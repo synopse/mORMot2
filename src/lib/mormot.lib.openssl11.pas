@@ -90,7 +90,8 @@ uses
   unixtype,
   {$endif OSPOSIX}
   mormot.core.os,
-  mormot.net.sock; // for INetTls
+  mormot.core.os.security, // for TSystemCertificateStore
+  mormot.net.sock;         // for INetTls
 
 
 { ******************** Dynamic or Static OpenSSL Library Loading }

@@ -28,9 +28,10 @@ uses
   mormot.core.buffers,
   mormot.core.datetime,
   mormot.core.threads,
+  mormot.core.data,
   mormot.core.rtti,
   mormot.core.json,
-  mormot.core.data,
+  mormot.core.fmt,
   mormot.core.log,
   mormot.core.zip,
   mormot.net.http,
@@ -1253,7 +1254,8 @@ begin
     with fSet.Service[i] do
       if not Disabled then
         html := FormatUtf8('%<tr><td>%</td><td>%</td><td>%</td></tr>',
-          [html, HtmlEscape(Name), ToText(State)^, HtmlEscape(StateMessage)]);
+          [html, HtmlEscapeShort(Name), ToText(State)^,
+           HtmlEscapeShort(StateMessage)]);
   html := html + '</tbody></table></body></html>';
   FileFromString(html, fSas.StateFile + '.html');
 end;

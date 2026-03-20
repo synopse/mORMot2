@@ -22,6 +22,7 @@ uses
   mormot.core.data,
   mormot.core.variants,
   mormot.core.json,
+  mormot.core.fmt,
   mormot.core.log,
   mormot.core.perf,
   mormot.core.search,
@@ -538,7 +539,7 @@ begin
       Add('"', ',');
       dec(count);
     end;
-    CancelLastComma(']');
+    ReplaceLastComma(']');
     SetText(RawUtf8(Result));
   finally
     Free;

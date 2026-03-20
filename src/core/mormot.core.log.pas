@@ -1328,8 +1328,8 @@ type
     class function Void: TSynLogClass;
     /// low-level method helper which can be called to make debugging easier
     // - log some warning message to the TSynLog family
-    // - will force a manual breakpoint if tests are run from the Delphi IDE, or
-    // will output the message to the current console
+    // - will force a manual breakpoint if tests are run from the Delphi IDE,
+    // and will output the message to the current console
     class procedure DebuggerNotify(Level: TSynLogLevel; const Format: RawUtf8;
       const Args: array of const); overload;
     /// low-level method helper which can be called to make debugging easier
@@ -4509,6 +4509,7 @@ const
   // a 128 MB RawUtf8 seems fair enough
   MAXPREVIOUSCONTENTSIZE = 128 shl 20;
 var
+  stream: TStream;
   log: TSynLog;
   endpos, start: Int64;
   c: AnsiChar;
@@ -4527,7 +4528,8 @@ begin
       if log.fFamily <> self then
         continue;
       log.Writer.FlushToStream;
-      endpos := log.Writer.Stream.Position;
+      stream := log.Writer.Stream;
+      endpos := stream.Position;
       try
         if endpos > MAXPREVIOUSCONTENTSIZE then
           len := MAXPREVIOUSCONTENTSIZE
@@ -4538,20 +4540,20 @@ begin
            (endpos - start > len) then
         begin
           start := endpos - len;
-          log.Writer.Stream.Position := start;
+          stream.Position := start;
           repeat
             inc(start)
-          until (log.Writer.Stream.Read(c, 1) = 0) or
+          until (stream.Read(c, 1) = 0) or
                 (ord(c) in [10, 13]);
         end
         else
-          log.Writer.Stream.Position := start;
+          stream.Position := start;
         len := endpos - start;
         SetLength(result, len);
         P := pointer(result);
         total := 0;
         repeat
-          read := log.Writer.Stream.Read(P^, len);
+          read := stream.Read(P^, len);
           if read <= 0 then
           begin
             if total <> len then
@@ -4563,7 +4565,7 @@ begin
           inc(total, read);
         until len = 0;
       finally
-        log.Writer.Stream.Position := endpos;
+        stream.Position := endpos;
       end;
       break;
     end;
@@ -5656,39 +5658,17 @@ end;
 
 {$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
 
-{$ifdef WIN64DELPHI} // Delphi Win64 has no 64-bit inline assembler
-{$ifdef CPUINTEL}
-procedure DebugBreak;
-asm
-     .noframe
-     int  3
-end;
-{$else}
-procedure DebugBreak; // no ARM64 assembler on Delphi
-begin
-end;
-{$endif CPUINTEL}
-{$endif WIN64DELPHI}
-
 class procedure TSynLog.DebuggerNotify(Level: TSynLogLevel; const Text: RawUtf8);
 begin
   if Text = '' then
     exit;
   Add.LogInternalText(Level, pointer(Text), length(Text), nil, 16384);
-  {$ifdef ISDELPHI} // Lazarus/fpdebug does not like "int 3" instructions
-  {$ifdef OSWINDOWS}
-  if IsDebuggerPresent then
-    {$ifdef WIN64DELPHI}
-    DebugBreak
-    {$else}
-    asm
-      int  3
-    end
-    {$endif WIN64DELPHI}
-  else
-  {$endif OSWINDOWS}
-  {$endif ISDELPHI}
+  if HasConsole then
     ConsoleWrite('%  ', [Text], LOG_CONSOLE_COLORS[Level], {noLF=}true);
+  {$ifdef WINTELDELPHI}
+  if IsDebuggerPresent then
+    DebuggerBreak;
+  {$endif WINTELDELPHI}
 end;
 
 class procedure TSynLog.DebuggerNotify(Level: TSynLogLevel;

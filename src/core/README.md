@@ -23,11 +23,12 @@ Basic types and reusable stand-alone functions shared by all framework units
 - Integer Arrays Manipulation
 - `ObjArray` `PtrArray` `InterfaceArray` Wrapper Functions
 - Low-level Types Mapping Binary or Bits Structures
+- Low-level CPU Detection and Intrinsics
+- Faster Alternative to RTL Standard Functions
 - Buffers (e.g. Hashing and SynLZ compression) Raw Functions
 - Efficient `Variant` Values Conversion
 - Sorting/Comparison Functions
 - Some Convenient `TStream` descendants and File access functions
-- Faster Alternative to RTL Standard Functions
 - Raw Shared Types Definitions
 
 Aim of those types and functions is to be cross-platform and cross-compiler, without any dependency but the main FPC/Delphi RTL. It also detects the kind of Intel/AMD it runs on, to adapt to the fastest asm version available. It is the main unit where x86_64 or i386 asm stubs are included.
@@ -68,6 +69,7 @@ Cross-Platform Operating System Security Definitions
 - `TSecurityDescriptor` Wrapper Object
 - Kerberos KeyTab File Support
 - Basic ASN.1 Support
+- Operating System Certificates Operation
 - Windows API Specific Security Types and Functions
 
 Even if most of those security definitions comes from the Windows/AD world, our framework (re)implemented them in a cross-platform way.
@@ -93,8 +95,7 @@ Text Processing functions shared by all framework units
 - CSV-like Iterations over Text Buffers
 - `TTextWriter` parent class for Text Generation
 - Numbers (integers or floats) and Variants to Text Conversion
-- Text Formatting functions
-- Resource and Time Functions
+- Text Formatting Functions
 - HTTP/REST Common Headers Parsing (e.g. cookies)
 - `ESynException` class
 - Hexadecimal Text And Binary Conversion
@@ -102,6 +103,7 @@ Text Processing functions shared by all framework units
 ### mormot.core.datetime
 
 Date and Time definitions and process shared by all framework units
+- Size and Elapsed Time to Text Conversion
 - ISO-8601 Compatible Date/Time Text Encoding
 - `TSynDate` / `TSynDateTime` / `TSynSystemTime` High-Level objects
 - `TUnixTime` / `TUnixMSTime` POSIX Epoch Compatible 64-bit date/time
@@ -139,14 +141,12 @@ Low-Level Memory Buffers Processing Functions shared by all framework units
 - Basic MIME Content Types Support
 - Text Memory Buffers and Files
 - `TStreamRedirect` and other Hash process
-- Markup (e.g. HTML or Emoji) process
 - `RawByteString` Buffers Aggregation via `TRawByteStringGroup`
 
 ### mormot.core.data
 
 Low-Level Data Processing Functions shared by all framework units
 - RTL `TPersistent` or Root Classes with Custom Constructor
-- `IAutoFree` and `IAutoLocker` Reference-Counted Process
 - `TSynList` `TSynObjectList` `TSynLocker` classes
 - `TObjectStore` with proper Binary Serialization
 - INI Files and In-memory Access
@@ -160,12 +160,23 @@ Low-Level Data Processing Functions shared by all framework units
 
 JSON functions shared by all framework units
 - Low-Level JSON Processing Functions
-- `TTextWriter` class with proper JSON escaping and `WriteObject()` support
-- JSON-aware `TSynNameValue` `TObjectStoreJson`
+- `TJsonWriter` class with proper JSON escaping and `WriteObject()` support
+- JSON Formats Conversion
 - JSON-aware `TSynDictionary` Storage
 - JSON Unserialization for any kind of Values
 - JSON Serialization Wrapper Functions
 - Abstract Classes with Auto-Create-Fields
+
+### mormot.core.fmt
+
+Binary, JSON and Text Advanced Formatting Functions
+- HTML Text Conversions
+- Basic XML Conversions
+- Markup (e.g. Markdown or Emoji) process
+- INI Files In-memory Access
+- `TSynJsonFileSettings` Parent Class
+- JSON and Text Preprocessor
+- Source Code Generation Functions
 
 ### mormot.core.collections
 
@@ -193,6 +204,8 @@ Use `Collections.NewList<T>` and `Collections.NewKeyValue<TKey, TValue>` factori
 ### mormot.core.search
 
 Several Indexing and Search Engines, as used by other parts of the framework
+- SAX-oriented JSON buffers access
+- JSON-aware `TSynNameValue` `TSynCache` `TObjectStoreJson`
 - Files Search in Folders
 - ScanUtf8, GLOB and SOUNDEX Text Search
 - Efficient CSV Parsing using RTTI
@@ -225,6 +238,7 @@ Performance Monitoring functions shared by all framework units
 ### mormot.core.threads
 
 High-Level Multi-Threading features shared by all framework units
+- `IAutoFree` and `IAutoLocker` Reference-Counted Process
 - Thread-Safe `TSynQueue` and `TPendingTaskList`
 - Thread-Safe `ILockedDocVariant` Storage
 - Background Thread Processing

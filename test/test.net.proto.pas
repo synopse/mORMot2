@@ -21,6 +21,7 @@ uses
   mormot.core.data,
   mormot.core.variants,
   mormot.core.json,
+  mormot.core.fmt,
   mormot.core.log,
   mormot.core.test,
   mormot.core.perf,
@@ -943,7 +944,7 @@ var
   ip, rev, u, v, json, sid: RawUtf8;
   o: TAsnObject;
   c: cardinal;
-  withntp: boolean;
+  withntp, kerberosusrpwd: boolean;
   guid: TGuid;
   i, j, k, n: PtrInt;
   dns, clients, a: TRawUtf8DynArray;
@@ -961,6 +962,8 @@ var
   sfs: TSystemFlags;
   l: TLdapClientSettings;
   one: TLdapClient;
+  keytab: RawByteString;
+  keytabfile: TFileName;
   res: TLdapResult;
   utc1, utc2: TDateTime;
   ntp, usr, pwd, ku, main, txt: RawUtf8;
@@ -1469,6 +1472,7 @@ begin
         txt := '';
         if clients[j] = main then
           txt := ' (main)';
+        kerberosusrpwd := false;
         one := TLdapClient.Create;
         try
           one.Settings.TargetUri := clients[j];
@@ -1477,6 +1481,8 @@ begin
             if Executable.Command.Get('ldapusr', usr) and
                Executable.Command.Get('ldappwd', pwd) then
             begin
+              if keytab = '' then
+                keytab := TKerberosKeyTabGenerator.Generate(usr, pwd);
               one.Settings.UserName := usr;
               one.Settings.Password := pwd;
               if Executable.Command.Option('ldaps') then
@@ -1496,8 +1502,11 @@ begin
               else
                 // Windows/SSPI and POSIX/GSSAPI with no prior loggued user
                 if one.BindSaslKerberos('', @ku) then
+                begin
                   AddConsole('connected to % with specific user % = %',
-                    [one.Settings.TargetUri, usr, ku])
+                    [one.Settings.TargetUri, usr, ku]);
+                  kerberosusrpwd := true;
+                end
                 else
                 begin
                   CheckUtf8(false, '% on ldap:% [%]%',
@@ -1546,6 +1555,31 @@ begin
           end;
         finally
           one.Free;
+        end;
+        if kerberosusrpwd then
+        begin
+          Check(keytab <> '', 'keytab?');
+          Check(BufferIsKeyTab(keytab), 'keytab!');
+          keytabfile := TemporaryFileName;
+          FileFromString(keytab, keytabfile);
+          ku := FileIsKeyTabMachineAccountPrincipal(keytabfile, true);
+          CheckUtf8(IdemPropNameU(ku, usr), '%=%', [ku, usr]);
+          {$ifdef OSPOSIX}
+          one := TLdapClient.Create;
+          try
+            one.Settings.TargetUri := clients[j];
+            //one.Settings.UserName := usr;        // user from keytab
+            //one.Settings.KerberosDN := dns[i];   // DN from keytab
+            one.Settings.Password := Make(['FILE:', keytabfile]);
+            ku := '';
+            Check(one.BindSaslKerberos('', @ku), 'Bind keytab');
+            AddConsole('connected via keytab to % with specific user % = %',
+              [one.Settings.TargetUri, usr, ku]);
+          finally
+            one.Free;
+          end;
+          {$endif OSPOSIX}
+          DeleteFile(keytabfile);
         end;
       end;
     end;
@@ -2068,7 +2102,7 @@ begin
     d.Recv := d.Send;
     d.RecvLen := d.SendLen;
     Check(server.ComputeResponse(d) < 0, 'ack');
-    Check(d.RecvHostName^ = '', 'no hostname');
+    Check(d.RecvHostName^[0] = #0, 'no hostname');
     CheckEqual(server.Count, 1);
     txt := server.SaveToText;
     CheckNotEqual(txt, CRLF, 'offer not saved');
@@ -3521,6 +3555,35 @@ begin
   end;
 end;
 
+function MsgToText(const msg: THttpPeerCacheMessage): RawUtf8; // reference code
+var
+  algoext: PUtf8Char;
+  algohex: string[SizeOf(msg.Hash.Bin.b) * 2];
+  tmp: ShortString;
+begin
+  tmp[0] := #0;
+  if msg.Kind > high(msg.Kind) then
+    exit; // clearly invalid message
+  algoext := nil;
+  algohex[0] := #0;
+  if not IsZero(msg.Hash.Bin.b) then // append e.g. 'xxxHexaHashxxx.sha256'
+  begin
+    BinToHexLower(@msg.Hash.Bin, @algohex[1], HASH_SIZE[msg.Hash.Algo]);
+    algohex[0] := AnsiChar(HASH_SIZE[msg.Hash.Algo] * 2);
+    algoext := pointer(HASH_EXT[msg.Hash.Algo]);
+  end; // IsZero(Hash.Bin) = no hash known = no hash computed nor verified
+  with msg do
+    FormatShort('% #% % %% % % to % % % %Mb/s % %% siz=% con=% ',
+      [ToText(Kind)^, CardinalToHexLower(Seq), OS_INITIAL[Os.os],
+       OsvToShort(Os)^, WinOsBuild(Os, ' '), MAK_TXT[Hardware],
+       IP4ToShort(@IP4), IP4ToShort(@DestIP4),
+       IP4ToShort(@MaskIP4), IP4ToShort(@BroadcastIP4), Speed,
+       UnixTimeToFileShort(QWord(Timestamp) + UNIXTIME_MINIMAL),
+       algohex, algoext, Size, Connections], tmp);
+  AppendShortUuid(msg.Uuid, tmp);
+  result := ShortStringToUtf8(tmp);
+end;
+
 procedure TNetworkProtocols._THttpPeerCache;
 var
   hpc: THttpPeerCacheHook;
@@ -3618,6 +3681,7 @@ begin
           m := RawUtf8(ToText(msg));
           m2 := RawUtf8(ToText(msg2));
           CheckEqual(m, m2);
+          CheckEqual(m, MsgToText(msg));
           // validate UDP messages alteration (quick CRC identification)
           timer.Start;
           n := 10000;

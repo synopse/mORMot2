@@ -50,6 +50,7 @@ uses
   mormot.core.datetime,
   mormot.core.rtti,
   mormot.core.data, // for TRawUtf8List
+  mormot.core.fmt,
   mormot.core.variants;
 
 

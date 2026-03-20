@@ -839,7 +839,7 @@ begin
       W.AddDirect('}', ',');
       Data.Next;
     until Data.Eof;
-    W.CancelLastComma(']');
+    W.ReplaceLastComma(']');
     W.SetText(RawUtf8(result));
   finally
     W.Free;

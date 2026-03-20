@@ -16,6 +16,7 @@ unit mormot.core.os.security;
   - TSecurityDescriptor Wrapper Object
   - Kerberos KeyTab File Support
   - Basic ASN.1 Support
+  - Operating System Certificates Operation
   - Windows API Specific Security Types and Functions
 
   Even if most of those security definitions comes from the Windows/AD world,
@@ -1953,6 +1954,8 @@ type
       const Principals: array of RawUtf8): integer;
     /// remove an entry in the internal KeyTab list
     function Delete(aIndex: PtrUInt): boolean;
+    /// returns the first Entry[].Principal in the form HOSTNAME$@REALM
+    function MachineAccountPrincipal(FallbackToFirst: boolean = false): RawUtf8;
     /// persist this KeyTab list as a memory buffer
     function SaveToBinary: RawByteString;
     /// persist this KeyTab list as a local file
@@ -1968,12 +1971,20 @@ type
 /// internal comparison of two KeyTab entries as in a TKerberosKeyTab storage
 function CompareEntry(const A, B: TKerberosKeyEntry): boolean;
 
-/// check if a file is readable and is a valid Kerberos keytab
-function FileIsKeyTab(const aKeytab: TFileName): boolean;
-
 /// check if a buffer contains a valid Kerberos keytab
 // - redirect to TKerberosKeyTab.LoadFromBuffer() from this unit
 function BufferIsKeyTab(const aKeytab: RawByteString): boolean;
+
+/// check if a file is readable and is a valid Kerberos keytab
+function FileIsKeyTab(const aKeytab: TFileName): boolean;
+
+/// returns the first Principal in the form HOSTNAME$@REALM of a given keytab file
+function FileIsKeyTabMachineAccountPrincipal(const aKeytab: TFileName;
+  aFallbackToFirst: boolean = false): RawUtf8;
+
+/// check if a file is a valid Kerberos keytab, and return its entries
+// - so that you could write e.g. for entry in FileIsKeyTabEntries() do ...
+function FileIsKeyTabEntries(const aKeytab: TFileName): TKerberosKeyEntries;
 
 
 { **************** Basic ASN.1 Support }
@@ -2209,6 +2220,73 @@ function AsnNextBigInt(var Pos: integer; const Buffer: TAsnObject;
 
 /// initialize a set of AsnNext() Pos[] with its 1 default position
 procedure AsnNextInit(var Pos: TIntegerDynArray; Count: PtrInt);
+
+
+{ ****************** Operating System Certificates Operation }
+
+type
+  /// identify the (Windows) system certificate stores for GetSystemStoreAsPem()
+  // - ignored on POSIX systems, in which the main cacert.pem file is used
+  // - scsCA contains known Certification Authority certificates, i.e. from
+  // entities entrusted to issue certificates that assert that the recipient
+  // individual, computer, or organization requesting the certificate fulfills
+  // the conditions of an established policy
+  // - scsMY holds certificates with associated private keys (Windows only)
+  // - scsRoot contains known Root certificates, i.e. self-signed CA certificates
+  // which are the root of the whole certificates trust tree
+  // - scsSpc contains Software Publisher Certificates (Windows only)
+  TSystemCertificateStore = (
+    scsCA,
+    scsMY,
+    scsRoot,
+    scsSpc);
+  TSystemCertificateStores = set of TSystemCertificateStore;
+
+var
+  /// the local PEM file name to be searched by GetSystemStoreAsPem() to
+  // override the OS certificates store
+  // - a relative file name (i.e. with no included path, e.g. 'cacert.pem') will
+  // be searched in the Executable.ProgramFilePath folder
+  // - an absolute file name (e.g. 'C:\path\to\file.pem' or '/posix/path') could
+  // also be specified
+  // - set by default to '' to disable this override (for security purposes)
+  GetSystemStoreAsPemLocalFile: TFileName;
+
+/// retrieve the OS certificates store as PEM text
+// - first search for [Executable.ProgramFilePath+]GetSystemStoreAsPemLocalFile,
+// then for a file pointed by a 'SSL_CA_CERT_FILE' environment variable - unless
+// OnlySystemStore is forced to true
+// - if no such file exists, or if OnlySystemStore is true, will concatenate the
+// supplied CertStores values via individual GetOneSystemStoreAsPem() calls
+// - return CA + ROOT certificates by default, ready to validate a certificate
+// - Darwin specific API is not supported yet, and is handled as a BSD system
+// - an internal cache is refreshed every 4 minutes unless FlushCache is set
+function GetSystemStoreAsPem(
+  CertStores: TSystemCertificateStores = [scsCA, scsRoot];
+  FlushCache: boolean = false; OnlySystemStore: boolean = false): RawUtf8;
+
+/// retrieve all certificates of a given system store as PEM text
+// - on Windows, will use the System Crypt API
+// - on POSIX, scsRoot loads the main CA file of the known system file, and
+// scsCA the additional certificate files which may not be part of the main file
+// - GetSystemStoreAsPemLocalFile file and 'SSL_CA_CERT_FILE' environment
+// variables are ignored: call GetSystemStoreAsPem() instead for the global store
+// - an internal cache is refreshed every 4 minutes unless FlushCache is set
+function GetOneSystemStoreAsPem(CertStore: TSystemCertificateStore;
+  FlushCache: boolean = false; now: cardinal = 0): RawUtf8;
+
+var
+  /// low-level function used by StuffExeCertificate() in mormot.misc.pecoff.pas
+  // - properly implemented by mormot.crypt.openssl.pas, but mormot.misc.pecoff
+  // has its own stand-alone version using a pre-generated fixed certificate
+  // - warning: the Marker should have no 0 byte within
+  CreateDummyCertificate: function(const Stuff, CertName: RawUtf8;
+    Marker: cardinal): RawByteString;
+
+var
+  /// allow half a day margin when checking a Certificate date validity
+  // - this global setting is used as default for all our units
+  CERT_DEPRECATION_THRESHOLD: TDateTime = 0.5;
 
 
 { ****************** Windows API Specific Security Types and Functions }
@@ -2450,6 +2528,8 @@ const
   PROV_RSA_AES                    = 24;
   CRYPT_NEWKEYSET                 = 8;
   CRYPT_VERIFYCONTEXT             = DWord($F0000000);
+  CRYPT_STRING_BASE64HEADER       = 0; // = PEM textual format
+  CRYPTPROTECT_UI_FORBIDDEN       = 1;
   PLAINTEXTKEYBLOB                = 8;
   CUR_BLOB_VERSION                = 2;
   KP_IV                           = 1;
@@ -2469,6 +2549,24 @@ const
 var
   /// direct access to the Windows CryptoApi - with late binding
   CryptoApi: TWinCryptoApi;
+
+const
+  crypt32 = 'Crypt32.dll';
+
+function CertOpenSystemStoreW(hProv: HCRYPTPROV;
+  szSubsystemProtocol: PWideChar): HCERTSTORE ;
+    stdcall; external crypt32;
+
+function CertEnumCertificatesInStore(hCertStore: HCERTSTORE;
+  pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT;
+    stdcall; external crypt32;
+
+function CryptBinaryToStringA(pBinary: PByte; cbBinary, dwFlags: DWord;
+  pszString: PAnsiChar; var pchString: DWord): BOOL;
+    stdcall; external crypt32;
+
+function CertCloseStore(hCertStore: HCERTSTORE; dwFlags: DWord): BOOL;
+    stdcall; external crypt32;
 
 type
   /// TSynWindowsPrivileges enumeration synchronized with WinAPI
@@ -5834,14 +5932,43 @@ begin
             (SortDynArrayRawByteString(A.Key, B.Key) = 0);
 end;
 
-function FileIsKeyTab(const aKeytab: TFileName): boolean;
-begin
-  result := BufferIsKeyTab(StringFromFile(aKeyTab));
-end;
-
 function BufferIsKeyTab(const aKeytab: RawByteString): boolean;
 begin
   result := TKerberosKeyTab(nil).LoadFromBinary(aKeyTab); // fast with self=nil
+end;
+
+function FileIsKeyTab(const aKeytab: TFileName): boolean;
+begin
+  result := TKerberosKeyTab(nil).LoadFromFile(aKeyTab); // fast with self=nil
+end;
+
+function FileIsKeyTabMachineAccountPrincipal(const aKeytab: TFileName;
+  aFallbackToFirst: boolean): RawUtf8;
+var
+  kt: TKerberosKeyTab;
+begin
+  result := '';
+  kt := TKerberosKeyTab.Create;
+  try
+    if kt.LoadFromFile(aKeyTab) then
+      result := kt.MachineAccountPrincipal(aFallbackToFirst);
+  finally
+    kt.Free;
+  end;
+end;
+
+function FileIsKeyTabEntries(const aKeytab: TFileName): TKerberosKeyEntries;
+var
+  kt: TKerberosKeyTab;
+begin
+  result := nil;
+  kt := TKerberosKeyTab.Create;
+  try
+    if kt.LoadFromFile(aKeyTab) then
+      result := kt.fEntry;
+  finally
+    kt.Free;
+  end;
 end;
 
 
@@ -6000,7 +6127,8 @@ function TKerberosKeyTab.LoadFromFile(const aFile: TFileName): boolean;
 var
   bin: RawByteString;
 begin
-  fFileName := aFile;
+  if self <> nil then // may be called with self = nil from FileIsKeyTab()
+    fFileName := aFile;
   bin := StringFromFile(aFile);
   result := LoadFromBinary(bin);
   FillZero(bin); // anti-forensic
@@ -6098,6 +6226,31 @@ begin
     Clear
   else
     DynArrayFakeDelete(fEntry, aIndex, n, SizeOf(fEntry[n]));
+end;
+
+function TKerberosKeyTab.MachineAccountPrincipal(FallbackToFirst: boolean): RawUtf8;
+var
+  n: integer;
+  e: ^TKerberosKeyEntry;
+begin
+  result := '';
+  if self = nil then
+    exit;
+  e := pointer(fEntry);
+  if e = nil then
+    exit;
+  n := PDALen(PAnsiChar(e) - _DALEN)^ + _DAOFF;
+  repeat
+    if PosEx('$@', e^.Principal) <> 0 then
+    begin
+      result := e^.Principal;
+      exit;
+    end;
+    inc(e);
+    dec(n);
+  until n = 0;
+  if FallbackToFirst then
+    result := fEntry[0].Principal;
 end;
 
 function TKerberosKeyTab.SaveToBinary: RawByteString;
@@ -6723,6 +6876,196 @@ begin
 end;
 
 
+{ ****************** Operating System Certificates Operation }
+
+{$ifdef OSWINDOWS}
+
+const
+  WINDOWS_CERTSTORE: array[TSystemCertificateStore] of PWideChar = (
+    'CA', 'MY', 'ROOT', 'SPC');
+
+function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;
+var
+  store: HCERTSTORE;
+  ctx: PCCERT_CONTEXT;
+  certlen: DWord;
+  tmp: TSynTempBuffer;
+begin
+  // call the Windows API to retrieve the System certificates
+  result := '';
+  store := CertOpenSystemStoreW(nil, WINDOWS_CERTSTORE[CertStore]);
+  try
+    ctx := CertEnumCertificatesInStore(store, nil);
+    while ctx <> nil do
+    begin
+      certlen := 0;
+      if not CryptBinaryToStringA(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
+          CRYPT_STRING_BASE64HEADER, nil, certlen) then
+        break;
+      tmp.Init(certlen); // a PEM is very likely to be < 8KB so will be on stack
+      if CryptBinaryToStringA(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
+          CRYPT_STRING_BASE64HEADER, tmp.buf, certlen) then
+         AppendBufferToUtf8(tmp.buf, certlen, result);
+      tmp.Done;
+      ctx := CertEnumCertificatesInStore(store, ctx); // next certificate
+    end;
+  finally
+    CertCloseStore(store, 0);
+  end;
+end;
+
+{$else}
+
+function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;
+var
+  files: TRawUtf8DynArray;
+  f: PtrInt;
+begin
+  // see https://go.dev/src/crypto/x509/root_unix.go as reference
+  case CertStore of
+    scsRoot:
+      result := StringFromFirstFile([
+        {$ifdef OSLINUXANDROID}
+          '/etc/ssl/certs/ca-certificates.crt',                // Debian/Gentoo
+      	  '/etc/pki/tls/certs/ca-bundle.crt',                  // Fedora/RHEL 6
+          '/etc/ssl/ca-bundle.pem',                            // OpenSUSE
+          '/etc/pki/tls/cacert.pem',                           // OpenELEC
+          '/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem', // CentOS/RHEL 7
+          '/etc/ssl/cert.pem'                                  // Alpine Linux
+        {$else}
+      	  '/usr/local/etc/ssl/cert.pem',            // FreeBSD
+      	  '/etc/ssl/cert.pem',                      // OpenBSD
+      	  '/usr/local/share/certs/ca-root-nss.crt', // DragonFly
+      	  '/etc/openssl/certs/ca-certificates.crt'  // NetBSD
+        {$endif OSLINUXANDROID}
+        ]);
+    scsCA:
+      begin
+        files := StringFromFolders([
+          {$ifdef OSLINUXANDROID}
+            '/etc/ssl/certs',               // Debian/SLES10/SLES11
+            '/etc/pki/tls/certs',           // Fedora/RHEL
+      	    '/system/etc/security/cacerts'  // Android
+          {$else}
+            '/etc/ssl/certs',         // FreeBSD 12.2+
+            '/usr/local/share/certs', // FreeBSD
+            '/etc/openssl/certs'      // NetBSD
+          {$endif OSLINUXANDROID}
+          ]);
+        for f := 0 to length(files) - 1 do
+          if (PosEx('-----BEGIN', files[f]) <> 0) and
+             IsAnsiCompatible(files[f]) and
+             (PosEx(files[f], result) = 0) then // append PEM files once
+            result := Join([result, #10, files[f]]);
+      end;
+  end;
+end;
+
+{$endif OSWINDOWS}
+
+var
+  OSSafe: TLightLock; // when GlobalLock is overkill
+  _OneSystemStoreAsPem: array[TSystemCertificateStore] of record
+    Tix: cardinal;
+    Pem: RawUtf8;
+  end;
+  _SystemStoreAsPem: record
+    Tix: cardinal;
+    Scope: TSystemCertificateStores;
+    Pem: RawUtf8;
+  end;
+
+function GetOneSystemStoreAsPem(CertStore: TSystemCertificateStore;
+  FlushCache: boolean; now: cardinal): RawUtf8;
+begin
+  if now = 0 then
+    now := GetTickSec shr 8 + 1; // every 256s = 4 min
+  OSSafe.Lock;
+  try
+    // first search if not already in cache
+    with _OneSystemStoreAsPem[CertStore] do
+    begin
+      if not FlushCache then
+        if Tix = now then
+        begin
+          result := Pem; // quick retrieved from cache
+          exit;
+        end;
+      // fallback search depending on the POSIX / Windows specific OS
+      result := _GetSystemStoreAsPem(CertStore); // implemented in each .inc
+      Tix := now;
+      Pem := result;
+    end;
+  finally
+    OSSafe.UnLock;
+  end;
+end;
+
+function GetSystemStoreAsPem(CertStores: TSystemCertificateStores;
+  FlushCache, OnlySystemStore: boolean): RawUtf8;
+var
+  now: cardinal;
+  s: TSystemCertificateStore;
+  v: RawUtf8;
+begin
+  result := '';
+  now := GetTickSec shr 8 + 1;
+  OSSafe.Lock;
+  try
+    // first search if not already in cache
+    if not FlushCache then
+      with _SystemStoreAsPem do
+        if (Tix = now) and
+           (Scope = CertStores) and
+           (Pem <> '') then
+        begin
+          result := Pem; // quick retrieved from cache
+          exit;
+        end;
+    // load from a file, bounded within the application or from env variable
+    if not OnlySystemStore then
+    begin
+      if GetSystemStoreAsPemLocalFile <> '' then
+        {$ifdef OSPOSIX}
+        if GetSystemStoreAsPemLocalFile[1] = '/' then // full /posix/path
+        {$else}
+        if GetSystemStoreAsPemLocalFile[2] = ':' then // 'C:\path\to\file.pem'
+        {$endif OSPOSIX}
+          result := StringFromFile(GetSystemStoreAsPemLocalFile)
+        else
+          result := StringFromFile(
+            Executable.ProgramFilePath + GetSystemStoreAsPemLocalFile);
+      if result = '' then
+        result := StringFromFile(GetSystemEnvString('SSL_CA_CERT_FILE'));
+    end;
+  finally
+    OSSafe.UnLock; // GetOneSystemStoreAsPem() blocks
+  end;
+  // fallback to search depending on the POSIX / Windows specific OS stores
+  if result = '' then
+    for s := low(s) to high(s) do
+      if s in CertStores then
+      begin
+        v := GetOneSystemStoreAsPem(s, FlushCache, now); // may use its cache
+        if v <> '' then
+          result := Join([result, v, #13#10]);
+      end;
+  if result = '' then
+    exit;
+  OSSafe.Lock;
+  try
+    with _SystemStoreAsPem do
+    begin
+      Tix := now;
+      Scope := CertStores;
+      Pem := result;
+    end;
+  finally
+    OSSafe.UnLock;
+  end;
+end;
+
+
 { ****************** Windows API Specific Security Types and Functions }
 
 {$ifdef OSWINDOWS}
@@ -6835,10 +7178,6 @@ type
   {$ifdef FPC}
   {$packrecords DEFAULT}
   {$endif FPC}
-
-const
-  crypt32 = 'Crypt32.dll';
-  CRYPTPROTECT_UI_FORBIDDEN = 1;
 
 function CryptProtectData(const DataIn: DATA_BLOB; szDataDescr: PWideChar;
   OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: pointer; dwFlags: DWord;
@@ -7644,6 +7983,13 @@ begin
     result := '';
 end;
 
+function GetNamedSecurityInfoW(pObjectName: PWideChar; ObjectType,
+  SecurityInfo: cardinal; ppsidOwner, ppsidGroup, ppDacl, ppSacl: pointer;
+  var ppSecurityDescriptor: PSECURITY_DESCRIPTOR): DWord; stdcall; external advapi32;
+
+function SetNamedSecurityInfoW(pObjectName: PWideChar; ObjectType,
+  SecurityInfo: cardinal; psidOwner, psidGroup: pointer;
+  pDacl, pSacl: pointer): DWord; stdcall; external advapi32;
 
 function GetSystemSecurityDescriptor(const fn: TFileName;
   out dest: TSecurityDescriptor; info: TSecurityDescriptorInfos;

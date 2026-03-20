@@ -266,12 +266,12 @@ var
 begin
   result := false;
   tmpW.Init(L * 2);
-  L := Utf8ToUnicode(tmpW.Buf, L + 8, P, L); // use the RTL
+  L := Utf8ToUnicode(tmpW.Buf, L + 8, P, L); // convert to UTF-16 with the RTL
   if L > 0 then // valid UTF-8
   begin
     dec(L); // Utf8ToUnicode() included trailing #0
     tmpA.Init(L * 3);
-    L := Unicode_WideToAnsi(tmpW.buf, tmpA.buf, L, tmpA.len + 16, CP);
+    L := Unicode_WideToAnsi(tmpW.buf, tmpA.buf, L, tmpA.len + 16, CP); // WinAPI
     if L > 0 then
     begin
       FastSetStringCP(A, tmpA.buf, L, CP); // keep A untouched on failure
@@ -401,7 +401,7 @@ begin
 end;
 
 const
-  MilliSecsPerFileTime = 10000;
+  MilliSecsPerFileTime = 10000; // a tick is 100ns
   SecsPerFileTime      = 10000000;
 
 procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
@@ -576,6 +576,23 @@ begin
      (StdOut = INVALID_HANDLE_VALUE) then
     // force setup StdOut global variable
     StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
+end;
+
+function ConsoleNeedConversion(P: pointer; Len: PtrInt): boolean;
+begin
+  result := false;
+  if IsAnsiCompatible(P, Len) then
+    exit; // most common case
+  if ConsoleOutputCP = 0 then // retrieve once CP_OEM final code page
+    ConsoleOutputCP := GetConsoleOutputCP; // makes a syscall
+  result := ConsoleOutputCP <> CP_UTF8;
+end;
+
+function Utf8ToConsole(const S: RawUtf8): RawByteString;
+begin
+  if not ConsoleNeedConversion(pointer(S), length(S)) or
+     not Win32Utf8ToAnsi(pointer(S), length(S), ConsoleOutputCP, result) then
+    result := S; // no conversion needed, or conversion failed
 end;
 
 procedure ConsoleErrorWrite(const text: RawUtf8);
@@ -1523,18 +1540,22 @@ begin
   result := false;
 end;
 
-
-{$ifdef FPC}
-  {$define NOSETTHREADNAME} // only tested and supported on Delphi
-{$endif FPC}
+// thread naming and "int 3" debug opcode only validated on Delphi Wintel
+{$ifndef WINTELDELPHI}
+  {$define NOSETTHREADNAME}
+{$endif WINTELDELPHI}
 
 const
   // see http://msdn.microsoft.com/en-us/library/xcb2z8hs
   cSetThreadNameException = $406D1388;
 
-{$ifdef NOSETTHREADNAME}
+{$ifdef NOSETTHREADNAME} // only available on Delphi Wintel
 
 procedure RawSetThreadName(ThreadID: TThreadID; const Name: RawUtf8);
+begin
+end;
+
+procedure DebuggerBreak;
 begin
 end;
 
@@ -1569,6 +1590,11 @@ begin
     {ignore}
   end;
   {$endif ISDELPHIXE2}
+end;
+
+procedure DebuggerBreak;
+asm
+    int  3
 end;
 
 {$endif NOSETTHREADNAME}
@@ -2635,27 +2661,31 @@ begin
     SetConsoleTextAttribute(StdOut, TextAttr);
 end;
 
-procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
+procedure ConsoleWriteBuf(Text: PUtf8Char; Len: PtrInt; Color: TConsoleColor;
   NoLineFeed, NoColor: boolean);
 var
-  txt: RawByteString;
-  l: PtrInt;
+  tmp: RawByteString; // the Windows console is so slow anyway
 begin
   if not HasConsole then
     exit;
-  txt := Utf8ToConsole(Text); // convert to final GetConsoleOutputCP() code page
-  l := length(txt);
+  if Len > 0 then
+    if not ConsoleNeedConversion(Text, Len) or
+       not Win32Utf8ToAnsi(Text, Len, ConsoleOutputCP, tmp) then
+      FastSetStringCP(tmp, Text, Len, CP_UTF8);
+  Len := length(tmp);
   if not NoLineFeed then
   begin
-    SetLength(txt, l + 2); // faster to reallocate than WriteFile() twice
-    PWord(@PByteArray(txt)[l])^ := EOLW;
-    inc(l, 2);
-  end;
+    SetLength(tmp, Len + 2); // faster to resize than WriteFile() twice
+    PWord(@PByteArray(tmp)[Len])^ := EOLW;
+    inc(Len, 2);
+  end
+  else if Len = 0 then
+    exit;
   ConsoleCriticalSection.Lock;
   try
     if not NoColor then
       TextColor(Color);
-    FileWriteAll(StdOut, pointer(txt), l);
+    FileWriteAll(StdOut, pointer(tmp), Len);
     if not NoColor then
       TextColor(ccLightGray);
     // FlushFileBuffers(StdOut); // don't: would block until read on the pipe
@@ -2764,19 +2794,6 @@ begin
     StdInputHandle := GetStdHandle(STD_INPUT_HANDLE);
   if not PeekNamedPipe(StdInputHandle, nil, 0, nil, @result, nil) then
     result := 0;
-end;
-
-function Utf8ToConsole(const S: RawUtf8): RawByteString;
-begin
-  if not IsAnsiCompatible(S) then // need some encoding conversion
-  begin
-    if ConsoleOutputCP = 0 then // retrieve once CP_OEM final code page
-      ConsoleOutputCP := GetConsoleOutputCP; // makes a syscall
-    if ConsoleOutputCP <> CP_UTF8 then
-      if Win32Utf8ToAnsi(pointer(S), length(S), ConsoleOutputCP, result) then
-        exit;
-  end;
-  result := S; // no conversion needed, or conversion failed
 end;
 
 function TFileVersion.RetrieveInformationFromFileName: boolean;
@@ -3011,6 +3028,16 @@ begin
     inc(p);
   until p^ = #0;
   FreeEnvironmentStringsW(env);
+end;
+
+function _SetSystemEnv(const name, value: RawUtf8): boolean;
+var
+  n, v: TSynTempBuffer;
+begin
+  result := SetEnvironmentVariableW(Utf8ToWin32PWideChar(name, n),
+                                    Utf8ToWin32PWideChar(value, v));
+  n.Done;
+  v.Done;
 end;
 
 procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
@@ -3359,69 +3386,6 @@ begin
   if RegQueryValueEx(k, pointer(Value), nil, @typ, @tmp, @siz) = ERROR_SUCCESS then
     result := tmp;
   RegCloseKey(k);
-end;
-
-const
-  crypt32 = 'Crypt32.dll';
-  CRYPT_STRING_BASE64HEADER = 0; // = PEM textual format
-
-type
-  HCRYPTPROV = pointer;
-  HCERTSTORE = pointer;
-  PCERT_INFO = pointer;
-
-  CERT_CONTEXT = record
-    dwCertEncodingType: DWord;
-    pbCertEncoded: PByte;
-    cbCertEncoded: DWord;
-    pCertInfo: PCERT_INFO;
-    hCertStore: HCERTSTORE;
-  end;
-  PCCERT_CONTEXT = ^CERT_CONTEXT;
-
-function CertOpenSystemStoreW(hProv: HCRYPTPROV;
-  szSubsystemProtocol: PWideChar): HCERTSTORE ;
-    stdcall; external crypt32;
-
-function CertEnumCertificatesInStore(hCertStore: HCERTSTORE;
-  pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT;
-  stdcall; external crypt32;
-
-function CryptBinaryToStringA(pBinary: PByte; cbBinary, dwFlags: DWord;
-  pszString: PAnsiChar; var pchString: DWord): BOOL;
-    stdcall; external crypt32;
-
-function CertCloseStore(hCertStore: HCERTSTORE; dwFlags: DWord): BOOL;
-    stdcall; external crypt32;
-
-function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;
-var
-  store: HCERTSTORE;
-  ctx: PCCERT_CONTEXT;
-  certlen: DWord;
-  tmp: TSynTempBuffer;
-begin
-  // call the Windows API to retrieve the System certificates
-  result := '';
-  store := CertOpenSystemStoreW(nil, WINDOWS_CERTSTORE[CertStore]);
-  try
-    ctx := CertEnumCertificatesInStore(store, nil);
-    while ctx <> nil do
-    begin
-      certlen := 0;
-      if not CryptBinaryToStringA(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
-          CRYPT_STRING_BASE64HEADER, nil, certlen) then
-        break;
-      tmp.Init(certlen); // a PEM is very likely to be < 8KB so will be on stack
-      if CryptBinaryToStringA(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
-          CRYPT_STRING_BASE64HEADER, tmp.buf, certlen) then
-         AppendBufferToUtf8(tmp.buf, certlen, result);
-      tmp.Done;
-      ctx := CertEnumCertificatesInStore(store, ctx); // next certificate
-    end;
-  finally
-    CertCloseStore(store, 0);
-  end;
 end;
 
 function SearchSmbios(const mem: RawByteString; var info: TRawSmbiosInfo): PtrUInt;

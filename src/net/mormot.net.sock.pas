@@ -38,7 +38,8 @@ uses
   sysutils,
   classes,
   mormot.core.base,
-  mormot.core.os;
+  mormot.core.os,
+  mormot.core.os.security; // for TSystemCertificateStore
 
 
 { ******************** Socket Process High-Level Encapsulation }
@@ -638,6 +639,10 @@ procedure IP4Text(ip4addr: PByteArray; var result: RawUtf8);
 
 /// convert an IPv4 raw value into a RawUtf8 text
 function IP4ToText(ip4addr: PByteArray): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// append an IPv4 raw value into a ShortString
+procedure AppendShortIp4(ip4addr: PByteArray; dest: PAnsiChar; sep: AnsiChar = #0);
   {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an array of IPv4 raw value into a RawUtf8 CSV text
@@ -3846,6 +3851,13 @@ end;
 function IP4ToText(ip4addr: PByteArray): RawUtf8;
 begin
   IP4Text(ip4addr, result);
+end;
+
+procedure AppendShortIp4(ip4addr: PByteArray; dest: PAnsiChar; sep: AnsiChar);
+begin
+  dest[0] := AnsiChar(IP4TextAppend(ip4addr, @dest[ord(dest[0]) + 1]) - @dest[1]);
+  if sep <> #0 then
+    AppendShortChar(sep, dest);
 end;
 
 function IP4sToText(const ip4: array of TNetIP4): RawUtf8;

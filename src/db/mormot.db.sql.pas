@@ -34,6 +34,8 @@ uses
   mormot.core.data,
   mormot.core.variants,
   mormot.core.json,
+  mormot.core.search,
+  mormot.core.fmt,
   mormot.crypt.secure,
   mormot.core.rtti,
   mormot.core.log,
@@ -6366,7 +6368,7 @@ begin
     ColumnToJson(col, W);
     W.AddComma;
   end;
-  W.CancelLastComma('}');
+  W.ReplaceLastComma('}');
 end;
 
 procedure TSqlDBStatement.Execute(const aSql: RawUtf8; ExpectResults: boolean);
@@ -8399,7 +8401,7 @@ begin
     ColumnToJson(col, W);
     W.AddComma;
   end;
-  W.CancelLastComma('}');
+  W.ReplaceLastComma('}');
 end;
 
 procedure TSqlDBStatementWithParamsAndColumns.ClearColumns;

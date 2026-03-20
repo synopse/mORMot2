@@ -31,15 +31,16 @@ uses
   mormot.core.variants,
   mormot.core.data,
   mormot.core.rtti,
-  mormot.crypt.core,
-  mormot.crypt.secure,
   mormot.core.json,
+  mormot.core.fmt,
   mormot.core.threads,
   mormot.core.perf,
   mormot.core.search, // for fAccessControlAllowOriginsMatch
   mormot.core.log,
   mormot.core.interfaces,
   mormot.core.zip,
+  mormot.crypt.core,
+  mormot.crypt.secure,
   mormot.orm.base,
   mormot.orm.core,
   mormot.orm.rest,
@@ -1149,6 +1150,7 @@ begin
   // validate non-REST kind of requests
   if (self = nil) or
      (pointer(fRestServers) = nil) or
+     (Ctxt.Method = '') or // IsGet/IsOptions require method <> ''
      fShutdownInProgress then
   begin
     result := HTTP_NOTFOUND;
@@ -1346,7 +1348,7 @@ var
 begin
   if self = nil then
     exit;
-  if CurrentThreadNameShort^ = '' then
+  if CurrentThreadNameShort^[0] = #0 then
     SetCurrentThreadName('% %% %', [self, fPort, fRestServerNames, Sender]);
   fSafe.WriteLock; // protect fRestServers[]
   try

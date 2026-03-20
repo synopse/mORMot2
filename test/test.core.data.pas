@@ -83,11 +83,12 @@ uses
   mormot.core.text,
   mormot.core.buffers,
   mormot.core.unicode,
-  mormot.core.rtti,
-  mormot.core.variants,
-  mormot.core.json,
-  mormot.core.data,
   mormot.core.datetime,
+  mormot.core.data,
+  mormot.core.rtti,
+  mormot.core.json,
+  mormot.core.fmt,
+  mormot.core.variants,
   mormot.crypt.core,
   mormot.crypt.secure,
   mormot.core.perf,
@@ -2688,19 +2689,18 @@ var
     end;
   end;
 
-  procedure TestJop(const src, exp: RawUtf8; nest: boolean = true;
-    PreProcessor: TTextWriterJsonPreProcessor = [jppTemplate]);
+  procedure TestJop(const src, exp: RawUtf8; nest: boolean = true);
   var
     j, k: RawUtf8;
     s: TTextWriterJsonFormat;
   begin
-    j := JsonReformat(src, jsonUnquotedPropNameCompact, PreProcessor);
+    j := JsonPreprocess(src, jsonUnquotedPropNameCompact);
     Check(j <> '');
     CheckEqual(j, exp, src);
     if nest then
       for s := low(s) to high(s) do
       begin
-        k := JsonReformat(src, s, PreProcessor);
+        k := JsonPreprocess(src, s);
         if s = jsonCompact then
           Check(IsValidJson(k, {strict=}true), 'valid');
         if s = jsonUnquotedPropNameCompact then
@@ -3224,10 +3224,22 @@ begin
     '$$'#10'a=1'#10'$$'#10'{a:$a|0$,b:$b|2$}',
     '{a:1,b:2}');
   TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|a$}',
+    '{a:1,b:"a"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|$(a)$}',
+    '{a:1,b:1}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|$(c|a)$}',
+    '{a:1,b:"a"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$(b|$(c|a))}',
+    '{a:1,b:"a"}');
+  TestJop(
     '$$'#10'a=1'#10'$$'#10'{a:$a$,b:$"$a$"}',
     '{a:1,b:"1"}');
   TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$a$,b:"$a$",c{d:$a}}}',
+    '$$'#10'a=1'#10'$$'#10'{a:$a$,b:"$a$",c{d:$(a)}}',
     '{a:1,b:"$a$",c:{d:1}}');
   TestJop(
     '$$'#10'a=1'#10'$$'#10'{a:$none|$a$$,b:$"$a$"}',
@@ -3260,6 +3272,7 @@ begin
   TestJop(
     J + '[ $if b$ 1 $if var$ 2 $else$ 3 $endif$ $else$ 4 $endif$ 5 ]',
     '[4,5]');
+  J := '$$'#10'var=1'#10'a="number $var$" '#10'$$'#10;
   TestJop(
     J + '{a:$a$,b:$"$a$",c:$var$,d: $"$var$" ,e:"$var$",f:$"5432$var$0"}',
     '{a:"number 1",b:"number 1",c:1,d:"1",e:"$var$",f:"543210"}');
@@ -3267,6 +3280,14 @@ begin
     J + '{$a$:0,b:$exe:arch$,c:$"http://toto/$exe:arch$",d:$os:none$,e:$"a$os:no$s"}',
     '{"number 1":0,b:"' + CPU_ARCH_TEXT + '",c:"http://toto/' + CPU_ARCH_TEXT +
      '",d:null,e:"as"}');
+  TestJop(
+    J + '# comment 2'#10'$$ section 2'#10'$ifdef a$ b=10'#10'$endif$'#10'$$'#10 +
+    '[$ifdef b$ 99 $else$ 0 $endif$ $(b) $(a) 100]',
+    '[99,10,"number 1",100]');
+  TestJop(
+    J + '$$ section 2'#10'$ifdef a$ b=1'#10'a=2'#10'$endif$'#10'$$'#10 +
+    '[$ifdef b$ $(b) $else$ 0 $endif$ $(b) $(a) 10]',
+    '[1,1,2,10]');
   TestJop(
     '$$'#10'a=1'#10'$$'#10'{ $if a$ a:$a$ $endif$, b:$"$a$"}',
     '{a:1,b:"1"}');
@@ -4688,6 +4709,32 @@ var
   c: cardinal;
   s, exp: RawUtf8;
 begin
+  // validate source code generation
+  CheckEqual(TextToSource(''), '');
+  CheckEqual(TextToSource('ab', lfLF), '  ''ab'''#10);
+  CheckEqual(TextToSource('ab'#7, lfLF), '  ''ab''#7'#10);
+  CheckEqual(TextToSource('ab'#7'cd', lfLF), '  ''ab''#7''cd'''#10);
+  CheckEqual(TextToSource('ab'#7'cd'#1, lfLF), '  ''ab''#7''cd''#1'#10);
+  CheckEqual(TextToSource('ab'#7'cd'#1'e''f'#13#10, lfLF),
+    '  ''ab''#7''cd''#1''e''''f''#13#10'#10);
+  CheckEqualShort(TextToSourceShort(''), '');
+  CheckEqualShort(TextToSourceShort('ab', lfLF), '  ''ab'''#10);
+  CheckEqualShort(TextToSourceShort('ab'#7, lfLF), '  ''ab''#7'#10);
+  CheckEqualShort(TextToSourceShort('ab'#7'cd', lfLF), '  ''ab''#7''cd'''#10);
+  CheckEqualShort(TextToSourceShort('ab'#7'cd'#1, lfLF), '  ''ab''#7''cd''#1'#10);
+  CheckEqualShort(TextToSourceShort('ab'#7'cd'#1'e''f'#13#10, lfLF),
+    '  ''ab''#7''cd''#1''e''''f''#13#10'#10);
+  s := RawUtf8OfChar('a', 211);
+  s := Join(['ab'#7, s, #1'cd'#2, s, '.']);
+  CheckHash(TextToSource(s, lfLF), $429F0213);
+  Append(s, '1');
+  CheckHash(TextToSource(s, lfLF), $CE600C30);
+  Append(s, '2');
+  CheckHash(TextToSource(s, lfLF), $AE154C77);
+  Append(s, '3');
+  CheckHash(TextToSource(s, lfLF), $CD2B6983);
+  CheckHash(BinToSource('DATA', '', 'data', 16, '', lfLF), $2FEE1DC5);
+  CheckHash(BinToSource('DATA', 'some comment', s, 16, '', lfLF), $9F4563CE);
   // html escape and parsing
   CheckEqual(HtmlUnescape(''), '');
   CheckEqual(HtmlUnescape('test'), 'test');
@@ -8026,7 +8073,8 @@ begin
     begin
       s := RandomIdentifier(i);
       Check(not NeedsHtmlEscape(pointer(s), hf));
-      CheckEqual(HtmlEscape(s), s, 'HtmlEscape');
+      CheckEqual(HtmlEscape(s, hf), s, 'HtmlEscape');
+      CheckEqual(ShortStringToUtf8(HtmlEscapeShort(s, hf)), s);
       Check(not NeedsXmlEscape(pointer(s)));
       CheckEqual(XmlEscape(s), s, 'XmlEscape');
     end;
@@ -8043,6 +8091,7 @@ begin
     Check((t = s) <> (hf <> hfNone));
     if hf <> hfNone then
       CheckEqual(t, '&amp; some');
+    CheckEqual(ShortStringToUtf8(HtmlEscapeShort(s, hf)), t);
   end;
   CheckEqual(XmlEscape('&'), '&amp;');
   CheckEqual(XmlEscape(' &'), ' &amp;');

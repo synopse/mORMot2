@@ -34,9 +34,10 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.buffers,
+  mormot.core.datetime,
   mormot.core.rtti,
   mormot.core.json,
-  mormot.core.datetime,
+  mormot.core.fmt,
   mormot.core.variants,
   mormot.core.zip,
   mormot.core.log,
@@ -3430,7 +3431,7 @@ function THttpServerRequest.TempJsonWriter(
 begin
   if fTempWriter = nil then
   begin
-    fTempWriter := TJsonWriter.CreateOwnedStream(temp, {noshared=}true);
+    fTempWriter := TJsonWriter.CreateOwnedStream(temp);
     fTempWriter.FlushToStreamNoAutoResize := true;
   end
   else
@@ -5220,7 +5221,8 @@ begin
     GetNextItem(P, ' ', Http.CommandUri);    // '/path'
     result := grRejected;
     if (P = nil) or
-       (PCardinal(P)^ <> HTTP_32) then
+       (PCardinal(P)^ <> HTTP_32) or
+       (Http.CommandMethod = '') then
       exit;
     http10 := P[7] = '0';
     fKeepAliveClient := ((fServer = nil) or
@@ -7018,7 +7020,8 @@ begin
     include(err, eShutdown); // avoid GPF at shutdown
   if length(aBearerToken) < PEER_CACHE_BEARERLEN then // base64uri length
     include(err, eBearer);
-  if not (IsGet(aMethod) or
+  if (aMethod = '') or
+     not (IsGet(aMethod) or
           IsHead(aMethod)) then
     include(err, eNoGetHead);
   if aUrl = '' then // URI is just ignored but something should be specified
@@ -7719,29 +7722,41 @@ begin
 end;
 
 procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: ShortString);
-var
-  algoext: PUtf8Char;
-  algohex: string[SizeOf(msg.Hash.Bin.b) * 2];
 begin
   result[0] := #0;
   if msg.Kind > high(msg.Kind) then
     exit; // clearly invalid message
-  algoext := nil;
-  algohex[0] := #0;
-  if not IsZero(msg.Hash.Bin.b) then // append e.g. 'xxxHexaHashxxx.sha256'
+  result := ToText(msg.Kind)^;
+  AppendShortTwoChars(ord(' ') + ord('#') shl 8, @result);
+  AppendShortIntHex(msg.Seq, result);
+  AppendShortChar(' ', @result);
+  AppendShortChar(OS_INITIAL[msg.Os.os], @result);
+  AppendShortChar(' ', @result);
+  AppendShort(OsvToShort(msg.Os)^, result);
+  AppendOsBuild(msg.Os, @result, ' ');
+  AppendShortChar(' ', @result);
+  AppendShortChar(MAK_TXT[msg.Hardware], @result);
+  AppendShortChar(' ', @result);
+  AppendShortIp4(@msg.IP4, @result, ' ');
+  AppendShort('to ', result);
+  AppendShortIp4(@msg.DestIP4, @result, ' ');
+  AppendShortIp4(@msg.MaskIP4, @result, ' ');
+  AppendShortIp4(@msg.BroadcastIP4, @result, ' ');
+  AppendShortCardinal(msg.Speed, result);
+  AppendShort('Mb/s ', result);
+  AppendShort(UnixTimeToFileShort(QWord(msg.Timestamp) + UNIXTIME_MINIMAL), result);
+  if (msg.Hash.Algo <= high(msg.Hash.Algo)) and
+     not IsZero(@msg.Hash.Bin.b, HASH_SIZE[msg.Hash.Algo]) then
   begin
-    BinToHexLower(@msg.Hash.Bin, @algohex[1], HASH_SIZE[msg.Hash.Algo]);
-    algohex[0] := AnsiChar(HASH_SIZE[msg.Hash.Algo] * 2);
-    algoext := pointer(HASH_EXT[msg.Hash.Algo]);
+    AppendShortChar(' ', @result); // append e.g. ' xxxHexaHashxxx.sha256'
+    AppendShortHex(@msg.Hash.Bin, HASH_SIZE[msg.Hash.Algo], result);
+    AppendShortAnsi7String(HASH_EXT[msg.Hash.Algo], result);
   end; // IsZero(Hash.Bin) = no hash known = no hash computed nor verified
-  with msg do
-    FormatShort('% #% % %% % % to % % % %Mb/s % %% siz=% con=% ',
-      [ToText(Kind)^, CardinalToHexShort(Seq), OS_INITIAL[Os.os],
-       OsvToShort(Os)^, WinOsBuild(Os, ' '), MAK_TXT[Hardware],
-       IP4ToShort(@IP4), IP4ToShort(@DestIP4),
-       IP4ToShort(@MaskIP4), IP4ToShort(@BroadcastIP4), Speed,
-       UnixTimeToFileShort(QWord(Timestamp) + UNIXTIME_MINIMAL),
-       algohex, algoext, Size, Connections], result);
+  AppendShort(' siz=', result);
+  AppendShortCardinal(msg.Size, result);
+  AppendShort(' con=', result);
+  AppendShortCardinal(msg.Connections, result);
+  AppendShortCharSafe(' ', result);
   AppendShortUuid(msg.Uuid, result);
 end;
 
@@ -8188,7 +8203,7 @@ var // lots of local variable so that this method is thread-safe
         '<h1>Server Error %: %</h1><p>', [StatusCode, outstat], outmsg);
       if E <> nil then
         Append(outmsg, [E, ' Exception raised:<br>']);
-      Append(outmsg, HtmlEscape(ErrorMsg), '</p><p><small>' + XPOWEREDVALUE);
+      Append(outmsg, HtmlEscapeShort(ErrorMsg), '</p><p><small>' + XPOWEREDVALUE);
       resp^.SetContent(datachunkmem, outmsg, HTML_CONTENT_TYPE);
       HttpSendResponse(0);
     except

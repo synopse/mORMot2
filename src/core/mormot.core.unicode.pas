@@ -2097,7 +2097,6 @@ type
   TOnUtf8Translate = procedure(English: PUtf8Char; EnglishLen: integer;
     var Translated: RawUtf8) of object;
 
-
 /// check case-sensitive matching starting of text in start
 // - returns true if the item matched
 // - see StartWith() from this unit for a case-insensitive version
@@ -2538,7 +2537,7 @@ type
 
   /// store pointer references to a name/value pair as UTF-8 text buffers
   // - used e.g. for TParseSortExpression or as THttpCookie
-  TTextBufferPair = object
+  TTextBufferPair = record
     /// start of the name identifier - not #0 ended, but of NameLen length
     NameStart: PUtf8Char;
     /// start of the value identifier - not #0 ended, but of ValueLen length
@@ -2554,7 +2553,15 @@ type
   TTextBufferPairDynArray = array of TTextBufferPair;
 
   /// all parsed filled from ParseTextExpression()
-  TTextExpression = object(TTextBufferPair)
+  TTextExpression = record
+    /// start of the name identifier - not #0 ended, but of NameLen length
+    NameStart: PUtf8Char;
+    /// start of the value identifier - not #0 ended, but of ValueLen length
+    ValueStart: PUtf8Char;
+    /// the number of UTF-8 chars stored in NameStart
+    NameLen: integer;
+    /// the number of UTF-8 chars stored in ValueStart
+    ValueLen: integer;
     /// the recognized operator for EvaluateTextExpression()
     Match: TCompareOperator;
   end;
@@ -2578,13 +2585,14 @@ function ParseOperatorText(P: PUtf8Char; out Match: TCompareOperator): PUtf8Char
 function SortMatch(CompareResult: integer; CompareOperator: TCompareOperator): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// low-level search of NameStart/NameLen in pairs = pointer(TTextBufferPairDynArray)
-function FindTextBufferPair(name: PUtf8Char; len: PtrInt;
-  pairs: PTextBufferPair): PTextBufferPair; overload;
-
-/// low-level search of NameStart/NameLen in a TTextBufferPairDynArray
+/// case-sensitive search of NameStart/NameLen in a TTextBufferPairDynArray
 function FindTextBufferPair(const name: RawUtf8;
   const pairs: TTextBufferPairDynArray): PTextBufferPair; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// raw case-sensitive search of NameStart/NameLen in pairs = pointer(DynArray)
+function FindTextBufferPair(name: PUtf8Char; len: PtrInt;
+  pairs: PTextBufferPair): PTextBufferPair; overload;
 
 /// compute a RawUtf8 from pairs[ndx].NameStart/NameLen or '' if ndx is out of range
 function NameTextBufferPair(const pairs: TTextBufferPairDynArray; ndx: PtrInt): RawUtf8;
@@ -2639,30 +2647,6 @@ procedure SnakeCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8; sep: AnsiChar = '
 // - will convert up to the first 256 AnsiChar of text
 // - you can set e.g. sep='-' to convert to kekab-case as used e.g. in RFC
 function SnakeCase(const text: RawUtf8; sep: AnsiChar = '_'): RawUtf8; overload;
-
-const
-  // published for unit testing in TNetworkProtocols.OpenAPI (e.g. if sorted)
-  RESERVED_KEYWORDS: array[0..91] of RawUtf8 = (
-    'ABSOLUTE', 'ABSTRACT', 'ALIAS', 'AND', 'ARRAY', 'AS', 'ASM', 'ASSEMBLER',
-    'BEGIN', 'CASE', 'CLASS', 'CONST', 'CONSTREF', 'CONSTRUCTOR', 'DESTRUCTOR',
-    'DIV', 'DO', 'DOWNTO', 'ELSE', 'END', 'EXCEPT', 'EXPORT', 'EXTERNAL',
-    'FALSE', 'FAR', 'FILE', 'FINALIZATION', 'FINALLY', 'FOR', 'FORWARD',
-    'FUNCTION', 'GENERIC', 'GOTO', 'IF', 'IMPLEMENTATION', 'IN', 'INHERITED',
-    'INITIALIZATION', 'INLINE', 'INTERFACE', 'IS', 'LABEL', 'LIBRARY', 'MOD',
-    'NEAR', 'NEW', 'NIL', 'NOT', 'OBJECT', 'OF', 'ON', 'OPERATOR', 'OR', 'OUT',
-    'OVERRIDE', 'PACKED', 'PRIVATE', 'PROCEDURE', 'PROGRAM', 'PROPERTY',
-    'PROTECTED', 'PUBLIC', 'PUBLISHED', 'RAISE', 'READ', 'RECORD',
-    'REINTRODUCE', 'REPEAT', 'RESOURCESTRING', 'SELF', 'SET', 'SHL', 'SHR',
-    'STATIC', 'STRING', 'THEN', 'THREADVAR', 'TO', 'TRUE', 'TRY', 'TYPE',
-    'UNIT', 'UNTIL', 'USES', 'VAR', 'VARIANT', 'VIRTUAL', 'WHILE', 'WITH',
-    'WRITE', 'WRITELN', 'XOR');
-
-/// quickly check if a text is a case-insensitive pascal code keyword
-function IsReservedKeyWord(const aName: RawUtf8): boolean;
-
-/// wrap CamelCase() and IsReservedKeyWord() to generate a valid pascal identifier
-// - if aName is void after camel-casing, will raise an ESynUnicode
-function SanitizePascalName(const aName: RawUtf8; KeyWordCheck: boolean): RawUtf8;
 
 var
   /// these procedure type must be defined if a default system.pas is used
@@ -9952,7 +9936,7 @@ begin
       result := CompareResult <= 0;
     coGreaterThan:
       result := CompareResult > 0;
-  // coGreaterThanOrEqualTo and paranoid coEqualCaseInsens... fallback
+  // coGreaterThanOrEqualTo and paranoid >= coEqualCaseInsens fallback
   else
     result := CompareResult >= 0;
   end;
@@ -9973,9 +9957,8 @@ begin
   repeat
     if (result^.NameLen = len) and
        mormot.core.base.CompareMem(result^.NameStart, name, len) then
-      exit // cookies are case-sensitive
-    else
-      inc(result);
+      exit; // e.g. cookies are case-sensitive
+    inc(result);
     dec(n);
   until n = 0;
   result := nil;
@@ -10275,26 +10258,6 @@ end;
 function SnakeCase(const text: RawUtf8; sep: AnsiChar): RawUtf8;
 begin
   SnakeCase(pointer(text), length(text), result, sep);
-end;
-
-function IsReservedKeyWord(const aName: RawUtf8): boolean;
-var
-  up: TByteToAnsiChar;
-begin
-  UpperCopy255Buf(@up, pointer(aName), length(aName))^ := #0;
-  result := FastFindPUtf8CharSorted(
-    @RESERVED_KEYWORDS, high(RESERVED_KEYWORDS), @up) >= 0; // O(log(n)) search
-end;
-
-function SanitizePascalName(const aName: RawUtf8; KeyWordCheck: boolean): RawUtf8;
-begin
-  CamelCase(aName, result);
-  if result = '' then
-    ESynUnicode.RaiseFmt(nil, 'Unexpected SanitizePascalName(%s)', [aName]);
-  result[1] := NormToUpperAnsi7[result[1]]; // ensure PascalCase
-  if KeyWordCheck and
-     IsReservedKeyWord(result) then
-    result := '_' + result; // avoid identifier name collision
 end;
 
 procedure GetCaptionFromPCharLen(P: PUtf8Char; out result: string; Len: PtrUInt);

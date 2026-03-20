@@ -25,9 +25,11 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.datetime,
+  mormot.core.data,
   mormot.core.rtti,
   mormot.core.json,
-  mormot.core.data,
+  mormot.core.fmt,
   mormot.core.log,
   mormot.crypt.core;
 

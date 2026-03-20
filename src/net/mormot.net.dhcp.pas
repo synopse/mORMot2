@@ -2692,14 +2692,10 @@ begin
     W.AddPropJsonShort('op', 'request')
   else
     W.AddPropJsonShort('op', 'reply');
-  if p^.ciaddr <> 0 then
-    W.AddPropJsonShort('ciaddr', IP4ToShort(@p^.ciaddr));
-  if p^.yiaddr <> 0 then
-    W.AddPropJsonShort('yiaddr', IP4ToShort(@p^.yiaddr));
-  if p^.siaddr <> 0 then
-    W.AddPropJsonShort('siaddr', IP4ToShort(@p^.siaddr));
-  if p^.giaddr <> 0 then
-    W.AddPropJsonShort('giaddr', IP4ToShort(@p^.giaddr));
+  AddJsonWriterPropIP4(W, 'ciaddr', @p^.ciaddr);
+  AddJsonWriterPropIP4(W, 'yiaddr', @p^.yiaddr);
+  AddJsonWriterPropIP4(W, 'siaddr', @p^.siaddr);
+  AddJsonWriterPropIP4(W, 'giaddr', @p^.giaddr);
   if not IsZero(PNetMac(@p^.chaddr)^) then
     W.AddPropJsonShort('chaddr', MacToShort(@p^.chaddr));
   // parse and serialize all option fields in packet order
@@ -2717,8 +2713,7 @@ begin
   // end with main sllServer decoded/parsed state fields in fields
   if s <> nil then
   begin
-    if s^.RecvIp4 <> 0 then
-      W.AddPropJsonShort('via', IP4ToShort(@s^.RecvIp4));
+    AddJsonWriterPropIP4(W, 'via', @s^.RecvIp4);
     if (s^.RecvHostName <> nil) and
        (s^.RecvHostName^[0] <> #0) then
       W.AddPropJsonShort('host', s^.RecvHostName^);
@@ -2727,7 +2722,7 @@ begin
     if s^.Ip[0] <> #0 then
       W.AddPropJsonShort('ip', s^.Ip);
   end;
-  W.CancelLastComma('}');
+  W.ReplaceLastComma('}');
 end;
 
 function DhcpParseToJson(dhcp: PDhcpPacket; len: PtrInt; extended: boolean): RawJson;

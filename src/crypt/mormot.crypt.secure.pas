@@ -43,6 +43,7 @@ uses
   mormot.core.data,
   mormot.core.variants,
   mormot.core.json,
+  mormot.core.search,
   mormot.lib.sspi,   // for WinCertDecode() - void unit on POSIX
   mormot.crypt.core;
 
@@ -3872,6 +3873,10 @@ type
       aIsComputer: boolean = false; const aSalt: RawUtf8 = '';
       aEncType: integer = ENCTYPE_AES256_CTS_HMAC_SHA1_96;
       aIterations: integer = 0): boolean;
+    /// compute a binary KeyTab with one entry with supplied credentials
+    class function Generate(const aPrincipal: RawUtf8; const aPassword: SpiUtf8;
+      aIsComputer: boolean = false; const aSalt: RawUtf8 = '';
+      aEncType: integer = ENCTYPE_AES256_CTS_HMAC_SHA1_96): RawByteString;
   end;
 
 /// raw function to recognize the OID(s) of a public key ASN1_SEQ definition
@@ -5359,8 +5364,8 @@ var
 begin
   fAlgo := aAlgo;
   a := SIGN_HASH[Algo];
-  fSignatureSize := SIGN_SIZE[Algo];
-  fBlockMax := BLOCK_SIZE[Algo]; // typically 15 (256-bit) or 31 (512-bit)
+  fSignatureSize := SIGN_SIZE[fAlgo];
+  fBlockMax := BLOCK_SIZE[fAlgo]; // typically 15 (256-bit) or 31 (512-bit)
   fBlockSize := (fBlockMax + 1) shl 2;
   if fBlockMax = 0 then
   begin // we estimate that the HMAC pattern is part of the SHA-3 sponge design
@@ -5465,7 +5470,7 @@ end;
 function TSynSigner.Hash(aAlgo: TSignAlgo; aBuffer: pointer; aLen: integer;
   out aDigest: THash512Rec): integer;
 begin
-  result := fHasher.Full(SIGN_HASH[fAlgo], aBuffer, aLen, aDigest);
+  result := fHasher.Full(SIGN_HASH[aAlgo], aBuffer, aLen, aDigest);
 end;
 
 function TSynSigner.Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
@@ -5479,7 +5484,7 @@ begin
   if aSecretPbkdf2Round <> 0 then
     fHasher.CopyTo(bak); // save initial PRF(secret) state
   Update(aSalt);
-  if not (Algo in SIGNER_SHA3) then // padding + XOF mode are part of SHA-3
+  if not (fAlgo in SIGNER_SHA3) then // padding + XOF mode are part of SHA-3
     // U1 = PRF(secret, salt + INT_32_BE(part))
     UpdateBigEndian(aPartNumber);  // is a 1-based index
   Final(aDerivatedKey, {noinit=}true);
@@ -5577,10 +5582,10 @@ begin
   r := aDestLen - (l * hlen); // mod
   if r <> 0 then
     inc(l); // ceil()
-  if (Algo in SIGNER_SHA3) and
+  if (aAlgo in SIGNER_SHA3) and
      (l > 1) then
     ESynCrypto.RaiseUtf8('TSynSigner.Pbkdf2(%) with DestLen=%: use SHAKE instead',
-      [ToText(algo)^, aDestLen]);
+      [ToText(aAlgo)^, aDestLen]);
   // DK = T1 + T2 + .. + Tl with Ti = F(secret, salt, round, part)
   p := FastNewString(l * hlen); // pre-allocate destination buffer
   pointer(result) := p;
@@ -5663,7 +5668,7 @@ procedure TSynSigner.AssignTo(var aDerivatedKey: THash512Rec;
 var
   ks: integer;
 begin
-  case algo of
+  case fAlgo of
     saSha3S128:
       ks := 128; // truncate to Keccak sponge precision
     saSha3S256:
@@ -10738,6 +10743,22 @@ begin
               aIsComputer, aEncType, aIterations) and
             Add(e);
   FillZero(e.Key); // anti-forensic
+end;
+
+class function TKerberosKeyTabGenerator.Generate(const aPrincipal: RawUtf8;
+  const aPassword: SpiUtf8; aIsComputer: boolean; const aSalt: RawUtf8;
+  aEncType: integer): RawByteString;
+var
+  gen: TKerberosKeyTabGenerator;
+begin
+  result := '';
+  gen := TKerberosKeyTabGenerator.Create;
+  try
+    if gen.AddNew(aPrincipal, aPassword, aIsComputer, aSalt, aEncType) then
+      result := gen.SaveToBinary;
+  finally
+    gen.Free;
+  end;
 end;
 
 function OidToCka(const oid, oid2: RawUtf8): TCryptKeyAlgo;

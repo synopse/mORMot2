@@ -40,6 +40,7 @@ uses
   mormot.core.data,
   mormot.core.rtti,
   mormot.core.json,
+  mormot.core.fmt,
   mormot.core.threads,
   mormot.core.perf,
   mormot.crypt.core,
@@ -3619,14 +3620,14 @@ begin
   rec := Table.CreateAndFillPrepare(fCall^.OutBody);
   try
     W := TableModelProps.Props.CreateJsonWriter(TRawByteStringStream.Create,
-      true, FieldsCsv, {knownrows=}0, 0, @tmp);
+      true, FieldsCsv, 0, 0, @tmp);
     try
+      W.StreamIsOwned := true;
       W.CustomOptions := [twoForceJsonStandard]; // regular JSON
       W.OrmOptions := Options; // SetOrmOptions() may refine ColNames[]
       rec.AppendFillAsJsonValues(W);
       W.SetText(fCall^.OutBody);
     finally
-      W.Stream.Free; // associated TRawByteStringStream instance
       W.Free;
     end;
   finally
@@ -4779,7 +4780,7 @@ begin
       inc(a);
       inc(arg);
     end;
-    WR.CancelLastComma(']');
+    WR.ReplaceLastComma(']');
     WR.SetText(fCall^.InBody); // input Body contains new generated input JSON
   finally
     WR.Free;
@@ -7034,7 +7035,7 @@ begin
     W.CancelLastComma;
     W.AddDirect(']', ',');
   end;
-  W.CancelLastComma('}');
+  W.ReplaceLastComma('}');
 end;
 
 function TRestServer.GetServiceMethodStat(
@@ -7480,7 +7481,7 @@ begin
         W.WriteObject(fSessions.List[i]);
         W.AddComma;
       end;
-      W.CancelLastComma(']');
+      W.ReplaceLastComma(']');
       W.SetText(RawUtf8(result));
     finally
       fSessions.Safe.ReadOnlyUnLock;

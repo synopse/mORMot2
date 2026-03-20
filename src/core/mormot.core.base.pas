@@ -13,11 +13,12 @@ unit mormot.core.base;
     - Integer Arrays Manipulation
     - ObjArray PtrArray InterfaceArray Wrapper Functions
     - Low-level Types Mapping Binary or Bits Structures
+    - Low-level CPU Detection and Intrinsics
+    - Faster Alternative to RTL Standard Functions
     - Buffers (e.g. Hashing and SynLZ compression) Raw Functions
     - Efficient Variant Values Conversion
     - Sorting/Comparison Functions
     - Some Convenient TStream descendants and File access functions
-    - Faster Alternative to RTL Standard Functions
     - Raw Shared Constants / Types Definitions
 
    Aim of those types and functions is to be cross-platform and cross-compiler,
@@ -330,7 +331,7 @@ type
   PPUtf8Char = ^PUtf8Char;
   PPPUtf8Char = ^PPUtf8Char;
 
-  /// a Row/Col array of PUtf8Char, for containing sqlite3_get_table() result
+  /// a Row/Col array of PUtf8Char, for containing e.g. sqlite3_get_table() result
   TPUtf8CharArray = array[ 0 .. MaxInt div SizeOf(PUtf8Char) - 1 ] of PUtf8Char;
   PPUtf8CharArray = ^TPUtf8CharArray;
 
@@ -2695,9 +2696,6 @@ procedure mul64x64({$ifdef FPC}constref{$else}const{$endif} left, right: QWord;
 // - is implemented using plain pascal - for a few elements, AVX2 is not worth it
 procedure AddInt64Array(d, s: PInt64Array; n: PtrInt);
 
-
-{ ************ Low-level Functions Manipulating Bits }
-
 /// retrieve a particular bit status from a bit array
 // - this function can't be inlined, whereas GetBitPtr() function can
 function GetBit(const Bits; aIndex: PtrInt): boolean;
@@ -2812,8 +2810,7 @@ procedure UnSetBit64(var Bits: Int64; aIndex: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
 
-
-{ ************ Faster Alternative to RTL Standard Functions }
+{ ************ Low-level CPU Detection and Intrinsics }
 
 type
   /// the potential features, retrieved from an Intel/AMD CPU
@@ -3003,11 +3000,8 @@ procedure LockedDec32(int32: PInteger);
 /// slightly faster than InterlockedIncrement64()
 procedure LockedInc64(int64: PInt64);
 
-// defined here for mormot.test.base only
+// defined here for test.core.base
 function GetBitsCountSSE42(value: PtrInt): PtrInt;
-
-// defined here for mormot.test.base only
-// - use instead global crc32c() variable
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 {$else}
@@ -3029,32 +3023,6 @@ procedure LockedDec32(int32: PInteger); inline;
 procedure LockedInc64(int64: PInt64); inline;
 
 {$endif CPUINTEL}
-
-/// low-level string reference counter increment (do nothing if constant)
-procedure FastStringAddRef(str: pointer);
-
-/// low-level string reference counter decrement (do nothing if constant)
-procedure FastStringDecRef(str: pointer);
-  {$ifdef HASINLINE} {$ifdef ISDELPHI} inline; {$endif} {$endif}
-
-/// low-level string reference counter unprocess
-// - caller should have tested that refcnt>=0
-// - returns true if the managed variable should be released (i.e. refcnt was 1)
-function StrCntDecFree(var refcnt: TStrCnt): boolean;
-  {$ifndef CPUINTEL} inline; {$endif}
-
-/// low-level dynarray reference counter unprocess
-// - caller should have tested that refcnt>=0
-function DACntDecFree(var refcnt: TDACnt): boolean;
-  {$ifndef CPUINTEL} inline; {$endif}
-
-/// low-level string reference counter process
-procedure StrCntAdd(var refcnt: TStrCnt; increment: TStrCnt = 1);
-  {$ifdef HASINLINE} inline; {$endif}
-
-/// low-level dynarray reference counter process
-procedure DACntAdd(var refcnt: TDACnt; increment: TDACnt = 1);
-  {$ifdef HASINLINE} inline; {$endif}
 
 /// fast atomic compare-and-swap operation on a pointer-sized integer value
 // - via Intel/AMD custom asm or FPC RTL InterlockedCompareExchange(pointer)
@@ -3097,8 +3065,6 @@ function BSRqword(const q: Qword): cardinal;
 
 {$endif ISDELPHI}
 
-{$ifdef ASMINTEL}
-
 {$ifdef ASMX64} // will define its own self-dispatched SSE2/AVX functions
 
 type
@@ -3127,6 +3093,37 @@ procedure Base64DecodeAvx2(var b64: PAnsiChar; var b64len: PtrInt; var b: PAnsiC
 {$endif ASMX64AVXNOCONST}
 
 {$endif ASMX64}
+
+
+{ ************ Faster Alternative to RTL Standard Functions }
+
+/// low-level string reference counter increment (do nothing if constant)
+procedure FastStringAddRef(str: pointer);
+
+/// low-level string reference counter decrement (do nothing if constant)
+procedure FastStringDecRef(str: pointer);
+  {$ifdef HASINLINE} {$ifdef ISDELPHI} inline; {$endif} {$endif}
+
+/// low-level string reference counter unprocess
+// - caller should have tested that refcnt>=0
+// - returns true if the managed variable should be released (i.e. refcnt was 1)
+function StrCntDecFree(var refcnt: TStrCnt): boolean;
+  {$ifndef CPUINTEL} inline; {$endif}
+
+/// low-level dynarray reference counter unprocess
+// - caller should have tested that refcnt>=0
+function DACntDecFree(var refcnt: TDACnt): boolean;
+  {$ifndef CPUINTEL} inline; {$endif}
+
+/// low-level string reference counter process
+procedure StrCntAdd(var refcnt: TStrCnt; increment: TStrCnt = 1);
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// low-level dynarray reference counter process
+procedure DACntAdd(var refcnt: TDACnt; increment: TDACnt = 1);
+  {$ifdef HASINLINE} inline; {$endif}
+
+{$ifdef ASMINTEL}
 
 /// our fast version of FillChar() on Intel/AMD
 // - on Intel i386/x86_64, will use fast SSE2/AVX instructions (if available)
@@ -9406,8 +9403,6 @@ begin
     until n = 0;
 end;
 
-{ ************ low-level functions manipulating bits }
-
 // naive code gives the best performance - bts [Bits] has an overhead
 // we tried with PPtrIntArray but PIntegerArray seems to generate better code
 
@@ -10587,13 +10582,27 @@ begin
             (a.Data = b.Data);
 end;
 
+
+{ ************ Low-level CPU Detection and Intrinsics }
+
 type
-  // 16KB/32KB hash table used by SynLZ - as used by the asm .inc files
+  // 16KB/32KB hash table used by SynLZ - as used by the asm .inc files below
   TOffsets = array[0..4095] of PAnsiChar;
 
 {$ifdef CPUINTEL}
 
+type
+  TIntelRegisters = packed record
+    eax, ebx, ecx, edx: cardinal;
+  end;
+
 // optimized asm for x86 and x86_64 is located in include files
+{$ifdef CPUX64}
+  {$include mormot.core.base.asmx64.inc}
+{$endif CPUX64}
+{$ifdef CPUX86}
+  {$include mormot.core.base.asmx86.inc}
+{$endif CPUX86}
 
 {$ifndef HASNOSSE2}
 
@@ -10628,19 +10637,6 @@ begin
       dec(n);
     until n = 0;
 end;
-
-type
-  TIntelRegisters = packed record
-    eax, ebx, ecx, edx: cardinal;
-  end;
-
-{$ifdef CPUX64}
-  {$include mormot.core.base.asmx64.inc}
-{$endif CPUX64}
-
-{$ifdef CPUX86}
-  {$include mormot.core.base.asmx86.inc}
-{$endif CPUX86}
 
 function IntelManufacturer: RawUtf8;
 var

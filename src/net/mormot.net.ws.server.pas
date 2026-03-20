@@ -357,6 +357,7 @@ var
 begin
   if (hfConnectionUpgrade in ClientSock.Http.HeaderFlags) and
      ClientSock.KeepAliveClient and
+     (ClientSock.Method <> '') and
      IsGet(ClientSock.Method) and
      PropNameEquals(ClientSock.Http.Upgrade, 'websocket') then
   begin

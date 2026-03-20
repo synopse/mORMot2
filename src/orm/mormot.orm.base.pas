@@ -41,6 +41,7 @@ uses
   mormot.core.data,
   mormot.core.rtti,
   mormot.core.json,
+  mormot.core.fmt,
   mormot.core.threads,
   mormot.core.perf,
   mormot.core.zip,     // for ODS export
@@ -3544,7 +3545,7 @@ begin
                 dec(MultiInsertRowCount);
               end;
             end;
-            W.CancelLastComma(')');
+            W.ReplaceLastComma(')');
           end;
         end;
     else
@@ -9280,7 +9281,7 @@ begin
             W.Add('f');
             W.AddU(f);
             W.AddDirect('=', '"');
-            W.AddXmlEscape(U);
+            AddXmlEscape(W, U);
             W.AddDirect('"', ' ');
           end;
           inc(o); // points to next value
@@ -9390,20 +9391,20 @@ begin
                   ftCurrency:
                     begin
                       W.AddShort('float" office:value="');
-                      W.AddXmlEscape(U);
+                      AddXmlEscape(W, U);
                       W.AddDirect('"', ' ', '/', '>');
                     end;
                   ftDate:
                     begin
                       W.AddShort('date" office:date-value="');
-                      W.AddXmlEscape(U);
+                      AddXmlEscape(W, U);
                       W.AddDirect('"', ' ', '/', '>');
                     end;
                 else
                   begin
                     //ftUnknown,ftNull,ftUtf8,ftBlob:
                     W.AddShort('string"><text:p>');
-                    W.AddXmlEscape(U);
+                    AddXmlEscape(W, U);
                     W.AddShort('</text:p></table:table-cell>');
                   end;
                 end;
@@ -9414,7 +9415,7 @@ begin
               for f := 0 to FieldCount - 1 do
               begin
                 W.AddShort('<table:table-cell office:value-type="string"><text:p>');
-                W.AddXmlEscape(GetResults(o));
+                AddXmlEscape(W, GetResults(o));
                 W.AddShort('</text:p></table:table-cell>');
                 inc(o);
               end;
@@ -9453,7 +9454,7 @@ begin
         Dest.AddDirect('<', 't', 'd', '>');
       if Assigned(OnExportValue) and
          (r > 0) then
-        Dest.AddHtmlEscapeUtf8(OnExportValue(self, r, f, true), hfOutsideAttributes)
+        AddHtmlEscapeUtf8(Dest, OnExportValue(self, r, f, true), hfOutsideAttributes)
       else
         Dest.AddHtmlEscape(GetResults(o), hfOutsideAttributes);
       if r = 0 then
@@ -11219,19 +11220,19 @@ begin
   W.AddColumns(KnownRowsCount);
 end;
 
-function TOrmPropertiesAbstract.CreateJsonWriter(Json: TStream; Expand,
-  withID: boolean; const aFields: TFieldBits; KnownRowsCount, aBufSize: integer;
-  aStackBuffer: PTextWriterStackBuffer): TOrmWriter;
+function TOrmPropertiesAbstract.CreateJsonWriter(Json: TStream;
+  Expand, withID: boolean; const aFields: TFieldBits; KnownRowsCount,
+  aBufSize: integer; aStackBuffer: PTextWriterStackBuffer): TOrmWriter;
 var
   f: TFieldIndexDynArray;
 begin
   FieldBitsToIndex(aFields, f, Fields.Count);
-  result := CreateJsonWriter(
-    Json, Expand, withID, f, KnownRowsCount, aBufSize, aStackBuffer);
+  result := CreateJsonWriter(Json,
+    Expand, withID, f, KnownRowsCount, aBufSize, aStackBuffer);
 end;
 
-function TOrmPropertiesAbstract.CreateJsonWriter(Json: TStream; Expand,
-  withID: boolean; const aFields: TFieldIndexDynArray; KnownRowsCount,
+function TOrmPropertiesAbstract.CreateJsonWriter(Json: TStream;
+  Expand, withID: boolean; const aFields: TFieldIndexDynArray; KnownRowsCount,
   aBufSize: integer; aStackBuffer: PTextWriterStackBuffer): TOrmWriter;
 begin
   if (self = nil) or
@@ -11253,8 +11254,8 @@ var
   bits: TFieldBits;
 begin
   if FieldBitsFromCsv(aFieldsCsv, bits, withID) then
-    result := CreateJsonWriter(
-      Json, Expand, withID, bits, KnownRowsCount, aBufSize, aStackBuffer)
+    result := CreateJsonWriter(Json,
+      Expand, withID, bits, KnownRowsCount, aBufSize, aStackBuffer)
   else
     result := nil;
 end;
@@ -11324,7 +11325,7 @@ begin
     if (decoded <> 0) and
        (sfoPutIDLast in Format) then
       W.AddPropInt64('ID', decoded);
-    W.CancelLastComma('}');
+    W.ReplaceLastComma('}');
     W.SetText(JsonObject);
   finally
     W.Free;

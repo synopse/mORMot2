@@ -37,8 +37,9 @@
 // from mormot.core.os.pas => disabled by default, to preserve code size
 
 {.$define NOSETTHREADNAME}
-// if defined, SetThreadName() would not raise the exception used to set the
-// thread name: to be defined if you have issues when debugging your application
+// Delphi Wintel only: if defined, SetThreadName() would not raise the "thread
+// name set" fake exception, and DebuggerBreak won't call the "int 3" opcode:
+// could be set on issue when debugging your application in the Delphi IDE
 
 {.$define NODIRECTTHREADMANAGER}
 // on POSIX, omit direct GetThreadManager() API calls and just use RTL functions
@@ -150,7 +151,8 @@
     FPC_X64MM
 
   Delphi only:
-    ISDELPHI ISDELPHIxxx WIN32DELPHI WIN64DELPHI WINARMDELPHI DISPINVOKEBYVALUE
+    ISDELPHI ISDELPHIxxx WIN32DELPHI WIN64DELPHI WINTELDELPHI WINARMDELPHI
+    DISPINVOKEBYVALUE
 
 ********************** Conditionals **********************)
 
@@ -741,9 +743,11 @@
       {$define CPUX86NOTPIC}      // use "absolute" instead of local register
       {$define TSYNEXTENDED80}    // only Win32 has a true x87 extended type
       {$define DISPINVOKEBYVALUE} // DispInvoke() expects varVariant by value
+      {$define WINTELDELPHI}      // Delphi on Windows + Intel/AMD
     {$endif CPUX86}
     {$ifdef CPUX64}
       {$define ASMX64}            // supports asm with globals
+      {$define WINTELDELPHI}      // Delphi on Windows + Intel/AMD
     {$endif CPUX64}
     {$ifdef CPU64}
       {$define WIN64DELPHI}       // Delphi with Win64 functions

@@ -753,8 +753,7 @@ var
 /// client-side authentication procedure
 // - aSecContext holds information between function calls
 // - aInData contains data received from server
-// - aSecKerberosSpn is the optional SPN domain name, e.g.
-// 'mymormotservice/myserver.mydomain.tld'
+// - aSecKerberosSpn is the plain Service Principal Name, e.g. 'HTTP/webserver@REALM'
 // - aOutData contains data that must be sent to server
 // - if function returns True, client must send aOutData to server
 // and call function again with the data returned from servsr
@@ -777,6 +776,10 @@ function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8;
   const aPassword: SpiUtf8;  const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString): boolean;
+
+/// check if the password is a local keytab/ccache file with a FILE: prefix
+// - always return false with SSPI which does not support those keytabs
+function ClientSspiPasswordIsFile(const aPassword: SpiUtf8): boolean;
 
 /// check if a binary request packet from a client is using NTLM
 function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
@@ -817,8 +820,11 @@ function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 
 /// force using a Kerberos SPN for server identification
 // - aSecKerberosSpn is the Service Principal Name, as registered in domain,
-// e.g. 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
+// e.g. 'HTTP/webserver@REALM'
 procedure ClientForceSpn(const aSecKerberosSpn: RawUtf8);
+
+/// return the value set by ClientForceSpn()
+function ClientForcedSpn: RawUtf8;
 
 /// high-level cross-platform initialization function
 // - e.g. by mormot.rest.client/server.pas or mormot.net.client/ldap/server
@@ -1826,7 +1832,7 @@ begin
   begin
     if spn <> nil then
     begin
-      // extract from 'mymormotservice/myserver.mydomain.tld@MYDOMAIN.TLD'
+      // extract from 'HTTP/webserver@REALM'
       u := RawUtf8(spn);
       j := PosExChar('@', u);
       if j <> 0 then
@@ -1852,6 +1858,11 @@ begin
   ident.Flags          := SEC_WINNT_AUTH_IDENTITY_UNICODE;
   result := ClientSspiAuthWorker(aSecContext, aInData, spn, @ident, aOutData);
   //FillCharFast(pointer(password)^, length(password) * 2, 0); // anti-forensic
+end;
+
+function ClientSspiPasswordIsFile(const aPassword: SpiUtf8): boolean;
+begin
+  result := false;
 end;
 
 function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
@@ -1948,6 +1959,11 @@ end;
 procedure ClientForceSpn(const aSecKerberosSpn: RawUtf8);
 begin
   ForceSecKerberosSpn := SynUnicode(aSecKerberosSpn);
+end;
+
+function ClientForcedSpn: RawUtf8;
+begin
+  result := RawUtf8(ForceSecKerberosSpn); // from SynUnicode
 end;
 
 procedure GetPackageNames;

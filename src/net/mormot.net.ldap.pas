@@ -1939,8 +1939,9 @@ type
     /// the user password for non-anonymous Bind/BindSaslKerberos
     // - if you can, use instead password-less Kerberos authentication, or
     // at least ensure the connection is secured via TLS
-    // - as an alternative, on POSIX you can specify a keytab associated with
-    // UserName as 'FILE:/full/path/to/my.keytab' into this property
+    // - as an alternative, on POSIX you can specify a keytab as
+    // 'FILE:/full/path/to/my.keytab' into this property, and assign an UserName
+    // or let mormot.lib.gssapi.pas use TKerberosKeyTab.MachineAccountPrincipal
     property Password: SpiUtf8
       read fPassword write fPassword;
     /// Kerberos Canonical Domain Name
@@ -6673,10 +6674,15 @@ begin
     SetUnknownError('Kerberos: Error initializing the library');
     exit;
   end;
-  if (fSettings.KerberosSpn = '') and
-     (fSettings.KerberosDN <> '') then
-    fSettings.KerberosSpn := 'LDAP/' + fSettings.TargetHost + {noport}
-                             '@' + UpperCase(fSettings.KerberosDN);
+  if fSettings.KerberosSpn = '' then
+  begin
+    // default SPN for the LDAP service - even with no SPN yet
+    fSettings.KerberosSpn := Join(['LDAP/', fSettings.TargetHost]); // no port
+    if fSettings.KerberosDN <> '' then
+      fSettings.KerberosSpn := Join([fSettings.KerberosSpn,
+        '@', UpperCase(fSettings.KerberosDN)]);
+    // if KerberosDN is not set, it would be taken from the UserName or keytab
+  end;
   fLog.EnterLocal(log, 'BindSaslKerberos(%) on %',
     [fSettings.UserName, fSettings.KerberosSpn], self);
   needencrypt := false;
@@ -6713,7 +6719,7 @@ begin
            (fResultCode = LDAP_RES_SUCCESS) then
           break;
         try
-          if fSettings.UserName <> '' then
+          if fSettings.Password <> '' then // UserName may be '' for FILE:keytab
             ClientSspiAuthWithPassword(fSecContext, datain, fSettings.UserName,
               fSettings.Password, fSettings.KerberosSpn, dataout)
           else
@@ -8307,7 +8313,7 @@ var
   datain, dataout: RawByteString;
 begin
   result := false;
-  if StartWithExact(aPassword, 'FILE:') then
+  if ClientSspiPasswordIsFile(aPassword) then
     exit; // don't cheat with this server credentials :)
   InvalidateSecContext(client);
   try

@@ -39,6 +39,7 @@ uses
   mormot.core.data,
   mormot.core.rtti,
   mormot.core.json,
+  mormot.core.fmt,
   mormot.core.threads,
   mormot.core.perf,
   mormot.crypt.core,
@@ -4247,10 +4248,12 @@ begin
         AddDirect('[');
         repeat
           AddJsonEscapeVarRec(v);
+          dec(n);
+          if n = 0 then
+            break;
           AddComma;
           inc(v);
-          dec(n);
-        until n = 0;
+        until false;
         AddDirect(']');
       end;
       AddDirect('}');

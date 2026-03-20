@@ -47,7 +47,7 @@ type
   /// allow to customize the possible line feeds
   TLineFeed = (
     lfSystem,
-    lfCR,
+    lfLF,
     lfCRLF);
 
 const
@@ -464,29 +464,19 @@ type
     ldAndroid);
 
 const
-  /// the recognized MacOS versions, as plain text
-  // - indexed from OSVersion32.utsrelease[2] kernel revision
+  /// OSVersion32.utsrelease[2] indexed MacOS versions, as number
+  MACOS_NUM: array[8 .. 26] of TShort7 = (
+    '10.4',  '10.5',  '10.6',  '10.7',  '10.8',  '10.9',  '10.10', '10.11',
+    '10.12', '10.13', '10.14', '10.15', '11',    '12',    '13',    '14',
+    '15',    '26',    '27'); // MacOS 27 expected in 2026, ARM-only
+
+  /// OSVersion32.utsrelease[2] indexed MacOS versions, as plain text
   // - see https://en.wikipedia.org/wiki/MacOS_version_history#Releases
-  MACOS_NAME: array[8 .. 26] of TShort23 = (
-    '10.4 Tiger',
-    '10.5 Leopard',
-    '10.6 Snow Leopard',
-    '10.7 Lion',
-    '10.8 Mountain Lion',
-    '10.9 Mavericks',
-    '10.10 Yosemite',
-    '10.11 El Capitan',
-    '10.12 Sierra',
-    '10.13 High Sierra',
-    '10.14 Mojave',
-    '10.15 Catalina',
-    '11 Big Sur',
-    '12 Monterey',
-    '13 Ventura',
-    '14 Sonoma',
-    '15 Sequoia',
-    '26 Tahoe', // last ARM+Intel suport
-    '27 Next'); // expected in 2026, ARM-only
+  MACOS_NAME: array[8 .. 26] of TShort15 = (
+    'Tiger', 'Leopard', 'Snow Leopard', 'Lion', 'Mountain Lion', 'Mavericks',
+    'Yosemite', 'El Capitan', 'Sierra', 'High Sierra', 'Mojave', 'Catalina',
+    'Big Sur', 'Monterey', 'Ventura', 'Sonoma', 'Sequoia', 'Tahoe',
+    'Next'); // expected in 2026, ARM-only
 
   /// the recognized Windows versions, as plain text
   // - defined even outside OSWINDOWS to allow process e.g. from monitoring tools
@@ -718,7 +708,7 @@ var
 
   /// the current Operating System version, as retrieved for the current process
   // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or 'Windows XP SP3 (5.1.2600)' or
-  // 'Windows 10 64bit 22H2 (10.0.19045.4046)' or 'macOS 13 Ventura (Darwin 22.3.0)' or
+  // 'Windows 10 64bit 22H2 (10.0.19045.4046)' or 'macOS 15.7.3 Sequoia (Darwin 24.6.0)' or
   // 'Ubuntu 16.04.5 LTS - Linux 3.13.0 110 generic#157 Ubuntu SMP Mon Feb 20 11:55:25 UTC 2017'
   OSVersionText: RawUtf8;
   /// some addition system information as text, e.g. 'Wine 1.1.5' or 'Prism'
@@ -727,21 +717,8 @@ var
   OSVersionInfoEx: RawUtf8;
   /// the current Operating System version, as retrieved for the current process
   // and computed by ToTextOSU(OSVersionInt32)
-  // - contains e.g. 'Windows Vista' or 'Ubuntu Linux 5.4.0' or
-  // 'macOS 13 Ventura 22.3.0'
+  // - contains e.g. 'Windows Vista' or 'Ubuntu Linux 5.4.0' or 'macOS 15.7.3 Sequoia'
   OSVersionShort: RawUtf8;
-
-  {$ifdef OSWINDOWS}
-  /// on Windows, the Update Build Revision as shown with the "ver/winver" command
-  // - to track the current update state of the system
-  WindowsUbr: integer;
-  /// on Windows, the ready-to-be-displayed text version of the system
-  // - e.g. 'Windows 10 Entreprise N'
-  WindowsProductName: RawUtf8;
-  /// on Windows, the ready-to-be-displayed text version of the system
-  // - e.g. '22H2'
-  WindowsDisplayVersion: RawUtf8;
-  {$endif OSWINDOWS}
 
   /// some textual information about the current CPU and its known cache
   // - contains e.g. '4 x Intel(R) Core(TM) i5-7300U CPU @ 2.60GHz [3MB]'
@@ -809,7 +786,7 @@ function WinOsBuild(const osv: TOperatingSystemVersion; sep: AnsiChar): TShort7;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// convert an Operating System type into its one-word text representation
-// - returns e.g. 'Vista' or 'Ubuntu' or 'OSX'
+// - returns e.g. 'Vista' or 'Ubuntu' or 'Sequoia'
 function OsvToShort(const osv: TOperatingSystemVersion): PShortString;
 
 /// convert a 32-bit Operating System type into its full text representation
@@ -1481,6 +1458,9 @@ var
 
 {$ifdef OSWINDOWS}
 
+  /// on Windows, the Update Build Revision as shown with the "ver/winver" command
+  // - to track the current update state of the system
+  WindowsUbr: integer;
   /// the current System information, as retrieved for the current process
   // - under a WOW64 process, it will use the GetNativeSystemInfo() new API
   // to retrieve the real top-most system information
@@ -1500,6 +1480,12 @@ var
   IsWow64Emulation: boolean;
   /// low-level Operating System information, as retrieved for the current process
   OSVersionInfo: TOSVersionInfoEx;
+  /// on Windows, the ready-to-be-displayed text version of the system
+  // - e.g. 'Windows 10 Entreprise N'
+  WindowsProductName: RawUtf8;
+  /// on Windows, the ready-to-be-displayed text version of the system
+  // - e.g. '22H2'
+  WindowsDisplayVersion: RawUtf8;
 
 {$else OSWINDOWS}
 
@@ -1508,7 +1494,7 @@ var
     /// retrieved from libc's getpagesize() - is expected to not be 0
     dwPageSize: cardinal;
     /// the number of available logical CPUs threads
-    // - retrieved from HW_NCPU (BSD) or /proc/cpuinfo (Linux)
+    // - from HW_NCPU (BSD), hw.logicalcpu (macOS) or /proc/cpuinfo (Linux)
     // - see CpuSockets/CpuCores for the number of physical CPU sockets/cores
     dwNumberOfProcessors: cardinal;
     /// meaningful system information, as returned by fpuname()
@@ -1634,69 +1620,16 @@ function GetSystemEnv(const name: RawUtf8; var res: RawUtf8): boolean; overload;
 /// search a system environment variable as UTF-8 from the internal cache
 function GetSystemEnv(name: PUtf8Char; len: TStrLen): pointer; overload;
 
-type
-  /// identify the (Windows) system certificate stores for GetSystemStoreAsPem()
-  // - ignored on POSIX systems, in which the main cacert.pem file is used
-  // - scsCA contains known Certification Authority certificates, i.e. from
-  // entities entrusted to issue certificates that assert that the recipient
-  // individual, computer, or organization requesting the certificate fulfills
-  // the conditions of an established policy
-  // - scsMY holds certificates with associated private keys (Windows only)
-  // - scsRoot contains known Root certificates, i.e. self-signed CA certificates
-  // which are the root of the whole certificates trust tree
-  // - scsSpc contains Software Publisher Certificates (Windows only)
-  TSystemCertificateStore = (
-    scsCA,
-    scsMY,
-    scsRoot,
-    scsSpc);
-  TSystemCertificateStores = set of TSystemCertificateStore;
+/// override system environment variable for the current process
+// - calls SetEnvironmentVariable() on Windows, or libc setenv() on POSIX
+// - warning: won't change the GetSystemEnv() cached value - this function is
+// for a temporary change before some API call, with "finally ResetSystemEnv()"
+function SetSystemEnv(const name, value: RawUtf8): boolean;
 
-var
-  /// the local PEM file name to be searched by GetSystemStoreAsPem() to
-  // override the OS certificates store
-  // - a relative file name (i.e. with no included path, e.g. 'cacert.pem') will
-  // be searched in the Executable.ProgramFilePath folder
-  // - an absolute file name (e.g. 'C:\path\to\file.pem' or '/posix/path') could
-  // also be specified
-  // - set by default to '' to disable this override (for security purposes)
-  GetSystemStoreAsPemLocalFile: TFileName;
-
-/// retrieve the OS certificates store as PEM text
-// - first search for [Executable.ProgramFilePath+]GetSystemStoreAsPemLocalFile,
-// then for a file pointed by a 'SSL_CA_CERT_FILE' environment variable - unless
-// OnlySystemStore is forced to true
-// - if no such file exists, or if OnlySystemStore is true, will concatenate the
-// supplied CertStores values via individual GetOneSystemStoreAsPem() calls
-// - return CA + ROOT certificates by default, ready to validate a certificate
-// - Darwin specific API is not supported yet, and is handled as a BSD system
-// - an internal cache is refreshed every 4 minutes unless FlushCache is set
-function GetSystemStoreAsPem(
-  CertStores: TSystemCertificateStores = [scsCA, scsRoot];
-  FlushCache: boolean = false; OnlySystemStore: boolean = false): RawUtf8;
-
-/// retrieve all certificates of a given system store as PEM text
-// - on Windows, will use the System Crypt API
-// - on POSIX, scsRoot loads the main CA file of the known system file, and
-// scsCA the additional certificate files which may not be part of the main file
-// - GetSystemStoreAsPemLocalFile file and 'SSL_CA_CERT_FILE' environment
-// variables are ignored: call GetSystemStoreAsPem() instead for the global store
-// - an internal cache is refreshed every 4 minutes unless FlushCache is set
-function GetOneSystemStoreAsPem(CertStore: TSystemCertificateStore;
-  FlushCache: boolean = false; now: cardinal = 0): RawUtf8;
-
-var
-  /// low-level function used by StuffExeCertificate() in mormot.misc.pecoff.pas
-  // - properly implemented by mormot.crypt.openssl.pas, but mormot.misc.pecoff
-  // has its own stand-alone version using a pre-generated fixed certificate
-  // - warning: the Marker should have no 0 byte within
-  CreateDummyCertificate: function(const Stuff, CertName: RawUtf8;
-    Marker: cardinal): RawByteString;
-
-var
-  /// allow half a day margin when checking a Certificate date validity
-  // - this global setting is used as default for all our units
-  CERT_DEPRECATION_THRESHOLD: TDateTime = 0.5;
+/// reset a system environment variable for the current process to its initial value
+// - calls SetEnvironmentVariable() on Windows, or libc setenv() on POSIX with
+// the internal cached value as used by GetSystemEnv()
+procedure ResetSystemEnv(const name: RawUtf8);
 
 type
   /// the raw SMBIOS information as filled by GetRawSmbios
@@ -1976,10 +1909,6 @@ const
 
   INVALID_HANDLE_VALUE = Windows.INVALID_HANDLE_VALUE; // = HANDLE(-1)
   ENGLISH_LANGID       = $0409;
-
-const
-  WINDOWS_CERTSTORE: array[TSystemCertificateStore] of PWideChar = (
-    'CA', 'MY', 'ROOT', 'SPC');
 
 /// this global procedure should be called from each thread needing to use OLE
 // - it is called e.g. by TOleDBConnection.Create when an OleDb connection
@@ -2965,7 +2894,10 @@ function WindowsFileTimeToDateTime(WinTime: integer): TDateTime;
 /// convert a Windows API File 64-bit TimeStamp into a regular TUnixMSTime
 // - i.e. a FILETIME value as returned by GetFileTime() Win32 API
 // - some binary formats (e.g. ISO 9660 or LDAP) have such FILETIME fields
-function WindowsFileTime64ToUnixMSTime(WinTime: QWord): TUnixMSTime;
+function WindowsFileTime64ToUnixMSTime(WinTime64: QWord): TUnixMSTime;
+
+/// convert a TUnixMSTime into a Windows FILETIME value
+function UnixMSTimeToWindowsFileTime64(TimeMS: TUnixMSTime): QWord;
 
 /// low-level conversion of a TDateTime into a Windows File 32-bit TimeStamp
 // - returns 0 if the conversion failed
@@ -3647,6 +3579,12 @@ function IsDebuggerPresent: BOOL; stdcall;
 function IsDebuggerPresent: boolean;
 {$endif ODWINDOWS}
 
+/// on Delphi Wintel, trigger the IDE debugger - do nothing on FPC/Lazarus
+// - you can force this function to do nothing by setting the NOSETTHREADNAME
+// conditional, if you have issues with this feature when debugging your app
+procedure DebuggerBreak;
+  {$ifdef FPC} inline; {$endif} // Lazarus does not like "int 3" anyway
+
 /// return the time and memory usage information about a given process
 // - under Windows, is a wrapper around GetProcessTimes/GetProcessMemoryInfo
 // - on POSIX, is not implemented yet, and return false
@@ -3767,12 +3705,17 @@ procedure TextColor(Color: TConsoleColor);
 /// change the console text background color
 procedure TextBackground(Color: TConsoleColor);
 
-/// write some text to the console using a given color
+/// write some UTF-8 text to the console using a given color
 // - this method is protected by its own CriticalSection for output consistency
 procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor = ccLightGray;
   NoLineFeed: boolean = false; NoColor: boolean = false); overload;
+  {$ifdef HASINLINE} inline; {$endif}
 
-/// write some text to the console using the current color
+/// cross-platform write some UTF-8 text buffer to the console using a given color
+procedure ConsoleWriteBuf(Text: PUtf8Char; Len: PtrInt; Color: TConsoleColor;
+  NoLineFeed, NoColor: boolean);
+
+/// write some UTF-8 text to the console using the current color
 // - similar to writeln() but redirect to ConsoleWrite(NoColor=true)
 procedure ConsoleWriteRaw(const Text: RawUtf8; NoLineFeed: boolean = false); overload;
   {$ifdef HASINLINE} inline; {$endif}
@@ -3780,7 +3723,6 @@ procedure ConsoleWriteRaw(const Text: RawUtf8; NoLineFeed: boolean = false); ove
 /// append a line feed to the console
 // - similar to writeln but redirect to ConsoleWrite() with proper thread safety
 procedure ConsoleWriteLn;
-  {$ifdef HASINLINE} inline; {$endif}
 
 /// will wait for the ENTER key to be pressed, with all needed waiting process
 // - on the main thread, will call Synchronize() for proper work e.g. with
@@ -3963,7 +3905,7 @@ var
 // so you may consider using AnsiToUtf8() from mormot.core.unicode.pas with the
 // proper code page depending on each application
 function Utf8ToConsole(const S: RawUtf8): RawByteString;
-
+  {$ifdef FPC} inline; {$endif}
 
 type
   /// encapsulate cross-platform loading of library files
@@ -5329,13 +5271,6 @@ function OpenServiceManager(const TargetComputer, DatabaseName: RawUtf8;
 function OpenServiceInstance(hSCManager: SC_HANDLE; const ServiceName: RawUtf8;
   dwDesiredAccess: cardinal): SC_HANDLE;
 
-function GetNamedSecurityInfoW(pObjectName: PWideChar; ObjectType,
-  SecurityInfo: cardinal; ppsidOwner, ppsidGroup, ppDacl, ppSacl: pointer;
-  var ppSecurityDescriptor: PSECURITY_DESCRIPTOR): DWord; stdcall; external advapi32;
-function SetNamedSecurityInfoW(pObjectName: PWideChar; ObjectType,
-  SecurityInfo: cardinal; psidOwner, psidGroup: pointer;
-  pDacl, pSacl: pointer): DWord; stdcall; external advapi32;
-
 
 { *** high level classes to define and manage Windows Services }
 
@@ -6219,6 +6154,8 @@ begin
       if osv.utsrelease[2] in [low(MACOS_NAME) .. high(MACOS_NAME)] then
       begin
         AppendShort('macOS ', dest);
+        AppendShort(MACOS_NUM[osv.utsrelease[2]], dest);
+        AppendShortChar(' ', @dest);
         AppendShort(MACOS_NAME[osv.utsrelease[2]], dest);
         exit;
       end;
@@ -6252,7 +6189,7 @@ begin
         result := @MACOS_NAME[osv.utsrelease[2]];
   end;
   if (result = nil) or
-     (result^ = '') then
+     (result^[0] = #0) then
     result := @OS_NAME[osv.os];
 end;
 
@@ -7033,9 +6970,14 @@ end;
 const
   FileTimePerMs = 10000; // a tick is 100ns
 
-function WindowsFileTime64ToUnixMSTime(WinTime: QWord): TUnixMSTime;
+function WindowsFileTime64ToUnixMSTime(WinTime64: QWord): TUnixMSTime;
 begin
-  result := (Int64(WinTime) - UnixFileTimeDelta) div FileTimePerMs;
+  result := (Int64(WinTime64) - UnixFileTimeDelta) div FileTimePerMs;
+end;
+
+function UnixMSTimeToWindowsFileTime64(TimeMS: TUnixMSTime): QWord;
+begin
+  result := (TimeMS * FileTimePerMs) + UnixFileTimeDelta;
 end;
 
 function FileInfoByName(const FileName: TFileName; FileId, FileSize: PInt64;
@@ -8556,10 +8498,15 @@ begin
   AppendShortIntHex(OSVersionInt32, text); // identify and OS version
 end;
 
+procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
+  NoLineFeed, NoColor: boolean);
+begin
+  ConsoleWriteBuf(pointer(Text), length(Text), Color, NoLineFeed, NoColor);
+end;
 
 procedure ConsoleWriteRaw(const Text: RawUtf8; NoLineFeed: boolean);
 begin
-  ConsoleWrite(Text, ccLightGray, NoLineFeed, {nocolor=}true);
+  ConsoleWriteBuf(pointer(Text), length(Text), ccLightGray, NoLineFeed, true);
 end;
 
 procedure ConsoleWriteLn;
@@ -9023,7 +8970,8 @@ begin
   TrimDualSpaces(OSVersionInfoEx);
   {$ifndef OSLINUXANDROID} TrimDualSpaces(BiosInfoText); {$endif}
   TrimDualSpaces(CpuInfoText);
-  OSVersionShort := ToTextOSU(OSVersionInt32);
+  if OSVersionShort = '' then
+    OSVersionShort := ToTextOSU(OSVersionInt32);
   with Executable do            // retrieve Executable + Host/User info
   begin
     {$ifdef OSWINDOWS}
@@ -9729,7 +9677,7 @@ begin
   ndx := {$ifdef OSPOSIX}FindNonVoidRawUtf8{$else}FindNonVoidRawUtf8I{$endif}(
     pointer(_SystemEnvNames), name, len, length(_SystemEnvNames));
   if ndx >= 0 then
-    result := pointer(_SystemEnvValues[ndx]);
+    result := pointer(_SystemEnvValues[ndx]); // O(n) fast found in cache
 end;
 
 function GetSystemEnv(const name: RawUtf8): RawUtf8;
@@ -9754,112 +9702,23 @@ begin
   res := RawUtf8(p);
 end;
 
+function SetSystemEnv(const name, value: RawUtf8): boolean;
+begin
+  result := (GetSystemEnv(name) = value) or
+            _SetSystemEnv(name, value);
+end;
+
+procedure ResetSystemEnv(const name: RawUtf8);
+begin
+  SetSystemEnv(name, GetSystemEnv(name));
+end;
+
 function _GetExecutableLocation(aAddress: pointer): ShortString;
 begin // return the address as hexadecimal - hexstr() is not available on Delphi
   result[0] := #0;
   AppendShortIntHex(PtrUInt(aAddress), result);
 end; // mormot.core.log.pas will properly decode debug info - and handle .mab
 
-var
-  _OneSystemStoreAsPem: array[TSystemCertificateStore] of record
-    Tix: cardinal;
-    Pem: RawUtf8;
-  end;
-  _SystemStoreAsPem: record
-    Tix: cardinal;
-    Scope: TSystemCertificateStores;
-    Pem: RawUtf8;
-  end;
-
-function GetOneSystemStoreAsPem(CertStore: TSystemCertificateStore;
-  FlushCache: boolean; now: cardinal): RawUtf8;
-begin
-  if now = 0 then
-    now := GetTickSec shr 8 + 1; // every 256s = 4 min
-  OSSafe.Lock;
-  try
-    // first search if not already in cache
-    with _OneSystemStoreAsPem[CertStore] do
-    begin
-      if not FlushCache then
-        if Tix = now then
-        begin
-          result := Pem; // quick retrieved from cache
-          exit;
-        end;
-      // fallback search depending on the POSIX / Windows specific OS
-      result := _GetSystemStoreAsPem(CertStore); // implemented in each .inc
-      Tix := now;
-      Pem := result;
-    end;
-  finally
-    OSSafe.UnLock;
-  end;
-end;
-
-function GetSystemStoreAsPem(CertStores: TSystemCertificateStores;
-  FlushCache, OnlySystemStore: boolean): RawUtf8;
-var
-  now: cardinal;
-  s: TSystemCertificateStore;
-  v: RawUtf8;
-begin
-  result := '';
-  now := GetTickSec shr 8 + 1;
-  OSSafe.Lock;
-  try
-    // first search if not already in cache
-    if not FlushCache then
-      with _SystemStoreAsPem do
-        if (Tix = now) and
-           (Scope = CertStores) and
-           (Pem <> '') then
-        begin
-          result := Pem; // quick retrieved from cache
-          exit;
-        end;
-    // load from a file, bounded within the application or from env variable
-    if not OnlySystemStore then
-    begin
-      if GetSystemStoreAsPemLocalFile <> '' then
-        {$ifdef OSPOSIX}
-        if GetSystemStoreAsPemLocalFile[1] = '/' then // full /posix/path
-        {$else}
-        if GetSystemStoreAsPemLocalFile[2] = ':' then // 'C:\path\to\file.pem'
-        {$endif OSPOSIX}
-          result := StringFromFile(GetSystemStoreAsPemLocalFile)
-        else
-          result := StringFromFile(
-            Executable.ProgramFilePath + GetSystemStoreAsPemLocalFile);
-      if result = '' then
-        result := StringFromFile(GetSystemEnvString('SSL_CA_CERT_FILE'));
-    end;
-  finally
-    OSSafe.UnLock; // GetOneSystemStoreAsPem() blocks
-  end;
-  // fallback to search depending on the POSIX / Windows specific OS stores
-  if result = '' then
-    for s := low(s) to high(s) do
-      if s in CertStores then
-      begin
-        v := GetOneSystemStoreAsPem(s, FlushCache, now); // may use its cache
-        if v <> '' then
-          result := Join([result, v, #13#10]);
-      end;
-  if result = '' then
-    exit;
-  OSSafe.Lock;
-  try
-    with _SystemStoreAsPem do
-    begin
-      Tix := now;
-      Scope := CertStores;
-      Pem := result;
-    end;
-  finally
-    OSSafe.UnLock;
-  end;
-end;
 
 // SMBIOS can be available outside of Intel/AMD - e.g. on aarch64-win64
 

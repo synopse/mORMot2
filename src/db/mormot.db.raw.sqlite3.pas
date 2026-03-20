@@ -31,7 +31,7 @@ uses
   mormot.core.perf,
   mormot.core.buffers,
   mormot.core.variants,
-  mormot.core.search, // for soundex functions
+  mormot.core.search, // for soundex JSON-SAX and functions
   mormot.core.log,
   mormot.db.core,
   mormot.lib.static;
@@ -8332,7 +8332,7 @@ begin
     FieldToJson(W, sqlite3.column_value(Request, f), {noblob=}false);
     W.AddComma;
   end;
-  W.CancelLastComma('}');
+  W.ReplaceLastComma('}');
 end;
 
 procedure TSqlRequest.ExecuteDocVariant(aDB: TSqlite3DB; const aSql: RawUtf8;

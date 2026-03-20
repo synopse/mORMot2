@@ -22,6 +22,7 @@ uses
   mormot.core.data,
   mormot.core.json,
   mormot.core.variants,
+  mormot.core.fmt,
   mormot.crypt.core,
   mormot.crypt.secure,
   mormot.crypt.ecc,
@@ -6509,7 +6510,8 @@ begin
       end;
     except
       on E: Exception do
-        CheckUtf8(false, '% for %[%]%', [E, length(U), EscapeToShort(U), length(up4)]);
+        CheckUtf8(false, '% for %[%]%',
+          [E, length(U), EscapeToShort(U), length(up4)]);
     end;
     U2 := LowerCase(U);
     Check(IsLower(U2));
@@ -7597,6 +7599,8 @@ var
   b: TTimeLogBits;
   st, start: TSynSystemTime;
 begin
+  Check(TTextDateWriter.InstanceSize <= SizeOf(TLocalWriter) - 256, 'TLocalWriter');
+  Check(PtrUInt(@HTML_MONTH_NAMES[3]) - PtrUInt(@HTML_MONTH_NAMES[1]) = 8);
   Check(st.FromText('19821031T142319'));
   start := st;
   CheckEqual(st.ToText, '1982-10-31T14:23:19.000');
@@ -8119,7 +8123,7 @@ begin
   Check(WinErrorConstant(12002)^ = 'TIMEOUT', 'wecf');
   Check(WinErrorConstant($800b010a)^ = 'CERT_E_CHAINING', 'wecg');
   Check(WinErrorConstant($800b010c)^ = 'CERT_E_REVOKED', 'wecG');
-  Check(WinErrorConstant($800b010d)^ = '', 'wech');
+  Check(WinErrorConstant($800b010d)^[0] = #0, 'wech');
   Check(WinErrorConstant($80092002)^ = 'CRYPT_E_BAD_ENCODE', 'wecH');
   Check(WinErrorConstant(1229)^  = 'CONNECTION_INVALID', 'weci');
   Check(WinErrorConstant(122)^ = 'INSUFFICIENT_BUFFER', 'wecj');

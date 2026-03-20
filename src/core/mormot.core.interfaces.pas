@@ -3077,7 +3077,7 @@ begin
         inc(P); // include ending ','
       W.AddNoJsonEscape(Value, P - Value);
     end;
-    W.CancelLastComma('}');
+    W.ReplaceLastComma('}');
     W.SetText(result);
   finally
     W.Free;
@@ -3147,7 +3147,7 @@ begin
       end;
       W.AddComma;
     end;
-    W.CancelLastComma('}');
+    W.ReplaceLastComma('}');
     W.SetText(result);
   finally
     W.Free;
@@ -3554,7 +3554,7 @@ begin
   fInvoke := aInvoke;
   fNotifyDestroy := aNotifyDestroy;
   fServiceFactory := aServiceFactory;
-  fParams := TJsonWriter.CreateOwnedStream(8192, {nosharedstream=}true);
+  fParams := TJsonWriter.CreateOwnedStream(8192);
 end;
 
 destructor TInterfacedObjectFake.Destroy;
@@ -4522,7 +4522,7 @@ begin
         with m^.Args[na] do
           if IsOutput then
             AddDefaultJson(WR);
-      WR.CancelLastComma(']');
+      WR.ReplaceLastComma(']');
       WR.SetText(m^.DefaultResult);
       inc(m);
     end;
@@ -4539,7 +4539,7 @@ begin
       WR.AddDirect(']', '}', ',');
       inc(m);
     end;
-    WR.CancelLastComma(']');
+    WR.ReplaceLastComma(']');
     WR.SetText(fContract);
     {$ifdef SOA_DEBUG}
     JsonReformatToFile(fContract,TFileName(fInterfaceName + '-' +
@@ -6115,7 +6115,7 @@ begin
       inc(arg);
       inc(a);
     end;
-    W.CancelLastComma(']');
+    W.ReplaceLastComma(']');
     W.SetText(fResult);
   finally
     W.Free;
@@ -7703,12 +7703,12 @@ begin
   if aShared then
   begin
     // the shared instance has a generous 32KB non resizable work buffer
-    fWR := TJsonWriter.CreateOwnedStream(32768, {nosharedstream=}true);
+    fWR := TJsonWriter.CreateOwnedStream(32768);
     fWR.FlushToStreamNoAutoResize := true; // stick to BufferSize
   end
   else
     // start with a resizable 2KB buffer (medium blocks are > 2600 bytes in MM)
-    fWR := TJsonWriter.CreateOwnedStream(2048, {nosharedstream=}true);
+    fWR := TJsonWriter.CreateOwnedStream(2048);
 end;
 
 destructor TInterfaceMethodExecuteCached.Destroy;

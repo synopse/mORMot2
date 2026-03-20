@@ -1718,7 +1718,8 @@ begin
   InvalidateSecContext(sec);
   try
     repeat
-      if User.LogonName <> '' then // will use ClientForceSpn() value
+      if (User.LogonName <> '') or
+         ClientSspiPasswordIsFile(User.PasswordHashHexa) then // FILE:keytab
         ClientSspiAuthWithPassword(sec, Sender.fSession.Data,
           User.LogonName, User.PasswordHashHexa, {spn=}'', bin)
       else

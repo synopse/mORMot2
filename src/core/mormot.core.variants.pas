@@ -5407,7 +5407,7 @@ begin
         inc(nam);
         inc(val);
       until false;
-    W.CancelLastComma('}');
+    W.ReplaceLastComma('}');
   end
   else if dv^.IsArray then
   begin
@@ -9478,7 +9478,7 @@ begin
       inc(nam);
       inc(val);
     until false;
-    wr.CancelLastComma('}');
+    wr.ReplaceLastComma('}');
     wr.SetText(result);
   finally
     wr.Free;

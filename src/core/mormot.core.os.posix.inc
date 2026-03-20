@@ -2270,15 +2270,6 @@ begin
   s[6] := TERM_CTRL[(ord(Color) and 7)];
 end;
 
-procedure TextColorAppend(Color: TConsoleColor; var s: RawUtf8);
-  {$ifdef HASINLINE} inline; {$endif}
-var
-  c: TShort7;
-begin
-  TextColorCmd(Color, c);
-  AppendShortToUtf8(c, s);
-end;
-
 procedure TextColor(Color: TConsoleColor);
 var
   c: TShort7;
@@ -2296,30 +2287,40 @@ begin
   // not implemented yet - but not much needed either
 end;
 
-procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
+procedure ConsoleWriteBuf(Text: PUtf8Char; Len: PtrInt; Color: TConsoleColor;
   NoLineFeed, NoColor: boolean);
 var
-  s: RawUtf8;
+  c: TShort7;
+  tmp: TSynTempAdder; // no heap allocation up to 4KB of output
 begin
-  // pre-compute the whole chars to be sent to the console
   NoColor := NoColor or (not StdOutIsTTY);
   if NoColor and
      NoLineFeed then
-    s := Text // no memory allocation needed
+    tmp.Store.buf := nil // no memory allocation needed
   else
   begin
+    tmp.Init;
     if not NoColor then
-      TextColorAppend(Color, s);
-    AppendBufferToUtf8(pointer(Text), length(Text), s);
+    begin
+      TextColorCmd(Color, c);
+      tmp.AddShort(c);
+    end;
+    tmp.Add(Text, Len);
     if not NoLineFeed then
-      AppendShortToUtf8(#10, s);
+      tmp.AddDirect(#10);
     if not NoColor then
-      TextColorAppend(ccLightGray, s);
+    begin
+      TextColorCmd(ccLightGray, c);
+      tmp.AddShort(c);
+    end;
+    Text := tmp.Buffer;
+    Len := tmp.Size;
   end;
   // display whole line in a single syscall, and within our global lock
   ConsoleCriticalSection.Lock;
-  FileWriteAll(StdOut, pointer(s), length(s)); // UTF-8 console
+  FileWriteAll(StdOut, Text, Len); // UTF-8 console
   ConsoleCriticalSection.UnLock;
+  tmp.Store.Done;
 end;
 
 function UnixKeyPending: boolean;
@@ -2500,6 +2501,14 @@ begin
   until e^ = nil;
 end;
 
+function setenv(name, value: PUtf8Char; replace: integer): integer;
+  cdecl external clib name 'setenv';
+
+function _SetSystemEnv(const name, value: RawUtf8): boolean;
+begin
+  result := setenv(pointer(name), pointer(value), {replace=}1) = 0;
+end;
+
 procedure GetUserHost(out User, Host: RawUtf8);
 begin
   Host := SystemInfo.uts.nodename;
@@ -2566,52 +2575,6 @@ begin
     GetEnvFolder('HOME', result, {writable=}false);
   end;
 end;
-
-function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;
-var
-  files: TRawUtf8DynArray;
-  f: PtrInt;
-begin
-  // see https://go.dev/src/crypto/x509/root_unix.go as reference
-  case CertStore of
-    scsRoot:
-      result := StringFromFirstFile([
-        {$ifdef OSLINUXANDROID}
-          '/etc/ssl/certs/ca-certificates.crt',                // Debian/Gentoo
-      	  '/etc/pki/tls/certs/ca-bundle.crt',                  // Fedora/RHEL 6
-          '/etc/ssl/ca-bundle.pem',                            // OpenSUSE
-          '/etc/pki/tls/cacert.pem',                           // OpenELEC
-          '/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem', // CentOS/RHEL 7
-          '/etc/ssl/cert.pem'                                  // Alpine Linux
-        {$else}
-      	  '/usr/local/etc/ssl/cert.pem',            // FreeBSD
-      	  '/etc/ssl/cert.pem',                      // OpenBSD
-      	  '/usr/local/share/certs/ca-root-nss.crt', // DragonFly
-      	  '/etc/openssl/certs/ca-certificates.crt'  // NetBSD
-        {$endif OSLINUXANDROID}
-        ]);
-    scsCA:
-      begin
-        files := StringFromFolders([
-          {$ifdef OSLINUXANDROID}
-            '/etc/ssl/certs',               // Debian/SLES10/SLES11
-            '/etc/pki/tls/certs',           // Fedora/RHEL
-      	    '/system/etc/security/cacerts'  // Android
-          {$else}
-            '/etc/ssl/certs',         // FreeBSD 12.2+
-            '/usr/local/share/certs', // FreeBSD
-            '/etc/openssl/certs'      // NetBSD
-          {$endif OSLINUXANDROID}
-          ]);
-        for f := 0 to length(files) - 1 do
-          if (PosEx('-----BEGIN', files[f]) <> 0) and
-             IsAnsiCompatible(files[f]) and
-             (PosEx(files[f], result) = 0) then // append PEM files once
-            result := Join([result, #10, files[f]]);
-      end;
-  end;
-end;
-
 
 const
   // on POSIX, we store the SMBIOS data in a local cache for non-root users
@@ -2949,6 +2912,12 @@ begin
   bsdsysctl(CTL_HW, hwid, @result, SizeOf(result));
 end;
 
+function fpsysctlbynameint(name: PAnsiChar): Int64;
+begin
+  result := 0;
+  bsdsysctl(name, @result, SizeOf(result));
+end;
+
 function fpsysctlhwstr(hwid: cint; var temp: ShortString): PUtf8Char;
 begin
   FillCharFast(temp, SizeOf(temp), 0); // ShortString as 0-terminated buffer
@@ -2961,8 +2930,8 @@ end;
 
 function fpsysctlbynamestr(name: PAnsiChar; var temp: ShortString): PUtf8Char;
 begin
-  FillCharFast(temp, SizeOf(temp), 0); // ShortString as 0-terminated buffer
-  if (bsdsysctl(name, @temp, SizeOf(temp)) <> 0) and
+  FillCharFast(temp, high(temp) + 1, 0); // ShortString as 0-terminated buffer
+  if (bsdsysctl(name, @temp, high(temp) + 1) <> 0) and
      (temp[0] <> #0) then
     result := @temp
   else
@@ -3665,6 +3634,10 @@ begin
   if not (fIsDebuggerTested in _F0) then
     TestOnceDebuggerTty;
   result := fIsDebuggerPresent in _F0;
+end;
+
+procedure DebuggerBreak; // unsupported outside Delphi Wintel
+begin
 end;
 
 {$ifdef OSDARWIN}
@@ -4818,16 +4791,18 @@ end;
 const getpagesize = 4096; // ARM32/i386 have no getpagesize in clib :(
 {$else}
 // we used to hardcode this to 4096 on Android, but Android 15 uses 16KB
-function getpagesize: integer; cdecl external clib name 'getpagesize';
+function getpagesize: integer;
+  cdecl external clib name 'getpagesize';
 {$endif CPU32}
 
-{$else}
-function getpagesize: integer; cdecl external clib name 'getpagesize';
 {$endif OSANDROID}
 
 {$ifdef OSLINUX}
 
-function get_nprocs: integer;
+function getpagesize: integer;
+  cdecl external clib name 'getpagesize';
+
+function get_nprocs: integer; // fallback on limited /proc/cpuinfo content
   cdecl external clib name 'get_nprocs';
 
 procedure SetLinuxDistrib(const release: RawUtf8);
@@ -5096,14 +5071,18 @@ begin
   modnum := nil;
   {$ifdef OSBSDDARWIN}
   // pure FreeBSD NetBSD MacOS branch
-  SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
+  SystemInfo.dwPageSize := fpsysctlhwint(HW_PAGESIZE);
   beg := fpsysctlhwstr(HW_MACHINE, temp1);
   {$ifdef OSDARWIN}
+  SystemInfo.dwNumberOfProcessors := fpsysctlbynameint('hw.logicalcpu');
+  CpuCores := fpsysctlbynameint('hw.physicalcpu');
   if strscan(beg, ' ') = nil then // e.g. from a Parallels VM
     beg := fpsysctlhwstr(HW_MODEL, temp1);
   modname := fpsysctlbynamestr('machdep.cpu.brand_string', temp2);
   {$endif OSDARWIN}
   FastSetString(BiosInfoText, beg, StrLen(beg));
+  if SystemInfo.dwNumberOfProcessors = 0 then
+    SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
   if modname = nil then
     modname := fpsysctlhwstr(HW_MODEL, temp2);
   {$ifdef OSDARWIN}
@@ -5301,8 +5280,8 @@ begin
     CpuCacheSize := CpuCacheSize shl cacheshr;
   end;
   SystemInfo.release := release;
+  SystemInfo.dwPageSize := getpagesize; // call libc API on Linux/Android
   {$endif OSBSDDARWIN}
-  SystemInfo.dwPageSize := getpagesize; // call libc API
   if CpuCacheSize <> 0 then
   begin
     _fmt('[%s]', [KBNoSpace(CpuCacheSize)], CpuInfoText);
@@ -5379,7 +5358,19 @@ begin
   @LeaveCriticalSection    := @tm.LeaveCriticalSection;
   {$endif NODIRECTTHREADMANAGER}
   {$ifdef OSDARWIN}
-  OSVersionText := Join([ToTextU(OSVersion32), ' (', OSVersionText, ')']);
+  temp1 := 'macOS ';
+  modname := fpsysctlbynamestr('kern.osproductversion', temp2); // '15.7.3'
+  if OSVersion32.utsrelease[2] in [low(MACOS_NUM) .. high(MACOS_NUM)] then
+  begin
+    if modname = nil then // '15' number from kernel revision
+      AppendShort(MACOS_NUM[OSVersion32.utsrelease[2]], temp1)
+    else                  // '15.7.3'
+      AppendShortBuffer(modname, StrLen(modname), high(temp1), @temp1);
+    AppendShortCharSafe(' ', temp1);
+    AppendShort(MACOS_NAME[OSVersion32.utsrelease[2]], temp1);
+  end;
+  ShortStringToAnsi7String(temp1, OSVersionShort); // 'macOS 15.7.3 Sequoia'
+  OSVersionText := Join([OSVersionShort, ' (', OSVersionText, ')']);
   mach_timebase_info(mach_timeinfo);
   mach_timecoeff := mach_timeinfo.Numer / mach_timeinfo.Denom;
   if (mach_timeinfo.Numer = 1) and

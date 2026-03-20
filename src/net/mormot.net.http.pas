@@ -181,7 +181,7 @@ procedure GetHeaderInfo(const Headers: RawUtf8; out ContentLength: Int64;
 function DeleteHeader(const Headers, Name: RawUtf8): RawUtf8;
 
 /// 'HEAD' and 'OPTIONS' methods would be detected and return true
-// - will check only the first four chars for efficiency
+// - will check only the first four chars for efficiency  - requires method <> ''
 function HttpMethodWithNoBody(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -189,29 +189,29 @@ function HttpMethodWithNoBody(const method: RawUtf8): boolean;
 // - see https://tools.ietf.org/html/rfc2047
 function MimeHeaderEncode(const header: RawUtf8): RawUtf8;
 
-/// quick check for case-sensitive 'GET' HTTP method name
+/// quick check for case-sensitive 'GET' HTTP method name - requires method <> ''
 // - see also HttpMethodWithNoBody()
 function IsGet(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// quick check for case-sensitive 'HEAD' HTTP method name
+/// quick check for case-sensitive 'HEAD' HTTP method name - requires method <> ''
 // - see also HttpMethodWithNoBody()
 function IsHead(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// quick check for case-sensitive 'POST' HTTP method name
+/// quick check for case-sensitive 'POST' HTTP method name - requires method <> ''
 function IsPost(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// quick check for case-sensitive 'PUT' HTTP method name
+/// quick check for case-sensitive 'PUT' HTTP method name - requires method <> ''
 function IsPut(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// quick check for case-sensitive 'DELETE' HTTP method name
+/// quick check for case-sensitive 'DELETE' HTTP method name - requires method <> ''
 function IsDelete(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// quick check for case-sensitive 'OPTIONS' HTTP method name
+/// quick check for case-sensitive 'OPTIONS' HTTP method name - requires method <> ''
 function IsOptions(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -265,6 +265,10 @@ function GetNextRange(var P: PUtf8Char): Qword;
 /// append an IPv4 as '"1.2.3.4"' JSON string
 procedure AddJsonWriterIP4(W: TTextWriter; ip4: pointer);
   {$ifdef HASINLINE} inline; {$endif}
+
+/// append an IPv4 as "name":"1.2.3.4", JSON object field
+// - do nothing if IP is '0.0.0.0'
+procedure AddJsonWriterPropIP4(W: TTextWriter; const name: ShortString; ip4: pointer);
 
 const
   /// pseudo-header containing the current Synopse mORMot framework version
@@ -3189,6 +3193,15 @@ begin
   W.B^ := '"';
 end;
 
+procedure AddJsonWriterPropIP4(W: TTextWriter; const name: ShortString; ip4: pointer);
+begin
+  if PCardinal(ip4)^ = 0 then
+    exit;
+  W.AddProp(@name[1], ord(name[0]));
+  AddJsonWriterIP4(W, ip4);
+  W.AddComma;
+end;
+
 
 { THttpSocketCompressList }
 
@@ -5693,8 +5706,7 @@ begin
     Context.Tix64 := GetTickCount64; // retrieve from OS and cache for below
   tix32 := Context.Tix64 div MilliSecsPerSec;
   wr := GetWriter(tix32, RawUtf8(Context.Host), Context.State <> hrsResponseDone);
-  if (wr = nil) or
-     (wr.Stream = nil) then
+  if wr = nil then
     exit;
   // pre-compute CPU intensive values outside of fSafe.Lock
   urllen := 0;
@@ -6446,7 +6458,7 @@ end;
 const
   _WIDTH = 10; // any value < TTextWriter internal buffer size would do
 
-procedure AppendFieldNames(w: TTextWriter);
+procedure AppendFieldNames(w: TTextDateWriter);
 begin
   w.AddSpaced('Count',    _WIDTH, ',');
   w.AddSpaced('Time',     _WIDTH, ',');
@@ -6456,7 +6468,7 @@ begin
   w.AddCR;
 end;
 
-procedure AppendFieldValues(w: TTextWriter; const d: THttpAnalyzerState);
+procedure AppendFieldValues(w: TTextDateWriter; const d: THttpAnalyzerState);
 begin
   w.AddSpaced(d.Count,    _WIDTH, ',');
   w.AddSpaced(d.Time,     _WIDTH, ',');
@@ -6470,11 +6482,11 @@ function THttpAnalyzer.GetAsText(Period: THttpAnalyzerPeriod): RawUtf8;
 var
   s: THttpAnalyzerScope;
   d: THttpAnalyzerStatePerScope;
-  w: TTextWriter;
+  w: TTextDateWriter;
   tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   Get(Period, d);
-  w := TTextWriter.CreateOwnedStream(tmp);
+  w := TTextDateWriter.CreateOwnedStream(tmp);
   try
     w.AddSpaced('Scope', _WIDTH, ',');
     AppendFieldNames(w);
@@ -6493,11 +6505,11 @@ function THttpAnalyzer.GetAsText(Scope: THttpAnalyzerScope): RawUtf8;
 var
   p: THttpAnalyzerPeriod;
   d: THttpAnalyzerStatePerPeriod;
-  w: TTextWriter;
+  w: TTextDateWriter;
   tmp: TTextWriterStackBuffer;
 begin
   Get(Scope, d);
-  w := TTextWriter.CreateOwnedStream(tmp);
+  w := TTextDateWriter.CreateOwnedStream(tmp);
   try
     w.AddSpaced('Period', _WIDTH, ',');
     AppendFieldNames(w);
@@ -7420,13 +7432,13 @@ procedure MetricsToCsv(const Metrics: THttpAnalyzerToSaveDynArray;
 var
   n: integer;
   d: PHttpAnalyzerToSave;
-  w: TTextWriter;
+  w: TTextDateWriter;
   date: TShort16;
   tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if Metrics = nil then
     exit;
-  w := TTextWriter.CreateOwnedStream(tmp);
+  w := TTextDateWriter.CreateOwnedStream(tmp);
   try
     w.AddSpaced('Date', _WIDTH, ',');
     if not NoPeriod then

@@ -3523,7 +3523,7 @@ var
     nil,                      // vcSynObjectList
     nil,                      // vcRawUtf8List
     TObjectWithID,            // vcObjectWithID
-    TClonable);          // vcClonable
+    TClonable);               // vcClonable
 
 
 implementation
@@ -3983,7 +3983,7 @@ begin
     end;
   end;
   if QuoteChar <> #0 then
-    W.CancelLastComma(']')
+    W.ReplaceLastComma(']')
   else
     W.CancelLastComma;
 end;
