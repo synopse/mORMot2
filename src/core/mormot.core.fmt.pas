@@ -595,6 +595,30 @@ function TextPreprocessToStream(const Text: RawUtf8; Dest: TStream;
 
 { ********** Source Code Generation Functions }
 
+const
+  // published for unit testing in TNetworkProtocols.OpenAPI (e.g. if sorted)
+  RESERVED_KEYWORDS: array[0..91] of RawUtf8 = (
+    'ABSOLUTE', 'ABSTRACT', 'ALIAS', 'AND', 'ARRAY', 'AS', 'ASM', 'ASSEMBLER',
+    'BEGIN', 'CASE', 'CLASS', 'CONST', 'CONSTREF', 'CONSTRUCTOR', 'DESTRUCTOR',
+    'DIV', 'DO', 'DOWNTO', 'ELSE', 'END', 'EXCEPT', 'EXPORT', 'EXTERNAL',
+    'FALSE', 'FAR', 'FILE', 'FINALIZATION', 'FINALLY', 'FOR', 'FORWARD',
+    'FUNCTION', 'GENERIC', 'GOTO', 'IF', 'IMPLEMENTATION', 'IN', 'INHERITED',
+    'INITIALIZATION', 'INLINE', 'INTERFACE', 'IS', 'LABEL', 'LIBRARY', 'MOD',
+    'NEAR', 'NEW', 'NIL', 'NOT', 'OBJECT', 'OF', 'ON', 'OPERATOR', 'OR', 'OUT',
+    'OVERRIDE', 'PACKED', 'PRIVATE', 'PROCEDURE', 'PROGRAM', 'PROPERTY',
+    'PROTECTED', 'PUBLIC', 'PUBLISHED', 'RAISE', 'READ', 'RECORD',
+    'REINTRODUCE', 'REPEAT', 'RESOURCESTRING', 'SELF', 'SET', 'SHL', 'SHR',
+    'STATIC', 'STRING', 'THEN', 'THREADVAR', 'TO', 'TRUE', 'TRY', 'TYPE',
+    'UNIT', 'UNTIL', 'USES', 'VAR', 'VARIANT', 'VIRTUAL', 'WHILE', 'WITH',
+    'WRITE', 'WRITELN', 'XOR');
+
+/// quickly check if a text is a case-insensitive pascal code keyword
+function IsReservedKeyWord(const aName: RawUtf8): boolean;
+
+/// wrap CamelCase() and IsReservedKeyWord() to generate a valid pascal identifier
+// - if aName is void after camel-casing, will raise an ESynUnicode
+function SanitizePascalName(const aName: RawUtf8; KeyWordCheck: boolean): RawUtf8;
+
 /// generate some pascal source code holding some data binary as constant
 // - can store sensitive information (e.g. certificates) within the executable
 // - generates a source code snippet of the following format:
@@ -3583,6 +3607,26 @@ end;
 
 
 { ********** Source Code Generation Functions }
+
+function IsReservedKeyWord(const aName: RawUtf8): boolean;
+var
+  up: TByteToAnsiChar;
+begin
+  UpperCopy255Buf(@up, pointer(aName), length(aName))^ := #0;
+  result := FastFindPUtf8CharSorted(
+    @RESERVED_KEYWORDS, high(RESERVED_KEYWORDS), @up) >= 0; // O(log(n)) search
+end;
+
+function SanitizePascalName(const aName: RawUtf8; KeyWordCheck: boolean): RawUtf8;
+begin
+  CamelCase(aName, result);
+  if result = '' then
+    ESynUnicode.RaiseFmt(nil, 'Unexpected SanitizePascalName(%s)', [aName]);
+  result[1] := NormToUpperAnsi7[result[1]]; // ensure PascalCase
+  if KeyWordCheck and
+     IsReservedKeyWord(result) then
+    result := '_' + result; // avoid identifier name collision
+end;
 
 function BinToSource(const ConstName, Comment: RawUtf8; Data: pointer;
   Len, PerLine: PtrInt; const Suffix: RawUtf8; LF: TLineFeed): RawUtf8;

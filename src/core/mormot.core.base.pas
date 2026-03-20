@@ -331,7 +331,7 @@ type
   PPUtf8Char = ^PUtf8Char;
   PPPUtf8Char = ^PPUtf8Char;
 
-  /// a Row/Col array of PUtf8Char, for containing sqlite3_get_table() result
+  /// a Row/Col array of PUtf8Char, for containing e.g. sqlite3_get_table() result
   TPUtf8CharArray = array[ 0 .. MaxInt div SizeOf(PUtf8Char) - 1 ] of PUtf8Char;
   PPUtf8CharArray = ^TPUtf8CharArray;
 
