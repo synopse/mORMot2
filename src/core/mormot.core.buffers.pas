@@ -9699,7 +9699,11 @@ begin
     Ansi7StringToShortString(Context, ctx{%H-});
   persec[0] := #0;
   if PerSecond <> 0 then
-    FormatShort(' %/s', [KBNoSpace(PerSecond)], persec);
+  begin
+    PCardinal(@persec)^ := $2001; // ' '
+    AppendKB(PerSecond, persec, {withspace=}false);
+    AppendShortTwoChars(ord('/') + ord('s') shl 8, @persec);
+  end;
   curr[0] := #0;
   AppendKB(CurrentSize, curr, {withspace=}false);
   if ExpectedSize = 0 then
