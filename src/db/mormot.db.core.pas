@@ -3035,12 +3035,12 @@ begin
       if twoForceJsonExtended in CustomOptions then
       begin
         SetLength(c^, len + 1); // colname: in-place
-        PPAnsiChar(c)^[len] := ':';
+        PPUtf8Char(c)^[len] := ':';
       end
       else
       begin
         SetLength(c^, len + 3); // "colname": in-place
-        p := PPAnsiChar(c)^;
+        p := PPUtf8Char(c)^;
         MoveFast(p[0], p[1], len);
         p[0] := '"';
         PWord(p + len + 1)^ := ord('"') + ord(':') shl 8;

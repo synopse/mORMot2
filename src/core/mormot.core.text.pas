@@ -515,9 +515,8 @@ type
   // - json5 will emit unquoted names, but with a trailing , before } or ]
   // - jsonH for indented unquoted names and values, using LF as delimiter -
   // i.e. the .hjson "Human JSON" format, very suitable for config files
-  // - jsonMorml is as unquoted, unindented and as small as possible - resulting
-  // "mORMot Markup Language" - aka .morml - is actually 100% UTF-8 so much more
-  // human readable and editable than binary alternatives
+  // - jsonMorml is as unquoted, unindented and small as possible - resulting
+  // "less is more Markup Language" - aka .morml - is still UTF-8 human readable
   // - by default we rely on UTF-8 encoding (which is mandatory in the RFC 8259)
   // but you can use jsonEscapeUnicode to produce pure 7-bit ASCII output,
   // with \u#### escape of non-ASCII chars, e.g. as default python json.dumps
@@ -1107,7 +1106,7 @@ type
     // this TStream content, to flush all pending characters
     // - if the TStream instance has not been specified in the constructor,
     // it can be forced via this property, before any writing
-    // - warning: may contain nil, e.g. after CreateOwnedShort() or
+    // - warning: may return nil, e.g. after CreateOwnedShort() or
     // CreateOwnedStream(TTextWriterStackBuffer) since they maintain no TStream
     property Stream: TStream
       read GetStream write SetStream;
@@ -1117,8 +1116,8 @@ type
       read fCustomOptions write fCustomOptions;
     /// the internal flags used by this TTextWriter instance
     // - should not be modified by the end-user code directly
-    // - use the FlushToStreamNoAutoResize or NoWriteToStreamException
-    // properties to set the corresponding flags just after Create
+    // - use the FlushToStreamNoAutoResize or NoWriteToStreamException or
+    // StreamIsOwned properties to set the corresponding flags just after Create
     property Flags: TTextWriterFlags
       read fFlags;
     /// optional event called before FlushToStream method process
