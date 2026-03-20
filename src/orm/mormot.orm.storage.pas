@@ -3150,8 +3150,8 @@ begin
   else
     KnownRowsCount := 0;
   Stmt.SelectFieldBits(bits, withID);
-  wr := fStoredClassRecordProps.CreateJsonWriter(
-    Stream, Expand, withID, bits, KnownRowsCount, 65500, tmp);
+  wr := fStoredClassRecordProps.CreateJsonWriter(Stream,
+          Expand, withID, bits, KnownRowsCount, 65500, tmp);
   if wr <> nil then
   try
     if Expand then
@@ -3515,8 +3515,8 @@ begin
   try
     if fUnSortedID then
       fValues.CreateOrderedIndex(ndx, nil); // write in ascending ID order
-    W := fStoredClassRecordProps.CreateJsonWriter(Stream, Expand, true,
-      ALL_FIELDS, fCount, {bufsize=}1 shl 20);
+    W := fStoredClassRecordProps.CreateJsonWriter(Stream,
+      Expand, true, ALL_FIELDS, fCount, {bufsize=}1 shl 20);
     try
       if Expand then
         W.Add('[');

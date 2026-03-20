@@ -7361,8 +7361,8 @@ begin
   if self = nil then
     exit;
   with Orm do
-    serializer := CreateJsonWriter(Json, Expand, withID,
-      SimpleFieldsIndex[Occasion], {knownrows=}0, 0, @tmp);
+    serializer := CreateJsonWriter(Json,
+      Expand, withID, SimpleFieldsIndex[Occasion], {knownrows=}0, 0, @tmp);
   serializer.OrmOptions := OrmOptions; // SetOrmOptions() may refine ColNames[]
   GetJsonValuesAndFree(serializer);
 end;
@@ -7376,8 +7376,8 @@ var
 begin
   J := TRawByteStringStream.Create;
   try
-    serializer := Orm.CreateJsonWriter(J, Expand, withID, Fields,
-      {knownrows=}0, 0, @tmp);
+    serializer := Orm.CreateJsonWriter(J,
+      Expand, withID, Fields, {knownrows=}0, 0, @tmp);
     serializer.OrmOptions := OrmOptions; // SetOrmOptions() may refine ColNames[]
     GetJsonValuesAndFree(serializer);
     result := J.DataString;

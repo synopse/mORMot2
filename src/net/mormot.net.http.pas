@@ -5706,8 +5706,7 @@ begin
     Context.Tix64 := GetTickCount64; // retrieve from OS and cache for below
   tix32 := Context.Tix64 div MilliSecsPerSec;
   wr := GetWriter(tix32, RawUtf8(Context.Host), Context.State <> hrsResponseDone);
-  if (wr = nil) or
-     (wr.Stream = nil) then
+  if wr = nil then
     exit;
   // pre-compute CPU intensive values outside of fSafe.Lock
   urllen := 0;

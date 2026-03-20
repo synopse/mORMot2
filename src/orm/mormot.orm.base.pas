@@ -11227,8 +11227,8 @@ var
   f: TFieldIndexDynArray;
 begin
   FieldBitsToIndex(aFields, f, Fields.Count);
-  result := CreateJsonWriter(
-    Json, Expand, withID, f, KnownRowsCount, aBufSize, aStackBuffer);
+  result := CreateJsonWriter(Json,
+    Expand, withID, f, KnownRowsCount, aBufSize, aStackBuffer);
 end;
 
 function TOrmPropertiesAbstract.CreateJsonWriter(Json: TStream;
@@ -11254,8 +11254,8 @@ var
   bits: TFieldBits;
 begin
   if FieldBitsFromCsv(aFieldsCsv, bits, withID) then
-    result := CreateJsonWriter(
-      Json, Expand, withID, bits, KnownRowsCount, aBufSize, aStackBuffer)
+    result := CreateJsonWriter(Json,
+      Expand, withID, bits, KnownRowsCount, aBufSize, aStackBuffer)
   else
     result := nil;
 end;

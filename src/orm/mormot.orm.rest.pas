@@ -608,7 +608,7 @@ constructor TRestOrm.Create(aRest: TRest);
 begin
   inherited Create;
   fTempJsonWriter := TJsonWriter.CreateOwnedStream(128 shl 10);
-  fTempJsonWriter.FlushToStreamNoAutoResize := true; // 128KB: stick to BufferSize
+  fTempJsonWriter.FlushToStreamNoAutoResize := true; // stick to 128KB buffer
   if aRest = nil then
     exit;
   fRest := aRest;
