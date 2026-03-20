@@ -2492,6 +2492,40 @@ function GetStreamBuffer(S: TStream): pointer;
 /// check if class is a TCustomMemoryStream/TRawByteStringStream
 function IsStreamBuffer(S: TStream): boolean;
 
+/// read a TStream content into a RawByteString with
+// - it will read binary or text content from the current position until the
+// end (using TStream.Size)
+function StreamToRawByteString(aStream: TStream; aSize: Int64 = -1;
+  aCodePage: integer = CP_RAWBYTESTRING): RawByteString;
+
+/// iterative function to retrieve the new content appended to a stream
+// - aPosition should be set to 0 before the initial call
+function StreamChangeToRawByteString(
+  aStream: TStream; var aPosition: Int64): RawByteString;
+
+/// create a TStream from a string content
+// - uses RawByteString for byte storage, whatever the codepage is
+// - in fact, the returned TStream is a TRawByteString instance, since this
+// function is just a wrapper around:
+// ! result := TRawByteStringStream.Create(aString);
+function RawByteStringToStream(const aString: RawByteString): TStream;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// read UTF-8 text from a TStream saved with len prefix by WriteStringToStream
+// - format is Length(integer):Text - use StreamToRawByteString for raw data
+// - will return '' if there is no such text in the stream
+// - you can set a MaxAllowedSize value, if you know how long the size should be
+// - it will read from the current position in S: so if you just write into S,
+// it could be a good idea to rewind it before call, e.g.:
+// !  WriteStringToStream(Stream,aUtf8Text);
+// !  Stream.Seek(0,soBeginning);
+// !  str := ReadStringFromStream(Stream);
+function ReadStringFromStream(S: TStream; MaxAllowedSize: integer = 255): RawUtf8;
+
+/// write an UTF-8 text into a TStream with a len prefix - see ReadStringFromStream
+// - format is Length(integer):Text - use RawByteStringToStream for raw data
+function WriteStringToStream(S: TStream; const Text: RawUtf8): boolean;
+
 
 { ************ RawByteString Buffers Aggregation via TRawByteStringGroup }
 
@@ -10340,6 +10374,94 @@ function IsStreamBuffer(S: TStream): boolean;
 begin
   result := S.InheritsFrom(TRawByteStringStream) or
             S.InheritsFrom(TCustomMemoryStream);
+end;
+
+function StreamToRawByteString(aStream: TStream; aSize: Int64;
+  aCodePage: integer): RawByteString;
+var
+  current: Int64;
+begin
+  result := '';
+  if aStream = nil then
+    exit;
+  current := aStream.Position;
+  if (current = 0) and
+     aStream.InheritsFrom(TRawByteStringStream) and
+     ((aSize < 0) or
+      (aSize = length(TRawByteStringStream(aStream).DataString))) then
+  begin
+    result := TRawByteStringStream(aStream).DataString; // fast COW
+    exit;
+  end;
+  if aSize < 0 then
+    aSize := aStream.Size - current;
+  if (aSize = 0) or
+     (aSize > maxInt) then // Delphi uses 32-bit length() even on Win64
+    exit;
+  if aStream.InheritsFrom(TCustomMemoryStream) then
+  begin
+    FastSetStringCP(result, PAnsiChar(TCustomMemoryStream(aStream).
+      Memory) + current, aSize, aCodePage);
+    exit;
+  end;
+  pointer(result) := FastNewString(aSize, aCodePage);
+  if not StreamReadAll(aStream, pointer(result), aSize) then
+    result := '';
+  aStream.Position := current; // always restore position
+end;
+
+function StreamChangeToRawByteString(aStream: TStream; var aPosition: Int64): RawByteString;
+var
+  current, size: Int64;
+begin
+  result := '';
+  if aStream = nil then
+    exit;
+  size := aStream.Size - aPosition;
+  if size <= 0 then
+    exit; // nothing new
+  pointer(result) := FastNewString(size);
+  current := aStream.Position;
+  if aPosition <> current then
+    aStream.Position := aPosition;
+  if StreamReadAll(aStream, pointer(result), size) then
+    aPosition := current
+  else
+    result := '';
+  aStream.Position := current; // always restore position
+end;
+
+function RawByteStringToStream(const aString: RawByteString): TStream;
+begin
+  result := TRawByteStringStream.Create(aString);
+end;
+
+function ReadStringFromStream(S: TStream; MaxAllowedSize: integer): RawUtf8;
+var
+  L: integer;
+begin
+  L := 0;
+  if (S.Read(L, 4) <> 4) or
+     (L <= 0) or
+     (L > MaxAllowedSize) or
+     not StreamReadAll(S, FastSetString(result, L), L) then
+    result := '';
+end;
+
+function WriteStringToStream(S: TStream; const Text: RawUtf8): boolean;
+var
+  L: integer;
+begin
+  L := length(Text);
+  if L = 0 then
+    result := S.Write(L, 4) = 4
+  else
+    {$ifdef FPC}
+    result := (S.Write(L, 4) = 4) and
+              (S.Write(pointer(Text)^, L) = L);
+    {$else}
+    result := S.Write(pointer(PtrInt(Text) - SizeOf(integer))^, L + 4) = L + 4;
+    {$endif FPC}
 end;
 
 
