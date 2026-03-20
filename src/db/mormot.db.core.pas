@@ -3020,34 +3020,39 @@ end;
 
 procedure TResultsWriter.AddColumns(aKnownRowsCount: integer);
 var
-  i, len: PtrInt;
-  c: PPAnsiChar;
+  n, len: PtrInt;
+  c: PRawUtf8;
+  p: PUtf8Char;
 begin
+  c := pointer(ColNames);
+  if c = nil then
+    exit;
+  n := PDALen(PAnsiChar(c) - _DALEN)^ + _DAOFF;
   if fExpand then
   begin
-    c := pointer(ColNames);
-    for i := 1 to length(ColNames) do
-    begin
-      len := PStrLen(c^ - _STRLEN)^; // ColNames[] <> ''
+    repeat
+      len := PStrLen(PPAnsiChar(c)^ - _STRLEN)^; // ColNames[] <> ''
       if twoForceJsonExtended in CustomOptions then
       begin
-        SetLength(PRawUtf8(c)^, len + 1); // colname: in-place
-        c^[len] := ':';
+        SetLength(c^, len + 1); // colname: in-place
+        PPAnsiChar(c)^[len] := ':';
       end
       else
       begin
-        SetLength(PRawUtf8(c)^, len + 3); // "colname": in-place
-        MoveFast(c^[0], c^[1], len);
-        c^[0] := '"';
-        PWord(c^ + len + 1)^ := ord('"') + ord(':') shl 8;
+        SetLength(c^, len + 3); // "colname": in-place
+        p := PPAnsiChar(c)^;
+        MoveFast(p[0], p[1], len);
+        p[0] := '"';
+        PWord(p + len + 1)^ := ord('"') + ord(':') shl 8;
       end;
       inc(c);
-    end;
+      dec(n);
+    until n = 0;
   end
   else
   begin
     AddShort('{"fieldCount":');
-    AddU(length(ColNames));
+    AddU(n);
     if aKnownRowsCount > 0 then
     begin
       AddShort(',"rowCount":');
@@ -3055,11 +3060,12 @@ begin
     end;
     AddShort(',"values":["');
     // first row is FieldNames
-    for i := 0 to length(ColNames) - 1 do
-    begin
-      AddString(ColNames[i]);
-      AddDirect('"', ',', '"')
-    end;
+    repeat
+      AddString(c^);
+      AddDirect('"', ',', '"');
+      inc(c);
+      dec(n);
+    until n = 0;
     CancelLastChar;
     fStartDataPosition := GetTextLength;
   end;
