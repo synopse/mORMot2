@@ -3620,14 +3620,14 @@ begin
   rec := Table.CreateAndFillPrepare(fCall^.OutBody);
   try
     W := TableModelProps.Props.CreateJsonWriter(TRawByteStringStream.Create,
-      true, FieldsCsv, {knownrows=}0, 0, @tmp);
+      true, FieldsCsv, 0, 0, @tmp);
     try
+      W.StreamIsOwned := true;
       W.CustomOptions := [twoForceJsonStandard]; // regular JSON
       W.OrmOptions := Options; // SetOrmOptions() may refine ColNames[]
       rec.AppendFillAsJsonValues(W);
       W.SetText(fCall^.OutBody);
     finally
-      W.Stream.Free; // associated TRawByteStringStream instance
       W.Free;
     end;
   finally

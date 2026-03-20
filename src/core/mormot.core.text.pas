@@ -1127,6 +1127,9 @@ type
     /// set twfNoWriteToStreamException in the internal flags of this instance
     property NoWriteToStreamException: boolean
       index twfNoWriteToStreamException read GetFlag write SetFlag;
+    /// set twfStreamIsOwned in the internal flags of this instance
+    property StreamIsOwned: boolean
+      index twfStreamIsOwned read GetFlag write SetFlag;
   end;
 
   /// class of our simple TEXT format writer to a Stream
