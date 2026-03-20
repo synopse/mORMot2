@@ -1181,6 +1181,29 @@ type
     procedure AddSeconds(MilliSeconds: QWord; Quote: AnsiChar = #0);
   end;
 
+  /// a fake TTextWriter/TTextDateWriter instance allocated on stack
+  {$ifdef USERECORDWITHMETHODS}
+  TLocalWriter = record
+  {$else}
+  TLocalWriter = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    VMT: TClass; // fake inlined TTextDateWriter instance
+    Fields: array[1 .. 7 * SizeOf(pointer) + 10 * SizeOf(integer)] of byte;
+    Temp: ShortString;
+  public
+    /// initialize a fake TDateTimeWriter instance to write into a ShortString
+    // - don't forget to call Done - aka FlushFinal - to actually fill aDest
+    // - warning: but NEVER call Free on the returned fake instance
+    function Init(var Dest: ShortString): TTextDateWriter;
+    /// just return @self fake TDateTimeWriter instance
+    function Writer: TTextDateWriter;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// inlined faster FlushFinal to actually fill the Dest ShortString
+    procedure Done;
+      {$ifdef HASINLINE} inline; {$endif}
+  end;
+
 
 { ******************* TValuePUtf8Char text value wrapper record }
 
@@ -4218,6 +4241,37 @@ begin
 end;
 
 
+function TLocalWriter.Init(var Dest: ShortString): TTextDateWriter;
+begin // inlined TTextDateWriter.CreateOwnedShort logic with no heap allocation
+  VMT := TTextDateWriter; // for the virtual methods to work
+  FillCharFast(Fields, SizeOf(Fields), 0);
+  result := @VMT;
+  result.fFlags := [twfBufferIsOnStack, twfStreamIsShortString, twfFlushToStreamNoAutoResize];
+  result.InternalSetBuffer(@Temp, SizeOf(Temp));
+  Dest[0] := #0;
+  result.fStream := @Dest; // not a true TStream
+  result.fShortStringMax := high(Dest);
+end;
+
+function TLocalWriter.Writer: TTextDateWriter;
+begin
+  result := @VMT;
+end;
+
+procedure TLocalWriter.Done;
+var
+  len: PtrInt;
+  W: TTextDateWriter;
+begin // inlined FlushFinal + WriteToStream
+  W := @VMT;
+  if W.fStream = nil then
+    exit; // Dest is already full
+  len := W.B - W.fTempBuf + 1;
+  if len > 0 then
+    AppendShortBuffer(pointer(W.fTempBuf), len, W.fShortStringMax, pointer(W.fStream));
+end;
+
+
 { ******************* TValuePUtf8Char text value wrapper record }
 
 { TValuePUtf8Char }
@@ -4287,6 +4341,7 @@ begin
   // as expected by ParseMonth() to call FindShortStringListExact()
   assert(PtrUInt(@HTML_MONTH_NAMES[3]) - PtrUInt(@HTML_MONTH_NAMES[1]) = 8);
   assert(SizeOf(GlobalTime) = 128);
+  assert(TTextDateWriter.InstanceSize <= SizeOf(TLocalWriter) - 256);
   // some mormot.core.text wrappers are implemented by this unit
   _VariantToUtf8DateTimeToIso8601 := DateTimeToIso8601TextVar;
   _Iso8601ToDateTime := Iso8601ToDateTime;
