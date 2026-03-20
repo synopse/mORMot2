@@ -4727,11 +4727,11 @@ begin
   s := RawUtf8OfChar('a', 211);
   s := Join(['ab'#7, s, #1'cd'#2, s, '.']);
   CheckHash(TextToSource(s, lfLF), $429F0213);
-  AppendCharToRawUtf8(s, '1');
+  Append(s, '1');
   CheckHash(TextToSource(s, lfLF), $CE600C30);
-  AppendCharToRawUtf8(s, '2');
+  Append(s, '2');
   CheckHash(TextToSource(s, lfLF), $AE154C77);
-  AppendCharToRawUtf8(s, '3');
+  Append(s, '3');
   CheckHash(TextToSource(s, lfLF), $CD2B6983);
   CheckHash(BinToSource('DATA', '', 'data', 16, '', lfLF), $2FEE1DC5);
   CheckHash(BinToSource('DATA', 'some comment', s, 16, '', lfLF), $9F4563CE);
