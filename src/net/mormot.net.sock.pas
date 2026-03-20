@@ -38,7 +38,8 @@ uses
   sysutils,
   classes,
   mormot.core.base,
-  mormot.core.os;
+  mormot.core.os,
+  mormot.core.os.security; // for TSystemCertificateStore
 
 
 { ******************** Socket Process High-Level Encapsulation }

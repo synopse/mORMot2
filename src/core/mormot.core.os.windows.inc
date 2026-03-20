@@ -3388,69 +3388,6 @@ begin
   RegCloseKey(k);
 end;
 
-const
-  crypt32 = 'Crypt32.dll';
-  CRYPT_STRING_BASE64HEADER = 0; // = PEM textual format
-
-type
-  HCRYPTPROV = pointer;
-  HCERTSTORE = pointer;
-  PCERT_INFO = pointer;
-
-  CERT_CONTEXT = record
-    dwCertEncodingType: DWord;
-    pbCertEncoded: PByte;
-    cbCertEncoded: DWord;
-    pCertInfo: PCERT_INFO;
-    hCertStore: HCERTSTORE;
-  end;
-  PCCERT_CONTEXT = ^CERT_CONTEXT;
-
-function CertOpenSystemStoreW(hProv: HCRYPTPROV;
-  szSubsystemProtocol: PWideChar): HCERTSTORE ;
-    stdcall; external crypt32;
-
-function CertEnumCertificatesInStore(hCertStore: HCERTSTORE;
-  pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT;
-  stdcall; external crypt32;
-
-function CryptBinaryToStringA(pBinary: PByte; cbBinary, dwFlags: DWord;
-  pszString: PAnsiChar; var pchString: DWord): BOOL;
-    stdcall; external crypt32;
-
-function CertCloseStore(hCertStore: HCERTSTORE; dwFlags: DWord): BOOL;
-    stdcall; external crypt32;
-
-function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;
-var
-  store: HCERTSTORE;
-  ctx: PCCERT_CONTEXT;
-  certlen: DWord;
-  tmp: TSynTempBuffer;
-begin
-  // call the Windows API to retrieve the System certificates
-  result := '';
-  store := CertOpenSystemStoreW(nil, WINDOWS_CERTSTORE[CertStore]);
-  try
-    ctx := CertEnumCertificatesInStore(store, nil);
-    while ctx <> nil do
-    begin
-      certlen := 0;
-      if not CryptBinaryToStringA(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
-          CRYPT_STRING_BASE64HEADER, nil, certlen) then
-        break;
-      tmp.Init(certlen); // a PEM is very likely to be < 8KB so will be on stack
-      if CryptBinaryToStringA(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
-          CRYPT_STRING_BASE64HEADER, tmp.buf, certlen) then
-         AppendBufferToUtf8(tmp.buf, certlen, result);
-      tmp.Done;
-      ctx := CertEnumCertificatesInStore(store, ctx); // next certificate
-    end;
-  finally
-    CertCloseStore(store, 0);
-  end;
-end;
-
 function SearchSmbios(const mem: RawByteString; var info: TRawSmbiosInfo): PtrUInt;
   forward; // implemented later in mormot.core.os.pas
 

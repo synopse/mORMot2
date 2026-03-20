@@ -2576,52 +2576,6 @@ begin
   end;
 end;
 
-function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;
-var
-  files: TRawUtf8DynArray;
-  f: PtrInt;
-begin
-  // see https://go.dev/src/crypto/x509/root_unix.go as reference
-  case CertStore of
-    scsRoot:
-      result := StringFromFirstFile([
-        {$ifdef OSLINUXANDROID}
-          '/etc/ssl/certs/ca-certificates.crt',                // Debian/Gentoo
-      	  '/etc/pki/tls/certs/ca-bundle.crt',                  // Fedora/RHEL 6
-          '/etc/ssl/ca-bundle.pem',                            // OpenSUSE
-          '/etc/pki/tls/cacert.pem',                           // OpenELEC
-          '/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem', // CentOS/RHEL 7
-          '/etc/ssl/cert.pem'                                  // Alpine Linux
-        {$else}
-      	  '/usr/local/etc/ssl/cert.pem',            // FreeBSD
-      	  '/etc/ssl/cert.pem',                      // OpenBSD
-      	  '/usr/local/share/certs/ca-root-nss.crt', // DragonFly
-      	  '/etc/openssl/certs/ca-certificates.crt'  // NetBSD
-        {$endif OSLINUXANDROID}
-        ]);
-    scsCA:
-      begin
-        files := StringFromFolders([
-          {$ifdef OSLINUXANDROID}
-            '/etc/ssl/certs',               // Debian/SLES10/SLES11
-            '/etc/pki/tls/certs',           // Fedora/RHEL
-      	    '/system/etc/security/cacerts'  // Android
-          {$else}
-            '/etc/ssl/certs',         // FreeBSD 12.2+
-            '/usr/local/share/certs', // FreeBSD
-            '/etc/openssl/certs'      // NetBSD
-          {$endif OSLINUXANDROID}
-          ]);
-        for f := 0 to length(files) - 1 do
-          if (PosEx('-----BEGIN', files[f]) <> 0) and
-             IsAnsiCompatible(files[f]) and
-             (PosEx(files[f], result) = 0) then // append PEM files once
-            result := Join([result, #10, files[f]]);
-      end;
-  end;
-end;
-
-
 const
   // on POSIX, we store the SMBIOS data in a local cache for non-root users
   SMB_CACHE = '/var/tmp/.synopse.smb';

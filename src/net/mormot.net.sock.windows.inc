@@ -10,7 +10,6 @@
 
 uses
   Windows,
-  mormot.core.os.security,
   mormot.lib.sspi; // for Low-Level SSPI/SChannel Functions
 
 
