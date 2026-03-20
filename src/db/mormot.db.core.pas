@@ -2983,15 +2983,15 @@ end;
 
 const
   VOID_ARRAYFIELD: array[boolean] of TShort16 = (
-    '[]'#10, '{"FieldCount":0}'); // same as sqlite3_get_table()
+    '[]'#10, '{"FieldCount":0}');
 
 procedure TResultsWriter.CancelAllVoid;
 var
   p: PShortString;
-begin
+begin // called from TSqlRequest.ExecuteStream with no data
   CancelAll; // rewind JSON
   p := @VOID_ARRAYFIELD[fExpand];
-  inc(fWrittenBytes, fStream.Write(p^[1], ord(p^[0])));
+  WriteToStream(@p^[1], ord(p^[0]));
 end;
 
 constructor TResultsWriter.Create(aStream: TStream; Expand, withID: boolean;
