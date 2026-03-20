@@ -5748,8 +5748,7 @@ begin
     W := TBufferWriter.Create(TRawByteStringStream, BufLen);
   try
     SaveTo(W, aMagic);
-    W.Flush;
-    result := TRawByteStringStream(W.Stream).DataString;
+    result := W.FlushTo;
   finally
     W.Free;
   end;

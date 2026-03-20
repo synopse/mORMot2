@@ -3523,7 +3523,7 @@ var
     nil,                      // vcSynObjectList
     nil,                      // vcRawUtf8List
     TObjectWithID,            // vcObjectWithID
-    TClonable);          // vcClonable
+    TClonable);               // vcClonable
 
 
 implementation

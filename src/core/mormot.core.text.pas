@@ -1106,6 +1106,7 @@ type
     // - if the TStream instance has not been specified when calling the
     // TTextWriter constructor, it can be forced via this property, before
     // any writing
+    // - may contain nil, or not a TStream at all after CreateOwnedShort()
     property Stream: TStream
       read fStream write SetStream;
     /// global options to customize this TTextWriter instance process
