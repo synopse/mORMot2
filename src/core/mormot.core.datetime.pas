@@ -7,6 +7,7 @@ unit mormot.core.datetime;
   *****************************************************************************
 
    Date and Time definitions and process shared by all framework units
+    - Size and Elapsed Time to Text Conversion
     - ISO-8601 Compatible Date/Time Text Encoding
     - TSynDate / TSynDateTime / TSynSystemTime High-Level objects
     - TUnixTime / TUnixMSTime POSIX Epoch Compatible 64-bit date/time
@@ -29,6 +30,85 @@ uses
   mormot.core.os.security, // for Windows SetSystemTime()
   mormot.core.unicode,
   mormot.core.text;
+
+
+{ ************ Size and Elapsed Time to Text Conversion }
+
+/// convert a size to a human readable value
+// - append EB, PB, TB, GB, MB, KB or B symbol with or without preceding space
+// - for EB, PB, TB, GB, MB and KB, add one fractional digit
+function KB(bytes: Int64; nospace: boolean): TShort16; overload;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+
+/// convert a string size to a human readable value
+// - append EB, PB, TB, GB, MB, KB or B symbol
+// - for EB, PB, TB, GB, MB and KB, add one fractional digit
+function KB(const buffer: RawByteString): TShort16; overload;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif}
+
+/// convert a size to a human readable value
+// - append EB, PB, TB, GB, MB, KB or B symbol
+// - for EB, PB, TB, GB, MB and KB, add one fractional digit
+procedure KBU(bytes: Int64; var result: RawUtf8);
+
+/// convert a count to a human readable value power-of-two metric value
+// - append E, P, T, G, M, K symbol, with one fractional digit
+procedure K(value: Int64; out result: TShort16); overload;
+
+/// convert a count to a human readable value power-of-two metric value
+// - append E, P, T, G, M, K symbol, with one fractional digit
+function K(value: Int64): TShort16; overload;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+
+/// convert a seconds elapsed time into a human readable value
+// - append 's', 'm', 'h' and 'd' symbol for the given value range,
+// with two fractional digits
+function SecToString(S: QWord): TShort16;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+
+/// convert a milliseconds elapsed time into a human readable value
+// - append 'ms', 's', 'm', 'h' and 'd' symbol for the given value range,
+// with two fractional digits
+function MilliSecToString(MS: QWord): TShort16;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+
+/// convert a micro seconds elapsed time into a human readable value
+// - append 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value range,
+// with two fractional digits
+function MicroSecToString(Micro: QWord): TShort16; overload;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+
+/// compute elapsed time into a human readable value, from a Start value
+// - will get current QueryPerformanceMicroSeconds() and compute against Start
+// - append 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value range,
+// with two fractional digits
+function MicroSecFrom(Start: QWord): TShort16;
+  {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
+
+/// convert a micro seconds elapsed time into a human readable value
+// - append 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value range,
+// with two fractional digits
+procedure MicroSecToString(Micro: QWord; out result: TShort16); overload;
+
+/// convert a micro seconds elapsed time into a human readable value
+// - append 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value range,
+// with two fractional digits
+function MicroSecToText(Micro: QWord): RawUtf8;
+
+/// convert a nano seconds elapsed time into a human readable value
+// - append 'ns', 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value
+// range, with two fractional digits
+procedure NanoSecToString(Nano: QWord; out result: TShort16);
+
+/// convert "valueunit" values into x or x.xx text with up to 2 digits
+// - supplied value should be the actual unit value * 100
+procedure AppendShortBy100(value: cardinal; const valueunit: ShortString;
+  var result: ShortString);
+
+/// convert an integer value into its textual representation with thousands marked
+// - Sep is the character used to separate thousands in numbers with more than
+// three digits to the left of the decimal separator e.g. '100' '1,000' '10,000'
+function IntToThousandString(Value: PtrInt; const Sep: ShortString = ','): TShort31;
 
 
 { ************ ISO-8601 Compatible Date/Time Text Encoding }
@@ -1046,6 +1126,10 @@ type
   // - in addition to TTextWriter, will handle date/time ISO-8601 serialization
   TTextDateWriter = class(TTextWriter)
   public
+    /// append some number with left-filled spaces up to Width characters count
+    // - if the value too big to fit in Width, will append K(Value) abbreviation
+    procedure AddSpaced(Value: QWord; Width: PtrInt;
+      SepChar: AnsiChar = #0); overload;
     /// append a TTimeLog value, expanded as Iso-8601 encoded text
     procedure AddTimeLog(Value: PInt64; QuoteChar: AnsiChar = #0);
     /// append a TUnixTime value, expanded as Iso-8601 encoded text
@@ -1156,6 +1240,170 @@ type
 
 
 implementation
+
+
+{ ************ Size and Elapsed Time to Text Conversion }
+
+function KB(bytes: Int64; nospace: boolean): TShort16;
+begin
+  result[0] := #0;
+  AppendKb(bytes, result, not nospace);
+end;
+
+function KB(const buffer: RawByteString): TShort16;
+begin
+  result[0] := #0;
+  AppendKb(length(buffer), result, {withspace=}true);
+end;
+
+procedure KBU(bytes: Int64; var result: RawUtf8);
+var
+  tmp: TShort16;
+begin
+  tmp[0] := #0;
+  AppendKb(bytes, tmp, {withspace=}true);
+  FastSetString(result, @tmp[1], ord(tmp[0]));
+end;
+
+procedure K(value: Int64; out result: TShort16);
+begin
+  result[0] := #0;
+  AppendKb(value, result, {withspace=}false);
+  if result[0] <> #0 then
+    dec(result[0]); // just trim last 'B' ;)
+end;
+
+function K(value: Int64): TShort16;
+begin
+  K(Value, result);
+end;
+
+function IntToThousandString(Value: PtrInt; const Sep: ShortString): TShort31;
+var
+  i, L, Len: cardinal;
+begin
+  ToShortU(abs(Value), @result);
+  L := ord(result[0]);
+  if L >= 4 then
+  begin
+    Len := L + 1;
+    for i := 1 to (L - 1) div 3 do
+      insert(Sep, result, Len - i * 3);
+  end;
+  if value < 0 then
+    insert('-', result, 1); // seldom called
+end;
+
+function SecToString(S: QWord): TShort16;
+begin
+  MicroSecToString(S * MicroSecsPerSec, result);
+end;
+
+function MilliSecToString(MS: QWord): TShort16;
+begin
+  MicroSecToString(MS * MicroSecsPerMilliSec, result);
+end;
+
+function MicroSecToString(Micro: QWord): TShort16;
+begin
+  MicroSecToString(Micro, result);
+end;
+
+function MicroSecFrom(Start: QWord): TShort16;
+var
+  stop: Int64;
+begin
+  QueryPerformanceMicroSeconds(stop);
+  MicroSecToString(stop - Int64(Start), result);
+end;
+
+procedure AppendShortBy100(value: cardinal; const valueunit: ShortString;
+  var result: ShortString);
+var
+  d100: TDiv100Rec;
+begin
+  if value < 100 then
+  begin
+    PCardinal(PAnsiChar(@result) + ord(result[0]) + 1)^ :=
+      ord('0') + ord('.') shl 8 + cardinal(TwoDigitLookupW[value]) shl 16;
+    inc(result[0], 4);
+  end
+  else
+  begin
+    Div100(value, d100{%H-});
+    AppendShortCardinal(d100.d, result);
+    if d100.m <> 0 then
+    begin
+      AppendShortChar('.', @result);
+      AppendShortTwoChars(TwoDigitLookupW[d100.m], @result);
+    end;
+  end;
+  AppendShort(valueunit, result)
+end;
+
+procedure AppendShortTime(value: cardinal; const u: ShortString;
+  var result: ShortString);
+var
+  d: cardinal;
+begin
+  d := value div 60;
+  AppendShortCardinal(d, result);
+  AppendShort(u, result);
+  AppendShortTwoChars(TwoDigitLookupW[value - (d * 60)], @result);
+end;
+
+procedure MicroSecToString(Micro: QWord; out result: TShort16);
+begin
+  result[0] := #0;
+  if Int64(Micro) <= 0 then // warning: QWord=Int64 on pre-Unicode Delphi
+    PCardinal(@result)^ := 3 + ord('0') shl 8 + ord('u') shl 16 + ord('s') shl 24
+  else if Int64(Micro) < 1000 then
+  begin
+    AppendShortCardinal(Micro, result);
+    AppendShortTwoChars(ord('u') + ord('s') shl 8, @result);
+  end
+  else if Micro < 1000000 then
+    AppendShortBy100(
+      {$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif} div 10, 'ms', result)
+  else if Micro < 60000000 then
+    AppendShortBy100(
+      {$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif} div 10000, 's', result)
+  else if Micro < QWord(3600000000) then
+    AppendShortTime(
+      {$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif} div 1000000, 'm', result)
+  else if Micro < QWord(86400000000 * 2) then
+    AppendShortTime(Micro div 60000000, 'h', result)
+  else
+  begin
+    AppendShortCardinal(Micro div QWord(86400000000), result);
+    AppendShortChar('d', @result);
+  end;
+end;
+
+function MicroSecToText(Micro: QWord): RawUtf8;
+var
+  tmp: TShort16;
+begin
+  MicroSecToString(Micro, tmp);
+  FastSetString(result, @tmp[1], ord(tmp[0]));
+end;
+
+procedure NanoSecToString(Nano: QWord; out result: TShort16);
+begin
+  result[0] := #0;
+  if Int64(Nano) <= 0 then // warning: QWord=Int64 on pre-Unicode Delphi
+    PCardinal(@result)^ := 3 + ord('0') shl 8 + ord('n') shl 16 + ord('s') shl 24
+  else if Nano < 1000 then
+  begin
+    AppendShortCardinal(Nano, result);
+    AppendShortTwoChars(ord('n') + ord('s') shl 8, @result);
+  end
+  else if Nano < 1000000 then
+    AppendShortBy100(
+      {$ifdef CPU32} PCardinal(@Nano)^ {$else} Nano {$endif} div 10, 'us', result)
+  else
+    MicroSecToString(Nano div NanoSecsPerMicroSec, result);
+end;
 
 
 { ************ ISO-8601 Compatible Date/Time Text Encoding }
@@ -3808,6 +4056,26 @@ end;
 { ******************* TTextDateWriter supporting date/time ISO-8601 serialization }
 
 { TTextDateWriter }
+
+procedure TTextDateWriter.AddSpaced(Value: QWord; Width: PtrInt; SepChar: AnsiChar);
+var
+  tmp: TTemp24;
+  alt: TShort16;
+  p: PAnsiChar;
+  len: PtrInt;
+begin
+  p := StrUInt64(@tmp[23], Value);
+  len := @tmp[23] - p;
+  if len > Width then
+  begin
+    K(Value, alt); // truncate to xxxK or xxxM
+    p := @alt[1];
+    len := ord(alt[0]);
+  end;
+  AddSpaced(p, len);
+  if SepChar <> #0 then
+    Add(SepChar);
+end;
 
 procedure TTextDateWriter.AddTimeLog(Value: PInt64; QuoteChar: AnsiChar);
 begin

@@ -6459,7 +6459,7 @@ end;
 const
   _WIDTH = 10; // any value < TTextWriter internal buffer size would do
 
-procedure AppendFieldNames(w: TTextWriter);
+procedure AppendFieldNames(w: TTextDateWriter);
 begin
   w.AddSpaced('Count',    _WIDTH, ',');
   w.AddSpaced('Time',     _WIDTH, ',');
@@ -6469,7 +6469,7 @@ begin
   w.AddCR;
 end;
 
-procedure AppendFieldValues(w: TTextWriter; const d: THttpAnalyzerState);
+procedure AppendFieldValues(w: TTextDateWriter; const d: THttpAnalyzerState);
 begin
   w.AddSpaced(d.Count,    _WIDTH, ',');
   w.AddSpaced(d.Time,     _WIDTH, ',');
@@ -6483,11 +6483,11 @@ function THttpAnalyzer.GetAsText(Period: THttpAnalyzerPeriod): RawUtf8;
 var
   s: THttpAnalyzerScope;
   d: THttpAnalyzerStatePerScope;
-  w: TTextWriter;
+  w: TTextDateWriter;
   tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   Get(Period, d);
-  w := TTextWriter.CreateOwnedStream(tmp);
+  w := TTextDateWriter.CreateOwnedStream(tmp);
   try
     w.AddSpaced('Scope', _WIDTH, ',');
     AppendFieldNames(w);
@@ -6506,11 +6506,11 @@ function THttpAnalyzer.GetAsText(Scope: THttpAnalyzerScope): RawUtf8;
 var
   p: THttpAnalyzerPeriod;
   d: THttpAnalyzerStatePerPeriod;
-  w: TTextWriter;
+  w: TTextDateWriter;
   tmp: TTextWriterStackBuffer;
 begin
   Get(Scope, d);
-  w := TTextWriter.CreateOwnedStream(tmp);
+  w := TTextDateWriter.CreateOwnedStream(tmp);
   try
     w.AddSpaced('Period', _WIDTH, ',');
     AppendFieldNames(w);
@@ -7433,13 +7433,13 @@ procedure MetricsToCsv(const Metrics: THttpAnalyzerToSaveDynArray;
 var
   n: integer;
   d: PHttpAnalyzerToSave;
-  w: TTextWriter;
+  w: TTextDateWriter;
   date: TShort16;
   tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if Metrics = nil then
     exit;
-  w := TTextWriter.CreateOwnedStream(tmp);
+  w := TTextDateWriter.CreateOwnedStream(tmp);
   try
     w.AddSpaced('Date', _WIDTH, ',');
     if not NoPeriod then

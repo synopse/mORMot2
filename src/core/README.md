@@ -95,7 +95,6 @@ Text Processing functions shared by all framework units
 - `TTextWriter` parent class for Text Generation
 - Numbers (integers or floats) and Variants to Text Conversion
 - Text Formatting Functions
-- Size and Elapsed Time to Text Conversion
 - HTTP/REST Common Headers Parsing (e.g. cookies)
 - `ESynException` class
 - Hexadecimal Text And Binary Conversion
@@ -103,6 +102,7 @@ Text Processing functions shared by all framework units
 ### mormot.core.datetime
 
 Date and Time definitions and process shared by all framework units
+- Size and Elapsed Time to Text Conversion
 - ISO-8601 Compatible Date/Time Text Encoding
 - `TSynDate` / `TSynDateTime` / `TSynSystemTime` High-Level objects
 - `TUnixTime` / `TUnixMSTime` POSIX Epoch Compatible 64-bit date/time
