@@ -9677,7 +9677,7 @@ begin
   ndx := {$ifdef OSPOSIX}FindNonVoidRawUtf8{$else}FindNonVoidRawUtf8I{$endif}(
     pointer(_SystemEnvNames), name, len, length(_SystemEnvNames));
   if ndx >= 0 then
-    result := pointer(_SystemEnvValues[ndx]);
+    result := pointer(_SystemEnvValues[ndx]); // O(n) fast found in cache
 end;
 
 function GetSystemEnv(const name: RawUtf8): RawUtf8;

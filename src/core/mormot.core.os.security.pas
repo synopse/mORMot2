@@ -2545,11 +2545,28 @@ const
   HCRYPTPROV_NOTTESTED            = HCRYPTPROV(-1);
   NTE_BAD_KEYSET                  = HRESULT($80090016);
   BCRYPT_USE_SYSTEM_PREFERRED_RNG = $00000002;
-  crypt32                         = 'Crypt32.dll';
 
 var
   /// direct access to the Windows CryptoApi - with late binding
   CryptoApi: TWinCryptoApi;
+
+const
+  crypt32 = 'Crypt32.dll';
+
+function CertOpenSystemStoreW(hProv: HCRYPTPROV;
+  szSubsystemProtocol: PWideChar): HCERTSTORE ;
+    stdcall; external crypt32;
+
+function CertEnumCertificatesInStore(hCertStore: HCERTSTORE;
+  pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT;
+    stdcall; external crypt32;
+
+function CryptBinaryToStringA(pBinary: PByte; cbBinary, dwFlags: DWord;
+  pszString: PAnsiChar; var pchString: DWord): BOOL;
+    stdcall; external crypt32;
+
+function CertCloseStore(hCertStore: HCERTSTORE; dwFlags: DWord): BOOL;
+    stdcall; external crypt32;
 
 type
   /// TSynWindowsPrivileges enumeration synchronized with WinAPI
@@ -6866,21 +6883,6 @@ end;
 const
   WINDOWS_CERTSTORE: array[TSystemCertificateStore] of PWideChar = (
     'CA', 'MY', 'ROOT', 'SPC');
-
-function CertOpenSystemStoreW(hProv: HCRYPTPROV;
-  szSubsystemProtocol: PWideChar): HCERTSTORE ;
-    stdcall; external crypt32;
-
-function CertEnumCertificatesInStore(hCertStore: HCERTSTORE;
-  pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT;
-  stdcall; external crypt32;
-
-function CryptBinaryToStringA(pBinary: PByte; cbBinary, dwFlags: DWord;
-  pszString: PAnsiChar; var pchString: DWord): BOOL;
-    stdcall; external crypt32;
-
-function CertCloseStore(hCertStore: HCERTSTORE; dwFlags: DWord): BOOL;
-    stdcall; external crypt32;
 
 function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;
 var
