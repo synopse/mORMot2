@@ -379,7 +379,7 @@ type
 
   /// available internal flags defining TTextWriter / TJsonWriter process
   // - twfStreamIsOwned is set if the associated TStream is owned by the
-  // TTextWriter instance - as a TRawByteStringStream with twfStreamIsRawByteString
+  // TTextWriter instance - as a TRawByteStringStream with twfRawByteStringStream
   // - twfFlushToStreamNoAutoResize would forbid FlushToStream to resize the
   // internal memory buffer when it appears undersized - FlushFinal will set it
   // before calling a last FlushToStream - use
@@ -388,14 +388,16 @@ type
   // this instance, but specified at constructor, maybe from the stack
   // - twfNoWriteToStreamException let WriteToStream silently fail - use
   // TTextWriter.NoWriteToStreamException property to specify this option
-  // - twfStreamIsShortString is set by CreateOwnedShort constructor
+  // - twfStreamIsShortString is set by CreateOwnedShort or with a TLocalWriter
+  // - twfStreamIsRawUtf8 is set by CreateOwnedStream(TTextWriterStackBuffer)
   TTextWriterFlag = (
     twfStreamIsOwned,
     twfFlushToStreamNoAutoResize,
     twfNoWriteToStreamException,
-    twfStreamIsRawByteString,
     twfBufferIsOnStack,
-    twfStreamIsShortString);
+    twfRawByteStringStream,
+    twfStreamIsShortString,
+    twfStreamIsRawUtf8);
 
   /// internal flags used by a TTextWriter / TJsonWriter instance
   TTextWriterFlags = set of TTextWriterFlag;
@@ -544,7 +546,7 @@ type
   // are moved into Rtti.RegisterFromText() as other similar methods
   TTextWriter = class
   protected
-    fStream: TStream;
+    fStream: TStream; // may be a PShortString or a RawUtf8 in disguise
     fOnFlushToStream: TOnTextWriterFlush;
     fTempBuf: PUtf8Char;
     fTempBufSize: integer;
@@ -594,8 +596,8 @@ type
     // - will use the stack-allocated TTextWriterStackBuffer if possible
     constructor CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer;
       aBufSize: PtrUInt); overload;
-    /// the data will be written to an internal TRawByteStringStream
-    // - will use the stack-allocated TTextWriterStackBuffer
+    /// the data will be written to an internal RawUtf8 using the 8KB stack buffer
+    // - fStream will be pointer(RawUtf8), not a true TRawByteStringStream
     constructor CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer); overload;
     /// the data will be written to an external file
     // - you should call explicitly FlushFinal or FlushToStream to write
@@ -4058,7 +4060,7 @@ end;
 constructor TTextWriter.CreateOwnedStream(aBuf: pointer; aBufSize: PtrUInt);
 begin
   fStream := TRawByteStringStream.Create; // inlined SetStream()
-  fFlags := [twfStreamIsOwned, twfStreamIsRawByteString];
+  fFlags := [twfStreamIsOwned, twfRawByteStringStream];
   SetBuffer(aBuf, aBufSize); // aBuf may be nil
 end;
 
@@ -4078,8 +4080,7 @@ end;
 
 constructor TTextWriter.CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer);
 begin
-  fStream := TRawByteStringStream.Create; // inlined SetStream()
-  fFlags := [twfStreamIsOwned, twfStreamIsRawByteString, twfBufferIsOnStack];
+  fFlags := [twfStreamIsRawUtf8, twfBufferIsOnStack]; // now fStream = RawUtf8
   InternalSetBuffer(@aStackBuf, SizeOf(aStackBuf));
 end;
 
@@ -4105,7 +4106,9 @@ end;
 
 destructor TTextWriter.Destroy;
 begin
-  if twfStreamIsOwned in fFlags then
+  if twfStreamIsRawUtf8 in fFlags then // fStream is a RawUtf8 not a TStream
+    FastAssignNew(fStream)
+  else if twfStreamIsOwned in fFlags then
     fStream.Free;
   if not (twfBufferIsOnStack in fFlags) then
     FreeMem(fTempBuf);
@@ -4392,10 +4395,17 @@ var
 begin
   if Assigned(fOnFlushToStream) then
     fOnFlushToStream(data, len);
-  if (len <> 0) and
-     Assigned(fStream) then
+  if len = 0 then
+    exit;
+  if twfStreamIsRawUtf8 in fFlags then // fStream is a RawUtf8 not a TStream
+  begin
+    inc(fWrittenBytes, len);
+    Append(RawUtf8(pointer(fStream)), data, len); // fStream may be nil = ''
+  end
+  else if Assigned(fStream) then
     if twfStreamIsShortString in fFlags then
     begin // here fStream is a PShortString not a TStream
+      inc(fWrittenBytes, len);
       AppendShortBuffer(data, len, fShortStringMax, pointer(fStream));
       if PShortString(fStream)^[0] = #255 then
         fStream := nil; // don't write anything anymore
@@ -4436,7 +4446,9 @@ end;
 
 procedure TTextWriter.SetStream(aStream: TStream);
 begin
-  exclude(fFlags, twfStreamIsRawByteString);
+  if fFlags * [twfStreamIsRawUtf8, twfStreamIsShortString] <> [] then
+    exit; // invalid call
+  exclude(fFlags, twfRawByteStringStream);
   if fStream <> nil then
     if twfStreamIsOwned in fFlags then
     begin
@@ -4449,7 +4461,7 @@ begin
   fInitialStreamPosition := fStream.Position;
   fWrittenBytes := fInitialStreamPosition;
   if aStream.InheritsFrom(TRawByteStringStream) then
-    include(fFlags, twfStreamIsRawByteString);
+    include(fFlags, twfRawByteStringStream);
 end;
 
 procedure TTextWriter.FlushFinal;
@@ -4461,7 +4473,7 @@ begin // don't mess with twfFlushToStreamNoAutoResize: it may not be final
     WriteToStream(fTempBuf, len);
   B := fTempBuf - 1;
   {$ifdef HASCODEPAGE}
-  if twfStreamIsRawByteString in fFlags then
+  if twfRawByteStringStream in fFlags then
     TRawByteStringStream(fStream).EnsureDataStringIsUtf8;
   {$endif HASCODEPAGE}
 end;
@@ -4504,7 +4516,7 @@ procedure TTextWriter.ForceContent(const text: RawUtf8);
 begin
   CancelAll;
   if (fInitialStreamPosition = 0) and
-     (twfStreamIsRawByteString in fFlags) then
+     (twfRawByteStringStream in fFlags) then
     TRawByteStringStream(fStream).DataString := text
   else
     fStream.WriteBuffer(pointer(text)^, length(text));
@@ -4524,7 +4536,9 @@ begin
     result := '';
     exit;
   end;
-  if twfStreamIsRawByteString in fFlags then
+  if twfStreamIsRawUtf8 in fFlags then // fStream is a RawUtf8 not a TStream
+    FastAssignUtf8(result, RawByteString(pointer(fStream))) // direct assign
+  else if twfRawByteStringStream in fFlags then
     TRawByteStringStream(fStream).GetAsText(fInitialStreamPosition, Len, result)
   else if fStream.InheritsFrom(TCustomMemoryStream) then
     FastSetString(result, PAnsiChar(TCustomMemoryStream(fStream).Memory) +
@@ -4560,7 +4574,12 @@ begin
   result := nil; // if the TStream has no proper memory buffer to return
   if (fInitialStreamPosition = 0) and
      not (twfStreamIsShortString in fFlags) then
-    if twfStreamIsRawByteString in fFlags then
+    if twfStreamIsRawUtf8 in fFlags then // fStream is a RawUtf8 not a TStream
+    begin
+      FlushFinal;
+      result := pointer(fStream);
+    end
+    else if twfRawByteStringStream in fFlags then
     begin
       FlushFinal;
       result := pointer(TRawByteStringStream(fStream).DataString);
@@ -4582,9 +4601,15 @@ procedure TTextWriter.CancelAll;
 begin
   if self = nil then
     exit; // avoid GPF
-  if (fWrittenBytes <> 0) and
-     not (twfStreamIsShortString in fFlags) then
-    fWrittenBytes := fStream.Seek(fInitialStreamPosition, soBeginning);
+  if fWrittenBytes <> 0 then
+    if twfStreamIsRawUtf8 in fFlags then // fStream is a RawUtf8 not a TStream
+    begin
+      fWrittenBytes := 0;
+      if fStream <> nil then
+        FastAssignNew(fStream); // seldom called (SetText did reset to nil='')
+    end
+    else if not (twfStreamIsShortString in fFlags) then
+      fWrittenBytes := fStream.Seek(fInitialStreamPosition, soBeginning);
   B := fTempBuf - 1;
 end;
 
@@ -4596,13 +4621,9 @@ end;
 
 procedure TTextWriter.CancelAllWith(var temp: TTextWriterStackBuffer);
 begin
-  if (fWrittenBytes <> 0) and
-     not (twfStreamIsShortString in fFlags) then
-    fWrittenBytes := fStream.Seek(fInitialStreamPosition, soBeginning);
+  CancelAll;
   if twfBufferIsOnStack in fFlags then
-    InternalSetBuffer(@temp, SizeOf(temp))
-  else
-    B := fTempBuf - 1; // we can continue to use our own buffer > 8KB
+    InternalSetBuffer(@temp, SizeOf(temp)); // just refresh the stack buffer
 end;
 
 procedure TTextWriter.CancelLastChar(aCharToCancel: AnsiChar);
