@@ -545,8 +545,8 @@ type
   TTextWriter = class
   protected
     fStream: TStream;
-    fTempBuf: PUtf8Char;
     fOnFlushToStream: TOnTextWriterFlush;
+    fTempBuf: PUtf8Char;
     fTempBufSize: integer;
     fHumanReadableLevel: integer;
     fWrittenBytes: Int64;
@@ -619,7 +619,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// write pending data, then retrieve the whole text as a UTF-8 string
     // - call CancelAll to reuse this instance after this method (or FlushFinal)
-    // - not available after CreateOwnedShort() constructor
+    // - not available after CreateOwnedShort() constructor or with TLocalWriter
     procedure SetText(var result: RawUtf8; reformat: TTextWriterJsonFormat = jsonCompact);
     /// write pending data, then return a UTF-8 #0 ended buffer of the whole text
     // - may return the internal buffer directly if nothing was written to Stream
@@ -628,7 +628,7 @@ type
     // - by definition, the returned buffer <> nil has a size of TextLength bytes
     // - you may use immediately the returned buffer <> nil, then call CancelAll
     // to reuse this instance after this method - but don't access result any more
-    // - not available after CreateOwnedShort() constructor
+    // - not available after CreateOwnedShort() constructor or with TLocalWriter
     function GetTextAsBuffer: PUtf8Char;
     /// set the internal stream content with the supplied UTF-8 text
     procedure ForceContent(const text: RawUtf8);
@@ -1086,7 +1086,7 @@ type
     // - note that this does not clear the Stream content itself, just
     // move back its writing position to its initial place
     // - mandatory call after FlushFinal or Text/SetText() to reuse this instance
-    // - not available after CreateOwnedShort() constructor
+    // - not available after CreateOwnedShort() constructor or with TLocalWriter
     procedure CancelAll;
     /// same as CancelAll, and also reset the CustomOptions before reusing it
     procedure CancelAllAsNew;

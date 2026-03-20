@@ -7599,6 +7599,8 @@ var
   b: TTimeLogBits;
   st, start: TSynSystemTime;
 begin
+  Check(TTextDateWriter.InstanceSize <= SizeOf(TLocalWriter) - 256, 'TLocalWriter');
+  Check(PtrUInt(@HTML_MONTH_NAMES[3]) - PtrUInt(@HTML_MONTH_NAMES[1]) = 8);
   Check(st.FromText('19821031T142319'));
   start := st;
   CheckEqual(st.ToText, '1982-10-31T14:23:19.000');

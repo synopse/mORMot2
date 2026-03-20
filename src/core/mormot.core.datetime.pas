@@ -2280,7 +2280,7 @@ end;
 { ************ TSynDate / TSynDateTime / TSynSystemTime High-Level objects }
 
 var
-  // GlobalTime[LocalTime] thread-safe cache
+  // GlobalTime[LocalTime] thread-safe cache, each one taking one L1 cache line
   GlobalTime: array[boolean] of packed record
     safe: TLightLock; // better than RCU
     time: TSystemTime;

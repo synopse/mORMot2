@@ -790,15 +790,12 @@ end;
 
 function HtmlEscapeShort(const text: RawUtf8; fmt: TTextWriterHtmlFormat): ShortString;
 var
-  temp: ShortString;
-  W: TTextWriter;
+  temp: TLocalWriter;
 begin
   if NeedsHtmlEscape(pointer(text), fmt) then
   begin
-    W := TTextWriter.CreateOwnedShort(result, temp);
-    __AddHtmlEscape(W, pointer(text), {TextLen=}0, fmt);
-    W.FlushFinal;
-    W.Free;
+    __AddHtmlEscape(temp.Init(result), pointer(text), {TextLen=}0, fmt);
+    temp.Done;
   end
   else
     Ansi7StringToShortString(text, result);
@@ -3720,13 +3717,10 @@ end;
 
 function TextToSourceShort(const Text: RawUtf8; LF: TLineFeed): ShortString;
 var
-  W: TTextWriter;
-  temp: ShortString;
+  temp: TLocalWriter;
 begin
-  W := TTextWriter.CreateOwnedShort(result, temp);
-  TextToSource(W, pointer(Text), LINE_FEED[LF]);
-  W.FlushFinal;
-  W.Free;
+  TextToSource(temp.Init(result), pointer(Text), LINE_FEED[LF]);
+  temp.Done;
 end;
 
 
