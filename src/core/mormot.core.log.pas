@@ -4509,6 +4509,7 @@ const
   // a 128 MB RawUtf8 seems fair enough
   MAXPREVIOUSCONTENTSIZE = 128 shl 20;
 var
+  stream: TStream;
   log: TSynLog;
   endpos, start: Int64;
   c: AnsiChar;
@@ -4527,7 +4528,8 @@ begin
       if log.fFamily <> self then
         continue;
       log.Writer.FlushToStream;
-      endpos := log.Writer.Stream.Position;
+      stream := log.Writer.Stream;
+      endpos := stream.Position;
       try
         if endpos > MAXPREVIOUSCONTENTSIZE then
           len := MAXPREVIOUSCONTENTSIZE
@@ -4538,20 +4540,20 @@ begin
            (endpos - start > len) then
         begin
           start := endpos - len;
-          log.Writer.Stream.Position := start;
+          stream.Position := start;
           repeat
             inc(start)
-          until (log.Writer.Stream.Read(c, 1) = 0) or
+          until (stream.Read(c, 1) = 0) or
                 (ord(c) in [10, 13]);
         end
         else
-          log.Writer.Stream.Position := start;
+          stream.Position := start;
         len := endpos - start;
         SetLength(result, len);
         P := pointer(result);
         total := 0;
         repeat
-          read := log.Writer.Stream.Read(P^, len);
+          read := stream.Read(P^, len);
           if read <= 0 then
           begin
             if total <> len then
@@ -4563,7 +4565,7 @@ begin
           inc(total, read);
         until len = 0;
       finally
-        log.Writer.Stream.Position := endpos;
+        stream.Position := endpos;
       end;
       break;
     end;

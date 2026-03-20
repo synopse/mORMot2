@@ -557,6 +557,8 @@ type
     fFlags: TTextWriterFlags;
     fShortStringMax: byte; // = high(Dest) for twfStreamIsShortString
     function GetTextLength: Int64;
+    function GetStream: TStream;
+      {$ifdef HASINLINE} inline; {$endif}
     procedure SetStream(aStream: TStream);
     procedure SetBuffer(aBuf: pointer; aBufSize: PtrUInt);
     procedure WriteToStream(data: pointer; len: PtrUInt); virtual;
@@ -1103,12 +1105,12 @@ type
     /// the internal TStream used for storage
     // - you should call the FlushFinal (or FlushToStream) methods before using
     // this TStream content, to flush all pending characters
-    // - if the TStream instance has not been specified when calling the
-    // TTextWriter constructor, it can be forced via this property, before
-    // any writing
-    // - may contain nil, or not a TStream at all after CreateOwnedShort()
+    // - if the TStream instance has not been specified in the constructor,
+    // it can be forced via this property, before any writing
+    // - warning: may contain nil, e.g. after CreateOwnedShort() or
+    // CreateOwnedStream(TTextWriterStackBuffer) since they maintain no TStream
     property Stream: TStream
-      read fStream write SetStream;
+      read GetStream write SetStream;
     /// global options to customize this TTextWriter instance process
     // - allows to override e.g. AddRecordJson() and AddDynArrayJson() behavior
     property CustomOptions: TTextWriterOptions
@@ -4442,6 +4444,15 @@ begin
   else
     Include(fFlags, twfBufferIsOnStack);
   InternalSetBuffer(aBuf, aBufSize);
+end;
+
+function TTextWriter.GetStream: TStream;
+begin
+  if (self = nil) or
+     (fFlags * [twfStreamIsRawUtf8, twfStreamIsShortString] <> []) then
+    result := nil // pointer(fStream) is a PShortString or a RawUtf8
+  else
+    result := fStream;
 end;
 
 procedure TTextWriter.SetStream(aStream: TStream);
