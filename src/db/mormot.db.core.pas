@@ -3061,7 +3061,7 @@ begin
       AddDirect('"', ',', '"')
     end;
     CancelLastChar;
-    fStartDataPosition := PtrInt(fStream.Position) + PtrInt(B - fTempBuf);
+    fStartDataPosition := GetTextLength;
   end;
 end;
 
@@ -3104,7 +3104,7 @@ begin
     begin
       // last AddColumn() call would finalize the non-expanded header
       AddDirect('"' , ',');
-      fStartDataPosition := PtrInt(fStream.Position) + PtrInt(B - fTempBuf);
+      fStartDataPosition := GetTextLength;
     end
     else
       AddDirect('"', ',', '"')
