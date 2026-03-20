@@ -560,6 +560,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     procedure SetStream(aStream: TStream);
     procedure SetBuffer(aBuf: pointer; aBufSize: PtrUInt);
+    procedure SetOwnedStream(aBuf: pointer; aBufSize: PtrUInt);
+    procedure SetOwnedRawUtf8(var aStackBuf: TTextWriterStackBuffer);
     procedure WriteToStream(data: pointer; len: PtrUInt); virtual;
     procedure InternalSetBuffer(aBuf: PUtf8Char; const aBufSize: PtrUInt);
       {$ifdef FPC} inline; {$endif}
@@ -4009,6 +4011,30 @@ begin
   BEnd := @aBuf[aBufSize - (TRAIL_BYTES - 1)]; // to avoid overwrite/overread
 end;
 
+procedure TTextWriter.SetBuffer(aBuf: pointer; aBufSize: PtrUInt);
+begin
+  if aBufSize <= TRAIL_BYTES then
+    ESynException.RaiseUtf8('%.SetBuffer(size=%)', [self, aBufSize]);
+  if aBuf = nil then
+    GetMem(aBuf, aBufSize)
+  else
+    Include(fFlags, twfBufferIsOnStack);
+  InternalSetBuffer(aBuf, aBufSize);
+end;
+
+procedure TTextWriter.SetOwnedStream(aBuf: pointer; aBufSize: PtrUInt);
+begin
+  fStream := TRawByteStringStream.Create; // inlined SetStream()
+  fFlags := [twfStreamIsOwned, twfRawByteStringStream];
+  SetBuffer(aBuf, aBufSize); // aBuf may be nil
+end;
+
+procedure TTextWriter.SetOwnedRawUtf8(var aStackBuf: TTextWriterStackBuffer);
+begin
+  fFlags := [twfStreamIsRawUtf8, twfBufferIsOnStack]; // now fStream = RawUtf8
+  InternalSetBuffer(@aStackBuf, SizeOf(aStackBuf));
+end;
+
 constructor TTextWriter.Create(aStream: TStream; aBufSize: PtrUInt);
 begin
   SetStream(aStream);
@@ -4025,29 +4051,26 @@ end;
 
 constructor TTextWriter.CreateOwnedStream(aBuf: pointer; aBufSize: PtrUInt);
 begin
-  fStream := TRawByteStringStream.Create; // inlined SetStream()
-  fFlags := [twfStreamIsOwned, twfRawByteStringStream];
-  SetBuffer(aBuf, aBufSize); // aBuf may be nil
+  SetOwnedStream(aBuf, aBufSize);
 end;
 
 constructor TTextWriter.CreateOwnedStream(aBufSize: PtrUInt);
 begin
-  CreateOwnedStream(nil, aBufSize);
+  SetOwnedStream(nil, aBufSize);
 end;
 
 constructor TTextWriter.CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer;
   aBufSize: PtrUInt);
 begin
   if aBufSize > SizeOf(aStackBuf) then // temp too small -> allocate on heap
-    CreateOwnedStream(nil, aBufSize)
+    SetOwnedStream(nil, aBufSize)
   else
-    CreateOwnedStream(aStackBuf);
+    SetOwnedRawUtf8(aStackBuf);
 end;
 
 constructor TTextWriter.CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer);
 begin
-  fFlags := [twfStreamIsRawUtf8, twfBufferIsOnStack]; // now fStream = RawUtf8
-  InternalSetBuffer(@aStackBuf, SizeOf(aStackBuf));
+  SetOwnedRawUtf8(aStackBuf);
 end;
 
 constructor TTextWriter.CreateOwnedFileStream(
@@ -4397,17 +4420,6 @@ begin
   result := PtrUInt(self);
   if self <> nil then
     result := PtrInt(B - fTempBuf + 1) + fWrittenBytes - fInitialStreamPosition;
-end;
-
-procedure TTextWriter.SetBuffer(aBuf: pointer; aBufSize: PtrUInt);
-begin
-  if aBufSize <= TRAIL_BYTES then
-    ESynException.RaiseUtf8('%.SetBuffer(size=%)', [self, aBufSize]);
-  if aBuf = nil then
-    GetMem(aBuf, aBufSize)
-  else
-    Include(fFlags, twfBufferIsOnStack);
-  InternalSetBuffer(aBuf, aBufSize);
 end;
 
 function TTextWriter.GetStream: TStream;
