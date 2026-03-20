@@ -3077,7 +3077,7 @@ begin
         inc(P); // include ending ','
       W.AddNoJsonEscape(Value, P - Value);
     end;
-    W.CancelLastComma('}');
+    W.ReplaceLastComma('}');
     W.SetText(result);
   finally
     W.Free;
@@ -3147,7 +3147,7 @@ begin
       end;
       W.AddComma;
     end;
-    W.CancelLastComma('}');
+    W.ReplaceLastComma('}');
     W.SetText(result);
   finally
     W.Free;
@@ -4522,7 +4522,7 @@ begin
         with m^.Args[na] do
           if IsOutput then
             AddDefaultJson(WR);
-      WR.CancelLastComma(']');
+      WR.ReplaceLastComma(']');
       WR.SetText(m^.DefaultResult);
       inc(m);
     end;
@@ -4539,7 +4539,7 @@ begin
       WR.AddDirect(']', '}', ',');
       inc(m);
     end;
-    WR.CancelLastComma(']');
+    WR.ReplaceLastComma(']');
     WR.SetText(fContract);
     {$ifdef SOA_DEBUG}
     JsonReformatToFile(fContract,TFileName(fInterfaceName + '-' +
@@ -6115,7 +6115,7 @@ begin
       inc(arg);
       inc(a);
     end;
-    W.CancelLastComma(']');
+    W.ReplaceLastComma(']');
     W.SetText(fResult);
   finally
     W.Free;

@@ -3983,7 +3983,7 @@ begin
     end;
   end;
   if QuoteChar <> #0 then
-    W.CancelLastComma(']')
+    W.ReplaceLastComma(']')
   else
     W.CancelLastComma;
 end;

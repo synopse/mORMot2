@@ -2598,7 +2598,7 @@ begin
         AddJsonEscape(pointer(Value));
         AddDirect('"', ',');
       end;
-    CancelLastComma('}');
+    ReplaceLastComma('}');
     SetText(result);
   finally
     Free;
@@ -2716,7 +2716,7 @@ begin
   try
     W.AddDirect('{');
     AddJson(W);
-    W.CancelLastComma('}');
+    W.ReplaceLastComma('}');
     W.SetText(result, reformat);
   finally
     W.Free;

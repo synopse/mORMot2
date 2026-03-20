@@ -4780,7 +4780,7 @@ begin
       inc(a);
       inc(arg);
     end;
-    WR.CancelLastComma(']');
+    WR.ReplaceLastComma(']');
     WR.SetText(fCall^.InBody); // input Body contains new generated input JSON
   finally
     WR.Free;
@@ -7035,7 +7035,7 @@ begin
     W.CancelLastComma;
     W.AddDirect(']', ',');
   end;
-  W.CancelLastComma('}');
+  W.ReplaceLastComma('}');
 end;
 
 function TRestServer.GetServiceMethodStat(
@@ -7481,7 +7481,7 @@ begin
         W.WriteObject(fSessions.List[i]);
         W.AddComma;
       end;
-      W.CancelLastComma(']');
+      W.ReplaceLastComma(']');
       W.SetText(RawUtf8(result));
     finally
       fSessions.Safe.ReadOnlyUnLock;

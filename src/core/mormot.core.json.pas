@@ -4595,9 +4595,9 @@ begin
       kb := ve + 1;
       inc(n);
     until ve^ = '}';
-    wk.CancelLastComma(']');
+    wk.ReplaceLastComma(']');
     wk.SetText(keys);
-    wv.CancelLastComma(']');
+    wv.ReplaceLastComma(']');
     wv.SetText(values);
     result := n; // success
   finally
@@ -5763,7 +5763,7 @@ begin
       inc(Data, item.Cache.Size);
       dec(n);
     until n = 0;
-  c.W.CancelLastComma(']');
+  c.W.ReplaceLastComma(']');
   c.W.BlockEnd('}', c.Options);
 end;
 
@@ -7450,7 +7450,7 @@ begin
     keys := k + 1;
     values := v + 1;
   until false;
-  CancelLastComma('}');
+  ReplaceLastComma('}');
 end;
 
 procedure AddJsonEscapeValue(W: TJsonWriter; var a: PVarRec; aEnd: PtrUInt);
@@ -7466,7 +7466,7 @@ begin
             break;
           AddJsonEscapeValue(W, a, aEnd);
         end;
-        W.CancelLastComma(']');
+        W.ReplaceLastComma(']');
       end;
     ord('{'):
       begin
@@ -7481,7 +7481,7 @@ begin
           inc(a);
           AddJsonEscapeValue(W, a, aEnd);
         end;
-        W.CancelLastComma('}');
+        W.ReplaceLastComma('}');
       end
   else
     W.AddJsonEscapeVarRec(a);
@@ -7504,7 +7504,7 @@ begin
     AddJsonEscapeValue(self, a, PtrUInt(aEnd));
     inc(a);
   end;
-  CancelLastComma('}');
+  ReplaceLastComma('}');
 end;
 
 function TJsonWriter.AddRecordJson(Value: pointer; RecordInfo: PRttiInfo;

@@ -2722,7 +2722,7 @@ begin
     if s^.Ip[0] <> #0 then
       W.AddPropJsonShort('ip', s^.Ip);
   end;
-  W.CancelLastComma('}');
+  W.ReplaceLastComma('}');
 end;
 
 function DhcpParseToJson(dhcp: PDhcpPacket; len: PtrInt; extended: boolean): RawJson;

@@ -1080,11 +1080,13 @@ type
     // CancelLastChar/CancelLastComma more than once without appending text inbetween
     procedure CancelLastComma; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// the last char appended is canceled if it was a ',' and replaced
+    /// replace the last ',' appended, or just append it
     // - only one char cancelation is allowed at the same position: don't call
     // CancelLastChar/CancelLastComma more than once without appending text inbetween
-    procedure CancelLastComma(aReplaceChar: AnsiChar); overload;
+    procedure ReplaceLastComma(aReplaceChar: AnsiChar);
       {$ifdef HASINLINE}inline;{$endif}
+    // deprecated method with confusing name - use ReplaceLastComma() from now on
+    procedure CancelLastComma(aReplaceChar: AnsiChar); overload;
     /// rewind the Stream to the position when Create() was called to reuse it
     // - note that this does not clear the Stream content itself, just
     // move back its writing position to its initial place
@@ -4375,7 +4377,7 @@ begin
     WriteObject(a[i], aOptions);
     AddComma;
   end;
-  CancelLastComma(']');
+  ReplaceLastComma(']');
 end;
 
 procedure TTextWriter.WriteToStream(data: pointer; len: PtrUInt);
@@ -4639,7 +4641,7 @@ begin
     dec(B);
 end;
 
-procedure TTextWriter.CancelLastComma(aReplaceChar: AnsiChar);
+procedure TTextWriter.ReplaceLastComma(aReplaceChar: AnsiChar);
 var
   P: PUtf8Char;
 begin
@@ -4651,6 +4653,11 @@ begin
     B := P;
   end;
   P^ := aReplaceChar;
+end;
+
+procedure TTextWriter.CancelLastComma(aReplaceChar: AnsiChar);
+begin
+  ReplaceLastComma(aReplaceChar);
 end;
 
 function TTextWriter.LastChar: AnsiChar;

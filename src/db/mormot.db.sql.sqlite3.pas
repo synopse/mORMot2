@@ -810,7 +810,7 @@ begin
       sqlite3.column_value(fStatement.Request, col), dsfForceBlobAsNull in fFlags);
     W.AddComma;
   end;
-  W.CancelLastComma('}');
+  W.ReplaceLastComma('}');
 end;
 
 

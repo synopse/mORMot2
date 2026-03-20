@@ -3545,7 +3545,7 @@ begin
                 dec(MultiInsertRowCount);
               end;
             end;
-            W.CancelLastComma(')');
+            W.ReplaceLastComma(')');
           end;
         end;
     else
@@ -11325,7 +11325,7 @@ begin
     if (decoded <> 0) and
        (sfoPutIDLast in Format) then
       W.AddPropInt64('ID', decoded);
-    W.CancelLastComma('}');
+    W.ReplaceLastComma('}');
     W.SetText(JsonObject);
   finally
     W.Free;

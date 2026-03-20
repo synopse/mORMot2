@@ -2706,7 +2706,7 @@ begin
           else
             AddComma;
         end;
-        CancelLastComma(')');
+        ReplaceLastComma(')');
       end;
       AddString(Suffix);
       SetText(result);
@@ -2751,7 +2751,7 @@ begin
           else
             AddComma;
         end;
-        CancelLastComma(')');
+        ReplaceLastComma(')');
       end;
       AddString(Suffix);
       SetText(result);
@@ -3134,7 +3134,7 @@ end;
 procedure TResultsWriter.EndJsonObject(aKnownRowsCount, aRowsCount: integer;
   aFlushFinal: boolean);
 begin
-  CancelLastComma(']');
+  ReplaceLastComma(']');
   if not fExpand then
   begin
     if aKnownRowsCount = 0 then
@@ -4089,7 +4089,7 @@ begin
       W.AddShort(') values (');
       for f := 0 to FieldCount - 1 do
         AddValue;
-      W.CancelLastComma(')');
+      W.ReplaceLastComma(')');
     end;
     W.SetText(result);
   finally
@@ -4120,7 +4120,7 @@ begin
         W.AddString(FieldValues[f]);
       W.AddComma;
     end;
-    W.CancelLastComma('}');
+    W.ReplaceLastComma('}');
     W.SetText(result);
   finally
     W.Free;

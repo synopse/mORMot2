@@ -5204,7 +5204,7 @@ begin
         W.AddStrings('?,', FieldCount);
         dec(RowCount);
       end;
-      W.CancelLastComma(')');
+      W.ReplaceLastComma(')');
     end;
     W.SetText(result);
   finally
@@ -7091,7 +7091,7 @@ begin
     GetJsonValues(W);
     W.AddComma;
   end;
-  W.CancelLastComma(']');
+  W.ReplaceLastComma(']');
 end;
 
 function TOrm.SetFieldSqlVars(const Values: TSqlVarDynArray): boolean;
@@ -7297,7 +7297,7 @@ begin
     end;
     inc(nfo);
   end;
-  W.CancelLastComma('}');
+  W.ReplaceLastComma('}');
 end;
 
 procedure TOrm.AppendFillAsJsonArray(const FieldName: RawUtf8;
@@ -7311,7 +7311,7 @@ begin
     AppendAsJsonObject(W, Fields, WithID);
     W.AddComma;
   end;
-  W.CancelLastComma(']');
+  W.ReplaceLastComma(']');
   if FieldName <> '' then
     W.AddComma;
 end;
@@ -11565,7 +11565,7 @@ begin
             end;
             inc(nfo);
           end;
-          fBatch.CancelLastComma(']');
+          fBatch.ReplaceLastComma(']');
         end
     end;
     if fCalledWithinRest and ForceID then
@@ -11677,7 +11677,7 @@ begin
       end;
       inc(nfo);
     end;
-    fBatch.CancelLastComma(']');
+    fBatch.ReplaceLastComma(']');
   end;
   fBatch.AddComma;
   if Assigned(fRest) and
@@ -11718,7 +11718,7 @@ begin
   begin
     if fBatchCount > 0 then
     begin // if something to send
-      fBatch.CancelLastComma(']');
+      fBatch.ReplaceLastComma(']');
       if (fTable <> nil) and
          (fModel <> nil) and
          not (boOnlyObjects in fOptions) then
