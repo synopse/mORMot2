@@ -3006,13 +3006,17 @@ constructor TResultsWriter.Create(aStream: TStream; Expand, withID: boolean;
 begin
   if aStream = nil then
     if aStackBuffer <> nil then
-      CreateOwnedStream(aStackBuffer^)
+      SetOwnedRawUtf8(aStackBuffer^)
     else
-      CreateOwnedStream(aBufSize)
-  else if aStackBuffer <> nil then
-    inherited Create(aStream, aStackBuffer, SizeOf(aStackBuffer^))
+      SetOwnedStream(nil, aBufSize)
   else
-    inherited Create(aStream, aBufSize);
+  begin
+    SetStream(aStream);
+    if aStackBuffer <> nil then
+      SetBuffer(aStackBuffer, SizeOf(aStackBuffer^))
+    else
+      SetBuffer(nil, aBufSize);
+  end;
   fExpand := Expand;
   fWithID := withID;
   fFields := aFields;
