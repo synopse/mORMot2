@@ -6346,7 +6346,7 @@ end;
 function TJsonWriter.GetTempJsonWriter: TJsonWriter;
 begin
   if fInternalJsonWriter = nil then
-    fInternalJsonWriter := TJsonWriter.CreateOwnedStream(4096, {noshare=}true)
+    fInternalJsonWriter := TJsonWriter.CreateOwnedStream(4096)
   else
     fInternalJsonWriter.CancelAllAsNew;
   result := fInternalJsonWriter;

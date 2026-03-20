@@ -3554,7 +3554,7 @@ begin
   fInvoke := aInvoke;
   fNotifyDestroy := aNotifyDestroy;
   fServiceFactory := aServiceFactory;
-  fParams := TJsonWriter.CreateOwnedStream(8192, {nosharedstream=}true);
+  fParams := TJsonWriter.CreateOwnedStream(8192);
 end;
 
 destructor TInterfacedObjectFake.Destroy;
@@ -7703,12 +7703,12 @@ begin
   if aShared then
   begin
     // the shared instance has a generous 32KB non resizable work buffer
-    fWR := TJsonWriter.CreateOwnedStream(32768, {nosharedstream=}true);
+    fWR := TJsonWriter.CreateOwnedStream(32768);
     fWR.FlushToStreamNoAutoResize := true; // stick to BufferSize
   end
   else
     // start with a resizable 2KB buffer (medium blocks are > 2600 bytes in MM)
-    fWR := TJsonWriter.CreateOwnedStream(2048, {nosharedstream=}true);
+    fWR := TJsonWriter.CreateOwnedStream(2048);
 end;
 
 destructor TInterfaceMethodExecuteCached.Destroy;

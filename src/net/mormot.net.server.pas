@@ -3431,7 +3431,7 @@ function THttpServerRequest.TempJsonWriter(
 begin
   if fTempWriter = nil then
   begin
-    fTempWriter := TJsonWriter.CreateOwnedStream(temp, {noshared=}true);
+    fTempWriter := TJsonWriter.CreateOwnedStream(@temp, SizeOf(temp));
     fTempWriter.FlushToStreamNoAutoResize := true;
   end
   else

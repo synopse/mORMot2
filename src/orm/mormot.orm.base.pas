@@ -11220,9 +11220,9 @@ begin
   W.AddColumns(KnownRowsCount);
 end;
 
-function TOrmPropertiesAbstract.CreateJsonWriter(Json: TStream; Expand,
-  withID: boolean; const aFields: TFieldBits; KnownRowsCount, aBufSize: integer;
-  aStackBuffer: PTextWriterStackBuffer): TOrmWriter;
+function TOrmPropertiesAbstract.CreateJsonWriter(Json: TStream;
+  Expand, withID: boolean; const aFields: TFieldBits; KnownRowsCount,
+  aBufSize: integer; aStackBuffer: PTextWriterStackBuffer): TOrmWriter;
 var
   f: TFieldIndexDynArray;
 begin
@@ -11231,8 +11231,8 @@ begin
     Json, Expand, withID, f, KnownRowsCount, aBufSize, aStackBuffer);
 end;
 
-function TOrmPropertiesAbstract.CreateJsonWriter(Json: TStream; Expand,
-  withID: boolean; const aFields: TFieldIndexDynArray; KnownRowsCount,
+function TOrmPropertiesAbstract.CreateJsonWriter(Json: TStream;
+  Expand, withID: boolean; const aFields: TFieldIndexDynArray; KnownRowsCount,
   aBufSize: integer; aStackBuffer: PTextWriterStackBuffer): TOrmWriter;
 begin
   if (self = nil) or

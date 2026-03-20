@@ -1787,7 +1787,7 @@ function TSynMustache.NewMustacheContextVariant(
   aBufSize: integer): TSynMustacheContextVariant;
 begin
   result := TSynMustacheContextVariant.Create(self,
-    TJsonWriter.CreateOwnedStream(aBufSize, {nosharedstream=}true),
+    TJsonWriter.CreateOwnedStream(aBufSize),
     SectionMaxCount + 4, Null, {ownwriter=}true);
   result.CancelAll; // to be reused from a void context
 end;
@@ -1796,7 +1796,7 @@ function TSynMustache.NewMustacheContextData(
   aBufSize: integer): TSynMustacheContextData;
 begin
   result := TSynMustacheContextData.Create(self,
-    TJsonWriter.CreateOwnedStream(aBufSize, {nosharedstream=}true),
+    TJsonWriter.CreateOwnedStream(aBufSize),
     SectionMaxCount + 4, nil, nil, {ownwriter=}true);
   result.CancelAll; // to be reused from a void context
 end;

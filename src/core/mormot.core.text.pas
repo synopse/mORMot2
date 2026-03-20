@@ -535,7 +535,7 @@ type
     jsonNoEscapeUnicode);
 
   /// parent to T*Writer text processing classes, with the minimum set of methods
-  // - use an internal buffer, so much faster than naive string+string
+  // - use an internal buffer to be faster than naive string concatenation
   // - see TTextDateWriter in mormot.core.datetime for date/time methods
   // - see TJsonWriter in mormot.core.json for proper JSON support
   // - see TResultsWriter in mormot.db.core for SQL resultset export
@@ -586,20 +586,17 @@ type
     /// the data will be written to an internal TRawByteStringStream
     // - default internal buffer size if 4096 (enough for most JSON objects)
     // - consider using a stack-allocated buffer and the overloaded method
-    constructor CreateOwnedStream(aBufSize: PtrUInt = 4096;
-      NoSharedStream: boolean = false); overload;
+    constructor CreateOwnedStream(aBufSize: PtrUInt = 4096); overload;
     /// the data will be written to an internal TRawByteStringStream
     // - will use an external buffer (which may be allocated on stack)
-    constructor CreateOwnedStream(aBuf: pointer; aBufSize: PtrUInt;
-      NoSharedStream: boolean = false); overload;
+    constructor CreateOwnedStream(aBuf: pointer; aBufSize: PtrUInt); overload;
     /// the data will be written to an internal TRawByteStringStream
     // - will use the stack-allocated TTextWriterStackBuffer if possible
     constructor CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer;
-      aBufSize: PtrUInt; NoSharedStream: boolean = false); overload;
+      aBufSize: PtrUInt); overload;
     /// the data will be written to an internal TRawByteStringStream
     // - will use the stack-allocated TTextWriterStackBuffer
-    constructor CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer;
-      NoSharedStream: boolean = false); overload;
+    constructor CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer); overload;
     /// the data will be written to an external file
     // - you should call explicitly FlushFinal or FlushToStream to write
     // any pending data to the file
@@ -607,6 +604,7 @@ type
       aBufSize: PtrUInt = 16384);
     /// the data will be written to a ShortString - another is used as temp buffer
     // - don't forget to call FlushFinal before Free to actually fill aDest
+    // - but NEVER try to reuse this instance by calling e.g. SetText or CancelAll
     // - you may prefer TLocalWriter from mormot.core.datetime for NO heap alloc
     constructor CreateOwnedShort(var aDest, aTemp: ShortString);
     /// release all internal structures
@@ -4054,42 +4052,30 @@ begin
   SetBuffer(aBuf, aBufSize);
 end;
 
-var
-  TextWriterSharedStreamSafe: TLightLock; // thread-safe instance acquisition
-  TextWriterSharedStream: TRawByteStringStream;
-
-constructor TTextWriter.CreateOwnedStream(
-  aBuf: pointer; aBufSize: PtrUInt; NoSharedStream: boolean);
+constructor TTextWriter.CreateOwnedStream(aBuf: pointer; aBufSize: PtrUInt);
 begin
-  if (not NoSharedStream) and TextWriterSharedStreamSafe.TryLock then
-    fStream := TextWriterSharedStream
-  else
-    fStream := TRawByteStringStream.Create; // inlined SetStream()
+  fStream := TRawByteStringStream.Create; // inlined SetStream()
   fFlags := [twfStreamIsOwned, twfStreamIsRawByteString];
   SetBuffer(aBuf, aBufSize); // aBuf may be nil
 end;
 
-constructor TTextWriter.CreateOwnedStream(aBufSize: PtrUInt; NoSharedStream: boolean);
+constructor TTextWriter.CreateOwnedStream(aBufSize: PtrUInt);
 begin
-  CreateOwnedStream(nil, aBufSize, NoSharedStream);
+  CreateOwnedStream(nil, aBufSize);
 end;
 
 constructor TTextWriter.CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer;
-  aBufSize: PtrUInt; NoSharedStream: boolean);
+  aBufSize: PtrUInt);
 begin
   if aBufSize > SizeOf(aStackBuf) then // temp too small -> allocate on heap
-    CreateOwnedStream(nil, aBufSize, NoSharedStream)
+    CreateOwnedStream(nil, aBufSize)
   else
-    CreateOwnedStream(aStackBuf, NoSharedStream);
+    CreateOwnedStream(aStackBuf);
 end;
 
-constructor TTextWriter.CreateOwnedStream(
-  var aStackBuf: TTextWriterStackBuffer; NoSharedStream: boolean);
+constructor TTextWriter.CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer);
 begin
-  if (not NoSharedStream) and TextWriterSharedStreamSafe.TryLock then
-    fStream := TextWriterSharedStream
-  else
-    fStream := TRawByteStringStream.Create; // inlined SetStream()
+  fStream := TRawByteStringStream.Create; // inlined SetStream()
   fFlags := [twfStreamIsOwned, twfStreamIsRawByteString, twfBufferIsOnStack];
   InternalSetBuffer(@aStackBuf, SizeOf(aStackBuf));
 end;
@@ -4117,13 +4103,7 @@ end;
 destructor TTextWriter.Destroy;
 begin
   if twfStreamIsOwned in fFlags then
-    if fStream = TextWriterSharedStream then
-    begin
-      TRawByteStringStream(fStream).Clear; // for proper reuse
-      TextWriterSharedStreamSafe.UnLock;
-    end
-    else
-      fStream.Free;
+    fStream.Free;
   if not (twfBufferIsOnStack in fFlags) then
     FreeMem(fTempBuf);
   inherited Destroy;
@@ -4457,14 +4437,7 @@ begin
   if fStream <> nil then
     if twfStreamIsOwned in fFlags then
     begin
-      if fStream = TextWriterSharedStream then
-      begin
-        TRawByteStringStream(fStream).Clear; // for proper reuse
-        TextWriterSharedStreamSafe.UnLock;
-        fStream := nil;
-      end
-      else
-        FreeAndNilSafe(fStream);
+      FreeAndNilSafe(fStream);
       exclude(fFlags, twfStreamIsOwned);
     end;
   if aStream = nil then
@@ -11530,15 +11503,11 @@ begin
   _AddHtmlEscape := __AddHtmlEscape;
   _VariantToUtf8DateTimeToIso8601 := __VariantToUtf8DateTimeToIso8601;
   _VariantSaveJson := __VariantSaveJson;
-  TextWriterSharedStream := TRawByteStringStream.Create;
 end;
 
 
 initialization
   InitializeUnit;
-
-finalization
-  TextWriterSharedStream.Free;
 
 end.
 

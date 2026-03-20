@@ -958,12 +958,12 @@ type
     fExpand: boolean;
     /// used to store output format for TOrm.GetJsonValues()
     fWithID: boolean;
-    /// used to store field for TOrm.GetJsonValues()
-    fFields: TFieldIndexDynArray;
     /// if not Expanded format, contains the Stream position of the first
     // useful Row of data; i.e. ',val11' position in:
     // & { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
     fStartDataPosition: integer;
+    /// used to store field for TOrm.GetJsonValues()
+    fFields: TFieldIndexDynArray;
   public
     /// used internally to store column names and count for AddColumns
     ColNames: TRawUtf8DynArray;
