@@ -720,10 +720,10 @@ type
 
   /// map the Delphi/FPC dynamic array header (stored before each instance)
   TDynArrayRec = packed record
-    {$ifdef CPUX64}
+    {$ifdef CPU64}
     /// padding bytes for 16 byte alignment of the header
     _Padding: cardinal;
-    {$endif}
+    {$endif CPU64}
     /// dynamic array reference count (basic garbage memory mechanism)
     refCnt: TDACnt; // 32-bit integer with Delphi
     /// length in element count
@@ -10273,7 +10273,11 @@ function GetTickCount64: UInt64; cdecl external 'c' name 'mach_absolute_time';
 {$endif OSDDARWIN}
 procedure __Fill256FromOs(out e: THash256Rec);
 begin
+  {$ifdef FPC}
   e.q[0] := GetTickCount64;         // always available in FPC RTL
+  {$else}
+  PDouble(@e)^ := Now;              // good enough as fallback
+  {$endif FPC}
   crc256c(@e, SizeOf(e.q[0]), e.b); // weak but not void
 end; // mormot.core.os.posix.inc overrides to use OS API - but not /dev/urandom
 {$endif OSWINDOWS}
@@ -10286,7 +10290,8 @@ begin
   XorMemory(e.r[0], tmp.l);
   XorMemory(e.r[1], tmp.h);
   e.r[2].L := e.r[2].L xor PtrUInt(@tmp) xor tmp.d3;
-  e.r[2].H := e.r[2].H xor PtrUInt(GetCurrentThreadId) xor tmp.d2;
+  e.r[2].H := e.r[2].H xor tmp.d2 xor PtrUInt(
+    {$ifdef POSIXDELPHI} MainThreadID {$else} GetCurrentThreadId {$endif});
   {$ifdef CPUINTEL}
   if cfTSC in CpuFeatures then      // may trigger GPF if CR4.TSD bit is set
     tmp.d0 := tmp.d0 xor Rdtsc;     // 64-bit CPU cycles
@@ -10294,7 +10299,7 @@ begin
   if cfTSC in CpuFeatures then
     e.r[2].L := e.r[2].L xor Rdtsc; // has changed during slow RdRand32()
   {$else}
-  e.r[2].L := e.r[2].L xor GetTickCount64; // defined in FPC RTL or just above
+  {$ifdef FPC} e.r[2].L := e.r[2].L xor GetTickCount64; {$endif FPC}
   {$endif CPUINTEL}
   crcblock(@e.r[3], @tmp.l);        // crc32c 128-bit diffusion
 end; // note: RTL Random() not used because it is not thread-safe nor consistent
@@ -13943,7 +13948,7 @@ begin
   SetPointer(Data, DataLen);
 end;
 
-function TSynMemoryStream.Write(const Buffer; Count: integer): Longint;
+function TSynMemoryStream.Write(const Buffer; Count: Longint): Longint;
 begin
   result := RaiseStreamError(self, 'Write');
 end;

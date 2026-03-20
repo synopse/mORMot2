@@ -756,7 +756,12 @@
       {$define WINARMDELPHI}
     {$endif CPUARM64}
   {$else}
-  // no optimization outside known Windows platforms (better safe than sorry)
+    {$define POSIXDELPHI}
+    // no asm support by LLVM Delphi compilers
+    {$undef CPUINTEL}
+    {$undef CPUX64}
+    {$undef CPUX64ASM}
+    {$undef ASMINTEL}
   {$endif OSWINDOWS}
   {$ifdef CPU32}
     {$define HASSLOWMUL64}  // Delphi 32-bit has slow 64-bit mul: favor shl
