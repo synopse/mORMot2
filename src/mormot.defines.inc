@@ -315,6 +315,7 @@
           {$ifdef CPUX86}
             {$define FPC_PIC}
           {$endif CPUX86}
+          {$define NOPATCHVMT}  // the vmtAutoTable tricks seems to fail
         {$endif OPENBSD}
         {$ifdef FREEBSD}
           {$define OSFREEBSD}
