@@ -7763,6 +7763,10 @@ begin
       fStats.ClientConnect;
     end;
     fSessionCounter := PCardinal(R.P)^;
+    if n = 0 then
+      fSessionCounterMin := fSessionCounter
+    else
+      fSessionCounterMin := TAuthSession(fSessions.List[0]).ID - 1;
   finally
     fSessions.Safe.WriteUnLock;
   end;
