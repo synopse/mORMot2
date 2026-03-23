@@ -41,10 +41,12 @@ uses
 
 {$else}
 
-// rough preparation for Delphi compatibility - not finished at all
 uses
-  System.IOUtils,
-  System.SyncObjs;
+   mormot.core.os.delphi;
+
+{$ifndef UNICODE}
+  'mORMot assumes UNICODE on POSIX Delphi, i.e. as TFileName = PChar = PWideChar'
+{$endif UNICODE}
 
 {$endif FPC}
 

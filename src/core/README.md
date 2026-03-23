@@ -50,6 +50,13 @@ In practice, no "Windows", nor "Linux/Unix" reference should be needed in regula
 
 See `mormot.core.os.mac.pas` and `mormot.core.os.security.pas` units for completion.
 
+### mormot.core.os.delphi
+
+Map FPC cross-platform API types and functions into Delphi POSIX units
+- Core POSIX Operating Systems API for Delphi
+
+This unit is called by mormot.core.os.posix.inc as a compatibility layer with the FPC POSIX units.
+
 ### mormot.core.os.mac
 
 MacOS API calls for FPC, as injected to `mormot.core.os.pas`
