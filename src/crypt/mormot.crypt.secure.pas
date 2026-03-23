@@ -8003,7 +8003,7 @@ end;
 // core is not published outside of the system unit, it consumes 2KB from a weak
 // 32-bit seed from GetTickCount/fptime, and is not thread-safe either
 
-{$ifdef CPUINTEL}
+{$ifdef ASMINTEL}
 
 { TCryptRandomRdRand }
 
@@ -8018,7 +8018,7 @@ begin
   result := RdRand32; // class is only registered if cfRAND in CpuFeatures
 end;
 
-{$endif CPUINTEL}
+{$endif ASMINTEL}
 
 { TCryptHash }
 
@@ -9991,10 +9991,10 @@ begin
     TCryptRandomAesPrng.Implements('rnd-default,rnd-aes');
     TCryptRandomLecuyerPrng.Implements('rnd-lecuyer');
     TCryptRandomDelphi.Implements('rnd-delphi');
-    {$ifdef CPUINTEL}
+    {$ifdef ASMINTEL}
     if cfRAND in CpuFeatures then
       TCryptRandomRdRand.Implements('rnd-rdrand');
-    {$endif CPUINTEL}
+    {$endif ASMINTEL}
     TCryptRandomEntropy.Implements(RndAlgosText);
     TCryptRandomSysPrng.Implements('rnd-system,rnd-systemblocking');
     TCryptHasherInternal.Implements(HashAlgosText);
