@@ -4895,7 +4895,7 @@ begin
       if not WinHttpApi.QueryHeaders(fRequest, Info, nil, tmp.buf, dwSize, dwIndex) then
         exit;
     end;
-    Win32PWideCharToUtf8(tmp.buf, dwSize shr 1, result);
+    Unicode_ToUtf8(tmp.buf, dwSize shr 1, result);
   finally
     tmp.Done;
   end;
@@ -5086,7 +5086,7 @@ begin
       if not HttpQueryInfoW(fRequest, Info, tmp.buf, dwSize, dwIndex) then
         exit;
     end;
-    Win32PWideCharToUtf8(tmp.buf, dwSize shr 1, result);
+    Unicode_ToUtf8(tmp.buf, dwSize shr 1, result);
   finally
     tmp.Done;
   end;

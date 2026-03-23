@@ -2384,6 +2384,9 @@ type
   {$ifdef FPC}
   /// system-specific structure holding a non-recursive mutex
   TOSLightMutex = TRTLCriticalSection;
+  {$else}
+  /// cross-compiler definition for FPC/Delphi compatibility
+  TLibHandle = PtrUInt;
   {$endif FPC}
 
 {$endif OSWINDOWS}
@@ -3771,14 +3774,9 @@ type
 function WinWaitFor(ms: cardinal; h: THandle = 0;
   checkSubThreadQuit: boolean = false): TWinWaitFor;
 
-var
-  /// used by Win32PWideCharToUtf8() when IsAnsiCompatibleW(P, Len) = false
-  // - overriden by mormot.core.unicode for performance and Delphi 7/2007 fix
-  DoWin32PWideCharToUtf8: procedure(P: PWideChar; Len: PtrInt; var res: RawUtf8);
-
-/// local RTL wrapper function to avoid linking mormot.core.unicode.pas
-procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt;
-  out res: RawUtf8); overload;
+/// local RTL wrapper function which redirects to Unicode_ToUtf8()
+procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt; out res: RawUtf8);
+  overload; {$ifdef HASINLINE} inline; {$endif}
 
 /// local RTL wrapper function to avoid linking mormot.core.unicode.pas
 procedure Win32PWideCharToUtf8(P: PWideChar; out res: RawUtf8); overload;
@@ -3786,10 +3784,9 @@ procedure Win32PWideCharToUtf8(P: PWideChar; out res: RawUtf8); overload;
 /// local RTL wrapper function to avoid linking mormot.core.unicode.pas
 procedure Win32PWideCharToFileName(P: PWideChar; out fn: TFileName);
 
-/// local RTL wrapper function to avoid linking mormot.core.unicode.pas
-// - just a wrapper around Unicode_FromUtf8() over a temporary buffer
-// - caller should always call d.Done to release any (unlikely) allocated memory
+/// local RTL wrapper function which redirects to Unicode_FromUtf8()
 function Utf8ToWin32PWideChar(const u: RawUtf8; var d: TSynTempBuffer): PWideChar;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// local RTL wrapper function to avoid linking mormot.core.unicode.pas
 // - returns true and set A on conversion success from UTF-8 to code page CP
