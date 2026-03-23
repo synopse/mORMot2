@@ -3,6 +3,13 @@
 All notable changes to the *mORMot 2 Open Source* project will be documented in this file.
 Details are available [on out GitHub repository](https://github.com/synopse/mORMot2/commits/master)
 
+## [2.5.stable] - trunk
+### Added 
+- new `mormot.core.fmt.pas` unit
+### Changed
+- refactored main units to reduce their size: you may need to explicitly add `mormot.core.fmt`, `mormot.core.datetime` or `mormot.core.search` to your uses clause now
+- refactored cross-platform and cross-cpu conditionals (e.g. new internal `ASM*` definitions)
+
 ## [2.4.stable] - 2026-01-13
 This is the latest stable release of *mORMot* v2.
 ### Added
