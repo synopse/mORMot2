@@ -4268,7 +4268,7 @@ begin
   for i := 1 to ITER do
     Check(IsValidUtf8Ptr(pointer(people)));
   NotifyTestSpeed('IsValidUtf8(PUtf8Char)', 0, len, @timer, ONLYLOG);
-  {$ifdef ASMX64AVXNOCONST}
+  {$ifdef ASMX64AVX1}
   if cpuHaswell in X64CpuFeatures then
   begin
     timer.Start;
@@ -4276,7 +4276,7 @@ begin
       Check(IsValidUtf8Pas(pointer(people), length(people)));
     NotifyTestSpeed('IsValidUtf8Pas(RawUtf8)', 0, len, @timer, ONLYLOG);
   end;
-  {$endif ASMX64AVXNOCONST}
+  {$endif ASMX64AVX1}
   timer.Start;
   for i := 1 to ITER do
     Check(IsValidJson(people));
@@ -8957,10 +8957,10 @@ var
   s, t: RawByteString;
   i, j, complen2: integer;
   comp2, dec1: array of byte;
-  {$ifdef CPUINTEL}
+  {$ifdef ASMINTEL}
   comp1, dec2: array of byte;
   complen1: integer;
-  {$endif CPUINTEL}
+  {$endif ASMINTEL}
 begin
   for i := 0 to 200 do
     TestOne(RawUtf8OfChar(AnsiChar(i), i));
@@ -8985,7 +8985,7 @@ begin
     SetLength(comp2, AlgoSynLZ.Compressdestlen(length(s)));
     complen2 := SynLZCompress1pas(Pointer(s), length(s), pointer(comp2));
     Check(complen2 < length(comp2));
-    {$ifdef CPUINTEL}
+    {$ifdef ASMINTEL}
     // validate the i386/i86_64 asm versions against their pascal reference
     SetLength(comp1, AlgoSynLZ.Compressdestlen(length(s)));
     complen1 := SynLZCompress1(Pointer(s), length(s), pointer(comp1));
@@ -9000,7 +9000,7 @@ begin
     SetLength(dec2, Length(s));
     CheckEqual(SynLZDecompress1(Pointer(comp2), complen2, pointer(dec2)), length(s));
     Check(CompareMem(pointer(dec1), pointer(s), length(s)));
-    {$endif CPUINTEL}
+    {$endif ASMINTEL}
   end;
   SetLength(dec1, length(t));
   for j := 0 to length(t) - 1 do

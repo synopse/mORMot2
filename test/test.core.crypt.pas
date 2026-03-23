@@ -259,14 +259,14 @@ procedure TTestCoreCrypto._SHA1;
 
 begin
   DoTest;
-  {$ifdef ASMX64}
+  {$ifdef ASMX64NOTPIC}
   if cfSHA in CpuFeatures then
   begin
     Exclude(CpuFeatures, cfSHA); // validate regular code without SHA-NI
     DoTest;
     Include(CpuFeatures, cfSHA);
   end;
-  {$endif ASMX64}
+  {$endif ASMX64NOTPIC}
   // see https://datatracker.ietf.org/doc/html/rfc6070
   Rfc(saSha1, 'password', 'salt', 1, 20,
       '0c60c80f961f0e71f3a9b524af6012062fe037a6', '1 round');
@@ -373,7 +373,7 @@ procedure TTestCoreCrypto._SHA256;
 
 begin
   DoTest;
-  {$ifdef ASMX64}
+  {$ifdef ASMX64NOTPIC}
   if cfSSE41 in CpuFeatures then // validate regular code without Sha256Sse4()
   begin
     Exclude(CpuFeatures, cfSSE41);
@@ -386,7 +386,7 @@ begin
     DoTest;
     Include(CpuFeatures, cfSHA);
   end;
-  {$endif ASMX64}
+  {$endif ASMX64NOTPIC}
 // https://github.com/brycx/Test-Vector-Generation/blob/master/PBKDF2/pbkdf2-hmac-sha2-test-vectors.md
   Rfc(saSha224, 'password', 'salt', 1, 20,
       '3c198cbdb9464b7857966bd05b7bc92bc1cc4e6e', '1 round');
@@ -601,22 +601,22 @@ procedure TTestCoreCrypto._SHA512;
 
 begin
   DoTest;
-  {$ifdef ASMX86}
+  {$ifdef ASMX86NOTPIC}
   if cfSSSE3 in CpuFeatures then // validate regular code without sha512_compress()
   begin
     Exclude(CpuFeatures, cfSSSE3);
     DoTest;
     Include(CpuFeatures, cfSSSE3);
   end;
-  {$endif ASMX86}
-  {$ifdef ASMX64}
+  {$endif ASMX86NOTPIC}
+  {$ifdef ASMX64NOTPIC}
   if cfSSE41 in CpuFeatures then // validate regular code without sha512_sse4()
   begin
     Exclude(CpuFeatures, cfSSE41);
     DoTest;
     Include(CpuFeatures, cfSSE41);
   end;
-  {$endif ASMX64}
+  {$endif ASMX64NOTPIC}
 // https://github.com/brycx/Test-Vector-Generation/blob/master/PBKDF2/pbkdf2-hmac-sha2-test-vectors.md
   Rfc(saSha384, 'password', 'salt', 1, 20,
       'c0e14f06e49e32d73f9f52ddf1d0c5c719160923', '1 round');
@@ -762,14 +762,14 @@ procedure TTestCoreCrypto._SHA3;
 
 begin
   DoTest;
-  {$ifdef ASMX64AVXNOCONST}
+  {$ifdef ASMX64AVX1}
   if cpuAVX2 in X64CpuFeatures then // validate without KeccakPermutationAvx2()
   begin
     Exclude(X64CpuFeatures, cpuAVX2);
     DoTest;
     Include(X64CpuFeatures, cpuAVX2);
   end;
-  {$endif ASMX64AVXNOCONST}
+  {$endif ASMX64AVX1}
 end;
 
 procedure TTestCoreCrypto._PRNG;
@@ -2516,13 +2516,13 @@ begin
   SetLength(tmp2, length(tmp));
   L := 0;
   n := 50;
-  {$ifdef ASMX64AVXNOCONST}
+  {$ifdef ASMX64AVX1}
   if cfAVX2 in CpuFeatures then
   begin
     n := n * 10;
     msg := ' avx2';
   end;
-  {$endif ASMX64AVXNOCONST}
+  {$endif ASMX64AVX1}
   for i := 0 to 20 do
   begin
     enc.Resume;
@@ -2680,13 +2680,13 @@ var
   Tags: array[0..2, 7..9] of THash256DynArray; // Tags[k,m]
   h32: array[0..2, 0..9] of TCardinalDynArray;
   tab: PCardinalArray;
-  {$ifdef CPUINTEL}
+  {$ifdef ASMINTEL}
   backup: TIntelCpuFeatures;
-  {$endif CPUINTEL}
+  {$endif ASMINTEL}
 begin
-  {$ifdef CPUINTEL}
+  {$ifdef ASMINTEL}
   backup := CpuFeatures;
-  {$endif CPUINTEL}
+  {$endif ASMINTEL}
   CheckEqual(SizeOf(TMd5Buf), SizeOf(TMd5Digest));
   CheckEqual(1 shl AesBlockShift, SizeOf(TAesBlock));
   CheckEqual(SizeOf(TAes), AES_CONTEXT_SIZE);
@@ -3017,7 +3017,7 @@ begin
           end
         end;
       end;
-    {$ifdef CPUINTEL}
+    {$ifdef ASMINTEL}
     if noaesni then
     begin
       AddConsole('cypher with AES-NI: %, without: %',
@@ -3026,11 +3026,11 @@ begin
     end;
     if HasHWAes then
       Exclude(CpuFeatures, cfAESNI);
-    {$endif CPUINTEL}
+    {$endif ASMINTEL}
   end;
-  {$ifdef CPUINTEL}
+  {$ifdef ASMINTEL}
   CpuFeatures := backup;
-  {$endif CPUINTEL}
+  {$endif ASMINTEL}
   // see https://datatracker.ietf.org/doc/html/rfc3962#appendix-B
   st := mormot.core.text.HexToBin('636869636b656e207465726979616b69');
   CheckEqual(length(st), 16);
@@ -3251,9 +3251,9 @@ const
         IV_Len, aLen, cLen, tag, avx), 'FullEncryptAndAuthenticate #%', [tn]);
       CheckUtf8(CompareMem(@tag, ptag, tlen), 'Tag #%', [tn]);
       CheckUtf8(CompareMem(@ct, ctp, cLen), 'Encoded #%', [tn]);
-      {$ifndef CPUX64ASM}
+      {$ifndef ASMX64AVX0}
       break;
-      {$endif CPUX64ASM}
+      {$endif ASMX64AVX0}
     end;
   end;
 

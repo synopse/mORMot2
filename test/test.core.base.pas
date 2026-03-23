@@ -646,7 +646,7 @@ begin
   Check(mormot.core.text.HexToBin('200100B80A0B12F00000000000000001', PByte(@ip), 16));
   IP6Text(@ip, txt);
   CheckEqual(txt, '2001:b8:a0b:12f0::1');
-  {$ifdef CPUINTEL}
+  {$ifdef ASMINTEL}
   GetBitsCountPtrInt := @GetBitsCountPurePascal;
   TestPopCnt('pas');
   GetBitsCountPtrInt := @GetBitsCountPas; // x86/x86_64 assembly
@@ -658,7 +658,7 @@ begin
   end;
   {$else}
   TestPopCnt('pas');
-  {$endif CPUINTEL}
+  {$endif ASMINTEL}
   {$ifdef FPC}
   timer.Start;
   for u := 1 to N do
@@ -2379,9 +2379,9 @@ var
     timer: TPrecisionTimer;
     P: PByteArray;
     msg: string;
-    {$ifdef ASMX64}
+    {$ifdef ASMX64NOTPIC}
     cputxt: RawUtf8;
-    {$endif ASMX64}
+    {$endif ASMX64NOTPIC}
     elapsed: Int64;
   begin
     // first validate FillCharFast
@@ -2403,17 +2403,17 @@ var
         inc(len, 777 + len shr 4);
     until len >= length(buf);
     // benchmark FillChar/FillCharFast
-    {$ifdef ASMX64}
+    {$ifdef ASMX64NOTPIC}
     cputxt := GetSetName(TypeInfo(TX64CpuFeatures), X64CpuFeatures);
-    {$endif ASMX64}
+    {$endif ASMX64NOTPIC}
     if rtl then
       msg := 'FillChar'
     else
-      {$ifdef ASMX64}
+      {$ifdef ASMX64NOTPIC}
       FormatString('FillCharFast [%]', [{%H-}cputxt], msg);
       {$else}
       msg := 'FillCharFast';
-      {$endif ASMX64}
+      {$endif ASMX64NOTPIC}
     // now make the same test with no Check() but with timing
     // small len makes timer.Resume/Pause unreliable -> single shot measure
     b1 := 0;
@@ -2443,11 +2443,11 @@ var
     if rtl then
       msg := 'Move'
     else
-      {$ifdef ASMX64}
+      {$ifdef ASMX64NOTPIC}
       FormatString('MoveFast [%]', [{%H-}cputxt], msg);
       {$else}
       msg := 'MoveFast';
-      {$endif ASMX64}
+      {$endif ASMX64NOTPIC}
     P := pointer(buf);
     for i := 0 to length(buf) - 1 do
       P[i] := i; // fills with 0,1,2,...
@@ -2526,26 +2526,26 @@ var
     CheckHash(buf, $B49DB8A5);
   end;
 
-{$ifdef ASMX64}
+{$ifdef ASMX64NOTPIC}
 var
   bak, cpu: TX64CpuFeatures;
-{$endif ASMX64}
+{$endif ASMX64NOTPIC}
 begin
   Check(FileIsExecutable(Executable.ProgramFileName));
   Check(not FileIsExecutable(Executable.ProgramFilePath));
   SetLength(buf, 16 shl 20); // 16MB
-  {$ifdef ASMX64} // activate and validate SSE2 + AVX branches
+  {$ifdef ASMX64NOTPIC} // activate and validate SSE2 + AVX branches
   bak := X64CpuFeatures;
   cpu := bak - [cpuHaswell, cpuAvx2];
   X64CpuFeatures := []; // default SSE2 128-bit process
   Validate({rtl=}false);
-  {$ifdef ASMX64AVXNOCONST} // oldest Delphi doesn't support AVX asm
+  {$ifdef ASMX64AVX1} // oldest Delphi doesn't support AVX asm
   if cpuAvx in cpu then
   begin
     X64CpuFeatures := [cpuAvx]; // AVX 256-bit process
     Validate(false);
   end;
-  {$endif ASMX64AVXNOCONST}
+  {$endif ASMX64AVX1}
   X64CpuFeatures := bak; // there is no AVX move/fillchar (still 256-bit wide)
   if (cpu <> []) and
      (cpu <> [cpuAvx]) then
@@ -2554,7 +2554,7 @@ begin
   {$else}
   Validate(true);
   Validate(false);
-  {$endif ASMX64}
+  {$endif ASMX64NOTPIC}
 end;
 
 type
@@ -4263,22 +4263,22 @@ begin
   Test(crc32creference, 'pas');
   Test(crc32cinlined, 'inl');
   Test(crc32cfast, 'fast');
-  {$ifdef CPUINTEL}
+  {$ifdef ASMINTEL}
   {$ifndef OSDARWIN}
-  // Not [yet] working on Darwin
+  // Not [yet] implemented on Darwin
   if cfSSE42 in CpuFeatures then
     Test(crc32csse42, 'sse42');
   {$endif OSDARWIN}
-  {$ifdef CPUX64}
+  {$ifdef ASMX64}
   if (cfSSE42 in CpuFeatures) and
      (cfAesNi in CpuFeatures) and
      (cfCLMUL in CpuFeatures) then
     Test(crc32c, 'aesni'); // use SSE4.2+pclmulqdq instructions on x64
-  {$endif CPUX64}
+  {$endif ASMX64}
   {$else}
   if @crc32c <> @crc32cfast then
     Test(crc32c, 'armv8');
-  {$endif CPUINTEL}
+  {$endif ASMINTEL}
   AddConsole('%', [msg]);
 end;
 
@@ -6379,7 +6379,7 @@ begin
     else
       len120 := 0;
     Check(IsValidUtf8Buffer(P, len120), 'IsValidUtf8Buffer truncated');
-    {$ifdef ASMX64AVXNOCONST}
+    {$ifdef ASMX64AVX1}
     HasValidUtf8Avx2 := (cpuHaswell in X64CpuFeatures);
     if HasValidUtf8Avx2 then
     begin
@@ -6388,7 +6388,7 @@ begin
     end;
     {$else}
     HasValidUtf8Avx2 := false; // IsValidUtf8Buffer = @IsValidUtf8Pas
-    {$endif ASMX64AVXNOCONST}
+    {$endif ASMX64AVX1}
     for j := 1 to lenup100 do
     begin
       check(PosChar(P, U[j])^ = U[j], 'PosCharj');
