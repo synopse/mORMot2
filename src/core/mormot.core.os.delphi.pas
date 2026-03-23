@@ -51,6 +51,10 @@ const
 
 implementation
 
+uses
+  mormot.core.os;
+
+
 { ****************** Core POSIX Operating Systems API for Delphi }
 
 function dlopen(Name: PWideChar; Flags: integer): pointer;

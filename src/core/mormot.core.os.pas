@@ -2351,43 +2351,48 @@ const
   {$endif OSLINUXX64}
 
 {$undef HAS_OSPTHREADS}
-{$ifdef OSLINUX}
-  {$define OSPTHREADSLIB}    // direct pthread calls were tested on Linux only
-{$endif OSLINUX}
-{$ifdef OSDARWIN}
-  {$define OSPTHREADSSTATIC} // direct pthread calls from the 'c' library
-{$endif OSDARWIN}
-{$ifdef OSBSD}
-  {$define OSPTHREADSSTATIC} // direct pthread calls from the c library
-{$endif OSBSD}
+{$ifdef FPC}
+  {$ifdef OSLINUX}
+    {$define OSPTHREADSLIB}    // direct pthread calls were tested on Linux only
+  {$endif OSLINUX}
+  {$ifdef OSDARWIN}
+    {$define OSPTHREADSSTATIC} // direct pthread calls from the 'c' library
+  {$endif OSDARWIN}
+  {$ifdef OSBSD}
+    {$define OSPTHREADSSTATIC} // direct pthread calls from the c library
+  {$endif OSBSD}
 
-// some pthread_mutex_*() API defined here for proper inlining
-{$ifdef OSPTHREADSLIB}
-{$define HAS_OSPTHREADS}
-var
-  {%H-}pthread: pointer; // access to pthread.so e.g. for mormot.lib.static
-  pthread_mutex_lock:    function(mutex: pointer): integer; cdecl;
-  pthread_mutex_trylock: function(mutex: pointer): integer; cdecl;
-  pthread_mutex_unlock:  function(mutex: pointer): integer; cdecl;
-{$endif OSPTHREADSLIB}
-{$ifdef OSPTHREADSSTATIC}
-{$define HAS_OSPTHREADS}
-function pthread_mutex_lock(mutex: pointer): integer; cdecl;
-function pthread_mutex_trylock(mutex: pointer): integer; cdecl;
-function pthread_mutex_unlock(mutex: pointer): integer; cdecl;
-{$endif OSPTHREADSSTATIC}
+  // some pthread_mutex_*() API defined here for proper inlining
+  {$ifdef OSPTHREADSLIB}
+  {$define HAS_OSPTHREADS}
+  var
+    {%H-}pthread: pointer; // access to pthread.so e.g. for mormot.lib.static
+    pthread_mutex_lock:    function(mutex: pointer): integer; cdecl;
+    pthread_mutex_trylock: function(mutex: pointer): integer; cdecl;
+    pthread_mutex_unlock:  function(mutex: pointer): integer; cdecl;
+  {$endif OSPTHREADSLIB}
+  {$ifdef OSPTHREADSSTATIC}
+  {$define HAS_OSPTHREADS}
+  function pthread_mutex_lock(mutex: pointer): integer; cdecl;
+  function pthread_mutex_trylock(mutex: pointer): integer; cdecl;
+  function pthread_mutex_unlock(mutex: pointer): integer; cdecl;
+  {$endif OSPTHREADSSTATIC}
+{$else} // some Delphi POSIX compatibility type definitions
+type
+  /// we use Delphi TMonitor on POSIX - no pthread direct call yet
+  TRTLCriticalSection = type TObject;
+  TLibHandle = PtrUInt;
+  TSystemTime = packed record
+    Year, Month, DayOfWeek, Hour, Minute, Second, MilliSecond: word;
+  end;
+  {$define NODIRECTTHREADMANAGER}
+{$endif FPC}
 
 type
   /// system-specific type returned by FileAge(): UTC 64-bit Epoch on POSIX
   TFileAge = TUnixTime;
-
-  {$ifdef FPC}
   /// system-specific structure holding a non-recursive mutex
   TOSLightMutex = TRTLCriticalSection;
-  {$else}
-  /// cross-compiler definition for FPC/Delphi compatibility
-  TLibHandle = PtrUInt;
-  {$endif FPC}
 
 {$endif OSWINDOWS}
 
@@ -2418,13 +2423,13 @@ const
 
 /// initialize a Critical Section (for Lock/UnLock)
 // - redefined in mormot.core.os to avoid dependency to the Windows unit
-// - under Delphi/Windows, directly call the homonymous Win32 API
+// - under Windows, directly call the homonymous Win32 API
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
   {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
 /// finalize a Critical Section (for Lock/UnLock)
 // - redefined in mormot.core.os to avoid dependency to the Windows unit
-// - under Delphi/Windows, directly call the homonymous Win32 API
+// - under Windows, directly call the homonymous Win32 API
 procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
   {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
 
