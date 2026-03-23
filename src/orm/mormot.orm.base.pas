@@ -7763,7 +7763,7 @@ begin
   begin
     GetNextItemShortString(P, @n); // n ends with #0
     if n[0] = #0 then
-      break;
+      break; // reached end of the CSV input text
     ndx := IndexByNameU(@n[1]);
     if ndx < 0 then
       exit; // invalid field name
@@ -11477,7 +11477,7 @@ begin
   begin
     GetNextItemShortString(P, @n); // n ends with #0
     if n[0] = #0 then
-      break;
+      break; // reached end of the CSV input text
     ndx := Fields.IndexByNameU(@n[1]);
     if ndx < 0 then
       exit; // invalid field name
@@ -11517,7 +11517,7 @@ begin
   begin
     GetNextItemShortString(P, @n); // n ends with #0
     if n[0] = #0 then
-      break;
+      break; // reached end of the CSV input text
     if IsRowIDShort(n) then
     begin
       withID := true;
