@@ -4927,7 +4927,7 @@ var
   logN, R, P: cardinal;
   hasher: TSynHasher absolute signer;
   dig: THash256 absolute signer;
-begin
+{%H-}begin
   case format of
     mcfMd5Crypt .. mcfSha512Crypt:
       result := hasher.UnixCryptHash(MCF_ALGO[format], password, rounds, saltsize, salt);
@@ -5005,6 +5005,11 @@ begin
         SCryptRoundsDecode(rounds, logN, R, P);
         h := SCryptHash(password, salt, logN, R, P, @pos);
       end;
+  else
+    begin
+      result := mcfUnknown;
+      exit;
+    end;
   end;
   if (pos = 0) or
      (mormot.core.base.StrComp(checksum, PUtf8Char(pointer(h)) + pos - 1) <> 0) then
