@@ -120,18 +120,18 @@ function umoddi3(num, den: uint64): uint64; cdecl;
 function divdi3(num, den: int64): int64; cdecl;
 function udivdi3(num, den: uint64): uint64; cdecl;
 function udivmoddi4(a, b: UInt64; var c: UInt64): UInt64; cdecl;
-{$ifdef CPUINTEL}
+{$ifdef ASMINTEL}
 procedure __chkstk_ms;
-{$endif CPUINTEL}
+{$endif ASMINTEL}
 
-{$ifdef CPUX64}
+{$ifdef ASMX64}
 
 procedure __udivti3;
 procedure __udivmodti4;
 procedure __divti3;
 procedure __umodti3;
 
-{$endif CPUX64}
+{$endif ASMX64}
 
 {$endif OSWINDOWS}
 
@@ -435,7 +435,7 @@ begin
   result := libc_write(libc_fileno(f), buf, size * count) div size;
 end;
 
-{$ifdef CPUX86}
+{$ifdef ASMX86}
 
 // asm stubs to circumvent libgcc.a (cross)linking issues on Win32
 
@@ -458,9 +458,9 @@ asm
         pop     ecx
 end;
 
-{$endif CPUX86}
+{$endif ASMX86}
 
-{$ifdef CPUX64}
+{$ifdef ASMX64}
 
 procedure __chkstk_ms; assembler;
   {$ifdef FPC} nostackframe; public name _PREFIX + '___chkstk_ms'; {$endif}
@@ -484,7 +484,7 @@ asm
         pop     rcx
 end;
 
-{$endif CPUX64}
+{$endif ASMX64}
 
 {$ifdef FPC}
 
@@ -587,7 +587,7 @@ begin
   raise ELibStatic.Create('Unexpected exit() call');
 end;
 
-{$ifdef CPUINTEL}
+{$ifdef ASMINTEL}
 
 procedure printf; assembler; 
  {$ifdef FPC} nostackframe; public name _PREFIX + 'printf'; {$else} export; {$endif}
@@ -615,7 +615,7 @@ end;
 
 {$else}
 
-{$endif CPUINTEL}
+{$endif ASMINTEL}
 
 function strcspn(str, reject: PUtf8Char): integer; cdecl;
   {$ifdef FPC} public name _PREFIX + 'strcspn'; {$else} export; {$endif}
@@ -1196,7 +1196,7 @@ end;
 
 {$endif FPC}
 
-{$ifdef CPUINTEL}
+{$ifdef ASMINTEL}
 
 {$ifdef CPU64}
 
@@ -2079,7 +2079,7 @@ end;
 
 {$endif CPU64}
 
-{$endif CPUINTEL}
+{$endif ASMINTEL}
 
 {$endif NOLIBCSTATIC}
 
@@ -2137,6 +2137,7 @@ end;
 
 
 initialization
+{$ifndef NOLIBCSTATIC}
 {$ifdef FPC}
 {$ifdef OSWINDOWS}
   // manual fill of our raw mingw import table
@@ -2154,6 +2155,7 @@ initialization
   _pthread_load;
 {$endif OSLINUXX64}
 {$endif FPC}
+{$endif NOLIBCSTATIC}
 
 end.
 

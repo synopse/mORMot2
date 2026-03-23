@@ -716,7 +716,7 @@ const
   {$define USE_IFADDRS}
   // Android BIONIC seems to implement it since Android N (API level 24)
   // https://android.googlesource.com/platform/bionic/+/master/docs/status.md
-{$endif OSANDROID}
+{$endif OSANDROIDARM64}
 
 {$ifdef OSLINUX}
 
