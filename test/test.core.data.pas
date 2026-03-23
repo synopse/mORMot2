@@ -7205,6 +7205,20 @@ begin
   Doc.SortArrayByFields(['a', 'b']);
   CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact),
     '[{a:1,b:2,c:0},{b:3,c:1,a:1},{a:2,b:1,c:2}]', 'SortArrayByField ab');
+  Doc.Clear;
+  s := '{un:{a:1},dos:{a:2},tres:{a:1},quatro:{a:1}}';
+  Doc.InitJson(s);
+  Doc.SortByValue;
+  CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact),
+    '{tres:{a:1},quatro:{a:1},un:{a:1},dos:{a:2}}', 'SortByValue2');
+  Doc.SortByValue(nil, false, {SortFallbackName=}@StrIComp);
+  CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact),
+    '{quatro:{a:1},tres:{a:1},un:{a:1},dos:{a:2}}', 'SortByValue3');
+  CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact),
+    '{quatro:{a:1},tres:{a:1},un:{a:1},dos:{a:2}}', 'SortByValue4');
+  Doc.SortByValue(nil, false, {SortFallbackName=}@StrIComp);
+  CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact),
+    '{quatro:{a:1},tres:{a:1},un:{a:1},dos:{a:2}}', 'SortByValue5');
   // some tests to avoid regression about bugs reported by users on forum
   lTable := TOrmTableJson.Create('');
   try
