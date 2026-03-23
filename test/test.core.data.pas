@@ -7212,13 +7212,15 @@ begin
   CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact),
     '{tres:{a:1},quatro:{a:1},un:{a:1},dos:{a:2}}', 'SortByValue2');
   Doc.SortByValue(nil, false, {SortFallbackName=}@StrIComp);
-  CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact),
-    '{quatro:{a:1},tres:{a:1},un:{a:1},dos:{a:2}}', 'SortByValue3');
-  CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact),
-    '{quatro:{a:1},tres:{a:1},un:{a:1},dos:{a:2}}', 'SortByValue4');
+  s := Doc.ToJson('', '', jsonUnquotedPropNameCompact);
+  CheckEqual(s, '{quatro:{a:1},tres:{a:1},un:{a:1},dos:{a:2}}', 'SortByValue3');
+  CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact), s, 'SortByValue4');
   Doc.SortByValue(nil, false, {SortFallbackName=}@StrIComp);
-  CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact),
-    '{quatro:{a:1},tres:{a:1},un:{a:1},dos:{a:2}}', 'SortByValue5');
+  CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact), s, 'SortByValue5');
+  Doc.Clear;
+  Doc.InitJson(s);
+  Doc.SortByValue(nil, false, {SortFallbackName=}@StrIComp);
+  CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact), s, 'SortByValue6');
   // some tests to avoid regression about bugs reported by users on forum
   lTable := TOrmTableJson.Create('');
   try
