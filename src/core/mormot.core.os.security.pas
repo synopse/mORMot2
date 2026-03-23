@@ -3198,11 +3198,11 @@ var
   i: PtrInt;
 begin
   for i := 0 to length(OldSid) - 1 do
-    {$ifdef CPUX64}
+    {$ifdef ASMX64}
     if MemCmp(pointer(OldSid[i]), @Sid, SidLen) = 0 then // use SSE2 asm
     {$else}
     if mormot.core.base.CompareMem(pointer(OldSid[i]), @Sid, SidLen) then
-    {$endif CPUX64}
+    {$endif ASMX64}
     begin
       MoveFast(pointer(NewSid[i])^, Sid, SidLen); // in-place overwrite
       result := 1;

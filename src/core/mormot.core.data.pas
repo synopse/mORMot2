@@ -870,11 +870,11 @@ type
 const
   /// redirect to the proper SortDynArrayAnsiString/SortDynArrayAnsiStringI
   SORT_LSTRING: array[{caseins=}boolean] of TDynArraySortCompare = (
-    {$ifdef CPUINTEL}
+    {$ifdef ASMINTEL}
     SortDynArrayAnsiString,
     {$else}
     SortDynArrayRawByteString,
-    {$endif CPUINTEL}
+    {$endif ASMINTEL}
     SortDynArrayAnsiStringI);
 
 {$ifndef PUREMORMOT2}
@@ -4020,7 +4020,7 @@ begin
   Sender.UpdateText(['cpu:sockets'],    [CpuSockets]);
   if HasHWAes then
     Sender.UpdateText('cpu:aes',        'true');
-  {$ifdef CPUINTEL}
+  {$ifdef ASMINTEL}
   if cfAVX in CpuFeatures then
     Sender.UpdateText('cpu:avx',        'true');
   if cfAVX2 in CpuFeatures then
@@ -4034,7 +4034,7 @@ begin
   Sender.UpdateTextNotVoid('cpu:id',     IntelManufacturer);
   Sender.UpdateTextNotVoid('cpu:hyp',    IntelHypervisor);
   Sender.UpdateTextNotVoid('cpu:manufacturer', GetSmbios(sbiCpuManufacturer));
-  {$endif CPUINTEL}
+  {$endif ASMINTEL}
   {$ifdef CPUARM3264}
   Sender.UpdateTextNotVoid('cpu:model',        CpuArmModel);
   Sender.UpdateTextNotVoid('cpu:manufacturer', CpuArmImplementer);
@@ -5140,11 +5140,11 @@ function _BC_LString(A, B: PRawByteString; Info: PRttiInfo;
   out Compared: integer): PtrInt;
 begin
   // StrComp() would fail for RawByteString
-  {$ifdef CPUINTEL}
+  {$ifdef ASMINTEL}
   compared := SortDynArrayAnsiString(A^, B^); // optimized asm using length()
   {$else}
   compared := SortDynArrayRawByteString(A^, B^);
-  {$endif CPUINTEL}
+  {$endif ASMINTEL}
   result := SizeOf(pointer);
 end;
 
@@ -6213,7 +6213,7 @@ const
      SortDynArrayInt64,         //  ptInt64
      SortDynArrayInteger,       //  ptInteger
      SortDynArrayQWord,         //  ptQWord
-     {$ifdef CPUINTEL}SortDynArrayAnsiString
+     {$ifdef ASMINTEL}SortDynArrayAnsiString
      {$else}SortDynArrayRawByteString{$endif}, //  ptRawByteString
      SortDynArrayAnsiString,    //  ptRawJson
      SortDynArrayAnsiString,    //  ptRawUtf8
@@ -6256,7 +6256,7 @@ const
      SortDynArrayInt64,          //  ptInt64
      SortDynArrayInteger,        //  ptInteger
      SortDynArrayQWord,          //  ptQWord
-     {$ifdef CPUINTEL}SortDynArrayAnsiString
+     {$ifdef ASMINTEL}SortDynArrayAnsiString
      {$else}SortDynArrayRawByteString{$endif}, //  ptRawByteString
      SortDynArrayAnsiStringI,    //  ptRawJson
      SortDynArrayAnsiStringI,    //  ptRawUtf8

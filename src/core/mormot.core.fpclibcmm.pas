@@ -43,6 +43,8 @@ unit mormot.core.fpclibcmm;
 
 interface
 
+{$I ..\mormot.defines.inc}
+
 // nothing published
 
 implementation
@@ -117,9 +119,9 @@ end;
 // - note: the FPC RTL cmem unit triggers some errors during mormot2tests on
 // x86_64 (at least) whereas this unit won't
 
-{$ifndef LINUX}
+{$ifndef OSLINUX}
   {$define FPC_LIBCMM_NOMSIZE}
-{$endif LINUX}
+{$endif OSLINUX}
 
 {$ifdef FPC_LIBCMM_NOMSIZE}
 

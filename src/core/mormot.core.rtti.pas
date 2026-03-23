@@ -1800,7 +1800,7 @@ type
     TypeInfo: PRttiInfo;
     /// how the parameter has been defined (const/var/out/result)
     // - we don't support the FPC "constref" kind of argument by now, and
-    // follow the standard WIN64ABI / SYSVABI specs with "const"
+    // follow the standard WIN64/SYSV ABI specs with "const"
     Direction: TRttiMethodArgDirection;
   end;
   PRttiMethodArg = ^TRttiMethodArg;
@@ -11065,7 +11065,7 @@ begin
 end;
 
 
-{$ifdef CPUX64}
+{$ifdef ASMX64}
 
 // very efficient branchless asm - rcx/rdi=Item1 rdx/rsi=Item2
 function TObjectWithIDDynArrayCompare(const Item1, Item2): integer;
@@ -11089,7 +11089,7 @@ begin
   // inlined branchless comparison or correct x86 asm for older Delphi
 end;
 
-{$endif CPUX64}
+{$endif ASMX64}
 
 function TObjectWithIDDynArrayHashOne(const Elem; Hasher: THasher): cardinal;
 begin

@@ -674,9 +674,9 @@ const
     {$endif CPUARM}
     {$endif CPUAARCH64}
     {$ifdef CPU32}
-      '32'
+      'cpu32'
     {$else}
-      '64'
+      'cpu64'
     {$endif CPU32}
     {$endif CPUX64}
     {$endif CPUX86};
@@ -4184,9 +4184,9 @@ type
     Flags: PtrUInt; // bit 0 = WriteLock, 1 = ReadWriteLock, >1 = ReadOnlyLock
     LastReadWriteLockThread, LastWriteLockThread: TThreadID; // to be reentrant
     LastReadWriteLockCount,  LastWriteLockCount: cardinal;
-    {$ifndef ASMX64}
+    {$ifndef ASMX64NOTPIC}
     procedure ReadOnlyLockSpin;
-    {$endif ASMX64}
+    {$endif ASMX64NOTPIC}
   public
     /// initialize the R/W lock
     // - not needed if TRWLock is part of a class - i.e. if was filled with 0
@@ -4206,7 +4206,7 @@ type
     // !   rwlock.ReadOnlyUnLock;
     // ! end;
     procedure ReadOnlyLock;
-      {$ifdef HASINLINE} {$ifndef ASMX64} inline; {$endif} {$endif}
+      {$ifdef HASINLINE} {$ifndef ASMX64NOTPIC} inline; {$endif} {$endif}
     /// release a previous ReadOnlyLock call
     procedure ReadOnlyUnLock;
       {$ifdef HASINLINE} inline; {$endif}
@@ -8928,12 +8928,12 @@ begin
     {$ifdef OSLINUXANDROID}
     Hash.c0 := crc32c(Hash.c0, pointer(CpuInfoLinux), length(CpuInfoLinux));
     {$else}
-    {$ifdef CPUINTELARM}
+    {$ifdef HASCPUFEATURES}
     Hash.c0 := crc32c(Hash.c0, @CpuFeatures, SizeOf(CpuFeatures));
     {$else}
     Hash.c0 := crc32c(Hash.c0, pointer(CpuInfoText), length(CpuInfoText));
     {$endif OSLINUXANDROID}
-    {$endif CPUINTELARM}
+    {$endif HASCPUFEATURES}
     Hash.c0 := crc32c(Hash.c0, pointer(Host), length(Host));
     Hash.c1 := crc32c(Hash.c0, pointer(User), length(User));
     Hash.c2 := crc32c(Hash.c1, pointer(ProgramFullSpec), length(ProgramFullSpec));
@@ -9913,10 +9913,10 @@ begin
   // note: /etc/machine-id is no viable alternative since it is from SW random
   s := CPU_ARCH_TEXT;
   crc128c(pointer(s), length(s), u.b); // rough starting point
-  {$ifdef CPUINTELARM}
+  {$ifdef HASCPUFEATURES}
   if not (gcuCpuFeatures in disable) then
     crc128c(@CpuFeatures, SizeOf(CpuFeatures), u.b); // override
-  {$endif CPUINTELARM}
+  {$endif HASCPUFEATURES}
   if (RawSmbios.Data <> '') and // some bios have no uuid but some HW info
      not (gcuSmbiosData in disable) then
     crc32c128(@u.b, pointer(RawSmbios.Data), length(RawSmbios.Data));
@@ -10137,12 +10137,14 @@ const
 // our light locks do not use the resource of an associated futex, so are easier
 // if there is almost no contention - and really seldom call fpnanosleep(10us)
 
-{$ifdef CPUINTEL}
+{$undef SPINADAPT}
+{$ifdef ASMINTEL}
+{$define SPINADAPT}
 var
   SpinFactor: PtrUInt = 1; // default value on Intel - set to 10 on AMD Zen3+
 
 // on Intel/AMD, the pause CPU instruction would relax the core
-// - but it is expected to be inlined within the spinning loop itself
+// - "pause" is expected to be inlined within the spinning loop itself
 // - sadly, Delphi does not support inlined asm on Win64 so we use a function
 {$ifdef WIN64DELPHI}
 procedure DoPause(n: PtrUInt);
@@ -10152,9 +10154,10 @@ asm
       jnz     @s     // within its own 1..16x loop (better than nothing)
 end;
 {$endif WIN64DELPHI}
-{$endif CPUINTEL}
-
+{$endif ASMINTEL}
 {$ifdef FPC_CPUARM}
+{$ifndef OSANDROID}
+{$define SPINADAPT}
 const
   SpinFactor = 2; // ARM yield has smaller latency than Intel's pause
 
@@ -10162,27 +10165,14 @@ const
 // - but our FPC arm32 asm seems not knowledgable of this
 procedure DoPause; assembler; nostackframe;
 asm
-     {$ifdef CPUARMYIELD}
      yield // a few cycles, but helps modern CPU adjust their power requirements
-     {$endif CPUARMYIELD}
 end;
+{$endif OSANDROID}
 {$endif FPC_CPUARM}
-
-{$ifdef CPUAARCH64DELPHI}
-const
-  SpinFactor = 20; // no inline asm on Delphi ARM, so no "yield"
-
-procedure DoPause(n: PtrUInt);
-begin
-   while n <> 0 do
-     dec(n);
-end;
-{$endif CPUAARCH64DELPHI}
 
 function DoSpin(spin: PtrUInt): PtrUInt;
 begin
-  {$ifdef CPUINTELARM}
-  // adaptive spinning to reduce cache coherence traffic
+  {$ifdef SPINADAPT} // adaptive spinning to reduce cache coherence traffic
   result := (SPIN_COUNT - spin) shr 5; // 0..5 range, each 32 times
   if result <> 0 then // no pause up to 32 times (low latency acquisition)
   {$ifdef OSLINUX_SCHEDYIELDONCE}      // yield once during the process
@@ -10199,18 +10189,18 @@ begin
     DoPause(result);
     {$else}
     repeat
-      {$ifdef CPUINTEL}
+      {$ifdef ASMINTEL}
       asm
         pause // "rep nop" opcode should be inlined within the spinning loop
       end;
       {$else}
-      DoPause; // "yield" arm/aarch64 opcode
-      {$endif CPUINTEL}
+      DoPause; // FPC_CPUARM "yield" arm/aarch64 opcode
+      {$endif ASMINTEL}
       dec(result);
     until result = 0;
     {$endif WIN64DELPHI}
   end;
-  {$endif CPUINTELARM}
+  {$endif SPINADAPT}
   dec(spin);
   if spin = 0 then // eventually call the OS for long wait
   begin
@@ -10436,16 +10426,16 @@ begin
 end;
 
 // dedicated asm for this most simple (and used) method
-{$ifdef ASMX64}
+{$ifdef ASMX64NOTPIC}
 
 procedure TRWLock.ReadOnlyLock;
 // stack frame is required (at least on Windows) since it may call SwitchToThread
 var
   backup: pointer; // better than push/pop since we have a stack frame
 asm
-        {$ifdef SYSVABI}
+        {$ifdef ABISYSVX64}
         mov     rcx, rdi      // rcx = self
-        {$endif SYSVABI}
+        {$endif ABISYSVX64}
 @retry: mov     r8d, SPIN_COUNT
 @spin:  mov     rax, qword ptr [rcx + TRWLock.Flags]
         and     rax, not 1
@@ -10486,7 +10476,7 @@ begin
         LockedExc(Flags, {to=}f + 4, {from=}f);
 end;
 
-{$endif ASMX64}
+{$endif ASMX64NOTPIC}
 
 procedure TRWLock.ReadOnlyUnLock;
 begin
@@ -11886,12 +11876,12 @@ begin
   NULL_STR_VAR := 'null';
   BOOL_UTF8[false] := 'false';
   BOOL_UTF8[true]  := 'true';
-  {$ifdef CPUINTEL}
+  {$ifdef ASMINTEL}
   if (CpuManufacturer = icmAmd) and
      (CpuFamily = $19) and
      (CpuModel >= $30) then // Zen 3 or later
     SpinFactor := 10;       // "pause" opcode is only 1-2 cycles
-  {$endif CPUINTEL}
+  {$endif ASMINTEL}
   // minimal stubs which will be properly implemented in other mormot.core units
   GetExecutableLocation := _GetExecutableLocation; // mormot.core.log
   SetThreadName         := _SetThreadName;

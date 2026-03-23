@@ -573,9 +573,9 @@ type
     fArgUsed: TInterfaceFactoryPerArgumentDynArray;
     // contains e.g. [{"method":"Add","arguments":[...]},{"method":"...}]
     fContract: RawUtf8;
-    {$ifdef CPUX86}  // i386 stub requires "ret ArgsSizeInStack"
+    {$ifdef ABIX86}  // i386 stub requires "ret ArgsSizeInStack"
     fFakeVTable: TPointerDynArray;
-    {$endif CPUX86}
+    {$endif ABIX86}
     procedure AddMethodsFromTypeInfo(aInterface: PRttiInfo); virtual; abstract;
     // low-level JIT redirection of the VMT to TInterfacedObjectFake.FakeCall
     function GetMethodsVirtualTable: pointer;
@@ -1843,7 +1843,7 @@ SYSV aarch64:
 }
 
 const
-{$ifdef CPUX86}
+{$ifdef ABIX86}
   MAX_EXECSTACK = 1024;
   VMTSTUBSIZE = 24 {$ifdef OSPOSIX} + 4 {$endif};
   // 32-bit integer param registers (in Delphi + FPC calling convention)
@@ -1854,13 +1854,13 @@ const
   PARAMREG_LAST  = REGECX;
   // x87 floating-point params are passed by reference, but result with fstp
   {$undef HAS_FPREG}
-{$endif CPUX86}
+{$endif ABIX86}
 
-{$ifdef CPUX64}
+{$ifdef ABIX64}
   MAX_EXECSTACK = MAX_METHOD_ARGS * 8; // match .PARAMS 32
   VMTSTUBSIZE = 24;
   // 64-bit integer param registers
-  {$ifdef SYSVABI}
+  {$ifdef ABISYSVX64}
   REGRDI = 1;
   REGRSI = 2;
   REGRDX = 3;
@@ -1876,15 +1876,15 @@ const
   REGR9  = 4;
   PARAMREG_FIRST  = REGRCX;
   PARAMREG_RESULT = REGRDX;
-  {$endif SYSVABI}
+  {$endif ABISYSVX64}
   PARAMREG_LAST = REGR9;
   // 64-bit floating-point (double) registers
-  {$define HAS_FPREG} // XMM0..XMM3 (WIN64ABI) or XMM0..XMM7 (SYSVABI)
+  {$define HAS_FPREG} // XMM0..XMM3 (WIN) or XMM0..XMM7 (SYSV)
   REGXMM0 = 1;
   REGXMM1 = 2;
   REGXMM2 = 3;
   REGXMM3 = 4;
-  {$ifdef SYSVABI}
+  {$ifdef ABISYSVX64}
   REGXMM4 = 5;
   REGXMM5 = 6;
   REGXMM6 = 7;
@@ -1894,10 +1894,10 @@ const
   {$else}
   FPREG_FIRST = REGXMM0;
   FPREG_LAST  = REGXMM3;
-  {$endif SYSVABI}
-{$endif CPUX64}
+  {$endif ABISYSVX64}
+{$endif ABIX64}
 
-{$ifdef CPUARM}
+{$ifdef ABIA32}
   MAX_EXECSTACK = (MAX_METHOD_ARGS - 4) * 8; // may store only doubles on stack
   VMTSTUBSIZE = 16;
   // 32-bit integer param registers
@@ -1921,9 +1921,9 @@ const
   REGD7 = 8;
   FPREG_FIRST = REGD0;
   FPREG_LAST  = REGD7;
-{$endif CPUARM}
+{$endif ABIA32}
 
-{$ifdef CPUAARCH64}
+{$ifdef ABIA64}
   MAX_EXECSTACK = (MAX_METHOD_ARGS - 8) * 8;
   VMTSTUBSIZE = 28;
   // 64-bit integer param registers
@@ -1950,7 +1950,7 @@ const
   REGD7 = 8; // REGV7
   FPREG_FIRST = REGD0;
   FPREG_LAST  = REGD7;
-{$endif CPUAARCH64}
+{$endif ABIA64}
 
   // ordinal values are stored within 64-bit buffer, and records in a RawUtf8
   ARGS_TO_VAR: array[TInterfaceMethodValueType] of TInterfaceMethodValueVar = (
@@ -2016,7 +2016,7 @@ const
 type
   /// map the stack memory layout at TInterfacedObjectFake.FakeCall()
   TFakeCallStack = packed record
-    {$ifdef CPUX86}
+    {$ifdef ABIX86}
     EDX, ECX, MethodIndex, EBP, Ret: cardinal;
     {$else}
     {$ifdef OSPOSIX}
@@ -2031,15 +2031,15 @@ type
     {$ifndef OSPOSIX}
     ParamRegs: packed array[PARAMREG_FIRST .. PARAMREG_LAST] of pointer;
     {$endif OSPOSIX}
-    {$endif CPUX86}
-    {$ifdef CPUARM}
+    {$endif ABIX86}
+    {$ifdef ABIA32}
     // alf: on ARM, there is more on the stack than you will expect
     DummyStack: packed array[0..9] of pointer;
-    {$endif CPUARM}
-    {$ifdef CPUAARCH64}
+    {$endif ABIA32}
+    {$ifdef ABIA64}
     // alf: on AARCH64, there is more on the stack than you will expect
     DummyStack: packed array[0..0] of pointer;
-    {$endif CPUAARCH64}
+    {$endif ABIA64}
     Stack: packed array[word] of byte;
   end;
   PFakeCallStack = ^TFakeCallStack;
@@ -2074,14 +2074,14 @@ type
     // used internally to compute the actual instance from the FakeCall()
     function SelfFromInterface: TInterfacedObjectFakeRaw;
       {$ifdef HASINLINE} inline; {$endif}
-    {$ifdef CPUARM}
+    {$ifdef ABIA32}
     // on ARM, the FakeStub needs to be here, for FakeCall redirection
     procedure ArmFakeStub;
-    {$endif CPUARM}
-    {$ifdef CPUAARCH64}
+    {$endif ABIA32}
+    {$ifdef ABIA64}
     // on Aarch64, the FakeStub needs to be here, for FakeCall redirection
     procedure AArch64FakeStub;
-    {$endif CPUAARCH64}
+    {$endif ABIA64}
     function FakeQueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
       IID: TGuid; out Obj): TIntQry; {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
     function Fake_AddRef: TIntCnt;   {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
@@ -3403,7 +3403,7 @@ begin
   begin
     inc(a); // increase first, to ignore self
     V := nil;
-    {$ifdef CPUX86}
+    {$ifdef ABIX86}
     case a^.RegisterIdent of
       REGEAX:
         FakeCallRaiseError(ctxt, 'unexpected self', []);
@@ -3424,7 +3424,7 @@ begin
       FakeCallRaiseError(ctxt, 'unexpected self', []);
     if V = nil then
     begin
-    {$endif CPUX86}
+    {$endif ABIX86}
       if vIsOnStack in a^.ValueKindAsm then
         V := @ctxt.Stack.Stack[a^.InStackOffset] // value is on stack
       else
@@ -3486,7 +3486,7 @@ begin
   if ctxt.ResultType in [imvDouble, imvDateTime] then
     PInt64(@stack.FPRegs[FPREG_FIRST])^ := result;
   {$else}
-  {$ifdef CPUINTEL} // x87 ABI expects floats to be in st(0) FPU stack
+  {$ifdef ABIINTEL} // x87 ABI expects floats to be in st(0) FPU stack
   case ctxt.ResultType of
     imvDouble,
     imvDateTime:
@@ -3498,7 +3498,7 @@ begin
         fild    qword ptr [result]
       end;
   end;
-  {$endif CPUINTEL}
+  {$endif ABIINTEL}
   {$endif HAS_FPREG}
 end;
 
@@ -4024,7 +4024,7 @@ var
   {$ifdef HAS_FPREG}
   SizeInFPR: integer; // 0 if not in FPR, or the number of FPR involved
   {$endif HAS_FPREG}
-  {$ifdef CPUX86}
+  {$ifdef ABIX86}
   offs: integer;
   {$else}
   {$ifdef OSPOSIX} // not used for Win64
@@ -4032,7 +4032,7 @@ var
   fpreg: integer;
   {$endif HAS_FPREG}
   {$endif OSPOSIX}
-  {$endif CPUX86}
+  {$endif ABIX86}
 begin
   // validate supplied TypeInfo() RTTI input
   if aInterface = nil then
@@ -4196,7 +4196,7 @@ begin
                   [self, m^.InterfaceDotMethodName, m^.Args[na].ParamName^]);
             include(m^.Flags, imfResultIsServiceCustomAnswer);
           end
-        {$ifdef CPUAARCH64}
+        {$ifdef ABIA64}
         // FPC uses registers for managed records, but follows the ABI otherwise
         // which requires the result to be in X8 which is not handled yet
         // - see aarch64/cpupara.pas: tcpuparamanager.create_paraloc_info_intern
@@ -4205,7 +4205,7 @@ begin
             '%.Create: I% record result type % is unsupported on aarch64:' +
             'use an OUT parameter instead, or include a managed field',
             [self, m^.InterfaceDotMethodName, a^.ArgTypeName^]);
-        {$endif CPUAARCH64}
+        {$endif ABIA64}
       end;
     end;
     if (m^.ArgsInputValuesCount = 1) and
@@ -4306,7 +4306,7 @@ begin
                 'should be at least % bytes (i.e. bigger than a pointer) to be on stack',
                 [self, a^.ArgTypeName^, fInterfaceName, m^.URI,
                  a^.ParamName^, POINTERBYTES + 1]);
-              // to be fair, both WIN64ABI and SYSVABI could handle those and
+              // to be fair, both ABIWINX64 and ABISYSVX64 could handle those and
               // transmit them within a register
             if RecordIsHfa(a^.ArgRtti.Props) then
             begin
@@ -4328,13 +4328,13 @@ begin
           inc(a);
           continue; // ordinal/real/class results are returned in CPU/FPU registers
         end;
-        {$ifndef CPUX86}
+        {$ifndef ABIX86}
         a^.InStackOffset := -1;
         a^.RegisterIdent := PARAMREG_RESULT;
         inc(a);
         continue;
-        {$endif CPUX86}
-        // CPUX86 will add an additional by-ref parameter
+        {$endif ABIX86}
+        // i386 will add an additional by-ref parameter
       end;
       {$ifdef CPU32}
       if a^.ValueDirection = imdConst then
@@ -4343,10 +4343,10 @@ begin
       {$endif CPU32}
         a^.SizeInStack := POINTERBYTES; // always 8 bytes aligned on 64-bit
       if
-        {$ifndef CPUARM}
+        {$ifndef ABIA32}
         // on ARM, ordinals>POINTERBYTES can also be placed in the normal registers !!
         (a^.SizeInStack <> POINTERBYTES) or
-        {$endif CPUARM}
+        {$endif ABIA32}
         {$ifdef HAS_FPREG}
         {$ifdef OSPOSIX}  // Linux x64, armhf, aarch64
         ((SizeInFPR = 1) and (fpreg > FPREG_LAST)) or // too many FP registers
@@ -4372,11 +4372,11 @@ begin
         if a^.ValueDirection = imdConst then
           a^.SizeInStack := a^.ArgRtti.Size;
         {$else}
-        {$ifdef CPUARM}
+        {$ifdef ABIA32}
         // parameter must be aligned on a SizeInStack boundary
         if a^.SizeInStack > POINTERBYTES then
           inc(m^.ArgsSizeInStack, m^.ArgsSizeInStack mod cardinal(a^.SizeInStack));
-        {$endif CPUARM}
+        {$endif ABIA32}
         {$endif OSDARWINARM}
         a^.InStackOffset := m^.ArgsSizeInStack;
         inc(m^.ArgsSizeInStack, a^.SizeInStack);
@@ -4385,18 +4385,18 @@ begin
       begin
         // this parameter will go in a register
         a^.InStackOffset := -1;
-        {$ifndef CPUX86}
+        {$ifndef ABIX86}
         if (m^.ArgsResultIndex >= 0) and
            (reg = PARAMREG_RESULT) and
            (m^.Args[m^.ArgsResultIndex].ValueType in ARGS_RESULT_BY_REF) then
           inc(reg); // this register is reserved for method result pointer
-        {$endif CPUX86}
+        {$endif ABIX86}
         {$ifdef HAS_FPREG}
         if SizeInFPR = 1 then
         begin
           // put in next floating-point register
           {$ifdef OSPOSIX}
-          a^.FPRegisterIdent := fpreg; // SYSVABI has its own FP registers index
+          a^.FPRegisterIdent := fpreg; // ABISYSVX64 has its own FP registers index
           inc(fpreg);
           {$else}
           a^.FPRegisterIdent := reg; // Win64 ABI: reg and fpreg do overlap
@@ -4407,7 +4407,7 @@ begin
         {$endif HAS_FPREG}
         begin
           // put in an integer register
-          {$ifdef CPUARM}
+          {$ifdef ABIA32}
           // on 32-bit ARM, ordinals>POINTERBYTES are also placed in registers
           if (a^.SizeInStack > POINTERBYTES) and
              ((reg and 1) = 0) then
@@ -4431,7 +4431,7 @@ begin
           {$else}
           a^.RegisterIdent := reg;
           inc(reg);
-          {$endif CPUARM}
+          {$endif ABIA32}
         end;
       end;
       inc(a);
@@ -4471,13 +4471,13 @@ begin
           if a^.SizeInStack = POINTERBYTES then
             a^.RawExecute := reValReg   // use a single register
           else
-            a^.RawExecute := reValRegs  // several registers (e.g. SYSVABI TGuid)
+            a^.RawExecute := reValRegs  // several registers (e.g. ABISYSVX64 TGuid)
         {$ifdef HAS_FPREG}
         else if a^.FPRegisterIdent > 0 then
           if a^.SizeInStack = SizeOf(double) then
             a^.RawExecute := reValFpReg  // use a single FP register
           else
-            a^.RawExecute := reValFpRegs // several FP registers (e.g. SYSVABI HFA)
+            a^.RawExecute := reValFpRegs // several FP registers (e.g. ABISYSVX64 HFA)
         {$endif HAS_FPREG}
         else
           a^.RawExecute := reNone; // e.g. for a result register
@@ -4493,7 +4493,7 @@ begin
         '%.Create: Stack size % > % for %.% method % parameters',
         [self, m^.ArgsSizeInStack, MAX_EXECSTACK, fInterfaceName, m^.URI,
          m^.ArgsInputValuesCount]);
-    {$ifdef CPUX86}
+    {$ifdef ABIX86}
     // pascal/register convention are passed left-to-right -> reverse order
     offs := m^.ArgsSizeInStack;
     a := pointer(m^.Args);
@@ -4507,7 +4507,7 @@ begin
       inc(a);
     end;
     //assert(offs=0);
-    {$endif CPUX86}
+    {$endif ABIX86}
     inc(m);
   end;
   WR := TJsonWriter.CreateOwnedStream;
@@ -4689,7 +4689,7 @@ end;
 
 {$ifdef FPC}
 
-{$ifdef CPUARM}
+{$ifdef ABIA32}
 {$ifdef ASMORIG}
 procedure TInterfacedObjectFakeRaw.ArmFakeStub;
 var
@@ -4770,8 +4770,8 @@ asm
       ldmea r11,{r11,r13,r15}
 end;
 {$endif ASMORIG}
-{$endif CPUARM}
-{$ifdef CPUAARCH64}
+{$endif ABIA32}
+{$ifdef ABIA64}
 procedure TInterfacedObjectFakeRaw.AArch64FakeStub;
 var
   // warning: exact local variables order should match TFakeCallStack
@@ -4808,20 +4808,20 @@ asm
     // and float in aCall.FPRegs["sd0"]
     str d0,sd0
 end;
-{$endif CPUAARCH64}
+{$endif ABIA64}
 
 {$else}
 
-{$ifdef CPUAARCH64}
+{$ifdef ABIA64}
 procedure TInterfacedObjectFakeRaw.AArch64FakeStub;
 begin
   // TODO: use external .o for Delphi ARM64
 end;
-{$endif CPUAARCH64}
+{$endif ABIA64}
 
 {$endif FPC}
 
-{$ifdef CPUX64}
+{$ifdef ABIX64}
 
 {$ifdef FPC}
   {$WARN 7102 off : Use of +offset(%ebp) for parameters invalid here}
@@ -4883,13 +4883,13 @@ asm     // caller = mov eax,{MethodIndex}; jmp x64FakeStub
         movsd   xmm0, qword ptr sxmm0 // movsd for zero extension
 end;
 
-{$endif CPUX64}
+{$endif ABIX64}
 
 var
   // just called once for _FAKEVMT creation (once per interface type on i386)
   VmtSafe: TLightLock;
 
-{$ifdef CPUX86}  // i386 stub requires "ret ArgsSizeInStack"
+{$ifdef ABIX86}  // i386 stub requires "ret ArgsSizeInStack"
 
 function TInterfaceFactory.GetMethodsVirtualTable: pointer;
 var
@@ -4962,14 +4962,14 @@ procedure Compute_FAKEVMT;
 var
   P: PCardinal;
   i: PtrInt;
-  {$ifdef CPUARM3264}
-  stub {$ifdef CPUAARCH64} , tmp {$endif}: PtrUInt;
-  {$endif CPUARM3264}
+  {$ifdef ABIARM}
+  stub {$ifdef ABIA64} , tmp {$endif}: PtrUInt;
+  {$endif ABIARM}
 begin
   // reserve executable memory for JIT (aligned to 8 bytes)
   P := ReserveExecutableMemory(MAX_METHOD_COUNT * VMTSTUBSIZE
-    {$ifdef CPUAARCH64} + ($120 shr 2) {$endif CPUAARCH64}
-    {$ifdef CPUARM}, @TInterfacedObjectFakeRaw.ArmFakeStub {$endif CPUARM});
+    {$ifdef ABIA64} + ($120 shr 2) {$endif ABIA64}
+    {$ifdef ABIA32}, @TInterfacedObjectFakeRaw.ArmFakeStub {$endif ABIA32});
   // populate _FAKEVMT[] with JITted stubs
   SetLength(_FAKEVMT, MAX_METHOD_COUNT + RESERVED_VTABLE_SLOTS);
   // set IInterface RESERVED_VTABLE_SLOTS required methods
@@ -4980,7 +4980,7 @@ begin
   for i := 0 to MAX_METHOD_COUNT - 1 do
   begin
     _FAKEVMT[i + RESERVED_VTABLE_SLOTS] := P;
-    {$ifdef CPUX64}    // note: on Posix, (stub-P) > 32-bit -> need absolute jmp
+    {$ifdef ABIX64}    // note: on Posix, (stub-P) > 32-bit -> need absolute jmp
     P^ := $ba49;       // mov r10, x64FakeStub
     inc(PWord(P));
     PPointer(P)^ := @x64FakeStub;
@@ -4993,8 +4993,8 @@ begin
     inc(P);
     P^ := $00441f0f;   // multi-byte nop
     inc(PByte(P), 5);  // VMTSTUBSIZE = 24
-    {$endif CPUX64}
-    {$ifdef CPUARM}
+    {$endif ABIX64}
+    {$ifdef ABIA32}
     {$ifdef ASMORIG}
     P^ := ($e3a040 shl 8) + i;
     inc(P); // mov r4 (v1),{MethodIndex} : store method index in register
@@ -5009,8 +5009,8 @@ begin
     inc(P);
     P^ := $e320f000;  // VMTSTUBSIZE = 16
     inc(P);
-    {$endif CPUARM}
-    {$ifdef CPUAARCH64}
+    {$endif ABIA32}
+    {$ifdef ABIA64}
     // store method index in register r16 [IP0]
     // $10 = r16 ... loop to $1F -> number shifted * $20
     P^ := ($d280 shl 16) + (i shl 5) + $10;
@@ -5035,7 +5035,7 @@ begin
     inc(P);
     P^ := $d503201f;
     inc(P); // VMTSTUBSIZE = 28
-    {$endif CPUAARCH64}
+    {$endif ABIA64}
   end;
   // reenable execution permission of JITed memory as expected by the VMT
   ReserveExecutableMemoryPageAccess(
@@ -5058,7 +5058,7 @@ begin
   result := pointer(_FAKEVMT);  // we can reuse pre-JITted stubs
 end;
 
-{$endif CPUX86}
+{$endif ABIX86}
 
 
 {$ifdef HASINTERFACERTTI}
@@ -6850,7 +6850,7 @@ type
   end;
 
 // ARM/AARCH64 code below provided by ALF, greatly inspired by pascalscript
-{$ifdef CPUARM}
+{$ifdef ABIA32}
 
 procedure CallMethod(var Args: TCallMethodArgs); assembler; nostackframe;
 label
@@ -6951,9 +6951,9 @@ asmcall_end:
    ldmea fp, {v1, v2, sb, sl, fp, sp, pc}
 end;
 
-{$endif CPUARM}
+{$endif ABIA32}
 
-{$ifdef CPUAARCH64}
+{$ifdef ABIA64}
 
 {$ifdef FPC}
 procedure CallMethod(var Args: TCallMethodArgs); assembler; nostackframe;
@@ -7041,9 +7041,9 @@ begin
   // TODO: use external .o stub on Delphi ARM64
 end;
 {$endif FPC}
-{$endif CPUAARCH64}
+{$endif ABIA64}
 
-{$ifdef CPUX64}
+{$ifdef ABIX64}
 
 procedure CallMethod(var Args: TCallMethodArgs); assembler;
 {$ifdef FPC} nostackframe;
@@ -7121,9 +7121,9 @@ asm
         {$endif FPC}
 end;
 
-{$endif CPUX64}
+{$endif ABIX64}
 
-{$ifdef CPUX86}
+{$ifdef ABIX86}
 
 procedure CallMethod(var Args: TCallMethodArgs);
   {$ifdef FPC}nostackframe; assembler;{$endif}
@@ -7171,7 +7171,7 @@ asm
         pop     esi
 end;
 
-{$endif CPUX86}
+{$endif ABIX86}
 
 procedure BackgroundExecuteProc(Call: pointer);
 var
@@ -7273,7 +7273,7 @@ var
 begin
   FillCharFast(call, SizeOf(call), 0);
   // create the stack layout with proper alignment
-  {$ifdef CPUX86}
+  {$ifdef ABIX86}
   call.StackAddr := PtrInt(@Stack[0]);
   call.StackSize := fMethod^.ArgsSizeInStack;
   {$ifdef OSPOSIX} // ensure always aligned by 16 bytes on POSIX
@@ -7281,7 +7281,7 @@ begin
     inc(call.StackSize, POINTERBYTES); // needed for Darwin and Linux i386
   {$endif OSPOSIX}
   {$else}
-  {$ifdef CPUINTEL}
+  {$ifdef ABIINTEL}
   call.StackSize := fMethod^.ArgsSizeInStack shr 3;
   // ensure stack aligned on 16 bytes (mandatory on some architectures)
   if call.StackSize and 1 <> 0 then
@@ -7291,16 +7291,16 @@ begin
   {$else}
   // stack is filled normally (LTR)
   call.StackAddr := PtrInt(@Stack[0]);
-  {$ifdef CPUAARCH64}
+  {$ifdef ABIA64}
   call.StackSize := fMethod^.ArgsSizeInStack shr 3;
   // ensure stack aligned on 16 bytes (mandatory: needed for correct low level asm)
   if call.StackSize and 1 <> 0 then
     inc(call.StackSize);
   {$else}
   call.StackSize := fMethod^.ArgsSizeInStack shr 2;
-  {$endif CPUAARCH64}
-  {$endif CPUINTEL}
-  {$endif CPUX86}
+  {$endif ABIA64}
+  {$endif ABIINTEL}
+  {$endif ABIX86}
   // assign content from fValues[] into the stack
   pv := pointer(fValues);
   arg := pointer(fMethod^.Args);
@@ -7324,7 +7324,7 @@ begin
       reValFpReg:
         PInt64(@call.FPRegs[arg^.FPRegisterIdent])^ := PInt64(pv^)^;
       reValFpRegs:
-        // e.g. HFA on SYSVABI systems are passed in several FP registers
+        // e.g. HFA on SYSV systems are passed in several FP registers
         MoveFast(pv^^, call.FPRegs[arg^.FPRegisterIdent], arg^.SizeInStack);
       {$endif HAS_FPREG}
     end;

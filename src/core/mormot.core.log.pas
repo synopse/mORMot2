@@ -3865,7 +3865,7 @@ type
 
 function RetrieveMemoryManagerInfo: RawUtf8;
 begin
-  {$ifdef CPUX64}
+  {$ifdef ASMX64}
   // detect and include mormot.core.fpcx64mm raw information
   with GetHeapStatus do
     if PShortString(@TotalAddrSpace)^ = 'fpcx64mm' then // magic marker
@@ -3874,7 +3874,7 @@ begin
       exit;
     except
     end;
-  {$endif CPUX64}
+  {$endif ASMX64}
   // standard FPC memory manager
   with GetFPCHeapStatus do
     FormatUtf8(' - Heap: Current: used=% size=% free=%   Max: size=% used=%',
@@ -5761,14 +5761,10 @@ begin
     w.AddDirect('-');
     w.Add(SystemInfo.wProcessorRevision);
     {$endif OSWINDOWS}
-    {$ifdef CPUINTEL}
-    w.AddDirect(':');
+    {$ifdef HASCPUFEATURES}
+    w.AddDirect(':' {$ifdef ABIA32}, '-' {$endif} {$ifdef ABIA64}, '+' {$endif});
     w.AddBinToHexMinChars(@CpuFeatures, SizeOf(CpuFeatures), {lower=}true);
-    {$endif CPUINTEL}
-    {$ifdef CPUARM3264}
-    w.Add(':', {$ifdef CPUARM} '-' {$else} '+' {$endif}); // ARM marker
-    w.AddBinToHexMinChars(@CpuFeatures, SizeOf(CpuFeatures), {lower=}true);
-    {$endif CPUARM3264}
+    {$endif HASCPUFEATURES}
     w.AddDirect(' ', 'O', 'S', '=');
     {$ifdef OSWINDOWS}
     w.AddB(ord(OSVersion));

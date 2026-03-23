@@ -10,12 +10,10 @@
 {$ifdef FPC} // we may be on Delphi for Linux
 
   // setup the expected memory manager
-  {$ifdef CPUX64}         // our x86_64 asm MM
   {$ifdef FPC_X64MM}
     mormot.core.fpcx64mm, // redirect to our optimized x86_64 asm Memory Manager
     {$undef FPC_LIBCMM}   // no fpclibcmm
   {$endif FPC_X64MM}
-  {$endif CPUX64}
   {$ifdef FPC_LIBCMM}     // libc MM
     {$ifdef LINUX}
     mormot.core.fpclibcmm, // redirect to libc memory manager on LINUX

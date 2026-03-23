@@ -2732,7 +2732,7 @@ begin
   else
   begin
     S := P;
-    {$ifdef CPUINTEL}
+    {$ifdef ASMINTEL}
     S := PosChar(S, Sep); // SSE2 asm on i386 and x86_64
     if S = nil then
       S := P + mormot.core.base.StrLen(P);
@@ -2740,7 +2740,7 @@ begin
     while (S^ <> #0) and
           (S^ <> Sep) do
       inc(S);
-    {$endif CPUINTEL}
+    {$endif ASMINTEL}
     FastSetString(result, P, S - P);
     if S^ <> #0 then
       P := S + 1
@@ -7207,7 +7207,7 @@ type
 const
   ROUNDER = $80000000;
 
-{$ifdef CPUINTEL} // our faster version using 128-bit x86_64 multiplication
+{$ifdef ASMINTEL} // our faster version using 128-bit x86_64 multiplication
 
 procedure d2a_diy_fp_multiply(var x, y: TDIY_FP; normalize: boolean;
   out result: TDIY_FP); {$ifdef HASINLINE}inline;{$endif}
@@ -7251,7 +7251,7 @@ begin
     end;
 end;
 
-{$endif CPUINTEL}
+{$endif ASMINTEL}
 
 const
   // alpha =-61; gamma = 0

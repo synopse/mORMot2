@@ -4462,11 +4462,11 @@ const
     SortDynArrayInt64,           // 12
     SortDynArrayQWord,           // 13
     SortDynArrayWordBoolean,     // 14
-    {$ifdef CPUINTEL}
-    SortDynArrayAnsiString,      // 15
+    {$ifdef ASMINTEL}
+    SortDynArrayAnsiString,      // 15 - optimized asm
     {$else}
-    SortDynArrayRawByteString,
-    {$endif CPUINTEL}
+    SortDynArrayRawByteString,   // 15 - pure pascal vesion
+    {$endif ASMINTEL}
     SortDynArrayAnsiStringI,     // 16
     SortDynArrayUnicodeString,   // 17 about hashing: UTF-16 equal = UTF-8 equal
     SortDynArrayUnicodeStringI); // 18

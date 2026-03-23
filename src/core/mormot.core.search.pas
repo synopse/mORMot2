@@ -3639,7 +3639,7 @@ end;
 
 // faster alternative (without recursion) for only * ? (but not [...])
 
-{$ifdef CPU32} // less registers on this CPU - also circumvent ARM problems (Alf)
+{$ifdef CPU32} // less registers on i386 - also circumvent ARM32 problems (Alf)
 
 function SearchNoRange(aMatch: PMatch; aText: PUtf8Char; aTextLen: PtrInt): boolean;
 var
@@ -3762,7 +3762,7 @@ fin:result := false;
   result := true;
 end;
 
-{$endif CPUX86}
+{$endif CPU32}
 
 function SearchNoRangeU(aMatch: PMatch; aText: PUtf8Char; aTextLen: PtrInt): boolean;
 var
@@ -6201,22 +6201,20 @@ begin
   result := sp;
 end;
 
-{$ifdef CPUINTEL}
-// crc32c SSE4.2 hardware accellerated dword hash
-{$ifdef CPUX86}
+{$ifdef ASMINTEL} // crc32c SSE4.2 hardware accellerated dword hash
 function crc32c32sse42(buf: pointer): cardinal;
+{$ifdef ASMX86}
 {$ifdef FPC} nostackframe; assembler; {$endif}
 asm
         mov     edx, eax
         xor     eax, eax
-        {$ifdef HASAESNI}
+        {$ifdef ASMAESNI}
         crc32   eax, dword ptr [edx]
         {$else}
         db $F2, $0F, $38, $F1, $02
-        {$endif HASAESNI}
+        {$endif ASMAESNI}
 end;
 {$else}
-function crc32c32sse42(buf: pointer): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm {$else}
 asm // ecx=buf (Linux: edi=buf)
         .noframe
@@ -6224,8 +6222,8 @@ asm // ecx=buf (Linux: edi=buf)
         xor     eax, eax
         crc32   eax, dword ptr [buf]
 end;
-{$endif CPUX86}
-{$endif CPUINTEL}
+{$endif ASMX86}
+{$endif ASMINTEL}
 
 function hash32prime(buf: pointer): cardinal;
 begin
@@ -6257,11 +6255,11 @@ var
   hash: function(buf: pointer): cardinal;
 begin
   // 1. fill HTab[] with hashes for all old data
-  {$ifdef CPUINTEL}
+  {$ifdef ASMINTEL}
   if cfSSE42 in CpuFeatures then
     hash := @crc32c32sse42
   else
-  {$endif CPUINTEL}
+  {$endif ASMINTEL}
     hash := @hash32prime;
   FillCharFast(HTab^, SizeOf(HTab^), $ff); // HTab[]=HListMask by default
   pInBuf := OldBuf;
