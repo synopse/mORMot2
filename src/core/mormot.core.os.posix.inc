@@ -108,7 +108,7 @@ var // two flag sets of 8 items = 8-bit byte efficient storage and access
   _F1: set of (fMachTimeNanoSec, fNoTryProcExe, fStubMemoryExecXorWrite,
     fSynDaemonIntercepted, fSigPipeDisabled);
 
-function SortDynArrayFileName(const A, B): integer;
+function SortDynArrayFileName(const A, B): integer; // = TFileName
 begin // file extension, then file name case-sensitive comparison on POSIX
   result := 0;
   if pointer(A) = pointer(B) then
@@ -117,11 +117,6 @@ begin // file extension, then file name case-sensitive comparison on POSIX
               PosExtString(pointer(A)), PosExtString(pointer(B)));
   if result = 0 then
     result := {$ifdef UNICODE}StrCompW{$else}StrComp{$endif}(pointer(A), pointer(B));
-end;
-
-procedure _toutf8(const Str: TFileName; var Utf8: RawUtf8);
-begin
-  Utf8 := Str; // assumed both AnsiString on POSIX - or use RTL
 end;
 
 function TDirectoryBrowser.Make(const fn: TFileName): TFileName;
@@ -356,7 +351,7 @@ end;
 
 function TIcuLibrary.ucnv(codepage: cardinal): pointer;
 var
-  cp: ShortString;
+  cp: TShort16;
   err: SizeInt;
   {$ifdef CPUINTEL}
   mask: cardinal;

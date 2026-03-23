@@ -12,18 +12,6 @@
 
 function PosExtString(Str: PChar): PChar; forward;
 
-procedure _DoWin32PWideCharToUtf8(P: PWideChar; Len: PtrInt; var res: RawUtf8);
-var
-  tmp: TSynTempBuffer;
-begin // FPC RTL is fine, and recent Delphi just calls WideCharToMultiByte() API
-  tmp.Init(Len * 3);
-  Len := UnicodeToUtf8(tmp.Buf, Len * 3 + 16, P, Len);
-  if Len > 0 then
-    dec(Len); // UnicodeToUtf8() result includes the null terminator
-  FastSetString(res, tmp.buf, Len);
-  tmp.Done;
-end; // warning: Delphi 7/2007 UnicodeToUtf8() RTL doesn't handle surrogates
-
 function IsExtendedPathNameW(Name: PWideChar): boolean; // in '\\?\...' format
 begin
   result := (Name <> nil) and
@@ -72,19 +60,8 @@ begin
 end;
 
 procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt; out res: RawUtf8);
-var
-  i: PtrInt;
-  R: PByteArray;
 begin
-  if Len > 0 then
-    if IsAnsiCompatibleW(P, Len) then
-    begin
-      R := FastSetString(res, Len);
-      for i := 0 to Len - 1 do
-        R[i] := PWordArray(P)[i]; // fast direct ASCII 7-bit conversion
-    end
-    else
-      DoWin32PWideCharToUtf8(P, Len, res); // use RTL or mormot.core.unicode
+  Unicode_ToUtf8(P, Len, res);
 end;
 
 {$ifdef UNICODE}
@@ -125,11 +102,6 @@ begin
       dec(l);
       dst[l] := cardinal(s[l]); // fast direct 7-bit conversion
     until l = 0;
-end;
-
-procedure _toutf8(const Str: TFileName; var Utf8: RawUtf8);
-begin
-  Win32PWideCharToUtf8(pointer(Str), length(Str), Utf8);
 end;
 
 {$else}
@@ -192,7 +164,7 @@ begin
   end
   {$ifdef FPC}
   else if DefaultRTLFileSystemCodePage = CP_UTF8 then // happens with Lazarus
-    DoWin32PWideCharToUtf8(P, l, RawUtf8(s)) // use RTL or mormot.core.unicode
+    Unicode_ToUtf8(P, l, RawUtf8(s)) // use RTL or mormot.core.unicode
   {$endif FPC}
   else
     DoSynUnicodeConv;
@@ -202,15 +174,6 @@ procedure SetStringFromAnsi7Buffer(var d: string; s: PAnsiChar; l: PtrInt);
   {$ifdef HASINLINE} inline; {$endif}
 begin
   SetString(d, s, l);
-end;
-
-procedure _toutf8(const Str: TFileName; var Utf8: RawUtf8);
-begin
-  if {$ifdef FPC} (DefaultRTLFileSystemCodePage = CP_UTF8) or {$endif}
-     IsAnsiCompatible(Str) then
-    Utf8 := Str // assign
-  else
-    Utf8 := UTF8Encode(Str); // use RTL
 end;
 
 {$endif UNICODE}
@@ -223,12 +186,12 @@ end;
 procedure Win32PWideCharToUtf8(P: PWideChar; out res: RawUtf8);
 begin
   if P <> nil then
-    Win32PWideCharToUtf8(P, StrLenW(P), res);
+    Unicode_ToUtf8(P, StrLenW(P), res);
 end;
 
 function Utf8ToWin32PWideChar(const u: RawUtf8; var d: TSynTempBuffer): PWideChar;
 begin
-  result := Unicode_FromUtf8(pointer(u), length(u), d); // call the RTL
+  result := Unicode_FromUtf8(pointer(u), length(u), d);
 end;
 
 const
@@ -2178,7 +2141,7 @@ begin
       begin
         len := high(name);
         if QueryFullProcessImageNameW(h, 0, name, @len) then
-          Win32PWideCharToUtf8(name, len, result);
+          Unicode_ToUtf8(name, len, result);
       end
       else if DelayedProc(GetModuleFileNameExW, PsapiDll, 'Psapi.dll',
                 'GetModuleFileNameExW') and
@@ -2623,7 +2586,7 @@ begin
       begin
         SetLength(result, n + 1);
         p := @result[n];
-        Win32PWideCharToUtf8(pointer(volume), length(volume), p^.name);
+        Unicode_ToUtf8(pointer(volume), length(volume), p^.name);
         p^.mounted := fn;
         p^.size := tot;
         volume := '';
@@ -3018,11 +2981,11 @@ begin
       repeat
         inc(p);
       until p^ = '=';
-      Win32PWideCharToUtf8(e, p - e, _SystemEnvNames[i]);
+      Unicode_ToUtf8(e, p - e, _SystemEnvNames[i]);
       inc(p);
       e := p;
       inc(p, StrLenW(p));
-      Win32PWideCharToUtf8(e, p - e, _SystemEnvValues[i]);
+      Unicode_ToUtf8(e, p - e, _SystemEnvValues[i]);
       inc(i);
     end;
     inc(p);
@@ -3215,7 +3178,7 @@ begin
   begin
     len := maxlen;
     if RegEnumKeyExW(key, i, tmp.buf, len, nil, nil, nil, nil) = NO_ERROR then
-      Win32PWideCharToUtf8(tmp.buf, len, result[i]);
+      Unicode_ToUtf8(tmp.buf, len, result[i]);
   end;
   tmp.Done;
 end;
@@ -4900,7 +4863,6 @@ begin
   {$endif HASNOSSE2}
   {$endif ASMX86}
   // 2. late-binding of newest Windows APIs
-  DoWin32PWideCharToUtf8 := @_DoWin32PWideCharToUtf8; // or mormot.core.unicode
   h := GetModuleHandle(kernel32);
   GetSystemTimePreciseAsFileTime :=
     LibraryResolve(h, 'GetSystemTimePreciseAsFileTime'); // Win8+
