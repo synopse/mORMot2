@@ -352,9 +352,10 @@ function UriTruncAnchorLen(const Address: RawUtf8): PtrInt;
   {$ifdef HASINLINE} inline; {$endif}
 
 // define some raw text functions, to avoid linking mormot.core.text
+procedure _utf16utf8(P: PWideChar; Len: PtrInt; var res: RawUtf8);
 function _fmt(const Fmt: string; const Args: array of const): RawUtf8; overload;
 procedure _fmt(const Fmt: string; const Args: array of const; var result: RawUtf8); overload;
-procedure _toutf8(const Str: TFileName; var Utf8: RawUtf8); {$ifdef OSPOSIX} inline; {$endif}
+procedure _toutf8(const Str: TFileName; var Utf8: RawUtf8);
 procedure _addutf8(var Values: TRawUtf8DynArray; const Value: RawUtf8);
 
 
@@ -2651,6 +2652,15 @@ function Unicode_InPlaceLower(W: PWideChar; WLen: integer): integer;
 function Unicode_FromUtf8(Text: PUtf8Char; TextLen: PtrInt;
   var Dest: TSynTempBuffer): PWideChar;
 
+/// local RTL wrapper function to avoid linking mormot.core.unicode.pas
+// - returns dest.buf as PUtf8Char result, and dest.len as length in UTF-8 bytes
+// - caller should always call Dest.Done to release any (unlikely) allocated memory
+function Unicode_ToUtf8(Text: PWideChar; var Dest: TSynTempBuffer;
+  TextLen: PtrInt = 0): pointer; overload;
+
+/// local RTL wrapper function to avoid linking mormot.core.unicode.pas
+procedure Unicode_ToUtf8(Text: PWideChar; TextLen: PtrInt; var Dest: RawUtf8); overload;
+
 /// return a code page number into ICU-compatible charset name
 // - Unicode_CodePageName(932) returns e.g. 'SHIFT_JIS'
 // - Unicode_CodePageName(1251) returns 'MS1251' since 'CP####' is used
@@ -3224,7 +3234,7 @@ function GetFileNameWithoutExtOrPath(const FileName: TFileName): RawUtf8;
 
 /// compare two "array of TFileName" elements, grouped by file extension
 // - i.e. with no case sensitivity on Windows
-// - the expected string type is the RTL string, i.e. TFileName
+// - the expected string type for A and B is the RTL string, i.e. TFileName
 // - like calling GetFileNameWithoutExt() and AnsiCompareFileName()
 function SortDynArrayFileName(const A, B): integer;
 
@@ -3737,6 +3747,10 @@ procedure ConsoleWaitForEnterKey;
 // - could be used to retrieve some file piped to the command line
 // - the content is not converted, so will follow the encoding used for storage
 function ConsoleReadBody: RawByteString;
+
+var
+  /// local RTL wrapper - mormot.core.unicode.pas would inject its own process
+  DoWideCharToUtf8Temp: function(w: PWideChar; wc: PtrInt; var u: TSynTempBuffer): PUtf8Char;
 
 {$ifdef OSWINDOWS}
 
@@ -5918,6 +5932,34 @@ implementation
 
 { ****************** Some Cross-System Type and Constant Definitions }
 
+{$ifdef UNICODE}
+procedure _toutf8(const Str: TFileName; var Utf8: RawUtf8);
+begin
+  Unicode_ToUtf8(pointer(Str), length(Str), Utf8); // fast conversion function
+end;
+{$else}
+{$ifdef OSPOSIX}
+procedure _toutf8(const Str: TFileName; var Utf8: RawUtf8);
+begin
+  Utf8 := Str; // we can assume UTF-8 encoding on POSIX
+end;
+{$else}
+procedure __toutf8(const Str: TFileName; var Utf8: RawUtf8);
+begin
+  Utf8 := UTF8Encode(Str); // use RTL and local UnicodeString slow conversion
+end;
+
+procedure _toutf8(const Str: TFileName; var Utf8: RawUtf8);
+begin
+  if {$ifdef FPC} (DefaultRTLFileSystemCodePage = CP_UTF8) or {$endif}
+     IsAnsiCompatible(Str) then
+    Utf8 := Str // assign
+  else
+    __toutf8(Str, Utf8); // use RTL for any complex charset conversion
+end;
+{$endif OSPOSIX}
+{$endif UNICODE}
+
 function _fmt(const Fmt: string; const Args: array of const): RawUtf8;
 begin
   _toutf8(Format(Fmt, Args), result); // good enough (seldom called)
@@ -6878,6 +6920,49 @@ begin
       result[Dest.len] := #0; // missing on FPC
     end;
   end;
+end;
+
+function _utf16ascii(s: PWordArray; d: PByteArray; l: PtrInt): pointer;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  d[l] := 0;      // ensure is #0 terminated
+  repeat
+    dec(l);
+    d[l] := s[l]; // 7-bit ASCII direct conversion
+  until l = 0;
+  result := d;
+end;
+
+function Unicode_ToUtf8(Text: PWideChar; var Dest: TSynTempBuffer; TextLen: PtrInt): pointer;
+begin
+  if TextLen = 0 then         // e.g. from mormot.core.os.delphi.pas
+    TextLen := StrLenW(Text); // as WideChars count, not bytes
+  if TextLen = 0 then
+    result := Dest.Init(0)
+  else if IsAnsiCompatibleW(Text, TextLen) then
+    result := _utf16ascii(pointer(Text), Dest.Init(TextLen), TextLen)
+  else // complex UTF-16 to UTF-8 conversion via RTL or mormot.core.unicode
+    result := DoWideCharToUtf8Temp(Text, TextLen, Dest);
+end;
+
+procedure _utf16utf8(P: PWideChar; Len: PtrInt; var res: RawUtf8);
+var
+  tmp: TSynTempBuffer;
+begin
+  DoWideCharToUtf8Temp(P, Len, tmp); // RTL or mormot.core.unicode
+  FastSetString(res, tmp.buf, tmp.len);
+  tmp.Done;
+end;
+
+procedure Unicode_ToUtf8(Text: PWideChar; TextLen: PtrInt; var Dest: RawUtf8);
+begin
+  if TextLen > 0 then
+    if IsAnsiCompatibleW(Text, TextLen) then
+      _utf16ascii(pointer(Text), FastSetString(Dest, TextLen), TextLen)
+    else
+      _utf16utf8(Text, TextLen, Dest) // complex UTF-16 to UTF-8 conversion
+  else
+    FastAssignNew(Dest);
 end;
 
 procedure Unicode_CodePageName(CodePage: cardinal; var Name: ShortString);
@@ -11859,8 +11944,18 @@ begin
 end;
 
 
+function _DoWideCharToUtf8Temp(w: PWideChar; wc: PtrInt; var u: TSynTempBuffer): PUtf8Char;
+begin
+  u.len := UnicodeToUtf8(u.Init(wc * 3), wc * 3 + 16, w, wc); // RTL as default
+  if u.len <> 0 then
+    dec(u.len); // RTL UnicodeToUtf8() result includes the null terminator
+  result := u.buf;
+end; // warning: Delphi 7/2007 UnicodeToUtf8() RTL don't handle surrogates
+
 procedure InitializeUnit;
 begin
+  // early initialization needed for those functions
+  DoWideCharToUtf8Temp  := _DoWideCharToUtf8Temp;  // mormot.core.unicode
   {$ifdef ISFPC27}
   // we force UTF-8 everywhere on FPC for consistency with Lazarus
   SetMultiByteConversionCodePage(CP_UTF8);
@@ -11883,13 +11978,13 @@ begin
     SpinFactor := 10;       // "pause" opcode is only 1-2 cycles
   {$endif ASMINTEL}
   // minimal stubs which will be properly implemented in other mormot.core units
+  ShortToUuid           := _ShortToUuid;           // mormot.core.text
+  AppendShortUuid       := _AppendShortUuid;
+  RawToBase64           := _RawToBase64;           // mormot.core.buffers
+  GetEnumNameRtti       := _GetEnumNameRtti;       // mormot.core.rtti
   GetExecutableLocation := _GetExecutableLocation; // mormot.core.log
   SetThreadName         := _SetThreadName;
   GetCurrentThreadName  := _GetCurrentThreadName;
-  ShortToUuid           := _ShortToUuid;           // mormot.core.text
-  AppendShortUuid       := _AppendShortUuid;
-  GetEnumNameRtti       := _GetEnumNameRtti;       // mormot.core.rtti
-  RawToBase64           := _RawToBase64;           // mormot.core.buffers
 end;
 
 procedure FinalizeUnit;

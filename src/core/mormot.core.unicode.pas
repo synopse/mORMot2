@@ -3245,6 +3245,13 @@ begin
   RawUnicodeToUtf8(WideChar, WideCharCount, result, Flags);
 end;
 
+function _DoWideCharToUtf8Temp(w: PWideChar; wc: PtrInt; var u: TSynTempBuffer): PUtf8Char;
+begin
+  u.len := RawUnicodeToUtf8(u.Init(wc * 3), wc * 3 + 16, w, wc,
+    [ccfReplacementCharacterForUnmatchedSurrogate]); // with trailing #0
+  result := u.buf;
+end;
+
 function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
   out Utf8Length: integer): RawUtf8;
 var
@@ -3260,13 +3267,6 @@ begin
   if Utf8Length <= 0 then
     result := '';
 end;
-
-{$ifdef OSWINDOWS}
-procedure _DoWin32PWideCharToUtf8(P: PWideChar; Len: PtrInt; var res: RawUtf8);
-begin
-  RawUnicodeToUtf8(P, Len, res); // our function is likely to be faster
-end;
-{$endif OSWINDOWS}
 
 function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char;
   MaxDestChars, sourceBytes: PtrUInt; NoTrailingZero: boolean): PtrInt;
@@ -3920,7 +3920,7 @@ var
   tmp: TShort16;
 begin
   Unicode_CodePageName(aCodePage, tmp);
-  LowerCaseCopy(@tmp[1], ord(tmp[0]), result); // more convenient
+  LowerCaseCopy(@tmp[1], ord(tmp[0]), result); // more convenient as lower ident
 end;
 
 var
@@ -12196,9 +12196,7 @@ begin
   SortDynArrayAnsiStringByCase[true]  := @SortDynArrayAnsiStringI;
   IdemPropNameUSameLen[false]         := @IdemPropNameUSameLenNotNull;
   IdemPropNameUSameLen[true]          := @mormot.core.base.CompareMem;
-  {$ifdef OSWINDOWS}
-  DoWin32PWideCharToUtf8              := _DoWin32PWideCharToUtf8;
-  {$endif OSWINDOWS}
+  DoWideCharToUtf8Temp                := @_DoWideCharToUtf8Temp;
   // setup basic/global Unicode conversion engines
   WinAnsiConvert         := TSynAnsiFixedWidth.Create(CP_WINANSI);
   Utf8AnsiConvert        := TSynAnsiUtf8.Create(CP_UTF8);
