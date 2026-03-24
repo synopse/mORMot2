@@ -465,12 +465,31 @@ begin
   syslog(priority, '%s', [msg]);
 end;
 
-const
-  // for CompareStringW() Windows-like call in Unicode_CompareString()
-  LOCALE_USER_DEFAULT = $400; // ignored in practice
-  NORM_IGNORECASE = 1 shl ord(coIgnoreCase); // [widestringmanager.coIgnoreCase]
-  U_FOLD_CASE_DEFAULT = 0;
-  U_COMPARE_CODE_POINT_ORDER = $8000;
+{$ifdef FPC}
+
+{$ifdef NODIRECTTHREADMANAGER} // try to stabilize MacOS/BSD pthreads API calls
+
+function GetCurrentThreadId: TThreadID;
+begin
+  result := system.GetCurrentThreadID();
+end;
+
+function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer;
+begin
+  result := system.TryEnterCriticalSection(cs);
+end;
+
+procedure EnterCriticalSection(var cs: TRTLCriticalSection);
+begin
+  system.EnterCriticalSection(cs);
+end;
+
+procedure LeaveCriticalSection(var cs: TRTLCriticalSection);
+begin
+  system.LeaveCriticalSection(cs);
+end;
+
+{$endif NODIRECTTHREADMANAGER}
 
 function CompareStringRTL(A, B: PWideChar; AL, BL, flags: integer): integer;
 var
@@ -719,30 +738,6 @@ begin
   result := 0; // fixed result on a window-abstracted system
 end;
 
-
-{$ifdef NODIRECTTHREADMANAGER} // try to stabilize MacOS/BSD pthreads API calls
-
-function GetCurrentThreadId: TThreadID;
-begin
-  result := system.GetCurrentThreadID();
-end;
-
-function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer;
-begin
-  result := system.TryEnterCriticalSection(cs);
-end;
-
-procedure EnterCriticalSection(var cs: TRTLCriticalSection);
-begin
-  system.EnterCriticalSection(cs);
-end;
-
-procedure LeaveCriticalSection(var cs: TRTLCriticalSection);
-begin
-  system.LeaveCriticalSection(cs);
-end;
-
-{$endif NODIRECTTHREADMANAGER}
 
 const
   // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
