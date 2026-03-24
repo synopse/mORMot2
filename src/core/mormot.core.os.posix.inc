@@ -141,6 +141,14 @@ begin
   result := dlsym(pointer(Lib), ProcName);
 end;
 
+function LibraryResolve2(Lib: TLibHandle; const a, b: string): pointer;
+var
+  name: RawUtf8;
+begin
+  _toutf8(a + b, name);
+  result := LibraryResolve(Lib, pointer(name));
+end;
+
 function LibraryError: string;
 begin
   result := dlerror;
@@ -159,15 +167,15 @@ begin
       ucnv_close(fSharedCnv[i]);
     fSharedCount := 0;
   end;
-  if icui18n <> nil then
-    dlclose(icui18n);
-  if icu <> nil then
-    dlclose(icu);
-  if icudata <> nil then
-    dlclose(icudata);
-  icu := nil;
-  icudata := nil;
-  icui18n := nil;
+  if icui18n <> 0 then
+    LibraryClose(icui18n);
+  if icu <> 0 then
+    LibraryClose(icu);
+  if icudata <> 0 then
+    LibraryClose(icudata);
+  icu := 0;
+  icudata := 0;
+  icui18n := 0;
   @ucnv_open := nil;
 end;
 
@@ -226,7 +234,7 @@ const
 var
   i: integer;
   err: SizeInt;
-  P: PPointer;
+  P: PPointerArray;
   {$ifndef OSDARWIN}
   so: string;
   {$endif OSDARWIN}
@@ -241,49 +249,49 @@ begin
     fSharedCount := 0;
     if LibName <> '' then
     begin
-      icu := dlopen(pointer(LibName), RTLD_LAZY);
-      if icu = nil then
+      icu := LibraryOpen(LibName);
+      if icu = 0 then
         exit;
     end
     else
     begin
       {$ifdef OSDARWIN}
       // Mach OS has its own ICU set of libraries
-      icu := dlopen('libicuuc.dylib', RTLD_LAZY);
+      icu := LibraryOpen('libicuuc.dylib');
       if icu <> nil then
-        icui18n := dlopen('libicui18n.dylib', RTLD_LAZY);
+        icui18n := LibraryOpen('libicui18n.dylib');
       {$else}
       // libicudata should be loaded first because other two depend on it
-      icudata := dlopen('libicudata.so', RTLD_LAZY);
+      icudata := LibraryOpen('libicudata.so');
       {$ifndef OSANDROID}
-      if icudata = nil then
+      if icudata = 0 then
       begin
         // there is no link to the library -> try e.g. 'libicudata.so.67'
         if Version <> '' then
-          icudata := dlopen(pointer('libicudata.so.' + Version), RTLD_LAZY);
-        if icudata = nil then
+          icudata := LibraryOpen(string('libicudata.so.') + Version);
+        if icudata = 0 then
           for i := ICU_MAX downto ICU_MIN do
           begin
-            str(i, v);
-            icudata := dlopen(pointer('libicudata.so.' + v), RTLD_LAZY);
-            if icudata <> nil then
+            v := IntToStr(i);
+            icudata := LibraryOpen(string('libicudata.so.') + v);
+            if icudata <> 0 then
             begin
               Version := v;
               break;
             end;
           end;
-        if icudata <> nil then
+        if icudata <> 0 then
           so := '.' + Version;
       end;
       {$endif OSANDROID}
-      if icudata <> nil then
+      if icudata <> 0 then
       begin
-        icu := dlopen(pointer('libicuuc.so' + so), RTLD_LAZY);
-        if icu <> nil then
-          icui18n := dlopen(pointer('libicui18n.so' + so), RTLD_LAZY);
+        icu := LibraryOpen(string('libicuuc.so') + so);
+        if icu <> 0 then
+          icui18n := LibraryOpen(string('libicui18n.so') + so);
       end;
       {$endif OSDARWIN}
-      if icui18n = nil then
+      if icui18n = 0 then
       begin
         // we did not find any ICU installed -> ensure iconv/RTL fallback is ok
         if not IsWideStringManagerProperlyInstalled then
@@ -295,14 +303,14 @@ begin
     end;
     // ICU append a version prefix to all its functions e.g. ucnv_open_66
     if (Version <> '') and
-       (dlsym(icu, pointer('ucnv_open_' + Version)) <> nil) then
+       (LibraryResolve2(icu, 'ucnv_open_', Version) <> nil) then
       vers := '_' + Version // matched the explicit version
     else
     begin
       {$ifdef OSANDROID}
       for i := high(ICU_VER) downto 1 do // only check official version numbers
       begin
-        if dlsym(icu, pointer(NAMES[0] + ICU_VER[i])) <> nil then
+        if LibraryResolve2(icu, NAMES[0], ICU_VER[i]) <> nil then
         begin
           vers := ICU_VER[i];
           break;
@@ -310,11 +318,11 @@ begin
       end;
       if vers <> '' then
       {$endif OSANDROID}
-      if dlsym(icu, 'ucnv_open') = nil then
+      if LibraryResolve(icu, 'ucnv_open') = nil then
         for i := ICU_MAX downto ICU_MIN do
         begin
-          str(i, v);
-          if dlsym(icu, pointer('ucnv_open_' + v)) <> nil then
+          v := IntToStr(i);
+          if LibraryResolve2(icu, 'ucnv_open_', v) <> nil then
           begin
             vers := '_' + v;
             break;
@@ -324,7 +332,7 @@ begin
     P := @@ucnv_open;
     for i := 0 to high(NAMES) do
     begin
-      P[i] := dlsym(icu, pointer(NAMES[i] + vers));
+      P[i] := LibraryResolve2(icu, NAMES[i], vers);
       if P[i] = nil then
       begin
         @ucnv_open := nil;

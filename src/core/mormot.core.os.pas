@@ -2069,7 +2069,7 @@ type
   // - ICU is loaded only when needed outside of mORMot needs
   TIcuLibrary = record
   private
-    icu, icudata, icui18n: pointer;
+    icu, icudata, icui18n: PtrUInt; // TLibHandle
     fLoaded: boolean;
     procedure DoLoad(const LibName: TFileName = ''; Version: string = '');
     procedure Done;
@@ -2176,7 +2176,7 @@ type
   // on debian: `sudo apt install libsystemd-dev && cd /usr/include/systemd`
   TSystemD = record
   private
-    systemd: pointer;
+    systemd: PtrUInt; // TLibHandle
     tested: boolean;
     procedure DoLoad;
   public
