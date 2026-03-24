@@ -2380,10 +2380,10 @@ const
 {$else} // some Delphi POSIX compatibility type definitions
 type
   /// we use Delphi TMonitor on POSIX - no pthread direct call yet
-  TRTLCriticalSection = type TObject;
+  TRTLCriticalSection = class(TObject);
   TLibHandle = PtrUInt;
   TSystemTime = packed record
-    Year, Month, DayOfWeek, Hour, Minute, Second, MilliSecond: word;
+    Year, Month, DayOfWeek, Day, Hour, Minute, Second, MilliSecond: word;
   end;
   {$define NODIRECTTHREADMANAGER}
 {$endif FPC}

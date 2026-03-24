@@ -27,9 +27,32 @@ uses
   sysutils,
   mormot.core.base,
   // the Delphi System and POSIX units exposed by this unit
+  System.TimeSpan,
+  System.DateUtils,
   System.IOUtils,
   System.SyncObjs,
-  Posix.Dlfcn;
+  Posix.Base,
+  Posix.Unistd,
+  Posix.Stdio,
+  Posix.Stdlib,
+  Posix.Errno,
+  Posix.Fcntl,
+  Posix.Dlfcn,
+  Posix.Pthread,
+  Posix.Sched,
+  {$IFDEF OSLINUX}
+  Linuxapi.KernelIoctl,
+  {$ENDIF OSLINUX}
+  Posix.StrOpts,
+  Posix.Time,
+  Posix.SysTime,
+  Posix.Utime,
+  Posix.SysMman,
+  Posix.SysStat,
+  Posix.SysWait,
+  Posix.SysUtsname,
+  Posix.DirEnt,
+  Posix.Termios;
 
 
 { ****************** Core POSIX Operating Systems API for Delphi }
@@ -37,13 +60,201 @@ uses
 // in the code below, PChar = PWideChar so those wrapper functions could make the
 // proper temporary conversion from UTF-16 to UTF-8 before calling the POSIX API
 
-function dlopen(Name: PWideChar; Flags: integer): pointer;
+type
+  cint    = integer;
+  cuint   = cardinal;
+  clong   = PtrInt;
+  culong  = PtrUInt;
+  cshort  = smallint;
+  cushort = word;
+  ssize_t = PtrInt;
+  size_t  = PtrUInt;
+  TUid    = cardinal;
+  TGid    = cardinal;
+  PGid    = ^TGid;
+  TPid    = cint;
+  dl_info = Posix.Dlfcn.dl_info;
+
+function dlopen(Name: PWideChar; Flags: cint): pointer;
 function dlsym(Lib: pointer; Name: PAnsiChar): pointer;
-function dlclose(Lib: pointer) : integer;
+function dlclose(Lib: pointer): cint;
 function dlerror: UnicodeString;
+function dladdr(Lib: pointer; info: Pdl_info): cint;
+
+procedure InitCriticalSection(var cs);
+procedure DoneCriticalSection(var cs);
+procedure ThreadSwitch;
+
+// wrap to System.SyncObjs.TEvent
+function  RTLEventCreate: TEvent;
+procedure RTLEventDestroy(state: TEvent);
+procedure RTLEventSetEvent(state: TEvent);
+procedure RTLEventResetEvent(state: TEvent);
+procedure RTLEventWaitFor(state: TEvent); overload;
+procedure RTLEventWaitFor(state: TEvent; timeout: cint); overload;
 
 const
-  RTLD_LAZY = Posix.Dlfcn.RTLD_LAZY;
+  clib = libc;
+
+  ESysEACCES = Posix.Errno.EACCES;
+  ESysEINTR  = Posix.Errno.EINTR;
+  ESysEFAULT = Posix.Errno.EFAULT;
+  ESysEPERM  = Posix.Errno.EPERM;
+  ESysESRCH  = Posix.Errno.ESRCH;
+  ESysE2BIG  = Posix.Errno.E2BIG;
+
+  StdInputHandle  = 0;
+  StdOutputHandle = 1;
+  StdErrorHandle  = 2;
+  RTLD_LAZY       = Posix.Dlfcn.RTLD_LAZY;
+  O_RDONLY        = O_RDONLY;
+  SEEK_CUR        = SEEK_CUR;
+  FIONREAD        = FIONREAD;
+  F_OK            = F_OK;
+
+  SIGINT          = 2;
+  SIGQUIT         = 3;
+  SIGKILL         = 9;
+  SIGTERM         = 15;
+
+  W_OK    = Posix.Unistd.W_OK;
+  S_IRUSR = Posix.SysStat.S_IRUSR;
+  S_IWUSR = Posix.SysStat.S_IWUSR;
+  S_IRGRP = Posix.SysStat.S_IRGRP;
+  S_IROTH = Posix.SysStat.S_IROTH;
+  S_ISVTX = Posix.SysStat.S_ISVTX;
+  S_IXUSR = Posix.SysStat.S_IXUSR;
+  S_IXGRP = Posix.SysStat.S_IXGRP;
+  S_IXOTH = Posix.SysStat.S_IXOTH;
+
+  CLOCK_MONOTONIC_RAW = 4;
+
+type
+  clockid_t = cint;
+  ptimeval = Posix.SysTime.ptimeval;
+  TTimeVal = timeval;
+  ptimezone = pointer;
+  ptimespec = ^timespec;
+  TTimeSpec = timespec;
+  TStat     = _stat;
+  TUtimBuf  = utimbuf;
+  UtsName   = TUtsName;
+
+function fpgeterrno: cint;
+procedure fpseterrno(err: cint);
+
+function fpsettimeofday(tp: ptimeval; tzp: ptimezone): cint;
+function fpnanosleep(t, rem: ptimespec): cint;
+function GetLocalTimeOffset: integer;
+function TZSeconds: integer;
+function fpuname(var uts: UtsName): cint;
+
+function fpstat(path: PWideChar; var buf: _stat): cint;
+function fplstat(path: PWideChar; var buf: _stat): cint;
+function fpfstat(fd: cint; var buf: _stat): cint;
+function fplseek(fd: cint; off: Int64; orig: cint): Int64;
+function fpftruncate(fd: cint; off: Int64): Int64;
+function fpfsync(fd: cint): cint;
+function fpclose(fd: cint): cint;
+function fputime(path: PWideChar; times: putimbuf): cint;
+function fpaccess(path: PWideChar; mode: cint): cint;
+function fpunlink(path: PWideChar): cint;
+function fpchdir(path: PWideChar): cint;
+function fprename(old, new: PWideChar): cint;
+function fpsymlink(old, new: PWideChar): cint;
+function fprmdir(path: PWideChar): cint;
+function fpchmod(path: PWideChar; mode: cint): cint;
+function fpopen(path: PWideChar; mode: cint): cint;
+function fpopena(path: PAnsiChar; mode: cint): cint;
+function fpwrite(fd: cint; buf: pointer; n: PtrInt): PtrInt;
+function fpread(fd: cint; buf: pointer; n: PtrInt): PtrInt;
+function fpioctl(fd, ndx: cint; data: pointer): cint;
+function fpreadlink(fn, lnk: pointer; max: cint): cint;
+
+function FpS_ISDIR(m: cint): boolean;  inline;
+function FpS_ISSOCK(m: cint): boolean; inline;
+function FpS_ISBLK(m: cint): boolean;  inline;
+function FpS_ISCHR(m: cint): boolean;  inline;
+function FpS_ISFIFO(m: cint): boolean; inline;
+function FpS_ISLNK(m: cint): boolean;  inline;
+
+const
+  POLLIN      = $0001;
+  POLLPRI     = $0002;
+
+type
+  TPollFD = record
+    fd: cint;
+    events: cshort;
+    revents: cshort;
+  end;
+  PPollFD = ^TPollFD;
+
+function fppoll(fds: PPollFD; nfds, timeout: cint): cint; cdecl;
+  external clib name 'poll';
+function fpkill(pid, sig: cint): cint; cdecl;
+  external clib name 'kill';
+function fpfork: TPid; cdecl;
+  external clib name 'fork';
+
+function FpGetuid: TUid;
+function FpGetgid: TGid;
+function FpGetpid: TPid;
+function FpGetppid: TPid;
+function FpSetsid: TPid;
+function fpumask(mode: cint): cint;
+function fpexecve(path: PAnsiChar; argc, envp: pointer): cint;
+procedure fpexit(code: cint);
+function WaitProcess(pid: cint): cint;
+
+function fpmmap(start: pointer; len: PtrUInt; prot, flags, fd: cint; offst: Int64): pointer;
+function fpmunmap(start: pointer; len: PtrUint): cint;
+
+type
+  Dir     = Posix.DirEnt.Dir;
+  pDir    = Posix.DirEnt.pDir;
+  pDirent = Posix.DirEnt.pDirent;
+
+function fpopendir(path: PWideChar): pDir;
+function fpreaddir(var dirp: Dir): pDirent;
+function fpclosedir(var dirp: Dir): cint;
+
+{$ifdef OSLINUX}
+type
+  TStatfs = record
+    fstype, bsize: clong;
+    blocks, bfree, bavail, files, ffree, fsid: culong;
+    namelen, frsize, flags: clong;
+    spare: array[0..3] of clong; { For later use }
+  end;
+
+  TSysInfo = record
+    uptime: clong;                     //* Seconds since boot */
+    loads: array[0..2] of culong;      //* 1, 5, and 15 minute load averages */
+    totalram: culong;                  //* Total usable main memory size */
+    freeram: culong;                   //* Available memory size */
+    sharedram: culong;                 //* Amount of shared memory */
+    bufferram: culong;                 //* Memory used by buffers */
+    totalswap: culong;                 //* Total swap space size */
+    freeswap: culong;                  //* swap space still available */
+    procs: cushort;                    //* Number of current processes */
+    pad: cushort;                      //* explicit padding for m68k */
+    totalhigh: culong;                 //* Total high memory size */
+    freehigh: culong;                  //* Available high memory size */
+    mem_unit: cuint;                   //* Memory unit size in bytes */
+{$ifndef cpu64}
+    { the upper bound of the array below is negative for 64 bit cpus }
+    _f: array[0..19-2*sizeof(clong)-sizeof(cint)] of cChar;  //* Padding: libc5 uses this.. */
+{$endif cpu64}
+  end;
+  PSysInfo = ^TSysInfo;
+
+function SysInfo(Info: PSysinfo): cInt; cdecl;
+  external clib name 'sysinfo';
+{$endif OSLINUX}
+
+function fpstatfs(path: PWideChar; nfo: pointer): cint;
+function IsAtty(fd: cint): cint;
 
 
 { ****************** Network POSIX Operating Systems API for Delphi }
@@ -80,7 +291,371 @@ begin
   result := UnicodeString(Posix.Dlfcn.dlerror);
 end;
 
-{ ****************** Network POSIX Operating Systems API for Delphi }
+function dladdr(Lib: pointer; info: Pdl_info): cint;
+begin
+  result := Posix.Dlfcn.dladdr(PtrUInt(Lib), info^);
+end;
+
+
+procedure InitCriticalSection(var cs);
+begin
+  TRTLCriticalSection(cs) := TRTLCriticalSection.Create;
+end;
+
+procedure DoneCriticalSection(var cs);
+begin
+  TRTLCriticalSection(cs).Free;
+end;
+
+procedure ThreadSwitch;
+begin
+  sched_yield();
+end;
+
+// do-nothing implementation - expect eventfd() on Linux
+function RTLEventCreate: TEvent;
+begin
+  result := TEvent.Create;
+end;
+
+procedure RTLEventDestroy(state: TEvent);
+begin
+  state.Free;
+end;
+
+procedure RTLEventSetEvent(state: TEvent);
+begin
+  state.SetEvent;
+end;
+
+procedure RTLEventResetEvent(state: TEvent);
+begin
+  state.ResetEvent;
+end;
+
+procedure RTLEventWaitFor(state: TEvent);
+begin
+  state.WaitFor(INFINITE);
+end;
+
+procedure RTLEventWaitFor(state: TEvent; timeout: cint);
+begin
+  state.WaitFor(timeout);
+end;
+
+
+function fpgeterrno: cint;
+begin
+  result := Posix.Errno.errno;
+end;
+
+procedure fpseterrno(err: cint);
+begin
+  system.SetLastError(err);
+end;
+
+function fpsettimeofday(tp: ptimeval; tzp: ptimezone): cint;
+begin
+  result := settimeofday(tp, tzp);
+end;
+
+function fpnanosleep(t, rem: ptimespec): cint;
+begin
+  result := nanosleep(t^, pointer(rem));
+end;
+
+function GetLocalTimeOffset: integer;
+begin
+  result := Round(TTimeZone.Local.UtcOffset.TotalSeconds);
+end;
+
+function TZSeconds: integer;
+begin
+  result := -GetLocalTimeOffset * 60; // GetLocalTimeOffset = -TZseconds div 60
+end;
+
+function fpuname(var uts: UtsName): cint;
+begin
+  result := uname(uts);
+end;
+function fpstat(path: PWideChar; var buf: _stat): cint;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := stat(Unicode_ToUtf8(path, tmp), buf);
+  tmp.Done;
+end;
+
+function fplstat(path: PWideChar; var buf: _stat): cint;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := lstat(Unicode_ToUtf8(path, tmp), buf);
+  tmp.Done;
+end;
+
+function fpfstat(fd: cint; var buf: _stat): cint;
+begin
+  result := fstat(fd, buf);
+end;
+
+function fplseek(fd: cint; off: Int64; orig: cint): Int64;
+begin
+  result := {$ifdef ANDROID} lseek64 {$else} lseek {$endif}(fd, off, orig);
+end;
+
+function fpftruncate(fd: cint; off: Int64): Int64;
+begin
+  result := ftruncate(fd, off);
+end;
+
+function fpfsync(fd: cint): cint;
+begin
+  result := fsync(fd);
+end;
+
+function fpclose(fd: cint): cint;
+begin
+  result := __close(fd);
+end;
+
+function fputime(path: PWideChar; times: putimbuf): cint;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := utime(Unicode_ToUtf8(path, tmp), times^);
+  tmp.Done;
+end;
+
+function fpaccess(path: PWideChar; mode: cint): cint;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := access(Unicode_ToUtf8(path, tmp), mode);
+  tmp.Done;
+end;
+
+function fpunlink(path: PWideChar): cint;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := unlink(Unicode_ToUtf8(path, tmp));
+  tmp.Done;
+end;
+
+function fpchdir(path: PWideChar): cint;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := __chdir(Unicode_ToUtf8(path, tmp));
+  tmp.Done;
+end;
+
+function fprename(old, new: PWideChar): cint;
+var
+  o, n: TSynTempBuffer;
+begin
+  result := __rename(Unicode_ToUtf8(old, o), Unicode_ToUtf8(new, n));
+  o.Done;
+  n.Done;
+end;
+
+function fpsymlink(old, new: PWideChar): cint;
+var
+  o, n: TSynTempBuffer;
+begin
+  result := symlink(Unicode_ToUtf8(old, o), Unicode_ToUtf8(new, n));
+  o.Done;
+  n.Done;
+end;
+
+function fprmdir(path: PWideChar): cint;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := __rmdir(Unicode_ToUtf8(path, tmp));
+  tmp.Done;
+end;
+
+function fpchmod(path: PWideChar; mode: cint): cint;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := chmod(Unicode_ToUtf8(path, tmp), mode);
+  tmp.Done;
+end;
+
+function fpopen(path: PWideChar; mode: cint): cint;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := __open(Unicode_ToUtf8(path, tmp), mode);
+  tmp.Done;
+end;
+
+function fpopena(path: PAnsiChar; mode: cint): cint;
+begin
+  result := __open(path, mode);
+end;
+
+function fpwrite(fd: cint; buf: pointer; n: PtrInt): PtrInt;
+begin
+  result := __write(fd, buf, n);
+end;
+
+function fpread(fd: cint; buf: pointer; n: PtrInt): PtrInt;
+begin
+  result := __read(fd, buf, n);
+end;
+
+function fpioctl(fd, ndx: cint; data: pointer): cint;
+begin
+  result := ioctl(fd, ndx, data);
+end;
+
+function fpreadlink(fn, lnk: pointer; max: cint): cint;
+begin
+  result := readlink(fn, lnk, max);
+end;
+
+function FpS_ISDIR(m: cint): boolean;
+begin
+  result := S_ISDIR(m);
+end;
+
+function FpS_ISSOCK(m: cint): boolean;
+begin
+  result := S_ISSOCK(m);
+end;
+
+function FpS_ISBLK(m: cint): boolean;
+begin
+  result := S_ISBLK(m);
+end;
+
+function FpS_ISCHR(m: cint): boolean;
+begin
+  result := S_ISCHR(m);
+end;
+
+function FpS_ISFIFO(m: cint): boolean;
+begin
+  result := S_ISFIFO(m);
+end;
+
+function FpS_ISLNK(m: cint): boolean;
+begin
+  result := S_ISLNK(m);
+end;
+
+
+function FpGetuid: TUid;
+begin
+  result := getuid;
+end;
+
+function FpGetgid: TGid;
+begin
+  result := getgid;
+end;
+
+function FpGetpid: TPid;
+begin
+  result := getpid;
+end;
+
+function FpGetppid: TPid;
+begin
+  result := getppid;
+end;
+
+function FpSetsid: TPid;
+begin
+  result := setsid;
+end;
+
+function fpumask(mode: cint): cint;
+begin
+  result := umask(mode);
+end;
+
+function fpexecve(path: PAnsiChar; argc, envp: pointer): cint;
+begin
+  result := execve(path, argc, envp);
+end;
+
+procedure fpexit(code: cint);
+begin
+  __exit(code);
+end;
+
+function WaitProcess(pid: cint): cint;
+var
+  s: cint;
+begin
+  repeat
+    s := $7f00;
+    result := waitpid(pid, @s, 0);
+    if (result < 0) and
+       (GetLastError = EINTR) then
+      continue;
+    if result = -1 then
+      exit; // error
+  until result <> 0;
+  if WIFEXITED(s) then
+    result := WEXITSTATUS(s)
+  else if result > 0 then
+    result := -result;
+end;
+
+function fpmmap(start: pointer; len: PtrUInt; prot, flags, fd: cint; offst: Int64): pointer;
+begin
+  result := mmap(start, len, prot, flags, fd, offst);
+end;
+
+function fpmunmap(start: pointer; len: PtrUint): cint;
+begin
+  result := munmap(start, len);
+end;
+
+function fpopendir(path: PWideChar): pDir;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := opendir(Unicode_ToUtf8(path, tmp));
+  tmp.Done;
+end;
+
+function fpreaddir(var dirp: Dir): pDirent;
+begin
+  result := readdir(@dirp);
+end;
+
+function fpclosedir(var dirp: Dir): cint;
+begin
+  result := closedir(@dirp);
+end;
+
+function statfs(path: PAnsiChar; nfo: pointer): cint; cdecl;
+  external clib name 'statfs';
+
+function fpstatfs(path: PWideChar; nfo: pointer): cint;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := statfs(Unicode_ToUtf8(path, tmp), nfo);
+  tmp.Done;
+end;
+
+function IsAtty(fd: cint): cint;
+var
+  t: Termios;
+begin
+  result := ord(tcgetattr(fd, t) = 0);
+end;
+
+{****************** Network POSIX Operating Systems API for Delphi }
+
 
 initialization
 
