@@ -7736,11 +7736,7 @@ end;
 
 function GetLastDelim(const FileName: TFileName; OtherDelim: cardinal): PtrInt;
 var
-  {$ifdef UNICODE}
-  p: PWordArray;
-  {$else}
-  p: PByteArray;
-  {$endif UNICODE}
+  p: PCharIntArray;
   c: cardinal;
 begin
   result := length(FileName);

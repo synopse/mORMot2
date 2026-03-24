@@ -513,6 +513,18 @@ type
   PPShortString = ^PShortString;
   PTextFile = ^TextFile;
 
+  {$ifdef UNICODE}
+  CharInt = word;
+  PCharInt = PWord;
+  PTwoCharsInt = PCardinal;
+  PCharIntArray = PWordArray;
+  {$else}
+  CharInt = byte;
+  PCharInt = PByte;
+  PTwoCharsInt = PWord;
+  PCharIntArray = PByteArray;
+  {$endif UNICODE}
+
   PInterface = ^IInterface;
   TInterfaceDynArray = array of IInterface;
   PInterfaceDynArray = ^TInterfaceDynArray;
