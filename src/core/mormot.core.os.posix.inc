@@ -186,6 +186,7 @@ begin
   result := Assigned(ucnv_open);
 end;
 
+{$ifdef FPC}
 function IsWideStringManagerProperlyInstalled: boolean;
 const
   u: WideChar = #$2020; // should convert to dagger glyph #134 in CP 1252
@@ -201,6 +202,7 @@ begin
     result := false;
   end;
 end;
+{$endif FPC}
 
 procedure TIcuLibrary.DoLoad(const LibName: TFileName; Version: string);
 const
@@ -293,10 +295,12 @@ begin
       {$endif OSDARWIN}
       if icui18n = 0 then
       begin
+        {$ifdef FPC}
         // we did not find any ICU installed -> ensure iconv/RTL fallback is ok
         if not IsWideStringManagerProperlyInstalled then
           DisplayFatalError('ICU ' + CPU_ARCH_TEXT + ' is not available',
             'Either install it or put cwstring in your uses clause as fallback');
+        {$endif FPC}
         Done;
         exit;
       end
@@ -363,17 +367,17 @@ function TIcuLibrary.ucnv(codepage: cardinal): pointer;
 var
   cp: TShort16;
   err: SizeInt;
-  {$ifdef CPUINTEL}
+  {$ifdef FPC_INTEL}
   mask: cardinal;
-  {$endif CPUINTEL}
+  {$endif FPC_INTEL}
 begin
   if not IsAvailable then
     exit(nil);
   Unicode_CodePageName(codepage, cp);
-  {$ifdef CPUINTEL}
+  {$ifdef FPC_INTEL}
   mask := GetMXCSR;
   SetMXCSR(mask or $0080 {MM_MaskInvalidOp} or $1000 {MM_MaskPrecision});
-  {$endif CPUINTEL}
+  {$endif FPC_INTEL}
   err := 0;
   result := ucnv_open(@cp[1], err);
   if result <> nil then
@@ -382,9 +386,9 @@ begin
     ucnv_setSubstChars(result, '?', 1, err);
     ucnv_setFallback(result, true);
   end;
-  {$ifdef CPUINTEL}
+  {$ifdef FPC_INTEL}
   SetMXCSR(mask);
-  {$endif CPUINTEL}
+  {$endif FPC_INTEL}
 end;
 
 function TIcuLibrary.SharedUcnv(codepage: cardinal; out ndx: PtrInt): pointer;
@@ -479,6 +483,90 @@ begin
     U1, U2, TCompareOptions(flags));
 end;
 
+function AnsiToWideRTL(CodePage: cardinal; A: PAnsiChar; W: PWideChar;
+  AL, WL: PtrInt): PtrInt;
+var
+  tmp: UnicodeString;
+begin
+  // cwstring as fallback, using iconv on systems where ICU is not available
+  widestringmanager.Ansi2UnicodeMoveProc(A, CodePage, tmp, AL);
+  result := length(tmp);
+  if result > WL then
+    result := WL;
+  MoveFast(pointer(tmp)^, W^, result * 2);
+end;
+
+function WideToAnsiRTL(CodePage: cardinal; W: PWideChar; A: PAnsiChar;
+  WL, AL: PtrInt): PtrInt;
+var
+  tmp: RawByteString;
+begin
+  // cwstring as fallback, using iconv on systems where ICU is not available
+  widestringmanager.Unicode2AnsiMoveProc(W, tmp, CodePage, WL);
+  result := length(tmp);
+  if result > AL then
+    result := AL;
+  MoveFast(pointer(tmp)^, A^, result);
+end;
+
+{$else}
+
+procedure FileClose(F: THandle);
+var
+  res: cint;
+begin
+  repeat
+    res := fpclose(F);
+  until (res <> -1) or
+        (GetLastError <> ESysEINTR);
+end;
+
+function GetCurrentThreadId: TThreadID;
+begin
+  result := Posix.Pthread.GetCurrentThreadID();
+end;
+
+function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer;
+begin
+  result := ord(TMonitor.TryEnter(cs));
+end;
+
+procedure EnterCriticalSection(var cs: TRTLCriticalSection);
+begin
+  TMonitor.Enter(cs);
+end;
+
+procedure LeaveCriticalSection(var cs: TRTLCriticalSection);
+begin
+  TMonitor.Exit(cs);
+end;
+
+function CompareStringRTL(A, B: PWideChar; AL, BL, flags: integer): integer;
+begin
+  result := StrCompW(A, B); // Delphi POSIX is likely to use ICU anyway
+end;
+
+function AnsiToWideRTL(CodePage: cardinal; A: PAnsiChar; W: PWideChar;
+  AL, WL: PtrInt): PtrInt;
+begin
+  result := 0;
+end;
+
+function WideToAnsiRTL(CodePage: cardinal; W: PWideChar; A: PAnsiChar;
+  WL, AL: PtrInt): PtrInt;
+begin
+  result := 0;
+end;
+
+{$endif FPC}
+
+  const
+  // for CompareStringW() Windows-like call in Unicode_CompareString()
+  LOCALE_USER_DEFAULT = $400; // ignored in practice
+  NORM_IGNORECASE = 1 shl ord(coIgnoreCase); // [widestringmanager.coIgnoreCase]
+  U_FOLD_CASE_DEFAULT = 0;
+  U_COMPARE_CODE_POINT_ORDER = $8000;
+
 function CompareStringW(locale, flags: DWORD;
   A: PWideChar; AL: integer; B: PWideChar; BL: integer): PtrInt;
 var
@@ -497,19 +585,6 @@ begin
   else
     result := CompareStringRTL(A, B, AL, BL, flags); // RTL fallback
   inc(result, 2); // caller would make -2 to get regular -1/0/1 comparison values
-end;
-
-function AnsiToWideRTL(CodePage: cardinal; A: PAnsiChar; W: PWideChar;
-  AL, WL: PtrInt): PtrInt;
-var
-  tmp: UnicodeString;
-begin
-  // cwstring as fallback, using iconv on systems where ICU is not available
-  widestringmanager.Ansi2UnicodeMoveProc(A, CodePage, tmp, AL);
-  result := length(tmp);
-  if result > WL then
-    result := WL;
-  MoveFast(pointer(tmp)^, W^, result * 2);
 end;
 
 function Unicode_AnsiToWide(A: PAnsiChar; W: PWideChar;
@@ -549,19 +624,6 @@ begin
   end;
   if result < 0 then
     result := 0;
-end;
-
-function WideToAnsiRTL(CodePage: cardinal; W: PWideChar; A: PAnsiChar;
-  WL, AL: PtrInt): PtrInt;
-var
-  tmp: RawByteString;
-begin
-  // cwstring as fallback, using iconv on systems where ICU is not available
-  widestringmanager.Unicode2AnsiMoveProc(W, tmp, CodePage, WL);
-  result := length(tmp);
-  if result > AL then
-    result := AL;
-  MoveFast(pointer(tmp)^, A^, result);
 end;
 
 function Unicode_WideToAnsi(W: PWideChar; A: PAnsiChar;
