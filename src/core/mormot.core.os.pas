@@ -2444,10 +2444,10 @@ type
 {$endif OSLINUX}
 
 {$ifdef NODIRECTTHREADMANAGER} // try to stabilize MacOS pthreads API calls
-function GetCurrentThreadId: TThreadID; inline;
-function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer; inline;
-procedure EnterCriticalSection(var cs: TRTLCriticalSection); inline;
-procedure LeaveCriticalSection(var cs: TRTLCriticalSection); inline;
+function GetCurrentThreadId: TThreadID; {$ifdef FPC}inline;{$endif}
+function TryEnterCriticalSection(var cs: TRTLCriticalSection): integer; {$ifdef FPC}inline;{$endif}
+procedure EnterCriticalSection(var cs: TRTLCriticalSection); {$ifdef FPC}inline;{$endif}
+procedure LeaveCriticalSection(var cs: TRTLCriticalSection); {$ifdef FPC}inline;{$endif}
 {$else}
 
 /// returns the unique ID of the current running thread
@@ -2514,15 +2514,15 @@ procedure GetLocalTime(out result: TSystemTime);
 /// compatibility function, wrapping Win32 API file truncate at current position
 // or FpFtruncate() on POSIX
 procedure SetEndOfFile(F: THandle);
-  {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
+  {$ifdef OSWINDOWS} stdcall; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 
 /// compatibility function, wrapping Win32 API file flush to disk or FpFsync()
 procedure FlushFileBuffers(F: THandle);
-  {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
+  {$ifdef OSWINDOWS} stdcall; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 
 /// compatibility function, wrapping Win32 API last error code or fpgeterrno
 function GetLastError: integer;
-  {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
+  {$ifdef OSWINDOWS} stdcall; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 
 /// check if the last error reporting by the system is a file access violation
 // - call GetLastError is no ErrorCode is supplied
@@ -2530,7 +2530,7 @@ function IsSharedViolation(ErrorCode: integer = 0): boolean;
 
 /// compatibility function, wrapping Win32 API last error code
 procedure SetLastError(error: integer);
-  {$ifdef OSWINDOWS} stdcall; {$else} inline; {$endif}
+  {$ifdef OSWINDOWS} stdcall; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 
 /// returns a given error code as plain text
 // - redirects to WinApiErrorShort(error, nil) on Windows, or StrError() on POSIX
@@ -3714,7 +3714,7 @@ const HasConsole = true; // assume POSIX has always a console somewhere
 /// POSIX only: true if StdOut has the TTY flag and env has a known TERM
 // - equals false if the console does not support colors, e.g. piped to a file
 // or from the Lazarus debugger
-function StdOutIsTTY: boolean; inline;
+function StdOutIsTTY: boolean; {$ifdef FPC} inline; {$endif}
 {$endif OSWINDOWS}
 
 /// change the console text writing color
@@ -4686,19 +4686,19 @@ type
     destructor Destroy; override;
     /// ignore any pending events, so that WaitFor will be set on next SetEvent
     procedure ResetEvent;
-      {$ifdef OSPOSIX} inline; {$endif}
+      {$ifdef FPCPOSIX} inline; {$endif}
     /// trigger any pending event, releasing the WaitFor/WaitForEver methods
     procedure SetEvent;
-      {$ifdef OSPOSIX} inline; {$endif}
+      {$ifdef FPCPOSIX} inline; {$endif}
     /// wait until SetEvent is called from another thread, with a maximum time
     // - returns true if was signaled by SetEvent, or false on timeout
     // - WARNING: you should wait from a single thread at once
     function WaitFor(TimeoutMS: integer): boolean;
-      {$ifdef OSPOSIX} inline; {$endif}
+      {$ifdef FPCPOSIX} inline; {$endif}
     /// wait until SetEvent is called from another thread, with no maximum time
     // - returns true if was signaled by SetEvent, or false if aborted/destroyed
     function WaitForEver: boolean;
-      {$ifdef OSPOSIX} inline; {$endif}
+      {$ifdef FPCPOSIX} inline; {$endif}
     /// wait until SetEvent is called, calling CheckSynchronize() on main thread
     // - returns true if was signaled by SetEvent, or false on timeout
     function WaitForSafe(TimeoutMS: integer): boolean;
