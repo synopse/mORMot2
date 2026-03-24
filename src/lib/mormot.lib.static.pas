@@ -145,6 +145,14 @@ procedure SetLibcNumericLocale;
 
 { ********************** Cross-Platform FPU Exceptions Masking }
 
+{$undef FPUMASK32}
+{$ifdef FPC_INTEL}
+  {$define FPUMASK32}
+{$endif FPC_INTEL}
+{$ifdef WINTELDELPHI}
+  {$define FPUMASK32}
+{$endif WINTELDELPHI}
+
 type
   /// define SetFpuFlags/ResetFpuFlags context
   // - external libraries coded in C are likely to disable FPU exceptions,
@@ -155,7 +163,8 @@ type
     ffLibrary,
     ffPascal);
 
-{$ifdef CPUINTEL}
+{$ifdef FPUMASK32}
+  TFpuFlagsInt = cardinal;
 
 var
   /// direct efficient x87 / SSE2 FPU flags for rounding and exceptions
@@ -168,10 +177,12 @@ var
 
 {$else}
 
-{$ifdef WINARMDELPHI}
-type
+  {$ifdef ISDELPHI} // Delphi POSIX or WinARM
+  TFpuFlagsInt = byte;
   TFPUExceptionMask = TArithmeticExceptionMask; // undefined in math.pas on LLVM
-{$endif WINARMDELPHI}
+  {$else}
+  TFpuFlagsInt = cardinal;
+  {$endif ISDELPHI}
 
 var
   /// on non Intel/AMD, use slower but cross-platform RTL Math unit
@@ -182,7 +193,7 @@ var
     // ffPascal
     [exDenormalized, exUnderflow, exPrecision]);
 
-{$endif CPUINTEL}
+{$endif FPUMASK32}
 
 /// mask/unmask all FPU exceptions, according to the running CPU
 // - returns the previous exception flags, for ResetFpuFlags() call
@@ -2092,29 +2103,29 @@ const
 function _GetFlags: cardinal;
   {$ifdef HASINLINE} inline; {$endif}
 begin
-  {$ifdef CPUINTEL}
+  {$ifdef FPUMASK32}
     {$ifdef CPU64}
     result := GetMXCSR;
     {$else}
     result := Get8087CW;
     {$endif CPU64}
   {$else}
-    result := {$ifdef WINARMDELPHI}byte{$else}cardinal{$endif}(GetExceptionMask);
-  {$endif CPUINTEL}
+    result := TFpuFlagsInt(GetExceptionMask);
+  {$endif FPUMASK32}
 end;
 
 procedure _SetFlags(flags: cardinal);
   {$ifdef HASINLINE} inline; {$endif}
 begin
-  {$ifdef CPUINTEL}
+  {$ifdef FPUMASK32}
     {$ifdef CPU64}
     SetMXCSR(flags);
     {$else}
     Set8087CW(flags);
     {$endif CPU64}
   {$else}
-    SetExceptionMask(TFPUExceptionMask({$ifdef WINARMDELPHI}byte{$endif}(flags)));
-  {$endif CPUINTEL}
+    SetExceptionMask(TFPUExceptionMask(TFpuFlagsInt(flags)));
+  {$endif FPUMASK32}
 end;
 
 function SetFpuFlags(flags: TFpuFlags): cardinal;
@@ -2122,7 +2133,7 @@ var
   new: cardinal;
 begin
   result := _GetFlags;
-  new := {$ifdef WINARMDELPHI}byte{$else}cardinal{$endif}(_FPUFLAGS[flags]);
+  new := TFpuFlagsInt(_FPUFLAGS[flags]);
   if new <> result then
     _SetFlags(new)
   else
