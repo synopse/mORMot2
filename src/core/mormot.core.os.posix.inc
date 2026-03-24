@@ -47,6 +47,8 @@ end;
 {$else}
 
 uses
+   Posix.Pthread,
+   Posix.SysMman,
    mormot.core.os.delphi;
 
 {$ifndef UNICODE}
@@ -986,7 +988,7 @@ var
 
 function UnixMSTimeUtc: TUnixMSTime;
 var
-  r: timespec;
+  r: TTimeSpec;
 begin
   clock_gettime(CLOCK_REALTIME_FAST, @r); // likely = CLOCK_REALTIME_COARSE
   // convert from nanoseconds into milliseconds
@@ -996,7 +998,7 @@ end;
 
 function UnixTimeUtc: TUnixTime;
 var
-  r: timespec;
+  r: TTimeSpec;
 begin
   clock_gettime(CLOCK_REALTIME_FAST, @r);
   result := r.tv_sec;
@@ -1014,7 +1016,7 @@ end;
 
 procedure GetSystemTime(out result: TSystemTime);
 var
-  r: timespec;
+  r: TTimeSpec;
 begin
   // faster than fpgettimeofday() which makes a syscall and don't use vDSO
   clock_gettime(CLOCK_REALTIME_FAST, @r);
@@ -1026,7 +1028,7 @@ end;
 
 procedure GetLocalTime(out result: TSystemTime);
 var
-  r: timespec;
+  r: TTimeSpec;
 begin
   // faster than fpgettimeofday() which makes a syscall and don't use vDSO
   clock_gettime(CLOCK_REALTIME_FAST, @r);
@@ -1037,7 +1039,7 @@ end;
 
 function GetTickCount64: Int64;
 var
-  tp: timespec;
+  tp: TTimeSpec;
 begin
   clock_gettime(CLOCK_MONOTONIC_FAST, @tp); // likely = CLOCK_MONOTONIC_COARSE
   // convert from nanoseconds into milliseconds
@@ -1047,7 +1049,7 @@ end;
 
 function GetTickSec: cardinal;
 var
-  tp: timespec;
+  tp: TTimeSpec;
 begin
   clock_gettime(CLOCK_MONOTONIC_FAST, @tp); // likely = CLOCK_MONOTONIC_COARSE
   result := tp.tv_sec; // no division needed
@@ -1055,7 +1057,7 @@ end;
 
 function GetUptimeSec: cardinal;
 var
-  tp: timespec;
+  tp: TTimeSpec;
 begin
   tp.tv_sec := 0;
   clock_gettime(CLOCK_UPTIME, @tp);
@@ -1066,7 +1068,7 @@ end;
 
 function SetSystemTime(utctime: TUnixTime): boolean;
 var
-  u: timeval;
+  u: TTimeVal;
 begin
   u.tv_sec := utctime;
   u.tv_usec := 0;
