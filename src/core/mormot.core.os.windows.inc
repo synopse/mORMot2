@@ -4409,7 +4409,7 @@ begin
     [path, arg1, arg2, arg3, arg4, arg5]), waitfor, env, options);
 end;
 
-function RunCommand(const cmd: TFileName; waitfor: boolean; const env: TFileName;
+function RunCommand(const cmd: TRunArg; waitfor: boolean; const env: TRunArg;
   options: TRunOptions; processhandle: PHandle): integer;
 var
   processinfo: TProcessInformation;

@@ -3884,6 +3884,7 @@ end;
 {$else}
 function RetrieveMemoryManagerInfo: RawUtf8;
 begin
+  {$ifdef OSWINDOWS}
   // standard Delphi memory manager
   with GetHeapStatus do
     if TotalAddrSpace <> 0 then
@@ -3895,6 +3896,7 @@ begin
          KBNoSpace(FreeBig),        KBNoSpace(Unused),
          KBNoSpace(Overhead)], result)
     else
+  {$endif OSWINDOWS}
       result := '';
 end;
 {$endif FPC}
@@ -5134,7 +5136,7 @@ begin
   end;
 end;
 
-{$ifdef ISDELPHI} // specific to Delphi: fast get the caller method name
+{$ifdef WINTELDELPHI} // specific to Delphi: fast get the caller method name
 
 {$STACKFRAMES ON} // we need a stack frame for ebp/RtlCaptureStackBackTrace
 {$ifdef CPU64}
@@ -5183,7 +5185,7 @@ begin
   EnterLocal(result, aInstance, aMethodName);
 end;
 
-{$endif ISDELPHI}
+{$endif WINTELDELPHI}
 
 class function TSynLog.Enter(TextFmt: PUtf8Char;
   const TextArgs: array of const; aInstance: TObject): ISynLog;
@@ -6290,7 +6292,7 @@ end;
 {$else not FPC}
 
 procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
-
+{$ifdef OSWINDOWS}
 {$ifdef CPU64}
 
   procedure AddStackManual(Stack: PPtrUInt);
@@ -6367,12 +6369,12 @@ procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
 {$endif CPU64}
 
 var
-  n, i, logged: integer;
   {$ifndef NOEXCEPTIONINTERCEPT}
   bak: TSynLogThreadInfoFlags; // paranoid precaution
   threadflags: ^TSynLogThreadInfoFlags;
   {$endif NOEXCEPTIONINTERCEPT}
   {$ifdef OSWINDOWS}
+  n, i, logged: integer;
   BackTrace: array[byte] of PtrUInt;
   {$endif OSWINDOWS}
 begin
@@ -6409,6 +6411,10 @@ begin
   {$endif NOEXCEPTIONINTERCEPT}
 end;
 
+{$else}
+begin // not implemented yet on Delphi POSIX
+end;
+{$endif OSWINDOWS}
 {$endif FPC}
 
 

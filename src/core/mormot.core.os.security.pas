@@ -6941,7 +6941,7 @@ begin
         ]);
     scsCA:
       begin
-        files := StringFromFolders([
+        files := TRawUtf8DynArray(StringFromFolders([
           {$ifdef OSLINUXANDROID}
             '/etc/ssl/certs',               // Debian/SLES10/SLES11
             '/etc/pki/tls/certs',           // Fedora/RHEL
@@ -6951,7 +6951,7 @@ begin
             '/usr/local/share/certs', // FreeBSD
             '/etc/openssl/certs'      // NetBSD
           {$endif OSLINUXANDROID}
-          ]);
+          ]));
         for f := 0 to length(files) - 1 do
           if (PosEx('-----BEGIN', files[f]) <> 0) and
              IsAnsiCompatible(files[f]) and
