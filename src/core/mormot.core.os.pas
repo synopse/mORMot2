@@ -5695,10 +5695,15 @@ function RunUntilSigTerminatedPidFile: TFileName;
 /// check the local .pid file to return either ssRunning or ssStopped
 function RunUntilSigTerminatedState: TServiceState;
 
+{$ifdef FPC}
 var
   /// once SynDaemonIntercept has been called, this global variable
   // contains the SIGQUIT / SIGTERM / SIGINT received signal
   SynDaemonTerminated: integer;
+{$else}
+/// compatibility function for Delphi POSIX - only SIGINT/SIGQUIT are tracked
+function SynDaemonTerminated: integer;
+{$endif FPC}
 
 /// enable low-level interception of executable stop signals
 // - any SIGQUIT / SIGTERM / SIGINT signal will set appropriately the global

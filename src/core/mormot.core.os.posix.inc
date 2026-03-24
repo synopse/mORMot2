@@ -4385,6 +4385,7 @@ end;
 var
   SynDaemonInterceptLog: TSynLogProc;
 
+{$ifdef FPC}
 procedure DoShutDown(Sig: integer; Info: PSigInfo; Context: PSigContext); cdecl;
 var
   level: TSynLogLevel;
@@ -4447,13 +4448,12 @@ begin
   end;
 end;
 
-// TO INVESTIGATE: we may use per-thread signal masking instead
-// http://www.microhowto.info/howto/ignore_sigpipe_without_affecting_other_threads_in_a_process.html
-
 procedure DoNothing(Sig: integer; Info: PSigInfo; Context: PSigContext); cdecl;
 begin
 end;
 
+// TO INVESTIGATE: we may use per-thread signal masking instead
+// http://www.microhowto.info/howto/ignore_sigpipe_without_affecting_other_threads_in_a_process.html
 procedure SigPipeIntercept;
 var
   sa: SigactionRec;
@@ -4472,6 +4472,31 @@ begin
     OSSafe.UnLock;
   end;
 end;
+
+{$else} // Delphi for POSIX hook its own signal handler in System.SysUtils
+
+procedure SynDaemonIntercept(const onlog: TSynLogProc);
+begin
+  DeferUserInterrupts := true; // global SysUtils flag
+end;
+
+function SynDaemonTerminated: integer;
+begin
+  result := 0;
+  if not DeferUserInterrupts then
+    exit;
+  if SIGINTIssued then
+    result := SIGINT
+  else if SIGQUITIssued then
+    result := SIGQUIT;
+end;
+
+procedure SigPipeIntercept;
+begin
+  // do nothing by now
+end;
+
+{$endif FPC}
 
 type
   TPasswd = record
@@ -4548,7 +4573,7 @@ begin
   else
   begin
     if crc = 0 then // allow several executable instances in several folders
-      crc := crc32cHash(Executable.ProgramFilePath);
+      crc := crc32cHash(RawUtf8(Executable.ProgramFilePath));
     result := Format('%s.%s%x.pid', [result, Executable.ProgramName, crc]);
   end;
   RunUntilSigTerminatedPidFileName := result;
