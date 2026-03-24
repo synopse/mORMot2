@@ -1127,7 +1127,7 @@ function pthread_mutex_unlock(mutex: pointer): integer;      cdecl; external;
 {$endif OSDARWIN}
 {$endif OSPTHREADSSTATIC}
 
-{$ifdef OSLINUX}
+{$ifdef FPCLINUX}
 procedure _SetShell(var a, b: RawUtf8);
 var
   pw: PPasswd; // from the pwd.pp unit
@@ -1156,7 +1156,7 @@ function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
 begin
   result := not IsZero(@cs, SizeOf(cs));
 end;
-{$endif OSLINUX}
+{$endif FPCLINUX}
 
 {$ifdef HAS_OSPTHREADS}
 
@@ -1820,6 +1820,7 @@ procedure GetErrorShortVar(error: integer; var dest: ShortString);
 begin
   OsErrorShort(error, @dest, {noint=}true); // known 'E###' on Linux + BSD
   if dest[0] = #0 then
+  {$ifdef FPC}
     dest := StrError(error) // FPC RTL returns its plain text as shortstring
   else
   begin
@@ -1827,6 +1828,9 @@ begin
     AppendShort(StrError(error), dest); // e.g. 'ECHILD (No child processes)'
     AppendShortCharSafe(')', dest);
   end;
+  {$else}
+    dest := 'Unknown error';
+  {$endif FPC}
 end;
 
 function TMemoryMap.DoMap(aCustomOffset: Int64): boolean;
@@ -1918,7 +1922,7 @@ var
 {$undef HASEVENTFD}
 {$undef HASGETRANDOM}
 // eventfd + getrandom syscalls are validated on Linux i386, x86_64 and aarch64
-{$ifdef OSLINUX}
+{$ifdef FPCLINUX}
   {$ifdef CPUX64}
     {$define HASEVENTFD}
     {$define HASGETRANDOM}
@@ -1931,7 +1935,7 @@ var
     {$define HASEVENTFD} 
     {$define HASGETRANDOM}
   {$endif CPUAARCH64}
-{$endif OSLINUX}
+{$endif FPCLINUX}
 
 
 { TSynEvent }
@@ -2029,6 +2033,7 @@ begin
   result := FpGetpid;
 end;
 
+{$ifdef FPC}
 function GetFileOpenLimit(hard: boolean): integer;
 var
   limit: TRLIMIT;
@@ -2061,7 +2066,17 @@ begin
   if fpsetrlimit(RLIMIT_NOFILE, @limit) = 0 then
     result := GetFileOpenLimit(hard);
 end;
+{$else}
+function GetFileOpenLimit(hard: boolean): integer;
+begin
+  result := -1; // RLIMIT API is not published in Delphi POSIX
+end;
 
+function SetFileOpenLimit(max: integer; hard: boolean): integer;
+begin
+  result := -1;
+end;
+{$endif FPC}
 
 {$ifdef OSLINUXANDROID}
 // https://www.cyberciti.biz/tips/tell-what-filesystems-linux-kernel-can-handle.html
@@ -2223,6 +2238,7 @@ begin
   end;
 end;
 
+{$ifdef HASGETRANDOM} // validated on Linux i386, x86_64 and aarch64
 const
   PR_SET_NAME = 15; // see prctl.h
 
@@ -2238,7 +2254,6 @@ begin
             (do_syscall(syscall_nr_prctl, PR_SET_NAME, TSysParam(@trunc)) = 0);
 end;
 
-{$ifdef HASGETRANDOM} // validated on Linux i386, x86_64 and aarch64
 function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
 begin
   result := false;
@@ -2253,6 +2268,11 @@ begin
       include(_F0, fLinuxGetRandomFailed); // won't retry on syscall failure
 end;
 {$else}
+function LinuxSetProcessName(const NewName: RawUtf8): boolean;
+begin
+  result := false;
+end;
+
 function LinuxGetRandom(buf: pointer; len: PtrInt): boolean;
 begin
   result := false;
@@ -2909,6 +2929,7 @@ begin
     DynArrayFakeLength(result, n);
 end;
 
+{$ifdef FPC}
 var
   argv0len: PtrInt;
 
@@ -2920,11 +2941,11 @@ begin
     exit;
   if argv0len = 0 then
     argv0len := StrLen(argv[0]); // retrieve once to keep the max possible size
-  {$ifdef OSLINUX} // untested (probably unsafe?) on Android
+  {$ifdef FPCLINUX} // untested (probably unsafe?) on Android
   if LinuxSetProcessName(Name) then // first try with the prctl syscall
     result := true
   else
-  {$endif OSLINUX}
+  {$endif FPCLINUX}
   try
     MoveFast(pointer(Name)^, argv[0]^, MinPtrInt(argv0len, length(Name)) + 1);
     result := true;
@@ -2932,6 +2953,12 @@ begin
     result := false; // catch any GPF
   end;
 end;
+{$else}
+function PosixSetProcessName(const Name: RawUtf8): boolean;
+begin
+  result := false;
+end;
+{$endif FPC}
 
 {$ifdef OSBSDDARWIN}
 
@@ -2969,7 +2996,7 @@ end;
 function _IsDebuggerPresent: boolean;
 begin
   // rough detection for FPC on BSD (not yet working because of EnumProcessName)
-  result := PosEx('lazarus', LowerCase(EnumProcessName(FpGetppid))) <> 0;
+  result := PosEx('lazarus', LowerU(EnumProcessName(FpGetppid))) <> 0;
 end;
 
 function GetParentProcess(PID: cardinal): cardinal;
@@ -3255,7 +3282,7 @@ end;
 procedure XorOSEntropy(var e: THash512Rec);
 var
   mem: TMemoryInfo;
-  tp: timespec         absolute mem;          // in nanoseconds resolution
+  tp: TTimeSpec        absolute mem;          // in nanoseconds resolution
   avg: TLoadAvg        absolute mem.memtotal; // array[0..2] of double
   times: TBsdProcTimes absolute mem.vmtotal;  // array[0..4] of clong
 begin
