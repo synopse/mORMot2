@@ -150,9 +150,9 @@
     PUREMORMOT2
 
   FPC only:
-    FPC FPC_HAS_CONSTREF FPC_32 FPC_64 FPC_X86 FPC_CPUX64 FPC_PIC
+    FPC FPC_HAS_CONSTREF FPC_32 FPC_64 FPC_X86 FPC_CPUX64 FPC_PIC FPC_INTEL
     FPC_REQUIRES_PROPER_ALIGNMENT HASINLINEWINAPI HASDIRECTTYPEINFO
-    FPCBSD FPCDARWIN FPCLINUX FPCANDROID
+    FPCPOSIX FPCBSD FPCDARWIN FPCLINUX FPCANDROID
     FPC_X64MM
 
   Delphi only:
@@ -360,6 +360,7 @@
     // 64-bit Architecture
     {$define FPC_64}
     {$ifdef CPUX64}
+      {$define FPC_INTEL}
       {$ASMMODE INTEL}         // as Delphi requires
       {$define CPUINTEL}
       {$define ASMINTEL}
@@ -392,6 +393,7 @@
     // 32-bit Architecture
     {$define FPC_32}
     {$ifdef CPUX86}
+      {$define FPC_INTEL}
       {$ASMMODE INTEL}         // as Delphi requires
       {$define ASMINTEL}
       {$define ASMX86}
@@ -776,6 +778,7 @@
   {$else}
     {$define POSIXDELPHI}
     {$define NOASMBLOCK}    // no "asm .. end" blocks support by LLVM compilers
+    {$define NOEXCEPTIONINTERCEPT}  // TODO: interception for Delphi POSIX
   {$endif OSWINDOWS}
   {$ifdef CPU32}
     {$define HASSLOWMUL64}  // Delphi 32-bit has slow 64-bit mul: favor shl
