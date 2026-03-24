@@ -39,6 +39,11 @@ uses
   'mORMot assumes no UNICODE on POSIX FPC, i.e. as TFileName = PChar = PUtf8Char'
 {$endif UNICODE}
 
+function FpOpenA(path: PAnsiChar; mode: cint): cint; inline;
+begin
+  result := FpOpen(path, mode);
+end;
+
 {$else}
 
 uses
@@ -1511,28 +1516,25 @@ begin
 end;
 
 procedure StatTimeMS(const st: TStat; out time: TUnixMSTime); inline;
-begin
-  time := QWord(st.st_mtime) * MilliSecsPerSec + // no local conversion needed
-          // include milliseconds information
-          {$ifdef OSLINUXANDROID}
-          st.st_mtime_nsec div NanoSecsPerMilliSec;
-          {$else}
-          st.st_mtimensec div NanoSecsPerMilliSec;
-          {$endif OSLINUXANDROID}
+begin // no local conversion needed
+  time := QWord(st.st_mtime) * MilliSecsPerSec +
+          QWord(st. {$ifdef POSIXDELPHI} st_mtimensec {$else}
+            {$ifdef OSLINUXANDROID} st_mtime_nsec {$else} st_mtimensec
+            {$endif} {$endif}) div NanoSecsPerMilliSec;
 end;
 
-function StatFileAttr(const fn: RawUtf8; const st: TStat): integer;
+function StatFileAttr(const fn: TFileName; const st: TStat): integer;
 var
-  p: PByteArray;
+  p: PCharIntArray;
 begin
   result := faArchive; // as LinuxToWinAttr() in fpcsrc/rtl/unix/sysutils.pp
-  p := @PByteArray(fn)[GetLastDelimU(fn)]; // no memory allocation
+  p := @PCharIntArray(fn)[GetLastDelim(fn)]; // no memory allocation
   if FpS_ISDIR(st.st_mode) then
   begin
     result := result or faDirectory;
     if (p[0] = ord('.')) and
        (p[1] <> 0) and
-       (PWord(@p[1])^ <> ord('.')) then
+       (PTwoCharsInt(@p[1])^ <> ord('.')) then
       result := result or faHidden{%H-}; // '.' and '..' are not hidden
   end
   else if p[0] = ord('.') then
@@ -1584,7 +1586,7 @@ end;
 function FileInfoByHandle(aFileHandle: THandle; FileId, FileSize: PInt64;
   LastWriteAccess, FileCreateDateTime: PUnixMSTime): boolean;
 var
-  mtime, atime, ctime: Int64;
+  mtime, atime, ctime: TUnixMSTime;
   lp: TStat;
   r: integer;
 begin
@@ -1611,8 +1613,8 @@ begin
     lp.st_ctime := lp.st_birthtime;
   {$endif OSOPENBSD}
   // ignore nanoseconds/Milliseconds for FileCreateDateTime
-  ctime := Int64(lp.st_ctime) * MilliSecsPerSec;
-  atime := Int64(lp.st_atime) * MilliSecsPerSec;
+  ctime := TUnixMSTime(lp.st_ctime) * MilliSecsPerSec;
+  atime := TUnixMSTime(lp.st_atime) * MilliSecsPerSec;
   if mtime <> 0 then
     if (ctime = 0) or
        (ctime > mtime) then
@@ -1764,8 +1766,13 @@ begin
 end;
 
 procedure SetEndOfFile(F: THandle);
+var
+  res: cint;
 begin
-  FpFtruncate(F, FPLseek(F, 0, SEEK_CUR));
+  repeat
+    res := fpftruncate(F, FPLseek(F, 0, SEEK_CUR));
+  until (res <> -1) or
+        (fpgeterrno <> ESysEINTR);
 end;
 
 procedure FlushFileBuffers(F: THandle);
@@ -2412,7 +2419,7 @@ begin
       if UnixKeyPending then
         repeat
           c := #0;
-          if FpRead(StdInputHandle, c, 1) <> 1 then
+          if FpRead(StdInputHandle, @c, 1) <> 1 then
             break;
           if c in [#10, #13] then
             exit;

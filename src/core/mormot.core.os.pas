@@ -2057,6 +2057,11 @@ function SetFileOpenLimit(max: integer; hard: boolean = false): integer;
 /// read /proc/pid/status to ensure pid is of a real process, not a thread
 function IsValidPid(pid: cardinal): boolean;
 
+{$ifdef POSIXDELPHI}
+//  why did Delphi define these slow RTL function as inlined ?
+procedure FileClose(F: THandle);
+{$endif POSIXDELPHI}
+
 type
   /// Low-level access to the ICU library installed on this POSIX system
   // - "International Components for Unicode" (ICU) is an open-source set of
