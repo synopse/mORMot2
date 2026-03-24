@@ -2745,9 +2745,10 @@ const
   UnixFileTimeDelta = 116444736000000000;
 
 /// the number of minutes bias in respect to UTC/GMT date/time
-// - as retrieved via -GetLocalTimeOffset() at startup, so may not be accurate
-// after a time shift during the process execution - but any long-running
-// process (like a service) should use UTC timestamps only
+// - on FPC, retrieved as -GetLocalTimeOffset() at startup, so may not be
+// accurate after a time shift during the process execution - but any
+// long-running process (like a service) should use UTC timestamps only
+// - on Delphi POSIX, System.DateUtils TTimeZone is used
 var
   TimeZoneLocalBias: integer;
 
@@ -3217,6 +3218,7 @@ function ExtractExt(const FileName: TFileName; WithoutDot: boolean = false): TFi
 
 // defined here for proper ExtractExtP() inlining
 function GetLastDelimU(const FileName: RawUtf8; OtherDelim: AnsiChar = #0): PtrInt;
+function GetLastDelim(const FileName: TFileName; OtherDelim: cardinal = 0): PtrInt;
 
 /// extract an extension from a file name like ExtractFileExt function
 // - but cross-platform, i.e. detect both '\' and '/' on all platforms
