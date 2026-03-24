@@ -2998,6 +2998,32 @@ end;
 
 {$ifdef OSPOSIX}
 
+procedure FileNamesU(const Directory, Mask: TFileName; Options: TFindFilesOptions;
+  const IgnoreFileName: TFileName; var Files: TRawUtf8DynArray);
+var
+  m: TMatchDynArray;
+  cb: TOnPosixFileName;
+begin
+  // use much faster PosixFileNames() low-level function over TMatchDynArray
+  cb := nil;
+  if Mask <> FILES_ALL then
+  begin
+    cb := @MatchAnyP; // exact same signature than TOnPosixFileName callback
+    SetMatchs(RawUtf8(Mask), {caseinsens=}false, m, ';');
+  end;
+  Files := PosixFileNames(Directory, ffoSubFolder in Options, cb, pointer(m),
+    ffoExcludesDir in Options, ffoIncludeHiddenFiles in Options,
+    ffoIncludeFolder in Options);
+  if Files = nil then
+    exit;
+  if IgnoreFileName <> '' then
+    DeleteRawUtf8(Files, FindRawUtf8(Files, RawUtf8(IgnoreFileName)));
+  if ffoSortByName in Options then
+    QuickSortRawUtf8(Files, length(Files), nil, StrCompPosixFileName)
+  else if ffoSortByFullName in Options then
+    QuickSortRawUtf8(Files, length(Files));
+end;
+
 function FindFiles(const Directory, Mask, IgnoreFileName: TFileName;
   Options: TFindFilesOptions): TFindFilesDynArray;
 var
@@ -3013,7 +3039,7 @@ begin
   if not DirectoryExists(dir) then
     exit;
   // call PosixFileNames() i.e. efficient getdents/getdents64 syscall
-  names := FileNames(dir, Mask, Options, IgnoreFileName);
+  FileNamesU(dir, Mask, Options, IgnoreFileName, names);
   n := length(names);
   if n = 0 then
     exit;
@@ -3026,7 +3052,11 @@ begin
   d := pointer(result);
   for i := 0 to n - 1 do
   begin
+    {$ifdef UNICODE}
+    Utf8ToStringVar(names[i], string(d^.Name));
+    {$else}
     d^.Name := names[i];
+    {$endif UNICODE}
     if FileInfoByName(dir + d^.Name, d^.Size, ts, @d^.Attr) then // = fpStat()
     begin
       d^.Timestamp := UnixMSTimeToDateTime(ts + tolocal);
@@ -3044,29 +3074,21 @@ end;
 
 function FileNames(const Directory, Mask: TFileName; Options: TFindFilesOptions;
   const IgnoreFileName: TFileName): TFileNameDynArray;
+{$ifdef UNICODE}
 var
-  m: TMatchDynArray;
-  cb: TOnPosixFileName;
+  i: PtrInt;
+  u: TRawUtf8DynArray;
 begin
-  // use much faster PosixFileNames() low-level function over TMatchDynArray
-  cb := nil;
-  if Mask <> FILES_ALL then
-  begin
-    cb := @MatchAnyP; // exact same signature than TOnPosixFileName callback
-    SetMatchs(Mask, {caseinsens=}false, m, ';');
-  end;
-  result := PosixFileNames(Directory, ffoSubFolder in Options, cb, pointer(m),
-    ffoExcludesDir in Options, ffoIncludeHiddenFiles in Options,
-    ffoIncludeFolder in Options);
-  if result = nil then
-    exit;
-  if IgnoreFileName <> '' then
-    DeleteRawUtf8(result, FindRawUtf8(result, IgnoreFileName));
-  if ffoSortByName in Options then
-    QuickSortRawUtf8(result, length(result), nil, StrCompPosixFileName)
-  else if ffoSortByFullName in Options then
-    QuickSortRawUtf8(result, length(result));
+  FileNamesU(Directory, Mask, Options, IgnoreFileName, u);
+  SetLength(result, length(u));
+  for i := 0 to length(u) - 1 do
+    Utf8ToFileName(u[i], result[i]);
 end;
+{$else}
+begin
+  FileNamesU(Directory, Mask, Options, IgnoreFileName, result);
+end;
+{$endif UNICODE}
 
 {$else} // Windows can just call FindFiles() and RTL FindFirst/FindNext
 
