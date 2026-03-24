@@ -61,6 +61,23 @@ function _GetNextSpaced(var P: PAnsiChar): RawUtf8; forward;
 function _GetNextCardinal(var P: PAnsiChar): PtrUInt; forward;
 function PosExtString(Str: PChar): PChar; forward; // to extract extension
 
+procedure LowerSelf(p: PAnsiChar);
+begin
+  if p <> nil then
+    repeat
+      if (p^ >= 'A') and
+         (p^ <= 'Z') then
+        inc(p^, 32);
+      inc(p);
+    until p^ = #0;
+end;
+
+function LowerU(const u: RawUtf8): RawUtf8;
+begin
+  FastSetString(result, pointer(u), length(u));
+  LowerSelf(pointer(result));
+end;
+
 procedure WrDeb(const t: ShortString; const p; l: PtrInt); // internal use below
 var
   tmp: RawUtf8;
@@ -4883,10 +4900,10 @@ var
   distrib: TOperatingSystem;
   rel, dist: RawUtf8;
 begin
-  rel := UpperCase(release);
+  rel := LowerU(release);
   for distrib := osArch to pred(osAndroid) do
   begin
-    dist := UpperCase(OS_NAME[distrib]);
+    dist := LowerU(OS_NAME[distrib]);
     if PosEx(dist, rel) > 0 then
     begin
       OS_KIND := distrib;
@@ -5095,7 +5112,7 @@ var
   i: PtrInt;
   {$endif CPUARM3264}
   tpfail: integer;
-  tp: array[0 .. 1{$ifdef OSLINUX} + 2{$endif}] of timespec;
+  tp: array[0 .. 1{$ifdef OSLINUX} + 2{$endif}] of TTimeSpec;
   {$endif OSDARWIN}
   {$ifdef OSBSDDARWIN}
   temp1, temp2: ShortString;
@@ -5104,7 +5121,7 @@ var
   release: RawUtf8;
   procid, phyid, phyndx, cacheshr, threads: integer;
   phy: TIntegerDynArray;
-  auxv: PPtrUInt;
+  auxv: PPtrUIntArray;
   {$ifdef OSLINUX}
   dist: RawUtf8;
   SR: TSearchRec;
@@ -5148,7 +5165,7 @@ begin
   {$ifdef OSDARWIN}
   SystemInfo.dwNumberOfProcessors := fpsysctlbynameint('hw.logicalcpu');
   CpuCores := fpsysctlbynameint('hw.physicalcpu');
-  if strscan(beg, ' ') = nil then // e.g. from a Parallels VM
+  if PosChar(beg, ' ') = nil then // e.g. from a Parallels VM
     beg := fpsysctlhwstr(HW_MODEL, temp1);
   modname := fpsysctlbynamestr('machdep.cpu.brand_string', temp2);
   {$endif OSDARWIN}
@@ -5198,12 +5215,12 @@ begin
   if (release = '') and
      (FindFirst('/etc/*-release', faAnyFile, SR) = 0) then // fast enough
   begin // http://linuxmafia.com/faq/Admin/release-files.html
-    release := SR.Name; // 'redhat-release' 'SuSE-release'
+    _toutf8(SR.Name, release); // 'redhat-release' 'SuSE-release'
     if IdemPChar(pointer(release), 'LSB-') and // /etc/lsb-release done above
        (FindNext(SR) = 0) then
-      release := SR.Name;
+      _toutf8(SR.Name, release);
     release := Split(release, '-');
-    dist := Split(StringFromFileNoSize(Join(['/etc/', SR.Name])), #10);
+    dist := Split(StringFromFileNoSize('/etc/' + SR.Name), #10);
     if (dist <> '') and
        (PosExChar('=', dist) = 0) and
        (PosExChar(' ', dist) > 0) then
@@ -5272,7 +5289,7 @@ begin
         __BiosInfoHardwareFromCpuInfo := ParseLine(beg);
     6:
       if _Smbios[sbiSerial] = '' then
-        _Smbios[sbiSerial] := LowerCase(TrimU(ParseLine(beg)));
+        _Smbios[sbiSerial] := LowerU(TrimU(ParseLine(beg)));
     7:
       if cache = nil then
         cache := ParseLine(beg);
@@ -5336,7 +5353,7 @@ begin
   if cache <> nil then
   begin
     TrimU(cache, CpuCacheText);
-    CpuCacheSize := _GetNextCardinal(cache);
+    CpuCacheSize := _GetNextCardinal(PAnsiChar(cache));
     while cache^ = ' ' do
       inc(cache);
     case cache^ of
@@ -5515,13 +5532,13 @@ begin
   {$ifdef OSLINUXANDROID}
   // add entropy from auxiliary vectors - https://lwn.net/Articles/519085/
   auxv := pointer(system.envp);
-  while auxv^ <> 0 do
-    inc(auxv);
-  inc(auxv); // set by kernel's ELF binary loader after all env PPAnsiChar
+  while auxv[0] <> 0 do
+    auxv := @auxv[1];
+  auxv := @auxv[1]; // set by kernel's ELF binary loader after all env PPAnsiChar
   P := pointer(auxv);
   while auxv[0] <> 0 do
   begin
-    if auxv[0] = 25 then // AT_RANDOM: 16 random bytes (used for stacks canary)
+    if auxv[0] = 25 then  // AT_RANDOM: 16 random bytes (used for stacks canary)
       with SystemEntropy do // should be available from 2.6.29 on glibc
       begin
         LiveFeed := PHash128Rec(auxv[1])^; // great initial source from Kernel
