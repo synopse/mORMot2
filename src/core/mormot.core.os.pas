@@ -8688,7 +8688,7 @@ begin
     FillCharFast(dlinfo, SizeOf(dlinfo), 0);
     dladdr(Entry^, @dlinfo);
     if dlinfo.dli_fname <> nil then
-      fLibraryPath := dlinfo.dli_fname;
+      fLibraryPath := TFileName(dlinfo.dli_fname);
   end;
   {$endif OSPOSIX}
   result := result or ignoremissing;

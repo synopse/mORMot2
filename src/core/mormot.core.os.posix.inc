@@ -1592,7 +1592,11 @@ var
 
 procedure GetDlInfoName(var dlinfo: dl_info; var result: TFileName);
 begin
+  {$ifdef UNICODE}
+  result := string(dlinfo.dli_fname); // use RTL from PAnsiChar to TFileName
+  {$else}
   FastSetString(RawUtf8(result), dlinfo.dli_fname, StrLen(dlinfo.dli_fname));
+  {$endif UNICODE}
   if (result <> '') and
      (result[1] <> '/') then
     result := ExpandFileName(string(result));
@@ -2055,13 +2059,13 @@ begin
   try
     if tested then
       exit;
-    systemd := dlopen(LIBSYSTEMD_PATH, RTLD_LAZY);
-    if systemd <> nil then
+    systemd := LibraryOpen(LIBSYSTEMD_PATH);
+    if systemd <> 0 then
     begin
       p := @@listen_fds;
       for i := 0 to high(SD_NAMES) do
       begin
-        p^ := dlsym(systemd, SD_NAMES[i]);
+        p^ := LibraryResolve(systemd, SD_NAMES[i]);
         if p^ = nil then
         begin
           p := @@listen_fds; // missing entry: reset all other API functions
@@ -2124,15 +2128,15 @@ begin
             // parent PID = 1 e.g. under Docker or when started by init.d
             (fpgetppid() = 1) and
             // INVOCATION_ID is set e.g. on Ubuntu 20.04
-            (BaseUnix.fpGetenv(PAnsiChar('INVOCATION_ID')) <> nil);
+            (GetSystemEnv('INVOCATION_ID', 13) <> nil);
 end;
 
 procedure TSystemD.Done;
 begin
-  if systemd <> nil then
+  if systemd <> 0 then
   begin
-    dlclose(systemd);
-    systemd := nil;
+    LibraryClose(systemd);
+    systemd := 0;
   end;
 end;
 
@@ -2257,7 +2261,7 @@ function StdOutIsTTY: boolean;
 begin
   if not (fIsDebuggerTested in _F0) then
     TestOnceDebuggerTty;
-  result :=  (fStdOutIsTTY in _F0);
+  result := (fStdOutIsTTY in _F0);
 end;
 
 procedure TextColorCmd(Color: TConsoleColor; var s: TShort7);
@@ -4856,7 +4860,6 @@ var
 begin
   // retrieve raw EFI information from systab
   result := '';
-  xaddr := 0;
   efi := StringFromFileNoSize('/sys/firmware/efi/systab');
   if efi = '' then
     efi := StringFromFileNoSize('/proc/efi/systab'); // old Linux<2.6.6
