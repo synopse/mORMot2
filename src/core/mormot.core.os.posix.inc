@@ -2104,7 +2104,7 @@ begin
   repeat
     while p^ = ' ' do
       inc(p);
-    s := _GetNextSpaced(p);
+    s := _GetNextSpaced(PAnsiChar(p));
     if (s <> '') and
        (s <> 'nodev') and
        (s <> 'squashfs') and
@@ -2390,7 +2390,7 @@ begin
   if c[0] = #0 then
     exit;
   ConsoleCriticalSection.Lock;
-  fpwrite(StdOut, @c[1], ord(c[0])); // single syscall
+  FileWrite(StdOut, c[1], ord(c[0])); // single syscall
   ConsoleCriticalSection.UnLock;
 end;
 
@@ -2630,15 +2630,20 @@ begin
     GetSystemEnv('USER', User);
 end;
 
-function GetEnvFolder(name: PAnsiChar; var folder: TFileName;
+function GetEnvFolder(name: PUtf8Char; var folder: TFileName;
   writable: boolean): boolean;
+var
+  res: RawUtf8; // for Delphi POSIX where TFileName = UnicodeString
 begin
-  if GetSystemEnv(name, RawUtf8(folder)) then
+  if GetSystemEnv(name, res) then
+  begin
+    folder := string(res);
     if writable and
        not FileIsWritable(folder) then
       folder := ''
     else
       folder := IncludeTrailingPathDelimiter(folder);
+  end;
   result := folder <> '';
 end;
 
@@ -2856,7 +2861,7 @@ var
   begin
     // read all the file or directory names of this folder
     subcount := 0;
-    Join([root, subpath], RawUtf8(addedpath));
+    addedpath := root + subpath;
     dir := FpOpendir(pointer(addedpath)); // faster than FindFirst()
     if dir = nil then
       exit;
@@ -2872,16 +2877,16 @@ var
         DT_UNKNOWN, // assume modern FS over BSD or Linux Kernel >= 2.6.4
         DT_REG:
           if Assigned(OnFile) and
-             not OnFile(OnFileOpaque, ent^.d_name, entlen) then
+             not OnFile(OnFileOpaque, @ent^.d_name, entlen) then
             continue // e.g. no MatchAnyP()
           else if (not IncludeHiddenFiles) and
-                  (ent^.d_name[0] = '.') then
+                  (AnsiChar(ent^.d_name[0]) = '.') then
             continue;
         DT_DIR:
           begin
-            if (ent^.d_name[0] = '.') and
+            if (AnsiChar(ent^.d_name[0]) = '.') and
                ((not IncludeHiddenFiles) or
-                (ent^.d_name[1] = #0) or
+                (AnsiChar(ent^.d_name[1]) = #0) or
                 (PWord(@ent^.d_name[1])^ = ord('.'))) then
               continue; // ignore hidden or '.' or '..' folders
             if Recursive then
@@ -2900,7 +2905,7 @@ var
             if not IncludeFolders then
               continue;
             if Assigned(OnFile) and
-               not OnFile(OnFileOpaque, ent^.d_name, entlen) then
+               not OnFile(OnFileOpaque, @ent^.d_name, entlen) then
               continue; // simulate a FindFirst(mask) as in FindFilesRtl()
           end;
       else
@@ -2917,7 +2922,7 @@ var
     FpClosedir(dir^);
     // now process the sub-folders recursively outside of FpOpendir/FpCLoseDir
     for i := 0 to subcount - 1 do
-      DoFolder(sub[i]);
+      DoFolder(TFileName(sub[i]));
   end;
 
 begin
@@ -3359,7 +3364,7 @@ end;
 function ParseLine(P: PUtf8Char): PUtf8Char;
 begin
   if P <> nil then
-    P := strscan(P, ':');
+    P := PosChar(P, ':');
   result := P;
   if P = nil then
     exit;
@@ -3421,7 +3426,7 @@ var
 begin
   result := 0;
   repeat
-    h := FpOpen(fn, O_RDONLY); // no fpFlock() call
+    h := FpOpenA(fn, O_RDONLY); // no fpFlock() call
   until (PtrInt(h) >= 0) or (fpgeterrno <> ESysEINTR); // as FileOpen()
   if PtrInt(h) <= 0 then
     exit;
@@ -3502,7 +3507,7 @@ var
   pid: cardinal;
 begin
   result := nil;
-  d := FpOpendir(PAnsiChar('/proc')); // faster alternative to FindFirst()
+  d := FpOpendir(PChar('/proc')); // faster alternative to FindFirst()
   if d = nil then
     exit;
   n := 0;
@@ -3512,7 +3517,7 @@ begin
     if e = nil then
       break;
     if (e.d_type in [DT_UNKNOWN, DT_DIR]) and
-       (e.d_name[0] in ['1'..'9']) then
+       (AnsiChar(e.d_name[0]) in ['1'..'9']) then
     begin
       pid := GetCardinal(@e.d_name[0]);
       if IsValidPid(pid) then
@@ -3530,6 +3535,7 @@ function EnumProcessName(PID: cardinal): RawUtf8;
 var
   fn: ShortString;
   tmp: TBuffer4K;
+  l: PtrInt;
   n: AnsiChar;
 begin
   result := '';
@@ -3542,9 +3548,12 @@ begin
   begin
     // may need to be root to follow /fn/[pid]/exe
     AppendShort('/exe'#0, fn);
-    result := fpReadLink(PChar(@fn[1])); // a single syscall is fine
-    if result <> '' then
+    l := fpReadLink(@fn, @tmp, SizeOf(tmp)); // a single syscall is enough
+    if l > 0 then
+    begin
+      FastSetString(result, pointer(@tmp), l);
       exit;
+    end;
   end;
   fn[0] := n;
   AppendShort('/cmdline'#0, fn);
@@ -3594,7 +3603,7 @@ end;
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 var
-  P: PUtf8Char;
+  P: PAnsiChar;
   tmp: TBuffer4K;
 begin
   result := false;
@@ -3613,27 +3622,28 @@ end;
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 var
   tmp: TBuffer4K;
-  P: PUtf8Char;
+  U: PUtf8Char;
+  P: PAnsiChar;
 begin
   result := false;
   FillCharFast(info, SizeOf(info), 0);
   // sysinfo() syscall has not enough information: use /proc sysfiles
   if LoadProcFile('/proc/meminfo', tmp) <= 0 then
     exit;
-  P := @tmp;
-  info.memtotal  := QWord(FindNameValueCardinal(P, 'MEMTOTAL:')) shl 10;
-  info.memfree   := QWord(FindNameValueCardinal(P, 'MEMAVAILABLE:')) shl 10;
-  info.filetotal := QWord(FindNameValueCardinal(P, 'SWAPTOTAL:')) shl 10;
-  info.filefree  := QWord(FindNameValueCardinal(P, 'SWAPFREE:')) shl 10;
+  U := @tmp;
+  info.memtotal  := QWord(FindNameValueCardinal(U, 'MEMTOTAL:')) shl 10;
+  info.memfree   := QWord(FindNameValueCardinal(U, 'MEMAVAILABLE:')) shl 10;
+  info.filetotal := QWord(FindNameValueCardinal(U, 'SWAPTOTAL:')) shl 10;
+  info.filefree  := QWord(FindNameValueCardinal(U, 'SWAPFREE:')) shl 10;
   // note: Windows-like virtual memory information is not available under Linux
-  info.vmtotal   := QWord(FindNameValueCardinal(P, 'COMMITLIMIT:')) shl 10;
-  info.vmfree    := QWord(FindNameValueCardinal(P, 'MEMFREE:')) shl 10;
+  info.vmtotal   := QWord(FindNameValueCardinal(U, 'COMMITLIMIT:')) shl 10;
+  info.vmfree    := QWord(FindNameValueCardinal(U, 'MEMFREE:')) shl 10;
   if info.memfree = 0 then // kernel < 3.14 may not have the MemAvailable field
     info.memfree  := info.vmfree + QWord(
-                       FindNameValueCardinal(P, 'BUFFERS:') +
-                       FindNameValueCardinal(P, 'CACHED:')  +
-                       FindNameValueCardinal(P, 'SRECLAIMABLE:') -
-                       FindNameValueCardinal(P, 'SHMEM:')) shl 10;
+                       FindNameValueCardinal(U, 'BUFFERS:') +
+                       FindNameValueCardinal(U, 'CACHED:')  +
+                       FindNameValueCardinal(U, 'SRECLAIMABLE:') -
+                       FindNameValueCardinal(U, 'SHMEM:')) shl 10;
   if info.memtotal <> 0 then
   begin
     info.percent := ((info.memtotal - info.memfree) * 100) div info.memtotal;
@@ -3816,7 +3826,7 @@ begin
   // retrieve OS-dependent information
   _DirectSmbiosInfo(info);
   // normalize some entries
-  info[sbiUuid] := LowerCase(info[sbiUuid]);
+  LowerSelf(pointer(info[sbiUuid]));
   // some missing info may have retrieved at startup of this unit
   if info[sbiCpuVersion] = '' then
     info[sbiCpuVersion] := CpuInfoText;
@@ -3878,7 +3888,7 @@ begin
   e.d0 := mach_absolute_time   * 2654435761;
   e.d1 := mach_continuous_time * 3266489917;
   {$else}
-  if SizeOf(timespec) <= SizeOf(e) then // paranoid (max 128-bit) -> no-op
+  if SizeOf(TTimeSpec) <= SizeOf(e) then // paranoid (max 128-bit) -> no-op
     clock_gettime(CLOCK_MONOTONIC_FAST, @e); // fast VDSO call
   {$endif OSDARWIN}
   crcblock(@e.l, @SystemEntropy.LiveFeed); // obfuscate
@@ -3935,7 +3945,7 @@ begin
     end;
     if dev > 0 then // we can read some bytes from /dev/urandom or /dev/random
     begin
-      result := (fpRead(dev, Buffer^, rd) = rd); // may block until entropy
+      result := (fpRead(dev, Buffer, rd) = rd); // may block until entropy
       FileClose(dev);
       if result and
          (rd >= SizeOf(SystemEntropy.LiveFeed)) then
@@ -4000,7 +4010,7 @@ begin
      (IdemPChars(mnt, '/PROC/'#0'/SYS/'#0'/RUN/'#0) >= 0) or
      not IsRealFileSystem(typ) then
     exit;
-  fn := mnt;
+  fn := string(mnt);
   //writeln('GetDiskInfo=',GetDiskInfo(fn, av, fr, tot));
   //writeln('fs=',fs,' mnt=',fn,' typ=',typ, ' av=',KB(av),' fr=',KB(fr),' tot=',KB(tot));
   if not (GetDiskInfo(fn, av, fr, tot)) or
@@ -4072,7 +4082,7 @@ end;
 function GetDiskPartitions: TDiskPartitions;
 var
   mounts: RawUtf8;
-  p: PUtf8Char;
+  p: PAnsiChar;
   n: PtrInt;
 begin
   // see https://github.com/gagern/gnulib/blob/master/lib/mountlist.c
@@ -4091,7 +4101,7 @@ begin
   repeat
     AddDiskPartition(
       _GetNextSpaced(p), _GetNextSpaced(p), _GetNextSpaced(p), result, n);
-    p := GotoNextLineSmall(p);
+    p := pointer(GotoNextLineSmall(pointer(p)));
   until p^ = #0;
   SetLength(result, n);
 end;
@@ -4993,12 +5003,13 @@ begin
   if FindFirst('/sys/class/net/*', faDirectory, SR) <> 0 then
     exit;
   repeat
-    if (SR.Name <> 'lo') and
-       not IdemPChar(pointer(SR.Name), 'DOCKER') and
+    _toUtf8(SR.Name, f); // explicit for Delphi POSIX
+    if (f <> 'lo') and
+       not IdemPChar(pointer(f), 'DOCKER') and
        SearchRecValidFolder(SR) then
     begin
       fn := '/sys/class/net/';
-      AppendShortAnsi7String(SR.Name, fn);
+      AppendShortAnsi7String(f, fn);
       fnl := fn[0];
       AppendShort('/flags'#0, fn);
       LoadProcFileTrimed(@fn[1], f);
