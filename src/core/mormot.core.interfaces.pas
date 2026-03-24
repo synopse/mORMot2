@@ -4822,6 +4822,21 @@ end;
 {$endif FPC}
 
 {$ifdef ABIX64}
+{$ifdef NOASMBLOCK}
+var
+  _fakecall: function(stack: PFakeCallStack): Int64 of object;
+
+procedure dofakecall;
+begin // just redirect to TInterfacedObjectFakeRaw.FakeCall
+  TProcedure(TMethod(_fakecall).Code)();
+end;
+
+exports
+  dofakecall name 'fakecall';
+
+procedure x64FakeStub;
+  external '../../res/static/delphillvm/delphi-linux-x64.o' name 'x64FakeStub';
+{$else}
 
 {$ifdef FPC}
   {$WARN 7102 off : Use of +offset(%ebp) for parameters invalid here}
@@ -4882,7 +4897,7 @@ asm     // caller = mov eax,{MethodIndex}; jmp x64FakeStub
         // and float in aCall.FPRegs["XMM0"]
         movsd   xmm0, qword ptr sxmm0 // movsd for zero extension
 end;
-
+{$endif NOASMBLOCK}
 {$endif ABIX64}
 
 var
@@ -7045,6 +7060,11 @@ end;
 
 {$ifdef ABIX64}
 
+{$ifdef NOASMBLOCK}
+procedure CallMethod(var Args: TCallMethodArgs);
+  external '../../res/static/delphillvm/delphi-linux-x64.o' name 'x64callmethod';
+{$else}
+
 procedure CallMethod(var Args: TCallMethodArgs); assembler;
 {$ifdef FPC} nostackframe;
 asm
@@ -7121,6 +7141,7 @@ asm
         {$endif FPC}
 end;
 
+{$endif NOASMBLOCK}
 {$endif ABIX64}
 
 {$ifdef ABIX86}
@@ -8686,6 +8707,11 @@ begin
   GlobalInterfaceResolver.Add(TypeInfo(ILockedDocVariant), TLockedDocVariant);
   InterfaceFactoryCache :=
     RegisterGlobalShutdownRelease(TSynObjectListLightLocked.Create);
+  {$ifdef NOASMBLOCK}
+  {$ifdef ABIX64}
+  _fakecall := TInterfacedObjectFakeRaw(nil).FakeCall;
+  {$endif ABIX64}
+  {$endif NOASMBLOCK}
 end;
 
 
