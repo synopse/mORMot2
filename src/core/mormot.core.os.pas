@@ -5832,15 +5832,18 @@ const
   // - detaching the process from the console and Job group by default does only
   // make sense for RunProcess() which will use TRunOptions = []
   RUN_CMD = [roWinNoProcessDetach];
+type
+  /// the low-level OS API type for executing processes arguments
+  TRunArg = {$ifdef OSPOSIX} RawUtf8 {$else} TFileName {$endif};
 
 /// like SysUtils.ExecuteProcess, but allowing not to wait for the process to finish
 // - optional env value follows 'n1=v1'#0'n2=v2'#0'n3=v3'#0#0 Windows layout
 // - by default, TRunOptions = [] so would detach from the current process
 // console and Job group as we would expect from launch a new stand-alone process
-function RunProcess(const path, arg1: TFileName; waitfor: boolean;
-  const arg2: TFileName = ''; const arg3: TFileName = '';
-  const arg4: TFileName = ''; const arg5: TFileName = '';
-  const env: TFileName = ''; options: TRunOptions = []): integer;
+function RunProcess(const path, arg1: TRunArg; waitfor: boolean;
+  const arg2: TRunArg = ''; const arg3: TRunArg = '';
+  const arg4: TRunArg = ''; const arg5: TRunArg = '';
+  const env: TRunArg = ''; options: TRunOptions = []): integer;
 
 /// like fpSystem function, but cross-compiler and cross-platform
 // - under POSIX, calls bash only if needed, after ParseCommandArgs() analysis
@@ -5850,8 +5853,8 @@ function RunProcess(const path, arg1: TFileName; waitfor: boolean;
 // - parsed^ is implemented on POSIX only, and processhandle^ on Windows only
 // - under Windows (especially Windows 10/11), creating a process can be dead
 // slow https://randomascii.wordpress.com/2019/04/21/on2-in-createprocess
-function RunCommand(const cmd: TFileName; waitfor: boolean = true;
-  const env: TFileName = ''; options: TRunOptions = RUN_CMD;
+function RunCommand(const cmd: TRunArg; waitfor: boolean = true;
+  const env: TRunArg = ''; options: TRunOptions = RUN_CMD;
   {$ifdef OSPOSIX} parsed: PParseCommands = nil
   {$else} processhandle: PHandle = nil {$endif OSPOSIX}): integer;
 
@@ -5873,9 +5876,9 @@ function RunCommand(const cmd: TFileName; waitfor: boolean = true;
 // - you can specify a wrkdir if the path specified by cmd is not good enough
 // - TRunOptions = RUN_CMD as expected from executing a transient command
 // - warning: exitcode^ should be a 32-bit "integer" variable, not a PtrInt
-function RunRedirect(const cmd: TFileName; exitcode: PInteger = nil;
+function RunRedirect(const cmd: TRunArg; exitcode: PInteger = nil;
   const onoutput: TOnRedirect = nil; waitfordelayms: cardinal = INFINITE;
-  setresult: boolean = true; const env: TFileName = '';
+  setresult: boolean = true; const env: TRunArg = '';
   const wrkdir: TFileName = ''; options: TRunOptions = RUN_CMD): RawByteString;
 
 var

@@ -4826,16 +4826,17 @@ begin
   end;
 end;
 
-function RunRedirect(const cmd: TFileName; exitcode: PInteger;
-  const onoutput: TOnRedirect; waitfordelayms: cardinal;
-  setresult: boolean; const env, wrkdir: TFileName; options: TRunOptions): RawByteString;
+{$ifdef FPC}
+function RunRedirect(const cmd: TRunArg; exitcode: PInteger;
+  const onoutput: TOnRedirect; waitfordelayms: cardinal; setresult: boolean;
+  const env: TRunArg; const wrkdir: TFileName; options: TRunOptions): RawByteString;
 var
   // notes: - FPC popen() allows access to the pid whereas clib popen() won't
   //        - env and options params are not supported by popen() so are ignored
   f: file;
   fd: THandle;
   pid, res, wr: cint;
-  n: TSsize;
+  n: ssize_t;
   wait: cardinal;
   endtix: Int64;
   tmp: TBuffer64K;
@@ -4847,7 +4848,7 @@ var
     result := false; // return false on pipe closed
     if WaitReadPending(fd, wait) then
     begin
-      n := fpread(fd, tmp, SizeOf(tmp));
+      n := fpread(fd, @tmp, SizeOf(tmp));
       if n < 0 then
         exit; // pipe closed or EINTR = execution finished
       if setresult and
@@ -4925,6 +4926,16 @@ begin
     else
       exitcode^ := res;
 end;
+{$else}
+function RunRedirect(const cmd: TRunArg; exitcode: PInteger;
+  const onoutput: TOnRedirect; waitfordelayms: cardinal; setresult: boolean;
+  const env: TRunArg; const wrkdir: TFileName; options: TRunOptions): RawByteString;
+begin
+  result := ''; // not implemented yet on Delphi POSIX - see libc popen()
+  if exitcode <> nil then
+    exitcode^ := -1; // error
+end;
+{$endif FPC}
 
 
 { ****************** Gather Operating System Information }
