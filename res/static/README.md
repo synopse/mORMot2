@@ -17,6 +17,7 @@ Each sub-folder contains the compilation scripts of the static libraries, and th
 - [`libquickjs`](libquickjs) for the `QuickJS` JavaScript interpreter;
 - [`libspidermonkey`](libspidermonkey) for the `SpiderMonkey` JavaScript Engine;
 - [`libzlib`](libzlib) for the `zlib` official 1.3.1 revision for the arm-linux/RPi platform.
+- [`delphillvm`](delphillvm) for some low-level asm stub used to link with Delphi LLVM.
 
 
 ## Licensing
