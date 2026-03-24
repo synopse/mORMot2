@@ -2083,9 +2083,9 @@ type
     procedure AArch64FakeStub;
     {$endif ABIA64}
     function FakeQueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-      IID: TGuid; out Obj): TIntQry; {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
-    function Fake_AddRef: TIntCnt;   {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
-    function Fake_Release: TIntCnt;  {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
+      IID: TGuid; out Obj): TIntQry; {$ifdef FPCPOSIX}cdecl{$else}stdcall{$endif};
+    function Fake_AddRef: TIntCnt;   {$ifdef FPCPOSIX}cdecl{$else}stdcall{$endif};
+    function Fake_Release: TIntCnt;  {$ifdef FPCPOSIX}cdecl{$else}stdcall{$endif};
   public
     /// create an instance, using the specified interface
     constructor Create(aFactory: TInterfaceFactory); reintroduce;
