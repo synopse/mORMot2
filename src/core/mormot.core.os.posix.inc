@@ -4642,7 +4642,7 @@ begin
   Close(output);
   AssignFile(output, '/dev/null');
   ReWrite(output);
-  Close(stderr);
+  Close({$ifdef FPC} stderr {$else} ErrOutput {$endif});
 end;
 
 procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
@@ -4710,24 +4710,20 @@ begin
   end;
 end;
 
-function RunInternal(args: PPAnsiChar; waitfor: boolean; const env: TFileName;
+function RunInternal(args: PPAnsiChar; waitfor: boolean; const env: TRunArg;
   options: TRunOptions): integer;
 var
   pid: TPID;
-  e: array[0..511] of PAnsiChar; // max 512 environment variables
-  envpp: PPAnsiChar;
-  P: PAnsiChar;
+  e: array[0..511] of PUtf8Char; // max 512 environment variables
+  envpp: PPUtf8Char;
+  P: PUtf8Char;
   n: PtrInt;
 begin
-  {$ifdef FPC}
   {$if (defined(BSD) or defined(SUNOS)) and defined(FPC_USE_LIBC)}
   pid := FpvFork;
   {$else}
   pid := FpFork;
   {$ifend}
-  {$else}
-  'only FPC is supported yet';
-  {$endif FPC}
   if pid < 0 then
   begin
     // fork failed
@@ -4740,7 +4736,7 @@ begin
     if not waitfor then
       // don't share the same console
       CleanAfterFork;
-    envpp := envp;
+    envpp := pointer(envp); // Delphi POSIX uses wrongly a PWideChar here
     if env <> '' then
     begin
       n := 0;
@@ -4788,9 +4784,8 @@ begin
     result := 0;
 end;
 
-function RunProcess(const path, arg1: TFileName; waitfor: boolean;
-  const arg2, arg3, arg4, arg5, env: TFileName;
-  options: TRunOptions): integer;
+function RunProcess(const path, arg1: TRunArg; waitfor: boolean;
+  const arg2, arg3, arg4, arg5, env: TRunArg; options: TRunOptions): integer;
 var
   a: array[0..6] of PAnsiChar; // assume no UNICODE on POSIX, i.e. as TFileName
 begin
@@ -4804,8 +4799,8 @@ begin
   result := RunInternal(@a, waitfor, env, options);
 end;
 
-function RunCommand(const cmd: TFileName; waitfor: boolean;
-  const env: TFileName; options: TRunOptions; parsed: PParseCommands): integer;
+function RunCommand(const cmd: TRunArg; waitfor: boolean;
+  const env: TRunArg; options: TRunOptions; parsed: PParseCommands): integer;
 var
   temp: RawUtf8;
   err: TParseCommands;
@@ -4816,7 +4811,7 @@ begin
     parsed^ := err;
   if err = [] then
     // no need to spawn the shell for simple commands
-    result := RunInternal(a, waitfor, env, options)
+    result := RunInternal(@a, waitfor, env, options)
   else if err * PARSECOMMAND_ERROR <> [] then
     // no system call for clearly invalid command line
     result := -ESysEPERM
