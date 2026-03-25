@@ -850,30 +850,30 @@ type
     // mainly IFF_UP, IFF_BROADCAST and IFF_LOOPBACK
     ifa_flags: cardinal;
     // Address of interface
-    ifa_addr: Psockaddr;
+    ifa_addr: PSockAddr;
     // netmask associated with ifa_addr (may be nil)
-    ifa_netmask: Psockaddr;
+    ifa_netmask: PSockAddr;
     // if IFF_BROADCAST is set, the broadcast address associated with ifa_addr
-    ifa_broadaddr: Psockaddr;
+    ifa_broadaddr: PSockAddr;
     // address-family-specific data - e.g. statistics on AF_PACKET
     ifa_data: pointer;
   end;
 
   {$ifdef OSBSDDARWIN} // from bsd/net/if_dl.h
-  psockaddr_dl = ^sockaddr_dl;
-  sockaddr_dl = record
-    sdl_len: byte;       // Total length of sockaddr
-    sdl_family: byte;    // AF_LINK
-    sdl_index: word;     // if != 0, system given index for interface
-    sdl_type: byte;      // interface type
-    sdl_nlen: byte;      // interface name length, no trailing 0 required
-    sdl_alen: byte;      // link level address length
-    sdl_slen: byte;      // link layer selector length
+  PSockAddr_dl = ^SockAddr_dl;
+  SockAddr_dl = record
+    sdl_len: byte;         // Total length of TSockAddr
+    sdl_family: byte;      // AF_LINK
+    sdl_index: word;       // if != 0, system given index for interface
+    sdl_type: byte;        // interface type
+    sdl_nlen: byte;        // interface name length, no trailing 0 required
+    sdl_alen: byte;        // link level address length
+    sdl_slen: byte;        // link layer selector length
     sdl_data: TByteToByte; // interface name + link level address
   end;
   {$else}
-  psockaddr_ll = ^sockaddr_ll;
-  sockaddr_ll = record
+  PSockAddr_ll = ^SockAddr_ll;
+  SockAddr_ll = record
     sll_family: word;
     sll_protocol: word;
     sll_ifindex: integer;
@@ -963,7 +963,7 @@ begin
           (info^.ifa_addr^.sa_family = AF_LINK)) then
       begin
         if info^.ifa_addr <> nil then
-          with psockaddr_dl(info^.ifa_addr)^ do
+          with PSockAddr_dl(info^.ifa_addr)^ do
             if sdl_alen = 6 then
               // #define LLADDR(s) ((caddr_t)((s)->sdl_data + (s)->sdl_nlen))
               {$ifdef OSDARWIN}
@@ -975,7 +975,7 @@ begin
           (info^.ifa_addr^.sa_family = AF_PACKET)) then
       begin
         if info^.ifa_addr <> nil then
-          mac := MacToText(@psockaddr_ll(info^.ifa_addr)^.sll_addr);
+          mac := MacToText(@PSockAddr_ll(info^.ifa_addr)^.sll_addr);
       {$endif OSBSDDARWIN}
         if mac = '' then
           mac := '00:00:00:00:00:00' // for makSoftware (e.g. tunnel)
@@ -999,8 +999,8 @@ begin
             {$ifdef OSBSDDARWIN}
             // BSD/DARWIN do name the networks from their manufacturer
             // -> parse net.wlan.devices ?
-            m^.IfIndex := psockaddr_dl(info^.ifa_addr)^.sdl_index;
-            case psockaddr_dl(info^.ifa_addr)^.sdl_type of
+            m^.IfIndex := PSockAddr_dl(info^.ifa_addr)^.sdl_index;
+            case PSockAddr_dl(info^.ifa_addr)^.sdl_type of
               IFT_ETHER:
                 m^.Kind := makEthernet;
               IFT_PPP:
@@ -1008,8 +1008,8 @@ begin
               IFT_CELLULAR:
                 m^.Kind := makCellular;
             {$else}
-            m^.IfIndex := psockaddr_ll(info^.ifa_addr)^.sll_ifindex;
-            case psockaddr_ll(info^.ifa_addr)^.sll_hatype of
+            m^.IfIndex := PSockAddr_ll(info^.ifa_addr)^.sll_ifindex;
+            case PSockAddr_ll(info^.ifa_addr)^.sll_hatype of
               ARPHRD_ETHER:
                 begin
                   m^.Kind := makEthernet;
@@ -1123,7 +1123,7 @@ var
   ns: TNetSocket absolute s;
   local: TMacAddress;
   arp: TRawARP;
-  addr: sockaddr_ll;
+  addr: SockAddr_ll;
   resp: RawByteString;
   retry: integer;
   start: Int64;
