@@ -5550,7 +5550,7 @@ begin
       // execute the notification script in this background thread
       res := 0;
       // safer to use a timeout at 20s - even if typically < 100ms
-      msg := RunRedirect(ctx^.cmd, @res, nil, {ms=}20 * MilliSecsPerSec);
+      msg := RunRedirect(TRunArg(ctx^.cmd), @res, nil, {ms=}20 * MilliSecsPerSec);
     except
       on E: Exception do
       begin

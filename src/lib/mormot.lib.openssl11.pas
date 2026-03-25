@@ -87,7 +87,11 @@ uses
   sysutils,
   mormot.core.base,
   {$ifdef OSPOSIX}
+  {$ifdef FPC}
   unixtype,
+  {$else}
+  mormot.core.os.delphi,
+  {$endif FPC}
   {$endif OSPOSIX}
   mormot.core.os,
   mormot.core.os.security, // for TSystemCertificateStore

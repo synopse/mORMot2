@@ -8442,7 +8442,7 @@ var
     f2: TFindFilesDynArray;
     p1, p2: PFindFiles;
     siz: Int64;
-    {$endif}
+    {$endif OSPOSIX}
     n1, n2: TFileNameDynArray;
     i: PtrInt;
   begin
@@ -8470,7 +8470,7 @@ var
       inc(p2);
     end;
     CheckEqual(siz, 0);
-    CheckEqual(RunUntilSigTerminatedPidFile, Make([
+    Check(RunUntilSigTerminatedPidFile = MakeString([
       Executable.ProgramFilePath, '.', Executable.ProgramName, '.pid']));
     {$endif OSPOSIX}
     if ffoSortByDate in opt then

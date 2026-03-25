@@ -1176,13 +1176,13 @@ begin
   fBufCount := 0;
 end;
 
-function TAesWriteStream.{%H-}Read(var Buffer; Count: integer): Longint;
+function TAesWriteStream.{%H-}Read(var Buffer; Count: Longint): Longint;
 begin
   ESynCrypto.RaiseUtf8('Unexpected %.Read', [self]);
   result := 0; // make compiler happy
 end;
 
-function TAesWriteStream.{%H-}Seek(Offset: integer; Origin: Word): Longint;
+function TAesWriteStream.{%H-}Seek(Offset: Longint; Origin: Word): Longint;
 begin
   ESynCrypto.RaiseUtf8('Unexpected %.Seek', [self]);
   result := 0; // make compiler happy

@@ -4647,7 +4647,7 @@ end;
 
 procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
   const start, stop: TThreadMethod; const onlog: TSynLogProc;
-  const servicename: string);
+  const servicename: RawUtf8);
 var
   pid, sid: TPID;
   pidfilename: TFileName;

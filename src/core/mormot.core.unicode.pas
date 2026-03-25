@@ -11095,7 +11095,7 @@ begin
   try
     i := FastFindPUtf8CharSorted( // efficient O(log(n)) binary search
       pointer(fFiles), high(fFiles), pointer(fn), @StrIComp);
-    if i >= 0 then
+    if i >= 0 then                       // return result = '' if not found
       Utf8ToFileName(fFiles[i], result); // use exact file name case from OS
   finally
     fSafe.ReadUnLock;

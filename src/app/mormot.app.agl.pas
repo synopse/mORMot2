@@ -79,7 +79,8 @@ type
     fRedirect: TFileStreamEx;
     fRedirectSize, fNotifyStableTix: Int64;
     // copy of fService properties
-    fCmd, fEnv, fWrkDir, fRedirectFileName: TFileName;
+    fCmd, fEnv: TRunArg;
+    fWrkDir, fRedirectFileName: TFileName;
     fAbortRequested: boolean;
     fRunOptions: TRunOptions;
     procedure Execute; override;
@@ -551,8 +552,8 @@ begin
   fService.fRunnerExitCode := -777;
   fService.fRunner := self;
   // fService may be set to nil: make a local copy of all RunRedirect() params
-  fCmd := aCmd;
-  fEnv := aEnv;
+  fCmd := TRunArg(aCmd);
+  fEnv := TRunArg(aEnv);
   fWrkDir := aWrkDir;
   // fRunOptions=[] without roWinNoProcessDetach to detach from main console
   if soWinJobCloseChildren in aService.StartOptions then
@@ -974,9 +975,9 @@ begin
     begin
       Utf8ToFileName(ExtractExecutableName(n), fn);
       if fn = '' then
-        res := -1 // this parametr seems invalid
+        res := -1 // this parameter seems invalid
       else if FileIsExecutable(fn) then
-        res := RunCommand(Utf8ToString(n), {waitfor=}true)
+        res := RunCommand(TRunArg(n), {waitfor=}true)
       else
       begin // append to text log file
         GetMemoryInfo(mem, false);
@@ -1528,7 +1529,7 @@ begin
     aaExec,
     aaWait:
       begin
-        status := RunCommand(fn{%H-}, Action = aaWait);
+        status := RunCommand(TRunArg(fn{%H-}), Action = aaWait);
         if status <> expectedstatus then
           StatusFailed;
       end;

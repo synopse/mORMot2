@@ -5671,7 +5671,7 @@ function AssignJobToProcess(job, process: THandle; const ctxt: ShortString): boo
 // - onLog can be assigned from TSynLog.DoLog for proper logging
 procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
   const start, stop: TThreadMethod; const onlog: TSynLogProc = nil;
-  const servicename: string = '');
+  const servicename: RawUtf8 = '');
 
 /// kill a process previously created by RunUntilSigTerminated(dofork=true)
 // - will lookup a local /run/.[ProgramName][ProgramFilePathHash].pid file

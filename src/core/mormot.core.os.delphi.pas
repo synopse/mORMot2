@@ -182,8 +182,9 @@ const
 
 type
   clockid_t = cint;
-  ptimeval = Posix.SysTime.ptimeval;
-  TTimeVal = timeval;
+  time_t    = Posix.SysTime.time_t;
+  ptimeval  = Posix.SysTime.ptimeval;
+  TTimeVal  = Posix.SysTime.timeval;
   ptimezone = pointer;
   ptimespec = ^timespec;
   TTimeSpec = timespec;
