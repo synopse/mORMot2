@@ -1154,7 +1154,7 @@ var
   user: gss_name_t;
   fn: TFileName;
   n , p, spn, u: RawUtf8;
-  orig: PAnsiChar;
+  orig: PUtf8Char;
   keytab: TKerberosKeyTab;
   useCredFrom, fromEnv: boolean;
   credStore: record
