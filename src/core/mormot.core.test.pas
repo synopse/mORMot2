@@ -1050,7 +1050,9 @@ function TSynTestCase.CheckRaised(const Method: TOnTestCheck;
 var
   msg: string;
 begin
+  {$ifndef NOEXCEPTIONINTERCEPT}
   TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+  {$endif NOEXCEPTIONINTERCEPT}
   try
     Method(Params);
     result := false;
@@ -1068,7 +1070,9 @@ begin
         FormatString('% instead of %', [E, Raised], msg);
     end;
   end;
+  {$ifndef NOEXCEPTIONINTERCEPT}
   TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+  {$endif NOEXCEPTIONINTERCEPT}
   Check(result, msg);
 end;
 
