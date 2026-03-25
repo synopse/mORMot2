@@ -4568,16 +4568,19 @@ begin
 end;
 
 function TSocketStream.Read(var Buffer; Count: Longint): Longint;
+var
+  n: integer; // Delphi POSIX defined Longint = Int64 :(
 begin
+  n := Count;
   if Assigned(fSecure) then
-    fLastResult := fSecure.Receive(@Buffer, Count)
+    fLastResult := fSecure.Receive(@Buffer, n)
   else
-    fLastResult := fSocket.Recv(@Buffer, Count, @fLastRawError);
+    fLastResult := fSocket.Recv(@Buffer, n, @fLastRawError);
   case fLastResult of
     nrOk:
       begin
-        result := Count;
-        inc(fSize, Count);
+        result := n;
+        inc(fSize, n);
         fPosition := fSize;
       end;
     nrRetry:
@@ -4588,16 +4591,19 @@ begin
 end;
 
 function TSocketStream.Write(const Buffer; Count: Longint): Longint;
+var
+  n: integer; // Delphi POSIX defined Longint = Int64 :(
 begin
+  n := Count;
   if Assigned(fSecure) then
-    fLastResult := fSecure.Send(@Buffer, Count)
+    fLastResult := fSecure.Send(@Buffer, n)
   else
-    fLastResult := fSocket.Send(@Buffer, Count, @fLastRawError);
+    fLastResult := fSocket.Send(@Buffer, n, @fLastRawError);
   case fLastResult of
     nrOk:
       begin
-        result := Count;
-        inc(fSize, Count);
+        result := n;
+        inc(fSize, n);
         fPosition := fSize;
       end;
     nrRetry:
@@ -5031,7 +5037,6 @@ begin
   LockedInc32(@fGettingOne);
   try
     // thread-safe get the pending (un)subscriptions
-    last := -1;
     new.Count := 0;
     {$ifdef OSPOSIX} // TOSLight.TryLock is not available on Windows
     if (fPending.Count = 0) and
@@ -5056,6 +5061,7 @@ begin
     last := 0;
     lastcount := fPoll[0].Count;
     {$else}
+    last := -1;
     // manual check of all fPoll[] for subscriptions or modifications
     if fCount + fSubscription.SubscribeCount = 0 then
       exit; // caller would loop
@@ -7481,13 +7487,16 @@ begin
 end;
 
 function TCrtSocketStream.Read(var Buffer; Count: Longint): Longint;
+var
+  n: integer; // Delphi POSIX defined Longint = Int64 :(
 begin
-  if Count > 0 then
-    if fSocket.TrySockRecv(@Buffer, Count, {stopbeforeCount=}true,
+  n := Count;
+  if n > 0 then
+    if fSocket.TrySockRecv(@Buffer, n, {stopbeforeCount=}true,
                  @fLastResult, @fLastRawError) then
     begin
-      result := Count;
-      inc(fSize, Count);
+      result := n;
+      inc(fSize, n);
       fPosition := fSize;
     end
     else if fLastResult = nrRetry then
@@ -7499,12 +7508,15 @@ begin
 end;
 
 function TCrtSocketStream.Write(const Buffer; Count: Longint): Longint;
+var
+  n: integer; // Delphi POSIX defined Longint = Int64 :(
 begin
-  if Count > 0 then
-    if fSocket.TrySndLow(@Buffer, Count, @fLastResult, @fLastRawError) then
+  n := Count;
+  if n > 0 then
+    if fSocket.TrySndLow(@Buffer, n, @fLastResult, @fLastRawError) then
     begin
-      result := Count;
-      inc(fSize, Count);
+      result := n;
+      inc(fSize, n);
       fPosition := fSize;
     end
     else if fLastResult = nrRetry then
