@@ -747,12 +747,12 @@ const
         QWord($FFFFFFFFFFFFFFFF),
         QWord($FFFFFFFF00000000)));
 
-  _1: THash256Rec = (q: (1, 0, 0, 0));
-  _3: THash256Rec = (q: (3, 0, 0, 0));
-  _11: THash256Rec = (q: (QWord($0101010101010101),
-                          QWord($0101010101010101),
-                          QWord($0101010101010101),
-                          QWord($0101010101010101)));
+  P_1: THash256Rec = (q: (QWord(1), QWord(0), QWord(0), QWord(0)));
+  P_3: THash256Rec = (q: (QWord(3), QWord(0), QWord(0), QWord(0)));
+  P_11: THash256Rec = (q: (QWord($0101010101010101),
+                           QWord($0101010101010101),
+                           QWord($0101010101010101),
+                           QWord($0101010101010101)));
 
 procedure _set1(out V: THash256Rec);
   {$ifdef HASINLINE}inline;{$endif}
@@ -1075,7 +1075,7 @@ begin
   _mv(X2, X1);
   _mv(Y2, Y1);
   if InitialZ = nil then
-    InitialZ := @_1;
+    InitialZ := @P_1;
   _mv(z, InitialZ^);
   _apply_z(X1, Y1, z);
   EccPointDoubleJacobian(X1, Y1, z);
@@ -1179,7 +1179,7 @@ begin
   _set1(result);
   // Since curve_p == 3 (mod 4) for all supported curves, we can compute
   // sqrt(a) = a^((curve_p + 1) / 4) (mod curve_p)
-  _add256(p1, Curve_P_32, _1); // p1 = curve_p + 1
+  _add256(p1, Curve_P_32, P_1); // p1 = curve_p + 1
   for i := _numbits256(p1) - 1 downto 2 do
   begin
     _modSquareP(result, result);
@@ -1193,7 +1193,7 @@ procedure EccPointDecompress(out Point: TEccPoint; const Compressed: TEccPublicK
 begin
   _bswap256(@Point.x, @Compressed[1]);
   _modSquareP(Point.y, Point.x);           // y = x^2
-  _modSubP(Point.y, Point.y, _3);          // y = x^2 - 3
+  _modSubP(Point.y, Point.y, P_3);          // y = x^2 - 3
   _modMultP(Point.y, Point.y, Point.x);    // y = x^3 - 3x
   _modAddP(Point.y, Point.y, Curve_B_32);  // y = x^3 - 3x + b
   ModSqrt(Point.y);
@@ -1230,8 +1230,8 @@ begin
     crcblock(@EccMakeEntropy, @priv);  // simple forward secrecy
     kdf.Done(priv.b);                  // apply the HMAC-SHA-256 safe KDF
     if _isZero(priv) or
-       _equals(priv, _1) or
-       _equals(priv, _11) then
+       _equals(priv, P_1) or
+       _equals(priv, P_11) then
       continue;
     // Make sure the private key is in the range [1, n - 1]
     // For the supported curves, n is always large enough that we only need
@@ -1340,8 +1340,8 @@ begin
       exit;
     Random128(@rnd.l, @rnd.h); // fast unpredictable 256-bit
   until not (_isZero(rnd) or
-             _equals(rnd, _1) or
-             _equals(rnd, _11));
+             _equals(rnd, P_1) or
+             _equals(rnd, P_11));
   result := true;
 end;
 
@@ -1423,7 +1423,7 @@ begin
         (_cmp256(modbig.L, product.L) <= 0)) then
     begin
       if _dec256(product.L, modbig.L) <> 0 then
-        _dec256(product.H, _1); // borrow
+        _dec256(product.H, P_1); // borrow
       _dec256(product.H, modbig.H);
     end;
     carry := (modbig.Q[ECC_QUAD] and 1) shl 63;
