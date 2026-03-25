@@ -50,8 +50,10 @@ uses
   Posix.SysMman,
   Posix.SysStat,
   Posix.SysWait,
+  Posix.SysSocket,
   Posix.SysUtsname,
   Posix.DirEnt,
+  Posix.NetinetIn,
   Posix.Termios;
 
 
@@ -61,12 +63,16 @@ uses
 // proper temporary conversion from UTF-16 to UTF-8 before calling the POSIX API
 
 type
-  cint    = integer;
-  cuint   = cardinal;
-  clong   = PtrInt;
-  culong  = PtrUInt;
+  cint8   = shortint;
+  cuchar  = byte;
   cshort  = smallint;
   cushort = word;
+  cint    = integer;
+  cuint   = cardinal;
+  cuint32 = cardinal;
+  clong   = PtrInt;
+  culong  = PtrUInt;
+  cuint64 = QWord;
   ssize_t = PtrInt;
   size_t  = PtrUInt;
   TUid    = cardinal;
@@ -96,26 +102,44 @@ procedure RTLEventWaitFor(state: TEvent; timeout: cint); overload;
 const
   clib = libc;
 
-  ESysEACCES = Posix.Errno.EACCES;
-  ESysEINTR  = Posix.Errno.EINTR;
-  ESysEFAULT = Posix.Errno.EFAULT;
-  ESysEPERM  = Posix.Errno.EPERM;
-  ESysESRCH  = Posix.Errno.ESRCH;
-  ESysE2BIG  = Posix.Errno.E2BIG;
+  ESysEACCES        = Posix.Errno.EACCES;
+  ESysEINTR         = Posix.Errno.EINTR;
+  ESysEFAULT        = Posix.Errno.EFAULT;
+  ESysEPERM         = Posix.Errno.EPERM;
+  ESysESRCH         = Posix.Errno.ESRCH;
+  ESysE2BIG         = Posix.Errno.E2BIG;
+  ESysEAGAIN        = Posix.ErrNo.EAGAIN;
+  ESysEADDRNOTAVAIL = Posix.ErrNo.EADDRNOTAVAIL;
+  ESysECONNABORTED  = Posix.ErrNo.ECONNABORTED;
+  ESysECONNRESET    = Posix.ErrNo.ECONNRESET;
+  ESysETIMEDOUT     = Posix.ErrNo.ETIMEDOUT;
+  ESysEINVAL        = Posix.ErrNo.EINVAL;
+  ESysEMFILE        = Posix.ErrNo.EMFILE;
+  ESysECONNREFUSED  = Posix.ErrNo.ECONNREFUSED;
+  ESysEINPROGRESS   = Posix.ErrNo.EINPROGRESS;
+  ESysEALREADY      = Posix.ErrNo.EALREADY;
+  ESysENOSYS        = Posix.ErrNo.ENOSYS;
+  ESysEOPNOTSUPP    = Posix.ErrNo.EOPNOTSUPP;
+  ESysEPROTOTYPE    = Posix.ErrNo.EPROTOTYPE;
+  ESysEPIPE         = Posix.ErrNo.EPIPE;
 
-  StdInputHandle  = 0;
-  StdOutputHandle = 1;
-  StdErrorHandle  = 2;
-  RTLD_LAZY       = Posix.Dlfcn.RTLD_LAZY;
-  O_RDONLY        = O_RDONLY;
-  SEEK_CUR        = SEEK_CUR;
-  FIONREAD        = FIONREAD;
-  F_OK            = F_OK;
+  StdInputHandle    = 0;
+  StdOutputHandle   = 1;
+  StdErrorHandle    = 2;
+  RTLD_LAZY         = Posix.Dlfcn.RTLD_LAZY;
+  O_RDONLY          = O_RDONLY;
+  O_NONBLOCK        = O_NONBLOCK;
+  SEEK_CUR          = SEEK_CUR;
+  FIONREAD          = FIONREAD;
+  FIONBIO           = FIONBIO;
+  F_OK              = F_OK;
 
-  SIGINT          = 2;
-  SIGQUIT         = 3;
-  SIGKILL         = 9;
-  SIGTERM         = 15;
+  CLOCK_MONOTONIC_RAW = 4;
+
+  SIGINT  = 2;
+  SIGQUIT = 3;
+  SIGKILL = 9;
+  SIGTERM = 15;
 
   W_OK    = Posix.Unistd.W_OK;
   S_IRUSR = Posix.SysStat.S_IRUSR;
@@ -127,7 +151,34 @@ const
   S_IXGRP = Posix.SysStat.S_IXGRP;
   S_IXOTH = Posix.SysStat.S_IXOTH;
 
-  CLOCK_MONOTONIC_RAW = 4;
+  IPPROTO_TCP  = IPPROTO_TCP;
+  IPPROTO_UDP  = IPPROTO_UDP;
+  TCP_NODELAY  = 1;
+  TCP_CORK     = 3; // Linux specific
+  TCP_NOPUSH   = 4; // BSD specific
+  MSG_PEEK     = Posix.SysSocket.MSG_PEEK;
+  SHUT_RD      = Posix.SysSocket.SHUT_RD;
+  SHUT_WR      = Posix.SysSocket.SHUT_WR;
+  SHUT_RDWR    = Posix.SysSocket.SHUT_RDWR;
+
+  SOCK_RAW     = Posix.SysSocket.SOCK_RAW;
+  SOCK_STREAM  = Posix.SysSocket.SOCK_STREAM;
+  SOCK_DGRAM   = Posix.SysSocket.SOCK_DGRAM;
+  AF_INET      = Posix.SysSocket.AF_INET;
+  AF_INET6     = Posix.SysSocket.AF_INET6;
+  AF_UNIX      = Posix.SysSocket.AF_UNIX;
+  AF_PACKET    = 17; // Linux specific
+  SOMAXCONN    = Posix.SysSocket.SOMAXCONN;
+  SOL_SOCKET   = Posix.SysSocket.SOL_SOCKET;
+  SO_SNDTIMEO  = Posix.SysSocket.SO_SNDTIMEO;
+  SO_RCVTIMEO  = Posix.SysSocket.SO_RCVTIMEO;
+  SO_REUSEADDR = Posix.SysSocket.SO_REUSEADDR;
+  SO_LINGER    = Posix.SysSocket.SO_LINGER;
+  SO_PRIORITY  = Posix.SysSocket.SO_PRIORITY;
+  SO_KEEPALIVE = Posix.SysSocket.SO_KEEPALIVE;
+  SO_SNDBUF    = Posix.SysSocket.SO_SNDBUF;
+  SO_RCVBUF    = Posix.SysSocket.SO_RCVBUF;
+  SO_BROADCAST = Posix.SysSocket.SO_BROADCAST;
 
 type
   clockid_t = cint;
@@ -139,9 +190,11 @@ type
   TStat     = _stat;
   TUtimBuf  = utimbuf;
   UtsName   = TUtsName;
+  TLinger   = linger;
 
 function fpgeterrno: cint;
 procedure fpseterrno(err: cint);
+function cerrno: cint; inline; // internal to mormot.net.sock.posix.inc
 
 function fpsettimeofday(tp: ptimeval; tzp: ptimezone): cint;
 function fpnanosleep(t, rem: ptimespec): cint;
@@ -178,6 +231,10 @@ function FpS_ISCHR(m: cint): boolean;  inline;
 function FpS_ISFIFO(m: cint): boolean; inline;
 function FpS_ISLNK(m: cint): boolean;  inline;
 
+type
+  // POSIX definitions to share the same type fields between FPC and Delphi
+  TSockLen  = Posix.SysSocket.socklen_t;
+
 const
   POLLIN      = $0001;
   POLLPRI     = $0002;
@@ -196,6 +253,42 @@ function fpkill(pid, sig: cint): cint; cdecl;
   external clib name 'kill';
 function fpfork: TPid; cdecl;
   external clib name 'fork';
+
+const
+  EPOLLIN      = $01;
+  EPOLLPRI     = $02;
+  EPOLLOUT     = $04;
+  EPOLLERR     = $08;
+  EPOLLHUP     = $10;
+  EPOLLONESHOT = $40000000;
+  EPOLLET      = $80000000;
+
+  EPOLL_CTL_ADD = 1;
+  EPOLL_CTL_DEL = 2;
+  EPOLL_CTL_MOD = 3;
+
+type
+  TEPoll_Data = record
+    case integer of
+      0: (ptr: pointer);
+      1: (fd:  cint);
+      2: (u32: cuint);
+      3: (u64: cuint64);
+  end;
+  PEPoll_Data = ^TEpoll_Data;
+  TEPoll_Event = {$ifdef CPUX64} packed {$endif} record
+    events: cuint32;
+    data: TEpoll_Data;
+  end;
+  PEPoll_Event = ^TEPoll_Event;
+
+function epoll_create(size: cint): cint; cdecl;
+  external clib name 'epoll_create';
+function epoll_ctl(epfd, op, fd: cint; event: PEPoll_Event): cint; cdecl;
+  external clib name 'epoll_ctl';
+function epoll_wait(epfd: cint; events: PEPoll_Event;
+    maxevents, timeout: cint): cint; cdecl;
+  external clib name 'epoll_wait';
 
 function FpGetuid: TUid;
 function FpGetgid: TGid;
@@ -343,6 +436,11 @@ begin
   state.WaitFor(timeout);
 end;
 
+
+function cerrno: cint;
+begin
+  result := Posix.Errno.errno;
+end;
 
 function fpgeterrno: cint;
 begin
@@ -597,7 +695,7 @@ begin
     s := $7f00;
     result := waitpid(pid, @s, 0);
     if (result < 0) and
-       (GetLastError = EINTR) then
+       (cerrno = EINTR) then
       continue;
     if result = -1 then
       exit; // error

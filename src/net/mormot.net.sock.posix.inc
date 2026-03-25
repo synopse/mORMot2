@@ -6,6 +6,8 @@
   make any difference in terms of stability or performance.
 }
 
+{$ifdef FPC}
+
 uses
   baseunix,
   termio,
@@ -15,9 +17,20 @@ uses
   {$endif OSLINUXANDROID}
   initc;  // link clib='c' for our socket purpose
 
+{$else}
+
+uses
+  Posix.Errno,  // to inline cerrno function
+  mormot.core.os.delphi;
+
+{$endif FPC}
+
+{$undef HASACCEPT4}
 {$ifdef OSLINUX}
-  {$define HASACCEPT4} // use Linux-specific accept4() enhanced API call
-  // define OLDLIBC conditional to disable this feature and fallback to accept()
+  {$ifndef OLDLIBC}
+    {$define HASACCEPT4} // use Linux-specific accept4() enhanced API call
+    // define OLDLIBC conditional to disable this API and fallback to accept()
+  {$endif OLDLIBC}
 {$endif OSLINUX}
 
 {$ifdef OSBSDDARWIN}
@@ -62,9 +75,6 @@ const
   NI_NUMERICSERV = 2;
   {$endif OSFREEBSD}
 
-  FIONREAD = termio.FIONREAD;
-  FIONBIO  = termio.FIONBIO;
-
   {$ifdef OSBSDDARWIN}
 
     {$ifndef OSOPENBSD}
@@ -77,35 +87,42 @@ const
 
     {$ifndef OSOPENBSD}
     // Works under MAC OS X and FreeBSD, but is undocumented, so FPC doesn't include it
-    MSG_NOSIGNAL  = $20000;  // Do not generate SIGPIPE.
+    MSG_NOSIGNAL  = $20000;
     {$else}
     MSG_NOSIGNAL  = $400;
     {$endif OSOPENBSD}
   {$else}
 
     {$ifdef SUNOS}
-    MSG_NOSIGNAL = $20000;  // Do not generate SIGPIPE.
+    MSG_NOSIGNAL = $20000;
     {$else}
-    MSG_NOSIGNAL = sockets.MSG_NOSIGNAL; // Do not generate SIGPIPE
+    MSG_NOSIGNAL = $4000; // don't generate SIGPIPE on Linux
     {$endif SUNOS}
 
   {$endif OSBSDDARWIN}
 
-  _ST: array[TNetLayer] of integer = (
+  {$ifdef FPC} // or defined in mormot.core.os.delphi.pas
+
+  {$packrecords C}
+
+  FIONREAD = termio.FIONREAD;
+  FIONBIO  = termio.FIONBIO;
+
+  {$endif FPC}
+
+  _ST: array[TNetLayer] of cint = (
     SOCK_STREAM,
     SOCK_DGRAM,
     SOCK_STREAM);
-  _IP: array[TNetLayer] of integer = (
+  _IP: array[TNetLayer] of cint = (
     IPPROTO_TCP,
     IPPROTO_UDP,
     0);
-  _SF: array[TNetFamily] of integer = (
+  _SF: array[TNetFamily] of cint = (
     0,
     AF_INET,
     AF_INET6,
     AF_UNIX);
-
-{$packrecords C}
 
 type
   /// a socket is always cint = 32-bit integer sized on POSIX
@@ -215,10 +232,6 @@ type
 
 // note: POSIX sockets are fd = C int = 32-bit integer, not our TSocket = PtrInt
 //       so we use plain integer in the Sockets API calls below
-
-{$ifdef OLDLIBC}
-  {$undef HASACCEPT4}
-{$endif OLDLIBC}
 
 {.$define SOCKDIRECTSYSCALL} // no noticeable performance or stability change
 
