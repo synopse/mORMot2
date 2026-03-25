@@ -6674,7 +6674,7 @@ begin
   end;
   CheckEqual(CodePageToText(CP_UTF8), 'utf8');
   CheckEqual(CodePageToText(CP_UTF16), 'utf16le');
-  CheckEqual(CodePageToText(CP_WINANSI), 'ms1252');
+  CheckEqual(CodePageToText(CP_WINANSI), 'windows-1252');
   CheckEqual(CodePageToText(54936), 'gb18030');
   Check(LcidToLanguage(0) = lngUndefined);
   CheckEqual(LANG_LCID[lngUndefined], LANG_ENGLISH_US);

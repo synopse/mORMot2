@@ -2680,7 +2680,7 @@ procedure Unicode_ToUtf8(Text: PWideChar; TextLen: PtrInt; var Dest: RawUtf8); o
 
 /// return a code page number into ICU-compatible charset name
 // - Unicode_CodePageName(932) returns e.g. 'SHIFT_JIS'
-// - Unicode_CodePageName(1251) returns 'MS1251' since 'CP####' is used
+// - Unicode_CodePageName(1251) returns 'WINDOWS-1251' since 'CP####' is used
 // for IBM code pages by ICU - which do not match Windows code pages
 procedure Unicode_CodePageName(CodePage: cardinal; var Name: ShortString);
 
@@ -7033,8 +7033,8 @@ begin // cut-down and fixed version of FPC rtl/objpas/sysutils/syscodepages.inc
     CP_UTF8: // = 65001
       Name := 'UTF8';
   else
-    begin  // 'MS####' is enough for most code pages
-      Name := 'MS';
+    begin  // 'WINDOWS-####' is enough for most code pages
+      Name := 'WINDOWS-';
       AppendShortCardinal(codepage, Name);
     end; // ICU expects 'CP####' for IBM codepages which are not Windows'
   end;
