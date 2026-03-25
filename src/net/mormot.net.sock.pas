@@ -2749,32 +2749,32 @@ begin
   if address = c6AnyHost then // ::
   begin
     SetFamily(AF_INET6);
-    FillZero(PHash128(@PSockAddrIn6(@Addr)^.sin6_addr)^); // all sin6_addr[] = 0
+    FillZero(PSockAddrIn6(@Addr)^.sin6_addr.b); // all sin6_addr[] = 0
     result := true;
     exit;
   end;
   result := false;
   ad4.sin_family := 0; // reset family to mark as invalid, but keep sin_port
-  ad4.sin_addr.s_addr := 0; // reset
+  ad4.sin_addr := 0; // reset
   PInt64(@ad4.sin_zero)^ := 0; // seems mandatory on Windows
   if (address = cLocalhost) or
      (address = c6Localhost) or // ::1
      PropNameEquals(address, 'localhost') then
-    ad4.sin_addr.s_addr := cLocalhost32 // 127.0.0.1
+    ad4.sin_addr := cLocalhost32 // 127.0.0.1
   else if (address = cBroadcast) or
           (address = c6Broadcast) then
-    ad4.sin_addr.s_addr := cAnyHost32 // 255.255.255.255
+    ad4.sin_addr := cAnyHost32 // 255.255.255.255
   else if address = cAnyHost then
     // keep 0.0.0.0 for bind - but connect would redirect to 127.0.0.1
   else if NetIsIP4(pointer(address), @ad4.sin_addr) or
-          GetKnownHost(address, ad4.sin_addr.s_addr) or
-          NetAddrCache.SafeFind(address, ad4.sin_addr.s_addr) then
+          GetKnownHost(address, ad4.sin_addr) or
+          NetAddrCache.SafeFind(address, ad4.sin_addr) then
     // numerical IPv4, /etc/hosts, or cached entry
   else if (Assigned(NewSocketIP4Lookup) and
           not noNewSocketIP4Lookup and
-          NewSocketIP4Lookup(address, ad4.sin_addr.s_addr)) then
+          NewSocketIP4Lookup(address, ad4.sin_addr)) then
     // cache value found from mormot.net.dns lookup for 1 shl 15 = 32 seconds
-    NetAddrCache.SafeAdd(address, ad4.sin_addr.s_addr, {tixshr=}15)
+    NetAddrCache.SafeAdd(address, ad4.sin_addr, {tixshr=}15)
   else
     // return result=false if unknown
     exit;
@@ -2809,7 +2809,7 @@ begin
   case ad4.sa_family of
     AF_INET:
       if (not localasvoid) or
-         (ad4.sin_addr.s_addr <> cLocalhost32) then
+         (ad4.sin_addr <> cLocalhost32) then
         IP4Text(@ad4.sin_addr, res); // detect 0.0.0.0 and 127.0.0.1
     AF_INET6:
       begin
@@ -2836,7 +2836,7 @@ var
   ad4: TSockAddr absolute Addr;
 begin
   if ad4.sa_family = AF_INET then
-    result := ad4.sin_addr.s_addr // may be cLocalhost32
+    result := ad4.sin_addr // may be cLocalhost32
   else
     result := 0; // AF_INET6 or AF_UNIX return 0
 end;
@@ -2925,7 +2925,7 @@ var
   ad4: TSockAddr absolute Addr;
 begin
   SetFamily(AF_INET);
-  ad4.sin_addr.s_addr := ipv4;
+  ad4.sin_addr := ipv4;
   PInt64(@ad4.sin_zero)^ := 0; // seems needed on Windows
   ad4.sin_port := bswap16(netport);
   if netport > 65535 then
@@ -2950,13 +2950,12 @@ function TNetAddr.IPEqual(const another: TNetAddr): boolean;
 begin
   case PSockAddr(@Addr)^.sa_family of
     AF_INET:
-      result := PSockAddr(@Addr)^.sin_addr.s_addr =
-                PSockAddr(@another)^.sin_addr.s_addr;
+      result := PSockAddr(@Addr)^.sin_addr = PSockAddr(@another)^.sin_addr;
     AF_INET6:
-      result := (PHash128Rec(@PSockAddrIn6(@Addr)^.sin6_addr).Lo =
-                 PHash128Rec(@PSockAddrIn6(@another)^.sin6_addr).Lo) and
-                (PHash128Rec(@PSockAddrIn6(@Addr)^.sin6_addr).Hi =
-                 PHash128Rec(@PSockAddrIn6(@another)^.sin6_addr).Hi);
+      result := (PSockAddrIn6(@Addr)^.sin6_addr.Lo =
+                 PSockAddrIn6(@another)^.sin6_addr.Lo) and
+                (PSockAddrIn6(@Addr)^.sin6_addr.Hi =
+                 PSockAddrIn6(@another)^.sin6_addr.Hi);
   else
     result := false; // nlUnix has no IP
   end;

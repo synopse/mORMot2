@@ -114,24 +114,6 @@ type
 
   // we redefined most of the sockaddr structs due to OpenBSD FPC RTL bug
   // and to share the same fields between FPC and Delphi POSIX
-  TInAddr = packed record
-    case boolean of
-       true:  (s_addr:  TNetIP4); // inaddr_t=cuint32
-       false: (s_bytes: packed array[1..4] of byte);
-  end;
-  PInAddr = ^TInAddr;
-
-  TIn6Addr = packed record
-  case byte of
-    0: (u6_addr8:  array[0..15] of cuchar);
-    1: (u6_addr16: array[0..7]  of cushort);
-    2: (u6_addr32: array[0..3]  of cuint);
-    3: (s6_addr8:  array[0..15] of cuchar);
-    4: (s6_addr:   array[0..15] of cuchar);
-    5: (s6_addr16: array[0..7]  of cshort);
-    6: (s6_addr32: array[0..3]  of cint);
-  end;
-  PIn6Addr = ^TIn6Addr;
 
   {$ifdef SOCK_HAS_SINLEN} // as set in mormot.defines.inc (and FPC RTL)
   sa_family_t = cuchar;    // 8-bit to follow a 8-bit sa_len field
@@ -141,26 +123,26 @@ type
 
   TSockAddrIn = packed record
     {$ifdef SOCK_HAS_SINLEN}
-    sa_len: cuchar;   // could be 0 on FreeBSD/Darwin but not on OpenBSD
+    sa_len: cuchar;   // could be 0 on FreeBSD/Darwin but properly set on OpenBSD
     {$endif SOCK_HAS_SINLEN}
     case integer of
       0: (sa_family:  sa_family_t;
           sa_data:    packed array[0..13] of cuchar);
       1: (sin_family: sa_family_t;
           sin_port:   cushort;
-          sin_addr:   TInAddr;
+          sin_addr:   TNetIP4;
           sin_zero:   packed array[0..7] of cuchar);
   end;
   PSockAddrIn = ^TSockAddrIn;
 
   TSockAddrIn6 = packed record
     {$ifdef SOCK_HAS_SINLEN}
-    sin6_len:      cuchar; // could be 0 on FreeBSD/Darwin but not on OpenBSD
+    sin6_len: cuchar; // could be 0 on FreeBSD/Darwin but properly set on OpenBSD
     {$endif SOCK_HAS_SINLEN}
     sin6_family:   sa_family_t;
     sin6_port:     cushort;
     sin6_flowinfo: cuint;
-    sin6_addr:     TIn6Addr;
+    sin6_addr:     TNetIP6;
     sin6_scope_id: cuint;
   end;
   PSockAddrIn6 = ^TSockAddrIn6;
@@ -185,8 +167,8 @@ type
     h_length: TSockLen;
     case integer of
        0: (h_addr_list: PPAnsiChar);
-       1: (h_addr:      ^PInAddr);
-       2: (h_addr6:     ^PIn6Addr);
+       1: (h_addr:      ^PNetIP4);
+       2: (h_addr6:     ^PNetIP6);
   end;
   PHostEnt = ^THostEnt;
 
@@ -548,7 +530,7 @@ begin
       SetFamily(h^.h_addrtype);
       case h^.h_addrtype of
         AF_INET:
-           ad4.sin_addr.s_addr := h^.h_addr^^.s_addr;
+           ad4.sin_addr := h^.h_addr^^;
         AF_INET6:
            PSockAddrIn6(@Addr)^.sin6_addr := h^.h_addr6^^;
       else

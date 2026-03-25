@@ -80,41 +80,25 @@ const
   }
 
 type
-  TInAddr = packed record
-    case integer of
-      0: (S_bytes: packed array[0..3] of byte);
-      1: (S_addr:  TNetIP4);
-  end;
-  PInAddr = ^TInAddr;
-
-  PSockAddrIn = ^TSockAddrIn;
   TSockAddrIn = packed record
     case integer of
       0: (sin_family: word;
           sin_port:   word;
-          sin_addr:   TInAddr;
+          sin_addr:   TNetIP4;
           sin_zero:   array[0..7] of AnsiChar);
       1: (sa_family:  word;
           sa_data:    array[0..13] of AnsiChar)
   end;
+  PSockAddrIn = ^TSockAddrIn;
 
-  PIn6Addr = ^TIn6Addr;
-  TIn6Addr = packed record
-    case integer of
-      0: (S6_addr:   THash128);
-      1: (u6_addr8:  packed array[0..15] of byte);
-      2: (u6_addr16: packed array[0..7]  of word);
-      3: (u6_addr32: packed array[0..3]  of integer);
-  end;
-
-  PSockAddrIn6 = ^TSockAddrIn6;
   TSockAddrIn6 = packed record
     sin6_family:   word;     // AF_INET6
     sin6_port:     word;     // Transport level port number
     sin6_flowinfo: cardinal; // IPv6 flow information
-    sin6_addr:     TIn6Addr; // IPv6 address
+    sin6_addr:     TNetIP6; // IPv6 address
     sin6_scope_id: cardinal; // IF number for link-local, SITE id for site-local
   end;
+  PSockAddrIn6 = ^TSockAddrIn6;
 
   // structure used by kernel to store most addresses
   TSockAddr = TSockAddrIn;
@@ -1088,9 +1072,9 @@ begin
               if b <= 32 then
                 b := IP4Netmask(b)
               else
-                b := IP4Mask(a^.Address.lpSockaddr^.sin_addr.S_addr);
+                b := IP4Mask(a^.Address.lpSockaddr^.sin_addr);
               IP4Text(@b, m^.NetMask);
-              b := a^.Address.lpSockaddr^.sin_addr.S_addr or (not b);
+              b := a^.Address.lpSockaddr^.sin_addr or (not b);
               IP4Text(@b, m^.Broadcast);
               break; // we found the first IPv4 network information
             end;
