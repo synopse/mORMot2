@@ -1120,7 +1120,7 @@ begin
   if GssApi.EnvClientKtValue <> '' then
   begin
     // GSSAPI_ENV_CLIENT_KT_MIT or GSSAPI_ENV_CLIENT_KT_HEIMDAL specific path
-    ClientSspiAuthWithPassword(aSecContext, aInData, '', '',
+    result := ClientSspiAuthWithPassword(aSecContext, aInData, '', '',
       aSecKerberosSpn, aOutData, aMech);
     exit;
   end;
