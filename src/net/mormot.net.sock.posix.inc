@@ -684,7 +684,7 @@ begin
   res := poll(@p, 1, ms);
   if res < 0 then
   begin
-    res := RawSocketErrNo;
+    res := cerrno;
     if loerr <> nil then
       loerr^ := res;
     if res in [ESysEAGAIN, ESysEINTR] then
@@ -1488,7 +1488,11 @@ end;
 function PollEventToPse(r: integer): TPollSocketEvents; inline;
 begin
   if r = POLLIN then
+    {$ifdef FPC}
     byte(result) := byte([pseRead]) // optimized for the most common case
+    {$else}
+    result := [pseRead]
+    {$endif FPC}
   else
   begin
     byte(result) := 0;
@@ -1780,7 +1784,11 @@ begin
   er := pointer(results.Events);
   repeat
     ev := ee^.events;
+    {$ifdef FPC}
     byte(e) := byte([pseRead]); // optimized for the most common case
+    {$else}
+    e := [pseRead];
+    {$endif FPC}
     if ev <> EPOLLIN then
     begin
       if ev and (EPOLLIN or EPOLLPRI) = 0 then
