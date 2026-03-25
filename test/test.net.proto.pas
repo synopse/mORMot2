@@ -3142,6 +3142,9 @@ var
   bin, bin2: RawByteString;
   timer: TPrecisionTimer;
 begin
+  CheckEqual(SizeOf(TNetIP4), 4);
+  CheckEqual(SizeOf(TNetIP6), 16);
+  CheckEqual(SizeOf(TNetAddr), SOCKADDR_SIZE);
   FillZero(ip.b);
   Check(IsZero(ip.b));
   IP4Short(@ip, s);
