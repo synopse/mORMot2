@@ -139,11 +139,18 @@ type
     nfIP6,
     nfUnix);
 
-  /// store the 4 bytes of a typical IP address as 32-bit unsigned integer
+  /// store the 4 bytes of a typical IPv4 address as 32-bit unsigned integer
   TNetIP4 = cardinal;
   PNetIP4 = ^TNetIP4;
-  /// store several 4 bytes of a typical IP address as 32-bit unsigned integers
+  /// store several IPv4 address as dynamic arry of 32-bit unsigned integers
   TNetIP4s = array of TNetIP4;
+
+  /// store the 16 bytes of a typical IPv6 address as 128-bit unsigned integer
+  TNetIP6 = THash128Rec;
+  PNetIP6 = ^TNetIP6;
+  /// store several IPv6 address as dynamic arry of 128-bit unsigned integers
+  TNetIP6s = array of TNetIP6;
+
   /// store the 16-bit IP port to connect/bind a socket
   TNetPort = cardinal;
 
@@ -7701,8 +7708,8 @@ end;
 
 initialization
   IP4local := cLocalhost; // use var string with refcount=1 to avoid allocation
-  assert(SizeOf(TInAddr) = 4);
-  assert(SizeOf(TIn6Addr) = 16);
+  assert(SizeOf(TNetIP4) = 4);
+  assert(SizeOf(TNetIP6) = 16);
   assert(SizeOf(TSockAddrIn) = 16);
   assert(SizeOf(TNetAddr) = SOCKADDR_SIZE);
   assert(SizeOf(TNetAddr) >= {$ifdef OSWINDOWS} SizeOf(TSockAddrIn6)
