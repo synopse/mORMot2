@@ -90,6 +90,8 @@ function dlclose(Lib: pointer): cint;
 function dlerror: UnicodeString;
 function dladdr(Lib: pointer; info: Pdl_info): cint;
 
+function envp: PPAnsiChar; // system.envp is nil !
+
 procedure InitCriticalSection(var cs);
 procedure DoneCriticalSection(var cs);
 procedure ThreadSwitch;
@@ -425,6 +427,10 @@ begin
   result := Posix.Dlfcn.dladdr(PtrUInt(Lib), info^);
 end;
 
+function envp: PPAnsiChar;
+begin
+  result := Posix.Unistd.environ;
+end;
 
 procedure InitCriticalSection(var cs);
 begin

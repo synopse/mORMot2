@@ -11363,7 +11363,9 @@ begin
   caps[0] := 0;
   caps[1] := 0;
   try
-    p := pointer(system.envp); // PPAnsiChar
+    p := pointer(envp); // PPAnsiChar
+    if p = nil then
+      exit; // e.g. on Delphi POSIX
     while p^ <> 0 do
       inc(p);
     inc(p); // auxv is located after the last textual environment variable

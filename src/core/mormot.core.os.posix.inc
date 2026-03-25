@@ -2578,7 +2578,7 @@ var
   b, p: PUtf8Char;
   n: PtrInt;
 begin
-  e := pointer(system.envp);
+  e := pointer(envp);
   if e = nil then
     exit;
   n := 0; // pre-compute the number of entries
@@ -2592,7 +2592,7 @@ begin
     exit; // should never happen
   SetLength(_SystemEnvNames, n);
   SetLength(_SystemEnvValues, n);
-  e := pointer(system.envp);
+  e := pointer(envp);
   n := 0;
   repeat
     p := e^;
@@ -5635,22 +5635,25 @@ begin
   {$endif OSDARWIN}
   {$ifdef OSLINUXANDROID}
   // add entropy from auxiliary vectors - https://lwn.net/Articles/519085/
-  auxv := pointer(system.envp);
-  while auxv[0] <> 0 do
-    auxv := @auxv[1];
-  auxv := @auxv[1]; // set by kernel's ELF binary loader after all env PPAnsiChar
-  P := pointer(auxv);
-  while auxv[0] <> 0 do
+  auxv := pointer(envp);
+  if auxv <> nil then
   begin
-    if auxv[0] = 25 then  // AT_RANDOM: 16 random bytes (used for stacks canary)
-      with SystemEntropy do // should be available from 2.6.29 on glibc
-      begin
-        LiveFeed := PHash128Rec(auxv[1])^; // great initial source from Kernel
-        XorMemory(Startup, PHash128Rec(auxv[1])^); // won't hurt
-      end;
-    auxv := @auxv[2];
+    while auxv[0] <> 0 do
+      auxv := @auxv[1];
+    auxv := @auxv[1]; // set by kernel's ELF binary loader after all env PPAnsiChar
+    P := pointer(auxv);
+    while auxv[0] <> 0 do
+    begin
+      if auxv[0] = 25 then  // AT_RANDOM: 16 random bytes (used for stacks canary)
+        with SystemEntropy do // should be available from 2.6.29 on glibc
+        begin
+          LiveFeed := PHash128Rec(auxv[1])^; // great initial source from Kernel
+          XorMemory(Startup, PHash128Rec(auxv[1])^); // won't hurt
+        end;
+      auxv := @auxv[2];
+    end;
+    crc32c128(@SystemEntropy.Startup, P, PAnsiChar(auxv) - P); // all auxv info
   end;
-  crc32c128(@SystemEntropy.Startup, P, PAnsiChar(auxv) - P); // all auxv info
   {$endif OSLINUXANDROID}
   // CpuCache, Executable.Hash, CpuFeatures will be added in main mormot.core.os
 end;
