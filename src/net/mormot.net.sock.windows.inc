@@ -80,26 +80,26 @@ const
   }
 
 type
-  PInAddr = ^in_addr;
-  in_addr = packed record
+  TInAddr = packed record
     case integer of
       0: (S_bytes: packed array[0..3] of byte);
-      1: (S_addr: TNetIP4);
+      1: (S_addr:  TNetIP4);
   end;
+  PInAddr = ^TInAddr;
 
-  PSockAddrIn = ^sockaddr_in;
-  sockaddr_in = packed record
+  PSockAddrIn = ^TSockAddrIn;
+  TSockAddrIn = packed record
     case integer of
       0: (sin_family: word;
-          sin_port: word;
-          sin_addr: in_addr;
-          sin_zero: array[0..7] of AnsiChar);
-      1: (sa_family: word;
-          sa_data: array[0..13] of AnsiChar)
+          sin_port:   word;
+          sin_addr:   TInAddr;
+          sin_zero:   array[0..7] of AnsiChar);
+      1: (sa_family:  word;
+          sa_data:    array[0..13] of AnsiChar)
   end;
 
-  PInAddr6 = ^in6_addr;
-  in6_addr = packed record
+  PIn6Addr = ^TIn6Addr;
+  TIn6Addr = packed record
     case integer of
       0: (S6_addr:   THash128);
       1: (u6_addr8:  packed array[0..15] of byte);
@@ -107,15 +107,18 @@ type
       3: (u6_addr32: packed array[0..3]  of integer);
   end;
 
-  PSockAddrIn6 = ^sockaddr_in6;
-  sockaddr_in6 = packed record
+  PSockAddrIn6 = ^TSockAddrIn6;
+  TSockAddrIn6 = packed record
     sin6_family:   word;     // AF_INET6
     sin6_port:     word;     // Transport level port number
     sin6_flowinfo: cardinal; // IPv6 flow information
-    sin6_addr:     in6_addr; // IPv6 address
-    sin6_scope_id: cardinal; // Scope Id: IF number for link-local
-                             //           SITE id for site-local
+    sin6_addr:     TIn6Addr; // IPv6 address
+    sin6_scope_id: cardinal; // IF number for link-local, SITE id for site-local
   end;
+
+  // structure used by kernel to store most addresses
+  TSockAddr = TSockAddrIn;
+  PSockAddr = ^TSockAddr;
 
 const
   INADDR_ANY       = $00000000;
@@ -221,12 +224,6 @@ const
   PF_INET         = AF_INET;
   PF_INET6        = AF_INET6;
   PF_MAX          = AF_MAX;
-
-type
-  // Structure used by kernel to store most addresses
-  PSockAddr = ^TSockAddr;
-  TSockAddr = sockaddr_in;
-  sockaddr = sockaddr_in; // as in POSIX
 
 type
   PAddrInfo = ^TAddrInfo;
@@ -565,6 +562,11 @@ procedure TNetAddr.Clear;
 begin
   FillCharFast(Addr, SizeOf(Addr), 0);
 end; // some obscure Windows docs seem to state that zeroing is expected
+
+procedure TNetAddr.SetFamily(fam: cardinal);
+begin
+  PSockAddr(@Addr)^.sin_family := fam;
+end;
 
 function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
