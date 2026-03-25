@@ -112,17 +112,81 @@ type
   // - but we use PtrInt on POSIX to cast it as TNetSocket = ^PNetSocketWrap
   TSocket = PtrInt;
 
-  PSockAddrIn6 = ^sockaddr_in6;
+  // we redefined most of the sockaddr structs due to OpenBSD FPC RTL bug
+  // and to share the same fields between FPC and Delphi POSIX
+  TInAddr = packed record
+    case boolean of
+       true:  (s_addr:  TNetIP4); // inaddr_t=cuint32
+       false: (s_bytes: packed array[1..4] of byte);
+  end;
+  PInAddr = ^TInAddr;
+
+  TIn6Addr = packed record
+  case byte of
+    0: (u6_addr8:  array[0..15] of cuchar);
+    1: (u6_addr16: array[0..7]  of cushort);
+    2: (u6_addr32: array[0..3]  of cuint);
+    3: (s6_addr8:  array[0..15] of cuchar);
+    4: (s6_addr:   array[0..15] of cuchar);
+    5: (s6_addr16: array[0..7]  of cshort);
+    6: (s6_addr32: array[0..3]  of cint);
+  end;
+  PIn6Addr = ^TIn6Addr;
+
+  {$ifdef SOCK_HAS_SINLEN} // as set in mormot.defines.inc (and FPC RTL)
+  sa_family_t = cuchar;    // 8-bit to follow a 8-bit sa_len field
+  {$else}
+  sa_family_t = cushort;   // 16-bit on Linux as on Windows
+  {$endif SOCK_HAS_SINLEN}
+
+  TSockAddrIn = packed record
+    {$ifdef SOCK_HAS_SINLEN}
+    sa_len: cuchar;   // could be 0 on FreeBSD/Darwin but not on OpenBSD
+    {$endif SOCK_HAS_SINLEN}
+    case integer of
+      0: (sa_family:  sa_family_t;
+          sa_data:    packed array[0..13] of cuchar);
+      1: (sin_family: sa_family_t;
+          sin_port:   cushort;
+          sin_addr:   TInAddr;
+          sin_zero:   packed array[0..7] of cuchar);
+  end;
+  PSockAddrIn = ^TSockAddrIn;
+
+  TSockAddrIn6 = packed record
+    {$ifdef SOCK_HAS_SINLEN}
+    sin6_len:      cuchar; // could be 0 on FreeBSD/Darwin but not on OpenBSD
+    {$endif SOCK_HAS_SINLEN}
+    sin6_family:   sa_family_t;
+    sin6_port:     cushort;
+    sin6_flowinfo: cuint;
+    sin6_addr:     TIn6Addr;
+    sin6_scope_id: cuint;
+  end;
+  PSockAddrIn6 = ^TSockAddrIn6;
+
+  TSockAddrUnix = packed record
+    {$ifdef SOCK_HAS_SINLEN}
+    sun_len:    cuchar; // could be 0 on FreeBSD/Darwin but not on OpenBSD
+    {$endif SOCK_HAS_SINLEN}
+    sun_family: sa_family_t;
+    sun_path:   array[0..107] of AnsiChar;
+  end;
+  PSockAddrUnix = ^TSockAddrUnix;
+
+  // structure used by kernel to store most addresses
+  TSockAddr = TSockAddrIn;
+  PSockAddr = ^TSockAddr;
 
   THostEnt = record
     h_name: PAnsiChar;
     h_aliases: PPAnsiChar;
-    h_addrtype: integer;
-    h_length: socklen_t;
+    h_addrtype: cint;
+    h_length: TSockLen;
     case integer of
        0: (h_addr_list: PPAnsiChar);
-       1: (h_addr:      ^pin_addr);
-       2: (h_addr6:     ^pin6_addr);
+       1: (h_addr:      ^PInAddr);
+       2: (h_addr6:     ^PIn6Addr);
   end;
   PHostEnt = ^THostEnt;
 
@@ -154,13 +218,13 @@ type
   /// polling request data structure for poll()
   TPollFD = record
     /// file descriptor to poll
-    fd: integer;
+    fd: cint;
     /// types of events poller cares about
     // - mainly POLLIN and/or POLLOUT
-    events: Smallint;
+    events: cshort;
     /// types of events that actually occurred
     // - caller could just reset revents := 0 to reuse the structure
-    revents: Smallint;
+    revents: cshort;
   end;
   PPollFD = ^TPollFD;
 
@@ -423,19 +487,25 @@ var
   // since this may take some time, we use a pthread mutex, not a TLightLock
 
 procedure TNetAddr.Clear;
-var
-  ad4: sockaddr absolute Addr;
 begin
-  PInteger(@ad4.sin_family)^ := 0; // sin_family and sin_port = 0
+  PInteger(@Addr)^ := 0; // sa_len = sin_family = sin_port = 0
 end; // other fields are not supposed/required to be initialized on POSIX
+
+procedure TNetAddr.SetFamily(fam: cardinal);
+begin
+  PSockAddr(@Addr)^.sin_family := fam;
+  {$ifdef SOCK_HAS_SINLEN}
+  PSockAddr(@Addr)^.sa_len := Size; // for OpenBSD - FreeBSD/Darwin allow 0
+  {$endif SOCK_HAS_SINLEN}
+end;
 
 function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
 var
   h: PHostEnt;
-  ad4: sockaddr absolute Addr;
+  ad4: TSockAddr absolute Addr;
 begin
-  PInteger(@ad4.sin_family)^ := 0; // sin_family and sin_port = 0 are enough
+  Clear;
   result := nrNotFound;
   if address = '' then
     exit;
@@ -443,13 +513,16 @@ begin
   if layer = nlUnix then
   begin
     // socket file name is just copied to the address struct
-    with psockaddr_un(@Addr)^ do
+    with PSockAddrUnix(@Addr)^ do
       if length(address) >= SizeOf(sun_path) then
         // avoid buffer overflow or truncated socket name
-        result := nrFatalError
+        result := nrInvalidParameter
       else
       begin
         sun_family := AF_UNIX;
+        {$ifdef SOCK_HAS_SINLEN}
+        sun_len := SOCKADDR_SIZE; // mandatory on OpenBSD - FreeBSD/Darwin allow 0
+        {$endif SOCK_HAS_SINLEN}
         MoveFast(pointer(address)^, sun_path, length(address) + 1); // +1 for #0
         result := nrOK;
       end;
@@ -472,12 +545,12 @@ begin
       result := nrNotFound
     else
     begin
-      ad4.sin_family := h^.h_addrtype;
+      SetFamily(h^.h_addrtype);
       case h^.h_addrtype of
         AF_INET:
            ad4.sin_addr.s_addr := h^.h_addr^^.s_addr;
         AF_INET6:
-           psockaddr6(@Addr)^.sin6_addr := h^.h_addr6^^;
+           PSockAddrIn6(@Addr)^.sin6_addr := h^.h_addr6^^;
       else
         result := nrNotImplemented;
       end;
