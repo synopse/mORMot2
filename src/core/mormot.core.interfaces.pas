@@ -4822,20 +4822,30 @@ end;
 {$endif FPC}
 
 {$ifdef ABIX64}
+
+{$ifdef FPC_TEST}
+  {$L ../../res/static/delphillvm/delphi-linux-x64.o}
+  {$define NOASMBLOCK} // for testing with FPC
+{$endif FPC}
+
 {$ifdef NOASMBLOCK}
 var
   _fakecall: function(stack: PFakeCallStack): Int64 of object;
 
-procedure dofakecall;
+procedure dofakecall; {$ifdef FPC} public name 'fakecall'; {$endif}
 begin // just redirect to TInterfacedObjectFakeRaw.FakeCall
   TProcedure(TMethod(_fakecall).Code)();
 end;
 
+{$ifdef ISDELPHI}
 exports
   dofakecall name 'fakecall';
+{$endif ISDELPHI}
 
-procedure x64FakeStub;
-  external '../../res/static/delphillvm/delphi-linux-x64.o' name 'x64FakeStub';
+procedure x64FakeStub; external
+{$ifdef ISDELPHI} '../../res/static/delphillvm/delphi-linux-x64.o' {$endif}
+  name 'x64fakestub';
+
 {$else}
 
 {$ifdef FPC}
@@ -7061,8 +7071,9 @@ end;
 {$ifdef ABIX64}
 
 {$ifdef NOASMBLOCK}
-procedure CallMethod(var Args: TCallMethodArgs);
-  external '../../res/static/delphillvm/delphi-linux-x64.o' name 'x64callmethod';
+procedure CallMethod(var Args: TCallMethodArgs); external
+  {$ifdef ISDELPHI} '../../res/static/delphillvm/delphi-linux-x64.o' {$endif}
+  name 'x64callmethod';
 {$else}
 
 procedure CallMethod(var Args: TCallMethodArgs); assembler;
