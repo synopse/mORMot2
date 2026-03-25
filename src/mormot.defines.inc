@@ -314,6 +314,7 @@
         {$define DISABLE_SSE42} // circumvent clang asm bugs
       {$else}
         {$define OSBSD}         // OSX has some non-standard API calls
+        {$define SOCK_HAS_SINLEN}
         {$define FPCBSD}
         {$ifdef OPENBSD}
           {$define OSOPENBSD}   // OSBDS = OSOPENBSD + OSFREEBSD
@@ -513,6 +514,7 @@
       {$define OSDARWIN}
       {$define DELPHIDARWIN}
       {$define OSBSD}
+      {$define SOCK_HAS_SINLEN}
     {$endif MACOS}
     {$ifdef ANDROID}
       {$define OSANDROID}
