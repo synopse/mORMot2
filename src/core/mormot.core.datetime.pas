@@ -2129,10 +2129,9 @@ begin
      (PCardinal(s)^ and $ffffff =
        ord('G') + ord('M') shl 8 + ord('T') shl 16) then // HTTP default
   begin
-    inc(s);
     if s^ <> 'Z' then
       inc(s, 2);
-    P := GotoNextNotSpace(s);
+    P := IgnoreAndGotoNextNotSpace(s);
     Zone := 0;
     result := true;
   end
