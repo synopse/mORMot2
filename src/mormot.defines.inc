@@ -511,9 +511,8 @@
     {$define OSPOSIX}
     {$define DELPHIPOSIX}
     {$ifdef MACOS}
-      {$define OSDARWIN}
+      {$define OSDARWIN} // but not OSBSD
       {$define DELPHIDARWIN}
-      {$define OSBSD}
       {$define SOCK_HAS_SINLEN}
     {$endif MACOS}
     {$ifdef ANDROID}

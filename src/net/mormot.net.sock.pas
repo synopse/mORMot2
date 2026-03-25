@@ -201,7 +201,7 @@ type
     // opaque wrapper with len: TSockAddrUnix=110 or TSockAddrIn6=28 (Win)
     Addr: array[0..SOCKADDR_SIZE - 1] of byte;
     procedure SetFamily(fam: cardinal); // internal function used for BSD
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
   public
     /// fill the meaningful bytes of the internal data structure with zeros
     procedure Clear;

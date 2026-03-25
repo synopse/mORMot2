@@ -80,6 +80,8 @@ const
     {$ifndef OSOPENBSD}
     {$ifdef OSDARWIN}
     SO_NOSIGPIPE = $1022;
+    SO_REUSEPORT = $0200;
+    AF_LINK      = 18;
     {$else}
     SO_NOSIGPIPE = $800;
     {$endif OSDARWIN}

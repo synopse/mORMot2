@@ -52,6 +52,7 @@ uses
   Posix.SysWait,
   Posix.SysSocket,
   Posix.SysUtsname,
+  Posix.SysSysctl,
   Posix.DirEnt,
   Posix.NetinetIn,
   Posix.Termios;
@@ -73,8 +74,10 @@ type
   clong   = PtrInt;
   culong  = PtrUInt;
   cuint64 = QWord;
+  pcint   = ^cint;
   ssize_t = PtrInt;
   size_t  = PtrUInt;
+  psize_t = ^size_t;
   TUid    = cardinal;
   TGid    = cardinal;
   PGid    = ^TGid;
@@ -174,11 +177,13 @@ const
   SO_RCVTIMEO  = Posix.SysSocket.SO_RCVTIMEO;
   SO_REUSEADDR = Posix.SysSocket.SO_REUSEADDR;
   SO_LINGER    = Posix.SysSocket.SO_LINGER;
-  SO_PRIORITY  = Posix.SysSocket.SO_PRIORITY;
   SO_KEEPALIVE = Posix.SysSocket.SO_KEEPALIVE;
   SO_SNDBUF    = Posix.SysSocket.SO_SNDBUF;
   SO_RCVBUF    = Posix.SysSocket.SO_RCVBUF;
   SO_BROADCAST = Posix.SysSocket.SO_BROADCAST;
+  {$ifdef OSLINUXANDROID}
+  SO_PRIORITY  = Posix.SysSocket.SO_PRIORITY;
+  {$endif OSLINUXANDROID}
 
 type
   clockid_t = cint;
@@ -197,7 +202,8 @@ function fpgeterrno: cint;
 procedure fpseterrno(err: cint);
 function cerrno: cint; inline; // internal to mormot.net.sock.posix.inc
 
-function fpsettimeofday(tp: ptimeval; tzp: ptimezone): cint;
+function fpgettimeofday(tp: ptimeval; tzp: pointer): cint;
+function fpsettimeofday(tp: ptimeval; tzp: pointer): cint;
 function fpnanosleep(t, rem: ptimespec): cint;
 function GetLocalTimeOffset: integer;
 function TZSeconds: integer;
@@ -225,12 +231,12 @@ function fpread(fd: cint; buf: pointer; n: PtrInt): PtrInt;
 function fpioctl(fd, ndx: cint; data: pointer): cint;
 function fpreadlink(fn, lnk: pointer; max: cint): cint;
 
-function FpS_ISDIR(m: cint): boolean;  inline;
-function FpS_ISSOCK(m: cint): boolean; inline;
-function FpS_ISBLK(m: cint): boolean;  inline;
-function FpS_ISCHR(m: cint): boolean;  inline;
-function FpS_ISFIFO(m: cint): boolean; inline;
-function FpS_ISLNK(m: cint): boolean;  inline;
+function FpS_ISDIR(m: cint): boolean;
+function FpS_ISSOCK(m: cint): boolean;
+function FpS_ISBLK(m: cint): boolean;
+function FpS_ISCHR(m: cint): boolean;
+function FpS_ISFIFO(m: cint): boolean;
+function FpS_ISLNK(m: cint): boolean;
 
 type
   // POSIX definitions to share the same type fields between FPC and Delphi
@@ -254,6 +260,8 @@ function fpkill(pid, sig: cint): cint; cdecl;
   external clib name 'kill';
 function fpfork: TPid; cdecl;
   external clib name 'fork';
+
+{$ifdef OSLINUX}
 
 const
   EPOLLIN      = $01;
@@ -290,6 +298,33 @@ function epoll_ctl(epfd, op, fd: cint; event: PEPoll_Event): cint; cdecl;
 function epoll_wait(epfd: cint; events: PEPoll_Event;
     maxevents, timeout: cint): cint; cdecl;
   external clib name 'epoll_wait';
+
+{$endif OSLINUX}
+
+{$ifdef OSDARWIN}
+
+const
+  CTL_HW          = 6;
+  MAP_ANONYMOUS   = $1000; // not defined in Delphi RTL
+  HW_USERMEM      = HW_USERMEM;
+  HW_PAGESIZE     = HW_PAGESIZE;
+  HW_MACHINE      = HW_MACHINE;
+  HW_MODEL        = HW_MODEL;
+  HW_NCPU         = HW_NCPU;
+  HW_CACHELINE    = HW_CACHELINE;
+  HW_L1DCACHESIZE = HW_L1DCACHESIZE;
+  HW_L2CACHESIZE  = HW_L2CACHESIZE;
+  HW_L3CACHESIZE  = HW_L3CACHESIZE;
+  HW_MEMSIZE      = HW_MEMSIZE;
+
+function fpsysctl(name: pcint; namelen: cuint; oldp: pointer;
+    oldlenp: psize_t; newp: pointer; newlen: size_t): cint; cdecl;
+  external clib name 'sysctl';
+function fpsysctlbyname(name: PAnsiChar; oldp: pointer; oldlenp: psize_t;
+    newp: pointer; newlen: size_t): cint; cdecl;
+  external clib name 'sysctlbyname';
+
+{$endif OSDARWIN}
 
 function FpGetuid: TUid;
 function FpGetgid: TGid;
@@ -453,9 +488,14 @@ begin
   system.SetLastError(err);
 end;
 
-function fpsettimeofday(tp: ptimeval; tzp: ptimezone): cint;
+function fpsettimeofday(tp: ptimeval; tzp: pointer): cint;
 begin
   result := settimeofday(tp, tzp);
+end;
+
+function fpgettimeofday(tp: ptimeval; tzp: pointer): cint;
+begin
+  result := gettimeofday(tp^, tzp);
 end;
 
 function fpnanosleep(t, rem: ptimespec): cint;

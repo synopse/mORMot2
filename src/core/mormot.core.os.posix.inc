@@ -284,7 +284,7 @@ begin
       {$ifdef OSDARWIN}
       // Mach OS has its own ICU set of libraries
       icu := LibraryOpen('libicuuc.dylib');
-      if icu <> nil then
+      if icu <> 0 then
         icui18n := LibraryOpen('libicui18n.dylib');
       {$else}
       // libicudata should be loaded first because other two depend on it
@@ -886,7 +886,7 @@ end;
 
 function UnixTimeUtc: TUnixTime;
 var
-  tz: timeval;
+  tz: TTimeVal;
 begin
   fpgettimeofday(@tz, nil); // from libc
   result := tz.tv_sec;
@@ -894,7 +894,7 @@ end;
 
 function UnixMSTimeUtc: TUnixMSTime;
 var
-  tz: timeval;
+  tz: TTimeVal;
 begin
   fpgettimeofday(@tz, nil);
   result := (Int64(tz.tv_sec) * MilliSecsPerSec) +
@@ -903,7 +903,7 @@ end;
 
 procedure GetSystemTime(out result: TSystemTime);
 var
-  tz: timeval;
+  tz: TTimeVal;
 begin
   fpgettimeofday(@tz, nil);
   EpochToSystemTime(tz.tv_sec, result);
@@ -912,7 +912,7 @@ end;
 
 procedure GetLocalTime(out result: TSystemTime);
 var
-  tz: timeval;
+  tz: TTimeVal;
 begin
   fpgettimeofday(@tz, nil);
   // + unixutil.TZSeconds = UTC to local time conversion
@@ -3012,7 +3012,7 @@ begin
     result := 0; // not implemented yet on BSD/Darwin
 end;
 
-function bsdsysctl(node, id: cint; dest: pointer; len: cint): cint; overload;
+function bsdsysctl(node, id: cint; dest: pointer; len: cint): Int64; overload;
 var
   mib: array[0..1] of cint;
 begin
@@ -3023,20 +3023,20 @@ begin
     result := 0;
 end;
 
-function bsdsysctl(name: PAnsiChar; dest: pointer; len: cint): cint; overload;
+function bsdsysctl(name: PAnsiChar; dest: pointer; len: cint): Int64; overload;
 begin
   result := len;
   if FPsysctlbyname(name, dest, @result, nil, 0) <> 0 then
     result := 0;
 end;
 
-function fpsysctlhwint(hwid: cint): Int64;
+function fpsysctlhwint(hwid: cint): QWord;
 begin
   result := 0;
   bsdsysctl(CTL_HW, hwid, @result, SizeOf(result));
 end;
 
-function fpsysctlbynameint(name: PAnsiChar): Int64;
+function fpsysctlbynameint(name: PAnsiChar): QWord;
 begin
   result := 0;
   bsdsysctl(name, @result, SizeOf(result));
@@ -3244,25 +3244,26 @@ end;
 procedure XorOSEntropy(var e: THash512Rec);
 var
   mem: TMemoryInfo;
-  tix1: UInt64         absolute mem.memtotal; // in ticks (ns) resolution
-  tix2: UInt64         absolute mem.memfree;
-  avg: TLoadAvg        absolute mem.memfree;  // array[0..2] of double
-  proccount: cardinal  absolute mem.vmfree;
-  infocount: cardinal  absolute mem.percent;
-  info: PCardinalArray absolute mem.allocused;
+  avg: ^TLoadAvg;
+  proccount, infocount: PCardinal;
+  info: PCardinalArray;
 begin
   // some minimal OS entropy we could get on Darwin
-  tix1 := tix1 xor mach_absolute_time;        // monotonic hi-res clock
-  getloadavg(avg, 3);                         // system stats
+  mem.memtotal := mem.memtotal xor mach_absolute_time; // monotonic hi-res clock
+  avg := @mem.memfree;                        // 3*64-bit double
+  getloadavg(avg^, 3);                        // system stats
   DefaultHasher128(@e.h0, @mem, SizeOf(mem)); // include values on stack
   GetMemoryInfo(mem, {withalloc=}false);      // also fill mem with zeros
   DefaultHasher128(@e.h1, @mem, SizeOf(mem));
-  infocount := 0;
+  proccount := @mem.vmfree;
+  infocount := @mem.percent;
+  info := @mem.allocused;
+  infocount^ := 0;
   host_processor_info(mach_host_self,         // detailed per-cpu times
-    PROCESSOR_CPU_LOAD_INFO, proccount, info, infocount);
-  DefaultHasher128(@e.h2, pointer(info), infocount * SizeOf(info^[0]));
-  tix1 := mach_continuous_time;               // wall clock time since boot
-  tix2 := mach_absolute_time;                 // should have changed in-between
+    PROCESSOR_CPU_LOAD_INFO, proccount^, info, infocount^);
+  DefaultHasher128(@e.h2, pointer(info), infocount^ * SizeOf(info^[0]));
+  mem.memtotal := mach_continuous_time;       // wall clock time since boot
+  mem.memfree := mach_absolute_time;          // should have changed in-between
   crcblock(@e.h3, @mem);                      // another algo
 end;
 
@@ -3770,6 +3771,10 @@ begin
 end;
 
 {$ifdef OSDARWIN}
+type
+  fsid_t = record
+    val: array[0..1] of cint;
+  end;
 {$if defined(cpuarm) or defined(cpuaarch64) or defined(iphonesim)}
 const // FPC RTL defined wrong field lengths for TStatfs in darwin/ptypes.inc
   MFSTYPENAMELEN = 16;
@@ -3792,6 +3797,33 @@ type // see https://keith.github.io/xcode-man-pages/statfs.2.html
     mountpoint:  array[0 .. PATH_MAX - 1]       of AnsiChar;
     mntfromname: array[0 .. PATH_MAX - 1]       of AnsiChar;
     reserved:    array[0 .. 7] of cuint32;
+  end;
+  {$else}
+const
+  MFSNAMELEN = 15;
+  MNAMELEN   = 90;
+type
+  TStatfs = record
+    otype: cshort;
+    oflags: cshort;
+    bsize: clong;
+    iosize: clong;
+    blocks: clong;
+    bfree: clong;
+    bavail: clong;
+    files: clong;
+    ffree: clong;
+    fsid: fsid_t;
+    fowner: TUid;
+    reserved1: cshort;
+    ftype: cshort;
+    fflags: clong;
+    reserved2:   array[0 .. 1] of clong;
+    fstypename:  array[0 .. MFSNAMELEN - 1] of AnsiChar;
+    mountpoint:  array[0 .. MNAMELEN - 1]   of AnsiChar;
+    mntfromname: array[0 .. MNAMELEN - 1]   of AnsiChar;
+    f_reserved3: AnsiChar;
+    reserved4: array[0 .. 3] of clong;
   end;
 {$ifend}
 {$else}
@@ -4047,7 +4079,6 @@ var
   all: array of TStatFs;
 begin
   result := nil;
-  fs := nil;
   max := getfsstat(nil, 0, MNT_WAIT); // return the number to allocate
   if max <= 0 then
     exit;
@@ -5227,7 +5258,6 @@ begin
   {$endif CPUARM3264}
   // retrieve Kernel and Hardware information
   StdOut := StdOutputHandle;
-  modname := nil;
   modnum := nil;
   {$ifdef OSBSDDARWIN}
   // pure FreeBSD NetBSD MacOS branch
@@ -5239,6 +5269,8 @@ begin
   if PosChar(beg, ' ') = nil then // e.g. from a Parallels VM
     beg := fpsysctlhwstr(HW_MODEL, temp1);
   modname := fpsysctlbynamestr('machdep.cpu.brand_string', temp2);
+  {$else}
+  modname := nil;
   {$endif OSDARWIN}
   FastSetString(BiosInfoText, beg, StrLen(beg));
   if SystemInfo.dwNumberOfProcessors = 0 then
@@ -5266,6 +5298,7 @@ begin
   SystemMemorySize := fpsysctlhwint(HW_PHYSMEM);
   {$endif OSDARWIN}
   {$else}
+  modname := nil;
   {$ifdef OSANDROID}
   // pure ANDROID branch
   release := GetSystemProperty('ro.build.version.release');
@@ -5525,7 +5558,7 @@ begin
     if modname = nil then // '15' number from kernel revision
       AppendShort(MACOS_NUM[OSVersion32.utsrelease[2]], temp1)
     else                  // '15.7.3'
-      AppendShortBuffer(modname, StrLen(modname), high(temp1), @temp1);
+      AppendShortBuffer(pointer(modname), StrLen(modname), high(temp1), @temp1);
     AppendShortCharSafe(' ', temp1);
     AppendShort(MACOS_NAME[OSVersion32.utsrelease[2]], temp1);
   end;
