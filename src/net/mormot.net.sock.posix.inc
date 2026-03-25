@@ -393,16 +393,16 @@ function accept(s: integer; addr: PSockAddr; var addrlen: TSockLen): integer; cd
 
 function accept4(s: integer; addr: PSockAddr; var addrlen: TSockLen; flags: integer): integer;
   cdecl; external clib name 'accept4'  // no LIBC_SUFFIX: libc 2.10 is required
-    {$ifdef OSLINUXINTEL} + '@GLIBC_2.10' {$endif} ;
+    {$ifdef FPC}{$ifdef OSLINUXINTEL} + '@GLIBC_2.10' {$endif}{$endif} ;
 
 {$endif HASACCEPT4}
 
 function connect(s: integer; name: PSockAddr; namelen: TSockLen): integer; cdecl;
   external clib name 'connect' + LIBC_SUFFIX;
 
-function select(nfds: integer; readfds, writefds, exceptfds: PFDSet;
+{function select(nfds: integer; readfds, writefds, exceptfds: PFDSet;
    timeout: PTimeVal): integer; cdecl;
-  external clib name 'select' + LIBC_SUFFIX;
+  external clib name 'select' + LIBC_SUFFIX;} // use poll() on POSIX
 
 function recv(s: integer; Buf: pointer; len: size_t; flags: integer): ssize_t; cdecl;
   external clib name 'recv' + LIBC_SUFFIX;

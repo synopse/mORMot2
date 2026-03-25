@@ -2345,6 +2345,7 @@ const
   INVALID_HANDLE_VALUE = THandle(-1);
 
   /// allow to assign proper signed symbol table name for a libc.so.6 method
+  {$ifdef FPC}
   {$ifdef OSLINUXX64}
   LIBC_SUFFIX = '@GLIBC_2.2.5';
   {$else}
@@ -2354,6 +2355,9 @@ const
   LIBC_SUFFIX = ''; // no suffix seems needed outside of Intel/AMD systems
   {$endif OSLINUXX86}
   {$endif OSLINUXX64}
+  {$else}
+  LIBC_SUFFIX = ''; // Delphi LLVM does not like suffixes
+  {$endif FPC}
 
 {$undef HAS_OSPTHREADS}
 {$ifdef FPC}
