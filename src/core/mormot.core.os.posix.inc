@@ -829,10 +829,16 @@ function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): integer;
 
 function host_processor_info(host, flavor: cint; var proccount: cardinal;
   var info: PCardinalArray; var infocount: cardinal): cint;
-  cdecl external '_host_processor_info';
+  cdecl external 'host_processor_info';
 
 function mach_host_self: cint;
-  cdecl external '_mach_host_self';
+  cdecl external 'mach_host_self';
+
+function vm_deallocate(task: cint; add: pointer; size: PtrUInt): cint;
+  cdecl external 'vm_deallocate';
+
+function mach_task_self: cint;
+  cdecl external 'mach_task_self';
 
 var
   mach_timeinfo: TTimebaseInfoData;
@@ -3210,32 +3216,48 @@ end;
 
 {$ifdef OSDARWIN}
 
+type
+  TMachCpuInfo = record
+    nproc, ninfo: cardinal;
+    info: PCardinalArray; // per User/System/Idle/Nice quad
+  end;
+
+function GetMachCpuInfo(out cpu: TMachCpuInfo): boolean;
+begin
+  cpu.nproc := 0;
+  cpu.ninfo := 0;
+  cpu.info := nil;
+  result := (host_processor_info(mach_host_self, PROCESSOR_CPU_LOAD_INFO,
+               cpu.nproc, cpu.info, cpu.ninfo) = 0) and
+            (cpu.nproc <> 0) and
+            (cpu.ninfo = cpu.nproc * 4) and
+            (cpu.info <> nil);
+end;
+
+procedure FreeMachCpuInfo(var cpu: TMachCpuInfo);
+begin
+  vm_deallocate(mach_task_self, cpu.info, cpu.ninfo shl 2);
+end;
+
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 var
-  proccount, infocount: cardinal;
-  info: PCardinalArray; // per User/System/Idle/Nice quad
+  cpu: TMachCpuInfo;
 begin
   result := false;
   IdleTime := 0;
   KernelTime := 0;
   UserTime := 0;
-  proccount := 0;
-  infocount := 0;
-  info := nil;
-  if (host_processor_info(mach_host_self, PROCESSOR_CPU_LOAD_INFO,
-       proccount, info, infocount) <> 0) or
-     (proccount = 0) or
-     (infocount <> proccount * 4) or
-     (info = nil) then
+  if not GetMachCpuInfo(cpu) then
     exit;
   repeat
     //writeln('U:',info[0],' S:', info[1],' I:', info[2],' N:', info[3]);
-    inc(UserTime,   info[0] + info[3]);  // CPU_STATE_USER + CPU_STATE_NICE
-    inc(KernelTime, info[1]);            // CPU_STATE_SYSTEM
-    inc(IdleTime,   info[2]);            // CPU_STATE_IDLE
-    info := @info[4];                    // next cpu
-    dec(proccount);
-  until proccount = 0;
+    inc(UserTime,   cpu.info[0] + cpu.info[3]); // CPU_STATE_USER + CPU_STATE_NICE
+    inc(KernelTime, cpu.info[1]);               // CPU_STATE_SYSTEM
+    inc(IdleTime,   cpu.info[2]);               // CPU_STATE_IDLE
+    cpu.info := @cpu.info[4];                   // next cpu
+    dec(cpu.nproc);
+  until cpu.nproc = 0;
+  FreeMachCpuInfo(cpu);
   inc(KernelTime, IdleTime); // as with GetSystemTimes() WinAPI
   result := (UserTime + KernelTime) <> 0;
   //writeln('I:',IdleTime,',K:',KernelTime,',U:',UserTime,'  result=',result);
@@ -3245,8 +3267,7 @@ procedure XorOSEntropy(var e: THash512Rec);
 var
   mem: TMemoryInfo;
   avg: ^TLoadAvg;
-  proccount, infocount: PCardinal;
-  info: PCardinalArray;
+  cpu: ^TMachCpuInfo;
 begin
   // some minimal OS entropy we could get on Darwin
   mem.memtotal := mem.memtotal xor mach_absolute_time; // monotonic hi-res clock
@@ -3255,13 +3276,12 @@ begin
   DefaultHasher128(@e.h0, @mem, SizeOf(mem)); // include values on stack
   GetMemoryInfo(mem, {withalloc=}false);      // also fill mem with zeros
   DefaultHasher128(@e.h1, @mem, SizeOf(mem));
-  proccount := @mem.vmfree;
-  infocount := @mem.percent;
-  info := @mem.allocused;
-  infocount^ := 0;
-  host_processor_info(mach_host_self,         // detailed per-cpu times
-    PROCESSOR_CPU_LOAD_INFO, proccount^, info, infocount^);
-  DefaultHasher128(@e.h2, pointer(info), infocount^ * SizeOf(info^[0]));
+  cpu := @mem.filetotal;
+  if GetMachCpuInfo(cpu^) then                // detailed per-cpu times
+  begin
+    DefaultHasher128(@e.h2, pointer(cpu^.info), cpu^.ninfo shl 2);
+    FreeMachCpuInfo(cpu^);
+  end;
   mem.memtotal := mach_continuous_time;       // wall clock time since boot
   mem.memfree := mach_absolute_time;          // should have changed in-between
   crcblock(@e.h3, @mem);                      // another algo
