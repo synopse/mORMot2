@@ -4245,10 +4245,10 @@ begin // inlined TTextDateWriter.CreateOwnedShort logic with no heap allocation
   VMT := TTextDateWriter; // for the virtual methods to work
   FillCharFast(Fields, SizeOf(Fields), 0);
   result := @VMT;
-  result.fFlags := [twfBufferIsOnStack, twfStreamIsShortString, twfFlushToStreamNoAutoResize];
+  result.fFlags := [twfBufferIsOnStack, twfDestIsShortString, twfFlushNoAutoResize];
   result.InternalSetBuffer(@Temp, SizeOf(Temp));
   Dest[0] := #0;
-  result.fStream := @Dest; // not a true TStream
+  result.fDest := @Dest; // not a true TStream
   result.fShortStringMax := high(Dest);
 end;
 
@@ -4263,11 +4263,11 @@ var
   W: TTextDateWriter;
 begin // inlined FlushFinal + WriteToStream
   W := @VMT;
-  if W.fStream = nil then
+  if W.fDest = nil then
     exit; // Dest is already full
   len := W.B - W.fTempBuf + 1;
   if len > 0 then
-    AppendShortBuffer(pointer(W.fTempBuf), len, W.fShortStringMax, pointer(W.fStream));
+    AppendShortBuffer(pointer(W.fTempBuf), len, W.fShortStringMax, W.fDest);
 end;
 
 

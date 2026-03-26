@@ -5285,7 +5285,7 @@ end;
 
 procedure THttpLoggerWriter.TryRotate(Tix32: cardinal);
 begin
-  if (fStream <> nil) and
+  if (fDest <> nil) and
      (fRotate.Trigger > hrtDisabled) then
     fRotate.TryRotate(Tix32, WrittenBytes + Int64(PendingBytes));
 end;
@@ -5307,14 +5307,14 @@ begin
       fOwner.fSafe.UnLock;
     hreOpenFile:
       begin
-        fStream := TFileStreamEx.Create(FileName, fmCreate or fmShareRead);
+        fDest := TFileStreamEx.Create(FileName, fmCreate or fmShareRead);
         fInitialStreamPosition := 0; // brand new file
         CancelAll;
       end;
     hreCloseFile:
       begin
         FlushFinal;
-        FreeAndNil(fStream);
+        FreeAndNil(fDest);
       end;
   end;
 end;
@@ -5332,8 +5332,8 @@ begin
   s := TFileStreamNoWriteError.CreateAndRenameIfLocked(fRotate.FileName);
   s.Seek(0, soEnd); // append
   inherited Create(s, 65536);
-  fFlags := [twfStreamIsOwned,
-             twfFlushToStreamNoAutoResize,
+  fFlags := [twfDestIsOwnedStream,
+             twfFlushNoAutoResize,
              twfNoWriteToStreamException];
 end;
 

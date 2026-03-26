@@ -3152,17 +3152,19 @@ end;
 procedure TResultsWriter.TrimFirstRow;
 var
   P, PBegin, PEnd: PUtf8Char;
+  ms: TCustomMemoryStream;
 begin
   if (self = nil) or
-     not fStream.InheritsFrom(TCustomMemoryStream) or
+     not TStream(fDest).InheritsFrom(TCustomMemoryStream) or
      fExpand or
      (fStartDataPosition = 0) then
     exit;
   // go to begin of first row
-  FlushToStream; // we need the data to be in fStream memory
+  FlushToStream; // we need the data to be in fDest: TStream memory
   // PBegin^=val11 in { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
-  PBegin := TCustomMemoryStream(fStream).Memory;
-  PEnd := PBegin + fStream.Position;
+  ms := fDest;
+  PBegin := ms.Memory;
+  PEnd := PBegin + ms.Position;
   PEnd^ := #0; // mark end of current values
   inc(PBegin, fStartDataPosition + 1); // +1 to include ',' of ',val11'
   // jump to end of first row
@@ -3172,7 +3174,7 @@ begin
   // trim first row data
   if P^ <> #0 then
     MoveFast(P^, PBegin^, PEnd - P); // erase content
-  fStream.Seek(PBegin - P, soCurrent){%H-}; // adjust current stream position
+  ms.Seek(PBegin - P, soCurrent){%H-}; // adjust current stream position
 end;
 
 
