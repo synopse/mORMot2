@@ -3242,6 +3242,7 @@ end;
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 var
   cpu: TMachCpuInfo;
+  p: PCardinalArray;
 begin
   result := false;
   IdleTime := 0;
@@ -3249,12 +3250,13 @@ begin
   UserTime := 0;
   if not GetMachCpuInfo(cpu) then
     exit;
+  p := cpu.info; // keep original pointer for FreeMachCpuInfo()
   repeat
-    //writeln('U:',info[0],' S:', info[1],' I:', info[2],' N:', info[3]);
-    inc(UserTime,   cpu.info[0] + cpu.info[3]); // CPU_STATE_USER + CPU_STATE_NICE
-    inc(KernelTime, cpu.info[1]);               // CPU_STATE_SYSTEM
-    inc(IdleTime,   cpu.info[2]);               // CPU_STATE_IDLE
-    cpu.info := @cpu.info[4];                   // next cpu
+    //writeln('U:', p[0],' S:', p[1],' I:', p[2],' N:', p[3]);
+    inc(UserTime,   p[0] + p[3]); // CPU_STATE_USER + CPU_STATE_NICE
+    inc(KernelTime, p[1]);        // CPU_STATE_SYSTEM
+    inc(IdleTime,   p[2]);        // CPU_STATE_IDLE
+    p := @p[4];                   // next cpu
     dec(cpu.nproc);
   until cpu.nproc = 0;
   FreeMachCpuInfo(cpu);
