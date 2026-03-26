@@ -5592,6 +5592,7 @@ procedure TTestCoreBase.Utf8Slow(Context: TObject);
       FillCharFast(dst, SizeOf(dst), 0);
       UpperCopy255Buf(@dst, @src, i)^ := #0;
       Check(StrLen(@dst) = i);
+      Check(StrLenSafe(@dst) = i);
       for j := 0 to i - 1 do
         Check(dst[j] = 'A');
     end;

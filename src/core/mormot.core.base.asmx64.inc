@@ -1988,7 +1988,8 @@ function StrLen(S: pointer): PtrInt;
         test    rcx, rcx
         {$else}
         mov     rax, rdi
-        mov     ecx, edi
+        mov     rcx, rdi
+        mov     r8,  rdi
         test    rdi, rdi
         {$endif ABIWINX64}
         jz      @null                // returns 0 if S=nil
@@ -2016,11 +2017,7 @@ function StrLen(S: pointer): PtrInt;
         // strings are short, and newer processors have higher priority)
         jz      @L1                  // loop if not found
 @L2:    // Zero-byte found. Compute string length
-        {$ifdef ABIWINX64}
         sub     rax, r8              // subtract start address
-        {$else}
-        sub     rax, rdi
-        {$endif ABIWINX64}
         add     rax, rdx             // add byte index
 @null:
 end;
