@@ -4526,7 +4526,7 @@ begin
   end;
 end;
 
-{$else} // Delphi for POSIX hook its own signal handler in System.SysUtils
+{$else} // Delphi for POSIX hooks its own signal handler in System.SysUtils
 
 procedure SynDaemonIntercept(const onlog: TSynLogProc);
 begin
@@ -5035,6 +5035,7 @@ begin
   end;
 end;
 
+{$ifndef NOPATCHRTL}
 function clock_gettime_c(clk_id: clockid_t; tp: ptimespec): cint;
 begin
   // FPC only knows the regular clocks: convert to the *_FAST version
@@ -5056,6 +5057,7 @@ begin
   // it is much faster to not use the Linux syscall but the libc vDSO call
   result := gettimeofday(tp, tzp);
 end;
+{$endif NOPATCHRTL}
 
 function GetSmbEfiMem: RawByteString;
 var
@@ -5628,18 +5630,18 @@ begin
   pthread := dlopen('libpthread.so.0', RTLD_LAZY);
   if pthread <> nil then
   begin
-    {$ifdef HAS_PTHREADSETNAMENP}
-    @pthread_setname_np := dlsym(pthread, 'pthread_setname_np');
-    {$endif HAS_PTHREADSETNAMENP}
-    {$ifdef HAS_PTHREADSETAFFINITY}
-    @pthread_setaffinity_np := dlsym(pthread, 'pthread_setaffinity_np');
-    {$endif HAS_PTHREADSETAFFINITY}
-    @pthread_cancel := dlsym(pthread, 'pthread_cancel');
-    @pthread_mutex_init := dlsym(pthread, 'pthread_mutex_init');
+    @pthread_cancel        := dlsym(pthread, 'pthread_cancel');
+    @pthread_mutex_init    := dlsym(pthread, 'pthread_mutex_init');
     @pthread_mutex_destroy := dlsym(pthread, 'pthread_mutex_destroy');
     @pthread_mutex_trylock := dlsym(pthread, 'pthread_mutex_trylock');
     @pthread_mutex_lock    := dlsym(pthread, 'pthread_mutex_lock');
     @pthread_mutex_unlock  := dlsym(pthread, 'pthread_mutex_unlock');
+    {$ifdef HAS_PTHREADSETNAMENP}
+    @pthread_setname_np    := dlsym(pthread, 'pthread_setname_np');
+    {$endif HAS_PTHREADSETNAMENP}
+    {$ifdef HAS_PTHREADSETAFFINITY}
+    @pthread_setaffinity_np := dlsym(pthread, 'pthread_setaffinity_np');
+    {$endif HAS_PTHREADSETAFFINITY}
   end;
   {$endif OSPTHREADSLIB}
   {$ifdef CPUX64}

@@ -1533,7 +1533,7 @@ var
   min, bytes: integer;
   last32: PCardinal;
   rnd: RawByteString;
-  lecuyer: TLecuyer;
+  lecuyer: TLecuyer; // convenient local thread-safe randomness source
 begin
   // ensure it is worth searching (paranoid)
   if Size <= 2 then
