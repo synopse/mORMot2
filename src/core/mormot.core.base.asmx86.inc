@@ -1086,6 +1086,48 @@ asm
 @null:
 end;
 
+function StrLenWSSE2(S: PWideChar): PtrInt; // mostly used with UNICODE strings
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        // PWideChar SSE2 version by AB
+        mov     ecx, eax            // copy pointer
+        test    eax, eax
+        jz      @null               // returns 0 if S=nil
+        push    eax                 // save start address
+        test    al, 1
+        jnz     @unal               // unaligned input (paranoid)
+        pxor    xmm0, xmm0          // set to zero
+        and     ecx, 15             // lower 4 bits indicate misalignment
+        and     eax, -16            // align pointer by 16
+        // will never read outside a memory page boundary, so won't trigger GPF
+        movaps  xmm1, [eax]         // read from nearest preceding boundary
+        pcmpeqw xmm1, xmm0          // compare 16 bytes with zero into 0000/ffff
+        pmovmskb edx, xmm1          // get one bit for each byte result
+        shr     edx, cl             // shift out false bits
+        shl     edx, cl             // shift back again
+        bsf     edx, edx            // find first 1-bit
+        jnz     @found
+        // Main loop, search 16 bytes (8 WideChar) at a time
+{$ifdef FPC} align 16 {$else} {$ifdef ASMALIGN} .align 16 {$endif}{$endif}
+@by16:  add     eax, 16             // increment pointer by 16
+        movaps  xmm1, [eax]         // read 16 bytes aligned
+        pcmpeqw xmm1, xmm0          // compare 16 bytes with zero into 0000/ffff
+        pmovmskb edx, xmm1          // get one bit for each byte result
+        bsf     edx, edx            // find first 1-bit
+        jz      @by16               // loop if not found
+@found: // Zero-byte found. Compute string length
+        pop     ecx                 // restore start address
+        sub     eax, ecx            // subtract start address
+        add     eax, edx            // add byte index
+        shr     eax, 1              // convert bytes into WideChar count
+@null:  ret
+@unal:  xor     edx, edx
+@by1:   cmp     word ptr [eax], dx  // unaligned search - almost never called
+        jz      @found
+        add     eax, 2
+        jmp     @by1
+end;
+
 function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm

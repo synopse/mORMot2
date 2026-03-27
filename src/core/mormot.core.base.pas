@@ -3339,6 +3339,9 @@ function StrCompW(Str1, Str2: PWideChar): PtrInt;
 function StrLenSafe(S: pointer): PtrInt;
   {$ifdef CPU64}inline;{$endif}
 
+/// simple version of StrLenW(), but which will never read beyond the string
+function StrLenWSafe(S: PWideChar): PtrInt;
+
 /// our fast version of StrLen(), to be used with PUtf8Char/PAnsiChar
 // - under x86, will detect SSE2 and use it if available, reaching e.g.
 // 37.5 GB/s on a Core i5-13500 under Linux x86_64
@@ -3349,8 +3352,12 @@ function StrLen(S: pointer): PtrInt;
 var StrLen: function(S: pointer): PtrInt = StrLenSafe;
 {$endif ASMX64}
 
-/// our fast version of StrLen(), to be used with PWideChar
+/// our fast version of StrLen(), to be used with PWideChar - SSE2 on Intel/AMD
+{$ifdef ASMX64}
 function StrLenW(S: PWideChar): PtrInt;
+{$else}
+var StrLenW: function(S: PWideChar): PtrInt = StrLenWSafe;
+{$endif ASMINTEL}
 
 /// fast go to next text line, ended by #10 or #13#10
 // - source is expected to be not nil
@@ -10012,7 +10019,7 @@ begin
     FastSetString(result, @PByteArray(Str)[StartPos - 1], len - StartPos + 1);
 end;
 
-function StrLenW(S: PWideChar): PtrInt;
+function StrLenWSafe(S: PWideChar): PtrInt;
 begin
   result := 0;
   if S <> nil then
@@ -10809,7 +10816,10 @@ begin
   {$endif WITH_ERMS}
   {$endif HASNOSSE2}
   if cfSSE2 in CpuFeatures then
-    StrLen := @StrLenSSE2;
+  begin
+    StrLen  := @StrLenSSE2;
+    StrLenW := @StrLenWSSE2;
+  end;
   {$endif ASMX86NOTPIC}
 end;
 

@@ -2022,6 +2022,50 @@ function StrLen(S: pointer): PtrInt;
 @null:
 end;
 
+function StrLenW(S: PWideChar): PtrInt;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // PWideChar SSE2 version by AB
+        {$ifdef ABIWINX64}
+        mov     rax, rcx
+        mov     r8,  rcx
+        test    rcx, rcx
+        {$else}
+        mov     rax, rdi
+        mov     rcx, rdi
+        mov     r8,  rdi
+        test    rdi, rdi
+        {$endif}
+        jz      @null
+        test    al, 1
+        jnz     @unal          // unaligned input (paranoid)
+        pxor    xmm0, xmm0
+        and     ecx, 15        // align to 16 bytes
+        and     rax, -16
+        movaps  xmm1, [rax]    // read from nearest preceding boundary
+        pcmpeqw xmm1, xmm0     // compare 16 bytes with zero into 0000/ffff
+        pmovmskb edx, xmm1
+        shr     edx, cl        // mask out leading bytes before original pointer
+        shl     edx, cl
+        bsf     edx, edx       // first zero word index
+        jnz     @found
+{$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@loop:  add     rax, 16
+        movaps  xmm1, [rax]
+        pcmpeqw xmm1, xmm0     // compare 16 bytes with zero into 0000/ffff
+        pmovmskb edx, xmm1
+        bsf     edx, edx
+        jz      @loop          // continue until zero found
+@found: sub     rax, r8        // byte distance from start
+        add     rax, rdx       // add byte index of match
+        shr     rax, 1         // convert bytes into WideChar count
+@null:  ret
+@unal:  xor     rdx, rdx       // unaligned search - almost never called
+@by1:   cmp     word ptr [rax], dx
+        jz      @found
+        add     rax, 2
+        jmp     @by1
+end;
+
 function PosChar(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         // fast SSE2 version searching for both Chr and #0 over 16 bytes at once
