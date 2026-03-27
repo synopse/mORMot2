@@ -6695,11 +6695,14 @@ begin
     CheckEqual(PCardinal(SU)^, $DEA5D869);
     CheckEqual(StrLenW(pointer(SU)), length(SU));
     RB1 := eng.Utf8ToAnsi(U);
-    Check((RB1 <> '') and (PCardinal(RB1)^ = $37EE3598), 'Utf8ToAnsi');
-    RB2 := eng.UnicodeStringToAnsi(SU);
-    Check(SortDynArrayRawByteString(rb1, rb2) = 0, 'UnicodeStringToAnsi');
-    eng.AnsiToUtf8(RB1, U2);
-    CheckEqual(U2, U, 'AnsiToUtf8');
+    if RB1 = '' then // not supported on this sytem
+    begin
+      Check((RB1 <> '') and (PCardinal(RB1)^ = $37EE3598), 'Utf8ToAnsi');
+      RB2 := eng.UnicodeStringToAnsi(SU);
+      Check(SortDynArrayRawByteString(rb1, rb2) = 0, 'UnicodeStringToAnsi');
+      eng.AnsiToUtf8(RB1, U2);
+      CheckEqual(U2, U, 'AnsiToUtf8');
+    end;
   end;
   CheckEqual(CodePageToText(CP_UTF8), 'utf8');
   CheckEqual(CodePageToText(CP_UTF16), 'utf16le');
