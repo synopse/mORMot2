@@ -1725,8 +1725,9 @@ begin
   DoColor(ccLightCyan);
   result := (fFailedCount = 0);
   if Executable.Version.Major <> 0 then
-    FormatUtf8(CRLF +'Software version tested: % (%)', [Executable.Version.Detailed,
-      Executable.Version.BuildDateTimeString], Version);
+    FormatUtf8(CRLF +'Software version tested: % (%)',
+      [Executable.Version.Detailed,
+       Executable.Version.BuildDateTimeString], Version);
   FormatUtf8(CRLF + CRLF + 'Time elapsed for all tests: %' + CRLF +
     'Performed % by % on %',
     [RunTimer.Stop, NowToHuman, Executable.User, Executable.Host], Elapsed);

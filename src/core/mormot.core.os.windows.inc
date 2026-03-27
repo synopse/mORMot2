@@ -626,7 +626,7 @@ begin
     WinError(Code, 0, nil, @result); // fallback to FormatMessageW()
 end;
 
-function WinApiErrorShort(Code: cardinal; Lib: HMODULE): shortstring;
+function WinApiErrorShort(Code: cardinal; Lib: HMODULE): ShortString;
 begin
   if (Lib = 0) or
      not WinError(Code, Lib, @result, nil) then // try from library name
@@ -2809,8 +2809,8 @@ begin
               ft.dwLowDateTime := dwFileDateLS; // built date from version nfo
               ft.dwHighDateTime := dwFileDateMS;
               FileTimeToSystemTime(ft, st);
-              fBuildDateTime := EncodeDate(
-                st.wYear, st.wMonth, st.wDay);
+              fBuildDateTime := EncodeDate(st.wYear, st.wMonth, st.wDay);
+              fBuildDateTimeString := '';
             end;
           end;
         if VerQueryValueW(pt, '\VarFileInfo\Translation', pointer(trans), siz2) and

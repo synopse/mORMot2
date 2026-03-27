@@ -1224,7 +1224,7 @@ type
     fDetailed: string;
     fFileName: TFileName;
     fBuildDateTime: TDateTime;
-    fVersionInfo, fUserAgent: RawUtf8;
+    fBuildDateTimeString, fVersionInfo, fUserAgent: RawUtf8;
     // change the version - returns true if supplied values are actually new
     function SetVersion(aMajor, aMinor, aRelease, aBuild: integer): boolean;
   public
@@ -1280,7 +1280,7 @@ type
     // - following Major shl 16+Minor shl 8+Release bit pattern
     function Version32: integer;
     /// build date and time of this exe file, as plain text
-    function BuildDateTimeString: string;
+    function BuildDateTimeString: RawUtf8;
     /// version info of the exe file as '3.1.0.123' or ''
     // - this method returns '' if Detailed is '0.0.0.0'
     function DetailedOrVoid: string;
@@ -8944,9 +8944,12 @@ begin
   fUserAgent := '';
 end;
 
-function TFileVersion.BuildDateTimeString: string;
+function TFileVersion.BuildDateTimeString: RawUtf8;
 begin
-  result := DateTimeToIsoString(fBuildDateTime);
+  if (fBuildDateTimeString = '') and
+     (PInt64(@fBuildDateTime)^ <> 0) then
+    fBuildDateTimeString := DoDateTimeToText(fBuildDateTime);
+  result := fBuildDateTimeString;
 end;
 
 function TFileVersion.DetailedOrVoid: string;
