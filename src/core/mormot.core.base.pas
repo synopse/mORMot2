@@ -2955,9 +2955,9 @@ var
   CpuManufacturer: TIntelCpuManufacturer;
   CpuFamily, CpuModel: byte;
 
-/// twelve-character ASCII vendor string returned by Intel/AMD cpuid
-// - typical values are 'AuthenticAMD' or 'GenuineIntel'
-function IntelManufacturer: RawUtf8;
+  /// twelve-character ASCII vendor string returned by Intel/AMD cpuid
+  // - typical values are 'AuthenticAMD' or 'GenuineIntel'
+  IntelManufacturer: RawUtf8;
 
 /// twelve-character ASCII hypervisor string returned by Intel/AMD cpuid
 // - returns '' if cfHYP is not part of CpuFeatures
@@ -10650,19 +10650,6 @@ begin
     until n = 0;
 end;
 
-function IntelManufacturer: RawUtf8;
-var
-  regs: TIntelRegisters;
-  id: array[0..12] of AnsiChar;
-begin
-  GetCpuid(0, 0, regs); // EAX=0: Highest Function Parameter and Manufacturer ID
-  PCardinalArray(@id)[0] := regs.ebx; // 12-character ID in EBX,EDX,ECX
-  PCardinalArray(@id)[1] := regs.edx;
-  PCardinalArray(@id)[2] := regs.ecx;
-  id[12] := #0;
-  FastSetString(result, @id, StrLen(@id));
-end;
-
 function IntelHypervisor: RawUtf8;
 var
   regs: TIntelRegisters;
@@ -10693,6 +10680,7 @@ procedure TestCpuFeatures;
 var
   regs: TIntelRegisters;
   flags: PIntegerArray;
+  id: array[0..3] of cardinal;
 begin
   // retrieve CPUID raw flags
   GetCpuid({eax=}1, {ecx=}0, regs); // EAX=1: Processor Info and Feature Bits
@@ -10725,6 +10713,11 @@ begin
           (regs.edx = $69746e65) and
           (regs.ecx = $444d4163) then
     CpuManufacturer := icmAmd;   // 'AuthenticAMD'
+  id[0] := regs.ebx; // 12-character ID
+  id[1] := regs.edx;
+  id[2] := regs.ecx;
+  id[3] := 0;
+  FastSetString(IntelManufacturer, @id, StrLen(@id));
   // validate accuracy of most used HW opcodes against flags reported by CPUID
   if cfTSC in CpuFeatures then
     try
