@@ -4122,7 +4122,8 @@ var
   stat: ^TStatfs; // TStatfs may be redefined above for Darwin
   temp: array of TStatFs;
   max, n: PtrInt;
-  name, mnt, fs: RawUtf8; // FPC aarch64 requires explicit temp variables
+  name, mnt, fs: RawUtf8;      // FPC aarch64 requires explicit temp variables
+  pname, pmnt, pfs: PUtf8Char; // BSD are not consistent about field names
 begin
   result := nil;
   max := getfsstat(nil, 0, MNT_WAIT); // return the number to allocate
@@ -4139,18 +4140,21 @@ begin
     //WrDeb('stat^.mountpoint',  stat^.mountpoint,  SizeOf(stat^.mountpoint));
     //WrDeb('stat^.fstypename',  stat^.fstypename,  SizeOf(stat^.fstypename));
     {$ifdef OSFREEBSD} // the FPC RTL headers has field names issues
-    FastSetString(name, @stat^.f_mntfromname, StrLen(@stat^.f_mntfromname));
-    FastSetString(mnt,  @stat^.f_mntonname,   StrLen(@stat^.f_mntonname));
-    FastSetString(fs,   @stat^.f_fstypename,  StrLen(@stat^.f_fstypename));
+    pname := @stat^.f_mntfromname;
+    pmnt  := @stat^.f_mntonname;
+    pfs   := @stat^.f_fstypename;
     {$else}
-    FastSetString(name, @stat^.mntfromname, StrLen(@stat^.mntfromname));
+    pname := @stat^.mntfromname;
     {$ifdef OSDARWIN}
-    FastSetString(mnt,  @stat^.mountpoint,  StrLen(@stat^.mountpoint));
+    pmnt  := @stat^.mountpoint;
     {$else}
-    FastSetString(mnt,  @stat^.mntonname,  StrLen(@stat^.mntonname));
+    pmnt  := @stat^.mntonname;
     {$endif OSDARWIN}
-    FastSetString(fs,   @stat^.fstypename,  StrLen(@stat^.fstypename));
+    pfs   := @stat^.fstypename;
     {$endif OSFREEBSD}
+    FastSetString(name, pname, StrLen(pname));
+    FastSetString(mnt,  pmnt,  StrLen(pmnt));
+    FastSetString(fs,   pfs,   StrLen(pfs));
     AddDiskPartition(name, mnt, fs, result, n);
     inc(stat);
     dec(max);
