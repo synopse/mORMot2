@@ -874,8 +874,8 @@ type
     actCortexA8,
     actCortexA9,
     actCortexA12,
-    actCortexA15,
     actCortexA17,
+    actCortexA15,
     actCortexR4,
     actCortexR5,
     actCortexR7,
@@ -900,8 +900,14 @@ type
     actCortexA77,
     actCortexA76AE,
     actCortexR52,
+    actCortexR82AE,
+    actCortexR82,
+    actCortexR52P,
     actCortexM23,
     actCortexM33,
+    actCortexM55,
+    actCortexM85,
+    actCortexM52,
     actNeoverseV1,
     actCortexA78,
     actCortexA78AE,
@@ -974,6 +980,141 @@ procedure ArmCpuTypeNameAppend(act: TArmCpuType; id: word; var txt: ShortString)
 procedure ArmCpuImplementerNameAppend(aci: TArmCpuImplementer; id: word;
   var txt: ShortString);
 
+{ all those constants are defined here only for testing purposes }
+const
+  // https://github.com/karelzak/util-linux/blob/master/sys-utils/lscpu-arm.c
+  ARMCPU_ID: array[TArmCpuType] of word = (
+    0,      // actUnknown
+    $0810,  // actARM810
+    $0920,  // actARM920
+    $0922,  // actARM922
+    $0926,  // actARM926
+    $0940,  // actARM940
+    $0946,  // actARM946
+    $0966,  // actARM966
+    $0a20,  // actARM1020
+    $0a22,  // actARM1022
+    $0a26,  // actARM1026
+    $0b02,  // actARM11MPCore
+    $0b36,  // actARM1136
+    $0b56,  // actARM1156
+    $0b76,  // actARM1176
+    $0c05,  // actCortexA5
+    $0c07,  // actCortexA7
+    $0c08,  // actCortexA8
+    $0c09,  // actCortexA9
+    $0c0d,  // actCortexA12
+    $0c0e,  // actCortexA17
+    $0c0f,  // actCortexA15
+    $0c14,  // actCortexR4
+    $0c15,  // actCortexR5
+    $0c17,  // actCortexR7
+    $0c18,  // actCortexR8
+    $0c20,  // actCortexM0
+    $0c21,  // actCortexM1
+    $0c23,  // actCortexM3
+    $0c24,  // actCortexM4
+    $0c27,  // actCortexM7
+    $0c60,  // actCortexM0P
+    $0d01,  // actCortexA32
+    $0d03,  // actCortexA53
+    $0d04,  // actCortexA35
+    $0d05,  // actCortexA55
+    $0d06,  // actCortexA65
+    $0d07,  // actCortexA57
+    $0d08,  // actCortexA72
+    $0d09,  // actCortexA73
+    $0d0a,  // actCortexA75
+    $0d0b,  // actCortexA76
+    $0d0c,  // actNeoverseN1
+    $0d0d,  // actCortexA77
+    $0d0e,  // actCortexA76AE
+    $0d13,  // actCortexR52
+    $0d14,  // actCortexR82AE
+    $0d15,  // actCortexR82
+    $0d16,  // actCortexR52P
+    $0d20,  // actCortexM23
+    $0d21,  // actCortexM33
+    $0d22,  // actCortexM55
+    $0d23,  // actCortexM85
+    $0d24,  // actCortexM52
+    $0d40,  // actNeoverseV1
+    $0d41,  // actCortexA78
+    $0d42,  // actCortexA78AE
+    $0d44,  // actCortexX1
+    $0d46,  // actCortex510
+    $0d47,  // actCortex710
+    $0d48,  // actCortexX2
+    $0d49,  // actNeoverseN2
+    $0d4a,  // actNeoverseE1
+    $0d4b,  // actCortexA78C
+    $0d4c,  // actCortexX1C
+    $0d4d,  // actCortexA715
+    $0d4e,  // actCortexX3
+    $0d4f,  // actNeoverseV2
+    $0d80,  // actCortexA520
+    $0d81,  // actCortexA720
+    $0d82,  // actCortexX4
+    $0d83,  // actNeoverseV3AE
+    $0d84,  // actNeoverseV3
+    $0d85,  // actCortextX925
+    $0d87,  // actCortextA725
+    $0d88,  // actCortextA520AE
+    $0d89,  // actCortextA720AE
+    $0d8a,  // actC1Nano
+    $0d8b,  // actC1Pro
+    $0d8c,  // actC1Ultra
+    $0d8e,  // actNeoverseN3
+    $0d8f,  // actCortextA320
+    $0d90); // actC1Premium
+
+  ARMCPU_IMPL: array[TArmCpuImplementer] of byte = (
+    0,    // aciUnknown
+    $41,  // aciARM
+    $42,  // aciBroadcom
+    $43,  // aciCavium
+    $44,  // aciDEC
+    $46,  // aciFUJITSU
+    $48,  // aciHiSilicon
+    $49,  // aciInfineon
+    $4d,  // aciMotorola
+    $4e,  // aciNVIDIA
+    $50,  // aciAPM
+    $51,  // aciQualcomm
+    $53,  // aciSamsung
+    $56,  // aciMarvell
+    $61,  // aciApple
+    $66,  // aciFaraday
+    $69,  // aciIntel
+    $6d,  // aciMicrosoft
+    $70,  // aciPhytium
+    $c0); // aciAmpere
+
+  ARMCPU_ID_TXT: array[TArmCpuType] of TShort15 = (
+     '',
+     'ARM810', 'ARM920', 'ARM922', 'ARM926', 'ARM940', 'ARM946', 'ARM966',
+     'ARM1020', 'ARM1022', 'ARM1026', 'ARM11 MPCore', 'ARM1136', 'ARM1156',
+     'ARM1176',     'Cortex-A5',   'Cortex-A7',   'Cortex-A8',   'Cortex-A9',
+     'Cortex-A17',{originally A12} 'Cortex-A17',  'Cortex-A15',  'Cortex-R4',
+     'Cortex-R5',   'Cortex-R7',   'Cortex-R8',   'Cortex-M0',   'Cortex-M1',
+     'Cortex-M3',   'Cortex-M4',   'Cortex-M7',   'Cortex-M0+',  'Cortex-A32',
+     'Cortex-A53',  'Cortex-A35',  'Cortex-A55',  'Cortex-A65',  'Cortex-A57',
+     'Cortex-A72',  'Cortex-A73',  'Cortex-A75',  'Cortex-A76',  'Neoverse-N1',
+     'Cortex-A77',  'Cortex-A76AE','Cortex-R52',  'Cortex-R82AE','Cortex-R82',
+     'Cortex-R52+', 'Cortex-M23',  'Cortex-M33',  'Cortex-M55',  'Cortex-M85',
+     'Cortex-M52',
+     'Neoverse-V1', 'Cortex-A78',  'Cortex-A78AE','Cortex-X1',   'Cortex-510',
+     'Cortex-710',  'Cortex-X2',   'Neoverse-N2', 'Neoverse-E1', 'Cortex-A78C',
+     'Cortex-X1C',  'Cortex-A715', 'Cortex-X3',   'Neoverse-V2', 'Cortex-A520',
+     'Cortex-A720', 'Cortex-X4',   'Neoverse-V3AE','Neoverse-V3','Cortex-X925',
+     'Cortex-A725', 'Cortex-A520AE', 'Cortex-A720AE', 'C1-Nano', 'C1-Pro',
+     'C1-Ultra',    'Neoverse-N3',   'Cortex-A320',   'C1-Premium');
+
+  ARMCPU_IMPL_TXT: array[TArmCpuImplementer] of string[18] = (
+      '',
+      'ARM', 'Broadcom', 'Cavium', 'DEC', 'FUJITSU', 'HiSilicon', 'Infineon',
+      'Motorola/Freescale', 'NVIDIA', 'APM', 'Qualcomm', 'Samsung', 'Marvell',
+      'Apple', 'Faraday', 'Intel', 'Microsoft', 'Phytium', 'Ampere');
 
 const
   /// contains the Delphi/FPC Compiler Version as text
@@ -6662,139 +6803,10 @@ begin
   FastSetString(result, @txt[1], ord(txt[0]));
 end;
 
-const
-  // https://github.com/karelzak/util-linux/blob/master/sys-utils/lscpu-arm.c
-  ARMCPU_ID: array[TArmCpuType] of word = (
-    0,      // actUnknown
-    $0810,  // actARM810
-    $0920,  // actARM920
-    $0922,  // actARM922
-    $0926,  // actARM926
-    $0940,  // actARM940
-    $0946,  // actARM946
-    $0966,  // actARM966
-    $0a20,  // actARM1020
-    $0a22,  // actARM1022
-    $0a26,  // actARM1026
-    $0b02,  // actARM11MPCore
-    $0b36,  // actARM1136
-    $0b56,  // actARM1156
-    $0b76,  // actARM1176
-    $0c05,  // actCortexA5
-    $0c07,  // actCortexA7
-    $0c08,  // actCortexA8
-    $0c09,  // actCortexA9
-    $0c0d,  // actCortexA12
-    $0c0f,  // actCortexA15
-    $0c0e,  // actCortexA17
-    $0c14,  // actCortexR4
-    $0c15,  // actCortexR5
-    $0c17,  // actCortexR7
-    $0c18,  // actCortexR8
-    $0c20,  // actCortexM0
-    $0c21,  // actCortexM1
-    $0c23,  // actCortexM3
-    $0c24,  // actCortexM4
-    $0c27,  // actCortexM7
-    $0c60,  // actCortexM0P
-    $0d01,  // actCortexA32
-    $0d03,  // actCortexA53
-    $0d04,  // actCortexA35
-    $0d05,  // actCortexA55
-    $0d06,  // actCortexA65
-    $0d07,  // actCortexA57
-    $0d08,  // actCortexA72
-    $0d09,  // actCortexA73
-    $0d0a,  // actCortexA75
-    $0d0b,  // actCortexA76
-    $0d0c,  // actNeoverseN1
-    $0d0d,  // actCortexA77
-    $0d0e,  // actCortexA76AE
-    $0d13,  // actCortexR52
-    $0d20,  // actCortexM23
-    $0d21,  // actCortexM33
-    $0d40,  // actNeoverseV1
-    $0d41,  // actCortexA78
-    $0d42,  // actCortexA78AE
-    $0d44,  // actCortexX1
-    $0d46,  // actCortex510
-    $0d47,  // actCortex710
-    $0d48,  // actCortexX2
-    $0d49,  // actNeoverseN2
-    $0d4a,  // actNeoverseE1
-    $0d4b,  // actCortexA78C
-    $0d4c,  // actCortexX1C
-    $0d4d,  // actCortexA715
-    $0d4e,  // actCortexX3
-    $0d4f,  // actNeoverseV2
-    $0d80,  // actCortexA520
-    $0d81,  // actCortexA720
-    $0d82,  // actCortexX4
-    $0d83,  // actNeoverseV3AE
-    $0d84,  // actNeoverseV3
-    $0d85,  // actCortextX925
-    $0d87,  // actCortextA725
-    $0d88,  // actCortextA520AE
-    $0d89,  // actCortextA720AE
-    $0d8a,  // actC1Nano
-    $0d8b,  // actC1Pro
-    $0d8c,  // actC1Ultra
-    $0d8e,  // actNeoverseN3
-    $0d8f,  // actCortextA320
-    $0d90); // actC1Premium
-
-  ARMCPU_IMPL: array[TArmCpuImplementer] of byte = (
-    0,    // aciUnknown
-    $41,  // aciARM
-    $42,  // aciBroadcom
-    $43,  // aciCavium
-    $44,  // aciDEC
-    $46,  // aciFUJITSU
-    $48,  // aciHiSilicon
-    $49,  // aciInfineon
-    $4d,  // aciMotorola
-    $4e,  // aciNVIDIA
-    $50,  // aciAPM
-    $51,  // aciQualcomm
-    $53,  // aciSamsung
-    $56,  // aciMarvell
-    $61,  // aciApple
-    $66,  // aciFaraday
-    $69,  // aciIntel
-    $6d,  // aciMicrosoft
-    $70,  // aciPhytium
-    $c0); // aciAmpere
-
-  ARMCPU_ID_TXT: array[TArmCpuType] of TShort15 = (
-     '',
-     'ARM810', 'ARM920', 'ARM922', 'ARM926', 'ARM940', 'ARM946', 'ARM966',
-     'ARM1020', 'ARM1022', 'ARM1026', 'ARM11 MPCore', 'ARM1136', 'ARM1156',
-     'ARM1176',     'Cortex-A5',   'Cortex-A7',   'Cortex-A8',   'Cortex-A9',
-     'Cortex-A17',{originally A12} 'Cortex-A15',  'Cortex-A17',  'Cortex-R4',
-     'Cortex-R5',   'Cortex-R7',   'Cortex-R8',   'Cortex-M0',   'Cortex-M1',
-     'Cortex-M3',   'Cortex-M4',   'Cortex-M7',   'Cortex-M0+',  'Cortex-A32',
-     'Cortex-A53',  'Cortex-A35',  'Cortex-A55',  'Cortex-A65',  'Cortex-A57',
-     'Cortex-A72',  'Cortex-A73',  'Cortex-A75',  'Cortex-A76',  'Neoverse-N1',
-     'Cortex-A77',  'Cortex-A76AE','Cortex-R52',  'Cortex-M23',  'Cortex-M33',
-     'Neoverse-V1', 'Cortex-A78',  'Cortex-A78AE','Cortex-X1',   'Cortex-510',
-     'Cortex-710',  'Cortex-X2',   'Neoverse-N2', 'Neoverse-E1', 'Cortex-A78C',
-     'Cortex-X1C',  'Cortex-A715', 'Cortex-X3',   'Neoverse-V2', 'Cortex-A520',
-     'Cortex-A720', 'Cortex-X4',   'Neoverse-V3AE','Neoverse-V3','Cortex-X925',
-     'Cortex-A725', 'Cortex-A520AE', 'Cortex-A720AE', 'C1-Nano', 'C1-Pro',
-     'C1-Ultra',    'Neoverse-N3',   'Cortex-A320', 'C1-Premium');
-
-  ARMCPU_IMPL_TXT: array[TArmCpuImplementer] of string[18] = (
-      '',
-      'ARM', 'Broadcom', 'Cavium', 'DEC', 'FUJITSU', 'HiSilicon', 'Infineon',
-      'Motorola/Freescale', 'NVIDIA', 'APM', 'Qualcomm', 'Samsung', 'Marvell',
-      'Apple', 'Faraday', 'Intel', 'Microsoft', 'Phytium', 'Ampere');
-
 function ArmCpuType(id: word): TArmCpuType;
 begin
-  for result := low(TArmCpuType) to high(TArmCpuType) do
-    if ARMCPU_ID[result] = id then
-      exit;
-  result := actUnknown;
+  result := TArmCpuType(FastFindWordSorted(
+    @ARMCPU_ID[succ(low(result))], ord(high(result)) - 1, id) + 1);
 end;
 
 procedure ArmCpuTypeNameAppend(act: TArmCpuType; id: word; var txt: ShortString);
@@ -6811,10 +6823,8 @@ end;
 
 function ArmCpuImplementer(id: byte): TArmCpuImplementer;
 begin
-  for result := low(TArmCpuImplementer) to high(TArmCpuImplementer) do
-    if ARMCPU_IMPL[result] = id then
-      exit;
-  result := aciUnknown;
+  result := TArmCpuImplementer(ByteScanIndex(
+    @ARMCPU_IMPL[succ(low(result))], ord(high(result)), id) + 1);
 end;
 
 procedure ArmCpuImplementerNameAppend(aci: TArmCpuImplementer; id: word;
