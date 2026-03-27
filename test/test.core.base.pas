@@ -8034,6 +8034,8 @@ var
   bak: byte;
   s: RawUtf8;
   b: RawByteString;
+  act: TArmCpuType;
+  aci: TArmCpuImplementer;
 
   procedure CheckAgainst(const full: TSmbiosInfo; const os: TSmbiosBasicInfos);
   begin
@@ -8054,6 +8056,16 @@ var
   end;
 
 begin
+  for act := low(act) to high(act) do
+  begin
+    ShortStringToAnsi7String(ARMCPU_ID_TXT[act], s);
+    CheckEqual(ord(ArmCpuType(ARMCPU_ID[act])), ord(act), s);
+  end;
+  for aci := low(aci) to high(aci) do
+  begin
+    ShortStringToAnsi7String(ARMCPU_IMPL_TXT[aci], s);
+    CheckEqual(ord(ArmCpuImplementer(ARMCPU_IMPL[aci])), ord(aci), s);
+  end;
   CheckEqual(ord(arm64DCPODP), 64);
   CheckEqual(ord(arm32AES), 32);
   CheckEqual(SizeOf(TSmbiosBiosFlags), 8);
