@@ -540,7 +540,7 @@ type
   // - see TResultsWriter in mormot.db.core for SQL resultset export
   // - see TOrmWriter in mormot.orm.core for ORM oriented serialization
   // - note: mORMot 1.18 TTextWriter.RegisterCustomJSONSerializerFromText()
-  // are moved into Rtti.RegisterFromText() as other similar methods
+  // are moved into Rtti.RegisterFromText() as other RTTI-related methods
   TTextWriter = class
   protected
     fDest: pointer; // may be a TStream, a PShortString or a RawUtf8
@@ -633,13 +633,13 @@ type
     function GetTextAsBuffer: PUtf8Char;
     /// set the internal stream content with the supplied UTF-8 text
     procedure ForceContent(const text: RawUtf8);
-    /// write pending data to the Stream, with automatic buffer resize
+    /// write pending data to the destination TStream, with proper buffer adjust
     // - you should not have to call FlushToStream in most cases, but FlushFinal
     // at the end of the process, just before using the resulting Stream
     // - FlushToStream may be used to force immediate writing of the internal
     // memory buffer to the destination Stream
     // - you can set FlushToStreamNoAutoResize=true or call FlushFinal if you
-    // do not want the automatic memory buffer resize to take place
+    // do not want the automatic memory buffer size adjustment to take place
     procedure FlushToStream; virtual;
     /// to be called as P := FlushToStream(P) when P is the current B + 1
     function FlushToStreamUsing(P: PUtf8Char): PUtf8Char;
@@ -895,6 +895,7 @@ type
     procedure AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat = hfAnyWhere); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append some UTF-8 chars, escaping all HTML special chars as expected
+    // - implemented by mormot.core.fmt.pas which would inject the HTML logic
     procedure AddHtmlEscape(Text: PUtf8Char; TextLen: PtrInt;
       Fmt: TTextWriterHtmlFormat = hfAnyWhere); overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -4455,7 +4456,7 @@ end;
 procedure TTextWriter.FlushFinal;
 var
   len: PtrInt;
-begin // don't mess with twfFlushNoAutoResize: it may not be final
+begin
   len := B - fTempBuf + 1;
   if len > 0 then
     WriteToStream(fTempBuf, len);
@@ -4487,7 +4488,7 @@ begin
   if twfBufferIsOnStack in fFlags then
     exclude(fFlags, twfBufferIsOnStack) // use heap, not stack from now on
   else
-    FreeMem(fTempBuf); // no need to realloc/move the previous (written) buffer
+    FreeMem(fTempBuf); // no need to realloc/move the previous buffer content
   GetMem(fTempBuf, fTempBufSize);
   BEnd := fTempBuf + (fTempBufSize - TRAIL_BYTES); // as in SetBuffer()
   B := fTempBuf - 1;
