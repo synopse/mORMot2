@@ -1181,10 +1181,6 @@ function FindPropName(Values: PRawUtf8Array; const Value: RawUtf8;
 // - here name search would use fast IdemPropNameU() function
 function FindPropName(const Names: array of RawUtf8; const Name: RawUtf8): integer; overload;
 
-/// use the RTL to return a date/time as ISO-8601 text
-// - slow function, here to avoid linking mormot.core.datetime
-function DateTimeToIsoString(dt: TDateTime): string;
-
 /// parse a '0x#####' buffer context into a 32-bit binary
 // - jump trailing '0x', then ends at first non hexadecimal character
 // - internal function to avoid linking mormot.core.buffers.pas for a few bytes
@@ -5844,12 +5840,6 @@ begin
   result := high(Names);
   if result >= 0 then
     result := FindPropName(@Names[0], Name, result + 1);
-end;
-
-function DateTimeToIsoString(dt: TDateTime): string;
-begin
-  // avoid to link mormot.core.datetime
-  DateTimeToString(result, 'yyyy-mm-dd hh:nn:ss', dt);
 end;
 
 function Hex2Dec(c: AnsiChar): ShortInt; {$ifdef HASINLINE} inline; {$endif}

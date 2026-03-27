@@ -1958,24 +1958,26 @@ begin
                 @result[1], D, Expanded, FirstChar, WithMS, QuotedChar));
 end;
 
+function _DoDateTimeToText(dt: TDateTime): RawUtf8;
+begin // fastger version to be injected in mormot.core.os.pas instead of RTL
+  DateTimeToIso8601Var(dt, {expanded=}true, {withms=}false, ' ', #0, result);
+end;
+
 function DateToIso8601(Date: TDateTime; Expanded: boolean): RawUtf8;
-// use YYYYMMDD / YYYY-MM-DD date format
-begin
+begin // 'YYYYMMDD' format if not Expanded, 'YYYY-MM-DD' format if Expanded
   DateToIso8601PChar(Date,
     FastSetString(result, 8 + 2 * integer(Expanded)), Expanded);
 end;
 
 function DateToIso8601(Y, M, D: cardinal; Expanded: boolean): RawUtf8;
-// use 'YYYYMMDD' format if not Expanded, 'YYYY-MM-DD' format if Expanded
-begin
+begin // 'YYYYMMDD' format if not Expanded, 'YYYY-MM-DD' format if Expanded
   DateToIso8601PChar(
     FastSetString(result, 8 + 2 * integer(Expanded)), Expanded, Y, M, D);
 end;
 
 function TimeToIso8601(Time: TDateTime; Expanded: boolean;
   FirstChar: AnsiChar; WithMS: boolean): RawUtf8;
-// use Thhmmss[.sss] / Thh:mm:ss[.sss] format
-begin
+begin // "Thhmmss[.sss]' / 'Thh:mm:ss[.sss]' format
   FastSetString(result, 7 + 2 * integer(Expanded) + 4 * integer(WithMS));
   TimeToIso8601PChar(Time, pointer(result), Expanded, FirstChar, WithMS);
 end;
@@ -4335,6 +4337,7 @@ begin
 end;
 
 
+
 procedure InitializeUnit;
 begin
   // as expected by ParseMonth() to call FindShortStringListExact()
@@ -4343,8 +4346,10 @@ begin
   assert(TTextDateWriter.InstanceSize <= SizeOf(TLocalWriter) - 256);
   // some mormot.core.text wrappers are implemented by this unit
   _VariantToUtf8DateTimeToIso8601 := DateTimeToIso8601TextVar;
-  _Iso8601ToDateTime := Iso8601ToDateTime;
+  _Iso8601ToDateTime              := Iso8601ToDateTime;
+  DoDateTimeToText                := _DoDateTimeToText;
 end;
+
 
 procedure FinalizeUnit;
 begin

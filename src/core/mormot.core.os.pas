@@ -3914,6 +3914,10 @@ var
   // - this unit defaults to the RTL, but mormot.core.text.pas will override it
   AppendShortUuid: TAppendShortUuid;
 
+  /// return a date/time value as '2026-03-27 13:59:30' UTF-8 text
+  // - slow RTL function in this unit, properly set by mormot.core.datetime.pas
+  DoDateTimeToText: function(dt: TDateTime): RawUtf8;
+
   /// late binding to binary encoding to Base64 or Base64-URI
   // - as used by mormot.net.sock.pas for its NetBinToBase64() function
   // - this unit raises an EOSException - properly injected by mormot.core.buffers.pas
@@ -6067,6 +6071,14 @@ end;
 procedure _AppendShortUuid(const u: TGuid; var s: ShortString);
 begin
   AppendShortAnsi7String(AnsiString(LowerCase(copy(GUIDToString(u), 2, 36))), s);
+end;
+
+function _DoDateTimeToText(dt: TDateTime): RawUtf8;
+var
+  tmp: string; // avoid to link mormot.core.datetime
+begin
+  DateTimeToString(tmp, 'yyyy-mm-dd hh:nn:ss', dt);
+  _toutf8(tmp, result);
 end;
 
 function TextToUuid(const text: RawUtf8; out uuid: TGuid): boolean;
@@ -11973,6 +11985,7 @@ procedure InitializeUnit;
 begin
   // early initialization needed for those functions
   DoWideCharToUtf8Temp  := _DoWideCharToUtf8Temp;  // mormot.core.unicode
+  DoDateTimeToText      := _DoDateTimeToText;      // mormot.core.datetime
   {$ifdef ISFPC27}
   // we force UTF-8 everywhere on FPC for consistency with Lazarus
   SetMultiByteConversionCodePage(CP_UTF8);
