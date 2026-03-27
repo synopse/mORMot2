@@ -3018,22 +3018,27 @@ begin
     result := 0; // not implemented yet on BSD/Darwin
 end;
 
-function bsdsysctl(node, id: cint; dest: pointer; len: cint): Int64; overload;
+function bsdsysctl(node, id: cint; dest: pointer; len: PtrInt): PtrInt; overload;
 var
   mib: array[0..1] of cint;
+  s: PtrInt; // safer with an explicit psize_t transient variable
 begin
   mib[0] := node;
   mib[1] := id;
-  result := len;
-  if fpsysctl(pointer(@mib), 2, dest, @result, nil, 0) <> 0 then
-    result := 0;
+  s := len;
+  if fpsysctl(pointer(@mib), 2, dest, @s, nil, 0) <> 0 then
+    s := 0;
+  result := s;
 end;
 
-function bsdsysctl(name: PAnsiChar; dest: pointer; len: cint): Int64; overload;
+function bsdsysctl(name: PAnsiChar; dest: pointer; len: PtrInt): PtrInt; overload;
+var
+  s: PtrInt;
 begin
-  result := len;
+  s := len;
   if FPsysctlbyname(name, dest, @result, nil, 0) <> 0 then
-    result := 0;
+    s := 0;
+  result := s;
 end;
 
 function fpsysctlhwint(hwid: cint): QWord;
@@ -3050,7 +3055,7 @@ end;
 
 function fpsysctlhwstr(hwid: cint; var temp: ShortString): PUtf8Char;
 begin
-  FillCharFast(temp, SizeOf(temp), 0); // ShortString as 0-terminated buffer
+  FillCharFast(temp, high(temp) + 1, 0); // ShortString as 0-terminated buffer
   if (bsdsysctl(CTL_HW, hwid, @temp, SizeOf(temp)) <> 0) and
      (temp[0] <> #0) then
     result := @temp
