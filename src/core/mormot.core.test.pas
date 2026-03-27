@@ -1573,7 +1573,7 @@ begin
   result := true;
   if Executable.Command.Option('multithread')
      {$ifdef OSWINDOWS} and not IsWow64Emulation {$endif} then
-    fMultiThread := SystemInfo.dwNumberOfProcessors > 2; // enabled with 3 cores
+    fMultiThread := CpuThreads > 2; // enabled with 3 cores
   if Executable.Command.Option('&methods') then
   begin
     for m := 0 to Count - 1 do

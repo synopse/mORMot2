@@ -1539,7 +1539,7 @@ type
     procedure RunDone(Sender: TObject); virtual;
   public
     /// initialize the task threading process
-    // - default aMaxThread=0 will use SystemInfo.dwNumberOfProcessors
+    // - default aMaxThread=0 will use CpuThreads = SystemInfo.dwNumberOfProcessors
     constructor Create(aSynLog: TSynLogClass; aMaxThread: integer = 0); reintroduce;
     /// finalize this instance, aborting and waiting for closure if needed
     destructor Destroy; override;
@@ -1576,7 +1576,7 @@ type
     property Running: integer
       read fRunning;
     /// up to how many TLoggedWorkThread could be used
-    // - default to SystemInfo.dwNumberOfProcessors if 0 is kept at Create()
+    // - default to CpuThreads if 0 is kept at Create()
     // - lwtForceThreadMaybeQueued would use an internal queue
     property MaxRunning: integer
       read fMaxRunning;
@@ -4029,7 +4029,7 @@ procedure TNotifiedThread.SetServerThreadsAffinityPerCpu(
 var
   rnd, i: PtrInt;
 begin
-  rnd := SystemInfo.dwNumberOfProcessors;
+  rnd := CpuThreads;
   if (threads = nil) or
      (rnd <= 1) then
     exit;
@@ -4044,17 +4044,16 @@ end;
 procedure TNotifiedThread.SetServerThreadsAffinityPerSocket(
   const log: ISynLog; const threads: TThreadDynArray);
 var
-  sock, persock, i: integer;
+  sock, persock, i: cardinal;
   ok: boolean;
 begin
   if (threads = nil) or
      (CpuSockets <= 1) then
     exit;
   // with multiple CPU sockets, group threads by closest HW socket
-  persock := length(threads) div CpuSockets;
+  persock := cardinal(length(threads)) div CpuSockets;
   if Assigned(log) then
-    log.Log(sllTrace, 'Create: CpuSockets=% persock=%',
-      [CpuSockets, persock], self);
+    log.Log(sllTrace, 'Create: CpuSockets=% persock=%', [CpuSockets, persock], self);
   sock := 0;
   SetThreadSocketAffinity(self, sock); // AW with R0 and lower R# threads
   for i := 0 to high(threads) do
@@ -4255,7 +4254,7 @@ constructor TLoggedWorker.Create(aSynLog: TSynLogClass; aMaxThread: integer);
 begin
   fSynLog := aSynLog;
   if aMaxThread = 0 then
-    aMaxThread := SystemInfo.dwNumberOfProcessors;
+    aMaxThread := CpuThreads; // = SystemInfo.dwNumberOfProcessors logical count
   fMaxRunning := aMaxThread;
 end;
 

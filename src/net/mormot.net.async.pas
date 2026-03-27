@@ -2814,8 +2814,7 @@ begin
     aThreadPoolCount := 1;
   ThreadCountAdjust(aThreadPoolCount); // e.g. WinARM PRISM
   {$ifndef USE_WINIOCP}
-  fThreadPollingWakeupLoad :=
-    (cardinal(aThreadPoolCount) div SystemInfo.dwNumberOfProcessors) * 8;
+  fThreadPollingWakeupLoad := (cardinal(aThreadPoolCount) div CpuThreads) * 8;
   if fThreadPollingWakeupLoad < 4 then
     fThreadPollingWakeupLoad := 4; // below 4, the whole algorithm seems pointless
   {$endif USE_WINIOCP}
@@ -5899,7 +5898,7 @@ end;
 constructor THttpProxyServerMainSettings.Create;
 begin
   inherited Create;
-  fThreadCount := SystemInfo.dwNumberOfProcessors + 1;
+  fThreadCount := CpuThreads + 1;
   fPort := '8098';
 end;
 

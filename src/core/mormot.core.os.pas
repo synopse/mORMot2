@@ -734,13 +734,16 @@ var
   CpuCacheSize: cardinal;
   /// how many hardware CPU sockets are defined on this system
   // - i.e. the number of physical CPU slots
-  // - SystemInfo.dwNumberOfProcessors is the number of logical CPU threads
+  // - CpuThreads = SystemInfo.dwNumberOfProcessors is the logical CPU count
   // - as used e.g. by SetThreadAffinity()
-  CpuSockets: integer;
+  CpuSockets: cardinal;
   /// how many hardware CPU cores are defined on this system
   // - i.e. the number of physical CPU cores
-  // - SystemInfo.dwNumberOfProcessors is the number of logical CPU threads
-  CpuCores: integer;
+  // - CpuThreads = SystemInfo.dwNumberOfProcessors is the logical CPU count
+  CpuCores: cardinal;
+  /// the number of available logical CPUs threads
+  // - just an alias to SystemInfo.dwNumberOfProcessors compatibility value
+  CpuThreads: cardinal;
 
   /// Level 1 to 4 CPU caches as returned by GetLogicalProcessorInformation
   // - yes, Intel introduced a Level 4 cache (eDRAM) with some Haswell/Iris CPUs
@@ -1637,6 +1640,7 @@ var
     dwPageSize: cardinal;
     /// the number of available logical CPUs threads
     // - from HW_NCPU (BSD), hw.logicalcpu (macOS) or /proc/cpuinfo (Linux)
+    // - prefer the CpuThreads global variable instead of this legacy Windowism
     // - see CpuSockets/CpuCores for the number of physical CPU sockets/cores
     dwNumberOfProcessors: cardinal;
     /// meaningful system information, as returned by fpuname()
@@ -5190,7 +5194,7 @@ function CurrentCpuSet(out CpuSet: TCpuSet): integer;
 function SetThreadMaskAffinity(Thread: TThread; const Mask: TCpuSet): boolean;
 
 /// try to assign a given thread to a specific logical CPU core
-// - CpuIndex should be in 0 .. SystemInfo.dwNumberOfProcessors - 1 range
+// - CpuIndex should be in 0 .. CpuThreads - 1 range
 function SetThreadCpuAffinity(Thread: TThread; CpuIndex: cardinal): boolean;
 
 /// try to assign a given thread to a specific hardware CPU socket
@@ -8596,7 +8600,7 @@ var
   si: TSysInfo;  // Linuxism, but properly emulated in thit unit on Win/Mac/BSD
 begin
   text[0] := #0;
-  AppendShortCardinal(SystemInfo.dwNumberOfProcessors, text);
+  AppendShortCardinal(CpuThreads, text);
   if not RetrieveSysInfo(si) then // single syscall on Linux/Android
     exit;
   AppendShortChar(' ', @text); // si.loads[0/1] = user kern on Windows
@@ -11665,7 +11669,7 @@ function SetCpuSet(var CpuSet: TCpuSet; CpuIndex: cardinal): boolean;
 begin
   result := false;
   if (CpuIndex >= SizeOf(CpuSet) shl 3) or
-     (CpuIndex >= SystemInfo.dwNumberOfProcessors) then
+     (CpuIndex >= CpuThreads) then
     exit;
   SetBitPtr(@CpuSet, CpuIndex);
   result := true;

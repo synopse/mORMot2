@@ -5322,8 +5322,8 @@ begin
   SystemInfo.dwPageSize := fpsysctlhwint(HW_PAGESIZE);
   beg := fpsysctlhwstr(HW_MACHINE, temp1);
   {$ifdef OSDARWIN}
-  SystemInfo.dwNumberOfProcessors := fpsysctlbynameint('hw.logicalcpu');
-  CpuCores := fpsysctlbynameint('hw.physicalcpu');
+  CpuThreads := fpsysctlbynameint('hw.logicalcpu');
+  CpuCores   := fpsysctlbynameint('hw.physicalcpu');
   if PosChar(beg, ' ') = nil then // e.g. from a Parallels VM
     beg := fpsysctlhwstr(HW_MODEL, temp1);
   modname := fpsysctlbynamestr('machdep.cpu.brand_string', temp2);
@@ -5331,8 +5331,8 @@ begin
   modname := nil;
   {$endif OSDARWIN}
   FastSetString(BiosInfoText, beg, StrLen(beg));
-  if SystemInfo.dwNumberOfProcessors = 0 then
-    SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
+  if CpuThreads = 0 then
+    CpuThreads := fpsysctlhwint(HW_NCPU);
   if modname = nil then
     modname := fpsysctlhwstr(HW_MODEL, temp2);
   {$ifdef OSDARWIN}
@@ -5415,7 +5415,7 @@ begin
   {$endif OSANDROID}
   OS_DISTRI := LinuxDistribution(OS_KIND);
   cache := nil;
-  SystemInfo.dwNumberOfProcessors := 0;
+  CpuThreads := 0;
   CpuInfoLinux := StringFromFileNoSize('/proc/cpuinfo'); // too big for LoadProcFile
   crc32c128(@SystemEntropy.Startup, pointer(CpuInfoLinux), length(CpuInfoLinux));
   procid := -1;
@@ -5430,9 +5430,9 @@ begin
       if beg^ <> 'P' then
       begin
         // loop over all "processor : 0 .. 1 .. 2" lines to count the CPUs
-        inc(SystemInfo.dwNumberOfProcessors);
+        inc(CpuThreads);
         procid := ParseInt(beg);
-        if procid >= integer(SystemInfo.dwNumberOfProcessors) then
+        if procid >= integer(CpuThreads) then
           procid := -1; // paranoid
       end
       else if modname = nil then
@@ -5470,7 +5470,7 @@ begin
         phyndx := IntegerScanIndex(pointer(phy), CpuSockets, phyid);
         if phyndx < 0 then
         begin
-          AddInteger(phy, CpuSockets, phyid);
+          AddInteger(phy, integer(CpuSockets), phyid);
           SetLength(CpuSocketsMask, CpuSockets);
           phyndx := CpuSockets - 1;
         end;
@@ -5567,22 +5567,23 @@ begin
   OSVersionText := Join(['Android (', OSVersionText, ')']);
   {$else}
   {$ifdef OSLINUX}
-  if SystemInfo.dwNumberOfProcessors = 0 then // e.g. QEMU limited /proc/cpuinfo
-    SystemInfo.dwNumberOfProcessors := get_nprocs;
+  if CpuThreads = 0 then // e.g. QEMU limited /proc/cpuinfo
+    CpuThreads := get_nprocs;
   {$endif OSLINUX}
   {$endif OSANDROID}
-  if SystemInfo.dwNumberOfProcessors = 0 then
-    SystemInfo.dwNumberOfProcessors := 1;
+  if CpuThreads = 0 then
+    CpuThreads := 1;
   if CpuCores = 0 then
-    CpuCores := SystemInfo.dwNumberOfProcessors;
+    CpuCores := CpuThreads;
+  SystemInfo.dwNumberOfProcessors := CpuThreads; // Windowism
   if modname = nil then
     modname := modnum;
   if modname = nil then
     CpuInfoText := _fmt('%d x generic ' + CPU_ARCH_TEXT + ' cpu %s',
-      [SystemInfo.dwNumberOfProcessors, CpuInfoText])
+      [CpuThreads, CpuInfoText])
   else
     CpuInfoText := _fmt('%d x %s %s (' + CPU_ARCH_TEXT + ')',
-      [SystemInfo.dwNumberOfProcessors, modname, CpuInfoText]);
+      [CpuThreads, modname, CpuInfoText]);
   // initialize supported APIs
   TimeZoneLocalBias := -GetLocalTimeOffset; // = Tzseconds div 60
   _Fill256FromOs    := @__Fill256FromOs;

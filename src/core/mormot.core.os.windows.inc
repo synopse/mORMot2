@@ -5084,7 +5084,8 @@ begin
         RelationProcessorCore:
           inc(CpuCores);
         RelationProcessorPackage: // physical processor socket
-          AddPtrUInt(TPtrUIntDynArray(CpuSocketsMask), CpuSockets, pi^.ProcessorMask);
+          AddPtrUInt(TPtrUIntDynArray(CpuSocketsMask), integer(CpuSockets),
+            pi^.ProcessorMask);
         RelationCache:            // raw cache information
           if pi^.Cache.CacheType in [CacheUnified, CacheData] then
             if (pi^.Cache.Level >= low(CpuCache)) and
@@ -5121,12 +5122,12 @@ begin
               _fmt('%s L%d=%d*%s ', [CpuCacheText, i, Count, KBNoSpace(Size)]);
     TrimSelf(CpuCacheText);
   until true;
+  CpuThreads := SystemInfo.dwNumberOfProcessors;
   if CpuSockets = 0 then
     CpuSockets := 1; // e.g. on XP prior to SP3
   if CpuCores = 0 then
-    CpuCores := SystemInfo.dwNumberOfProcessors;
-  _fmt('%d x %s (' + CPU_ARCH_TEXT + ')',
-    [SystemInfo.dwNumberOfProcessors, cpu], CpuInfoText);
+    CpuCores := CpuThreads;
+  _fmt('%d x %s (' + CPU_ARCH_TEXT + ')', [CpuThreads, cpu], CpuInfoText);
   // 5. compute some minimal entropy using the just retrieved info
   rnd := @SystemEntropy.Startup;
   CoCreateGuid(rnd^); // very fast and unique (but not strong)

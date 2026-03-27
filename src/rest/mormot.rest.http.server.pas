@@ -861,7 +861,7 @@ begin
   if aSecurity in SEC_TLS then
     include(hso, hsoEnableTls);
   //include(hso, hsoHeadersInterning);
-  if aThreadPoolCount < integer(SystemInfo.dwNumberOfProcessors) * 5 then
+  if aThreadPoolCount < integer(CpuThreads) * 5 then
     include(hso, hsoThreadSmooting); // regular HW tends to like it
   {$ifdef USEHTTPSYS}
   if aUse in HTTP_API_MODES then // Windows system's http.sys

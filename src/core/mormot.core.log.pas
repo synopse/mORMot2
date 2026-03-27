@@ -5747,7 +5747,7 @@ begin
     w.AddString(Executable.User);
     w.AddShort(' CPU='); // not AddShorter() for AddDirect(CpuInfoText) below
     if CpuInfoText = '' then
-      w.Add(SystemInfo.dwNumberOfProcessors)
+      w.AddU(CpuThreads)
     else
       for i := 1 to length(CpuInfoText) do
         if not (ord(CpuInfoText[i]) in [1..32, ord(':')]) then

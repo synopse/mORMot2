@@ -4015,7 +4015,7 @@ end;
 procedure _GlobalInfoCpu(Sender: TBinDictionary);
 begin
   Sender.UpdateText( 'cpu:name',         CpuInfoText);
-  Sender.UpdateText(['cpu:threads'],    [SystemInfo.dwNumberOfProcessors]);
+  Sender.UpdateText(['cpu:threads'],    [CpuThreads]);
   Sender.UpdateText(['cpu:cores'],      [CpuCores]);
   Sender.UpdateText(['cpu:sockets'],    [CpuSockets]);
   if HasHWAes then
