@@ -4534,7 +4534,7 @@ begin
   {$endif USE_OPENSSL}
   DoEcc(TCryptPublicKeyEcc);
   alg := TCryptAsym.Instances;
-  //fCatalogAllGenerate := SystemInfo.dwNumberOfProcessors > 8; // not worth it
+  //fCatalogAllGenerate := CpuThreads > 8; // not worth it
   for a := 0 to high(alg) do
   begin
     asy := alg[a] as TCryptAsym;

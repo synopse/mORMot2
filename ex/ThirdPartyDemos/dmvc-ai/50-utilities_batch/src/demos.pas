@@ -353,7 +353,7 @@ begin
   WriteLn('Processing 100 batches (100 items each) concurrently...');
   WriteLn;
 
-  parallel := TSynParallelProcess.Create(SystemInfo.dwNumberOfProcessors, 'batch', nil, nil);
+  parallel := TSynParallelProcess.Create(CpuThreads, 'batch', nil, nil);
   demo := TBatchProcessingDemo.Create;
   try
     FillCharFast(demo.Results, SizeOf(demo.Results), 0);

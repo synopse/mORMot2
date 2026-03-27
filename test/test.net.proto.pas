@@ -433,7 +433,7 @@ begin
     test.Check(false, 'expect a running proxy on 127.0.0.1')
   else
   try
-    if SystemInfo.dwNumberOfProcessors < 8 then
+    if CpuThreads < 8 then
       Sleep(50); // seems mandatory from LUTI regression tests
     rmax := clientcount - 1;
     streamer := TCrtSocket.Bind(proxy.RtspPort);
@@ -464,7 +464,7 @@ begin
         end;
       if log <> nil then
         log.Log(sllCustom1, 'RegressionTests % POST', [clientcount], proxy);
-      if SystemInfo.dwNumberOfProcessors < 8 then
+      if CpuThreads < 8 then
         Sleep(50); // seems mandatory from LUTI regression tests
       for r := 0 to rmax do
         with req[r] do

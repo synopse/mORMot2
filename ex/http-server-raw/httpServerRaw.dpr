@@ -114,7 +114,7 @@ constructor TSimpleHttpAsyncServer.Create;
 begin
   inherited Create;
   fHttpServer := THttpAsyncServer.Create(
-    '8888', nil, nil, '', SystemInfo.dwNumberOfProcessors + 1, 30000,
+    '8888', nil, nil, '', CpuThreads + 1, 30000,
     [hsoNoXPoweredHeader,
      hsoNoStats,
      hsoHeadersInterning,
