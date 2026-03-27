@@ -1811,7 +1811,7 @@ begin
         continue;
       if dest[0] = #0 then
         dest := ' [.NET/CLR unhandled'
-      else if ord(dest[0]) + ps^[0] > 240 then
+      else if PtrUInt(dest[0]) + ps^[0] >= PtrUInt(high(dest)) then
         break; // paranoid
       p := @dest[ord(dest[0]) + 1];
       p^ := ' '; // replace leading '_' by ' '
