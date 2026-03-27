@@ -14023,12 +14023,12 @@ begin
   ClassUnit                := @_ClassUnit;
   // initialize CPU-specific asm
   TestCpuFeatures;
-  {$ifndef ASMINTEL}
+  {$ifndef ASMINTELNOTPIC}
   MoveFast := @Move;
   FillCharFast := @_FillChar;
   if BaseEntropy.i0 = 0 then // BSD or MAC arm/aarch64
     XorEntropy(BaseEntropy); // ensure not void
-  {$endif ASMINTEL}
+  {$endif ASMINTELNOTPIC}
 end;
 
 
