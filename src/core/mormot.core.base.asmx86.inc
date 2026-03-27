@@ -600,42 +600,6 @@ asm
         pop     edi
 end;
 
-function StrLenSSE2(S: pointer): PtrInt;
-{$ifdef FPC}nostackframe; assembler;{$endif}
-asm
-        // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
-        mov     ecx, eax            // copy pointer
-        test    eax, eax
-        jz      @null               // returns 0 if S=nil
-        push    eax                 // save start address
-        pxor    xmm0, xmm0          // set to zero
-        and     ecx, 15             // lower 4 bits indicate misalignment
-        and     eax, -16            // align pointer by 16
-        // will never read outside a memory page boundary, so won't trigger GPF
-        movaps  xmm1, [eax]         // read from nearest preceding boundary
-        pcmpeqb xmm1, xmm0          // compare 16 bytes with zero
-        pmovmskb edx, xmm1          // get one bit for each byte result
-        shr     edx, cl             // shift out false bits
-        shl     edx, cl             // shift back again
-        bsf     edx, edx            // find first 1-bit
-        jnz     @A200               // found
-        // Main loop, search 16 bytes at a time
-@A100:  add     eax, 10H            // increment pointer by 16
-        movaps  xmm1, [eax]         // read 16 bytes aligned
-        pcmpeqb xmm1, xmm0          // compare 16 bytes with zero
-        pmovmskb edx, xmm1          // get one bit for each byte result
-        bsf     edx, edx            // find first 1-bit
-        // (moving the bsf out of the loop and using test here would be faster
-        // for long strings on old processors, but we are assuming that most
-        // strings are short, and newer processors have higher priority)
-        jz      @A100               // loop if not found
-@A200:  // Zero-byte found. Compute string length
-        pop     ecx                 // restore start address
-        sub     eax, ecx            // subtract start address
-        add     eax, edx            // add byte index
-@null:
-end;
-
 function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
@@ -1084,6 +1048,43 @@ asm
 end;
 
 {$else}
+
+function StrLenSSE2(S: pointer): PtrInt;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
+        mov     ecx, eax            // copy pointer
+        test    eax, eax
+        jz      @null               // returns 0 if S=nil
+        push    eax                 // save start address
+        pxor    xmm0, xmm0          // set to zero
+        and     ecx, 15             // lower 4 bits indicate misalignment
+        and     eax, -16            // align pointer by 16
+        // will never read outside a memory page boundary, so won't trigger GPF
+        movaps  xmm1, [eax]         // read from nearest preceding boundary
+        pcmpeqb xmm1, xmm0          // compare 16 bytes with zero into 00/ff
+        pmovmskb edx, xmm1          // get one bit for each byte result
+        shr     edx, cl             // shift out false bits
+        shl     edx, cl             // shift back again
+        bsf     edx, edx            // find first 1-bit
+        jnz     @found
+        // Main loop, search 16 bytes at a time
+{$ifdef FPC} align 16 {$else} {$ifdef ASMALIGN} .align 16 {$endif}{$endif}
+@by16:  add     eax, 16             // increment pointer by 16
+        movaps  xmm1, [eax]         // read 16 bytes aligned
+        pcmpeqb xmm1, xmm0          // compare 16 bytes with zero into 00/ff
+        pmovmskb edx, xmm1          // get one bit for each byte result
+        bsf     edx, edx            // find first 1-bit
+        // (moving the bsf out of the loop and using test here would be faster
+        // for long strings on old processors, but we are assuming that most
+        // strings are short, and newer processors have higher priority)
+        jz      @by16               // loop if not found
+@found: // Zero-byte found. Compute string length
+        pop     ecx                 // restore start address
+        sub     eax, ecx            // subtract start address
+        add     eax, edx            // add byte index
+@null:
+end;
 
 function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
 {$ifdef FPC}nostackframe; assembler;{$endif}

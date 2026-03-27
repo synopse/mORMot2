@@ -3335,7 +3335,7 @@ function StrCompW(Str1, Str2: PWideChar): PtrInt;
 // preferred e.g. with valgrid
 // - SSE2 StrLen() versions would never read outside a memory page boundary,
 // so are safe to use in practice, but may read outside the string buffer
-// itself, so may not please paranoid tools like valgrid
+// itself, so may trigger paranoid tools like valgrid
 function StrLenSafe(S: pointer): PtrInt;
   {$ifdef CPU64}inline;{$endif}
 
@@ -10305,7 +10305,7 @@ begin
   {$ifdef ASMINTEL}
   if cfTSC in CpuFeatures then      // may trigger GPF if CR4.TSD bit is set
     tmp.d0 := tmp.d0 xor Rdtsc;     // 64-bit CPU cycles
-  RdRand32(@tmp.l, 4);              // xor 128-bit HW CSPRNG: no-op if no cfSSE42
+  RdRand32(@tmp.l, 4);              // xor 128-bit HW CSPRNG: no-op if no SSE42
   if cfTSC in CpuFeatures then
     e.r[2].L := e.r[2].L xor Rdtsc; // has changed during slow RdRand32()
   {$else}
