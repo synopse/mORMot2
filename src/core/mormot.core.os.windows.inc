@@ -2777,7 +2777,7 @@ var
     u: TSynTempBuffer;
   begin
     sz := 0;
-    if VerQueryValueW(pt, Utf8ToWin32PWideChar(lngnfo + From, u), str, sz) and
+    if VerQueryValueW(pt, Utf8ToWin32PWideChar(Join([lngnfo, From]), u), str, sz) and
        (sz > 0) then
       Win32PWideCharToUtf8(str, Res);
     u.Done;

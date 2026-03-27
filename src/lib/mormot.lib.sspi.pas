@@ -1690,29 +1690,29 @@ end;
 function _WinCertInfoToText(const c: TWinCertInfo): RawUtf8;
 begin
   // roughly follow X509_print() OpenSSL formatting with basic fields only
-  result :=
+  Join([
     'Certificate:'#13#10 +
     '  Serial Number:'#13#10 +
-    '    ' + c.Serial + #13#10 +
-    '  Signature Algorithm: ' + c.AlgorithmName + #13#10 +
-    '  Issuer: ' + c.IssuerName + #13#10 +
+    '    ', c.Serial, #13#10 +
+    '  Signature Algorithm: ', c.AlgorithmName, #13#10 +
+    '  Issuer: ', c.IssuerName, #13#10 +
     '  Validity:'#13#10 +
-    '    Not Before: ' + RawUtf8(DateTimeToIsoString(c.NotBefore)) + #13#10 +
-    '    Not After : ' + RawUtf8(DateTimeToIsoString(c.NotAfter)) + #13#10 +
-    '  Subject: ' + c.SubjectName + #13#10 +
+    '    Not Before: ', DoDateTimeToText(c.NotBefore), #13#10 +
+    '    Not After : ', DoDateTimeToText(c.NotAfter), #13#10 +
+    '  Subject: ', c.SubjectName, #13#10 +
     '  Subject Public Key Info:'#13#10 +
-    '    Public Key Algorithm: ' + c.PublicKeyAlgorithmName + #13#10 +
-    '    OID: ' + c.PublicKeyAlgorithm + #13#10 +
-    '  X509v3 extensions:'#13#10;
+    '    Public Key Algorithm: ', c.PublicKeyAlgorithmName, #13#10 +
+    '    OID: ', c.PublicKeyAlgorithm, #13#10 +
+    '  X509v3 extensions:'#13#10], result);
   if c.SubjectID <> '' then
-    result := result + '    X509v3 Subject Key Identifier:'#13#10 +
-                       '      ' + c.SubjectID + #13#10;
+    result := Join([result, '    X509v3 Subject Key Identifier:'#13#10 +
+                            '      ', c.SubjectID, #13#10]);
   if c.IssuerID <> '' then
-    result := result + '    X509v3 Authority Key Identifier:'#13#10 +
-                       '      ' + c.IssuerID + #13#10;
+    result := Join([result, '    X509v3 Authority Key Identifier:'#13#10 +
+                            '      ', c.IssuerID, #13#10]);
   if c.SubjectAltNames <> '' then
-    result := result + '    X509v3 Subject Alternative Name:'#13#10 +
-                       '      ' + c.SubjectAltNames + #13#10;
+    result := Join([result, '    X509v3 Subject Alternative Name:'#13#10 +
+                            '      ', c.SubjectAltNames, #13#10]);
   // other extensions will be properly written by mormot.crypt.secure code
 end;
 
