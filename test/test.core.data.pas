@@ -4216,7 +4216,7 @@ var
   peoples: string;
   peoplehash: cardinal;
   P: PUtf8Char;
-  count, len, lennexp, i, c, interned: integer;
+  count, len, lenw, lennexp, i, c, interned: integer;
   dv: TDocVariantData;
   table: TOrmTableJson;
   timer: TPrecisionTimer;
@@ -4265,6 +4265,13 @@ begin
     Check(StrLen(pointer(people)) = len);
   len := len * ITER;
   NotifyTestSpeed('StrLen()', 0, len, @timer, ONLYLOG);
+  lenw := 0;
+  while PWordArray(pointer(people))[lenw] <> 0 do
+    inc(lenw);
+  timer.Start;
+  for i := 1 to ITER do
+    CheckEqual(StrLenW(pointer(people)), lenw);
+  NotifyTestSpeed('StrLenW()', 0, len, @timer, ONLYLOG);
   timer.Start;
   for i := 1 to ITER do
     Check(IsValidUtf8(people));

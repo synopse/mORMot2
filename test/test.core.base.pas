@@ -5589,10 +5589,14 @@ procedure TTestCoreBase.Utf8Slow(Context: TObject);
     FillCharFast(src, SizeOf(src), ord('a'));
     for i := 0 to 200 do
     begin
-      FillCharFast(dst, SizeOf(dst), 0);
+      FillCharFast(dst, SizeOf(dst), 10);
       UpperCopy255Buf(@dst, @src, i)^ := #0;
       Check(StrLen(@dst) = i);
       Check(StrLenSafe(@dst) = i);
+      Check(ByteScanIndex(@dst, SizeOf(dst), 0) = i);
+      if i = 0 then
+        continue;
+      Check(ByteScanIndex(@dst, i, 0) < 0);
       for j := 0 to i - 1 do
         Check(dst[j] = 'A');
     end;
@@ -5644,6 +5648,7 @@ var
   arr, arr2: TRawUtf8DynArray;
   P: PUtf8Char;
   PB: PByte;
+  PW: PWideChar;
   q: RawUtf8;
   Unic: RawByteString;
   Ucs4: RawUcs4;
@@ -6300,6 +6305,20 @@ begin
   CheckEqual(U, '#abcd##e##fg###');
   U := QuotedStr('#abcd#efg', '#');
   CheckEqual(U, '###abcd##efg#');
+  Utf8ToSynUnicode('123456789abcdefghijkl', su);
+  PW := pointer(su);
+  len := length(su);
+  for i := 1 to len do
+    Check(SU[i] <> #0);
+  repeat
+    CheckEqual(StrLenW(PW), len);
+    CheckEqual(WordScanIndex(pointer(PW), len + 10, 0), len);
+    PW^ := #0; // force some #0 within the SSE2 16 bytes alignment
+    inc(PW);
+    dec(len);
+  until len < 0;
+  for i := 1 to length(su) do
+    Check(SU[i] = #0);
   for i := 0 to 1000 do
   begin
     len := i * 5;
@@ -6437,6 +6456,10 @@ begin
     WinAnsiConvert.AnsiToUtf8(W, U1);
     CheckEqual(WinAnsiConvert.Utf8ToAnsi(U), W, 'uw');
     SU := WinAnsiConvert.AnsiToUnicodeString(W);
+    CheckEqual(StrLenWSafe(pointer(SU)), length(SU));
+    CheckEqual(StrLenW(pointer(SU)), length(SU));
+    if SU <> '' then
+      Check(WordScanIndex(pointer(SU), length(SU) + 10, 0) = length(SU));
     W2 := WinAnsiConvert.UnicodeStringToAnsi(SU);
     //ConsoleWrite(['SU len=', length(SU), ' =', SU]); ConsoleWrite(['W2 len=', length(W2), ' =', W2]); readln;
     CheckEqual(W2, W, 'A2U(U2A)');
@@ -6459,6 +6482,7 @@ begin
     CheckEqual(integer(Utf8ToUnicodeLength(Pointer(U))), length(WS));
     SU := Utf8ToSynUnicode(U);
     CheckEqual(length(SU), length(Unic) shr 1);
+    CheckEqual(StrLenW(pointer(SU)), length(SU));
     if SU <> '' then
       Check(CompareMem(pointer(SU), pointer(Unic), length(Unic)), 'Utf8ToSU');
     WA := IsWinAnsi(pointer(Unic));
@@ -6594,6 +6618,7 @@ begin
   Utf8ToSynUnicode(U, SU);
   if not CheckFailed(length(SU) = 2) then
     Check(PCardinal(SU)^ = $DCD2D863);
+  CheckEqual(StrLenW(pointer(SU)), length(SU));
   Check(Utf8ToUnicodeLength(Pointer(U)) = 2);
   Check(Utf8FirstLineToUtf16Length(Pointer(U)) = 2);
   PCardinal(@WU)^ := 0;
@@ -6602,6 +6627,7 @@ begin
   U := SynUnicodeToUtf8(SU);
   if not CheckFailed(length(U) = 4) then
     Check(PCardinal(U)^ = $92b3a8f0);
+  CheckEqual(StrLenW(pointer(SU)), length(SU));
   TSynAnsiConvert.Engine(CP_UTF8).UnicodeBufferToAnsiVar(
     pointer(SU), length(SU), RawByteString(U));
   Check(length(U) = 4);
@@ -6628,6 +6654,7 @@ begin
   FastSetString(U, @CHINESE_TEXT, 9);
   CheckEqual(StrLen(pointer(U)), 9);
   SU := Utf8ToSynUnicode(U);
+  CheckEqual(StrLenW(pointer(SU)), length(SU));
   eng := TSynAnsiConvert.Engine(936);
   Check(eng <> nil, 'Engine(936)');
   rb1 := eng.UnicodeStringToAnsi(SU); // GB2312
@@ -6666,6 +6693,7 @@ begin
     PCardinal(U)^ := $A59AAAF0; // valid in GB18030 only
     SU := Utf8ToSynUnicode(U);  // 69 D8 A5 DE , UTF16, Code Point: \uD869\uDEA5
     CheckEqual(PCardinal(SU)^, $DEA5D869);
+    CheckEqual(StrLenW(pointer(SU)), length(SU));
     RB1 := eng.Utf8ToAnsi(U);
     Check((RB1 <> '') and (PCardinal(RB1)^ = $37EE3598), 'Utf8ToAnsi');
     RB2 := eng.UnicodeStringToAnsi(SU);
@@ -6960,10 +6988,12 @@ procedure TTestCoreBase.Charsets;
     // validate UTF-8 to/from UTF-16 conversion
     su := Utf8ToSynUnicode(ru);
     Check(su <> '', msg);
+    CheckEqual(StrLenW(pointer(su)), length(su));
     CheckEqual(SynUnicodeToUtf8(su), ru, 'utf8');
     {$ifdef HASCODEPAGE} // old Delphi RTL does not decode UTF-16 surrogates
     w := UTF8Decode(ru);
     CheckEqual(length(w), length(su), 'rtl1');
+    CheckEqual(StrLenW(pointer(w)), length(su));
     Check(CompareMem(pointer(w), pointer(su), length(w)), 'rtl2');
     {$endif HASCODEPAGE}
     {$ifdef OSWINDOWS}
@@ -6977,6 +7007,7 @@ procedure TTestCoreBase.Charsets;
     CheckEqual(eng.CodePage, cp, 'eng2');
     // with ASCII-7 chars
     su2 := eng.AnsiToUnicodeString('abcd efgh');
+    CheckEqual(StrLenW(pointer(su2)), length(su2));
     Check(su2 = 'abcd efgh', msg);
     a := eng.UnicodeStringToAnsi(su2);
     {$ifdef OSPOSIX}
@@ -7032,6 +7063,7 @@ procedure TTestCoreBase.Charsets;
       exit; // some casing issue to investigate on Windows (not with ICU)
     {$endif OSWINDOWS}
     su2 := eng.AnsiToUnicodeString(ra);
+    CheckEqual(StrLenW(pointer(su2)), length(su));
     Check(su = su2, msg);
     eng := TSynAnsiConvert.Engine(cp); // validate "last" cache
     Check(eng <> nil, 'eng3');
