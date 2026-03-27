@@ -828,7 +828,7 @@ function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): integer;
   cdecl external clib name 'mach_timebase_info';
 
 function host_processor_info(host, flavor: cint; var proccount: cardinal;
-  var info: PCardinalArray; var infocount: cardinal): cint;
+  var info: pointer; var infocount: cardinal): cint;
   cdecl external 'host_processor_info';
 
 function mach_host_self: cint;
@@ -3217,49 +3217,53 @@ end;
 {$ifdef OSDARWIN}
 
 type
+  TMachCpuOne = packed record
+    user, system, idle, nice: cardinal;
+  end;
   TMachCpuInfo = record
-    nproc, ninfo: cardinal;
-    info: PCardinalArray; // per User/System/Idle/Nice quad
+    count, bytes: cardinal;
+    cpu: pointer;
   end;
 
-function GetMachCpuInfo(out cpu: TMachCpuInfo): boolean;
+function GetMachCpuInfo(out nfo: TMachCpuInfo): boolean;
 begin
-  cpu.nproc := 0;
-  cpu.ninfo := 0;
-  cpu.info := nil;
+  nfo.count := 0;
+  nfo.bytes := 0;
+  nfo.cpu := nil;
   result := (host_processor_info(mach_host_self, PROCESSOR_CPU_LOAD_INFO,
-               cpu.nproc, cpu.info, cpu.ninfo) = 0) and
-            (cpu.nproc <> 0) and
-            (cpu.ninfo = cpu.nproc * 4) and
-            (cpu.info <> nil);
+               nfo.count, nfo.cpu, nfo.bytes) = 0) and
+            (nfo.count <> 0) and
+            (nfo.bytes = nfo.count shl 2) and
+            (nfo.cpu <> nil);
+  nfo.bytes := nfo.bytes shl 2; // more convenient as bytes
 end;
 
-procedure FreeMachCpuInfo(var cpu: TMachCpuInfo);
+procedure FreeMachCpuInfo(var nfo: TMachCpuInfo);
 begin
-  vm_deallocate(mach_task_self, cpu.info, cpu.ninfo shl 2);
+  vm_deallocate(mach_task_self, nfo.cpu, nfo.bytes);
 end;
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 var
-  cpu: TMachCpuInfo;
-  p: PCardinalArray;
+  cpus: TMachCpuInfo;
+  cpu: ^TMachCpuOne;
 begin
   result := false;
   IdleTime := 0;
   KernelTime := 0;
   UserTime := 0;
-  if not GetMachCpuInfo(cpu) then
+  if not GetMachCpuInfo(cpus) then
     exit;
-  p := cpu.info; // keep original pointer for FreeMachCpuInfo()
+  cpu := cpus.cpu; // and keep original pointer for FreeMachCpuInfo()
   repeat
-    //writeln('U:', p[0],' S:', p[1],' I:', p[2],' N:', p[3]);
-    inc(UserTime,   p[0] + p[3]); // CPU_STATE_USER + CPU_STATE_NICE
-    inc(KernelTime, p[1]);        // CPU_STATE_SYSTEM
-    inc(IdleTime,   p[2]);        // CPU_STATE_IDLE
-    p := @p[4];                   // next cpu
-    dec(cpu.nproc);
-  until cpu.nproc = 0;
-  FreeMachCpuInfo(cpu);
+    //writeln('U:', p[0],' S:', p[1],' I:', p[2],' count:', p[3]);
+    inc(UserTime,   cpu.user + cpu.nice);
+    inc(KernelTime, cpu.system);
+    inc(IdleTime,   cpu.idle);
+    inc(cpu);
+    dec(cpus.count);
+  until cpus.count = 0;
+  FreeMachCpuInfo(cpus);
   inc(KernelTime, IdleTime); // as with GetSystemTimes() WinAPI
   result := (UserTime + KernelTime) <> 0;
   //writeln('I:',IdleTime,',K:',KernelTime,',U:',UserTime,'  result=',result);
@@ -3269,7 +3273,7 @@ procedure XorOSEntropy(var e: THash512Rec);
 var
   mem: TMemoryInfo;
   avg: ^TLoadAvg;
-  cpu: ^TMachCpuInfo;
+  nfo: ^TMachCpuInfo;
 begin
   // some minimal OS entropy we could get on Darwin
   mem.memtotal := mem.memtotal xor mach_absolute_time; // monotonic hi-res clock
@@ -3278,11 +3282,11 @@ begin
   DefaultHasher128(@e.h0, @mem, SizeOf(mem)); // include values on stack
   GetMemoryInfo(mem, {withalloc=}false);      // also fill mem with zeros
   DefaultHasher128(@e.h1, @mem, SizeOf(mem));
-  cpu := @mem.filetotal;
-  if GetMachCpuInfo(cpu^) then                // detailed per-cpu times
+  nfo := @mem.filetotal;
+  if GetMachCpuInfo(nfo^) then                // detailed per-nfo times
   begin
-    DefaultHasher128(@e.h2, pointer(cpu^.info), cpu^.ninfo shl 2);
-    FreeMachCpuInfo(cpu^);
+    DefaultHasher128(@e.h2, nfo^.cpu, nfo^.bytes);
+    FreeMachCpuInfo(nfo^);
   end;
   mem.memtotal := mach_continuous_time;       // wall clock time since boot
   mem.memfree := mach_absolute_time;          // should have changed in-between
