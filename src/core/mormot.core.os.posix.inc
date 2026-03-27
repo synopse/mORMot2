@@ -4008,7 +4008,7 @@ begin
     end;
     if dev > 0 then // we can read some bytes from /dev/urandom or /dev/random
     begin
-      result := (fpRead(dev, Buffer, rd) = rd); // may block until entropy
+      result := (fpRead(dev, pointer(Buffer), rd) = rd); // may block until entropy
       FileClose(dev);
       if result and
          (rd >= SizeOf(SystemEntropy.LiveFeed)) then
