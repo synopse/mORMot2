@@ -304,6 +304,7 @@
     {$define FPCPOSIX}
     {$ifdef BSD}
       // conditionals for Darwin and BSD family like OpenBSD/FreeBSD
+      {$define SOCK_HAS_SINLEN}
       {$ifdef DARWIN}
         {$define OSDARWIN}
         {$define FPCDARWIN}
@@ -314,7 +315,6 @@
         {$define DISABLE_SSE42} // circumvent clang asm bugs
       {$else}
         {$define OSBSD}         // OSX has some non-standard API calls
-        {$define SOCK_HAS_SINLEN}
         {$define FPCBSD}
         {$ifdef OPENBSD}
           {$define OSOPENBSD}   // OSBDS = OSOPENBSD + OSFREEBSD

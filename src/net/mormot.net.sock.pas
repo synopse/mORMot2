@@ -7728,14 +7728,6 @@ initialization
   DefaultListenBacklog := SOMAXCONN;
   GetSystemMacAddress := @_GetSystemMacAddress;
   InitializeUnit; // in mormot.net.sock.windows/posix.inc
-  (*{$ifdef OSLINUX}
-  writeln(GetRemoteMacAddress('192.168.0.1'));
-  writeln(GetRemoteMacAddress('192.168.0.254'));
-  writeln(GetRemoteMacAddress('192.168.0.2'));
-  writeln(GetRemoteMacAddress('192.168.0.121'));
-  writeln(GetRemoteMacAddress('10.0.2.15'));
-  writeln(GetRemoteMacAddress('10.0.2.2'));
-  {$endif OSLINUX}*)
 
 finalization
   FinalizeUnit;  // in mormot.net.sock.windows/posix.inc
