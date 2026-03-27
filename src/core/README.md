@@ -54,8 +54,9 @@ See `mormot.core.os.mac.pas` and `mormot.core.os.security.pas` units for complet
 
 Map FPC cross-platform API types and functions into Delphi POSIX units
 - Core POSIX Operating Systems API for Delphi
+- Network POSIX Operating Systems API for Delphi
 
-This unit is called by mormot.core.os.posix.inc as a compatibility layer with the FPC POSIX units.
+This unit is called by mormot.core.os.posix.inc and mormot.net.sock.posix.inc as a compatibility layer with the FPC POSIX units.
 
 ### mormot.core.os.mac
 
