@@ -3577,9 +3577,9 @@ begin
   end; // IsZero(Hash.Bin) = no hash known = no hash computed nor verified
   with msg do
     FormatShort('% #% % %% % % to % % % %Mb/s % %% siz=% con=% ',
-      [ToText(Kind)^, CardinalToHexLower(Seq), OS_INITIAL[Os.os],
-       OsvToShort(Os)^, WinOsBuild(Os, ' '), MAK_TXT[Hardware],
-       IP4ToShort(@IP4), IP4ToShort(@DestIP4),
+      [ToText(Kind)^, PointerToHexShort(pointer(PtrUInt(Seq))),
+       OS_INITIAL[Os.os], OsvToShort(Os)^, WinOsBuild(Os, ' '),
+       MAK_TXT[Hardware], IP4ToShort(@IP4), IP4ToShort(@DestIP4),
        IP4ToShort(@MaskIP4), IP4ToShort(@BroadcastIP4), Speed,
        UnixTimeToFileShort(QWord(Timestamp) + UNIXTIME_MINIMAL),
        algohex, algoext, Size, Connections], tmp);
