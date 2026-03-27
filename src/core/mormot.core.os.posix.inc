@@ -3031,6 +3031,7 @@ begin
   result := s;
 end;
 
+{$ifndef OPENBSD} // no sysctlbyname() on OpenBSD :(
 function bsdsysctl(name: PAnsiChar; dest: pointer; len: PtrInt): PtrInt; overload;
 var
   s: PtrInt;
@@ -3041,32 +3042,33 @@ begin
   result := s;
 end;
 
-function fpsysctlhwint(hwid: cint): QWord;
-begin
-  result := 0;
-  bsdsysctl(CTL_HW, hwid, @result, SizeOf(result));
-end;
-
 function fpsysctlbynameint(name: PAnsiChar): QWord;
 begin
   result := 0;
   bsdsysctl(name, @result, SizeOf(result));
 end;
 
-function fpsysctlhwstr(hwid: cint; var temp: ShortString): PUtf8Char;
+function fpsysctlbynamestr(name: PAnsiChar; var temp: ShortString): PUtf8Char;
 begin
   FillCharFast(temp, high(temp) + 1, 0); // ShortString as 0-terminated buffer
-  if (bsdsysctl(CTL_HW, hwid, @temp, SizeOf(temp)) <> 0) and
+  if (bsdsysctl(name, @temp, high(temp) + 1) <> 0) and
      (temp[0] <> #0) then
     result := @temp
   else
     result := nil;
 end;
+{$endif OPENBSD}
 
-function fpsysctlbynamestr(name: PAnsiChar; var temp: ShortString): PUtf8Char;
+function fpsysctlhwint(hwid: cint): QWord;
+begin
+  result := 0;
+  bsdsysctl(CTL_HW, hwid, @result, SizeOf(result));
+end;
+
+function fpsysctlhwstr(hwid: cint; var temp: ShortString): PUtf8Char;
 begin
   FillCharFast(temp, high(temp) + 1, 0); // ShortString as 0-terminated buffer
-  if (bsdsysctl(name, @temp, high(temp) + 1) <> 0) and
+  if (bsdsysctl(CTL_HW, hwid, @temp, SizeOf(temp)) <> 0) and
      (temp[0] <> #0) then
     result := @temp
   else
@@ -3187,18 +3189,10 @@ begin
         info[id] := TrimU(tmp);
 end;
 
-type
-  TBsdProcTimes = array[0 .. 4] of clong; // user/nice/system/int/idle
-
-procedure BsdProcTimes(var times: TBsdProcTimes);
-begin
-  bsdsysctl('kern.cp_time', @times, SizeOf(times));
-end;
-
 {$else}
 
-// help is needed to implement those on buggy Mac OS
-// may fallback to PosixInject wrappers from mormot.core.os.mac
+// on MacOS, fallback to PosixInject wrappers from mormot.core.os.mac
+// OpenBSD has no simple way to retrieve the SMBios information
 
 function GetSmbEfiMem: RawByteString;
 begin
@@ -3299,6 +3293,18 @@ begin
 end;
 
 {$else}
+
+type
+  TBsdProcTimes = array[0 .. 4] of clong; // user/nice/system/int/idle
+
+procedure BsdProcTimes(var times: TBsdProcTimes);
+begin
+  {$ifdef OPENBSD} // no sysctlbyname() on OpenBSD :(
+  bsdsysctl(CTL_KERN, KERN_CPTIME, @times, SizeOf(times));
+  {$else}
+  bsdsysctl('kern.cp_time', @times, SizeOf(times));
+  {$endif OPENBSD}
+end;
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 var
@@ -4132,15 +4138,19 @@ begin
     //WrDeb('stat^.mntfromname', stat^.mntfromname, SizeOf(stat^.mntfromname));
     //WrDeb('stat^.mountpoint',  stat^.mountpoint,  SizeOf(stat^.mountpoint));
     //WrDeb('stat^.fstypename',  stat^.fstypename,  SizeOf(stat^.fstypename));
-    {$ifdef OSBSD} // the FPC RTL headers has field names issues
+    {$ifdef OSFREEBSD} // the FPC RTL headers has field names issues
     FastSetString(name, @stat^.f_mntfromname, StrLen(@stat^.f_mntfromname));
     FastSetString(mnt,  @stat^.f_mntonname,   StrLen(@stat^.f_mntonname));
     FastSetString(fs,   @stat^.f_fstypename,  StrLen(@stat^.f_fstypename));
     {$else}
     FastSetString(name, @stat^.mntfromname, StrLen(@stat^.mntfromname));
+    {$ifdef OSDARWIN}
     FastSetString(mnt,  @stat^.mountpoint,  StrLen(@stat^.mountpoint));
+    {$else}
+    FastSetString(mnt,  @stat^.mntonname,  StrLen(@stat^.mntonname));
+    {$endif OSDARWIN}
     FastSetString(fs,   @stat^.fstypename,  StrLen(@stat^.fstypename));
-    {$endif OSBSD}
+    {$endif OSFREEBSD}
     AddDiskPartition(name, mnt, fs, result, n);
     inc(stat);
     dec(max);
