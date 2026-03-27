@@ -5621,6 +5621,7 @@ end;
 constructor TLdapClientSettings.Create(const aUri: RawUtf8);
 begin
   inherited Create;
+  fkey := Random32;
   fTimeout := 5000;
   fAutoReconnect := true; // sounds fair enough
   SetTargetUri(aUri); // initialize TargetHost/TargetPort and TLS
