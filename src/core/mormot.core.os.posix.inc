@@ -3833,7 +3833,7 @@ type // see https://keith.github.io/xcode-man-pages/statfs.2.html
 const
   MFSNAMELEN = 15;
   MNAMELEN   = 90;
-type
+type // we define it here since it is missing on Delphi
   TStatfs = record
     otype: cshort;
     oflags: cshort;
@@ -4038,56 +4038,65 @@ begin
     aDriveFolderOrFile := '.';
   FillCharFast(fs, SizeOf(fs), 0);
   result := fpStatFS(pointer(aDriveFolderOrFile), @fs) = 0;
+  //writeln('fpStatFS(',aDriveFolderOrFile,')=',result);
+  //writeln('avail=',fs.bavail,' blocksize=',fs.bsize, 'total=',fs.blocks);
   aAvailableBytes := QWord(fs.bavail) * QWord(fs.bsize);
   aFreeBytes := aAvailableBytes; // no user Quota involved here
   aTotalBytes := QWord(fs.blocks) * QWord(fs.bsize);
 end;
 
-function IsRealFileSystem(const typ: RawUtf8): boolean;
+function IsRealFileSystem(const fs: RawUtf8): boolean;
 begin
   {$ifdef OSLINUXANDROID}
   if _ProcFileSystems <> nil then   // caller made LoadProcFileSystems once
-    result := IsProcFileSystem(typ) // from /proc/filesystems
+    result := IsProcFileSystem(fs) // from /proc/filesystems
   else
   {$endif OSLINUXANDROID}
-    // generic / best guess fallback list
-    result := IdemPChars(typ, 'AUTOFS'#0'PROC'#0'SUBFS'#0'DEBUGFS'#0 +
-      'DEVPTS'#0'FUSECTL'#0'MQUEUE'#0'RPC-PIPEFS'#0'SYSFS'#0'DEVFS'#0 +
-      'KERNFS'#0'PTY'#0'IGNORE'#0'NONE'#0'TMPFS'#0'SECURITYFS'#0'RAMFS'#0 +
-      'ROOTFS'#0'DEVTMPFS'#0'HUGETLBFS'#0'ISO9660'#0) >= 0;
+    // wild guess via fallback white/block list for BSD/MacOS
+    result := (IdemPChars(fs, 'EXT'#0'XFS'#0'BTRFS'#0'ZFS'#0'APFS'#0 +
+                'HFS'#0'FAT'#0'EXFAT'#0'NTFS'#0'UFS'#0'FFS'#0) >= 0) or
+              (IdemPChars(fs, 'AUTO'#0'PROC'#0'SUB'#0'DEBUG'#0'DEV'#0'SYS'#0 +
+      'FUSE'#0'MQUEUE'#0'RPC'#0'KERN'#0'PTY'#0'IGNORE'#0'NONE'#0'TMP'#0 +
+      'SECURITY'#0'RAM'#0'ROOT'#0'HUGETLB'#0'NSFS'#0'CGROUP'#0'ISO9660'#0 +
+      'OVERLAY'#0'CONFIG'#0'PSTORE'#0'SHM'#0) < 0);
 end;
 
-procedure AddDiskPartition(const typ, mnt, fs: RawUtf8;
-  var result: TDiskPartitions; var n:PtrInt);
+procedure AddDiskPartition(const n, mnt, fs: RawUtf8;
+  var result: TDiskPartitions; var count: PtrInt);
+// e.g. on Linux: n=udev           mnt=/dev fs=devtmpfs
+//                n=/dev/nvme0n1p2 mnt=/    fs=ext4
+//      on Mac:   n=/dev/disk1s4s1 mnt=/    fs=apfs
 var
   av, fr, tot: QWord;
   fn: TFileName;
 begin
-  //writeln('AddDiskPartition typ=',typ,' mnt=',mnt,' fs=',fs);
+  //writeln(#10'AddDiskPartition n=',n,' mnt=',mnt,' fs=',fs);
+  //writeln('IsRealFileSystem(',fs,')=',IsRealFileSystem(fs));
+  //writeln('IdemPChars()=',IdemPChars(mnt, '/PROC/'#0'/SYS/'#0'/RUN/'#0));
   if (fs = '') or
      (mnt = '') or
-     (typ = '') or
-     (fs = 'rootfs') or
+     (n = '') or
+     (n = 'rootfs') or
      (mnt = '/mnt') or
-     IdemPChar(pointer(fs), '/DEV/LOOP') or
+     IdemPChar(pointer(n), '/DEV/LOOP') or
      (IdemPChars(mnt, '/PROC/'#0'/SYS/'#0'/RUN/'#0) >= 0) or
-     not IsRealFileSystem(typ) then
+     not IsRealFileSystem(fs) then
     exit;
   fn := string(mnt);
   //writeln('GetDiskInfo=',GetDiskInfo(fn, av, fr, tot));
-  //writeln('fs=',fs,' mnt=',fn,' typ=',typ, ' av=',KB(av),' fr=',KB(fr),' tot=',KB(tot));
+  //writeln('fs=',fs,' mnt=',fn,' n=',n, ' av=',KB(av),' fr=',KB(fr),' tot=',KB(tot));
   if not (GetDiskInfo(fn, av, fr, tot)) or
      (tot < 1 shl 20) then
     exit;
-  if n = length(result) then
-    SetLength(result, NextGrow(n));
-  with result[n] do
+  if count = length(result) then
+    SetLength(result, NextGrow(count));
+  with result[count] do
   begin
-    name := fs;
+    name := n;
     mounted := fn;
     size := tot;
   end;
-  inc(n);
+  inc(count);
 end;
 
 // we tried with libc setmntent/getmntent but it is Linux only :(
@@ -4104,36 +4113,36 @@ function getfsstat(statfs: pointer; bufsize: clong; mode: cint): cint;
 
 function GetDiskPartitions: TDiskPartitions;
 var
-  fs: ^TStatfs; // TStatfs may be redefined above for darwin aarch64
+  stat: ^TStatfs; // TStatfs may be redefined above for Darwin
+  temp: array of TStatFs;
   max, n: PtrInt;
-  t, m, f: RawUtf8; // FPC aarch64 requires explicit temp variables
-  all: array of TStatFs;
+  name, mnt, fs: RawUtf8; // FPC aarch64 requires explicit temp variables
 begin
   result := nil;
   max := getfsstat(nil, 0, MNT_WAIT); // return the number to allocate
   if max <= 0 then
     exit;
-  SetLength(all, max);
-  fs := pointer(all);
-  max := getfsstat(fs, max * SizeOf(all[0]), MNT_WAIT); // fill all[]
+  SetLength(temp, max);
+  stat := pointer(temp);
+  max := getfsstat(stat, max * SizeOf(stat^), MNT_WAIT); // fill temp[]
   if max <= 0 then
     exit;
   n := 0;
   repeat
-    //WrDeb('fs^.mntfromname', fs^.mntfromname, SizeOf(fs^.mntfromname));
-    //WrDeb('fs^.mountpoint', fs^.mountpoint, SizeOf(fs^.mountpoint));
-    //WrDeb('fs^.fstypename',fs^.fstypename,SizeOf(fs^.fstypename));
+    //WrDeb('stat^.mntfromname', stat^.mntfromname, SizeOf(stat^.mntfromname));
+    //WrDeb('stat^.mountpoint',  stat^.mountpoint,  SizeOf(stat^.mountpoint));
+    //WrDeb('stat^.fstypename',  stat^.fstypename,  SizeOf(stat^.fstypename));
     {$ifdef OSBSD} // the FPC RTL headers has field names issues
-    FastSetString(t, @fs^.f_mntfromname, StrLen(@fs^.f_mntfromname));
-    FastSetString(m, @fs^.f_mntonname,   StrLen(@fs^.f_mntonname));
-    FastSetString(f, @fs^.f_fstypename,  StrLen(@fs^.f_fstypename));
+    FastSetString(name, @stat^.f_mntfromname, StrLen(@stat^.f_mntfromname));
+    FastSetString(mnt,  @stat^.f_mntonname,   StrLen(@stat^.f_mntonname));
+    FastSetString(fs,   @stat^.f_fstypename,  StrLen(@stat^.f_fstypename));
     {$else}
-    FastSetString(t, @fs^.mntfromname, StrLen(@fs^.mntfromname));
-    FastSetString(m, @fs^.mountpoint,  StrLen(@fs^.mountpoint));
-    FastSetString(f, @fs^.fstypename,  StrLen(@fs^.fstypename));
+    FastSetString(name, @stat^.mntfromname, StrLen(@stat^.mntfromname));
+    FastSetString(mnt,  @stat^.mountpoint,  StrLen(@stat^.mountpoint));
+    FastSetString(fs,   @stat^.fstypename,  StrLen(@stat^.fstypename));
     {$endif OSBSD}
-    AddDiskPartition(t, m, f, result, n);
-    inc(fs);
+    AddDiskPartition(name, mnt, fs, result, n);
+    inc(stat);
     dec(max);
   until max = 0;
   SetLength(result, n);
@@ -4143,7 +4152,7 @@ end;
 
 function GetDiskPartitions: TDiskPartitions;
 var
-  mounts: RawUtf8;
+  mounts, name, mnt, fs: RawUtf8;
   p: PAnsiChar;
   n: PtrInt;
 begin
@@ -4161,8 +4170,10 @@ begin
   {$endif OSLINUXANDROID}
   n := 0;
   repeat
-    AddDiskPartition(
-      _GetNextSpaced(p), _GetNextSpaced(p), _GetNextSpaced(p), result, n);
+    name := _GetNextSpaced(p);
+    mnt  := _GetNextSpaced(p);
+    fs   := _GetNextSpaced(p);
+    AddDiskPartition(name, mnt, fs, result, n);
     p := pointer(GotoNextLineSmall(pointer(p)));
   until p^ = #0;
   SetLength(result, n);
