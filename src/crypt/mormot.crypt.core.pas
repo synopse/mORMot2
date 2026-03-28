@@ -7879,7 +7879,7 @@ end;
 var
   _h: record
     safe: TLightLock;
-    k: THash256;      // decoded local private key file
+    k: THash256;      // decoded local private key file (sensitive)
     mac: THmacSha256; // initialized from CryptProtectDataEntropy salt
   end;
 

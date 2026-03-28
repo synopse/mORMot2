@@ -50,6 +50,11 @@ uses
 
 { ***************** Password-Safe and TSynConnectionDefinition Classes }
 
+const
+  /// set this to TObjectWithPassword.Key to disable password obfuscation
+  // - i.e. trigger PasswordPlain = Password
+  OBJECTPASSWORD_PLAIN = cardinal(-1);
+
 type
   /// abstract class allowing safe storage of a password in a published property
   // - the associated Password, e.g. for storage or transmission encryption
@@ -64,8 +69,7 @@ type
   protected
     fPassWord: SpiUtf8;
     fKey: cardinal;
-    function GetKey: cardinal;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure XorKey(var Value: RawByteString);
     function GetPassWordPlain: SpiUtf8;
     function GetPassWordPlainInternal(AppSecret: RawUtf8): SpiUtf8;
     procedure SetPassWordPlain(const Value: SpiUtf8);
@@ -90,12 +94,14 @@ type
       CustomKey: cardinal = 0; const AppSecret: RawUtf8 = ''): SpiUtf8;
     /// the private key used to cypher the password storage on serialization
     // - application can override the default 0 value at runtime
+    // - set OBJECTPASSWORD_PLAIN would disable obfuscation
     property Key: cardinal
-      read GetKey write fKey;
+      read fKey write fKey;
     /// access to the associated unencrypted Password value
     // - may trigger a ECrypt if the password was stored using hardened
     // CryptDataForCurrentUser, and the current user doesn't match the
     // expected user stored in the field
+    // - equals fPassword field if Key is set to OBJECTPASSWORD_PLAIN
     property PasswordPlain: SpiUtf8
       read GetPassWordPlain write SetPassWordPlain;
   end;
@@ -6678,6 +6684,7 @@ end;
 destructor TObjectWithPassword.Destroy;
 begin
   FillZero(fPassword);
+  fKey := 0; // this is also a sensitive value
   inherited Destroy;
 end;
 
@@ -6719,12 +6726,9 @@ begin
   end;
 end;
 
-function TObjectWithPassword.GetKey: cardinal;
+procedure TObjectWithPassword.XorKey(var Value: RawByteString);
 begin
-  if self = nil then
-    result := 0
-  else
-    result := fKey xor $A5abba5A;
+  SymmetricEncrypt(fKey xor $A5abba5A, Value);
 end;
 
 function TObjectWithPassword.GetPassWordPlain: SpiUtf8;
@@ -6732,6 +6736,8 @@ begin
   if (self = nil) or
      (fPassWord = '') then
     result := ''
+  else if fKey = OBJECTPASSWORD_PLAIN then
+    result := fPassword
   else
     result := GetPassWordPlainInternal('');
 end;
@@ -6747,6 +6753,11 @@ begin
   if (self = nil) or
      (fPassWord = '') then
     exit;
+  if fKey = OBJECTPASSWORD_PLAIN then
+  begin
+    result := fPassWord;
+    exit;
+  end;
   if AppSecret = '' then
     ClassToText(ClassType, AppSecret);
   usr := Executable.User + ':';
@@ -6768,14 +6779,14 @@ begin
   begin
     i := PosExChar(':', fPassword);
     if i > 0 then
-      ECrypt.RaiseUtf8('%.GetPassWordPlain unable to retrieve the ' +
-        'stored value: current user is [%], but password in % was encoded for [%]',
+      ECrypt.RaiseUtf8('%.GetPassWordPlain unable to retrieve the stored ' +
+        'value: current user is [%], but password in % was encoded for [%]',
         [self, Executable.User, AppSecret, copy(fPassword, 1, i - 1)]);
   end;
   if result = '' then
   begin
     value := Base64ToBin(fPassWord);
-    SymmetricEncrypt(GetKey, value);
+    XorKey(value);
     result := value;
   end;
 end;
@@ -6786,14 +6797,17 @@ var
 begin
   if self = nil then
     exit;
-  if value = '' then
+  FillZero(fPassword);
+  if (value = '') or
+     (fKey = OBJECTPASSWORD_PLAIN) then
   begin
-    fPassWord := '';
+    fPassWord := value;
     exit;
   end;
   FastSetRawByteString(tmp, pointer(value), Length(value)); // private copy
-  SymmetricEncrypt(GetKey, tmp);
+  XorKey(tmp);
   fPassWord := BinToBase64(tmp);
+  FillZero(tmp);
 end;
 
 
