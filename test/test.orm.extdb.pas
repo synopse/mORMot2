@@ -792,6 +792,7 @@ var
   props: TSqlDBConnectionProperties;
   def: TSynConnectionDefinition;
   json: RawUtf8;
+  pwd: SpiUtf8;
 begin
   def := TSynConnectionDefinition.Create;
   try
@@ -824,7 +825,10 @@ begin
     def.SetPassWordPlainCurrentUser('777', 'app');
     CheckNotEqual(def.Password, '777');
     CheckEqual(def.PasswordPlain, '');
-    CheckEqual(def.PassWordPlainCurrentUser('app'), '777');
+    def.GetPassWordSafe(pwd, 'app');
+    CheckEqual(pwd, '777');
+    FillZero(pwd);
+    CheckEqual(pwd, '');
   finally
     def.Free;
   end;

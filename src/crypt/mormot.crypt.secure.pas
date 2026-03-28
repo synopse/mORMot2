@@ -101,8 +101,8 @@ type
     // memory using a local private key and Windows DPAPI for the current user
     procedure SetPassWordPlainCurrentUser(const Value: SpiUtf8;
       AppSecret: RawUtf8 = '');
-    /// alternative to PasswordPlain when you need to specify your own AppSecret
-    function PassWordPlainCurrentUser(const AppSecret: RawUtf8): SpiUtf8;
+    /// getter for PasswordPlain property to eventually call FillZero(Value)
+    procedure GetPasswordSafe(var Value: SpiUtf8; const AppSecret: RawUtf8 = '');
     /// the private key used to cypher the password storage on serialization
     // - application can override the default 0 value at runtime
     // - set OBJECTPASSWORD_PLAIN would disable obfuscation
@@ -6770,7 +6770,7 @@ begin
   end;
   if AppSecret = '' then
     ClassToText(ClassType, AppSecret);
-  usr := Executable.User + ':';
+  Join([Executable.User, ':'], usr);
   i := PosEx(usr, fPassword);
   if (i = 1) or
      ((i > 0) and
@@ -6823,10 +6823,10 @@ begin // follow GetPassWordPlainInternal() encoding logic
   fPassWord := list.AsCsv(':', ',');
 end;
 
-function TObjectWithPassword.PassWordPlainCurrentUser(
-  const AppSecret: RawUtf8): SpiUtf8;
+procedure TObjectWithPassword.GetPasswordSafe(
+  var Value: SpiUtf8; const AppSecret: RawUtf8);
 begin
-  result := GetPassWordPlainInternal(AppSecret);
+  Value := GetPassWordPlainInternal(AppSecret);
 end;
 
 procedure TObjectWithPassword.SetPassWordPlain(const Value: SpiUtf8);
