@@ -92,6 +92,17 @@ type
     // expected user stored in the field
     class function ComputePlainPassword(const CypheredPassword: SpiUtf8;
       CustomKey: cardinal = 0; const AppSecret: RawUtf8 = ''): SpiUtf8;
+    /// append the password encoded via CryptDataForCurrentUser()
+    // - would store it as 'username:passwordbase64' CSV values
+    // - each Executable.User would have its own encrypted value: so we store
+    // each username with its associated encrypted password
+    // - you could remove the current user password by setting Value = ''
+    // - you can use this method at runtime to safely obfucate a password in
+    // memory using a local private key and Windows DPAPI for the current user
+    procedure SetPassWordPlainCurrentUser(const Value: SpiUtf8;
+      AppSecret: RawUtf8 = '');
+    /// alternative to PasswordPlain when you need to specify your own AppSecret
+    function PassWordPlainCurrentUser(const AppSecret: RawUtf8): SpiUtf8;
     /// the private key used to cypher the password storage on serialization
     // - application can override the default 0 value at runtime
     // - set OBJECTPASSWORD_PLAIN would disable obfuscation
@@ -6742,8 +6753,7 @@ begin
     result := GetPassWordPlainInternal('');
 end;
 
-function TObjectWithPassword.GetPassWordPlainInternal(
-  AppSecret: RawUtf8): SpiUtf8;
+function TObjectWithPassword.GetPassWordPlainInternal(AppSecret: RawUtf8): SpiUtf8;
 var
   value, pass: RawByteString;
   usr: RawUtf8;
@@ -6789,6 +6799,34 @@ begin
     XorKey(value);
     result := value;
   end;
+end;
+
+procedure TObjectWithPassword.SetPassWordPlainCurrentUser(const Value: SpiUtf8;
+  AppSecret: RawUtf8);
+var
+  list: TSynNameValue;
+begin // follow GetPassWordPlainInternal() encoding logic
+  if PosExChar(':', fPassword) = 0 then
+    FillZero(fPassword); // both formats are incompatible
+  list.InitFromCsv(pointer(fPassWord), ':', ',');
+  FillZero(fPassword);
+  list.Delete(Executable.User);
+  if Value <> '' then
+  begin
+    if AppSecret = '' then
+      ClassToText(ClassType, AppSecret);
+    list.Add(Executable.User,
+      BinToBase64(CryptDataForCurrentUser(Value, AppSecret, true)));
+    if fKey = OBJECTPASSWORD_PLAIN then
+      fKey := 0; // disable plain password storage from now on
+  end;
+  fPassWord := list.AsCsv(':', ',');
+end;
+
+function TObjectWithPassword.PassWordPlainCurrentUser(
+  const AppSecret: RawUtf8): SpiUtf8;
+begin
+  result := GetPassWordPlainInternal(AppSecret);
 end;
 
 procedure TObjectWithPassword.SetPassWordPlain(const Value: SpiUtf8);
