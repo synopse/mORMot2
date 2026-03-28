@@ -6783,7 +6783,11 @@ begin
       j := length(fPassword) + 1;
     Base64ToBin(@fPassword[i], j - i, pwd);
     if pwd <> '' then
+    begin
       Value := CryptDataForCurrentUser(pwd, app, false);
+      if Value <> '' then
+        exit;
+    end;
   end
   else
   begin
@@ -6793,8 +6797,6 @@ begin
         'v: current user is [%], but password in % was encoded for [%]',
         [self, Executable.User, app, copy(fPassword, 1, i - 1)]);
   end;
-  if Value <> '' then
-    exit;
   Base64ToBinSafe(pointer(fPassword), length(fPassword), RawByteString(Value));
   XorKey(RawByteString(Value));
 end;

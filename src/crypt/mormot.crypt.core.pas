@@ -5623,10 +5623,8 @@ class function TAesAbstract.MacEncrypt(const Data: RawByteString;
 var
   aes: TAesAbstract;
 begin
-  aes := Create(Key);
+  aes := Create(Key, 256, IV);
   try
-    if IV <> nil then
-      aes.IV := IV^;
     result := aes.MacAndCrypt(Data, Encrypt, IV = nil, Associated);
   finally
     aes.Free;
@@ -5639,10 +5637,8 @@ class function TAesAbstract.MacEncrypt(const Data: RawByteString;
 var
   aes: TAesAbstract;
 begin
-  aes := Create(Key);
+  aes := Create(Key, 128, IV);
   try
-    if IV <> nil then
-      aes.IV := IV^;
     result := aes.MacAndCrypt(Data, Encrypt, IV = nil, Associated);
   finally
     aes.Free;
