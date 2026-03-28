@@ -71,7 +71,6 @@ type
     fKey: cardinal;
     procedure XorKey(var Value: RawByteString);
     function GetPassWordPlain: SpiUtf8;
-    function GetPassWordPlainInternal(AppSecret: RawUtf8): SpiUtf8;
     procedure SetPassWordPlain(const Value: SpiUtf8);
   public
     /// finalize the instance
@@ -6731,7 +6730,7 @@ begin
   try
     instance.Key := CustomKey;
     instance.fPassWord := CypheredPassword;
-    result := instance.GetPassWordPlainInternal(AppSecret);
+    instance.GetPasswordSafe(result, AppSecret);
   finally
     instance.Free;
   end;
@@ -6750,26 +6749,27 @@ begin
   else if fKey = OBJECTPASSWORD_PLAIN then
     result := fPassword
   else
-    result := GetPassWordPlainInternal('');
+    GetPasswordSafe(result, '');
 end;
 
-function TObjectWithPassword.GetPassWordPlainInternal(AppSecret: RawUtf8): SpiUtf8;
+procedure TObjectWithPassword.GetPasswordSafe(var Value: SpiUtf8;
+  const AppSecret: RawUtf8);
 var
-  value, pass: RawByteString;
-  usr: RawUtf8;
-  i, j: integer;
+  pwd: RawByteString;
+  app, usr: RawUtf8;
+  i, j: PtrInt;
 begin
-  result := '';
-  if (self = nil) or
-     (fPassWord = '') then
-    exit;
-  if fKey = OBJECTPASSWORD_PLAIN then
+  if (fPassword = '') or
+     (fKey = OBJECTPASSWORD_PLAIN) then
   begin
-    result := fPassWord;
+    Value := fPassWord;
     exit;
   end;
+  FastAssignNew(Value);
   if AppSecret = '' then
-    ClassToText(ClassType, AppSecret);
+    ClassToText(ClassType, app)
+  else
+    app := AppSecret;
   Join([Executable.User, ':'], usr);
   i := PosEx(usr, fPassword);
   if (i = 1) or
@@ -6781,31 +6781,29 @@ begin
     j := PosEx(',', fPassword, i);
     if j = 0 then
       j := length(fPassword) + 1;
-    Base64ToBin(@fPassword[i], j - i, pass);
-    if pass <> '' then
-      result := CryptDataForCurrentUser(pass, AppSecret, false);
+    Base64ToBin(@fPassword[i], j - i, pwd);
+    if pwd <> '' then
+      Value := CryptDataForCurrentUser(pwd, app, false);
   end
   else
   begin
     i := PosExChar(':', fPassword);
     if i > 0 then
       ECrypt.RaiseUtf8('%.PassWordPlain unable to retrieve the stored ' +
-        'value: current user is [%], but password in % was encoded for [%]',
-        [self, Executable.User, AppSecret, copy(fPassword, 1, i - 1)]);
+        'v: current user is [%], but password in % was encoded for [%]',
+        [self, Executable.User, app, copy(fPassword, 1, i - 1)]);
   end;
-  if result = '' then
-  begin
-    value := Base64ToBin(fPassWord);
-    XorKey(value);
-    result := value;
-  end;
+  if Value <> '' then
+    exit;
+  Base64ToBinSafe(pointer(fPassword), length(fPassword), RawByteString(Value));
+  XorKey(RawByteString(Value));
 end;
 
 procedure TObjectWithPassword.SetPassWordPlainCurrentUser(const Value: SpiUtf8;
   AppSecret: RawUtf8);
 var
   list: TSynNameValue;
-begin // follow GetPassWordPlainInternal() encoding logic
+begin // follow GetPasswordSafe() encoding logic
   if PosExChar(':', fPassword) = 0 then
     FillZero(fPassword); // both formats are incompatible
   list.InitFromCsv(pointer(fPassWord), ':', ',');
@@ -6821,12 +6819,6 @@ begin // follow GetPassWordPlainInternal() encoding logic
       fKey := 0; // disable plain password storage from now on
   end;
   fPassWord := list.AsCsv(':', ',');
-end;
-
-procedure TObjectWithPassword.GetPasswordSafe(
-  var Value: SpiUtf8; const AppSecret: RawUtf8);
-begin
-  Value := GetPassWordPlainInternal(AppSecret);
 end;
 
 procedure TObjectWithPassword.SetPassWordPlain(const Value: SpiUtf8);
