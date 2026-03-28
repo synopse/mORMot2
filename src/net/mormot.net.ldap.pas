@@ -1867,8 +1867,6 @@ type
   public
     /// initialize this instance
     constructor Create(const aUri: RawUtf8 = ''); reintroduce;
-    /// finalize this instance
-    destructor Destroy; override;
     /// run Connect and Bind of a temporary TLdapClient over TargetHost/TargetPort
     // - don't validate the password nor Kerberos auth, just TargetHost/TargetPort
     function CheckTargetHost: TLdapClientTransmission;
@@ -1935,6 +1933,16 @@ type
     // but on MacOS it seems to be the fully qualified 'logonname@mycompany.tld'
     property UserName: RawUtf8
       read fUserName write fUserName;
+    /// the user password for non-anonymous Bind/BindSaslKerberos
+    // - if you can, use instead password-less Kerberos authentication, or
+    // at least ensure the connection is secured via TLS
+    // - as an alternative, on POSIX you can specify a keytab as
+    // 'FILE:/full/path/to/my.keytab' into this property, and assign an UserName
+    // or let mormot.lib.gssapi.pas use TKerberosKeyTab.MachineAccountPrincipal
+    // - this stored value could be obfuscated if you set the Key property
+    // to a custom 32-bit value, or if you use SetPassWordPlainCurrentUser()
+    property Password: SpiUtf8
+      read fPassword write fPassword;
     /// Kerberos Canonical Domain Name
     // - as set by Connect when TargetHost is empty
     // - can be pre-set before Connect if the system is not part of the domain
@@ -5621,16 +5629,10 @@ end;
 constructor TLdapClientSettings.Create(const aUri: RawUtf8);
 begin
   inherited Create;
-  fkey := Random32;
+  fKey := OBJECTPASSWORD_PLAIN; // default with no Password encryption
   fTimeout := 5000;
   fAutoReconnect := true; // sounds fair enough
   SetTargetUri(aUri); // initialize TargetHost/TargetPort and TLS
-end;
-
-destructor TLdapClientSettings.Destroy;
-begin
-  inherited Destroy;
-  FillZero(fPassword);
 end;
 
 function TLdapClientSettings.CheckTargetHost: TLdapClientTransmission;
@@ -6711,7 +6713,8 @@ begin
            (fResultCode = LDAP_RES_SUCCESS) then
           break;
         try
-          if fSettings.PasswordPlain <> '' then // UserName may be '' for FILE:keytab
+          if fSettings.PasswordPlain <> '' then
+            // not that UserName may be '' with Password='FILE:keytab'
             ClientSspiAuthWithPassword(fSecContext, datain, fSettings.UserName,
               fSettings.PasswordPlain, fSettings.KerberosSpn, dataout)
           else
@@ -8431,7 +8434,7 @@ begin
   client := TLdapClient.Create(fLdapSettings);
   try
     client.Settings.UserName := u;
-    client.Settings.PasswordPlain := aPassword;
+    client.Settings.Password := aPassword;
     result := client.Bind;
   finally
     client.Free;
