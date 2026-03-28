@@ -1849,12 +1849,11 @@ type
     lsfSaclSecurityInformation);
 
   /// store the authentication and connection settings of a TLdapClient instance
-  TLdapClientSettings = class(TSynPersistent)
+  TLdapClientSettings = class(TObjectWithPassword)
   protected
     fTargetHost: RawUtf8;
     fTargetPort: RawUtf8;
     fUserName: RawUtf8;
-    fPassword: SpiUtf8;
     fKerberosDN: RawUtf8;
     fKerberosSpn: RawUtf8;
     fTimeout: integer;
@@ -1936,14 +1935,6 @@ type
     // but on MacOS it seems to be the fully qualified 'logonname@mycompany.tld'
     property UserName: RawUtf8
       read fUserName write fUserName;
-    /// the user password for non-anonymous Bind/BindSaslKerberos
-    // - if you can, use instead password-less Kerberos authentication, or
-    // at least ensure the connection is secured via TLS
-    // - as an alternative, on POSIX you can specify a keytab as
-    // 'FILE:/full/path/to/my.keytab' into this property, and assign an UserName
-    // or let mormot.lib.gssapi.pas use TKerberosKeyTab.MachineAccountPrincipal
-    property Password: SpiUtf8
-      read fPassword write fPassword;
     /// Kerberos Canonical Domain Name
     // - as set by Connect when TargetHost is empty
     // - can be pre-set before Connect if the system is not part of the domain
@@ -5630,6 +5621,7 @@ end;
 constructor TLdapClientSettings.Create(const aUri: RawUtf8);
 begin
   inherited Create;
+  fkey := Random32;
   fTimeout := 5000;
   fAutoReconnect := true; // sounds fair enough
   SetTargetUri(aUri); // initialize TargetHost/TargetPort and TLS
@@ -6532,7 +6524,7 @@ begin
   if fBound or
      not Connect then
     exit;
-  if (fSettings.Password <> '') and
+  if (fSettings.PasswordPlain <> '') and
      not fSettings.Tls and
      not fSettings.AllowUnsafePasswordBind then
     ELdap.RaiseUtf8('%.Bind with a password requires a TLS connection', [self]);
@@ -6541,7 +6533,7 @@ begin
     SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
                      Asn(fVersion),
                      AsnOctStr(fSettings.UserName),
-                     AsnTyped(fSettings.Password, ASN1_CTX0)]));
+                     AsnTyped(fSettings.PasswordPlain, ASN1_CTX0)]));
     if fResultCode <> LDAP_RES_SUCCESS then
       exit; // binding error
     fBound := true;
@@ -6583,7 +6575,7 @@ begin
   if DIGEST_ALGONAME[Algo] = '' then
     ELdap.RaiseUtf8('Unsupported %.BindSaslDigest(%) algorithm',
       [self, DIGEST_NAME[Algo]]);
-  if fSettings.Password = '' then
+  if fSettings.PasswordPlain = '' then
     result := Bind
   else
   try
@@ -6598,7 +6590,7 @@ begin
     x := 1;
     AsnNext(x, s, @t);
     dig := DigestClient(Algo, t, '', 'ldap/' + LowerCaseU(fSock.Server),
-      fSettings.UserName, fSettings.Password, 'digest-uri');
+      fSettings.UserName, fSettings.PasswordPlain, 'digest-uri');
     SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
                      Asn(fVersion),
                      AsnOctStr(''),
@@ -6719,9 +6711,9 @@ begin
            (fResultCode = LDAP_RES_SUCCESS) then
           break;
         try
-          if fSettings.Password <> '' then // UserName may be '' for FILE:keytab
+          if fSettings.PasswordPlain <> '' then // UserName may be '' for FILE:keytab
             ClientSspiAuthWithPassword(fSecContext, datain, fSettings.UserName,
-              fSettings.Password, fSettings.KerberosSpn, dataout)
+              fSettings.PasswordPlain, fSettings.KerberosSpn, dataout)
           else
             ClientSspiAuth(fSecContext, datain, fSettings.KerberosSpn, dataout);
         except
@@ -8439,7 +8431,7 @@ begin
   client := TLdapClient.Create(fLdapSettings);
   try
     client.Settings.UserName := u;
-    client.Settings.Password := aPassword;
+    client.Settings.PasswordPlain := aPassword;
     result := client.Bind;
   finally
     client.Free;
