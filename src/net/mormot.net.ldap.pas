@@ -1866,7 +1866,9 @@ type
     procedure SetTargetUri(const uri: RawUtf8);
   public
     /// initialize this instance
-    constructor Create(const aUri: RawUtf8 = ''); reintroduce;
+    constructor Create; override;
+    /// initialize this instance with a custom LDAP server URI
+    constructor Create(const aUri: RawUtf8); overload;
     /// run Connect and Bind of a temporary TLdapClient over TargetHost/TargetPort
     // - don't validate the password nor Kerberos auth, just TargetHost/TargetPort
     function CheckTargetHost: TLdapClientTransmission;
@@ -5626,12 +5628,17 @@ end;
 
 { TLdapClientSettings }
 
-constructor TLdapClientSettings.Create(const aUri: RawUtf8);
+constructor TLdapClientSettings.Create;
 begin
   inherited Create;
   fKey := OBJECTPASSWORD_PLAIN; // default with no Password encryption
   fTimeout := 5000;
   fAutoReconnect := true; // sounds fair enough
+end;
+
+constructor TLdapClientSettings.Create(const aUri: RawUtf8);
+begin
+  Create;
   SetTargetUri(aUri); // initialize TargetHost/TargetPort and TLS
 end;
 
