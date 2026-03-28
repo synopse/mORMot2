@@ -526,6 +526,9 @@ var
 
 
 const
+  /// a constant to indicate no socket
+  NO_SOCKET = TNetSocket(-1);
+
   // don't use RTTI to avoid mormot.core.rtti.pas and have better spelling
   _NR: array[TNetResult] of TShort31 = (
     'Ok',
@@ -2050,7 +2053,7 @@ type
     // mormot.lib.openssl11 unit) - with custom input options in the TLS fields
     procedure OpenBind(const aServer, aPort: RawUtf8; doBind: boolean;
       aTLS: boolean = false; aLayer: TNetLayer = nlTcp;
-      aSock: TNetSocket = TNetSocket(-1); aReusePort: boolean = false); virtual;
+      aSock: TNetSocket = NO_SOCKET; aReusePort: boolean = false); virtual;
     /// a wrapper around Close + OpenBind() with the current settings
     // - could be used to reestablish a broken or closed connection
     // - return '' on success, or an error message on failure
@@ -6229,7 +6232,7 @@ procedure TCrtSocket.BindPort(const aAddress: RawUtf8; aLayer: TNetLayer;
   aReusePort: boolean);
 var
   s, p: RawUtf8;
-  aSock: integer;
+  aSock: TNetSocket;
 begin
   if aAddress = '' then
   begin
@@ -6238,7 +6241,7 @@ begin
       DoRaise('Bind('''') but Systemd is not available');
     if sd.listen_fds(0) > 1 then
       DoRaise('Bind(''''): Systemd activation failed - too many file descriptors');
-    aSock := SD_LISTEN_FDS_START + 0;
+    aSock := TNetSocket(SD_LISTEN_FDS_START);
     {$else}
     DoRaise('Bind(''''), i.e. Systemd activation, is not allowed on this platform');
     aSock := 0; // make compiler happy
@@ -6246,7 +6249,7 @@ begin
   end
   else
   begin
-    aSock := -1; // force OpenBind to create listening socket
+    aSock := NO_SOCKET; // force OpenBind to create listening socket
     if not SplitFromRight(aAddress, ':', s, p) then
     begin
       s := '0.0.0.0';
@@ -6257,14 +6260,14 @@ begin
     begin
       // aAddress='unix:/path/to/myapp.socket'
       FpUnlink(pointer(p)); // previous bind may have left the .socket file
-      OpenBind(p, '', {dobind=}true, {tls=}false, nlUnix, {%H-}TNetSocket(aSock));
+      OpenBind(p, '', {dobind=}true, {tls=}false, nlUnix, {%H-}aSock);
       exit;
     end;
     {$endif OSPOSIX}
   end;
   // next line will raise exception on error
   OpenBind(s{%H-}, p{%H-}, {dobind=}true, {tls=}false, aLayer,
-    {%H-}TNetSocket(aSock), aReusePort);
+    {%H-}aSock, aReusePort);
   {$ifdef OSLINUX}
   // in case started by systemd (port=''), listening socket is created by
   // another process and do not interrupt when it got a signal. So we need to
@@ -6341,7 +6344,7 @@ begin
     include(fFlags, fWasBind);
   if aTLS then
     include(fFlags, fServerTlsEnabled); // for proper reconnection
-  if {%H-}PtrInt(aSock) <= 0 then
+  if aSock = NO_SOCKET then
   begin
     // OPEN or BIND mode -> create the socket
     fServer := aServer;
@@ -6442,7 +6445,7 @@ begin
      aTLS then
     if doBind then
       DoTlsAfter(cstaBind) // never called by OpenBind(aTLS=false) in practice
-    else if {%H-}PtrInt(aSock) <= 0 then
+    else if aSock = NO_SOCKET then
       DoTlsAfter(cstaConnect);
   if Assigned(OnLog) then
     OnLog(sllTrace, '%(%:%) sock=% %', [BINDTXT[doBind], fServer, fPort,
@@ -6691,7 +6694,7 @@ begin
   QueryPerformanceMicroSeconds(stop);
   TSynLog.Add.Log(sllTrace, 'ShutdownAndClose(%): %', [fWasBind, stop-start], self);
   {$endif SYNCRTDEBUGLOW2}
-  fSock := TNetSocket(-1);
+  fSock := NO_SOCKET;
   // don't reset fServer/fPort/fTls/fWasBind: caller may use them to reconnect
   // (see e.g. THttpClientSocket.Request)
   {$ifdef OSPOSIX}
