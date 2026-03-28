@@ -5634,6 +5634,7 @@ begin
   fKey := OBJECTPASSWORD_PLAIN; // default with no Password encryption
   fTimeout := 5000;
   fAutoReconnect := true; // sounds fair enough
+  fTargetPort := LDAP_PORT;
 end;
 
 constructor TLdapClientSettings.Create(const aUri: RawUtf8);
@@ -5896,6 +5897,7 @@ constructor TLdapClient.Create(aSettings: TLdapClientSettings);
 begin
   Create;
   CopyObject(aSettings, fSettings);
+  aSettings.Key := fSettings.Key;
 end;
 
 destructor TLdapClient.Destroy;
