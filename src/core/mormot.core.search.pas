@@ -213,7 +213,7 @@ type
     /// search for a Name, return the associated Value as a UTF-8 string
     function Value(const aName: RawUtf8; const aDefaultValue: RawUtf8 = ''): RawUtf8;
     /// search for a Name, return the associated Value as integer
-    function ValueInt(const aName: RawUtf8; const aDefaultValue: Int64 = 0): Int64;
+    function ValueInt(const aName: RawUtf8; aDefaultValue: Int64 = 0): Int64;
     /// search for a Name, return the associated Value as boolean
     // - returns true only if the value is exactly '1' / 'true'
     function ValueBool(const aName: RawUtf8): boolean;
@@ -2401,18 +2401,17 @@ end;
 procedure TSynNameValue.Add(const aName, aValue: RawUtf8; aTag: PtrInt);
 var
   added: boolean;
-  i: PtrInt;
+  ndx: PtrInt;
+  p: PSynNameValueItem;
 begin
-  i := DynArray.FindHashedForAdding(aName, added);
-  with List[i] do
-  begin
-    if added then
-      Name := aName;
-    Value := aValue;
-    Tag := aTag;
-  end;
+  ndx := DynArray.FindHashedForAdding(aName, added);
+  p := @List[ndx];
+  if added then
+    p^.Name := aName;
+  p^.Value := aValue;
+  p^.Tag := aTag;
   if Assigned(fOnAdd) then
-    fOnAdd(List[i], i);
+    fOnAdd(p^, ndx);
 end;
 
 procedure TSynNameValue.AddJoined(const aName: RawUtf8;
@@ -2433,18 +2432,28 @@ begin
 end;
 
 function TSynNameValue.FindStart(const aUpperName: RawUtf8): PtrInt;
+var
+  p: PSynNameValueItem;
 begin
+  p := pointer(List);
   for result := 0 to Count - 1 do
-    if IdemPChar(pointer(List[result].Name), pointer(aUpperName)) then
-      exit;
+    if IdemPChar(pointer(p^.Name), pointer(aUpperName)) then
+      exit
+    else
+      inc(p);
   result := -1;
 end;
 
 function TSynNameValue.FindByValue(const aValue: RawUtf8): PtrInt;
+var
+  p: PSynNameValueItem;
 begin
+  p := pointer(List);
   for result := 0 to Count - 1 do
-    if List[result].Value = aValue then
-      exit;
+    if p^.Value = aValue then
+      exit
+    else
+      inc(p);
   result := -1;
 end;
 
@@ -2467,29 +2476,29 @@ end;
 
 function TSynNameValue.Value(const aName: RawUtf8; const aDefaultValue: RawUtf8): RawUtf8;
 var
-  i: PtrInt;
+  ndx: PtrInt;
 begin
   if @self = nil then
-    i := -1
+    ndx := -1
   else
-    i := DynArray.FindHashed(aName);
-  if i < 0 then
+    ndx := DynArray.FindHashed(aName);
+  if ndx < 0 then
     result := aDefaultValue
   else
-    result := List[i].Value;
+    result := List[ndx].Value;
 end;
 
-function TSynNameValue.ValueInt(const aName: RawUtf8; const aDefaultValue: Int64): Int64;
+function TSynNameValue.ValueInt(const aName: RawUtf8; aDefaultValue: Int64): Int64;
 var
-  i: PtrInt;
+  ndx: PtrInt;
   err: integer;
 begin
-  i := DynArray.FindHashed(aName);
-  if i < 0 then
+  ndx := DynArray.FindHashed(aName);
+  if ndx < 0 then
     result := aDefaultValue
   else
   begin
-    result := GetInt64(pointer(List[i].Value), err);
+    result := GetInt64(pointer(List[ndx].Value), err);
     if err <> 0 then
       result := aDefaultValue;
   end;
@@ -2563,19 +2572,24 @@ end;
 function TSynNameValue.AsCsv(const KeySeparator, ValueSeparator, IgnoreKey: RawUtf8): RawUtf8;
 var
   i: PtrInt;
+  p: PSynNameValueItem;
   temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   with TTextWriter.CreateOwnedStream(temp) do
   try
-    for i := 0 to Count - 1 do
+    p := pointer(List);
+    for i := 1 to Count do
+    begin
       if (IgnoreKey = '') or
-         (List[i].Name <> IgnoreKey) then
+         (p^.Name <> IgnoreKey) then
       begin
-        AddString(List[i].Name);
+        AddString(p^.Name);
         AddString(KeySeparator);
-        AddString(List[i].Value);
+        AddString(p^.Value);
         AddString(ValueSeparator);
       end;
+      inc(p);
+    end;
     SetText(result);
   finally
     Free;
@@ -2585,19 +2599,21 @@ end;
 function TSynNameValue.AsJson: RawUtf8;
 var
   i: PtrInt;
+  p: PSynNameValueItem;
   temp: TTextWriterStackBuffer;
 begin
   with TJsonWriter.CreateOwnedStream(temp) do
   try
     AddDirect('{');
-    for i := 0 to Count - 1 do
-      with List[i] do
-      begin
-        AddProp(pointer(Name), length(Name));
-        AddDirect('"');
-        AddJsonEscape(pointer(Value));
-        AddDirect('"', ',');
-      end;
+    p := pointer(List);
+    for i := 1 to Count do
+    begin
+      AddProp(pointer(p^.Name), length(p^.Name));
+      AddDirect('"');
+      AddJsonEscape(pointer(p^.Value));
+      AddDirect('"', ',');
+      inc(p);
+    end;
     ReplaceLastComma('}');
     SetText(result);
   finally
@@ -2608,31 +2624,35 @@ end;
 procedure TSynNameValue.AsNameValues(out Names, Values: TRawUtf8DynArray);
 var
   i: PtrInt;
+  p: PSynNameValueItem;
 begin
-  SetLength(Names, Count);
+  SetLength(Names,  Count);
   SetLength(Values, Count);
+  p := pointer(List);
   for i := 0 to Count - 1 do
   begin
-    Names[i] := List[i].Name;
-    Values[i] := List[i].Value;
+    Names[i]  := p^.Name;
+    Values[i] := p^.Value;
+    inc(p);
   end;
 end;
 
 function TSynNameValue.ValueVariantOrNull(const aName: RawUtf8): variant;
 var
-  i: PtrInt;
+  ndx: PtrInt;
 begin
-  i := Find(aName);
-  if i < 0 then
+  ndx := Find(aName);
+  if ndx < 0 then
     SetVariantNull(result{%H-})
   else
-    RawUtf8ToVariant(List[i].Value, result);
+    RawUtf8ToVariant(List[ndx].Value, result);
 end;
 
 procedure TSynNameValue.AsDocVariant(out DocVariant: variant;
   ExtendedJson, ValueAsString, AllowVarDouble: boolean);
 var
   ndx: PtrInt;
+  p: PSynNameValueItem;
   dv: TDocVariantData absolute DocVariant;
 begin
   if Count > 0 then
@@ -2640,13 +2660,14 @@ begin
       dv.Init(JSON_NAMEVALUE[ExtendedJson], dvObject);
       dv.SetCount(Count);
       dv.Capacity := Count;
+      p := pointer(List);
       for ndx := 0 to Count - 1 do
       begin
-        dv.Names[ndx] := List[ndx].Name;
+        dv.Names[ndx] := p^.Name;
         if ValueAsString or
-           not GetVariantFromNotStringJson(pointer(List[ndx].Value),
+           not GetVariantFromNotStringJson(pointer(p^.Value),
               TVarData(dv.Values[ndx]), AllowVarDouble) then
-          RawUtf8ToVariant(List[ndx].Value, dv.Values[ndx]);
+          RawUtf8ToVariant(p^.Value, dv.Values[ndx]);
       end;
     end
   else
@@ -2665,6 +2686,7 @@ var
   dv: TDocVariantData absolute DocVariant;
   i, ndx: PtrInt;
   v: variant;
+  p: PSynNameValueItem;
   intvalues: TRawUtf8Interning;
   forcenoutf8: boolean;
 begin
@@ -2678,26 +2700,30 @@ begin
     intvalues := nil;
   forcenoutf8 := dvoValueDoNotNormalizeAsRawUtf8 in dv.Options;
   result := 0; // returns number of changed values
-  for i := 0 to Count - 1 do
-    if List[i].Name <> '' then
+  p := pointer(List);
+  for i := 1 to Count do
+  begin
+    if p^.Name <> '' then
     begin
       VarClear(v{%H-});
       if ValueAsString or
          not GetVariantFromNotStringJson(
-            pointer(List[i].Value), TVarData(v), AllowVarDouble) then
-        RawUtf8ToVariant(List[i].Value, v);
-      ndx := dv.GetValueIndex(List[i].Name);
+            pointer(p^.Value), TVarData(v), AllowVarDouble) then
+        RawUtf8ToVariant(p^.Value, v);
+      ndx := dv.GetValueIndex(p^.Name);
       if ndx < 0 then
-        ndx := dv.InternalAdd(List[i].Name)
+        ndx := dv.InternalAdd(p^.Name)
       else if FastVarDataComp(@v, @dv.Values[ndx], false) = 0 then
         continue; // value not changed -> skip
       if ChangedProps <> nil then
-        PDocVariantData(ChangedProps)^.AddValue(List[i].Name, v);
+        PDocVariantData(ChangedProps)^.AddValue(p^.Name, v);
       SetVariantByValue(v, dv.Values[ndx], forcenoutf8);
       if intvalues <> nil then
         intvalues.UniqueVariant(dv.Values[ndx]);
       inc(result);
     end;
+    inc(p);
+  end;
 end;
 
 
