@@ -14009,11 +14009,13 @@ begin
   SortDynArrayVariantComp  := @_SortDynArrayVariantComp;
   _Fill256FromOs           := @__Fill256FromOs;
   ClassUnit                := @_ClassUnit;
-  // initialize CPU-specific asm
-  TestCpuFeatures;
   {$ifndef ASMINTELNOTPIC}
   MoveFast := @Move;
   FillCharFast := @_FillChar;
+  {$endif ASMINTELNOTPIC}
+  // initialize CPU-specific asm
+  TestCpuFeatures;
+  {$ifndef ASMINTELNOTPIC}
   if BaseEntropy.i0 = 0 then // BSD or MAC arm/aarch64
     XorEntropy(BaseEntropy); // ensure not void
   {$endif ASMINTELNOTPIC}
