@@ -6789,7 +6789,7 @@ begin
   begin
     i := PosExChar(':', fPassword);
     if i > 0 then
-      ECrypt.RaiseUtf8('%.GetPassWordPlain unable to retrieve the stored ' +
+      ECrypt.RaiseUtf8('%.PassWordPlain unable to retrieve the stored ' +
         'value: current user is [%], but password in % was encoded for [%]',
         [self, Executable.User, AppSecret, copy(fPassword, 1, i - 1)]);
   end;

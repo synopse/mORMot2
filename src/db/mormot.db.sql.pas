@@ -5703,13 +5703,16 @@ class function TSqlDBConnectionProperties.CreateFrom(
   aDefinition: TSynConnectionDefinition): TSqlDBConnectionProperties;
 var
   c: TSqlDBConnectionPropertiesClass;
+  pwd: SpiUtf8;
 begin
   c := ClassFrom(aDefinition);
   if c = nil then
     ESqlDBException.RaiseUtf8('%.CreateFrom: unknown % class - please ' +
       'add a reference to its implementation unit', [self, aDefinition.Kind]);
+  aDefinition.GetPasswordSafe(pwd);
   result := c.Create(aDefinition.ServerName, aDefinition.DatabaseName,
-    aDefinition.User, aDefinition.PassWordPlain);
+    aDefinition.User, pwd);
+  FillZero(pwd); // anti-forensic
 end;
 
 class function TSqlDBConnectionProperties.CreateFromJson(
