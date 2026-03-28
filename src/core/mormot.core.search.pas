@@ -2777,7 +2777,7 @@ end;
 
 function TSynCache.Find(const aKey: RawUtf8; aResultTag: PPtrInt): RawUtf8;
 var
-  ndx: PtrInt;
+  p: PSynNameValueItem;
 begin
   result := '';
   if (self = nil) or
@@ -2789,14 +2789,13 @@ begin
   {$else}
   begin
   {$endif HASFASTTRYFINALLY}
-    ndx := fNameValue.Find(aKey);
-    if ndx >= 0 then
-      with fNameValue.List[ndx] do
-      begin
-        result := Value;
-        if aResultTag <> nil then
-          aResultTag^ := Tag;
-      end;
+    p := fNameValue.FindItem(aKey);
+    if p <> nil then
+    begin
+      result := p^.Value;
+      if aResultTag <> nil then
+        aResultTag^ := p^.Tag;
+    end;
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
@@ -2807,6 +2806,7 @@ end;
 function TSynCache.AddOrUpdate(const aKey, aValue: RawUtf8; aTag: PtrInt): boolean;
 var
   ndx: PtrInt;
+  p: PSynNameValueItem;
 begin
   result := false;
   if self = nil then
@@ -2815,14 +2815,12 @@ begin
   try
     ResetIfNeeded;
     ndx := fNameValue.DynArray.FindHashedForAdding(aKey, result);
-    with fNameValue.List[ndx] do
-    begin
-      Name := aKey;
-      dec(fRamUsed, length(Value));
-      Value := aValue;
-      inc(fRamUsed, length(Value));
-      Tag := aTag;
-    end;
+    p := @fNameValue.List[ndx];
+    p^.Name := aKey;
+    dec(fRamUsed, length(p^.Value));
+    p^.Value := aValue;
+    inc(fRamUsed, length(p^.Value));
+    p^.Tag := aTag;
   finally
     fSafe.WriteUnlock;
   end;
