@@ -6530,21 +6530,23 @@ end;
 function TLdapClient.Bind: boolean;
 var
   log: ISynLog;
+  pwd: SpiUtf8;
 begin
   result := false;
   if fBound or
      not Connect then
     exit;
-  if (fSettings.PasswordPlain <> '') and
+  if (fSettings.Password <> '') and
      not fSettings.Tls and
      not fSettings.AllowUnsafePasswordBind then
     ELdap.RaiseUtf8('%.Bind with a password requires a TLS connection', [self]);
   fLog.EnterLocal(log, 'Bind as %', [fSettings.UserName], self);
   try
+    fSettings.GetPasswordSafe(pwd);
     SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
                      Asn(fVersion),
                      AsnOctStr(fSettings.UserName),
-                     AsnTyped(fSettings.PasswordPlain, ASN1_CTX0)]));
+                     AsnTyped(pwd, ASN1_CTX0)]));
     if fResultCode <> LDAP_RES_SUCCESS then
       exit; // binding error
     fBound := true;
@@ -6552,6 +6554,7 @@ begin
     fBoundUser := fSettings.UserName;
     result := true;
   finally
+    FillZero(pwd); // anti-forensic
     if Assigned(log) then
       log.Log(LOG_DEBUGERROR[not result], 'Bind=% % %',
         [BOOL_STR[result], fResultCode, fResultString], self);
@@ -6574,6 +6577,7 @@ function TLdapClient.BindSaslDigest(Algo: TDigestAlgo): boolean;
 var
   x: integer;
   dig: RawUtf8;
+  pwd: SpiUtf8;
   s, t, digreq: TAsnObject;
   log: ISynLog;
 begin
@@ -6586,7 +6590,7 @@ begin
   if DIGEST_ALGONAME[Algo] = '' then
     ELdap.RaiseUtf8('Unsupported %.BindSaslDigest(%) algorithm',
       [self, DIGEST_NAME[Algo]]);
-  if fSettings.PasswordPlain = '' then
+  if fSettings.Password = '' then
     result := Bind
   else
   try
@@ -6600,8 +6604,10 @@ begin
       exit;
     x := 1;
     AsnNext(x, s, @t);
+    fSettings.GetPasswordSafe(pwd);
     dig := DigestClient(Algo, t, '', 'ldap/' + LowerCaseU(fSock.Server),
-      fSettings.UserName, fSettings.PasswordPlain, 'digest-uri');
+      fSettings.UserName, pwd, 'digest-uri');
+    FillZero(pwd);
     SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
                      Asn(fVersion),
                      AsnOctStr(''),
@@ -6643,6 +6649,7 @@ function TLdapClient.BindSaslKerberos(const AuthIdentify: RawUtf8;
 var
   datain, dataout, cert: RawByteString;
   certhashname: RawUtf8;
+  pwd: SpiUtf8;
   channelbindinghash: THash512Rec;
   t, req1, req2: TAsnObject;
   needencrypt: boolean;
@@ -6715,6 +6722,8 @@ begin
       end;
     end;
     // main GSSAPI / Kerberos loop
+    if fSettings.Password <> '' then
+      fSettings.GetPasswordSafe(pwd);
     try
       repeat
         ParseInput;
@@ -6722,10 +6731,10 @@ begin
            (fResultCode = LDAP_RES_SUCCESS) then
           break;
         try
-          if fSettings.PasswordPlain <> '' then
-            // not that UserName may be '' with Password='FILE:keytab'
-            ClientSspiAuthWithPassword(fSecContext, datain, fSettings.UserName,
-              fSettings.PasswordPlain, fSettings.KerberosSpn, dataout)
+          if pwd <> '' then
+            // note that UserName may be '' with Password='FILE:keytab'
+            ClientSspiAuthWithPassword(fSecContext, datain,
+              fSettings.UserName, pwd, fSettings.KerberosSpn, dataout)
           else
             ClientSspiAuth(fSecContext, datain, fSettings.KerberosSpn, dataout);
         except
@@ -6821,6 +6830,7 @@ begin
         FreeSecContext(fSecContext);
     end;
   finally
+    FillZero(pwd); // anti-forensic
     if Assigned(log) then
       log.Log(LOG_DEBUGERROR[not result],
         'BindSaslKerberos=% % % signseal=% as %', [BOOL_STR[result], fResultCode,
