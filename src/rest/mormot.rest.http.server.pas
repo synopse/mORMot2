@@ -1620,6 +1620,7 @@ var
   a: TRestHttpServerRestAuthentication;
   P: PUtf8Char;
   hostroot, host, root: RawUtf8;
+  pwd: SpiUtf8;
   thrdcnt: integer;
 begin
   if aDefinition = nil then
@@ -1671,8 +1672,14 @@ begin
       aServer.AuthenticationRegister(AUTH_CLASS[a]);
     end;
   if aDefinition.WebSocketPassword <> '' then
-    WebSocketsEnable(aServer, aDefinition.PasswordPlain)^.
-      LoopDelay := aWebSocketsLoopDelay;
+  begin
+    aDefinition.GetPasswordSafe(pwd);
+    try
+      WebSocketsEnable(aServer, pwd)^.LoopDelay := aWebSocketsLoopDelay;
+    finally
+      FillZero(pwd); // anti-forensic
+    end;
+  end;
 end;
 
 

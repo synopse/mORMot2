@@ -277,9 +277,16 @@ end;
 constructor TRestServerDB.RegisteredClassCreateFrom(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition;
   aServerHandleAuthentication: boolean);
+var
+  pwd: SpiUtf8;
 begin
-  Create(aModel, Utf8ToString(aDefinition.ServerName),
-    aServerHandleAuthentication, aDefinition.PasswordPlain);
+  aDefinition.GetPasswordSafe(pwd);
+  try
+    Create(aModel, Utf8ToString(aDefinition.ServerName),
+      aServerHandleAuthentication, pwd);
+  finally
+    FillZero(pwd); // anti-forensic
+  end;
 end;
 
 procedure TRestServerDB.DefinitionTo(Definition: TSynConnectionDefinition);
