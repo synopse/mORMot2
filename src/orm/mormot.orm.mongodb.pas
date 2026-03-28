@@ -1733,7 +1733,8 @@ function TRestMongoDBCreate(aModel: TOrmModel;
 var
   client: TMongoClient;
   database: TMongoDatabase;
-  server, port, pwd: RawUtf8;
+  server, port: RawUtf8;
+  pwd: SpiUtf8;
   o: TMongoClientOptions;
   p: integer;
 begin
@@ -1759,7 +1760,7 @@ begin
       if (aDefinition.User <> '') and
          (aDefinition.Password <> '') then
       begin
-        pwd := aDefinition.PasswordPlain;
+        aDefinition.GetPasswordSafe(pwd);
         database := client.OpenAuth(
           aDefinition.DatabaseName, aDefinition.User, pwd);
       end
@@ -1774,6 +1775,7 @@ begin
       FreeAndNilSafe(result);
       client.Free; // avoid memory leak
     end;
+    FillZero(pwd); // anti-forensic
   end
   else
     // Kind is not 'MongoDB' -> try other known TRest class
