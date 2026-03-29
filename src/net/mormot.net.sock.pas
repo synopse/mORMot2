@@ -7237,7 +7237,22 @@ begin
     if neClosed in events then
       result := cspDataAvailableOnClosedSocket // read+closed may coexist
     else
-      result := cspDataAvailable
+    {$ifdef OSWINDOWS}
+    // inlined fSock.Available seems mandatory on Windows
+    case mormot.net.sock.recv(TSocket(fSock), @events, 1, MSG_PEEK) of
+      0:
+        result := cspSocketClosed; // WSACONNRESET with recv() returning 0
+      1:
+        result := cspDataAvailable;
+      else
+        if NetLastError(NO_ERROR, loerr) = nrRetry then
+          result := cspNoData
+        else
+         result := cspSocketError;
+    end
+    {$else}
+    result := cspDataAvailable // POSIX should have detected a broken connection
+    {$endif OSWINDOWS}
   else if neClosed in events then
     result := cspSocketClosed
   else
