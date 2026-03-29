@@ -6244,7 +6244,7 @@ begin
     aSock := TNetSocket(SD_LISTEN_FDS_START);
     {$else}
     DoRaise('Bind(''''), i.e. Systemd activation, is not allowed on this platform');
-    aSock := 0; // make compiler happy
+    aSock := nil; // make compiler happy
     {$endif OSLINUX}
   end
   else
