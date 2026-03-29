@@ -3979,7 +3979,7 @@ begin
     _GlobalInfo := RegisterGlobalShutdownRelease(TBinDictionary.Create);
   result := _GlobalInfo;
   for i := 0 to length(_GlobalInfoAdd) - 1 do
-    _GlobalInfoAdd[i](result); // may take some time
+    _GlobalInfoAdd[i](result); // may take some time (e.g. ldap:* info)
   _GlobalInfoPre := nil;
   _GlobalInfoAdd := nil;
   _GlobalInfoSafe.UnLock;
