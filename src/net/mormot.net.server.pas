@@ -992,9 +992,9 @@ type
     fServer: THttpServer;
     fBigBodySize: integer;
     fMaxBodyThreadCount: integer;
-    {$ifndef USE_WINIOCP}
+    {$ifndef USE_THREADWINIOCP}
     function QueueLength: integer; override;
-    {$endif USE_WINIOCP}
+    {$endif USE_THREADWINIOCP}
     // here aContext is a THttpServerSocket instance
     procedure Task(aCaller: TSynThreadPoolWorkThread;
       aContext: pointer); override;
@@ -5597,11 +5597,11 @@ begin
   fMaxBodyThreadCount := THREADPOOL_MAXWORKTHREADS;
   fPoolName := 'http';
   inherited Create(NumberOfThreads,
-    {$ifdef USE_WINIOCP} INVALID_HANDLE_VALUE {$else} {queuepending=}true{$endif},
+    {$ifdef USE_THREADWINIOCP} INVALID_HANDLE_VALUE {$else} {queuepending=}true{$endif},
     Server.ProcessName);
 end;
 
-{$ifndef USE_WINIOCP}
+{$ifndef USE_THREADWINIOCP}
 function TSynThreadPoolTHttpServer.QueueLength: integer;
 begin
   if fServer = nil then
@@ -5609,7 +5609,7 @@ begin
   else
     result := fServer.fHttpQueueLength;
 end;
-{$endif USE_WINIOCP}
+{$endif USE_THREADWINIOCP}
 
 procedure TSynThreadPoolTHttpServer.Task(
   aCaller: TSynThreadPoolWorkThread; aContext: pointer);
@@ -9164,8 +9164,10 @@ begin
       fState := wsClosedByGuard;
       fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
       fBuffer := 'Closed after ping timeout';
+      {$ifdef USE_THREADWINIOCP}
       IocpPostQueuedStatus(
         fProtocol.fServer.fThreadPoolServer.FRequestQueue, 0, nil, @fOverlapped);
+      {$endif USE_THREADWINIOCP}
     end
     else
       Ping;
@@ -9402,9 +9404,11 @@ end;
 procedure THttpApiWebSocketServer.DoAfterResponse(Ctxt: THttpServerRequest;
   const Referer: RawUtf8; StatusCode: cardinal; Elapsed, Received, Sent: QWord);
 begin
+  {$ifdef USE_THREADWINIOCP}
   if Assigned(fLastConnection) then
     IocpPostQueuedStatus(fThreadPoolServer.FRequestQueue, 0, nil,
       @fLastConnection.fOverlapped);
+  {$endif USE_THREADWINIOCP}
   inherited DoAfterResponse(Ctxt, Referer, StatusCode, Elapsed, Received, Sent);
 end;
 
@@ -9533,7 +9537,9 @@ end;
 
 procedure THttpApiWebSocketServer.SendServiceMessage;
 begin
+  {$ifdef USE_THREADWINIOCP}
   IocpPostQueuedStatus(fThreadPoolServer.FRequestQueue, 0, nil, @fServiceOverlaped);
+  {$endif USE_THREADWINIOCP}
 end;
 
 
@@ -9608,7 +9614,11 @@ begin
   fServer := Server;
   fOnThreadStart := OnThreadStart;
   fOnThreadTerminate := OnThreadTerminate;
+  {$ifdef USE_THREADWINIOCP}
   inherited Create(NumberOfThreads, Server.fReqQueue);
+  {$else}
+  inherited Create(NumberOfThreads, {withqueue=}true);
+  {$endif USE_THREADWINIOCP}
 end;
 
 

@@ -1589,10 +1589,10 @@ type
   protected
     fOwner: TSynThreadPool;
     fThreadNumber: integer;
-    {$ifndef USE_WINIOCP}
+    {$ifndef USE_THREADWINIOCP}
     fProcessingContext: pointer; // protected by fOwner.fSafe.Lock
     fEvent: TSynEvent;
-    {$endif USE_WINIOCP}
+    {$endif USE_THREADWINIOCP}
     procedure NotifyThreadStart(Sender: TSynThread);
     procedure DoTask(Context: pointer); // exception-safe call of fOwner.Task()
   public
@@ -1614,9 +1614,9 @@ type
   // Event-driven approach under Linux/POSIX
   TSynThreadPool = class
   protected
-    {$ifndef USE_WINIOCP}
+    {$ifndef USE_THREADWINIOCP}
     fSafe: TOSLightLock; // TLightLock is likely to be less stable
-    {$endif USE_WINIOCP}
+    {$endif USE_THREADWINIOCP}
     fWorkThread: TSynThreadPoolWorkThreads;
     fWorkThreadCount: integer;
     fRunningThreads: integer;
@@ -1630,7 +1630,7 @@ type
     fName, fPoolName: RawUtf8;
     fPendingContextCount: integer;
     fTerminated: boolean;
-    {$ifdef USE_WINIOCP}
+    {$ifdef USE_THREADWINIOCP}
     fRequestQueue: THandle; // IOCP has its own internal queue
     {$else}
     fQueuePendingContext: boolean;
@@ -1638,7 +1638,7 @@ type
     function GetPendingContextCount: integer;
     function PopPendingContext: pointer;
     function QueueLength: integer; virtual;
-    {$endif USE_WINIOCP}
+    {$endif USE_THREADWINIOCP}
     /// end thread on IO error
     function NeedStopOnIOError: boolean; virtual;
     /// process to be executed after notification
@@ -1654,13 +1654,13 @@ type
     // opened using Windows Overlapped I/O (IOCP)
     // - on POSIX, aQueuePendingContext=true will store the pending context into
     // an internal queue, so that Push() returns true until the queue is full
-    {$ifdef USE_WINIOCP}
+    {$ifdef USE_THREADWINIOCP}
     constructor Create(NumberOfThreads: integer = 32;
       aOverlapHandle: THandle = INVALID_HANDLE_VALUE; const aName: RawUtf8 = '');
     {$else}
     constructor Create(NumberOfThreads: integer = 32;
       aQueuePendingContext: boolean = false; const aName: RawUtf8 = '');
-    {$endif USE_WINIOCP}
+    {$endif USE_THREADWINIOCP}
     /// shut down the Thread pool, releasing all associated threads
     destructor Destroy; override;
     /// let a task (specified as a pointer) be processed by the Thread Pool
@@ -1672,7 +1672,7 @@ type
     // queue is full; set aWaitOnContention=true to wait up to
     // ContentionAbortDelay ms and retry to queue the task
     function Push(aContext: pointer; aWaitOnContention: boolean = false): boolean;
-    {$ifndef USE_WINIOCP}
+    {$ifndef USE_THREADWINIOCP}
     /// may be called after Push() returned false to see if queue was actually full
     // - returns false if QueuePendingContext is false
     function QueueIsFull: boolean;
@@ -1680,7 +1680,7 @@ type
     // - supplied as Create constructor parameter
     property QueuePendingContext: boolean
       read fQueuePendingContext;
-    {$endif USE_WINIOCP}
+    {$endif USE_THREADWINIOCP}
     /// low-level access to the threads defined in this thread pool
     property WorkThread: TSynThreadPoolWorkThreads
       read fWorkThread;
@@ -1720,11 +1720,11 @@ type
       read fContentionCount;
     /// how many input tasks are currently waiting to be affected to threads
     property PendingContextCount: integer
-      {$ifdef USE_WINIOCP}
+      {$ifdef USE_THREADWINIOCP}
       read fPendingContextCount;
       {$else}
       read GetPendingContextCount;
-      {$endif USE_WINIOCP}
+      {$endif USE_THREADWINIOCP}
   end;
 
   {$M-}
@@ -4400,13 +4400,13 @@ end;
 
 { TSynThreadPool }
 
-{$ifdef USE_WINIOCP}
+{$ifdef USE_THREADWINIOCP}
 constructor TSynThreadPool.Create(NumberOfThreads: integer;
   aOverlapHandle: THandle; const aName: RawUtf8);
 {$else}
 constructor TSynThreadPool.Create(NumberOfThreads: integer;
   aQueuePendingContext: boolean; const aName: RawUtf8);
-{$endif USE_WINIOCP}
+{$endif USE_THREADWINIOCP}
 var
   i: PtrInt;
 begin
@@ -4421,7 +4421,7 @@ begin
   if fPoolName = '' then
     fPoolName := 'pool';
   // create IO completion port to queue the HTTP requests
-  {$ifdef USE_WINIOCP}
+  {$ifdef USE_THREADWINIOCP}
   fRequestQueue := IocpCreate(aOverlapHandle, 0, nil, NumberOfThreads);
   if fRequestQueue = INVALID_HANDLE_VALUE then
     fRequestQueue := 0;
@@ -4430,7 +4430,7 @@ begin
   {$else}
   fSafe.Init; // mandatory for TOSLightLock
   fQueuePendingContext := aQueuePendingContext;
-  {$endif USE_WINIOCP}
+  {$endif USE_THREADWINIOCP}
   // now create the worker threads
   fWorkThreadCount := NumberOfThreads;
   SetLength(fWorkThread, fWorkThreadCount);
@@ -4445,7 +4445,7 @@ var
 begin
   fTerminated := true; // fWorkThread[].Execute will check this flag
   try
-    {$ifdef USE_WINIOCP}
+    {$ifdef USE_THREADWINIOCP}
     // notify the threads we are shutting down
     for i := 0 to fWorkThreadCount * 2  do
       IocpPostQueuedStatus(fRequestQueue, 0, nil, {ctxt=}nil);
@@ -4457,7 +4457,7 @@ begin
     // cleanup now any pending task (e.g. THttpServerSocket instance)
     for i := 0 to fPendingContextCount - 1 do
       TaskAbort(fPendingContext[i]);
-    {$endif USE_WINIOCP}
+    {$endif USE_THREADWINIOCP}
     // wait for threads to finish, with 30 seconds TimeOut
     endtix := GetTickSec + 30;
     while (fRunningThreads > 0) and
@@ -4466,18 +4466,18 @@ begin
     for i := 0 to fWorkThreadCount - 1 do
       fWorkThread[i].Free;
   finally
-    {$ifdef USE_WINIOCP}
+    {$ifdef USE_THREADWINIOCP}
     CloseHandle(fRequestQueue);
     {$else}
     fSafe.Done; // mandatory for TOSLightLock
-    {$endif USE_WINIOCP}
+    {$endif USE_THREADWINIOCP}
   end;
   inherited Destroy;
 end;
 
 function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boolean;
 
-{$ifdef USE_WINIOCP}
+{$ifdef USE_THREADWINIOCP}
 
   function Enqueue: boolean;
   begin
@@ -4526,7 +4526,7 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
     fSafe.UnLock;
   end;
 
-{$endif USE_WINIOCP}
+{$endif USE_THREADWINIOCP}
 
 var
   tix, starttix, endtix: Int64;
@@ -4567,7 +4567,7 @@ begin
     inc(fContentionAbortCount);
 end;
 
-{$ifndef USE_WINIOCP}
+{$ifndef USE_THREADWINIOCP}
 
 function TSynThreadPool.GetPendingContextCount: integer;
 begin
@@ -4620,7 +4620,7 @@ begin
   result := 10000; // lazy high value
 end;
 
-{$endif USE_WINIOCP}
+{$endif USE_THREADWINIOCP}
 
 function TSynThreadPool.NeedStopOnIOError: boolean;
 begin
@@ -4638,18 +4638,18 @@ constructor TSynThreadPoolWorkThread.Create(Owner: TSynThreadPool);
 begin
   fOwner := Owner; // ensure it is set ASAP: on Linux, Execute raises immediately
   fOnThreadTerminate := Owner.fOnThreadTerminate;
-  {$ifndef USE_WINIOCP}
+  {$ifndef USE_THREADWINIOCP}
   fEvent := TSynEvent.Create;
-  {$endif USE_WINIOCP}
+  {$endif USE_THREADWINIOCP}
   inherited Create({suspended=}false);
 end;
 
 destructor TSynThreadPoolWorkThread.Destroy;
 begin
   inherited Destroy;
-  {$ifndef USE_WINIOCP}
+  {$ifndef USE_THREADWINIOCP}
   fEvent.Free;
-  {$endif USE_WINIOCP}
+  {$endif USE_THREADWINIOCP}
 end;
 
 procedure TSynThreadPoolWorkThread.DoTask(Context: pointer);
@@ -4665,16 +4665,16 @@ end;
 procedure TSynThreadPoolWorkThread.Execute;
 var
   ctxt: pointer;
-  {$ifdef USE_WINIOCP}
+  {$ifdef USE_THREADWINIOCP}
   dum1: cardinal; // those variables are not used by our queue
   dum2: pointer;
-  {$endif USE_WINIOCP}
+  {$endif USE_THREADWINIOCP}
 begin
   if fOwner <> nil then
   try
     fThreadNumber := InterlockedIncrement(fOwner.fRunningThreads);
     NotifyThreadStart(self);
-    {$ifdef USE_WINIOCP}
+    {$ifdef USE_THREADWINIOCP}
     // main loop, waiting for the next task(s) to process from IOCP
     ctxt := nil;
     repeat
@@ -4723,7 +4723,7 @@ begin
     until fOwner.fTerminated or
           Terminated;
     // TaskAbort(fPendingContext[]) is done in fOwner's TSynThreadPool.Destroy
-    {$endif USE_WINIOCP}
+    {$endif USE_THREADWINIOCP}
   finally
     LockedDec32(@fOwner.fRunningThreads);
   end;

@@ -1072,6 +1072,7 @@
   {$define USE_WINIOCP}     // I/O completion ports API is fine under Windows
   // (as used by mormot.core.threads and mormot.net.async)
   // (under Linux/POSIX, we fallback to a classical event-driven pool)
+  {$define USE_THREADWINIOCP} // IOCP is needed by the WebSocketsAPI thread pool
 
   {$ifndef NOSSPIAUTH}        // from mormot.lib.sspi
     {$define DOMAINRESTAUTH}  // enable SSPI in mormot.rest.client/server
@@ -1083,6 +1084,7 @@
 
   {$define ONLYUSEHTTPSOCKET} // efficient cross-platform Socket + OpenSSL API
   {$undef USE_WINIOCP}        // disable any Windows-specific code
+  {$undef USE_THREADWINIOCP}
 
   {$ifdef OSANDROID}
 
