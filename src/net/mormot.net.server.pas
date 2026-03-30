@@ -5130,8 +5130,7 @@ var
   pool: TSynThreadPoolTHttpServer;
 begin
   result := true; // freeme = true by default
-  if (fServer = nil) or
-     fServer.Terminated  then
+  if GetAborted then
     exit;
   // properly get the incoming body and process the request
   repeat
@@ -5223,14 +5222,12 @@ begin
     // - i.e. open an idle socket with NO activity, which blocks our pool
     // - so we need to wait for actual data, checking server termination
     startTix := 0;
-    pendingMaxTix := headerMaxTix;
+    pendingMaxTix := headerMaxTix; // e.g. from fServer.HeaderRetrieveAbortTix
     repeat
-      if (fServer <> nil) and
-         fServer.Terminated then
+      if GetAborted then
         exit; // server is down -> close connection
       pending := SockInPending(100);
-      if (fServer <> nil) and
-         fServer.Terminated then
+      if GetAborted then
         exit;
       if pending > 0 then
         break // SockRecvLn() won't block
@@ -5482,10 +5479,8 @@ procedure THttpServerResp.Execute;
     {$endif SYNCRTDEBUGLOW}
     try
       repeat
-        res := fServerSock.GetRequest({withbody=}true,
-          fServer.HeaderRetrieveAbortTix);
-        if (fServer = nil) or
-           fServer.Terminated then
+        res := fServerSock.GetRequest({body=}true, fServer.HeaderRetrieveAbortTix);
+        if fServerSock.GetAborted then
           // server is down -> disconnect the client
           exit;
         fServer.IncStat(res);
