@@ -5446,8 +5446,6 @@ procedure THttpServerResp.Execute;
 
   procedure HandleRequestsProcess;
   var
-    keepaliveendtix, beforetix, headertix, tix: Int64;
-    pending: TCrtSocketPending;
     res: THttpServerSocketGetRequestResult;
     banned: boolean;
   begin
@@ -5456,108 +5454,36 @@ procedure THttpServerResp.Execute;
     {$endif SYNCRTDEBUGLOW}
     try
       repeat
-        beforetix := mormot.core.os.GetTickCount64;
-        keepaliveendtix := beforetix + fServer.fServerKeepAliveTimeOut;
-        repeat
-          // within this loop, break=wait for next command, exit=quit
-          if (fServer = nil) or
-             fServer.Terminated or
-             (fServerSock = nil) then
-            // server is down -> close connection
+        res := fServerSock.GetRequest({withbody=}true,
+          fServer.HeaderRetrieveAbortTix);
+        if (fServer = nil) or
+           fServer.Terminated then
+          // server is down -> disconnect the client
+          exit;
+        fServer.IncStat(res);
+        case res of
+          grBodyReceived,
+          grHeaderReceived:
+            begin
+              if res = grBodyReceived then
+                fServer.IncStat(grHeaderReceived);
+              // calc answer and send response
+              fServer.Process(fServerSock, ConnectionID, self);
+            end;
+          grWwwAuthenticate:
+            ; // try to continue on this connection
+        else
+          begin
+            banned := (res <> grClosed) and
+                      (hsoBan40xIP in fServer.Options) and
+                      fServer.fBanned.BanIP(fServerSock.RemoteIP);
+            if banned then
+              fServer.IncStat(grBanned);
+            if Assigned(fServer.Sock.OnLog) then
+              fServer.Sock.OnLog(sllTrace,
+                'Execute: close after GetRequest=% from % (ban=%)',
+                [ToText(res)^, fServerSock.RemoteIP, banned], self);
             exit;
-          pending := fServerSock.SockReceivePending(50); // 50 ms timeout
-          if (fServer = nil) or
-             fServer.Terminated then
-            // server is down -> disconnect the client
-            exit;
-          {$ifdef SYNCRTDEBUGLOW}
-          TSynLog.Add.Log(sllCustom2, 'HandleRequestsProcess: sock=% pending=%',
-            [fServerSock.fSock, _CSP[pending]], self);
-          {$endif SYNCRTDEBUGLOW}
-          case pending of
-            cspSocketError,
-            cspSocketClosed:
-              begin
-                if Assigned(fServer.Sock.OnLog) then
-                  fServer.Sock.OnLog(sllTrace, 'Execute: Socket error from %',
-                    [fServerSock.RemoteIP], self);
-                exit; // disconnect the client
-              end;
-            cspNoData:
-              begin
-                tix := mormot.core.os.GetTickCount64;
-                if tix >= keepaliveendtix then
-                begin
-                  if Assigned(fServer.Sock.OnLog) then
-                    fServer.Sock.OnLog(sllTrace, 'Execute: % KeepAlive=% timeout',
-                      [fServerSock.RemoteIP, keepaliveendtix - tix], self);
-                  exit; // reached keep alive time out -> close connection
-                end;
-                if tix - beforetix < 40 then
-                begin
-                  {$ifdef SYNCRTDEBUGLOW}
-                  // getsockopt(fServerSock.fSock,SOL_SOCKET,SO_ERROR,@error,errorlen) returns 0 :(
-                  TSynLog.Add.Log(sllCustom2,
-                    'HandleRequestsProcess: sock=% LOWDELAY=%',
-                    [fServerSock.fSock, tix - beforetix], self);
-                  {$endif SYNCRTDEBUGLOW}
-                  SleepHiRes(1); // seen only on Windows in practice
-                  if (fServer = nil) or
-                     fServer.Terminated then
-                    // server is down -> disconnect the client
-                    exit;
-                end;
-                beforetix := tix;
-              end;
-            cspDataAvailable,
-            cspDataAvailableOnClosedSocket:
-              begin
-                // get request and headers
-                headertix := fServer.HeaderRetrieveAbortDelay;
-                if headertix > 0 then
-                  inc(headertix, beforetix);
-                res := fServerSock.GetRequest({withbody=}true, headertix);
-                if (fServer = nil) or
-                   fServer.Terminated then
-                  // server is down -> disconnect the client
-                  exit;
-                if pending = cspDataAvailableOnClosedSocket then
-                  fServerSock.KeepAliveClient := false; // we can't keep it
-                fServer.IncStat(res);
-                case res of
-                  grBodyReceived,
-                  grHeaderReceived:
-                    begin
-                      if res = grBodyReceived then
-                        fServer.IncStat(grHeaderReceived);
-                      // calc answer and send response
-                      fServer.Process(fServerSock, ConnectionID, self);
-                      // keep connection only if necessary
-                      if fServerSock.KeepAliveClient then
-                        break
-                      else
-                        exit;
-                    end;
-                  grWwwAuthenticate:
-                    if fServerSock.KeepAliveClient then
-                      break
-                    else
-                      exit;
-                else
-                  begin
-                    banned := (res <> grClosed) and
-                              (hsoBan40xIP in fServer.Options) and
-                              fServer.fBanned.BanIP(fServerSock.RemoteIP);
-                    if banned then
-                      fServer.IncStat(grBanned);
-                    if Assigned(fServer.Sock.OnLog) then
-                      fServer.Sock.OnLog(sllTrace,
-                        'Execute: close after GetRequest=% from % (ban=%)',
-                        [ToText(res)^, fServerSock.RemoteIP, banned], self);
-                    exit;
-                  end;
-                end;
-              end;
           end;
         until false;
       until false;
