@@ -5429,12 +5429,14 @@ end;
 
 procedure TTextWriter.AddInstanceName(Instance: TObject; SepChar: AnsiChar);
 begin
-  Add('"');
+  if not (twoForceJsonExtended in fCustomOptions) then
+    Add('"');
   if Instance = nil then
     AddDirect('v', 'o', 'i', 'd')
   else
     AddInstancePointer(Instance, #0, {unitname=}false, {pointer=}true);
-  AddDirect('"');
+  if not (twoForceJsonExtended in fCustomOptions) then
+    AddDirect('"');
   if SepChar <> #0 then
     AddDirect(SepChar);
 end;
