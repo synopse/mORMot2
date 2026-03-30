@@ -5326,16 +5326,7 @@ const
   SERVICE_PAUSE_CONTINUE       = $0040;
   SERVICE_INTERROGATE          = $0080;
   SERVICE_USER_DEFINED_CONTROL = $0100;
-  SERVICE_ALL_ACCESS           = STANDARD_RIGHTS_REQUIRED or
-                                 SERVICE_QUERY_CONFIG or
-                                 SERVICE_CHANGE_CONFIG or
-                                 SERVICE_QUERY_STATUS or
-                                 SERVICE_ENUMERATE_DEPENDENTS or
-                                 SERVICE_START or
-                                 SERVICE_STOP or
-                                 SERVICE_PAUSE_CONTINUE or
-                                 SERVICE_INTERROGATE or
-                                 SERVICE_USER_DEFINED_CONTROL;
+  SERVICE_ALL_ACCESS           = $01ff;
 
   SC_MANAGER_CONNECT            = $0001;
   SC_MANAGER_CREATE_SERVICE     = $0002;
@@ -5343,13 +5334,7 @@ const
   SC_MANAGER_LOCK               = $0008;
   SC_MANAGER_QUERY_LOCK_STATUS  = $0010;
   SC_MANAGER_MODIFY_BOOT_CONFIG = $0020;
-  SC_MANAGER_ALL_ACCESS         = STANDARD_RIGHTS_REQUIRED or
-                                  SC_MANAGER_CONNECT or
-                                  SC_MANAGER_CREATE_SERVICE or
-                                  SC_MANAGER_ENUMERATE_SERVICE or
-                                  SC_MANAGER_LOCK or
-                                  SC_MANAGER_QUERY_LOCK_STATUS or
-                                  SC_MANAGER_MODIFY_BOOT_CONFIG;
+  SC_MANAGER_ALL_ACCESS         = STANDARD_RIGHTS_REQUIRED or $003f;
 
   SERVICE_CONFIG_DESCRIPTION    = $0001;
 
@@ -5774,7 +5759,8 @@ var
 // - ServiceSingle provided by this application (most probably from
 // TServiceSingle.Create) is sent to the operating system
 // - returns TRUE on success
-// - returns FALSE on error (to get extended information, call GetLastError)
+// - returns FALSE on error (to get extended information, call GetLastError
+// and check e.g. ERROR_FAILED_SERVICE_CONTROLLER_CONNECT)
 function ServiceSingleRun: boolean;
 
 /// convert the Control Code retrieved from Windows into a service state
