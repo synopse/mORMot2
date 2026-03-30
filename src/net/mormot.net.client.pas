@@ -3242,7 +3242,7 @@ begin
           include(Http.HeaderFlags, hfConnectionClose); // socket state is wrong
         end;
       end;
-      // wait and retrieve HTTP command line response
+      // wait for the HTTP response
       pending := SockReceivePending(Timeout, @loerr); // select/poll
       case pending of
         cspDataAvailable:
@@ -3250,7 +3250,8 @@ begin
         cspDataAvailableOnClosedSocket:
           begin
             include(Http.HeaderFlags, hfConnectionClose); // socket is closed
-            if not Sock.Available(@loerr, {nowait=}true) then // e.g. on Windows
+            if (fSecure = nil) and
+               not Sock.Available(@loerr, {nowait=}true) then // e.g. on Windows
             begin
               DoRetry('Closed FIN/RST during headers', [NetErrorText(loerr)]);
               exit;
@@ -3281,6 +3282,7 @@ begin
           exit;
         end;
       end;
+      // retrieve HTTP command line response
       SockRecvLn(Http.CommandResp); // will raise ENetSock on any error
       cmd := pointer(Http.CommandResp);
       if IdemPChar(cmd, 'HTTP/1.') and
