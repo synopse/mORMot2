@@ -1306,6 +1306,10 @@ type
     ClientSock: THttpServerSocket): THttpServerSocketGetRequestResult of object;
 
   /// main HTTP server Thread using the standard Sockets API (e.g. WinSock)
+  // - consider using THttpAsyncServer from mormot.net.async for any realistic
+  // HTTP server, e.g. from web browsers, especially if simultaneous concurrent
+  // connections are possible; use THttpServer only for small/internal services,
+  // or behind a safe HTTP/1.0 reverse proxy
   // - bind to a port and listen to incoming requests
   // - assign this requests to THttpServerResp threads from a ThreadPool
   // - it implements a HTTP/1.1 compatible server, according to RFC 2068 specifications
@@ -1317,9 +1321,9 @@ type
   // configured as https reverse proxy, leaving default "proxy_http_version 1.0"
   // and "proxy_request_buffering on" options for best performance, and
   // setting KeepAliveTimeOut=0 in the THttpServer.Create constructor
-  // - consider using THttpAsyncServer from mormot.net.async if a very high
-  // number of concurrent connections is expected, e.g. if using HTTP/1.0 behind
-  // a https reverse proxy is not an option
+  // - some browsers (especially Chromium-based like Chrome or Edge) initiate
+  // speculative/preconnect idle TCP connection, which would block the threads
+  // from the thread pool for no benefit: do not use THttpServer from browsers
   // - under Windows, will trigger the firewall UAC popup at first run
   // - don't forget to use Free method when you are finished
   // - a typical HTTPS server usecase could be:
@@ -1333,6 +1337,7 @@ type
     fSocketClass: THttpServerSocketClass;
     fThreadRespClass: THttpServerRespClass;
     fHttpQueueLength: cardinal;
+    fThreadPoolRetrieveAbortDelay: cardinal;
     fServerConnectionCount: integer;
     fServerConnectionActive: integer;
     fServerSendBufferSize: integer;
@@ -1371,6 +1376,11 @@ type
       ProcessOptions: THttpServerOptions = []; aLog: TSynLogClass = nil); override;
     /// release all memory and handlers
     destructor Destroy; override;
+    /// milliseconds delay to reject a connection from the thread pool
+    // - default 5000ms seems safe for early detection of speculative/preconnect
+    // idle TCP connection (e.g. from Chromium)
+    property ThreadPoolRetrieveAbortDelay: cardinal
+      read fThreadPoolRetrieveAbortDelay write fThreadPoolRetrieveAbortDelay;
     /// low-level callback called before OnBeforeBody and allow quick execution
     // directly from THttpServerSocket.GetRequest
     property OnHeaderParsed: TOnHttpServerHeaderParsed
@@ -4652,6 +4662,7 @@ begin
     fThreadRespClass := THttpServerResp;
   if fSocketClass = nil then
     fSocketClass := THttpServerSocket;
+  fThreadPoolRetrieveAbortDelay := 5000; // allow 5 seconds wait in thread pool
   fServerSendBufferSize := 256 shl 10; // 256KB seems fine on Windows + POSIX
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
     KeepAliveTimeOut, ProcessOptions, aLog);
@@ -4914,6 +4925,8 @@ begin
         cltservsock := fSocketClass.Create(self);
         // note: we tried to reuse the fSocketClass instance -> no perf benefit
         cltservsock.AcceptRequest(cltsock, @cltaddr);
+        if Assigned(fSock.OnLog) then
+          fSock.OnLog(sllTrace, 'Execute: push %', [cltservsock], self);
         if not fThreadPool.Push(pointer(cltservsock), {waitoncontention=}true) then
           // was false if there is no idle thread in the pool, and queue is full
           cltservsock.Free; // will call DirectShutdown(cltsock)
@@ -5227,10 +5240,14 @@ begin
         begin
           max := 10000;
           if fServer <> nil then
-            max := MinPtrUInt(fServer.fServerKeepAliveTimeOut, max);
-          if (max > 5000) and
-             not withBody then // from thread pool
-            max := 5000; // release thread from pool after 5 seconds max
+          begin
+            max := MaxPtrUInt(fServer.fServerKeepAliveTimeOut, max);
+            if (fServer.fThreadPoolRetrieveAbortDelay <> 0) and
+               (max > fServer.fThreadPoolRetrieveAbortDelay) and
+               not withBody then
+              // withBody=false: ensure early release (5s) from thread pool
+              max := fServer.fThreadPoolRetrieveAbortDelay;
+          end;
           pendingMaxTix := startTix + max;
         end
         else if tix >= pendingMaxTix then
