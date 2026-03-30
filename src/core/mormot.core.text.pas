@@ -5427,20 +5427,6 @@ begin
     AddShort(ClassNameShort(aClass)^);
 end;
 
-procedure TTextWriter.AddInstanceName(Instance: TObject; SepChar: AnsiChar);
-begin
-  if not (twoForceJsonExtended in fCustomOptions) then
-    Add('"');
-  if Instance = nil then
-    AddDirect('v', 'o', 'i', 'd')
-  else
-    AddInstancePointer(Instance, #0, {unitname=}false, {pointer=}true);
-  if not (twoForceJsonExtended in fCustomOptions) then
-    AddDirect('"');
-  if SepChar <> #0 then
-    AddDirect(SepChar);
-end;
-
 function DisplayMinChars(Bin: PByteArray; BinBytes: PtrInt): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 begin
@@ -5497,6 +5483,22 @@ begin
   if SepChar = #0 then
     dec(P);
   B := P;
+end;
+
+procedure TTextWriter.AddInstanceName(Instance: TObject; SepChar: AnsiChar);
+begin // inlined AddInstancePointer() with optional quotes
+  if BEnd - B <= 255 then
+    FlushToStream;
+  if not (twoForceJsonExtended in fCustomOptions) then
+    AddDirect('"');
+  if Instance = nil then
+    AddDirect('v', 'o', 'i', 'd')
+  else
+    B := PointerToText(Instance, B + 1, {unitname=}false, {pointer=}true) - 1;
+  if not (twoForceJsonExtended in fCustomOptions) then
+    AddDirect('"');
+  if SepChar <> #0 then
+    AddDirect(SepChar);
 end;
 
 procedure TTextWriter.AddLine(const Text: ShortString);
