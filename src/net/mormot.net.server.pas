@@ -897,6 +897,7 @@ type
     fAuthTix32: cardinal; // 403 reject for 4 seconds, then 401 and retry login
     fConnectionOpaque: THttpServerConnectionOpaque; // two PtrUInt tags
     fResponseHeader: RawUtf8;
+    function GetAborted: boolean; override;
     // from TSynThreadPoolTHttpServer.Task
     procedure TaskProcess(aCaller: TSynThreadPoolWorkThread); virtual;
     function TaskProcessBody(aCaller: TSynThreadPoolWorkThread;
@@ -5078,6 +5079,13 @@ end;
 
 { THttpServerSocket }
 
+function THttpServerSocket.GetAborted: boolean;
+begin
+  result := (fAborted in fFlags) or // inherited GetAborted
+            ((fServer <> nil) and
+             fServer.Terminated);   // interrupt e.g. any SockRecvLn
+end;
+
 procedure THttpServerSocket.TaskProcess(aCaller: TSynThreadPoolWorkThread);
 var
   freeme: boolean;
@@ -5439,7 +5447,7 @@ procedure THttpServerResp.Shutdown;
 begin
   Terminate;
   if fServerSock <> nil then
-    fServerSock.Close;
+    fServerSock.Abort;
 end;
 
 procedure THttpServerResp.Execute;
@@ -5485,8 +5493,12 @@ procedure THttpServerResp.Execute;
                 [ToText(res)^, fServerSock.RemoteIP, banned], self);
             exit;
           end;
-        until false;
-      until false;
+        end;
+        if (fServer = nil) or
+           fServer.Terminated then
+          exit;
+        // keep on this connection only if likely
+      until not fServerSock.KeepAliveClient;
     except
       on E: Exception do
         ; // any exception will silently disconnect the client
