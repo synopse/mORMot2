@@ -62,6 +62,7 @@ uses
 
 // in the code below, PChar = PWideChar so those wrapper functions could make the
 // proper temporary conversion from UTF-16 to UTF-8 before calling the POSIX API
+// from regular pointer(aFileName) parameters
 
 type
   cint8   = shortint;

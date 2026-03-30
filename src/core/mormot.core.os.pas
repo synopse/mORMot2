@@ -12017,9 +12017,9 @@ begin
   InitializeSpecificUnit; // in mormot.core.os.posix/windows.inc files
   InitializeProcessInfo;  // cross-platform info - e.g. User/Host + Executable
   // setup some constants
-  JSON_CONTENT_TYPE_VAR := JSON_CONTENT_TYPE;
+  JSON_CONTENT_TYPE_VAR        := JSON_CONTENT_TYPE;
   JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
-  NULL_STR_VAR := 'null';
+  NULL_STR_VAR     := 'null';
   BOOL_UTF8[false] := 'false';
   BOOL_UTF8[true]  := 'true';
   {$ifdef ASMINTEL}
