@@ -1379,6 +1379,9 @@ type
     /// milliseconds delay to reject a connection from the thread pool
     // - default 5000ms seems safe for early detection of speculative/preconnect
     // idle TCP connection (e.g. from Chromium)
+    // - set 0 will disable this feature and use HeaderRetrieveAbortDelay or
+    // ServerKeepAliveTimeOut properties minimal value; otherwise, don't put a
+    // too small value here (<500 ms) especially on slow networks
     property ThreadPoolRetrieveAbortDelay: cardinal
       read fThreadPoolRetrieveAbortDelay write fThreadPoolRetrieveAbortDelay;
     /// low-level callback called before OnBeforeBody and allow quick execution
@@ -5096,7 +5099,7 @@ function THttpServerSocket.GetAborted: boolean;
 begin
   result := (fAborted in fFlags) or // inherited GetAborted
             ((fServer <> nil) and
-             fServer.Terminated);   // interrupt e.g. any SockRecvLn
+             fServer.Terminated);   // abort e.g. any background SockRecvLn()
 end;
 
 procedure THttpServerSocket.TaskProcess(aCaller: TSynThreadPoolWorkThread);
