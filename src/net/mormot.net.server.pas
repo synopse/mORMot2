@@ -5184,25 +5184,69 @@ function THttpServerSocket.GetRequest(withBody: boolean;
   headerMaxTix: Int64): THttpServerSocketGetRequestResult;
 var
   P, B: PUtf8Char;
-  status, tix32: cardinal;
-  noheaderfilter, http10: boolean;
+  status, tix32, max: cardinal;
+  startTix, pendingMaxTix, tix: Int64;
+  pending: integer;
+  http10: boolean;
 begin
   try
+    // abort now with no exception if socket is obviously broken
+    result := grClosed;
     // use SockIn with 1KB buffer if not already initialized: 2x faster
     if SockIn = nil then
       CreateSockIn;
-    // abort now with no exception if socket is obviously broken
-    result := grClosed;
-    if fServer <> nil then
-    begin
-      if (SockInPending(100) < 0) or
-         (fServer = nil) or
+    // Chromium/Edge browsers create "speculative/preconnect TCP connections"
+    // - i.e. open an idle socket with NO activity, which blocks our pool
+    // - so we need to wait for actual data, checking server termination
+    startTix := 0;
+    pendingMaxTix := headerMaxTix;
+    repeat
+      if (fServer <> nil) and
+         fServer.Terminated then
+        exit; // server is down -> close connection
+      pending := SockInPending(100);
+      if (fServer <> nil) and
          fServer.Terminated then
         exit;
-      noheaderfilter := hsoHeadersUnfiltered in fServer.Options;
-    end
-    else
-      noheaderfilter := false;
+      if pending > 0 then
+        break // SockRecvLn() won't block
+      else if pending = 0 then
+      begin
+        tix := mormot.core.os.GetTickCount64;
+        if startTix = 0 then
+          startTix := tix;
+        if pendingMaxTix = 0 then // lazy starTix+timeout setting
+        begin
+          max := 10000;
+          if fServer <> nil then
+            max := MinPtrUInt(fServer.fServerKeepAliveTimeOut, max);
+          if (max > 5000) and
+             not withBody then // from thread pool
+            max := 5000; // release thread from pool after 5 seconds max
+          pendingMaxTix := startTix + max;
+        end
+        else if tix >= pendingMaxTix then
+        begin
+          if (fServer <> nil) and
+             Assigned(fServer.Sock.OnLog) then
+            fServer.Sock.OnLog(sllTrace, 'Execute: % %s timeout',
+              [fRemoteIP, (tix - startTix) div MilliSecsPerSec], self);
+          result := grTimeout;
+          exit; // reached headers time out -> close connection
+        end;
+      end
+      else // pending < 0 -> clased
+      begin
+        if (fServer <> nil) and
+           Assigned(fServer.Sock.OnLog) then
+          fServer.Sock.OnLog(sllTrace, 'Execute: % Socket error',
+            [fRemoteIP], self);
+        exit; // grClosed: disconnect the client and release this thread
+      end;
+      {$ifdef OSWINDOWS}
+      SleepHiRes(1); // seems to be needed only with Windows select()
+      {$endif OSWINDOWS}
+    until false;
     // 1st line is command: 'GET /path HTTP/1.1' e.g.
     SockRecvLn(Http.CommandResp);
     P := pointer(Http.CommandResp);
@@ -5230,7 +5274,8 @@ begin
                         not http10;
     Http.Content := '';
     // get and parse HTTP request header
-    if not GetHeader(noheaderfilter) then
+    if not GetHeader((fServer <> nil) and
+                     (hsoHeadersUnfiltered in fServer.Options)) then
     begin
       SockSendFlush('HTTP/1.0 400 Bad Request'#13#10 +
         'Content-Length: 16'#13#10#13#10'Rejected Headers');
