@@ -1378,10 +1378,10 @@ type
     destructor Destroy; override;
     /// milliseconds delay to reject a connection from the thread pool
     // - default 5000ms seems safe for early detection of speculative/preconnect
-    // idle TCP connection (e.g. from Chromium)
-    // - set 0 will disable this feature and use HeaderRetrieveAbortDelay or
-    // ServerKeepAliveTimeOut properties minimal value; otherwise, don't put a
-    // too small value here (<500 ms) especially on slow networks
+    // idle TCP connection (e.g. from Chromium/Edge browsers)
+    // - set 0 will disable this feature and fallback to the minimum value of
+    // HeaderRetrieveAbortDelay or ServerKeepAliveTimeOut properties; otherwise,
+    // don't put a too small value here (<500 ms) especially on slow networks
     property ThreadPoolRetrieveAbortDelay: cardinal
       read fThreadPoolRetrieveAbortDelay write fThreadPoolRetrieveAbortDelay;
     /// low-level callback called before OnBeforeBody and allow quick execution

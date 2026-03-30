@@ -4400,6 +4400,8 @@ end;
 
 { TSynThreadPool }
 
+{.$define THREADPOOL_DEBUGLOG} // to help debugging e.g. THttpServer
+
 {$ifdef USE_THREADWINIOCP}
 constructor TSynThreadPool.Create(NumberOfThreads: integer;
   aOverlapHandle: THandle; const aName: RawUtf8);
@@ -4464,7 +4466,13 @@ begin
           (GetTickSec < endtix) do
       SleepHiRes(5);
     for i := 0 to fWorkThreadCount - 1 do
+    begin
+      {$ifdef THREADPOOL_DEBUGLOG}
+      TSynLog.Add.Log(sllTrace, 'fWorkThread[%].Free as %',
+        [i, fWorkThread[i].fThreadNumber]);
+      {$endif THREADPOOL_DEBUGLOG}
       fWorkThread[i].Free;
+    end;
   finally
     {$ifdef USE_THREADWINIOCP}
     CloseHandle(fRequestQueue);
@@ -4664,7 +4672,7 @@ end;
 
 procedure TSynThreadPoolWorkThread.Execute;
 var
-  ctxt: pointer;
+  ctxt: {$ifdef THREADPOOL_DEBUGLOG} TObject {$else} pointer {$endif};
   {$ifdef USE_THREADWINIOCP}
   dum1: cardinal; // those variables are not used by our queue
   dum2: pointer;
@@ -4678,29 +4686,52 @@ begin
     // main loop, waiting for the next task(s) to process from IOCP
     ctxt := nil;
     repeat
+      {$ifdef THREADPOOL_DEBUGLOG}
+      TSynLog.Add.Log(sllTrace, 'Thread #% IOCP waiting', [fThreadNumber]);
+      {$endif THREADPOOL_DEBUGLOG}
       if not IocpGetQueuedStatus(fOwner.fRequestQueue, dum1, dum2,
-           ctxt, INFINITE) then // blocking during normal process
+           pointer(ctxt), INFINITE) then // blocking during normal process
         if fOwner.NeedStopOnIOError then
-          break;
+          break
+      {$ifdef THREADPOOL_DEBUGLOG}
+        else
+          TSynLog.Add.Log(sllTrace, 'Thread #% IOCP failed', [fThreadNumber]);
+      TSynLog.Add.Log(sllTrace, 'Received ctxt=% in thread #%', [ctxt, fThreadNumber])
+      {$endif THREADPOOL_DEBUGLOG};
       if fOwner.fTerminated then
         break;
       if ctxt = nil then
         continue;
+      {$ifdef THREADPOOL_DEBUGLOG}
+      TSynLog.Add.Log(sllTrace, 'Thread #% before DoTask(%)', [fThreadNumber, ctxt]);
+      {$endif THREADPOOL_DEBUGLOG}
       DoTask(ctxt);
+      {$ifdef THREADPOOL_DEBUGLOG}
+      TSynLog.Add.Log(sllTrace, 'Thread #% after DoTask(%)', [fThreadNumber, ctxt]);
+      {$endif THREADPOOL_DEBUGLOG}
       InterlockedDecrement(fOwner.fPendingContextCount);
       ctxt := nil;
     until fOwner.fTerminated or
           Terminated;
+    {$ifdef THREADPOOL_DEBUGLOG}
+    TSynLog.Add.Log(sllTrace, 'After main loop in thread #%', [fThreadNumber]);
+    {$endif THREADPOOL_DEBUGLOG}
     // this thread is finished: pending tasks cleanup
     repeat
       if ctxt = nil then
         break; // reached the TSynThreadPool.Destroy "nil" events in the queue
       try
+        {$ifdef THREADPOOL_DEBUGLOG}
+        TSynLog.Add.Log(sllTrace, 'Task Abort in thread #%', [fThreadNumber]);
+        {$endif THREADPOOL_DEBUGLOG}
         fOwner.TaskAbort(ctxt); // e.g. free the THttpServerSocket instance
       except
       end;
       InterlockedDecrement(fOwner.fPendingContextCount); // always dec
-    until not IocpGetQueuedStatus(fOwner.fRequestQueue, dum1, dum2, ctxt, {ms=}1);
+    until not IocpGetQueuedStatus(fOwner.fRequestQueue, dum1, dum2, pointer(ctxt), {ms=}1);
+    {$ifdef THREADPOOL_DEBUGLOG}
+    TSynLog.Add.Log(sllTrace, 'Ended thread #%', [fThreadNumber]);
+    {$endif THREADPOOL_DEBUGLOG}
     {$else}
     // main loop, waiting for the next task(s) notified from this thread event
     repeat
