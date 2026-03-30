@@ -4666,23 +4666,29 @@ begin
   if fSocketClass = nil then
     fSocketClass := THttpServerSocket;
   fThreadPoolRetrieveAbortDelay := 5000; // allow 5 seconds wait in thread pool
-  fServerSendBufferSize := 256 shl 10; // 256KB seems fine on Windows + POSIX
+  fServerSendBufferSize := 256 shl 10;   // 256KB seems fine on Windows + POSIX
   inherited Create(aPort, OnStart, OnStop, ProcessName, ServerThreadPoolCount,
     KeepAliveTimeOut, ProcessOptions, aLog);
-  fBanned := THttpAcceptBan.Create; // for hsoBan40xIP or BlackList
+  fBanned := THttpAcceptBan.Create;      // for hsoBan40xIP or BlackList
   if ServerThreadPoolCount > 0 then
   begin
     ThreadCountAdjust(ServerThreadPoolCount); // e.g. WinARM PRISM
     fThreadPool := TSynThreadPoolTHttpServer.Create(self, ServerThreadPoolCount);
-    fHttpQueueLength := 1000;
+    if ServerThreadPoolCount > 1 then
+      fHttpQueueLength := 1000
+    else
+      fHttpQueueLength := 100; // single threaded server is not meant to scale
     if hsoThreadCpuAffinity in ProcessOptions then
       SetServerThreadsAffinityPerCpu(nil, TThreadDynArray(fThreadPool.WorkThread))
     else if hsoThreadSocketAffinity in ProcessOptions then
       SetServerThreadsAffinityPerSocket(nil, TThreadDynArray(fThreadPool.WorkThread));
   end
   else if ServerThreadPoolCount < 0 then
+  begin
     fMonoThread := true; // accept() + recv() + send() in a single thread
-    // setting fHeaderRetrieveAbortDelay may be a good idea
+    if fHeaderRetrieveAbortDelay = 0 then
+      fHeaderRetrieveAbortDelay := 200; // shortest block and wait possible
+  end;
 end;
 
 destructor THttpServer.Destroy;
