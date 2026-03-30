@@ -1987,11 +1987,10 @@ type
     procedure SetReceiveTimeout(aReceiveTimeout: integer); virtual;
     procedure SetSendTimeout(aSendTimeout: integer); virtual;
     procedure SetTcpNoDelay(aTcpNoDelay: boolean); virtual;
+    function GetAborted: boolean; virtual;
     function EnsureSockSend(Len: PtrInt): PUtf8Char;
       {$ifdef FPC}inline;{$endif}
     function GetRawSocket: PtrInt;
-      {$ifdef HASINLINE}inline;{$endif}
-    function GetAborted: boolean;
       {$ifdef HASINLINE}inline;{$endif}
   public
     /// direct access to the optional low-level HTTP proxy tunnelling information
@@ -6751,7 +6750,7 @@ var
         exit;
       end;
       DoInputSock(r, 'SockInReadLn', {notvoid=}true);
-    until fAborted in fFlags;
+    until GetAborted;
     result := 0;
   end;
 
@@ -6790,7 +6789,7 @@ begin
             exit;
           end;
         end;
-    until fAborted in fFlags;
+    until GetAborted;
     if Buffer <> nil then
       Buffer[result] := #0;
     exit;
@@ -6813,7 +6812,7 @@ begin
          (line < len) then
         break; // we got a line
       dec(Size, line);
-    until fAborted in fFlags;
+    until GetAborted;
     Buffer[0] := #0;
     inc(p, line);
     dec(len, line);
@@ -6840,7 +6839,7 @@ begin
     end;
     line := GetSockInLineLength;
     inc(r^.bufpos, line); // just ignore any text up to the line feed
-  until fAborted in fFlags;
+  until GetAborted;
 end;
 
 function TCrtSocket.SockInRead(Content: PAnsiChar; Length: PtrInt;
@@ -6869,17 +6868,17 @@ begin
         dec(Length, len);
       end;
       if (Length = 0) or
-         (fAborted in fFlags) then
+         GetAborted then
         exit; // we got everything we wanted
       if not UseOnlySockIn then
         break;
       if Timeout = 0 then
         SleepHiRes(0); // don't burn 100% of CPU
       DoInputSock(r, 'SockInRead', {notvoid=}false);
-    until fAborted in fFlags;
+    until GetAborted;
   // direct receiving of the remaining bytes from socket
   if (Length <= 0) or
-     (fAborted in fFlags) then
+     GetAborted then
     exit;
   SockRecv(Content, Length); // raise ENetSock if failed to read Length
   inc(result, Length);
@@ -7235,7 +7234,7 @@ begin
     result := cspSocketError
   else if neRead in events then
     {$ifdef OSWINDOWS}
-    // inlined fSock.Available seems mandatory on Windows
+    // inlined fSock.Available seems safer on Windows
     case mormot.net.sock.recv(TSocket(fSock), @events, 1, MSG_PEEK) of
       0:
         result := cspSocketClosed;  // WSACONNRESET with recv() returning 0
@@ -7301,7 +7300,7 @@ begin
   if SockIsDefined and
      (Buffer <> nil) and
      (Length > 0) and
-     not (fAborted in fFlags) then
+     not GetAborted then
   begin
     expected := Length;
     Length := 0;
@@ -7338,7 +7337,7 @@ begin
           break;
         end;
       end;
-      if (fAborted in fFlags) or
+      if GetAborted or
          (Length = expected) or
          (StopBeforeLength and
           (read <> 0) and
@@ -7348,7 +7347,7 @@ begin
          ((fSock.RecvPending(pending) = nrOk) and
           (pending > 0)) then
         continue; // no need to call WaitFor()
-      if fAborted in fFlags then
+      if GetAborted then
         break;
       events := fSock.WaitFor(TimeOut, [neRead, neError], RawError); // select/poll
       if neError in events then
@@ -7363,9 +7362,9 @@ begin
         OnLog(sllTrace, 'TrySockRecv: timeout after %s', [TimeOut div 1000], self);
       res := nrTimeout;  // identify read timeout as error
       break;
-    until fAborted in fFlags;
+    until GetAborted;
   end;
-  if fAborted in fFlags then
+  if GetAborted then
     res := nrClosed;
   if NetResult <> nil then
     NetResult^ := res;
@@ -7415,7 +7414,7 @@ var
 begin
   if RawError <> nil then
     RawError^ := NO_ERROR;
-  if fAborted in fFlags then
+  if GetAborted then
     res := nrClosed
   else if Len = 0 then
     res := nrOk
@@ -7442,7 +7441,7 @@ begin
         if res = nrOk then
           continue;
       end;
-      if (fAborted in fFlags) or
+      if GetAborted or
          not (res in [nrOk, nrRetry]) then
         break;
       events := fSock.WaitFor(TimeOut, [neWrite, neError]); // select() or poll()
@@ -7455,8 +7454,8 @@ begin
         OnLog(sllTrace, 'TrySndLow: timeout after %ms)', [TimeOut], self);
       res := nrTimeout;  // identify write timeout as error
       break;
-    until fAborted in fFlags;
-    if fAborted in fFlags then
+    until GetAborted;
+    if GetAborted then
       res := nrClosed;
   end;
   if NetResult <> nil then
