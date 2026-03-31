@@ -1038,8 +1038,8 @@ type
     fOnDownloadProgress: TOnHttpRequestProgress;
     class function InternalREST(const url, method: RawUtf8;
       const data: RawByteString; const header: RawUtf8;
-      aIgnoreTlsCertificateErrors: boolean; timeout: integer;
-      outHeaders: PRawUtf8; outStatus: PInteger): RawByteString;
+      aIgnoreTlsCertificateErrors: boolean; timeout: integer; outHeaders: PRawUtf8;
+      outStatus: PInteger; outError: PString = nil): RawByteString;
     // inherited class should override those abstract methods
     procedure InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal); virtual; abstract;
     procedure InternalCreateRequest(const aMethod, aUrl: RawUtf8); virtual; abstract;
@@ -4346,7 +4346,7 @@ end;
 
 class function THttpRequest.InternalREST(const url, method: RawUtf8;
   const data: RawByteString; const header: RawUtf8; aIgnoreTlsCertificateErrors: boolean;
-  timeout: integer; outHeaders: PRawUtf8; outStatus: PInteger): RawByteString;
+  timeout: integer; outHeaders: PRawUtf8; outStatus: PInteger; outError: PString): RawByteString;
 var
   uri: TUri;
   outh: RawUtf8;
@@ -4369,7 +4369,12 @@ begin
         Free;
       end;
     except
-      result := '';
+      on E: Exception do
+      begin
+        if outError <> nil then
+          outError^ := E.Message;
+        result := '';
+      end;
     end;
 end;
 
