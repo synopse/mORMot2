@@ -8834,17 +8834,17 @@ end;
 
 const // https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types/Common_types
   MIME_EXT = 'PNG|GIF|TIF|JP|BMP|DOC|HTM|CSS|JSON|ICO|WOF|TXT|SVG|ATOM|RDF|' +
-     'RSS|WEBP|APPC|MANI|XML|JS|MJS|OGA|OGV|MP4|M2V|M2P|MP3|H264|TEXT|LOG|' +
-     'GZ|WEBM|MKV|RAR|7Z|BZ2|WMA|WMV|AVI|PPT|XLS|PDF|DCM|DICOM|SQLIT|DB3|' +
-     'HEIC|H265|AVIF|AAC|CSV|MD|ICS|OGX|OGG|OPUS|';
+    'RSS|WEBP|APPC|MANI|XML|JS|MJS|OGA|OGV|MP4|M2V|M2P|MP3|H264|TEXT|LOG|' +
+    'GZ|WEBM|MKV|RAR|7Z|BZ2|WMA|WMV|AVI|PPT|XLS|PDF|DCM|DICOM|SQLIT|DB3|' +
+    'HEIC|H265|AVIF|AAC|CSV|MD|ICS|OGX|OGG|OPUS|';
   MIME_EXT_TYPE: array[0 .. 56] of TMimeType = (
     mtPng,  mtGif,  mtTiff,  mtJpg,  mtBmp,  mtDoc,  mtHtml, mtCss,
     mtJson, mtXIcon, mtFont, mtText, mtSvg,  mtXml,  mtXml,  mtXml,
     mtWebp, mtManifest, mtManifest,  mtXml,  mtJS,   mtJS, mtOga, mtOgv,
     mtMp4,  mtMp2,   mtMp2,  mtMpeg, mtH264, mtText, mtText, mtGzip,
-    mtWebm, mtWebm,  mtRar,  mt7z,   mtBz2,  mtWma,  mtWmv, mtAvi,
-    mtPpt,  mtXls,   mtPdf, mtDicom, mtDicom, mtSQlite3, mtSQlite3, mtHeic,
-    mtH265, mtAvif,  mtAac,  mtCsv,  mtMarkdown, mtICalendar, mtOgg,  mtOga, mtOga);
+    mtWebm, mtWebm,  mtRar,  mt7z,   mtBz2,  mtWma,  mtWmv, mtAvi, mtPpt,
+    mtXls,   mtPdf, mtDicom, mtDicom, mtSQlite3, mtSQlite3, mtHeic, mtH265,
+    mtAvif,  mtAac,  mtCsv,  mtMarkdown, mtICalendar, mtOgg,  mtOga, mtOga);
 
 function GetMimeTypeFromExt(const Ext: RawUtf8): TMimeType;
 var
@@ -10357,7 +10357,6 @@ begin
   if ValidHandle(f1) then
     FileClose(f1);
 end;
-
 
 function HashFileCrc32c(const FileName: TFileName): RawUtf8;
 begin

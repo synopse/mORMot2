@@ -1217,6 +1217,7 @@ begin
     if not IsExpandedPath(localfile) then
       localfile := WorkDir + localfile;
   repeat
+    status := 0;
     result := HttpGetWeak(uri, localfile, @status);
     FormatString('DownloadFile %=% retry=% [%]',
       [uri, status, retry, EscapeToShort(result)], info);
