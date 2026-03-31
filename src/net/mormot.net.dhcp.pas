@@ -1679,12 +1679,16 @@ type
       const aInterface: TMacAddress); reintroduce;
   end;
 
-  TDhcpServer = class(TSynPersistent)
+  /// implements a full DHCP IPv4 server over UDP
+  // - several interfaces and ports could be bound to this single instance
+  TDhcpServer = class(TDhcpProcess)
   protected
-    fProcess: TDhcpProcess;
     fThreads: array of TDhcpServerThread;
   public
-  published
+    /// bind and start listening to incoming UDP frames
+    // - will bind all network interfaces matching a Scope[] by default; you
+    // can limit to bind a single interface by providing its IPv4
+    procedure Bind(const InterfaceIP4: RawUtf8 = ''); virtual;
   end;
 
 
@@ -6441,6 +6445,12 @@ begin
 end;
 
 
+{ TDhcpServer }
+
+procedure TDhcpServer.Bind(const InterfaceIP4: RawUtf8);
+begin
+
+end;
 
 
 initialization
