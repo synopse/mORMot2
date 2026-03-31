@@ -71,8 +71,8 @@ type
     fSock: TNetSocket;
     fSockAddr: TNetAddr;
     fFrame: PUdpFrame;
-    fReceived, fTimeout, fRebindRetry, fRebindCount: integer;
-    fInitialBound, fAutoRebind: boolean;
+    fReceived, fTimeout, fRebindRetry, fRebindCount, fFrameLen: integer;
+    fInitialBound, fAutoRebind, fFrameOwned: boolean;
     fBindAddress, fBindPort: RawUtf8;
     function DoBind: TNetResult; virtual;
     function GetIPWithPort: RawUtf8;

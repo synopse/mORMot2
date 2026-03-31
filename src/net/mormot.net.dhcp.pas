@@ -926,6 +926,7 @@ type
     LeaseTimeBE, RenewalTimeBE, RebindingBE: cardinal;
     MaxDeclinePerSec, DeclineTime, GraceFactor, OfferHolding: cardinal;
     DnsScriptSecs, DnsScriptLastTix32: cardinal;
+    ServerPort, ClientPort: word;
     OnBackgroundExecute: function(const ctxt: TOnDhcpBackgroundExecute): boolean of object;
     procedure CheckSubNet(ident: PUtf8Char; ip: TNetIP4);
     function ExecuteDnsScript(ip4: TNetIP4; m: PNetMac; host: PShortString;
@@ -1307,6 +1308,7 @@ type
     fBroadCastAddress: RawUtf8;
     fDynDnsScript: TFileName;
     fServerIdentifier: RawUtf8;
+    fServerPort, fClientPort: TNetPort;
     fLeaseTimeSeconds: cardinal;
     fMaxDeclinePerSecond: cardinal;
     fDeclineTimeSeconds: cardinal;
@@ -1337,6 +1339,12 @@ type
     // raw value sent in DHCP headers, and fill min/max and others
     property SubnetMask: RawUtf8
       read fSubnetMask write fSubnetMask;
+    /// the associated UDP server port to be used on this interface
+    property ServerPort: TNetPort
+      read fServerPort write fServerPort;
+    /// the associated UDP server port to be used on this interface
+    property ClientPort: TNetPort
+      read fClientPort write fClientPort;
     /// Default Gateway (option 3) e.g. "default-gateway":"192.168.1.1"
     property DefaultGateway: RawUtf8
       read fDefaultGateway write fDefaultGateway;
@@ -1491,7 +1499,7 @@ type
   end;
 
   /// optional callback signature for TDhcpProcess.ComputeResponse
-  // - input frame is parsed in Data.Recv/RecvLen/RecvLens/RecvLensRai
+  // - input frame is supplied parsed in Data.Recv/RecvLen/RecvLens/RecvLensRai
   // - could update SendEnd with DhcpAddOption() or set SendEnd=nil for no response
   TOnComputeResponse = procedure(Sender: TDhcpProcess; var State: TDhcpState);
 
@@ -4690,7 +4698,7 @@ begin
   Pool.IpMax        := ToIP4(fMax);
   Pool.StaticIP     := nil;
   Pool.StaticMac    := nil;
-  TrimU(fName, Pool.name);
+  TrimU(fName, Pool.Name);
   for i := 0 to high(fStatic) do
     if not Pool.AddStatic(fStatic[i]) then // add sorted, from 'ip' 'mac/hex=ip'
       EDhcp.RaiseUtf8('PrepareScope: invalid static=%', [fStatic[i]]);
@@ -4762,6 +4770,8 @@ begin
     Scope.DeclineTime     := Scope.LeaseTimeLE;
   Scope.GraceFactor       := fGraceFactor;         // * 2
   Scope.Options           := fOptions;
+  Scope.ServerPort        := fServerPort;
+  Scope.ClientPort        := fClientPort;
   Scope.DnsScript         := '';
   Scope.OnBackgroundExecute := nil;
   if (fDynDnsTrustSecs <> 0) and
