@@ -1298,6 +1298,7 @@ type
   TDhcpPoolSettingsObjArray = array of TDhcpPoolSettings;
 
   /// main high-level options for defining one scope/subnet for our DHCP Server
+  // - to be assigned to a given network interface via UDP by TDhcpServer
   TDhcpScopeSettings = class(TSynAutoCreateFields)
   protected
     fSubnetMask: RawUtf8;
@@ -1665,9 +1666,17 @@ type
 { **************** High-Level DHCP Server over UDP }
 
 type
+  /// listen for DHCP messages on one local UDP IPv4 and port
   TDhcpServerThread = class(TUdpServerThread)
   protected
-  published
+    fOwner: TDhcpProcess;
+    fState: TDhcpState;
+    procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
+    function DoBind: TNetResult; override;
+  public
+    /// initialize and bind the server instance for a given interface and scope
+    constructor Create(aOwner: TDhcpProcess; const aScope: TDhcpScope;
+      const aInterface: TMacAddress); reintroduce;
   end;
 
   TDhcpServer = class(TSynPersistent)
@@ -4726,6 +4735,8 @@ constructor TDhcpScopeSettings.Create;
 begin
   inherited Create;
   fSubnetMask := '192.168.1.1/24';
+  fServerPort := DHCP_SERVER_PORT; // default to 67
+  fClientPort := DHCP_CLIENT_PORT; // default to 68
   fLeaseTimeSeconds := 120; // avoid IP exhaustion during iPXE process
   fOfferHoldingSecs := 5;
   fMaxDeclinePerSecond := 5;
@@ -6404,6 +6415,32 @@ end;
 
 
 { **************** High-Level DHCP Server over UDP }
+
+{ TDhcpServerThread }
+
+constructor TDhcpServerThread.Create(aOwner: TDhcpProcess;
+  const aScope: TDhcpScope; const aInterface: TMacAddress);
+begin
+  fOwner := aOwner;
+  fFrameLen := SizeOf(fState); // directly fill our DHCP state machine buffer
+  fFrame := @fState.Recv;
+  inherited Create(aOwner.Log, aInterface.IP, UInt32ToUtf8(aScope.ServerPort),
+    aScope.Main.Name, 1000);
+  end;
+
+function TDhcpServerThread.DoBind: TNetResult;
+begin
+  result := inherited DoBind;
+  if result <> nrOK then
+    exit;
+end;
+
+procedure TDhcpServerThread.OnFrameReceived(len: integer; var remote: TNetAddr);
+begin
+
+end;
+
+
 
 
 initialization
