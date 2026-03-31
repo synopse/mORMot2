@@ -175,6 +175,8 @@ JSON functions shared by all framework units
 - JSON Serialization Wrapper Functions
 - Abstract Classes with Auto-Create-Fields
 
+Our JSON engine uses a very efficient SAX-like kernel and full RTTI support.
+
 ### mormot.core.fmt
 
 Binary, JSON and Text Advanced Formatting Functions
@@ -185,6 +187,8 @@ Binary, JSON and Text Advanced Formatting Functions
 - `TSynJsonFileSettings` Parent Class
 - JSON and Text Preprocessor
 - Source Code Generation Functions
+
+This unit contains some advanced features, not included by default in `mormot.core.json.pas` and `mormot.core.text.pas`.
 
 ### mormot.core.collections
 
@@ -208,6 +212,8 @@ Use `Collections.NewList<T>` and `Collections.NewKeyValue<TKey, TValue>` factori
 - `IDocList`/`IDocDict` advanced Wrappers of `TDocVariant` Documents
 - JSON Parsing into `Variant`
 - `Variant` Binary Serialization
+
+Variants are first class citizens in *mORMot*. The `TDocVariant` and `IDocAny` allow efficient runtime processing of schema-less JSON arrays of objects.
 
 ### mormot.core.search
 
@@ -256,16 +262,20 @@ High-Level Multi-Threading features shared by all framework units
 ### mormot.core.zip
 
 High-Level Zip/Deflate Compression features shared by all framework units
-- `TSynZipCompressor` Stream Class
+- `TSynZipCompressor` and `TSynZipDecompressor` Stream Classes
 - GZ Read/Write Support
 - `.zip` Archive File Support
 - `TAlgoDeflate` and `TAlgoGZ` High-Level Compression Algorithms
+
+With proper Unicode and ZIP64 support, and faster libdeflate usage if available.
 
 ### mormot.core.mustache
 
 Logic-Less `{{Mustache}}` Templates Rendering
 - *Mustache* Execution Data Context Types
 - `TSynMustache` Template Processing
+
+The `TSynMustache` data context could be a `TDocVariant` document, or any kind of data using direct RTTI lookup.
 
 ### mormot.core.interfaces
 
@@ -288,7 +298,7 @@ Model-View-Controller (MVC) pattern and Mustache
 - Web Renderer Returning Mustache Views or Json
 - Application ViewModel/Controller using Interfaces
 
-Abstract MVC logic over Mustache, as used by `mormot.rest.mvc.pas` and `mormot.net.mvc.pas`.
+Abstract MVC logic over *Mustache*, as used by `mormot.rest.mvc.pas` and `mormot.net.mvc.pas`.
 
 ### mormot.core.test
 
@@ -299,15 +309,19 @@ Testing functions shared by all framework units
 ### mormot.core.fpcx64mm
 
 An (optional) Multi-thread Friendly Memory Manager for FPC written in x86_64 assembly
-- targetting Linux (and Windows) multi-threaded Services
+- should be included as the very first unit of your project uses clause
+- targetting Linux and Windows medium size Services
 - only for FPC on the x86_64 target - use the RTL MM on Delphi or ARM
-- based on FastMM4 proven algorithms by Pierre le Riche
-- code has been reduced to the only necessary featureset for production
-- deep asm refactoring for cross-platform, compactness and efficiency
 - can report detailed statistics (with threads contention and memory leaks)
-- mremap() makes large block ReallocMem a breeze on Linux :)
-- inlined SSE2 movaps loop is more efficient that subfunction(s)
-- lockless round-robin of tiny blocks (<=128/256 bytes) for better scaling
-- optional lockless bin list to avoid FreeMem() thread contention
+- based on proven FastMM4 by Pierre le Riche, reduced and optimized
 - three app modes: default mono-thread friendly, `FPCMM_SERVER` or `FPCMM_BOOST`
+
+## mormot.core.fpclibcmm
+
+Wrap the libc Memory Manager on FPC POSIX systems
+- should be included as the very first unit of your project uses clause
+- `mormot.core.fpcx64mm.pas` shines on standard load over a few cores
+- `mormot.core.fpclibcmm.pas` scales better on heavy load on > 16 cores
+- glibc free/realloc may scale better, but do abort/SIG_KILL on any GPF
+
 

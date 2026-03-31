@@ -220,7 +220,7 @@ end;
 function Win32Utf8ToAnsi(P: pointer; L, CP: integer; var A: RawByteString): boolean;
 var
   tmpW, tmpA: TSynTempBuffer;
-begin
+begin // fast enough: used internally only by Utf8ToConsole() if CP <> CP_UTF8
   result := false;
   tmpW.Init(L * 2);
   L := Utf8ToUnicode(tmpW.Buf, L + 8, P, L); // convert to UTF-16 with the RTL

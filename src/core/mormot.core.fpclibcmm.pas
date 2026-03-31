@@ -14,6 +14,7 @@ unit mormot.core.fpclibcmm;
     glibc free/realloc may scale better, but do abort/SIG_KILL on any GPF, so
     first ensure your project is very clean about its memory (using heaptrc)
     before running it on production - fpcx64mm or FPC RTL MM are less paranoid
+    - expects the OS to use glibc ptmalloc2 - musl libc allocator is pointless
     - GetMem() is almost twice slower on single thread than fpcx64mm
     - so only use it if you know what you are doing, and really see a difference
     - consider it as a more direct (and correct?) alternative to FPC cmem unit
