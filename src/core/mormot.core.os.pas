@@ -6927,13 +6927,32 @@ begin
   else
     // use WinAPI, ICU or cwstring/RTL for accurate conversion
     res[0] := AnsiChar(
-      Unicode_WideToAnsi(W, PAnsiChar(@res[1]), LW, 255, CodePage));
+      Unicode_WideToAnsi(W, PAnsiChar(@res[1]), LW, high(res), CodePage));
+end;
+
+procedure _utf16fromascii(s: PByteArray; d: PWordArray; l: PtrInt);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  d[l] := 0; // ensure is #0 terminated
+  repeat
+    dec(l);
+    d[l] := cardinal(s[l]); // fast direct 7-bit conversion
+  until l = 0;
+end;
+
+function _utf16toascii(s: PWordArray; d: PByteArray; l: PtrInt): pointer;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  d[l] := 0; // ensure is #0 terminated
+  repeat
+    dec(l);
+    d[l] := s[l]; // 7-bit ASCII direct conversion
+  until l = 0;
+  result := d;
 end;
 
 function Unicode_FromUtf8(Text: PUtf8Char; TextLen: PtrInt;
   var Dest: TSynTempBuffer): PWideChar;
-var
-  i: PtrInt;
 begin
   if (Text = nil) or
      (TextLen <= 0) then
@@ -6941,9 +6960,7 @@ begin
   else if IsAnsiCompatible(pointer(Text), TextLen) then // optimistic way
   begin
     result := Dest.Init(TextLen);
-    for i := 0 to TextLen - 1 do
-      PWordArray(result)[i] := PByteArray(Text)[i];
-    result[Dest.len] := #0; // Text[TextLen] may not be #0
+    _utf16fromascii(pointer(Text), pointer(result), Dest.Len);
   end
   else // use the RTL to perform the UTF-8 to UTF-16 conversion
   begin                               
@@ -6959,17 +6976,6 @@ begin
   end;
 end;
 
-function _utf16ascii(s: PWordArray; d: PByteArray; l: PtrInt): pointer;
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  d[l] := 0;      // ensure is #0 terminated
-  repeat
-    dec(l);
-    d[l] := s[l]; // 7-bit ASCII direct conversion
-  until l = 0;
-  result := d;
-end;
-
 function Unicode_ToUtf8(Text: PWideChar; var Dest: TSynTempBuffer; TextLen: PtrInt): pointer;
 begin
   if TextLen = 0 then         // e.g. from mormot.core.os.delphi.pas
@@ -6977,7 +6983,7 @@ begin
   if TextLen = 0 then
     result := Dest.Init(0)
   else if IsAnsiCompatibleW(Text, TextLen) then
-    result := _utf16ascii(pointer(Text), Dest.Init(TextLen), TextLen)
+    result := _utf16toascii(pointer(Text), Dest.Init(TextLen), TextLen)
   else // complex UTF-16 to UTF-8 conversion via RTL or mormot.core.unicode
     result := DoWideCharToUtf8Temp(Text, TextLen, Dest);
 end;
@@ -6995,7 +7001,7 @@ procedure Unicode_ToUtf8(Text: PWideChar; TextLen: PtrInt; var Dest: RawUtf8);
 begin
   if TextLen > 0 then
     if IsAnsiCompatibleW(Text, TextLen) then
-      _utf16ascii(pointer(Text), FastSetString(Dest, TextLen), TextLen)
+      _utf16toascii(pointer(Text), FastSetString(Dest, TextLen), TextLen)
     else
       _utf16utf8(Text, TextLen, Dest) // complex UTF-16 to UTF-8 conversion
   else

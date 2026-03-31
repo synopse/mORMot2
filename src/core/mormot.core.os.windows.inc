@@ -12,6 +12,9 @@
 
 function PosExtString(Str: PChar): PChar; forward;
 
+function _utf16toascii(s: PWordArray; d: PByteArray; l: PtrInt): pointer; forward;
+procedure _utf16fromascii(s: PByteArray; d: PWordArray; l: PtrInt); forward;
+
 function IsExtendedPathNameW(Name: PWideChar): boolean; // in '\\?\...' format
 begin
   result := (Name <> nil) and
@@ -92,16 +95,10 @@ begin
 end;
 
 procedure SetStringFromAnsi7Buffer(var d: string; s: PByteArray; l: PtrInt);
-var
-  dst: PWordArray;
 begin
   SetString(d, nil, l);
-  dst := pointer(d);
-  if dst <> nil then
-    repeat
-      dec(l);
-      dst[l] := cardinal(s[l]); // fast direct 7-bit conversion
-    until l = 0;
+  if pointer(d) <> nil then
+    _utf16fromascii(s, pointer(d), l);
 end;
 
 {$else}
@@ -123,7 +120,7 @@ end;
 
 function W32(const FileName: TFileName; var Temp: TW32Temp; DoCopy: boolean): PWideChar;
 var
-  i, len: PtrInt;
+  len: PtrInt;
 begin
   result := nil;
   if FileName = '' then
@@ -134,8 +131,7 @@ begin
        IsExtendedPathName(FileName))) and
      IsAnsiCompatible(pointer(FileName), len) then
     // most common cases do not need any Unicode conversion
-    for i := 0 to len do // includes #0 terminator
-      PWordArray(@Temp)[i] := cardinal(PByteArray(FileName)[i])
+    _utf16fromascii(pointer(FileName), @Temp, len)
   else
     // use a temporary SynUnicode variable for complex UTF-16 conversion
     // or if MAX_PATH is reached and \\?\ prefix is needed for extended-length
@@ -144,8 +140,6 @@ begin
 end;
 
 procedure Win32PWideCharToString(P: PWideChar; l: PtrInt; var s: string);
-var
-  i: PtrInt;
 
   procedure DoSynUnicodeConv;
   var
@@ -159,8 +153,8 @@ begin
   if IsAnsiCompatibleW(P, l) then // most common case
   begin
     SetString(s, nil, l);
-    for i := 0 to l - 1 do
-      PByteArray(s)[i] := PWordArray(P)[i]; // fast direct conversion
+    if pointer(s) <> nil then
+      _utf16toascii(pointer(P), pointer(s), l); // fast direct conversion
   end
   {$ifdef FPC}
   else if DefaultRTLFileSystemCodePage = CP_UTF8 then // happens with Lazarus
