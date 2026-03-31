@@ -5808,6 +5808,8 @@ function AssignJobToProcess(job, process: THandle; const ctxt: ShortString): boo
 // then execute the start/stop methods of a TSynDaemon / TDDDDaemon instance
 // - dofork will create e.g. a /run/.[ProgramName][ProgramFilePathHash].pid file
 // - onLog can be assigned from TSynLog.DoLog for proper logging
+// - warning: the parent process would be killed immediately by design, to
+// avoid any unexpected cleanup of the resource shared by both processes
 procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
   const start, stop: TThreadMethod; const onlog: TSynLogProc = nil;
   const servicename: RawUtf8 = '');
@@ -5818,6 +5820,7 @@ procedure RunUntilSigTerminated(daemon: TObject; dofork: boolean;
 // waitseconds for the .pid file to disapear
 // - returns true on success, false on error (e.g. no valid .pid file or
 // the file didn't disappear, which may mean that the daemon is broken)
+// - warning: on OpenBSD the current process needs to be killed via fpexit()
 function RunUntilSigTerminatedForKill(waitseconds: integer = 30): boolean;
 
 var

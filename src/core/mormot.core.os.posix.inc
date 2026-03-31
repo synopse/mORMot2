@@ -4634,6 +4634,9 @@ begin
             (chroot('.') = 0);
 end;
 
+const
+  OS_RUN = {$ifdef OpenBsd} '/var/run' {$else} '/run' {$endif};
+
 function RunUntilSigTerminatedPidFile: TFileName;
 var
   crc: cardinal;
@@ -4646,8 +4649,8 @@ begin
   if result = '' then
     if FileIsWritable(Executable.ProgramFilePath) then // fpaccess is enough
       result := Executable.ProgramFilePath
-    else if FileIsWritable('/run') then
-      result := '/run/' // favor tmpfs for transient file
+    else if FileIsWritable(OS_RUN) then
+      result := OS_RUN + '/' // favor tmpfs for transient file
     else
       result := GetSystemPath(spTemp)
   else
@@ -4707,7 +4710,11 @@ begin
       pidnew := GetInteger(pointer(StringFromFile(pidfile)));
       result := (pidnew = 0) or (pidnew <> pid); // stopped or restarted
       if result then
+        {$ifdef OPENBSD}
+        fpExit(0); // avoid "bogus pointer (double free?)" error
+        {$else}
         exit;
+        {$endif OPENBSD}
     until GetTickCount64 > tix;
     // timeout: murder with finesse
     if {$ifdef OSLINUX}
@@ -4757,7 +4764,8 @@ begin
     if pid < 0 then
       EOSException.RaiseFmt(daemon, 'CommandLine Fork failed', []);
     if pid > 0 then  // main program - just terminate
-      exit;
+      fpExit(0);     // need to kill the parent process especially
+                     // to avoid "bogus pointer (double free?)" error on OpenBSD
     // clean forked instance
     sid := fpSetSID;
     if sid < 0 then // new session (process group) created?

@@ -316,7 +316,7 @@ An (optional) Multi-thread Friendly Memory Manager for FPC written in x86_64 ass
 - based on proven FastMM4 by Pierre le Riche, reduced and optimized
 - three app modes: default mono-thread friendly, `FPCMM_SERVER` or `FPCMM_BOOST`
 
-## mormot.core.fpclibcmm
+### mormot.core.fpclibcmm
 
 Wrap the libc Memory Manager on FPC POSIX systems
 - should be included as the very first unit of your project uses clause
