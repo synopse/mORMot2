@@ -595,14 +595,14 @@ begin
   if len = 0 then
     // typically ERROR_RESOURCE_LANG_NOT_FOUND or ERROR_MUI_FILE_NOT_FOUND
     len := FormatMessageW(flags, pointer(lib), err, 0, @tmp, SizeOf(tmp), nil);
-  SetLastError(errbak);
   while (len <> 0) and
         (ord(tmp[len - 1]) in [0..32, ord('.')]) do
     dec(len); // trim right
   if s <> nil then
     Win32PWideCharToString(@tmp, len, s^)
-  else if len <> 0 then
-    ss^[0] := AnsiChar(UnicodeToUtf8(@ss^[1], 255, @tmp, len)); // use RTL
+  else
+    Unicode_WideToShort(@tmp, len, CP_UTF8, ss^);
+  SetLastError(errbak);
   result := len <> 0;
 end;
 
