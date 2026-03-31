@@ -2591,10 +2591,15 @@ var
   ident: RawUtf8;
   res: TNetResult;
 begin
-  GetMem(fFrame, SizeOf(fFrame^));
   fBindAddress := BindAddress;
   fBindPort := BindPort;
   fTimeout := TimeoutMS;
+  if fFrame = nil then // allocate a 64KB UDP frame buffer (if not yet)
+  begin
+    fFrameLen := SizeOf(fFrame^);
+    GetMem(fFrame, fFrameLen);
+    fFrameOwned := true;
+  end;
   ident := ProcessName;
   if ident = '' then
     FormatUtf8('udp%srv', [fBindPort], ident);
@@ -2603,7 +2608,7 @@ begin
   inherited Create({suspended=}false, nil, nil, LogClass, ident);
   res := DoBind;
   if res = nrOk then
-    exit;
+    exit; // successfully bound to this UDP port
   // Windows seems to require this to avoid breaking the process on error
   {$ifdef OSWINDOWS}
   Resume{%H-}; // force Execute/DoExecute launch
@@ -2650,7 +2655,8 @@ begin
   inherited Destroy;
   if fSock <> nil then
     fSock.ShutdownAndClose({rdwr=}true);
-  FreeMem(fFrame);
+  if fFrameOwned then
+    FreeMem(fFrame);
 end;
 
 function TUdpServerThread.GetIPWithPort: RawUtf8;
@@ -2693,7 +2699,7 @@ begin
           begin
             // some UDP packet received
             PInteger(fFrame)^ := 0;
-            len := fSock.RecvFrom(fFrame, SizeOf(fFrame^), remote);
+            len := fSock.RecvFrom(fFrame, fFrameLen, remote);
             if Terminated then
               break;
             if len < 0 then // paranoid
@@ -2710,7 +2716,7 @@ begin
           end
           else
             // len = 0 for ICMP port unreachable: flush reception buffer
-            fSock.RecvFrom(fFrame, SizeOf(fFrame^), remote);
+            fSock.RecvFrom(fFrame, fFrameLen, remote);
         end
         else if res <> nrRetry then
         begin

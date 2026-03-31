@@ -4635,7 +4635,7 @@ begin
 end;
 
 const
-  OS_RUN = {$ifdef OpenBsd} '/var/run' {$else} '/run' {$endif};
+  OS_RUN = {$ifdef OPENBSD} '/var/run' {$else} '/run' {$endif};
 
 function RunUntilSigTerminatedPidFile: TFileName;
 var
