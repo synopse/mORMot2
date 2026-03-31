@@ -444,7 +444,7 @@ end;
 
 procedure DoneCriticalSection(var cs);
 begin
-  TRTLCriticalSection(cs).Free;
+  FreeAndNil(TRTLCriticalSection(cs));
 end;
 
 procedure ThreadSwitch;
