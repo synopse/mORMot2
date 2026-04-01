@@ -113,7 +113,7 @@ For security-sensitive deployments:
        │                         │                           │
 ┌──────┴──────┐           ┌──────┴──────┐            ┌───────┴───────┐
 │  AJAX/Web   │           │  Services   │            │     ORM       │
-│   Clients   │─────────▶ │   Server    │──────────▶ │    Server     │
+│   Clients   │─────────> │   Server    │──────────> │    Server     │
 └─────────────┘           │  (Stateless)│            │  + Database   │
                           └─────────────┘            └───────────────┘
                                 │
