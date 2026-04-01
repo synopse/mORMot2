@@ -534,14 +534,14 @@ type
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     Infrastructure Layer                         │
-│     (Database, External Services, UI, HTTP Server)               │
+│                     Infrastructure Layer                        │
+│     (Database, External Services, UI, HTTP Server)              │
 ├─────────────────────────────────────────────────────────────────┤
-│                     Application Layer                            │
-│           (Use Cases, DTOs, Application Services)                │
+│                     Application Layer                           │
+│           (Use Cases, DTOs, Application Services)               │
 ├─────────────────────────────────────────────────────────────────┤
-│                      Domain Layer                                │
-│   (Entities, Value Objects, Aggregates, Domain Services)         │
+│                      Domain Layer                               │
+│   (Entities, Value Objects, Aggregates, Domain Services)        │
 └─────────────────────────────────────────────────────────────────┘
 
 Dependencies point inward → Domain has NO external dependencies

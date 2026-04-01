@@ -27,16 +27,17 @@ All features work with local or remote access, via an auto-configuring Client-Se
 │  · SQLite3                  · MongoDB              · Method-based      │
 │  · PostgreSQL               · In-Memory            · Interface-based   │
 │  · MySQL/MariaDB            · Files                · Asynchronous      │
-│  · MS SQL Server                                   · Remote (SaaS)     │
-│  · Oracle                        ↓                                     │
-│  · Firebird                     ODM                      ↓             │
-│  · DB2                           ↓                      SOA            │
-│  · Informix                      │                       │             │
-│        ↓                         │                       │             │
-│       ORM ───────────────────────┴───────────────────────┘             │
-│        │                                                               │
-│        └─────────────────────────┬────────────────────────             │
-│                                  ↓                                     │
+│  · MS SQL Server                │                  · Remote (SaaS)     │
+│  · Oracle                       │                        │             │
+│  · Firebird                     │                        │             │
+│  · DB2                          │                        │             │
+│  · Informix                     │                        │             │
+│        ↓                        ↓                        ↓             │
+│       ORM                      ODM                      SOA            │
+│        ↓                        ↓                        ↓             │
+│        │                        │                        │             │
+│        └────────────────────────┬────────────────────────┘             │
+│                                 ↓                                      │
 │                            REST Server                                 │
 │                        ┌────────┴────────┐                             │
 │                        │    MVC/MVVM     │                             │

@@ -341,8 +341,8 @@ Mock.Options := [imoLogMethodCallsAndResults];
 │           │                                                     │
 │           ▼                                                     │
 │  ┌─────────────────────────────────────────┐                    │
-│  │              Log File                    │                   │
-│  │  • Automatic rotation                    │                   │
+│  │              Log File                   │                    │
+│  │  • Automatic rotation                   │                    │
 │  │  • Stack traces on errors               │                    │
 │  │  • Thread-safe writes                   │                    │
 │  └─────────────────────────────────────────┘                    │

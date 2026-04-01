@@ -11,18 +11,18 @@ The mORMot framework provides direct access to external SQL databases through th
 ### 8.1.1. SynDB Layer (mORMot 2: mormot.db.*)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────────┐
 │                     mormot.db.sql.pas                            │
 │       TSqlDBConnectionProperties (base class, virtual methods)   │
 │              TSqlDBConnection, TSqlDBStatement                   │
-└─────────────────────────────────────────────────────────────────┘ 
+└──────────────────────────────────────────────────────────────────┘ 
                               │
       ┌───────────────────────┼───────────────────────┐
       │                       │                       │
       ▼                       ▼                       ▼
 ┌─────────────┐       ┌─────────────┐       ┌─────────────┐         
-│   Direct    │       │    ODBC     │       │  TDataSet            │
-│   Access    │       │   Access    │       │   Bridge             │
+│   Direct    │       │    ODBC     │       │  TDataSet   │
+│   Access    │       │   Access    │       │   Bridge    │
 └─────────────┘       └─────────────┘       └─────────────┘         
       │                       │                       │
       ▼                       ▼                       ▼
