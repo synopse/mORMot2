@@ -84,14 +84,17 @@ type
     procedure OnShutdown; virtual; abstract;
   public
     /// initialize and bind the server instance, in non-suspended state
-    constructor Create(LogClass: TSynLogClass;
-      const BindAddress, BindPort, ProcessName: RawUtf8;
-      TimeoutMS: integer); reintroduce;
+    constructor Create(LogClass: TSynLogClass; const BindAddress, BindPort,
+      ProcessName: RawUtf8; TimeoutMS: integer); reintroduce;
     /// finalize the processing thread
     destructor Destroy; override;
     /// low-level access to the bound UDP socket (for debugging purposes)
     property Sock: TNetSocket
       read fSock;
+    property BindAddress: RawUtf8
+      read fBindAddress write fBindAddress;
+    property BindPort: RawUtf8
+      read fBindPort write fBindPort;
   published
     property IPWithPort: RawUtf8
       read GetIPWithPort;
