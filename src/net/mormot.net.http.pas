@@ -2501,12 +2501,14 @@ procedure MetricsToCsv(const Metrics: THttpAnalyzerToSaveDynArray;
 type
   /// define how GetMacAddress() makes its sorting choices
   // - used e.g. for THttpPeerCacheSettings.InterfaceFilter property
+  // - mafUpOnly will return only connected network interfaces
   // - mafEthernetOnly will only select TMacAddress.Kind = makEthernet
   // - mafLocalOnly will only select makEthernet or makWifi adapters
   // - mafRequireBroadcast won't return any TMacAddress with Broadcast = ''
   // - mafIgnoreGateway won't put the TMacAddress.Gateway <> '' first
   // - mafIgnoreKind and mafIgnoreSpeed will ignore Kind or Speed properties
   TMacAddressFilter = set of (
+    mafUpOnly,
     mafEthernetOnly,
     mafLocalOnly,
     mafRequireBroadcast,
@@ -2530,6 +2532,9 @@ const
 // to select the most suitable local interface e.g. for THttpPeerCache
 function GetMainMacAddress(out Mac: TMacAddress;
   Filter: TMacAddressFilter = []): boolean; overload;
+
+/// return an ordered list of network interfaces - as used by GetMainMacAddress()
+function GetSortedMacAddress(Filter: TMacAddressFilter): TMacAddressDynArray;
 
 /// get a network interface from its TMacAddress main fields
 // - search is case insensitive for TMacAddress.Name and Address fields or as
@@ -7518,22 +7523,20 @@ begin
     result := ComparePointer(@ma, @mb);
 end;
 
-function GetMainMacAddress(out Mac: TMacAddress; Filter: TMacAddressFilter): boolean;
+function GetSortedMacAddress(Filter: TMacAddressFilter): TMacAddressDynArray;
 var
   allowed, available: TMacAddressKinds;
-  all: TMacAddressDynArray;
   arr: TDynArray;
   i, bct: PtrInt;
 begin
-  result := false;
-  all := copy(GetMacAddresses({upanddown=}false)); // using a 65-seconds cache
-  if all = nil then
+  result := copy(GetMacAddresses(not (mafUpOnly in Filter))); // 65 secs cache
+  if result = nil then
     exit;
-  arr.Init(TypeInfo(TMacAddressDynArray), all);
+  arr.Init(TypeInfo(TMacAddressDynArray), result);
   bct := 0;
   available := [];
-  for i := 0 to high(all) do
-    with all[i] do
+  for i := 0 to high(result) do
+    with result[i] do
     begin
       include(available, Kind);
       if Broadcast <> '' then
@@ -7546,19 +7549,29 @@ begin
     allowed := [makEthernet, makWifi]
   else if mafEthernetOnly in Filter then
     include(allowed, makEthernet);
-  if (available * allowed) <> [] then // e.g. if all makUndefined
-    for i := high(all) downto 0 do
-      if not (all[i].Kind in allowed) then
+  if (available * allowed) <> [] then // e.g. if result makUndefined
+    for i := high(result) downto 0 do
+      if not (result[i].Kind in allowed) then
         arr.Delete(i);
   if (mafRequireBroadcast in Filter) and
      (bct <> 0) then
-    for i := high(all) downto 0 do
-      if all[i].Broadcast = '' then
+    for i := high(result) downto 0 do
+      if result[i].Broadcast = '' then
         arr.Delete(i);
+  if result = nil then
+    exit;
+  if length(result) > 1 then
+    arr.Sort(TSortByMacAddress(PtrUInt(byte(Filter))).Compare);
+end;
+
+function GetMainMacAddress(out Mac: TMacAddress; Filter: TMacAddressFilter): boolean;
+var
+  all: TMacAddressDynArray;
+begin
+  result := false;
+  all := GetSortedMacAddress(Filter);
   if all = nil then
     exit;
-  if length(all) > 1 then
-    arr.Sort(TSortByMacAddress(PtrUInt(byte(Filter))).Compare);
   Mac := all[0];
   result := true;
 end;
