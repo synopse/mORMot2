@@ -1769,7 +1769,9 @@ type
     /// check and decode the supplied CIDR address text from its format '1.2.3.4/24'
     // - e.g. as 32-bit 1.2.3.0 into ip and 255.255.255.0 into mask
     // - plain IP address like '1.2.3.4' will be decoded with mask=255.255.255.255
-    function From(const subnet: RawUtf8): boolean;
+    function From(const subnet: RawUtf8): boolean; overload;
+    /// fill ip/mask fields from '1.2.3.4' and '255.255.255.0' text values
+    function From(const ip4, mask4: RawUtf8): boolean; overload;
     /// check if an 32-bit IPv4 matches a decoded CIDR sub-network
     function Match(ip4: TNetIP4): boolean; overload;
       {$ifdef HASINLINE} inline; {$endif}
@@ -5664,6 +5666,13 @@ begin
     result := NetIsIP4(pointer(subnet), @ip32); // plain '1.2.3.4' IPv4 address
   end;
   ip := ip32 and mask; // normalize
+end;
+
+function TIp4SubNet.From(const ip4, mask4: RawUtf8): boolean;
+begin
+  result := NetIsIP4(pointer(ip4), @ip) and
+            NetIsIP4(pointer(mask4), @mask);
+  ip := ip and mask; // normalize
 end;
 
 function TIp4SubNet.Match(const ip4: RawUtf8): boolean;
