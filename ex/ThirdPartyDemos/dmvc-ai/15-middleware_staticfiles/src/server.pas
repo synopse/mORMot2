@@ -196,7 +196,7 @@ begin
 
   // Convert to file system path
   fileName := Utf8ToString(FileSystemPath) +
-    StringReplace(Utf8ToString(relPath), '/', '\', [rfReplaceAll]);
+    StringReplace(Utf8ToString(relPath), '/', PathDelim, [rfReplaceAll]);
 
   // If empty or ends with /, append default file
   if (relPath = '') or (relPath[Length(relPath)] = '/') then
@@ -217,7 +217,7 @@ begin
 
     // Filter may have modified the path
     fileName := Utf8ToString(FileSystemPath) +
-      StringReplace(pathInfo, '/', '\', [rfReplaceAll]);
+      StringReplace(pathInfo, '/', PathDelim, [rfReplaceAll]);
   end;
 
   // Check if file exists
@@ -322,12 +322,12 @@ begin
   fHttpServer.AccessControlAllowOrigin := '*';
 
   // Calculate paths relative to executable
-  wwwPath := IncludeTrailingPathDelimiter(
-    Executable.ProgramFilePath + '..\www\');
-  www2Path := IncludeTrailingPathDelimiter(
-    Executable.ProgramFilePath + '..\www2\');
-  www3Path := IncludeTrailingPathDelimiter(
-    Executable.ProgramFilePath + '..\www3\');
+  wwwPath :=
+    Executable.ProgramFilePath + '..' + PathDelim + 'www' + PathDelim;
+  www2Path :=
+    Executable.ProgramFilePath + '..' + PathDelim + 'www2' + PathDelim;
+  www3Path :=
+    Executable.ProgramFilePath + '..' + PathDelim + 'www3' + PathDelim;
 
   // Add static file paths (equivalent to DMVC middleware)
 
