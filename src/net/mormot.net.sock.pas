@@ -1777,8 +1777,10 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// check if a textual IPv4 matches a decoded CIDR sub-network
     function Match(const ip4: RawUtf8): boolean; overload;
-    /// return the CIDR sub-network as standard '1.2.3.4/24' text
+    /// return the CIDR sub-network as standard '1.2.3.0/24' text
     function ToShort: TShort23;
+    /// wrap IP4Broadcast(ip, mask) and Ip4Text() into e.g. '1.2.3.255' text
+    function ToBroadCast: RawUtf8;
   end;
   PIp4SubNet = ^TIp4SubNet;
 
@@ -5693,6 +5695,14 @@ begin
     exit;
   AppendShortChar('/', @result);
   AppendShortByte(prefix, @result); // in range '0'..'32'
+end;
+
+function TIp4SubNet.ToBroadCast: RawUtf8;
+var
+  b: TNetIP4;
+begin
+  b := IP4Broadcast(ip, mask);
+  IP4Text(@b, result);
 end;
 
 
