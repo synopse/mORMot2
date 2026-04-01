@@ -7,6 +7,7 @@ unit mormot.core.threads;
   *****************************************************************************
 
    High-Level Multi-Threading features shared by all framework units
+    - TThreadList thread-safe wrapper
     - IAutoFree and IAutoLocker Reference-Counted Process
     - Thread-Safe TSynQueue and TPendingTaskList
     - Thread-Safe ILockedDocVariant Storage
@@ -39,6 +40,7 @@ uses
   mormot.core.log,
   mormot.core.perf;
 
+
 {$ifndef PUREMORMOT2}
 
 const
@@ -58,12 +60,39 @@ type
 
 {$endif PUREMORMOT2}
 
-type
-  /// a dynamic array of TThread
-  TThreadDynArray = array of TThread;
 
+{ ************* TThreadList thread-safe wrapper }
+
+type
   /// exception class raised by this unit
   ESynThread = class(ESynException);
+
+  /// a dynamic array of TThread
+  TThreadDynArray = array of TThread;
+  PThreadDynArray = ^TThreadDynArray;
+
+  /// maintain a thread-safe list of TThread instances
+  {$ifdef USERECORDWITHMETHODS}
+  TThreadList = record
+  {$else}
+  TThreadList = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// make this list thread-safe
+    Safe: TLightLock;
+    /// the actual dynamic array of TThread instances
+    List: TThreadDynArray;
+    /// thread-safe add an item to the list
+    procedure Add(t: TThread);
+    /// notify the list that a thread is finished and about to be destroyed
+    procedure Terminated(t: TThread);
+    /// trigger all List^[].Terminate
+    procedure Terminate;
+    /// trigger all List^[].Terminate and wait for List^ = nil via Terminated
+    // - so each background thread should notify
+    procedure TerminateAndWait(secs: integer; sender: TObject = nil;
+      logclass: TSynLogClass = nil);
+  end;
 
 
 { ************ IAutoFree and IAutoLocker Reference-Counted Process }
@@ -1741,6 +1770,66 @@ procedure ThreadCountAdjust(var aThreadPoolCount: integer);
 
 
 implementation
+
+
+{ ************* TThreadList thread-safe wrapper }
+
+{ TThreadList }
+
+procedure TThreadList.Add(t: TThread);
+begin
+  Safe.Lock;
+  try
+    PtrArrayAdd(List, t);
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+procedure TThreadList.Terminated(t: TThread);
+begin
+  if t <> nil then
+    PtrArrayDelete(List, t, Safe);
+end;
+
+procedure TThreadList.Terminate;
+var
+  i: PtrInt;
+begin
+  Safe.Lock;
+  try
+    for i := 0 to length(List) - 1 do
+      List[i].Terminate;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+procedure TThreadList.TerminateAndWait(secs: integer;
+  sender: TObject; logclass: TSynLogClass);
+var
+  tix, endtix, lasttix: cardinal;
+  log: ISynLog;
+begin
+  if List = nil then
+    exit;
+  if logclass <> nil then
+    logclass.EnterLocal(log, sender, 'Shutdown');
+  Terminate;
+  lasttix := GetTickSec;
+  endtix := lasttix + secs; // never wait forever
+  repeat
+    SleepHiRes(10);
+    if List = nil then
+      exit; // all thread did call Terminated()
+    tix := GetTickSec;
+    if Assigned(log) and
+       (lasttix <> tix) then
+      log.Log(sllTrace, 'TerminateAndWait: threads=#', [length(List)], sender);
+    lasttix := tix;
+  until tix > endtix;
+end;
+
 
 
 { ************ IAutoFree and IAutoLocker Reference-Counted Process }

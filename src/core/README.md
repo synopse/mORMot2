@@ -252,6 +252,7 @@ Performance Monitoring functions shared by all framework units
 ### mormot.core.threads
 
 High-Level Multi-Threading features shared by all framework units
+- `TThreadList` thread-safe wrapper
 - `IAutoFree` and `IAutoLocker` Reference-Counted Process
 - Thread-Safe `TSynQueue` and `TPendingTaskList`
 - Thread-Safe `ILockedDocVariant` Storage
