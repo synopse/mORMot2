@@ -29,6 +29,8 @@ type
   TStaticFilesHttpServer = class(TRestHttpServer)
   protected
     fStaticRoots: array of record
+      // URL prefix that activates this static file serving rule (e.g. '/static/').
+      // Must always end with /, otherwise matching algorithm will make mistakes.
       UrlPath: RawUtf8;
       FileSystemPath: TFileName;
       DefaultFile: TFileName;
@@ -332,15 +334,15 @@ begin
   // Add static file paths (equivalent to DMVC middleware)
 
   // First path: /static -> www folder
-  fHttpServer.AddStaticPath('/static', StringToUtf8(wwwPath), 'index.html',
+  fHttpServer.AddStaticPath('/static/', StringToUtf8(wwwPath), 'index.html',
     False, 'UTF-8', nil, [], []);
 
   // Second path: /static2 -> www2 folder
-  fHttpServer.AddStaticPath('/static2', StringToUtf8(www2Path), 'index.html',
+  fHttpServer.AddStaticPath('/static2/', StringToUtf8(www2Path), 'index.html',
     False, 'UTF-8', nil, [], []);
 
   // Third path: /static3 -> www3 folder with custom filter and MIME types
-  fHttpServer.AddStaticPath('/static3', StringToUtf8(www3Path), 'index.html',
+  fHttpServer.AddStaticPath('/static3/', StringToUtf8(www3Path), 'index.html',
     True, 'UTF-8',
     // Custom filter: block .txt files and redirect file1.html to file2.html
     ExampleFilter,
