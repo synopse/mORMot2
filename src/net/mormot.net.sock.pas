@@ -759,15 +759,15 @@ type
     // - contains e.g. '12:50:b6:1e:c6:aa' from /sys/class/net/eth0/adddress
     // - may equal '00:00:00:00:00:00' for a non-physical interface (makSoftware)
     Address: RawUtf8;
-    /// the raw IPv4 address of this interface
+    /// the raw IPv4 address of this computer interface, e.g. '192.168.0.77'
     // - not available on Android
     IP: RawUtf8;
-    /// the raw IPv4 network mask of this interface
+    /// the raw IPv4 network mask of this interface, e.g. '255.255.255.0'
     // - not available on Android
     NetMask: RawUtf8;
-    /// the raw IPv4 broadcast address of this interface
+    /// the raw IPv4 broadcast address of this interface, e.g. '192.168.0.255'
     Broadcast: RawUtf8;
-    /// the raw IPv4 gateway address of this interface
+    /// the raw IPv4 gateway address of this interface, e.g. '192.168.0.254'
     // - not available on Windows XP or BSD
     Gateway: RawUtf8;
     {$ifdef OSWINDOWS}
@@ -4248,10 +4248,10 @@ begin
   begin
     Safe.Lock;
     try
-      if Tix <> now then
+      if Tix <> now then // need to be refreshed
       begin
         Tix := now;
-        Addresses := RetrieveMacAddresses(UpAndDown);
+        Addresses := RetrieveMacAddresses(UpAndDown); // retrieve from OS call
       end;
       result := Addresses;
     finally
