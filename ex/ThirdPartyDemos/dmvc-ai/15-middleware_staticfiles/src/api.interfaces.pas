@@ -27,4 +27,6 @@ type
 
 implementation
 
+initialization
+  TInterfaceFactory.RegisterInterfaces([TypeInfo(IApiService)]);
 end.
