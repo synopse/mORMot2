@@ -29,8 +29,8 @@ type
   TStaticFilesHttpServer = class(TRestHttpServer)
   protected
     fStaticRoots: array of record
-      // URL prefix that activates this static file serving rule (e.g. '/static/').
-      // Must always end with /, otherwise matching algorithm will make mistakes.
+      // URL prefix that activates this static file serving rule (e.g. '/static').
+      // Must never end with /, otherwise matching algorithm will make mistakes.
       UrlPath: RawUtf8;
       FileSystemPath: TFileName;
       DefaultFile: TFileName;
@@ -273,6 +273,7 @@ function TStaticFilesHttpServer.Request(
   Ctxt: THttpServerRequestAbstract): cardinal;
 var
   i: Integer;
+  UrlPathU, UrlPathUWithSlash: RawUtf8;
 begin
   // Only handle GET requests
   if Ctxt.Method = 'GET' then
@@ -280,10 +281,15 @@ begin
     // Check all registered static paths
     for i := 0 to High(fStaticRoots) do
     begin
-      if StartWith(Ctxt.Url, UpperCaseU(fStaticRoots[i].UrlPath)) then
+      UrlPathU := UpperCaseU(fStaticRoots[i].UrlPath); // e.g. '/STATIC2'
+      UrlPathUWithSlash := UrlPathU + '/'; // e.g. '/STATIC2/'
+      // Match if URL starts with UrlPathUWithSlash, or is exactly UrlPathU.
+      // This means these will work:
+      if (UpperCaseU(Ctxt.Url) = UrlPathU) or
+         StartWith(Ctxt.Url, UrlPathUWithSlash) then
       begin
         result := ServeStaticFile(Ctxt,
-          fStaticRoots[i].UrlPath,
+          UrlPathUWithSlash,
           fStaticRoots[i].FileSystemPath,
           fStaticRoots[i].DefaultFile,
           fStaticRoots[i].Charset,
@@ -334,15 +340,15 @@ begin
   // Add static file paths (equivalent to DMVC middleware)
 
   // First path: /static -> www folder
-  fHttpServer.AddStaticPath('/static/', StringToUtf8(wwwPath), 'index.html',
+  fHttpServer.AddStaticPath('/static', StringToUtf8(wwwPath), 'index.html',
     False, 'UTF-8', nil, [], []);
 
   // Second path: /static2 -> www2 folder
-  fHttpServer.AddStaticPath('/static2/', StringToUtf8(www2Path), 'index.html',
+  fHttpServer.AddStaticPath('/static2', StringToUtf8(www2Path), 'index.html',
     False, 'UTF-8', nil, [], []);
 
   // Third path: /static3 -> www3 folder with custom filter and MIME types
-  fHttpServer.AddStaticPath('/static3/', StringToUtf8(www3Path), 'index.html',
+  fHttpServer.AddStaticPath('/static3', StringToUtf8(www3Path), 'index.html',
     True, 'UTF-8',
     // Custom filter: block .txt files and redirect file1.html to file2.html
     ExampleFilter,
