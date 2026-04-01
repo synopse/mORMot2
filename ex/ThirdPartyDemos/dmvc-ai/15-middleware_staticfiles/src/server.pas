@@ -68,6 +68,7 @@ type
     fServer: TRestServerFullMemory;
     fHttpServer: TStaticFilesHttpServer;
     fPort: RawUtf8;
+    procedure ExampleFilter(var PathInfo: string; var Allow: Boolean);
   public
     constructor Create(const aPort: RawUtf8);
     destructor Destroy; override;
@@ -342,12 +343,7 @@ begin
   fHttpServer.AddStaticPath('/static3', StringToUtf8(www3Path), 'index.html',
     True, 'UTF-8',
     // Custom filter: block .txt files and redirect file1.html to file2.html
-    procedure(var PathInfo: string; var Allow: Boolean)
-    begin
-      Allow := not PathInfo.EndsWith('.txt', True);
-      if Allow and PathInfo.Contains('file1.html') then
-        PathInfo := PathInfo.Replace('file1.html', 'file2.html');
-    end,
+    ExampleFilter,
     // Custom MIME types
     ['.xpi'],
     ['application/x-xpinstall']);
@@ -359,6 +355,13 @@ begin
   fServer.Free;
   fModel.Free;
   inherited;
+end;
+
+procedure TStaticFilesSampleServer.ExampleFilter(var PathInfo: string; var Allow: Boolean);
+begin
+  Allow := not PathInfo.EndsWith('.txt', True);
+  if Allow and PathInfo.Contains('file1.html') then
+    PathInfo := PathInfo.Replace('file1.html', 'file2.html');
 end;
 
 procedure TStaticFilesSampleServer.Start;
