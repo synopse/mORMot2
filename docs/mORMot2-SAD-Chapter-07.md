@@ -21,8 +21,8 @@ The core database of the framework uses SQLite3 - a free, secure, zero-configura
      │                          │                          │
      ▼                          ▼                          ▼
 ┌─────────────┐          ┌─────────────┐          ┌─────────────┐      
-│  SQLite3    │          │ External DB │          │   NoSQL           │
-│  (native)   │          │  (via SQL)  │          │  (MongoDB)        │
+│  SQLite3    │          │ External DB │          │   NoSQL     │
+│  (native)   │          │  (via SQL)  │          │  (MongoDB)  │
 └─────────────┘          └─────────────┘          └─────────────┘      
      │                          │                          │
      ▼                          ▼                          ▼

@@ -132,23 +132,23 @@ The default authentication uses a secure two-pass challenge:
 ```
 Client                                    Server
   │                                         │
-  │  GET /auth?UserName=John               │
+  │  GET /auth?UserName=John                │
   ├────────────────────────────────────────►│
   │                                         │
-  │  {"result":"<hex_nonce>"}              │
+  │  {"result":"<hex_nonce>"}               │
   │◄────────────────────────────────────────┤
   │                                         │
-  │  GET /auth?UserName=John&              │
-  │      Password=<computed>&              │
-  │      ClientNonce=<random>              │
+  │  GET /auth?UserName=John&               │
+  │      Password=<computed>&               │
+  │      ClientNonce=<random>               │
   ├────────────────────────────────────────►│
   │                                         │
-  │  {"result":"SessionID+PrivateKey",     │
-  │   "logonname":"John"}                  │
+  │  {"result":"SessionID+PrivateKey",      │
+  │   "logonname":"John"}                   │
   │◄────────────────────────────────────────┤
   │                                         │
-  │  All requests now include:             │
-  │  ?session_signature=XXXX               │
+  │  All requests now include:              │
+  │  ?session_signature=XXXX                │
   ├────────────────────────────────────────►│
 ```
 
@@ -589,9 +589,9 @@ end;
 ### 21.10.2. Session Lifecycle
 
 ```
-┌──────────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────────┐
 │                    Session Lifecycle                          │
-├──────────────────────────────────────────────────────────────┤
+├───────────────────────────────────────────────────────────────┤
 │                                                               │
 │  Client.SetUser()  ──► Auth Request ──► Session Created       │
 │         │                                    │                │
@@ -609,7 +609,7 @@ end;
 │         │                                    ▼                │
 │         │                            Session Destroyed        │
 │         │                                                     │
-└──────────────────────────────────────────────────────────────┘
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ### 21.10.3. Session Timeout

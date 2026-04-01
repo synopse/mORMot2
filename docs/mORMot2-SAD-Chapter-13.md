@@ -136,10 +136,10 @@ OrmMapInMemory(Server.OrmInstance, TOrmCache);  // In-memory table
 ### 13.3.2. How Virtual Tables Work
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      SQLite3 Core                     │
-│  SELECT * FROM Product, User WHERE Product.UserID = Us│
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                      SQLite3 Core                       │
+│  SELECT * FROM Product, User WHERE Product.UserID = Us  │
+└─────────────────────────────────────────────────────────┘
         │                                    │
         │ Virtual Table                      │ Native Table
         ▼                                    ▼
