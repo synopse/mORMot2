@@ -2538,6 +2538,10 @@ function GetMainMacAddress(out Mac: TMacAddress;
   const InterfaceNameAddressOrIP: RawUtf8;
   UpAndDown: boolean = false): boolean; overload;
 
+/// search for a matching TMacAddress in a list - as used by GetMainMacAddress()
+function FindMacAddress(const Macs: TMacAddressDynArray;
+  const InterfaceNameAddressOrIP: RawUtf8): PMacAddress;
+
 
 
 implementation
@@ -7559,31 +7563,27 @@ begin
   result := true;
 end;
 
-function GetMainMacAddress(out Mac: TMacAddress;
-  const InterfaceNameAddressOrIP: RawUtf8; UpAndDown: boolean): boolean;
+function FindMacAddress(const Macs: TMacAddressDynArray;
+  const InterfaceNameAddressOrIP: RawUtf8): PMacAddress;
 var
   n: integer;
-  all: TMacAddressDynArray;
   mask: TIp4SubNet;
-  m, fnd: ^TMacAddress;
+  m: PMacAddress;
 begin
-  // retrieve the current network interfaces
-  result := false;
+  result := nil;
   if InterfaceNameAddressOrIP = '' then
     exit;
-  all := GetMacAddresses(UpAndDown); // from cache
-  n := length(all);
-  if n = 0 then
+  m := pointer(Macs);
+  if m = nil then
     exit;
-  m := pointer(all);
-  fnd := nil;
+  n := PDALen(PAnsiChar(m) - _DALEN)^ + _DAOFF;
   if mask.From(InterfaceNameAddressOrIP) then
     // search as IP bitmask pattern e.g. '192.168.1.0/24' or '192.168.1.13'
     repeat
       if mask.Match(m^.IP) then // e.g. 192.168.1.2 against '192.168.1.0/24'
-        if (fnd = nil) or
-           (NETHW_ORDER[m^.Kind] < NETHW_ORDER[fnd^.Kind]) then
-          fnd := m; // pickup the interface with the best hardware (paranoid)
+        if (result = nil) or
+           (NETHW_ORDER[m^.Kind] < NETHW_ORDER[result^.Kind]) then
+          result := m; // pickup the interface with the best hardware (paranoid)
       inc(m);
       dec(n);
     until n = 0
@@ -7593,16 +7593,28 @@ begin
       if IdemPropNameU(m^.Name,    InterfaceNameAddressOrIP) or
          IdemPropNameU(m^.Address, InterfaceNameAddressOrIP) then
       begin
-        fnd := m;
+        result := m;
         break;
       end;
       inc(m);
       dec(n);
     until n = 0;
-  if fnd = nil then
-    exit;
-  Mac := fnd^;
-  result := true;
+end;
+
+function GetMainMacAddress(out Mac: TMacAddress;
+  const InterfaceNameAddressOrIP: RawUtf8; UpAndDown: boolean): boolean;
+var
+  m: PMacAddress;
+begin
+  // retrieve and filter the current network interfaces
+  m := FindMacAddress(GetMacAddresses(UpAndDown), InterfaceNameAddressOrIP);
+  if m <> nil then
+  begin
+    Mac := m^;
+    result := true;
+  end
+  else
+    result := false;
 end;
 
 procedure _GlobalInfoNet(Sender: TBinDictionary);
