@@ -278,7 +278,7 @@ begin
     // Check all registered static paths
     for i := 0 to High(fStaticRoots) do
     begin
-      if IdemPChar(pointer(Ctxt.Url), pointer(fStaticRoots[i].UrlPath)) then
+      if StartWith(Ctxt.Url, UpperCaseU(fStaticRoots[i].UrlPath)) then
       begin
         result := ServeStaticFile(Ctxt,
           fStaticRoots[i].UrlPath,
