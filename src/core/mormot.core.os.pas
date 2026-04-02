@@ -8587,7 +8587,7 @@ begin
     result := 0;
 end;
 
-function GetSystemInfoText: RawUtf8;
+function _GetSystemInfoText(notused: pointer): RawUtf8;
 var
   avail, free, total: QWord;
 begin
@@ -8603,6 +8603,12 @@ end;
 
 var
   _Shell: RawUtf8;
+  _SystemInfoText: TCachedValue;
+
+function GetSystemInfoText: RawUtf8;
+begin
+  _SystemInfoText.Cache(@_GetSystemInfoText, nil, 0, result); // 1 second cache
+end;
 
 function GetSystemShell: RawUtf8;
 begin
