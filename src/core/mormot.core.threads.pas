@@ -1816,8 +1816,10 @@ begin
   if logclass <> nil then
     logclass.EnterLocal(log, sender, 'Shutdown');
   Terminate;
+  if secs <= 0 then
+    exit;
   lasttix := GetTickSec;
-  endtix := lasttix + secs; // never wait forever
+  endtix := lasttix + cardinal(secs); // never wait forever
   repeat
     SleepHiRes(10);
     if List = nil then
