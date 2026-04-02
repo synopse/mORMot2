@@ -4156,11 +4156,7 @@ end;
 
 var
   // GetIPAddressesText(Sep=' ') cache - refreshed every 32 seconds
-  IPAddresses: array[TIPAddress] of record
-    Safe: TLightLock;
-    Text: RawUtf8;
-    Tix: integer;
-  end;
+  IPAddresses: array[TIPAddress] of TCachedValue;
 
   // GetMacAddresses / GetMacAddressesText cache - refreshed every 65 seconds
   MacAddresses: array[{UpAndDown=}boolean] of record
@@ -4176,16 +4172,7 @@ var
   ud: boolean;
 begin
   for ip := low(ip) to high(ip) do
-    with IPAddresses[ip] do
-    begin
-      Safe.Lock;
-      try
-        Text := '';
-        Tix := 0;
-      finally
-        Safe.UnLock;
-      end;
-    end;
+    IPAddresses[ip].Reset;
   for ud := low(ud) to high(ud) do
     with MacAddresses[ud] do
     begin
@@ -4201,47 +4188,37 @@ begin
     end;
 end;
 
-procedure GetIPCSV(const Sep: RawUtf8; Kind: TIPAddress; out Text: RawUtf8);
+type
+  TGetIPAddressesText = record Sep: pointer; Kind: TIPAddress; end;
+  PGetIPAddressesText = ^TGetIPAddressesText;
+
+function _IpCsvRetrieve(p: PGetIPAddressesText): RawByteString;
 var
   ip: TRawUtf8DynArray;
   i: PtrInt;
 begin
-  ip := GetIPAddresses(Kind); // from OS
+  FastAssignNew(result);
+  ip := GetIPAddresses(p^.Kind); // from OS
   if ip = nil then
     exit;
-  Text := ip[0];
+  result := ip[0];
   for i := 1 to high(ip) do
-    Text := Text + Sep + ip[i]; // as CSV
+    result := Join([result, RawUtf8(p^.Sep), ip[i]]); // as CSV
 end;
 
 function GetIPAddressesText(const Sep: RawUtf8; Kind: TIPAddress): RawUtf8;
 var
-  now: integer;
+  p: TGetIPAddressesText;
 begin
-  result := '';
+  FastAssignNew(result);
+  p.Sep := pointer(Sep);
+  p.Kind := Kind;
   if Sep = ' ' then
-    with IPAddresses[Kind] do
-    begin
-      now := GetTickSec shr 5 + 1; // refresh every 32s
-      Safe.Lock;
-      try
-        if now <> Tix then
-          Tix := now
-        else
-        begin
-          result := Text;
-          if result <> '' then
-            exit; // return the value from cache
-        end;
-        GetIPCSV(Sep, Kind, result); // ask the OS for the current IP addresses
-        Text := result;
-      finally
-        Safe.UnLock;
-      end;
-    end
+    // retrieve from OS or from cache
+    IPAddresses[Kind].Cache(@_IpCsvRetrieve, @p, 5, result)
   else
     // Sep <> ' ' -> can't use the cache, so don't need to lock
-    GetIPCSV(Sep, Kind, result);
+    result := _IpCsvRetrieve(@p);
 end;
 
 function GetMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
@@ -4409,7 +4386,7 @@ begin
     result[0] := ForcedDomainName;
   end
   else
-    result := _GetDnsAddresses(usePosixEnv, {getAD=}true); // no cache for the AD
+    result := _GetDnsAddresses(usePosixEnv, {getAD=}true);
 end;
 
 var
