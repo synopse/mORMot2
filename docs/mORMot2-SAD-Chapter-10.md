@@ -102,7 +102,7 @@ begin
   // Result: {"Name":"John","Age":30,"Email":"john@example.com"}
 
   // JSON to Record
-  RecordLoadJson(Person, pointer(json), TypeInfo(TPerson));
+  RecordLoadJson(Person, json, TypeInfo(TPerson));
 end;
 ```
 
@@ -125,7 +125,7 @@ begin
   // Result: [{"Name":"John",...},{"Name":"Jane",...}]
 
   // JSON to Array
-  DynArrayLoadJson(People, pointer(json), TypeInfo(TPersonArray));
+  DynArrayLoadJson(People, json, TypeInfo(TPersonArray));
 end;
 ```
 
@@ -249,7 +249,7 @@ begin
   // Result: {"ID":0,"Name":"ACME Corp","Email":"contact@acme.com"}
 
   // Selected fields only
-  json := Customer.GetJsonValues(True, True, ooSelect, 'Name,Email');
+  json := Customer.GetJsonValues(True, True, 'Name,Email');
 end;
 ```
 
@@ -439,7 +439,7 @@ end;
 |---------|---------------|
 | JSON parsing | `mormot.core.json` |
 | TDocVariant | `mormot.core.variants` |
-| Record serialization | `mormot.core.rtti` |
+| Record serialization | `mormot.core.json` |
 | REST HTTP client/server | `mormot.rest.http.client` / `mormot.rest.http.server` |
 
 ---
