@@ -116,7 +116,9 @@ mormot.core.base (RTL types, ASM stubs, no dependencies)
 | `mormot.core.os.mac` | macOS platform support | macOS-specific implementations |
 | `mormot.core.unicode` | Charset conversion | `Utf8ToWideString`, `WinAnsiToUtf8` |
 | `mormot.core.text` | Text processing | `FormatUtf8`, CSV parsing |
+| `mormot.core.datetime` | Date/time types and ISO-8601 | `TTimeLog`, ISO-8601 helpers |
 | `mormot.core.rtti` | RTTI abstraction | `TRttiCustom`, `PRttiInfo` |
+| `mormot.core.buffers` | Low-level memory buffers | compression, base64, binary helpers |
 | `mormot.core.json` | JSON handling | `TJsonWriter`, `GetJsonField` |
 | `mormot.core.data` | Data structures | `TDynArray`, `TDynArrayHashed` |
 | `mormot.core.collections` | Advanced collection types | Collection algorithms |
@@ -137,10 +139,11 @@ mormot.core.base (RTL types, ASM stubs, no dependencies)
 
 ```pascal
 uses
-  mormot.core.base,    // Foundation types
-  mormot.core.os,      // OS abstraction
-  mormot.core.text,    // Text utilities
-  mormot.core.json;    // JSON support
+  mormot.core.base,     // Foundation types
+  mormot.core.os,       // OS abstraction
+  mormot.core.text,     // Text utilities
+  mormot.core.variants, // TDocVariantData
+  mormot.core.json;     // JSON support
 
 var
   doc: TDocVariantData;
@@ -189,6 +192,7 @@ end;
 | `mormot.crypt.jwt` | JSON Web Tokens |
 | `mormot.crypt.x509` | X.509 certificates |
 | `mormot.crypt.openssl` | OpenSSL wrapper |
+| `mormot.crypt.pkcs11` | Hardware Security Module (HSM) via PKCS#11 |
 | `mormot.crypt.other` | Additional cryptographic utilities |
 
 ### Cryptography Factory Pattern
@@ -216,7 +220,7 @@ end;
 
 ## 3.5. Layer 2: Networking (mormot.net.*)
 
-**18 units** for network communication:
+**19 units** for network communication:
 
 ### Socket & HTTP
 
@@ -244,6 +248,7 @@ end;
 | `mormot.net.dns` | DNS resolution |
 | `mormot.net.ldap` | LDAP client |
 | `mormot.net.acme` | ACME/Let's Encrypt |
+| `mormot.net.dhcp` | DHCP server implementation |
 | `mormot.net.relay` | Firewall traversal |
 | `mormot.net.openapi` | OpenAPI client generator |
 | `mormot.net.tftp.client` | TFTP client implementation |
@@ -285,6 +290,7 @@ end;
 | `mormot.db.sql.oracle` | Oracle |
 | `mormot.db.sql.odbc` | Any ODBC source |
 | `mormot.db.sql.oledb` | Any OLE DB source |
+| `mormot.db.sql.ibx` | Firebird via IBX/FB Pascal API |
 | `mormot.db.sql.zeos` | Via ZDBC (cross-database) |
 
 ### NoSQL
