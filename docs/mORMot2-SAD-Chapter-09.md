@@ -89,7 +89,7 @@ Client := TMongoClient.Create('localhost', 27017);
 // Write concern settings
 Client.WriteConcern := wcAcknowledged;      // Default - wait for ack
 Client.WriteConcern := wcUnacknowledged;    // Fire and forget (fastest)
-Client.WriteConcern := wcMajority;          // Wait for majority
+Client.WriteConcern := wcJournaled;         // Wait for journal sync
 
 // Read preference
 Client.ReadPreference := rpPrimary;         // Always read from primary
@@ -305,9 +305,10 @@ Coll.Update(
 **Update multiple documents:**
 ```pascal
 // Set all inactive users to archived
-Coll.UpdateMany(
+Coll.Update(
   '{status:?}', ['inactive'],
-  '{$set:{archived:?}}', [True]
+  '{$set:{archived:?}}', [True],
+  [mufMultiUpdate]  // Update all matching documents
 );
 ```
 
@@ -336,7 +337,7 @@ Coll.Remove('{status:?}', ['deleted']);  // Delete all matching
 **Bulk delete:**
 ```pascal
 var
-  IDs: TBsonObjectIDDynArray;
+  IDs: TVariantDynArray;
 begin
   // Much faster than individual deletes
   Coll.Remove('{_id:{$in:?}}', [IDs]);
@@ -406,7 +407,7 @@ Coll.FindDocs('{items:{$elemMatch:{qty:{$gt:?},price:{$lt:?}}}}', [10, 100], Doc
 
 ```pascal
 // Create text index first
-Coll.EnsureIndex('{content:"text"}');
+Coll.EnsureIndex(BsonVariant('{content:"text"}'), null);
 
 // Text search
 Coll.FindDocs('{$text:{$search:?}}', ['mongodb tutorial'], Docs);
@@ -437,9 +438,9 @@ begin
   // Create server first
   Server := TRestServerDB.Create(Model, ':memory:');
 
-  // Map classes to MongoDB (signature: aClass, aServer, aMongoDatabase, aCollectionName)
-  OrmMapMongoDB(TOrmCustomer, Server, Client.Database['mydb'], 'customers');
-  OrmMapMongoDB(TOrmOrder, Server, Client.Database['mydb'], 'orders');
+  // Map classes to MongoDB (signature: aClass, aServer.OrmInstance, aMongoDatabase, aCollectionName)
+  OrmMapMongoDB(TOrmCustomer, Server.OrmInstance, Client.Database['mydb'], 'customers');
+  OrmMapMongoDB(TOrmOrder, Server.OrmInstance, Client.Database['mydb'], 'orders');
 end;
 ```
 
@@ -502,18 +503,18 @@ For advanced queries, use direct MongoDB access:
 ```pascal
 var
   Coll: TMongoCollection;
-  Docs: TVariantDynArray;
+  Json: RawUtf8;
 begin
   // Get underlying collection
   Coll := TRestStorageMongoDB(
-    Server.StaticDataServer[TOrmArticle]).Collection;
+    Server.OrmInstance.GetStaticStorage(TOrmArticle)).Collection;
 
-  // Complex aggregation
-  Coll.AggregateJson([
-    '{$match:{status:"published"}}',
-    '{$group:{_id:"$author",count:{$sum:1}}}',
-    '{$sort:{count:-1}}'
-  ], Docs);
+  // Complex aggregation - operators passed as comma-separated JSON objects
+  Json := Coll.AggregateJson(
+    '{$match:{status:"published"}},' +
+    '{$group:{_id:"$author",count:{$sum:1}}},' +
+    '{$sort:{count:-1}}',
+    []);
 end;
 ```
 
@@ -525,25 +526,29 @@ end;
 
 ```pascal
 var
-  Results: TVariantDynArray;
+  Pipeline: variant;
+  Results: variant;
+  i: Integer;
 begin
-  Coll.AggregateDoc([
+  Pipeline := _Arr([
     // Stage 1: Filter
-    _ObjFast(['$match', _Obj(['status', 'active'])]),
+    _ObjFast(['$match', _ObjFast(['status', 'active'])]),
 
     // Stage 2: Group and count
-    _ObjFast(['$group', _Obj([
+    _ObjFast(['$group', _ObjFast([
       '_id', '$category',
-      'total', _Obj(['$sum', 1]),
-      'avgPrice', _Obj(['$avg', '$price'])
+      'total', _ObjFast(['$sum', 1]),
+      'avgPrice', _ObjFast(['$avg', '$price'])
     ])]),
 
     // Stage 3: Sort
-    _ObjFast(['$sort', _Obj(['total', -1])])
-  ], Results);
+    _ObjFast(['$sort', _ObjFast(['total', -1])])
+  ]);
+  Results := Coll.AggregateDocFromVariant(Pipeline);
 
-  for Doc in Results do
-    WriteLn(Doc._id, ': ', Doc.total, ' items, avg $', Doc.avgPrice);
+  with _Safe(Results)^ do
+    for i := 0 to Count - 1 do
+      WriteLn(Values[i]._id, ': ', Values[i].total, ' items, avg $', Values[i].avgPrice);
 end;
 ```
 
@@ -568,27 +573,36 @@ end;
 
 ```pascal
 // Single field index
-Coll.EnsureIndex('{email:1}');  // 1 = ascending
+Coll.EnsureIndex(BsonVariant('{email:1}'), null);  // 1 = ascending
 
 // Compound index
-Coll.EnsureIndex('{status:1,created:-1}');
+Coll.EnsureIndex(BsonVariant('{status:1,created:-1}'), null);
 
-// Unique index
-Coll.EnsureIndex('{email:1}', [ifoUnique]);
+// Unique index - pass options as a variant document
+Coll.EnsureIndex(BsonVariant('{email:1}'),
+  BsonVariant('{unique:true}'));
 
 // Text index
-Coll.EnsureIndex('{title:"text",content:"text"}');
+Coll.EnsureIndex(BsonVariant('{title:"text",content:"text"}'), null);
 
 // TTL index (auto-delete after time)
-Coll.EnsureIndex('{createdAt:1}', [ifoExpireAfterSeconds], 3600);
+Coll.EnsureIndex(BsonVariant('{createdAt:1}'),
+  BsonVariant('{expireAfterSeconds:3600}'));
 ```
 
 ### 9.8.2. Index Hints
 
+MongoDB index selection is typically handled automatically by the query optimizer. For specific index selection in mORMot2, use `RunCommand` directly with the `find` command and the `hint` field:
+
 ```pascal
-// Force index usage
-Coll.FindJson('{status:?}', ['active'], '',
-  '{$hint:{status:1}}');  // Use status index
+var
+  Res: variant;
+begin
+  // Force index usage via RunCommand
+  DB.RunCommand(BsonVariant(
+    '{find:?,filter:{status:?},hint:{status:1}}',
+    [], ['mycollection', 'active']), Res);
+end;
 ```
 
 ---
@@ -622,15 +636,14 @@ end;
 
 ```pascal
 // 1. Use projections to limit returned fields
-Coll.FindJson('{status:?}', ['active'], '{name:1,email:1}');
+Coll.FindJson('{status:?}', ['active'], BsonVariant('{name:1,email:1}'));
 
 // 2. Use covered queries (all fields in index)
-Coll.EnsureIndex('{email:1,name:1}');
-Coll.FindJson('{email:?}', ['john@example.com'], '{email:1,name:1,_id:0}');
+Coll.EnsureIndex(BsonVariant('{email:1,name:1}'), null);
+Coll.FindJson('{email:?}', ['john@example.com'], BsonVariant('{email:1,name:1,_id:0}'));
 
-// 3. Use cursor batching for large result sets
-Cursor := Coll.Find(Query, nil, [mqfNoCursorTimeout]);
-Cursor.BatchSize := 1000;
+// 3. Use pagination for large result sets
+Coll.FindJson('{status:?}', ['active'], null, 1000, 0);  // 1000 docs per page
 ```
 
 ### 9.9.3. Index Strategies
