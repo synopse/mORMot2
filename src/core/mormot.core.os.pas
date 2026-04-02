@@ -4972,6 +4972,23 @@ type
 function NewSynLocker: PSynLocker;
 
 type
+  TCachedValueCall = function(Param: pointer): RawByteString;
+  /// raw thread-safe cache of a RawByteString content
+  {$ifdef USERECORDWITHMETHODS}
+  TCachedValue = record
+  {$else}
+  TCachedValue = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    Safe: TLightLock;
+    Tix32: cardinal;
+    Value: RawByteString;
+    procedure Reset;
+    procedure Cache(Call: TCachedValueCall; CallParam: pointer; TixShr: cardinal;
+      var Dest; Flush: boolean = false);
+  end;
+
+type
   /// a thread-safe Pierre L'Ecuyer gsl_rng_taus2 software random generator
   // - just wrap a TLecuyer generator with a TLighLock in a 20-24 bytes structure
   // - as used by SharedRandom to implement Random32/RandomBytes/... functions
@@ -10388,6 +10405,37 @@ begin
   repeat
     spin := DoSpin(spin);
   until TryLock;
+end;
+
+
+{ TCachedValue }
+
+procedure TCachedValue.Reset;
+begin
+  Safe.Lock;
+  Tix32 := 0;
+  FastAssignNew(Value);
+  Safe.UnLock;
+end;
+
+procedure TCachedValue.Cache(Call: TCachedValueCall; CallParam: pointer;
+  TixShr: cardinal; var Dest; Flush: boolean);
+begin
+  TixShr := (GetTickSec shr TixShr) + 1; // big shr may get 0 just after boot
+  Safe.Lock;
+  if (TixShr = Tix32) and
+     not Flush then
+  begin
+    RawByteString(Dest) := Value;
+    Safe.UnLock;
+    exit;
+  end;
+  Safe.UnLock;
+  RawByteString(Dest) := Call(CallParam);
+  Safe.Lock;
+  Tix32 := TixShr;
+  Value := RawByteString(Dest);
+  Safe.UnLock;
 end;
 
 
