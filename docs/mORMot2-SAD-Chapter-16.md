@@ -343,7 +343,7 @@ end;
 
 ### 16.6.1. Automatic Contract Hash
 
-By default, mORMot generates an MD5 hash of the interface signature:
+By default, mORMot generates a combined hash (Hash32 + CRC32) of the interface signature:
 - Method names
 - Parameter types and directions
 - Return types
@@ -355,9 +355,8 @@ If client and server contracts don't match, connection fails with a clear error.
 For explicit version control:
 
 ```pascal
-// Server
-Server.ServiceRegister(TMyService, [TypeInfo(IMyService)], sicShared)
-  .SetOptions([], 'v2.5');  // Contract = 'v2.5'
+// Server: pass the contract string as the last parameter to ServiceRegister
+Server.ServiceRegister(TMyService, [TypeInfo(IMyService)], sicShared, 'v2.5');
 
 // Client must match
 Client.ServiceRegister([TypeInfo(IMyService)], sicShared, 'v2.5');
@@ -383,8 +382,8 @@ begin
   // Deny all by default
   Factory.DenyAll;
 
-  // Allow specific groups by ID
-  Factory.Allow(ICalculator, [ADMIN_GROUP_ID]);
+  // Allow all methods for specific groups by ID
+  Factory.AllowAllByID([ADMIN_GROUP_ID]);
 
   // Allow specific methods for other groups by name
   // Note: AllowByName takes group names (RawUtf8), not IDs
@@ -403,9 +402,9 @@ Server.ServiceMethodByPassAuthentication('Calculator.GetVersion');
 ### 16.7.3. Execution Options
 
 ```pascal
-Factory.SetOptions([optExecInMainThread]);  // Execute in main VCL thread
-Factory.SetOptions([optFreeInMainThread]);  // Free instance in main thread
-Factory.SetOptions([optExecInPerInterfaceThread]);  // Dedicated thread per interface
+Factory.SetOptions([], [optExecInMainThread]);  // Execute in main VCL thread
+Factory.SetOptions([], [optFreeInMainThread]);  // Free instance in main thread
+Factory.SetOptions([], [optExecInPerInterfaceThread]);  // Dedicated thread per interface
 ```
 
 ---
@@ -415,7 +414,7 @@ Factory.SetOptions([optExecInPerInterfaceThread]);  // Dedicated thread per inte
 ### 16.8.1. Enabling Logging
 
 ```pascal
-Factory.SetServiceLog(Server, TOrmServiceLog);
+Factory.SetServiceLog([], Server, TOrmServiceLog);
 ```
 
 This logs:
@@ -434,7 +433,7 @@ type
     property CustomField: RawUtf8 read fCustomField write fCustomField;
   end;
 
-Factory.SetServiceLog(Server, TOrmMyServiceLog);
+Factory.SetServiceLog([], Server, TOrmMyServiceLog);
 ```
 
 ---
@@ -585,10 +584,10 @@ uses
   mormot.soa.codegen;
 
 var
-  Context: TDocVariantData;
+  Context: variant;
 begin
-  // Extract ORM and SOA metadata as JSON
-  Context := ContextFromModel(Server.Model, Server.Services);
+  // Extract ORM and SOA metadata as JSON (pass the TRestServer directly)
+  Context := ContextFromModel(Server);
 
   // Context now contains:
   // - All TOrm classes with properties
@@ -600,23 +599,22 @@ end;
 
 ### 16.11.3. Generating Client Code
 
+`WrapperFromModel` takes a Mustache template content string (not a template name). You must supply the template file content yourself:
+
 ```pascal
 var
   Output: RawUtf8;
+  Template: RawUtf8;
 begin
-  // Generate using built-in template
-  Output := WrapperFromModel(
-    Server.Model,
-    Server.Services,
-    'delphi'  // Template name: 'delphi', 'javascript', 'typescript'
-  );
+  // Load a Mustache template file (e.g. FPC-mORMotInterfaces.pas.mustache)
+  Template := RawUtf8FromFile('MyTemplate.mustache');
 
-  // Or use custom Mustache template
+  // Generate using the Mustache template
   Output := WrapperFromModel(
-    Server.Model,
-    Server.Services,
-    '',                          // No built-in template
-    FileToString('MyTemplate.mustache')  // Custom template
+    Server,          // TRestServer (not Server.Model or Server.Services)
+    Template,        // Mustache template content
+    'MyClient',      // Filename hint, available as {{filename}} in template
+    8080             // HTTP port, available as {{port}} in template
   );
 
   // Save generated code
@@ -624,13 +622,9 @@ begin
 end;
 ```
 
-### 16.11.4. Built-in Templates
+### 16.11.4. Mustache Templates
 
-| Template | Output | Use Case |
-|----------|--------|----------|
-| `delphi` | `.pas` unit | Native Delphi/FPC client |
-| `javascript` | `.js` file | Browser/Node.js client |
-| `typescript` | `.ts` file | TypeScript projects |
+There are no built-in template names such as `'delphi'` or `'javascript'`. Client code generation uses external `.mustache` template files. Pass the template content string directly to `WrapperFromModel`. Example template files (e.g. `FPC-mORMotInterfaces.pas.mustache`) can be found in the mORMot repository examples.
 
 ### 16.11.5. Async Interface Generation
 
@@ -651,20 +645,24 @@ type
 //   end;
 ```
 
-### 16.11.6. REST API Documentation
+### 16.11.6. OpenAPI/Swagger Client Generation
 
-Generate OpenAPI/Swagger documentation:
+Note: `mormot.net.openapi` is a **parser** that reads existing OpenAPI/Swagger specifications and generates Pascal client code from them. It does **not** generate OpenAPI specs from mORMot models. Use it to consume third-party APIs described in OpenAPI format:
 
 ```pascal
 uses
   mormot.net.openapi;
 
 var
-  OpenAPI: TDocVariantData;
+  Parser: TOpenApiParser;
 begin
-  // Generate OpenAPI 3.0 spec from model
-  OpenAPI := OpenAPIFromModel(Server.Model, Server.Services);
-  FileFromString(OpenAPI.ToJson('', '', jsonHumanReadable), 'api-spec.json');
+  Parser := TOpenApiParser.Create('MyApi');
+  try
+    Parser.ParseFile('api-spec.json');  // Parse an existing OpenAPI spec file
+    Parser.ExportToDirectory('generated/');  // Generate Pascal client units
+  finally
+    Parser.Free;
+  end;
 end;
 ```
 
