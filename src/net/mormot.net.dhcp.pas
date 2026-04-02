@@ -5137,6 +5137,7 @@ var
   tix32, n: cardinal;
   total, saved: integer;
   csv: boolean;
+  sll: TSynLogLevel;
   s: PDhcpScope;
   start: Int64;
   tmp: TShort31;
@@ -5167,19 +5168,21 @@ begin
     if result <> 0 then
       inc(fModifSequence); // trigger SaveToFile() below
     // background persist into FileName and MetricsFolder if needed
+    sll := sllTrace;
     tmp[0] := #0;
     if (fFileName <> '') and
-       (fFileFlushSeconds <> 0) and         // = 0 if disabled
+       (fFileFlushSeconds <> 0) and         // = 0 if disabled, 30 secs default
        (fModifSaved <> fModifSequence) then // if something new to be written
       if tix32 >= fFileFlushTix then        // reached the next persistence time
       begin
-        fFileFlushTix := tix32 + fFileFlushSeconds;  // every 30 secs by default
-        QueryPerformanceMicroSeconds(start);         // saved=100000 in 5.65ms
+        fFileFlushTix := tix32 + fFileFlushSeconds;
+        QueryPerformanceMicroSeconds(start);
         saved := SaveToFile(fFileName); // make fScopeSafe.ReadLock/ReadUnLock
         FormatShort(' saved=% in %', [saved, MicroSecFrom(start)], tmp);
-        // notes: 1) do not aggressively retry if saved < 0 (write failed)
-        //        2) no background thread needed - SaveToFile() takes only
-        //           5.65ms with 100K leases for a 4.2MB text file
+        if saved < 0 then    // write failed
+          sll := sllWarning; // do not aggressively retry, but log something
+        // note: no background thread needed - SaveToFile() takes only 5.65ms
+        // with 100K leases for a 4.2MB text file
         if fMetricsFolder <> '' then
         begin
           csv := tix32 >= fMetricsCsvTix;
@@ -5197,7 +5200,7 @@ begin
   // - we mitigate aggressive clients via the RateLimit counter anyway
   if Assigned(fLog) and
      ((result or saved) <> 0) then
-    fLog.Add.Log(sllTrace, 'OnIdle: outdated=%/%%', [result, total, tmp], self);
+    fLog.Add.Log(sll, 'OnIdle: outdated=%/%%', [result, total, tmp], self);
 end;
 
 function TDhcpProcess.SaveToText(SavedCount: PInteger): RawUtf8;
