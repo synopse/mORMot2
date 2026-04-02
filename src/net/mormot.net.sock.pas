@@ -632,7 +632,7 @@ function IP4Match(const ip4, subnet: RawUtf8): boolean;
 // - by design, both 0.0.0.0 and 127.0.0.1 always return false
 function IP4Filter(ip4: TNetIP4; filter: TIPAddress): boolean;
 
-/// convert an IPv4 raw value into a ShortString text
+/// convert an IPv4 raw value into a ShortString text (and hidden ending #0)
 // - won't use the Operating System network layer API so works on XP too
 // - zero is returned as '0.0.0.0' and loopback as '127.0.0.1'
 procedure IP4Short(ip4addr: PByteArray; var s: TShort16);
@@ -642,7 +642,7 @@ procedure IP4Short(ip4addr: PByteArray; var s: TShort16);
 function IP4ToShort(ip4addr: PByteArray): TShort16;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// append an IPv4 raw value into a text memory buffer
+/// append an IPv4 raw value (and ending #0) into a text memory buffer
 function IP4TextAppend(ip4addr: PByteArray; dest: PAnsiChar): PAnsiChar;
 
 /// convert an IPv4 raw value into a RawUtf8 text
@@ -1778,7 +1778,8 @@ type
     /// check if a textual IPv4 matches a decoded CIDR sub-network
     function Match(const ip4: RawUtf8): boolean; overload;
     /// return the CIDR sub-network as standard '1.2.3.0/24' text
-    function ToShort: TShort23;
+    // - or as file-compatible name, e.g. '1-2-3-0_24'
+    function ToShort(filecompatible: boolean = false): TShort23;
     /// wrap IP4Broadcast(ip, mask) and Ip4Text() into e.g. '1.2.3.255' text
     function ToBroadCast: RawUtf8;
   end;
@@ -5685,15 +5686,29 @@ begin
             Match(ip32{%H-});
 end;
 
-function TIp4SubNet.ToShort: TShort23;
+function TIp4SubNet.ToShort(filecompatible: boolean): TShort23;
 var
   prefix: cardinal;
+  p: PAnsiChar;
+  c: AnsiChar;
 begin
   IP4Short(@ip, result);
+  if filecompatible then
+  begin
+    p := @result;
+    repeat
+      if p^ = '.' then
+        p^ := '-';
+      inc(p);
+    until p^ = #0;
+  end;
   prefix := IP4Prefix(mask);
   if prefix = 0 then
     exit;
-  AppendShortChar('/', @result);
+  c := '/';
+  if filecompatible then
+    c := '_';
+  AppendShortChar(c, @result);
   AppendShortByte(prefix, @result); // in range '0'..'32'
 end;
 
