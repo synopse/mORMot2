@@ -1069,9 +1069,10 @@ function HashDigestEqual(const a, b: THashDigest): boolean;
 function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUtf8; overload;
 
 /// compute one or several hexadecimal hash(es) of any (big) file
-// - using a temporary buffer of 1MB for the sequential reading
+// - using a temporary buffer of 1MB for the sequential one-pass reading
 // - returns the hash in THashAlgo type definition order in aAlgos set
-function HashFileRaw(const aFileName: TFileName; aAlgos: THashAlgos): TRawUtf8DynArray;
+function HashFileRaw(const aFileName: TFileName; aAlgos: THashAlgos;
+  aFileSize: PInt64 = nil): TRawUtf8DynArray;
 
 /// compute the hexadecimal hashe(s) of one file, as external .md5/.sha256/.. files
 // - generate the text hash files in the very same folder
@@ -4672,7 +4673,8 @@ begin
   result := hasher.Full(aAlgo, pointer(aBuffer), length(aBuffer));
 end;
 
-function HashFileRaw(const aFileName: TFileName; aAlgos: THashAlgos): TRawUtf8DynArray;
+function HashFileRaw(const aFileName: TFileName; aAlgos: THashAlgos;
+  aFileSize: PInt64): TRawUtf8DynArray;
 var
   hasher: array of TSynHasher;
   temp: RawByteString;
@@ -4683,6 +4685,8 @@ var
   h: PtrInt;
 begin
   result := nil;
+  if aFileSize <> nil then
+    aFileSize^ := 0;
   if aFileName = '' then
     exit;
   n := 0;
@@ -4702,6 +4706,8 @@ begin
         else
           exit;
     size := FileSize(F);
+    if aFileSize <> nil then
+      aFileSize^ := size;
     tempsize := 1 shl 20; // 1MB temporary buffer for reading seems good enough
     if tempsize > size then
       tempsize := size;
@@ -4716,7 +4722,7 @@ begin
         hasher[h].Update(pointer(temp), read);
       dec(size, read);
     end;
-    SetLength(result, n + 1);
+    SetLength(result, n + 1); // don't return any partial hash result
     for h := 0 to n do
       hasher[h].Final(result[h]);
   finally
