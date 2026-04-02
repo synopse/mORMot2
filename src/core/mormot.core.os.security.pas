@@ -6921,6 +6921,7 @@ var
   files: TRawUtf8DynArray;
   f: PtrInt;
 begin
+  FastAssignNew(result);
   // see https://go.dev/src/crypto/x509/root_unix.go as reference
   case CertStore of
     scsRoot:
@@ -6965,10 +6966,7 @@ end;
 
 var
   OSSafe: TLightLock; // when GlobalLock is overkill
-  _OneSystemStoreAsPem: array[TSystemCertificateStore] of record
-    Tix: cardinal;
-    Pem: RawUtf8;
-  end;
+  _OneSystemStoreAsPem: array[TSystemCertificateStore] of TCachedValue;
   _SystemStoreAsPem: record
     Tix: cardinal;
     Scope: TSystemCertificateStores;
@@ -6976,29 +6974,10 @@ var
   end;
 
 function GetOneSystemStoreAsPem(CertStore: TSystemCertificateStore;
-  FlushCache: boolean; now: cardinal): RawUtf8;
+  FlushCache: boolean): RawUtf8;
 begin
-  if now = 0 then
-    now := GetTickSec shr 8 + 1; // every 256s = 4 min
-  OSSafe.Lock;
-  try
-    // first search if not already in cache
-    with _OneSystemStoreAsPem[CertStore] do
-    begin
-      if not FlushCache then
-        if Tix = now then
-        begin
-          result := Pem; // quick retrieved from cache
-          exit;
-        end;
-      // fallback search depending on the POSIX / Windows specific OS
-      result := _GetSystemStoreAsPem(CertStore); // implemented in each .inc
-      Tix := now;
-      Pem := result;
-    end;
-  finally
-    OSSafe.UnLock;
-  end;
+  _OneSystemStoreAsPem[CertStore].Cache(@_GetSystemStoreAsPem,
+    pointer(CertStore), 8, result, FlushCache); // every 256s = 4 min
 end;
 
 function GetSystemStoreAsPem(CertStores: TSystemCertificateStores;
