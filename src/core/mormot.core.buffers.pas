@@ -10787,8 +10787,7 @@ begin
     W.WrBase64(P, aLength, withMagic);
 end;
 
-procedure TRawByteStringGroup.FindMove(aPosition, aLength: integer;
-  aDest: pointer);
+procedure TRawByteStringGroup.FindMove(aPosition, aLength: integer; aDest: pointer);
 var
   P: pointer;
 begin

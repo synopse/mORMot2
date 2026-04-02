@@ -3310,7 +3310,7 @@ function HttpDateNowUtc(Tix64: Int64): THttpDateNowUtc;
 var
   tix32: cardinal;
   T: TSynSystemTime;
-  now: ShortString; // use a temp variable for _HttpDateNowUtc atomic set
+  now: THttpDateNowUtc; // use a temp variable for _HttpDateNowUtc atomic set
 begin
   if Tix64 = 0 then
     tix32 := GetTickSec
@@ -3323,7 +3323,7 @@ begin
     begin
       Tix := tix32; // let this single thread update the Value
       Safe.UnLock;
-      T.FromNowUtc;
+      FromGlobalTime(T, {local=}false, Tix64);
       T.ToHttpDateShort(now, 'GMT'#13#10, 'Date: ');
       Safe.Lock;
       Value := now;
