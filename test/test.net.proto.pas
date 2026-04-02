@@ -3138,6 +3138,7 @@ var
   s: ShortString;
   txt, uri: RawUtf8;
   ip: THash128Rec;
+  sn: TIp4SubNet;
   sub: TIp4SubNets;
   bin, bin2: RawByteString;
   timer: TPrecisionTimer;
@@ -3224,8 +3225,16 @@ begin
   Check(not IP4Match('193.168.1.1',   '192.168.1.0/24'), 'match9');
   Check(IP4Match('192.168.1.250', '192.168.1.250'),     'match10');
   Check(not IP4Match('192.168.1.251', '192.168.1.250'), 'match11');
+  Check(sn.From('1.2.3.4/24'));
+  CheckEqualShort(sn.ToShort, '1.2.3.0/24');
+  CheckEqual(sn.ToBroadCast, '1.2.3.255');
+  Check(sn.Match('1.2.3.0'));
+  Check(sn.Match('1.2.3.4'));
+  Check(sn.Match('1.2.3.5'));
+  Check(not sn.Match('1.2.4.5'));
   sub := TIp4SubNets.Create;
   try
+    Check(sub.SubNet = nil);
     CheckEqual(sub.AfterAdd, 0);
     bin := sub.SaveToBinary;
     if CheckEqual(length(bin), 8) then
@@ -3235,6 +3244,7 @@ begin
     Check(not sub.Match('190.16.1.250'));
     Check(not sub.Match('190.16.2.135'));
     Check(sub.Add('190.16.1.0/24'));
+    Check(sub.SubNet <> nil);
     Check(sub.Match('190.16.1.1'));
     Check(sub.Match('190.16.1.135'));
     Check(sub.Match('190.16.1.250'));
@@ -3244,11 +3254,14 @@ begin
     CheckEqual(sub.AfterAdd, 1);
     bin := sub.SaveToBinary;
     sub.Clear;
+    Check(sub.SubNet = nil);
     CheckEqual(sub.AfterAdd, 0);
+    Check(sub.SubNet = nil);
     Check(not sub.Match('190.16.1.1'));
     Check(not sub.Match('190.16.1.135'));
     Check(not sub.Match('190.16.1.250'));
     CheckEqual(sub.LoadFromBinary(bin), 1, 'load1');
+    Check(sub.SubNet <> nil);
     CheckEqual(sub.AfterAdd, 1);
     Check(sub.Match('190.16.1.1'));
     Check(sub.Match('190.16.1.135'));

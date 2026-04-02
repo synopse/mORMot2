@@ -77,8 +77,11 @@ const
   BOOT_REQUEST = 1;
   BOOT_REPLY   = 2;
 
+  /// how a DHCP frame notifies a braodcasting response - LSB order
+  DHCP_BROADCAST_FLAG = $0080;
+
 type
-  /// Exception class raised by this unit
+  /// Exception class raised by the DHCP server logic of this unit
   EDhcp = class(ESynException);
 
   /// a DHCP raw UDP packet message as defined in RFC 2131 from BOOTP layout
@@ -93,6 +96,7 @@ type
     /// request transaction sequence
     xid:    cardinal;
     secs:   word;
+    /// request flag - mainly to check DHCP_BROADCAST_FLAG
     flags:  word;
     /// client IP address
     ciaddr: TNetIP4;
@@ -1332,6 +1336,8 @@ type
     /// compute the low-level TDhcpScope data structure for current settings
     // - raise an EDhcp exception if the parameters are not correct
     procedure PrepareScope(Sender: TDhcpProcess; var Scope: TDhcpScope);
+    /// fill the main IP fields from a given network address information
+    function From(const Mac: TMacAddress): boolean;
   published
     /// Subnet Mask (option 1) e.g. "subnet-mask": "192.168.1.1/24"
     // - the CIDR 'ip/mask' pattern will compute min/max and
@@ -1666,16 +1672,26 @@ type
 { **************** High-Level DHCP Server over UDP }
 
 type
+  /// exception class raised during TDhcpServer process at UDP/Network level
+  EDhcpServer = class(EDhcp);
+
+  TDhcpServer = class;
+
   /// listen for DHCP messages on one local UDP IPv4 and port
   TDhcpServerThread = class(TUdpServerThread)
   protected
-    fOwner: TDhcpProcess;
+    fOwner: TDhcpServer;
     fState: TDhcpState;
-    procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
+    fClientBroadcast: TNetIP4;
+    fClientPort, fServerPort: TNetPort;
+    fTix32: cardinal; // set by OnIdle()
     function DoBind: TNetResult; override;
+    procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
+    procedure OnShutdown; override; // to call TDhcpServer.ThreadShutdownNotify
+    procedure OnIdle(tix64: Int64); override; // called every second
   public
     /// initialize and bind the server instance for a given interface and scope
-    constructor Create(aOwner: TDhcpProcess; const aScope: TDhcpScope;
+    constructor Create(aOwner: TDhcpServer; const aScope: TDhcpScope;
       const aInterface: TMacAddress); reintroduce;
   end;
 
@@ -1683,12 +1699,19 @@ type
   // - several interfaces and ports could be bound to this single instance
   TDhcpServer = class(TDhcpProcess)
   protected
-    fThreads: array of TDhcpServerThread;
+    fThreads: TThreadList; // fThreads.List[] are TDhcpServerThread
+    function GetThread(s: PDhcpScope): TDhcpServerThread;
+    function EnsureBound(s: PDhcpScope; mac: PMacAddress): TDhcpServerThread;
+    procedure ThreadShutdownNotify(Sender: TDhcpServerThread);
   public
+    /// finalize this DHCP server instance and any per-interface UDP threads
+    destructor Destroy; override;
     /// bind and start listening to incoming UDP frames
     // - will bind all network interfaces matching a Scope[] by default; you
     // can limit to bind a single interface by providing its IPv4
     procedure Bind(const InterfaceIP4: RawUtf8 = ''); virtual;
+    /// relase all bound interfaces and their threads, and wait for finalization
+    procedure Shutdown; virtual;
   end;
 
 
@@ -1871,7 +1894,7 @@ begin
     xid := InterlockedIncrement(DhcpClientId);
   end;
   dhcp.xid := xid;
-  dhcp.flags := $8000; // not unicast in this userland UDP socket API unit
+  dhcp.flags := DHCP_BROADCAST_FLAG; // not unicast in this userland UDP socket API unit
   PNetMac(@dhcp.chaddr)^ := addr;
   dhcp.cookie := DHCP_MAGIC_COOKIE;
   result := @dhcp.options;
@@ -4741,10 +4764,10 @@ begin
   fSubnetMask := '192.168.1.1/24';
   fServerPort := DHCP_SERVER_PORT; // default to 67
   fClientPort := DHCP_CLIENT_PORT; // default to 68
-  fLeaseTimeSeconds := 120; // avoid IP exhaustion during iPXE process
-  fOfferHoldingSecs := 5;
-  fMaxDeclinePerSecond := 5;
-  fGraceFactor := 2;
+  fLeaseTimeSeconds := 120;        // avoid IP exhaustion during iPXE process
+  fOfferHoldingSecs := 5;          // allow 5 secs between OFFER and REQUEST
+  fMaxDeclinePerSecond := 5;       // detect malicious/aggressive clients
+  fGraceFactor := 2;               // keep in memory expired leases twice TTL
 end;
 
 function TDhcpScopeSettings.AddPool(one: TDhcpPoolSettings): TDhcpPoolSettings;
@@ -4754,6 +4777,29 @@ begin
   if self <> nil then
     PtrArrayAdd(fPool, one); // will be owned by this instance
   result := one;
+end;
+
+function TDhcpScopeSettings.From(const Mac: TMacAddress): boolean;
+var
+  subnet: TIp4SubNet;
+begin
+  result := subnet.From(Mac.IP, Mac.NetMask); // '1.2.3.4' and '255.255.255.0'
+  if not result then
+    exit;
+  Make([Mac.IP, '/', IP4Prefix(subnet.mask)], fSubnetMask); // '1.2.3.4/24'
+  // subnet.ToShort='1.2.3.0/24' so we need manual adding for the proper format
+  if Mac.Broadcast <> '' then
+    fBroadCastAddress := Mac.Broadcast
+  else
+    fBroadCastAddress := subnet.ToBroadCast; // '1.2.3.255'
+  if Mac.FriendlyName <> '' then
+    fMain.Name := Mac.FriendlyName
+  else
+    fMain.Name := Mac.Name;
+  fDefaultGateway := Mac.Gateway;
+  {$ifdef OSWINDOWS}
+  fDnsServers := Mac.Dns;
+  {$endif OSWINDOWS}
 end;
 
 procedure TDhcpScopeSettings.PrepareScope(Sender: TDhcpProcess;
@@ -4869,9 +4915,16 @@ begin
 end;
 
 function TDhcpServerSettings.AddScope(one: TDhcpScopeSettings): TDhcpScopeSettings;
+var
+  main: TMacAddress;
 begin
   if one = nil then
+  begin
     one := TDhcpScopeSettings.Create; // default '192.168.1.1/24' subnet
+    if GetMainMacAddress(main, [mafRequireBroadcast]) then
+      // assign the main network interface specs to new this default scope
+      one.From(main);
+  end;
   if self <> nil then
     PtrArrayAdd(fScope, one); // will be owned by this instance
   result := one;
@@ -5095,9 +5148,9 @@ begin
      (fScope = nil) or
      (fState <> sSetup) then // e.g. after Shutdown
     exit;
+  fIdleTix := tix32;
   saved := 0;
   total := 0;
-  fIdleTix := tix32;
   fScopeSafe.ReadLock;
   try
     // check deprecated entries in all scopes
@@ -6422,34 +6475,171 @@ end;
 
 { TDhcpServerThread }
 
-constructor TDhcpServerThread.Create(aOwner: TDhcpProcess;
+constructor TDhcpServerThread.Create(aOwner: TDhcpServer;
   const aScope: TDhcpScope; const aInterface: TMacAddress);
 begin
   fOwner := aOwner;
   fFrameLen := SizeOf(fState); // directly fill our DHCP state machine buffer
   fFrame := @fState.Recv;
+  fClientBroadcast := aScope.Broadcast;
+  fClientPort := aScope.ClientPort;
+  fServerPort := aScope.ServerPort;
   inherited Create(aOwner.Log, aInterface.IP, UInt32ToUtf8(aScope.ServerPort),
     aScope.Main.Name, 1000);
-  end;
+end;
 
 function TDhcpServerThread.DoBind: TNetResult;
 begin
   result := inherited DoBind;
-  if result <> nrOK then
-    exit;
+  if result = nrOk then
+    fSock.SetBroadcast(true); // enable broadcasting on the response socket
+end;
+
+procedure TDhcpServerThread.OnShutdown;
+begin
+  fOwner.ThreadShutdownNotify(self);
+  fOwner := nil;
+end;
+
+procedure TDhcpServerThread.OnIdle(tix64: Int64);
+begin
+  fTix32 := tix64 div MilliSecsPerSec; // for TDhcpState.Tix32
+  if fOwner <> nil then
+    fOwner.OnIdle(tix64);
 end;
 
 procedure TDhcpServerThread.OnFrameReceived(len: integer; var remote: TNetAddr);
+var
+  nr: TNetResult;
 begin
-
+  // avoid GPF during shutdown
+  if fOwner = nil then
+    exit;
+  // compute the response
+  fState.RecvLen := len;
+  fState.RecvIp4 := remote.IP4;
+  fState.Tix32 := fTix32; // set in OnIdle()
+  len := fOwner.ComputeResponse(fState);
+  if len <= 0 then
+    exit; // invalid input frame (-1), or no response needed (0)
+  // guess the response address
+  if fState.Recv.giaddr <> 0 then
+  begin
+    // send back to the supplied relay address
+    fState.Send.giaddr := fState.Recv.giaddr;
+    remote.SetIP4Port(fState.Recv.giaddr, fServerPort);
+  end
+  else if (fState.Recv.ciaddr <> 0) and
+          (fState.Recv.flags and DHCP_BROADCAST_FLAG = 0) and
+          (fState.RecvType in [dmtRequest, dmtInform]) and
+          (fState.SendType <> dmtNak) then
+    // unicast to known client IP
+    remote.SetIP4Port(fState.Recv.ciaddr, fClientPort)
+  else
+    // broadcast back the response
+    remote.SetIP4Port(fClientBroadcast, fClientPort);
+  // actual send back the response frame over UDP
+  nr := fSock.SendTo(@fState.Send, len, remote);
+  if (nr <> nrOk) and
+     (fOwner <> nil) and
+     (fOwner.fLog <> nil) then
+    fOwner.fLog.Add.Log(sllWarning, 'SendTo(%)=%',
+      [remote.IPShort({withport=}true), ToText(nr)], self);
 end;
 
 
 { TDhcpServer }
 
-procedure TDhcpServer.Bind(const InterfaceIP4: RawUtf8);
+destructor TDhcpServer.Destroy;
 begin
+  if fThreads.List <> nil then
+    Shutdown;
+  inherited Destroy;
+  if fThreads.List <> nil then
+    ObjArrayClear(fThreads.List);
+end;
 
+function TDhcpServer.GetThread(s: PDhcpScope): TDhcpServerThread;
+var
+  t: ^TDhcpServerThread;
+  n: integer;
+begin
+  result := nil;
+  if s = nil then
+    exit;
+  fThreads.Safe.Lock;
+  try
+    t := pointer(fThreads.List);
+    for n := 1 to length(fThreads.List) do
+      if s^.Subnet.Match(t^.BindAddress) then
+      begin
+        result := t^;
+        exit;
+      end
+      else
+        inc(s);
+  finally
+    fThreads.Safe.UnLock;
+  end;
+end;
+
+function TDhcpServer.EnsureBound(s: PDhcpScope; mac: PMacAddress): TDhcpServerThread;
+begin
+  result := GetThread(s);
+  if result <> nil then
+    exit;
+  result := TDhcpServerThread.Create(self, s^, mac^); // may raise exception
+  fThreads.Add(result);
+end;
+
+procedure TDhcpServer.Bind(const InterfaceIP4: RawUtf8);
+var
+  ds: PDhcpScope;
+  mac: PMacAddress;
+  all: TMacAddressDynArray;
+  n: integer;
+begin
+  all := GetMacAddresses({up=}true);
+  fScopeSafe.WriteLock;
+  try
+    if InterfaceIP4 = '' then
+    begin
+      // bind to all interfaces matching scopes by default
+      mac := pointer(all);
+      n := length(all);
+      repeat
+        ds := GetScope(mac^.IP);
+        if ds <> nil then
+          EnsureBound(ds, mac);
+        inc(mac);
+        dec(n);
+      until n = 0;
+    end
+    else
+    begin
+      // bind to a specific address
+      mac := FindMacAddress(all, InterfaceIP4);
+      if mac = nil then
+        EDhcpServer.RaiseUtf8('Incorrect %.Bind(%)', [self, InterfaceIP4]);
+      ds := GetScope(mac^.IP);
+      if ds = nil then
+        EDhcpServer.RaiseUtf8('Unknown %.Bind(%)', [self, InterfaceIP4]);
+      EnsureBound(ds, mac);
+    end;
+  finally
+    fScopeSafe.WriteLock;
+  end;
+end;
+
+procedure TDhcpServer.ThreadShutdownNotify(Sender: TDhcpServerThread);
+begin
+  if self <> nil then
+    fThreads.Terminated(Sender);
+end;
+
+procedure TDhcpServer.Shutdown;
+begin
+  fThreads.TerminateAndWait({secs=}30, self, fLog);
 end;
 
 

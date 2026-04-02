@@ -759,15 +759,15 @@ type
     // - contains e.g. '12:50:b6:1e:c6:aa' from /sys/class/net/eth0/adddress
     // - may equal '00:00:00:00:00:00' for a non-physical interface (makSoftware)
     Address: RawUtf8;
-    /// the raw IPv4 address of this interface
+    /// the raw IPv4 address of this computer interface, e.g. '192.168.0.77'
     // - not available on Android
     IP: RawUtf8;
-    /// the raw IPv4 network mask of this interface
+    /// the raw IPv4 network mask of this interface, e.g. '255.255.255.0'
     // - not available on Android
     NetMask: RawUtf8;
-    /// the raw IPv4 broadcast address of this interface
+    /// the raw IPv4 broadcast address of this interface, e.g. '192.168.0.255'
     Broadcast: RawUtf8;
-    /// the raw IPv4 gateway address of this interface
+    /// the raw IPv4 gateway address of this interface, e.g. '192.168.0.254'
     // - not available on Windows XP or BSD
     Gateway: RawUtf8;
     {$ifdef OSWINDOWS}
@@ -1769,14 +1769,18 @@ type
     /// check and decode the supplied CIDR address text from its format '1.2.3.4/24'
     // - e.g. as 32-bit 1.2.3.0 into ip and 255.255.255.0 into mask
     // - plain IP address like '1.2.3.4' will be decoded with mask=255.255.255.255
-    function From(const subnet: RawUtf8): boolean;
+    function From(const subnet: RawUtf8): boolean; overload;
+    /// fill ip/mask fields from '1.2.3.4' and '255.255.255.0' text values
+    function From(const ip4, mask4: RawUtf8): boolean; overload;
     /// check if an 32-bit IPv4 matches a decoded CIDR sub-network
     function Match(ip4: TNetIP4): boolean; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// check if a textual IPv4 matches a decoded CIDR sub-network
     function Match(const ip4: RawUtf8): boolean; overload;
-    /// return the CIDR sub-network as standard '1.2.3.4/24' text
+    /// return the CIDR sub-network as standard '1.2.3.0/24' text
     function ToShort: TShort23;
+    /// wrap IP4Broadcast(ip, mask) and Ip4Text() into e.g. '1.2.3.255' text
+    function ToBroadCast: RawUtf8;
   end;
   PIp4SubNet = ^TIp4SubNet;
 
@@ -4248,10 +4252,10 @@ begin
   begin
     Safe.Lock;
     try
-      if Tix <> now then
+      if Tix <> now then // need to be refreshed
       begin
         Tix := now;
-        Addresses := RetrieveMacAddresses(UpAndDown);
+        Addresses := RetrieveMacAddresses(UpAndDown); // retrieve from OS call
       end;
       result := Addresses;
     finally
@@ -5666,6 +5670,13 @@ begin
   ip := ip32 and mask; // normalize
 end;
 
+function TIp4SubNet.From(const ip4, mask4: RawUtf8): boolean;
+begin
+  result := NetIsIP4(pointer(ip4), @ip) and
+            NetIsIP4(pointer(mask4), @mask);
+  ip := ip and mask; // normalize
+end;
+
 function TIp4SubNet.Match(const ip4: RawUtf8): boolean;
 var
   ip32: TNetIP4;
@@ -5684,6 +5695,14 @@ begin
     exit;
   AppendShortChar('/', @result);
   AppendShortByte(prefix, @result); // in range '0'..'32'
+end;
+
+function TIp4SubNet.ToBroadCast: RawUtf8;
+var
+  b: TNetIP4;
+begin
+  b := IP4Broadcast(ip, mask);
+  IP4Text(@b, result);
 end;
 
 

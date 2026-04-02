@@ -1027,7 +1027,7 @@ begin
                 m^.Kind := makTunnel;
               ARPHRD_PPP:
                 m^.Kind := makPpp;
-          {$endif OSBSDDARWIN}
+            {$endif OSBSDDARWIN}
             else
               // https://systemd.io/PREDICTABLE_INTERFACE_NAMES
               if m^.Name <> '' then

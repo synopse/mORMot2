@@ -31,7 +31,7 @@ end;
 
 function TApiService.ReverseString(const Value: RawUtf8): RawUtf8;
 begin
-  result := StringToUtf8(System.StrUtils.ReverseString(Trim(Utf8ToString(Value))));
+  result := StringToUtf8(StrUtils.ReverseString(Trim(Utf8ToString(Value))));
 end;
 
 end.

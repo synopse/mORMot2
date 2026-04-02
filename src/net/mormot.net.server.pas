@@ -80,18 +80,21 @@ type
     procedure DoExecute; override;
     // this is the main processing method for all incoming frames
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); virtual; abstract;
-    procedure OnIdle(tix64: Int64); virtual; // called every 512 ms at most
+    procedure OnIdle(tix64: Int64); virtual; // called every second
     procedure OnShutdown; virtual; abstract;
   public
     /// initialize and bind the server instance, in non-suspended state
-    constructor Create(LogClass: TSynLogClass;
-      const BindAddress, BindPort, ProcessName: RawUtf8;
-      TimeoutMS: integer); reintroduce;
+    constructor Create(LogClass: TSynLogClass; const BindAddress, BindPort,
+      ProcessName: RawUtf8; TimeoutMS: integer); reintroduce;
     /// finalize the processing thread
     destructor Destroy; override;
     /// low-level access to the bound UDP socket (for debugging purposes)
     property Sock: TNetSocket
       read fSock;
+    property BindAddress: RawUtf8
+      read fBindAddress write fBindAddress;
+    property BindPort: RawUtf8
+      read fBindPort write fBindPort;
   published
     property IPWithPort: RawUtf8
       read GetIPWithPort;
@@ -1855,7 +1858,7 @@ type
     fBroadcastSafe: TOSLightLock; // non-reentrant, to serialize Broadcast()
     fBroadcastIpPort: RawUtf8;
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
-    procedure OnIdle(tix64: Int64); override;
+    procedure OnIdle(tix64: Int64); override; // called every second
     procedure OnShutdown; override; // = Destroy
     function Broadcast(const aReq: THttpPeerCacheMessage;
       out aAlone: boolean): THttpPeerCacheMessageDynArray;
@@ -2734,11 +2737,11 @@ begin
       if Terminated then
         break;
       tix64 := mormot.core.os.GetTickCount64;
-      tix := tix64 shr 9; // div 512
+      tix := tix64 div MilliSecsPerSec;
       if tix <> lasttix then
       begin
         lasttix := tix;
-        OnIdle(tix64); // called every 512 ms at most
+        OnIdle(tix64); // called every second at most
       end;
     end;
     // here, Terminated or broken fSock: notify method to close all connections

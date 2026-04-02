@@ -29,6 +29,8 @@ type
   TStaticFilesHttpServer = class(TRestHttpServer)
   protected
     fStaticRoots: array of record
+      // URL prefix that activates this static file serving rule (e.g. '/static').
+      // Must never end with /, otherwise matching algorithm will make mistakes.
       UrlPath: RawUtf8;
       FileSystemPath: TFileName;
       DefaultFile: TFileName;
@@ -68,6 +70,7 @@ type
     fServer: TRestServerFullMemory;
     fHttpServer: TStaticFilesHttpServer;
     fPort: RawUtf8;
+    procedure ExampleFilter(var PathInfo: string; var Allow: Boolean);
   public
     constructor Create(const aPort: RawUtf8);
     destructor Destroy; override;
@@ -195,7 +198,7 @@ begin
 
   // Convert to file system path
   fileName := Utf8ToString(FileSystemPath) +
-    StringReplace(Utf8ToString(relPath), '/', '\', [rfReplaceAll]);
+    StringReplace(Utf8ToString(relPath), '/', PathDelim, [rfReplaceAll]);
 
   // If empty or ends with /, append default file
   if (relPath = '') or (relPath[Length(relPath)] = '/') then
@@ -216,7 +219,7 @@ begin
 
     // Filter may have modified the path
     fileName := Utf8ToString(FileSystemPath) +
-      StringReplace(pathInfo, '/', '\', [rfReplaceAll]);
+      StringReplace(pathInfo, '/', PathDelim, [rfReplaceAll]);
   end;
 
   // Check if file exists
@@ -270,6 +273,7 @@ function TStaticFilesHttpServer.Request(
   Ctxt: THttpServerRequestAbstract): cardinal;
 var
   i: Integer;
+  UrlPathU, UrlPathUWithSlash: RawUtf8;
 begin
   // Only handle GET requests
   if Ctxt.Method = 'GET' then
@@ -277,10 +281,15 @@ begin
     // Check all registered static paths
     for i := 0 to High(fStaticRoots) do
     begin
-      if IdemPChar(pointer(Ctxt.Url), pointer(fStaticRoots[i].UrlPath)) then
+      UrlPathU := UpperCaseU(fStaticRoots[i].UrlPath); // e.g. '/STATIC2'
+      UrlPathUWithSlash := UrlPathU + '/'; // e.g. '/STATIC2/'
+      // Match if URL starts with UrlPathUWithSlash, or is exactly UrlPathU.
+      // This means these will work:
+      if (UpperCaseU(Ctxt.Url) = UrlPathU) or
+         StartWith(Ctxt.Url, UrlPathUWithSlash) then
       begin
         result := ServeStaticFile(Ctxt,
-          fStaticRoots[i].UrlPath,
+          UrlPathUWithSlash,
           fStaticRoots[i].FileSystemPath,
           fStaticRoots[i].DefaultFile,
           fStaticRoots[i].Charset,
@@ -321,12 +330,12 @@ begin
   fHttpServer.AccessControlAllowOrigin := '*';
 
   // Calculate paths relative to executable
-  wwwPath := IncludeTrailingPathDelimiter(
-    Executable.ProgramFilePath + '..\www\');
-  www2Path := IncludeTrailingPathDelimiter(
-    Executable.ProgramFilePath + '..\www2\');
-  www3Path := IncludeTrailingPathDelimiter(
-    Executable.ProgramFilePath + '..\www3\');
+  wwwPath :=
+    Executable.ProgramFilePath + '..' + PathDelim + 'www' + PathDelim;
+  www2Path :=
+    Executable.ProgramFilePath + '..' + PathDelim + 'www2' + PathDelim;
+  www3Path :=
+    Executable.ProgramFilePath + '..' + PathDelim + 'www3' + PathDelim;
 
   // Add static file paths (equivalent to DMVC middleware)
 
@@ -342,12 +351,7 @@ begin
   fHttpServer.AddStaticPath('/static3', StringToUtf8(www3Path), 'index.html',
     True, 'UTF-8',
     // Custom filter: block .txt files and redirect file1.html to file2.html
-    procedure(var PathInfo: string; var Allow: Boolean)
-    begin
-      Allow := not PathInfo.EndsWith('.txt', True);
-      if Allow and PathInfo.Contains('file1.html') then
-        PathInfo := PathInfo.Replace('file1.html', 'file2.html');
-    end,
+    ExampleFilter,
     // Custom MIME types
     ['.xpi'],
     ['application/x-xpinstall']);
@@ -359,6 +363,13 @@ begin
   fServer.Free;
   fModel.Free;
   inherited;
+end;
+
+procedure TStaticFilesSampleServer.ExampleFilter(var PathInfo: string; var Allow: Boolean);
+begin
+  Allow := not PathInfo.EndsWith('.txt', True);
+  if Allow and PathInfo.Contains('file1.html') then
+    PathInfo := PathInfo.Replace('file1.html', 'file2.html');
 end;
 
 procedure TStaticFilesSampleServer.Start;

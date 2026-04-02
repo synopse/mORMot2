@@ -130,8 +130,8 @@ type
     function SetWrqStream(var Context: TTftpContext): TTftpError; virtual;
     // main processing methods for all incoming frames
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
-    procedure OnIdle(tix64: Int64); override;
-    procedure OnShutdown; override; // = Destroy
+    procedure OnIdle(tix64: Int64); override; // called every second
+    procedure OnShutdown; override; // from Destroy
     procedure NotifyShutdown;
   public
     /// initialize and bind the server instance, in non-suspended state
