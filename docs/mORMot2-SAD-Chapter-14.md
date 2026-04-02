@@ -201,7 +201,7 @@ end;
 
 ### 14.3.2. URL Decode Functions
 
-Available in `mormot.core.text`:
+Available in `mormot.core.buffers` (except `UrlDecodeObject`, which is in `mormot.core.json`):
 
 | Function | Purpose |
 |----------|---------|
@@ -464,13 +464,15 @@ TJwtAbstract
 ├── TJwtSynSignerAbstract
 │   ├── TJwtHS256/384/512   (HMAC-SHA2)
 │   └── TJwtS3256/384/512   (SHA-3)
-├── TJwtES256          (ECDSA P-256)
-├── TJwtRS256/384/512  (RSA)
-├── TJwtPS256/384/512  (RSA-PSS)
+├── TJwtAsym
+│   ├── TJwtEs256          (ECDSA P-256)
+│   └── TJwtRsa
+│       ├── TJwtRs256/384/512  (RSA)
+│       └── TJwtPs256/384/512  (RSA-PSS)
 └── TJwtCrypt          (factory-based, recommended)
 ```
 
-> **Note**: Only HMAC-SHA2 and SHA-3 variants inherit from `TJwtSynSignerAbstract`. The asymmetric algorithms (ECDSA, RSA, RSA-PSS) are direct descendants of `TJwtAbstract`.
+> **Note**: Only HMAC-SHA2 and SHA-3 variants inherit from `TJwtSynSignerAbstract`. The asymmetric algorithms use `TJwtAsym` as an intermediate base class; ECDSA (`TJwtEs256`) inherits directly from `TJwtAsym`, while RSA and RSA-PSS variants (`TJwtRs256/384/512`, `TJwtPs256/384/512`) inherit from `TJwtRsa`, which itself inherits from `TJwtAsym`.
 
 ### 14.8.3. Verifying JWTs
 

@@ -255,8 +255,8 @@ if Stmt.ColumnNull(0) then
   WriteLn('Value is NULL');
 
 // Variant access (auto-conversion)
-Value := Stmt.Column[0];  // Returns Variant
-Value := Stmt['ColumnName'];  // By name
+Value := Stmt.ColumnVariant(0);  // Returns Variant by column index
+Value := Stmt['ColumnName'];     // By name (default Column[] property)
 ```
 
 ---

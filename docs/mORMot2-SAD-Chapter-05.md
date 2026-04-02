@@ -575,7 +575,7 @@ var
 begin
   Client := TMongoClient.Create('localhost', 27017);
   // OrmMapMongoDB signature: (aClass, aServer: TRestOrm, aMongoDatabase, aCollectionName)
-  OrmMapMongoDB(TOrmDocument, Server, Client.Database['mydb']);
+  OrmMapMongoDB(TOrmDocument, Server.OrmInstance, Client.Database['mydb']);
 end;
 ```
 

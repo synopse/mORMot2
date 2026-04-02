@@ -470,7 +470,7 @@ begin
 
   // Create mock that expects Save to be called once
   TInterfaceMock.Create(TypeInfo(IUserRepository), UserRepository, Self)
-    .ExpectsCount('Save', qoEqualTo, 1);
+    .ExpectsCount('Save', ioEqualTo, 1);
 
   // Run the test
   with TLoginController.Create(UserRepository, SmsSender) do
@@ -517,9 +517,9 @@ TInterfaceStub.Create(TypeInfo(ICalculator), Calc)
 ```pascal
 TInterfaceMock.Create(TypeInfo(ICalculator), Calc, Self)
   // Expect Multiply to be called exactly twice
-  .ExpectsCount('Multiply', qoEqualTo, 2)
+  .ExpectsCount('Multiply', ioEqualTo, 2)
   // Expect Add to be called at least once
-  .ExpectsCount('Add', qoGreaterThan, 0)
+  .ExpectsCount('Add', ioGreaterThan, 0)
   // Expect specific call sequence
   .ExpectsTrace('Add(10,20)=[30],Multiply(5,6)=[30]');
 ```
