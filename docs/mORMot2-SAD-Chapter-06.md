@@ -269,7 +269,7 @@ begin
   try
     for Row := 1 to Table.RowCount do
       WriteLn(
-        'ID=', Table.GetAsInteger(Row, 0),
+        'ID=', Table.GetAsInt64(Row, 0),
         ' Name=', Table.GetU(Row, 1),
         ' Born=', Table.GetU(Row, 2));
   finally
@@ -530,7 +530,7 @@ Order.Lines := _JsonFast('[
 ]');
 
 // Query line items
-for i := 0 to _Safe(Order.Lines)^._Count - 1 do
+for i := 0 to _Safe(Order.Lines)^.Count - 1 do
   WriteLn('SKU: ', _Safe(Order.Lines)^.Value[i].sku);
 ```
 
@@ -558,14 +558,18 @@ var
   Baby: TOrmBaby;
   i: Integer;
 begin
-  Batch := TRestBatch.Create(Orm, TOrmBaby, 1000);  // Auto-flush every 1000
+  Batch := TRestBatch.Create(Orm, TOrmBaby, 1000);  // AutomaticTransactionPerRow = 1000
   try
-    for i := 1 to 10000 do
-    begin
-      Baby := TOrmBaby.Create;
-      Baby.Name := FormatUtf8('Baby %', [i]);
-      Baby.BirthDate := Date - Random(365);
-      Batch.Add(Baby, True);  // True = Batch owns Baby, auto-frees
+    Baby := TOrmBaby.Create;
+    try
+      for i := 1 to 10000 do
+      begin
+        Baby.Name := FormatUtf8('Baby %', [i]);
+        Baby.BirthDate := Date - Random(365);
+        Batch.Add(Baby, True);  // True = SendData, sends record fields as JSON
+      end;
+    finally
+      Baby.Free;
     end;
     Orm.BatchSend(Batch, Results);  // Single network call
     WriteLn('Inserted ', Length(Results), ' records');
@@ -629,10 +633,10 @@ OrmMapExternal(Model, TOrmCustomer, PostgresProps);
 OrmMapExternal(Model, TOrmOrder, PostgresProps);
 
 // MongoDB for logs
-OrmMapMongoDB(Model, TOrmAuditLog, MongoClient.Database['logs']);
+OrmMapMongoDB(TOrmAuditLog, Server.Orm, MongoClient.Database['logs']);
 
 // In-memory for cache
-Model.Props[TOrmSessionCache].SetStorage(TRestStorageInMemory);
+OrmMapInMemory(Server.Orm, TOrmSessionCache);
 ```
 
 ### 6.8.2. Think Multi-Tier
