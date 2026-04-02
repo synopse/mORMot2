@@ -12,7 +12,7 @@ type
   /// Custom filter callback for static file serving
   /// @param PathInfo - The requested file path (can be modified by filter)
   /// @param Allow - Set to False to deny access to the file
-  TStaticFileFilter = reference to procedure(var PathInfo: string; var Allow: Boolean);
+  TStaticFileFilter = procedure(var PathInfo: string; var Allow: Boolean) of object;
 
   /// Simple API service interface
   IApiService = interface(IInvokable)
@@ -27,4 +27,6 @@ type
 
 implementation
 
+initialization
+  TInterfaceFactory.RegisterInterfaces([TypeInfo(IApiService)]);
 end.
