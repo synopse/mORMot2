@@ -6976,19 +6976,21 @@ begin
 end;
 
 function _GetPemLocalFile(dummy: pointer): RawUtf8;
+var
+  fn: TFileName;
 begin
   // load from a file, bounded within the application or from env variable
   FastAssignNew(result);
-  if GetSystemStoreAsPemLocalFile <> '' then
+  fn := GetSystemStoreAsPemLocalFile;
+  if fn <> '' then
     {$ifdef OSPOSIX}
-    if GetSystemStoreAsPemLocalFile[1] = '/' then // full /posix/path
+    if fn[1] = '/' then // full /posix/path
     {$else}
-    if GetSystemStoreAsPemLocalFile[2] = ':' then // 'C:\path\to\file.pem'
+    if fn[2] = ':' then // 'C:\path\to\file.pem'
     {$endif OSPOSIX}
-      result := StringFromFile(GetSystemStoreAsPemLocalFile)
+      result := StringFromFile(fn)
     else
-      result := StringFromFile(
-        Executable.ProgramFilePath + GetSystemStoreAsPemLocalFile);
+      result := StringFromFile(Executable.ProgramFilePath + fn);
   if result = '' then
     result := StringFromFile(GetSystemEnvString('SSL_CA_CERT_FILE'));
 end;

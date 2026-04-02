@@ -7670,7 +7670,7 @@ end;
 
 initialization
   assert(SizeOf(THttpAnalyzerToSave) = 40);
-  _GETVAR :=  'GET';
+  _GETVAR  := 'GET';
   _POSTVAR := 'POST';
   _HEADVAR := 'HEAD';
   GetEnumTrimmedNames(TypeInfo(THttpAnalyzerScope),  @HTTP_SCOPE);

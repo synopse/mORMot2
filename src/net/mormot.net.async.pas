@@ -1073,7 +1073,7 @@ type
     fInterningTix: cardinal;
     fExecuteEvent: TSynEvent;
     fClientSockets: THttpAsyncClientConnections; // allocated when needed
-    fHttpDateNowUtc: THttpDateNowUtc;
+    fHttpDateNowUtc: THttpDateNowUtc;            // set by IdleEverySecond
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
     function GetConnectionsActive: cardinal; override;
@@ -5319,14 +5319,12 @@ procedure THttpAsyncServer.IdleEverySecond;
 var
   tix, cleaned: cardinal;
   T: TSynSystemTime;
-  tmp: ShortString;
 begin
   // no need to use the global HttpDateNowUtc and its GetTickCount64 API call
   if hsoIncludeDateHeader in fOptions then
   begin
-    T.FromNowUtc;
-    T.ToHttpDateShort(tmp, 'GMT'#13#10, 'Date: ');
-    fHttpDateNowUtc := tmp; // (almost) atomic set within CPU L1 cache line
+    FromGlobalTime(T, {local=}false);
+    T.ToHttpDateShort(fHttpDateNowUtc, 'GMT'#13#10, 'Date: ');
   end;
   // ensure log file(s) are flushed/consolidated if needed
   if fLogger <> nil then
