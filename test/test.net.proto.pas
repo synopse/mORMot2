@@ -2044,7 +2044,7 @@ begin
     // DISCOVER -> OFFER
     d.RecvLen := length(refdisc);
     d.RecvIp4 := 0; // use the default server.Scope[]
-    d.Tix32 := GetTickSec; // ComputeResponse() requires Tix32
+    d.BootTix32 := GetUptimeSec; // ComputeResponse() requires Tix32
     MoveFast(pointer(refdisc)^, d.Recv, d.RecvLen);
     i := server.ComputeResponse(d);
     CheckEqual(i, d.SendLen);

@@ -5521,8 +5521,6 @@ var
   s: PDhcpScope;
   json: RawUtf8;
   n: integer;
-  i: PtrInt;
-  p: PAnsiChar;
   local: TDhcpMetrics;
 begin
   fMetricsFolder := '';
@@ -5548,15 +5546,7 @@ begin
       n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
       repeat
         // compute the metrics file names for this scope
-        s^.MetricsFileSubnet := s^.Subnet.ToShort;
-        p := @s^.MetricsFileSubnet;
-        for i := 1 to ord(p[0]) do // make it file-compatible
-          case p[i] of
-            '.':
-              p[i] := '-';
-            '/':
-              p[i] := '_';
-          end;
+        s^.MetricsFileSubnet := s^.Subnet.ToShort({filecompatible=}true);
         s^.MetricsJsonFileName := MakeString([
           fMetricsFolder, s^.MetricsFileSubnet, '.json']);
         // retrieve the previous metrics totals for this scope
