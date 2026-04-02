@@ -2273,7 +2273,7 @@ function GetSystemStoreAsPem(
 // variables are ignored: call GetSystemStoreAsPem() instead for the global store
 // - an internal cache is refreshed every 4 minutes unless FlushCache is set
 function GetOneSystemStoreAsPem(CertStore: TSystemCertificateStore;
-  FlushCache: boolean = false; now: cardinal = 0): RawUtf8;
+  FlushCache: boolean = false): RawUtf8;
 
 var
   /// low-level function used by StuffExeCertificate() in mormot.misc.pecoff.pas
@@ -6965,13 +6965,8 @@ end;
 {$endif OSWINDOWS}
 
 var
-  OSSafe: TLightLock; // when GlobalLock is overkill
   _OneSystemStoreAsPem: array[TSystemCertificateStore] of TCachedValue;
-  _SystemStoreAsPem: record
-    Tix: cardinal;
-    Scope: TSystemCertificateStores;
-    Pem: RawUtf8;
-  end;
+  _PemLocalFile: TCachedValue;
 
 function GetOneSystemStoreAsPem(CertStore: TSystemCertificateStore;
   FlushCache: boolean): RawUtf8;
@@ -6980,68 +6975,43 @@ begin
     pointer(CertStore), 8, result, FlushCache); // every 256s = 4 min
 end;
 
+function _GetPemLocalFile(dummy: pointer): RawUtf8;
+begin
+  // load from a file, bounded within the application or from env variable
+  FastAssignNew(result);
+  if GetSystemStoreAsPemLocalFile <> '' then
+    {$ifdef OSPOSIX}
+    if GetSystemStoreAsPemLocalFile[1] = '/' then // full /posix/path
+    {$else}
+    if GetSystemStoreAsPemLocalFile[2] = ':' then // 'C:\path\to\file.pem'
+    {$endif OSPOSIX}
+      result := StringFromFile(GetSystemStoreAsPemLocalFile)
+    else
+      result := StringFromFile(
+        Executable.ProgramFilePath + GetSystemStoreAsPemLocalFile);
+  if result = '' then
+    result := StringFromFile(GetSystemEnvString('SSL_CA_CERT_FILE'));
+end;
+
 function GetSystemStoreAsPem(CertStores: TSystemCertificateStores;
   FlushCache, OnlySystemStore: boolean): RawUtf8;
 var
-  now: cardinal;
   s: TSystemCertificateStore;
   v: RawUtf8;
 begin
-  result := '';
-  now := GetTickSec shr 8 + 1;
-  OSSafe.Lock;
-  try
-    // first search if not already in cache
-    if not FlushCache then
-      with _SystemStoreAsPem do
-        if (Tix = now) and
-           (Scope = CertStores) and
-           (Pem <> '') then
-        begin
-          result := Pem; // quick retrieved from cache
-          exit;
-        end;
-    // load from a file, bounded within the application or from env variable
-    if not OnlySystemStore then
-    begin
-      if GetSystemStoreAsPemLocalFile <> '' then
-        {$ifdef OSPOSIX}
-        if GetSystemStoreAsPemLocalFile[1] = '/' then // full /posix/path
-        {$else}
-        if GetSystemStoreAsPemLocalFile[2] = ':' then // 'C:\path\to\file.pem'
-        {$endif OSPOSIX}
-          result := StringFromFile(GetSystemStoreAsPemLocalFile)
-        else
-          result := StringFromFile(
-            Executable.ProgramFilePath + GetSystemStoreAsPemLocalFile);
-      if result = '' then
-        result := StringFromFile(GetSystemEnvString('SSL_CA_CERT_FILE'));
-    end;
-  finally
-    OSSafe.UnLock; // GetOneSystemStoreAsPem() blocks
-  end;
-  // fallback to search depending on the POSIX / Windows specific OS stores
+  FastAssignNew(result);
+  // system store may be overriden by a (cached) custom file or SSL_CA_CERT_FILE
+  if not OnlySystemStore then
+    _PemLocalFile.Cache(@_GetPemLocalFile, nil, {shr=}8, result, FlushCache);
   if result = '' then
+    // append the POSIX / Windows specific OS stores (also cached)
     for s := low(s) to high(s) do
       if s in CertStores then
       begin
-        v := GetOneSystemStoreAsPem(s, FlushCache, now); // may use its cache
+        v := GetOneSystemStoreAsPem(s, FlushCache);
         if v <> '' then
           result := Join([result, v, #13#10]);
       end;
-  if result = '' then
-    exit;
-  OSSafe.Lock;
-  try
-    with _SystemStoreAsPem do
-    begin
-      Tix := now;
-      Scope := CertStores;
-      Pem := result;
-    end;
-  finally
-    OSSafe.UnLock;
-  end;
 end;
 
 
