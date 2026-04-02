@@ -4988,6 +4988,10 @@ type
       var Dest; Flush: boolean = false);
   end;
 
+/// thread-safe cache of a File content
+function StringFromFileCached(const FileName: TFileName;
+  var Cache: TCachedValue; TixShr: cardinal = 6): RawByteString;
+
 type
   /// a thread-safe Pierre L'Ecuyer gsl_rng_taus2 software random generator
   // - just wrap a TLecuyer generator with a TLighLock in a 20-24 bytes structure
@@ -7654,6 +7658,12 @@ begin
   SetLength(result, length(FileName));
   for f := 0 to high(FileName) do
     result[f] := StringFromFile(FileName[f]);
+end;
+
+function StringFromFileCached(const FileName: TFileName;
+  var Cache: TCachedValue; TixShr: cardinal): RawByteString;
+begin
+  Cache.Cache(@StringFromFile, pointer(FileName), TixShr, result);
 end;
 
 function StringFromFolders(const Folders: array of TFileName;
