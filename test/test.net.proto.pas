@@ -1992,7 +1992,7 @@ begin
   server := TDhcpProcess.Create;
   try
     // custom settings for our tests
-    settings.AddScope; // with default subnet
+    settings.AddScope(TDhcpScopeSettings.Create); // with default/fixed subnet
     CheckEqual(settings.Scope[0].SubnetMask, '192.168.1.1/24');
     settings.Scope[0].SubnetMask := '192.168.0.1/14'; // allow 262,144 IPs
     //ConsoleObject(settings);

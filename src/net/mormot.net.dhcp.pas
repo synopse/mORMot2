@@ -6515,7 +6515,7 @@ begin
   // avoid GPF during shutdown
   if fOwner = nil then
     exit;
-  // compute the response
+  // parse the request, and compute the response
   fState.RecvLen := len;
   fState.RecvIp4 := remote.IP4;
   fState.Tix32 := fTix32; // set in OnIdle()
