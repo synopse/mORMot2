@@ -5149,7 +5149,9 @@ begin
      (fState <> sSetup) then // e.g. after Shutdown
     exit;
   fIdleTix := tix32;
+  {$ifdef OSPOSIX} // GetUptimeSec = GetTickSec = tix32 on Windows
   tix32 := GetUptimeSec; // GetTickSec/tix64/fIdleTix would not include sleep
+  {$endif OSPOSIX}
   saved := 0;
   total := 0;
   fScopeSafe.ReadLock;

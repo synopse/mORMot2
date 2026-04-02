@@ -4988,7 +4988,7 @@ type
       var Dest; Flush: boolean = false);
   end;
 
-/// thread-safe cache of a File content
+/// thread-safe cache of a File content with default 1 shl 6 = 64 secs timeout
 function StringFromFileCached(const FileName: TFileName;
   var Cache: TCachedValue; TixShr: cardinal = 6): RawByteString;
 
