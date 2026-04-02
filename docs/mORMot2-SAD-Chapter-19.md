@@ -158,7 +158,7 @@ begin
   TOrmComment.AddFilterNotVoidText(['Title', 'Content']);
   TOrmTag.AddFilterNotVoidText(['Ident']);
   // FTS without content (external content table)
-  Result.Props[TOrmArticleSearch].Fts5WithoutContent(TOrmArticle);
+  Result.Props[TOrmArticleSearch].Fts4WithoutContent(TOrmArticle);
 end;
 
 end.
@@ -605,10 +605,17 @@ mORMot includes built-in CSRF protection:
 ```pascal
 procedure TBlogApplication.Search(const Query: RawUtf8;
   out Results: variant);
+var
+  DocIDs: TIDDynArray;
 begin
-  Results := RestModel.Orm.FtsMatch(
-    TOrmArticleSearch, 'Title,Abstract,Content', Query,
-    'ID,Title,Abstract', 20);
+  // FtsMatch returns matching document IDs as a boolean result
+  if RestModel.Orm.FtsMatch(TOrmArticleSearch, Query + '*', DocIDs) then
+    Results := RestModel.Orm.RetrieveDocVariantArray(
+      TOrmArticle, '', 'RowID in (%)',
+      [Int64DynArrayToCsv(pointer(DocIDs), length(DocIDs))],
+      'ID,Title,Abstract')
+  else
+    Results := _ArrFast([]);
 end;
 ```
 

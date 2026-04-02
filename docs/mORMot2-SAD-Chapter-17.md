@@ -68,7 +68,7 @@ Available HTTP client classes:
 | Class | Transport | Platform |
 |-------|-----------|----------|
 | `TRestHttpClientSocket` | Raw sockets | All |
-| `TRestHttpClientWebSockets` | WebSocket | All |
+| `TRestHttpClientWebsockets` | WebSocket | All |
 | `TRestHttpClientWinHttp` | WinHTTP API | Windows |
 | `TRestHttpClientCurl` | libcurl | Linux/macOS |
 
@@ -320,10 +320,10 @@ Content-Type: application/json
 
 mORMot's default authentication uses a challenge-response protocol:
 
-1. Client requests timestamp: `GET /api/auth`
-2. Server returns: `{"result": "1234567890"}`
-3. Client computes: `HMAC-SHA256(password, timestamp + username)`
-4. Client authenticates: `GET /api/auth?UserName=xxx&PasswordHashHexa=yyy&ClientNonce=zzz`
+1. Client requests a server nonce: `GET /api/auth?UserName=xxx`
+2. Server returns: `{"result": "hexadecimalnonce"}`
+3. Client computes: `Sha256(ModelRoot+Nonce+ClientNonce+UserName+Sha256('salt'+PassWord))`
+4. Client authenticates: `GET /api/auth?UserName=xxx&Password=yyy&ClientNonce=zzz`
 5. Server returns session info
 
 For simpler integration, consider:

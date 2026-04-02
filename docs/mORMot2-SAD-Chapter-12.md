@@ -191,10 +191,10 @@ Get results as object list:
 
 ```pascal
 var
-  List: TObjectList<TOrmCustomer>;
+  List: TObjectList;
   Customer: TOrmCustomer;
 begin
-  List := Client.Orm.RetrieveList<TOrmCustomer>(
+  List := Client.Orm.RetrieveList(TOrmCustomer,
     'Country = ?', ['USA']);
   try
     for Customer in List do
@@ -380,7 +380,7 @@ begin
     begin
       Customer := TOrmCustomer.Create;
       Customer.Name := FormatUtf8('Customer %', [i]);
-      Client.Orm.Add(Customer, True);  // Automatically batched
+      Client.BatchAdd(Customer, True);  // Add to current batch
       Customer.Free;
     end;
   finally
@@ -551,31 +551,30 @@ end;
 var
   MasterClient: TRestHttpClient;
   SlaveServer: TRestServerDB;
-  MasterOrm: IRestOrmServer;
 begin
   MasterClient := TRestHttpClientWinHttp.Create('master', '8080', Model);
   SlaveServer := TRestServerDB.Create(Model, 'slave.db3');
 
-  // One-shot sync (var parameter requires IRestOrmServer)
-  MasterOrm := MasterClient.Orm as IRestOrmServer;
+  // One-shot sync (Master parameter is IRestOrm)
   SlaveServer.RecordVersionSynchronizeSlave(
-    TOrmCustomer, MasterOrm, nil, 1000);  // 1000 = MaxRowsInOneBatch
+    TOrmCustomer, MasterClient.Orm, 1000);  // 1000 = ChunkRowLimit per batch
 end;
 
 // For continuous synchronization (recommended):
+// MasterRemoteAccess requires TRestClientUri (not IRestOrm)
 SlaveServer.RecordVersionSynchronizeSlaveStart(
-  TOrmCustomer, MasterClient.Orm, 1000);  // Check every 1000ms
+  TOrmCustomer, MasterClient);  // OnNotify callback is optional
 ```
 
 ### 12.8.2. Change Tracking
 
-mORMot2 provides `TOrmHistory` in `mormot.orm.core` for tracking record changes:
+mORMot2 provides `TOrmHistory` in `mormot.rest.core` for tracking record changes:
 
 ```pascal
-// TOrmHistory is defined in mormot.orm.core with fields for:
+// TOrmHistory is defined in mormot.rest.core with fields for:
 // - ModifiedRecord: TID (reference to modified record)
 // - Event: TOrmHistoryEvent
-// - SentDataJson: RawBlob
+// - SentDataJson: RawUtf8
 // - Timestamp: TModTime
 
 // Server tracks all changes via TRestOrmServer

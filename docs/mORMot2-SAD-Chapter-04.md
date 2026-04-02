@@ -9,7 +9,7 @@ The mORMot 2 framework uses custom low-level types, classes, and functions inste
 - **Optimized performance** for speed, multi-threading, and memory efficiency
 - **Consistent KISS design** with shared common features
 
-In mORMot 1, most of this functionality resided in a single 2.3MB `SynCommons.pas` file. In mORMot 2, this has been split into **24 focused units** in the `mormot.core.*` namespace, following SOLID principles.
+In mORMot 1, most of this functionality resided in a single 2.3MB `SynCommons.pas` file. In mORMot 2, this has been split into **26 focused units** in the `mormot.core.*` namespace, following SOLID principles.
 
 ---
 
@@ -510,7 +510,7 @@ Inherit from these for built-in `TSynLocker`:
 | `mormot.core.os` | OS abstraction | `TSynLocker`, `GetTickCount64`, file/process APIs |
 | `mormot.core.unicode` | Charset conversion | `Utf8ToString`, `WinAnsiToUtf8` |
 | `mormot.core.text` | Text processing | `FormatUtf8`, CSV parsing, currency |
-| `mormot.core.datetime` | Date/time handling | `TTimeLog`, ISO 8601, `TSynTimeZone` |
+| `mormot.core.datetime` | Date/time handling | `TTimeLog`, ISO 8601 |
 
 ### 4.8.2. Data Layer
 
@@ -529,16 +529,18 @@ Inherit from these for built-in `TSynLocker`:
 | `mormot.core.log` | Logging framework | `TSynLog`, `ISynLog` |
 | `mormot.core.perf` | Performance monitoring | `TSynMonitor`, timing |
 | `mormot.core.threads` | Threading utilities | `TSynBackgroundThread` (Abstract, Method, Event variants), `TSynParallelProcess` |
-| `mormot.core.search` | Search and filtering | Full-text search helpers |
+| `mormot.core.search` | Search and filtering | `TSynTimeZone`, full-text search helpers |
 | `mormot.core.test` | Testing framework | `TSynTestCase` |
 | `mormot.core.mustache` | Template engine | `TSynMustache` |
 | `mormot.core.interfaces` | Interface support | DI/IoC container |
 | `mormot.core.zip` | ZIP compression | Archive handling |
 
-> **Note:** The tables above list commonly used core units (18 of 24 total). Specialized units not shown include:
+> **Note:** The tables above list commonly used core units (18 of 26 total). Specialized units not shown include:
 > - `mormot.core.collections` - Additional collection types
+> - `mormot.core.fmt` - HTML, XML, Markdown, INI and settings formatting
 > - `mormot.core.os.security` - OS security APIs
 > - `mormot.core.os.mac` - macOS-specific functionality
+> - `mormot.core.os.delphi` - Delphi-specific POSIX wrappers
 > - `mormot.core.mvc` - Model-View-Controller patterns
 > - `mormot.core.fpclibcmm` - FPC LibC memory manager
 > - `mormot.core.fpcx64mm` - FPC x64 memory manager
