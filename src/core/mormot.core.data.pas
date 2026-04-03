@@ -4065,12 +4065,12 @@ begin
 end;
 
 {$ifdef OSWINDOWS}
-procedure _GlobalInfoComputer(Sender: TBinDictionary);
+procedure _GlobalInfoJoin(Sender: TBinDictionary);
 var
   f: TComputerNameFormat;
 begin
   for f := low(f) to high(f) do
-    Sender.UpdateTextNotVoid(Join(['computer:', GetEnumNameTrimed(
+    Sender.UpdateTextNotVoid(Join(['join:', GetEnumNameTrimed(
       TypeInfo(TComputerNameFormat), ord(f), scKebabCase)]), WinComputerName(f));
 end;
 {$endif OSWINDOWS}
@@ -10859,7 +10859,7 @@ begin
   GlobalInfoRegister('user:', _GlobalInfoUser);
   GlobalInfoRegister('bios:', _GlobalInfoBios);
   {$ifdef OSWINDOWS}
-  GlobalInfoRegister('computer:', _GlobalInfoComputer);
+  GlobalInfoRegister('join:', _GlobalInfoJoin);
   {$endif OSWINDOWS}
   // in-memory hashing are seeded from random to avoid hash flooding
   HashSeed := SystemEntropy.Startup.c0;
