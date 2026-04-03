@@ -2774,7 +2774,7 @@ function GetTimeZoneInformation(var info: TTimeZoneInformation): DWord;
 procedure SetSystemTimeZone(const info: TDynamicTimeZoneInformation);
 
 type
-  /// the SID types, as recognized by LookupSid()
+  /// the SID types, as recognized by LookupSid() and LookupName()
   TSidType = (
     stUndefined,
     stTypeUser,
@@ -2872,6 +2872,21 @@ function LookupToken(tok: THandle; out name, domain: RawUtf8;
 
 /// retrieve the 'domain\name' combined value of a given Token
 function LookupToken(tok: THandle; const server: RawUtf8 = ''): RawUtf8; overload;
+
+/// retrieve the binary SID and type of a given account by name
+// - use fully qualified account names (for example, domain_name\user_name)
+function LookupName(const system, account: RawUtf8;
+  out domain: RawUtf8; out sid: TSid): TSidType; overload;
+
+/// retrieve the text SID of a given account by name
+// - use fully qualified account names (for example, domain_name\user_name)
+// instead of isolated names (for example, user_name); fully qualified names are
+// unambiguous and provide better performance when the lookup is performed. This
+// function also supports fully qualified DNS names (for example,
+// example.example.com\user_name) and user principal names (UPN) (for example,
+// someone@example.com)
+function LookupName(const system, account: RawUtf8;
+  domain: PRawUtf8 = nil; st: PSidType = nil): RawUtf8; overload;
 
 type
   /// define the kind of resource access by GetFileSecurityDescriptor()
@@ -7312,6 +7327,11 @@ function LookupAccountSidW(lpSystemName: PWideChar; Sid: PSID; Name: PWideChar;
   var cchReferencedDomainName: DWord; var peUse: DWord): BOOL;
     stdcall; external advapi32;
 
+function LookupAccountNameW(lpSystemName, lpAccountName: PWideChar; Sid: PSID;
+  var cbSid: DWord; ReferencedDomainName: PWideChar; var cbReferencedDomainName: DWord;
+  var peUse: DWord): BOOL;
+    stdcall; external advapi32;
+
 function RawTokenOpen(wtt: TWinTokenType; access: cardinal): THandle;
 begin
   if wtt = wttProcess then
@@ -7898,6 +7918,7 @@ begin
     exit;
   nl := SizeOf(n);
   dl := SizeOf(d);
+  use := ord(stUndefined);
   if LookupAccountSidW(
        Utf8ToWin32PWideChar(server, s), sid, @n, nl, @d, dl, use) then
   begin
@@ -7921,6 +7942,46 @@ begin
     result := LookupSid(@s, name, domain, server)
   else
     result := stUndefined;
+end;
+
+function LookupName(const system, account: RawUtf8; out domain: RawUtf8;
+  out sid: TSid): TSidType;
+var
+  s, a: TSynTempBuffer;
+  nsid, ndom, use: cardinal;
+  dom: TByteToWideChar;
+begin
+  result := stUndefined;
+  FillZero(sid);
+  if account = '' then
+    exit;
+  nsid := SizeOf(sid);
+  ndom := SizeOf(dom) shr 1; // in TCHARs
+  use := ord(stUndefined);
+  if LookupAccountNameW(Utf8ToWin32PWideChar(system, s),
+       Utf8ToWin32PWideChar(account, a), @sid, nsid, @dom, ndom, use) then
+  begin
+    Win32PWideCharToUtf8(@dom, domain);
+    if use <= byte(high(TSidType)) then
+      result := TSidType(use);
+  end;
+  s.Done;
+  a.Done;
+end;
+
+function LookupName(const system, account: RawUtf8; domain: PRawUtf8;
+  st: PSidType): RawUtf8;
+var
+  sid: TSid;
+  dom: RawUtf8;
+  t: TSidType;
+begin
+  t := LookupName(system, account, dom, sid);
+  if domain <> nil then
+    domain^ := dom;
+  if st <> nil then
+    st^ := t;
+  SidToText(@sid, result);
 end;
 
 function LookupToken(tok: THandle; out name, domain: RawUtf8;
