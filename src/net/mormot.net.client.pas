@@ -354,7 +354,7 @@ type
     FirstAccess: TUnixTimeMinimal;
     /// the last time this file was accessed - used to delete deprecated files
     LastAccess: TUnixTimeMinimal;
-    /// a few (4) bytes to reach 32 bytes per entry
+    /// a few (4) bytes to reach 32 bytes per entry and prepare extension
     Padding: array[1 .. 32 - SizeOf(THash160) - SizeOf(TUnixTimeMinimal) * 2] of byte;
   end;
   /// point to one cached file metadata

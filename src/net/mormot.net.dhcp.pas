@@ -1698,7 +1698,7 @@ type
   // - several interfaces and ports could be bound to this single instance
   TDhcpServer = class(TDhcpProcess)
   protected
-    fThreads: TThreadList; // fThreads.List[] are TDhcpServerThread
+    fThreads: TThreads; // fThreads.List[] are TDhcpServerThread
     function GetThread(s: PDhcpScope): TDhcpServerThread;
     function EnsureBound(s: PDhcpScope; mac: PMacAddress): TDhcpServerThread;
     procedure ThreadShutdownNotify(Sender: TDhcpServerThread);

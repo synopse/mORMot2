@@ -7,7 +7,7 @@ unit mormot.core.threads;
   *****************************************************************************
 
    High-Level Multi-Threading features shared by all framework units
-    - TThreadList thread-safe wrapper
+    - TThreads thread-safe wrapper
     - IAutoFree and IAutoLocker Reference-Counted Process
     - Thread-Safe TSynQueue and TPendingTaskList
     - Thread-Safe ILockedDocVariant Storage
@@ -61,7 +61,7 @@ type
 {$endif PUREMORMOT2}
 
 
-{ ************* TThreadList thread-safe wrapper }
+{ ************* TThreads thread-safe wrapper }
 
 type
   /// exception class raised by this unit
@@ -73,9 +73,9 @@ type
 
   /// maintain a thread-safe list of TThread instances
   {$ifdef USERECORDWITHMETHODS}
-  TThreadList = record
+  TThreads = record
   {$else}
-  TThreadList = object
+  TThreads = object
   {$endif USERECORDWITHMETHODS}
   public
     /// make this list thread-safe
@@ -1772,11 +1772,11 @@ procedure ThreadCountAdjust(var aThreadPoolCount: integer);
 implementation
 
 
-{ ************* TThreadList thread-safe wrapper }
+{ ************* TThreads thread-safe wrapper }
 
-{ TThreadList }
+{ TThreads }
 
-procedure TThreadList.Add(t: TThread);
+procedure TThreads.Add(t: TThread);
 begin
   Safe.Lock;
   try
@@ -1786,13 +1786,13 @@ begin
   end;
 end;
 
-procedure TThreadList.Terminated(t: TThread);
+procedure TThreads.Terminated(t: TThread);
 begin
   if t <> nil then
     PtrArrayDelete(List, t, Safe);
 end;
 
-procedure TThreadList.Terminate;
+procedure TThreads.Terminate;
 var
   i: PtrInt;
 begin
@@ -1805,7 +1805,7 @@ begin
   end;
 end;
 
-procedure TThreadList.TerminateAndWait(secs: integer;
+procedure TThreads.TerminateAndWait(secs: integer;
   sender: TObject; logclass: TSynLogClass);
 var
   tix, endtix, lasttix: cardinal;
