@@ -2889,6 +2889,27 @@ function LookupName(const system, account: RawUtf8;
   domain: PRawUtf8 = nil; st: PSidType = nil): RawUtf8; overload;
 
 type
+  /// select a type of output for the ComputerName() function
+  // - cnfNetbios may be truncated so return e.g. 'corporate-mail-'
+  // - cnfDnsHostname, e.g. 'corporate-mail-server'
+  // - cnfDnsDomain, e.g. 'microsoft.com'
+  // - cnfDnsFqn, e.g. 'corporate-mail-server.microsoft.com'
+  // - cnfLocalNetbios, cnfLocalDnsHostname, cnfLocalDnsDomain and
+  // cnfLocalDnsFqn return the local/physical node name on a cluster
+  TComputerNameFormat = (
+    cnfNetbios,
+    cnfDnsHostname,
+    cnfDnsDomain,
+    cnfDnsFqn,
+    cnfLocalNetbios,
+    cnfLocalDnsHostname,
+    cnfLocalDnsDomain,
+    cnfLocalDnsFqn);
+
+/// retrieves a NetBIOS or DNS name associated with the local computer
+function ComputerName(fmt: TComputerNameFormat = cnfDnsFqn): RawUtf8;
+
+type
   /// define the kind of resource access by GetFileSecurityDescriptor()
   // - match the SE_OBJECT_TYPE low-level Windows definition
   // - nrtFile is a relative, absolute or UNC file name e.g. 'c:\toto\titi.txt'
@@ -7332,6 +7353,9 @@ function LookupAccountNameW(lpSystemName, lpAccountName: PWideChar; Sid: PSID;
   var peUse: DWord): BOOL;
     stdcall; external advapi32;
 
+function GetComputerNameExW(NameType: DWord; lpbuffer: PWideChar; var nSize: DWord): BOOL;
+  stdcall; external kernel32;
+
 function RawTokenOpen(wtt: TWinTokenType; access: cardinal): THandle;
 begin
   if wtt = wttProcess then
@@ -7982,6 +8006,18 @@ begin
   if st <> nil then
     st^ := t;
   SidToText(@sid, result);
+end;
+
+function ComputerName(fmt: TComputerNameFormat): RawUtf8;
+var
+  n: TByteToWideChar;
+  s: cardinal;
+begin
+  s := SizeOf(n);
+  if GetComputerNameExW(ord(fmt), @n, s) then
+    Win32PWideCharToUtf8(@n, result)
+  else
+    FastAssignNew(result);
 end;
 
 function LookupToken(tok: THandle; out name, domain: RawUtf8;
