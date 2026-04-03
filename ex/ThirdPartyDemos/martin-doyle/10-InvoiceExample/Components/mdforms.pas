@@ -1,5 +1,5 @@
 {:
-———————————————————————————————————————————————— (C) martindoyle 2017-2025 ——
+---------------------------------------------------(C) martindoyle 2017-2026 --
  Project : mdComponents
 
   Module : mdForms.pas
@@ -26,19 +26,20 @@
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
     IN THE SOFTWARE.
-————————————————————————————————————————————————————————————————————————————
+--------------------------------------------------------------------------------
 }
 unit MdForms;
 
 interface
 
 uses
-  Classes, SysUtils, Controls, Forms, Menus,
+  Classes, SysUtils, Controls, Forms, Graphics, Menus, StdCtrls,
   {$IFDEF FPC}
   LCLType
   {$ELSE FPC}
   Windows
-  {$ENDIF FPC};
+  {$ENDIF FPC},
+  mdLayout;
 
 type
   TFormMode = (fmBrowse, fmInsert, fmEdit);
@@ -49,14 +50,30 @@ type
   private
     FAsChild: boolean;
     FTempParent: TWinControl;
+    FLayout: TLayoutHelper;
+    FLabelHeight: Integer;
+    FEditHeight: Integer;
+    FLabelWidth: Integer;
+    FEditWidth: Integer;
   protected
     procedure CreateParams(var Params: TCreateParams); override;
     procedure Loaded; override;
   public
     constructor Create(AOwner: TComponent); overload; override;
     constructor Create(AOwner: TComponent; AParent: TWinControl); reintroduce; overload;
+    destructor Destroy; override;
+    procedure InitLayout(ALabelHeight, AEditHeight: Integer;
+      ALabelWidth, AEditWidth: Single);
+    procedure PrepareLabel(ALabel: TLabel);
+    procedure PrepareEdit(AEdit: TEdit);
+    procedure PrepareLabelEdit(ALabel: TLabel; AEdit: TEdit);
     function GetFormMenu: TMainMenu; virtual; abstract;
     function CanChange: boolean; virtual;
+    property Layout: TLayoutHelper read FLayout;
+    property LabelHeight: Integer read FLabelHeight;
+    property EditHeight: Integer read FEditHeight;
+    property LabelWidth: Integer read FLabelWidth;
+    property EditWidth: Integer read FEditWidth;
   end;
 
   { TMDDBModeForm }
@@ -124,6 +141,44 @@ begin
   FAsChild := True;
   FTempParent := aParent;
   inherited Create(AOwner);
+end;
+
+destructor TMDChildForm.Destroy;
+begin
+  FLayout.Free;
+  inherited Destroy;
+end;
+
+procedure TMDChildForm.InitLayout(ALabelHeight, AEditHeight: Integer;
+  ALabelWidth, AEditWidth: Single);
+begin
+  FLabelHeight := ALabelHeight;
+  FEditHeight := AEditHeight;
+  FLabelWidth := Round(ALabelWidth);
+  FEditWidth := Round(AEditWidth);
+  FreeAndNil(FLayout);
+  FLayout := TLayoutHelper.Create(Self, LayoutMargins(ALabelHeight));
+  FLayout.AdjustForPlatform;
+end;
+
+procedure TMDChildForm.PrepareLabel(ALabel: TLabel);
+begin
+  ALabel.AutoSize := False;
+  ALabel.Width := FLabelWidth;
+  ALabel.Height := FEditHeight;
+  ALabel.Layout := tlCenter;
+end;
+
+procedure TMDChildForm.PrepareEdit(AEdit: TEdit);
+begin
+  AEdit.Width := FEditWidth;
+end;
+
+procedure TMDChildForm.PrepareLabelEdit(ALabel: TLabel; AEdit: TEdit);
+begin
+  PrepareLabel(ALabel);
+  PrepareEdit(AEdit);
+  ALabel.FocusControl := AEdit;
 end;
 
 function TMDChildForm.CanChange: boolean;
