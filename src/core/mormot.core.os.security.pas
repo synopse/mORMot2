@@ -69,7 +69,7 @@ type
   /// Security IDentifier (SID) binary format, as retrieved e.g. by Windows API
   // - this definition is not detailed on oldest Delphi, and not available on
   // POSIX, whereas it makes sense to also have it, e.g. for server process
-  // - its maximum used length is 1032 bytes
+  // - its maximum used length is 1032 bytes (but usually much shorter)
   // - see [MS-DTYP] 2.4.2 SID
   TSid = packed record
     Revision: byte;
@@ -100,6 +100,9 @@ function SidLength(sid: PSid): PtrInt;
 
 /// allocate a RawSid instance from a PSid raw handler
 procedure ToRawSid(sid: PSid; out result: RawSid);
+
+/// initialize a TSid structure by setting Revision and length to 0
+procedure FillZero(var sid: TSid); overload;
 
 /// check if a RawSid binary buffer has the expected length of a valid SID
 function IsValidRawSid(const sid: RawSid): boolean;
@@ -2785,6 +2788,8 @@ type
     stTypeComputer,
     stTypeLabel,
     stTypeLogonSession);
+  /// pointer to a SID type for LookupName() optional parameter
+  PSidType = ^TSidType;
 
 /// return the SID of a given token, nil if none found
 // - the returned PSid is located within buf temporary buffer
@@ -2948,6 +2953,11 @@ procedure ToRawSid(sid: PSid; out result: RawSid);
 begin
   if sid <> nil then
     FastSetRawByteString(RawByteString(result), sid, SidLength(sid));
+end;
+
+procedure FillZero(var sid: TSid);
+begin
+  PInt64(@sid)^ := 0;
 end;
 
 procedure SidAppendShort(sid: PSid; var s: ShortString);
