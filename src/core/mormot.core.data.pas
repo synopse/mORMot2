@@ -4057,6 +4057,10 @@ begin
   {$else}
   Sender.UpdateTextNotVoid( 'user:uid', CurrentSid(wttProcess, nil, @u));
   Sender.UpdateTextNotVoid( 'user:domain', u);
+  u := LookupName('', Join([u, '\', Executable.Host])); // try 'domain\host'
+  if u = '' then
+    u := LookupName('', Executable.Host); // fallback to isolated name
+  Sender.UpdateTextNotVoid( 'user:computerid', u);
   {$endif OSPOSIX}
 end;
 
