@@ -4071,7 +4071,7 @@ var
 begin
   for f := low(f) to high(f) do
     Sender.UpdateTextNotVoid(Join(['computer:', GetEnumNameTrimed(
-      TypeInfo(TComputerNameFormat), ord(f), scKebabCase)]), ComputerName(f));
+      TypeInfo(TComputerNameFormat), ord(f), scKebabCase)]), WinComputerName(f));
 end;
 {$endif OSWINDOWS}
 

@@ -2905,25 +2905,25 @@ function LookupName(const system, account: RawUtf8;
   domain: PRawUtf8 = nil; st: PSidType = nil): RawUtf8; overload;
 
 type
-  /// select a type of output for the ComputerName() function
+  /// select a type of output for the WinComputerName() function
   // - cnfNetbios may be truncated so return e.g. 'corporate-mail-'
-  // - cnfDnsHostname, e.g. 'corporate-mail-server'
-  // - cnfDnsDomain, e.g. 'microsoft.com'
-  // - cnfDnsFqn, e.g. 'corporate-mail-server.microsoft.com'
-  // - cnfLocalNetbios, cnfLocalDnsHostname, cnfLocalDnsDomain and
-  // cnfLocalDnsFqn return the local/physical node name on a cluster
+  // - cnfHostname is e.g. 'corporate-mail-server'
+  // - cnfDomain is e.g. 'microsoft.com'
+  // - cnfFqn is e.g. 'corporate-mail-server.microsoft.com'
+  // - cnfLocalNetbios, cnfLocalHostname, cnfLocalDomain and
+  // cnfLocalFqn return the local/physical node name on a cluster
   TComputerNameFormat = (
     cnfNetbios,
-    cnfDnsHostname,
-    cnfDnsDomain,
-    cnfDnsFqn,
+    cnfHostname,
+    cnfDomain,
+    cnfFqn,
     cnfLocalNetbios,
-    cnfLocalDnsHostname,
-    cnfLocalDnsDomain,
-    cnfLocalDnsFqn);
+    cnfLocalHostname,
+    cnfLocalDomain,
+    cnfLocalFqn);
 
 /// retrieves a NetBIOS or DNS name associated with the local computer
-function ComputerName(fmt: TComputerNameFormat = cnfDnsFqn): RawUtf8;
+function WinComputerName(fmt: TComputerNameFormat = cnfFqn): RawUtf8;
 
 type
   /// define the kind of resource access by GetFileSecurityDescriptor()
@@ -8023,7 +8023,7 @@ begin
   SidToText(@sid, result);
 end;
 
-function ComputerName(fmt: TComputerNameFormat): RawUtf8;
+function WinComputerName(fmt: TComputerNameFormat): RawUtf8;
 var
   n: TByteToWideChar;
   s: cardinal;
