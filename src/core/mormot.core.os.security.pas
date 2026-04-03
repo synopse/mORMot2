@@ -8195,9 +8195,10 @@ begin
   win_safe.Lock;
   if name <> nil then
     win_joined := name^;
-  win_join := result;
-  if win_join = jsUnknown then
-    win_join := jsUnjoined;
+  if result = jsUnknown then
+    win_join := jsUnjoined
+  else
+    win_join := result;
   win_safe.UnLock;
 end;
 
