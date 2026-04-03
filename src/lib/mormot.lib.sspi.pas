@@ -859,15 +859,10 @@ const
 // netapi32.dll API calls
 
 const
-  netapi32 = 'netapi32.dll';
-
   MAX_PREFERRED_LENGTH = cardinal(-1);
   LG_INCLUDE_INDIRECT = 1;
-  NERR_Success = 0;
 
 type
-  TNetApiStatus = cardinal;
-
   // _USER_INFO_0, _LOCALGROUP_MEMBERS_INFO_3 and _LOCALGROUP_INFO_0 do match
   TGroupInfo0 = record
     name: PWideChar;
@@ -892,8 +887,6 @@ type
 
 function NetApiBufferAllocate(ByteCount: cardinal;
   var Buffer: pointer): TNetApiStatus; stdcall;
-
-function NetApiBufferFree(Buffer: pointer): TNetApiStatus; stdcall;
 
 function NetApiBufferReallocate(OldBuffer: pointer; NewByteCount: cardinal;
   var NewBuffer: pointer): TNetApiStatus; stdcall;
@@ -2000,7 +1993,6 @@ end;
 { ****************** Lan Manager Access Functions }
 
 function NetApiBufferAllocate;    external netapi32;
-function NetApiBufferFree;        external netapi32;
 function NetApiBufferReallocate;  external netapi32;
 function NetApiBufferSize;        external netapi32;
 

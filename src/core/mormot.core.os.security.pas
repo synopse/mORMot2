@@ -2554,7 +2554,7 @@ var
   CryptoApi: TWinCryptoApi;
 
 const
-  crypt32 = 'Crypt32.dll';
+  crypt32 = 'crypt32.dll';
 
 function CertOpenSystemStoreW(hProv: HCRYPTPROV;
   szSubsystemProtocol: PWideChar): HCERTSTORE ;
@@ -2741,6 +2741,22 @@ procedure GetProcessInfo(const aPidList: TCardinalDynArray;
 // - warning: do not call this function directly, but rather mormot.core.datetime
 // TSynSystemTime.ChangeOperatingSystemTime cross-platform method instead
 function SetSystemTime(const utctime: TSystemTime): boolean;
+
+
+{ netapi32.dll API calls - see also mormot.lib.sspi.pas }
+
+const
+  netapi32 = 'netapi32.dll';
+
+  NERR_Success = 0;
+
+type
+  TNetApiStatus = cardinal;
+
+// published since used by mormot.lib.sspi
+function NetApiBufferFree(Buffer: pointer): TNetApiStatus;
+    stdcall; external netapi32;
+
 
 { some Windows API redefined here for Delphi and FPC consistency }
 
@@ -7311,7 +7327,6 @@ const
     'SeIncreaseWorkingSetPrivilege',   // wspIncWorkingSet
     'SeTimeZonePrivilege',             // wspTimeZone
     'SeCreateSymbolicLinkPrivilege');  // wspCreateSymbolicLink
-
 
 type
   TOKEN_PRIVILEGES = packed record
