@@ -4064,6 +4064,17 @@ begin
   {$endif OSPOSIX}
 end;
 
+{$ifdef OSWINDOWS}
+procedure _GlobalInfoComputer(Sender: TBinDictionary);
+var
+  f: TComputerNameFormat;
+begin
+  for f := low(f) to high(f) do
+    Sender.UpdateTextNotVoid(Join(['computer:', GetEnumNameTrimed(
+      TypeInfo(TComputerNameFormat), ord(f), scKebabCase)]), ComputerName(f));
+end;
+{$endif OSWINDOWS}
+
 procedure _GlobalInfoBios(Sender: TBinDictionary);
 begin
   Sender.UpdateTextNotVoid( 'bios:info',         BiosInfoText);
@@ -10847,6 +10858,9 @@ begin
   GlobalInfoRegister('env:',  _GlobalInfoEnv);
   GlobalInfoRegister('user:', _GlobalInfoUser);
   GlobalInfoRegister('bios:', _GlobalInfoBios);
+  {$ifdef OSWINDOWS}
+  GlobalInfoRegister('computer:', _GlobalInfoComputer);
+  {$endif OSWINDOWS}
   // in-memory hashing are seeded from random to avoid hash flooding
   HashSeed := SystemEntropy.Startup.c0;
 end;
