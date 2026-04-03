@@ -2934,8 +2934,39 @@ type
     cnfLocalDomain,
     cnfLocalFqn);
 
+  /// extended type output for WinComputerName() and WinUserName() functions
+  // - enfFqdn is e.g. 'CN=Jeff Smith,OU=Users,DC=Engineering,DC=Microsoft,DC=Com'
+  // - enfSam is e.g. 'Engineering\JSmith'
+  // - enfDisplay is e.g. 'Jeff Smith'
+  // - enfGuid is e.g. '{4fa050f0-f561-11cf-bdd9-00aa003a77b6}'
+  // - enfUuid is e.g. '4fa050f0-f561-11cf-bdd9-00aa003a77b6'
+  // - enfCanonical is e.g. 'engineering.microsoft.com/software/someone'
+  // - enfUserPrincipal is e.g. 'someone@example.com'
+  // - enfServicePrincipal is e.g. 'www/www.microsoft.com@microsoft.com'
+  // - enfDnsDomain is e.g. 'engineering.microsoft.com/software\JSmith'
+  // - enfGivenname (only for WinUserName) is e.g. 'Jeff'
+  // - enfSurname (only for WinUserName) is e.g. 'Smith'
+  TExtendedNameFormat = (
+    enfFqdn,
+    enfSam,
+    enfDisplay,
+    enfGuid,
+    enfUuid,
+    enfCanonical,
+    enfUserPrincipal,
+    enfServicePrincipal,
+    enfDnsDomain,
+    enfGivenname,
+    enfSurname);
+
 /// retrieves a NetBIOS or DNS name associated with the local computer
-function WinComputerName(fmt: TComputerNameFormat = cnfFqn): RawUtf8;
+function WinComputerName(fmt: TComputerNameFormat = cnfFqn): RawUtf8; overload;
+
+/// retrieves an extended name associated with the local computer
+function WinComputerName(fmt: TExtendedNameFormat): RawUtf8; overload;
+
+/// retrieves an extended name associated with the current user
+function WinUserName(fmt: TExtendedNameFormat): RawUtf8;
 
 type
   /// define the kind of resource access by GetFileSecurityDescriptor()
@@ -7381,7 +7412,18 @@ function LookupAccountNameW(lpSystemName, lpAccountName: PWideChar; Sid: PSID;
     stdcall; external advapi32;
 
 function GetComputerNameExW(NameType: DWord; lpbuffer: PWideChar; var nSize: DWord): BOOL;
-  stdcall; external kernel32;
+    stdcall; external kernel32;
+
+const
+  secur32 = 'secur32.dll';
+
+function GetComputerObjectNameW(NameFormat: DWord; lpNameBuffer: PWideChar;
+  var nSize: DWord): BOOL;
+    stdcall; external secur32;
+
+function GetUserNameExW(NameFormat: DWord; lpNameBuffer: PWideChar;
+  var nSize: DWord): BOOL;
+    stdcall; external secur32;
 
 function RawTokenOpen(wtt: TWinTokenType; access: cardinal): THandle;
 begin
@@ -8045,6 +8087,43 @@ begin
     Win32PWideCharToUtf8(@n, result)
   else
     FastAssignNew(result);
+end;
+
+type
+  TGetExtendedName = function(NameFormat: DWord; lpNameBuffer: PWideChar;
+    var nSize: DWord): BOOL; stdcall;
+const
+  ENF: array[TExtendedNameFormat] of byte = (1, 2, 3, 6, 6, 7, 8, 10, 12, 13, 14);
+
+procedure _GetExtendedName(call: TGetExtendedName; fmt, max: TExtendedNameFormat;
+  out name: RawUtf8);
+var
+  tmp: TByteToWideChar;
+  siz: cardinal;
+  namelen: PtrInt;
+begin
+  siz := SizeOf(tmp);
+  if (fmt > max) or
+     not call(ENF[fmt], @tmp, siz) and
+     (tmp[0] = #0) then
+    exit;
+  Win32PWideCharToUtf8(@tmp, name);
+  namelen := length(name);
+  if (namelen > 30) and
+     (fmt = enfUuid) and
+     (name[1] = '{') and
+     (name[namelen] = '}') then
+    name := copy(name, 2, namelen - 2); // trim { } GUID format into plain UUID
+end;
+
+function WinComputerName(fmt: TExtendedNameFormat): RawUtf8;
+begin
+  _GetExtendedName(@GetComputerObjectNameW, fmt, enfDnsDomain, result);
+end;
+
+function WinUserName(fmt: TExtendedNameFormat): RawUtf8;
+begin
+  _GetExtendedName(@GetUserNameExW, fmt, high(fmt), result);
 end;
 
 function LookupToken(tok: THandle; out name, domain: RawUtf8;
