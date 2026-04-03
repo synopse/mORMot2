@@ -2753,9 +2753,21 @@ const
 type
   TNetApiStatus = cardinal;
 
+  /// define the join status of a computer for WinJoinStatus()
+  TJoinStatus = (
+    jsUnknown,
+    jsUnjoined,
+    jsWorkgroup,
+    jsDomain);
+
 // published since used by mormot.lib.sspi
 function NetApiBufferFree(Buffer: pointer): TNetApiStatus;
     stdcall; external netapi32;
+
+/// return join status of a given computer, local if server is default ''
+// - could return the associated joined workgroup or domain name
+// - the value is cached for the current computer (server = '')
+function WinJoinStatus(const server: RawUtf8 = ''; name: PRawUtf8 = nil): TJoinStatus;
 
 
 { some Windows API redefined here for Delphi and FPC consistency }
@@ -8054,6 +8066,60 @@ begin
     Join([domain, '\', name], result)
   else
     result := '';
+end;
+
+var // WinJoinStatus(server='') thread-safe cache for the current computer
+  win_safe: TLightLock;
+  win_join: TJoinStatus;
+  win_joined: RawUtf8;
+
+function NetGetJoinInformation(lpServer: PWideChar; var lpNameBuffer: PWideChar;
+  var BufferType: DWord): Dword;
+    stdcall; external netapi32;
+
+function WinJoinStatus(const server: RawUtf8; name: PRawUtf8): TJoinStatus;
+var
+  s: TSynTempBuffer;
+  n: PWideChar;
+  typ: cardinal;
+begin
+  if server = '' then
+  begin
+    result := win_join;
+    if result <> jsUnknown then
+    begin
+      if name <> nil then
+        name^ := win_joined;
+      exit;
+    end;
+  end;
+  result := jsUnknown;
+  typ := 0;
+  n := nil;
+  if NetGetJoinInformation(Utf8ToWin32PWideChar(server, s), n, typ) = NERR_Success then
+  begin
+    if typ <= byte(high(TJoinStatus)) then
+      result := TJoinStatus(typ);
+    if name <> nil then
+      Win32PWideCharToUtf8(n, name^)
+    else if server = '' then
+    begin
+      win_safe.Lock;
+      Win32PWideCharToUtf8(n, win_joined);
+      win_safe.UnLock;
+    end;
+    NetApiBufferFree(n);
+  end;
+  s.Done;
+  if server <> '' then
+    exit;
+  win_safe.Lock;
+  if name <> nil then
+    win_joined := name^;
+  win_join := result;
+  if win_join = jsUnknown then
+    win_join := jsUnjoined;
+  win_safe.UnLock;
 end;
 
 function GetNamedSecurityInfoW(pObjectName: PWideChar; ObjectType,
