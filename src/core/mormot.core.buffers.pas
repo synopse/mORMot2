@@ -6376,11 +6376,11 @@ begin
       dec(len)
   else
     dec(len, 2); // Base64AnyDecode() algorithm ignores the trailing '='
-  {$ifdef ASMX64AVXNOCONST}
+  {$ifdef ASMX64AVX1}
   result := Base64DecodeMain(sp, rp, len); // may be Base64DecodeMainAvx2
   {$else}
   result := Base64AnyDecode(tab, sp, rp, len);
-  {$endif ASMX64AVXNOCONST}
+  {$endif ASMX64AVX1}
 end;
 
 procedure Base64EncodeLoop(rp, sp: PAnsiChar; len: cardinal; enc: PAnsiChar);
@@ -6400,7 +6400,7 @@ begin // this loop is faster than mORMot 1 manual x86 asm, even on Delphi 7
   until len = 0;
 end;
 
-{$ifdef ASMX64AVXNOCONST} // AVX2 ASM not available on Delphi < 11
+{$ifdef ASMX64AVX1} // AVX2 ASM not available on Delphi < 11
 function Base64EncodeMainAvx2(rp, sp: PAnsiChar; len: cardinal): integer;
 var
   blen: PtrUInt;
@@ -6419,7 +6419,7 @@ begin
   // on error, AVX2 code let sp point to the faulty input so result=false
   result := Base64AnyDecode(@ConvertBase64ToBin, sp, rp, len);
 end;
-{$endif ASMX64AVXNOCONST}
+{$endif ASMX64AVX1}
 
 function Base64EncodeMainPas(rp, sp: PAnsiChar; len: cardinal): integer;
 var
@@ -8834,17 +8834,17 @@ end;
 
 const // https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types/Common_types
   MIME_EXT = 'PNG|GIF|TIF|JP|BMP|DOC|HTM|CSS|JSON|ICO|WOF|TXT|SVG|ATOM|RDF|' +
-     'RSS|WEBP|APPC|MANI|XML|JS|MJS|OGA|OGV|MP4|M2V|M2P|MP3|H264|TEXT|LOG|' +
-     'GZ|WEBM|MKV|RAR|7Z|BZ2|WMA|WMV|AVI|PPT|XLS|PDF|DCM|DICOM|SQLIT|DB3|' +
-     'HEIC|H265|AVIF|AAC|CSV|MD|ICS|OGX|OGG|OPUS|';
+    'RSS|WEBP|APPC|MANI|XML|JS|MJS|OGA|OGV|MP4|M2V|M2P|MP3|H264|TEXT|LOG|' +
+    'GZ|WEBM|MKV|RAR|7Z|BZ2|WMA|WMV|AVI|PPT|XLS|PDF|DCM|DICOM|SQLIT|DB3|' +
+    'HEIC|H265|AVIF|AAC|CSV|MD|ICS|OGX|OGG|OPUS|';
   MIME_EXT_TYPE: array[0 .. 56] of TMimeType = (
     mtPng,  mtGif,  mtTiff,  mtJpg,  mtBmp,  mtDoc,  mtHtml, mtCss,
     mtJson, mtXIcon, mtFont, mtText, mtSvg,  mtXml,  mtXml,  mtXml,
     mtWebp, mtManifest, mtManifest,  mtXml,  mtJS,   mtJS, mtOga, mtOgv,
     mtMp4,  mtMp2,   mtMp2,  mtMpeg, mtH264, mtText, mtText, mtGzip,
-    mtWebm, mtWebm,  mtRar,  mt7z,   mtBz2,  mtWma,  mtWmv, mtAvi,
-    mtPpt,  mtXls,   mtPdf, mtDicom, mtDicom, mtSQlite3, mtSQlite3, mtHeic,
-    mtH265, mtAvif,  mtAac,  mtCsv,  mtMarkdown, mtICalendar, mtOgg,  mtOga, mtOga);
+    mtWebm, mtWebm,  mtRar,  mt7z,   mtBz2,  mtWma,  mtWmv, mtAvi, mtPpt,
+    mtXls,   mtPdf, mtDicom, mtDicom, mtSQlite3, mtSQlite3, mtHeic, mtH265,
+    mtAvif,  mtAac,  mtCsv,  mtMarkdown, mtICalendar, mtOgg,  mtOga, mtOga);
 
 function GetMimeTypeFromExt(const Ext: RawUtf8): TMimeType;
 var
@@ -9271,14 +9271,14 @@ begin
   if P < PEnd then
     repeat
       PBeg := P;
-      {$ifdef CPUX64}
+      {$ifdef ASMX64}
       inc(P, BufferLineLength(P, PEnd)); // use branchless SSE2 on x86_64
       {$else}
       while (P < PEnd) and
             (P^ <> #13) and
             (P^ <> #10) do
         inc(P);
-      {$endif CPUX64}
+      {$endif ASMX64}
       Map.ProcessOneLine(PBeg, P);
       if P + 1 < PEnd then
         if PWord(P)^ = EOLW then
@@ -10358,7 +10358,6 @@ begin
     FileClose(f1);
 end;
 
-
 function HashFileCrc32c(const FileName: TFileName): RawUtf8;
 begin
   result := CardinalToHexLower(HashFile(FileName, crc32c));
@@ -10788,8 +10787,7 @@ begin
     W.WrBase64(P, aLength, withMagic);
 end;
 
-procedure TRawByteStringGroup.FindMove(aPosition, aLength: integer;
-  aDest: pointer);
+procedure TRawByteStringGroup.FindMove(aPosition, aLength: integer; aDest: pointer);
 var
   P: pointer;
 begin
@@ -11080,13 +11078,13 @@ begin
   Base64EncodeMain     := @Base64EncodeMainPas;
   Base64DecodeMain     := @Base64DecodeMainPas;
   Base64MagicRawDecode := @_Base64MagicRawDecode;
-  {$ifdef ASMX64AVXNOCONST} // focus on x86_64 server performance
+  {$ifdef ASMX64AVX1} // focus on x86_64 server performance
   if cfAVX2 in CpuFeatures then
   begin // our AVX2 asm code is almost 10x faster than the pascal version
     Base64EncodeMain := @Base64EncodeMainAvx2; // 11.5 GB/s vs 1.3 GB/s
     Base64DecodeMain := @Base64DecodeMainAvx2; //  8.7 GB/s vs 0.9 GB/s
   end;
-  {$endif ASMX64AVXNOCONST}
+  {$endif ASMX64AVX1}
   RawToBase64 := _RawToBase64; // for mormot.net.sock and mormot.crypt.core
   // setup internal compression algorithms
   AlgoSynLZ := TAlgoSynLZ.Create;

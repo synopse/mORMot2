@@ -534,14 +534,14 @@ type
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     Infrastructure Layer                         │
-│     (Database, External Services, UI, HTTP Server)               │
+│                     Infrastructure Layer                        │
+│     (Database, External Services, UI, HTTP Server)              │
 ├─────────────────────────────────────────────────────────────────┤
-│                     Application Layer                            │
-│           (Use Cases, DTOs, Application Services)                │
+│                     Application Layer                           │
+│           (Use Cases, DTOs, Application Services)               │
 ├─────────────────────────────────────────────────────────────────┤
-│                      Domain Layer                                │
-│   (Entities, Value Objects, Aggregates, Domain Services)         │
+│                      Domain Layer                               │
+│   (Entities, Value Objects, Aggregates, Domain Services)        │
 └─────────────────────────────────────────────────────────────────┘
 
 Dependencies point inward → Domain has NO external dependencies
@@ -584,7 +584,7 @@ var
   Batch: TRestBatch;
   i: Integer;
 begin
-  Batch := TRestBatch.Create(Server, nil, 1000);
+  Batch := TRestBatch.Create(Server.Orm, nil, 1000);
   try
     // Add order (will get ID after send)
     Batch.Add(Order, True);
@@ -594,7 +594,7 @@ begin
       Batch.Add(Order.Items[i], True);
 
     // Atomic commit
-    if Server.BatchSend(Batch) <> HTTP_SUCCESS then
+    if Server.Orm.BatchSend(Batch) <> HTTP_SUCCESS then
       raise EDomainError.Create('Failed to save order');
   finally
     Batch.Free;

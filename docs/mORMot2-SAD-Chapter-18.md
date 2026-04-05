@@ -248,14 +248,15 @@ Register helpers for common transformations:
 {{EnumTrim Article.Status}}  // Removes type prefix (e.g., "osActive" → "Active")
 {{BlobToBase64 Article.Image}}
 
-// Custom helper registration
-TSynMustache.HelpersGetStandardList.Add(
-  'FormatCurrency',
-  procedure(const Value: variant; out Result: variant)
-  begin
-    Result := FormatFloat('$#,##0.00', Value);
-  end
-);
+// Custom helper registration: TSynMustacheHelperEvent is 'procedure of object',
+// so the event must be a method bound to an object instance
+var Helpers: TSynMustacheHelpers;
+begin
+  Helpers := TSynMustache.HelpersGetStandardList;
+  TSynMustache.HelperAdd(Helpers, 'FormatCurrency', MyHelperObj.FormatCurrency);
+end;
+// Or register directly on a TMvcViewsMustache instance:
+// Views.RegisterExpressionHelpers(['FormatCurrency'], [MyHelperObj.FormatCurrency]);
 ```
 
 ### 18.4.7. ORM Integration
@@ -353,10 +354,14 @@ begin
 end;
 
 function TBlogApplication.Login(const LogonName, Password: RawUtf8): TMvcAction;
+var
+  SessionInfo: TCookieData;
 begin
   if ValidateCredentials(LogonName, Password) then
   begin
-    CurrentSession.User := LogonName;
+    // Session data is stored in a typed record; Initialize stores it as a cookie
+    SessionInfo.AuthorName := LogonName;
+    CurrentSession.Initialize(@SessionInfo, TypeInfo(TCookieData));
     Result.RedirectToMethodName := 'Default';
   end
   else
@@ -378,7 +383,7 @@ type
 
 function TBlogApplication.Logout: TMvcAction;
 begin
-  CurrentSession.Clear;
+  CurrentSession.Finalize;
   Result.RedirectToMethodName := 'Default';
   // or: Result.ReturnedStatus := HTTP_TEMPORARYREDIRECT;
 end;
@@ -396,7 +401,7 @@ raise EMvcApplication.CreateGotoError('Article not found');
 raise EMvcApplication.CreateGotoError(HTTP_NOTFOUND);
 
 // Redirect to another method
-raise EMvcApplication.CreateGotoMethod('Login');
+raise EMvcApplication.CreateGotoView('Login', []);
 ```
 
 ---
@@ -500,25 +505,39 @@ type
 
 ### 18.7.2. Session Data
 
-Access session data in controllers:
+Access session data in controllers using a typed record:
 
 ```pascal
+// Session data must be stored in a packed record
+type
+  TSessionData = packed record
+    UserName: RawUtf8;
+    UserID: integer;
+  end;
+
 procedure TBlogApplication.Default(var Scope: variant);
+var
+  SessionData: TSessionData;
 begin
-  // Read session data
-  if CurrentSession['LoggedIn'] then
-    Scope := _ObjFast(['User', CurrentSession['UserName']]);
+  // Read session data via CheckAndRetrieve; returns > 0 if a valid session exists
+  if CurrentSession.CheckAndRetrieve(@SessionData, TypeInfo(TSessionData)) > 0 then
+    Scope := _ObjFast(['User', SessionData.UserName]);
 end;
 
 function TBlogApplication.Login(const LogonName, Password: RawUtf8): TMvcAction;
+var
+  SessionData: TSessionData;
 begin
   if ValidateUser(LogonName, Password) then
   begin
-    CurrentSession['LoggedIn'] := True;
-    CurrentSession['UserName'] := LogonName;
-    CurrentSession['UserID'] := GetUserID(LogonName);
-    Result.RedirectToMethodName := 'Default';
-  end;
+    SessionData.UserName := LogonName;
+    SessionData.UserID := GetUserID(LogonName);
+    // Persist the record in the encrypted session cookie
+    CurrentSession.Initialize(@SessionData, TypeInfo(TSessionData));
+    GotoDefault(result);
+  end
+  else
+    GotoError(result, 'Invalid credentials');
 end;
 ```
 

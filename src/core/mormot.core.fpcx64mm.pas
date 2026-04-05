@@ -1069,7 +1069,7 @@ asm
         mov     rax, rbx
         lea     r10, [rip + SmallBlockInfo]
         sub     rax, r10
-        shr     eax, SmallBlockTypePO2 - 3 // 1 shl 3 = SizeOf(pointer)
+        shr     eax, SmallBlockTypePO2 - 3 // 1 shl 3 = SizeOf(SmallLastFree[])
         lea     r10, [r10 + rax].TSmallBlockInfo.SmallLastFree
         // r10 = @SmallLastFree[] of this rbx
         mov     eax, $100
@@ -1719,7 +1719,7 @@ asm
         jmp     @LockTinyBlockTypeLoop
         // ---------- SMALL (size<2600) block lock ----------
 @NotTinyBlockType:
-        // Try to get a Small block from its SmallLastFree list or the next two
+        // Try to get a Small block from its SmallLastFree[] list or the next two
         lea     rbx, [r8 + rcx].TSmallBlockInfo.Small
         cmp     dword ptr [rbx].TSmallBlockType.LastFreeCount, 0
         je      @SLL0

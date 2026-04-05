@@ -5042,11 +5042,11 @@ end;
 
 procedure InitializeUnit;
 begin
-  {$ifdef CPUINTELARM}
+  {$ifdef HASCPUFEATURES}
   // CpuFeatures: TIntelCpuFeatures/TArm32HwCaps/TArm64HwCaps
   CpuFeaturesText := LowerCase(ToText(CpuFeatures, ' '));
   if CpuFeaturesText = '' then
-  {$endif CPUINTELARM}
+  {$endif HASCPUFEATURES}
   begin
     {$ifdef OSLINUXANDROID}
     CpuFeaturesText := LowerCase(CpuInfoFeatures); // fallback to /proc/cpuinfo

@@ -7,7 +7,7 @@ unit mormot.core.zip;
   *****************************************************************************
 
    High-Level Zip/Deflate Compression features shared by all framework units
-    - TSynZipCompressor Stream Class
+    - TSynZipCompressor/TSynZipDecompressor Stream Classes
     - GZ Read/Write Support
     - .ZIP Archive File Support
     - TAlgoDeflate and TAlgoGZ High-Level Compression Algorithms

@@ -120,18 +120,18 @@ function umoddi3(num, den: uint64): uint64; cdecl;
 function divdi3(num, den: int64): int64; cdecl;
 function udivdi3(num, den: uint64): uint64; cdecl;
 function udivmoddi4(a, b: UInt64; var c: UInt64): UInt64; cdecl;
-{$ifdef CPUINTEL}
+{$ifdef ASMINTEL}
 procedure __chkstk_ms;
-{$endif CPUINTEL}
+{$endif ASMINTEL}
 
-{$ifdef CPUX64}
+{$ifdef ASMX64}
 
 procedure __udivti3;
 procedure __udivmodti4;
 procedure __divti3;
 procedure __umodti3;
 
-{$endif CPUX64}
+{$endif ASMX64}
 
 {$endif OSWINDOWS}
 
@@ -145,6 +145,14 @@ procedure SetLibcNumericLocale;
 
 { ********************** Cross-Platform FPU Exceptions Masking }
 
+{$undef FPUMASK32}
+{$ifdef FPC_INTEL}
+  {$define FPUMASK32}
+{$endif FPC_INTEL}
+{$ifdef WINTELDELPHI}
+  {$define FPUMASK32}
+{$endif WINTELDELPHI}
+
 type
   /// define SetFpuFlags/ResetFpuFlags context
   // - external libraries coded in C are likely to disable FPU exceptions,
@@ -155,7 +163,8 @@ type
     ffLibrary,
     ffPascal);
 
-{$ifdef CPUINTEL}
+{$ifdef FPUMASK32}
+  TFpuFlagsInt = cardinal;
 
 var
   /// direct efficient x87 / SSE2 FPU flags for rounding and exceptions
@@ -168,10 +177,12 @@ var
 
 {$else}
 
-{$ifdef WINARMDELPHI}
-type
+  {$ifdef ISDELPHI} // Delphi POSIX or WinARM
+  TFpuFlagsInt = byte;
   TFPUExceptionMask = TArithmeticExceptionMask; // undefined in math.pas on LLVM
-{$endif WINARMDELPHI}
+  {$else}
+  TFpuFlagsInt = cardinal;
+  {$endif ISDELPHI}
 
 var
   /// on non Intel/AMD, use slower but cross-platform RTL Math unit
@@ -182,7 +193,7 @@ var
     // ffPascal
     [exDenormalized, exUnderflow, exPrecision]);
 
-{$endif CPUINTEL}
+{$endif FPUMASK32}
 
 /// mask/unmask all FPU exceptions, according to the running CPU
 // - returns the previous exception flags, for ResetFpuFlags() call
@@ -435,7 +446,7 @@ begin
   result := libc_write(libc_fileno(f), buf, size * count) div size;
 end;
 
-{$ifdef CPUX86}
+{$ifdef ASMX86}
 
 // asm stubs to circumvent libgcc.a (cross)linking issues on Win32
 
@@ -458,9 +469,9 @@ asm
         pop     ecx
 end;
 
-{$endif CPUX86}
+{$endif ASMX86}
 
-{$ifdef CPUX64}
+{$ifdef ASMX64}
 
 procedure __chkstk_ms; assembler;
   {$ifdef FPC} nostackframe; public name _PREFIX + '___chkstk_ms'; {$endif}
@@ -484,7 +495,7 @@ asm
         pop     rcx
 end;
 
-{$endif CPUX64}
+{$endif ASMX64}
 
 {$ifdef FPC}
 
@@ -587,7 +598,7 @@ begin
   raise ELibStatic.Create('Unexpected exit() call');
 end;
 
-{$ifdef CPUINTEL}
+{$ifdef ASMINTEL}
 
 procedure printf; assembler; 
  {$ifdef FPC} nostackframe; public name _PREFIX + 'printf'; {$else} export; {$endif}
@@ -615,7 +626,7 @@ end;
 
 {$else}
 
-{$endif CPUINTEL}
+{$endif ASMINTEL}
 
 function strcspn(str, reject: PUtf8Char): integer; cdecl;
   {$ifdef FPC} public name _PREFIX + 'strcspn'; {$else} export; {$endif}
@@ -1196,7 +1207,7 @@ end;
 
 {$endif FPC}
 
-{$ifdef CPUINTEL}
+{$ifdef ASMINTEL}
 
 {$ifdef CPU64}
 
@@ -2079,7 +2090,7 @@ end;
 
 {$endif CPU64}
 
-{$endif CPUINTEL}
+{$endif ASMINTEL}
 
 {$endif NOLIBCSTATIC}
 
@@ -2092,29 +2103,29 @@ const
 function _GetFlags: cardinal;
   {$ifdef HASINLINE} inline; {$endif}
 begin
-  {$ifdef CPUINTEL}
+  {$ifdef FPUMASK32}
     {$ifdef CPU64}
     result := GetMXCSR;
     {$else}
     result := Get8087CW;
     {$endif CPU64}
   {$else}
-    result := {$ifdef WINARMDELPHI}byte{$else}cardinal{$endif}(GetExceptionMask);
-  {$endif CPUINTEL}
+    result := TFpuFlagsInt(GetExceptionMask);
+  {$endif FPUMASK32}
 end;
 
 procedure _SetFlags(flags: cardinal);
   {$ifdef HASINLINE} inline; {$endif}
 begin
-  {$ifdef CPUINTEL}
+  {$ifdef FPUMASK32}
     {$ifdef CPU64}
     SetMXCSR(flags);
     {$else}
     Set8087CW(flags);
     {$endif CPU64}
   {$else}
-    SetExceptionMask(TFPUExceptionMask({$ifdef WINARMDELPHI}byte{$endif}(flags)));
-  {$endif CPUINTEL}
+    SetExceptionMask(TFPUExceptionMask(TFpuFlagsInt(flags)));
+  {$endif FPUMASK32}
 end;
 
 function SetFpuFlags(flags: TFpuFlags): cardinal;
@@ -2122,7 +2133,7 @@ var
   new: cardinal;
 begin
   result := _GetFlags;
-  new := {$ifdef WINARMDELPHI}byte{$else}cardinal{$endif}(_FPUFLAGS[flags]);
+  new := TFpuFlagsInt(_FPUFLAGS[flags]);
   if new <> result then
     _SetFlags(new)
   else
@@ -2137,6 +2148,7 @@ end;
 
 
 initialization
+{$ifndef NOLIBCSTATIC}
 {$ifdef FPC}
 {$ifdef OSWINDOWS}
   // manual fill of our raw mingw import table
@@ -2154,6 +2166,7 @@ initialization
   _pthread_load;
 {$endif OSLINUXX64}
 {$endif FPC}
+{$endif NOLIBCSTATIC}
 
 end.
 

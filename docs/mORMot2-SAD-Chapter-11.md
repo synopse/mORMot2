@@ -16,22 +16,22 @@ mORMot provides a flexible Client-Server architecture supporting multiple commun
 └─────────────────────────────────────────────────────────────────┘
                                │
 ┌─────────────────────────────────────────────────────────────────┐
-│                    TRest (Abstract Parent)                      │
+│  TRest (Abstract Parent)                                        │
 │    ├── Orm: IRestOrm        (Object-Relational Mapping)         │
 │    ├── Services             (Service-Oriented Architecture)     │
 │    └── Run: TRestRunThreads (Threading)                         │
 └─────────────────────────────────────────────────────────────────┘
            │                                    │
-┌──────────────────────┐          ┌──────────────────────┐         
-│    TRestClient       │          │    TRestServer                │
-│  (Client-side)       │          │  (Server-side)                │
-└──────────────────────┘          └──────────────────────┘         
+┌──────────────────────┐            ┌──────────────────────┐         
+│      TRestClient     │            │      TRestServer     │
+│     (Client-side)    │            │     (Server-side)    │
+└──────────────────────┘            └──────────────────────┘         
            │                                    │
 ┌─────────────────────────────────────────────────────────────────┐
 │                      Transport Layer                            │
-│  ┌──────────┐  ┌─────────┐  ┌──────────┐  ┌────────────────┐    │
-│  │In-Process│  │  HTTP   │  │WebSockets│  │Named Pipes/Msg │    │
-│  └──────────┘  └─────────┘  └──────────┘  └────────────────┘    │
+│   ┌──────────┐  ┌─────────┐  ┌──────────┐  ┌────────────────┐   │
+│   │In-Process│  │  HTTP   │  │WebSockets│  │Named Pipes/Msg │   │
+│   └──────────┘  └─────────┘  └──────────┘  └────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -103,11 +103,11 @@ uses
 var
   Server: TRestServerFullMemory;
 begin
-  Server := TRestServerFullMemory.Create(Model);
+  Server := TRestServerFullMemory.Create(Model, 'backup.json');
   try
-    // Fast in-memory storage
-    // Can persist to JSON/binary files
-    Server.Flush('backup.json');
+    // Fast in-memory storage, persisted to backup.json on shutdown
+    // To explicitly flush changes to disk, call UpdateToFile on the ORM layer:
+    // (Server.OrmInstance as TRestOrmServerFullMemory).UpdateToFile;
   finally
     Server.Free;
   end;
@@ -141,7 +141,7 @@ var
   RemoteClient: TRestHttpClient;
   ProxyServer: TRestServerRemoteDB;
 begin
-  RemoteClient := TRestHttpClientWinHTTP.Create('dbserver', '8080', Model);
+  RemoteClient := TRestHttpClientWinHttp.Create('dbserver', '8080', Model);
   ProxyServer := TRestServerRemoteDB.Create(RemoteClient);
   // ProxyServer forwards ORM to RemoteClient
 end;
@@ -165,10 +165,11 @@ TRest (abstract)
     ├── TRestClientLibraryRequest  → In-process DLL
     └── TRestHttpClientGeneric     → HTTP transport
         ├── TRestHttpClientSocket     → Raw sockets
-        ├── TRestHttpClientWinHTTP    → WinHTTP API (recommended)
-        ├── TRestHttpClientWinINet    → WinINet API
-        ├── TRestHttpClientCurl       → libcurl (cross-platform)
-        └── TRestHttpClientWebsockets → WebSocket upgrade
+        │   └── TRestHttpClientWebsockets → WebSocket upgrade
+        └── TRestHttpClientRequest    → Abstract request-based class
+            ├── TRestHttpClientWinHttp    → WinHttp API (recommended)
+            ├── TRestHttpClientWinINet    → WinINet API
+            └── TRestHttpClientCurl       → libcurl (cross-platform)
 ```
 
 ### 11.3.2. In-Process Client (TRestClientDB)
@@ -199,10 +200,10 @@ uses
   mormot.rest.http.client;
 
 var
-  Client: TRestHttpClientWinHTTP;
+  Client: TRestHttpClientWinHttp;
 begin
   // Recommended HTTP client for Windows
-  Client := TRestHttpClientWinHTTP.Create('localhost', '8080', Model);
+  Client := TRestHttpClientWinHttp.Create('localhost', '8080', Model);
   try
     if Client.SetUser('user', 'password') then
       Client.Orm.Retrieve(123, Customer);
@@ -216,7 +217,7 @@ end;
 
 | Class | Platform | HTTPS | Speed | Notes |
 |-------|----------|-------|-------|-------|
-| `TRestHttpClientWinHTTP` | Windows | ✓ | Fast | **Recommended** |
+| `TRestHttpClientWinHttp` | Windows | ✓ | Fast | **Recommended** |
 | `TRestHttpClientWinINet` | Windows | ✓ | Medium | IE proxy integration |
 | `TRestHttpClientSocket` | Cross-platform | ✗ | Fastest | No SSL, raw sockets |
 | `TRestHttpClientCurl` | Cross-platform | ✓ | Fast | Requires libcurl |
@@ -422,7 +423,7 @@ Server.AcquireExecutionMode[execSoaByInterface] := amLocked;
 | `execOrmGet` | `amUnlocked` | ORM read operations |
 | `execOrmWrite` | `amLocked` | ORM write operations |
 | `execSoaByMethod` | `amUnlocked` | Method-based services |
-| `execSoaByInterface` | `amLocked` | Interface-based services |
+| `execSoaByInterface` | `amUnlocked` | Interface-based services |
 
 ---
 
@@ -447,15 +448,15 @@ end;
 ### 11.7.2. Load Balancer Setup
 
 ```
-                    ┌─────────────────┐
-                    │  Load Balancer  │
-                    │   (nginx/HAProxy)│
-                    └────────┬────────┘
+                    ┌───────────────────┐
+                    │  Load Balancer    │
+                    │   (nginx/HAProxy) │
+                    └────────┬──────────┘
            ┌─────────────────┼─────────────────┐
            ▼                 ▼                 ▼
-    ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-    │ mORMot Srv 1│   │ mORMot Srv 2│   │ mORMot Srv 3│
-    └─────────────┘   └─────────────┘   └─────────────┘
+    ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+    │ mORMot Srv 1 │  │ mORMot Srv 2 │  │ mORMot Srv 3 │
+    └──────────────┘  └──────────────┘  └──────────────┘
            │                 │                 │
            └─────────────────┼─────────────────┘
                              ▼
@@ -471,7 +472,7 @@ end;
        Internet
            │
    ┌───────┴───────┐
-   │     DMZ       │  TRestServerRemoteDB (services only)
+   │     DMZ       │  TRestServer (services only, custom proxy)
    │  ┌─────────┐  │
    │  │ Proxy   │  │
    │  │ Server  │  │
@@ -535,9 +536,9 @@ end;
 | `TSQLRestServer` | `TRestServer` |
 | `TSQLRestServerDB` | `TRestServerDB` |
 | `TSQLRestServerFullMemory` | `TRestServerFullMemory` |
-| `TSQLRestClient` | `TRestClient` |
+| `TSQLRestClient` | `TRestClientUri` |
 | `TSQLRestClientDB` | `TRestClientDB` |
-| `TSQLHttpServer` | `TRestHttpServer` |
+| `TSQLHTTPServer` | `TRestHttpServer` |
 | `TSQLHttpClient*` | `TRestHttpClient*` |
 
 ### 11.9.2. Unit Renames

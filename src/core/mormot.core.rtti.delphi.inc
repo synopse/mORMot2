@@ -138,7 +138,7 @@ begin
     result := @NULCHAR;
 end;
 
-{$ifdef CPUX86} // Delphi is not efficient when inlining code :(
+{$ifdef ASMX86} // Delphi is not efficient when inlining this code :(
 
 function GetEnumName(aTypeInfo: PRttiInfo; aIndex: integer): PShortString;
 asm     // eax=aTypeInfo edx=aIndex

@@ -113,7 +113,7 @@ For security-sensitive deployments:
        │                         │                           │
 ┌──────┴──────┐           ┌──────┴──────┐            ┌───────┴───────┐
 │  AJAX/Web   │           │  Services   │            │     ORM       │
-│   Clients   │─────────▶ │   Server    │──────────▶ │    Server     │
+│   Clients   │─────────> │   Server    │──────────> │    Server     │
 └─────────────┘           │  (Stateless)│            │  + Database   │
                           └─────────────┘            └───────────────┘
                                 │
@@ -146,7 +146,7 @@ Multiple specialized servers:
 
 ```
 ┌─────────┐   ┌─────────┐   ┌─────────┐
-│ Client  │   │ Client  │   │ C│
+│ Client  │   │ Client  │   │ Client  │
 └────┬────┘   └────┬────┘   └────┬────┘
      │             │             │
      └──────┬──────┴──────┬──────┘
@@ -156,8 +156,8 @@ Multiple specialized servers:
      │   Server     │     │
      └──────┬───────┘     │
             │             │
-     ┌──────┼──────┬──────┼──────┐
-     ▼      ▼      ▼      ▼      ▼
+     ┌──────┼─────────────┤
+     ▼      ▼             ▼
 ┌────────┐ ┌────────┐ ┌────────┐
 │ Auth   │ │ Orders │ │ Reports│
 │ Service│ │ Service│ │ Service│
@@ -198,29 +198,34 @@ uses
   mormot.app.daemon;
 
 type
-  TMyDaemon = class(TDaemon)
+  TMyDaemon = class(TSynDaemon)
   protected
     fServer: TRestServerDB;
     fHttp: TRestHttpServer;
-    procedure DoStart; override;
-    procedure DoStop; override;
+  public
+    procedure Start; override;
+    procedure Stop; override;
   end;
 
-procedure TMyDaemon.DoStart;
+procedure TMyDaemon.Start;
 begin
   fServer := TRestServerDB.Create(Model, 'data.db3');
   fHttp := TRestHttpServer.Create('8080', [fServer]);
 end;
 
-procedure TMyDaemon.DoStop;
+procedure TMyDaemon.Stop;
 begin
   fHttp.Free;
   fServer.Free;
 end;
 
 begin
-  TDaemonService.Create(TMyDaemon, 'MyServer', 'My mORMot Server');
-  TDaemonService.RunAsService;
+  with TMyDaemon.Create(TSynDaemonSettings, '', '', '') do
+  try
+    CommandLine;  // Handles install/start/stop/console on Windows and Linux
+  finally
+    Free;
+  end;
 end.
 ```
 
@@ -245,7 +250,7 @@ For best Windows performance, use http.sys:
 
 ```pascal
 HttpServer := TRestHttpServer.Create('8080', [Server], '+',
-  useHttpApiRegisteringUri);  // Uses http.sys
+  useHttpApiRegisteringURI);  // Uses http.sys
 ```
 
 URL reservation (run as Administrator):
@@ -370,19 +375,19 @@ net.ipv4.ip_local_port_range = 1024 65535
 ### 20.5.2. Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────┐
 │              TSynAngelize                        │
 │         (Main Launcher/Watcher)                  │
 │                                                  │
-│  ┌─────────────┐  ┌─────────────┐  ┌──────────┐ │
-│  │ Service 1   │  │ Service 2   │  │ Service N│ │
-│  │ (API Server)│  │ (Worker)    │  │ (...)    │ │
-│  └─────────────┘  └─────────────┘  └──────────┘ │
+│  ┌─────────────┐  ┌─────────────┐  ┌──────────┐  │
+│  │ Service 1   │  │ Service 2   │  │ Service N│  │ 
+│  │ (API Server)│  │ (Worker)    │  │ (...)    │  │
+│  └─────────────┘  └─────────────┘  └──────────┘  │
 │         │               │               │        │
 │    [Watch]         [Watch]         [Watch]       │
 │    Health          Process         Custom        │
 │    Check           Monitor         Script        │
-└─────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────┘
 ```
 
 ### 20.5.3. Configuration
@@ -479,7 +484,7 @@ type
   end;
 
 begin
-  with TMyAngelize.Create(TSynAngelizeSettings, '', '', '') do
+  with TMyAngelize.Create do
   try
     CommandLine;  // Handles install/start/stop/console
   finally
@@ -735,12 +740,7 @@ upstream mormot_cluster {
 }
 ```
 
-Or use external session storage (Redis):
-
-```pascal
-// Store sessions externally
-Server.SessionClass := TAuthSessionRedis;
-```
+Or use a custom `TAuthSession` descendant with external session storage for distributed state.
 
 ### 20.9.3. Database Replication
 

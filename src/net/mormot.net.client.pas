@@ -354,7 +354,7 @@ type
     FirstAccess: TUnixTimeMinimal;
     /// the last time this file was accessed - used to delete deprecated files
     LastAccess: TUnixTimeMinimal;
-    /// a few (4) bytes to reach 32 bytes per entry
+    /// a few (4) bytes to reach 32 bytes per entry and prepare extension
     Padding: array[1 .. 32 - SizeOf(THash160) - SizeOf(TUnixTimeMinimal) * 2] of byte;
   end;
   /// point to one cached file metadata
@@ -694,7 +694,7 @@ type
     // - overriden to support HTTP proxy without CONNECT
     procedure OpenBind(const aServer, aPort: RawUtf8; doBind: boolean;
       aTLS: boolean = false; aLayer: TNetLayer = nlTcp;
-      aSock: TNetSocket = TNetSocket(-1); aReusePort: boolean = false); override;
+      aSock: TNetSocket = NO_SOCKET; aReusePort: boolean = false); override;
     /// compare TUri and its options with the actual connection
     // - returns true if no new instance - i.e. Free + OpenOptions() - is needed
     // - only supports HTTP/HTTPS, not any custom RegisterNetClientProtocol()
@@ -1038,8 +1038,8 @@ type
     fOnDownloadProgress: TOnHttpRequestProgress;
     class function InternalREST(const url, method: RawUtf8;
       const data: RawByteString; const header: RawUtf8;
-      aIgnoreTlsCertificateErrors: boolean; timeout: integer;
-      outHeaders: PRawUtf8; outStatus: PInteger): RawByteString;
+      aIgnoreTlsCertificateErrors: boolean; timeout: integer; outHeaders: PRawUtf8;
+      outStatus: PInteger; outError: PString = nil): RawByteString;
     // inherited class should override those abstract methods
     procedure InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal); virtual; abstract;
     procedure InternalCreateRequest(const aMethod, aUrl: RawUtf8); virtual; abstract;
@@ -3242,7 +3242,7 @@ begin
           include(Http.HeaderFlags, hfConnectionClose); // socket state is wrong
         end;
       end;
-      // wait and retrieve HTTP command line response
+      // wait for the HTTP response
       pending := SockReceivePending(Timeout, @loerr); // select/poll
       case pending of
         cspDataAvailable:
@@ -3250,7 +3250,8 @@ begin
         cspDataAvailableOnClosedSocket:
           begin
             include(Http.HeaderFlags, hfConnectionClose); // socket is closed
-            if not Sock.Available(@loerr, {nowait=}true) then // e.g. on Windows
+            if (fSecure = nil) and
+               not Sock.Available(@loerr, {nowait=}true) then // e.g. on Windows
             begin
               DoRetry('Closed FIN/RST during headers', [NetErrorText(loerr)]);
               exit;
@@ -3281,6 +3282,7 @@ begin
           exit;
         end;
       end;
+      // retrieve HTTP command line response
       SockRecvLn(Http.CommandResp); // will raise ENetSock on any error
       cmd := pointer(Http.CommandResp);
       if IdemPChar(cmd, 'HTTP/1.') and
@@ -4344,7 +4346,7 @@ end;
 
 class function THttpRequest.InternalREST(const url, method: RawUtf8;
   const data: RawByteString; const header: RawUtf8; aIgnoreTlsCertificateErrors: boolean;
-  timeout: integer; outHeaders: PRawUtf8; outStatus: PInteger): RawByteString;
+  timeout: integer; outHeaders: PRawUtf8; outStatus: PInteger; outError: PString): RawByteString;
 var
   uri: TUri;
   outh: RawUtf8;
@@ -4367,7 +4369,12 @@ begin
         Free;
       end;
     except
-      result := '';
+      on E: Exception do
+      begin
+        if outError <> nil then
+          outError^ := E.Message;
+        result := '';
+      end;
     end;
 end;
 
@@ -4895,7 +4902,7 @@ begin
       if not WinHttpApi.QueryHeaders(fRequest, Info, nil, tmp.buf, dwSize, dwIndex) then
         exit;
     end;
-    Win32PWideCharToUtf8(tmp.buf, dwSize shr 1, result);
+    Unicode_ToUtf8(tmp.buf, dwSize shr 1, result);
   finally
     tmp.Done;
   end;
@@ -5086,7 +5093,7 @@ begin
       if not HttpQueryInfoW(fRequest, Info, tmp.buf, dwSize, dwIndex) then
         exit;
     end;
-    Win32PWideCharToUtf8(tmp.buf, dwSize shr 1, result);
+    Unicode_ToUtf8(tmp.buf, dwSize shr 1, result);
   finally
     tmp.Done;
   end;

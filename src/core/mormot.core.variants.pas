@@ -2105,8 +2105,9 @@ type
     /// sort the document object values by value using a comparison function
     // - work for both dvObject and dvArray documents
     // - will sort by UTF-8 text (VariantCompare) if no custom aCompare is supplied
+    // - for dvObject, any SortFallbackName() would be used if SortCompare()=0
     procedure SortByValue(SortCompare: TVariantCompare = nil;
-      SortCompareReversed: boolean = false);
+      SortCompareReversed: boolean = false; SortFallbackName: TUtf8Compare = nil);
     /// sort the document object values by value using a comparison method
     // - work for both dvObject and dvArray documents
     // - you should supply a TVariantComparer callback method
@@ -4462,11 +4463,11 @@ const
     SortDynArrayInt64,           // 12
     SortDynArrayQWord,           // 13
     SortDynArrayWordBoolean,     // 14
-    {$ifdef CPUINTEL}
-    SortDynArrayAnsiString,      // 15
+    {$ifdef ASMINTEL}
+    SortDynArrayAnsiString,      // 15 - optimized asm
     {$else}
-    SortDynArrayRawByteString,
-    {$endif CPUINTEL}
+    SortDynArrayRawByteString,   // 15 - pure pascal vesion
+    {$endif ASMINTEL}
     SortDynArrayAnsiStringI,     // 16
     SortDynArrayUnicodeString,   // 17 about hashing: UTF-16 equal = UTF-8 equal
     SortDynArrayUnicodeStringI); // 18
@@ -8003,6 +8004,8 @@ type
     valueCompare: TVariantCompare;
     valueComparer: TVariantComparer;
     reversed: PtrInt;
+    function CompValueName(I, J: PtrInt; P: PVariant): PtrInt;
+      {$ifdef HASINLINE} inline; {$endif}
     procedure SortByName(L, R: PtrInt);
     procedure SortByValue(L, R: PtrInt);
   end;
@@ -8053,6 +8056,13 @@ begin
     until L >= R;
 end;
 
+function TQuickSortDocVariant.CompValueName(I, J: PtrInt; P: PVariant): PtrInt;
+begin
+  result := valueCompare(values[I], P^);
+  if result = 0 then
+    result := nameCompare(names[I], names[J]);
+end;
+
 procedure TQuickSortDocVariant.SortByValue(L, R: PtrInt);
 var
   I, J, P: PtrInt;
@@ -8065,15 +8075,22 @@ begin
       P := (L + R) shr 1;
       repeat
         pivot := @values[P];
-        if Assigned(valueCompare) then
-        begin // called from SortByValue
+        if Assigned(nameCompare) then
+        begin // called from SortByValue with a custom SortFallbackName function
+          while CompValueName(I, P, pivot) * reversed < 0 do
+            inc(I);
+          while CompValueName(J, P, pivot) * reversed > 0 do
+            dec(J);
+        end
+        else if Assigned(valueCompare) then
+        begin // called from SortByValue with SortFallbackName = nil
           while valueCompare(values[I], pivot^) * reversed < 0 do
             inc(I);
           while valueCompare(values[J], pivot^) * reversed > 0 do
             dec(J);
         end
         else
-        begin // called from SortByRow
+        begin // called from SortByRow with valueComparer as function of object
           while valueComparer(values[I], pivot^) * reversed < 0 do
             inc(I);
           while valueComparer(values[J], pivot^) * reversed > 0 do
@@ -8144,16 +8161,18 @@ begin
 end;
 
 procedure TDocVariantData.SortByValue(SortCompare: TVariantCompare;
-  SortCompareReversed: boolean);
+  SortCompareReversed: boolean; SortFallbackName: TUtf8Compare);
 var
   qs: TQuickSortDocVariant;
 begin
   if VCount <= 1 then
     exit;
-  if Assigned(SortCompare) then
-    qs.valueCompare := SortCompare
-  else
-    qs.valueCompare := @VariantCompare;
+  if not IsObject then
+    SortFallbackName := nil;
+  qs.nameCompare := SortFallbackName;
+  if not Assigned(SortCompare) then
+    SortCompare := @VariantCompare;
+  qs.valueCompare := SortCompare;
   qs.valueComparer := nil;
   qs.names := pointer(VName);
   qs.values := pointer(VValue);
@@ -8172,6 +8191,7 @@ begin
   if (VCount <= 1) or
      (not Assigned(SortComparer)) then
     exit;
+  qs.nameCompare := nil;
   qs.valueCompare := nil;
   qs.valueComparer := SortComparer;
   qs.names := pointer(VName);

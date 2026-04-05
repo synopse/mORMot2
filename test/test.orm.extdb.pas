@@ -17,6 +17,7 @@ uses
   mormot.core.datetime,
   mormot.core.rtti,
   mormot.crypt.core,
+  mormot.crypt.secure,
   mormot.core.data,
   mormot.core.variants,
   mormot.core.json,
@@ -788,27 +789,59 @@ end;
 
 procedure TTestExternalDatabase.DBPropertiesPersistence;
 var
-  Props: TSqlDBConnectionProperties;
+  props: TSqlDBConnectionProperties;
+  def: TSynConnectionDefinition;
   json: RawUtf8;
+  pwd: SpiUtf8;
 begin
-  Props := TSqlDBSQLite3ConnectionProperties.Create('server', '', '', '');
-  json := Props.DefinitionToJson(14);
-  Check(json = '{"Kind":"TSqlDBSQLite3ConnectionProperties",' +
-    '"ServerName":"server","DatabaseName":"","User":"","Password":""}');
-  Props.Free;
-  Props := TSqlDBSQLite3ConnectionProperties.Create('server', '', '', '1234');
-  json := Props.DefinitionToJson(14);
-  Check(json = '{"Kind":"TSqlDBSQLite3ConnectionProperties",' +
-    '"ServerName":"server","DatabaseName":"","User":"","Password":"MnVfJg=="}');
-  Props.DefinitionToFile(WorkDir + 'connectionprops.json');
-  Props.Free;
-  Props := TSqlDBConnectionProperties.CreateFromFile(WorkDir + 'connectionprops.json');
-  Check(Props.ClassType = TSqlDBSQLite3ConnectionProperties);
-  Check(Props.ServerName = 'server');
-  Check(Props.DatabaseName = '');
-  Check(Props.UserID = '');
-  Check(Props.PassWord = '1234');
-  Props.Free;
+  def := TSynConnectionDefinition.Create;
+  try
+    props := TSqlDBSQLite3ConnectionProperties.Create('server', '', '', '');
+    try
+      json := props.DefinitionToJson(14);
+      Check(json = '{"Kind":"TSqlDBSQLite3ConnectionProperties",' +
+        '"ServerName":"server","DatabaseName":"","User":"","Password":""}');
+      props.Free;
+      props := TSqlDBSQLite3ConnectionProperties.Create('server', '', '', '1234');
+      json := props.DefinitionToJson(14);
+      Check(json = '{"Kind":"TSqlDBSQLite3ConnectionProperties",' +
+        '"ServerName":"server","DatabaseName":"","User":"","Password":"MnVfJg=="}');
+      props.DefinitionToFile(WorkDir + 'connectionprops.json');
+      def.Key := 14; // same encoding as props.DefinitionToJson(14) above
+      props.DefinitionTo(def);
+    finally
+      props.Free;
+    end;
+    CheckEqual(def.Password, 'MnVfJg==');
+    CheckEqual(def.PasswordPlain, '1234');
+    def.Key := OBJECTPASSWORD_PLAIN;
+    CheckEqual(def.PasswordPlain, 'MnVfJg==');
+    def.PasswordPlain := '1222';
+    CheckEqual(def.Password, '1222');
+    CheckEqual(def.PasswordPlain, '1222');
+    def.SetPassWordPlainCurrentUser('731');
+    CheckNotEqual(def.Password, '731');
+    CheckEqual(def.PasswordPlain, '731');
+    def.SetPassWordPlainCurrentUser('777', 'app');
+    CheckNotEqual(def.Password, '777');
+    CheckEqual(def.PasswordPlain, '');
+    def.GetPassWordSafe(pwd, 'app');
+    CheckEqual(pwd, '777');
+    FillZero(pwd);
+    CheckEqual(pwd, '');
+  finally
+    def.Free;
+  end;
+  props := TSqlDBConnectionProperties.CreateFromFile(WorkDir + 'connectionprops.json');
+  try
+    Check(props.ClassType = TSqlDBSQLite3ConnectionProperties);
+    Check(props.ServerName = 'server');
+    Check(props.DatabaseName = '');
+    Check(props.UserID = '');
+    Check(props.PassWord = '1234');
+  finally
+    props.Free;
+  end;
   DeleteFile(WorkDir + 'connectionprops.json');
 end;
 

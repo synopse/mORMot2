@@ -14,12 +14,14 @@ program httpServerFiles;
 uses
   {$I mormot.uses.inc} // may include mormot.core.fpcx64mm.pas
   sysutils,
+  mormot.core.os,
   mormot.core.text,
   httpServerMain in 'httpServerMain.pas';
 
 begin
 
   try
+    //ReportMemoryLeaksOnShutdown := true;
     Main;
     {$ifdef FPC_X64MM}
     if (ExitCode = 0) and

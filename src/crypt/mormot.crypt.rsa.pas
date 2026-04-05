@@ -1104,7 +1104,7 @@ begin
     pa := pointer(Value);
     pb := pointer(b^.Value);
     v := 0;
-    {$ifdef CPUINTEL}
+    {$ifdef ASMINTEL}
     while n >= _xasmaddn div HALF_BYTES do // 512/1024-bit per iteration
     begin
       v := _xasmadd(pa, pb, v);
@@ -1113,7 +1113,7 @@ begin
       dec(n, _xasmaddn div HALF_BYTES);
     end;
     if n > 0 then
-    {$endif CPUINTEL}
+    {$endif ASMINTEL}
       repeat
         inc(v, PtrUInt(pa^) + pb^); // 16/32-bit per iteration
         pa^ := v;
@@ -1142,7 +1142,7 @@ begin
     pa := pointer(Value);
     pb := pointer(b^.Value);
     v := 0;
-    {$ifdef CPUINTEL}
+    {$ifdef ASMINTEL}
     while n >= _xasmsubn div HALF_BYTES do // 512/1024-bit per iteration
     begin
       v := _xasmsub(pa, pb, v);
@@ -1151,7 +1151,7 @@ begin
       dec(n, _xasmsubn div HALF_BYTES);
     end;
     if n > 0 then
-    {$endif CPUINTEL}
+    {$endif ASMINTEL}
       repeat // 16/32-bit per iteration
         v := PtrUInt(pa^) - pb^ - v;
         pa^ := v;
@@ -1180,7 +1180,7 @@ begin
   r := pointer(result^.Value);
   v := 0;
   n := Size;
-  {$ifdef CPUINTEL}
+  {$ifdef ASMINTEL}
   while n >= _xasmmuln div HALF_BYTES do // 256/512-bit per iteration
   begin
     v := _xasmmul(a, r, b, v);
@@ -1189,7 +1189,7 @@ begin
     dec(n, _xasmmuln div HALF_BYTES);
   end;
   if n > 0 then
-  {$endif CPUINTEL}
+  {$endif ASMINTEL}
     repeat // 16/32-bit per iteration
       inc(v, PtrUInt(a^) * b);
       r^ := v;
@@ -1212,7 +1212,7 @@ begin
   n := Size;
   a := @Value[n];
   v := 0;
-  {$ifdef CPUINTEL}
+  {$ifdef ASMINTEL}
   while n >= _xasmdivn div HALF_BYTES do // 512/1024-bit per iteration
   begin
     dec(PByte(a), _xasmdivn);
@@ -1220,7 +1220,7 @@ begin
     dec(n, _xasmdivn div HALF_BYTES);
   end;
   if n > 0 then
-  {$endif CPUINTEL}
+  {$endif ASMINTEL}
     repeat // 16/32-bit per iteration
       dec(a);
       v := (v shl HALF_BITS) + a^; // inject carry as high bits
@@ -1244,7 +1244,7 @@ begin
   n := Size;
   v := @Value[n];
   result := 0;
-  {$ifdef CPUINTEL}
+  {$ifdef ASMINTEL}
   while n >= _xasmmodn div HALF_BYTES do // 512/1024-bit per iteration
   begin
     dec(PByte(v), _xasmmodn);
@@ -1252,7 +1252,7 @@ begin
     dec(n, _xasmmodn div HALF_BYTES);
   end;
   if n > 0 then
-  {$endif CPUINTEL}
+  {$endif ASMINTEL}
     repeat // 16/32-bit per iteration
       dec(v);
       result := ((result shl HALF_BITS) + v^) mod bb;
@@ -1533,7 +1533,7 @@ var
   min, bytes: integer;
   last32: PCardinal;
   rnd: RawByteString;
-  lecuyer: TLecuyer;
+  lecuyer: TLecuyer; // convenient local thread-safe randomness source
 begin
   // ensure it is worth searching (paranoid)
   if Size <= 2 then
@@ -1554,9 +1554,9 @@ begin
   bytes := Size * HALF_BYTES;
   pointer(rnd) := FastNewString(bytes);
   FillSystemRandom(pointer(rnd), bytes, {mayblock=}true); // official OS API
-  {$ifdef CPUINTEL} // claimed to be NIST SP 800-90A and FIPS 140-2 compliant
+  {$ifdef ASMINTEL} // claimed to be NIST SP 800-90A and FIPS 140-2 compliant
   RdRand32(pointer(rnd), bytes shr 2); // xor with HW CPU prng
-  {$endif CPUINTEL}
+  {$endif ASMINTEL}
   AFDiffusion(pointer(Value), pointer(rnd), bytes); // sha-256 diffusion
   DefaultHasher128(@lecuyer, pointer(rnd), bytes);  // may be AesNiHash128
   lecuyer.SeedGenerator; // setup 88-bit gsl_rng_taus2 uniform distribution
@@ -1820,7 +1820,7 @@ var
   carry: PtrUInt;
 begin
   carry := 0; // initial carry value
-  {$ifdef CPUINTEL}
+  {$ifdef ASMINTEL}
   while n >= _xasmmuladdn div HALF_BYTES do // 256/512-bit per loop
   begin
     carry := _xasmmuladd(src, dst, factor, carry);
@@ -1829,7 +1829,7 @@ begin
     dec(n, _xasmmuladdn div HALF_BYTES);
   end;
   if n > 0 then
-  {$endif CPUINTEL}
+  {$endif ASMINTEL}
     repeat // 16/32-bit per iteration
       inc(carry, PtrUInt(dst^) + PtrUInt(src^) * factor);
       dst^ := carry;

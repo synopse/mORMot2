@@ -43,7 +43,6 @@ uses
 /// append some UTF-8 chars, escaping all HTML special chars as expected
 procedure AddHtmlEscapeUtf8(W: TTextWriter; const Text: RawUtf8;
   Fmt: TTextWriterHtmlFormat = hfAnyWhere);
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// low-level function removing all &lt; &gt; &amp; &quot; HTML entities
 procedure AddHtmlUnescape(W: TTextWriter; p, amp: PUtf8Char; plen: PtrUInt);
@@ -676,16 +675,16 @@ begin
       esc := @HTML_ESC[Fmt];
       beg := Text;
       repeat
-        if TextLen <> 0 then
-          while (PtrUInt(Text) < PtrUInt(TextLen)) and
-                (esc[Text^] = 0) do
-            inc(Text)
-        else // this next loop is faster without TextLen overload
+        if TextLen = 0 then // slightly faster without TextLen check
           while true do
             if esc[Text^] = 0 then
               inc(Text)
             else
-              break;
+              break
+        else
+          while (PtrUInt(Text) < PtrUInt(TextLen)) and
+                (esc[Text^] = 0) do
+            inc(Text);
         W.AddNoJsonEscape(beg, Text - beg);
         if (Text^ = #0) or
            ((TextLen <> 0) and
@@ -714,7 +713,7 @@ begin
   p := pointer(Text);
   if p <> nil then
     if Fmt <> hfNone then
-      _AddHtmlEscape(W, p, {TextLen=}0, Fmt) // faster with no TextLen
+      __AddHtmlEscape(W, p, {TextLen=}0, Fmt) // faster with no TextLen
     else
       W.AddNoJsonEscapeBig(p, PStrLen(p - _STRLEN)^) // seldom called
 end;
@@ -1973,11 +1972,11 @@ begin // expects UpperName as 'NAME=' and P^ at the beginning of section content
         break;
       if table[u^] = first then
         PBeg := u; // check for UpperName=... line below - ignore ; comment
-      {$ifdef CPUX64}
+      {$ifdef ASMX64}
       if PEnd <> nil then
         inc(u, BufferLineLength(u, PEnd)) // we can use SSE2
       else
-      {$endif CPUX64}
+      {$endif ASMX64}
         while true do
           if u^ > #13 then
             inc(u)

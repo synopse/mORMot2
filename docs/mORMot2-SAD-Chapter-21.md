@@ -132,23 +132,23 @@ The default authentication uses a secure two-pass challenge:
 ```
 Client                                    Server
   │                                         │
-  │  GET /auth?UserName=John               │
+  │  GET /auth?UserName=John                │
   ├────────────────────────────────────────►│
   │                                         │
-  │  {"result":"<hex_nonce>"}              │
+  │  {"result":"<hex_nonce>"}               │
   │◄────────────────────────────────────────┤
   │                                         │
-  │  GET /auth?UserName=John&              │
-  │      Password=<computed>&              │
-  │      ClientNonce=<random>              │
+  │  GET /auth?UserName=John&               │
+  │      Password=<computed>&               │
+  │      ClientNonce=<random>               │
   ├────────────────────────────────────────►│
   │                                         │
-  │  {"result":"SessionID+PrivateKey",     │
-  │   "logonname":"John"}                  │
+  │  {"result":"SessionID+PrivateKey",      │
+  │   "logonname":"John"}                   │
   │◄────────────────────────────────────────┤
   │                                         │
-  │  All requests now include:             │
-  │  ?session_signature=XXXX               │
+  │  All requests now include:              │
+  │  ?session_signature=XXXX                │
   ├────────────────────────────────────────►│
 ```
 
@@ -353,7 +353,7 @@ begin
   Server.JwtForUnauthenticatedRequest := JwtEngine;  // Server owns it
 
   // Optionally restrict to specific IPs
-  Server.JwtForUnauthenticatedRequestWhiteIP := '192.168.1.0/24';
+  Server.JwtForUnauthenticatedRequestWhiteIP('192.168.1.0/24');
 end;
 ```
 
@@ -376,9 +376,9 @@ Client.SessionHttpHeader := AuthorizationBearer(Token);
 | `TJwtHS256` | HMAC-SHA256 | Symmetric |
 | `TJwtHS384` | HMAC-SHA384 | Symmetric |
 | `TJwtHS512` | HMAC-SHA512 | Symmetric |
-| `TJwtES256` | ECDSA P-256 | Asymmetric |
-| `TJwtRS256` | RSA-SHA256 | Asymmetric |
-| `TJwtPS256` | RSA-PSS-SHA256 | Asymmetric |
+| `TJwtEs256` | ECDSA P-256 | Asymmetric |
+| `TJwtRs256` | RSA-SHA256 | Asymmetric |
+| `TJwtPs256` | RSA-PSS-SHA256 | Asymmetric |
 
 ---
 
@@ -488,12 +488,14 @@ end;
 
 ```pascal
 TOrmAllowRemoteExecute = set of (
-  reSQL,                    // Allow POST with SQL statements
-  reSQLSelectWithoutTable,  // Allow complex SELECT (JOINs)
-  reService,                // Allow interface-based services
-  reUrlEncodedSQL,          // Allow SQL in URL parameters
-  reUrlEncodedDelete,       // Allow DELETE with WHERE clause
-  reOneSessionPerUser       // Enforce single session per user
+  reSQL,                        // Allow POST with SQL statements
+  reService,                    // Allow interface-based services
+  reUrlEncodedSQL,              // Allow SQL in URL parameters
+  reUrlEncodedDelete,           // Allow DELETE with WHERE clause
+  reOneSessionPerUser,          // Enforce single session per user
+  reSqlSelectWithoutTable,      // Allow complex SELECT (JOINs)
+  reUserCanChangeOwnPassword,   // Allow user to change own password
+  reCheckSessionConnectionID    // Validate connection ID per session
 );
 ```
 
@@ -503,7 +505,7 @@ TOrmAllowRemoteExecute = set of (
 const
   // Full access (use only for local/in-process)
   FULL_ACCESS_RIGHTS: TOrmAccessRights = (
-    AllowRemoteExecute: [reSQL, reSQLSelectWithoutTable,
+    AllowRemoteExecute: [reSQL, reSqlSelectWithoutTable,
                          reService, reUrlEncodedSQL,
                          reUrlEncodedDelete];
     GET: ALL_ACCESS_RIGHTS;
@@ -512,15 +514,10 @@ const
     DELETE: ALL_ACCESS_RIGHTS;
   );
 
-  // Admin access (remote, with SQL)
-  ADMIN_ACCESS_RIGHTS: TOrmAccessRights = (
-    AllowRemoteExecute: [reSQL, reSQLSelectWithoutTable, reService];
-    // ...
-  );
-
-  // Supervisor access (remote, SELECT only)
+  // Supervisor access (remote, no direct SQL POST)
   SUPERVISOR_ACCESS_RIGHTS: TOrmAccessRights = (
-    AllowRemoteExecute: [reSQLSelectWithoutTable, reService];
+    AllowRemoteExecute: [reSqlSelectWithoutTable, reService,
+                         reUrlEncodedSQL, reUrlEncodedDelete];
     // ...
   );
 ```
@@ -589,9 +586,9 @@ end;
 ### 21.10.2. Session Lifecycle
 
 ```
-┌──────────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────────┐
 │                    Session Lifecycle                          │
-├──────────────────────────────────────────────────────────────┤
+├───────────────────────────────────────────────────────────────┤
 │                                                               │
 │  Client.SetUser()  ──► Auth Request ──► Session Created       │
 │         │                                    │                │
@@ -609,7 +606,7 @@ end;
 │         │                                    ▼                │
 │         │                            Session Destroyed        │
 │         │                                                     │
-└──────────────────────────────────────────────────────────────┘
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ### 21.10.3. Session Timeout
@@ -653,10 +650,10 @@ procedure TMyService.DoSomething;
 var
   Ctxt: TRestServerUriContext;
 begin
-  Ctxt := ServiceRunningContext;
+  Ctxt := ServiceRunningContext.Request;
   if Ctxt <> nil then
     Log('Session ID: %d, User: %s',
-        [Ctxt.SessionID, Ctxt.SessionUser.LogonName]);
+        [Ctxt.SessionID, Ctxt.SessionUserName]);
 end;
 ```
 
@@ -720,10 +717,10 @@ User.GroupRights := TAuthGroup(ReadOnlyGroupID);
 // Enable detailed logging
 Server.OnAfterUri := procedure(Ctxt: TRestServerUriContext)
 begin
-  if Ctxt.SessionUser <> nil then
+  if Ctxt.SessionUser <> 0 then
     Log('%s: %s %s from %s', [
       DateTimeToIso8601(Now, True),
-      Ctxt.SessionUser.LogonName,
+      Ctxt.SessionUserName,
       Ctxt.Uri,
       Ctxt.RemoteIP
     ]);

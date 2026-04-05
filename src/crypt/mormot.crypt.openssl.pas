@@ -3703,14 +3703,14 @@ begin
     exit;
   HasOpenSsl := true; // global mormot.crypt.core flag
   // set the fastest AES implementation classes according to the actual platform
-  {$ifdef HASAESNI}
+  {$ifdef ASMAESNI}
   if (OpenSslVersion < OPENSSL3_VERNUM) or
      (OpenSslVersion >= OPENSSL31_VERNUM) then
      // OpenSSL 3.0 has a performance regression (as API overhead)
-  {$endif HASAESNI}
+  {$endif ASMAESNI}
   begin
     TAesFast[mGcm] := TAesGcmOsl;
-    {$ifdef HASAESNI}
+    {$ifdef ASMAESNI}
     // mormot.crypt.core i386/x86_64 asm is faster than OpenSSL - but GCM
     if (daAesNiSse41 in DisabledAsm) or
        (not (cfAESNI in CpuFeatures)) or
@@ -3724,7 +3724,7 @@ begin
     TAesFast[mCfb] := TAesCfbOsl;
     TAesFast[mOfb] := TAesOfbOsl;
     TAesFast[mCtr] := TAesCtrOsl;
-    {$endif HASAESNI}
+    {$endif ASMAESNI}
   end;
   // redirects raw mormot.crypt.ecc256r1 functions to faster OpenSSL wrappers
   @Ecc256r1MakeKey      := @ecc_make_key_osl;
@@ -3753,10 +3753,10 @@ begin
     end;
   CryptStoreOpenSsl := TCryptStoreAlgoOpenSsl.Implements(['x509-store']);
   // OpenSSL is slower than our SSE2 mormot.crypt.other.pas RawSCrypt() :)
-  {$ifndef CPUSSE2}
+  {$ifndef ASMSSE2}
   if OpenSslVersion >= OPENSSL3_VERNUM then // OpenSSL 1.1 has only macros
     SCrypt := @OpenSslSCrypt;
-  {$endif CPUSSE2}
+  {$endif ASMSSE2}
   // we can use OpenSSL for StuffExeCertificate() stuffed certificate generation
   CreateDummyCertificate := _CreateDummyCertificate;
   // and also for X.509 parsing

@@ -200,8 +200,7 @@ end;
 
 procedure TScheduler.StartServer;
 begin
-  server := THttpAsyncServer.Create('4000', nil, nil, '',
-    SystemInfo.dwNumberOfProcessors + 1, 120000,
+  server := THttpAsyncServer.Create('4000', nil, nil, '', CpuThreads + 1, 120000,
     [hsoNoXPoweredHeader,
      hsoNoStats,
      hsoHeadersInterning,

@@ -2146,19 +2146,25 @@ const
 
 constructor TRestClientUri.RegisteredClassCreateFrom(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean);
+var
+  pwd: SpiUtf8;
 begin
   if fModel = nil then // if not already created with a reintroduced constructor
     Create(aModel);
   if fModel <> nil then
     fOnIdle := fModel.OnClientIdle; // allow UI interactivity during SetUser()
-  if aDefinition.User <> '' then
-  begin
+  if aDefinition.User = '' then
+    exit;
+  aDefinition.GetPasswordSafe(pwd);
+  try
     {$ifdef DOMAINRESTAUTH}
     if aDefinition.User = SSPI_DEFINITION_USERNAME then
-      SetUser('', aDefinition.PasswordPlain)
+      SetUser('', pwd)
     else
     {$endif DOMAINRESTAUTH}
-      SetUser(aDefinition.User, aDefinition.PasswordPlain, true);
+      SetUser(aDefinition.User, pwd, true);
+  finally
+    FillZero(pwd); // anti-forensic
   end;
 end;
 

@@ -7763,7 +7763,7 @@ begin
   begin
     GetNextItemShortString(P, @n); // n ends with #0
     if n[0] = #0 then
-      exit;
+      break; // reached end of the CSV input text
     ndx := IndexByNameU(@n[1]);
     if ndx < 0 then
       exit; // invalid field name
@@ -9587,7 +9587,7 @@ begin
   end;
 end;
 
-{$ifdef CPUX86}
+{$ifdef ASMX86}
 procedure ExchgData(P1, P2: TOrmTableDataArray; FieldCount: integer);
 {$ifdef FPC} nostackframe; assembler; {$endif}
 asm     // eax=P1 edx=P2 ecx=FieldCount
@@ -9632,7 +9632,7 @@ begin
     dec(FieldCount);
   until FieldCount = 0;
 end;
-{$endif CPUX86}
+{$endif ASMX86}
 
 procedure TUtf8QuickSort.Sort(L, R: integer);
 var
@@ -9689,7 +9689,7 @@ begin
             dec(OJ, f);
             ExchgData(@Data[OI], @Data[OJ], Params.FieldCount);
             {$ifndef NOTORMTABLELEN}
-            {$ifdef CPUX86}ExchgData{$else}ExchgLen{$endif}(
+            {$ifdef ASMX86}ExchgData{$else}ExchgLen{$endif}(
               @Len[OI], @Len[OJ], Params.FieldCount);
             {$endif NOTORMTABLELEN}
             f := Params.FieldIndex;
@@ -9899,7 +9899,7 @@ begin
             ExchgData(@Data[i * FieldCount],
                       @Data[j * FieldCount], FieldCount);
             {$ifndef NOTORMTABLELEN}
-            {$ifdef CPUX86}ExchgData{$else}ExchgLen{$endif}(
+            {$ifdef ASMX86}ExchgData{$else}ExchgLen{$endif}(
               @Len[i * FieldCount], @Len[j * FieldCount], FieldCount);
             {$endif NOTORMTABLELEN}
           end;
@@ -11477,7 +11477,7 @@ begin
   begin
     GetNextItemShortString(P, @n); // n ends with #0
     if n[0] = #0 then
-      exit;
+      break; // reached end of the CSV input text
     ndx := Fields.IndexByNameU(@n[1]);
     if ndx < 0 then
       exit; // invalid field name
@@ -11517,7 +11517,7 @@ begin
   begin
     GetNextItemShortString(P, @n); // n ends with #0
     if n[0] = #0 then
-      exit;
+      break; // reached end of the CSV input text
     if IsRowIDShort(n) then
     begin
       withID := true;

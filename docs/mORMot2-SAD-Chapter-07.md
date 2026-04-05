@@ -21,8 +21,8 @@ The core database of the framework uses SQLite3 - a free, secure, zero-configura
      │                          │                          │
      ▼                          ▼                          ▼
 ┌─────────────┐          ┌─────────────┐          ┌─────────────┐      
-│  SQLite3    │          │ External DB │          │   NoSQL           │
-│  (native)   │          │  (via SQL)  │          │  (MongoDB)        │
+│  SQLite3    │          │ External DB │          │   NoSQL     │
+│  (native)   │          │  (via SQL)  │          │  (MongoDB)  │
 └─────────────┘          └─────────────┘          └─────────────┘      
      │                          │                          │
      ▼                          ▼                          ▼
@@ -89,7 +89,9 @@ mormot.db.raw.sqlite3.pas   → Low-level SQLite3 C API wrapper
         ↓
 mormot.db.sql.sqlite3.pas   → TSqlDB* implementation for SQLite3
         ↓
-mormot.orm.sqlite3.pas      → ORM integration (TRestServerDB)
+mormot.orm.sqlite3.pas      → ORM integration (TRestOrmServerDB)
+        ↓
+mormot.rest.sqlite3.pas     → REST server (TRestServerDB)
 ```
 
 ### 7.2.2. Static vs Dynamic Linking
@@ -103,14 +105,16 @@ mormot.orm.sqlite3.pas      → ORM integration (TRestServerDB)
 ```pascal
 uses
   mormot.db.raw.sqlite3.static,  // Include static .obj
-  mormot.orm.sqlite3;
+  mormot.orm.sqlite3,
+  mormot.rest.sqlite3;
 ```
 
 **Dynamic linking** (required for some platforms):
 ```pascal
 uses
   mormot.db.raw.sqlite3,
-  mormot.orm.sqlite3;
+  mormot.orm.sqlite3,
+  mormot.rest.sqlite3;
 
 // Load external DLL
 sqlite3 := TSqlite3LibraryDynamic.Create;
@@ -143,6 +147,7 @@ end;
 | Mode | Safety | Speed | Use Case |
 |------|--------|-------|----------|
 | `smFull` (default) | ACID | Slow writes | Production with crash safety |
+| `smNormal` | Safe (except power loss) | Moderate | Good balance of safety and speed |
 | `smOff` | Risk on crash | Fast | Batch imports, dev/test |
 | `lmExclusive` | Single process | Fastest | Embedded applications |
 
@@ -479,11 +484,15 @@ SELECT * FROM Table WHERE JsonHas(DataColumn, 'settings.darkMode') = 1;
 
 ```pascal
 // Hot backup (while server is running)
-Server.DB.BackupBackground('backup.db3', 100, 10,
-  procedure(Sender: TSqlDatabase; Step: integer)
-  begin
-    WriteLn('Backup progress: ', Step);
-  end);
+// TOnSqlDatabaseBackup = function(Sender: TSqlDatabaseBackupThread): boolean of object
+Server.DB.BackupBackground('backup.db3', 100, 10, OnBackupProgress);
+
+// Example callback method (must be a method of an object, returning boolean):
+// function TMyClass.OnBackupProgress(Sender: TSqlDatabaseBackupThread): boolean;
+// begin
+//   WriteLn('Backup step: ', GetEnumName(TypeInfo(TOnSqlDatabaseBackupStep), ord(Sender.Step))^);
+//   result := true; // return false to abort
+// end;
 ```
 
 ### 7.9.2. Restore

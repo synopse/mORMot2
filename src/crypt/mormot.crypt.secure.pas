@@ -50,6 +50,11 @@ uses
 
 { ***************** Password-Safe and TSynConnectionDefinition Classes }
 
+const
+  /// set this to TObjectWithPassword.Key to disable password obfuscation
+  // - i.e. trigger PasswordPlain = Password
+  OBJECTPASSWORD_PLAIN = cardinal(-1);
+
 type
   /// abstract class allowing safe storage of a password in a published property
   // - the associated Password, e.g. for storage or transmission encryption
@@ -64,10 +69,8 @@ type
   protected
     fPassWord: SpiUtf8;
     fKey: cardinal;
-    function GetKey: cardinal;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure XorKey(var Value: RawByteString);
     function GetPassWordPlain: SpiUtf8;
-    function GetPassWordPlainInternal(AppSecret: RawUtf8): SpiUtf8;
     procedure SetPassWordPlain(const Value: SpiUtf8);
   public
     /// finalize the instance
@@ -88,14 +91,27 @@ type
     // expected user stored in the field
     class function ComputePlainPassword(const CypheredPassword: SpiUtf8;
       CustomKey: cardinal = 0; const AppSecret: RawUtf8 = ''): SpiUtf8;
+    /// append the password encoded via CryptDataForCurrentUser()
+    // - would store it as 'username:passwordbase64' CSV values
+    // - each Executable.User would have its own encrypted value: so we store
+    // each username with its associated encrypted password
+    // - you could remove the current user password by setting Value = ''
+    // - you can use this method at runtime to safely obfucate a password in
+    // memory using a local private key and Windows DPAPI for the current user
+    procedure SetPassWordPlainCurrentUser(const Value: SpiUtf8;
+      AppSecret: RawUtf8 = '');
+    /// getter for PasswordPlain property to eventually call FillZero(Value)
+    procedure GetPasswordSafe(var Value: SpiUtf8; const AppSecret: RawUtf8 = '');
     /// the private key used to cypher the password storage on serialization
     // - application can override the default 0 value at runtime
+    // - set OBJECTPASSWORD_PLAIN would disable obfuscation
     property Key: cardinal
-      read GetKey write fKey;
+      read fKey write fKey;
     /// access to the associated unencrypted Password value
     // - may trigger a ECrypt if the password was stored using hardened
     // CryptDataForCurrentUser, and the current user doesn't match the
     // expected user stored in the field
+    // - equals fPassword field if Key is set to OBJECTPASSWORD_PLAIN
     property PasswordPlain: SpiUtf8
       read GetPassWordPlain write SetPassWordPlain;
   end;
@@ -1053,9 +1069,10 @@ function HashDigestEqual(const a, b: THashDigest): boolean;
 function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUtf8; overload;
 
 /// compute one or several hexadecimal hash(es) of any (big) file
-// - using a temporary buffer of 1MB for the sequential reading
+// - using a temporary buffer of 1MB for the sequential one-pass reading
 // - returns the hash in THashAlgo type definition order in aAlgos set
-function HashFileRaw(const aFileName: TFileName; aAlgos: THashAlgos): TRawUtf8DynArray;
+function HashFileRaw(const aFileName: TFileName; aAlgos: THashAlgos;
+  aFileSize: PInt64 = nil): TRawUtf8DynArray;
 
 /// compute the hexadecimal hashe(s) of one file, as external .md5/.sha256/.. files
 // - generate the text hash files in the very same folder
@@ -4656,7 +4673,8 @@ begin
   result := hasher.Full(aAlgo, pointer(aBuffer), length(aBuffer));
 end;
 
-function HashFileRaw(const aFileName: TFileName; aAlgos: THashAlgos): TRawUtf8DynArray;
+function HashFileRaw(const aFileName: TFileName; aAlgos: THashAlgos;
+  aFileSize: PInt64): TRawUtf8DynArray;
 var
   hasher: array of TSynHasher;
   temp: RawByteString;
@@ -4667,6 +4685,8 @@ var
   h: PtrInt;
 begin
   result := nil;
+  if aFileSize <> nil then
+    aFileSize^ := 0;
   if aFileName = '' then
     exit;
   n := 0;
@@ -4686,6 +4706,8 @@ begin
         else
           exit;
     size := FileSize(F);
+    if aFileSize <> nil then
+      aFileSize^ := size;
     tempsize := 1 shl 20; // 1MB temporary buffer for reading seems good enough
     if tempsize > size then
       tempsize := size;
@@ -4700,7 +4722,7 @@ begin
         hasher[h].Update(pointer(temp), read);
       dec(size, read);
     end;
-    SetLength(result, n + 1);
+    SetLength(result, n + 1); // don't return any partial hash result
     for h := 0 to n do
       hasher[h].Final(result[h]);
   finally
@@ -4927,7 +4949,7 @@ var
   logN, R, P: cardinal;
   hasher: TSynHasher absolute signer;
   dig: THash256 absolute signer;
-begin
+{%H-}begin
   case format of
     mcfMd5Crypt .. mcfSha512Crypt:
       result := hasher.UnixCryptHash(MCF_ALGO[format], password, rounds, saltsize, salt);
@@ -5005,6 +5027,11 @@ begin
         SCryptRoundsDecode(rounds, logN, R, P);
         h := SCryptHash(password, salt, logN, R, P, @pos);
       end;
+  else
+    begin
+      result := mcfUnknown;
+      exit;
+    end;
   end;
   if (pos = 0) or
      (mormot.core.base.StrComp(checksum, PUtf8Char(pointer(h)) + pos - 1) <> 0) then
@@ -6673,6 +6700,7 @@ end;
 destructor TObjectWithPassword.Destroy;
 begin
   FillZero(fPassword);
+  fKey := 0; // this is also a sensitive value
   inherited Destroy;
 end;
 
@@ -6708,18 +6736,15 @@ begin
   try
     instance.Key := CustomKey;
     instance.fPassWord := CypheredPassword;
-    result := instance.GetPassWordPlainInternal(AppSecret);
+    instance.GetPasswordSafe(result, AppSecret);
   finally
     instance.Free;
   end;
 end;
 
-function TObjectWithPassword.GetKey: cardinal;
+procedure TObjectWithPassword.XorKey(var Value: RawByteString);
 begin
-  if self = nil then
-    result := 0
-  else
-    result := fKey xor $A5abba5A;
+  SymmetricEncrypt(fKey xor $A5abba5A, Value);
 end;
 
 function TObjectWithPassword.GetPassWordPlain: SpiUtf8;
@@ -6727,24 +6752,31 @@ begin
   if (self = nil) or
      (fPassWord = '') then
     result := ''
+  else if fKey = OBJECTPASSWORD_PLAIN then
+    result := fPassword
   else
-    result := GetPassWordPlainInternal('');
+    GetPasswordSafe(result, '');
 end;
 
-function TObjectWithPassword.GetPassWordPlainInternal(
-  AppSecret: RawUtf8): SpiUtf8;
+procedure TObjectWithPassword.GetPasswordSafe(var Value: SpiUtf8;
+  const AppSecret: RawUtf8);
 var
-  value, pass: RawByteString;
-  usr: RawUtf8;
-  i, j: integer;
+  pwd: RawByteString;
+  app, usr: RawUtf8;
+  i, j: PtrInt;
 begin
-  result := '';
-  if (self = nil) or
-     (fPassWord = '') then
+  if (fPassword = '') or
+     (fKey = OBJECTPASSWORD_PLAIN) then
+  begin
+    Value := fPassWord;
     exit;
+  end;
+  FastAssignNew(Value);
   if AppSecret = '' then
-    ClassToText(ClassType, AppSecret);
-  usr := Executable.User + ':';
+    ClassToText(ClassType, app)
+  else
+    app := AppSecret;
+  Join([Executable.User, ':'], usr);
   i := PosEx(usr, fPassword);
   if (i = 1) or
      ((i > 0) and
@@ -6755,24 +6787,46 @@ begin
     j := PosEx(',', fPassword, i);
     if j = 0 then
       j := length(fPassword) + 1;
-    Base64ToBin(@fPassword[i], j - i, pass);
-    if pass <> '' then
-      result := CryptDataForCurrentUser(pass, AppSecret, false);
+    Base64ToBin(@fPassword[i], j - i, pwd);
+    if pwd <> '' then
+    begin
+      Value := CryptDataForCurrentUser(pwd, app, false);
+      if Value <> '' then
+        exit;
+    end;
   end
   else
   begin
     i := PosExChar(':', fPassword);
     if i > 0 then
-      ECrypt.RaiseUtf8('%.GetPassWordPlain unable to retrieve the ' +
-        'stored value: current user is [%], but password in % was encoded for [%]',
-        [self, Executable.User, AppSecret, copy(fPassword, 1, i - 1)]);
+      ECrypt.RaiseUtf8('%.PassWordPlain unable to retrieve the stored ' +
+        'v: current user is [%], but password in % was encoded for [%]',
+        [self, Executable.User, app, copy(fPassword, 1, i - 1)]);
   end;
-  if result = '' then
+  Base64ToBinSafe(pointer(fPassword), length(fPassword), RawByteString(Value));
+  XorKey(RawByteString(Value));
+end;
+
+procedure TObjectWithPassword.SetPassWordPlainCurrentUser(const Value: SpiUtf8;
+  AppSecret: RawUtf8);
+var
+  list: TSynNameValue;
+begin // follow GetPasswordSafe() encoding logic
+  if PosExChar(':', fPassword) = 0 then
+    FillZero(fPassword); // both formats are incompatible
+  list.InitFromCsv(pointer(fPassWord), ':', ',');
+  FillZero(fPassword);
+  list.Delete(Executable.User);
+  if Value <> '' then
   begin
-    value := Base64ToBin(fPassWord);
-    SymmetricEncrypt(GetKey, value);
-    result := value;
+    if AppSecret = '' then
+      ClassToText(ClassType, AppSecret);
+    list.Add(Executable.User,
+      BinToBase64(CryptDataForCurrentUser(Value, AppSecret, true)));
+    if fKey = OBJECTPASSWORD_PLAIN then
+      fKey := 0; // disable plain password storage from now on
   end;
+  fPassWord := list.AsCsv(':', ',');
 end;
 
 procedure TObjectWithPassword.SetPassWordPlain(const Value: SpiUtf8);
@@ -6781,14 +6835,17 @@ var
 begin
   if self = nil then
     exit;
-  if value = '' then
+  FillZero(fPassword);
+  if (value = '') or
+     (fKey = OBJECTPASSWORD_PLAIN) then
   begin
-    fPassWord := '';
+    fPassWord := value;
     exit;
   end;
   FastSetRawByteString(tmp, pointer(value), Length(value)); // private copy
-  SymmetricEncrypt(GetKey, tmp);
+  XorKey(tmp);
   fPassWord := BinToBase64(tmp);
+  FillZero(tmp);
 end;
 
 
@@ -8003,7 +8060,7 @@ end;
 // core is not published outside of the system unit, it consumes 2KB from a weak
 // 32-bit seed from GetTickCount/fptime, and is not thread-safe either
 
-{$ifdef CPUINTEL}
+{$ifdef ASMINTEL}
 
 { TCryptRandomRdRand }
 
@@ -8018,7 +8075,7 @@ begin
   result := RdRand32; // class is only registered if cfRAND in CpuFeatures
 end;
 
-{$endif CPUINTEL}
+{$endif ASMINTEL}
 
 { TCryptHash }
 
@@ -9991,10 +10048,10 @@ begin
     TCryptRandomAesPrng.Implements('rnd-default,rnd-aes');
     TCryptRandomLecuyerPrng.Implements('rnd-lecuyer');
     TCryptRandomDelphi.Implements('rnd-delphi');
-    {$ifdef CPUINTEL}
+    {$ifdef ASMINTEL}
     if cfRAND in CpuFeatures then
       TCryptRandomRdRand.Implements('rnd-rdrand');
-    {$endif CPUINTEL}
+    {$endif ASMINTEL}
     TCryptRandomEntropy.Implements(RndAlgosText);
     TCryptRandomSysPrng.Implements('rnd-system,rnd-systemblocking');
     TCryptHasherInternal.Implements(HashAlgosText);

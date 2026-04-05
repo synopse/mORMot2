@@ -235,8 +235,10 @@ end;
 
 ```pascal
 procedure TTestWithLogging.TestDatabaseConnection;
+var
+  Log: ISynLog;
 begin
-  TSynLog.Enter(self, 'TestDatabaseConnection');
+  Log := TSynLog.Enter(self, 'TestDatabaseConnection');
 
   Log.Log(sllInfo, 'Connecting to database...');
   // Test code...
@@ -254,7 +256,8 @@ end;
 
 ```pascal
 uses
-  mormot.core.interfaces;
+  mormot.core.interfaces,
+  mormot.core.test;
 
 type
   ICalculator = interface(IInvokable)
@@ -308,10 +311,10 @@ end;
 
 ```pascal
 type
-  TInterfaceMockOptions = set of (
-    imoMockFailsWillPassTestCase,  // Failures don't fail test
-    imoFakeInstanceCreation,       // Create fake objects
-    imoLogMethodCallsAndResults    // Log all calls
+  TInterfaceStubOptions = set of (
+    imoMockFailsWillPassTestCase,           // Failures don't fail test
+    imoFakeInstanceWontReleaseTInterfaceStub, // Stub not freed with interface
+    imoLogMethodCallsAndResults             // Log all calls
   );
 
 Mock.Options := [imoLogMethodCallsAndResults];
@@ -341,8 +344,8 @@ Mock.Options := [imoLogMethodCallsAndResults];
 │           │                                                     │
 │           ▼                                                     │
 │  ┌─────────────────────────────────────────┐                    │
-│  │              Log File                    │                   │
-│  │  • Automatic rotation                    │                   │
+│  │              Log File                   │                    │
+│  │  • Automatic rotation                   │                    │
 │  │  • Stack traces on errors               │                    │
 │  │  • Thread-safe writes                   │                    │
 │  └─────────────────────────────────────────┘                    │
@@ -434,8 +437,8 @@ LogFamily.RotateFileSizeKB := 10240;      // 10MB per file
 // Rotate by time
 LogFamily.RotateFileDailyAtHour := 0;     // Rotate at midnight
 
-// Archive rotated logs
-LogFamily.RotateFileArchiveCompression := acSynLz;  // Compress with SynLZ
+// Archive rotated logs (via OnArchive event)
+LogFamily.OnArchive := EventArchiveSynLZ; // Compress with SynLZ
 ```
 
 ### 25.8.3. Stack Traces
@@ -620,25 +623,24 @@ end;
 ```pascal
 uses
   mormot.core.log,
-  mormot.net.client;
+  mormot.rest.http.client;
 
-var
-  LogFamily: TSynLogFamily;
-begin
-  LogFamily := TSynLog.Family;
+// Remote logging is done via a REST client's ServerRemoteLogStart method:
+// - Connect a TRestHttpClientGeneric to the log server
+// - Call ServerRemoteLogStart to begin forwarding logs to it
+// - The family owns the client if aClientOwnedByFamily=true
 
-  // Enable remote logging
-  LogFamily.EchoRemoteClient := THttpClientSocket.Create('logserver', '8080');
-  LogFamily.EchoRemoteClientOwned := True;
-end;
+// Example: start remote logging from an existing REST client
+// HttpClient.ServerRemoteLogStart(TSynLog, {owned=}true);
+// HttpClient.ServerRemoteLogStop;
 ```
 
-### 25.13.2. SysLog Support
+### 25.13.2. System Journal Support
 
 ```pascal
-// Send to SysLog server (RFC 5424)
-LogFamily.EchoToSysLog := True;
-LogFamily.SysLogFacility := sfLocal0;
+// Redirect EchoToConsole output to the system journal (Linux/BSD/macOS/Windows)
+LogFamily.EchoToConsole := [sllWarning, sllError, sllException];
+LogFamily.EchoToConsoleUseJournal := True;
 ```
 
 ---
@@ -660,9 +662,9 @@ begin
   LogFile := TSynLogFile.Create('app.log');
   try
     // Iterate events
-    for i := 0 to LogFile.EventCount - 1 do
+    for i := 0 to LogFile.Count - 1 do
     begin
-      Writeln(LogFile.EventDateTime[i], ': ',
+      Writeln(LogFile.EventDateTime(i), ': ',
               LogFile.EventLevel[i], ' - ',
               LogFile.EventText[i]);
     end;

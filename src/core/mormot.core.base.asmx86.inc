@@ -13,7 +13,7 @@
   {$WARN 7122 off : Check size of XMM memory operand }
 {$endif FPC}
 
-{$ifdef ASMX86} // i386 asm with global - disabled on PIC targets
+{$ifdef ASMX86NOTPIC} // i386 asm with global - disabled on PIC targets
 
 {
  FillCharFast/MoveFast implementation notes:
@@ -88,12 +88,12 @@ asm
         neg     edx
         cmp     edx, -NONTEMPORALSIZE        // assume > 512KB bypass the cache
         jl      @nv
-{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
+{$ifdef FPC} align 16 {$else} {$ifdef ASMALIGN} .align 16 {$endif}{$endif}
 @loop:  movaps  dqword ptr [eax + edx], xmm0 // fill 16 bytes per loop
         add     edx, 16
         jl      @loop
         ret
-{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
+{$ifdef FPC} align 16 {$else} {$ifdef ASMALIGN} .align 16 {$endif}{$endif}
 @nv:    movntdq dqword ptr [eax + edx], xmm0 // non-temporal fill 16 bytes
         add     edx, 16
         jl      @nv
@@ -195,7 +195,7 @@ asm
         ret
 {$endif HASNOSSE2}
 @exit:  rep     ret
-{$ifdef FPC} align 4 {$else} {$ifdef HASALIGN} .align 4 {$endif}{$endif}
+{$ifdef FPC} align 4 {$else} {$ifdef ASMALIGN} .align 4 {$endif}{$endif}
 @table: dd      @exit, @m01, @m02, @m03, @m04, @m05, @m06, @m07, @m08
 {$ifdef WITH_ERMSASM}
 @ermsf: push    esi
@@ -246,7 +246,7 @@ asm
         pop     edx
         cmp     ecx, -NONTEMPORALSIZE        // assume > 512KB bypass the cache
         jl      @fwnv
-{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
+{$ifdef FPC} align 16 {$else} {$ifdef ASMALIGN} .align 16 {$endif}{$endif}
 @fwd:   movups  xmm0, dqword ptr [eax + ecx] // move by 16 bytes
         movaps  dqword ptr [edx + ecx], xmm0
         add     ecx, 16
@@ -255,7 +255,7 @@ asm
         pop     edx
         movups  dqword ptr [edx], xmm2       // first 16
         ret
-{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
+{$ifdef FPC} align 16 {$else} {$ifdef ASMALIGN} .align 16 {$endif}{$endif}
 @fwnv:  movups  xmm0, dqword ptr [eax + ecx]
         movntdq dqword ptr [edx + ecx], xmm0 // non-temporal move by 16 bytes
         add     ecx, 16
@@ -281,7 +281,7 @@ asm
         and     ecx, -16              // 16-byte align writes
         sub     ecx, edx
         // non-volatile backward is not efficient since we overlap data
-{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
+{$ifdef FPC} align 16 {$else} {$ifdef ASMALIGN} .align 16 {$endif}{$endif}
 @bwd:   movups  xmm0, dqword ptr [eax + ecx]
         movaps  dqword ptr [edx + ecx], xmm0
         sub     ecx, 16
@@ -600,42 +600,6 @@ asm
         pop     edi
 end;
 
-function StrLenSSE2(S: pointer): PtrInt;
-{$ifdef FPC}nostackframe; assembler;{$endif}
-asm
-        // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
-        mov     ecx, eax            // copy pointer
-        test    eax, eax
-        jz      @null               // returns 0 if S=nil
-        push    eax                 // save start address
-        pxor    xmm0, xmm0          // set to zero
-        and     ecx, 15             // lower 4 bits indicate misalignment
-        and     eax, -16            // align pointer by 16
-        // will never read outside a memory page boundary, so won't trigger GPF
-        movaps  xmm1, [eax]         // read from nearest preceding boundary
-        pcmpeqb xmm1, xmm0          // compare 16 bytes with zero
-        pmovmskb edx, xmm1          // get one bit for each byte result
-        shr     edx, cl             // shift out false bits
-        shl     edx, cl             // shift back again
-        bsf     edx, edx            // find first 1-bit
-        jnz     @A200               // found
-        // Main loop, search 16 bytes at a time
-@A100:  add     eax, 10H            // increment pointer by 16
-        movaps  xmm1, [eax]         // read 16 bytes aligned
-        pcmpeqb xmm1, xmm0          // compare 16 bytes with zero
-        pmovmskb edx, xmm1          // get one bit for each byte result
-        bsf     edx, edx            // find first 1-bit
-        // (moving the bsf out of the loop and using test here would be faster
-        // for long strings on old processors, but we are assuming that most
-        // strings are short, and newer processors have higher priority)
-        jz      @A100               // loop if not found
-@A200:  // Zero-byte found. Compute string length
-        pop     ecx                 // restore start address
-        sub     eax, ecx            // subtract start address
-        add     eax, edx            // add byte index
-@null:
-end;
-
 function StrInt32(P: PAnsiChar; val: PtrInt): PAnsiChar;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
@@ -744,9 +708,9 @@ asm
         mov     [ecx], eax
 end;
 
-{$endif ASMX86}
+{$endif ASMX86NOTPIC}
 
-// functions below are always available, even on DARWIN
+// functions below are always available, even on DARWIN / x86 with PIC
 
 function Hash32(Data: PCardinalArray; Len: integer): cardinal;
 {$ifdef FPC}nostackframe; assembler;{$endif}
@@ -1085,6 +1049,85 @@ end;
 
 {$else}
 
+function StrLenSSE2(S: pointer): PtrInt;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
+        mov     ecx, eax            // copy pointer
+        test    eax, eax
+        jz      @null               // returns 0 if S=nil
+        push    eax                 // save start address
+        pxor    xmm0, xmm0          // set to zero
+        and     ecx, 15             // lower 4 bits indicate misalignment
+        and     eax, -16            // align pointer by 16
+        // will never read outside a memory page boundary, so won't trigger GPF
+        movaps  xmm1, [eax]         // read from nearest preceding boundary
+        pcmpeqb xmm1, xmm0          // compare 16 bytes with zero into 00/ff
+        pmovmskb edx, xmm1          // get one bit for each byte result
+        shr     edx, cl             // shift out false bits
+        shl     edx, cl             // shift back again
+        bsf     edx, edx            // find first 1-bit
+        jnz     @found
+        // Main loop, search 16 bytes at a time
+{$ifdef FPC} align 16 {$else} {$ifdef ASMALIGN} .align 16 {$endif}{$endif}
+@by16:  add     eax, 16             // increment pointer by 16
+        movaps  xmm1, [eax]         // read 16 bytes aligned
+        pcmpeqb xmm1, xmm0          // compare 16 bytes with zero into 00/ff
+        pmovmskb edx, xmm1          // get one bit for each byte result
+        bsf     edx, edx            // find first 1-bit
+        // (moving the bsf out of the loop and using test here would be faster
+        // for long strings on old processors, but we are assuming that most
+        // strings are short, and newer processors have higher priority)
+        jz      @by16               // loop if not found
+@found: // Zero-byte found. Compute string length
+        pop     ecx                 // restore start address
+        sub     eax, ecx            // subtract start address
+        add     eax, edx            // add byte index
+@null:
+end;
+
+function StrLenWSSE2(S: PWideChar): PtrInt; // mostly used with UNICODE strings
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        // PWideChar SSE2 version by AB
+        mov     ecx, eax            // copy pointer
+        test    eax, eax
+        jz      @null               // returns 0 if S=nil
+        push    eax                 // save start address
+        test    al, 1
+        jnz     @unal               // unaligned input (paranoid)
+        pxor    xmm0, xmm0          // set to zero
+        and     ecx, 15             // lower 4 bits indicate misalignment
+        and     eax, -16            // align pointer by 16
+        // will never read outside a memory page boundary, so won't trigger GPF
+        movaps  xmm1, [eax]         // read from nearest preceding boundary
+        pcmpeqw xmm1, xmm0          // compare 16 bytes with zero into 0000/ffff
+        pmovmskb edx, xmm1          // get one bit for each byte result
+        shr     edx, cl             // shift out false bits
+        shl     edx, cl             // shift back again
+        bsf     edx, edx            // find first 1-bit
+        jnz     @found
+        // Main loop, search 16 bytes (8 WideChar) at a time
+{$ifdef FPC} align 16 {$else} {$ifdef ASMALIGN} .align 16 {$endif}{$endif}
+@by16:  add     eax, 16             // increment pointer by 16
+        movaps  xmm1, [eax]         // read 16 bytes aligned
+        pcmpeqw xmm1, xmm0          // compare 16 bytes with zero into 0000/ffff
+        pmovmskb edx, xmm1          // get one bit for each byte result
+        bsf     edx, edx            // find first 1-bit
+        jz      @by16               // loop if not found
+@found: // Zero-byte found. Compute string length
+        pop     ecx                 // restore start address
+        sub     eax, ecx            // subtract start address
+        add     eax, edx            // add byte index
+        shr     eax, 1              // convert bytes into WideChar count
+@null:  ret
+@unal:  xor     edx, edx
+@by1:   cmp     word ptr [eax], dx  // unaligned search - almost never called
+        jz      @found
+        add     eax, 2
+        jmp     @by1
+end;
+
 function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
@@ -1111,7 +1154,7 @@ asm
         jnz     @fnd
         cmp     edx, ecx
         jbe     @no
-{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
+{$ifdef FPC} align 16 {$else} {$ifdef ASMALIGN} .align 16 {$endif}{$endif}
 @by16:  movaps  xmm0, [ebx + ecx]
         add     ecx, 16
         pcmpeqb xmm0, xmm1
@@ -1694,7 +1737,7 @@ end;
 function SortDynArrayQWord(const A, B): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
-        // Delphi x86 compiler is not efficient, and oldest even incorrect
+        // Delphi x86 compiler is not efficient, and Delphi 7 even incorrect
         mov     ecx, [eax]
         mov     eax, [eax + 4]
         cmp     eax, [edx + 4]
@@ -1897,22 +1940,22 @@ function GetBitsCountSse42(value: PtrInt): PtrInt;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // eax=value
-        {$ifdef HASAESNI}
+        {$ifdef ASMAESNI}
         popcnt  eax, eax
         {$else} // oldest Delphi don't support this opcode
         db      $f3,$0f,$B8,$c0
-        {$endif HASAESNI}
+        {$endif ASMAESNI}
 end;
 
 function crc32cby4sse42(crc, value: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // eax=crc, edx=value
-        {$ifdef HASAESNI}
+        {$ifdef ASMAESNI}
         crc32   eax, edx
         {$else} // oldest Delphi don't support this opcode
         db      $F2, $0F, $38, $F1, $C2
-        {$endif HASAESNI}
+        {$endif ASMAESNI}
 end;
 
 procedure crcblocksse42(crc128, data128: PBlock128);
@@ -1920,7 +1963,7 @@ procedure crcblocksse42(crc128, data128: PBlock128);
 asm
         // eax=crc128, edx=data128
         mov     ecx, eax
-        {$ifdef HASAESNI}
+        {$ifdef ASMAESNI}
         mov     eax, dword ptr [ecx]
         crc32   eax, dword ptr [edx]
         mov     dword ptr [ecx], eax
@@ -1946,7 +1989,7 @@ asm
         mov     eax, dword ptr [ecx + 12]
         db      $F2, $0F, $38, $F1, $42, $0C
         mov     dword ptr [ecx + 12], eax
-        {$endif HASAESNI}
+        {$endif ASMAESNI}
 end;
 
 procedure crcblockssse42(crc128, data128: PBlock128; count: integer);
@@ -1966,8 +2009,8 @@ asm
           mov     ebx, dword ptr [esi + 4]
           mov     ecx, dword ptr [esi + 8]
           mov     edx, dword ptr [esi + 12]
-          {$ifdef HASAESNI}
-{$ifdef FPC} align 16 {$else} {$ifdef HASALIGN} .align 16 {$endif}{$endif}
+          {$ifdef ASMAESNI}
+{$ifdef FPC} align 16 {$else} {$ifdef ASMALIGN} .align 16 {$endif}{$endif}
 @s:       crc32   eax, dword ptr [edi]
           crc32   ebx, dword ptr [edi + 4]
           crc32   ecx, dword ptr [edi + 8]
@@ -1977,7 +2020,7 @@ asm
           db $F2, $0F, $38, $F1, $5F, $04
           db $F2, $0F, $38, $F1, $4F, $08
           db $F2, $0F, $38, $F1, $57, $0C
-          {$endif HASAESNI}
+          {$endif ASMAESNI}
           add     edi, 16
           dec     ebp
           jnz     @s
@@ -2001,11 +2044,11 @@ asm
         test    edx, edx
         jz      @0
         jmp     @align
-@a:     {$ifdef HASAESNI}
+@a:     {$ifdef ASMAESNI}
         crc32   eax, byte ptr [edx]
         {$else} // oldest Delphi don't support these opcodes
         db      $F2, $0F, $38, $F0, $02
-        {$endif HASAESNI}
+        {$endif ASMAESNI}
         inc     edx
         dec     ecx
         jz      @0
@@ -2017,36 +2060,36 @@ asm
 @rem:   pop     ecx
         test    cl, 4
         jz      @4
-        {$ifdef HASAESNI}
+        {$ifdef ASMAESNI}
         crc32   eax, dword ptr [edx]
         {$else}
         db      $F2, $0F, $38, $F1, $02
-        {$endif HASAESNI}
+        {$endif ASMAESNI}
         add     edx, 4
 @4:     test    cl, 2
         jz      @2
-        {$ifdef HASAESNI}
+        {$ifdef ASMAESNI}
         crc32   eax, word ptr [edx]
         {$else}
         db      $66, $F2, $0F, $38, $F1, $02
-        {$endif HASAESNI}
+        {$endif ASMAESNI}
         add     edx, 2
 @2:     test    cl, 1
         jz      @0
-        {$ifdef HASAESNI}
+        {$ifdef ASMAESNI}
         crc32   eax, byte ptr [edx]
         {$else}
         db      $F2, $0F, $38, $F0, $02
-        {$endif HASAESNI}
+        {$endif ASMAESNI}
 @0:     not     eax
         ret
-        {$ifdef HASAESNI}
+        {$ifdef ASMAESNI}
 @by8:   crc32   eax, dword ptr [edx]
         crc32   eax, dword ptr [edx + 4]
         {$else}
 @by8:   db      $F2, $0F, $38, $F1, $02
         db      $F2, $0F, $38, $F1, $42, $04
-        {$endif HASAESNI}
+        {$endif ASMAESNI}
         add     edx, 8
         dec     ecx
         jnz     @by8
@@ -2518,7 +2561,7 @@ asm
         pushfd
         pop     eax
         xor     eax, edx // does this CPU support the cpuid opcode?
-        jz      @nocpu
+        jz      @old
         mov     eax, edi
         mov     ecx, ebx
         cpuid
@@ -2526,7 +2569,7 @@ asm
         mov     TIntelRegisters(esi).&ebx, ebx
         mov     TIntelRegisters(esi).&ecx, ecx
         mov     TIntelRegisters(esi).&edx, edx
-@nocpu: pop     ebx
+@old:   pop     ebx
         pop     edi
         pop     esi
 end;

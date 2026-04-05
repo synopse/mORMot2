@@ -1958,24 +1958,26 @@ begin
                 @result[1], D, Expanded, FirstChar, WithMS, QuotedChar));
 end;
 
+function _DoDateTimeToText(dt: TDateTime): RawUtf8;
+begin // fastger version to be injected in mormot.core.os.pas instead of RTL
+  DateTimeToIso8601Var(dt, {expanded=}true, {withms=}false, ' ', #0, result);
+end;
+
 function DateToIso8601(Date: TDateTime; Expanded: boolean): RawUtf8;
-// use YYYYMMDD / YYYY-MM-DD date format
-begin
+begin // 'YYYYMMDD' format if not Expanded, 'YYYY-MM-DD' format if Expanded
   DateToIso8601PChar(Date,
     FastSetString(result, 8 + 2 * integer(Expanded)), Expanded);
 end;
 
 function DateToIso8601(Y, M, D: cardinal; Expanded: boolean): RawUtf8;
-// use 'YYYYMMDD' format if not Expanded, 'YYYY-MM-DD' format if Expanded
-begin
+begin // 'YYYYMMDD' format if not Expanded, 'YYYY-MM-DD' format if Expanded
   DateToIso8601PChar(
     FastSetString(result, 8 + 2 * integer(Expanded)), Expanded, Y, M, D);
 end;
 
 function TimeToIso8601(Time: TDateTime; Expanded: boolean;
   FirstChar: AnsiChar; WithMS: boolean): RawUtf8;
-// use Thhmmss[.sss] / Thh:mm:ss[.sss] format
-begin
+begin // "Thhmmss[.sss]' / 'Thh:mm:ss[.sss]' format
   FastSetString(result, 7 + 2 * integer(Expanded) + 4 * integer(WithMS));
   TimeToIso8601PChar(Time, pointer(result), Expanded, FirstChar, WithMS);
 end;
@@ -2129,10 +2131,9 @@ begin
      (PCardinal(s)^ and $ffffff =
        ord('G') + ord('M') shl 8 + ord('T') shl 16) then // HTTP default
   begin
-    inc(s);
     if s^ <> 'Z' then
       inc(s, 2);
-    P := GotoNextNotSpace(s);
+    P := IgnoreAndGotoNextNotSpace(s);
     Zone := 0;
     result := true;
   end
@@ -3309,7 +3310,7 @@ function HttpDateNowUtc(Tix64: Int64): THttpDateNowUtc;
 var
   tix32: cardinal;
   T: TSynSystemTime;
-  now: ShortString; // use a temp variable for _HttpDateNowUtc atomic set
+  now: THttpDateNowUtc; // use a temp variable for _HttpDateNowUtc atomic set
 begin
   if Tix64 = 0 then
     tix32 := GetTickSec
@@ -3322,7 +3323,7 @@ begin
     begin
       Tix := tix32; // let this single thread update the Value
       Safe.UnLock;
-      T.FromNowUtc;
+      FromGlobalTime(T, {local=}false, Tix64);
       T.ToHttpDateShort(now, 'GMT'#13#10, 'Date: ');
       Safe.Lock;
       Value := now;
@@ -4246,10 +4247,10 @@ begin // inlined TTextDateWriter.CreateOwnedShort logic with no heap allocation
   VMT := TTextDateWriter; // for the virtual methods to work
   FillCharFast(Fields, SizeOf(Fields), 0);
   result := @VMT;
-  result.fFlags := [twfBufferIsOnStack, twfStreamIsShortString, twfFlushToStreamNoAutoResize];
+  result.fFlags := [twfBufferIsOnStack, twfDestIsShortString, twfFlushNoAutoResize];
   result.InternalSetBuffer(@Temp, SizeOf(Temp));
   Dest[0] := #0;
-  result.fStream := @Dest; // not a true TStream
+  result.fDest := @Dest; // not a true TStream
   result.fShortStringMax := high(Dest);
 end;
 
@@ -4264,11 +4265,11 @@ var
   W: TTextDateWriter;
 begin // inlined FlushFinal + WriteToStream
   W := @VMT;
-  if W.fStream = nil then
+  if W.fDest = nil then
     exit; // Dest is already full
   len := W.B - W.fTempBuf + 1;
   if len > 0 then
-    AppendShortBuffer(pointer(W.fTempBuf), len, W.fShortStringMax, pointer(W.fStream));
+    AppendShortBuffer(pointer(W.fTempBuf), len, W.fShortStringMax, W.fDest);
 end;
 
 
@@ -4336,6 +4337,7 @@ begin
 end;
 
 
+
 procedure InitializeUnit;
 begin
   // as expected by ParseMonth() to call FindShortStringListExact()
@@ -4344,8 +4346,10 @@ begin
   assert(TTextDateWriter.InstanceSize <= SizeOf(TLocalWriter) - 256);
   // some mormot.core.text wrappers are implemented by this unit
   _VariantToUtf8DateTimeToIso8601 := DateTimeToIso8601TextVar;
-  _Iso8601ToDateTime := Iso8601ToDateTime;
+  _Iso8601ToDateTime              := Iso8601ToDateTime;
+  DoDateTimeToText                := _DoDateTimeToText;
 end;
+
 
 procedure FinalizeUnit;
 begin

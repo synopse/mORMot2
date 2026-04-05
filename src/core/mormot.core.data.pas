@@ -79,9 +79,9 @@ type
     function VirtualRelease: integer; virtual; abstract;
     // IUnknown methods
     function QueryInterface({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
-      IID: TGuid; out Obj): TIntQry; {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
-    function _AddRef: TIntCnt;       {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
-    function _Release: TIntCnt;      {$ifdef OSWINDOWS}stdcall{$else}cdecl{$endif};
+      IID: TGuid; out Obj): TIntQry; {$ifdef FPCPOSIX}cdecl{$else}stdcall{$endif};
+    function _AddRef: TIntCnt;       {$ifdef FPCPOSIX}cdecl{$else}stdcall{$endif};
+    function _Release: TIntCnt;      {$ifdef FPCPOSIX}cdecl{$else}stdcall{$endif};
   public
     /// the associated reference count
     property RefCount: integer
@@ -870,11 +870,11 @@ type
 const
   /// redirect to the proper SortDynArrayAnsiString/SortDynArrayAnsiStringI
   SORT_LSTRING: array[{caseins=}boolean] of TDynArraySortCompare = (
-    {$ifdef CPUINTEL}
+    {$ifdef ASMINTEL}
     SortDynArrayAnsiString,
     {$else}
     SortDynArrayRawByteString,
-    {$endif CPUINTEL}
+    {$endif ASMINTEL}
     SortDynArrayAnsiStringI);
 
 {$ifndef PUREMORMOT2}
@@ -3979,7 +3979,7 @@ begin
     _GlobalInfo := RegisterGlobalShutdownRelease(TBinDictionary.Create);
   result := _GlobalInfo;
   for i := 0 to length(_GlobalInfoAdd) - 1 do
-    _GlobalInfoAdd[i](result); // may take some time
+    _GlobalInfoAdd[i](result); // may take some time (e.g. ldap:* info)
   _GlobalInfoPre := nil;
   _GlobalInfoAdd := nil;
   _GlobalInfoSafe.UnLock;
@@ -4015,12 +4015,12 @@ end;
 procedure _GlobalInfoCpu(Sender: TBinDictionary);
 begin
   Sender.UpdateText( 'cpu:name',         CpuInfoText);
-  Sender.UpdateText(['cpu:threads'],    [SystemInfo.dwNumberOfProcessors]);
+  Sender.UpdateText(['cpu:threads'],    [CpuThreads]);
   Sender.UpdateText(['cpu:cores'],      [CpuCores]);
   Sender.UpdateText(['cpu:sockets'],    [CpuSockets]);
   if HasHWAes then
     Sender.UpdateText('cpu:aes',        'true');
-  {$ifdef CPUINTEL}
+  {$ifdef ASMINTEL}
   if cfAVX in CpuFeatures then
     Sender.UpdateText('cpu:avx',        'true');
   if cfAVX2 in CpuFeatures then
@@ -4034,7 +4034,7 @@ begin
   Sender.UpdateTextNotVoid('cpu:id',     IntelManufacturer);
   Sender.UpdateTextNotVoid('cpu:hyp',    IntelHypervisor);
   Sender.UpdateTextNotVoid('cpu:manufacturer', GetSmbios(sbiCpuManufacturer));
-  {$endif CPUINTEL}
+  {$endif ASMINTEL}
   {$ifdef CPUARM3264}
   Sender.UpdateTextNotVoid('cpu:model',        CpuArmModel);
   Sender.UpdateTextNotVoid('cpu:manufacturer', CpuArmImplementer);
@@ -4042,10 +4042,11 @@ begin
 end;
 
 procedure _GlobalInfoUser(Sender: TBinDictionary);
-{$ifndef OSPOSIX}
+{$ifdef OSWINDOWS}
 var
   u: RawUtf8;
-{$endif OSPOSIX}
+  x: TExtendedNameFormat;
+{$endif OSWINDOWS}
 begin
   Sender.UpdateText( 'user:name',    Executable.User);
   Sender.UpdateText(['user:home'],  [GetSystemPath(spUserDocuments)]);
@@ -4054,11 +4055,44 @@ begin
   {$ifdef OSPOSIX}
   Sender.UpdateText(['user:uid'],   [PosixUid]);
   Sender.UpdateText(['user:gid'],   [PosixGid]);
-  {$else}
+  {$endif OSPOSIX}
+  {$ifdef OSWINDOWS}
   Sender.UpdateTextNotVoid( 'user:uid', CurrentSid(wttProcess, nil, @u));
   Sender.UpdateTextNotVoid( 'user:domain', u);
-  {$endif OSPOSIX}
+  u := LookupName('', Join([u, '\', Executable.Host])); // try 'domain\host'
+  if u = '' then
+    u := LookupName('', Executable.Host); // fallback to isolated name
+  Sender.UpdateTextNotVoid( 'user:computerid', u);
+  if WinJoinStatus = jsDomain then
+    for x := low(x) to high(x) do
+      Sender.UpdateTextNotVoid(Join(['user:', GetEnumNameTrimed(
+        TypeInfo(TExtendedNameFormat), ord(x), scKebabCase)]), WinUserName(x));
+  {$endif OSWINDOWS}
 end;
+
+{$ifdef OSWINDOWS}
+procedure _GlobalInfoJoin(Sender: TBinDictionary);
+var
+  f: TComputerNameFormat;
+  x: TExtendedNameFormat;
+  u: RawUtf8;
+begin
+  for f := low(f) to high(f) do
+    Sender.UpdateTextNotVoid(Join(['join:', GetEnumNameTrimed(
+      TypeInfo(TComputerNameFormat), ord(f), scKebabCase)]), WinComputerName(f));
+  case WinJoinStatus('', @u) of
+    jsWorkgroup:
+      Sender.UpdateText('join:workgroup', u);
+    jsDomain:
+      begin
+        Sender.UpdateText('join:domain', u);
+        for x := low(x) to enfDnsDomain do
+          Sender.UpdateTextNotVoid(Join(['join:', GetEnumNameTrimed(
+            TypeInfo(TExtendedNameFormat), ord(x), scKebabCase)]), WinComputerName(x));
+      end;
+  end;
+end;
+{$endif OSWINDOWS}
 
 procedure _GlobalInfoBios(Sender: TBinDictionary);
 begin
@@ -5140,11 +5174,11 @@ function _BC_LString(A, B: PRawByteString; Info: PRttiInfo;
   out Compared: integer): PtrInt;
 begin
   // StrComp() would fail for RawByteString
-  {$ifdef CPUINTEL}
+  {$ifdef ASMINTEL}
   compared := SortDynArrayAnsiString(A^, B^); // optimized asm using length()
   {$else}
   compared := SortDynArrayRawByteString(A^, B^);
-  {$endif CPUINTEL}
+  {$endif ASMINTEL}
   result := SizeOf(pointer);
 end;
 
@@ -6213,7 +6247,7 @@ const
      SortDynArrayInt64,         //  ptInt64
      SortDynArrayInteger,       //  ptInteger
      SortDynArrayQWord,         //  ptQWord
-     {$ifdef CPUINTEL}SortDynArrayAnsiString
+     {$ifdef ASMINTEL}SortDynArrayAnsiString
      {$else}SortDynArrayRawByteString{$endif}, //  ptRawByteString
      SortDynArrayAnsiString,    //  ptRawJson
      SortDynArrayAnsiString,    //  ptRawUtf8
@@ -6256,7 +6290,7 @@ const
      SortDynArrayInt64,          //  ptInt64
      SortDynArrayInteger,        //  ptInteger
      SortDynArrayQWord,          //  ptQWord
-     {$ifdef CPUINTEL}SortDynArrayAnsiString
+     {$ifdef ASMINTEL}SortDynArrayAnsiString
      {$else}SortDynArrayRawByteString{$endif}, //  ptRawByteString
      SortDynArrayAnsiStringI,    //  ptRawJson
      SortDynArrayAnsiStringI,    //  ptRawUtf8
@@ -10843,6 +10877,9 @@ begin
   GlobalInfoRegister('env:',  _GlobalInfoEnv);
   GlobalInfoRegister('user:', _GlobalInfoUser);
   GlobalInfoRegister('bios:', _GlobalInfoBios);
+  {$ifdef OSWINDOWS}
+  GlobalInfoRegister('join:', _GlobalInfoJoin);
+  {$endif OSWINDOWS}
   // in-memory hashing are seeded from random to avoid hash flooding
   HashSeed := SystemEntropy.Startup.c0;
 end;

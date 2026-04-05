@@ -120,10 +120,9 @@ begin
   Cert := mormot.crypt.secure.Cert('syn-es256');
 
   // Generate with subject info
-  Cert.Generate([
-    cuDigitalSignature,
-    cuKeyEncipherment
-  ], 365, nil, nil, 'CN=My Certificate');
+  // Generate(Usages, Subjects, Authority, ExpireDays, ValidDays, Fields)
+  Cert.Generate([cuDigitalSignature, cuKeyEncipherment],
+    'CN=My Certificate', nil, 365);
 
   // Export
   PublicPem := Cert.Save(cccCertOnly, '', ccfPem);
@@ -160,11 +159,12 @@ begin
     365               // Valid for 365 days
   );
   try
-    // Save public certificate
-    Secret.SaveToFile('myapp.public');
+    // Save public certificate as JSON .public file
+    Secret.ToFile('myapp.public');
 
-    // Save private key (password protected)
-    Secret.SaveToSecureFile('myapp.private', 'MySecretPassword');
+    // Save private key (password protected) to current folder
+    // Filename is auto-generated as '<Serial>.private'
+    Secret.SaveToSecureFile('MySecretPassword', '.');
   finally
     Secret.Free;
   end;
@@ -178,9 +178,9 @@ var
   PublicCert: TEccCertificate;
   SecretCert: TEccCertificateSecret;
 begin
-  // Load public certificate
+  // Load public certificate from .public JSON file
   PublicCert := TEccCertificate.Create;
-  PublicCert.LoadFromFile('myapp.public');
+  PublicCert.FromFile('myapp.public');
 
   // Load private certificate
   SecretCert := TEccCertificateSecret.Create;
@@ -201,15 +201,16 @@ uses
 var
   Secret: TEccCertificateSecret;
   Data: RawByteString;
-  Signature: TEccSignature;
+  Signature: RawByteString;
 begin
   Secret := TEccCertificateSecret.Create;
   Secret.LoadFromSecureFile('signer.private', 'password');
   try
     Data := 'Important document content';
 
-    // Sign the data
-    if Secret.Sign(Data, Signature) then
+    // Sign the data (returns binary-encoded certified signature)
+    Signature := Secret.SignToBinary(pointer(Data), length(Data));
+    if Signature <> '' then
       Writeln('Data signed successfully');
   finally
     Secret.Free;
@@ -222,17 +223,26 @@ end;
 ```pascal
 var
   PublicCert: TEccCertificate;
+  Sign: TEccSignatureCertified;
   Data: RawByteString;
-  Signature: TEccSignature;
+  Validity: TEccValidity;
 begin
   PublicCert := TEccCertificate.Create;
-  PublicCert.LoadFromFile('signer.public');
+  PublicCert.FromFile('signer.public');
   try
-    // Verify signature
-    if PublicCert.Verify(Data, Signature) then
-      Writeln('Signature is VALID')
-    else
-      Writeln('Signature is INVALID!');
+    // Reconstruct signature from binary (as returned by SignToBinary)
+    Sign := TEccSignatureCertified.CreateFrom(
+      TEccSignatureCertifiedContent(pointer(BinarySignature)^));
+    try
+      // Verify signature (Verify is on TEccSignatureCertified, not TEccCertificate)
+      Validity := Sign.Verify(PublicCert, pointer(Data), length(Data));
+      if Validity in ECC_VALIDSIGN then
+        Writeln('Signature is VALID')
+      else
+        Writeln('Signature is INVALID!');
+    finally
+      Sign.Free;
+    end;
   finally
     PublicCert.Free;
   end;
@@ -295,7 +305,7 @@ var
 begin
   // Load recipient's public certificate
   RecipientCert := TEccCertificate.Create;
-  RecipientCert.LoadFromFile('recipient.public');
+  RecipientCert.FromFile('recipient.public');
   try
     PlainText := 'Secret message for recipient only';
 
@@ -313,13 +323,16 @@ end;
 var
   SecretCert: TEccCertificateSecret;
   Encrypted, Decrypted: RawByteString;
+  DecryptResult: TEccDecrypt;
 begin
   // Load your private certificate
   SecretCert := TEccCertificateSecret.Create;
   SecretCert.LoadFromSecureFile('recipient.private', 'password');
   try
-    // Decrypt
-    Decrypted := SecretCert.Decrypt(Encrypted);
+    // Decrypt (Decrypted is an out parameter; function returns TEccDecrypt status)
+    DecryptResult := SecretCert.Decrypt(Encrypted, Decrypted);
+    if DecryptResult in ECC_VALIDDECRYPT then
+      Writeln('Decryption successful');
   finally
     SecretCert.Free;
   end;
@@ -331,10 +344,13 @@ end;
 ```pascal
 type
   TEciesAlgo = (
-    ecaPBKDF2_HMAC_SHA256_AES256_CFB,     // Default
+    ecaUnknown,                                  // Default (auto-detect)
+    ecaPBKDF2_HMAC_SHA256_AES256_CFB,
     ecaPBKDF2_HMAC_SHA256_AES256_CBC,
+    ecaPBKDF2_HMAC_SHA256_AES256_OFB,
     ecaPBKDF2_HMAC_SHA256_AES256_CTR,
     ecaPBKDF2_HMAC_SHA256_AES256_CFB_SYNLZ,  // With compression
+    // ... more options
     ecaPBKDF2_AES256_GCM,                  // Authenticated encryption
     // ... more options
   );
@@ -347,7 +363,7 @@ var
   RecipientCert: TEccCertificate;
 begin
   RecipientCert := TEccCertificate.Create;
-  RecipientCert.LoadFromFile('recipient.public');
+  RecipientCert.FromFile('recipient.public');
   try
     // Creates document.pdf.synecc encrypted file
     RecipientCert.EncryptFile('document.pdf');
@@ -371,16 +387,19 @@ var
   CA: TEccCertificateSecret;
 begin
   // Create root CA
+  // CreateNew(Authority, IssuerText, ExpirationDays, StartDate, ParanoidVerify, Usage, ...)
   CA := TEccCertificateSecret.CreateNew(
     nil,                          // Self-signed (root)
     'MyCompany Root CA',          // Issuer
     3650,                         // 10 years validity
-    365,                          // 1 year signature validity
+    0,                            // StartDate (0 = now)
+    true,                         // ParanoidVerify
     [cuCA, cuDigitalSignature]    // CA usage
   );
   try
-    CA.SaveToFile('ca.public');
-    CA.SaveToSecureFile('ca.private', 'CaSecretPassword', 10000);
+    CA.ToFile('ca.public');
+    // SaveToSecureFile(Password, DestFolder, AFStripes, Pbkdf2Rounds)
+    CA.SaveToSecureFile('CaSecretPassword', '.', 64, 10000);
   finally
     CA.Free;
   end;
@@ -399,16 +418,18 @@ begin
   CA.LoadFromSecureFile('ca.private', 'CaSecretPassword');
   try
     // Create user certificate signed by CA
+    // CreateNew(Authority, IssuerText, ExpirationDays, StartDate, ParanoidVerify, Usage)
     UserCert := TEccCertificateSecret.CreateNew(
       CA,                           // Signed by CA
       'John Doe',                   // Issuer/subject
       365,                          // 1 year validity
-      0,                            // Default signature validity
+      0,                            // StartDate (0 = now)
+      true,                         // ParanoidVerify
       [cuDigitalSignature, cuKeyEncipherment]
     );
     try
-      UserCert.SaveToFile('john.public');
-      UserCert.SaveToSecureFile('john.private', 'JohnPassword');
+      UserCert.ToFile('john.public');
+      UserCert.SaveToSecureFile('JohnPassword', '.');
     finally
       UserCert.Free;
     end;
@@ -423,18 +444,21 @@ end;
 ```pascal
 var
   Chain: TEccCertificateChain;
+  CACert: TEccCertificate;
   UserCert: TEccCertificate;
   ValidationResult: TEccValidity;
 begin
   // Build trust chain
   Chain := TEccCertificateChain.Create;
   try
-    // Add trusted CA
-    Chain.Add(TEccCertificate.CreateFromFile('ca.public'));
+    // Add trusted CA (TEccCertificate has FromFile, not CreateFromFile)
+    CACert := TEccCertificate.Create;
+    CACert.FromFile('ca.public');
+    Chain.Add(CACert);  // Chain takes ownership of CACert
 
     // Load certificate to validate
     UserCert := TEccCertificate.Create;
-    UserCert.LoadFromFile('john.public');
+    UserCert.FromFile('john.public');
     try
       // Validate
       ValidationResult := Chain.IsValid(UserCert);
@@ -443,10 +467,8 @@ begin
           Writeln('Certificate is valid and signed by trusted CA');
         ecvValidSelfSigned:
           Writeln('Certificate is self-signed (not in chain)');
-        ecvNotValidYet:
-          Writeln('Certificate not yet valid');
-        ecvExpired:
-          Writeln('Certificate has expired');
+        ecvInvalidDate:
+          Writeln('Certificate date is not valid (not yet valid or expired)');
         ecvRevoked:
           Writeln('Certificate has been revoked');
         ecvUnknownAuthority:
@@ -477,16 +499,17 @@ uses
 
 type
   IProtocol = interface
-    function ProcessHandshake(const Input: RawUtf8;
-      out Output: RawUtf8): TProtocolResult;
-    procedure Encrypt(const Plain: RawByteString;
-      out Encrypted: RawByteString);
-    procedure Decrypt(const Encrypted: RawByteString;
-      out Plain: RawByteString);
+    function ProcessHandshake(const MsgIn: RawUtf8;
+      out MsgOut: RawUtf8): TProtocolResult;
+    procedure Encrypt(const aPlain: RawByteString;
+      out aEncrypted: RawByteString);
+    function Decrypt(const aEncrypted: RawByteString;
+      out aPlain: RawByteString): TProtocolResult;
+    function Clone: IProtocol;
   end;
 ```
 
-### 23.8.2. Using TProtocolEcc
+### 23.8.2. Using TEcdheProtocol
 
 ```pascal
 uses
@@ -498,14 +521,13 @@ var
   ClientCert: TEccCertificateSecret;
   Handshake1, Handshake2, Handshake3: RawUtf8;
 begin
-  // Server setup
-  ServerCert := TEccCertificateSecret.CreateFromFile('server.private', 'pwd');
-  ServerProtocol := TProtocolEcc.Create(ServerCert, nil);
+  // Server setup (TEcdheProtocolServer)
+  ServerCert := TEccCertificateSecret.CreateFromSecureFile('server.private', 'pwd');
+  ServerProtocol := TEcdheProtocol.Create(authMutual, nil, ServerCert);
 
-  // Client setup
-  ClientCert := TEccCertificateSecret.CreateFromFile('client.private', 'pwd');
-  ClientProtocol := TProtocolEcc.Create(ClientCert,
-    TEccCertificate.CreateFromFile('server.public'));
+  // Client setup (TEcdheProtocolClient) with server's public key in PKI
+  ClientCert := TEccCertificateSecret.CreateFromSecureFile('client.private', 'pwd');
+  ClientProtocol := TEcdheProtocol.Create(authMutual, nil, ClientCert);
 
   // Three-way handshake
   ClientProtocol.ProcessHandshake('', Handshake1);       // Client hello
@@ -534,16 +556,15 @@ uses
   mormot.crypt.x509;
 
 var
-  Cert: ICryptCert;
+  MyCert: ICryptCert;
 begin
   // Create X.509 certificate with ECC
-  Cert := Cert('x509-es256');
-  Cert.Generate([cuDigitalSignature], 365, nil, nil,
-    'CN=My Server,O=My Company,C=US');
+  MyCert := mormot.crypt.secure.Cert('x509-es256');
+  MyCert.Generate([cuDigitalSignature], 'CN=My Server,O=My Company,C=US', nil, 365);
 
   // Save in standard formats
-  Cert.Save(cccCertOnly, '', ccfPem);          // PEM format
-  Cert.Save(cccCertWithPrivateKey, 'pwd', ccfBinary);  // DER/PKCS12
+  MyCert.Save(cccCertOnly, '', ccfPem);          // PEM format
+  MyCert.Save(cccCertWithPrivateKey, 'pwd', ccfBinary);  // DER/PKCS12
 end;
 ```
 
@@ -551,13 +572,13 @@ end;
 
 ```pascal
 var
-  Cert: ICryptCert;
+  MyCert: ICryptCert;
   PemContent: RawUtf8;
 begin
-  // Load PEM certificate
+  // Load PEM certificate using ICryptCert.Load()
   PemContent := StringFromFile('server.crt');
-  Cert := Cert('x509-es256');
-  Cert.LoadFromPem(PemContent, '');
+  MyCert := mormot.crypt.secure.Cert('x509-es256');
+  MyCert.Load(PemContent, cccCertOnly, '');
 end;
 ```
 
@@ -590,7 +611,7 @@ ecc verify document.pdf.sign -pub signer.public
 
 The ECC tool source is at:
 ```
-/mnt/w/mORMot2/ex/ecc/
+src/tools/ecc/
 ```
 
 ---
@@ -609,9 +630,10 @@ var
   Secret: TEccCertificateSecret;
   Signature: RawByteString;
 begin
-  Secret := TEccCertificateSecret.CreateFromFile('client.private', 'pwd');
+  Secret := TEccCertificateSecret.CreateFromSecureFile('client.private', 'pwd');
   try
-    Secret.Sign(Body, Signature);
+    // SignToBinary returns the binary certified signature
+    Signature := Secret.SignToBinary(pointer(Body), length(Body));
     Client.SessionHttpHeader := 'X-Signature: ' + BinToBase64(Signature);
   finally
     Secret.Free;
@@ -631,9 +653,13 @@ begin
   SignatureB64 := Ctxt.InHeader['X-Signature'];
   Signature := Base64ToBin(SignatureB64);
 
-  PublicCert := TEccCertificate.CreateFromFile('client.public');
+  PublicCert := TEccCertificate.Create;
+  PublicCert.FromFile('client.public');
   try
-    if not PublicCert.Verify(Ctxt.Call^.InBody, Signature) then
+    // Use TEccSignatureCertified.Verify to validate against the public cert
+    // (TEccCertificate.Verify takes a hash+TEccSignatureCertifiedContent, not raw bytes)
+    if PublicCert.Verify(Sha256Digest(Ctxt.Call^.InBody),
+         TEccSignatureCertifiedContent(pointer(Signature)^)) <> ecvValidSigned then
       Ctxt.Error('Invalid signature', HTTP_FORBIDDEN);
   finally
     PublicCert.Free;
@@ -673,7 +699,7 @@ var
 procedure InitializeCrypto;
 begin
   // Load once at startup
-  CachedCert := TEccCertificateSecret.CreateFromFile('server.private', 'pwd');
+  CachedCert := TEccCertificateSecret.CreateFromSecureFile('server.private', 'pwd');
 end;
 
 procedure FinalizeCrypto;
@@ -690,7 +716,8 @@ end;
 
 ```pascal
 // ✓ Use password-protected storage
-Secret.SaveToSecureFile('key.private', 'StrongPassword', 100000);  // High PBKDF2 rounds
+// SaveToSecureFile(Password, DestFolder, AFStripes, Pbkdf2Rounds)
+Secret.SaveToSecureFile('StrongPassword', '.', 64, 100000);  // High PBKDF2 rounds
 
 // ✓ Clear sensitive data after use
 Secret.Free;  // Securely clears memory
@@ -706,9 +733,9 @@ Writeln(Secret.PrivateKey);  // NEVER DO THIS!
 if Chain.IsValid(Cert) <> ecvValidSigned then
   raise Exception.Create('Invalid certificate');
 
-// ✓ Check expiration
-if Cert.IsExpired then
-  raise Exception.Create('Certificate expired');
+// ✓ Check date validity (covers not-yet-valid and expired)
+if not Cert.IsValidDate then
+  raise Exception.Create('Certificate date is invalid');
 
 // ❌ Don't skip validation
 // ProcessData(Cert);  // Without validation - DANGEROUS
@@ -723,10 +750,10 @@ uses
   mormot.crypt.core;
 
 var
-  Random: TAesPrng;
+  Random: TAesPrngAbstract;
   Entropy: THash256;
 begin
-  Random := TAesPrng.Main;  // Thread-safe singleton
+  Random := TAesPrng.Main;  // Thread-safe singleton (returns TAesPrngAbstract)
   Random.FillRandom(Entropy);  // Cryptographically secure
 end;
 ```
@@ -740,13 +767,13 @@ end;
 | Need | Solution |
 |------|----------|
 | Generate keys | `TEccCertificateSecret.CreateNew()` |
-| Sign data | `Secret.Sign()` |
-| Verify signature | `PublicCert.Verify()` |
+| Sign data | `Secret.SignToBinary()` / `Secret.SignToBase64()` |
+| Verify signature | `Sign.Verify()` (via `TEccSignatureCertified`) |
 | Encrypt data | `PublicCert.Encrypt()` |
-| Decrypt data | `Secret.Decrypt()` |
+| Decrypt data | `Secret.Decrypt()` (out param, returns `TEccDecrypt`) |
 | Certificate chain | `TEccCertificateChain` |
 | X.509 support | `mormot.crypt.x509` |
-| Secure protocol | `TProtocolEcc` |
+| Secure protocol | `TEcdheProtocol` |
 
 ### 23.14.2. Key Units
 

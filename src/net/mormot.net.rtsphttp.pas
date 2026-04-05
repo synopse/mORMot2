@@ -336,7 +336,7 @@ begin
               get := fPendingGet.Objects[found];
               fPendingGet.Objects[found] := nil; // will be owned by rtspinstance
               fPendingGet.Delete(found);
-              sock.Sock := TNetSocket(-1); // disable Close on sock.Free -> handled in pool
+              sock.Sock := NO_SOCKET; // disable Close on sock.Free -> handled in pool
             end;
           end;
         finally

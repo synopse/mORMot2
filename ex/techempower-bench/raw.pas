@@ -900,10 +900,11 @@ begin
     // display some information and wait for SIGTERM
     ConsoleWrite([CRLF, rawServers[0].fHttpServer.ClassName,
       ' running on localhost:', rawServers[0].fHttpServer.SockPort], ccWhite);
-    ConsoleWrite([' num servers=',   servers,
+    ConsoleWrite([
+      ' num servers=',   servers,
       ', threads per server=', threads,
       ', total threads=',      threads * servers,
-      ', total CPU=',          SystemInfo.dwNumberOfProcessors,
+      ', total logical CPU=',  CpuThreads,
       ', accessible CPU=',     cpuCount,
       ', pinned=',             pinServers2Cores,
       ', db=',                 rawServers[0].fDbPool.DbmsEngineName, CRLF,

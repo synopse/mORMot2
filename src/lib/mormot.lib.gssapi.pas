@@ -1120,7 +1120,7 @@ begin
   if GssApi.EnvClientKtValue <> '' then
   begin
     // GSSAPI_ENV_CLIENT_KT_MIT or GSSAPI_ENV_CLIENT_KT_HEIMDAL specific path
-    ClientSspiAuthWithPassword(aSecContext, aInData, '', '',
+    result := ClientSspiAuthWithPassword(aSecContext, aInData, '', '',
       aSecKerberosSpn, aOutData, aMech);
     exit;
   end;
@@ -1154,7 +1154,7 @@ var
   user: gss_name_t;
   fn: TFileName;
   n , p, spn, u: RawUtf8;
-  orig: PAnsiChar;
+  orig: PUtf8Char;
   keytab: TKerberosKeyTab;
   useCredFrom, fromEnv: boolean;
   credStore: record

@@ -139,11 +139,18 @@ type
     nfIP6,
     nfUnix);
 
-  /// store the 4 bytes of a typical IP address as 32-bit unsigned integer
+  /// store the 4 bytes of a typical IPv4 address as 32-bit unsigned integer
   TNetIP4 = cardinal;
   PNetIP4 = ^TNetIP4;
-  /// store several 4 bytes of a typical IP address as 32-bit unsigned integers
+  /// store several IPv4 address as dynamic arry of 32-bit unsigned integers
   TNetIP4s = array of TNetIP4;
+
+  /// store the 16 bytes of a typical IPv6 address as 128-bit unsigned integer
+  TNetIP6 = THash128Rec;
+  PNetIP6 = ^TNetIP6;
+  /// store several IPv6 address as dynamic arry of 128-bit unsigned integers
+  TNetIP6s = array of TNetIP6;
+
   /// store the 16-bit IP port to connect/bind a socket
   TNetPort = cardinal;
 
@@ -191,8 +198,10 @@ type
   TNetAddr = object
   {$endif USERECORDWITHMETHODS}
   private
-    // opaque wrapper with len: sockaddr_un=110 (POSIX) or sockaddr_in6=28 (Win)
+    // opaque wrapper with len: TSockAddrUnix=110 or TSockAddrIn6=28 (Win)
     Addr: array[0..SOCKADDR_SIZE - 1] of byte;
+    procedure SetFamily(fam: cardinal); // internal function used for BSD
+      {$ifdef FPC}inline;{$endif}
   public
     /// fill the meaningful bytes of the internal data structure with zeros
     procedure Clear;
@@ -517,6 +526,9 @@ var
 
 
 const
+  /// a constant to indicate no socket
+  NO_SOCKET = TNetSocket(-1);
+
   // don't use RTTI to avoid mormot.core.rtti.pas and have better spelling
   _NR: array[TNetResult] of TShort31 = (
     'Ok',
@@ -620,7 +632,7 @@ function IP4Match(const ip4, subnet: RawUtf8): boolean;
 // - by design, both 0.0.0.0 and 127.0.0.1 always return false
 function IP4Filter(ip4: TNetIP4; filter: TIPAddress): boolean;
 
-/// convert an IPv4 raw value into a ShortString text
+/// convert an IPv4 raw value into a ShortString text (and hidden ending #0)
 // - won't use the Operating System network layer API so works on XP too
 // - zero is returned as '0.0.0.0' and loopback as '127.0.0.1'
 procedure IP4Short(ip4addr: PByteArray; var s: TShort16);
@@ -630,7 +642,7 @@ procedure IP4Short(ip4addr: PByteArray; var s: TShort16);
 function IP4ToShort(ip4addr: PByteArray): TShort16;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// append an IPv4 raw value into a text memory buffer
+/// append an IPv4 raw value (and ending #0) into a text memory buffer
 function IP4TextAppend(ip4addr: PByteArray; dest: PAnsiChar): PAnsiChar;
 
 /// convert an IPv4 raw value into a RawUtf8 text
@@ -747,15 +759,15 @@ type
     // - contains e.g. '12:50:b6:1e:c6:aa' from /sys/class/net/eth0/adddress
     // - may equal '00:00:00:00:00:00' for a non-physical interface (makSoftware)
     Address: RawUtf8;
-    /// the raw IPv4 address of this interface
+    /// the raw IPv4 address of this computer interface, e.g. '192.168.0.77'
     // - not available on Android
     IP: RawUtf8;
-    /// the raw IPv4 network mask of this interface
+    /// the raw IPv4 network mask of this interface, e.g. '255.255.255.0'
     // - not available on Android
     NetMask: RawUtf8;
-    /// the raw IPv4 broadcast address of this interface
+    /// the raw IPv4 broadcast address of this interface, e.g. '192.168.0.255'
     Broadcast: RawUtf8;
-    /// the raw IPv4 gateway address of this interface
+    /// the raw IPv4 gateway address of this interface, e.g. '192.168.0.254'
     // - not available on Windows XP or BSD
     Gateway: RawUtf8;
     {$ifdef OSWINDOWS}
@@ -1757,14 +1769,19 @@ type
     /// check and decode the supplied CIDR address text from its format '1.2.3.4/24'
     // - e.g. as 32-bit 1.2.3.0 into ip and 255.255.255.0 into mask
     // - plain IP address like '1.2.3.4' will be decoded with mask=255.255.255.255
-    function From(const subnet: RawUtf8): boolean;
+    function From(const subnet: RawUtf8): boolean; overload;
+    /// fill ip/mask fields from '1.2.3.4' and '255.255.255.0' text values
+    function From(const ip4, mask4: RawUtf8): boolean; overload;
     /// check if an 32-bit IPv4 matches a decoded CIDR sub-network
     function Match(ip4: TNetIP4): boolean; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// check if a textual IPv4 matches a decoded CIDR sub-network
     function Match(const ip4: RawUtf8): boolean; overload;
-    /// return the CIDR sub-network as standard '1.2.3.4/24' text
-    function ToShort: TShort23;
+    /// return the CIDR sub-network as standard '1.2.3.0/24' text
+    // - or as file-compatible name, e.g. '1-2-3-0_24'
+    function ToShort(filecompatible: boolean = false): TShort23;
+    /// wrap IP4Broadcast(ip, mask) and Ip4Text() into e.g. '1.2.3.255' text
+    function ToBroadCast: RawUtf8;
   end;
   PIp4SubNet = ^TIp4SubNet;
 
@@ -1975,11 +1992,10 @@ type
     procedure SetReceiveTimeout(aReceiveTimeout: integer); virtual;
     procedure SetSendTimeout(aSendTimeout: integer); virtual;
     procedure SetTcpNoDelay(aTcpNoDelay: boolean); virtual;
+    function GetAborted: boolean; virtual;
     function EnsureSockSend(Len: PtrInt): PUtf8Char;
       {$ifdef FPC}inline;{$endif}
     function GetRawSocket: PtrInt;
-      {$ifdef HASINLINE}inline;{$endif}
-    function GetAborted: boolean;
       {$ifdef HASINLINE}inline;{$endif}
   public
     /// direct access to the optional low-level HTTP proxy tunnelling information
@@ -2041,7 +2057,7 @@ type
     // mormot.lib.openssl11 unit) - with custom input options in the TLS fields
     procedure OpenBind(const aServer, aPort: RawUtf8; doBind: boolean;
       aTLS: boolean = false; aLayer: TNetLayer = nlTcp;
-      aSock: TNetSocket = TNetSocket(-1); aReusePort: boolean = false); virtual;
+      aSock: TNetSocket = NO_SOCKET; aReusePort: boolean = false); virtual;
     /// a wrapper around Close + OpenBind() with the current settings
     // - could be used to reestablish a broken or closed connection
     // - return '' on success, or an error message on failure
@@ -2734,49 +2750,49 @@ end;
 function TNetAddr.SetFromIP4(const address: RawUtf8;
   noNewSocketIP4Lookup: boolean): boolean;
 var
-  ad4: sockaddr absolute Addr;
+  ad4: TSockAddr absolute Addr;
 begin
   // allow to bind to any IPv6 address
   if address = c6AnyHost then // ::
   begin
-    ad4.sin_family := AF_INET6; 
-    FillZero(PHash128(@PSockAddrIn6(@Addr)^.sin6_addr)^); // all sin6_addr[] = 0
+    SetFamily(AF_INET6);
+    FillZero(PSockAddrIn6(@Addr)^.sin6_addr.b); // all sin6_addr[] = 0
     result := true;
     exit;
   end;
   result := false;
-  ad4.sin_family := 0; // keep sin_port
-  ad4.sin_addr.s_addr := 0; // reset
+  ad4.sin_family := 0; // reset family to mark as invalid, but keep sin_port
+  ad4.sin_addr := 0; // reset
   PInt64(@ad4.sin_zero)^ := 0; // seems mandatory on Windows
   if (address = cLocalhost) or
      (address = c6Localhost) or // ::1
      PropNameEquals(address, 'localhost') then
-    ad4.sin_addr.s_addr := cLocalhost32 // 127.0.0.1
+    ad4.sin_addr := cLocalhost32 // 127.0.0.1
   else if (address = cBroadcast) or
           (address = c6Broadcast) then
-    ad4.sin_addr.s_addr := cAnyHost32 // 255.255.255.255
+    ad4.sin_addr := cAnyHost32 // 255.255.255.255
   else if address = cAnyHost then
     // keep 0.0.0.0 for bind - but connect would redirect to 127.0.0.1
   else if NetIsIP4(pointer(address), @ad4.sin_addr) or
-          GetKnownHost(address, ad4.sin_addr.s_addr) or
-          NetAddrCache.SafeFind(address, ad4.sin_addr.s_addr) then
+          GetKnownHost(address, ad4.sin_addr) or
+          NetAddrCache.SafeFind(address, ad4.sin_addr) then
     // numerical IPv4, /etc/hosts, or cached entry
   else if (Assigned(NewSocketIP4Lookup) and
           not noNewSocketIP4Lookup and
-          NewSocketIP4Lookup(address, ad4.sin_addr.s_addr)) then
+          NewSocketIP4Lookup(address, ad4.sin_addr)) then
     // cache value found from mormot.net.dns lookup for 1 shl 15 = 32 seconds
-    NetAddrCache.SafeAdd(address, ad4.sin_addr.s_addr, {tixshr=}15)
+    NetAddrCache.SafeAdd(address, ad4.sin_addr, {tixshr=}15)
   else
     // return result=false if unknown
     exit;
   // we found the IPv4 matching this address
-  ad4.sin_family := AF_INET;
+  SetFamily(AF_INET);
   result := true;
 end;
 
 function TNetAddr.Family: TNetFamily;
 var
-  ad4: sockaddr absolute Addr;
+  ad4: TSockAddr absolute Addr;
 begin
   case ad4.sa_family of
     AF_INET:
@@ -2794,13 +2810,13 @@ end;
 
 procedure TNetAddr.IP(var res: RawUtf8; localasvoid: boolean);
 var
-  ad4: sockaddr absolute Addr;
+  ad4: TSockAddr absolute Addr;
 begin
   res := '';
   case ad4.sa_family of
     AF_INET:
       if (not localasvoid) or
-         (ad4.sin_addr.s_addr <> cLocalhost32) then
+         (ad4.sin_addr <> cLocalhost32) then
         IP4Text(@ad4.sin_addr, res); // detect 0.0.0.0 and 127.0.0.1
     AF_INET6:
       begin
@@ -2824,17 +2840,17 @@ end;
 
 function TNetAddr.IP4: TNetIP4;
 var
-  ad4: sockaddr absolute Addr;
+  ad4: TSockAddr absolute Addr;
 begin
   if ad4.sa_family = AF_INET then
-    result := ad4.sin_addr.s_addr // may be cLocalhost32
+    result := ad4.sin_addr // may be cLocalhost32
   else
     result := 0; // AF_INET6 or AF_UNIX return 0
 end;
 
 function TNetAddr.IP4Short: TShort16;
 var
-  ad4: sockaddr absolute Addr;
+  ad4: TSockAddr absolute Addr;
 begin
   if ad4.sa_family = AF_INET then
     mormot.net.sock.IP4Short(@ad4.sin_addr, result)
@@ -2849,7 +2865,7 @@ end;
 
 procedure TNetAddr.IPShort(var result: TShort127; withport: boolean);
 var
-  ad4: sockaddr absolute Addr;
+  ad4: TSockAddr absolute Addr;
 begin
   result[0] := #0;
   case ad4.sa_family of
@@ -2859,10 +2875,10 @@ begin
       IP6Short(@PSockAddrIn6(@Addr)^.sin6_addr, result);
     {$ifdef OSPOSIX}
     AF_UNIX:
-      with psockaddr_un(@Addr)^ do
+      with PSockAddrUnix(@Addr)^ do
       begin
         SetString(result, PAnsiChar(@sun_path), mormot.core.base.StrLen(@sun_path));
-        exit; // no port - up to 127 bytes
+        exit; // no port - up to 107 bytes
       end;
     {$endif OSPOSIX}
   else
@@ -2889,7 +2905,7 @@ end;
 
 function TNetAddr.Port: TNetPort;
 var
-  ad4: sockaddr absolute Addr;
+  ad4: TSockAddr absolute Addr;
 begin
   if ad4.sa_family in [AF_INET, AF_INET6] then
     result := bswap16(ad4.sin_port)
@@ -2899,7 +2915,7 @@ end;
 
 function TNetAddr.SetPort(p: TNetPort): TNetResult;
 var
-  ad4: sockaddr absolute Addr;
+  ad4: TSockAddr absolute Addr;
 begin
   if (ad4.sa_family in [AF_INET, AF_INET6]) and
      (p <= 65535) then // p may equal 0 to set ephemeral port
@@ -2913,10 +2929,10 @@ end;
 
 function TNetAddr.SetIP4Port(ipv4: TNetIP4; netport: TNetPort): TNetResult;
 var
-  ad4: sockaddr absolute Addr;
+  ad4: TSockAddr absolute Addr;
 begin
-  ad4.sin_family := AF_INET;
-  ad4.sin_addr.s_addr := ipv4;
+  SetFamily(AF_INET);
+  ad4.sin_addr := ipv4;
   PInt64(@ad4.sin_zero)^ := 0; // seems needed on Windows
   ad4.sin_port := bswap16(netport);
   if netport > 65535 then
@@ -2929,9 +2945,9 @@ function TNetAddr.Size: integer;
 begin
   case PSockAddr(@Addr)^.sa_family of
     AF_INET:
-      result := SizeOf(sockaddr_in);
+      result := SizeOf(TSockAddrIn);
     AF_INET6:
-      result := SizeOf(sockaddr_in6);
+      result := SizeOf(TSockAddrIn6);
   else
     result := SizeOf(Addr);
   end;
@@ -2941,13 +2957,12 @@ function TNetAddr.IPEqual(const another: TNetAddr): boolean;
 begin
   case PSockAddr(@Addr)^.sa_family of
     AF_INET:
-      result := PSockAddr(@Addr)^.sin_addr.s_addr =
-                PSockAddr(@another)^.sin_addr.s_addr;
+      result := PSockAddr(@Addr)^.sin_addr = PSockAddr(@another)^.sin_addr;
     AF_INET6:
-      result := (PHash128Rec(@PSockAddrIn6(@Addr)^.sin6_addr).Lo =
-                 PHash128Rec(@PSockAddrIn6(@another)^.sin6_addr).Lo) and
-                (PHash128Rec(@PSockAddrIn6(@Addr)^.sin6_addr).Hi =
-                 PHash128Rec(@PSockAddrIn6(@another)^.sin6_addr).Hi);
+      result := (PSockAddrIn6(@Addr)^.sin6_addr.Lo =
+                 PSockAddrIn6(@another)^.sin6_addr.Lo) and
+                (PSockAddrIn6(@Addr)^.sin6_addr.Hi =
+                 PSockAddrIn6(@another)^.sin6_addr.Hi);
   else
     result := false; // nlUnix has no IP
   end;
@@ -4141,11 +4156,7 @@ end;
 
 var
   // GetIPAddressesText(Sep=' ') cache - refreshed every 32 seconds
-  IPAddresses: array[TIPAddress] of record
-    Safe: TLightLock;
-    Text: RawUtf8;
-    Tix: integer;
-  end;
+  IPAddresses: array[TIPAddress] of TCachedValue;
 
   // GetMacAddresses / GetMacAddressesText cache - refreshed every 65 seconds
   MacAddresses: array[{UpAndDown=}boolean] of record
@@ -4161,16 +4172,7 @@ var
   ud: boolean;
 begin
   for ip := low(ip) to high(ip) do
-    with IPAddresses[ip] do
-    begin
-      Safe.Lock;
-      try
-        Text := '';
-        Tix := 0;
-      finally
-        Safe.UnLock;
-      end;
-    end;
+    IPAddresses[ip].Reset;
   for ud := low(ud) to high(ud) do
     with MacAddresses[ud] do
     begin
@@ -4186,47 +4188,37 @@ begin
     end;
 end;
 
-procedure GetIPCSV(const Sep: RawUtf8; Kind: TIPAddress; out Text: RawUtf8);
+type
+  TGetIPAddressesText = record Sep: pointer; Kind: TIPAddress; end;
+  PGetIPAddressesText = ^TGetIPAddressesText;
+
+function _IpCsvRetrieve(p: PGetIPAddressesText): RawByteString;
 var
   ip: TRawUtf8DynArray;
   i: PtrInt;
 begin
-  ip := GetIPAddresses(Kind); // from OS
+  FastAssignNew(result);
+  ip := GetIPAddresses(p^.Kind); // from OS
   if ip = nil then
     exit;
-  Text := ip[0];
+  result := ip[0];
   for i := 1 to high(ip) do
-    Text := Text + Sep + ip[i]; // as CSV
+    result := Join([result, RawUtf8(p^.Sep), ip[i]]); // as CSV
 end;
 
 function GetIPAddressesText(const Sep: RawUtf8; Kind: TIPAddress): RawUtf8;
 var
-  now: integer;
+  p: TGetIPAddressesText;
 begin
-  result := '';
+  FastAssignNew(result);
+  p.Sep := pointer(Sep);
+  p.Kind := Kind;
   if Sep = ' ' then
-    with IPAddresses[Kind] do
-    begin
-      now := GetTickSec shr 5 + 1; // refresh every 32s
-      Safe.Lock;
-      try
-        if now <> Tix then
-          Tix := now
-        else
-        begin
-          result := Text;
-          if result <> '' then
-            exit; // return the value from cache
-        end;
-        GetIPCSV(Sep, Kind, result); // ask the OS for the current IP addresses
-        Text := result;
-      finally
-        Safe.UnLock;
-      end;
-    end
+    // retrieve from OS or from cache
+    IPAddresses[Kind].Cache(@_IpCsvRetrieve, @p, 5, result)
   else
     // Sep <> ' ' -> can't use the cache, so don't need to lock
-    GetIPCSV(Sep, Kind, result);
+    result := _IpCsvRetrieve(@p);
 end;
 
 function GetMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
@@ -4238,10 +4230,10 @@ begin
   begin
     Safe.Lock;
     try
-      if Tix <> now then
+      if Tix <> now then // need to be refreshed
       begin
         Tix := now;
-        Addresses := RetrieveMacAddresses(UpAndDown);
+        Addresses := RetrieveMacAddresses(UpAndDown); // retrieve from OS call
       end;
       result := Addresses;
     finally
@@ -4394,7 +4386,7 @@ begin
     result[0] := ForcedDomainName;
   end
   else
-    result := _GetDnsAddresses(usePosixEnv, {getAD=}true); // no cache for the AD
+    result := _GetDnsAddresses(usePosixEnv, {getAD=}true);
 end;
 
 var
@@ -4560,16 +4552,19 @@ begin
 end;
 
 function TSocketStream.Read(var Buffer; Count: Longint): Longint;
+var
+  n: integer; // Delphi POSIX defined Longint = Int64 :(
 begin
+  n := Count;
   if Assigned(fSecure) then
-    fLastResult := fSecure.Receive(@Buffer, Count)
+    fLastResult := fSecure.Receive(@Buffer, n)
   else
-    fLastResult := fSocket.Recv(@Buffer, Count, @fLastRawError);
+    fLastResult := fSocket.Recv(@Buffer, n, @fLastRawError);
   case fLastResult of
     nrOk:
       begin
-        result := Count;
-        inc(fSize, Count);
+        result := n;
+        inc(fSize, n);
         fPosition := fSize;
       end;
     nrRetry:
@@ -4580,16 +4575,19 @@ begin
 end;
 
 function TSocketStream.Write(const Buffer; Count: Longint): Longint;
+var
+  n: integer; // Delphi POSIX defined Longint = Int64 :(
 begin
+  n := Count;
   if Assigned(fSecure) then
-    fLastResult := fSecure.Send(@Buffer, Count)
+    fLastResult := fSecure.Send(@Buffer, n)
   else
-    fLastResult := fSocket.Send(@Buffer, Count, @fLastRawError);
+    fLastResult := fSocket.Send(@Buffer, n, @fLastRawError);
   case fLastResult of
     nrOk:
       begin
-        result := Count;
-        inc(fSize, Count);
+        result := n;
+        inc(fSize, n);
         fPosition := fSize;
       end;
     nrRetry:
@@ -5023,7 +5021,6 @@ begin
   LockedInc32(@fGettingOne);
   try
     // thread-safe get the pending (un)subscriptions
-    last := -1;
     new.Count := 0;
     {$ifdef OSPOSIX} // TOSLight.TryLock is not available on Windows
     if (fPending.Count = 0) and
@@ -5048,6 +5045,7 @@ begin
     last := 0;
     lastcount := fPoll[0].Count;
     {$else}
+    last := -1;
     // manual check of all fPoll[] for subscriptions or modifications
     if fCount + fSubscription.SubscribeCount = 0 then
       exit; // caller would loop
@@ -5650,6 +5648,13 @@ begin
   ip := ip32 and mask; // normalize
 end;
 
+function TIp4SubNet.From(const ip4, mask4: RawUtf8): boolean;
+begin
+  result := NetIsIP4(pointer(ip4), @ip) and
+            NetIsIP4(pointer(mask4), @mask);
+  ip := ip and mask; // normalize
+end;
+
 function TIp4SubNet.Match(const ip4: RawUtf8): boolean;
 var
   ip32: TNetIP4;
@@ -5658,16 +5663,38 @@ begin
             Match(ip32{%H-});
 end;
 
-function TIp4SubNet.ToShort: TShort23;
+function TIp4SubNet.ToShort(filecompatible: boolean): TShort23;
 var
   prefix: cardinal;
+  p: PAnsiChar;
+  c: AnsiChar;
 begin
   IP4Short(@ip, result);
+  if filecompatible then
+  begin
+    p := @result;
+    repeat
+      if p^ = '.' then
+        p^ := '-';
+      inc(p);
+    until p^ = #0;
+  end;
   prefix := IP4Prefix(mask);
   if prefix = 0 then
     exit;
-  AppendShortChar('/', @result);
+  c := '/';
+  if filecompatible then
+    c := '_';
+  AppendShortChar(c, @result);
   AppendShortByte(prefix, @result); // in range '0'..'32'
+end;
+
+function TIp4SubNet.ToBroadCast: RawUtf8;
+var
+  b: TNetIP4;
+begin
+  b := IP4Broadcast(ip, mask);
+  IP4Text(@b, result);
 end;
 
 
@@ -6215,7 +6242,7 @@ procedure TCrtSocket.BindPort(const aAddress: RawUtf8; aLayer: TNetLayer;
   aReusePort: boolean);
 var
   s, p: RawUtf8;
-  aSock: integer;
+  aSock: TNetSocket;
 begin
   if aAddress = '' then
   begin
@@ -6224,15 +6251,15 @@ begin
       DoRaise('Bind('''') but Systemd is not available');
     if sd.listen_fds(0) > 1 then
       DoRaise('Bind(''''): Systemd activation failed - too many file descriptors');
-    aSock := SD_LISTEN_FDS_START + 0;
+    aSock := TNetSocket(SD_LISTEN_FDS_START);
     {$else}
     DoRaise('Bind(''''), i.e. Systemd activation, is not allowed on this platform');
-    aSock := 0; // make compiler happy
+    aSock := nil; // make compiler happy
     {$endif OSLINUX}
   end
   else
   begin
-    aSock := -1; // force OpenBind to create listening socket
+    aSock := NO_SOCKET; // force OpenBind to create listening socket
     if not SplitFromRight(aAddress, ':', s, p) then
     begin
       s := '0.0.0.0';
@@ -6243,14 +6270,14 @@ begin
     begin
       // aAddress='unix:/path/to/myapp.socket'
       FpUnlink(pointer(p)); // previous bind may have left the .socket file
-      OpenBind(p, '', {dobind=}true, {tls=}false, nlUnix, {%H-}TNetSocket(aSock));
+      OpenBind(p, '', {dobind=}true, {tls=}false, nlUnix, {%H-}aSock);
       exit;
     end;
     {$endif OSPOSIX}
   end;
   // next line will raise exception on error
   OpenBind(s{%H-}, p{%H-}, {dobind=}true, {tls=}false, aLayer,
-    {%H-}TNetSocket(aSock), aReusePort);
+    {%H-}aSock, aReusePort);
   {$ifdef OSLINUX}
   // in case started by systemd (port=''), listening socket is created by
   // another process and do not interrupt when it got a signal. So we need to
@@ -6327,7 +6354,7 @@ begin
     include(fFlags, fWasBind);
   if aTLS then
     include(fFlags, fServerTlsEnabled); // for proper reconnection
-  if {%H-}PtrInt(aSock) <= 0 then
+  if aSock = NO_SOCKET then
   begin
     // OPEN or BIND mode -> create the socket
     fServer := aServer;
@@ -6428,7 +6455,7 @@ begin
      aTLS then
     if doBind then
       DoTlsAfter(cstaBind) // never called by OpenBind(aTLS=false) in practice
-    else if {%H-}PtrInt(aSock) <= 0 then
+    else if aSock = NO_SOCKET then
       DoTlsAfter(cstaConnect);
   if Assigned(OnLog) then
     OnLog(sllTrace, '%(%:%) sock=% %', [BINDTXT[doBind], fServer, fPort,
@@ -6677,7 +6704,7 @@ begin
   QueryPerformanceMicroSeconds(stop);
   TSynLog.Add.Log(sllTrace, 'ShutdownAndClose(%): %', [fWasBind, stop-start], self);
   {$endif SYNCRTDEBUGLOW2}
-  fSock := TNetSocket(-1);
+  fSock := NO_SOCKET;
   // don't reset fServer/fPort/fTls/fWasBind: caller may use them to reconnect
   // (see e.g. THttpClientSocket.Request)
   {$ifdef OSPOSIX}
@@ -6734,7 +6761,7 @@ var
         exit;
       end;
       DoInputSock(r, 'SockInReadLn', {notvoid=}true);
-    until fAborted in fFlags;
+    until GetAborted;
     result := 0;
   end;
 
@@ -6773,7 +6800,7 @@ begin
             exit;
           end;
         end;
-    until fAborted in fFlags;
+    until GetAborted;
     if Buffer <> nil then
       Buffer[result] := #0;
     exit;
@@ -6796,7 +6823,7 @@ begin
          (line < len) then
         break; // we got a line
       dec(Size, line);
-    until fAborted in fFlags;
+    until GetAborted;
     Buffer[0] := #0;
     inc(p, line);
     dec(len, line);
@@ -6823,7 +6850,7 @@ begin
     end;
     line := GetSockInLineLength;
     inc(r^.bufpos, line); // just ignore any text up to the line feed
-  until fAborted in fFlags;
+  until GetAborted;
 end;
 
 function TCrtSocket.SockInRead(Content: PAnsiChar; Length: PtrInt;
@@ -6852,17 +6879,17 @@ begin
         dec(Length, len);
       end;
       if (Length = 0) or
-         (fAborted in fFlags) then
+         GetAborted then
         exit; // we got everything we wanted
       if not UseOnlySockIn then
         break;
       if Timeout = 0 then
         SleepHiRes(0); // don't burn 100% of CPU
       DoInputSock(r, 'SockInRead', {notvoid=}false);
-    until fAborted in fFlags;
+    until GetAborted;
   // direct receiving of the remaining bytes from socket
   if (Length <= 0) or
-     (fAborted in fFlags) then
+     GetAborted then
     exit;
   SockRecv(Content, Length); // raise ENetSock if failed to read Length
   inc(result, Length);
@@ -7217,10 +7244,29 @@ begin
   if neError in events then
     result := cspSocketError
   else if neRead in events then
+    {$ifdef OSWINDOWS}
+    // inlined fSock.Available seems safer on Windows
+    case mormot.net.sock.recv(TSocket(fSock), @events, 1, MSG_PEEK) of
+      0:
+        result := cspSocketClosed;  // WSACONNRESET with recv() returning 0
+      1:
+        if neClosed in events then
+          result := cspDataAvailableOnClosedSocket // read+closed may coexist
+        else
+          result := cspDataAvailable; // next recv() would succeed for sure
+      else
+        if NetLastError(NO_ERROR, loerr) = nrRetry then
+          result := cspNoData
+        else
+         result := cspSocketError;
+    end
+    {$else}
+    // POSIX should have detected a broken connection
     if neClosed in events then
       result := cspDataAvailableOnClosedSocket // read+closed may coexist
     else
       result := cspDataAvailable
+    {$endif OSWINDOWS}
   else if neClosed in events then
     result := cspSocketClosed
   else
@@ -7265,7 +7311,7 @@ begin
   if SockIsDefined and
      (Buffer <> nil) and
      (Length > 0) and
-     not (fAborted in fFlags) then
+     not GetAborted then
   begin
     expected := Length;
     Length := 0;
@@ -7302,7 +7348,7 @@ begin
           break;
         end;
       end;
-      if (fAborted in fFlags) or
+      if GetAborted or
          (Length = expected) or
          (StopBeforeLength and
           (read <> 0) and
@@ -7312,7 +7358,7 @@ begin
          ((fSock.RecvPending(pending) = nrOk) and
           (pending > 0)) then
         continue; // no need to call WaitFor()
-      if fAborted in fFlags then
+      if GetAborted then
         break;
       events := fSock.WaitFor(TimeOut, [neRead, neError], RawError); // select/poll
       if neError in events then
@@ -7327,9 +7373,9 @@ begin
         OnLog(sllTrace, 'TrySockRecv: timeout after %s', [TimeOut div 1000], self);
       res := nrTimeout;  // identify read timeout as error
       break;
-    until fAborted in fFlags;
+    until GetAborted;
   end;
-  if fAborted in fFlags then
+  if GetAborted then
     res := nrClosed;
   if NetResult <> nil then
     NetResult^ := res;
@@ -7379,7 +7425,7 @@ var
 begin
   if RawError <> nil then
     RawError^ := NO_ERROR;
-  if fAborted in fFlags then
+  if GetAborted then
     res := nrClosed
   else if Len = 0 then
     res := nrOk
@@ -7406,7 +7452,7 @@ begin
         if res = nrOk then
           continue;
       end;
-      if (fAborted in fFlags) or
+      if GetAborted or
          not (res in [nrOk, nrRetry]) then
         break;
       events := fSock.WaitFor(TimeOut, [neWrite, neError]); // select() or poll()
@@ -7419,8 +7465,8 @@ begin
         OnLog(sllTrace, 'TrySndLow: timeout after %ms)', [TimeOut], self);
       res := nrTimeout;  // identify write timeout as error
       break;
-    until fAborted in fFlags;
-    if fAborted in fFlags then
+    until GetAborted;
+    if GetAborted then
       res := nrClosed;
   end;
   if NetResult <> nil then
@@ -7473,13 +7519,16 @@ begin
 end;
 
 function TCrtSocketStream.Read(var Buffer; Count: Longint): Longint;
+var
+  n: integer; // Delphi POSIX defined Longint = Int64 :(
 begin
-  if Count > 0 then
-    if fSocket.TrySockRecv(@Buffer, Count, {stopbeforeCount=}true,
+  n := Count;
+  if n > 0 then
+    if fSocket.TrySockRecv(@Buffer, n, {stopbeforeCount=}true,
                  @fLastResult, @fLastRawError) then
     begin
-      result := Count;
-      inc(fSize, Count);
+      result := n;
+      inc(fSize, n);
       fPosition := fSize;
     end
     else if fLastResult = nrRetry then
@@ -7491,12 +7540,15 @@ begin
 end;
 
 function TCrtSocketStream.Write(const Buffer; Count: Longint): Longint;
+var
+  n: integer; // Delphi POSIX defined Longint = Int64 :(
 begin
-  if Count > 0 then
-    if fSocket.TrySndLow(@Buffer, Count, @fLastResult, @fLastRawError) then
+  n := Count;
+  if n > 0 then
+    if fSocket.TrySndLow(@Buffer, n, @fLastResult, @fLastRawError) then
     begin
-      result := Count;
-      inc(fSize, Count);
+      result := n;
+      inc(fSize, n);
       fPosition := fSize;
     end
     else if fLastResult = nrRetry then
@@ -7699,23 +7751,15 @@ end;
 
 initialization
   IP4local := cLocalhost; // use var string with refcount=1 to avoid allocation
-  assert(SizeOf(in_addr) = 4);
-  assert(SizeOf(in6_addr) = 16);
-  assert(SizeOf(sockaddr_in) = 16);
+  assert(SizeOf(TNetIP4) = 4);
+  assert(SizeOf(TNetIP6) = 16);
+  assert(SizeOf(TSockAddrIn) = 16);
   assert(SizeOf(TNetAddr) = SOCKADDR_SIZE);
-  assert(SizeOf(TNetAddr) >=
-    {$ifdef OSWINDOWS} SizeOf(sockaddr_in6) {$else} SizeOf(sockaddr_un) {$endif});
+  assert(SizeOf(TNetAddr) >= {$ifdef OSWINDOWS} SizeOf(TSockAddrIn6)
+                                        {$else} SizeOf(TSockAddrUnix) {$endif});
   DefaultListenBacklog := SOMAXCONN;
   GetSystemMacAddress := @_GetSystemMacAddress;
   InitializeUnit; // in mormot.net.sock.windows/posix.inc
-  (*{$ifdef OSLINUX}
-  writeln(GetRemoteMacAddress('192.168.0.1'));
-  writeln(GetRemoteMacAddress('192.168.0.254'));
-  writeln(GetRemoteMacAddress('192.168.0.2'));
-  writeln(GetRemoteMacAddress('192.168.0.121'));
-  writeln(GetRemoteMacAddress('10.0.2.15'));
-  writeln(GetRemoteMacAddress('10.0.2.2'));
-  {$endif OSLINUX}*)
 
 finalization
   FinalizeUnit;  // in mormot.net.sock.windows/posix.inc

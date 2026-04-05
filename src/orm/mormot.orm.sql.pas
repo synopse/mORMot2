@@ -2644,6 +2644,7 @@ function TRestExternalDBCreate(aModel: TOrmModel;
 var
   propsClass: TSqlDBConnectionPropertiesClass;
   props: TSqlDBConnectionProperties;
+  pwd: SpiUtf8;
 begin
   result := nil;
   if aDefinition = nil then
@@ -2654,8 +2655,9 @@ begin
     props := nil;
     try
       // aDefinition.Kind was a TSqlDBConnectionProperties -> all external DB
+      aDefinition.GetPasswordSafe(pwd);
       props := propsClass.Create(aDefinition.ServerName,
-        aDefinition.DatabaseName, aDefinition.User, aDefinition.PassWordPlain);
+        aDefinition.DatabaseName, aDefinition.User, pwd);
       OrmMapExternalAll(aModel, props, aExternalOptions);
       // instantiate either a SQLite3 :memory: DB or a TRestServerFullMemory
       result := CreateInMemoryServer(
@@ -2664,6 +2666,7 @@ begin
       FreeAndNilSafe(result);
       props.Free;  // avoid memory leak
     end;
+    FillZero(pwd);
   end
   else
     // not external DB -> try if aDefinition.Kind is a TRest class

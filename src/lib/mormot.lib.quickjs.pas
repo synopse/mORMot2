@@ -1819,113 +1819,113 @@ end;
 
 procedure memcmp;
 asm
-  {$ifdef CPUX64}
+  {$ifdef ASMX64}
   .noframe
-  {$endif CPUX64}
+  {$endif ASMX64}
   jmp libc_memcmp
 end;
 
 procedure __ms_vsnprintf;
 asm
-  {$ifdef CPUX64}
+  {$ifdef ASMX64}
   .noframe
-  {$endif CPUX64}
+  {$endif ASMX64}
   jmp libc_vsnprintf
 end;
 
 procedure printf;
 asm
-  {$ifdef CPUX64}
+  {$ifdef ASMX64}
   .noframe
-  {$endif CPUX64}
+  {$endif ASMX64}
   jmp libc_printf
 end;
 
 procedure sprintf;
 asm
-  {$ifdef CPUX64}
+  {$ifdef ASMX64}
   .noframe
-  {$endif CPUX64}
+  {$endif ASMX64}
   jmp libc_sprintf
 end;
 
 procedure fprintf;
 asm
-  {$ifdef CPUX64}
+  {$ifdef ASMX64}
   .noframe
-  {$endif CPUX64}
+  {$endif ASMX64}
   jmp libc_fprintf
 end;
 
 procedure strchr;
 asm
-  {$ifdef CPUX64}
+  {$ifdef ASMX64}
   .noframe
-  {$endif CPUX64}
+  {$endif ASMX64}
   jmp libc_strchr
 end;
 
 procedure strcspn;
 asm
-  {$ifdef CPUX64}
+  {$ifdef ASMX64}
   .noframe
-  {$endif CPUX64}
+  {$endif ASMX64}
   jmp libc_strcspn
 end;
 
 procedure strrchr;
 asm
-  {$ifdef CPUX64}
+  {$ifdef ASMX64}
   .noframe
-  {$endif CPUX64}
+  {$endif ASMX64}
   jmp mormot.lib.static.strrchr
 end;
 
 procedure putchar;
 asm
-  {$ifdef CPUX64}
+  {$ifdef ASMX64}
   .noframe
-  {$endif CPUX64}
+  {$endif ASMX64}
   jmp mormot.lib.static.putchar
 end;
 
 procedure __strtod;
 asm
-  {$ifdef CPUX64}
+  {$ifdef ASMX64}
   .noframe
-  {$endif CPUX64}
+  {$endif ASMX64}
   jmp libc_strtod
 end;
 
 procedure strcpy;
 asm
-  {$ifdef CPUX64}
+  {$ifdef ASMX64}
   .noframe
-  {$endif CPUX64}
+  {$endif ASMX64}
   jmp libc_strcpy
 end;
 
 procedure fwrite;
 asm
-  {$ifdef CPUX64}
+  {$ifdef ASMX64}
   .noframe
-  {$endif CPUX64}
+  {$endif ASMX64}
   jmp mormot.lib.static.fwrite
 end;
 
 procedure memchr;
 asm
-  {$ifdef CPUX64}
+  {$ifdef ASMX64}
   .noframe
-  {$endif CPUX64}
+  {$endif ASMX64}
   jmp libc_memchr
 end;
 
 procedure log;
 asm
-  {$ifdef CPUX64}
+  {$ifdef ASMX64}
   .noframe
-  {$endif CPUX64}
+  {$endif ASMX64}
   jmp libc_log // Delphi Win64 ln() is buggy -> redirect to msvcrt
 end;
 
@@ -1957,7 +1957,7 @@ begin
   result := mormot.core.base.StrComp(p1, p2);
 end;
 
-{$ifdef CPUX64}
+{$ifdef ASMX64}
 
 procedure ___chkstk_ms;
 asm
@@ -2021,7 +2021,7 @@ asm
   jmp udivmoddi4
 end;
 
-{$endif CPUX64}
+{$endif ASMX64}
 
 function atoi(const str: PUtf8Char): PtrInt; cdecl;
 begin

@@ -14,7 +14,7 @@
   {$WARN 7123 off : Check "$1: offset of memory operand is negative "$2 byte" }
 {$endif FPC}
 
-{$ifdef ASMX64}
+{$ifdef ASMX64NOTPIC} // some asm with global variables access
 
 procedure AesEncryptAsm(const ctxt: TAesContext; bi, bo: PBlock128);
 {$ifdef FPC} nostackframe; assembler; asm {$else}
@@ -28,7 +28,7 @@ asm     // input: rcx/rdi=TAesContext, rdx/rsi=source, r8/rdx=dest
         push    r12
         push    rbx
         push    rbp
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         push    rdi
         push    rsi
         mov     r15,  r8
@@ -37,7 +37,7 @@ asm     // input: rcx/rdi=TAesContext, rdx/rsi=source, r8/rdx=dest
         mov     r15,  rdx
         mov     rdx,  rsi
         mov     r12,  rdi
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         movzx   r13,  byte ptr [r12].TAesContext.Rounds
         mov     eax,  dword ptr [rdx]
         mov     ebx,  dword ptr [rdx + 4H]
@@ -174,10 +174,10 @@ asm     // input: rcx/rdi=TAesContext, rdx/rsi=source, r8/rdx=dest
         xor     r14d, r8d
         xor     r14d, dword ptr [r12 + 0CH]
         mov     dword ptr [r15 + 0CH], r14d
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         pop     rsi
         pop     rdi
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         pop     rbp
         pop     rbx
         pop     r12
@@ -192,7 +192,7 @@ var
   K256Aligned: PBlock2048; // movaps + paddd do expect 16 bytes alignment
 
 const
-  STACK_SIZE = 32 {$ifndef SYSVABI} + 7 * 16 {$endif};
+  STACK_SIZE = 32 {$ifndef ABISYSVX64} + 7 * 16 {$endif};
 
 procedure Sha256Sse4(var input_data; var digest; num_blks: PtrUInt);
 {$ifdef FPC} nostackframe; assembler; asm {$else}
@@ -200,20 +200,20 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         .noframe
 {$endif FPC}
         push    rbx
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         push    rsi   // Win64 expects those registers to be preserved
         push    rdi
         {$else}
         mov     r8, rdx
         mov     rcx, rdi
         mov     rdx, rsi
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         push    rbp
         push    r13
         push    r14
         push    r15
         sub     rsp, STACK_SIZE
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         movaps  [rsp + 20H], xmm6    // manual .PUSHNV for FPC compatibility
         movaps  [rsp + 30H], xmm7
         movaps  [rsp + 40H], xmm8
@@ -221,7 +221,7 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         movaps  [rsp + 60H], xmm10
         movaps  [rsp + 70H], xmm11
         movaps  [rsp + 80H], xmm12
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         shl     r8, 6
         je      @done
         add     r8, rcx
@@ -1121,7 +1121,7 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         add     rcx, 64
         cmp     rcx, [rsp]
         jne     @loop0
-@done: {$ifdef WIN64ABI}
+@done: {$ifdef ABIWINX64}
         movaps  xmm6, [rsp + 20H]
         movaps  xmm7, [rsp + 30H]
         movaps  xmm8, [rsp + 40H]
@@ -1129,16 +1129,16 @@ asm     // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         movaps  xmm10, [rsp + 60H]
         movaps  xmm11, [rsp + 70H]
         movaps  xmm12, [rsp + 80H]
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         add     rsp, STACK_SIZE
         pop     r15
         pop     r14
         pop     r13
         pop     rbp
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         pop     rdi
         pop     rsi
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         pop     rbx
         ret
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
@@ -1154,7 +1154,7 @@ end;
 // - those opcodes are not available in FPC/Delphi asm, so are manually encoded
 
 procedure Sha1ni(var input_data; var digest; num_bytes: cardinal);
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 var
   bak6, bak7, bak8, bak9: THash128;
 asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
@@ -1163,7 +1163,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  dqword ptr [bak8], xmm8
         movups  dqword ptr [bak9], xmm9
 {$else} {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-{$endif WIN64ABI}
+{$endif ABIWINX64}
         test    num_bytes, num_bytes
         jz      @0
         movups  xmm5, dqword ptr [digest]
@@ -1394,7 +1394,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
 @2:     pshufd  xmm0, xmm0, 1bh
         pextrd  dword ptr [digest + 16], xmm1, 3
         movups  dqword ptr [digest], xmm0
-@0:     {$ifdef WIN64ABI}
+@0:     {$ifdef ABIWINX64}
         movups  xmm6, dqword ptr [bak6]
         movups  xmm7, dqword ptr [bak7]
         movups  xmm8, dqword ptr [bak8]
@@ -1402,17 +1402,17 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         jmp     @end
         {$else}
         ret
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @3:     dq $08090a0b0c0d0e0f
         dq $0001020304050607
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 @end:
-{$endif WIN64ABI}
+{$endif ABIWINX64}
 end;
 
 procedure Sha256ni(var input_data; var digest; num_blks: cardinal);
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 var
   bak6, bak7, bak8, bak9, bak10, bak11, bak12, bak13, bak14, bak15: THash128;
 asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
@@ -1427,7 +1427,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  dqword ptr [bak14], xmm14
         movups  dqword ptr [bak15], xmm15
 {$else} {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-{$endif WIN64ABI}
+{$endif ABIWINX64}
         test    num_blks, num_blks
         jz      @0
         movups  xmm7, dqword ptr [digest]
@@ -1663,7 +1663,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         palignr xmm7, xmm6, $08
         movups  dqword ptr [digest], xmm0
         movups  dqword ptr [digest + 16], xmm7
-@0:     {$ifdef WIN64ABI}
+@0:     {$ifdef ABIWINX64}
         movups  xmm6, dqword ptr [bak6]
         movups  xmm7, dqword ptr [bak7]
         movups  xmm8, dqword ptr [bak8]
@@ -1677,7 +1677,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         jmp     @end
         {$else}
         ret
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @c0:    dq $0405060700010203
         dq $0c0d0e0f08090a0b
@@ -1713,19 +1713,19 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         dq $8cc7020884c87814
 @c16:   dd $90befffa, $a4506ceb
         dd $bef9a3f7, $c67178f2
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 @end:
-{$endif WIN64ABI}
+{$endif ABIWINX64}
 end;
 
 // Synopse's x64 asm, optimized for both in+out-order pipelined CPUs
 procedure KeccakPermutationKernel(B, A, C: pointer);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        {$ifndef WIN64ABI}  // input: rcx=B, rdx=A, r8=C (Linux: rdi,rsi,rdx)
+        {$ifndef ABIWINX64}  // input: rcx=B, rdx=A, r8=C (Linux: rdi,rsi,rdx)
         mov     r8, rdx
         mov     rdx, rsi
         mov     rcx, rdi
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         push    rbx
         push    r12
         push    r13
@@ -2005,14 +2005,14 @@ procedure KeccakPermutationKernel(B, A, C: pointer);
         pop     rbx
 end;
 
-{$endif ASMX64}
+{$endif ASMX64NOTPIC}
 
-{$ifdef ASMX64AVXNOCONST}
+{$ifdef ASMX64AVX1}
 
 // our AVX2 version is at least x2 faster than KeccakPermutationKernel() asm
 // inspired by Andy Polyakov's keccak1600-avx2.pl from the CRYPTOGAMS project
 procedure KeccakPermutationAvx2(A: PQWordArray);
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 var
   bak6, bak7, bak8, bak9, bak10, bak11, bak12, bak13, bak14, bak15: THash128;
 asm     // Windows x64 calling convention expects to preserve XMM6-XMM15 and rdi
@@ -2028,7 +2028,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15 and rdi
         movups  dqword ptr [bak15], xmm15
         push    rdi
 {$else} {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-{$endif WIN64ABI}
+{$endif ABIWINX64}
         // + 60H ajustments to keep asm opcodes offsets within -$7f..+$7f range
         lea     r8,  qword ptr [rip + @rhotates_left + 60H]
         lea     r9,  qword ptr [rip + @rhotates_right + 60H]
@@ -2165,11 +2165,11 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15 and rdi
         vmovdqu yword ptr [rdi + 28H], ymm5
         vmovdqu yword ptr [rdi + 48H], ymm6
         vzeroupper
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         jmp @w64end
         {$else}
         ret
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         {$ifdef FPC} align 32 {$else} .align 16 {$endif}
         // note: on AVX2, constant alignment seems not required by above opcodes
 @rhotates_left:
@@ -2211,7 +2211,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15 and rdi
    dq $8000000000008080, $8000000000008080, $8000000000008080, $8000000000008080
    dq $0000000080000001, $0000000080000001, $0000000080000001, $0000000080000001
    dq $8000000080008008, $8000000080008008, $8000000080008008, $8000000080008008
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
 @w64end:pop     rdi
         movups  xmm6, dqword ptr [bak6]
         movups  xmm7, dqword ptr [bak7]
@@ -2223,10 +2223,10 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15 and rdi
         movups  xmm13, dqword ptr [bak13]
         movups  xmm14, dqword ptr [bak14]
         movups  xmm15, dqword ptr [bak15]
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
-{$endif ASMX64AVXNOCONST}
+{$endif ASMX64AVX1}
 
 // see http://nicst.de/crc.pdf
 function gf2_multiply(x, y, m, bits: PtrUInt): PtrUInt;
@@ -2244,11 +2244,11 @@ function gf2_multiply(x, y, m, bits: PtrUInt): PtrUInt;
         shr     x, 1
         mov     r10, rax
         xor     r10, y
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         test    cl, 1
         {$else}
         test    dil, 1
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         cmovne  rax, r10
         sub     bits, 1
         jne     @s
@@ -2396,13 +2396,13 @@ asm
         .noframe
 {$endif FPC}
         // rcx/rdi=l rdx/rsi=r r8/rdx=product
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         // -> preserve rdx=r, which is used as result by mul opcode
         push   rsi
         mov    rsi, r
         {$else}
         mov    r8, product
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         // t1.V := l.L * r.L;
         xor    r9, r9
         mov    r10, qword ptr [rsi].THash128Rec.L
@@ -2433,19 +2433,19 @@ asm
         mov    qword ptr [r8].THash256Rec.H.L, rax
         mov    qword ptr [r8].THash256Rec.H.H, rdx
         // product.L := t3.V shl 64 or t1.L;
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         pop    rsi
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Output rdx/rsi=Left r8/rdx=Right
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         push    rdi
         push    rsi
         mov     rdi, Output
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         push    r15
         push    r14
         push    r13
@@ -2563,10 +2563,10 @@ procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
         pop     r13
         pop     r14
         pop     r15
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         pop     rsi
         pop     rdi
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 procedure _inc64(var Value: THash128Rec; var Added: QWord);
@@ -2676,13 +2676,13 @@ end;
 function _xasmmul(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Src rdx/rsi=Dst r8/rdx=Factor r9/rcx=Carry
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         push   rsi
         push   rdi
         mov    rsi, Dst
         mov    rdi, Src
         mov    rcx, Carry
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         xor    r10, r10
         mov    r11, Factor
         mov    rax, qword ptr [rdi]
@@ -2733,23 +2733,23 @@ function _xasmmul(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
         adc    rdx, r10
         mov    qword ptr [rsi + 8 * 7], rax
         mov    rax, rdx
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         pop    rdi
         pop    rsi
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 // use "div" opcode to divide 128-bit into 64-bit * 64-bit result
 function _xasmdiv(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Value rdx/rsi=Factor r8/rdx=Carry
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         push   rsi
         push   rdi
         mov    rdi, Value
         mov    rsi, Factor
         mov    rdx, Carry
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         mov    rax, qword ptr [rdi + 8 * 15]
         div    rsi // rax = rdx:rax div rsi (rdx = modulo for next div)
         mov    qword ptr [rdi + 8 * 15], rax
@@ -2799,23 +2799,23 @@ function _xasmdiv(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
         div    rsi
         mov    qword ptr [rdi], rax
         mov    rax, rdx // return carry/modulo
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         pop    rdi
         pop    rsi
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 // use "div" opcode to divide 128-bit into 64-bit * 64-bit result
 function _xasmmod(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Value rdx/rsi=Factor r8/rdx=Carry
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         push   rsi
         push   rdi
         mov    rdi, Value
         mov    rsi, Factor
         mov    rdx, Carry
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         mov    rax, qword ptr [rdi + 8 * 15]
         div    rsi // rax = rdx:rax div rsi (rdx = modulo for next div)
         mov    rax, qword ptr [rdi + 8 * 14]
@@ -2849,23 +2849,23 @@ function _xasmmod(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
         mov    rax, qword ptr [rdi]
         div    rsi
         mov    rax, rdx // return carry/modulo
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         pop    rdi
         pop    rsi
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 // use "mul" opcode to compute 64-bit * 64-bit into 128-bit
 function _xasmmuladd(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Src rdx/rsi=Dst r8/rdx=Factor r9/rcx=Carry
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         push   rsi
         push   rdi
         mov    rsi, Dst
         mov    rdi, Src
         mov    rcx, Carry
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         xor    r10, r10
         mov    r11, Factor
         mov    rax, qword ptr [rdi]
@@ -2925,10 +2925,10 @@ function _xasmmuladd(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
         add    qword ptr [rsi + 8 * 7], rax
         adc    rdx, r10
         mov    rax, rdx
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         pop    rdi
         pop    rsi
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 procedure Xor512(dst, src: PPtrIntArray);
@@ -2939,7 +2939,7 @@ procedure Xor512(dst, src: PPtrIntArray);
         movups  xmm3, dqword ptr [dst + 48]
         movups  xmm4, dqword ptr [src] // xorps xmm,[mem] requires alignment
         movups  xmm5, dqword ptr [src + 16]
-        {$ifdef WIN64ABI} // Win64 requires to preserve xmm6/xmm7
+        {$ifdef ABIWINX64} // Win64 requires to preserve xmm6/xmm7
         xorps   xmm0, xmm4
         xorps   xmm1, xmm5
         movups  xmm4, dqword ptr [src + 32]
@@ -2953,7 +2953,7 @@ procedure Xor512(dst, src: PPtrIntArray);
         xorps   xmm1, xmm5
         xorps   xmm2, xmm6
         xorps   xmm3, xmm7
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         movups  dqword ptr [dst], xmm0
         movups  dqword ptr [dst + 16], xmm1
         movups  dqword ptr [dst + 32], xmm2
@@ -2994,10 +2994,10 @@ procedure MD5Transform(var buf: TMd5Buf; const in_: TMd5In);
  Taken from https://github.com/maximmasiutin/MD5_Transform-x64
 }
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        {$ifndef WIN64ABI} // W=rcx Buf=rdx
+        {$ifndef ABIWINX64} // W=rcx Buf=rdx
         mov     rdx, rsi
         mov     rcx, rdi
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         push    rbx
         push    rsi
         push    rdi
@@ -3785,7 +3785,7 @@ procedure AesNiEncrypt128(const ctxt, source, dest);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         lea     ctxt, [ctxt + $70] // for smaller code gen of [ctx + -$70..+$70]
         movups  xmm0,  dqword ptr [source]
-        {$ifdef WIN64ABI} // should preserve XMM6-XMM15 on Win64
+        {$ifdef ABIWINX64} // should preserve XMM6-XMM15 on Win64
         movups  xmm5,  dqword ptr [ctxt + $00 - $70]
         movups  xmm1,  dqword ptr [ctxt + $10 - $70]
         movups  xmm2,  dqword ptr [ctxt + $20 - $70]
@@ -3831,7 +3831,7 @@ procedure AesNiEncrypt128(const ctxt, source, dest);
         aesenc  xmm0,  xmm9
         aesenc  xmm0,  xmm10
         aesenclast xmm0, xmm11
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         movups  dqword ptr [dest], xmm0
         pxor    xmm0,  xmm0 // for safety
 end;
@@ -3840,7 +3840,7 @@ procedure AesNiEncrypt192(const ctxt, source, dest);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         lea     ctxt, [ctxt + $70] // for smaller code gen of [ctx + -$70..+$70]
         movups  xmm0,  dqword ptr [source]
-        {$ifdef WIN64ABI} // should preserve XMM6-XMM15 on Win64
+        {$ifdef ABIWINX64} // should preserve XMM6-XMM15 on Win64
         movups  xmm5,  dqword ptr [ctxt + $00 - $70]
         movups  xmm1,  dqword ptr [ctxt + $10 - $70]
         movups  xmm2,  dqword ptr [ctxt + $20 - $70]
@@ -3895,7 +3895,7 @@ procedure AesNiEncrypt192(const ctxt, source, dest);
         aesenc  xmm0,  xmm11
         aesenc  xmm0,  xmm12
         aesenclast xmm0, xmm13
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         movups  dqword ptr [dest], xmm0
         pxor    xmm0,  xmm0 // for safety
 end;
@@ -3904,7 +3904,7 @@ procedure AesNiEncrypt256(const ctxt, source, dest);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         lea     ctxt, [ctxt + $70] // for smaller code gen of [ctx + -$70..+$70]
         movups  xmm0,  dqword ptr [source]
-        {$ifdef WIN64ABI} // should preserve XMM6-XMM15 on Win64
+        {$ifdef ABIWINX64} // should preserve XMM6-XMM15 on Win64
         movups  xmm5,  dqword ptr [ctxt + $00 - $70]
         movups  xmm1,  dqword ptr [ctxt + $10 - $70]
         movups  xmm2,  dqword ptr [ctxt + $20 - $70]
@@ -3966,7 +3966,7 @@ procedure AesNiEncrypt256(const ctxt, source, dest);
         aesenc  xmm0,  xmm13
         aesenc  xmm0,  xmm14
         aesenclast xmm0, xmm15
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         movups  dqword ptr [dest], xmm0
         pxor    xmm0,  xmm0 // for safety
 end;
@@ -3975,7 +3975,7 @@ procedure AesNiDecrypt128(const ctxt, source, dest);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         lea     ctxt, [ctxt + $70] // for smaller code gen of [ctx + -$70..+$70]
         movups  xmm0,  dqword ptr [source]
-        {$ifdef WIN64ABI} // should preserve XMM6-XMM15 on Win64
+        {$ifdef ABIWINX64} // should preserve XMM6-XMM15 on Win64
         movups  xmm5,  dqword ptr [ctxt + $a0 - $70]
         movups  xmm1,  dqword ptr [ctxt + $90 - $70]
         movups  xmm2,  dqword ptr [ctxt + $80 - $70]
@@ -4021,7 +4021,7 @@ procedure AesNiDecrypt128(const ctxt, source, dest);
         aesdec  xmm0,  xmm9
         aesdec  xmm0,  xmm10
         aesdeclast xmm0, xmm11
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         movups  dqword ptr [dest], xmm0
         pxor    xmm0,  xmm0 // for safety
 end;
@@ -4030,7 +4030,7 @@ procedure AesNiDecrypt192(const ctxt, source, dest);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         lea     ctxt, [ctxt + $70] // for smaller code gen of [ctx + -$70..+$70]
         movups  xmm0,  dqword ptr [source]
-        {$ifdef WIN64ABI} // should preserve XMM6-XMM15 on Win64
+        {$ifdef ABIWINX64} // should preserve XMM6-XMM15 on Win64
         movups  xmm5,  dqword ptr [ctxt + $c0 - $70]
         movups  xmm1,  dqword ptr [ctxt + $b0 - $70]
         movups  xmm2,  dqword ptr [ctxt + $a0 - $70]
@@ -4084,7 +4084,7 @@ procedure AesNiDecrypt192(const ctxt, source, dest);
         aesdec  xmm0,  xmm11
         aesdec  xmm0,  xmm12
         aesdeclast xmm0, xmm13
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         movups  dqword ptr [dest], xmm0
         pxor    xmm0,  xmm0 // for safety
 end;
@@ -4093,7 +4093,7 @@ procedure AesNiDecrypt256(const ctxt, source, dest);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         lea     ctxt, [ctxt + $70] // for smaller code gen of [ctx + -$70..+$70]
         movups  xmm0,  dqword ptr [source]
-        {$ifdef WIN64ABI} // should preserve XMM6-XMM15 on Win64
+        {$ifdef ABIWINX64} // should preserve XMM6-XMM15 on Win64
         movups  xmm5,  dqword ptr [ctxt + $e0 - $70]
         movups  xmm1,  dqword ptr [ctxt + $d0 - $70]
         movups  xmm2,  dqword ptr [ctxt + $c0 - $70]
@@ -4155,7 +4155,7 @@ procedure AesNiDecrypt256(const ctxt, source, dest);
         aesdec  xmm0,  xmm13
         aesdec  xmm0,  xmm14
         aesdeclast xmm0, xmm15
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         movups  dqword ptr [dest], xmm0
         pxor    xmm0,  xmm0 // for safety
 end;
@@ -4308,7 +4308,7 @@ procedure MakeDecrKeyAesNi(Rounds: integer; RK: pointer);
 end;
 
 procedure AesNiEncryptOfb128(iv, aes, source, dest: pointer; blockcount: PtrUInt);
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 var
   bak6, bak7, bak8, bak9, bak10, bak11, bak15: THash128;
 asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
@@ -4321,7 +4321,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  dqword ptr [bak15], xmm15
 {$else}
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-{$endif WIN64ABI}
+{$endif ABIWINX64}
         mov     rax,  blockcount  // on Win64 ABI, blockcount is not a register
         test    eax,  eax
         jz      @z
@@ -4357,7 +4357,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         sub     eax, 1
         jnz     @s
         movups  dqword ptr [iv], xmm7
-@z:     {$ifdef WIN64ABI}
+@z:     {$ifdef ABIWINX64}
         movups  xmm6,   dqword ptr [bak6]
         movups  xmm7,   dqword ptr [bak7]
         movups  xmm8,   dqword ptr [bak8]
@@ -4365,11 +4365,11 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm10,  dqword ptr [bak10]
         movups  xmm11,  dqword ptr [bak11]
         movups  xmm15,  dqword ptr [bak15]
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 procedure AesNiEncryptOfb256(iv, aes, source, dest: pointer; blockcount: PtrUInt);
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 var
   bak6, bak7, bak8, bak9, bak10, bak11, bak12, bak13, bak14, bak15: THash128;
 asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
@@ -4385,7 +4385,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  dqword ptr [bak15], xmm15
 {$else}
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-{$endif WIN64ABI}
+{$endif ABIWINX64}
         mov     rax, blockcount
         test    eax, eax
         jz      @z
@@ -4430,7 +4430,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         sub     eax, 1
         jnz     @s
         movups  dqword ptr [iv], xmm7
-@z:     {$ifdef WIN64ABI}
+@z:     {$ifdef ABIWINX64}
         movups  xmm6,  dqword ptr [bak6]
         movups  xmm7,  dqword ptr [bak7]
         movups  xmm8,  dqword ptr [bak8]
@@ -4441,7 +4441,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm13, dqword ptr [bak13]
         movups  xmm14, dqword ptr [bak14]
         movups  xmm15, dqword ptr [bak15]
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 
@@ -4544,7 +4544,7 @@ end;
 // AES-CTR with 8x AES-NI interleave factor over a 32-bit counter
 procedure AesNiEncryptCtrNist32(
   src, dest: pointer; blocks: PtrUInt; ctxt, iv: pointer);
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 var
   bak6, bak7, bak8, bak9, bak10, bak11, bak12, bak13, bak14, bak15: THash128;
 asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
@@ -4557,7 +4557,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         mov     r8, qword ptr [iv]  // not passed as register
 {$else}
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-{$endif WIN64ABI}
+{$endif ABIWINX64}
         // rdi=src, rsi=dest, rdx=blocks, rcx=ctxt, r8=iv
       	cmp    rdx, $1
       	jne    @big
@@ -4588,13 +4588,13 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
       	pxor   xmm3, xmm3
       	movups dqword ptr [rsi], xmm2
       	xorps  xmm2, xmm2
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         jmp    @exit
         {$else}
         ret
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         // optimized AES-CTR process
-@big:   {$ifdef WIN64ABI}
+@big:   {$ifdef ABIWINX64}
         movups  dqword ptr [bak6], xmm6
         movups  dqword ptr [bak7], xmm7
         movups  dqword ptr [bak8], xmm8
@@ -4605,7 +4605,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  dqword ptr [bak13], xmm13
         movups  dqword ptr [bak14], xmm14
         movups  dqword ptr [bak15], xmm15
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         lea    r11, [rsp]
         push   rbp
         sub    rsp, $80
@@ -5016,7 +5016,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         // restore stack
 @done:  mov    rbp, qword ptr [r11 - $8]
       	lea    rsp, [r11]
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         movups  xmm6, dqword ptr [bak6]
         movups  xmm7, dqword ptr [bak7]
         movups  xmm8, dqword ptr [bak8]
@@ -5029,7 +5029,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm15, dqword ptr [bak15]
 @exit:  pop    rdi
         pop    rsi
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 {$else} // our naive/simple code following our i386 x4 pattern - extended to x8
@@ -5040,10 +5040,10 @@ type
   TAesNiCtr = record // shared stack structure to make Win64 code simpler
     count: PtrUInt;
     src, dst, ctxt, iv: pointer;
-    {$ifdef WIN64ABI} // WIN64 ABI should preserve rsi/rdi and XMM6-XMM15
+    {$ifdef ABIWINX64} // WIN64 ABI should preserve rsi/rdi and XMM6-XMM15
     bakrdi, bakrsi: pointer;
     bak6, bak7, bak8, bak9, bak10, bak11, bak12, bak13, bak14, bak15: THash128;
-    {$endif WIN64ABI}
+    {$endif ABIWINX64}
   end;
 
 procedure AesNiEncryptCtrNist32Small;
@@ -5143,7 +5143,7 @@ procedure AesNiEncryptCtrNist32Fast(var ctx: TAesNiCtr);
         sub     dword ptr [r8].TAesNiCtr.count, edx
         jz      AesNiEncryptCtrNist32Small
         call    AesNiEncryptCtrNist32Small
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         // Windows x64 calling convention expects to preserve rsi/rdi XMM6-XMM15
 @start: mov     qword  ptr [r8].TAesNiCtr.bakrdi, rdi
         mov     qword  ptr [r8].TAesNiCtr.bakrsi, rsi
@@ -5152,7 +5152,7 @@ procedure AesNiEncryptCtrNist32Fast(var ctx: TAesNiCtr);
         {$ifdef FPC} align 16 {$endif}
         {$else}
         {$ifdef FPC} align 16 {$endif}
-@start: {$endif WIN64ABI}
+@start: {$endif ABIWINX64}
 @by4:   // prepare xmm0-xmm3 as iv0-iv3
         movups  xmm0, [r9]
         movaps  xmm1, xmm0
@@ -5248,12 +5248,12 @@ procedure AesNiEncryptCtrNist32Fast(var ctx: TAesNiCtr);
         lea     r11, qword [r11 + $40]
         sub     dword ptr [r8].TAesNiCtr.count, 4 // 4x blocks per loop
         jnz     @by4
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         mov     rdi,  qword  ptr [r8].TAesNiCtr.bakrdi
         mov     rsi,  qword  ptr [r8].TAesNiCtr.bakrsi
         movups  xmm6, dqword ptr [r8].TAesNiCtr.bak6
         movups  xmm7, dqword ptr [r8].TAesNiCtr.bak7
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         ret
 @192:   movups  xmm4, [rax + $c0 - $70]
         movups  xmm5, [rax + $d0 - $70]
@@ -5306,7 +5306,7 @@ procedure AesNiEncryptCtrNist32Fast(var ctx: TAesNiCtr);
         sub     dword ptr [r8].TAesNiCtr.count, edx
         jz      AesNiEncryptCtrNist32Small // no register save on Win64 for 1..7
         call    AesNiEncryptCtrNist32Small
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         // Windows x64 calling convention expects to preserve rsi/rdi XMM6-XMM15
 @start: mov     qword  ptr [r8].TAesNiCtr.bakrdi, rdi
         mov     qword  ptr [r8].TAesNiCtr.bakrsi, rsi
@@ -5323,7 +5323,7 @@ procedure AesNiEncryptCtrNist32Fast(var ctx: TAesNiCtr);
         {$ifdef FPC} align 16 {$endif}
         {$else}
         {$ifdef FPC} align 16 {$endif}
-@start: {$endif WIN64ABI}
+@start: {$endif ABIWINX64}
 @by8:   // prepare xmm0-xmm7 as iv0-iv7
         movups  xmm0, [r9]
         movaps  xmm1, xmm0
@@ -5492,7 +5492,7 @@ procedure AesNiEncryptCtrNist32Fast(var ctx: TAesNiCtr);
         lea     r11, qword [r11 + $80]
         sub     dword ptr [r8].TAesNiCtr.count, 8 // 8x blocks per loop
         jnz     @by8
-@done:  {$ifdef WIN64ABI}
+@done:  {$ifdef ABIWINX64}
         mov     rdi,   qword  ptr [r8].TAesNiCtr.bakrdi
         mov     rsi,   qword  ptr [r8].TAesNiCtr.bakrsi
         movups  xmm6,  dqword ptr [r8].TAesNiCtr.bak6
@@ -5505,7 +5505,7 @@ procedure AesNiEncryptCtrNist32Fast(var ctx: TAesNiCtr);
         movups  xmm13, dqword ptr [r8].TAesNiCtr.bak13
         movups  xmm14, dqword ptr [r8].TAesNiCtr.bak14
         movups  xmm15, dqword ptr [r8].TAesNiCtr.bak15
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         ret
 @192:   movups  xmm8, [rax + $c0 - $70]
         movups  xmm9, [rax + $d0 - $70]
@@ -5578,7 +5578,7 @@ end;
 // AES-CTR and 256-bit crc32c with 8x AES-NI interleave over a 32-bit counter
 procedure AesNiEncryptCtrCrc32(
   src, dest: pointer; blocks: PtrUInt; ctxt: TAesCtc);
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 var
   bak6, bak7, bak8, bak9, bak10, bak11, bak12, bak13, bak14, bak15: THash128;
 asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
@@ -5590,7 +5590,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         mov     rcx, ctxt   // r9
 {$else}
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-{$endif WIN64ABI}
+{$endif ABIWINX64}
         // rdi=src, rsi=dest, rdx=blocks, rcx=TAesCtc
         push   r12
         push   r13
@@ -5656,7 +5656,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         mov    dword ptr [rbx + 12], r15d
         ret
         // optimized AES-CTR process
-@big:   {$ifdef WIN64ABI}
+@big:   {$ifdef ABIWINX64}
         movups  dqword ptr [bak6],  xmm6
         movups  dqword ptr [bak7],  xmm7
         movups  dqword ptr [bak8],  xmm8
@@ -5667,7 +5667,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  dqword ptr [bak13], xmm13
         movups  dqword ptr [bak14], xmm14
         movups  dqword ptr [bak15], xmm15
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         lea    r11, [rsp]
         push   rbp
         sub    rsp, $80
@@ -6171,7 +6171,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         // restore stack
 @done:  mov    rbp, qword ptr [r11 - $8]
       	lea    rsp, [r11]
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         movups  xmm6,  dqword ptr [bak6]
         movups  xmm7,  dqword ptr [bak7]
         movups  xmm8,  dqword ptr [bak8]
@@ -6182,16 +6182,16 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm13, dqword ptr [bak13]
         movups  xmm14, dqword ptr [bak14]
         movups  xmm15, dqword ptr [bak15]
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 @exit:  pop    rbx
         pop    r15
         pop    r14
         pop    r13
         pop    r12
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         pop    rdi
         pop    rsi
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 procedure CtrNistCarry12(ctr: PAesBlock); forward; // not worth inlining
@@ -6224,7 +6224,7 @@ begin
 end;
 
 procedure AesNiEncryptCfb128(src, dest, aes: pointer; blocks: PtrUInt);
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 var
   bak6, bak7, bak8, bak9, bak10, bak11, bak15: THash128;
 asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
@@ -6237,7 +6237,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  dqword ptr [bak15], xmm15
 {$else}
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-{$endif WIN64ABI}
+{$endif ABIWINX64}
         // rcx/rdi=src, rdx/rsi=dest, r8/rdx=aes, r9/rcx=blocks
         test    blocks, blocks
         jz      @z
@@ -6275,7 +6275,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         sub     blocks, 1
         jnz     @s
         movups  dqword ptr [aes].TAesCfc.fIV, xmm7
-@z:     {$ifdef WIN64ABI}
+@z:     {$ifdef ABIWINX64}
         movups  xmm6,  dqword ptr [bak6]
         movups  xmm7,  dqword ptr [bak7]
         movups  xmm8,  dqword ptr [bak8]
@@ -6283,11 +6283,11 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm10, dqword ptr [bak10]
         movups  xmm11, dqword ptr [bak11]
         movups  xmm15, dqword ptr [bak15]
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 procedure AesNiDecryptCfb128(src, dest, aes: pointer; blocks: PtrUInt);
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 var
   bak6, bak7, bak8, bak9, bak10, bak11, bak14, bak15: THash128;
 asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
@@ -6301,7 +6301,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  dqword ptr [bak15], xmm15
 {$else}
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-{$endif WIN64ABI}
+{$endif ABIWINX64}
         // rcx/rdi=src, rdx/rsi=dest, r8/rdx=aes, r9/rcx=blocks
         test    blocks, blocks
         jz      @z
@@ -6340,7 +6340,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         sub     blocks, 1
         jnz     @s
         movups  dqword ptr [aes].TAesCfc.fIV, xmm7
-@z:     {$ifdef WIN64ABI}
+@z:     {$ifdef ABIWINX64}
         movups  xmm6,  dqword ptr [bak6]
         movups  xmm7,  dqword ptr [bak7]
         movups  xmm8,  dqword ptr [bak8]
@@ -6349,11 +6349,11 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm11, dqword ptr [bak11]
         movups  xmm14, dqword ptr [bak14]
         movups  xmm15, dqword ptr [bak15]
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 procedure AesNiEncryptCfb256(src, dest, aes: pointer; blocks: PtrUInt);
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 var
   bak6, bak7, bak8, bak9, bak10, bak11, bak12, bak13, bak14, bak15: THash128;
 asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
@@ -6369,7 +6369,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  dqword ptr [bak15], xmm15
 {$else}
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-{$endif WIN64ABI}
+{$endif ABIWINX64}
         // rcx/rdi=src, rdx/rsi=dest, r8/rdx=aes, r9/rcx=blocks
         test    blocks, blocks
         jz      @z
@@ -6415,7 +6415,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         sub     blocks, 1
         jnz     @s
         movups  dqword ptr [aes].TAesCfc.fIV, xmm7
-@z:     {$ifdef WIN64ABI}
+@z:     {$ifdef ABIWINX64}
         movups  xmm6,  dqword ptr [bak6]
         movups  xmm7,  dqword ptr [bak7]
         movups  xmm8,  dqword ptr [bak8]
@@ -6426,11 +6426,11 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm13, dqword ptr [bak13]
         movups  xmm14, dqword ptr [bak14]
         movups  xmm15, dqword ptr [bak15]
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 procedure AesNiDecryptCfb256(src, dest, aes: pointer; blocks: PtrUInt);
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 var
   bak6, bak7, bak8, bak9, bak10, bak11, bak12, bak13, bak14, bak15: THash128;
 asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
@@ -6446,7 +6446,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  dqword ptr [bak15], xmm15
 {$else}
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-{$endif WIN64ABI}
+{$endif ABIWINX64}
         // rcx/rdi=src, rdx/rsi=dest, r8/rdx=aes, r9/rcx=blocks
         test    blocks, blocks
         jz      @z
@@ -6493,7 +6493,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         sub     blocks, 1
         jnz     @s
         movups  dqword ptr [aes].TAesCfc.fIV, xmm7
-@z:     {$ifdef WIN64ABI}
+@z:     {$ifdef ABIWINX64}
         movups  xmm6,  dqword ptr [bak6]
         movups  xmm7,  dqword ptr [bak7]
         movups  xmm8,  dqword ptr [bak8]
@@ -6504,11 +6504,11 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm13, dqword ptr [bak13]
         movups  xmm14, dqword ptr [bak14]
         movups  xmm15, dqword ptr [bak15]
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 procedure AesNiEncryptCfbCrc128(src, dest, aes: pointer; blocks: PtrUInt);
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 var
   bak6, bak7, bak8, bak9, bak10, bak11, bak15: THash128;
 asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
@@ -6527,7 +6527,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         mov     rcx, blocks  // r9
 {$else}
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-{$endif WIN64ABI}
+{$endif ABIWINX64}
         // rdi=src, rsi=dest, rdx=aes, rcx=blocks
         test    ecx, ecx
         jz      @z
@@ -6595,7 +6595,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         pop     rbx
         pop     r13
         pop     r12
-@z:     {$ifdef WIN64ABI}
+@z:     {$ifdef ABIWINX64}
         pop    rdi
         pop    rsi
         movups  xmm6,  dqword ptr [bak6]
@@ -6605,11 +6605,11 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm10, dqword ptr [bak10]
         movups  xmm11, dqword ptr [bak11]
         movups  xmm15, dqword ptr [bak15]
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 procedure AesNiDecryptCfbCrc128(src, dest, aes: pointer; blocks: PtrUInt);
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 var
   bak6, bak7, bak8, bak9, bak10, bak11, bak12, bak14, bak15: THash128;
 asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
@@ -6630,7 +6630,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         mov     rcx, blocks  // r9
 {$else}
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-{$endif WIN64ABI}
+{$endif ABIWINX64}
         // rdi=src, rsi=dest, rdx=aes, rcx=blocks
         test    ecx, ecx
         jz      @z
@@ -6699,7 +6699,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         pop     rbx
         pop     r13
         pop     r12
-@z:     {$ifdef WIN64ABI}
+@z:     {$ifdef ABIWINX64}
         pop    rdi
         pop    rsi
         movups  xmm6,  dqword ptr [bak6]
@@ -6711,11 +6711,11 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm12, dqword ptr [bak12]
         movups  xmm14, dqword ptr [bak14]
         movups  xmm15, dqword ptr [bak15]
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 procedure AesNiEncryptCfbCrc256(src, dest, aes: pointer; blocks: PtrUInt);
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 var
   bak6, bak7, bak8, bak9, bak10, bak11, bak12, bak13, bak14, bak15: THash128;
 asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
@@ -6737,7 +6737,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         mov     rcx, blocks  // r9
 {$else}
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-{$endif WIN64ABI}
+{$endif ABIWINX64}
         // rdi=src, rsi=dest, rdx=aes, rcx=blocks
         test    ecx, ecx
         jz      @z
@@ -6813,7 +6813,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         pop     rbx
         pop     r13
         pop     r12
-@z:     {$ifdef WIN64ABI}
+@z:     {$ifdef ABIWINX64}
         pop    rdi
         pop    rsi
         movups  xmm6,  dqword ptr [bak6]
@@ -6826,11 +6826,11 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm13, dqword ptr [bak13]
         movups  xmm14, dqword ptr [bak14]
         movups  xmm15, dqword ptr [bak15]
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 procedure AesNiDecryptCfbCrc256(src, dest, aes: pointer; blocks: PtrUInt);
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 var
   bak6, bak7, bak8, bak9, bak10, bak11, bak12, bak13, bak14, bak15: THash128;
 asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
@@ -6852,7 +6852,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         mov     rcx, blocks  // r9
 {$else}
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-{$endif WIN64ABI}
+{$endif ABIWINX64}
         // rdi=src, rsi=dest, rdx=aes, rcx=blocks
         test    ecx, ecx
         jz      @z
@@ -6929,7 +6929,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         pop     rbx
         pop     r13
         pop     r12
-@z:     {$ifdef WIN64ABI}
+@z:     {$ifdef ABIWINX64}
         pop    rdi
         pop    rsi
         movups  xmm6,  dqword ptr [bak6]
@@ -6942,14 +6942,14 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm13, dqword ptr [bak13]
         movups  xmm14, dqword ptr [bak14]
         movups  xmm15, dqword ptr [bak15]
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 {$ifdef USEGCMAVX}
 
 // prepare the GMAC process for GcmAvxAuth() and GcmAvxGetTag()
 procedure GcmAvxInit(ptab, ks: pointer; rounds: cardinal);
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 var
   bak6, bak7, bak8, bak9, bak10, bak11, bak12, bak13, bak14, bak15: THash128;
 asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
@@ -6965,7 +6965,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  dqword ptr [bak15], xmm15
 {$else}
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-{$endif WIN64ABI}
+{$endif ABIWINX64}
         // rcx/rdi=ptab, rdx/rsi=ks, r8/rdx=kslen
         movaps  xmm15, dqword ptr [rip + @bswapMask]
         movaps  xmm14, dqword ptr [rip + @gcmPoly]
@@ -7056,11 +7056,11 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         lea     ptab, [ptab - 20H]
         sub     al, 1
         jne     @init
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         jmp     @exit
         {$else}
         ret
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @bswapMask:
         dq $08090A0B0C0D0E0F
@@ -7068,7 +7068,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
 @gcmPoly:
         dq $0000000000000001
         dq $C200000000000000
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
 @exit:  movups  xmm6, dqword ptr [bak6]
         movups  xmm7, dqword ptr [bak7]
         movups  xmm8, dqword ptr [bak8]
@@ -7079,12 +7079,12 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm13, dqword ptr [bak13]
         movups  xmm14, dqword ptr [bak14]
         movups  xmm15, dqword ptr [bak15]
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 // compute GMAC with 8x interleaved pclmulqdq opcode
 procedure GcmAvxAuth(ptab, data: pointer; datalen: PtrInt; hash: pointer);
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 var
   bak6, bak7, bak8, bak9, bak10, bak11, bak12, bak13, bak14, bak15: THash128;
 asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
@@ -7100,7 +7100,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  dqword ptr [bak15], xmm15
 {$else}
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-{$endif WIN64ABI}
+{$endif ABIWINX64}
         // rdi=ptab, rsi=data, rdx=datalen, rcx=hash
         movups  xmm8, dqword ptr [hash]
         movaps  xmm15, dqword ptr [rip + @bswapMask]
@@ -7318,7 +7318,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         dq $0000000000000001
         dq $C200000000000000
 @done:  movups  dqword ptr [hash], xmm8
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         movups  xmm6, dqword ptr [bak6]
         movups  xmm7, dqword ptr [bak7]
         movups  xmm8, dqword ptr [bak8]
@@ -7329,11 +7329,11 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  xmm13, dqword ptr [bak13]
         movups  xmm14, dqword ptr [bak14]
         movups  xmm15, dqword ptr [bak15]
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 procedure GcmAvxGetTag(ptab, mask, hash: pointer; plen, dlen: PtrInt);
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 var
   bak8, bak9, bak10, bak11: THash128;
 asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
@@ -7351,7 +7351,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
 {$else}
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         mov     rax, r8
-{$endif WIN64ABI}
+{$endif ABIWINX64}
         // rdi=ptab, rsi=mask, rdx=hash, rcx=plen, r8=dlen
         shl     rcx, 3
         movups  xmm8, dqword ptr [rdx]
@@ -7394,11 +7394,11 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         pshufb  xmm8, xmm2
         pxor    xmm8, xmm1
         movups  dqword ptr [rdx], xmm8
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         jmp     @exit
         {$else}
         ret
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @bswapMask:
         dq $08090A0B0C0D0E0F
@@ -7406,14 +7406,14 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
 @gcmPoly:
         dq $0000000000000001
         dq $C200000000000000
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
 @exit:  pop    rdi
         pop    rsi
         movups  xmm8, dqword ptr [bak8]
         movups  xmm9, dqword ptr [bak9]
         movups  xmm10, dqword ptr [bak10]
         movups  xmm11, dqword ptr [bak11]
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 {$endif USEGCMAVX}
@@ -7421,7 +7421,7 @@ end;
 // compute a := a * b in GF(2^128) using pclmulqdq on WestMere CPUs
 // - three times faster than the pascal version using lookup tables
 procedure gf_mul_pclmulqdq(a, b: pointer);
-{$ifdef WIN64ABI}
+{$ifdef ABIWINX64}
 var
   bak6, bak7, bak10: THash128;
 asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
@@ -7430,7 +7430,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  dqword ptr [bak10], xmm10
 {$else}
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-{$endif WIN64ABI}
+{$endif ABIWINX64}
         movups  xmm0, dqword ptr [a]
         movups  xmm1, dqword ptr [b]
         movaps  xmm10, dqword ptr [rip + @swap]
@@ -7507,18 +7507,18 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         pxor    xmm0, xmm2
         pshufb  xmm0, xmm10
         movups  dqword ptr [a], xmm0
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         jmp     @exit
         {$else}
         ret
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @swap:  db 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
 @exit:  movups  xmm6, dqword ptr [bak6]
         movups  xmm7, dqword ptr [bak7]
         movups  xmm10, dqword ptr [bak10]
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
 end;
 
 {$endif USEAESNI}
@@ -7648,11 +7648,11 @@ procedure _AesNiHashXmm0(seed: PtrUInt; data: pointer; len: PtrUInt);
         dq $0908070605040302, $ffff0f0e0d0c0b0a
         dq $0807060504030201, $ff0f0e0d0c0b0a09
 @65up:  // 65 bytes and up
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         // Windows x64 calling convention expects to preserve XMM6-XMM15
         movups  dqword ptr [rsp - 16], xmm6
         movups  dqword ptr [rsp - 32], xmm7
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         movaps  xmm2, xmm1
         movaps  xmm3, xmm1
         pxor    xmm1, dqword ptr [rax + 16]
@@ -7702,10 +7702,10 @@ procedure _AesNiHashXmm0(seed: PtrUInt; data: pointer; len: PtrUInt);
         aesenc  xmm7, xmm7
         pxor    xmm4, xmm6  // combine result
         pxor    xmm5, xmm7
-        {$ifdef WIN64ABI}
+        {$ifdef ABIWINX64}
         movups  xmm6, dqword ptr [rsp - 16]
         movups  xmm7, dqword ptr [rsp - 32]
-        {$endif WIN64ABI}
+        {$endif ABIWINX64}
         pxor    xmm4, xmm5
         movaps  xmm0, xmm4
         movd    eax,  xmm4   // truncate to 32-bit for _AesNiHash32

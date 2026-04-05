@@ -142,7 +142,7 @@ The `src/` folder contains the framework source code organized into logical laye
 | `core/` | Core utilities: RTTI, JSON, text, logging, threads | `mormot.core.base.pas`, `mormot.core.json.pas`, `mormot.core.log.pas` |
 | `lib/` | Raw API definitions for external libraries | `mormot.lib.openssl11.pas`, `mormot.lib.curl.pas` |
 | `crypt/` | Cryptographic primitives and secure protocols | `mormot.crypt.core.pas`, `mormot.crypt.jwt.pas`, `mormot.crypt.openssl.pas` |
-| `net/` | Network layer: HTTP, WebSockets, async servers | `mormot.net.http.pas`, `mormot.net.server.pas`, `mormot.net.ws.pas` |
+| `net/` | Network layer: HTTP, WebSockets, async servers | `mormot.net.http.pas`, `mormot.net.server.pas`, `mormot.net.ws.core.pas` |
 | `db/` | Database access: SynDB, SQLite3, SQL/NoSQL | `mormot.db.core.pas`, `mormot.db.sql.pas`, `mormot.db.nosql.mongodb.pas` |
 | `orm/` | Object-Relational Mapping | `mormot.orm.core.pas`, `mormot.orm.sql.pas` |
 | `rest/` | REST client and server | `mormot.rest.core.pas`, `mormot.rest.server.pas`, `mormot.rest.http.server.pas` |
@@ -198,7 +198,7 @@ The framework source code:
 - Tries to stay compatible with FPC stable and Delphi 7 and up
 - Is currently validated against:
   - **FPC**: 3.2.3 (fixes-3_2 branch) and Lazarus 2.2.5 (fixes_2_2 branch)
-  - **Delphi**: 7, 2007, 2009, 2010, XE4, XE7, XE8, 10.4, 11.1, 12.2 Athenes
+  - **Delphi**: 7, 2007, 2009, 2010, XE4, XE7, XE8, 10.4, 11.1, 12.2 Athens
 
 **Note:** FPC 3.2.2 has a regression with variant late binding. Use the FPC 3.2.3 fixes branch instead.
 
@@ -418,6 +418,7 @@ program MyMormotApp;
 uses
   {$I mormot.uses.inc}  // Includes FPC-specific units for Linux
   mormot.core.base,
+  mormot.core.datetime,
   mormot.core.text;
 
 begin
@@ -426,7 +427,7 @@ begin
 end.
 ```
 
-The `mormot.uses.inc` file automatically includes the necessary units for FPC on various platforms (e.g., `cthreads`, `cwstring` on Linux).
+The `mormot.uses.inc` file automatically includes the necessary units for FPC on various platforms (e.g., `cthreads` on Linux/POSIX).
 
 ## 26.7. Writing Cross-Platform Code
 

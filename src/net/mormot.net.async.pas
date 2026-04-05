@@ -1073,7 +1073,7 @@ type
     fInterningTix: cardinal;
     fExecuteEvent: TSynEvent;
     fClientSockets: THttpAsyncClientConnections; // allocated when needed
-    fHttpDateNowUtc: THttpDateNowUtc;
+    fHttpDateNowUtc: THttpDateNowUtc;            // set by IdleEverySecond
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
     function GetConnectionsActive: cardinal; override;
@@ -2814,8 +2814,7 @@ begin
     aThreadPoolCount := 1;
   ThreadCountAdjust(aThreadPoolCount); // e.g. WinARM PRISM
   {$ifndef USE_WINIOCP}
-  fThreadPollingWakeupLoad :=
-    (cardinal(aThreadPoolCount) div SystemInfo.dwNumberOfProcessors) * 8;
+  fThreadPollingWakeupLoad := (cardinal(aThreadPoolCount) div CpuThreads) * 8;
   if fThreadPollingWakeupLoad < 4 then
     fThreadPollingWakeupLoad := 4; // below 4, the whole algorithm seems pointless
   {$endif USE_WINIOCP}
@@ -5320,14 +5319,12 @@ procedure THttpAsyncServer.IdleEverySecond;
 var
   tix, cleaned: cardinal;
   T: TSynSystemTime;
-  tmp: ShortString;
 begin
   // no need to use the global HttpDateNowUtc and its GetTickCount64 API call
   if hsoIncludeDateHeader in fOptions then
   begin
-    T.FromNowUtc;
-    T.ToHttpDateShort(tmp, 'GMT'#13#10, 'Date: ');
-    fHttpDateNowUtc := tmp; // (almost) atomic set within CPU L1 cache line
+    FromGlobalTime(T, {local=}false);
+    T.ToHttpDateShort(fHttpDateNowUtc, 'GMT'#13#10, 'Date: ');
   end;
   // ensure log file(s) are flushed/consolidated if needed
   if fLogger <> nil then
@@ -5899,7 +5896,7 @@ end;
 constructor THttpProxyServerMainSettings.Create;
 begin
   inherited Create;
-  fThreadCount := SystemInfo.dwNumberOfProcessors + 1;
+  fThreadCount := CpuThreads + 1;
   fPort := '8098';
 end;
 

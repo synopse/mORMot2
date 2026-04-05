@@ -1050,7 +1050,9 @@ function TSynTestCase.CheckRaised(const Method: TOnTestCheck;
 var
   msg: string;
 begin
+  {$ifndef NOEXCEPTIONINTERCEPT}
   TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+  {$endif NOEXCEPTIONINTERCEPT}
   try
     Method(Params);
     result := false;
@@ -1068,7 +1070,9 @@ begin
         FormatString('% instead of %', [E, Raised], msg);
     end;
   end;
+  {$ifndef NOEXCEPTIONINTERCEPT}
   TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+  {$endif NOEXCEPTIONINTERCEPT}
   Check(result, msg);
 end;
 
@@ -1213,6 +1217,7 @@ begin
     if not IsExpandedPath(localfile) then
       localfile := WorkDir + localfile;
   repeat
+    status := 0;
     result := HttpGetWeak(uri, localfile, @status);
     FormatString('DownloadFile %=% retry=% [%]',
       [uri, status, retry, EscapeToShort(result)], info);
@@ -1569,7 +1574,7 @@ begin
   result := true;
   if Executable.Command.Option('multithread')
      {$ifdef OSWINDOWS} and not IsWow64Emulation {$endif} then
-    fMultiThread := SystemInfo.dwNumberOfProcessors > 2; // enabled with 3 cores
+    fMultiThread := CpuThreads > 2; // enabled with 3 cores
   if Executable.Command.Option('&methods') then
   begin
     for m := 0 to Count - 1 do
@@ -1721,8 +1726,9 @@ begin
   DoColor(ccLightCyan);
   result := (fFailedCount = 0);
   if Executable.Version.Major <> 0 then
-    FormatUtf8(CRLF +'Software version tested: % (%)', [Executable.Version.Detailed,
-      Executable.Version.BuildDateTimeString], Version);
+    FormatUtf8(CRLF +'Software version tested: % (%)',
+      [Executable.Version.Detailed,
+       Executable.Version.BuildDateTimeString], Version);
   FormatUtf8(CRLF + CRLF + 'Time elapsed for all tests: %' + CRLF +
     'Performed % by % on %',
     [RunTimer.Stop, NowToHuman, Executable.User, Executable.Host], Elapsed);

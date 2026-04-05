@@ -433,7 +433,7 @@ begin
     test.Check(false, 'expect a running proxy on 127.0.0.1')
   else
   try
-    if SystemInfo.dwNumberOfProcessors < 8 then
+    if CpuThreads < 8 then
       Sleep(50); // seems mandatory from LUTI regression tests
     rmax := clientcount - 1;
     streamer := TCrtSocket.Bind(proxy.RtspPort);
@@ -464,7 +464,7 @@ begin
         end;
       if log <> nil then
         log.Log(sllCustom1, 'RegressionTests % POST', [clientcount], proxy);
-      if SystemInfo.dwNumberOfProcessors < 8 then
+      if CpuThreads < 8 then
         Sleep(50); // seems mandatory from LUTI regression tests
       for r := 0 to rmax do
         with req[r] do
@@ -1992,7 +1992,7 @@ begin
   server := TDhcpProcess.Create;
   try
     // custom settings for our tests
-    settings.AddScope; // with default subnet
+    settings.AddScope(TDhcpScopeSettings.Create); // with default/fixed subnet
     CheckEqual(settings.Scope[0].SubnetMask, '192.168.1.1/24');
     settings.Scope[0].SubnetMask := '192.168.0.1/14'; // allow 262,144 IPs
     //ConsoleObject(settings);
@@ -2044,7 +2044,7 @@ begin
     // DISCOVER -> OFFER
     d.RecvLen := length(refdisc);
     d.RecvIp4 := 0; // use the default server.Scope[]
-    d.Tix32 := GetTickSec; // ComputeResponse() requires Tix32
+    d.BootTix32 := GetUptimeSec; // ComputeResponse() requires Tix32
     MoveFast(pointer(refdisc)^, d.Recv, d.RecvLen);
     i := server.ComputeResponse(d);
     CheckEqual(i, d.SendLen);
@@ -3138,10 +3138,14 @@ var
   s: ShortString;
   txt, uri: RawUtf8;
   ip: THash128Rec;
+  sn: TIp4SubNet;
   sub: TIp4SubNets;
   bin, bin2: RawByteString;
   timer: TPrecisionTimer;
 begin
+  CheckEqual(SizeOf(TNetIP4), 4);
+  CheckEqual(SizeOf(TNetIP6), 16);
+  CheckEqual(SizeOf(TNetAddr), SOCKADDR_SIZE);
   FillZero(ip.b);
   Check(IsZero(ip.b));
   IP4Short(@ip, s);
@@ -3221,8 +3225,16 @@ begin
   Check(not IP4Match('193.168.1.1',   '192.168.1.0/24'), 'match9');
   Check(IP4Match('192.168.1.250', '192.168.1.250'),     'match10');
   Check(not IP4Match('192.168.1.251', '192.168.1.250'), 'match11');
+  Check(sn.From('1.2.3.4/24'));
+  CheckEqualShort(sn.ToShort, '1.2.3.0/24');
+  CheckEqual(sn.ToBroadCast, '1.2.3.255');
+  Check(sn.Match('1.2.3.0'));
+  Check(sn.Match('1.2.3.4'));
+  Check(sn.Match('1.2.3.5'));
+  Check(not sn.Match('1.2.4.5'));
   sub := TIp4SubNets.Create;
   try
+    Check(sub.SubNet = nil);
     CheckEqual(sub.AfterAdd, 0);
     bin := sub.SaveToBinary;
     if CheckEqual(length(bin), 8) then
@@ -3232,6 +3244,7 @@ begin
     Check(not sub.Match('190.16.1.250'));
     Check(not sub.Match('190.16.2.135'));
     Check(sub.Add('190.16.1.0/24'));
+    Check(sub.SubNet <> nil);
     Check(sub.Match('190.16.1.1'));
     Check(sub.Match('190.16.1.135'));
     Check(sub.Match('190.16.1.250'));
@@ -3241,11 +3254,14 @@ begin
     CheckEqual(sub.AfterAdd, 1);
     bin := sub.SaveToBinary;
     sub.Clear;
+    Check(sub.SubNet = nil);
     CheckEqual(sub.AfterAdd, 0);
+    Check(sub.SubNet = nil);
     Check(not sub.Match('190.16.1.1'));
     Check(not sub.Match('190.16.1.135'));
     Check(not sub.Match('190.16.1.250'));
     CheckEqual(sub.LoadFromBinary(bin), 1, 'load1');
+    Check(sub.SubNet <> nil);
     CheckEqual(sub.AfterAdd, 1);
     Check(sub.Match('190.16.1.1'));
     Check(sub.Match('190.16.1.135'));
@@ -3574,9 +3590,9 @@ begin
   end; // IsZero(Hash.Bin) = no hash known = no hash computed nor verified
   with msg do
     FormatShort('% #% % %% % % to % % % %Mb/s % %% siz=% con=% ',
-      [ToText(Kind)^, CardinalToHexLower(Seq), OS_INITIAL[Os.os],
-       OsvToShort(Os)^, WinOsBuild(Os, ' '), MAK_TXT[Hardware],
-       IP4ToShort(@IP4), IP4ToShort(@DestIP4),
+      [ToText(Kind)^, PointerToHexShort(pointer(PtrUInt(Seq))),
+       OS_INITIAL[Os.os], OsvToShort(Os)^, WinOsBuild(Os, ' '),
+       MAK_TXT[Hardware], IP4ToShort(@IP4), IP4ToShort(@DestIP4),
        IP4ToShort(@MaskIP4), IP4ToShort(@BroadcastIP4), Speed,
        UnixTimeToFileShort(QWord(Timestamp) + UNIXTIME_MINIMAL),
        algohex, algoext, Size, Connections], tmp);

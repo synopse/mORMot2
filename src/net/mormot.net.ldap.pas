@@ -1849,12 +1849,11 @@ type
     lsfSaclSecurityInformation);
 
   /// store the authentication and connection settings of a TLdapClient instance
-  TLdapClientSettings = class(TSynPersistent)
+  TLdapClientSettings = class(TObjectWithPassword)
   protected
     fTargetHost: RawUtf8;
     fTargetPort: RawUtf8;
     fUserName: RawUtf8;
-    fPassword: SpiUtf8;
     fKerberosDN: RawUtf8;
     fKerberosSpn: RawUtf8;
     fTimeout: integer;
@@ -1867,9 +1866,9 @@ type
     procedure SetTargetUri(const uri: RawUtf8);
   public
     /// initialize this instance
-    constructor Create(const aUri: RawUtf8 = ''); reintroduce;
-    /// finalize this instance
-    destructor Destroy; override;
+    constructor Create; override;
+    /// initialize this instance with a custom LDAP server URI
+    constructor Create(const aUri: RawUtf8); overload;
     /// run Connect and Bind of a temporary TLdapClient over TargetHost/TargetPort
     // - don't validate the password nor Kerberos auth, just TargetHost/TargetPort
     function CheckTargetHost: TLdapClientTransmission;
@@ -1942,6 +1941,8 @@ type
     // - as an alternative, on POSIX you can specify a keytab as
     // 'FILE:/full/path/to/my.keytab' into this property, and assign an UserName
     // or let mormot.lib.gssapi.pas use TKerberosKeyTab.MachineAccountPrincipal
+    // - this stored value could be obfuscated if you set the Key property
+    // to a custom 32-bit value, or if you use SetPassWordPlainCurrentUser()
     property Password: SpiUtf8
       read fPassword write fPassword;
     /// Kerberos Canonical Domain Name
@@ -5627,18 +5628,19 @@ end;
 
 { TLdapClientSettings }
 
-constructor TLdapClientSettings.Create(const aUri: RawUtf8);
+constructor TLdapClientSettings.Create;
 begin
   inherited Create;
+  fKey := OBJECTPASSWORD_PLAIN; // default with no Password encryption
   fTimeout := 5000;
   fAutoReconnect := true; // sounds fair enough
-  SetTargetUri(aUri); // initialize TargetHost/TargetPort and TLS
+  fTargetPort := LDAP_PORT;
 end;
 
-destructor TLdapClientSettings.Destroy;
+constructor TLdapClientSettings.Create(const aUri: RawUtf8);
 begin
-  inherited Destroy;
-  FillZero(fPassword);
+  Create;
+  SetTargetUri(aUri); // initialize TargetHost/TargetPort and TLS
 end;
 
 function TLdapClientSettings.CheckTargetHost: TLdapClientTransmission;
@@ -5895,6 +5897,7 @@ constructor TLdapClient.Create(aSettings: TLdapClientSettings);
 begin
   Create;
   CopyObject(aSettings, fSettings);
+  aSettings.Key := fSettings.Key;
 end;
 
 destructor TLdapClient.Destroy;
@@ -6527,6 +6530,7 @@ end;
 function TLdapClient.Bind: boolean;
 var
   log: ISynLog;
+  pwd: SpiUtf8;
 begin
   result := false;
   if fBound or
@@ -6538,10 +6542,11 @@ begin
     ELdap.RaiseUtf8('%.Bind with a password requires a TLS connection', [self]);
   fLog.EnterLocal(log, 'Bind as %', [fSettings.UserName], self);
   try
+    fSettings.GetPasswordSafe(pwd);
     SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
                      Asn(fVersion),
                      AsnOctStr(fSettings.UserName),
-                     AsnTyped(fSettings.Password, ASN1_CTX0)]));
+                     AsnTyped(pwd, ASN1_CTX0)]));
     if fResultCode <> LDAP_RES_SUCCESS then
       exit; // binding error
     fBound := true;
@@ -6549,6 +6554,7 @@ begin
     fBoundUser := fSettings.UserName;
     result := true;
   finally
+    FillZero(pwd); // anti-forensic
     if Assigned(log) then
       log.Log(LOG_DEBUGERROR[not result], 'Bind=% % %',
         [BOOL_STR[result], fResultCode, fResultString], self);
@@ -6571,6 +6577,7 @@ function TLdapClient.BindSaslDigest(Algo: TDigestAlgo): boolean;
 var
   x: integer;
   dig: RawUtf8;
+  pwd: SpiUtf8;
   s, t, digreq: TAsnObject;
   log: ISynLog;
 begin
@@ -6597,8 +6604,10 @@ begin
       exit;
     x := 1;
     AsnNext(x, s, @t);
+    fSettings.GetPasswordSafe(pwd);
     dig := DigestClient(Algo, t, '', 'ldap/' + LowerCaseU(fSock.Server),
-      fSettings.UserName, fSettings.Password, 'digest-uri');
+      fSettings.UserName, pwd, 'digest-uri');
+    FillZero(pwd);
     SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
                      Asn(fVersion),
                      AsnOctStr(''),
@@ -6640,6 +6649,7 @@ function TLdapClient.BindSaslKerberos(const AuthIdentify: RawUtf8;
 var
   datain, dataout, cert: RawByteString;
   certhashname: RawUtf8;
+  pwd: SpiUtf8;
   channelbindinghash: THash512Rec;
   t, req1, req2: TAsnObject;
   needencrypt: boolean;
@@ -6712,6 +6722,8 @@ begin
       end;
     end;
     // main GSSAPI / Kerberos loop
+    if fSettings.Password <> '' then
+      fSettings.GetPasswordSafe(pwd);
     try
       repeat
         ParseInput;
@@ -6719,9 +6731,10 @@ begin
            (fResultCode = LDAP_RES_SUCCESS) then
           break;
         try
-          if fSettings.Password <> '' then // UserName may be '' for FILE:keytab
-            ClientSspiAuthWithPassword(fSecContext, datain, fSettings.UserName,
-              fSettings.Password, fSettings.KerberosSpn, dataout)
+          if pwd <> '' then
+            // note that UserName may be '' with Password='FILE:keytab'
+            ClientSspiAuthWithPassword(fSecContext, datain,
+              fSettings.UserName, pwd, fSettings.KerberosSpn, dataout)
           else
             ClientSspiAuth(fSecContext, datain, fSettings.KerberosSpn, dataout);
         except
@@ -6817,6 +6830,7 @@ begin
         FreeSecContext(fSecContext);
     end;
   finally
+    FillZero(pwd); // anti-forensic
     if Assigned(log) then
       log.Log(LOG_DEBUGERROR[not result],
         'BindSaslKerberos=% % % signseal=% as %', [BOOL_STR[result], fResultCode,

@@ -136,10 +136,10 @@ OrmMapInMemory(Server.OrmInstance, TOrmCache);  // In-memory table
 ### 13.3.2. How Virtual Tables Work
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                      SQLite3 Core                     │
-│  SELECT * FROM Product, User WHERE Product.UserID = Us│
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                      SQLite3 Core                       │
+│  SELECT * FROM Product, User WHERE Product.UserID = Us  │
+└─────────────────────────────────────────────────────────┘
         │                                    │
         │ Virtual Table                      │ Native Table
         ▼                                    ▼
@@ -380,13 +380,13 @@ type
   end;
 
 function TRestStorageTenant.EngineList(TableModelIndex: integer;
-  const SQL: RawUtf8): RawUtf8;
+  const SQL: RawUtf8; ForceAjax: boolean; ReturnedRowCount: PPtrInt): RawUtf8;
 var
   FilteredSQL: RawUtf8;
 begin
   // Inject tenant filter into all queries
   FilteredSQL := InjectWhereClause(SQL, FormatUtf8('TenantID = %', [TenantID]));
-  Result := inherited EngineList(TableModelIndex, FilteredSQL);
+  Result := inherited EngineList(TableModelIndex, FilteredSQL, ForceAjax, ReturnedRowCount);
 end;
 
 // Pattern 3: Use method-based services for controlled data access
@@ -413,8 +413,8 @@ Server.Cache.SetCache(TOrmProduct);
 // Cache with timeout
 Server.Cache.SetTimeOut(TOrmProduct, 300000);  // 5 minutes
 
-// Cache frequently accessed records
-Server.Cache.SetCache(TOrmSettings, True);  // Force all records cached
+// Cache all records of a table (call SetCache with only the table class)
+Server.Cache.SetCache(TOrmSettings);
 ```
 
 ### 13.6.2. Cache Statistics
@@ -428,8 +428,8 @@ Server.CreateMissingTables;
 // Access statistics via TRestServerMonitor
 if Server.Stats <> nil then
 begin
-  WriteLn('Total ORM reads: ', Server.Stats.NotifyOrmTable);
-  WriteLn('ORM cache saved: ', Server.Stats.NotifyOrmCache, ' lookups');
+  WriteLn('Total ORM reads: ', Server.Stats.Read);
+  WriteLn('Total ORM writes (created): ', Server.Stats.Created);
 end;
 
 // For detailed per-table cache info, iterate cached tables
@@ -444,8 +444,8 @@ for TableIndex := 0 to Server.Model.TablesMax do
 // Clear specific record
 Server.Cache.NotifyDeletion(TOrmProduct, ProductID);
 
-// Clear entire table
-Server.Cache.Clear(TOrmProduct);
+// Clear entire table cache (use Flush with table class, not Clear)
+Server.Cache.Flush(TOrmProduct);
 
 // Clear all caches
 Server.Cache.Clear;
@@ -568,22 +568,22 @@ Storage.LoadFromFile('backup.json');
 Server.CreateMissingTables;
 
 // Access statistics
-WriteLn('Total requests: ', Server.Stats.TotalRequestCount);
-WriteLn('Success: ', Server.Stats.SuccessRequestCount);
-WriteLn('Errors: ', Server.Stats.ErrorRequestCount);
-WriteLn('Avg response time: ', Server.Stats.AverageResponseTime, ' ms');
+WriteLn('Total requests: ', Server.Stats.TaskCount);
+WriteLn('Success: ', Server.Stats.Success);
+WriteLn('Errors: ', Server.Stats.Errors);
+WriteLn('Avg response time: ', Server.Stats.AverageTime, ' ms');
 ```
 
 ### 13.9.2. Per-Table Statistics
 
 ```pascal
-for i := 0 to Server.Model.TablesMax do
-begin
-  Stats := Server.Stats[i];
-  if Stats <> nil then
-    WriteLn(Server.Model.Tables[i].SqlTableName, ': ',
-      Stats.SelectCount, ' reads, ', Stats.InsertCount, ' inserts');
-end;
+// Access aggregate ORM statistics from TRestServerMonitor
+WriteLn('ORM reads: ', Server.Stats.Read);
+WriteLn('ORM inserts: ', Server.Stats.Created);
+WriteLn('ORM updates: ', Server.Stats.Updated);
+WriteLn('ORM deletes: ', Server.Stats.Deleted);
+// Per-table statistics are only available via the JSON stats output:
+// Server.Stats.ComputeDetailsJson
 ```
 
 ### 13.9.3. SQL Execution Logging
@@ -615,7 +615,7 @@ Server.DB.RegisterSQLFunction(
     // Custom function implementation
     sqlite3.result_int64(Context, CalculateHash(argv[0]));
   end,
-  'MYHASH', 1);
+  1, 'MYHASH');
 
 // Use in queries
 Server.Orm.ExecuteList(TOrmCustomer,

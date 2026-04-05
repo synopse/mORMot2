@@ -50,10 +50,9 @@ interface
   {$else not FPC}
     {$ifdef WIN32}
       {$define ZLIBSTATIC} // Delphi Win32: our static .obj
+    {$else}
+      {$define ZLIBRTL}    // system.zlib.pas from Delphi RTL is good enough
     {$endif WIN32}
-    {$ifdef WIN64}
-      {$define ZLIBRTL}    // Delphi Win64: system.zlib.pas from Delphi RTL
-    {$endif WIN64}
   {$endif FPC}
 
 {$ifend}

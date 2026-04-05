@@ -266,7 +266,7 @@ function IsValidUtf8(const source: RawByteString): boolean;
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding and no #0 within
 // - will also refuse #0 characters within the buffer even on AVX2
 function IsValidUtf8NotVoid(source: PUtf8Char; len: PtrInt): boolean; overload;
-  {$ifdef HASINLINE}{$ifndef ASMX64AVXNOCONST}inline;{$endif}{$endif}
+  {$ifdef HASINLINE}{$ifndef ASMX64AVX1}inline;{$endif}{$endif}
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding and no #0 within
 // - will also refuse #0 characters within the buffer even on AVX2
@@ -368,7 +368,7 @@ function CodePageToCharSet(CodePage: cardinal): integer;
 function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
 
 /// return a code page number into human-friendly text
-// - e.g. 'shift_jis' for aCodePage = 932, or 'ms1252' for 1252
+// - e.g. 'shift_jis' for aCodePage = 932, or 'windows-1252' for 1252
 // - returns the lowercased Unicode_CodePageName(aCodePage) value
 function CodePageToText(aCodePage: cardinal): RawUtf8;
 
@@ -3245,6 +3245,13 @@ begin
   RawUnicodeToUtf8(WideChar, WideCharCount, result, Flags);
 end;
 
+function _DoWideCharToUtf8Temp(w: PWideChar; wc: PtrInt; var u: TSynTempBuffer): PUtf8Char;
+begin
+  u.len := RawUnicodeToUtf8(u.Init(wc * 3), wc * 3 + 16, w, wc,
+    [ccfReplacementCharacterForUnmatchedSurrogate]); // with trailing #0
+  result := u.buf;
+end;
+
 function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
   out Utf8Length: integer): RawUtf8;
 var
@@ -3260,13 +3267,6 @@ begin
   if Utf8Length <= 0 then
     result := '';
 end;
-
-{$ifdef OSWINDOWS}
-procedure _DoWin32PWideCharToUtf8(P: PWideChar; Len: PtrInt; var res: RawUtf8);
-begin
-  RawUnicodeToUtf8(P, Len, res); // our function is likely to be faster
-end;
-{$endif OSWINDOWS}
 
 function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char;
   MaxDestChars, sourceBytes: PtrUInt; NoTrailingZero: boolean): PtrInt;
@@ -3286,13 +3286,13 @@ begin // slightly slower overload with explicit destlen
   begin
     if source^ = #0 then
       goto nosource;
-    {$ifdef CPUX86}
+    {$ifdef ASMX86}
     sourceBytes := StrLen(source);
     {$else} // better code generation without StrLen() call (almost never used)
     repeat
       inc(sourcebytes);
     until source[sourcebytes] = #0;
-    {$endif CPUX86}
+    {$endif ASMX86}
   end;
   inc(sourceBytes, PtrUInt(source)); // PUtf8Char(sourceBytes)  = endSource
   inc(MaxDestChars, PtrUInt(dest));  // PUtf8Char(MaxDestChars) = endDest
@@ -3387,13 +3387,13 @@ begin // expects dest to have source*3 bytes: more used than overload destlen
   begin
     if source^ = #0 then
       goto nosource;
-    {$ifdef CPUX86}
+    {$ifdef ASMX86}
     sourceBytes := StrLen(source);
     {$else} // better code generation without StrLen() call (almost never used)
     repeat
       inc(sourcebytes);
     until source[sourcebytes] = #0;
-    {$endif CPUX86}
+    {$endif ASMX86}
   end;
   begd := dest;
   endSourceBy4 := @source[sourceBytes - 4];
@@ -3555,7 +3555,7 @@ begin
     IsValidUtf8Buffer(pointer(source), PStrLen(PAnsiChar(pointer(source)) - _STRLEN)^);
 end;
 
-{$ifdef ASMX64AVXNOCONST}
+{$ifdef ASMX64AVX1}
 function IsValidUtf8NotVoid(source: PUtf8Char; len: PtrInt): boolean;
 begin
   if (len >= 128) and // main AVX2 loop iterates on 64 bytes
@@ -3570,7 +3570,7 @@ function IsValidUtf8NotVoid(source: PUtf8Char; len: PtrInt): boolean;
 begin
   result := IsValidUtf8Pas(source, len);
 end;
-{$endif ASMX64AVXNOCONST}
+{$endif ASMX64AVX1}
 
 function IsValidUtf8NotVoid(const source: RawByteString): boolean;
 begin
@@ -3920,7 +3920,7 @@ var
   tmp: TShort16;
 begin
   Unicode_CodePageName(aCodePage, tmp);
-  LowerCaseCopy(@tmp[1], ord(tmp[0]), result); // more convenient
+  LowerCaseCopy(@tmp[1], ord(tmp[0]), result); // more convenient as lower ident
 end;
 
 var
@@ -8356,11 +8356,11 @@ function PosExI(const SubStr, S: RawUtf8; Offset: PtrUInt; Lookup: PNormTable): 
 begin
   if (Lookup = nil) or
      (Lookup = @NormToNorm) then
-    {$ifdef CPUX86}
+    {$ifdef ASMX86}
     result := PosEx(SubStr, S, Offset)
     {$else}
     result := PosExPas(pointer(SubStr), pointer(S), Offset)
-    {$endif CPUX86}
+    {$endif ASMX86}
   else
     result := PosExIPas(pointer(SubStr), pointer(S), Offset, Lookup);
 end;
@@ -10587,7 +10587,7 @@ begin
   result := -1;
 end;
 
-{$ifdef CPUX64}
+{$ifdef ASMX64}
 
 function FastFindPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt; Value: PUtf8Char): PtrInt;
 {$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
@@ -10699,7 +10699,7 @@ begin
   result := -1;
 end;
 
-{$endif CPUX64}
+{$endif ASMX64}
 
 function FastFindUpperPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt;
   Value: PUtf8Char; ValueLen: PtrInt): PtrInt;
@@ -11095,7 +11095,7 @@ begin
   try
     i := FastFindPUtf8CharSorted( // efficient O(log(n)) binary search
       pointer(fFiles), high(fFiles), pointer(fn), @StrIComp);
-    if i >= 0 then
+    if i >= 0 then                       // return result = '' if not found
       Utf8ToFileName(fFiles[i], result); // use exact file name case from OS
   finally
     fSafe.ReadUnLock;
@@ -12188,17 +12188,15 @@ begin
   // setup proper functions redirection
   StrCompByCase[false] := @StrComp;
   StrCompByCase[true]  := @StrIComp;
-  {$ifdef CPUINTEL}
+  {$ifdef ASMINTEL}
   SortDynArrayAnsiStringByCase[false] := @SortDynArrayAnsiString;
   {$else}
   SortDynArrayAnsiStringByCase[false] := @SortDynArrayRawByteString;
-  {$endif CPUINTEL}
+  {$endif ASMINTEL}
   SortDynArrayAnsiStringByCase[true]  := @SortDynArrayAnsiStringI;
   IdemPropNameUSameLen[false]         := @IdemPropNameUSameLenNotNull;
   IdemPropNameUSameLen[true]          := @mormot.core.base.CompareMem;
-  {$ifdef OSWINDOWS}
-  DoWin32PWideCharToUtf8              := _DoWin32PWideCharToUtf8;
-  {$endif OSWINDOWS}
+  DoWideCharToUtf8Temp                := @_DoWideCharToUtf8Temp;
   // setup basic/global Unicode conversion engines
   WinAnsiConvert         := TSynAnsiFixedWidth.Create(CP_WINANSI);
   Utf8AnsiConvert        := TSynAnsiUtf8.Create(CP_UTF8);
@@ -12206,11 +12204,11 @@ begin
   CurrentAnsiConvert     := TSynAnsiConvert.Engine(Unicode_CodePage);
   // setup optimized ASM functions
   IsValidUtf8Buffer := @IsValidUtf8Pas;
-  {$ifdef ASMX64AVXNOCONST}
+  {$ifdef ASMX64AVX1}
   if cpuHaswell in X64CpuFeatures then
     // Haswell CPUs can use simdjson AVX2 asm for IsValidUtf8()
     IsValidUtf8Buffer := @IsValidUtf8Avx2;
-  {$endif ASMX64AVXNOCONST}
+  {$endif ASMX64AVX1}
 end;
 
 

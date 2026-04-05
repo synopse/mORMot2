@@ -101,8 +101,8 @@ var
   Runtime: JSRuntime;
   Context: JSContext;
   Script, FuncName: RawUtf8;
-  Global, Func, Args: array[0..1] of JSValue;
-  Result: JSValue;
+  Global, Func, Res: JSValue;
+  Args: array[0..1] of JSValue;
   ResultInt: integer;
 begin
   // 1. Create runtime and context
@@ -120,55 +120,54 @@ begin
   try
     // 2. Execute JavaScript to define a function
     Script := 'function multiply(a, b) { return a * b; }';
-    Result := JS_Eval(Context, pointer(Script), length(Script),
-                      'init.js', JS_EVAL_TYPE_GLOBAL);
+    Res.Raw := JS_Eval(Context, pointer(Script), length(Script),
+                       'init.js', JS_EVAL_TYPE_GLOBAL);
 
-    // Check for script errors
-    if JSValueRaw(Result).IsException then
+    // Check for script errors (IsException and type checks are on JSValue)
+    if Res.IsException then
     begin
       WriteLn('Script error');
-      JS_FreeValue(Context, Result);
+      Context^.Free(Res);
       Exit;
     end;
-    JS_FreeValue(Context, Result);  // Free eval result
+    Context^.Free(Res);  // Free eval result
 
-    // 3. Get the global object
-    Global[0] := JS_GetGlobalObject(Context);
+    // 3. Get the global object (JS_GetGlobalObject returns JSValueRaw)
+    Global.Raw := JS_GetGlobalObject(Context);
 
-    // 4. Get the function by name
+    // 4. Get the function by name (JS_GetPropertyStr returns JSValueRaw)
     FuncName := 'multiply';
-    Func[0] := JS_GetPropertyStr(Context, Global[0], pointer(FuncName));
+    Func.Raw := JS_GetPropertyStr(Context, Global.Raw, pointer(FuncName));
 
-    if not JSValueRaw(Func[0]).IsFunction then
+    if JS_IsFunction(Context, Func.Raw) = 0 then
     begin
       WriteLn('multiply is not a function');
-      JS_FreeValue(Context, Func[0]);
-      JS_FreeValue(Context, Global[0]);
+      Context^.Free(Func);
+      Context^.Free(Global);
       Exit;
     end;
 
-    // 5. Prepare arguments
-    Args[0] := JS_NewInt32(Context, 7);
-    Args[1] := JS_NewInt32(Context, 6);
+    // 5. Prepare arguments: integer tags need no heap allocation
+    Args[0].From32(7);
+    Args[1].From32(6);
 
-    // 6. Call the function
-    Result := JS_Call(Context, Func[0], Global[0], 2, @Args[0]);
+    // 6. Call the function (JS_Call returns JSValueRaw)
+    Res.Raw := JS_Call(Context, Func.Raw, Global.Raw, 2, @Args[0]);
 
-    // 7. Get result
-    if JSValueRaw(Result).IsNumber then
+    // 7. Get result (IsNumber, IsException are methods on JSValue)
+    if Res.IsNumber then
     begin
-      if JS_ToInt32(Context, ResultInt, Result) = 0 then
+      if JS_ToInt32(Context, @ResultInt, Res.Raw) = 0 then
         WriteLn('7 × 6 = ', ResultInt);
     end
-    else if JSValueRaw(Result).IsException then
+    else if Res.IsException then
       WriteLn('Function call error');
 
-    // 8. Clean up all JSValues (IMPORTANT!)
-    JS_FreeValue(Context, Result);
-    JS_FreeValue(Context, Args[1]);
-    JS_FreeValue(Context, Args[0]);
-    JS_FreeValue(Context, Func[0]);
-    JS_FreeValue(Context, Global[0]);
+    // 8. Clean up JSValues that reference heap objects
+    Context^.Free(Res);
+    // Args[0] and Args[1] are JS_TAG_INT — no heap allocation, no Free needed
+    Context^.Free(Func);
+    Context^.Free(Global);
 
   finally
     // 9. Free context and runtime
@@ -179,10 +178,11 @@ end;
 ```
 
 **Key Points:**
-- **Memory Management**: Every `JSValue` returned by QuickJS functions (except constants like `JS_UNDEFINED`) must be freed with `JS_FreeValue()`
-- **Error Checking**: Use `JSValueRaw(Value).IsException` to check for JavaScript errors
-- **Type Checking**: Use `JSValueRaw(Value).IsNumber`, `.IsString`, `.IsFunction`, etc.
-- **Cleanup Order**: Free values before freeing context, and context before runtime
+- **Memory Management**: Every `JSValue` referencing a heap object (strings, objects) must be freed via `Context^.Free(v)`. There is no standalone `JS_FreeValue` procedure; use the `TJSContext.Free` method instead.
+- **Raw vs. Wrapper**: Most QuickJS C-API functions (`JS_Eval`, `JS_Call`, `JS_GetPropertyStr`, etc.) return/accept `JSValueRaw`. Assign to `JSValue` via the `.Raw` property. Type-checking helpers (`IsException`, `IsNumber`, `IsString`, `IsObject`) are methods on `JSValue`, not on `JSValueRaw`.
+- **No JS_NewInt32**: There is no `JS_NewInt32()` helper. Create integer-tagged values using `JSValue.From32(val)` instead.
+- **Checking Functions**: Use `JS_IsFunction(ctx, val.Raw)` (returns 0/1) to test whether a value is callable; `JSValue` has no `IsFunction` method.
+- **Cleanup Order**: Free values before freeing context, and context before runtime.
 
 ### 22.3.3. Enabling QuickJS
 
@@ -193,11 +193,18 @@ QuickJS requires the `LIBQUICKJSSTATIC` conditional:
 {$define LIBQUICKJSSTATIC}
 ```
 
-Static libraries are located in:
+Static object files are located under the `static/` folder, in platform-specific subdirectories:
+
 ```
-/mnt/w/mORMot2/static/
-  libquickjs.a        // Linux/macOS
-  libquickjs.obj      // Windows
+static/
+  x86_64-linux/quickjs.o    // Linux 64-bit (FPC)
+  i386-linux/quickjs.o      // Linux 32-bit (FPC)
+  aarch64-linux/quickjs.o   // Linux ARM64 (FPC)
+  arm-linux/quickjs.o       // Linux ARM (FPC)
+  x86_64-win64/quickjs.o    // Windows 64-bit (FPC)
+  i386-win32/quickjs.o      // Windows 32-bit (FPC)
+  delphi/quickjs.obj        // Windows 32-bit (Delphi)
+  delphi/quickjs.o          // Windows 64-bit (Delphi)
 ```
 
 ---
@@ -262,9 +269,9 @@ end;
 ### 22.4.3. Thread Safety Model
 
 ```
-┌────────────────────────────────────────────────────────────────┐
+┌─────────────────────────────────────────────────────────────────┐
 │                    Thread Safety Model                          │
-├────────────────────────────────────────────────────────────────┤
+├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  Thread 1 ──────► Engine 1 (exclusive)                          │
 │                                                                 │
@@ -284,7 +291,7 @@ end;
 │  • Manager handles allocation/deallocation                      │
 │  • Automatic expiration prevents memory leaks                   │
 │                                                                 │
-└────────────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -353,11 +360,9 @@ Manager.PauseDebuggerOnFirstStep := true;
 
 ## 22.7. mORMot Integration Patterns
 
-> **⚠️ CONCEPTUAL**: The high-level APIs shown in sections 22.7-22.8 (TThreadSafeEngine, RegisterFunction, etc.) represent planned/conceptual patterns.
+> **⚠️ NOTE**: The high-level APIs shown in sections 22.7-22.8 are **illustrative patterns**, not exact API signatures. The `mormot.script.quickjs` unit provides `TQuickJSEngine` with `Evaluate()`, `RegisterMethod()`, `Global` variant and `TQuickJSVariant` for late-binding. The specific method names in the examples below (e.g. `RegisterFunction`, `Engine.Call`) differ from the actual API names.
 >
-> Current implementations require using the low-level QuickJS C API directly (see Section 22.3).
->
-> These examples illustrate design goals and patterns that can be implemented on top of the existing low-level API.
+> For exact signatures, see `mormot.script.quickjs.pas`. For maximum control use the low-level QuickJS C API in `mormot.lib.quickjs.pas` (see Section 22.3).
 
 ### 22.7.1. Exposing ORM to JavaScript
 
@@ -490,7 +495,7 @@ end;
 | Unit | Purpose |
 |------|---------|
 | `mormot.script.core` | Abstract engine management, thread pooling |
-| `mormot.script.quickjs` | QuickJS high-level wrapper (in development) |
+| `mormot.script.quickjs` | QuickJS high-level wrapper (`TQuickJSEngine`, `TQuickJSVariant`) |
 | `mormot.lib.quickjs` | Low-level QuickJS API bindings |
 | `mormot.lib.static` | Static library loading infrastructure |
 
@@ -504,11 +509,11 @@ end;
 - ✓ Thread-safe pooling with expiration
 - ✓ Remote debugging infrastructure
 - ✓ Low-level QuickJS bindings (`mormot.lib.quickjs`)
+- ✓ `TQuickJSEngine` high-level wrapper (`mormot.script.quickjs`)
+- ✓ `TQuickJSVariant` custom variant type for late-binding JavaScript access
 
 ### 22.10.2. In Development
 
-- `mormot.script.quickjs` high-level wrapper
-- Custom variant type for late-binding
 - ORM/SOA integration helpers
 
 ### 22.10.3. Planned
@@ -533,9 +538,9 @@ end;
 
 ### 22.11.2. Security Considerations
 
-> **⚠️ CONCEPTUAL**: The security properties shown below represent design goals.
+> **⚠️ NOTE**: The security control properties shown below (`DisableFileAccess`, `MaxExecutionTimeMs`, etc.) are **conceptual** names not present in the current API.
 >
-> Current implementations should use QuickJS C API functions like `JS_SetMaxStackSize()`, `JS_SetMemoryLimit()`, and manual timeout tracking for security controls.
+> Use `TQuickJSEngine.TimeoutValue` (in seconds) for execution timeout control. QuickJS C API functions `JS_SetMaxStackSize()` and `JS_SetMemoryLimit()` are available via the low-level bindings for stack and memory limits.
 
 ```pascal
 // Conceptual API - limit script capabilities

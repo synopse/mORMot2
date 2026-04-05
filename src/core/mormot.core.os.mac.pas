@@ -20,7 +20,7 @@ interface
 
 {$I ..\mormot.defines.inc}
 
-{$ifdef OSDARWIN} // do-nothing unit on other systems
+{$ifdef FPCDARWIN} // do-nothing unit on other systems
 
 {$modeswitch cvar}
 
@@ -205,7 +205,7 @@ initialization
 
 {$else}
 implementation
-{$endif OSDARWIN}
+{$endif FPCDARWIN}
 
 end.
 

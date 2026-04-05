@@ -861,7 +861,7 @@ begin
   if aSecurity in SEC_TLS then
     include(hso, hsoEnableTls);
   //include(hso, hsoHeadersInterning);
-  if aThreadPoolCount < integer(SystemInfo.dwNumberOfProcessors) * 5 then
+  if aThreadPoolCount < integer(CpuThreads) * 5 then
     include(hso, hsoThreadSmooting); // regular HW tends to like it
   {$ifdef USEHTTPSYS}
   if aUse in HTTP_API_MODES then // Windows system's http.sys
@@ -1620,6 +1620,7 @@ var
   a: TRestHttpServerRestAuthentication;
   P: PUtf8Char;
   hostroot, host, root: RawUtf8;
+  pwd: SpiUtf8;
   thrdcnt: integer;
 begin
   if aDefinition = nil then
@@ -1671,8 +1672,14 @@ begin
       aServer.AuthenticationRegister(AUTH_CLASS[a]);
     end;
   if aDefinition.WebSocketPassword <> '' then
-    WebSocketsEnable(aServer, aDefinition.PasswordPlain)^.
-      LoopDelay := aWebSocketsLoopDelay;
+  begin
+    aDefinition.GetPasswordSafe(pwd);
+    try
+      WebSocketsEnable(aServer, pwd)^.LoopDelay := aWebSocketsLoopDelay;
+    finally
+      FillZero(pwd); // anti-forensic
+    end;
+  end;
 end;
 
 

@@ -135,19 +135,24 @@
     HASCODEPAGE HASVARUSTRING STRCNT32 DACNT32 HASDYNARRAYTYPE
     HASITERATORS HASIMPLICITOPERATOR HASDBFTWIDE HASDBFNEW
     HASTTHREADSTART HASTTHREADTERMINATESET HASINTERFACEASTOBJECT
-    HASEXTRECORDRTTI
-    CPU32 CPU64 CPUINTEL CPUX86 CPUX64 CPUSSE2 CPUARM3264 CPUARM CPUAARCH64
-    CPUX86NOTPIC CPUX64ASM ASMINTEL ASMX86 ASMX64AVX ASMX64AVXNOCONST HASAESNI
-    TSYNEXTENDED80 EXTENDEDTOSHORT_USESTR DOUBLETOSHORT_USEGRISU HASSLOWMUL64
-    OSWINDOWS OSPOSIX OSBSD OSDARWIN OSBSDDARWIN OSOPENBSD OSFREEBSD
-    OSLINUX OSANDROID OSLINUXANDROID
-    OSLINUXINTEL OSLINUXX64 OSLINUXX86 OSANDROIDARM64
+    HASEXTRECORDRTTI HASSLOWMUL64
+    CPU32 CPU64
+    CPUINTEL CPUX86 CPUX64 CPUARM3264 CPUARM CPUAARCH64 CPUX86NOTPIC
+    NOASMBLOCK
+    ASMINTEL ASMINTELNOTPIC ASMSSE2 ASMAESNI
+    ASMX86 ASMX86NOTPIC ASMX64 ASMX64NOTPIC ASMX64AVX0 ASMX64AVX1
+    ABIX86 ABIX64 ABIWINX64 ABISYSVX64 ABIA32 ABIA64 ABIWINA64 ABISYSVA64
+    TSYNEXTENDED80 EXTENDEDTOSHORT_USESTR DOUBLETOSHORT_USEGRISU
+    OSWINDOWS OSWINTEL OSWINARM
+    OSPOSIX OSBSD OSDARWIN OSBSDDARWIN OSOPENBSD OSFREEBSD
+    OSLINUX OSANDROID OSLINUXINTEL OSLINUXX64 OSLINUXX86
+    OSLINUXANDROID OSANDROIDARM64
     PUREMORMOT2
 
   FPC only:
-    FPC FPC_HAS_CONSTREF FPC_32 FPC_64 FPC_CPUINTEL FPC_X86 FPC_CPUX64 FPC_PIC
+    FPC FPC_HAS_CONSTREF FPC_32 FPC_64 FPC_X86 FPC_CPUX64 FPC_PIC FPC_INTEL
     FPC_REQUIRES_PROPER_ALIGNMENT HASINLINEWINAPI HASDIRECTTYPEINFO
-    FPCBSD FPCDARWIN FPCLINUX FPCANDROID
+    FPCPOSIX FPCBSD FPCDARWIN FPCLINUX FPCANDROID
     FPC_X64MM
 
   Delphi only:
@@ -299,6 +304,7 @@
     {$define FPCPOSIX}
     {$ifdef BSD}
       // conditionals for Darwin and BSD family like OpenBSD/FreeBSD
+      {$define SOCK_HAS_SINLEN}
       {$ifdef DARWIN}
         {$define OSDARWIN}
         {$define FPCDARWIN}
@@ -315,6 +321,7 @@
           {$ifdef CPUX86}
             {$define FPC_PIC}
           {$endif CPUX86}
+          {$define NOPATCHVMT}  // the vmtAutoTable tricks seems to fail
         {$endif OPENBSD}
         {$ifdef FREEBSD}
           {$define OSFREEBSD}
@@ -346,29 +353,37 @@
   // -- identify CPU Architectures
 
   {$define FPC_SINGLEABI}      // only on i386 default ABI <> cdecl
+  {$undef ASMAESNI}            // AES-NI is an Intel-specific feature
+  {$ifndef CPUX64}
+    {$undef FPC_X64MM}         // x86_64 only unit
+  {$endif CPUX64}
   {$ifdef CPU64}
     // 64-bit Architecture
     {$define FPC_64}
     {$ifdef CPUX64}
-      {$ASMMODE INTEL}         // as Delphi expects
+      {$define FPC_INTEL}
+      {$ASMMODE INTEL}         // as Delphi requires
       {$define CPUINTEL}
-      {$define FPC_CPUINTEL}
+      {$define ASMINTEL}
+      {$define ASMX64}
       {$define FPC_CODEALIGN}  // we can use {$CODEALIGN LOOP=16} conditional
       {$define FPC_CPUX64}
       {$ifndef OSDARWIN}       // MachOS has troubles with our asm
-        {$define FPC_ASMX64}
-        {$define ASMX64}     // supports asm with globals
-        {$define ASMINTEL}   // either ASMX86 or ASMX64
-        {$define ASMX64AVX}  // supports AVX/AVX2/AVX512
-        {$define ASMX64AVXNOCONST} // supports AVX with no align32 constant load
-        {$define CPUX64ASM}  // FPC has no problem (not Delphi prior XE7)
-        {$define HASAESNI}   // mormot.crypt.core AES-NI rejected by Darwin asm
+        {$define ASMINTELNOTPIC}
+        {$define ASMAESNI}     // mormot.crypt.core AES-NI rejected by Darwin asm
+        {$define ASMX64NOTPIC} // supports asm with globals
+        {$define ASMX64AVX0}   // basic AVX/AVX2 support (not Delphi prior XE7)
+        {$define ASMX64AVX1}   // enhanced AVX/AVX2 support
+        {$ifdef OSLINUX}
+          {$define ASMX64LINUX} // some specifically tuned asm for FPC x64-linux
+        {$endif OSLINUX}
         {.$define FPC_PICX64}
         // FPC_PIC seems always defined on Linux x86_64: define this to use GOT
         // in our custom asm when generating a .so library on such platform
       {$endif OSDARWIN}
     {$endif CPUX64}
     {$ifdef CPUAARCH64}
+      {$define CPUARM3264}
       {$define FPC_CPUARM}     // circumvent bug e.g. about sets in registers
       {$define FPC_CPUAARCH64}
       {$ifdef OSWINDOWS}
@@ -379,16 +394,18 @@
     // 32-bit Architecture
     {$define FPC_32}
     {$ifdef CPUX86}
-      {$ASMMODE INTEL}         // as Delphi expects
+      {$define FPC_INTEL}
+      {$ASMMODE INTEL}         // as Delphi requires
+      {$define ASMINTEL}
+      {$define ASMX86}
       {$define CPUINTEL}
-      {$define FPC_CPUINTEL}
       {.$define FPC_CODEALIGN} // no need of {$CODEALIGN LOOP=16} conditional
       {$define FPC_X86}
       {$ifndef FPC_PIC}        // MachOS/OpenBSD/Android require PIC on i386
-        {$define ASMX86}       // supports asm with globals
-        {$define ASMINTEL}     // either ASMX86 or ASMX64
+        {$define ASMINTELNOTPIC}
         {$define CPUX86NOTPIC} // use "absolute" instead of local register
-        {$define HASAESNI}
+        {$define ASMX86NOTPIC} // supports asm with globals
+        {$define ASMAESNI}
       {$endif FPC_PIC}
       {$ifdef FPUSSE2}
         {$undef TSYNEXTENDED80}  // no "extended" if -dFPC_SSE2 was defined
@@ -398,14 +415,12 @@
       {$undef FPC_SINGLEABI}   // on i386, cdecl <> register convention
     {$endif CPUX86}
     {$ifdef CPUARM}
+      {$define CPUARM3264}
       {$define FPC_CPUARM}
     {$endif CPUARM}
     {$define STRCNT32}         // 32-bit TAnsiRec.Ref
     {$define DACNT32}          // 32-bit TDynArrayRec.refCnt
   {$endif CPU64}
-  {$ifndef CPUX64}
-    {$undef FPC_X64MM}         // x86_64 only unit
-  {$endif CPUX64}
 
 
   // -----------
@@ -496,9 +511,9 @@
     {$define OSPOSIX}
     {$define DELPHIPOSIX}
     {$ifdef MACOS}
-      {$define OSDARWIN}
+      {$define OSDARWIN} // but not OSBSD
       {$define DELPHIDARWIN}
-      {$define OSBSD}
+      {$define SOCK_HAS_SINLEN}
     {$endif MACOS}
     {$ifdef ANDROID}
       {$define OSANDROID}
@@ -555,25 +570,29 @@
     // Delphi XE2 introduced Win64 as the first non i386 target
 // https://docwiki.embarcadero.com/RADStudio/en/Conditional_compilation_(Delphi)
     {$ifdef CPUX86}
-      {$define CPUINTEL}
       {$define CPU32}
+      {$define CPUINTEL}
+      {$define ASMX86}
     {$endif CPUX86}
     {$ifdef CPUX64}
-      {$define CPUINTEL}
       {$define CPU64}
+      {$define CPUINTEL}
+      {$define ASMX64}
     {$endif CPUX64}
     {$undef CPUARM} // not the same meaning on Delphi and FPC/mORMot :(
     {$ifdef CPUARM32}
-      {$define CPUARM}
       {$define CPU32}
+      {$define CPUARM3264}
+      {$define CPUARM}
     {$endif CPUARM32}
     {$ifdef CPUARM64}
-      {$define CPUAARCH64}
       {$define CPU64}
+      {$define CPUARM3264}
+      {$define CPUAARCH64}
       {$define CPUAARCH64DELPHI}
     {$endif CPUARM64}
     {$ifdef CPUINTEL}
-      {$define ASMINTEL}  // either ASMX86 or ASMX64
+      {$define ASMINTEL}
     {$else}
       {$ifdef CPU64BITS}  // handle non INTEL/AMD Delphi targets
         {$define CPU64}
@@ -584,9 +603,10 @@
   {$else}
     // before Delphi XE2, all compilers are only x86
     {$define CPU32}
-    {$define CPUX86}
     {$define CPUINTEL}
+    {$define CPUX86}
     {$define ASMINTEL}
+    {$define ASMX86}
   {$ifend}
 
   // -----------
@@ -661,8 +681,8 @@
     {$if CompilerVersion >= 25.0} // = Delphi XE4
       {$define ISDELPHIXE4}
       {$define FPC_OR_DELPHIXE4}  // circumvent Internal Error: C2130 on XE3
-      {$define HASAESNI}
-      {$define HASALIGN}          // .align ### inline assembler directive
+      {$define ASMAESNI}
+      {$define ASMALIGN}          // .align ### inline assembler directive
     {$ifend}
     {$if CompilerVersion >= 26.0} // = Delphi XE5
       {$define ISDELPHIXE5}
@@ -683,7 +703,7 @@
       {$define ISDELPHIXE7}
       {$ifdef CPUINTEL}
         {$ifdef CPU64}
-          {$define CPUX64ASM}       // e.g. XE4 SSE asm is buggy :(
+          {$define ASMX64AVX0}     // e.g. XE4 SSE/AVX asm is buggy :(
         {$endif CPU64}
       {$endif CPUINTEL}
     {$ifend}
@@ -715,8 +735,7 @@
     {$if CompilerVersion >= 35.0} // = Delphi 11.x Alexandria
       {$define ISDELPHI11}
       {$ifdef CPUX64}
-        {.$define ASMX64AVX}      // initial AVX/AVX2/AVX512 support - but broken
-        {$define ASMX64AVXNOCONST} // supports AVX with no align32 constant load
+        {$define ASMX64AVX1}      // enhanced AVX/AVX2 support
       {$endif CPUX64}
     {$ifend}
     {$if CompilerVersion >= 36.0} // = Delphi 12 Athens
@@ -739,14 +758,16 @@
   {$ifdef OSWINDOWS}
     {$ifdef CPUX86}
       {$define WIN32DELPHI}       // Delphi with Win32 inlined asm
-      {$define ASMX86}            // supports asm with globals
+      {$define ASMINTELNOTPIC}
+      {$define ASMX86NOTPIC}      // supports asm with globals
       {$define CPUX86NOTPIC}      // use "absolute" instead of local register
       {$define TSYNEXTENDED80}    // only Win32 has a true x87 extended type
       {$define DISPINVOKEBYVALUE} // DispInvoke() expects varVariant by value
       {$define WINTELDELPHI}      // Delphi on Windows + Intel/AMD
     {$endif CPUX86}
     {$ifdef CPUX64}
-      {$define ASMX64}            // supports asm with globals
+      {$define ASMINTELNOTPIC}
+      {$define ASMX64NOTPIC}      // supports asm with globals
       {$define WINTELDELPHI}      // Delphi on Windows + Intel/AMD
     {$endif CPUX64}
     {$ifdef CPU64}
@@ -756,7 +777,9 @@
       {$define WINARMDELPHI}
     {$endif CPUARM64}
   {$else}
-  // no optimization outside known Windows platforms (better safe than sorry)
+    {$define POSIXDELPHI}
+    {$define NOASMBLOCK}    // no "asm .. end" blocks support by LLVM compilers
+    {$define NOEXCEPTIONINTERCEPT}  // TODO: interception for Delphi POSIX
   {$endif OSWINDOWS}
   {$ifdef CPU32}
     {$define HASSLOWMUL64}  // Delphi 32-bit has slow 64-bit mul: favor shl
@@ -799,102 +822,138 @@
   {$P+} // Open string params
 
   {$ifdef DEBUG}
-    {$assertions on} // assert() may be disabled, e.g. on FPC
+    {$assertions on}   // assert() may be disabled, e.g. on FPC
   {$endif DEBUG}
 
+  // -----------
+  // -- Assembly Code specific conditionals
+
+  // ABI* conditionals as needed e.g. by mormot.core.interfaces
+  {$undef ASMSSE2}
+  {$ifdef CPUINTEL}
+    {$ifdef CPUX86}
+      {$define ABIINTEL}
+      {$define ABIX86}    // with register convention (not stdcall nor c)
+      {$ifndef HASNOSSE2} // conditional to compile for oldest CPUs
+        {$define ASMSSE2}
+      {$endif HASNOSSE2}
+    {$endif CPUX86}
+    {$ifdef CPUX64}
+      {$define ABIINTEL}
+      {$define ABIX64}
+      {$ifdef OSPOSIX}
+        {$define ABISYSVX64}
+      {$endif OSPOSIX}
+      {$ifdef OSWINDOWS}
+        {$define ABIWINX64}
+      {$endif OSWINDOWS}
+      {$define ASMSSE2} // x86_64 has SSE2
+    {$endif CPUX64}
+  {$endif CPUINTEL}
+  {$ifdef CPUARM3264}
+    {$ifdef CPUARM}
+      {$define ABIARM}
+      {$define ABIA32}
+    {$endif CPUARM}
+    {$ifdef CPUAARCH64}
+      {$define ABIARM}
+      {$define ABIA64}
+      {$ifdef OSPOSIX}
+        {$define ABISYSVA64}
+      {$endif OSPOSIX}
+      {$ifdef OSWINDOWS}
+        {$define ABIWINA64}
+      {$endif OSWINDOWS}
+    {$endif CPUAARCH64}
+  {$endif CPUARM3264}
+
+  // trigger pure pascal compilation, e.g. for Delphi LLVM or RISC-V CPUs
+  {$ifdef NOASMBLOCK}
+    {$undef ASMINTEL}
+    {$undef ASMINTELNOTPIC}
+    {$undef ASMSSE2}
+    {$undef ASMAESNI}
+    {$undef ASMX86}
+    {$undef ASMX86NOTPIC}
+    {$undef ASMX64}
+    {$undef ASMX64NOTPIC}
+    {$undef ASMX64AVX0}
+    {$undef ASMX64AVX1}
+    {$undef ASMX64LINUX}
+    {$undef CPUARM3264}
+    {$undef CPUARM}
+    {$undef CPUAARCH64}
+    {$undef FPC_CPUARM}
+    {$undef FPC_X86}
+    {$undef FPC_CPUX64}
+    {$undef FPC_PICX64}
+    {$undef FPC_CPUAARCH64}
+    // the vmtAutoTable tricks seems to fail
+    {$define NOPATCHVMT}
+    // no static linking
+    {$define NOLIBCSTATIC}
+    {$define NOSQLITE3STATIC}
+    {$define NOLIBDEFLATESTATIC}
+  {$endif NOASMBLOCK}
 
 // -----------
-// -- Operating Systems specific conditionals
+// -- Operating Systems specific conditionals (e.g. define expected ABI)
 
-{$ifdef OSLINUX}
-  {$define OSLINUXANDROID}
-  {$ifdef CPUX86}
-    {$define OSLINUXINTEL}
-    {$define OSLINUXX86}
-  {$endif CPUX86}
-  {$ifdef CPUX64}
-    {$define OSLINUXINTEL}
-    {$define OSLINUXX64}
-  {$endif CPUX64}
+{$ifdef OSWINDOWS}
+  {$ifdef ABIINTEL}
+    {$define OSWINTEL}
+  {$endif ABIINTEL}
+  {$ifdef ABIARM}
+    {$define OSWINARM}
+  {$endif ABIARM}
+  {$define THREADID32}    // TThreadID always 32-bit DWORD on all Windows archs
+{$else}
   {$ifdef CPU32}
-    {$define OSLINUX32}
+    {$define THREADID32}    // TThreadID 32-bit on 32-bit systems
   {$endif CPU32}
-  {$ifdef CPU64}
-    {$define OSLINUX64}
-  {$endif CPU64}
-{$endif OSLINUX}
-{$ifdef OSANDROID}
-  {$define OSLINUXANDROID}
-  {$ifdef CPUAARCH64}
-    {$define OSANDROIDARM64}
-  {$endif CPUAARCH64}
-{$endif OSANDROID}
-{$ifdef OSDARWIN}
-  {$define OSBSDDARWIN}     // OSBSDDARWIN = OSBSD or OSDARWIN
-{$endif OSDARWIN}
-{$ifdef OSBSD}
-  {$define OSBSDDARWIN}     // OSBSDDARWIN = OSBSD or OSDARWIN
-{$endif OSBSD}
+  {$ifdef OSLINUX}
+    {$define OSLINUXANDROID}
+    {$ifdef ABIX86}
+      {$define OSLINUXINTEL}
+      {$define OSLINUXX86}
+    {$endif ABIX86}
+    {$ifdef ABIX64}
+      {$define OSLINUXINTEL}
+      {$define OSLINUXX64}
+    {$endif ABIX64}
+    {$ifdef CPU32}
+      {$define OSLINUX32}
+    {$endif CPU32}
+    {$ifdef CPU64}
+      {$define OSLINUX64}
+    {$endif CPU64}
+  {$endif OSLINUX}
+  {$ifdef OSANDROID}
+    {$define OSLINUXANDROID}
+    {$ifdef ABIA64}
+      {$define OSANDROIDARM64}
+    {$endif ABIA64}
+  {$endif OSANDROID}
+  {$ifdef OSDARWIN}
+    {$define OSBSDDARWIN}     // OSBSDDARWIN = OSBSD or OSDARWIN
+  {$endif OSDARWIN}
+  {$ifdef OSBSD}
+    {$define OSBSDDARWIN}     // OSBSDDARWIN = OSBSD or OSDARWIN
+  {$endif OSBSD}
+{$endif OSWINDOW}
 
 // -----------
 // -- CPU specific conditionals
 
-{$undef CPUSSE2}
-{$ifdef CPUINTEL}
-  {$ifdef OSWINDOWS}
-    {$define OSWINTEL}
-    {$ifdef CPUX64}
-      {$define WIN64ABI}    // for asm on x86_64
-      {$define OSWINDOWS64} // Win64
-    {$else}
-      {$define OSWINDOWS32} // Win32
-    {$endif CPUX64}
-    {$define THREADID32}    // TThreadID = 32-bit DWORD on Win32 and Win64
-  {$endif OSWINDOWS}
-  {$ifdef OSPOSIX}
-    {$ifdef CPUX64}
-      {$define SYSVABI}     // for asm on x86_64
-    {$else}
-      {$define THREADID32}  // TThreadID = PtrUInt/pointer on pthread
-    {$endif CPUX64}
-  {$endif OSPOSIX}
-  {$define CPUINTELARM}
-  {$ifdef CPUX86}
-    {$ifndef HASNOSSE2} // conditional to compile for oldest CPUs
-      {$define CPUSSE2}
-    {$endif HASNOSSE2}
-  {$else}
-    {$define CPUSSE2} // x86_64 has SSE2
-  {$endif CPUX86}
-{$else}
-  {$ifdef OSWINDOWS}
-    {$ifdef CPUAARCH64}
-      {$define OSWINARM}    // Windows for ARM 64
-    {$endif CPUAARCH64}
-    {$define THREADID32}    // TThreadID = 32-bit DWORD on win64-aarch64
-  {$endif OSWINDOWS}
-  {$undef HASAESNI}         // AES-NI is an Intel-specific feature
-  {$ifdef CPUARM}
-    {$define CPUARM3264}
-    {$define CPUINTELARM}
-    {$ifndef OSANDROID}
-      {$define CPUARMYIELD}
-    {$endif OSANDROID}
-  {$endif CPUARM}
-  {$ifdef CPUAARCH64}
-    {$define CPUARM3264}
-    {$define CPUINTELARM}
-    {$define CPUARMYIELD}
-  {$endif CPUAARCH64}
-  {$ifdef CPU32}
-    {$define THREADID32}    // TThreadID = PtrUInt/pointer on pthread
-  {$endif CPU32}
-{$endif CPUINTEL}
-
 {$ifdef CPU32}
   {$define NOPOINTEROFFSET} // 32-bit CPU will always store pointers
 {$endif CPU32}
-
+{$ifdef ASMINTEL}
+  {$define HASCPUFEATURES}  // TIntelCpuFeatures requires inlined asm
+{$endif ASMINTEL}
+{$ifdef CPUARM3264}
+  {$define HASCPUFEATURES}  // CpuFeatures: TArmHwCaps
+{$endif CPUARM3264}
 
   // -----------
   // -- Libraries linking
@@ -1013,6 +1072,7 @@
   {$define USE_WINIOCP}     // I/O completion ports API is fine under Windows
   // (as used by mormot.core.threads and mormot.net.async)
   // (under Linux/POSIX, we fallback to a classical event-driven pool)
+  {$define USE_THREADWINIOCP} // IOCP is needed by the WebSocketsAPI thread pool
 
   {$ifndef NOSSPIAUTH}        // from mormot.lib.sspi
     {$define DOMAINRESTAUTH}  // enable SSPI in mormot.rest.client/server
@@ -1024,6 +1084,7 @@
 
   {$define ONLYUSEHTTPSOCKET} // efficient cross-platform Socket + OpenSSL API
   {$undef USE_WINIOCP}        // disable any Windows-specific code
+  {$undef USE_THREADWINIOCP}
 
   {$ifdef OSANDROID}
 
