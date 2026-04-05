@@ -5034,7 +5034,7 @@ begin
     end;
   end;
   if (pos = 0) or
-     (mormot.core.base.StrComp(checksum, PUtf8Char(pointer(h)) + pos - 1) <> 0) then
+     (mormot.core.base.StrComp(checksum, PUtf8Char(pointer({%H-}h)) + pos - 1) <> 0) then
     result := mcfInvalid;
 end;
 
@@ -5304,7 +5304,7 @@ begin
   fLastError := 'invalid Server initial response';
   resp.InitFromPairs(ServerResponse, JSON_FAST, '=', ',');
   if not resp.GetAsRawUtf8('r', fullnonce) or
-     not StartWithExact(fullnonce, fClientNonce) then
+     not StartWithExact(fullnonce{%H-}, fClientNonce) then
     exit;
   if fMcfSupport and
      resp.GetAsRawUtf8('f', mcf) then // SCRAM-MCF extension
@@ -5316,9 +5316,9 @@ begin
       exit; // unsupported Modular Crypt algorithm or invalid prefix
   end
   else if not resp.GetAsRawUtf8('s', s) or
-          not Base64ToBin(pointer(s), length(s), salt) or
+          not Base64ToBin(pointer({%H-}s), length({%H-}s), salt) or
           not resp.GetAsRawUtf8('i', i) or
-          not ToInteger(i, iterations) or
+          not ToInteger(i{%H-}, iterations) or
           (iterations <= 0) or
           (iterations > MAX_PBKDF2_ROUNDS) then // avoid DoS attacks
     // invalid s=... and i=... standard SCRAM parameters
@@ -5328,7 +5328,7 @@ begin
   Join([fAuthMessage, ',', ServerResponse, ',', key], msg);
   if mcf = '' then
   begin
-    fSigner.Pbkdf2(fAlgo, Password, salt, iterations, @salted);
+    fSigner.Pbkdf2(fAlgo, Password, salt{%H-}, iterations, @salted);
     fSigner.Full(fAlgo, @salted, fSize, 'Client Key', @client);
     fSigner.Full(fAlgo, @salted, fSize, 'Server Key', @server);
     FillZero(salted, fSize);
@@ -5520,7 +5520,7 @@ begin
     // F(secret, salt, c, i) = U1 ^ U2 ^ .. ^ Uc  with Uc = PRF(secret, Uc-1)
     MoveFast(aDerivatedKey^, tmp, fSignatureSize);
     repeat
-      MoveFast(bak.ctxt, fHasher.ctxt, HASH_INSTANCE[fHasher.fAlgo]); // restore
+      MoveFast({%H-}bak.ctxt, fHasher.ctxt, HASH_INSTANCE[fHasher.fAlgo]); // restore
       Update(@tmp, fSignatureSize);
       Final(@tmp, {noinit=}true);
       XorMemory(pointer(aDerivatedKey), @tmp, fSignatureSize);
@@ -11053,7 +11053,7 @@ function ParsedToText(const c: TX509Parsed): RawUtf8;
   begin
     for cu := l to h do
       if cu in c.Usage then
-        AddToCsv(CU_FULLTEXT[cu], usage, ', ');
+        AddToCsv(CU_FULLTEXT[cu], usage{%H-}, ', ');
     if usage <> '' then
       result := result +   '    X509v3 ' + ext + #13#10 +
                            '      ' + usage + #13#10;
