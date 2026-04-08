@@ -3843,7 +3843,7 @@ begin
     if CheckEqual(length(ktg.Entry), 2) then
     begin
       CheckHash(ktg.Entry[1].Key, $D101D374);
-      Check(ktg.Entry[1].Timestamp > 1750947820);
+      Check(ktg.Entry[0].Timestamp > 1750947820);
       Check(ktg.Entry[1].Timestamp > 1750947820);
       Check(UnixTimeUtc - ktg.Entry[0].Timestamp < 2, 'UnixTimeUtc');
       ktg.Entry[0].Timestamp := 1750947820; // as in KEYTAB_REF
