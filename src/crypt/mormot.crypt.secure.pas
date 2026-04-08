@@ -10781,7 +10781,11 @@ begin
   if aSalt <> '' then
     salt := aSalt
   else if aIsComputer then // see [MS-KILE] 3.1.1.2 Cryptographic Material
-    salt := Join([realm, 'host', name, '.', LowerCaseU(realm)])
+  begin
+    if EndWith(name, '$') then
+      SetLength(name, Length(name) - 1);
+    salt := Join([realm, 'host', LowerCaseU(name), '.', LowerCaseU(realm)]);
+  end
   else
     salt := Join([realm, name]);
   aEntry.Key := MakeKerberosKey(aPassword, salt, aEncType, aIterations);
