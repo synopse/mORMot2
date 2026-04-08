@@ -10782,7 +10782,7 @@ begin
     salt := aSalt
   else if aIsComputer then // see [MS-KILE] 3.1.1.2 Cryptographic Material
   begin
-    if EndWith(name, '$') then
+    if EndWithExact(name, '$') then
       SetLength(name, Length(name) - 1);
     salt := Join([realm, 'host', LowerCaseU(name), '.', LowerCaseU(realm)]);
   end
