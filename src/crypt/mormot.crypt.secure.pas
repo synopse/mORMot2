@@ -10784,10 +10784,10 @@ begin
   begin
     if EndWithExact(name, '$') then
       SetLength(name, Length(name) - 1);
-    salt := Join([realm, 'host', LowerCaseU(name), '.', LowerCaseU(realm)]);
+    Join([realm, 'host', LowerCaseU(name), '.', LowerCaseU(realm)], salt);
   end
   else
-    salt := Join([realm, name]);
+    Join([realm, name], salt);
   aEntry.Key := MakeKerberosKey(aPassword, salt, aEncType, aIterations);
   result := aEntry.Key <> '';
 end;
