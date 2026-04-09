@@ -9139,20 +9139,16 @@ function GotoNextSqlIdentifier(P: PUtf8Char; tab: PTextCharSet): PUtf8Char;
 begin
   while tcCtrlNot0Comma in tab[P^] do // in [#1..' ', ';']
     inc(P);
-  if PWord(P)^ = SLBEG_16 then
-  begin
-    // detect and ignore e.g. '/*nocache*/'
-    repeat
+  while P^ <> #0 do // detect and ignore e.g. '/*nocache*/'
+     if PWord(P)^ = SLEND_16 then
+    begin
+      inc(P, 2);
+      break;
+    end
+    else
       inc(P);
-      if PWord(P)^ = SLEND_16 then
-      begin
-        inc(P, 2);
-        break;
-      end;
-    until P^ = #0;
-    while tcCtrlNot0Comma in tab[P^] do
-      inc(P);
-  end;
+  while tcCtrlNot0Comma in tab[P^] do
+    inc(P);
   result := P;
 end;
 
