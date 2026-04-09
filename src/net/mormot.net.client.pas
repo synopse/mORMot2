@@ -342,6 +342,10 @@ type
   /// exception raised by THttpCacheFiles process
   EHttpCacheFiles = class(ESynException);
 
+  /// compute the truncated THttpCached 160-bit hash from a local filename
+  TOnComputeHashFromFileName = function(const LocalFile: TFileName;
+    out Hash: THash160): boolean of object;
+
   /// store the metadata of one cached file, from its hash, as 32 bytes
   // - used by THttpCacheFiles to delete deprecated cache entries
   THttpCached = packed record

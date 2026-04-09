@@ -1503,6 +1503,8 @@ type
     function OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
     function OnGetHeadLocalFolder(Ctxt: THttpServerRequest; const Uri: TUriMatchName): cardinal;
     function OnGetHeadRemoteUri(Ctxt: THttpServerRequest; const Uri: TUriMatchName): cardinal;
+    // TOnComputeHashFromFileName callback
+    function OnComputeHashFromFileName(const LocalFile: TFileName; out Hash: THash160): boolean;
   public
     /// initialize this forward proxy instance
     // - the supplied aSettings should be owned by the caller (e.g from a main
@@ -6307,6 +6309,29 @@ begin
   if fHasLog then
     fLog.Add.Log(sllDebug, 'OnExecute: % % fn=% status=% size=% cached=%',
       [Ctxt.Method, Ctxt.Url, fn, result, siz, (cached <> '')], self);
+end;
+
+function THttpProxyServer.OnComputeHashFromFileName(const LocalFile: TFileName;
+  out Hash: THash160): boolean;
+var
+  tmp: array[0 .. (SizeOf(THash160) * 2) - 1] of AnsiChar;
+  i, l: PtrInt;
+  bin: RawByteString;
+begin // LocalFile could be without any path e.g. from TSearchRec.Name
+  result := false;
+  l := length(LocalFile);
+  if (l > 0) and
+     (LocalFile[l] = '.') then
+    dec(l);
+  if l < SizeOf(tmp) then
+    exit;
+  for i := l - high(tmp) to l do
+    tmp[i] := AnsiChar(ord(LocalFile[i])); // extract file name (no extension)
+  bin := Base32ToBin(@tmp, SizeOf(tmp));
+  if bin = '' then
+    exit;
+  MoveFast(pointer(bin)^, Hash, SizeOf(Hash));
+  result := true;
 end;
 
 function THttpProxyServer.OnGetHeadRemoteUri(Ctxt: THttpServerRequest;
