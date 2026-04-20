@@ -4773,15 +4773,20 @@ type
   end;
   TSystemLogicalProcessorInformation = record
     ProcessorMask: PtrUInt;
-    case Relationship: TSystemLogicalProcessorRelation of
-      RelationProcessorCore: (
+    // explicit field (not a variant discriminant) so {$Z4} is always honored
+    // - Delphi 2010 otherwise stores the discriminant as 1 byte, making the
+    //   record smaller than Windows' SYSTEM_LOGICAL_PROCESSOR_INFORMATION and
+    //   causing GetLogicalProcessorInformation() to overrun the dynamic array
+    Relationship: TSystemLogicalProcessorRelation;
+    case integer of
+      0: ( // RelationProcessorCore
         ProcessorCoreFlags: byte);
-      RelationNumaNode: (
+      1: ( // RelationNumaNode
         NumaNodeNumber: DWord);
-      RelationCache: (
+      2: ( // RelationCache
         Cache: TSystemCacheDescriptor);
-      RelationGroup: (
-        Reserved: array[0..1] of QWord); // to define the actual struct size
+      3: ( // RelationGroup - defines the actual struct size
+        Reserved: array[0..1] of QWord);
   end;
 
 {$ifndef UNICODE}
@@ -4837,6 +4842,10 @@ var
   i, n: PtrInt;
   siz: DWord;
 begin
+  // guard against compiler layout drift (D2010 used to under-size this record,
+  // leading to heap corruption from GetLogicalProcessorInformation overruns)
+  Assert(SizeOf(TSystemLogicalProcessorInformation) =
+    {$ifdef CPU64} 32 {$else} 24 {$endif});
   // 1. minimal fallback to support of very old 32-bit CPU without SSE2
   {$ifdef ASMX86}
   {$ifndef HASNOSSE2}
