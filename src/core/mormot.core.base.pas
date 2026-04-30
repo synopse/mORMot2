@@ -2501,6 +2501,9 @@ type
   /// pointer to 128-bit hash map variable record
   PHash128Rec = ^THash128Rec;
 
+  /// store several 160-bit hash values
+  THash160DynArray = array of THash160;
+
   /// map an infinite array of 256-bit hash values
   // - each item consumes 32 bytes of memory
   THash256Array = array[ 0 .. MaxInt div SizeOf(THash256) - 1 ] of THash256;
@@ -5888,17 +5891,17 @@ begin
     result := FindPropName(@Names[0], Name, result + 1);
 end;
 
-function Hex2Dec(c: AnsiChar): ShortInt; {$ifdef HASINLINE} inline; {$endif}
+function Hex2Dec(c: AnsiChar): integer; {$ifdef HASINLINE} inline; {$endif}
 begin
   result := ord(c);
-  case c of // fast enough for a few chars
-    '#':
+  case result of // fast enough for a few chars
+    ord('#'):
       result := 0; // handle '#' as '0' within the hexadecimal buffer
-    '0'..'9':
+    ord('0') .. ord('9'):
       dec(result, ord('0'));
-    'A'..'Z':
+    ord('A') .. ord('Z'):
       dec(result, ord('A') - 10);
-    'a'..'z':
+    ord('a') .. ord('z'):
       dec(result, ord('a') - 10);
   else
     result := -1;
