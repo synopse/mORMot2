@@ -1398,6 +1398,10 @@ function Base58ToBin(B58: PAnsiChar; B58Len: integer): RawByteString; overload;
 function Base58ToBin(const base58: RawUtf8): RawByteString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+const
+  b32encUpper: array[0..31] of AnsiChar = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  b32encLower: array[0..31] of AnsiChar = 'abcdefghijklmnopqrstuvwxyz234567';
+
 /// compute the length resulting of Base32 encoding of a binary buffer
 // - RFC4648 Base32 is defined as upper alphanumeric without misleading 0O 1I 8B
 function BinToBase32Length(BinLen: cardinal): cardinal;
@@ -7247,8 +7251,6 @@ begin
 end;
 
 const
-  b32encUpper: array[0..31] of AnsiChar = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  b32encLower: array[0..31] of AnsiChar = 'abcdefghijklmnopqrstuvwxyz234567';
   b32enc: array[boolean] of PAnsiChar = (@b32encUpper, @b32encLower);
   b32pad: array[0..4] of byte = (8, 6, 4, 3, 1);
 var
@@ -8294,7 +8296,7 @@ var
   tmp: TSynTempBuffer;
 begin
   if L = 0 then
-    result := ''
+    FastAssignNew(result)
   else
     tmp.Done(DoUrlDecode(tmp.Init(L), pointer(U), space), result);
 end;
