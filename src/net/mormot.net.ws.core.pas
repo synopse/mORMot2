@@ -210,6 +210,8 @@ type
     /// notify the server to move any callbacks to the renewed connection
     // - default is FALSE
     ClientRestoreCallbacks: boolean;
+    /// call ProcessIncomingFrame method for all frames, e.g. focPing/focPong
+    NotifyAllFrames: boolean;
     /// by default, contains [] to minimize the logged information
     // - set logHeartbeat if you want the ping/pong frames to be logged
     // - set logTextFrameContent if you want the text frame content to be logged
@@ -217,13 +219,13 @@ type
     // - set logCallback for each TWebSocketAsyncServerRest callback notification
     // - used only if WebSocketLog global variable is set to a TSynLog class
     LogDetails: TWebSocketProcessSettingsLogDetails;
-    /// TWebSocketProtocol.SetEncryptKey PBKDF2-SHA-3 salt for TProtocolAes
-    // - default is some fixed value - you may customize it for a project
-    AesSalt: RawUtf8;
     /// TWebSocketProtocol.SetEncryptKey PBKDF2-SHA-3 rounds for TProtocolAes
     // - default is 1024 which takes around 0.5 ms to compute
     // - 0 would use Sha256Weak() derivation function, as mORMot 1.18
     AesRounds: integer;
+    /// TWebSocketProtocol.SetEncryptKey PBKDF2-SHA-3 salt for TProtocolAes
+    // - default is some fixed value - you may customize it for a project
+    AesSalt: RawUtf8;
     /// TWebSocketProtocol.SetEncryptKey AES class for TProtocolAes
     // - default is TAesFast[mCtr]
     AesCipher: TAesAbstractClass;
@@ -2920,6 +2922,7 @@ begin
   OnClientDisconnected := nil;
   ClientAutoUpgrade := true;
   ClientRestoreCallbacks := false;
+  NotifyAllFrames := false;
   AesSalt := 'E750ACCA-2C6F-4B0E-999B-D31C9A14EFAB';
   AesRounds := 1024;
   AesCipher := TAesFast[mCtr];
@@ -3047,10 +3050,10 @@ procedure TWebSocketProcess.ProcessStart;
 var
   frame: TWebSocketFrame; // notify e.g. TOnWebSocketProtocolChatIncomingFrame
 begin
-  if Assigned(fSettings.OnClientConnected) then
+  if Assigned(fSettings^.OnClientConnected) then
   try
     WebSocketLog.Add.Log(sllTrace, 'ProcessStart: OnClientConnected', self);
-    fSettings.OnClientConnected(Self);
+    fSettings^.OnClientConnected(Self);
   except
   end;
   //WebSocketLog.Add.Log(sllTrace, 'ProcessStart: callbacks', self);
@@ -3076,10 +3079,10 @@ begin
       if (not Assigned(fProtocol.fOnBeforeIncomingFrame)) or
          (not fProtocol.fOnBeforeIncomingFrame(self, frame)) then
         fProtocol.ProcessIncomingFrame(self, frame, '');
-    if Assigned(fSettings.OnClientDisconnected) then
+    if Assigned(fSettings^.OnClientDisconnected) then
     begin
       WebSocketLog.Add.Log(sllTrace, 'ProcessStop: OnClientDisconnected', self);
-      fSettings.OnClientDisconnected(Self);
+      fSettings^.OnClientDisconnected(Self);
     end;
   except // exceptions are just ignored at shutdown
   end;
@@ -3111,21 +3114,20 @@ begin
 end;
 
 procedure TWebSocketProcess.ProcessLoopReceived(var request: TWebSocketFrame);
+var
+  notify: boolean;
 begin
+  notify := fSettings^.NotifyAllFrames;
+  // some opcodes require a specific reponse (should be done first)
   case request.opcode of
     focPing:
       begin
         request.opcode := focPong;
         SendFrame(request); // immediate pong frame sending
       end;
-    focPong:
-      ; // nothing to do
     focText,
     focBinary:
-      if Assigned(fProtocol) then
-        if (not Assigned(fProtocol.fOnBeforeIncomingFrame)) or
-           (not fProtocol.fOnBeforeIncomingFrame(self, request)) then
-          fProtocol.ProcessIncomingFrame(self, request, '');
+      notify := true;
     focConnectionClose:
       begin
         if (fState = wpsRun) and
@@ -3136,6 +3138,12 @@ begin
         end;
       end;
   end;
+  // notify to ProcessIncomingFrame() method - callback may change request
+  if notify and
+     Assigned(fProtocol) then
+    if (not Assigned(fProtocol.fOnBeforeIncomingFrame)) or
+       (not fProtocol.fOnBeforeIncomingFrame(self, request)) then
+      fProtocol.ProcessIncomingFrame(self, request, '');
   request.payload := ''; // release memory ASAP
 end;
 
@@ -3187,9 +3195,9 @@ begin
     request.content := [];
     request.tix := 0;
     if not SendFrame(request) then // immediate frame sending
-      if (fSettings.DisconnectAfterInvalidHeartbeatCount <> 0) and
+      if (fSettings^.DisconnectAfterInvalidHeartbeatCount <> 0) and
          (fInvalidPingSendCount >=
-           fSettings.DisconnectAfterInvalidHeartbeatCount) then
+           fSettings^.DisconnectAfterInvalidHeartbeatCount) then
         fState := wpsClose
       else
         MarkAsInvalid;
@@ -3207,12 +3215,12 @@ begin
     LockedInc32(@fProcessCount); // flag currently processing
     try
       elapsed := LastPingDelay;
-      if elapsed > fSettings.SendDelay then
+      if elapsed > fSettings^.SendDelay then
         if (fOutgoing.Count > 0) and
            (SendPendingOutgoingFrames < 0) then
           fState := wpsClose // SendFrames() failed
-        else if (fSettings.HeartbeatDelay <> 0) and
-                (elapsed > fSettings.HeartbeatDelay) then
+        else if (fSettings^.HeartbeatDelay <> 0) and
+                (elapsed > fSettings^.HeartbeatDelay) then
           SendPing;
     finally
       LockedDec32(@fProcessCount); // release flag
@@ -3263,9 +3271,9 @@ var
   delay: cardinal;
 begin
   delay := SleepStepTime(start, result); // efficient 0/1/5/50/120-250 ms steps
-  if (fSettings.LoopDelay <> 0) and
-     (delay > fSettings.LoopDelay) then
-    delay := fSettings.LoopDelay;
+  if (fSettings^.LoopDelay <> 0) and
+     (delay > fSettings^.LoopDelay) then
+    delay := fSettings^.LoopDelay;
   SleepHiRes(delay);
 end;
 
@@ -3318,7 +3326,7 @@ begin
     aMode in [wscBlockWithoutAnswer, wscNonBlockWithoutAnswer], request, head);
   case aMode of
     wscNonBlockWithoutAnswer:
-      if fSettings.SendDelay <> 0 then
+      if fSettings^.SendDelay <> 0 then
       begin
         // add to the internal sending list for asynchronous sending
         SendFrameAsync(request); // with potential jumboframes gathering
@@ -3372,7 +3380,7 @@ begin
     end;
     tix := GetTickCount64;
     start := tix;
-    max := fSettings.CallbackAnswerTimeOutMS;
+    max := fSettings^.CallbackAnswerTimeOutMS;
     if max = 0 then
       // never wait for ever: 30 seconds is the absolute maximum delay
       max := 30000
@@ -3430,7 +3438,7 @@ procedure TWebSocketProcess.Log(const frame: TWebSocketFrame;
     log.DisableRemoteLog(DisableRemoteLog);
     try
       if (frame.opcode = focText) and
-         (logTextFrameContent in fSettings.LogDetails) then
+         (logTextFrameContent in fSettings^.LogDetails) then
         log.Log(aEvent, '% % % focText %',
           [aMethodName, fProtocol.GetRemoteIP,
            fProtocol.FrameType(frame), frame.PayLoad], self)
@@ -3441,7 +3449,7 @@ procedure TWebSocketProcess.Log(const frame: TWebSocketFrame;
          [aMethodName, fProtocol.GetRemoteIP, fProtocol.FrameType(frame),
           _TWebSocketFrameOpCode[frame.opcode]^, len,
           LogEscape(pointer(frame.PayLoad), len, tmp,
-            logBinaryFrameContent in fSettings.LogDetails)], self);
+            logBinaryFrameContent in fSettings^.LogDetails)], self);
       end;
     finally
       log.DisableRemoteLog(false);
@@ -3452,7 +3460,7 @@ begin
   if WebSocketLog <> nil then
     with WebSocketLog.Family do
       if aEvent in Level then
-        if (logHeartbeat in fSettings.LogDetails) or
+        if (logHeartbeat in fSettings^.LogDetails) or
            not (frame.opcode in [focPing, focPong]) then
           DoLog(Add);
 end;
