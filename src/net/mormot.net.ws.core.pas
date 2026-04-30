@@ -3124,18 +3124,17 @@ begin
       begin
         request.opcode := focPong;
         SendFrame(request); // immediate pong frame sending
+        request.opcode := focPing; // for notify below
       end;
     focText,
     focBinary:
       notify := true;
     focConnectionClose:
+      if (fState = wpsRun) and
+         not fConnectionCloseWasSent then
       begin
-        if (fState = wpsRun) and
-           not fConnectionCloseWasSent then
-        begin
-          fState := wpsClose; // will close the connection
-          SendFrame(request); // immediate send back the frame as ACK
-        end;
+        fState := wpsClose; // will close the connection
+        SendFrame(request); // immediate send back the frame as ACK
       end;
   end;
   // notify to ProcessIncomingFrame() method - callback may change request
@@ -3144,7 +3143,8 @@ begin
     if (not Assigned(fProtocol.fOnBeforeIncomingFrame)) or
        (not fProtocol.fOnBeforeIncomingFrame(self, request)) then
       fProtocol.ProcessIncomingFrame(self, request, '');
-  request.payload := ''; // release memory ASAP
+  // release memory ASAP
+  request.payload := '';
 end;
 
 function TWebSocketProcess.ProcessLoopStepReceive(FrameProcessed: PBoolean): boolean;
