@@ -572,7 +572,8 @@ begin
       focBinary:
         if fOwner.fServerConnected = nil then
           ERelayProtocol.RaiseUtf8(
-            '%.ProcessIncomingFrame: No server to relay to', [self]);
+           '%.ProcessIncomingFrame(%): No server to relay to',
+            [self, ToText(Frame.opcode)^]);
       focConnectionClose:
         if fOwner.fServerConnected = nil then
           exit;
