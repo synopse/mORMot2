@@ -6217,15 +6217,14 @@ var
   i: PtrInt;
 begin
   info := aTypeInfo^.BaseType; // works for rkEnumeration and rkSet
-  if info <> nil then
+  if info = nil then
+    exit;
+  p := info^.NameList;
+  for i := info^.MinValue to info^.MaxValue do
   begin
-    p := info^.NameList;
-    for i := info^.MinValue to info^.MaxValue do
-    begin
-      aDest^ := p;
-      p := @PByteArray(p)^[ord(p^[0]) + 1];
-      inc(aDest);
-    end;
+    aDest^ := p;
+    p := @PByteArray(p)^[ord(p^[0]) + 1];
+    inc(aDest);
   end;
 end;
 
@@ -6237,15 +6236,14 @@ var
   i: PtrInt;
 begin
   info := aTypeInfo^.BaseType; // works for rkEnumeration and rkSet
-  if info <> nil then
+  if info = nil then
+    exit;
+  p := info^.NameList;
+  for i := info^.MinValue to info^.MaxValue do
   begin
-    p := info^.NameList;
-    for i := info^.MinValue to info^.MaxValue do
-    begin
-      ShortTrim(p, aDest^, aKind);
-      p := @PByteArray(p)^[ord(p^[0]) + 1];
-      inc(aDest);
-    end;
+    ShortTrim(p, aDest^, aKind);
+    p := @PByteArray(p)^[ord(p^[0]) + 1];
+    inc(aDest);
   end;
 end;
 
