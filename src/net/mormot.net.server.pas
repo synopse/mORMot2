@@ -2048,11 +2048,11 @@ function HttpRequestHash(aAlgo: THashAlgo; const aUri: TUri;
   aHeaders: PUtf8Char; out aDigest: THashDigest): integer;
 
 /// hash an URL and the "Etag:" or "Last-Modified:" headers into 32 ascii chars
-// - you could set any custom aDiglen in 5/10/15/20/25/30 set
 // - aHeaders could be supplied as nil so that only the URI resource is hashed
 // - using SHA-256 and lowercase Base-32 encoding, so perfect for a file name
-function HttpRequestHashBase32(const aUri: TUri; aHeaders: PUtf8Char = nil;
-  aDiglen: integer = 20; aDig: PHashDigest = nil): RawUtf8;
+// - with Base-32, 32 chars means 160-bit or 20 bytes into aDig^ binary hash
+function HttpRequestHashBase32(const aUri: TUri; var aName: RawUtf8;
+  aHeaders: PUtf8Char = nil; aDig: PHash160 = nil): boolean;
 
 
 {$ifdef USEWININET}
@@ -7812,19 +7812,17 @@ begin
   result := hasher.Final(aDigest.Bin);
 end;
 
-function HttpRequestHashBase32(const aUri: TUri; aHeaders: PUtf8Char;
-  aDiglen: integer; aDig: PHashDigest): RawUtf8;
+function HttpRequestHashBase32(const aUri: TUri; var aName: RawUtf8;
+  aHeaders: PUtf8Char; aDig: PHash160): boolean;
 var
   dig: THashDigest;
-begin
-  result := '';
-  if (aDigLen = 0) or // e.g. default aDigLen=20 bytes=160-bit as 32 chars
-     (aDigLen mod 5 <> 0) or
-     (HttpRequestHash(hfSHA256, aUri, aHeaders, dig) < aDiglen) then
-    exit;
-  result := BinToBase32(@dig.Bin, aDiglen, {lower=}true);
+begin // SizeOf(aDig^)=20 bytes=160-bit as 32 chars of case-insensitive base-32
+  result := HttpRequestHash(hfSHA256, aUri, aHeaders, dig) = SizeOf(THash256);
+  if not result then
+    FillZero(dig.Bin.b160);
   if aDig <> nil then
-    MoveFast(dig, aDig^, SizeOf(TSha256Digest) + 1);
+    MoveFast(dig.Bin, aDig^, SizeOf(aDig^));
+  BinToBase32(@dig.Bin, FastSetString(aName, 32), SizeOf(aDig^), @b32encLower);
 end;
 
 {$ifdef USEWININET}
