@@ -1159,7 +1159,7 @@ function GetTlsContext(TlsEnabled, IgnoreTlsCertError: boolean;
   var Context: TNetTlsContext; Forced: PNetTlsContext = nil): PNetTlsContext;
 
 /// compare the main fields of twoTNetTlsContext instances
-// - won't compare the callbacks
+// - won't compare the callbacks, just the certificates/privatekey/hostcsv fields
 function SameNetTlsContext(const tls1, tls2: TNetTlsContext): boolean;
 
 var
@@ -1983,6 +1983,7 @@ type
     fOpenUriFull: RawUtf8; // set by OpenUri()
     fBytesIn: Int64;
     fBytesOut: Int64;
+    fRetryCount: cardinal;
     procedure DoRaise(const msg: string; const args: array of const;
       error: TNetResult = nrOK; errnumber: PNetErrorInt = nil;
       exc: ENetSockClass = nil); overload;
@@ -2333,6 +2334,10 @@ type
     /// total bytes sent
     property BytesOut: Int64
       read fBytesOut write fBytesOut;
+    /// counter incremented on nrRetry within TrySockRecv/TrySndLow methods
+    // - may be used to control the data flow at application level
+    property RetryCount: cardinal
+      read fRetryCount write fRetryCount;
   end;
   {$M-}
 
@@ -7338,6 +7343,7 @@ begin
           end;
         nrRetry:
           begin
+            inc(fRetryCount);
             res := nrOk; // make RecvPending + WaitFor below and retry Recv
             read := 0;
           end;
@@ -7455,6 +7461,7 @@ begin
       if GetAborted or
          not (res in [nrOk, nrRetry]) then
         break;
+      inc(fRetryCount);
       events := fSock.WaitFor(TimeOut, [neWrite, neError]); // select() or poll()
       res := nrUnknownError;
       if neError in events then
