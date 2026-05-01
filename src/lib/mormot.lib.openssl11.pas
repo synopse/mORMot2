@@ -774,6 +774,17 @@ const
   SSL_TLSEXT_ERR_ALERT_FATAL = 2;
   SSL_TLSEXT_ERR_NOACK = 3;
 
+  SSL_MODE_ENABLE_PARTIAL_WRITE = $00000001;
+  SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER = $00000002;
+  SSL_MODE_AUTO_RETRY = $00000004;
+  SSL_MODE_NO_AUTO_CHAIN = $00000008;
+  SSL_MODE_RELEASE_BUFFERS = $00000010;
+  SSL_MODE_SEND_CLIENTHELLO_TIME = $00000020;
+  SSL_MODE_SEND_SERVERHELLO_TIME = $00000040;
+  SSL_MODE_SEND_FALLBACK_SCSV = $00000080;
+  SSL_MODE_ASYNC = $00000100;
+  SSL_MODE_DTLS_SCTP_LABEL_LENGTH_BUG = $00000400;
+
   X509_FILETYPE_PEM = 1;
   X509_FILETYPE_ASN1 = 2;
   X509_FILETYPE_DEFAULT = 3;
@@ -2618,8 +2629,12 @@ function SSL_CTX_set_tlsext_servername_callback(ctx: PSSL_CTX; cb: SSL_SNI_serve
   {$ifdef HASINLINE} inline; {$endif}
 function SSL_CTX_set_tlsext_servername_arg(ctx: PSSL_CTX; arg: pointer): integer;
   {$ifdef HASINLINE} inline; {$endif}
+function SSL_CTX_set_mode(ctx: PSSL_CTX; mode: integer): integer;
+  {$ifdef HASINLINE} inline; {$endif}
 function SSL_set_mode(s: PSSL; version: integer): integer;
+  {$ifdef HASINLINE} inline; {$endif}
 function SSL_get_mode(s: PSSL): integer;
+  {$ifdef HASINLINE} inline; {$endif}
 
 function EVP_MD_CTX_size(ctx: PEVP_MD_CTX): integer;
 function BN_num_bytes(bn: PBIGNUM): integer;
@@ -10455,6 +10470,11 @@ end;
 function SSL_CTX_set_tlsext_servername_arg(ctx: PSSL_CTX; arg: pointer): integer;
 begin
   result := SSL_CTX_ctrl(ctx, SSL_CTRL_SET_TLSEXT_SERVERNAME_ARG, 0, arg);
+end;
+
+function SSL_CTX_set_mode(ctx: PSSL_CTX; mode: integer): integer;
+begin
+  result := SSL_CTX_ctrl(ctx, SSL_CTRL_MODE, mode, nil);
 end;
 
 function SSL_set_mode(s: PSSL; version: integer): integer;
