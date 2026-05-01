@@ -11001,7 +11001,7 @@ begin
 end;
 
 const
-  // list taken on 2021-02-19 from https://ssl-config.mozilla.org/
+  // list taken on 2026-05-01 from https://ssl-config.mozilla.org/
   SAFE_CIPHERLIST: array[ {hwaes=} boolean ] of PUtf8Char = (
     // without AES acceleration: prefer CHACHA20-POLY1305
     'ECDHE-ECDSA-CHACHA20-POLY1305:' +
@@ -11009,18 +11009,14 @@ const
     'ECDHE-ECDSA-AES128-GCM-SHA256:' +
     'ECDHE-RSA-AES128-GCM-SHA256:' +
     'ECDHE-ECDSA-AES256-GCM-SHA384:' +
-    'ECDHE-RSA-AES256-GCM-SHA384:' +
-    'DHE-RSA-AES128-GCM-SHA256:' +
-    'DHE-RSA-AES256-GCM-SHA384',
+    'ECDHE-RSA-AES256-GCM-SHA384',
     // with AES acceleration
     'ECDHE-ECDSA-AES128-GCM-SHA256:' +
     'ECDHE-RSA-AES128-GCM-SHA256:' +
     'ECDHE-ECDSA-AES256-GCM-SHA384:' +
     'ECDHE-RSA-AES256-GCM-SHA384:' +
     'ECDHE-ECDSA-CHACHA20-POLY1305:' +
-    'ECDHE-RSA-CHACHA20-POLY1305:' +
-    'DHE-RSA-AES128-GCM-SHA256:' +
-    'DHE-RSA-AES256-GCM-SHA384');
+    'ECDHE-RSA-CHACHA20-POLY1305');
 
 // see https://www.ibm.com/support/knowledgecenter/SSB23S_1.1.0.2020/gtps7/s5sple2.html
 
