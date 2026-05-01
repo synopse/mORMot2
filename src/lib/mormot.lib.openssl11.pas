@@ -11276,8 +11276,10 @@ begin
   // issue a fresh SSL_write for the remainder (no retry-same-buffer constraint)
   // SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER ($02): allow retry with different
   // buffer pointer after WANT_WRITE (mORMot copies pending data to fWr)
-  SSL_CTX_set_mode(fCtx, SSL_MODE_ENABLE_PARTIAL_WRITE or
-                         SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
+  mode := SSL_MODE_ENABLE_PARTIAL_WRITE or SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER;
+  if Context.ReleaseBuffers then
+    mode := mode or SSL_MODE_RELEASE_BUFFERS; // save 34KB per idle TLS instance
+  SSL_CTX_set_mode(fCtx, mode);
 end;
 
 function AfterAcceptSNI(s: PSSL; ad: PInteger; arg: pointer): integer; cdecl;

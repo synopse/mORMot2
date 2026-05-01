@@ -981,6 +981,12 @@ type
     // - clients that are willing to connect to servers that don't implement RFC
     // 5746 secure renegotiation are subject to attacks such as CVE-2009-3555
     ClientAllowUnsafeRenegotation: boolean;
+    /// input: the server will release its read/write buffers on idle connection
+    // - may be useful with high number of concurrent connections to save around
+    // 34KB per idle TLS connection
+    // - on OpenSSL client or server, set the SSL_MODE_RELEASE_BUFFERS option
+    // - not used on SChannel
+    ReleaseBuffers: boolean;
     /// input: PEM/PFX file name containing a certificate to be loaded
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
     // - on OpenSSL client or server, calls SSL_CTX_use_certificate_file() API
