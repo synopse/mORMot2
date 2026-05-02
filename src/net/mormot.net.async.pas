@@ -6360,7 +6360,7 @@ begin
   req.remote := req.proxy.fRemoteUri;
   Append(req.remote.Address, Uri.Path.Text, Uri.Path.Len);
   // check the local file (named from hashed URI)
-  if not HttpRequestHashBase32(req.remote, req.b32hash, @req.binhash) then
+  if not HttpRequestHashBase32(req.remote, @req.b32hash, @req.binhash) then
     exit; // paranoid
   if hpoClientCacheSubFolder in req.proxy.Settings.Options then
     req.filename := MakePath([ // hash partitioning into subfolders

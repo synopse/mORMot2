@@ -981,9 +981,9 @@ type
     // - clients that are willing to connect to servers that don't implement RFC
     // 5746 secure renegotiation are subject to attacks such as CVE-2009-3555
     ClientAllowUnsafeRenegotation: boolean;
-    /// input: the server will release its read/write buffers on idle connection
+    /// input: release internal read/write TLS buffers on idle connection
     // - may be useful with high number of concurrent connections to save around
-    // 34KB per idle TLS connection
+    // 34KB per idle TLS connection - false (disabled) by default
     // - on OpenSSL client or server, set the SSL_MODE_RELEASE_BUFFERS option
     // - not used on SChannel
     ReleaseBuffers: boolean;

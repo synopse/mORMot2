@@ -2051,7 +2051,7 @@ function HttpRequestHash(aAlgo: THashAlgo; const aUri: TUri;
 // - aHeaders could be supplied as nil so that only the URI resource is hashed
 // - using SHA-256 and lowercase Base-32 encoding, so perfect for a file name
 // - with Base-32, 32 chars means 160-bit or 20 bytes into aDig^ binary hash
-function HttpRequestHashBase32(const aUri: TUri; var aName: RawUtf8;
+function HttpRequestHashBase32(const aUri: TUri; aName: PRawUtf8 = nil;
   aHeaders: PUtf8Char = nil; aDig: PHash160 = nil): boolean;
 
 
@@ -7809,10 +7809,10 @@ begin
     end;
     hasher.Update(h, hl);
   end;
-  result := hasher.Final(aDigest.Bin);
+  result := hasher.Final(aDigest.Bin, {noinit=}true);
 end;
 
-function HttpRequestHashBase32(const aUri: TUri; var aName: RawUtf8;
+function HttpRequestHashBase32(const aUri: TUri; aName: PRawUtf8;
   aHeaders: PUtf8Char; aDig: PHash160): boolean;
 var
   dig: THashDigest;
@@ -7822,7 +7822,8 @@ begin // SizeOf(aDig^)=20 bytes=160-bit as 32 chars of case-insensitive base-32
     FillZero(dig.Bin.b160);
   if aDig <> nil then
     MoveFast(dig.Bin, aDig^, SizeOf(aDig^));
-  BinToBase32(@dig.Bin, FastSetString(aName, 32), SizeOf(aDig^), @b32encLower);
+  if aName <> nil then
+    BinToBase32(@dig.Bin, FastSetString(aName^, 32), SizeOf(aDig^), @b32encLower);
 end;
 
 {$ifdef USEWININET}

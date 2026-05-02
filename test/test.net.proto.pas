@@ -4136,11 +4136,11 @@ begin
   Check(dig.Algo = hfSHA256);
   CheckEqual(Sha256DigestToString(dig.Bin.Lo),
     '9b23e3b9894578f2709eca35aa9afad277ab5aa4afe9344192f59535719ac734');
-  Check(HttpRequestHashBase32(U, s, 'Content-Length: 100'#13#10'Last-Modified: 2025'));
+  Check(HttpRequestHashBase32(U, @s, 'Content-Length: 100'#13#10'Last-Modified: 2025'));
   CheckEqual(s, 'tmr6homjiv4pe4e6zi22vgx22j32wwve');
-  Check(HttpRequestHashBase32(U, s, 'Content-Length: 101'#13#10'Last-Modified: 2025'));
+  Check(HttpRequestHashBase32(U, @s, 'Content-Length: 101'#13#10'Last-Modified: 2025'));
   CheckEqual(s, '5umuom5hoh7sohesrs3fqse4rweeum7d');
-  Check(HttpRequestHashBase32(U, s, nil));
+  Check(HttpRequestHashBase32(U, @s, nil));
   CheckEqual(s, 'bq4n2dkrduzo2v3arzy2lafegac3wmbw');
 end;
 
