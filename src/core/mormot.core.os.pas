@@ -367,6 +367,7 @@ type
 
   /// the known operating systems
   // - it will also recognize most Linux distributions
+  // - stored as integer in TOperatingSystemVersion: do not change the order
   TOperatingSystem = (
     osUnknown,
     osWindows,
@@ -404,7 +405,9 @@ type
     osAlpine,
     osAndroid,
     osApt,
-    osRpm);
+    osRpm,
+    osAlma,
+    osRocky);
   TOperatingSystems = set of TOperatingSystem;
 
   /// the recognized Windows versions
@@ -570,7 +573,9 @@ const
     'Alpine',       // osAlpine
     'Android',      // osAndroid
     'Debian-based', // osApt - any Debian-based flavor
-    'Rpm-based');   // osRpm - any RedHat-based flavor
+    'Rpm-based',    // osRpm - any RedHat-based flavor
+    'Alma',         // osAlma
+    'Rocky');       // osRocky
 
   /// translate one operating system (and distribution) into a single character
   // - may be used internally e.g. for a HTTP User-Agent header, as with
@@ -612,19 +617,22 @@ const
     'p', // Alpine
     'J', // Android (J=JVM)
     '1', // Apt-based
-    '2'  // Rpm-based
+    '2', // Rpm-based
+    'h', // Alma (rHel fork)
+    'k'  // Rocky
     );
 
   /// the operating systems items which actually have a Linux kernel
-  OS_LINUX = [osLinux, osArch .. osSlackware, osSuse, osTrustix .. osRpm];
+  OS_LINUX = [osLinux, osArch .. osSlackware, osSuse, osTrustix .. osRocky];
 
   /// used to recognize the package management system used by a Linux OS
   LINUX_DIST: array[TLinuxDistribution] of TOperatingSystems = (
     [osUnknown, osWindows, osOSX, osBSD, osPOSIX, osSolaris, osSynology],  // ldNotLinux
     [osLinux, osSlackware, osClear, osLFS, osXen, osAlpine],               // ldUndefined
     [osDebian, osKnoppix, osMint, osUbuntu, osApt],                        // ldApt
-    [osAurox, osFedora, osMandrake, osMandriva, osNovell, osSuse, osTrustix, // ldRpm
-     osUnited, osRedHat, osOracle, osMageia, osCentOS, osCloud, osAmazon, osRpm],
+    [osAurox, osFedora, osMandrake, osMandriva, osNovell, osSuse, osTrustix,
+     osUnited, osRedHat, osOracle, osMageia, osCentOS, osCloud, osAmazon,  // ldRpm
+     osRpm, osAlma, osRocky],
     [osArch],                                                              // ldPacman
     [osGentoo, osCoreOs],                                                  // ldPortage
     [osAndroid]);                                                          // ldAndroid
