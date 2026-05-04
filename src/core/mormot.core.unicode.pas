@@ -9793,7 +9793,7 @@ function IdemPropNameUSmallNotVoid(P1, P2, P1P2Len: PtrInt): boolean;
 begin
   inc(P1P2Len, P1);
   dec(P2, P1);
-  repeat
+  repeat // efficient branchless case-insensitive ASCII identifier comparison
     result := (PByte(P1)^ xor ord(PAnsiChar(P1)[P2])) and $df = 0;
     if not result then
       exit;

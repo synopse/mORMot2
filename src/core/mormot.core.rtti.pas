@@ -2170,6 +2170,13 @@ const
   /// '"' + UTF-8 encoded \uFFF0 special code to mark Base64 binary as JSON string
   JSON_BASE64_MAGIC_QUOTE_C = ord('"') + cardinal(JSON_BASE64_MAGIC_C) shl 8;
 
+  // some other constants used for fast pattern recognition
+  _ID16     = ord('I') + ord('D') shl 8;
+  _ROW24    = ord('R') + ord('O') shl 8 + ord('W') shl 16;
+  _ROWI32   = _ROW24 + ord('I') shl 24;
+  SQUOT_16  = ord('''') + ord('''') shl 8;
+  DOLLAR_16 = ord('$') + ord('$') shl 8;
+
   /// simple lookup to the TRttiParserType of a complex type
   PTC_PT: array[TRttiParserComplexType] of TRttiParserType = (
     ptNone,      // pctNone
@@ -4410,7 +4417,7 @@ begin
   else
     result := CP_UTF8; // default is UTF-8
   {$else}
-  if @self = TypeInfo(RawUtf8) then
+  if @self = TypeInfo(RawUtf8) then // = TypeInfo(Utf8String)
     result := CP_UTF8 // most common case
   else if @self = TypeInfo(WinAnsiString) then
     result := CP_WINANSI
@@ -7787,17 +7794,17 @@ begin
     end;
   // array/record keywords, integer/cardinal FPC types, T*ID pattern
   result := KnownTypeName(@Info^.RawName[1], ord(Info^.RawName[0]));
-  if (result = ptNone) and
-     (Complex <> nil) and
-     (Info^.Kind = rkInt64) and
-     (Info^.RawName[1] = 'T') and // T...ID pattern in name?
-     (PCardinal(@Info^.RawName[ord(Info^.RawName[0]) - 1])^ and $dfdf = ord('I') + ord('D') shl 8) then
-  begin
-    result := ptOrm;
-    Complex^ := pctSpecificClassID;
-  end;
   if result <> ptNone then
     exit; // found by name
+  if (Complex <> nil) and
+     (Info^.Kind = rkInt64) and
+     (Info^.RawName[1] = 'T') and
+     (PCardinal(@Info^.RawName[ord(Info^.RawName[0]) - 1])^ and $dfdf = _ID16) then
+  begin
+    result := ptOrm;
+    Complex^ := pctSpecificClassID; // T...ID pattern in name
+    exit;
+  end;
   // fallback to the closed known type, using RTTI
   case Info^.Kind of
   {$ifdef FPC}
@@ -11276,7 +11283,7 @@ begin
   PT_INFO[ptQWord]               := TypeInfo(QWord);
   PT_INFO[ptRawByteString]       := TypeInfo(RawByteString);
   PT_INFO[ptRawJson]             := TypeInfo(RawJson);
-  PT_INFO[ptRawUtf8]             := TypeInfo(RawUtf8);
+  PT_INFO[ptRawUtf8]             := TypeInfo(RawUtf8); // = TypeInfo(Utf8String)
   PT_INFO[ptSingle]              := TypeInfo(Single);
   PT_INFO[ptString]              := TypeInfo(String);
   PT_INFO[ptSynUnicode]          := TypeInfo(SynUnicode);

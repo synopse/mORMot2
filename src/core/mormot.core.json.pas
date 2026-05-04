@@ -110,13 +110,6 @@ const
   /// used internally to encode '\u00xx' JSON_ESCAPE_UNICODEHEX pattern
   JSON_UHEXC = JSON_UHEX + ord('0') shl 16 + ord('0') shl 24;
 
-  // some other constants used for fast pattern recognition
-  _ID16     = ord('I') + ord('D') shl 8;
-  _ROW24    = ord('R') + ord('O') shl 8 + ord('W') shl 16;
-  _ROWI32   = _ROW24 + ord('I') shl 24;
-  SQUOT_16  = ord('''') + ord('''') shl 8;
-  DOLLAR_16 = ord('$') + ord('$') shl 8;
-
 var
   /// 256-byte lookup table for fast branchless initial character JSON parsing
   JSON_TOKENS: TJsonTokens;

@@ -389,12 +389,12 @@ function TRttiInfo.Name: PShortString;
 begin
   result := pointer(@self);
   if result <> nil then
-    if result <> TypeInfo(RawUtf8) then
-      result := @RawName   // as stored in RTTI
+    if result <> TypeInfo(RawUtf8) then // = TypeInfo(Utf8String)
+      result := @RawName                // as stored in RTTI
     else
-      result := @UTF8_NAME // instead of 'UTF8String'
+      result := @UTF8_NAME              // instead of 'UTF8String'
   else
-    result := @NULCHAR;    // instead of a GPF
+    result := @NULCHAR;                 // instead of a GPF
 end;
 
 function TRttiInfo.RecordSize: PtrInt;

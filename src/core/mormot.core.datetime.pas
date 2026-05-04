@@ -2125,7 +2125,7 @@ const
 function ParseTimeZone(var P: PUtf8Char; var Zone: integer): boolean;
 var
   z, sign: integer;
-  i: PtrInt;
+  i, l: PtrInt;
   s: PUtf8Char;
 begin
   result := false;
@@ -2182,18 +2182,16 @@ begin
     // TODO: enhance TSynTimeZone from mormot.core.search to parse timezones?
     while (s^ in ['a'..'z', 'A'..'Z']) do
       inc(s);
-    z := s - P;
-    if (z >= 1) and
-       (z <= 4) then
-    begin
-      i := FindShortStringListNoTrim(@_TZs[0], high(_TZv), P, z);
-      if i >= 0 then
-      begin
-        Zone := integer(_TZv[i]) * 60;
-        P := GotoNextNotSpace(s);
-        result := true
-      end;
-    end;
+    l := s - P;
+    if (l < 1) or
+       (l > 4) then
+      exit;
+    i := FindShortStringListNoTrim(@_TZs[0], high(_TZv), P, l);
+    if i < 0 then
+      exit;
+    Zone := integer(_TZv[i]) * 60;
+    P := GotoNextNotSpace(s);
+    result := true
   end;
 end;
 
