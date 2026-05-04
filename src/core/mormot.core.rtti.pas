@@ -2232,64 +2232,6 @@ const
     SizeOf(pointer),  //  ptPUtf8Char
     0 );              //  ptCustom
 
-  /// type definition name lookup to the TRttiParserType values
-  // - ptComplexTypes types should see PTC_NAME[] constant
-  PT_NAME: array[TRttiParserType] of RawUtf8 = (
-    '',               //  ptNone
-    '',               //  ptArray
-    'boolean',        //  ptBoolean
-    'byte',           //  ptByte
-    'cardinal',       //  ptCardinal
-    'currency',       //  ptCurrency
-    'double',         //  ptDouble
-    'extended',       //  ptExtended
-    'Int64',          //  ptInt64
-    'integer',        //  ptInteger
-    'QWord',          //  ptQWord
-    'RawByteString',  //  ptRawByteString
-    'RawJson',        //  ptRawJson
-    'RawUtf8',        //  ptRawUtf8
-    '',               //  ptRecord
-    'single',         //  ptSingle
-    'string',         //  ptString
-    'SynUnicode',     //  ptSynUnicode
-    'TDateTime',      //  ptDateTime
-    'TDateTimeMS',    //  ptDateTimeMS
-    'TGuid',          //  ptGuid
-    'THash128',       //  ptHash128
-    'THash256',       //  ptHash256
-    'THash512',       //  ptHash512
-    '',               //  ptOrm
-    '',               //  ptTimeLog
-    'UnicodeString',  //  ptUnicodeString
-    'TUnixTime',      //  ptUnixTime
-    'TUnixMSTime',    //  ptUnixMSTime
-    'variant',        //  ptVariant
-    'WideString',     //  ptWideString
-    'WinAnsi',        //  ptWinAnsi
-    'word',           //  ptWord
-    '',               //  ptEnumeration
-    '',               //  ptSet
-    '',               //  ptClass
-    '',               //  ptDynArray
-    '',               //  ptInterface
-    'PUtf8Char',      //  ptPUtf8Char
-    '');              //  ptCustom
-
-  /// type definition name lookup to the TRttiParserComplexType values
-  // - for ptComplexTypes types, with PT_NAME[]=''
-  // - ptcSpecificClassID returns '' since T....ID types are variable
-  PTC_NAME: array[TRttiParserComplexType] of RawUtf8 = (
-    '',                            // pctNone
-    'TTimeLog',                    // pctTimeLog
-    'TCreateTime',                 // pctCreateTime
-    'TModTime',                    // pctModTime
-    'TID',                         // pctID
-    '',                            // pctSpecificClassID
-    'TRecordReference',            // pctRecordReference
-    'TRecordReferenceToBeDeleted', // pctRecordReferenceToBeDeleted
-    'TRecordVersion');             // pctRecordVersion
-
 /// retrieve the text name of one TRttiParserType enumerate
 function ToText(t: TRttiParserType): PShortString; overload;
 
@@ -9314,7 +9256,7 @@ begin
   if fCache.Info <> nil then
     case aParser of
       ptGuid:
-        fName := PT_NAME[aParser]; // normalize for Delphi
+        fName := 'TGuid'; // normalize for Delphi
     else
       ShortStringToAnsi7String(fCache.Info.Name^, fName);
     end;
