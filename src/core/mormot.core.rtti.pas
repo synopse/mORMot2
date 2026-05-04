@@ -10393,31 +10393,29 @@ begin
   end;
 end;
 
+procedure AddPair(var List: TPointerDynArray; Instance: TRttiCustom; Info: PRttiInfo);
+var
+  n: PtrInt;
+begin
+  n := length(List);
+  SetLength(List, n + 2);
+  List[n] := Info;
+  List[n + 1] := Instance;
+end;
 
 procedure TRttiCustomList.AddToPairs(Instance: TRttiCustom; Info: PRttiInfo);
-
-  procedure AddPair(var List: TPointerDynArray);
-  var
-    n: PtrInt;
-  begin
-    n := length(List);
-    SetLength(List, n + 2);
-    List[n] := Info;
-    List[n + 1] := Instance;
-  end;
-
 var
   k: PRttiCustomListPairs;
 begin
   k := @fHashTable[RK_TOSLOT[Info^.Kind]];
   k^.Safe.WriteLock; // needed when resizing k^.HashInfo/HashName[]
   try
-    AddPair(k^.HashInfo[xxHash32Mixup(PtrUInt(Info)) and RTTIHASH_MAX]);
+    AddPair(k^.HashInfo[xxHash32Mixup(PtrUInt(Info)) and RTTIHASH_MAX], Instance, Info);
     {$ifdef FPC} // FPC extended RTTI generates no name for nested plain records
     if Info.RawName[0] <> #0 then
     {$endif FPC}
     if PosExChar('$', Instance.Name) = 0 then // e.g. 'TArray$1$crcA5831B1D'
-      AddPair(k^.HashName[RttiHashName(@Info.RawName[1], ord(Info.RawName[0]))]);
+      AddPair(k^.HashName[RttiHashName(@Info.RawName[1], ord(Info.RawName[0]))], Instance, Info);
     ObjArrayAddCount(fInstances, Instance, Count); // to release memory
     inc(Counts[Info^.Kind]); // Instance.Kind is not available from DoRegister
   finally
