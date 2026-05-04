@@ -2459,18 +2459,17 @@ procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: ShortString
   trimlowercase: boolean);
 
 /// fast search of an exact case-insensitive match of a RTTI's PShortString array
-function FindShortStringListExact(List: PShortString; MaxValue: integer;
-  aValue: PUtf8Char; aValueLen: PtrInt): integer;
+function FindShortStringListExact(List: PShortString; MaxValue: PtrInt;
+  aValue: PUtf8Char; aValueLen: PtrInt): PtrInt;
 
 /// fast case-insensitive search of a left-trimmed lowercase match
 // of a RTTI's PShortString array
-function FindShortStringListTrimLowerCase(List: PShortString; MaxValue: integer;
-  aValue: PUtf8Char; aValueLen: PtrInt): integer;
+function FindShortStringListTrimLowerCase(List: PShortString; MaxValue: PtrInt;
+  aValue: PUtf8Char; aValueLen: PtrInt): PtrInt;
 
-/// fast case-sensitive search of a left-trimmed lowercase match
-// of a RTTI's PShortString array
-function FindShortStringListTrimLowerCaseExact(List: PShortString; MaxValue: integer;
-  aValue: PUtf8Char; aValueLen: PtrInt): integer;
+/// fast case-sensitive search of a left-trimmed lowercase match of a RTTI's PShortString array
+function FindShortStringListTrimLowerCaseExact(List: PShortString;
+  MaxValue: PtrInt; aValue: PUtf8Char; aValueLen: PtrInt): PtrInt;
 
 /// convert a 'CamelCase' string into a space-separated 'Camel case' human text
 function UnCamelCase(const S: RawUtf8): RawUtf8; overload;
@@ -9802,30 +9801,36 @@ begin
   until P1 >= P1P2Len;
 end;
 
-function FindShortStringListExact(List: PShortString; MaxValue: integer;
-  aValue: PUtf8Char; aValueLen: PtrInt): integer;
+function FindShortStringListExact(List: PShortString; MaxValue: PtrInt;
+  aValue: PUtf8Char; aValueLen: PtrInt): PtrInt;
 var
   len: PtrInt;
 begin
   if aValueLen <> 0 then
-    for result := 0 to MaxValue do
+  begin
+    result := 0;
+    while result <= MaxValue do
     begin
       len := PByte(List)^;
       if (len = aValueLen) and
          IdemPropNameUSmallNotVoid(PtrInt(@List^[1]), PtrInt(aValue), len) then
         exit;
       List := pointer(@PAnsiChar(len)[PtrUInt(List) + 1]); // next
+      inc(result);
     end;
+  end;
   result := -1;
 end;
 
-function FindShortStringListTrimLowerCase(List: PShortString; MaxValue: integer;
-  aValue: PUtf8Char; aValueLen: PtrInt): integer;
+function FindShortStringListTrimLowerCase(List: PShortString; MaxValue: PtrInt;
+  aValue: PUtf8Char; aValueLen: PtrInt): PtrInt;
 var
   len: PtrInt;
 begin
   if aValueLen <> 0 then
-    for result := 0 to MaxValue do
+  begin
+    result := 0;
+    while result <= MaxValue do
     begin
       len := ord(List^[0]);
       inc(PUtf8Char(List));
@@ -9839,17 +9844,21 @@ begin
          IdemPropNameUSmallNotVoid(PtrInt(aValue), PtrInt(List), len) then
         exit;
       inc(PUtf8Char(List), len); // next
+      inc(result);
     end;
+  end;
   result := -1;
 end;
 
 function FindShortStringListTrimLowerCaseExact(List: PShortString;
-  MaxValue: integer; aValue: PUtf8Char; aValueLen: PtrInt): integer;
+  MaxValue: PtrInt; aValue: PUtf8Char; aValueLen: PtrInt): PtrInt;
 var
   len: PtrInt;
 begin
   if aValueLen <> 0 then
-    for result := 0 to MaxValue do
+  begin
+    result := 0;
+    while result <= MaxValue do
     begin
       len := ord(List^[0]);
       inc(PUtf8Char(List));
@@ -9863,7 +9872,9 @@ begin
          CompareMemSmall(aValue, List, len) then
         exit;
       inc(PUtf8Char(List), len);
+      inc(result);
     end;
+  end;
   result := -1;
 end;
 
