@@ -11682,16 +11682,6 @@ const
    2, 32, 30, 0, 3, 0, 3, 3, 3, 3, 131, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
    3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 28, 0, 0);
 
-type // local type definitions for their own RTTI to be found by name
-  RawUtf8 = type Utf8String;
-  {$ifdef CPU64}
-  PtrInt  = type Int64;
-  PtrUInt = type QWord;
-  {$else}
-  PtrInt  = type integer;
-  PtrUInt = type cardinal;
-  {$endif CPU64}
-
 procedure InitializeUnit;
 var
   c: AnsiChar;
@@ -11758,8 +11748,7 @@ begin
   CLASS_RTTI[vcSynList]       := TSynList;
   CLASS_RTTI[vcSynObjectList] := TSynObjectList;
   CLASS_RTTI[vcRawUtf8List]   := TRawUtf8List;
-  Rtti.RegisterTypes([TypeInfo(RawUtf8), TypeInfo(PtrInt), TypeInfo(PtrUInt),
-    TypeInfo(TRawUtf8DynArray), TypeInfo(TIntegerDynArray)]);
+  Rtti.RegisterTypes([TypeInfo(TRawUtf8DynArray), TypeInfo(TIntegerDynArray)]);
   // prepare some JSON wrappers
   GetDataFromJson := _GetDataFromJson;
   InitializeVariantsJson; // from mormot.core.variants
