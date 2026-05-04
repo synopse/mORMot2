@@ -2459,7 +2459,7 @@ procedure AppendShortComma(text: PAnsiChar; len: PtrInt; var result: ShortString
   trimlowercase: boolean);
 
 /// fast search of an exact case-insensitive match of a RTTI's PShortString array
-function FindShortStringListExact(List: PShortString; MaxValue: PtrInt;
+function FindShortStringListNoTrim(List: PShortString; MaxValue: PtrInt;
   aValue: PUtf8Char; aValueLen: PtrInt): PtrInt;
 
 /// fast case-insensitive search of a left-trimmed lowercase match
@@ -9801,7 +9801,7 @@ begin
   until P1 >= P1P2Len;
 end;
 
-function FindShortStringListExact(List: PShortString; MaxValue: PtrInt;
+function FindShortStringListNoTrim(List: PShortString; MaxValue: PtrInt;
   aValue: PUtf8Char; aValueLen: PtrInt): PtrInt;
 var
   len: PtrInt;

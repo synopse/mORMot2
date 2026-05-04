@@ -2186,7 +2186,7 @@ begin
     if (z >= 1) and
        (z <= 4) then
     begin
-      i := FindShortStringListExact(@_TZs[0], high(_TZv), P, z);
+      i := FindShortStringListNoTrim(@_TZs[0], high(_TZv), P, z);
       if i >= 0 then
       begin
         Zone := integer(_TZv[i]) * 60;
@@ -4433,7 +4433,7 @@ end;
 
 procedure InitializeUnit;
 begin
-  // as expected by ParseMonth() to call FindShortStringListExact()
+  // as expected by ParseMonth() to call FindShortStringListNoTrim()
   assert(PtrUInt(@HTML_MONTH_NAMES[3]) - PtrUInt(@HTML_MONTH_NAMES[1]) = 8);
   assert(SizeOf(GlobalTime) = 128);
   assert(TTextDateWriter.InstanceSize <= SizeOf(TLocalWriter) - 256);

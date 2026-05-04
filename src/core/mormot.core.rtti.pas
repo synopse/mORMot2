@@ -3836,7 +3836,7 @@ begin
     if ValueLen = 0 then
       exit;
   end;
-  result := FindShortStringListExact(NameList, MaxValue, Value, ValueLen);
+  result := FindShortStringListNoTrim(NameList, MaxValue, Value, ValueLen);
   if (result < 0) and
      AlsoTrimLowerCase then
     result := FindShortStringListTrimLowerCase(NameList, MaxValue, Value, ValueLen);
@@ -4025,7 +4025,7 @@ begin
       ValueLen := StrLen(Value);
     result := FindShortStringListTrimLowerCase(NameList, MaxValue, Value, ValueLen);
     if result < 0 then
-      result := FindShortStringListExact(NameList, MaxValue, Value, ValueLen);
+      result := FindShortStringListNoTrim(NameList, MaxValue, Value, ValueLen);
   end;
 end;
 
@@ -6453,7 +6453,7 @@ begin
   if MaxValue > 63 then
     MaxValue := 63; // no need to search more than the Result number of bits
   if Value^ in ['a'..'z'] then
-    i := FindShortStringListExact(SetNames, MaxValue, Value, ValueLen)
+    i := FindShortStringListNoTrim(SetNames, MaxValue, Value, ValueLen)
   else
     i := -1;
   if i < 0 then
@@ -7748,7 +7748,7 @@ const
 function KnownTypeName(Name: PUtf8Char; NameLen: PtrInt): TRttiParserType;
   {$ifdef HASINLINE}inline;{$endif}
 begin // weak/alias type definition have no TypeInfo() with their own name
-  result := _TypeParser[FindShortStringListExact(@_TypeNames[0],
+  result := _TypeParser[FindShortStringListNoTrim(@_TypeNames[0],
               pred(high(_TypeParser)), Name, NameLen) + 1];
 end;
 
@@ -9683,7 +9683,7 @@ begin
     if result >= 0 then
       exit;
   end;
-  result := FindShortStringListExact(Cache.EnumList, Cache.EnumMax, Value, ValueLen);
+  result := FindShortStringListNoTrim(Cache.EnumList, Cache.EnumMax, Value, ValueLen);
   if result < 0 then
     result := FindShortStringListTrimLowerCase(Cache.EnumList, Cache.EnumMax, Value, ValueLen);
 end;
