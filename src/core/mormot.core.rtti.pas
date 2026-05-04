@@ -7735,52 +7735,21 @@ begin
     result := PT_INFO[pt];
 end;
 
-// called from TRttiCustomList.RegisterTypeFromName and TRttiCustom.Create
-// if Rtti.Find(Name, NameLen) did not have any match
-// -> detect array/record keywords, integer/cardinal types, T*ID pattern
-function AlternateTypeNameToRttiParserType(Name: PUtf8Char; NameLen: integer;
-  Complex: PRttiParserComplexType = nil; Kind: TRttiKind = rkUnknown): TRttiParserType;
-begin
-  result := ptNone;
-  if Complex <> nil then
-    Complex^ := pctNone;
-  case NameLen of
-    5:
-      if IdemPropNameUSameLenNotNull(Name, 'array', 5) then
-        result := ptArray
-      else if IdemPropNameUSameLenNotNull(Name, 'TDate', 5) then
-        result := ptDateTime
-      else if IdemPropNameUSameLenNotNull(Name, 'TGuid', 5) then
-        result := ptGuid; // Delphi defines uppercase TGUID in System.pas
-    6:
-      {$ifdef FPC}
-      // TypeInfo(string)=TypeInfo(AnsiString) on FPC
-      if IdemPropNameUSameLenNotNull(Name, 'string', 6) then
-        result := ptString
-      else
-      {$endif FPC}
-      if IdemPropNameUSameLenNotNull(Name, 'record', 6) then
-        result := ptRecord;
-    // TypeInfo(integer/cardinal)=TypeInfo(LongInt/LongWord) on FPC
-    7:
-      if IdemPropNameUSameLenNotNull(Name,
-          {$ifdef FPC}'integer'{$else}'longint'{$endif}, 7) then
-        result := ptInteger;
-    8:
-      if IdemPropNameUSameLenNotNull(Name,
-           {$ifdef FPC}'cardinal'{$else}'longword'{$endif}, 8) then
-        result := ptCardinal;
-  end;
-  if (result = ptNone) and
-     (Complex <> nil) and
-     (Kind = rkInt64) and
-     (NameLen < 200) and
-     (Name[0] = 'T') and // T...ID pattern in name?
-     (PWord(@Name[NameLen - 2])^ and $dfdf = ord('I') + ord('D') shl 8) then
-  begin
-    result := ptOrm;
-    Complex^ := pctSpecificClassID;
-  end;
+const
+  _TypeNames: PAnsiChar = // fast brute force search in L1 cache
+    #7'RawUtf8'#5'array'#6'record'#5'TDate'#5'TGuid'#6'PtrInt'#7'PtrUInt' +
+    {$ifdef FPC} #6'string'#7'integer'#8'cardinal' {$else}
+                 #7'longint'#8'longword' {$endif} + #9'TFileName';
+  _TypeParser: array[0 .. 10 {$ifdef FPC} + 1 {$endif} ] of TRttiParserType = (
+    ptNone, ptRawUtf8, ptArray, ptRecord, ptDateTime, ptGuid,
+    {$ifdef CPU64} ptInt64, ptQWord, {$else} ptInteger, ptCardinal, {$endif}
+    {$ifdef FPC} ptString, {$endif} ptInteger, ptCardinal, ptString);
+
+function KnownTypeName(Name: PUtf8Char; NameLen: PtrInt): TRttiParserType;
+  {$ifdef HASINLINE}inline;{$endif}
+begin // weak/alias type definition have no TypeInfo() with their own name
+  result := _TypeParser[FindShortStringListExact(@_TypeNames[0],
+              pred(high(_TypeParser)), Name, NameLen) + 1];
 end;
 
 // called internally by TRttiCustom.Create - can't use Rtti.RegisterType()
@@ -7806,18 +7775,27 @@ begin
   end;
   for c := succ(low(c)) to high(c) do
     if PTC_INFO[c] = Info then // complex ORM types as set by mormot.orm.base
-      if PTC_PT[c] <> ptNone then
+    begin
+      result := PTC_PT[c];
+      if result <> ptNone then
       begin
-        result := PTC_PT[c];
         if Complex <> nil then
           Complex^ := c;
         exit;
-      end
-      else
-        break;
+      end;
+      break;
+    end;
   // array/record keywords, integer/cardinal FPC types, T*ID pattern
-  result := AlternateTypeNameToRttiParserType(
-    @Info^.RawName[1], ord(Info^.RawName[0]), Complex, Info^.Kind);
+  result := KnownTypeName(@Info^.RawName[1], ord(Info^.RawName[0]));
+  if (result = ptNone) and
+     (Complex <> nil) and
+     (Info^.Kind = rkInt64) and
+     (Info^.RawName[1] = 'T') and // T...ID pattern in name?
+     (PCardinal(@Info^.RawName[ord(Info^.RawName[0]) - 1])^ and $dfdf = ord('I') + ord('D') shl 8) then
+  begin
+    result := ptOrm;
+    Complex^ := pctSpecificClassID;
+  end;
   if result <> ptNone then
     exit; // found by name
   // fallback to the closed known type, using RTTI
@@ -10511,7 +10489,7 @@ begin
   if result = nil then
   begin
     // array/record keywords, integer/cardinal FPC types not available by Find()
-    pt := AlternateTypeNameToRttiParserType(Name, NameLen);
+    pt := KnownTypeName(Name, NameLen);
     if ParserType <> nil then
       ParserType^ := pt;
     result := PT_RTTI[pt];
