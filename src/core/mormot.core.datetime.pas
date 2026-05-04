@@ -2125,6 +2125,7 @@ const
 function ParseTimeZone(var P: PUtf8Char; var Zone: integer): boolean;
 var
   z, sign: integer;
+  i: PtrInt;
   s: PUtf8Char;
 begin
   result := false;
@@ -2185,10 +2186,10 @@ begin
     if (z >= 1) and
        (z <= 4) then
     begin
-      z := FindShortStringListExact(@_TZs[0], high(_TZv), P, z);
-      if z >= 0 then
+      i := FindShortStringListExact(@_TZs[0], high(_TZv), P, z);
+      if i >= 0 then
       begin
-        Zone := integer(_TZv[z]) * 60;
+        Zone := integer(_TZv[i]) * 60;
         P := GotoNextNotSpace(s);
         result := true
       end;
