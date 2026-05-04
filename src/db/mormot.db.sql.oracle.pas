@@ -1293,8 +1293,12 @@ begin
   status := OCI.StmtFetch(
     fStatement, fError, fRowCount, OCI_FETCH_NEXT, OCI_DEFAULT);
   case status of
-    OCI_SUCCESS:
-      fRowFetched := fRowCount; // all rows successfully retrieved
+    OCI_SUCCESS,
+    OCI_SUCCESS_WITH_INFO:
+      begin
+        fRowFetched := fRowCount; // all rows retrieved but got a warning
+        OCI.CheckSuccessInfo(self, Status, fError); // log message
+      end;
     OCI_NO_DATA:
       begin
         OCI.AttrGet(fStatement, OCI_HTYPE_STMT, @fRowFetched, nil,
@@ -1756,10 +1760,9 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
                     SetLength(fBoundCursor, fParamCount);
                     fBoundCursor[i] := PPointer(@VInt64)^; // available via BoundCursor()
                   end
-                  else
                   // on error, release bound statement resource
-                  if OCI.HandleFree(
-                       PPointer(@VInt64)^, OCI_HTYPE_STMT) <> OCI_SUCCESS then
+                  else if OCI.HandleFree(PPointer(@VInt64)^,
+                            OCI_HTYPE_STMT) <> OCI_SUCCESS then
                     SynDBLog.Add.Log(sllError,
                       'ExecutePrepared: HandleFree(SQLT_RSET)', self);
               ftInt64:
@@ -1803,8 +1806,7 @@ begin
       begin
         if fColumnCount <> 0 then
           fRowFetched := fRowCount;
-        if Status = OCI_SUCCESS_WITH_INFO then
-          OCI.Check(nil, self, Status, fError, false, sllWarning);
+        OCI.CheckSuccessInfo(self, Status, fError); // log message
       end;
     OCI_NO_DATA:
       begin
