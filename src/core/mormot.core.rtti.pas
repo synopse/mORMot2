@@ -1912,6 +1912,12 @@ procedure StringClearSeveral(v: PPointer; n: PtrInt);
 procedure RawUtf8DynArrayClear(var Value: TRawUtf8DynArray);
   {$ifdef HASINLINE}inline;{$endif}
 
+/// check if the TypeInfo() points to a "RawUtf8" kind of type
+// - e.g. returns true for TypeInfo(RawUtf8) or TypeInfo(Utf8String) or other
+// sub-types defined as "type aNewType = type RawUtf8"
+function IsRawUtf8(Info: PRttiInfo): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// check if the TypeInfo() points to an "array of RawUtf8"
 // - e.g. returns true for TypeInfo(TRawUtf8DynArray) or other sub-types
 // defined as "type aNewType = type TRawUtf8DynArray" or "= array of RawUtf8"
@@ -6777,19 +6783,18 @@ begin
   FastDynArrayClear(@Value, TypeInfo(RawUtf8));
 end;
 
-function IsRawUtf8DynArray(Info: PRttiInfo): boolean;
-var
-  item: PRttiInfo;
+function IsRawUtf8(Info: PRttiInfo): boolean;
 begin
-  result := false;
-  if (Info = nil) or
-     (Info^.Kind <> rkDynArray) then
-    exit;
-  item := Info^.DynArrayItemType;
-  if (item <> nil) and
-     (item^.Kind = rkLString) and
-     (item^.AnsiStringCodePage = CP_UTF8) then
-    result := true;
+  result := (Info <> nil) and
+            (Info^.Kind = rkLString) and
+            (Info^.AnsiStringCodePage = CP_UTF8);
+end; // works for RawUtf8/Utf8String with basic Delphi 7/2007 support
+
+function IsRawUtf8DynArray(Info: PRttiInfo): boolean;
+begin
+  result := (Info <> nil) and
+            (Info^.Kind = rkDynArray) and
+            IsRawUtf8(Info^.DynArrayItemType);
 end;
 
 procedure RecordClearSeveral(v: PAnsiChar; info: PRttiInfo; n: integer);
