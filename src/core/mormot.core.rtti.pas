@@ -579,10 +579,10 @@ type
     // - will also accept JSON '"string"' as input as if it were 'string'
     // - return -1 if not found, or if RTTI's MinValue is not 0
     function GetEnumNameValue(Value: PUtf8Char; ValueLen: PtrInt;
-      AlsoTrimLowerCase: boolean = true): integer; overload;
+      AlsoTrimLowerCase: boolean = true): PtrInt; overload;
     /// get the corresponding enumeration ordinal value, from its trimmed name
     function GetEnumNameValueTrimmed(Value: PUtf8Char; ValueLen: PtrInt;
-      CaseSensitive: boolean): integer;
+      CaseSensitive: boolean): PtrInt;
     /// get the corresponding enumeration name, without the first lowercase chars
     // (otDone -> 'Done')
     // - Value will be converted to the matching ordinal value (byte or word)
@@ -608,7 +608,7 @@ type
     /// get the corresponding enumeration ordinal value, from its name without
     // its first lowercase chars ('Done' will find otDone e.g.)
     // - return -1 if not found, or if RTTI's MinValue is not 0
-    function GetEnumNameTrimedValue(Value: PUtf8Char; ValueLen: integer = 0): integer; overload;
+    function GetEnumNameTrimedValue(Value: PUtf8Char; ValueLen: integer = 0): PtrInt; overload;
     /// compute how many bytes this type will use to be stored as a enumerate
     function SizeInStorageAsEnum: integer;
       {$ifdef HASSAFEINLINE}inline;{$endif}
@@ -2787,7 +2787,7 @@ type
       PathDelim: AnsiChar = '.'): PRttiCustomProp;
     /// search an enumeration/set value from its UTF-8 text representation
     // - first search by Cache.EnumCustomText, then by (trimmed) RTTI names
-    function GetEnumFromText(Value: PUtf8Char; ValueLen: PtrInt): integer;
+    function GetEnumFromText(Value: PUtf8Char; ValueLen: PtrInt): PtrInt;
     /// change the identifiers of enumerate/set type using a proper casing
     // - most common are scLowerCaseFirst (aka camelCase, for API), scSnakeCase
     // (POSIX/IT conventions) or even scKebabCase (RFC/networking)
@@ -3818,7 +3818,7 @@ begin
 end;
 
 function TRttiEnumType.GetEnumNameValue(Value: PUtf8Char; ValueLen: PtrInt;
-  AlsoTrimLowerCase: boolean): integer;
+  AlsoTrimLowerCase: boolean): PtrInt;
 begin
   result := -1;
   if (@self = nil) or
@@ -3843,7 +3843,7 @@ begin
 end;
 
 function TRttiEnumType.GetEnumNameValueTrimmed(Value: PUtf8Char; ValueLen: PtrInt;
-  CaseSensitive: boolean): integer;
+  CaseSensitive: boolean): PtrInt;
 begin
   if (@self <> nil) and
      (Value <> nil) and
@@ -4014,7 +4014,7 @@ begin
   result := GetEnumNameTrimedValue(@EnumName[1], ord(EnumName[0]));
 end;
 
-function TRttiEnumType.GetEnumNameTrimedValue(Value: PUtf8Char; ValueLen: integer): integer;
+function TRttiEnumType.GetEnumNameTrimedValue(Value: PUtf8Char; ValueLen: integer): PtrInt;
 begin
   if (Value = nil) or
      (MinValue <> 0) then
@@ -6437,7 +6437,7 @@ end;
 procedure SetNamesValue(SetNames: PShortString; MinValue, MaxValue: integer;
   Value: PUtf8Char; ValueLen: PtrInt; var Result: QWord);
 var
-  i: integer;
+  i: PtrInt;
 begin
   if (Value = nil) or
      (ValueLen = 0) then
@@ -9692,7 +9692,7 @@ begin
   result := -1;
 end;
 
-function TRttiCustom.GetEnumFromText(Value: PUtf8Char; ValueLen: PtrInt): integer;
+function TRttiCustom.GetEnumFromText(Value: PUtf8Char; ValueLen: PtrInt): PtrInt;
 begin
   result := -1;
   if (self = nil) or
@@ -10063,7 +10063,6 @@ begin
   r.fCache.ObjArrayClass := aItemClass; // overwrite
   r.fArrayRtti := Rtti.RegisterClass(aItemClass);
 end; // no need to set other fields like Name
-
 
 
 { TRttiCustomList }
