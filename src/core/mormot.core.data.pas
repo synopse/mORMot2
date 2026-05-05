@@ -2698,7 +2698,7 @@ type
     function Find(const Key: ShortString; ValueLen: PPtrInt = nil): pointer; overload;
     /// erase the whole storage
     procedure Clear;
-    /// write all key = value pairs as human-readable text
+    /// write all key = value pairs as key-ordered human-readable text
     function AsText(const Sep: RawUtf8 = ' = '; const Feed: RawUtf8 = #10): RawUtf8;
     /// raw storage, encoded as B[keysize]+key+value so value is #0 terminated
     property Value: TRawByteStringDynArray
@@ -3945,8 +3945,7 @@ begin
   if _GlobalInfo = nil then
     _GlobalInfo := RegisterGlobalShutdownRelease(TBinDictionary.Create);
   result := _GlobalInfo.Find(Key, KeyLen, @ValueLen);
-  if result = nil then
-  begin
+  if result = nil then // search for pending GlobalInfoRegister()
     repeat
       i := StrStartArray(Key, pointer(_GlobalInfoPre));
       if i < 0 then
@@ -3957,7 +3956,6 @@ begin
       if result = nil then
         result := _GlobalInfo.Find(Key, KeyLen, @ValueLen); // may appear now
     until false;
-  end;
   _GlobalInfoSafe.UnLock;
 end;
 
@@ -4026,13 +4024,13 @@ begin
   if cfAVX2 in CpuFeatures then
     Sender.UpdateText('cpu:avx2',       'true');
   if IntelAvx10 > 0 then
-    Sender.UpdateText(['cpu:avx10'],    [IntelAvx10]);
-  Sender.UpdateText(['cpu:family'],     [CpuFamily]);
-  Sender.UpdateText(['cpu:model'],      [CpuModel]);
-  Sender.UpdateText(['cpu:cachesize'],  [CpuCacheSize]);
-  Sender.UpdateTextNotVoid('cpu:caches', CpuCacheText);
-  Sender.UpdateTextNotVoid('cpu:id',     IntelManufacturer);
-  Sender.UpdateTextNotVoid('cpu:hyp',    IntelHypervisor);
+    Sender.UpdateText(['cpu:avx10'],     [IntelAvx10]);
+  Sender.UpdateText(  ['cpu:family'],    [CpuFamily]);
+  Sender.UpdateText(  ['cpu:model'],     [CpuModel]);
+  Sender.UpdateText(  ['cpu:cachesize'], [CpuCacheSize]);
+  Sender.UpdateTextNotVoid('cpu:caches',  CpuCacheText);
+  Sender.UpdateTextNotVoid('cpu:id',      IntelManufacturer);
+  Sender.UpdateTextNotVoid('cpu:hyp',     IntelHypervisor);
   Sender.UpdateTextNotVoid('cpu:manufacturer', GetSmbios(sbiCpuManufacturer));
   {$endif ASMINTEL}
   {$ifdef CPUARM3264}

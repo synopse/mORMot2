@@ -4350,7 +4350,7 @@ end;
 function TRttiInfo.AnsiStringCodePage: integer;
 begin
   if @self = TypeInfo(RawBlob) then
-    result := CP_RAWBLOB
+    result := CP_RAWBLOB // not a true codepage, but its own type
   else
   {$ifdef HASCODEPAGE}
   if Kind = rkLString then
@@ -7696,7 +7696,7 @@ const
 
 function KnownTypeName(Name: PUtf8Char; NameLen: PtrInt): TRttiParserType;
   {$ifdef HASINLINE}inline;{$endif}
-begin // weak/alias type definition have no TypeInfo() with their own name
+begin // weak/alias type definitions have no TypeInfo() with their usual name
   result := _TypeParser[FindShortStringListNoTrim(@_TypeNames[0],
               pred(high(_TypeParser)), Name, NameLen) + 1];
 end;
@@ -10416,14 +10416,12 @@ var
   pt: TRttiParserType;
   i: PtrInt;
 begin
+  result := nil;
   if ParserType <> nil then
     ParserType^ := ptNone;
   if (Name = nil) or
      (NameLen <= 0) then
-  begin
-    result := nil;
     exit;
-  end;
   repeat
     i := ByteScanIndex(pointer(Name), NameLen, ord('.'));
     if i < 0 then
@@ -10432,7 +10430,7 @@ begin
     inc(Name, i);
     dec(NameLen, i);
   until false;
-  result := FindName(Name, NameLen);
+  result := FindName(Name, NameLen); // search in fHashTable[].HashName[]
   if result = nil then
   begin
     // array/record keywords, integer/cardinal FPC types not available by Find()
@@ -10611,7 +10609,7 @@ var
 begin
   RegisterSafe.Lock;
   try
-    result := FindName(pointer(TypeName), length(TypeName));
+    result := FindName(pointer(TypeName), length(TypeName)); // in fHashTable[]
     new := result = nil;
     if new then
     begin

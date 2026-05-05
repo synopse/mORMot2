@@ -9007,7 +9007,7 @@ begin
     v := pointer(Values);
     for i := 0 to NamesCount do
       if (v^.Text = nil) and
-         StrIEqual(Names[i], name) then // properly inlined
+         StrIEqual(Names[i], name) then
       begin
         v^.Text := info.Value;
         v^.Len  := info.ValueLen;

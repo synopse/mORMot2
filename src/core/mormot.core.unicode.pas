@@ -1744,7 +1744,7 @@ function StrIComp(Str1, Str2: pointer): PtrInt;
 
 /// faster alternative to StrIComp() = 0
 function StrIEqual(Str1, Str2: pointer): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifndef CPUX86}inline;{$endif}
 
 /// faster alternative to AnsiICompW() = 0
 function StrIEqualW(Str1, Str2: PWord): boolean;
@@ -6979,16 +6979,15 @@ var
   c1, c2: byte; // integer/PtrInt are actually slower on FPC
 begin
   result := PtrInt(PtrUInt(Str2)) - PtrInt(PtrUInt(Str1));
-  if result <> 0 then
-  begin
-    repeat
-      c1 := Up[PByteArray(Str1)[0]];
-      c2 := Up[PByteArray(Str1)[result]];
-      inc(PByte(Str1));
-    until (c1 = 0) or
-          (c1 <> c2);
-    result := c1 - c2;
-  end;
+  if result = 0 then
+    exit;
+  repeat
+    c1 := Up[PByteArray(Str1)[0]];
+    c2 := Up[PByteArray(Str1)[result]];
+    inc(PByte(Str1));
+  until (c1 = 0) or
+        (c1 <> c2);
+  result := c1 - c2;
 end;
 
 function StrICompLNotNil(Str1, Str2: pointer; Up: PNormTableByte; L: PtrInt): PtrInt;
