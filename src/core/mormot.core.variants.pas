@@ -8234,7 +8234,9 @@ type
     Depth: integer; // = high(Lookup)
     procedure Init(const aPropNames: array of RawUtf8;
       aNameSortedCompare: TUtf8Compare);
-    function DoComp(Value: PQuickSortByFieldLookup): PtrInt;
+    function DoCompare(Value: PQuickSortByFieldLookup): PtrInt;
+      {$ifndef CPUX86} inline; {$endif}
+    function DoCompareField(Value: PQuickSortByFieldLookup): PtrInt;
       {$ifndef CPUX86} inline; {$endif}
     procedure Sort(L, R: PtrInt);
   end;
@@ -8243,7 +8245,7 @@ procedure TQuickSortDocVariantValuesByField.Init(
   const aPropNames: array of RawUtf8; aNameSortedCompare: TUtf8Compare);
 var
   namecomp: TUtf8Compare;
-  v: pointer;
+  v, r: PVariant;
   row, f: PtrInt;
   rowdata: PDocVariantData;
   ndx: integer;
@@ -8263,58 +8265,63 @@ begin
     if aPropNames[f] = '' then
       EDocVariant.RaiseUtf8('TDocVariantData.SortByFields(%=void)', [f]);
     ndx := -1;
+    r := pointer(Doc^.VValue);
     for row := 0 to Doc^.VCount - 1 do
     begin
-      rowdata := _Safe(Doc^.VValue[row]);
-      if (cardinal(ndx) < cardinal(rowdata^.VCount)) and
-         (namecomp(pointer(rowdata^.VName[ndx]), pointer(aPropNames[f])) = 0) then
-        v := @rowdata^.VValue[ndx] // get the value at the (likely) same position
+      if _SafeObject(r^, rowdata) then
+        if (cardinal(ndx) < cardinal(rowdata^.VCount)) and
+           (namecomp(pointer(rowdata^.VName[ndx]), pointer(aPropNames[f])) = 0) then
+          v := @rowdata^.VValue[ndx] // get the value at the (likely) same position
+        else
+        begin
+          v := pointer(rowdata^.GetVarData(aPropNames[f], aNameSortedCompare, @ndx));
+          if v = nil then
+            v := @NullVarData;
+        end
       else
-      begin
-        v := rowdata^.GetVarData(aPropNames[f], aNameSortedCompare, @ndx);
-        if v = nil then
-          v := @NullVarData;
-      end;
+        v := @NullVarData;
       Lookup[row, f] := v;
+      inc(r);
     end;
   end;
 end;
 
-function TQuickSortDocVariantValuesByField.DoComp(
+function TQuickSortDocVariantValuesByField.DoCompare(
   Value: PQuickSortByFieldLookup): PtrInt;
 begin
-  if Assigned(Compare) then
+  result := Compare(Value[0]^, Pivot[0]^);
+  if (result = 0) and
+     (depth > 0) then
   begin
-    result := Compare(Value[0]^, Pivot[0]^);
+    result := Compare(Value[1]^, Pivot[1]^);
     if (result = 0) and
-       (depth > 0) then
+       (depth > 1) then
     begin
-      result := Compare(Value[1]^, Pivot[1]^);
+      result := Compare(Value[2]^, Pivot[2]^);
       if (result = 0) and
-         (depth > 1) then
-      begin
-        result := Compare(Value[2]^, Pivot[2]^);
-        if (result = 0) and
-           (depth > 2) then
-         result := Compare(Value[3]^, Pivot[3]^);
-      end;
+         (depth > 2) then
+       result := Compare(Value[3]^, Pivot[3]^);
     end;
-  end
-  else
+  end;
+  if Reverse then
+    result := -result;
+end;
+
+function TQuickSortDocVariantValuesByField.DoCompareField(
+  Value: PQuickSortByFieldLookup): PtrInt;
+begin
+  result := CompareField(Fields[0], Value[0]^, Pivot[0]^);
+  if (result = 0) and
+     (depth > 0) then
   begin
-    result := CompareField(Fields[0], Value[0]^, Pivot[0]^);
+    result := CompareField(Fields[1], Value[1]^, Pivot[1]^);
     if (result = 0) and
-       (depth > 0) then
+       (depth > 1) then
     begin
-      result := CompareField(Fields[1], Value[1]^, Pivot[1]^);
+      result := CompareField(Fields[2], Value[2]^, Pivot[2]^);
       if (result = 0) and
-         (depth > 1) then
-      begin
-        result := CompareField(Fields[2], Value[2]^, Pivot[2]^);
-        if (result = 0) and
-           (depth > 2) then
-         result := CompareField(Fields[3], Value[3]^, Pivot[3]^);
-      end;
+         (depth > 2) then
+       result := CompareField(Fields[3], Value[3]^, Pivot[3]^);
     end;
   end;
   if Reverse then
@@ -8332,10 +8339,20 @@ begin
       P := (L + R) shr 1;
       repeat
         Pivot := @Lookup[P];
-        while DoComp(@Lookup[I]) < 0 do
-          inc(I);
-        while DoComp(@Lookup[J]) > 0 do
-          dec(J);
+        if Assigned(Compare) then
+        begin
+          while DoCompare(@Lookup[I]) < 0 do
+            inc(I);
+          while DoCompare(@Lookup[J]) > 0 do
+            dec(J);
+        end
+        else
+        begin
+          while DoCompareField(@Lookup[I]) < 0 do
+            inc(I);
+          while DoCompareField(@Lookup[J]) > 0 do
+            dec(J);
+        end;
         if I <= J then
         begin
           if I <> J then
