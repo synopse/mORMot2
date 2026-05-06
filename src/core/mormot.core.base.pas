@@ -878,11 +878,16 @@ function IsNullGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: 
 /// swap the endianness TGuid members, i.e. D1/D2/D2 with bswap32/bswap16/bswap16
 procedure SwapGuid(var result: TGuid);
 
+/// find one TGuid item in a TGuid dynamic array - redirect to Hash128Index()
+function FindGuid(const guids: TGuidDynArray; {$ifdef FPC_HAS_CONSTREF}constref{$else}
+  const{$endif} guid: TGuid): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// append one TGuid item to a TGuid dynamic array
 // - returning the newly inserted index in guids[], or an existing index in
 // guids[] if NoDuplicates is TRUE and TGuid already exists
 function AddGuid(var guids: TGuidDynArray; {$ifdef FPC_HAS_CONSTREF}constref{$else}
-  const{$endif} guid: TGuid; NoDuplicates: boolean = false): integer;
+  const{$endif} guid: TGuid; NoDuplicates: boolean = false): PtrInt;
 
 /// fast O(log(n)) binary search of a binary (e.g. TGuid) value in a sorted array
 function FastFindBinarySorted(P, Value: PByteArray; Size, R: PtrInt): PtrInt;
@@ -4994,12 +4999,18 @@ begin
   result.D3 := bswap16(result.D3);
 end; // result.D4 bytes are kept as-is
 
+function FindGuid(const guids: TGuidDynArray; {$ifdef FPC_HAS_CONSTREF}constref{$else}
+  const{$endif} guid: TGuid): PtrInt;
+begin
+  result := Hash128Index(pointer(guids), length(guids), @guid);
+end;
+
 function AddGuid(var guids: TGuidDynArray; {$ifdef FPC_HAS_CONSTREF}constref{$else}
-  const{$endif} guid: TGuid; NoDuplicates: boolean): integer;
+  const{$endif} guid: TGuid; NoDuplicates: boolean): PtrInt;
 begin
   if NoDuplicates then
   begin
-    result := Hash128Index(pointer(guids), length(guids), @guid);
+    result := Hash128Index(pointer(guids), length(guids), @guid); // = FindGuid()
     if result >= 0 then
       exit;
   end;
