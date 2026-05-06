@@ -2714,7 +2714,7 @@ begin
 end;
 
 const
-  TOBEPURGED: PUtf8Char =
+  TOBEPURGED: PUtf8Char = // fast lookup in L1 CPU cache
     'CONTENT-|CONNECTION:|KEEP-ALIVE:|TRANSFER-|X-POWERED|USER-AGENT|' +
     'REMOTEIP:|HOST:|ACCEPT:|DATE:|';
 

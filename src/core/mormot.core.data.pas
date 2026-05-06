@@ -1666,7 +1666,8 @@ type
   // maintain a hash table over an existing dynamic array: several TDynArrayHasher
   // could be applied to a single TDynArray wrapper or could index one or several
   // fields of an ORM table via TRestStorageInMemoryUnique in mormot.orm.storage
-  // - TDynArrayHashed will use a TDynArrayHasher on its own storage
+  // - TDynArrayHashed will use a TDynArrayHasher on its own storage to implement
+  // a dense array with external hash indexes optimized for read-heavy workloads
   {$ifdef USERECORDWITHMETHODS}
   TDynArrayHasher = record
   {$else}
@@ -1730,6 +1731,9 @@ type
     // - trigger hashing if Count reaches CountTrigger
     function FindBeforeAdd(Item: pointer; out wasAdded: boolean; aHashCode: cardinal): PtrInt;
     /// search and delete an element value, updating the internal hash table
+    // - this hash table is optimized for read-heavy workloads: deletion needs to
+    // actually move the data in the associated TDynArray and adjust hash indexes
+    // - caller should eventuall call TDynArray.Delete() with the returned result
     function FindBeforeDelete(Item: pointer): PtrInt;
     /// full computation of the internal hash table
     // - to be called after items have been manually updated - e.g. after Clear
@@ -2656,6 +2660,7 @@ procedure QuickSortIndexedPUtf8Char(Values: PPUtf8CharArray; Count: integer;
 type
   /// store binary key/value pairs with an efficient O(1) hash table
   // - works with pointers on text or binary, when TSynDictionary is overkill
+  // - each key/value is stored as a single efficient RawByteString instance
   TBinDictionary = class(TSynPersistent)
   protected
     fValue: TRawByteStringDynArray;
@@ -3800,7 +3805,7 @@ begin
   result := pointer(fValue[Index]); // never nil
   keylen := PByte(result)^ + 1;
   if Len <> nil then
-    Len^ := PStrLen(PAnsiChar(result) - _STRLEN)^ - keylen;
+    Len^ := PtrInt(PStrLen(PAnsiChar(result) - _STRLEN)^) - keylen;
   inc(PByte(result), keylen);
 end;
 
