@@ -8248,7 +8248,7 @@ var
   v, r: PVariant;
   row, f: PtrInt;
   rowdata: PDocVariantData;
-  ndx: integer;
+  ndx: integer; // not PtrInt
 begin
   Depth := high(aPropNames);
   if (Depth < 0) or
