@@ -7062,25 +7062,23 @@ var
 begin
   result := false;
   if Str1 <> Str2 then
-    if Str1 = nil then
-      exit
-    else if Str2 = nil then
-      exit
-    else
-    begin
-        {$ifndef CPUX86NOTPIC}
-        table := @NormToUpperAnsi7Byte;
-        {$endif CPUX86NOTPIC}
-        repeat
-          c1 := table[PByte(Str1)^];
-          if c1 <> table[PByte(Str2)^] then
-            exit;
-          if c1 = 0 then
-            break;
-          inc(PByte(Str1));
-          inc(PByte(Str2));
-        until false;
-      end;
+  begin
+    if (Str1 = nil) or
+       (Str2 = nil) then
+      exit;
+    {$ifndef CPUX86NOTPIC}
+    table := @NormToUpperAnsi7Byte;
+    {$endif CPUX86NOTPIC}
+    repeat
+      c1 := table[PByte(Str1)^];
+      if c1 <> table[PByte(Str2)^] then
+        exit;
+      if c1 = 0 then
+        break;
+      inc(PByte(Str1));
+      inc(PByte(Str2));
+    until false;
+  end;
   result := true;
 end;
 
@@ -7095,29 +7093,27 @@ var
 begin
   result := false;
   if Str1 <> Str2 then
-    if Str1 = nil then
-      exit
-    else if Str2 = nil then
-      exit
-    else
-    begin
-      {$ifndef CPUX86NOTPIC}
-      table := @NormToUpperAnsi7Byte;
-      {$endif CPUX86NOTPIC}
-      repeat
-        c1 := Str1^;
-        c2 := Str2^;
-        if c1 <> c2 then
-          if (c1 > 255) or
-             (c2 > 255) or
-             (table[c1] <> table[c2]) then
-            exit;
-        if c1 = 0 then
-          break;
-        inc(Str1);
-        inc(Str2);
-      until false;
-    end;
+  begin
+    if (Str1 = nil) or
+       (Str2 = nil) then
+      exit;
+    {$ifndef CPUX86NOTPIC}
+    table := @NormToUpperAnsi7Byte;
+    {$endif CPUX86NOTPIC}
+    repeat
+      c1 := Str1^;
+      c2 := Str2^;
+      if c1 <> c2 then
+        if (c1 > 255) or
+           (c2 > 255) or
+           (table[c1] <> table[c2]) then
+          exit;
+      if c1 = 0 then
+        break;
+      inc(Str1);
+      inc(Str2);
+    until false;
+  end;
   result := true;
 end;
 
