@@ -4504,8 +4504,8 @@ procedure ExchgPointer(n1, n2: PPointer);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// low-level inlined function for exchanging two sets of pointers
-// - used e.g. during sorting process
-procedure ExchgPointers(n1, n2: PPointer; count: PtrInt);
+// - used e.g. during sorting process - requires count >= 1
+procedure ExchgPointers(n1, n2: PPointer; count: integer);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// low-level inlined function for exchanging two variants
@@ -13788,7 +13788,7 @@ begin
   n1^ := n;
 end;
 
-procedure ExchgPointers(n1, n2: PPointer; count: PtrInt);
+procedure ExchgPointers(n1, n2: PPointer; count: integer);
 var
   n: pointer;
 begin

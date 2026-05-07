@@ -8213,7 +8213,7 @@ begin
 end;
 
 type
-  TQuickSortByFieldLookup = array[0..3] of PVariant;
+  TQuickSortByFieldLookup = array[0..3] of PVariant; // 32 bytes on 64-bit
   PQuickSortByFieldLookup = ^TQuickSortByFieldLookup;
 
   {$ifdef USERECORDWITHMETHODS}
@@ -8231,7 +8231,7 @@ type
     Doc: PDocVariantData;
     TempExch: TQuickSortByFieldLookup;
     Reverse: boolean;
-    Depth: integer; // = high(Lookup)
+    Depth: integer; // = high(Lookup) + 1
     procedure Init(const aPropNames: array of RawUtf8;
       aNameSortedCompare: TUtf8Compare);
     function DoCompare(Value: PQuickSortByFieldLookup): PtrInt;
@@ -8291,15 +8291,15 @@ function TQuickSortDocVariantValuesByField.DoCompare(
 begin
   result := Compare(Value[0]^, Pivot[0]^);
   if (result = 0) and
-     (depth > 0) then
+     (Depth > 0) then
   begin
     result := Compare(Value[1]^, Pivot[1]^);
     if (result = 0) and
-       (depth > 1) then
+       (Depth > 1) then
     begin
       result := Compare(Value[2]^, Pivot[2]^);
       if (result = 0) and
-         (depth > 2) then
+         (Depth > 2) then
        result := Compare(Value[3]^, Pivot[3]^);
     end;
   end;
@@ -8312,15 +8312,15 @@ function TQuickSortDocVariantValuesByField.DoCompareField(
 begin
   result := CompareField(Fields[0], Value[0]^, Pivot[0]^);
   if (result = 0) and
-     (depth > 0) then
+     (Depth > 0) then
   begin
     result := CompareField(Fields[1], Value[1]^, Pivot[1]^);
     if (result = 0) and
-       (depth > 1) then
+       (Depth > 1) then
     begin
       result := CompareField(Fields[2], Value[2]^, Pivot[2]^);
       if (result = 0) and
-         (depth > 2) then
+         (Depth > 2) then
        result := CompareField(Fields[3], Value[3]^, Pivot[3]^);
     end;
   end;
