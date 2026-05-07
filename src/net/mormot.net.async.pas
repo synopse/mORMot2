@@ -5699,7 +5699,8 @@ const
 
 function TStartProxyRequest.MakeHeadAndComputeFilename: cardinal;
 var
-  h: THash160; // binary version of remote TUri without then with etag/lastmod
+  h: THash160;  // binary version of remote TUri without then with etag/lastmod
+  d: TUnixTime; // headdate is TUnixMSTime
 begin
   result := HTTP_BADREQUEST;
   // hash the plain URI to identify the local cache
@@ -5710,8 +5711,9 @@ begin
   end;
   // always perform a HEAD request to the original server (maybe from cache)
   headsize := 0;
-  headdate := 0;
-  result := proxy.RemoteClientHead(remote, h, headers, headsize, headdate);
+  d := 0;
+  result := proxy.RemoteClientHead(remote, h, headers, headsize, d);
+  headdate := d * MillisecsPerSec;
   if not StatusCodeIsSuccess(result) then
   begin
     loginfo := 'head status';
@@ -5751,6 +5753,7 @@ var
   stream: TFileStreamEx;
   opt: THttpRequestExtendedOptions;
 begin // this method is protected by proxy.fSafe.Lock
+  result := HTTP_BADREQUEST;
   log := proxy.fOwner.fLog;
   // check the header against the local cached file (headdate may be 0)
   ctxt.OutCustomHeaders := PurgeHeaders(remotehead, false, TOBEPURGEDPROXY);
