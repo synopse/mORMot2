@@ -48,6 +48,7 @@ uses
   {$endif NEEDVCLPREFIX}
   mormot.core.base,
   mormot.core.os,
+  mormot.core.unicode,
   mormot.lib.gdiplus;
 
 
