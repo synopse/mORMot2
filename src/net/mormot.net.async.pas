@@ -5713,7 +5713,7 @@ begin
   headsize := 0;
   d := 0;
   result := proxy.RemoteClientHead(remote, h, headers, headsize, d);
-  headdate := d * MillisecsPerSec;
+  headdate := d * MilliSecsPerSec;
   if not StatusCodeIsSuccess(result) then
   begin
     loginfo := 'head status';

@@ -4128,20 +4128,22 @@ begin
   CheckEqual(l, SizeOf(THash256));
   Check(dig.Algo = hfSHA256);
   CheckEqual(Sha256DigestToString(dig.Bin.Lo),
-    'cc991f15d823e419ef45f8b94e6759c4f992056c1c1a64cc79338c49f9720273');
+    '19b9f18055bc3307c80f58159938f4e6bd0eb583f672fe7793e1b0df50e60bb2');
   FillCharFast(dig, SizeOf(dig), 0);
   l := HttpRequestHash(hfSHA256, U,
     'Content-Length: 100'#13#10'Last-Modified: 2025', dig);
   CheckEqual(l, SizeOf(THash256));
   Check(dig.Algo = hfSHA256);
   CheckEqual(Sha256DigestToString(dig.Bin.Lo),
-    '9b23e3b9894578f2709eca35aa9afad277ab5aa4afe9344192f59535719ac734');
-  Check(HttpRequestHashBase32(U, @s, 'Content-Length: 100'#13#10'Last-Modified: 2025'));
-  CheckEqual(s, 'tmr6homjiv4pe4e6zi22vgx22j32wwve');
-  Check(HttpRequestHashBase32(U, @s, 'Content-Length: 101'#13#10'Last-Modified: 2025'));
-  CheckEqual(s, '5umuom5hoh7sohesrs3fqse4rweeum7d');
+    'dd36778462987d817a662b4a602accde058d26f4247aa55ca70bf476a9a442e7');
+  Check(HttpRequestHashBase32(U, @s,
+    'Content-Length: 100'#13#10'Last-Modified: 2025'));
+  CheckEqual(s, '3u3hpbdctb6yc6tgfnfgakwm3ycy2jxu');
+  Check(HttpRequestHashBase32(U, @s,
+    'Content-Length: 101'#13#10'Last-Modified: 2025'));
+  CheckEqual(s, 'utip3vleydamax5oayo7tjfyaoub6y5w');
   Check(HttpRequestHashBase32(U, @s, nil));
-  CheckEqual(s, 'bq4n2dkrduzo2v3arzy2lafegac3wmbw');
+  CheckEqual(s, 'na3q2n4gw6cly5fvf5da4frmek667zk2');
 end;
 
 procedure TNetworkProtocols._THttpProxyCache;

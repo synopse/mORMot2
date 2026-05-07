@@ -2039,7 +2039,7 @@ function ToText(const msg: THttpPeerCacheMessage): ShortString; overload;
 
 procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: ShortString);
 
-/// hash an URL and the "Etag:" or "Last-Modified:" headers
+/// hash a normalized URL and the "Etag:" or "Last-Modified:" headers
 // - could be used to identify a HTTP resource as a binary hash on a given server
 // - aHeaders could be supplied as nil so that only the URI resource is hashed
 // - returns 0 if aUrl/aHeaders have not enough information
@@ -7779,6 +7779,7 @@ var
   hasher: TSynHasher;
   h: PUtf8Char;
   hl: PtrInt; // not integer
+  up: TByteToAnsiChar; // normalize server name
 begin
   result := 0;
   aDigest.Algo := aAlgo;
@@ -7787,7 +7788,7 @@ begin
     exit;
   hasher.Update(HTTPS_TEXT[aUri.Https]); // hash normalized URI
   hasher.Update(@aAlgo, 1); // separator
-  hasher.Update(aUri.Server);
+  hasher.Update(@up, UpperCopy255(@up, aUri.Server) - PAnsiChar(@up));
   hasher.Update(@aAlgo, 1);
   hasher.Update(aUri.Port);
   hasher.Update(@aAlgo, 1);
