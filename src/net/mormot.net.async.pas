@@ -5689,7 +5689,6 @@ type
     // some additional internal parameters and methods for proper threading
     uri: RawUtf8;
     stream: TFileStreamEx;
-    filedate: TUnixTime;
   end;
 
 const
@@ -5771,8 +5770,8 @@ begin // this method is protected by proxy.fSafe.Lock
     begin
       // the local file seems invalid and should be removed
       log.Add.Log(sllTrace,
-        'OnExecute: deprecate status=% headers=% filename=% size=%=% local=% head=%',
-        [result, ctxt.OutCustomHeaders, b32hash, localsize, headsize,
+        'OnExecute: delete % status=% headers=% size=%=% local=% head=%',
+        [b32hash, result, ctxt.OutCustomHeaders, localsize, headsize,
          localdate, headdate], proxy);
       if not DeleteFile(filename) then // may fail on Windows: use previous
       begin
@@ -5804,9 +5803,7 @@ begin // this method is protected by proxy.fSafe.Lock
        (direct <> '') then
       if ((localsize < 0) or // no length/range = retrieve full dynamic content
           (length(direct) = localsize)) and
-         FileFromString(direct, filename) and
-         ((headdate = 0) or
-          FileSetDateFromUnixUtc(filename, headdate)) then
+         FileFromString(direct, filename) then
       begin
         if localsize < 0 then
           loginfo := 'nosize get'
@@ -5839,7 +5836,6 @@ begin // this method is protected by proxy.fSafe.Lock
     background := TStartProxyRequestClient.OpenOptions(remote, opt);
     background.stream := stream;
     background.uri := remote.Address;
-    background.filedate := headdate;
     Make(['get-', id], remotehead);
     TLoggedWorkThread.Create(log, remotehead, background, proxy.BackgroundGet);
     loginfo := 'progressive new';
@@ -5865,11 +5861,7 @@ begin
     fn := back.stream.FileName;
     FreeAndNil(back.stream);
     if StatusCodeIsSuccess(status) then
-      if (back.filedate <= 0) or
-         FileSetDateFromUnixUtc(fn, back.filedate) then
-        msg := 'ok'
-      else
-        FormatUtf8('FileSetDate(%) failed as %', [back.filedate, OsErrorShort], msg)
+      msg := 'ok'
     else
       msg := 'GET error';
     fOwner.fLog.Add.Log(sllTrace, 'BackgroundGet=%: % [%] size=%',
@@ -5909,9 +5901,13 @@ begin
     result := Ctxt.SetOutFile(filename, with304, '',
       fSettings.CacheControlMaxAgeSec, @size)
   else
+  begin
     // from hpsRemoteUri: we have the resource size+date attributes
     result := Ctxt.SetOutFile(filename, with304,
       size, lastmod, fSettings.CacheControlMaxAgeSec);
+    if result = HTTP_SUCCESS then
+      FileSetDateFromUnixUtc(filename, UnixTimeUtc); // mark file timestamp
+  end;
   if (result <> HTTP_SUCCESS) or
      IsHead(ctxt.Method) or
      not Assigned(fMemCache) then
@@ -6309,8 +6305,9 @@ begin
   if hpoNoSubFolder in opt then
     if PosExChar(PathDelim, name) <> 0 then
       exit;
+  // stream the content from local file
   fn := MakePath([one.Settings.fLocalFolder, name]);
-  result := one.ReturnFile(Ctxt, name, fn, Uri, siz, 0); // stream from file
+  result := one.ReturnFile(Ctxt, name, fn, Uri, siz, {lastmod=}0);
   // additional response types
   case result of
     HTTP_NOTFOUND:
