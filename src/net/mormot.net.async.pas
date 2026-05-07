@@ -1194,8 +1194,6 @@ type
   // - hpoClientCacheSubFolder could be used with a lot of cached files, to
   // generate sub-folders following the first hash nibble (0..9/a..z)
   // - hpoClientIgnoreTlsError will ignore any HTTPS issue
-  // - hpoClientNoHead will disable the HEAD request to the server if there is a
-  // local cached file to be served - faster but won't detect any server change
   // - hpoClientAlllowWinApi will be used for THttpProxyUrl.RemoteClientHead()
   // - hpoNoXProxyName will remove our custom 'X-Proxy-Name: xxxx' output header
   THttpProxyUrlOption = (
@@ -1208,7 +1206,6 @@ type
     hpoDisable304,
     hpoClientCacheSubFolder,
     hpoClientIgnoreTlsError,
-    hpoClientNoHead,
     hpoClientAlllowWinApi,
     hpoNoXProxyName);
   /// store THttpProxyUrl.Settings options for a given URI
@@ -6219,8 +6216,7 @@ begin
           s.DiskCache.Path := EnsureDirectoryExists(s.DiskCache.Path);
           if s.DiskCache.TimeoutSec <= 0 then
             s.DiskCache.TimeoutSec := fSettings.DiskCache.TimeoutSec;
-          if (s.HttpHeadCacheSec > 0) and
-             not (hpoClientNoHead in s.Options) then
+          if s.HttpHeadCacheSec > 0 then
             one.fHeadCache := TSynDictionary.Create(TypeInfo(THash160DynArray),
               TypeInfo(TRawUtf8DynArray), {caseins=}false, s.HttpHeadCacheSec);
           Make([' in ', s.DiskCache.Path], nfo);
@@ -6382,7 +6378,7 @@ begin
       exit;
   req.remote := req.proxy.fRemoteUri;
   Append(req.remote.Address, Uri.Path.Text, Uri.Path.Len);
-  // retrieve the headers, from cache or to compute the local file name
+  // retrieve the headers, from cache or HEAD, and compute the local file name
   result := req.MakeHeadAndComputeFilename;
   if StatusCodeIsSuccess(result) then
   begin
@@ -6401,7 +6397,7 @@ begin
           req.loginfo := 'partial exists';
           result := HTTP_SUCCESS;
         end
-        else if hpoClientNoHead in req.proxy.Settings.Options then
+        else
         begin
           // assume file won't change on the server: return the current cache
           result := req.proxy.ReturnFile(
