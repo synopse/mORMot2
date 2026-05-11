@@ -1222,6 +1222,8 @@ type
       aMaxLineLen: PtrInt);
     /// save all attributes into a Modifier() / TLdapClient.Modify() ASN1_SEQ
     function ExportToAsnSeq: TAsnObject;
+    /// comparison method between two attributes - by name then all values
+    function Compare(Another: TLdapAttribute): integer;
     /// how many values have been added to this attribute
     property Count: integer
       read fCount;
@@ -4657,6 +4659,27 @@ begin
               AsnOctStr(fAttributeName), // attribute description
               AsnSetOf(result)           // attribute value set
             ]);
+end;
+
+function TLdapAttribute.Compare(Another: TLdapAttribute): integer;
+var
+  i: PtrInt;
+begin
+  result := 0;
+  if self = Another then
+    exit;
+  result := SortDynArrayAnsiString(fAttributeName, Another.fAttributeName);
+  if result <> 0 then
+    exit;
+  result := CompareInteger(fCount, Another.fCount);
+  if result <> 0 then
+    exit;
+  for i := 0 to fCount - 1 do
+  begin
+    result := SortDynArrayAnsiString(fList[i], Another.fList[i]);
+    if result <> 0 then
+      exit;
+  end;
 end;
 
 function TLdapAttribute.FindIndex(const aValue: RawByteString): PtrInt;
