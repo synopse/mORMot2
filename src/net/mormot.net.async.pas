@@ -1497,6 +1497,8 @@ type
     fLog: TSynLogClass;
     fSettingsOwned, fHasLog: boolean;
     fSources: THttpProxySources;
+    fUrlOptions: THttpProxyUrlOptions; // consolidated from all fUrl[].Options
+    fTempFilesTix: cardinal;
     fServer: THttpAsyncServer;
     fGC: TObjectDynArray;
     fPartials: THttpPartials;
@@ -5950,8 +5952,9 @@ begin
   inherited Create;
   // set default values in this main instance
   fDiskCache.Path := Executable.ProgramFilePath + 'proxycache';
+  fDiskCache.TimeoutSec := 4 * SecsPerHour; // TTL on disk = 4 hours
   fMemCache.MaxSizeKB := 4;
-  fMemCache.TimeoutSec := 15 * SecsPerMin;
+  fMemCache.TimeoutSec := 15 * SecsPerMin;  // TTL in memory = 15 minutes
 end;
 
 function THttpProxyServerSettings.AddUrl(
@@ -6154,6 +6157,7 @@ var
   i: PtrInt;
 begin
   fSources := [];
+  fUrlOptions := [];
   ObjArrayClear(fUrl);
   new := TUriRouter.Create(TUriTreeNode);
   try
@@ -6194,6 +6198,7 @@ begin
         continue;
       end;
       include(fSources, hps);
+      fUrlOptions := fUrlOptions + s.fOptions;
       // normalize cache settings
       nfo := '';
       if (hps <> hpsEvent) and
@@ -6265,9 +6270,11 @@ end;
 procedure THttpProxyServer.OnIdle(Sender: TObject; NowTix: Int64);
 var
   i, n: integer;
+  tixmin: cardinal;
+  size: Int64;
   one: ^THttpProxyUrl;
 begin
-  // delete any deprecated cached content - called every second
+  // delete any deprecated in-memory cached content - called every second
   n := 0;
   one := pointer(fUrl);
   for i := 1 to length(fUrl) do
@@ -6279,6 +6286,20 @@ begin
   end;
   if n <> 0 then
     fLog.Add.Log(sllTrace, 'OnIdle: cache gc=%', [n], self);
+  // delete deprecated file content - check every minute
+  if (fSettings.DiskCache.Path = '') or
+     (fSettings.DiskCache.TimeoutSec <= SecsPerMin) then
+    exit;
+  tixmin := (NowTix shr 16) + 1; // check folder every 65,536 seconds
+  if fTempFilesTix = tixmin then
+    exit;
+  fTempFilesTix := tixmin;
+  size := 0;
+  DirectoryDeleteOlderFiles(fSettings.DiskCache.Path,
+    fSettings.DiskCache.TimeoutSec / SecsPerDay, '*.',
+    {recursive=}hpoClientCacheSubFolder in fUrlOptions, @size);
+  if size <> 0 then // something changed on disk
+    fLog.Add.Log(sllTrace, 'OnIdle: deleted old=%', [KBNoSpace(size)], self);
 end;
 
 function THttpProxyServer.OnGetHeadLocalFolder(Ctxt: THttpServerRequest;
