@@ -1064,6 +1064,9 @@ function HashDetect(const Hash: RawUtf8; out Digest: THashDigest): boolean;
 function HashDigestEqual(const a, b: THashDigest): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// anti-forensic method for a hash digest
+procedure FillZero(var Digest: THashDigest); overload;
+
 /// compute the hexadecimal hash of any (big) file
 // - using a temporary buffer of 1MB for the sequential reading
 function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUtf8; overload;
@@ -5878,8 +5881,15 @@ end;
 
 function HashDigestEqual(const a, b: THashDigest): boolean;
 begin
-  result := (a.Algo <= high(THashAlgo)) and
+  result := (a.Algo <= high(THashAlgo)) and // avoid buffer overflow
             mormot.core.base.CompareMem(@a, @b, HASH_SIZE[a.Algo] + 1);
+end;
+
+procedure FillZero(var Digest: THashDigest);
+begin
+  if Digest.Algo <= high(THashAlgo) then // avoid buffer overflow
+    FillZero(Digest.Bin, HASH_SIZE[Digest.Algo]);
+  Digest.Algo := low(Digest.Algo);
 end;
 
 procedure Hmac(algo: TSignAlgo; key, msg: pointer; keylen, msglen: integer;
