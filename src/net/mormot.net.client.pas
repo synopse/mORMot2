@@ -259,10 +259,10 @@ const
 type
   /// maintain one partial download for THttpPartials
   THttpPartial = record
-    /// genuine 31-bit positive identifier, 0 if empty/recyclable
+    /// genuine 31-bit positive number, 0 if empty/recyclable after ReleaseSlot
     ID: THttpPartialID;
     /// the state of this partial download
-    Flags: set of (pFinished);
+    Flags: set of (pFinished, pHash);
     /// the expected full size of this download
     FullSize: Int64;
     /// the timestamp to be affected to the file, when it is fully downloaded
@@ -2313,9 +2313,9 @@ var
   i: PtrInt;
 begin
   result := pointer(fDownload);
-  if cardinal(aID) <= fLastID then
+  if cardinal(aID) <= fLastID then // aID may be 0 to search for empty slog
     for i := 1 to length(fDownload) do
-      if result^.ID = aID then // fast enough with a few slots
+      if result^.ID = aID then     // fast enough with a few slots
         exit
       else
         inc(result);
@@ -2329,6 +2329,7 @@ begin
   result := pointer(fDownload);
   for i := 1 to length(fDownload) do
     if (result^.ID <> 0) and // not a recycled slot
+       (pHash in result^.Flags) and
        HashDigestEqual(result^.Digest, Hash) then
       exit
     else
@@ -2396,20 +2397,18 @@ begin
     if p = nil then
     begin
       n := length(fDownload);
-      SetLength(fDownload, n + 1); // need a new slot (seldom called)
+      SetLength(fDownload, NextGrow(n)); // need new slots (seldom called)
       p := @fDownload[n];
-    end
-    else
-    begin
-      p^.HttpContext := nil; // force reset
-      FillCharFast(p^.Digest, SizeOf(p^.Digest), 0); // clean but not mandatory
     end;
     p^.ID := result;
     p^.FullSize := ExpectedFullSize;
     p^.EventualTime := EventualTime;
     p^.PartFile := Partial;
     if Hash <> nil then
+    begin
       MoveFast(Hash^, p^.Digest, HASH_SIZE[Hash^.Algo] + 1);
+      include(p^.Flags, pHash);
+    end;
     n := RawAssociate(Http, p);
   finally
     Safe.WriteUnLock;
