@@ -5818,7 +5818,8 @@ begin // this method is protected by proxy.fSafe.Lock
   end;
   // big files need an asynchronous GET to the uri server
   stream := TFileStreamEx.Create(filename, fmCreate or fmShareRead);
-  id := proxy.fOwner.fPartials.Add(filename, localsize, @hash, Ctxt.ConnectionHttp);
+  id := proxy.fOwner.fPartials.Add(filename, localsize, {hash=}nil,
+    Ctxt.ConnectionHttp, {eventualtime=}0);
   if id = 0 then
   begin
     stream.Free;
