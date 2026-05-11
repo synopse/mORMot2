@@ -5749,7 +5749,7 @@ var
   log: TSynLogClass;
   id: THttpPartialID;
   stream: TFileStreamEx;
-  opt: THttpRequestExtendedOptions;
+  opt: THttpRequestExtendedOptions; // local copy since is modified by Open()
 begin // this method is protected by proxy.fSafe.Lock
   result := HTTP_BADREQUEST;
   log := proxy.fOwner.fLog;
@@ -5793,7 +5793,8 @@ begin // this method is protected by proxy.fSafe.Lock
     exit;
   end;
   // no matching local file: need to download to return the GET body
-  if localsize < proxy.fSettings.HttpDirectGetKB shl 10 then
+  if (localsize = 0) or
+     (localsize < proxy.fSettings.HttpDirectGetKB shl 10) then
   begin
     // use the blocking connection for smallest files < 16KB (or without size)
     if localsize <> 0 then
