@@ -1899,8 +1899,8 @@ type
     fTempCurrentSize: Int64;
     fBroadcastStart: Int64;   // QueryPerformanceMicroSeconds()
     fTempFilesTix, fInstableTix, fBroadcastTix: cardinal;
-    fFilesSafe: TOSLock; // concurrent cached files access
     fPartials: THttpPartials;
+    fFilesSafe: TOSLock; // concurrent cached files access
     fOnDirectOptions: TOnHttpPeerCacheDirectOptions;
     // most of these internal methods are virtual for proper customization
     procedure StartHttpServer(aHttpServerClass: THttpServerSocketGenericClass;
@@ -7120,6 +7120,7 @@ begin
       if (fSettings.CacheTempMaxMin <= 0) or
          (fTempFilesPath = '') then
         exit;
+      size := 0;
       DirectoryDeleteOlderFiles(fTempFilesPath,
         fSettings.CacheTempMaxMin / MinsPerDay, PEER_CACHE_PATTERN, false, @size);
       if size <> 0 then // something changed on disk
