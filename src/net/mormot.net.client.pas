@@ -2421,7 +2421,7 @@ function THttpPartials.Find(const Hash: THashDigest; out Size: Int64;
 var
   p: PHttpPartial;
   n: integer;
-  id: THttpPartialID;
+  id: THttpPartialID; // local copy for logging
 begin
   Size := 0;
   result := '';
@@ -2578,11 +2578,14 @@ end;
 
 procedure THttpPartials.ReleaseSlot(p: PHttpPartial);
 begin
-  p^.ID := 0; // reuse this slot at next Add()
+  p^.ID := 0; // mark this slot as empty for the next Add() - no resize
+  if pHash in p^.Flags then
+    FillZero(p^.Digest); // cleaner but not mandatory
   byte(p^.Flags) := 0;
+  p^.FullSize := 0;
+  p^.EventualTime := 0;
   p^.PartFile := '';
   p^.HttpContext := nil;
-  p^.EventualTime := 0;
   dec(fUsed);
   if (fUsed = 0) and
      (length(fDownload) > 16) then
@@ -2696,7 +2699,7 @@ begin
       if not (pFinished in p^.Flags) then // file has just been fully downloaded
       begin
         include(p^.Flags, pFinished);  // mark file as fully available
-        if p^.EventualTime <> 0 then   // e.g. for THttpProxyServer
+        if p^.EventualTime <> 0 then   // not used yet by proxy/peer servers
           if FileSetDateFromUnixUtc(p^.PartFile, p^.EventualTime) then
             err := ' FileSetDate'
           else
