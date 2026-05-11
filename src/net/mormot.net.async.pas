@@ -5725,7 +5725,7 @@ begin
       exit;
     end;
   // compute the base-32 encoded local file name from URI + etag/lastmod
-  if not HttpRequestHashBase32(remote, @b32hash, @headers) then
+  if not HttpRequestHashBase32(remote, @b32hash, pointer(headers)) then
   begin
     result := HTTP_BADREQUEST;
     loginfo := 'wrong b32';
