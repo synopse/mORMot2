@@ -261,7 +261,7 @@ type
   THttpPartial = record
     /// genuine 31-bit positive number, 0 if empty/recyclable after ReleaseSlot
     ID: THttpPartialID;
-    /// the state of this partial download
+    /// the internal state of this partial download
     Flags: set of (pFinished, pHash);
     /// the expected full size of this download
     FullSize: Int64;
@@ -2276,8 +2276,6 @@ procedure THttpPartials.DoLog(const Fmt: RawUtf8; const Args: array of const);
 var
   txt: ShortString;
 begin
-  if not Assigned(OnLog) then
-    exit;
   FormatShort(Fmt, Args, txt);
   OnLog(sllTrace, '% used=%/%', [txt, fUsed, length(fDownload)], self);
 end;
@@ -2328,7 +2326,8 @@ begin
   finally
     Safe.WriteUnLock;
   end;
-  DoLog('Add(%,size=%)=% n=%', [Partial, ExpectedFullSize, result, n]);
+  if Assigned(OnLog) then
+    DoLog('Add(%,size=%)=% n=%', [Partial, ExpectedFullSize, result, n]);
 end;
 
 function THttpPartials.Find(const Hash: THashDigest; out Size: Int64;
@@ -2358,7 +2357,8 @@ begin
   finally
     Safe.ReadUnLock;
   end;
-  if n <> 0 then
+  if (n <> 0) and
+     Assigned(OnLog) then
     DoLog('Find(%)=% added n=%', [result, id, n]);
 end;
 
@@ -2407,7 +2407,8 @@ begin
   finally
     Safe.ReadUnLock; // keep ReadLock if a file name was found
   end;
-  if n <> 0 then
+  if (n <> 0) and
+     Assigned(OnLog) then
     DoLog('HasFile(%)=% added n=%', [FileName, id, n]);
 end;
 
@@ -2434,7 +2435,8 @@ begin
   finally
     Safe.WriteUnLock;
   end;
-  DoLog('Associate(%)=% n=%', [fn, id, n]);
+  if Assigned(OnLog) then
+    DoLog('Associate(%)=% n=%', [fn, id, n]);
 end;
 
 function THttpPartials.ProcessBody(var Ctxt: THttpRequestContext;
@@ -2522,7 +2524,8 @@ begin
       n := length(p^.HttpContext);
     end;
   end;
-  DoLog('Done(%,%)=% n=%', [OldFile, NewFile, result, n]);
+  if Assigned(OnLog) then
+    DoLog('Done(%,%)=% n=%', [OldFile, NewFile, result, n]);
 end;
 
 function THttpPartials.DoneLocked(ID: THttpPartialID): boolean;
@@ -2546,7 +2549,8 @@ begin
       // keep p^.PartFile which may still be available
       n := length(p^.HttpContext);
   end;
-  DoLog('Done(%)=% n=%', [ID, result, n]);
+  if Assigned(OnLog) then
+    DoLog('Done(%)=% n=%', [ID, result, n]);
 end;
 
 function THttpPartials.Abort(ID: THttpPartialID): integer;
@@ -2583,7 +2587,8 @@ begin
   finally
     Safe.WriteUnLock;
   end;
-  DoLog('Abort(%)=%', [ID, result]);
+  if Assigned(OnLog) then
+    DoLog('Abort(%)=%', [ID, result]);
 end;
 
 procedure THttpPartials.Remove(Sender: PHttpRequestContext);
@@ -2606,8 +2611,8 @@ begin
     begin
       if not (pFinished in p^.Flags) then // file has just been fully downloaded
       begin
-        include(p^.Flags, pFinished);  // mark file as fully available
-        if p^.EventualTime <> 0 then   // not used yet by proxy/peer servers
+        include(p^.Flags, pFinished);     // mark file as fully available
+        if p^.EventualTime <> 0 then      // not used yet by proxy/peer servers
           if FileSetDateFromUnixUtc(p^.PartFile, p^.EventualTime) then
             err := ' FileSetDate'
           else
@@ -2622,7 +2627,8 @@ begin
   finally
     Safe.WriteUnLock;
   end;
-  DoLog('Remove(%)=% n=%%', [Sender.ProgressiveID, BOOL_STR[p <> nil], n, err]);
+  if Assigned(OnLog) then
+    DoLog('Remove(%)=% n=%%', [Sender.ProgressiveID, BOOL_STR[p <> nil], n, err]);
 end;
 
 
