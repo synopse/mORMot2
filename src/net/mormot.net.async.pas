@@ -1508,6 +1508,7 @@ type
     function OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
     function OnGetHeadLocalFolder(Ctxt: THttpServerRequest; const Uri: TUriMatchName): cardinal;
     function OnGetHeadRemoteUri(Ctxt: THttpServerRequest; const Uri: TUriMatchName): cardinal;
+    procedure OnBackgroundDeleteDeprecated(Sender: TObject);
     // TOnComputeHashFromFileName callback
     function OnComputeHashFromFileName(const LocalFile: TFileName; out Hash: THash160): boolean;
   public
@@ -6272,7 +6273,6 @@ procedure THttpProxyServer.OnIdle(Sender: TObject; NowTix: Int64);
 var
   i, n: integer;
   tixmin: cardinal;
-  size: Int64;
   one: ^THttpProxyUrl;
 begin
   // delete any deprecated in-memory cached content - called every second
@@ -6287,14 +6287,21 @@ begin
   end;
   if n <> 0 then
     fLog.Add.Log(sllTrace, 'OnIdle: cache gc=%', [n], self);
-  // delete deprecated file content - check every minute
+  // delete deprecated file content in background thread - check every 2 minutes
   if (fSettings.DiskCache.Path = '') or
-     (fSettings.DiskCache.TimeoutSec <= SecsPerMin) then
+     (fSettings.DiskCache.TimeoutSec <= SecsPerHour) then
     exit;
-  tixmin := (NowTix shr 16) + 1; // check folder every 65,536 seconds
+  tixmin := (NowTix shr 27) + 1; // check folder every 128 seconds
   if fTempFilesTix = tixmin then
     exit;
   fTempFilesTix := tixmin;
+  TLoggedWorkThread.Create(nil, 'cacheclean', nil, OnBackgroundDeleteDeprecated);
+end;
+
+procedure THttpProxyServer.OnBackgroundDeleteDeprecated(Sender: TObject);
+var
+  size: Int64;
+begin // folder timestamp check is called every 2 minutes, and may be slow
   size := 0;
   DirectoryDeleteOlderFiles(fSettings.DiskCache.Path,
     fSettings.DiskCache.TimeoutSec / SecsPerDay, '*.',
