@@ -2135,6 +2135,10 @@ type
     procedure SortArrayByFields(const aItemPropNames: array of RawUtf8;
       aValueCompare: TVariantCompare = nil; const aValueCompareField: TVariantCompareField = nil;
       aValueCompareReverse: boolean = false; aNameSortedCompare: TUtf8Compare = nil);
+    /// find an occurence in O(log(n)) after SortArrayByField() array sorting
+    function SearchSortedArrayByField(const aItemPropName: RawUtf8;
+      const aValue: variant; aValueCompare: TVariantCompare = nil;
+      aValueCompareReverse: boolean = false): PtrInt;
     /// inverse the order of Names and Values of this document
     // - could be applied after a content sort if needed
     procedure Reverse;
@@ -8428,6 +8432,46 @@ begin
   QS.InitSort(@self, @aItemPropNames[0], high(aItemPropNames),
     aValueCompare, aValueCompareField, aValueCompareReverse, aNameSortedCompare);
   QS.Sort(0, VCount - 1);
+end;
+
+function TDocVariantData.SearchSortedArrayByField(const aItemPropName: RawUtf8;
+  const aValue: variant; aValueCompare: TVariantCompare;
+  aValueCompareReverse: boolean): PtrInt;
+var
+  L, R, cmp: PtrInt;
+  ndx: integer; // not PtrInt
+  p: PVariant;
+begin
+  result := -1;
+  R := VCount - 1;
+  if (R < 0) or
+     not IsArray then
+    exit;
+  if not Assigned(aValueCompare) then
+    aValueCompare := VariantCompare;
+  ndx := -1;
+  L := 0;
+  repeat // efficient O(log(n)) binary search
+    result := (L + R) shr 1;
+    if not _Safe(VValue[result])^.GetObjectProp(aItemPropName, p, @ndx) then
+      p := @NullVarData;
+    cmp := aValueCompare(p^, aValue);
+    if aValueCompareReverse then
+      cmp := -cmp;
+    if cmp = 0 then
+    begin
+      while (result > 0) and
+            _Safe(VValue[result - 1])^.GetObjectProp(aItemPropName, p, @ndx) and
+            (aValueCompare(p^, aValue) = 0) do
+        dec(result); // go down to the first occurence of aValue
+      exit;
+    end;
+    if cmp < 0 then
+      L := result + 1
+    else
+      R := result - 1;
+  until L > R;
+  result := -1
 end;
 
 procedure TDocVariantData.Reverse;
