@@ -2132,9 +2132,11 @@ type
     // - allow up to 4 fields (aItemPropNames[0]..aItemPropNames[3])
     // - do nothing if the document is not a dvArray, or if the items are no dvObject
     // - will sort by UTF-8 text (VariantCompare) if no aValueCompareField is supplied
+    // - can optionally return all indexes of each unique value, e.g. for a grid
     procedure SortArrayByFields(const aItemPropNames: array of RawUtf8;
       aValueCompare: TVariantCompare = nil; const aValueCompareField: TVariantCompareField = nil;
-      aValueCompareReverse: boolean = false; aNameSortedCompare: TUtf8Compare = nil);
+      aValueCompareReverse: boolean = false; aNameSortedCompare: TUtf8Compare = nil;
+      aUniqueValueIndex: PIntegerDynArray = nil);
     /// find an occurence in O(log(n)) after SortArrayByField() array sorting
     function SearchSortedArrayByField(const aItemPropName: RawUtf8;
       const aValue: variant; aValueCompare: TVariantCompare = nil;
@@ -8242,6 +8244,7 @@ type
     function DoCompareField(Value: PQuickSortByFieldLookup): PtrInt;
       {$ifndef CPUX86} inline; {$endif}
     procedure Sort(L, R: PtrInt);
+    procedure GetUniqueIndex(var ndx: TIntegerDynArray);
   end;
 
 procedure TQuickSortDocVariantValuesByField.InitSort(aDoc: PDocVariantData;
@@ -8404,6 +8407,40 @@ begin
     until L >= R;
 end;
 
+procedure TQuickSortDocVariantValuesByField.GetUniqueIndex(var ndx: TIntegerDynArray);
+var
+  n: PtrInt;
+  v: ^TQuickSortByFieldLookup;
+  p: PVariant;
+  i, cmp: integer;
+begin
+  if Doc^.VCount = 0 then
+    exit;
+  SetLength(ndx, Doc^.VCount);
+  p := nil;
+  v := pointer(Lookup);
+  n := 0;
+  i := 0;
+  repeat
+    if p = nil then
+      cmp := 1
+    else if Assigned(Compare) then
+      cmp := Compare(p^, v^[0]^)
+    else
+      cmp := CompareField(Fields[0], p^, v^[0]^);
+    if cmp <> 0 then
+    begin
+      ndx[n] := i;
+      inc(n);
+      p := v^[0];
+    end;
+    inc(v);
+    inc(i);
+  until i = Doc^.VCount;
+  if n <> Doc^.VCount then
+    SetLength(ndx, n);
+end;
+
 procedure TDocVariantData.SortArrayByField(const aItemPropName: RawUtf8;
   aValueCompare: TVariantCompare; aValueCompareReverse: boolean;
   aNameSortedCompare: TUtf8Compare);
@@ -8421,17 +8458,21 @@ end;
 
 procedure TDocVariantData.SortArrayByFields(
   const aItemPropNames: array of RawUtf8; aValueCompare: TVariantCompare;
-  const aValueCompareField: TVariantCompareField;
-  aValueCompareReverse: boolean; aNameSortedCompare: TUtf8Compare);
+  const aValueCompareField: TVariantCompareField; aValueCompareReverse: boolean;
+  aNameSortedCompare: TUtf8Compare; aUniqueValueIndex: PIntegerDynArray);
 var
   QS: TQuickSortDocVariantValuesByField;
 begin
+  if aUniqueValueIndex <> nil then
+    aUniqueValueIndex^ := nil;
   if (VCount <= 0) or
      not IsArray then
     exit;
   QS.InitSort(@self, @aItemPropNames[0], high(aItemPropNames),
     aValueCompare, aValueCompareField, aValueCompareReverse, aNameSortedCompare);
   QS.Sort(0, VCount - 1);
+  if aUniqueValueIndex <> nil then
+    QS.GetUniqueIndex(aUniqueValueIndex^);
 end;
 
 function TDocVariantData.SearchSortedArrayByField(const aItemPropName: RawUtf8;
