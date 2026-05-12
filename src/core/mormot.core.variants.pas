@@ -2126,16 +2126,14 @@ type
     // - will sort by UTF-8 text (VariantCompare) if no custom aValueCompare is supplied
     // - this method is faster than SortByValue/SortByRow
     procedure SortArrayByField(const aItemPropName: RawUtf8;
-      aValueCompare: TVariantCompare = nil;
-      aValueCompareReverse: boolean = false;
+      aValueCompare: TVariantCompare = nil; aValueCompareReverse: boolean = false;
       aNameSortedCompare: TUtf8Compare = nil);
     /// sort the document array values by field(s) of some stored objet values
     // - allow up to 4 fields (aItemPropNames[0]..aItemPropNames[3])
     // - do nothing if the document is not a dvArray, or if the items are no dvObject
     // - will sort by UTF-8 text (VariantCompare) if no aValueCompareField is supplied
     procedure SortArrayByFields(const aItemPropNames: array of RawUtf8;
-      aValueCompare: TVariantCompare = nil;
-      const aValueCompareField: TVariantCompareField = nil;
+      aValueCompare: TVariantCompare = nil; const aValueCompareField: TVariantCompareField = nil;
       aValueCompareReverse: boolean = false; aNameSortedCompare: TUtf8Compare = nil);
     /// inverse the order of Names and Values of this document
     // - could be applied after a content sort if needed
@@ -7910,7 +7908,7 @@ begin
     exit;
   ndx := -1;
   if aPreviousIndex <> nil then
-  begin // optimistic try if this field appears at the same position
+  begin // optimistic try if this field appears at the same position (common)
     ndx := aPreviousIndex^;
     if (PtrUInt(ndx) >= PtrUInt(n)) or
        (SortDynArrayAnsiStringByCase[not Has(dvoNameCaseSensitive)](
@@ -8232,8 +8230,9 @@ type
     TempExch: TQuickSortByFieldLookup;
     Reverse: boolean;
     Depth: integer; // = high(Lookup) + 1
-    procedure Init(const aPropNames: array of RawUtf8;
-      aNameSortedCompare: TUtf8Compare);
+    procedure InitSort(aDoc: PDocVariantData; aPropNames: PRawUtf8Array; aPropHi: PtrInt;
+      aValueCompare: TVariantCompare; const aValueCompareField: TVariantCompareField;
+      aValueCompareReverse: boolean; aNameSortedCompare: TUtf8Compare);
     function DoCompare(Value: PQuickSortByFieldLookup): PtrInt;
       {$ifndef CPUX86} inline; {$endif}
     function DoCompareField(Value: PQuickSortByFieldLookup): PtrInt;
@@ -8241,16 +8240,30 @@ type
     procedure Sort(L, R: PtrInt);
   end;
 
-procedure TQuickSortDocVariantValuesByField.Init(
-  const aPropNames: array of RawUtf8; aNameSortedCompare: TUtf8Compare);
+procedure TQuickSortDocVariantValuesByField.InitSort(aDoc: PDocVariantData;
+  aPropNames: PRawUtf8Array; aPropHi: PtrInt;
+  aValueCompare: TVariantCompare; const aValueCompareField: TVariantCompareField;
+  aValueCompareReverse: boolean; aNameSortedCompare: TUtf8Compare);
 var
   namecomp: TUtf8Compare;
   v, r: PVariant;
   row, f: PtrInt;
-  rowdata: PDocVariantData;
+  d: PDocVariantData;
   ndx: integer; // not PtrInt
 begin
-  Depth := high(aPropNames);
+  Fields := aPropNames;
+  if Assigned(aValueCompareField) then
+  begin
+    Compare := nil;
+    CompareField := aValueCompareField;
+  end
+  else if Assigned(aValueCompare) then
+    Compare := aValueCompare
+  else
+    Compare := VariantCompare;
+  Doc := aDoc;
+  Reverse := aValueCompareReverse;
+  Depth := aPropHi;
   if (Depth < 0) or
      (Depth > high(TQuickSortByFieldLookup)) then
     EDocVariant.RaiseUtf8('TDocVariantData.SortByFields(%)', [Depth]);
@@ -8262,19 +8275,20 @@ begin
     namecomp := StrCompByCase[not Doc^.Has(dvoNameCaseSensitive)];
   for f := 0 to Depth do
   begin
-    if aPropNames[f] = '' then
+    if aPropNames[0] = '' then
       EDocVariant.RaiseUtf8('TDocVariantData.SortByFields(%=void)', [f]);
     ndx := -1;
     r := pointer(Doc^.VValue);
     for row := 0 to Doc^.VCount - 1 do
     begin
-      if _SafeObject(r^, rowdata) then
-        if (cardinal(ndx) < cardinal(rowdata^.VCount)) and
-           (namecomp(pointer(rowdata^.VName[ndx]), pointer(aPropNames[f])) = 0) then
-          v := @rowdata^.VValue[ndx] // get the value at the (likely) same position
+      d := _Safe(r^);
+      if d^.IsObject then // inlined GetObjectProp()
+        if (cardinal(ndx) < cardinal(d^.VCount)) and
+           (namecomp(pointer(d^.VName[ndx]), pointer(aPropNames[0])) = 0) then
+          v := @d^.VValue[ndx] // get the value at the (likely) same position
         else
         begin
-          v := pointer(rowdata^.GetVarData(aPropNames[f], aNameSortedCompare, @ndx));
+          v := pointer(d^.GetVarData(aPropNames[0], aNameSortedCompare, @ndx));
           if v = nil then
             v := @NullVarData;
         end
@@ -8283,6 +8297,7 @@ begin
       Lookup[row, f] := v;
       inc(r);
     end;
+    aPropNames := @aPropNames[1];
   end;
 end;
 
@@ -8395,12 +8410,8 @@ begin
      (aItemPropName = '') or
      not IsArray then
     exit;
-  if not Assigned(aValueCompare) then
-    aValueCompare := VariantCompare;
-  QS.Compare := aValueCompare;
-  QS.Doc := @self;
-  QS.Init([aItemPropName], aNameSortedCompare);
-  QS.Reverse := aValueCompareReverse;
+  QS.InitSort(@self, @aItemPropName, 0,
+    aValueCompare, nil, aValueCompareReverse, aNameSortedCompare);
   QS.Sort(0, VCount - 1);
 end;
 
@@ -8414,19 +8425,8 @@ begin
   if (VCount <= 0) or
      not IsArray then
     exit;
-  if Assigned(aValueCompareField) then
-  begin
-    QS.Compare := nil;
-    QS.Fields := @aItemPropNames[0];
-    QS.CompareField := aValueCompareField;
-  end
-  else if Assigned(aValueCompare) then
-      QS.Compare := aValueCompare
-    else
-      QS.Compare := VariantCompare;
-  QS.Doc := @self;
-  QS.Init(aItemPropNames, aNameSortedCompare);
-  QS.Reverse := aValueCompareReverse;
+  QS.InitSort(@self, @aItemPropNames[0], high(aItemPropNames),
+    aValueCompare, aValueCompareField, aValueCompareReverse, aNameSortedCompare);
   QS.Sort(0, VCount - 1);
 end;
 
