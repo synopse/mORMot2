@@ -6731,6 +6731,7 @@ var
   dv: PDocVariantData;
   pv: PVariant;
   i, ndx: PtrInt;
+  x: TIntegerDynArray;
   V, V1, V2: variant;
   s, j: RawUtf8;
   p: PUtf8Char;
@@ -7285,12 +7286,27 @@ begin
   Doc.SortArrayByField('c');
   CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact),
     '[{a:1,b:2,c:0},{b:3,c:1,a:1},{a:2,b:1,c:2}]', 'SortArrayByField c');
+  CheckEqual(Doc.SearchSortedArrayByField('c', 0), 0);
+  CheckEqual(Doc.SearchSortedArrayByField('c', 1), 1);
+  CheckEqual(Doc.SearchSortedArrayByField('c', 2), 2);
+  CheckEqual(Doc.SearchSortedArrayByField('c', 3), -1);
   Doc.SortArrayByField('b');
   CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact),
     '[{a:2,b:1,c:2},{a:1,b:2,c:0},{b:3,c:1,a:1}]', 'SortArrayByField b');
-  Doc.SortArrayByFields(['a', 'b']);
+  CheckEqual(Doc.SearchSortedArrayByField('b', 0), -1);
+  CheckEqual(Doc.SearchSortedArrayByField('b', 1), 0);
+  CheckEqual(Doc.SearchSortedArrayByField('b', 2), 1);
+  CheckEqual(Doc.SearchSortedArrayByField('b', 3), 2);
+  Check(x = nil);
+  Doc.SortArrayByFields(['a', 'b'], nil, nil, false, nil, @x);
   CheckEqual(Doc.ToJson('', '', jsonUnquotedPropNameCompact),
     '[{a:1,b:2,c:0},{b:3,c:1,a:1},{a:2,b:1,c:2}]', 'SortArrayByField ab');
+  CheckEqual(Doc.SearchSortedArrayByField('a', 0), -1);
+  CheckEqual(Doc.SearchSortedArrayByField('a', 1), 0);
+  CheckEqual(Doc.SearchSortedArrayByField('a', 2), 2);
+  CheckEqual(length(x), 2);
+  CheckEqual(x[0], 0);
+  CheckEqual(x[1], 2);
   Doc.Clear;
   s := '{un:{a:1},dos:{a:2},tres:{a:1},quatro:{a:1}}';
   Doc.InitJson(s);
