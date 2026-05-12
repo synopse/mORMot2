@@ -727,7 +727,7 @@ type
     property OnSendFile: TOnHttpServerSendFile
       read fOnSendFile write fOnSendFile;
     /// this callback would be called on idle state, typically every few seconds
-    // - any implementation should not be blocking for long
+    // - any implementation should not be blocking for a long period
     property OnIdle: TOnPollSocketsIdle
       read fOnIdle write fOnIdle;
     /// defines request/response internal queue length
