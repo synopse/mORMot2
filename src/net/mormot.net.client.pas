@@ -2493,14 +2493,7 @@ end;
 
 procedure THttpPartials.ReleaseSlot(p: PHttpPartial);
 begin
-  p^.ID := 0; // mark this slot as empty for the next Add() - no resize
-  if pHash in p^.Flags then
-    FillZero(p^.Digest); // cleaner but not mandatory
-  byte(p^.Flags) := 0;
-  p^.FullSize := 0;
-  p^.EventualTime := 0;
-  p^.PartFile := '';
-  p^.HttpContext := nil;
+  RecordZero(p, TypeInfo(THttpPartial));
   dec(fUsed);
   if (fUsed = 0) and
      (length(fDownload) > 16) then
