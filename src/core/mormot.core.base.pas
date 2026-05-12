@@ -5817,7 +5817,8 @@ begin
     if (PStrLen(p1 - _STRLEN)^ = len) and // same length
        (p1^ = p2^) then // we can safely compare the first char
     begin
-      if len = 1 then
+      if (len = 1) or
+         (p1 = p2) then // if string was interned
         exit;
       l := @p1[len - SizeOf(PtrInt)];
       inc(p1);
@@ -5857,7 +5858,8 @@ begin
     if (PStrLen(p1 - _STRLEN)^ = len) and          // same length
        ((ord(p1^) xor ord(p2^)) and $df = 0) then  // same first char
     begin
-      if len = 1 then
+      if (len = 1) or
+         (p1 = p2) then // if string was interned
         exit;
       l := @p1[len - SizeOf(cardinal)];
       inc(p1);

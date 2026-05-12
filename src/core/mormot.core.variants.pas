@@ -3170,7 +3170,7 @@ type
     CompFunc: TVariantCompare;
     CompMatch: TCompareOperator;
     CompKeyHasPath: boolean;
-    CompKeyPrev: integer;
+    CompKeyPrev: integer; // not PtrInt
   public
     function MoveNext: boolean; { too complex to be inlined }
     function GetEnumerator: TDocObjectEnumerator;
@@ -7347,7 +7347,7 @@ function TDocVariantData.CompareObject(const ObjFields: array of RawUtf8;
   const Another: TDocVariantData; CaseInsensitive: boolean): integer;
 var
   f: PtrInt;
-  prev: integer;
+  prev: integer; // not PtrInt
   v1, v2: PVariant;
 begin
   if IsObject then
@@ -7936,7 +7936,7 @@ function TDocVariantData.SearchItemByProp(const aPropName, aPropValue: RawUtf8;
   aPropValueCaseSensitive: boolean; aStartIndex: PtrInt): integer;
 var
   v, prop: PVariant;
-  prev: integer;
+  prev: integer; // not PtrInt
 begin
   if IsObject then
   begin
@@ -8414,8 +8414,6 @@ var
   p: PVariant;
   i, cmp: integer;
 begin
-  if Doc^.VCount = 0 then
-    exit;
   SetLength(ndx, Doc^.VCount);
   p := nil;
   v := pointer(Lookup);
@@ -8430,11 +8428,11 @@ begin
       cmp := CompareField(Fields[0], p^, v^[0]^);
     if cmp <> 0 then
     begin
-      ndx[n] := i;
+      ndx[n] := i; // store the index of each new unique value
       inc(n);
       p := v^[0];
     end;
-    inc(v);
+    inc(v); // next row
     inc(i);
   until i = Doc^.VCount;
   if n <> Doc^.VCount then
@@ -8575,7 +8573,7 @@ procedure TDocVariantData.ReduceFilter(const aKey: RawUtf8;
   const aValue: variant; aMatch: TCompareOperator; aCompare: TVariantCompare;
   aLimit: integer; aPathDelim: AnsiChar; var result: TDocVariantData);
 var
-  n, prev: integer;
+  n, prev: integer; // not PtrInt
   v, obj: PVariant;
   haspath: boolean;
   dv: PDocVariantData;
@@ -8674,7 +8672,7 @@ procedure TDocVariantData.ReduceAsArray(const aPropName: RawUtf8;
   var result: TDocVariantData; const OnReduce: TOnReducePerItem);
 var
   ndx: PtrInt;
-  prev: integer;
+  prev: integer; // not PtrInt
   item: PDocVariantData;
   v: PVariant;
 begin
@@ -8703,7 +8701,7 @@ procedure TDocVariantData.ReduceAsArray(const aPropName: RawUtf8;
   var result: TDocVariantData; const OnReduce: TOnReducePerValue);
 var
   ndx: PtrInt;
-  prev: integer;
+  prev: integer; // not PtrInt
   v: PVariant;
 begin
   result.Init(VOptions, dvArray); // same options than the main document
@@ -8736,7 +8734,7 @@ function TDocVariantData.ReduceAsVariantArray(const aPropName: RawUtf8;
   aDuplicates: TSearchDuplicate): TVariantDynArray;
 var
   n, ndx: PtrInt;
-  prev: integer;
+  prev: integer; // not PtrInt
   v: PVariant;
 begin
   result := nil;
