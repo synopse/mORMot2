@@ -2732,16 +2732,7 @@ begin
     result := ''
   else
   begin
-    S := P;
-    {$ifdef ASMINTEL}
-    S := PosChar(S, Sep); // SSE2 asm on i386 and x86_64
-    if S = nil then
-      S := P + mormot.core.base.StrLen(P);
-    {$else}
-    while (S^ <> #0) and
-          (S^ <> Sep) do
-      inc(S);
-    {$endif ASMINTEL}
+    S := PosChar0(P, Sep); // SSE2 asm on i386 and x86_64
     FastSetString(result, P, S - P);
     if S^ <> #0 then
       P := S + 1
@@ -3062,9 +3053,7 @@ begin
     while S^ > ' ' do
       inc(S)
   else
-    while (S^ <> #0) and
-          (S^ <> Sep) do
-      inc(S);
+    S := PosChar0(S, Sep);
   len := S - P;
   while (P[len - 1] in [#1..' ']) and
         (len > 0) do
