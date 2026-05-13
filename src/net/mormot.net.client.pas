@@ -2367,7 +2367,8 @@ var
   p: PHttpPartial;
 begin
   result := '';
-  if IsVoid then
+  if IsVoid or
+     (ID = 0) then
     exit;
   Safe.ReadLock;
   try
