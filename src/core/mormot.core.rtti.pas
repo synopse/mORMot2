@@ -2556,6 +2556,8 @@ type
     // - called e.g. when no RTTI is available, i.e. text serialization
     // - will copy all published properties one-by-one
     procedure CopyProperties(Dest, Source: PAnsiChar);
+    /// copy properties by name between two class or record instances
+    procedure CopyByName(Dest, Source: PAnsiChar; const Names: array of RawUtf8);
   end;
 
   PRttiCustomProps = ^TRttiCustomProps;
@@ -8990,6 +8992,18 @@ begin
     inc(p);
     dec(n);
   until n = 0;
+end;
+
+procedure TRttiCustomProps.CopyByName(Dest, Source: PAnsiChar;
+  const Names: array of RawUtf8);
+var
+  i: PtrInt;
+begin
+  if (Dest <> nil) and
+     (Source <> nil) and
+     (Count > 0) then
+    for i := 0 to high(Names) do
+      Find(Names[i])^.CopyValue(Dest, Source);
 end;
 
 
