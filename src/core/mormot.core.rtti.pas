@@ -2555,9 +2555,9 @@ type
     /// copy the properties of a rkClass instance
     // - called e.g. when no RTTI is available, i.e. text serialization
     // - will copy all published properties one-by-one
-    procedure CopyProperties(Dest, Source: PAnsiChar);
+    procedure CopyProperties(Dest, Source: pointer);
     /// copy properties by name between two class or record instances
-    procedure CopyByName(Dest, Source: PAnsiChar; const Names: array of RawUtf8);
+    procedure CopyByName(Dest, Source: pointer; const Names: array of RawUtf8);
   end;
 
   PRttiCustomProps = ^TRttiCustomProps;
@@ -8975,7 +8975,7 @@ begin
     MoveFast(Source^, Dest^, offset);
 end;
 
-procedure TRttiCustomProps.CopyProperties(Dest, Source: PAnsiChar);
+procedure TRttiCustomProps.CopyProperties(Dest, Source: pointer);
 var
   p: PRttiCustomProp;
   n: integer;
@@ -8994,7 +8994,7 @@ begin
   until n = 0;
 end;
 
-procedure TRttiCustomProps.CopyByName(Dest, Source: PAnsiChar;
+procedure TRttiCustomProps.CopyByName(Dest, Source: pointer;
   const Names: array of RawUtf8);
 var
   i: PtrInt;
