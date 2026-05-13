@@ -2420,7 +2420,7 @@ type
     // - managed or simple (e.g. integer) properties call Value.ValueCopy()
     // - if the property is a class, will copy the properties or call Assign()
     // as expected on an existing Dest instance
-    procedure CopyValue(Dest, Source: PAnsiChar; DestRtti: PRttiCustomProp);
+    procedure CopyValue(Dest, Source: PAnsiChar; DestRtti: PRttiCustomProp = nil);
     /// low-level initialization of one property value
     // - if the property is a class, all nested properties will be cleared,
     // optionally calling Free on all instances
@@ -8497,7 +8497,8 @@ procedure TRttiCustomProp.CopyValue(Dest, Source: PAnsiChar; DestRtti: PRttiCust
 var
   v: TVarData;
 begin
-  if (Dest = nil) or
+  if (@self = nil) or
+     (Dest = nil) or
      (Source = nil) then
     exit; // avoid GPF
   if DestRtti = nil then
@@ -8580,8 +8581,10 @@ end;
 
 function TRttiCustomProps.Find(PropName: PUtf8Char; PropNameLen: PtrInt): PRttiCustomProp;
 begin
-  result := pointer(PropName);
-  if result <> nil then
+  if (PropName = nil) or
+     (PropNameLen <= 0) then
+    result := nil
+  else
     result := FindCustomProp(pointer(List), PropName, PropNameLen, Count);
 end;
 
@@ -8591,12 +8594,12 @@ var
 begin
   if PropNameLen <> 0 then
   begin
-    p := pointer(List);
-    for result := 0 to Count - 1 do
-      if p^.NameMatch(PropName, PropNameLen) then
-        exit
-      else
-        inc(p);
+    p := FindCustomProp(pointer(List), PropName, PropNameLen, Count);
+    if p <> nil then
+    begin
+      result := PtrUInt((PtrUInt(p) - PtrUInt(List)) div SizeOf(p^));
+      exit;
+    end;
   end;
   result := -1;
 end;
@@ -8983,7 +8986,7 @@ begin
     exit;
   n := Count;
   repeat
-    p^.CopyValue(Dest, Source, p);
+    p^.CopyValue(Dest, Source);
     inc(p);
     dec(n);
   until n = 0;
