@@ -67,6 +67,11 @@ function GetNextItemMultiple(var P: PUtf8Char; const Sep: RawUtf8;
 procedure GetNextItemTrimed(var P: PUtf8Char; Sep: AnsiChar;
   var result: RawUtf8);
 
+/// return trimmed next CSV string buffer and length from P
+// - P=nil after call when end of text is reached
+function GetNextItemTrimedBuffer(var P: PUtf8Char; Sep: AnsiChar;
+  out Item: PUtf8Char): PtrInt;
+
 /// return trimmed next CSV string from P, ending value at #0 .. #13
 // - typically usage is to parse HTTP headers
 // - P=nil after call when P^ = #0 end of text is reached, or return P^ = #10
@@ -2786,32 +2791,40 @@ begin
     GetNextItem(P, Sep, result);
 end;
 
+function GetNextItemTrimedBuffer(var P: PUtf8Char; Sep: AnsiChar;
+  out Item: PUtf8Char): PtrInt;
+var
+  S: PUtf8Char;
+begin
+  S := P;
+  if (S = nil) or
+     (Sep <= ' ') then
+  begin
+    result := 0;
+    exit;
+  end;
+  while (S^ <= ' ') and
+        (S^ <> #0) do
+    inc(S); // trim left
+  Item := S;
+  result := PosChar0(S, Sep) - S; // use fast SSE2 asm on x86_64
+  while (result <> 0) and
+        (S[result] in [#1 .. ' ']) do
+    dec(result);
+  inc(S, result);
+  if S^ = #0 then
+    P := nil
+  else
+    P := S + 1;
+end;
+
 procedure GetNextItemTrimed(var P: PUtf8Char; Sep: AnsiChar; var result: RawUtf8);
 var
-  S, E: PUtf8Char;
+  S: PUtf8Char;
+  len: PtrInt;
 begin
-  if (P = nil) or
-     (Sep <= ' ') then
-    result := ''
-  else
-  begin
-    while (P^ <= ' ') and
-          (P^ <> #0) do
-      inc(P); // trim left
-    S := P;
-    while (S^ <> #0) and
-          (S^ <> Sep) do
-      inc(S); // go to end of value
-    E := S;
-    while (E > P) and
-          (E[-1] in [#1..' ']) do
-      dec(E); // trim right
-    FastSetString(result, P, E - P);
-    if S^ <> #0 then
-      P := S + 1
-    else
-      P := nil;
-  end;
+  len := GetNextItemTrimedBuffer(P, Sep, S);
+  FastSetString(result, S, len);
 end;
 
 procedure GetNextItemTrimedLine(var P: PUtf8Char; Sep: AnsiChar;

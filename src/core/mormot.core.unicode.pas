@@ -6705,7 +6705,7 @@ begin
      (strlen > 0) then
     if sublen = 1 then
     begin
-      result := PosChar(str, strlen, sub^); // use SSE2
+      result := PosChar(str, strlen, sub^); // use fast SSE2 asm on x86_64
       exit;
     end
     else
