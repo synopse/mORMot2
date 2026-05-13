@@ -1304,7 +1304,7 @@ end;
 var
   EtcResolve, EtcResolveEnv: TCachedValue; // 64 seconds thread-safe cache
 
-function _GetDnsAddresses(usePosixEnv, getAD: boolean): TRawUtf8DynArray;
+procedure _GetDnsAddresses(usePosixEnv, getAD: boolean; var result: TRawUtf8DynArray);
 var
   resolv, one: RawUtf8;
   p: PUtf8Char;

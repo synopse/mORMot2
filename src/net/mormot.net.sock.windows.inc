@@ -957,7 +957,7 @@ var
   GetBestInterface: function(dwDestAddrIPv4: cardinal;
     var pdwBestIfIndex: DWord): DWord; stdcall;
 
-function _GetDnsAddresses(usePosixEnv, getAD: boolean): TRawUtf8DynArray;
+procedure _GetDnsAddresses(usePosixEnv, getAD: boolean; var result: TRawUtf8DynArray);
 var
   n, l: PtrInt;
   siz: ULONG;
