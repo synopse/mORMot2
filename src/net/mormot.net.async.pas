@@ -5903,7 +5903,8 @@ begin
     // from hpsRemoteUri: we have the resource size+date attributes
     result := Ctxt.SetOutFile(filename, with304,
       size, lastmod, fSettings.CacheControlMaxAgeSec);
-    if result = HTTP_SUCCESS then
+    if (result = HTTP_SUCCESS) or
+       (result = HTTP_NOTMODIFIED) then
       FileSetDateFromUnixUtc(filename, UnixTimeUtc); // mark file timestamp
   end;
   if (result <> HTTP_SUCCESS) or
