@@ -7821,11 +7821,11 @@ var
 begin // SizeOf(aDig^)=20 bytes=160-bit as 32 chars of case-insensitive base-32
   result := HttpRequestHash(hfSHA256, aUri, aHeaders, dig) = SizeOf(THash256);
   if not result then
-    FillZero(dig.Bin.b160);
+    FillZero(dig.Bin.b160)
+  else if aName <> nil then // keep aName^ = '' if false
+    BinToBase32(@dig.Bin, FastSetString(aName^, 32), SizeOf(aDig^), @b32encLower);
   if aDig <> nil then
     MoveFast(dig.Bin, aDig^, SizeOf(aDig^));
-  if aName <> nil then
-    BinToBase32(@dig.Bin, FastSetString(aName^, 32), SizeOf(aDig^), @b32encLower);
 end;
 
 {$ifdef USEWININET}
