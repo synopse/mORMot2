@@ -1528,7 +1528,7 @@ end;
 function FileCreate(const aFileName: TFileName; aMode, aRights: integer): THandle;
 begin
   if aFileName = '' then
-    result := 0
+    result := INVALID_HANDLE_VALUE
   else if (aMode = 0) and
           (aRights = 0) then
     result := sysutils.FileCreate(aFileName) // direct call of the FPC RTL

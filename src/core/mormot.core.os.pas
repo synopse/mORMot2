@@ -7516,7 +7516,7 @@ var
 
 begin
   // logic similar to TSynLog.CreateLogWriter
-  h := 0;
+  h := INVALID_HANDLE_VALUE;
   err := 0;
   if not CanOpenWrite then
     if not FileExists(aFileName) then
@@ -7783,7 +7783,7 @@ begin
     bak := FileName + '.bak';
     DeleteFile(bak);
     RenameFile(FileName, bak);
-    h := 0;
+    h := INVALID_HANDLE_VALUE;
   end
   else
     h := FileOpen(FileName, fmOpenWriteShared);

@@ -1169,7 +1169,7 @@ var
 begin
   // aRights parameter is just ignored on Windows
   if aFileName = '' then
-    result := 0
+    result := INVALID_HANDLE_VALUE
   else
     result := CreateFileW(W32(aFileName, tmp), GENERIC_READ or GENERIC_WRITE,
       FileShare(aMode), nil, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
@@ -1188,7 +1188,7 @@ var
   tmp: TW32Temp;
 begin
   if aFileName = '' then
-    result := 0
+    result := INVALID_HANDLE_VALUE
   else
    result := CreateFileW(W32(aFileName, tmp), FILE_ACCESS[aMode and 3],
       FileShare(aMode), nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
