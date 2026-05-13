@@ -138,8 +138,8 @@ function GetBitCsv(const Bits; BitsCount: integer): RawUtf8;
 /// decode next CSV hexadecimal string from P, nil if no more or not matching BinBytes
 // - Bin is filled with 0 if the supplied CSV content is invalid
 // - if Sep is #0, it will read the hexadecimal chars until a whitespace is reached
-function GetNextItemHexDisplayToBin(var P: PUtf8Char; Bin: PByte; BinBytes: PtrInt;
-  Sep: AnsiChar = ','): boolean;
+function GetNextItemHexDisplayToBin(var P: PUtf8Char; Bin: PByte;
+  BinBytes: PtrInt; Sep: AnsiChar = ','): boolean;
 
 type
   /// some stack-allocated zero-terminated character buffer
@@ -2991,48 +2991,22 @@ end;
 
 procedure GetNextItemShortString(var P: PUtf8Char; Dest: PShortString; Sep: AnsiChar);
 var
-  S, D: PUtf8Char;
-  c: AnsiChar;
+  S: PUtf8Char;
   len: PtrInt;
 begin
-  S := P;
-  D := pointer(Dest); // better FPC codegen with a dedicated variable
-  if S <> nil then
+  if P <> nil then
   begin
-    len := 0;
-    if S^ <= ' ' then
-      while (S^ <= ' ') and
-            (S^ <> #0) do
-        inc(S); // trim left space
-    repeat
-      c := S^;
-      inc(S);
-      if c = Sep then
-        break;
-      if c <> #0 then
-        if len < 254 then // avoid shortstring buffer overflow
-        begin
-          inc(len);
-          D[len] := c;
-          continue;
-        end
-        else
-          len := 0;
-      S := nil; // reached #0: end of input
-      break;
-    until false;
-    if len <> 0 then
-      repeat
-        if D[len] >= ' ' then
-          break;
-        dec(len); // trim right space
-      until len = 0;
-    D[0] := AnsiChar(len);
-    D[len + 1] := #0; // #0 terminator
-    P := S;
-  end
-  else
-    PCardinal(D)^ := 0 // Dest='' with #0 terminator
+    len := GetNextItemTrimedBuffer(P, Sep, S);
+    if (len <> 0) and
+       (len <= 254) then
+    begin
+      PByte(Dest)^ := len;
+      PByteArray(Dest)^[len + 1] := 0; // #0 terminator
+      MoveFast(S^, Dest^[1], len);
+      exit;
+    end;
+  end;
+  PCardinal(Dest)^ := 0 // Dest='' with #0 terminator
 end;
 
 function GetNextItemHexDisplayToBin(var P: PUtf8Char;
