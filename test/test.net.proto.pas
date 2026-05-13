@@ -3853,9 +3853,11 @@ begin
         // in a background thread due to remote http://ictuswin.com access
         // (will also validate rfProgressiveStatic process of our web server)
         if hasinternet then // checked by above DNSAndLDAP method
+        begin
           Run(RunPeerCacheDirect, hpc, 'peercachedirect', true, false, false);
-        hpc := nil; // will be owned and freed by RunPeerCacheDirect from now on
-        hps := nil;
+          hpc := nil; // will be owned and freed by RunPeerCacheDirect from now on
+          hps := nil;
+        end;
       finally
         hpc.Free;
       end;
