@@ -5727,11 +5727,7 @@ begin
     end;
   // compute the base-32 encoded local file name from URI + etag/lastmod
   if not HttpRequestHashBase32(remote, @b32hash, pointer(headers)) then
-  begin
-    result := HTTP_BADREQUEST;
-    loginfo := 'wrong b32';
-    exit;
-  end;
+    exit; // e.g. not cacheable content: return filename=''
   // compute the local file name from this base-32 hash
   if hpoClientCacheSubFolder in proxy.Settings.Options then
     filename := MakePath([ // hash partitioning into subfolders
@@ -5792,7 +5788,8 @@ begin // this method is protected by proxy.fSafe.Lock
     exit;
   end;
   // no matching local file: need to download to return the GET body
-  if (localsize = 0) or
+  if (filename = '') or
+     (localsize = 0) or
      (localsize < proxy.fSettings.HttpDirectGetKB shl 10) then
   begin
     // use the blocking connection for smallest files < 16KB (or without size)
@@ -5802,7 +5799,8 @@ begin // this method is protected by proxy.fSafe.Lock
        (direct <> '') then
       if ((localsize < 0) or // no length/range = retrieve full dynamic content
           (length(direct) = localsize)) and
-         FileFromString(direct, filename) then
+         ((filename = '') or
+          FileFromString(direct, filename)) then
       begin
         if localsize < 0 then
           loginfo := 'nosize get'
@@ -6428,7 +6426,8 @@ begin
   if (req.loginfo <> nil) and
      not StatusCodeIsSuccess(result) then
     Ctxt.SetErrorMessage('%', [req.loginfo])
-  else if not (hpoNoXProxyName in req.proxy.Settings.Options) then
+  else if (req.b32hash <> '') and
+          not (hpoNoXProxyName in req.proxy.Settings.Options) then
     Ctxt.AddOutHeader(['X-Proxy-Name: ', req.b32hash]);
   if fHasLog then
     fLog.Add.Log(LOG_INFOWARNING[not StatusCodeIsSuccess(result)],
