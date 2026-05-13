@@ -3304,6 +3304,11 @@ function PosChar(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char; overload;
 function PosChar(Str: PUtf8Char; StrLen: PtrInt; Chr: AnsiChar): PUtf8Char; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// fast retrieve the position of a given character or a #0 in a buffer
+// - will use fast SSE2 asm on x86_64
+function PosChar0(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char;
+  {$ifndef ASMX64}{$ifdef FPC}inline;{$endif}{$endif}
+
 /// fast retrieve the pointer of a given character in a UTF-8 string
 // - will use fast SSE2 asm on x86_64
 function PosCharU(const Str: RawUtf8; Chr: AnsiChar): PUtf8Char;
@@ -11648,6 +11653,15 @@ begin
       break;
     inc(Str);
   until false;
+  result := Str;
+end;
+
+function PosChar0(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char;
+begin
+  if Str <> nil then
+    while (Str^ <> #0) and
+          (Str^ <> Chr) do
+      inc(Str);
   result := Str;
 end;
 
