@@ -4764,7 +4764,8 @@ function GetSetNameValue(Names: PShortString; MinValue, MaxValue: integer;
   var P: PUtf8Char; out EndOfObject: AnsiChar): QWord;
 var
   info: TGetJsonField;
-  tmp: ShortString;
+  v: PUtf8Char;
+  l: PtrInt;
 begin
   result := 0;
   if (P = nil) or
@@ -4812,8 +4813,8 @@ begin
     if info.WasString then // stored as CSV text (e.g. from a .INI file)
       while info.Value <> nil do
       begin
-        GetNextItemShortString(info.Value, @tmp);
-        SetNamesValue(Names, MinValue, MaxValue, @tmp[1], ord(tmp[0]), result);
+        l := GetNextItemTrimedBuffer(info.Value, ',', v);
+        SetNamesValue(Names, MinValue, MaxValue, v, l, result);
       end
     else // stored as a 64-bit unsigned integer
       SetQWord(info.Value, result);
@@ -10515,7 +10516,7 @@ var
   p: PRttiCustomProp;
   v: TVarData;
   i: PtrInt;
-  n: ShortString;
+  n: ShortString; // should end with #0
 begin
   result := self;
   if (self <> nil) and

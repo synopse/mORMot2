@@ -6414,16 +6414,16 @@ end;
 
 function TDigestAuthServer.DigestAlgoMatch(const FromClient: RawUtf8): boolean;
 var
-  p: PUtf8Char;
-  alg: ShortString;
+  p, a: PUtf8Char;
+  l: PtrInt;
 begin
   result := false;
   p := StrPosI('ALGORITHM=', pointer(FromClient));
   if p = nil then
     exit;
   inc(p, 10);
-  GetNextItemShortString(p, @alg);
-  result := IdemPropNameU(DIGEST_NAME[fAlgo], @alg[1], ord(alg[0]));
+  l := GetNextItemTrimedBuffer(p, ',', a);
+  result := IdemPropNameU(DIGEST_NAME[fAlgo], a, l);
 end;
 
 function TDigestAuthServer.DigestAuth(FromClient: PUtf8Char;

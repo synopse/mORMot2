@@ -2182,17 +2182,18 @@ end;
 
 function JsonObjectByPath(JsonObject, PropPath: PUtf8Char): PUtf8Char;
 var
-  objName: ShortString;
+  n: PUtf8Char;
+  l: PtrInt;
 begin
   result := nil;
   if (JsonObject = nil) or
      (PropPath = nil) then
     exit;
   repeat
-    GetNextItemShortString(PropPath, @objName, '.');
-    if objName[0] = #0 then
+    l := GetNextItemTrimedBuffer(PropPath, '.', n);
+    if l = 0 then
       exit;
-    JsonObject := JsonObjectItem(JsonObject, @objName[1], ord(objName[0]), nil);
+    JsonObject := JsonObjectItem(JsonObject, n, l, nil);
     if JsonObject = nil then
       exit;
   until PropPath = nil; // found full name scope

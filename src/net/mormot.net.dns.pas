@@ -561,8 +561,8 @@ function DnsBuildQuestion(const QName: RawUtf8; RR: TDnsResourceRecord;
   QClass: cardinal): RawByteString;
 var
   h: PDnsHeader;
-  n: PUtf8Char;
-  one: ShortString;
+  n, v: PUtf8Char;
+  l: PtrInt;
   tmp: TSynTempAdder;
 begin
   tmp.Init;
@@ -576,11 +576,11 @@ begin
   n := pointer(QName);
   while n <> nil do
   begin
-    GetNextItemShortString(n, @one, '.');
-    if one[0] = #0 then
+    l := GetNextItemTrimedBuffer(n, '.', v);
+    if l = 0 then
       break;
-    tmp.AddDirect(one[0]);
-    tmp.AddShort(one);
+    tmp.AddDirect(AnsiChar(l));
+    tmp.Add(v, l);
   end;
   tmp.AddDirect(#0); // final #0
   tmp.Add16BigEndian(ord(RR));
