@@ -80,8 +80,8 @@ procedure GetNextItemTrimedLine(var P: PUtf8Char; Sep: AnsiChar;
 
 /// return trimmed next CSV string from P, ending value at #0 .. #13
 // - as used internally by GetNextItemTrimedLine()
-procedure GetNextItemTrimedLineBuffer(var P: PUtf8Char; Sep: AnsiChar;
-  out Item: PUtf8Char; out Len: integer);
+function GetNextItemTrimedLineBuffer(var P: PUtf8Char; Sep: AnsiChar;
+  out Item: PUtf8Char): PtrInt;
 
 /// return trimmed next CSV string from P, ignoring any Escaped char
 // - P=nil after call when end of text is reached
@@ -2264,7 +2264,7 @@ type
 // - returns the length of the found Value, or 0 if Name did not match
 // - could be directly applied e.g. to TBinaryCookieGenerator.Validate()
 function CookieFromHeaders(Headers: PUtf8Char; const Name: RawUtf8;
-  out Value: PUtf8Char): integer; overload;
+  out Value: PUtf8Char): PtrInt; overload;
 
 /// quickly return Value from 'Cookie: Name=Value' within HTTP headers
 function CookieFromHeaders(Headers: PUtf8Char; const Name: RawUtf8): RawUtf8; overload;
@@ -2822,20 +2822,20 @@ procedure GetNextItemTrimedLine(var P: PUtf8Char; Sep: AnsiChar;
   var result: RawUtf8);
 var
   item: PUtf8Char;
-  len: integer;
+  len: PtrInt;
 begin
   if (P <> nil) and
      (Sep > ' ') then
   begin
-    GetNextItemTrimedLineBuffer(P, Sep, item, len);
+    len := GetNextItemTrimedLineBuffer(P, Sep, item);
     FastSetString(result, item, len);
   end
   else
     FastAssignNew(result);
 end;
 
-procedure GetNextItemTrimedLineBuffer(var P: PUtf8Char; Sep: AnsiChar;
-  out Item: PUtf8Char; out Len: integer);
+function GetNextItemTrimedLineBuffer(var P: PUtf8Char; Sep: AnsiChar;
+  out Item: PUtf8Char): PtrInt;
 var
   S, E: PUtf8Char;
 begin // caller should ensure that (P <> nil) and (Sep > ' ')
@@ -2850,7 +2850,7 @@ begin // caller should ensure that (P <> nil) and (Sep > ' ')
         (E[-1] in [#14 .. ' ']) do
     dec(E); // trim right
   Item := P;
-  Len := E - P;
+  result := E - P;
   if (cardinal(PWord(S)^) = EOLW) or
      (S^ = Sep) then
     P := S + 1
@@ -10271,8 +10271,8 @@ begin
     repeat
       if IdemPChar(p, '__SECURE-') then
         inc(p, 9); // e.g. if rsoCookieSecure is in Server.Options
-      GetNextItemTrimedLineBuffer(p, '=', new.NameStart,  new.NameLen);
-      GetNextItemTrimedLineBuffer(p, ';', new.ValueStart, new.ValueLen);
+      new.NameLen := GetNextItemTrimedLineBuffer(p, '=', new.NameStart);
+      new.ValueLen := GetNextItemTrimedLineBuffer(p, ';', new.ValueStart);
       if (new.NameLen = 0) or
          (new.ValueLen = 0) then
         continue;
@@ -10313,11 +10313,10 @@ begin
 end;
 
 function CookieFromHeaders(Headers: PUtf8Char; const Name: RawUtf8;
-  out Value: PUtf8Char): integer;
+  out Value: PUtf8Char): PtrInt;
 var
   p, n: PUtf8Char;
-  plen: PtrInt;
-  l: integer;
+  plen, l: PtrInt;
 begin // same logic than THttpCookies.ParseServer above
   if Name <> '' then
     while Headers <> nil do
@@ -10329,8 +10328,8 @@ begin // same logic than THttpCookies.ParseServer above
       repeat
         if IdemPChar(p, '__SECURE-') then
           inc(p, 9);
-        GetNextItemTrimedLineBuffer(p, '=', n, l);
-        GetNextItemTrimedLineBuffer(p, ';', Value, result);
+        l := GetNextItemTrimedLineBuffer(p, '=', n);
+        result := GetNextItemTrimedLineBuffer(p, ';', Value);
         if (l = length(Name)) and
            (result <> 0) and
            mormot.core.base.CompareMem(n, pointer(Name), l) then
