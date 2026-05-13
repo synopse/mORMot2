@@ -6414,6 +6414,7 @@ begin
       end
       else
       begin
+        result := HTTP_NOTFOUND;
         req.localsize := -1; // no local file
         req.localdate := 0;
       end;
