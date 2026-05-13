@@ -6272,6 +6272,7 @@ var
   i, n: integer;
   tixmin: cardinal;
   one: ^THttpProxyUrl;
+  tmp: TSynLogClass; // for Delphi 7 compilation
 begin
   // delete any deprecated in-memory cached content - called every second
   n := 0;
@@ -6293,7 +6294,8 @@ begin
   if fTempFilesTix = tixmin then
     exit;
   fTempFilesTix := tixmin;
-  TLoggedWorkThread.Create(nil, 'cacheclean', nil, OnBackgroundDeleteDeprecated);
+  tmp := nil;
+  TLoggedWorkThread.Create(tmp, 'cacheclean', nil, OnBackgroundDeleteDeprecated);
 end;
 
 procedure THttpProxyServer.OnBackgroundDeleteDeprecated(Sender: TObject);

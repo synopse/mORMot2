@@ -8410,29 +8410,29 @@ end;
 procedure TQuickSortDocVariantValuesByField.GetUniqueIndex(var ndx: TIntegerDynArray);
 var
   n: PtrInt;
-  v: ^TQuickSortByFieldLookup;
-  p: PVariant;
+  l: ^TQuickSortByFieldLookup;
+  v: PVariant;
   i, cmp: integer;
 begin
   SetLength(ndx, Doc^.VCount);
-  p := nil;
-  v := pointer(Lookup);
+  v := nil;
+  l := pointer(Lookup);
   n := 0;
   i := 0;
   repeat
-    if p = nil then
+    if v = nil then
       cmp := 1
     else if Assigned(Compare) then
-      cmp := Compare(p^, v^[0]^)
+      cmp := Compare(v^, l^[0]^)
     else
-      cmp := CompareField(Fields[0], p^, v^[0]^);
+      cmp := CompareField(Fields[0], v^, l^[0]^);
     if cmp <> 0 then
     begin
       ndx[n] := i; // store the index of each new unique value
       inc(n);
-      p := v^[0];
+      v := l^[0];
     end;
-    inc(v); // next row
+    inc(l); // next row
     inc(i);
   until i = Doc^.VCount;
   if n <> Doc^.VCount then
@@ -8479,7 +8479,7 @@ function TDocVariantData.SearchSortedArrayByField(const aItemPropName: RawUtf8;
 var
   L, R, cmp: PtrInt;
   ndx: integer; // not PtrInt
-  p: PVariant;
+  v: PVariant;
 begin
   result := -1;
   R := VCount - 1;
@@ -8492,16 +8492,16 @@ begin
   L := 0;
   repeat // efficient O(log(n)) binary search
     result := (L + R) shr 1;
-    if not _Safe(VValue[result])^.GetObjectProp(aItemPropName, p, @ndx) then
-      p := @NullVarData;
-    cmp := aValueCompare(p^, aValue);
+    if not _Safe(VValue[result])^.GetObjectProp(aItemPropName, v, @ndx) then
+      v := @NullVarData;
+    cmp := aValueCompare(v^, aValue);
     if aValueCompareReverse then
       cmp := -cmp;
     if cmp = 0 then
     begin
       while (result > 0) and
-            _Safe(VValue[result - 1])^.GetObjectProp(aItemPropName, p, @ndx) and
-            (aValueCompare(p^, aValue) = 0) do
+            _Safe(VValue[result - 1])^.GetObjectProp(aItemPropName, v, @ndx) and
+            (aValueCompare(v^, aValue) = 0) do
         dec(result); // go down to the first occurence of aValue
       exit;
     end;
