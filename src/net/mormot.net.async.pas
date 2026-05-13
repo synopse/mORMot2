@@ -1456,7 +1456,7 @@ type
     fHeadCache: TSynDictionary; // THash160 / header:RawUtf8
     fReject: TUriMatch;
     fRemoteClient: IHttpClient;
-    fSafe: TOSLightLock; // non-reentrant lock for fRemoteClient + file access
+    fOsSafe: TOSLightLock; // non-reentrant lock for fRemoteClient + file access
     procedure BackgroundGet(Sender: TObject);
   public
     /// initialize this instance
@@ -5522,7 +5522,7 @@ constructor THttpProxyUrl.Create(aSettings: THttpProxyUrlSettings;
   aOwner: THttpProxyServer);
 begin
   inherited Create;
-  fSafe.Init;
+  fOsSafe.Init;
   fSettings := aSettings;
   fOwner := aOwner;
 end;
@@ -5534,7 +5534,7 @@ begin
   FreeAndNil(fHashCache);
   FreeAndNil(fHeadCache);
   // fSettings are owned by THttpProxyServerSettings.Url[]
-  fSafe.Done; // mandatory for TOSLightLock
+  fOsSafe.Done; // mandatory for TOSLightLock
 end;
 
 function THttpProxyUrl.ReturnHash(ctxt: THttpServerRequestAbstract;
@@ -6385,13 +6385,13 @@ begin
       exit;
   req.remote := req.proxy.fRemoteUri;
   Append(req.remote.Address, Uri.Path.Text, Uri.Path.Len);
-  // retrieve the headers, from cache or HEAD, and compute the local file name
-  result := req.MakeHeadAndComputeFilename;
-  if StatusCodeIsSuccess(result) then
-  begin
-    // blocking to ensure file consistency and remote connection sharing
-    req.proxy.fSafe.Lock;
-    try
+  // blocking to ensure file consistency and remote connection sharing
+  req.proxy.fOsSafe.Lock;
+  try
+    // retrieve the headers, from cache or HEAD, and compute the local file name
+    result := req.MakeHeadAndComputeFilename;
+    if StatusCodeIsSuccess(result) then
+    begin
       // check the local file (named from hashed URI + header etag/lastmod)
       if FileInfoByName(req.filename, req.localsize, req.localdate) and
          (req.localsize >= 0) then
@@ -6421,9 +6421,9 @@ begin
       if not StatusCodeIsSuccess(result) then
         // no matching local file: need to initiate a GET proxy request
         result := req.MakeGet(Uri);
-    finally
-      req.proxy.fSafe.UnLock;
     end;
+  finally
+    req.proxy.fOsSafe.UnLock;
   end;
   if (req.loginfo <> nil) and
      not StatusCodeIsSuccess(result) then
