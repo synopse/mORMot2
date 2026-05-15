@@ -3567,7 +3567,7 @@ begin
   if (R >= 0) and
      (aAddressOffset >= fUnit[0].Symbol.Start) and
      (aAddressOffset <= fUnit[R].Symbol.Stop) then
-    repeat
+    repeat // efficient O(log(n)) binary search
       result := (L + R) shr 1;
       s := @fUnit[result].Symbol;
       if aAddressOffset < s^.Start then
@@ -3598,7 +3598,7 @@ begin
   L := 0;
   R := max;
   if R >= 0 then
-    repeat
+    repeat // efficient O(log(n)) binary search
       n := (L + R) shr 1;
       if aAddressOffset < u^.Addr[n] then
         R := n - 1
