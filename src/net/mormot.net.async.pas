@@ -5713,7 +5713,7 @@ begin // this method is protected by proxy.fOsSafe.Lock
   headdate := d * MilliSecsPerSec;
   if not StatusCodeIsSuccess(result) then // 4xx.. range
   begin
-    loginfo := 'head status';
+    loginfo := 'error from HEAD on remote server';
     exit;
   end;
   if headsize < 0 then
@@ -5738,7 +5738,6 @@ end;
 
 function TStartProxyRequest.MakeGet(const path: TUriMatchName): cardinal;
 var
-  remotehead: RawUtf8;
   direct: RawByteString;
   background: TStartProxyRequestClient;
   log: TSynLogClass;
@@ -5749,7 +5748,6 @@ begin // this method is protected by proxy.fOsSafe.Lock
   result := HTTP_BADREQUEST;
   log := proxy.fOwner.fLog;
   // check the header against the local cached file (headdate may be 0)
-  ctxt.OutCustomHeaders := PurgeHeaders(remotehead, false, TOBEPURGEDPROXY);
   if localsize >= 0 then // check the local file
     if (headsize < 0) or
        (headsize = localsize) then
@@ -5834,8 +5832,8 @@ begin // this method is protected by proxy.fOsSafe.Lock
     background := TStartProxyRequestClient.OpenOptions(remote, opt);
     background.stream := stream;
     background.uri := remote.Address;
-    Make(['get-', id], remotehead);
-    TLoggedWorkThread.Create(log, remotehead, background, proxy.BackgroundGet);
+    TLoggedWorkThread.Create(log, Make(['get-', id]),
+                             background, proxy.BackgroundGet);
     loginfo := 'progressive new';
     result := HTTP_SUCCESS;
   except
@@ -6390,6 +6388,7 @@ begin
   try
     // retrieve the headers, from cache or HEAD, and compute the local file name
     result := req.MakeHeadAndComputeFilename;
+    Ctxt.OutCustomHeaders := PurgeHeaders(req.headers, false, TOBEPURGEDPROXY);
     if StatusCodeIsSuccess(result) then
     begin
       // check the local file (named from hashed URI + header etag/lastmod)
@@ -6409,7 +6408,7 @@ begin
           // assume file won't change on the server: return the current cache
           result := req.proxy.ReturnFile(
             Ctxt, req.b32hash, req.filename, Uri, req.localsize, req.headdate);
-          req.loginfo := 'no head';
+          req.loginfo := 'direct';
         end;
       end
       else
