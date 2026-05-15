@@ -5605,12 +5605,16 @@ begin // this method is protected by fOsSafe.Lock
   if Assigned(fHeadCache) and
      fHeadCache.FindAndCopy(hash, header) then
   begin
-    if header = '' then
-      result := HTTP_NOTFOUND // already identified as error
+    if header = '' then // already identified as error
+      result := HTTP_NOTFOUND
     else
     begin
+      // return original cached HTTP headers
       GetHeaderInfo(header, size, time);
-      result := HTTP_SUCCESS; // return original cached HTTP headers
+      if IdemPChar(pointer(header), 'X-STATUS: ') then
+        result := GetCardinal(PUtf8Char(pointer(header)) + 10)
+      else
+        result := HTTP_SUCCESS;
     end;
     exit;
   end;
@@ -5639,15 +5643,17 @@ begin // this method is protected by fOsSafe.Lock
   if result = 0 then // server has no length: try range GET trick
     result := fRemoteClient.Request(uri, 'GET', 'Range: bytes=0-0', '', '', keepalive);
     // Apache+Varnish may return 'Content-Range: bytes 0-0/*' for some text/html :(
+  header := fRemoteClient.Headers;
   if StatusCodeIsSuccess(result) then // 2xx..3xx range
-  begin
-    header := fRemoteClient.Headers;
     GetHeaderInfo(header, size, time);
-  end;
   if Assigned(fHeadCache) and
      (result < HTTP_SERVERERROR) and  // retry on pure server or client side
      (size >= 0) then                 // only store if the size was known
-    fHeadCache.Add(hash, header);     // may store '' on error (e.g. 30x/404)
+  begin
+    if result <> HTTP_SUCCESS then    // see TOBEPURGEDPROXY below
+      header := Make(['X-status: ', result, EOL, header]);
+    fHeadCache.Add(hash, header);
+  end;
   fOwner.fLog.Add.Log(sllTrace, 'RemoteClientHead(%)=% size=% lastmod=%',
     [uri.Address, result, size, time], self);
 end;
@@ -6395,14 +6401,14 @@ begin
     result := req.MakeHeadAndComputeFilename;
     Ctxt.OutCustomHeaders := PurgeHeaders(
       req.headers, false, PURGED[hpNoXCache in req.proxy.Settings.Options]);
-    if StatusCodeIsSuccess(result) then
+    if result < 300 then // StatusCodeIsSuccess = 2xx..3xx range
     begin
       // check the local file (named from hashed URI + header etag/lastmod)
       if FileInfoByName(req.filename, req.localsize, req.localdate) and
          (req.localsize >= 0) then
       begin
         // we have a local cached file
-        if fPartials.HasFile(req.filename, @req.localsize, ctxt.ConnectionHttp) then
+        if fPartials.HasFile(req.filename, @req.localsize, Ctxt.ConnectionHttp) then
         begin
           // but it is already associated in progressive mode: join the team
           Ctxt.SetOutProgressiveFile(req.filename, req.localsize);
