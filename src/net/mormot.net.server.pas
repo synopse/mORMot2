@@ -388,6 +388,7 @@ type
     fConnectionAsyncHandle: TConnectionAsyncHandle;
     fErrorMessage: string;
     fTempWriter: TJsonWriter; // reused between SetOutJson() calls
+    procedure DoPurgeHeaders;
     {$ifdef USEWININET}
     fHttpApiRequest: PHTTP_REQUEST;
     function GetFullUrl: SynUnicode;
@@ -3306,6 +3307,11 @@ begin
   // inherited Destroy; is void
 end;
 
+procedure THttpServerRequest.DoPurgeHeaders;
+begin // sub-function to avoid implicit try..finally
+  fOutCustomHeaders := PurgeHeaders(fOutCustomHeaders);
+end;
+
 const
   _CMD_200: array[boolean, boolean] of TShort31 = (
    ('HTTP/1.1 200 OK'#13#10,
@@ -3362,7 +3368,8 @@ function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   var
     txt: PRawUtf8;
   begin
-    FastAssignNew(fOutCustomHeaders);
+    if fOutCustomHeaders <> '' then // keep meaningful headers
+      DoPurgeHeaders;
     txt := fServer.StatusCodeToText(fRespStatus);
     if hsoTextError in fServer.Options then // fast and good enough
     begin
