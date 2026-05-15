@@ -6294,7 +6294,8 @@ begin
     exit;
   fTempFilesTix := tixmin;
   tmp := nil;
-  TLoggedWorkThread.Create(tmp, 'cacheclean', nil, OnBackgroundDeleteDeprecated);
+  if DirectoryExists(fSettings.DiskCache.Path) then
+    TLoggedWorkThread.Create(tmp, 'cacheclean', nil, OnBackgroundDeleteDeprecated);
 end;
 
 procedure THttpProxyServer.OnBackgroundDeleteDeprecated(Sender: TObject);
@@ -6303,7 +6304,7 @@ var
 begin // folder timestamp check is called every 2 minutes, and may be slow
   size := 0;
   DirectoryDeleteOlderFiles(fSettings.DiskCache.Path,
-    fSettings.DiskCache.TimeoutSec / SecsPerDay, '*.',
+    fSettings.DiskCache.TimeoutSec / SecsPerDay, FILES_ALL,
     {recursive=}hpoClientCacheSubFolder in fUrlOptions, @size);
   if size <> 0 then // something changed on disk
     fLog.Add.Log(sllTrace, 'OnIdle: deleted old=%', [KBNoSpace(size)], self);
