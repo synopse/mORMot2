@@ -1195,7 +1195,8 @@ type
   // generate sub-folders following the first hash nibble (0..9/a..z)
   // - hpoClientIgnoreTlsError will ignore any HTTPS issue
   // - hpoClientAlllowWinApi will be used for THttpProxyUrl.RemoteClientHead()
-  // - hpoNoXProxyName will remove our custom 'X-Proxy-Name: xxxx' output header
+  // - hpoNoXProxyName will disable our custom 'X-Proxy-Name: xxxx' header
+  // - hpNoXCache will purge any X-Cache: X-Served-By: Via: Age: headers
   THttpProxyUrlOption = (
     hpoNoSubFolder,
     hpoNoFolderHtmlIndex,
@@ -1207,7 +1208,8 @@ type
     hpoClientCacheSubFolder,
     hpoClientIgnoreTlsError,
     hpoClientAlllowWinApi,
-    hpoNoXProxyName);
+    hpoNoXProxyName,
+    hpNoXCache);
   /// store THttpProxyUrl.Settings options for a given URI
   THttpProxyUrlOptions = set of THttpProxyUrlOption;
 
@@ -5690,9 +5692,12 @@ type
   end;
 
 const
-  TOBEPURGEDPROXY: PUtf8Char =
+  PURGED_PROXY =
     'CONTENT-LENGTH:|CONTENT-RANGE:|CONTENT-ENCODING:|CONNECTION:|' +
-    'KEEP-ALIVE:|DATE:|';
+    'KEEP-ALIVE:|DATE:|TE:|TRAILER:|X-STATUS:|X-TIMER:|';
+  PURGED: array[{=hpNoXCache}boolean] of PUtf8Char = (
+    PURGED_PROXY,
+    PURGED_PROXY + 'VIA:|X-CACHE|X-SERVED-BY:|X-CLACKS-|AGE:|');
 
 function TStartProxyRequest.MakeHeadAndComputeFilename: cardinal;
 var
@@ -6388,7 +6393,8 @@ begin
   try
     // retrieve the headers, from cache or HEAD, and compute the local file name
     result := req.MakeHeadAndComputeFilename;
-    Ctxt.OutCustomHeaders := PurgeHeaders(req.headers, false, TOBEPURGEDPROXY);
+    Ctxt.OutCustomHeaders := PurgeHeaders(
+      req.headers, false, PURGED[hpNoXCache in req.proxy.Settings.Options]);
     if StatusCodeIsSuccess(result) then
     begin
       // check the local file (named from hashed URI + header etag/lastmod)
