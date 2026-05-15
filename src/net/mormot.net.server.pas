@@ -388,11 +388,11 @@ type
     fConnectionAsyncHandle: TConnectionAsyncHandle;
     fErrorMessage: string;
     fTempWriter: TJsonWriter; // reused between SetOutJson() calls
-    procedure DoPurgeHeaders;
     {$ifdef USEWININET}
     fHttpApiRequest: PHTTP_REQUEST;
     function GetFullUrl: SynUnicode;
     {$endif USEWININET}
+    procedure DoPurgeHeaders;
   public
     /// initialize the context, associated to a HTTP server instance
     constructor Create(aServer: THttpServerGeneric;
