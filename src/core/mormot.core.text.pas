@@ -226,7 +226,11 @@ function GetLastCsvItem(const Csv: RawUtf8; Sep: AnsiChar = ','): RawUtf8;
 
 /// quickly check if Value is in Csv with no temporary memory allocation
 function CsvContains(const Csv, Value: RawUtf8; Sep: AnsiChar = ',';
-  CaseSensitive: boolean = true): boolean;
+  CaseSensitive: boolean = true): boolean; overload;
+
+/// quickly check if Value is in Csv with no temporary memory allocation
+function CsvContains(Csv, Value: PUtf8Char; ValueLen: PtrInt;
+  Sep: AnsiChar; CaseSensitive, TrimValue: boolean): boolean; overload;
 
 /// return the index of a Value in a CSV string
 // - start at Index=0 for first one
@@ -3472,49 +3476,34 @@ begin
       result := GetNextItemString(P, Sep);
 end;
 
-function CsvContains(const Csv, Value: RawUtf8; Sep: AnsiChar;
-  CaseSensitive: boolean): boolean;
+function CsvContains(Csv, Value: PUtf8Char; ValueLen: PtrInt;
+  Sep: AnsiChar; CaseSensitive, TrimValue: boolean): boolean;
 var
-  i, l: PtrInt;
-  p, s: PUtf8Char;
-  match: TIdemPropNameUSameLen;
+  o: PUtf8Char;
+  l: PtrInt;
 begin
-  if (Csv = '') or
-     (Value = '') then
-  begin
-    result := false;
-    exit;
-  end;
-  // note: all search sub-functions do use fast SSE2 asm on i386 and x86_64
-  match := IdemPropNameUSameLen[CaseSensitive];
-  p := pointer(Csv);
-  l := PStrLen(PAnsiChar(pointer(Value)) - _STRLEN)^;
-  if l >= PStrLen(p - _STRLEN)^ then
-    result := (l = PStrLen(p - _STRLEN)^) and
-              match(p, pointer(Value), l)
-  else
-  begin
-    i := PosExChar(Sep, Csv);
-    if i <> 0 then
-    begin
-      result := true;
-      s := p + i - 1;
-      repeat
-        if (s - p = l) and
-           match(p, pointer(Value), l) then
+  result := (Csv <> nil) and
+            (ValueLen > 0);
+  if result then
+    repeat // use fast SSE2 asm on x86_64
+      if TrimValue then
+        l := GetNextItemTrimedBuffer(Csv, Sep, o)
+      else
+        l := GetNextItemBuffer(Csv, Sep, o);
+      if l = ValueLen then
+        if CaseSensitive then
+        begin
+          if CompareMem(o, Value, l) then
+            exit;
+        end else if IdemPropNameUSameLenNotNull(o, Value, l) then
           exit;
-        p := s + 1;
-        s := PosChar(p, Sep); // use fast SSE2 asm on x86_64
-        if s <> nil then
-          continue;
-        if (PStrLen(PAnsiChar(pointer(Csv)) - _STRLEN)^ - (p - pointer(Csv)) = l) and
-           match(p, pointer(Value), l) then
-          exit;
-        break;
-      until false;
-    end;
-    result := false;
-  end;
+    until Csv = nil;
+  result := false;
+end;
+
+function CsvContains(const Csv, Value: RawUtf8; Sep: AnsiChar; CaseSensitive: boolean): boolean;
+begin
+  result := CsvContains(pointer(Csv), pointer(Value), length(Value), Sep, CaseSensitive, false);
 end;
 
 function FindCsvIndex(Csv: PUtf8Char; const Value: RawUtf8; Sep: AnsiChar;
