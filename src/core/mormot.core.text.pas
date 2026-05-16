@@ -2800,7 +2800,7 @@ begin
   Item := S;
   result := PosChar0(S, Sep) - S; // use fast SSE2 asm on x86_64
   while (result <> 0) and
-        (S[result] in [#1 .. ' ']) do
+        (S[result - 1] in [#1 .. ' ']) do
     dec(result);
   inc(S, result);
   if S^ = #0 then
