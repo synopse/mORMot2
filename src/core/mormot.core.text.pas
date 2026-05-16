@@ -70,6 +70,10 @@ function GetNextItemTrimedBuffer(var P: PUtf8Char; Sep: AnsiChar;
 function GetNextItemBuffer(var P: PUtf8Char; Sep: AnsiChar; out Item: PUtf8Char): PtrInt;
   {$ifdef ASMX64}inline;{$endif}
 
+/// return next CSV string buffer and length from P until P = nil
+function GetNextItemBufferLen(var P: PUtf8Char; var PL: PtrInt; Sep: AnsiChar;
+  out Item: PUtf8Char; TrimValue: boolean): PtrInt;
+
 /// return trimmed next CSV string from P, ending value at #0 .. #13
 // - typically usage is to parse HTTP headers
 // - P=nil after call when P^ = #0 end of text is reached, or return P^ = #10
@@ -2825,6 +2829,44 @@ begin
     P := nil
   else
     P := S + 1;
+end;
+
+function GetNextItemBufferLen(var P: PUtf8Char; var PL: PtrInt; Sep: AnsiChar;
+  out Item: PUtf8Char; TrimValue: boolean): PtrInt;
+var
+  S, E: PUtf8Char;
+begin
+  result := 0;
+  S := P;
+  if (S = nil) or
+     (PL <= 0) or
+     (Sep <= ' ') then
+    exit;
+  if TrimValue then
+  begin
+    E := S + PL;
+    while (S < E) and
+          (S^ <= ' ') do
+      inc(S); // trim left
+  end;
+  Item := S;
+  result := ByteScanIndex(pointer(S), PL, ord(Sep)); // SSE2 asm on x86_64
+  if result < 0 then
+  begin
+    P := nil;
+    result := PL;
+  end
+  else
+  begin
+    inc(result); // let P/PL point after Sep
+    dec(PL, result);
+    P := S + result;
+    dec(result);
+  end;
+  if TrimValue then
+    while (result <> 0) and
+          (S[result - 1] <= ' ') do
+      dec(result);
 end;
 
 procedure GetNextItemTrimed(var P: PUtf8Char; Sep: AnsiChar; var result: RawUtf8);
