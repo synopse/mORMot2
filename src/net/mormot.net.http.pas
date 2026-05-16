@@ -4850,7 +4850,7 @@ begin
     begin
       h := FindNameValuePointer(pointer(fInHeaders), 'IF-NONE-MATCH: ', hl);
       if (h <> nil) and
-         IdemPropName(e, h, el, hl) then
+         CsvContains(e, h, el, hl, ',', {casesens=}true, {trim=}true) then
         exit;
     end;
   end;

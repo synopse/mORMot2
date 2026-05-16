@@ -3407,7 +3407,7 @@ end;
 function FileHttp304NotModified(Size: Int64; Time: TUnixMSTime;
   InHeaders: PUtf8Char; var OutHeaders: RawUtf8): boolean;
 var
-  etag: TShort23;
+  etag: TShort23; // should be separated from date
   date: TShort31;
   h: PUtf8Char;
   l: PtrInt;
@@ -3418,7 +3418,7 @@ begin
     result := true; // return true as HTTP_NOTMODIFIED (304) status code
     h := FindNameValuePointer(InHeaders, 'IF-NONE-MATCH: ', l);
     if (h <> nil) and
-       IdemPropName(etag, h, l) then
+       CsvContains(@etag[1], h, ord(etag[0]), l, ',', true, true) then
       exit;
     h := FindNameValuePointer(InHeaders, 'IF-MODIFIED-SINCE: ', l);
     if h <> nil then
@@ -3446,7 +3446,7 @@ begin
     result := true; // return true as HTTP_NOTMODIFIED (304) status code
     h := FindNameValuePointer(InHeaders, 'IF-NONE-MATCH: ', l);
     if (h <> nil) and
-       IdemPropName(etag, h, l) then
+       CsvContains(@etag[1], h, ord(etag[0]), l, ',', true, true) then
       exit;
   end;
   AppendLine(OutHeaders, ['Etag: ', etag]);
