@@ -228,6 +228,10 @@ function CsvContains(const Csv, Value: RawUtf8; Sep: AnsiChar = ',';
 function CsvContains(Csv, Value: PUtf8Char; ValueLen: PtrInt;
   Sep: AnsiChar; CaseSensitive, TrimValue: boolean): boolean; overload;
 
+/// quickly check if Value is in Csv with no temporary memory allocation
+function CsvContains(Csv, Value: PUtf8Char; CsvLen, ValueLen: PtrInt;
+  Sep: AnsiChar; CaseSensitive, TrimValue: boolean): boolean; overload;
+
 /// return the index of a Value in a CSV string
 // - start at Index=0 for first one
 // - return -1 if specified Value was not found in CSV items
@@ -3535,6 +3539,28 @@ end;
 function CsvContains(const Csv, Value: RawUtf8; Sep: AnsiChar; CaseSensitive: boolean): boolean;
 begin
   result := CsvContains(pointer(Csv), pointer(Value), length(Value), Sep, CaseSensitive, false);
+end;
+
+function CsvContains(Csv, Value: PUtf8Char; CsvLen, ValueLen: PtrInt;
+  Sep: AnsiChar; CaseSensitive, TrimValue: boolean): boolean;
+var
+  o: PUtf8Char;
+  l: PtrInt;
+begin
+  result := (Csv <> nil) and
+            (ValueLen > 0);
+  if result then
+    repeat // use fast SSE2 asm on x86_64
+      l := GetNextItemBufferLen(Csv, CsvLen, Sep, o, TrimValue);
+      if l = ValueLen then
+        if CaseSensitive then
+        begin
+          if CompareMem(o, Value, l) then
+            exit;
+        end else if IdemPropNameUSameLenNotNull(o, Value, l) then
+          exit;
+    until Csv = nil;
+  result := false;
 end;
 
 function FindCsvIndex(Csv: PUtf8Char; const Value: RawUtf8; Sep: AnsiChar;
