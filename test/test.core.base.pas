@@ -6253,6 +6253,16 @@ begin
   Check(CsvContains('aa,bb,cc', 'cC', ',', false));
   Check(not CsvContains('aa,bb,cc', 'cb', ',', false));
   Check(not CsvContains('aa,bb,cc', 'a', ',', false));
+  Check(CsvContains('"3a8-64cf88076aae1", "a828414ff6"',
+    '"3a8-64cf88076aae1"', 19, ',', {casesens=}true, {trim=}true));
+  Check(CsvContains('"3a8-64cf88076aae1", "a828414ff6"',
+    '"a828414ff6"', 12, ',', true, true));
+  Check(CsvContains(' "3a8-64cf88076aae1" , "a828414ff6" ',
+    '"3a8-64cf88076aae1"', 19, ',', true, true));
+  Check(CsvContains(' "3a8-64cf88076aae1" , "a828414ff6" ',
+    '"a828414ff6"', 12, ',', true, true));
+  Check(CsvContains('"3a8-64cf88076aae1","a828414ff6" ',
+    '"a828414ff6"', 12, ',', true, true));
   CheckEqual(GetFirstCsvItem(''), '');
   CheckEqual(GetFirstCsvItem('a'), 'a');
   CheckEqual(GetFirstCsvItem('ab'), 'ab');
