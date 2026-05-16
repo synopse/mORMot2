@@ -6267,12 +6267,12 @@ begin
     '"3a8-64cf88076aae1"', 34, 19, ',', {casesens=}true, {trim=}true));
   Check(CsvContains('"3a8-64cf88076aae1", "a828414ff6"',
     '"a828414ff6"', 34, 12, ',', true, true));
-  Check(CsvContains(' "3a8-64cf88076aae1" , "a828414ff6" ',
-    '"3a8-64cf88076aae1"', 37, 19, ',', true, true));
-  Check(CsvContains(' "3a8-64cf88076aae1" , "a828414ff6" ',
-    '"a828414ff6"', 37, 12, ',', true, true));
-  Check(CsvContains('"3a8-64cf88076aae1","a828414ff6" ',
-    '"a828414ff6"', 34, 12, ',', true, true));
+  U1 := ' "3a8-64cf88076aae1" , "a828414ff6" ds46';
+  L := length(U1) - 4; // should stop at ds46 ending chars
+  Check(CsvContains(pointer(U1), '"3a8-64cf88076aae1"645', L, 19, ',', true, true));
+  Check(CsvContains(pointer(U1), '"a828414ff6"275', L, 12, ',', true, true));
+  Check(CsvContains('"3a8-64cf88076aae1","a828414ff6"  321',
+    '"a828414ff6"46', 34, 12, ',', true, true));
   CheckEqual(GetFirstCsvItem(''), '');
   CheckEqual(GetFirstCsvItem('a'), 'a');
   CheckEqual(GetFirstCsvItem('ab'), 'ab');

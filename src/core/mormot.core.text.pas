@@ -2846,12 +2846,15 @@ begin
      (PL <= 0) or
      (Sep <= ' ') then
     exit;
-  if TrimValue then
+  if TrimValue and
+     (S^ <= ' ') then
   begin
     E := S + PL;
-    while (S < E) and
-          (S^ <= ' ') do
-      inc(S); // trim left
+    repeat
+      inc(S) // trim left
+    until (S >= E) or
+          (S^ > ' ');
+    PL := E - S;
   end;
   Item := S;
   result := ByteScanIndex(pointer(S), PL, ord(Sep)); // SSE2 asm on x86_64

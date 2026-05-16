@@ -4090,7 +4090,7 @@ begin
   if server = '' then
     server := crc32cUtf8ToHex(Call^.OutBody);
   server := Join(['"', server, '"']);
-  if client <> server then
+  if client <> server then // ETAG value is case sensitive by RFV 7232
     AppendLine(Call^.OutHead, ['ETag: ', server])
   else
   begin
