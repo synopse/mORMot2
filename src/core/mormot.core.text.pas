@@ -2788,39 +2788,36 @@ function GetNextItemTrimedBuffer(var P: PUtf8Char; Sep: AnsiChar;
 var
   S: PUtf8Char;
 begin
+  result := 0;
   S := P;
   if (S = nil) or
      (Sep <= ' ') then
-  begin
-    result := 0;
     exit;
-  end;
   while (S^ <= ' ') and
         (S^ <> #0) do
     inc(S); // trim left
   Item := S;
-  result := PosChar0(S, Sep) - S; // use fast SSE2 asm on x86_64
-  while (result <> 0) and
-        (S[result - 1] in [#1 .. ' ']) do
-    dec(result);
-  inc(S, result);
+  S := PosChar0(S, Sep); // use fast SSE2 asm on x86_64
   if S^ = #0 then
     P := nil
   else
     P := S + 1;
+  result := S - Item;
+  S := Item;
+  while (result <> 0) and
+        (S[result - 1] <= ' ') do
+    dec(result); // trim right
 end;
 
 function GetNextItemBuffer(var P: PUtf8Char; Sep: AnsiChar; out Item: PUtf8Char): PtrInt;
 var
   S: PUtf8Char;
 begin
+  result := 0;
   S := P;
   if (S = nil) or
      (Sep <= ' ') then
-  begin
-    result := 0;
     exit;
-  end;
   Item := S;
   result := PosChar0(S, Sep) - S; // use fast SSE2 asm on x86_64
   inc(S, result);
