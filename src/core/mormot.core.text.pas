@@ -41,39 +41,32 @@ uses
 function IdemPCharAndGetNextItem(var source: PUtf8Char; const searchUp: RawUtf8;
   var Item: RawUtf8; Sep: AnsiChar = #13): boolean;
 
-/// return next CSV string from P
-// - P=nil after call when end of text is reached
+/// return next CSV string from P until P = nil
 function GetNextItem(var P: PUtf8Char; Sep: AnsiChar = ','): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// return next CSV string from P
-// - P=nil after call when end of text is reached
+/// return next CSV string from P until P = nil
 procedure GetNextItem(var P: PUtf8Char; Sep: AnsiChar;
   var result: RawUtf8); overload;
 
-/// return next CSV string (unquoted if needed) from P
-// - P=nil after call when end of text is reached
+/// return next CSV string (unquoted if needed) from P until P = nil
 procedure GetNextItem(var P: PUtf8Char; Sep, Quote: AnsiChar;
   var result: RawUtf8); overload;
 
-/// return next CSV string from P from several separator characters
-// - P=nil after call when end of text is reached
+/// return next CSV string from P until P = nil from several separator characters
 // - returns the character which ended the result string, i.e. #0 or one of Sep
 function GetNextItemMultiple(var P: PUtf8Char; const Sep: RawUtf8;
   var Next: RawUtf8): AnsiChar; overload;
 
-/// return trimmed next CSV string from P
-// - P=nil after call when end of text is reached
+/// return trimmed next CSV string from P until P = nil
 procedure GetNextItemTrimed(var P: PUtf8Char; Sep: AnsiChar;
   var result: RawUtf8);
 
-/// return trimmed next CSV string buffer and length from P
-// - P=nil after call when end of text is reached
+/// return trimmed next CSV string buffer and length from P until P = nil
 function GetNextItemTrimedBuffer(var P: PUtf8Char; Sep: AnsiChar;
   out Item: PUtf8Char): PtrInt;
 
-/// return next CSV string buffer and length from P
-// - P=nil after call when end of text is reached
+/// return next CSV string buffer and length from P until P = nil
 function GetNextItemBuffer(var P: PUtf8Char; Sep: AnsiChar; out Item: PUtf8Char): PtrInt;
   {$ifdef ASMX64}inline;{$endif}
 
@@ -88,8 +81,7 @@ procedure GetNextItemTrimedLine(var P: PUtf8Char; Sep: AnsiChar;
 function GetNextItemTrimedLineBuffer(var P: PUtf8Char; Sep: AnsiChar;
   out Item: PUtf8Char): PtrInt;
 
-/// return trimmed next CSV string from P, ignoring any Escaped char
-// - P=nil after call when end of text is reached
+/// return trimmed next CSV string from P until P = nil, ignoring any Escaped char
 procedure GetNextItemTrimedEscaped(var P: PUtf8Char; Sep, Esc: AnsiChar;
   var result: RawUtf8);
 
@@ -99,7 +91,7 @@ procedure GetNextItemTrimedEscaped(var P: PUtf8Char; Sep, Esc: AnsiChar;
 // - P=nil after call when end of text is reached
 procedure GetNextItemTrimedCRLF(var P: PUtf8Char; var result: RawUtf8);
 
-/// return next CSV string from P, nil if no more
+/// return next CSV string from P until P = nil
 // - this function returns the RTL string type of the compiler, and
 // therefore can be used with ready to be displayed text (e.g. for the UI)
 function GetNextItemString(var P: PChar; Sep: Char = ','): string;
@@ -113,7 +105,7 @@ function GetNextItemString(var P: PChar; Sep: Char = ','): string;
 // - see also SameExt() from mormot.core.os.pas
 function GetFileNameExtIndex(const FileName, CsvExt: TFileName): integer;
 
-/// return next CSV string from P, nil if no more
+/// return next CSV string from P until P = nil
 // - output text would be trimmed from any left or right space
 // - will always append a #0 terminator - excluded from Dest length (0..254)
 procedure GetNextItemShortString(var P: PUtf8Char; Dest: PShortString;
