@@ -72,6 +72,11 @@ procedure GetNextItemTrimed(var P: PUtf8Char; Sep: AnsiChar;
 function GetNextItemTrimedBuffer(var P: PUtf8Char; Sep: AnsiChar;
   out Item: PUtf8Char): PtrInt;
 
+/// return next CSV string buffer and length from P
+// - P=nil after call when end of text is reached
+function GetNextItemBuffer(var P: PUtf8Char; Sep: AnsiChar; out Item: PUtf8Char): PtrInt;
+  {$ifdef ASMX64}inline;{$endif}
+
 /// return trimmed next CSV string from P, ending value at #0 .. #13
 // - typically usage is to parse HTTP headers
 // - P=nil after call when P^ = #0 end of text is reached, or return P^ = #10
@@ -2802,6 +2807,26 @@ begin
   while (result <> 0) and
         (S[result - 1] in [#1 .. ' ']) do
     dec(result);
+  inc(S, result);
+  if S^ = #0 then
+    P := nil
+  else
+    P := S + 1;
+end;
+
+function GetNextItemBuffer(var P: PUtf8Char; Sep: AnsiChar; out Item: PUtf8Char): PtrInt;
+var
+  S: PUtf8Char;
+begin
+  S := P;
+  if (S = nil) or
+     (Sep <= ' ') then
+  begin
+    result := 0;
+    exit;
+  end;
+  Item := S;
+  result := PosChar0(S, Sep) - S; // use fast SSE2 asm on x86_64
   inc(S, result);
   if S^ = #0 then
     P := nil
