@@ -690,7 +690,7 @@ type
         {$endif STRCNT32}
         {$endif HASCODEPAGE}
         refCnt: TStrCnt; // =SizeInt on older FPC, =integer since FPC 3.4
-        length: TStrLen;
+        length: TStrLen; // =SizeInt on FPC, =integer on Delphi
       );
     {$ifdef HASCODEPAGE}
     1: (

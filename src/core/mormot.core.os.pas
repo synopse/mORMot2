@@ -3422,6 +3422,12 @@ function GetFileNameWithoutExtOrPath(const FileName: TFileName): RawUtf8;
 // - like calling GetFileNameWithoutExt() and AnsiCompareFileName()
 function SortDynArrayFileName(const A, B): integer;
 
+/// check if two TFileName are equal, checking backward from the last bytes
+// - most filenames have similar paths, but unique file names
+// - warning: a and b should be <> '' - to be used e.g. inlined in a loop
+function EqualFileNameNotNull(const a, b: TFileName): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 {$ifdef ISDELPHI20062007}
 /// compatibility function defined to avoid hints on buggy Delphi 2006/2007
 function AnsiCompareFileName(const S1, S2 : TFileName): integer;
@@ -7970,6 +7976,23 @@ end;
 function GetFileNameWithoutExtOrPath(const FileName: TFileName): RawUtf8;
 begin
   _toutf8(GetFileNameWithoutExt(ExtractFileName(FileName)), result);
+end;
+
+function EqualFileNameNotNull(const a, b: TFileName): boolean;
+var
+  l: PtrInt;
+begin
+  result := false;
+  l := PStrLen(PAnsiChar(pointer(b)) - _STRLEN)^;
+  if PStrLen(PAnsiChar(pointer(a)) - _STRLEN)^ <> l then
+    exit;
+  l := l * SizeOf(Char); // from AnsiChar/WideChar to bytes
+  repeat
+    dec(l, SizeOf(TStrLen)); // backwards - may compare Length header bytes
+    if PStrLen(@PByteArray(a)[l])^ <> PStrLen(@PByteArray(b)[l])^ then
+      exit;
+  until l <= 0;
+  result := true;
 end;
 
 function PosExtString(Str: PChar): PChar; // work on AnsiString + UnicodeString
