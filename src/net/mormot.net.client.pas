@@ -2259,7 +2259,7 @@ begin
   result := pointer(fDownload);
   for i := 1 to length(fDownload) do
     if (result^.ID <> 0) and // not a recycled slot
-       (result^.PartFile = FileName) then
+       EqualFileNameNotNull(result^.PartFile, FileName) then
       exit
     else
       inc(result);
