@@ -831,6 +831,8 @@ procedure TTestCoreBase.FastStringCompare;
     result := StrIEqualW(pointer(p1), pointer(p2));
   end;
 
+var
+  fn: TFileName;
 begin
   CheckEqual(CompareText('', ''), 0);
   Check(CompareText('abcd', '') > 0);
@@ -944,6 +946,22 @@ begin
   Check(not HasOnlyChar('eabab', ['a' .. 'c']));
   Check(not HasOnlyChar('ababe', ['a' .. 'c']));
   Check(HasOnlyChar('ababe', ['a' .. 'e']));
+  CheckEqual(GetFileNameWithoutExtOrPath(''), '');
+  CheckEqual(GetFileNameWithoutExtOrPath('toto.ext'), 'toto');
+  CheckEqual(GetFileNameWithoutExtOrPath('toto'), 'toto');
+  {$ifdef OSWINDOWS}
+  CheckEqual(GetFileNameWithoutExtOrPath('c:\temp\toto.ext'), 'toto');
+  CheckEqual(GetFileNameWithoutExtOrPath('c:\temp\toto'), 'toto');
+  {$else}
+  CheckEqual(GetFileNameWithoutExtOrPath('/var/tmp/toto.ext'), 'toto');
+  CheckEqual(GetFileNameWithoutExtOrPath('/var/tmp/toto'), 'toto');
+  {$endif OSWINDOWS}
+  fn := '/var/toto.ext';
+  Check(EqualFileNameNotNull(fn, fn));
+  Check(EqualFileNameNotNull(fn, '/var/toto.ext'));
+  Check(not EqualFileNameNotNull(fn, '/var/toto.ex2'));
+  Check(not EqualFileNameNotNull(fn, '/var/toto.ex'));
+  Check(not EqualFileNameNotNull(fn, '/Var/toto.ext'));
 end;
 
 procedure TTestCoreBase.IniFiles;
