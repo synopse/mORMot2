@@ -1860,7 +1860,6 @@ type
   );
   /// the text fields stored by GetSmbios/DecodeSmbios functions
   TSmbiosBasicInfos = array[TSmbiosBasicInfo] of RawUtf8;
-  TSmbiosBasicInfoLookup = array[byte] of TSmbiosBasicInfo;
 
 /// check if a string value should be ignored when parsed e.g. from SMBIOS fields
 function IsDefaultString(p: pointer; l: PtrInt): boolean;
@@ -1869,8 +1868,7 @@ function IsDefaultString(p: pointer; l: PtrInt): boolean;
 // - see DecodeSmbiosInfo() in mormot.core.perf.pas for a more complete decoder
 // - returns the total size of DMI/SMBIOS information in raw.data (may be lower)
 // - will also adjust raw.Length and truncate raw.Data to the actual useful size
-function DecodeSmbios(var raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos;
-  var temp: TSmbiosBasicInfoLookup): PtrInt;
+function DecodeSmbios(var raw: TRawSmbiosInfo; var info: TSmbiosBasicInfos): PtrInt;
 
 // some global definitions for proper caching and inlining of GetSmbios()
 procedure ComputeGetSmbios;
@@ -10063,8 +10061,6 @@ begin
 end;
 
 procedure ComputeGetSmbios;
-var
-  temp: TSmbiosBasicInfoLookup;
 begin
   GlobalLock; // thread-safe retrieval
   try
@@ -10074,7 +10070,7 @@ begin
       Finalize(RawSmbios.Data);
       FillCharFast(RawSmbios, SizeOf(RawSmbios), 0);
       if _GetRawSmbios(RawSmbios) then // OS specific call
-         if DecodeSmbios(RawSmbios, _Smbios, temp) <> 0 then
+         if DecodeSmbios(RawSmbios, _Smbios) <> 0 then
          begin
            // we were able to retrieve and decode SMBIOS information
            {$ifdef OSPOSIX}
@@ -10244,9 +10240,9 @@ begin
   result := PropNameEquals(@TO_IGNORE[1], p, 14, l); // properly inlined on FPC
 end;
 
-function DecodeSmbios(var raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos;
-  var temp: TSmbiosBasicInfoLookup): PtrInt;
+function DecodeSmbios(var raw: TRawSmbiosInfo; var info: TSmbiosBasicInfos): PtrInt;
 var
+  temp: array[byte] of TSmbiosBasicInfo;
   len, trimright: PtrInt;
   cur: ^TSmbiosBasicInfo;
   s, sEnd: PByteArray;
@@ -10257,7 +10253,7 @@ begin // single pass efficient decoding
   if s = nil then
     exit;
   sEnd := @s[length(raw.Data)];
-  FillCharFast(temp, SizeOf(temp), ord(sbiUndefined));
+  FillCharFast(temp, SizeOf(temp), ord(sbiUndefined)); // fast lookup
   repeat
     if (s[0] = 127) or // type (127=EOT)
        (s[1] < 4) or   // length
