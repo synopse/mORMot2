@@ -1862,6 +1862,10 @@ type
   /// the text fields stored by GetSmbios/DecodeSmbios functions
   TSmbiosBasicInfos = array[TSmbiosBasicInfo] of RawUtf8;
 
+/// check if a string value should be ignored when parsed e.g. from SMBIOS fields
+function IsDefaultString(p: pointer; l: PtrInt): boolean;
+  {$ifdef FPC} inline; {$endif}
+
 /// decode basic SMBIOS information as text from a TRawSmbiosInfo binary blob
 // - see DecodeSmbiosInfo() in mormot.core.perf.pas for a more complete decoder
 // - returns the total size of DMI/SMBIOS information in raw.data (may be lower)
@@ -10228,6 +10232,14 @@ begin
     uid.D3 := bswap16(uid.D3);
   end;
   UuidToText(uid, dest);
+end;
+
+const
+  TO_IGNORE: TShort15 = 'Default string';
+
+function IsDefaultString(p: pointer; l: PtrInt): boolean;
+begin
+  result := (l = 14) and CompareMem(p, @TO_IGNORE[1], 14);
 end;
 
 function DecodeSmbios(var raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos): PtrInt;
