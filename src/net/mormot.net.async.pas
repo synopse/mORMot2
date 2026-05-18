@@ -5691,7 +5691,7 @@ type
     ctxt: THttpServerRequestAbstract;
     proxy: THttpProxyUrl;              // server proxy definition
     filename: TFileName;               // full file name, including path
-    head: THeadCache;                  // remote headers retrieved from HASH
+    head: THeadCache;                  // remote headers retrieved via HEAD
     localsize: Int64;                  // local file size
     localdate: TUnixMSTime;            // local file timestamp
     loginfo: PUtf8Char;                // optional error message / log context
@@ -6292,11 +6292,11 @@ begin
   end;
   if n <> 0 then
     fLog.Add.Log(sllTrace, 'OnIdle: cache gc=%', [n], self);
-  // delete deprecated file content in background thread - check every 2 minutes
+  // delete deprecated file content in background thread - every 17 minutes
   if (fSettings.DiskCache.Path = '') or
      (fSettings.DiskCache.TimeoutSec <= SecsPerHour) then
     exit;
-  tixmin := (NowTix shr 27) + 1; // check folder every 128 seconds
+  tixmin := (NowTix shr 20) + 1; // check folder every 1048 seconds
   if fTempFilesTix = tixmin then
     exit;
   fTempFilesTix := tixmin;

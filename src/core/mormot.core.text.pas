@@ -9739,7 +9739,7 @@ begin
 end;
 
 procedure MakePath(const Part: array of const; var Dest: TFileName;
-  EndWithDelim: booleane; Delim: AnsiChar);
+  EndWithDelim: boolean; Delim: AnsiChar);
 var
   f: TFormatUtf8;
 begin
