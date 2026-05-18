@@ -6686,7 +6686,7 @@ begin
   begin
     // create sub-folders using the first hash nibble (0..9/a..z), in a way
     // similar to git - aFileName[1..2] is the algorithm, so hash starts at [3]
-    result := MakePath([fPermFilesPath, aFileName[3]]);
+    MakePath([fPermFilesPath, aFileName[3]], result);
     if lfnEnsureDirectoryExists in aFlags then
       result := EnsureDirectoryExistsNoExpand(result);
     result := result + aFileName;

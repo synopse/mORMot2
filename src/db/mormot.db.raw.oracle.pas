@@ -1685,7 +1685,7 @@ begin
     LibraryFileName := LIBNAME;
   if (SynDBOracleOCIpath <> '') and
      DirectoryExists(SynDBOracleOCIpath) then
-    l1 := MakePath([SynDBOracleOCIpath, LibraryFileName]);
+    MakePath([SynDBOracleOCIpath, LibraryFileName], l1);
   l2 := Executable.ProgramFilePath + LibraryFileName;
   if not FileExists(l2) then
   begin

@@ -1596,7 +1596,7 @@ end;
 
 function TOrmVirtualTableModule.FileName(const aTableName: RawUtf8): TFileName;
 begin
-  result := Utf8ToString(aTableName) + '.' + FileExtension;
+  result := MakeString([aTableName, '.', FileExtension]);
   if fFilePath = '' then
     result := Executable.ProgramFilePath + result
   else

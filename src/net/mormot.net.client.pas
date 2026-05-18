@@ -2479,10 +2479,9 @@ begin
     Ctxt.ProgressiveTix := tix + STATICFILE_PROGTIMEOUTSEC; // first seen
   // retrieve the file name to be processed
   fn := FindReadLocked(Ctxt.ProgressiveID);
-  if fn = '' then // e.g. after THttpPartials.DoneLocked()
-    exit;
-  // process this file within the read lock
+  if fn <> '' then // e.g. after THttpPartials.DoneLocked()
   try
+    // process this file within the read lock
     src := FileOpen(fn, fmOpenReadShared); // partial file access
     if ValidHandle(src) then
     try
@@ -3543,7 +3542,7 @@ begin
   // try to get from local HashCacheDir
   if (params.HashCacheDir <> '') and
      DirectoryExists(params.HashCacheDir) then
-    cached := MakePath([params.HashCacheDir, ExtractFileName(result)]);
+    MakePath([params.HashCacheDir, ExtractFileName(result)], cached);
   if (destfile <> '') and
      Assigned(params.Hasher) and
      (params.Hash <> '') then

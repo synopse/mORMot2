@@ -3139,7 +3139,7 @@ function FileNames(const Path: array of const; const Mask: TFileName;
 var
   dir: TFileName;
 begin
-  dir := MakePath(Path, {endwithdelim=}true);
+  MakePath(Path, dir, {endwithdelim=}true);
   result := FileNames(dir, Mask, Options);
 end;
 

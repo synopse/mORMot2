@@ -6023,7 +6023,7 @@ begin
   repeat
     if SearchRecValidFile(F) then
     begin
-      fn := MakePath([settingsfolder, F.Name]);
+      MakePath([settingsfolder, F.Name], fn);
       one := THttpProxyUrlSettings.Create;
       if not JsonFileToObject(fn, one, nil, JSONPARSER_TOLERANTOPTIONS) then
         one.Free
@@ -6334,7 +6334,7 @@ begin
     if PosExChar(PathDelim, name) <> 0 then
       exit;
   // stream the content from local file
-  fn := MakePath([one.Settings.fLocalFolder, name]);
+  MakePath([one.Settings.fLocalFolder, name], fn);
   result := one.ReturnFile(Ctxt, name, fn, Uri, siz, {lastmod=}0);
   // additional response types
   case result of

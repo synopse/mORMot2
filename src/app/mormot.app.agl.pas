@@ -1111,7 +1111,7 @@ constructor TSynAngelizeSettings.Create;
 begin
   inherited Create;
   fHttpTimeoutMS := 200;
-  fFolder := MakePath([Executable.ProgramFilePath, 'services'], true);
+  fFolder := MakePath([Executable.ProgramFilePath, 'services'], {enddelim=}true);
   fExt := '.service';
   fCommandFile := 'cmd';
 end;

@@ -4638,7 +4638,7 @@ var
   fileName: TFileName;
 begin
   if fUriMethodPath = '' then
-    fileName := MakePath([FolderName, DefaultFileName])
+    MakePath([FolderName, DefaultFileName], fileName)
   else
     NormalizeUriToFileName(fUriMethodPath, filename, FolderName);
   ReturnFile(fileName,

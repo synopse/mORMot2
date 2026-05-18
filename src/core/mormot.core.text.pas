@@ -9777,7 +9777,7 @@ begin
     if FolderName = '' then
       Utf8ToFileName(fn, FileName)
     else
-      FileName := MakePath([FolderName, fn]);
+      MakePath([FolderName, fn], FileName);
 end;
 
 function FileExistsMake(const Part: array of const;
@@ -9785,7 +9785,7 @@ function FileExistsMake(const Part: array of const;
 var
   filename: TFileName;
 begin
-  filename := MakePath(Part);
+  MakePath(Part, filename);
   result := FileExists(filename);
   if result and
      (SetIfFound <> nil) then
@@ -9797,7 +9797,7 @@ function DirectoryExistsMake(const Part: array of const;
 var
   folder: TFileName;
 begin
-  folder := MakePath(Part);
+  MakePath(Part, folder);
   result := DirectoryExists(folder);
   if result and
      (SetIfFound <> nil) then

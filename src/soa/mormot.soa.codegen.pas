@@ -781,7 +781,7 @@ begin
   ComputeSearchPath(Path, SearchPath);
   for i := 0 to High(SearchPath) do
   begin
-    result := MakePath([SearchPath[i], TemplateName]);
+    MakePath([SearchPath[i], TemplateName], result);
     if FileExists(result) then
       exit;
   end;
