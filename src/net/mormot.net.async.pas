@@ -1445,11 +1445,17 @@ type
     hpsEvent);
   THttpProxySources = set of THttpProxySource;
 
+  /// internal HEAD request cache entry for a given resource
   THeadCache = record
-    B32: RawUtf8; // Base-32 encoded URI + etag/lastmod from Headers
+    /// Base-32 encoded URI + etag/lastmod from Headers
+    B32: RawUtf8;
+    /// origin headers ready to be sent back to the client with the file content
     PurgedHeaders: RawUtf8;
+    /// resource full size, e.g. from headers Content-Length
     Size: Int64;
+    /// resource remote timestamp, e.g. from headers Last-Modified
     TimeMS: TUnixMSTime;
+    /// HTTP code number from remote server, e.g. 200, 206, 301 or 404
     Status: integer;
   end;
   THeadCaches = array of THeadCache;
