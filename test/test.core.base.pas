@@ -5727,6 +5727,7 @@ var
   WU: array[0..3] of WideChar;
   str: string;
   ss: ShortString;
+  fn: TFileName;
   up4: RawUcs4;
   U, U1, U2, res, Up, Up2, json, json1, json2, s1, s2, s3: RawUtf8;
   arr, arr2: TRawUtf8DynArray;
@@ -6315,6 +6316,10 @@ begin
   Check(MakePath(['1/', 2, 3], true, '/') = '1/2/3/');
   Check(MakePath([1, 2, '3/'], true, '/') = '1/2/3/');
   Check(MakePath([1, '', 2, '3/'], true, '/') = '1/2/3/');
+  MakePath([1, 2, '3'], fn, false, '/');
+  Check(fn = '1/2/3');
+  MakePath(['1', 2, 3], fn, true, '/');
+  Check(fn = '1/2/3/');
   Check(MakeFileName([]) = '');
   Check(MakeFileName(['toto', 'doc']) = 'toto.doc');
   {$ifdef OSWINDOWS}

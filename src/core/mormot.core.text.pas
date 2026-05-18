@@ -1992,7 +1992,11 @@ procedure AppendLine(var Text: RawUtf8; const Args: array of const;
 // - similar to os.path.join() in the Python RTL
 // - e.g. on Windows: MakePath(['abc', 1, 'toto.json']) = 'abc\1\toto.json'
 function MakePath(const Part: array of const; EndWithDelim: boolean = false;
-  Delim: AnsiChar = PathDelim): TFileName;
+  Delim: AnsiChar = PathDelim): TFileName; overload;
+
+/// append some path parts into a single file name with proper path delimiters
+procedure MakePath(const Part: array of const; var Dest: TFileName;
+  EndWithDelim: boolean = false; Delim: AnsiChar = PathDelim); overload;
 
 /// a wrapper around ExpandFileName(MakePath(Part))
 function MakeExpandedPath(const Part: array of const;
@@ -9732,6 +9736,15 @@ var
 begin
   {%H-}f.DoDelim(@Part[0], length(Part), EndWithDelim, Delim);
   f.WriteString(string(result));
+end;
+
+procedure MakePath(const Part: array of const; var Dest: TFileName;
+  EndWithDelim: booleane; Delim: AnsiChar);
+var
+  f: TFormatUtf8;
+begin
+  {%H-}f.DoDelim(@Part[0], length(Part), EndWithDelim, Delim);
+  f.WriteString(string(Dest));
 end;
 
 function MakeExpandedPath(const Part: array of const; EndWithDelim: boolean): TFileName;
