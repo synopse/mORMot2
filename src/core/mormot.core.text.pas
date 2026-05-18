@@ -9178,9 +9178,38 @@ type
     function WriteMax(Dest: PUtf8Char; Max: PtrUInt): PUtf8Char;
   end;
 
+procedure TFormatUtf8.Init;
+begin
+  L := 0;
+  last := @blocks;
+end;
+
 procedure TooManyArgs;
 begin
   ESynException.RaiseU('TFormatUtf8: too many arguments');
+end;
+
+procedure TFormatUtf8.AddVarRec(Arg: PVarRec; ArgCount: PtrUInt);
+var
+  d: PTempUtf8;
+begin
+  if ArgCount = 0 then
+    exit;
+  d := last;
+  inc(d, ArgCount);
+  if PtrUInt(d) > PtrUInt(@blocks[high(blocks)]) then
+    TooManyArgs;
+  d := last;
+  repeat
+    if VarRecToTempUtf8(Arg, d^) then
+    begin
+      inc(L, d^.Len);
+      inc(d);
+    end;
+    inc(Arg);
+    dec(ArgCount)
+  until ArgCount = 0;
+  last := d;
 end;
 
 procedure TFormatUtf8.WriteAll(Dest: PUtf8Char; d: PTempUtf8);
@@ -9296,35 +9325,6 @@ begin // in our internal usage, we know that SomeText is <> ''
     TempRawUtf8 := nil;
   end;
   inc(last);
-end;
-
-procedure TFormatUtf8.AddVarRec(Arg: PVarRec; ArgCount: PtrUInt);
-var
-  d: PTempUtf8;
-begin
-  if ArgCount = 0 then
-    exit;
-  d := last;
-  inc(d, ArgCount);
-  if PtrUInt(d) > PtrUInt(@blocks[high(blocks)]) then
-    TooManyArgs;
-  d := last;
-  repeat
-    if VarRecToTempUtf8(Arg, d^) then
-    begin
-      inc(L, d^.Len);
-      inc(d);
-    end;
-    inc(Arg);
-    dec(ArgCount)
-  until ArgCount = 0;
-  last := d;
-end;
-
-procedure TFormatUtf8.Init;
-begin
-  L := 0;
-  last := @blocks;
 end;
 
 procedure TFormatUtf8.DoAppend(var Text: RawUtf8; Arg: PVarRec; ArgCount: PtrInt);
