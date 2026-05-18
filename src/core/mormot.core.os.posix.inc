@@ -3501,9 +3501,9 @@ begin
   while (l > 0) and
         (p[l - 1] <= ' ') do // trim right
     dec(l);
+  if IsDefaultString(p, l) then
+    l := 0; // e.g. on ProxMox containers or VMs
   FastSetString(result, p, l);
-  if result = 'Default string' then // e.g. on ProxMox containers or VMs
-    result := '';
 end;
 
 function LoadProcFileTrim(fn: PAnsiChar): RawUtf8;

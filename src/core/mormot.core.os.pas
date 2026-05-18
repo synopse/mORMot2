@@ -10341,9 +10341,8 @@ begin
             while (trimright <> 0) and
                   (s[trimright - 1] <= ord(' ')) do
               dec(trimright);
-            FastSetString(info[cur^], s, trimright);
-            if info[cur^] = 'Default string' then
-              FastAssignNew(info[cur^]);
+            if not IsDefaultString(s, trimright) then
+              FastSetString(info[cur^], s, trimright);
           end;
           cur^ := sbiUndefined; // reset slot in lines[]
         end;

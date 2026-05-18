@@ -4789,8 +4789,8 @@ begin
       12: // System Configuration options (type 12)
         if s[4] <> 0 then
         begin
-          i := length(info.Oem);
-          SetLength(info.Oem, i + s[4]);
+          c := length(info.Oem);
+          SetLength(info.Oem, c + s[4]);
           // we just parse the strings table here
           s := @s[s[1]];
           if s[0] = 0 then
@@ -4799,17 +4799,17 @@ begin
             repeat
               len := StrLen(s);
               if (len <> 0) and
-                 (i < length(info.Oem)) then
+                 (c < length(info.Oem)) and
+                 not IsDefaultString(s, len) then
               begin
-                FastSetString(info.Oem[i], s, len);
-                if info.Oem[i] <> 'Default string' then // see mormot.core.os
-                  inc(i);
+                FastSetString(info.Oem[c], s, len);
+                inc(c);
               end;
               s := @s[len + 1]; // next string
             until s[0] = 0;
           inc(PByte(s));
-          if length(info.Oem) <> i then
-            SetLength(info.Oem, i);
+          if length(info.Oem) <> c then
+            SetLength(info.Oem, c);
           continue;
         end;
       16: // Physical Memory Array (type 16)
