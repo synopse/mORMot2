@@ -1864,7 +1864,6 @@ type
 
 /// check if a string value should be ignored when parsed e.g. from SMBIOS fields
 function IsDefaultString(p: pointer; l: PtrInt): boolean;
-  {$ifdef FPC} inline; {$endif}
 
 /// decode basic SMBIOS information as text from a TRawSmbiosInfo binary blob
 // - see DecodeSmbiosInfo() in mormot.core.perf.pas for a more complete decoder
@@ -10242,7 +10241,7 @@ const
 
 function IsDefaultString(p: pointer; l: PtrInt): boolean;
 begin
-  result := (l = 14) and CompareMem(p, @TO_IGNORE[1], 14);
+  result := PropNameEquals(@TO_IGNORE[1], p, 14, l); // properly inlined on FPC
 end;
 
 function DecodeSmbios(var raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos;
