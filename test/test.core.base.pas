@@ -8180,10 +8180,12 @@ begin
   CheckEqual(SizeOf(TSmbiosMemory) - 7 * SizeOf(RawUtf8), 11);
   CheckEqual(SizeOf(TSmbiosMemoryArray) - 2 * SizeOf(pointer), 5);
   Check(not IsDefaultString(pointer(s), length(s)));
-  s := 'Default String';
-  Check(not IsDefaultString(pointer(s), length(s)));
   s := 'Default string';
   Check(IsDefaultString(pointer(s), length(s)));
+  s := 'Default String';
+  Check(IsDefaultString(pointer(s), length(s)));
+  s := 'Default 5tring';
+  Check(not IsDefaultString(pointer(s), length(s)));
   // validate actual retrieval from this computer
   GetComputerUuid(uid); // retrieve main SMBIOS and its UUID, or generate it
   Check(_SmbiosRetrieved);
