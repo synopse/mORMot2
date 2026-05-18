@@ -6294,7 +6294,7 @@ begin
     fLog.Add.Log(sllTrace, 'OnIdle: cache gc=%', [n], self);
   // delete deprecated file content in background thread - every 17 minutes
   if (fSettings.DiskCache.Path = '') or
-     (fSettings.DiskCache.TimeoutSec <= SecsPerHour) then
+     (fSettings.DiskCache.TimeoutSec <= 0) then
     exit;
   tixmin := (NowTix shr 20) + 1; // check folder every 1048 seconds
   if fTempFilesTix = tixmin then
