@@ -8143,6 +8143,7 @@ var
   b: RawByteString;
   act: TArmCpuType;
   aci: TArmCpuImplementer;
+  temp: TSmbiosBasicInfoLookup;
 
   procedure CheckAgainst(const full: TSmbiosInfo; const os: TSmbiosBasicInfos);
   begin
@@ -8199,8 +8200,8 @@ begin
   PCardinal(@raw)^ := $010003ff;
   bak := PByte(@_SmbiosDecodeUuid)^;
   _SmbiosDecodeUuid := sduVersion; // consistent UUID decoding on all platforms
-  CheckEqual(DecodeSmbios(raw, os), 3066, 'DecodeSmbios');
-  Check(DecodeSmbiosInfo(raw, dec), 'DecodeSmbiosInfo');
+  CheckEqual(DecodeSmbios(raw, os, temp), 3066, 'DecodeSmbios');
+  Check(DecodeSmbiosInfo(raw, dec, nil), 'DecodeSmbiosInfo');
   PByte(@_SmbiosDecodeUuid)^ := bak;
   CheckAgainst(dec, os);
   CheckHash(BinarySave(@dec.Bios,
