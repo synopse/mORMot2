@@ -1180,9 +1180,9 @@ type
   THttpProxyUrl = class;
 
   /// THttpProxyUrl.OnRemoteClient callback signature
-  // - could be used e.g. for interaction, or to customize TLS options
+  // - could be used e.g. for interaction, or to customize TLS or proxy options
   TOnHttpProxyUrlClient = procedure(Sender: THttpProxyUrl; const Uri: TUri;
-    var TLS: TNetTlsContext) of object;
+    var Options: THttpRequestExtendedOptions) of object;
 
   /// set of THttpProxyUrl.Settings.Options items, to customize a specific URI
   // - hpoNoSubFolder disable access to any sub-folder within this URI
@@ -5623,7 +5623,7 @@ begin
   if hpoClientIgnoreTlsError in fSettings.Options then
     client.Options^.TLS.IgnoreCertificateErrors := true;
   if Assigned(fSettings.OnRemoteClient) then
-    fSettings.OnRemoteClient(self, fRemoteUri, client.Options^.TLS);
+    fSettings.OnRemoteClient(self, fRemoteUri, client.Options^);
   if psoLogVerbose in fOwner.fSettings.Server.Options then
     client.OnLog := TSynLog.DoLog;
   // TODO: on scaling issue, maintain a pool of client connections
