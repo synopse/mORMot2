@@ -7990,7 +7990,7 @@ begin
   l := PStrLen(PAnsiChar(pointer(b)) - _STRLEN)^;
   if PStrLen(PAnsiChar(pointer(a)) - _STRLEN)^ <> l then
     exit;
-  l := l * SizeOf(Char); // from AnsiChar/WideChar to bytes
+  l := l * SizeOf(Char); // from WideChar to bytes (no-op for AnsiChar)
   repeat
     dec(l, SizeOf(TStrLen)); // backwards - may compare Length header bytes
     if PStrLen(@PByteArray(a)[l])^ <> PStrLen(@PByteArray(b)[l])^ then

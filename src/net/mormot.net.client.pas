@@ -2254,15 +2254,36 @@ end;
 
 function THttpPartials.FromFile(const FileName: TFileName): PHttpPartial;
 var
-  i: PtrInt;
-begin
+  n, l: PtrInt;
+  p: PAnsiChar;
+begin // very ugly but very efficient code
   result := pointer(fDownload);
-  for i := 1 to length(fDownload) do
-    if (result^.ID <> 0) and // not a recycled slot
-       EqualFileNameNotNull(result^.PartFile, FileName) then
-      exit
-    else
+  if result = nil then
+    exit;
+  if FileName <> '' then
+  begin
+    l := PStrLen(PAnsiChar(pointer(FileName)) - _STRLEN)^;
+    n := PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF;
+    repeat
+      if result^.ID <> 0 then // not a recycled slot
+      begin // inlined EqualFileNameNotNull() - comparing backwards
+        p := pointer(result^.PartFile);
+        if PStrLen(p - _STRLEN)^ = l then
+        begin
+          l := l * SizeOf(Char); // from WideChar to bytes (no-op for AnsiChar)
+          repeat
+            dec(l, SizeOf(TStrLen)); // may compare Length header bytes
+            if PStrLen(p + l)^ <> PStrLen(@PByteArray(FileName)[l])^ then
+              break;
+            if l <= 0 then
+              exit; // found exact filename
+          until false;
+        end;
+      end;
       inc(result);
+      dec(n);
+    until n = 0;
+  end;
   result := nil;
 end;
 
