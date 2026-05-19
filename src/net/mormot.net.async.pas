@@ -1193,6 +1193,8 @@ type
   // default support as efficient 304 HTTP_NOTMODIFIED response
   // - hpoClientCacheSubFolder could be used with a lot of cached files, to
   // generate sub-folders following the first hash nibble (0..9/a..z)
+  // - hpoClientHeadNoRefresh won't refresh the HEAD timeout when a resource
+  // is accessed, so that the cache is flushed after HttpHeadCacheSec
   // - hpoClientIgnoreTlsError will ignore any HTTPS issue
   // - hpoClientAlllowWinApi will be used for THttpProxyUrl.RemoteClientHead()
   // - hpoNoXProxyName will disable our custom 'X-Proxy-Name: xxxx' header
@@ -1206,6 +1208,7 @@ type
     hpoPublishSha256,
     hpoDisable304,
     hpoClientCacheSubFolder,
+    hpoClientHeadNoRefresh,
     hpoClientIgnoreTlsError,
     hpoClientAlllowWinApi,
     hpoNoXProxyName,
@@ -5725,7 +5728,8 @@ begin // this method is protected by proxy.fOsSafe.Lock
   end;
   // always perform a HEAD request to the original server
   if not Assigned(proxy.fHeadCache) or // see HttpHeadCacheSec for this URI
-     not proxy.fHeadCache.FindAndCopy(h, head) then
+     not proxy.fHeadCache.FindAndCopy(h, head,
+       {updatetimeout=}not (hpoClientHeadNoRefresh in proxy.fSettings.Options)) then
     proxy.RemoteClientHead(remote, h, head);
   result := head.Status;
   if not StatusCodeIsSuccess(result) then // 4xx.. range
