@@ -3489,7 +3489,7 @@ function DirectoryDeleteAll(const Directory: TFileName): boolean;
 function DirectoryDeleteOlderFiles(const Directory: TFileName;
   TimePeriod: TDateTime; const Mask: TFileName = FILES_ALL;
   Recursive: boolean = false; TotalSize: PInt64 = nil;
-  DeleteFolders: boolean = false): boolean;
+  DeleteFolders: boolean = false; DeletedCount: PInteger = nil): boolean;
 
 type
   /// recursively search a folder and its nested sub-folders via methods
@@ -8078,7 +8078,7 @@ type // state machine for DirectoryDeleteOlderFiles() / DirectoryDeleteAll()
 function TDirectoryDelete.OnFile(const FileInfo: TSearchRec;
   const FullFileName: TFileName): boolean;
 begin
-  if (fDeleteBefore = 0) or
+  if (PInt64(@fDeleteBefore)^ = 0) or
      (SearchRecToDateTimeUtc(FileInfo) < fDeleteBefore) then
     if DeleteFile(FullFileName) then
     begin
@@ -8122,7 +8122,7 @@ end;
 
 function DirectoryDeleteOlderFiles(const Directory: TFileName;
   TimePeriod: TDateTime; const Mask: TFileName; Recursive: boolean;
-  TotalSize: PInt64; DeleteFolders: boolean): boolean;
+  TotalSize: PInt64; DeleteFolders: boolean; DeletedCount: PInteger): boolean;
 var
   browse: TDirectoryDelete;
 begin
@@ -8134,6 +8134,8 @@ begin
     browse.Run;
     if TotalSize <> nil then
       TotalSize^ := browse.fTotalSize;
+    if DeletedCount <> nil then
+      DeletedCount^ := browse.fDeletedCount;
     result := not browse.fDeleteError;
   finally
     browse.Free;
