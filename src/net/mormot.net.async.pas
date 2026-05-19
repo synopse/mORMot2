@@ -6292,23 +6292,26 @@ end;
 
 procedure THttpProxyServer.OnIdle(Sender: TObject; NowTix: Int64);
 var
-  i, n: integer;
+  i, mem, hash, head: integer;
   tixmin: cardinal;
   one: ^THttpProxyUrl;
   tmp: TSynLogClass; // for Delphi 7 compilation
 begin
   // delete any deprecated in-memory cached content - called every second
-  n := 0;
+  mem := 0;
+  hash := 0;
+  head := 0;
   one := pointer(fUrl);
   for i := 1 to length(fUrl) do
   begin
-    inc(n, one^.fMemCache.DeleteDeprecated(NowTix));
-    inc(n, one^.fHashCache.DeleteDeprecated(NowTix));
-    inc(n, one^.fHeadCache.DeleteDeprecated(NowTix));
+    inc(mem,  one^.fMemCache.DeleteDeprecated(NowTix));
+    inc(hash, one^.fHashCache.DeleteDeprecated(NowTix));
+    inc(head, one^.fHeadCache.DeleteDeprecated(NowTix));
     inc(one);
   end;
-  if n <> 0 then
-    fLog.Add.Log(sllTrace, 'OnIdle: cache gc=%', [n], self);
+  if mem + hash + head <> 0 then
+    fLog.Add.Log(sllTrace, 'OnIdle: gc mem=% hash=% head=%',
+      [mem, hash, head], self);
   // delete deprecated file content in background thread - every 17 minutes
   if (fSettings.DiskCache.Path = '') or
      (fSettings.DiskCache.TimeoutSec <= 0) then
