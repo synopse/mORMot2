@@ -6412,9 +6412,9 @@ begin
     if result < 300 then // StatusCodeIsSuccess = 2xx..3xx range
     begin
       // check the local file (named from hashed URI + header etag/lastmod)
-      if FileInfoByName(req.filename, req.localsize, req.localdate) and
+      if (req.filename <> '') and
+         FileInfoByName(req.filename, req.localsize, req.localdate) and
          (req.localsize >= 0) then
-      begin
         // we have a local cached file
         if fPartials.HasFile(req.filename, @req.localsize, Ctxt.ConnectionHttp) then
         begin
@@ -6423,14 +6423,24 @@ begin
           req.loginfo := 'partial exists';
           result := HTTP_SUCCESS;
         end
+        else if req.localsize <> req.head.Size then
+        begin
+          // delete aborted/invalid file on disk and retry from scratch
+          fLog.Add.Log(sllDebug, 'OnExecute: delete=% disk=% expected=%',
+            [req.head.B32, req.localsize, req.head.Size], self);
+          if not DeleteFile(req.filename) then
+            fLog.Add.Log(sllLastError, 'OnExecute: delete=%', [req.filename], self);
+          result := HTTP_NOTFOUND;
+          req.localsize := -1; // no local file
+          req.localdate := 0;
+        end
         else
         begin
           // assume file won't change on the server: return the current cache
           result := req.proxy.ReturnFile(Ctxt,
             req.head.B32, req.filename, Uri, req.localsize, req.head.TimeMS);
           req.loginfo := 'direct';
-        end;
-      end
+        end
       else
       begin
         result := HTTP_NOTFOUND;
