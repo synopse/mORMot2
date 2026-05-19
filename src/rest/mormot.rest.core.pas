@@ -1119,10 +1119,11 @@ type
     // - warning: you should re-call SetPassword(aMutualAuth=true) when this
     // LogonName field is changed, since PasswordHashHexa is bound to LogonName
     // - so in this field, you may encounter such values:
-    // $ 0123abc.....ffee = 256-bit hexa of mORMot 1 SHA256('salt'+password)
-    // $ bc01a89.....2b07 = HA0 = Hash(username:realm:password) for DIGEST
-    // $ $mcf$params$checkum = standard "Modular Crypt" hash
-    // $ #mcf$params$scramkeys = SCRAM-like "Modular" hash with mutual auth
+    // $ '0123abc.....ffee' = 256-bit hexa of mORMot 1 SHA256('salt'+password)
+    // $ 'bc01a89.....2b07' = HA0 = Hash(username:realm:password) for DIGEST
+    // $ '$mcf$params$checkum' = standard "Modular Crypt" hash
+    // $ '#mcf$params$scramkeys' = SCRAM-like "Modular" hash with mutual auth
+    // $ '' for password-less authentication e.g. with GSSAPI/SSPI Kerberos
     property PasswordHashHexa: RawUtf8
       index 192 read fPasswordHashHexa write fPasswordHashHexa;
     /// the associated access rights of this user

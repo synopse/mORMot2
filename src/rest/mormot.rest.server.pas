@@ -7373,7 +7373,7 @@ var
   a: PAuthSession;
 begin
   // TRestServer.Uri() runs this method at most every second
-  fSessionsDeprecatedTix := tix32;
+  fSessionsDeprecatedTix := tix32; // = TickCount64 shr 10
   result := 0;
   if (self = nil) or
      (fSessions = nil) or

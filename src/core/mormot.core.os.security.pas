@@ -1893,11 +1893,11 @@ function SecurityDescriptorToText(const sd: RawSecurityDescriptor;
 { ****************** Kerberos KeyTab File Support }
 
 const
-  ENCTYPE_DES3_CBC_SHA1              = $10;
-  ENCTYPE_AES128_CTS_HMAC_SHA1_96    = $11; // RFC 3962
-  ENCTYPE_AES256_CTS_HMAC_SHA1_96    = $12;
-  ENCTYPE_AES128_CTS_HMAC_SHA256_128 = $13; // RFC 8009 - libktb5 1.15+
-  ENCTYPE_AES256_CTS_HMAC_SHA384_192 = $14;
+  ENCTYPE_DES3_CBC_SHA1              = $10; // =16 (deprecated)
+  ENCTYPE_AES128_CTS_HMAC_SHA1_96    = $11; // =17 from RFC 3962
+  ENCTYPE_AES256_CTS_HMAC_SHA1_96    = $12; // =18
+  ENCTYPE_AES128_CTS_HMAC_SHA256_128 = $13; // =19 from RFC 8009 - libktb5 1.15+
+  ENCTYPE_AES256_CTS_HMAC_SHA384_192 = $14; // =20
 
   /// the standard KeyTab encoding names - do not change
   ENCTYPE_NAME: array[$11 .. $14] of RawUtf8 = (
