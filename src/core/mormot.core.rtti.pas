@@ -9837,6 +9837,7 @@ begin
               begin
                 inc(P);
                 ac := Rtti.RegisterTypeFromName(typname);
+                typname := Join(['TArray<', typname, '>']); // normalize
               end;
             end
             else
