@@ -6313,33 +6313,42 @@ begin
     fLog.Add.Log(sllTrace, 'OnIdle: gc mem=% hash=% head=%',
       [mem, hash, head], self);
   // delete deprecated file content in background thread - every 17 minutes
-  if (fSettings.DiskCache.Path = '') or
-     (fSettings.DiskCache.TimeoutSec <= 0) then
+  if not (fHasCacheClean in fFlags) then
     exit;
   tixmin := (NowTix shr 20) + 1; // check folder every 1048 seconds
   if fTempFilesTix = tixmin then
     exit;
   fTempFilesTix := tixmin;
   tmp := nil;
-  if DirectoryExists(fSettings.DiskCache.Path) then
-    TLoggedWorkThread.Create(tmp, 'cacheclean', nil, OnBackgroundDeleteDeprecated);
+  TLoggedWorkThread.Create(tmp, 'cacheclean', nil, OnBackgroundDeleteDeprecated);
 end;
 
 procedure THttpProxyServer.OnBackgroundDeleteDeprecated(Sender: TObject);
 var
   size: Int64;
-  n: integer;
+  one: ^THttpProxyUrl;
+  i, n: integer;
   ok: boolean;
 begin // folder timestamp check is called every 17 minutes, and may be slow
-  n := 0;
-  size := 0;
-  ok := DirectoryDeleteOlderFiles(fSettings.DiskCache.Path,
-    fSettings.DiskCache.TimeoutSec / SecsPerDay, FILES_ALL,
-    {recursive=}hpoClientCacheSubFolder in fUrlOptions, @size);
-  if (n <> 0) or
-     not ok then // something changed on disk
-    fLog.Add.Log(sllTrace, 'OnIdle: delete=% old=%=%',
-      [BOOL_STR[ok], n, KBNoSpace(size)], self);
+  one := pointer(fUrl);
+  for i := 1 to length(fUrl) do
+  begin
+    if (one^.fSource = hpsRemoteUri) and
+       (one^.fSettings.DiskCache.Path <> '') and
+       (one^.fSettings.DiskCache.TimeoutSec > 0) then
+    begin
+      n := 0;
+      size := 0;
+      ok := DirectoryDeleteOlderFiles(one^.fSettings.DiskCache.Path,
+        one^.fSettings.DiskCache.TimeoutSec / SecsPerDay, FILES_ALL,
+        {recursive=}hpoClientCacheSubFolder in one^.fSettings.Options, @size);
+      if (n <> 0) or
+         not ok then // something changed on disk
+        fLog.Add.Log(sllTrace, 'OnIdle: remote=% delete=% old=%=%',
+          [one^.fRemoteUri.Server, BOOL_STR[ok], n, KBNoSpace(size)], self);
+    end;
+    inc(one);
+  end;
 end;
 
 function THttpProxyServer.OnGetHeadLocalFolder(Ctxt: THttpServerRequest;
@@ -6393,7 +6402,7 @@ begin
   end; // may be e.g. HTTP_NOTMODIFIED (304)
   if not StatusCodeIsSuccess(result) then // in 4xx.. range
     Ctxt.SetErrorMessage('serving %', [name]);
-  if fHasLog then
+  if fHasLog in fFlags then
     fLog.Add.Log(sllDebug, 'OnExecute: % % fn=% status=% size=% cached=%',
       [Ctxt.Method, Ctxt.Url, fn, result, siz, (cached <> '')], self);
 end;
@@ -6409,7 +6418,7 @@ begin
   req.ctxt := Ctxt;
   req.proxy := Ctxt.RouteOpaque;
   req.loginfo := nil;
-  if fHasLog then
+  if fHasLog in fFlags then
     QueryPerformanceMicroSeconds(start);
   // compute the remote URI corresponding to the original server
   if hpoNoSubFolder in req.proxy.Settings.Options then
@@ -6474,7 +6483,7 @@ begin
   else if (req.head.B32 <> '') and
           not (hpoNoXProxyName in req.proxy.Settings.Options) then
     Ctxt.AddOutHeader(['X-Proxy-Name: ', req.head.B32]);
-  if fHasLog then
+  if fHasLog in fFlags then
     fLog.Add.Log(LOG_INFOWARNING[not StatusCodeIsSuccess(result)],
       'OnExecute: % % fn=% status=% size=% info=% in %',
       [Ctxt.Method, Ctxt.Url, req.head.B32, result, req.localsize, req.loginfo,
