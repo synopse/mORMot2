@@ -8167,14 +8167,16 @@ begin
               SetLength(fCacheOKGroupsAN, length(fCacheOK)); // grow capacity
           end;
           fCacheOKGroupsAN[fromcachendx] := groups;
-          if GroupsAN <> nil then
-            GroupsAN^ := groups;
         end
         else
           AddRawUtf8(fCacheKO, fCacheKOCount, User)
     finally
       fSafe.UnLock;
     end;
+    // returns the optional groups
+    if result then
+      if GroupsAN <> nil then
+        GroupsAN^ := groups;
   except
     on Exception do
     begin
