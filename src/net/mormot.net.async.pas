@@ -6314,13 +6314,18 @@ end;
 procedure THttpProxyServer.OnBackgroundDeleteDeprecated(Sender: TObject);
 var
   size: Int64;
-begin // folder timestamp check is called every 2 minutes, and may be slow
+  n: integer;
+  ok: boolean;
+begin // folder timestamp check is called every 17 minutes, and may be slow
+  n := 0;
   size := 0;
-  DirectoryDeleteOlderFiles(fSettings.DiskCache.Path,
+  ok := DirectoryDeleteOlderFiles(fSettings.DiskCache.Path,
     fSettings.DiskCache.TimeoutSec / SecsPerDay, FILES_ALL,
     {recursive=}hpoClientCacheSubFolder in fUrlOptions, @size);
-  if size <> 0 then // something changed on disk
-    fLog.Add.Log(sllTrace, 'OnIdle: deleted old=%', [KBNoSpace(size)], self);
+  if (n <> 0) or
+     not ok then // something changed on disk
+    fLog.Add.Log(sllTrace, 'OnIdle: delete=% old=%=%',
+      [BOOL_STR[ok], n, KBNoSpace(size)], self);
 end;
 
 function THttpProxyServer.OnGetHeadLocalFolder(Ctxt: THttpServerRequest;
