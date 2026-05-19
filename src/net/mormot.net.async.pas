@@ -1194,7 +1194,7 @@ type
   // - hpoClientCacheSubFolder could be used with a lot of cached files, to
   // generate sub-folders following the first hash nibble (0..9/a..z)
   // - hpoClientHeadNoRefresh won't refresh the HEAD timeout when a resource
-  // is accessed, so that the cache is flushed after HttpHeadCacheSec
+  // is accessed, so that the cache is always flushed after HttpHeadCacheSec
   // - hpoClientIgnoreTlsError will ignore any HTTPS issue
   // - hpoClientAlllowWinApi will be used for THttpProxyUrl.RemoteClientHead()
   // - hpoNoXProxyName will disable our custom 'X-Proxy-Name: xxxx' header
@@ -1515,7 +1515,7 @@ type
     fSettings: THttpProxyServerSettings;
     fUrl: THttpProxyUrlObjArray;
     fLog: TSynLogClass;
-    fSettingsOwned, fHasLog: boolean;
+    fFlags: set of (fSettingsOwned, fHasLog, fHasCacheClean);
     fSources: THttpProxySources;
     fUrlOptions: THttpProxyUrlOptions; // consolidated from all fUrl[].Options
     fTempFilesTix: cardinal;
@@ -6060,7 +6060,7 @@ begin
   if aSettings = nil then
   begin
     fSettings := THttpProxyServerSettings.Create;
-    fSettingsOwned := true;
+    include(fFlags, fSettingsOwned);
   end
   else
     fSettings := aSettings;
@@ -6073,7 +6073,7 @@ begin
   inherited Destroy;
   Stop;
   FreeAndNil(fPartials);
-  if fSettingsOwned then
+  if fSettingsOwned in fFlags then
     fSettings.Free;
   fSettings := nil; // notify background threads and event callbacks
   ObjArrayClear(fGC);
@@ -6087,7 +6087,8 @@ var
   fav: RawByteString;
 begin
   fLog.EnterLocal(log, 'Start %', [fSettings], self);
-  fHasLog := Assigned(log);
+  if Assigned(log) then
+    include(fFlags, fHasLog);
   if fServer <> nil then
     EHttpProxyServer.RaiseUtf8('Duplicated %.Start', [self]);
   // compute THttpAsyncServer options from settings
@@ -6174,6 +6175,7 @@ var
 begin
   fSources := [];
   fUrlOptions := [];
+  fFlags := fFlags - [fHasCacheClean];
   ObjArrayClear(fUrl);
   new := TUriRouter.Create(TUriTreeNode);
   try
@@ -6217,18 +6219,20 @@ begin
       fUrlOptions := fUrlOptions + s.fOptions;
       // normalize cache settings
       nfo := '';
-      if (hps <> hpsEvent) and
-         not (psoDisableMemCache in fSettings.Server.Options) then
+      if hps <> hpsEvent then
       begin
-        if s.MemCache.MaxSizeKB < 0 then
-          s.MemCache.MaxSizeKB := fSettings.MemCache.MaxSizeKB;
-        if s.MemCache.TimeoutSec < 0 then
-          s.MemCache.TimeoutSec := fSettings.MemCache.TimeoutSec;
-        if (s.MemCache.MaxSizeKB > 0) and
-           (s.MemCache.TimeoutSec > 0) then
-          one.fMemCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
-            TypeInfo(TRawByteStringDynArray), PathCaseInsensitive,
-            s.MemCache.TimeoutSec);
+        if not (psoDisableMemCache in fSettings.Server.Options) then
+        begin
+          if s.MemCache.MaxSizeKB < 0 then
+            s.MemCache.MaxSizeKB := fSettings.MemCache.MaxSizeKB;
+          if s.MemCache.TimeoutSec < 0 then
+            s.MemCache.TimeoutSec := fSettings.MemCache.TimeoutSec;
+          if (s.MemCache.MaxSizeKB > 0) and
+             (s.MemCache.TimeoutSec > 0) then
+            one.fMemCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
+              TypeInfo(TRawByteStringDynArray), PathCaseInsensitive,
+              s.MemCache.TimeoutSec);
+        end;
         if hps = hpsRemoteUri then
         begin
           if s.DiskCache.MaxSizeKB < 0 then
@@ -6241,6 +6245,9 @@ begin
           if s.HttpHeadCacheSec > 0 then
             one.fHeadCache := TSynDictionary.Create(TypeInfo(THash160DynArray),
               TypeInfo(THeadCaches), {caseins=}false, s.HttpHeadCacheSec);
+          if (s.DiskCache.Path <> '') and
+             (s.DiskCache.TimeoutSec > 0) then
+            include(fFlags, fHasCacheClean);
           Make([' in ', s.DiskCache.Path], nfo);
         end;
       end;
