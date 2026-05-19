@@ -5766,47 +5766,10 @@ var
 begin // this method is protected by proxy.fOsSafe.Lock
   result := HTTP_BADREQUEST;
   log := proxy.fOwner.fLog;
-  // check the header against the local cached file (headdate may be 0)
-  if localsize >= 0 then // check the local file
-    if (head.Size < 0) or
-       (head.Size = localsize) then
-    begin
-      // we can stream from local cache
-      loginfo := 'cached';
-      result := proxy.ReturnFile(ctxt, head.B32, filename, path, localsize,
-                  head.TimeMS, {canbecached=}(head.Size >= 0));
-      exit;
-    end
-    else
-    begin
-      // the local file seems invalid and should be removed
-      log.Add.Log(sllTrace,
-        'OnExecute: delete % status=% headers=% size=%=% local=% head=%',
-        [head.B32, result, ctxt.OutCustomHeaders, localsize, head.Size,
-         localdate, head.TimeMS], proxy);
-      if not DeleteFile(filename) then // may fail on Windows: use previous
-      begin
-        log.Add.Log(sllLastError,
-          'OnExecute: return existing % bytes after DeleteFile(%) failed as',
-          [FileSize(filename), filename], proxy);
-        loginfo := 'deletefile failed - corrupt?';
-        result := proxy.ReturnFile(ctxt, head.B32, filename, path, localsize,
-                    head.TimeMS, {canbecached=}(head.Size >= 0));
-        exit;
-      end;
-    end;
-  // no matching local file - but enough to implement a HEAD request
-  localsize := head.Size;
-  if IsHead(ctxt.Method) then
-  begin
-    loginfo := 'head'; // not in proxy.fOwner.fPartials yet
-    Ctxt.SetOutProgressiveFile(filename, localsize); // won't need file on disk
-    result := HTTP_SUCCESS;
-    exit;
-  end;
   // no matching local file: need to download to return the GET body
+  localsize := head.Size;
   if (filename = '') or
-     (localsize = 0) or
+     (localsize <= 0) or
      (localsize < proxy.fSettings.HttpDirectGetKB shl 10) then
   begin
     // use the blocking connection for smallest files < 16KB (or without size)
@@ -5820,11 +5783,14 @@ begin // this method is protected by proxy.fOsSafe.Lock
           FileFromString(direct, filename)) then
       begin
         if localsize < 0 then
-          loginfo := 'nosize get'
+        begin
+          loginfo := 'nosize';
+          localsize := length(direct);
+        end
         else
-          loginfo := 'small get';
-        result := ctxt.SetOutContent(
-                    direct, not (hpoDisable304 in proxy.fSettings.Options));
+          loginfo := 'small';
+        result := ctxt.SetOutContent(direct,
+                    not (hpoDisable304 in proxy.fSettings.Options));
       end
       else
       begin
@@ -5840,14 +5806,14 @@ begin // this method is protected by proxy.fOsSafe.Lock
   if id = 0 then
   begin
     stream.Free;
-    loginfo := 'no partial id';
+    loginfo := 'no partial id'; // paranoid
     result := HTTP_SERVERERROR; // 500
     exit;
   end;
-  opt := proxy.fRemoteClient.Options^; // non-blocking same options reuse
   // connect and start background downloading (unlocked)
   ctxt.SetOutProgressiveFile(filename, localsize);
   try
+    opt := proxy.fRemoteClient.Options^; // local copy for this instance
     background := TStartProxyRequestClient.OpenOptions(remote, opt);
     background.stream := stream;
     background.uri := remote.Address;
@@ -5879,7 +5845,7 @@ begin
       msg := 'ok'
     else
       msg := 'GET error';
-    fOwner.fLog.Add.Log(sllTrace, 'BackgroundGet=%: % [%] size=%',
+    fOwner.fLog.Add.Log(sllInfo, 'BackgroundGet=%: % [%] size=%',
       [status, fn, msg, FileSize(fn)], self);
   finally
     back.stream.Free;
@@ -6414,6 +6380,7 @@ function THttpProxyServer.OnGetHeadRemoteUri(Ctxt: THttpServerRequest;
 var
   req: TStartProxyRequest;
   start: Int64;
+  instance: TObject;
 begin
   // supplied URI should be a safe resource reference
   result := HTTP_FORBIDDEN; // 403
@@ -6434,7 +6401,14 @@ begin
     // retrieve the headers, from cache or HEAD, and compute the local file name
     result := req.MakeHeadAndComputeFilename;
     Ctxt.OutCustomHeaders := req.head.PurgedHeaders;
-    if result < 300 then // StatusCodeIsSuccess = 2xx..3xx range
+    if IsHead(Ctxt.Method) then
+    begin
+      // no actual file is needed to implement a HEAD request
+      if req.loginfo = nil then
+        req.loginfo := 'head';
+      Ctxt.SetOutProgressiveFile(req.filename, req.head.Size);
+    end
+    else if result < 300 then // StatusCodeIsSuccess = 2xx..3xx range
     begin
       // check the local file (named from hashed URI + header etag/lastmod)
       if (req.filename <> '') and
@@ -6457,8 +6431,6 @@ begin
           if not DeleteFile(req.filename) then
             fLog.Add.Log(sllLastError, 'OnExecute: delete=%', [req.filename], self);
           result := HTTP_NOTFOUND;
-          req.localsize := -1; // MakeGet() would try DeleteFile() again
-          req.localdate := 0;
         end
         else
         begin
@@ -6468,14 +6440,11 @@ begin
           req.loginfo := 'direct';
         end
       else
-      begin
+        // no local file
         result := HTTP_NOTFOUND;
-        req.localsize := -1; // no local file
-        req.localdate := 0;
-      end;
+      // check if no matching local file
       if not StatusCodeIsSuccess(result) then // in 4xx.. range
-        // no matching local file: need to initiate a GET proxy request
-        result := req.MakeGet(Uri);
+        result := req.MakeGet(Uri); // initiate a GET proxy request
     end;
   finally
     req.proxy.fOsSafe.UnLock;
@@ -6486,11 +6455,15 @@ begin
   else if (req.head.B32 <> '') and
           not (hpoNoXProxyName in req.proxy.Settings.Options) then
     Ctxt.AddOutHeader(['X-Proxy-Name: ', req.head.B32]);
-  if fHasLog in fFlags then
-    fLog.Add.Log(LOG_INFOWARNING[not StatusCodeIsSuccess(result)],
-      'OnExecute: % % ip=% fn=% status=% size=% info=% in %',
-      [Ctxt.Method, Ctxt.Url, Ctxt.RemoteIP, req.head.B32, result,
-       req.localsize, req.loginfo, MicroSecFrom(start)], self);
+  if not (fHasLog in fFlags) then
+    exit;
+  instance := nil;
+  if fLog.HasLevel([sllTrace, sllDebug]) then
+    instance := self; // include THttpProxyServer context in verbose logs
+  fLog.Add.Log(LOG_INFOWARNING[not StatusCodeIsSuccess(result)],
+    'OnExecute: % % ip=% fn=% status=% size=% info=% in %',
+    [Ctxt.Method, Ctxt.Url, Ctxt.RemoteIP, req.head.B32, result,
+     req.localsize, req.loginfo, MicroSecFrom(start)], instance);
 end;
 
 function THttpProxyServer.OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
