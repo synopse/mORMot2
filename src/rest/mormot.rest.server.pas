@@ -1884,6 +1884,10 @@ type
     // - it will be called to search for outdated sessions only once per second
     // - returns how many deprecated sessions have been purged
     function SessionDeleteDeprecated(tix32: cardinal): integer;
+    /// force all sessions to expire immediately
+    // - could be used e.g. to force re-authentication of all connected clients
+    // - returns how many sessions have been purged
+    function SessionDeleteAll: integer;
     /// return the Server's current nonce in the proper JSON format
     // - as called from TRestServerAuthenticationDefault.Auth
     procedure ReturnNonce(Ctxt: TRestServerUriContext;
@@ -7402,6 +7406,29 @@ begin
     end;
     fSessions.Safe.ReadWriteUnLock;
   end;
+end;
+
+function TRestServer.SessionDeleteAll: integer;
+var
+  i: PtrInt;
+  start: Int64;
+begin
+  result := 0;
+  if (self = nil) or
+     (fSessions = nil) or
+     (fSessions.Count = 0) then
+    exit;
+  QueryPerformanceMicroSeconds(start);
+  fSessions.Safe.WriteLock;
+  try
+    result := fSessions.Count;
+    for i := result - 1 downto 0 do // backward for deletion
+      WriteLockedSessionDelete(i, fSessions.List[i], nil);
+  finally
+    fSessions.Safe.WriteUnlock;
+  end;
+  fLogClass.Add.Log(sllTrace, 'SessionDeleteAll=% in %',
+    [result, MicroSecFrom(start)], self);
 end;
 
 function TRestServer.LockedSessionAccess(Ctxt: TRestServerUriContext;
