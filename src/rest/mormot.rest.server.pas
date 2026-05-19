@@ -1882,7 +1882,7 @@ type
     // - may be used e.g. from OnSessionCreate to limit the number of active sessions
     // - this method is thread-safe via Sessions.Safe.ReadWriteLock/WriteLock
     // - it will be called to search for outdated sessions only once per second
-    // - returns how many deprecated sessions have been purge
+    // - returns how many deprecated sessions have been purged
     function SessionDeleteDeprecated(tix32: cardinal): integer;
     /// return the Server's current nonce in the proper JSON format
     // - as called from TRestServerAuthenticationDefault.Auth
@@ -7357,16 +7357,16 @@ begin
   // optional callback
   if Assigned(OnSessionClosed) then
     OnSessionClosed(self, aSession, Ctxt);
-  // actually remove this sesion from the internal list
+  // actually remove this session from the internal list
   fSessions.Delete(aSessionIndex);
-  fStats.ClientDisconnect;
+  fStats.ClientDisconnect; // dec(ClientDisconnect)
 end;
 
 function TRestServer.SessionDeleteDeprecated(tix32: cardinal): integer;
 var
   i: PtrInt;
   log: ISynLog;
-  a: ^TAuthSession;
+  a: PAuthSession;
 begin
   // TRestServer.Uri() runs this method at most every second
   fSessionsDeprecatedTix := tix32;
@@ -7377,7 +7377,7 @@ begin
     exit;
   fSessions.Safe.ReadWriteLock; // won't block the ReadOnlyLock methods
   try
-    a := @fSessions.List[fSessions.Count];
+    a := @fSessions.List[fSessions.Count]; // for faster loop against tix32
     for i := fSessions.Count - 1 downto 0 do // backward for deletion
     begin
       dec(a);
@@ -7388,7 +7388,8 @@ begin
           fLogClass.EnterLocal(log, self, 'SessionDeleteDeprecated');
           fSessions.Safe.WriteLock; // upgrade the lock (only if needed)
         end;
-        WriteLockedSessionDelete(i, a^, nil);
+        WriteLockedSessionDelete(i, a^, nil); // with full clean-up
+        a := @fSessions.List[i]; // List[] may have moved in memory
         inc(result);
       end;
     end;
