@@ -5064,13 +5064,18 @@ const
   // version 2 includes fRemoteOsVersion
 
 procedure TAuthSession.SaveTo(W: TBufferWriter);
+var
+  g: TAuthGroup;
 begin
   W.Write1(TAUTHSESSION_MAGIC);
   W.WriteVarUInt32(fID);
   W.WriteVarUInt32(fUser.IDValue);
-  fUser.GetBinaryValues(W); // User.fGroup is a pointer, but will be overriden
-  W.WriteVarUInt32(fUser.GroupRights.IDValue);
-  fUser.GroupRights.GetBinaryValues(W);
+  g := fUser.GroupRights;
+  fUser.GroupRights := nil; // store 0 now but WriteVarUInt32(g.IDValue) below
+  fUser.GetBinaryValues(W);
+  fUser.GroupRights := g;
+  W.WriteVarUInt32(g.IDValue); // store the TAuthGroup with no DB involved
+  g.GetBinaryValues(W);
   W.Write(fPrivateKey);
   W.Write(fSentHeaders);
   W.Write4(integer(fRemoteOsVersion));
@@ -5085,8 +5090,8 @@ begin
   fID := Read.VarUInt32;
   fUser := Server.AuthUserClass.Create;
   fUser.IDValue := Read.VarUInt32;
-  fUser.SetBinaryValues(Read); // fUser.fGroup will be overriden by true instance
-  fUser.GroupRights := Server.AuthGroupClass.Create;
+  fUser.SetBinaryValues(Read);
+  fUser.GroupRights := Server.AuthGroupClass.Create; // expects a true instance
   fUser.GroupRights.IDValue := Read.VarUInt32;
   fUser.GroupRights.SetBinaryValues(Read);
   Read.VarUtf8(fPrivateKey);
