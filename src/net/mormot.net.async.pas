@@ -5789,7 +5789,7 @@ begin // this method is protected by proxy.fOsSafe.Lock
         log.Add.Log(sllLastError,
           'OnExecute: return existing % bytes after DeleteFile(%) failed as',
           [FileSize(filename), filename], proxy);
-        loginfo := 'locked cache';
+        loginfo := 'deletefile failed - corrupt?';
         result := proxy.ReturnFile(ctxt, head.B32, filename, path, localsize,
                     head.TimeMS, {canbecached=}(head.Size >= 0));
         exit;
@@ -5799,7 +5799,7 @@ begin // this method is protected by proxy.fOsSafe.Lock
   localsize := head.Size;
   if IsHead(ctxt.Method) then
   begin
-    loginfo := 'HEAD needs no file'; // not in proxy.fOwner.fPartials yet
+    loginfo := 'head'; // not in proxy.fOwner.fPartials yet
     Ctxt.SetOutProgressiveFile(filename, localsize); // won't need file on disk
     result := HTTP_SUCCESS;
     exit;
@@ -6327,20 +6327,22 @@ procedure THttpProxyServer.OnBackgroundDeleteDeprecated(Sender: TObject);
 var
   size: Int64;
   one: ^THttpProxyUrl;
+  cache: THttpProxyDisk;
   i, n: integer;
   ok: boolean;
 begin // folder timestamp check is called every 17 minutes, and may be slow
   one := pointer(fUrl);
   for i := 1 to length(fUrl) do
   begin
+    cache := one^.fSettings.DiskCache;
     if (one^.fSource = hpsRemoteUri) and
-       (one^.fSettings.DiskCache.Path <> '') and
-       (one^.fSettings.DiskCache.TimeoutSec > 0) then
+       (cache.Path <> '') and
+       (cache.TimeoutSec > 0) then
     begin
       n := 0;
       size := 0;
-      ok := DirectoryDeleteOlderFiles(one^.fSettings.DiskCache.Path,
-        one^.fSettings.DiskCache.TimeoutSec / SecsPerDay, FILES_ALL,
+      ok := DirectoryDeleteOlderFiles(cache.Path,
+        cache.TimeoutSec / SecsPerDay, FILES_ALL,
         {recursive=}hpoClientCacheSubFolder in one^.fSettings.Options, @size);
       if (n <> 0) or
          not ok then // something changed on disk
@@ -6443,10 +6445,11 @@ begin
         begin
           // but it is already associated in progressive mode: join the team
           Ctxt.SetOutProgressiveFile(req.filename, req.localsize);
-          req.loginfo := 'partial exists';
+          req.loginfo := 'partial';
           result := HTTP_SUCCESS;
         end
-        else if req.localsize <> req.head.Size then
+        else if (req.head.Size >= 0) and
+                (req.localsize <> req.head.Size) then
         begin
           // delete aborted/invalid file on disk and retry from scratch
           fLog.Add.Log(sllDebug, 'OnExecute: delete=% disk=% expected=%',
@@ -6454,7 +6457,7 @@ begin
           if not DeleteFile(req.filename) then
             fLog.Add.Log(sllLastError, 'OnExecute: delete=%', [req.filename], self);
           result := HTTP_NOTFOUND;
-          req.localsize := -1; // no local file
+          req.localsize := -1; // MakeGet() would try DeleteFile() again
           req.localdate := 0;
         end
         else
@@ -6485,9 +6488,9 @@ begin
     Ctxt.AddOutHeader(['X-Proxy-Name: ', req.head.B32]);
   if fHasLog in fFlags then
     fLog.Add.Log(LOG_INFOWARNING[not StatusCodeIsSuccess(result)],
-      'OnExecute: % % fn=% status=% size=% info=% in %',
-      [Ctxt.Method, Ctxt.Url, req.head.B32, result, req.localsize, req.loginfo,
-       MicroSecFrom(start)], self);
+      'OnExecute: % % ip=% fn=% status=% size=% info=% in %',
+      [Ctxt.Method, Ctxt.Url, Ctxt.RemoteIP, req.head.B32, result,
+       req.localsize, req.loginfo, MicroSecFrom(start)], self);
 end;
 
 function THttpProxyServer.OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
