@@ -7690,11 +7690,13 @@ const
   _TypeNames: PAnsiChar = // fast brute force search in L1 cache
     #7'RawUtf8'#5'array'#6'record'#5'TDate'#5'TGuid'#6'PtrInt'#7'PtrUInt' +
     {$ifdef FPC} #6'string'#7'integer'#8'cardinal' {$else}
-                 #7'longint'#8'longword' {$endif} + #9'TFileName';
-  _TypeParser: array[0 .. 10 {$ifdef FPC} + 1 {$endif} ] of TRttiParserType = (
+                 #7'longint'#8'longword' {$endif} + #9'TFileName' +
+    #7'RawBlob'#7'SpiUtf8';
+  _TypeParser: array[0 .. 12 {$ifdef FPC} + 1 {$endif} ] of TRttiParserType = (
     ptNone, ptRawUtf8, ptArray, ptRecord, ptDateTime, ptGuid,
     {$ifdef CPU64} ptInt64, ptQWord, {$else} ptInteger, ptCardinal, {$endif}
-    {$ifdef FPC} ptString, {$endif} ptInteger, ptCardinal, ptString);
+    {$ifdef FPC} ptString, {$endif} ptInteger, ptCardinal, ptString,
+    ptRawByteString, ptRawUtf8);
 
 function KnownTypeName(Name: PUtf8Char; NameLen: PtrInt): TRttiParserType;
   {$ifdef HASINLINE}inline;{$endif}
@@ -7707,7 +7709,6 @@ end;
 function GuessTypeInfoToStandardParserType(Info: PRttiInfo;
   Complex: PRttiParserComplexType): TRttiParserType;
 var
-  c: TRttiParserComplexType;
   ndx: PtrInt;
   cp: integer;
 begin                                            
@@ -7724,142 +7725,136 @@ begin
     if not (result in ptComplexTypes) then
       exit;
   end;
-  for c := succ(low(c)) to high(c) do
-    if PTC_INFO[c] = Info then // complex ORM types as set by mormot.orm.base
+  ndx := PtrUIntScanIndex(@PTC_INFO, length(PTC_INFO), PtrUInt(Info));
+  if ndx >= 0 then
+  begin
+    result := PTC_PT[TRttiParserComplexType(ndx)];
+    if result <> ptNone then
     begin
-      result := PTC_PT[c];
-      if result <> ptNone then
-      begin
-        if Complex <> nil then
-          Complex^ := c;
-        exit;
-      end;
-      break;
+      if Complex <> nil then
+        Complex^ := TRttiParserComplexType(ndx);
+      exit;
     end;
+  end;
   // array/record keywords, integer/cardinal FPC types, T*ID pattern
   result := KnownTypeName(@Info^.RawName[1], ord(Info^.RawName[0]));
-  if result <> ptNone then
-    exit; // found by name
-  if (Complex <> nil) and
-     (Info^.Kind = rkInt64) and
-     (Info^.RawName[1] = 'T') and
-     (PCardinal(@Info^.RawName[ord(Info^.RawName[0]) - 1])^ and $dfdf = _ID16) then
-  begin
-    result := ptOrm;
-    Complex^ := pctSpecificClassID; // T...ID pattern in name
-    exit;
-  end;
-  // fallback to the closed known type, using RTTI
-  case Info^.Kind of
-  {$ifdef FPC}
-    rkLStringOld,
-  {$endif FPC}
-    rkLString: // PT_INFO[ptRawUtf8/ptRawJson] have been found above
-      begin
-        cp := Info^.AnsiStringCodePage;
-        if cp = CP_UTF8 then
-          result := ptRawUtf8
-        else if cp = CP_WINANSI then
-          result := ptWinAnsi
-        else if cp >= CP_RAWBLOB then
-          result := ptRawByteString
-        {$ifndef UNICODE}
-        else if (cp = CP_ACP) or
-                (cp = Unicode_CodePage) then
-          result := ptString
-        {$endif UNICODE}
-        else
-          result := ptRawUtf8; // fallback to UTF-8 string
-      end;
-    rkWString:
-      result := ptWideString;
-  {$ifdef HASVARUSTRING}
-    rkUString:
-      result := ptUnicodeString;
-  {$endif HASVARUSTRING}
-  {$ifdef FPC_OR_UNICODE}
-    {$ifdef UNICODE}
-    rkProcedure,
-    {$endif UNICODE}
-    rkClassRef,
-    rkPointer:
-      result := ptPtrInt;
-  {$endif FPC_OR_UNICODE}
-    rkVariant:
-      result := ptVariant;
-    rkArray:
-      result := ptArray;
-    rkDynArray:
-      result := ptDynArray;
-    {$ifdef FPC}rkObject,{$else}{$ifdef UNICODE}rkMRecord,{$endif}{$endif}
-    rkRecord:
-      result := ptRecord;
-    rkChar:
-      result := ptByte;
-    rkWChar:
-      result := ptWord;
-    rkMethod:
-      result := {$ifdef CPU64} ptHash128 {$else} ptInt64 {$endif}; // 2*pointer
-    rkInterface:
-      result := ptInterface;
-    rkInteger:
-      case Info^.RttiOrd of
-        roSByte,
-        roUByte:
-          result := ptByte;
-        roSWord,
-        roUWord:
-          result := ptWord;
-        roSLong:
-          result := ptInteger;
-        roULong:
-          result := ptCardinal;
-      {$ifdef FPC_NEWRTTI}
-        roSQWord:
+  if result = ptNone then
+    case Info^.Kind of // fallback to the closed known type, using RTTI
+    {$ifdef FPC}
+      rkLStringOld,
+    {$endif FPC}
+      rkLString: // PT_INFO[ptRawUtf8/ptRawJson] have been found above
+        begin
+          cp := Info^.AnsiStringCodePage;
+          if cp = CP_UTF8 then
+            result := ptRawUtf8
+          else if cp = CP_WINANSI then
+            result := ptWinAnsi
+          else if cp >= CP_RAWBLOB then
+            result := ptRawByteString
+          {$ifndef UNICODE}
+          else if (cp = CP_ACP) or
+                  (cp = Unicode_CodePage) then
+            result := ptString
+          {$endif UNICODE}
+          else
+            result := ptRawUtf8; // fallback to UTF-8 string
+        end;
+      rkWString:
+        result := ptWideString;
+    {$ifdef HASVARUSTRING}
+      rkUString:
+        result := ptUnicodeString;
+    {$endif HASVARUSTRING}
+    {$ifdef FPC_OR_UNICODE}
+      {$ifdef UNICODE}
+      rkProcedure,
+      {$endif UNICODE}
+      rkClassRef,
+      rkPointer:
+        result := ptPtrInt;
+    {$endif FPC_OR_UNICODE}
+      rkVariant:
+        result := ptVariant;
+      rkArray:
+        result := ptArray;
+      rkDynArray:
+        result := ptDynArray;
+      {$ifdef FPC}rkObject,{$else}{$ifdef UNICODE}rkMRecord,{$endif}{$endif}
+      rkRecord:
+        result := ptRecord;
+      rkChar:
+        result := ptByte;
+      rkWChar:
+        result := ptWord;
+      rkMethod:
+        result := {$ifdef CPU64} ptHash128 {$else} ptInt64 {$endif}; // 2*pointer
+      rkInterface:
+        result := ptInterface;
+      rkInteger:
+        case Info^.RttiOrd of
+          roSByte,
+          roUByte:
+            result := ptByte;
+          roSWord,
+          roUWord:
+            result := ptWord;
+          roSLong:
+            result := ptInteger;
+          roULong:
+            result := ptCardinal;
+        {$ifdef FPC_NEWRTTI}
+          roSQWord:
+            result := ptInt64;
+          roUQWord:
+            result := ptQWord;
+        {$endif FPC_NEWRTTI}
+        end;
+      rkInt64:
+        if (Complex <> nil) and
+           (Info^.RawName[1] = 'T') and
+           (PCardinal(@Info^.RawName[ord(Info^.RawName[0]) - 1])^ and $dfdf = _ID16) then
+        begin
+          result := ptOrm;
+          Complex^ := pctSpecificClassID; // T...ID pattern in name
+        end
+      {$ifdef ISDELPHI}
+        else if Info^.IsQWord then
+          result := ptQWord
+      {$endif ISDELPHI}
+        else // PT_INFO[ptOrm/ptTimeLog/ptUnixTime] have been found above
           result := ptInt64;
-        roUQWord:
-          result := ptQWord;
-      {$endif FPC_NEWRTTI}
-      end;
-    rkInt64:
-    {$ifdef ISDELPHI}
-      if Info^.IsQWord then
-        result := ptQWord
-      else
-    {$endif ISDELPHI}
-      // PT_INFO[ptOrm/ptTimeLog/ptUnixTime] have been found above
-      result := ptInt64;
-  {$ifdef FPC}
-    rkQWord:
-      result := ptQWord;
-    rkBool:
-      result := ptBoolean;
-  {$endif FPC}
-    rkEnumeration:
-    {$ifdef ISDELPHI}
-      if Info^.IsBoolean then
-        result := ptBoolean
-      else
-    {$endif ISDELPHI}
-        result := ptEnumeration;
-    rkSet:
-      result := ptSet;
-    rkClass:
-      result := ptClass;
-    rkFloat:
-      case Info^.RttiFloat of
-        rfSingle:
-          result := ptSingle;
-        rfDouble:
-          // TDateTime/TDateTimeMS/TDate have been found above
-          result := ptDouble;
-        rfCurr:
-          result := ptCurrency;
-        rfExtended:
-          result := ptExtended;
-        // rfComp: not implemented yet
-      end;
-  end;
+    {$ifdef FPC}
+      rkQWord:
+        result := ptQWord;
+      rkBool:
+        result := ptBoolean;
+    {$endif FPC}
+      rkEnumeration:
+      {$ifdef ISDELPHI}
+        if Info^.IsBoolean then
+          result := ptBoolean
+        else
+      {$endif ISDELPHI}
+          result := ptEnumeration;
+      rkSet:
+        result := ptSet;
+      rkClass:
+        result := ptClass;
+      rkFloat:
+        case Info^.RttiFloat of
+          rfSingle:
+            result := ptSingle;
+          rfDouble:
+            // TDateTime/TDateTimeMS/TDate have been found above
+            result := ptDouble;
+          rfCurr:
+            result := ptCurrency;
+          rfExtended:
+            result := ptExtended;
+          // rfComp: not implemented yet
+        end;
+    end;
 end;
 
 function ItemSizeToDynArrayKind(size: integer): TRttiParserType;
