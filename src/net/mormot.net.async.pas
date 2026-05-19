@@ -6284,7 +6284,7 @@ begin
     old := fServer.ReplaceRoute(new); // thread-safe
     new := nil; // is owned by fServer from now on
     if old <> nil then
-      PtrArrayAdd(fGC, old); // late release at shutdown
+      PtrArrayAdd(fGC, old); // delayed release at shutdown
   finally
     new.Free;
   end;

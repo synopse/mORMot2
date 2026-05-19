@@ -11142,8 +11142,7 @@ function ObjectToJsonFile(Value: TObject; const JsonFile: TFileName;
   Options: TTextWriterWriteObjectOptions; Format: TTextWriterJsonFormat): boolean;
 var
   json: RawUtf8;
-begin
-  Options := Options - [woHumanReadable]; // JsonBufferReformatToFile() below
+begin // we keep woHumanReadable in Options for proper comment and set generation
   json := ObjectToJson(Value, Options);
   result := JsonBufferReformatToFile(pointer(json), JsonFile, Format);
 end;
