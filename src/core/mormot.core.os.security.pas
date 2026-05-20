@@ -2101,8 +2101,9 @@ procedure AsnEncOidItem(Value: PtrUInt; var Result: ShortString);
 /// create an ASN.1 ObjectID from '1.x.x.x.x' text
 function AsnEncOid(OidText: PUtf8Char): TAsnObject;
 
-/// encode the len of a ASN.1 binary item
-function AsnEncLen(Len: cardinal; dest: PHash128): PtrInt;
+/// encode the len of a ASN.1 binary item into a temporary 1..5 bytes buffer
+function AsnEncLen(Len: cardinal; var dest: TQWordRec): PtrInt;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// create an ASN.1 binary from the aggregation of several binaries
 function Asn(AsnType: integer;
@@ -6492,24 +6493,24 @@ begin
   FastSetRawByteString(result, @tmp[1], ord(tmp[0]));
 end;
 
-function AsnEncLen(Len: cardinal; dest: PHash128): PtrInt;
+function AsnEncLen(Len: cardinal; var dest: TQWordRec): PtrInt;
 begin
   if Len <= $7f then
   begin
-    dest^[0] := Len; // most simple case
+    dest.L := Len; // most simple case
     result := 1;
-    exit;
+  end
+  else if Len <= $ff then
+  begin
+    dest.L := (Len shl 8) + $81;
+    result := 2;
+  end
+  else
+  begin
+    dest.B[0] := $84;
+    PCardinal(@dest.B[1])^ := bswap32(Len); // seldom called
+    result := 5;
   end;
-  result := 0;
-  repeat
-    dest^[high(dest^) - result] := byte(Len); // prepare big endian storage
-    inc(result);
-    Len := Len shr 8;
-  until Len = 0;
-  dest^[0] := byte(result) or $80; // first byte is following bytes count + $80
-  inc(PByte(dest));
-  MoveFast(dest^[high(dest^) - result], dest^[0], result);
-  inc(result);
 end;
 
 function AsnDecLen(var Start: integer; const Buffer: TAsnObject): cardinal;
