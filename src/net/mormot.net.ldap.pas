@@ -2021,6 +2021,7 @@ type
     fLog: TSynLogClass;
     fOnDisconnect: TOnLdapClientEvent;
     fWellKnownObjects: TLdapKnownCommonNames;
+    fExtWhoAmI: TAsnObject;
     // protocol methods
     function GetTlsContext: PNetTlsContext;
       {$ifdef HASINLINE} inline; {$endif}
@@ -2157,6 +2158,9 @@ type
     /// test whether the client socket is connected to the server
     function Connected: boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// make a quick "Who am I" request to validate an active connection
+    // - Connected is about the client side state: this method check the server
+    function Ping: boolean;
     /// test whether the client is connected to the server and try re-connect
     // - follows Settings.AutoReconnect property and OnDisconnect event
     function EnsureConnected(const context: ShortString): boolean;
@@ -6874,7 +6878,22 @@ end;
 
 function TLdapClient.Connected: boolean;
 begin
-  result := fSock.SockConnected;
+  result := (self <> nil) and
+            fSock.SockConnected;
+end;
+
+function TLdapClient.Ping: boolean;
+begin
+  result := false;
+  if Connected then
+  try
+    if fExtWhoAmI = '' then
+      fExtWhoAmI := AsnTyped(AsnTyped(ASN1_OID_WHOAMI, ASN1_CTX0), LDAP_ASN1_EXT_REQUEST);
+    SendPacket(fExtWhoAmI);
+    result := ReceiveResponse <> ''; // no need to parse anything
+  except
+    result := false;
+  end;
 end;
 
 function TLdapClient.EnsureConnected(const context: ShortString): boolean;
