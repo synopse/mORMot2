@@ -2175,7 +2175,7 @@ procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject);
 procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject;
   AsnType: integer); overload;
 
-/// decode the len of a ASN.1 binary item
+/// decode the len of a ASN.1 binary item from a TAsnObject instance
 function AsnDecLen(var Start: integer; const Buffer: TAsnObject): cardinal;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -6515,22 +6515,16 @@ end;
 
 function AsnDecLen(var Start: integer; const Buffer: TAsnObject): cardinal;
 var
-  n: byte;
+  p: PByteArray;
 begin
-  result := cardinal(Buffer[Start]);
+  p := @PByteArray(Buffer)[Start - 1];
+  result := p^[0];
   inc(Start);
   if result <= $7f then
     exit;
-  n := result and $7f; // first byte is number of following bytes + $80
-  result := 0;
-  repeat
-    result := result shl 8;
-    inc(result, cardinal(Buffer[Start]));
-    if integer(result) < 0 then
-      exit; // 31-bit overflow: clearly invalid input
-    inc(Start);
-    dec(n);
-  until n = 0;
+  result := result and $7f; // $8x means x bytes of length
+  inc(Start, result);
+  result := bswapN(@p^[1], result);
 end;
 
 function AsnEncInt(Value: Int64): TAsnObject;
