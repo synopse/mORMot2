@@ -6420,8 +6420,9 @@ end;
 
 function TLdapClient.ReceiveResponse: TAsnObject;
 var
-  b: byte;
-  len, pos: integer;
+  headerlen, datalen: integer;
+  p: PAnsiChar;
+  tmp: array[0 .. 7] of byte; // ASN1 SEQ header
 begin
   result := '';
   if fSock = nil then
@@ -6429,20 +6430,30 @@ begin
   fFullResult := '';
   try
     // we need to decode the ASN.1 plain input to return a single SEQ message
-    ReceivePacket(@b, 1); // ASN type
-    if b <> ASN1_SEQ then
+    ReceivePacket(@tmp, 2); // ASN type + first byte of ASN length
+    if tmp[0] <> ASN1_SEQ then
       exit;
-    FastSetRawByteString(result, @b, 2);
-    ReceivePacket(@b, 1); // first byte of ASN length
-    PByteArray(result)[1] := b;
-    if b > $7f then
-      ReceivePacket(result, b and $7f); // $8x means x bytes of length
-    // decode length of LDAP packet
-    pos := 2;
-    len := AsnDecLen(pos, result);
-    // retrieve body of LDAP packet
-    if len > 0 then
-      ReceivePacket(result, len);
+    headerlen := 2;
+    datalen := tmp[1];
+    if datalen > $7f then
+    begin
+      headerlen := datalen and $7f; // $8x means x bytes of length
+      if headerlen > 4 then
+        exit;
+      ReceivePacket(@tmp[2], headerlen);
+      if headerlen = 4 then
+        datalen := bswap32(PInteger(@tmp[2])^) // most common case
+      else
+        datalen := bswapN(@tmp[2], headerlen); // in-place decode
+      inc(headerlen, 2);
+    end;
+    // allocate and retrieve whole LDAP packet
+    p := FastNewRawByteString(result, headerlen + datalen);
+    MoveFast(tmp, p^, headerlen);
+    if datalen > 0 then
+      ReceivePacket(p + headerlen, datalen);
+    if fSettings.PingIdleSeconds > 0 then
+      fLastPingTix := GetTickSec;
   except
     on Exception do
     begin
