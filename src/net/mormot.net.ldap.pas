@@ -1859,6 +1859,7 @@ type
     fKerberosDN: RawUtf8;
     fKerberosSpn: RawUtf8;
     fTimeout: integer;
+    fPingIdleSeconds: integer;
     fTls: boolean;
     fAllowUnsafePasswordBind: boolean;
     fKerberosDisableChannelBinding: boolean;
@@ -1929,6 +1930,11 @@ type
     // - default is 5000, ie. 5 seconds
     property Timeout: integer
       read fTimeout write fTimeout;
+    /// EnsureConnected() will perform a Ping after connection idle TTL
+    // - Ping = WhoAmI will validate that the socket is actually available
+    // - default is 300 seconds, i.e. 5 minutes
+    property PingIdleSeconds: integer
+      read fPingIdleSeconds write fPingIdleSeconds;
     /// the user identifier for non-anonymous Bind/BindSaslKerberos
     // - with Bind, should be a DN like 'CN=John,CN=Users,DC=mycompany,DC=tld',
     // as stated by the official LDAP specification - but note that some servers
@@ -2018,6 +2024,7 @@ type
     fSearchBeginBak: TIntegerDynArray; // SearchPageSize (recursive) backup
     fSearchBeginCount: integer; // usually = only 0..1
     fSockBufferPos: integer;
+    fLastPingTix: cardinal;
     fLog: TSynLogClass;
     fOnDisconnect: TOnLdapClientEvent;
     fWellKnownObjects: TLdapKnownCommonNames;
@@ -2155,14 +2162,16 @@ type
     // - can optionally return the KerberosUser which made the authentication
     function BindSaslKerberos(const AuthIdentify: RawUtf8 = '';
       KerberosUser: PRawUtf8 = nil): boolean;
-    /// test whether the client socket is connected to the server
+    /// test whether the client socket is connected using getpeername()
     function Connected: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// make a quick "Who am I" request to validate an active connection
     // - Connected is about the client side state: this method check the server
+    // - won't reconnect automatically, but EnsureConnected calls this method
     function Ping: boolean;
     /// test whether the client is connected to the server and try re-connect
     // - follows Settings.AutoReconnect property and OnDisconnect event
+    // - perform a "Who Am I" Ping request after Settings.PingIdleSeconds
     function EnsureConnected(const context: ShortString): boolean;
     /// test whether the client is connected with TLS or Kerberos Signing-Sealing
     // - it is unsafe to send e.g. a plain Password without lctEncrypted
@@ -5659,8 +5668,9 @@ constructor TLdapClientSettings.Create;
 begin
   inherited Create;
   fKey := OBJECTPASSWORD_PLAIN; // default with no Password encryption
-  fTimeout := 5000;
-  fAutoReconnect := true; // sounds fair enough
+  fTimeout := 5000;             // 5 seconds
+  fPingIdleSeconds := 300;      // 5 minutes
+  fAutoReconnect := true;       // sounds fair enough
   fTargetPort := LDAP_PORT;
 end;
 
@@ -6897,11 +6907,22 @@ begin
 end;
 
 function TLdapClient.EnsureConnected(const context: ShortString): boolean;
+var
+  ttl: cardinal;
 begin
-  result := (self <> nil) and
-            (fSock.SockConnected or
-             ((fBoundAs <> lcbNone) and
-              Reconnect(context))); // try re-connect and re-bind if possible
+  result := false;
+  if (self = nil) or
+     (fSock = nil) then
+    exit;
+  ttl := fSettings.PingIdleSeconds;
+  if (ttl > 0) and
+     (cardinal(fLastPingTix + ttl) < GetTickSec) then
+    result := Ping       // send extended WhoAmI to check the real socket state
+  else
+    result := Connected; // rough but quick client-side socket state check
+  if not result and
+     (fBoundAs <> lcbNone) then
+    result :=  Reconnect(context); // try re-connect and re-bind if possible
 end;
 
 function TLdapClient.Transmission: TLdapClientTransmission;
@@ -7124,9 +7145,7 @@ begin
             n := 1;
             AsnNext(n, resp, @r.fObjectName);
             if AsnNext(n, resp) = ASN1_SEQ then
-            begin
               while n < length(resp) do
-              begin
                 if AsnNext(n, resp, nil, @seqend) = ASN1_SEQ then
                 begin
                   AsnNext(n, resp, @u);
@@ -7141,8 +7160,6 @@ begin
                     a.AfterAdd; // allow "for a in attr.List do"
                   end;
                 end;
-              end;
-            end;
           end;
         LDAP_ASN1_SEARCH_REFERENCE:
           begin
