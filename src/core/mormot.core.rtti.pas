@@ -9749,8 +9749,7 @@ begin
         break;
     end
     else if not GetNextFieldProp(P, propname) then
-      // expect regular Object Pascal identifier (i.e. 0..9,a..z,A..Z,_)
-      break;
+      break; // expect regular Object Pascal identifier (i.e. 0..9,a..z,A..Z,_)
     if P^ = ',' then
     begin
       // a,'b,b',c: integer
@@ -9809,13 +9808,11 @@ begin
                 ac := Rtti.RegisterTypeFromName(atypname, @apt);
                 if ac = nil then
                   if apt = ptRecord then
-                    // array of record ... end
-                    ee := eeEndKeyWord
+                    ee := eeEndKeyWord // array of record ... end
                   else
                     P := nil
                 else
-                  // normalize as array of KnownType
-                  Join(['[', ac.Name, ']'], typname);
+                  Join(['[', ac.Name, ']'], typname); // normalize for reuse
               end;
             end
             else
@@ -9885,15 +9882,13 @@ begin
       nested := Rtti.GlobalClass.Create;
       nested.FromRtti(nil);
       nested.SetPropsFromText(P, ee, NoRegister); // before NoRttiSetAndRegister()
-      nested.NoRttiSetAndRegister(ptRecord, typname, NoRegister);
+      nested.NoRttiSetAndRegister(ptRecord, '', NoRegister);
       if NoRegister then
         PtrArrayAdd(Rtti.fOwnedRtti, nested);
       if pt = ptRecord then
-        // rec: record .. end  or  rec: { ... }
-        c := nested
+        c := nested   // rec: record .. end  or  rec: { ... }
       else
-        // arr: [ ... ]   or  arr: array of record .. end
-        ac := nested;
+        ac := nested; // arr: [ ... ]   or  arr: array of record .. end
     end;
     if ac <> nil then
     begin
