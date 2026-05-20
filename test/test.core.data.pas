@@ -375,7 +375,7 @@ const
   __TTestCustomJsonArray: RawUtf8 =
       'A,B,C byte D RawByteString E[E1 double E2 string] F TDateTime';
   __TTestCustomJsonArraySimple =
-      'A,B Int64 C array of TGuid D RawUtf8 E [F RawUtf8 G array of RawUtf8] H RawUtf8';
+      'A,B Int64 C array of TGuid D RawUtf8 E [F RawUtf8 G TRawUtf8DynArray] H RawUtf8';
   __TTestCustomJsonArrayVariant =
       'A,B Int64 C array of variant D RawUtf8';
   __TTestCustomJsonGitHub =
@@ -399,7 +399,7 @@ const
   __TSubCD =
     'c : byte; d : RawUtf8;';
   __TAggregate =
-    'abArr : array of TSubAB; cdArr : array of TSubCD;';
+    'abArr : array of TSubAB; cdArr : TSubCDDynArray;';
 
   zendframeworkFileName = 'zendframework.json';
   discogsFileName = 'discogs.json';
