@@ -6946,7 +6946,7 @@ begin
   // we need to decode and return the Value^
   if (result and ASN1_CL_CTR) <> 0 then
     // constructed (e.g. SEQ/SETOF): return whole data, but keep Pos after header
-    Value^ := copy(Buffer, Pos, asnsize)
+    FastSetRawByteString(Value^, @PByteArray(Buffer)[Pos - 1], asnsize)
   else
     // decode Value^ as text - use AsnNextRaw() to avoid the decoding
     case result of
@@ -6968,8 +6968,7 @@ begin
       // ASN1_UTF8STRING, ASN1_OCTSTR or unknown - return as CP_UTF8 for FPC
       if asnsize > 0 then
       begin
-        Value^ := copy(Buffer, Pos, asnsize);
-        FakeCodePage(Value^, CP_UTF8);
+        FastSetString(PRawUtf8(Value)^, @PByteArray(Buffer)[Pos - 1], asnsize);
         inc(Pos, asnsize);
       end;
     end;
