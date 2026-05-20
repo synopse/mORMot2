@@ -6497,13 +6497,21 @@ function AsnEncLen(Len: cardinal; var dest: TQWordRec): PtrInt;
 begin
   if Len <= $7f then
   begin
-    dest.L := Len; // most simple case
+    dest.B[0] := Len; // most simple case
     result := 1;
   end
   else if Len <= $ff then
   begin
-    dest.L := (Len shl 8) + $81;
+    dest.B[0] := $81;
+    dest.B[1] := Len;
     result := 2;
+  end
+  else if Len <= $ffff then
+  begin
+    dest.B[0] := $82;
+    dest.B[1] := Len shr 8;
+    dest.B[2] := Len;
+    result := 3;
   end
   else
   begin
