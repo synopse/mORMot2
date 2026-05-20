@@ -1890,7 +1890,7 @@ begin
                 ASN1_CTX7: // ip
                   v := AsnDecIp(pointer(v), length(v));
                 ASN1_CTX8: // registeredID
-                  v := AsnDecOid(1, 1 + length(v), v);
+                  AsnDecOid(1, 1 + length(v), v, RawUtf8(v));
               else
                 continue;  // unsupported value type
               end;

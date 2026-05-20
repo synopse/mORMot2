@@ -2191,7 +2191,7 @@ function AsnDecInt(var Start: integer; const Buffer: TAsnObject;
   AsnSize: integer): Int64;
 
 /// decode an OID ASN.1 value into human-readable text
-function AsnDecOid(Pos, EndPos: PtrInt; const Buffer: TAsnObject): RawUtf8;
+procedure AsnDecOid(Pos, EndPos: PtrInt; const Buffer: TAsnObject; var Dest: RawUtf8);
 
 /// decode an OCTSTR ASN.1 value into its raw bynary buffer
 // - returns plain input value if was not a valid ASN1_OCTSTR
@@ -6509,8 +6509,9 @@ begin
   else if Len <= $ffff then
   begin
     dest.B[0] := $82;
-    dest.B[1] := Len shr 8;
     dest.B[2] := Len;
+    Len := Len shr 8;
+    dest.B[1] := Len;
     result := 3;
   end
   else
@@ -6800,7 +6801,7 @@ begin
   AsnAdd(Data, AsnTyped(Buffer, AsnType));
 end;
 
-function AsnDecOid(Pos, EndPos: PtrInt; const Buffer: TAsnObject): RawUtf8;
+procedure AsnDecOid(Pos, EndPos: PtrInt; const Buffer: TAsnObject; var Dest: RawUtf8);
 var
   b: byte;
   x, y: cardinal;
@@ -6826,7 +6827,7 @@ begin
     {%H-}AppendShortCharSafe('.', tmp);
     AppendShortCardinal(x, tmp);
   end;
-  FastSetString(result, @tmp[1], ord(tmp[0]));
+  FastSetString(Dest, @tmp[1], ord(tmp[0])); // last: Buffer may be = Dest
 end;
 
 function AsnDecOctStr(const input: RawByteString): RawByteString;
@@ -6958,7 +6959,7 @@ begin
         end;
       ASN1_OBJID:
         begin
-          Value^ := AsnDecOid(Pos, Pos + asnsize, Buffer);
+          AsnDecOid(Pos, Pos + asnsize, Buffer, PRawUtf8(Value)^);
           inc(Pos, asnsize);
         end;
       ASN1_NULL:
