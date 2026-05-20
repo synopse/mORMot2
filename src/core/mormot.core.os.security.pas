@@ -6613,14 +6613,14 @@ end;
 
 function Asn(AsnType: integer; const Content: array of TAsnObject): TAsnObject;
 var
-  tmp: THash128;
+  tmp: TQWordRec;
   i, len, al: PtrInt;
   p: PByte;
 begin
   len := ord(AsnType = ASN1_BITSTR);
   for i := 0 to high(Content) do
     inc(len, length(Content[i]));
-  al := AsnEncLen(len, @tmp);
+  al := AsnEncLen(len, tmp);
   p := FastNewRawByteString(result, al + len + 1);
   p^ := AsnType;         // type
   inc(p);
@@ -6641,12 +6641,12 @@ end;
 
 function AsnTyped(const Data: RawByteString; AsnType: integer): TAsnObject;
 var
-  tmp: THash128;
+  tmp: TQWordRec;
   len, al: PtrInt;
   p: PByte;
 begin
   len := ord(AsnType = ASN1_BITSTR) + length(Data);
-  al := AsnEncLen(len, @tmp);
+  al := AsnEncLen(len, tmp);
   p := FastNewRawByteString(result, al + len + 1);
   p^ := AsnType;         // type
   inc(p);
