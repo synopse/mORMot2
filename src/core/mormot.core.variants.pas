@@ -2184,8 +2184,7 @@ type
     // objects of this document array, specified by name
     // - you can optionally apply an additional filter to each reduced item
     procedure ReduceAsArray(const aPropName: RawUtf8;
-      var result: TDocVariantData;
-      const OnReduce: TOnReducePerItem = nil); overload;
+      var result: TDocVariantData; const OnReduce: TOnReducePerItem = nil); overload;
     /// create a TDocVariant array, from the values of a single property of the
     // objects of this document array, specified by name
     // - always returns a TDocVariantData, even if no property name did match
@@ -2197,8 +2196,7 @@ type
     // objects of this document array, specified by name
     // - this overloaded method accepts an additional filter to each reduced item
     procedure ReduceAsArray(const aPropName: RawUtf8;
-      var result: TDocVariantData;
-      const OnReduce: TOnReducePerValue); overload;
+      var result: TDocVariantData; const OnReduce: TOnReducePerValue); overload;
     /// create a TDocVariant array, from the values of a single property of the
     // objects of this document array, specified by name
     // - always returns a TDocVariantData, even if no property name did match
@@ -8244,7 +8242,9 @@ type
     function DoCompareField(Value: PQuickSortByFieldLookup): PtrInt;
       {$ifndef CPUX86} inline; {$endif}
     procedure Sort(L, R: PtrInt);
-    procedure GetUniqueIndex(var ndx: TIntegerDynArray);
+    function DoCompareAt(v: PVariant; level: PtrInt; row: PQuickSortByFieldLookup): integer;
+      {$ifdef HASINLINE} inline; {$endif}
+    function GetUniqueIndex(var ndx: TIntegerDynArray): PtrInt;
   end;
 
 procedure TQuickSortDocVariantValuesByField.InitSort(aDoc: PDocVariantData;
@@ -8407,36 +8407,41 @@ begin
     until L >= R;
 end;
 
-procedure TQuickSortDocVariantValuesByField.GetUniqueIndex(var ndx: TIntegerDynArray);
-var
-  n: PtrInt;
-  l: ^TQuickSortByFieldLookup;
-  v: PVariant;
-  i, cmp: integer;
+function TQuickSortDocVariantValuesByField.DoCompareAt(v: PVariant;
+  level: PtrInt; row: PQuickSortByFieldLookup): integer;
 begin
-  SetLength(ndx, Doc^.VCount);
-  v := nil;
+  if v = nil then
+    result := 1
+  else if Assigned(Compare) then
+    result := Compare(v^, row^[level]^)
+  else
+    result := CompareField(Fields[level], v^, row^[level]^);
+end;
+
+function TQuickSortDocVariantValuesByField.GetUniqueIndex(var ndx: TIntegerDynArray): PtrInt;
+var
+  l: PQuickSortByFieldLookup;
+  v: PVariant;
+  i: integer;
+begin
+  result := 0;
   l := pointer(Lookup);
-  n := 0;
+  v := nil;
   i := 0;
   repeat
-    if v = nil then
-      cmp := 1
-    else if Assigned(Compare) then
-      cmp := Compare(v^, l^[0]^)
-    else
-      cmp := CompareField(Fields[0], v^, l^[0]^);
-    if cmp <> 0 then
+    if DoCompareAt(v, 0, l) <> 0 then
     begin
-      ndx[n] := i; // store the index of each new unique value
-      inc(n);
+      if result >= length(ndx) then
+        SetLength(ndx, NextGrow(result));
+      ndx[result] := i; // store the index of each new unique value
+      inc(result);
       v := l^[0];
     end;
     inc(l); // next row
     inc(i);
   until i = Doc^.VCount;
-  if n <> Doc^.VCount then
-    SetLength(ndx, n);
+  if result <> 0 then
+    DynArrayFakeLength(ndx, result);
 end;
 
 procedure TDocVariantData.SortArrayByField(const aItemPropName: RawUtf8;
@@ -8769,11 +8774,10 @@ begin
     for prop := 0 to n - 1 do
     begin
       ndx := GetValueIndex(aFromPropName[prop]);
-      if ndx >= 0 then
-      begin
-        VName[ndx] := aToPropName[prop];
-        inc(result);
-      end;
+      if ndx < 0 then
+        continue;
+      VName[ndx] := aToPropName[prop];
+      inc(result);
     end;
 end;
 
