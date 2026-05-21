@@ -5718,6 +5718,12 @@ procedure TTestCoreBase.Utf8Slow(Context: TObject);
     CheckEqual(t, TrimRight(c));
   end;
 
+  procedure CheckCleanThreadName(s, exp: RawUtf8);
+  begin
+    CleanThreadName(s);
+    CheckEqual(s, exp);
+  end;
+
 var
   i, j, k, len, len120, lenup100, CP, L, lcid: integer;
   bak, bakj: AnsiChar;
@@ -6955,6 +6961,9 @@ begin
   CheckEqual(StringReplaceAll('abcabcabc', 'c', 'C', true), 'abCabCabC');
   CheckEqual(StringReplaceAll('abcabcabc', 'c', '', true), 'ababab');
   CheckEqual(StringReplaceAll('abcabcabc', 'C', '', true), 'ababab');
+  CheckCleanThreadName('', '');
+  CheckCleanThreadName('toto', 'toto');
+  CheckCleanThreadName('TWebSockettotoTSqlRestServerTOrmRestmemory', 'WStotoSrvmem');
   CheckEqual(LogEscapeFull(''), '');
   CheckEqual(LogEscapeFull(' abc'), ' abc');
   CheckEqual(LogEscapeFull('abc'), 'abc');

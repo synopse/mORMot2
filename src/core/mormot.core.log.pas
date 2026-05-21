@@ -1489,6 +1489,9 @@ const
   ptIdentifiedInOnFile = ptIdentifiedInOneFile;
 {$endif PUREMORMOT2}
 
+// mostly published for regression tests
+procedure CleanThreadName(var name: RawUtf8);
+
 
 { ************** High-Level Logs and Exception Related Features }
 
@@ -5354,34 +5357,11 @@ begin
   for i := 1 to length(name) do
     if name[i] < ' ' then
       name[i] := ' '; // ensure on same line
-  name := TrimU(StringReplaceAll(name, [
-    'TSqlRest',        '',
-    'TRest',           '',
-    'TSql',            '',
-    'TSQLRest',        '',
-    'TSQL',            '',
-    'TOrmRest',        '',
-    'TOrm',            '',
-    'TWebSocket',      'WS',
-    'TServiceFactory', 'SF',
-    'TSyn',            '',
-    'Thread',          '',
-    'Process',         '',
-    'Background',      'Bgd',
-    'WebSocket',       'WS',
-    'Asynch',          'A',
-    'Async',           'A',
-    'Parallel',        'Prl',
-    'Timer',           'Tmr',
-    'Thread',          'Thd',
-    'Database',        'DB',
-    'Backup',          'Bak',
-    'Server',          'Srv',
-    'Client',          'Cli',
-    'synopse',         'syn',
-    'memory',          'mem',
-    '  ',              ' '
-    ]));
+  name := TrimU(StringReplaceCsv(name,
+    'TSqlRest=,TRest=,TSql=,TSQLRest=,TSQL=,TOrmRest=,TOrm=,TWebSocket=WS,' +
+    'TServiceFactory=SF,TSyn=,Thread=,Process=,Background=Bgd,WebSocket=WS,' +
+    'Asynch=A,Async=A,Parallel=Prl,Timer=Tmr,Thread=Thd,Database=DB,Backup=Bak,' +
+    'Server=Srv,Client=Cli,synopse=syn,memory=mem,  = '));
 end;
 
 procedure _SetThreadName(ThreadID: TThreadID; const Format: RawUtf8;
