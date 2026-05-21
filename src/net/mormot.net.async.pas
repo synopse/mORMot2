@@ -5705,6 +5705,7 @@ type
     localdate: TUnixMSTime;            // local file timestamp
     loginfo: PUtf8Char;                // optional error message / log context
     remote: TUri;                      // URI members of the remote resource
+    remotehash: THash160;              // remote TUri hash without etag/lastmod
     function MakeHeadAndComputeFilename: cardinal;
     function MakeGet(const path: TUriMatchName): cardinal;
   end;
@@ -5716,21 +5717,12 @@ type
   end;
 
 function TStartProxyRequest.MakeHeadAndComputeFilename: cardinal;
-var
-  h: THash160;  // binary version of remote TUri without etag/lastmod
 begin // this method is protected by proxy.fOsSafe.Lock
-  result := HTTP_BADREQUEST;
-  // hash the plain URI to identify the local header cache
-  if not HttpRequestHashBase32(remote, nil, nil, @h) then
-  begin
-    loginfo := 'wrong URI';
-    exit;
-  end;
   // always perform a HEAD request to the original server
   if not Assigned(proxy.fHeadCache) or // see HttpHeadCacheSec for this URI
-     not proxy.fHeadCache.FindAndCopy(h, head,
+     not proxy.fHeadCache.FindAndCopy(remotehash, head,
        {updatetimeout=}not (hpoClientHeadNoRefresh in proxy.fSettings.Options)) then
-    proxy.RemoteClientHead(remote, h, head);
+    proxy.RemoteClientHead(remote, remotehash, head);
   result := head.Status;
   if not StatusCodeIsSuccess(result) then // 4xx.. range
   begin
@@ -6382,19 +6374,21 @@ var
   start: Int64;
   instance: TObject;
 begin
+  if fHasLog in fFlags then
+    QueryPerformanceMicroSeconds(start);
   // supplied URI should be a safe resource reference
   result := HTTP_FORBIDDEN; // 403
   req.ctxt := Ctxt;
   req.proxy := Ctxt.RouteOpaque;
   req.loginfo := nil;
-  if fHasLog in fFlags then
-    QueryPerformanceMicroSeconds(start);
-  // compute the remote URI corresponding to the original server
+  // compute the remote URI and its hash corresponding to the original server
   if hpoNoSubFolder in req.proxy.Settings.Options then
     if ByteScanIndex(pointer(Uri.Path.Text), Uri.Path.Len, ord('/')) <> 0 then
       exit;
   req.remote := req.proxy.fRemoteUri;
   Append(req.remote.Address, Uri.Path.Text, Uri.Path.Len);
+  if not HttpRequestHashBase32(req.remote, nil, nil, @req.remotehash) then
+    exit; // paranoid
   // blocking to ensure file consistency and remote connection sharing
   req.proxy.fOsSafe.Lock;
   try
