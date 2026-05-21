@@ -2034,8 +2034,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
     procedure SendPacket(const Asn1Data: TAsnObject);
-    procedure ReceivePacket(Dest: pointer; DestLen: PtrInt); overload;
-    procedure ReceivePacket(var Append: RawByteString; Len: PtrInt); overload;
+    procedure ReceivePacket(Dest: pointer; DestLen: PtrInt);
     procedure ReceivePacketFillSockBuffer;
     function ReceiveResponse: TAsnObject;
     function DecodeResponse(var Pos: integer; const Asn1Response: TAsnObject): TAsnObject;
@@ -6412,24 +6411,15 @@ begin
         len := DestLen;
       MoveFast(PByteArray(fSockBuffer)[fSockBufferPos], Dest^, len);
       inc(fSockBufferPos, len);
-      inc(PByte(Dest), len);
       dec(DestLen, len);
       if DestLen = 0 then
         exit;
+      inc(PByte(Dest), len);
     end;
     // fill fSockBuffer from fSock pending data
     ReceivePacketFillSockBuffer;
   end;
   // note: several SEQ messages may be returned
-end;
-
-procedure TLdapClient.ReceivePacket(var Append: RawByteString; Len: PtrInt);
-var
-  l: PtrInt;
-begin
-  l := length(Append);
-  SetLength(Append, l + Len);
-  ReceivePacket(@PByteArray(Append)[l], Len);
 end;
 
 function TLdapClient.ReceiveResponse: TAsnObject;
