@@ -1842,6 +1842,18 @@ SYSV aarch64:
  https://c9x.me/compile/bib/abi-arm64.pdf
 }
 
+{$ifdef ISDELPHI}
+  {$ifdef ABISYSVX64}
+    // Delphi's LLVM Linux x64 compiler returns a by-ref result (managed
+    // record, string, dynarray, variant...) following the Itanium C++ ABI:
+    // the hidden result pointer is the 1st integer register (RDI) and Self
+    // is pushed to the 2nd (RSI). FPC and Delphi-Win64 do the opposite (Self
+    // first), which is what the register layout in this unit assumes. This
+    // symbol enables the small fixups that bridge that ABI difference.
+    {$define DELPHI_SYSVX64_RESULT_FIRST}
+  {$endif ABISYSVX64}
+{$endif ISDELPHI}
+
 const
 {$ifdef ABIX86}
   MAX_EXECSTACK = 1024;
@@ -3419,7 +3431,14 @@ begin
     else
     {$endif HAS_FPREG}
       if a^.RegisterIdent > 0 then
-        V := @ctxt.Stack.ParamRegs[a^.RegisterIdent + (PARAMREG_FIRST - 1)];
+        {$ifdef DELPHI_SYSVX64_RESULT_FIRST}
+        if a^.ValueDirection = imdResult then
+          // Delphi LLVM Linux x64: the hidden result pointer travels in the
+          // 1st integer register, not the 2nd as FPC/Delphi-Win64 do
+          V := @ctxt.Stack.ParamRegs[REGRDI]
+        else
+        {$endif DELPHI_SYSVX64_RESULT_FIRST}
+          V := @ctxt.Stack.ParamRegs[a^.RegisterIdent + (PARAMREG_FIRST - 1)];
     if a^.RegisterIdent = PARAMREG_FIRST then
       FakeCallRaiseError(ctxt, 'unexpected self', []);
     if V = nil then
@@ -3454,6 +3473,13 @@ asm
 end;
 {$endif HASINLINE}
 
+{$ifndef ABIX86}
+var
+  // reuse the very same JITted stubs for all interfaces (declared early so
+  // FakeCall() below can use it to validate a fake interface Self pointer)
+  _FAKEVMT: TPointerDynArray;
+{$endif ABIX86}
+
 procedure FakeCallRaise(Fake: TInterfacedObjectFakeRaw; MethodIndex: PtrUInt);
 begin
   EInterfaceFactory.RaiseUtf8('%.FakeCall(%) failed: out of range %',
@@ -3471,6 +3497,16 @@ begin
      forged to call a remote SOA server or mock/stub an interface
   *)
   me := SelfFromInterface;
+  {$ifdef DELPHI_SYSVX64_RESULT_FIRST}
+  // for a by-ref-result method, Delphi's LLVM Linux x64 ABI passes the hidden
+  // result pointer in the 1st integer register, so the shared x64fakestub
+  // trampoline forwarded @Result (not the interface) to us as Self. A genuine
+  // fake interface has fVTable = _FAKEVMT; if it does not, the real Self was
+  // pushed into the 2nd register (RSI), saved on the stack: recover it there.
+  if me.fVTable <> pointer(_FAKEVMT) then
+    me := TInterfacedObjectFakeRaw(PAnsiChar(stack^.ParamRegs[REGRSI]) -
+      PtrUInt(@TInterfacedObjectFakeRaw(nil).fVTable));
+  {$endif DELPHI_SYSVX64_RESULT_FIRST}
   // setup context
   ctxt.Stack := stack;
   if stack.MethodIndex >= PtrUInt(me.fFactory.MethodsCount) then
@@ -4976,10 +5012,6 @@ begin
 end;
 
 {$else}
-
-var
-  // reuse the very same JITted stubs for all interfaces
-  _FAKEVMT: TPointerDynArray;
 
 // JIT MAX_METHOD_COUNT VMT stubs for every method of any interface
 // - internal function protected by VmtSafe.Lock
@@ -7361,6 +7393,14 @@ begin
       {$endif HAS_FPREG}
     end;
   end;
+  {$ifdef DELPHI_SYSVX64_RESULT_FIRST}
+  // the FPC-shaped layout above placed a by-ref result pointer in RSI
+  // (PARAMREG_RESULT); Delphi's LLVM Linux x64 ABI expects it in RDI, so
+  // move it there once. Self is assigned to RSI per-instance in the loop.
+  if (fMethod^.ArgsResultIndex >= 0) and
+     (fMethod^.Args[fMethod^.ArgsResultIndex].ValueType in ARGS_RESULT_BY_REF) then
+    call.ParamRegs[REGRDI] := call.ParamRegs[REGRSI];
+  {$endif DELPHI_SYSVX64_RESULT_FIRST}
   // execute the method
   for i := 0 to InstancesLast do
   begin
@@ -7378,6 +7418,13 @@ begin
       end;
     end;
     // prepare the low-level call context for the asm stub
+    {$ifdef DELPHI_SYSVX64_RESULT_FIRST}
+    if (fMethod^.ArgsResultIndex >= 0) and
+       (fMethod^.Args[fMethod^.ArgsResultIndex].ValueType in ARGS_RESULT_BY_REF) then
+      // Delphi LLVM Linux x64: Self travels in the 2nd integer register
+      call.ParamRegs[REGRSI] := PtrInt(Instances[i])
+    else
+    {$endif DELPHI_SYSVX64_RESULT_FIRST}
     call.ParamRegs[PARAMREG_FIRST] := PtrInt(Instances[i]); // pass self
     call.method := PPtrIntArray(PPointer(Instances[i])^)^[
       fMethod^.ExecutionMethodIndex];
