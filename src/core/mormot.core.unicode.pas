@@ -11279,8 +11279,10 @@ end;
 // freely inspired by Bero's PUCU library, released under zlib license
 //  https://github.com/BeRo1985/pucu  (C)2016-2020 Benjamin Rosseaux
 
-{$define UU_COMPRESSED}
 // 1KB compressed static table in the exe renders into our 20KB UU[] array :)
+{$ifndef NOCOMPRESSEDTABLE}
+  {$define UU_COMPRESSED}
+{$endif NOCOMPRESSEDTABLE}
 
 const
   UU_BLOCK_HI = 7;
