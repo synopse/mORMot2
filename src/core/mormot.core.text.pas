@@ -115,6 +115,10 @@ function GetFileNameExtIndex(const FileName, CsvExt: TFileName): integer;
 procedure GetNextItemShortString(var P: PUtf8Char; Dest: PShortString;
   Sep: AnsiChar = ',');
 
+/// fast version of several cascaded StringReplaceAll() as old=new,... parameters
+function StringReplaceCsv(const S: RawUtf8; OldNewPatternPairs: PUtf8Char;
+  CaseInsensitive: boolean = false): RawUtf8;
+
 /// append some text lines with the supplied Values[]
 // - if any Values[] item is '', no line is added
 // - otherwise, appends 'Caption: Value', with Caption taken from CSV
@@ -2751,6 +2755,20 @@ begin
       P := S + 1
     else
       P := nil;
+  end;
+end;
+
+function StringReplaceCsv(const S: RawUtf8; OldNewPatternPairs: PUtf8Char;
+  CaseInsensitive: boolean): RawUtf8;
+var
+  old, new: RawUtf8;
+begin
+  result := S;
+  while OldNewPatternPairs <> nil do
+  begin
+    GetNextItem(OldNewPatternPairs, '=', old);
+    GetNextItem(OldNewPatternPairs, ',', new);
+    result := StringReplaceAll(result, old, new, CaseInsensitive);
   end;
 end;
 

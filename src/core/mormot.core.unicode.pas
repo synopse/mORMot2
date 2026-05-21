@@ -2259,7 +2259,7 @@ function StringReplaceAll(const S, OldPattern, NewPattern: RawUtf8;
   CaseInsensitive: boolean): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// fast version of several cascaded StringReplaceAll()
+/// fast version of several cascaded StringReplaceAll() as array parameter
 function StringReplaceAll(const S: RawUtf8;
   const OldNewPatternPairs: array of RawUtf8;
   CaseInsensitive: boolean = false): RawUtf8; overload;
