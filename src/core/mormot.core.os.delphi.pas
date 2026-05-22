@@ -455,7 +455,8 @@ end;
 
 function RTLEventCreate: TEvent;
 begin
-  result := TEvent.Create;
+  // auto-reset event, to match FPC PRTLEvent and Windows CreateEvent() semantic
+  result := TEvent.Create(nil, {ManualReset=}false, {InitialState=}false, '');
 end;
 
 procedure RTLEventDestroy(state: TEvent);
