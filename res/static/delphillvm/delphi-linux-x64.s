@@ -7,9 +7,21 @@
 # redirect to TInterfacedObjectFakeRaw.FakeCall
 .extern fakecall
 
+# NOTE: the .cfi_* directives below are mandatory, not cosmetic.
+# Without them, gcc emits no .eh_frame unwind info for these hand-written
+# functions. Delphi Linux x64 uses DWARF/Itanium-ABI exceptions, so the
+# unwinder cannot walk a raised exception back through these frames: a
+# try..except around a fake interface call (or around an invoked method)
+# would then silently fail to catch it. CFA is kept rbp-relative so it
+# stays valid across the rsp adjustments in the body.
+
 x64fakestub:
+    .cfi_startproc
     push rbp
+    .cfi_def_cfa_offset 16
+    .cfi_offset rbp, -16
     mov rbp, rsp
+    .cfi_def_cfa_register rbp
     sub rsp, 0x80
 
     mov [rbp-8], rax
@@ -37,12 +49,20 @@ x64fakestub:
 
     mov rsp, rbp
     pop rbp
+    .cfi_def_cfa rsp, 8
     ret
+    .cfi_endproc
 
 x64callmethod:
+    .cfi_startproc
     push rbp
+    .cfi_def_cfa_offset 16
+    .cfi_offset rbp, -16
     push r12
+    .cfi_def_cfa_offset 24
+    .cfi_offset r12, -24
     mov rbp, rsp
+    .cfi_def_cfa_register rbp
     sub rsp, 0x100
     and rsp, -16
 
@@ -95,5 +115,8 @@ x64callmethod:
 .Lend:
     mov rsp, rbp
     pop r12
+    .cfi_restore r12
     pop rbp
+    .cfi_def_cfa rsp, 8
     ret
+    .cfi_endproc
