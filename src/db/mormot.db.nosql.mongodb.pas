@@ -2814,8 +2814,6 @@ begin
       EMongoException.RaiseUtf8('%.Open unable to connect to MongoDB server %: % [%]',
         [self, Client.ConnectionString, E, E.Message]);
   end;
-  fSocket.TcpNoDelay := true; // we buffer all output data before sending
-  fSocket.KeepAlive := true;  // do not close the connection without notice
 end;
 
 function TMongoConnection.GetOpened: boolean;

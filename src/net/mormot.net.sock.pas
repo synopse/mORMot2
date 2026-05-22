@@ -298,7 +298,8 @@ type
     procedure SetKeepAliveTcp(idle, intvl, cnt: cardinal);
   public
     /// called by NewSocket to finalize a socket attributes
-    procedure SetupConnection(layer: TNetLayer; sendtimeout, recvtimeout: integer);
+    procedure SetupConnection(layer: TNetLayer; dobind: boolean;
+      sendtimeout, recvtimeout: integer);
     /// change the sending timeout of this socket, in milliseconds
     procedure SetSendTimeout(ms: integer);
     /// change the receiving timeout of this socket, in milliseconds
@@ -528,6 +529,8 @@ var
   // - used by both TCrtSock.AcceptRequest and THttpApiServer.Execute servers
   RemoteIPLocalHostAsVoidInServers: boolean = true;
 
+  /// the TCP SetKeepAlive() value for a client (false) or server (true)
+  TcpKeepAliveSeconds: array[boolean] of cardinal = (120, 240);
 
 const
   /// a constant to indicate no socket
@@ -1998,7 +2001,7 @@ type
       error: TNetResult = nrOK; errnumber: PNetErrorInt = nil;
       exc: ENetSockClass = nil); overload;
     procedure DoRaise(const msg: string); overload;
-    procedure SetKeepAlive(aKeepAlive: boolean); virtual;
+    procedure SetKeepAlive(aSeconds: integer); virtual;
     procedure SetLinger(aLinger: integer); virtual;
     procedure SetReceiveTimeout(aReceiveTimeout: integer); virtual;
     procedure SetSendTimeout(aSendTimeout: integer); virtual;
@@ -2283,10 +2286,11 @@ type
     // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ms740476
     property ReceiveTimeout: integer
       write SetReceiveTimeout;
-    /// set the SO_KEEPALIVE option for the connection
-    // - 1 (true) will enable keep-alive packets for the connection
-    // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ee470551
-    property KeepAlive: boolean
+    /// set the SO_KEEPALIVE TCP option as seconds before connection detection
+    // - default 0 will disable TCP keep-alive packets for the connection
+    // - POSIX and latest Windows will set idle=value/2 intvl=value/12 cnt=6
+    // - typical values are 120 for a client and 180/240 for a server
+    property KeepAlive: integer
       write SetKeepAlive;
     /// set the SO_LINGER option for the connection, to control its shutdown
     // - by default (or Linger<0), Close will return immediately to the caller,
@@ -3248,7 +3252,7 @@ begin
     // update cache once we are sure the host actually exists
     NewSocketAddressCache.Add(address, addr);
   netsocket := sock;
-  netsocket.SetupConnection(layer, sendtimeout, recvtimeout);
+  netsocket.SetupConnection(layer, dobind, sendtimeout, recvtimeout);
   if netaddr <> nil then
     if (addr.Port <> 0) or                   // 0 = assigned by the OS
        (sock.GetName(netaddr^) <> nrOk) then // retrieve ephemeral port
@@ -3360,7 +3364,7 @@ begin
   SetOpt(SOL_SOCKET, SO_BROADCAST, @v, SizeOf(v));
 end;
 
-procedure TNetSocketWrap.SetupConnection(layer: TNetLayer;
+procedure TNetSocketWrap.SetupConnection(layer: TNetLayer; dobind: boolean;
   sendtimeout, recvtimeout: integer);
 begin
   if @self = nil then
@@ -3369,11 +3373,10 @@ begin
     SetSendTimeout(sendtimeout);
   if recvtimeout > 0 then
     SetReceiveTimeout(recvtimeout);
-  if layer = nlTcp then
-  begin
-    SetNoDelay(true);   // disable Nagle algorithm (we use our own buffers)
-    SetKeepAlive(true); // enabled TCP keepalive
-  end;
+  if layer <> nlTcp then
+    exit;
+  SetNoDelay(true);   // disable Nagle algorithm (we use our own buffers)
+  SetKeepAlive(TcpKeepAliveSeconds[dobind]); // enabled proper TCP keepalive
 end;
 
 function TNetSocketWrap.Accept(out clientsocket: TNetSocket;
@@ -6145,9 +6148,9 @@ begin
   result := PtrInt(fSock);
 end;
 
-procedure TCrtSocket.SetKeepAlive(aKeepAlive: boolean);
+procedure TCrtSocket.SetKeepAlive(aSeconds: integer);
 begin
-  fSock.SetKeepAlive(aKeepAlive);
+  fSock.SetKeepAlive(aSeconds);
 end;
 
 procedure TCrtSocket.SetLinger(aLinger: integer);
