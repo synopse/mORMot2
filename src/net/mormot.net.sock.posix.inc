@@ -591,6 +591,12 @@ end;
 // FPC does not provide BSD and macOS values - and OpenBSD has no such feature
 {$ifdef OSLINUXANDROID}
   {$define HASKEEPALIVETCP} // defined in FPC headers
+  {$ifndef FPC}
+const // Delphi POSIX/Android headers do not expose those Linux <netinet/tcp.h> values
+  TCP_KEEPIDLE  = 4;
+  TCP_KEEPINTVL = 5;
+  TCP_KEEPCNT   = 6;
+  {$endif FPC}
 {$endif OSLINUXANDROID}
 {$ifdef OSFREEBSD}
 const
