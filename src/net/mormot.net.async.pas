@@ -5809,9 +5809,10 @@ begin // this method is protected by proxy.fOsSafe.Lock
     background := TStartProxyRequestClient.OpenOptions(remote, opt);
     background.stream := stream;
     background.uri := remote.Address;
-    TLoggedWorkThread.Create(log, Make(['get-', id]),
-                             background, proxy.BackgroundGet);
-    loginfo := 'progressive new';
+    Make(['get-', id], head.PurgedHeaders); // already set to OutCustomHeaders
+    TLoggedWorkThread.Create(log, head.PurgedHeaders,
+      background, proxy.BackgroundGet);
+    loginfo := pointer(head.PurgedHeaders);
     result := HTTP_SUCCESS;
   except
     stream.Free;
@@ -6413,7 +6414,9 @@ begin
         begin
           // but it is already associated in progressive mode: join the team
           Ctxt.SetOutProgressiveFile(req.filename, req.localsize);
-          req.loginfo := 'partial';
+          Make(['part-', Ctxt.ConnectionHttp^.ProgressiveID],
+            req.head.PurgedHeaders); // already set to OutCustomHeaders
+          req.loginfo := pointer(req.head.PurgedHeaders);
           result := HTTP_SUCCESS;
         end
         else if (req.head.Size >= 0) and
