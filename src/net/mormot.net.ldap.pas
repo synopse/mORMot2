@@ -6568,7 +6568,7 @@ end;
 function TLdapClient.Bind: boolean;
 var
   log: ISynLog;
-  pwd: SpiUtf8;
+  pwd, asn1, asn2: SpiUtf8;
 begin
   result := false;
   if fBound or
@@ -6581,10 +6581,12 @@ begin
   fLog.EnterLocal(log, 'Bind as %', [fSettings.UserName], self);
   try
     fSettings.GetPasswordSafe(pwd);
-    SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
+    asn1 := AsnTyped(pwd, ASN1_CTX0);
+    asn2 := Asn(LDAP_ASN1_BIND_REQUEST, [
                      Asn(fVersion),
                      AsnOctStr(fSettings.UserName),
-                     AsnTyped(pwd, ASN1_CTX0)]));
+                     asn1]);
+    SendAndReceive(asn2);
     if fResultCode <> LDAP_RES_SUCCESS then
       exit; // binding error
     fBound := true;
@@ -6593,6 +6595,8 @@ begin
     result := true;
   finally
     FillZero(pwd); // anti-forensic
+    FillZero(asn2);
+    FillZero(asn1);
     if Assigned(log) then
       log.Log(LOG_DEBUGERROR[not result], 'Bind=% % %',
         [BOOL_STR[result], fResultCode, fResultString], self);
