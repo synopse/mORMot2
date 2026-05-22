@@ -3503,7 +3503,8 @@ begin
   // trampoline forwarded @Result (not the interface) to us as Self. A genuine
   // fake interface has fVTable = _FAKEVMT; if it does not, the real Self was
   // pushed into the 2nd register (RSI), saved on the stack: recover it there.
-  if me.fVTable <> pointer(_FAKEVMT) then
+  if (self = nil) or
+     (me.fVTable <> pointer(_FAKEVMT)) then
     me := TInterfacedObjectFakeRaw(PAnsiChar(stack^.ParamRegs[REGRSI]) -
       PtrUInt(@TInterfacedObjectFakeRaw(nil).fVTable));
   {$endif DELPHI_SYSVX64_RESULT_FIRST}
