@@ -190,6 +190,7 @@ function fpclose(fd: cint): cint;
 function fputime(path: PWideChar; times: putimbuf): cint;
 function fpaccess(path: PWideChar; mode: cint): cint;
 function fpunlink(path: PWideChar): cint;
+function fpunlinka(path: PAnsiChar): cint; // when the path is already UTF-8
 function fpchdir(path: PWideChar): cint;
 function fprename(old, new: PWideChar): cint;
 function fpsymlink(old, new: PWideChar): cint;
@@ -592,6 +593,11 @@ var
 begin
   result := unlink(Unicode_ToUtf8(path, tmp));
   tmp.Done;
+end;
+
+function fpunlinka(path: PAnsiChar): cint;
+begin
+  result := unlink(path); // path is already UTF-8: no conversion needed
 end;
 
 function fpchdir(path: PWideChar): cint;
