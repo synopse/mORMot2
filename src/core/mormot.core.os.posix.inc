@@ -2857,12 +2857,26 @@ var
     procedure MakeFileName(const path: TFileName);
     var
       plen: PtrInt;
+      {$ifdef UNICODE}
+      tmp: TSynTempBuffer; // stack-backed UTF-8 buffer (heap only if > 4KB),
+                           // avoids one alloc/free per directory entry on the
+                           // Delphi POSIX "faster than FindFirst" enumeration
+      src: pointer;
+      {$endif UNICODE}
     begin
       if path <> '' then // fn := path + d_name
       begin
+        {$ifdef UNICODE}
+        src := Unicode_ToUtf8(pointer(path), tmp, length(path));
+        plen := tmp.len;
+        fn := FastNewString(plen + entlen, CP_UTF8);
+        MoveFast(src^, fn^, plen);
+        tmp.Done;
+        {$else}
         plen := length(path);
         fn := FastNewString(plen + entlen, CP_UTF8);
-        MoveFast(pointer(path)^, fn^, plen);
+        MoveFast(pointer(path)^, fn^, plen); // TFileName is UTF-8 on FPC POSIX
+        {$endif UNICODE}
         MoveFast(ent^.d_name, fn[plen], entlen);
       end
       else
