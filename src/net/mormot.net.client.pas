@@ -1846,7 +1846,8 @@ type
     // - you can then set the needed HttpOptions^, then call the Connected method
     // to check if it is actually connected
     constructor Create(const aServerAddress: RawUtf8; const aBaseUri: RawUtf8 = '';
-      aKeepAlive: integer = 5000); reintroduce; virtual;
+      aKeepAlive: integer = 5000; aOnlyUseSocket: boolean = ONLY_CLIENT_SOCKET);
+      reintroduce; virtual;
     /// finalize the instance, and its associated lock
     destructor Destroy; override;
     /// raw access to the HTTP options for the connection, e.g. TLS or Auth
@@ -5661,14 +5662,14 @@ end;
 { TJsonClient }
 
 constructor TJsonClient.Create(const aServerAddress, aBaseUri: RawUtf8;
-  aKeepAlive: integer);
+  aKeepAlive: integer; aOnlyUseSocket: boolean);
 begin
   inherited Create;
   if not fServerUri.From(aServerAddress) then
     EJsonClient.RaiseUtf8('Unexpected %.Create(%)', [self, aServerAddress]);
   fBaseUri := IncludeTrailingUriDelimiter(aBaseUri);
   fKeepAlive := aKeepAlive;
-  fHttp := TSimpleHttpClient.Create;
+  fHttp := TSimpleHttpClient.Create(aOnlyUseSocket);
   fDefaultHeaders := ('Accept: ' + JSON_CONTENT_TYPE);
   fOptions := [jcoParseTolerant, jcoHttpErrorRaise];
   fUrlEncoder := [ueEncodeNames, ueSkipVoidString];
