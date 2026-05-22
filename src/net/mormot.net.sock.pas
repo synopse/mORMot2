@@ -966,7 +966,7 @@ type
     // - could be useful if the server has some trouble with TLS 1.3
     DisableTls13: boolean;
     /// input: enable two-way TLS for the server
-    // - to be used with OnEachPeerVerify callback
+    // - to be used with OnEachPeerVerify callback or CACertificatesFile
     // - on OpenSSL client or server, set SSL_VERIFY_FAIL_IF_NO_PEER_CERT mode
     // - not used on SChannel
     ClientCertificateAuthentication: boolean;

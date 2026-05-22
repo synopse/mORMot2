@@ -11153,23 +11153,23 @@ var
   pk: PEVP_PKEY;
   c: PX509;
   ca: Pstack_st_X509;
+  cb: pointer;
 begin
   // setup the peer verification patterns
+  cb := nil;
   if Context.IgnoreCertificateErrors then
-    SSL_CTX_set_verify(fCtx, SSL_VERIFY_NONE, nil)
+    mode := SSL_VERIFY_NONE
   else
   begin
+    mode := SSL_VERIFY_PEER;
+    if Context.ClientCertificateAuthentication then
+      mode := mode or SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
     if Assigned(Context.OnEachPeerVerify) then
     begin
-      mode := SSL_VERIFY_PEER;
-      if Context.ClientCertificateAuthentication then
-        mode := mode or SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
+      cb := @AfterConnectionPeerVerify;
       if Context.ClientVerifyOnce then
         mode := mode or SSL_VERIFY_CLIENT_ONCE;
-      SSL_CTX_set_verify(fCtx, mode, AfterConnectionPeerVerify);
-    end
-    else
-      SSL_CTX_set_verify(fCtx, SSL_VERIFY_PEER, nil);
+    end;
     if FileExists(TFileName(Context.CACertificatesFile)) then
       SSL_CTX_load_verify_locations(
         fCtx, pointer(Context.CACertificatesFile), nil)
@@ -11182,11 +11182,10 @@ begin
     else
       SSL_CTX_set_default_verify_paths(fCtx);
     if not Bind then
-    begin
       if Context.ClientAllowUnsafeRenegotation then
         SSL_CTX_set_options(fCtx, SSL_OP_LEGACY_SERVER_CONNECT);
-    end;
   end;
+  SSL_CTX_set_verify(fCtx, mode, cb);
   // load any certificate (and private key)
   pk := nil;
   cert := Context.CertificateBin;
