@@ -622,6 +622,45 @@ begin
   // do nothing on Windows
 end;
 
+type
+  TTCPKeepAlive = record
+    onoff: cardinal;
+    keepalivetime: cardinal;
+    keepaliveinterval: cardinal;
+  end;
+const
+  IOC_IN             = DWORD($80000000);
+  IOC_VENDOR         = DWORD($18000000);
+  SIO_KEEPALIVE_VALS = IOC_IN or IOC_VENDOR or 4;
+
+  TCP_KEEPIDLE  = 3;
+  TCP_KEEPINTVL = 17;
+  TCP_KEEPCNT   = 16;
+
+procedure TNetSocketWrap.SetKeepAliveTcp(idle, intvl, cnt: cardinal);
+var
+  ka: TTCPKeepAlive;
+  ret: DWORD;
+  s: TSocket;
+begin
+  s := TSocket(@self);
+  // first try the newest API available
+  if (OSVersion32.win >= wEleven) or // Windows 11 or Windows Server 2019
+     ((OSVersion32.win in [wTen, wTen_64]) and // Windows 10 1709 (16299)
+      (OSVersion32.winbuild >= 16299)) then
+    if setsockopt(s, IPPROTO_TCP, TCP_KEEPIDLE, @idle, SizeOf(idle)) = NO_ERROR then
+    begin
+      setsockopt(s, IPPROTO_TCP, TCP_KEEPINTVL, @intvl, SizeOf(intvl));
+      setsockopt(s, IPPROTO_TCP, TCP_KEEPCNT,   @cnt, SizeOf(cnt));
+      exit;
+    end;
+  // fallback to SIO_KEEPALIVE_VALS for Windows 7/8/2016 - cnt not handled
+  ka.onoff := 1;
+  ka.keepalivetime := idle * 1000;
+  ka.keepaliveinterval := intvl * 1000;
+  WSAIoctl(s, SIO_KEEPALIVE_VALS, @ka, SizeOf(ka), nil, 0, @ret, nil, nil);
+end;
+
 const
   // https://techcommunity.microsoft.com/t5/networking-blog/ledbat-background-data-transfer-for-windows/ba-p/3639278
   SIO_PRIORITY_HINT = integer($98000018); // _WSAIOW(IOC_VENDOR,$18)

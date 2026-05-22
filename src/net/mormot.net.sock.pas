@@ -295,6 +295,7 @@ type
     procedure SetRecvBufferSize(bytes: integer);
     function GetSendBufferSize: integer;
     function GetRecvBufferSize: integer;
+    procedure SetKeepAliveTcp(idle, intvl, cnt: cardinal);
   public
     /// called by NewSocket to finalize a socket attributes
     procedure SetupConnection(layer: TNetLayer; sendtimeout, recvtimeout: integer);
@@ -303,7 +304,10 @@ type
     /// change the receiving timeout of this socket, in milliseconds
     procedure SetReceiveTimeout(ms: integer);
     /// change if this socket should enable TCP level keep-alive packets
-    procedure SetKeepAlive(keepalive: boolean);
+    // - default 0 will disable TCP keep-alive packets for the connection
+    // - POSIX and latest Windows will set idle=value/2 intvl=value/12 cnt=6
+    // - typical values are 120 for a client and 180/240 for a server
+    procedure SetKeepAlive(secs: cardinal);
     /// change the SO_LINGER option, i.e. let the socket remain open for a while
     // - on POSIX, will also set the SO_REUSEADDR/SO_REUSEPORT option
     procedure SetLinger(linger: integer);
@@ -3302,12 +3306,14 @@ begin
     raise ENetSock.CreateLastError('GetOptInt(%d,%d)', [prot, name]);
 end;
 
-procedure TNetSocketWrap.SetKeepAlive(keepalive: boolean);
+procedure TNetSocketWrap.SetKeepAlive(secs: cardinal);
 var
-  v: integer;
+  v: cardinal;
 begin
-  v := ord(keepalive);
+  v := ord(secs >= 6);
   SetOpt(SOL_SOCKET, SO_KEEPALIVE, @v, SizeOf(v));
+  if v <> 0 then // e.g. 120=60/10/6 180=90/15/6 240=120/20/6
+     SetKeepAliveTcp({idle=}secs shr 1, {intvl=}secs div 12, {cnt=}6);
 end;
 
 procedure TNetSocketWrap.SetNoDelay(nodelay: boolean);
@@ -6445,7 +6451,7 @@ begin
   end
   else
   begin
-    // ACCEPT mode -> socket is already created by caller
+    // ACCEPT mode -> socket is already created by caller with inherited params
     fSock := aSock;
     if TimeOut > 0 then
     begin

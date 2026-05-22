@@ -588,6 +588,35 @@ begin
   // don't call SetOpt() which raise ENetSock on old kernel without SO_REUSEPORT
 end;
 
+// FPC does not provide BSD and macOS values - and OpenBSD has no such feature
+{$ifdef OSLINUXANDROID}
+  {$define HASKEEPALIVETCP} // defined in FPC headers
+{$endif OSLINUXANDROID}
+{$ifdef OSFREEBSD}
+const
+  TCP_KEEPIDLE  = 4;
+  TCP_KEEPINTVL = 5;
+  TCP_KEEPCNT   = 6;
+  {$define HASKEEPALIVETCP}
+{$endif OSFREEBSD}
+{$ifdef OSDARWIN}
+const
+  TCP_KEEPIDLE  = $10; // named TCP_KEEPALIVE on Darwin
+  TCP_KEEPINTVL = $101;
+  TCP_KEEPCNT   = $102;
+  {$define HASKEEPALIVETCP}
+{$endif OSDARWIN}
+
+procedure TNetSocketWrap.SetKeepAliveTcp(idle, intvl, cnt: cardinal);
+begin
+  {$ifdef HASKEEPALIVETCP}
+  if setsockopt(TSocket(@self), IPPROTO_TCP, TCP_KEEPIDLE, @idle, SizeOf(idle)) <> NO_ERROR then
+    exit; // don't call SetOpt() which raises ENetSock
+  setsockopt(TSocket(@self), IPPROTO_TCP, TCP_KEEPINTVL, @intvl, SizeOf(intvl));
+  setsockopt(TSocket(@self), IPPROTO_TCP, TCP_KEEPCNT, @cnt, SizeOf(cnt));
+  {$endif HASKEEPALIVETCP}
+end;
+
 procedure TNetSocketWrap.SetSendTimeout(ms: integer);
 var
   tv: TTimeVal; // POSIX uses a timeval (not Windows)
