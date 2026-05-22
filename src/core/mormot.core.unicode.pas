@@ -7493,7 +7493,7 @@ begin
       s := P - 1;
       inc(P, extra);
       inc(extra);
-      MoveByOne(s, D + result, extra);
+      MoveByOne(s, D + result, extra); // properly inlined by FPC
       inc(result, extra);
     end;
   until false;
@@ -8885,11 +8885,10 @@ begin
   for i := first + 1 to len do
   begin
     c := text[i];
-    if c <> exclude then
-    begin
-      p^ := c;
-      inc(p);
-    end;
+    if c = exclude then
+      continue;
+    p^ := c;
+    inc(p);
   end;
   FakeSetLength(result, p - pointer(result));
 end;
@@ -8899,7 +8898,7 @@ var
   i: PtrInt;
   exclude: array[0..(SizeOf(only) shr POINTERSHR) - 1] of PtrInt;
 begin // reverse bits in local stack copy before calling TrimChar()
-  for i := 0 to (SizeOf(only) shr POINTERSHR) - 1 do
+  for i := 0 to high(exclude) do
     exclude[i] := not PPtrIntArray(@only)[i];
   result := TrimChar(text, TSynAnsicharSet(exclude));
 end;
@@ -8997,7 +8996,7 @@ begin
     inc(dst, sharedlen);
     if newlen > 0 then
     begin
-      MoveByOne(pointer(NewPattern), dst, newlen);
+      MoveFast(pointer(NewPattern)^, dst^, newlen);
       inc(dst, newlen);
     end;
     last := pos[i] + oldlen;
@@ -9785,7 +9784,7 @@ begin
   if textlen + len >= high(result) then
     exit;
   if len > 0 then
-    MoveByOne(text, @res[textlen + 1], len);
+    MoveByOne(text, @res[textlen + 1], len); // properly inlined on FPC
   inc(res[0], len + 1);
   res[res[0]] := ord(',');
 end;

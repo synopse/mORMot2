@@ -6470,7 +6470,7 @@ begin
     if srclen <> 0 then
     begin
       if PtrUInt(upd - src) < srclen then
-        MoveByOne(src, upd, srclen)
+        MoveByOne(src, upd, srclen) // overlapping single-byte expansion
       else
         MoveFast(src^, upd^, srclen);
       inc(upd, srclen);
