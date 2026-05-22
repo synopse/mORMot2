@@ -384,7 +384,7 @@ type
     function SendAll(Buf: PByte; len: integer;
       terminated: PTerminated = nil): TNetResult;
     /// check if the socket is not closed nor broken
-    // - i.e. check if it is likely to be accept Send() and Recv() calls
+    // - i.e. check if it is likely to accept Send() and Recv() calls
     // - calls WaitFor(neRead) then Recv() to check e.g. WSACONNRESET on Windows
     // - set nowait=true to avoid WaitFor() and just call Recv(MSG_PEEK)
     function Available(loerr: PNetErrorInt = nil; nowait: boolean = false): boolean;

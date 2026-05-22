@@ -6889,7 +6889,8 @@ end;
 function TLdapClient.Ping: boolean;
 begin
   result := false;
-  if Connected then
+  if Connected and             // getpeername() on client side
+     fSock.Sock.Available then // WaitFor + Recv(peek) to detect TCP keepalive
   try
     if fExtWhoAmI = '' then
       fExtWhoAmI := AsnTyped(AsnTyped(ASN1_OID_WHOAMI, ASN1_CTX0), LDAP_ASN1_EXT_REQUEST);
