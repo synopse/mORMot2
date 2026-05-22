@@ -2082,7 +2082,6 @@ function AppendUInt32ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;
 
 /// fast add text conversion of 0-999 integer value into a given buffer
 // - warning: it won't check that Value is in 0-999 range
-// - up to 4 bytes may be written to the buffer (including #0 terminator)
 function Append999ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -9386,13 +9385,11 @@ end;
 
 function Append999ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;
 var
-  L: PtrInt;
   P: PAnsiChar;
 begin
   P := pointer(SmallUInt32Utf8[Value]);
-  L := PStrLen(P - _STRLEN)^;
-  MoveByOne(P, Buffer, L);
-  result := Buffer + L;
+  PCardinal(Buffer)^ := PCardinal(P)^;
+  result := Buffer + PStrLen(P - _STRLEN)^;
 end;
 
 function AppendBufferToBuffer(Buffer: PUtf8Char; Text: pointer; Len: PtrInt): PUtf8Char;
