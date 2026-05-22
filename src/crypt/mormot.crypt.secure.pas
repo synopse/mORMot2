@@ -6167,6 +6167,8 @@ begin
   dp.DigestHa0;
   dp.DigestResponse(DigestMethod);
   result := dp.ClientResponse(DigestUriName);
+  FillZero(dp.HA0.b); // Ha0 is a sensitive value
+  FillZero(dp.HA1);
 end;
 
 procedure BasicClient(const UserName: RawUtf8; const Password: SpiUtf8;
