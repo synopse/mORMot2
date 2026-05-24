@@ -74,6 +74,8 @@ type
     procedure _AES_GCM;
     /// RC4 encryption function
     procedure _RC4;
+    /// BlowFish CTR mode + key-schedule regression checks
+    procedure _BlowFish;
     /// pure pascal RSA tests
     procedure _RSA;
     /// X509 Certificates
@@ -464,6 +466,56 @@ begin
       rc4.EncryptBuffer(pointer(d), pointer(d), len); // decrypt
       check(s = d);
     end;
+  end;
+end;
+
+procedure TTestCoreCrypto._BlowFish;
+var
+  bf: TBlowFishCtr;
+  data, enc1, enc2: RawByteString;
+  salt, saltCopy: THash128Rec;
+begin
+  // regression for the rodata-salt corruption in BlowFishKeySetup() - see the
+  // commit that introduced this test. BlowFishPrepareKey() now returns the
+  // big-endian salt via an out-parameter, so the caller's Salt^ buffer
+  // (possibly @BLOWFISHCTR_DEFAULTSALT in .rodata on Delphi POSIX, or any
+  // read-only/const buffer) is never mutated.
+  data := 'mORMot2 BlowFish rodata-salt regression test vector payload';
+  // 1. two TBlowFishCtr.Create('secret') with no explicit Salt must produce
+  //    the same key schedule, i.e. encrypt identically: catches the silent
+  //    BLOWFISHCTR_DEFAULTSALT mutation that used to happen on Delphi
+  //    Windows (typed const in .data) and segfault on Delphi POSIX (typed
+  //    const in .rodata)
+  FastNewRawByteString(enc1, length(data));
+  FastNewRawByteString(enc2, length(data));
+  bf := TBlowFishCtr.Create('secret');
+  try
+    bf.EncryptBuffer(pointer(data), pointer(enc1), length(data));
+  finally
+    bf.Free;
+  end;
+  bf := TBlowFishCtr.Create('secret');
+  try
+    bf.EncryptBuffer(pointer(data), pointer(enc2), length(data));
+  finally
+    bf.Free;
+  end;
+  CheckEqual(enc1, enc2, 'BLOWFISHCTR_DEFAULTSALT stable');
+  // 2. a caller-supplied salt buffer must also remain byte-identical across
+  //    Create() (BCrypt path with Cost > 0 takes a different code branch)
+  RandomBytes(@salt, SizeOf(salt));
+  saltCopy := salt;
+  bf := TBlowFishCtr.Create('secret', 0, @salt);
+  try
+    Check(CompareMem(@salt, @saltCopy, SizeOf(salt)), 'caller salt unchanged');
+  finally
+    bf.Free;
+  end;
+  bf := TBlowFishCtr.Create('secret', 4, @salt); // BCrypt expensive setup
+  try
+    Check(CompareMem(@salt, @saltCopy, SizeOf(salt)), 'caller salt unchanged (bcrypt)');
+  finally
+    bf.Free;
   end;
 end;
 

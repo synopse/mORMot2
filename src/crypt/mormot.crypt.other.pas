@@ -345,12 +345,18 @@ procedure BlowFishKeySetup(var State: TBlowFishState;
   Salt: PHash128Rec; const Password: RawUtf8); overload;
 
 /// prepare a password into a binary key usable for BlowFishKeySetup()
-// - Salt and Key will also be converted to big-endian
-// - caller should call FillZero(key) once done with this sensitive buffer
+// - Key is filled with the repeated Password and converted to big-endian
+// - SaltBE returns a big-endian copy of Salt^; the caller's Salt^ buffer is
+//   not modified (previous versions byte-swapped Salt^ in place, which
+//   segfaulted on POSIX targets when the caller passed a pointer into
+//   .rodata - e.g. @BLOWFISHCTR_DEFAULTSALT - and silently corrupted any
+//   writable typed-const salt on Delphi/Windows)
+// - caller should FillZero(Key) once done, and FillZero(SaltBE.b) if the
+//   salt is itself sensitive
 // - return the number of 64-bit blocks of the padded key
 // - by design, Password will be truncated to 72 bytes (BLOWFISH_MAXKEYLEN)
 function BlowFishPrepareKey(const Password: RawUtf8; Salt: PHash128Rec;
-  out Key: RawByteString): PtrInt;
+  out SaltBE: THash128Rec; out Key: RawByteString): PtrInt;
 
 /// raw BlowFish key setup with binary input parameters
 // - salt is expected to be 16 bytes = 128-bit
@@ -1601,7 +1607,7 @@ begin
 end;
 
 function BlowFishPrepareKey(const Password: RawUtf8; Salt: PHash128Rec;
-  out Key: RawByteString): PtrInt;
+  out SaltBE: THash128Rec; out Key: RawByteString): PtrInt;
 var
   p: PUtf8Char;
   plen, n: PtrInt;
@@ -1625,9 +1631,10 @@ begin
   until n = 0;
   if result > BLOWFISH_MAXKEYLEN then
     result := BLOWFISH_MAXKEYLEN; // in-place truncation to 72 bytes
-  // prepare Salt and Key to be in Big-Endian format
+  // produce big-endian Key (mutated locally) and big-endian Salt (out-param)
   bswap32array(pointer(Key), result shr 2);
-  bswap32array(pointer(Salt), BLOWFISH_SALTLEN shr 2);
+  SaltBE := Salt^; // copy then swap, so the caller's Salt^ stays untouched
+  bswap32array(@SaltBE, BLOWFISH_SALTLEN shr 2);
   result := result shr 3; // return the number of 64-bit blocks
 end;
 
@@ -1636,10 +1643,12 @@ procedure BlowFishKeySetup(var State: TBlowFishState;
 var
   key: RawByteString;
   blocks: PtrInt;
+  saltBE: THash128Rec; // big-endian copy produced by BlowFishPrepareKey
 begin
-  blocks := BlowFishPrepareKey(Password, Salt, key);
-  BlowFishKeySetup(State, pointer(Salt), pointer(key), blocks);
+  blocks := BlowFishPrepareKey(Password, Salt, saltBE, key);
+  BlowFishKeySetup(State, @saltBE, pointer(key), blocks);
   FillZero(key); // anti-forensic
+  FillZero(saltBE.b); // caller's salt may be private (e.g. derived from a token)
 end;
 
 procedure BlowFishKeyClear(var State: TBlowFishState);
@@ -1821,6 +1830,7 @@ procedure BCryptExpensiveKeySetup(var State: TBlowFishState;
 var
   i, blocks: PtrUInt;
   key: RawByteString;
+  saltBE: THash128Rec; // big-endian copy produced by BlowFishPrepareKey
 begin
   if (Cost < 4) or
      (Cost > 31) then
@@ -1828,17 +1838,18 @@ begin
   if Salt = nil then
     ESynCrypto.RaiseU('BCrypt: missing Salt');
   // prepare the 64-bit padded binary key from the supplied Password
-  blocks := BlowFishPrepareKey(Password, Salt, key);
+  blocks := BlowFishPrepareKey(Password, Salt, saltBE, key);
   // permute PBox and SBox based on the password and salt - the BlowFish setup
-  BlowFishKeySetup(State, pointer(Salt), pointer(key), blocks);
+  BlowFishKeySetup(State, @saltBE, pointer(key), blocks);
   // this is the "Expensive" part of the "Expensive Key Setup"
   for i := 1 to (1 shl Cost) do
   begin
     BCryptExpensiveRound(State, pointer(key), blocks);
-    BCryptExpensiveRound(State, pointer(Salt), BCRYPT_SALTLEN shr 3);
+    BCryptExpensiveRound(State, @saltBE, BCRYPT_SALTLEN shr 3);
   end;
   // anti-forensic measure
   FillZero(key);
+  FillZero(saltBE.b); // caller's salt may be private (e.g. derived from a token)
 end;
 
 const
