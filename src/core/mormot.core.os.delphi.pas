@@ -190,6 +190,7 @@ function fpclose(fd: cint): cint;
 function fputime(path: PWideChar; times: putimbuf): cint;
 function fpaccess(path: PWideChar; mode: cint): cint;
 function fpunlink(path: PWideChar): cint;
+function fpunlinka(path: PAnsiChar): cint; // when the path is already UTF-8
 function fpchdir(path: PWideChar): cint;
 function fprename(old, new: PWideChar): cint;
 function fpsymlink(old, new: PWideChar): cint;
@@ -455,7 +456,8 @@ end;
 
 function RTLEventCreate: TEvent;
 begin
-  result := TEvent.Create;
+  // auto-reset event, to match FPC PRTLEvent and Windows CreateEvent() semantic
+  result := TEvent.Create(nil, {ManualReset=}false, {InitialState=}false, '');
 end;
 
 procedure RTLEventDestroy(state: TEvent);
@@ -516,7 +518,10 @@ end;
 
 function GetLocalTimeOffset: integer;
 begin
-  result := Round(TTimeZone.Local.UtcOffset.TotalSeconds);
+  // return the offset in MINUTES, positive west of UTC (e.g. +240 for EDT) -
+  // i.e. the FPC RTL convention, as expected by TZSeconds and TimeZoneLocalBias
+  // (TTimeZone.UtcOffset is local-minus-UTC, so negative west of UTC: negate it)
+  result := -Round(TTimeZone.Local.UtcOffset.TotalMinutes);
 end;
 
 function TZSeconds: integer;
@@ -591,6 +596,11 @@ var
 begin
   result := unlink(Unicode_ToUtf8(path, tmp));
   tmp.Done;
+end;
+
+function fpunlinka(path: PAnsiChar): cint;
+begin
+  result := unlink(path); // path is already UTF-8: no conversion needed
 end;
 
 function fpchdir(path: PWideChar): cint;

@@ -3065,9 +3065,14 @@ begin
       until false
     else
     {$endif OSWINDOWS}
-      fCallerEvent.WaitForEver;
+      // loop to ignore any (spurious) wake-up until the process is actually done
+      // - e.g. Delphi POSIX TEvent does not filter pthread_cond spurious wakeups
+      repeat
+        fCallerEvent.WaitForEver;
+      until fPendingProcessFlag <> flagStarted;
     if fPendingProcessFlag <> flagFinished then
-      ESynThread.RaiseUtf8('%.WaitForFinished: flagFinished?', [self]);
+      ESynThread.RaiseUtf8('%.WaitForFinished: flag=% exec=% terminated=%',
+        [self, ord(fPendingProcessFlag), ord(fExecute), ord(Terminated)]);
     if fBackgroundException <> nil then
     begin
       E := fBackgroundException;

@@ -4767,6 +4767,39 @@ var
   DispInvokeArgOrderInverted: boolean; // circumvent FPC 3.2+ breaking change
 {$endif FPC}
 
+// On Delphi POSIX 64-bit Intel (Linux/macOS/Android x86_64), the RTL's
+// DispInvokeCore passes Params as a pointer to a SysV AMD64 ABI va_list
+// (24-byte struct), not as a flat argument buffer like on Win64. We need to use
+// va_arg semantics to read each argument from the right register save slot or
+// stack overflow area. The walker below is SysV-AMD64-specific - the AArch64
+// va_list layout (__va_list with stack/gr_top/vr_top/gr_offs/vr_offs) is
+// entirely different, so a future Delphi POSIX ARM64 port will need its own
+// walker; until then it must fall through to the flat-buffer path, which is
+// the wrong answer but at least matches today's Win64 behavior.
+{$ifdef POSIXDELPHI}
+  {$ifdef CPU64}
+    {$ifdef CPUINTEL}
+      {$define DISPINVOKE_SYSVAMD64}
+    {$else}
+      {$ifdef CPUAARCH64}
+        {$message warn 'TSynInvokeableVariantType.DispInvoke: AArch64 va_list layout not yet implemented; variant late-binding with arguments will read garbage'}
+      {$endif CPUAARCH64}
+    {$endif CPUINTEL}
+  {$endif CPU64}
+{$endif POSIXDELPHI}
+
+{$ifdef DISPINVOKE_SYSVAMD64}
+type
+  // SysV AMD64 va_list layout (see System V AMD64 ABI section 3.5.7)
+  PSynVAListSysVAmd64 = ^TSynVAListSysVAmd64;
+  TSynVAListSysVAmd64 = packed record
+    gp_offset: cardinal;       // 0..48 step 8 (6 GP registers * 8 bytes)
+    fp_offset: cardinal;       // 48..176 step 16 (8 SSE registers * 16 bytes)
+    overflow_arg_area: PByte;  // pointer to stack-passed args
+    reg_save_area: PByte;      // pointer to 6 GP + 8 SSE register save area
+  end;
+{$endif DISPINVOKE_SYSVAMD64}
+
 {$ifdef FPC_VARIANTSETVAR}
 procedure TSynInvokeableVariantType.DispInvoke(
   Dest: PVarData; var Source: TVarData; CallDesc: PCallDesc; Params: pointer);
@@ -4791,6 +4824,39 @@ var
   {$ifdef FPC}
   inverted: boolean;
   {$endif FPC}
+  {$ifdef DISPINVOKE_SYSVAMD64}
+  va: PSynVAListSysVAmd64;
+
+  function VAArgSysVAmd64(isFloat: boolean): PAnsiChar;
+  begin
+    if isFloat then
+    begin
+      if va^.fp_offset < 176 then
+      begin
+        result := PAnsiChar(va^.reg_save_area) + va^.fp_offset;
+        inc(va^.fp_offset, 16);
+      end
+      else
+      begin
+        result := PAnsiChar(va^.overflow_arg_area);
+        inc(va^.overflow_arg_area, 8);
+      end;
+    end
+    else
+    begin
+      if va^.gp_offset < 48 then
+      begin
+        result := PAnsiChar(va^.reg_save_area) + va^.gp_offset;
+        inc(va^.gp_offset, 8);
+      end
+      else
+      begin
+        result := PAnsiChar(va^.overflow_arg_area);
+        inc(va^.overflow_arg_area, 8);
+      end;
+    end;
+  end;
+  {$endif DISPINVOKE_SYSVAMD64}
 
   procedure RaiseInvalid;
   begin
@@ -4824,7 +4890,11 @@ begin
     else
     {$endif FPC}
       v := pointer(args);
+    {$ifdef DISPINVOKE_SYSVAMD64}
+    va := pointer(Params);
+    {$else}
     a := Params;
+    {$endif DISPINVOKE_SYSVAMD64}
     for i := 0 to n - 1 do
     begin
       asize := SizeOf(pointer);
@@ -4837,6 +4907,17 @@ begin
         varStrArg:
           t := varString;
       end;
+      {$ifdef DISPINVOKE_SYSVAMD64}
+      // Linux/macOS/Android Delphi 64-bit Intel: Params is a SysV AMD64 va_list
+      // pointer; use va_arg semantics. ARGREF (var/out) params are passed as
+      // pointers in GP registers; float types (double/date) go to SSE;
+      // everything else to GP.
+      if (CallDesc^.ArgTypes[i] and ARGREF_MASK <> 0) or
+         not (t in [varSingle, varDouble, varDate]) then
+        a := VAArgSysVAmd64({isFloat=}false)
+      else
+        a := VAArgSysVAmd64({isFloat=}true);
+      {$endif DISPINVOKE_SYSVAMD64}
       if CallDesc^.ArgTypes[i] and ARGREF_MASK <> 0 then
       begin
         TSynVarData(v^).VType := t or varByRef;
@@ -4883,7 +4964,9 @@ begin
           v^.VAny := PPointer(a)^; // e.g. varString or varOleStr
         end;
       end;
-      inc(a, asize);
+      {$ifndef DISPINVOKE_SYSVAMD64}
+      inc(a, asize); // flat-buffer advancement (VAArgSysVAmd64 already advanced va)
+      {$endif DISPINVOKE_SYSVAMD64}
       {$ifdef FPC}
       if inverted then
         dec(v)
