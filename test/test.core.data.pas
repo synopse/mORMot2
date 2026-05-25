@@ -9315,13 +9315,9 @@ var
 begin
   if not IsDebuggerPresent then
   begin
-    {$ifndef NOEXCEPTIONINTERCEPT}
     TSynLog.Family.ExceptionIgnoreCurrentThread := true;
-    {$endif NOEXCEPTIONINTERCEPT}
     Check(not ZipTest(Executable.ProgramFileName), 'exe is no zip');
-    {$ifndef NOEXCEPTIONINTERCEPT}
     TSynLog.Family.ExceptionIgnoreCurrentThread := false;
-    {$endif NOEXCEPTIONINTERCEPT}
   end;
   FN := WorkDir + 'void.zip';
   FillCharFast(minim, SizeOf(minim), 0);

@@ -285,9 +285,7 @@ begin
       if not IsDebuggerPresent then // do not pollute the IDE
       begin
         hadError := false;
-        {$ifndef NOEXCEPTIONINTERCEPT}
         TSynLog.Family.ExceptionIgnoreCurrentThread := true;
-        {$endif NOEXCEPTIONINTERCEPT}
         try
           res := engine.Evaluate('syntax error !!!');
         except
@@ -297,9 +295,7 @@ begin
             Check(E.Message <> '', 'should have error message');
           end;
         end;
-        {$ifndef NOEXCEPTIONINTERCEPT}
         TSynLog.Family.ExceptionIgnoreCurrentThread := false;
-        {$endif NOEXCEPTIONINTERCEPT}
         Check(hadError, 'should raise exception');
       end;
       // GlobalObject access - check it's initialized
