@@ -75,7 +75,7 @@ type
     /// RC4 encryption function
     procedure _RC4;
     /// BlowFish CTR mode + key-schedule regression checks
-    procedure _BlowFish;
+    procedure _BlowFish; move
     /// pure pascal RSA tests
     procedure _RSA;
     /// X509 Certificates

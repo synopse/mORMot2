@@ -303,35 +303,41 @@ function IsAtty(fd: cint): cint;
 { ****************** Network POSIX Operating Systems API for Delphi }
 
 const
-  IPPROTO_TCP  = IPPROTO_TCP;
-  IPPROTO_UDP  = IPPROTO_UDP;
-  TCP_NODELAY  = 1;
-  TCP_CORK     = 3; // Linux specific
-  TCP_NOPUSH   = 4; // BSD specific
-  MSG_PEEK     = Posix.SysSocket.MSG_PEEK;
-  SHUT_RD      = Posix.SysSocket.SHUT_RD;
-  SHUT_WR      = Posix.SysSocket.SHUT_WR;
-  SHUT_RDWR    = Posix.SysSocket.SHUT_RDWR;
+  IPPROTO_TCP   = IPPROTO_TCP;
+  IPPROTO_UDP   = IPPROTO_UDP;
+  TCP_NODELAY   = 1;
+  TCP_CORK      = 3; // Linux specific
+  TCP_NOPUSH    = 4; // BSD specific
+  {$ifdef OSLINUX}
+  // Delphi POSIX/Android headers do not expose those Linux <netinet/tcp.h> values
+  TCP_KEEPIDLE  = 4;
+  TCP_KEEPINTVL = 5;
+  TCP_KEEPCNT   = 6;
+  {$endif OSLINUX}
+  MSG_PEEK      = Posix.SysSocket.MSG_PEEK;
+  SHUT_RD       = Posix.SysSocket.SHUT_RD;
+  SHUT_WR       = Posix.SysSocket.SHUT_WR;
+  SHUT_RDWR     = Posix.SysSocket.SHUT_RDWR;
 
-  SOCK_RAW     = Posix.SysSocket.SOCK_RAW;
-  SOCK_STREAM  = Posix.SysSocket.SOCK_STREAM;
-  SOCK_DGRAM   = Posix.SysSocket.SOCK_DGRAM;
-  AF_INET      = Posix.SysSocket.AF_INET;
-  AF_INET6     = Posix.SysSocket.AF_INET6;
-  AF_UNIX      = Posix.SysSocket.AF_UNIX;
-  AF_PACKET    = 17; // Linux specific
-  SOMAXCONN    = Posix.SysSocket.SOMAXCONN;
-  SOL_SOCKET   = Posix.SysSocket.SOL_SOCKET;
-  SO_SNDTIMEO  = Posix.SysSocket.SO_SNDTIMEO;
-  SO_RCVTIMEO  = Posix.SysSocket.SO_RCVTIMEO;
-  SO_REUSEADDR = Posix.SysSocket.SO_REUSEADDR;
-  SO_LINGER    = Posix.SysSocket.SO_LINGER;
-  SO_KEEPALIVE = Posix.SysSocket.SO_KEEPALIVE;
-  SO_SNDBUF    = Posix.SysSocket.SO_SNDBUF;
-  SO_RCVBUF    = Posix.SysSocket.SO_RCVBUF;
-  SO_BROADCAST = Posix.SysSocket.SO_BROADCAST;
+  SOCK_RAW      = Posix.SysSocket.SOCK_RAW;
+  SOCK_STREAM   = Posix.SysSocket.SOCK_STREAM;
+  SOCK_DGRAM    = Posix.SysSocket.SOCK_DGRAM;
+  AF_INET       = Posix.SysSocket.AF_INET;
+  AF_INET6      = Posix.SysSocket.AF_INET6;
+  AF_UNIX       = Posix.SysSocket.AF_UNIX;
+  AF_PACKET     = 17; // Linux specific
+  SOMAXCONN     = Posix.SysSocket.SOMAXCONN;
+  SOL_SOCKET    = Posix.SysSocket.SOL_SOCKET;
+  SO_SNDTIMEO   = Posix.SysSocket.SO_SNDTIMEO;
+  SO_RCVTIMEO   = Posix.SysSocket.SO_RCVTIMEO;
+  SO_REUSEADDR  = Posix.SysSocket.SO_REUSEADDR;
+  SO_LINGER     = Posix.SysSocket.SO_LINGER;
+  SO_KEEPALIVE  = Posix.SysSocket.SO_KEEPALIVE;
+  SO_SNDBUF     = Posix.SysSocket.SO_SNDBUF;
+  SO_RCVBUF     = Posix.SysSocket.SO_RCVBUF;
+  SO_BROADCAST  = Posix.SysSocket.SO_BROADCAST;
   {$ifdef OSLINUXANDROID}
-  SO_PRIORITY  = Posix.SysSocket.SO_PRIORITY;
+  SO_PRIORITY   = Posix.SysSocket.SO_PRIORITY;
   {$endif OSLINUXANDROID}
 
 

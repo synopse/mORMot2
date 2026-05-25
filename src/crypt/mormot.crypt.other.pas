@@ -347,12 +347,11 @@ procedure BlowFishKeySetup(var State: TBlowFishState;
 /// prepare a password into a binary key usable for BlowFishKeySetup()
 // - Key is filled with the repeated Password and converted to big-endian
 // - SaltBE returns a big-endian copy of Salt^; the caller's Salt^ buffer is
-//   not modified (previous versions byte-swapped Salt^ in place, which
-//   segfaulted on POSIX targets when the caller passed a pointer into
-//   .rodata - e.g. @BLOWFISHCTR_DEFAULTSALT - and silently corrupted any
-//   writable typed-const salt on Delphi/Windows)
-// - caller should FillZero(Key) once done, and FillZero(SaltBE.b) if the
-//   salt is itself sensitive
+// not modified (previous versions byte-swapped Salt^ in place, which
+// segfaulted on POSIX targets when the caller passed a pointer into
+// rodata - e.g. @BLOWFISHCTR_DEFAULTSALT - and silently corrupted any
+// writable typed-const salt on Delphi/Windows)
+// - caller should FillZero(Key) once done
 // - return the number of 64-bit blocks of the padded key
 // - by design, Password will be truncated to 72 bytes (BLOWFISH_MAXKEYLEN)
 function BlowFishPrepareKey(const Password: RawUtf8; Salt: PHash128Rec;
@@ -1648,7 +1647,7 @@ begin
   blocks := BlowFishPrepareKey(Password, Salt, saltBE, key);
   BlowFishKeySetup(State, @saltBE, pointer(key), blocks);
   FillZero(key); // anti-forensic
-  FillZero(saltBE.b); // caller's salt may be private (e.g. derived from a token)
+  FillZero(saltBE.b); // paranoid
 end;
 
 procedure BlowFishKeyClear(var State: TBlowFishState);
@@ -1849,7 +1848,7 @@ begin
   end;
   // anti-forensic measure
   FillZero(key);
-  FillZero(saltBE.b); // caller's salt may be private (e.g. derived from a token)
+  FillZero(saltBE.b); // paranoid
 end;
 
 const

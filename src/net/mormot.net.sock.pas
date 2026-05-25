@@ -6250,7 +6250,7 @@ const
     'Is a server available on this address:port?',
     'Port may be invalid or already bound by another process!');
 
-{$ifdef OSPOSIX}
+{$ifdef OSPOSIX}fixme
 procedure UnixSocketFileDelete(const aSocketFile: RawUtf8);
 begin
   // delete a (stale) Unix domain socket file, so that a server bind() won't

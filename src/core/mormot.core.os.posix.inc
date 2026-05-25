@@ -2856,7 +2856,7 @@ var
 
     procedure MakeFileName(const path: TFileName);
     var
-      plen: PtrInt;
+      plen: PtrInt; reviewme
       {$ifdef UNICODE}
       tmp: TSynTempBuffer; // stack-backed UTF-8 buffer (heap only if > 4KB),
                            // avoids one alloc/free per directory entry on the
