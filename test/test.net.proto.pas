@@ -4150,45 +4150,6 @@ begin
   CheckEqual(s, 'na3q2n4gw6cly5fvf5da4frmek667zk2');
 end;
 
-{$ifdef OSPOSIX}
-procedure TNetworkProtocols.UnixDomainSocket;
-var
-  fn: TFileName;
-  un: RawUtf8;
-  sock: TCrtSocket;
-begin
-  // regression test for Unix domain socket server bind and stale file cleanup
-  // - on Delphi POSIX, the FpUnlink() called to remove a stale .socket file
-  // was a UTF-16 shim fed an UTF-8 RawUtf8, so it silently did nothing: stale
-  // socket files were left behind, and any server re-bind failed with
-  // EADDRINUSE - see UnixSocketFileDelete() in mormot.net.sock
-  fn := WorkDir + 'test-unixdomain.socket';
-  DeleteFile(fn);
-  Check(not FileExists(fn), 'no leftover .socket file');
-  un := FormatUtf8('unix:%', [fn]);
-  // 1. a plain server bind should create the .socket file, and close remove it
-  sock := TCrtSocket.Bind(un);
-  try
-    Check(sock.SockIsDefined, 'unix bind');
-    Check(sock.SocketLayer = nlUnix, 'nlUnix');
-    Check(FileExists(fn), 'socket file created');
-  finally
-    sock.Free; // closing the socket should delete its .socket file
-  end;
-  Check(not FileExists(fn), 'socket file removed on close');
-  // 2. a stale .socket file (e.g. after a killed process) must not block bind
-  FileFromString('stale', fn);
-  Check(FileExists(fn), 'stale file created');
-  sock := TCrtSocket.Bind(un); // raises ENetSock if the stale file is not purged
-  try
-    Check(sock.SockIsDefined, 'unix bind over stale file');
-  finally
-    sock.Free;
-  end;
-  Check(not FileExists(fn), 'stale file cleaned on close');
-end;
-{$endif OSPOSIX}
-
 procedure TNetworkProtocols._THttpProxyCache;
 
   procedure TryOne(const force, ignore: RawUtf8;
@@ -4247,6 +4208,43 @@ begin
 end;
 
 {$ifdef OSPOSIX}
+procedure TNetworkProtocols.UnixDomainSocket;
+var
+  fn: TFileName;
+  un: RawUtf8;
+  sock: TCrtSocket;
+begin
+  // regression test for Unix domain socket server bind and stale file cleanup
+  // - on Delphi POSIX, the FpUnlink() called to remove a stale .socket file
+  // was a UTF-16 shim fed an UTF-8 RawUtf8, so it silently did nothing: stale
+  // socket files were left behind, and any server re-bind failed with
+  // EADDRINUSE - see UnixSocketFileDelete() in mormot.net.sock
+  fn := WorkDir + 'test-unixdomain.socket';
+  DeleteFile(fn);
+  Check(not FileExists(fn), 'no leftover .socket file');
+  FormatUtf8('unix:%', [fn], un);
+  // 1. a plain server bind should create the .socket file, and close remove it
+  sock := TCrtSocket.Bind(un);
+  try
+    Check(sock.SockIsDefined, 'unix bind');
+    Check(sock.SocketLayer = nlUnix, 'nlUnix');
+    Check(FileExists(fn), 'socket file created');
+  finally
+    sock.Free; // closing the socket should delete its .socket file
+  end;
+  Check(not FileExists(fn), 'socket file removed on close');
+  // 2. a stale .socket file (e.g. after a killed process) must not block bind
+  FileFromString('stale', fn);
+  Check(FileExists(fn), 'stale file created');
+  sock := TCrtSocket.Bind(un); // raises ENetSock if the stale file is not purged
+  try
+    Check(sock.SockIsDefined, 'unix bind over stale file');
+  finally
+    sock.Free;
+  end;
+  Check(not FileExists(fn), 'stale file cleaned on close');
+end;
+
 procedure TNetworkProtocols.TFTPServer;
 var
   srv: TTftpServerThread;

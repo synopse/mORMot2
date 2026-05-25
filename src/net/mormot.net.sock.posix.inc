@@ -436,6 +436,12 @@ function poll(fds: PPollFD; nfds, timeout: integer): integer; cdecl;
   external clib name 'poll' + LIBC_SUFFIX;
 {$endif OSDARWIN}
 
+function fpunlinka(path: PAnsiChar): integer; inline;
+begin
+  if path <> nil then
+    result := fpunlink(path);
+end;
+
 function RawSocketErrNo: integer;
 begin
   result := cerrno; // thread-locale variable from libc

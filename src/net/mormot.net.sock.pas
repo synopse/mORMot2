@@ -6250,21 +6250,6 @@ const
     'Is a server available on this address:port?',
     'Port may be invalid or already bound by another process!');
 
-{$ifdef OSPOSIX}fixme
-procedure UnixSocketFileDelete(const aSocketFile: RawUtf8);
-begin
-  // delete a (stale) Unix domain socket file, so that a server bind() won't
-  // fail with EADDRINUSE - e.g. after a previous process crashed without
-  // a graceful shutdown
-  if aSocketFile <> '' then
-    {$ifdef FPC}
-    FpUnlink(pointer(aSocketFile)); // BaseUnix.FpUnlink() expects UTF-8
-    {$else}
-    fpunlinka(pointer(aSocketFile)); // our Delphi fpunlink() shim expects UTF-16
-    {$endif FPC}
-end;
-{$endif OSPOSIX}
-
 procedure TCrtSocket.BindPort(const aAddress: RawUtf8; aLayer: TNetLayer;
   aReusePort: boolean);
 var
@@ -6296,7 +6281,7 @@ begin
     if s = 'unix' then
     begin
       // aAddress='unix:/path/to/myapp.socket'
-      UnixSocketFileDelete(p); // a previous bind may have left the .socket file
+      fpunlinka(pointer(p)); // a previous bind may have left the .socket file
       OpenBind(p, '', {dobind=}true, {tls=}false, nlUnix, {%H-}aSock);
       exit;
     end;
@@ -6736,7 +6721,7 @@ begin
   // (see e.g. THttpClientSocket.Request)
   {$ifdef OSPOSIX}
   if fSocketLayer = nlUnix then
-    UnixSocketFileDelete(fServer); // 'unix:/path/to/myapp.socket' -> delete file
+    fpunlinka(pointer(fServer)); // 'unix:/path/to/myapp.socket' -> delete file
   {$endif OSPOSIX}
 end;
 
