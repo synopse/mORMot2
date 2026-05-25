@@ -436,11 +436,13 @@ function poll(fds: PPollFD; nfds, timeout: integer): integer; cdecl;
   external clib name 'poll' + LIBC_SUFFIX;
 {$endif OSDARWIN}
 
-function fpunlinka(path: PAnsiChar): integer; inline;
+{$ifdef FPC}
+function fpunlinka(path: PAnsiChar): integer; inline; // internal call
 begin
   if path <> nil then
     result := fpunlink(path);
 end;
+{$endif FPC}
 
 function RawSocketErrNo: integer;
 begin
@@ -596,7 +598,7 @@ end;
 
 // FPC does not provide BSD and macOS values - and OpenBSD has no such feature
 {$ifdef OSLINUXANDROID}
-  {$define HASKEEPALIVETCP} // defined in FPC headers
+  {$define HASKEEPALIVETCP} // defined in FPC headers or mormot.core.os.delphi
 {$endif OSLINUXANDROID}
 {$ifdef OSFREEBSD}
 const

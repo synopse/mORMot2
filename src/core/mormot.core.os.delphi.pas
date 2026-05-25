@@ -308,12 +308,12 @@ const
   TCP_NODELAY   = 1;
   TCP_CORK      = 3; // Linux specific
   TCP_NOPUSH    = 4; // BSD specific
-  {$ifdef OSLINUX}
+  {$ifdef OSLINUXANDROID}
   // Delphi POSIX/Android headers do not expose those Linux <netinet/tcp.h> values
   TCP_KEEPIDLE  = 4;
   TCP_KEEPINTVL = 5;
   TCP_KEEPCNT   = 6;
-  {$endif OSLINUX}
+  {$endif OSLINUXANDROID}
   MSG_PEEK      = Posix.SysSocket.MSG_PEEK;
   SHUT_RD       = Posix.SysSocket.SHUT_RD;
   SHUT_WR       = Posix.SysSocket.SHUT_WR;
@@ -539,6 +539,7 @@ function fpuname(var uts: UtsName): cint;
 begin
   result := uname(uts);
 end;
+
 function fpstat(path: PWideChar; var buf: _stat): cint;
 var
   tmp: TSynTempBuffer;
