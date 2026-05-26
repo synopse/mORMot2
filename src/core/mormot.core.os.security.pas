@@ -1930,6 +1930,7 @@ type
   protected
     fEntry: TKerberosKeyEntries;
     fFileName: TFileName;
+    fRealm: RawUtf8;
   public
     /// remove all stored entries
     procedure Clear;
@@ -1969,6 +1970,9 @@ type
     /// the KeyTab file name, as supplied to LoadFromFile()
     property FileName: TFileName
       read fFileName;
+    /// the KeyTab realm, as decoded by LoadFromBuffer/LoadFromFile
+    property Realm: RawUtf8
+      read fRealm;
   end;
 
 /// internal comparison of two KeyTab entries as in a TKerberosKeyTab storage
@@ -6184,66 +6188,28 @@ end;
 
 function TKerberosKeyTab.LoadFromBuffer(P, PEnd: PAnsiChar): boolean;
 var
-  bigendian: boolean;
-
-  function Read8(var v: integer): boolean;
-  begin
-    v := PByte(P)^;
-    inc(P);
-    result := PtrUInt(P) <= PtrUInt(PEnd);
-  end;
-
-  function Read16(var v: integer): boolean;
-  begin
-    v := PWord(P)^;
-    if bigendian then
-      v := bswap16(v);
-    inc(P, 2);
-    result := PtrUInt(P) <= PtrUInt(PEnd);
-  end;
-
-  function Read32(var v: integer): boolean;
-  begin
-    v := PCardinal(P)^; // may read up to 4 bytes after end - fine with strings
-    if bigendian then
-      v := bswap32(v);
-    inc(P, 4);
-    result := PtrUInt(P) <= PtrUInt(PEnd);
-  end;
-
-  function ReadOctStr(var v): boolean;
-  var
-    len: integer;
-  begin
-    result := false;
-    if not Read16(len) or
-       (PtrUInt(P + len) > PtrUInt(PEnd)) then
-      exit;
-    if self <> nil then // no transient memory alloc from BufferIsKeyTab()
-      FastSetString(RawUtf8(v), P, len);
-    inc(P, len);
-    result := true;
-  end;
-
-var
+  r: TBinaryReader;
   n, v, siz, ncomp: integer;
   pendbak: PAnsiChar;
-  realm, u: RawUtf8;
+  rlm: RawUtf8;
   e: TKerberosKeyEntry;
 begin
   // note: may be called with self = nil to implement BufferIsKeyTab()
   Clear;
   n := 0;
   result := false;
+  r.P := P;
+  r.PEnd := PEnd;
   if (P = nil) or
-     not Read8(v) or
+     not r.Read8(v) or
      (v <> 5) or
-     not Read8(v) or
+     not r.Read8(v) or
      not (v in [1, 2]) then
     exit;
-  bigendian := v = 2;
+  r.bigendian := v = 2;
+  r.decodestr := self <> nil; // not from BufferIsKeyTab()
   repeat
-    if not Read32(siz) then // entry size
+    if not r.Read32(siz) then // entry size
       exit;
     if siz = 0 then
       break; // may happen to notify the end of file (but not from kutil)
@@ -6254,45 +6220,34 @@ begin
         exit;
       continue;
     end;
-    pendbak := PEnd;
-    PEnd := P + siz; // paranoid: avoid overflow above the entry size
-    if (PtrUInt(PEnd) > PtrUInt(pendbak)) or
-       not Read16(ncomp) then
+    pendbak := r.PEnd;
+    r.PEnd := r.P + siz; // paranoid: avoid overflow above the entry size
+    if (PtrUInt(r.PEnd) > PtrUInt(pendbak)) or
+       not r.Read16(ncomp) then
       exit;
-    if not bigendian then
+    if not r.bigendian then
       inc(ncomp); // minus 1 if version 0x501
-    if (ncomp = 0) or
-       not ReadOctStr(realm) or
-       not ReadOctStr(e.Principal) then
+    if not r.ReadPrincipal(e.Principal, rlm, ncomp, {len32=}false) then
       exit;
-    repeat
-      dec(ncomp);
-      if ncomp = 0 then
-        break;
-      if not ReadOctStr(u) then
-        exit;
-      if self <> nil then
-        e.Principal := Join([e.Principal, '/', u]);
-    until false;
-    if self <> nil then
-      e.Principal := Join([e.Principal, '@', realm]);
+    if r.decodestr then
+      fRealm := rlm;
     e.NameType := 0;
-    if bigendian then
-      if not Read32(e.NameType) then // not present if version 0x501
+    if r.bigendian then
+      if not r.Read32(e.NameType) then // not present if version 0x501
         exit;
-    if not Read32(v) or // e.Timestamp is 64-bit -> use temp 32-bit v
-       not Read8(e.KeyVersion) or
-       not Read16(e.EncType) or
-       not ReadOctStr(e.Key) then
+    if not r.Read32(v) or // e.Timestamp is 64-bit -> use temp 32-bit v
+       not r.Read8(e.KeyVersion) or
+       not r.Read16(e.EncType) or
+       not r.ReadOctStr(@e.Key) then
       exit;
     e.Timestamp := PCardinal(@v)^; // cardinal is Year-2038-ready (up to 2106)
-    if (PtrUInt(P + 4) <= PtrUInt(PEnd)) and
+    if (PtrUInt(P + 4) <= PtrUInt(r.PEnd)) and
        (PCardinal(P)^ <> 0) then
-      if not Read32(e.KeyVersion) then // optional 32-bit key version
+      if not r.Read32(e.KeyVersion) then // optional 32-bit key version
         exit;
-    P := PEnd;
-    PEnd := pendbak;
-    if (self <> nil) and        // not from BufferIsKeyTab()
+    r.P := r.PEnd;
+    r.PEnd := pendbak;
+    if r.decodestr and          // not from BufferIsKeyTab()
        (e.Principal <> '') then // we expect non void principals
     begin
       if n = length(fEntry) then
@@ -6301,8 +6256,8 @@ begin
       inc(n);
       Finalize(e);
     end;
-  until P = PEnd;
-  if self <> nil then // not from BufferIsKeyTab()
+  until r.P = r.PEnd;
+  if r.decodestr then // not from BufferIsKeyTab()
     DynArrayFakeLength(fEntry, n);
   result := true;
 end;
