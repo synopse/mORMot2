@@ -1524,7 +1524,7 @@ type
 
 function FVSort(const A, B): integer;
 begin
-  // string/PChar compariosn of first "Detailed" field
+  // string/PChar comparison of first "Detailed" field
   result := SysUtils.StrComp(
     PChar(pointer(TFV(A).Detailed)), PChar(pointer(TFV(B).Detailed)));
 end;
@@ -6456,6 +6456,14 @@ begin
            (str[1] <> str[3]) then
           CheckEqual(PosExString(str[3], str), 3);
       end;
+      fn := str;
+      Check(pointer(fn) = pointer(str));
+      check(EqualFileNameNotNull(fn, str));
+      check(SortDynArrayFileName(fn, str) = 0);
+      UniqueString(string(fn));
+      Check(pointer(fn) <> pointer(str));
+      check(EqualFileNameNotNull(fn, str));
+      check(SortDynArrayFileName(fn, str) = 0);
       for j := 1 to lenup100 do
       begin
         CheckEqual(PosExString(#13, str, j), 0);
@@ -6466,6 +6474,15 @@ begin
         k := PosExString(str[j], str);
         check((k > 0) and
              (str[k] = str[j]));
+        inc(fn[j]);
+        check(not EqualFileNameNotNull(fn, str));
+        check(SortDynArrayFileName(fn, str) <> 0);
+        {$ifdef UNICODE}
+        Check(StrCompW(pointer(fn), pointer(str)) <> 0);
+        {$else}
+        Check(StrComp(pointer(fn), pointer(str)) <> 0);
+        {$endif UNICODE}
+        dec(fn[j]);
       end;
     end
     else
