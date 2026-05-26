@@ -1935,7 +1935,7 @@ type
     /// remove all stored entries
     procedure Clear;
     /// parse the raw binary buffer of a KeyTab file content
-    function LoadFromBuffer(P, PEnd: PAnsiChar): boolean;
+    function LoadFromBuffer(PBeg, PEnding: PAnsiChar): boolean;
     /// parse the string binary buffer of a KeyTab file content
     function LoadFromBinary(const Binary: RawByteString): boolean;
     /// parse a KeyTab file from its name
@@ -6049,6 +6049,7 @@ type
   {$endif USERECORDWITHMETHODS}
     P, PEnd: PAnsiChar;
     bigendian, decodestr: boolean;
+    function Has(len: PtrInt): boolean;  {$ifdef HASINLINE} inline; {$endif}
     function Skip(len: PtrInt): boolean; {$ifdef HASINLINE} inline; {$endif}
     function Read8(var v: integer): boolean;
     function Read16(var v: integer): boolean;
@@ -6057,6 +6058,11 @@ type
     function ReadPrincipal(var dest, realm: RawUtf8; count: integer;
       len32: boolean): boolean;
   end;
+
+function TKerberosReader.Has(len: PtrInt): boolean;
+begin
+  result := PtrUInt(P + len) <= PtrUInt(PEnd);
+end;
 
 function TKerberosReader.Skip(len: PtrInt): boolean;
 begin
@@ -6080,10 +6086,13 @@ end;
 
 function TKerberosReader.Read32(var v: integer): boolean;
 begin
+  result := Has(4);
+  if not result then
+    exit;
   v := PCardinal(P)^; // may read up to 4 bytes after end - fine with strings
+  inc(P, 4);
   if bigendian then
     v := bswap32(v);
-  result := Skip(4);
 end;
 
 function TKerberosReader.ReadOctStr(dest: PRawUtf8; len32: boolean): boolean;
@@ -6095,7 +6104,7 @@ begin
   else
     result := Read16(len);
   if not result or
-     (PtrUInt(P + len) > PtrUInt(PEnd)) then
+     not Has(len) then
     exit;
   if decodestr then // no transient memory alloc from BufferIsKeyTab()
     FastSetString(dest^, P, len);
@@ -6235,21 +6244,19 @@ end;
 // see https://vfssoft.com/en/blog/mit_kerberos_keytab_file_format and
 // https://web.mit.edu/kerberos/krb5-latest/doc/formats/keytab_file_format.html
 
-function TKerberosKeyTab.LoadFromBuffer(P, PEnd: PAnsiChar): boolean;
+function TKerberosKeyTab.LoadFromBuffer(PBeg, PEnding: PAnsiChar): boolean;
 var
   r: TKerberosReader;
   n, v, siz, ncomp: integer;
-  pendbak: PAnsiChar;
   rlm: RawUtf8;
   e: TKerberosKeyEntry;
 begin
   // note: may be called with self = nil to implement BufferIsKeyTab()
   Clear;
-  n := 0;
   result := false;
-  r.P := P;
-  r.PEnd := PEnd;
-  if (P = nil) or
+  r.P := PBeg;
+  r.PEnd := PEnding;
+  if (PBeg = nil) or
      not r.Read8(v) or
      (v <> 5) or
      not r.Read8(v) or
@@ -6257,21 +6264,19 @@ begin
     exit;
   r.bigendian := v = 2;
   r.decodestr := self <> nil; // not from BufferIsKeyTab()
+  n := 0;
   repeat
     if not r.Read32(siz) then // entry size
       exit;
     if siz = 0 then
       break; // may happen to notify the end of file (but not from kutil)
     if siz < 0 then // this entry has been deleted
-    begin
-      inc(P, -siz);
-      if PtrUInt(P) > PtrUInt(PEnd) then
+      if r.Skip(-siz) then
+        continue
+      else
         exit;
-      continue;
-    end;
-    pendbak := r.PEnd;
     r.PEnd := r.P + siz; // paranoid: avoid overflow above the entry size
-    if (PtrUInt(r.PEnd) > PtrUInt(pendbak)) or
+    if (PtrUInt(r.PEnd) > PtrUInt(PEnding)) or
        not r.Read16(ncomp) then
       exit;
     if not r.bigendian then
@@ -6290,12 +6295,10 @@ begin
        not r.ReadOctStr(@e.Key) then
       exit;
     e.Timestamp := PCardinal(@v)^; // cardinal is Year-2038-ready (up to 2106)
-    if (PtrUInt(P + 4) <= PtrUInt(r.PEnd)) and
-       (PCardinal(P)^ <> 0) then
+    if r.Has(4) and
+       (PCardinal(r.P)^ <> 0) then
       if not r.Read32(e.KeyVersion) then // optional 32-bit key version
         exit;
-    r.P := r.PEnd;
-    r.PEnd := pendbak;
     if r.decodestr and          // not from BufferIsKeyTab()
        (e.Principal <> '') then // we expect non void principals
     begin
@@ -6305,6 +6308,8 @@ begin
       inc(n);
       Finalize(e);
     end;
+    r.P := r.PEnd;              // prepare the next chunk
+    r.PEnd := PEnding;
   until r.P = r.PEnd;
   if r.decodestr then // not from BufferIsKeyTab()
     DynArrayFakeLength(fEntry, n);
