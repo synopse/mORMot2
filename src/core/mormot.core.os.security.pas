@@ -6028,6 +6028,94 @@ end;
 
 { ****************** Kerberos KeyTab File Support }
 
+type
+  // cut-down version of TFastReader for TKerberosKeyTab and ccache parsing
+  {$ifdef USERECORDWITHMETHODS}
+  TBinaryReader = record
+  {$else}
+  TBinaryReader = object
+  {$endif USERECORDWITHMETHODS}
+    P, PEnd: PAnsiChar;
+    bigendian, decodestr: boolean;
+    function Skip(len: PtrInt): boolean; {$ifdef HASINLINE} inline; {$endif}
+    function Read8(var v: integer): boolean;
+    function Read16(var v: integer): boolean;
+    function Read32(var v: integer): boolean;
+    function ReadOctStr(dest: PRawUtf8; len32: boolean = false): boolean;
+    function ReadPrincipal(var dest, realm: RawUtf8; count: integer;
+      len32: boolean): boolean;
+  end;
+
+function TBinaryReader.Skip(len: PtrInt): boolean;
+begin
+  inc(P, len);
+  result := PtrUInt(P) <= PtrUInt(PEnd);
+end;
+
+function TBinaryReader.Read8(var v: integer): boolean;
+begin
+  v := PByte(P)^;
+  result := Skip(1);
+end;
+
+function TBinaryReader.Read16(var v: integer): boolean;
+begin
+  v := PWord(P)^;
+  if bigendian then
+    v := bswap16(v);
+  result := Skip(2);
+end;
+
+function TBinaryReader.Read32(var v: integer): boolean;
+begin
+  v := PCardinal(P)^; // may read up to 4 bytes after end - fine with strings
+  if bigendian then
+    v := bswap32(v);
+  result := Skip(4);
+end;
+
+function TBinaryReader.ReadOctStr(dest: PRawUtf8; len32: boolean): boolean;
+var
+  len: integer; // not PtrInt
+begin
+  if len32 then
+    result := Read32(len)
+  else
+    result := Read16(len);
+  if not result or
+     (PtrUInt(P + len) > PtrUInt(PEnd)) then
+    exit;
+  if decodestr then // no transient memory alloc from BufferIsKeyTab()
+    FastSetString(dest^, P, len);
+  inc(P, len);
+  result := true;
+end;
+
+function TBinaryReader.ReadPrincipal(var dest, realm: RawUtf8; count: integer;
+  len32: boolean): boolean;
+var
+  c: RawUtf8;
+begin
+  result := false;
+  if (count = 0) or
+     not ReadOctStr(@realm, len32) or
+     not ReadOctStr(@dest, len32) then // component 1
+    exit;
+  repeat
+    dec(count);
+    if count = 0 then
+      break;
+    if not ReadOctStr(@c, len32) then // component 2..n
+      exit;
+    if decodestr then
+      dest := Join([dest, '/', c]);
+  until false;
+  if decodestr then
+    dest := Join([dest, '@', realm]);
+  result := true;
+end;
+
+
 function CompareEntry(const A, B: TKerberosKeyEntry): boolean;
 begin
   result := (A.Timestamp  = B.Timestamp) and
