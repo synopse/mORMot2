@@ -2449,6 +2449,7 @@ begin
   if IsVoid or
      (Http = nil) then
     exit;
+  id := 0; // make compiler happy
   Safe.WriteLock;
   try
     p := FromHash(Hash);
