@@ -2449,18 +2449,15 @@ begin
   if IsVoid or
      (Http = nil) then
     exit;
-  id := 0; // make compiler happy
   Safe.WriteLock;
   try
     p := FromHash(Hash);
     if p = nil then
       exit;
     result := true;
+    id := p^.ID; // set always to make Delpĥi compiler happy
     if Assigned(OnLog) then
-    begin
-      id := p^.ID;
       fn := p^.PartFile;
-    end;
     n := RawAssociate(Http, p);
   finally
     Safe.WriteUnLock;

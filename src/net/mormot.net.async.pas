@@ -5698,14 +5698,13 @@ type
   TStartProxyRequest = object
   {$endif USERECORDWITHMETHODS}
     ctxt: THttpServerRequestAbstract;
-    proxy: THttpProxyUrl;              // server proxy definition
-    filename: TFileName;               // full file name, including path
-    head: THeadCache;                  // remote headers retrieved via HEAD
-    localsize: Int64;                  // local file size
-    localdate: TUnixMSTime;            // local file timestamp
-    loginfo: PUtf8Char;                // optional error message / log context
-    remote: TUri;                      // URI members of the remote resource
-    remotehash: THash160;              // remote TUri hash without etag/lastmod
+    proxy: THttpProxyUrl;       // server proxy definition
+    filename: TFileName;        // full file name, including path
+    head: THeadCache;           // remote headers retrieved via HEAD
+    localsize: Int64;           // local file size
+    loginfo: PUtf8Char;         // optional error message / log context
+    remote: TUri;               // URI members of the remote resource
+    remotehash: THash160;       // remote TUri hash without etag/lastmod
     function MakeHeadAndComputeFilename: cardinal;
     function MakeGet(const path: TUriMatchName): cardinal;
   end;
@@ -5724,6 +5723,7 @@ begin // this method is protected by proxy.fOsSafe.Lock
        {updatetimeout=}not (hpoClientHeadNoRefresh in proxy.fSettings.Options)) then
     proxy.RemoteClientHead(remote, remotehash, head);
   result := head.Status;
+  localsize := head.Size; // for proper logging
   if not StatusCodeIsSuccess(result) then // 4xx.. range
   begin
     loginfo := 'error from HEAD';
@@ -5759,7 +5759,7 @@ begin // this method is protected by proxy.fOsSafe.Lock
   result := HTTP_BADREQUEST;
   log := proxy.fOwner.fLog;
   // no matching local file: need to download to return the GET body
-  localsize := head.Size;
+  localsize := head.Size; // reset
   if (filename = '') or
      (localsize <= 0) or
      (localsize < proxy.fSettings.HttpDirectGetKB shl 10) then
@@ -6373,6 +6373,7 @@ function THttpProxyServer.OnGetHeadRemoteUri(Ctxt: THttpServerRequest;
 var
   req: TStartProxyRequest;
   start: Int64;
+  localdate: TUnixMSTime;
   instance: TObject;
 begin
   if fHasLog in fFlags then
@@ -6407,7 +6408,7 @@ begin
     begin
       // check the local file (named from hashed URI + header etag/lastmod)
       if (req.filename <> '') and
-         FileInfoByName(req.filename, req.localsize, req.localdate) and
+         FileInfoByName(req.filename, req.localsize, localdate) and
          (req.localsize >= 0) then
         // we have a local cached file
         if fPartials.HasFile(req.filename, @req.localsize, Ctxt.ConnectionHttp) then
