@@ -1993,6 +1993,14 @@ function FileIsKeyTabMachineAccountPrincipal(const aKeytab: TFileName;
 // - so that you could write e.g. for entry in FileIsKeyTabEntries() do ...
 function FileIsKeyTabEntries(const aKeytab: TFileName): TKerberosKeyEntries;
 
+/// extract the Principal Name of a ccache file content
+function BufferCccachePrincipal(const ccache: RawByteString;
+  realm: PRawUtf8 = nil): RawUtf8;
+
+/// extract the Principal Name of a ccache file from disk
+function FileCccachePrincipal(const ccache: TFileName;
+  realm: PRawUtf8 = nil): RawUtf8;
+
 
 { **************** Basic ASN.1 Support }
 
@@ -6167,6 +6175,47 @@ begin
   finally
     kt.Free;
   end;
+end;
+
+// https://web.mit.edu/kerberos/krb5-devel/doc/formats/ccache_file_format.html
+
+function BufferCccachePrincipal(const ccache: RawByteString; realm: PRawUtf8): RawUtf8;
+var
+  rd: TBinaryReader;
+  i, v, n: integer;
+  r: RawUtf8;
+begin
+  result := '';
+  if pointer(ccache) = nil then
+    exit;
+  rd.P := pointer(ccache);
+  rd.PEnd := rd.P + length(ccache);
+  if not rd.Read8(i) or
+     (i <> 5) or
+     not rd.Read8(v) or
+     not (v in [1 .. 4]) then
+    exit; // wrong format
+  rd.bigendian := v >= 3;
+  rd.decodestr := true;
+  if not rd.Read16(i) or
+     not rd.Skip(i) then
+    exit;
+  if v <> 1 then
+    if not rd.Skip(4) then // name type (32 bits) [omitted in version 1]
+      exit;
+  if not rd.Read32(n) then // count of components (32 bits)
+    exit;
+  if v = 1 then
+    dec(n); // count includes realm in v1
+  if not rd.ReadPrincipal(result, r, n, {len32=}true) then
+    exit;
+  if realm <> nil then
+    realm^ := r;
+end;
+
+function FileCccachePrincipal(const ccache: TFileName; realm: PRawUtf8): RawUtf8;
+begin
+  result := BufferCccachePrincipal(StringFromFile(ccache), realm);
 end;
 
 

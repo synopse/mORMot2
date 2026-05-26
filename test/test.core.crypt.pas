@@ -3731,11 +3731,19 @@ const
     $18, $94, $1a, $0e, $92, $78, $d6, $d9, $78, $f3, $b5, $bb, $a7, $a1, $99,
     $50, $c6, $c1, $2c, $78, $6e, $26, $ba, $ec, $ac, $d9, $4d, $0b, $cb, $6f,
     $56, $87, $00, $00, $00, $01);
+  // $ klist
+  // Ticket cache: FILE:/tmp/krb5cc_1000
+  // Default principal: abouchez@AD.TRANQUIL.IT
+  CCACHE_REF: array[0 .. 63] of byte = ( // truncated for safety
+    $05, $04, $00, $0c, $00, $01, $00, $08, $00, $00, $00, $00, $00, $00, $00, $00,
+    $00, $00, $00, $01, $00, $00, $00, $01, $00, $00, $00, $0e, $41, $44, $2e, $54,
+    $52, $41, $4e, $51, $55, $49, $4c, $2e, $49, $54, $00, $00, $00, $08, $61, $62,
+    $6f, $75, $63, $68, $65, $7a, $00, $00, $00, $01, $00, $00, $00, $01, $00, $00);
 
 procedure TTestCoreCrypto._TKerberosKeyTab;
 var
   bin, bin2, password: RawByteString;
-  hex: RawUtf8;
+  hex, realm: RawUtf8;
   kt, kt2: TKerberosKeyTab;
   ktg: TKerberosKeyTabGenerator;
   a: TSignAlgo;
@@ -3908,6 +3916,12 @@ begin
   finally
     ktg.Free;
   end;
+  // validate ccache file parsing
+  CheckEqual(BufferCccachePrincipal('', @realm), '');
+  CheckEqual(realm, '');
+  FastSetRawByteString(bin, @CCACHE_REF, SizeOf(CCACHE_REF));
+  CheckEqual(BufferCccachePrincipal(bin, @realm), 'abouchez@AD.TRANQUIL.IT');
+  CheckEqual(realm, 'AD.TRANQUIL.IT');
 end;
 
 procedure TTestCoreCrypto.CatalogRunAsym(Context: TObject);
