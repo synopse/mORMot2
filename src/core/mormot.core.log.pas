@@ -692,7 +692,9 @@ type
     fNoEnvironmentVariable: boolean;
     {$endif OSWINDOWS}
     fHandleExceptions, fExceptionIgnoreLibrary: boolean;
+    {$ifndef NOEXCEPTIONINTERCEPT}
     fOnBeforeException: TOnBeforeException;
+    {$endif NOEXCEPTIONINTERCEPT}
     fAutoFlushTimeOut: cardinal;
     fArchiveAfterDays: integer;
     fArchivePath: TFileName;
@@ -812,14 +814,15 @@ type
     // - do nothing if exceptions are not intercepted on this target platform
     property DisableCurrentThread: boolean
       index tiTemporaryDisable read GetCurrentThreadFlag write SetCurrentThreadFlag;
+    {$ifndef NOEXCEPTIONINTERCEPT}
     /// you can let exceptions be ignored from a callback
     // - if set and returns true, the given exception won't be logged
     // - execution of this event handler is protected via the logs global lock
     // - may be handy e.g. when working with code triggerring a lot of
     // exceptions (e.g. Indy), where ExceptionIgnore could be refined
-    // - do nothing if exceptions are not intercepted on this target platform
     property OnBeforeException: TOnBeforeException
       read fOnBeforeException write fOnBeforeException;
+    {$endif NOEXCEPTIONINTERCEPT}
     /// event called to archive - i.e. compress and delete - .log files
     // - called by TSynLogFamily.Destroy with files older than ArchiveAfterDays,
     // or by TSynLog.PerformRotation when some rotated files need to be deleted
