@@ -3327,7 +3327,8 @@ type
     /// removes the element at the specified position, not returning it
     function Del(position: integer): boolean;
     /// check if a specified value is present in the list
-    function Exists(const value: variant): boolean; overload;
+    function Exists(const value: variant;
+      caseinsensitive: boolean = false): boolean; overload;
     /// check if a specified text value is present in the list
     function Exists(const value: RawUtf8;
       caseinsensitive: boolean = false): boolean; overload;
@@ -3354,10 +3355,11 @@ type
     /// search the first matching expression over IDocDict kind of elements
     function First(const expression: RawUtf8; const value: variant): variant; overload;
     /// returns the position at the first occurrence of the specified value
-    function Index(const value: variant): integer; overload;
+    function Index(const value: variant; caseinsensitive: boolean = false;
+      start: PtrInt = 0): integer; overload;
     /// returns the position at the first occurrence of the specified text value
-    function Index(const value: RawUtf8;
-      caseinsensitive: boolean = false): integer; overload;
+    function Index(const value: RawUtf8; caseinsensitive: boolean = false;
+      start: PtrInt = 0): integer; overload;
     /// inserts the specified value at the specified position
     function Insert(position: integer; const value: variant): integer; overload;
     /// inserts the specified value at the specified position
@@ -11345,7 +11347,7 @@ type
     function Append(const value: RawUtf8): integer; overload;
     function AppendDoc(const value: IDocAny): integer;
     function Copy(start, stop: integer): IDocList;
-    function Compare(const another: IDocList; caseinsensitive: boolean): integer;
+    function Compare(const another: IDocList; caseinsens: boolean): integer;
     function Count(const value: variant): integer; overload;
     function Count(const value: RawUtf8): integer; overload;
     procedure Extend(const value: IDocList); overload;
@@ -11357,10 +11359,10 @@ type
       limit: integer; pathdelim: AnsiChar): IDocList; overload;
     function First(const expression: RawUtf8): variant; overload;
     function First(const expression: RawUtf8; const value: variant): variant; overload;
-    function Index(const value: variant): integer; overload;
-    function Index(const value: RawUtf8; caseinsensitive: boolean): integer; overload;
-    function Exists(const value: variant): boolean; overload;
-    function Exists(const value: RawUtf8; caseinsensitive: boolean): boolean; overload;
+    function Index(const value: variant; caseinsens: boolean; start: PtrInt): integer; overload;
+    function Index(const value: RawUtf8; caseinsens: boolean; start: PtrInt): integer; overload;
+    function Exists(const value: variant; caseinsens: boolean): boolean; overload;
+    function Exists(const value: RawUtf8; caseinsens: boolean): boolean; overload;
     function Insert(position: integer; const value: variant): integer; overload;
     function Insert(position: integer; const value: RawUtf8): integer; overload;
     function ObjectsDicts: IDocDicts;
@@ -11370,7 +11372,7 @@ type
     function Del(position: integer): boolean;
     function Reduce(const keys: array of RawUtf8): IDocList;
     function Remove(const value: variant): integer; overload;
-    function Remove(const value: RawUtf8; caseinsensitive: boolean): integer; overload;
+    function Remove(const value: RawUtf8; caseinsens: boolean): integer; overload;
     procedure Reverse;
     procedure Sort(reverse: boolean; compare: TVariantCompare);
     procedure SortByKeyValue(const key: RawUtf8; reverse: boolean;
@@ -11438,9 +11440,9 @@ type
     function Get(const key: RawUtf8; var value: PDocVariantData): boolean; overload;
     function GetPathDelim: AnsiChar;
     procedure SetPathDelim(value: AnsiChar);
-    function Compare(const another: IDocDict; caseinsensitive: boolean): integer; overload;
+    function Compare(const another: IDocDict; caseinsens: boolean): integer; overload;
     function Compare(const another: IDocDict; const keys: array of RawUtf8;
-      caseinsensitive: boolean = false): integer; overload;
+      caseinsens: boolean = false): integer; overload;
     function Copy: IDocDict;
     function Del(const key: RawUtf8): boolean;
     function Exists(const key: RawUtf8): boolean;
@@ -12252,14 +12254,14 @@ begin
     result.Value^.InitArrayFrom(fValue^, fValue^.VOptions, start, stop);
 end;
 
-function TDocList.Compare(const another: IDocList; caseinsensitive: boolean): integer;
+function TDocList.Compare(const another: IDocList; caseinsens: boolean): integer;
 begin
   if another = nil then
     result := 1
   else if another.Value = fValue then
     result := 0 // same reference
   else
-    result := fValue^.Compare(another.Value^, caseinsensitive);
+    result := fValue^.Compare(another.Value^, caseinsens);
 end;
 
 function TDocList.Count(const value: variant): integer;
@@ -12287,28 +12289,28 @@ begin
   fValue^.AddItems(value);
 end;
 
-function TDocList.Index(const value: variant): integer;
+function TDocList.Index(const value: variant; caseinsens: boolean; start: PtrInt): integer;
 begin
-  result := fValue^.SearchItemByValue(value);
+  result := fValue^.SearchItemByValue(value, caseinsens, start);
 end;
 
-function TDocList.Index(const value: RawUtf8; caseinsensitive: boolean): integer;
+function TDocList.Index(const value: RawUtf8; caseinsens: boolean; start: PtrInt): integer;
 var
   v: TSynVarData;
 begin
   v.VType := varString;
   v.VAny := pointer(value); // direct set to our RawUtf8 searched value
-  result := fValue^.SearchItemByValue(variant(v), caseinsensitive);
+  result := fValue^.SearchItemByValue(variant(v), caseinsens, start);
 end;
 
-function TDocList.Exists(const value: variant): boolean;
+function TDocList.Exists(const value: variant; caseinsens: boolean): boolean;
 begin
-  result := fValue^.SearchItemByValue(value) >= 0;
+  result := fValue^.SearchItemByValue(value, caseinsens) >= 0;
 end;
 
-function TDocList.Exists(const value: RawUtf8; caseinsensitive: boolean): boolean;
+function TDocList.Exists(const value: RawUtf8; caseinsens: boolean): boolean;
 begin
-  result := Index(value, caseinsensitive) >= 0;
+  result := Index(value, caseinsens, 0) >= 0;
 end;
 
 function TDocList.Insert(position: integer; const value: variant): integer;
@@ -12391,9 +12393,9 @@ begin
     fValue^.Delete(result);
 end;
 
-function TDocList.Remove(const value: RawUtf8; caseinsensitive: boolean): integer;
+function TDocList.Remove(const value: RawUtf8; caseinsens: boolean): integer;
 begin
-  result := Index(value, caseinsensitive);
+  result := Index(value, caseinsens, 0);
   if result >= 0 then
     fValue^.Delete(result);
 end;
@@ -12576,15 +12578,15 @@ begin
   fPathDelim := value;
 end;
 
-function TDocDict.Compare(const another: IDocDict; caseinsensitive: boolean): integer;
+function TDocDict.Compare(const another: IDocDict; caseinsens: boolean): integer;
 begin
-  result := fValue^.Compare(another.Value^, caseinsensitive);
+  result := fValue^.Compare(another.Value^, caseinsens);
 end;
 
 function TDocDict.Compare(const another: IDocDict;
-  const keys: array of RawUtf8; caseinsensitive: boolean): integer;
+  const keys: array of RawUtf8; caseinsens: boolean): integer;
 begin
-  result := fValue^.CompareObject(keys, another.Value^, caseinsensitive);
+  result := fValue^.CompareObject(keys, another.Value^, caseinsens);
 end;
 
 function TDocDict.GetValueAt(const key: RawUtf8; out value: PVariant): boolean;
