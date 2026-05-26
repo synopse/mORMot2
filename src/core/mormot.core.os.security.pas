@@ -1994,11 +1994,11 @@ function FileIsKeyTabMachineAccountPrincipal(const aKeytab: TFileName;
 function FileIsKeyTabEntries(const aKeytab: TFileName): TKerberosKeyEntries;
 
 /// extract the Principal Name of a ccache file content
-function BufferCccachePrincipal(const ccache: RawByteString;
+function BufferCcachePrincipal(const ccache: RawByteString;
   realm: PRawUtf8 = nil): RawUtf8;
 
 /// extract the Principal Name of a ccache file from disk
-function FileCccachePrincipal(const ccache: TFileName;
+function FileCcachePrincipal(const ccache: TFileName;
   realm: PRawUtf8 = nil): RawUtf8;
 
 
@@ -6043,9 +6043,9 @@ end;
 type
   // cut-down version of TFastReader for TKerberosKeyTab and ccache parsing
   {$ifdef USERECORDWITHMETHODS}
-  TBinaryReader = record
+  TKerberosReader = record
   {$else}
-  TBinaryReader = object
+  TKerberosReader = object
   {$endif USERECORDWITHMETHODS}
     P, PEnd: PAnsiChar;
     bigendian, decodestr: boolean;
@@ -6058,19 +6058,19 @@ type
       len32: boolean): boolean;
   end;
 
-function TBinaryReader.Skip(len: PtrInt): boolean;
+function TKerberosReader.Skip(len: PtrInt): boolean;
 begin
   inc(P, len);
   result := PtrUInt(P) <= PtrUInt(PEnd);
 end;
 
-function TBinaryReader.Read8(var v: integer): boolean;
+function TKerberosReader.Read8(var v: integer): boolean;
 begin
   v := PByte(P)^;
   result := Skip(1);
 end;
 
-function TBinaryReader.Read16(var v: integer): boolean;
+function TKerberosReader.Read16(var v: integer): boolean;
 begin
   v := PWord(P)^;
   if bigendian then
@@ -6078,7 +6078,7 @@ begin
   result := Skip(2);
 end;
 
-function TBinaryReader.Read32(var v: integer): boolean;
+function TKerberosReader.Read32(var v: integer): boolean;
 begin
   v := PCardinal(P)^; // may read up to 4 bytes after end - fine with strings
   if bigendian then
@@ -6086,7 +6086,7 @@ begin
   result := Skip(4);
 end;
 
-function TBinaryReader.ReadOctStr(dest: PRawUtf8; len32: boolean): boolean;
+function TKerberosReader.ReadOctStr(dest: PRawUtf8; len32: boolean): boolean;
 var
   len: integer; // not PtrInt
 begin
@@ -6103,7 +6103,7 @@ begin
   result := true;
 end;
 
-function TBinaryReader.ReadPrincipal(var dest, realm: RawUtf8; count: integer;
+function TKerberosReader.ReadPrincipal(var dest, realm: RawUtf8; count: integer;
   len32: boolean): boolean;
 var
   c: RawUtf8;
@@ -6179,9 +6179,9 @@ end;
 
 // https://web.mit.edu/kerberos/krb5-devel/doc/formats/ccache_file_format.html
 
-function BufferCccachePrincipal(const ccache: RawByteString; realm: PRawUtf8): RawUtf8;
+function BufferCcachePrincipal(const ccache: RawByteString; realm: PRawUtf8): RawUtf8;
 var
-  rd: TBinaryReader;
+  rd: TKerberosReader;
   i, v, n: integer;
   r: RawUtf8;
 begin
@@ -6213,9 +6213,9 @@ begin
     realm^ := r;
 end;
 
-function FileCccachePrincipal(const ccache: TFileName; realm: PRawUtf8): RawUtf8;
+function FileCcachePrincipal(const ccache: TFileName; realm: PRawUtf8): RawUtf8;
 begin
-  result := BufferCccachePrincipal(StringFromFile(ccache), realm);
+  result := BufferCcachePrincipal(StringFromFile(ccache), realm);
 end;
 
 
@@ -6237,7 +6237,7 @@ end;
 
 function TKerberosKeyTab.LoadFromBuffer(P, PEnd: PAnsiChar): boolean;
 var
-  r: TBinaryReader;
+  r: TKerberosReader;
   n, v, siz, ncomp: integer;
   pendbak: PAnsiChar;
   rlm: RawUtf8;

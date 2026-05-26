@@ -3917,10 +3917,10 @@ begin
     ktg.Free;
   end;
   // validate ccache file parsing
-  CheckEqual(BufferCccachePrincipal('', @realm), '');
+  CheckEqual(BufferCcachePrincipal('', @realm), '');
   CheckEqual(realm, '');
   FastSetRawByteString(bin, @CCACHE_REF, SizeOf(CCACHE_REF));
-  CheckEqual(BufferCccachePrincipal(bin, @realm), 'abouchez@AD.TRANQUIL.IT');
+  CheckEqual(BufferCcachePrincipal(bin, @realm), 'abouchez@AD.TRANQUIL.IT');
   CheckEqual(realm, 'AD.TRANQUIL.IT');
 end;
 
