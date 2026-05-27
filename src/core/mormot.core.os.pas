@@ -10573,7 +10573,7 @@ function TMultiLightLock.TryLock: boolean;
 var
   tid: pointer;
 begin
-  tid := pointer(GetCurrentThreadId);
+  tid := pointer(PtrUInt(GetCurrentThreadId));
   if Flags = 0 then    // is not locked
     if LockedExc(Flags, {to=}1, {from=}0) then // try atomic acquisition
     begin
@@ -10594,7 +10594,7 @@ end;
 procedure TMultiLightLock.ForceLock;
 begin
   Flags := MaxInt; // forced acquisition, whatever the current state is
-  ThreadID := pointer(GetCurrentThreadId);
+  ThreadID := pointer(PtrUInt(GetCurrentThreadId));
 end;
 
 function TMultiLightLock.IsLocked: boolean;
