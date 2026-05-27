@@ -3890,6 +3890,7 @@ const
     // TWellKnownRid in SDDL_WKR[] order
     'ROLALGDADUDGDCDDCASAEAPACNAPKAEKRSHO';
 var
+  OsSecSafe: TLightLock;
   SDDL_WKS_INDEX: array[TWellKnownSid] of byte; // into 1..48
   SDDL_WKR_INDEX: array[TWellKnownRid] of byte; // into 49..66
   SID_SDDLW: packed array[byte] of word absolute SID_SDDL;
@@ -3901,7 +3902,7 @@ var
   sam: TSecAccess;
   i: PtrInt;
 begin
-  GlobalLock;
+  OsSecSafe.Lock;
   try
     if SddlInitialized then
       exit;
@@ -3926,7 +3927,7 @@ begin
         include(samWithSddl, sam);
     SddlInitialized := true; // should be last
   finally
-    GlobalUnLock;
+    OsSecSafe.UnLock;
   end;
 end;
 
