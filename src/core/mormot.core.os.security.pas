@@ -2635,6 +2635,25 @@ type
     wttProcess,
     wttThread);
 
+  /// state machine used to open a Windows Security token
+  {$ifdef USERECORDWITHMETHODS}
+  TOpenToken = record
+  {$else}
+  TOpenToken = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    Handle: THandle;
+    TokenType: TWinTokenType;
+    Flag: (fNone, fImpersonified, fLocked);
+    /// calls OpenProcessToken() or OpenThreadToken() to get the current token
+    // - raise an EOSException on failure
+    // - caller should then run RawTokenClose() once done with the Token handle
+    // - would also lock a global mutex for wttProcess
+    procedure Open(wtt: TWinTokenType; access: cardinal);
+    /// call CloseHandle(), then UnLock or RevertToSelf if needed
+    procedure Close;
+  end;
+
   /// manage available privileges on Windows platform
   // - not all available privileges are active for all process
   // - for usage of more advanced WinAPI, explicit enabling of privilege is
@@ -2648,8 +2667,7 @@ type
     fAvailable: TWinSystemPrivileges;
     fEnabled: TWinSystemPrivileges;
     fDefEnabled: TWinSystemPrivileges;
-    fTokenType: TWinTokenType;
-    fToken: THandle;
+    fToken: TOpenToken;
     function SetPrivilege(wsp: TWinSystemPrivilege; on: boolean): boolean;
     procedure LoadPrivileges;
   public
@@ -2683,10 +2701,10 @@ type
       read fEnabled;
     /// low-level access to the privileges token handle
     property Token: THandle
-      read fToken;
+      read fToken.Handle;
     /// low-level access to the privileges token type
     property TokenType: TWinTokenType
-      read fTokenType;
+      read fToken.TokenType;
   end;
 
   /// which information was returned by GetProcessInfo() overloaded functions
@@ -2733,10 +2751,6 @@ type
   TWinProcessInfoDynArray = array of TWinProcessInfo;
 
 function ToTextU(w: TWinSystemPrivilege): PUtf8Char; overload;
-
-/// calls OpenProcessToken() or OpenThreadToken() to get the current token
-// - caller should then run CloseHandle() once done with the Token handle
-function RawTokenOpen(wtt: TWinTokenType; access: cardinal): THandle;
 
 /// low-level retrieveal of raw binary information for a given token
 // - returns the number of bytes retrieved into buf.buf
@@ -7484,26 +7498,53 @@ function GetUserNameExW(NameFormat: DWord; lpNameBuffer: PWideChar;
   var nSize: DWord): BOOL;
     stdcall; external secur32;
 
-function RawTokenOpen(wtt: TWinTokenType; access: cardinal): THandle;
+{ TOpenToken }
+
+var
+  RawTokenOpenSafe: TOSLock; // global nested calls protection for wttProcess
+
+procedure TOpenToken.Open(wtt: TWinTokenType; access: cardinal);
 begin
+  Handle := 0;
+  TokenType := wtt;
+  Flag := fNone;
   if wtt = wttProcess then
   begin
-    if not OpenProcessToken(GetCurrentProcess, access, result) then
+    if not OpenProcessToken(GetCurrentProcess, access, Handle) then
       RaiseLastError('OpenToken: OpenProcessToken');
+    RawTokenOpenSafe.LockAndInitIfNeeded;
+    Flag := fLocked;
   end
-  else if not OpenThreadToken(GetCurrentThread, access, false, result) then
+  else if not OpenThreadToken(GetCurrentThread, access, false, Handle) then
     if GetLastError = ERROR_NO_TOKEN then
     begin
       // try to impersonate the thread - requires eventual RevertToSelf
       if not ImpersonateSelf(SecurityImpersonation) then
         RaiseLastError('OpenToken: ImpersonateSelf');
-      if OpenThreadToken(GetCurrentThread, access, false, result) then
+      if OpenThreadToken(GetCurrentThread, access, false, Handle) then
+      begin
+        Flag := fImpersonified;
         exit;
+      end;
       RevertToSelf;
       RaiseLastError('OpenToken: OpenThreadToken after ImpersonateSelf');
     end
     else
       RaiseLastError('OpenToken: OpenThreadToken');
+end;
+
+procedure TOpenToken.Close;
+begin
+  if Handle = 0 then
+    exit;
+  CloseHandle(Handle);
+  Handle := 0;
+  case Flag of
+    fImpersonified:
+      RevertToSelf;
+    fLocked:
+      RawTokenOpenSafe.UnLock;
+  end;
 end;
 
 function RawTokenGetInfo(tok: THandle; tic: TTokenInformationClass;
@@ -7571,7 +7612,6 @@ const
     'SeTimeZonePrivilege'#0 +             // wspTimeZone
     'SeCreateSymbolicLinkPrivilege'#0;    // wspCreateSymbolicLink
 var
-  WSP_SAFE: TOSLock; // protect nested calls for wttProcess
   WSP_ID: array[TWinSystemPrivilege] of TLargeInteger;
   WSP_TXT: array[TWinSystemPrivilege] of PUtf8Char;
 
@@ -7583,7 +7623,6 @@ begin
   OsSecSafe.Lock; // thread-safe late resolution of all known priviledges
   if WSP_TXT[high(WSP_TXT)] = nil then
   begin
-    WSP_SAFE.Init;
     p := _WSP;
     for w := low(w) to high(w) do
     begin
@@ -7607,23 +7646,17 @@ procedure TSynWindowsPrivileges.Init(aTokenType: TWinTokenType;
 begin
   if WSP_TXT[high(WSP_TXT)] = nil then
     WspSetup; // delayed initialization
-  fToken := 0; // as expected by Done on any RaiseLastError in RawTokenOpen()
-  fTokenType := wttThread;
   fAvailable := [];
   fEnabled := [];
   fDefEnabled := [];
-  fToken := RawTokenOpen(aTokenType, TOKEN_QUERY or TOKEN_ADJUST_PRIVILEGES);
+  fToken.Open(aTokenType, TOKEN_QUERY or TOKEN_ADJUST_PRIVILEGES);
   if aLoadPrivileges then
     try
       LoadPrivileges; // may raise an exception
     except
-      CloseHandle(fToken);
-      fToken := 0;
+      fToken.Close;
       raise;
     end;
-  fTokenType := aTokenType;
-  if aTokenType = wttProcess then
-    WSP_SAFE.Lock; // protect global coherency around multiple threads
 end;
 
 procedure TSynWindowsPrivileges.Done(aRestoreInitiallyEnabled: boolean);
@@ -7631,7 +7664,7 @@ var
   p: TWinSystemPrivilege;
   new: TWinSystemPrivileges;
 begin
-  if fToken <> 0 then
+  if fToken.Handle <> 0 then
   try
     if aRestoreInitiallyEnabled then
     begin
@@ -7647,14 +7680,7 @@ begin
           end;
     end;
   finally
-    CloseHandle(fToken);
-    fToken := 0;
-    case fTokenType of
-      wttProcess:
-        WSP_SAFE.UnLock; // make wttProcess calls thread-safe
-      wttThread:
-        RevertToSelf;    // mandatory after ImpersonateSelf
-    end;
+    fToken.Close;
   end;
 end;
 
@@ -7992,13 +8018,13 @@ end;
 procedure CurrentRawSid(out sid: RawSid; wtt: TWinTokenType;
   name, domain: PRawUtf8);
 var
-  h: THandle;
+  tok: TOpenToken;
   p: PSid;
   n, d: RawUtf8;
   tmp: TSynTempBuffer;
 begin
-  h := RawTokenOpen(wtt, TOKEN_QUERY);
-  p := RawTokenSid(h, tmp);
+  tok.Open(wtt, TOKEN_QUERY);
+  p := RawTokenSid(tok.Handle, tmp);
   if p <> nil then
   begin
     ToRawSid(p, sid);
@@ -8013,7 +8039,7 @@ begin
     end;
   end;
   tmp.Done;
-  CloseHandle(h);
+  tok.Close;
 end;
 
 function RawTokenGroups(tok: THandle; var buf: TSynTempBuffer): PSids;
@@ -8068,11 +8094,11 @@ end;
 
 function CurrentGroups(wtt: TWinTokenType; var tmp: TSynTempBuffer): PSids;
 var
-  h: THandle;
+  tok: TOpenToken;
 begin
-  h := RawTokenOpen(wtt, TOKEN_QUERY);
-  result := RawTokenGroups(h, tmp);
-  CloseHandle(h);
+  tok.Open(wtt, TOKEN_QUERY);
+  result := RawTokenGroups(tok.Handle, tmp);
+  tok.Close;
 end;
 
 function CurrentGroupsSid(wtt: TWinTokenType): TRawUtf8DynArray;
@@ -8093,11 +8119,11 @@ end;
 
 function CurrentUserHasGroup(sid: PSid; wtt: TWinTokenType): boolean;
 var
-  h: THandle;
+  tok: TOpenToken;
 begin
-  h := RawTokenOpen(wtt, TOKEN_QUERY);
-  result := TokenHasGroup(h, sid);
-  CloseHandle(h);
+  tok.Open(wtt, TOKEN_QUERY);
+  result := TokenHasGroup(tok.Handle, sid);
+  tok.Close;
 end;
 
 function CurrentUserHasGroup(wks: TWellKnownSid; wtt: TWinTokenType): boolean;
@@ -8444,7 +8470,7 @@ initialization
 finalization
   if CryptProv <> nil then // used as fallback on XP
     CryptoApi.ReleaseContext(CryptProv, 0);
-  WSP_SAFE.Done;
+  RawTokenOpenSafe.Done;
 
 {$endif OSWINDOWS}
 
