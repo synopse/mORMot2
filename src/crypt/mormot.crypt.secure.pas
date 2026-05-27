@@ -7189,8 +7189,11 @@ begin
 end;
 
 function TSynUniqueIdentifierBits.CreateTimeLog: TTimeLog;
+var
+  bits: TTimeLogBits; // safer with an explicit local variable
 begin
-  PTimeLogBits(@result)^.From(UnixTimeToDateTime(Value shr 31));
+  bits.From(UnixTimeToDateTime(Value shr 31));
+  result := bits.Value;
 end;
 
 function TSynUniqueIdentifierBits.CreateDateTime: TDateTime;
@@ -7275,8 +7278,11 @@ begin
 end;
 
 function TSynUniqueIdentifierGenerator.ComputeNew: Int64;
+var
+  b: TSynUniqueIdentifierBits;
 begin
-  ComputeNew(PSynUniqueIdentifierBits(@result)^);
+  ComputeNew(b);
+  result := b.Value;
 end;
 
 procedure TSynUniqueIdentifierGenerator.ComputeFromDateTime(
@@ -7918,8 +7924,11 @@ begin
 end;
 
 function TCryptRandom.Get32: cardinal;
+var
+  n: cardinal; // safer with a local variable
 begin
-  Get(@result, 4);
+  Get(@n, 4);
+  result := n;
 end;
 
 function TCryptRandom.Get32(max: cardinal): cardinal;
