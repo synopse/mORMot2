@@ -2599,6 +2599,7 @@ procedure OpenSSL_error_short(error: integer; var result: ShortString);
 procedure OpenSSL_error(error: integer; var result: RawUtf8); overload;
 function OpenSSL_error(error: integer): RawUtf8; overload;
   {$ifdef HASINLINE} inline; {$endif}
+function OpenSSL_error_eof(error: integer): boolean;
 
 function SSL_is_fatal_error(get_error: integer): boolean;
 procedure SSL_get_error_text(get_error: integer; var result: RawUtf8);
@@ -10293,6 +10294,18 @@ begin
     exit;
   ERR_error_string_n(error, @result[1], high(result) - 1);
   result[0] := AnsiChar(mormot.core.base.StrLen(@result[1]));
+end;
+
+const
+  // ERR_GET_REASON() is a version-specific macro with no public API :(
+  OPENSSL_EOF_TEXT = ' eof while';
+
+function OpenSSL_error_eof(error: integer): boolean;
+var
+  tmp: ShortString;
+begin
+  OpenSSL_error_short(error, tmp);
+  result := Pos(OPENSSL_EOF_TEXT, tmp) > 0;
 end;
 
 // see https://www.openssl.org/docs/man1.1.1/man3/SSL_get_error.html
