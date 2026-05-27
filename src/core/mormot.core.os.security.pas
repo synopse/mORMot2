@@ -2653,8 +2653,9 @@ type
     procedure LoadPrivileges;
   public
     /// initialize the object dedicated to management of available privileges
-    // - aTokenPrivilege can be used for current process or current thread
-    procedure Init(aTokenPrivilege: TWinTokenType = wttProcess;
+    // - should eventually call Done() to release any resource
+    // - default wttThread seems faster and safer for most local calls
+    procedure Init(aTokenType: TWinTokenType = wttThread;
       aLoadPrivileges: boolean = true);
     /// finalize the object and relese Token handle
     // - aRestoreInitiallyEnabled parameter can be used to restore initially
@@ -7385,7 +7386,7 @@ var
   privileges: TSynWindowsPrivileges;
 begin
   try
-    privileges.Init;
+    privileges.Init(wttThread);
     try
       privileges.Enable(wspSystemTime); // ensure has SE_SYSTEMTIME_NAME
       result := Windows.SetSystemTime(PSystemTime(@utctime)^);
@@ -7412,7 +7413,7 @@ var
 begin
   SetDynamicTimeZoneInformation := LibraryResolve(
     GetModuleHandle(kernel32), 'SetDynamicTimeZoneInformation');
-  privileges.Init;
+  privileges.Init(wttThread);
   try
     privileges.Enable(wspTimeZone); // ensure has SE_TIME_ZONE_NAME
     if Assigned(SetDynamicTimeZoneInformation) then
@@ -8353,7 +8354,7 @@ begin
     exit;
   if privileges <> [] then
   begin
-    priv.Init;
+    priv.Init(wttThread);
     priv.Enable(privileges);
   end;
   sd := nil;
@@ -8387,7 +8388,7 @@ begin
     exit;
   if privileges <> [] then
   begin
-    priv.Init;
+    priv.Init(wttThread);
     priv.Enable(privileges);
   end;
   o := nil;
