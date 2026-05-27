@@ -2629,10 +2629,11 @@ type
 
   /// define which WinAPI token is to be retrieved
   // - define the execution context, i.e. if the token is used for the current
-  // process or the current thread
+  // process or the current thread, and wttProcessUnLock if lock is not needed
   // - used e.g. by TSynWindowsPrivileges or mormot.core.os.security
   TWinTokenType = (
     wttProcess,
+    wttProcessUnLock,
     wttThread);
 
   /// state machine used to open a Windows Security token
@@ -2675,6 +2676,7 @@ type
     // - should eventually call Done() to release any resource
     // - default wttThread seems faster and safer for most local calls
     // - wttProcess will lock a critical section until Done() is called
+    // - wttProcessUnLock is by design refused
     procedure Init(aTokenType: TWinTokenType = wttThread;
       aLoadPrivileges: boolean = true);
     /// finalize the object and relese Token handle
@@ -2873,44 +2875,44 @@ function TokenHasAnyGroup(tok: THandle; const sid: RawSidDynArray): boolean;
 /// return the SID of the current user, from process or thread, as text
 // - e.g. 'S-1-5-21-823746769-1624905683-418753922-1000'
 // - optionally returning the name and domain via LookupSid()
-function CurrentSid(wtt: TWinTokenType = wttProcess;
+function CurrentSid(wtt: TWinTokenType = wttProcessUnLock;
   name: PRawUtf8 = nil; domain: PRawUtf8 = nil): RawUtf8;
 
 /// return the SID of the current user, from process or thread, as raw binary
-procedure CurrentRawSid(out sid: RawSid; wtt: TWinTokenType = wttProcess;
+procedure CurrentRawSid(out sid: RawSid; wtt: TWinTokenType = wttProcessUnLock;
   name: PRawUtf8 = nil; domain: PRawUtf8 = nil);
 
 /// return the SID of the current user groups, from process or thread, as text
-function CurrentGroupsSid(wtt: TWinTokenType = wttProcess): TRawUtf8DynArray;
+function CurrentGroupsSid(wtt: TWinTokenType = wttProcessUnLock): TRawUtf8DynArray;
 
 /// recognize the well-known SIDs from the current user, from process or thread
 // - for instance, for an user with administrator rights on Windows, returns
 // $ [wksWorld, wksLocal, wksConsoleLogon, wksIntegrityHigh, wksInteractive,
 // $  wksAuthenticatedUser, wksThisOrganisation, wksBuiltinAdministrators,
 // $  wksBuiltinUsers, wksNtlmAuthentication]
-function CurrentKnownGroups(wtt: TWinTokenType = wttProcess): TWellKnownSids;
+function CurrentKnownGroups(wtt: TWinTokenType = wttProcessUnLock): TWellKnownSids;
 
 /// fast check if the current user, from process or thread, has a well-known group SID
 // - e.g. CurrentUserHasGroup(wksLocalSystem) returns true for LOCAL_SYSTEM user
 function CurrentUserHasGroup(wks: TWellKnownSid;
-  wtt: TWinTokenType = wttProcess): boolean; overload;
+  wtt: TWinTokenType = wttProcessUnLock): boolean; overload;
 
 /// fast check if the current user, from process or thread, has a given group SID
 function CurrentUserHasGroup(const sid: RawUtf8;
-  wtt: TWinTokenType = wttProcess): boolean; overload;
+  wtt: TWinTokenType = wttProcessUnLock): boolean; overload;
 
 /// fast check if the current user, from process or thread, has a given group SID
 function CurrentUserHasGroup(sid: PSid;
-  wtt: TWinTokenType = wttProcess): boolean; overload;
+  wtt: TWinTokenType = wttProcessUnLock): boolean; overload;
 
 /// fast check if the current user, from process or thread, has any given group SID
 function CurrentUserHasAnyGroup(const sid: RawSidDynArray;
-  wtt: TWinTokenType = wttProcess): boolean;
+  wtt: TWinTokenType = wttProcessUnLock): boolean;
 
 /// fast check if the current user, from process or thread, match a group by name
 // - calls LookupSid() on each group SID of this user, and filter with name/domain
 function CurrentUserHasGroup(const name, domain, server: RawUtf8;
-  wtt: TWinTokenType = wttProcess): boolean; overload;
+  wtt: TWinTokenType = wttProcessUnLock): boolean; overload;
 
 /// just a wrapper around CurrentUserHasGroup(wksBuiltinAdministrators)
 function CurrentUserIsAdmin: boolean;
@@ -7508,10 +7510,12 @@ begin
   Handle := 0;
   TokenType := wtt;
   Flag := fNone;
-  if wtt = wttProcess then
+  if wtt in [wttProcess, wttProcessUnLock] then
   begin
     if not OpenProcessToken(GetCurrentProcess, access, Handle) then
       RaiseLastError('OpenToken: OpenProcessToken');
+    if wtt = wttProcessUnLock then
+      exit; // e.g.
     RawTokenOpenSafe.LockAndInitIfNeeded;
     Flag := fLocked;
   end
@@ -7644,6 +7648,8 @@ end;
 procedure TSynWindowsPrivileges.Init(aTokenType: TWinTokenType;
   aLoadPrivileges: boolean);
 begin
+  if aTokenType = wttProcessUnLock then // Init/Done logic requires a mutex
+    raise EOSException.Create('TSynWindowsPrivileges.Init(wttProcessUnLock)');
   if WSP_TXT[high(WSP_TXT)] = nil then
     WspSetup; // delayed initialization
   fAvailable := [];
