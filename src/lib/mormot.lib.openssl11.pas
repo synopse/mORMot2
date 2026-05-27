@@ -10298,7 +10298,7 @@ end;
 
 const
   // ERR_GET_REASON() is a version-specific macro with no public API :(
-  OPENSSL_EOF_TEXT = ' eof while';
+  OPENSSL_EOF_TEXT: TShort15 = ' eof while';
 
 function OpenSSL_error_eof(error: integer): boolean;
 var
