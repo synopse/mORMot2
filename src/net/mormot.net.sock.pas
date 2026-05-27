@@ -5457,8 +5457,12 @@ begin
 end;
 
 function ToIP4(const text: RawUtf8): TNetIP4;
+var
+  c: cardinal; // safer with an explicit variable
 begin
-  if not NetIsIP4(pointer(text), @result) then
+  if NetIsIP4(pointer(text), @c) then
+    result := c
+  else
     result := 0;
 end;
 

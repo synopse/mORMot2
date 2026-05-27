@@ -5568,9 +5568,10 @@ function TDhcpProcess.SaveToFile(const FileName: TFileName): integer;
 var
   txt: RawUtf8;
   bak: TFileName;
+  n: integer; // not PtrInt
   hasbak: boolean;
 begin // for 100K leases: SaveToText=4.21ms FileFromString=1.44ms (4.2MB)
-  txt := SaveToText(@result);     // make fScopeSafe.ReadLock/ReadUnLock
+  txt := SaveToText(@n);     // make fScopeSafe.ReadLock/ReadUnLock
   hasbak := false;
   if not (dsoNoFileBak in fOptions) then
   begin
@@ -5579,7 +5580,10 @@ begin // for 100K leases: SaveToText=4.21ms FileFromString=1.44ms (4.2MB)
     hasbak := RenameFile(FileName, bak);    // atomic backup
   end;
   if FileFromString(txt, FileName) then
-    fModifSaved := fModifSequence // success: won't retry on next OnIdle()
+  begin
+    fModifSaved := fModifSequence; // success: won't retry on next OnIdle()
+    result := n;
+  end
   else
   begin
     if hasbak then

@@ -2654,10 +2654,12 @@ end;
 function GetExtensionFunc(sock: TSocket; const id: TGuid): pointer;
 var
   ret: cardinal;
+  res: pointer; // safer with an explicit local variable
 begin
-  result := nil;
   if WSAIoctl(sock, SIO_GET_EXTENSION_FUNCTION_POINTER, @id, sizeof(id),
-      @result, SizeOf(result), @ret, nil, nil) <> 0 then
+      @res, SizeOf(res), @ret, nil, nil) = 0 then
+    result := res
+  else
     result := nil;
 end;
 

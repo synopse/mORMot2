@@ -8575,6 +8575,8 @@ begin
 end;
 
 function THttpApiServer.GetHttpQueueLength: cardinal;
+var
+  n: cardinal; // safer with an explicit local variable
 begin
   result := 0;
   if (self = nil) or
@@ -8583,7 +8585,8 @@ begin
     exit;
   EHttpApiServer.RaiseOnError(hQueryRequestQueueProperty,
     Http.QueryRequestQueueProperty(fReqQueue, HttpServerQueueLengthProperty,
-      @result, SizeOf(result)));
+      @n, SizeOf(n)));
+  result := n;
 end;
 
 procedure THttpApiServer.SetHttpQueueLength(aValue: cardinal);

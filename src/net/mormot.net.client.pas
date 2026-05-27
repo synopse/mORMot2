@@ -4714,12 +4714,14 @@ end;
 
 function TWinHttp.InternalGetInfo32(Info: cardinal): cardinal;
 var
-  dwSize, dwIndex: cardinal;
+  dwSize, dwIndex, res: cardinal;
 begin
-  dwSize := SizeOf(result);
+  dwSize := SizeOf(res);
   dwIndex := 0;
   Info := Info or WINHTTP_QUERY_FLAG_NUMBER;
-  if not WinHttpApi.QueryHeaders(fRequest, Info, nil, @result, dwSize, dwIndex) then
+  if WinHttpApi.QueryHeaders(fRequest, Info, nil, @res, dwSize, dwIndex) then
+    result := res
+  else
     result := 0;
 end;
 
@@ -4905,12 +4907,14 @@ end;
 
 function TWinINet.InternalGetInfo32(Info: cardinal): cardinal;
 var
-  dwSize, dwIndex: cardinal;
+  dwSize, dwIndex, res: cardinal;
 begin
-  dwSize := SizeOf(result);
+  dwSize := SizeOf(res);
   dwIndex := 0;
   Info := Info or HTTP_QUERY_FLAG_NUMBER;
-  if not HttpQueryInfoA(fRequest, Info, @result, dwSize, dwIndex) then
+  if HttpQueryInfoA(fRequest, Info, @res, dwSize, dwIndex) then
+    result := res
+  else
     result := 0;
 end;
 
