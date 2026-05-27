@@ -2726,8 +2726,7 @@ type
   PWinProcessInfo = ^TWinProcessInfo;
   TWinProcessInfoDynArray = array of TWinProcessInfo;
 
-
-function ToText(p: TWinSystemPrivilege): PShortString; overload;
+function ToTextU(w: TWinSystemPrivilege): PUtf8Char; overload;
 
 /// calls OpenProcessToken() or OpenThreadToken() to get the current token
 // - caller should then run CloseHandle() once done with the Token handle
@@ -7429,46 +7428,6 @@ begin
   PostMessage(HWND_BROADCAST, WM_TIMECHANGE, 0, 0); // notify the apps
 end;
 
-
-const
-  _WSP: array[TWinSystemPrivilege] of TShort32 = (
-    // note: string[32] to ensure there is a #0 terminator for all items
-    'SeCreateTokenPrivilege',          // wspCreateToken
-    'SeAssignPrimaryTokenPrivilege',   // wspAssignPrimaryToken
-    'SeLockMemoryPrivilege',           // wspLockMemory - e.g. MEM_LARGE_PAGES
-    'SeIncreaseQuotaPrivilege',        // wspIncreaseQuota
-    'SeUnsolicitedInputPrivilege',     // wspUnsolicitedInput
-    'SeMachineAccountPrivilege',       // wspMachineAccount
-    'SeTcbPrivilege',                  // wspTCB
-    'SeSecurityPrivilege',             // wspSecurity
-    'SeTakeOwnershipPrivilege',        // wspTakeOwnership
-    'SeLoadDriverPrivilege',           // wspLoadDriver
-    'SeSystemProfilePrivilege',        // wspSystemProfile
-    'SeSystemtimePrivilege',           // wspSystemTime
-    'SeProfileSingleProcessPrivilege', // wspProfSingleProcess
-    'SeIncreaseBasePriorityPrivilege', // wspIncBasePriority
-    'SeCreatePagefilePrivilege',       // wspCreatePageFile
-    'SeCreatePermanentPrivilege',      // wspCreatePermanent
-    'SeBackupPrivilege',               // wspBackup
-    'SeRestorePrivilege',              // wspRestore
-    'SeShutdownPrivilege',             // wspShutdown
-    'SeDebugPrivilege',                // wspDebug
-    'SeAuditPrivilege',                // wspAudit
-    'SeSystemEnvironmentPrivilege',    // wspSystemEnvironment
-    'SeChangeNotifyPrivilege',         // wspChangeNotify
-    'SeRemoteShutdownPrivilege',       // wspRemoteShutdown
-    'SeUndockPrivilege',               // wspUndock
-    'SeSyncAgentPrivilege',            // wspSyncAgent
-    'SeEnableDelegationPrivilege',     // wspEnableDelegation
-    'SeManageVolumePrivilege',         // wspManageVolume
-    'SeImpersonatePrivilege',          // wspImpersonate
-    'SeCreateGlobalPrivilege',         // wspCreateGlobal
-    'SeTrustedCredManAccessPrivilege', // wspTrustedCredmanAccess
-    'SeRelabelPrivilege',              // wspRelabel
-    'SeIncreaseWorkingSetPrivilege',   // wspIncWorkingSet
-    'SeTimeZonePrivilege',             // wspTimeZone
-    'SeCreateSymbolicLinkPrivilege');  // wspCreateSymbolicLink
-
 type
   TOKEN_PRIVILEGES = packed record
     PrivilegeCount : DWord;
@@ -7488,10 +7447,6 @@ function OpenProcessToken(ProcessHandle: THandle; DesiredAccess: DWord;
 
 function LookupPrivilegeValueA(lpSystemName, lpName: PAnsiChar;
   var lpLuid: TLargeInteger): BOOL;
-    stdcall; external advapi32;
-
-function LookupPrivilegeNameA(lpSystemName: PAnsiChar; var lpLuid: TLargeInteger;
-  lpName: PAnsiChar; var cbName: DWord): BOOL;
     stdcall; external advapi32;
 
 function AdjustTokenPrivileges(TokenHandle: THandle; DisableAllPrivileges: BOOL;
@@ -7565,9 +7520,71 @@ end;
 
 { TSynWindowsPrivileges }
 
-function ToText(p: TWinSystemPrivilege): PShortString;
+const
+  _WSP: PAnsiChar =
+    'SeCreateTokenPrivilege'#0 +          // wspCreateToken
+    'SeAssignPrimaryTokenPrivilege'#0 +   // wspAssignPrimaryToken
+    'SeLockMemoryPrivilege'#0 +           // wspLockMemory - e.g. MEM_LARGE_PAGES
+    'SeIncreaseQuotaPrivilege'#0 +        // wspIncreaseQuota
+    'SeUnsolicitedInputPrivilege'#0 +     // wspUnsolicitedInput
+    'SeMachineAccountPrivilege'#0 +       // wspMachineAccount
+    'SeTcbPrivilege'#0 +                  // wspTCB
+    'SeSecurityPrivilege'#0 +             // wspSecurity
+    'SeTakeOwnershipPrivilege'#0 +        // wspTakeOwnership
+    'SeLoadDriverPrivilege'#0 +           // wspLoadDriver
+    'SeSystemProfilePrivilege'#0 +        // wspSystemProfile
+    'SeSystemtimePrivilege'#0 +           // wspSystemTime
+    'SeProfileSingleProcessPrivilege'#0 + // wspProfSingleProcess
+    'SeIncreaseBasePriorityPrivilege'#0 + // wspIncBasePriority
+    'SeCreatePagefilePrivilege'#0 +       // wspCreatePageFile
+    'SeCreatePermanentPrivilege'#0 +      // wspCreatePermanent
+    'SeBackupPrivilege'#0 +               // wspBackup
+    'SeRestorePrivilege'#0 +              // wspRestore
+    'SeShutdownPrivilege'#0 +             // wspShutdown
+    'SeDebugPrivilege'#0 +                // wspDebug
+    'SeAuditPrivilege'#0 +                // wspAudit
+    'SeSystemEnvironmentPrivilege'#0 +    // wspSystemEnvironment
+    'SeChangeNotifyPrivilege'#0 +         // wspChangeNotify
+    'SeRemoteShutdownPrivilege'#0 +       // wspRemoteShutdown
+    'SeUndockPrivilege'#0 +               // wspUndock
+    'SeSyncAgentPrivilege'#0 +            // wspSyncAgent
+    'SeEnableDelegationPrivilege'#0 +     // wspEnableDelegation
+    'SeManageVolumePrivilege'#0 +         // wspManageVolume
+    'SeImpersonatePrivilege'#0 +          // wspImpersonate
+    'SeCreateGlobalPrivilege'#0 +         // wspCreateGlobal
+    'SeTrustedCredManAccessPrivilege'#0 + // wspTrustedCredmanAccess
+    'SeRelabelPrivilege'#0 +              // wspRelabel
+    'SeIncreaseWorkingSetPrivilege'#0 +   // wspIncWorkingSet
+    'SeTimeZonePrivilege'#0 +             // wspTimeZone
+    'SeCreateSymbolicLinkPrivilege'#0;    // wspCreateSymbolicLink
+var
+  WSP_ID: array[TWinSystemPrivilege] of TLargeInteger;
+  WSP_TXT: array[TWinSystemPrivilege] of PUtf8Char;
+
+procedure WspSetup;
+var
+  w: TWinSystemPrivilege;
+  p: PAnsiChar;
 begin
-  result := @_WSP[p];
+  OsSecSafe.Lock; // thread-safe late resolution of all known priviledges
+  if WSP_TXT[high(WSP_TXT)] = nil then
+  begin
+    p := _WSP;
+    for w := low(w) to high(w) do
+    begin
+      WSP_TXT[w] := PUtf8Char(p);
+      LookupPrivilegeValueA(nil, p, WSP_ID[w]); // keep =0 if unsupported
+      inc(p, StrLen(p) + 1);
+    end;
+  end;
+  OsSecSafe.UnLock;
+end;
+
+function ToTextU(w: TWinSystemPrivilege): PUtf8Char;
+begin
+  if WSP_TXT[high(WSP_TXT)] = nil then
+    WspSetup;
+  result := WSP_TXT[w];
 end;
 
 procedure TSynWindowsPrivileges.Init(aTokenPrivilege: TWinTokenType;
