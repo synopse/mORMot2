@@ -7697,37 +7697,49 @@ begin
   end;
 end;
 
+const
+  WSP_ATT: array[boolean] of byte = (0, SE_PRIVILEGE_ENABLED);
+
 function TSynWindowsPrivileges.SetPrivilege(
   wsp: TWinSystemPrivilege; on: boolean): boolean;
 var
-  tp: TOKEN_PRIVILEGES;
+  tp, prev: TOKEN_PRIVILEGES;
   id: TLargeInteger;
-  tpprev: TOKEN_PRIVILEGES;
-  cbprev: DWord;
+  cbprev, att: DWord;
 begin
+  if WSP_TXT[high(WSP_TXT)] = nil then
+    WspSetup;
   result := false;
-  if not LookupPrivilegeValueA(nil, @_WSP[wsp][1], id) then
-    exit;
+  id := WSP_ID[wsp]; // O(1) lookup
+  if id = 0 then
+    exit; // unsupported (e.g. SeCreateSymbolicLinkPrivilege on XP)
   tp.PrivilegeCount := 1;
-  tp.Privileges[0].Luid := PInt64(@id)^;
-  tp.Privileges[0].Attributes := 0;
-  cbprev := SizeOf(TOKEN_PRIVILEGES);
-  AdjustTokenPrivileges(
-    Token, false, tp, SizeOf(TOKEN_PRIVILEGES), @tpprev, @cbprev);
-  if GetLastError <> ERROR_SUCCESS then
+  tp.Privileges[0].Luid := id;
+  tp.Privileges[0].Attributes := WSP_ATT[on];
+  FillCharFast(prev, SizeOf(prev), 0);
+  cbprev := SizeOf(prev);
+  if not AdjustTokenPrivileges(Token, false, tp, cbprev, @prev, @cbprev) or
+     (GetLastError <> ERROR_SUCCESS) then // detect ERROR_NOT_ALL_ASSIGNED
     exit;
-  tpprev.PrivilegeCount := 1;
-  tpprev.Privileges[0].Luid := PInt64(@id)^;
-  with tpprev.Privileges[0] do
+  if (prev.PrivilegeCount = 0) or         // unmodified priviledge
+     ((prev.Privileges[0].Luid = id) and  // no meaningful previous priviledge
+      ((prev.Privileges[0].Attributes and not SE_PRIVILEGE_ENABLED) = 0)) then
+    // no need to make a second API call
+    result := true
+  else
+  begin
+    // merge with existing/previous flags (seldom called)
+    att := 0;
+    if prev.Privileges[0].Luid = id then
+      att := prev.Privileges[0].Attributes;
     if on then
-      Attributes := Attributes or SE_PRIVILEGE_ENABLED
+      att := att or SE_PRIVILEGE_ENABLED
     else
-      Attributes := Attributes xor (SE_PRIVILEGE_ENABLED and Attributes);
-  AdjustTokenPrivileges(
-    Token, false, tpprev, cbprev, nil, nil);
-  if GetLastError <> ERROR_SUCCESS then
-    exit;
-  result := true;
+      att := att and not SE_PRIVILEGE_ENABLED;
+    tp.Privileges[0].Attributes := att;
+    result := AdjustTokenPrivileges(Token, false, tp, sizeOf(tp), nil, nil) and
+              (GetLastError = ERROR_SUCCESS);
+  end;
 end;
 
 type
