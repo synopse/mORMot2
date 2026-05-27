@@ -2392,8 +2392,8 @@ type
   // - maintains a list of all WebSockets clients for a given protocol
   THttpApiWebSocketServerProtocol = class
   private
-    fName: RawUtf8;
     fSafe: TOSLock;
+    fName: RawUtf8;
     fServer: THttpApiWebSocketServer;
     fConnections: PHttpApiWebSocketConnectionVector;
     fConnectionsCapacity: integer;

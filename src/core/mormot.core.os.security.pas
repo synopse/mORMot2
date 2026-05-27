@@ -7510,31 +7510,37 @@ begin
   Handle := 0;
   TokenType := wtt;
   Flag := fNone;
-  if wtt in [wttProcess, wttProcessUnLock] then
-  begin
-    if not OpenProcessToken(GetCurrentProcess, access, Handle) then
-      RaiseLastError('OpenToken: OpenProcessToken');
-    if wtt = wttProcessUnLock then
-      exit; // e.g.
-    RawTokenOpenSafe.LockAndInitIfNeeded;
-    Flag := fLocked;
-  end
-  else if not OpenThreadToken(GetCurrentThread, access, false, Handle) then
-    if GetLastError = ERROR_NO_TOKEN then
-    begin
-      // try to impersonate the thread - requires eventual RevertToSelf
-      if not ImpersonateSelf(SecurityImpersonation) then
-        RaiseLastError('OpenToken: ImpersonateSelf');
-      if OpenThreadToken(GetCurrentThread, access, false, Handle) then
+  case wtt of
+    wttProcess,
+    wttProcessUnLock:
       begin
-        Flag := fImpersonified;
-        exit;
+        if not OpenProcessToken(GetCurrentProcess, access, Handle) then
+          RaiseLastError('OpenToken: OpenProcessToken');
+        if wtt = wttProcessUnLock then
+          exit; // e.g. when quering process user SID or groups
+        RawTokenOpenSafe.LockAndInitIfNeeded;
+        Flag := fLocked;
       end;
-      RevertToSelf;
-      RaiseLastError('OpenToken: OpenThreadToken after ImpersonateSelf');
-    end
-    else
-      RaiseLastError('OpenToken: OpenThreadToken');
+    wttThread:
+      if not OpenThreadToken(GetCurrentThread, access, false, Handle) then
+        if GetLastError = ERROR_NO_TOKEN then
+        begin
+          // try to impersonate the thread - requires eventual RevertToSelf
+          if not ImpersonateSelf(SecurityImpersonation) then
+            RaiseLastError('OpenToken: ImpersonateSelf');
+          if OpenThreadToken(GetCurrentThread, access, false, Handle) then
+          begin
+            Flag := fImpersonified;
+            exit;
+          end;
+          RevertToSelf;
+          RaiseLastError('OpenToken: OpenThreadToken after ImpersonateSelf');
+        end
+        else
+          RaiseLastError('OpenToken: OpenThreadToken');
+  else
+    raise EOSException.CreateFmt('TOpenToken.Open(%d)', [ord(wtt)]);
+  end;
 end;
 
 procedure TOpenToken.Close;
