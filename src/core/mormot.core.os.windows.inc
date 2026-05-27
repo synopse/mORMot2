@@ -2272,8 +2272,7 @@ begin
   if not DelayedGetProcessMemoryInfo then
     exit;
   h := OpenProcess(OpenProcessAccess, false, PID);
-  if h = 0 then
-    exit;
+  if h <> 0 then
   try
     if GetProcessTimes(h, ftp, fte, ftkrn, ftusr) then
     begin

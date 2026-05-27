@@ -7502,11 +7502,11 @@ function RawTokenGetInfo(tok: THandle; tic: TTokenInformationClass;
 var
   len: DWord; // safer with an explicit variable
 begin
+  buf.Init; // setup stack-allocated buffer - caller will always make buf.Done
   result := 0; // error
   if (tok = INVALID_HANDLE_VALUE) or
      (tok = 0) then
     exit;
-  buf.Init; // stack-allocated buffer (enough in most cases)
   if GetTokenInformation(tok, tic, buf.buf, buf.len, len) then
   begin
     result := len; // we directly stored the output buffer on buf stack
@@ -7710,6 +7710,8 @@ begin
   if WSP_TXT[high(WSP_TXT)] = nil then
     WspSetup;
   result := false;
+  if Token = 0 then
+    exit;
   id := WSP_ID[wsp]; // O(1) lookup
   if id = 0 then
     exit; // unsupported (e.g. SeCreateSymbolicLinkPrivilege on XP)
@@ -7846,11 +7848,10 @@ begin
     exit;
   prochandle := OpenProcess(
     PROCESS_QUERY_INFORMATION or PROCESS_VM_READ, FALSE, aPid);
-  if prochandle = INVALID_HANDLE_VALUE then
-    exit;
-  Include(aInfo.AvailableInfo, wpaiPID);
-  aInfo.PID := aPid;
+  if prochandle <> 0 then
   try
+    Include(aInfo.AvailableInfo, wpaiPID);
+    aInfo.PID := aPid;
     // read PBI (Process Basic Information)
     sizeneeded := 0;
     FillCharFast(pbi, SizeOf(pbi), 0);
