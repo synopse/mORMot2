@@ -4498,6 +4498,8 @@ type
     // - if returned true, caller should eventually call UnLock()
     function TryLock: boolean;
       {$ifdef FPC} inline; {$endif} { Delphi can't inline TryEnterCriticalSection }
+    /// enter an OS lock, initializing it if it was currently filled with zeros
+    procedure LockAndInitIfNeeded;
     /// leave an OS lock
     procedure UnLock;
       {$ifdef FPC} inline; {$endif} { Delphi can't inline LeaveCriticalSection }
@@ -10891,6 +10893,18 @@ end;
 function TOSLock.TryLock: boolean;
 begin
   result := mormot.core.os.TryEnterCriticalSection(CS) <> 0;
+end;
+
+procedure TOSLock.LockAndInitIfNeeded;
+begin
+  if not IsInitializedCriticalSection(CS) then
+  begin
+    OSSafe.Lock;
+    if not IsInitializedCriticalSection(CS) then // thread-safe initialization
+      Init;
+    OSSafe.Lock;
+  end;
+  Lock;
 end;
 
 procedure TOSLock.UnLock;
