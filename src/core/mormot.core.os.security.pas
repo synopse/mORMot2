@@ -6054,7 +6054,7 @@ type
     function Read8(var v: integer): boolean;
     function Read16(var v: integer): boolean;
     function Read32(var v: integer): boolean;
-    function ReadOctStr(dest: PRawUtf8; len32: boolean = false): boolean;
+    function ReadOctStr(var dest: RawUtf8; len32: boolean = false): boolean;
     function ReadPrincipal(var dest, realm: RawUtf8; count: integer;
       len32: boolean): boolean;
   end;
@@ -6089,13 +6089,13 @@ begin
   result := Has(4);
   if not result then
     exit;
-  v := PCardinal(P)^; // may read up to 4 bytes after end - fine with strings
+  v := PCardinal(P)^;
   inc(P, 4);
   if bigendian then
     v := bswap32(v);
 end;
 
-function TKerberosReader.ReadOctStr(dest: PRawUtf8; len32: boolean): boolean;
+function TKerberosReader.ReadOctStr(var dest: RawUtf8; len32: boolean): boolean;
 var
   len: integer; // not PtrInt
 begin
@@ -6107,7 +6107,7 @@ begin
      not Has(len) then
     exit;
   if decodestr then // no transient memory alloc from BufferIsKeyTab()
-    FastSetString(dest^, P, len);
+    FastSetString(dest, P, len);
   inc(P, len);
   result := true;
 end;
@@ -6119,14 +6119,14 @@ var
 begin
   result := false;
   if (count = 0) or
-     not ReadOctStr(@realm, len32) or
-     not ReadOctStr(@dest, len32) then // component 1
+     not ReadOctStr(realm, len32) or
+     not ReadOctStr(dest, len32) then // component 1
     exit;
   repeat
     dec(count);
     if count = 0 then
       break;
-    if not ReadOctStr(@c, len32) then // component 2..n
+    if not ReadOctStr(c, len32) then // component 2..n
       exit;
     if decodestr then
       dest := Join([dest, '/', c]);
@@ -6292,7 +6292,7 @@ begin
     if not r.Read32(v) or // e.Timestamp is 64-bit -> use temp 32-bit v
        not r.Read8(e.KeyVersion) or
        not r.Read16(e.EncType) or
-       not r.ReadOctStr(@e.Key) then
+       not r.ReadOctStr(RawUtf8(e.Key)) then
       exit;
     e.Timestamp := PCardinal(@v)^; // cardinal is Year-2038-ready (up to 2106)
     if r.Has(4) and
