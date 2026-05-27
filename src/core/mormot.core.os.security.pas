@@ -2648,6 +2648,7 @@ type
     fAvailable: TWinSystemPrivileges;
     fEnabled: TWinSystemPrivileges;
     fDefEnabled: TWinSystemPrivileges;
+    fTokenType: TWinTokenType;
     fToken: THandle;
     function SetPrivilege(wsp: TWinSystemPrivilege; on: boolean): boolean;
     procedure LoadPrivileges;
@@ -2655,6 +2656,7 @@ type
     /// initialize the object dedicated to management of available privileges
     // - should eventually call Done() to release any resource
     // - default wttThread seems faster and safer for most local calls
+    // - wttProcess will lock a critical section until Done() is called
     procedure Init(aTokenType: TWinTokenType = wttThread;
       aLoadPrivileges: boolean = true);
     /// finalize the object and relese Token handle
@@ -2682,6 +2684,9 @@ type
     /// low-level access to the privileges token handle
     property Token: THandle
       read fToken;
+    /// low-level access to the privileges token type
+    property TokenType: TWinTokenType
+      read fTokenType;
   end;
 
   /// which information was returned by GetProcessInfo() overloaded functions
@@ -7563,6 +7568,7 @@ const
     'SeTimeZonePrivilege'#0 +             // wspTimeZone
     'SeCreateSymbolicLinkPrivilege'#0;    // wspCreateSymbolicLink
 var
+  WSP_SAFE: TOSLock; // protect nested calls for wttProcess
   WSP_ID: array[TWinSystemPrivilege] of TLargeInteger;
   WSP_TXT: array[TWinSystemPrivilege] of PUtf8Char;
 
@@ -7574,6 +7580,7 @@ begin
   OsSecSafe.Lock; // thread-safe late resolution of all known priviledges
   if WSP_TXT[high(WSP_TXT)] = nil then
   begin
+    WSP_SAFE.Init;
     p := _WSP;
     for w := low(w) to high(w) do
     begin
@@ -7592,15 +7599,29 @@ begin
   result := WSP_TXT[w];
 end;
 
-procedure TSynWindowsPrivileges.Init(aTokenPrivilege: TWinTokenType;
+procedure TSynWindowsPrivileges.Init(aTokenType: TWinTokenType;
   aLoadPrivileges: boolean);
 begin
+  if WSP_TXT[high(WSP_TXT)] = nil then
+    WspSetup; // delayed initialization
+  fToken := 0; // as expected by Done on any RaiseLastError in RawTokenOpen()
+  fTokenType := wttThread;
   fAvailable := [];
   fEnabled := [];
   fDefEnabled := [];
-  fToken := RawTokenOpen(aTokenPrivilege, TOKEN_QUERY or TOKEN_ADJUST_PRIVILEGES);
+  fToken := RawTokenOpen(aTokenType, TOKEN_QUERY or TOKEN_ADJUST_PRIVILEGES);
   if aLoadPrivileges then
-    LoadPrivileges;
+    try
+      LoadPrivileges; // may raise an exception
+    except
+      CloseHandle(fToken);
+      fToken := 0;
+      raise;
+    end;
+  if aTokenType <> wttProcess then
+    exit;
+  fTokenType := wttProcess;
+  WSP_SAFE.Lock; // protect global coherency around multiple threads
 end;
 
 procedure TSynWindowsPrivileges.Done(aRestoreInitiallyEnabled: boolean);
@@ -7608,21 +7629,27 @@ var
   p: TWinSystemPrivilege;
   new: TWinSystemPrivileges;
 begin
-  if aRestoreInitiallyEnabled then
-  begin
-    new := fEnabled - fDefEnabled;
-    if new <> [] then
-      for p := low(p) to high(p) do
-        if p in new then
-        begin
-          Disable(p);
-          exclude(new, p);
-          if new = [] then
-            break; // all done
-        end;
+  if fToken <> 0 then
+  try
+    if aRestoreInitiallyEnabled then
+    begin
+      new := fEnabled - fDefEnabled;
+      if new <> [] then
+        for p := low(p) to high(p) do
+          if p in new then
+          begin
+            Disable(p);
+            exclude(new, p);
+            if new = [] then
+              break; // all done
+          end;
+    end;
+  finally
+    CloseHandle(fToken);
+    fToken := 0;
+    if fTokenType = wttProcess then
+      WSP_SAFE.UnLock;
   end;
-  CloseHandle(fToken);
-  fToken := 0;
 end;
 
 function TSynWindowsPrivileges.Enable(aPrivilege: TWinSystemPrivilege): boolean;
@@ -7666,27 +7693,22 @@ var
   i, ndx: PtrInt;
   priv: PLUIDANDATTRIBUTES;
 begin
-  fAvailable := [];
-  fEnabled := [];
-  fDefEnabled := [];
   if Token = 0 then
     raise EOSException.Create('LoadPriviledges: no token');
-  if WSP_TXT[high(WSP_TXT)] = nil then
-    WspSetup;
   try
     if RawTokenGetInfo(Token, TokenPrivileges, buf) = 0 then
       RaiseLastError('LoadPriviledges: GetTokenInformation');
     tp := buf.buf;
-    priv := @tp.Privileges;
-    for i := 1 to tp.PrivilegeCount do
+    priv := @tp^.Privileges;
+    for i := 1 to tp^.PrivilegeCount do
     begin
-      if priv.Luid <> 0 then
+      if priv^.Luid <> 0 then
       begin
-        ndx := Int64ScanIndex(@WSP_ID, length(WSP_ID), priv.Luid);
+        ndx := Int64ScanIndex(@WSP_ID, length(WSP_ID), priv^.Luid);
         if ndx >= 0 then
         begin
           include(fAvailable, TWinSystemPrivilege(ndx));
-          if priv.Attributes and SE_PRIVILEGE_ENABLED <> 0 then
+          if priv^.Attributes and SE_PRIVILEGE_ENABLED <> 0 then
             include(fDefEnabled, TWinSystemPrivilege(ndx));
         end;
       end;
@@ -7708,8 +7730,6 @@ var
   id: TLargeInteger;
   cbprev, att: DWord;
 begin
-  if WSP_TXT[high(WSP_TXT)] = nil then
-    WspSetup;
   result := false;
   if Token = 0 then
     exit;
@@ -8418,6 +8438,7 @@ initialization
 finalization
   if CryptProv <> nil then // used as fallback on XP
     CryptoApi.ReleaseContext(CryptProv, 0);
+  WSP_SAFE.Done;
 
 {$endif OSWINDOWS}
 
