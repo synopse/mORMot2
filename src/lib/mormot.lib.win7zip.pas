@@ -1989,12 +1989,15 @@ begin
 end;
 
 function T7zReader.Count: integer;
+var
+  n: cardinal; // safe with a local variable
 begin
   if fInArchive = nil then
-    result := 0
+    n := 0
   else
     E7Zip.CheckOk(self, 'GetNumberOfItems',
-      fInArchive.GetNumberOfItems(PCardinal(@result)^));
+      fInArchive.GetNumberOfItems(n));
+  result := n;
 end;
 
 function T7zReader.NameToIndex(const zipname: RawUtf8): integer;

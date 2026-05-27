@@ -10512,10 +10512,13 @@ begin
 end;
 
 function BigNumFromDecimal(const Text: RawUtf8): PBIGNUM;
+var
+  bn: PBIGNUM; // safer with an explicit transient variable
 begin
-  result := nil;
-  if BN_dec2bn(@result, pointer(Text)) = 0 then
-    result := nil;
+  bn := nil;
+  if BN_dec2bn(@bn, pointer(Text)) = 0 then
+    bn := nil;
+  result := bn;
 end;
 
 function BigNumHexFromDecimal(const Text: RawUtf8): RawUtf8;
@@ -10588,40 +10591,39 @@ var
   pw: pointer;
   priv: PBIO;
   pkcs12: PPKCS12;
+  key: PEVP_PKEY;
 begin
-  if (PrivateKey = nil) or
-     (PrivateKeyLen = 0) then
-    result := nil
-  else
+  key := nil;
+  if (PrivateKey <> nil) and
+     (PrivateKeyLen <> 0) then
   begin
     pw := PassNotNil(Password);
     priv := BIO_new_mem_buf(PrivateKey, PrivateKeyLen);
     if NetIsPem(PrivateKey) then
-      result := PEM_read_bio_PrivateKey(priv, nil, nil, pw)
-    else
-      result := nil;
-    if result = nil then
+      key := PEM_read_bio_PrivateKey(priv, nil, nil, pw);
+    if key = nil then
     begin
       if Password = '' then
       begin
         priv.Reset;
-        result := d2i_PrivateKey_bio(priv, nil); // try raw binary format
+        key := d2i_PrivateKey_bio(priv, nil); // try raw binary format
       end;
-      if result = nil then
+      if key = nil then
       begin
         priv.Reset;
-        result := d2i_PKCS8PrivateKey_bio(priv, nil, nil, pw); // try PKCS#8
+        key := d2i_PKCS8PrivateKey_bio(priv, nil, nil, pw); // try PKCS#8
       end;
-      if result = nil then
+      if key = nil then
       begin
         priv.Reset;
         pkcs12 := d2i_PKCS12_bio(priv, nil); // try PKCS#12
-        pkcs12.Extract(Password, @result, Pkcs12Cert, nil); // ignore CA
+        pkcs12.Extract(Password, @key, Pkcs12Cert, nil); // ignore CA
         pkcs12.Free;
       end;
     end;
     priv.Free;
   end;
+  result := key;
 end;
 
 function LoadPrivateKey(const Saved: RawByteString;
