@@ -11419,10 +11419,14 @@ end;
 // see https://www.openssl.org/docs/man1.1.1/man3/SSL_get_error.html
 function TOpenSslNetTls.CheckSsl(res: integer): TNetResult;
 var
-  err: integer;
+  err: integer; // not PtrInt
+  tmp: ShortString;
 begin
-  err := SSL_get_error(fSsl, res); // caller ensured res > 0
+  tmp[0] := #0;
+  err := SSL_get_error(fSsl, res); // caller ensured res <= 0
   case err of
+    SSL_ERROR_NONE:
+      result := nrOk; // paranoid
     SSL_ERROR_WANT_READ,
     SSL_ERROR_WANT_WRITE:
       // note that want_read may appear during recv, and want_write during send
@@ -11432,21 +11436,31 @@ begin
       result := nrClosed;
     SSL_ERROR_SYSCALL:
       begin
-        result := NetLastError; // try to get some additional context from OS
-        if result in [nrOK, nrRetry] then
-          result := nrFatalError;
+        // additional context from OS to return the socket state
+        result := NetLastError(NO_ERROR, @err);
+        if result <= nrRetry then
+          result := nrUnknownError; // ensure reported as an error
+        tmp := SSL_ERROR_TEXT[SSL_ERROR_SYSCALL];
+        if (err <> NO_ERROR) and
+           (fLastError <> nil) then
+          OsErrorAppend(err, tmp, ' ');
         fDoSslShutdown := false; // connection is likely to be broken
       end;
-    else
+    else // e.g. SSL_ERROR_SSL or out-of-context SSL_ERROR_WANT_*
       begin
+        SSL_get_error_short(err, tmp); // as human-readable text
         result := nrFatalError;
-        fDoSslShutdown := false;
+        if err = SSL_ERROR_SSL then // non-recoverable protocol error
+          if Pos(OPENSSL_EOF_TEXT, tmp) > 0 then // since OpenSSL 1.1.1e
+            result := nrClosed;
+        fDoSslShutdown := false; // connection is likely to be broken
       end;
   end;
-  if (result <> nrRetry) and
-     (fLastError <> nil) then
-    SSL_get_error_text(err, fLastError^); // retrieve as human-readable text
-end;
+  if (result > nrRetry) and
+     (fLastError <> nil) and
+     (tmp[0] <> #0) then
+    ShortStringToAnsi7String(tmp, fLastError^);
+ end;
 
 function TOpenSslNetTls.Receive(Buffer: pointer; var Length: integer): TNetResult;
 begin
