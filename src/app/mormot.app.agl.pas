@@ -1678,14 +1678,17 @@ begin
 end;
 
 function TSynAngelize.DoHttpGet(const aUri: RawUtf8): integer;
+var
+  status: integer; // not PtrInt
 begin
-  result := 0;
+  status := 0;
   try
-    HttpGet(aUri, nil, false, @result, fSas.HttpTimeoutMS,
+    HttpGet(aUri, nil, false, @status, fSas.HttpTimeoutMS,
       {forcesocket:}true, {ignoretlserror:}true);
   except
-    result := -500; // e.g. on TCP or TLS connection error
+    status := -500; // e.g. on TCP or TLS connection error
   end;
+  result := status; // safer with an explicit variable
 end;
 
 function TSynAngelize.DoNotifyByEmail(const aService: TSynAngelizeService;
