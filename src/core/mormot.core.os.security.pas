@@ -7661,18 +7661,17 @@ end;
 procedure TSynWindowsPrivileges.LoadPrivileges;
 var
   buf: TSynTempBuffer;
-  name: TShort127;
   tp: PTOKEN_PRIVILEGES;
-  i: PtrInt;
-  len: cardinal;
-  p: TWinSystemPrivilege;
+  i, ndx: PtrInt;
   priv: PLUIDANDATTRIBUTES;
 begin
-  if Token = 0 then
-    raise EOSException.Create('LoadPriviledges: no token');
   fAvailable := [];
   fEnabled := [];
   fDefEnabled := [];
+  if Token = 0 then
+    raise EOSException.Create('LoadPriviledges: no token');
+  if WSP_TXT[high(WSP_TXT)] = nil then
+    WspSetup;
   try
     if RawTokenGetInfo(Token, TokenPrivileges, buf) = 0 then
       RaiseLastError('LoadPriviledges: GetTokenInformation');
@@ -7680,20 +7679,16 @@ begin
     priv := @tp.Privileges;
     for i := 1 to tp.PrivilegeCount do
     begin
-      len := high(name);
-      if not LookupPrivilegeNameA(nil, priv.Luid, @name[1], len) or
-         (len = 0) then
-         RaiseLastError('LoadPriviledges: LookupPrivilegeNameA');
-      name[0] := AnsiChar(len);
-      for p := low(p) to high(p) do
-        if not (p in fAvailable) and
-           PropNameEquals(PShortString(@name), PShortString(@_WSP[p])) then
+      if priv.Luid <> 0 then
+      begin
+        ndx := Int64ScanIndex(@WSP_ID, length(WSP_ID), priv.Luid);
+        if ndx >= 0 then
         begin
-          include(fAvailable, p);
+          include(fAvailable, TWinSystemPrivilege(ndx));
           if priv.Attributes and SE_PRIVILEGE_ENABLED <> 0 then
-            include(fDefEnabled, p);
-          break;
+            include(fDefEnabled, TWinSystemPrivilege(ndx));
         end;
+      end;
       inc(priv);
     end;
     fEnabled := fDefEnabled;
