@@ -2595,7 +2595,7 @@ function X509_print(bp: PBIO; x: PX509): integer; cdecl;
 
 procedure OpenSSL_Free(ptr: pointer);
 
-function OpenSSL_error_short(error: integer): ShortString;
+procedure OpenSSL_error_short(error: integer; var result: ShortString);
 procedure OpenSSL_error(error: integer; var result: RawUtf8); overload;
 function OpenSSL_error(error: integer): RawUtf8; overload;
   {$ifdef HASINLINE} inline; {$endif}
@@ -10286,12 +10286,12 @@ begin
   FastSetString(result, @tmp, mormot.core.base.StrLen(@tmp));
 end;
 
-function OpenSSL_error_short(error: integer): ShortString;
+procedure OpenSSL_error_short(error: integer; var result: ShortString);
 begin
   result[0] := #0;
   if error = 0 then // no error in the queue
     exit;
-  ERR_error_string_n(error, @result[1], 254);
+  ERR_error_string_n(error, @result[1], high(result) - 1);
   result[0] := AnsiChar(mormot.core.base.StrLen(@result[1]));
 end;
 
@@ -10327,6 +10327,8 @@ const
     'WANT_CLIENT_HELLO_CB');
 
 procedure SSL_get_error_short(get_error: integer; var dest: shortstring);
+var
+  tmp: ShortString;
 begin
   dest := 'SSL_ERROR_';
   if get_error in [low(SSL_ERROR_TEXT) .. high(SSL_ERROR_TEXT)] then
@@ -10340,7 +10342,8 @@ begin
           if get_error <> 0 then
           begin
             AppendShortTwoChars(ord(' ') + ord('(') shl 8, @dest);
-            AppendShort(OpenSSL_error_short(get_error), dest);
+            OpenSSL_error_short(get_error, tmp);
+            AppendShort(tmp, dest);
             AppendShortChar(')', @dest)
           end;
         end;

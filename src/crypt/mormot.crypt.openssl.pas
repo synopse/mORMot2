@@ -1991,13 +1991,17 @@ end;
 function TJwtOpenSsl.ComputeSignature(const headpayload: RawUtf8): RawUtf8;
 var
   sig: RawByteString;
+  tmp: ShortString;
 begin
   if fPrivKey = nil then
     fPrivKey := LoadPrivateKey(fPrivateKey, fPrivateKeyPassword);
   sig := fPrivKey^.Sign(fAlgoMd, pointer(headpayload), length(headpayload));
   if sig = '' then
+  begin
+    OpenSSL_error_short(ERR_get_error, tmp);
     EJwtException.RaiseUtf8('%.ComputeSignature: OpenSslSign % failed [%]',
-      [self, fAlgorithm, OpenSSL_error_short(ERR_get_error)]);
+      [self, fAlgorithm, tmp]);
+  end;
   result := GetSignatureSecurityRaw(fAsymAlgo, sig); // into base-64 encoded raw
 end;
 
