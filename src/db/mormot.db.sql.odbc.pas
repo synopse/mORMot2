@@ -821,15 +821,18 @@ begin
 end;
 
 function TSqlDBOdbcStatement.ColumnCurrency(Col: integer): currency;
+var
+  curr: currency; // safer with an explicit variable
 begin
   case GetCol(Col, ftCurrency) of
     colNull:
-      result := 0;
+      PInt64(@curr)^ := 0;
     colWrongType:
-      ColumnToTypedValue(Col, ftCurrency, result);
+      ColumnToTypedValue(Col, ftCurrency, curr);
   else
-    PInt64(@result)^ := StrToCurr64(pointer(fColData[Col])); // as SQL_C_CHAR
+    PInt64(@curr)^ := StrToCurr64(pointer(fColData[Col])); // as SQL_C_CHAR
   end;
+  result := curr;
 end;
 
 function TSqlDBOdbcStatement.ColumnDateTime(Col: integer): TDateTime;

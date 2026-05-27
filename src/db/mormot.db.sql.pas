@@ -6186,17 +6186,20 @@ begin
 end;
 
 function TSqlDBStatement.ColumnTimestamp(Col: integer): TTimeLog;
+var
+  b: TTimeLogBits; // safer with a transient variable
 begin
   case ColumnType(Col) of // will call GetCol() to check Col
     ftNull:
-      result := 0;
+      b.Value := 0;
     ftInt64:
-      result := ColumnInt(Col);
+      b.Value := ColumnInt(Col);
     ftDate:
-      PTimeLogBits(@result)^.From(ColumnDateTime(Col));
+      b.From(ColumnDateTime(Col));
   else
-    PTimeLogBits(@result)^.From(TrimU(ColumnUtf8(Col)));
+    b.From(TrimU(ColumnUtf8(Col)));
   end;
+  result := b.Value;
 end;
 
 function TSqlDBStatement.ColumnTimestamp(const ColName: RawUtf8): TTimeLog;
@@ -6616,14 +6619,14 @@ function TSqlDBStatement.FetchAllToBinary(Dest: TStream; MaxRowCount: cardinal;
 var
   f, fmax, fieldsize, nullrowlast: integer;
   startpos: Int64;
-  maxmem: PtrInt;
+  maxmem, count: PtrInt;
   W: TBufferWriter;
   ft: TSqlDBFieldType;
   coltypes: TSqlDBFieldTypeDynArray;
   nullbits: TByteDynArray;
   tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
-  result := 0;
+  count := 0; // safer with a transient local variable
   maxmem := Connection.Properties.StatementMaxMemory;
   W := TBufferWriter.Create(Dest, @tmp, SizeOf(tmp));
   try
@@ -6657,9 +6660,9 @@ begin
           // save row position in DataRowPosition[] (if any)
           if DataRowPosition <> nil then
           begin
-            if Length(DataRowPosition^) <= integer(result) then
-              SetLength(DataRowPosition^, NextGrow(result));
-            DataRowPosition^[result] := W.TotalWritten - startpos;
+            if Length(DataRowPosition^) <= count then
+              SetLength(DataRowPosition^, NextGrow(count));
+            DataRowPosition^[count] := W.TotalWritten - startpos;
           end;
           // first write null columns flags
           if nullrowlast > 0 then
@@ -6684,9 +6687,9 @@ begin
             W.Write1(0); // = W.WriteVarUInt32(0)
           // then write data values
           ColumnsToBinary(W, pointer(nullbits), coltypes);
-          inc(result);
+          inc(count);
           if (MaxRowCount > 0) and
-             (result >= MaxRowCount) then
+             (count >= PtrInt(MaxRowCount)) then
             break;
           if (maxmem > 0) and
              (W.TotalWritten > maxmem) then // Dest.Position is slower
@@ -6695,11 +6698,12 @@ begin
         until not Step;
       ReleaseRows;
     end;
-    W.Write(@result, SizeOf(result)); // fixed size at the end for row count
+    W.Write(@count, 4); // 32-bit number of rows at the end of whole binary
     W.Flush;
   finally
     W.Free;
   end;
+  result := count;
 end;
 
 function TSqlDBStatement.FetchAllToDocVariantArray(MaxRowCount: cardinal): variant;
@@ -7402,8 +7406,11 @@ begin
 end;
 
 function TSqlDBConnection.GetServerTimestamp: TTimeLog;
+var
+  t: TTimeLogBits;
 begin
-  PTimeLogBits(@result)^.From(GetServerDateTime);
+  t.From(GetServerDateTime);
+  result := t.Value;
 end;
 
 function TSqlDBConnection.GetServerDateTime: TDateTime;

@@ -838,14 +838,16 @@ function TSqlDBOracleStatement.ColumnCurrency(Col: integer): currency;
 var
   C: PSqlDBColumnProperty;
   V: PUtf8Char;
+  curr: currency; // safer with an explicit variable
 begin
   V := GetCol(Col, C);
   if V = nil then // column is NULL
     result := 0
   else if C^.ColumnType = ftCurrency then  // encoded as SQLT_STR
-    PInt64(@result)^ := StrToCurr64(V)
+    PInt64(@curr)^ := StrToCurr64(V)
   else
-    ColumnToTypedValue(Col, ftCurrency, result);
+    ColumnToTypedValue(Col, ftCurrency, curr);
+  result := curr;
 end;
 
 function TSqlDBOracleStatement.ColumnDateTime(Col: integer): TDateTime;
@@ -1950,11 +1952,14 @@ begin
 end;
 
 function TSqlDBOracleStatement.UpdateCount: integer;
+var
+  n: integer;
 begin
-  result := 0;
+  n := 0;
   if fStatement <> nil then
-    OCI.AttrGet(fStatement, OCI_HTYPE_STMT, @result, nil,
+    OCI.AttrGet(fStatement, OCI_HTYPE_STMT, @n, nil,
       OCI_ATTR_ROW_COUNT, fError);
+  result := n;
 end;
 
 procedure TSqlDBOracleStatement.SetColumnsForPreparedStatement;

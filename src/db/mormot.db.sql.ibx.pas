@@ -927,12 +927,14 @@ var
   nul: boolean;
   len: smallint;
   data: PByte;
+  curr: currency; // safer with an explicit variable
 begin
   CheckColAndRowset(Col);
   if fColumnsMeta[Col].Scale = -4 then
   begin
     fResults.GetData(Col, nul, len, data);
-    PInt64(@result)^ := PInt64(data)^;
+    PInt64(@curr)^ := PInt64(data)^;
+    result := curr;
   end
   else
     result := fResults[Col].GetAsCurrency;

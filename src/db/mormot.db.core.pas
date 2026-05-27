@@ -2284,8 +2284,11 @@ begin
 end;
 
 function NullableTimeLogToValue(const V: TNullableTimeLog): TTimeLog;
+var
+  b: TTimeLogBits; // safer with a transient variable
 begin
-  VariantToInt64(PVariant(@V)^, PInt64(@result)^);
+  VariantToInt64(PVariant(@V)^, b.Value);
+  result := b.Value;
 end;
 
 // TNullableUtf8Text
