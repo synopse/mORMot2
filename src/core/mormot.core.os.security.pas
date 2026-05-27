@@ -7499,21 +7499,25 @@ end;
 
 function RawTokenGetInfo(tok: THandle; tic: TTokenInformationClass;
   var buf: TSynTempBuffer): cardinal;
+var
+  len: DWord; // safer with an explicit variable
 begin
-  buf.Init; // stack-allocated buffer (enough in most cases)
   result := 0; // error
   if (tok = INVALID_HANDLE_VALUE) or
-     (tok = 0) or
-     GetTokenInformation(tok, tic, buf.buf, buf.len, result) then
-    exit; // we directly store the output buffer on buf stack
-  if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
+     (tok = 0) then
+    exit;
+  buf.Init; // stack-allocated buffer (enough in most cases)
+  if GetTokenInformation(tok, tic, buf.buf, buf.len, len) then
   begin
-    result := 0;
+    result := len; // we directly stored the output buffer on buf stack
     exit;
   end;
-  buf.Done;
-  buf.Init(result); // we need a bigger buffer (unlikely)
-  if not GetTokenInformation(tok, tic, buf.buf, buf.len, result) then
+  if GetLastError <> ERROR_INSUFFICIENT_BUFFER then
+    exit;
+  buf.Init(len); // we need a bigger buffer (unlikely)
+  if GetTokenInformation(tok, tic, buf.buf, buf.len, len) then
+    result := len
+  else
     result := 0;
 end;
 
