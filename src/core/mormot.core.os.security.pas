@@ -6549,7 +6549,6 @@ end;
 procedure AsnEncOidItem(Value: PtrUInt; var Result: ShortString);
 var
   tmp: THash128; // written in reverse order (big endian)
-  vl, rl: PtrInt;
   r: PByte;
 begin
   r := @tmp[14];
@@ -6561,10 +6560,7 @@ begin
     r^ := byte(Value) or $80;
     Value := Value shr 7;
   end;
-  rl := ord(Result[0]);
-  vl := PAnsiChar(@tmp[15]) - pointer(r);
-  inc(Result[0], vl);
-  MoveFast(r^, Result[rl + 1], vl);
+  AppendShortBuffer(pointer(r), PAnsiChar(@tmp[15]) - pointer(r), high(Result), @Result);
 end;
 
 function AsnEncOid(OidText: PUtf8Char): TAsnObject;
