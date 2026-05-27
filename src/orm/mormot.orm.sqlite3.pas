@@ -1362,6 +1362,7 @@ end;
 function TRestOrmServerDB.TableMaxID(Table: TOrmClass): TID;
 var
   sql: RawUtf8;
+  res: Int64;
 begin
   if GetStorage(Table) <> nil then
     // select(max(RowID)) with proper SQL detection e.g. for ext/MongoDB
@@ -1370,7 +1371,9 @@ begin
   begin
     sql := 'select rowid from ' + Table.SqlTableName +
            ' order by rowid desc limit 1'; // faster than max(RowID) on SQLite3
-    if not InternalExecute(sql, true, PInt64(@result)) then
+    if InternalExecute(sql, true, @res) then
+      result := res
+    else
       result := 0;
   end;
 end;

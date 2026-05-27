@@ -8787,8 +8787,11 @@ begin
 end;
 
 function TOrmTableAbstract.GetAsCurrency(Row, Field: PtrInt): currency;
+var
+  curr: currency; // safer with an explicit local variable
 begin
-  PInt64(@result)^ := StrToCurr64(Get(Row, Field), nil);
+  PInt64(@curr)^ := StrToCurr64(Get(Row, Field), nil);
+  result := curr;
 end;
 
 function TOrmTableAbstract.GetAsCurrency(Row: PtrInt; const FieldName: RawUtf8): currency;

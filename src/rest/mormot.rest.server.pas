@@ -7579,7 +7579,7 @@ function TRestServer.ServiceMethodRegister(aMethodName: RawUtf8;
 var
   m: TUriMethods;
   one: TUriMethod;
-  pos: PtrInt;
+  pos, ndx: PtrInt;
   obj: TObject;
   met: PRestServerMethod;
 begin
@@ -7609,12 +7609,14 @@ begin
      (Model.GetTableIndex(aMethodName) >= 0) then
     EServiceException.RaiseUtf8('Published method name %.% ' +
       'conflicts with a Table in the Model!', [obj, aMethodName]);
+  ndx := 0;
   met := fPublishedMethods.AddUniqueName(aMethodName,
-    'Duplicated published method name %.%', [obj, aMethodName], @result);
+    'Duplicated published method name %.%', [obj, aMethodName], @ndx);
   met^.Callback := aEvent;
   met^.ByPassAuthentication := aByPassAuthentication;
   met^.Methods := m;
-  ResetRoutes;  // fRouter will be re-generated when needed
+  ResetRoutes;   // fRouter will be re-generated when needed
+  result := ndx; // safer with a transient local variable
 end;
 
 function TRestServer.ServiceMethodByPassAuthentication(
