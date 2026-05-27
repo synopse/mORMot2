@@ -7494,10 +7494,13 @@ begin
   else if not OpenThreadToken(GetCurrentThread, access, false, result) then
     if GetLastError = ERROR_NO_TOKEN then
     begin
-      // try to impersonate the thread
-      if not ImpersonateSelf(SecurityImpersonation) or
-         not OpenThreadToken(GetCurrentThread, access, false, result) then
+      // try to impersonate the thread - requires eventual RevertToSelf
+      if not ImpersonateSelf(SecurityImpersonation) then
         RaiseLastError('OpenToken: ImpersonateSelf');
+      if OpenThreadToken(GetCurrentThread, access, false, result) then
+        exit;
+      RevertToSelf;
+      RaiseLastError('OpenToken: OpenThreadToken after ImpersonateSelf');
     end
     else
       RaiseLastError('OpenToken: OpenThreadToken');
@@ -7618,10 +7621,9 @@ begin
       fToken := 0;
       raise;
     end;
-  if aTokenType <> wttProcess then
-    exit;
-  fTokenType := wttProcess;
-  WSP_SAFE.Lock; // protect global coherency around multiple threads
+  fTokenType := aTokenType;
+  if aTokenType = wttProcess then
+    WSP_SAFE.Lock; // protect global coherency around multiple threads
 end;
 
 procedure TSynWindowsPrivileges.Done(aRestoreInitiallyEnabled: boolean);
@@ -7647,8 +7649,12 @@ begin
   finally
     CloseHandle(fToken);
     fToken := 0;
-    if fTokenType = wttProcess then
-      WSP_SAFE.UnLock;
+    case fTokenType of
+      wttProcess:
+        WSP_SAFE.UnLock; // make wttProcess calls thread-safe
+      wttThread:
+        RevertToSelf;    // mandatory after ImpersonateSelf
+    end;
   end;
 end;
 
