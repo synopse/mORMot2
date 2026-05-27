@@ -6275,9 +6275,10 @@ begin
         continue
       else
         exit;
+    if not r.Has(siz) then
+      exit;
     r.PEnd := r.P + siz; // paranoid: avoid overflow above the entry size
-    if (PtrUInt(r.PEnd) > PtrUInt(PEnding)) or
-       not r.Read16(ncomp) then
+    if not r.Read16(ncomp) then
       exit;
     if not r.bigendian then
       inc(ncomp); // minus 1 if version 0x501
@@ -6308,9 +6309,9 @@ begin
       inc(n);
       Finalize(e);
     end;
-    r.P := r.PEnd;              // prepare the next chunk
-    r.PEnd := PEnding;
-  until r.P = r.PEnd;
+    r.P := r.PEnd;     // prepare the next chunk
+    r.PEnd := PEnding; // till the end
+  until r.P >= r.PEnd;
   if r.decodestr then // not from BufferIsKeyTab()
     DynArrayFakeLength(fEntry, n);
   result := true;
