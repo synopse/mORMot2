@@ -4900,8 +4900,11 @@ begin
 end;
 
 function DoubleToCurrency(const d: double): currency;
+var
+  curr: currency; // safer with an explicit local variable
 begin
-  PInt64(@result)^ := trunc(d * CURR_RES);
+  PInt64(@curr)^ := trunc(d * CURR_RES);
+  result := curr;
 end;
 
 {$endif CPUX86}
@@ -4918,9 +4921,12 @@ begin
 end;
 
 function SimpleRoundTo2Digits(const Value: Currency): Currency;
+var
+  curr: currency; // safer with an explicit local variable
 begin
-  result := Value;
-  SimpleRoundTo2DigitsCurr64(PInt64(@result)^);
+  curr := Value;
+  SimpleRoundTo2DigitsCurr64(PInt64(@curr)^);
+  result := curr;
 end;
 
 procedure SimpleRoundTo2DigitsCurr64(var Value: Int64);
@@ -10495,9 +10501,12 @@ begin
 end;
 
 function TLecuyer.NextQWord: QWord;
+var
+  q: TQWordRec;
 begin
-  PQWordRec(@result)^.L := Next;
-  PQWordRec(@result)^.H := Next;
+  q.L := Next;
+  q.H := RawNext;
+  result := q.V;
 end;
 
 function TLecuyer.NextDouble: double;
@@ -12695,21 +12704,30 @@ end;
 {$endif HASINLINE}
 
 function crc64c(buf: PAnsiChar; len: cardinal): Int64;
+var
+  q: TQWordRec;
 begin
-  PQWordRec(@result)^.L := crc32c(0, buf, len);
-  PQWordRec(@result)^.H := crc32c(PQWordRec(@result)^.L, buf, len);
+  q.L := crc32c(0, buf, len);
+  q.H := crc32c(q.L, buf, len);
+  result := q.V;
 end;
 
 function crc32cTwice(seed: QWord; buf: PAnsiChar; len: cardinal): QWord;
+var
+  q: TQWordRec;
 begin
-  PQWordRec(@result)^.L := crc32c(PQWordRec(@seed)^.L, buf, len);
-  PQWordRec(@result)^.H := crc32c(PQWordRec(@seed)^.H, buf, len);
+  q.L := crc32c(PQWordRec(@seed)^.L, buf, len);
+  q.H := crc32c(PQWordRec(@seed)^.H, buf, len);
+  result := q.V;
 end;
 
 function crc63c(buf: PAnsiChar; len: cardinal): Int64;
+var
+  q: TQWordRec;
 begin
-  PQWordRec(@result)^.L := crc32c(0, buf, len);
-  PQWordRec(@result)^.H := crc32c(PQWordRec(@result)^.L, buf, len) and $7fffffff;
+  q.L := crc32c(0, buf, len);
+  q.H := crc32c(q.L, buf, len) and $7fffffff;
+  result := q.V;
 end;
 
 procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);

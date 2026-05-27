@@ -1629,7 +1629,7 @@ begin
   if (P = nil) or
      not Iso8601ToDatePUtf8Char(P, L, y, m, d) or
      not mormot.core.datetime.TryEncodeDate(y, m, d, PDateTime(@result)^) then
-  PInt64(@result)^ := 0;
+    PInt64(@result)^ := 0;
 end;
 
 function Iso8601CheckAndDecode(P: PUtf8Char; L: PtrInt;
@@ -3920,34 +3920,48 @@ begin
 end;
 
 function TimeLogNow: TTimeLog;
+var
+  b: TTimeLogBits; // safer with an explicit variable
 begin
-  PTimeLogBits(@result)^.FromNow;
+  b.FromNow;
+  result := b.Value;
 end;
 
 function TimeLogNowUtc: TTimeLog;
+var
+  b: TTimeLogBits; // safer with an explicit variable
 begin
-  PTimeLogBits(@result)^.FromUtcTime;
+  b.FromUtcTime;
+  result := b.Value;
 end;
 
 function TimeLogFromFile(const FileName: TFileName): TTimeLog;
 var
   dt: TDateTime;
+  b: TTimeLogBits; // safer with a transient variable
 begin
   dt := FileAgeToDateTime(FileName);
   if dt = 0 then
-    result := 0
+    b.Value := 0
   else
-    PTimeLogBits(@result)^.From(dt);
+    b.From(dt);
+  result := b.Value;
 end;
 
 function TimeLogFromDateTime(const DateTime: TDateTime): TTimeLog;
+var
+  b: TTimeLogBits; // safer with a transient variable
 begin
-  PTimeLogBits(@result)^.From(DateTime);
+  b.From(DateTime);
+  result := b.Value;
 end;
 
 function TimeLogFromUnixTime(const UnixTime: TUnixTime): TTimeLog;
+var
+  b: TTimeLogBits; // safer with a transient variable
 begin
-  PTimeLogBits(@result)^.FromUnixTime(UnixTime);
+  b.FromUnixTime(UnixTime);
+  result := b.Value;
 end;
 
 function TimeLogToDateTime(const Timestamp: TTimeLog): TDateTime;

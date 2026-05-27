@@ -9447,8 +9447,11 @@ end;
 
 {$ifndef PUREMORMOT2}
 function TDynArrayHasher.ReHash(forced: boolean): integer;
+var
+  n: integer; // safer with an explicit local variable
 begin
-  ForceRehash(@result); // always forced for true thread-safety
+  ForceRehash(@n); // always forced for true thread-safety
+  result := n;
 end;
 {$endif PUREMORMOT2}
 
@@ -9762,8 +9765,11 @@ end;
 
 {$ifndef PUREMORMOT2}
 function TDynArrayHashed.ReHash(forced: boolean): integer;
+var
+  n: integer; // safer with an explicit local variable
 begin
-  fHash.ForceReHash(@result); // always forced
+  fHash.ForceReHash(@n); // always forced
+  result := n;
 end;
 {$endif PUREMORMOT2}
 

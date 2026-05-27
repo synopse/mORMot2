@@ -2488,9 +2488,13 @@ end;
 {$I+}
 
 function ConsoleStdInputLen: integer;
+var
+  n: integer; // safer with an explicit local variable
 begin
-  if fpioctl(StdInputHandle, FIONREAD, @result) < 0 then
-    result := 0;
+  if fpioctl(StdInputHandle, FIONREAD, @n) < 0 then
+    result := 0
+  else
+    result := n;
 end;
 
 function Utf8ToConsole(const S: RawUtf8): RawByteString;
@@ -3053,18 +3057,21 @@ end;
 {$ifndef OPENBSD} // no sysctlbyname() on OpenBSD :(
 function bsdsysctl(name: PAnsiChar; dest: pointer; len: PtrInt): PtrInt; overload;
 var
-  s: PtrInt;
+  s: PtrInt; // safer with an explicit variable
 begin
   s := len;
-  if FPsysctlbyname(name, dest, @result, nil, 0) <> 0 then
+  if FPsysctlbyname(name, dest, @s, nil, 0) <> 0 then
     s := 0;
   result := s;
 end;
 
 function fpsysctlbynameint(name: PAnsiChar): QWord;
+var
+  q: QWord;
 begin
-  result := 0;
-  bsdsysctl(name, @result, SizeOf(result));
+  q := 0;
+  bsdsysctl(name, @q, SizeOf(q));
+  result := q;
 end;
 
 function fpsysctlbynamestr(name: PAnsiChar; var temp: ShortString): PUtf8Char;

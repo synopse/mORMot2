@@ -3448,13 +3448,15 @@ function GetNextItemHexa(var P: PUtf8Char; Sep: AnsiChar): QWord;
 var
   tmp: TChar64;
   L: integer;
+  q: QWord; // safer with a transient variable
 begin
-  result := 0;
+  q := 0;
   L := GetNextTChar64(P, Sep, tmp);
   if (L > 0) and
      (L and 1 = 0) then
-    if not HexDisplayToBin(@tmp, @result, L shr 1) then
-      result := 0;
+    if not HexDisplayToBin(@tmp, @q, L shr 1) then
+      q := 0;
+  result := q;
 end;
 
 function GetNextItemDouble(var P: PUtf8Char; Sep: AnsiChar): double;
@@ -6662,7 +6664,7 @@ begin
   c := byte(P^) - 48;
   if c > 9 then
     exit;
-  PCardinal(@result)^ := c;
+  result := c;
   inc(P);
   repeat
     if P^ <> '.' then
@@ -6728,8 +6730,11 @@ begin
 end;
 
 function StrToCurrency(P: PUtf8Char): currency;
+var
+  curr: currency; // safer with a transient local value
 begin
-  PInt64(@result)^ := StrToCurr64(P, nil);
+  PInt64(@curr)^ := StrToCurr64(P, nil);
+  result := curr;
 end;
 
 {$ifdef UNICODE}

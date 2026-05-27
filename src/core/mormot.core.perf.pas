@@ -3593,9 +3593,12 @@ begin
 end;
 
 function TSynMonitorUsageID.ToTimeLog: TTimeLog;
+var
+  bits: TTimeLogBits;
 begin
-  PTimeLogBits(@result)^.From(GetTime(mugYear), GetTime(mugMonth),
-    GetTime(mugDay), GetTime(mugHour), 0, 0);
+  bits.From(GetTime(mugYear), GetTime(mugMonth), GetTime(mugDay),
+            GetTime(mugHour), 0, 0);
+  result := bits.Value;
 end;
 
 

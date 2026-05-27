@@ -2756,10 +2756,14 @@ begin
 end;
 
 function ConsoleStdInputLen: integer;
+var
+  n: cardinal; // safer with an explicit local variable
 begin
   if StdInputHandle = 0 then
     StdInputHandle := GetStdHandle(STD_INPUT_HANDLE);
-  if not PeekNamedPipe(StdInputHandle, nil, 0, nil, @result, nil) then
+  if PeekNamedPipe(StdInputHandle, nil, 0, nil, @n, nil) then
+    result := n
+  else
     result := 0;
 end;
 
@@ -3127,14 +3131,22 @@ begin
 end;
 
 function TWinRegistry.ReadDword(const entry: SynUnicode): cardinal;
+var
+  n: cardinal; // safer with an explicit local variable
 begin
-  if not ReadBuffer(entry, @result, SizeOf(result)) then
+  if ReadBuffer(entry, @n, SizeOf(n)) then
+    result := n
+  else
     result := 0;
 end;
 
 function TWinRegistry.ReadQword(const entry: SynUnicode): QWord;
+var
+  q: QWord; // safer with an explicit local variable
 begin
-  if not ReadBuffer(entry, @result, SizeOf(result)) then
+  if ReadBuffer(entry, @q, SizeOf(q)) then
+    result := q
+  else
     result := 0;
 end;
 
@@ -3159,8 +3171,12 @@ begin
 end;
 
 function TWinRegistry.ReadSize(const entry: SynUnicode): integer;
+var
+  n: cardinal; // safer with an explicit local variable
 begin
-  if RegQueryValueExW(key, pointer(entry), nil, nil, nil, @result) <> NO_ERROR then
+  if RegQueryValueExW(key, pointer(entry), nil, nil, nil, @n) = NO_ERROR then
+    result := n
+  else
     result := -1;
 end;
 
