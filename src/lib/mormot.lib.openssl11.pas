@@ -10281,7 +10281,7 @@ var
   tmp: TBuffer1K;
 begin
   result := '';
-  if error = 0 then // no error in the queue
+  if error = SSL_ERROR_NONE then // no error in the queue
     exit;
   ERR_error_string_n(error, @tmp, SizeOf(tmp));
   FastSetString(result, @tmp, mormot.core.base.StrLen(@tmp));
@@ -10290,7 +10290,7 @@ end;
 procedure OpenSSL_error_short(error: integer; var result: ShortString);
 begin
   result[0] := #0;
-  if error = 0 then // no error in the queue
+  if error = SSL_ERROR_NONE then // no error in the queue
     exit;
   ERR_error_string_n(error, @result[1], high(result) - 1);
   result[0] := AnsiChar(mormot.core.base.StrLen(@result[1]));
@@ -10348,23 +10348,21 @@ begin
   begin
     AppendShort(SSL_ERROR_TEXT[get_error], dest);
     case get_error of
-      SSL_ERROR_SSL:
-        // non-recoverable protocol error
+      SSL_ERROR_SSL: // non-recoverable protocol error
         begin
-          get_error := ERR_get_error;
-          if get_error <> 0 then
+          get_error := ERR_get_error; // unqueue earliest error code
+          if get_error <> SSL_ERROR_NONE then
           begin
             AppendShortTwoChars(ord(' ') + ord('(') shl 8, @dest);
             OpenSSL_error_short(get_error, tmp);
             AppendShort(tmp, dest);
-            AppendShortChar(')', @dest)
+            AppendShortCharSafe(')', dest)
           end;
         end;
-      SSL_ERROR_SYSCALL:
+      SSL_ERROR_SYSCALL: // non-recoverable I/O error
         begin
-          // non-recoverable I/O error
           get_error := RawSocketErrNo; // try to get additional info from OS
-          if get_error <> NO_ERROR then
+          if get_error <> SSL_ERROR_NONE then
             OsErrorAppend(get_error, dest, ' ');
         end;
     end; // non-fatal SSL_ERROR_WANT_* codes are unexpected here
