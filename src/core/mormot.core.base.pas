@@ -3704,7 +3704,7 @@ type
     function InitIncreasing(Count: PtrInt; Start: PtrInt = 0): PIntegerArray;
     /// initialize a new temporary buffer of a given number of zero bytes
     // - if ZeroLen=0, will initialize the whole tmp[] stack buffer to 0
-    function InitZero(ZeroLen: PtrInt): pointer;
+    function InitZero(ZeroLen: PtrInt = 0): pointer;
     /// inlined wrapper around buf + len
     function BufEnd: pointer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -12350,12 +12350,20 @@ begin
   end;
 end;
 
+function TSynTempBuffer.Init: integer;
+begin
+  added := 0;
+  buf := @tmp;
+  result := SizeOf(tmp) - SYNTEMPTRAIL; // set to 4080 bytes = maximum safe size
+  len := result;
+end;
+
 function TSynTempBuffer.InitOnStack: pointer;
 begin
   len := SizeOf(tmp) - SYNTEMPTRAIL;
   added := 0;
-  result := @tmp;
-  buf := result;
+  buf := @tmp; 
+  result := buf;
 end;
 
 procedure TSynTempBuffer.Init(const Source: RawByteString);
@@ -12384,14 +12392,6 @@ begin
     PPtrInt(PAnsiChar(buf) + SourceLen)^ := 0; // init last 4/8 bytes
   end;
   result := buf;
-end;
-
-function TSynTempBuffer.Init: integer;
-begin
-  added := 0;
-  buf := @tmp;
-  result := SizeOf(tmp) - SYNTEMPTRAIL; // set to 4080 bytes = maximum safe size
-  len := result;
 end;
 
 function TSynTempBuffer.InitIncreasing(Count, Start: PtrInt): PIntegerArray;
@@ -12437,7 +12437,7 @@ end;
 
 procedure TSynTempAdder.Init;
 begin
-  Store.InitOnStack;
+  Store.Init;
 end;
 
 procedure TSynTempAdder.Init(StartupCapacity: PtrInt);
