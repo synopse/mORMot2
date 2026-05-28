@@ -7741,9 +7741,9 @@ begin
   if Token = 0 then
     raise EOSException.Create('LoadPriviledges: no token');
   try
-    if RawTokenGetInfo(Token, TokenPrivileges, buf) = 0 then
+    if RawTokenGetInfo(Token, TokenPrivileges, tmp) = 0 then
       RaiseLastError('LoadPriviledges: GetTokenInformation');
-    tp := buf.buf;
+    tp := tmp.buf;
     priv := @tp^.Privileges;
     for i := 1 to tp^.PrivilegeCount do
     begin
@@ -7761,7 +7761,7 @@ begin
     end;
     fEnabled := fDefEnabled;
   finally
-    buf.Done;
+    tmp.Done;
   end;
 end;
 
