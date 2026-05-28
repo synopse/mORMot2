@@ -2636,7 +2636,7 @@ type
     wttProcessUnLock,
     wttThread);
 
-  /// state machine used to open a Windows Security token
+  /// state machine used to open a Windows Security token for process or thread
   {$ifdef USERECORDWITHMETHODS}
   TOpenToken = record
   {$else}
@@ -2647,9 +2647,9 @@ type
     Flag: (fNone, fImpersonified, fLocked);
     Handle: THandle; // last for proper structure alignment
     /// calls OpenProcessToken() or OpenThreadToken() to get the current token
-    // - raise an EOSException on failure
+    // - raises an EOSException on failure
     // - caller should then run RawTokenClose() once done with the Token handle
-    // - would also lock a global mutex for wttProcess
+    // - also locks a global mutex for wttProcess but not for wttProcessUnLock
     procedure Open(wtt: TWinTokenType; access: cardinal);
     /// call CloseHandle(), then UnLock or RevertToSelf if needed
     procedure Close;
@@ -2755,8 +2755,9 @@ type
 function ToTextU(w: TWinSystemPrivilege): PUtf8Char; overload;
 
 /// low-level retrieveal of raw binary information for a given token
-// - returns the number of bytes retrieved into buf.buf
-// - caller should then run buf.Done to release the buf result memory
+// - on success, returns the number of bytes retrieved into buf.buf
+// - this function never raise an exception but return 0 on error
+// - caller should eventually run buf.Done to release the buf result memory
 function RawTokenGetInfo(tok: THandle; tic: TTokenInformationClass;
   var buf: TSynTempBuffer): cardinal;
 
@@ -7562,7 +7563,7 @@ function RawTokenGetInfo(tok: THandle; tic: TTokenInformationClass;
 var
   len: DWord; // safer with an explicit variable
 begin
-  buf.Init; // setup stack-allocated buffer - caller will always make buf.Done
+  buf.Init; // setup buffer - caller eventually make buf.Done
   result := 0; // error
   if (tok = INVALID_HANDLE_VALUE) or
      (tok = 0) then
