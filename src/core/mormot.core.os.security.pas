@@ -2643,9 +2643,9 @@ type
   TOpenToken = object
   {$endif USERECORDWITHMETHODS}
   public
-    Handle: THandle;
     TokenType: TWinTokenType;
     Flag: (fNone, fImpersonified, fLocked);
+    Handle: THandle; // last for proper structure alignment
     /// calls OpenProcessToken() or OpenThreadToken() to get the current token
     // - raise an EOSException on failure
     // - caller should then run RawTokenClose() once done with the Token handle
