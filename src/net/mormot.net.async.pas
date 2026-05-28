@@ -1197,6 +1197,7 @@ type
   // is accessed, so that the cache is always flushed after HttpHeadCacheSec
   // - hpoClientIgnoreTlsError will ignore any HTTPS issue
   // - hpoClientAlllowWinApi will be used for THttpProxyUrl.RemoteClientHead()
+  // - hpoClientNoCacheDirect disable caching of dynamic pages < HttpDirectGetKB
   // - hpoNoXProxyName will disable our custom 'X-Proxy-Name: xxxx' header
   // - hpNoXCache will purge any X-Cache: X-Served-By: Via: Age: headers
   THttpProxyUrlOption = (
@@ -1211,6 +1212,7 @@ type
     hpoClientHeadNoRefresh,
     hpoClientIgnoreTlsError,
     hpoClientAlllowWinApi,
+    hpoClientNoCacheDirect,
     hpoNoXProxyName,
     hpNoXCache);
   /// store THttpProxyUrl.Settings options for a given URI
@@ -5772,7 +5774,18 @@ begin // this method is protected by proxy.fOsSafe.Lock
   begin
     // use the blocking connection for smallest files < 16KB (or without size)
     if localsize <> 0 then
-      direct := proxy.RemoteClientGet(remote);
+      if (filename = '') and // e.g. dynamic HTML folder index from Apache
+         not (hpoClientNoCacheDirect in proxy.fSettings.Options) then
+      begin
+        if proxy.fMemCache.FindAndCopy(remotehash, direct) then
+          loginfo := 'memcached'
+        else
+        begin
+          direct := proxy.RemoteClientGet(remote);
+          proxy.fMemCache.Add(remotehash, direct);
+        end;
+      end else
+        direct := proxy.RemoteClientGet(remote); // eventually written as file
     if (localsize = 0) or
        (direct <> '') then
       if ((localsize < 0) or // no length/range = retrieve full dynamic content
@@ -5782,10 +5795,11 @@ begin // this method is protected by proxy.fOsSafe.Lock
       begin
         if localsize < 0 then
         begin
-          loginfo := 'nosize';
+          if loginfo = nil then
+            loginfo := 'nosize';
           localsize := length(direct);
         end
-        else
+        else if loginfo = nil then
           loginfo := 'small';
         result := ctxt.SetOutContent(direct,
                     not (hpoDisable304 in proxy.fSettings.Options));
