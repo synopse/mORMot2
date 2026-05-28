@@ -1061,8 +1061,7 @@ function TextToHashAlgo(P: PUtf8Char; Len: PtrInt; out Algo: THashAlgo): boolean
 function HashDetect(const Hash: RawUtf8; out Digest: THashDigest): boolean;
 
 /// fast compare two hash digest and their associated algorithm
-function HashDigestEqual(const a, b: THashDigest): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
+function HashDigestEqual(a, b: PPtrIntArray): boolean;
 
 /// anti-forensic method for a hash digest
 procedure FillZero(var Digest: THashDigest); overload;
@@ -5879,10 +5878,11 @@ begin
       end;
 end;
 
-function HashDigestEqual(const a, b: THashDigest): boolean;
+function HashDigestEqual(a, b: PPtrIntArray): boolean;
 begin
-  result := (a.Algo <= high(THashAlgo)) and // avoid buffer overflow
-            mormot.core.base.CompareMem(@a, @b, HASH_SIZE[a.Algo] + 1);
+  result := (a[0] = b[0]) and // compare first 4/8 bytes (much faster in loops)
+            (PHashAlgo(a)^ <= high(THashAlgo)) and // avoid buffer overflow
+     (MemCmp(@a[1], @b[1], HASH_SIZE[PHashAlgo(a)^] - (SizeOf(a[0]) - 1)) = 0);
 end;
 
 procedure FillZero(var Digest: THashDigest);

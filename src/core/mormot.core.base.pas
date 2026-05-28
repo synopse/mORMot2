@@ -605,6 +605,7 @@ type
 
   /// used to serialize up to 128-bit binary as hexadecimal
   TShort32 = string[32];
+  PShort32 = ^TShort32;
 
   /// 32-bytes aligned shortstring - e.g. for SetThreadName
   TShort31 = string[31];
