@@ -3810,7 +3810,7 @@ begin
           FillCharFast(msg2, SizeOf(msg2), 0);
           Check(msg2.Hash.Algo <> hfSHA256);
           Check(not CompareMem(@msg.Hash.Bin, @msg2.Hash.Bin, HASH_SIZE[hfSHA256]));
-          Check(not HashDigestEqual(msg.Hash, msg2.Hash), 'hde0');
+          Check(not HashDigestEqual(@msg.Hash, @msg2.Hash), 'hde0');
           res := hpc2.BearerDecode(dBearer, pcfBearerDirect, msg2);
           Check(res = mdBParam, 'directB64');
           dTok := '';
@@ -3823,12 +3823,12 @@ begin
           Check(res = mdOk, 'directOk');
           Check(not CompareMem(@msg, @msg2, SizeOf(msg)), 'cm');
           Check(CompareMem(@msg.Hash.Bin, @msg2.Hash.Bin, HASH_SIZE[hfSHA256]));
-          Check(HashDigestEqual(msg.Hash, msg2.Hash), 'hde1');
+          Check(HashDigestEqual(@msg.Hash, @msg2.Hash), 'hde1');
           Check(msg2.Kind = pcfBearerDirect);
           CheckEqual(msg2.Opaque, 7142701337754149600, 'Opaque');
           Check(msg2.Hash.Algo = hfSHA256);
           Check(CompareMem(@msg.Hash.Bin, @msg2.Hash.Bin, HASH_SIZE[hfSHA256]));
-          Check(HashDigestEqual(msg.Hash, msg2.Hash), 'hde2');
+          Check(HashDigestEqual(@msg.Hash, @msg2.Hash), 'hde2');
           FillCharFast(msg2, SizeOf(msg2), 0);
           inc(dTok[10]);
           res := hpc2.BearerDecode(dTok, pcfBearer, msg2);
@@ -3890,6 +3890,7 @@ var
   h, v: PUtf8Char;
   l: PtrInt;
   dig: THashDigest;
+  s32: TShort32;
 
   procedure Check4;
   begin
@@ -4140,14 +4141,14 @@ begin
   Check(dig.Algo = hfSHA256);
   CheckEqual(Sha256DigestToString(dig.Bin.Lo),
     'dd36778462987d817a662b4a602accde058d26f4247aa55ca70bf476a9a442e7');
-  Check(HttpRequestHashBase32(U, @s,
+  Check(HttpRequestHashBase32(U, @s32,
     'Content-Length: 100'#13#10'Last-Modified: 2025'));
-  CheckEqual(s, '3u3hpbdctb6yc6tgfnfgakwm3ycy2jxu');
-  Check(HttpRequestHashBase32(U, @s,
+  CheckEqualShort(s32, '3u3hpbdctb6yc6tgfnfgakwm3ycy2jxu');
+  Check(HttpRequestHashBase32(U, @s32,
     'Content-Length: 101'#13#10'Last-Modified: 2025'));
-  CheckEqual(s, 'utip3vleydamax5oayo7tjfyaoub6y5w');
-  Check(HttpRequestHashBase32(U, @s, nil));
-  CheckEqual(s, 'na3q2n4gw6cly5fvf5da4frmek667zk2');
+  CheckEqualShort(s32, 'utip3vleydamax5oayo7tjfyaoub6y5w');
+  Check(HttpRequestHashBase32(U, @s32, nil));
+  CheckEqualShort(s32, 'na3q2n4gw6cly5fvf5da4frmek667zk2');
 end;
 
 procedure TNetworkProtocols._THttpProxyCache;
