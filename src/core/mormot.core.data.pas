@@ -6128,8 +6128,8 @@ function BinaryLoadBase64(Source: PAnsiChar; Len: PtrInt; Data: pointer;
   Info: PRttiInfo; UriCompatible: boolean; Kinds: TRttiKinds;
   WithCrc: boolean; TryCustomVariants: PDocVariantOptions): boolean;
 var
-  temp: TSynTempBuffer;
   tempend: pointer;
+  temp: TSynTempBuffer;
 begin
   if (Len > 6) and
      (Info^.Kind in Kinds) then

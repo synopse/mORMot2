@@ -4049,9 +4049,9 @@ end;
 function TSynAnsiConvert.AnsiBufferToUtf8(Dest: PUtf8Char; Source: PAnsiChar;
   SourceChars: cardinal; NoTrailingZero: boolean): PUtf8Char;
 var
-  tmp: TSynTempBuffer;
   c: cardinal;
   u: PWideChar;
+  tmp: TSynTempBuffer;
 begin
   if not fAnsiCharMbcs then
   begin
@@ -4122,8 +4122,8 @@ end;
 procedure TSynAnsiConvert.AnsiToUnicodeStringVar(Source: PAnsiChar;
   SourceChars: cardinal; var Result: SynUnicode);
 var
-  tmp: TSynTempBuffer;
   u: PWideChar;
+  tmp: TSynTempBuffer;
 begin
   if SourceChars = 0 then
     Result := ''
@@ -4148,8 +4148,8 @@ end;
 procedure TSynAnsiConvert.AnsiBufferToRawUtf8(Source: PAnsiChar;
   SourceChars: cardinal; out Value: RawUtf8);
 var
-  tmp: TSynTempBuffer;
   p: PUtf8Char;
+  tmp: TSynTempBuffer;
 begin
   if (Source = nil) or
      (SourceChars = 0) then
@@ -4372,8 +4372,8 @@ end;
 procedure TSynAnsiConvert.UnicodeBufferToAnsiVar(Source: PWideChar;
   SourceChars: cardinal; var Result: RawByteString);
 var
-  tmp: TSynTempBuffer;
   l: PtrInt;
+  tmp: TSynTempBuffer;
 begin
   if (Source = nil) or
      (SourceChars = 0) then
@@ -4411,8 +4411,8 @@ end;
 function TSynAnsiConvert.AnsiToAnsi(From: TSynAnsiConvert;
   Source: PAnsiChar; SourceChars: cardinal): RawByteString;
 var
-  tmp: TSynTempBuffer;
   u: PWideChar;
+  tmp: TSynTempBuffer;
 begin
   if From.fCodePage = fCodePage then
     FastSetStringCP(result, Source, SourceChars, fCodePage)
@@ -6109,8 +6109,8 @@ end;
 
 procedure Utf8ToSynUnicode(Text: PUtf8Char; Len: PtrInt; var result: SynUnicode);
 var
-  tmp: TSynTempBuffer;
   n: PtrInt;
+  tmp: TSynTempBuffer;
 begin
   n := Utf8DecodeToUnicode(Text, Len, tmp);
   FastSynUnicode(result, tmp.buf, n);
@@ -8178,8 +8178,8 @@ end;
 
 function UpperCaseUnicode(const S: RawUtf8): RawUtf8;
 var
+  len: PtrInt;
   tmp: TSynTempBuffer;
-  len: integer;
 begin
   if S = '' then
   begin
@@ -8220,8 +8220,8 @@ end;
 
 function LowerCaseUnicode(const S: RawUtf8): RawUtf8;
 var
-  tmp: TSynTempBuffer;
   len: PtrInt;
+  tmp: TSynTempBuffer;
 begin
   if S = '' then
   begin
@@ -9891,8 +9891,8 @@ end;
 
 procedure UnCamelCase(var Dest: RawUtf8; P: PUtf8Char; Len: PtrInt);
 var
-  tmp: TSynTempBuffer; // 4KB means no temporary memalloc from RTTI identifiers
   destlen: PtrInt;
+  tmp: TSynTempBuffer; // 4KB means no temporary memalloc from RTTI identifiers
 begin
   if P = nil then
   begin
@@ -11837,7 +11837,7 @@ end;
 
 function UpperCaseReference(const S: RawUtf8): RawUtf8;
 var
-  len: integer;
+  len: PtrInt;
   tmp: TSynTempBuffer;
 begin
   len := length(S);

@@ -5450,9 +5450,9 @@ function TAceTextTree.RawAppendBinary(var bin: TSynTempAdder;
 
   procedure DoUnicode(p: PUtf8Char);
   var
-    tmpw: TSynTempBuffer;
     l: PtrInt;
     w: PWideChar;
+    tmpw: TSynTempBuffer;
   begin
     l := node.Length;
     case node.Token of
@@ -7110,9 +7110,9 @@ const
 
 function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;
 var
+  certlen: DWord;
   store: HCERTSTORE;
   ctx: PCCERT_CONTEXT;
-  certlen: DWord;
   tmp: TSynTempBuffer;
 begin
   // call the Windows API to retrieve the System certificates
@@ -7732,10 +7732,10 @@ end;
 
 procedure TSynWindowsPrivileges.LoadPrivileges;
 var
-  buf: TSynTempBuffer;
   tp: PTOKEN_PRIVILEGES;
   i, ndx: PtrInt;
   priv: PLUIDANDATTRIBUTES;
+  tmp: TSynTempBuffer;
 begin
   if Token = 0 then
     raise EOSException.Create('LoadPriviledges: no token');
@@ -8030,8 +8030,8 @@ end;
 procedure CurrentRawSid(out sid: RawSid; wtt: TWinTokenType;
   name, domain: PRawUtf8);
 var
-  tok: TOpenToken;
   p: PSid;
+  tok: TOpenToken;
   n, d: RawUtf8;
   tmp: TSynTempBuffer;
 begin
@@ -8080,8 +8080,8 @@ end;
 
 function TokenHasGroup(tok: THandle; sid: PSid): boolean;
 var
-  tmp: TSynTempBuffer;
   i: PtrInt;
+  tmp: TSynTempBuffer;
 begin
   result := false;
   if (sid <> nil) and
@@ -8194,9 +8194,10 @@ end;
 function LookupSid(sid: PSid; out name, domain: RawUtf8;
   const server: RawUtf8): TSidType;
 var
+  nl, dl, use: cardinal;
+  sw: PWideChar;
   n, d: TByteToWideChar;
   s: TSynTempBuffer;
-  nl, dl, use: cardinal;
 begin
   result := stUndefined;
   if sid = nil then
@@ -8204,8 +8205,8 @@ begin
   nl := SizeOf(n);
   dl := SizeOf(d);
   use := ord(stUndefined);
-  if LookupAccountSidW(
-       Utf8ToWin32PWideChar(server, s), sid, @n, nl, @d, dl, use) then
+  sw := Utf8ToWin32PWideChar(server, s);
+  if LookupAccountSidW(sw, sid, @n, nl, @d, dl, use) then
   begin
     Win32PWideCharToUtf8(@n, name);
     Win32PWideCharToUtf8(@d, domain);
@@ -8232,9 +8233,9 @@ end;
 function LookupName(const system, account: RawUtf8; out domain: RawUtf8;
   out sid: TSid): TSidType;
 var
-  s, a: TSynTempBuffer;
   nsid, ndom, use: cardinal;
   dom: TByteToWideChar;
+  s, a: TSynTempBuffer;
 begin
   result := stUndefined;
   FillZero(sid);
@@ -8321,8 +8322,8 @@ end;
 function LookupToken(tok: THandle; out name, domain: RawUtf8;
   const server: RawUtf8): boolean;
 var
-  tmp: TSynTempBuffer;
   sid: PSid;
+  tmp: TSynTempBuffer;
 begin
   sid := RawTokenSid(tok, tmp);
   result := LookupSid(sid, name, domain, server) <> stUndefined;
@@ -8350,9 +8351,9 @@ function NetGetJoinInformation(lpServer: PWideChar; var lpNameBuffer: PWideChar;
 
 function WinJoinStatus(const server: RawUtf8; name: PRawUtf8): TJoinStatus;
 var
-  s: TSynTempBuffer;
   n: PWideChar;
   typ: cardinal;
+  s: TSynTempBuffer;
 begin
   if server = '' then
   begin

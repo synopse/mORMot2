@@ -5546,8 +5546,8 @@ procedure TSynSigner.Pbkdf2(aParamsJson: PUtf8Char; aParamsJsonLen: integer;
   out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUtf8;
   aDefaultAlgo: TSignAlgo);
 var
-  tmp: TSynTempBuffer;
   k: TSynSignerParams;
+  tmp: TSynTempBuffer;
 
   procedure SetDefault;
   begin

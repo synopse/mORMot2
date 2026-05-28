@@ -4432,8 +4432,8 @@ end;
 function TMatch.MatchString(const aText: string): boolean;
 var
   local: TMatch; // thread-safe with no lock!
+  len: PtrInt;
   temp: TSynTempBuffer;
-  len: integer;
 begin
   if aText = '' then
   begin

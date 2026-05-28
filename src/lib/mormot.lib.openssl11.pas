@@ -8032,8 +8032,8 @@ end;
 
 function X509_NAME.GetEntry(NID: integer): RawUtf8;
 var
+  L: PtrInt;
   tmp: TSynTempBuffer;
-  L: integer;
 begin
   result := '';
   if (@self = nil) or

@@ -91,7 +91,7 @@ type
     content: TWebSocketFramePayloads;
     /// equals GetTickSec, as used for TWebSocketFrameList timeout
     tix: cardinal;
-    /// the frame data itself
+    /// the frame data itself - last for efficient struct alignment
     // - is plain UTF-8 for focText kind of frame
     // - is raw binary for focBinary or any other frames
     payload: RawByteString;

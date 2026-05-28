@@ -969,9 +969,9 @@ end;
 procedure _ansistr_concat_convert(var dest: RawByteString;
   const s1, s2: RawByteString; cp, cp1, cp2: cardinal);
 var
-  t1, t2, t: TSynTempBuffer; // avoid most memory allocations
   p1, p2, p: PAnsiChar;
   eng: TSynAnsiConvert;
+  t1, t2, t: TSynTempBuffer; // avoid most memory allocations
 begin
   p1 := AnsiBufferToTempUtf8(t1, pointer(s1), length(s1), cp1);
   p2 := AnsiBufferToTempUtf8(t2, pointer(s2), length(s2), cp2);

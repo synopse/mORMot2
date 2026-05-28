@@ -2211,8 +2211,8 @@ function MsiGetFileSignatureInformationW; external msidll;
 
 function MsiGetString(hRecord: TMsiHandle; index: integer; var str: RawUtf8): boolean;
 var
-  tmp: TSynTempBuffer;
   sz, res: cardinal;
+  tmp: TSynTempBuffer;
 begin
   result := false;
   sz := tmp.Init shr 1; // size in WideChar

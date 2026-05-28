@@ -6670,9 +6670,9 @@ var
   doc: TDocVariantData;
   json: PUtf8Char;
   info: TGetJsonField;
-  tmp: TSynTempBuffer;
   u: RawUtf8;
   v: PVariant;
+  tmp: TSynTempBuffer;
 begin
   // JsonSet(VariantField,'PropName','abc') to set a value
   // JsonSet(VariantField,'Obj1.Obj2.PropName','def') to set by path

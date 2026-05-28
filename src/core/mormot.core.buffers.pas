@@ -5970,8 +5970,8 @@ end;
 function TAlgoRleLZ.RawProcess(src, dst: pointer; srcLen, dstLen, dstMax: integer;
   process: TAlgoCompressWithNoDestLenProcess): integer;
 var
-  tmp: TSynTempBuffer;
   rle: integer;
+  tmp: TSynTempBuffer;
 begin
   case process of
     doCompress:
@@ -7155,8 +7155,8 @@ end;
 
 function BinToBase58(Bin: PAnsiChar; BinLen: integer): RawUtf8;
 var
+  len: PtrInt;
   temp: TSynTempBuffer;
-  len: integer;
 begin
   len := BinToBase58(Bin, BinLen, temp);
   FastSetString(result{%H-}, temp.buf, len);
@@ -7228,8 +7228,8 @@ end;
 
 function Base58ToBin(B58: PAnsiChar; B58Len: integer): RawByteString;
 var
+  len: PtrInt;
   temp: TSynTempBuffer;
-  len: integer;
 begin
   len := Base58ToBin(B58, B58Len, temp);
   FastSetRawByteString(result{%H-}, temp.buf, len);

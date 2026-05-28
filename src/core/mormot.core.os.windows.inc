@@ -749,7 +749,7 @@ function GetFileNameFromUrl(const Uri: RawUtf8): TFileName;
 var
   len: DWord;
   u: TSynTempBuffer;
-  fn: array[0..MAX_PATH] of WideChar;
+  fn: array[0 .. MAX_PATH] of WideChar;
 begin
   result := '';
   Utf8ToWin32PWideChar(Uri, u);
