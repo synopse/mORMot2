@@ -263,8 +263,6 @@ type
   THttpPartial = record
     /// genuine 31-bit positive number, 0 if empty/recyclable after ReleaseSlot
     ID: THttpPartialID;
-    /// the internal state of this partial download
-    Flags: set of (pFinished, pHash);
     /// the expected full size of this download
     FullSize: Int64;
     /// the timestamp to be affected to the file, when it is fully downloaded
@@ -273,6 +271,8 @@ type
     PartFile: TFileName;
     /// background HTTP requests which are waiting for data on this download
     HttpContext: array of PHttpRequestContext;
+    /// the internal state of this partial download
+    Flags: set of (pFinished, pHash);
     /// up to 512-bit of raw binary hash, prefixed by THashAlgo identifier
     // - actual file hash for THttpPeerCache, but URI hash for THttpProxyServer
     Digest: THashDigest;
@@ -293,7 +293,6 @@ type
     procedure DoLog(const Fmt: RawUtf8; const Args: array of const);
     /// retrieve a Partial[] for a given sequence ID, hash or filename
     function FromID(aID: THttpPartialID): PHttpPartial;
-    function FromHash(const Hash: THashDigest): PHttpPartial;
     function FromFile(const FileName: TFileName): PHttpPartial;
   public
     /// thread-safe access to the list of partial downloads
@@ -310,16 +309,16 @@ type
       Hash: PHashDigest = nil; Http: PHttpRequestContext = nil;
       EventualTime: TUnixTime = 0): THttpPartialID;
     /// search for given partial file name and size, from its hash
-    function Find(const Hash: THashDigest; out Size: Int64;
-      aID: PHttpPartialID = nil; Http: PHttpRequestContext = nil): TFileName;
-    /// search for given partial file name from its ID, returning its file name
-    // - caller should eventually run Safe.ReadUnLock
-    function FindReadLocked(ID: THttpPartialID): TFileName;
+    function Find(const Hash: THashDigest; out Size: Int64; aID: PHttpPartialID = nil;
+      Http: PHttpRequestContext = nil): TFileName; overload;
     /// search for a given partial file name
     // - and optionally return the expected final file size, and/or associate
     // this partial with a given HTTP connection
-    function HasFile(const FileName: TFileName; FileExpectedSize: PInt64 = nil;
-      Http: PHttpRequestContext = nil): boolean;
+    function Find(const FileName: TFileName; FileExpectedSize: PInt64 = nil;
+      Http: PHttpRequestContext = nil): boolean; overload;
+    /// search for given partial file name from its ID, returning its file name
+    // - caller should eventually run Safe.ReadUnLock
+    function FindReadLocked(ID: THttpPartialID): TFileName;
     /// register a HTTP request to an existing partial
     function Associate(const Hash: THashDigest; Http: PHttpRequestContext): boolean;
     /// fill Dest buffer from up to MaxSize bytes from Ctxt.ProgressiveID
@@ -2241,21 +2240,6 @@ begin
   result := nil;
 end;
 
-function THttpPartials.FromHash(const Hash: THashDigest): PHttpPartial;
-var
-  i: PtrInt;
-begin
-  result := pointer(fDownload);
-  for i := 1 to length(fDownload) do
-    if (result^.ID <> 0) and // not a recycled slot
-       (pHash in result^.Flags) and
-       HashDigestEqual(result^.Digest, Hash) then
-      exit
-    else
-      inc(result);
-  result := nil;
-end;
-
 function THttpPartials.FromFile(const FileName: TFileName): PHttpPartial;
 var
   n, l: PtrInt;
@@ -2355,6 +2339,31 @@ begin
     DoLog('Add(%,size=%)=% n=%', [Partial, ExpectedFullSize, result, n]);
 end;
 
+function FromHash(p: PHttpPartial; h: PPtrIntArray): PHttpPartial;
+var
+  l, n: PtrInt;
+  d: PPtrIntArray;
+begin // optimized O(n) loop with aggressively inlined HashDigestEqual()
+  result := p;
+  if result = nil then
+    exit;
+  n := PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF;
+  l := HASH_SIZE[PHashAlgo(h)^] - (SizeOf(PtrInt) - 1);
+  repeat
+    if (result^.ID <> 0) and // not a recycled slot
+       (pHash in result^.Flags) then
+    begin
+      d := @result^.Digest;
+      if (d^[0] = h^[0]) and
+         (MemCmp(@d^[1], @h^[1], l) = 0) then
+        exit;
+    end;
+    inc(result);
+    dec(n);
+  until n = 0;
+  result := nil;
+end;
+
 function THttpPartials.Find(const Hash: THashDigest; out Size: Int64;
   aID: PHttpPartialID; Http: PHttpRequestContext): TFileName;
 var
@@ -2370,7 +2379,7 @@ begin
     exit;
   Safe.ReadLock;
   try
-    p := FromHash(Hash);
+    p := FromHash(pointer(fDownload), @Hash);
     if p = nil then
       exit;
     Size := p^.FullSize;
@@ -2385,6 +2394,35 @@ begin
   if (n <> 0) and
      Assigned(OnLog) then
     DoLog('Find(%)=% added n=%', [result, id, n]);
+end;
+
+function THttpPartials.Find(const FileName: TFileName;
+  FileExpectedSize: PInt64; Http: PHttpRequestContext): boolean;
+var
+  p: PHttpPartial;
+  n: integer;
+  id: THttpPartialID;
+begin
+  result := false;
+  if IsVoid or
+     (FileName = '') then
+    exit;
+  Safe.ReadLock;
+  try
+    p := FromFile(FileName);
+    if p = nil then
+      exit;
+    result := true;
+    if FileExpectedSize <> nil then
+      FileExpectedSize^ := p^.FullSize;
+    id := p^.ID;
+    n := RawAssociate(Http, p);
+  finally
+    Safe.ReadUnLock; // keep ReadLock if a file name was found
+  end;
+  if (n <> 0) and
+     Assigned(OnLog) then
+    DoLog('Find(%)=% added n=%', [FileName, id, n]);
 end;
 
 function THttpPartials.FindReadLocked(ID: THttpPartialID): TFileName;
@@ -2406,38 +2444,6 @@ begin
   end;
 end;
 
-function THttpPartials.HasFile(const FileName: TFileName;
-  FileExpectedSize: PInt64; Http: PHttpRequestContext): boolean;
-var
-  p: PHttpPartial;
-  n: integer;
-  id: THttpPartialID;
-begin
-  result := false;
-  if IsVoid or
-     (FileName = '') then
-    exit;
-  Safe.ReadLock;
-  try
-    p := FromFile(FileName);
-    if p = nil then
-      exit;
-    if assigned(Http) and
-       (pFinished in p^.Flags) then
-      exit; // file is complete - no need of Ctxt.SetOutProgressiveFile()
-    result := true;
-    if FileExpectedSize <> nil then
-      FileExpectedSize^ := p^.FullSize;
-    id := p^.ID;
-    n := RawAssociate(Http, p);
-  finally
-    Safe.ReadUnLock; // keep ReadLock if a file name was found
-  end;
-  if (n <> 0) and
-     Assigned(OnLog) then
-    DoLog('HasFile(%)=% added n=%', [FileName, id, n]);
-end;
-
 function THttpPartials.Associate(const Hash: THashDigest; Http: PHttpRequestContext): boolean;
 var
   p: PHttpPartial;
@@ -2451,7 +2457,7 @@ begin
     exit;
   Safe.WriteLock;
   try
-    p := FromHash(Hash);
+    p := FromHash(pointer(fDownload), @Hash);
     if p = nil then
       exit;
     result := true;
@@ -2635,7 +2641,8 @@ begin
     p := FromID(Sender.ProgressiveID);
     if p <> nil then
     begin
-      if not (pFinished in p^.Flags) then // file has just been fully downloaded
+      if (Sender^.State = hrsResponseDone) and // not called from client abort
+         not (pFinished in p^.Flags) then // file has just been fully downloaded
       begin
         include(p^.Flags, pFinished);     // mark file as fully available
         if p^.EventualTime <> 0 then      // not used yet by proxy/peer servers

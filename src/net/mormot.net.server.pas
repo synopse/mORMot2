@@ -6809,7 +6809,7 @@ begin
   for i := 1 to length(dir) do
   begin
     fn := fTempFilesPath + d^.Name;
-    if not fPartials.HasFile(fn) then // if not currently downloading
+    if not fPartials.Find(fn) then // if not currently downloading
       if DeleteFile(fn) then
       begin
         dec(result, d^.Size);
