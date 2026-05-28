@@ -3139,7 +3139,7 @@ begin
   result := nil;
   SetLength(result, length(sids));
   for i := 0 to length(sids) - 1 do
-    result[i] := SidToText(sids[i]);
+    SidToText(sids[i], result[i]);
 end;
 
 function IsValidRawSid(const sid: RawSid): boolean;
@@ -3188,7 +3188,7 @@ end;
 function RawSidToText(const sid: RawSid): RawUtf8;
 begin
   if IsValidRawSid(sid) then
-    result := SidToText(pointer(sid))
+    SidToText(pointer(sid), result)
   else
     result := '';
 end;
