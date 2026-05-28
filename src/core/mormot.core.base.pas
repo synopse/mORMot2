@@ -1786,6 +1786,9 @@ function QWordScanIndex(P: PQWordArray; Count: PtrInt; const Value: QWord): PtrI
 // - returns false if Value was not found
 function Int64ScanExists(P: PInt64Array; Count: PtrInt; const Value: Int64): boolean;
 
+/// allocate and copy a dest[] array of byte if all i64[] are <= 255
+procedure Int64ArrayShrink(i64: PInt64Array; n: PtrInt; out dest: TByteDynArray);
+
 /// fast search of a pointer-sized unsigned integer position
 // in an pointer-sized integer array
 // - Count is the number of pointer-sized integer entries in P^
@@ -7287,6 +7290,18 @@ end;
 function QWordScanIndex(P: PQWordArray; Count: PtrInt; const Value: QWord): PtrInt;
 begin
   result := Int64ScanIndex(pointer(P), Count, Value); // this is the very same code
+end;
+
+procedure Int64ArrayShrink(i64: PInt64Array; n: PtrInt; out dest: TByteDynArray);
+var
+  i: PtrInt;
+begin
+  for i := 0 to n - 1 do
+    if i64[i] > 255 then
+      exit;
+  SetLength(dest, n);
+  for i := 0 to n - 1 do
+    dest[i] := i64[i];
 end;
 
 {$ifdef CPU64}
