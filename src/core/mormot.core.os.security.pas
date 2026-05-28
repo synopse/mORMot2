@@ -2670,7 +2670,7 @@ type
     fDefEnabled: TWinSystemPrivileges;
     fToken: TOpenToken;
     function SetPrivilege(wsp: TWinSystemPrivilege; on: boolean): boolean;
-    procedure LoadPrivileges;
+    function LoadPrivileges: boolean;
   public
     /// initialize the object dedicated to management of available privileges
     // - should eventually call Done() to release any resource
@@ -3912,7 +3912,7 @@ const
     // TWellKnownRid in SDDL_WKR[] order
     'ROLALGDADUDGDCDDCASAEAPACNAPKAEKRSHO';
 var
-  OsSecSafe: TLightLock;
+  OsSecSafe: TLightLock; // global lock shared by this unit
   SDDL_WKS_INDEX: array[TWellKnownSid] of byte; // into 1..48
   SDDL_WKR_INDEX: array[TWellKnownRid] of byte; // into 49..66
   SID_SDDLW: packed array[byte] of word absolute SID_SDDL;
@@ -7623,7 +7623,7 @@ const
     'SeTimeZonePrivilege'#0 +             // wspTimeZone
     'SeCreateSymbolicLinkPrivilege'#0;    // wspCreateSymbolicLink
 var
-  WSP_ID: array[TWinSystemPrivilege] of TLargeInteger;
+  WSP_ID: array[TWinSystemPrivilege] of TLargeInteger; // fast enough O(n)
   WSP_TXT: array[TWinSystemPrivilege] of PUtf8Char;
 
 procedure WspSetup;
@@ -7637,8 +7637,8 @@ begin
     p := _WSP;
     for w := low(w) to high(w) do
     begin
-      WSP_TXT[w] := PUtf8Char(p);
       LookupPrivilegeValueA(nil, p, WSP_ID[w]); // keep =0 if unsupported
+      WSP_TXT[w] := PUtf8Char(p);
       inc(p, StrLen(p) + 1);
     end;
   end;
@@ -7664,11 +7664,10 @@ begin
   fDefEnabled := [];
   fToken.Open(aTokenType, TOKEN_QUERY or TOKEN_ADJUST_PRIVILEGES);
   if aLoadPrivileges then
-    try
-      LoadPrivileges; // may raise an exception
-    except
+    if not LoadPrivileges then
+    begin
       fToken.Close;
-      raise;
+      raise EOSException.Create('TSynWindowsPrivileges.LoadPriviledges failed');
     end;
 end;
 
@@ -7731,18 +7730,16 @@ begin
   result := true;
 end;
 
-procedure TSynWindowsPrivileges.LoadPrivileges;
+function TSynWindowsPrivileges.LoadPrivileges: boolean;
 var
   tp: PTOKEN_PRIVILEGES;
   i, ndx: PtrInt;
   priv: PLUIDANDATTRIBUTES;
   tmp: TSynTempBuffer;
 begin
-  if Token = 0 then
-    raise EOSException.Create('LoadPriviledges: no token');
-  try
-    if RawTokenGetInfo(Token, TokenPrivileges, tmp) = 0 then
-      RaiseLastError('LoadPriviledges: GetTokenInformation');
+  result := RawTokenGetInfo(Token, TokenPrivileges, tmp) <> 0;
+  if result then
+  begin
     tp := tmp.buf;
     priv := @tp^.Privileges;
     for i := 1 to tp^.PrivilegeCount do
@@ -7760,9 +7757,8 @@ begin
       inc(priv);
     end;
     fEnabled := fDefEnabled;
-  finally
-    tmp.Done;
   end;
+  tmp.Done;
 end;
 
 const
