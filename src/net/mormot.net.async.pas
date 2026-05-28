@@ -1474,9 +1474,9 @@ type
     fSource: THttpProxySource;
     fAlgos: THashAlgos; // may be in [hfMD5, hfSha1, hfSha256] range
     fRemoteUri: TUri;
-    fMemCache: TSynDictionary;  // name:RawUtf8 / Content:RawByteString
-    fHashCache: TSynDictionary; // name:RawUtf8 / hash[fAlgos]:TRawUtf8DynArray
     fHeadCache: TSynDictionary; // THash160 / THeadCache
+    fMemCache: TSynDictionary;  // THash160 / Content:RawByteString
+    fHashCache: TSynDictionary; // name:RawUtf8 / hash[fAlgos]:TRawUtf8DynArray
     fReject: TUriMatch;
     fRemoteClient: IHttpClient;
     fOsSafe: TOSLightLock; // non-reentrant lock for fRemoteClient + file access
@@ -1489,9 +1489,9 @@ type
     /// finalize this instance and its associated Settings
     destructor Destroy; override;
     /// return a local file content with proper fMemCache support
-    function ReturnFile(ctxt: THttpServerRequestAbstract; const name: RawUtf8;
+    function ReturnFile(ctxt: THttpServerRequestAbstract; const hash: THash160;
       const filename: TFileName; const uri: TUriMatchName; var size: Int64;
-      lastmod: TUnixMSTime; canbecached: boolean = true): cardinal;
+      lastmod: TUnixMSTime; var loginfo: PUtf8Char; canbecached: boolean = true): cardinal;
     /// compute the (probably cached) hash of a given URI resource
     function ReturnHash(ctxt: THttpServerRequestAbstract;
       const name: RawUtf8; var fn: TFileName): integer;
@@ -5853,18 +5853,21 @@ begin
 end;
 
 function THttpProxyUrl.ReturnFile(ctxt: THttpServerRequestAbstract;
-  const name: RawUtf8; const filename: TFileName; const uri: TUriMatchName;
-  var size: Int64; lastmod: TUnixMSTime; canbecached: boolean): cardinal;
+  const hash: THash160; const filename: TFileName;
+  const uri: TUriMatchName; var size: Int64; lastmod: TUnixMSTime;
+  var loginfo: PUtf8Char; canbecached: boolean): cardinal;
 
   procedure FromCache;
   var
     cached: RawByteString;
   begin
-    if not fMemCache.FindAndCopy(name, cached) then
+    if fMemCache.FindAndCopy(hash, cached) then
+      loginfo := 'memcache'
+    else
     begin
       cached := StringFromFile(filename);
       if canbecached then
-        fMemCache.Add(name, cached);
+        fMemCache.Add(hash, cached);
     end;
     ctxt.ExtractOutContentType; // reverse ctxt.SetOutFile(fn)
     ctxt.OutContent := cached;
@@ -5889,11 +5892,12 @@ begin
        (result = HTTP_NOTMODIFIED) then
       FileSetDateFromUnixUtc(filename, UnixTimeUtc); // touch file timestamp
   end;
+  loginfo := 'direct';
+  // try to use the memory cache content (for GET, not HEAD)
   if (result <> HTTP_SUCCESS) or
      IsHead(ctxt.Method) or
      not Assigned(fMemCache) then
     exit;
-  // try to use the memory cache content (for GET, not HEAD)
   pck := fSettings.MemCache.FromUri(uri);
   if not (pckIgnore in pck) then
     if (pckForce in pck) or
@@ -6194,7 +6198,7 @@ begin
             s.MemCache.TimeoutSec := fSettings.MemCache.TimeoutSec;
           if (s.MemCache.MaxSizeKB > 0) and
              (s.MemCache.TimeoutSec > 0) then
-            one.fMemCache := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
+            one.fMemCache := TSynDictionary.Create(TypeInfo(THash160DynArray),
               TypeInfo(TRawByteStringDynArray), PathCaseInsensitive,
               s.MemCache.TimeoutSec);
         end;
