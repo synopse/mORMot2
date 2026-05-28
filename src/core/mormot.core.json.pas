@@ -265,8 +265,6 @@ type
     /// in-place output parsed JSON value, unescaped and #0 terminated
     // - see associated WasString to find out its actual type
     Value: PUtf8Char;
-    /// in-place output parsed JSON value length
-    ValueLen: integer;
     /// set if the value was actually a JSON string
     // - "strings" are decoded as 'strings', with WasString=true, properly JSON
     // unescaped (e.g. any \u0123 pattern would be converted into UTF-8 content)
@@ -279,6 +277,8 @@ type
     EndOfObject: AnsiChar;
     /// true if the last parsing succeeded - used in inherited TJsonParserContext
     Valid: boolean;
+    /// in-place output parsed JSON value length - last to force struct alignment
+    ValueLen: integer;
     /// decode a JSON field name in-place into Value/ValueLen
     // - returns true if Value/ValueLen has been set with a non void identifier
     function GetJsonFieldName: boolean;
