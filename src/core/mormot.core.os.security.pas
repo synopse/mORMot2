@@ -7408,7 +7408,7 @@ var
   privileges: TSynWindowsPrivileges;
 begin
   try
-    privileges.Init(wttThread);
+    privileges.Init(wttProcess);
     try
       privileges.Enable(wspSystemTime); // ensure has SE_SYSTEMTIME_NAME
       result := Windows.SetSystemTime(PSystemTime(@utctime)^);
@@ -7435,7 +7435,7 @@ var
 begin
   SetDynamicTimeZoneInformation := LibraryResolve(
     GetModuleHandle(kernel32), 'SetDynamicTimeZoneInformation');
-  privileges.Init(wttThread);
+  privileges.Init(wttProcess);
   try
     privileges.Enable(wspTimeZone); // ensure has SE_TIME_ZONE_NAME
     if Assigned(SetDynamicTimeZoneInformation) then
