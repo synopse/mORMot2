@@ -8085,8 +8085,9 @@ var
   tmp: TSynTempBuffer;
 begin
   result := false;
-  if (sid <> nil) and
-     (RawTokenGetInfo(tok, TokenGroups, tmp) <> 0) then
+  if sid = nil then
+    exit;
+  if RawTokenGetInfo(tok, TokenGroups, tmp) <> 0 then
     with PTokenGroups(tmp.buf)^ do
       for i := 0 to GroupCount - 1 do
         if SidCompare(pointer(Groups[i].Sid), sid) = 0 then
