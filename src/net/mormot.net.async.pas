@@ -6326,10 +6326,13 @@ function THttpProxyServer.OnGetHeadLocalFolder(Ctxt: THttpServerRequest;
   const Uri: TUriMatchName): cardinal;
 var
   fn: TFileName;
-  name, cached: RawUtf8;
+  name, html: RawUtf8;
   siz: Int64;
   one: THttpProxyUrl;
   opt: THttpProxyUrlOptions;
+  loginfo: PUtf8Char;
+  dig: THash256Rec; // 160-bit truncated SHA-256 hash of resource name
+  sha: TSha256;
 begin
   // supplied URI should be a safe resource reference
   result := HTTP_FORBIDDEN; // 403
@@ -6343,9 +6346,10 @@ begin
   if hpoNoSubFolder in opt then
     if PosExChar(PathDelim, name) <> 0 then
       exit;
-  // stream the content from local file
   MakePath([one.Settings.fLocalFolder, name], fn);
-  result := one.ReturnFile(Ctxt, name, fn, Uri, siz, {lastmod=}0);
+  sha.Full(pointer(name), length(name), dig.b);
+  // stream the content from local file
+  result := one.ReturnFile(Ctxt, dig.sha1, fn, Uri, siz, {lastmod=}0, loginfo);
   // additional response types
   case result of
     HTTP_NOTFOUND:
@@ -6355,27 +6359,31 @@ begin
       begin
         // return the folder files info as cached HTML
         if (hpoDisableFolderHtmlIndexCache in opt) or
-           not one.fMemCache.FindAndCopy(name, cached) then
+           not one.fMemCache.FindAndCopy(dig.sha1, html) then
         begin
           FolderHtmlIndex(fn, Ctxt.Url, StringReplaceChars(name, PathDelim, '/'),
-            cached, hpoNoSubFolder in opt);
+            html, hpoNoSubFolder in opt);
           if Assigned(one.fMemCache) and
              not (hpoDisableFolderHtmlIndexCache in opt) then
-            one.fMemCache.Add(name, cached);
+            one.fMemCache.Add(dig.sha1, html);
         end;
+        if html = '' then
+          loginfo := 'void'
+        else
+          loginfo := 'html';
         result := Ctxt.SetOutContent(
-                    cached, not (hpoDisable304 in opt), HTML_CONTENT_TYPE);
+                    html, not (hpoDisable304 in opt), HTML_CONTENT_TYPE);
       end
       else if siz = 0 then
         // check URI for any .md5/.sha1/.sha256 hash extension
         if Assigned(one.fHashCache) then
           result := one.ReturnHash(Ctxt, name, fn);
-  end; // may be e.g. HTTP_NOTMODIFIED (304)
+  end; // may be e.g. HTTP_SUCCESS (200) or HTTP_NOTMODIFIED (304)
   if not StatusCodeIsSuccess(result) then // in 4xx.. range
     Ctxt.SetErrorMessage('serving %', [name]);
   if fHasLog in fFlags then
-    fLog.Add.Log(sllDebug, 'OnExecute: % % fn=% status=% size=% cached=%',
-      [Ctxt.Method, Ctxt.Url, fn, result, siz, (cached <> '')], self);
+    fLog.Add.Log(sllDebug, 'OnExecute: % % fn=% status=% size=% %',
+      [Ctxt.Method, Ctxt.Url, fn, result, siz, loginfo], self);
 end;
 
 function THttpProxyServer.OnGetHeadRemoteUri(Ctxt: THttpServerRequest;
