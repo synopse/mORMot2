@@ -10902,7 +10902,7 @@ begin
     OSSafe.Lock;
     if not IsInitializedCriticalSection(CS) then // thread-safe initialization
       Init;
-    OSSafe.Lock;
+    OSSafe.UnLock;
   end;
   Lock;
 end;
