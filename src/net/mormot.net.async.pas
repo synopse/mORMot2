@@ -6391,6 +6391,7 @@ function THttpProxyServer.OnGetHeadRemoteUri(Ctxt: THttpServerRequest;
 var
   req: TStartProxyRequest;
   start: Int64;
+  pid: THttpPartialID;
   localdate: TUnixMSTime;
   instance: TObject;
 begin
@@ -6413,6 +6414,7 @@ begin
   req.proxy.fOsSafe.Lock;
   try
     // retrieve the headers, from cache or HEAD, and compute the local file name
+    // from hashed URI + header etag/lastmod
     result := req.MakeHeadAndComputeFilename;
     Ctxt.OutCustomHeaders := req.head.PurgedHeaders;
     if IsHead(Ctxt.Method) then
@@ -6424,22 +6426,28 @@ begin
     end
     else if result < 300 then // StatusCodeIsSuccess = 2xx..3xx range
     begin
-      // check the local file (named from hashed URI + header etag/lastmod)
+      // fallback to trigger req.MakeGet(Uri)
+      result := HTTP_NOTFOUND;
+      // check any local file
       if (req.filename <> '') and
          FileInfoByName(req.filename, req.localsize, localdate) and
          (req.localsize >= 0) then
         // we have a local cached file
-        if fPartials.HasFile(req.filename, @req.localsize, Ctxt.ConnectionHttp) then
+        if (req.head.Size >= 0) and
+           (req.localsize = req.head.Size) then
+          // it is safe to assume a complete local file is correct (as 200/304)
+          result := req.proxy.ReturnFile(Ctxt, req.head.Hash160, req.filename,
+            Uri, req.localsize, req.head.TimeMS, req.loginfo)
+        else if fPartials.Find(PHashDigest(@req.head.HashDigest)^,
+                  req.localsize, @pid, Ctxt.ConnectionHttp) = req.filename then
         begin
-          // but it is already associated in progressive mode: join the team
+          // there is progressive/partial match
           Ctxt.SetOutProgressiveFile(req.filename, req.localsize);
-          Make(['part-', Ctxt.ConnectionHttp^.ProgressiveID],
-            req.head.PurgedHeaders); // already set to OutCustomHeaders
+          Make(['part-', pid], req.head.PurgedHeaders); // temp
           req.loginfo := pointer(req.head.PurgedHeaders);
           result := HTTP_SUCCESS;
         end
-        else if (req.head.Size >= 0) and
-                (req.localsize <> req.head.Size) then
+        else
         begin
           // delete aborted/invalid file on disk and retry from scratch
           fLog.Add.Log(sllWarning, 'OnExecute: delete=% disk=% expected=%',
@@ -6447,17 +6455,7 @@ begin
           if not DeleteFile(req.filename) then
             fLog.Add.Log(sllLastError, 'OnExecute: delete=%', [req.filename], self);
           result := HTTP_NOTFOUND;
-        end
-        else
-        begin
-          // assume file won't change on the server: return the current cache
-          result := req.proxy.ReturnFile(Ctxt,
-            req.head.B32, req.filename, Uri, req.localsize, req.head.TimeMS);
-          req.loginfo := 'direct';
-        end
-      else
-        // no local file
-        result := HTTP_NOTFOUND;
+        end;
       // check if no matching local file
       if not StatusCodeIsSuccess(result) then // in 4xx.. range
         result := req.MakeGet(Uri); // initiate a GET proxy request
