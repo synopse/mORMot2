@@ -5733,21 +5733,18 @@ begin // this method is protected by proxy.fOsSafe.Lock
   result := head.Status;
   localsize := head.Size; // for proper logging
   if not StatusCodeIsSuccess(result) then // 4xx.. range
-  begin
-    loginfo := 'error from HEAD';
     exit;
-  end;
   if head.Size < 0 then
     // note: progressive download needs an eventual size (by now), but Apache
     // may not provide Content-Length/Range on dynamic content (text/html)
     if FindNameValue(pointer(head.PurgedHeaders), 'CONTENT-TYPE: TEXT/HTM') = nil then
     begin
       result := HTTP_BADGATEWAY; // 502
-      loginfo := 'no HEAD size';
+      loginfo := 'nosize';
       exit;
     end;
   // compute the local file name from the base-32 hash of these headers
-  if head.HashB32[0] <> #0 then
+  if head.HashB32[0] <> #0 then // '' if no etag/lastmod
     if hpoClientCacheSubFolder in proxy.Settings.Options then
       MakePath([ // hash partitioning into subfolders
         proxy.Settings.DiskCache.Path, head.HashB32[1], head.HashB32], filename)
@@ -5778,7 +5775,7 @@ begin // this method is protected by proxy.fOsSafe.Lock
          not (hpoClientNoCacheDirect in proxy.fSettings.Options) then
       begin
         if proxy.fMemCache.FindAndCopy(remotehash, direct) then
-          loginfo := 'memcached'
+          loginfo := 'smallmem'
         else
         begin
           direct := proxy.RemoteClientGet(remote);
@@ -5794,19 +5791,15 @@ begin // this method is protected by proxy.fOsSafe.Lock
           FileFromString(direct, filename)) then
       begin
         if localsize < 0 then
-        begin
-          if loginfo = nil then
-            loginfo := 'nosize';
           localsize := length(direct);
-        end
-        else if loginfo = nil then
+        if loginfo = nil then
           loginfo := 'small';
         result := ctxt.SetOutContent(direct,
                     not (hpoDisable304 in proxy.fSettings.Options));
       end
       else
       begin
-        loginfo := 'get error';
+        loginfo := 'geterror';
         result := HTTP_BADGATEWAY; // 502
       end;
     exit;
@@ -5818,7 +5811,7 @@ begin // this method is protected by proxy.fOsSafe.Lock
   if id = 0 then
   begin
     stream.Free;
-    loginfo := 'no partial id'; // paranoid
+    loginfo := 'part'; // paranoid
     result := HTTP_SERVERERROR; // 500
     exit;
   end;
@@ -5836,7 +5829,7 @@ begin // this method is protected by proxy.fOsSafe.Lock
     result := HTTP_SUCCESS;
   except
     stream.Free;
-    loginfo := 'connection failed';
+    loginfo := 'connect';
     result := HTTP_BADGATEWAY;
   end;
 end;
@@ -6381,10 +6374,7 @@ begin
              not (hpoDisableFolderHtmlIndexCache in opt) then
             one.fMemCache.Add(dig.sha1, html);
         end;
-        if html = '' then
-          loginfo := 'void'
-        else
-          loginfo := 'html';
+        loginfo := 'html';
         result := Ctxt.SetOutContent(
                     html, not (hpoDisable304 in opt), HTML_CONTENT_TYPE);
       end
@@ -6440,8 +6430,7 @@ begin
     end
     else if result < 300 then // StatusCodeIsSuccess = 2xx..3xx range
     begin
-      // fallback to trigger req.MakeGet(Uri)
-      result := HTTP_NOTFOUND;
+      result := HTTP_NOTFOUND; // default to trigger req.MakeGet(Uri)
       // check any local file
       if (req.filename <> '') and
          FileInfoByName(req.filename, req.localsize, localdate) and
@@ -6479,7 +6468,7 @@ begin
   end;
   if (req.loginfo <> nil) and
      not StatusCodeIsSuccess(result) then // in 4xx.. range
-    Ctxt.SetErrorMessage('%', [req.loginfo])
+    Ctxt.SetErrorMessage('proxy %', [req.loginfo])
   else if (req.head.HashB32[0] <> #0) and
           not (hpoNoXProxyName in req.proxy.Settings.Options) then
     Ctxt.AddOutHeader(['X-Proxy-Name: ', req.head.HashB32]);
@@ -6488,8 +6477,7 @@ begin
   instance := nil;
   if fLog.HasLevel([sllTrace, sllDebug]) then
     instance := self; // include THttpProxyServer context in verbose logs
-  fLog.Add.Log(LOG_INFOWARNING[not StatusCodeIsSuccess(result)],
-    'OnExecute: % % ip=% fn=% status=% size=% info=% in %',
+  fLog.Add.Log(sllInfo, 'OnExecute: % % ip=% fn=% status=% size=% info=% in %',
     [Ctxt.Method, Ctxt.Url, Ctxt.RemoteIP, req.head.HashB32, result,
      req.localsize, req.loginfo, MicroSecFrom(start)], instance);
 end;
