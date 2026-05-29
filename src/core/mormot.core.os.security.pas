@@ -3679,7 +3679,7 @@ begin
     exit; // no DACL/SACL
   hdr := @p[offset];
   if (hdr^.Sbz1 <> 0) or
-     not (hdr^.AclRevision in [2, 4]) then
+     not (hdr^.AclRevision in [2, 3, 4]) then // rev3 do exist in the wild!
     exit;
   if hdr^.AceCount <> 0 then
   begin

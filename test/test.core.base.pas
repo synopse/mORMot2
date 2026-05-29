@@ -8745,6 +8745,27 @@ begin
   CheckEqual(KnownSidToText(wrkGroupRasServers, dom), dom + '-553');
   Check(sd.FromText(RID_TXT[9]) = atpSuccess, 'guess domain from O:');
   CheckEqual(sd.ToText, SD_TXT[9]);
+  bin := Base64ToBin('AQAEhBQAAAAkAAAAAAAAAEAAAAABAgAAAAAABSAAAAAgAgAAAQUAAAAAA' +
+    'AUVAAAA/ZxDLSkUVWPZmlbYAQIAAAMAoAAFAAAAABAUAP8BHwABAQAAAAAABRIAAAAAEBgA/' +
+    'wEfAAECAAAAAAAFIAAAACACAAAAECQAqQESAAEFAAAAAAAFFQAAAP2cQy0pFFVj2ZpW2EdYB' +
+    'AAAECQA/wESAAEFAAAAAAAFFQAAAP2cQy0pFFVj2ZpW2JIfBwAAECQA/wEfAAEFAAAAAAAFF' +
+    'QAAAKu8Fu9mK3SFkRuTS9XrAQA=');
+  Check(sd.FromBinary(bin), 'tolerate acl rev3');
+  u := sd.ToText('');
+  CheckEqual(u,
+    'O:BAG:S-1-5-21-759405821-1666520105-3629554393-513D:AI(A;ID;FA;;;SY)(A;ID;FA;;;B' +
+    'A)(A;ID;0x1201a9;;;S-1-5-21-759405821-1666520105-3629554393-284743)(A;ID;0x1201f' +
+    'f;;;S-1-5-21-759405821-1666520105-3629554393-466834)(A;ID;FA;;;S-1-5-21-40112447' +
+    '15-2238983014-1267932049-125909)');
+  {$ifdef OSWINDOWS}
+  Check(CryptoApi.SecurityDescriptorToText(pointer(bin), u2), 'winapi aclv3');
+  CheckEqual(u, u2);
+  {$endif OSWINDOWS}
+  u := sd.ToText('S-1-5-21-759405821-1666520105-3629554393'); // recognize G:DU
+  CheckEqual(u, 'O:BAG:DUD:AI(A;ID;FA;;;SY)(A;ID;FA;;;BA)(A;ID;0x1201a9;;;' +
+    'S-1-5-21-759405821-1666520105-3629554393-284743)(A;ID;0x1201ff;;;' +
+    'S-1-5-21-759405821-1666520105-3629554393-466834)(A;ID;FA;;;' +
+    'S-1-5-21-4011244715-2238983014-1267932049-125909)');
   // validate against some reference binary material
   for i := 0 to high(SD_B64) do
   begin
