@@ -3592,7 +3592,8 @@ var
   p: PUtf8Char;
 begin
   p := pointer(text);
-  if TextToSid(p, sid) and (p^ = #0) then
+  if TextToSid(p, sid) and
+     (p^ = #0) then
     result := SidToKnown(@sid)
   else
     result := wksNull;
@@ -5824,7 +5825,10 @@ begin
     case p[-2] of
       'O':
         if not SddlNextSid(p, Owner, dom) then
-          result := atpInvalidOwner;
+          result := atpInvalidOwner
+        else if (dom = nil) and
+                SidIsDomain(pointer(Owner)) then
+          dom := pointer(Owner); // try the Owner domain if none specified
       'G':
         if not SddlNextSid(p, Group, dom) then
           result := atpInvalidGroup;
@@ -5839,7 +5843,8 @@ begin
       exit;
     while p^ = ' ' do
       inc(p);
-  until (p^ = #0) or (p^ = endchar);
+  until (p^ = #0) or
+        (p^ = endchar);
   if Dacl <> nil then
     include(Flags, scDaclPresent);
   if Sacl <> nil then

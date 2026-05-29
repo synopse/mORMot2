@@ -8743,6 +8743,8 @@ begin
   dom := 'S-1-5-21-823746769-1624905683-418753922';
   CheckEqual(KnownSidToText(wkrUserAdmin, dom), dom + '-500');
   CheckEqual(KnownSidToText(wrkGroupRasServers, dom), dom + '-553');
+  Check(sd.FromText(RID_TXT[9]) = atpSuccess, 'guess domain from O:');
+  CheckEqual(sd.ToText, SD_TXT[9]);
   // validate against some reference binary material
   for i := 0 to high(SD_B64) do
   begin

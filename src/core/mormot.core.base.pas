@@ -12463,7 +12463,7 @@ end;
 
 procedure TSynTempAdder.AddRealloc(new: PtrInt);
 begin
-  Store.len := NextGrow(new);
+  Store.len := NextGrow(new); // len is capacity here
   if Store.buf = @Store.tmp then
   begin
     GetMem(Store.buf, Store.len + SYNTEMPTRAIL);
