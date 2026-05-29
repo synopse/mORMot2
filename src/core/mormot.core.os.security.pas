@@ -152,6 +152,9 @@ function TextToRawSidArray(const text: array of RawUtf8; out sid: RawSidDynArray
 function SidIsDomain(s: PSid): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// truncate in-place a RID into its Domain SID
+function SidToDomain(var Sid: RawSid): boolean;
+
 /// decode a domain SID text into a generic binary RID value
 // - returns true if Domain is '', or is in its 'S-1-5-21-xx-xx-xx' domain form
 // - will also accepts any 'S-1-5-21-xx-xx-xx-yyy' form, e.g. the current user SID
@@ -3274,6 +3277,16 @@ begin
             (PCardinalArray(s)[1] = SID_DOM_MASKAUT);
 end;
 
+function SidToDomain(var Sid: RawSid): boolean;
+begin
+  result := (length(Sid) >= SID_DOMAINLEN) and
+            SidIsDomain(pointer(Sid));
+  if not result then
+    exit;
+  SetLength(Sid, SID_DOMAINLEN);     // in-place truncate
+  PSid(Sid)^.SubAuthorityCount := 4; // adjust length
+end;
+
 function TryDomainTextToSid(const Domain: RawUtf8; out Dom: RawSid): boolean;
 var
   tmp: TSid;
@@ -5831,7 +5844,10 @@ begin
           dom := pointer(Owner); // try the Owner domain if none specified
       'G':
         if not SddlNextSid(p, Group, dom) then
-          result := atpInvalidGroup;
+          result := atpInvalidGroup
+        else if (dom = nil) and
+                SidIsDomain(pointer(Owner)) then
+          dom := pointer(Owner); // try the Group domain if none specified
       'D':
         result := NextAclFromText(p, dom, uuid, sasDacl);
       'S':
