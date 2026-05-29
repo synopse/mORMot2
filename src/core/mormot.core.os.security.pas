@@ -2886,6 +2886,9 @@ function CurrentSid(wtt: TWinTokenType = wttProcessUnLock;
 procedure CurrentRawSid(out sid: RawSid; wtt: TWinTokenType = wttProcessUnLock;
   name: PRawUtf8 = nil; domain: PRawUtf8 = nil);
 
+/// return the SID of the domain or the current user, as raw binary
+function CurrentDomain: RawSid;
+
 /// return the SID of the current user groups, from process or thread, as text
 function CurrentGroupsSid(wtt: TWinTokenType = wttProcessUnLock): TRawUtf8DynArray;
 
@@ -8070,6 +8073,13 @@ begin
   end;
   tmp.Done;
   tok.Close;
+end;
+
+function CurrentDomain: RawSid;
+begin
+  CurrentRawSid(result);
+  if not SidToDomain(result) then
+    result := '';
 end;
 
 function RawTokenGroups(tok: THandle; var buf: TSynTempBuffer): PSids;
