@@ -869,8 +869,9 @@ begin
           W.AddShort4(DOT_24, 3)      // &hellip;
         else
           W.AddWideChar(WideChar(c)); // &Eacute;
-        inc(p, l + 1);
-        dec(plen, l + 1);
+        inc(l); // consume ending ;
+        inc(p, l);
+        dec(plen, l);
         continue;
       end;
     end;
@@ -966,12 +967,12 @@ begin
 end;
 
 const // rough but efficient storage of all &xxx; entities for fast SSE2 search
-  HTML_UNESCAPE: array[1 .. 102] of array[0 .. 3] of AnsiChar = (
-    'amp',  'lt',   'gt',   'quot', 'rsqu', {6=}'ndas', {7=}'trad', {8=}'hell',
+  HTML_UNESCAPE: array[1 .. 100] of array[0 .. 3] of AnsiChar = (
+    'amp',  'quot', 'rsqu', {4=}'ndas', {5=}'trad', {6=}'hell',
     'nbsp', 'iexc', 'cent', 'poun', 'curr', 'yen',  'brvb', 'sect', 'uml',
     'copy', 'ordf', 'laqu', 'not',  'shy',  'reg',  'macr', 'deg',  'plus',
     'sup2', 'sup3', 'acut', 'micr', 'para', 'midd', 'cedi', 'sup1', 'ordm',
-    'raqu',  {37=}'frac',   'ique', 'Agra', 'Aacu', 'Acir', 'Atil',
+    'raqu',  {35=}'frac',   'ique', 'Agra', 'Aacu', 'Acir', 'Atil',
     'Auml', 'Arin', 'AEli', 'Cced', 'Egra', 'Eacu', 'Ecir', 'Euml', 'Igra',
     'Iacu', 'Icir', 'Iuml', 'ETH',  'Ntil', 'Ogra', 'Oacu', 'Ocir', 'Otil',
     'Ouml', 'time', 'Osla', 'Ugra', 'Uacu', 'Ucir', 'Uuml', 'Yacu', 'THOR',
@@ -979,38 +980,60 @@ const // rough but efficient storage of all &xxx; entities for fast SSE2 search
     'egra', 'eacu', 'ecir', 'euml', 'igra', 'iacu', 'icir', 'iuml', 'eth',
     'ntil', 'ogra', 'oacu', 'ocir', 'otil', 'ouml', 'divi', 'osla', 'ugra',
     'uacu', 'ucir', 'uuml', 'yacu', 'thor', 'yuml');
-  HTML_UNESCAPED: array[1 .. 8] of word = (
-    ord('&'), ord('<'), ord('>'), ord('"'), ord(''''), ord('-'), 153, $2026);
+  HTML_UNESCAPED: array[1 .. 6] of word = (
+    ord('&'), ord('"'), ord(''''), ord('-'), 153, $2026);
 
 function EntityToUcs4(entity: PUtf8Char; len: byte): Ucs4CodePoint;
 var
   by4: cardinal;
+  ndx: PtrInt;
+label
+  ok;
 begin
-  result := 0;
-  if (len < 2) or (len > 6) then
-    exit;
-  by4 := 0;
-  MoveByOne(entity, @by4, MinPtrUInt(4, len)); // properly inlined
-  result := IntegerScanIndex(@HTML_UNESCAPE, length(HTML_UNESCAPE), by4) + 1;
-  if result >= 37 then // adjust 'frac' as frac14', 'frac12' or 'frac34'
-    if result > 37 then
-      inc(result, 2)
+  case len of
+    2:
+      begin
+        case cardinal(PWord(entity)^) of
+          ord('l') + ord('t') shl 8:
+            ndx := ord('<');
+          ord('g') + ord('t') shl 8:
+            ndx := ord('>');
+        else
+          ndx := 0;
+        end;
+        goto ok;
+      end;
+    3:
+      by4 := PCardinal(entity)^ and $ffffff;
+    4 .. 6:
+      by4 := PCardinal(entity)^;
+  else
+    begin
+      ndx := 0;
+      goto ok;
+    end;
+  end;
+  ndx := IntegerScanIndex(@HTML_UNESCAPE, length(HTML_UNESCAPE), by4) + 1;
+  if ndx >= 35 then // adjust 'frac' as frac14', 'frac12' or 'frac34'
+    if ndx > 35 then
+      inc(ndx, 2)
     else
       case cardinal(PWord(entity + 4)^) of
         ord('1') + ord('4') shl 8:
           ;
         ord('1') + ord('2') shl 8:
-          inc(result);
+          inc(ndx);
         ord('3') + ord('4') shl 8:
-          inc(result, 2);
+          inc(ndx, 2);
       else
-        result := 0;
+        ndx := 0;
       end;
-  if result <> 0 then
-    if result <= high(HTML_UNESCAPED) then
-      result := ord(HTML_UNESCAPED[result]) // non linear entities
+  if ndx <> 0 then
+    if ndx <= high(HTML_UNESCAPED) then
+      ndx := HTML_UNESCAPED[ndx] // non linear entities
      else
-       inc(result, $00a0 - 9); // &nbsp; = U+00A0, &iexcl; = U+00A1, ...
+       inc(ndx, $00a0 - 7); // &nbsp; = U+00A0, &iexcl; = U+00A1, ...
+ok:result := ndx;
 end;
 
 function HtmlUnescape(const text: RawUtf8): RawUtf8;
