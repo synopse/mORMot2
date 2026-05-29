@@ -3940,7 +3940,7 @@ begin
       end;
     atsUnicodePwd:
       begin
-        s := 'xxxxxxxx'; // anti-forensic measure
+        s := 'xxxxxxxx'; // anti-forensic measure (paranoid)
         result := true;
         exit;
       end;

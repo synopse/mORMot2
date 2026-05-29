@@ -878,7 +878,6 @@ begin
   until plen = 0;
 end;
 
-
 function NeedsHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat): boolean;
 var
   esc: PAnsiCharToByte;
@@ -1056,7 +1055,6 @@ begin
   end;
 end;
 
-
 function HtmlTagNeedsCRLF(tag: PUtf8Char): boolean;
 var
   taglen: PtrUInt;
@@ -1089,7 +1087,6 @@ begin
       result := PCardinal(tag)^ and $00dfdfdf =
                   ord('D') + ord('I') shl 8 + ord('V') shl 16;
   end;
-
 end;
 
 procedure AddHtmlAsText(W: TTextWriter; p, tag: PUtf8Char; plen: PtrUInt);

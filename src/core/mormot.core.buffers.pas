@@ -2433,6 +2433,7 @@ type
   end;
 
   /// TStream allowing to read from some nested TStream instances
+  // - e.g. parent of THttpMultiPartStream as defined in mormot.net.client
   TNestedStreamReader = class(TStreamWithPositionAndSize)
   protected
     fNested: array of TNestedStream;
