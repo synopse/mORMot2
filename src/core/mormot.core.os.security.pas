@@ -6183,6 +6183,57 @@ begin
   result := true;
 end;
 
+function AddKerberosPrincipal(var dest: TSynTempAdder; principal: PUtf8Char;
+  len32: boolean): boolean;
+var
+  start: PUtf8Char;
+  compn, len, i: PtrInt;
+  comp: array[0 .. 31] of PUtf8Char; // 31 seems big enough
+  complen: array[0 .. high(comp)] of integer;
+
+  procedure AddLen(len: integer); {$ifdef FPC}inline;{$endif}
+  begin
+    if len32 then
+      dest.Add32BigEndian(len)
+    else
+      dest.Add16BigEndian(len);
+  end;
+
+begin // serialize comp1/comp2@realm into binary
+  result := false;
+  compn := 0;
+  start := principal;
+  repeat
+    case principal^ of
+      #0:
+        exit;
+      '/',
+      '@':
+        begin
+          if compn > high(comp) then
+            exit;
+          comp[compn] := start;
+          complen[compn] := principal - start;
+          inc(compn);
+          if principal^ = '@' then
+            break;
+          start := principal + 1;
+        end;
+    end;
+    inc(principal);
+  until false;
+  AddLen(compn);
+  inc(principal); // @realm
+  len := StrLen(principal);
+  AddLen(len);
+  dest.Add(principal, len);
+  for i := 0 to compn - 1 do
+  begin
+    AddLen(complen[i]);
+    dest.Add(comp[i], complen[i]);
+  end;
+  result := true;
+end;
 
 function CompareEntry(const A, B: TKerberosKeyEntry): boolean;
 begin
@@ -6507,19 +6558,8 @@ end;
 function TKerberosKeyTab.SaveToBinary: RawByteString;
 var
   e: ^TKerberosKeyEntry;
-  principal: PUtf8Char;
-  n, pos, start, stop, realm, compn: integer;
+  n, pos: integer;
   dest: TSynTempAdder;
-
-  procedure AddOctStr(start, stop: integer);
-  begin
-    dec(stop, start); // = length
-    dest.Add16BigEndian(stop);
-    dest.Add(principal + start, stop);
-  end;
-
-var
-  compstart, compstop: array[0 .. 31] of integer; // 31 seems big enough
 begin
   result := '';
   e := pointer(fEntry);
@@ -6532,31 +6572,8 @@ begin
     repeat
       pos := dest.Size;
       dest.Add32BigEndian(0); // entry size will be filled below
-      compn := 0;
-      realm := PosExChar('@', e^.Principal);
-      if realm = 0 then
-        exit;
-      principal := pointer(e^.Principal); // parse into comp1/comp2@realm
-      start := 0;
-      stop  := 0;
-      repeat
-        if principal[stop] in ['/', '@'] then
-        begin
-          if compn > high(compstart) then
-            exit;
-          compstart[compn] := start;
-          compstop[compn]  := stop;
-          inc(compn);
-          start := stop + 1;
-          if start = realm then
-            break;
-        end;
-        inc(stop);
-      until false;
-      dest.Add16BigEndian(compn);
-      AddOctStr(realm, length(e^.Principal));
-      for stop := 0 to compn - 1 do
-        AddOctStr(compstart[stop], compstop[stop]); // no memory allocation
+      if not AddKerberosPrincipal(dest, pointer(e^.Principal), {len32=}false) then
+        exit; // error parsing the principal name into realm + components
       dest.Add32BigEndian(e^.NameType);
       dest.Add32BigEndian(e^.Timestamp);
       dest.Add(@e^.KeyVersion, 1); // 8-bit
