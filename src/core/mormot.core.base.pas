@@ -3739,7 +3739,7 @@ type
     procedure Init(StartupCapacity: PtrInt); overload;
     /// prepare to append some bytes to the internal buffer
     // - returns the destination buffer where l bytes should be written
-    function Add(l: PtrInt): pointer; overload;
+    function Add(l: integer): pointer; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append some bytes to the internal buffer
     // - making a buffer reallocation if needed
@@ -3748,6 +3748,9 @@ type
     /// append some bytes to the internal buffer
     // - making a buffer reallocation if needed
     procedure Add(const s: RawByteString); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// add one AnsiChar to the internal buffer
+    procedure Add(c: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append some bytes to the internal buffer
     // - making a buffer reallocation if needed
@@ -12473,7 +12476,7 @@ begin
     ReallocMem(Store.buf, Store.len + SYNTEMPTRAIL);
 end;
 
-function TSynTempAdder.Add(l: PtrInt): pointer;
+function TSynTempAdder.Add(l: integer): pointer;
 var
   new: integer;
 begin
@@ -12488,6 +12491,14 @@ procedure TSynTempAdder.Add(p: pointer; l: PtrInt);
 begin
   if l > 0 then
     MoveFast(p^, Add(l)^, l);
+end;
+
+procedure TSynTempAdder.Add(c: AnsiChar);
+begin
+  if Store.added >= Store.len then
+    AddRealloc(Store.added);
+  PUtf8Char(Store.buf)[Store.added] := c;
+  inc(Store.added);
 end;
 
 procedure TSynTempAdder.Add(const s: RawByteString);
