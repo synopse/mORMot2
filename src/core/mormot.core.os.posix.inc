@@ -1994,12 +1994,16 @@ begin
   {$ifdef HASEVENTFD}
   if fFD <> 0 then
   begin
-    if WaitReadPending(fFD, TimeoutMS) then // = LinuxEventFDWait()
+    if (cardinal(TimeoutMS) = INFINITE) or
+       WaitReadPending(fFD, TimeoutMS) then // = LinuxEventFDWait()
       LinuxEventFDRead(fFD);
   end
   else
   {$endif HASEVENTFD}
-    RTLEventWaitFor(fHandle, TimeoutMS);
+    if cardinal(TimeoutMS) = INFINITE then
+      RTLEventWaitFor(fHandle)
+    else
+      RTLEventWaitFor(fHandle, TimeoutMS);
   result := fNotified;
 end;
 

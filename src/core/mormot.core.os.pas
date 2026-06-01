@@ -4866,6 +4866,7 @@ type
   // - on Windows, calls directly the CreateEvent/ResetEvent/SetEvent API
   // - on Linux, will use eventfd() in blocking and non-semaphore mode
   // - on other POSIX, will use PRTLEvent which is lighter than TEvent BasicEvent
+  // - WARNING: you should wait from a single thread at once
   TSynEvent = class(TSynPersistent)
   protected
     fHandle: pointer; // Windows THandle or FPC PRTLEvent
@@ -4886,13 +4887,11 @@ type
       {$ifdef FPCPOSIX} inline; {$endif}
     /// wait until SetEvent is called from another thread, with a maximum time
     // - returns true if was signaled by SetEvent, or false on timeout
-    // - WARNING: you should wait from a single thread at once
+    // - WaitFor(INFINITE) is the same as WaitForEver
     function WaitFor(TimeoutMS: integer): boolean;
-      {$ifdef FPCPOSIX} inline; {$endif}
     /// wait until SetEvent is called from another thread, with no maximum time
     // - returns true if was signaled by SetEvent, or false if aborted/destroyed
     function WaitForEver: boolean;
-      {$ifdef FPCPOSIX} inline; {$endif}
     /// wait until SetEvent is called, calling CheckSynchronize() on main thread
     // - returns true if was signaled by SetEvent, or false on timeout
     function WaitForSafe(TimeoutMS: integer): boolean;
