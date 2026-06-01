@@ -14,7 +14,7 @@ unit mormot.core.buffers;
    - URI-Encoded Text Buffer Process
    - Basic MIME Content Types Support
    - Text Memory Buffers and Files
-   - TStreamRedirect and other Hash process
+   - TStreamRedirect and other TStream/Hash process
    - RawByteString Buffers Aggregation via TRawByteStringGroup
 
   *****************************************************************************
@@ -2156,7 +2156,7 @@ procedure BinToHumanHex(W: TTextWriter; Data: PByte; Len: integer;
   PerLine: integer = 16; LeftTab: integer = 0; SepChar: AnsiChar = ':'); overload;
 
 
-{ *************************** TStreamRedirect and other Hash process }
+{ *************************** TStreamRedirect and other TStream/Hash process }
 
 /// compute the 32-bit default hash of a file content
 // - you can specify your own hashing function if DefaultHasher is not what you expect
@@ -2484,6 +2484,39 @@ type
     function Read(var Buffer; Count: Longint): Longint; override;
   end;
 
+  /// a TStream which transmits Write() method buffer into blocking Read()
+  // - could be used e.g. to efficient synchronize data between two threads,
+  // designed for one producer thread and one consumer thread
+  TPipeStream = class(TStream)
+  private
+    fLock: TLightLock;  // enough to protect MoveFast + TSynEvent fast process
+    fBuffer: PAnsiChar; // =nil after Close
+    fBufferSize, fPending: integer;
+    fReadPos, fWritePos: integer;
+    fReadTimeout, fWriteTimeout: cardinal;
+    fCanRead: TSynEvent;
+    fCanWrite: TSynEvent;
+  public
+    /// initialize this TStream and its internal buffer
+    constructor Create(aBufSize: cardinal = 65536; aReadTimeout: cardinal = INFINITE;
+      aWriteTimeout: cardinal = INFINITE); reintroduce;
+    /// finalize this instance and its buffer
+    // - all producer/consumer threads should have terminated before destruction
+    destructor Destroy; override;
+    /// abort any blocking Read/Write process
+    procedure Close;
+    /// will read up to Count bytes waiting from data on Write()
+    // - this method blocks when the internal buffer is empty (Pending = 0)
+    function Read(var Buffer; Count: Longint): Longint; override;
+    /// will write up to Count bytes and triggering waiting Read()
+    // - this method blocks when the internal buffer is full
+    function Write(const Buffer; Count: Longint): Longint; override;
+    /// forbidden method: will raise an exception
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+    /// informative value about data waiting for Read() - not thread-safe by design
+    property Pending: integer
+      read fPending;
+  end;
 
 /// compute the crc32c checksum of a given file
 // - this function maps the THashFile signature
@@ -9602,7 +9635,7 @@ begin
 end;
 
 
-{ *************************** TStreamRedirect and other Hash process }
+{ *************************** TStreamRedirect and other TStream/Hash process }
 
 { TProgressInfo }
 
@@ -10303,6 +10336,125 @@ begin
       break;
   end;
   inc(fPosition, result);
+end;
+
+
+{ TPipeStream }
+
+constructor TPipeStream.Create(aBufSize, aReadTimeout, aWriteTimeout: cardinal);
+begin
+  inherited Create;
+  fBufferSize := NextPowerOfTwo(aBufSize); // for efficient "and size-1" modulo
+  fReadTimeout := aReadTimeout;
+  fWriteTimeout := aWriteTimeout;
+  GetMem(fBuffer, fBufferSize);
+  fCanRead := TSynEvent.Create;
+  fCanWrite := TSynEvent.Create;
+  fCanWrite.SetEvent; // initially empty => writable
+end;
+
+destructor TPipeStream.Destroy;
+begin
+  Close;
+  fCanRead.Free;
+  fCanWrite.Free;
+  inherited Destroy;
+end;
+
+procedure TPipeStream.Close;
+begin
+  fLock.Lock;
+  try
+    if fBuffer <> nil then // make the method re-entrant (e.g. from Destroy)
+      FreeMem(fBuffer);
+    fBuffer := nil;    // mark as closed
+    fCanRead.SetEvent; // always release both Read() and Write() methods
+    fCanWrite.SetEvent;
+  finally
+    fLock.UnLock;
+  end;
+end;
+
+function TPipeStream.Read(var Buffer; Count: Longint): Longint;
+var
+  toread, tail: integer;
+begin
+  result := 0;
+  if (Count > 0) and
+     (fBuffer <> nil) then
+  repeat
+    fLock.Lock;
+    try
+      if fBuffer = nil then
+        exit; // closed
+      if fPending > 0 then
+      begin
+        toread := MinPtrInt(Count, fPending);
+        tail := fBufferSize - fReadPos;
+        MoveFast(fBuffer[fReadPos], Buffer, MinPtrInt(toread, tail));
+        if toread > tail then
+          MoveFast(fBuffer[0], PAnsiChar(@Buffer)[tail], toread - tail);
+        fReadPos := (fReadPos + toread) and (fBufferSize - 1); // fast modulo
+        dec(fPending, toread);
+        if fPending = 0 then
+          fCanRead.ResetEvent;
+        fCanWrite.SetEvent;
+        result := toread;
+        exit;
+      end;
+    finally
+      fLock.UnLock;
+    end;
+  until not fCanRead.WaitFor(fReadTimeout) or // return partial read on timeout
+        (fBuffer = nil);
+end;
+
+function TPipeStream.Write(const Buffer; Count: Longint): Longint;
+var
+  avail, towrite, tail: integer;
+  P: PAnsiChar;
+begin
+  result := 0;
+  P := @Buffer;
+  if Count > 0 then
+  while (fBuffer <> nil) and
+        (result < Count) do
+  begin
+    fLock.Lock;
+    try
+      if fBuffer = nil then
+        exit; // closed
+      avail := fBufferSize - fPending;
+      if avail > 0 then
+      begin
+        towrite := MinPtrInt(Count - result, avail);
+        tail := fBufferSize - fWritePos;
+        MoveFast(P[0], fBuffer[fWritePos], MinPtrInt(towrite, tail));
+        if towrite > tail then
+          MoveFast(P[tail], fBuffer[0], towrite - tail);
+        fWritePos := (fWritePos + towrite) and (fBufferSize - 1); // fast modulo
+        inc(fPending, towrite);
+        inc(P, towrite);
+        inc(result, towrite);
+        fCanRead.SetEvent;
+        if fPending = fBufferSize then
+          fCanWrite.ResetEvent;
+      end
+      else
+        fCanWrite.ResetEvent;
+    finally
+      fLock.UnLock;
+    end;
+    if result < Count then
+      if (fBuffer = nil) or
+         not fCanWrite.WaitFor(fWriteTimeout) then
+        exit; // timeout -> return partial write
+  end;
+end;
+
+function TPipeStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  result := RaiseStreamError(self, 'Seek');
 end;
 
 

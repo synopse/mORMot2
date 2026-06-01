@@ -148,7 +148,7 @@ Low-Level Memory Buffers Processing Functions shared by all framework units
 - URI-Encoded Text Buffer Process
 - Basic MIME Content Types Support
 - Text Memory Buffers and Files
-- `TStreamRedirect` and other Hash process
+- `TStreamRedirect` and other `TStream`/Hash process
 - `RawByteString` Buffers Aggregation via `TRawByteStringGroup`
 
 ### mormot.core.data
