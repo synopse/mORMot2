@@ -1194,6 +1194,13 @@ end;
 
 {$endif FPC_HAS_CPSTRING}
 
+// Win64 seems not to like our patched RTL for the DEBUG stack trace
+{$ifdef OSWINDOWS}
+  {$ifdef DEBUG}
+    {$define NOPATCHRTL}
+  {$endif DEBUG}
+{$endif OSWINDOWS}
+
 procedure RedirectRtl;
 {$ifndef NOPATCHRTL}
 var
