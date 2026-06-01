@@ -6189,7 +6189,7 @@ var
   start: PUtf8Char;
   compn, len, i: PtrInt;
   comp: array[0 .. 31] of PUtf8Char; // 31 seems big enough
-  complen: array[0 .. high(comp)] of integer;
+  clen: array[0 .. high(comp)] of integer;
 
   procedure AddLen(len: integer); {$ifdef FPC}inline;{$endif}
   begin
@@ -6213,7 +6213,7 @@ begin // serialize comp1/comp2@realm into binary
           if compn > high(comp) then
             exit;
           comp[compn] := start;
-          complen[compn] := principal - start;
+          clen[compn] := principal - start;
           inc(compn);
           if principal^ = '@' then
             break;
@@ -6229,8 +6229,8 @@ begin // serialize comp1/comp2@realm into binary
   dest.Add(principal, len);
   for i := 0 to compn - 1 do
   begin
-    AddLen(complen[i]);
-    dest.Add(comp[i], complen[i]);
+    AddLen(clen[i]);
+    dest.Add(comp[i], clen[i]);
   end;
   result := true;
 end;
