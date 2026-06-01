@@ -3729,7 +3729,7 @@ type
   TSynTempAdder = object
   {$endif USERECORDWITHMETHODS}
   private
-    procedure AddRealloc(new: PtrInt);
+    procedure AddRealloc(new: integer);
   public
     /// direct access to the internal 4KB temporary buffer
     Store: TSynTempBuffer;
@@ -12464,7 +12464,7 @@ begin
   Store.Init(StartupCapacity);
 end;
 
-procedure TSynTempAdder.AddRealloc(new: PtrInt);
+procedure TSynTempAdder.AddRealloc(new: integer);
 begin
   Store.len := NextGrow(new); // len is capacity here
   if Store.buf = @Store.tmp then

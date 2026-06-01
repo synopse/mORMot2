@@ -3130,7 +3130,7 @@ type
     Name: array[0..1] of AnsiChar;
     Number: Integer;
     Dest: PRawUtf8;
-    Temp: TSynTempAdder; // 4KB temp output on stack
+    Temp: TSynTempAdder; // 4KB temp output on stack is almost always enough
   end;
 
 procedure DoSqlReplace(s: PUtf8Char; var w: TReplaceSql);
@@ -3164,11 +3164,11 @@ begin
                   ESqlDBException.RaiseU(
                     'Only up to 656 parameters are possible in :AA to :ZZ range');
                 w.Name[1] := 'A';
-                inc(w.Name[0]); // :AZ -> :BZ
+                inc(w.Name[0]); // :AZ -> :BA
               end
               else
                 inc(w.Name[1]); // :AA -> :AB
-            until not IsSqlReservedByTwo(@w.Name);
+            until not IsSqlReservedByTwo(@w.Name); // skip e.g. :AS :IF :OF
           end;
           inc(s);
           continue;

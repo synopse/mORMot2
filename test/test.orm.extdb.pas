@@ -275,6 +275,12 @@ begin
   CheckEqual(s, 'toto=$1 titi=$2 and a=''''');
   CheckEqual(ReplaceParamsByNumbers('toto=? titi=? and a=''dd''', s), 2);
   CheckEqual(s, 'toto=$1 titi=$2 and a=''dd''');
+  CheckEqual(ReplaceParamsByNumbers('toto=? titi=? and a=''dd''eee', s), 2);
+  CheckEqual(s, 'toto=$1 titi=$2 and a=''dd''eee');
+  CheckEqual(ReplaceParamsByNumbers('toto=? titi=? and a=''dd''e''e''', s), 2);
+  CheckEqual(s, 'toto=$1 titi=$2 and a=''dd''e''e''');
+  CheckEqual(ReplaceParamsByNumbers('toto=? titi=? and a=''d''d'' end', s), 0);
+  CheckEqual(s, 'toto=? titi=? and a=''d''d'' end');
   CheckEqual(ReplaceParamsByNumbers('toto=? titi=? and a=''d''''d'' end', s), 2);
   CheckEqual(s, 'toto=$1 titi=$2 and a=''d''''d'' end');
   CheckEqual(ReplaceParamsByNumbers('toto=? titi=? and a=''d?d''', s), 2);
