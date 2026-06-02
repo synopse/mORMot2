@@ -3489,6 +3489,9 @@ procedure RttiSetParserTObjectWithRttiMethods(
   O: TObjectWithRttiMethodsClass; Rtti: TRttiCustom);
 
 var
+  /// set to global TSystemUser.Timer field by mormot.core.perf.pas
+  ProcessSystemUseTimer: PObject;
+
   /// let TRttiCustom recognize the actual TClass of each TRttiValueClass
   // - mormot.core.data list classses are set by mormot.core.json
   CLASS_RTTI: array[TRttiValueClass] of TClass = (

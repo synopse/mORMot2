@@ -3912,7 +3912,7 @@ begin
 end;
 
 var
-  ProcessSystemUse: TSystemUse;
+  ProcessSystemUse: TSystemUse; // global hidden variable
 
 class function TSystemUse.Current(aCreateIfNone: boolean): TSystemUse;
 begin
@@ -3922,7 +3922,10 @@ begin
     GlobalLock; // RegisterGlobalShutdownRelease() will use it anyway
     try
       if ProcessSystemUse = nil then
+      begin
         ProcessSystemUse := RegisterGlobalShutdownRelease(TSystemUse.Create(60));
+        ProcessSystemUseTimer := @ProcessSystemUse.fTimer;
+      end;
     finally
       GlobalUnLock;
     end;
