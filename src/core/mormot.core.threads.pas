@@ -99,7 +99,7 @@ type
 { ************* TPipeStream Read/Write synchronization between two threads }
 
 type
-  /// allow to customize TPipeStream process
+  /// allow to customize TPipeStream behavior
   // - psoWritePartial for Write() to return without blocking on partial sending
   // - psoWriteNonBlocking for Write() to return 0 bytes on full buffer
   // - psoWritePosition for Position to return the Write() number of bytes
@@ -131,9 +131,7 @@ type
     function GetSize: Int64; override;
   public
     /// initialize this TStream and its internal buffer
-    // - support optional ms timeout for Read/Write methods to mimics e.g. sockets
-    constructor Create(aBufSize: cardinal = 65536; aReadTimeout: cardinal = INFINITE;
-      aWriteTimeout: cardinal = INFINITE); reintroduce;
+    constructor Create(aBufSize: cardinal = 65536); reintroduce;
     /// finalize this instance and its buffer
     // - all producer/consumer threads should have terminated before destruction
     destructor Destroy; override;
@@ -157,12 +155,23 @@ type
     /// informative value about data waiting for Read() - not thread-safe by design
     property Pending: integer
       read fPending;
-    /// allow to customize the instance process
+    /// informative value about the internal buffer size as supplied to Create()
+    property Capacity: integer
+      read fBufferSize;
+    /// Read() optional timeout in milliseconds
+    // - convenient e.g. when used in conjunction with sockets
+    property ReadTimeout: cardinal
+      read fReadTimeout write fReadTimeout;
+    /// Write() optional timeout in milliseconds
+    // - convenient e.g. when used in conjunction with sockets
+    property WriteTimeout: cardinal
+      read fWriteTimeout write fWriteTimeout;
+    /// customize the instance behavior
     property Options: TPipeStreamOptions
       read fOptions write fOptions;
     /// internal metadata field which will be returned as TPipeStream.Size
-    // - is convenient e.g. when the eventual/final resource size is known
-    // - equals -1 by default, i.e. if Size should follow Position
+    // - convenient e.g. when the eventual/final resource size is known
+    // - equals -1 by default, i.e. if Size value should follow current Position
     property ExpectedSize: Int64
       read fExpectedSize write fExpectedSize;
   end;
@@ -1914,12 +1923,12 @@ end;
 
 { TPipeStream }
 
-constructor TPipeStream.Create(aBufSize, aReadTimeout, aWriteTimeout: cardinal);
+constructor TPipeStream.Create(aBufSize: cardinal);
 begin
   inherited Create;
   fBufferSize := NextPowerOfTwo(aBufSize); // for efficient "and size-1" modulo
-  fReadTimeout := aReadTimeout;
-  fWriteTimeout := aWriteTimeout;
+  fReadTimeout := INFINITE;
+  fWriteTimeout := INFINITE;
   fExpectedSize := -1; // eventual Size metadata is disabled by default
   GetMem(fBuffer, fBufferSize);
   fCanRead := TSynEvent.Create;

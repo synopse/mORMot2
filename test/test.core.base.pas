@@ -1606,8 +1606,9 @@ begin
   end;
   NotifyTestSpeed('TPipeStream', c, n, @timer);
   // read timeout
-  P := TPipeStream.Create(64, 50, 50);
+  P := TPipeStream.Create(64);
   try
+    P.ReadTimeout := 50;
     Tix := GetTickCount64;
     CheckEqual(P.Read(tmp, 64), 0);
     Check(GetTickCount64 - Tix >= 30, 'rdto');
@@ -1615,8 +1616,9 @@ begin
     P.Free;
   end;
   // write timeout
-  P := TPipeStream.Create(64, 50, 50);
+  P := TPipeStream.Create(64);
   try
+    P.WriteTimeout := 50;
     CheckEqual(P.Write(tmp, 64), 64);
     Tix := GetTickCount64;
     n := P.Write(tmp, SizeOf(tmp));
@@ -1626,7 +1628,7 @@ begin
     P.Free;
   end;
   // close while blocked
-  P := TPipeStream.Create(64, 10000, 10000);
+  P := TPipeStream.Create(64);
   try
     W := TPipeThread.Create({suspended=}true, nil, nil, TSynLog, 'wr2');
     try
