@@ -101,8 +101,10 @@ type
 type
   /// allow to customize TPipeStream process
   // - psoReadSafe for Read() to detect the main thread and call CheckSynchronize
+  // which is slower but allow VCL/LCL UI responsiveness
   // - psoWritePartial for Write() to return without blocking on partial sending
   // - psoWritePosition for Position to return the Write() number of bytes
+  // instead of the Read() number of bytes by default
   TPipeStreamOptions = set of (
     psoReadSafe,
     psoWritePartial,
@@ -135,8 +137,8 @@ type
     // - this method blocks when the internal buffer is empty (Pending = 0)
     // - may return less than Count bytes if there is some data in the buffer
     // - return 0 if aReadTimeout has been reached
-    // - TPipeStream.Position/Size reflect the total number of bytes from Read()
-    // unless the psoWritePosition option is set
+    // - by default, TPipeStream.Position/Size reflect the total number of bytes
+    // from Read(), unless the psoWritePosition option is set
     function Read(var Buffer; Count: Longint): Longint; override;
     /// send Count bytes to the corresponding Read() on the other side of pipe
     // - blocks when the internal buffer is full, until Count bytes are sent

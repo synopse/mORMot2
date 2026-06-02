@@ -2393,10 +2393,10 @@ var
 // - returns a file descriptor handle on success, to be eventually closed
 function LinuxEventFD(nonblocking, semaphore: boolean): integer;
 
-/// wrapper to read from a eventfd() file
+/// wrapper to read from a eventfd() file depending on LinuxEventFD() parameters
+// - may be blocking or not blocking
 // - return 1 and decrement the counter by 1 in semaphore mode
-// - return the current counter value and set it to 0 in non-semaphor mode
-// - may be blocking or not blocking, depending on how LinuxEventFD() was called
+// - return the current counter and set it to 0 in non-semaphore/TSynEvent mode
 // - return -1 on error
 function LinuxEventFDRead(fd: integer): Int64;
 

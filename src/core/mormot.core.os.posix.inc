@@ -1976,7 +1976,7 @@ begin
   begin
     if fNotified and
        WaitReadPending(fFD, 0) then
-      LinuxEventFDRead(fFD); // call once to reset the eventfd() handle
+      LinuxEventFDRead(fFD); // eventfd non-semaphore: call once for reset
   end
   else
   {$endif HASEVENTFD}
@@ -2313,7 +2313,10 @@ function LinuxEventFDRead(fd: integer): Int64;
 var
   res: Int64; // need a local variable on i386
 begin
-  { If EFD_SEMAPHORE was specified and the eventfd counter has a nonzero value,
+  { - If EFD_SEMAPHORE was not specified - e.g. as used by TSynEvent - and the
+    eventfd counter has a nonzero value, then a read(2) returns 8 bytes
+    containing that value, and the counter's value is reset to zero
+    - If EFD_SEMAPHORE was specified and the eventfd counter has a nonzero value,
     then a read returns 8 bytes containing the value 1, and the counter's value
     is decremented by 1 }
   res := 0;
