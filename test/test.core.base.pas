@@ -195,6 +195,7 @@ type
     function QuickSelectGT(IndexA, IndexB: PtrInt): boolean;
     procedure intadd(const Sender; Value: integer);
     procedure intdel(const Sender; Value: integer);
+    // methods below are run in the background from _TDynArray startup
     /// test the TDynArrayHashed object and methods (dictionary features)
     // - this test will create an array of 200,000 items to test speed
     procedure TDynArrayHashedSlow(Context: TObject);
@@ -206,12 +207,14 @@ type
     procedure TimeZonesSlow(Context: TObject);
     /// test the TRawUtf8List class
     procedure TRawUtf8ListSlow(Context: TObject);
+    /// test the TPipeStream class
+    procedure TStreamSlow(Context: TObject);
   published
     /// test RecordCopy(), TRttiMap and TRttiFilter
     procedure _Records;
     /// test the TSynList class
     procedure _TSynList;
-    /// test the TDynArray object and methods
+    /// test the TDynArray object and methods - also launch background *Slow()
     procedure _TDynArray;
     /// validate the TSynQueue class
     procedure _TSynQueue;
@@ -1487,6 +1490,155 @@ begin
 end;
 
 type
+  TPipeThread = class(TLoggedThread)
+  protected
+    Pipe: TPipeStream;
+    WriteData: RawByteString;
+    Hash: cardinal;
+    Bytes, Expected: integer;
+    procedure DoExecute; override;
+  end;
+const
+  THREAD_ITER = 3; // stream 3 * 100K content between two TPipeThread
+{.$define PIPEDEBUG}
+
+procedure TPipeThread.DoExecute;
+var
+  tmp: TByteToAnsiChar; // 256 bytes small buffer for reading
+  n: integer;
+begin
+  if WriteData <> '' then // from W thread
+    repeat
+      {$ifdef PIPEDEBUG}ConsoleWrite('before Write');{$endif PIPEDEBUG}
+      n := Pipe.Write(pointer(WriteData)^, length(WriteData));
+      {$ifdef PIPEDEBUG}ConsoleWrite(['Write(', length(WriteData), ')=', n]);{$endif PIPEDEBUG}
+      if n <> length(WriteData) then
+        exit;
+      Hash := crc32c(Hash, pointer(WriteData), n);
+      inc(Bytes, n);
+      {$ifdef PIPEDEBUG}ConsoleWrite('Write Stop');{$endif PIPEDEBUG}
+      SleepHiRes(Random(50)); // simulate a blocking network connection
+    until Bytes = Expected // execute Write() three times (HTTP-like body)
+  else
+  begin                   // from R thread
+    {$ifdef PIPEDEBUG}ConsoleWrite('Read Start');{$endif PIPEDEBUG}
+    repeat
+      {$ifdef PIPEDEBUG}ConsoleWrite('before Read');{$endif PIPEDEBUG}
+      n := Pipe.Read(tmp, SizeOf(tmp)); // n=256 until n=160 at end Write()
+      {$ifdef PIPEDEBUG}ConsoleWrite(['Read(', SizeOf(tmp), ')=', n]);{$endif PIPEDEBUG}
+      if n <= 0 then
+        break;
+      Hash := crc32c(Hash, @tmp, n);
+      inc(Bytes, n);
+      if Hash and 255 = 0 then
+        SleepHiRes(Random(30)); // wait a few times during the whole process
+      {$ifdef PIPEDEBUG}ConsoleWrite(['Read Bytes=', Bytes]);{$endif PIPEDEBUG}
+    until Bytes = Expected; // execute Read() per 256-bytes (TFTP-like) chunk
+    {$ifdef PIPEDEBUG}ConsoleWrite(['Read Stop, bytes=', Bytes]);{$endif PIPEDEBUG}
+  end;
+end;
+
+procedure TTestCoreBase.TStreamSlow(Context: TObject);
+var
+  P: TPipeStream;
+  R, W: TPipeThread;
+  S: RawByteString;
+  ps: PAnsiChar;
+  Tix: Int64;
+  i, n, c: integer;
+  crc: cardinal;
+  timer: TPrecisionTimer;
+  tmp: TBuffer1K; // small 1K buffer to stress (should be e.g. 64KB in practice)
+begin
+  S := RandomAnsi7(100000);
+  // basic integrity from two threads
+  P := TPipeStream.Create(512);
+  R := TPipeThread.Create({suspended=}true, nil, nil, TSynLog, 'rd');
+  W := TPipeThread.Create({suspended=}true, nil, nil, TSynLog, 'wr');
+  try
+    R.Pipe := P;
+    R.Expected := length(S) * THREAD_ITER;
+    R.Start;
+    W.Pipe := P;
+    W.WriteData := S;
+    W.Expected := R.Expected;
+    W.Start;
+    W.WaitFor;
+    CheckEqual(W.Expected, R.Expected);
+    CheckEqual(W.Bytes, W.Expected, 'W.Bytes');
+    R.WaitFor;
+    CheckEqual(R.Bytes, R.Expected, 'R.Bytes');
+    CheckEqual(R.Hash, W.Hash, 'Hash');
+  finally
+    W.Free;
+    R.Free;
+    P.Free;
+  end;
+  // tiny ring buffer / wrap-around - no thread needed
+  timer.Start;
+  P := TPipeStream.Create(SizeOf(tmp));
+  try
+    ps := pointer(S);
+    n := SizeOf(tmp); // always try whole 1K buffer first
+    c := length(S) div SizeOf(tmp); // loop 97 times
+    for i := 1 to c do
+    begin
+      crc := crc32c(0, ps, n);
+      CheckEqual(P.Write(ps^, n), n, 'write all');
+      inc(ps, n);
+      CheckNotEqual(crc, crc32c(0, @tmp, n), 'tmp');
+      CheckEqual(P.Read(tmp, SizeOf(tmp)), n, 'read trunc');
+      CheckEqual(crc, crc32c(0, @tmp, n), 'crc');
+      n := Random32(SizeOf(tmp)) + 1; // variable Write+Read (1..1024 bytes)
+    end;
+    n := ps - pointer(S);
+    Check(n <= length(S), 'ps overflow');
+  finally
+    P.Free;
+  end;
+  NotifyTestSpeed('TPipeStream 1K', c, n, @timer);
+  // read timeout
+  P := TPipeStream.Create(64, 50, 50);
+  try
+    Tix := GetTickCount64;
+    CheckEqual(P.Read(tmp, 64), 0);
+    Check(GetTickCount64 - Tix >= 30);
+  finally
+    P.Free;
+  end;
+  // write timeout
+  P := TPipeStream.Create(64, 50, 50);
+  try
+    CheckEqual(P.Write(tmp, 64), 64);
+    Tix := GetTickCount64;
+    n := P.Write(tmp, SizeOf(tmp));
+    Check(n < SizeOf(tmp));
+    Check(GetTickCount64 - Tix >= 30);
+  finally
+    P.Free;
+  end;
+  // close while blocked
+  P := TPipeStream.Create(64, 10000, 10000);
+  try
+    W := TPipeThread.Create({suspended=}true, nil, nil, TSynLog, 'wr2');
+    try
+      W.Pipe := P;
+      W.WriteData := S;
+      W.Expected := length(s);
+      W.Start;
+      SleepHiRes(50);
+      P.Close;
+      W.WaitFor;
+      Check(W.Bytes < length(s));
+    finally
+      W.Free;
+    end;
+  finally
+    P.Free;
+  end;
+end;
+
+type
   TRec = packed record
     a: integer;
     b: byte;
@@ -1641,6 +1793,7 @@ begin
   Run(Utf8Slow, self, 'UTF-8', true, false);
   Run(TimeZonesSlow, self, 'TimeZones', true, false);
   Run(TRawUtf8ListSlow, self, 'TRawUtf8List', true, false);
+  Run(TStreamSlow, self, 'TPipeStream', true, false);
   { TODO : implement TypeInfoToHash() if really needed }
   {
   h := TypeInfoToHash(TypeInfo(TAmount));
