@@ -4893,7 +4893,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// wait until SetEvent is called, calling CheckSynchronize() on main thread
     // - returns true if was signaled by SetEvent, or false on timeout
-    function WaitForSafe(TimeoutMS: cardinal): boolean;
+    function WaitForSafe(TimeoutMS: cardinal; DisableSafe: boolean = false): boolean;
     /// calls SleepHiRes() in steps while checking terminated flag and this event
     function SleepStep(var start: Int64; terminated: PBoolean): Int64;
     /// could be used to tune your algorithm if the eventfd() API is used
@@ -11519,24 +11519,25 @@ begin
   result := WaitFor(INFINITE);
 end;
 
-function TSynEvent.WaitForSafe(TimeoutMS: cardinal): boolean;
+function TSynEvent.WaitForSafe(TimeoutMS: cardinal; DisableSafe: boolean): boolean;
 var
   endtix: Int64;
 begin
-  if GetCurrentThreadID = MainThreadID then
+  if DisableSafe or  // DisableSafe=true to skip main Thread recognition
+     (GetCurrentThreadID <> MainThreadID) then
   begin
-    endtix := 0;
-    if TimeoutMS <> INFINITE then
-      endtix := GetTickCount64 + TimeoutMS;
-    repeat
-      CheckSynchronize(1); // make UI responsive enough
-    until WaitFor(10) or
-          ((endtix <> 0) and
-           (GetTickCount64 > endtix));
-    result := fNotified;
-  end
-  else
     result := WaitFor(TimeoutMS);
+    exit;
+  end;
+  endtix := 0;
+  if TimeoutMS <> INFINITE then
+    endtix := GetTickCount64 + TimeoutMS;
+  repeat
+    CheckSynchronize(1); // make UI responsive enough
+  until WaitFor(10) or
+        ((endtix <> 0) and
+         (GetTickCount64 > endtix));
+  result := fNotified;
 end;
 
 
