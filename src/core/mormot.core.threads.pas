@@ -118,7 +118,7 @@ type
   // - used e.g. to efficiently synchronize/pipe data between two threads,
   // as exactly one producer/Write thread and one consumer/Read thread
   TPipeStream = class(TStreamWithNoSeek)
-  private
+  protected
     fLock: TLightLock;  // enough to protect MoveFast + TSynEvent fast process
     fBuffer: PAnsiChar; // =nil after Close
     fBufferSize, fPending: integer;
@@ -126,7 +126,9 @@ type
     fReadTimeout, fWriteTimeout: cardinal;
     fCanRead: TSynEvent;
     fCanWrite: TSynEvent;
+    fExpectedSize: Int64;
     fOptions: TPipeStreamOptions;
+    function GetSize: Int64; override;
   public
     /// initialize this TStream and its internal buffer
     // - support optional ms timeout for Read/Write methods to mimics e.g. sockets
@@ -136,7 +138,7 @@ type
     // - all producer/consumer threads should have terminated before destruction
     destructor Destroy; override;
     /// abort any blocking Read/Write process
-    procedure Close;
+    procedure Close; virtual;
     /// read up to Count bytes waiting for data sent on Write()
     // - this method blocks when the internal buffer is empty (Pending = 0)
     // - may return less than Count bytes if there is some data in the buffer
@@ -158,6 +160,11 @@ type
     /// allow to customize the instance process
     property Options: TPipeStreamOptions
       read fOptions write fOptions;
+    /// internal metadata field which will be returned as TPipeStream.Size
+    // - is convenient e.g. when the eventual/final resource size is known
+    // - equals -1 by default, i.e. if Size should follow Position
+    property ExpectedSize: Int64
+      read fExpectedSize write fExpectedSize;
   end;
 
 
@@ -1913,6 +1920,7 @@ begin
   fBufferSize := NextPowerOfTwo(aBufSize); // for efficient "and size-1" modulo
   fReadTimeout := aReadTimeout;
   fWriteTimeout := aWriteTimeout;
+  fExpectedSize := -1; // eventual Size metadata is disabled by default
   GetMem(fBuffer, fBufferSize);
   fCanRead := TSynEvent.Create;
   fCanWrite := TSynEvent.Create;
@@ -2035,6 +2043,13 @@ begin
         not fCanWrite.WaitFor(fWriteTimeout); // partial Write() on timeout
 end;
 
+function TPipeStream.GetSize: Int64;
+begin
+  if fExpectedSize < 0 then
+    result := fSize          // = fPosition in practice and by default
+  else
+    result := fExpectedSize; // custom meta-data value
+end;
 
 
 { ************ IAutoFree and IAutoLocker Reference-Counted Process }
