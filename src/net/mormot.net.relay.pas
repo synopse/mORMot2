@@ -109,7 +109,7 @@ uses
   mormot.core.rtti,
   mormot.core.json,
   mormot.crypt.jwt,
-  mormot.core.perf,
+  mormot.core.perf, // for GetDiskPartitionsVariant/TSynMonitorMemory
   mormot.crypt.secure,
   mormot.net.sock,
   mormot.net.http,

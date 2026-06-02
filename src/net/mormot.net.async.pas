@@ -41,7 +41,6 @@ uses
   mormot.core.log,
   mormot.core.rtti,
   mormot.core.json,
-  mormot.core.perf,
   mormot.core.zip,
   mormot.crypt.core,
   mormot.crypt.secure,
