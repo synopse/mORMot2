@@ -265,7 +265,7 @@ type
     /// used by the published methods to execute a Method with the given
     // parameters, and ensure a (optionally specific) exception is raised
     function CheckRaised(const Method: TOnTestCheck; const Params: array of const;
-      Raised: ExceptionClass = nil): boolean;
+      Raised: ExceptionClass = nil; const Context: RawUtf8 = ''): boolean;
     /// used by published methods to start some timing on associated log
     // - call this once, before one or several consecutive CheckLogTime()
     // - warning: this method is not thread-safe
@@ -1039,40 +1039,36 @@ begin
 end;
 
 function TSynTestCase.CheckMatchAny(const Value: RawUtf8; const Values: array of RawUtf8;
-  CaseSentitive: boolean; ExpectedResult: boolean; const msg: string): boolean;
+  CaseSentitive, ExpectedResult: boolean; const msg: string): boolean;
 begin
   result := (FindRawUtf8(Values, Value, CaseSentitive) >= 0) = ExpectedResult;
   Check(result);
 end;
 
 function TSynTestCase.CheckRaised(const Method: TOnTestCheck;
-  const Params: array of const; Raised: ExceptionClass): boolean;
+  const Params: array of const; Raised: ExceptionClass; const Context: RawUtf8): boolean;
 var
   msg: string;
 begin
-  {$ifndef NOEXCEPTIONINTERCEPT}
   TSynLog.Family.ExceptionIgnoreCurrentThread := true;
-  {$endif NOEXCEPTIONINTERCEPT}
   try
     Method(Params);
     result := false;
     if Raised = nil then
       Raised := Exception;
-    FormatString('% missing', [Raised], msg);
+    FormatString('% missing%', [Raised, Context], msg);
   except
     on E: Exception do
     begin
       result := (Raised = nil) or
                 (PClass(E)^ = Raised);
       if result then
-        FormatString('% [%]', [E, E.Message], msg)
+        FormatString('% [%]%', [E, E.Message, Context], msg)
       else
-        FormatString('% instead of %', [E, Raised], msg);
+        FormatString('% instead of %%', [E, Raised, Context], msg);
     end;
   end;
-  {$ifndef NOEXCEPTIONINTERCEPT}
   TSynLog.Family.ExceptionIgnoreCurrentThread := false;
-  {$endif NOEXCEPTIONINTERCEPT}
   Check(result, msg);
 end;
 
@@ -1436,7 +1432,7 @@ end;
 
 procedure TSynTests.DoText(const value: RawUtf8);
 begin
-  ConsoleWrite(value, ccLightGray, {nolf=}true, {nocolor=}true);
+  ConsoleWrite(value, ccDefault, {nolf=}true, {nocolor=}true);
   if Assigned(CustomOutput) then
     CustomOutput(value);
 end;
@@ -1488,7 +1484,7 @@ begin
   Append(fNotifyProgress, value);
   DoColor(cc);
   DoText(value);
-  DoColor(ccLightGray);
+  DoColor(ccDefault);
 end;
 
 procedure TSynTests.DoLog(Level: TSynLogLevel; const TextFmt: RawUtf8;
@@ -1632,7 +1628,7 @@ begin
                 titledone := true;
                 DoColor(ccWhite);
                 DoTextLn([CRLF + CRLF, m + 1, '. ', fTests[m].TestName]);
-                DoColor(ccLightGray);
+                DoColor(ccDefault);
               end;
               if not started then
               begin
@@ -1644,7 +1640,7 @@ begin
                 c.Setup;
                 DoColor(ccWhite);
                 DoTextLn([CRLF + ' ', m + 1, '.', i + 1, '. ', c.Ident, ': ']);
-                DoColor(ccLightGray);
+                DoColor(ccDefault);
                 started := true;
               end;
               c.fAssertionsBeforeRun := c.fAssertions;
@@ -1672,7 +1668,7 @@ begin
                 {$ifndef NOEXCEPTIONINTERCEPT}
                 DoTextLn(['! ', GetLastExceptionText]); // with extended info
                 {$endif NOEXCEPTIONINTERCEPT}
-                DoColor(ccLightGray);
+                DoColor(ccDefault);
               end;
             end;
             _CurrentMethodInfo := nil;
@@ -1699,7 +1695,7 @@ begin
               AppendShortToUtf8(' FAILED', s);
             Append(s, ['  ', TotalTimer.Stop, CRLF]);
             DoText(s); // write at once to the console output
-            DoColor(ccLightGray);
+            DoColor(ccDefault);
             inc(fAssertions, c.fAssertions); // compute global assertions count
             inc(fAssertionsFailed, c.fAssertionsFailed);
           finally
@@ -1750,7 +1746,7 @@ begin
     DoTextLn([CRLF + '! Some tests FAILED: please correct the code.']);
     ExitCode := 1;
   end;
-  DoColor(ccLightGray);
+  DoColor(ccDefault);
 end;
 
 procedure TSynTests.AfterOneRun;
@@ -1808,7 +1804,7 @@ begin
     C.fRunConsole := '';
   end;
   DoText(s); // append whole information at once to the console
-  DoColor(ccLightGray);
+  DoColor(ccDefault);
 end;
 
 class procedure TSynTests.DescribeCommandLine;
@@ -1877,7 +1873,7 @@ begin
   err := Executable.Command.DetectUnknown;
   if (err <> '') or
      Executable.Command.Option(['?', 'help'], 'display this message') or
-     SameText(redirect, 'help') then
+     SameTextS(redirect, 'help') then
   begin
     ConsoleWrite(err);
     ConsoleWrite(Executable.Command.FullDescription);

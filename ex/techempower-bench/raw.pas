@@ -918,7 +918,7 @@ begin
     begin
       ConsoleWrite('Per-server accepted connections:');
       for i := 0 to servers - 1 do
-        ConsoleWrite([' ', rawServers[i].fHttpServer.Async.Accepted], ccLightGray, true);
+        ConsoleWrite([' ', rawServers[i].fHttpServer.Async.Accepted], ccDefault, true);
       ConsoleWrite([#10'Please wait: Shutdown ', servers, ' servers and ',
         threads * servers, ' threads']);
     end;

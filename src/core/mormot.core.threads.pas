@@ -7,13 +7,14 @@ unit mormot.core.threads;
   *****************************************************************************
 
    High-Level Multi-Threading features shared by all framework units
-    - TThreadList thread-safe wrapper
+    - TThreads thread-safe wrapper
     - IAutoFree and IAutoLocker Reference-Counted Process
     - Thread-Safe TSynQueue and TPendingTaskList
     - Thread-Safe ILockedDocVariant Storage
     - Background Thread Processing
     - Parallel Execution in a Thread Pool
     - Server Process Oriented Thread Pool
+    - TPipeStream Read/Write synchronization between two threads
 
   *****************************************************************************
 }
@@ -37,8 +38,7 @@ uses
   mormot.core.data,
   mormot.core.variants,
   mormot.core.json,
-  mormot.core.log,
-  mormot.core.perf;
+  mormot.core.log;
 
 
 {$ifndef PUREMORMOT2}
@@ -61,7 +61,7 @@ type
 {$endif PUREMORMOT2}
 
 
-{ ************* TThreadList thread-safe wrapper }
+{ ************* TThreads thread-safe wrapper }
 
 type
   /// exception class raised by this unit
@@ -73,9 +73,9 @@ type
 
   /// maintain a thread-safe list of TThread instances
   {$ifdef USERECORDWITHMETHODS}
-  TThreadList = record
+  TThreads = record
   {$else}
-  TThreadList = object
+  TThreads = object
   {$endif USERECORDWITHMETHODS}
   public
     /// make this list thread-safe
@@ -953,7 +953,7 @@ type
     fOnException: TNotifyEvent;
     fOnProcessMS: cardinal;
     fProcessingCounter: integer;
-    fStats: TSynMonitor;
+    fStats: TSynMonitorAbstract;
     procedure ExecuteLoop; override;
   public
     /// initialize the thread for a periodic task processing
@@ -983,7 +983,7 @@ type
       read fOnProcessMS write fOnProcessMS;
     /// processing statistics
     // - may be nil if aStats was nil in the class constructor
-    property Stats: TSynMonitor
+    property Stats: TSynMonitorAbstract
       read fStats;
   end;
 
@@ -1092,15 +1092,15 @@ type
 
   /// used by TSynBackgroundTimer internal registration list
   TSynBackgroundTimerTask = record
-    MsgSafe: TLightLock; // protect Msg[] list - topmost to ensure aarch64 align
-    OnProcess: TOnSynBackgroundTimerProcess;
-    Secs: cardinal;
-    NextTix: Int64;
     Msg: TRawUtf8DynArray;
+    MsgCount, MilliSecs: integer; // not PtrInt
+    OnProcess: TOnSynBackgroundTimerProcess;
+    NextTix: Int64;
   end;
+  PSynBackgroundTimerTask = ^TSynBackgroundTimerTask;
 
   /// stores TSynBackgroundTimer internal registration list
-  TSynBackgroundTimerTaskDynArray = array of TSynBackgroundTimerTask;
+  TSynBackgroundTimerTasks = array of TSynBackgroundTimerTask;
 
   /// TThread able to run one or several tasks at a periodic pace in a
   // background thread
@@ -1112,10 +1112,13 @@ type
   // use its own separated thread
   TSynBackgroundTimer = class(TSynBackgroundThreadProcess)
   protected
-    fTask: TSynBackgroundTimerTaskDynArray;
-    fTasks: TDynArrayLocked;
+    fSafe: TLightLock;  // seems enough - TOSLightLock is more than twice slower
+    fTask: TSynBackgroundTimerTasks;
+    fTaskCount: integer; // not PtrInt
+    fTasks: TDynArray;
+    fTodo: TSynBackgroundTimerTasks; // local storage for EverySecond()
     procedure EverySecond(Sender: TSynBackgroundThreadProcess);
-    function Find(const aProcess: TMethod): PtrInt;
+    function Find(const aProcess: TMethod): PSynBackgroundTimerTask;
     function Add(const aOnProcess: TOnSynBackgroundTimerProcess;
       const aMsg: RawUtf8; aExecuteNow: boolean): boolean;
   public
@@ -1134,7 +1137,7 @@ type
     // - for background process on a mORMot service, consider using TRest
     // TimerEnable/TimerDisable methods, and its associated BackgroundTimer thread
     procedure Enable(const aOnProcess: TOnSynBackgroundTimerProcess;
-      aOnProcessSecs: cardinal);
+      aOnProcessSecs: integer);
     /// undefine a task running on a periodic number of seconds
     // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied task was not registered
@@ -1174,12 +1177,12 @@ type
     function ExecuteOnce(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
     /// wait until no background task is processed
     procedure WaitUntilNotProcessing(timeoutsecs: integer = 10);
-    /// low-level access to the internal task list
-    property Task: TSynBackgroundTimerTaskDynArray
+    /// low-level access to the internal task list - not thread safe
+    property Task: TSynBackgroundTimerTasks
       read fTask;
-    /// low-level access to the internal task list wrapper and safe
-    property Tasks: TDynArrayLocked
-      read fTasks;
+    /// low-level access to the internal task list count - not thread safe
+    property TaskCount: integer
+      read fTaskCount;
     /// returns true if there is currenly some tasks processed
     property Processing: boolean
       read fProcessing;
@@ -1768,15 +1771,95 @@ const
 procedure ThreadCountAdjust(var aThreadPoolCount: integer);
 
 
+{ ************* TPipeStream Read/Write synchronization between two threads }
+
+type
+  /// allow to customize TPipeStream behavior
+  // - psoWritePartial for Write() to return without blocking on partial sending
+  // - psoWriteNonBlocking for Write() to return 0 bytes on full buffer
+  // - psoWritePosition for Position to return the Write() number of bytes
+  // instead of the Read() number of bytes by default
+  // - psoReadNonBlocking for Read() to return 0 bytes on empty buffer
+  // - psoReadCheckSynchronize for Read() to detect the main thread and call
+  // CheckSynchronize which is slower but allow VCL/LCL UI responsiveness
+  TPipeStreamOptions = set of (
+    psoWritePartial,
+    psoWriteNonBlocking,
+    psoWritePosition,
+    psoReadNonBlocking,
+    psoReadCheckSynchronize);
+
+  /// a TStream which transmits its Write() method buffer into its blocking Read()
+  // - used e.g. to efficiently synchronize/pipe data between two threads,
+  // as exactly one producer/Write thread and one consumer/Read thread
+  TPipeStream = class(TStreamWithNoSeek)
+  protected
+    fLock: TLightLock;  // enough to protect MoveFast + TSynEvent.ResetEvent
+    fBuffer: PAnsiChar; // =nil after Close
+    fBufferSize, fPending: integer;
+    fReadPos, fWritePos: integer;
+    fReadTimeout, fWriteTimeout: cardinal;
+    fCanRead: TSynEvent;
+    fCanWrite: TSynEvent;
+    fExpectedSize: Int64;
+    fOptions: TPipeStreamOptions;
+    function GetSize: Int64; override;
+  public
+    /// initialize this TStream and its internal buffer
+    constructor Create(aBufSize: cardinal = 65536); reintroduce;
+    /// finalize this instance and its buffer
+    // - all producer/consumer threads should have terminated before destruction
+    destructor Destroy; override;
+    /// abort any blocking Read/Write process
+    procedure Close; virtual;
+    /// read up to Count bytes waiting for data sent on Write()
+    // - this method blocks when the internal buffer is empty (Pending = 0)
+    // - may return less than Count bytes if there is some data in the buffer
+    // - return 0 if aReadTimeout has been reached or psoReadNonBlocking was set
+    // - by default, TPipeStream.Position/Size reflect the total number of bytes
+    // from Read(), unless the psoWritePosition option is set
+    function Read(var Buffer; Count: Longint): Longint; override;
+    /// send Count bytes to the corresponding Read() on the other side of pipe
+    // - blocks when the internal buffer is full, until Count bytes are sent
+    // - write less than Count bytes only if aWriteTimeout has been reached,
+    // or if psoWritePartial/psoWriteNonBlocking options have been set
+    function Write(const Buffer; Count: Longint): Longint; override;
+    /// check if Close has been called and pipe process was aborted
+    function Closed: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// informative value about data waiting for Read() - not thread-safe by design
+    property Pending: integer
+      read fPending;
+    /// informative value about the internal buffer size as supplied to Create()
+    property Capacity: integer
+      read fBufferSize;
+    /// Read() optional timeout in milliseconds
+    // - convenient e.g. when used in conjunction with sockets
+    property ReadTimeout: cardinal
+      read fReadTimeout write fReadTimeout;
+    /// Write() optional timeout in milliseconds
+    // - convenient e.g. when used in conjunction with sockets
+    property WriteTimeout: cardinal
+      read fWriteTimeout write fWriteTimeout;
+    /// customize the instance behavior
+    property Options: TPipeStreamOptions
+      read fOptions write fOptions;
+    /// internal metadata field which will be returned as TPipeStream.Size
+    // - convenient e.g. when the eventual/final resource size is known
+    // - equals -1 by default, i.e. if Size value should follow current Position
+    property ExpectedSize: Int64
+      read fExpectedSize write fExpectedSize;
+  end;
+
 
 implementation
 
 
-{ ************* TThreadList thread-safe wrapper }
+{ ************* TThreads thread-safe wrapper }
 
-{ TThreadList }
+{ TThreads }
 
-procedure TThreadList.Add(t: TThread);
+procedure TThreads.Add(t: TThread);
 begin
   Safe.Lock;
   try
@@ -1786,13 +1869,13 @@ begin
   end;
 end;
 
-procedure TThreadList.Terminated(t: TThread);
+procedure TThreads.Terminated(t: TThread);
 begin
   if t <> nil then
     PtrArrayDelete(List, t, Safe);
 end;
 
-procedure TThreadList.Terminate;
+procedure TThreads.Terminate;
 var
   i: PtrInt;
 begin
@@ -1805,8 +1888,8 @@ begin
   end;
 end;
 
-procedure TThreadList.TerminateAndWait(secs: integer;
-  sender: TObject; logclass: TSynLogClass);
+procedure TThreads.TerminateAndWait(secs: integer; sender: TObject;
+  logclass: TSynLogClass);
 var
   tix, endtix, lasttix: cardinal;
   log: ISynLog;
@@ -1816,8 +1899,10 @@ begin
   if logclass <> nil then
     logclass.EnterLocal(log, sender, 'Shutdown');
   Terminate;
+  if secs <= 0 then
+    exit;
   lasttix := GetTickSec;
-  endtix := lasttix + secs; // never wait forever
+  endtix := lasttix + cardinal(secs); // never wait forever
   repeat
     SleepHiRes(10);
     if List = nil then
@@ -1829,7 +1914,6 @@ begin
     lasttix := tix;
   until tix > endtix;
 end;
-
 
 
 { ************ IAutoFree and IAutoLocker Reference-Counted Process }
@@ -1954,9 +2038,9 @@ begin
   fLast := -2;
   fValues.Init(aArrayTypeInfo, fValueVar, @fCount);
   if aKind = ptNone then
-    aKind := fValues.Info.ArrayFirstFieldSort;      // compare by first field
+    aKind := fValues.Info.ArrayFirstFieldSort; // compare by first field
   if aKind <> ptNone then
-    fValues.SetParserType(aKind, aCaseInsensitive); // set fValues.fCompare()
+    fValues.Compare := DynArraySortOne(aKind, aCaseInsensitive); // may be nil
 end;
 
 {$ifdef HASGENERICS}
@@ -3060,9 +3144,14 @@ begin
       until false
     else
     {$endif OSWINDOWS}
-      fCallerEvent.WaitForEver;
+      // loop to ignore any (spurious) wake-up until the process is actually done
+      // - e.g. Delphi POSIX TEvent does not filter pthread_cond spurious wakeups
+      repeat
+        fCallerEvent.WaitForEver;
+      until fPendingProcessFlag <> flagStarted;
     if fPendingProcessFlag <> flagFinished then
-      ESynThread.RaiseUtf8('%.WaitForFinished: flagFinished?', [self]);
+      ESynThread.RaiseUtf8('%.WaitForFinished: flag=% exec=% terminated=%',
+        [self, ord(fPendingProcessFlag), ord(fExecute), ord(Terminated)]);
     if fBackgroundException <> nil then
     begin
       E := fBackgroundException;
@@ -3409,15 +3498,11 @@ end;
 
 { TSynBackgroundTimer }
 
-var
-  ProcessSystemUse: TSystemUse;
-
 constructor TSynBackgroundTimer.Create(const aThreadName: RawUtf8;
   const aOnBeforeExecute: TOnNotifyThread; aOnAfterExecute: TOnNotifyThread;
   aStats: TSynMonitorClass; aLogClass: TSynLogClass);
 begin
-  fTasks.DynArray.Init(TypeInfo(TSynBackgroundTimerTaskDynArray),
-    fTask, @fTasks.Count);
+  fTasks.Init(TypeInfo(TSynBackgroundTimerTasks), fTask, @fTaskCount);
   if not Assigned(aOnAfterExecute) and
      Assigned(aLogClass) then // minimal TSynLog support
     aOnAfterExecute := aLogClass.Family.OnThreadEnded;
@@ -3427,100 +3512,116 @@ end;
 
 destructor TSynBackgroundTimer.Destroy;
 begin
-  if (ProcessSystemUse <> nil) and
-     (ProcessSystemUse.Timer = self) then
-    ProcessSystemUse.Timer := nil; // allows processing by another background timer
+  if (ProcessSystemUseTimer <> nil) and
+     (ProcessSystemUseTimer^ = self) then
+    ProcessSystemUseTimer^ := nil; // free ownership for another background timer
   inherited Destroy;
 end;
-
-const
-  TIXPRECISION = 32; // GetTickCount64 resolution (for aOnProcessSecs=1)
 
 procedure TSynBackgroundTimer.EverySecond(Sender: TSynBackgroundThreadProcess);
 var
   tix: Int64;
-  i, f, n: PtrInt;
-  t: ^TSynBackgroundTimerTask;
-  todo: TSynBackgroundTimerTaskDynArray; // avoid lock contention
+  i: integer;
+  t, todo: PSynBackgroundTimerTask;
 begin
   if (fTask = nil) or
      Terminated then
     exit;
-  tix := mormot.core.os.GetTickCount64;
-  n := 0;
+  tix := mormot.core.os.GetTickCount64; // retrieve once outside lock
   LockedInc32(@fProcessingCounter);
   try
-    fTasks.Safe.WriteLock;
+    i := 0;
+    todo := nil;
+    fSafe.Lock; // very quick, just enough to copy to fTodo[]
     try
-      i := 0;
-      while i < fTasks.Count do
+      t := pointer(fTask);
+      while i < fTaskCount do
       begin
-        t := @fTask[i];
         if tix >= t^.NextTix then
         begin
-          if n = 0 then
-            SetLength(todo, fTasks.Count - n);
-          MoveFast(t^, todo[n], SizeOf(t^)); // no COW needed
-          pointer(t^.Msg) := nil; // now owned by todo[n].Msg
-          inc(n);
-          if integer(t^.Secs) = -1 then
+          // threadsafe move of this triggerred task into our local todo list
+          if todo = nil then
           begin
-            // from ExecuteOnce()
-            fTasks.DynArray.Delete(i); // is likely to be the last -> no move
-            continue; // don't inc(i)
-          end
-          else
-            // schedule for next time
-            t^.NextTix := tix + ((t^.Secs * 1000) - TIXPRECISION);
+            if length(fTodo) < fTaskCount then // no need to resize often
+              SetLength(fTodo, NextGrow(fTaskCount));
+            todo := pointer(fTodo);
+          end;
+          todo^ := t^;
+          inc(todo);
+          if t^.MilliSecs < 0 then
+          begin
+            // Secs=-1 from ExecuteOnce() -> delete
+            fTasks.Delete(i); // is likely to be the last -> no move
+            t := @fTask[i];   // t may have moved to another location
+            continue;         // no inc(i)
+          end;
+          // schedule for next occurence - should match Enable() logic below
+          t^.NextTix := tix + t^.MilliSecs;
+          t^.Msg := nil;
+          t^.MsgCount := 0; // reset
         end;
         inc(i);
+        inc(t);
       end;
     finally
-      fTasks.Safe.WriteUnLock;
+      fSafe.UnLock;
     end;
-    for i := 0 to n - 1 do
-      with todo[i] do
-        if Msg <> nil then
-          for f := 0 to length(Msg) - 1 do
-            try
-              OnProcess(self, Msg[f]);
-            except // any exception is just ignored
-            end
-        else
+    if todo = nil then
+      exit;
+    // execute the pending tasks out of the main fSafe lock
+    t := pointer(fTodo);
+    repeat
+      if t^.MsgCount <> 0 then
+      begin
+        for i := 0 to t^.MsgCount - 1 do
           try
-            OnProcess(self, '');
-          except
+            t^.OnProcess(self, t^.Msg[i]);
+          except // any exception is just ignored
           end;
+        t^.Msg := nil; // release memory ASAP
+      end
+      else
+        try
+          t^.OnProcess(self, '');
+        except
+        end;
+      inc(t);
+    until t = todo;
   finally
     fProcessing := InterlockedDecrement(fProcessingCounter) <> 0;
   end;
 end;
 
-function TSynBackgroundTimer.Find(const aProcess: TMethod): PtrInt;
+function TSynBackgroundTimer.Find(const aProcess: TMethod): PSynBackgroundTimerTask;
 var
-  m: ^TSynBackgroundTimerTask;
+  n: integer;
 begin
-  // caller should have made fTaskLock.Lock;
-  result := fTasks.Count - 1;
-  if result >= 0 then
+  // caller should have made fTasks.Safe.*Lock
+  n := fTaskCount;
+  if (n > 0) and
+     Assigned(aProcess.Code) then
   begin
-    m := @fTask[result];
+    result := pointer(fTask);
     repeat
-      with TMethod(m^.OnProcess) do
-        if (Code = aProcess.Code) and
-           (Data = aProcess.Data) then
-          exit;
-      dec(result);
-      dec(m);
-    until result < 0;
+      if (TMethod(result^.OnProcess).Code = aProcess.Code) and
+         (TMethod(result^.OnProcess).Data = aProcess.Data) then
+        exit;
+      inc(result);
+      dec(n);
+    until n = 0;
   end;
+  result := nil;
 end;
 
+const
+  TIXPRECISION = 32; // GetTickCount64 resolution (for aOnProcessSecs=1)
+  NO_MSG: RawUtf8 = '-nomsg-'; // hidden place holder for ExecuteNow()
+
 procedure TSynBackgroundTimer.Enable(
-  const aOnProcess: TOnSynBackgroundTimerProcess; aOnProcessSecs: cardinal);
+  const aOnProcess: TOnSynBackgroundTimerProcess; aOnProcessSecs: integer);
 var
-  task: TSynBackgroundTimerTask;
-  found: PtrInt;
+  new: TSynBackgroundTimerTask;
+  found: PSynBackgroundTimerTask;
 begin
   if (self = nil) or
      Terminated or
@@ -3531,19 +3632,19 @@ begin
     Disable(aOnProcess);
     exit;
   end;
-  task.OnProcess := aOnProcess;
-  task.Secs := aOnProcessSecs;
-  task.NextTix := mormot.core.os.GetTickCount64 + (aOnProcessSecs * 1000 - TIXPRECISION);
-  task.MsgSafe.Init; // required since task is on stack
-  fTasks.Safe.WriteLock;
+  new.MsgCount  := 0;
+  new.OnProcess := aOnProcess;
+  new.MilliSecs := aOnProcessSecs * 1000 - TIXPRECISION; // may be -1032 from -1
+  new.NextTix   := mormot.core.os.GetTickCount64 + new.MilliSecs;
+  fSafe.Lock;
   try
     found := Find(TMethod(aOnProcess));
-    if found >= 0 then
-      fTask[found] := task
+    if found <> nil then
+      found^ := new
     else
-      fTasks.DynArray.Add(task);
+      fTasks.Add(new);
   finally
-    fTasks.Safe.WriteUnLock;
+    fSafe.UnLock;
   end;
 end;
 
@@ -3555,7 +3656,7 @@ end;
 function TSynBackgroundTimer.ExecuteNow(
   const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
 begin
-  result := Add(aOnProcess, #0, true);
+  result := Add(aOnProcess, NO_MSG, true);
 end;
 
 function TSynBackgroundTimer.ExecuteOnce(
@@ -3565,7 +3666,7 @@ begin
             Assigned(self);
   if not result then
     exit;
-  Enable(aOnProcess, cardinal(-1));
+  Enable(aOnProcess, {Secs=}-1);
   Add(aOnProcess, 'Once', true);
 end;
 
@@ -3580,93 +3681,79 @@ function TSynBackgroundTimer.EnQueue(
   const aOnProcess: TOnSynBackgroundTimerProcess; const aMsgFmt: RawUtf8;
   const Args: array of const; aExecuteNow: boolean): boolean;
 var
-  msg: RawUtf8;
+  txt: RawUtf8;
 begin
-  FormatUtf8(aMsgFmt, Args, msg);
-  result := Add(aOnProcess, msg, aExecuteNow);
+  FormatUtf8(aMsgFmt, Args, txt);
+  result := Add(aOnProcess, txt, aExecuteNow);
 end;
 
 function TSynBackgroundTimer.Add(
   const aOnProcess: TOnSynBackgroundTimerProcess; const aMsg: RawUtf8;
   aExecuteNow: boolean): boolean;
 var
-  found: PtrInt;
+  t: PSynBackgroundTimerTask;
 begin
   result := false;
   if (self = nil) or
-     Terminated or
-     (not Assigned(aOnProcess)) then
+     Terminated then
     exit;
-  fTasks.Safe.ReadLock;
+  fSafe.Lock;
   try
-    found := Find(TMethod(aOnProcess));
-    if found >= 0 then
-    begin
-      with fTask[found] do
-      begin
-        if aExecuteNow then
-          NextTix := 0;
-        if aMsg <> #0 then
-        begin
-          MsgSafe.Lock;
-          AddRawUtf8(Msg, aMsg);
-          MsgSafe.UnLock;
-        end;
-      end;
-      if aExecuteNow then
-        ProcessEvent.SetEvent;
-      result := true;
-    end;
+    t := Find(TMethod(aOnProcess));
+    if t = nil then
+      exit;
+    if pointer(aMsg) <> pointer(NO_MSG) then // ExecuteNow() expects no Msg
+      AddRawUtf8(t^.Msg, t^.MsgCount, aMsg);
+    if aExecuteNow then
+      t^.NextTix := 0;
+    result := true;
   finally
-    fTasks.Safe.ReadUnLock;
+    fSafe.UnLock;
   end;
+  if aExecuteNow then
+    fProcessEvent.SetEvent; // trigger outside of the lock to keep it short
 end;
 
 function TSynBackgroundTimer.DeQueue(
   const aOnProcess: TOnSynBackgroundTimerProcess; const aMsg: RawUtf8): boolean;
 var
-  found: PtrInt;
+  t: PSynBackgroundTimerTask;
+  i: integer;
 begin
   result := false;
   if (self = nil) or
-     Terminated or
-     (not Assigned(aOnProcess)) then
+     Terminated then
     exit;
-  fTasks.Safe.ReadLock;
+  fSafe.Lock;
   try
-    found := Find(TMethod(aOnProcess));
-    if found >= 0 then
-      with fTask[found] do
-      begin
-        MsgSafe.Lock;
-        result := DeleteRawUtf8(Msg, FindRawUtf8(Msg, aMsg));
-        MsgSafe.UnLock;
-      end;
+    t := Find(TMethod(aOnProcess));
+    if t = nil then
+      exit;
+    i := FindRawUtf8(pointer(t^.Msg), aMsg, t^.MsgCount, {casesens=}true);
+    result := DeleteRawUtf8(t^.Msg, t^.MsgCount, i);
   finally
-    fTasks.Safe.ReadUnLock;
+    fSafe.UnLock;
   end;
 end;
 
 function TSynBackgroundTimer.Disable(
   const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
 var
-  found: PtrInt;
+  t: PSynBackgroundTimerTask;
 begin
   result := false;
   if (self = nil) or
-     Terminated or
-     (not Assigned(aOnProcess)) then
+     Terminated then
     exit;
-  fTasks.Safe.WriteLock;
+  fSafe.Lock;
   try
-    found := Find(TMethod(aOnProcess));
-    if found >= 0 then
-    begin
-      fTasks.DynArray.Delete(found);
-      result := true;
-    end;
+    t := Find(TMethod(aOnProcess));
+    if t = nil then
+      exit;
+    fTasks.Delete((PtrUInt(t) - PtrUInt(fTask)) div SizeOf(t^));
+    result := true;
   finally
-    fTasks.Safe.WriteUnLock;
+    fSafe.UnLock;
   end;
 end;
 
@@ -4872,6 +4959,148 @@ begin
       aThreadPoolCount := 4; // Windows PRISM does not like too many threads
   {$endif OSWINDOWS}
 end;
+
+
+{ ************* TPipeStream Read/Write synchronization between two threads }
+
+{ TPipeStream }
+
+constructor TPipeStream.Create(aBufSize: cardinal);
+begin
+  inherited Create;
+  fBufferSize := NextPowerOfTwo(aBufSize); // for efficient "and size-1" modulo
+  fReadTimeout := INFINITE;
+  fWriteTimeout := INFINITE;
+  fExpectedSize := -1; // eventual Size metadata is disabled by default
+  GetMem(fBuffer, fBufferSize);
+  fCanRead := TSynEvent.Create;
+  fCanWrite := TSynEvent.Create;
+  fCanWrite.SetEvent; // initially empty => writable
+end;
+
+destructor TPipeStream.Destroy;
+begin
+  Close;
+  fCanRead.Free;
+  fCanWrite.Free;
+  inherited Destroy;
+end;
+
+procedure TPipeStream.Close;
+begin
+  fLock.Lock;
+  try
+    if fBuffer <> nil then // make the method re-entrant (e.g. from Destroy)
+      FreeMem(fBuffer);
+    fBuffer := nil;    // mark as closed
+  finally
+    fLock.UnLock;
+  end;
+  fCanRead.SetEvent; // always release both Read() and Write() methods
+  fCanWrite.SetEvent;
+end;
+
+function TPipeStream.Closed: boolean;
+begin
+  result := fBuffer = nil;
+end;
+
+function TPipeStream.Read(var Buffer; Count: Longint): Longint;
+var
+  tail: integer;
+  wakewriter: boolean;
+begin
+  result := 0;
+  if (Count > 0) and
+     not Closed then
+  repeat
+    wakewriter := false;
+    fLock.Lock;
+    try
+      if Closed then
+        exit;
+      fCanRead.ResetEvent;
+      if fPending > 0 then
+      begin
+        wakewriter := fPending = fBufferSize; // Write() blocks on full buffer
+        result := MinPtrInt(Count, fPending);
+        tail := fBufferSize - fReadPos;
+        MoveFast(fBuffer[fReadPos], Buffer, MinPtrInt(result, tail));
+        if result > tail then
+          MoveFast(fBuffer[0], PAnsiChar(@Buffer)[tail], result - tail);
+        fReadPos := (fReadPos + result) and (fBufferSize - 1); // fast modulo
+        dec(fPending, result);
+        if not (psoWritePosition in fOptions) then
+        begin
+          inc(fPosition, result);
+          inc(fSize, result);
+        end;
+        exit; // quickly return partial Read() without blocking
+      end;
+    finally
+      fLock.UnLock;
+      if wakewriter then
+        fCanWrite.SetEvent; // trigger to fill some more from Write()
+    end;
+  until Closed or
+        (psoReadNonBlocking in fOptions) or // return 0 on timeout or non-blocking
+        not fCanRead.WaitForSafe(fReadTimeout, not(psoReadCheckSynchronize in fOptions));
+end;
+
+function TPipeStream.Write(const Buffer; Count: Longint): Longint;
+var
+  avail, towrite, tail: integer;
+  wakereader: boolean;
+  P: PAnsiChar;
+begin
+  result := 0;
+  P := @Buffer;
+  if Count > 0 then
+  repeat
+    fLock.Lock;
+    try
+      if Closed then
+        exit;
+      fCanWrite.ResetEvent;
+      wakereader := fPending = 0; // Read() blocks on empty buffer
+      avail := fBufferSize - fPending;
+      if avail > 0 then
+      begin
+        towrite := MinPtrInt(Count - result, avail);
+        tail := fBufferSize - fWritePos;
+        MoveFast(P[0], fBuffer[fWritePos], MinPtrInt(towrite, tail));
+        if towrite > tail then
+          MoveFast(P[tail], fBuffer[0], towrite - tail);
+        fWritePos := (fWritePos + towrite) and (fBufferSize - 1); // fast modulo
+        inc(P, towrite);
+        inc(fPending, towrite);
+        inc(result, towrite);
+        if psoWritePosition in fOptions then
+        begin
+          inc(fPosition, towrite);
+          inc(fSize, towrite);
+        end;
+      end;
+    finally
+      fLock.UnLock;
+    end;
+    if wakereader then
+      fCanRead.SetEvent; // trigger to consume some more from Read()
+  until Closed or
+        (result = Count) or // blocks until all Count bytes have been written
+        (psoWriteNonBlocking in fOptions) or
+        ((result <> 0) and
+         (psoWritePartial in fOptions)) or    // optional partial Write()
+        not fCanWrite.WaitFor(fWriteTimeout); // partial Write() on timeout
+end;
+
+function TPipeStream.GetSize: Int64;
+begin
+  result := fExpectedSize; // custom meta-data value
+  if result < 0 then
+    result := fSize;      // = fPosition in practice and by default
+end;
+
 
 end.
 

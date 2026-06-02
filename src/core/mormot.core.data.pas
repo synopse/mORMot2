@@ -1610,7 +1610,7 @@ type
     Safe: TRWLightLock;
     /// the wrapper to a dynamic array
     DynArray: TDynArray;
-    /// will store the length of the TDynArray
+    /// will store the length of the TDynArray - should not be a PtrInt
     Count: integer;
   end;
 
@@ -1666,7 +1666,8 @@ type
   // maintain a hash table over an existing dynamic array: several TDynArrayHasher
   // could be applied to a single TDynArray wrapper or could index one or several
   // fields of an ORM table via TRestStorageInMemoryUnique in mormot.orm.storage
-  // - TDynArrayHashed will use a TDynArrayHasher on its own storage
+  // - TDynArrayHashed will use a TDynArrayHasher on its own storage to implement
+  // a dense array with external hash indexes optimized for read-heavy workloads
   {$ifdef USERECORDWITHMETHODS}
   TDynArrayHasher = record
   {$else}
@@ -1730,6 +1731,9 @@ type
     // - trigger hashing if Count reaches CountTrigger
     function FindBeforeAdd(Item: pointer; out wasAdded: boolean; aHashCode: cardinal): PtrInt;
     /// search and delete an element value, updating the internal hash table
+    // - this hash table is optimized for read-heavy workloads: deletion needs to
+    // actually move the data in the associated TDynArray and adjust hash indexes
+    // - caller should eventuall call TDynArray.Delete() with the returned result
     function FindBeforeDelete(Item: pointer): PtrInt;
     /// full computation of the internal hash table
     // - to be called after items have been manually updated - e.g. after Clear
@@ -2656,6 +2660,7 @@ procedure QuickSortIndexedPUtf8Char(Values: PPUtf8CharArray; Count: integer;
 type
   /// store binary key/value pairs with an efficient O(1) hash table
   // - works with pointers on text or binary, when TSynDictionary is overkill
+  // - each key/value is stored as a single efficient RawByteString instance
   TBinDictionary = class(TSynPersistent)
   protected
     fValue: TRawByteStringDynArray;
@@ -2698,7 +2703,7 @@ type
     function Find(const Key: ShortString; ValueLen: PPtrInt = nil): pointer; overload;
     /// erase the whole storage
     procedure Clear;
-    /// write all key = value pairs as human-readable text
+    /// write all key = value pairs as key-ordered human-readable text
     function AsText(const Sep: RawUtf8 = ' = '; const Feed: RawUtf8 = #10): RawUtf8;
     /// raw storage, encoded as B[keysize]+key+value so value is #0 terminated
     property Value: TRawByteStringDynArray
@@ -3800,7 +3805,7 @@ begin
   result := pointer(fValue[Index]); // never nil
   keylen := PByte(result)^ + 1;
   if Len <> nil then
-    Len^ := PStrLen(PAnsiChar(result) - _STRLEN)^ - keylen;
+    Len^ := PtrInt(PStrLen(PAnsiChar(result) - _STRLEN)^) - keylen;
   inc(PByte(result), keylen);
 end;
 
@@ -3945,8 +3950,7 @@ begin
   if _GlobalInfo = nil then
     _GlobalInfo := RegisterGlobalShutdownRelease(TBinDictionary.Create);
   result := _GlobalInfo.Find(Key, KeyLen, @ValueLen);
-  if result = nil then
-  begin
+  if result = nil then // search for pending GlobalInfoRegister()
     repeat
       i := StrStartArray(Key, pointer(_GlobalInfoPre));
       if i < 0 then
@@ -3957,7 +3961,6 @@ begin
       if result = nil then
         result := _GlobalInfo.Find(Key, KeyLen, @ValueLen); // may appear now
     until false;
-  end;
   _GlobalInfoSafe.UnLock;
 end;
 
@@ -4026,13 +4029,13 @@ begin
   if cfAVX2 in CpuFeatures then
     Sender.UpdateText('cpu:avx2',       'true');
   if IntelAvx10 > 0 then
-    Sender.UpdateText(['cpu:avx10'],    [IntelAvx10]);
-  Sender.UpdateText(['cpu:family'],     [CpuFamily]);
-  Sender.UpdateText(['cpu:model'],      [CpuModel]);
-  Sender.UpdateText(['cpu:cachesize'],  [CpuCacheSize]);
-  Sender.UpdateTextNotVoid('cpu:caches', CpuCacheText);
-  Sender.UpdateTextNotVoid('cpu:id',     IntelManufacturer);
-  Sender.UpdateTextNotVoid('cpu:hyp',    IntelHypervisor);
+    Sender.UpdateText(['cpu:avx10'],     [IntelAvx10]);
+  Sender.UpdateText(  ['cpu:family'],    [CpuFamily]);
+  Sender.UpdateText(  ['cpu:model'],     [CpuModel]);
+  Sender.UpdateText(  ['cpu:cachesize'], [CpuCacheSize]);
+  Sender.UpdateTextNotVoid('cpu:caches',  CpuCacheText);
+  Sender.UpdateTextNotVoid('cpu:id',      IntelManufacturer);
+  Sender.UpdateTextNotVoid('cpu:hyp',     IntelHypervisor);
   Sender.UpdateTextNotVoid('cpu:manufacturer', GetSmbios(sbiCpuManufacturer));
   {$endif ASMINTEL}
   {$ifdef CPUARM3264}
@@ -4042,10 +4045,11 @@ begin
 end;
 
 procedure _GlobalInfoUser(Sender: TBinDictionary);
-{$ifndef OSPOSIX}
+{$ifdef OSWINDOWS}
 var
   u: RawUtf8;
-{$endif OSPOSIX}
+  x: TExtendedNameFormat;
+{$endif OSWINDOWS}
 begin
   Sender.UpdateText( 'user:name',    Executable.User);
   Sender.UpdateText(['user:home'],  [GetSystemPath(spUserDocuments)]);
@@ -4054,11 +4058,44 @@ begin
   {$ifdef OSPOSIX}
   Sender.UpdateText(['user:uid'],   [PosixUid]);
   Sender.UpdateText(['user:gid'],   [PosixGid]);
-  {$else}
+  {$endif OSPOSIX}
+  {$ifdef OSWINDOWS}
   Sender.UpdateTextNotVoid( 'user:uid', CurrentSid(wttProcess, nil, @u));
   Sender.UpdateTextNotVoid( 'user:domain', u);
-  {$endif OSPOSIX}
+  u := LookupName('', Join([u, '\', Executable.Host])); // try 'domain\host'
+  if u = '' then
+    u := LookupName('', Executable.Host); // fallback to isolated name
+  Sender.UpdateTextNotVoid( 'user:computerid', u);
+  if WinJoinStatus = jsDomain then
+    for x := low(x) to high(x) do
+      Sender.UpdateTextNotVoid(Join(['user:', GetEnumNameTrimed(
+        TypeInfo(TExtendedNameFormat), ord(x), scKebabCase)]), WinUserName(x));
+  {$endif OSWINDOWS}
 end;
+
+{$ifdef OSWINDOWS}
+procedure _GlobalInfoJoin(Sender: TBinDictionary);
+var
+  f: TComputerNameFormat;
+  x: TExtendedNameFormat;
+  u: RawUtf8;
+begin
+  for f := low(f) to high(f) do
+    Sender.UpdateTextNotVoid(Join(['join:', GetEnumNameTrimed(
+      TypeInfo(TComputerNameFormat), ord(f), scKebabCase)]), WinComputerName(f));
+  case WinJoinStatus('', @u) of
+    jsWorkgroup:
+      Sender.UpdateText('join:workgroup', u);
+    jsDomain:
+      begin
+        Sender.UpdateText('join:domain', u);
+        for x := low(x) to enfDnsDomain do
+          Sender.UpdateTextNotVoid(Join(['join:', GetEnumNameTrimed(
+            TypeInfo(TExtendedNameFormat), ord(x), scKebabCase)]), WinComputerName(x));
+      end;
+  end;
+end;
+{$endif OSWINDOWS}
 
 procedure _GlobalInfoBios(Sender: TBinDictionary);
 begin
@@ -6091,8 +6128,8 @@ function BinaryLoadBase64(Source: PAnsiChar; Len: PtrInt; Data: pointer;
   Info: PRttiInfo; UriCompatible: boolean; Kinds: TRttiKinds;
   WithCrc: boolean; TryCustomVariants: PDocVariantOptions): boolean;
 var
-  temp: TSynTempBuffer;
   tempend: pointer;
+  temp: TSynTempBuffer;
 begin
   if (Len > 6) and
      (Info^.Kind in Kinds) then
@@ -9410,8 +9447,11 @@ end;
 
 {$ifndef PUREMORMOT2}
 function TDynArrayHasher.ReHash(forced: boolean): integer;
+var
+  n: integer; // safer with an explicit local variable
 begin
-  ForceRehash(@result); // always forced for true thread-safety
+  ForceRehash(@n); // always forced for true thread-safety
+  result := n;
 end;
 {$endif PUREMORMOT2}
 
@@ -9725,8 +9765,11 @@ end;
 
 {$ifndef PUREMORMOT2}
 function TDynArrayHashed.ReHash(forced: boolean): integer;
+var
+  n: integer; // safer with an explicit local variable
 begin
-  fHash.ForceReHash(@result); // always forced
+  fHash.ForceReHash(@n); // always forced
+  result := n;
 end;
 {$endif PUREMORMOT2}
 
@@ -10757,6 +10800,7 @@ end;
 procedure InitializeUnit;
 var
   k: TRttiKind;
+  p: PPUtf8CharArray;
 begin
   // initialize RTTI low-level comparison functions
   RTTI_ORD_COMPARE[roSByte]       := @_BC_SByte;
@@ -10837,12 +10881,25 @@ begin
     end;
   // setup internal function wrappers
   GetDataFromJson :=  _GetDataFromJson;
-  GlobalInfoRegister('os:',   _GlobalInfoOs);
-  GlobalInfoRegister('cpu:',  _GlobalInfoCpu);
-  GlobalInfoRegister('exe:',  _GlobalInfoExe);
-  GlobalInfoRegister('env:',  _GlobalInfoEnv);
-  GlobalInfoRegister('user:', _GlobalInfoUser);
-  GlobalInfoRegister('bios:', _GlobalInfoBios);
+  SetLength(_GlobalInfoPre, 6);
+  SetLength(_GlobalInfoAdd, 6);
+  p := pointer(_GlobalInfoPre);
+  p[0] := 'os:';
+  p[1] := 'cpu:';
+  p[2] := 'exe:';
+  p[3] := 'env:';
+  p[4] := 'user:';
+  p[5] := 'bios:';
+  p := pointer(_GlobalInfoAdd);
+  p[0] := @_GlobalInfoOs;
+  p[1] := @_GlobalInfoCpu;
+  p[2] := @_GlobalInfoExe;
+  p[3] := @_GlobalInfoEnv;
+  p[4] := @_GlobalInfoUser;
+  p[5] := @_GlobalInfoBios;
+  {$ifdef OSWINDOWS}
+  GlobalInfoRegister('join:', _GlobalInfoJoin);
+  {$endif OSWINDOWS}
   // in-memory hashing are seeded from random to avoid hash flooding
   HashSeed := SystemEntropy.Startup.c0;
 end;

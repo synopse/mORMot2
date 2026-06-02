@@ -1882,8 +1882,12 @@ type
     // - may be used e.g. from OnSessionCreate to limit the number of active sessions
     // - this method is thread-safe via Sessions.Safe.ReadWriteLock/WriteLock
     // - it will be called to search for outdated sessions only once per second
-    // - returns how many deprecated sessions have been purge
+    // - returns how many deprecated sessions have been purged
     function SessionDeleteDeprecated(tix32: cardinal): integer;
+    /// force all sessions to expire immediately
+    // - could be used e.g. to force re-authentication of all connected clients
+    // - returns how many sessions have been purged
+    function SessionDeleteAll: integer;
     /// return the Server's current nonce in the proper JSON format
     // - as called from TRestServerAuthenticationDefault.Auth
     procedure ReturnNonce(Ctxt: TRestServerUriContext;
@@ -4638,7 +4642,7 @@ var
   fileName: TFileName;
 begin
   if fUriMethodPath = '' then
-    fileName := MakePath([FolderName, DefaultFileName])
+    MakePath([FolderName, DefaultFileName], fileName)
   else
     NormalizeUriToFileName(fUriMethodPath, filename, FolderName);
   ReturnFile(fileName,
@@ -5060,13 +5064,18 @@ const
   // version 2 includes fRemoteOsVersion
 
 procedure TAuthSession.SaveTo(W: TBufferWriter);
+var
+  g: TAuthGroup;
 begin
   W.Write1(TAUTHSESSION_MAGIC);
   W.WriteVarUInt32(fID);
   W.WriteVarUInt32(fUser.IDValue);
-  fUser.GetBinaryValues(W); // User.fGroup is a pointer, but will be overriden
-  W.WriteVarUInt32(fUser.GroupRights.IDValue);
-  fUser.GroupRights.GetBinaryValues(W);
+  g := fUser.GroupRights;
+  fUser.GroupRights := nil; // store 0 now but WriteVarUInt32(g.IDValue) below
+  fUser.GetBinaryValues(W);
+  fUser.GroupRights := g;
+  W.WriteVarUInt32(g.IDValue); // store the TAuthGroup with no DB involved
+  g.GetBinaryValues(W);
   W.Write(fPrivateKey);
   W.Write(fSentHeaders);
   W.Write4(integer(fRemoteOsVersion));
@@ -5081,8 +5090,8 @@ begin
   fID := Read.VarUInt32;
   fUser := Server.AuthUserClass.Create;
   fUser.IDValue := Read.VarUInt32;
-  fUser.SetBinaryValues(Read); // fUser.fGroup will be overriden by true instance
-  fUser.GroupRights := Server.AuthGroupClass.Create;
+  fUser.SetBinaryValues(Read);
+  fUser.GroupRights := Server.AuthGroupClass.Create; // expects a true instance
   fUser.GroupRights.IDValue := Read.VarUInt32;
   fUser.GroupRights.SetBinaryValues(Read);
   Read.VarUtf8(fPrivateKey);
@@ -7357,19 +7366,19 @@ begin
   // optional callback
   if Assigned(OnSessionClosed) then
     OnSessionClosed(self, aSession, Ctxt);
-  // actually remove this sesion from the internal list
+  // actually remove this session from the internal list
   fSessions.Delete(aSessionIndex);
-  fStats.ClientDisconnect;
+  fStats.ClientDisconnect; // dec(ClientDisconnect)
 end;
 
 function TRestServer.SessionDeleteDeprecated(tix32: cardinal): integer;
 var
   i: PtrInt;
   log: ISynLog;
-  a: ^TAuthSession;
+  a: PAuthSession;
 begin
   // TRestServer.Uri() runs this method at most every second
-  fSessionsDeprecatedTix := tix32;
+  fSessionsDeprecatedTix := tix32; // = TickCount64 shr 10
   result := 0;
   if (self = nil) or
      (fSessions = nil) or
@@ -7377,7 +7386,7 @@ begin
     exit;
   fSessions.Safe.ReadWriteLock; // won't block the ReadOnlyLock methods
   try
-    a := @fSessions.List[fSessions.Count];
+    a := @fSessions.List[fSessions.Count]; // for faster loop against tix32
     for i := fSessions.Count - 1 downto 0 do // backward for deletion
     begin
       dec(a);
@@ -7388,7 +7397,8 @@ begin
           fLogClass.EnterLocal(log, self, 'SessionDeleteDeprecated');
           fSessions.Safe.WriteLock; // upgrade the lock (only if needed)
         end;
-        WriteLockedSessionDelete(i, a^, nil);
+        WriteLockedSessionDelete(i, a^, nil); // with full clean-up
+        a := @fSessions.List[i]; // List[] may have moved in memory
         inc(result);
       end;
     end;
@@ -7401,6 +7411,29 @@ begin
     end;
     fSessions.Safe.ReadWriteUnLock;
   end;
+end;
+
+function TRestServer.SessionDeleteAll: integer;
+var
+  i: PtrInt;
+  start: Int64;
+begin
+  result := 0;
+  if (self = nil) or
+     (fSessions = nil) or
+     (fSessions.Count = 0) then
+    exit;
+  QueryPerformanceMicroSeconds(start);
+  fSessions.Safe.WriteLock;
+  try
+    result := fSessions.Count;
+    for i := result - 1 downto 0 do // backward for deletion
+      WriteLockedSessionDelete(i, fSessions.List[i], nil);
+  finally
+    fSessions.Safe.WriteUnlock;
+  end;
+  fLogClass.Add.Log(sllTrace, 'SessionDeleteAll=% in %',
+    [result, MicroSecFrom(start)], self);
 end;
 
 function TRestServer.LockedSessionAccess(Ctxt: TRestServerUriContext;
@@ -7546,7 +7579,7 @@ function TRestServer.ServiceMethodRegister(aMethodName: RawUtf8;
 var
   m: TUriMethods;
   one: TUriMethod;
-  pos: PtrInt;
+  pos, ndx: PtrInt;
   obj: TObject;
   met: PRestServerMethod;
 begin
@@ -7576,12 +7609,14 @@ begin
      (Model.GetTableIndex(aMethodName) >= 0) then
     EServiceException.RaiseUtf8('Published method name %.% ' +
       'conflicts with a Table in the Model!', [obj, aMethodName]);
+  ndx := 0;
   met := fPublishedMethods.AddUniqueName(aMethodName,
-    'Duplicated published method name %.%', [obj, aMethodName], @result);
+    'Duplicated published method name %.%', [obj, aMethodName], @ndx);
   met^.Callback := aEvent;
   met^.ByPassAuthentication := aByPassAuthentication;
   met^.Methods := m;
-  ResetRoutes;  // fRouter will be re-generated when needed
+  ResetRoutes;   // fRouter will be re-generated when needed
+  result := ndx; // safer with a transient local variable
 end;
 
 function TRestServer.ServiceMethodByPassAuthentication(

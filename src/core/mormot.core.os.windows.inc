@@ -513,26 +513,32 @@ function  Unicode_InPlaceLower;       external user32 name 'CharLowerBuffW';
 var
   ConsoleCriticalSection: TOSLock; // too early to use TOSLightLock
   ConsoleOutputCP: cardinal;       // to call the Windows API once
+  TextAttr, DefaultTextAttr: integer;
   {$ifdef ISDELPHI}
   StdInputHandle: THandle;         // Delphi doesn't define this global variable
   {$endif ISDELPHI}
 
 function HasConsole: boolean;
+var
+  nfo: TConsoleScreenBufferInfo;
 begin
   if StdOut = 0 then
     StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
   result := (StdOut <> 0) and
             (StdOut <> INVALID_HANDLE_VALUE);
+  if result and
+     (DefaultTextAttr = 0) then
+    if GetConsoleScreenBufferInfo(StdOut, nfo) then
+      DefaultTextAttr := nfo.wAttributes // typically 7 = ord(ccLightGray)
+    else
+      DefaultTextAttr := ord(ccLightGray);
 end;
 
 procedure WinAllocConsole;
 begin
   ConsoleOutputCP := 0; // reset to force calling GetConsoleOutputCP() again
   Windows.AllocConsole;
-  if (StdOut = 0) or
-     (StdOut = INVALID_HANDLE_VALUE) then
-    // force setup StdOut global variable
-    StdOut := GetStdHandle(STD_OUTPUT_HANDLE);
+  HasConsole; // ensure setup StdOut/DefaultTextAttr global variables
 end;
 
 function ConsoleNeedConversion(P: pointer; Len: PtrInt): boolean;
@@ -743,7 +749,7 @@ function GetFileNameFromUrl(const Uri: RawUtf8): TFileName;
 var
   len: DWord;
   u: TSynTempBuffer;
-  fn: array[0..MAX_PATH] of WideChar;
+  fn: array[0 .. MAX_PATH] of WideChar;
 begin
   result := '';
   Utf8ToWin32PWideChar(Uri, u);
@@ -1163,7 +1169,7 @@ var
 begin
   // aRights parameter is just ignored on Windows
   if aFileName = '' then
-    result := 0
+    result := INVALID_HANDLE_VALUE
   else
     result := CreateFileW(W32(aFileName, tmp), GENERIC_READ or GENERIC_WRITE,
       FileShare(aMode), nil, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
@@ -1182,7 +1188,7 @@ var
   tmp: TW32Temp;
 begin
   if aFileName = '' then
-    result := 0
+    result := INVALID_HANDLE_VALUE
   else
    result := CreateFileW(W32(aFileName, tmp), FILE_ACCESS[aMode and 3],
       FileShare(aMode), nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
@@ -1476,19 +1482,13 @@ end;
 
 procedure TSynEvent.SetEvent;
 begin
-  fNotified := true;
+  fNotified := true; // should be set before notification
   Windows.SetEvent(THandle(fHandle));
 end;
 
-function TSynEvent.WaitFor(TimeoutMS: integer): boolean;
+function TSynEvent.WaitFor(TimeoutMS: cardinal): boolean;
 begin
   WaitForSingleObject(THandle(fHandle), TimeoutMS);
-  result := fNotified;
-end;
-
-function TSynEvent.WaitForEver: boolean;
-begin
-  WaitForSingleObject(THandle(fHandle), INFINITE);
   result := fNotified;
 end;
 
@@ -2266,8 +2266,7 @@ begin
   if not DelayedGetProcessMemoryInfo then
     exit;
   h := OpenProcess(OpenProcessAccess, false, PID);
-  if h = 0 then
-    exit;
+  if h <> 0 then
   try
     if GetProcessTimes(h, ftp, fte, ftkrn, ftusr) then
     begin
@@ -2559,7 +2558,8 @@ end;
 
 function GetDiskPartitions: TDiskPartitions;
 var
-  drives, drive, m, n: integer;
+  drives, m: DWord;
+  drive, n: integer;
   fn: TFileName;
   volume: SynUnicode;
   av, fr, tot: QWord;
@@ -2568,11 +2568,11 @@ begin
   result := nil;
   n := 0;
   fn := '#:';
-  drives := GetLogicalDrives;
-  m := 1 shl 2; // bit 2 = drive C
+  drives := GetLogicalDrives and not 3; // ignore A: and B: floppies
+  m := 1 shl 2; // bit 2 = drive 3 = C:
   for drive := 3 to 26 do
   begin
-    // retrieve partitions mounted as C..Z drives
+    // retrieve partitions mounted as C: .. Z: drives
     if drives and m <> 0 then
     begin
       fn[1] := char(64 + drive);
@@ -2586,13 +2586,13 @@ begin
         volume := '';
         inc(n);
       end;
+      drives := drives and not m;
+      if drives = 0 then
+        exit; // no more drives
     end;
-    m := m shl 1;
+    m := m shl 1; // next drive from C: to Z:
   end;
 end;
-
-var
-  TextAttr: integer = ord(ccDarkGray);
 
 procedure TextColor(Color: TConsoleColor);
 var
@@ -2602,8 +2602,11 @@ begin
     exit;
   oldAttr := TextAttr;
   TextAttr := (TextAttr and $F0) or ord(Color);
-  if TextAttr <> oldAttr then
-    SetConsoleTextAttribute(StdOut, TextAttr);
+  if TextAttr = oldAttr then
+    exit;
+  if Color = ccLightGray then // = ccDefault
+    TextAttr := DefaultTextAttr or (TextAttr and $F0);
+  SetConsoleTextAttribute(StdOut, TextAttr);
 end;
 
 procedure TextBackground(Color: TConsoleColor);
@@ -2644,7 +2647,7 @@ begin
       TextColor(Color);
     FileWriteAll(StdOut, pointer(tmp), Len);
     if not NoColor then
-      TextColor(ccLightGray);
+      TextColor(ccDefault);
     // FlushFileBuffers(StdOut); // don't: would block until read on the pipe
   finally
     ConsoleCriticalSection.UnLock;
@@ -2746,10 +2749,14 @@ begin
 end;
 
 function ConsoleStdInputLen: integer;
+var
+  n: cardinal; // safer with an explicit local variable
 begin
   if StdInputHandle = 0 then
     StdInputHandle := GetStdHandle(STD_INPUT_HANDLE);
-  if not PeekNamedPipe(StdInputHandle, nil, 0, nil, @result, nil) then
+  if PeekNamedPipe(StdInputHandle, nil, 0, nil, @n, nil) then
+    result := n
+  else
     result := 0;
 end;
 
@@ -3117,14 +3124,22 @@ begin
 end;
 
 function TWinRegistry.ReadDword(const entry: SynUnicode): cardinal;
+var
+  n: cardinal; // safer with an explicit local variable
 begin
-  if not ReadBuffer(entry, @result, SizeOf(result)) then
+  if ReadBuffer(entry, @n, SizeOf(n)) then
+    result := n
+  else
     result := 0;
 end;
 
 function TWinRegistry.ReadQword(const entry: SynUnicode): QWord;
+var
+  q: QWord; // safer with an explicit local variable
 begin
-  if not ReadBuffer(entry, @result, SizeOf(result)) then
+  if ReadBuffer(entry, @q, SizeOf(q)) then
+    result := q
+  else
     result := 0;
 end;
 
@@ -3149,8 +3164,12 @@ begin
 end;
 
 function TWinRegistry.ReadSize(const entry: SynUnicode): integer;
+var
+  n: cardinal; // safer with an explicit local variable
 begin
-  if RegQueryValueExW(key, pointer(entry), nil, nil, nil, @result) <> NO_ERROR then
+  if RegQueryValueExW(key, pointer(entry), nil, nil, nil, @n) = NO_ERROR then
+    result := n
+  else
     result := -1;
 end;
 
@@ -4764,7 +4783,7 @@ type
     CacheInstruction,
     CacheData,
     CacheTrace);
-  TSystemCacheDescriptor = packed record
+  TSystemCacheDescriptor = record
     Level: byte;
     Associativity: byte;
     LineSize: Word;
@@ -5065,57 +5084,59 @@ begin
   if Assigned(GetLogicalProcessorInformation) and
      not GetLogicalProcessorInformation(nil, siz) and
      (GetLastError = ERROR_INSUFFICIENT_BUFFER) then
-  repeat
-    n := siz div SizeOf(proc[0]);
-    if n > 2048 then
-      break;
-    SetLength(proc, n);
-    if not GetLogicalProcessorInformation(pointer(proc), siz) then
-      break;
-    pi := pointer(proc);
-    repeat
-      case pi^.Relationship of
-        RelationProcessorCore:
-          inc(CpuCores);
-        RelationProcessorPackage: // physical processor socket
-          AddPtrUInt(TPtrUIntDynArray(CpuSocketsMask), integer(CpuSockets),
-            pi^.ProcessorMask);
-        RelationCache:            // raw cache information
-          if pi^.Cache.CacheType in [CacheUnified, CacheData] then
-            if (pi^.Cache.Level >= low(CpuCache)) and
-               (pi^.Cache.Level <= high(CpuCache)) then
-              with CpuCache[pi^.Cache.Level] do
-                if (Count = 0) or
-                   (pi^.Cache.CacheType <> CacheUnified) then
-                begin
-                  inc(Count);
-                  Size := pi^.Cache.Size;
-                  LineSize := pi^.Cache.LineSize;
-                end;
-      end;
-      inc(pi);
-      dec(n);
-    until n = 0;
-    for i := high(CpuCache) downto low(CpuCache) do
+  begin
+    n := siz div SizeOf(pi^);
+    if (n <= 2048) and
+       (DWord(n) * SizeOf(pi^) = siz) then
     begin
-      CpuCacheSize := CpuCache[i].Size;
-      if CpuCacheSize <> 0 then // append the biggest level Cache size
+      SetLength(proc, n);
+      if GetLogicalProcessorInformation(pointer(proc), siz) then
       begin
-        cpu := _fmt('%s [%s]', [cpu, KBNoSpace(CpuCacheSize)]);
-        break;
+        pi := pointer(proc);
+        repeat
+          case pi^.Relationship of
+            RelationProcessorCore:
+              inc(CpuCores);
+            RelationProcessorPackage: // physical processor socket
+              AddPtrUInt(TPtrUIntDynArray(CpuSocketsMask), integer(CpuSockets),
+                pi^.ProcessorMask);
+            RelationCache:            // raw cache information
+              if pi^.Cache.CacheType in [CacheUnified, CacheData] then
+                if (pi^.Cache.Level >= low(CpuCache)) and
+                   (pi^.Cache.Level <= high(CpuCache)) then
+                  with CpuCache[pi^.Cache.Level] do
+                    if (Count = 0) or
+                       (pi^.Cache.CacheType <> CacheUnified) then
+                    begin
+                      inc(Count);
+                      Size := pi^.Cache.Size;
+                      LineSize := pi^.Cache.LineSize;
+                    end;
+          end;
+          inc(pi);
+          dec(n);
+        until n = 0;
+        for i := high(CpuCache) downto low(CpuCache) do
+        begin
+          CpuCacheSize := CpuCache[i].Size;
+          if CpuCacheSize = 0 then // append the highest level Cache size
+            continue;
+          cpu := _fmt('%s [%s]', [cpu, KBNoSpace(CpuCacheSize)]);
+          break;
+        end;
+        for i := low(CpuCache) to high(CpuCache) do
+          with CpuCache[i] do
+            if Count <> 0 then
+              if Count = 1 then
+                CpuCacheText := _fmt('%s L%d=%s ',
+                  [CpuCacheText, i, KBNoSpace(Size)])
+              else
+                CpuCacheText := _fmt('%s L%d=%d*%s ',
+                  [CpuCacheText, i, Count, KBNoSpace(Size)]);
+        TrimSelf(CpuCacheText);
       end;
     end;
-    for i := low(CpuCache) to high(CpuCache) do
-      with CpuCache[i] do
-        if Count <> 0 then
-          if Count = 1 then
-            CpuCacheText :=
-              _fmt('%s L%d=%s ', [CpuCacheText, i, KBNoSpace(Size)])
-          else
-            CpuCacheText :=
-              _fmt('%s L%d=%d*%s ', [CpuCacheText, i, Count, KBNoSpace(Size)]);
-    TrimSelf(CpuCacheText);
-  until true;
+  end;
   CpuThreads := SystemInfo.dwNumberOfProcessors;
   if CpuSockets = 0 then
     CpuSockets := 1; // e.g. on XP prior to SP3

@@ -47,6 +47,10 @@
 {.$define NOEXCEPTIONINTERCEPT}
 // if defined, exceptions shall not be intercepted nor logged
 
+{.$define NOCOMPRESSEDTABLE}
+// disable compressed tables e.g. UU_COMPRESSED or BIGINT_PRIMES[] which may
+// trigger some weak anti-virus heuristic
+
 {.$define NOPATCHVMT}
 // disable the vmtAutoTable slot runtime patch, replacing it with Rtti.FindType
 // - is likely to be defined with the NOPATCHRTL conditional

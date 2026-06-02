@@ -1,5 +1,5 @@
 {:
-———————————————————————————————————————————————— (C) martindoyle 2017-2026 ——
+---------------------------------------------------(C) martindoyle 2017-2026 --
  Project : mdComponents
 
   Module : mdDates.pas
@@ -26,7 +26,7 @@
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
     IN THE SOFTWARE.
-————————————————————————————————————————————————————————————————————————————
+--------------------------------------------------------------------------------
 }
 unit mdDates;
 

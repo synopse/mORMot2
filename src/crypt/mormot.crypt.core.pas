@@ -3693,7 +3693,7 @@ procedure Random128(iv, iv2: PAesBlock);
 var
   aes: PAesContext;
 begin
-  rnd128safe.Lock; // ensure thread safe with minimal contention
+  rnd128safe.Lock;                  // thread safe with minimal contention
   aes := @rnd128gen;
   if PPtrUInt(aes)^ = 0 then
     PAes(aes)^.EncryptInitRandom;   // initialize AES-128 (or AES-256 if HW AES)

@@ -110,13 +110,6 @@ const
   /// used internally to encode '\u00xx' JSON_ESCAPE_UNICODEHEX pattern
   JSON_UHEXC = JSON_UHEX + ord('0') shl 16 + ord('0') shl 24;
 
-  // some other constants used for fast pattern recognition
-  _ID16     = ord('I') + ord('D') shl 8;
-  _ROW24    = ord('R') + ord('O') shl 8 + ord('W') shl 16;
-  _ROWI32   = _ROW24 + ord('I') shl 24;
-  SQUOT_16  = ord('''') + ord('''') shl 8;
-  DOLLAR_16 = ord('$') + ord('$') shl 8;
-
 var
   /// 256-byte lookup table for fast branchless initial character JSON parsing
   JSON_TOKENS: TJsonTokens;
@@ -199,6 +192,13 @@ function IsStringJson(P: PUtf8Char): boolean; overload;
 /// test if the supplied buffer is NOT a valid JSON constant or number
 function IsStringJson(P: PUtf8Char; len: PtrInt): boolean; overload;
 
+/// test if the supplied buffer is a valid JSON number with no trailing space
+function IsNumberJson(P: PUtf8Char): boolean;
+
+/// test if the supplied buffer is a valid JSON true/false boolean with no space
+function IsBooleanJson(P: PUtf8Char; V: PBoolean = nil): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// test if the supplied buffer is a valid JSON constant or number
 function IsConstantOrNumberJson(P: PUtf8Char; len: PtrUInt): boolean;
 
@@ -265,8 +265,6 @@ type
     /// in-place output parsed JSON value, unescaped and #0 terminated
     // - see associated WasString to find out its actual type
     Value: PUtf8Char;
-    /// in-place output parsed JSON value length
-    ValueLen: integer;
     /// set if the value was actually a JSON string
     // - "strings" are decoded as 'strings', with WasString=true, properly JSON
     // unescaped (e.g. any \u0123 pattern would be converted into UTF-8 content)
@@ -279,6 +277,8 @@ type
     EndOfObject: AnsiChar;
     /// true if the last parsing succeeded - used in inherited TJsonParserContext
     Valid: boolean;
+    /// in-place output parsed JSON value length - last to force struct alignment
+    ValueLen: integer;
     /// decode a JSON field name in-place into Value/ValueLen
     // - returns true if Value/ValueLen has been set with a non void identifier
     function GetJsonFieldName: boolean;
@@ -2190,7 +2190,8 @@ function JsonNormalizeToObject(var ObjectInstance; const From: RawUtf8;
   Interning: TRawUtf8Interning = nil): boolean;
 
 /// parse the supplied JSON with high tolerance about Settings format
-// - alias to JsonNormalizeToObject() with JSONPARSER_TOLERANTOPTIONS
+// - alias to JsonNormalizeToObject() with JSONPARSER_TOLERANTOPTIONS, so
+// will support standard JSON, but also JSON5, JSONC or HJson variations
 function JsonSettingsToObject(const JsonContent: RawUtf8; Instance: TObject): boolean;
 
 /// read an object properties, as saved by ObjectToJson function
@@ -3601,6 +3602,47 @@ begin
              (GotoEndJsonItemNumber(P) - P = len));
 end;
 
+function IsNumberJson(P: PUtf8Char): boolean;
+begin
+  if P <> nil then
+  begin
+    if P^ = '-' then
+      inc(P);
+    if ((P^ >= '1') and (P^ <= '9')) or // is first char numeric?
+       ((P^ = '0') and ((P[1] < '0') or (P[1] > '9'))) then // no '012'
+      if GotoEndRawNumber(P)^ = #0 then
+      begin
+        result := true;
+        exit;
+      end;
+  end;
+  result := false;
+end;
+
+function IsBooleanJson(P: PUtf8Char; V: PBoolean): boolean;
+begin
+  if P <> nil then
+    case PInteger(P)^ of
+      TRUE_LOW:
+        if P[4] = #0 then
+        begin
+          if V <> nil then
+            V^ := true;
+          result := true;
+          exit;
+        end;
+      FALSE_LOW:
+        if PWord(P + 4)^ = ord('e') then
+        begin
+          if V <> nil then
+            V^ := false;
+          result := true;
+          exit;
+        end;
+    end;
+  result := false;
+end;
+
 function IsConstantOrNumberJson(P: PUtf8Char; len: PtrUInt): boolean;
 begin
   result := false;
@@ -4722,7 +4764,8 @@ function GetSetNameValue(Names: PShortString; MinValue, MaxValue: integer;
   var P: PUtf8Char; out EndOfObject: AnsiChar): QWord;
 var
   info: TGetJsonField;
-  tmp: ShortString;
+  v: PUtf8Char;
+  l: PtrInt;
 begin
   result := 0;
   if (P = nil) or
@@ -4770,8 +4813,8 @@ begin
     if info.WasString then // stored as CSV text (e.g. from a .INI file)
       while info.Value <> nil do
       begin
-        GetNextItemShortString(info.Value, @tmp);
-        SetNamesValue(Names, MinValue, MaxValue, @tmp[1], ord(tmp[0]), result);
+        l := GetNextItemTrimedBuffer(info.Value, ',', v);
+        SetNamesValue(Names, MinValue, MaxValue, v, l, result);
       end
     else // stored as a 64-bit unsigned integer
       SetQWord(info.Value, result);
@@ -5212,8 +5255,7 @@ begin
     AddCRAndIndent;
 end;
 
-procedure TJsonWriter.BlockBegin(Starter: AnsiChar;
-  Options: TTextWriterWriteObjectOptions);
+procedure TJsonWriter.BlockBegin(Starter: AnsiChar; Options: TTextWriterWriteObjectOptions);
 begin
   if woHumanReadable in Options then
   begin
@@ -5223,8 +5265,7 @@ begin
   Add(Starter);
 end;
 
-procedure TJsonWriter.BlockEnd(Stopper: AnsiChar;
-  Options: TTextWriterWriteObjectOptions);
+procedure TJsonWriter.BlockEnd(Stopper: AnsiChar; Options: TTextWriterWriteObjectOptions);
 begin
   if woHumanReadable in Options then
   begin
@@ -5311,6 +5352,11 @@ end;
 procedure _JS_Boolean(Data: PBoolean; const Ctxt: TJsonSaveContext);
 begin
   Ctxt.W.Add(Data^);
+end;
+
+procedure _JS_WordBool(Data: PWord; const Ctxt: TJsonSaveContext);
+begin
+  Ctxt.W.Add(Data^ <> 0); // WordBool specific support
 end;
 
 procedure _JS_Byte(Data: PByte; const Ctxt: TJsonSaveContext);
@@ -5836,7 +5882,7 @@ const
   VARIANT_JSONSAVE: array[varEmpty .. varOleUInt] of pointer = (
     {0}  @_JS_Null, @_JS_Null, @_JS_SmallInt, @_JS_Integer, @_JS_Single,
     {5}  @_JS_Double, @_JS_Currency, @_JS_DateTime, nil, nil,
-    {10} nil, @_JS_Boolean, nil, nil, nil,
+    {10} nil, @_JS_WordBool, nil, nil, nil,
     {15} nil, @_JS_ShortInt, @_JS_Byte, @_JS_Word, @_JS_Cardinal,
     {20} @_JS_Int64, @_JS_QWord, @_JS_Integer, @_JS_Cardinal);
 
@@ -8962,7 +9008,7 @@ begin
     v := pointer(Values);
     for i := 0 to NamesCount do
       if (v^.Text = nil) and
-         (StrIComp(Names[i], name) = 0) then // properly inlined
+         StrIEqual(Names[i], name) then
       begin
         v^.Text := info.Value;
         v^.Len  := info.ValueLen;
@@ -10470,7 +10516,7 @@ var
   p: PRttiCustomProp;
   v: TVarData;
   i: PtrInt;
-  n: ShortString;
+  n: ShortString; // should end with #0
 begin
   result := self;
   if (self <> nil) and
@@ -11096,8 +11142,7 @@ function ObjectToJsonFile(Value: TObject; const JsonFile: TFileName;
   Options: TTextWriterWriteObjectOptions; Format: TTextWriterJsonFormat): boolean;
 var
   json: RawUtf8;
-begin
-  Options := Options - [woHumanReadable]; // JsonBufferReformatToFile() below
+begin // we keep woHumanReadable in Options for proper comment and set generation
   json := ObjectToJson(Value, Options);
   result := JsonBufferReformatToFile(pointer(json), JsonFile, Format);
 end;
@@ -11621,112 +11666,88 @@ begin
 end;
 
 
-type // local type definitions for their own RTTI to be found by name
-  RawUtf8 = type Utf8String;
-  {$ifdef CPU64}
-  PtrInt  = type Int64;
-  PtrUInt = type QWord;
-  {$else}
-  PtrInt  = type integer;
-  PtrUInt = type cardinal;
-  {$endif CPU64}
+const
+  _JSONCHARS: array[0 .. 127] of byte = ( // = lower TJsonCharSet
+   60, 0, 0, 0, 0, 0, 0, 0, 0, 16, 16, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+   0, 0, 0, 0, 0, 0, 0, 0, 16, 0, 32, 0, 3, 0, 0, 0, 0, 0, 0, 128, 28, 194, 130,
+   0, 195, 195, 195, 195, 195, 195, 195, 195, 195, 195, 4, 0, 0, 0, 0, 0, 0, 3,
+   3, 3, 3, 131, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+   2, 32, 30, 0, 3, 0, 3, 3, 3, 3, 131, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+   3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 28, 0, 0);
 
 procedure InitializeUnit;
 var
-  i: {$ifdef FPC}system.PtrInt{$else}integer{$endif}; // circumvent Delphi bug
   c: AnsiChar;
-  jc: TJsonChar;
-  p: PByteArray;
+  p: PAnsiCharToAnsiChar;
   r: PJsonCharSet;
-  {$ifdef FPC} dummy: RawUtf8; {$endif}
+  t: PJsonTokens;
+  {$ifdef FPC} dummy: pointer; {$endif}
 begin
   // branchless JSON escaping - JSON_ESCAPE_NONE=0 if no JSON escape needed
+  FillCharFast(JSON_ESCAPE, 32, JSON_ESCAPE_UNICODEHEX); // 2: #1..#31 as \u00xx
   p := @JSON_ESCAPE;
-  p[0]   := JSON_ESCAPE_ENDINGZERO; // 1 for #0 end of input
-  for i := 1 to 31 do
-    p[i] := JSON_ESCAPE_UNICODEHEX; // 2 to escape #1..#31 as \u00xx
-  p[8]   := ord('b');  // others contain the escaped character
-  p[9]   := ord('t');
-  p[10]  := ord('n');
-  p[12]  := ord('f');
-  p[13]  := ord('r');
-  p[ord('\')] := ord('\');
-  p[ord('"')] := ord('"');
+  p[#0]  := AnsiChar(JSON_ESCAPE_ENDINGZERO); // 1 for #0 end of input
+  p[#8]  := 'b';               // others contain the escaped character
+  p[#9]  := 't';
+  p[#10] := 'n';
+  p[#12] := 'f';
+  p[#13] := 'r';
+  p['\'] := '\';
+  p['"'] := '"';
   // branchless JSON unescaping - default JSON_UNESCAPE_UNEXPECTED = #0
   p := @JSON_UNESCAPE;
-  for i := 32 to 127 do
-    p[i] := i;
-  p[ord('b')] := 8;
-  p[ord('t')] := 9;
-  p[ord('n')] := 10;
-  p[ord('f')] := 12;
-  p[ord('r')] := 13;
-  p[ord('u')] := ord(JSON_UNESCAPE_UTF16); // = #1
+  for c := #32 to #127 do
+    p[c] := c;
+  p['b'] := #8;
+  p['t'] := #9;
+  p['n'] := #10;
+  p['f'] := #12;
+  p['r'] := #13;
+  p['u'] := JSON_UNESCAPE_UTF16; // = #1
   // fast JSON parsing using JSON_CHARS[] and JSON_TOKENS[] lookup tables
-  for c := low(c) to high(c) do
-  begin
-    jc := [];
-    if c in [#0, ',', ']', '}', ':'] then
-      include(jc, jcEndOfJsonFieldOr0);        // #0,]}:
-    if c in [#0, ',', ']', '}'] then
-      include(jc, jcEndOfJsonFieldNotName);    // #0,]}
-    if c in [#0, #9, #10, #13, ' ',  ',', '}', ']'] then
-      include(jc, jcEndOfJsonValueField);      // #0#9#10#13 ,}]
-    if c in [#0, '"', '\'] then
-      include(jc, jcJsonStringMarker);         // #0"\
-    if c in ['-', '0'..'9'] then
-    begin
-      include(jc, jcDigitFirstChar);           // -0123456789
-      JSON_TOKENS[c] := jtFirstDigit;
-    end;
-    if c in ['-', '+', '0'..'9', '.', 'E', 'e'] then
-      include(jc, jcDigitFloatChar);           // -+.eE0123456789
-    if c in ['_', '0'..'9', 'a'..'z', 'A'..'Z', '$'] then
-      include(jc, jcJsonIdentifierFirstChar);  // _$0..9a..zA..Z
-    if c in ['_', '-', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']', '$'] then
-      include(jc, jcJsonIdentifier);           // _-.[]$0..9a..zA..Z
-    JSON_CHARS[c] := jc;
-    if c in ['_', 'a'..'z', 'A'..'Z'] then
-      // exclude '0'..'9' as already in jtFirstDigit - jtDollar is distinct
-      JSON_TOKENS[c] := jtIdentifierFirstChar;
-  end;
+  MoveFast(_JSONCHARS, JSON_CHARS, SizeOf(_JSONCHARS));
+  MoveFast(_JSONCHARS, JSON_CHARS_RELAXED, SizeOf(_JSONCHARS));
   r := @JSON_CHARS_RELAXED; // extended to support minimalistic .morml
-  r^ := JSON_CHARS;
   r^['{'] := r^['{'] + [jcEndOfJsonValueField, jcEndOfJsonFieldOr0, jcEndOfJsonFieldNotName];
   r^['['] := r^['['] + [jcEndOfJsonValueField, jcEndOfJsonFieldOr0, jcEndOfJsonFieldNotName];
   include(r^['='], jcEndOfJsonFieldOr0);
   include(r^['#'], jcEndOfJsonFieldNotName);
   r^[#10] := r^[#10] + [jcEndOfJsonFieldOr0, jcEndOfJsonFieldNotName];
-  p := @JSON_TOKENS;
-  p[ord(#0 )]  := ord(jtEndOfBuffer);
-  p[ord('{')]  := ord(jtObjectStart);
-  p[ord('}')]  := ord(jtObjectStop);
-  p[ord('[')]  := ord(jtArrayStart);
-  p[ord(']')]  := ord(jtArrayStop);
-  p[ord(':')]  := ord(jtAssign);
-  p[ord('=')]  := ord(jtEqual);
-  p[ord(',')]  := ord(jtComma);
-  p[ord('''')] := ord(jtSingleQuote);
-  p[ord('"')]  := ord(jtDoubleQuote);
-  p[ord('t')]  := ord(jtTrueFirstChar);
-  p[ord('f')]  := ord(jtFalseFirstChar);
-  p[ord('n')]  := ord(jtNullFirstChar);
-  p[ord('/')]  := ord(jtSlash);
-  p[ord('#')]  := ord(jtHash);
-  p[ord('$')]  := ord(jtDollar);
+  FillCharFast(JSON_TOKENS['0'], 10, ord(jtFirstDigit));
+  FillCharFast(JSON_TOKENS['a'], 26, ord(jtIdentifierFirstChar));
+  FillCharFast(JSON_TOKENS['A'], 26, ord(jtIdentifierFirstChar));
+  t := @JSON_TOKENS;
+  t[#0]   := jtEndOfBuffer;
+  t['-']  := jtFirstDigit;
+  t['{']  := jtObjectStart;
+  t['}']  := jtObjectStop;
+  t['[']  := jtArrayStart;
+  t[']']  := jtArrayStop;
+  t[':']  := jtAssign;
+  t['=']  := jtEqual;
+  t[',']  := jtComma;
+  t[''''] := jtSingleQuote;
+  t['"']  := jtDoubleQuote;
+  t['t']  := jtTrueFirstChar;
+  t['f']  := jtFalseFirstChar;
+  t['n']  := jtNullFirstChar;
+  t['/']  := jtSlash;
+  t['#']  := jtHash;
+  t['$']  := jtDollar;
+  t['_']  := jtIdentifierFirstChar;
   // initialize JSON serialization
   Rtti.GlobalClass := TRttiJson; // will ensure Rtti.Count = 0
   // now we can register some local type alias to be found by name or ASAP
   CLASS_RTTI[vcSynList]       := TSynList;
   CLASS_RTTI[vcSynObjectList] := TSynObjectList;
   CLASS_RTTI[vcRawUtf8List]   := TRawUtf8List;
-  Rtti.RegisterTypes([TypeInfo(RawUtf8), TypeInfo(PtrInt), TypeInfo(PtrUInt),
-    TypeInfo(TRawUtf8DynArray), TypeInfo(TIntegerDynArray)]);
+  Rtti.RegisterTypes([TypeInfo(TRawUtf8DynArray), TypeInfo(TIntegerDynArray)]);
   // prepare some JSON wrappers
   GetDataFromJson := _GetDataFromJson;
   InitializeVariantsJson; // from mormot.core.variants
   {$ifdef FPC} // we need to call it once so that it is linked to the executable
-  JsonForDebug(nil, dummy, dummy);
+  dummy := nil;
+  JsonForDebug(nil, RawUtf8(dummy), RawUtf8(dummy));
   {$endif FPC}
 end;
 

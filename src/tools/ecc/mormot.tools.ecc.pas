@@ -993,7 +993,7 @@ begin
      (result = eccSuccess) and
      not (cmd in [ecInfoCrypt]) then
     sw.Text(' % file created.', [newfile], ccWhite);
-  sw.TextColor(ccLightGray);
+  sw.TextColor(ccDefault);
 end;
 
 

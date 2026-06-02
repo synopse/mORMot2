@@ -87,7 +87,7 @@ begin
 
   if CheckFileName(pmcName, [fnvFileName], @docName) then  // Never trust data that comes from outside!
   begin
-    if ExtractFileExt(docName) = '' then
+    if not HasExt(docName) then
       docName := ChangeFileExt(docName, TFileRestServer.DEFAULT_FILE_EXT);
 
     fileName := MakePath([dirName, docName]);
@@ -111,7 +111,7 @@ begin
 
   if CheckFileName(pmcName, [fnvFileName], @docName) then  // Never trust data that comes from outside!
   begin
-    if ExtractFileExt(docName) = '' then
+    if not HasExt(docName) then
       docName := ChangeFileExt(docName, TFileRestServer.DEFAULT_FILE_EXT);
 
     fileName := MakePath([dirName, docName]);

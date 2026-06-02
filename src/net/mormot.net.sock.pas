@@ -295,15 +295,20 @@ type
     procedure SetRecvBufferSize(bytes: integer);
     function GetSendBufferSize: integer;
     function GetRecvBufferSize: integer;
+    procedure SetKeepAliveTcp(idle, intvl, cnt: cardinal);
   public
     /// called by NewSocket to finalize a socket attributes
-    procedure SetupConnection(layer: TNetLayer; sendtimeout, recvtimeout: integer);
+    procedure SetupConnection(layer: TNetLayer; dobind: boolean;
+      sendtimeout, recvtimeout: integer);
     /// change the sending timeout of this socket, in milliseconds
     procedure SetSendTimeout(ms: integer);
     /// change the receiving timeout of this socket, in milliseconds
     procedure SetReceiveTimeout(ms: integer);
     /// change if this socket should enable TCP level keep-alive packets
-    procedure SetKeepAlive(keepalive: boolean);
+    // - default 0 will disable TCP keep-alive packets for the connection
+    // - POSIX and latest Windows will set idle=value/2 intvl=value/12 cnt=6
+    // - typical values are 120 for a client and 180/240 for a server
+    procedure SetKeepAlive(secs: cardinal);
     /// change the SO_LINGER option, i.e. let the socket remain open for a while
     // - on POSIX, will also set the SO_REUSEADDR/SO_REUSEPORT option
     procedure SetLinger(linger: integer);
@@ -379,7 +384,7 @@ type
     function SendAll(Buf: PByte; len: integer;
       terminated: PTerminated = nil): TNetResult;
     /// check if the socket is not closed nor broken
-    // - i.e. check if it is likely to be accept Send() and Recv() calls
+    // - i.e. check if it is likely to accept Send() and Recv() calls
     // - calls WaitFor(neRead) then Recv() to check e.g. WSACONNRESET on Windows
     // - set nowait=true to avoid WaitFor() and just call Recv(MSG_PEEK)
     function Available(loerr: PNetErrorInt = nil; nowait: boolean = false): boolean;
@@ -524,6 +529,8 @@ var
   // - used by both TCrtSock.AcceptRequest and THttpApiServer.Execute servers
   RemoteIPLocalHostAsVoidInServers: boolean = true;
 
+  /// the TCP SetKeepAlive() value for a client (false) or server (true)
+  TcpKeepAliveSeconds: array[boolean] of cardinal = (120, 240);
 
 const
   /// a constant to indicate no socket
@@ -632,7 +639,7 @@ function IP4Match(const ip4, subnet: RawUtf8): boolean;
 // - by design, both 0.0.0.0 and 127.0.0.1 always return false
 function IP4Filter(ip4: TNetIP4; filter: TIPAddress): boolean;
 
-/// convert an IPv4 raw value into a ShortString text
+/// convert an IPv4 raw value into a ShortString text (and hidden ending #0)
 // - won't use the Operating System network layer API so works on XP too
 // - zero is returned as '0.0.0.0' and loopback as '127.0.0.1'
 procedure IP4Short(ip4addr: PByteArray; var s: TShort16);
@@ -642,7 +649,7 @@ procedure IP4Short(ip4addr: PByteArray; var s: TShort16);
 function IP4ToShort(ip4addr: PByteArray): TShort16;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// append an IPv4 raw value into a text memory buffer
+/// append an IPv4 raw value (and ending #0) into a text memory buffer
 function IP4TextAppend(ip4addr: PByteArray; dest: PAnsiChar): PAnsiChar;
 
 /// convert an IPv4 raw value into a RawUtf8 text
@@ -852,7 +859,7 @@ function GetLocalIpAddress(const Remote: RawUtf8 = '8.8.8.8'): RawUtf8;
 /// retrieve all DNS (Domain Name Servers) addresses known by the Operating System
 // - on POSIX, return "nameserver" from /etc/resolv.conf unless usePosixEnv is set
 // - on Windows, calls GetNetworkParams API from iphlpapi
-// - an internal cache of the result will be refreshed every 8 seconds
+// - an internal cache of the result will be refreshed every 64 seconds
 function GetDnsAddresses(usePosixEnv: boolean = false): TRawUtf8DynArray;
 
 /// append a custom resolver address for GetDnsAddresses() in addition to the OS
@@ -867,7 +874,7 @@ var
 /// retrieve the AD Domain Name addresses known by the Operating System
 // - on POSIX, return all "search" from /etc/resolv.conf unless usePosixEnv is set
 // - on Windows, calls GetNetworkParams API from iphlpapi to retrieve a single item
-// - no cache is used for this function
+// - a 64 seconds cache is used for this function on POSIX
 // - you can force for a given value using ForcedDomainName, e.g. if the
 // machine is not actually registered for / part of the domain, but has access
 // to the domain controller
@@ -966,7 +973,7 @@ type
     // - could be useful if the server has some trouble with TLS 1.3
     DisableTls13: boolean;
     /// input: enable two-way TLS for the server
-    // - to be used with OnEachPeerVerify callback
+    // - to be used with OnEachPeerVerify callback or CACertificatesFile
     // - on OpenSSL client or server, set SSL_VERIFY_FAIL_IF_NO_PEER_CERT mode
     // - not used on SChannel
     ClientCertificateAuthentication: boolean;
@@ -981,6 +988,12 @@ type
     // - clients that are willing to connect to servers that don't implement RFC
     // 5746 secure renegotiation are subject to attacks such as CVE-2009-3555
     ClientAllowUnsafeRenegotation: boolean;
+    /// input: release internal read/write TLS buffers on idle connection
+    // - may be useful with high number of concurrent connections to save around
+    // 34KB per idle TLS connection - false (disabled) by default
+    // - on OpenSSL client or server, set the SSL_MODE_RELEASE_BUFFERS option
+    // - not used on SChannel
+    ReleaseBuffers: boolean;
     /// input: PEM/PFX file name containing a certificate to be loaded
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
     // - on OpenSSL client or server, calls SSL_CTX_use_certificate_file() API
@@ -1159,7 +1172,7 @@ function GetTlsContext(TlsEnabled, IgnoreTlsCertError: boolean;
   var Context: TNetTlsContext; Forced: PNetTlsContext = nil): PNetTlsContext;
 
 /// compare the main fields of twoTNetTlsContext instances
-// - won't compare the callbacks
+// - won't compare the callbacks, just the certificates/privatekey/hostcsv fields
 function SameNetTlsContext(const tls1, tls2: TNetTlsContext): boolean;
 
 var
@@ -1778,7 +1791,8 @@ type
     /// check if a textual IPv4 matches a decoded CIDR sub-network
     function Match(const ip4: RawUtf8): boolean; overload;
     /// return the CIDR sub-network as standard '1.2.3.0/24' text
-    function ToShort: TShort23;
+    // - or as file-compatible name, e.g. '1-2-3-0_24'
+    function ToShort(filecompatible: boolean = false): TShort23;
     /// wrap IP4Broadcast(ip, mask) and Ip4Text() into e.g. '1.2.3.255' text
     function ToBroadCast: RawUtf8;
   end;
@@ -1982,11 +1996,12 @@ type
     fOpenUriFull: RawUtf8; // set by OpenUri()
     fBytesIn: Int64;
     fBytesOut: Int64;
+    fRetryCount: cardinal;
     procedure DoRaise(const msg: string; const args: array of const;
       error: TNetResult = nrOK; errnumber: PNetErrorInt = nil;
       exc: ENetSockClass = nil); overload;
     procedure DoRaise(const msg: string); overload;
-    procedure SetKeepAlive(aKeepAlive: boolean); virtual;
+    procedure SetKeepAlive(aSeconds: integer); virtual;
     procedure SetLinger(aLinger: integer); virtual;
     procedure SetReceiveTimeout(aReceiveTimeout: integer); virtual;
     procedure SetSendTimeout(aSendTimeout: integer); virtual;
@@ -2271,10 +2286,11 @@ type
     // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ms740476
     property ReceiveTimeout: integer
       write SetReceiveTimeout;
-    /// set the SO_KEEPALIVE option for the connection
-    // - 1 (true) will enable keep-alive packets for the connection
-    // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ee470551
-    property KeepAlive: boolean
+    /// set the SO_KEEPALIVE TCP option as seconds before connection detection
+    // - default 0 will disable TCP keep-alive packets for the connection
+    // - POSIX and latest Windows will set idle=value/2 intvl=value/12 cnt=6
+    // - typical values are 120 for a client and 180/240 for a server
+    property KeepAlive: integer
       write SetKeepAlive;
     /// set the SO_LINGER option for the connection, to control its shutdown
     // - by default (or Linger<0), Close will return immediately to the caller,
@@ -2332,6 +2348,10 @@ type
     /// total bytes sent
     property BytesOut: Int64
       read fBytesOut write fBytesOut;
+    /// counter incremented on nrRetry within TrySockRecv/TrySndLow methods
+    // - may be used to control the data flow at application level
+    property RetryCount: cardinal
+      read fRetryCount write fRetryCount;
   end;
   {$M-}
 
@@ -3232,7 +3252,7 @@ begin
     // update cache once we are sure the host actually exists
     NewSocketAddressCache.Add(address, addr);
   netsocket := sock;
-  netsocket.SetupConnection(layer, sendtimeout, recvtimeout);
+  netsocket.SetupConnection(layer, dobind, sendtimeout, recvtimeout);
   if netaddr <> nil then
     if (addr.Port <> 0) or                   // 0 = assigned by the OS
        (sock.GetName(netaddr^) <> nrOk) then // retrieve ephemeral port
@@ -3290,12 +3310,14 @@ begin
     raise ENetSock.CreateLastError('GetOptInt(%d,%d)', [prot, name]);
 end;
 
-procedure TNetSocketWrap.SetKeepAlive(keepalive: boolean);
+procedure TNetSocketWrap.SetKeepAlive(secs: cardinal);
 var
-  v: integer;
+  v: cardinal;
 begin
-  v := ord(keepalive);
+  v := ord(secs >= 6);
   SetOpt(SOL_SOCKET, SO_KEEPALIVE, @v, SizeOf(v));
+  if v <> 0 then // e.g. 120=60/10/6 180=90/15/6 240=120/20/6
+     SetKeepAliveTcp({idle=}secs shr 1, {intvl=}secs div 12, {cnt=}6);
 end;
 
 procedure TNetSocketWrap.SetNoDelay(nodelay: boolean);
@@ -3342,7 +3364,7 @@ begin
   SetOpt(SOL_SOCKET, SO_BROADCAST, @v, SizeOf(v));
 end;
 
-procedure TNetSocketWrap.SetupConnection(layer: TNetLayer;
+procedure TNetSocketWrap.SetupConnection(layer: TNetLayer; dobind: boolean;
   sendtimeout, recvtimeout: integer);
 begin
   if @self = nil then
@@ -3351,11 +3373,10 @@ begin
     SetSendTimeout(sendtimeout);
   if recvtimeout > 0 then
     SetReceiveTimeout(recvtimeout);
-  if layer = nlTcp then
-  begin
-    SetNoDelay(true);   // disable Nagle algorithm (we use our own buffers)
-    SetKeepAlive(true); // enabled TCP keepalive
-  end;
+  if layer <> nlTcp then
+    exit;
+  SetNoDelay(true);   // disable Nagle algorithm (we use our own buffers)
+  SetKeepAlive(TcpKeepAliveSeconds[dobind]); // enabled proper TCP keepalive
 end;
 
 function TNetSocketWrap.Accept(out clientsocket: TNetSocket;
@@ -4155,11 +4176,7 @@ end;
 
 var
   // GetIPAddressesText(Sep=' ') cache - refreshed every 32 seconds
-  IPAddresses: array[TIPAddress] of record
-    Safe: TLightLock;
-    Text: RawUtf8;
-    Tix: integer;
-  end;
+  IPAddresses: array[TIPAddress] of TCachedValue;
 
   // GetMacAddresses / GetMacAddressesText cache - refreshed every 65 seconds
   MacAddresses: array[{UpAndDown=}boolean] of record
@@ -4175,16 +4192,7 @@ var
   ud: boolean;
 begin
   for ip := low(ip) to high(ip) do
-    with IPAddresses[ip] do
-    begin
-      Safe.Lock;
-      try
-        Text := '';
-        Tix := 0;
-      finally
-        Safe.UnLock;
-      end;
-    end;
+    IPAddresses[ip].Reset;
   for ud := low(ud) to high(ud) do
     with MacAddresses[ud] do
     begin
@@ -4200,47 +4208,37 @@ begin
     end;
 end;
 
-procedure GetIPCSV(const Sep: RawUtf8; Kind: TIPAddress; out Text: RawUtf8);
+type
+  TGetIPAddressesText = record Sep: pointer; Kind: TIPAddress; end;
+  PGetIPAddressesText = ^TGetIPAddressesText;
+
+function _IpCsvRetrieve(p: PGetIPAddressesText): RawByteString;
 var
   ip: TRawUtf8DynArray;
   i: PtrInt;
 begin
-  ip := GetIPAddresses(Kind); // from OS
+  FastAssignNew(result);
+  ip := GetIPAddresses(p^.Kind); // from OS
   if ip = nil then
     exit;
-  Text := ip[0];
+  result := ip[0];
   for i := 1 to high(ip) do
-    Text := Text + Sep + ip[i]; // as CSV
+    result := Join([result, RawUtf8(p^.Sep), ip[i]]); // as CSV
 end;
 
 function GetIPAddressesText(const Sep: RawUtf8; Kind: TIPAddress): RawUtf8;
 var
-  now: integer;
+  p: TGetIPAddressesText;
 begin
-  result := '';
+  FastAssignNew(result);
+  p.Sep := pointer(Sep);
+  p.Kind := Kind;
   if Sep = ' ' then
-    with IPAddresses[Kind] do
-    begin
-      now := GetTickSec shr 5 + 1; // refresh every 32s
-      Safe.Lock;
-      try
-        if now <> Tix then
-          Tix := now
-        else
-        begin
-          result := Text;
-          if result <> '' then
-            exit; // return the value from cache
-        end;
-        GetIPCSV(Sep, Kind, result); // ask the OS for the current IP addresses
-        Text := result;
-      finally
-        Safe.UnLock;
-      end;
-    end
+    // retrieve from OS or from cache
+    IPAddresses[Kind].Cache(@_IpCsvRetrieve, @p, 5, result)
   else
     // Sep <> ' ' -> can't use the cache, so don't need to lock
-    GetIPCSV(Sep, Kind, result);
+    result := _IpCsvRetrieve(@p);
 end;
 
 function GetMacAddresses(UpAndDown: boolean): TMacAddressDynArray;
@@ -4356,47 +4354,39 @@ begin
 end;
 
 var
-  DnsCache: record
-    Safe: TLightLock;
-    Tix: cardinal;
-    Value, Custom: TRawUtf8DynArray;
-  end;
+  DnsCacheSafe: TLightLock;
+  DnsCacheTix: cardinal;
+  DnsCacheValue, DnsCacheCustom: TRawUtf8DynArray;
 
 function GetDnsAddresses(usePosixEnv: boolean): TRawUtf8DynArray;
 var
   tix32: cardinal;
   i: PtrInt;
 begin
-  tix32 := mormot.core.os.GetTickSec shr 3 + 1; // refresh every 8s
-  with DnsCache do
-  begin
-    Safe.Lock;
-    try
-      if tix32 <> Tix then
-      begin
-        Value := _GetDnsAddresses(usePosixEnv, false); // from OS
-        for i := 0 to length(Custom) - 1 do
-          _addutf8(Value, Custom[i]);          // from RegisterDnsAddress()
-        Tix := tix32;
-      end;
-      result := Value;
-    finally
-      Safe.UnLock;
+  tix32 := mormot.core.os.GetTickSec shr 6 + 1; // TCachedValue resolution
+  DnsCacheSafe.Lock;
+  try
+    if tix32 <> DnsCacheTix then
+    begin
+      _GetDnsAddresses(usePosixEnv, false, DnsCacheValue); // from OS
+      for i := 0 to length(DnsCacheCustom) - 1 do
+        _addutf8(DnsCacheValue, DnsCacheCustom[i]); // from RegisterDnsAddress
+      DnsCacheTix := tix32;
     end;
+    result := DnsCacheValue;
+  finally
+    DnsCacheSafe.UnLock;
   end;
 end;
 
 procedure RegisterDnsAddress(const DnsResolver: RawUtf8);
 begin
-  with DnsCache do
-  begin
-    Safe.Lock;
-    try
-      _addutf8(Custom, DnsResolver);
-      Tix := 0; // flush cache
-    finally
-      Safe.UnLock;
-    end;
+  DnsCacheSafe.Lock;
+  try
+    _addutf8(DnsCacheCustom, DnsResolver);
+    DnsCacheTix := 0; // flush cache
+  finally
+    DnsCacheSafe.UnLock;
   end;
 end;
 
@@ -4408,7 +4398,7 @@ begin
     result[0] := ForcedDomainName;
   end
   else
-    result := _GetDnsAddresses(usePosixEnv, {getAD=}true); // no cache for the AD
+    _GetDnsAddresses(usePosixEnv, {getAD=}true, result);
 end;
 
 var
@@ -5467,8 +5457,12 @@ begin
 end;
 
 function ToIP4(const text: RawUtf8): TNetIP4;
+var
+  c: cardinal; // safer with an explicit variable
 begin
-  if not NetIsIP4(pointer(text), @result) then
+  if NetIsIP4(pointer(text), @c) then
+    result := c
+  else
     result := 0;
 end;
 
@@ -5685,15 +5679,29 @@ begin
             Match(ip32{%H-});
 end;
 
-function TIp4SubNet.ToShort: TShort23;
+function TIp4SubNet.ToShort(filecompatible: boolean): TShort23;
 var
   prefix: cardinal;
+  p: PAnsiChar;
+  c: AnsiChar;
 begin
   IP4Short(@ip, result);
+  if filecompatible then
+  begin
+    p := @result;
+    repeat
+      if p^ = '.' then
+        p^ := '-';
+      inc(p);
+    until p^ = #0;
+  end;
   prefix := IP4Prefix(mask);
   if prefix = 0 then
     exit;
-  AppendShortChar('/', @result);
+  c := '/';
+  if filecompatible then
+    c := '_';
+  AppendShortChar(c, @result);
   AppendShortByte(prefix, @result); // in range '0'..'32'
 end;
 
@@ -6144,9 +6152,9 @@ begin
   result := PtrInt(fSock);
 end;
 
-procedure TCrtSocket.SetKeepAlive(aKeepAlive: boolean);
+procedure TCrtSocket.SetKeepAlive(aSeconds: integer);
 begin
-  fSock.SetKeepAlive(aKeepAlive);
+  fSock.SetKeepAlive(aSeconds);
 end;
 
 procedure TCrtSocket.SetLinger(aLinger: integer);
@@ -6277,7 +6285,7 @@ begin
     if s = 'unix' then
     begin
       // aAddress='unix:/path/to/myapp.socket'
-      FpUnlink(pointer(p)); // previous bind may have left the .socket file
+      fpunlinka(pointer(p)); // a previous bind may have left the .socket file
       OpenBind(p, '', {dobind=}true, {tls=}false, nlUnix, {%H-}aSock);
       exit;
     end;
@@ -6450,7 +6458,7 @@ begin
   end
   else
   begin
-    // ACCEPT mode -> socket is already created by caller
+    // ACCEPT mode -> socket is already created by caller with inherited params
     fSock := aSock;
     if TimeOut > 0 then
     begin
@@ -6717,7 +6725,7 @@ begin
   // (see e.g. THttpClientSocket.Request)
   {$ifdef OSPOSIX}
   if fSocketLayer = nlUnix then
-    FpUnlink(pointer(fServer)); // 'unix:/path/to/myapp.socket' -> delete file
+    fpunlinka(pointer(fServer)); // 'unix:/path/to/myapp.socket' -> delete file
   {$endif OSPOSIX}
 end;
 
@@ -7346,6 +7354,7 @@ begin
           end;
         nrRetry:
           begin
+            inc(fRetryCount);
             res := nrOk; // make RecvPending + WaitFor below and retry Recv
             read := 0;
           end;
@@ -7463,6 +7472,7 @@ begin
       if GetAborted or
          not (res in [nrOk, nrRetry]) then
         break;
+      inc(fRetryCount);
       events := fSock.WaitFor(TimeOut, [neWrite, neError]); // select() or poll()
       res := nrUnknownError;
       if neError in events then

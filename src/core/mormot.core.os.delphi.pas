@@ -190,6 +190,7 @@ function fpclose(fd: cint): cint;
 function fputime(path: PWideChar; times: putimbuf): cint;
 function fpaccess(path: PWideChar; mode: cint): cint;
 function fpunlink(path: PWideChar): cint;
+function fpunlinka(path: PAnsiChar): cint; // when the path is already UTF-8
 function fpchdir(path: PWideChar): cint;
 function fprename(old, new: PWideChar): cint;
 function fpsymlink(old, new: PWideChar): cint;
@@ -302,35 +303,41 @@ function IsAtty(fd: cint): cint;
 { ****************** Network POSIX Operating Systems API for Delphi }
 
 const
-  IPPROTO_TCP  = IPPROTO_TCP;
-  IPPROTO_UDP  = IPPROTO_UDP;
-  TCP_NODELAY  = 1;
-  TCP_CORK     = 3; // Linux specific
-  TCP_NOPUSH   = 4; // BSD specific
-  MSG_PEEK     = Posix.SysSocket.MSG_PEEK;
-  SHUT_RD      = Posix.SysSocket.SHUT_RD;
-  SHUT_WR      = Posix.SysSocket.SHUT_WR;
-  SHUT_RDWR    = Posix.SysSocket.SHUT_RDWR;
-
-  SOCK_RAW     = Posix.SysSocket.SOCK_RAW;
-  SOCK_STREAM  = Posix.SysSocket.SOCK_STREAM;
-  SOCK_DGRAM   = Posix.SysSocket.SOCK_DGRAM;
-  AF_INET      = Posix.SysSocket.AF_INET;
-  AF_INET6     = Posix.SysSocket.AF_INET6;
-  AF_UNIX      = Posix.SysSocket.AF_UNIX;
-  AF_PACKET    = 17; // Linux specific
-  SOMAXCONN    = Posix.SysSocket.SOMAXCONN;
-  SOL_SOCKET   = Posix.SysSocket.SOL_SOCKET;
-  SO_SNDTIMEO  = Posix.SysSocket.SO_SNDTIMEO;
-  SO_RCVTIMEO  = Posix.SysSocket.SO_RCVTIMEO;
-  SO_REUSEADDR = Posix.SysSocket.SO_REUSEADDR;
-  SO_LINGER    = Posix.SysSocket.SO_LINGER;
-  SO_KEEPALIVE = Posix.SysSocket.SO_KEEPALIVE;
-  SO_SNDBUF    = Posix.SysSocket.SO_SNDBUF;
-  SO_RCVBUF    = Posix.SysSocket.SO_RCVBUF;
-  SO_BROADCAST = Posix.SysSocket.SO_BROADCAST;
+  IPPROTO_TCP   = IPPROTO_TCP;
+  IPPROTO_UDP   = IPPROTO_UDP;
+  TCP_NODELAY   = 1;
+  TCP_CORK      = 3; // Linux specific
+  TCP_NOPUSH    = 4; // BSD specific
   {$ifdef OSLINUXANDROID}
-  SO_PRIORITY  = Posix.SysSocket.SO_PRIORITY;
+  // Delphi POSIX/Android headers do not expose those Linux <netinet/tcp.h> values
+  TCP_KEEPIDLE  = 4;
+  TCP_KEEPINTVL = 5;
+  TCP_KEEPCNT   = 6;
+  {$endif OSLINUXANDROID}
+  MSG_PEEK      = Posix.SysSocket.MSG_PEEK;
+  SHUT_RD       = Posix.SysSocket.SHUT_RD;
+  SHUT_WR       = Posix.SysSocket.SHUT_WR;
+  SHUT_RDWR     = Posix.SysSocket.SHUT_RDWR;
+
+  SOCK_RAW      = Posix.SysSocket.SOCK_RAW;
+  SOCK_STREAM   = Posix.SysSocket.SOCK_STREAM;
+  SOCK_DGRAM    = Posix.SysSocket.SOCK_DGRAM;
+  AF_INET       = Posix.SysSocket.AF_INET;
+  AF_INET6      = Posix.SysSocket.AF_INET6;
+  AF_UNIX       = Posix.SysSocket.AF_UNIX;
+  AF_PACKET     = 17; // Linux specific
+  SOMAXCONN     = Posix.SysSocket.SOMAXCONN;
+  SOL_SOCKET    = Posix.SysSocket.SOL_SOCKET;
+  SO_SNDTIMEO   = Posix.SysSocket.SO_SNDTIMEO;
+  SO_RCVTIMEO   = Posix.SysSocket.SO_RCVTIMEO;
+  SO_REUSEADDR  = Posix.SysSocket.SO_REUSEADDR;
+  SO_LINGER     = Posix.SysSocket.SO_LINGER;
+  SO_KEEPALIVE  = Posix.SysSocket.SO_KEEPALIVE;
+  SO_SNDBUF     = Posix.SysSocket.SO_SNDBUF;
+  SO_RCVBUF     = Posix.SysSocket.SO_RCVBUF;
+  SO_BROADCAST  = Posix.SysSocket.SO_BROADCAST;
+  {$ifdef OSLINUXANDROID}
+  SO_PRIORITY   = Posix.SysSocket.SO_PRIORITY;
   {$endif OSLINUXANDROID}
 
 
@@ -455,7 +462,8 @@ end;
 
 function RTLEventCreate: TEvent;
 begin
-  result := TEvent.Create;
+  // auto-reset event, to match FPC PRTLEvent and Windows CreateEvent() semantic
+  result := TEvent.Create(nil, {ManualReset=}false, {InitialState=}false, '');
 end;
 
 procedure RTLEventDestroy(state: TEvent);
@@ -516,7 +524,10 @@ end;
 
 function GetLocalTimeOffset: integer;
 begin
-  result := Round(TTimeZone.Local.UtcOffset.TotalSeconds);
+  // return the offset in MINUTES, positive west of UTC (e.g. +240 for EDT) -
+  // i.e. the FPC RTL convention, as expected by TZSeconds and TimeZoneLocalBias
+  // (TTimeZone.UtcOffset is local-minus-UTC, so negative west of UTC: negate it)
+  result := -Round(TTimeZone.Local.UtcOffset.TotalMinutes);
 end;
 
 function TZSeconds: integer;
@@ -528,6 +539,7 @@ function fpuname(var uts: UtsName): cint;
 begin
   result := uname(uts);
 end;
+
 function fpstat(path: PWideChar; var buf: _stat): cint;
 var
   tmp: TSynTempBuffer;
@@ -591,6 +603,11 @@ var
 begin
   result := unlink(Unicode_ToUtf8(path, tmp));
   tmp.Done;
+end;
+
+function fpunlinka(path: PAnsiChar): cint;
+begin
+  result := unlink(path); // path is already UTF-8: no conversion needed
 end;
 
 function fpchdir(path: PWideChar): cint;

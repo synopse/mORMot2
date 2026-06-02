@@ -72,7 +72,7 @@ begin
             #13#10'-----------------------------------------------------');
     TextColor(ccGreen);
     writeln('Using mormot.crypt.ecc '  + SYNOPSE_FRAMEWORK_VERSION +  #13#10);
-    TextColor(ccLightGray);
+    TextColor(ccDefault);
     writeln(Executable.ProgramName,
       ' help');
     writeln(Executable.ProgramName,

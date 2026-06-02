@@ -74,6 +74,8 @@ type
     procedure _AES_GCM;
     /// RC4 encryption function
     procedure _RC4;
+    /// BlowFish CTR mode + key-schedule regression checks
+    procedure _BlowFish;
     /// pure pascal RSA tests
     procedure _RSA;
     /// X509 Certificates
@@ -464,6 +466,56 @@ begin
       rc4.EncryptBuffer(pointer(d), pointer(d), len); // decrypt
       check(s = d);
     end;
+  end;
+end;
+
+procedure TTestCoreCrypto._BlowFish;
+var
+  bf: TBlowFishCtr;
+  data, enc1, enc2: RawByteString;
+  salt, saltCopy: THash128Rec;
+begin
+  // regression for the rodata-salt corruption in BlowFishKeySetup() - see the
+  // commit that introduced this test. BlowFishPrepareKey() now returns the
+  // big-endian salt via an out-parameter, so the caller's Salt^ buffer
+  // (possibly @BLOWFISHCTR_DEFAULTSALT in .rodata on Delphi POSIX, or any
+  // read-only/const buffer) is never mutated.
+  data := 'mORMot2 BlowFish rodata-salt regression test vector payload';
+  // 1. two TBlowFishCtr.Create('secret') with no explicit Salt must produce
+  //    the same key schedule, i.e. encrypt identically: catches the silent
+  //    BLOWFISHCTR_DEFAULTSALT mutation that used to happen on Delphi
+  //    Windows (typed const in .data) and segfault on Delphi POSIX (typed
+  //    const in .rodata)
+  FastNewRawByteString(enc1, length(data));
+  FastNewRawByteString(enc2, length(data));
+  bf := TBlowFishCtr.Create('secret');
+  try
+    bf.EncryptBuffer(pointer(data), pointer(enc1), length(data));
+  finally
+    bf.Free;
+  end;
+  bf := TBlowFishCtr.Create('secret');
+  try
+    bf.EncryptBuffer(pointer(data), pointer(enc2), length(data));
+  finally
+    bf.Free;
+  end;
+  CheckEqual(enc1, enc2, 'BLOWFISHCTR_DEFAULTSALT stable');
+  // 2. a caller-supplied salt buffer must also remain byte-identical across
+  //    Create() (BCrypt path with Cost > 0 takes a different code branch)
+  RandomBytes(@salt, SizeOf(salt));
+  saltCopy := salt;
+  bf := TBlowFishCtr.Create('secret', 0, @salt);
+  try
+    Check(CompareMem(@salt, @saltCopy, SizeOf(salt)), 'caller salt unchanged');
+  finally
+    bf.Free;
+  end;
+  bf := TBlowFishCtr.Create('secret', 4, @salt); // BCrypt expensive setup
+  try
+    Check(CompareMem(@salt, @saltCopy, SizeOf(salt)), 'caller salt unchanged (bcrypt)');
+  finally
+    bf.Free;
   end;
 end;
 
@@ -3679,11 +3731,19 @@ const
     $18, $94, $1a, $0e, $92, $78, $d6, $d9, $78, $f3, $b5, $bb, $a7, $a1, $99,
     $50, $c6, $c1, $2c, $78, $6e, $26, $ba, $ec, $ac, $d9, $4d, $0b, $cb, $6f,
     $56, $87, $00, $00, $00, $01);
+  // $ klist
+  // Ticket cache: FILE:/tmp/krb5cc_1000
+  // Default principal: abouchez@AD.TRANQUIL.IT
+  CCACHE_REF: array[0 .. 63] of byte = ( // truncated for safety
+    $05, $04, $00, $0c, $00, $01, $00, $08, $00, $00, $00, $00, $00, $00, $00, $00,
+    $00, $00, $00, $01, $00, $00, $00, $01, $00, $00, $00, $0e, $41, $44, $2e, $54,
+    $52, $41, $4e, $51, $55, $49, $4c, $2e, $49, $54, $00, $00, $00, $08, $61, $62,
+    $6f, $75, $63, $68, $65, $7a, $00, $00, $00, $01, $00, $00, $00, $01, $00, $00);
 
 procedure TTestCoreCrypto._TKerberosKeyTab;
 var
   bin, bin2, password: RawByteString;
-  hex: RawUtf8;
+  hex, realm: RawUtf8;
   kt, kt2: TKerberosKeyTab;
   ktg: TKerberosKeyTabGenerator;
   a: TSignAlgo;
@@ -3843,7 +3903,7 @@ begin
     if CheckEqual(length(ktg.Entry), 2) then
     begin
       CheckHash(ktg.Entry[1].Key, $D101D374);
-      Check(ktg.Entry[1].Timestamp > 1750947820);
+      Check(ktg.Entry[0].Timestamp > 1750947820);
       Check(ktg.Entry[1].Timestamp > 1750947820);
       Check(UnixTimeUtc - ktg.Entry[0].Timestamp < 2, 'UnixTimeUtc');
       ktg.Entry[0].Timestamp := 1750947820; // as in KEYTAB_REF
@@ -3856,6 +3916,12 @@ begin
   finally
     ktg.Free;
   end;
+  // validate ccache file parsing
+  CheckEqual(BufferCcachePrincipal('', @realm), '');
+  CheckEqual(realm, '');
+  FastSetRawByteString(bin, @CCACHE_REF, SizeOf(CCACHE_REF));
+  CheckEqual(BufferCcachePrincipal(bin, @realm), 'abouchez@AD.TRANQUIL.IT');
+  CheckEqual(realm, 'AD.TRANQUIL.IT');
 end;
 
 procedure TTestCoreCrypto.CatalogRunAsym(Context: TObject);

@@ -61,7 +61,7 @@ begin
     writeln('WebSockets Chat Server running on localhost:8888'#13#10);
     TextColor(ccWhite);
     writeln('Please load restws_simpleechoserver.html in your browser'#13#10);
-    TextColor(ccLightGray);
+    TextColor(ccDefault);
     writeln('Press [Enter] to quit'#13#10);
     TextColor(ccCyan);
     readln;

@@ -304,7 +304,6 @@ function TMvcSessionWithRestServer.GetCookie(out Value: PUtf8Char): integer;
 var
   ctxt: TRestServerUriContext;
   cookie: PHttpCookie;
-  valueend: PUtf8Char;
 begin
   result := 0;
   ctxt := ServiceRunningContext.Request;
@@ -316,11 +315,7 @@ begin
     if Value <> nil then
     begin
       inc(Value);
-      valueend := PosChar(Value, ';'); // use fast SSE2 asm on x86_64
-      if valueend <> nil then
-        result := valueend - Value
-      else
-        result := StrLen(Value);
+      result := PosChar0(Value, ';') - Value; // use fast SSE2 asm on x86_64
       exit;
     end;
   end;

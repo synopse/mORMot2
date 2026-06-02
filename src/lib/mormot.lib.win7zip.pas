@@ -1430,8 +1430,7 @@ begin
       exit;
   end;
   // fallback to guess from file extension
-  StringToUtf8(ExtractFileExt(FileName), ext);
-  delete(ext, 1, 1);
+  StringToUtf8(ExtractExt(FileName, {withoutdot=}true), ext);
   l := length(ext);
   if l = 1 then
     case ext[1] of
@@ -1990,12 +1989,15 @@ begin
 end;
 
 function T7zReader.Count: integer;
+var
+  n: cardinal; // safe with a local variable
 begin
   if fInArchive = nil then
-    result := 0
+    n := 0
   else
     E7Zip.CheckOk(self, 'GetNumberOfItems',
-      fInArchive.GetNumberOfItems(PCardinal(@result)^));
+      fInArchive.GetNumberOfItems(n));
+  result := n;
 end;
 
 function T7zReader.NameToIndex(const zipname: RawUtf8): integer;

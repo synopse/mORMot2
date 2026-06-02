@@ -43,7 +43,7 @@ end;
 // slower but smoother (need the GDI+ library, best with version 1.1)
 
 {.$define USEPDFPRINTER}
-// do not use the Synopse PDF engine, in Delphi code, but a doPdf virtual printer
+// do not use the Synopse PDF engine, in Delphi code, but (do)Pdf virtual printer
 
 {$define USE_UNISCRIBE}
 // the same conditional as in mormot.ui.pdf
@@ -718,13 +718,13 @@ type
     // - uses internal PDF code, from Synopse PDF engine (handle bookmarks,
     // outline and twin bitmaps) - in this case, a file name can be set
     {$endif USEPDFPRINTER}
-    function ExportPdf(aPdfFileName: TFileName; ShowErrorOnScreen: boolean;
+    function ExportPdf(const aPdfFileName: TFileName; ShowErrorOnScreen: boolean;
       LaunchAfter: boolean = true): boolean;
     {$ifndef USEPDFPRINTER}
     /// export the current report as PDF in a specified stream
     // - uses internal PDF code, from Synopse PDF engine (handle bookmarks,
     // outline and twin bitmaps) - in this case, a file name can be set
-    function ExportPdfStream(aDest: TStream): boolean;
+    function ExportPdfStream(aDest: TStream; aRaiseException: boolean = false): boolean;
     {$endif USEPDFPRINTER}
     /// show a form with the preview, allowing the user to browse pages and
     // print the report
@@ -3501,7 +3501,7 @@ begin
 {$else}
   fExportPdfUseFontFallBack := true;
   fExportPdfEncryptionPermissions := PDF_PERMISSION_ALL;
-  fExportPdfEncryptionOwnerPassword := 'mORMot ' + SYNOPSE_FRAMEWORK_VERSION;
+  fExportPdfEncryptionOwnerPassword := 'SynopsePDFEngine'; // documented default
 {$endif USEPDFPRINTER}
   GetPrinterParams; // necessary, but will also be updated in BeginDoc()
   fCanvas := nil;
@@ -5206,13 +5206,14 @@ begin
 end;
 
 {$ifndef USEPDFPRINTER}
-function TGdiPages.ExportPdfStream(aDest: TStream): boolean;
+function TGdiPages.ExportPdfStream(aDest: TStream; aRaiseException: boolean): boolean;
 var
   PDF: TPdfDocument;
   BackgroundImage: TPdfImage;
   page: TPdfPage;
   i: integer;
 begin
+  result := false;
   try
     PDF := TPdfDocument.Create(UseOutlines, 0, ExportPdfLevel,
       TPdfEncryption.New(ExportPdfEncryptionLevel,
@@ -5252,14 +5253,15 @@ begin
         with Pages[i] do
         begin
         // this loop will do all the magic :)
-          PDF.DefaultPageWidth := PdfCoord(25.4 * SizePx.X / fPrinterPxPerInch.x);
+          PDF.DefaultPageWidth  := PdfCoord(25.4 * SizePx.X / fPrinterPxPerInch.x);
           PDF.DefaultPageHeight := PdfCoord(25.4 * SizePx.Y / fPrinterPxPerInch.y);
           page := PDF.AddPage;
           if BackgroundImage <> nil then
             PDF.Canvas.DrawXObject(0, 0, page.PageWidth, page.PageHeight,
               'BackgroundImage');
-          RenderMetaFile(PDF.Canvas, GetMetaFileForPage(i), Screen.PixelsPerInch
-            / fPrinterPxPerInch.x, Screen.PixelsPerInch / fPrinterPxPerInch.y);
+          RenderMetaFile(PDF.Canvas, GetMetaFileForPage(i),
+            Screen.PixelsPerInch / fPrinterPxPerInch.x,
+            Screen.PixelsPerInch / fPrinterPxPerInch.y);
           PDF.SaveToStreamDirectPageFlush;
         end;
       PDF.SaveToStreamDirectEnd;
@@ -5268,70 +5270,70 @@ begin
     end;
     result := true;
   except
-    result := false;
+    if aRaiseException then
+      raise;
   end;
 end;
 {$endif USEPDFPRINTER}
 
-function TGdiPages.ExportPdf(aPdfFileName: TFileName; ShowErrorOnScreen,
-  LaunchAfter: boolean): boolean;
-{$ifdef USEPDFPRINTER}
+function ValidFileName(const FN: TFileName): TFileName;
 var
-  DefaultPrinter: integer;
-{$else}
+  i: PtrInt;
+begin
+  result := FN;
+  for i := length(result) downto 1 do
+    if ord(result[i]) in [ord('/'), ord(':'), ord('\'), ord('.')] then
+      delete(result,i,1);
+  i := length(result);
+  while (i > 0) and
+        (ord(result[i]) in [ord(' '), ord('-')]) do
+    dec(i);
+  SetLength(result, i);
+  result := trim(result);
+end;
 
-  function ValidFileName(const FN: TFileName): TFileName;
-  var
-    i: integer;
-  begin
-    result := FN;
-    for i := length(result) downto 1 do
-      if ord(result[i]) in [ord('/'), ord(':'), ord('\'), ord('.')] then
-        delete(result,i,1);
-    i := length(result);
-    while (i > 0) and
-          (ord(result[i]) in [ord(' '), ord('-')]) do
-      dec(i);
-    SetLength(result, i);
-      result := trim(result);
-  end;
-
+function TGdiPages.ExportPdf(const aPdfFileName: TFileName; ShowErrorOnScreen,
+  LaunchAfter: boolean): boolean;
 var
   PDFFileName: TFileName;
+{$ifdef USEPDFPRINTER}
+  DefaultPrinter: integer;
+{$else}
   PDFFile: TStream;
   f: THandle;
-  Name: string;
   TempDir: TFileName;
+  dlg: TSaveDialog;
 {$endif USEPDFPRINTER}
 begin
   result := false;
   if self = nil then
     exit;
+  PDFFileName := ValidFileName(Caption);
   if PageCount > 10 then
     Screen.Cursor := crHourGlass;
 {$ifdef USEPDFPRINTER}
   if HasPDFPrinterInstalled then
-  begin
+  try
     DefaultPrinter := Printer.PrinterIndex;
     Printer.PrinterIndex := fPDFPrinterIndex;
     PrintPages(0, 0);
     Printer.PrinterIndex := DefaultPrinter;
-  end; 
 {$else}
   // use the Synopse PDF engine
   if aPdfFileName = '' then
-    with TSaveDialog.Create(nil) do
+  begin
+    dlg := TSaveDialog.Create(nil);
     try
       TempDir := GetCurrentDir;
-      Filter := sPDFFile + ' (*.pdf)|*.pdf';
-      Title := Caption;
-      FileName := ValidFileName(Caption);
-      DefaultExt := 'pdf';
-      Options := [ofOverwritePrompt, ofHideReadOnly, ofEnableSizing];
+      dlg.Filter := sPDFFile + ' (*.pdf)|*.pdf';
+      dlg.Title := Caption;
+      dlg.FileName := PDFFileName;
+      dlg.DefaultExt := 'pdf';
+      dlg.Options := [ofOverwritePrompt, ofHideReadOnly, ofEnableSizing];
       repeat
-        if not Execute then
+        if not dlg.Execute then
           exit;
-        PDFFileName := FileName;
+        PDFFileName := dlg.Name;          // allow user customization of file name
         f := FileCreate(PDFFileName); // test file create (pdf not opened)
         if ValidHandle(f) then
           break;
@@ -5341,30 +5343,32 @@ begin
       FileClose(f);
     finally
       SetCurrentDir(TempDir); // allow unplug e.g. any USB
-      Free;
-    end
+      dlg.Free;
+    end;
+  end
   else
     PDFFileName := aPdfFileName;
   try
     PDFFile := TFileStreamEx.Create(PDFFileName, fmCreate);
     try
-      ExportPdfStream(PDFFile);
+      ExportPdfStream(PDFFile, {raiseException=}true);
     finally
       PDFFile.Free;
     end;
     if LaunchAfter then
       ShellExecute(Application.MainForm.Handle, 'open',
         pointer(PDFFileName), nil, nil, SW_NORMAL);
+{$endif USEPDFPRINTER}
   except
     on E: Exception do
     begin
       // show any error raised during PDF creation
       if ShowErrorOnScreen then
-        MessageBox(0, pointer(E.Message), pointer(Name), MB_ICONERROR);
+        MessageBox(0, pointer(E.Message), pointer(ExtractFileName(PDFFileName)),
+          MB_ICONERROR);
       exit;
     end;
-  end;
-{$endif USEPDFPRINTER}
+  end;                        
   result := true;
   if PageCount > 10 then
     Screen.Cursor := crDefault;

@@ -2714,9 +2714,9 @@ begin
 end;
 
 const
-  TOBEPURGED: PUtf8Char =
+  TOBEPURGED: PUtf8Char = // fast lookup in L1 CPU cache
     'CONTENT-|CONNECTION:|KEEP-ALIVE:|TRANSFER-|X-POWERED|USER-AGENT|' +
-    'REMOTEIP:|HOST:|ACCEPT:|DATE:|';
+    'REMOTEIP:|HOST:|ACCEPT:|DATE:|TE:|TRAILER:|';
 
 function PurgeHeaders(const headers: RawUtf8; trim: boolean; upIgnore: PUtf8Char): RawUtf8;
 var
@@ -4850,7 +4850,7 @@ begin
     begin
       h := FindNameValuePointer(pointer(fInHeaders), 'IF-NONE-MATCH: ', hl);
       if (h <> nil) and
-         IdemPropName(e, h, el, hl) then
+         CsvContains(e, h, el, hl, ',', {casesens=}true, {trim=}true) then
         exit;
     end;
   end;
@@ -7670,7 +7670,7 @@ end;
 
 initialization
   assert(SizeOf(THttpAnalyzerToSave) = 40);
-  _GETVAR :=  'GET';
+  _GETVAR  := 'GET';
   _POSTVAR := 'POST';
   _HEADVAR := 'HEAD';
   GetEnumTrimmedNames(TypeInfo(THttpAnalyzerScope),  @HTTP_SCOPE);

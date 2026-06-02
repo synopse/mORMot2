@@ -163,10 +163,14 @@ type
     function GetTC: boolean;
       {$ifdef FPC} inline; {$endif}
     function GetZ: byte;
-    procedure SetOpCode(AValue: byte);
-    procedure SetQR(AValue: boolean);
-    procedure SetRD(AValue: boolean);
-    procedure SetZ(AValue: byte);
+    procedure SetOpCode(const AValue: byte);
+      {$ifdef FPC} inline; {$endif}
+    procedure SetQR(const AValue: boolean);
+      {$ifdef FPC} inline; {$endif}
+    procedure SetRD(const AValue: boolean);
+      {$ifdef FPC} inline; {$endif}
+    procedure SetZ(const AValue: byte);
+      {$ifdef FPC} inline; {$endif}
   public
     Xid: word;
     Flags: byte;
@@ -418,26 +422,26 @@ begin
   result := (Flags and QF_Z) shr 4;
 end;
 
-procedure TDnsHeader.SetOpCode(AValue: byte);
+procedure TDnsHeader.SetOpCode(const AValue: byte);
 begin
   Flags := (Flags and not(QF_OPCODE)) or ((AValue and $f) shl 3);
 end;
 
-procedure TDnsHeader.SetQR(AValue: boolean);
+procedure TDnsHeader.SetQR(const AValue: boolean);
 begin
   Flags := Flags and not(QF_QR);
   if AValue then
     Flags := Flags or QF_QR;
 end;
 
-procedure TDnsHeader.SetRD(AValue: boolean);
+procedure TDnsHeader.SetRD(const AValue: boolean);
 begin
   Flags := Flags and not(QF_RD);
   if AValue then
     Flags := Flags or QF_RD;
 end;
 
-procedure TDnsHeader.SetZ(AValue: byte);
+procedure TDnsHeader.SetZ(const AValue: byte);
 begin
   Flags := (Flags2 and not(QF_Z)) or ((AValue and $7) shl 4);
 end;
@@ -556,37 +560,32 @@ end;
 function DnsBuildQuestion(const QName: RawUtf8; RR: TDnsResourceRecord;
   QClass: cardinal): RawByteString;
 var
-  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
-  w: TBufferWriter;
-  h: TDnsHeader;
-  n: PUtf8Char;
-  one: ShortString;
+  h: PDnsHeader;
+  n, v: PUtf8Char;
+  l: PtrInt;
+  tmp: TSynTempAdder;
 begin
-  w := TBufferWriter.Create(tmp{%H-});
-  try
-    FillCharFast(h, SizeOf(h), 0);
-    repeat
-      h.Xid := Random32; // truncated to 16-bit
-    until h.XId <> 0;
-    h.RecursionDesired := true;
-    h.QuestionCount := 1 shl 8;
-    w.Write(@h, SizeOf(h));
-    n := pointer(QName);
-    while n <> nil do
-    begin
-      GetNextItemShortString(n, @one, '.');
-      if one[0] = #0 then
-        break;
-      w.Write1(ord(one[0]));
-      w.Write(@one[1], ord(one[0]));
-    end;
-    w.Write1(0); // final #0
-    w.Write2(bswap16(ord(RR)));
-    w.Write2(bswap16(QClass));
-    result := w.FlushTo;
-  finally
-    w.Free;
+  tmp.Init;
+  h := tmp.Add(SizeOf(h^));
+  FillCharFast(h^, SizeOf(h^), 0);
+  repeat
+    h^.Xid := Random32; // truncated to 16-bit
+  until h^.XId <> 0;
+  h^.RecursionDesired := true;
+  h^.QuestionCount := 1 shl 8;
+  n := pointer(QName);
+  while n <> nil do
+  begin
+    l := GetNextItemTrimedBuffer(n, '.', v);
+    if l = 0 then
+      break;
+    tmp.AddDirect(AnsiChar(l));
+    tmp.Add(v, l);
   end;
+  tmp.AddDirect(#0); // final #0
+  tmp.Add16BigEndian(ord(RR));
+  tmp.Add16BigEndian(QClass);
+  tmp.Done(result, CP_RAWBYTESTRING);
 end;
 
 var

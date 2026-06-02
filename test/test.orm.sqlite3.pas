@@ -2136,12 +2136,12 @@ begin
         check(T.FieldIndex(J.Get(0, aF)) = aF);
       for aR := 0 to T.RowCount do
         for aF := 0 to T.FieldCount - 1 do // aF=3=Blob
-          check((aF = 3) or (StrIComp(T.Get(aR, aF), J.Get(aR, aF)) = 0));
+          check((aF = 3) or StrIEqual(T.Get(aR, aF), J.Get(aR, aF)));
       n := 0;
       while T.Step do
       begin
         for aF := 0 to T.FieldCount - 1 do // aF=3=Blob
-          check((aF = 3) or (StrIComp(T.FieldBuffer(aF), J.Get(T.StepRow, aF)) = 0));
+          check((aF = 3) or StrIEqual(T.FieldBuffer(aF), J.Get(T.StepRow, aF)));
         inc(n);
       end;
       check(n = J.RowCount);

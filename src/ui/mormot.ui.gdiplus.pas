@@ -48,6 +48,7 @@ uses
   {$endif NEEDVCLPREFIX}
   mormot.core.base,
   mormot.core.os,
+  mormot.core.unicode,
   mormot.lib.gdiplus;
 
 
@@ -546,21 +547,20 @@ var
   i: PtrInt;
 begin
   result := nil;
-  ext := ExtractFileExt(FileName);
+  ext := ExtractExt(FileName, {withoutdot=}true);
   if ext = '' then
     exit;
-  Delete(ext, 1, 1); // '.bmp' -> 'bmp'
-  if SameText(ext, 'BMP') then
+  if SameTextS(ext, 'BMP') then
     result := TBitmap
-  else if SameText(ext, 'EMF') then
+  else if SameTextS(ext, 'EMF') then
     result := TMetafile
-  else if SameText(ext, 'WMF') then
+  else if SameTextS(ext, 'WMF') then
     result := TMetafile
-  else if SameText(ext, 'ICO') then
+  else if SameTextS(ext, 'ICO') then
     result := TIcon
   else
     for i := 0 to high(PicturesExt) do
-      if SameText(ext, PicturesExt[i]) then
+      if SameTextS(ext, PicturesExt[i]) then
       begin
         result := PictureClasses[i];
         exit;
@@ -1179,16 +1179,13 @@ function LoadFrom(const FileName: TFileName): TBitmap;
 var
   P: TSynPicture;
   mf: TMetafile;
-  ext: TFileName;
 begin
   result := nil;
   if not FileExists(FileName) then
     exit;
   EnsureGdipExistsAndLock('LoadFrom');
   try
-    ext := ExtractFileExt(FileName);
-    if SameText(ext, '.WMF') or
-       SameText(ext, '.EMF') then
+    if SameExt(FileName, ['.wmf', '.emf']) >= 0 then
     begin
       // EMF will be loaded and rendered using GDI+ anti-aliasing
       mf := TMetaFile.Create;

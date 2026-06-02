@@ -1061,17 +1061,20 @@ function TextToHashAlgo(P: PUtf8Char; Len: PtrInt; out Algo: THashAlgo): boolean
 function HashDetect(const Hash: RawUtf8; out Digest: THashDigest): boolean;
 
 /// fast compare two hash digest and their associated algorithm
-function HashDigestEqual(const a, b: THashDigest): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
+function HashDigestEqual(a, b: PPtrIntArray): boolean;
+
+/// anti-forensic method for a hash digest
+procedure FillZero(var Digest: THashDigest); overload;
 
 /// compute the hexadecimal hash of any (big) file
 // - using a temporary buffer of 1MB for the sequential reading
 function HashFile(const aFileName: TFileName; aAlgo: THashAlgo): RawUtf8; overload;
 
 /// compute one or several hexadecimal hash(es) of any (big) file
-// - using a temporary buffer of 1MB for the sequential reading
+// - using a temporary buffer of 1MB for the sequential one-pass reading
 // - returns the hash in THashAlgo type definition order in aAlgos set
-function HashFileRaw(const aFileName: TFileName; aAlgos: THashAlgos): TRawUtf8DynArray;
+function HashFileRaw(const aFileName: TFileName; aAlgos: THashAlgos;
+  aFileSize: PInt64 = nil): TRawUtf8DynArray;
 
 /// compute the hexadecimal hashe(s) of one file, as external .md5/.sha256/.. files
 // - generate the text hash files in the very same folder
@@ -4672,7 +4675,8 @@ begin
   result := hasher.Full(aAlgo, pointer(aBuffer), length(aBuffer));
 end;
 
-function HashFileRaw(const aFileName: TFileName; aAlgos: THashAlgos): TRawUtf8DynArray;
+function HashFileRaw(const aFileName: TFileName; aAlgos: THashAlgos;
+  aFileSize: PInt64): TRawUtf8DynArray;
 var
   hasher: array of TSynHasher;
   temp: RawByteString;
@@ -4683,6 +4687,8 @@ var
   h: PtrInt;
 begin
   result := nil;
+  if aFileSize <> nil then
+    aFileSize^ := 0;
   if aFileName = '' then
     exit;
   n := 0;
@@ -4702,6 +4708,8 @@ begin
         else
           exit;
     size := FileSize(F);
+    if aFileSize <> nil then
+      aFileSize^ := size;
     tempsize := 1 shl 20; // 1MB temporary buffer for reading seems good enough
     if tempsize > size then
       tempsize := size;
@@ -4716,7 +4724,7 @@ begin
         hasher[h].Update(pointer(temp), read);
       dec(size, read);
     end;
-    SetLength(result, n + 1);
+    SetLength(result, n + 1); // don't return any partial hash result
     for h := 0 to n do
       hasher[h].Final(result[h]);
   finally
@@ -5028,7 +5036,7 @@ begin
     end;
   end;
   if (pos = 0) or
-     (mormot.core.base.StrComp(checksum, PUtf8Char(pointer(h)) + pos - 1) <> 0) then
+     (mormot.core.base.StrComp(checksum, PUtf8Char(pointer({%H-}h)) + pos - 1) <> 0) then
     result := mcfInvalid;
 end;
 
@@ -5298,7 +5306,7 @@ begin
   fLastError := 'invalid Server initial response';
   resp.InitFromPairs(ServerResponse, JSON_FAST, '=', ',');
   if not resp.GetAsRawUtf8('r', fullnonce) or
-     not StartWithExact(fullnonce, fClientNonce) then
+     not StartWithExact(fullnonce{%H-}, fClientNonce) then
     exit;
   if fMcfSupport and
      resp.GetAsRawUtf8('f', mcf) then // SCRAM-MCF extension
@@ -5310,9 +5318,9 @@ begin
       exit; // unsupported Modular Crypt algorithm or invalid prefix
   end
   else if not resp.GetAsRawUtf8('s', s) or
-          not Base64ToBin(pointer(s), length(s), salt) or
+          not Base64ToBin(pointer({%H-}s), length({%H-}s), salt) or
           not resp.GetAsRawUtf8('i', i) or
-          not ToInteger(i, iterations) or
+          not ToInteger(i{%H-}, iterations) or
           (iterations <= 0) or
           (iterations > MAX_PBKDF2_ROUNDS) then // avoid DoS attacks
     // invalid s=... and i=... standard SCRAM parameters
@@ -5322,7 +5330,7 @@ begin
   Join([fAuthMessage, ',', ServerResponse, ',', key], msg);
   if mcf = '' then
   begin
-    fSigner.Pbkdf2(fAlgo, Password, salt, iterations, @salted);
+    fSigner.Pbkdf2(fAlgo, Password, salt{%H-}, iterations, @salted);
     fSigner.Full(fAlgo, @salted, fSize, 'Client Key', @client);
     fSigner.Full(fAlgo, @salted, fSize, 'Server Key', @server);
     FillZero(salted, fSize);
@@ -5514,7 +5522,7 @@ begin
     // F(secret, salt, c, i) = U1 ^ U2 ^ .. ^ Uc  with Uc = PRF(secret, Uc-1)
     MoveFast(aDerivatedKey^, tmp, fSignatureSize);
     repeat
-      MoveFast(bak.ctxt, fHasher.ctxt, HASH_INSTANCE[fHasher.fAlgo]); // restore
+      MoveFast({%H-}bak.ctxt, fHasher.ctxt, HASH_INSTANCE[fHasher.fAlgo]); // restore
       Update(@tmp, fSignatureSize);
       Final(@tmp, {noinit=}true);
       XorMemory(pointer(aDerivatedKey), @tmp, fSignatureSize);
@@ -5537,8 +5545,8 @@ procedure TSynSigner.Pbkdf2(aParamsJson: PUtf8Char; aParamsJsonLen: integer;
   out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUtf8;
   aDefaultAlgo: TSignAlgo);
 var
-  tmp: TSynTempBuffer;
   k: TSynSignerParams;
+  tmp: TSynTempBuffer;
 
   procedure SetDefault;
   begin
@@ -5870,10 +5878,18 @@ begin
       end;
 end;
 
-function HashDigestEqual(const a, b: THashDigest): boolean;
+function HashDigestEqual(a, b: PPtrIntArray): boolean;
 begin
-  result := (a.Algo <= high(THashAlgo)) and
-            mormot.core.base.CompareMem(@a, @b, HASH_SIZE[a.Algo] + 1);
+  result := (a[0] = b[0]) and // compare first 4/8 bytes (much faster in loops)
+            (PHashAlgo(a)^ <= high(THashAlgo)) and // avoid buffer overflow
+     (MemCmp(@a[1], @b[1], HASH_SIZE[PHashAlgo(a)^] - (SizeOf(a[0]) - 1)) = 0);
+end;
+
+procedure FillZero(var Digest: THashDigest);
+begin
+  if Digest.Algo <= high(THashAlgo) then // avoid buffer overflow
+    FillZero(Digest.Bin, HASH_SIZE[Digest.Algo]);
+  Digest.Algo := low(Digest.Algo);
 end;
 
 procedure Hmac(algo: TSignAlgo; key, msg: pointer; keylen, msglen: integer;
@@ -6151,6 +6167,8 @@ begin
   dp.DigestHa0;
   dp.DigestResponse(DigestMethod);
   result := dp.ClientResponse(DigestUriName);
+  FillZero(dp.HA0.b); // Ha0 is a sensitive value
+  FillZero(dp.HA1);
 end;
 
 procedure BasicClient(const UserName: RawUtf8; const Password: SpiUtf8;
@@ -6398,16 +6416,16 @@ end;
 
 function TDigestAuthServer.DigestAlgoMatch(const FromClient: RawUtf8): boolean;
 var
-  p: PUtf8Char;
-  alg: ShortString;
+  p, a: PUtf8Char;
+  l: PtrInt;
 begin
   result := false;
   p := StrPosI('ALGORITHM=', pointer(FromClient));
   if p = nil then
     exit;
   inc(p, 10);
-  GetNextItemShortString(p, @alg);
-  result := IdemPropNameU(DIGEST_NAME[fAlgo], @alg[1], ord(alg[0]));
+  l := GetNextItemTrimedBuffer(p, ',', a);
+  result := IdemPropNameU(DIGEST_NAME[fAlgo], a, l);
 end;
 
 function TDigestAuthServer.DigestAuth(FromClient: PUtf8Char;
@@ -7171,8 +7189,11 @@ begin
 end;
 
 function TSynUniqueIdentifierBits.CreateTimeLog: TTimeLog;
+var
+  bits: TTimeLogBits; // safer with an explicit local variable
 begin
-  PTimeLogBits(@result)^.From(UnixTimeToDateTime(Value shr 31));
+  bits.From(UnixTimeToDateTime(Value shr 31));
+  result := bits.Value;
 end;
 
 function TSynUniqueIdentifierBits.CreateDateTime: TDateTime;
@@ -7257,8 +7278,11 @@ begin
 end;
 
 function TSynUniqueIdentifierGenerator.ComputeNew: Int64;
+var
+  b: TSynUniqueIdentifierBits;
 begin
-  ComputeNew(PSynUniqueIdentifierBits(@result)^);
+  ComputeNew(b);
+  result := b.Value;
 end;
 
 procedure TSynUniqueIdentifierGenerator.ComputeFromDateTime(
@@ -7900,8 +7924,11 @@ begin
 end;
 
 function TCryptRandom.Get32: cardinal;
+var
+  n: cardinal; // safer with a local variable
 begin
-  Get(@result, 4);
+  Get(@n, 4);
+  result := n;
 end;
 
 function TCryptRandom.Get32(max: cardinal): cardinal;
@@ -10775,9 +10802,13 @@ begin
   if aSalt <> '' then
     salt := aSalt
   else if aIsComputer then // see [MS-KILE] 3.1.1.2 Cryptographic Material
-    salt := Join([realm, 'host', name, '.', LowerCaseU(realm)])
+  begin
+    if EndWithExact(name, '$') then
+      SetLength(name, Length(name) - 1);
+    Join([realm, 'host', LowerCaseU(name), '.', LowerCaseU(realm)], salt);
+  end
   else
-    salt := Join([realm, name]);
+    Join([realm, name], salt);
   aEntry.Key := MakeKerberosKey(aPassword, salt, aEncType, aIterations);
   result := aEntry.Key <> '';
 end;
@@ -11047,7 +11078,7 @@ function ParsedToText(const c: TX509Parsed): RawUtf8;
   begin
     for cu := l to h do
       if cu in c.Usage then
-        AddToCsv(CU_FULLTEXT[cu], usage, ', ');
+        AddToCsv(CU_FULLTEXT[cu], usage{%H-}, ', ');
     if usage <> '' then
       result := result +   '    X509v3 ' + ext + #13#10 +
                            '      ' + usage + #13#10;

@@ -2814,8 +2814,6 @@ begin
       EMongoException.RaiseUtf8('%.Open unable to connect to MongoDB server %: % [%]',
         [self, Client.ConnectionString, E, E.Message]);
   end;
-  fSocket.TcpNoDelay := true; // we buffer all output data before sending
-  fSocket.KeepAlive := true;  // do not close the connection without notice
 end;
 
 function TMongoConnection.GetOpened: boolean;
@@ -3600,8 +3598,12 @@ begin
 end;
 
 function MongoPasswordDigest(const UserName, Password: RawUtf8): RawUtf8;
+var
+  key: RawUtf8;
 begin
-  result := Md5(UserName + ':mongo:' + Password);
+  Join([UserName, ':mongo:', Password], key);
+  result := Md5(key);
+  FillZero(key);
 end;
 
 function TMongoClient.OpenAuth(const DatabaseName, UserName, PassWord: RawUtf8;
@@ -3656,7 +3658,7 @@ procedure TMongoClient.DoAuth(const DatabaseName, UserName, Password: RawUtf8;
 var
   conn: TMongoConnection;
   res, bson: variant;
-  err, nonce, key, mech: RawUtf8;
+  err, nonce, key0, key1, mech: RawUtf8;
   payload: RawByteString;
   sc: TScramClient;
 
@@ -3693,15 +3695,17 @@ begin
     if err <> '' then
       EMongoException.RaiseUtf8('%.OpenAuthCR("%") step1: % - res=%',
         [self, DatabaseName, err, res]);
-    mech := MongoPasswordDigest(UserName, Password);
-    Join([nonce, UserName, mech], key);
-    FillZero(mech);
+    key0 := MongoPasswordDigest(UserName, Password);
+    Join([nonce, UserName, key0], key1);
+    FillZero(key0);
+    key0 := Md5(key1);
     bson := BsonVariant([
       'authenticate', 1,
       'user',         UserName,
       'nonce',        nonce,
-      'key',          Md5(key)]);
-    FillZero(key);
+      'key',          key0]);
+    FillZero(key0);
+    FillZero(key1);
     err := conn.RunCommand(DatabaseName, bson, res);
     if err <> '' then
       EMongoException.RaiseUtf8('%.OpenAuthCR("%") step2: % - res=%',
@@ -3740,14 +3744,14 @@ begin
     ExtractPayload;
     if err = '' then
     begin
-      key := sc.ComputeFinalMessage(payload, Password);
-      if key = '' then
+      key1 := sc.ComputeFinalMessage(payload, Password);
+      if key1 = '' then
         err := sc.LastError;
     end;
     if err <> '' then
       EMongoException.RaiseUtf8('%.OpenAuth%("%") step1: % - res=% as %',
         [self, mech, DatabaseName, err, res, payload]);
-    BsonVariantType.FromBinary(key, bbtGeneric, bson);
+    BsonVariantType.FromBinary(key1, bbtGeneric, bson);
     (* SEND
     {
       "saslContinue": 1,
@@ -4003,7 +4007,7 @@ begin
     // 2) better not set any mechanism to force SCRAM-SHA-256 on MongoDB >= 4.x
     usr.InitObject([
       'createUser',     UserName,
-      'pwd',            Password, // will be hashed server side
+      'pwd',            Password, // will be hashed server side - assume TLS
       'roles',          roles], JSON_FAST);
   result := RunCommand(variant(usr), res);
 end;

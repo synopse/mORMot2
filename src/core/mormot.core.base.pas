@@ -502,6 +502,7 @@ type
   TByteToWideChar = array[byte] of WideChar;
   /// type of mormot.core.unicode TNormTable lookup table
   TAnsiCharToAnsiChar = array[AnsiChar] of AnsiChar;
+  PAnsiCharToAnsiChar = ^TAnsiCharToAnsiChar;
   /// type of a lookup table used for fast two-digit chars conversion
   TAnsiCharToWord = array[AnsiChar] of word;
   PAnsiCharToWord = ^TAnsiCharToWord;
@@ -604,6 +605,7 @@ type
 
   /// used to serialize up to 128-bit binary as hexadecimal
   TShort32 = string[32];
+  PShort32 = ^TShort32;
 
   /// 32-bytes aligned shortstring - e.g. for SetThreadName
   TShort31 = string[31];
@@ -689,7 +691,7 @@ type
         {$endif STRCNT32}
         {$endif HASCODEPAGE}
         refCnt: TStrCnt; // =SizeInt on older FPC, =integer since FPC 3.4
-        length: TStrLen;
+        length: TStrLen; // =SizeInt on FPC, =integer on Delphi
       );
     {$ifdef HASCODEPAGE}
     1: (
@@ -747,6 +749,13 @@ type
 
   PStrRec = ^TStrRec;
   PDynArrayRec = ^TDynArrayRec;
+
+  /// store a fake RawUtf8 constant string with up to 7 chars
+  TStrRecConst = record
+    Header: TStrRec;
+    Text: array[0 .. 7] of AnsiChar;
+  end;
+  PStrRecConst = ^TStrRecConst;
 
 const
   /// codePage offset = string header size
@@ -815,6 +824,7 @@ const
   GUID_NULL: TGuid = '{00000000-0000-0000-0000-000000000000}';
 
   NULL_LOW   = ord('n') + ord('u') shl 8 + ord('l') shl 16 + ord('l') shl 24;
+  NULL_HI    = ord('N') + ord('U') shl 8 + ord('L') shl 16 + ord('L') shl 24;
   FALSE_LOW  = ord('f') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24;
   FALSE_LOW2 = ord('a') + ord('l') shl 8 + ord('s') shl 16 + ord('e') shl 24;
   TRUE_LOW   = ord('t') + ord('r') shl 8 + ord('u') shl 16 + ord('e') shl 24;
@@ -869,11 +879,16 @@ function IsNullGuid({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif} guid: 
 /// swap the endianness TGuid members, i.e. D1/D2/D2 with bswap32/bswap16/bswap16
 procedure SwapGuid(var result: TGuid);
 
+/// find one TGuid item in a TGuid dynamic array - redirect to Hash128Index()
+function FindGuid(const guids: TGuidDynArray; {$ifdef FPC_HAS_CONSTREF}constref{$else}
+  const{$endif} guid: TGuid): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// append one TGuid item to a TGuid dynamic array
 // - returning the newly inserted index in guids[], or an existing index in
 // guids[] if NoDuplicates is TRUE and TGuid already exists
 function AddGuid(var guids: TGuidDynArray; {$ifdef FPC_HAS_CONSTREF}constref{$else}
-  const{$endif} guid: TGuid; NoDuplicates: boolean = false): integer;
+  const{$endif} guid: TGuid; NoDuplicates: boolean = false): PtrInt;
 
 /// fast O(log(n)) binary search of a binary (e.g. TGuid) value in a sorted array
 function FastFindBinarySorted(P, Value: PByteArray; Size, R: PtrInt): PtrInt;
@@ -940,6 +955,12 @@ procedure FastAssignNewNotVoid(var d; s: pointer = nil); overload;
 // - caller should fill the pointer result, and eventually call FastAssignNew()
 function FastNewString(len: PtrInt; codepage: PtrInt = CP_RAWBYTESTRING): pointer;
   {$ifdef HASSAFEFPCINLINE}inline;{$endif}
+
+procedure FastSetStrRec(var Rec: TStrRec; Len: TStrLen);
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fill a RawUtf8 constant with up to 7 chars of UTF-8 content
+function FastSetConst(var S; var Rec: TStrRecConst; P: pointer; Len: TStrLen): PUtf8Char;
 
 /// ensure the supplied variable will have a CP_UTF8 code page
 // - making it unique if needed
@@ -1766,6 +1787,9 @@ function QWordScanIndex(P: PQWordArray; Count: PtrInt; const Value: QWord): PtrI
 // - returns false if Value was not found
 function Int64ScanExists(P: PInt64Array; Count: PtrInt; const Value: Int64): boolean;
 
+/// allocate and copy a dest[] array of byte if all i64[] are <= 255
+procedure Int64ArrayShrink(i64: PInt64Array; n: PtrInt; out dest: TByteDynArray);
+
 /// fast search of a pointer-sized unsigned integer position
 // in an pointer-sized integer array
 // - Count is the number of pointer-sized integer entries in P^
@@ -2485,6 +2509,9 @@ type
   end;
   /// pointer to 128-bit hash map variable record
   PHash128Rec = ^THash128Rec;
+
+  /// store several 160-bit hash values
+  THash160DynArray = array of THash160;
 
   /// map an infinite array of 256-bit hash values
   // - each item consumes 32 bytes of memory
@@ -3281,6 +3308,11 @@ function PosChar(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char; overload;
 function PosChar(Str: PUtf8Char; StrLen: PtrInt; Chr: AnsiChar): PUtf8Char; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// fast retrieve the position of a given character or a #0 in a buffer
+// - will use fast SSE2 asm on x86_64
+function PosChar0(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char;
+  {$ifndef ASMX64}{$ifdef FPC}inline;{$endif}{$endif}
+
 /// fast retrieve the pointer of a given character in a UTF-8 string
 // - will use fast SSE2 asm on x86_64
 function PosCharU(const Str: RawUtf8; Chr: AnsiChar): PUtf8Char;
@@ -3307,8 +3339,10 @@ procedure TrimU(const S: RawUtf8; var Dest: RawUtf8); overload;
 procedure TrimSelf(var S: RawUtf8);
 
 /// single-allocation (therefore faster) alternative to Trim(copy())
-procedure TrimCopy(const S: RawUtf8; start, count: PtrInt;
-  var result: RawUtf8);
+procedure TrimCopy(const S: RawUtf8; start, count: PtrInt; var result: RawUtf8);
+
+/// internal function used by TrimCopy/TrimLeftCopy/TrimRightCopy wrappers
+procedure TrimCopyAssign(P: PAnsiChar; start, len: PtrInt; var result: RawUtf8);
 
 /// faster dedicated RawUtf8 version of delete(s, 1, 1) to avoid realloc
 procedure TrimFirstChar(var S: RawUtf8);
@@ -3516,6 +3550,10 @@ function bswap16(a: cardinal): cardinal;
 function bswap32(a: cardinal): cardinal;
   {$ifndef ASMINTEL}inline;{$endif}
 
+/// convert the endianness of a given unsigned integer from 0..4 bytes input
+function bswapN(b: PByte; len: cardinal): cardinal;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// in-place convert the endianness of several unsigned 32-bit integers
 // - n is required to be > 0
 procedure bswap32array(a: PCardinalArray; n: PtrInt);
@@ -3670,7 +3708,7 @@ type
     function InitIncreasing(Count: PtrInt; Start: PtrInt = 0): PIntegerArray;
     /// initialize a new temporary buffer of a given number of zero bytes
     // - if ZeroLen=0, will initialize the whole tmp[] stack buffer to 0
-    function InitZero(ZeroLen: PtrInt): pointer;
+    function InitZero(ZeroLen: PtrInt = 0): pointer;
     /// inlined wrapper around buf + len
     function BufEnd: pointer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -3691,7 +3729,7 @@ type
   TSynTempAdder = object
   {$endif USERECORDWITHMETHODS}
   private
-    procedure AddRealloc(new: PtrInt);
+    procedure AddRealloc(new: integer);
   public
     /// direct access to the internal 4KB temporary buffer
     Store: TSynTempBuffer;
@@ -3701,7 +3739,7 @@ type
     procedure Init(StartupCapacity: PtrInt); overload;
     /// prepare to append some bytes to the internal buffer
     // - returns the destination buffer where l bytes should be written
-    function Add(l: PtrInt): pointer; overload;
+    function Add(l: integer): pointer; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append some bytes to the internal buffer
     // - making a buffer reallocation if needed
@@ -3710,6 +3748,9 @@ type
     /// append some bytes to the internal buffer
     // - making a buffer reallocation if needed
     procedure Add(const s: RawByteString); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// add one AnsiChar to the internal buffer
+    procedure Add(c: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append some bytes to the internal buffer
     // - making a buffer reallocation if needed
@@ -4021,6 +4062,9 @@ var
 // - so the hash value may change on another computer or after program restart
 function DefaultHash(const s: RawByteString; crc: cardinal = 0): cardinal; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// compute a 32-bit hash of Trim(string) using DefaultHasher()
+function DefaultHashTrim(const s: RawByteString; crc: cardinal = 0): cardinal;
 
 /// compute a 32-bit hash of any array of bytes using DefaultHasher()
 // - so the hash value may change on another computer or after program restart
@@ -4476,8 +4520,8 @@ procedure ExchgPointer(n1, n2: PPointer);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// low-level inlined function for exchanging two sets of pointers
-// - used e.g. during sorting process
-procedure ExchgPointers(n1, n2: PPointer; count: PtrInt);
+// - used e.g. during sorting process - requires count >= 1
+procedure ExchgPointers(n1, n2: PPointer; count: integer);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// low-level inlined function for exchanging two variants
@@ -4863,8 +4907,11 @@ begin
 end;
 
 function DoubleToCurrency(const d: double): currency;
+var
+  curr: currency; // safer with an explicit local variable
 begin
-  PInt64(@result)^ := trunc(d * CURR_RES);
+  PInt64(@curr)^ := trunc(d * CURR_RES);
+  result := curr;
 end;
 
 {$endif CPUX86}
@@ -4881,9 +4928,12 @@ begin
 end;
 
 function SimpleRoundTo2Digits(const Value: Currency): Currency;
+var
+  curr: currency; // safer with an explicit local variable
 begin
-  result := Value;
-  SimpleRoundTo2DigitsCurr64(PInt64(@result)^);
+  curr := Value;
+  SimpleRoundTo2DigitsCurr64(PInt64(@curr)^);
+  result := curr;
 end;
 
 procedure SimpleRoundTo2DigitsCurr64(var Value: Int64);
@@ -4971,12 +5021,18 @@ begin
   result.D3 := bswap16(result.D3);
 end; // result.D4 bytes are kept as-is
 
+function FindGuid(const guids: TGuidDynArray; {$ifdef FPC_HAS_CONSTREF}constref{$else}
+  const{$endif} guid: TGuid): PtrInt;
+begin
+  result := Hash128Index(pointer(guids), length(guids), @guid);
+end;
+
 function AddGuid(var guids: TGuidDynArray; {$ifdef FPC_HAS_CONSTREF}constref{$else}
-  const{$endif} guid: TGuid; NoDuplicates: boolean): integer;
+  const{$endif} guid: TGuid; NoDuplicates: boolean): PtrInt;
 begin
   if NoDuplicates then
   begin
-    result := Hash128Index(pointer(guids), length(guids), @guid);
+    result := Hash128Index(pointer(guids), length(guids), @guid); // = FindGuid()
     if result >= 0 then
       exit;
   end;
@@ -5292,6 +5348,29 @@ begin
     FastAssignNewNotVoid(s, result);
 end;
 
+procedure FastSetStrRec(var Rec: TStrRec; Len: TStrLen);
+begin
+  {$ifdef HASCODEPAGE}
+  {$ifdef FPC}
+  Rec.codePageElemSize := CP_UTF8 + (1 shl 16);
+  {$else}
+  PCardinal(@Rec.codePage)^ := cardinal(CP_UTF8) + (1 shl 16);
+  {$endif FPC}
+  {$endif HASCODEPAGE}
+  Rec.refCnt := -1; // make it constant, out of the MM allocation space
+  Rec.length := Len;
+end;
+
+function FastSetConst(var S; var Rec: TStrRecConst; P: pointer; Len: TStrLen): PUtf8Char;
+begin
+  FastSetStrRec(Rec.Header, Len);
+  result := @Rec.Text;
+  if P <> nil then
+    PInt64(result)^ := PInt64(P)^; // up to 7 chars
+  result[Len] := #0;
+  pointer(S) := result;
+end;
+
 {$ifdef HASVARUSTRING}
 procedure FastSynUnicode(var s: SynUnicode; p: pointer; len: PtrInt);
 var
@@ -5307,7 +5386,7 @@ begin
   {$ifdef FPC}
   rec^.codePageElemSize := CP_UTF16 + (SizeOf(WideChar) shl 16);
   {$else}
-  PCardinal(@rec^.codePage)^ := CP_UTF16 + (SizeOf(WideChar) shl 16);
+  PCardinal(@rec^.codePage)^ := cardinal(CP_UTF16) + (SizeOf(WideChar) shl 16);
   {$endif FPC}
   rec^.refCnt := 1;
   rec^.length := len shr 1; // length as WideChar count
@@ -5760,7 +5839,8 @@ begin
     if (PStrLen(p1 - _STRLEN)^ = len) and // same length
        (p1^ = p2^) then // we can safely compare the first char
     begin
-      if len = 1 then
+      if (len = 1) or
+         (p1 = p2) then // if string was interned
         exit;
       l := @p1[len - SizeOf(PtrInt)];
       inc(p1);
@@ -5800,7 +5880,8 @@ begin
     if (PStrLen(p1 - _STRLEN)^ = len) and          // same length
        ((ord(p1^) xor ord(p2^)) and $df = 0) then  // same first char
     begin
-      if len = 1 then
+      if (len = 1) or
+         (p1 = p2) then // if string was interned
         exit;
       l := @p1[len - SizeOf(cardinal)];
       inc(p1);
@@ -5845,17 +5926,17 @@ begin
     result := FindPropName(@Names[0], Name, result + 1);
 end;
 
-function Hex2Dec(c: AnsiChar): ShortInt; {$ifdef HASINLINE} inline; {$endif}
+function Hex2Dec(c: AnsiChar): integer; {$ifdef HASINLINE} inline; {$endif}
 begin
   result := ord(c);
-  case c of // fast enough for a few chars
-    '#':
+  case result of // fast enough for a few chars
+    ord('#'):
       result := 0; // handle '#' as '0' within the hexadecimal buffer
-    '0'..'9':
+    ord('0') .. ord('9'):
       dec(result, ord('0'));
-    'A'..'Z':
+    ord('A') .. ord('Z'):
       dec(result, ord('A') - 10);
-    'a'..'z':
+    ord('a') .. ord('z'):
       dec(result, ord('a') - 10);
   else
     result := -1;
@@ -7213,6 +7294,18 @@ end;
 function QWordScanIndex(P: PQWordArray; Count: PtrInt; const Value: QWord): PtrInt;
 begin
   result := Int64ScanIndex(pointer(P), Count, Value); // this is the very same code
+end;
+
+procedure Int64ArrayShrink(i64: PInt64Array; n: PtrInt; out dest: TByteDynArray);
+var
+  i: PtrInt;
+begin
+  for i := 0 to n - 1 do
+    if i64[i] > 255 then
+      exit;
+  SetLength(dest, n);
+  for i := 0 to n - 1 do
+    dest[i] := i64[i];
 end;
 
 {$ifdef CPU64}
@@ -9951,8 +10044,19 @@ begin
 end;
 {$endif PUREMORMOT2}
 
-procedure TrimCopy(const S: RawUtf8; start, count: PtrInt;
-  var result: RawUtf8); // faster alternative to TrimU(copy())
+procedure TrimCopyAssign(P: PAnsiChar; start, len: PtrInt; var result: RawUtf8);
+begin // caller ensured P <> nil and points to original S: RawUtf8
+  if len > 0 then
+    if (start = 0) and
+       (len = PStrLen(P - _STRLEN)^) then
+      result := RawUtf8(pointer(P)) // no memory allocation needed
+    else
+      FastSetString(result, P + start, len)
+  else
+    FastAssignNew(result); // done last because result could point to S
+end;
+
+procedure TrimCopy(const S: RawUtf8; start, count: PtrInt; var result: RawUtf8);
 var
   len: PtrInt;
 begin
@@ -9962,27 +10066,24 @@ begin
       start := 1;
     len := Length(S);
     while (start <= len) and
-          (S[start] <= ' ') do
+          (S[start] <= ' ') do // trim left
     begin
       inc(start);
       dec(count);
     end;
     dec(start);
-    dec(len,start);
+    dec(len, start);
     if count < len then
       len := count;
     while len > 0 do
-      if S[start + len] <= ' ' then
+      if S[start + len] <= ' ' then // trim right
         dec(len)
       else
         break;
-    if len > 0 then
-    begin
-      FastSetString(result, @PByteArray(S)[start], len);
-      exit;
-    end;
-  end;
-  FastAssignNew(result); // done last becase result could point to S
+  end
+  else
+    len := 0;
+  TrimCopyAssign(pointer(S), start, len, result);
 end;
 
 function Split(const Str, SepStr: RawUtf8; StartPos: PtrInt): RawUtf8;
@@ -10252,6 +10353,20 @@ begin
   result := ((a and 255) shl 8) or (a shr 8);
 end;
 
+function bswapN(b: PByte; len: cardinal): cardinal;
+begin
+  result := 0;
+  if len > 0 then
+    repeat
+      inc(result, b^);
+      dec(len);
+      if len = 0 then
+        break;
+      inc(b);
+      result := result shl 8;
+    until false;
+end;
+
 procedure MoveSwap(dst, src: PByte; n: PtrInt);
 begin
   if n <= 0 then
@@ -10405,9 +10520,12 @@ begin
 end;
 
 function TLecuyer.NextQWord: QWord;
+var
+  q: TQWordRec;
 begin
-  PQWordRec(@result)^.L := Next;
-  PQWordRec(@result)^.H := Next;
+  q.L := Next;
+  q.H := RawNext;
+  result := q.V;
 end;
 
 function TLecuyer.NextDouble: double;
@@ -10800,12 +10918,12 @@ begin
     ERMSB_MIN_SIZE_FWD := 4096; // "on 32-bit strings have to be at least 4KB"
     // backward rep movsd has no ERMS optimization so degrades performance
   {$endif WITH_ERMS}
-  {$endif HASNOSSE2}
   if cfSSE2 in CpuFeatures then
   begin
     StrLen  := @StrLenSSE2;
     StrLenW := @StrLenWSSE2;
   end;
+  {$endif HASNOSSE2}
   {$endif ASMX86NOTPIC}
 end;
 
@@ -11584,6 +11702,15 @@ begin
   result := Str;
 end;
 
+function PosChar0(Str: PUtf8Char; Chr: AnsiChar): PUtf8Char;
+begin
+  if Str <> nil then
+    while (Str^ <> #0) and
+          (Str^ <> Chr) do
+      inc(Str);
+  result := Str;
+end;
+
 function MemCmp(P1, P2: PByteArray; L: PtrInt): integer;
 begin
   // caller ensured that P1<>nil, P2<>nil and L>0 -> aggressively inlined asm
@@ -12242,12 +12369,20 @@ begin
   end;
 end;
 
+function TSynTempBuffer.Init: integer;
+begin
+  added := 0;
+  buf := @tmp;
+  result := SizeOf(tmp) - SYNTEMPTRAIL; // set to 4080 bytes = maximum safe size
+  len := result;
+end;
+
 function TSynTempBuffer.InitOnStack: pointer;
 begin
   len := SizeOf(tmp) - SYNTEMPTRAIL;
   added := 0;
-  result := @tmp;
-  buf := result;
+  buf := @tmp; 
+  result := buf;
 end;
 
 procedure TSynTempBuffer.Init(const Source: RawByteString);
@@ -12276,14 +12411,6 @@ begin
     PPtrInt(PAnsiChar(buf) + SourceLen)^ := 0; // init last 4/8 bytes
   end;
   result := buf;
-end;
-
-function TSynTempBuffer.Init: integer;
-begin
-  added := 0;
-  buf := @tmp;
-  result := SizeOf(tmp) - SYNTEMPTRAIL; // set to 4080 bytes = maximum safe size
-  len := result;
 end;
 
 function TSynTempBuffer.InitIncreasing(Count, Start: PtrInt): PIntegerArray;
@@ -12329,7 +12456,7 @@ end;
 
 procedure TSynTempAdder.Init;
 begin
-  Store.InitOnStack;
+  Store.Init;
 end;
 
 procedure TSynTempAdder.Init(StartupCapacity: PtrInt);
@@ -12337,9 +12464,9 @@ begin
   Store.Init(StartupCapacity);
 end;
 
-procedure TSynTempAdder.AddRealloc(new: PtrInt);
+procedure TSynTempAdder.AddRealloc(new: integer);
 begin
-  Store.len := NextGrow(new);
+  Store.len := NextGrow(new); // len is capacity here
   if Store.buf = @Store.tmp then
   begin
     GetMem(Store.buf, Store.len + SYNTEMPTRAIL);
@@ -12349,7 +12476,7 @@ begin
     ReallocMem(Store.buf, Store.len + SYNTEMPTRAIL);
 end;
 
-function TSynTempAdder.Add(l: PtrInt): pointer;
+function TSynTempAdder.Add(l: integer): pointer;
 var
   new: integer;
 begin
@@ -12364,6 +12491,14 @@ procedure TSynTempAdder.Add(p: pointer; l: PtrInt);
 begin
   if l > 0 then
     MoveFast(p^, Add(l)^, l);
+end;
+
+procedure TSynTempAdder.Add(c: AnsiChar);
+begin
+  if Store.added >= Store.len then
+    AddRealloc(Store.added);
+  PUtf8Char(Store.buf)[Store.added] := c;
+  inc(Store.added);
 end;
 
 procedure TSynTempAdder.Add(const s: RawByteString);
@@ -12596,21 +12731,30 @@ end;
 {$endif HASINLINE}
 
 function crc64c(buf: PAnsiChar; len: cardinal): Int64;
+var
+  q: TQWordRec;
 begin
-  PQWordRec(@result)^.L := crc32c(0, buf, len);
-  PQWordRec(@result)^.H := crc32c(PQWordRec(@result)^.L, buf, len);
+  q.L := crc32c(0, buf, len);
+  q.H := crc32c(q.L, buf, len);
+  result := q.V;
 end;
 
 function crc32cTwice(seed: QWord; buf: PAnsiChar; len: cardinal): QWord;
+var
+  q: TQWordRec;
 begin
-  PQWordRec(@result)^.L := crc32c(PQWordRec(@seed)^.L, buf, len);
-  PQWordRec(@result)^.H := crc32c(PQWordRec(@seed)^.H, buf, len);
+  q.L := crc32c(PQWordRec(@seed)^.L, buf, len);
+  q.H := crc32c(PQWordRec(@seed)^.H, buf, len);
+  result := q.V;
 end;
 
 function crc63c(buf: PAnsiChar; len: cardinal): Int64;
+var
+  q: TQWordRec;
 begin
-  PQWordRec(@result)^.L := crc32c(0, buf, len);
-  PQWordRec(@result)^.H := crc32c(PQWordRec(@result)^.L, buf, len) and $7fffffff;
+  q.L := crc32c(0, buf, len);
+  q.H := crc32c(q.L, buf, len) and $7fffffff;
+  result := q.V;
 end;
 
 procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);
@@ -12703,6 +12847,28 @@ end;
 function DefaultHash(const s: RawByteString; crc: cardinal): cardinal;
 begin
   result := DefaultHasher(crc, pointer(s), length(s));
+end;
+
+function DefaultHashTrim(const s: RawByteString; crc: cardinal): cardinal;
+var
+  p: PAnsiChar;
+  l: PtrInt;
+begin
+  p := pointer(s);
+  l := length(s);
+  if p <> nil then
+  begin
+    while (l > 0) and
+          (p^ <= ' ') do // trim left in-place
+    begin
+      inc(p);
+      dec(l);
+    end;
+    while (l > 0) and
+          (p[l - 1] <= ' ') do // trim right in-place
+      dec(l);
+  end;
+  result := DefaultHasher(crc, p, l);
 end;
 
 function DefaultHash(const b: TBytes; crc: cardinal): cardinal;
@@ -13701,7 +13867,7 @@ begin
   n1^ := n;
 end;
 
-procedure ExchgPointers(n1, n2: PPointer; count: PtrInt);
+procedure ExchgPointers(n1, n2: PPointer; count: integer);
 var
   n: pointer;
 begin

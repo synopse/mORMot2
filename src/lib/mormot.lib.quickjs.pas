@@ -3420,8 +3420,8 @@ end;
 
 function TJSContext.FromW(P: PWideChar; Len: PtrInt): JSValue;
 var
+  W: PtrInt;
   tmp: TSynTempBuffer; // avoid most memory allocations
-  W: integer;
 begin
   if (P = nil) or (Len = 0) then
     result := From(nil, 0)

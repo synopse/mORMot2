@@ -32,7 +32,7 @@ procedure TChatCallback.NotifyBlaBla(const pseudo, msg: string);
 begin
   TextColor(ccLightBlue);
   writeln(#13'@',pseudo,' ',msg);
-  TextColor(ccLightGray);
+  TextColor(ccDefault);
   write('>');
 end;
 
@@ -60,7 +60,7 @@ begin
       writeln('Please enter your name, then press [Enter] to join the chat');
       writeln('Enter a void line to quit');
       write('@');
-      TextColor(ccLightGray);
+      TextColor(ccDefault);
       readln(pseudo);
       if pseudo = '' then
         exit;
@@ -70,7 +70,7 @@ begin
       writeln('Please type a message, then press [Enter]');
       writeln('Enter a void line to quit');
       repeat
-        TextColor(ccLightGray);
+        TextColor(ccDefault);
         write('>');
         readln(msg);
         if msg='' then

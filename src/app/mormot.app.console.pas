@@ -79,7 +79,7 @@ type
     /// write some console text, with an optional color
     // - will output the text even if NoPrompt is TRUE
     procedure Text(const Fmt: RawUtf8; const Args: array of const;
-      Color: TConsoleColor = ccLightGray);
+      Color: TConsoleColor = ccDefault);
   end;
 
   /// a class to process the command line switches, with console interactivity
@@ -152,7 +152,7 @@ type
     // - will output the text even if NoPrompt=TRUE, but not if NoConsole=TRUE
     // - will append the text to the internal storage, available from ConsoleText
     procedure Text(const Fmt: RawUtf8; const Args: array of const;
-      Color: TConsoleColor = ccLightGray);
+      Color: TConsoleColor = ccDefault);
     /// returns the UTF-8 text as inserted by Text() calls
     // - line feeds will be included to the ConsoleLines[] values
     function ConsoleText(const LineFeed: RawUtf8 = CRLF): RawUtf8;
@@ -299,7 +299,7 @@ begin
      (Prompt = '') or
      not HasConsole then
     exit;
-  TextColor(ccLightGray);
+  TextColor(ccDefault);
   {$I-}
   writeln(Prompt);
   if ioresult <> 0 then
@@ -314,7 +314,7 @@ begin
   writeln;
   ioresult;
   {$I+}
-  TextColor(ccLightGray);
+  TextColor(ccDefault);
   TrimSelf(result);
   if result = '' then
     result := Default;

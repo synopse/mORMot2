@@ -24,7 +24,7 @@
       <UseVersionInfo Value="True"/>
       <AutoIncrementBuild Value="True"/>
       <MajorVersionNr Value="2"/>
-      <BuildNr Value="640"/>
+      <BuildNr Value="681"/>
       <Language Value="0407"/>
       <StringTable CompanyName="martindoyle"/>
     </VersionInfo>
@@ -234,8 +234,9 @@
 -dFPCMM_DEBUG
 -dFPCMM_REPORTMEMORYLEAKS
 -dPUREMORMOT2
--dFPCMM_SERVER"/>
-            <OtherDefines Count="7">
+-dFPCMM_SERVER
+-dFPCUSEVERSIONINFO"/>
+            <OtherDefines Count="8">
               <Define0 Value="FPC_NO_DEFAULT_MEMORYMANAGER"/>
               <Define1 Value="FPC_X64MM"/>
               <Define2 Value="FPCMM_DEBUG"/>
@@ -243,6 +244,7 @@
               <Define4 Value="PUREMORMOT2"/>
               <Define5 Value="FPCMM_SERVER"/>
               <Define6 Value="FPCMM_ASSUMEMULTITHREAD"/>
+              <Define7 Value="FPCUSEVERSIONINFO"/>
             </OtherDefines>
           </Other>
         </CompilerOptions>
@@ -905,6 +907,22 @@
         <UnitName Value="rgDtoTypes"/>
       </Unit>
       <Unit>
+        <Filename Value="rgServiceInterfaces.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="rgConfig.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="rgServiceImplementation.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="rgServer.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
         <Filename Value="rgclient.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="rgClient"/>
@@ -955,6 +973,10 @@
         <Filename Value="Components/mdforms.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="MdForms"/>
+      </Unit>
+      <Unit>
+        <Filename Value="Components/mdDates.pas"/>
+        <IsPartOfProject Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="rgReportBase.pas"/>
@@ -1034,10 +1056,12 @@
         <ShowHints Value="False"/>
       </Verbosity>
       <CustomOptions Value="-dPUREMORMOT2
--dDEBUG"/>
-      <OtherDefines Count="2">
+-dDEBUG
+-dFPCUSEVERSIONINFO"/>
+      <OtherDefines Count="3">
         <Define0 Value="PUREMORMOT2"/>
         <Define1 Value="DEBUG"/>
+        <Define2 Value="FPCUSEVERSIONINFO"/>
       </OtherDefines>
     </Other>
   </CompilerOptions>

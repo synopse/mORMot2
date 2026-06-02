@@ -1002,11 +1002,15 @@ begin
 end;
 
 function TRestOrmClientUri.ServerInternalState: cardinal;
+var
+  status: cardinal;
 begin
   if (self = nil) or
      (fModel = nil) or // avoid GPF
-     (Uri(fModel.Root, 'STATE', nil, nil, nil, @result) <> HTTP_SUCCESS) then
-    result := cardinal(-1);
+     (Uri(fModel.Root, 'STATE', nil, nil, nil, @status) <> HTTP_SUCCESS) then
+    result := cardinal(-1)
+  else
+    result := status;
 end;
 
 function TRestOrmClientUri.UpdateFromServer(const Data: array of TObject;

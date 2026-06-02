@@ -2223,7 +2223,8 @@ begin
   begin
     fSession.IDHexa8 := CardinalToHexLower(fSession.ID);
     fSession.PrivateKey := crc32(0, pointer(aSessionKey), length(aSessionKey));
-    if aUser.PasswordHashHexa <> '#' then // ignore the SCRAM DB value
+    if (aUser.PasswordHashHexa <> '') and      // e.g. Kerberos
+       (aUser.PasswordHashHexa[1] <> '#') then // e.g. SCRAM DB value
       fSession.PrivateKey := crc32(fSession.PrivateKey,
         pointer(aUser.PasswordHashHexa), length(aUser.PasswordHashHexa));
   end;

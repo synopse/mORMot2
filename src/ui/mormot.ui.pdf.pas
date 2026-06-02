@@ -7608,7 +7608,7 @@ end;
 
 function TPdfDocument.GetTrueTypeFontIndex(const AName: RawUtf8): integer;
 begin
-  if StrIComp(pointer(fTrueTypeFontLastName), pointer(AName)) = 0 then
+  if StrIEqual(pointer(fTrueTypeFontLastName), pointer(AName)) then
   begin
     result := fTrueTypeFontLastIndex; // simple but efficient cache
     exit;

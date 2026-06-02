@@ -1461,7 +1461,7 @@ end;
 function OpenSslGenerateKeys(EvpType, BitsOrCurve: integer): PEVP_PKEY;
 var
   ctx, kctx: PEVP_PKEY_CTX;
-  par: PEVP_PKEY;
+  par, key: PEVP_PKEY;
   ctrl: integer;
 begin
   result := nil;
@@ -1470,6 +1470,7 @@ begin
   if ctx <> nil then
   try
     // see https://wiki.openssl.org/index.php/EVP_Key_and_Parameter_Generation
+    key := nil;
     case EvpType of
       EVP_PKEY_EC,
       EVP_PKEY_DSA,
@@ -1494,7 +1495,7 @@ begin
             EOpenSsl.Check(-1);
           try
             EOpenSsl.Check(EVP_PKEY_keygen_init(kctx));
-            EOpenSsl.Check(EVP_PKEY_keygen(kctx, @result));
+            EOpenSsl.Check(EVP_PKEY_keygen(kctx, @key));
           finally
             EVP_PKEY_CTX_free(kctx);
           end;
@@ -1510,11 +1511,12 @@ begin
               EOpenSsl.Check(EVP_PKEY_CTX_ctrl(ctx, EvpType, EVP_PKEY_OP_KEYGEN,
                 EVP_PKEY_CTRL_RSA_KEYGEN_BITS, BitsOrCurve, nil));
           end;
-          EOpenSsl.Check(EVP_PKEY_keygen(ctx, @result));
-        end
+          EOpenSsl.Check(EVP_PKEY_keygen(ctx, @key));
+        end;
       else
         exit; // unsupported type (yet)
     end;
+    result := key;
   finally
     EVP_PKEY_CTX_free(ctx);
   end;
@@ -1991,13 +1993,17 @@ end;
 function TJwtOpenSsl.ComputeSignature(const headpayload: RawUtf8): RawUtf8;
 var
   sig: RawByteString;
+  tmp: ShortString;
 begin
   if fPrivKey = nil then
     fPrivKey := LoadPrivateKey(fPrivateKey, fPrivateKeyPassword);
   sig := fPrivKey^.Sign(fAlgoMd, pointer(headpayload), length(headpayload));
   if sig = '' then
+  begin
+    OpenSSL_error_short(ERR_get_error, tmp);
     EJwtException.RaiseUtf8('%.ComputeSignature: OpenSslSign % failed [%]',
-      [self, fAlgorithm, OpenSSL_error_short(ERR_get_error)]);
+      [self, fAlgorithm, tmp]);
+  end;
   result := GetSignatureSecurityRaw(fAsymAlgo, sig); // into base-64 encoded raw
 end;
 

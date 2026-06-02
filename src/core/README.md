@@ -148,7 +148,7 @@ Low-Level Memory Buffers Processing Functions shared by all framework units
 - URI-Encoded Text Buffer Process
 - Basic MIME Content Types Support
 - Text Memory Buffers and Files
-- `TStreamRedirect` and other Hash process
+- `TStreamRedirect` and other `TStream`/Hash process
 - `RawByteString` Buffers Aggregation via `TRawByteStringGroup`
 
 ### mormot.core.data
@@ -182,6 +182,7 @@ Our JSON engine uses a very efficient SAX-like kernel and full RTTI support.
 Binary, JSON and Text Advanced Formatting Functions
 - HTML Text Conversions
 - Basic XML Conversions
+- YAML 1.2 core-schema to JSON or `TDocVariant` Support
 - Markup (e.g. Markdown or Emoji) process
 - INI Files In-memory Access
 - `TSynJsonFileSettings` Parent Class
@@ -252,13 +253,14 @@ Performance Monitoring functions shared by all framework units
 ### mormot.core.threads
 
 High-Level Multi-Threading features shared by all framework units
-- `TThreadList` thread-safe wrapper
+- `TThreads` thread-safe wrapper
 - `IAutoFree` and `IAutoLocker` Reference-Counted Process
 - Thread-Safe `TSynQueue` and `TPendingTaskList`
 - Thread-Safe `ILockedDocVariant` Storage
 - Background Thread Processing
 - Parallel Execution in a Thread Pool
 - Server Process Oriented Thread Pool
+- `TPipeStream` Read/Write synchronization between two threads
 
 ### mormot.core.zip
 

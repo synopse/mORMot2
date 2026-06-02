@@ -1928,7 +1928,7 @@ type
     /// release internal list items
     destructor Destroy; override;
     /// add a TOrmPropInfo to the list
-    function Add(aItem: TOrmPropInfo): integer;
+    function Add(aItem: TOrmPropInfo): PtrInt;
     /// set the length of the internal List[] array and the sorted names
     procedure AfterAdd;
     /// find an item in the list using O(log(n)) binary search
@@ -2790,11 +2790,10 @@ type
   TOrmLocks = object
   {$endif USERECORDWITHMETHODS}
   private
-    fSafe: TRWLock; // thread-safe and not blocking concurrent IsLocked()
-    fID: TIDDynArray;        // array[0..Count-1] of locked TID
-    fTix: TCardinalDynArray; // GetTickSec values at the Lock() time
-    fCount: PtrInt;
-    fLastPurge: integer;
+    fSafe: TRWLock;              // thread-safe and not blocking IsLocked()
+    fID: TIDDynArray;            // array[0..Count-1] of locked TID
+    fTix: TCardinalDynArray;     // GetTickSec values at the Lock() time
+    fCount, fLastPurge: integer; // no need of PtrInt here and better alignment
   public
     /// lock a record, specified by its TID
     // - returns true on success, false if was already locked
@@ -2812,7 +2811,7 @@ type
     // - could be used to release locked records e.g. if some client(s) crashed
     procedure PurgeOlderThan(MinutesFromNow: cardinal);
     /// the current number of locked TID
-    property Count: PtrInt
+    property Count: integer
       read fCount;
   end;
   POrmLocks = ^TOrmLocks;
@@ -7381,7 +7380,7 @@ begin
   QuickSortByName(0, fCount - 1);
 end;
 
-function TOrmPropInfoList.Add(aItem: TOrmPropInfo): integer;
+function TOrmPropInfoList.Add(aItem: TOrmPropInfo): PtrInt;
 var
   f: PtrInt;
 begin
@@ -8787,8 +8786,11 @@ begin
 end;
 
 function TOrmTableAbstract.GetAsCurrency(Row, Field: PtrInt): currency;
+var
+  curr: currency; // safer with an explicit local variable
 begin
-  PInt64(@result)^ := StrToCurr64(Get(Row, Field), nil);
+  PInt64(@curr)^ := StrToCurr64(Get(Row, Field), nil);
+  result := curr;
 end;
 
 function TOrmTableAbstract.GetAsCurrency(Row: PtrInt; const FieldName: RawUtf8): currency;
@@ -11737,11 +11739,11 @@ begin
   pointer(@OrmFieldTypeComp[oftVariant])    := @StrComp;
   pointer(@OrmFieldTypeComp[oftNullable])   := @StrComp;
   // refresh ORM types RTTI with actual type definitions
-  PTC_INFO[pctRecordReference] := TypeInfo(TRecordReference);
+  PTC_INFO[pctRecordReference]            := TypeInfo(TRecordReference);
   PTC_INFO[pctRecordReferenceToBeDeleted] := TypeInfo(TRecordReferenceToBeDeleted);
-  PTC_INFO[pctCreateTime]      := TypeInfo(TCreateTime);
-  PTC_INFO[pctModTime]         := TypeInfo(TModTime);
-  PTC_INFO[pctRecordVersion]   := TypeInfo(TRecordVersion);
+  PTC_INFO[pctCreateTime]                 := TypeInfo(TCreateTime);
+  PTC_INFO[pctModTime]                    := TypeInfo(TModTime);
+  PTC_INFO[pctRecordVersion]              := TypeInfo(TRecordVersion);
   for ptc := succ(low(ptc)) to high(ptc) do
     PTC_RTTI[ptc] := Rtti.RegisterType(PTC_INFO[ptc]);
 end;

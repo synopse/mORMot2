@@ -6670,9 +6670,9 @@ var
   doc: TDocVariantData;
   json: PUtf8Char;
   info: TGetJsonField;
-  tmp: TSynTempBuffer;
   u: RawUtf8;
   v: PVariant;
+  tmp: TSynTempBuffer;
 begin
   // JsonSet(VariantField,'PropName','abc') to set a value
   // JsonSet(VariantField,'Obj1.Obj2.PropName','def') to set by path
@@ -8456,7 +8456,7 @@ begin
   if Request = 0 then
     sqlite3_failed(RequestDB, SQLITE_MISUSE, 'FieldIndex');
   for result := 0 to FieldCount - 1 do
-    if StrIComp(pointer(aColumnName), sqlite3.column_name(Request, result)) = 0 then
+    if StrIEqual(pointer(aColumnName), sqlite3.column_name(Request, result)) then
       exit;
   result := -1; // not found
 end;

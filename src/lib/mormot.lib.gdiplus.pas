@@ -1227,7 +1227,7 @@ type
     DC: array[0..10] of TGdiplusEnumState;
     // if true, DrawText() will use DrawString and not DrawDriverString
     UseDrawString: boolean;
-    // a temporary buffer used to reduce memory allocations
+    // owned buffer to reduce memory allocations e.g. for Points16To32()
     Temp: TSynTempBuffer;
     procedure SaveDC;
     procedure RestoreDC;

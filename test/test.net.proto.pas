@@ -100,6 +100,8 @@ type
     function DoRequest4(Ctxt: THttpServerRequestAbstract): cardinal;
     // this is the main method called by RtspOverHttp[BufferedWrite]
     procedure DoRtspOverHttp(options: TAsyncConnectionsOptions);
+    // helper invoked from OpenAPI to verify YAML dispatch
+    procedure OpenApiYamlDispatch;
   published
     /// Engine.IO and Socket.IO regression tests
     procedure _SocketIO;
@@ -126,6 +128,8 @@ type
     /// validate mormot.net.openapi unit
     procedure OpenAPI;
     {$ifdef OSPOSIX}
+    /// validate Unix domain socket server bind and stale .socket file cleanup
+    procedure UnixDomainSocket;
     /// validate mormot.net.tftp.server using libcurl (so only POSIX by now)
     procedure TFTPServer;
     {$endif OSPOSIX}
@@ -308,7 +312,10 @@ begin
   for i := 0 to high(OpenApiName) do
     if OpenApiName[i] <> '' then
     begin
-      fn := FormatString('%OpenApi%.json', [WorkDir, OpenApiName[i]]);
+      fn := '';
+      if PosExChar('.', OpenApiName[i]) = 0 then
+        fn := '.json';
+      fn := FormatString('%OpenApi%%', [WorkDir, OpenApiName[i], fn]);
       api[i] := StringFromFile(fn);
       if api[i] <> '' then
         continue; // already downloaded
@@ -352,6 +359,80 @@ begin
       end;
       NotifyTestSpeed('%', [OpenApiName[i]], 0, length(dto) + length(client), @timer);
     end;
+  // YAML dispatch smoke test: TOpenApiParser must produce identical output
+  // for a YAML spec and its JSON counterpart when consumed via ParseYaml/
+  // ParseFile. Covers the spec-approved invariant behind mopenapi's .yaml
+  // support.
+  OpenApiYamlDispatch;
+end;
+
+procedure TNetworkProtocols.OpenApiYamlDispatch;
+const
+  YAML_SPEC: RawUtf8 =
+    'openapi: 3.0.0'#10 +
+    'info:'#10 +
+    '  title: DispatchTest'#10 +
+    '  version: 1.0.0'#10 +
+    'paths:'#10 +
+    '  /ping:'#10 +
+    '    get:'#10 +
+    '      operationId: ping'#10 +
+    '      responses:'#10 +
+    '        "200":'#10 +
+    '          description: OK'#10 +
+    'components:'#10 +
+    '  schemas:'#10 +
+    '    Info:'#10 +
+    '      type: object'#10 +
+    '      properties:'#10 +
+    '        name:'#10 +
+    '          type: string'#10;
+  JSON_SPEC: RawUtf8 =
+    '{"openapi":"3.0.0",' +
+    '"info":{"title":"DispatchTest","version":"1.0.0"},' +
+    '"paths":{"/ping":{"get":{"operationId":"ping",' +
+    '"responses":{"200":{"description":"OK"}}}}},' +
+    '"components":{"schemas":{"Info":{"type":"object",' +
+    '"properties":{"name":{"type":"string"}}}}}}';
+var
+  oaY, oaJ, oaF: TOpenApiParser;
+  dtoY, dtoJ, dtoF, clientY, clientJ, clientF: RawUtf8;
+  fn: TFileName;
+begin
+  oaY := TOpenApiParser.Create('DispatchTest');
+  oaJ := TOpenApiParser.Create('DispatchTest');
+  oaF := TOpenApiParser.Create('DispatchTest');
+  try
+    oaY.ParseYaml(YAML_SPEC);
+    oaJ.ParseJson(JSON_SPEC);
+    dtoY := oaY.GenerateDtoUnit;
+    dtoJ := oaJ.GenerateDtoUnit;
+    CheckEqual(dtoY, dtoJ);
+    Check(dtoY <> '', 'yaml dto');
+    Check(dtoJ <> '', 'json dto');
+    clientY := oaY.GenerateClientUnit;
+    clientJ := oaJ.GenerateClientUnit;
+    CheckEqual(clientY, clientJ);
+    Check(clientY <> '', 'yaml client');
+    Check(clientJ <> '', 'json client');
+    // ParseFile with .yaml extension must dispatch to the YAML path
+    fn := WorkDir + 'test.openapi.dispatch.yaml';
+    FileFromString(YAML_SPEC, fn);
+    try
+      oaF.Name := 'DispatchTest'; // match oaY so outputs are comparable
+      oaF.ParseFile(fn);
+      dtoF := oaF.GenerateDtoUnit;
+      clientF := oaF.GenerateClientUnit;
+      CheckEqual(dtoF, dtoY, 'ParseFile(.yaml) dto must equal ParseYaml');
+      CheckEqual(clientF, clientY, 'ParseFile(.yaml) client must equal ParseYaml');
+    finally
+      DeleteFile(fn);
+    end;
+  finally
+    oaY.Free;
+    oaJ.Free;
+    oaF.Free;
+  end;
 end;
 
 procedure RtspRegressionTests(proxy: TRtspOverHttpServer; test: TSynTestCase;
@@ -1992,7 +2073,7 @@ begin
   server := TDhcpProcess.Create;
   try
     // custom settings for our tests
-    settings.AddScope; // with default subnet
+    settings.AddScope(TDhcpScopeSettings.Create); // with default/fixed subnet
     CheckEqual(settings.Scope[0].SubnetMask, '192.168.1.1/24');
     settings.Scope[0].SubnetMask := '192.168.0.1/14'; // allow 262,144 IPs
     //ConsoleObject(settings);
@@ -2044,7 +2125,7 @@ begin
     // DISCOVER -> OFFER
     d.RecvLen := length(refdisc);
     d.RecvIp4 := 0; // use the default server.Scope[]
-    d.Tix32 := GetTickSec; // ComputeResponse() requires Tix32
+    d.BootTix32 := GetUptimeSec; // ComputeResponse() requires Tix32
     MoveFast(pointer(refdisc)^, d.Recv, d.RecvLen);
     i := server.ComputeResponse(d);
     CheckEqual(i, d.SendLen);
@@ -3729,7 +3810,7 @@ begin
           FillCharFast(msg2, SizeOf(msg2), 0);
           Check(msg2.Hash.Algo <> hfSHA256);
           Check(not CompareMem(@msg.Hash.Bin, @msg2.Hash.Bin, HASH_SIZE[hfSHA256]));
-          Check(not HashDigestEqual(msg.Hash, msg2.Hash), 'hde0');
+          Check(not HashDigestEqual(@msg.Hash, @msg2.Hash), 'hde0');
           res := hpc2.BearerDecode(dBearer, pcfBearerDirect, msg2);
           Check(res = mdBParam, 'directB64');
           dTok := '';
@@ -3742,12 +3823,12 @@ begin
           Check(res = mdOk, 'directOk');
           Check(not CompareMem(@msg, @msg2, SizeOf(msg)), 'cm');
           Check(CompareMem(@msg.Hash.Bin, @msg2.Hash.Bin, HASH_SIZE[hfSHA256]));
-          Check(HashDigestEqual(msg.Hash, msg2.Hash), 'hde1');
+          Check(HashDigestEqual(@msg.Hash, @msg2.Hash), 'hde1');
           Check(msg2.Kind = pcfBearerDirect);
           CheckEqual(msg2.Opaque, 7142701337754149600, 'Opaque');
           Check(msg2.Hash.Algo = hfSHA256);
           Check(CompareMem(@msg.Hash.Bin, @msg2.Hash.Bin, HASH_SIZE[hfSHA256]));
-          Check(HashDigestEqual(msg.Hash, msg2.Hash), 'hde2');
+          Check(HashDigestEqual(@msg.Hash, @msg2.Hash), 'hde2');
           FillCharFast(msg2, SizeOf(msg2), 0);
           inc(dTok[10]);
           res := hpc2.BearerDecode(dTok, pcfBearer, msg2);
@@ -3774,9 +3855,11 @@ begin
         // in a background thread due to remote http://ictuswin.com access
         // (will also validate rfProgressiveStatic process of our web server)
         if hasinternet then // checked by above DNSAndLDAP method
+        begin
           Run(RunPeerCacheDirect, hpc, 'peercachedirect', true, false, false);
-        hpc := nil; // will be owned and freed by RunPeerCacheDirect from now on
-        hps := nil;
+          hpc := nil; // will be owned and freed by RunPeerCacheDirect from now on
+          hps := nil;
+        end;
       finally
         hpc.Free;
       end;
@@ -3807,6 +3890,7 @@ var
   h, v: PUtf8Char;
   l: PtrInt;
   dig: THashDigest;
+  s32: TShort32;
 
   procedure Check4;
   begin
@@ -4049,21 +4133,22 @@ begin
   CheckEqual(l, SizeOf(THash256));
   Check(dig.Algo = hfSHA256);
   CheckEqual(Sha256DigestToString(dig.Bin.Lo),
-    'cc991f15d823e419ef45f8b94e6759c4f992056c1c1a64cc79338c49f9720273');
+    '19b9f18055bc3307c80f58159938f4e6bd0eb583f672fe7793e1b0df50e60bb2');
   FillCharFast(dig, SizeOf(dig), 0);
   l := HttpRequestHash(hfSHA256, U,
     'Content-Length: 100'#13#10'Last-Modified: 2025', dig);
   CheckEqual(l, SizeOf(THash256));
   Check(dig.Algo = hfSHA256);
   CheckEqual(Sha256DigestToString(dig.Bin.Lo),
-    '9b23e3b9894578f2709eca35aa9afad277ab5aa4afe9344192f59535719ac734');
-  CheckEqual(HttpRequestHashBase32(
-    U, 'Content-Length: 100'#13#10'Last-Modified: 2025'),
-    'tmr6homjiv4pe4e6zi22vgx22j32wwve');
-  CheckEqual(HttpRequestHashBase32(
-    U, 'Content-Length: 101'#13#10'Last-Modified: 2025'),
-    '5umuom5hoh7sohesrs3fqse4rweeum7d');
-  CheckEqual(HttpRequestHashBase32(U, nil), 'bq4n2dkrduzo2v3arzy2lafegac3wmbw');
+    'dd36778462987d817a662b4a602accde058d26f4247aa55ca70bf476a9a442e7');
+  Check(HttpRequestHashBase32(U, @s32,
+    'Content-Length: 100'#13#10'Last-Modified: 2025'));
+  CheckEqualShort(s32, '3u3hpbdctb6yc6tgfnfgakwm3ycy2jxu');
+  Check(HttpRequestHashBase32(U, @s32,
+    'Content-Length: 101'#13#10'Last-Modified: 2025'));
+  CheckEqualShort(s32, 'utip3vleydamax5oayo7tjfyaoub6y5w');
+  Check(HttpRequestHashBase32(U, @s32, nil));
+  CheckEqualShort(s32, 'na3q2n4gw6cly5fvf5da4frmek667zk2');
 end;
 
 procedure TNetworkProtocols._THttpProxyCache;
@@ -4124,6 +4209,43 @@ begin
 end;
 
 {$ifdef OSPOSIX}
+procedure TNetworkProtocols.UnixDomainSocket;
+var
+  fn: TFileName;
+  un: RawUtf8;
+  sock: TCrtSocket;
+begin
+  // regression test for Unix domain socket server bind and stale file cleanup
+  // - on Delphi POSIX, the FpUnlink() called to remove a stale .socket file
+  // was a UTF-16 shim fed an UTF-8 RawUtf8, so it silently did nothing: stale
+  // socket files were left behind, and any server re-bind failed with
+  // EADDRINUSE - see UnixSocketFileDelete() in mormot.net.sock
+  fn := WorkDir + 'test-unixdomain.socket';
+  DeleteFile(fn);
+  Check(not FileExists(fn), 'no leftover .socket file');
+  FormatUtf8('unix:%', [fn], un);
+  // 1. a plain server bind should create the .socket file, and close remove it
+  sock := TCrtSocket.Bind(un);
+  try
+    Check(sock.SockIsDefined, 'unix bind');
+    Check(sock.SocketLayer = nlUnix, 'nlUnix');
+    Check(FileExists(fn), 'socket file created');
+  finally
+    sock.Free; // closing the socket should delete its .socket file
+  end;
+  Check(not FileExists(fn), 'socket file removed on close');
+  // 2. a stale .socket file (e.g. after a killed process) must not block bind
+  FileFromString('stale', fn);
+  Check(FileExists(fn), 'stale file created');
+  sock := TCrtSocket.Bind(un); // raises ENetSock if the stale file is not purged
+  try
+    Check(sock.SockIsDefined, 'unix bind over stale file');
+  finally
+    sock.Free;
+  end;
+  Check(not FileExists(fn), 'stale file cleaned on close');
+end;
+
 procedure TNetworkProtocols.TFTPServer;
 var
   srv: TTftpServerThread;

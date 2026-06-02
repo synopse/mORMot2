@@ -124,7 +124,7 @@ begin
       writeln('WebSockets Long Work Server running on localhost:8888'#13#10);
       TextColor(ccWhite);
       writeln('Please compile and run one or several restws_longworkclient'#13#10);
-      TextColor(ccLightGray);
+      TextColor(ccDefault);
       writeln('Press [Enter] to quit'#13#10);
       TextColor(ccCyan);
       readln;
@@ -135,6 +135,7 @@ begin
   finally
     Server.Free;
   end;
+  TextColor(ccDefault);
 end;
 
 

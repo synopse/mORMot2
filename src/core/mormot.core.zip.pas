@@ -1862,7 +1862,7 @@ begin
   result := false;
   for i := 0 to length(fOnCreateFromFilesIgnore) - 1 do
     // case-insensitive even on POSIX (no AnsiCompareFileName)
-    if CompareText(Entry.zipName, fOnCreateFromFilesIgnore[i]) = 0 then
+    if SameTextS(Entry.zipName, fOnCreateFromFilesIgnore[i]) then
       exit;
   result := true;
 end;
@@ -2453,22 +2453,26 @@ begin
   RawUnicodeToString(@utf16, len, string(filename));
 end;
 
-function IsZipStart(P: PCardinal): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
+function FindZipStart(P: pointer; Last: PtrInt = 0): PtrInt;
 begin
-  // we need to check more than the signature because of false positives
-  case P^ + 1 of
-    FIRSTHEADER_SIGNATURE_INC:
-      with PLocalFileHeader(P)^.fileInfo do
-        result := (ToByte(neededVersion) in [10, 20, 45]) and
-                  (zzipMethod in [Z_STORED, Z_DEFLATED]) and
-                  (nameLen  < ZIP_MAXNAMELEN) and
-                  (extraLen < ZIP_MAXNAMELEN); // e.g. UNICODEPATH_EXTRA_ID
-    LASTHEADER_SIGNATURE_INC:
-      result := PInt64(@PLastHeader(P)^.totalFiles)^ = 0; // *Disk=0
-  else
-    result := false;
+  for result := 0 to Last do
+  begin
+    // we need to check more than the signature because of false positives
+    case PCardinal(P)^ + 1 of
+      FIRSTHEADER_SIGNATURE_INC:
+        with PLocalFileHeader(P)^.fileInfo do
+          if (ToByte(neededVersion) in [10, 20, 45]) and
+             (zzipMethod in [Z_STORED, Z_DEFLATED]) and
+             (nameLen  < ZIP_MAXNAMELEN) and
+             (extraLen < ZIP_MAXNAMELEN) then // e.g. UNICODEPATH_EXTRA_ID
+            exit;
+      LASTHEADER_SIGNATURE_INC:
+        if PInt64(@PLastHeader(P)^.totalFiles)^ = 0 then // *Disk=0
+          exit;
+    end;
+    inc(PByte(P));
   end;
+  result := -1;
 end;
 
 function LocateEndCentralDirectory(BufZip: PByteArray; Size: PtrInt;
@@ -2721,7 +2725,7 @@ end;
 constructor TZipRead.Create(aFile: THandle;
   ZipStartOffset, Size, WorkingMem: QWord; DontReleaseHandle: boolean);
 var
-  read, i, j: PtrInt;
+  read, i: PtrInt;
   P: PByteArray;
   local: TLocalFileHeader;
   centraldirsize: Int64;
@@ -2749,7 +2753,7 @@ begin
       exit;
     end;
     if (fSource.Read(local, SizeOf(local)) = SizeOf(local)) and
-       IsZipStart(@local) then
+       (FindZipStart(@local) >= 0) then
     begin
       // it seems to be a regular .zip -> read WorkingMem trailing content
       fSource.Seek(Size - WorkingMem, soBeginning);
@@ -2786,7 +2790,7 @@ begin
       begin
          fSource.Seek(fSourceOffset, soBeginning);
          if (fSource.Read(local, SizeOf(local)) = SizeOf(local)) and
-            IsZipStart(@local) then
+            (FindZipStart(@local) >= 0) then
          begin
            Create(P, i, Size - WorkingMem - fSourceOffset);
            exit;
@@ -2802,31 +2806,31 @@ begin
     end
     else
       read := WorkingMem; // we already have the whole file content in P^
-    for i := 0 to read - SizeOf(TLocalFileHeader) do
-      if IsZipStart(@P[i]) then
+    i := FindZipStart(P, read - SizeOf(TLocalFileHeader));
+    if i >= 0 then
+    begin
+      fSourceOffset := ZipStartOffset + Qword(i);
+      if (i >= 4) and
+         (PCardinal(@P[i - 4])^ + 1 = SPANHEADER_SIGNATURE_INC) then
       begin
-        fSourceOffset := ZipStartOffset + Qword(i);
-        j := i;
-        if (j >= 4) and
-           (PCardinal(@P[j - 4])^ + 1 = SPANHEADER_SIGNATURE_INC) then
-        begin
-          dec(j, 4); // PK00 prefix of single zip file from spanning mode
-          dec(fSourceOffset, 4); // all offsets start from this PK00 header
-        end;
-        if Size = WorkingMem then
-          // small files could reuse the existing buffer
-          Create(@P[j], read - j, 0)
-        else
-        begin
-          // big files just read the last WorkingMem bytes for centraldir lookup
-          fSource.Seek(Size - WorkingMem, soBeginning);
-          fSource.ReadBuffer(P^, WorkingMem);
-          Create(P, WorkingMem, Size - WorkingMem - fSourceOffset);
-        end;
-        exit;
+        dec(i, 4); // PK00 prefix of single zip file from spanning mode
+        dec(fSourceOffset, 4); // all offsets start from this PK00 header
       end;
+      if Size = WorkingMem then
+        // small files could reuse the existing buffer
+        Create(@P[i], read - i, 0)
+      else
+      begin
+        // big files just read the last WorkingMem bytes for centraldir lookup
+        fSource.Seek(Size - WorkingMem, soBeginning);
+        fSource.ReadBuffer(P^, WorkingMem);
+        Create(P, WorkingMem, Size - WorkingMem - fSourceOffset);
+      end;
+      exit;
+    end;
     inc(ZipStartOffset, WorkingMem - SizeOf(TLocalFileHeader)); // search next
-  until read <> WorkingMem;
+  until (Size = WorkingMem) or
+        (QWord(read) <> WorkingMem);
   // if we reached here, we found no ZIP marker anywhere
   ESynZip.RaiseUtf8('%.Create: No ZIP header found in % %',
     [self, KBNoSpace(Size), fFileName]);
@@ -2861,7 +2865,7 @@ begin
     // TZipRead did ensure ZipNamePathDelim was stored in Entry[].zipName
     normalized := NormalizeZipName(aName);
     for result := 0 to Count - 1 do
-      if SameText(Entry[result].zipName, normalized) then
+      if SameTextS(Entry[result].zipName, normalized) then
         exit;
   end;
   result := -1;

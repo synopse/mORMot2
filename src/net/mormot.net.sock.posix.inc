@@ -436,6 +436,14 @@ function poll(fds: PPollFD; nfds, timeout: integer): integer; cdecl;
   external clib name 'poll' + LIBC_SUFFIX;
 {$endif OSDARWIN}
 
+{$ifdef FPC}
+function fpunlinka(path: PAnsiChar): integer; inline; // internal call
+begin
+  if path <> nil then
+    result := fpunlink(path);
+end;
+{$endif FPC}
+
 function RawSocketErrNo: integer;
 begin
   result := cerrno; // thread-locale variable from libc
@@ -586,6 +594,35 @@ begin
   if @self <> nil then
     setsockopt(TSocket(@self), SOL_SOCKET, SO_REUSEPORT, @v, SizeOf(v));
   // don't call SetOpt() which raise ENetSock on old kernel without SO_REUSEPORT
+end;
+
+// FPC does not provide BSD and macOS values - and OpenBSD has no such feature
+{$ifdef OSLINUXANDROID}
+  {$define HASKEEPALIVETCP} // defined in FPC headers or mormot.core.os.delphi
+{$endif OSLINUXANDROID}
+{$ifdef OSFREEBSD}
+const
+  TCP_KEEPIDLE  = 4;
+  TCP_KEEPINTVL = 5;
+  TCP_KEEPCNT   = 6;
+  {$define HASKEEPALIVETCP}
+{$endif OSFREEBSD}
+{$ifdef OSDARWIN}
+const
+  TCP_KEEPIDLE  = $10; // named TCP_KEEPALIVE on Darwin
+  TCP_KEEPINTVL = $101;
+  TCP_KEEPCNT   = $102;
+  {$define HASKEEPALIVETCP}
+{$endif OSDARWIN}
+
+procedure TNetSocketWrap.SetKeepAliveTcp(idle, intvl, cnt: cardinal);
+begin
+  {$ifdef HASKEEPALIVETCP}
+  if setsockopt(TSocket(@self), IPPROTO_TCP, TCP_KEEPIDLE, @idle, SizeOf(idle)) <> NO_ERROR then
+    exit; // don't call SetOpt() which raises ENetSock
+  setsockopt(TSocket(@self), IPPROTO_TCP, TCP_KEEPINTVL, @intvl, SizeOf(intvl));
+  setsockopt(TSocket(@self), IPPROTO_TCP, TCP_KEEPCNT, @cnt, SizeOf(cnt));
+  {$endif HASKEEPALIVETCP}
 end;
 
 procedure TNetSocketWrap.SetSendTimeout(ms: integer);
@@ -1301,7 +1338,10 @@ begin
     end;
 end;
 
-function _GetDnsAddresses(usePosixEnv, getAD: boolean): TRawUtf8DynArray;
+var
+  EtcResolve, EtcResolveEnv: TCachedValue; // 64 seconds thread-safe cache
+
+procedure _GetDnsAddresses(usePosixEnv, getAD: boolean; var result: TRawUtf8DynArray);
 var
   resolv, one: RawUtf8;
   p: PUtf8Char;
@@ -1309,11 +1349,11 @@ var
 begin
   result := nil;
   if usePosixEnv then
-    resolv := StringFromFile(GetSystemEnvString('ETC'));
+    resolv := StringFromFileCached(GetSystemEnvString('ETC'), EtcResolveEnv);
   if resolv = '' then
     // all systems are likely to have or generate this file
     // - even the libc seems to read it when implementing gethostname()
-    resolv := StringFromFile('/etc/resolv.conf');
+    resolv := StringFromFileCached('/etc/resolv.conf', EtcResolve);
   p := pointer(resolv);
   if p = nil then
     exit;

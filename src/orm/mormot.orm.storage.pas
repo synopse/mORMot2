@@ -1596,7 +1596,7 @@ end;
 
 function TOrmVirtualTableModule.FileName(const aTableName: RawUtf8): TFileName;
 begin
-  result := Utf8ToString(aTableName) + '.' + FileExtension;
+  result := MakeString([aTableName, '.', FileExtension]);
   if fFilePath = '' then
     result := Executable.ProgramFilePath + result
   else
@@ -4422,37 +4422,53 @@ end;
 function TRestStorageInMemory.SearchCopy(
   const FieldName, FieldValue: RawUtf8;
   CaseInsensitive: boolean; Op: TSelectStatementOperator): pointer;
+var
+  res: pointer; // DoCopyEvent() result parameter
 begin
   if SearchEvent(FieldName, FieldValue, DoCopyEvent,
-      @result, 1, 0, CaseInsensitive, Op) = 0 then
-    result := nil;
+       @res, 1, 0, CaseInsensitive, Op) = 0 then
+    result := nil
+  else
+    result := res;
 end;
 
 function TRestStorageInMemory.SearchInstance(
   const FieldName, FieldValue: RawUtf8;
   CaseInsensitive: boolean; Op: TSelectStatementOperator): pointer;
+var
+  res: pointer; // DoInstanceEvent() result parameter
 begin
   if SearchEvent(FieldName, FieldValue, DoInstanceEvent,
-      @result, 1, 0, CaseInsensitive, Op) = 0 then
-    result := nil;
+      @res, 1, 0, CaseInsensitive, Op) = 0 then
+    result := nil
+  else
+    result := res;
 end;
 
 function TRestStorageInMemory.SearchInstance(
   FieldIndex: integer; const FieldValue: RawUtf8;
   CaseInsensitive: boolean; Op: TSelectStatementOperator): pointer;
+var
+  res: pointer; // DoInstanceEvent() result parameter
 begin
   if SearchEvent(FieldIndex, FieldValue, DoInstanceEvent,
-      @result, 1, 0, CaseInsensitive, Op) = 0 then
-    result := nil;
+      @res, 1, 0, CaseInsensitive, Op) = 0 then
+    result := nil
+  else
+    result := res;
 end;
 
 function TRestStorageInMemory.SearchIndex(
   const FieldName, FieldValue: RawUtf8;
   CaseInsensitive: boolean; Op: TSelectStatementOperator): integer;
+var
+  res: integer; // for DoIndexEvent - not PtrInt
 begin
   if SearchEvent(FieldName, FieldValue, DoIndexEvent,
-      @result, 1, 0, CaseInsensitive, Op) = 0 then
-    result := -1;
+      @res, 1, 0, CaseInsensitive, Op) = 0 then
+    result := -1
+  else
+    result := res;
 end;
 
 function TRestStorageInMemory.SearchCount(

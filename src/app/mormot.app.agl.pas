@@ -1111,7 +1111,7 @@ constructor TSynAngelizeSettings.Create;
 begin
   inherited Create;
   fHttpTimeoutMS := 200;
-  fFolder := MakePath([Executable.ProgramFilePath, 'services'], true);
+  fFolder := MakePath([Executable.ProgramFilePath, 'services'], {enddelim=}true);
   fExt := '.service';
   fCommandFile := 'cmd';
 end;
@@ -1678,14 +1678,17 @@ begin
 end;
 
 function TSynAngelize.DoHttpGet(const aUri: RawUtf8): integer;
+var
+  status: integer; // not PtrInt
 begin
-  result := 0;
+  status := 0;
   try
-    HttpGet(aUri, nil, false, @result, fSas.HttpTimeoutMS,
+    HttpGet(aUri, nil, false, @status, fSas.HttpTimeoutMS,
       {forcesocket:}true, {ignoretlserror:}true);
   except
-    result := -500; // e.g. on TCP or TLS connection error
+    status := -500; // e.g. on TCP or TLS connection error
   end;
+  result := status; // safer with an explicit variable
 end;
 
 function TSynAngelize.DoNotifyByEmail(const aService: TSynAngelizeService;
@@ -1825,7 +1828,7 @@ begin
     ESynAngelize.RaiseUtf8('/new: duplicated servicename "%"', [sn]);
   exe := sysutils.Trim(paramstr(3));
   {$ifdef OSWINDOWS}
-  if ExtractFileExt(exe) = '' then
+  if not HasExt(exe) then
     exe := exe + '.exe';
   {$endif OSWINDOWS}
   if exe <> '' then

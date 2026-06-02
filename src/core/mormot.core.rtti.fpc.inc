@@ -368,16 +368,16 @@ begin
   if result <> nil then
     if result <> TypeInfo(integer) then
       if result <> TypeInfo(cardinal) then
-        if result <> TypeInfo(RawUtf8) then
-          result := @RawName     // as stored in RTTI
+        if result <> TypeInfo(RawUtf8) then // = TypeInfo(Utf8String)
+          result := @RawName                // as stored in RTTI
         else
-          result := @UTF8_NAME   // instead of 'UTF8String'
+          result := @UTF8_NAME              // instead of 'UTF8String'
       else
-        result := @CARDINAL_NAME // instead of 'longword'
+        result := @CARDINAL_NAME            // instead of 'longword'
     else
-      result := @INTEGER_NAME    // instead of 'longint'
+      result := @INTEGER_NAME               // instead of 'longint'
   else
-    result := @NULCHAR;          // instead of a GPF
+    result := @NULCHAR;                     // instead of a GPF
 end;
 
 function TRttiInfo.RecordSize: PtrInt;
@@ -969,9 +969,9 @@ end;
 procedure _ansistr_concat_convert(var dest: RawByteString;
   const s1, s2: RawByteString; cp, cp1, cp2: cardinal);
 var
-  t1, t2, t: TSynTempBuffer; // avoid most memory allocations
   p1, p2, p: PAnsiChar;
   eng: TSynAnsiConvert;
+  t1, t2, t: TSynTempBuffer; // avoid most memory allocations
 begin
   p1 := AnsiBufferToTempUtf8(t1, pointer(s1), length(s1), cp1);
   p2 := AnsiBufferToTempUtf8(t2, pointer(s2), length(s2), cp2);
@@ -1193,6 +1193,13 @@ begin
 end;
 
 {$endif FPC_HAS_CPSTRING}
+
+// Win64 seems not to like our patched RTL for the DEBUG stack trace
+{$ifdef OSWINDOWS}
+  {$ifdef DEBUG}
+    {$define NOPATCHRTL}
+  {$endif DEBUG}
+{$endif OSWINDOWS}
 
 procedure RedirectRtl;
 {$ifndef NOPATCHRTL}

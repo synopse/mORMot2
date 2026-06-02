@@ -156,12 +156,12 @@ begin
     writeln(simpleServer.fHttpServer.ClassName, ' running on localhost:8888'#10);
     TextColor(ccWhite);
     writeln('try curl http://localhost:8888/echo'#10);
-    TextColor(ccLightGray);
+    TextColor(ccDefault);
     writeln('Press [Enter] to quit'#10);
     TextColor(ccCyan);
     ConsoleWaitForEnterKey;
     writeln(ObjectToJson(simpleServer.fHttpServer, [woHumanReadable]));
-    TextColor(ccLightGray);
+    TextColor(ccDefault);
     {$ifdef FPC_X64MM}
     WriteHeapStatus(' ', 16, 8, {compileflags=}true);
     {$endif FPC_X64MM}

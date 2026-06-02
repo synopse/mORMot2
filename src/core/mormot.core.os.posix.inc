@@ -1528,7 +1528,7 @@ end;
 function FileCreate(const aFileName: TFileName; aMode, aRights: integer): THandle;
 begin
   if aFileName = '' then
-    result := 0
+    result := INVALID_HANDLE_VALUE
   else if (aMode = 0) and
           (aRights = 0) then
     result := sysutils.FileCreate(aFileName) // direct call of the FPC RTL
@@ -1927,7 +1927,7 @@ var
 
 {$undef HASEVENTFD}
 {$undef HASGETRANDOM}
-// eventfd + getrandom syscalls are validated on Linux i386, x86_64 and aarch64
+// eventfd + getrandom syscalls validated on FPC Linux i386, x86_64 and aarch64
 {$ifdef FPCLINUX}
   {$ifdef CPUX64}
     {$define HASEVENTFD}
@@ -1971,16 +1971,22 @@ end;
 
 procedure TSynEvent.ResetEvent;
 begin
-  fNotified := false;
   {$ifdef HASEVENTFD}
-  if fFD = 0 then // no need to reset the eventfd() handle
+  if fFD <> 0 then
+  begin
+    if fNotified and
+       WaitReadPending(fFD, 0) then
+      LinuxEventFDRead(fFD); // eventfd non-semaphore: call once for reset
+  end
+  else
   {$endif HASEVENTFD}
     RTLEventResetEvent(fHandle);
+  fNotified := false;
 end;
 
 procedure TSynEvent.SetEvent;
 begin
-  fNotified := true;
+  fNotified := true; // should be set before notification
   {$ifdef HASEVENTFD}
   if fFD <> 0 then
     LinuxEventFDWrite(fFD, 1)
@@ -1989,28 +1995,21 @@ begin
     RTLEventSetEvent(fHandle);
 end;
 
-function TSynEvent.WaitFor(TimeoutMS: integer): boolean;
+function TSynEvent.WaitFor(TimeoutMS: cardinal): boolean;
 begin
   {$ifdef HASEVENTFD}
   if fFD <> 0 then
   begin
-    if WaitReadPending(fFD, TimeoutMS) then // = LinuxEventFDWait()
+    if (TimeoutMS = INFINITE) or
+       WaitReadPending(fFD, TimeoutMS) then // = LinuxEventFDWait()
       LinuxEventFDRead(fFD);
   end
   else
   {$endif HASEVENTFD}
-    RTLEventWaitFor(fHandle, TimeoutMS);
-  result := fNotified;
-end;
-
-function TSynEvent.WaitForEver: boolean;
-begin
-  {$ifdef HASEVENTFD}
-  if fFD <> 0 then
-    LinuxEventFDRead(fFD)
-  else
-  {$endif HASEVENTFD}
-    RTLEventWaitFor(fHandle);
+    if TimeoutMS = INFINITE then
+      RTLEventWaitFor(fHandle)
+    else
+      RTLEventWaitFor(fHandle, TimeoutMS);
   result := fNotified;
 end;
 
@@ -2314,7 +2313,10 @@ function LinuxEventFDRead(fd: integer): Int64;
 var
   res: Int64; // need a local variable on i386
 begin
-  { If EFD_SEMAPHORE was specified and the eventfd counter has a nonzero value,
+  { - If EFD_SEMAPHORE was not specified - e.g. as used by TSynEvent - and the
+    eventfd counter has a nonzero value, then a read(2) returns 8 bytes
+    containing that value, and the counter's value is reset to zero
+    - If EFD_SEMAPHORE was specified and the eventfd counter has a nonzero value,
     then a read returns 8 bytes containing the value 1, and the counter's value
     is decremented by 1 }
   res := 0;
@@ -2373,16 +2375,24 @@ begin
   result := (fStdOutIsTTY in _F0);
 end;
 
-procedure TextColorCmd(Color: TConsoleColor; var s: TShort7);
 const
+  TERM_DEFAULT: TShort7 = #27'[0m';
+  TERM_CMD:     TShort7 = #27'[0;3#m';
   TERM_CTRL: PUtf8Char = '04261537';
+
+procedure TextColorCmd(Color: TConsoleColor; var s: TShort7);
 begin
   s[0] := #0;
   if (ord(Color) = TextAttr) or
      not StdOutIsTTY then
     exit;
   TextAttr := ord(Color);
-  s := #27'[0;3#m';
+  if Color = ccLightGray then // handle ccLightGray = ccDefault
+  begin
+    PInt64(@s)^ := PInt64(@TERM_DEFAULT)^;
+    exit;
+  end;
+  PInt64(@s)^ := PInt64(@TERM_CMD)^;
   if ord(Color) >= 8 then
     s[3] := '1';
   s[6] := TERM_CTRL[(ord(Color) and 7)];
@@ -2428,7 +2438,7 @@ begin
       tmp.AddDirect(#10);
     if not NoColor then
     begin
-      TextColorCmd(ccLightGray, c);
+      TextColorCmd(ccDefault, c);
       tmp.AddShort(c);
     end;
     Text := tmp.Buffer;
@@ -2480,9 +2490,13 @@ end;
 {$I+}
 
 function ConsoleStdInputLen: integer;
+var
+  n: integer; // safer with an explicit local variable
 begin
-  if fpioctl(StdInputHandle, FIONREAD, @result) < 0 then
-    result := 0;
+  if fpioctl(StdInputHandle, FIONREAD, @n) < 0 then
+    result := 0
+  else
+    result := n;
 end;
 
 function Utf8ToConsole(const S: RawUtf8): RawByteString;
@@ -2849,12 +2863,23 @@ var
     procedure MakeFileName(const path: TFileName);
     var
       plen: PtrInt;
+      {$ifdef UNICODE}
+      tmp: TSynTempBuffer;
+      {$endif UNICODE}
     begin
       if path <> '' then // fn := path + d_name
       begin
+        {$ifdef UNICODE}
+        Unicode_ToUtf8(pointer(path), tmp, length(path));
+        plen := tmp.len;
+        fn := FastNewString(plen + entlen, CP_UTF8);
+        MoveFast(tmp.buf^, fn^, plen);
+        tmp.Done;
+        {$else}
         plen := length(path);
         fn := FastNewString(plen + entlen, CP_UTF8);
-        MoveFast(pointer(path)^, fn^, plen);
+        MoveFast(pointer(path)^, fn^, plen); // TFileName is UTF-8 on FPC POSIX
+        {$endif UNICODE}
         MoveFast(ent^.d_name, fn[plen], entlen);
       end
       else
@@ -3034,18 +3059,21 @@ end;
 {$ifndef OPENBSD} // no sysctlbyname() on OpenBSD :(
 function bsdsysctl(name: PAnsiChar; dest: pointer; len: PtrInt): PtrInt; overload;
 var
-  s: PtrInt;
+  s: PtrInt; // safer with an explicit variable
 begin
   s := len;
-  if FPsysctlbyname(name, dest, @result, nil, 0) <> 0 then
+  if FPsysctlbyname(name, dest, @s, nil, 0) <> 0 then
     s := 0;
   result := s;
 end;
 
 function fpsysctlbynameint(name: PAnsiChar): QWord;
+var
+  q: QWord;
 begin
-  result := 0;
-  bsdsysctl(name, @result, SizeOf(result));
+  q := 0;
+  bsdsysctl(name, @q, SizeOf(q));
+  result := q;
 end;
 
 function fpsysctlbynamestr(name: PAnsiChar; var temp: ShortString): PUtf8Char;
@@ -3493,9 +3521,9 @@ begin
   while (l > 0) and
         (p[l - 1] <= ' ') do // trim right
     dec(l);
+  if IsDefaultString(p, l) then
+    l := 0; // e.g. on ProxMox containers or VMs
   FastSetString(result, p, l);
-  if result = 'Default string' then // e.g. on ProxMox containers or VMs
-    result := '';
 end;
 
 function LoadProcFileTrim(fn: PAnsiChar): RawUtf8;

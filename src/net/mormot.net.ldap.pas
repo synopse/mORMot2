@@ -1222,6 +1222,8 @@ type
       aMaxLineLen: PtrInt);
     /// save all attributes into a Modifier() / TLdapClient.Modify() ASN1_SEQ
     function ExportToAsnSeq: TAsnObject;
+    /// comparison method between two attributes - by name then all values
+    function Compare(Another: TLdapAttribute): integer;
     /// how many values have been added to this attribute
     property Count: integer
       read fCount;
@@ -1857,6 +1859,7 @@ type
     fKerberosDN: RawUtf8;
     fKerberosSpn: RawUtf8;
     fTimeout: integer;
+    fPingIdleSeconds: integer;
     fTls: boolean;
     fAllowUnsafePasswordBind: boolean;
     fKerberosDisableChannelBinding: boolean;
@@ -1927,6 +1930,11 @@ type
     // - default is 5000, ie. 5 seconds
     property Timeout: integer
       read fTimeout write fTimeout;
+    /// EnsureConnected() will perform a Ping after connection idle TTL
+    // - Ping = WhoAmI will validate that the socket is actually available
+    // - default is 300 seconds, i.e. 5 minutes
+    property PingIdleSeconds: integer
+      read fPingIdleSeconds write fPingIdleSeconds;
     /// the user identifier for non-anonymous Bind/BindSaslKerberos
     // - with Bind, should be a DN like 'CN=John,CN=Users,DC=mycompany,DC=tld',
     // as stated by the official LDAP specification - but note that some servers
@@ -2016,16 +2024,17 @@ type
     fSearchBeginBak: TIntegerDynArray; // SearchPageSize (recursive) backup
     fSearchBeginCount: integer; // usually = only 0..1
     fSockBufferPos: integer;
+    fLastPingTix: cardinal;
     fLog: TSynLogClass;
     fOnDisconnect: TOnLdapClientEvent;
     fWellKnownObjects: TLdapKnownCommonNames;
+    fExtWhoAmI: TAsnObject;
     // protocol methods
     function GetTlsContext: PNetTlsContext;
       {$ifdef HASINLINE} inline; {$endif}
     function BuildPacket(const Asn1Data: TAsnObject): TAsnObject;
     procedure SendPacket(const Asn1Data: TAsnObject);
-    procedure ReceivePacket(Dest: pointer; DestLen: PtrInt); overload;
-    procedure ReceivePacket(var Append: RawByteString; Len: PtrInt); overload;
+    procedure ReceivePacket(Dest: pointer; DestLen: PtrInt);
     procedure ReceivePacketFillSockBuffer;
     function ReceiveResponse: TAsnObject;
     function DecodeResponse(var Pos: integer; const Asn1Response: TAsnObject): TAsnObject;
@@ -2152,11 +2161,16 @@ type
     // - can optionally return the KerberosUser which made the authentication
     function BindSaslKerberos(const AuthIdentify: RawUtf8 = '';
       KerberosUser: PRawUtf8 = nil): boolean;
-    /// test whether the client socket is connected to the server
+    /// test whether the client socket is connected using getpeername()
     function Connected: boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// make a quick "Who am I" request to validate an active connection
+    // - Connected is about the client side state: this method check the server
+    // - won't reconnect automatically, but EnsureConnected calls this method
+    function Ping: boolean;
     /// test whether the client is connected to the server and try re-connect
     // - follows Settings.AutoReconnect property and OnDisconnect event
+    // - perform a "Who Am I" Ping request after Settings.PingIdleSeconds
     function EnsureConnected(const context: ShortString): boolean;
     /// test whether the client is connected with TLS or Kerberos Signing-Sealing
     // - it is unsafe to send e.g. a plain Password without lctEncrypted
@@ -3926,7 +3940,7 @@ begin
       end;
     atsUnicodePwd:
       begin
-        s := 'xxxxxxxx'; // anti-forensic measure
+        s := 'xxxxxxxx'; // anti-forensic measure (paranoid)
         result := true;
         exit;
       end;
@@ -4657,6 +4671,27 @@ begin
               AsnOctStr(fAttributeName), // attribute description
               AsnSetOf(result)           // attribute value set
             ]);
+end;
+
+function TLdapAttribute.Compare(Another: TLdapAttribute): integer;
+var
+  i: PtrInt;
+begin
+  result := 0;
+  if self = Another then
+    exit;
+  result := SortDynArrayAnsiString(fAttributeName, Another.fAttributeName);
+  if result <> 0 then
+    exit;
+  result := CompareInteger(fCount, Another.fCount);
+  if result <> 0 then
+    exit;
+  for i := 0 to fCount - 1 do
+  begin
+    result := SortDynArrayAnsiString(fList[i], Another.fList[i]);
+    if result <> 0 then
+      exit;
+  end;
 end;
 
 function TLdapAttribute.FindIndex(const aValue: RawByteString): PtrInt;
@@ -5632,8 +5667,9 @@ constructor TLdapClientSettings.Create;
 begin
   inherited Create;
   fKey := OBJECTPASSWORD_PLAIN; // default with no Password encryption
-  fTimeout := 5000;
-  fAutoReconnect := true; // sounds fair enough
+  fTimeout := 5000;             // 5 seconds
+  fPingIdleSeconds := 300;      // 5 minutes
+  fAutoReconnect := true;       // sounds fair enough
   fTargetPort := LDAP_PORT;
 end;
 
@@ -6375,10 +6411,10 @@ begin
         len := DestLen;
       MoveFast(PByteArray(fSockBuffer)[fSockBufferPos], Dest^, len);
       inc(fSockBufferPos, len);
-      inc(PByte(Dest), len);
       dec(DestLen, len);
       if DestLen = 0 then
         exit;
+      inc(PByte(Dest), len);
     end;
     // fill fSockBuffer from fSock pending data
     ReceivePacketFillSockBuffer;
@@ -6386,19 +6422,11 @@ begin
   // note: several SEQ messages may be returned
 end;
 
-procedure TLdapClient.ReceivePacket(var Append: RawByteString; Len: PtrInt);
-var
-  l: PtrInt;
-begin
-  l := length(Append);
-  SetLength(Append, l + Len);
-  ReceivePacket(@PByteArray(Append)[l], Len);
-end;
-
 function TLdapClient.ReceiveResponse: TAsnObject;
 var
-  b: byte;
-  len, pos: integer;
+  headerlen, datalen: integer;
+  p: PAnsiChar;
+  tmp: array[0 .. 7] of byte; // ASN1 SEQ header
 begin
   result := '';
   if fSock = nil then
@@ -6406,20 +6434,30 @@ begin
   fFullResult := '';
   try
     // we need to decode the ASN.1 plain input to return a single SEQ message
-    ReceivePacket(@b, 1); // ASN type
-    if b <> ASN1_SEQ then
+    ReceivePacket(@tmp, 2); // ASN type + first byte of ASN length
+    if tmp[0] <> ASN1_SEQ then
       exit;
-    FastSetRawByteString(result, @b, 2);
-    ReceivePacket(@b, 1); // first byte of ASN length
-    PByteArray(result)[1] := b;
-    if b > $7f then
-      ReceivePacket(result, b and $7f); // $8x means x bytes of length
-    // decode length of LDAP packet
-    pos := 2;
-    len := AsnDecLen(pos, result);
-    // retrieve body of LDAP packet
-    if len > 0 then
-      ReceivePacket(result, len);
+    headerlen := 2;
+    datalen := tmp[1];
+    if datalen > $7f then
+    begin
+      headerlen := datalen and $7f; // $8x means x bytes of length
+      if headerlen > 4 then
+        exit;
+      ReceivePacket(@tmp[2], headerlen);
+      if headerlen = 4 then
+        datalen := bswap32(PInteger(@tmp[2])^) // most common case
+      else
+        datalen := bswapN(@tmp[2], headerlen); // in-place decode
+      inc(headerlen, 2);
+    end;
+    // allocate and retrieve whole LDAP packet
+    p := FastNewRawByteString(result, headerlen + datalen);
+    MoveFast(tmp, p^, headerlen);
+    if datalen > 0 then
+      ReceivePacket(p + headerlen, datalen);
+    if fSettings.PingIdleSeconds > 0 then
+      fLastPingTix := GetTickSec;
   except
     on Exception do
     begin
@@ -6530,7 +6568,7 @@ end;
 function TLdapClient.Bind: boolean;
 var
   log: ISynLog;
-  pwd: SpiUtf8;
+  pwd, asn1, asn2: SpiUtf8;
 begin
   result := false;
   if fBound or
@@ -6543,10 +6581,12 @@ begin
   fLog.EnterLocal(log, 'Bind as %', [fSettings.UserName], self);
   try
     fSettings.GetPasswordSafe(pwd);
-    SendAndReceive(Asn(LDAP_ASN1_BIND_REQUEST, [
+    asn1 := AsnTyped(pwd, ASN1_CTX0);
+    asn2 := Asn(LDAP_ASN1_BIND_REQUEST, [
                      Asn(fVersion),
                      AsnOctStr(fSettings.UserName),
-                     AsnTyped(pwd, ASN1_CTX0)]));
+                     asn1]);
+    SendAndReceive(asn2);
     if fResultCode <> LDAP_RES_SUCCESS then
       exit; // binding error
     fBound := true;
@@ -6555,6 +6595,8 @@ begin
     result := true;
   finally
     FillZero(pwd); // anti-forensic
+    FillZero(asn2);
+    FillZero(asn1);
     if Assigned(log) then
       log.Log(LOG_DEBUGERROR[not result], 'Bind=% % %',
         [BOOL_STR[result], fResultCode, fResultString], self);
@@ -6840,15 +6882,42 @@ end;
 
 function TLdapClient.Connected: boolean;
 begin
-  result := fSock.SockConnected;
+  result := (self <> nil) and
+            fSock.SockConnected;
+end;
+
+function TLdapClient.Ping: boolean;
+begin
+  result := false;
+  if Connected and             // getpeername() on client side
+     fSock.Sock.Available then // WaitFor + Recv(peek) to detect TCP keepalive
+  try
+    if fExtWhoAmI = '' then
+      fExtWhoAmI := AsnTyped(AsnTyped(ASN1_OID_WHOAMI, ASN1_CTX0), LDAP_ASN1_EXT_REQUEST);
+    SendPacket(fExtWhoAmI);
+    result := ReceiveResponse <> ''; // no need to parse anything
+  except
+    result := false;
+  end;
 end;
 
 function TLdapClient.EnsureConnected(const context: ShortString): boolean;
+var
+  ttl: cardinal;
 begin
-  result := (self <> nil) and
-            (fSock.SockConnected or
-             ((fBoundAs <> lcbNone) and
-              Reconnect(context))); // try re-connect and re-bind if possible
+  result := false;
+  if (self = nil) or
+     (fSock = nil) then
+    exit;
+  ttl := fSettings.PingIdleSeconds;
+  if (ttl > 0) and
+     (cardinal(fLastPingTix + ttl) < GetTickSec) then
+    result := Ping       // send extended WhoAmI to check the real socket state
+  else
+    result := Connected; // rough but quick client-side socket state check
+  if not result and
+     (fBoundAs <> lcbNone) then
+    result :=  Reconnect(context); // try re-connect and re-bind if possible
 end;
 
 function TLdapClient.Transmission: TLdapClientTransmission;
@@ -7071,9 +7140,7 @@ begin
             n := 1;
             AsnNext(n, resp, @r.fObjectName);
             if AsnNext(n, resp) = ASN1_SEQ then
-            begin
               while n < length(resp) do
-              begin
                 if AsnNext(n, resp, nil, @seqend) = ASN1_SEQ then
                 begin
                   AsnNext(n, resp, @u);
@@ -7088,8 +7155,6 @@ begin
                     a.AfterAdd; // allow "for a in attr.List do"
                   end;
                 end;
-              end;
-            end;
           end;
         LDAP_ASN1_SEARCH_REFERENCE:
           begin
@@ -8144,14 +8209,16 @@ begin
               SetLength(fCacheOKGroupsAN, length(fCacheOK)); // grow capacity
           end;
           fCacheOKGroupsAN[fromcachendx] := groups;
-          if GroupsAN <> nil then
-            GroupsAN^ := groups;
         end
         else
           AddRawUtf8(fCacheKO, fCacheKOCount, User)
     finally
       fSafe.UnLock;
     end;
+    // returns the optional groups
+    if result then
+      if GroupsAN <> nil then
+        GroupsAN^ := groups;
   except
     on Exception do
     begin

@@ -662,8 +662,9 @@ type
     Mac: TNetMac;
     /// the 32-bit reserved IP
     IP4: TNetIP4;
-    /// the GetTickSec monotonic value stored as 32-bit unsigned integer
+    /// the GetUptimeSec monotonic value stored as 32-bit unsigned integer
     // - TUnixTime is used on disk but not during server process (not monotonic)
+    // - GetTickSec/GetTickCount64 may not take into account the sleep time
     // - for lsStatic as in Scope.StaticMac[], is the last seen timestamp
     Expired: cardinal;
   end;
@@ -842,7 +843,7 @@ type
   TDhcpScopeOptions = set of TDhcpScopeOption;
 
   TOnDhcpBackgroundExecute = record
-    expiredtix32: cardinal;
+    expiredtix32: cardinal; // GetUptimeSec value
     ip4: TNetIP4;
     cmd: TFileName;
   end;
@@ -907,7 +908,7 @@ type
     /// efficient search of a static UUID in all Pools[]/Main.Entry[]
     function FindStaticUuid(bin: pointer; len: TStrLen; var pool: PDhcpPool): TNetIP4;
       {$ifdef FPC} inline; {$endif}
-    /// check all TDhcpLease.Expired against tix32
+    /// check all TDhcpLease.Expired against current tix32 = GetUptimeSec
     // - return the number of leases marked as lsOutdated
     // - this method is thread safe and will call Safe.Lock/UnLock
     function CheckOutdated(tix32: cardinal; var total: integer): integer;
@@ -933,8 +934,7 @@ type
     ServerPort, ClientPort: word;
     OnBackgroundExecute: function(const ctxt: TOnDhcpBackgroundExecute): boolean of object;
     procedure CheckSubNet(ident: PUtf8Char; ip: TNetIP4);
-    function ExecuteDnsScript(ip4: TNetIP4; m: PNetMac; host: PShortString;
-      tix32: cardinal): boolean;
+    function ExecuteDnsScript(ip4: TNetIP4; m: PNetMac; host: PShortString): boolean;
     function DoOutdated(p: PDhcpLease; tix32, n: cardinal): integer;
   public
     /// DDNS script location e.g. '/usr/local/bin/dhcp-dyndns.sh'
@@ -1011,8 +1011,8 @@ type
     Recv: TDhcpPacket;
     /// UDP frame to be sent back to the client, after processing
     Send: TDhcpPacket;
-    /// the GetTickSec current 32-bit value - as set by ComputeResponse() caller
-    Tix32: cardinal;
+    /// the GetUptimeSec current 32-bit value - set by ComputeResponse() caller
+    BootTix32: cardinal;
     /// the QueryPerformanceMicroSeconds() start value
     // - only set if dsoVerboseLog is defined in server Options
     StartMicroSec: Int64;
@@ -1061,7 +1061,7 @@ type
     function SendToJson(extended: boolean = false): RawJson;
     /// for testing: wrapper to DhcpClient() on the State.Recv[] buffer
     // - then call e.g. DhcpAddOption32/Raw/Buf/U/Short() functions
-    // - warning: won't make Tix32 := GetTickSec
+    // - warning: won't make Tix32 := GetUptimeSec
     function ClientNew(dmt: TDhcpMessageType; const addr: TNetMac;
       req: TDhcpOptions = DHCP_REQUEST): PAnsiChar;
     /// for testing: properly end ClientNew() buffer with #255 and compute RecvLen
@@ -1684,7 +1684,6 @@ type
     fState: TDhcpState;
     fClientBroadcast: TNetIP4;
     fClientPort, fServerPort: TNetPort;
-    fTix32: cardinal; // set by OnIdle()
     function DoBind: TNetResult; override;
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
     procedure OnShutdown; override; // to call TDhcpServer.ThreadShutdownNotify
@@ -1699,7 +1698,7 @@ type
   // - several interfaces and ports could be bound to this single instance
   TDhcpServer = class(TDhcpProcess)
   protected
-    fThreads: TThreadList; // fThreads.List[] are TDhcpServerThread
+    fThreads: TThreads; // fThreads.List[] are TDhcpServerThread
     function GetThread(s: PDhcpScope): TDhcpServerThread;
     function EnsureBound(s: PDhcpScope; mac: PMacAddress): TDhcpServerThread;
     procedure ThreadShutdownNotify(Sender: TDhcpServerThread);
@@ -3942,7 +3941,7 @@ begin
       begin
         if (p^.State = lsAckDdns) and
            (DnsScript <> '') then
-          ExecuteDnsScript(p^.IP4, @p^.Mac, {host/add=}nil, tix32);
+          ExecuteDnsScript(p^.IP4, @p^.Mac, {host/add=}nil);
         inc(result);
         p^.State := lsOutdated;
       end;
@@ -4017,7 +4016,7 @@ begin
 end;
 
 function TDhcpScope.ExecuteDnsScript(ip4: TNetIP4; m: PNetMac;
-  host: PShortString; tix32: cardinal): boolean;
+  host: PShortString): boolean;
 var
   ctx: TOnDhcpBackgroundExecute;
   ip, mac: TShort16;
@@ -4040,7 +4039,7 @@ begin
     ctx.cmd := MakeString([DnsScript, ' IPV4 delete', ip, ' ', mac]);
   // trigger the execution in a background thread
   ctx.ip4 := ip4;
-  ctx.expiredtix32 := tix32 + DnsScriptSecs;
+  ctx.expiredtix32 := GetUptimeSec + DnsScriptSecs;
   result := OnBackgroundExecute(ctx);
 end;
 
@@ -4280,7 +4279,7 @@ begin
     end;
   end;
   // notify DNS server e.g. as "dns add fqdn A ip" via a custom script
-  result := Scope^.ExecuteDnsScript(Ip4, @Mac64, @fqdn, Tix32);
+  result := Scope^.ExecuteDnsScript(Ip4, @Mac64, @fqdn);
 end;
 
 procedure TDhcpState.AddOption81;
@@ -4307,7 +4306,7 @@ begin
      (Scope^.DnsScript <> '') then
     if NotifyDnsScript(p + 3, len - 3, {plain=}not(E in flags)) then
       if (Scope^.DnsScriptLastTix32 <> 0) and
-         (cardinal(Tix32 - Scope^.DnsScriptLastTix32) < Scope^.DnsScriptSecs) then
+         (cardinal(BootTix32 - Scope^.DnsScriptLastTix32) < Scope^.DnsScriptSecs) then
         // return S=1 if DnsScript succeeded recently enough (in last 300 secs)
         include(flags, S);
   // echo raw encoded fqdn value
@@ -5137,6 +5136,7 @@ var
   tix32, n: cardinal;
   total, saved: integer;
   csv: boolean;
+  sll: TSynLogLevel;
   s: PDhcpScope;
   start: Int64;
   tmp: TShort31;
@@ -5149,6 +5149,9 @@ begin
      (fState <> sSetup) then // e.g. after Shutdown
     exit;
   fIdleTix := tix32;
+  {$ifdef OSPOSIX} // GetUptimeSec = GetTickSec = tix32 on Windows
+  tix32 := GetUptimeSec; // GetTickSec/tix64/fIdleTix would not include sleep
+  {$endif OSPOSIX}
   saved := 0;
   total := 0;
   fScopeSafe.ReadLock;
@@ -5167,19 +5170,21 @@ begin
     if result <> 0 then
       inc(fModifSequence); // trigger SaveToFile() below
     // background persist into FileName and MetricsFolder if needed
+    sll := sllTrace;
     tmp[0] := #0;
     if (fFileName <> '') and
-       (fFileFlushSeconds <> 0) and         // = 0 if disabled
+       (fFileFlushSeconds <> 0) and         // = 0 if disabled, 30 secs default
        (fModifSaved <> fModifSequence) then // if something new to be written
       if tix32 >= fFileFlushTix then        // reached the next persistence time
       begin
-        fFileFlushTix := tix32 + fFileFlushSeconds;  // every 30 secs by default
-        QueryPerformanceMicroSeconds(start);         // saved=100000 in 5.65ms
+        fFileFlushTix := tix32 + fFileFlushSeconds;
+        QueryPerformanceMicroSeconds(start);
         saved := SaveToFile(fFileName); // make fScopeSafe.ReadLock/ReadUnLock
         FormatShort(' saved=% in %', [saved, MicroSecFrom(start)], tmp);
-        // notes: 1) do not aggressively retry if saved < 0 (write failed)
-        //        2) no background thread needed - SaveToFile() takes only
-        //           5.65ms with 100K leases for a 4.2MB text file
+        if saved < 0 then    // write failed
+          sll := sllWarning; // do not aggressively retry, but log something
+        // note: no background thread needed - SaveToFile() takes only 5.65ms
+        // with 100K leases for a 4.2MB text file
         if fMetricsFolder <> '' then
         begin
           csv := tix32 >= fMetricsCsvTix;
@@ -5197,7 +5202,7 @@ begin
   // - we mitigate aggressive clients via the RateLimit counter anyway
   if Assigned(fLog) and
      ((result or saved) <> 0) then
-    fLog.Add.Log(sllTrace, 'OnIdle: outdated=%/%%', [result, total, tmp], self);
+    fLog.Add.Log(sll, 'OnIdle: outdated=%/%%', [result, total, tmp], self);
 end;
 
 function TDhcpProcess.SaveToText(SavedCount: PInteger): RawUtf8;
@@ -5215,7 +5220,7 @@ begin
   n := GetCount;
   if n = 0 then
     exit;
-  tix32 := GetTickSec;
+  tix32 := GetUptimeSec;          // not GetTickSec
   boot := UnixTimeUtc - tix32;    // = UnixTimeUtc at computer boot
   if boot < UNIXTIME_MINIMAL then // we should have booted after 08 Dec 2016 :)
     exit;
@@ -5260,7 +5265,7 @@ var
   p, lastp: PDhcpPool;
 begin
   result := false;
-  tix32 := GetTickSec;
+  tix32 := GetUptimeSec;          // not GetTickSec to include sleep time
   boot := UnixTimeUtc - tix32;    // = UnixTimeUtc at computer boot
   if boot < UNIXTIME_MINIMAL then // we should have booted after 08 Dec 2016
     exit;
@@ -5518,8 +5523,6 @@ var
   s: PDhcpScope;
   json: RawUtf8;
   n: integer;
-  i: PtrInt;
-  p: PAnsiChar;
   local: TDhcpMetrics;
 begin
   fMetricsFolder := '';
@@ -5545,15 +5548,7 @@ begin
       n := PDALen(PAnsiChar(s) - _DALEN)^ + _DAOFF;
       repeat
         // compute the metrics file names for this scope
-        s^.MetricsFileSubnet := s^.Subnet.ToShort;
-        p := @s^.MetricsFileSubnet;
-        for i := 1 to ord(p[0]) do // make it file-compatible
-          case p[i] of
-            '.':
-              p[i] := '-';
-            '/':
-              p[i] := '_';
-          end;
+        s^.MetricsFileSubnet := s^.Subnet.ToShort({filecompatible=}true);
         s^.MetricsJsonFileName := MakeString([
           fMetricsFolder, s^.MetricsFileSubnet, '.json']);
         // retrieve the previous metrics totals for this scope
@@ -5573,9 +5568,10 @@ function TDhcpProcess.SaveToFile(const FileName: TFileName): integer;
 var
   txt: RawUtf8;
   bak: TFileName;
+  n: integer; // not PtrInt
   hasbak: boolean;
 begin // for 100K leases: SaveToText=4.21ms FileFromString=1.44ms (4.2MB)
-  txt := SaveToText(@result);     // make fScopeSafe.ReadLock/ReadUnLock
+  txt := SaveToText(@n);     // make fScopeSafe.ReadLock/ReadUnLock
   hasbak := false;
   if not (dsoNoFileBak in fOptions) then
   begin
@@ -5584,7 +5580,10 @@ begin // for 100K leases: SaveToText=4.21ms FileFromString=1.44ms (4.2MB)
     hasbak := RenameFile(FileName, bak);    // atomic backup
   end;
   if FileFromString(txt, FileName) then
-    fModifSaved := fModifSequence // success: won't retry on next OnIdle()
+  begin
+    fModifSaved := fModifSequence; // success: won't retry on next OnIdle()
+    result := n;
+  end
   else
   begin
     if hasbak then
@@ -5615,7 +5614,7 @@ var
 begin
   result := true; // continue de-queuing as much as possible
   // ensure this notification is not expired (may happen if script is broken)
-  if ctx^.expiredtix32 < GetTickSec then
+  if ctx^.expiredtix32 < GetUptimeSec then
   begin
     msg := 'deprecated';
     res := -2;
@@ -5647,7 +5646,7 @@ begin
     if scope <> nil then
       if res = 0 then
       begin
-        scope^.DnsScriptLastTix32 := GetTickSec; // notify success for option 81
+        scope^.DnsScriptLastTix32 := GetUptimeSec; // notify success for option 81
         inc(scope^.Metrics.Current[dsmDdnsNotified]);
       end
       else
@@ -5832,7 +5831,7 @@ begin
         IP4Short(@Lease^.IP4, State.Ip);
         DoLog(sllTrace, 'as', State);
         if Lease^.State = lsAckDdns then // unregister to DDNS
-          State.Scope^.ExecuteDnsScript(Lease^.IP4, @Lease^.Mac, nil, State.Tix32);
+          State.Scope^.ExecuteDnsScript(Lease^.IP4, @Lease^.Mac, nil);
         State.Pool^.ReuseLease(Lease); // set MAC=0 IP=0 State=lsFree
         inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
       end;
@@ -6219,14 +6218,14 @@ begin
         // update the lease information
         if p^.State = lsStatic then
         begin
-          p^.Expired := State.Tix32;
+          p^.Expired := State.BootTix32;
           inc(State.Scope^.Metrics.Current[dsmStaticHits]);
         end
         else
         begin
           inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
           p^.State := lsReserved;
-          p^.Expired := State.Tix32 + State.Scope^.OfferHolding;
+          p^.Expired := State.BootTix32 + State.Scope^.OfferHolding;
           inc(State.Scope^.Metrics.Current[dsmDynamicHits]);
         end;
         // respond with an OFFER
@@ -6242,7 +6241,7 @@ begin
             ((p^.State = lsOutdated) and
              (State.Scope^.GraceFactor > 1) and
              (State.Scope^.LeaseTimeLE < SecsPerHour) and // grace period
-             (State.Tix32 - p^.Expired <
+             (State.BootTix32 - p^.Expired <
                 State.Scope^.LeaseTimeLE * State.Scope^.GraceFactor))) then
           // RFC 2131: lease is Reserved after OFFER = SELECTING
           //           lease is Ack/Static/Outdated = RENEWING/REBINDING
@@ -6265,7 +6264,7 @@ begin
         // update the lease information
         if p^.State = lsStatic then
         begin
-          p^.Expired := State.Tix32;
+          p^.Expired := State.BootTix32;
           inc(State.Scope^.Metrics.Current[dsmStaticHits]);
         end
         else
@@ -6277,7 +6276,7 @@ begin
             p^.State := lsAckDdns
           else
             p^.State := lsAck;
-          p^.Expired := State.Tix32 + State.Scope^.LeaseTimeLE;
+          p^.Expired := State.BootTix32 + State.Scope^.LeaseTimeLE;
           inc(State.Scope^.Metrics.Current[dsmDynamicHits]);
         end;
         // respond with an ACK on the known IP
@@ -6332,7 +6331,7 @@ begin
           p := State.Pool^.NewLease(0); // mac=0: sentinel to store this IP
           p^.State := lsUnavailable;
           p^.IP4 := State.Ip4;
-          p^.Expired := State.Tix32 + State.Scope^.DeclineTime;
+          p^.Expired := State.BootTix32 + State.Scope^.DeclineTime;
         end;
         inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
         result := 0;         // no response, but not an error
@@ -6365,7 +6364,7 @@ begin
         if (p <> nil) and
            (p^.State = lsStatic) then
         begin
-          p^.Expired := State.Tix32;
+          p^.Expired := State.BootTix32;
           inc(State.Scope^.Metrics.Current[dsmStaticHits]);
         end
         else
@@ -6397,7 +6396,7 @@ begin
             // update the lease information
             inc(fModifSequence); // trigger SaveToFile() in next OnIdle()
             p^.State := lsUnavailable;
-            p^.Expired := State.Tix32 + State.Scope^.DeclineTime;
+            p^.Expired := State.BootTix32 + State.Scope^.DeclineTime;
             p^.IP4 := State.Ip4;
           end;
         end;
@@ -6453,8 +6452,8 @@ begin
       exit; // MUST NOT respond if no subnet matches
     end;
     // syscalls before locking this scope
-    if State.Tix32 = 0 then
-      State.Tix32 := GetTickSec; // caller should have set this field
+    if State.BootTix32 = 0 then
+      State.BootTix32 := GetUptimeSec; // caller could have set this field
     if (dsoVerboseLog in Options) and
        Assigned(fLog) then
       QueryPerformanceMicroSeconds(State.StartMicroSec);
@@ -6503,7 +6502,6 @@ end;
 
 procedure TDhcpServerThread.OnIdle(tix64: Int64);
 begin
-  fTix32 := tix64 div MilliSecsPerSec; // for TDhcpState.Tix32
   if fOwner <> nil then
     fOwner.OnIdle(tix64);
 end;
@@ -6515,10 +6513,10 @@ begin
   // avoid GPF during shutdown
   if fOwner = nil then
     exit;
-  // compute the response
+  // parse the request, and compute the response
   fState.RecvLen := len;
   fState.RecvIp4 := remote.IP4;
-  fState.Tix32 := fTix32; // set in OnIdle()
+  fState.BootTix32 := GetUptimeSec; // not GetTickSec to include sleep time
   len := fOwner.ComputeResponse(fState);
   if len <= 0 then
     exit; // invalid input frame (-1), or no response needed (0)

@@ -1,5 +1,5 @@
 {:
-———————————————————————————————————————————————— (C) martindoyle 2017-2026 ——
+---------------------------------------------------(C) martindoyle 2017-2026 --
  Project : Rechnung
 
  Using mORMot2
@@ -9,7 +9,7 @@
   Module : rgReportRevenue.pas
 
   Last modified
-    Date : 01.02.2026
+    Date : 09.02.2026
     Author : Martin Doyle
     Email : martin-doyle@online.de
 
@@ -30,7 +30,7 @@
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
     IN THE SOFTWARE.
-————————————————————————————————————————————————————————————————————————————
+--------------------------------------------------------------------------------
 }
 unit rgReportRevenue;
 
@@ -50,7 +50,6 @@ type
     RefreshButton: TButton;
     procedure RefreshButtonClick(Sender: TObject);
   private
-    FReportService: ICustomerRevenueReportService;
     FSelectedYear: integer;
     procedure PopulateYearCombo;
   protected
@@ -71,7 +70,9 @@ implementation
 uses
   mdGrids, DateUtils,
   mormot.core.base,
-  mormot.core.text;
+  mormot.core.text,
+  mormot.core.unicode,
+  mdNumbers;
 
 type
   TMDListColumn = mdGrids.TMDListColumn;
@@ -84,7 +85,6 @@ type
 constructor TCustomerRevenueReportForm.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-  FReportService := TCustomerRevenueReportService.Create;
 
   PopulateYearCombo;
 
@@ -97,7 +97,6 @@ end;
 
 destructor TCustomerRevenueReportForm.Destroy;
 begin
-  FReportService := nil;
   inherited Destroy;
 end;
 
@@ -172,8 +171,8 @@ end;
 
 procedure TCustomerRevenueReportForm.LoadData;
 var
+  Items: TDtoCustomerRevenueDynArray;
   i: integer;
-  Item: TDtoCustomerRevenue;
   ListItem: TMDListItem;
   YearText: string;
   TempYear: integer;
@@ -195,18 +194,17 @@ begin
   end;
 
   FSelectedYear := TempYear;
-  FReportService.LoadCustomerRevenue(FSelectedYear);
+  RgServices.ReportService.GetCustomerRevenueReport(FSelectedYear, Items);
 
-  for i := 0 to FReportService.GetItemCount - 1 do
+  for i := 0 to High(Items) do
   begin
-    Item := FReportService.GetItem(i);
     ListItem := FResultGrid.Items.Add;
-    ListItem.Caption := Item.Company;
-    ListItem.SubItems.Add(IntToStr(Item.InvoiceCount));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.TotalRevenue)^));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.TotalPaid)^));
-    ListItem.SubItems.Add(Curr64ToString(PInt64(@Item.TotalOpen)^));
-    ListItem.Data := Pointer(PtrInt(Item.CustomerID));
+    ListItem.Caption := Utf8ToString(Items[i].Company);
+    ListItem.SubItems.Add(IntToThousandString(Items[i].InvoiceCount));
+    ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Items[i].TotalRevenue));
+    ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Items[i].TotalPaid));
+    ListItem.SubItems.Add(FormatCurr(FMT_CURR_DISPLAY, Items[i].TotalOpen));
+    ListItem.Data := Pointer(PtrInt(Items[i].CustomerID));
   end;
 end;
 

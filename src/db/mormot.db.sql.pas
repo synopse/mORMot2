@@ -3122,174 +3122,144 @@ begin
     result := copy(TableName, j, maxInt);
 end;
 
+type
+  // efficient state machine for ReplaceParamsByNumbers/ReplaceParamsByNames
+  TReplaceSql = record
+    Flags: set of (fAllowSemicolon, fByNumber);
+    IndexChar: AnsiChar;
+    Name: array[0..1] of AnsiChar;
+    Number: Integer;
+    Dest: PRawUtf8;
+    Temp: TSynTempAdder; // 4KB temp output on stack is almost always enough
+  end;
+
+procedure DoSqlReplace(s: PUtf8Char; var w: TReplaceSql);
+var
+  c: AnsiChar;
+  l: PtrInt;
+begin
+  l := 0;
+  while not (s[l] in [#0, '?', '''', ';']) do
+    inc(l);
+  w.Temp.Add(s, l); // quickly add the first part of the SQL statement
+  inc(s, l);
+  w.Number := 0;
+  repeat
+    case s^ of
+      #0:
+        break; // success
+      '?':
+        begin
+          w.Temp.AddDirect(w.IndexChar);
+          inc(w.Number);
+          if fByNumber in w.Flags then
+            w.Temp.AddU(w.Number)   // ReplaceParamsByNumbers
+          else
+          begin
+            w.Temp.Add(@w.Name, 2); // ReplaceParamsByNames
+            repeat
+              if w.Name[1] = 'Z' then
+              begin
+                if w.Name[0] = 'Z' then
+                  ESqlDBException.RaiseU(
+                    'Only up to 656 parameters are possible in :AA to :ZZ range');
+                w.Name[1] := 'A';
+                inc(w.Name[0]); // :AZ -> :BA
+              end
+              else
+                inc(w.Name[1]); // :AA -> :AB
+            until not IsSqlReservedByTwo(@w.Name); // skip e.g. :AS :IF :OF
+          end;
+          inc(s);
+          continue;
+        end;
+      '''':
+        repeat
+          w.Temp.Add(s^);
+          inc(s);
+          c := s^;
+          if c = #0 then
+            exit // quote without proper ending -> reject
+          else if c = '''' then
+            if s[1] = c then
+            begin
+              w.Temp.AddDirect(c);
+              inc(s); // ignore double quotes between single quotes
+            end
+            else
+              break;
+        until false;
+      ';':
+        if not (fAllowSemicolon in w.Flags) then
+          exit; // complex expression can not be prepared
+    end;
+    w.Temp.Add(s^);
+    inc(s);
+  until false;
+  FastSetStringCP(w.Dest^, w.Temp.Store.buf, w.Temp.Store.added, CP_UTF8);
+  w.Dest := nil; // mark success
+end;
+
+
 function ReplaceParamsByNames(const aSql: RawUtf8; var aNewSql: RawUtf8;
   aStripSemicolon: boolean): integer;
 var
-  i, j, B, L: PtrInt;
-  P: PAnsiChar;
-  c: array[0..3] of AnsiChar;
-  tmp: RawUtf8;
-begin
+  L: PtrInt;
+  w: TReplaceSql;
+begin // only called by mormot.db.rad.pas with a TDataSet: less optimized
   result := 0;
   L := Length(aSql);
   if aStripSemicolon then
     while (L > 0) and
-          (aSql[L] in [#1..' ', ';']) do
+          (aSql[L] in [#1 .. ' ', ';']) do
       if (aSql[L] = ';') and
          (L > 5) and
          IdemPChar(@aSql[L - 3], 'END') then
         break
       else // allows 'END;' at the end of a statement
         dec(L);    // trim ' ' or ';' right (last ';' could be found incorrect)
-  if PosExChar('?', aSql) > 0 then
-  begin
-    aNewSql := '';
-    // change ? into :AA :BA ..
-    c := ':AA';
-    i := 0;
-    P := pointer(aSql);
-    if P <> nil then
-      repeat
-        B := i;
-        while (i < L) and
-              (P[i] <> '?') do
-        begin
-          if P[i] = '''' then
-          begin
-            repeat // ignore chars inside ' quotes
-              inc(i);
-            until (i = L) or
-                  ((P[i] = '''') and
-                   (P[i + 1] <> ''''));
-            if i = L then
-              break;
-          end;
-          inc(i);
-        end;
-        FastSetString(tmp, P + B, i - B);
-        aNewSql := aNewSql + tmp;
-        if i = L then
-          break;
-        // store :AA :BA ..
-        j := length(aNewSql);
-        SetLength(aNewSql, j + 3);
-        PCardinal(PtrInt(aNewSql) + j)^ := PCardinal(@c)^;
-        repeat
-          if c[1] = 'Z' then
-          begin
-            if c[2] = 'Z' then
-              ESqlDBException.RaiseU(
-                'Only up to 656 parameters are possible in :AA to :ZZ range');
-            c[1] := 'A';
-            inc(c[2]);
-          end
-          else
-            inc(c[1]);
-        until not IsSqlReservedByTwo(@c[1]);
-        inc(result);
-        inc(i); // jump '?'
-      until i = L;
-  end
+  if L = length(aSql) then
+    aNewSql := aSql
   else
     aNewSql := copy(aSql, 1, L); // trim right ';' if any
+  if (L = 0) or
+     (ByteScanIndex(pointer(aNewSql), L, ord('?')) < 0) then // may use SSE2
+    exit;
+  w.Flags := [];
+  w.IndexChar := ':';
+  w.Name[0] := 'A';
+  w.Name[1] := 'A';
+  w.Dest := @aNewSql;
+  w.Temp.Init(L + L shr 2); // no alloc nor realloc needed in practice
+  DoSqlReplace(pointer(aNewSql), w);
+  w.Temp.Store.Done;
+  if w.Dest = nil then
+    result := w.Number; // success
 end;
 
 function ReplaceParamsByNumbers(const aSql: RawUtf8; var aNewSql: RawUtf8;
   IndexChar: AnsiChar; AllowSemicolon: boolean): integer;
 var
-  ndx, L: PtrInt;
-  s, d: PUtf8Char;
-  c: AnsiChar;
+  L: PtrInt;
+  w: TReplaceSql;
 begin
   aNewSql := aSql;
   result := 0;
-  ndx := 0;
   L := Length(aSql);
-  s := pointer(aSql);
-  if (s = nil) or
-     (PosExChar('?', aSql) = 0) then
+  if (L = 0) or
+     (ByteScanIndex(pointer(aSql), L, ord('?')) < 0) then // may use SSE2
     exit;
-  // calculate ? parameters count, check for ;
-  while s^ <> #0 do
-  begin
-    c := s^;
-    if c = '?' then
-    begin
-      inc(ndx);
-      if ndx > 9 then  // ? will be replaced by $n $nn $nnn
-        if ndx > 99 then
-          if ndx > 999 then
-            exit
-          else
-            inc(L, 3)
-        else
-          inc(L, 2)
-        else
-          inc(L);
-    end
-    else if c = '''' then
-    begin
-      repeat
-        inc(s);
-        c := s^;
-        if c = #0 then
-          exit; // quote without proper ending -> reject
-        if c = '''' then
-          if s[1] = c then
-            inc(s) // ignore double quotes between single quotes
-          else
-            break;
-      until false;
-    end
-    else if (c = ';') and
-                not AllowSemicolon then
-      exit; // complex expression can not be prepared
-    inc(s);
-  end;
-  if ndx = 0 then // no ? parameter
-    exit;
-  result := ndx;
-  // parse SQL and replace ? into $n $nn $nnn
-  d := FastSetString(aNewSql, L);
-  s := pointer(aSql);
-  ndx := 0;
-  repeat
-    c := s^;
-    if c = '?' then
-    begin
-      d^ := IndexChar; // e.g. '$'
-      inc(d);
-      inc(ndx);
-      d := Append999ToBuffer(d, ndx);
-    end
-    else if c = '''' then
-    begin
-      repeat // ignore double quotes between single quotes
-        d^ := c;
-        inc(d);
-        inc(s);
-        c := s^;
-        if c = '''' then
-          if s[1] = c then
-          begin
-            d^ := c;
-            inc(d);
-            inc(s) // ignore double quotes between single quotes
-          end
-          else
-            break;
-      until false;
-      d^ := c; // store last '''
-      inc(d);
-    end
-    else
-    begin
-      d^ := c;
-      inc(d);
-    end;
-    inc(s);
-  until s^ = #0;
-  //assert(d - pointer(aNewSql) = length(aNewSql)); // until stabilized
+  if AllowSemicolon then
+    w.Flags := [fByNumber, fAllowSemicolon]
+  else
+    w.Flags := [fByNumber];
+  w.IndexChar := IndexChar;
+  w.Dest := @aNewSql;
+  w.Temp.Init(L + L shr 2);
+  DoSqlReplace(pointer(aSql), w);
+  w.Temp.Store.Done;
+  if w.Dest = nil then
+    result := w.Number; // success
 end;
 
 function BoundArrayToJsonArray(const Values: TRawUtf8DynArray;
@@ -6186,17 +6156,20 @@ begin
 end;
 
 function TSqlDBStatement.ColumnTimestamp(Col: integer): TTimeLog;
+var
+  b: TTimeLogBits; // safer with a transient variable
 begin
   case ColumnType(Col) of // will call GetCol() to check Col
     ftNull:
-      result := 0;
+      b.Value := 0;
     ftInt64:
-      result := ColumnInt(Col);
+      b.Value := ColumnInt(Col);
     ftDate:
-      PTimeLogBits(@result)^.From(ColumnDateTime(Col));
+      b.From(ColumnDateTime(Col));
   else
-    PTimeLogBits(@result)^.From(TrimU(ColumnUtf8(Col)));
+    b.From(TrimU(ColumnUtf8(Col)));
   end;
+  result := b.Value;
 end;
 
 function TSqlDBStatement.ColumnTimestamp(const ColName: RawUtf8): TTimeLog;
@@ -6616,14 +6589,14 @@ function TSqlDBStatement.FetchAllToBinary(Dest: TStream; MaxRowCount: cardinal;
 var
   f, fmax, fieldsize, nullrowlast: integer;
   startpos: Int64;
-  maxmem: PtrInt;
+  maxmem, count: PtrInt;
   W: TBufferWriter;
   ft: TSqlDBFieldType;
   coltypes: TSqlDBFieldTypeDynArray;
   nullbits: TByteDynArray;
   tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
-  result := 0;
+  count := 0; // safer with a transient local variable
   maxmem := Connection.Properties.StatementMaxMemory;
   W := TBufferWriter.Create(Dest, @tmp, SizeOf(tmp));
   try
@@ -6657,9 +6630,9 @@ begin
           // save row position in DataRowPosition[] (if any)
           if DataRowPosition <> nil then
           begin
-            if Length(DataRowPosition^) <= integer(result) then
-              SetLength(DataRowPosition^, NextGrow(result));
-            DataRowPosition^[result] := W.TotalWritten - startpos;
+            if Length(DataRowPosition^) <= count then
+              SetLength(DataRowPosition^, NextGrow(count));
+            DataRowPosition^[count] := W.TotalWritten - startpos;
           end;
           // first write null columns flags
           if nullrowlast > 0 then
@@ -6684,9 +6657,9 @@ begin
             W.Write1(0); // = W.WriteVarUInt32(0)
           // then write data values
           ColumnsToBinary(W, pointer(nullbits), coltypes);
-          inc(result);
+          inc(count);
           if (MaxRowCount > 0) and
-             (result >= MaxRowCount) then
+             (count >= PtrInt(MaxRowCount)) then
             break;
           if (maxmem > 0) and
              (W.TotalWritten > maxmem) then // Dest.Position is slower
@@ -6695,11 +6668,12 @@ begin
         until not Step;
       ReleaseRows;
     end;
-    W.Write(@result, SizeOf(result)); // fixed size at the end for row count
+    W.Write(@count, 4); // 32-bit number of rows at the end of whole binary
     W.Flush;
   finally
     W.Free;
   end;
+  result := count;
 end;
 
 function TSqlDBStatement.FetchAllToDocVariantArray(MaxRowCount: cardinal): variant;
@@ -7402,8 +7376,11 @@ begin
 end;
 
 function TSqlDBConnection.GetServerTimestamp: TTimeLog;
+var
+  t: TTimeLogBits;
 begin
-  PTimeLogBits(@result)^.From(GetServerDateTime);
+  t.From(GetServerDateTime);
+  result := t.Value;
 end;
 
 function TSqlDBConnection.GetServerDateTime: TDateTime;
@@ -7876,24 +7853,32 @@ end;
 procedure TSqlDBConnectionPropertiesThreadSafe.DeleteDeprecated(secs: integer);
 var
   i: PtrInt;
+  c: TSqlDBConnectionThreadSafe;
   delete: TObjectDynArray; // outside non-reentrant lock
-  deletecount: integer;
+  deletecount: integer;    // not PtrInt
   log: ISynLog;
 begin // called at most every 32 seconds - ensured timeout <> 0 and secs <> 0
   if fConnectionPoolCount = 0 then
     exit;
+  // detect outdated connection instances into a local delete[] list
   deletecount := 0;
   fConnectionPoolSafe.Lock;
   try
     for i := fConnectionPoolMin to fConnectionPoolMax do
-      if (fConnectionPool[i] <> nil) and
-         fConnectionPool[i].IsOutdated(secs) then
-        ObjArrayAddCount(delete, fConnectionPool[i], deletecount);
+    begin
+      c := fConnectionPool[i];
+      if (c = nil) or
+         not c.IsOutdated(secs) then
+        continue;
+      ObjArrayAddCount(delete, c, deletecount);
+      fConnectionPool[i] := nil; // instance is owned by delete[] now
+    end;
   finally
     fConnectionPoolSafe.UnLock;
   end;
   if deletecount = 0 then
     exit;
+  // delete all deprecated connections outside of the lock
   SynDBLog.EnterLocal(log, 'DeleteDeprecated=%', [deletecount], self);
   ObjArrayClear(delete, {continueonexc=}true, @deletecount);
 end;

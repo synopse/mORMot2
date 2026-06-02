@@ -296,7 +296,7 @@ begin
       writeln('  - Interval doubles after 5 messages (demonstrates dynamic adjustment)');
       writeln('  - Per-client session tracking');
       writeln('');
-      TextColor(ccLightGray);
+      TextColor(ccDefault);
       writeln('Press ENTER to stop...');
       writeln('');
 

@@ -380,10 +380,8 @@ type
   // process is to be monitored
   // - this class is thread-safe for its methods, but you should call explicitly
   // non-reentrant Lock/UnLock to access its individual properties
-  TSynMonitor = class(TObjectWithRttiMethods)
+  TSynMonitor = class(TSynMonitorAbstract)
   protected
-    fSafe: TLightLock; // our fast non-reentrant lock
-    fName: RawUtf8;
     fTaskCount: TSynMonitorCount64;
     fTotalTime: TSynMonitorTime;
     fLastTime: TSynMonitorOneTime;
@@ -409,10 +407,6 @@ type
     /// low-level high-precision timer instance
     InternalTimer: TPrecisionTimer;
     /// initialize the instance nested class properties
-    // - you can specify identifier associated to this monitored resource
-    // which would be used for TSynMonitorUsage persistence
-    constructor Create(const aName: RawUtf8); reintroduce; overload; virtual;
-    /// initialize the instance nested class properties
     constructor Create; overload; override;
     /// finalize the instance
     destructor Destroy; override;
@@ -431,7 +425,7 @@ type
     // - similar to ProcessStart + ProcessDoTask
     // - this method is not thread-safe, due to the shared InternalTimer: use
     // an external TPrecisionTimer then FromExternalMicroSeconds()
-    procedure ProcessStartTask; virtual;
+    procedure ProcessStartTask; override;
     /// should be called when an error occurred
     // - typical use is with ObjectToVariant(E,...) kind of information
     // - thread-safe method
@@ -445,11 +439,11 @@ type
     procedure ProcessErrorFmt(const Fmt: RawUtf8; const Args: array of const);
     /// should be called when an Exception occurred
     // - just a wraper around overloaded ProcessError(), so a thread-safe method
-    procedure ProcessErrorRaised(E: Exception);
+    procedure ProcessErrorRaised(E: Exception); override;
     /// should be called when the process stops, to pause the internal timer
     // - this method is not thread-safe, due to the shared InternalTimer: use
     // an external TPrecisionTimer then FromExternalMicroSeconds()
-    procedure ProcessEnd; virtual;
+    procedure ProcessEnd; override;
     /// could be used to manage information average or sums
     // - thread-safe method calling LockedSum protected virtual method
     procedure Sum(another: TSynMonitor);
@@ -458,7 +452,7 @@ type
     function ComputeDetailsJson: RawUtf8;
     /// appends a JSON content with all published properties information
     // - thread-safe method
-    procedure ComputeDetailsTo(W: TTextWriter); virtual;
+    procedure ComputeDetailsTo(W: TTextWriter); override;
     /// returns a TDocVariant with all published properties information
     // - thread-safe method
     function ComputeDetails: variant;
@@ -630,9 +624,6 @@ type
 
   /// a list of incoming/outgoing data process statistics
   TSynMonitorInputOutputObjArray = array of TSynMonitorInputOutput;
-
-  /// class-reference type (metaclass) of a process statistic information
-  TSynMonitorClass = class of TSynMonitor;
 
 
 { ************ TSynMonitorUsage Process Information Database Storage }
@@ -2651,12 +2642,6 @@ begin
   fMaximalTime := TSynMonitorOneTime.Create;
 end;
 
-constructor TSynMonitor.Create(const aName: RawUtf8);
-begin
-  Create;
-  fName := aName;
-end;
-
 destructor TSynMonitor.Destroy;
 begin
   fMaximalTime.Free;
@@ -3593,9 +3578,12 @@ begin
 end;
 
 function TSynMonitorUsageID.ToTimeLog: TTimeLog;
+var
+  bits: TTimeLogBits;
 begin
-  PTimeLogBits(@result)^.From(GetTime(mugYear), GetTime(mugMonth),
-    GetTime(mugDay), GetTime(mugHour), 0, 0);
+  bits.From(GetTime(mugYear), GetTime(mugMonth), GetTime(mugDay),
+            GetTime(mugHour), 0, 0);
+  result := bits.Value;
 end;
 
 
@@ -3924,7 +3912,7 @@ begin
 end;
 
 var
-  ProcessSystemUse: TSystemUse;
+  ProcessSystemUse: TSystemUse; // global hidden variable
 
 class function TSystemUse.Current(aCreateIfNone: boolean): TSystemUse;
 begin
@@ -3934,7 +3922,10 @@ begin
     GlobalLock; // RegisterGlobalShutdownRelease() will use it anyway
     try
       if ProcessSystemUse = nil then
+      begin
         ProcessSystemUse := RegisterGlobalShutdownRelease(TSystemUse.Create(60));
+        ProcessSystemUseTimer := @ProcessSystemUse.fTimer;
+      end;
     finally
       GlobalUnLock;
     end;
@@ -4789,8 +4780,8 @@ begin
       12: // System Configuration options (type 12)
         if s[4] <> 0 then
         begin
-          i := length(info.Oem);
-          SetLength(info.Oem, i + s[4]);
+          c := length(info.Oem);
+          SetLength(info.Oem, c + s[4]);
           // we just parse the strings table here
           s := @s[s[1]];
           if s[0] = 0 then
@@ -4799,17 +4790,17 @@ begin
             repeat
               len := StrLen(s);
               if (len <> 0) and
-                 (i < length(info.Oem)) then
+                 (c < length(info.Oem)) and
+                 not IsDefaultString(s, len) then
               begin
-                FastSetString(info.Oem[i], s, len);
-                if info.Oem[i] <> 'Default string' then // see mormot.core.os
-                  inc(i);
+                FastSetString(info.Oem[c], s, len);
+                inc(c);
               end;
               s := @s[len + 1]; // next string
             until s[0] = 0;
           inc(PByte(s));
-          if length(info.Oem) <> i then
-            SetLength(info.Oem, i);
+          if length(info.Oem) <> c then
+            SetLength(info.Oem, c);
           continue;
         end;
       16: // Physical Memory Array (type 16)

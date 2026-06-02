@@ -1244,9 +1244,12 @@ begin
 end;
 
 function TSqlDBPostgresStatement.ColumnCurrency(Col: integer): currency;
+var
+  curr: currency; // safer with an explicit variable
 begin
   CheckColAndRowset(Col);
-  PInt64(@result)^ := StrToCurr64(PQ.GetValue(fRes, fCurrentRow, Col));
+  PInt64(@curr)^ := StrToCurr64(PQ.GetValue(fRes, fCurrentRow, Col));
+  result := curr;
 end;
 
 function TSqlDBPostgresStatement.ColumnUtf8(Col: integer): RawUtf8;

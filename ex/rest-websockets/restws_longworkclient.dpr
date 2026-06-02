@@ -46,7 +46,7 @@ procedure TLongWorkCallback.WorkFailed(const workName, error: string);
 begin
   TextColor(ccLightRed);
   writeln(#13'Received callback WorkFailed(', workName, ') with message "', error, '"');
-  TextColor(ccLightGray);
+  TextColor(ccDefault);
   write('>');
 end;
 
@@ -54,7 +54,7 @@ procedure TLongWorkCallback.WorkFinished(const workName: string; timeTaken: inte
 begin
   TextColor(ccLightBlue);
   writeln(#13'Received callback WorkFinished(', workName, ') in ', timeTaken, 'ms');
-  TextColor(ccLightGray);
+  TextColor(ccDefault);
   write('>');
 end;
 
@@ -127,7 +127,7 @@ begin
       try
         // actual main loop
         repeat
-          TextColor(ccLightGray);
+          TextColor(ccDefault);
           write('>');
           readln(workName);
           if workName = '' then

@@ -32,7 +32,6 @@ uses
   mormot.core.rtti,
   mormot.core.json,
   mormot.core.buffers,
-  mormot.core.perf,
   mormot.core.interfaces,
   mormot.crypt.core,
   mormot.crypt.ecc,

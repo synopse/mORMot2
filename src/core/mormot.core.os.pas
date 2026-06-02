@@ -187,7 +187,7 @@ const
   /// a fake response code, generated for client side panic failure/exception
   // - for it is the number of a man, and that number is 666
   HTTP_CLIENTERROR = 666;
-  /// a fake response code, usedfor internal THttpAsyncServer asynchronous process
+  /// a fake response code, used for internal THttpAsyncServer asynchronous process
   HTTP_ASYNCRESPONSE = 777;
 
   /// the successful HTTP response codes after a GET request
@@ -367,6 +367,7 @@ type
 
   /// the known operating systems
   // - it will also recognize most Linux distributions
+  // - stored as integer in TOperatingSystemVersion: do not change the order
   TOperatingSystem = (
     osUnknown,
     osWindows,
@@ -404,7 +405,9 @@ type
     osAlpine,
     osAndroid,
     osApt,
-    osRpm);
+    osRpm,
+    osAlma,
+    osRocky);
   TOperatingSystems = set of TOperatingSystem;
 
   /// the recognized Windows versions
@@ -570,7 +573,9 @@ const
     'Alpine',       // osAlpine
     'Android',      // osAndroid
     'Debian-based', // osApt - any Debian-based flavor
-    'Rpm-based');   // osRpm - any RedHat-based flavor
+    'Rpm-based',    // osRpm - any RedHat-based flavor
+    'Alma',         // osAlma
+    'Rocky');       // osRocky
 
   /// translate one operating system (and distribution) into a single character
   // - may be used internally e.g. for a HTTP User-Agent header, as with
@@ -612,19 +617,22 @@ const
     'p', // Alpine
     'J', // Android (J=JVM)
     '1', // Apt-based
-    '2'  // Rpm-based
+    '2', // Rpm-based
+    'h', // Alma (rHel fork)
+    'k'  // Rocky
     );
 
   /// the operating systems items which actually have a Linux kernel
-  OS_LINUX = [osLinux, osArch .. osSlackware, osSuse, osTrustix .. osRpm];
+  OS_LINUX = [osLinux, osArch .. osSlackware, osSuse, osTrustix .. osRocky];
 
   /// used to recognize the package management system used by a Linux OS
   LINUX_DIST: array[TLinuxDistribution] of TOperatingSystems = (
     [osUnknown, osWindows, osOSX, osBSD, osPOSIX, osSolaris, osSynology],  // ldNotLinux
     [osLinux, osSlackware, osClear, osLFS, osXen, osAlpine],               // ldUndefined
     [osDebian, osKnoppix, osMint, osUbuntu, osApt],                        // ldApt
-    [osAurox, osFedora, osMandrake, osMandriva, osNovell, osSuse, osTrustix, // ldRpm
-     osUnited, osRedHat, osOracle, osMageia, osCentOS, osCloud, osAmazon, osRpm],
+    [osAurox, osFedora, osMandrake, osMandriva, osNovell, osSuse, osTrustix,
+     osUnited, osRedHat, osOracle, osMageia, osCentOS, osCloud, osAmazon,  // ldRpm
+     osRpm, osAlma, osRocky],
     [osArch],                                                              // ldPacman
     [osGentoo, osCoreOs],                                                  // ldPortage
     [osAndroid]);                                                          // ldAndroid
@@ -1850,15 +1858,17 @@ type
     sbiBatteryChemistry,
     sbiOem
   );
-
   /// the text fields stored by GetSmbios/DecodeSmbios functions
   TSmbiosBasicInfos = array[TSmbiosBasicInfo] of RawUtf8;
+
+/// check if a string value should be ignored when parsed e.g. from SMBIOS fields
+function IsDefaultString(p: pointer; l: PtrInt): boolean;
 
 /// decode basic SMBIOS information as text from a TRawSmbiosInfo binary blob
 // - see DecodeSmbiosInfo() in mormot.core.perf.pas for a more complete decoder
 // - returns the total size of DMI/SMBIOS information in raw.data (may be lower)
 // - will also adjust raw.Length and truncate raw.Data to the actual useful size
-function DecodeSmbios(var raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos): PtrInt;
+function DecodeSmbios(var raw: TRawSmbiosInfo; var info: TSmbiosBasicInfos): PtrInt;
 
 // some global definitions for proper caching and inlining of GetSmbios()
 procedure ComputeGetSmbios;
@@ -2383,10 +2393,10 @@ var
 // - returns a file descriptor handle on success, to be eventually closed
 function LinuxEventFD(nonblocking, semaphore: boolean): integer;
 
-/// wrapper to read from a eventfd() file
+/// wrapper to read from a eventfd() file depending on LinuxEventFD() parameters
+// - may be blocking or not blocking
 // - return 1 and decrement the counter by 1 in semaphore mode
-// - return the current counter value and set it to 0 in non-semaphor mode
-// - may be blocking or not blocking, depending on how LinuxEventFD() was called
+// - return the current counter and set it to 0 in non-semaphore/TSynEvent mode
 // - return -1 on error
 function LinuxEventFDRead(fd: integer): Int64;
 
@@ -3374,6 +3384,14 @@ function ExtractNameU(const FileName: RawUtf8): RawUtf8;
 // - but cross-platform, i.e. detect both '\' and '/' on all platforms
 function ExtractExt(const FileName: TFileName; WithoutDot: boolean = false): TFileName;
 
+/// returns true if the file name as a non-void extension (e.g. 'toto.txt' = true)
+// - see also GetFileNameExtIndex() from mormot.core.text
+function HasExt(const FileName: TFileName): boolean;
+
+/// case-insensitive check a file name extension, returning -1 or Exts[] found index
+function SameExt(const FileName: TFileName; const Exts: array of TFileName;
+  WithoutDot: boolean = false): PtrInt;
+
 // defined here for proper ExtractExtP() inlining
 function GetLastDelimU(const FileName: RawUtf8; OtherDelim: AnsiChar = #0): PtrInt;
 function GetLastDelim(const FileName: TFileName; OtherDelim: cardinal = 0): PtrInt;
@@ -3405,6 +3423,12 @@ function GetFileNameWithoutExtOrPath(const FileName: TFileName): RawUtf8;
 // - the expected string type for A and B is the RTL string, i.e. TFileName
 // - like calling GetFileNameWithoutExt() and AnsiCompareFileName()
 function SortDynArrayFileName(const A, B): integer;
+
+/// check if two TFileName are equal, checking backward from the last bytes
+// - most filenames have similar paths, but unique file names
+// - warning: a and b should be <> '' - to be used e.g. inlined in a loop
+function EqualFileNameNotNull(const a, b: TFileName): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
 {$ifdef ISDELPHI20062007}
 /// compatibility function defined to avoid hints on buggy Delphi 2006/2007
@@ -3465,7 +3489,7 @@ function DirectoryDeleteAll(const Directory: TFileName): boolean;
 function DirectoryDeleteOlderFiles(const Directory: TFileName;
   TimePeriod: TDateTime; const Mask: TFileName = FILES_ALL;
   Recursive: boolean = false; TotalSize: PInt64 = nil;
-  DeleteFolders: boolean = false): boolean;
+  DeleteFolders: boolean = false; DeletedCount: PInteger = nil): boolean;
 
 type
   /// recursively search a folder and its nested sub-folders via methods
@@ -3830,7 +3854,7 @@ function GetDiskPartitions: TDiskPartitions;
 procedure XorOSEntropy(var e: THash512Rec);
 
 type
-  /// available console colors
+  /// available console colors for TextColor/TextBackground functions
   TConsoleColor = (
     ccBlack,
     ccBlue,
@@ -3848,6 +3872,9 @@ type
     ccLightMagenta,
     ccYellow,
     ccWhite);
+const
+  /// TextColor(ccLightGray) has a special meaning of "default" console color
+  ccDefault = ccLightGray;
 
 var
   /// low-level handle used for console writing
@@ -3878,14 +3905,15 @@ function StdOutIsTTY: boolean; {$ifdef FPC} inline; {$endif}
 {$endif OSWINDOWS}
 
 /// change the console text writing color
+// - TextColor(ccDefault=ccLightGray) will reset to the default console color
 procedure TextColor(Color: TConsoleColor);
 
-/// change the console text background color
+/// change the console text background color - do nothing on POSIX
 procedure TextBackground(Color: TConsoleColor);
 
 /// write some UTF-8 text to the console using a given color
 // - this method is protected by its own CriticalSection for output consistency
-procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor = ccLightGray;
+procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor = ccDefault;
   NoLineFeed: boolean = false; NoColor: boolean = false); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -4209,7 +4237,7 @@ type
   TLightLock = object
   {$endif USERECORDWITHMETHODS}
   private
-    Flags: PtrUInt;
+    Flags: PtrUInt;     // 0=unlocked, 1=locked
     procedure LockSpin; // called by the Lock method when inlined
   public
     /// to be called if the instance has not been filled with 0
@@ -4249,9 +4277,9 @@ type
   TMultiLightLock = object
   {$endif USERECORDWITHMETHODS}
   private
-    Flags: PtrUInt;      // is also the reentrant > 0 counter
-    ThreadID: TThreadID; // pointer on POSIX, DWord on Windows
-    procedure LockSpin;  // called by the Lock method when inlined
+    Flags: PtrUInt;     // is also the reentrant > 0 counter
+    ThreadID: pointer;  // TThreadID is pointer on POSIX, DWord on Windows
+    procedure LockSpin; // called by the Lock method when inlined
   public
     /// to be called if the instance has not been filled with 0
     // - e.g. not needed if TMultiLightLock is defined as a class field
@@ -4470,6 +4498,8 @@ type
     // - if returned true, caller should eventually call UnLock()
     function TryLock: boolean;
       {$ifdef FPC} inline; {$endif} { Delphi can't inline TryEnterCriticalSection }
+    /// enter an OS lock, initializing it if it was currently filled with zeros
+    procedure LockAndInitIfNeeded;
     /// leave an OS lock
     procedure UnLock;
       {$ifdef FPC} inline; {$endif} { Delphi can't inline LeaveCriticalSection }
@@ -4836,9 +4866,10 @@ type
   // - on Windows, calls directly the CreateEvent/ResetEvent/SetEvent API
   // - on Linux, will use eventfd() in blocking and non-semaphore mode
   // - on other POSIX, will use PRTLEvent which is lighter than TEvent BasicEvent
+  // - WARNING: you should wait from a single thread at once
   TSynEvent = class(TSynPersistent)
   protected
-    fHandle: pointer; // Windows THandle or FPC PRTLEvent
+    fHandle: pointer; // Windows THandle, FPC PRTLEvent or Delphi-POSIX TEvent
     {$ifdef OSLINUX}
     fFD: integer;     // for eventfd()
     {$endif OSLINUX}
@@ -4850,27 +4881,27 @@ type
     destructor Destroy; override;
     /// ignore any pending events, so that WaitFor will be set on next SetEvent
     procedure ResetEvent;
-      {$ifdef FPCPOSIX} inline; {$endif}
     /// trigger any pending event, releasing the WaitFor/WaitForEver methods
     procedure SetEvent;
-      {$ifdef FPCPOSIX} inline; {$endif}
     /// wait until SetEvent is called from another thread, with a maximum time
     // - returns true if was signaled by SetEvent, or false on timeout
-    // - WARNING: you should wait from a single thread at once
-    function WaitFor(TimeoutMS: integer): boolean;
-      {$ifdef FPCPOSIX} inline; {$endif}
+    // - WaitFor(INFINITE) is the same as WaitForEver
+    function WaitFor(TimeoutMS: cardinal): boolean;
     /// wait until SetEvent is called from another thread, with no maximum time
     // - returns true if was signaled by SetEvent, or false if aborted/destroyed
     function WaitForEver: boolean;
-      {$ifdef FPCPOSIX} inline; {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// wait until SetEvent is called, calling CheckSynchronize() on main thread
     // - returns true if was signaled by SetEvent, or false on timeout
-    function WaitForSafe(TimeoutMS: integer): boolean;
+    function WaitForSafe(TimeoutMS: cardinal; DisableSafe: boolean = false): boolean;
     /// calls SleepHiRes() in steps while checking terminated flag and this event
     function SleepStep(var start: Int64; terminated: PBoolean): Int64;
     /// could be used to tune your algorithm if the eventfd() API is used
     function IsEventFD: boolean;
       {$ifdef HASINLINE} inline; {$endif}
+    /// low-level read-only access to the internal SetEvent flag
+    property Notified: boolean
+      read fNotified;
   end;
 
   /// a thread-safe class with a virtual constructor and properties persistence
@@ -4970,6 +5001,27 @@ type
 // - call DoneandFreeMem to release the associated memory and OS mutex
 // - as used e.g. by TSynLocked/TSynLockedWithRttiMethods to reduce class instance size
 function NewSynLocker: PSynLocker;
+
+type
+  TCachedValueCall = function(Param: pointer): RawByteString;
+  /// raw thread-safe cache of a RawByteString content
+  {$ifdef USERECORDWITHMETHODS}
+  TCachedValue = record
+  {$else}
+  TCachedValue = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    Safe: TLightLock;
+    Tix32: cardinal;
+    Value: RawByteString;
+    procedure Reset;
+    procedure Cache(Call: TCachedValueCall; CallParam: pointer; TixShr: cardinal;
+      var Dest; Flush: boolean = false);
+  end;
+
+/// thread-safe cache of a File content with default 1 shl 6 = 64 secs timeout
+function StringFromFileCached(const FileName: TFileName;
+  var Cache: TCachedValue; TixShr: cardinal = 6): RawByteString;
 
 type
   /// a thread-safe Pierre L'Ecuyer gsl_rng_taus2 software random generator
@@ -7475,7 +7527,7 @@ var
 
 begin
   // logic similar to TSynLog.CreateLogWriter
-  h := 0;
+  h := INVALID_HANDLE_VALUE;
   err := 0;
   if not CanOpenWrite then
     if not FileExists(aFileName) then
@@ -7484,7 +7536,7 @@ begin
     else
     begin
       fn := aFileName;
-      ext := ExtractFileExt(aFileName);
+      ext := ExtractExt(aFileName);
       for retry := 1 to aAliases do
       begin
         if IsSharedViolation(err) then
@@ -7639,6 +7691,12 @@ begin
     result[f] := StringFromFile(FileName[f]);
 end;
 
+function StringFromFileCached(const FileName: TFileName;
+  var Cache: TCachedValue; TixShr: cardinal): RawByteString;
+begin
+  Cache.Cache(@StringFromFile, pointer(FileName), TixShr, result);
+end;
+
 function StringFromFolders(const Folders: array of TFileName;
   const Mask: TFileName; FileNames: PFileNameDynArray): TRawByteStringDynArray;
 var
@@ -7736,7 +7794,7 @@ begin
     bak := FileName + '.bak';
     DeleteFile(bak);
     RenameFile(FileName, bak);
-    h := 0;
+    h := INVALID_HANDLE_VALUE;
   end
   else
     h := FileOpen(FileName, fmOpenWriteShared);
@@ -7844,6 +7902,28 @@ begin
   result := copy(FileName, i, 100);
 end;
 
+function HasExt(const FileName: TFileName): boolean;
+var
+  i: PtrInt;
+begin
+  i := GetLastDelim(FileName, ord('.'));
+  result := (i > 1) and
+            (FileName[i] = '.');
+end;
+
+function SameExt(const FileName: TFileName; const Exts: array of TFileName;
+  WithoutDot: boolean): PtrInt;
+var
+  ext: TFileName;
+begin
+  ext := ExtractExt(FileName, WithoutDot);
+  if ext <> '' then
+    for result := 0 to high(Exts) do
+      if CompareText(ext, Exts[result]) = 0 then
+        exit;
+  result := -1;
+end;
+
 function ExtractExtU(const FileName: RawUtf8; WithoutDot: boolean): RawUtf8;
 var
   i: PtrInt;
@@ -7901,6 +7981,23 @@ end;
 function GetFileNameWithoutExtOrPath(const FileName: TFileName): RawUtf8;
 begin
   _toutf8(GetFileNameWithoutExt(ExtractFileName(FileName)), result);
+end;
+
+function EqualFileNameNotNull(const a, b: TFileName): boolean;
+var
+  l: PtrInt;
+begin
+  result := false;
+  l := PStrLen(PAnsiChar(pointer(b)) - _STRLEN)^;
+  if PStrLen(PAnsiChar(pointer(a)) - _STRLEN)^ <> l then
+    exit;
+  l := l * SizeOf(Char); // from WideChar to bytes (no-op for AnsiChar)
+  repeat
+    dec(l, SizeOf(TStrLen)); // backwards - may compare Length header bytes
+    if PStrLen(@PByteArray(a)[l])^ <> PStrLen(@PByteArray(b)[l])^ then
+      exit;
+  until l <= 0;
+  result := true;
 end;
 
 function PosExtString(Str: PChar): PChar; // work on AnsiString + UnicodeString
@@ -7984,7 +8081,7 @@ type // state machine for DirectoryDeleteOlderFiles() / DirectoryDeleteAll()
 function TDirectoryDelete.OnFile(const FileInfo: TSearchRec;
   const FullFileName: TFileName): boolean;
 begin
-  if (fDeleteBefore = 0) or
+  if (PInt64(@fDeleteBefore)^ = 0) or
      (SearchRecToDateTimeUtc(FileInfo) < fDeleteBefore) then
     if DeleteFile(FullFileName) then
     begin
@@ -8028,7 +8125,7 @@ end;
 
 function DirectoryDeleteOlderFiles(const Directory: TFileName;
   TimePeriod: TDateTime; const Mask: TFileName; Recursive: boolean;
-  TotalSize: PInt64; DeleteFolders: boolean): boolean;
+  TotalSize: PInt64; DeleteFolders: boolean; DeletedCount: PInteger): boolean;
 var
   browse: TDirectoryDelete;
 begin
@@ -8040,6 +8137,8 @@ begin
     browse.Run;
     if TotalSize <> nil then
       TotalSize^ := browse.fTotalSize;
+    if DeletedCount <> nil then
+      DeletedCount^ := browse.fDeletedCount;
     result := not browse.fDeleteError;
   finally
     browse.Free;
@@ -8570,7 +8669,7 @@ begin
     result := 0;
 end;
 
-function GetSystemInfoText: RawUtf8;
+function _GetSystemInfoText(notused: pointer): RawUtf8;
 var
   avail, free, total: QWord;
 begin
@@ -8586,6 +8685,12 @@ end;
 
 var
   _Shell: RawUtf8;
+  _SystemInfoText: TCachedValue;
+
+function GetSystemInfoText: RawUtf8;
+begin
+  _SystemInfoText.Cache(@_GetSystemInfoText, nil, 0, result); // 1 second cache
+end;
 
 function GetSystemShell: RawUtf8;
 begin
@@ -8633,12 +8738,12 @@ end;
 
 procedure ConsoleWriteRaw(const Text: RawUtf8; NoLineFeed: boolean);
 begin
-  ConsoleWriteBuf(pointer(Text), length(Text), ccLightGray, NoLineFeed, true);
+  ConsoleWriteBuf(pointer(Text), length(Text), ccDefault, NoLineFeed, true);
 end;
 
 procedure ConsoleWriteLn;
 begin
-  ConsoleWrite(CRLF, ccLightGray, {nolinefeed=}true, {nocolor=}true);
+  ConsoleWrite(CRLF, ccDefault, {nolinefeed=}true, {nocolor=}true);
 end;
 
 function ConsoleReadBody: RawByteString;
@@ -10132,20 +10237,28 @@ begin
   UuidToText(uid, dest);
 end;
 
-function DecodeSmbios(var raw: TRawSmbiosInfo; out info: TSmbiosBasicInfos): PtrInt;
+const
+  TO_IGNORE: TShort15 = 'Default string';
+
+function IsDefaultString(p: pointer; l: PtrInt): boolean;
+begin
+  result := PropNameEquals(@TO_IGNORE[1], p, 14, l); // properly inlined on FPC
+end;
+
+function DecodeSmbios(var raw: TRawSmbiosInfo; var info: TSmbiosBasicInfos): PtrInt;
 var
-  lines: array[byte] of TSmbiosBasicInfo; // single pass efficient decoding
+  temp: array[byte] of TSmbiosBasicInfo;
   len, trimright: PtrInt;
   cur: ^TSmbiosBasicInfo;
   s, sEnd: PByteArray;
-begin
+begin // single pass efficient decoding
   result := 0;
   Finalize(info);
   s := pointer(raw.Data);
   if s = nil then
     exit;
   sEnd := @s[length(raw.Data)];
-  FillCharFast(lines, SizeOf(lines), ord(sbiUndefined));
+  FillCharFast(temp, SizeOf(temp), ord(sbiUndefined)); // fast lookup
   repeat
     if (s[0] = 127) or // type (127=EOT)
        (s[1] < 4) or   // length
@@ -10157,9 +10270,9 @@ begin
     case s[0] of
       0: // Bios Information (type 0)
         begin
-          lines[s[4]] := sbiBiosVendor;
-          lines[s[5]] := sbiBiosVersion;
-          lines[s[8]] := sbiBiosDate;
+          temp[s[4]] := sbiBiosVendor;
+          temp[s[5]] := sbiBiosVersion;
+          temp[s[8]] := sbiBiosDate;
           if s[1] >= $17 then // 2.4+
           begin
             _fmt('%d.%d', [s[$14], s[$15]], info[sbiBiosRelease]);
@@ -10168,56 +10281,67 @@ begin
         end;
       1: // System Information (type 1)
         begin
-          lines[s[4]] := sbiManufacturer;
-          lines[s[5]] := sbiProductName;
-          lines[s[6]] := sbiVersion;
-          lines[s[7]] := sbiSerial;
+          temp[s[4]] := sbiManufacturer;
+          temp[s[5]] := sbiProductName;
+          temp[s[6]] := sbiVersion;
+          temp[s[7]] := sbiSerial;
           if s[1] >= $18 then // 2.1+
           begin
             DecodeSmbiosUuid(@s[8], info[sbiUuid], raw);
             if s[1] >= $1a then // 2.4+
             begin
-              lines[s[$19]] := sbiSku;
-              lines[s[$1a]] := sbiFamily;
+              temp[s[$19]] := sbiSku;
+              temp[s[$1a]] := sbiFamily;
             end;
           end;
         end;
       2: // Baseboard (or Module) Information (type 2) - keep only the first
         begin
-          lines[s[4]] := sbiBoardManufacturer;
-          lines[s[5]] := sbiBoardProductName;
-          lines[s[6]] := sbiBoardVersion;
-          lines[s[7]] := sbiBoardSerial;
-          lines[s[8]] := sbiBoardAssetTag;
-          lines[s[10]] := sbiBoardLocation;
+          temp[s[4]] := sbiBoardManufacturer;
+          temp[s[5]] := sbiBoardProductName;
+          temp[s[6]] := sbiBoardVersion;
+          temp[s[7]] := sbiBoardSerial;
+          temp[s[8]] := sbiBoardAssetTag;
+          temp[s[10]] := sbiBoardLocation;
         end;
       4: // Processor Information (type 4) - keep only the first
         begin
-          lines[s[7]] := sbiCpuManufacturer;
-          lines[s[$10]] := sbiCpuVersion;
+          temp[s[7]] := sbiCpuManufacturer;
+          temp[s[$10]] := sbiCpuVersion;
           if s[1] >= $22 then // 2.3+
           begin
-            lines[s[$20]] := sbiCpuSerial;
-            lines[s[$21]] := sbiCpuAssetTag;
-            lines[s[$22]] := sbiCpuPartNumber;
+            temp[s[$20]] := sbiCpuSerial;
+            temp[s[$21]] := sbiCpuAssetTag;
+            temp[s[$22]] := sbiCpuPartNumber;
           end;
         end;
-      11: // OEM Strings (Type 11) - keep only the first
-        if s[4] <> 0 then
-          lines[1] := sbiOem; // e.g. 'vboxVer_6.1.36'
+      11: // OEM Strings (Type 11) are arrays
+        begin
+          s := @s[s[1]]; // e.g. 'vboxVer_6.1.36'
+          repeat
+            len := StrLen(s);
+            if (len <> 0) and
+               (info[sbiOem] = '') and // keep only the first
+               not IsDefaultString(s, len) then
+              FastSetString(info[sbiOem], s, len);
+            s := @s[len + 1]; // next string
+          until s[0] = 0;
+          inc(PByte(s)); // go to next structure
+          continue;
+        end;
       22: // Portable Battery (type 22) - keep only the first
         if s[1] >= $0f then // 2.1+
         begin
-          lines[s[4]] := sbiBatteryLocation;
-          lines[s[5]] := sbiBatteryManufacturer;
-          lines[s[8]] := sbiBatteryName;
-          lines[s[$0e]] := sbiBatteryVersion;
+          temp[s[4]] := sbiBatteryLocation;
+          temp[s[5]] := sbiBatteryManufacturer;
+          temp[s[8]] := sbiBatteryName;
+          temp[s[$0e]] := sbiBatteryVersion;
           if s[1] >= $14 then // 2.2+
-            lines[s[$14]] := sbiBatteryChemistry;
+            temp[s[$14]] := sbiBatteryChemistry;
         end;
     end;
     s := @s[s[1]]; // go to string table
-    cur := @lines[1];
+    cur := @temp[1];
     if s[0] = 0 then
       inc(PByte(s)) // no string table
     else
@@ -10231,11 +10355,10 @@ begin
             while (trimright <> 0) and
                   (s[trimright - 1] <= ord(' ')) do
               dec(trimright);
-            FastSetString(info[cur^], s, trimright);
-            if info[cur^] = 'Default string' then
-              FastAssignNew(info[cur^]);
+            if not IsDefaultString(s, trimright) then
+              FastSetString(info[cur^], s, trimright);
           end;
-          cur^ := sbiUndefined; // reset slot in lines[]
+          cur^ := sbiUndefined; // reset slot in temp[]
         end;
         s := @s[len + 1]; // next string
         inc(cur);
@@ -10391,18 +10514,49 @@ begin
 end;
 
 
+{ TCachedValue }
+
+procedure TCachedValue.Reset;
+begin
+  Safe.Lock;
+  Tix32 := 0;
+  FastAssignNew(Value);
+  Safe.UnLock;
+end;
+
+procedure TCachedValue.Cache(Call: TCachedValueCall; CallParam: pointer;
+  TixShr: cardinal; var Dest; Flush: boolean);
+begin
+  TixShr := (GetTickSec shr TixShr) + 1; // big shr may get 0 just after boot
+  Safe.Lock;
+  if (TixShr = Tix32) and
+     not Flush then
+  begin
+    RawByteString(Dest) := Value;
+    Safe.UnLock;
+    exit;
+  end;
+  Safe.UnLock;
+  RawByteString(Dest) := Call(CallParam);
+  Safe.Lock;
+  Tix32 := TixShr;
+  Value := RawByteString(Dest);
+  Safe.UnLock;
+end;
+
+
 { TMultiLightLock }
 
 procedure TMultiLightLock.Init;
 begin
   Flags := 0;
-  ThreadID := TThreadID(0);
+  ThreadID := nil;
 end;
 
 procedure TMultiLightLock.Done;
 begin
-  Flags := PtrUInt(-1);
-  ThreadID := TThreadID(0); // invalid combination to let TryLock fail
+  Flags := MaxInt;
+  ThreadID := nil; // invalid combination to let TryLock fail
 end;
 
 procedure TMultiLightLock.Lock;
@@ -10414,15 +10568,15 @@ end;
 procedure TMultiLightLock.UnLock;
 begin
   if Flags = 1 then
-    ThreadID := TThreadID(0); // paranoid
+    ThreadID := nil; // paranoid
   LockedDec(Flags, 1);
 end;
 
 function TMultiLightLock.TryLock: boolean;
 var
-  tid: TThreadID;
+  tid: pointer;
 begin
-  tid := GetCurrentThreadId;
+  tid := pointer(PtrUInt(GetCurrentThreadId));
   if Flags = 0 then    // is not locked
     if LockedExc(Flags, {to=}1, {from=}0) then // try atomic acquisition
     begin
@@ -10443,7 +10597,7 @@ end;
 procedure TMultiLightLock.ForceLock;
 begin
   Flags := MaxInt; // forced acquisition, whatever the current state is
-  ThreadID := GetCurrentThreadId;
+  ThreadID := pointer(PtrUInt(GetCurrentThreadId));
 end;
 
 function TMultiLightLock.IsLocked: boolean;
@@ -10740,6 +10894,18 @@ end;
 function TOSLock.TryLock: boolean;
 begin
   result := mormot.core.os.TryEnterCriticalSection(CS) <> 0;
+end;
+
+procedure TOSLock.LockAndInitIfNeeded;
+begin
+  if not IsInitializedCriticalSection(CS) then
+  begin
+    OSSafe.Lock;
+    if not IsInitializedCriticalSection(CS) then // thread-safe initialization
+      Init;
+    OSSafe.UnLock;
+  end;
+  Lock;
 end;
 
 procedure TOSLock.UnLock;
@@ -11348,21 +11514,30 @@ begin
     until result >= endtix;
 end;
 
-function TSynEvent.WaitForSafe(TimeoutMS: integer): boolean;
+function TSynEvent.WaitForEver: boolean;
+begin
+  result := WaitFor(INFINITE);
+end;
+
+function TSynEvent.WaitForSafe(TimeoutMS: cardinal; DisableSafe: boolean): boolean;
 var
   endtix: Int64;
 begin
-  if GetCurrentThreadID = MainThreadID then
+  if DisableSafe or  // DisableSafe=true to skip main Thread recognition
+     (GetCurrentThreadID <> MainThreadID) then
   begin
-    endtix := GetTickCount64 + TimeoutMS;
-    repeat
-      CheckSynchronize(1); // make UI responsive enough
-    until WaitFor(10) or
-          (GetTickCount64 > endtix);
-    result := fNotified;
-  end
-  else
     result := WaitFor(TimeoutMS);
+    exit;
+  end;
+  endtix := 0;
+  if TimeoutMS <> INFINITE then
+    endtix := GetTickCount64 + TimeoutMS;
+  repeat
+    CheckSynchronize(1); // make UI responsive enough
+  until WaitFor(10) or
+        ((endtix <> 0) and
+         (GetTickCount64 > endtix));
+  result := fNotified;
 end;
 
 
