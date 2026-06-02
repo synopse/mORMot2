@@ -38,8 +38,7 @@ uses
   mormot.core.data,
   mormot.core.variants,
   mormot.core.json,
-  mormot.core.log,
-  mormot.core.perf;
+  mormot.core.log;
 
 
 {$ifndef PUREMORMOT2}
@@ -1035,7 +1034,7 @@ type
     fOnException: TNotifyEvent;
     fOnProcessMS: cardinal;
     fProcessingCounter: integer;
-    fStats: TSynMonitor;
+    fStats: TSynMonitorAbstract;
     procedure ExecuteLoop; override;
   public
     /// initialize the thread for a periodic task processing
@@ -1065,7 +1064,7 @@ type
       read fOnProcessMS write fOnProcessMS;
     /// processing statistics
     // - may be nil if aStats was nil in the class constructor
-    property Stats: TSynMonitor
+    property Stats: TSynMonitorAbstract
       read fStats;
   end;
 
@@ -3643,9 +3642,6 @@ end;
 
 { TSynBackgroundTimer }
 
-var
-  ProcessSystemUse: TSystemUse;
-
 constructor TSynBackgroundTimer.Create(const aThreadName: RawUtf8;
   const aOnBeforeExecute: TOnNotifyThread; aOnAfterExecute: TOnNotifyThread;
   aStats: TSynMonitorClass; aLogClass: TSynLogClass);
@@ -3660,9 +3656,9 @@ end;
 
 destructor TSynBackgroundTimer.Destroy;
 begin
-  if (ProcessSystemUse <> nil) and
-     (ProcessSystemUse.Timer = self) then
-    ProcessSystemUse.Timer := nil; // free ownership for another background timer
+  if (ProcessSystemUseTimer <> nil) and
+     (ProcessSystemUseTimer^ = self) then
+    ProcessSystemUseTimer^ := nil; // free ownership for another background timer
   inherited Destroy;
 end;
 
