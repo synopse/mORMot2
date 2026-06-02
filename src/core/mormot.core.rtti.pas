@@ -3448,6 +3448,30 @@ type
   /// used to determine the exact class type of a TClonable
   TClonableClass = class of TClonable;
 
+  /// abstract parent for TSynMonitor as fully defined in mormot.core.perf.pas
+  // - contains only the bare minimum e.g. for mormot.core.threads integration
+  TSynMonitorAbstract = class(TObjectWithRttiMethods)
+  protected
+    fSafe: TLightLock; // our fast non-reentrant lock
+    fName: RawUtf8;
+  public
+    /// initialize the instance nested class properties
+    // - you can specify identifier associated to this monitored resource
+    // which would be used for TSynMonitorUsage persistence
+    constructor Create(const aName: RawUtf8); reintroduce; overload; virtual;
+    /// should be called when the process starts, and a task is processed
+    procedure ProcessStartTask; virtual; abstract;
+    /// should be called when the process stops, to pause the internal timer
+    procedure ProcessEnd; virtual; abstract;
+    /// should be called when an Exception occurred
+    // - just a wraper around overloaded ProcessError(), so a thread-safe method
+    procedure ProcessErrorRaised(E: Exception); virtual; abstract;
+    /// appends a JSON content with all published properties information
+    procedure ComputeDetailsTo(W: TTextWriter); virtual; abstract;
+  end;
+  /// class-reference type (metaclass) of a process statistic information
+  TSynMonitorClass = class of TSynMonitorAbstract;
+
   /// used for backward compatibility only with existing code
   TSynPersistentLock   = class(TSynLocked);
   TSynPersistentLocked = class(TSynLocked);
@@ -11075,6 +11099,12 @@ end;
 procedure CopyTClonable(Dest, Source: TObject);
 begin
   TClonable(Source).AssignTo(TClonable(Dest)); // AssignTo is a protected method
+end;
+
+constructor TSynMonitorAbstract.Create(const aName: RawUtf8);
+begin
+  Create;
+  fName := aName;
 end;
 
 
