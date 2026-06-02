@@ -100,15 +100,19 @@ type
 
 type
   /// allow to customize TPipeStream process
-  // - psoReadSafe for Read() to detect the main thread and call CheckSynchronize
-  // which is slower but allow VCL/LCL UI responsiveness
   // - psoWritePartial for Write() to return without blocking on partial sending
+  // - psoWriteNonBlocking for Write() to return 0 bytes on full buffer
   // - psoWritePosition for Position to return the Write() number of bytes
   // instead of the Read() number of bytes by default
+  // - psoReadNonBlocking for Read() to return 0 bytes on empty buffer
+  // - psoReadCheckSynchronize for Read() to detect the main thread and call
+  // CheckSynchronize which is slower but allow VCL/LCL UI responsiveness
   TPipeStreamOptions = set of (
-    psoReadSafe,
     psoWritePartial,
-    psoWritePosition);
+    psoWriteNonBlocking,
+    psoWritePosition,
+    psoReadNonBlocking,
+    psoReadCheckSynchronize);
 
   /// a TStream which transmits its Write() method buffer into its blocking Read()
   // - used e.g. to efficiently synchronize/pipe data between two threads,
@@ -136,14 +140,14 @@ type
     /// read up to Count bytes waiting for data sent on Write()
     // - this method blocks when the internal buffer is empty (Pending = 0)
     // - may return less than Count bytes if there is some data in the buffer
-    // - return 0 if aReadTimeout has been reached
+    // - return 0 if aReadTimeout has been reached or psoReadNonBlocking was set
     // - by default, TPipeStream.Position/Size reflect the total number of bytes
     // from Read(), unless the psoWritePosition option is set
     function Read(var Buffer; Count: Longint): Longint; override;
     /// send Count bytes to the corresponding Read() on the other side of pipe
     // - blocks when the internal buffer is full, until Count bytes are sent
     // - write less than Count bytes only if aWriteTimeout has been reached,
-    // or if psoWritePartial option has been set
+    // or if psoWritePartial/psoWriteNonBlocking options have been set
     function Write(const Buffer; Count: Longint): Longint; override;
     /// check if Close has been called and pipe process was aborted
     function Closed: boolean;
@@ -1979,8 +1983,9 @@ begin
       if wakewriter then
         fCanWrite.SetEvent; // trigger to fill some more from Write()
     end;
-  until Closed or  // return 0 on timeout
-        not fCanRead.WaitForSafe(fReadTimeout, not(psoReadSafe in fOptions));
+  until Closed or
+        (psoReadNonBlocking in fOptions) or // return 0 on timeout or non-blocking
+        not fCanRead.WaitForSafe(fReadTimeout, not(psoReadCheckSynchronize in fOptions));
 end;
 
 function TPipeStream.Write(const Buffer; Count: Longint): Longint;
@@ -2024,6 +2029,7 @@ begin
       fCanRead.SetEvent; // trigger to consume some more from Read()
   until Closed or
         (result = Count) or // blocks until all Count bytes have been written
+        (psoWriteNonBlocking in fOptions) or
         ((result <> 0) and
          (psoWritePartial in fOptions)) or    // optional partial Write()
         not fCanWrite.WaitFor(fWriteTimeout); // partial Write() on timeout
