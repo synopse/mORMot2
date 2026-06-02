@@ -1507,20 +1507,22 @@ var
   tmp: TByteToAnsiChar; // very small 256 bytes buffer for stress reading
   n: integer;
 begin
-  if WriteData <> '' then // from W thread
+  if WriteData <> '' then
+    // from W thread
     repeat
       {$ifdef PIPEDEBUG}ConsoleWrite('before Write');{$endif PIPEDEBUG}
       n := Pipe.Write(pointer(WriteData)^, length(WriteData));
       {$ifdef PIPEDEBUG}ConsoleWrite(['Write(', length(WriteData), ')=', n]);{$endif PIPEDEBUG}
       if n <> length(WriteData) then
-        exit; // should have blocked until Write() all data
+        exit; // should block until Write() all data unless Pipe.Close was called
       Hash := crc32c(Hash, pointer(WriteData), n);
       inc(Bytes, n);
       {$ifdef PIPEDEBUG}ConsoleWrite('Write Stop');{$endif PIPEDEBUG}
       SleepHiRes(Random(50)); // simulate a blocking network connection
     until Bytes = Expected // execute Write() three times (HTTP-like body)
   else
-  begin                   // from R thread
+  begin
+    // from R thread
     {$ifdef PIPEDEBUG}ConsoleWrite('Read Start');{$endif PIPEDEBUG}
     repeat
       {$ifdef PIPEDEBUG}ConsoleWrite('before Read');{$endif PIPEDEBUG}
@@ -1559,6 +1561,9 @@ begin
     R.Pipe := P;
     R.Expected := length(S) * THREAD_ITER;
     R.Start;
+    CheckEqual(P.Size, 0);
+    CheckEqual(P.Position, 0);
+    CheckEqual(P.Seek(0, soFromCurrent), 0);
     W.Pipe := P;
     W.WriteData := S;
     W.Expected := R.Expected;
@@ -1569,6 +1574,9 @@ begin
     R.WaitFor;
     CheckEqual(R.Bytes, R.Expected, 'R.Bytes');
     CheckEqual(R.Hash, W.Hash, 'Hash');
+    CheckEqual(P.Size, R.Expected);
+    CheckEqual(P.Position, R.Expected);
+    CheckEqual(P.Seek(0, soFromCurrent), R.Expected);
   finally
     W.Free;
     R.Free;
@@ -1586,7 +1594,7 @@ begin
       crc := crc32c(0, ps, n);
       CheckEqual(P.Write(ps^, n), n, 'write all');
       inc(ps, n);
-      CheckNotEqual(crc, crc32c(0, @tmp, n), 'tmp');
+      FillCharFast(tmp, n, 0);
       CheckEqual(P.Read(tmp, SizeOf(tmp)), n, 'read trunc');
       CheckEqual(crc, crc32c(0, @tmp, n), 'crc');
       n := Random32(SizeOf(tmp)) + 1; // variable Write+Read (1..1024 bytes)
@@ -1602,7 +1610,7 @@ begin
   try
     Tix := GetTickCount64;
     CheckEqual(P.Read(tmp, 64), 0);
-    Check(GetTickCount64 - Tix >= 30);
+    Check(GetTickCount64 - Tix >= 30, 'rdto');
   finally
     P.Free;
   end;
@@ -1613,7 +1621,7 @@ begin
     Tix := GetTickCount64;
     n := P.Write(tmp, SizeOf(tmp));
     Check(n < SizeOf(tmp));
-    Check(GetTickCount64 - Tix >= 30);
+    Check(GetTickCount64 - Tix >= 30, 'wrto');
   finally
     P.Free;
   end;
@@ -1629,7 +1637,7 @@ begin
       SleepHiRes(50);
       P.Close;
       W.WaitFor;
-      Check(W.Bytes < length(s));
+      CheckEqual(W.Bytes, 0, 'close');
     finally
       W.Free;
     end;

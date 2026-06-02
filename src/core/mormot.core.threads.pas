@@ -102,7 +102,7 @@ type
   /// a TStream which transmits Write() method buffer into blocking Read()
   // - used e.g. to efficiently synchronize/pipe data between two threads,
   // as exactly one producer/Write thread and one consumer/Read thread
-  TPipeStream = class(TStream)
+  TPipeStream = class(TStreamWithNoSeek)
   private
     fLock: TLightLock;  // enough to protect MoveFast + TSynEvent fast process
     fBuffer: PAnsiChar; // =nil after Close
@@ -125,13 +125,12 @@ type
     // - this method blocks when the internal buffer is empty (Pending = 0)
     // - may return less than Count bytes if there is some data in the buffer
     // - return 0 if aReadTimeout has been reached
+    // - TPipeStream.Position/Size reflect the total number of bytes from Read()
     function Read(var Buffer; Count: Longint): Longint; override;
     /// send Count bytes to the corresponding Read() on the other side of pipe
     // - blocks when the internal buffer is full, until Count bytes are sent
     // - write less than Count bytes only if aWriteTimeout has been reached
     function Write(const Buffer; Count: Longint): Longint; override;
-    /// forbidden method: will raise an exception
-    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
     /// check if Close has been called and pipe process was aborted
     function Closed: boolean;
       {$ifdef HASINLINE} inline; {$endif}
@@ -1952,6 +1951,8 @@ begin
         fReadPos := (fReadPos + toread) and (fBufferSize - 1); // fast modulo
         result := toread;
         dec(fPending, toread);
+        inc(fPosition, toread);
+        inc(fSize, toread);
         exit; // quickly return partial Read() without blocking
       end;
     finally
@@ -2000,11 +2001,6 @@ begin
   until Closed or
         (result = Count) or
         not fCanWrite.WaitFor(fWriteTimeout); // partial Write() on timeout
-end;
-
-function TPipeStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
-begin
-  result := RaiseStreamError(self, 'Seek');
 end;
 
 
