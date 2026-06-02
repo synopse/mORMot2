@@ -1482,19 +1482,13 @@ end;
 
 procedure TSynEvent.SetEvent;
 begin
-  fNotified := true;
+  fNotified := true; // should be set before notification
   Windows.SetEvent(THandle(fHandle));
 end;
 
-function TSynEvent.WaitFor(TimeoutMS: integer): boolean;
+function TSynEvent.WaitFor(TimeoutMS: cardinal): boolean;
 begin
   WaitForSingleObject(THandle(fHandle), TimeoutMS);
-  result := fNotified;
-end;
-
-function TSynEvent.WaitForEver: boolean;
-begin
-  WaitForSingleObject(THandle(fHandle), INFINITE);
   result := fNotified;
 end;
 

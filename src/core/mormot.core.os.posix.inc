@@ -1971,16 +1971,22 @@ end;
 
 procedure TSynEvent.ResetEvent;
 begin
-  fNotified := false;
   {$ifdef HASEVENTFD}
-  if fFD = 0 then // no need to reset the eventfd() handle
+  if fFD <> 0 then
+  begin
+    if fNotified and
+       WaitReadPending(fFD, 0) then
+      LinuxEventFDRead(fFD); // call once to reset the eventfd() handle
+  end
+  else
   {$endif HASEVENTFD}
     RTLEventResetEvent(fHandle);
+  fNotified := false;
 end;
 
 procedure TSynEvent.SetEvent;
 begin
-  fNotified := true;
+  fNotified := true; // should be set before notification
   {$ifdef HASEVENTFD}
   if fFD <> 0 then
     LinuxEventFDWrite(fFD, 1)
@@ -1989,32 +1995,21 @@ begin
     RTLEventSetEvent(fHandle);
 end;
 
-function TSynEvent.WaitFor(TimeoutMS: integer): boolean;
+function TSynEvent.WaitFor(TimeoutMS: cardinal): boolean;
 begin
   {$ifdef HASEVENTFD}
   if fFD <> 0 then
   begin
-    if (cardinal(TimeoutMS) = INFINITE) or
+    if (TimeoutMS = INFINITE) or
        WaitReadPending(fFD, TimeoutMS) then // = LinuxEventFDWait()
       LinuxEventFDRead(fFD);
   end
   else
   {$endif HASEVENTFD}
-    if cardinal(TimeoutMS) = INFINITE then
+    if TimeoutMS = INFINITE then
       RTLEventWaitFor(fHandle)
     else
       RTLEventWaitFor(fHandle, TimeoutMS);
-  result := fNotified;
-end;
-
-function TSynEvent.WaitForEver: boolean;
-begin
-  {$ifdef HASEVENTFD}
-  if fFD <> 0 then
-    LinuxEventFDRead(fFD)
-  else
-  {$endif HASEVENTFD}
-    RTLEventWaitFor(fHandle);
   result := fNotified;
 end;
 

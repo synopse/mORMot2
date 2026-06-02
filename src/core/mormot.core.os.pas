@@ -4881,17 +4881,16 @@ type
     destructor Destroy; override;
     /// ignore any pending events, so that WaitFor will be set on next SetEvent
     procedure ResetEvent;
-      {$ifdef FPCPOSIX} inline; {$endif}
     /// trigger any pending event, releasing the WaitFor/WaitForEver methods
     procedure SetEvent;
-      {$ifdef FPCPOSIX} inline; {$endif}
     /// wait until SetEvent is called from another thread, with a maximum time
     // - returns true if was signaled by SetEvent, or false on timeout
     // - WaitFor(INFINITE) is the same as WaitForEver
-    function WaitFor(TimeoutMS: integer): boolean;
+    function WaitFor(TimeoutMS: cardinal): boolean;
     /// wait until SetEvent is called from another thread, with no maximum time
     // - returns true if was signaled by SetEvent, or false if aborted/destroyed
     function WaitForEver: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// wait until SetEvent is called, calling CheckSynchronize() on main thread
     // - returns true if was signaled by SetEvent, or false on timeout
     function WaitForSafe(TimeoutMS: integer): boolean;
@@ -4900,6 +4899,9 @@ type
     /// could be used to tune your algorithm if the eventfd() API is used
     function IsEventFD: boolean;
       {$ifdef HASINLINE} inline; {$endif}
+    /// low-level read-only access to the internal SetEvent flag
+    property Notified: boolean
+      read fNotified;
   end;
 
   /// a thread-safe class with a virtual constructor and properties persistence
@@ -11510,6 +11512,11 @@ begin
         exit;
       result := GetTickCount64;
     until result >= endtix;
+end;
+
+function TSynEvent.WaitForEver: boolean;
+begin
+  result := WaitFor(INFINITE);
 end;
 
 function TSynEvent.WaitForSafe(TimeoutMS: integer): boolean;
