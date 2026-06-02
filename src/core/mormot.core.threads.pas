@@ -99,7 +99,16 @@ type
 { ************* TPipeStream Read/Write synchronization between two threads }
 
 type
-  /// a TStream which transmits Write() method buffer into blocking Read()
+  /// allow to customize TPipeStream process
+  // - psoReadSafe for Read() to detect the main thread and call CheckSynchronize
+  // - psoWritePartial for Write() to return without blocking on partial sending
+  // - psoWritePosition for Position to return the Write() number of bytes
+  TPipeStreamOptions = set of (
+    psoReadSafe,
+    psoWritePartial,
+    psoWritePosition);
+
+  /// a TStream which transmits its Write() method buffer into its blocking Read()
   // - used e.g. to efficiently synchronize/pipe data between two threads,
   // as exactly one producer/Write thread and one consumer/Read thread
   TPipeStream = class(TStreamWithNoSeek)
@@ -111,6 +120,7 @@ type
     fReadTimeout, fWriteTimeout: cardinal;
     fCanRead: TSynEvent;
     fCanWrite: TSynEvent;
+    fOptions: TPipeStreamOptions;
   public
     /// initialize this TStream and its internal buffer
     // - support optional ms timeout for Read/Write methods to mimics e.g. sockets
@@ -121,15 +131,17 @@ type
     destructor Destroy; override;
     /// abort any blocking Read/Write process
     procedure Close;
-    /// read up to Count bytes waiting from data on Write()
+    /// read up to Count bytes waiting for data sent on Write()
     // - this method blocks when the internal buffer is empty (Pending = 0)
     // - may return less than Count bytes if there is some data in the buffer
     // - return 0 if aReadTimeout has been reached
     // - TPipeStream.Position/Size reflect the total number of bytes from Read()
+    // unless the psoWritePosition option is set
     function Read(var Buffer; Count: Longint): Longint; override;
     /// send Count bytes to the corresponding Read() on the other side of pipe
     // - blocks when the internal buffer is full, until Count bytes are sent
-    // - write less than Count bytes only if aWriteTimeout has been reached
+    // - write less than Count bytes only if aWriteTimeout has been reached,
+    // or if psoWritePartial option has been set
     function Write(const Buffer; Count: Longint): Longint; override;
     /// check if Close has been called and pipe process was aborted
     function Closed: boolean;
@@ -137,6 +149,9 @@ type
     /// informative value about data waiting for Read() - not thread-safe by design
     property Pending: integer
       read fPending;
+    /// allow to customize the instance process
+    property Options: TPipeStreamOptions
+      read fOptions write fOptions;
   end;
 
 
@@ -1913,11 +1928,11 @@ begin
     if fBuffer <> nil then // make the method re-entrant (e.g. from Destroy)
       FreeMem(fBuffer);
     fBuffer := nil;    // mark as closed
-    fCanRead.SetEvent; // always release both Read() and Write() methods
-    fCanWrite.SetEvent;
   finally
     fLock.UnLock;
   end;
+  fCanRead.SetEvent; // always release both Read() and Write() methods
+  fCanWrite.SetEvent;
 end;
 
 function TPipeStream.Closed: boolean;
@@ -1927,7 +1942,7 @@ end;
 
 function TPipeStream.Read(var Buffer; Count: Longint): Longint;
 var
-  toread, tail: integer;
+  tail: integer;
   wakewriter: boolean;
 begin
   result := 0;
@@ -1943,16 +1958,18 @@ begin
       if fPending > 0 then
       begin
         wakewriter := fPending = fBufferSize; // Write() blocks on full buffer
-        toread := MinPtrInt(Count, fPending);
+        result := MinPtrInt(Count, fPending);
         tail := fBufferSize - fReadPos;
-        MoveFast(fBuffer[fReadPos], Buffer, MinPtrInt(toread, tail));
-        if toread > tail then
-          MoveFast(fBuffer[0], PAnsiChar(@Buffer)[tail], toread - tail);
-        fReadPos := (fReadPos + toread) and (fBufferSize - 1); // fast modulo
-        result := toread;
-        dec(fPending, toread);
-        inc(fPosition, toread);
-        inc(fSize, toread);
+        MoveFast(fBuffer[fReadPos], Buffer, MinPtrInt(result, tail));
+        if result > tail then
+          MoveFast(fBuffer[0], PAnsiChar(@Buffer)[tail], result - tail);
+        fReadPos := (fReadPos + result) and (fBufferSize - 1); // fast modulo
+        dec(fPending, result);
+        if not (psoWritePosition in fOptions) then
+        begin
+          inc(fPosition, result);
+          inc(fSize, result);
+        end;
         exit; // quickly return partial Read() without blocking
       end;
     finally
@@ -1960,8 +1977,8 @@ begin
       if wakewriter then
         fCanWrite.SetEvent; // trigger to fill some more from Write()
     end;
-  until Closed or
-        not fCanRead.WaitFor(fReadTimeout); // return 0 on timeout
+  until Closed or  // return 0 on timeout
+        not fCanRead.WaitForSafe(fReadTimeout, not(psoReadSafe in fOptions));
 end;
 
 function TPipeStream.Write(const Buffer; Count: Longint): Longint;
@@ -1992,6 +2009,11 @@ begin
         inc(P, towrite);
         inc(fPending, towrite);
         inc(result, towrite);
+        if psoWritePosition in fOptions then
+        begin
+          inc(fPosition, towrite);
+          inc(fSize, towrite);
+        end;
       end;
     finally
       fLock.UnLock;
@@ -1999,7 +2021,9 @@ begin
     if wakereader then
       fCanRead.SetEvent; // trigger to consume some more from Read()
   until Closed or
-        (result = Count) or
+        (result = Count) or // blocks until all Count bytes have been written
+        ((result <> 0) and
+         (psoWritePartial in fOptions)) or    // optional partial Write()
         not fCanWrite.WaitFor(fWriteTimeout); // partial Write() on timeout
 end;
 
