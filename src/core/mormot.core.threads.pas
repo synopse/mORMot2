@@ -1959,7 +1959,8 @@ begin
       if wakewriter then
         fCanWrite.SetEvent; // trigger to fill some more from Write()
     end;
-  until not fCanRead.WaitFor(fReadTimeout); // return 0 on timeout
+  until Closed or
+        not fCanRead.WaitFor(fReadTimeout); // return 0 on timeout
 end;
 
 function TPipeStream.Write(const Buffer; Count: Longint): Longint;
