@@ -254,6 +254,7 @@ Performance Monitoring functions shared by all framework units
 
 High-Level Multi-Threading features shared by all framework units
 - `TThreads` thread-safe wrapper
+- `TPipeStream` Read/Write synchronization between two threads
 - `IAutoFree` and `IAutoLocker` Reference-Counted Process
 - Thread-Safe `TSynQueue` and `TPendingTaskList`
 - Thread-Safe `ILockedDocVariant` Storage
