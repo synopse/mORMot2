@@ -4869,7 +4869,7 @@ type
   // - WARNING: you should wait from a single thread at once
   TSynEvent = class(TSynPersistent)
   protected
-    fHandle: pointer; // Windows THandle or FPC PRTLEvent
+    fHandle: pointer; // Windows THandle, FPC PRTLEvent or Delphi-POSIX TEvent
     {$ifdef OSLINUX}
     fFD: integer;     // for eventfd()
     {$endif OSLINUX}

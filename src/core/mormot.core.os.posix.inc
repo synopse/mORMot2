@@ -1927,7 +1927,7 @@ var
 
 {$undef HASEVENTFD}
 {$undef HASGETRANDOM}
-// eventfd + getrandom syscalls are validated on Linux i386, x86_64 and aarch64
+// eventfd + getrandom syscalls validated on FPC Linux i386, x86_64 and aarch64
 {$ifdef FPCLINUX}
   {$ifdef CPUX64}
     {$define HASEVENTFD}
