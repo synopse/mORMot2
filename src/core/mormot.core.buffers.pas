@@ -2485,8 +2485,8 @@ type
   end;
 
   /// a TStream which transmits Write() method buffer into blocking Read()
-  // - could be used e.g. to efficient synchronize data between two threads,
-  // designed for one producer thread and one consumer thread
+  // - used e.g. to efficiently synchronize/pipe data between two threads,
+  // as exactly one producer/Write thread and one consumer/Read thread
   TPipeStream = class(TStream)
   private
     fLock: TLightLock;  // enough to protect MoveFast + TSynEvent fast process
@@ -2498,6 +2498,7 @@ type
     fCanWrite: TSynEvent;
   public
     /// initialize this TStream and its internal buffer
+    // - support optional ms timeout for Read/Write methods to mimics e.g. sockets
     constructor Create(aBufSize: cardinal = 65536; aReadTimeout: cardinal = INFINITE;
       aWriteTimeout: cardinal = INFINITE); reintroduce;
     /// finalize this instance and its buffer
@@ -2505,11 +2506,14 @@ type
     destructor Destroy; override;
     /// abort any blocking Read/Write process
     procedure Close;
-    /// will read up to Count bytes waiting from data on Write()
+    /// read up to Count bytes waiting from data on Write()
     // - this method blocks when the internal buffer is empty (Pending = 0)
+    // - may return less than Count bytes if there is some data in the buffer
+    // - return 0 if aReadTimeout has been reached
     function Read(var Buffer; Count: Longint): Longint; override;
-    /// will write up to Count bytes and triggering waiting Read()
+    /// send Count bytes to the corresponding Read() on the other side of pipe
     // - blocks when the internal buffer is full, until Count bytes are sent
+    // - write less than Count bytes only if aWriteTimeout has been reached
     function Write(const Buffer; Count: Longint): Longint; override;
     /// forbidden method: will raise an exception
     function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
@@ -10380,25 +10384,27 @@ end;
 
 function TPipeStream.Closed: boolean;
 begin
-  result := (self = nil) or (fBuffer = nil);
+  result := fBuffer = nil;
 end;
 
 function TPipeStream.Read(var Buffer; Count: Longint): Longint;
 var
   toread, tail: integer;
+  wakewriter: boolean;
 begin
   result := 0;
   if (Count > 0) and
      not Closed then
   repeat
+    wakewriter := false;
     fLock.Lock;
     try
       if Closed then
         exit;
       fCanRead.ResetEvent;
-      //ConsoleWrite(['Read pending=', fPending]);
       if fPending > 0 then
       begin
+        wakewriter := fPending = fBufferSize; // Write() blocks on full buffer
         toread := MinPtrInt(Count, fPending);
         tail := fBufferSize - fReadPos;
         MoveFast(fBuffer[fReadPos], Buffer, MinPtrInt(toread, tail));
@@ -10407,22 +10413,20 @@ begin
         fReadPos := (fReadPos + toread) and (fBufferSize - 1); // fast modulo
         result := toread;
         dec(fPending, toread);
-        exit;
+        exit; // quickly return partial Read() without blocking
       end;
     finally
       fLock.UnLock;
-      if fPending = 0 then
-        fCanWrite.SetEvent;
+      if wakewriter then
+        fCanWrite.SetEvent; // trigger to fill some more from Write()
     end;
-    //ConsoleWrite(['Read.WaitFor notified=', fCanRead.Notified]);
-  until (not fCanRead.WaitFor(fReadTimeout)) or // return partial read on timeout
-        Closed;
-  //ConsoleWrite(['Read done result=', result, ' notified=', fCanRead.Notified]);
+  until not fCanRead.WaitFor(fReadTimeout); // return 0 on timeout
 end;
 
 function TPipeStream.Write(const Buffer; Count: Longint): Longint;
 var
   avail, towrite, tail: integer;
+  wakereader: boolean;
   P: PAnsiChar;
 begin
   result := 0;
@@ -10434,8 +10438,8 @@ begin
       if Closed then
         exit;
       fCanWrite.ResetEvent;
+      wakereader := fPending = 0; // Read() blocks on empty buffer
       avail := fBufferSize - fPending;
-      //ConsoleWrite(['Write avail=', avail]);
       if avail > 0 then
       begin
         towrite := MinPtrInt(Count - result, avail);
@@ -10445,23 +10449,17 @@ begin
           MoveFast(P[tail], fBuffer[0], towrite - tail);
         fWritePos := (fWritePos + towrite) and (fBufferSize - 1); // fast modulo
         inc(P, towrite);
-        inc(result, towrite);
         inc(fPending, towrite);
+        inc(result, towrite);
       end;
     finally
       fLock.UnLock;
-      fCanRead.SetEvent;
     end;
-    if result < Count then
-    begin
-      //ConsoleWrite(['Write.WaitFor notified=', fCanWrite.Notified]);
-      if (fBuffer = nil) or
-         not fCanWrite.WaitFor(fWriteTimeout) then
-        exit; // timeout -> return partial write
-    end;
+    if wakereader then
+      fCanRead.SetEvent; // trigger to consume some more from Read()
   until Closed or
-        (result >= Count);
-  //ConsoleWrite(['Write done notified=', fCanWrite.Notified]);
+        (result = Count) or
+        not fCanWrite.WaitFor(fWriteTimeout); // partial Write() on timeout
 end;
 
 function TPipeStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;

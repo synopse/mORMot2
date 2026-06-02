@@ -1504,7 +1504,7 @@ const
 
 procedure TPipeThread.DoExecute;
 var
-  tmp: TByteToAnsiChar; // 256 bytes small buffer for reading
+  tmp: TByteToAnsiChar; // very small 256 bytes buffer for stress reading
   n: integer;
 begin
   if WriteData <> '' then // from W thread
@@ -1513,7 +1513,7 @@ begin
       n := Pipe.Write(pointer(WriteData)^, length(WriteData));
       {$ifdef PIPEDEBUG}ConsoleWrite(['Write(', length(WriteData), ')=', n]);{$endif PIPEDEBUG}
       if n <> length(WriteData) then
-        exit;
+        exit; // should have blocked until Write() all data
       Hash := crc32c(Hash, pointer(WriteData), n);
       inc(Bytes, n);
       {$ifdef PIPEDEBUG}ConsoleWrite('Write Stop');{$endif PIPEDEBUG}
@@ -1596,7 +1596,7 @@ begin
   finally
     P.Free;
   end;
-  NotifyTestSpeed('TPipeStream 1K', c, n, @timer);
+  NotifyTestSpeed('TPipeStream', c, n, @timer);
   // read timeout
   P := TPipeStream.Create(64, 50, 50);
   try
