@@ -4627,7 +4627,7 @@ const
 { TPreProc }
 
 type
-  TPreprocIfLevel = 0 .. 15; // 0 = outer level, 1..15 = nested levels
+  TPreprocIfLevel = 0 .. 31; // 0 = outer level, 1..31 = nested levels
   TPreprocIf = (
     piNone,
     piIf,
@@ -4639,10 +4639,10 @@ type
   TPreproc = class(TPreprocAbstract)
   protected
     Vars: TBinDictionary;
-    IfLevel: TPreprocIfLevel;
-    IfSkip: set of TPreprocIfLevel;
-    IncludeDepth: byte;
-    Options: TPreprocFlags;
+    IfLevel: TPreprocIfLevel;       // 8-bit
+    IncludeDepth: byte;             // 8-bit
+    Options: TPreprocFlags;         // 8-bit
+    IfSkip: set of TPreprocIfLevel; // 32-bit
     IncludeFolder: TFileName;
     procedure DoSkip(var P: PUtf8Char);
     function DoFind(Key: pointer; KeyLen: PtrInt; var ValueLen: PtrInt): pointer;
