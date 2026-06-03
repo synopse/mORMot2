@@ -3820,7 +3820,7 @@ end;
 
 function SearchNoRangeU(aMatch: PMatch; aText: PUtf8Char; aTextLen: PtrInt): boolean;
 var
-  c: AnsiChar;
+  c: PtrUInt;
   pat, txt: PtrInt;
 begin
   aMatch.T := 0;
@@ -3831,31 +3831,36 @@ begin
   repeat
     if pat <= aMatch.PMax then
     begin
-      c := aMatch.Pattern[pat];
-      case c of
-        '?':
+      c := byte(aMatch.Pattern[pat]);
+      if c <> ord('*') then
+        if c <> ord('?') then
+        begin
+          if (txt <= aMatch.TMax) and
+             (PAnsiChar(aMatch.Upper)[c] = aMatch.Upper[aMatch.Text[txt]]) then
+          begin
+            inc(pat);
+            inc(txt);
+            continue;
+          end;
+        end
+        else
+        begin
+          // '?'
           if txt <= aMatch.TMax then
           begin
             inc(pat);
             inc(txt);
             continue;
           end;
-        '*':
-          begin
-            aMatch.P := pat;
-            aMatch.T := txt + 1;
-            inc(pat);
-            continue;
-          end;
-      else
-        if (txt <= aMatch.TMax) and
-           (aMatch.Upper[c] = aMatch.Upper[aMatch.Text[txt]]) then
+        end
+        else
         begin
+          // '*'
+          aMatch.P := pat;
+          aMatch.T := txt + 1;
           inc(pat);
-          inc(txt);
           continue;
         end;
-      end;
     end
     else if txt > aMatch.TMax then
       break;
