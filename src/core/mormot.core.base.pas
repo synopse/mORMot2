@@ -3752,6 +3752,9 @@ type
     /// add one AnsiChar to the internal buffer
     procedure Add(c: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// add one repeated AnsiChar to the internal buffer
+    procedure AddChars(c: AnsiChar; n: PtrInt);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append some bytes to the internal buffer
     // - making a buffer reallocation if needed
     procedure AddShort(const s: ShortString); overload;
@@ -12501,9 +12504,15 @@ begin
   inc(Store.added);
 end;
 
+procedure TSynTempAdder.AddChars(c: AnsiChar; n: PtrInt);
+begin
+  if n > 0 then
+    FillCharFast(Add(n)^, n, ord(c));
+end;
+
 procedure TSynTempAdder.Add(const s: RawByteString);
 var
-  l: PtrInt;
+  l: TStrLen;
 begin
   if pointer(s) = nil then
     exit;
