@@ -941,6 +941,7 @@ type
     function HistoryVariant(aProcessID: integer = 0; aDepth: integer = 0): variant;
     /// access to a global instance, corresponding to the current process
     // - its HistoryDepth will be of 60 items
+    // - used e.g. by TRestRunThreads.SystemUseTrack
     class function Current(aCreateIfNone: boolean = true): TSystemUse;
     /// returns detailed CPU and RAM usage history as text of the supplied process
     // - fallback to RetrieveLoadAvg if the ProcessID was not registered

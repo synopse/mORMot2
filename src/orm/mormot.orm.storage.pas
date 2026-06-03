@@ -41,7 +41,6 @@ uses
   mormot.core.threads,
   mormot.crypt.core,
   mormot.crypt.jwt,
-  mormot.core.perf,
   mormot.crypt.secure,
   mormot.core.log,
   mormot.core.interfaces,
@@ -3385,26 +3384,25 @@ end;
 procedure TRestStorageInMemory.DropValues(andUpdateFile: boolean);
 var
   f: PtrInt;
-  timer: TPrecisionTimer;
+  start: Int64;
 begin
   StorageLock(true {$ifdef DEBUGSTORAGELOCK}, 'DropValues' {$endif});
   try
     fUnSortedID := false;
     fMaxID := 0;
-    if fCount > 0 then
+    if fCount <= 0 then
+      exit;
+    QueryPerformanceMicroSeconds(start);
+    fValues.Clear;
+    for f := 0 to length(fUnique) - 1 do
+      fUnique[f].Hasher.ForceReHash;
+    fValues.Hasher.ForceReHash;
+    if andUpdateFile then
     begin
-      timer.Start;
-      fValues.Clear;
-      for f := 0 to length(fUnique) - 1 do
-        fUnique[f].Hasher.ForceReHash;
-      fValues.Hasher.ForceReHash;
-      if andUpdateFile then
-      begin
-        fModified := true;
-        UpdateFile;
-      end;
-      fRest.InternalLog('DropValues % in %', [fStoredClass, timer.Stop]);
+      fModified := true;
+      UpdateFile;
     end;
+    fRest.InternalLog('DropValues % in %', [fStoredClass, MicroSecFrom(start)]);
   finally
     StorageUnLock;
   end;
@@ -4278,13 +4276,13 @@ end;
 procedure TRestStorageInMemory.UpdateFile;
 var
   F: TStream;
-  timer: TPrecisionTimer;
+  start: Int64;
 begin
   if (self = nil) or
      not fModified or
      (FileName = '') then
     exit;
-  timer.Start;
+  QueryPerformanceMicroSeconds(start);
   StorageLock(false {$ifdef DEBUGSTORAGELOCK}, 'UpdateFile' {$endif});
   try
     DeleteFile(FileName); // always overwrite previous file
@@ -4304,7 +4302,7 @@ begin
   finally
     StorageUnLock;
   end;
-  fRest.InternalLog('UpdateFile % in %', [fStoredClass, timer.Stop], sllDB);
+  fRest.InternalLog('UpdateFile % in %', [fStoredClass, MicroSecFrom(start)], sllDB);
 end;
 
 procedure TRestStorageInMemory.SetFileName(const aFileName: TFileName);

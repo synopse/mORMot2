@@ -40,7 +40,7 @@ uses
   mormot.core.threads,
   mormot.crypt.core,
   mormot.crypt.jwt,
-  mormot.core.perf,
+  mormot.core.perf,   // for TSynMonitor + timers in TRestOrmServerDB
   mormot.core.search, // for TRestStorageShardDB FindFiles()
   mormot.crypt.secure,
   mormot.core.log,
