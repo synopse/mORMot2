@@ -2707,7 +2707,7 @@ begin
     exit;
   if FoundLimit <= 0 then
     FoundLimit := maxInt;
-  if WhereField = 0 then
+  if WhereField = 0 then // WhereField=RTTIfield+1
   begin
     // search ID
     if FoundOffset <= 0 then // omit first FoundOffset rows
@@ -2729,8 +2729,8 @@ begin
   end
   else if cardinal(WhereField) > cardinal(fStoredClassRecordProps.Fields.Count) then
     exit;
-  // handle WHERE WhereField=WhereValue (WhereField=RTTIfield+1)
-  dec(WhereField);
+  // handle WHERE WhereField=WhereValue
+  dec(WhereField); // = RTTIfield from now on
   P := fStoredClassRecordProps.Fields.List[WhereField];
   if not (P.OrmFieldType in COPIABLE_FIELDS) then
     // nothing to search (e.g. oftUnknown or oftMany)
@@ -2852,8 +2852,9 @@ function TRestStorageInMemory.FindWhere(WhereField: integer;
 var
   P: TOrmPropInfo;
   cmp: integer;
-  id: Int64;
   i: integer;
+  id: Int64;
+  comp: set of (cNeg, cZero, cPos); // from WhereOp
   found: boolean;
   v: POrm;
 begin
@@ -2871,12 +2872,17 @@ begin
           FoundLimit, FoundOffset, CaseInsensitive);
         exit;
       end;
-    opNotEqualTo,
-    opLessThan,
-    opLessThanOrEqualTo,
-    opGreaterThan,
+    // CompareValue() operations
+    opNotEqualTo:
+      comp := [cNeg, cPos];
+    opLessThan:
+      comp := [cNeg];
+    opLessThanOrEqualTo:
+      comp := [cNeg, cZero];
+    opGreaterThan:
+      comp := [cPos];
     opGreaterThanOrEqualTo:
-      ; // CompareValue() operations
+      comp := [cPos, cZero];
   else
     exit; // unsupported operation
   end;
@@ -2901,12 +2907,12 @@ begin
     else
       cmp := P.CompareValue(v^, fSearchRec, CaseInsensitive); // fast override
     if cmp < 0 then
-      found := WhereOp in [opNotEqualTo, opLessThan, opLessThanOrEqualTo]
+      found := cNeg in comp
     else if cmp > 0 then
-      found := WhereOp in [opNotEqualTo, opGreaterThan, opGreaterThanOrEqualTo]
+      found := cPos in comp
     else
       // cmp = 0 -> opEqualTo has been handled above
-      found := WhereOp in [opLessThanOrEqualTo, opGreaterThanOrEqualTo];
+      found := cZero in comp;
     if found then
       if FoundOffset > 0 then
         // omit first FoundOffset rows
