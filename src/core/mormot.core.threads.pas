@@ -1782,12 +1782,15 @@ type
   // - psoReadNonBlocking for Read() to return 0 bytes on empty buffer
   // - psoReadCheckSynchronize for Read() to detect the main thread and call
   // CheckSynchronize which is slower but allow VCL/LCL UI responsiveness
+  // - psoCheckThread will ensure Read() and Write() are always called from
+  // the very same thread - may be useful to debug some unexpected behavior
   TPipeStreamOptions = set of (
     psoWritePartial,
     psoWriteNonBlocking,
     psoWritePosition,
     psoReadNonBlocking,
-    psoReadCheckSynchronize);
+    psoReadCheckSynchronize,
+    psoCheckThread);
 
   /// a TStream which transmits its Write() method buffer into its blocking Read()
   // - used e.g. to efficiently synchronize/pipe data between two threads,
@@ -1806,6 +1809,8 @@ type
     fExpectedSize: Int64;
     fOptions: TPipeStreamOptions;
     fOnClose: TNotifyEvent;
+    fCallingThread: array[{wr=}boolean] of TThreadID;
+    procedure CheckCallingThread(wr: boolean);
     function GetSize: Int64; override;
     procedure DoTerminate; virtual; // call once from Abort/Destroy
   public
@@ -5036,6 +5041,8 @@ begin
   if (Count <= 0) or
      Closed then
     exit;
+  if psoCheckThread in fOptions then
+    CheckCallingThread({wr=}false);
   repeat
     wakewriter := false;
     fLock.Lock;
@@ -5080,6 +5087,8 @@ begin
   if (Count <= 0) or
      Closed then
     exit;
+  if psoCheckThread in fOptions then
+    CheckCallingThread({wr=}true);
   P := @Buffer;
   repeat
     fLock.Lock;
@@ -5126,6 +5135,20 @@ begin
     result := fSize;      // = fPosition in practice and by default
 end;
 
+const
+  _RW: array[boolean] of TShort7 = ('Read', 'Write');
+
+procedure TPipeStream.CheckCallingThread(wr: boolean);
+var
+  tid: TThreadID;
+begin
+  tid := GetCurrentThreadId;
+  if fCallingThread[wr] <> tid then
+    if fCallingThread[wr] = 0 then
+      fCallingThread[wr] := tid
+    else
+      ESynThread.RaiseUtf8('%.% called from wrong thread', [self, _RW[wr]]);
+end;
 
 end.
 

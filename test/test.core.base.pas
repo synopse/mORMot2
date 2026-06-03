@@ -1558,6 +1558,7 @@ begin
   R := TPipeThread.Create({suspended=}true, nil, nil, TSynLog, 'rd');
   W := TPipeThread.Create({suspended=}true, nil, nil, TSynLog, 'wr');
   try
+    P.Options := [psoCheckThread];
     R.Pipe := P;
     R.Expected := length(S) * THREAD_ITER;
     R.Start;
