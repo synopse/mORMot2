@@ -1488,7 +1488,9 @@ end;
 
 function TSynEvent.WaitFor(TimeoutMS: cardinal): boolean;
 begin
+  fWaiting := true;
   WaitForSingleObject(THandle(fHandle), TimeoutMS);
+  fWaiting := false;
   result := fNotified;
 end;
 

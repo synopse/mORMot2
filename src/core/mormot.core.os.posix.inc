@@ -1997,6 +1997,7 @@ end;
 
 function TSynEvent.WaitFor(TimeoutMS: cardinal): boolean;
 begin
+  fWaiting := true;
   {$ifdef HASEVENTFD}
   if fFD <> 0 then
   begin
@@ -2010,6 +2011,7 @@ begin
       RTLEventWaitFor(fHandle)
     else
       RTLEventWaitFor(fHandle, TimeoutMS);
+  fWaiting := false;
   result := fNotified;
 end;
 

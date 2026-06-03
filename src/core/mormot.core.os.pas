@@ -4873,7 +4873,7 @@ type
     {$ifdef OSLINUX}
     fFD: integer;     // for eventfd()
     {$endif OSLINUX}
-    fNotified: boolean;
+    fNotified, fWaiting: boolean;
   public
     /// initialize an instance of cross-platform event
     constructor Create; override;
@@ -4902,6 +4902,9 @@ type
     /// low-level read-only access to the internal SetEvent flag
     property Notified: boolean
       read fNotified;
+    /// low-level flag if WaitFor/WaitForEver/WaitForSafe are blocking
+    property Waiting: boolean
+      read fWaiting;
   end;
 
   /// a thread-safe class with a virtual constructor and properties persistence
