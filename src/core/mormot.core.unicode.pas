@@ -2737,26 +2737,6 @@ function RawUtf8DynArrayContains(const A, B: TRawUtf8DynArray;
 function RawUtf8DynArraySame(const A, B: TRawUtf8DynArray;
   CaseInsensitive: boolean = false): boolean;
 
-/// add the Value to Values[] string array
-function AddString(var Values: TStringDynArray; const Value: string): PtrInt;
-
-/// convert the string dynamic array into a dynamic array of UTF-8 strings
-procedure StringDynArrayToRawUtf8DynArray(const Source: array of string;
-  var result: TRawUtf8DynArray); overload;
-
-/// convert the string dynamic array into a dynamic array of UTF-8 strings
-function StringDynArrayToRawUtf8DynArray(const Source: array of string): TRawUtf8DynArray; overload;
-
-/// convert the TStrings/TStringList content into a dynamic array of UTF-8 strings
-procedure StringListToRawUtf8DynArray(Source: TStrings; var List: TRawUtf8DynArray);
-
-/// convert some UTF-8 strings into regular TStrings/TStringList
-procedure AddRawUtf8ToStringList(const V: array of RawUtf8; Dest: TStrings;
-  ClearDest: boolean = false);
-
-/// convert some UTF-8 strings into regular TStrings/TStringList
-procedure PRawUtf8AddStrings(V: PRawUtf8; n: integer; Dest: TStrings; ClearDest: boolean);
-
 /// parse UTF-8 lines of text into a TRawUtf8DynArray
 procedure LinesToRawUtf8DynArray(const Lines: RawUtf8; var List: TRawUtf8DynArray);
 
@@ -2854,6 +2834,48 @@ function SumRawUtf8Length(Values: PRawUtf8; n: integer): TStrLen;
 
 /// sort and remove any duplicated RawUtf8 from Values[]
 procedure DeduplicateRawUtf8(var Values: TRawUtf8DynArray);
+
+type
+  /// a read-only virtual TStrings using internal TRawUtf8DynArray storage
+  // - is meant to be used in the UI layer from existing RawUtf8 content
+  TVirtualStringList = class(TStrings)
+  protected
+    fValues: TRawUtf8DynArray;
+    fObjects: TObjectDynArray;
+    fCount: integer;
+    procedure CheckIndex(Index: integer); {$ifdef HASINLINE} inline; {$endif}
+    function Get(Index: integer): string; override;
+    function GetCount: integer; override;
+    function GetObject(Index: integer): TObject; override;
+  public
+    /// main factory method, called e.g. from TRawUtf8List.ToStrings
+    constructor Create(const U: TRawUtf8DynArray; UCount: integer = -1;
+      const O: TObjectDynArray = nil); reintroduce;
+    // overriden TStrings abstract methods
+    procedure Clear; override;
+    procedure Delete(Index: integer); override;
+    procedure Insert(Index: integer; const S: string); override;
+  end;
+
+/// add the Value to Values[] string array
+function AddString(var Values: TStringDynArray; const Value: string): PtrInt;
+
+/// convert the string dynamic array into a dynamic array of UTF-8 strings
+procedure StringDynArrayToRawUtf8DynArray(const Source: array of string;
+  var result: TRawUtf8DynArray); overload;
+
+/// convert the string dynamic array into a dynamic array of UTF-8 strings
+function StringDynArrayToRawUtf8DynArray(const Source: array of string): TRawUtf8DynArray; overload;
+
+/// convert the TStrings/TStringList content into a dynamic array of UTF-8 strings
+procedure StringListToRawUtf8DynArray(Source: TStrings; var List: TRawUtf8DynArray);
+
+/// convert some UTF-8 strings into regular TStrings/TStringList
+procedure AddRawUtf8ToStringList(const V: array of RawUtf8; Dest: TStrings;
+  ClearDest: boolean = false);
+
+/// convert some UTF-8 strings into regular TStrings/TStringList
+procedure PRawUtf8AddStrings(V: PRawUtf8; n: integer; Dest: TStrings; ClearDest: boolean);
 
 {$ifdef OSPOSIX}
 type
@@ -10600,6 +10622,60 @@ begin
   result := (length(A) = length(B)) and
             RawUtf8DynArrayContains(A, B, CaseInsensitive) and
             RawUtf8DynArrayContains(B, A, CaseInsensitive);
+end;
+
+{ TVirtualStringList }
+
+constructor TVirtualStringList.Create(const U: TRawUtf8DynArray;
+  UCount: integer; const O: TObjectDynArray);
+begin
+  inherited Create;
+  fCount := UCount;
+  if UCount < 0 then
+    fCount := length(U);
+  fValues := U;
+  fObjects := O;
+end;
+
+procedure TVirtualStringList.CheckIndex(Index: integer);
+begin
+  if cardinal(Index) >= cardinal(fCount) then
+    Error('Out of range %d index', Index);
+end;
+
+function TVirtualStringList.Get(Index: Integer): string;
+begin
+  CheckIndex(Index);
+  Utf8ToStringVar(fValues[Index], result); // delayed conversion
+end;
+
+function TVirtualStringList.GetCount: Integer;
+begin
+  result := fCount;
+end;
+
+function TVirtualStringList.GetObject(Index: Integer): TObject;
+begin
+  CheckIndex(Index);
+  if Index >= length(fObjects) then
+    result := nil
+  else
+    result := fObjects[Index];
+end;
+
+procedure TVirtualStringList.Clear;
+begin
+  Error('TVirtualStringList is read-only', 0);
+end;
+
+procedure TVirtualStringList.Delete(Index: Integer);
+begin
+  Clear;
+end;
+
+procedure TVirtualStringList.Insert(Index: Integer; const S: string);
+begin
+  Clear;
 end;
 
 function AddString(var Values: TStringDynArray; const Value: string): PtrInt;
