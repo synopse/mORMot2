@@ -1812,7 +1812,7 @@ type
     fCallingThread: array[{wr=}boolean] of TThreadID;
     procedure CheckCallingThread(wr: boolean);
     function GetSize: Int64; override;
-    procedure DoTerminate; virtual; // call once from Abort/Destroy
+    procedure DoTerminate; virtual; // called once from Abort/Destroy
   public
     /// initialize this TStream and its internal buffer
     constructor Create(aBufSize: cardinal = 65536); reintroduce;
@@ -5144,8 +5144,8 @@ var
 begin
   tid := GetCurrentThreadId;
   if fCallingThread[wr] <> tid then
-    if fCallingThread[wr] = 0 then
-      fCallingThread[wr] := tid
+    if PtrUInt(fCallingThread[wr]) = 0 then
+      fCallingThread[wr] := tid // set at first call
     else
       ESynThread.RaiseUtf8('%.% called from wrong thread', [self, _RW[wr]]);
 end;
