@@ -2745,12 +2745,17 @@ procedure StringDynArrayToRawUtf8DynArray(const Source: array of string;
   var result: TRawUtf8DynArray); overload;
 
 /// convert the string dynamic array into a dynamic array of UTF-8 strings
-function StringDynArrayToRawUtf8DynArray(
-  const Source: array of string): TRawUtf8DynArray; overload;
+function StringDynArrayToRawUtf8DynArray(const Source: array of string): TRawUtf8DynArray; overload;
 
-/// convert the string list into a dynamic array of UTF-8 strings
-procedure StringListToRawUtf8DynArray(Source: TStringList;
-  var result: TRawUtf8DynArray);
+/// convert the TStrings/TStringList content into a dynamic array of UTF-8 strings
+procedure StringListToRawUtf8DynArray(Source: TStrings; var List: TRawUtf8DynArray);
+
+/// convert some UTF-8 strings into regular TStrings/TStringList
+procedure AddRawUtf8ToStringList(const V: array of RawUtf8; Dest: TStrings;
+  ClearDest: boolean = false);
+
+/// convert some UTF-8 strings into regular TStrings/TStringList
+procedure PRawUtf8AddStrings(V: PRawUtf8; n: integer; Dest: TStrings; ClearDest: boolean);
 
 /// parse UTF-8 lines of text into a TRawUtf8DynArray
 procedure LinesToRawUtf8DynArray(const Lines: RawUtf8; var List: TRawUtf8DynArray);
@@ -10621,14 +10626,44 @@ begin
   StringDynArrayToRawUtf8DynArray(Source, result);
 end;
 
-procedure StringListToRawUtf8DynArray(Source: TStringList; var Result: TRawUtf8DynArray);
+procedure StringListToRawUtf8DynArray(Source: TStrings; var List: TRawUtf8DynArray);
 var
   i: PtrInt;
 begin
-  Finalize(Result);
-  SetLength(Result, Source.Count);
+  List := nil;
+  SetLength(List, Source.Count);
   for i := 0 to Source.Count - 1 do
-    StringToUtf8(Source[i], Result[i]);
+    StringToUtf8(Source[i], List[i]);
+end;
+
+procedure PRawUtf8AddStrings(V: PRawUtf8; n: integer; Dest: TStrings; ClearDest: boolean);
+var
+  s: string;
+begin
+  if Dest = nil then
+    exit;
+  Dest.BeginUpdate;
+  try
+    if ClearDest then
+      Dest.Clear;
+    if (V = nil) or
+       (n <= 0) then
+      exit;
+    Dest.Capacity := n;
+    repeat
+      Utf8ToStringVar(V^, s);
+      Dest.Add(s);
+      inc(V);
+      dec(n);
+    until n = 0;
+  finally
+    Dest.EndUpdate;
+  end;
+end;
+
+procedure AddRawUtf8ToStringList(const V: array of RawUtf8; Dest: TStrings; ClearDest: boolean);
+begin
+  PRawUtf8AddStrings(@V[0], length(V), Dest, ClearDest);
 end;
 
 procedure LinesToRawUtf8DynArray(const Lines: RawUtf8; var List: TRawUtf8DynArray);
