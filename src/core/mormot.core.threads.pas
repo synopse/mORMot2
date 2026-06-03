@@ -1795,8 +1795,8 @@ type
   /// a TStream which transmits its Write() method buffer into its blocking Read()
   // - used e.g. to efficiently synchronize/pipe data between two threads,
   // as exactly one producer/Write thread and one consumer/Read thread
-  // - purpose is to replace e.g. a TFileStream with some asynchronous background
-  // source of data, e.g. a HTTP request
+  // - purpose is to replace e.g. a TFileStream with some asynchronous source
+  // of data, e.g. a HTTP request made in its background thread
   TPipeStream = class(TStreamWithNoSeek)
   protected
     fLock: TLightLock;  // enough to protect MoveFast + TSynEvent.ResetEvent

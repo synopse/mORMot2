@@ -3753,6 +3753,7 @@ end;
 {$else} // optimized for x86_64/ARM with more registers
 
 function SearchNoRange(aMatch: PMatch; aText: PUtf8Char; aTextLen: PtrInt): boolean;
+  {$ifdef FPC} inline; {$endif}
 var
   c: AnsiChar;
   pat, patend, txtend, txtretry, patretry: PUtf8Char;
@@ -3819,6 +3820,7 @@ end;
 {$endif CPU32}
 
 function SearchNoRangeU(aMatch: PMatch; aText: PUtf8Char; aTextLen: PtrInt): boolean;
+  {$ifdef FPC_64} inline; {$endif}
 var
   c: PtrUInt;
   pat, txt: PtrInt;
@@ -4547,22 +4549,23 @@ function _Glob(Pattern, Text: PUtf8Char; PatternLen, TextLen: PtrInt;
 var
   match: TMatch;
 begin // GLOB has no [range] -> dedicated inlined Prepare() + Match()
-  if Pattern = nil then
-    result := TextLen = 0 // most simple case for sure
-  else if TextLen = 0 then
-    result := false       // as in match.Match()
-  else
-  begin
-    match.Pattern := Pattern;
-    match.PMax := PatternLen - 1;
-    if CaseInsensitive then
+  if Pattern <> nil then
+    if TextLen <> 0 then
     begin
-      match.Upper := @NormToUpperAnsi7;
-      result := SearchNoRangeU(@match, Text, TextLen);
+      match.Pattern := Pattern;
+      match.PMax := PatternLen - 1;
+      if CaseInsensitive then
+      begin
+        match.Upper := @NormToUpperAnsi7;
+        result := SearchNoRangeU(@match, Text, TextLen); // inlined on FPC
+      end
+      else
+        result := SearchNoRange(@match, Text, TextLen);  // inlined on FPC
     end
     else
-      result := SearchNoRange(@match, Text, TextLen);
-  end;
+      result := false      // TextLen=0: as in match.Match()
+  else
+    result := TextLen = 0; // Pattern = nil: most simple case for sure
 end;
 
 function IsMatch(const Pattern, Text: RawUtf8; CaseInsensitive: boolean): boolean;
