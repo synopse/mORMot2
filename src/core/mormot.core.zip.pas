@@ -2536,10 +2536,10 @@ var
   lh32: PLastHeader;
   lh64: PLastHeader64;
 begin
-  if (BufZip = nil) or
-     (Size < SizeOf(TLastHeader)) then
-    lh32 := nil
-  else
+  lh32 := nil;
+  lh64 := nil;
+  if (BufZip <> nil) and
+     (Size >= SizeOf(TLastHeader)) then
     lh32 := LocateEndCentralDirectory(BufZip, Size, Offset, lh64);
   if lh32 = nil then
     ESynZip.RaiseUtf8(
@@ -3919,7 +3919,7 @@ var
   h: array[0..4] of cardinal; // .gz file should be at least 20 bytes long
 begin
   result := BufferFromFile(Name, @h, SizeOf(h)) and
-            (h[0] and $ffffff = GZ_MAGIC); // only check the .gz magic
+            ({%H-}h[0] and $ffffff = GZ_MAGIC); // only check the .gz magic
 end;
 
 function TAlgoGZ.FileCompress(const Source, Dest: TFileName; Magic: cardinal;
