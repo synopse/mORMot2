@@ -1792,6 +1792,8 @@ type
   /// a TStream which transmits its Write() method buffer into its blocking Read()
   // - used e.g. to efficiently synchronize/pipe data between two threads,
   // as exactly one producer/Write thread and one consumer/Read thread
+  // - purpose is to replace e.g. a TFileStream with some asynchronous background
+  // source of data, e.g. a HTTP request
   TPipeStream = class(TStreamWithNoSeek)
   protected
     fLock: TLightLock;  // enough to protect MoveFast + TSynEvent.ResetEvent
@@ -1803,15 +1805,19 @@ type
     fCanWrite: TSynEvent;
     fExpectedSize: Int64;
     fOptions: TPipeStreamOptions;
+    fOnClose: TNotifyEvent;
     function GetSize: Int64; override;
+    procedure DoTerminate; virtual; // call once from Abort/Destroy
   public
     /// initialize this TStream and its internal buffer
     constructor Create(aBufSize: cardinal = 65536); reintroduce;
     /// finalize this instance and its buffer
-    // - all producer/consumer threads should have terminated before destruction
+    // - both producer/consumer threads should not use this instance from now on
     destructor Destroy; override;
-    /// abort any blocking Read/Write process
-    procedure Close; virtual;
+    /// abort/close any blocking Read/Write process
+    // - as eventually called by Destroy - so you should not have to call this
+    // method, unless you want to break both Read() and Write() blocking methods
+    procedure Abort; virtual;
     /// read up to Count bytes waiting for data sent on Write()
     // - this method blocks when the internal buffer is empty (Pending = 0)
     // - may return less than Count bytes if there is some data in the buffer
@@ -1824,7 +1830,7 @@ type
     // - write less than Count bytes only if aWriteTimeout has been reached,
     // or if psoWritePartial/psoWriteNonBlocking options have been set
     function Write(const Buffer; Count: Longint): Longint; override;
-    /// check if Close has been called and pipe process was aborted
+    /// check if Abort has been called and pipe process was stopped
     function Closed: boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// informative value about data waiting for Read() - not thread-safe by design
@@ -1849,6 +1855,9 @@ type
     // - equals -1 by default, i.e. if Size value should follow current Position
     property ExpectedSize: Int64
       read fExpectedSize write fExpectedSize;
+    /// called by Destroy/Abort e.g. to force shutdown of the running threads
+    property OnClose: TNotifyEvent
+      read fOnClose write fOnClose;
   end;
 
 
@@ -4980,24 +4989,37 @@ end;
 
 destructor TPipeStream.Destroy;
 begin
-  Close;
+  Abort; // do-nothing if already called
   fCanRead.Free;
   fCanWrite.Free;
   inherited Destroy;
 end;
 
-procedure TPipeStream.Close;
+procedure TPipeStream.Abort;
 begin
   fLock.Lock;
   try
     if fBuffer <> nil then // make the method re-entrant (e.g. from Destroy)
+    begin
+      DoTerminate;
       FreeMem(fBuffer);
+    end;
     fBuffer := nil;    // mark as closed
   finally
     fLock.UnLock;
   end;
   fCanRead.SetEvent; // always release both Read() and Write() methods
   fCanWrite.SetEvent;
+end;
+
+procedure TPipeStream.DoTerminate;
+begin
+  if Assigned(fOnClose) then
+  try
+    fOnClose(self);  // may e.g. notify the threads
+  except
+    fOnClose := nil; // trap any exception in user code and disable it
+  end;
 end;
 
 function TPipeStream.Closed: boolean;
@@ -5011,8 +5033,9 @@ var
   wakewriter: boolean;
 begin
   result := 0;
-  if (Count > 0) and
-     not Closed then
+  if (Count <= 0) or
+     Closed then
+    exit;
   repeat
     wakewriter := false;
     fLock.Lock;
@@ -5054,8 +5077,10 @@ var
   P: PAnsiChar;
 begin
   result := 0;
+  if (Count <= 0) or
+     Closed then
+    exit;
   P := @Buffer;
-  if Count > 0 then
   repeat
     fLock.Lock;
     try
