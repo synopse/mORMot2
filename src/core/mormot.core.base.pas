@@ -13967,8 +13967,7 @@ begin
       result := 0;
     fPosition := result;
   end
-  else
-    // optimize for Delphi with no GetPosition method but Seek(0,soCurrent) call
+  else // optimized for Delphi with no GetPosition method but Seek(0,soCurrent)
     result := fPosition;
 end;
 
@@ -13995,7 +13994,6 @@ begin
   result := fSize;
 end;
 
-
 { TStreamWithNoSeek }
 
 function TStreamWithNoSeek.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
@@ -14004,8 +14002,10 @@ var
 begin
   prev := fPosition;
   result := inherited Seek(Offset, Origin);
-  if prev <> fPosition then
-    RaiseStreamError(self, 'Seek');
+  if prev = fPosition then
+    exit;
+  fPosition := prev; // restore before exception
+  RaiseStreamError(self, 'Seek');
 end;
 
 
