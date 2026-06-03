@@ -2843,7 +2843,6 @@ type
     fValues: TRawUtf8DynArray;
     fObjects: TObjectDynArray;
     fCount: integer;
-    procedure CheckIndex(Index: integer); {$ifdef HASINLINE} inline; {$endif}
     function Get(Index: integer): string; override;
     function GetCount: integer; override;
     function GetObject(Index: integer): TObject; override;
@@ -10637,15 +10636,10 @@ begin
   fObjects := O;
 end;
 
-procedure TVirtualStringList.CheckIndex(Index: integer);
-begin
-  if cardinal(Index) >= cardinal(fCount) then
-    Error('Out of range %d index', Index);
-end;
-
 function TVirtualStringList.Get(Index: Integer): string;
 begin
-  CheckIndex(Index);
+  if cardinal(Index) >= cardinal(fCount) then
+    Error('Out of range Get(%d) index', Index);
   Utf8ToStringVar(fValues[Index], result); // delayed conversion
 end;
 
@@ -10656,7 +10650,8 @@ end;
 
 function TVirtualStringList.GetObject(Index: Integer): TObject;
 begin
-  CheckIndex(Index);
+  if cardinal(Index) >= cardinal(fCount) then
+    Error('Out of range GetObject(%d) index', Index);
   if Index >= length(fObjects) then
     result := nil
   else
