@@ -2553,6 +2553,11 @@ type
     /// write all lines into a new UTF-8 file
     // - this method is thread-safe
     procedure SaveToFile(const FileName: TFileName; const Delimiter: RawUtf8 = EOL);
+    /// append the lines into a VCL/LCL TStrings instance - ignoring Objects[]
+    procedure AddToStrings(Dest: TStrings; ClearDest: boolean = false);
+    /// convert the lines into VCL/LCL TStrings - caller should Free the result
+    // - conversion from RawUtf8 to string will be delayed until needed
+    function ToStrings: TVirtualStringList; overload;
     /// return the count of stored RawUtf8
     // - reading this property is not thread-safe, since size may change
     property Count: PtrInt
@@ -4968,6 +4973,23 @@ begin
     if fThreadSafe in fFlags then
       fSafe.WriteUnLock;
   end;
+end;
+
+procedure TRawUtf8List.AddToStrings(Dest: TStrings; ClearDest: boolean);
+begin
+  if (self = nil) or
+     (Dest = nil) then
+    exit;
+  if fThreadSafe in fFlags then
+    fSafe.ReadOnlyLock;
+  PRawUtf8AddStrings(pointer(fValue), fCount, Dest, ClearDest);
+  if fThreadSafe in fFlags then
+    fSafe.ReadOnlyUnLock;
+end;
+
+function TRawUtf8List.ToStrings: TVirtualStringList;
+begin
+  result := TVirtualStringList.Create(fValue, fCount, fObjects);
 end;
 
 procedure CopyRawUtf8List(Dest, Source: TRawUtf8List);
