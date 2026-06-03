@@ -4816,41 +4816,38 @@ end;
 
 procedure TPreproc.DoSkip(var P: PUtf8Char);
 begin
-  while true do
-    if P^ = #0 then
-      exit
-    else if P^ <> '$' then
-      inc(P) // most common case
-    else
-      case ParseIfDollar(P) of
-        piNone:
-          inc(P);
-        piIf:
-          begin
-            dec(P, 4); // caller should detect and execute DslIf()
-            exit;
-          end;
-        piIfDef:
-          begin
-            dec(P, 7);
-            exit;
-          end;
-        piEnd:
-          begin
-            DoEndif(P);
-            exit;
-          end;
-        piElse:
-          if IfLevel = 0 then // paranoid
-            exit
-          else if IfLevel in IfSkip then
-          begin
-            exclude(IfSkip, IfLevel); // include until $end$
-            exit;
-          end
-          else
-            include(IfSkip, IfLevel);  // and continue skip loop
-      end;
+  repeat
+    P := PosChar(P, '$'); // use SSE2 on x86_64
+    case ParseIfDollar(P) of
+      piNone:
+        inc(P);
+      piIf:
+        begin
+          dec(P, 4); // caller should detect and execute DslIf()
+          exit;
+        end;
+      piIfDef:
+        begin
+          dec(P, 7);
+          exit;
+        end;
+      piEnd:
+        begin
+          DoEndif(P);
+          exit;
+        end;
+      piElse:
+        if IfLevel = 0 then // paranoid
+          exit
+        else if IfLevel in IfSkip then
+        begin
+          exclude(IfSkip, IfLevel); // include until $end$
+          exit;
+        end
+        else
+          include(IfSkip, IfLevel);  // and continue skip loop
+    end;
+  until false;
 end;
 
 function TPreproc.DoIf(P: PUtf8Char): PUtf8Char;
