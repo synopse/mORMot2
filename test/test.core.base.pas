@@ -1129,6 +1129,7 @@ var
   O: TSynMonitorTime;
   v: TRawUtf8DynArray;
   v64: Int64;
+  sl: TStrings;
   timer: TPrecisionTimer;
 
   procedure TestBinDictionary;
@@ -1167,6 +1168,16 @@ begin
     end;
     for i := 0 to MAX do
       Check(TSynMonitorTime(L.Objects[i]).MicroSec = i);
+    sl := L.ToStrings;
+    Check(sl is TVirtualStringList);
+    CheckEqual(sl.Count, L.Count);
+    CheckEqual(sl.Capacity, L.Count);
+    for i := 0 to MAX do
+    begin
+      Check(StrToInt(sl[i]) = i);
+      Check(TSynMonitorTime(sl.Objects[i]).MicroSec = i);
+    end;
+    sl.Free;
     timer.Start;
     Check(L.IndexOf('') < 0);
     for i := MAX downto MAX - 99 do // O(n) worst case: appear at the end
@@ -1187,6 +1198,7 @@ begin
     Check(not L.Exists('6'));
     L.Clear;
     Check(L.Count = 0);
+    Check(L.IndexOf('5') < 0);
     Check(L.Add('toto') = 0);
     Check(L.Count = 1);
     Check(L.IndexOf('titi') < 0);
