@@ -25,6 +25,10 @@ This index provides a complete reference to all chapters of the mORMot 2 Softwar
 
 - [**Foreword**](mORMot2-SAD-Foreword.md) - Document purpose, resources, quick start guide
 
+### Guides
+
+- [**Recommended Patterns & Default Toolbox**](mORMot2-SAD-Recommended-Patterns.md) - The default set of types, classes and configuration to reach for, plus one opinionated application blueprint (cross-cutting; complements Chapters 4, 15, 16, 24)
+
 ---
 
 ### Part I: Introduction and Core Concepts
