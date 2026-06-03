@@ -2556,7 +2556,7 @@ type
     /// append the lines into a VCL/LCL TStrings instance - ignoring Objects[]
     procedure AddToStrings(Dest: TStrings; ClearDest: boolean = false);
     /// convert the lines into VCL/LCL TStrings - caller should Free the result
-    // - conversion from RawUtf8 to string will be delayed until needed
+    // - with delayed conversion from RawUtf8 to string, and associated Objects[]
     function ToStrings: TVirtualStringList; overload;
     /// return the count of stored RawUtf8
     // - reading this property is not thread-safe, since size may change
@@ -4989,7 +4989,7 @@ end;
 
 function TRawUtf8List.ToStrings: TVirtualStringList;
 begin
-  result := TVirtualStringList.Create(fValue, fCount, fObjects);
+  result := TVirtualStringList.Create(fValue, fCount, fObjects); // by ref
 end;
 
 procedure CopyRawUtf8List(Dest, Source: TRawUtf8List);

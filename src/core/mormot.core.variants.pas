@@ -1588,6 +1588,8 @@ type
     // any nested custom variant types (e.g. TDocVariant) will be stored as JSON
     function ToRawUtf8DynArray: TRawUtf8DynArray; overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// save a document into a TStrings list of encoded JSON
+    procedure ToStrings(Dest: TStrings; ClearDest: boolean = false);
     /// save a document as an CSV of UTF-8 encoded JSON
     // - will expect the document to be a dvArray - otherwise, will raise a
     // EDocVariant exception
@@ -3367,6 +3369,7 @@ type
     /// returns all IDocDict kind of elements of this IDocList
     // - the list should consist e.g. of a JSON array of JSON objects
     // - will just ignore any element of the IDocList which is not a IDocDict
+    // - returned IDocDict instances are weak references to this IDocList
     function ObjectsDicts: IDocDicts;
     /// removes the element at the specified position, and returns it
     // - raise an EDocList on invalid supplied position
@@ -10035,6 +10038,12 @@ end;
 function TDocVariantData.ToRawUtf8DynArray: TRawUtf8DynArray;
 begin
   ToRawUtf8DynArray(result);
+end;
+
+procedure TDocVariantData.ToStrings(Dest: TStrings; ClearDest: boolean);
+begin
+  if Dest <> nil then
+    AddRawUtf8ToStringList(ToRawUtf8DynArray, Dest, ClearDest);
 end;
 
 function TDocVariantData.ToCsv(const Separator: RawUtf8): RawUtf8;
