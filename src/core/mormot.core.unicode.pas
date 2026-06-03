@@ -10725,7 +10725,7 @@ begin
     if (V = nil) or
        (n <= 0) then
       exit;
-    Dest.Capacity := n;
+    Dest.Capacity := Dest.Count + n; // pre-allocate
     repeat
       Utf8ToStringVar(V^, s);
       Dest.Add(s);
