@@ -1847,13 +1847,10 @@ end;
 procedure TYamlToJson.EmitCollectBlockScalar(MinIndent, ExplicitIndent: integer;
   Folded, Chomp: AnsiChar);
 var
-  tmp: TTextWriter;
   blockIndent, blankRun: integer;
-  len: PtrInt;
-  c: PYamlLine;
   prevWasContent: boolean;
-  text: RawUtf8;
-  buf: TTextWriterStackBuffer;
+  c: PYamlLine;
+  buf: TSynTempAdder;
 begin
   // skip leading blank lines; stop at the first non-blank line.
   c := SkipBlankLines;
@@ -1880,7 +1877,7 @@ begin
   if blockIndent < 0 then
     // empty block no chomping needed
     exit;
-  tmp := TTextWriter.CreateOwnedStream(buf);
+  buf.Init;
   try
     blankRun := 0;
     prevWasContent := false;
@@ -1898,54 +1895,52 @@ begin
       // block content line: strip blockIndent prefix
       if prevWasContent then
         if blankRun = 0 then
-          tmp.AddDirect(folded)
+          buf.AddDirect(folded)
         else
           // preserve blank-line runs literally as \n * blankRun
-          tmp.AddChars(#10, blankRun)
-      else if blankRun <> 0 then
+          buf.AddChars(#10, blankRun)
+      else
         // leading blanks before first content: keep them
-        tmp.AddChars(#10, blankRun);
-      tmp.AddChars(' ', c^.Indent - blockIndent);
-      tmp.AddString(c^.Content);
+        buf.AddChars(#10, blankRun);
+      buf.AddChars(' ', c^.Indent - blockIndent);
+      buf.Add(c^.Content);
       prevWasContent := true;
       blankRun := 0;
       inc(fIdx);
       inc(c);
     end;
-    tmp.SetText(text);
-  finally
-    tmp.Free;
-  end;
-  len := length(text);
-  // apply chomping to the trailing content
-  case Chomp of
-    '-':
-      begin
+    // apply chomping to the trailing content
+    case Chomp of
+      '-':
         // strip all trailing newlines
-        while (len > 0) and
-              (text[len] in [#13, #10]) do
-          dec(len);
-        if len <> length(text) then
-          SetLength(text, len); // seldom called
-      end;
-    '+':
-      // keep trailing newlines exactly; ensure at least one
-      if (len = 0) or
-         not (text[len] in [#13, #10]) then
-        Append(text, #10);
-    else
-      // clip: collapse trailing newlines to a single one
-      while (len >= 2) and
-            (text[len] = #10) and
-            (text[len - 1] = #10) do
-        dec(len);
-      if len <> length(text) then
-        SetLength(text, len);
-      if (len = 0) or
-         (text[len] <> #10) then
-        Append(text, #10);
+        while (buf.Size > 0) and
+              (PUtf8Char(buf.Buffer)[buf.Size - 1] in [#13, #10]) do
+          dec(buf.Store.added);
+      '+':
+        // keep trailing newlines exactly; ensure at least one
+        if (buf.Size = 0) or
+           not (PUtf8Char(buf.Buffer)[buf.Size - 1] in [#13, #10]) then
+        begin
+          PUtf8Char(buf.Buffer)[buf.Size] := #10; // append
+          inc(buf.Store.added);
+        end;
+      else
+        // clip: collapse trailing newlines to a single one
+        while (buf.Size >= 2) and
+              (PUtf8Char(buf.Buffer)[buf.Size - 1] = #10) and
+              (PUtf8Char(buf.Buffer)[buf.Size - 2] = #10) do
+          dec(buf.Store.added);
+        if (buf.Size <= 0) or
+           (PUtf8Char(buf.Buffer)[buf.Size - 1] <> #10) then
+         begin
+           PUtf8Char(buf.Buffer)[buf.Size] := #10; // append
+           inc(buf.Store.added);
+         end;
+    end;
+    fOut.AddJsonStringBuffer(buf.Buffer, buf.Size);
+  finally
+    buf.Store.Done; // almost never any allocation
   end;
-  fOut.AddJsonString(text);
 end;
 
 procedure TYamlToJson.EmitBlockScalar(const rest: RawUtf8; BaseIndent: integer);
