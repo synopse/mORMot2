@@ -1637,7 +1637,7 @@ begin
       W.Expected := length(s);
       W.Start;
       SleepHiRes(50);
-      P.Close;
+      P.Abort;
       W.WaitFor;
       CheckEqual(W.Bytes, 0, 'close');
     finally
