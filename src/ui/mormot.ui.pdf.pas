@@ -4724,9 +4724,7 @@ var
 begin
   if BEnd - B <= 24 then
     Save;
-  {$ifndef ASMINTEL} // our StrInt32 asm has less CPU cache pollution
   if cardinal(Value) < 1000 then
-  {$endif ASMINTEL}
     if cardinal(Value) < 10 then
     begin
       B^ := AnsiChar(Value + 48);
@@ -4737,13 +4735,11 @@ begin
       PWord(B)^ := TwoDigitLookupW[Value];
       inc(B, 2);
     end
-    {$ifndef ASMINTEL}
     else
     begin
-      PCardinal(B)^ := PCardinal(SmallUInt32Utf8[Value])^;
+      PCardinal(B)^ := UINT_999[Value].TextLo;
       inc(B, 3);
     end
-    {$endif ASMINTEL}
   else
   begin
     P := StrInt32(@t[23], Value);
@@ -5551,7 +5547,7 @@ begin
     end
     else
     begin
-      PCardinal(B)^ := PCardinal(SmallUInt32Utf8[Value])^ + 32 shl 24;
+      PCardinal(B)^ := UINT_999[Value].TextLo + 32 shl 24;
       inc(B, 4);
     end
   else

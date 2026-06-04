@@ -1460,7 +1460,7 @@ type
       read fStream;
   end;
 
-  /// multi-mode PKCS7 buffered AES encryption stream
+  /// multi-mode PKCS7-padded buffered AES encryption stream
   // - output will follow standard PKCS7 padding, with a trailing IV if needed,
   // i.e. TAesAbstract.DecryptPkcs7 and TAesPkcs7Reader encoding
   TAesPkcs7Writer = class(TAesPkcs7Abstract)
@@ -1484,7 +1484,7 @@ type
     procedure Finish;
   end;
 
-  /// multi-mode PKCS7 buffered AES decryption stream
+  /// multi-mode PKCS7-padded buffered AES decryption stream
   // - input should follow standard PKCS7 padding, with a trailing IV if needed,
   // i.e. TAesAbstract.EncryptPkcs7 and TAesPkcs7Writer encoding
   TAesPkcs7Reader = class(TAesPkcs7Abstract)
@@ -1493,7 +1493,7 @@ type
   public
     /// initialize the AES decryption stream from an intput stream and a key
     // - inStream is typically a TMemoryStream or a TFileStreamEx
-    // - inStream size will be checked for proper PKCS7 padding
+    // - inStream.Size will be checked for proper PKCS7 padding
     // - aesMode should be one of the supported AES_PKCS7WRITER chaining mode
     // - by default, a trailing random IV is read, unless IV is supplied
     // - see also Create() overload with PBKDF2 password derivation
