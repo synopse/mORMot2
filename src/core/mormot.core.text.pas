@@ -1790,9 +1790,8 @@ type
   /// a memory structure which avoids smallest temporary RawUtf8 allocations
   // - used by VarRecToTempUtf8/VariantToTempUtf8 and FormatUtf8/FormatShort
   // - would allocate a RawUtf8 in TempRawUtf8 only if needed, but use the
-  // Temp[0..23] buffer for numbers or small text conversion - caller should
-  // ensure to call TempUtf8Done(Res) once finished with it
-  // - you should eventually release TempRawUtf8 by calling TempUtf8Done()
+  // Temp[0..23] buffer for numbers or small text conversion
+  // - you MUST eventually release any TempRawUtf8 by calling TempUtf8Done()
   TTempUtf8 = record
     Len: PtrInt;
     Text: PUtf8Char;
@@ -1811,11 +1810,13 @@ procedure TempUtf8Done(var Res: TTempUtf8);
 // - empty and null variants will be stored as 'null' text - as expected by JSON
 // - booleans will be stored as 'true' or 'false' - as expected by JSON
 // - custom variant types (e.g. TDocVariant) will be stored as JSON
+// - you MUST eventually release any TempRawUtf8 by calling TempUtf8Done(Res)
 procedure VariantToTempUtf8(const V: variant; var Res: TTempUtf8;
   var wasString: boolean);
 
 /// convert any numerical or text Variant into a 64-bit integer
-// - try first VariantToInt64() then with GetInt64Bool() via VariantToTempUtf8()
+// - call first VariantToInt64() then GetInt64Bool() via VariantToTempUtf8()
+// - V=null or any not integer-shaped value will return the supplied Default
 function AnyVariantToInteger(const V: Variant; Default: Int64 = 0): Int64;
 
 /// convert an open array (const Args: array of const) argument into a TTempUtf8
@@ -1823,6 +1824,7 @@ function AnyVariantToInteger(const V: Variant; Default: Int64 = 0): Int64;
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
+// - you MUST eventually release any TempRawUtf8 by calling TempUtf8Done(Res)
 function VarRecToTempUtf8(V: PVarRec; var Res: TTempUtf8;
   wasString: PBoolean = nil): boolean;
 
@@ -8929,16 +8931,20 @@ var
   tmp: TTempUtf8; // small text won't allocate any memory
   wasString: boolean;
 begin
+  if VarIsEmptyOrNull(V) then
+  begin
+    result := Default; // 0 may not be wanted - rather return Default
+    exit;
+  end;
   if VariantToInt64(V, result) then
     exit; // direct conversion from a numerical value
   VariantToTempUtf8(V, tmp, wasString);
-  if not GetInt64Bool(tmp.Text, result) then // try from text
+  if not GetInt64Bool(tmp.Text, result) then // try from text e.g. '123'
     result := Default;
   TempUtf8Done(tmp);
 end;
 
-function VarRecToTempUtf8(V: PVarRec; var Res: TTempUtf8;
-  wasString: PBoolean): boolean;
+function VarRecToTempUtf8(V: PVarRec; var Res: TTempUtf8; wasString: PBoolean): boolean;
 var
   isString: boolean;
 begin

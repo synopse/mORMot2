@@ -1589,7 +1589,7 @@ begin
   if (sciexp < -6) or
      (exp > 0) then
   begin
-    // scientific format
+    // scientific format 0.xxxxE+yy
     dest^ := AnsiChar(dig^ + ord('0'));
     inc(dig);
     inc(dest);

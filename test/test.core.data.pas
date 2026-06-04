@@ -726,6 +726,8 @@ begin
   CheckEqual(AnyVariantToInteger(v, -1), -1);
   v := '123';
   CheckEqual(AnyVariantToInteger(v), 123);
+  CheckEqual(AnyVariantToInteger(Null), 0);
+  CheckEqual(AnyVariantToInteger(Null, 1), 1);
 end;
 
 type
