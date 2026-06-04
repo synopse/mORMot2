@@ -1607,23 +1607,33 @@ begin
     CheckEqual(P.Size, 777, 'ExpectedSize before');
     CheckEqual(P.ExpectedSize, 777);
     ps := pointer(S);
-    n := SizeOf(tmp); // always try whole 1K buffer first
-    c := length(S) div SizeOf(tmp); // loop 97 times
+    c := length(S) div SizeOf(tmp); // loop c=97 times
     for i := 1 to c do
     begin
+      // try variable Write+Read (1..1024 bytes)
+      if i and 31 = 7 then
+        n := SizeOf(tmp) // whole 1K buffer once in a while
+      else if i and 31 = 0 then
+        n := 1 // another very intriguing number
+      else
+        n := Random32(SizeOf(tmp)) + 1; // good enough
+      // verify Write/Read data roundtrip
       crc := crc32c(0, ps, n);
       CheckEqual(P.Write(ps^, n), n, 'write all');
       inc(ps, n);
       FillCharFast(tmp, n, 0);
       CheckEqual(P.Read(tmp, SizeOf(tmp)), n, 'read trunc');
       CheckEqual(crc, crc32c(0, @tmp, n), 'crc');
-      n := Random32(SizeOf(tmp)) + 1; // variable Write+Read (1..1024 bytes)
+      CheckEqual(P.Pending, 0, 'pipe should be empty after full read');
     end;
-    n := ps - pointer(S); // around half of length(S) = 50,000
+    n := ps - pointer(S); // compute final length: around half of length(S)
     Check(n <= length(S), 'ps overflow');
     CheckEqual(P.Position, n, 'Position');
     CheckEqual(P.Size, 777, 'ExpectedSize after');
     CheckEqual(P.ExpectedSize, 777);
+    P.ExpectedSize := -1;
+    CheckEqual(P.Size, n, 'ExpectedSize reset');
+    CheckEqual(P.Position, n, 'Position unchanged');
   finally
     P.Free;
   end;
