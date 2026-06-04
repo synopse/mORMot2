@@ -713,7 +713,7 @@ type
     procedure Add(const Value: Int64); overload;
     {$endif CPU32}
     /// append a PtrInt signed integer Value as text
-    procedure Add(Value: PtrInt); overload;
+    procedure Add(const Value: PtrInt); overload;
     /// append a boolean Value as 'true' or 'false' text
     procedure Add(Value: boolean); overload;
     /// append a boolean Value as 1 or 0 number
@@ -727,15 +727,15 @@ type
     procedure AddCurr(const Value: currency); 
       {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 32-bit integer Value as a String
-    procedure AddU(Value: PtrUInt); overload;
+    procedure AddU(const Value: PtrUInt); overload;
     /// append an Unsigned integer <= 255 < 999 Value as a String
-    procedure AddB(Value: PtrUInt);
+    procedure AddB(const Value: PtrUInt);
       {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 32-bit integer Value as a quoted hexadecimal String
     procedure AddUHex(Value: cardinal; QuotedChar: AnsiChar = '"');
       {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 64-bit integer Value as a String
-    procedure AddQ(Value: QWord; Reserve: PtrInt = 32);
+    procedure AddQ(const Value: QWord; Reserve: PtrInt = 32);
     /// append an Unsigned 64-bit integer Value as a quoted hexadecimal String
     procedure AddQHex(Value: Qword; QuotedChar: AnsiChar = '"');
       {$ifdef HASINLINE}inline;{$endif}
@@ -747,17 +747,17 @@ type
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     // - noexp=true will call ExtendedToShortNoExp() to avoid any scientific
     // notation in the resulting text
-    procedure AddDouble(Value: double; noexp: boolean = false);
+    procedure AddDouble(const Value: double; noexp: boolean = false);
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     // - noexp=true will call ExtendedToShortNoExp() to avoid any scientific
     // notation in the resulting text
-    procedure AddSingle(Value: single; noexp: boolean = false);
+    procedure AddSingle(const Value: single; noexp: boolean = false);
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     // - noexp=true will call ExtendedToShortNoExp() to avoid any scientific
     // notation in the resulting text
-    procedure Add(Value: Extended; precision: integer; noexp: boolean = false); overload;
+    procedure Add(const Value: Extended; precision: integer; noexp: boolean = false); overload;
     /// append a floating-point text buffer
     // - will correct on the fly '.5' -> '0.5' and '-.5' -> '-0.5'
     // - is used when the input comes from a third-party source with no regular
@@ -1569,15 +1569,15 @@ procedure DoubleToAscii(min_width, frac_digits: integer;
 // - returns the number as text (stored into tmp variable), or "Infinity",
 // "-Infinity", and "NaN" for corresponding IEEE special values
 // - result is a PShortString either over tmp, or JSON_NAN[]
-function DoubleToJson(tmp: PShortString; Value: double;
+function DoubleToJson(tmp: PShortString; const Value: double;
   NoExp: boolean): PShortString;
 
 /// convert a 64-bit floating-point value to its numerical text equivalency
-function DoubleToStr(Value: Double): RawUtf8; overload;
+function DoubleToStr(const Value: Double): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a 64-bit floating-point value to its numerical text equivalency
-procedure DoubleToStr(Value: Double; var result: RawUtf8); overload;
+procedure DoubleToStr(const Value: Double; var result: RawUtf8); overload;
 
 /// copy a floating-point text buffer with proper correction and validation
 // - will correct on the fly '.5' -> '0.5' and '-.5' -> '-0.5'
@@ -4752,7 +4752,7 @@ begin
   inc(B, s^.Header.length);
 end;
 
-procedure TTextWriter.Add(Value: PtrInt);
+procedure TTextWriter.Add(const Value: PtrInt);
 var
   tmp: TTemp24;
   P: PAnsiChar;
@@ -4833,7 +4833,7 @@ begin
   AddCurr64(PInt64(@Value));
 end;
 
-procedure TTextWriter.AddU(Value: PtrUInt);
+procedure TTextWriter.AddU(const Value: PtrUInt);
 var
   tmp: TTemp24;
   P: PAnsiChar;
@@ -4852,7 +4852,7 @@ begin
   end;
 end;
 
-procedure TTextWriter.AddB(Value: PtrUInt);
+procedure TTextWriter.AddB(const Value: PtrUInt);
 begin
   if B >= BEnd then
     FlushToStream;
@@ -4864,13 +4864,13 @@ begin
   AddBinToHexDisplayLower(@Value, SizeOf(Value), QuotedChar);
 end;
 
-procedure TTextWriter.AddQ(Value: QWord; Reserve: PtrInt);
+procedure TTextWriter.AddQ(const Value: QWord; Reserve: PtrInt);
 var
   tmp: TTemp24;
   P: PAnsiChar;
   Len: PtrInt;
 begin
-  if BEnd - B <= Reserve then
+  if BEnd - B <= Reserve then // note: PtrInt(BEnd - B) could be < 0
     FlushToStream;
   if Value <= high(UINT_999) then
     StrRefConst(@UINT_999[Value])
@@ -4906,21 +4906,21 @@ begin
   inc(B, ord(Text[0]));
 end;
 
-procedure TTextWriter.Add(Value: Extended; precision: integer; noexp: boolean);
+procedure TTextWriter.Add(const Value: Extended; precision: integer; noexp: boolean);
 var
   tmp: ShortString;
 begin
   AddShort(ExtendedToJson(@tmp, Value, precision, noexp)^);
 end;
 
-procedure TTextWriter.AddDouble(Value: double; noexp: boolean);
+procedure TTextWriter.AddDouble(const Value: double; noexp: boolean);
 var
   tmp: ShortString;
 begin
   AddShort(DoubleToJson(@tmp, Value, noexp)^);
 end;
 
-procedure TTextWriter.AddSingle(Value: single; noexp: boolean);
+procedure TTextWriter.AddSingle(const Value: single; noexp: boolean);
 var
   tmp: ShortString;
 begin
@@ -5107,7 +5107,7 @@ begin
     if i = HighValues then
       break;
     if Sep <> '' then
-      AddShort(pointer(Sep), PStrLen(PtrInt(Sep) - _STRLEN)^);
+      AddShort(pointer(Sep), PStrLen(PtruInt(Sep) - _STRLEN)^);
     if Reverse then
       dec(i)
     else
@@ -5351,7 +5351,7 @@ procedure TTextWriter.AddProp(PropName: PUtf8Char; PropNameLen: PtrInt);
 begin // not faster with a local P: PUtf8Char temp pointer instead of B
   if PropNameLen <= 0 then
     exit; // paranoid check
-  if BEnd - B <= PropNameLen then
+  if BEnd - B <= PropNameLen then // note: PtrInt(BEnd - B) could be < 0
     FlushToStream;
   if twoForceJsonExtended in fCustomOptions then
   begin
@@ -5420,7 +5420,7 @@ begin
     FieldName := pointer(VoidPlaceHolder);
     FieldNameLen := length(VoidPlaceHolder);
   end;
-  if BEnd - B <= FieldNameLen then
+  if BEnd - B <= FieldNameLen then // note: PtrInt(BEnd - B) could be < 0
     FlushToStream;
   B[1] := '"';
   MoveFast(FieldName^, B[2], FieldNameLen);
@@ -8072,7 +8072,7 @@ end;
 
 {$endif DOUBLETOSHORT_USEGRISU}
 
-function DoubleToJson(tmp: PShortString; Value: double;
+function DoubleToJson(tmp: PShortString; const Value: double;
   NoExp: boolean): PShortString;
 begin
   if PInt64(@Value)^ = 0 then
@@ -8087,12 +8087,12 @@ begin
   end;
 end;
 
-function DoubleToStr(Value: Double): RawUtf8;
+function DoubleToStr(const Value: Double): RawUtf8;
 begin
   DoubleToStr(Value, result);
 end;
 
-procedure DoubleToStr(Value: Double; var result: RawUtf8);
+procedure DoubleToStr(const Value: Double; var result: RawUtf8);
 var
   tmp: ShortString;
 begin
