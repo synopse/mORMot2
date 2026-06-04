@@ -2490,7 +2490,7 @@ type
     // - if Name is not found, Value is not modified, and false is returned
     // - thread-safe method, but not using the internal Hash Table
     // - consider using TSynNameValue if you expect efficient name/value process
-    function UpdateValue(const Name: RawUtf8; var Value: RawUtf8;
+    function ExtractValue(const Name: RawUtf8; var Value: RawUtf8;
       ThenDelete: boolean): boolean;
     /// retrieve and delete the first RawUtf8 item in the list
     // - could be used as a FIFO, calling Add() as a "push" method
@@ -2527,7 +2527,7 @@ type
     // - this method is not thread-safe since the internal list may change
     // and the returned index may not be accurate any more
     // - by design, aText lookup can't use the internal Hash Table
-    function Contains(const aText: RawUtf8; aFirstIndex: integer = 0): PtrInt;
+    function Contains(const aText: RawUtf8; aFirstIndex: PtrInt = 0): PtrInt;
     /// retrieve the all lines, separated by the supplied delimiter
     // - this method is thread-safe
     function GetText(const Delimiter: RawUtf8 = EOL): RawUtf8;
@@ -4705,7 +4705,8 @@ var
   up: TByteToAnsiChar;
   table: PNormTable;
 begin
-  if self <> nil then
+  if (self <> nil) and
+     (fCount <> 0) then
   begin
     PWord(UpperCopy255(@up, Name))^ := ord(NameValueSep);
     table := @NormToUpperAnsi7;
@@ -4719,7 +4720,8 @@ end;
 function TRawUtf8List.IndexOfObject(aObject: TObject): PtrInt;
 begin
   if (self <> nil) and
-     (fObjects <> nil) then
+     (fObjects <> nil) and
+     (fCount <> 0) then
   begin
     if fThreadSafe in fFlags then
       fSafe.ReadOnlyLock;
@@ -4734,21 +4736,24 @@ begin
     result := -1;
 end;
 
-function TRawUtf8List.Contains(const aText: RawUtf8; aFirstIndex: integer): PtrInt;
+function TRawUtf8List.Contains(const aText: RawUtf8; aFirstIndex: PtrInt): PtrInt;
+var
+  i: PtrInt;
 begin
   result := -1;
-  if self = nil then
+  if (self = nil) or
+     (fCount = 0) then
     exit;
   if fThreadSafe in fFlags then
     fSafe.ReadOnlyLock;
-  try
-    for result := aFirstIndex to fCount - 1 do
-      if PosEx(aText, fValue[result]) > 0 then
-        exit;
-  finally
-    if fThreadSafe in fFlags then
-      fSafe.ReadOnlyUnLock;
-  end;
+  for i := aFirstIndex to fCount - 1 do
+    if PosEx(aText, fValue[i]) > 0 then
+    begin
+      result := i;
+      break;
+    end;
+  if fThreadSafe in fFlags then
+    fSafe.ReadOnlyUnLock;
 end;
 
 procedure TRawUtf8List.OnChangeHidden(Sender: TObject);
@@ -4898,7 +4903,7 @@ begin
             (fNoDuplicate in fFlags);
 end;
 
-function TRawUtf8List.UpdateValue(const Name: RawUtf8; var Value: RawUtf8;
+function TRawUtf8List.ExtractValue(const Name: RawUtf8; var Value: RawUtf8;
   ThenDelete: boolean): boolean;
 var
   i: PtrInt;
