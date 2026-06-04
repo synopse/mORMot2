@@ -4993,8 +4993,29 @@ end;
 
 procedure CopyRawUtf8List(Dest, Source: TRawUtf8List);
 begin
+  if Dest = nil then
+    exit;
   Dest.Clear;
-  Dest.AddRawUtf8List(Source);
+  if Source = nil then
+    exit;
+  if fThreadSafe in Source.fFlags then
+    Source.fSafe.ReadOnlyLock;
+  if fThreadSafe in Dest.fFlags then
+    Dest.fSafe.WriteLock;
+  try
+    Dest.fCount := Source.fCount;
+    Dest.fValue := copy(Source.fValue); // copy by reference, increase refcnt
+    Dest.fObjects := copy(Source.fObjects);
+    exclude(Dest.fFlags, fObjectsOwned);
+    if fNoDuplicate in Dest.fFlags then
+      Dest.fValues.ForceReHash; // assume Source has no duplicate either
+    Dest.Changed;
+  finally
+    if fThreadSafe in Source.fFlags then
+      Source.fSafe.ReadOnlyUnLock;
+    if fThreadSafe in Dest.fFlags then
+      Dest.fSafe.WriteUnLock;
+  end;
 end;
 
 
