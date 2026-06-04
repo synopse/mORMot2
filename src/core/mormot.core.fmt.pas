@@ -285,7 +285,7 @@ function HtmlEscapeMarkdown(const md: RawUtf8;
 
 type
   /// map the first Unicode page of Emojis, from U+1F600 to U+1F64F
-  // - naming comes from github/Markdown :identifiers:
+  // - naming comes from github/Markdown :identifiers: and copied in EMOJI_RTTI[]
   TEmoji = (
     eNone,
     eGrinning,
@@ -3558,7 +3558,7 @@ begin
     begin
       P := c + 1; // continue parsing after the Emoji text
       if W <> nil then
-        W.AddShort(pointer(EMOJI_UTF8[result]), 4);
+        W.AddShort4(_EMOJI_UTF8[result].TextLo);
       exit;
     end;
   end;
