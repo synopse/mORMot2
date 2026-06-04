@@ -3843,16 +3843,23 @@ type
   THasher128 = procedure(hash: PHash128; buf: PAnsiChar; len: cardinal);
 
 var
-  /// 8KB tables used by crc32cfast() function
-  // - created with the Castagnoli/iSCSI polynom, diverse from zlib/IEEE-802
-  // crc32() algorithm, but compatible with SSE 4.2 and ARMv8 HW instructions,
-  // with better error detection - https://datatracker.ietf.org/doc/html/rfc3385
-  // - tables content is created from code in initialization section below
-  // - will also be used internally by SymmetricEncrypt and
-  // TSynUniqueIdentifierGenerator as 1KB master/reference key tables
-  crc32ctab: TCrc32tab;
-  /// 8KB tables used by crc32fast() function - i.e. zlib/IEEE-802 polynom
-  crc32tab: TCrc32tab;
+  _crc32ctab, _crc32tab: TCrc32tab; // lazy-initialized lookup tables
+
+/// 8KB tables used by crc32cfast() function
+// - created with the Castagnoli/iSCSI polynom, diverse from zlib/IEEE-802
+// crc32() algorithm, but compatible with SSE 4.2 and ARMv8 HW instructions,
+// with better error detection - https://datatracker.ietf.org/doc/html/rfc3385
+// - tables content is created from code in initialization section below
+// - will also be used internally by SymmetricEncrypt and
+// TSynUniqueIdentifierGenerator as 1KB master/reference key tables
+function crc32ctab: PCrc32tab;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// 8KB tables used by crc32fast() function - i.e. zlib/IEEE-802 polynom
+function crc32tab: PCrc32tab;
+  {$ifdef HASINLINE} inline; {$endif}
+
+function crc32Init(polynom: cardinal; tab: PCrc32tab): PCrc32tab; // for inlining
 
 /// compute CRC32C checksum on the supplied buffer on processor-neutral code
 // - result is compatible with SSE 4.2 based hardware accelerated instruction
@@ -10904,8 +10911,10 @@ begin
     crcblocks       := @crcblockssse42;
     DefaultHasher   := @crc32csse42;
     InterningHasher := @crc32csse42;
-  end;
+  end
+  else
   {$endif DISABLE_SSE42}
+    crc32ctab; // pre-initialize the internal tables on old CPUs
   {$ifdef ASMX86NOTPIC}
   {$ifndef HASNOSSE2}
   {$ifdef WITH_ERMS}
@@ -11666,6 +11675,82 @@ end;
 
 { ************ Buffers (e.g. Hashing and SynLZ compression) Raw Functions }
 
+function crc32ctab: PCrc32tab;
+begin
+  result := @_crc32ctab; // Castagnoli/iSCSI RFC3720 tables
+  if result[0, 1] = 0 then
+    result := crc32Init($82f63b78, result); // lazy initialization
+end;
+
+function crc32tab: PCrc32tab;
+begin
+  result := @_crc32tab; // zlib/IEEE-802 tables
+  if result[0, 1] = 0 then
+    result := crc32Init($edb88320, result); // lazy initialization
+end;
+
+function crc32Init(polynom: cardinal; tab: PCrc32tab): PCrc32tab;
+var
+  i, n: PtrUInt;
+  crc: cardinal;
+begin // 256 bytes of code to generate 2 x 8KB lookup tables
+  i := 0;
+  repeat // unrolled branchless root lookup table generation
+    crc := cardinal(-(i   and 1) and polynom) xor (i   shr 1);
+    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
+    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
+    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
+    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
+    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
+    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
+    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
+    tab^[0, i] := crc;
+    if i = 255 then
+      break;
+    inc(i);
+  until false;
+  i := 0;
+  repeat // expand the root lookup table for by-8 fast computation
+    crc := tab^[0, i];
+    for n := 1 to high(tab^) do
+    begin
+      crc := (crc shr 8) xor tab^[0, ToByte(crc)];
+      tab^[n, i] := crc;
+    end;
+    if i = 255 then
+      break;
+    inc(i);
+  until false;
+  result := tab;
+end;
+
+procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
+begin
+  if data = '' then
+    exit; // nothing to cypher
+  {$ifdef FPC}
+  UniqueString(data); // @data[1] won't call UniqueString() under FPC :(
+  {$endif FPC}
+  SymmetricEncrypt(key, @data[1], length(data));
+end;
+
+procedure SymmetricEncrypt(key: PtrUInt; data: PCardinal; len: PtrInt); overload;
+var
+  i: PtrInt;
+  tab: PCardinalArray;
+begin
+  tab := pointer(crc32ctab); // use first 4KB of this lazy-generated table
+  key := key xor PtrUInt(len);
+  for i := 0 to (len shr 2) - 1 do
+  begin
+    key := key xor tab[(PtrUInt(i) xor key) and 1023];
+    data^ := data^ xor key; // 32-bit loop
+    inc(data);
+  end;
+  for i := 0 to (len and 3) - 1 do // trailing 1..3 bytes from tab[17..136]
+    PByteArray(data)^[i] := PByteArray(data)^[i] xor key xor tab[17 shl i];
+end;
+
 {$ifndef ASMX64} // there is fast branchless SSE2 assembly on x86-64
 
 function BufferLineLength(Text, TextEnd: PUtf8Char): PtrInt;
@@ -12319,33 +12404,6 @@ begin
   result := PAnsiChar(dst) - dststart;
 end;
 
-procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
-begin
-  if data = '' then
-    exit; // nothing to cypher
-  {$ifdef FPC}
-  UniqueString(data); // @data[1] won't call UniqueString() under FPC :(
-  {$endif FPC}
-  SymmetricEncrypt(key, @data[1], length(data));
-end;
-
-procedure SymmetricEncrypt(key: PtrUInt; data: PCardinal; len: PtrInt); overload;
-var
-  i: PtrInt;
-  tab: PCardinalArray;
-begin
-  key := key xor PtrUInt(len);
-  tab := @crc32ctab; // use first 1KB of this 8KB table generated at startup
-  for i := 0 to (len shr 2) - 1 do
-  begin
-    key := key xor tab[(PtrUInt(i) xor key) and 1023];
-    data^ := data^ xor key; // 32-bit loop
-    inc(data);
-  end;
-  for i := 0 to (len and 3) - 1 do // trailing 1..3 bytes from tab[17..136]
-    PByteArray(data)^[i] := PByteArray(data)^[i] xor key xor tab[17 shl i];
-end;
-
 
 { TSynTempBuffer }
 
@@ -12696,19 +12754,19 @@ end;
 
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 begin
-  result := crc32fasttab(crc, buf, len, @crc32ctab);
+  result := crc32fasttab(crc, buf, len, crc32ctab);
 end;
 
 function crc32fast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 begin
-  result := crc32fasttab(crc, buf, len, @crc32tab);
+  result := crc32fasttab(crc, buf, len, crc32tab);
 end;
 
 function crc32cBy4fast(crc, value: cardinal): cardinal;
 var
   tab: PCrc32tab;
 begin
-  tab := @crc32ctab;
+  tab := crc32ctab;
   result := crc xor value;
   result := tab[3, ToByte(result)]        xor tab[2, ToByte(result shr 8)] xor
             tab[1, ToByte(result shr 16)] xor tab[0, ToByte(result shr 24)];
@@ -12721,7 +12779,7 @@ var
   tab: PCrc32tab;
 begin
   result := not crc;
-  tab := @crc32ctab;
+  tab := crc32ctab;
   if len > 0 then
     repeat
       result := tab[0, ToByte(result xor ord(buf^))] xor (result shr 8);
@@ -12911,6 +12969,8 @@ begin
   result := result xor (result shr 16);
 end;
 
+{$ifndef ASMX86NOTPIC} // those functions have their tuned x86 asm version
+
 procedure crcblockone(crc128, data128: PBlock128; tab: PCrc32tab);
   {$ifdef HASINLINE} inline; {$endif}
 var
@@ -12929,8 +12989,6 @@ begin
   crc128^[3] := tab[3, ToByte(c)]        xor tab[2, ToByte(c shr 8)] xor
                 tab[1, ToByte(c shr 16)] xor tab[0, ToByte(c shr 24)];
 end;
-
-{$ifndef ASMX86NOTPIC} // those functions have their tuned x86 asm version
 
 {$ifdef ASMX64}
 function CompareMem(P1, P2: pointer; Length: PtrInt): boolean;
@@ -13007,11 +13065,6 @@ zero:
 end;
 {$endif ASMX64}
 
-procedure crcblockfast(crc128, data128: PBlock128);
-begin
-  crcblockone(crc128, data128, @crc32ctab);
-end;
-
 function fnv32(crc: cardinal; buf: PAnsiChar; len: PtrInt): cardinal;
 var
   i: PtrInt;
@@ -13047,6 +13100,11 @@ begin
 end;
 
 {$endif ASMX86NOTPIC}
+
+procedure crcblockfast(crc128, data128: PBlock128);
+begin
+  crcblockone(crc128, data128, crc32ctab);
+end;
 
 function UInt8ToPChar(P: PAnsiChar; val: PtrUInt; tab: PWordArray): PAnsiChar;
 begin
@@ -13167,11 +13225,11 @@ end;
 
 procedure crcblocksfast(crc128, data128: PBlock128; count: integer);
 var
-  tab: PCrc32tab; // good enough or PIC or ARM
+  tab: PCrc32tab; // good enough on PIC or ARM
 begin
   if count <= 0 then
     exit;
-  tab := @crc32ctab;
+  tab := crc32ctab;
   repeat
     crcblockone(crc128, data128, tab); // properly inlined
     inc(data128);
@@ -14052,7 +14110,7 @@ procedure TRawByteStringStream.SetSize(NewSize: Longint);
 begin
   SetLength(fDataString, NewSize);
   if fPosition > NewSize then
-    fPosition := NewSize;
+    fPosition := NewSize; // truncated
 end;
 
 function TRawByteStringStream.Write(const Buffer; Count: Longint): Longint;
@@ -14139,47 +14197,10 @@ begin
 end;
 
 
-procedure crc32tabInit(polynom: cardinal; var tab: TCrc32tab);
-var
-  i, n: PtrUInt;
-  crc: cardinal;
-begin // 256 bytes of code to generate 2 x 8KB lookup tables
-  i := 0;
-  repeat // unrolled branchless root lookup table generation
-    crc := cardinal(-(i   and 1) and polynom) xor (i   shr 1);
-    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
-    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
-    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
-    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
-    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
-    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
-    crc := cardinal(-(crc and 1) and polynom) xor (crc shr 1);
-    tab[0, i] := crc;
-    if i = 255 then
-      break;
-    inc(i);
-  until false;
-  i := 0;
-  repeat // expand the root lookup table for by-8 fast computation
-    crc := tab[0, i];
-    for n := 1 to high(tab) do
-    begin
-      crc := (crc shr 8) xor tab[0, ToByte(crc)];
-      tab[n, i] := crc;
-    end;
-    if i = 255 then
-      break;
-    inc(i);
-  until false;
-end;
-
 procedure InitializeUnit;
 begin
   Assert(ord(high(TSynLogLevel)) = 31);
   Assert(@PSynVarData(nil)^.VAny = @PVarData(nil)^.VAny);
-  // initialize internal constants from crc32 reversed polynoms
-  crc32tabInit($82f63b78, crc32ctab); // Castagnoli/iSCSI RFC3720 tables
-  crc32tabInit($edb88320, crc32tab);  // zlib/IEEE-802 tables
   // setup minimalistic global functions - overriden by other core units
   VariantClearSeveral      := @_VariantClearSeveral;
   SortDynArrayVariantComp  := @_SortDynArrayVariantComp;

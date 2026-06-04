@@ -7307,6 +7307,7 @@ constructor TSynUniqueIdentifierGenerator.Create(
 var
   i, len: integer;
   crc: cardinal;
+  tab: PCrc32tab;
   key: THash256Rec;
 begin
   inherited Create; // may have been overriden
@@ -7331,11 +7332,12 @@ begin
     // naive and would be broken easily with brute force - but point here is to
     // hide/obfuscate public values at end-user level (e.g. when publishing URIs),
     // not implement strong security, so it sounds good enough for our purpose
-    crc := crc32ctab[0, len and 1023];
+    tab := crc32ctab;
+    crc := tab^[0, len and 1023];
     for i := 0 to high(fCrypto) + 1 do
     begin
-      crc := crc32ctab[0, crc and 1023] xor
-             crc32ctab[3, i] xor
+      crc := tab^[0, crc and 1023] xor
+             tab^[3, i] xor
              kr32(crc, pointer(aSharedObfuscationKey), len) xor
              crc32c(crc, pointer(aSharedObfuscationKey), len) xor
              fnv32(crc, pointer(aSharedObfuscationKey), len);
@@ -7377,7 +7379,7 @@ begin
   if self = nil then
     key := 0
   else
-    key := crc32ctab[0, bits.id.ProcessID and 1023] xor fCryptoCRC;
+    key := crc32ctab^[0, bits.id.ProcessID and 1023] xor fCryptoCRC;
   bits.crc := crc32c(bits.id.ProcessID, @bits.id, SizeOf(bits.id)) xor key;
   if self <> nil then
     if fCryptoAesE.Initialized then
@@ -7416,7 +7418,7 @@ begin
     fCryptoAesD.Decrypt(block.b, block.b);
     if block.c3 <> fCryptoCRC then
       exit;
-    key := crc32ctab[0, bits.id.ProcessID and 1023] xor fCryptoCRC;
+    key := crc32ctab^[0, bits.id.ProcessID and 1023] xor fCryptoCRC;
   end
   else
   begin
@@ -7428,7 +7430,7 @@ begin
     else
     begin
       bits.id.Value := bits.id.Value xor PInt64(@fCrypto[high(fCrypto) - 1])^;
-      key := crc32ctab[0, bits.id.ProcessID and 1023] xor fCryptoCRC;
+      key := crc32ctab^[0, bits.id.ProcessID and 1023] xor fCryptoCRC;
     end;
   end;
   if crc32c(bits.id.ProcessID, @bits.id, SizeOf(bits.id)) xor key = bits.crc then
