@@ -750,7 +750,7 @@ type
   PStrRec = ^TStrRec;
   PDynArrayRec = ^TDynArrayRec;
 
-  /// store a fake RawUtf8 constant string with up to 7 chars
+  /// store a fake RawUtf8 constant string with up to 7 chars in a 16-bytes block
   TStrRecConst = record
     Header: TStrRec;
     Text: array[0 .. 7] of AnsiChar;

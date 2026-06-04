@@ -6824,12 +6824,12 @@ begin
     save := VARIANT_JSONSAVE[vt];
     if Assigned(save) then
     begin
-      save(@v^.VAny, ctxt);
+      save(@v^.VAny, ctxt); // direct output up to varOleUInt
       exit;
     end;
   end;
-  if vt = varString then
-    AddText(RawByteString(v^.VString), Escape)
+  if vt = varString then // most common first
+    AddText(RawByteString(v^.VString), Escape) // assume normalized as RawUtf8
   else
   case vt of
     varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}:
