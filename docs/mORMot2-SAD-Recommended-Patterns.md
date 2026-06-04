@@ -132,25 +132,25 @@ with _Safe(v)^ do        // safe even if v is null / not a TDocVariant
 A sane default server wires five things: a model, a storage server bound as `IRestOrm`, your services, an HTTP server, and logging. A minimal shape:
 
 ```pascal
-// 1. Model: list every TOrm class the server persists
+// 1. Logging: turn it on early (see Chapter 25)
+TSynLog.Family.Level := LOG_VERBOSE;
+TSynLog.Family.PerThreadLog := ptIdentifiedInOnFile;
+
+// 2. Model: list every TOrm class the server persists
 Model := TOrmModel.Create([TUser, TInvoice]);
 
-// 2. Storage: embedded SQLite is the default system of record
+// 3. Storage: embedded SQLite is the default system of record
 RestServer := TRestServerDB.Create(Model, 'data.db');
 RestServer.Server.CreateMissingTables;       // server-only call, at composition root
 
-// 3. Services: register interface-based services (default sicShared)
+// 4. Services: register interface-based services (default sicShared)
 RestServer.ServiceDefine(TUserService, [IUserQuery, IUserCommand], sicShared);
 
-// 4. Authentication: enable it explicitly (JWT / mORMot auth)
+// 5. Authentication: enable it explicitly (JWT / mORMot auth)
 RestServer.AuthenticationRegister(TRestServerAuthenticationDefault);
 
-// 5. HTTP: expose over HTTP/HTTPS
+// 6. HTTP: expose over HTTP/HTTPS
 HttpServer := TRestHttpServer.Create('8080', [RestServer], '+', HTTP_DEFAULT_MODE);
-
-// Logging: turn it on early (see Chapter 25)
-TSynLog.Family.Level := LOG_VERBOSE;
-TSynLog.Family.PerThreadLog := ptIdentifiedInOnFile;
 ```
 
 Adjust per project: swap `TRestServerDB` for an external SQL/NoSQL backend behind the same `IRestOrm` abstraction (see [A.5](#a5-bind-to-irestorm-and-the-_safe-rule) and [B.1](#b1-storage-behind-an-interface)); choose your authentication scheme in [Chapter 21](mORMot2-SAD-Chapter-21.md); tune logging in [Chapter 25](mORMot2-SAD-Chapter-25.md). The point is that **every one of these five is a deliberate, named decision** — none should be left implicit.
