@@ -813,28 +813,11 @@ var
 { ************ TOrmWriter Class for TOrm Serialization }
 
 type
-  /// several options to customize how TOrm will be serialized
-  // - e.g. if properties storing JSON should be serialized as an object, and not
-  // escaped as a string (which is the default, matching ORM column storage)
-  // - if an additional "ID_str":"12345" field should be added to the standard
-  // "ID":12345 field, which may exceed 53-bit integer precision of JavaScript
-  // - to generate JS-friendly "id" (and "idStr") instead of "ID" or "RowID"
-  // - to generate JS-friendly "propName": from a PropName pascal property
-  TOrmWriterOption = (
-    owoAsJsonNotAsString,
-    owoID_str,
-    owoLowCaseID,
-    owoLowCaseFirstPropChar);
-
-  /// options to customize how TOrm will be written by TOrmWriter
-  TOrmWriterOptions = set of TOrmWriterOption;
-
   /// simple writer to a Stream, specialized for writing TOrm as JSON
   // - in respect to the standard TResultsWriter as defined in mormot.db.core,
   // this class has some options dedicated to our TOrm serialization
   TOrmWriter = class(TResultsWriter)
   protected
-    fOrmOptions: TOrmWriterOptions;
     procedure SetOrmOptions(Value: TOrmWriterOptions);
   public
     /// customize TOrm.GetJsonValues serialization process

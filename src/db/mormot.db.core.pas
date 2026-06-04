@@ -951,6 +951,22 @@ function GetTableNamesFromSqlSelect(const Sql: RawUtf8): TRawUtf8DynArray;
 { ************ TResultsWriter Specialized for Database Export }
 
 type
+  /// several options to customize how TOrm will be serialized by TOrmWriter
+  // - e.g. if properties storing JSON should be serialized as an object, and not
+  // escaped as a string (which is the default, matching ORM column storage)
+  // - if an additional "ID_str":"12345" field should be added to the standard
+  // "ID":12345 field, which may exceed 53-bit integer precision of JavaScript
+  // - to generate JS-friendly "id" (and "idStr") instead of "ID" or "RowID"
+  // - to generate JS-friendly "propName": from a PropName pascal property
+  TOrmWriterOption = (
+    owoAsJsonNotAsString,
+    owoID_str,
+    owoLowCaseID,
+    owoLowCaseFirstPropChar);
+
+  /// options to customize how TOrm will be written by TOrmWriter
+  TOrmWriterOptions = set of TOrmWriterOption;
+
   /// simple writer to a Stream, specialized for SQL export as JSON
   // - i.e. define some property/method helpers to export SQL resultset as JSON
   TResultsWriter = class(TJsonWriter)
@@ -959,6 +975,8 @@ type
     fExpand: boolean;
     /// used to store output format for TOrm.GetJsonValues()
     fWithID: boolean;
+    /// used by inherited TOrmWriter class - here to reduce instance size
+    fOrmOptions: TOrmWriterOptions;
     /// if not Expanded format, contains the Stream position of the first
     // useful Row of data; i.e. ',val11' position in:
     // & { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
