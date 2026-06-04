@@ -2419,8 +2419,7 @@ type
     // - if fNoDuplicate was set and aText already exists (using the internal
     // hash table), it will return -1 unless aRaiseExceptionIfExisting is forced
     // - thread-safe method
-    function Add(const aText: RawUtf8;
-      aRaiseExceptionIfExisting: boolean = false): PtrInt;
+    function Add(const aText: RawUtf8; aRaiseExceptionIfExisting: boolean = false): PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
     /// store a new RawUtf8 item, and its associated TObject
     // - without the fNoDuplicate flag, it will always add the supplied value
@@ -2455,7 +2454,7 @@ type
     // - thread-safe method, using an internal Hash Table to speedup IndexOf()
     function AddOrReplaceObject(const aText: RawUtf8; aObject: TObject): PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
-    /// append a specified list to the current content
+    /// append another list content to the current content
     // - thread-safe method
     procedure AddRawUtf8List(List: TRawUtf8List);
     /// delete a stored RawUtf8 item, and its associated TObject
@@ -4333,7 +4332,7 @@ begin
         exit;
       end;
     end;
-    result := fValues.Add(aText);
+    result := fValues.Add(aText); // includes inc(fCount)
     if (fObjects <> nil) or
        (aObject <> nil) then
     begin
@@ -4365,17 +4364,22 @@ end;
 
 procedure TRawUtf8List.AddRawUtf8List(List: TRawUtf8List);
 var
-  i: PtrInt;
+  c, i: PtrInt;
 begin
-  if List <> nil then
-  begin
-    BeginUpdate; // includes Safe.Lock
-    try
-      for i := 0 to List.fCount - 1 do
-        AddObject(List.fValue[i], List.GetObject(i));
-    finally
-      EndUpdate;
-    end;
+  if (List = nil) or
+     (List.fCount = 0) then
+    exit;
+  BeginUpdate; // includes Safe.Lock
+  try
+    c := length(fValue) + List.fCount; // pre-allocate
+    SetLength(fValue, c);
+    if (fObjects <> nil) or
+       (List.fObjects <> nil) then
+      SetLength(fObjects, c);
+    for i := 0 to List.fCount - 1 do
+      AddObject(List.fValue[i], List.GetObject(i));
+  finally
+    EndUpdate;
   end;
 end;
 
@@ -4731,8 +4735,6 @@ begin
 end;
 
 function TRawUtf8List.Contains(const aText: RawUtf8; aFirstIndex: integer): PtrInt;
-var
-  i: PtrInt; // use a temp variable to make oldest Delphi happy :(
 begin
   result := -1;
   if self = nil then
@@ -4740,12 +4742,9 @@ begin
   if fThreadSafe in fFlags then
     fSafe.ReadOnlyLock;
   try
-    for i := aFirstIndex to fCount - 1 do
-      if PosEx(aText, fValue[i]) > 0 then
-      begin
-        result := i;
+    for result := aFirstIndex to fCount - 1 do
+      if PosEx(aText, fValue[result]) > 0 then
         exit;
-      end;
   finally
     if fThreadSafe in fFlags then
       fSafe.ReadOnlyUnLock;
@@ -4867,7 +4866,7 @@ var
   i: PtrInt;
   txt: RawUtf8;
 begin
-  txt := Name + RawUtf8(NameValueSep) + Value;
+  Make([Name, NameValueSep, Value], txt);
   if fThreadSafe in fFlags then
     fSafe.WriteLock;
   try
