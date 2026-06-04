@@ -1806,7 +1806,6 @@ type
     fReadTimeout, fWriteTimeout: cardinal;
     fCanRead: TSynEvent;
     fCanWrite: TSynEvent;
-    fExpectedSize: Int64;
     fOptions: TPipeStreamOptions;
     fOnClose: TNotifyEvent;
     fCallingThread: array[{wr=}boolean] of TThreadID;
@@ -1859,7 +1858,7 @@ type
     // - convenient e.g. when the eventual/final resource size is known
     // - equals -1 by default, i.e. if Size value should follow current Position
     property ExpectedSize: Int64
-      read fExpectedSize write fExpectedSize;
+      read fSize write fSize;
     /// called by Destroy/Abort e.g. to force shutdown of the running threads
     property OnClose: TNotifyEvent
       read fOnClose write fOnClose;
@@ -4985,7 +4984,7 @@ begin
   fBufferSize := NextPowerOfTwo(aBufSize); // for efficient "and size-1" modulo
   fReadTimeout := INFINITE;
   fWriteTimeout := INFINITE;
-  fExpectedSize := -1; // eventual Size metadata is disabled by default
+  fSize := -1; // eventual Size metadata is disabled by default
   GetMem(fBuffer, fBufferSize);
   fCanRead := TSynEvent.Create;
   fCanWrite := TSynEvent.Create;
@@ -5061,10 +5060,7 @@ begin
         fReadPos := (fReadPos + result) and (fBufferSize - 1); // fast modulo
         dec(fPending, result);
         if not (psoWritePosition in fOptions) then
-        begin
           inc(fPosition, result);
-          inc(fSize, result);
-        end;
         exit; // quickly return partial Read() without blocking
       end;
     finally
@@ -5110,10 +5106,7 @@ begin
         inc(fPending, towrite);
         inc(result, towrite);
         if psoWritePosition in fOptions then
-        begin
           inc(fPosition, towrite);
-          inc(fSize, towrite);
-        end;
       end;
     finally
       fLock.UnLock;
@@ -5130,9 +5123,9 @@ end;
 
 function TPipeStream.GetSize: Int64;
 begin
-  result := fExpectedSize; // custom meta-data value
+  result := fSize; // custom ExpectedSize meta-data value
   if result < 0 then
-    result := fSize;      // = fPosition in practice and by default
+    result := fPosition;
 end;
 
 const

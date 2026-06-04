@@ -1590,6 +1590,8 @@ begin
     CheckEqual(P.Size, R.Expected);
     CheckEqual(P.Position, R.Expected);
     CheckEqual(P.Seek(0, soFromCurrent), R.Expected);
+    CheckEqual(P.Size, R.Expected);
+    CheckEqual(P.ExpectedSize, -1);
   finally
     W.Free;
     R.Free;
@@ -1599,6 +1601,11 @@ begin
   timer.Start;
   P := TPipeStream.Create(SizeOf(tmp));
   try
+    CheckEqual(P.ExpectedSize, -1);
+    P.ExpectedSize := 777;
+    CheckEqual(P.Position, 0);
+    CheckEqual(P.Size, 777, 'ExpectedSize before');
+    CheckEqual(P.ExpectedSize, 777);
     ps := pointer(S);
     n := SizeOf(tmp); // always try whole 1K buffer first
     c := length(S) div SizeOf(tmp); // loop 97 times
@@ -1612,8 +1619,11 @@ begin
       CheckEqual(crc, crc32c(0, @tmp, n), 'crc');
       n := Random32(SizeOf(tmp)) + 1; // variable Write+Read (1..1024 bytes)
     end;
-    n := ps - pointer(S);
+    n := ps - pointer(S); // around half of length(S) = 50,000
     Check(n <= length(S), 'ps overflow');
+    CheckEqual(P.Position, n, 'Position');
+    CheckEqual(P.Size, 777, 'ExpectedSize after');
+    CheckEqual(P.ExpectedSize, 777);
   finally
     P.Free;
   end;
