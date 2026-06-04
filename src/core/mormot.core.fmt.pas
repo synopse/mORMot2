@@ -1913,31 +1913,31 @@ begin
     case Chomp of
       '-':
         // strip all trailing newlines
-        while (buf.Size > 0) and
-              (PUtf8Char(buf.Buffer)[buf.Size - 1] in [#13, #10]) do
+        while (buf.Store.added > 0) and
+              (PUtf8Char(buf.Buffer)[buf.Store.added - 1] in [#13, #10]) do
           dec(buf.Store.added);
       '+':
         // keep trailing newlines exactly; ensure at least one
-        if (buf.Size = 0) or
-           not (PUtf8Char(buf.Buffer)[buf.Size - 1] in [#13, #10]) then
+        if (buf.Store.added = 0) or
+           not (PUtf8Char(buf.Buffer)[buf.Store.added - 1] in [#13, #10]) then
         begin
-          PUtf8Char(buf.Buffer)[buf.Size] := #10; // append
+          PUtf8Char(buf.Buffer)[buf.Store.added] := #10; // append
           inc(buf.Store.added);
         end;
       else
         // clip: collapse trailing newlines to a single one
-        while (buf.Size >= 2) and
-              (PUtf8Char(buf.Buffer)[buf.Size - 1] = #10) and
-              (PUtf8Char(buf.Buffer)[buf.Size - 2] = #10) do
+        while (buf.Store.added >= 2) and
+              (PUtf8Char(buf.Buffer)[buf.Store.added - 1] = #10) and
+              (PUtf8Char(buf.Buffer)[buf.Store.added - 2] = #10) do
           dec(buf.Store.added);
-        if (buf.Size <= 0) or
-           (PUtf8Char(buf.Buffer)[buf.Size - 1] <> #10) then
+        if (buf.Store.added <= 0) or
+           (PUtf8Char(buf.Buffer)[buf.Store.added - 1] <> #10) then
          begin
-           PUtf8Char(buf.Buffer)[buf.Size] := #10; // append
+           PUtf8Char(buf.Buffer)[buf.Store.added] := #10; // append
            inc(buf.Store.added);
          end;
     end;
-    fOut.AddJsonStringBuffer(buf.Buffer, buf.Size);
+    fOut.AddJsonStringBuffer(buf.Buffer, buf.Store.added);
   finally
     buf.Store.Done; // almost never any allocation
   end;
@@ -2034,9 +2034,8 @@ var
   end;
 
 var
-  tmp: TTextWriter;
-  cur: RawUtf8; // we need a temp value since = rest first
-  buf: TTextWriterStackBuffer;
+  cur: PRawUtf8; // we need a temp value since = rest first
+  buf: TSynTempAdder;
 begin
   if rest = '' then
     exit;
@@ -2046,36 +2045,35 @@ begin
   if ScanQuoteClosed(pointer(rest), {skipOpeningQuote=}true) then
     exit; // single-line, already closed
   // multi-line merge
-  tmp := TTextWriter.CreateOwnedStream(buf);
+  buf.Init;
   try
-    cur := rest;
+    cur := @rest;
     repeat
       // absorbed line break: drop the trailing '\' and emit no separator
-      tmp.AddNoJsonEscape(pointer(cur), length(cur) - ord(trailingEscape));
+      buf.Add(pointer(cur^), length(cur^) - ord(trailingEscape));
       if not trailingEscape then
         // folded line break -> single space (per YAML 1.2 §7.5)
-        tmp.AddDirect(' ');
+        buf.AddDirect(' ');
       inc(fIdx);
       if AtEnd then
         Error(firstLineIdx, 'unterminated multi-line quoted scalar');
       // Content is already left-trimmed by SplitYamlLines via Indent metadata,
       // which is exactly the §7.5 requirement that leading ws is ignored
-      cur := fLines[fIdx].Content;
-      if cur = '' then
+      cur := @fLines[fIdx].Content;
+      if cur^ = '' then
         continue;
-      if ScanQuoteClosed(pointer(cur), {skipOpeningQuote=}false) then
+      if ScanQuoteClosed(pointer(cur^), {skipOpeningQuote=}false) then
       begin
         // last line closes the scalar; include everything up to and past the
         // closing quote (any trailing content is ignored - quoted scalars end
         // at the closing quote)
-        tmp.AddString(cur);
+        buf.Add(cur^);
         // leave fIdx pointing at this closing line; callers advance it
         break;
       end;
     until false;
-    tmp.SetText(rest);
   finally
-    tmp.Free;
+    buf.Done(rest);
   end;
 end;
 
