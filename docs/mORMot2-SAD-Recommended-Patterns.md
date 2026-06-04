@@ -198,9 +198,11 @@ Every service exposes an `IXxxRepository` (or a CQRS pair, see [B.4](#b5-cqrs-re
 
 ### B.7. Default starting point for a new service
 
+The following list is a possible starting point. It is not a pattern to always follow:
+
 1. `TOrm` per entity (in `infra/`), doubling as the domain object.
 2. A family of (possibily `packed record`) DTOs (in `app/<Entity>/`), registered with `Rtti.RegisterFromText` in the unit's `initialization`.
-3. Paired `IXxxCommand` + `IXxxQuery` interfaces descending from `IInvokable`.
+3. Possibly pairing `IXxxCommand` + `IXxxQuery` interfaces descending from `IInvokable`.
 4. Service implementations as `TInjectableObjectRest` subclasses, `IRestOrm` injected via published property.
 5. `sicShared` instance mode unless profiling says otherwise.
 6. Standard daemon: load settings, build the `TOrmModel`, create the persistence server, wire repositories, register services, start `TRestHttpServer`.
@@ -212,7 +214,7 @@ Every service exposes an `IXxxRepository` (or a CQRS pair, see [B.4](#b5-cqrs-re
 
 ## When to deviate
 
-Part A is a default you should rarely override on serialized code paths — if you find yourself using `TStringList` or `TDictionary<K,V>` on a service signature, that is almost always a mistake. Part B is a blueprint: a small service may collapse the DTO family to one DTO, skip CQRS, or front a legacy schema directly. That is fine — **the rule is not "always do B," it is "when you depart from B, know why, and write it down."** Alignment is the cheap default; divergence should buy you something.
+Part A is a default you should rarely override on serialized code paths — if you find yourself using `TStringList` or `TDictionary<K,V>` on a service signature, that is almost always a mistake. Part B is a blueprint. You may collapse the DTO family to one DTO, skip CQRS, or front a legacy schema directly. That is fine.
 
 ---
 
