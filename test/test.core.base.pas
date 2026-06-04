@@ -4220,12 +4220,15 @@ begin
 end;
 
 function crc32creference(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+var
+  tab: PCrc32tab;
 begin
+  tab := crc32ctab; // retrieve the lookup table once
   result := not crc;
   if buf <> nil then
     while len > 0 do
     begin
-      result := crc32ctab[0, ToByte(result xor ord(buf^))] xor (result shr 8);
+      result := tab[0, ToByte(result xor ord(buf^))] xor (result shr 8);
       dec(len);
       inc(buf);
     end;
@@ -4324,19 +4327,22 @@ end;
 procedure crcblockreference(crc128, data128: PBlock128);
 var
   c: cardinal;
+var
+  tab: PCrc32tab;
 begin
+  tab := crc32ctab; // retrieve the lookup table once
   c := crc128^[0] xor data128^[0];
-  crc128^[0] := crc32ctab[3, byte(c)] xor crc32ctab[2, byte(c shr 8)] xor
-                crc32ctab[1, byte(c shr 16)] xor crc32ctab[0, c shr 24];
+  crc128^[0] := tab[3, byte(c)] xor tab[2, byte(c shr 8)] xor
+                tab[1, byte(c shr 16)] xor tab[0, c shr 24];
   c := crc128^[1] xor data128^[1];
-  crc128^[1] := crc32ctab[3, byte(c)] xor crc32ctab[2, byte(c shr 8)] xor
-                crc32ctab[1, byte(c shr 16)] xor crc32ctab[0, c shr 24];
+  crc128^[1] := tab[3, byte(c)] xor tab[2, byte(c shr 8)] xor
+                tab[1, byte(c shr 16)] xor tab[0, c shr 24];
   c := crc128^[2] xor data128^[2];
-  crc128^[2] := crc32ctab[3, byte(c)] xor crc32ctab[2, byte(c shr 8)] xor
-                crc32ctab[1, byte(c shr 16)] xor crc32ctab[0, c shr 24];
+  crc128^[2] := tab[3, byte(c)] xor tab[2, byte(c shr 8)] xor
+                tab[1, byte(c shr 16)] xor tab[0, c shr 24];
   c := crc128^[3] xor data128^[3];
-  crc128^[3] := crc32ctab[3, byte(c)] xor crc32ctab[2, byte(c shr 8)] xor
-                crc32ctab[1, byte(c shr 16)] xor crc32ctab[0, c shr 24];
+  crc128^[3] := tab[3, byte(c)] xor tab[2, byte(c shr 8)] xor
+                tab[1, byte(c shr 16)] xor tab[0, c shr 24];
 end;
 
 procedure TTestCoreBase._crc32c;
@@ -4381,6 +4387,7 @@ var
 var
   i, j: integer;
   c1, c2: cardinal;
+  p: PAnsiChar;
   crc1, crc2: THash128;
   crcs: THash512Rec;
   digest: THash256;
@@ -4493,11 +4500,12 @@ begin
       LecuyerEncrypt(i, s2);
       CheckEqual(s2, S, 'LecuyerEncrypt');
     end;
-  Check(crc32fast(0, @crc32tab, 5) = $DF4EC16C, 'crc32a');
-  Check(crc32fast(0, @crc32tab, 1024) = $6FCF9E13, 'crc32b');
-  Check(crc32fast(0, @crc32tab, 1024 - 5) = $70965738, 'crc32c');
-  Check(crc32fast(0, pointer(PtrInt(@crc32tab) + 1), 2) = $41D912FF, 'crc32d');
-  Check(crc32fast(0, pointer(PtrInt(@crc32tab) + 3), 1024 - 5) = $E5FAEC6C, 'crc32e');
+  p := pointer(crc32tab);
+  Check(crc32fast(0, p, 5) = $DF4EC16C, 'crc32a');
+  Check(crc32fast(0, p, 1024) = $6FCF9E13, 'crc32b');
+  Check(crc32fast(0, p, 1024 - 5) = $70965738, 'crc32c');
+  Check(crc32fast(0, p + 1, 2) = $41D912FF, 'crc32d');
+  Check(crc32fast(0, p + 3, 1024 - 5) = $E5FAEC6C, 'crc32e');
   Test(crc32creference, 'pas');
   Test(crc32cinlined, 'inl');
   Test(crc32cfast, 'fast');

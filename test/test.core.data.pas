@@ -9067,7 +9067,7 @@ end;
 
 const
   // regression tests use a const table instead of our runtime-computed array
-  crc32tab: array[byte] of cardinal = ($00000000, $77073096, $EE0E612C,
+  c32t: array[byte] of cardinal = ($00000000, $77073096, $EE0E612C,
     $990951BA, $076DC419, $706AF48F, $E963A535, $9E6495A3, $0EDB8832, $79DCB8A4,
     $E0D5E91E, $97D2D988, $09B64C2B, $7EB17CBD, $E7B82D07, $90BF1D91, $1DB71064,
     $6AB020F2, $F3B97148, $84BE41DE, $1ADAD47D, $6DDDE4EB, $F4D4B551, $83D385C7,
@@ -9114,7 +9114,7 @@ begin
   result := not aCRC32;
   for i := 1 to inLen do
   begin
-    result := crc32tab[(result xor pByte(inBuf)^) and $ff] xor (result shr 8);
+    result := c32t[(result xor pByte(inBuf)^) and $ff] xor (result shr 8);
     inc(PByte(inBuf));
   end;
   result := not result;
@@ -9130,16 +9130,17 @@ var
   s, tmp: RawByteString;
   gzr: TGZRead;
 begin
-  Check(crc32(0, @crc32tab, 5) = $DF4EC16C, 'crc32');
-  Check(ReferenceCrc32(0, @crc32tab, 5) = $DF4EC16C, 'crc32');
-  Check(crc32(0, @crc32tab, 1024) = $6FCF9E13, 'crc32');
-  Check(ReferenceCrc32(0, @crc32tab, 1024) = $6FCF9E13);
-  Check(crc32(0, @crc32tab, 1024 - 5) = $70965738, 'crc32');
-  Check(ReferenceCrc32(0, @crc32tab, 1024 - 5) = $70965738);
-  Check(crc32(0, pointer(PtrInt(@crc32tab) + 1), 2) = $41D912FF, 'crc32');
-  Check(ReferenceCrc32(0, pointer(PtrInt(@crc32tab) + 1), 2) = $41D912FF);
-  Check(crc32(0, pointer(PtrInt(@crc32tab) + 3), 1024 - 5) = $E5FAEC6C, 'crc32');
-  Check(ReferenceCrc32(0, pointer(PtrInt(@crc32tab) + 3), 1024 - 5) = $E5FAEC6C, 'crc32');
+  Check(crc32(0, @c32t, 5) = $DF4EC16C, 'crc32');
+  Check(ReferenceCrc32(0, @c32t, 5) = $DF4EC16C, 'crc32');
+  Check(crc32(0, @c32t, 1024) = $6FCF9E13, 'crc32');
+  Check(ReferenceCrc32(0, @c32t, 1024) = $6FCF9E13);
+  Check(crc32(0, @c32t, 1024 - 5) = $70965738, 'crc32');
+  Check(ReferenceCrc32(0, @c32t, 1024 - 5) = $70965738);
+  Check(crc32(0, pointer(PtrInt(@c32t) + 1), 2) = $41D912FF, 'crc32');
+  Check(ReferenceCrc32(0, pointer(PtrInt(@c32t) + 1), 2) = $41D912FF);
+  Check(crc32(0, pointer(PtrInt(@c32t) + 3), 1024 - 5) = $E5FAEC6C, 'crc32');
+  Check(CompareMem(@c32t, crc32tab, SizeOf(c32t)), 'crc32tab');
+  Check(ReferenceCrc32(0, pointer(PtrInt(@c32t) + 3), 1024 - 5) = $E5FAEC6C, 'crc32');
   M := TMemoryStream.Create;
   Z := TSynZipCompressor.Create(M, 6, szcfGZ);
   L := length(Data);
