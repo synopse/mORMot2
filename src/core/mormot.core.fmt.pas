@@ -147,6 +147,8 @@ function AddJsonToXml(W: TTextWriter; Json: PUtf8Char; ArrayName: PUtf8Char = ni
 
 { ************* YAML 1.2 core-schema to JSON or TDocVariant Support }
 
+{ main high-level YAML conversion functions }
+
 type
   /// exception raised by YAML parser on unsupported or invalid input
   EYamlException = class(ESynException);
@@ -218,6 +220,23 @@ var
   // - converts would-be EStackOverflow into a clean EYamlException with
   // line info; guards both block and flow recursive descent
   YamlMaxDepth: integer = 512;
+
+
+{ low-level functions which may be handy in some scenarios }
+
+/// YAML 1.2 core-schema decimal/hexa/octal integer with safe overflow detection
+// - return false on signed 64-bit overflow so caller falls back to string
+function TryYamlInt(p: PUtf8Char; out V: Int64): boolean;
+
+/// strip an unquoted trailing "# ..." YAML comment from a scalar fragment
+// - accounts for single/double quoted spans where # is literal
+procedure YamlStripLineComment(var S: RawUtf8);
+
+/// emit some text as YAML string, with JSON-escaped double-quotes if needed
+procedure WriteYamlString(W: TJsonWriter; const S: RawUtf8);
+
+/// emit some variant as YAML, with JSON-escaped double-quotes if needed
+procedure WriteYamlVariant(W: TJsonWriter; const V: variant);
 
 
 { ************* Markup (e.g. Markdown or Emoji) process }
@@ -1416,8 +1435,6 @@ type
   TYamlLines = array of TYamlLine;
   PYamlLine = ^TYamlLine;
 
-// strip an unquoted trailing "# ..." comment from a scalar fragment
-// - accounts for single/double quoted spans where # is literal
 procedure YamlStripLineComment(var S: RawUtf8);
 var
   p: PUtf8Char;
@@ -1472,8 +1489,6 @@ begin
 end;
 
 function TryYamlInt(p: PUtf8Char; out V: Int64): boolean;
-// YAML 1.2 core-schema decimal/hexa/octal integer with safe overflow detection
-// - return false on signed 64-bit overflow so caller falls back to string
 var
   neg: boolean;
   b: byte;
@@ -1797,7 +1812,7 @@ begin
       fOut.AddJsonString(K);            // JSON-escape
     end
   else
-    fOut.AddShorter('""');
+    fOut.AddShort4(ord('"') + ord('"') shl 8, 2);
 end;
 
 procedure TYamlToJson.EmitScalarFragment(const Frag: RawUtf8; LineIdx: integer);
@@ -2786,8 +2801,6 @@ type
     procedure WriteBlockSeq(const dv: TDocVariantData; Indent: PtrInt);
     procedure WriteYamlKey(const K: RawUtf8);
       {$ifdef HASINLINE} inline; {$endif}
-    procedure WriteYamlString(const S: RawUtf8);
-    procedure WriteYamlVariantAsString(const v: variant);
     procedure WriteIndent(N: PtrInt);
       {$ifdef HASINLINE} inline; {$endif}
   public
@@ -2814,44 +2827,9 @@ begin
   fOut.AddChars(' ', N);
 end;
 
-procedure TVariantToYaml.WriteYamlString(const S: RawUtf8);
-var
-  p: PUtf8Char;
-begin
-  p := pointer(S);
-  if p = nil then
-    fOut.AddShorter('""')
-  else if // leading chars that need quoting
-          (p^ in [' ', #9, '!', '&', '*', '>', '|', '%', '@', '`', '"', '''',
-                  '#', '-', '?', ':', '{', '[', '}', ']', ',']) or
-          // trailing whitespace triggers quotes
-          (p[length(S) - 1] in [' ', #9]) or
-          // reserved plain-scalar forms: null, bool, numbers - must be quoted
-          // to preserve string type on round-trip
-          IsYamlNull(p) or
-          IsBooleanJson(p) or
-          IsNumberJson(p) or
-          // quick scan for chars that require escape
-          YamlSpecialChars(p) then
-    // emit as JSON-escaped double-quoted string - valid YAML 1.2 §5.7
-    // since the JSON escape set is a subset of YAML's flow-scalar escapes
-    fOut.AddJsonString(S)
-  else
-    // we can directly output this text without quotes
-    fOut.AddString(S);
-end;
-
 procedure TVariantToYaml.WriteYamlKey(const K: RawUtf8);
 begin
-  WriteYamlString(K);
-end;
-
-procedure TVariantToYaml.WriteYamlVariantAsString(const v: variant);
-var
-  s: RawUtf8;
-begin
-  VariantToUtf8(v, s);
-  WriteYamlString(s);
+  WriteYamlString(fOut, K);
 end;
 
 procedure TVariantToYaml.WriteBlockMap(const dv: TDocVariantData; Indent: PtrInt);
@@ -2905,7 +2883,7 @@ begin
   i := 0;
   v := pointer(dv.Values);
   repeat
-    fOut.AddShorter('- ');
+    fOut.AddShort4(ord('-') + ord(' ') shl 8, 2);
     if _Safe(v^, cd) and
        (cd^.Count > 0) then
     begin
@@ -2946,18 +2924,19 @@ begin
     // let TJsonWriter.AddVariant emit them directly without any escaping
     fOut.AddVariant(PVariant(vd)^, twNone)
   else if vt = varString then
-    // in a TDocVariant, strings are usually normalized as RawUtf8 varString
-    WriteYamlString(RawUtf8(PVarData(vd)^.VAny))
-  else if (vd^.VarType = DocVariantVType) and
-          (vd^.Kind <> dvUndefined) then
+    // in a TDocVariant, varString are usually normalized as RawUtf8
+    WriteYamlString(fOut, RawUtf8(PVarData(vd)^.VAny))
+  else if vt = DocVariantVType then
     // nested object or array
     if vd^.IsObject then
       WriteBlockMap(vd^, Indent)
-    else
+    else if vd^.IsArray then
       WriteBlockSeq(vd^, Indent)
+    else
+      fOut.AddNull
   else
     // string-like or unknown: coerce to UTF-8 and apply YAML quoting rules
-    WriteYamlVariantAsString(PVariant(vd)^);
+    WriteYamlVariant(fOut, PVariant(vd)^);
 end;
 
 function TVariantToYaml.Run(const Doc: variant): RawUtf8;
@@ -2984,6 +2963,46 @@ procedure SaveVariantToYamlFile(const Doc: variant; const FileName: TFileName;
   Options: TYamlWriterOptions);
 begin
   FileFromString(VariantToYaml(Doc, Options), FileName);
+end;
+
+procedure WriteYamlString(W: TJsonWriter; const S: RawUtf8);
+var
+  p: PUtf8Char;
+begin
+  p := pointer(S);
+  if p = nil then
+    W.AddShort4(ord('"') + ord('"') shl 8, 2)
+  else if
+      // leading chars that need quoting
+      (p^ in [' ', #9, '!', '&', '*', '>', '|', '%', '@', '`', '"', '''',
+              '#', '-', '?', ':', '{', '[', '}', ']', ',']) or
+      // trailing whitespace triggers quotes
+      (p[length(S) - 1] in [' ', #9]) or
+      // reserved plain-scalar forms: null, bool, numbers - must be quoted
+      // to preserve string type on round-trip
+      IsYamlNull(p) or
+      IsBooleanJson(p) or
+      IsNumberJson(p) or
+      // quick scan for chars that require escape
+      YamlSpecialChars(p) then
+    // emit as JSON-escaped double-quoted string - valid YAML 1.2 §5.7
+    // since the JSON escape set is a subset of YAML's flow-scalar escapes
+    W.AddJsonString(S)
+  else
+    // we can directly output this text without quotes
+    W.AddString(S);
+end;
+
+procedure WriteYamlVariant(W: TJsonWriter; const V: variant);
+var
+  s: RawUtf8;
+  wasstring: boolean;
+begin
+  VariantToUtf8(V, s, wasString);
+  if wasString then
+    WriteYamlString(W, s) // apply YAML quoting rules to a string
+  else
+    W.AddString(s); // direct output of e.g. BSON content as JSON
 end;
 
 
