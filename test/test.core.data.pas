@@ -708,6 +708,7 @@ begin
   Check(v._kind = ord(dvObject));
   Check(v._count = 0);
   v := VariantLoadJson('[1,2,3]', @JSON_[mFast]);
+  CheckEqual(AnyVariantToInteger(v), 0);
   Check(v._kind = ord(dvArray));
   Check(v._count = 3);
   v := VariantLoadJson(' {"a":10,b:20}', @JSON_[mFast]);
@@ -721,6 +722,10 @@ begin
   CheckEqual(vd.VType, varString);
   Check(VariantTypeName(v)^ = 'String');
   Check(v = 'toto'#13#10'toto');
+  CheckEqual(AnyVariantToInteger(v), 0);
+  CheckEqual(AnyVariantToInteger(v, -1), -1);
+  v := '123';
+  CheckEqual(AnyVariantToInteger(v), 123);
 end;
 
 type

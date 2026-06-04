@@ -1814,6 +1814,10 @@ procedure TempUtf8Done(var Res: TTempUtf8);
 procedure VariantToTempUtf8(const V: variant; var Res: TTempUtf8;
   var wasString: boolean);
 
+/// convert any numerical or text Variant into a 64-bit integer
+// - try first VariantToInt64() then with GetInt64Bool() via VariantToTempUtf8()
+function AnyVariantToInteger(const V: Variant; Default: Int64 = 0): Int64;
+
 /// convert an open array (const Args: array of const) argument into a TTempUtf8
 // - it would return true if Res.Len > 0, so Res could be added or processed
 // - note that, due to a Delphi compiler limitation, cardinal values should be
@@ -8918,6 +8922,19 @@ begin
       Res.Len := length(RawUtf8(Res.TempRawUtf8));
     end;
  end;
+end;
+
+function AnyVariantToInteger(const V: Variant; Default: Int64): Int64;
+var
+  tmp: TTempUtf8; // small text won't allocate any memory
+  wasString: boolean;
+begin
+  if VariantToInt64(V, result) then
+    exit; // direct conversion from a numerical value
+  VariantToTempUtf8(V, tmp, wasString);
+  if not GetInt64Bool(tmp.Text, result) then // try from text
+    result := Default;
+  TempUtf8Done(tmp);
 end;
 
 function VarRecToTempUtf8(V: PVarRec; var Res: TTempUtf8;

@@ -4345,7 +4345,7 @@ function VariantToInteger(const V: Variant; var Value: integer): boolean;
 /// convert any numerical Variant into a 64-bit integer
 // - it will expect true numerical Variant and won't convert any string nor
 // floating-pointer Variant, which will return FALSE and won't change the
-// Value variable content
+// Value variable content - see rather AnyVariantToInteger() in mormot.core.text
 function VariantToInt64(const V: Variant; var Value: Int64): boolean;
 
 /// convert any numerical Variant into a 64-bit integer
