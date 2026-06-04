@@ -1860,7 +1860,7 @@ function UpperCopyWin255(dest: PWinAnsiChar; const source: RawUtf8): PWinAnsiCha
 // - used internally for short keys match or case-insensitive hash
 // - returns final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be array[byte] of
-// AnsiChar), replacing any non WinAnsi character by '?'
+// AnsiChar), replacing any non ASCII-7 character by '?'
 function UpperCopy255W(dest: PAnsiChar; const source: SynUnicode): PAnsiChar; overload;
   {$ifdef HASINLINE}inline;{$endif}
 

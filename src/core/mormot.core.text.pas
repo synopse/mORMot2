@@ -569,8 +569,8 @@ type
     fHumanReadableLevel: integer;
     fWrittenBytes: Int64;
     fInitialStreamPosition: Int64;
-    fCustomOptions: TTextWriterOptions;
-    fFlags: TTextWriterFlags;
+    fCustomOptions: TTextWriterOptions; // 16-bit
+    fFlags: TTextWriterFlags;           // 8-bit
     fShortStringMax: byte; // = high(Dest) for twfDestIsShortString
     function GetTextLength: Int64;
     function GetStream: TStream;
@@ -4153,9 +4153,9 @@ begin
 end;
 
 constructor TTextWriter.CreateOwnedShort(var aDest, aTemp: ShortString);
-begin
+begin // should match exactly TLocalWriter.Init from mormot.core.fmt
   if high(aTemp) < TRAIL_BYTES then
-     ESynException.RaiseUtf8('%.CreateOwnedShort(temp[%])', [self, high(aTemp)]);
+    ESynException.RaiseUtf8('%.CreateOwnedShort(temp[%])', [self, high(aTemp)]);
   fFlags := [twfBufferIsOnStack, twfDestIsShortString, twfFlushNoAutoResize];
   InternalSetBuffer(@aTemp, high(aTemp) + 1);
   aDest[0] := #0;
@@ -6587,9 +6587,8 @@ begin
     begin
       decim := PCardinal(P + L - SizeOf(cardinal))^; // 4 last digits = 4 decimals
       if decim = $30303030 then
-        dec(L, 5)
-      else // no decimal
-      if decim and $ffff0000 = $30300000 then
+        dec(L, 5)  // no decimal
+      else if decim and $ffff0000 = $30300000 then
         dec(L, 2); // 2 decimals
     end;
     FastSetString(result, P, L);
