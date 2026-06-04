@@ -168,7 +168,7 @@ function JsonUnicodeEscape(const s: RawUtf8): RawUtf8;
 function JsonUnicodeUnEscape(const s: RawUtf8): RawUtf8;
 
 /// encode one \u#### JSON escaped UTF-16 codepoint into Dest
-procedure Utf16ToJsonUnicodeEscape(var B: PUtf8Char; c: PtrUint; tab: PByteToWord);
+procedure Utf16ToJsonUnicodeEscape(var B: PUtf8Char; c: PtrUInt; tab: PByteToWord);
   {$ifdef HASINLINE} inline; {$endif}
 
 /// test if the supplied buffer is a "string" value or a numerical value
@@ -4123,9 +4123,9 @@ begin
     begin
       c := PInteger(Value)^;
       if c = TRUE_LOW then
-        Value := pointer(SmallUInt32Utf8[1]) // normalize true -> 1
+        Value := @UINT_999[1].TextLo // normalize true -> 1
       else if c = FALSE_LOW then
-        Value := pointer(SmallUInt32Utf8[0]) // normalize false -> 0
+        Value := @UINT_999[0].TextLo // normalize false -> 0
       else
         exit;
       ValueLen := 1; // result = '0' or '1'

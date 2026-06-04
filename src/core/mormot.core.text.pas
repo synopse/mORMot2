@@ -585,6 +585,7 @@ type
     class procedure RaiseUnimplemented(const Method: ShortString);
     function GetFlag(one: TTextWriterFlag): boolean;
     procedure SetFlag(one: TTextWriterFlag; value: boolean);
+    procedure StrRefConst(s: PStrRecConst); {$ifdef HASINLINE}inline;{$endif}
   public
     /// direct access to the low-level current position in the buffer
     // - you should not use this field directly
@@ -709,11 +710,10 @@ type
     {$ifdef CPU32}
     /// append a 64-bit signed integer Value as text
     // - already implemented by Add(Value: PtrInt) method on CPU64
-    procedure Add(Value: Int64); overload;
+    procedure Add(const Value: Int64); overload;
     {$endif CPU32}
     /// append a PtrInt signed integer Value as text
     procedure Add(Value: PtrInt); overload;
-      {$ifdef FPC_OR_DELPHIXE4}{$ifdef ASMINTEL}inline;{$endif}{$endif} // URW1111
     /// append a boolean Value as 'true' or 'false' text
     procedure Add(Value: boolean); overload;
     /// append a boolean Value as 1 or 0 number
@@ -728,7 +728,6 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 32-bit integer Value as a String
     procedure AddU(Value: PtrUInt); overload;
-      {$ifdef FPC_OR_DELPHIXE4}{$ifdef ASMINTEL}inline;{$endif}{$endif} // URW1111
     /// append an Unsigned integer <= 255 < 999 Value as a String
     procedure AddB(Value: PtrUInt);
       {$ifdef HASINLINE}inline;{$endif}
@@ -737,7 +736,6 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 64-bit integer Value as a String
     procedure AddQ(Value: QWord; Reserve: PtrInt = 32);
-      {$ifdef FPC_CPUX64}inline;{$endif} // URW1147 on Delphi XE2
     /// append an Unsigned 64-bit integer Value as a quoted hexadecimal String
     procedure AddQHex(Value: Qword; QuotedChar: AnsiChar = '"');
       {$ifdef HASINLINE}inline;{$endif}
@@ -1375,14 +1373,14 @@ type
 { ************ Numbers (integers or floats) and Variants to Text Conversion }
 
 var
-  /// naive but efficient cache to avoid string memory allocation for
-  // 0..999 small numbers by Int32ToUtf8/UInt32ToUtf8
-  // - filled with statically allocated constant RawUtf8 values at startup
-  // - noticeable when RawUtf8 strings are used as array indexes (e.g.
-  // in mormot.db.nosql.bson)
-  // - less noticeable without any allocation: StrInt32() is faster on a buffer
+  /// naive but efficient cache to avoid string memory allocation for 0 .. 999
+  // small numbers by Int32ToUtf8/UInt32ToUtf8
+  // - filled with statically allocated UINT_999[] constant values at startup
+  // - noticeable when RawUtf8 strings are used as array indexes (e.g. in BSON)
   // - is defined globally, since may be used from an inlined function
   SmallUInt32Utf8: array[0..999] of RawUtf8;
+  /// raw pre-allocated SmallUInt32Utf8[] values as L1-friendly constants
+  UINT_999: array[0..999] of TStrRecConst;
 
 /// fast RawUtf8 version of 32-bit IntToStr()
 function Int32ToUtf8(Value: PtrInt): RawUtf8; overload;
@@ -4748,6 +4746,12 @@ begin
   inc(B);
 end;
 
+procedure TTextWriter.StrRefConst(s: PStrRecConst);
+begin
+  PCardinal(B + 1)^ := s^.TextLo; // append up to 4 chars - e.g. UINT_999[]
+  inc(B, s^.Header.length);
+end;
+
 procedure TTextWriter.Add(Value: PtrInt);
 var
   tmp: TTemp24;
@@ -4756,15 +4760,9 @@ var
 begin
   if BEnd - B <= 24 then
     FlushToStream;
-  {$ifndef ASMINTEL} // our StrInt32 asm has less CPU cache pollution
-  if PtrUInt(Value) <= high(SmallUInt32Utf8) then
-  begin
-    P := pointer(SmallUInt32Utf8[Value]);
-    PCardinal(B + 1)^ := PCardinal(P)^;
-    inc(B, PStrLen(P - _STRLEN)^);
-  end
+  if PtrUInt(Value) <= high(UINT_999) then
+    StrRefConst(@UINT_999[Value])
   else
-  {$endif ASMINTEL}
   begin
     P := StrInt32(@tmp[23], Value);
     Len := @tmp[23] - P;
@@ -4774,7 +4772,7 @@ begin
 end;
 
 {$ifdef CPU32} // Add(Value: PtrInt) already implements it for CPU64
-procedure TTextWriter.Add(Value: Int64);
+procedure TTextWriter.Add(const Value: Int64);
 var
   tmp: TTemp24;
   P: PAnsiChar;
@@ -4782,24 +4780,21 @@ var
 begin
   if BEnd - B <= 24 then
     FlushToStream;
-  if Value < 0 then
+  if Value >= 0 then
+    if Value <= high(UINT_999) then
+    begin
+      StrRefConst(@UINT_999[Value]);
+      exit;
+    end
+    else
+    begin
+      P := StrUInt64(@tmp[23], Value);
+      Len := @tmp[23] - P;
+    end
+  else
   begin
     P := StrUInt64(@tmp[23], -Value) - 1;
     P^ := '-';
-    Len := @tmp[23] - P;
-  end
-  {$ifndef ASMINTEL} // our StrUInt32 asm has less CPU cache pollution
-  else if Value <= high(SmallUInt32Utf8) then
-  begin
-    P := pointer(SmallUInt32Utf8[Value]);
-    PCardinal(B + 1)^ := PCardinal(P)^;
-    inc(B, PStrLen(P - _STRLEN)^);
-    exit;
-  end
-  {$endif ASMINTEL} // our StrInt32 asm has less CPU cache pollution
-  else
-  begin
-    P := StrUInt64(@tmp[23], Value);
     Len := @tmp[23] - P;
   end;
   MoveByOne(P, B + 1, Len);
@@ -4846,15 +4841,9 @@ var
 begin
   if BEnd - B <= 24 then
     FlushToStream;
-  {$ifndef ASMINTEL} // our StrUInt32 asm has less CPU cache pollution
-  if Value <= high(SmallUInt32Utf8) then
-  begin
-    P := pointer(SmallUInt32Utf8[Value]);
-    PCardinal(B + 1)^ := PCardinal(P)^;
-    inc(B, PStrLen(P - _STRLEN)^);
-  end
+  if Value <= high(UINT_999) then
+    StrRefConst(@UINT_999[Value])
   else
-  {$endif ASMINTEL}
   begin
     P := StrUInt32(@tmp[23], Value);
     Len := @tmp[23] - P;
@@ -4864,14 +4853,10 @@ begin
 end;
 
 procedure TTextWriter.AddB(Value: PtrUInt);
-var
-  P: PAnsiChar;
 begin
   if B >= BEnd then
     FlushToStream;
-  P := pointer(SmallUInt32Utf8[Value]); // caller ensured Value <= 255 < 999
-  PCardinal(B + 1)^ := PCardinal(P)^;
-  inc(B, PStrLen(P - _STRLEN)^);
+  StrRefConst(@UINT_999[Value]); // caller ensured Value <= 255 < 999
 end;
 
 procedure TTextWriter.AddUHex(Value: cardinal; QuotedChar: AnsiChar);
@@ -4887,15 +4872,9 @@ var
 begin
   if BEnd - B <= Reserve then
     FlushToStream;
-  {$ifndef ASMINTEL} // our StrInt32 asm has less CPU cache pollution
-  if Value <= high(SmallUInt32Utf8) then
-  begin
-    P := pointer(SmallUInt32Utf8[Value]);
-    PCardinal(B + 1)^ := PCardinal(P)^;
-    inc(B, PStrLen(P - _STRLEN)^);
-  end
+  if Value <= high(UINT_999) then
+    StrRefConst(@UINT_999[Value])
   else
-  {$endif ASMINTEL}
   begin
     P := StrUInt64(@tmp[23], Value);
     Len := @tmp[23] - P;
@@ -7755,7 +7734,8 @@ end;
 procedure d2a_return_exponential(str: PAnsiChar; minus: boolean;
   digits: PByte; n_digits_have, n_digits_req, d_exp: PtrInt);
 var
-  p, exp: PAnsiChar;
+  p: PAnsiChar;
+  exp: PStrRecConst; // 0..999 range is fine
 begin
   p := str + 1;
   // Sign
@@ -7806,9 +7786,9 @@ begin
     inc(p);
   end;
   // Exponent digits
-  exp := pointer(SmallUInt32Utf8[d_exp]); // 0..999 range is fine
-  PCardinal(p)^ := PCardinal(exp)^;
-  inc(p, PStrLen(exp - _STRLEN)^);
+  exp := @UINT_999[d_exp];
+  PCardinal(p)^ := exp^.TextLo;
+  inc(p, exp^.Header.length);
   // Store length
   str[0] := AnsiChar(p - str - 1);
 end;
@@ -8766,14 +8746,13 @@ end;
 procedure PtrIntToTempUtf8(V: PtrInt; var Res: TTempUtf8);
   {$ifdef HASINLINE} inline; {$endif}
 begin
-  {$ifndef ASMINTEL} // our StrInt32 asm has less CPU cache pollution
-  if PtrUInt(V) <= high(SmallUInt32Utf8) then
-  begin
-    Res.Text := pointer(SmallUInt32Utf8[V]);
-    Res.Len := PStrLen(Res.Text - _STRLEN)^;
-  end
+  if PtrUInt(V) <= high(UINT_999) then
+    with UINT_999[V] do
+    begin
+      Res.Text := @TextLo;
+      Res.Len := Header.length;
+    end
   else
-  {$endif ASMINTEL}
   begin
     Res.Text := PUtf8Char(StrInt32(@Res.Temp[23], V));
     Res.Len := @Res.Temp[23] - Res.Text;
@@ -8786,12 +8765,13 @@ begin
 {$ifdef CPU64}
   PtrIntToTempUtf8(V^, Res);
 {$else}
-  if (PCardinalArray(V)^[0] <= high(SmallUInt32Utf8)) and
+  if (PCardinalArray(V)^[0] <= high(UINT_999)) and
      (PCardinalArray(V)^[1] = 0) then
-  begin
-    Res.Text := pointer(SmallUInt32Utf8[PPtrInt(V)^]);
-    Res.Len := PStrLen(Res.Text - _STRLEN)^;
-  end
+    with UINT_999[PPtrInt(V)^] do
+    begin
+      Res.Text := @TextLo;
+      Res.Len := Header.length;
+    end
   else
   begin
     Res.Text := PUtf8Char(StrInt64(@Res.Temp[23], V^));
@@ -8803,14 +8783,13 @@ end;
 procedure QWordToTempUtf8(V: PQWord; var Res: TTempUtf8);
   {$ifdef HASINLINE} inline; {$endif}
 begin
-  {$ifndef ASMINTEL} // our StrUInt64 asm has less CPU cache pollution
-  if V^ <= high(SmallUInt32Utf8) then
-  begin
-    Res.Text := pointer(SmallUInt32Utf8[PPtrInt(V)^]);
-    Res.Len := PStrLen(Res.Text - _STRLEN)^;
-  end
+  if V^ <= high(UINT_999) then
+    with UINT_999[PPtrInt(V)^] do
+    begin
+      Res.Text := @TextLo;
+      Res.Len := Header.length;
+    end
   else
-  {$endif ASMINTEL}
   begin
     Res.Text := PUtf8Char(StrUInt64(@Res.Temp[23], V^));
     Res.Len := @Res.Temp[23] - Res.Text;
@@ -8841,7 +8820,7 @@ begin
       PtrIntToTempUtf8(TVarData(V).VWord, Res);
     varLongWord:
       {$ifdef CPU32}
-      if TVarData(V).VLongWord > high(SmallUInt32Utf8) then
+      if TVarData(V).VLongWord > high(UINT_999) then
       begin
         Res.Text := PUtf8Char(StrUInt32(@Res.Temp[23], TVarData(V).VLongWord));
         Res.Len := @Res.Temp[23] - Res.Text;
@@ -8984,9 +8963,9 @@ begin
       begin
         isString := false;
         if V^.VBoolean then // normalize
-          Res.Text := pointer(SmallUInt32Utf8[1])
+          Res.Text := @UINT_999[1].TextLo
         else
-          Res.Text := pointer(SmallUInt32Utf8[0]);
+          Res.Text := @UINT_999[0].TextLo;
         Res.Len := 1;
       end;
     vtInteger:
@@ -11424,8 +11403,6 @@ begin
     end;
 end;
 
-var // pre-allocated SmallUInt32Utf8[] values as constant
-  _SmallUInt32Utf8: array[0..999] of TStrRecConst;
 
 procedure InitializeUnit;
 var
@@ -11464,10 +11441,11 @@ begin
     B4[i + (ord('a') - ord('A'))] := v shl 4;
     inc(v);
   end;
-  for i := 0 to high(SmallUInt32Utf8) do // 0..999 into '0'..'999'
+  PInt64(@tmp[8])^ := 0;
+  for i := 0 to high(SmallUInt32Utf8) do // 0..999 into '0'..'999' RawUtf8
   begin
-    P := StrUInt32(@tmp[15], i);
-    FastSetConst(SmallUInt32Utf8[i], _SmallUInt32Utf8[i], P, @tmp[15] - P);
+    P := StrUInt32(@tmp[8], i);
+    FastSetConst(SmallUInt32Utf8[i], UINT_999[i], P, @tmp[8] - P);
   end;
   pc := @METHODNAME32;
   i := length(METHODNAME32);

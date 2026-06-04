@@ -9385,11 +9385,11 @@ end;
 
 function Append999ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;
 var
-  P: PAnsiChar;
+  r: PStrRecConst;
 begin
-  P := pointer(SmallUInt32Utf8[Value]);
-  PCardinal(Buffer)^ := PCardinal(P)^;
-  result := Buffer + PStrLen(P - _STRLEN)^;
+  r := @UINT_999[Value];
+  PCardinal(Buffer)^ := r.TextLo;
+  result := Buffer + r.Header.length;
 end;
 
 function AppendBufferToBuffer(Buffer: PUtf8Char; Text: pointer; Len: PtrInt): PUtf8Char;
@@ -9404,20 +9404,16 @@ var
   P: PAnsiChar;
   tmp: TTemp24;
 begin
-  {$ifndef ASMINTEL} // our StrUInt32 asm has less CPU cache pollution
-  if Value <= high(SmallUInt32Utf8) then
-  begin
-    P := pointer(SmallUInt32Utf8[Value]);
-    L := PStrLen(P - _STRLEN)^;
-    MoveByOne(P, Buffer, L);
-  end
-  else
-  {$endif ASMINTEL}
-  begin
-    P := StrUInt32(@tmp[23], Value);
-    L := @tmp[23] - P;
-    MoveFast(P^, Buffer^, L);
-  end;
+  if Value <= high(UINT_999) then
+    with UINT_999[Value] do
+    begin
+      PCardinal(Buffer)^ := TextLo;
+      result := Buffer + Header.length;
+      exit;
+    end;
+  P := StrUInt32(@tmp[23], Value);
+  L := @tmp[23] - P;
+  MoveFast(P^, Buffer^, L);
   result := Buffer + L;
 end;
 
@@ -10942,11 +10938,10 @@ var
   tmp: TTemp24;
   P: PAnsiChar;
 begin
-  {$ifndef ASMINTEL} // our StrUInt64 asm has less CPU cache pollution
-  if Value <= high(SmallUInt32Utf8) then
-    Append(SmallUInt32Utf8[Value])
+  if Value <= high(UINT_999) then
+    with UINT_999[Value] do
+      Append(@TextLo, Header.length)
   else
-  {$endif ASMINTEL}
   begin
     P := StrUInt64(@tmp[23], Value);
     Append(P, @tmp[23] - P);

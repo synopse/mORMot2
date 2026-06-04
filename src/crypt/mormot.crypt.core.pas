@@ -7204,8 +7204,8 @@ begin
     Result[0] := #11;
     PCardinal(@Result[1])^ :=
       ord('a') + ord('e') shl 8 + ord('s') shl 16 + ord('-') shl 24;
-    PCardinal(@Result[5])^ := PCardinal(SmallUInt32Utf8[KeyBits])^;
-    Result[8] := '-'; // SmallUInt32Utf8 put a #0 there
+    PCardinal(@Result[5])^ := UINT_999[KeyBits].TextLo;
+    Result[8] := '-'; // UINT_999[] put a #0 there
     PCardinal(@Result[9])^ := PCardinal(@AESMODE_TXT[Mode])^;
   end
   else

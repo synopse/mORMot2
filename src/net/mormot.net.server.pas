@@ -3415,7 +3415,8 @@ begin
   else
   begin // other cases
     h^.AppendShort(_CMD_XXX[rfHttp10 in Context.ResponseFlags]);
-    h^.Append(SmallUInt32Utf8[MinPtrUInt(high(SmallUInt32Utf8), fRespStatus)]);
+    with UINT_999[MinPtrUInt(high(SmallUInt32Utf8), fRespStatus)] do
+      h^.Append(@TextLo, Header.length);
     h^.Append(' ');
     h^.Append(mormot.core.text.StatusCodeToText(fRespStatus)^); // need English
     h^.AppendCRLF;
