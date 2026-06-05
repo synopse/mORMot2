@@ -1724,7 +1724,7 @@ const
     4); // 'TORM'
 begin
   if self = nil then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     ClassToText(self, result);
@@ -1742,7 +1742,7 @@ end;
 
 function TOrmVirtualTable.Structure: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if self <> nil then
     if static <> nil then
       // e.g. for TOrmVirtualTableJson or TOrmVirtualTableExternal
@@ -1860,7 +1860,7 @@ begin
   if VirtualTableClass.InheritsFrom(TOrmVirtualTable) then
     result := TOrmVirtualTableClass(VirtualTableClass).ModuleName
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 
@@ -2040,7 +2040,7 @@ end;
 function TRestStorage.GetStoredClassName: RawUtf8;
 begin
   if self = nil then
-    result := ''
+    FastAssignNew(result)
   else
     ClassToText(fStoredClass, result);
 end;
@@ -3280,7 +3280,7 @@ var
   end;
 
 begin
-  result := '';
+  FastAssignNew(result);
   ResCount := 0;
   if PropNameEquals(fBasicSqlCount, SQL) then
     // SELECT COUNT(*) FROM tablename
@@ -3548,7 +3548,7 @@ var
   MS: TRawByteStringStream;
 begin
   if self = nil then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     MS := TRawByteStringStream.Create;
@@ -3566,7 +3566,7 @@ var
   MS: TRawByteStringStream;
 begin
   if self = nil then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     MS := TRawByteStringStream.Create;
@@ -3826,7 +3826,7 @@ begin
   try
     i := IDToIndex(ID);
     if i < 0 then
-      result := ''
+      FastAssignNew(result)
     else
       GetJsonValue(fValue[i], {withID=}false, [], result);
   finally
@@ -5242,7 +5242,7 @@ function TRestStorageShard.EngineList(TableModelIndex: integer;
 var
   ResCount: PtrInt;
 begin
-  result := ''; // indicates error occurred
+  FastAssignNew(result); // indicates error occurred
   StorageLock(false {$ifdef DEBUGSTORAGELOCK}, 'ShardList' {$endif});
   try
     ResCount := 0;
@@ -5284,7 +5284,7 @@ begin
   StorageLock(false {$ifdef DEBUGSTORAGELOCK}, 'ShardRetrieve' {$endif});
   try
     if not ShardFromID(ID, tableIndex, rest) then
-      result := ''
+      FastAssignNew(result)
     else
       result := rest.EngineRetrieve(tableIndex, ID);
   finally
@@ -5576,7 +5576,7 @@ function TRestStorageMultiOnDisk.GetDBPassword(
   aID: TRestStorageMultiDatabaseID): SpiUtf8;
 begin
   // no encryption by default
-  result := '';
+  FastAssignNew(result);
 end;
 
 function TRestStorageMultiOnDisk.GetDBFileName(

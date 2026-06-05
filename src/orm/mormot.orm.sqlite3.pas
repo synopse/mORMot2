@@ -1912,7 +1912,7 @@ var
   rows: integer;
   msg: ShortString;
 begin
-  result := '';
+  FastAssignNew(result);
   rows := 0;
   if (self <> nil) and
      (DB <> nil) and
@@ -1958,7 +1958,7 @@ var
   msg: ShortString absolute tmp;
 begin
   // faster direct access with no ID inlining
-  result := '';
+  FastAssignNew(result);
   if (ID < 0) or
      (TableModelIndex < 0) or
      (DB = nil) then

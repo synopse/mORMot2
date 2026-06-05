@@ -5418,7 +5418,7 @@ end;
 procedure TOrmPropInfoRttiMany.GetValueVar(Instance: TObject; ToSql: boolean;
   var result: RawUtf8; wasSqlString: PBoolean);
 begin
-  result := '';
+  FastAssignNew(result);
 end;
 
 procedure TOrmPropInfoRttiMany.SetValue(Instance: TObject; Value: PUtf8Char;
@@ -7766,7 +7766,7 @@ begin
       inc(len, length(List[f].Name) + 1);
   if len = 0 then
   begin
-    result := '';
+    FastAssignNew(result);
     exit;
   end;
   p := FastSetString(result, len - 1); // allocate once for all
@@ -11107,10 +11107,10 @@ function TOrmPropertiesAbstract.OrmFieldTypeToSql(FieldIndex: integer): RawUtf8;
 begin
   if (self = nil) or
     (cardinal(FieldIndex) >= cardinal(Fields.Count)) then
-    result := ''
+    FastAssignNew(result)
   else if (FieldIndex < length(fCustomCollation)) and
           (fCustomCollation[FieldIndex] <> '') then
-    result := ' TEXT COLLATE ' + fCustomCollation[FieldIndex] + ', '
+    Join([' TEXT COLLATE ', fCustomCollation[FieldIndex], ', '], result)
   else
     result := DEFAULT_ORMFIELDTYPETOSQL[Fields.List[FieldIndex].OrmFieldTypeStored];
 end;
@@ -11664,7 +11664,7 @@ function TOrmPropertiesAbstract.MainFieldName(ReturnFirstIfNoUnique: boolean): R
 begin
   if (self = nil) or
      (MainField[ReturnFirstIfNoUnique] < 0) then
-    result := ''
+    FastAssignNew(result)
   else
     result := Fields.List[MainField[ReturnFirstIfNoUnique]].Name;
 end;
