@@ -8498,6 +8498,8 @@ end;
 type
   // internal memory buffer created with PAGE_EXECUTE_READWRITE flags
   TFakeStubBuffer = class
+  protected // used just as method stub for RedirectToConsole: TOnRedirect
+    class function ToConsole(const text: RawByteString; pid: cardinal): boolean;
   public
     Stub: PByteArray;
     StubUsed: cardinal;
@@ -8530,6 +8532,20 @@ begin
   while size and 15 <> 0 do
     inc(size); // ensure the returned buffers are 16 bytes aligned
   inc(StubUsed, size);
+end;
+
+class function TFakeStubBuffer.ToConsole(const text: RawByteString; pid: cardinal): boolean;
+begin
+  result := false; // continue
+  if (text = '') or
+     not HasConsole then
+    exit;
+  ConsoleCriticalSection.Lock;
+  try
+    FileWriteAll(StdOut, pointer(text), length(text)); // no code page involved
+  finally
+    ConsoleCriticalSection.UnLock;
+  end;
 end;
 
 function ReserveExecutableMemory(size: cardinal
@@ -8769,23 +8785,9 @@ begin
   end;
 end;
 
-function _ToConsole(self: TObject; const text: RawByteString; pid: cardinal): boolean;
-begin
-  result := false; // continue
-  if (text = '') or
-     not HasConsole then
-    exit;
-  ConsoleCriticalSection.Lock;
-  try
-    FileWriteAll(StdOut, pointer(text), length(text)); // no code page involved
-  finally
-    ConsoleCriticalSection.UnLock;
-  end;
-end;
-
 procedure AllocConsole;
 begin
-  TMethod(RedirectToConsole).Code := @_ToConsole;
+  RedirectToConsole := TFakeStubBuffer.ToConsole;
   {$ifdef OSWINDOWS}
   WinAllocConsole;
   {$endif OSWINDOWS}
