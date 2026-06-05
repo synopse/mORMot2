@@ -2995,16 +2995,16 @@ end;
 
 procedure WriteYamlVariant(W: TJsonWriter; const V: variant);
 var
-  s: RawUtf8;
-  wasstring: boolean;
+  tmp: TTempUtf8;
 begin
-  VariantToUtf8(V, s, wasString);
-  if wasString then
-    WriteYamlString(W, s) // apply YAML quoting rules to a string
+  if VariantToTempUtf8(V, tmp) then
+    // wasString: apply YAML quoting rules
+    WriteYamlString(W, tmp.Text, tmp.Len)
   else
-    W.AddString(s); // direct output of e.g. BSON content as JSON
+    // direct output of e.g. BSON content as JSON
+    W.AddNoJsonEscape(tmp.Text, tmp.Len);
+  TempUtf8Done(tmp);
 end;
-
 
 
 { ************* Markup (e.g. Markdown or Emoji) process }

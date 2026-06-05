@@ -1964,7 +1964,7 @@ begin
 end;
 
 function _DoDateTimeToText(dt: TDateTime): RawUtf8;
-begin // fastger version to be injected in mormot.core.os.pas instead of RTL
+begin // faster version to be injected in mormot.core.os.pas instead of RTL
   DateTimeToIso8601Var(dt, {expanded=}true, {withms=}false, ' ', #0, result);
 end;
 

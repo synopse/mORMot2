@@ -5119,7 +5119,7 @@ var
   handler: TSynInvokeableVariantType;
   v, tmp: TVarData; // PVarData wouldn't store e.g. RowID/count
   vt: cardinal;
-  n: ShortString;
+  n: ShortString; // local temporary variable to end with #0
 begin
   TSynVarData(Dest).VType := varEmpty; // left to Unassigned if not found
   v := Instance;
@@ -5132,7 +5132,7 @@ begin
   repeat
     if vt < varFirstCustom then
       exit; // we need a complex type to lookup
-    GetNextItemShortString(FullName, @n, PathDelim); // n will end with #0
+    GetNextItemShortString(FullName, @n, PathDelim);
     if n[0] = #0 then
       exit;
     handler := self;
@@ -9839,7 +9839,6 @@ end;
 function TDocVariantData.GetValueOrItem(const aNameOrIndex: variant): variant;
 var
   ndx: integer;
-  wasString: boolean;
   name: TTempUtf8; // no memory allocation most of the time
 begin
   if VariantToInteger(aNameOrIndex, ndx) then
@@ -9850,9 +9849,9 @@ begin
   else
   begin
     ndx := -1;
-    if VName <> nil then
+    if VName <> nil then // locate by name as variant text
     begin
-      VariantToTempUtf8(aNameOrIndex, name, wasString);
+      VariantToTempUtf8(aNameOrIndex, name, [vfNoComplex, vfNullAsVoid]);
       if name.Text <> nil then
         ndx := FindNonVoid[Has(dvoNameCaseSensitive)](pointer(VName),
           name.Text, name.Len, VCount);
@@ -11220,14 +11219,13 @@ function EvaluateVariantExpression(Comp: TVariantCompare;
   const A, B: variant; Match: TCompareOperator): boolean;
 var
   au, bu: TTempUtf8; // almost never allocated
-  dummy: boolean;
 begin // same logic than EvaluateTextExpression() in mormot.core.unicode
   if Match < coEqualCaseInsens then
     result := SortMatch(Comp(A, B), Match)
   else
   begin
-    VariantToTempUtf8(A, au, dummy);
-    VariantToTempUtf8(B, bu, dummy);
+    VariantToTempUtf8(A, au, [vfNullAsVoid]);
+    VariantToTempUtf8(B, bu, [vfNullAsVoid]);
     case Match of
       coEqualCaseInsens, coNotEqualCaseInsens:
         result := (Match = coEqualCaseInsens) =

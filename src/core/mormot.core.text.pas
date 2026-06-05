@@ -4309,14 +4309,13 @@ end;
 procedure TTextWriter.AddVarData(Value: PVarData; HtmlEscape: boolean);
 var
   tmp: TTempUtf8;
-  wasString: boolean;
 begin
   if cardinal(Value^.VType) = varVariantByRef then
     Value := Value^.VPointer;
   if HtmlEscape and
      not (cardinal(Value^.VType) in VTYPE_NUMERIC) then
   begin
-    VariantToTempUtf8(PVariant(Value)^, tmp, wasString);
+    VariantToTempUtf8(PVariant(Value)^, tmp);
     if tmp.Len <> 0 then
       _AddHtmlEscape(self, tmp.Text, tmp.Len);
     TempUtf8Done(tmp);
