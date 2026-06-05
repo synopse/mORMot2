@@ -12367,58 +12367,12 @@ nxt:u0 := U;
   until false;
 end;
 
-const
-  // reference 8-bit upper chars as in WinAnsi/CP1252 for NormToUpper/Lower[]
-  // - UU[] would convert accents into upper accents (e acute to E acute): this
-  // table converts to the upper plain/unaccentuated char (e.g. e acute to E)
-  {%H-}WinAnsiToUp: array[138..255] of byte = (
-    83,  139, 140, 141, 90,  143, 144, 145, 146, 147, 148, 149, 150, 151, 152,
-    153, 83,  155, 140, 157,  90,  89, 160, 161, 162, 163, 164, 165, 166, 167,
-    168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182,
-    183, 184, 185, 186, 187, 188, 189, 190, 191, 65,  65,  65,  65,  65,  65,
-    198, 67,  69,  69,  69,  69,  73,  73,  73,  73,  68,  78,  79,  79,  79,
-    79,  79,  215, 79,  85,  85,  85,  85,  89,  222, 223, 65,  65,  65,  65,
-    65,  65,  198, 67,  69,  69,  69,  69,  73,  73,  73,  73,  68,  78,  79,
-    79,  79,  79,  79,  247, 79,  85,  85,  85,  85,  89,  222, 89);
-  _IDENTS: array[' ' .. 'z'] of byte = ( // = ord(TCharKind)
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 6, 4, 6, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-    3, 0, 6, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-    2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 5, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1);
+{procedure Set_Chars; // keep to recompute _CHARS[] constant when needed
 var
-  _LANG_ISO: array[TLanguage] of TStrRecConst;
-
-procedure InitializeUnit;
-var
-  i: PtrInt;
   c: AnsiChar;
   tc: TTextChar;
-  lng: TLanguage;
-  p: PByteArray;
+  _CHARS2: array[#1 .. 'z'] of byte;
 begin
-  // initialize internal lookup tables for various text conversions
-  p := @NormToNormByte;
-  for i := 0 to 255 do
-    p[i] := i;
-  NormToUpperAnsi7Byte := NormToNormByte;
-  p := @NormToUpperAnsi7Byte;
-  for i := ord('a') to ord('z') do
-    dec(p[i], 32);
-  NormToLowerAnsi7Byte := NormToNormByte;
-  p := @NormToLowerAnsi7Byte;
-  for i := ord('A') to ord('Z') do
-    inc(p[i], 32);
-  NormToLower_Ansi7 := NormToLowerAnsi7;
-  NormToLower_Ansi7['_'] := '-'; // for scLower_Case
-  MoveFast(NormToUpperAnsi7, NormToUpper, 138);
-  MoveFast(WinAnsiToUp, NormToUpperByte[138], SizeOf(WinAnsiToUp));
-  MoveFast(NormToLowerAnsi7, NormToLower, 138);
-  MoveFast(WinAnsiToUp, NormToLowerByte[138], SizeOf(WinAnsiToUp));
-  p := @NormToLowerByte;
-  for i := 138 to 255 do
-    if p[i] in [ord('A') .. ord('Z')] then
-      inc(p[i], 32); // manual lower
-  MoveFast(_IDENTS, IDENT_CHARS[' '], SizeOf(_IDENTS));
   for c := #1 to 'z' do
   begin
     if c in [#10, #13] then
@@ -12444,6 +12398,62 @@ begin
       include(tc, tcCtrlNot0Comma);
     TEXT_CHARS[c] := tc;
   end;
+  MoveFast(TEXT_CHARS[#1], _CHARS2, SizeOf(_CHARS2));
+end;}
+
+const
+  // reference 8-bit upper chars as in WinAnsi/CP1252 for NormToUpper/Lower[]
+  // - UU[] would convert accents into upper accents (e acute to E acute): this
+  // table converts to the upper plain/unaccentuated char (e.g. e acute to E)
+  {%H-}WinAnsiToUp: array[138..255] of byte = (
+    83,  139, 140, 141, 90,  143, 144, 145, 146, 147, 148, 149, 150, 151, 152,
+    153, 83,  155, 140, 157,  90,  89, 160, 161, 162, 163, 164, 165, 166, 167,
+    168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182,
+    183, 184, 185, 186, 187, 188, 189, 190, 191, 65,  65,  65,  65,  65,  65,
+    198, 67,  69,  69,  69,  69,  73,  73,  73,  73,  68,  78,  79,  79,  79,
+    79,  79,  215, 79,  85,  85,  85,  85,  89,  222, 223, 65,  65,  65,  65,
+    65,  65,  198, 67,  69,  69,  69,  69,  73,  73,  73,  73,  68,  78,  79,
+    79,  79,  79,  79,  247, 79,  85,  85,  85,  85,  89,  222, 89);
+  _IDENTS: array[' ' .. 'z'] of byte = ( // = IDENT_CHARS[]
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 6, 4, 6, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+    3, 0, 6, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 5, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1);
+  _CHARS: array[#1 .. 'z'] of byte = (   // = TEXT_CHARS[]
+    13, 13, 13, 13, 13, 13, 13, 13, 13, 10, 13, 13, 10, 13, 13, 13, 13, 13, 13,
+    13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 129, 129, 1, 209, 209, 209, 209, 209, 209, 209, 209, 209, 209,
+    1, 9, 1, 1, 1, 1, 1, 241, 241, 241, 241, 241, 241, 241, 241, 241, 241, 241,
+    241, 241, 241, 241, 241, 241, 241, 241, 241, 241, 241, 241, 241, 241, 241,
+    1, 1, 1, 1, 225, 1, 241, 241, 241, 241, 241, 241, 241, 241, 241, 241, 241,
+    241, 241, 241, 241, 241, 241, 241, 241, 241, 241, 241, 241, 241, 241, 241);
+var
+  _LANG_ISO: array[TLanguage] of TStrRecConst;
+
+procedure InitializeUnit;
+var
+  i: PtrInt;
+  lng: TLanguage;
+  p: PByteArray;
+begin
+  // initialize internal lookup tables for various text conversions
+  FillIncreasingB(@NormToNorm, 0, 255);
+  NormToUpperAnsi7 := NormToNorm;
+  MoveFast(NormToUpperAnsi7['A'], NormToUpperAnsi7['a'], 26);
+  NormToLowerAnsi7 := NormToNorm;
+  MoveFast(NormToLowerAnsi7['a'], NormToLowerAnsi7['A'], 26);
+  NormToLower_Ansi7 := NormToLowerAnsi7;
+  NormToLower_Ansi7['_'] := '-'; // for scLower_Case
+  MoveFast(NormToUpperAnsi7, NormToUpper, 138);
+  MoveFast(WinAnsiToUp, NormToUpperByte[138], SizeOf(WinAnsiToUp));
+  MoveFast(NormToLowerAnsi7, NormToLower, 138);
+  MoveFast(WinAnsiToUp, NormToLowerByte[138], SizeOf(WinAnsiToUp));
+  p := @NormToLower;
+  for i := 138 to 255 do
+    if p[i] in [ord('A') .. ord('Z')] then
+      inc(p[i], 32); // manual lower
+  MoveFast(_IDENTS, IDENT_CHARS[' '], SizeOf(_IDENTS));
+  MoveFast(_CHARS, TEXT_CHARS[low(_CHARS)], SizeOf(_CHARS));
   FillCharFast(TEXT_CHARS[succ('z')], 255 - ord('z'), 1 shl ord(tcNot01013));
   for lng := succ(low(lng)) to high(lng) do
   begin
