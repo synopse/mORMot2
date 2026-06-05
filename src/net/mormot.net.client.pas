@@ -5102,8 +5102,16 @@ begin
   curl.easy_setopt(fHandle, coNoBody, ord(HttpMethodWithNoBody(fIn.Method)));
   // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
   curl.easy_setopt(fHandle, coCustomRequest, pointer(fIn.Method));
-  curl.easy_setopt(fHandle, coPostFields, pointer(aData));
-  curl.easy_setopt(fHandle, coPostFieldSize, length(aData));
+  if aData <> '' then
+  begin
+    // libcurl sets Content-Type: application/x-www-form-urlencoded by default
+    // when CURLOPT_POSTFIELDS option is used
+    curl.easy_setopt(fHandle, coPostFields, pointer(aData));
+    curl.easy_setopt(fHandle, coPostFieldSize, length(aData));
+  end
+  else
+    // resets the request type to the default to disable the POST with no body
+    curl.easy_setopt(fHandle, coPost, 0);
   curl.easy_setopt(fHandle, coHttpHeader, fIn.Headers);
   curl.easy_setopt(fHandle, coWriteData, @fOut.Data);
   curl.easy_setopt(fHandle, coWriteHeader, @fOut.Header);
