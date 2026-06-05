@@ -769,6 +769,7 @@ type
     fDocumentStackOffset: TCardinalDynArray;
     fDocumentArray: integer;
     procedure WriteCollectionName(Flags: integer; const CollectionName: RawUtf8);
+    function WriteLike(const name: RawUtf8; const Value: variant): boolean;
   public
     /// rewind the Stream to the position when Create() was called
     // - this will also reset the internal document offset table
@@ -3857,6 +3858,43 @@ begin
   BsonDocumentEnd;
 end;
 
+function TBsonWriter.WriteLike(const name: RawUtf8; const Value: variant): boolean;
+var
+  like: RawUtf8;
+  len: PtrInt;
+  wasString: boolean;
+begin
+  result := false;
+  VariantToUtf8(Value, like, wasString);
+  len := length(like);
+  if (len = 0) or
+     not wasString then
+    exit;
+  if like[1] = '%' then
+    if len = 1 then
+      // LIKE '%' is invalid
+      exit
+    else if like[len] = '%' then
+      if len = 2 then
+        // LIKE '%%' is invalid
+        exit
+      else
+        // LIKE '%a%' -> /a/
+        TrimChars(like, 1, 1)
+    else
+      // LIKE '%a'  -> /a$/
+      like := copy(like, 2, len - 1) + '$'
+  else
+  if like[len] = '%' then
+    // LIKE 'a%'  -> /^a/
+    like := '^' + copy(like, 1, len - 1)
+  else
+    // LIKE 'a'   -> /^a$/
+    like := '^' + like + '$';
+  BsonWriteRegEx(name, like, 'i'); // /like/i for case-insensitivity
+  result := true;
+end;
+
 const
   QUERY_OPS: array[opNotEqualTo..opIn] of RawUtf8 = (
     '$ne',   // opNotEqualTo
@@ -3877,9 +3915,6 @@ const
 function TBsonWriter.BsonWriteQueryOperator(name: RawUtf8; inverted: boolean;
   op: TSelectStatementOperator; const Value: variant): boolean;
 var
-  wasString: boolean;
-  like: RawUtf8;
-  len: integer;
   doInvert: boolean;
 begin
   result := false; // error on premature exit
@@ -3912,35 +3947,8 @@ begin
         BsonDocumentEnd;
       end;
     opLike:
-      begin
-        VariantToUtf8(Value, like, wasString);
-        len := length(like);
-        if (len = 0) or
-           not wasString then
-          exit;
-        if like[1] = '%' then
-          if len = 1 then
-            // LIKE '%' is invalid
-            exit
-          else if like[len] = '%' then
-            if len = 2 then
-              // LIKE '%%' is invalid
-              exit
-            else
-              // LIKE '%a%' -> /a/
-              TrimChars(like, 1, 1)
-          else
-            // LIKE '%a'  -> /a$/
-            like := copy(like, 2, len - 1) + '$'
-        else
-        if like[len] = '%' then
-          // LIKE 'a%'  -> /^a/
-          like := '^' + copy(like, 1, len - 1)
-        else
-          // LIKE 'a'   -> /^a$/
-          like := '^' + like + '$';
-        BsonWriteRegEx(name, like, 'i'); // /like/i for case-insensitivity
-      end;
+      if not WriteLike(name, Value) then
+        exit; // impossible to convert this LIKE operation to the proper RegEx
     opContains:
       begin
         // http://docs.mongodb.org/manual/reference/operator/query/in
