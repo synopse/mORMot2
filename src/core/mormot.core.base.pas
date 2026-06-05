@@ -2040,8 +2040,14 @@ procedure DeleteInt64(var Values: TInt64DynArray; Index: PtrInt); overload;
 procedure DeleteInt64(var Values: TInt64DynArray; var ValuesCount: integer;
   Index: PtrInt); overload;
 
-/// fill some values with i,i+1,i+2...i+Count-1
+/// fill some 32-bit values with i,i+1,i+2...i+Count-1
 procedure FillIncreasing(Values: PIntegerArray; StartValue: integer; Count: PtrUInt);
+
+/// fill some 8-bit values with their index
+procedure FillIncreasingB(Values: PByteArray; Min, Max: PtrInt);
+
+/// fill some 16-bit values with their index
+procedure FillIncreasingW(Values: PWordArray; Min, Max: PtrInt);
 
 /// quick helper to initialize a dynamic array of integer from some constants
 // - can be used e.g. as:
@@ -7762,6 +7768,22 @@ begin
         Values[i] := StartValue;
         inc(StartValue);
       end;
+end;
+
+procedure FillIncreasingB(Values: PByteArray; Min, Max: PtrInt);
+var
+  i: PtrInt;
+begin
+  for i := Min to Max do
+    Values[i] := i;
+end;
+
+procedure FillIncreasingW(Values: PWordArray; Min, Max: PtrInt);
+var
+  i: PtrInt;
+begin
+  for i := Min to Max do
+    Values[i] := i;
 end;
 
 procedure QuickSortInteger(ID: PIntegerArray; L, R: PtrInt);
