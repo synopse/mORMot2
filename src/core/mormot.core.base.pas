@@ -13423,8 +13423,7 @@ begin
   end;
 end;
 
-function SetVariantUnRefSimpleValue(const Source: variant;
-  var Dest: TVarData): boolean;
+function SetVariantUnRefSimpleValue(const Source: variant; var Dest: TVarData): boolean;
 var
   typ: cardinal;
 begin
