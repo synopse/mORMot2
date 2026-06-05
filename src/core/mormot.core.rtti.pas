@@ -1237,6 +1237,7 @@ type
     function SetAsString(Instance: TObject; const Value: RawUtf8): boolean;
     /// set a property value from a variant value
     // - to be called when a setter is involved - not very fast, but safe
+    // - SetValue(null) is expected to clear the value
     function SetValue(Instance: TObject; const Value: variant): boolean;
     /// set a property value from a text value
     // - handle simple kind of fields, e.g. converting from text into ordinals
@@ -4589,12 +4590,23 @@ begin
     exit;
   tmp := nil;
   k := TypeInfo^.Kind;
-  if k in rkOrdinalTypes then
-    if VariantToInt64(Value, v) then // include FPC rkBool
+  if k = rkVariant then
+    SetVariantProp(Instance, Value)
+  else if VarIsEmptyOrNull(Value) then // SetValue(null) should clear the field
+    if k in rkOrdinalTypes then
+      SetInt64Value(Instance, 0)
+    else if k in rkStringTypes then
+      SetAsString(Instance, '') // otherwise would set 'null' text
+    else if k = rkFloat then
+      SetFloatProp(Instance, 0)
+    else
+      exit
+  else if k in rkOrdinalTypes then
+    if AnyVariantToInteger(Value, v) then // 123, '123' or 'true'
       SetInt64Value(Instance, v)
     else
     begin
-      if (k = rkEnumeration) and
+      if (k = rkEnumeration) and // FPC rkBool is done above
          VariantToText(Value, RawUtf8(tmp)) then
       begin
         result := SetValueText(Instance, RawUtf8(tmp)); // GetEnumNameValue()
@@ -4603,9 +4615,7 @@ begin
       exit;
     end
   else if k in rkStringTypes then
-    if VarIsEmptyOrNull(Value) then // otherwise would set 'null' text
-      SetAsString(Instance, '')
-    else if VariantToUtf8(Value, RawUtf8(tmp)) then
+    if VariantToUtf8(Value, RawUtf8(tmp)) then
     begin
       SetAsString(Instance, RawUtf8(tmp));
       FastAssignNew(tmp);
@@ -4617,8 +4627,6 @@ begin
       SetFloatProp(Instance, f)
     else
       exit
-  else if k = rkVariant then
-    SetVariantProp(Instance, Value)
   else
     exit;
   result := true;
