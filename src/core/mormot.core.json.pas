@@ -9259,7 +9259,7 @@ var
 begin
   result := 0;
   if (self = nil) or
-     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) or // no entry
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) or  // no entry
      (fSafe.Padding[DIC_TIMESEC].VInteger = 0) then // nothing in fTimeOut[]
     exit;
   if tix64 = 0 then
@@ -9304,7 +9304,8 @@ end;
 
 procedure TSynDictionary.DeleteAll;
 begin
-  if self = nil then
+  if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) then // no entry
     exit;
   fSafe.Lock; // = RWLock(cWrite);
   try
@@ -9422,7 +9423,10 @@ begin
     ESynDictionary.RaiseUtf8('%.Values: % items are not dynamic arrays',
       [self, fValues.Info.Name]);
   if aAction = iaFind then
-    fSafe.ReadLock
+    if fSafe.Padding[DIC_KEYCOUNT].VInteger = 0 then // no entry
+      exit
+    else
+      fSafe.ReadLock
   else
     fSafe.Lock; // other actions may need to write the internal data
   try
@@ -9469,16 +9473,19 @@ function TSynDictionary.FindKeyFromValue(const aValue;
 var
   ndx: PtrInt;
 begin
+  result := false;
+  if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) then // no entry
+    exit;
   fSafe.ReadLock; // cReadOnly is good enough for SetTimeoutAtIndex()
   try
     ndx := fValues.IndexOf(aValue); // use fast RTTI for value search
     result := ndx >= 0;
-    if result then
-    begin
-      fKeys.ItemCopyAt(ndx, @aKey);
-      if aUpdateTimeOut then
-        SetTimeoutAtIndex(ndx); // no cWrite lock needed
-    end;
+    if not result then
+      exit;
+    fKeys.ItemCopyAt(ndx, @aKey);
+    if aUpdateTimeOut then
+      SetTimeoutAtIndex(ndx); // no cWrite lock needed
   finally
     fSafe.ReadUnLock;
   end;
@@ -9580,7 +9587,8 @@ var
   ndx: PtrInt;
 begin
   result := false;
-  if self = nil then
+  if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) then // no entry
     exit;
   fSafe.ReadLock;
   {$ifdef HASFASTTRYFINALLY}
@@ -9608,7 +9616,8 @@ var
   ndx: PtrInt;
 begin
   result := -1;
-  if self = nil then
+  if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) then // no entry
     exit;
   tim := ComputeNextTimeOut;
   if tim = 0 then
@@ -9630,6 +9639,7 @@ var
 begin
   result := false;
   if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) or // no entry
      (aSeconds <= 0) then
     exit;
   tim := ComputeNextTimeOut;
@@ -9651,7 +9661,8 @@ var
   ndx: PtrInt;
 begin
   result := false;
-  if self = nil then
+  if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) then // no entry
     exit;
   fSafe.ReadWriteLock;
   try
@@ -9677,7 +9688,8 @@ end;
 function TSynDictionary.Exists(const aKey): boolean;
 begin
   result := false;
-  if self = nil then
+  if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) then // no entry
     exit;
   fSafe.ReadLock;
   {$ifdef HASFASTTRYFINALLY}
@@ -9697,7 +9709,8 @@ function TSynDictionary.ExistsValue(
   const aValue; aCompare: TDynArraySortCompare): boolean;
 begin
   result := false;
-  if self = nil then
+  if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) then // no entry
     exit;
   fSafe.ReadLock;
   try
@@ -9724,6 +9737,9 @@ var
   i, n, ks, vs: PtrInt;
 begin
   result := 0;
+  if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) then // no entry
+    exit;
   if MayModify then
     fSafe.ReadWriteLock
   else
@@ -9760,12 +9776,15 @@ var
   k, v: PAnsiChar;
   i, n, ks, vs: PtrInt;
 begin
+  result := 0;
+  if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) then // no entry
+    exit;
   if MayModify then
     fSafe.ReadWriteLock
   else
     fSafe.ReadLock;
   try
-    result := 0;
     if (not Assigned(OnMatch)) or
        (not (Assigned(KeyCompare) or
              Assigned(ValueCompare))) then
@@ -11743,6 +11762,7 @@ begin
   CLASS_RTTI[vcRawUtf8List]   := TRawUtf8List;
   Rtti.RegisterTypes([TypeInfo(TRawUtf8DynArray), TypeInfo(TIntegerDynArray)]);
   // prepare some JSON wrappers
+  DefaultJsonWriter := TJsonWriter;
   GetDataFromJson := _GetDataFromJson;
   InitializeVariantsJson; // from mormot.core.variants
   {$ifdef FPC} // we need to call it once so that it is linked to the executable
@@ -11754,7 +11774,6 @@ end;
 
 initialization
   InitializeUnit;
-  DefaultJsonWriter := TJsonWriter;
 
 end.
 
