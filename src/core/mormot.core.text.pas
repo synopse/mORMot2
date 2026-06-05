@@ -1834,6 +1834,7 @@ function VariantToTempUtf8(const V: variant; var Res: TTempUtf8;
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
+// - Res.Text may NOT be #0 terminated if the TVarRec is a shortstring
 // - you MUST eventually release any TempRawUtf8 by calling TempUtf8Done(Res)
 function VarRecToTempUtf8(V: PVarRec; var Res: TTempUtf8;
   wasString: PBoolean = nil): boolean;
@@ -8964,13 +8965,15 @@ end;
 function VarRecToTempUtf8(V: PVarRec; var Res: TTempUtf8; wasString: PBoolean): boolean;
 var
   isString: boolean;
+label
+  n;
 begin
   isString := true;
   Res.TempRawUtf8 := nil; // no allocation by default - and avoid GPF
   case V^.VType of
     vtString:
       begin
-        Res.Text := @V^.VString^[1];
+        Res.Text := @V^.VString^[1]; // may NOT be #0 terminated
         Res.Len := ord(V^.VString^[0]);
       end;
     vtAnsiString: // expect UTF-8 content
@@ -8980,10 +8983,10 @@ begin
       end;
     {$ifdef HASVARUSTRING}
     vtUnicodeString:
-      WideToTempUtf8(V^.VPointer, length(UnicodeString(V^.VPointer)), Res);
+      UStrToTempUtf8(V^.VPointer, Res, false);
     {$endif HASVARUSTRING}
     vtWideString:
-      WideToTempUtf8(V^.VPointer, length(WideString(V^.VPointer)), Res);
+      BStrToTempUtf8(V^.VPointer, Res, false);
     vtPChar: // expect UTF-8 content
       begin
         Res.Text := V^.VPointer;
@@ -8996,9 +8999,9 @@ begin
         Res.Len := 1;
       end;
     vtPWideChar:
-      WideToTempUtf8(V^.VPWideChar, StrLenW(V^.VPWideChar), Res);
+      WideToTempUtf8(V^.VPWideChar, StrLenW(V^.VPWideChar), Res, false);
     vtWideChar:
-      WideToTempUtf8(@V^.VWideChar, 1, Res);
+      WideToTempUtf8(@V^.VWideChar, 1, Res, false);
     vtBoolean:
       begin
         isString := false;
@@ -9039,25 +9042,23 @@ begin
     vtPointer, vtInterface:
       PtrIntToTempUtf8(PtrInt(V^.VPointer), Res);
     vtClass:
-      if V^.VClass = nil then
-        Res.Len := 0
-      else
       begin
+        if V^.VClass = nil then
+          goto n;
         Res.Text := PPUtf8Char(PtrInt(PtrUInt(V^.VClass)) + vmtClassName)^ + 1;
         Res.Len := ord(Res.Text[-1]);
       end;
     vtObject:
-      if V^.VObject = nil then
-        Res.Len := 0
-      else
       begin
+        if V^.VObject = nil then
+          goto n;
         Res.Text := PPUtf8Char(PPtrInt(V^.VObject)^ + vmtClassName)^ + 1;
         Res.Len := ord(Res.Text[-1]);
       end;
     vtVariant:
-      VariantToTempUtf8(V^.VVariant^, Res, isString);
+      isString := VariantToTempUtf8(V^.VVariant^, Res);
   else
-    Res.Len := 0;
+n:  Res.Len := 0;
   end;
   if wasString <> nil then
     wasString^ := isString;
