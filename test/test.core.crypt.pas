@@ -3436,10 +3436,9 @@ var
   h128, ref128: THash128;
   bak: THash512;
 begin
-  for i := 0 to high(bytes) do
-    bytes[i] := i;
   // validate AesNiHash128() against reference vectors
   // - should be done FIRST with no process in the background
+  FillIncreasingB(@bytes, 0, high(bytes));
   if Assigned(AesNiHash128) and
      not CheckFailed(not fBackgroundRun.Waiting, 'no background run') then
   begin

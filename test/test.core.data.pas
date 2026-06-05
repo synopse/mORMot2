@@ -467,6 +467,9 @@ end;
 procedure TTestCoreProcess.Variants;
 var
   v: Variant;
+  u: SynUnicode;
+  i64: Int64;
+  d: double;
   vd: TVarData absolute v;
   info: TGetJsonField;
   t: pointer;
@@ -708,7 +711,8 @@ begin
   Check(v._kind = ord(dvObject));
   Check(v._count = 0);
   v := VariantLoadJson('[1,2,3]', @JSON_[mFast]);
-  CheckEqual(AnyVariantToInteger(v), 0);
+  Check(not AnyVariantToInteger(v, i64));
+  CheckEqual(AnyVariantToIntegerDef(v), 0);
   Check(v._kind = ord(dvArray));
   Check(v._count = 3);
   v := VariantLoadJson(' {"a":10,b:20}', @JSON_[mFast]);
@@ -722,12 +726,37 @@ begin
   CheckEqual(vd.VType, varString);
   Check(VariantTypeName(v)^ = 'String');
   Check(v = 'toto'#13#10'toto');
-  CheckEqual(AnyVariantToInteger(v), 0);
-  CheckEqual(AnyVariantToInteger(v, -1), -1);
+  Check(not AnyVariantToInteger(v, i64));
+  Check(not AnyVariantToDouble(v, d));
+  CheckEqual(AnyVariantToIntegerDef(v), 0);
+  CheckEqual(AnyVariantToIntegerDef(v, -1), -1);
   v := '123';
-  CheckEqual(AnyVariantToInteger(v), 123);
-  CheckEqual(AnyVariantToInteger(Null), 0);
-  CheckEqual(AnyVariantToInteger(Null, 1), 1);
+  i64 := 0;
+  Check(AnyVariantToInteger(v, i64));
+  CheckEqual(i64, 123);
+  d := 0;
+  Check(AnyVariantToDouble(v, d));
+  Check(d = 123.0, '123a');
+  CheckEqual(AnyVariantToIntegerDef(v), 123);
+  Check(not AnyVariantToInteger(Null, i64));
+  CheckEqual(i64, 123);
+  CheckEqual(AnyVariantToIntegerDef(Null), 0);
+  CheckEqual(AnyVariantToIntegerDef(Null, 1), 1);
+  Check(not AnyVariantToDouble(Null, d));
+  Check(d = 123.0, '123b');
+  u := '1234';
+  v := u; // as SynUnicode
+  CheckEqual(AnyVariantToIntegerDef(v), 1234);
+  Check(AnyVariantToInteger(v, i64));
+  CheckEqual(i64, 1234);
+  Check(AnyVariantToDouble(v, d));
+  Check(d = 1234, '1234');
+  v := 12.0;
+  CheckEqual(AnyVariantToIntegerDef(v), 12);
+  Check(AnyVariantToInteger(v, i64));
+  CheckEqual(i64, 12);
+  Check(AnyVariantToDouble(v, d));
+  Check(d = 12.0, '12');
 end;
 
 type
