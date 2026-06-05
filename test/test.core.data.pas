@@ -6067,7 +6067,7 @@ begin
   Check(double(o) = double(o2));
   o := ObjectID;
   Check(Abs(NowUtc - double(o)) < 0.1);
-  oid.FromText(ToUtf8(string(o)));
+  oid.FromTextU(ToUtf8(string(o)));
   Check(Abs(NowUtc - oid.CreateDateTime) < 0.1);
   oid2.ComputeNew;
   Check(oid.MachineID.b1 = oid2.MachineID.b1);

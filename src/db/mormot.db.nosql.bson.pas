@@ -262,10 +262,10 @@ type
     procedure ComputeNew;
     /// convert an hexadecimal string value into one ObjectID
     // - returns TRUE if conversion was made, FALSE on any error
-    function FromText(const Text: RawUtf8): boolean; overload;
+    function FromTextU(const Text: RawUtf8): boolean;
     /// convert an hexadecimal string value into one ObjectID
     // - returns TRUE if conversion was made, FALSE on any error
-    function FromText(Text: PUtf8Char): boolean; overload;
+    function FromText(Text: PUtf8Char): boolean;
     /// convert a variant into one ObjectID
     // - will first check for a TBsonVariant containing a betObjectID
     // - then will try to convert the variant from its string value, expecting
@@ -1174,7 +1174,6 @@ function BsonVariant(const Json: RawUtf8): variant; overload;
 // - warning: this overloaded method will mofify the supplied JSON buffer
 // in-place: you can use the overloaded BsonVariant(const Json: RawUtf8) function
 // instead if you do not want to modify the input buffer content
-
 procedure BsonVariant(Json: PUtf8Char; var result: variant); overload;
 
 /// store some object content, supplied as (extended) JSON and parameters,
@@ -2090,7 +2089,7 @@ begin
   res.VObjectID := self;
 end;
 
-function TBsonObjectID.FromText(const Text: RawUtf8): boolean;
+function TBsonObjectID.FromTextU(const Text: RawUtf8): boolean;
 begin
   if length(Text) = SizeOf(self) * 2 then
     result := mormot.core.text.HexToBin(pointer(Text), @self, SizeOf(self))
@@ -2105,9 +2104,8 @@ end;
 
 function TBsonObjectID.FromVariant(const value: variant): boolean;
 var
-  txt: RawUtf8;
   b: PBsonVariantData;
-  wasString: boolean;
+  tmp: TTempUtf8;
 begin
   b := @value;
   if cardinal(b^.VType) = varVariantByRef then
@@ -2119,10 +2117,8 @@ begin
     result := true;
   end
   else
-  begin
-    VariantToUtf8(PVariant(b)^, txt, wasString);
-    result := wasString and FromText(txt);
-  end;
+    result := VariantToTempUtf8(PVariant(b)^, tmp, [vfNoAlloc]) and
+              FromText(tmp.Text);
 end;
 
 procedure TBsonObjectID.ToText(var result: RawUtf8);
@@ -2700,7 +2696,7 @@ begin
     if wasString then
     begin
       VarClear(variant(Dest));
-      if TBsonVariantData(Dest).VObjectID.FromText(tmp) then
+      if TBsonVariantData(Dest).VObjectID.FromTextU(tmp) then
       begin
         Dest.VType := VarType;
         TBsonVariantData(Dest).VKind := betObjectID;
@@ -4410,7 +4406,7 @@ function ObjectID(const Hexa: RawUtf8): variant;
 var
   ID: TBsonObjectID;
 begin
-  if ID.FromText(Hexa) then
+  if ID.FromTextU(Hexa) then
     ID.ToVariant(result)
   else
     EBsonException.RaiseUtf8('Invalid ObjectID("%")', [Hexa]);
