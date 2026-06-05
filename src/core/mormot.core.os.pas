@@ -6202,7 +6202,7 @@ function _GetNextSpaced(var P: PAnsiChar): RawUtf8; // separated by space/feed
 var
   S: PAnsiChar;
 begin
-  result := '';
+  FastAssignNew(result);
   S := P;
   if S = nil then
     exit;
@@ -7654,7 +7654,7 @@ var
   h: THandle;
   size: Int64;
 begin
-  result := '';
+  FastAssignNew(result);
   if FileName = '' then
     exit;
   h := FileOpenSequentialRead(FileName); // = plain fpOpen() on POSIX
@@ -7666,7 +7666,7 @@ begin
   begin
     pointer(result) := FastNewString(size, CP_UTF8); // UTF-8 for FPC RTL bug
     if not FileReadAll(h, pointer(result), size) then
-      result := ''; // error reading
+      FastAssignNew(result); // error reading
   end;
   FileClose(h);
 end;
@@ -7681,7 +7681,7 @@ begin
     if result <> '' then
       exit;
   end;
-  result := '';
+  FastAssignNew(result);
 end;
 
 function StringFromFiles(const FileName: array of TFileName): TRawByteStringDynArray;
@@ -7931,7 +7931,7 @@ function ExtractExtU(const FileName: RawUtf8; WithoutDot: boolean): RawUtf8;
 var
   i: PtrInt;
 begin
-  result := '';
+  FastAssignNew(result);
   i := GetLastDelimU(FileName, '.');
   if (i <= 1) or
      (FileName[i] <> '.') then
@@ -8777,7 +8777,7 @@ begin
     n := FileRead(StdInputHandle, p^, len);
     if n <= 0 then
     begin
-      result := ''; // read error
+      FastAssignNew(result); // read error
       break;
     end;
     dec(len, n);
@@ -9077,7 +9077,7 @@ end;
 function TFileVersion.VersionInfo: RawUtf8;
 begin
   if self = nil then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     if fVersionInfo = '' then
@@ -9090,7 +9090,7 @@ end;
 function TFileVersion.UserAgent: RawUtf8;
 begin
   if self = nil then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     if fUserAgent = '' then
@@ -9447,7 +9447,7 @@ end;
 function TExecutableCommandLine.ArgU(index: integer; const description: RawUtf8;
   optional: boolean): RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if Arg(index, description, optional) then
     result := Args[index];
 end;
@@ -11343,7 +11343,7 @@ begin
       RWUnLock(cReadOnly);
     end
     else
-      result := '';
+      FastAssignNew(result);
 end;
 
 procedure TSynLocker.SetUtf8(Index: integer; const Value: RawUtf8);
@@ -11948,7 +11948,7 @@ var
 begin
   if (pcInvalidCommand in ParseCommandArgs(cmd, @argv, @argc, @temp, posix)) or
      ({%H-}argc = 0) then
-    result := ''
+    FastAssignNew(result)
   else
     FastSetString(result, argv[0], StrLen(argv[0]));
 end;

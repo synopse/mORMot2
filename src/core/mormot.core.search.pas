@@ -2228,7 +2228,7 @@ var
   end;
 
 begin
-  result := '';
+  FastAssignNew(result);
   if (JsonObject = nil) or
      (PropPath = nil) then
     exit;
@@ -2780,7 +2780,7 @@ function TSynCache.Find(const aKey: RawUtf8; aResultTag: PPtrInt): RawUtf8;
 var
   p: PSynNameValueItem;
 begin
-  result := '';
+  FastAssignNew(result);
   if (self = nil) or
      (aKey = '') then
     exit;
@@ -5457,7 +5457,7 @@ begin
   try
     res := parser.Parse(aExpression);
     if res = eprSuccess then
-      result := ''
+      FastAssignNew(result)
     else
       result := ToUtf8(res);
   finally
@@ -8000,7 +8000,7 @@ begin
   fSafe.ReadLock;
   ndx := GetIndex(TzId);
   if ndx < 0 then
-    result := ''
+    FastAssignNew(result)
   else
     result := fZone[ndx].display;
   fSafe.ReadUnLock;

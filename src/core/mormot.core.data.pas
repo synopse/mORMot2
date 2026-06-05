@@ -3581,11 +3581,7 @@ begin
     begin
       if PStrCnt(PAnsiChar(s^) - _STRCNT)^ <= aMaxRefCount then // also -1
       begin
-        {$ifdef FPC}
         FastAssignNew(PRawUtf8(s)^);
-        {$else}
-        PRawUtf8(s)^ := '';
-        {$endif FPC}
         inc(result);
       end
       else
@@ -3663,7 +3659,7 @@ var
 begin
   result := false; // not added
   if aText = '' then
-    aResult := ''
+    FastAssignNew(aResult)
   else if self = nil then
     aResult := aText
   else
@@ -4525,7 +4521,7 @@ function TRawUtf8List.Get(Index: PtrInt): RawUtf8;
 begin
   if (self = nil) or
      (PtrUInt(Index) >= PtrUInt(fCount)) then
-    result := ''
+    FastAssignNew(result)
   else
     result := fValue[Index];
 end;
@@ -4576,7 +4572,7 @@ begin
     exit;
   Index := PosExChar(NameValueSep, result);
   if Index = 0 then
-    result := ''
+    FastAssignNew(result)
   else
     SetLength(result, Index - 1);
 end;
@@ -4614,7 +4610,7 @@ end;
 
 function TRawUtf8List.GetText(const Delimiter: RawUtf8): RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if (self = nil) or
      (fCount = 0) then
     exit;
@@ -4688,7 +4684,7 @@ begin
     exit;
   Index := PosExChar(NameValueSep, result);
   if Index = 0 then
-    result := ''
+    FastAssignNew(result)
   else
     TrimChars(result, Index, 0);
 end;
@@ -6027,7 +6023,7 @@ begin
     end;
   end
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function BinarySaveBytes(Data: pointer; Info: PRttiInfo;
@@ -6128,7 +6124,7 @@ begin
     end;
   end
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function BinaryLoad(Data: pointer; Source: PAnsiChar; Info: PRttiInfo;
@@ -10685,7 +10681,7 @@ end;
 
 function TRadixTree.ToText: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if self <> nil then
     fRoot.ToText(result, 0);
 end;

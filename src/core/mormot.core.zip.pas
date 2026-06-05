@@ -1206,7 +1206,7 @@ begin
      ((uncomplen32 = 0) and
       (crc32 = 0)) or
      not ToBuffer(FastSetString(RawUtf8(result), uncomplen32)) then
-    result := ''; // invalid CRC or truncated uncomplen32
+    FastAssignNew(result); // invalid CRC or truncated uncomplen32
 end;
 
 function TGZRead.ToBuffer(dest: PAnsiChar; maxDest: PtrInt;
@@ -1335,7 +1335,7 @@ begin
   if gzr.Init(gz, gzLen) then
     result := gzr.ToMem
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function GZRead(const gzfile: TFileName): RawByteString;
@@ -1351,7 +1351,7 @@ begin
   if len > 0 then
     len := GZWrite(buf, FastNewRawByteString(result, GZWriteLen(len)), len, level);
   if len <= 0 then
-    result := '' // error
+    FastAssignNew(result) // error
   else
     FakeLength(result, len); // no realloc
 end;
@@ -2995,7 +2995,7 @@ var
   tmp: RawByteString;
   info: TFileInfoFull;
 begin
-  result := '';
+  FastAssignNew(result);
   if not RetrieveFileInfo(aIndex, info) or
      (info.f64.zfullSize = 0) or
      ((aMaxSize > 0) and
@@ -3272,7 +3272,7 @@ var
 begin
   aIndex := NameToIndex(aName);
   if aIndex < 0 then
-    result := ''
+    FastAssignNew(result)
   else
     result := UnZip(aIndex);
 end;
@@ -3650,12 +3650,12 @@ begin
        not failIfGrow ) then
     SetLength(result, 12 + len)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function UncompressString(const data: RawByteString): RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if Length(data) > 12 then
   begin
     SetLength(result, PCardinal(data)^);
@@ -3664,7 +3664,7 @@ begin
       length(data) - 12, length(result)));
     if (result <> '') and
        ((Adler32(0, pointer(result), length(result))) <> PCardinalArray(data)^[2]) then
-      result := '';
+      FastAssignNew(result);
   end;
 end;
 

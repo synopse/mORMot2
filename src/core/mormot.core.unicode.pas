@@ -3301,7 +3301,7 @@ function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
 var
   lw: PtrInt;
 begin
-  result := ''; // somewhat faster if result is freed before any SetLength()
+  FastAssignNew(result); // somewhat faster if result is freed before any SetLength()
   if WideCharCount = 0 then
     exit;
   lw := WideCharCount * 3; // maximum resulting length
@@ -3309,7 +3309,7 @@ begin
   Utf8Length := RawUnicodeToUtf8(pointer(result), lw + 1,
     WideChar, WideCharCount, [ccfNoTrailingZero]);
   if Utf8Length <= 0 then
-    result := '';
+    FastAssignNew(result);
 end;
 
 function Utf8ToWideChar(dest: PWideChar; source: PUtf8Char;
@@ -4004,7 +4004,7 @@ var
 begin
   lng := LcidToLanguage(lcid);
   if lng = lngUndefined then
-    result := ''
+    FastAssignNew(result)
   else
     result := LANG_TXT[lng]; // as set by mormot.core.rtti
 end;
@@ -4345,7 +4345,7 @@ var
 begin
   if (Source = nil) or
      (SourceChars = 0) then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     max := (SourceChars + 1) shl fAnsiCharShift;
@@ -4405,7 +4405,7 @@ var
 begin
   if (Source = nil) or
      (SourceChars = 0) then
-    Result := ''
+    FastAssignNew(Result)
   else
   begin
     tmp.Init(SourceChars * 3);
@@ -4446,7 +4446,7 @@ begin
     FastSetStringCP(result, Source, SourceChars, fCodePage)
   else if (Source = nil) or
           (SourceChars = 0) then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     u := tmp.Init(SourceChars * 2);
@@ -5013,7 +5013,7 @@ var
 begin
   if (Source = nil) or
      (SourceChars = 0) then
-    Result := ''
+    FastAssignNew(Result)
   else
   begin
     tmp.Init(SourceChars * 3);
@@ -5569,7 +5569,7 @@ end;
 function AnsiToUtf8(const Ansi: RawByteString; CodePage: integer): RawUtf8;
 begin
   if Ansi = '' then
-    result := ''
+    FastAssignNew(result)
   else
     TSynAnsiConvert.Engine(CodePage).AnsiToUtf8(Ansi, result);
 end;
@@ -5966,9 +5966,12 @@ function Utf8DecodeToUnicodeRawByteString(P: PUtf8Char; L: integer): RawByteStri
 begin
   if (P <> nil) and
      (L <> 0) then
-    FakeSetLength(result, Utf8ToWideChar(FastNewRawByteString(result, L * 3), P, L))
+  begin
+    L := Utf8ToWideChar(FastNewRawByteString(result, L * 3), P, L);
+    FakeSetLength(result, L);
+  end
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function Utf8DecodeToUnicodeRawByteString(const U: RawUtf8): RawByteString;
@@ -6015,7 +6018,7 @@ var
   a: AnsiChar;
   s, d: PAnsiChar;
 begin
-  result := '';
+  FastAssignNew(result);
   len := length(bin);
   if len = 0 then
     exit;
@@ -6063,7 +6066,7 @@ var
   a: AnsiChar;
   s, d: PAnsiChar;
 begin
-  result := '';
+  FastAssignNew(result);
   len := length(u);
   if len = 0 then
     exit;
@@ -8216,7 +8219,7 @@ var
 begin
   if S = '' then
   begin
-    result := '';
+    FastAssignNew(result);
     exit;
   end;
   tmp.Init(length(s) * 2);
@@ -8258,7 +8261,7 @@ var
 begin
   if S = '' then
   begin
-    result := '';
+    FastAssignNew(result);
     exit;
   end;
   tmp.Init(length(s) * 2);
@@ -8512,11 +8515,7 @@ var
 begin
   if source = nil then
   begin
-    {$ifdef FPC}
     FastAssignNew(result);
-    {$else}
-    result := '';
-    {$endif FPC}
     next := source;
     exit;
   end;
@@ -9181,11 +9180,7 @@ begin
   end;
   QuotedStr(p, length(S), Quote, result);
   if tmp <> nil then
-    {$ifdef FPC}
     FastAssignNew(tmp);
-    {$else}
-    RawUtf8(tmp) := '';
-    {$endif FPC}
 end;
 
 procedure QuotedStr(P: PUtf8Char; PLen: PtrInt; Quote: AnsiChar;
@@ -9540,11 +9535,7 @@ begin
     exit;
   end;
   if not KeepNotFoundValue then
-    {$ifdef FPC}
     FastAssignNew(Value);
-    {$else}
-    Value := '';
-    {$endif FPC}
   result := false;
 end;
 

@@ -3597,7 +3597,7 @@ var
   f, min, max: integer;
   ps: PShortString;
 begin
-  result := '';
+  FastAssignNew(result);
   Info^.SetEnumType(ps, min, max);
   for f := min to max do
   begin
@@ -3951,7 +3951,7 @@ var
   mem: RawUtf8;
   i: integer;
 begin
-  result := '';
+  FastAssignNew(result);
   if self <> nil then
     data := HistoryData(aProcessID, aDepth);
   d := pointer(data);

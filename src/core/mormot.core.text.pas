@@ -2761,7 +2761,7 @@ var
   S: PUtf8Char;
 begin
   if P = nil then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     S := PosChar0(P, Sep); // SSE2 asm on i386 and x86_64
@@ -2813,12 +2813,12 @@ end;
 procedure GetNextItem(var P: PUtf8Char; Sep, Quote: AnsiChar; var result: RawUtf8);
 begin
   if P = nil then
-    result := ''
+    FastAssignNew(result)
   else if P^ = Quote then
   begin
     P := UnQuoteSqlStringVar(P, result);
     if P = nil then
-      result := ''
+      FastAssignNew(result)
     else if P^ = #0 then
       P := nil
     else
@@ -2972,7 +2972,7 @@ begin
   if (P = nil) or
      (Sep <= ' ') or
      (Esc = #0) then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     while (P^ <= ' ') and
@@ -3001,7 +3001,7 @@ var
   S, E: PUtf8Char;
 begin
   if P = nil then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     S := P;
@@ -3227,7 +3227,7 @@ var
   P: PAnsiChar;
 begin
   // CsvOfValue('?',3)='?,?,?'
-  result := '';
+  FastAssignNew(result);
   if Count = 0 then
     exit;
   ValueLen := length(Value);
@@ -3301,7 +3301,7 @@ function GetBitCsv(const Bits; BitsCount: integer): RawUtf8;
 var
   i, j: integer;
 begin
-  result := '';
+  FastAssignNew(result);
   i := 0;
   while i < BitsCount do
     if GetBitPtr(@Bits, i) then
@@ -3509,7 +3509,7 @@ var
   i: PtrUInt;
 begin
   if P = nil then
-    result := ''
+    FastAssignNew(result)
   else
     for i := 0 to Index do
       GetNextItem(P, Sep, result);
@@ -3520,7 +3520,7 @@ var
   i: PtrUInt;
 begin
   if P = nil then
-    result := ''
+    FastAssignNew(result)
   else
     for i := 0 to Index do
       GetNextItem(P, Sep, Quote, result);
@@ -3770,7 +3770,7 @@ var
   p: PAnsiChar;
   s: PUtf8Char;
 begin
-  result := '';
+  FastAssignNew(result);
   if (v = nil) or
      (n <= 0) then
     exit;
@@ -3932,7 +3932,7 @@ var
   int, P: PAnsiChar;
   temp: TSynTempBuffer; // faster than a dynamic array
 begin
-  result := '';
+  FastAssignNew(result);
   if ValuesCount = 0 then
     exit;
   int := temp.Init(ValuesCount * I2T_SIZE);
@@ -3959,7 +3959,7 @@ var
   int, P: PAnsiChar;
   temp: TSynTempBuffer; // faster than a dynamic array
 begin
-  result := '';
+  FastAssignNew(result);
   if ValuesCount = 0 then
     exit;
   int := temp.Init(ValuesCount * I2T_SIZE);
@@ -4605,7 +4605,7 @@ begin
   if (Len = 0) or
      (twfDestIsShortString in fFlags) then
   begin
-    result := '';
+    FastAssignNew(result);
     exit;
   end;
   if twfDestIsRawUtf8 in fFlags then // fDest is a RawUtf8 not a TStream
@@ -4620,7 +4620,7 @@ begin
     FastSetString(result, Len);
     TStream(fDest).Seek(fInitialStreamPosition, soBeginning);
     if not StreamReadAll(TStream(fDest), pointer(result), Len) then
-      result := '';
+      FastAssignNew(result);
   end;
   if reformat <> jsonCompact then
   begin
@@ -11206,7 +11206,7 @@ end;
 function NotNullGuidToUtf8({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
   guid: TGuid): RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if not IsNullGuid(guid) then
     ToUtf8(guid, result);
 end;
@@ -11224,7 +11224,7 @@ var
   g: PGuid;
   P: PUtf8Char;
 begin
-  result := '';
+  FastAssignNew(result);
   n := length(guid);
   if n = 0 then
     exit;

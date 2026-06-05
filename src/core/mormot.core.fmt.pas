@@ -2751,7 +2751,7 @@ begin
   if doc.InitJson(Json, DocOptions) then
     result := VariantToYaml(variant(doc), Options)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 procedure YamlToVariant(const Yaml: RawUtf8; out Doc: TDocVariantData;
@@ -3893,7 +3893,7 @@ begin
   if FindSectionFirstLine(P, @up, @PEnd) then
     FastSetString(result, P, PEnd - P)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function DeleteSection(var Content: RawUtf8; const SectionName: RawUtf8;
@@ -4476,7 +4476,7 @@ var
   end;
 
 begin
-  result := '';
+  FastAssignNew(result);
   if Instance = nil then
     exit;
   nestedcount := 0;
@@ -5462,7 +5462,7 @@ var
   W: TTextWriter;
   temp: TTextWriterStackBuffer;
 begin
-  result := '';
+  FastAssignNew(result);
   if (Data = nil) or
      (Len <= 0) or
      (PerLine <= 0) then
@@ -5575,7 +5575,7 @@ var
   W: TTextWriter;
   temp: TTextWriterStackBuffer;
 begin
-  result := '';
+  FastAssignNew(result);
   if Text = '' then
     exit;
   W := TTextWriter.CreateOwnedStream(temp);

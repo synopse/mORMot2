@@ -5762,7 +5762,7 @@ var
   P: PShortString;
 begin
   if C = nil then
-    result := '' // avoid GPF
+    FastAssignNew(result) // avoid GPF
   else
   begin
     P := PPointer(PtrInt(PtrUInt(C)) + vmtClassName)^; // either ASCII or UTF-8
@@ -6016,7 +6016,7 @@ end;
 
 procedure ToHumanHex(var result: RawUtf8; bin: PByte; len: PtrInt; reverse: boolean);
 begin
-  result := '';
+  FastAssignNew(result);
   if len <= 0 then
     exit;
   pointer(result) := FastNewString((len * 3) - 1, CP_UTF8);
@@ -10128,7 +10128,7 @@ begin
   len := length(Str);
   if len = 0 then
   begin
-    result := '';
+    FastAssignNew(result);
     exit;
   end;
   if StartPos > len then
@@ -10811,7 +10811,7 @@ var
   regs: TIntelRegisters;
   id: array[0..12] of AnsiChar;
 begin
-  result := '';
+  FastAssignNew(result);
   if not(cfHYP in CpuFeatures) then
     exit;
   GetCpuid($40000000, 0, regs); // EAX=40000000h: Hypervisor ID
@@ -12226,7 +12226,7 @@ begin
     end
     else
     begin
-      result := '';
+      FastAssignNew(result);
       p := pointer(Data);
       if (datalen <= 8) or
          (Hash32(pointer(p + 8), datalen - 8) <> PCardinal(p + 4)^) then
@@ -13731,7 +13731,7 @@ begin
   if cardinal(vd^.VType) = varString then
     result := RawUtf8(vd^.VString)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function VariantStringToUtf8(const V: Variant): RawUtf8;

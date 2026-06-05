@@ -3848,7 +3848,7 @@ var
   tmp: TSynTempAdder; // no temp allocation up to 4KB of output text
   tmp2: ShortString;
 begin
-  result := '';
+  FastAssignNew(result);
   if (@self = nil) or
      (@value = nil) then
     exit;
@@ -4673,7 +4673,7 @@ var
   k: TRttiKind;
   v: TSynVarData;
 begin
-  result := '';
+  FastAssignNew(result);
   if (@self = nil) or
      (Instance = nil) then
     exit;
@@ -6334,7 +6334,7 @@ var
   tmp: TSynTempAdder; // no temp allocation up to 4KB of output text
   i: PtrInt;
 begin
-  result := '';
+  FastAssignNew(result);
   info := aTypeInfo^.BaseType;
   if (info = nil) or
      (@value = nil) or
@@ -6361,7 +6361,7 @@ var
   tmp: TSynTempAdder; // no temp allocation up to 4KB of output text
   i: PtrInt;
 begin
-  result := '';
+  FastAssignNew(result);
   if (valueLength = 0) or
      (valueLength > 65535) or
      (@value = nil) or
@@ -6515,7 +6515,7 @@ var
 begin
   if C = nil then
   begin
-    result := '';
+    FastAssignNew(result);
     exit;
   end;
   name := ClassNameShort(C);

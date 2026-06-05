@@ -2640,7 +2640,7 @@ function TPendingTaskList.NextPendingTask: RawByteString;
 var
   tix: Int64;
 begin
-  result := '';
+  FastAssignNew(result);
   if (self = nil) or
      (fTasks.Count = 0) then
     exit;

@@ -1901,7 +1901,7 @@ function DateToIso8601Text(Date: TDateTime): RawUtf8;
 begin
   // into 'YYYY-MM-DD' date format
   if Date = 0 then
-    result := ''
+    FastAssignNew(result)
   else
     DateToIso8601PChar(Date, FastSetString(result, 10), true);
 end;
@@ -2019,7 +2019,7 @@ procedure DateTimeToIso8601TextVar(DT: TDateTime; FirstChar: AnsiChar;
   var result: RawUtf8; WithMS: boolean);
 begin
   if DT = 0 then
-    result := ''
+    FastAssignNew(result)
   else if frac(DT) = 0 then
     result := DateToIso8601(DT, true)
   else if trunc(DT) = 0 then
@@ -2494,7 +2494,7 @@ end;
 function TSynDate.ToText(Expanded: boolean): RawUtf8;
 begin
   if PInt64(@self)^ = 0 then
-    result := ''
+    FastAssignNew(result)
   else
     result := DateToIso8601(Year, Month, Day, Expanded);
 end;
@@ -3216,7 +3216,7 @@ var
 begin
   //  'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
   if DateTime = 0 then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     T.FromDateTime(DateTime);
@@ -3246,7 +3246,7 @@ var
   T: TSynSystemTime;
 begin
   if dt = 0 then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     T.FromDateTime(dt);
@@ -3549,7 +3549,7 @@ function UnixMSTimeToString(const UnixMSTime: TUnixMSTime; Expanded: boolean;
 begin
   // inlined UnixMSTimeToDateTime()
   if UnixMSTime <= 0 then
-    result := ''
+    FastAssignNew(result)
   else
     result := DateTimeMSToString(UnixMSTime * MilliSecsPerDate + UnixDateDelta,
                                  Expanded, FirstTimeChar, TZD);

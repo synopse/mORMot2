@@ -3755,7 +3755,7 @@ class function TDebugFile.FindLocation(exc: ESynException): RawUtf8;
 begin
   if (exc = nil) or
      (exc.RaisedAt = nil) then
-    result := ''
+    FastAssignNew(result)
   else
     result := GetInstanceDebugFile.FindLocation(PtrUInt(exc.RaisedAt));
 end;
@@ -4521,7 +4521,7 @@ var
   i, len, read, total: integer;
   P: PAnsiChar;
 begin
-  result := '';
+  FastAssignNew(result);
   if (SynLogFile = nil) or
      SynLogFileFreeing then
     exit;
@@ -5416,7 +5416,7 @@ var
   ndx: PtrInt;
   thd: PSynLogThreads;
 begin
-  result := '';
+  FastAssignNew(result);
   if not SynLogFileFreeing then
   begin
     ndx := PerThreadInfo.ThreadNumber - 1; // no InitThreadNumber() call
@@ -6659,7 +6659,7 @@ begin
             [result, ExeInstanceDebugFile.FindLocationShort(EStack[i])]);
     end
     else
-      result := '';
+      FastAssignNew(result);
 end;
 
 function GetLastExceptionText: RawUtf8;
@@ -6669,7 +6669,7 @@ begin
   if GetLastException(info) then
     result := ToText(info)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 {$endif NOEXCEPTIONINTERCEPT}
@@ -7557,7 +7557,7 @@ begin
     result := 'Main Thread'
   else
   begin
-    result := '';
+    FastAssignNew(result);
     if cardinal(ThreadID) <= fThreadMax then
     begin
       names := fThreadInfo[ThreadID].SetThreadName;
@@ -7613,12 +7613,12 @@ var
 begin
   if (self = nil) or
      (cardinal(index) >= cardinal(fCount)) then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     L := GetLineSize(fLines[index], fMapEnd);
     if L <= fLineTextOffset then
-      result := ''
+      FastAssignNew(result)
     else
       FastSetString(result, PAnsiChar(fLines[index]) + fLineTextOffset,
         L - fLineTextOffset);

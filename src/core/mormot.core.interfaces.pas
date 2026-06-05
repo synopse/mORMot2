@@ -4694,7 +4694,7 @@ function TInterfaceFactory.GetMethodName(aMethodIndex: integer): RawUtf8;
 begin
   if (aMethodIndex < 0) or
      (self = nil) then
-    result := ''
+    FastAssignNew(result)
   else if aMethodIndex < SERVICE_PSEUDO_METHOD_COUNT then
     result := SERVICE_PSEUDO_METHOD[TServiceInternalMethod(aMethodIndex)]
   else
@@ -4703,14 +4703,14 @@ begin
     if cardinal(aMethodIndex) < cardinal(fMethodsCount) then
       result := fMethods[aMethodIndex].Uri
     else
-      result := '';
+      FastAssignNew(result);
   end;
 end;
 
 function TInterfaceFactory.GetFullMethodName(aMethodIndex: integer): RawUtf8;
 begin
   if self = nil then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     result := GetMethodName(aMethodIndex);
@@ -5394,7 +5394,7 @@ function TInterfaceResolverForSingleInterface.GetImplementationName: RawUtf8;
 begin
   if (self = nil) or
      (fImplementation.ValueClass = nil) then
-    result := ''
+    FastAssignNew(result)
   else
     result := fImplementation.Name;
 end;
@@ -6116,7 +6116,7 @@ function TOnInterfaceStubExecuteParamsVariant.GetInUtf8(
 var
   wasString: boolean;
 begin
-  result := '';
+  FastAssignNew(result);
   VariantToUtf8(GetInNamed(ParamName), result, wasString);
 end;
 
@@ -6148,7 +6148,7 @@ var
   o: PVarData;
   temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
-  fResult := '';
+  FastAssignNew(fResult);
   if fOutput = nil then
     exit;
   W := TJsonWriter.CreateOwnedStream(temp);
@@ -6736,7 +6736,7 @@ var
   log: ^TInterfaceStubLog;
 begin
   if fLogCount = 0 then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     WR := TJsonWriter.CreateOwnedStream(temp);

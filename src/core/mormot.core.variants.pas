@@ -4099,11 +4099,7 @@ begin
           goto clr; // varError/varDispatch
     end // note: varVariant/varUnknown are not handled because should not appear
     else if vt = varString then
-      {$ifdef FPC}
       FastAssignNew(V^.VAny)
-      {$else}
-      RawUtf8(V^.VAny) := ''
-      {$endif FPC}
     else if vt < varByRef then // varByRef has no refcount -> nothing to clear
       {$ifdef HASVARUSTRING}
       if vt = varUString then
@@ -5893,7 +5889,7 @@ begin
       result := ToCsv
     else if IsObject or
             not VariantToText(DocVariantOrString, result) then
-      result := '';
+      FastAssignNew(result);
 end;
 
 function ObjectToVariant(Value: TObject; EnumSetsAsText: boolean): variant;
@@ -9638,7 +9634,7 @@ end;
 
 function TDocVariantData.GetItemAsText(aIndex: integer): RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if cardinal(aIndex) < cardinal(VCount) then
     VariantToUtf8(VValue[aIndex], result)
   else
@@ -9963,7 +9959,7 @@ begin
   if (cardinal(VType) <> DocVariantVType) or
      not IsArray then
   begin
-    result := '';
+    FastAssignNew(result);
     exit;
   end;
   if VCount = 0 then
@@ -10157,7 +10153,7 @@ var
 begin
   v := GetPVariantByName(aName);
   if PVarData(v)^.VType <= varNull then // default VariantToUtf8(null)='null'
-    result := ''
+    FastAssignNew(result)
   else
     VariantToUtf8(v^, result, wasString);
 end;

@@ -5243,7 +5243,7 @@ var
   crc: cardinal;
   tmp: TBuffer16K;  // big enough to resize result in-place
 begin
-  result := '';
+  FastAssignNew(result);
   if (PlainLen = 0) or
      (Plain = nil) then
     exit;
@@ -5404,7 +5404,7 @@ begin
     exit;
   dec := FastSetString(RawUtf8(result), len + BufferOffset); // CP_UTF8 for FPC
   if not DecompressBody(Comp, dec + BufferOffset, CompLen, len, Load) then
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TAlgoCompress.Decompress(const Comp: RawByteString; Load: TAlgoCompressLoad;
@@ -6684,7 +6684,7 @@ end;
 function Base64ToBinSafe(const s: RawByteString): RawByteString;
 begin
   if s = '' then
-    result := ''
+    FastAssignNew(result)
   else
     Base64ToBinSafe(pointer(s), length(s), result);
 end;
@@ -7435,7 +7435,7 @@ begin
       exit;
     end;
   end;
-  result := '';
+  FastAssignNew(result);
 end;
 
 function Base32ToBin(const base32: RawUtf8): RawByteString;
@@ -7452,7 +7452,7 @@ procedure BlobToRawBlob(P: PUtf8Char; var result: RawBlob; Len: integer);
 var
   LenHex: integer;
 begin
-  result := '';
+  FastAssignNew(result);
   if Len = 0 then
     Len := StrLen(P);
   if Len = 0 then
@@ -7481,7 +7481,7 @@ var
   Len, LenHex: integer;
   P: PUtf8Char;
 begin
-  result := '';
+  FastAssignNew(result);
   if Blob = '' then
     exit;
   Len := length(Blob);
@@ -7946,7 +7946,7 @@ function AsciiToBaudot(P: PAnsiChar; len: PtrInt): RawByteString;
 var
   tmp: TSynTempBuffer;
 begin
-  result := '';
+  FastAssignNew(result);
   if (P = nil) or
      (len = 0) then
     exit;
@@ -9216,7 +9216,7 @@ function TMemoryMapText.GetLine(aIndex: integer): RawUtf8;
 begin
   if (self = nil) or
      (cardinal(aIndex) >= cardinal(fCount)) then
-    result := ''
+    FastAssignNew(result)
   else
     FastSetString(result, fLines[aIndex], GetLineSize(fLines[aIndex], fMapEnd));
 end;
@@ -9749,7 +9749,7 @@ function TStreamRedirect.GetProgress: RawUtf8;
 begin
   if (self = nil) or
      fTerminated then
-    result := ''
+    FastAssignNew(result)
   else
     result := fInfo.GetProgress;
 end;
@@ -10377,7 +10377,7 @@ function StreamToRawByteString(aStream: TStream; aSize: Int64;
 var
   current: Int64;
 begin
-  result := '';
+  FastAssignNew(result);
   if aStream = nil then
     exit;
   current := aStream.Position;
@@ -10402,7 +10402,7 @@ begin
   end;
   pointer(result) := FastNewString(aSize, aCodePage);
   if not StreamReadAll(aStream, pointer(result), aSize) then
-    result := '';
+    FastAssignNew(result);
   aStream.Position := current; // always restore position
 end;
 
@@ -10410,7 +10410,7 @@ function StreamChangeToRawByteString(aStream: TStream; var aPosition: Int64): Ra
 var
   current, size: Int64;
 begin
-  result := '';
+  FastAssignNew(result);
   if aStream = nil then
     exit;
   size := aStream.Size - aPosition;
@@ -10423,7 +10423,7 @@ begin
   if StreamReadAll(aStream, pointer(result), size) then
     aPosition := current
   else
-    result := '';
+    FastAssignNew(result);
   aStream.Position := current; // always restore position
 end;
 
@@ -10441,7 +10441,7 @@ begin
      (L <= 0) or
      (L > MaxAllowedSize) or
      not StreamReadAll(S, FastSetString(result, L), L) then
-    result := '';
+    FastAssignNew(result);
 end;
 
 function WriteStringToStream(S: TStream; const Text: RawUtf8): boolean;
@@ -10574,7 +10574,7 @@ end;
 function TRawByteStringGroup.AsText: RawByteString;
 begin
   if Values = nil then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     if Count > 1 then
@@ -10597,11 +10597,7 @@ begin
     for i := 1 to Count do
     begin
       MoveFast(pointer(v^.Value)^, tmp[v^.Position], length(v^.Value));
-      {$ifdef FPC}
       FastAssignNew(v^.Value);
-      {$else}
-      v^.Value := '';
-      {$endif FPC}
       inc(v);
     end;
     pointer(Values[0].Value) := tmp; // absolute compaction ;)

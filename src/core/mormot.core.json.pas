@@ -4382,7 +4382,7 @@ var
   B: PUtf8Char;
   parser: TJsonParser;
 begin
-  result := '';
+  FastAssignNew(result);
   if P = nil then
     exit;
   B := GotoNextNotSpace(P);
@@ -9042,7 +9042,7 @@ function JsonDecode(Json: PUtf8Char; const aName: RawUtf8;
 var
   info: TGetJsonField;
 begin
-  result := '';
+  FastAssignNew(result);
   if Json = nil then
     exit;
   while Json^ <> '{' do
@@ -9863,7 +9863,7 @@ function TSynDictionary.SaveValuesToJson(EnumSetsAsText: boolean;
 begin
   if self = nil then
   begin
-    result := '';
+    FastAssignNew(result);
     exit;
   end;
   fSafe.ReadLock;
@@ -9968,7 +9968,7 @@ var
   tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   W: TBufferWriter;
 begin
-  result := '';
+  FastAssignNew(result);
   if fSafe.Padding[DIC_KEYCOUNT].VInteger = 0 then
     exit;
   W := TBufferWriter.Create(tmp{%H-});
@@ -10937,7 +10937,7 @@ var
 begin
   if length(Values) = 0 then
     if WithoutBraces then
-      result := ''
+      FastAssignNew(result)
     else
       result := '[]'
   else
@@ -11010,7 +11010,7 @@ var
 begin
   nfo := Rtti.RegisterTypeFromName(TypeName);
   if nfo = nil then
-    result := ''
+    FastAssignNew(result)
   else
     SaveJson(Value, nfo.Cache.Info, Options, result);
 end;
@@ -11093,7 +11093,7 @@ begin
   DynArray.Init(TypeInfo, Value);
   try
     if DynArray.LoadFrom(BlobValue, PAnsiChar(BlobValue) + BlobLen) = nil then
-      result := ''
+      FastAssignNew(result)
     else
       with TJsonWriter.CreateOwnedStream(temp) do
       try
