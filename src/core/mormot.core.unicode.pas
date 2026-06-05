@@ -2163,6 +2163,7 @@ procedure TrimChars(var S: RawUtf8; Left, Right: PtrInt);
 function TrimChar(const text: RawUtf8; const exclude: TSynAnsicharSet): RawUtf8;
 
 /// returns the supplied text content, without one specified char
+// - e.g. TrimOneChar(sometext, #13) convert DOS CRLF lines into POSIX LF lines
 function TrimOneChar(const text: RawUtf8; exclude: AnsiChar): RawUtf8;
 
 /// returns the supplied text content, without any other char than specified
@@ -8900,29 +8901,32 @@ end;
 
 function TrimOneChar(const text: RawUtf8; exclude: AnsiChar): RawUtf8;
 var
-  first, len, i: PtrInt;
+  first, len: PtrInt;
   c: AnsiChar;
-  p: PAnsiChar;
+  s, d: PAnsiChar;
 begin
   len := length(text);
   first := ByteScanIndex(pointer(text), len, ord(exclude)); // may use SSE2
   if first < 0 then
   begin
-    result := text; // no exclude char found
+    result := text; // no exclude char found: just return the content
     exit;
   end;
-  p := FastSetString(result, len - 1);
-  MoveFast(pointer(text)^, p^, first);
-  inc(p, first);
-  for i := first + 1 to len do
-  begin
-    c := text[i];
-    if c = exclude then
+  d := FastSetString(result, len - 1); // allocate maximum destination new size
+  MoveFast(pointer(text)^, d^, first);
+  inc(d, first);
+  s := @PAnsiChar(pointer(text))[first + 1];
+  repeat
+    c := s^;
+    inc(s);
+    if c = #0 then
+      break
+    else if c = exclude then
       continue;
-    p^ := c;
-    inc(p);
-  end;
-  FakeSetLength(result, p - pointer(result));
+    d^ := c;
+    inc(d);
+  until false;
+  FakeSetLength(result, d - pointer(result)); // truncate with no realloc
 end;
 
 function OnlyChar(const text: RawUtf8; const only: TSynAnsicharSet): RawUtf8;
