@@ -7860,18 +7860,17 @@ type
   TSetWeakZero = class(TSynDictionary) // TClass / TPointerDynArray map
   protected
     fHookedFreeInstance: PtrUInt;
+    procedure HookedFreeInstance;
   public
     constructor Create(aClass: TClass); reintroduce;
   end;
 
-type
-  TFreeInstanceMethod = procedure(self: TObject);
-
-procedure HookedFreeInstance(self: TObject);
+procedure TSetWeakZero.HookedFreeInstance;
 var
   inst: TSetWeakZero;
   i: PtrInt;
   fields: PPointerArray; // holds a TPointerDynArray but avoid try..finally
+  next: TThreadMethod;
 begin
   inst := Rtti.FindClass(PClass(self)^).GetPrivateSlot(TSetWeakZero);
   fields := nil;
@@ -7883,7 +7882,10 @@ begin
       PPointer(fields[i])^ := nil;
     FastDynArrayClear(@fields, nil);
   end;
-  TFreeInstanceMethod(inst.fHookedFreeInstance)(self); // CleanupInstance + FreeMem()
+  // cascaded call up to TObject.FreeInstance = CleanupInstance + FreeMem()
+  TMethod(next).Code := pointer(inst.fHookedFreeInstance);
+  TMethod(next).Data := self;
+  next();
 end;
 
 constructor TSetWeakZero.Create(aClass: TClass);
@@ -7893,11 +7895,11 @@ begin
   // key = instance TObject, value = dynarray field(s) to be zeroed
   inherited Create(TypeInfo(TPointerDynArray), TypeInfo(TPointerDynArrayDynArray));
   P := pointer(PAnsiChar(aClass) + vmtFreeInstance);
-  if P^ = PtrUInt(@HookedFreeInstance) then
+  if PPointer(P)^ = @TSetWeakZero.HookedFreeInstance then
     // hook once - Create may be done twice in GetWeakZero() for SetPrivateSlot
     exit;
   fHookedFreeInstance := P^;
-  PatchCodePtrUInt(P, PtrUInt(@HookedFreeInstance), {leaveunprot=}false);
+  PatchCodePtrUInt(P, PtrUInt(@TSetWeakZero.HookedFreeInstance), {leaveunprot=}false);
 end;
 
 function GetWeakZero(aClass: TClass; CreateIfNonExisting: boolean): TSetWeakZero;
