@@ -2087,7 +2087,7 @@ begin
   prefix := RegURL(aRoot, aPort, Https, aDomainName);
   if prefix = '' then
     exit;
-  result := ''; // success
+  FastAssignNew(result); // success
   try
     HttpApiInitialize;
     if HttpApiSucceed(hInitialize, result,

@@ -4181,7 +4181,7 @@ begin
     FastNewRawByteString(result, Len);
   if (Len <= 0) or
      (fC.GenerateRandom(fSession, pointer(result), Len) <> CKR_SUCCESS) then
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TPkcs11.Sign(Data: pointer; Len: PtrInt; PrivKey: CK_OBJECT_HANDLE;
@@ -4189,7 +4189,7 @@ function TPkcs11.Sign(Data: pointer; Len: PtrInt; PrivKey: CK_OBJECT_HANDLE;
 var
   reslen: CK_ULONG;
 begin
-  result := '';
+  FastAssignNew(result);
   if (Data = nil) or
      (Len <= 0) or
      (PrivKey = CK_INVALID_HANDLE) then
@@ -4269,7 +4269,7 @@ function TPkcs11.SessionGetAttribute(
 var
   a: CK_ATTRIBUTE;
 begin
-  result := '';
+  FastAssignNew(result);
   a._type := ToULONG(attr);
   a.pValue := nil;
   a.ulValueLen := 0;
@@ -4279,7 +4279,7 @@ begin
   FastSetString(result, a.ulValueLen);
   a.pValue := pointer(result); // copy the attribute value to result
   if fC.GetAttributeValue(fSession, obj, @a, 1) <> CKR_SUCCESS then
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TPkcs11.SessionDestroyObject(obj: CK_OBJECT_HANDLE): boolean;
