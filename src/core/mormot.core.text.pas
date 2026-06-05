@@ -4888,7 +4888,8 @@ var
 begin
   if BEnd - B <= Reserve then // note: PtrInt(BEnd - B) could be < 0
     FlushToStream;
-  if Value <= high(UINT_999) then
+  if {$ifndef HASQWORD} (Value >= 0) and {$endif}
+     (Value <= high(UINT_999)) then
     StrRefConst(@UINT_999[Value])
   else
   begin
@@ -8820,7 +8821,8 @@ end;
 
 procedure QWordToTempUtf8(V: PQWord; var Res: TTempUtf8);
 begin
-  if V^ <= high(UINT_999) then
+  if {$ifndef HASQWORD} (V^ >= 0) and {$endif}
+     (V^ <= high(UINT_999)) then
     with UINT_999[PPtrInt(V)^] do
     begin
       Res.Text := @TextLo;
@@ -8866,15 +8868,7 @@ n:    if vfNullAsVoid in Flags then
     varWord:
       PtrIntToTempUtf8(vd^.VWord, Res);
     varLongWord:
-      {$ifdef CPU32}
-      if vd^.VLongWord > high(UINT_999) then
-      begin
-        Res.Text := PUtf8Char(StrUInt32(@Res.Temp[23], vd^.VLongWord));
-        Res.Len := @Res.Temp[23] - Res.Text;
-      end
-      else
-      {$endif CPU32}
-        PtrIntToTempUtf8(vd^.VLongWord, Res);
+      PtrIntToTempUtf8(vd^.VLongWord, Res);
     varByte:
       PtrIntToTempUtf8(vd^.VByte, Res);
     varBoolean:

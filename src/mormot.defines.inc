@@ -136,7 +136,7 @@
   common:
     UNICODE FPC_OR_UNICODE FPC_OR_DELPHIxxx USERECORDWITHMETHODS
     HASINLINE HASSAFEINLINE HASSAFEFPCINLINE HASINLINEFPC
-    HASCODEPAGE HASVARUSTRING STRCNT32 DACNT32 HASDYNARRAYTYPE
+    HASCODEPAGE HASVARUSTRING STRCNT32 DACNT32 HASDYNARRAYTYPE HASQWORD
     HASITERATORS HASIMPLICITOPERATOR HASDBFTWIDE HASDBFNEW
     HASTTHREADSTART HASTTHREADTERMINATESET HASINTERFACEASTOBJECT
     HASEXTRECORDRTTI HASSLOWMUL64
@@ -192,6 +192,7 @@
   {$define HASSAFEFPCINLINE}  // FPC 3.2.0 specific inlining troubles
   {$define NODELPHIASM}       // avoid e.g. low-level System.@LStrFromPCharLen
   {$define HASDYNARRAYTYPE}   // eltype2 field, used e.g. for T*ObjArray
+  {$define HASQWORD}
   {$define HASITERATORS}
   {$define HASIMPLICITOPERATOR}
   {$define HASDBFTWIDE}
@@ -643,6 +644,7 @@
     {$if CompilerVersion = 20}    // = Delphi 2009
       {$define ISDELPHI2009}      // to circumvent some specific bugs
       {$define ISDELPHI20092010}
+      {$define HASQWORD}          // properly handle and inline UInt64
       {$define HASNOSTATICRTTI}   // has no TypeInfo(TGuid)
     {$ifend}
     {$if CompilerVersion = 21}    // = Delphi 2010

@@ -10934,7 +10934,8 @@ var
   tmp: TTemp24;
   P: PAnsiChar;
 begin
-  if Value <= high(UINT_999) then
+  if {$ifndef HASQWORD} (Value >= 0) and {$endif}
+     (Value <= high(UINT_999)) then
     with UINT_999[Value] do
       Append(@TextLo, Header.length)
   else

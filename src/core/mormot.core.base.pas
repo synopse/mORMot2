@@ -157,11 +157,11 @@ type
   // if you are sure that Delphi 6-2007 compiler handles your code as expected,
   // but mORMot code will expect to use QWord for its internal process
   // (e.g. ORM/SOA serialization)
-  {$ifdef UNICODE}
+  {$ifdef HASQWORD}
   QWord = UInt64;
   {$else}
   QWord = type Int64;
-  {$endif UNICODE}
+  {$endif HASQWORD}
   /// points to an unsigned Int64
   PQWord = ^QWord;
   
@@ -7177,7 +7177,7 @@ begin
   result := ord(PtrUInt(A) > PtrUInt(B)) - ord(PtrUInt(A) < PtrUInt(B));
 end;
 
-{$ifdef FPC_OR_UNICODE} // recent compilers are able to generate correct code
+{$ifdef HASQWORD} // recent compilers are able to generate correct code
 
 function CompareInt64(const A, B: Int64): integer;
 begin
@@ -7201,7 +7201,7 @@ begin
   result := SortDynArrayQWord(A, B);
 end;
 
-{$endif FPC_OR_UNICODE}
+{$endif HASQWORD}
 
 function MinPtrInt(const A, B: PtrInt): PtrInt;
 begin
@@ -8006,7 +8006,7 @@ begin
       j := R;
       p := (L + R) shr 1;
       repeat
-      {$ifdef FPC_OR_UNICODE}
+      {$ifdef HASQWORD}
       tmp := ID[p];
       if ID[i] < tmp then
         repeat
@@ -8021,7 +8021,7 @@ begin
           inc(i);
         while SortDynArrayQWord(ID[j], ID[p]) > 0 do
           dec(j);
-      {$endif FPC_OR_UNICODE}
+      {$endif HASQWORD}
         if i <= j then
         begin
           tmp := ID[j];

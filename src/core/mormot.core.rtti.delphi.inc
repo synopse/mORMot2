@@ -474,12 +474,12 @@ begin
   if @self = TypeInfo(QWord) then
     result := true
   else
-    {$ifdef UNICODE}
+    {$ifdef HASQWORD}
     if Kind = rkInt64 then
       with PHash128Rec(PAnsiChar(@RawName[1]) + ord(RawName[0]))^ do
         result := Lo > Hi // check MinInt64Value>MaxInt64Value
     else
-    {$endif UNICODE}
+    {$endif HASQWORD}
       result := false;
 end;
 
