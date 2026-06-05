@@ -758,11 +758,11 @@ function TRestHttpClientGeneric.HostName: RawUtf8;
 begin
   if fServer <> '' then
     if fPort <> '' then
-      result := fServer + ':' + fPort
+      Join([fServer, ':', fPort], result)
     else
       result := fServer
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TRestHttpClientGeneric.TLS: PNetTlsContext;
@@ -1094,7 +1094,7 @@ begin
         // call TServiceContainerServer.ClientFakeCallbackReplaceConnectionID
         if CallBack(mPOST, 'CacheFlush/_replaceconn_',
             Int64ToUtf8(prevconn), result) = HTTP_SUCCESS then
-          result := ''; // on error, log result = server response
+          FastAssignNew(result); // on error, log result = server response
       inc(fUpgradeCount);
     end;
   end;

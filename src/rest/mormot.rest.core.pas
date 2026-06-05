@@ -3963,7 +3963,7 @@ var
   up: TByteToAnsiChar;
 begin
   if self = nil then
-    result := ''
+    FastAssignNew(result)
   else if fInHeaderLastName = HeaderName then
     result := fInHeaderLastValue
   else

@@ -1077,7 +1077,7 @@ var
   err: integer;
   https: boolean;
 begin
-  result := '';
+  FastAssignNew(result);
   if not fHttpServer.InheritsFrom(THttpApiServer) then
     exit;
   https := aSecurity in SEC_TLS;
@@ -1105,7 +1105,7 @@ begin
 end;
 {$else}
 begin
-  result := ''; // do nothing, but no error
+  FastAssignNew(result); // do nothing, but no error
 end;
 {$endif USEHTTPSYS}
 

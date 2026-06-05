@@ -612,7 +612,7 @@ begin
     HTTP_NOTIMPLEMENTED: // 501
       result := 'Server does not support this request';
   else
-    result := '';
+    FastAssignNew(result);
   end;
 end;
 
@@ -906,7 +906,7 @@ end;
 
 function TServiceFactoryClient.RetrieveSignature: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if InternalInvoke(SERVICE_PSEUDO_METHOD[imSignature], '', @result) and
      (result <> '') then
     if result[1] = '[' then

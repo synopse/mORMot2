@@ -548,13 +548,13 @@ end;
 function TRestOrmServerFullMemory.MainEngineRetrieve(TableModelIndex: integer;
   ID: TID): RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
 end;
 
 function TRestOrmServerFullMemory.MainEngineList(const SQL: RawUtf8;
   ForceAjax: boolean; ReturnedRowCount: PPtrInt): RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
 end;
 
 function TRestOrmServerFullMemory.MainEngineUpdate(

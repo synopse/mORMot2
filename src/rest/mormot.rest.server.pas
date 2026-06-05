@@ -5032,7 +5032,7 @@ end;
 function TAuthSession.GetUserName: RawUtf8;
 begin
   if User = nil then
-    result := ''
+    FastAssignNew(result)
   else
     result := User.LogonName;
 end;
@@ -6353,7 +6353,7 @@ var
   m: TUriMethod;
   n: TRestNode;
 begin
-  result := ''; // just concatenate the counters for logging
+  FastAssignNew(result); // just concatenate the counters for logging
   for m := low(fTreeCount) to high(fTreeCount) do
     if fTreeCount[m] <> 0 then
       Append(result, [' ', ToText(m), '=', fTreeCount[m]]);
@@ -6698,7 +6698,7 @@ var
 begin
   if (self = nil) or
      (Services = nil) then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     nfo.PublicUri := fPublicUri;
@@ -7500,7 +7500,7 @@ var
   W: TJsonWriter;
   temp: TTextWriterStackBuffer;
 begin
-  result := '';
+  FastAssignNew(result);
   if (self = nil) or
      (fSessions.Count = 0) then
     exit;
