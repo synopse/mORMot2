@@ -9009,35 +9009,23 @@ begin
         Res.Len := 1;
       end;
     vtInteger:
-      begin
-        isString := false;
-        PtrIntToTempUtf8(V^.VInteger, Res);
-      end;
+      isString := PtrIntToTempUtf8(V^.VInteger, Res);
     vtInt64:
-      begin
-        isString := false;
-        Int64ToTempUtf8(V^.VInt64, Res);
-      end;
+      {$ifdef CPU64}
+      isString := PtrIntToTempUtf8(V^.VInt64^, Res);
+      {$else}
+      isString := Int64ToTempUtf8(V^.VInt64, Res);
+      {$endif CPU64}
     {$ifdef FPC}
     vtQWord:
-      begin
-        isString := false;
-        QwordToTempUtf8(V^.VQWord, Res);
-      end;
+      isString := QwordToTempUtf8(V^.VQWord^, Res);
     {$endif FPC}
     vtCurrency:
-      begin
-        isString := false;
-        Res.Text := @Res.Temp;
-        Res.Len := Curr64ToPChar(V^.VInt64^, Res.Temp);
-      end;
+      isString := Curr64ToTempUtf8(V^.VInt64^, Res);
     vtExtended:
-      begin
-        isString := false;
-        DoubleToTempUtf8(V^.VExtended^, Res);
-      end;
+      isString := DoubleToTempUtf8(V^.VExtended^, Res);
     vtPointer, vtInterface:
-      PtrIntToTempUtf8(PtrInt(V^.VPointer), Res);
+      PtrIntToTempUtf8(PtrInt(V^.VPointer), Res); // keep isString=true
     vtClass:
       begin
         if V^.VClass = nil then
@@ -9130,7 +9118,7 @@ begin
     vtExtended:
       DoubleToStr(V^.VExtended^,result);
     vtPointer:
-      UInt32ToUtf8(PtrUInt(V^.VPointer), result);
+      UInt32ToUtf8(PtrUInt(V^.VPointer), result); // isString=false
     vtClass:
       begin
         isString := true;
