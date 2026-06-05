@@ -1939,11 +1939,10 @@ end;
 
 function TDecimal128.FromVariant(const value: variant): boolean;
 var
-  txt: RawUtf8;
   b: PBsonVariantData;
   v64: Int64;
   vt: cardinal;
-  wasString: boolean;
+  tmp: TTempUtf8;
 begin
   b := @value;
   if cardinal(b^.VType) = varVariantByRef then
@@ -1960,8 +1959,9 @@ begin
     FromCurr(PVariant(b)^.VCurrency)
   else
   begin
-    VariantToUtf8(PVariant(b)^, txt, wasString);
-    result := FromText(txt) <> dsvError;
+    VariantToTempUtf8(PVariant(b)^, tmp);
+    result := FromText(tmp.Text, tmp.Len) <> dsvError;
+    TempUtf8Done(tmp);
     exit;
   end;
   result := true;
