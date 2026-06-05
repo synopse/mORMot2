@@ -6018,6 +6018,18 @@ begin
   CheckEqual(OnlyChar('abcdz', ['d', 'z']), 'dz');
   CheckEqual(OnlyChar('abzcd', ['z']), 'z');
   CheckEqual(OnlyChar('zabzcdz', ['z']), 'zzz');
+  CheckEqual(TrimOneChar('abcda', 'a'), 'bcd');
+  CheckEqual(TrimOneChar('abcda', 'b'), 'acda');
+  CheckEqual(TrimOneChar('abcda', 'd'), 'abca');
+  CheckEqual(TrimOneChar('', 'a'), '');
+  CheckEqual(TrimOneChar('a', 'a'), '');
+  CheckEqual(TrimOneChar('aa', 'a'), '');
+  CheckEqual(TrimOneChar('aaa', 'a'), '');
+  CheckEqual(TrimOneChar('baaa', 'a'), 'b');
+  CheckEqual(TrimOneChar('aaab', 'a'), 'b');
+  CheckEqual(TrimOneChar('aaaba', 'a'), 'b');
+  CheckEqual(TrimOneChar('aaabaa', 'a'), 'b');
+  CheckEqual(TrimOneChar('a'#13#10'b'#13#10, #13), 'a'#10'b'#10);
   // + on RawByteString seems buggy on FPC - at least inconsistent with Delphi
   rb2 := ARawSetString;
   rb1 := rb2 + RawByteString('test');
