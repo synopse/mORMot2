@@ -233,9 +233,9 @@ function TryYamlInt(p: PUtf8Char; out V: Int64): boolean;
 procedure YamlStripLineComment(var S: RawUtf8);
 
 /// emit some text as YAML string, with JSON-escaped double-quotes if needed
-procedure WriteYamlString(W: TJsonWriter; const S: RawUtf8);
+procedure WriteYamlString(W: TJsonWriter; P: PUtf8Char; L: PtrInt);
 
-/// emit some variant as YAML, with JSON-escaped double-quotes if needed
+/// emit some variant as YAML string, with JSON-escaped double-quotes if needed
 procedure WriteYamlVariant(W: TJsonWriter; const V: variant);
 
 
@@ -2796,10 +2796,10 @@ type
   private
     fOut: TJsonWriter;
     fOptions: TYamlWriterOptions; // not used yet
-    procedure WriteValue(vd: PDocVariantData; Indent: PtrInt);
+    procedure WriteVarData(vd: PVarData; Indent: PtrInt);
     procedure WriteBlockMap(const dv: TDocVariantData; Indent: PtrInt);
     procedure WriteBlockSeq(const dv: TDocVariantData; Indent: PtrInt);
-    procedure WriteYamlKey(const K: RawUtf8);
+    procedure WriteKey(const K: RawUtf8);
       {$ifdef HASINLINE} inline; {$endif}
     procedure WriteIndent(N: PtrInt);
       {$ifdef HASINLINE} inline; {$endif}
@@ -2827,9 +2827,9 @@ begin
   fOut.AddChars(' ', N);
 end;
 
-procedure TVariantToYaml.WriteYamlKey(const K: RawUtf8);
+procedure TVariantToYaml.WriteKey(const K: RawUtf8);
 begin
-  WriteYamlString(fOut, K);
+  WriteYamlString(fOut, pointer(K), length(K));
 end;
 
 procedure TVariantToYaml.WriteBlockMap(const dv: TDocVariantData; Indent: PtrInt);
@@ -2846,19 +2846,19 @@ begin
   i := 0;
   v := pointer(dv.Values);
   repeat
-    WriteYamlKey(dv.Names[i]);
+    WriteKey(dv.Names[i]);
     fOut.AddDirect(':');
     if _Safe(v^, cd) and
        (cd^.Count > 0) then
     begin
       fOut.Add(#10);
       WriteIndent(Indent + 2);
-      WriteValue(cd, Indent + 2);
+      WriteVarData(PVarData(cd), Indent + 2);
     end
     else
     begin
       fOut.Add(' ');
-      WriteValue(pointer(v), Indent + 2);
+      WriteVarData(PVarData(v), Indent + 2);
     end;
     inc(i);
     if i = dv.Count then
@@ -2898,7 +2898,7 @@ begin
       end;
     end
     else
-      WriteValue(pointer(v), Indent + 2);
+      WriteVarData(PVarData(v), Indent + 2);
     inc(i);
     if i = dv.Count then
       break;
@@ -2908,15 +2908,15 @@ begin
   until false;
 end;
 
-procedure TVariantToYaml.WriteValue(vd: PDocVariantData; Indent: PtrInt);
+procedure TVariantToYaml.WriteVarData(vd: PVarData; Indent: PtrInt);
 var
   vt: cardinal;
 begin
   repeat
-    vt := vd^.VarType;
+    vt := vd^.VType;
     if vt <> varVariantByRef then
       break;
-    vd := PVarData(vd)^.VPointer;
+    vd := vd^.VPointer;
   until false;
   if (vt <= varOleUInt) and
      (vt <> varOleStr) then
@@ -2925,13 +2925,13 @@ begin
     fOut.AddVariant(PVariant(vd)^, twNone)
   else if vt = varString then
     // in a TDocVariant, varString are usually normalized as RawUtf8
-    WriteYamlString(fOut, RawUtf8(PVarData(vd)^.VAny))
+    WriteYamlString(fOut, vd^.VAny, length(RawUtf8(vd^.VAny)))
   else if vt = DocVariantVType then
     // nested object or array
-    if vd^.IsObject then
-      WriteBlockMap(vd^, Indent)
-    else if vd^.IsArray then
-      WriteBlockSeq(vd^, Indent)
+    if PDocVariantData(vd)^.IsObject then
+      WriteBlockMap(PDocVariantData(vd)^, Indent)
+    else if PDocVariantData(vd)^.IsArray then
+      WriteBlockSeq(PDocVariantData(vd)^, Indent)
     else
       fOut.AddNull
   else
@@ -2941,7 +2941,7 @@ end;
 
 function TVariantToYaml.Run(const Doc: variant): RawUtf8;
 begin
-  WriteValue(@Doc, {indent=}0);
+  WriteVarData(@Doc, {indent=}0);
   fOut.AddDirect(#10);
   fOut.SetText(result);
 end;
@@ -2965,32 +2965,29 @@ begin
   FileFromString(VariantToYaml(Doc, Options), FileName);
 end;
 
-procedure WriteYamlString(W: TJsonWriter; const S: RawUtf8);
-var
-  p: PUtf8Char;
+procedure WriteYamlString(W: TJsonWriter; P: PUtf8Char; L: PtrInt);
 begin
-  p := pointer(S);
-  if p = nil then
+  if L <= 0 then
     W.AddShort4(ord('"') + ord('"') shl 8, 2)
   else if
       // leading chars that need quoting
-      (p^ in [' ', #9, '!', '&', '*', '>', '|', '%', '@', '`', '"', '''',
+      (P^ in [' ', #9, '!', '&', '*', '>', '|', '%', '@', '`', '"', '''',
               '#', '-', '?', ':', '{', '[', '}', ']', ',']) or
       // trailing whitespace triggers quotes
-      (p[length(S) - 1] in [' ', #9]) or
+      (P[L - 1] in [' ', #9]) or
       // reserved plain-scalar forms: null, bool, numbers - must be quoted
       // to preserve string type on round-trip
-      IsYamlNull(p) or
-      IsBooleanJson(p) or
-      IsNumberJson(p) or
+      IsYamlNull(P) or
+      IsBooleanJson(P) or
+      IsNumberJson(P) or
       // quick scan for chars that require escape
-      YamlSpecialChars(p) then
+      YamlSpecialChars(P) then
     // emit as JSON-escaped double-quoted string - valid YAML 1.2 §5.7
     // since the JSON escape set is a subset of YAML's flow-scalar escapes
-    W.AddJsonString(S)
+    W.AddJsonStringBuffer(P, L)
   else
     // we can directly output this text without quotes
-    W.AddString(S);
+    W.AddNoJsonEscape(P, L);
 end;
 
 procedure WriteYamlVariant(W: TJsonWriter; const V: variant);
