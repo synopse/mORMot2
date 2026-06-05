@@ -1704,7 +1704,8 @@ var
 /// wrap ToDouble(Text, V) and _Iso8601ToDateTime(Text)
 function AnyTextToDouble(const Text: RawUtf8; out V: double): boolean;
 
-/// wrap VariantToDouble(Value, V) and _Iso8601ToDateTime(VariantToText(Value))
+/// wrap VariantToDouble(Value, V) and AnyTextToDouble(VariantToText(Value))
+// - V=null or any not number-shaped value will return false
 function AnyVariantToDouble(const Value: Variant; out V: double): boolean;
 
 /// fill a text buffer from a 18-bit integer value (0..262143) as 3 chars
@@ -6592,13 +6593,12 @@ function Curr64ToPChar(const Value: Int64; Dest: PUtf8Char): PtrInt;
 var
   tmp: array[0..31] of AnsiChar;
   P: PAnsiChar;
-  decim: cardinal;
+  decim: cardinal; // = 4 last digits to check if 0/2 decimals
 begin
   P := StrCurr64(@tmp[31], Value);
   result := @tmp[31] - P;
   if result > 4 then
   begin
-    // decim = 4 last digits = 4 decimals
     decim := PCardinal(P + result - SizeOf(cardinal))^;
     if decim = $30303030 then // no decimal -> trunc trailing *.0000 chars
       dec(result, 5)
@@ -8459,23 +8459,18 @@ function AnyVariantToDouble(const Value: Variant; out V: double): boolean;
 var
   u: pointer;
 begin
+  result := false;
+  if VarIsEmptyOrNull(Value) then // null means no value, so not a valid double
+    exit;
   u := nil;
   result := VariantToDouble(Value, V);
-  if not result then
-    if Assigned(_Iso8601ToDateTime) and // may be a TDateTime
-       VarIsString(Value) and
-       VariantToText(Value, RawUtf8(u)) then
-    begin
-      V := 0;
-      if u <> nil then
-      begin
-        V := _Iso8601ToDateTime(RawUtf8(u));
-        FastAssignNew(u);
-        if V = 0 then
-          exit; // not a date
-      end;
-      result := true;
-    end;
+  if result or
+     not VarIsString(Value) or
+     not VariantToText(Value, RawUtf8(u)) then
+    exit;
+  result := AnyTextToDouble(RawUtf8(u), V); // TDateTime or float text
+  if u <> nil then
+    FastAssignNew(u);
 end;
 
 function Int18ToChars3(Value: cardinal): RawUtf8;
