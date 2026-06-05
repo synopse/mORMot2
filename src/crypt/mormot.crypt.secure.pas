@@ -5294,7 +5294,7 @@ var
   salted, client, stored, server: THash512Rec;
 begin
   // decode input parameters
-  FastAssignNew(result);
+  result := ''; // FastAssignNew() makes false positive on Delphi 2007
   fServerProof := '';
   if (fAuthMessage = '') or
      (fClientNonce = '') then

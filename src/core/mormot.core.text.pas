@@ -8778,11 +8778,13 @@ begin
   result := true;
 end;
 
+{$ifdef HASVARUSTRING}
 function UStrToTempUtf8(ustr: pointer; var Res: TTempUtf8; NoTemp: boolean): boolean;
 begin
   WideToTempUtf8(ustr, length(UnicodeString(ustr)), Res, NoTemp);
   result := true;
 end;
+{$endif HASVARUSTRING}
 
 procedure DoubleToTempUtf8(V: double; var Res: TTempUtf8);
 var
