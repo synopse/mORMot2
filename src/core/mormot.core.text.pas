@@ -1692,7 +1692,7 @@ var
   // - is implemented by DateTimeToIso8601TextVar from mormot.core.datetime.pas:
   // if this unit is not included in the project, an ESynException is raised
   // - used by VariantToUtf8() for TDateTime conversion
-  _VariantToUtf8DateTimeToIso8601: procedure(DT: TDateTime; FirstChar: AnsiChar;
+  _VariantToUtf8DateTimeIso8601: procedure(DT: TDateTime; FirstChar: AnsiChar;
     var result: RawUtf8; WithMS: boolean);
 
   /// Date/Time conversion from ISO-8601 text
@@ -8284,7 +8284,7 @@ begin
       Curr64ToStr(TVarData(V).VInt64, result);
     varDate:
       begin
-        _VariantToUtf8DateTimeToIso8601(
+        _VariantToUtf8DateTimeIso8601(
           TVarData(V).VDate, 'T', result, {withms=}false);
         wasString := true;
       end;
@@ -8421,7 +8421,7 @@ begin
     ' please include mormot.core.variants to your uses clause');
 end;
 
-procedure __VariantToUtf8DateTimeToIso8601(DT: TDateTime; FirstChar: AnsiChar;
+procedure __VariantToUtf8DateTimeIso8601(DT: TDateTime; FirstChar: AnsiChar;
   var result: RawUtf8; WithMS: boolean);
 begin
   ESynException.RaiseU('VariantToUtf8(varDate) unsupported:' +
@@ -8865,7 +8865,7 @@ begin
     varDate:
       begin
         wasString := true;
-        _VariantToUtf8DateTimeToIso8601(TVarData(V).VDate, 'T', RawUtf8(Res.TempRawUtf8), false);
+        _VariantToUtf8DateTimeIso8601(TVarData(V).VDate, 'T', RawUtf8(Res.TempRawUtf8), false);
         Res.Text := pointer(Res.TempRawUtf8);
         Res.Len := length(RawUtf8(Res.TempRawUtf8));
       end;
@@ -11479,7 +11479,7 @@ begin
   ShortToUuid := _ShortToUuid;
   AppendShortUuid := _AppendShortUuid;
   _AddHtmlEscape := __AddHtmlEscape;
-  _VariantToUtf8DateTimeToIso8601 := __VariantToUtf8DateTimeToIso8601;
+  _VariantToUtf8DateTimeIso8601 := __VariantToUtf8DateTimeIso8601;
   _VariantSaveJson := __VariantSaveJson;
 end;
 
