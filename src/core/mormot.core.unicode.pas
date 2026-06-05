@@ -4628,7 +4628,7 @@ constructor TSynAnsiFixedWidth.Create(aCodePage: cardinal);
 var
   len: PtrInt;
 begin
-  inherited;
+  inherited Create(aCodePage);
   if not IsFixedWidthCodePage(aCodePage) then
     // warning: CreateUtf8() uses Utf8ToString() -> call CreateFmt() here
     ESynUnicode.RaiseFmt(self, 'Create - Invalid code page %d', [fCodePage]);
@@ -4650,9 +4650,9 @@ begin
     // initialize table from Operating System Unicode_AnsiToWide() values
     FillIncreasingB(pointer(fWideToAnsi), 0, 255);
     FillcharFast(fAnsiToWide^, SizeOf(fAnsiToWide^), 0);
-    len := PtrUInt(inherited AnsiBufferToUnicode(
-      pointer(fAnsiToWide), pointer(fWideToAnsi), 256)) - PtrUInt(fAnsiToWide);
-    if (len < 500) or
+    len := PtrUInt(inherited AnsiBufferToUnicode(pointer(fAnsiToWide),
+      pointer(fWideToAnsi), 256, {nozero=}true)) - PtrUInt(fAnsiToWide);
+    if (len < 500) or // as bytes
        (len > 512) then
       // warning: CreateUtf8() uses Utf8ToString() -> call CreateFmt() now
       ESynUnicode.RaiseFmt(self, 'Create(%d): OS error [%d]', [aCodePage, len]);
