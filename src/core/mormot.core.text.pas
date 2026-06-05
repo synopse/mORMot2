@@ -1708,6 +1708,17 @@ function AnyTextToDouble(const Text: RawUtf8; out V: double): boolean;
 // - V=null or any not number-shaped value will return false
 function AnyVariantToDouble(const Value: Variant; out V: double): boolean;
 
+/// convert any numerical or text Variant into a 64-bit integer
+// - call first VariantToInt64() then GetInt64Bool() via VariantToTempUtf8()
+// - V=null or any not integer-shaped value will return false
+function AnyVariantToInteger(const Value: Variant; out V: Int64): boolean;
+
+/// convert any numerical or text Variant into a 64-bit integer or a given default
+// - call first VariantToInt64() then GetInt64Bool() via VariantToTempUtf8()
+// - V=null or any not integer-shaped value will return the supplied Default
+function AnyVariantToIntegerDef(const V: Variant; Default: Int64 = 0): Int64;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// fill a text buffer from a 18-bit integer value (0..262143) as 3 chars
 // - this encoding is faster than Base64, and has spaces on the left side
 // - use function Chars3ToInt18() to decode the textual content
@@ -8473,6 +8484,33 @@ begin
     FastAssignNew(u);
 end;
 
+function AnyVariantToInteger(const Value: Variant; out V: Int64): boolean;
+var
+  tmp: TTempUtf8;
+  d: double;
+begin
+  result := false;
+  if VarIsEmptyOrNull(Value) then // null means no value, so not a valid integer
+    exit;
+  result := true;
+  if VariantToInt64(Value, V) then
+    exit; // direct conversion from an integer value
+  if VariantToDouble(Value, d) then
+  begin
+    V := trunc(d); // better truncate than convert to TTempUtf8
+    result := true;
+    exit;
+  end;
+  VariantToTempUtf8(Value, tmp, [vfNoAlloc, vfNullAsVoid]);
+  result := GetInt64Bool(tmp.Text, V); // try from text e.g. '123'
+end;
+
+function AnyVariantToIntegerDef(const V: Variant; Default: Int64): Int64;
+begin
+  if not AnyVariantToInteger(V, result) then
+    result := Default;
+end;
+
 function Int18ToChars3(Value: cardinal): RawUtf8;
 begin
   Int18ToText(Value, FastSetString(result, 3));
@@ -8921,24 +8959,6 @@ n:    if vfNullAsVoid in Flags then
       Res.Len := length(RawUtf8(Res.TempRawUtf8));
     end;
  end;
-end;
-
-function AnyVariantToInteger(const V: Variant; Default: Int64): Int64;
-var
-  tmp: TTempUtf8; // small text won't allocate any memory
-  wasString: boolean;
-begin
-  if VarIsEmptyOrNull(V) then
-  begin
-    result := Default; // 0 may not be wanted - rather return Default
-    exit;
-  end;
-  if VariantToInt64(V, result) then
-    exit; // direct conversion from a numerical value
-  VariantToTempUtf8(V, tmp, wasString);
-  if not GetInt64Bool(tmp.Text, result) then // try from text e.g. '123'
-    result := Default;
-  TempUtf8Done(tmp);
 end;
 
 function VarRecToTempUtf8(V: PVarRec; var Res: TTempUtf8; wasString: PBoolean): boolean;
