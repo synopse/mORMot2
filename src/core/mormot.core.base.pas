@@ -509,6 +509,8 @@ type
   /// type of a lookup table used for fast two-digit chars conversion
   TByteToWord = array[byte] of word;
   PByteToWord = ^TByteToWord;
+  TWordToByte = array[word] of byte;
+  PWordToByte = ^TWordToByte;
   PInt64Rec = ^Int64Rec;
   PLongRec = ^LongRec;
   PPShortString = ^PShortString;

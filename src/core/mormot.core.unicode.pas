@@ -685,12 +685,14 @@ type
   // - NEVER call Create() constructor directly: use the Engine() factory instead
   TSynAnsiFixedWidth = class(TSynAnsiConvert)
   protected
-    fAnsiToWide: TWordDynArray;
-    fWideToAnsi: TByteDynArray;
+    fAnsiToWide: PByteToWord;
+    fWideToAnsi: PWordToByte;
   public
     /// initialize the internal conversion engine
     // - NEVER call this constructor directly: use the Engine() factory instead
     constructor Create(aCodePage: cardinal); override;
+    /// finalize the internal lookup tables
+    destructor Destroy; override;
     /// direct conversion of a PAnsiChar buffer into an Unicode buffer
     // - Dest^ buffer must be reserved with at least SourceChars*2 bytes
     // - will append a #0 terminator to the returned PWideChar, unless
@@ -743,12 +745,12 @@ type
     function IsValidAnsiU8Bit(Utf8Text: PUtf8Char): boolean;
     /// direct access to the Ansi-To-Unicode lookup table
     // - use this array like AnsiToWide: array[byte] of word
-    property AnsiToWide: TWordDynArray
+    property AnsiToWide: PByteToWord
       read fAnsiToWide;
     /// direct access to the UTF-16 to Ansi lookup table
     // - use this array like WideToAnsi: array[word] of byte
     // - any unhandled WideChar will return ord('?')
-    property WideToAnsi: TByteDynArray
+    property WideToAnsi: PWordToByte
       read fWideToAnsi;
   end;
 
@@ -4065,8 +4067,7 @@ begin
   end;
   if SourceChars > 0 then
     // rely on the Operating System for all remaining ASCII characters
-    inc(Dest,
-      Unicode_AnsiToWide(Source, Dest, SourceChars, SourceChars + 8, fCodePage));
+    inc(Dest, Unicode_AnsiToWide(Source, Dest, SourceChars, SourceChars + 8, fCodePage));
   if not NoTrailingZero then
     Dest^ := #0;
   result := Dest;
@@ -4605,63 +4606,68 @@ const
   // so are available outside the Windows platforms (e.g. Linux/BSD) and even
   // if the system has been tweaked as such:
   // http://www.fas.harvard.edu/~chgis/data/chgis/downloads/v4/howto/cyrillic.html
-  WinAnsiUnicodeChars: packed array[128..159] of word = (
+  CP1252W: packed array[128..159] of word = (
     8364, 129, 8218, 402, 8222, 8230, 8224, 8225, 710, 8240, 352, 8249, 338,
     141, 381, 143, 144, 8216, 8217, 8220, 8221, 8226, 8211, 8212, 732, 8482,
     353, 8250, 339, 157, 382, 376);
 
+procedure MakeLookupTable(w: PByteToWord; a: PWordToByte; min, max: PtrInt);
+var
+  i, c: PtrInt;
+begin
+  for i := min to max do
+  begin
+    c := w[i];
+    if c <> 0 then
+      a[c] := i;
+  end;
+end;
+
 constructor TSynAnsiFixedWidth.Create(aCodePage: cardinal);
 var
-  i, len, c: PtrInt;
-  w: PByteArray; // FPC arm32 prefers a local variable even at -O2 :(
-  a: array[0..255] of AnsiChar;
-  u: array[0..255] of WideChar;
+  len: PtrInt;
 begin
   inherited;
   if not IsFixedWidthCodePage(aCodePage) then
     // warning: CreateUtf8() uses Utf8ToString() -> call CreateFmt() here
     ESynUnicode.RaiseFmt(self, 'Create - Invalid code page %d', [fCodePage]);
   // create internal look-up tables
-  SetLength(fAnsiToWide, 256);
+  GetMem(fAnsiToWide, SizeOf(fAnsiToWide^));
+  GetMem(fWideToAnsi, SizeOf(fWideToAnsi^));
   if (aCodePage = CP_WINANSI) or
      (aCodePage = CP_LATIN1) or
      (aCodePage >= CP_RAWBLOB) then
   begin
     // Win1252 has its own table, LATIN1 and RawByteString map 8-bit Unicode
-    for i := 0 to 255 do
-      fAnsiToWide[i] := i;
+    FillIncreasingW(pointer(fAnsiToWide), 0, 255);
     if aCodePage = CP_WINANSI then
       // do not trust the Windows API for the 1252 code page :(
-      for i := low(WinAnsiUnicodeChars) to high(WinAnsiUnicodeChars) do
-        fAnsiToWide[i] := WinAnsiUnicodeChars[i];
+      MoveFast(CP1252W, fAnsiToWide[low(CP1252W)], SizeOf(CP1252W));
   end
   else
   begin
-    // initialize table from Operating System returned values
-    for i := 0 to 255 do
-      a[i] := AnsiChar(i);
-    FillcharFast(u, SizeOf(u), 0);
-    // call mormot.core.os cross-platform Unicode_AnsiToWide()
-    len := PtrUInt(inherited AnsiBufferToUnicode(u, a, 256)) - PtrUInt(@u);
+    // initialize table from Operating System Unicode_AnsiToWide() values
+    FillIncreasingB(pointer(fWideToAnsi), 0, 255);
+    FillcharFast(fAnsiToWide^, SizeOf(fAnsiToWide^), 0);
+    len := PtrUInt(inherited AnsiBufferToUnicode(
+      pointer(fAnsiToWide), pointer(fWideToAnsi), 256)) - PtrUInt(fAnsiToWide);
     if (len < 500) or
        (len > 512) then
       // warning: CreateUtf8() uses Utf8ToString() -> call CreateFmt() now
       ESynUnicode.RaiseFmt(self, 'Create(%d): OS error [%d]', [aCodePage, len]);
-    MoveFast(u[0], fAnsiToWide[0], 512);
   end;
-  SetLength(fWideToAnsi, 65536);
-  w := pointer(fWideToAnsi);
-  for i := 1 to 126 do
-    w[i] := i;
-  FillcharFast(w^[127], 65536 - 127, ord('?')); // '?' for unknown char
-  for i := 127 to 255 do
-  begin
-    c := fAnsiToWide[i];
-    if c <> 0 then
-      w[c] := i;
-  end;
+  FillIncreasingB(pointer(fWideToAnsi), 0, 126);
+  FillcharFast(fWideToAnsi[127], 65536 - 127, ord('?')); // '?' for unknown char
+  MakeLookupTable(fAnsiToWide, fWideToAnsi, 127, 255);
   // fixed width Ansi will never be bigger than UTF-8
   fAnsiCharShift := 0;
+end;
+
+destructor TSynAnsiFixedWidth.Destroy;
+begin
+  FreeMem(fAnsiToWide);
+  FreeMem(fWideToAnsi);
+  inherited Destroy;
 end;
 
 function TSynAnsiFixedWidth.IsValidAnsi(WideText: PWideChar; Length: PtrInt): boolean;
