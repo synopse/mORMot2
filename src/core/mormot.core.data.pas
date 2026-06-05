@@ -9183,7 +9183,7 @@ procedure TDynArrayHasher.HashDelete(aArrayIndex, aHashTableIndex: PtrInt;
 var
   first, next, last, n, s, ndx, i: PtrInt;
   P: PAnsiChar;
-  indexes: array[0..511] of integer; // to be rehashed  (seen always < 32)
+  indexes: array[0..511] of integer; // to be rehashed (seen always < 32)
 begin
   // retrieve hash table entries to be recomputed
   first := aHashTableIndex;
@@ -9233,12 +9233,13 @@ begin
     end;
   end;
   // adjust all stored indexes (using SSE2/AVX2 on x86_64)
-  {$ifdef DYNARRAYHASH_16BIT}
-  if hash16bit in fState then
-    DynArrayHashTableAdjust16(pointer(fHashTableStore), aArrayIndex, fHashTableSize)
-  else
-  {$endif DYNARRAYHASH_16BIT}
-    DynArrayHashTableAdjust(pointer(fHashTableStore), aArrayIndex, fHashTableSize);
+  if fDynArray^.GetCount > 1 then // Count not yet decremented
+    {$ifdef DYNARRAYHASH_16BIT}
+    if hash16bit in fState then
+      DynArrayHashTableAdjust16(pointer(fHashTableStore), aArrayIndex, fHashTableSize)
+    else
+    {$endif DYNARRAYHASH_16BIT}
+      DynArrayHashTableAdjust(pointer(fHashTableStore), aArrayIndex, fHashTableSize);
 end;
 
 function TDynArrayHasher.FindBeforeAdd(Item: pointer; out wasAdded: boolean;
