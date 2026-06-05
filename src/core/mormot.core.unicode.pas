@@ -2177,8 +2177,8 @@ function HasAnyChar(const text: RawUtf8; const chars: TSynAnsicharSet): boolean;
 function HasOnlyChar(const text: RawUtf8; const chars: TSynAnsicharSet): boolean;
 
 /// returns the supplied text content, without any control char
-// - here control chars have an ASCII code in [#0 .. ' '], i.e. text[] <= ' '
-function TrimControlChars(const text: RawUtf8): RawUtf8;
+// - here control chars have an ASCII code in [#0 .. ' '], i.e. text[] <= last
+function TrimControlChars(const text: RawUtf8; last: AnsiChar = ' '): RawUtf8;
 
 /// split a RawUtf8 string into two strings, according to SepStr separator
 // - returns true and LeftStr/RightStr if they were separated by SepStr
@@ -8849,21 +8849,21 @@ begin
   result := true;
 end;
 
-function TrimControlChars(const text: RawUtf8): RawUtf8;
+function TrimControlChars(const text: RawUtf8; last: AnsiChar): RawUtf8;
 var
   len, i, j, n: PtrInt;
   p: PAnsiChar;
 begin
   len := length(text);
   for i := 1 to len do
-    if text[i] <= ' ' then
+    if text[i] <= last then
     begin
       n := i - 1;
       p := FastSetString(result, len);
       if n > 0 then
         MoveFast(pointer(text)^, p^, n);
       for j := i + 1 to len do
-        if text[j] > ' ' then
+        if text[j] > last then
         begin
           p[n] := text[j];
           inc(n);
