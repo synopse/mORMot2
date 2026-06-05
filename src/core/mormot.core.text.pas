@@ -4181,7 +4181,7 @@ end;
 destructor TTextWriter.Destroy;
 begin
   if twfDestIsRawUtf8 in fFlags then // fDest is a RawUtf8 not a TStream
-    FastAssignNew(fDest)
+    FastAssignNew(RawUtf8(fDest))
   else if twfDestIsOwnedStream in fFlags then
     FreeAndNil(fDest);
   if not (twfBufferIsOnStack in fFlags) then
@@ -4678,7 +4678,7 @@ begin
     begin
       fWrittenBytes := 0;
       if fDest <> nil then
-        FastAssignNew(fDest); // seldom called (SetText did reset to nil='')
+        FastAssignNew(RawUtf8(fDest)); // seldom called (SetText did reset to nil='')
     end
     else if not (twfDestIsShortString in fFlags) then
       fWrittenBytes := TStream(fDest).Seek(fInitialStreamPosition, soBeginning);
