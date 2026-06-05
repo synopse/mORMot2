@@ -7347,18 +7347,14 @@ begin
 end;
 
 procedure TOrmPropInfoList.AfterAdd;
-var
-  i: PtrInt;
 begin
   SetLength(fList, fCount);
-  if fCount = 0 then
-    fLast := nil
-  else
+  fLast := nil;
+  if fCount <> 0 then
     fLast := fList[fCount - 1];
   // initialize once the ordered lookup indexes, for binary search
   SetLength(fOrderedByName, fCount);
-  for i := 0 to fCount - 1 do
-    fOrderedByName[i] := i;
+  FillIncreasingB(pointer(fOrderedByName), 0, fCount - 1);
   QuickSortByName(0, fCount - 1);
 end;
 
