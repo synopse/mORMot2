@@ -1205,7 +1205,7 @@ begin
   if x.FromAsn(Der) then
     result := x.AsDNText
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 procedure AddOther(var others: TXOthers; const o, v: RawByteString);
@@ -1228,7 +1228,7 @@ end;
 
 function FindOtherAsn(o: PXOther; n: integer; const OidBinary: TAsnObject): RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if (o <> nil) and
      (n > 0) and
      (OidBinary <> '') then
@@ -1421,7 +1421,7 @@ function XkuToOids(usages: TXExtendedKeyUsages): RawByteString;
 var
   xku: TXExtendedKeyUsage;
 begin
-  result := '';
+  FastAssignNew(result);
   for xku := succ(low(xku)) to high(xku) do
     if xku in usages then
       Append(result, AsnObjId(XKU_OID_ASN[xku]));
@@ -1626,7 +1626,7 @@ var
   h: THashAlgo;
 begin
   if Rdn = '' then
-    result := ''
+    FastAssignNew(result)
   else if TextToXa(Rdn, xa) then
     result := Name[xa]
   else if IsDer(Rdn) then
@@ -1658,7 +1658,7 @@ var
   o: TAsnObject;
   xa: TXAttr;
 begin
-  result := '';
+  FastAssignNew(result);
   o := AsnEncOid(pointer(Oid));
   if o = '' then
     exit;
@@ -1705,7 +1705,7 @@ end;
 
 function CsvToDns(p: PUtf8Char): RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   while p <> nil do
     Append(result, AsnTyped(TrimU(GetNextItem(p)), ASN1_CTX2));
 end;
@@ -1745,7 +1745,7 @@ function CertInfoCompute(usages: TCryptCertUsages; const ext: TXExtensions;
 var
   r: TCryptCertUsage;
 begin
-  result := '';
+  FastAssignNew(result);
   // high-level usages values are converted into usages and xku
   xku := [];
   for r := low(KU) to high(KU) do
@@ -2239,7 +2239,7 @@ end;
 function TX509.GetIssuerDN: RawUtf8;
 begin
   if self = nil then
-    result := ''
+    FastAssignNew(result)
   else
     result := Signed.Issuer.AsDNText;
 end;
@@ -2247,7 +2247,7 @@ end;
 function TX509.GetSubjectDN: RawUtf8;
 begin
   if self = nil then
-    result := ''
+    FastAssignNew(result)
   else
     result := Signed.Subject.AsDNText;
 end;
@@ -2395,7 +2395,7 @@ end;
 function TX509.FingerPrint(algo: THashAlgo): RawUtf8;
 begin
   if self = nil then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     result := fCachedHash[algo];
@@ -2541,7 +2541,7 @@ end;
 function TX509.PeerInfo: RawUtf8;
 begin
   if self = nil then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     if fCachedPeerInfo = '' then
@@ -2809,7 +2809,7 @@ end;
 function TX509Crl.GetIssuerDN: RawUtf8;
 begin
   if self = nil then
-    result := ''
+    FastAssignNew(result)
   else
     result := Signed.Issuer.AsDNText;
 end;
@@ -3294,7 +3294,7 @@ var
   xu: TXKeyUsages;
   xku: TXExtendedKeyUsages;
 begin
-  result := '';
+  FastAssignNew(result);
   if PrivateKey = nil then
     exit;
   // create a new key pair if not supplied
@@ -3431,7 +3431,7 @@ begin
   if fX509 <> nil then
     result := fX509.Signed.SerialNumberHex
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TCryptCertX509Abstract.GetSubjectName: RawUtf8;
@@ -3441,7 +3441,7 @@ end;
 
 function TCryptCertX509Abstract.GetSubject(const Rdn: RawUtf8): RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if (Rdn = '') or
      (fX509 = nil) then
     exit;
@@ -3466,7 +3466,7 @@ function TCryptCertX509Abstract.GetIssuer(const Rdn: RawUtf8): RawUtf8;
 begin
   if (Rdn = '') or
      (fX509 = nil) then
-    result := ''
+    FastAssignNew(result)
   else
     result := fX509.Signed.Issuer.Get(Rdn); // RDN or hash or OID
 end;
@@ -3479,7 +3479,7 @@ end;
 function TCryptCertX509Abstract.GetSubjectKey: RawUtf8;
 begin
   if fX509 = nil then
-    result := ''
+    FastAssignNew(result)
   else
     result := fX509.Signed.Extension[xeSubjectKeyIdentifier];
 end;
@@ -3487,7 +3487,7 @@ end;
 function TCryptCertX509Abstract.GetAuthorityKey: RawUtf8;
 begin
   if fX509 = nil then
-    result := ''
+    FastAssignNew(result)
   else
     result := fX509.Signed.Extension[xeAuthorityKeyIdentifier];
 end;
@@ -3571,7 +3571,7 @@ var
 begin
   bits := fX509.SignatureSecurityBits;
   if bits = 0 then
-    result := ''
+    FastAssignNew(result)
   else
     FormatUtf8('% %', [bits, XSA_TXT[fX509.SignatureAlgorithm]], result);
 end;
@@ -3584,7 +3584,7 @@ end;
 function TCryptCertX509Abstract.GetPublicKey: RawByteString;
 begin
   if fX509 = nil then
-    result := ''
+    FastAssignNew(result)
   else
     result := fX509.Signed.SubjectPublicKey;
 end;
@@ -3597,7 +3597,7 @@ end;
 function TCryptCertX509Abstract.GetPrivateKey: RawByteString;
 begin
   if fPrivateKey = nil then
-    result := ''
+    FastAssignNew(result)
   else
     result := fPrivateKey.ToDer;
 end;
@@ -3640,7 +3640,7 @@ begin
      (fX509.Usages * [cuDataEncipherment, cuEncipherOnly] <> []) then
     result := fX509.PublicKey.Seal(Message, Cipher)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TCryptCertX509Abstract.Decrypt(const Message: RawByteString;
@@ -3651,7 +3651,7 @@ begin
      (fX509.Usages * [cuDataEncipherment, cuEncipherOnly] <> []) then
     result := fPrivateKey.Open(Message, Cipher)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TCryptCertX509Abstract.SharedSecret(const pub: ICryptCert): RawByteString;
@@ -3665,7 +3665,7 @@ begin
      (cuKeyAgreement in TX509(pub.Handle).Usages) then
     result := fPrivateKey.SharedSecret(TX509(pub.Handle).PublicKey)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TCryptCertX509Abstract.PrivateKeyHandle: pointer;
@@ -3940,7 +3940,7 @@ function TCryptCertX509.Save(Content: TCryptCertContent;
 var
   pem: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if not (Format in [ccfBinary, ccfPem]) then
     // hexa or base64 encoding of the binary output is handled by TCryptCert
     result := inherited Save(Content, PrivatePassword, Format)
@@ -3998,7 +3998,7 @@ begin
      (Usage in fX509.Usages) then
     result := fPrivateKey.Sign(XSA_TO_CAA[AlgoXsa], Data, Len)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 procedure TCryptCertX509.Sign(const Authority: ICryptCert);

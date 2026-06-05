@@ -817,7 +817,7 @@ var
   txtlen, beg, dotcount: PtrInt;
   tc: PTextCharSet;
 begin
-  result := ''; // no JWT found
+  FastAssignNew(result); // no JWT found
   txtlen := length(aText);
   while (txtlen > 10) and
         (aText[txtlen] <= ' ') do // trim right
@@ -916,7 +916,7 @@ function TJwtAbstract.Compute(const DataNameValue: array of const;
 var
   payload, headpayload, sig: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if self = nil then
     exit;
   payload := PayloadToJson(DataNameValue, Issuer, Subject, Audience,
@@ -936,7 +936,7 @@ function TJwtAbstract.ComputeAuthorizationHeader(
   NotBefore: TDateTime; ExpirationMinutes: integer): RawUtf8;
 begin
   if self = nil then
-    result := ''
+    FastAssignNew(result)
   else
     result := 'Bearer ' + Compute(DataNameValue, Issuer, Subject, Audience,
       NotBefore, ExpirationMinutes);
@@ -955,7 +955,7 @@ function TJwtAbstract.PayloadToJson(const DataNameValue: array of const;
 var
   payload: TDocVariantData;
 begin
-  result := '';
+  FastAssignNew(result);
   payload.InitObject(DataNameValue, JSON_FAST);
   if jrcIssuer in fClaims then
     if Issuer = '' then
@@ -1067,7 +1067,7 @@ end;
 
 function TJwtAbstract.ComputeSignature(const headpayload: RawUtf8): RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
 end;
 
 function TJwtAbstract.CheckAgainstActualTimestamp(var Jwt: TJwtContent): boolean;
@@ -1297,7 +1297,7 @@ var
   V: TValuePUtf8Char; // only JWT_HEAD[0] = 'alg'
   temp: TSynTempBuffer;
 begin
-  result := '';
+  FastAssignNew(result);
   P := PosCharU(Token, '.');
   if (P = nil) or
      (PosChar(P + 1, '.') = nil) then

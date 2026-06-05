@@ -445,7 +445,7 @@ var
   log: ISynLog; // seldom called, and better be traced (and profiled)
 begin
   fCert.Log.EnterLocal(log, 'SignDigest % %', [ToText(DigAlgo)^, fCert], self);
-  result := '';
+  FastAssignNew(result);
   hf := CAA_HF[DigAlgo];
   if HASH_SIZE[hf] <> DigLen then
     exit; // paranoid
@@ -472,12 +472,12 @@ end;
 
 function TCryptPrivateKeyPkcs11.Generate(Algorithm: TCryptAsymAlgo): RawByteString;
 begin
-  result := ''; // to be implemented later on
+  FastAssignNew(result); // to be implemented later on
 end;
 
 function TCryptPrivateKeyPkcs11.ToDer: RawByteString;
 begin
-  result := ''; // unsupported by definition (key stays in the device)
+  FastAssignNew(result); // unsupported by definition (key stays in the device)
 end;
 
 function TCryptPrivateKeyPkcs11.ToSubjectPublicKey: RawByteString;
@@ -488,13 +488,13 @@ end;
 function TCryptPrivateKeyPkcs11.Open(const Message: RawByteString;
   const Cipher: RawUtf8): RawByteString;
 begin
-  result := ''; // to be implemented later on
+  FastAssignNew(result); // to be implemented later on
 end;
 
 function TCryptPrivateKeyPkcs11.SharedSecret(
   const PeerKey: ICryptPublicKey): RawByteString;
 begin
-  result := ''; // to be implemented later on?
+  FastAssignNew(result); // to be implemented later on?
 end;
 
 
@@ -753,7 +753,7 @@ function TCryptCertAlgoPkcs11.CreateSelfSignedCsr(const Subjects: RawUtf8;
   const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
   Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8;
 begin
-  result := ''; // unsupported
+  FastAssignNew(result); // unsupported
 end;
 
 
@@ -947,7 +947,7 @@ end;
 function TCryptCertPkcs11.Save(Content: TCryptCertContent;
   const PrivatePassword: SpiUtf8; Format: TCryptCertFormat): RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if not (Format in [ccfBinary, ccfPem]) then
     // hexa or base64 encoding of the binary output is handled by TCryptCert
     result := inherited Save(Content, PrivatePassword, Format)
@@ -979,7 +979,7 @@ begin
      (Usage in fX509.Usages) then
     result := fPrivateKey.Sign(fCaa, Data, Len)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 procedure TCryptCertPkcs11.Sign(const Authority: ICryptCert);

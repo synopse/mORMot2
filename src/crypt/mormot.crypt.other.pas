@@ -1760,7 +1760,7 @@ var
   d, piv: PQWord;
   tmpiv: QWord;
 begin
-  result := '';
+  FastAssignNew(result);
   len := length(Input);
   if len = 0 then
     exit;
@@ -1785,7 +1785,7 @@ var
   s, piv: PQWord;
   tmpiv: QWord;
 begin
-  result := '';
+  FastAssignNew(result);
   len := length(Input);
   if len = 0 then
     exit;
@@ -2781,7 +2781,7 @@ var
   XY, V: PByteArray; // allocate X[R*128] Y[R*128] and V[N*R*128]
   d: pointer;
 begin
-  result := '';
+  FastAssignNew(result);
   // validate parameters
   R128 := R * 128;
   if (DestLen < 16) or

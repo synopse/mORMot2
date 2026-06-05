@@ -1712,7 +1712,7 @@ end;
 function OpenSslSharedSecret(EvpType, BitsOrCurve: integer;
   const PublicKey, PrivateKey, PrivateKeyPassword: SpiUtf8): RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   EOpenSslAsymmetric.CheckAvailable(nil, 'OpenSslSharedSecret');
   //TODO: see https://wiki.openssl.org/index.php/Elliptic_Curve_Diffie_Hellman
 end;
@@ -2267,7 +2267,7 @@ begin
     else if fKeyAlgo = ckaEcc256 then
       result := EciesSeal(Cipher, GetEs256Public(fPubKey), Message)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 
@@ -2313,7 +2313,7 @@ function TCryptPrivateKeyOpenSsl.Save(AsPem: boolean;
 begin
   if (self = nil) or
      (fPrivKey = nil) then
-    result := ''
+    FastAssignNew(result)
   else if AsPem then
     result := fPrivKey.PrivateToPem(Password)
   else
@@ -2323,7 +2323,7 @@ end;
 function TCryptPrivateKeyOpenSsl.Generate(
   Algorithm: TCryptAsymAlgo): RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if (self = nil) or
      (fKeyAlgo <> ckaNone) or
      (fPrivKey <> nil) then
@@ -2345,7 +2345,7 @@ end;
 function TCryptPrivateKeyOpenSsl.Sign(Algorithm: TCryptAsymAlgo;
   Data: pointer; DataLen: integer): RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if (self <> nil) and
      (CAA_CKA[Algorithm] = fKeyAlgo) and
      (fPrivKey <> nil) then
@@ -2367,7 +2367,7 @@ function TCryptPrivateKeyOpenSsl.Open(const Message: RawByteString;
 var
   priv: TEccPrivateKey;
 begin
-  result := '';
+  FastAssignNew(result);
   if (self <> nil) and
      (fPrivKey <> nil) then
     case fKeyAlgo of
@@ -2390,7 +2390,7 @@ var
   priv: TEccPrivateKey;
   sec: TEccSecretKey;
 begin
-  result := '';
+  FastAssignNew(result);
   if (self <> nil) and
      Assigned(PeerKey) and
      (PClass(PeerKey.Instance)^ = TCryptPublicKeyOpenSsl) and
@@ -2561,7 +2561,7 @@ function SetupNameAndAltNames(name: PX509_NAME; Usages: TCryptCertUsages;
 var
   cn: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if Subjects <> nil then
     cn := Subjects[0] // first subject is the X.509 Common Name
   else if (Fields = nil) or
@@ -2786,7 +2786,7 @@ begin
   if (Rdn = '') or
      (fX509 = nil) then
   begin
-    result := '';
+    FastAssignNew(result);
     exit;
   end;
   result := fX509.GetSubject(Rdn); // RDN or hash
@@ -2872,7 +2872,7 @@ var
   der: RawByteString;
   pem: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if not (Format in [ccfBinary, ccfPem]) then
     // hexa or base64 encoding of the binary output is handled by TCryptCert
     result := inherited Save(Content, PrivatePassword, Format)
@@ -3002,7 +3002,7 @@ begin
   if HasPrivateSecret then
     result := fPrivKey.PrivateToDer({pwd=}'')
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TCryptCertOpenSsl.SetPrivateKey(const saved: RawByteString): boolean;
@@ -3030,7 +3030,7 @@ begin
       fX509.HasUsage(TX509Usage(Usage))) then
     result := fPrivKey.Sign(GetMD, Data, Len)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 procedure TCryptCertOpenSsl.Sign(const Authority: ICryptCert);
@@ -3135,7 +3135,7 @@ begin
     else if AsymAlgo = caaES256 then
       result := EciesSeal(Cipher, GetEs256Public(fX509.GetPublicKey), Message)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TCryptCertOpenSsl.Decrypt(const Message: RawByteString;
@@ -3143,7 +3143,7 @@ function TCryptCertOpenSsl.Decrypt(const Message: RawByteString;
 var
   priv: TEccPrivateKey;
 begin
-  result := '';
+  FastAssignNew(result);
   if (fPrivKey <> nil) and
      (Cipher <> '') and
      ((fX509 = nil) or
@@ -3165,7 +3165,7 @@ var
   priv: TEccPrivateKey;
   sec: TEccSecretKey;
 begin
-  result := '';
+  FastAssignNew(result);
   if (fPrivKey = nil) or
      not Assigned(pub) or
      (PClass(pub.Instance)^ <> TCryptCertOpenSsl) or

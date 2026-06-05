@@ -4179,7 +4179,7 @@ end;
 
 function TSynHasher.Full(aAlgo: THashAlgo; aBuffer: pointer; aLen: integer): RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if Init(aAlgo) then
   begin
     Update(aBuffer, aLen);
@@ -4224,7 +4224,7 @@ var
   dig: PHash512Rec;
   diglen, counter: cardinal;
 begin
-  result := '';
+  FastAssignNew(result);
   if (aSeed = nil) or
      (aSeedLen <= 0) or
      (aDestLen <= 0) then
@@ -4329,7 +4329,7 @@ var
   prep: PRawByteString;
   alt: THash512Rec;
 begin
-  result := '';
+  FastAssignNew(result);
   if aAlgo <> hfMD5 then // fixed to 1000 rounds (sooo weak!) for MD5-CRYPT
     if aRounds = 0 then
       aRounds := MCF_ROUNDS[mcfSha256Crypt] // same default for mcfSha512Crypt
@@ -4738,7 +4738,7 @@ var
 begin
   h := HashFileRaw(aFileName, [aAlgo]);
   if h = nil then
-    result := ''
+    FastAssignNew(result)
   else
     result := h[0];
 end;
@@ -4966,7 +4966,7 @@ var
         result := SCryptHash(password, salt, logN, R, P);
       end;
   else
-    result := '';
+    FastAssignNew(result);
   end;
 end;
 
@@ -5125,7 +5125,7 @@ function SCryptHash(const Password: RawUtf8; const Salt: RawUtf8; LogN: PtrUInt;
 var
   saltbin, saltb64, hash: RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if not Assigned(Api) then
     Api := @SCrypt; // from mormot.crypt.other or mormot.crypt.openssl
   if not Assigned(Api) or
@@ -5155,7 +5155,7 @@ var
   clientkey: THash256;
   stored: THash512Rec; // Lo=StoredKey, Hi=ServerKey
 begin
-  result := ''; // error
+  FastAssignNew(result); // error
   if (Hash = '') or
      (Hash[1] <> '$') or // should be a true KDF/MCF result
      not (ModularCryptIdentify(Hash, @result) in mcfValid) then
@@ -5185,7 +5185,7 @@ function ScramClientProof(const Hash, User: RawUtf8; var ClientSignature: THash2
 var
   clientkey, storedkey: THash256;
 begin
-  result := ''; // error
+  FastAssignNew(result); // error
   if (Hash = '') or
      (Hash[1] <> '$') or // should be a true KDF/MCF result
      not (ModularCryptIdentify(Hash) in mcfValid) then
@@ -5207,7 +5207,7 @@ var
   clientsig, clientkey: THash256;
   stored: THash512Rec; // Lo=StoredKey, Hi=ServerKey
 begin
-  result := ''; // error
+  FastAssignNew(result); // error
   if not Base64uriToBin(ClientProof, @clientkey, SizeOf(clientkey)) then
     exit;
   l := length(PersistedKey) - 86;
@@ -5294,7 +5294,7 @@ var
   salted, client, stored, server: THash512Rec;
 begin
   // decode input parameters
-  result := '';
+  FastAssignNew(result);
   fServerProof := '';
   if (fAuthMessage = '') or
      (fClientNonce = '') then
@@ -5599,7 +5599,7 @@ var
   p: PHash512Rec;
 begin
   // see https://www.rfc-editor.org/rfc/rfc2898#section-5.2
-  result := '';
+  FastAssignNew(result);
   if (aSecret = '') or
      (aSecretPbkdf2Round = 0) or
      (aSecretPbkdf2Round > 1 shl 20) or
@@ -5643,7 +5643,7 @@ var
   bin, b64: RawByteString;
   dig: THash512;
 begin
-  result := '';
+  FastAssignNew(result);
   if (aPassword = '') or
      not (aAlgo in [low(MCF_SIGN) .. high(MCF_SIGN)]) then
     exit;
@@ -5670,7 +5670,7 @@ var
   dig: PHash512Rec;
   diglen, counter: cardinal;
 begin
-  result := '';
+  FastAssignNew(result);
   if (aKey = '') or
      (aLabel = '') or
      (aDestLen = 0) then
@@ -6130,7 +6130,7 @@ var
   p: PUtf8Char;
   dp: TDigestProcess;
 begin
-  result := '';
+  FastAssignNew(result);
   dp.Algo := daMD5; // something is needed 
   p := pointer(FromServer);
   while p <> nil do
@@ -6145,7 +6145,7 @@ var
   p: PUtf8Char;
   dp: TDigestProcess;
 begin
-  result := '';
+  FastAssignNew(result);
   if Algo = daUndefined then
     exit;
   // parse server token
@@ -6185,7 +6185,7 @@ function BasicRealm(const FromServer: RawUtf8): RawUtf8;
 var
   p: PUtf8Char;
 begin
-  result := '';
+  FastAssignNew(result);
   p := pointer(FromServer);
   if IdemPChar(p, 'REALM="') then
     UnQuoteSqlStringVar(p + 6, result);
@@ -6197,7 +6197,7 @@ var
   h: THash128Rec;
   noncehex, opaquehex: TShort32;
 begin
-  result := '';
+  FastAssignNew(result);
   if (Algo = daUndefined) or
      (QuotedRealm = '') then
     exit; // missing some mandatory context
@@ -6763,7 +6763,7 @@ function TObjectWithPassword.GetPassWordPlain: SpiUtf8;
 begin
   if (self = nil) or
      (fPassWord = '') then
-    result := ''
+    FastAssignNew(result)
   else if fKey = OBJECTPASSWORD_PLAIN then
     result := fPassword
   else
@@ -7372,7 +7372,7 @@ var
   bits: TSynUniqueIdentifierObfuscatedBits absolute block; // 64+32 = 96-bit
   key: cardinal;
 begin
-  result := '';
+  FastAssignNew(result);
   if aIdentifier = 0 then
     exit;
   bits.id.Value := aIdentifier;
@@ -8803,7 +8803,7 @@ begin
   // use our proprietary mormot.core.secure encryption, not standard PKCS#8
   // - overriden in mormot.crypt.openssl to use PEVP_PKEY standard serialization
   if self = nil then
-    result := ''
+    FastAssignNew(result)
   else
   try
     // call overriden TCryptPrivateKeyEcc.ToDer and TCryptPrivateKeyRsa.ToDer
@@ -8850,7 +8850,7 @@ end;
 function TCryptPrivateKey.SignDigest(const Dig: THash512Rec; DigLen: integer;
   DigAlgo: TCryptAsymAlgo): RawByteString;
 begin
-  result := ''; // to be overriden if needed (not for OpenSSL)
+  FastAssignNew(result); // to be overriden if needed (not for OpenSSL)
 end;
 
 function TCryptPrivateKey.Load(Algorithm: TCryptKeyAlgo;
@@ -8914,7 +8914,7 @@ end;
 function TCryptPrivateKey.SharedSecret(
   const PeerKey: ICryptPublicKey): RawByteString;
 begin
-  result := ''; // unsupported by this algorithm (only ECC by now)
+  FastAssignNew(result); // unsupported by this algorithm (only ECC by now)
 end;
 
 
@@ -9212,7 +9212,7 @@ var
   headpayload: RawUtf8;
   sig: RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if not HasPrivateSecret then
     exit;
   // cut-down version of TJwtAbstract.PayloadToJson
@@ -9299,14 +9299,14 @@ var
   x, y: RawByteString;
 begin
   // retrieve raw public key parameters and export as JWT
-  result := '';
+  FastAssignNew(result);
   if GetKeyParams(x, y) then
     result := SaveAsJwk(AsymAlgo, x, y);
 end;
 
 function TCryptCert.SharedSecret(const pub: ICryptCert): RawByteString;
 begin
-  result := ''; // unsupported by default
+  FastAssignNew(result); // unsupported by default
 end;
 
 function TCryptCert.AsymAlgo: TCryptAsymAlgo;
@@ -9902,7 +9902,7 @@ function TCryptCertPerUsage.AsPem: RawUtf8;
 var
   i: PtrInt;
 begin
-  result := '';
+  FastAssignNew(result);
   for i := 0 to length(List) - 1 do
     result  := result + List[i].Save(cccCertOnly, '', ccfPem) + (CRLF + CRLF);
 end;
@@ -9993,7 +9993,7 @@ var
 begin
   if from_cu_text then
   begin
-    result := '';
+    result[0] := #0;
     for cu := low(cu) to high(cu) do
       if cu in u then
         AppendShortTwoChars(@CU_TEXT[cu], @result);
@@ -10032,7 +10032,7 @@ function SaveAsJwk(algo: TCryptAsymAlgo; const x, y: RawByteString): RawUtf8;
 var
   bx, by: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if (x = '') or
      (y = '') or
      (algo in [caaEdDSA]) then // EDSA not yet supported (single "x" parameter)
@@ -10365,7 +10365,7 @@ begin
     base64.Done;
   end
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function NextPem(var P: PUtf8Char; Kind: PPemKind): TCertPem;
@@ -10375,7 +10375,7 @@ var
 begin
   pem := ParsePem(P, Kind, len, {excludemarkers=}false);
   if pem = nil then
-    result := ''
+    FastAssignNew(result)
   else
     FastSetString(RawUtf8(result), pem, len);
 end;
@@ -10534,7 +10534,7 @@ begin
     result := BinToBase64uri(pointer(signature), length(signature));
     exit;
   end;
-  result := '';
+  FastAssignNew(result);
   derlen := length(signature);
   der := pointer(signature);
   if (derlen < 50) or
@@ -10654,7 +10654,7 @@ var
   algo: TSignAlgo;
   finalSalt: RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if (PassPhrase = '') or
      (Salt = '') or
      (Iterations < 0) or
@@ -10710,7 +10710,7 @@ var
   p: PHash256Rec;
   h0, h1: THash256Rec;
 begin
-  result := '';
+  FastAssignNew(result);
   case EncType of
     ENCTYPE_AES128_CTS_HMAC_SHA1_96:
       keysize := SizeOf(THash128);
@@ -10748,7 +10748,7 @@ var
   algo: TSignAlgo;
   keysize: cardinal;
 begin
-  result := '';
+  FastAssignNew(result);
   case EncType of
     ENCTYPE_AES128_CTS_HMAC_SHA256_128:
       begin
@@ -10771,7 +10771,7 @@ function MakeKerberosKey(const PassPhrase, Salt: RawUtf8;
 var
   tkey: RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   tkey := MakeKerberosKeySeed(PassPhrase, Salt, EncType, Iterations);
   if tkey = '' then
     exit;
@@ -10835,7 +10835,7 @@ class function TKerberosKeyTabGenerator.Generate(const aPrincipal: RawUtf8;
 var
   gen: TKerberosKeyTabGenerator;
 begin
-  result := '';
+  FastAssignNew(result);
   gen := TKerberosKeyTabGenerator.Create;
   try
     if gen.AddNew(aPrincipal, aPassword, aIsComputer, aSalt, aEncType) then
@@ -10884,7 +10884,7 @@ begin
                 ]);
   else
     begin
-      result := ''; // make compiler happy
+      FastAssignNew(result); // make compiler happy
       ECrypt.RaiseUtf8('Unexpected CkaToSeq(%)', [ToText(cka)^]);
     end;
   end;
@@ -10912,7 +10912,7 @@ var
   oid, oct, key: RawByteString;
   pos, posoct, vt, vers: integer;
 begin
-  result := '';
+  FastAssignNew(result);
   if rfcpub <> nil then
     rfcpub^ := '';
   // initial sequence decoding
@@ -10975,7 +10975,7 @@ var
   oid: RawByteString;
   pos: integer;
 begin
-  result := '';
+  FastAssignNew(result);
   // PKCS#8 sequence decoding
   pos := 1;
   if (AsnNext(pos, seq) <> ASN1_SEQ) or
@@ -10996,7 +10996,7 @@ begin
   if oid = CKA_OID[cka] then
     // public key raw binary extraction
     if AsnNextRaw(pos, seq, result) <> ASN1_BITSTR then
-      result := '';
+      FastAssignNew(result);
 end;
 
 function X509PubKeyToDer(Algorithm: TCryptKeyAlgo;
@@ -11019,7 +11019,7 @@ begin
   if (AsnNext(pos, PkcsDer) <> ASN1_SEQ) or
      (AsnNextRaw(pos, PkcsDer, algoseq) <> ASN1_SEQ) or
      (AsnNextRaw(pos, PkcsDer, result) <> ASN1_BITSTR) then
-    result := '';
+    FastAssignNew(result);
 end;
 
 function X509PubKeyBits(const SubjectPublicKey: RawByteString;

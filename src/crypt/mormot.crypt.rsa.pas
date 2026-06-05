@@ -1256,7 +1256,7 @@ end;
 
 function TBigInt.Save(andrelease: boolean): RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if @self = nil then
     exit;
   pointer(result) := FastNewString(Size * HALF_BYTES);
@@ -1817,7 +1817,7 @@ end;
 function TBigInt.ToHexa: RawUtf8;
 begin
   if @self = nil then
-    result := ''
+    FastAssignNew(result)
   else
     result := BinToHexDisplay(pointer(Value), UsedBytes);
 end;
@@ -1829,7 +1829,7 @@ var
   p: PByte;
 begin
   if @self = nil then
-    result := ''
+    FastAssignNew(result)
   else
     case Size of
       0:
@@ -2402,7 +2402,7 @@ function TRsaPublicKey.ToDer: TCertDer;
 begin
   if (Modulus = '') or
      (Exponent = '') then
-    result := ''
+    FastAssignNew(result)
   else
     // see "A.1.1. RSA Public Key Syntax" of RFC 8017
     result := Asn(ASN1_SEQ, [
@@ -2420,7 +2420,7 @@ function TRsaPublicKey.ToSubjectPublicKey: RawByteString;
 begin
   if (Modulus = '') or
      (Exponent = '') then
-    result := ''
+    FastAssignNew(result)
   else
     result := Asn(ASN1_SEQ, [
                 AsnBigInt(Modulus),
@@ -2467,7 +2467,7 @@ function TRsaPrivateKey.ToDer: TCertDer;
 var
   oct: RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if (Modulus = '') or
      (PublicExponent = '') then
     exit;
@@ -2890,7 +2890,7 @@ begin
   if HasPublicKey then
     result := SavePublicKey.ToDer
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TRsa.SavePublicKeyPem: TCertPem;
@@ -2925,7 +2925,7 @@ begin
     end;
   end
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TRsa.SavePrivateKeyPem: TCertPem;
@@ -2964,7 +2964,7 @@ var
   count, padding: integer;
 begin
   // virtual method following RSASSA-PKCS1-v1_5 padding
-  result := ''; // error
+  FastAssignNew(result); // error
   if p[0] <> 0 then
     exit; // leading zero
   count := 2;
@@ -3006,7 +3006,7 @@ var
   r: PByteArray absolute result;
 begin
   // virtual method following RSASSA-PKCS1-v1_5 padding
-  result := '';
+  FastAssignNew(result);
   padding := fModulusLen - n - 3;
   if (p = nil) or
      (padding < 8) or
@@ -3038,7 +3038,7 @@ var
   enc, dec: PBigInt;
   exp: RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if (Input = nil) or
      not HasPrivateKey then
     exit;
@@ -3062,7 +3062,7 @@ var
   enc, dec: PBigInt;
   exp: RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if (Input = nil) or
      not HasPublicKey then
     exit;
@@ -3087,7 +3087,7 @@ var
   dec: PBigInt;
   exp: RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if (Input = nil) or
      not HasPublicKey then
     exit;
@@ -3109,7 +3109,7 @@ var
   dec: PBigInt;
   exp: RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if (Input = nil) or
      not HasPrivateKey then
     exit;
@@ -3184,7 +3184,7 @@ begin
   if AesAlgoNameDecode(pointer(Cipher), mode, bits) then
     result := Seal(TAesFast[mode], bits, Message)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TRsa.Open(const Message: RawByteString;
@@ -3196,7 +3196,7 @@ begin
   if AesAlgoNameDecode(pointer(Cipher), mode, bits) then
     result := Open(TAesFast[mode], bits, Message)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 type
@@ -3224,7 +3224,7 @@ var
   head: TRsaSealHeader;
   enckey, encmsg: RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   // validate input parameters
   head.plainlen := length(Message);
   if (head.plainlen = 0) or
@@ -3267,7 +3267,7 @@ var
   head: PRsaSealHeader absolute Message;
   input: PByteArray absolute Message;
 begin
-  result := '';
+  FastAssignNew(result);
   // decode and validate the header
   msglen := length(Message);
   if not HasPrivateKey or
@@ -3397,7 +3397,7 @@ var
   h: THash512Rec;
 begin
   // overriden method following RSASSA-PSS padding using HashAlgo
-  result := '';
+  FastAssignNew(result);
   hlen := HASH_SIZE[HashAlgo];
   if (Hash = nil) or
      (fModulusLen < hlen + 6) or
@@ -3666,7 +3666,7 @@ end;
 
 function TCryptPrivateKeyRsa.Generate(Algorithm: TCryptAsymAlgo): RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if (self = nil) or
      (fKeyAlgo <> ckaNone) then
     exit;
@@ -3691,7 +3691,7 @@ function TCryptPrivateKeyRsa.ToDer: RawByteString;
 begin
   if (self = nil) or
      (fRsa = nil) then
-    result := ''
+    FastAssignNew(result)
   else
     result := fRsa.SavePrivateKeyDer;
 end;
@@ -3700,7 +3700,7 @@ function TCryptPrivateKeyRsa.ToSubjectPublicKey: RawByteString;
 begin
   if (self = nil) or
      (fRsa = nil) then
-    result := ''
+    FastAssignNew(result)
   else
     result := fRsa.SavePublicKey.ToSubjectPublicKey
 end;
@@ -3708,7 +3708,7 @@ end;
 function TCryptPrivateKeyRsa.SignDigest(const Dig: THash512Rec; DigLen: integer;
   DigAlgo: TCryptAsymAlgo): RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if (CAA_CKA[DigAlgo] = fKeyAlgo) and
      (HASH_SIZE[CAA_HF[DigAlgo]] = DigLen) then
     case fKeyAlgo of
@@ -3722,7 +3722,7 @@ end;
 function TCryptPrivateKeyRsa.Open(const Message: RawByteString;
   const Cipher: RawUtf8): RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if self <> nil then
     case fKeyAlgo of
       ckaRsa,
