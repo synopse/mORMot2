@@ -2108,7 +2108,7 @@ var
 begin
   id := LastDbErrorID;
   if id = 0 then
-    result := '' // no error
+    FastAssignNew(result) // no error
   else if not LastDbError.GetMsg(id, result) then
     FormatUtf8('Too many DB errors - #% is outdated', [id], result);
 end;
@@ -2334,7 +2334,7 @@ var
   dummy: boolean;
 begin
   if VarDataIsEmptyOrNull(@V) then // VariantToUtf8() will return 'null'
-    result := ''
+    FastAssignNew(result)
   else
     VariantToUtf8(PVariant(@V)^, result, dummy);
 end;
@@ -2344,7 +2344,7 @@ end;
 
 function DateToSql(Date: TDateTime): RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if Date <= 0 then
     exit;
   PCardinal(FastSetString(result, 13))^ := JSON_SQLDATE_MAGIC_C;
@@ -2353,7 +2353,7 @@ end;
 
 function DateToSql(Year, Month, Day: cardinal): RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if (Year = 0) or
      (Month - 1 > 11) or
      (Day - 1 > 30) then
@@ -2374,7 +2374,7 @@ end;
 function DateTimeToSql(DT: TDateTime; WithMS: boolean): RawUtf8;
 begin
   if DT <= 0 then
-    result := ''
+    FastAssignNew(result)
   else if frac(DT) = 0 then
     MagicDate(result, DateToIso8601(DT, true))
   else if trunc(DT) = 0 then
@@ -2388,7 +2388,7 @@ var
   t: TTimeLogBits absolute Timestamp; // circumvent Delphi 2009 bug
 begin
   if Timestamp = 0 then
-    result := ''
+    FastAssignNew(result)
   else
     MagicDate(result, t.Text(true, 'T'));
 end;
@@ -2398,7 +2398,7 @@ begin
   if IsIso8601(pointer(S), length(S)) then
     MagicDate(result, S)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function SqlToDateTime(const ParamValueWithMagic: RawUtf8): TDateTime;
@@ -2652,7 +2652,7 @@ end;
 function SqlFromWhere(const Where: RawUtf8): RawUtf8;
 begin
   if Where = '' then
-    result := ''
+    FastAssignNew(result)
   else if SqlWhereIsEndClause(Where) then
     Join([' ', Where], result)
   else
@@ -2735,7 +2735,7 @@ begin
       Free;
     end
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function SelectInClause(const PropName: RawUtf8; const Values: array of TID;
@@ -2780,7 +2780,7 @@ begin
       Free;
     end
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function GetTableNameFromSqlSelect(const Sql: RawUtf8;
@@ -3801,7 +3801,7 @@ begin
   P := GotoEndJsonItem(P); // quick go to end of array of object
   if P = nil then
   begin
-    result := '';
+    FastAssignNew(result);
     exit;
   end;
   if EndOfObject <> nil then
@@ -3820,7 +3820,7 @@ begin
   P := GotoEndJsonItem(P); // quick go to end of array of object
   if P = nil then
   begin
-    result := '';
+    FastAssignNew(result);
     exit;
   end;
   if EndOfObject <> nil then
@@ -4076,7 +4076,7 @@ var
   end;
 
 begin
-  result := '';
+  FastAssignNew(result);
   if FieldCount = 0 then
     exit;
   W := TTextWriter.CreateOwnedStream(temp);
@@ -4164,7 +4164,7 @@ var
   tmp: TTextWriterStackBuffer;
 begin
   if FieldCount = 0 then
-    result := ''
+    FastAssignNew(result)
   else
   with TTextWriter.CreateOwnedStream(tmp) do
     try
@@ -4227,7 +4227,7 @@ function UnJsonFirstField(var P: PUtf8Char): RawUtf8;
 var
   info: TGetJsonField;
 begin
-  result := '';
+  FastAssignNew(result);
   if P = nil then
     exit;
   if Expect(P, FIELDCOUNT_PATTERN, 14) then

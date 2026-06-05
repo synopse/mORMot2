@@ -2989,7 +2989,7 @@ begin
      item.FromSearch(Data.DocList, aName) then
     result := item.ToRawUtf8
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TBsonElement.DocItemToInteger(

@@ -1280,7 +1280,7 @@ begin
   blob := fResultSet.GetBlob(Col + FirstDbcIndex);
   if (blob = nil) or
      blob.IsEmpty then
-    result := ''
+    FastAssignNew(result)
   else
     result := blob.GetString; // ZAnsiString = RawByteString
 end;

@@ -1062,7 +1062,7 @@ begin
      @Status, SizeOf(Status), StringLength) = 0 then
     FastSetString(result, @Status, StringLength)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 procedure TOdbcLib.GetInfoString(ConnectionHandle: SqlHDbc;

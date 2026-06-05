@@ -457,7 +457,7 @@ var
   Server, Port: RawUtf8;
 begin
   if aServer < low(UNIDAC_PROVIDER) then
-    result := ''
+    FastAssignNew(result)
   else
     result := UNIDAC_PROVIDER[aServer];
   if result = '' then

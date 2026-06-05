@@ -765,7 +765,7 @@ var
 begin
   V := GetCol(Col, C);
   if V = nil then // column is NULL
-    result := ''
+    FastAssignNew(result)
   else if C^.ColumnType = ftBlob then
     if C^.ColumnValueInlined then
       FastSetRawByteString(result, V, C^.ColumnValueDBSize)
@@ -1169,7 +1169,7 @@ var
 begin
   V := GetCol(Col, C);
   if V = nil then // column is NULL
-    result := ''
+    FastAssignNew(result)
   else if C^.ColumnType = ftUtf8 then
     with TSqlDBOracleConnection(Connection) do
       if C^.ColumnValueInlined then

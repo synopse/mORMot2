@@ -577,7 +577,7 @@ var
   strm: TStream;
   f: TField;
 begin
-  result := '';
+  FastAssignNew(result);
   CheckCol(Col);
   f := TField(fColumns[Col].ColumnAttr);
   if f.IsNull then
@@ -662,7 +662,7 @@ begin
   CheckCol(Col);
   with fColumns[Col] do
     if TField(ColumnAttr).IsNull then
-      result := ''
+      FastAssignNew(result)
     else
       {$ifndef UNICODE}
       if ColumnValueDBType = IsTWideStringField then

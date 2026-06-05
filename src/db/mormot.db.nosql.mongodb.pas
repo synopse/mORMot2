@@ -3255,7 +3255,7 @@ begin
     returnedvalue);
   with _Safe(returnedValue)^ do
     if GetValueOrDefault('ok', 1) <> 0 then
-      result := ''
+      FastAssignNew(result)
     else if not GetAsRawUtf8('errmsg', result) then
       result := 'unspecified error';
 end;
@@ -3481,7 +3481,7 @@ function TMongoClient.ServerBuildInfoText: RawUtf8;
 begin
   with _Safe(ServerBuildInfo)^ do
     if count = 0 then
-      result := ''
+      FastAssignNew(result)
     else
     begin
       FormatUtf8('MongoDB % %', [U['version'], U['javascriptEngine']], result);
@@ -4179,7 +4179,7 @@ begin
   if AggregateCallFromVariant(pipelineArray, reply, res) then
     result := VariantSaveMongoJson(res, Mode)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TMongoCollection.AggregateDocFromJson(const PipelineJson: RawUtf8): variant;
@@ -4200,7 +4200,7 @@ begin
   if AggregateCallFromJson(PipelineJson, reply, res) then
     result := VariantSaveMongoJson(res, Mode)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TMongoCollection.Drop: RawUtf8;

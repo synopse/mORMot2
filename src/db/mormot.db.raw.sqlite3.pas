@@ -6999,12 +6999,12 @@ function TSqlDataBase.ExecuteNoExceptionUtf8(const aSql: RawUtf8): RawUtf8;
 begin
   if (self = nil) or
      (DB = 0) then
-    result := ''
+    FastAssignNew(result)
   else
   try
     Execute(aSql, result, true);
   except
-    result := '';
+    FastAssignNew(result);
   end;
 end;
 
@@ -7017,7 +7017,7 @@ var
 begin
   if self = nil then
   begin
-    result := '';
+    FastAssignNew(result);
     exit; // avoid GPF in case of call from a static-only server
   end;
   QueryPerformanceMicroSeconds(start);
@@ -7051,7 +7051,7 @@ begin
   result := R.ExecuteJson(DB, 'explain query plan ' + aSql, true, @cnt, 4096,
     [twoForceJsonExtended, twoIgnoreDefaultInRecord]);
   if cnt = 0 then
-    result := ''; // no query plan
+    FastAssignNew(result); // no query plan
 end;
 
 function TSqlDataBase.ExplainQueryPlan(const aSql: RawUtf8): RawUtf8;
@@ -7235,7 +7235,7 @@ function TSqlDataBase.LockJson(const aSql: RawUtf8;
 begin
   if self = nil then
   begin
-    result := '';
+    FastAssignNew(result);
     exit; // avoid GPF in case of call from a static-only server
   end;
   fSafe.Lock; // cache access is also protected by fSafe
@@ -7257,7 +7257,7 @@ begin
     begin
       // UPDATE, INSERT or any non SELECT statement
       CacheFlush;
-      result := '';
+      FastAssignNew(result);
     end;
   except
     on Exception do
@@ -8308,7 +8308,7 @@ begin
       result := Stream.DataString;
     except
       on ESqlite3Exception do
-        result := '';
+        FastAssignNew(result);
     end;
     // Close has been called in Execute() above since aSql<>''
   finally
@@ -8397,7 +8397,7 @@ var
   P: PUtf8Char;
   L, L2: integer;
 begin
-  result := '';
+  FastAssignNew(result);
   if cardinal(Col) >= cardinal(FieldCount) then
     sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldA');
   P := sqlite3.column_text(Request, Col);
