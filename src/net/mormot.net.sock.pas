@@ -2761,7 +2761,7 @@ function NetAddrResolve(const hostname: RawUtf8): RawUtf8;
 var
   addr: TNetAddr;
 begin
-  result := '';
+  FastAssignNew(result);
   if addr.SetFrom(hostname, '80', nlTcp) = nrOK then
     addr.IP(result);
 end;
@@ -3814,7 +3814,7 @@ begin
      NetIsIP4(pointer(netmask4), @mask) then
     ShortStringToAnsi7String(IP4Subnet(ip, mask), result)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function IP4Filter(ip4: TNetIP4; filter: TIPAddress): boolean;
@@ -3872,7 +3872,7 @@ var
 begin
   if PCardinal(ip4addr)^ = 0 then
     // '0.0.0.0' bound to any host -> ''
-    result := ''
+    FastAssignNew(result)
   else if PCardinal(ip4addr)^ = cLocalhost32 then
     // '127.0.0.1' loopback (no memory allocation)
     result := IP4local
@@ -3900,7 +3900,7 @@ var
   s: TShort16;
   i: PtrInt;
 begin
-  result := '';
+  FastAssignNew(result);
   for i := 0 to high(ip4) do
   begin
     IP4Short(@ip4[i], s);
@@ -4031,7 +4031,7 @@ begin
     case ip6addr[15] of
       0: // IPv6 :: bound to any host -> ''
         begin
-          result := '';
+          FastAssignNew(result);
           exit;
         end;
       1: // IPv6 ::1 -> '127.0.0.1' loopback (with no memory allocation)
@@ -4126,7 +4126,7 @@ begin
   if (L = 0) or
      (L and 1 <> 0) then
   begin
-    result := '';
+    FastAssignNew(result);
     exit;
   end;
   L := L shr 1;
@@ -4331,7 +4331,7 @@ const
     '53', '80', '443', '123', '9'); // DNS, HTTP, HTTPS, NTP, discard
 begin
   // note: UDP connect() makes no network request but browse the kernel routage
-  result := '';
+  FastAssignNew(result);
   for i := 0 to high(PORTS) do
     if addr.SetFrom(Remote, PORTS[i], nlUdp) = nrOk then
     begin
@@ -5590,7 +5590,7 @@ function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
 var
   S: PUtf8Char;
 begin
-  result := '';
+  FastAssignNew(result);
   while P^ in [#9, ' '] do
     inc(P);
   if P^ < ' ' then
@@ -6078,7 +6078,7 @@ end;
 
 function TUri.ServerPort: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if layer = nlUnix then
   begin
     Join(['http://unix:', Server, ':/'], result); // our own layout
@@ -6132,7 +6132,7 @@ end;
 function TUri.UserPasswordBase64: RawUtf8;
 begin
   if User = '' then
-    result := ''
+    FastAssignNew(result)
   else
     result := NetBinToBase64(Join([User, ':', Password]));
 end;
@@ -6917,7 +6917,7 @@ begin
      (Length <= 0) or
      (SockInRead(FastSetString(RawUtf8(result), Length),
                  Length, UseOnlySockIn) <> Length) then
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TCrtSocket.SockInPending(aTimeOutMS: integer): integer;
@@ -7311,7 +7311,7 @@ begin
      (read <> 0) then
     FastSetRawByteString(result, @tmp, read)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TCrtSocket.TrySockRecv(Buffer: pointer; var Length: integer;

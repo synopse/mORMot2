@@ -1787,7 +1787,7 @@ function TWebSocketProtocol.GetRemoteIP: RawUtf8;
 begin
   if (self = nil) or
      fRemoteLocalhost then
-    result := ''
+    FastAssignNew(result)
   else
     result := fRemoteIP;
 end;
@@ -3290,7 +3290,7 @@ begin
   if (self = nil) or
      (fProtocol = nil) or
      fProtocol.fRemoteLocalhost then
-    result := ''
+    FastAssignNew(result)
   else
     result := fProtocol.fRemoteIP;
 end;
@@ -4321,7 +4321,7 @@ end;
 
 function TWebSocketEngineIOProtocol.GetSubprotocols: RawUtf8;
 begin
-  result := ''; // no "Sec-WebSocket-Protocol:" header
+  FastAssignNew(result); // no "Sec-WebSocket-Protocol:" header
 end;
 
 function TWebSocketEngineIOProtocol.SetSubprotocol(const aProtocolName: RawUtf8): boolean;

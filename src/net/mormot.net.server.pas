@@ -4517,7 +4517,7 @@ end;
 function THttpServerSocketGeneric.ComputeWwwAuthenticate(Opaque: Int64): RawUtf8;
 begin
   // return the expected 'WWW-Authenticate: ####'#13#10 header content
-  result := '';
+  FastAssignNew(result);
   case fAuthorize of
     hraBasic:
       result := fAuthorizeBasicRealm; // includes trailing #13#10
@@ -6142,7 +6142,7 @@ end;
 
 function THttpPeerCacheSettings.GuessInterface(out Mac: TMacAddress): RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if fInterfaceName <> '' then
   begin
     if not GetMainMacAddress(Mac, fInterfaceName, {UpAndDown=}true) then

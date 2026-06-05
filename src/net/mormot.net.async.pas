@@ -5688,7 +5688,7 @@ function THttpProxyUrl.RemoteClientGet(const uri: TUri): RawByteString;
 var
   status: integer;
 begin // this method is protected by fOsSafe.Lock
-  result := '';
+  FastAssignNew(result);
   status := fRemoteClient.Request(uri, 'GET', '', '', '',
        fSettings.HttpKeepAlive * MilliSecsPerSec);
   if StatusCodeIsSuccess(status) then // 2xx..3xx range

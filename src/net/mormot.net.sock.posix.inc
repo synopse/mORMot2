@@ -1167,7 +1167,7 @@ var
   retry: integer;
   start: Int64;
 begin
-  result := '';
+  FastAssignNew(result);
   // validate and prepare input parameters
   if not NetIsIP4(pointer(IP), @arp.TPA) or
      not GetLocalMacAddress(IP, local) or // ask the kernel routage table

@@ -401,7 +401,7 @@ begin
   if self <> nil then
     result := fServer.Port
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TRtspOverHttpServer.RtspToHttp(const RtspUri: RawUtf8): RawUtf8;

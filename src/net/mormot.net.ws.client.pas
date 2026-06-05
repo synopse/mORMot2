@@ -779,7 +779,7 @@ begin
       aProtocol.RemoteLocalhost := (RemoteIP = '') or
                                    (PCardinal(RemoteIP)^ = HOST_127);
       // initialize the TWebSocketProcess
-      result := ''; // no error message = success
+      FastAssignNew(result); // no error message = success
       SetInt64(pointer(HeaderGetValue('SEC-WEBSOCKET-CONNECTION-ID')), id);
       if fProcess = nil then
         fProcess := TWebSocketProcessClient.Create(self, id, aProtocol, fProcessName)

@@ -2773,7 +2773,7 @@ var
   tmp: TTextWriterStackBuffer; // 8KB static
   W: TJsonWriter;
 begin
-  result := '';
+  FastAssignNew(result);
   if not DhcpParseHeader(dhcp, len) then
     exit;
   W := TJsonWriter.CreateOwnedStream(tmp);
@@ -4486,7 +4486,7 @@ var
   tmp: TTextWriterStackBuffer; // 8KB static
   W: TJsonWriter;
 begin
-  result := '';
+  FastAssignNew(result);
   if Mac64 = 0 then
     exit;
   W := TJsonWriter.CreateOwnedStream(tmp);
@@ -4505,7 +4505,7 @@ var
   tmp: TTextWriterStackBuffer; // 8KB static
   W: TJsonWriter;
 begin
-  result := '';
+  FastAssignNew(result);
   if SendLen = 0 then
     exit;
   W := TJsonWriter.CreateOwnedStream(tmp);

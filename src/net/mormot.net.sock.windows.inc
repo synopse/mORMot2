@@ -1196,7 +1196,7 @@ var
   PhyAddrLen: Longword;
   pMacAddr: array[0..7] of byte;
 begin
-  result := '';
+  FastAssignNew(result);
   if NetIsIP4(pointer(IP), @dwRemoteIP) and
      DelayedProc(SendARP, iphlpapiDll, 'iphlpapi.dll', 'SendARP') then
   begin

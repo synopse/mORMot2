@@ -2940,7 +2940,7 @@ var
 begin
   res := CldapGetBestLdapControllers(LdapServers, DomainName, NameServer, TimeOutMS);
   repeat
-    result := '';
+    FastAssignNew(result);
     if res = nil then
       exit; // no server to return
     i := Random32(length(res));
@@ -3242,7 +3242,7 @@ function DNToCN(const DN: RawUtf8; NoRaise: boolean): RawUtf8;
 var
   dc, ou, cn: TRawUtf8DynArray;
 begin
-  result := '';
+  FastAssignNew(result);
   if (DN <> '') and
      ParseDN(DN, dc, ou, cn, {valueEscapeCN=}true, NoRaise) then
     result := DNsToCN(dc, ou, cn);
@@ -3253,7 +3253,7 @@ var
   dc, ou, cn: TRawUtf8DynArray;
   i: PtrInt;
 begin
-  result := '';
+  FastAssignNew(result);
   if (DN = '') or
      not ParseDN(DN, dc, ou, cn, {valueEscapeCN=}true, {noraise=}true) then
     exit;
@@ -3415,7 +3415,7 @@ var
   end;
 
 begin
-  result := '';
+  FastAssignNew(result);
   TrimU(Filter, text);
   if text = '' then
     exit;
@@ -4234,7 +4234,7 @@ function ObjectFilter(Filter: TObjectFilter; const AccountName,
   DistinguishedName, UserPrincipalName, CustomFilter: RawUtf8): RawUtf8;
 begin
   // put AccountName/DistinguishedName/UserPrincipalName into result
-  result := '';
+  FastAssignNew(result);
   if AccountName <> '' then
     FormatUtf8('(sAMAccountName=%%)',
       [LdapEscapeName(AccountName),
@@ -4308,7 +4308,7 @@ var
   i, n: PtrInt;
   v: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   n := high(Types);
   if (n < 0) or
      (n <> length(Values)) then
@@ -4330,7 +4330,7 @@ function Modifier(Op: TLdapModifyOp;
 var
   i, n: PtrInt;
 begin
-  result := '';
+  FastAssignNew(result);
   n := length(NameValuePairs);
   if (n = 0) or
      (n and 1 <> 0) then
@@ -4492,7 +4492,7 @@ function TLdapAttribute.GetRaw(index: PtrInt): RawByteString;
 begin
   if (self = nil) or
      (PtrUInt(index) >= PtrUInt(fCount)) then
-    result := ''
+    FastAssignNew(result)
   else
     result := fList[index];
 end;
@@ -4661,7 +4661,7 @@ function TLdapAttribute.ExportToAsnSeq: TAsnObject;
 var
   i: PtrInt;
 begin
-  result := '';
+  FastAssignNew(result);
   if (self = nil) or
      (fCount = 0) then
     exit;
@@ -5758,7 +5758,7 @@ end;
 
 function TLdapClientSettings.GetTargetUri: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if (self = nil) or
      (fTargetHost = '') then
     exit;
@@ -5859,7 +5859,7 @@ begin
       result := customValues[i];
       exit;
     end;
-  result := '';
+  FastAssignNew(result);
 end;
 
 
@@ -6428,10 +6428,10 @@ var
   p: PAnsiChar;
   tmp: array[0 .. 7] of byte; // ASN1 SEQ header
 begin
-  result := '';
+  FastAssignNew(result);
   if fSock = nil then
     exit;
-  fFullResult := '';
+  FastAssignNew(fFullResult);
   try
     // we need to decode the ASN.1 plain input to return a single SEQ message
     ReceivePacket(@tmp, 2); // ASN type + first byte of ASN length
@@ -6461,7 +6461,7 @@ begin
   except
     on Exception do
     begin
-      result := '';
+      FastAssignNew(result);
       exit;
     end;
   end;
@@ -6481,7 +6481,7 @@ var
   errmsg: RawUtf8;
   hex: PAnsiChar;
 begin
-  result := '';
+  FastAssignNew(result);
   fResultCode := -1;
   fResultError := leUnknown;
   fResultString := '';
@@ -7051,7 +7051,7 @@ end;
 function TLdapClient.ExtWhoAmI: RawUtf8;
 begin
   if not Extended(ASN1_OID_WHOAMI, '', nil, @result) then
-    result := '';
+    FastAssignNew(result);
 end;
 
 
@@ -7891,7 +7891,7 @@ begin
      (SearchResult.Count = 1) then
     result := SearchResult.Items[0][atDistinguishedName]
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TLdapClient.GetGroupPrimaryID(
@@ -7957,7 +7957,7 @@ begin
         ObjectSid^ := Get(atObjectSid);
     end
     else
-      result := '';
+      FastAssignNew(result);
 end;
 
 function TLdapClient.GetIsMemberOf(
@@ -8051,7 +8051,7 @@ begin
   // the RFC states that ASN1_OID_PASSWDMODIFY supportedExtension SHOULD be
   // verified in server root DSE - but OpenLDAP does not have this list, nor seem
   // to actually implement this extension, and this OID is not listed by MSAD :(
-  result := '';
+  FastAssignNew(result);
   if UserDN = '' then
     exit;
   if Transmission <> lctEncrypted then

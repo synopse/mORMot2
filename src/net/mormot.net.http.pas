@@ -2708,7 +2708,7 @@ end;
 function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
 begin
   if AuthToken = '' then
-    result := ''
+    FastAssignNew(result)
   else
     Join(['Authorization: Bearer ', AuthToken], result);
 end;
@@ -2764,7 +2764,7 @@ begin
   end;
   // recreate an expurgated headers set
   if tot = 0 then // genocide
-    result := ''
+    FastAssignNew(result)
   else if purged = 0 then
     if (not trim) or
        (headers[PStrLen(h - _STRLEN)^] > ' ') then
@@ -5672,7 +5672,7 @@ begin
     AddByte(TByteDynArray(fVariable), vn, v);
     include(fVariables, THttpLogVariable(v));
   until false;
-  result := ''; // success
+  FastAssignNew(result); // success
   if vn <> 0 then
     DynArrayFakeLength(fVariable, vn);
   if un <> 0 then
@@ -6538,7 +6538,7 @@ var
   s: THttpAnalyzerScope;
   p: THttpAnalyzerPeriod;
 begin
-  result := '';
+  FastAssignNew(result);
   if Name <> '' then
     if FromText(Name, s) then
       result := GetAsText(s)
@@ -7282,7 +7282,7 @@ var
   s: THttpAnalyzerScope;
   p: THttpAnalyzerPeriod;
 begin
-  result := '';
+  FastAssignNew(result);
   if Name <> '' then
     if FromText(Name, s) then
       result := GetAsText(Start, Stop, s)

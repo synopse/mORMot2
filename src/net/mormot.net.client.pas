@@ -2801,7 +2801,7 @@ function ExtractResourceName(const uri: RawUtf8; sanitize: boolean): RawUtf8;
 var
   u: TUri;
 begin
-  result := '';
+  FastAssignNew(result);
   if (uri = '') or
      not u.From(uri) then
     exit;
@@ -4163,7 +4163,7 @@ var
   outh: RawUtf8;
   status: integer;
 begin
-  result := '';
+  FastAssignNew(result);
   with uri do
     if From(url) then
     try
@@ -4184,7 +4184,7 @@ begin
       begin
         if outError <> nil then
           outError^ := E.Message;
-        result := '';
+        FastAssignNew(result);
       end;
     end;
 end;
@@ -4700,7 +4700,7 @@ var
   dwSize, dwIndex: cardinal;
   tmp: TSynTempBuffer;
 begin
-  result := '';
+  FastAssignNew(result);
   dwIndex := 0;
   dwSize := tmp.Init; // first try with stack buffer (in bytes)
   try
@@ -4893,7 +4893,7 @@ var
   dwSize, dwIndex: cardinal;
   tmp: TSynTempBuffer;
 begin
-  result := '';
+  FastAssignNew(result);
   dwIndex := 0;
   dwSize := tmp.Init; // first try with stack buffer (in bytes)
   try
@@ -5654,7 +5654,7 @@ end;
 
 function HeadersEncode(const NameValuePairs: array of const): RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if (high(NameValuePairs) >= 0) and
      (high(NameValuePairs) and 1 = 1) then // n should be = 1,3,5,7,..
     DoHeadersEncode(NameValuePairs, result);
@@ -5846,7 +5846,7 @@ var
   status: integer;
   modified: boolean;
 begin
-  result := '';
+  FastAssignNew(result);
   if (fCache <> nil) and
      fCache.FindAndCopy(aAddress, cache) then
     FormatUtf8('If-None-Match: %', [cache.Tag], headin);
@@ -5935,7 +5935,7 @@ begin
         inHeaders, outHeaders, uri.Layer, uri.Https, outStatus,
         timeout, ignoreTlsCertError)
   else if uri.Scheme = '' then
-    result := '' // a clearly invalid URI
+    FastAssignNew(result) // a clearly invalid URI
   else // try custom RegisterNetClientProtocol()
     result := DoHttpGet(THttpClientSocket.OpenUri(uri, aUri, '', timeout, nil),
       uri.Address, inHeaders, outHeaders, outStatus);
