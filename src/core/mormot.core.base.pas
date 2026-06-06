@@ -4351,6 +4351,12 @@ function VarDataIsEmptyOrNull(VarData: pointer): boolean;
 function SetVariantUnRefSimpleValue(const Source: variant; var Dest: TVarData): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// create a fake variant after varByRef resolution into result=@tmp
+// - called with Source.VType and varByRef <> 0 - e.g. from Automation/COM values
+// - caller should already have handled varVariantByRef
+function SetVarDataUnRef(typ: cardinal; V: PVarData; var tmp: TVarData): PVariant;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// convert any numerical Variant into a 32-bit integer
 // - it will expect true numerical Variant and won't convert any string nor
 // floating-pointer Variant, which will return FALSE and won't change the Value
@@ -13448,6 +13454,13 @@ begin
         result := true;
       end;
   end;
+end;
+
+function SetVarDataUnRef(typ: cardinal; V: PVarData; var tmp: TVarData): PVariant;
+begin
+  PCardinal(@tmp)^ := typ and cardinal(not varByRef);
+  tmp.VInt64 := PInt64(V^.VAny)^; // simple types or pointer types
+  result := @tmp;
 end;
 
 function SetVarDataUnRefSimpleValue(V: PVarData; var tmp: TVarData): PVarData;
