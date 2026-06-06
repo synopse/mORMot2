@@ -8259,8 +8259,6 @@ var
   vd: PVarData;
   vt: cardinal;
   tmp: TVarData;
-label
-  c;
 begin
   wasString := false;
   vd := VarDataFromVariant(V); // handle varVariantByRef
@@ -8319,55 +8317,27 @@ begin
         RawUnicodeToUtf8(vd^.VAny, StrLenW(vd^.VAny), result);
       end;
   else
-    if vt and varByRef = 0 then
-      if vt = varString then
-      begin
-        wasString := true;
-        {$ifdef HASCODEPAGE}
-        AnyAnsiToUtf8Var(RawByteString(vd^.VString), result);
-        {$else}
-        result := RawUtf8(vd^.VString);
-        {$endif HASCODEPAGE}
-      end
-      {$ifdef HASVARUSTRING}
-      else if vt = varUString then
-      begin
-        wasString := true;
-        RawUnicodeToUtf8(vd^.VAny, length(UnicodeString(vd^.VAny)), result);
-      end
-      {$endif HASVARUSTRING}
-      else
-        // not recognizable vt -> seralize as JSON to handle also custom types
-c:      _VariantSaveJson(V, twJsonEscape, result) // = mormot.core.variants.pas
-    else if vt = varStringByRef then
+    if vt = varString then
     begin
       wasString := true;
       {$ifdef HASCODEPAGE}
-      AnyAnsiToUtf8Var(PRawByteString(vd^.VString)^, result);
+      AnyAnsiToUtf8Var(RawByteString(vd^.VString), result);
       {$else}
-      result := PRawUtf8(vd^.VString)^;
+      result := RawUtf8(vd^.VString);
       {$endif HASCODEPAGE}
     end
-    else if vt = varOleStrByRef then
-    begin
-      wasString := true;
-      RawUnicodeToUtf8(pointer(PWideString(vd^.VAny)^),
-        length(PWideString(vd^.VAny)^), result);
-    end
-    else
     {$ifdef HASVARUSTRING}
-    if vt = varUStringByRef then
+    else if vt = varUString then
     begin
       wasString := true;
-      RawUnicodeToUtf8(pointer(PUnicodeString(vd^.VAny)^),
-        length(PUnicodeString(vd^.VAny)^), result);
+      RawUnicodeToUtf8(vd^.VAny, length(UnicodeString(vd^.VAny)), result);
     end
     {$endif HASVARUSTRING}
-    else if SetVariantUnRefSimpleValue(V, tmp{%H-}) then
-      // simple varByRef
-      VariantToUtf8(Variant(tmp), result, wasString)
-    else
-      goto c;
+    else if vt and varByRef = 0 then
+      // not recognizable vt -> seralize as JSON to handle also custom types
+      _VariantSaveJson(V, twJsonEscape, result) // = mormot.core.variants.pas
+    else // varByRef values appear with Automation/COM
+      VariantToUtf8(SetVarDataUnRef(vt, vd, tmp)^, result, wasString);
   end;
 end;
 
