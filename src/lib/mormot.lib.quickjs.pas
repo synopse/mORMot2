@@ -3539,7 +3539,7 @@ var
   v: TVarData absolute val;
 begin
   vt := v.VType;
-  case vt of
+  case vt of // most simple types with a O(1) case jmp
     varEmpty:
       {%H-}result.Empty;
     varNull:
@@ -3576,41 +3576,30 @@ begin
       result.FromFloat(v.VCurrency);
     varDate:
       FromDate(v.VDate, result);
-    varString:
-      result := From(RawUtf8(v.VString));
-    {$ifdef HASVARUSTRING}
-    varUString:
-      result := FromW(v.VAny, length(UnicodeString(v.VAny)));
-    {$endif HASVARUSTRING}
     varOleStr:
       result := FromW(v.VAny, length(WideString(v.VAny)));
   else
-    if SetVariantUnRefSimpleValue(val, tmp{%H-}) then
-      // simple varByRef
-      FromVariant(Variant(tmp), result)
-    else if vt = varVariantByRef then
-      // complex varByRef
-      FromVariant(PVariant(v.VPointer)^, result)
-    else if vt = varStringByRef then
-      result := From(PRawUtf8(v.VString)^)
-    else if vt = varOleStrByRef then
-      result := FromW(PPointer(v.VAny)^, length(PWideString(v.VAny)^))
-    else
+    if vt = varString then
+      result := From(RawUtf8(v.VString))
     {$ifdef HASVARUSTRING}
-    if vt = varUStringByRef then
-      result := FromW(PPointer(v.VAny)^, length(PUnicodeString(v.VAny)^))
-    else
+    else if vt = varUString then
+      result := FromW(v.VAny, length(UnicodeString(v.VAny)))
     {$endif HASVARUSTRING}
-      begin
-        // not recognizable vt -> seralize as JSON to handle also custom types
-        tmp.VAny := nil;
-        try
-          _VariantSaveJson(val, twJsonEscape, RawUtf8(tmp.VAny));
-          FromJson(RawUtf8(tmp.VAny), result, {exceptonerror=}false);
-        finally
-          FastAssignNew(tmp.VAny);
-        end;
+    else if vt and varByRef = 0 then
+    begin
+      // not recognizable vt -> seralize as JSON to handle also custom types
+      tmp.VAny := nil;
+      try
+        _VariantSaveJson(val, twJsonEscape, RawUtf8(tmp.VAny));
+        FromJson(RawUtf8(tmp.VAny), result, {exceptonerror=}false);
+      finally
+        FastAssignNew(tmp.VAny);
       end;
+    end
+    else if vt = varVariantByRef then
+      FromVariant(PVariant(v.VPointer)^, result)
+    else
+      FromVariant(SetVarDataUnRef(vt, @v, tmp)^, result);
   end;
 end;
 
