@@ -5711,7 +5711,7 @@ function _BS_Variant(Data: PVarData; Dest: TBufferWriter; Info: PRttiInfo): PtrI
 var
   vt: cardinal;
 begin
-  Data := VarDataFromVariant(PVariant(Data)^); // handle varByRef
+  Data := VarDataFromVariant(PVariant(Data)^); // handle varVariantByRef
   vt := Data^.VType;
   Dest.Write2(vt);
   if vt <= high(VARIANT_SIZE) then

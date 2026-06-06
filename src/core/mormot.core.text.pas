@@ -8263,7 +8263,7 @@ label
   c;
 begin
   wasString := false;
-  vd := VarDataFromVariant(V);
+  vd := VarDataFromVariant(V); // handle varVariantByRef
   vt := vd^.VType;
   case vt of // most simple types with a O(1) case jmp
     varEmpty,

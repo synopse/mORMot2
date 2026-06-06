@@ -4324,7 +4324,7 @@ procedure RawByteStringToVariant(const Data: RawByteString; var Value: variant);
 // function call
 procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
 
-/// get the root PVarData of a variant, redirecting any varByRef
+/// get the root PVarData of a variant, redirecting any varVariantByRef
 // - if result^.VPointer=nil, returns varEmpty
 function VarDataFromVariant(const Value: variant): PVarData;
   {$ifdef HASINLINE}inline;{$endif}
@@ -13402,19 +13402,19 @@ begin
 end;
 
 function VarDataIsEmptyOrNull(VarData: pointer): boolean;
-begin
+begin // handle varVariantByRef
   result := (cardinal(VarDataFromVariant(PVariant(VarData)^)^.VType) and
              cardinal(not varByRef)) <= varNull;
 end;
 
 function VarIsEmptyOrNull(const V: Variant): boolean;
-begin
+begin // handle varVariantByRef
   result := (cardinal(VarDataFromVariant(V)^.VType) and
              cardinal(not varByRef)) <= varNull;
 end;
 
 function VarIsString(const V: Variant): boolean;
-begin
+begin // handle varVariantByRef
   case cardinal(VarDataFromVariant(V)^.VType) and cardinal(not varByRef) of
     {$ifdef HASVARUSTRING} varUString, {$endif} varString, varOleStr:
    result := true;
@@ -13476,7 +13476,7 @@ var
   tmp: TVarData;
 begin
   result := false;
-  vd := VarDataFromVariant(V);
+  vd := VarDataFromVariant(V);  // handle varVariantByRef
   repeat
     case cardinal(vd^.VType) of // use a jmp table on FPC
       varNull,
@@ -13535,7 +13535,7 @@ var
   i64: Int64;
 begin
   result := true;
-  vd := VarDataFromVariant(V);
+  vd := VarDataFromVariant(V); // handle varVariantByRef
   case cardinal(vd^.VType) of
     varEmpty,
     varNull:
@@ -13575,7 +13575,7 @@ var
   tmp: TVarData;
 begin
   result := true;
-  vd := VarDataFromVariant(V);
+  vd := VarDataFromVariant(V); // handle varVariantByRef
   case cardinal(vd^.VType) of
     varDouble,
     varDate:
@@ -13605,7 +13605,7 @@ var
   tmp: TVarData;
 begin
   result := false;
-  vd := VarDataFromVariant(V);
+  vd := VarDataFromVariant(V); // handle varVariantByRef
   repeat
     case cardinal(vd^.VType) of
       varEmpty,
@@ -13641,7 +13641,7 @@ var
   vd: PVarData;
   tmp: TVarData;
 begin
-  vd := VarDataFromVariant(V);
+  vd := VarDataFromVariant(V);  // handle varVariantByRef
   repeat
     case cardinal(vd^.VType) of // use a jmp table on FPC
       varNull,
@@ -13726,7 +13726,7 @@ procedure VariantStringToUtf8(const V: Variant; var result: RawUtf8);
 var
   vd: PVarData;
 begin
-  vd := VarDataFromVariant(V);
+  vd := VarDataFromVariant(V); // handle varVariantByRef
   if cardinal(vd^.VType) = varString then
     result := RawUtf8(vd^.VString)
   else

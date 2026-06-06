@@ -5190,7 +5190,7 @@ var
   call: TMethod;
   v: PVarData;
 begin
-  v := VarDataFromVariant(Value); // de-reference any varByRef
+  v := VarDataFromVariant(Value); // handle varVariantByRef
   case Setter(Instance, @call) of
     rpcField:
       PVariant({%H-}call.Data)^ := PVariant(v)^;
