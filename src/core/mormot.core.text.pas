@@ -8815,9 +8815,9 @@ var
 label
   n;
 begin
-  result := false;        // wasString flag
-  Res.TempRawUtf8 := nil; // no allocation by default - and avoid GPF
-  vd := VarDataFromVariant(V);
+  result := false;             // wasString=false by default (assume numbers)
+  Res.TempRawUtf8 := nil;      // no allocation by default - and avoid GPF
+  vd := VarDataFromVariant(V); // handle varVariantByRef
   vt := vd^.VType;
   case vt of // most simple types with a O(1) case jmp
     varEmpty,
@@ -8894,38 +8894,30 @@ n:    if vfNullAsVoid in Flags then
     varOleStr:
       result := BStrToTempUtf8(vd^.VAny, Res, vfNoAlloc in Flags);
   else
-    if vt = varString then // most common non-simple type
-    begin
-      result := true;
-      Res.Text := vd^.VString; // assume RawUtf8
-      Res.Len := length(RawUtf8(vd^.VString));
-    end
-    {$ifdef HASVARUSTRING}
-    else if vt = varUString then
-      result := UStrToTempUtf8(vd^.VAny, Res, vfNoAlloc in Flags)
-    else if vt = varUStringByRef then
-      result := UStrToTempUtf8(PPointer(vd^.VAny)^, Res, vfNoAlloc in Flags)
-    {$endif HASVARUSTRING}
-    else if vt = varStringByRef then
-    begin
-      result := true;
-      Res.Text := PPointer(vd^.VString)^; // assume RawUtf8
-      Res.Len := length(PRawUtf8(vd^.VString)^);
-    end
-    else if vt = varOleStrByRef then
-      result := BStrToTempUtf8(PPointer(vd^.VAny)^, Res, vfNoAlloc in Flags)
-    else if (vt and varByRef <> 0) and
-            SetVariantUnRefSimpleValue(PVariant(vd)^, tmp{%H-}) then
-      result := VariantToTempUtf8(Variant(tmp), Res, Flags)
+    case vt of
+      varString: // most common non-simple type
+        begin
+          result := true;
+          Res.Text := vd^.VString; // assume RawUtf8
+          Res.Len := length(RawUtf8(vd^.VString));
+        end;
+      {$ifdef HASVARUSTRING}
+      varUString:
+        result := UStrToTempUtf8(vd^.VAny, Res, vfNoAlloc in Flags);
+      {$endif HASVARUSTRING}
     else
-    begin
-      // not recognizable vt -> serialize as JSON to handle also custom types
-      if Flags * [vfNoAlloc, vfNoComplex] <> [] then
-        goto n;  // 'null' + result=false
-      result := true;
-      _VariantSaveJson(V, twJsonEscape, RawUtf8(Res.TempRawUtf8));
-      Res.Text := pointer(Res.TempRawUtf8);
-      Res.Len := length(RawUtf8(Res.TempRawUtf8));
+      if vt and varByRef = 0 then
+      begin
+        // not recognizable vt -> serialize as JSON to handle also custom types
+        if Flags * [vfNoAlloc, vfNoComplex] <> [] then
+          goto n;  // 'null' + result=false
+        result := true;
+        _VariantSaveJson(V, twJsonEscape, RawUtf8(Res.TempRawUtf8));
+        Res.Text := pointer(Res.TempRawUtf8);
+        Res.Len := length(RawUtf8(Res.TempRawUtf8));
+      end
+      else // varByRef values appear with Automation/COM
+        VariantToTempUtf8(SetVarDataUnRef(vt, vd, tmp)^, Res, Flags);
     end;
   end;
 end;
