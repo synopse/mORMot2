@@ -5273,9 +5273,6 @@ procedure DynArraySave(Data: PAnsiChar; ExternalCount: PInteger;
   Dest: TBufferWriter; Info: PRttiInfo);
 var
   n, itemsize: PtrInt;
-  sav: TRttiBinarySave;
-label
-  raw;
 begin
   Info := Info^.DynArrayItemType(itemsize); // nil if unmanaged
   Dest.Write1(0); // warning: store itemsize=0 (mORMot 1 ignores it anyway)
@@ -5291,19 +5288,7 @@ begin
       n := PDALen(Data - _DALEN)^ + _DAOFF;
     Dest.WriteVarUInt32(n);
     Dest.Write4(0); // warning: we don't store any Hash32 checksum any more
-    if Info = nil then
-raw:  Dest.Write(Data, itemsize * n)
-    else
-    begin
-      sav := RTTI_BINARYSAVE[Info^.Kind];
-      if Assigned(sav) then // paranoid check
-        repeat
-          inc(Data, sav(Data, Dest, Info));
-          dec(n);
-        until n = 0
-      else
-        goto raw;
-    end;
+    BinarySaveSeveral(Data, Dest, Info, n, itemsize * n);
   end;
 end;
 
@@ -5350,9 +5335,6 @@ function _BL_DynArray(Data: PAnsiChar; var Source: TFastReader; Info: PRttiInfo)
 var
   n, siz: PtrInt;
   nfo: PRttiInfo;
-  load: TRttiBinaryLoad;
-label
-  raw;
 begin
   nfo := Info^.DynArrayItemType(siz); // nil for unmanaged items
   n := DynArrayLoadHeader(Source, Info, nfo);
@@ -5361,20 +5343,7 @@ begin
   if n > 0 then
   begin
     DynArrayNew(pointer(Data), n, siz); // allocate zeroed  memory
-    Data := PPointer(Data)^; // point to first item
-    if nfo = nil then
-raw:  Source.Copy(Data, siz * n)
-    else
-    begin
-      load := RTTI_BINARYLOAD[nfo^.Kind];
-      if Assigned(load) then
-        repeat
-          inc(Data, load(Data, Source, nfo));
-          dec(n);
-        until n = 0
-      else
-        goto raw;
-    end;
+    BinaryLoadSeveral(PPointer(Data)^, Source, nfo, n, siz * n);
   end;
   result := SizeOf(pointer);
 end;
@@ -5627,47 +5596,17 @@ end;
 function _BS_Array(Data: PAnsiChar; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
 var
   n: PtrInt;
-  sav: TRttiBinarySave;
-label
-  raw;
 begin
-  Info := Info^.ArrayItemType(n, result);
-  if Info = nil then // unmanaged
-raw:Dest.Write(Data, result)
-  else
-  begin
-    sav := RTTI_BINARYSAVE[Info^.Kind];
-    if Assigned(sav) then // paranoid check
-      repeat
-        inc(Data, sav(Data, Dest, Info));
-        dec(n);
-      until n = 0
-    else
-      goto raw;
-  end;
+  Info := Info^.ArrayItemType(n, result); // nil if unmanaged
+  BinarySaveSeveral(Data, Dest, Info, n, result);
 end;
 
 function _BL_Array(Data: PAnsiChar; var Source: TFastReader; Info: PRttiInfo): PtrInt;
 var
   n: PtrInt;
-  load: TRttiBinaryLoad;
-label
-  raw;
 begin
-  Info := Info^.ArrayItemType(n, result);
-  if Info = nil then // unmanaged
-raw:Source.Copy(Data, result)
-  else
-  begin
-    load := RTTI_BINARYLOAD[Info^.Kind];
-    if Assigned(load) then // paranoid check
-      repeat
-        inc(Data, load(Data, Source, Info));
-        dec(n);
-      until n = 0
-    else
-      goto raw;
-  end;
+  Info := Info^.ArrayItemType(n, result); // nil if unmanaged
+  BinaryLoadSeveral(Data, Source, Info, n, result);
 end;
 
 function _BC_Array(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
