@@ -1943,6 +1943,9 @@ function RecordHasFields(Info: PRttiInfo): boolean;
 procedure CopySeveral(Dest, Source: PByte; SourceCount: PtrInt;
   ItemInfo: PRttiInfo; ItemSize: PtrInt);
 
+var // called by CopySeveral() if setup by mormot.core.variants
+  VariantCopySeveral: procedure(Dest, Source: PVariant; Count: PtrInt);
+
 /// low-level initialization of a dynamic array
 // - faster than System.DynArraySetLength() function on a void dynamic array,
 // when the RTTI is known
@@ -6982,34 +6985,52 @@ begin
   until n = 0;
 end;
 
+procedure _StringCopySeveral(Dest, Source: PRawByteString; n: PtrInt);
+begin
+  repeat
+    Dest^ := Source^;
+    inc(Source);
+    inc(Dest);
+    dec(n);
+  until n = 0;
+end;
+
 procedure CopySeveral(Dest, Source: PByte; SourceCount: PtrInt;
   ItemInfo: PRttiInfo; ItemSize: PtrInt);
 var
   cop: TRttiCopier;
   elemsize: PtrInt;
 label
-  raw;
+  raw, fun;
 begin
   if SourceCount > 0 then
     if ItemInfo = nil then // unmanaged items
 raw:  MoveFast(Source^, Dest^, ItemSize * SourceCount)
-    else if ItemInfo^.Kind in rkRecordTypes then
-      // retrieve record/object RTTI once for all items
-      _RecordCopySeveral(pointer(Dest), pointer(Source), SourceCount, ItemInfo)
     else
-    begin
-      // loop the TRttiCopier function over all items
-      cop := RTTI_MANAGEDCOPY[ItemInfo^.Kind];
-      if Assigned(cop) then
-        repeat
-          elemsize := cop(Dest, Source, ItemInfo);
-          inc(Source, elemsize);
-          inc(Dest, elemsize);
-          dec(SourceCount);
-        until SourceCount = 0
+      case ItemInfo^.Kind of
+        {$ifdef FPC}rkObject,{$else}{$ifdef UNICODE}rkMRecord,{$endif}{$endif}
+        rkRecord: // retrieve record/object RTTI once for all items
+          _RecordCopySeveral(pointer(Dest), pointer(Source), SourceCount, ItemInfo);
+        rkLString:
+          _StringCopySeveral(pointer(Dest), pointer(Source), SourceCount);
+        rkVariant:
+          if Assigned(VariantCopySeveral) then
+            VariantCopySeveral(pointer(Dest), pointer(Source), SourceCount)
+          else
+            goto fun; // if mormot.core.variants is not used
       else
-        goto raw;
-    end;
+        // loop the TRttiCopier function over all items (seldom called)
+fun:    cop := RTTI_MANAGEDCOPY[ItemInfo^.Kind];
+        if Assigned(cop) then
+          repeat
+            elemsize := cop(Dest, Source, ItemInfo);
+            inc(Source, elemsize);
+            inc(Dest, elemsize);
+            dec(SourceCount);
+          until SourceCount = 0
+        else
+          goto raw;
+      end;
 end;
 
 function DynArrayNew(Dest: PPointer; Count, ItemSize: PtrInt): pointer;

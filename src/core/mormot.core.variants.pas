@@ -4121,6 +4121,16 @@ hdr:      handler.Clear(V^)
   until n = 0;
 end;
 
+procedure _VariantCopySeveral(Dest, Source: PVariant; Count: PtrInt);
+begin
+  repeat
+    SetVariantByValue(Source^, Dest^, {noforceutf8=}false); // mostly inlined
+    inc(Source);
+    inc(Dest);
+    dec(Count);
+  until Count = 0;
+end;
+
 procedure RawUtf8ToVariant(const Txt: RawUtf8; var Value: TVarData;
   ExpectedValueType: cardinal);
 begin
@@ -13171,6 +13181,7 @@ begin
   JSON_OPTIONS             := PDocVariantOptionsBool(@JSON_[mDefault])^;
   // redirect to the feature complete variant wrapper functions
   VariantClearSeveral         := @_VariantClearSeveral;
+  VariantCopySeveral          := @_VariantCopySeveral;
   _VariantSaveJson            := @__VariantSaveJson;
   _VariantLoadJson            := @__VariantLoadJson;
   _VariantCustomHash          := @__VariantCustomHash;
