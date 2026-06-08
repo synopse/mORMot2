@@ -1284,8 +1284,8 @@ begin
     result := false
   else
   begin
-    result := true;
     Xa := TXAttr(i);
+    result := true;
   end;
 end;
 
@@ -1494,43 +1494,42 @@ end;
 
 procedure TXName.ComputeText;
 var
-  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   a: TXAttr;
   first: boolean;
-  p: PUtf8Char;
-  n, v: ShortString;
+  csv, np, vp: PUtf8Char;
+  ps: PShortString;
+  nl, vl: PtrInt;
+  tmp: TSynTempAdder; // 4KB work buffer on stack
 begin
   fSafe.Lock;
   try
-    if fCachedText = '' then
-      with TTextWriter.CreateOwnedStream(tmp) do
-      try
-        first := true;
-        for a := succ(low(a)) to high(a) do
+    if fCachedText <> '' then
+      exit;
+    tmp.Init;
+    first := true;
+    GetEnumType(TypeInfo(TXAttr), ps);
+    for a := succ(low(a)) to high(a) do
+    begin
+      ps := @ps^[ord(ps^[0]) + 1];
+      csv := pointer(Name[a]);
+      if csv = nil then
+        continue;
+      nl := TrimLeftLowerCaseP(ps, PAnsiChar(np));
+      repeat
+        vl := GetNextItemTrimedBuffer(csv, ',', vp);
+        if vl <> 0 then
         begin
-          p := pointer(Name[a]);
-          if p <> nil then
-          begin
-            TrimLeftLowerCaseToShort(ToText(a), n);
-            repeat
-              GetNextItemShortString(p, @v);
-              if v[0] <> #0 then
-              begin
-                if first then
-                  first := false
-                else
-                  Add(',', ' ');
-                AddShort(n);
-                Add('=');
-                AddShort(v);
-              end;
-            until p = nil;
-          end;
+          if first then
+            first := false
+          else
+            tmp.AddDirect(',', ' ');
+          tmp.Add(np, nl);
+          tmp.AddDirect('=');
+          tmp.Add(vp, vl);
         end;
-        SetText(fCachedText);
-      finally
-        Free;
-      end;
+      until csv = nil;
+    end;
+    tmp.Done(fCachedText);
   finally
     fSafe.UnLock;
   end;

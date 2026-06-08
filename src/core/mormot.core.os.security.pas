@@ -6623,7 +6623,8 @@ begin
     r^ := byte(Value) or $80;
     Value := Value shr 7;
   end;
-  AppendShortBuffer(pointer(r), PAnsiChar(@tmp[15]) - pointer(r), high(Result), @Result);
+  AppendShortBuffer(pointer(r), PAnsiChar(@tmp[15]) - pointer(r),
+    high(Result), @Result);
 end;
 
 function AsnEncOid(OidText: PUtf8Char): TAsnObject;
