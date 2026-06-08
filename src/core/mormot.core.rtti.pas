@@ -947,6 +947,7 @@ type
     // type is unmanaged (i.e. like old Delphi)
     // - used e.g. for static array binary-level process in mormot.core.data
     function ArrayItemType(out aDataCount, aDataSize: PtrInt): PRttiInfo;
+      {$ifdef FPC} inline; {$endif}
     /// for rkArray: get the size in bytes of all the static array items
     // - caller should ensure the type is indeed a static array
     function ArraySize: PtrInt;
@@ -7251,8 +7252,8 @@ var
   n: PtrInt;
   fin: TRttiFinalizer;
 begin
-  Info := Info^.ArrayItemType(n, result);
-  if Info = nil then // nil for unmanaged type
+  Info := Info^.ArrayItemType(n, result); // nil if unmanaged
+  if Info = nil then
     FillCharFast(V^, result, 0)
   else
   begin
@@ -7584,26 +7585,9 @@ end;
 function _ArrayCopy(Dest, Source: PByte; Info: PRttiInfo): PtrInt;
 var
   n, itemsize: PtrInt;
-  cop: TRttiCopier;
-label
-  raw;
 begin
-  Info := Info^.ArrayItemType(n, result);
-  if Info = nil then
-raw:MoveFast(Source^, Dest^, result)
-  else
-  begin
-    cop := RTTI_MANAGEDCOPY[Info^.Kind];
-    if Assigned(cop) then
-      repeat
-        itemsize := cop(Dest ,Source, Info);
-        inc(Source, itemsize);
-        inc(Dest, itemsize);
-        dec(n);
-      until n = 0
-    else
-      goto raw;
-  end;
+  Info := Info^.ArrayItemType(n, result); // nil if unmanaged
+  CopySeveral(Dest, Source, n, Info, itemsize);
 end;
 
 
