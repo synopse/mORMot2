@@ -723,6 +723,11 @@ function BinaryLoadBase64(Source: PAnsiChar; Len: PtrInt; Data: pointer;
   Info: PRttiInfo; UriCompatible: boolean; Kinds: TRttiKinds;
   WithCrc: boolean = true; TryCustomVariants: PDocVariantOptions = nil): boolean;
 
+// internal methods called for (dynamic) arrays with Data<>nil and n>0
+procedure BinaryLoadSeveral(Data: PAnsiChar; var Source: TFastReader;
+  Info: PRttiInfo; n, datasize: PtrInt);
+procedure BinarySaveSeveral(Data: PAnsiChar; Dest: TBufferWriter;
+  Info: PRttiInfo; n, datasize: PtrInt);
 
 /// check equality of two records by content
 // - will handle packed records, with binaries (byte, word, integer...) and
@@ -6195,6 +6200,44 @@ begin
   end
   else
     result := false;
+end;
+
+procedure BinaryLoadSeveral(Data: PAnsiChar; var Source: TFastReader;
+  Info: PRttiInfo; n, datasize: PtrInt);
+label
+  raw;
+var
+  load: TRttiBinaryLoad;
+begin // caller ensured Data<>nil and n>0
+  if Info = nil then
+    goto raw;
+  load := RTTI_BINARYLOAD[Info^.Kind];
+  if Assigned(load) then
+    repeat
+      inc(Data, load(Data, Source, Info));
+      dec(n);
+    until n = 0
+  else
+raw:Source.Copy(Data, datasize)
+end;
+
+procedure BinarySaveSeveral(Data: PAnsiChar; Dest: TBufferWriter;
+  Info: PRttiInfo; n, datasize: PtrInt);
+var
+  sav: TRttiBinarySave;
+label
+  raw;
+begin
+  if Info = nil then
+    goto raw;
+  sav := RTTI_BINARYSAVE[Info^.Kind];
+  if Assigned(sav) then // paranoid check
+    repeat
+      inc(Data, sav(Data, Dest, Info));
+      dec(n);
+    until n = 0
+  else
+raw:Dest.Write(Data, datasize);
 end;
 
 
