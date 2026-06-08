@@ -434,7 +434,6 @@ const
      '1.2.840.10045.4.3.4',    // xsaSha512Ecc512 = sha512ECDSA
      '1.3.101.110');           // xsaSha512EdDSA
 
-
   ASN1_OID_PKCS1_MGF       = '1.2.840.113549.1.1.8';
   ASN1_OID_PKCS9_EXTREQ    = '1.2.840.113549.1.9.14';
 
@@ -520,6 +519,9 @@ type
     // - aggregate KeyUsages and ExtendedKeyUsages X.509 fields with
     // cuCA from Extension[xeBasicConstraints]
     CertUsages: TCryptCertUsages;
+    /// CA URIs from declared X.509 v3 Authority Information Access extension
+    // - only http://... or https://... URIs are decoded here
+    CaIssuers: TRawUtf8DynArray;
     /// decimal text of a positive integer assigned by the CA to each certificate
     // - e.g. '330929475774275458452528262248458246563660'
     function SerialNumberText: RawUtf8;
@@ -1930,7 +1932,11 @@ begin
               if oid = '1.3.6.1.5.5.7.48.1' then
                 Prepend(v, 'ocsp=')
               else if oid = '1.3.6.1.5.5.7.48.2' then
-                Prepend(v, 'caIssuers=')
+              begin
+                if IsHttp(v) then
+                  AddRawUtf8(CaIssuers, v);
+                Prepend(v, 'caIssuers=');
+              end
               else
                 Prepend(v, [oid, '=']); // not part of RFC 5280
               EnsureRawUtf8(v);
