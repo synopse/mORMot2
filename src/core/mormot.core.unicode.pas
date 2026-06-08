@@ -613,7 +613,7 @@ type
     /// direct conversion of a PAnsiChar buffer into a UTF-8 encoded string
     // - will call AnsiBufferToUnicode() overloaded virtual method
     procedure AnsiBufferToRawUtf8(Source: PAnsiChar;
-      SourceChars: cardinal; out Value: RawUtf8); overload; virtual;
+      SourceChars: cardinal; var Value: RawUtf8); overload; virtual;
     /// direct conversion of an Unicode buffer into a PAnsiChar buffer
     // - Dest^ buffer must be reserved with at least SourceChars * 3 bytes
     // - will detect and ignore any trailing UTF-16LE BOM marker
@@ -804,7 +804,7 @@ type
     procedure AnsiToUtf8(const AnsiText: RawByteString; var Value: RawUtf8); override;
     /// direct conversion of a PAnsiChar buffer into a UTF-8 encoded string
     procedure AnsiBufferToRawUtf8(Source: PAnsiChar;
-      SourceChars: cardinal; out Value: RawUtf8); override;
+      SourceChars: cardinal; var Value: RawUtf8); override;
   end;
 
   /// a class to handle UTF-16 to/from Unicode translation
@@ -2297,7 +2297,7 @@ procedure QuotedStr(P: PUtf8Char; PLen: PtrInt; Quote: AnsiChar;
 // - "text "" end"   -> text " end
 // - returns nil if P doesn't contain a valid SQL string
 // - returns a pointer just after the quoted text otherwise
-function UnQuoteSqlStringVar(P: PUtf8Char; out Value: RawUtf8): PUtf8Char;
+function UnQuoteSqlStringVar(P: PUtf8Char; var Value: RawUtf8): PUtf8Char;
 
 /// unquote a SQL-compatible string
 function UnQuoteSqlString(const Value: RawUtf8): RawUtf8;
@@ -2420,7 +2420,7 @@ function TrimLeftLowerCaseToShort(V: PShortString): ShortString; overload;
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.)
 // - return a ShortString: enumeration names are pure 7-bit ANSI with Delphi 7
 // to 2007, and UTF-8 encoded with Delphi 2009+
-procedure TrimLeftLowerCaseToShort(V: PShortString; out result: ShortString); overload;
+procedure TrimLeftLowerCaseToShort(V: PShortString; var result: ShortString); overload;
 
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.) as pointers
 function TrimLeftLowerCaseP(V: PShortString; var Trimmed: PAnsiChar): PtrInt;
@@ -4181,14 +4181,17 @@ begin
 end;
 
 procedure TSynAnsiConvert.AnsiBufferToRawUtf8(Source: PAnsiChar;
-  SourceChars: cardinal; out Value: RawUtf8);
+  SourceChars: cardinal; var Value: RawUtf8);
 var
   p: PUtf8Char;
   tmp: TSynTempBuffer;
 begin
   if (Source = nil) or
      (SourceChars = 0) then
+  begin
+    FastAssignNew(Value);
     exit;
+  end;
   p := AnsiBufferToUtf8(tmp.Init(SourceChars * 3), Source, SourceChars);
   FastSetString(Value, tmp.buf, p - tmp.buf);
   tmp.Done;
@@ -5056,7 +5059,7 @@ begin
 end;
 
 procedure TSynAnsiUtf8.AnsiBufferToRawUtf8(
-  Source: PAnsiChar; SourceChars: cardinal; out Value: RawUtf8);
+  Source: PAnsiChar; SourceChars: cardinal; var Value: RawUtf8);
 begin
   FastSetString(Value, Source, SourceChars);
 end;
@@ -9361,12 +9364,14 @@ begin
   result := Prop <> '';
 end;
 
-function UnQuoteSqlStringVar(P: PUtf8Char; out Value: RawUtf8): PUtf8Char;
+function UnQuoteSqlStringVar(P: PUtf8Char; var Value: RawUtf8): PUtf8Char;
 var
   quote: AnsiChar;
   beg, ps: PUtf8Char;
   internalquote: PtrInt;
 begin
+  if Value <> '' then
+    FastAssignNew(Value);
   result := nil;
   if P = nil then
     exit;
@@ -9646,7 +9651,7 @@ begin
   Trimmed := p;
 end;
 
-procedure TrimLeftLowerCaseToShort(V: PShortString; out result: ShortString);
+procedure TrimLeftLowerCaseToShort(V: PShortString; var result: ShortString);
 var
   p: PAnsiChar;
   len: PtrInt;
