@@ -219,9 +219,6 @@ function IsOptions(const method: RawUtf8): boolean;
 function IsUrlFavIcon(P: PUtf8Char): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// check if the supplied text start with 'http://' or 'https://'
-function IsHttp(const text: RawUtf8): boolean;
-
 /// true if the supplied text is case-insensitive 'none'
 // - as in THttpRequestExtendedOptions.Proxy field
 function IsNone(const text: RawUtf8): boolean;
@@ -2999,15 +2996,6 @@ begin
         (PCardinalArray(P)[2] =
            ord('.') + ord('i') shl 8 + ord('c') shl 16 + ord('o') shl 24) and
         (P[12] = #0);
-end;
-
-function IsHttp(const text: RawUtf8): boolean;
-begin
-  result := (length(text) > 5) and
-            (PCardinal(text)^ and $dfdfdfdf = HTTP_32) and
-            ((text[5] = ':') or
-             ((text[5] in ['s', 'S']) and
-              (text[6] = ':')));
 end;
 
 function IsNone(const text: RawUtf8): boolean;

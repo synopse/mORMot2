@@ -2344,6 +2344,9 @@ function StatusCodeIsSuccess(Code: integer): boolean;
 // - to avoid unexpected HTTP body injection, e.g. from unsafe business code
 function IsInvalidHttpHeader(const Headers: RawUtf8): boolean;
 
+/// check if the supplied text start with 'http://' or 'https://'
+function IsHttp(const text: RawUtf8): boolean;
+
 
 { **************** Hexadecimal Text And Binary Conversion }
 
@@ -10290,6 +10293,15 @@ begin
       break;
   until false;
   result := true;
+end;
+
+function IsHttp(const text: RawUtf8): boolean;
+begin
+  result := (length(text) > 5) and
+            (PCardinal(text)^ and $dfdfdfdf = HTTP_32) and
+            ((text[5] = ':') or
+             ((text[5] in ['s', 'S']) and
+              (text[6] = ':')));
 end;
 
 
