@@ -6858,7 +6858,7 @@ begin
       // or at least from mormot.core.base calling inlined VarClear()
       VariantClearSeveral(pointer(Value), Count);
     else
-      begin // other managed types, e.g. IInterface or dynamic arrays
+      begin // other managed types, e.g. IInterface or nested dynamic arrays
         fin := RTTI_FINALIZE[ElemTypeInfo^.Kind];
         if Assigned(fin) then  // e.g. rkWString, rkArray, rkDynArray
           repeat

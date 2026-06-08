@@ -3820,6 +3820,7 @@ begin
   else if vt = varString then // second-most used complex type also inlined
   begin
     TSynVarData(Dest).VType := vt;
+    TSynVarData(Dest).VAny := nil;
     RawByteString(TSynVarData(Dest).VAny) := RawByteString(s^.VAny);
   end
   else
