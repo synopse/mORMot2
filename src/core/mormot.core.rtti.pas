@@ -7025,14 +7025,14 @@ function DynArrayGrow(Dest: PPointer; Count, ItemSize: PtrInt): PAnsiChar;
 var
   old: PtrInt;
 begin
+  dec(PDynArrayRec(Dest^));
+  ReallocMem(Dest^, (Count * ItemSize) + SizeOf(TDynArrayRec));
   result := Dest^;
-  dec(PDynArrayRec(result));
-  ReallocMem(result, (Count * ItemSize) + SizeOf(TDynArrayRec));
   old := PDynArrayRec(result)^.length;
   PDynArrayRec(result)^.length := Count;
   inc(PDynArrayRec(result));
-  FillCharFast(result[old * ItemSize], (Count - old) * ItemSize, 0);
   Dest^ := result;
+  FillCharFast(result[old * ItemSize], (Count - old) * ItemSize, 0);
 end;
 
 procedure DynArrayCopy(Dest, Source: PPointer; Info: PRttiInfo; SourceExtCount: PInteger);
