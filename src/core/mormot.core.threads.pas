@@ -2486,12 +2486,7 @@ end;
 
 procedure TSynQueue.LoadFromReader;
 var
-  n: integer;
-  info: PRttiInfo;
-  load: TRttiBinaryLoad;
-  p: PAnsiChar;
-label
-  raw;
+  n, siz: integer;
 begin
   fSafe.WriteLock;
   try
@@ -2502,22 +2497,10 @@ begin
       exit;
     fFirst := 0;
     fLast := n - 1;
-    fValues.Count := NextGrow(n);
-    p := fValues.Value^;
-    info := fValues.Info.Cache.ItemInfoManaged;
-    if info <> nil then // nil for unmanaged items
-    begin
-      load := RTTI_BINARYLOAD[info^.Kind];
-      if Assigned(load) then
-        repeat
-          inc(p, load(p, fReader, info));
-          dec(n);
-        until n = 0
-      else
-        goto raw;
-    end
-    else
-raw:  fReader.Copy(p, n * fValues.Info.Cache.ItemSize);
+    fValues.Count := NextGrow(n); // allocate with some spare
+    siz := fValues.Info.Cache.ItemSize * n;
+    BinaryLoadSeveral(fValues.Value^, fReader,
+      fValues.Info.Cache.ItemInfoManaged, n, siz);
   finally
     fSafe.WriteUnLock;
   end;
@@ -2527,22 +2510,13 @@ procedure TSynQueue.SaveToWriter(aWriter: TBufferWriter);
 var
   n: integer;
   info: PRttiInfo;
-  sav: TRttiBinarySave;
 
-  procedure WriteItems(start, count: integer);
-  var
-    p: PAnsiChar;
+  procedure WriteItems(start, stop: PtrInt);
   begin
-    if count = 0 then
-      exit;
-    p := fValues.ItemPtr(start);
-    if Assigned(sav) then
-      repeat
-        inc(p, sav(p, aWriter, info));
-        dec(count);
-      until count = 0
-    else
-      aWriter.Write(p, count * fValues.Info.Cache.ItemSize);
+    stop := stop - start + 1; // =count
+    if stop > 0 then
+      BinarySaveSeveral(fValues.ItemPtr(start), aWriter, info, stop,
+        stop * fValues.Info.Cache.ItemSize);
   end;
 
 begin
@@ -2554,16 +2528,12 @@ begin
     if n = 0 then
       exit;
     info := fValues.Info.Cache.ItemInfoManaged;
-    if info <> nil then
-      sav := RTTI_BINARYSAVE[info^.Kind]
-    else
-      sav := nil; // unmanaged items
     if fFirst <= fLast then
-      WriteItems(fFirst, fLast - fFirst + 1)
+      WriteItems(fFirst, fLast)
     else
     begin
-      WriteItems(fFirst, fCount - fFirst);
-      WriteItems(0, fLast + 1);
+      WriteItems(fFirst, fCount - 1);
+      WriteItems(0, fLast);
     end;
   finally
     fSafe.ReadOnlyUnLock;
