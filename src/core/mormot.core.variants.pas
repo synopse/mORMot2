@@ -126,7 +126,7 @@ procedure VariantToVarRec(const V: variant; var result: TVarRec);
 /// convert a variant array to open array (const Args: array of const) arguments
 // - variants are accessed by reference as vtVariant so should remain available
 procedure VariantsToArrayOfConst(V: PVariant; VCount: integer;
-  out result: TTVarRecDynArray); overload;
+  var result: TTVarRecDynArray); overload;
 
 /// convert a variant array to open array (const Args: array of const) arguments
 // - variants are accessed by reference as vtVariant so should remain available
@@ -3039,7 +3039,7 @@ procedure MultiPartToDocVariant(const MultiPart: TMultiPartDynArray;
   var Doc: TDocVariantData; Options: PDocVariantOptions = nil);
 
 /// parse a "key<value" or "key<" expression for EvaluateVariantExpression()
-function ParseVariantExpression(Expression: PUtf8Char; out Key: RawUtf8;
+function ParseVariantExpression(Expression: PUtf8Char; var Key: RawUtf8;
   out Match: TCompareOperator; Value: PVariant): boolean;
 
 /// evaluate if a ParseVariantExpression() operator match two variant values
@@ -4210,7 +4210,7 @@ begin
 end;
 
 procedure VariantsToArrayOfConst(V: PVariant; VCount: integer;
-  out result: TTVarRecDynArray);
+  var result: TTVarRecDynArray);
 var
   r: PVarRec;
 begin
@@ -11190,7 +11190,7 @@ begin
           'contenttype', ContentType]));
 end;
 
-function ParseVariantExpression(Expression: PUtf8Char; out Key: RawUtf8;
+function ParseVariantExpression(Expression: PUtf8Char; var Key: RawUtf8;
   out Match: TCompareOperator; Value: PVariant): boolean;
 var
   exp: TTextExpression;
@@ -11199,7 +11199,10 @@ begin
   result := false;
   if (Expression = nil) or
      (ParseTextExpression(Expression, exp) = nil) then
+  begin
+    FastAssignNew(Key);
     exit;
+  end;
   FastSetString(Key, exp.NameStart, exp.NameLen);
   if Value <> nil then
     if (exp.ValueStart = nil) or
@@ -12039,14 +12042,14 @@ begin
   Doc^.Void; // IDocList/IDocDict may be existing and with some previous data
   if GetFirstJsonToken(ctx.Json) <> Token then
   begin
-    Context.Valid := (ctx.Json <> nil) and Context.ParseNull;
+    ctx.Valid := (ctx.Json <> nil) and Context.ParseNull; // accept null
     exit;
   end;
   opt := Context.CustomVariant;
   if opt = nil then
     opt := @Doc^.VOptions;
   ctx.Json := Doc^.InitJsonInPlace(ctx.Json, opt^, @ctx.EndOfObject);
-  Context.Valid := ctx.Json <> nil;
+  ctx.Valid := ctx.Json <> nil;
 end;
 
 
