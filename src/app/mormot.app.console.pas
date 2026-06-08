@@ -205,7 +205,7 @@ begin
       end
       else if sw <> '' then
       begin
-        fValues.AddValueFromText(sw, p, true);
+        fValues.AddValueFromText(sw, p, {update=}true);
         sw := '';
       end;
   end;

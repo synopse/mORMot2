@@ -2513,7 +2513,7 @@ var
 
   procedure WriteItems(start, stop: PtrInt);
   begin
-    stop := stop - start + 1; // =count
+    stop := stop - start + 1; // = count
     if stop > 0 then
       BinarySaveSeveral(fValues.ItemPtr(start), aWriter, info, stop,
         stop * fValues.Info.Cache.ItemSize);
