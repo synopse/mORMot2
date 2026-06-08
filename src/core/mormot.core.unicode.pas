@@ -3278,7 +3278,14 @@ procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
 var
   tmp: TSynTempBuffer;
 begin
-  RawUnicodeToUtf8(WideChar, WideCharCount, tmp, Flags);
+  if (WideChar = nil) or
+     (WideCharCount <= 0) then
+  begin
+    FastAssignNew(result);
+    exit;
+  end;
+  tmp.Len := RawUnicodeToUtf8(tmp.Init(WideCharCount * 3),
+    (WideCharCount * 3) + 16, WideChar, WideCharCount, Flags);
   FastSetString(result, tmp.buf, tmp.len);
   tmp.Done;
 end;
