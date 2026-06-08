@@ -1923,8 +1923,8 @@ type
     function AddValueJson(aName: PUtf8Char; aNameLen: integer;
       var aValue: TGetJsonField): integer;
     /// add a value in this document from a real value and its associated RTTI
-    function AddValueRtti(const aName: RawUtf8;
-      aValue: pointer; aRtti: TRttiCustom): integer;
+    function AddValueRtti(const aName: RawUtf8; aValue: pointer;
+      aRtti: TRttiCustom; DoUpdate: boolean = false): integer;
     /// add a value in this document, or update an existing entry
     // - if instance's Kind is dvArray, it will raise an EDocVariant exception
     // - any existing Name would be updated with the new Value, unless
@@ -2016,8 +2016,8 @@ type
     // - new object will keep the same options as this document
     // - DontAddDefault=true won't include VarRecIsDefault (0/''/false) values
     // - slightly faster than AddItem(_Obj(...)) or AddValue(aName, _Obj(...))
-    procedure AddObject(const aNameValuePairs: array of const;
-      const aName: RawUtf8 = ''; DontAddDefault: boolean = false);
+    function AddObject(const aNameValuePairs: array of const;
+      const aName: RawUtf8 = ''; DontAddDefault: boolean = false): integer;
     /// add one or several values from another document
     // - supplied document should be of the same kind than the current one,
     // otherwise nothing is added
@@ -7731,16 +7731,18 @@ begin
 end;
 
 function TDocVariantData.AddValueRtti(const aName: RawUtf8;
-  aValue: pointer; aRtti: TRttiCustom): integer;
+  aValue: pointer; aRtti: TRttiCustom; DoUpdate: boolean): integer;
+var
+  v: PVariant;
 begin
   result := -1;
   if IsArray or
-     (aName = '') then
+     (aValue = nil) or
+     (aRtti = nil) then
     exit;
-  result := InternalAdd(aName);
-  if (aValue <> nil) and
-     (aRtti <> nil) then
-    aRtti.ValueToVariant(aValue, PVarData(@VValue[result])^, @VOptions);
+  result := InternalAddValuePrepare(aName, DoUpdate, v, 'Rtti');
+  if result >= 0 then
+    aRtti.ValueToVariant(aValue, PVarData(v)^, @VOptions);
 end;
 
 procedure TDocVariantData.AddValueArray(const aName: RawUtf8; const aValue: variant);
@@ -7965,26 +7967,23 @@ begin
   result := @VValue[PtrUInt(result)]; // in two steps for FPC
 end;
 
-procedure TDocVariantData.AddObject(const aNameValuePairs: array of const;
-  const aName: RawUtf8; DontAddDefault: boolean);
+function TDocVariantData.AddObject(const aNameValuePairs: array of const;
+  const aName: RawUtf8; DontAddDefault: boolean): integer;
 var
-  added: PtrInt;
   obj: PDocVariantData;
 begin
-  if (aName <> '') and
-     (Has(dvoCheckForDuplicatedNames)) then
-    if GetValueIndex(aName) >= 0 then
+  if (aName <> '') and // aName='' for dvArray: can't use InternalAddValuePrepare
+     (Has(dvoCheckForDuplicatedNames)) and
+     (GetValueIndex(aName) >= 0) then
       EDocVariant.RaiseUtf8('AddObject: Duplicated [%] name', [aName]);
-  added := InternalAdd(aName);
-  obj := @VValue[added];
+  result := InternalAdd(aName);
+  obj := @VValue[result];
   if PInteger(obj)^ = 0 then // most common case is adding a new value
     obj^.InitClone(self, dvoIsObject) // same options than owner document
   else if (cardinal(obj^.VType) <> cardinal(VType)) or
           not obj^.IsObject then
     EDocVariant.RaiseUtf8('AddObject: wrong existing [%]', [aName]);
   obj^.AddNameValuesToObject(aNameValuePairs, DontAddDefault);
-  if Has(dvoInternValues) then
-    InternalUniqueValueAt(added);
 end;
 
 function TDocVariantData.GetObjectProp(const aName: RawUtf8;
