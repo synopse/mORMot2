@@ -82,7 +82,10 @@ procedure SetVariantByRef(const Source: Variant; var Dest: Variant);
 // - will convert any string value into RawUtf8 (varString) for consistency,
 // unless NoForceRawUtf8 is true (e.g. from dvoValueDoNotNormalizeAsRawUtf8)
 procedure SetVariantByValue(const Source: Variant; var Dest: Variant;
-  NoForceRawUtf8: boolean = false);
+  const NoForceRawUtf8: boolean = false);
+  {$ifdef HASINLINE}inline;{$endif}
+
+procedure SetVariantComplex(vt: cardinal; s, d: PSynVarData; NoForceUtf8: boolean);
 
 /// same as FillChar(Value^,SizeOf(TVarData),0)
 // - so can be used for TVarData or Variant
@@ -3787,9 +3790,38 @@ procedure InitializeVariantsJson;
 implementation
 
 // some early methods implementation, defined here for proper inlining
-// 32-bit PInteger() is faster than 16-bit (dvoXXX in VOptions) on Intel CPUs
+
+procedure SetVariantByValue(const Source: Variant; var Dest: Variant;
+  const NoForceRawUtf8: boolean);
+var
+  s: PVarData;
+  vt: cardinal;
+begin
+  if TSynVarData(Dest).VType <> 0 then
+    VarClearProc(PVarData(@Dest)^);
+  s := @Source;
+  repeat
+    vt := s^.VType;          // inlined VarDataFromVariant
+    if vt <> varVariantByRef then
+      break;
+    s := s^.VAny;            // retrieve original value
+  until false;
+  if vt in VTYPE_SIMPLE then // inlined for numerical types
+  begin
+    TSynVarData(Dest).VType := vt;
+    TSynVarData(Dest).VInt64 := s^.VInt64;
+  end
+  else if vt = varString then // most used complex type also inlined
+  begin
+    TSynVarData(Dest).VType := vt;
+    RawByteString(TSynVarData(Dest).VAny) := RawByteString(s^.VAny);
+  end
+  else
+    SetVariantComplex(vt, pointer(s), @Dest, NoForceRawUtf8); // seldom called
+end;
 
 const
+  // 32-bit PInteger() is faster than 16-bit (dvoXXX in VOptions) on Intel CPUs
   _DVO = 1 shl ord(dvoIsArray) + 1 shl ord(dvoIsObject);
 
 function TDocVariantData.GetKind: TDocVariantKind;
@@ -3973,99 +4005,53 @@ begin
   end;
 end;
 
-procedure SetVariantByValue(const Source: Variant; var Dest: Variant;
-  NoForceRawUtf8: boolean);
+procedure SetVariantComplex(vt: cardinal; s, d: PSynVarData; NoForceUtf8: boolean);
 var
-  s: PVarData;
-  d: TSynVarData absolute Dest;
-  vt: cardinal;
   ct: TSynInvokeableVariantType;
+  tmp: TVarData;
 begin
-  s := @Source;
-  if d.VType <> 0 then
-    VarClearProc(d.Data);
-  repeat
-    vt := s^.VType;
-    if vt <> varVariantByRef then
-      break;
-    s := s^.VPointer; // retrieve original value
-  until false;
-  d.VAny := nil; // to avoid GPF with strings below
-  case vt of
-    varEmpty..varDate,
-    varBoolean,
-    varShortInt..varWord64:
-      begin
-        d.VType := vt;
-        d.VInt64 := s^.VInt64; // fast copy up to 64-bit of value
-      end;
-    varString:
-      begin
-        d.VType := varString;
-        if s^.VAny <> nil then
-          RawByteString(d.VAny) := RawByteString(s^.VAny); // assign
-      end;
-    varStringByRef:
-      begin
-        d.VType := varString;
-        RawByteString(d.VAny) := PRawByteString(s^.VAny)^; // deref + assign
-      end;
-    {$ifdef HASVARUSTRING}
-    varUString:
-      if s^.VAny = nil then
-        d.VType := varString
-      else if NoForceRawUtf8 then
-      begin
-        d.VType := varUString;
-        UnicodeString(d.VAny) := UnicodeString(s^.VAny); // assign
-      end
-      else
-      begin
-        d.VType := varString;
-        RawUnicodeToUtf8(s^.VAny, length(UnicodeString(s^.VAny)), RawUtf8(d.VAny));
-      end;
-    varUStringByRef:
-      if NoForceRawUtf8 then
-      begin
-        d.VType := varUString;
-        UnicodeString(d.VAny) := PUnicodeString(s^.VAny)^; // deref + assign
-      end
-      else
-      begin
-        d.VType := varString;
-        RawUnicodeToUtf8(PPointer(s^.VAny)^, length(PUnicodeString(s^.VAny)^), RawUtf8(d.VAny));
-      end;
-    {$endif HASVARUSTRING}
-    varOleStr:
-      if s^.VAny = nil then
-        d.VType := varString
-      else if NoForceRawUtf8 then
-      begin
-        d.VType := varSynUnicode; // store as UnicodeString if possible
-        FastSynUnicode(SynUnicode(d.VAny), s^.VAny, length(WideString(s^.VAny)));
-      end
-      else
-      begin
-        d.VType := varString;
-        RawUnicodeToUtf8(s^.VAny, length(WideString(s^.VAny)), RawUtf8(d.VAny));
-      end;
-    varOleStrByRef:
-      if NoForceRawUtf8 then
-      begin
-        d.VType := varSynUnicode;
-        FastSynUnicode(SynUnicode(d.VAny), PPointer(s^.VAny)^, length(PWideString(s^.VAny)^));
-      end
-      else
-      begin
-        d.VType := varString;
-        RawUnicodeToUtf8(PPointer(s^.VAny)^, length(PWideString(s^.VAny)^), RawUtf8(d.VAny));
-      end;
-  else // note: varVariant should not happen here
-    if DocVariantType.FindSynVariantType(vt, ct) then
-      ct.CopyByValue(d.Data, s^) // needed e.g. for TBsonVariant
-    else
-      SetVariantUnRefSimpleValue(PVariant(s)^, d.Data);
+  if vt = DocVariantVType then // most common case after VTYPE_SIMPLE+varString
+  begin
+    DocVariantType.CopyByValue(d^.Data, s^.Data);
+    exit;
   end;
+  if vt and varByRef = 0 then
+  begin
+    d.VType := varString; // default as RawUtf8 ''
+    d.VAny := nil;        // to avoid GPF with strings below
+    case vt of            // VTYPE_SIMPLE+varString were handled by caller
+      varOleStr:
+        if s.VAny <> nil then
+          if NoForceUtf8 then
+          begin
+            d.VType := varSynUnicode; // store as UnicodeString if forced
+            FastSynUnicode(SynUnicode(d.VAny), s.VAny, length(WideString(s.VAny)));
+          end
+          else                        // convert to RawUtf8 by default
+            RawUnicodeToUtf8(s.VAny, length(WideString(s.VAny)), RawUtf8(d.VAny));
+      {$ifdef HASVARUSTRING}
+      varUString:
+        if s.VAny <> nil then
+          if NoForceUtf8 then
+          begin
+            d.VType := varUString;
+            UnicodeString(d.VAny) := UnicodeString(s.VAny); // assign
+          end
+          else                        // convert to RawUtf8 by default
+            RawUnicodeToUtf8(s.VAny, length(UnicodeString(s.VAny)), RawUtf8(d.VAny));
+      {$endif HASVARUSTRING}
+      else
+        begin
+          ct := mormot.core.variants.FindSynVariantType(vt);
+          if ct <> nil then // e.g. TBsonVariant (TDocVariant is done above)
+            ct.CopyByValue(d.Data, s.Data)
+          else // convert uncommon types (e.g. varOlePAnsiChar) into RawUtf8
+            VariantToUtf8(PVariant(s)^, RawUtf8(d.VAny), boolean(tmp.VByte));
+        end;
+    end;
+  end
+  else // most varByRef values appear with Automation/COM or DispInvoke()
+    SetVariantByValue(SetVarDataUnRef(vt, @s.Data, tmp)^, variant(d^), NoForceUtf8);
 end;
 
 procedure ZeroFill(Value: PVarData);
