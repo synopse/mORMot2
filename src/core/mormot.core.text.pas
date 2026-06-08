@@ -2276,7 +2276,7 @@ type
     /// retrieve a cookie value from its name
     // - should always previously check "if not ###Parsed then Parse()"
     // - consider FindCookie() if you don't really require a transient RawUtf8
-    procedure RetrieveCookie(const CookieName: RawUtf8; out DestValue: RawUtf8);
+    procedure RetrieveCookie(const CookieName: RawUtf8; var DestValue: RawUtf8);
       {$ifdef HASINLINE} inline; {$endif}
     {$ifdef HASINLINE} { Delphi 7 should use GetCookie() or RetrieveCookie() }
     /// retrieve an incoming HTTP cookie value
@@ -10356,13 +10356,15 @@ begin
 end;
 
 procedure THttpCookies.RetrieveCookie(const CookieName: RawUtf8;
-  out DestValue: RawUtf8);
+  var DestValue: RawUtf8);
 var
   c: PHttpCookie;
 begin
   c := FindCookie(CookieName);
   if c <> nil then
-    FastSetString(DestValue, c^.ValueStart, c^.ValueLen);
+    FastSetString(DestValue, c^.ValueStart, c^.ValueLen)
+  else
+    FastAssignNew(DestValue);
 end;
 
 function CookieFromHeaders(Headers: PUtf8Char; const Name: RawUtf8;
