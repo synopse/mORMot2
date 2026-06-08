@@ -258,7 +258,9 @@ type
     fStatementSql: RawUtf8;
     fStatementLastException: RawUtf8;
     fStatementTruncateSqlLogLen: integer;
+    fBatch: PRestOrmServerDBBatch;
     fStatementDecoder: TExtractInlineParameters;
+    fJsonDecoder: TJsonObjectDecoder; // protected by execOrmWrite lock
     /// check if a VACUUM statement is possible
     // - VACUUM in fact DISCONNECT all virtual modules (sounds like a SQLite3
     // design problem), so calling it during process could break the engine
@@ -268,8 +270,6 @@ type
     // in this case, VACUUM will be a no-op
     function PrepareVacuum(const aSql: RawUtf8): boolean;
   protected
-    fBatch: PRestOrmServerDBBatch;
-    fJsonDecoder: TJsonObjectDecoder; // protected by execOrmWrite lock
     /// retrieve a TSqlRequest instance in fStatement
     // - will set @fStaticStatement if no :(%): internal parameters appear:
     // in this case, the TSqlRequest.Close method must be called

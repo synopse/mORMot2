@@ -5664,13 +5664,10 @@ begin
       end;
     end
     else
-    begin
-      p := @up;
       if fEngine.CodePage = CP_WINANSI then
-        l := UpperCopyWin255(p, RawUtf8(tmp)) - p
+        l := UpperCopyWin255(@up, RawUtf8(tmp)) - PAnsiChar(@up)
       else
-        l := UpperCopy255Buf(p, tmp, l) - p;
-    end;
+        l := UpperCopy255Buf(@up, tmp, l) - PAnsiChar(@up);
   end;
   result := DefaultHasher(OrmHashSeed, p, l);
   if fGetterIsFieldPropOffset = 0 then
