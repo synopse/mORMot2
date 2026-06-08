@@ -1070,7 +1070,7 @@ type
     /// initialize a TDocVariantData to store per-reference document-based content
     // - this overloaded method allows to specify an estimation of how many
     // properties or items this aKind document would contain
-    procedure InitFast(InitialCapacity: integer; aKind: TDocVariantKind); overload;
+    procedure InitFast(InitialCapacity: PtrInt; aKind: TDocVariantKind); overload;
     /// initialize a TDocVariantData to store document-based object content
     // - object will be initialized with data supplied two by two, as Name,Value
     // pairs, e.g.
@@ -5549,7 +5549,7 @@ begin
   if S.Has(dvoValueCopiedByReference) then
     D.VValue := S.VValue // inc DACntAdd()
   else
-    D.VValue := system.copy(S.VValue); // new array, but byref values
+    DynArrayCopy(@D.VValue, @S.VValue, TypeInfo(TVariantDynArray), @S.VCount);
 end;
 
 procedure TDocVariant.Cast(var Dest: TVarData; const Source: TVarData);
@@ -6201,7 +6201,7 @@ begin
     else
       VValue := CloneFrom.VValue // byref copy of the whole array
   else
-    SetLength(VValue, VCount);   // setup void values
+    DynArrayNew(@VValue, VCount, SizeOf(VValue[0])); // setup void values
   result := pointer(VValue);
 end;
 
@@ -6237,13 +6237,15 @@ begin
   TVarData(self) := DV_FAST[aKind];
 end;
 
-procedure TDocVariantData.InitFast(InitialCapacity: integer;
+procedure TDocVariantData.InitFast(InitialCapacity: PtrInt;
   aKind: TDocVariantKind);
 begin
   TVarData(self) := DV_FAST[aKind];
+  if InitialCapacity <= 0 then
+    exit;
   if aKind = dvObject then
-    SetLength(VName, InitialCapacity);
-  SetLength(VValue, InitialCapacity);
+    DynArrayNew(@VName, InitialCapacity, SizeOf(VName[0]));
+  DynArrayNew(@VValue, InitialCapacity, SizeOf(VValue[0]));
 end;
 
 procedure TDocVariantData.InitObject(const NameValuePairs: array of const;
@@ -6555,7 +6557,7 @@ begin
         v^.Init(aOptions, dvObject);
         v^.VName := nam;
         v^.VCount := n;
-        SetLength(v^.VValue, n);
+        DynArrayNew(@v^.VValue, n, SizeOf(VValue[0]));
         t := length(tmp);
         if t > n then
           t := n; // allow too many or missing last columns
@@ -6574,15 +6576,19 @@ begin
     VValue := copy(aSource.VValue, aOffset, VCount); // new array, byref values
 end;
 
-function _InitArray(out aDest: TDocVariantData; aOptions: TDocVariantOptions;
+function _InitArray(var aDest: TDocVariantData; aOptions: TDocVariantOptions;
   aCount: integer; const aItems): PSynVarData; // internal local factory
 begin
   if aCount < 0 then
     aCount := length(TByteDynArray(aItems));
   {%H-}aDest.Init(aOptions, dvArray);
+  if aCount = 0 then
+  begin
+    result := nil;
+    exit;
+  end;
   aDest.VCount := aCount;
-  SetLength(aDest.VValue, aCount);
-  result := pointer(aDest.VValue);
+  result := DynArrayNew(@aDest.VValue, aCount, SizeOf(aDest.VValue[0]));
 end;
 
 procedure TDocVariantData.InitArrayFromObjArray(const ObjArray;
@@ -6694,9 +6700,8 @@ begin
   begin
     // handle array of simple types
     VCount := n;
-    SetLength(VValue, n);
+    v := DynArrayNew(@VValue, n, SizeOf(VValue[0]));
     pb := aItems.Value^;
-    v := pointer(VValue);
     repeat
       inc(pb, item.ValueToVariant(pb, v^));
       inc(v);
@@ -6743,8 +6748,7 @@ begin
       proto.AddValueNameLen(info.Value, info.ValueLen, null); // set field name
     end;
     // 3. fill all nested objects from incoming values
-    SetLength(VValue, rowcount);
-    dv := pointer(VValue);
+    dv := DynArrayNew(@VValue, rowcount, SizeOf(VValue[0]));
     for r := 1 to rowcount do
     begin
       val := dv^.InitFrom(proto, {values=}false); // names byref + void values
@@ -6778,8 +6782,7 @@ begin
     end;
     rowcount := 0;
     capa := 16;
-    SetLength(VValue, capa);
-    dv := pointer(VValue);
+    dv := DynArrayNew(@VValue, capa, SizeOf(VValue[0]));
     dv^ := proto;
     // 2. get values (assume fields are always the same as in the first object)
     repeat
@@ -6797,8 +6800,8 @@ begin
       if rowcount = capa then
       begin
         capa := NextGrow(capa);
-        SetLength(VValue, capa);
-        dv := @VValue[rowcount];
+        dv := pointer(DynArrayGrow(@VValue, capa, SizeOf(VValue[0])));
+        inc(dv, rowcount);
       end
       else
         inc(dv);
@@ -6905,7 +6908,7 @@ var
   Name: PUtf8Char;
   NameLen: integer; // not PtrInt
   n: PtrInt;
-  Val: PVariant;
+  val: PVariant;
   intnames, intvalues: TRawUtf8Interning;
 begin
   Init(aOptions);
@@ -6943,8 +6946,7 @@ begin
               if aCapacity = 0 then
                 exit; // invalid content
             end;
-          SetLength(VValue, aCapacity);
-          Val := pointer(VValue);
+          val := DynArrayNew(@VValue, aCapacity, SizeOf(VValue[0]));
           n := 0;
           info.Json := Json;
           repeat
@@ -6952,8 +6954,8 @@ begin
             begin
               // grow if our initial guess was aborted due to huge input
               aCapacity := NextGrow(aCapacity);
-              SetLength(VValue, aCapacity);
-              Val := @VValue[n];
+              val := pointer(DynArrayGrow(@VValue, aCapacity, SizeOf(VValue[0])));
+              inc(val, n);
             end;
             // unserialize the next item
             JsonToAnyVariant(val^, info, @VOptions);
@@ -6961,7 +6963,7 @@ begin
               break; // invalid input
             if intvalues <> nil then
               intvalues.UniqueVariant(val^);
-            inc(Val);
+            inc(val);
             inc(n);
           until info.EndOfObject = ']';
           Json := info.Json;
@@ -7007,9 +7009,8 @@ begin
             intnames := DocVariantType.InternNames
           else
             intnames := nil;
-          SetLength(VValue, aCapacity);
-          Val := pointer(VValue);
-          SetLength(VName, aCapacity);
+          val := DynArrayNew(@VValue, aCapacity, SizeOf(VValue[0]));
+          DynArrayNew(@VName, aCapacity, SizeOf(VName[0]));
           n := 0;
           info.Json := Json;
           repeat
@@ -7021,11 +7022,11 @@ begin
             begin
               // grow if our initial guess was aborted due to huge input
               aCapacity := NextGrow(aCapacity);
-              SetLength(VName, aCapacity);
-              SetLength(VValue, aCapacity);
-              Val := @VValue[n];
+              DynArrayGrow(@VName, aCapacity, SizeOf(VName[0]));
+              val := pointer(DynArrayGrow(@VValue, aCapacity, SizeOf(VValue[0])));
+              inc(val, n);
             end;
-            JsonToAnyVariant(Val^, info, @VOptions);
+            JsonToAnyVariant(val^, info, @VOptions);
             if info.Json = nil then
               if info.EndOfObject = '}' then // valid object end
                 info.Json := @NULCHAR
@@ -7038,9 +7039,9 @@ begin
               else
                 FastSetString(VName[n], Name, NameLen);
               if intvalues <> nil then
-                intvalues.UniqueVariant(Val^);
+                intvalues.UniqueVariant(val^);
               inc(n);
-              inc(Val);
+              inc(val);
             end;
           until info.EndOfObject = '}';
           Json := info.Json;
@@ -7179,9 +7180,8 @@ begin
   end;
   if VCount > 0 then
   begin
-    SetLength(VValue, VCount);
+    vv := DynArrayNew(@VValue, VCount, SizeOf(VValue[0]));
     v := pointer(SourceVValue);
-    vv := pointer(VValue);
     ndx := VCount;
     repeat
       repeat
