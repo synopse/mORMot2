@@ -8136,7 +8136,7 @@ var
           begin
             info := ContextFromRtti(
               ClassToWrapperType(rtti.ObjArrayClass), rtti.ArrayRtti);
-            _Safe(info)^.AddValue('isObjArray', true);
+            _Safe(info)^.AddValue('isObjArray', varTrue);
           end
           else
           begin
@@ -8158,7 +8158,7 @@ var
             'camelName', LowerCamelCase(typName),
             'snakeName', SnakeCase(typName)], info);
           if rtti.Cache.ItemCount > 0 then
-            _Safe(info)^.AddValue('staticMaxIndex', rtti.Cache.ItemCount-1);
+            _Safe(info)^.AddValue('staticMaxIndex', rtti.Cache.ItemCount - 1);
         end;
     end;
     if not VarIsEmptyOrNull(info) then
@@ -8740,7 +8740,7 @@ begin
           // simple type (record, array, enumeration, set)
           if Descriptions.GetValueIndex(typeName) < 0 then
           begin
-            Descriptions.AddValue(typeName, RawUtf8ToVariant(desc));
+            Descriptions.AddValueText(typeName, desc);
             if typeName[1] = 'I' then
               interfaceName := Copy(typeName, 2, 128)
             else
@@ -8751,8 +8751,7 @@ begin
           if PropNameEquals(typeName, 'function') or
              PropNameEquals(typeName, 'procedure') then
             if GetNextFieldProp(P, typeName) then
-              Descriptions.AddValue(interfaceName + '.' + typeName,
-                RawUtf8ToVariant(desc));
+              Descriptions.AddValueText(Join([interfaceName, '.', typeName]), desc);
     end
     else
       P := GotoNextLineSmall(P);

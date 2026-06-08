@@ -1897,12 +1897,21 @@ type
     // - you can therefore write e.g.:
     // ! TDocVariant.New(aVariant);
     // ! Assert(TDocVariantData(aVariant).Kind=dvUndefined);
-    // ! TDocVariantData(aVariant).AddValue('name','John');
+    // ! TDocVariantData(aVariant).AddValue('name', value);
     // ! Assert(TDocVariantData(aVariant).Kind=dvObject);
     // - you can specify an optional index in the array where to insert
     // - returns the index of the corresponding newly added value
+    // - warning: call faster AddValueText if you know that aValue is a RawUtf8
     function AddValue(const aName: RawUtf8; const aValue: variant;
       aValueOwned: boolean = false; aIndex: integer = -1): integer;
+    /// add a value in this document, directly as string value
+    // - this function expects a UTF-8 text for the value, and won't make any
+    // conversion to number or true/false/null, but store aValue as string:
+    // ! TDocVariant.New(aVariant);
+    // ! TDocVariantData(aVariant).AddValueText('name', 'John');
+    // - use AddValueFromText() to store with boolean/number type guess
+    // - if Update=TRUE, will set the property, even if it is existing
+    function AddValueText(const aName, aValue: RawUtf8; DoUpdate: boolean = false): integer;
     /// add a value in this document
     // - accepts a UTF-8 encoded buffer for the name
     function AddValueNameLen(aName: PUtf8Char; aNameLen: integer; const aValue: variant;
@@ -1929,13 +1938,8 @@ type
     // converted to a variant number, if possible (as varInt/varInt64/varCurrency
     // and/or as varDouble is dvoAllowDoubleValue option is set)
     // - if Update=TRUE, will set the property, even if it is existing
+    // - use AddValueText() to store as RawUtf8 without any type guess
     function AddValueFromText(const aName, aValue: RawUtf8;
-      DoUpdate: boolean = false): integer;
-    /// add a value in this document, directly as string value
-    // - this function expects a UTF-8 text for the value, and won't make any
-    // conversion to number or true/false/null, but store aValue as string
-    // - if Update=TRUE, will set the property, even if it is existing
-    function AddValueText(const aName, aValue: RawUtf8;
       DoUpdate: boolean = false): integer;
     /// add some properties to a TDocVariantData dvObject
     // - data is supplied two by two, as Name,Value pairs, and nested objects
@@ -3811,7 +3815,7 @@ begin
     TSynVarData(Dest).VType := vt;
     TSynVarData(Dest).VInt64 := s^.VInt64;
   end
-  else if vt = varString then // most used complex type also inlined
+  else if vt = varString then // second-most used complex type also inlined
   begin
     TSynVarData(Dest).VType := vt;
     RawByteString(TSynVarData(Dest).VAny) := RawByteString(s^.VAny);

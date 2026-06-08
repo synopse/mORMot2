@@ -4280,7 +4280,7 @@ end;
 procedure TMongoCollection.EnsureIndex(const Keys: array of RawUtf8;
   Ascending, Unique: boolean);
 const
-  order: array[boolean] of integer = ( -1, 1);
+  order: array[boolean] of integer = (-1, 1);
 var
   k, opt: variant;
   A: integer;
@@ -4358,7 +4358,7 @@ var
   v: variant;
 begin
   cmd.InitFast(7, dvObject);
-  cmd.AddValue('find', fName);
+  cmd.AddValueText('find', fName);
   if not VarIsEmptyOrNull(Criteria) then
     if BsonVariantType.GetItem(Criteria, '$query', v) then
     begin

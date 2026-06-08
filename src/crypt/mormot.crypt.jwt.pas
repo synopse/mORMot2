@@ -997,8 +997,8 @@ begin
         exit; // not generated, but should be supplied
     end
     else
-      payload.AddValue(JWT_CLAIMS_TEXT[jrcJwtID],
-        RawUtf8ToVariant(fIDGen.ToObfuscated(fIDGen.ComputeNew)));
+      payload.AddValueText(JWT_CLAIMS_TEXT[jrcJwtID],
+        fIDGen.ToObfuscated(fIDGen.ComputeNew));
   result := payload.ToJson;
 end;
 
