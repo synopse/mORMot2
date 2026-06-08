@@ -2414,13 +2414,7 @@ procedure TrimLeftLowerUncamelCaseShort(V: PShortString; var U: RawUtf8);
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.)
 // - return a ShortString: enumeration names are pure 7-bit ANSI with Delphi 7
 // to 2007, and UTF-8 encoded with Delphi 2009+
-function TrimLeftLowerCaseToShort(V: PShortString): ShortString; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// trim first lowercase chars ('otDone' will return 'Done' e.g.)
-// - return a ShortString: enumeration names are pure 7-bit ANSI with Delphi 7
-// to 2007, and UTF-8 encoded with Delphi 2009+
-procedure TrimLeftLowerCaseToShort(V: PShortString; var result: ShortString); overload;
+procedure TrimLeftLowerCaseToShort(V: PShortString; var result: ShortString);
 
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.) as pointers
 function TrimLeftLowerCaseP(V: PShortString; var Trimmed: PAnsiChar): PtrInt;
@@ -9623,11 +9617,6 @@ begin
     if result^ = #0 then
       result := pointer(V);
   end;
-end;
-
-function TrimLeftLowerCaseToShort(V: PShortString): ShortString;
-begin
-  TrimLeftLowerCaseToShort(V, result);
 end;
 
 function TrimLeftLowerCaseP(V: PShortString; var Trimmed: PAnsiChar): PtrInt;
