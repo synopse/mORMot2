@@ -7682,7 +7682,7 @@ begin // this function won't create any duplicated
     result := GetValueIndex(aName)
   else if (Has(dvoCheckForDuplicatedNames)) and
           (GetValueIndex(aName) >= 0) then
-    EDocVariant.RaiseUtf8('Add%: Duplicated [%] name', [aName]);
+    EDocVariant.RaiseUtf8('AddValue%: Duplicated [%] name', [aName]);
   if result < 0 then
     result := InternalAdd(aName, aIndex);
   v := @VValue[result];
@@ -7695,14 +7695,9 @@ function TDocVariantData.AddValue(const aName: RawUtf8; const aValue: variant;
 var
   v: PVariant;
 begin
-  result := -1;
-  if aName = '' then
+  result := InternalAddValuePrepare(aName, {update=}false, v, '', aIndex);
+  if result < 0 then
     exit;
-  if Has(dvoCheckForDuplicatedNames) then
-    if GetValueIndex(aName) >= 0 then
-      EDocVariant.RaiseUtf8('AddValue: Duplicated [%] name', [aName]);
-  result := InternalAdd(aName, aIndex);
-  v := @VValue[result];
   if aValueOwned then
     v^ := aValue
   else
@@ -7784,7 +7779,7 @@ function TDocVariantData.AddValueFromText(const aName, aValue: RawUtf8;
 var
   v: PVariant;
 begin
-  result := InternalAddValuePrepare(aName, DoUpdate, v, 'ValueFromText');
+  result := InternalAddValuePrepare(aName, DoUpdate, v, 'FromText');
   if result >= 0 then
     _FromText(VOptions, v, aValue); // recognize numbers
 end;
@@ -7794,7 +7789,7 @@ function TDocVariantData.AddValueText(const aName, aValue: RawUtf8;
 var
   v: PVariant;
 begin
-  result := InternalAddValuePrepare(aName, DoUpdate, v, 'ValueText');
+  result := InternalAddValuePrepare(aName, DoUpdate, v, 'Text');
   if result >= 0 then
     if dvoInternValues in VOptions then
       DocVariantType.InternValues.UniqueVariant(v^, aValue)
