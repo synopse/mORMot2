@@ -828,7 +828,7 @@ type
   TExtractInlineParameters = object
   {$endif USERECORDWITHMETHODS}
   public
-    /// Values[0..Count-1] contains the unquoted parameters raw values
+    /// Values[0 .. Count-1] contains the unquoted parameters raw values
     Values: TRawUtf8DynArray;
     /// generic SQL statement with ? place holders for each inlined parameter
     GenericSql: RawUtf8;
@@ -2834,10 +2834,12 @@ end;
 procedure TExtractInlineParameters.Parse(const SQL: RawUtf8);
 var
   first: PtrInt;
-  s, d, beg: PUtf8Char;
+  s, d: PUtf8Char;
 begin
   Count := 0;
-  first := PosEx(RawUtf8(':('), SQL, 1);
+  first := PosExChar(':', SQL); // faster pass with SSE-2 or memchr()
+  if first <> 0 then
+    first := PosEx(RawUtf8(':('), SQL, first);
   if (first = 0) or
      (PosEx(RawUtf8('):'), SQL, first + 2) = 0) then
   begin
@@ -2865,13 +2867,14 @@ begin
       GenericSQL := SQL;
       exit; // any invalid parameter -> try direct SQL
     end;
-    beg := s;
     while (s^ <> #0) and
           ((s^ <> ':') or
            (s[1] <> '(')) do
+    begin
+      d^ := s^; // only a few chars (typically ',' or ', ')
       inc(s);
-    MoveFast(beg^, d^, s - beg);
-    inc(d, s - beg);
+      inc(d);
+    end;
     if s^ = #0 then
       break;
     inc(s, 2); // s^ just after :(
@@ -2909,7 +2912,7 @@ begin
         L := length(RawUtf8(v)) - 3;
         if L > 0 then
         begin
-          c := PInteger(v)^ and $00ffffff;
+          c := PInteger(v)^ and $00ffffff; // recognize UTF-8 encoded patterns
           if c = JSON_BASE64_MAGIC_C then
           begin
             // ':("\uFFF0base64encodedbinary"):' format -> decode
@@ -2929,7 +2932,7 @@ begin
     '+',
     '0'..'9': // allow 0 or + in SQL
       begin
-        // check if P^ is a true numerical value
+        // detect the exact sptInteger/sptFloat numerical type of P^
         spt := sptInteger;
         beg := pointer(P);
         repeat
