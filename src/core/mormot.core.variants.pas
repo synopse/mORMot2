@@ -1012,6 +1012,8 @@ type
     function InternalSetValue(aIndex: PtrInt; const aValue: variant): PVariant;
       {$ifdef HASINLINE}inline;{$endif}
     procedure InternalAddVarRec(var aValue: PVarRec; aEnd: PtrUInt);
+    function InternalAddValuePrepare(const aName: RawUtf8; DoUpdate: boolean;
+      out v: PVariant; const Ctxt: ShortString; aIndex: integer = -1): integer;
     procedure InternalUniqueValueAt(aIndex: PtrInt);
     function InternalNextPath(aCsv: PUtf8Char; aPathDelim: AnsiChar;
       out aLen: PtrInt): PtrInt; {$ifdef FPC} inline; {$endif}
@@ -7248,7 +7250,7 @@ begin
       Url := UrlDecodeNextNameValue(Url, n, v);
       if Url = nil then
         break;
-      AddValueFromText(n, v); // would recognize booleans or numbers
+      AddValueFromText(n, v, {update=}true); // recognize booleans or numbers
     until Url^ = #0;
 end;
 
@@ -7570,7 +7572,7 @@ begin
   if Length(VName) <> len then
     SetLength(VName, len)
   else
-    EnsureUnique(VName); // make unique
+    EnsureUnique(VName); // as SetLength() does
   if Has(dvoInternNames) then
     DocVariantType.InternNames.Unique(VName[result], aName)
   else
@@ -7670,6 +7672,24 @@ begin
     VCount := aValue; // avoid access to unallocated memory slots
 end;
 
+function TDocVariantData.InternalAddValuePrepare(const aName: RawUtf8;
+  DoUpdate: boolean; out v: PVariant; const Ctxt: ShortString; aIndex: integer): integer;
+begin // this function won't create any duplicated 
+  result := -1;
+  if aName = '' then
+    exit;
+  if DoUpdate then
+    result := GetValueIndex(aName)
+  else if (Has(dvoCheckForDuplicatedNames)) and
+          (GetValueIndex(aName) >= 0) then
+    EDocVariant.RaiseUtf8('Add%: Duplicated [%] name', [aName]);
+  if result < 0 then
+    result := InternalAdd(aName, aIndex);
+  v := @VValue[result];
+  if PSynVarData(v)^.VType <> 0 then
+    VarClearProc(PVarData(v)^); // paranoid
+end;
+
 function TDocVariantData.AddValue(const aName: RawUtf8; const aValue: variant;
   aValueOwned: boolean; aIndex: integer): integer;
 var
@@ -7759,31 +7779,13 @@ begin
   SetVariantByValue(aValue, v^, Has(dvoValueDoNotNormalizeAsRawUtf8));
 end;
 
-function _AddValueText(var DV: TDocVariantData; const aName: RawUtf8;
-  DoUpdate: boolean; out v: PVariant): integer;
-begin
-  result := -1;
-  v := nil;
-  if aName = '' then
-    exit;
-  result := DV.GetValueIndex(aName);
-  if not DoUpdate and
-     (DV.Has(dvoCheckForDuplicatedNames)) and
-     (result >= 0) then
-    EDocVariant.RaiseUtf8('AddValueText: Duplicated [%] name', [aName]);
-  if result < 0 then
-    result := DV.InternalAdd(aName);
-  v := @DV.VValue[result];
-  VarClear(v^);
-end;
-
 function TDocVariantData.AddValueFromText(const aName, aValue: RawUtf8;
   DoUpdate: boolean): integer;
 var
   v: PVariant;
 begin
-  result := _AddValueText(self, aNAme, DoUpdate, v);
-  if v <> nil then
+  result := InternalAddValuePrepare(aName, DoUpdate, v, 'ValueFromText');
+  if result >= 0 then
     _FromText(VOptions, v, aValue); // recognize numbers
 end;
 
@@ -7792,8 +7794,8 @@ function TDocVariantData.AddValueText(const aName, aValue: RawUtf8;
 var
   v: PVariant;
 begin
-  result := _AddValueText(self, aNAme, DoUpdate, v);
-  if v <> nil then
+  result := InternalAddValuePrepare(aName, DoUpdate, v, 'ValueText');
+  if result >= 0 then
     if dvoInternValues in VOptions then
       DocVariantType.InternValues.UniqueVariant(v^, aValue)
     else
@@ -8999,7 +9001,7 @@ begin
   k := pointer(VName);
   if k <> nil then
   begin
-    EnsureUnique(VName);
+    EnsureUnique(VName); // as SetLength() does
     k := @VName[Index];
     FastAssignNew(k[0]);
   end;
@@ -9038,7 +9040,7 @@ begin
       FastAssignNew(aName^)
     else
     begin
-      EnsureUnique(VName);
+      EnsureUnique(VName); // as SetLength() does
       v := @VName[aIndex];
       FastAssignNew(aName^, PPointer(v)^); // no refcount
       PPointer(v)^ := nil;
