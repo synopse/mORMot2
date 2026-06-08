@@ -3738,7 +3738,7 @@ type
   TSynTempAdder = object
   {$endif USERECORDWITHMETHODS}
   private
-    procedure AddRealloc(new: integer);
+    procedure AddRealloc(new: PtrInt);
   public
     /// direct access to the internal 4KB temporary buffer
     Store: TSynTempBuffer;
@@ -3748,26 +3748,22 @@ type
     procedure Init(StartupCapacity: PtrInt); overload;
     /// prepare to append some bytes to the internal buffer
     // - returns the destination buffer where l bytes should be written
-    function Add(l: integer): pointer; overload;
+    function Add(l: PtrInt): pointer; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append some bytes to the internal buffer
     // - making a buffer reallocation if needed
     procedure Add(p: pointer; l: PtrInt); overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// append some bytes to the internal buffer
     // - making a buffer reallocation if needed
     procedure Add(const s: RawByteString); overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// add one AnsiChar to the internal buffer
     procedure Add(c: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// add one repeated AnsiChar to the internal buffer
     procedure AddChars(c: AnsiChar; n: PtrInt);
-      {$ifdef HASINLINE}inline;{$endif}
     /// append some bytes to the internal buffer
     // - making a buffer reallocation if needed
     procedure AddShort(const s: ShortString); overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// add one AnsiChar just after another Add() within trailing 16 bytes margin
     procedure AddDirect(c: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -10143,7 +10139,7 @@ begin
     StartPos := 1;
   if (length(SepStr) = 1) and
      (StartPos <= 1) then
-    i := PosExChar(SepStr[1], Str) // may use SSE2 on i386/x86_64
+    i := PosExChar(SepStr[1], Str) // may use SSE2 or memchr()
   else
     i := PosEx(SepStr, Str, StartPos);
   if i > 0 then
@@ -12556,7 +12552,7 @@ begin
   Store.Init(StartupCapacity);
 end;
 
-procedure TSynTempAdder.AddRealloc(new: integer);
+procedure TSynTempAdder.AddRealloc(new: PtrInt);
 begin
   Store.len := NextGrow(new); // len is capacity here
   if Store.buf = @Store.tmp then
@@ -12568,9 +12564,9 @@ begin
     ReallocMem(Store.buf, Store.len + SYNTEMPTRAIL);
 end;
 
-function TSynTempAdder.Add(l: integer): pointer;
+function TSynTempAdder.Add(l: PtrInt): pointer;
 var
-  new: integer;
+  new: PtrInt;
 begin
   new := l + Store.added;
   if new > Store.len then // len is capacity here
@@ -12601,7 +12597,7 @@ end;
 
 procedure TSynTempAdder.Add(const s: RawByteString);
 var
-  l: TStrLen;
+  l: PtrInt;
 begin
   if pointer(s) = nil then
     exit;
@@ -12631,21 +12627,21 @@ procedure TSynTempAdder.AddU(v: PtrUInt);
 var
   t: TTemp24;
   P: PAnsiChar;
+  l: PtrInt;
 begin
   P := StrUInt32(@t[23], v);
-  Add(P, @t[23] - P);
+  l := @t[23] - P;
+  MoveFast(P^, Add(l)^, l);
 end;
 
 procedure TSynTempAdder.Add16BigEndian(v: cardinal);
 begin
-  v := bswap16(v);
-  Add(@v, 2);
+  PCardinal(Add(2))^ := bswap16(v);
 end;
 
 procedure TSynTempAdder.Add32BigEndian(v: cardinal);
 begin
-  v := bswap32(v);
-  Add(@v, 4);
+  PCardinal(Add(4))^ := bswap32(v);
 end;
 
 procedure TSynTempAdder.Done(var Dest; CodePage: cardinal);
