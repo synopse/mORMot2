@@ -6502,24 +6502,21 @@ end;
 function TDynArray.ItemCompare(A, B: pointer; CaseInSensitive: boolean): integer;
 var
   comp: TRttiCompare;
-  rtti: PRttiInfo;
 label
   raw;
 begin
   if Assigned(fCompare) then
-    result := fCompare(A^, B^)
-  else if not(rcfArrayItemManaged in fInfo.Flags) then
-     // fast binary comparison with length
-raw: result := MemCmp(A, B, fInfo.Cache.ItemSize)
-  else
   begin
-    rtti := fInfo.Cache.ItemInfoRaw;
-    comp := RTTI_COMPARE[CaseInsensitive, rtti.Kind];
-    if Assigned(comp) then
-      comp(A, B, rtti, result)
-    else
-      goto raw;
+    result := fCompare(A^, B^);
+    exit;
   end;
+  if not(rcfArrayItemManaged in fInfo.Flags) then
+    goto raw; // fast binary comparison with length
+  comp := RTTI_COMPARE[CaseInsensitive, fInfo.Cache.ItemInfoRaw.Kind];
+  if Assigned(comp) then
+    comp(A, B, fInfo.Cache.ItemInfoRaw, result)
+  else
+raw:result := MemCmp(A, B, fInfo.Cache.ItemSize)
 end;
 
 function TDynArray.Add(const Item): PtrInt;
