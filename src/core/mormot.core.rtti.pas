@@ -1931,7 +1931,6 @@ procedure RecordZero(Dest: pointer; Info: PRttiInfo);
 
 /// copy a record content from source to Dest
 procedure RecordCopy(var Dest; const Source; Info: PRttiInfo);
-  {$ifdef FPC}inline;{$endif}
 
 /// quickly check if a record type has nested properties information
 // - either from Delphi 2010+ (or FPC trunk) enhanced RTTI, or from
@@ -6925,10 +6924,49 @@ begin
     FillCharFast(Dest^, FastRecordClear(Dest, Info), 0);
 end;
 
+function _RecordCopy(Dest, Source: PByte; Info: PRttiInfo): PtrInt;
+var
+  fields: TRttiRecordManagedFields; // Size/Count/Fields
+  offset: PtrUInt;
+  f: PRttiRecordField;
+  cop: PRttiCopiers;
+begin
+  Info^.RecordManagedFields(fields); // handle nested managed fields
+  f := fields.Fields;
+  cop := @RTTI_MANAGEDCOPY;
+  offset := 0;
+  while fields.Count <> 0 do
+  begin
+    dec(fields.Count);
+    Info := f^.{$ifdef HASDIRECTTYPEINFO}TypeInfo{$else}TypeInfoRef^{$endif};
+    {$ifdef FPC_OLDRTTI}
+    if Info^.Kind in rkManagedTypes then
+    {$endif FPC_OLDRTTI}
+    begin
+      offset := f^.Offset - offset;
+      if offset <> 0 then
+      begin
+        MoveFast(Source^, Dest^, offset);
+        inc(Source, offset);
+        inc(Dest, offset);
+      end;
+      offset := cop[Info^.Kind](Dest, Source, Info);
+      inc(Source, offset);
+      inc(Dest, offset);
+      inc(offset, f^.Offset);
+    end;
+    inc(f);
+  end;
+  offset := PtrUInt(fields.Size) - offset;
+  if offset > 0 then
+    MoveFast(Source^, Dest^, offset);
+  result := fields.Size;
+end;
+
 procedure RecordCopy(var Dest; const Source; Info: PRttiInfo);
 begin
   if Info^.Kind in rkRecordTypes then
-    RTTI_MANAGEDCOPY[rkRecord](@Dest, @Source, Info);
+    _RecordCopy(@Dest, @Source, Info);
 end;
 
 function RecordHasFields(Info: PRttiInfo): boolean;
@@ -7005,7 +7043,7 @@ label
 begin
   if SourceCount > 0 then
     if ItemInfo = nil then // unmanaged items
-raw:  MoveFast(Source^, Dest^, ItemSize * SourceCount)
+      goto raw
     else
       case ItemInfo^.Kind of
         {$ifdef FPC}rkObject,{$else}{$ifdef UNICODE}rkMRecord,{$endif}{$endif}
@@ -7029,7 +7067,7 @@ fun:    cop := RTTI_MANAGEDCOPY[ItemInfo^.Kind];
             dec(SourceCount);
           until SourceCount = 0
         else
-          goto raw;
+raw:      MoveFast(Source^, Dest^, ItemSize * SourceCount)
       end;
 end;
 
@@ -7535,45 +7573,6 @@ function _InterfaceCopy(Dest, Source: PInterface; Info: PRttiInfo): PtrInt;
 begin
   Dest^ := Source^; // fast by-reference assignment
   result := SizeOf(Source^);
-end;
-
-function _RecordCopy(Dest, Source: PByte; Info: PRttiInfo): PtrInt;
-var
-  fields: TRttiRecordManagedFields; // Size/Count/Fields
-  offset: PtrUInt;
-  f: PRttiRecordField;
-  cop: PRttiCopiers;
-begin
-  Info^.RecordManagedFields(fields); // handle nested managed fields
-  f := fields.Fields;
-  cop := @RTTI_MANAGEDCOPY;
-  offset := 0;
-  while fields.Count <> 0 do
-  begin
-    dec(fields.Count);
-    Info := f^.{$ifdef HASDIRECTTYPEINFO}TypeInfo{$else}TypeInfoRef^{$endif};
-    {$ifdef FPC_OLDRTTI}
-    if Info^.Kind in rkManagedTypes then
-    {$endif FPC_OLDRTTI}
-    begin
-      offset := f^.Offset - offset;
-      if offset <> 0 then
-      begin
-        MoveFast(Source^, Dest^, offset);
-        inc(Source, offset);
-        inc(Dest, offset);
-      end;
-      offset := cop[Info^.Kind](Dest, Source, Info);
-      inc(Source, offset);
-      inc(Dest, offset);
-      inc(offset, f^.Offset);
-    end;
-    inc(f);
-  end;
-  offset := PtrUInt(fields.Size) - offset;
-  if offset > 0 then
-    MoveFast(Source^, Dest^, offset);
-  result := fields.Size;
 end;
 
 function _DynArrayCopy(Dest, Source: PPointer; Info: PRttiInfo): PtrInt;
