@@ -4172,7 +4172,7 @@ begin
     rkDynArray:
       result := SizeOf(pointer);
     rkMethod:
-      result := SizeOf(pointer) * 2;
+      result := SizeOf(TMethod);
     {$ifdef FPC}
     rkQWord,
     {$endif FPC}
@@ -6859,8 +6859,7 @@ begin
       // or at least from mormot.core.base calling inlined VarClear()
       VariantClearSeveral(pointer(Value), Count);
     else
-      begin
-        // regular finalization
+      begin // other managed types, e.g. IInterface or dynamic arrays
         fin := RTTI_FINALIZE[ElemTypeInfo^.Kind];
         if Assigned(fin) then  // e.g. rkWString, rkArray, rkDynArray
           repeat
@@ -7250,20 +7249,12 @@ end;
 function _ArrayClear(V: PByte; Info: PRttiInfo): PtrInt;
 var
   n: PtrInt;
-  fin: TRttiFinalizer;
 begin
   Info := Info^.ArrayItemType(n, result); // nil if unmanaged
   if Info = nil then
     FillCharFast(V^, result, 0)
   else
-  begin
-    fin := RTTI_FINALIZE[Info^.Kind];
-    if Assigned(fin) then
-      repeat
-        inc(V, fin(V, Info));
-        dec(n);
-      until n = 0;
-  end;
+    FastFinalizeArray(pointer(V), Info, n);
 end;
 
 function _ObjClear(V: PObject; Info: PRttiInfo): PtrInt;
@@ -7584,10 +7575,13 @@ end;
 
 function _ArrayCopy(Dest, Source: PByte; Info: PRttiInfo): PtrInt;
 var
-  n, itemsize: PtrInt;
+  n: PtrInt;
 begin
   Info := Info^.ArrayItemType(n, result); // nil if unmanaged
-  CopySeveral(Dest, Source, n, Info, itemsize);
+  if Info = nil then
+    MoveFast(Source^, Dest^, result)
+  else
+    CopySeveral(Dest, Source, n, Info, 0);
 end;
 
 
