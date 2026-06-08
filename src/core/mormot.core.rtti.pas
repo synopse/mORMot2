@@ -7469,50 +7469,8 @@ begin
 end;
 
 function _VariantCopy(Dest, Source: PVarData; Info: PRttiInfo): PtrInt;
-var
-  vt: cardinal;
-label
-  rtl, raw;
-begin
-  vt := Source^.VType;
-  VarClearAndSetType(Variant(Dest^), vt);
-  if vt > varNull then
-    // varEmpty,varNull need no copy
-    if vt <= varWord64 then
-      // most used types
-      if (vt < varOleStr) or
-         (vt > varError) then
-raw:    // copy any simple value (e.g. ordinal, varByRef)
-        Dest^.VInt64 := Source^.VInt64
-      else if vt = varOleStr then
-      begin
-        // copy WideString with reference counting
-        Dest^.VAny := nil;
-        WideString(Dest^.VAny) := WideString(Source^.VAny)
-      end
-      else
-        // varError, varDispatch
-        goto rtl
-    else if vt = varString then
-    begin
-      // copy AnsiString with reference counting
-      Dest^.VAny := nil;
-      RawByteString(Dest^.VAny) := RawByteString(Source^.VAny)
-    end
-    else if vt >= varByRef then
-      // varByRef has no refcount -> copy VPointer
-      goto raw
-    {$ifdef HASVARUSTRING}
-    else if vt = varUString then
-    begin
-      // copy UnicodeString with reference counting
-      Dest^.VAny := nil;
-      UnicodeString(Dest^.VAny) := UnicodeString(Source^.VAny)
-    end
-    {$endif HASVARUSTRING}
-    else
-rtl:  // copy any complex type via the RTL function of the variants unit
-      VarCopyProc(Dest^, Source^);
+begin // properly implemented in mormot.core.variants
+  VarCopyProc(Dest^, Source^);
   result := SizeOf(Source^);
 end;
 

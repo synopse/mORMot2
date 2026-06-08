@@ -3879,6 +3879,12 @@ end;
 
 { ************** Low-Level Variant Wrappers }
 
+function _VariantCopy(Dest, Source: PVariant; Info: PRttiInfo): PtrInt;
+begin
+  SetVariantByValue(Source^, Dest^, {noforceutf8=}false);
+  result := SizeOf(Source^);
+end;
+
 function VarIs(const V: Variant; const VTypes: TVarDataTypes): boolean;
 var
   vd: PVarData;
@@ -5213,7 +5219,7 @@ begin
     vt := V.VType;
     if (vt >= varFirstCustom) or
        ((Escape <> twNone) and
-        not (vt in [varEmpty..varDate, varBoolean, varShortInt..varWord64])) then
+        not (vt in VTYPE_SIMPLE)) then
       __VariantSaveJsonEscape(PVariant(V)^, result, Escape)
     else
       VariantToUtf8(PVariant(V)^, result, dummy); // no escape for simple values
@@ -13174,11 +13180,12 @@ begin
   JSON_NAMEVALUEINTERN     := PDocVariantOptionsBool(@JSON_[mNameValueIntern])^;
   JSON_OPTIONS             := PDocVariantOptionsBool(@JSON_[mDefault])^;
   // redirect to the feature complete variant wrapper functions
-  VariantClearSeveral     := @_VariantClearSeveral;
-  _VariantSaveJson        := @__VariantSaveJson;
-  _VariantLoadJson        := @__VariantLoadJson;
-  _VariantCustomHash      := @__VariantCustomHash;
-  SortDynArrayVariantComp := pointer(@FastVarDataComp);
+  VariantClearSeveral         := @_VariantClearSeveral;
+  _VariantSaveJson            := @__VariantSaveJson;
+  _VariantLoadJson            := @__VariantLoadJson;
+  _VariantCustomHash          := @__VariantCustomHash;
+  SortDynArrayVariantComp     := pointer(@FastVarDataComp);
+  RTTI_MANAGEDCOPY[rkVariant] := @_VariantCopy;
   // setup FastVarDataComp() efficient lookup comparison functions
   for ins := false to true do
   begin
