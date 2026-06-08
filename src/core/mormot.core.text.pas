@@ -1908,7 +1908,7 @@ function FormatUtf8(const Format: RawUtf8; const Args: array of const): RawUtf8;
 /// fast Format() function replacement, optimized for RawUtf8
 // - overloaded function, which avoid a temporary RawUtf8 instance on stack
 procedure FormatUtf8(const Format: RawUtf8; const Args: array of const;
-  out Result: RawUtf8); overload;
+  var Result: RawUtf8); overload;
 
 /// raw FormatUtf8() function process, using an existing TTextWriterStackBuffer
 procedure FormatUtf8Raw(const Format: RawUtf8; Args: PVarRec; ArgsCount: PtrInt;
@@ -9398,7 +9398,7 @@ begin
 end;
 
 procedure FormatUtf8(const Format: RawUtf8; const Args: array of const;
-  out Result: RawUtf8);
+  var Result: RawUtf8);
 var
   f: TFormatUtf8;
 begin
@@ -9411,7 +9411,9 @@ begin
   begin
     f.Parse(Format, @Args[0], length(Args)); // handle all supplied Args[]
     if f.L <> 0 then
-      f.WriteAll(FastSetString(Result, f.L), @f.blocks);
+      f.WriteAll(FastSetString(Result, f.L), @f.blocks)
+    else
+      FastAssignNew(Result);
   end;
 end;
 
