@@ -6205,6 +6205,8 @@ function TDocVariantData.InitFrom(const CloneFrom: TDocVariantData;
 begin
   TSynVarData(self).VType := TSynVarData(CloneFrom).VType; // VType+VOptions
   VCount := CloneFrom.VCount;
+  pointer(VName)  := nil; // to avoid GPF
+  pointer(VValue) := nil;
   if MakeUnique then             // new array, but byref names
     DynArrayCopy(@VName, @CloneFrom.VName, TypeInfo(TRawUtf8DynArray), @VCount)
   else
