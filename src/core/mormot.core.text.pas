@@ -8336,7 +8336,7 @@ begin
     else if vt and varByRef = 0 then
       // not recognizable vt -> seralize as JSON to handle also custom types
       _VariantSaveJson(V, twJsonEscape, result) // = mormot.core.variants.pas
-    else // varByRef values appear with Automation/COM
+    else // varByRef values appear with Automation/COM or DispInvoke()
       VariantToUtf8(SetVarDataUnRef(vt, vd, tmp)^, result, wasString);
   end;
 end;
@@ -8916,7 +8916,7 @@ n:    if vfNullAsVoid in Flags then
         Res.Text := pointer(Res.TempRawUtf8);
         Res.Len := length(RawUtf8(Res.TempRawUtf8));
       end
-      else // varByRef values appear with Automation/COM
+      else // varByRef values appear with Automation/COM or DispInvoke()
         VariantToTempUtf8(SetVarDataUnRef(vt, vd, tmp)^, Res, Flags);
     end;
   end;

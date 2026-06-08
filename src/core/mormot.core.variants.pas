@@ -3959,7 +3959,7 @@ begin
   vt := s.Data.VType;
   if ((vt and varByRef) <> 0) or
      (vt in VTYPE_SIMPLE) then
-    d := s // simple types can be weakly copied by value
+    d := s // simple types can be weakly copied by raw TVarData content
   else if not SetVariantUnRefSimpleValue(Source, d.Data) then
   begin
     d.VType := varVariantByRef;
@@ -4075,7 +4075,7 @@ end;
 procedure FillZero(var value: variant);
 begin
   if TSynVarData(value).VType and $ffff = varString then
-    FillZero(RawByteString(TVarData(value).VAny));
+    FillZero(RawByteString(TVarData(value).VAny)); // anti-forensic
   VarClear(value);
 end;
 
@@ -5553,9 +5553,9 @@ begin
   D.VCount := S.VCount;
   if S.VCount = 0 then
     exit; // no data to copy
-  D.VName := S.VName;
+  D.VName := S.VName;    // byref copy of names
   if S.Has(dvoValueCopiedByReference) then
-    D.VValue := S.VValue // byref copy of the whole array
+    D.VValue := S.VValue // inc DACntAdd()
   else
     D.VValue := system.copy(S.VValue); // new array, but byref values
 end;
@@ -6352,7 +6352,7 @@ begin
   end
   else
   begin
-    EnsureUnique(VValue); // as SetLength() above
+    EnsureUnique(VValue); // as SetLength() does
     EnsureUnique(VName);
   end;
   arg := @NameValuePairs[0];
@@ -7536,7 +7536,7 @@ begin
     SetLength(VValue, len);
   end
   else
-    EnsureUnique(VValue); // make unique as SetLength() does
+    EnsureUnique(VValue); // as SetLength() does
   result := VCount;
   inc(VCount);
   if cardinal(aIndex) < cardinal(result) then
@@ -8995,7 +8995,7 @@ begin
     k := @VName[Index];
     FastAssignNew(k[0]);
   end;
-  EnsureUnique(VValue);
+  EnsureUnique(VValue); // as SetLength() does
   v := @VValue[Index];
   VarClear(v[0]);
   n := VCount - Index;
@@ -9020,7 +9020,7 @@ begin
     inc(aIndex, VCount);
   if cardinal(aIndex) >= cardinal(VCount) then
     exit;
-  EnsureUnique(VValue);
+  EnsureUnique(VValue); // as SetLength() does
   VarClear(aValue);
   v := @VValue[aIndex];
   PSynVarData(@aValue)^ := PSynVarData(v)^; // no refcount

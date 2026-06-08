@@ -10301,8 +10301,7 @@ begin
     varBoolean:
       // rkInteger,rkBool,rkEnumeration,rkSet using VInt64 for unsigned 32-bit
       Dest.VInt64 := RTTI_FROM_ORD[Cache.RttiOrd](Data);
-    varWord64:
-      // rkInt64, rkQWord
+    varWord64: // rkInt64, rkQWord
       begin
         if not (rcfQWord in Cache.Flags) then
           TSynVarData(Dest).VType := varInt64; // fix VType
@@ -10314,34 +10313,29 @@ begin
     varDouble,
     varCurrency:
       Dest.VInt64 := PInt64(Data)^;
-    varString:
-      // rkString
+    varString: // rkString
       begin
         Dest.VAny := nil; // avoid GPF
         RawByteString(Dest.VAny) := PRawByteString(Data)^;
       end;
-    varOleStr:
-      // rkWString
+    varOleStr: // rkWString
       begin
         Dest.VAny := nil; // avoid GPF
         WideString(Dest.VAny) := PWideString(Data)^;
       end;
     {$ifdef HASVARUSTRING}
-    varUString:
-      // rkUString
+    varUString: // rkUString
       begin
         Dest.VAny := nil; // avoid GPF
         UnicodeString(Dest.VAny) := PUnicodeString(Data)^;
       end;
     {$endif HASVARUSTRING}
-    varVariant:
-      // rkVariant
+    varVariant: // rkVariant
       begin
         TSynVarData(Dest).VType := varEmpty; // for next line
         SetVariantByValue(PVariant(Data)^, PVariant(@Dest)^, {forcenoutf8=}true);
       end;
-    varUnknown:
-      // rkChar, rkWChar, rkSString converted into temporary RawUtf8
+    varUnknown: // rkChar, rkWChar, rkSString converted into temporary RawUtf8
       begin
         TSynVarData(Dest).VType := varString;
         Dest.VAny := nil; // avoid GPF

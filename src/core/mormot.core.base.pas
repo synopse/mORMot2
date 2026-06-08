@@ -13442,15 +13442,13 @@ begin
     varVariant:
       if cardinal(PVarData(TVarData(Source).VPointer)^.VType) in VTYPE_SIMPLE then
       begin
-        Dest := PVarData(TVarData(Source).VPointer)^;
+        Dest := PVarData(TVarData(Source).VPointer)^; // copy whole variant
         result := true;
       end;
-    varEmpty..varDate,
-    varBoolean,
-    varShortInt..varWord64:
+    varEmpty .. varDate, varBoolean, varShortInt .. varWord64: // VTYPE_SIMPLE
       begin
         PCardinal(@Dest)^ := typ;
-        Dest.VInt64 := PInt64(TVarData(Source).VAny)^;
+        Dest.VInt64 := PInt64(TVarData(Source).VAny)^; // copy any number
         result := true;
       end;
   end;
@@ -13458,7 +13456,7 @@ end;
 
 function SetVarDataUnRef(typ: cardinal; V: PVarData; var tmp: TVarData): PVariant;
 begin
-  PCardinal(@tmp)^ := typ and cardinal(not varByRef);
+  PCardinal(@tmp)^ := typ and cardinal(not varByRef); // store as original type
   tmp.VInt64 := PInt64(V^.VAny)^; // simple types or pointer types
   result := @tmp;
 end;
