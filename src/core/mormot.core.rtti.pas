@@ -3846,10 +3846,10 @@ end;
 
 function TRttiEnumType.GetSetName(const value; trimmed: boolean; sep: AnsiChar): RawUtf8;
 var
-  j: PtrInt;
-  PS, v: PShortString;
+  j, vl: PtrInt;
+  vp: PAnsiChar;
+  PS: PShortString;
   tmp: TSynTempAdder; // no temp allocation up to 4KB of output text
-  tmp2: ShortString;
 begin
   FastAssignNew(result);
   if (@self = nil) or
@@ -3863,17 +3863,16 @@ begin
     begin
       if trimmed then
       begin
-        TrimLeftLowerCaseToShort(PS, tmp2);
-        v := @tmp2;
+        vl := TrimLeftLowerCaseP(PS, vp);
+        tmp.Add(vp, vl);
       end
       else
-        v := PS;
-      tmp.AddShort(v^);
+        tmp.AddShort(PS^);
       tmp.AddDirect(sep);
     end;
     inc(PByte(PS), PByte(PS)^ + 1); // next
   end;
-  if tmp.Size= 0 then
+  if tmp.Size = 0 then
     exit;
   tmp.CancelLastChar; // cancel last comma
   tmp.Done(result);

@@ -1521,7 +1521,7 @@ end;
 function TSqlDBFieldTypeToString(aType: TSqlDBFieldType): TShort16;
 begin
   if aType <= high(aType) then
-    result := TrimLeftLowerCaseToShort(ToText(aType))
+    TrimLeftLowerCaseToShort(ToText(aType), result)
   else
     FormatShort('#%', [ord(aType)], result);
 end;
