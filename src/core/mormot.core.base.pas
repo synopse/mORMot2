@@ -12655,6 +12655,7 @@ begin
   dec(Store.added); // caller should have tested that Size = Store.added > 0
 end;
 
+
 procedure OrMemory(Dest, Source: PByteArray; Size: PtrInt);
 begin
   while Size >= SizeOf(PtrInt) do

@@ -526,12 +526,25 @@ const
     v: QWord;
   begin
     CheckEqual(GetBitsCountPtrInt(0), 0);
+    CheckEqual(GetBitsCountPtrInt(2), 1);
+    CheckEqual(GetBitsCountPtrInt(7), 3);
     CheckEqual(GetBitsCountPtrInt($f), 4);
     CheckEqual(GetBitsCountPtrInt($ff), 8);
     CheckEqual(GetBitsCountPtrInt($fff), 12);
     CheckEqual(GetBitsCountPtrInt($ffff), 16);
     CheckEqual(GetBitsCountPtrInt(-1), POINTERBITS);
-    v := PtrUInt(-1);
+    v := 0;
+    for i := 0 to 63 do
+    begin
+      Check(not GetBit(v, i));
+      Check(not GetBitPtr(@v, i));
+    end;
+    v := QWord(-1);
+    for i := 0 to 63 do
+    begin
+      Check(GetBit(v, i));
+      Check(GetBitPtr(@v, i));
+    end;
     CheckEqual(GetBitsCount(v, 0), 0);
     CheckEqual(GetBitsCount64(v, 0), 0);
     for i := 0 to POINTERBITS - 1 do
