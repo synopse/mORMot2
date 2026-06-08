@@ -5648,8 +5648,8 @@ end;
 
 const
   // 0 for unserialized VType, 255 for valOleStr
-  VARIANT_SIZE: array[varEmpty .. varWord64] of byte = (
-    0, 0, 2, 4, 4, 8, 8, 8, 255, 0, 0, 2, 0, 0, 0, 0, 1, 1, 2, 4, 8, 8);
+  VARIANT_SIZE: array[varEmpty .. varOleUInt] of byte = (
+    0, 0, 2, 4, 4, 8, 8, 8, 255, 0, 0, 2, 0, 0, 0, 0, 1, 1, 2, 4, 8, 8, 4, 4);
 
 function _BS_Variant(Data: PVarData; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
 var
@@ -5667,9 +5667,8 @@ begin
       else
         Dest.Write(@Data^.VInt64, vt); // simple types are stored as binary
   end
-  else if (vt = varString) and  // expect only RawUtf8
-          (Data^.vAny <> nil) then
-    Dest.WriteVar(Data^.vAny, PStrLen(PAnsiChar(Data^.VAny) - _STRLEN)^)
+  else if vt = varString then  // expect only RawUtf8
+    Dest.WriteVar(Data^.vAny, length(RawUtf8(Data^.vAny)))
   {$ifdef HASVARUSTRING}
   else if vt = varUString then
     Dest.WriteVar(Data^.vAny, length(UnicodeString(Data^.vAny)) * 2)
