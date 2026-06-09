@@ -11056,9 +11056,9 @@ begin
             if PubText <> nil then
             begin
               name := 'RSA ';
-              bits := '      Modulus:'#13#10 +
-                BinToHumanHex(pointer(modulo), length(modulo), 16, 8) +
-                '      Exponent: 0x' + BinToHex(exp) + #13#10 ;
+              Join(['      Modulus:'#13#10,
+                BinToHumanHex(pointer(modulo), length(modulo), 16, 8),
+                '      Exponent: 0x', BinToHex(exp), #13#10], bits);
             end;
           end;
         end;
@@ -11082,8 +11082,8 @@ function ParsedToText(const c: TX509Parsed): RawUtf8;
       if cu in c.Usage then
         AddToCsv(CU_FULLTEXT[cu], usage{%H-}, ', ');
     if usage <> '' then
-      result := result +   '    X509v3 ' + ext + #13#10 +
-                           '      ' + usage + #13#10;
+      result := Join([result, '    X509v3 ', ext, #13#10 +
+                              '      ', usage, #13#10]);
   end;
 
 var
@@ -11098,41 +11098,41 @@ begin
   else
     version := 1;
   X509PubKeyBits(c.PubKey, @bits);
-  result := 'Certificate:'#13#10 +
-            '  Version: ' + SmallUInt32Utf8[version + 1] +
-                   ' (0x' + SmallUInt32Utf8[version] + ')'#13#10 +
-            '  Serial Number:'#13#10 +
-            '    ' + c.Serial + #13#10 +
-            '  Signature Algorithm: ' + c.SigAlg + #13#10 +
-            '  Issuer: ' + c.IssuerDN + #13#10 +
-            '  Validity'#13#10 +
-            '    Not Before: ' + DateTimeToHttpDate(c.NotBefore) + #13#10 +
-            '    Not After : ' + DateTimeToHttpDate(c.NotAfter)  + #13#10 +
-            '  Subject: ' + c.SubjectDN + #13#10 +
-            '  Subject Public Key Info:'#13#10 +
-            '    Public Key Algorithm: ' + c.PubAlg + #13#10 +
-            bits;
+  Join(['Certificate:'#13#10 +
+        '  Version: ', SmallUInt32Utf8[version + 1],
+        ' (0x', SmallUInt32Utf8[version] ,')'#13#10 +
+        '  Serial Number:'#13#10 +
+        '    ', c.Serial, #13#10 +
+        '  Signature Algorithm: ', c.SigAlg, #13#10 +
+        '  Issuer: ', c.IssuerDN, #13#10 +
+        '  Validity'#13#10 +
+        '    Not Before: ', DateTimeToHttpDate(c.NotBefore), #13#10 +
+        '    Not After : ', DateTimeToHttpDate(c.NotAfter), #13#10 +
+        '  Subject: ', c.SubjectDN, #13#10 +
+        '  Subject Public Key Info:'#13#10 +
+        '    Public Key Algorithm: ', c.PubAlg, #13#10,
+        bits], result);
   if version = 1 then
     exit;
   // append the X.509 v3 known extensions
-  result := result + '  X509v3 extensions:'#13#10;
+  Append(result, '  X509v3 extensions:'#13#10);
   KeyUsage(cuCrlSign, cuDigitalSignature, 'Key Usage: critical');
   KeyUsage(cuTlsServer, cuTimestamp, 'Extended Key Usage:');
   if cuCA in c.Usage then
     bits := 'TRUE'
   else
     bits := 'FALSE';
-  result := result + '    X509v3 Basic Constraints: critical'#13#10 +
-                     '      CA:' + bits + #13#10;
+  result := Join([result, '    X509v3 Basic Constraints: critical'#13#10 +
+                          '      CA:', bits, #13#10]);
   if c.SubjectID <> '' then
-    result := result + '    X509v3 Subject Key Identifier:'#13#10 +
-                       '      ' + c.SubjectID + #13#10;
+    result := Join([result, '    X509v3 Subject Key Identifier:'#13#10 +
+                            '      ', c.SubjectID, #13#10]);
   if c.IssuerID <> '' then
-    result := result + '    X509v3 Authority Key Identifier:'#13#10 +
-                       '      ' + c.IssuerID + #13#10;
+    result := Join([result, '    X509v3 Authority Key Identifier:'#13#10 +
+                            '      ', c.IssuerID, #13#10]);
   if c.SubjectAltNames <> '' then
-    result := result + '    X509v3 Subject Alternative Name:'#13#10 +
-                       '      ' + c.SubjectAltNames + #13#10;
+    result := Join([result, '    X509v3 Subject Alternative Name:'#13#10 +
+                            '      ', c.SubjectAltNames, #13#10]);
 end;
 
 {$ifdef OSWINDOWS}
