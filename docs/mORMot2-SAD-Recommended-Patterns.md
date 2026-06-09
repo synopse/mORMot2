@@ -154,7 +154,7 @@ begin
 
 Switching a service from local to remote is a matter of *instance initialization* — register it on a different server, point a client at a URI — **not a code change**. The layering you design in Part B therefore survives any topology you later deploy it on.
 
-**Make the switch a one-line decision (the client-abstraction pattern).** Concentrate the local-vs-remote choice in a single *client-abstraction* unit that every consumer depends on, with two interchangeable implementations selected at the composition root. Consumer code never changes and never learns which one it got:
+**Make the switch a single, localized decision (the client-abstraction pattern).** Concentrate the local-vs-remote choice in one *client-abstraction* unit that every consumer depends on, with two interchangeable implementations. Consumer code never changes and never learns which one it got — the only thing that varies is which implementation unit gets wired up at startup:
 
 ```pascal
 // AppUserClient.pas — the only unit consumer code depends on
@@ -291,7 +291,42 @@ if UserClient.Query.GetProfile(userID, profile) then
   ...
 ```
 
-`Local` is the A.6.1 monolith (one exe, full stack in-process); `Remote` is the A.6.2 distributed layout (HTTP client to a standalone server). Same business code; the deployment model is a single `uses` line.
+`Local` is the A.6.1 monolith (one exe, full stack in-process); `Remote` is the A.6.2 distributed layout (HTTP client to a standalone server). The business code is identical; only the linked unit differs.
+
+One asymmetry to be honest about. The **local** unit self-wires in its `initialization` — it needs no parameters, so linking it is genuinely all you do. The **remote** unit cannot: it needs a host/port/root, so it registers the class in `initialization` and you supply the connection parameters once at startup:
+
+```pascal
+// startup, remote build only — connection params are configuration, not a code change:
+UserClient := UserClientClass.CreateRemote('10.0.0.7', '443', 'root');
+UserClient.Resolve;
+```
+
+So the *decision* is localized, not literally one line for remote: one `uses` line **plus** one `CreateRemote(...)` call fed from config. The local build is the genuinely zero-extra-code case.
+
+<details>
+<summary><b>Production variant</b> — select the topology with a compile-time define instead of the <code>uses</code> clause</summary>
+
+Putting the choice in a shared include file centralizes it in one place and turns "both" or "neither" into a *compile* error instead of a runtime surprise. The selector unit becomes:
+
+```pascal
+// AppUserClient.pas — selects the implementation at compile time
+{$I project.inc}   // must define exactly one of USERLOCAL / USERREMOTE
+
+{$if defined(USERLOCAL) and defined(USERREMOTE)}
+  {$message fatal 'Define exactly one of USERLOCAL / USERREMOTE — not both'}
+{$elseif not defined(USERLOCAL) and not defined(USERREMOTE)}
+  {$message fatal 'Define exactly one of USERLOCAL / USERREMOTE — not neither'}
+{$ifend}
+
+uses
+  {$ifdef USERLOCAL}  AppUserClientLocal,  {$endif}
+  {$ifdef USERREMOTE} AppUserClientRemote, {$endif}
+  ...;
+```
+
+Now the single switch lives in `project.inc` — flip `{$define USERLOCAL}` to `{$define USERREMOTE}` and the correct unit is linked, with the guard rejecting any misconfigured build before it compiles. (The remote build still supplies its host/port/root once at startup, exactly as above.) This is the form a production deployment tends to settle on, because the switch is one config line and a wrong build fails loudly.
+
+</details>
 
 The practical consequence the rest of this section turns on: **a single-executable monolith can still be a fully layered internal stack of services.** You do not split processes to get clean layering — you get that logically, inside one exe. You split processes only when scale, isolation, or a public network boundary actually demands it. So pick the physical topology by deployment context, not by how layered you want the code to be:
 
