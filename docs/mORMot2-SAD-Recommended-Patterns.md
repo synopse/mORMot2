@@ -131,9 +131,171 @@ with _Safe(v)^ do        // safe even if v is null / not a TDocVariant
 
 A sane default server wires a handful of deliberate decisions: a model, a storage server bound as `IRestOrm`, your services, authentication, an HTTP server, and logging. **Every one of these is a named decision — none should be left implicit.**
 
-One of those decisions is *topology*: how many REST servers exist and what is reachable from the network. Choose it by deployment context, not by habit:
+#### Two independent axes: logical layering vs physical topology
 
-- **A.6.1** — a single server, the right default for a **trusted / local** deployment.
+Before choosing a server layout, separate two decisions that are easy to conflate:
+
+- **Logical** — how your services are *layered*: repository, CQRS read/write split, event-driven handlers, DDD use-cases. This is a code-organisation concern (it is what Part B is about), and it is **independent of where anything runs**.
+- **Physical (topology)** — how many `TRestServer` / executable instances exist, and which of them are reachable from the network.
+
+These axes are orthogonal because mORMot gives you **location transparency**: an `IInvokable` service is consumed identically whether its implementation lives in-process or on another machine. The call site never changes:
+
+```pascal
+var
+  svc: IUserQuery;          // the service interface; same type, local or remote
+  profile: TUserProfile;
+begin
+  // Resolve once. Local: from the server's own container.
+  // Remote: from a client pointed at the other instance.
+  if Rest.Services.Resolve(IUserQuery, svc) then
+    // From here the call site is identical, wherever svc actually runs:
+    profile := svc.GetProfile(userID);
+```
+
+Switching a service from local to remote is a matter of *instance initialization* — register it on a different server, point a client at a URI — **not a code change**. The layering you design in Part B therefore survives any topology you later deploy it on.
+
+**Make the switch a one-line decision (the client-abstraction pattern).** Concentrate the local-vs-remote choice in a single *client-abstraction* unit that every consumer depends on, with two interchangeable implementations selected at the composition root. Consumer code never changes and never learns which one it got:
+
+```pascal
+// AppUserClient.pas — the only unit consumer code depends on
+type
+  TUserClient = class abstract
+  public
+    Query: IUserQuery;        // filled by Resolve, in whichever subclass is linked
+    Command: IUserCommand;
+    constructor CreateLocal; virtual; abstract;
+    constructor CreateRemote(const aServer, aPort, aRoot: RawUtf8); virtual; abstract;
+    procedure Resolve; virtual; abstract;
+    class function IsLocal: boolean; virtual; abstract;
+  end;
+  TUserClientClass = class of TUserClient;
+var
+  UserClient: TUserClient;          // active instance, set once at startup
+  UserClientClass: TUserClientClass;
+```
+
+The two concrete units share that surface and differ only in how `Resolve` obtains the interfaces — a direct object reference locally, an HTTP proxy remotely:
+
+<details>
+<summary><b>AppUserClientLocal.pas</b> — builds the whole layered stack in-process (the A.6.1 monolith)</summary>
+
+```pascal
+unit AppUserClientLocal;
+
+type
+  TUserClientLocal = class(TUserClient)
+  private
+    fModel: TOrmModel;
+    fRest: TRestServerDB;
+    fPersist: TUserPersistence;     // domain/persistence layer  (implements IDomUser)
+    fApp: TUserService;             // application layer (implements IUserQuery/IUserCommand)
+  public
+    constructor CreateLocal; override;
+    procedure Resolve; override;
+    class function IsLocal: boolean; override;
+  end;
+
+implementation
+
+constructor TUserClientLocal.CreateLocal;
+begin
+  fModel := TOrmModel.Create([TOrmUser]);
+  fRest  := TRestServerDB.Create(fModel, ':memory:');   // or a real 'data.db'
+  fRest.Model.Owner := fRest;
+  fRest.Server.CreateMissingTables;
+  // domain/persistence layer owns the ORM:
+  fPersist := TUserPersistence.Create(fRest.Orm);
+  // application layer, with the persistence interface injected (B.5 DI):
+  fApp := TUserService.CreateInjected([], [], [fPersist]);
+  // publish the app layer as services on the in-memory server:
+  fRest.ServiceDefine(fApp, [IUserQuery, IUserCommand]);
+  Resolve;
+end;
+
+procedure TUserClientLocal.Resolve;
+begin
+  Query   := fApp;     // direct assignment — no network, no marshalling
+  Command := fApp;
+end;
+
+class function TUserClientLocal.IsLocal: boolean;
+begin
+  Result := true;
+end;
+
+initialization
+  UserClient      := TUserClientLocal.CreateLocal;   // this unit selects "local"
+  UserClientClass := TUserClientLocal;
+finalization
+  FreeAndNil(UserClient);
+end.
+```
+
+</details>
+
+<details>
+<summary><b>AppUserClientRemote.pas</b> — an HTTP client to the standalone server (the A.6.2 distributed layout)</summary>
+
+```pascal
+unit AppUserClientRemote;
+
+type
+  TUserClientRemote = class(TUserClient)
+  private
+    fHttp: TRestHttpClientSocket;
+  public
+    constructor CreateRemote(const aServer, aPort, aRoot: RawUtf8); override;
+    procedure Resolve; override;
+    class function IsLocal: boolean; override;
+  end;
+
+implementation
+
+constructor TUserClientRemote.CreateRemote(const aServer, aPort, aRoot: RawUtf8);
+begin
+  fHttp := TRestHttpClientSocket.Create(aServer, aPort, TOrmModel.Create([], aRoot));
+  fHttp.Model.Owner := fHttp;
+  // declare the SAME interfaces, this time as client-side factories:
+  fHttp.ServiceDefine([IUserQuery, IUserCommand], sicShared);
+  Resolve;
+end;
+
+procedure TUserClientRemote.Resolve;
+begin
+  fHttp.Services.Resolve(IUserQuery,   Query);     // resolve over HTTP
+  fHttp.Services.Resolve(IUserCommand, Command);
+end;
+
+class function TUserClientRemote.IsLocal: boolean;
+begin
+  Result := false;
+end;
+
+initialization
+  UserClientClass := TUserClientRemote;
+  // CreateRemote(host, port, root) is called explicitly at startup,
+  // because it needs connection parameters.
+end.
+```
+
+</details>
+
+```pascal
+// Project.dpr — the ONE place topology is chosen:
+uses
+  AppUserClient,
+  AppUserClientLocal;      // <-- swap to AppUserClientRemote for distributed
+
+// consumer code, identical and unaware of the line above:
+if UserClient.Query.GetProfile(userID, profile) then
+  ...
+```
+
+`Local` is the A.6.1 monolith (one exe, full stack in-process); `Remote` is the A.6.2 distributed layout (HTTP client to a standalone server). Same business code; the deployment model is a single `uses` line.
+
+The practical consequence the rest of this section turns on: **a single-executable monolith can still be a fully layered internal stack of services.** You do not split processes to get clean layering — you get that logically, inside one exe. You split processes only when scale, isolation, or a public network boundary actually demands it. So pick the physical topology by deployment context, not by how layered you want the code to be:
+
+- **A.6.1** — a single server, the right default for a **trusted / local** deployment (one exe, still logically layered).
 - **A.6.2** — a private system-of-record plus a public edge, for an **Internet-facing or distributed** deployment.
 
 **A cross-cutting rule that applies to both.** Topology reduces *exposure*; it never substitutes for *authorization*. Scope every read to the caller: a logged-in end user must retrieve only their own rows, never the whole table. This is a service-design concern (filter each query to the session's identity at the service boundary) — no choice of server count fixes it. See [B.6](#b6-cross-cutting-standards).
