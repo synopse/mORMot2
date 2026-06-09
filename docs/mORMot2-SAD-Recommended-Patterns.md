@@ -370,6 +370,34 @@ HttpServer := TRestHttpServer.Create('443', [EdgeServer], '+', HTTP_DEFAULT_MODE
 
 Publishing too much is the classic Internet-facing mistake; the cross-cutting rule from A.6 — scope every read to the caller — is what actually prevents data leaks here. See [B.6](#b6-cross-cutting-standards).
 
+#### A.6.3. Mapping to standard architecture vocabulary
+
+The names used above are concrete on purpose, but none of them is a new concept. So that both people and AI can cross-reference the established literature, here is how they line up — kept on the two axes from the start of A.6.
+
+**Physical / topology axis** (A.6.2 — the network boundary):
+
+| Term used here | Established name | Reference |
+|---|---|---|
+| Public edge | **API Gateway**; **Backend-for-Frontend (BFF)** when one edge serves one client app | Richardson, *Microservices Patterns*; Newman, *Building Microservices* |
+| Private system-of-record | **System of Record (SoR)**; the core/domain side of a **Hexagonal (Ports & Adapters)** boundary | Cockburn, *Hexagonal Architecture* |
+| Private/public split | an inbound **adapter** (the edge) in front of the core — Ports & Adapters applied at the deployment boundary | Hexagonal / Onion architecture |
+
+**Logical / layering axis** (Part B — in-process, independent of topology):
+
+| Term used here | Established name | Reference |
+|---|---|---|
+| Application layer / context-scoped services | **use cases / application services** | Evans, *DDD*; Martin, *Clean Architecture* |
+| Repository interface ([B.1](#b1-storage-behind-an-interface)) | **Repository pattern** | Evans, *DDD*; Fowler, *PoEAA* |
+| Query/Command split ([B.4](#b5-cqrs-read-write-split)) | **CQRS** | Young; Fowler |
+| Domain object carried on the `TOrm` ([B.3](#b3-two-types-per-entity-not-three)) | **entity / aggregate** | Evans, *DDD* |
+
+Two caveats, because it is tempting to file all of this under one label such as "Clean Architecture":
+
+- **Clean Architecture / Onion / DDD describe the *logical* axis** — in-process layering — not how many processes you run. They apply just as much to the A.6.1 monolith as to A.6.2.
+- **API Gateway / BFF / hexagonal-edge describe the *physical* axis** — the network boundary. They are what A.6.2 adds on top of the layering.
+
+Picking the right body of literature per axis is the point: it keeps "private system-of-record + public edge" anchored to *System of Record + API Gateway*, rather than mislabelled as a Clean-Architecture concern.
+
 ---
 
 ## Part B — A Possible Application Blueprint — Deviate Where Required
