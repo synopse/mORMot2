@@ -7676,13 +7676,15 @@ const
     #7'RawUtf8'#5'array'#6'record'#5'TDate'#5'TGuid'#6'PtrInt'#7'PtrUInt' +
     {$ifdef FPC} #6'string'#7'integer'#8'cardinal' {$else}
                  #7'longint'#8'longword' {$endif} + #9'TFileName' +
-    #7'RawBlob'#7'SpiUtf8' +
+    #7'RawBlob'#7'SpiUtf8'#4'byte'#4'word'#7'boolean'#9'TDateTime'#6'double' +
+    #5'Int64'#7'variant' +
     {$ifdef UNICODE} #13'UnicodeString' {$else} #10'AnsiString' {$endif};
-  _TypeParser: array[0 .. 13 {$ifdef FPC} + 1 {$endif} ] of TRttiParserType = (
+  _TypeParser: array[0 .. 20 {$ifdef FPC} + 1 {$endif} ] of TRttiParserType = (
     ptNone, ptRawUtf8, ptArray, ptRecord, ptDateTime, ptGuid,
     {$ifdef CPU64} ptInt64, ptQWord, {$else} ptInteger, ptCardinal, {$endif}
     {$ifdef FPC} ptString, {$endif} ptInteger, ptCardinal, ptString,
-    ptRawByteString, ptRawUtf8, ptString);
+    ptRawByteString, ptRawUtf8, ptByte, ptWord, ptBoolean, ptDateTime, ptDouble,
+    ptInt64, ptVariant, ptString);
 
 function KnownTypeName(Name: PUtf8Char; NameLen: PtrInt): TRttiParserType;
   {$ifdef HASINLINE}inline;{$endif}
