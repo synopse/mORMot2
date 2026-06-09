@@ -683,6 +683,7 @@ procedure IP6Short(ip6addr: PByteArray; var s: TShort47);
 // - loopback address is returned as its '127.0.0.1' IPv4 representation
 // for consistency with our high-level HTTP/REST code
 // - does not support mapped IPv4 so never returns '::1.2.3.4' but '::102:304'
+// - won't use the Operating System network layer API so is fast and consistent
 procedure IP6Text(ip6addr: PByteArray; var result: RawUtf8);
 
 /// convert a MAC address value into its standard RawUtf8 text representation
@@ -1908,6 +1909,16 @@ function ToIP4Binary(text: PUtf8Char; var bin: RawByteString): PtrInt;
 
 /// compute a raw binary content from an array of ip4
 function IP4sToBinary(const ip4: TNetIP4s): RawByteString;
+
+/// check is the supplied address text is on IPv6 format '2001:b8:a0b:12f0::1'
+// - will optionally fill a 128-bit binary buffer with the decoded IPv4 address
+// - end text input parsing at final #0 in text
+// - calls the Operating System network layer API so is slower than IP6Short()
+function NetIsIP6(text: PUtf8Char; value: PByte = nil): boolean;
+
+/// just a wrapper around NetIsIP6(pointer(text), @value)
+// - calls the Operating System network layer API so is slower than IP6Text()
+function ToIP6(const text: RawUtf8; var value: TNetIP6): boolean;
 
 /// append one TNetMac instance to a dynamic array of such values
 procedure AddMac(var macs: TNetMacs; const mac: TNetMac);
@@ -3919,6 +3930,32 @@ begin
     exit;
   ip32 := bswap32(ip32); // to be asked in inverse byte order
   Join([IP4ToText(@ip32), '.in-addr.arpa'], reverse);
+end;
+
+function NetIsIP6(text: PUtf8Char; value: PByte): boolean;
+var
+  l: PtrInt;
+  tmp: TNetIP6;
+begin
+  result := false;
+  if text = nil then
+    exit;
+  l := 0;
+  while text[l] <> #0 do
+    if (l <= 45) and // max is 'ABCD:ABCD:ABCD:ABCD:ABCD:ABCD:192.168.158.190'
+       (text[l] in [':', '.', '0'..'9', 'a'..'f', 'A'..'F']) then
+      inc(l)
+    else
+      exit; // quickly eliminate invalid charset
+  if value = nil then
+    value := @tmp; // value is optional, just like for NetIsIP4()
+  result := (l >= 2) and
+            InetPton(text, value); // call the proper OS API
+end;
+
+function ToIP6(const text: RawUtf8; var value: TNetIP6): boolean;
+begin
+  result := NetIsIP6(pointer(text), @value);
 end;
 
 procedure IP6Short(ip6addr: PByteArray; var s: TShort47);
