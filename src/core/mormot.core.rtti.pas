@@ -2901,8 +2901,8 @@ type
     function GetByClass(ObjectClass: TClass): TRttiCustom;
       {$ifdef HASINLINE}inline;{$endif}
     // called by FindOrRegister() for proper inlining
-    function DoRegister(Info: PRttiInfo): TRttiCustom; overload;
-    function DoRegister(ObjectClass: TClass; ToDo: TRttiCustomFlags): TRttiCustom; overload;
+    function DoRegisterInfo(Info: PRttiInfo): TRttiCustom;
+    function DoRegisterFakeRtti(ObjectClass: TClass): TRttiCustom;
     procedure AddToPairs(Instance: TRttiCustom; Info: PRttiInfo);
     procedure SetGlobalClass(RttiClass: TRttiCustomClass); // ensure Count=0
   public
@@ -2983,13 +2983,12 @@ type
     // - please call RegisterCollection for TCollection
     function RegisterClass(aObject: TObject): TRttiCustom; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// low-level registration function called from RegisterClass()
-    // - is sometimes called after manual vmtAutoTable slot lookup
-    function DoRegister(ObjectClass: TClass): TRttiCustom; overload;
+    /// low-level registration function called once from inlined RegisterClass()
+    // - made public to be called e.g. after manual vmtAutoTable slot lookup
+    function DoRegisterClass(ObjectClass: TClass): TRttiCustom;
     /// register a given class type, using its RTTI, to auto-create/free its
     // class and dynamic array published fields
     function RegisterAutoCreateFieldsClass(ObjectClass: TClass): TRttiCustom;
-      {$ifdef HASINLINE}inline;{$endif}
     /// register one or several RTTI TypeInfo()
     // - to ensure that those classes will be recognized by text definition
     // - will just call RegisterClass() for each ObjectClass[]
@@ -5487,7 +5486,7 @@ begin
   begin
     result := FindType(Info);
     if result = nil then
-      result := DoRegister(Info);
+      result := DoRegisterInfo(Info);
   end
   else
     result := nil;
@@ -5501,7 +5500,7 @@ begin
   result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
   {$endif NOPATCHVMT}
   if result = nil then
-    result := DoRegister(ObjectClass);
+    result := DoRegisterClass(ObjectClass);
 end;
 
 function TRttiCustomList.RegisterClass(aObject: TObject): TRttiCustom;
@@ -5512,7 +5511,7 @@ begin
   result := PPointer(PPAnsiChar(aObject)^ + vmtAutoTable)^;
   {$endif NOPATCHVMT}
   if result = nil then
-    result := DoRegister(PClass(aObject)^);
+    result := DoRegisterClass(PClass(aObject)^);
 end;
 
 function GetRttiClass(RttiClass: TClass): PRttiClass;
@@ -8861,7 +8860,7 @@ begin
   p := pointer(List);
   for i := 1 to Count do
   begin
-    if f^.TypeInfo = nil then // may happen on Delphi (but not on FPC)
+    if f^.TypeInfo = nil then // may happen on old Delphi (but not on FPC)
     begin
       // guess field size (as mORMot 1 did)
       if i = Count then
@@ -9170,14 +9169,13 @@ procedure TRttiCustom.NoRttiSetAndRegister(ParserType: TRttiParserType;
   TypeName: RawUtf8; NoRegister: boolean);
 var
   def: PTypeData;
-begin
+begin // called on Delphi 7/2007 on weak types or from custom text definitions
   if TypeName = '' then
     Make(['#', InterlockedIncrement(_RttiCount)], TypeName); // not void
   if (fNoRttiInfo <> nil) or
      not (rcfWithoutRtti in fFlags) then
     ERttiException.RaiseUtf8('Unexpected %.NoRttiSetAndRegister(%)',
       [self, TypeName]);
-  // validate record/dynarray only supported types
   case ParserType of
     ptRecord:
       begin
@@ -10157,7 +10155,7 @@ function TRttiCustomList.FindName(Name: PUtf8Char; NameLen: PtrInt;
 var
   k: PRttiCustomListPairs;
   p: pointer; // ^TPointerDynArray
-begin
+begin // seldom called: from RegisterFromText() or ORM model initialization
   if (Kind <> rkUnknown) and
      (Name <> nil) and
      (NameLen > 0) then
@@ -10256,7 +10254,7 @@ begin
   k^.Safe.ReadUnLock;
 end;
 
-function TRttiCustomList.DoRegister(Info: PRttiInfo): TRttiCustom;
+function TRttiCustomList.DoRegisterInfo(Info: PRttiInfo): TRttiCustom;
 begin
   if Info = nil then
   begin
@@ -10281,17 +10279,8 @@ begin
     ERttiException.RaiseUtf8('%.DoRegister(%)?', [self, Info.RawName]);
 end;
 
-function TRttiCustomList.DoRegister(ObjectClass: TClass): TRttiCustom;
-var
-  info: PRttiInfo;
-begin
-  info := PPointer(PAnsiChar(ObjectClass) + vmtTypeInfo)^;
-  if info <> nil then // always available on FPC and Delphi 2010+
-  begin
-    result := DoRegister(info);
-    exit;
-  end;
-  // generate fake RTTI for classes without {$M+} on Delphi 7/2007
+function TRttiCustomList.DoRegisterFakeRtti(ObjectClass: TClass): TRttiCustom;
+begin // generate fake RTTI for classes without {$M+} on Delphi 7/2007
   RegisterSafe.Lock;
   try
     result := FindClass(ObjectClass); // search again (for thread safety)
@@ -10306,45 +10295,54 @@ begin
   end;
 end;
 
-function TRttiCustomList.DoRegister(ObjectClass: TClass; ToDo: TRttiCustomFlags): TRttiCustom;
+function TRttiCustomList.DoRegisterClass(ObjectClass: TClass): TRttiCustom;
+var
+  info: PRttiInfo;
+begin
+  info := PPointer(PAnsiChar(ObjectClass) + vmtTypeInfo)^;
+  if info <> nil then
+    result := DoRegisterInfo(info) // always available on FPC and Delphi 2010+
+  else
+    result := DoRegisterFakeRtti(ObjectClass); // Delphi 7/2007 without {$M+}
+end;
+
+function TRttiCustomList.RegisterAutoCreateFieldsClass(ObjectClass: TClass): TRttiCustom;
 var
   i: integer;
   p: PRttiCustomProp;
 begin
   RegisterSafe.Lock;
   try
-    result := DoRegister(ObjectClass);
-    if (rcfAutoCreateFields in ToDo) and
-       not (rcfAutoCreateFields in result.fFlags) then
+    result := DoRegisterClass(ObjectClass);
+    if rcfAutoCreateFields in result.fFlags then
+      exit;
+    // detect and cache T*AutoCreate fields
+    p := pointer(result.Props.List);
+    for i := 1 to result.Props.Count do
     begin
-      // detect T*AutoCreate fields
-      p := pointer(result.Props.List);
-      for i := 1 to result.Props.Count do
-      begin
-        case p^.Value.Kind of
-          rkClass:
-            if (p^.OffsetGet >= 0) and
-               (p^.OffsetSet >= 0) then
-            begin
-              PtrArrayAdd(result.fAutoCreateInstances, p);
-              PtrArrayAdd(result.fAutoDestroyClasses, p);
-            end;
-          rkDynArray:
-            if (rcfObjArray in p^.Value.Flags) and
-               (p^.OffsetGet >= 0) then
-              PtrArrayAdd(result.fAutoCreateObjArrays, p);
-          rkInterface:
-            if (p^.OffsetGet >= 0) and
-               (p^.OffsetSet >= 0) then
-              if p^.Value.HasClassNewInstance then // ISerializable
-                PtrArrayAdd(result.fAutoCreateInstances, p)
-              else
-                PtrArrayAdd(result.fAutoResolveInterfaces, p);
-        end;
-        inc(p);
+      case p^.Value.Kind of
+        rkClass:
+          if (p^.OffsetGet >= 0) and
+             (p^.OffsetSet >= 0) then
+          begin
+            PtrArrayAdd(result.fAutoCreateInstances, p);
+            PtrArrayAdd(result.fAutoDestroyClasses, p);
+          end;
+        rkDynArray:
+          if (rcfObjArray in p^.Value.Flags) and
+             (p^.OffsetGet >= 0) then
+            PtrArrayAdd(result.fAutoCreateObjArrays, p);
+        rkInterface:
+          if (p^.OffsetGet >= 0) and
+             (p^.OffsetSet >= 0) then
+            if p^.Value.HasClassNewInstance then // ISerializable
+              PtrArrayAdd(result.fAutoCreateInstances, p)
+            else
+              PtrArrayAdd(result.fAutoResolveInterfaces, p);
       end;
-      include(result.fFlags, rcfAutoCreateFields); // should be set once defined
+      inc(p);
     end;
+    include(result.fFlags, rcfAutoCreateFields); // should be set once defined
   finally
     RegisterSafe.UnLock;
   end;
@@ -10460,18 +10458,6 @@ end;
 function TRttiCustomList.GetByClass(ObjectClass: TClass): TRttiCustom;
 begin
   result := RegisterClass(ObjectClass);
-end;
-
-function TRttiCustomList.RegisterAutoCreateFieldsClass(ObjectClass: TClass): TRttiCustom;
-begin
-  {$ifdef NOPATCHVMT}
-  result := FindType(PPointer(PAnsiChar(ObjectClass) + vmtTypeInfo)^);
-  {$else}
-  result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
-  {$endif NOPATCHVMT}
-  if (result = nil) or // caller should have checked it - paranoiac we are
-     not (rcfAutoCreateFields in result.Flags) then
-    result := DoRegister(ObjectClass, [rcfAutoCreateFields]);
 end;
 
 procedure TRttiCustomList.RegisterClasses(const ObjectClass: array of TClass);
@@ -10881,7 +10867,7 @@ begin
   {$ifndef NOPATCHVMT}
   // register the class to the RTTI cache
   if PPointer(PAnsiChar(self) + vmtAutoTable)^ = nil then
-    Rtti.DoRegister(self); // ensure TRttiCustom is set
+    Rtti.DoRegisterClass(self); // ensure TRttiCustom is set
   {$endif NOPATCHVMT}
   // bypass vmtIntfTable and vmt^.vInitTable (FPC management operators)
   GetMem(pointer(result), InstanceSize); // InstanceSize is inlined

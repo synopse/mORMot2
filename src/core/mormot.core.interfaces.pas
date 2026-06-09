@@ -5831,7 +5831,7 @@ begin
   {$endif NOPATCHVMT}
   if (r = nil) or
      not (rcfAutoCreateFields in r.Flags) then
-    r := DoRegisterAutoCreateFields(self);
+    r := pointer(Rtti.RegisterAutoCreateFieldsClass(PClass(self)^));
   // resolve all published interface fields
   p := pointer(TRttiCustomWrapper(r).fAutoResolveInterfaces);
   if p = nil then
