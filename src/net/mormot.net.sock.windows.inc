@@ -804,7 +804,6 @@ type
 
 var
   iphlpapiDll: THandle;
-
   // some iphlpapi.dll late-binded API via DelayedProc()
   GetIpAddrTable: function (pIpAddrTable: PMIB_IPADDRTABLE;
     var pdwSize: DWord; bOrder: BOOL): DWord; stdcall;
@@ -826,7 +825,7 @@ begin
     exit;
   SetLength(result, Table.dwNumEntries);
   n := 0;
-  for i := 0 to Table.dwNumEntries-1 do
+  for i := 0 to Table.dwNumEntries - 1 do
     with Table.ip[i] do
       if IP4Filter(dwAddr, Kind) then
       begin
@@ -837,6 +836,18 @@ begin
     SetLength(result, n);
 end;
 
+function RtlIpv6StringToAddress(s: PUtf8Char; var term: PUtf8Char; in6: PByte): integer;
+  stdcall; external 'NTDLL.DLL' name 'RtlIpv6StringToAddressA';
+
+function InetPton(text: PUtf8Char; value: PByte): boolean;
+var
+  term: PUtf8Char;
+begin
+  term := nil;
+  result := (RtlIpv6StringToAddress(text, term, value) = NO_ERROR) and
+            (term <> nil) and
+            (term^ = #0);
+end;
 
 
 { ******************** MAC and DNS Addresses Support }

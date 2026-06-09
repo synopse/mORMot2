@@ -436,6 +436,9 @@ function poll(fds: PPollFD; nfds, timeout: integer): integer; cdecl;
   external clib name 'poll' + LIBC_SUFFIX;
 {$endif OSDARWIN}
 
+function inet_pton(af: integer; src, dst: pointer): integer; cdecl;
+  external clib name 'inet_pton' + LIBC_SUFFIX;
+
 {$ifdef FPC}
 function fpunlinka(path: PAnsiChar): integer; inline; // internal call
 begin
@@ -778,6 +781,11 @@ end;
 
 
 { ******************** Mac and IP Addresses Support }
+
+function InetPton(text: PUtf8Char; value: PByte): boolean; inline;
+begin
+  result := inet_pton(AF_INET6, text, value) = 1;
+end;
 
 const
   IFF_UP        = $1;
