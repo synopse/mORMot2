@@ -10438,17 +10438,17 @@ begin
     inc(Name, i);
     dec(NameLen, i);
   until false;
-  result := FindName(Name, NameLen); // search in fHashTable[].HashName[]
-  if result = nil then
+  pt := KnownTypeName(Name, NameLen); // most used simple types
+  if pt <> ptNone then
+    result := PT_RTTI[pt] // 'array' returns nil as expected
+  else
   begin
-    // array/record keywords, integer/cardinal FPC types not available by Find()
-    pt := KnownTypeName(Name, NameLen);
-    if ParserType <> nil then
-      ParserType^ := pt;
-    result := PT_RTTI[pt];
-  end
-  else if ParserType <> nil then
-    ParserType^ := result.Parser;
+    result := FindName(Name, NameLen); // search in fHashTable[].HashName[]
+    if result <> nil then
+      pt := result.Parser;
+  end;
+  if ParserType <> nil then
+    ParserType^ := pt;
 end;
 
 function TRttiCustomList.RegisterTypeFromName(const Name: RawUtf8;
