@@ -9052,12 +9052,11 @@ var
   i: PtrInt;
   a: TPointerDynArray absolute aObjArray;
 begin
-  if a <> nil then
-  begin
-    for i := 0 to length(a) - 1 do
-      ObjArrayClear(a[i]);
-    a := nil;
-  end;
+  if a = nil then
+    exit;
+  for i := 0 to length(a) - 1 do
+    ObjArrayClear(a[i]);
+  a := nil;
 end;
 
 procedure ObjArraysClear(const aObjArray: array of pointer);
