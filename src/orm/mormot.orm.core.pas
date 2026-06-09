@@ -5103,13 +5103,15 @@ begin
      (Rtti.Counts[rkClass] = 0) then
     exit;
   if (L > 13) and IdemPropName('ToBeDeletedID', @TypeName^[L - 12], 13) then
-  begin   // 'TOrmClientToBeDeletedID' -> TOrmClient + CascadeDelete=true
+  begin // 'TOrmClientToBeDeletedID' -> TOrmClient + CascadeDelete=true
     fCascadeDelete := true;
-    Found := Rtti.FindName(@TypeName^[1], L - 13, rkClass);
+    dec(L, 13);
   end
-  else    // 'TOrmClientID' -> TOrmClient
-    Found := Rtti.FindName(@TypeName^[1], L - 2, rkClass);
-  if (Found <> nil) and Found.ValueClass.InheritsFrom(TOrm) then
+  else  // 'TOrmClientID' -> TOrmClient
+    dec(L, 2);
+  Found := Rtti.FindName(@TypeName^[1], L);
+  if (Found <> nil) and (Found.Kind = rkClass) and
+     Found.ValueClass.InheritsFrom(TOrm) then
     fRecordClass := pointer(Found.ValueClass);
 end;
 
