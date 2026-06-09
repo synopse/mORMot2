@@ -272,7 +272,7 @@ end;
 
 function closesocket(s: integer): integer; inline;
 begin
-  result := FileClose(s);
+  result := fpclose(s);
 end;
 
 function getnameinfo(addr: PSockAddr; namelen: TSockLen; host: PAnsiChar;
@@ -282,12 +282,12 @@ function getnameinfo(addr: PSockAddr; namelen: TSockLen; host: PAnsiChar;
 
 function bind(s: integer; addr: PSockAddr; namelen: TSockLen): integer; inline;
 begin
-  result := fpbind(s, addr, namelen);
+  result := fpbind(s, pointer(addr), namelen);
 end;
 
 function getsockname(s: integer; name: PSockAddr; var namelen: TSockLen): integer; inline;
 begin
-  result := fpgetsockname(s, name, @namelen);
+  result := fpgetsockname(s, pointer(name), @namelen);
 end;
 
 function listen(s: integer; backlog: integer): integer; inline;
@@ -297,7 +297,7 @@ end;
 
 function accept(s: integer; addr: PSockAddr; var addrlen: TSockLen): integer; inline;
 begin
-  result := fpaccept(s, addr, @addrlen);
+  result := fpaccept(s, pointer(addr), @addrlen);
 end;
 
 {$ifdef HASACCEPT4}
@@ -308,7 +308,7 @@ function accept4(s: integer; addr: PSockAddr; var addrlen: TSockLen; flags: inte
 
 function connect(s: integer; name: PSockAddr; namelen: TSockLen): integer; inline;
   begin
-    result := fpconnect(s, name, namelen);
+    result := fpconnect(s, pointer(name), namelen);
   end;
 
 function select(nfds: integer; readfds, writefds, exceptfds: PFDSet;
@@ -325,7 +325,7 @@ end;
 function recvfrom(s: integer; Buf: pointer; len: size_t; flags: integer;
    from: PSockAddr; fromlen: pSocklen): ssize_t; inline;
 begin
- result := fprecvfrom(s, Buf, len, flags, from, fromlen);
+ result := fprecvfrom(s, Buf, len, flags, pointer(from), fromlen);
 end;
 
 function send(s: integer; Buf: pointer; len: size_t; flags: integer): ssize_t; inline;
@@ -336,12 +336,12 @@ end;
 function sendto(s: integer; Buf: pointer; len: size_t; flags: integer;
    addrto: PSockAddr; tolen: integer): ssize_t; inline;
 begin
- result := fpsendto(s, Buf, len, flags, addrto, tolen);
+ result := fpsendto(s, Buf, len, flags, pointer(addrto), tolen);
 end;
 
 function getpeername(s: integer; name: PSockAddr; var namelen: TSockLen): integer; inline;
 begin
-  result := fpgetpeername(s, name, @namelen);
+  result := fpgetpeername(s, pointer(name), @namelen);
 end;
 
 {$else}
