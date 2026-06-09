@@ -2888,6 +2888,9 @@ type
   private
     // store PRttiInfo/TRttiCustom pairs by Kind+PRttiInfo
     fHashInfo: array of TRttiCustomListPairs;
+    // store PRttiInfo/TRttiCustom pairs by Name - protected by RegisterSafe
+    fHashName: array of TPointerDynArray;
+    fLastName: TRttiCustom; // speedup search by name e.g. from a loop
     // used to release memory used by registered customizations
     fInstances: array of TRttiCustom;
     fGlobalClass: TRttiCustomClass;
@@ -2930,14 +2933,13 @@ type
       {$ifdef HASINLINE}static; inline;{$endif}
     {$endif NOPATCHVMT}
     /// efficient search of TRttiCustom from a given type name
-    function FindName(Name: PUtf8Char; NameLen: PtrInt;
-      Kind: TRttiKind): TRttiCustom; overload;
+    function FindName(Name: PUtf8Char; NameLen: PtrInt): TRttiCustom; overload;
+    /// efficient search of TRttiCustom from a given type name and kind
+    function FindName(Name: PUtf8Char; NameLen: PtrInt; Kind: TRttiKind): TRttiCustom;
+      overload; {$ifdef HASINLINE}inline;{$endif}
     /// efficient search of TRttiCustom from a given type name
-    function FindName(Name: PUtf8Char; NameLen: PtrInt;
-      Kinds: TRttiKinds = []): TRttiCustom; overload;
-    /// efficient search of TRttiCustom from a given type name
-    function FindName(const Name: ShortString; Kinds: TRttiKinds = []): TRttiCustom;
-       overload; {$ifdef HASINLINE}inline;{$endif}
+    function FindName(const Name: ShortString): TRttiCustom; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// manual search of any matching TRttiCustom.ArrayRtti type
     // - currently not called: IList<T> and IKeyValue<T> just use TypeInfo(T)
     function FindByArrayRtti(ElemInfo: PRttiInfo): TRttiCustom;
@@ -9996,9 +9998,13 @@ end; // no need to set other fields like Name
 
 { TRttiCustomList }
 
+const
+  HASHNAME_MAX = 127; // global hash table for TRttiCustomList.FindName()
+
 constructor TRttiCustomList.Create;
 begin
   SetLength(fHashInfo, RK_TOSLOT_MAX + 1); // per-kind hash table for PRttiInfo
+  SetLength(fHashName, HASHNAME_MAX + 1);  // a single hash table for names
   fGlobalClass := TRttiCustom;             // eventually set by mormot.core.json
   RegisterSafe.Init;
 end;
@@ -10092,27 +10098,27 @@ begin
 end;
 {$endif NOPATCHVMT}
 
-function LockedFindNameInPairs(Pairs, PEnd: PPointerArray;
-  Name: PUtf8Char; NameLen: PtrInt): TRttiCustom;
+function LockedFindNameInPairs(p: PPointerArray; n: PUtf8Char; l: PtrInt): TRttiCustom;
 var
   nfo: PRttiInfo;
-  p1, p2: PUtf8Char;
+  pe, p1, p2: PUtf8Char;
 label
   no;
 begin
+  pe := @p[PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF];
   repeat
-    nfo := Pairs[0];
-    if ord(nfo^.RawName[0]) <> NameLen then
+    nfo := p[0];
+    if ord(nfo^.RawName[0]) <> l then
     begin
-no:   Pairs := @Pairs[2]; // PRttiInfo/TRttiCustom pairs
-      if PAnsiChar(Pairs) >= PAnsiChar(PEnd) then
+no:   p := @p[2]; // PRttiInfo/TRttiCustom p
+      if PUtf8Char(p) >= pe then
         break;
       continue;
     end;
     // inlined IdemPropNameUSameLenNotNull
     p1 := @nfo^.RawName[1];
-    p2 := Name;
-    nfo := pointer(@p1[NameLen - SizeOf(cardinal)]);
+    p2 := n;
+    nfo := pointer(@p1[l - SizeOf(cardinal)]);
     dec(p2, PtrUInt(p1));
     while PtrUInt(nfo) >= PtrUInt(p1) do
       // compare 4 Bytes per loop
@@ -10127,14 +10133,13 @@ no:   Pairs := @Pairs[2]; // PRttiInfo/TRttiCustom pairs
         goto no
       else
         inc(PByte(p1));
-    result := Pairs[1];  // found
+    result := p[1];  // found
     exit;
   until false;
   result := nil; // not found
 end;
 
 function RttiHashName(Name: PByteArray; Len: PtrUInt): byte;
-  {$ifdef HASINLINE}inline;{$endif}
 begin
   result := Len;
   repeat
@@ -10143,68 +10148,46 @@ begin
       break;
     inc(result, Name[Len] and $df); // simple case-insensitive hash
   until false;
-  result := result and RTTIHASH_MAX;
+  result := result and HASHNAME_MAX;
 end;
 
-function TRttiCustomList.FindName(Name: PUtf8Char; NameLen: PtrInt;
-  Kind: TRttiKind): TRttiCustom;
+function TRttiCustomList.FindName(Name: PUtf8Char; NameLen: PtrInt): TRttiCustom;
 var
-  k: PRttiCustomListPairs;
-  p: pointer; // ^TPointerDynArray
+  p: PPointerArray;
 begin // seldom called: from RegisterFromText() or ORM model initialization
-  if (Kind <> rkUnknown) and
-     (Name <> nil) and
-     (NameLen > 0) then
-  begin
-    k := @fHashTable[RK_TOSLOT[Kind]];
-    // try latest found name e.g. calling from JsonRetrieveObjectRttiCustom()
-    result := k^.LastName;
-    if (result <> nil) and
-       (PStrLen(PAnsiChar(pointer(result.Name)) - _STRLEN)^ = NameLen) and
-       IdemPropNameUSameLenNotNull(pointer(result.Name), Name, NameLen) then
-      exit;
-    // our dedicated "hash table of the poor" (tm) lookup
-    p := Name; // for better code generation on FPC when inlining RttiHashName()
-    p := @k^.HashName[RttiHashName(p, NameLen)];
-    k^.Safe.ReadLock;
-    result := PPointer(p)^; // read TPointerDynArray within the lock
-    if result <> nil then
-      result := LockedFindNameInPairs(@PPointerArray(result)[0],
-        @PPointerArray(result)[PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF],
-        Name, NameLen);
-    k^.Safe.ReadUnLock;
-    if result <> nil then
-      k^.LastName := result;
-  end
-  else
-    result := nil;
-end;
-
-function TRttiCustomList.FindName(Name: PUtf8Char; NameLen: PtrInt;
-  Kinds: TRttiKinds): TRttiCustom;
-var
-  k: TRttiKind;
-begin
-  // not very optimized, but called only at startup from Rtti.RegisterFromText()
-  if (Name <> nil) and
-     (NameLen > 0) then
-  begin
-    if Kinds = [] then
-      Kinds := rkAllTypes;
-    for k := succ(low(k)) to high(k) do
-      if k in Kinds then
-      begin
-        result := FindName(Name, NameLen, k);
-        if result <> nil then
-          exit;
-      end;
-  end;
   result := nil;
+  if (Name = nil) or
+     (NameLen <= 0) then
+    exit;
+  // try latest found name e.g. calling from JsonRetrieveObjectRttiCustom()
+  result := fLastName; // accessing an aligned pointer is expected to be atomic
+  if (result <> nil) and
+     (PStrLen(PAnsiChar(pointer(result.Name)) - _STRLEN)^ = NameLen) and
+     IdemPropNameUSameLenNotNull(pointer(result.Name), Name, NameLen) then
+    exit;
+  // our dedicated "hash table of the poor" (tm) lookup
+  result := nil;
+  p := @fHashName[RttiHashName(pointer(Name), NameLen)];
+  RegisterSafe.Lock;
+  p := p^[0]; // read TPointerDynArray within the lock
+  if p <> nil then
+    result := LockedFindNameInPairs(p, Name, NameLen);
+  RegisterSafe.UnLock;
+  if result <> nil then
+    fLastName := result;
 end;
 
-function TRttiCustomList.FindName(const Name: ShortString; Kinds: TRttiKinds): TRttiCustom;
+function TRttiCustomList.FindName(Name: PUtf8Char; NameLen: PtrInt; Kind: TRttiKind): TRttiCustom;
 begin
-  result := FindName(@Name[1], ord(Name[0]), Kinds);
+  result := FindName(Name, NameLen);
+  if (result <> nil) and
+     (result.Kind <> Kind) then
+    exit;
+end;
+
+function TRttiCustomList.FindName(const Name: ShortString): TRttiCustom;
+begin
+  result := FindName(@Name[1], ord(Name[0]));
 end;
 
 function FindNameInArray(Pairs, PEnd: PPointerArray; ElemInfo: PRttiInfo): TRttiCustom;
@@ -10365,13 +10348,14 @@ begin
     {$ifdef FPC} // FPC extended RTTI generates no name for nested plain records
     if Info^.RawName[0] <> #0 then
     {$endif FPC}
-    if PosExChar('$', Instance.Name) = 0 then // e.g. 'TArray$1$crcA5831B1D'
-      AddPair(k^.HashName[RttiHashName(@Info.RawName[1], ord(Info.RawName[0]))], Instance, Info);
     ObjArrayAddCount(fInstances, Instance, Count); // to release memory
     inc(Counts[Info^.Kind]); // Instance.Kind is not available from DoRegister
   finally
     k^.Safe.UnLock;
   end;
+  if (Info^.RawName[0] <> #0) and
+     (PosExChar('$', Instance.Name) = 0) then // e.g. 'TArray$1$crcA5831B1D'
+    AddPair(fHashName[RttiHashName(@Info.RawName[1], ord(Info.RawName[0]))], Instance, Info);
 end;
 
 procedure TRttiCustomList.SetGlobalClass(RttiClass: TRttiCustomClass);
@@ -10437,7 +10421,7 @@ begin
     result := PT_RTTI[pt] // 'array' returns nil as expected
   else
   begin
-    result := FindName(Name, NameLen); // search in fHashTable[].HashName[]
+    result := FindName(Name, NameLen); // search in fHashName[]
     if result <> nil then
       pt := result.Parser;
   end;
@@ -10599,7 +10583,7 @@ var
 begin
   RegisterSafe.Lock;
   try
-    result := FindName(pointer(TypeName), length(TypeName)); // in fHashTable[]
+    result := FindName(pointer(TypeName), length(TypeName)); // in fHashName[]
     new := result = nil;
     if new then
     begin

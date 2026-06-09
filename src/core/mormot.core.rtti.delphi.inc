@@ -661,7 +661,7 @@ var
     if pp^ = nil then
     begin
       {$ifdef HASNOSTATICRTTI} // detect e.g. TGuid/THash128 -> fake TypeInfo()
-      rc := Rtti.FindName(argtypnam^, []); // search in fHashTable[].HashName[]
+      rc := Rtti.FindName(argtypnam^); // search in fHashName[]
       if rc <> nil then
         argtypnfo := rc.Info
       else
