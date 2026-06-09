@@ -4012,7 +4012,7 @@ function THttpRequestContext.ContentToOutput(
   aStatus: integer; aOutStream: TStream): integer;
 var
   date: TShort31;
-begin
+begin // from THttpClientSocket.Request
   if (aStatus = HTTP_SUCCESS) and
      (ContentLength = 0) then
     aStatus := HTTP_NOCONTENT;
@@ -4052,6 +4052,7 @@ function THttpRequestContext.CompressContentAndFinalizeHead(
   MaxSizeAtOnce: integer): PRawByteStringBuffer;
 var
   date: TShort31;
+  P: PUtf8Char;
 begin
   // DoRequest will use Head buffer by default (and send the body separated)
   result := @Head;
@@ -4111,8 +4112,9 @@ begin
     result^.AppendShort(date);
     result^.AppendCRLF;
   end;
-  if (ContentType <> '') and
-     (ContentType[1] <> '!') and
+  P := pointer(ContentType);
+  if (P <> nil) and
+     (P^ <> '!') and
      not (hhContentType in HeadCustom) then
   begin
     result^.AppendShort('Content-Type: ');
