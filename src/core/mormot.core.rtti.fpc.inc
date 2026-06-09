@@ -656,42 +656,38 @@ end;
 
 const
   // gather rk* to reduce number of TRttiCustomListPairs hash slots in memory
-  RK_TOSLOT_MAX = {$ifdef NOPATCHVMT} 11 {$else} 10 {$endif NOPATCHVMT};
+  RK_TOSLOT_MAX = 9;
   RK_TOSLOT: array[TRttiKind] of byte = (
-    0,   // rkUnknown
-    1,   // rkInteger
-    2,   // rkChar
-    3,   // rkEnumeration
-    4,   // rkFloat
-    5,   // rkSet
-    0,   // rkMethod
-    0,   // rkSString
-    6,   // rkLStringOld
-    6,   // rkLString
-    7,   // rkWString
-    7,   // rkVariant
-    2,   // rkArray
-    8,   // rkRecord
-    7,   // rkInterface
-    {$ifdef NOPATCHVMT}
-    11,  // rkClass
-    {$else}
-    4,   // vmtAutoTable is used instead of rkClass slot
-    {$endif NOPATCHVMT}
-    8,   // rkObject
-    2,   // rkWChar
-    3,   // rkBool
-    9,   // rkInt64
-    9,   // rkQWord
-    10,  // rkDynArray
-    0,   // rkInterfaceRaw
-    0,   // rkProcVar
-    7,   // rkUString
-    2,   // rkUChar
-    0,   // rkHelper
-    0,   // rkFile
-    0,   // rkClassRef
-    0);  // rkPointer
+    0,  // rkUnknown
+    1,  // rkInteger
+    2,  // rkChar
+    3,  // rkEnumeration
+    2,  // rkFloat
+    4,  // rkSet
+    0,  // rkMethod
+    0,  // rkSString
+    5,  // rkLStringOld
+    5,  // rkLString
+    6,  // rkWString
+    6,  // rkVariant
+    1,  // rkArray
+    7,  // rkRecord
+    6,  // rkInterface
+    0,  // rkClass - vmtAutoTable may be used instead of rkClass slot
+    7,  // rkObject
+    2,  // rkWChar
+    3,  // rkBool
+    8,  // rkInt64
+    8,  // rkQWord
+    9,  // rkDynArray
+    1,  // rkInterfaceRaw
+    1,  // rkProcVar
+    2,  // rkUString
+    2,  // rkUChar
+    0,  // rkHelper
+    0,  // rkFile
+    0,  // rkClassRef
+    1); // rkPointer
 
 
 { ********* Redirect Most Used FPC RTL Functions to Optimized x86_64 Assembly }
