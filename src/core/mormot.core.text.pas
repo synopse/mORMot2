@@ -1378,9 +1378,9 @@ var
   // - filled with statically allocated UINT_999[] constant values at startup
   // - noticeable when RawUtf8 strings are used as array indexes (e.g. in BSON)
   // - is defined globally, since may be used from an inlined function
-  SmallUInt32Utf8: array[0..999] of RawUtf8;
+  SmallUInt32Utf8: array[0 .. 999] of RawUtf8;
   /// raw pre-allocated SmallUInt32Utf8[] values as L1-friendly constants
-  UINT_999: array[0..999] of TStrRecConst;
+  UINT_999: array[0 .. 999] of TStrRecConst;
 
 /// fast RawUtf8 version of 32-bit IntToStr()
 function Int32ToUtf8(Value: PtrInt): RawUtf8; overload;
@@ -5643,23 +5643,11 @@ end;
 
 procedure TTextWriter.AddTrimLeftLowerCase(Text: PShortString);
 var
-  P: PUtf8Char;
+  P: PAnsiChar;
   L: PtrInt;
 begin
-  L := ord(Text^[0]);
-  P := @Text^[1];
-  while (L > 0) and
-        (P^ in ['a'..'z']) do
-  begin
-    inc(P);
-    dec(L);
-  end;
-  if L = 0 then
-  begin
-    L := ord(Text^[0]);
-    P := @Text^[1];
-  end;
-  AddShort(P, L);
+  L := TrimLeftLowerCaseP(Text, P);
+  AddShort(pointer(P), L);
 end;
 
 procedure TTextWriter.AddTrimSpaces(const Text: RawUtf8);
@@ -11446,7 +11434,7 @@ begin
     B4[i + (ord('a') - ord('A'))] := v shl 4;
     inc(v);
   end;
-  PInt64(@tmp[8])^ := 0;
+  PInt64(@tmp[8])^ := 0; // FastSetConst() copy 8 bytes - up to 7 may be 0
   for i := 0 to high(SmallUInt32Utf8) do // 0..999 into '0'..'999' RawUtf8
   begin
     P := StrUInt32(@tmp[8], i);

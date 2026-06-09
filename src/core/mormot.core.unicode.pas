@@ -2419,6 +2419,9 @@ procedure TrimLeftLowerCaseToShort(V: PShortString; var result: ShortString);
 /// trim first lowercase chars ('otDone' will return 'Done' e.g.) as pointers
 function TrimLeftLowerCaseP(V: PShortString; var Trimmed: PAnsiChar): PtrInt;
 
+/// trim first lowercase chars ('otDone' as 'Done' e.g.) into stack adder
+procedure TrimLeftLowerCaseAdd(var tmp: TSynTempAdder; ps: PShortString);
+
 /// capitalize the first letter of each word, as done with English titles
 // - e.g. TitleCase('Some text') = 'Some Text'
 procedure TitleCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt);
@@ -9670,6 +9673,15 @@ var
 begin
   len := TrimLeftLowerCaseP(V, p);
   UnCamelCase(U, pointer(p), len);
+end;
+
+procedure TrimLeftLowerCaseAdd(var tmp: TSynTempAdder; ps: PShortString);
+var
+  l: PtrInt;
+  p: PAnsiChar;
+begin
+  l := TrimLeftLowerCaseP(ps, p);
+  tmp.Add(p, l);
 end;
 
 procedure TitleCase(var Dest: RawUtf8; Text: PAnsiChar; TextLen: PtrInt);

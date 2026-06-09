@@ -3846,8 +3846,7 @@ end;
 
 function TRttiEnumType.GetSetName(const value; trimmed: boolean; sep: AnsiChar): RawUtf8;
 var
-  j, vl: PtrInt;
-  vp: PAnsiChar;
+  j: PtrInt;
   PS: PShortString;
   tmp: TSynTempAdder; // no temp allocation up to 4KB of output text
 begin
@@ -3862,10 +3861,7 @@ begin
     if GetBitPtr(@value, j) then
     begin
       if trimmed then
-      begin
-        vl := TrimLeftLowerCaseP(PS, vp);
-        tmp.Add(vp, vl);
-      end
+        TrimLeftLowerCaseAdd(tmp, PS)
       else
         tmp.AddShort(PS^);
       tmp.AddDirect(sep);
