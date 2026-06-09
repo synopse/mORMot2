@@ -802,8 +802,10 @@ type
     end;
   end;
 
+const
+  iphlpapi = 'iphlpapi.dll';
 var
-  iphlpapiDll: THandle;
+  iphlp: THandle;
   // some iphlpapi.dll late-binded API via DelayedProc()
   GetIpAddrTable: function (pIpAddrTable: PMIB_IPADDRTABLE;
     var pdwSize: DWord; bOrder: BOOL): DWord; stdcall;
@@ -819,8 +821,7 @@ begin
   if Kind = tiaIPv6 then
     exit; // GetIpAddrTable() is an IPv4 only API
   Size := SizeOf(Table);
-  if not DelayedProc(GetIpAddrTable, iphlpapiDll, 'iphlpapi.dll',
-           'GetIpAddrTable') or
+  if not DelayedProc(GetIpAddrTable, iphlp, iphlpapi, 'GetIpAddrTable') or
      (GetIpAddrTable(@Table, Size, false) <> NO_ERROR) then
     exit;
   SetLength(result, Table.dwNumEntries);
@@ -836,6 +837,7 @@ begin
     SetLength(result, n);
 end;
 
+// documented since Windows Vista, but actually available on Windows XP SP3 :)
 function RtlIpv6StringToAddress(s: PUtf8Char; var term: PUtf8Char; in6: PByte): integer;
   stdcall; external 'NTDLL.DLL' name 'RtlIpv6StringToAddressA';
 
@@ -846,7 +848,7 @@ begin
   term := nil;
   result := (RtlIpv6StringToAddress(text, term, value) = NO_ERROR) and
             (term <> nil) and
-            (term^ = #0);
+            (term^ = #0); // requires full string match just like inet_pton()
 end;
 
 
@@ -997,7 +999,7 @@ type
   PFIXED_INFO = ^FIXED_INFO;
 
 var
-  // some iphlpapi.dll late-binded API via DelayedProc()
+  // some other iphlpapi.dll late-binded API via DelayedProc()
   GetAdaptersAddresses: function(Family: ULONG; Flags: DWord; Reserved: pointer;
       pAdapterAddresses: PIP_ADAPTER_ADDRESSES; pOutBufLen: PULONG): DWord; stdcall;
   SendARP: function(DestIp: DWord; srcIP: DWord; pMacAddr: pointer;
@@ -1016,8 +1018,7 @@ var
 begin
   result := nil;
   siz := 0;
-  if not DelayedProc(GetNetworkParams, iphlpapiDll, 'iphlpapi.dll',
-           'GetNetworkParams') or
+  if not DelayedProc(GetNetworkParams, iphlp, iphlpapi, 'GetNetworkParams') or
      (GetNetworkParams(nil, @siz) <> ERROR_BUFFER_OVERFLOW) then
     exit;
   SetLength(tmp, siz);
@@ -1066,8 +1067,7 @@ begin
            GAA_FLAG_INCLUDE_PREFIX;
   if OsVersion >= wVista then
     flags := flags or GAA_FLAG_INCLUDE_GATEWAYS;
-  if not DelayedProc(GetAdaptersAddresses, iphlpapiDll, 'iphlpapi.dll',
-           'GetAdaptersAddresses') or
+  if not DelayedProc(GetAdaptersAddresses, iphlp, iphlpapi, 'GetAdaptersAddresses') or
      (GetAdaptersAddresses(AF_INET, flags, nil, nil, @siz) <> ERROR_BUFFER_OVERFLOW) or
      (siz = 0) then
     exit;
@@ -1185,8 +1185,7 @@ begin
     exit;
   dwRemoteIP := addr.IP4;
   if (dwRemoteIP <> 0) and
-     DelayedProc(GetBestInterface, iphlpapiDll,
-       'iphlpapi.dll', 'GetBestInterface') and
+     DelayedProc(GetBestInterface, iphlp, iphlpapi, 'GetBestInterface') and
      (GetBestInterface(dwRemoteIP, ifIndex) = NO_ERROR) then
   begin
     all := GetMacAddresses;
@@ -1209,7 +1208,7 @@ var
 begin
   FastAssignNew(result);
   if NetIsIP4(pointer(IP), @dwRemoteIP) and
-     DelayedProc(SendARP, iphlpapiDll, 'iphlpapi.dll', 'SendARP') then
+     DelayedProc(SendARP, iphlp, iphlpapi, 'SendARP') then
   begin
     PhyAddrLen := 8;
     if SendARP(dwremoteIP, 0, @pMacAddr, @PhyAddrLen) = NO_ERROR then

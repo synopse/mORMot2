@@ -3950,7 +3950,7 @@ begin
   if value = nil then
     value := @tmp; // value is optional, just like for NetIsIP4()
   result := (l >= 2) and
-            InetPton(text, value); // call the proper OS API
+            InetPton(text, value); // call proper OS API for RFC 4291 parsing
 end;
 
 function ToIP6(const text: RawUtf8; var value: TNetIP6): boolean;
