@@ -129,7 +129,18 @@ with _Safe(v)^ do        // safe even if v is null / not a TDocVariant
 
 ### A.6. Minimum recommended server configuration
 
-A sane default server wires five things: a model, a storage server bound as `IRestOrm`, your services, an HTTP server, and logging. A minimal shape:
+A sane default server wires a handful of deliberate decisions: a model, a storage server bound as `IRestOrm`, your services, authentication, an HTTP server, and logging. **Every one of these is a named decision — none should be left implicit.**
+
+One of those decisions is *topology*: how many REST servers exist and what is reachable from the network. Choose it by deployment context, not by habit:
+
+- **A.6.1** — a single server, the right default for a **trusted / local** deployment.
+- **A.6.2** — a private system-of-record plus a public edge, for an **Internet-facing or distributed** deployment.
+
+**A cross-cutting rule that applies to both.** Topology reduces *exposure*; it never substitutes for *authorization*. Scope every read to the caller: a logged-in end user must retrieve only their own rows, never the whole table. This is a service-design concern (filter each query to the session's identity at the service boundary) — no choice of server count fixes it. See [B.6](#b6-cross-cutting-standards).
+
+#### A.6.1. Trusted / local deployment
+
+For a service that is only reachable on a trusted network (local box, corporate LAN, in-cluster), a **single server** is correct and simplest. The ORM REST routes it exposes (`/root/TUser`, …) are not an unguarded second door: they sit behind the *same* session authentication as your services, and behind `TOrmAccessRights`, which lets you make a table read-only, forbid CRUD per-table, or expose none at all.
 
 ```pascal
 // 1. Logging: turn it on early (see Chapter 25)
@@ -149,11 +160,53 @@ RestServer.ServiceDefine(TUserService, [IUserQuery, IUserCommand], sicShared);
 // 5. Authentication: enable it explicitly (JWT / mORMot auth)
 RestServer.AuthenticationRegister(TRestServerAuthenticationDefault);
 
-// 6. HTTP: expose over HTTP/HTTPS
+// 6. Access rights: tighten or disable the ORM REST routes you do not want
+//    exposed (per-table read-only / no-CRUD); services stay reachable.
+RestServer.OnlyJsonRequests := true;
+// e.g. RestServer.SetAccessRights(...) to lock down or drop ORM endpoints
+
+// 7. HTTP: expose over HTTP/HTTPS
 HttpServer := TRestHttpServer.Create('8080', [RestServer], '+', HTTP_DEFAULT_MODE);
 ```
 
-Adjust per project: swap `TRestServerDB` for an external SQL/NoSQL backend behind the same `IRestOrm` abstraction (see [A.5](#a5-bind-to-irestorm-and-the-_safe-rule) and [B.1](#b1-storage-behind-an-interface)); choose your authentication scheme in [Chapter 21](mORMot2-SAD-Chapter-21.md); tune logging in [Chapter 25](mORMot2-SAD-Chapter-25.md). The point is that **every one of these five is a deliberate, named decision** — none should be left implicit.
+Adjust per project: swap `TRestServerDB` for an external SQL/NoSQL backend behind the same `IRestOrm` abstraction (see [A.5](#a5-bind-to-irestorm-and-the-_safe-rule) and [B.1](#b1-storage-behind-an-interface)); choose your authentication scheme in [Chapter 21](mORMot2-SAD-Chapter-21.md); tune logging in [Chapter 25](mORMot2-SAD-Chapter-25.md).
+
+#### A.6.2. Internet-facing or distributed deployment
+
+When the edge is **public on the Internet**, or when you are **orchestrating several service instances** across a server network, split the topology to minimise the public surface; the gain is reduced exposure and a clean place to terminate TLS/JWT.
+
+- A **private system-of-record** (`TRestServerDB`, SQLite or external SQL) that owns the business tables and the auth records, and is **never handed to an HTTP server** — so it has no network surface and is reachable only in-process. It still publishes services (repository / CQRS, authentication, the main data model); "private" means *not network-exposed*, not *data-only*.
+- A **public edge** (`TRestServerFullMemory`, void model) that terminates TLS, validates JWT, and exposes only the **context-scoped** services each application actually needs. The edge consumes the private services either in-process (same instance) or over the network (distributed).
+
+The edge coding is an *addition* to A.6.1, not a different world:
+
+```pascal
+// === PRIVATE: the system of record. Owns the data. No network surface. ===
+// Same wiring as A.6.1 steps 1-6, but the resulting server is NOT passed to
+// any TRestHttpServer: it stays reachable only in-process.
+DbModel  := TOrmModel.Create([TUser, TInvoice, TAuthUser, TAuthGroup]);
+DbServer := TRestServerDB.Create(DbModel, 'data.db');
+DbServer.Server.CreateMissingTables;
+// (register the private services on DbServer here: repository/CQRS, auth, ...)
+
+// === PUBLIC: the edge. Owns no data. Only context-scoped services + JWT. ===
+// Void model => no TOrm classes => no ORM REST routes can exist at all.
+EdgeModel  := TOrmModel.Create([]);
+EdgeServer := TRestServerFullMemory.Create(EdgeModel);
+
+// Inject the private DB ORM explicitly at the composition root: the service
+// runs on EdgeServer, whose inherited Server.Orm is the void edge ORM, so bind
+// the private ORM here rather than relying on Server.Orm (the explicit form of
+// B.5's DI). Publish only the services this application context needs.
+EdgeServer.ServiceDefine(
+  TUserService.Create(DbServer.Orm),          // inject the private DB ORM
+  [IUserQuery, IUserCommand]);                // registered as sicShared
+
+// Only the edge is handed to HTTP — the private server stays off the network.
+HttpServer := TRestHttpServer.Create('443', [EdgeServer], '+', HTTP_DEFAULT_MODE);
+```
+
+Publishing too much is the classic Internet-facing mistake; the cross-cutting rule from A.6 — scope every read to the caller — is what actually prevents data leaks here. See [B.6](#b6-cross-cutting-standards).
 
 ---
 
@@ -194,6 +247,7 @@ Every service exposes an `IXxxRepository` (or a CQRS pair, see [B.4](#b5-cqrs-re
 - **Folder layout.** Keep the persistence boundary visible: lowercase `dom/`, `infra/`, `app/`, `tests/`, one subfolder per entity. Don't merge domain and infrastructure into one folder.
 - **Result handling.** A shared base enum (e.g. `TServiceResult`: success / invalid-request / not-found / denied / db-error) plus optional per-service extensions — stops the proliferation of near-identical result enums.
 - **Auth on the consumer side.** Extract a single guard helper so every service does one `Guard.Require(Token, …)` call instead of a repeated multi-step token ritual.
+- **Scope every read to the caller.** The most common and most damaging public-service mistake is publishing too much: letting a logged-in user retrieve *all* rows when they should see only their own. Filter every query to the session's identity at the service boundary. No server-topology choice (see [A.6](#a6-minimum-recommended-server-configuration)) substitutes for this.
 - **Tests.** A `tests/` folder per service; mapper procedures are the cheapest, highest-value test target — exercise them first.
 
 ### B.7. Default starting point for a new service
