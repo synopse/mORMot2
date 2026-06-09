@@ -550,7 +550,8 @@ begin
         obj := fEngine.GetObjects(nil, nil, @val); // all objects
         ids := nil;
         for j := 0 to high(obj) do
-          if obj[j].ObjClass in [CKO_CERTIFICATE, CKO_PUBLIC_KEY] then
+          if (obj[j].ObjClass in [CKO_CERTIFICATE, CKO_PUBLIC_KEY]) and
+             (obj[j].StorageID <> '') then
             AddRawUtf8(ids, obj[j].StorageID, {nodup=}true);
         for j := 0 to high(ids) do
         begin
@@ -801,14 +802,7 @@ var
   o: ^TPkcs11Object;
   n, i, pub: PtrInt;
   xka, xkaKey: TXPublicKeyAlgorithm;
-
-  function ValuePubToSub: RawByteString;
-  begin
-    result := aValues[pub];
-    if xka in [xkaEcc256 .. xkaEdDSA] then
-      result := AsnDecOctStr(result); // ECC are encoded as ASN1_OCTSTR
-  end;
-
+  sub: RawByteString;
 begin
   fStorageID := aStorageID; // set both first for RaiseError()
   fSlotID := aSlotID;
@@ -826,6 +820,7 @@ begin
   if n <> length(aValues) then
     RaiseError('Create: aObjects/aValues mismatch');
   try
+    // identify a CKO_PUBLIC_KEY and if possible an associated CKO_CERTIFICATE
     pub := -1;
     xka := xkaNone;
     o := pointer(aObjects);
@@ -849,15 +844,19 @@ begin
               pub := i;
             end;
           CKO_CERTIFICATE:
-            if fX509 <> nil then
-              RaiseError('Create: duplicated certificates')
-            else
             begin
+              if fX509 <> nil then
+                RaiseError('Create: duplicated certificates');
               fX509 := TX509.Create;
-              if not fX509.LoadFromDer(aValues[i]) then
-                RaiseError('Create: invalid CKO_CERTIFICATE content');
-              fIsX509 := true;
-              xka := fX509.Signed.SubjectPublicKeyAlgorithm // more precise
+              if fX509.LoadFromDer(aValues[i]) then
+              begin
+                // successfully loaded this certificate
+                fIsX509 := true;
+                xka := fX509.Signed.SubjectPublicKeyAlgorithm; // more precise
+              end
+              else
+                // ignore this unsupported certificate and continue
+                FreeAndNilSafe(fX509);
             end
           // just ignore unneeded objects - e.g. CKO_PRIVATE_KEY in this context
         end;
@@ -867,6 +866,10 @@ begin
     if xka = xkaNone then
       RaiseError('Create: no matching object');
     if pub >= 0 then
+    begin
+      sub := aValues[pub];
+      if xka in [xkaEcc256 .. xkaEdDSA] then
+        sub := AsnDecOctStr(sub); // ECC are encoded as ASN1_OCTSTR
       if fX509 = nil then
       begin
         // no associated CKO_CERTIFICATE: create a fake X.509 certificate
@@ -874,9 +877,9 @@ begin
         fX509 := TX509.Create;
         fX509.Signed.Version := 3;
         fX509.Signed.SubjectPublicKeyAlgorithm := xka;
-        fX509.Signed.SubjectPublicKey := ValuePubToSub; // from aValues[pub]
+        fX509.Signed.SubjectPublicKey := sub;
         fX509.Signed.SubjectPublicKeyBits := o^.KeyBits;
-        fX509.Signed.SerialNumberHex := Sha1(aValues[pub]); // fake serial
+        fX509.Signed.SerialNumberHex := Sha1(sub); // fake but genuine serial
         fX509.Signed.SerialNumber := HexToBin(fX509.Signed.SerialNumberHex);
         fX509.Signed.CertUsages := Pkcs11FlagsToCertUsages(o^.StorageFlags);
         FormatUtf8('%-%', [aSlotID, o^.StorageID], fX509.Signed.Issuer.Name[xaDC]);
@@ -887,8 +890,11 @@ begin
         fX509.Signed.Issuer.Name[xaN]   := tok^.Name;
         fX509.Signed.Subject := fX509.Signed.Issuer; // emulate self-signed
       end
-      else if fX509.Signed.SubjectPublicKey <> ValuePubToSub then
-        RaiseError('Create: CKO_PUBLIC_KEY and CKO_CERTIFICATE do not match');
+      else
+        // ensure both retrieved CKO_CERTIFICATE and CKO_PUBLIC_KEY do match
+        if fX509.Signed.SubjectPublicKey <> sub then
+          RaiseError('Create: CKO_PUBLIC_KEY and CKO_CERTIFICATE do not match');
+    end;
   except
     FreeAndNil(fX509);
     raise;
