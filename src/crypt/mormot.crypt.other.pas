@@ -1874,7 +1874,7 @@ begin
   FastAssignNew(result);
   // decode the supplied salt or generate a new one
   if HASH64_DEC[#255] = 0 then // check the last byte for thread-safe init
-    FillBaseDecoder(@HASH64_ENC, @HASH64_DEC, high(HASH64_ENC));
+    FillBaseDecoder(@HASH64_ENC, @HASH64_DEC);
   if not TAesPrng.Main.RandomSalt(
            saltbin, saltb64, BCRYPT_SALTLEN, Salt, @HASH64_ENC, @HASH64_DEC) or
          (length(saltbin) <> BCRYPT_SALTLEN) then // always 16 bytes

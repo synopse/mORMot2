@@ -1435,7 +1435,7 @@ function Base32ToBin(const base32: RawUtf8): RawByteString; overload;
 
 // internal raw functions used to initialize Base32/58/64/64uri decoding lookup
 procedure FillLookupTable(s, d: PByteArray; his: PtrUInt);
-procedure FillBaseDecoder(s: PAnsiChar; d: PAnsiCharDec; i: PtrUInt);
+procedure FillBaseDecoder(s: PAnsiChar; d: PAnsiCharDec; i: PtrUInt = 63);
 
 /// fill a RawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
@@ -11061,8 +11061,8 @@ end; // keep Len since may be not final - see e.g. TPostConnection.OnRead
 procedure InitializeUnit;
 begin
   // initialize Base64/Base64Uri encoding/decoding tables
-  FillBaseDecoder(@ConvertToBase64,    @ConvertBase64ToBin,    high(ConvertToBase64));
-  FillBaseDecoder(@ConvertToBase64Uri, @ConvertBase64uriToBin, high(ConvertToBase64Uri));
+  FillBaseDecoder(@ConvertToBase64,    @ConvertBase64ToBin);
+  FillBaseDecoder(@ConvertToBase64Uri, @ConvertBase64uriToBin);
   ConvertBase64ToBin['='] := -2; // special value for ending '='
   Base64EncodeMain     := @Base64EncodeMainPas;
   Base64DecodeMain     := @Base64DecodeMainPas;
