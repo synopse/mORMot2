@@ -3102,10 +3102,13 @@ function WindowsFileTimeToDateTime(WinTime: integer): TDateTime;
 /// convert a Windows API File 64-bit TimeStamp into a regular TUnixMSTime
 // - i.e. a FILETIME value as returned by GetFileTime() Win32 API
 // - some binary formats (e.g. ISO 9660 or LDAP) have such FILETIME fields
-function WindowsFileTime64ToUnixMSTime(WinTime64: QWord): TUnixMSTime;
+function WindowsFileTime64ToUnixMSTime(const ft: TFileTime): TUnixMSTime;
 
 /// convert a TUnixMSTime into a Windows FILETIME value
 procedure UnixMSTimeToWindowsFileTime64(TimeMS: TUnixMSTime; var ft: TFileTime);
+
+/// wrap GetSystemTimeAsFileTime() on Windows, or UnixMSTimeUtcFast()
+procedure NowUtcToWindowsFileTime(var ft: TFileTime);
 
 /// low-level conversion of a TDateTime into a Windows File 32-bit TimeStamp
 // - returns 0 if the conversion failed

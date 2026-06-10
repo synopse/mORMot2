@@ -481,6 +481,11 @@ begin
   result := FileTimeToUnixMSTime(ft);
 end;
 
+procedure NowUtcToWindowsFileTime(var ft: TFileTime);
+begin
+  GetSystemTimeAsFileTime(ft);
+end;
+
 procedure GetSystemTime;              external kernel32;
 procedure GetLocalTime;               external kernel32;
 procedure InitializeCriticalSection;  external kernel32;

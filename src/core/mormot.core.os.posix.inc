@@ -1086,6 +1086,11 @@ begin
   result := UnixMSTimeUtc;
 end;
 
+procedure NowUtcToWindowsFileTime(var ft: TFileTime);
+begin
+  UnixMSTimeToWindowsFileTime64(UnixMSTimeUtc, ft);
+end;
+
 {$undef HAS_PTHREADSETNAMENP}
 {$undef HAS_PTHREADSETAFFINITY}
 
