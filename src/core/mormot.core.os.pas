@@ -7680,20 +7680,21 @@ constructor TFileStreamNoWriteError.CreateAndRenameIfLocked(
 var
   h: THandle;
   fn, ext: TFileName;
-  err, retry: integer;
+  retry: integer;
+  err: TSystemError;
 
   function CanOpenWrite: boolean;
   begin
     h := FileOpen(aFileName, fmOpenReadWrite or fmShareRead);
     result := ValidHandle(h);
     if not result then
-      err := GetLastError;
+      err := GetLastSystemError;
   end;
 
 begin
   // logic similar to TSynLog.CreateLogWriter
   h := INVALID_HANDLE_VALUE;
-  err := 0;
+  err := seSuccess;
   if not CanOpenWrite then
     if not FileExists(aFileName) then
       // immediately raise EOSException if this new file could not be created
@@ -7704,7 +7705,7 @@ begin
       ext := ExtractExt(aFileName);
       for retry := 1 to aAliases do
       begin
-        if IsSharedViolation(err) then
+        if err = seBusy then
         begin
           // file was locked: wait a little for a background process and retry
           SleepHiRes(50);

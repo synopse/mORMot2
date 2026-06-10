@@ -868,7 +868,7 @@ begin
       CloseHandle(h);
     end
     else
-      result := IsSharedViolation;
+      result := GetLastSystemError = seBusy;
   end;
 end;
 
