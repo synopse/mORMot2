@@ -1782,16 +1782,21 @@ type
   // - psoReadNonBlocking for Read() to return 0 bytes on empty buffer
   // - psoReadCheckSynchronize for Read() to detect the main thread and call
   // CheckSynchronize which is slower but allow VCL/LCL UI responsiveness
+  // - psoCheckThread will ensure Read() and Write() are always called from
+  // the very same thread - may be useful to debug some unexpected behavior
   TPipeStreamOptions = set of (
     psoWritePartial,
     psoWriteNonBlocking,
     psoWritePosition,
     psoReadNonBlocking,
-    psoReadCheckSynchronize);
+    psoReadCheckSynchronize,
+    psoCheckThread);
 
   /// a TStream which transmits its Write() method buffer into its blocking Read()
   // - used e.g. to efficiently synchronize/pipe data between two threads,
   // as exactly one producer/Write thread and one consumer/Read thread
+  // - purpose is to replace e.g. a TFileStream with some asynchronous source
+  // of data, e.g. a HTTP request made in its background thread
   TPipeStream = class(TStreamWithNoSeek)
   protected
     fLock: TLightLock;  // enough to protect MoveFast + TSynEvent.ResetEvent
@@ -1801,17 +1806,22 @@ type
     fReadTimeout, fWriteTimeout: cardinal;
     fCanRead: TSynEvent;
     fCanWrite: TSynEvent;
-    fExpectedSize: Int64;
     fOptions: TPipeStreamOptions;
+    fOnClose: TNotifyEvent;
+    fCallingThread: array[{wr=}boolean] of TThreadID;
+    procedure CheckCallingThread(wr: boolean);
     function GetSize: Int64; override;
+    procedure DoTerminate; virtual; // called once from Abort/Destroy
   public
     /// initialize this TStream and its internal buffer
     constructor Create(aBufSize: cardinal = 65536); reintroduce;
     /// finalize this instance and its buffer
-    // - all producer/consumer threads should have terminated before destruction
+    // - both producer/consumer threads should not use this instance from now on
     destructor Destroy; override;
-    /// abort any blocking Read/Write process
-    procedure Close; virtual;
+    /// abort/close any blocking Read/Write process
+    // - as eventually called by Destroy - so you should not have to call this
+    // method, unless you want to break both Read() and Write() blocking methods
+    procedure Abort; virtual;
     /// read up to Count bytes waiting for data sent on Write()
     // - this method blocks when the internal buffer is empty (Pending = 0)
     // - may return less than Count bytes if there is some data in the buffer
@@ -1824,7 +1834,7 @@ type
     // - write less than Count bytes only if aWriteTimeout has been reached,
     // or if psoWritePartial/psoWriteNonBlocking options have been set
     function Write(const Buffer; Count: Longint): Longint; override;
-    /// check if Close has been called and pipe process was aborted
+    /// check if Abort has been called and pipe process was stopped
     function Closed: boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// informative value about data waiting for Read() - not thread-safe by design
@@ -1848,7 +1858,10 @@ type
     // - convenient e.g. when the eventual/final resource size is known
     // - equals -1 by default, i.e. if Size value should follow current Position
     property ExpectedSize: Int64
-      read fExpectedSize write fExpectedSize;
+      read fSize write fSize;
+    /// called by Destroy/Abort e.g. to force shutdown of the running threads
+    property OnClose: TNotifyEvent
+      read fOnClose write fOnClose;
   end;
 
 
@@ -2473,12 +2486,7 @@ end;
 
 procedure TSynQueue.LoadFromReader;
 var
-  n: integer;
-  info: PRttiInfo;
-  load: TRttiBinaryLoad;
-  p: PAnsiChar;
-label
-  raw;
+  n, siz: integer;
 begin
   fSafe.WriteLock;
   try
@@ -2489,22 +2497,10 @@ begin
       exit;
     fFirst := 0;
     fLast := n - 1;
-    fValues.Count := NextGrow(n);
-    p := fValues.Value^;
-    info := fValues.Info.Cache.ItemInfoManaged;
-    if info <> nil then // nil for unmanaged items
-    begin
-      load := RTTI_BINARYLOAD[info^.Kind];
-      if Assigned(load) then
-        repeat
-          inc(p, load(p, fReader, info));
-          dec(n);
-        until n = 0
-      else
-        goto raw;
-    end
-    else
-raw:  fReader.Copy(p, n * fValues.Info.Cache.ItemSize);
+    fValues.Count := NextGrow(n); // allocate with some spare
+    siz := fValues.Info.Cache.ItemSize * n;
+    BinaryLoadSeveral(fValues.Value^, fReader,
+      fValues.Info.Cache.ItemInfoManaged, n, siz);
   finally
     fSafe.WriteUnLock;
   end;
@@ -2514,22 +2510,13 @@ procedure TSynQueue.SaveToWriter(aWriter: TBufferWriter);
 var
   n: integer;
   info: PRttiInfo;
-  sav: TRttiBinarySave;
 
-  procedure WriteItems(start, count: integer);
-  var
-    p: PAnsiChar;
+  procedure WriteItems(start, stop: PtrInt);
   begin
-    if count = 0 then
-      exit;
-    p := fValues.ItemPtr(start);
-    if Assigned(sav) then
-      repeat
-        inc(p, sav(p, aWriter, info));
-        dec(count);
-      until count = 0
-    else
-      aWriter.Write(p, count * fValues.Info.Cache.ItemSize);
+    stop := stop - start + 1; // = count
+    if stop > 0 then
+      BinarySaveSeveral(fValues.ItemPtr(start), aWriter, info, stop,
+        stop * fValues.Info.Cache.ItemSize);
   end;
 
 begin
@@ -2541,16 +2528,12 @@ begin
     if n = 0 then
       exit;
     info := fValues.Info.Cache.ItemInfoManaged;
-    if info <> nil then
-      sav := RTTI_BINARYSAVE[info^.Kind]
-    else
-      sav := nil; // unmanaged items
     if fFirst <= fLast then
-      WriteItems(fFirst, fLast - fFirst + 1)
+      WriteItems(fFirst, fLast)
     else
     begin
-      WriteItems(fFirst, fCount - fFirst);
-      WriteItems(0, fLast + 1);
+      WriteItems(fFirst, fCount - 1);
+      WriteItems(0, fLast);
     end;
   finally
     fSafe.ReadOnlyUnLock;
@@ -2627,7 +2610,7 @@ function TPendingTaskList.NextPendingTask: RawByteString;
 var
   tix: Int64;
 begin
-  result := '';
+  FastAssignNew(result);
   if (self = nil) or
      (fTasks.Count = 0) then
     exit;
@@ -4971,7 +4954,7 @@ begin
   fBufferSize := NextPowerOfTwo(aBufSize); // for efficient "and size-1" modulo
   fReadTimeout := INFINITE;
   fWriteTimeout := INFINITE;
-  fExpectedSize := -1; // eventual Size metadata is disabled by default
+  fSize := -1; // eventual Size metadata is disabled by default
   GetMem(fBuffer, fBufferSize);
   fCanRead := TSynEvent.Create;
   fCanWrite := TSynEvent.Create;
@@ -4980,24 +4963,37 @@ end;
 
 destructor TPipeStream.Destroy;
 begin
-  Close;
+  Abort; // do-nothing if already called
   fCanRead.Free;
   fCanWrite.Free;
   inherited Destroy;
 end;
 
-procedure TPipeStream.Close;
+procedure TPipeStream.Abort;
 begin
   fLock.Lock;
   try
     if fBuffer <> nil then // make the method re-entrant (e.g. from Destroy)
+    begin
+      DoTerminate;
       FreeMem(fBuffer);
+    end;
     fBuffer := nil;    // mark as closed
   finally
     fLock.UnLock;
   end;
   fCanRead.SetEvent; // always release both Read() and Write() methods
   fCanWrite.SetEvent;
+end;
+
+procedure TPipeStream.DoTerminate;
+begin
+  if Assigned(fOnClose) then
+  try
+    fOnClose(self);  // may e.g. notify the threads
+  except
+    fOnClose := nil; // trap any exception in user code and disable it
+  end;
 end;
 
 function TPipeStream.Closed: boolean;
@@ -5011,8 +5007,11 @@ var
   wakewriter: boolean;
 begin
   result := 0;
-  if (Count > 0) and
-     not Closed then
+  if (Count <= 0) or
+     Closed then
+    exit;
+  if psoCheckThread in fOptions then
+    CheckCallingThread({wr=}false);
   repeat
     wakewriter := false;
     fLock.Lock;
@@ -5031,10 +5030,7 @@ begin
         fReadPos := (fReadPos + result) and (fBufferSize - 1); // fast modulo
         dec(fPending, result);
         if not (psoWritePosition in fOptions) then
-        begin
           inc(fPosition, result);
-          inc(fSize, result);
-        end;
         exit; // quickly return partial Read() without blocking
       end;
     finally
@@ -5054,8 +5050,12 @@ var
   P: PAnsiChar;
 begin
   result := 0;
+  if (Count <= 0) or
+     Closed then
+    exit;
+  if psoCheckThread in fOptions then
+    CheckCallingThread({wr=}true);
   P := @Buffer;
-  if Count > 0 then
   repeat
     fLock.Lock;
     try
@@ -5076,10 +5076,7 @@ begin
         inc(fPending, towrite);
         inc(result, towrite);
         if psoWritePosition in fOptions then
-        begin
           inc(fPosition, towrite);
-          inc(fSize, towrite);
-        end;
       end;
     finally
       fLock.UnLock;
@@ -5096,11 +5093,25 @@ end;
 
 function TPipeStream.GetSize: Int64;
 begin
-  result := fExpectedSize; // custom meta-data value
+  result := fSize; // custom ExpectedSize meta-data value
   if result < 0 then
-    result := fSize;      // = fPosition in practice and by default
+    result := fPosition;
 end;
 
+const
+  _RW: array[boolean] of TShort7 = ('Read', 'Write');
+
+procedure TPipeStream.CheckCallingThread(wr: boolean);
+var
+  tid: TThreadID;
+begin
+  tid := GetCurrentThreadId;
+  if fCallingThread[wr] <> tid then
+    if PtrUInt(fCallingThread[wr]) = 0 then
+      fCallingThread[wr] := tid // set at first call
+    else
+      ESynThread.RaiseUtf8('%.% called from wrong thread', [self, _RW[wr]]);
+end;
 
 end.
 

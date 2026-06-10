@@ -1546,7 +1546,7 @@ var
   MechType: gss_OID;
   OutBuf: gss_buffer_desc;
 begin
-  result := '';
+  FastAssignNew(result);
   RequireGssApi;
   MajStatus := GssApi.gss_inquire_context(MinStatus, aSecContext.CtxHandle,
     nil, nil, nil, @MechType, nil, nil, nil);
@@ -1649,7 +1649,7 @@ var
   bin, bout: RawByteString;
   ctx: TSecContext;
 begin
-  result := '';
+  FastAssignNew(result);
   if AuthUser <> nil then
     AuthUser^ := '';
   auth := FindNameValue(pointer(InputHeaders), SECPKGNAMEHTTPAUTHORIZATION);

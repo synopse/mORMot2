@@ -1760,7 +1760,7 @@ var
   d, piv: PQWord;
   tmpiv: QWord;
 begin
-  result := '';
+  FastAssignNew(result);
   len := length(Input);
   if len = 0 then
     exit;
@@ -1785,7 +1785,7 @@ var
   s, piv: PQWord;
   tmpiv: QWord;
 begin
-  result := '';
+  FastAssignNew(result);
   len := length(Input);
   if len = 0 then
     exit;
@@ -1874,7 +1874,7 @@ begin
   FastAssignNew(result);
   // decode the supplied salt or generate a new one
   if HASH64_DEC[#255] = 0 then // check the last byte for thread-safe init
-    FillBaseDecoder(@HASH64_ENC, @HASH64_DEC, high(HASH64_ENC));
+    FillBaseDecoder(@HASH64_ENC, @HASH64_DEC);
   if not TAesPrng.Main.RandomSalt(
            saltbin, saltb64, BCRYPT_SALTLEN, Salt, @HASH64_ENC, @HASH64_DEC) or
          (length(saltbin) <> BCRYPT_SALTLEN) then // always 16 bytes
@@ -2781,7 +2781,7 @@ var
   XY, V: PByteArray; // allocate X[R*128] Y[R*128] and V[N*R*128]
   d: pointer;
 begin
-  result := '';
+  FastAssignNew(result);
   // validate parameters
   R128 := R * 128;
   if (DestLen < 16) or

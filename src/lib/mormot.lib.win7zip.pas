@@ -2075,7 +2075,7 @@ function T7zReader.Extract(const zipname: RawUtf8): RawByteString;
 var
   s: TRawByteStringStream;
 begin
-  result := '';
+  FastAssignNew(result);
   s := TRawByteStringStream.Create;
   try
     if Extract(zipname, s) then
@@ -2764,7 +2764,7 @@ function T7zWriter.GetName(index: integer): RawUtf8;
 begin
   index := Get(index).UpdateItemIndex;
   if index < 0 then
-    result := ''
+    FastAssignNew(result)
   else
     result := fUpdateReader.GetName(index);
 end;
@@ -2773,7 +2773,7 @@ function T7zWriter.GetMethod(index: integer): RawUtf8;
 begin
   index := Get(index).UpdateItemIndex;
   if index < 0 then
-    result := ''
+    FastAssignNew(result)
   else
     result := fUpdateReader.GetMethod(index);
 end;
@@ -2810,7 +2810,7 @@ function T7zWriter.GetComment(index: integer): RawUtf8;
 begin
   index := Get(index).UpdateItemIndex;
   if index < 0 then
-    result := ''
+    FastAssignNew(result)
   else
     result := fUpdateReader.GetComment(index);
 end;

@@ -918,14 +918,14 @@ var
 begin
   V := GetCol(Col, C);
   if V = nil then // column is NULL
-    result := ''
+    FastAssignNew(result)
   else
     case C^.ColumnType of
       ftBlob:
         FastSetRawByteString(result, ColPtr(C, V), V^.Length);
       ftUtf8:
         if V^.Length = 0 then
-          result := ''
+          FastAssignNew(result)
         else
           // +1 below for trailing WideChar(#0) in the resulting RawUnicode
           FastSetRawByteString(result, ColPtr(C, V), V^.Length + 1);
@@ -994,7 +994,7 @@ var
 begin
   V := GetCol(Col, C);
   if V = nil then // column is NULL
-    result := ''
+    FastAssignNew(result)
   else
     case C^.ColumnType of // fast direct conversion from OleDB buffer
       ftInt64:

@@ -659,7 +659,7 @@ begin
   Frame^.Opcode := bswap16(TFTP_DAT);
   Frame^.Sequence := bswap16(LastReceivedSequence);
   if CurrentSize <> FileStream.Position then
-    FileStream.Seek(Int64(CurrentSize), soBeginning);
+    FileStream.Seek(Int64(CurrentSize), soBeginning); // may break on TPipeStream
   FrameLen := FileStream.Read(Frame^.Data,  BlockSize);
   // data FrameLen=0 is possible for last block
   inc(FrameLen, SizeOf(Frame^.Opcode) + SizeOf(Frame^.Sequence));

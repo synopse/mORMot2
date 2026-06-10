@@ -1152,7 +1152,7 @@ begin
   if (src = nil) or
      (srcLen <= 0) then
   begin
-    result := '';
+    FastAssignNew(result);
     exit;
   end;
   s := TRawByteStringStream.Create;
@@ -1180,7 +1180,7 @@ begin
   if (src = nil) or
      (srcLen <= 0) then
   begin
-    result := '';
+    FastAssignNew(result);
     exit;
   end;
   s := TRawByteStringStream.Create;

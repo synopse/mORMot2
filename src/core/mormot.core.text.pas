@@ -569,8 +569,8 @@ type
     fHumanReadableLevel: integer;
     fWrittenBytes: Int64;
     fInitialStreamPosition: Int64;
-    fCustomOptions: TTextWriterOptions;
-    fFlags: TTextWriterFlags;
+    fCustomOptions: TTextWriterOptions; // 16-bit
+    fFlags: TTextWriterFlags;           // 8-bit
     fShortStringMax: byte; // = high(Dest) for twfDestIsShortString
     function GetTextLength: Int64;
     function GetStream: TStream;
@@ -585,6 +585,7 @@ type
     class procedure RaiseUnimplemented(const Method: ShortString);
     function GetFlag(one: TTextWriterFlag): boolean;
     procedure SetFlag(one: TTextWriterFlag; value: boolean);
+    procedure StrRefConst(s: PStrRecConst); {$ifdef HASINLINE}inline;{$endif}
   public
     /// direct access to the low-level current position in the buffer
     // - you should not use this field directly
@@ -709,11 +710,10 @@ type
     {$ifdef CPU32}
     /// append a 64-bit signed integer Value as text
     // - already implemented by Add(Value: PtrInt) method on CPU64
-    procedure Add(Value: Int64); overload;
+    procedure Add(const Value: Int64); overload;
     {$endif CPU32}
     /// append a PtrInt signed integer Value as text
-    procedure Add(Value: PtrInt); overload;
-      {$ifdef FPC_OR_DELPHIXE4}{$ifdef ASMINTEL}inline;{$endif}{$endif} // URW1111
+    procedure Add(const Value: PtrInt); overload;
     /// append a boolean Value as 'true' or 'false' text
     procedure Add(Value: boolean); overload;
     /// append a boolean Value as 1 or 0 number
@@ -727,17 +727,15 @@ type
     procedure AddCurr(const Value: currency); 
       {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 32-bit integer Value as a String
-    procedure AddU(Value: PtrUInt); overload;
-      {$ifdef FPC_OR_DELPHIXE4}{$ifdef ASMINTEL}inline;{$endif}{$endif} // URW1111
+    procedure AddU(const Value: PtrUInt); overload;
     /// append an Unsigned integer <= 255 < 999 Value as a String
-    procedure AddB(Value: PtrUInt);
+    procedure AddB(const Value: PtrUInt);
       {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 32-bit integer Value as a quoted hexadecimal String
     procedure AddUHex(Value: cardinal; QuotedChar: AnsiChar = '"');
       {$ifdef HASINLINE}inline;{$endif}
     /// append an Unsigned 64-bit integer Value as a String
-    procedure AddQ(Value: QWord; Reserve: PtrInt = 32);
-      {$ifdef FPC_CPUX64}inline;{$endif} // URW1147 on Delphi XE2
+    procedure AddQ(const Value: QWord; Reserve: PtrInt = 32);
     /// append an Unsigned 64-bit integer Value as a quoted hexadecimal String
     procedure AddQHex(Value: Qword; QuotedChar: AnsiChar = '"');
       {$ifdef HASINLINE}inline;{$endif}
@@ -749,17 +747,17 @@ type
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     // - noexp=true will call ExtendedToShortNoExp() to avoid any scientific
     // notation in the resulting text
-    procedure AddDouble(Value: double; noexp: boolean = false);
+    procedure AddDouble(const Value: double; noexp: boolean = false);
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     // - noexp=true will call ExtendedToShortNoExp() to avoid any scientific
     // notation in the resulting text
-    procedure AddSingle(Value: single; noexp: boolean = false);
+    procedure AddSingle(const Value: single; noexp: boolean = false);
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     // - noexp=true will call ExtendedToShortNoExp() to avoid any scientific
     // notation in the resulting text
-    procedure Add(Value: Extended; precision: integer; noexp: boolean = false); overload;
+    procedure Add(const Value: Extended; precision: integer; noexp: boolean = false); overload;
     /// append a floating-point text buffer
     // - will correct on the fly '.5' -> '0.5' and '-.5' -> '-0.5'
     // - is used when the input comes from a third-party source with no regular
@@ -1375,14 +1373,14 @@ type
 { ************ Numbers (integers or floats) and Variants to Text Conversion }
 
 var
-  /// naive but efficient cache to avoid string memory allocation for
-  // 0..999 small numbers by Int32ToUtf8/UInt32ToUtf8
-  // - filled with statically allocated constant RawUtf8 values at startup
-  // - noticeable when RawUtf8 strings are used as array indexes (e.g.
-  // in mormot.db.nosql.bson)
-  // - less noticeable without any allocation: StrInt32() is faster on a buffer
+  /// naive but efficient cache to avoid string memory allocation for 0 .. 999
+  // small numbers by Int32ToUtf8/UInt32ToUtf8
+  // - filled with statically allocated UINT_999[] constant values at startup
+  // - noticeable when RawUtf8 strings are used as array indexes (e.g. in BSON)
   // - is defined globally, since may be used from an inlined function
-  SmallUInt32Utf8: array[0..999] of RawUtf8;
+  SmallUInt32Utf8: array[0 .. 999] of RawUtf8;
+  /// raw pre-allocated SmallUInt32Utf8[] values as L1-friendly constants
+  UINT_999: array[0 .. 999] of TStrRecConst;
 
 /// fast RawUtf8 version of 32-bit IntToStr()
 function Int32ToUtf8(Value: PtrInt): RawUtf8; overload;
@@ -1571,15 +1569,15 @@ procedure DoubleToAscii(min_width, frac_digits: integer;
 // - returns the number as text (stored into tmp variable), or "Infinity",
 // "-Infinity", and "NaN" for corresponding IEEE special values
 // - result is a PShortString either over tmp, or JSON_NAN[]
-function DoubleToJson(tmp: PShortString; Value: double;
+function DoubleToJson(tmp: PShortString; const Value: double;
   NoExp: boolean): PShortString;
 
 /// convert a 64-bit floating-point value to its numerical text equivalency
-function DoubleToStr(Value: Double): RawUtf8; overload;
+function DoubleToStr(const Value: Double): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a 64-bit floating-point value to its numerical text equivalency
-procedure DoubleToStr(Value: Double; var result: RawUtf8); overload;
+procedure DoubleToStr(const Value: Double; var result: RawUtf8); overload;
 
 /// copy a floating-point text buffer with proper correction and validation
 // - will correct on the fly '.5' -> '0.5' and '-.5' -> '-0.5'
@@ -1694,7 +1692,7 @@ var
   // - is implemented by DateTimeToIso8601TextVar from mormot.core.datetime.pas:
   // if this unit is not included in the project, an ESynException is raised
   // - used by VariantToUtf8() for TDateTime conversion
-  _VariantToUtf8DateTimeToIso8601: procedure(DT: TDateTime; FirstChar: AnsiChar;
+  _VariantToUtf8DateTimeIso8601: procedure(DT: TDateTime; FirstChar: AnsiChar;
     var result: RawUtf8; WithMS: boolean);
 
   /// Date/Time conversion from ISO-8601 text
@@ -1706,8 +1704,20 @@ var
 /// wrap ToDouble(Text, V) and _Iso8601ToDateTime(Text)
 function AnyTextToDouble(const Text: RawUtf8; out V: double): boolean;
 
-/// wrap VariantToDouble(Value, V) and _Iso8601ToDateTime(VariantToText(Value))
+/// wrap VariantToDouble(Value, V) and AnyTextToDouble(VariantToText(Value))
+// - V=null or any not number-shaped value will return false
 function AnyVariantToDouble(const Value: Variant; out V: double): boolean;
+
+/// convert any numerical or text Variant into a 64-bit integer
+// - call first VariantToInt64() then GetInt64Bool() via VariantToTempUtf8()
+// - V=null or any not integer-shaped value will return false
+function AnyVariantToInteger(const Value: Variant; out V: Int64): boolean;
+
+/// convert any numerical or text Variant into a 64-bit integer or a given default
+// - call first VariantToInt64() then GetInt64Bool() via VariantToTempUtf8()
+// - V=null or any not integer-shaped value will return the supplied Default
+function AnyVariantToIntegerDef(const V: Variant; Default: Int64 = 0): Int64;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fill a text buffer from a 18-bit integer value (0..262143) as 3 chars
 // - this encoding is faster than Base64, and has spaces on the left side
@@ -1792,9 +1802,8 @@ type
   /// a memory structure which avoids smallest temporary RawUtf8 allocations
   // - used by VarRecToTempUtf8/VariantToTempUtf8 and FormatUtf8/FormatShort
   // - would allocate a RawUtf8 in TempRawUtf8 only if needed, but use the
-  // Temp[0..23] buffer for numbers or small text conversion - caller should
-  // ensure to call TempUtf8Done(Res) once finished with it
-  // - you should eventually release TempRawUtf8 by calling TempUtf8Done()
+  // Temp[0..23] buffer for numbers or small text conversion
+  // - you MUST eventually release any TempRawUtf8 by calling TempUtf8Done()
   TTempUtf8 = record
     Len: PtrInt;
     Text: PUtf8Char;
@@ -1802,6 +1811,8 @@ type
     Temp: TTemp24;
   end;
   PTempUtf8 = ^TTempUtf8;
+  TVariantToTempUtf8Flags = set of (
+    vfNoAlloc, vfNoComplex, vfNullAsVoid, vfBooleanAsInt, vfDateAsFloat);
 
 /// release Res.TempRawUtf8 after VariantToTempUtf8/VarRecToTempUtf8
 // - is faster than FastAssignNew() since we know that its RefCnt = 1
@@ -1809,18 +1820,22 @@ procedure TempUtf8Done(var Res: TTempUtf8);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any Variant into a TTempUtf8 transient instance
-// - wasString is set if the V value was a text
-// - empty and null variants will be stored as 'null' text - as expected by JSON
-// - booleans will be stored as 'true' or 'false' - as expected by JSON
-// - custom variant types (e.g. TDocVariant) will be stored as JSON
-procedure VariantToTempUtf8(const V: variant; var Res: TTempUtf8;
-  var wasString: boolean);
+// - return wasString boolean, i.e. true if the V value was a text
+// - empty and null will be stored as 'null' text - unless vfNullAsVoid is set
+// - booleans will be stored as 'true' or 'false' - unless vfBooleanAsInt is set
+// - custom variant types (e.g. TDocVariant) as JSON - unless vfNoComplex is set
+// - Res.Text will always be #0 terminated
+// - you MUST eventually call TempUtf8Done(Res) unless vfNoAlloc has been set
+function VariantToTempUtf8(const V: variant; var Res: TTempUtf8;
+  Flags: TVariantToTempUtf8Flags = []): boolean;
 
 /// convert an open array (const Args: array of const) argument into a TTempUtf8
 // - it would return true if Res.Len > 0, so Res could be added or processed
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
+// - Res.Text may NOT be #0 terminated if the TVarRec is a shortstring
+// - you MUST eventually release any TempRawUtf8 by calling TempUtf8Done(Res)
 function VarRecToTempUtf8(V: PVarRec; var Res: TTempUtf8;
   wasString: PBoolean = nil): boolean;
 
@@ -1893,7 +1908,7 @@ function FormatUtf8(const Format: RawUtf8; const Args: array of const): RawUtf8;
 /// fast Format() function replacement, optimized for RawUtf8
 // - overloaded function, which avoid a temporary RawUtf8 instance on stack
 procedure FormatUtf8(const Format: RawUtf8; const Args: array of const;
-  out Result: RawUtf8); overload;
+  var Result: RawUtf8); overload;
 
 /// raw FormatUtf8() function process, using an existing TTextWriterStackBuffer
 procedure FormatUtf8Raw(const Format: RawUtf8; Args: PVarRec; ArgsCount: PtrInt;
@@ -2261,7 +2276,7 @@ type
     /// retrieve a cookie value from its name
     // - should always previously check "if not ###Parsed then Parse()"
     // - consider FindCookie() if you don't really require a transient RawUtf8
-    procedure RetrieveCookie(const CookieName: RawUtf8; out DestValue: RawUtf8);
+    procedure RetrieveCookie(const CookieName: RawUtf8; var DestValue: RawUtf8);
       {$ifdef HASINLINE} inline; {$endif}
     {$ifdef HASINLINE} { Delphi 7 should use GetCookie() or RetrieveCookie() }
     /// retrieve an incoming HTTP cookie value
@@ -2328,6 +2343,9 @@ function StatusCodeIsSuccess(Code: integer): boolean;
 /// check the supplied HTTP header to contain only #13#10 EOL
 // - to avoid unexpected HTTP body injection, e.g. from unsafe business code
 function IsInvalidHttpHeader(const Headers: RawUtf8): boolean;
+
+/// check if the supplied text start with 'http://' or 'https://'
+function IsHttp(const text: RawUtf8): boolean;
 
 
 { **************** Hexadecimal Text And Binary Conversion }
@@ -2746,7 +2764,7 @@ var
   S: PUtf8Char;
 begin
   if P = nil then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     S := PosChar0(P, Sep); // SSE2 asm on i386 and x86_64
@@ -2798,12 +2816,12 @@ end;
 procedure GetNextItem(var P: PUtf8Char; Sep, Quote: AnsiChar; var result: RawUtf8);
 begin
   if P = nil then
-    result := ''
+    FastAssignNew(result)
   else if P^ = Quote then
   begin
     P := UnQuoteSqlStringVar(P, result);
     if P = nil then
-      result := ''
+      FastAssignNew(result)
     else if P^ = #0 then
       P := nil
     else
@@ -2957,7 +2975,7 @@ begin
   if (P = nil) or
      (Sep <= ' ') or
      (Esc = #0) then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     while (P^ <= ' ') and
@@ -2986,7 +3004,7 @@ var
   S, E: PUtf8Char;
 begin
   if P = nil then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     S := P;
@@ -3212,7 +3230,7 @@ var
   P: PAnsiChar;
 begin
   // CsvOfValue('?',3)='?,?,?'
-  result := '';
+  FastAssignNew(result);
   if Count = 0 then
     exit;
   ValueLen := length(Value);
@@ -3286,7 +3304,7 @@ function GetBitCsv(const Bits; BitsCount: integer): RawUtf8;
 var
   i, j: integer;
 begin
-  result := '';
+  FastAssignNew(result);
   i := 0;
   while i < BitsCount do
     if GetBitPtr(@Bits, i) then
@@ -3494,7 +3512,7 @@ var
   i: PtrUInt;
 begin
   if P = nil then
-    result := ''
+    FastAssignNew(result)
   else
     for i := 0 to Index do
       GetNextItem(P, Sep, result);
@@ -3505,7 +3523,7 @@ var
   i: PtrUInt;
 begin
   if P = nil then
-    result := ''
+    FastAssignNew(result)
   else
     for i := 0 to Index do
       GetNextItem(P, Sep, Quote, result);
@@ -3755,7 +3773,7 @@ var
   p: PAnsiChar;
   s: PUtf8Char;
 begin
-  result := '';
+  FastAssignNew(result);
   if (v = nil) or
      (n <= 0) then
     exit;
@@ -3917,7 +3935,7 @@ var
   int, P: PAnsiChar;
   temp: TSynTempBuffer; // faster than a dynamic array
 begin
-  result := '';
+  FastAssignNew(result);
   if ValuesCount = 0 then
     exit;
   int := temp.Init(ValuesCount * I2T_SIZE);
@@ -3944,7 +3962,7 @@ var
   int, P: PAnsiChar;
   temp: TSynTempBuffer; // faster than a dynamic array
 begin
-  result := '';
+  FastAssignNew(result);
   if ValuesCount = 0 then
     exit;
   int := temp.Init(ValuesCount * I2T_SIZE);
@@ -4153,9 +4171,9 @@ begin
 end;
 
 constructor TTextWriter.CreateOwnedShort(var aDest, aTemp: ShortString);
-begin
+begin // should match exactly TLocalWriter.Init from mormot.core.fmt
   if high(aTemp) < TRAIL_BYTES then
-     ESynException.RaiseUtf8('%.CreateOwnedShort(temp[%])', [self, high(aTemp)]);
+    ESynException.RaiseUtf8('%.CreateOwnedShort(temp[%])', [self, high(aTemp)]);
   fFlags := [twfBufferIsOnStack, twfDestIsShortString, twfFlushNoAutoResize];
   InternalSetBuffer(@aTemp, high(aTemp) + 1);
   aDest[0] := #0;
@@ -4166,7 +4184,7 @@ end;
 destructor TTextWriter.Destroy;
 begin
   if twfDestIsRawUtf8 in fFlags then // fDest is a RawUtf8 not a TStream
-    FastAssignNew(fDest)
+    FastAssignNew(RawUtf8(fDest))
   else if twfDestIsOwnedStream in fFlags then
     FreeAndNil(fDest);
   if not (twfBufferIsOnStack in fFlags) then
@@ -4294,14 +4312,13 @@ end;
 procedure TTextWriter.AddVarData(Value: PVarData; HtmlEscape: boolean);
 var
   tmp: TTempUtf8;
-  wasString: boolean;
 begin
   if cardinal(Value^.VType) = varVariantByRef then
     Value := Value^.VPointer;
   if HtmlEscape and
      not (cardinal(Value^.VType) in VTYPE_NUMERIC) then
   begin
-    VariantToTempUtf8(PVariant(Value)^, tmp, wasString);
+    VariantToTempUtf8(PVariant(Value)^, tmp);
     if tmp.Len <> 0 then
       _AddHtmlEscape(self, tmp.Text, tmp.Len);
     TempUtf8Done(tmp);
@@ -4591,7 +4608,7 @@ begin
   if (Len = 0) or
      (twfDestIsShortString in fFlags) then
   begin
-    result := '';
+    FastAssignNew(result);
     exit;
   end;
   if twfDestIsRawUtf8 in fFlags then // fDest is a RawUtf8 not a TStream
@@ -4606,7 +4623,7 @@ begin
     FastSetString(result, Len);
     TStream(fDest).Seek(fInitialStreamPosition, soBeginning);
     if not StreamReadAll(TStream(fDest), pointer(result), Len) then
-      result := '';
+      FastAssignNew(result);
   end;
   if reformat <> jsonCompact then
   begin
@@ -4664,7 +4681,7 @@ begin
     begin
       fWrittenBytes := 0;
       if fDest <> nil then
-        FastAssignNew(fDest); // seldom called (SetText did reset to nil='')
+        FastAssignNew(RawUtf8(fDest)); // seldom called (SetText did reset to nil='')
     end
     else if not (twfDestIsShortString in fFlags) then
       fWrittenBytes := TStream(fDest).Seek(fInitialStreamPosition, soBeginning);
@@ -4748,7 +4765,13 @@ begin
   inc(B);
 end;
 
-procedure TTextWriter.Add(Value: PtrInt);
+procedure TTextWriter.StrRefConst(s: PStrRecConst);
+begin
+  PCardinal(B + 1)^ := s^.TextLo; // append up to 4 chars - e.g. UINT_999[]
+  inc(B, s^.Header.length);
+end;
+
+procedure TTextWriter.Add(const Value: PtrInt);
 var
   tmp: TTemp24;
   P: PAnsiChar;
@@ -4756,15 +4779,9 @@ var
 begin
   if BEnd - B <= 24 then
     FlushToStream;
-  {$ifndef ASMINTEL} // our StrInt32 asm has less CPU cache pollution
-  if PtrUInt(Value) <= high(SmallUInt32Utf8) then
-  begin
-    P := pointer(SmallUInt32Utf8[Value]);
-    PCardinal(B + 1)^ := PCardinal(P)^;
-    inc(B, PStrLen(P - _STRLEN)^);
-  end
+  if PtrUInt(Value) <= high(UINT_999) then
+    StrRefConst(@UINT_999[Value])
   else
-  {$endif ASMINTEL}
   begin
     P := StrInt32(@tmp[23], Value);
     Len := @tmp[23] - P;
@@ -4774,7 +4791,7 @@ begin
 end;
 
 {$ifdef CPU32} // Add(Value: PtrInt) already implements it for CPU64
-procedure TTextWriter.Add(Value: Int64);
+procedure TTextWriter.Add(const Value: Int64);
 var
   tmp: TTemp24;
   P: PAnsiChar;
@@ -4782,24 +4799,21 @@ var
 begin
   if BEnd - B <= 24 then
     FlushToStream;
-  if Value < 0 then
+  if Value >= 0 then
+    if Value <= high(UINT_999) then
+    begin
+      StrRefConst(@UINT_999[Value]);
+      exit;
+    end
+    else
+    begin
+      P := StrUInt64(@tmp[23], Value);
+      Len := @tmp[23] - P;
+    end
+  else
   begin
     P := StrUInt64(@tmp[23], -Value) - 1;
     P^ := '-';
-    Len := @tmp[23] - P;
-  end
-  {$ifndef ASMINTEL} // our StrUInt32 asm has less CPU cache pollution
-  else if Value <= high(SmallUInt32Utf8) then
-  begin
-    P := pointer(SmallUInt32Utf8[Value]);
-    PCardinal(B + 1)^ := PCardinal(P)^;
-    inc(B, PStrLen(P - _STRLEN)^);
-    exit;
-  end
-  {$endif ASMINTEL} // our StrInt32 asm has less CPU cache pollution
-  else
-  begin
-    P := StrUInt64(@tmp[23], Value);
     Len := @tmp[23] - P;
   end;
   MoveByOne(P, B + 1, Len);
@@ -4838,7 +4852,7 @@ begin
   AddCurr64(PInt64(@Value));
 end;
 
-procedure TTextWriter.AddU(Value: PtrUInt);
+procedure TTextWriter.AddU(const Value: PtrUInt);
 var
   tmp: TTemp24;
   P: PAnsiChar;
@@ -4846,15 +4860,9 @@ var
 begin
   if BEnd - B <= 24 then
     FlushToStream;
-  {$ifndef ASMINTEL} // our StrUInt32 asm has less CPU cache pollution
-  if Value <= high(SmallUInt32Utf8) then
-  begin
-    P := pointer(SmallUInt32Utf8[Value]);
-    PCardinal(B + 1)^ := PCardinal(P)^;
-    inc(B, PStrLen(P - _STRLEN)^);
-  end
+  if Value <= high(UINT_999) then
+    StrRefConst(@UINT_999[Value])
   else
-  {$endif ASMINTEL}
   begin
     P := StrUInt32(@tmp[23], Value);
     Len := @tmp[23] - P;
@@ -4863,15 +4871,11 @@ begin
   end;
 end;
 
-procedure TTextWriter.AddB(Value: PtrUInt);
-var
-  P: PAnsiChar;
+procedure TTextWriter.AddB(const Value: PtrUInt);
 begin
   if B >= BEnd then
     FlushToStream;
-  P := pointer(SmallUInt32Utf8[Value]); // caller ensured Value <= 255 < 999
-  PCardinal(B + 1)^ := PCardinal(P)^;
-  inc(B, PStrLen(P - _STRLEN)^);
+  StrRefConst(@UINT_999[Value]); // caller ensured Value <= 255 < 999
 end;
 
 procedure TTextWriter.AddUHex(Value: cardinal; QuotedChar: AnsiChar);
@@ -4879,23 +4883,18 @@ begin
   AddBinToHexDisplayLower(@Value, SizeOf(Value), QuotedChar);
 end;
 
-procedure TTextWriter.AddQ(Value: QWord; Reserve: PtrInt);
+procedure TTextWriter.AddQ(const Value: QWord; Reserve: PtrInt);
 var
   tmp: TTemp24;
   P: PAnsiChar;
   Len: PtrInt;
 begin
-  if BEnd - B <= Reserve then
+  if BEnd - B <= Reserve then // note: PtrInt(BEnd - B) could be < 0
     FlushToStream;
-  {$ifndef ASMINTEL} // our StrInt32 asm has less CPU cache pollution
-  if Value <= high(SmallUInt32Utf8) then
-  begin
-    P := pointer(SmallUInt32Utf8[Value]);
-    PCardinal(B + 1)^ := PCardinal(P)^;
-    inc(B, PStrLen(P - _STRLEN)^);
-  end
+  if {$ifndef HASQWORD} (Value >= 0) and {$endif}
+     (Value <= high(UINT_999)) then
+    StrRefConst(@UINT_999[Value])
   else
-  {$endif ASMINTEL}
   begin
     P := StrUInt64(@tmp[23], Value);
     Len := @tmp[23] - P;
@@ -4927,21 +4926,21 @@ begin
   inc(B, ord(Text[0]));
 end;
 
-procedure TTextWriter.Add(Value: Extended; precision: integer; noexp: boolean);
+procedure TTextWriter.Add(const Value: Extended; precision: integer; noexp: boolean);
 var
   tmp: ShortString;
 begin
   AddShort(ExtendedToJson(@tmp, Value, precision, noexp)^);
 end;
 
-procedure TTextWriter.AddDouble(Value: double; noexp: boolean);
+procedure TTextWriter.AddDouble(const Value: double; noexp: boolean);
 var
   tmp: ShortString;
 begin
   AddShort(DoubleToJson(@tmp, Value, noexp)^);
 end;
 
-procedure TTextWriter.AddSingle(Value: single; noexp: boolean);
+procedure TTextWriter.AddSingle(const Value: single; noexp: boolean);
 var
   tmp: ShortString;
 begin
@@ -5128,7 +5127,7 @@ begin
     if i = HighValues then
       break;
     if Sep <> '' then
-      AddShort(pointer(Sep), PStrLen(PtrInt(Sep) - _STRLEN)^);
+      AddShort(pointer(Sep), PStrLen(PtruInt(Sep) - _STRLEN)^);
     if Reverse then
       dec(i)
     else
@@ -5372,7 +5371,7 @@ procedure TTextWriter.AddProp(PropName: PUtf8Char; PropNameLen: PtrInt);
 begin // not faster with a local P: PUtf8Char temp pointer instead of B
   if PropNameLen <= 0 then
     exit; // paranoid check
-  if BEnd - B <= PropNameLen then
+  if BEnd - B <= PropNameLen then // note: PtrInt(BEnd - B) could be < 0
     FlushToStream;
   if twoForceJsonExtended in fCustomOptions then
   begin
@@ -5441,7 +5440,7 @@ begin
     FieldName := pointer(VoidPlaceHolder);
     FieldNameLen := length(VoidPlaceHolder);
   end;
-  if BEnd - B <= FieldNameLen then
+  if BEnd - B <= FieldNameLen then // note: PtrInt(BEnd - B) could be < 0
     FlushToStream;
   B[1] := '"';
   MoveFast(FieldName^, B[2], FieldNameLen);
@@ -5644,23 +5643,11 @@ end;
 
 procedure TTextWriter.AddTrimLeftLowerCase(Text: PShortString);
 var
-  P: PUtf8Char;
+  P: PAnsiChar;
   L: PtrInt;
 begin
-  L := ord(Text^[0]);
-  P := @Text^[1];
-  while (L > 0) and
-        (P^ in ['a'..'z']) do
-  begin
-    inc(P);
-    dec(L);
-  end;
-  if L = 0 then
-  begin
-    L := ord(Text^[0]);
-    P := @Text^[1];
-  end;
-  AddShort(P, L);
+  L := TrimLeftLowerCaseP(Text, P);
+  AddShort(pointer(P), L);
 end;
 
 procedure TTextWriter.AddTrimSpaces(const Text: RawUtf8);
@@ -6587,9 +6574,8 @@ begin
     begin
       decim := PCardinal(P + L - SizeOf(cardinal))^; // 4 last digits = 4 decimals
       if decim = $30303030 then
-        dec(L, 5)
-      else // no decimal
-      if decim and $ffff0000 = $30300000 then
+        dec(L, 5)  // no decimal
+      else if decim and $ffff0000 = $30300000 then
         dec(L, 2); // 2 decimals
     end;
     FastSetString(result, P, L);
@@ -6610,13 +6596,12 @@ function Curr64ToPChar(const Value: Int64; Dest: PUtf8Char): PtrInt;
 var
   tmp: array[0..31] of AnsiChar;
   P: PAnsiChar;
-  decim: cardinal;
+  decim: cardinal; // = 4 last digits to check if 0/2 decimals
 begin
   P := StrCurr64(@tmp[31], Value);
   result := @tmp[31] - P;
   if result > 4 then
   begin
-    // decim = 4 last digits = 4 decimals
     decim := PCardinal(P + result - SizeOf(cardinal))^;
     if decim = $30303030 then // no decimal -> trunc trailing *.0000 chars
       dec(result, 5)
@@ -7756,7 +7741,8 @@ end;
 procedure d2a_return_exponential(str: PAnsiChar; minus: boolean;
   digits: PByte; n_digits_have, n_digits_req, d_exp: PtrInt);
 var
-  p, exp: PAnsiChar;
+  p: PAnsiChar;
+  exp: PStrRecConst; // 0..999 range is fine
 begin
   p := str + 1;
   // Sign
@@ -7807,9 +7793,9 @@ begin
     inc(p);
   end;
   // Exponent digits
-  exp := pointer(SmallUInt32Utf8[d_exp]); // 0..999 range is fine
-  PCardinal(p)^ := PCardinal(exp)^;
-  inc(p, PStrLen(exp - _STRLEN)^);
+  exp := @UINT_999[d_exp];
+  PCardinal(p)^ := exp^.TextLo;
+  inc(p, exp^.Header.length);
   // Store length
   str[0] := AnsiChar(p - str - 1);
 end;
@@ -8093,7 +8079,7 @@ end;
 
 {$endif DOUBLETOSHORT_USEGRISU}
 
-function DoubleToJson(tmp: PShortString; Value: double;
+function DoubleToJson(tmp: PShortString; const Value: double;
   NoExp: boolean): PShortString;
 begin
   if PInt64(@Value)^ = 0 then
@@ -8108,12 +8094,12 @@ begin
   end;
 end;
 
-function DoubleToStr(Value: Double): RawUtf8;
+function DoubleToStr(const Value: Double): RawUtf8;
 begin
   DoubleToStr(Value, result);
 end;
 
-procedure DoubleToStr(Value: Double; var result: RawUtf8);
+procedure DoubleToStr(const Value: Double; var result: RawUtf8);
 var
   tmp: ShortString;
 begin
@@ -8261,122 +8247,88 @@ end;
 procedure VariantToUtf8(const V: Variant; var result: RawUtf8;
   var wasString: boolean);
 var
-  tmp: TVarData;
+  vd: PVarData;
   vt: cardinal;
+  tmp: TVarData;
 begin
   wasString := false;
-  vt := TVarData(V).VType;
-  case vt of
+  vd := VarDataFromVariant(V); // handle varVariantByRef
+  vt := vd^.VType;
+  case vt of // most simple types with a O(1) case jmp
     varEmpty,
     varNull:
       result := NULL_STR_VAR;
-    varSmallint:
-      Int32ToUtf8(TVarData(V).VSmallInt, result);
-    varShortInt:
-      Int32ToUtf8(TVarData(V).VShortInt, result);
-    varWord:
-      UInt32ToUtf8(TVarData(V).VWord, result);
-    varLongWord:
-      UInt32ToUtf8(TVarData(V).VLongWord, result);
-    varByte:
-      result := SmallUInt32Utf8[TVarData(V).VByte];
     varBoolean:
-      if TVarData(V).VBoolean then
+      if vd^.VBoolean then
         result := SmallUInt32Utf8[1]
       else
         result := SmallUInt32Utf8[0];
-    varInteger:
-      Int32ToUtf8(TVarData(V).VInteger, result);
+    varByte:
+      result := SmallUInt32Utf8[vd^.VByte];
+    varSmallint:
+      Int32ToUtf8(vd^.VSmallInt, result);
+    varShortInt:
+      Int32ToUtf8(vd^.VShortInt, result);
+    varWord:
+      UInt32ToUtf8(vd^.VWord, result);
+    varInteger,
+    varOleInt:
+      Int32ToUtf8(vd^.VInteger, result);
+    varLongWord,
+    varOleUInt:
+      UInt32ToUtf8(vd^.VLongWord, result);
     varInt64:
-      Int64ToUtf8(TVarData(V).VInt64, result);
+      Int64ToUtf8(vd^.VInt64, result);
     varWord64:
-      UInt64ToUtf8(TVarData(V).VInt64, result);
+      UInt64ToUtf8(vd^.VInt64, result);
     varSingle:
-      ExtendedToStr(TVarData(V).VSingle, SINGLE_PRECISION, result);
+      ExtendedToStr(vd^.VSingle, SINGLE_PRECISION, result);
     varDouble:
-      DoubleToStr(TVarData(V).VDouble, result);
+      DoubleToStr(vd^.VDouble, result);
     varCurrency:
-      Curr64ToStr(TVarData(V).VInt64, result);
+      Curr64ToStr(vd^.VInt64, result);
     varDate:
       begin
-        _VariantToUtf8DateTimeToIso8601(
-          TVarData(V).VDate, 'T', result, {withms=}false);
+        _VariantToUtf8DateTimeIso8601(vd^.VDate, 'T', result, {withms=}false);
         wasString := true;
       end;
-    varString:
-      begin
-        wasString := true;
-        {$ifdef HASCODEPAGE}
-        AnyAnsiToUtf8Var(RawByteString(TVarData(V).VString), result);
-        {$else}
-        result := RawUtf8(TVarData(V).VString);
-        {$endif HASCODEPAGE}
-      end;
-    {$ifdef HASVARUSTRING}
-    varUString:
-      begin
-        wasString := true;
-        RawUnicodeToUtf8(TVarData(V).VAny,
-          length(UnicodeString(TVarData(V).VAny)), result);
-      end;
-    varUStringByRef:
-      begin
-        wasString := true;
-        RawUnicodeToUtf8(PPointer(TVarData(V).VAny)^,
-          length(PUnicodeString(TVarData(V).VAny)^), result);
-      end;
-    {$endif HASVARUSTRING}
     varOleStr:
       begin
         wasString := true;
-        RawUnicodeToUtf8(TVarData(V).VAny,
-          length(WideString(TVarData(V).VAny)), result);
+        RawUnicodeToUtf8(vd^.VAny, length(WideString(vd^.VAny)), result);
       end;
     varOlePAnsiChar: // = VT_LPSTR
       begin
         wasString := true;
-        CurrentAnsiConvert.AnsiBufferToRawUtf8(
-          TVarData(V).VString, StrLen(TVarData(V).VString), result);
+        CurrentAnsiConvert.AnsiBufferToRawUtf8(vd^.VString, StrLen(vd^.VString), result);
       end;
     varOlePWideChar: // = VT_LPWSTR
       begin
         wasString := true;
-        RawUnicodeToUtf8(TVarData(V).VAny, StrLenW(TVarData(V).VAny), result);
+        RawUnicodeToUtf8(vd^.VAny, StrLenW(vd^.VAny), result);
       end;
   else
-    if SetVariantUnRefSimpleValue(V, tmp{%H-}) then
-      // simple varByRef
-      VariantToUtf8(Variant(tmp), result, wasString)
-    else if vt = varVariantByRef then{%H-}
-      // complex varByRef
-      VariantToUtf8(PVariant(TVarData(V).VPointer)^, result, wasString)
-    else if vt = varStringByRef then
+    if vt = varString then
     begin
       wasString := true;
       {$ifdef HASCODEPAGE}
-      AnyAnsiToUtf8Var(PRawByteString(TVarData(V).VString)^, result);
+      AnyAnsiToUtf8Var(RawByteString(vd^.VString), result);
       {$else}
-      result := PRawUtf8(TVarData(V).VString)^;
+      result := RawUtf8(vd^.VString);
       {$endif HASCODEPAGE}
     end
-    else if vt = varOleStrByRef then
-    begin
-      wasString := true;
-      RawUnicodeToUtf8(pointer(PWideString(TVarData(V).VAny)^),
-        length(PWideString(TVarData(V).VAny)^), result);
-    end
-    else
     {$ifdef HASVARUSTRING}
-    if vt = varUStringByRef then
+    else if vt = varUString then
     begin
       wasString := true;
-      RawUnicodeToUtf8(pointer(PUnicodeString(TVarData(V).VAny)^),
-        length(PUnicodeString(TVarData(V).VAny)^), result);
+      RawUnicodeToUtf8(vd^.VAny, length(UnicodeString(vd^.VAny)), result);
     end
-    else
     {$endif HASVARUSTRING}
+    else if vt and varByRef = 0 then
       // not recognizable vt -> seralize as JSON to handle also custom types
-      _VariantSaveJson(V, twJsonEscape, result); // = mormot.core.variants.pas
+      _VariantSaveJson(V, twJsonEscape, result) // = mormot.core.variants.pas
+    else // varByRef values appear with Automation/COM or DispInvoke()
+      VariantToUtf8(SetVarDataUnRef(vt, vd, tmp)^, result, wasString);
   end;
 end;
 
@@ -8436,7 +8388,7 @@ begin
     ' please include mormot.core.variants to your uses clause');
 end;
 
-procedure __VariantToUtf8DateTimeToIso8601(DT: TDateTime; FirstChar: AnsiChar;
+procedure __VariantToUtf8DateTimeIso8601(DT: TDateTime; FirstChar: AnsiChar;
   var result: RawUtf8; WithMS: boolean);
 begin
   ESynException.RaiseU('VariantToUtf8(varDate) unsupported:' +
@@ -8476,23 +8428,45 @@ function AnyVariantToDouble(const Value: Variant; out V: double): boolean;
 var
   u: pointer;
 begin
+  result := false;
+  if VarIsEmptyOrNull(Value) then // null means no value, so not a valid double
+    exit;
   u := nil;
   result := VariantToDouble(Value, V);
-  if not result then
-    if Assigned(_Iso8601ToDateTime) and // may be a TDateTime
-       VarIsString(Value) and
-       VariantToText(Value, RawUtf8(u)) then
-    begin
-      V := 0;
-      if u <> nil then
-      begin
-        V := _Iso8601ToDateTime(RawUtf8(u));
-        FastAssignNew(u);
-        if V = 0 then
-          exit; // not a date
-      end;
-      result := true;
-    end;
+  if result or
+     not VarIsString(Value) or
+     not VariantToText(Value, RawUtf8(u)) then
+    exit;
+  result := AnyTextToDouble(RawUtf8(u), V); // TDateTime or float text
+  if u <> nil then
+    FastAssignNew(u);
+end;
+
+function AnyVariantToInteger(const Value: Variant; out V: Int64): boolean;
+var
+  tmp: TTempUtf8;
+  d: double;
+begin
+  result := false;
+  if VarIsEmptyOrNull(Value) then // null means no value, so not a valid integer
+    exit;
+  result := true;
+  if VariantToInt64(Value, V) then
+    exit; // direct conversion from an integer value
+  if VariantToDouble(Value, d) then
+  begin
+    V := trunc(d); // better truncate than convert to TTempUtf8
+    result := true;
+    exit;
+  end;
+  VariantToTempUtf8(Value, tmp, [vfNoAlloc, vfNullAsVoid]);
+  result := GetInt64Bool(tmp.Text, V); // try from text e.g. '123'
+end;
+
+function AnyVariantToIntegerDef(const V: Variant; Default: Int64): Int64;
+begin
+  if not AnyVariantToInteger(V, result) then
+    result := Default;
 end;
 
 function Int18ToChars3(Value: cardinal): RawUtf8;
@@ -8718,142 +8692,156 @@ begin
   result := true;
 end;
 
-procedure PrepareTempUtf8(var Res: TTempUtf8; Len: PtrInt);
-  {$ifdef FPC} inline; {$endif} // Delphi XE8 fails to inline this anyway :(
+function PrepareTempUtf8(var Res: TTempUtf8; Len: PtrInt; NoTempAlloc: boolean): boolean;
 begin
-  if Len > SizeOf(Res.Temp) then // memory allocation needed
+  result := false;
+  if Len >= SizeOf(Res.Temp) then // memory allocation needed (with ending #0)
   begin
+    if NoTempAlloc then
+      exit; // e.g. when try to extract a float or an iso8601 date
     Res.TempRawUtf8 := FastNewString(Len, CP_UTF8); // new RawUtf8
     Res.Text := Res.TempRawUtf8;
   end
   else
     Res.Text := @Res.Temp; // we can use the 24 bytes stack buffer (very common)
   Res.Len := Len;
-end;
-
-procedure DoubleToTempUtf8(V: double; var Res: TTempUtf8);
-var
-  tmp: ShortString;
-begin
-  PrepareTempUtf8(Res, DoubleToShort(@tmp, V));
-  MoveFast(tmp[1], Res.Text^, ord(tmp[0]));
+  result := true;
 end;
 
 procedure WideToTempUtf8(WideChar: PWideChar; WideCharCount: PtrUInt;
-  var Res: TTempUtf8);
+  var Res: TTempUtf8; NoTempAlloc: boolean);
 begin
-  if (WideChar = nil) or
-     (WideCharCount = 0) then
-  begin
-    Res.Text := nil;
-    Res.Len := 0;
-  end
-  else if IsAnsiCompatibleW(WideChar, WideCharCount) then // most common case
-  begin
-    PrepareTempUtf8(Res, WideCharCount);
-    repeat
-      dec(WideCharCount);
-      Res.Text[WideCharCount] := AnsiChar(ord(WideChar[WideCharCount]));
-    until WideCharCount = 0;
-  end
-  else
-  begin
-    PrepareTempUtf8(Res, WideCharCount * 3); // use temporarly worst case
-    Res.Len := RawUnicodeToUtf8(Res.Text, Res.Len + 1,
-      WideChar, WideCharCount, [ccfNoTrailingZero]);
-  end;
+  Res.Text := nil;
+  Res.Len := 0;
+  if (WideChar <> nil) and
+     (WideCharCount <> 0) then
+    if IsAnsiCompatibleW(WideChar, WideCharCount) then // most common case
+    begin
+      if not PrepareTempUtf8(Res, WideCharCount, NoTempAlloc) then
+        exit;
+      Res.Text[WideCharCount] := #0; // ensure is #0 terminated
+      repeat
+        dec(WideCharCount);
+        Res.Text[WideCharCount] := AnsiChar(ord(WideChar[WideCharCount]));
+      until WideCharCount = 0;
+    end
+    else if PrepareTempUtf8(Res, WideCharCount * 3, NoTempAlloc) then
+      Res.Len := RawUnicodeToUtf8(Res.Text, Res.Len + 1, WideChar, WideCharCount, []);
 end;
 
-procedure PtrIntToTempUtf8(V: PtrInt; var Res: TTempUtf8);
-  {$ifdef HASINLINE} inline; {$endif}
+function BStrToTempUtf8(bstr: pointer; var Res: TTempUtf8; NoTemp: boolean): boolean;
 begin
-  {$ifndef ASMINTEL} // our StrInt32 asm has less CPU cache pollution
-  if PtrUInt(V) <= high(SmallUInt32Utf8) then
-  begin
-    Res.Text := pointer(SmallUInt32Utf8[V]);
-    Res.Len := PStrLen(Res.Text - _STRLEN)^;
-  end
+  WideToTempUtf8(bstr, length(WideString(bstr)), Res, NoTemp);
+  result := true;
+end;
+
+{$ifdef HASVARUSTRING}
+function UStrToTempUtf8(ustr: pointer; var Res: TTempUtf8; NoTemp: boolean): boolean;
+begin
+  WideToTempUtf8(ustr, length(UnicodeString(ustr)), Res, NoTemp);
+  result := true;
+end;
+{$endif HASVARUSTRING}
+
+function DoubleToTempUtf8(V: double; var Res: TTempUtf8): boolean;
+var
+  tmp: ShortString;
+begin
+  Res.Len := MinPtrInt(High(Res.Temp), DoubleToShort(@tmp, V)); // truncate
+  Res.Text := @Res.Temp;
+  MoveFast(tmp[1], Res.Temp, Res.Len);
+  Res.Temp[Res.Len] := #0; // ensure #0 terminated
+  result := false;
+end;
+
+function Curr64ToTempUtf8(V: Int64; var Res: TTempUtf8): boolean;
+begin
+  Res.Len := Curr64ToPChar(V, @Res.Temp);
+  Res.Text := @Res.Temp;
+  Res.Temp[Res.Len] := #0; // #0 terminated
+  result := false;
+end;
+
+function PtrIntToTempUtf8(V: PtrInt; var Res: TTempUtf8): boolean;
+begin
+  if PtrUInt(V) <= high(UINT_999) then
+    with UINT_999[V] do
+    begin
+      Res.Text := @TextLo;
+      Res.Len := Header.length;
+    end
   else
-  {$endif ASMINTEL}
   begin
     Res.Text := PUtf8Char(StrInt32(@Res.Temp[23], V));
     Res.Len := @Res.Temp[23] - Res.Text;
+    Res.Temp[23] := #0; // make #0 terminated
   end;
+  result := false;
 end;
 
-procedure Int64ToTempUtf8(V: PInt64; var Res: TTempUtf8);
-  {$ifdef HASINLINE} inline; {$endif}
+{$ifdef CPU32}
+function Int64ToTempUtf8(V: PInt64; var Res: TTempUtf8): boolean;
 begin
-{$ifdef CPU64}
-  PtrIntToTempUtf8(V^, Res);
-{$else}
-  if (PCardinalArray(V)^[0] <= high(SmallUInt32Utf8)) and
-     (PCardinalArray(V)^[1] = 0) then
-  begin
-    Res.Text := pointer(SmallUInt32Utf8[PPtrInt(V)^]);
-    Res.Len := PStrLen(Res.Text - _STRLEN)^;
-  end
-  else
-  begin
-    Res.Text := PUtf8Char(StrInt64(@Res.Temp[23], V^));
-    Res.Len := @Res.Temp[23] - Res.Text;
-  end;
-{$endif CPU64}
+  Res.Text := PUtf8Char(StrInt64(@Res.Temp[23], V^));
+  Res.Len := @Res.Temp[23] - Res.Text;
+  Res.Temp[23] := #0; // make #0 terminated
+  result := false;
 end;
+{$endif CPU32}
 
-procedure QWordToTempUtf8(V: PQWord; var Res: TTempUtf8);
-  {$ifdef HASINLINE} inline; {$endif}
+function QWordToTempUtf8(const V: QWord; var Res: TTempUtf8): boolean;
 begin
-  {$ifndef ASMINTEL} // our StrUInt64 asm has less CPU cache pollution
-  if V^ <= high(SmallUInt32Utf8) then
-  begin
-    Res.Text := pointer(SmallUInt32Utf8[PPtrInt(V)^]);
-    Res.Len := PStrLen(Res.Text - _STRLEN)^;
-  end
-  else
-  {$endif ASMINTEL}
-  begin
-    Res.Text := PUtf8Char(StrUInt64(@Res.Temp[23], V^));
-    Res.Len := @Res.Temp[23] - Res.Text;
-  end;
+  Res.Text := PUtf8Char(StrUInt64(@Res.Temp[23], V)); // also cardinal
+  Res.Len := @Res.Temp[23] - Res.Text;
+  Res.Temp[23] := #0; // make #0 terminated
+  result := false;
 end;
 
-procedure VariantToTempUtf8(const V: variant; var Res: TTempUtf8;
-  var wasString: boolean);
+function VariantToTempUtf8(const V: variant; var Res: TTempUtf8;
+  Flags: TVariantToTempUtf8Flags): boolean;
 var
   tmp: TVarData;
+  vd: PVarData;
   vt: cardinal;
+label
+  n;
 begin
-  wasString := false;
-  Res.TempRawUtf8 := nil; // no allocation by default - and avoid GPF
-  vt := TVarData(V).VType;
-  case vt of
+  result := false;             // wasString=false by default (assume numbers)
+  Res.TempRawUtf8 := nil;      // no allocation by default - and avoid GPF
+  vd := VarDataFromVariant(V); // handle varVariantByRef
+  vt := vd^.VType;
+  case vt of // most simple types with a O(1) case jmp
     varEmpty,
     varNull:
+n:    if vfNullAsVoid in Flags then
+      begin
+        result := true;
+        Res.Text := nil;
+        Res.Len := 0;
+      end
+      else
       begin
         Res.Text := pointer(NULL_STR_VAR); // 'null' + wasString=false
         Res.Len := 4;
       end;
-    varSmallint:
-      PtrIntToTempUtf8(TVarData(V).VSmallInt, Res);
-    varShortInt:
-      PtrIntToTempUtf8(TVarData(V).VShortInt, Res);
-    varWord:
-      PtrIntToTempUtf8(TVarData(V).VWord, Res);
-    varLongWord:
-      {$ifdef CPU32}
-      if TVarData(V).VLongWord > high(SmallUInt32Utf8) then
-      begin
-        Res.Text := PUtf8Char(StrUInt32(@Res.Temp[23], TVarData(V).VLongWord));
-        Res.Len := @Res.Temp[23] - Res.Text;
-      end
-      else
-      {$endif CPU32}
-        PtrIntToTempUtf8(TVarData(V).VLongWord, Res);
     varByte:
-      PtrIntToTempUtf8(TVarData(V).VByte, Res);
+      PtrIntToTempUtf8(vd^.VByte, Res);
+    varSmallint:
+      PtrIntToTempUtf8(vd^.VSmallInt, Res);
+    varShortInt:
+      PtrIntToTempUtf8(vd^.VShortInt, Res);
+    varWord:
+      PtrIntToTempUtf8(vd^.VWord, Res);
     varBoolean:
-      if TVarData(V).VBoolean then
+      if vfBooleanAsInt in Flags then
+      begin
+        Res.Temp[0] := '0';
+        if vd^.VBoolean then
+          inc(Res.Temp[0]);
+        Res.Text := @Res.Temp;
+        Res.Len := 1;
+      end
+      else if vd^.VBoolean then
       begin
         Res.Text := @BOOL_STR[true][1]; // 'false' + wasString=false
         Res.Len := 4;
@@ -8863,96 +8851,80 @@ begin
         Res.Text := @BOOL_STR[false][1]; // 'true' + wasString=false
         Res.Len := 5;
       end;
-    varInteger:
-      PtrIntToTempUtf8(TVarData(V).VInteger, Res);
+    varInteger,
+    varOleInt:
+      PtrIntToTempUtf8(vd^.VInteger, Res);
+    varLongWord,
+    varOleUInt:
+      QWordToTempUtf8(vd^.VInt64, Res);  // seldom called
     varInt64:
-      Int64ToTempUtf8(@TVarData(V).VInt64, Res);
+      {$ifdef CPU64}
+      PtrIntToTempUtf8(vd^.VInt64, Res);
+      {$else}
+      Int64ToTempUtf8(@vd^.VInt64, Res);
+      {$endif CPU64}
     varWord64:
-      QWordToTempUtf8(@TVarData(V).VInt64, Res);
+      QWordToTempUtf8(vd^.VInt64, Res);
     varSingle:
-      DoubleToTempUtf8(TVarData(V).VSingle, Res);
+      DoubleToTempUtf8(vd^.VSingle, Res);
     varDouble:
-      DoubleToTempUtf8(TVarData(V).VDouble, Res);
+      DoubleToTempUtf8(vd^.VDouble, Res);
     varCurrency:
-      begin
-        Res.Len := Curr64ToPChar(TVarData(V).VInt64, @Res.Temp);
-        Res.Text := @Res.Temp;
-      end;
+      Curr64ToTempUtf8(vd^.VInt64, Res);
     varDate:
+      if Flags * [vfNoAlloc, vfDateAsFloat] <> [] then
+        DoubleToTempUtf8(vd^.VDate, Res)
+      else
       begin
-        wasString := true;
-        _VariantToUtf8DateTimeToIso8601(TVarData(V).VDate, 'T', RawUtf8(Res.TempRawUtf8), false);
+        result := true;
+        _VariantToUtf8DateTimeIso8601(vd^.VDate, 'T',
+          RawUtf8(Res.TempRawUtf8), false);
         Res.Text := pointer(Res.TempRawUtf8);
         Res.Len := length(RawUtf8(Res.TempRawUtf8));
       end;
-    varString:
-      begin
-        wasString := true;
-        Res.Text := TVarData(V).VString; // assume RawUtf8
-        Res.Len := length(RawUtf8(TVarData(V).VString));
-      end;
-    {$ifdef HASVARUSTRING}
-    varUString:
-      begin
-        wasString := true;
-        WideToTempUtf8(TVarData(V).VAny, length(UnicodeString(TVarData(V).VAny)), Res);
-      end;
-    {$endif HASVARUSTRING}
     varOleStr:
-      begin
-        wasString := true;
-        WideToTempUtf8(TVarData(V).VAny, length(WideString(TVarData(V).VAny)), Res);
-      end;
+      result := BStrToTempUtf8(vd^.VAny, Res, vfNoAlloc in Flags);
   else
-    if SetVariantUnRefSimpleValue(V, tmp{%H-}) then
-      // simple varByRef
-      VariantToTempUtf8(Variant(tmp), Res, wasString)
-    else if vt = varVariantByRef then{%H-}
-      // complex varByRef
-      VariantToTempUtf8(PVariant(TVarData(V).VPointer)^, Res, wasString)
-    else if vt = varStringByRef then
-    begin
-      wasString := true;
-      Res.Text := PPointer(TVarData(V).VString)^; // assume RawUtf8
-      Res.Len := length(PRawUtf8(TVarData(V).VString)^);
-    end
-    else if vt = varOleStrByRef then
-    begin
-      wasString := true;
-      WideToTempUtf8(PPointer(TVarData(V).VAny)^,
-        length(PWideString(TVarData(V).VAny)^), Res);
-    end
+    case vt of
+      varString: // most common non-simple type
+        begin
+          result := true;
+          Res.Text := vd^.VString; // assume RawUtf8
+          Res.Len := length(RawUtf8(vd^.VString));
+        end;
+      {$ifdef HASVARUSTRING}
+      varUString:
+        result := UStrToTempUtf8(vd^.VAny, Res, vfNoAlloc in Flags);
+      {$endif HASVARUSTRING}
     else
-    {$ifdef HASVARUSTRING}
-    if vt = varUStringByRef then
-    begin
-      wasString := true;
-      WideToTempUtf8(PPointer(TVarData(V).VAny)^,
-        length(PUnicodeString(TVarData(V).VAny)^), Res);
-    end
-    else
-    {$endif HASVARUSTRING}
-    begin
-      // not recognizable vt -> serialize as JSON to handle also custom types
-      wasString := true;
-      _VariantSaveJson(V, twJsonEscape, RawUtf8(Res.TempRawUtf8));
-      Res.Text := pointer(Res.TempRawUtf8);
-      Res.Len := length(RawUtf8(Res.TempRawUtf8));
+      if vt and varByRef = 0 then
+      begin
+        // not recognizable vt -> serialize as JSON to handle also custom types
+        if Flags * [vfNoAlloc, vfNoComplex] <> [] then
+          goto n;  // 'null' + result=false
+        result := true;
+        _VariantSaveJson(V, twJsonEscape, RawUtf8(Res.TempRawUtf8));
+        Res.Text := pointer(Res.TempRawUtf8);
+        Res.Len := length(RawUtf8(Res.TempRawUtf8));
+      end
+      else // varByRef values appear with Automation/COM or DispInvoke()
+        VariantToTempUtf8(SetVarDataUnRef(vt, vd, tmp)^, Res, Flags);
     end;
- end;
+  end;
 end;
 
-function VarRecToTempUtf8(V: PVarRec; var Res: TTempUtf8;
-  wasString: PBoolean): boolean;
+function VarRecToTempUtf8(V: PVarRec; var Res: TTempUtf8; wasString: PBoolean): boolean;
 var
   isString: boolean;
+label
+  n;
 begin
   isString := true;
   Res.TempRawUtf8 := nil; // no allocation by default - and avoid GPF
   case V^.VType of
     vtString:
       begin
-        Res.Text := @V^.VString^[1];
+        Res.Text := @V^.VString^[1]; // may NOT be #0 terminated
         Res.Len := ord(V^.VString^[0]);
       end;
     vtAnsiString: // expect UTF-8 content
@@ -8962,10 +8934,10 @@ begin
       end;
     {$ifdef HASVARUSTRING}
     vtUnicodeString:
-      WideToTempUtf8(V^.VPointer, length(UnicodeString(V^.VPointer)), Res);
+      UStrToTempUtf8(V^.VPointer, Res, false);
     {$endif HASVARUSTRING}
     vtWideString:
-      WideToTempUtf8(V^.VPointer, length(WideString(V^.VPointer)), Res);
+      BStrToTempUtf8(V^.VPointer, Res, false);
     vtPChar: // expect UTF-8 content
       begin
         Res.Text := V^.VPointer;
@@ -8978,68 +8950,54 @@ begin
         Res.Len := 1;
       end;
     vtPWideChar:
-      WideToTempUtf8(V^.VPWideChar, StrLenW(V^.VPWideChar), Res);
+      WideToTempUtf8(V^.VPWideChar, StrLenW(V^.VPWideChar), Res, false);
     vtWideChar:
-      WideToTempUtf8(@V^.VWideChar, 1, Res);
+      WideToTempUtf8(@V^.VWideChar, 1, Res, false);
     vtBoolean:
       begin
         isString := false;
         if V^.VBoolean then // normalize
-          Res.Text := pointer(SmallUInt32Utf8[1])
+          Res.Text := @UINT_999[1].TextLo
         else
-          Res.Text := pointer(SmallUInt32Utf8[0]);
+          Res.Text := @UINT_999[0].TextLo;
         Res.Len := 1;
       end;
     vtInteger:
-      begin
-        isString := false;
-        PtrIntToTempUtf8(V^.VInteger, Res);
-      end;
+      isString := PtrIntToTempUtf8(V^.VInteger, Res);
     vtInt64:
-      begin
-        isString := false;
-        Int64ToTempUtf8(V^.VInt64, Res);
-      end;
+      {$ifdef CPU64}
+      isString := PtrIntToTempUtf8(V^.VInt64^, Res);
+      {$else}
+      isString := Int64ToTempUtf8(V^.VInt64, Res);
+      {$endif CPU64}
     {$ifdef FPC}
     vtQWord:
-      begin
-        isString := false;
-        QwordToTempUtf8(V^.VQWord, Res);
-      end;
+      isString := QwordToTempUtf8(V^.VQWord^, Res);
     {$endif FPC}
     vtCurrency:
-      begin
-        isString := false;
-        Res.Text := @Res.Temp;
-        Res.Len := Curr64ToPChar(V^.VInt64^, Res.Temp);
-      end;
+      isString := Curr64ToTempUtf8(V^.VInt64^, Res);
     vtExtended:
-      begin
-        isString := false;
-        DoubleToTempUtf8(V^.VExtended^, Res);
-      end;
+      isString := DoubleToTempUtf8(V^.VExtended^, Res);
     vtPointer, vtInterface:
-      PtrIntToTempUtf8(PtrInt(V^.VPointer), Res);
+      PtrIntToTempUtf8(PtrInt(V^.VPointer), Res); // keep isString=true
     vtClass:
-      if V^.VClass = nil then
-        Res.Len := 0
-      else
       begin
+        if V^.VClass = nil then
+          goto n;
         Res.Text := PPUtf8Char(PtrInt(PtrUInt(V^.VClass)) + vmtClassName)^ + 1;
         Res.Len := ord(Res.Text[-1]);
       end;
     vtObject:
-      if V^.VObject = nil then
-        Res.Len := 0
-      else
       begin
+        if V^.VObject = nil then
+          goto n;
         Res.Text := PPUtf8Char(PPtrInt(V^.VObject)^ + vmtClassName)^ + 1;
         Res.Len := ord(Res.Text[-1]);
       end;
     vtVariant:
-      VariantToTempUtf8(V^.VVariant^, Res, isString);
+      isString := VariantToTempUtf8(V^.VVariant^, Res);
   else
-    Res.Len := 0;
+n:  Res.Len := 0;
   end;
   if wasString <> nil then
     wasString^ := isString;
@@ -9114,7 +9072,7 @@ begin
     vtExtended:
       DoubleToStr(V^.VExtended^,result);
     vtPointer:
-      UInt32ToUtf8(PtrUInt(V^.VPointer), result);
+      UInt32ToUtf8(PtrUInt(V^.VPointer), result); // isString=false
     vtClass:
       begin
         isString := true;
@@ -9431,7 +9389,7 @@ begin
 end;
 
 procedure FormatUtf8(const Format: RawUtf8; const Args: array of const;
-  out Result: RawUtf8);
+  var Result: RawUtf8);
 var
   f: TFormatUtf8;
 begin
@@ -9444,7 +9402,9 @@ begin
   begin
     f.Parse(Format, @Args[0], length(Args)); // handle all supplied Args[]
     if f.L <> 0 then
-      f.WriteAll(FastSetString(Result, f.L), @f.blocks);
+      f.WriteAll(FastSetString(Result, f.L), @f.blocks)
+    else
+      FastAssignNew(Result);
   end;
 end;
 
@@ -10323,6 +10283,15 @@ begin
   result := true;
 end;
 
+function IsHttp(const text: RawUtf8): boolean;
+begin
+  result := (length(text) > 5) and
+            (PCardinal(text)^ and $dfdfdfdf = HTTP_32) and
+            ((text[5] = ':') or
+             ((text[5] in ['s', 'S']) and
+              (text[6] = ':')));
+end;
+
 
 { THttpCookies }
 
@@ -10387,13 +10356,15 @@ begin
 end;
 
 procedure THttpCookies.RetrieveCookie(const CookieName: RawUtf8;
-  out DestValue: RawUtf8);
+  var DestValue: RawUtf8);
 var
   c: PHttpCookie;
 begin
   c := FindCookie(CookieName);
   if c <> nil then
-    FastSetString(DestValue, c^.ValueStart, c^.ValueLen);
+    FastSetString(DestValue, c^.ValueStart, c^.ValueLen)
+  else
+    FastAssignNew(DestValue);
 end;
 
 function CookieFromHeaders(Headers: PUtf8Char; const Name: RawUtf8;
@@ -11188,7 +11159,7 @@ end;
 function NotNullGuidToUtf8({$ifdef FPC_HAS_CONSTREF}constref{$else}const{$endif}
   guid: TGuid): RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if not IsNullGuid(guid) then
     ToUtf8(guid, result);
 end;
@@ -11206,7 +11177,7 @@ var
   g: PGuid;
   P: PUtf8Char;
 begin
-  result := '';
+  FastAssignNew(result);
   n := length(guid);
   if n = 0 then
     exit;
@@ -11425,8 +11396,6 @@ begin
     end;
 end;
 
-var // pre-allocated SmallUInt32Utf8[] values as constant
-  _SmallUInt32Utf8: array[0..999] of TStrRecConst;
 
 procedure InitializeUnit;
 var
@@ -11465,10 +11434,11 @@ begin
     B4[i + (ord('a') - ord('A'))] := v shl 4;
     inc(v);
   end;
-  for i := 0 to high(SmallUInt32Utf8) do // 0..999 into '0'..'999'
+  PInt64(@tmp[8])^ := 0; // FastSetConst() copy 8 bytes - up to 7 may be 0
+  for i := 0 to high(SmallUInt32Utf8) do // 0..999 into '0'..'999' RawUtf8
   begin
-    P := StrUInt32(@tmp[15], i);
-    FastSetConst(SmallUInt32Utf8[i], _SmallUInt32Utf8[i], P, @tmp[15] - P);
+    P := StrUInt32(@tmp[8], i);
+    FastSetConst(SmallUInt32Utf8[i], UINT_999[i], P, @tmp[8] - P);
   end;
   pc := @METHODNAME32;
   i := length(METHODNAME32);
@@ -11479,7 +11449,7 @@ begin
   ShortToUuid := _ShortToUuid;
   AppendShortUuid := _AppendShortUuid;
   _AddHtmlEscape := __AddHtmlEscape;
-  _VariantToUtf8DateTimeToIso8601 := __VariantToUtf8DateTimeToIso8601;
+  _VariantToUtf8DateTimeIso8601 := __VariantToUtf8DateTimeIso8601;
   _VariantSaveJson := __VariantSaveJson;
 end;
 

@@ -1391,7 +1391,7 @@ function TRestStorageExternal.EngineList(TableModelIndex: integer;
 var
   stmt: ISqlDBStatement;
 begin
-  result := '';
+  FastAssignNew(result);
   if ReturnedRowCount <> nil then
     ERestStorage.RaiseUtf8('%.EngineList(ReturnedRowCount<>nil) for %',
       [self, StoredClass]);
@@ -1416,7 +1416,7 @@ var
   tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   // TableModelIndex is not useful here
-  result := '';
+  FastAssignNew(result);
   if (self <> nil) and
      (ID > 0) then
     try
@@ -2249,7 +2249,7 @@ begin
     result := fSelectAllDirectSQL; // if Prepared is not supported -> full scan
     exit;
   end;
-  result := '';
+  FastAssignNew(result);
   WR := TTextWriter.CreateOwnedStream(temp);
   try
     WR.AddString(fSelectAllDirectSQL);

@@ -393,6 +393,8 @@ type
     function GetFullUrl: SynUnicode;
     {$endif USEWININET}
     procedure DoPurgeHeaders;
+    procedure ProcessErrorMessage;
+    procedure ProcessStaticFile(var Context: THttpRequestContext; CompressGz: integer);
   public
     /// initialize the context, associated to a HTTP server instance
     constructor Create(aServer: THttpServerGeneric;
@@ -3312,83 +3314,85 @@ begin // sub-function to avoid implicit try..finally
   fOutCustomHeaders := PurgeHeaders(fOutCustomHeaders);
 end;
 
+procedure THttpServerRequest.ProcessErrorMessage;
+var
+  txt: PRawUtf8;
+begin
+  if fOutCustomHeaders <> '' then // keep meaningful headers
+    DoPurgeHeaders;
+  txt := fServer.StatusCodeToText(fRespStatus);
+  if hsoTextError in fServer.Options then // fast and good enough
+  begin
+    Make([fRespStatus, ' ', txt^, ': ', fErrorMessage], RawUtf8(fOutContent));
+    fOutContentType := TEXT_CONTENT_TYPE;
+    exit;
+  end;
+  HtmlEscapeString(fErrorMessage, fOutContentType, hfAnyWhere); // safety
+  FormatUtf8(
+    '<!DOCTYPE html><html><body style="font-family:verdana">' +
+    '<h1>% Server Error %</h1>' +
+    '<p><b>HTTP % %:</b> %</p><hr><small><i>% on %</i></small></body></html>',
+    [fServer.ServerName, fRespStatus, fRespStatus, txt^, fOutContentType,
+     XPOWEREDVALUE, OS_TEXT], RawUtf8(fOutContent));
+  fOutContentType := HTML_CONTENT_TYPE; // body = human friendly HTML message
+end;
+
+procedure THttpServerRequest.ProcessStaticFile(var Context: THttpRequestContext;
+  CompressGz: integer);
+var
+  fn: TFileName;
+  fsiz: Int64;
+begin
+  ExtractOutContentType;
+  fn := Utf8ToString(fOutContent); // safer than Utf8ToFileName() here
+  fOutContent := '';
+  ExtractHeader(fOutCustomHeaders, STATICFILE_PROGSIZE, nil, @Context.ContentLength);
+  if Context.ContentLength <> 0 then
+    // STATICFILE_PROGSIZE: file is not fully available: wait for sending
+    if ((not (rfWantRange in Context.ResponseFlags)) or
+        Context.ValidateRange) then
+      if IsHead(Context.CommandMethod) or // HEAD needs no file but a length
+         (FileInfoByName(fn, fsiz, Context.ContentLastModified) and
+          (fsiz >= 0) and // not a folder
+          (fsiz <= Context.ContentLength)) then
+      begin
+        // void Context.ContentStream <> nil needed with both GET and HEAD
+        Context.ContentStream := TStreamWithPositionAndSize.Create;
+        Context.ResponseFlags := Context.ResponseFlags +
+          [rfAcceptRange, rfContentStreamNeedFree, rfProgressiveStatic];
+      end
+      else
+        fRespStatus := HTTP_NOTFOUND
+    else
+      fRespStatus := HTTP_RANGENOTSATISFIABLE
+  else if (not Assigned(fServer.OnSendFile)) or
+          (not fServer.OnSendFile(self, fn)) then
+  begin
+    // regular file sending by chunks
+    fRespStatus := Context.ContentFromFile(fn, CompressGz);
+    if fRespStatus = HTTP_SUCCESS then
+      fOutContent := Context.Content; // small static file content
+  end;
+  if not StatusCodeIsSuccess(fRespStatus) then
+    fErrorMessage := 'Error getting file'; // detected by ProcessErrorMessage
+end;
+
 const
-  _CMD_200: array[boolean, boolean] of TShort31 = (
-   ('HTTP/1.1 200 OK'#13#10,
-    'HTTP/1.0 200 OK'#13#10),
-   ('HTTP/1.1 206 Partial Content'#13#10,
-    'HTTP/1.0 206 Partial Content'#13#10));
+  _CMD_200: array[0 .. 3] of TShort31 = (
+   'HTTP/1.1 200 OK'#13#10,
+   'HTTP/1.0 200 OK'#13#10,
+   'HTTP/1.1 206 Partial Content'#13#10,
+   'HTTP/1.0 206 Partial Content'#13#10);
   _CMD_XXX: array[boolean] of TShort15 = (
     'HTTP/1.1 ',
     'HTTP/1.0 ');
 
 function THttpServerRequest.SetupResponse(var Context: THttpRequestContext;
   CompressGz, MaxSizeAtOnce: integer): PRawByteStringBuffer;
-
-  procedure ProcessStaticFile;
-  var
-    fn: TFileName;
-    fsiz: Int64;
-  begin
-    ExtractOutContentType;
-    fn := Utf8ToString(OutContent); // safer than Utf8ToFileName() here
-    OutContent := '';
-    ExtractHeader(fOutCustomHeaders, STATICFILE_PROGSIZE, nil, @Context.ContentLength);
-    if Context.ContentLength <> 0 then
-      // STATICFILE_PROGSIZE: file is not fully available: wait for sending
-      if ((not (rfWantRange in Context.ResponseFlags)) or
-          Context.ValidateRange) then
-        if IsHead(Context.CommandMethod) or // HEAD needs no file but a length
-           (FileInfoByName(fn, fsiz, Context.ContentLastModified) and
-            (fsiz >= 0) and // not a folder
-            (fsiz <= Context.ContentLength)) then
-        begin
-          // void Context.ContentStream <> nil needed with both GET and HEAD
-          Context.ContentStream := TStreamWithPositionAndSize.Create;
-          Context.ResponseFlags := Context.ResponseFlags +
-            [rfAcceptRange, rfContentStreamNeedFree, rfProgressiveStatic];
-        end
-        else
-          fRespStatus := HTTP_NOTFOUND
-      else
-        fRespStatus := HTTP_RANGENOTSATISFIABLE
-    else if (not Assigned(fServer.OnSendFile)) or
-            (not fServer.OnSendFile(self, fn)) then
-    begin
-      // regular file sending by chunks
-      fRespStatus := Context.ContentFromFile(fn, CompressGz);
-      if fRespStatus = HTTP_SUCCESS then
-        OutContent := Context.Content; // small static file content
-    end;
-    if not StatusCodeIsSuccess(fRespStatus) then
-      fErrorMessage := 'Error getting file'; // detected by ProcessErrorMessage
-  end;
-
-  procedure ProcessErrorMessage;
-  var
-    txt: PRawUtf8;
-  begin
-    if fOutCustomHeaders <> '' then // keep meaningful headers
-      DoPurgeHeaders;
-    txt := fServer.StatusCodeToText(fRespStatus);
-    if hsoTextError in fServer.Options then // fast and good enough
-    begin
-      Make([fRespStatus, ' ', txt^, ': ', fErrorMessage], RawUtf8(fOutContent));
-      fOutContentType := TEXT_CONTENT_TYPE;
-      exit;
-    end;
-    HtmlEscapeString(fErrorMessage, fOutContentType, hfAnyWhere); // safety
-    FormatUtf8(
-      '<!DOCTYPE html><html><body style="font-family:verdana">' +
-      '<h1>% Server Error %</h1>' +
-      '<p><b>HTTP % %:</b> %</p><hr><small><i>% on %</i></small></body></html>',
-      [fServer.ServerName, fRespStatus, fRespStatus, txt^, fOutContentType,
-       XPOWEREDVALUE, OS_TEXT], RawUtf8(fOutContent));
-    fOutContentType := HTML_CONTENT_TYPE; // body = human friendly HTML message
-  end;
-
 var
   P: PUtf8Char;
+  c: PShort31;
+  f: THttpRequestResponseFlags;
   h: PRawByteStringBuffer;
   // note: caller should have set hfConnectionClose in Context.HeaderFlags
 begin
@@ -3396,26 +3400,33 @@ begin
   Context.ContentLength := 0; // needed by ProcessStaticFile
   Context.ContentLastModified := 0;
   Context.CommandUri := fUrl; // may have been normalized/cleaned during process
-  if (fOutContentType <> '') and
-     (fOutContentType[1] = '!') then
+  P := pointer(fOutContentType);
+  if (P <> nil) and
+     (P^ = '!') then
     if fOutContentType = NORESPONSE_CONTENT_TYPE then
       fOutContentType := '' // true HTTP always expects a response
     else if (fOutContent <> '') and
             (fOutContentType = STATICFILE_CONTENT_TYPE) then
-      ProcessStaticFile;
+      ProcessStaticFile(Context, CompressGz);
   if fErrorMessage <> '' then
     ProcessErrorMessage;
   // append Command
   h := @Context.Head;
   h^.Reset; // reuse 2KB header buffer
   if fRespStatus = HTTP_SUCCESS then // optimistic approach
-    h^.AppendShort(_CMD_200[
-      rfWantRange in Context.ResponseFlags, // HTTP_PARTIALCONTENT=206 support
-      rfHttp10 in Context.ResponseFlags])   // HTTP/1.0 support
+  begin
+    c := @_CMD_200;
+    f := Context.ResponseFlags;
+    if rfWantRange in f then
+      inc(c, 2); // HTTP_PARTIALCONTENT=206 support
+    if rfHttp10 in f then
+      inc(c);    // HTTP/1.0 support
+    h^.AppendShort(c^);
+  end
   else
   begin // other cases
     h^.AppendShort(_CMD_XXX[rfHttp10 in Context.ResponseFlags]);
-    h^.Append(SmallUInt32Utf8[MinPtrUInt(high(SmallUInt32Utf8), fRespStatus)]);
+    h^.Append999(fRespStatus);
     h^.Append(' ');
     h^.Append(mormot.core.text.StatusCodeToText(fRespStatus)^); // need English
     h^.AppendCRLF;
@@ -4516,7 +4527,7 @@ end;
 function THttpServerSocketGeneric.ComputeWwwAuthenticate(Opaque: Int64): RawUtf8;
 begin
   // return the expected 'WWW-Authenticate: ####'#13#10 header content
-  result := '';
+  FastAssignNew(result);
   case fAuthorize of
     hraBasic:
       result := fAuthorizeBasicRealm; // includes trailing #13#10
@@ -6141,7 +6152,7 @@ end;
 
 function THttpPeerCacheSettings.GuessInterface(out Mac: TMacAddress): RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if fInterfaceName <> '' then
   begin
     if not GetMainMacAddress(Mac, fInterfaceName, {UpAndDown=}true) then

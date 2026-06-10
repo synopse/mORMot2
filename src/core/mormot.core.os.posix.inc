@@ -1997,6 +1997,7 @@ end;
 
 function TSynEvent.WaitFor(TimeoutMS: cardinal): boolean;
 begin
+  fWaiting := true;
   {$ifdef HASEVENTFD}
   if fFD <> 0 then
   begin
@@ -2010,6 +2011,7 @@ begin
       RTLEventWaitFor(fHandle)
     else
       RTLEventWaitFor(fHandle, TimeoutMS);
+  fWaiting := false;
   result := fNotified;
 end;
 
@@ -3022,7 +3024,7 @@ end;
 
 function EnumProcessName(PID: cardinal): RawUtf8;
 begin
-  result := ''; // not implemented yet on BSD/Darwin
+  FastAssignNew(result); // not implemented yet on BSD/Darwin
   // use fpsysctl with CTL_KERN + KERN_PROC + KERN_PROC_PID
   //  https://man.openbsd.org/sysctl.2#KERN_PROC_PID
   // another trouble is that the name is likely to be truncated to 16 chars
@@ -3176,7 +3178,7 @@ var
   tmp: TByteToAnsiChar;
   xaddr: PtrUInt;
 begin
-  result := '';
+  FastAssignNew(result);
   if kenv(KENV_GET, 'hint.smbios.0.mem', @tmp, SizeOf(tmp)) < 0 then
     exit;
   xaddr := ParseHex0x(@tmp); // typical value is '0xf05b0'
@@ -3224,13 +3226,13 @@ end;
 
 function GetSmbEfiMem: RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
 end;
 
 {$ifdef OSDARWIN}
 function ReadSystemMemory(address, size: PtrUInt): RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
 end;
 {$endif OSDARWIN}
 
@@ -3464,7 +3466,7 @@ var
   pos, read: PtrInt;
   tmp: TBuffer64K; // 64KB stack buffer - /proc/cpuinfo could be huge
 begin
-  result := '';
+  FastAssignNew(result);
   if FileName = '' then
     exit;
   h := FileOpenSequentialRead(FileName); // no fpFlock() call
@@ -3604,7 +3606,7 @@ var
   l: PtrInt;
   n: AnsiChar;
 begin
-  result := '';
+  FastAssignNew(result);
   if PID = 0 then
     exit;
   fn := '/proc/';
@@ -3900,7 +3902,7 @@ var
   map: PAnsiChar;
   off: PtrUInt;
 begin
-  result := '';
+  FastAssignNew(result);
   if size > 4 shl 20 then
     exit; // read up to 4MB
   mem := FileOpenSequentialRead('/dev/mem');
@@ -4993,7 +4995,7 @@ var
   end;
 
 begin
-  result := '';
+  FastAssignNew(result);
   if wrkdir <> '' then
     ChDir(wrkdir);
   if popen(f, cmd, 'r') <> 0 then // fork and launch cmd - env is ignored by now
@@ -5054,7 +5056,7 @@ function RunRedirect(const cmd: TRunArg; exitcode: PInteger;
   const onoutput: TOnRedirect; waitfordelayms: cardinal; setresult: boolean;
   const env: TRunArg; const wrkdir: TFileName; options: TRunOptions): RawByteString;
 begin
-  result := ''; // not implemented yet on Delphi POSIX - see libc popen()
+  FastAssignNew(result); // not implemented yet on Delphi POSIX - see libc popen()
   if exitcode <> nil then
     exitcode^ := -1; // error
 end;
@@ -5067,7 +5069,7 @@ end;
 
 function GetSmbEfiMem: RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
 end;
 
 {$ifdef CPU32}
@@ -5135,7 +5137,7 @@ var
   xaddr: cardinal;
 begin
   // retrieve raw EFI information from systab
-  result := '';
+  FastAssignNew(result);
   efi := StringFromFileNoSize('/sys/firmware/efi/systab');
   if efi = '' then
     efi := StringFromFileNoSize('/proc/efi/systab'); // old Linux<2.6.6

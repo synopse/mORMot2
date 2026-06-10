@@ -3255,7 +3255,7 @@ begin
     returnedvalue);
   with _Safe(returnedValue)^ do
     if GetValueOrDefault('ok', 1) <> 0 then
-      result := ''
+      FastAssignNew(result)
     else if not GetAsRawUtf8('errmsg', result) then
       result := 'unspecified error';
 end;
@@ -3481,7 +3481,7 @@ function TMongoClient.ServerBuildInfoText: RawUtf8;
 begin
   with _Safe(ServerBuildInfo)^ do
     if count = 0 then
-      result := ''
+      FastAssignNew(result)
     else
     begin
       FormatUtf8('MongoDB % %', [U['version'], U['javascriptEngine']], result);
@@ -4179,7 +4179,7 @@ begin
   if AggregateCallFromVariant(pipelineArray, reply, res) then
     result := VariantSaveMongoJson(res, Mode)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TMongoCollection.AggregateDocFromJson(const PipelineJson: RawUtf8): variant;
@@ -4200,7 +4200,7 @@ begin
   if AggregateCallFromJson(PipelineJson, reply, res) then
     result := VariantSaveMongoJson(res, Mode)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TMongoCollection.Drop: RawUtf8;
@@ -4280,7 +4280,7 @@ end;
 procedure TMongoCollection.EnsureIndex(const Keys: array of RawUtf8;
   Ascending, Unique: boolean);
 const
-  order: array[boolean] of integer = ( -1, 1);
+  order: array[boolean] of integer = (-1, 1);
 var
   k, opt: variant;
   A: integer;
@@ -4358,7 +4358,7 @@ var
   v: variant;
 begin
   cmd.InitFast(7, dvObject);
-  cmd.AddValue('find', fName);
+  cmd.AddValueText('find', fName);
   if not VarIsEmptyOrNull(Criteria) then
     if BsonVariantType.GetItem(Criteria, '$query', v) then
     begin

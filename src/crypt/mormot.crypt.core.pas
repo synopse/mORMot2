@@ -1460,7 +1460,7 @@ type
       read fStream;
   end;
 
-  /// multi-mode PKCS7 buffered AES encryption stream
+  /// multi-mode PKCS7-padded buffered AES encryption stream
   // - output will follow standard PKCS7 padding, with a trailing IV if needed,
   // i.e. TAesAbstract.DecryptPkcs7 and TAesPkcs7Reader encoding
   TAesPkcs7Writer = class(TAesPkcs7Abstract)
@@ -1484,7 +1484,7 @@ type
     procedure Finish;
   end;
 
-  /// multi-mode PKCS7 buffered AES decryption stream
+  /// multi-mode PKCS7-padded buffered AES decryption stream
   // - input should follow standard PKCS7 padding, with a trailing IV if needed,
   // i.e. TAesAbstract.EncryptPkcs7 and TAesPkcs7Writer encoding
   TAesPkcs7Reader = class(TAesPkcs7Abstract)
@@ -1493,7 +1493,7 @@ type
   public
     /// initialize the AES decryption stream from an intput stream and a key
     // - inStream is typically a TMemoryStream or a TFileStreamEx
-    // - inStream size will be checked for proper PKCS7 padding
+    // - inStream.Size will be checked for proper PKCS7 padding
     // - aesMode should be one of the supported AES_PKCS7WRITER chaining mode
     // - by default, a trailing random IV is read, unless IV is supplied
     // - see also Create() overload with PBKDF2 password derivation
@@ -5570,7 +5570,7 @@ var
   nonce: THash256;
   P: PByteArray;
 begin
-  result := ''; // e.g. MacSetNonce not supported
+  FastAssignNew(result); // e.g. MacSetNonce not supported
   // our non-standard mCfc/mOfc/mCtc modes with 256-bit crc32c
   if Encrypt then
   begin
@@ -5590,7 +5590,7 @@ begin
       rcd.crc := crc32c(VERSION, @rcd.nonce, CRCSIZ);
     end
     else
-      result := ''
+      FastAssignNew(result)
   end
   else
   begin
@@ -5612,7 +5612,7 @@ begin
       if not MacDecryptCheckTag(pcd^.mac) then
       begin
         FillZero(result);
-        result := '';
+        FastAssignNew(result);
       end;
   end;
 end;
@@ -5942,7 +5942,7 @@ var
   len: PtrInt;
   p: PAesBlock;
 begin
-  result := '';
+  FastAssignNew(result);
   if (self = nil) or
      (Input = '') then
     exit;
@@ -5966,7 +5966,7 @@ var
   len: PtrInt;
   p: PAesBlock;
 begin
-  result := '';
+  FastAssignNew(result);
   if (self = nil) or
      (Input = '') then
     exit;
@@ -7078,7 +7078,7 @@ var
   aes: TAesAbstract;
 begin
   if src = '' then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     aes := TAesFast[aesMode].Create(key, keySizeBits);
@@ -7204,8 +7204,8 @@ begin
     Result[0] := #11;
     PCardinal(@Result[1])^ :=
       ord('a') + ord('e') shl 8 + ord('s') shl 16 + ord('-') shl 24;
-    PCardinal(@Result[5])^ := PCardinal(SmallUInt32Utf8[KeyBits])^;
-    Result[8] := '-'; // SmallUInt32Utf8 put a #0 there
+    PCardinal(@Result[5])^ := UINT_999[KeyBits].TextLo;
+    Result[8] := '-'; // UINT_999[] put a #0 there
     PCardinal(@Result[9])^ := PCardinal(@AESMODE_TXT[Mode])^;
   end
   else
@@ -7299,7 +7299,7 @@ begin
         Data := DecryptPkcs7(Data, {ivatbeg=}true, {raiseexc=}true);
         if CompressSynLZ(Data, false) = '' then
         begin
-          result := '';
+          FastAssignNew(result);
           exit; // invalid content
         end;
       end;
@@ -7310,7 +7310,7 @@ begin
     on Exception do
     begin
       // e.g. ESynCrypto in DecryptPkcs7(Data)
-      result := '';
+      FastAssignNew(result);
       exit; // invalid content
     end;
   end;
@@ -7523,7 +7523,7 @@ var
   tmp: TByteDynArray;
   i: integer;
 begin
-  result := '';
+  FastAssignNew(result);
   if (self = nil) or
      (BufferBytes <= 0) then
     exit;
@@ -7573,7 +7573,7 @@ class function TAesPrngAbstract.AFUnsplit(const Split: RawByteString;
 var
   len, unsplit: cardinal;
 begin
-  result := '';
+  FastAssignNew(result);
   len := length(Split);
   inc(StripesCount);
   unsplit := len div cardinal(StripesCount);
@@ -7582,7 +7582,7 @@ begin
     exit;
   pointer(result) := FastNewString(unsplit);
   if not AFUnsplit(Split, pointer(result)^, unsplit) then
-    result := '';
+    FastAssignNew(result);
 end;
 
 class procedure TAesPrngAbstract.Fill(Buffer: pointer; Len: integer);
@@ -7659,7 +7659,7 @@ var
   data: THash512Rec;
   sha3: TSha3;
 begin
-  result := '';
+  FastAssignNew(result);
   if Len <= 0 then
     exit;
   // retrieve official "system" entropy (not for gesUserOnly)
@@ -7975,7 +7975,7 @@ var
   hmac: THmacSha256;
   secret: THash256;
 begin
-  result := '';
+  FastAssignNew(result);
   if Data = '' then
     exit;
   if IsZero(_h.k) then
@@ -9396,7 +9396,7 @@ var
   tmp: TSha256Digest;
   mac, first: THmacSha256; // re-use SHA context for best performance
 begin
-  result := '';
+  FastAssignNew(result);
   if (count = 0) or
      (count > 16 shl 20) or
      (destlen = 0) or

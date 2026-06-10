@@ -43,7 +43,6 @@ uses
   mormot.core.json,
   mormot.core.fmt,
   mormot.core.threads,
-  mormot.core.perf,
   mormot.core.zip,     // for ODS export
   mormot.crypt.secure, // for TSynUniqueIdentifierBits
   mormot.db.core;
@@ -814,28 +813,11 @@ var
 { ************ TOrmWriter Class for TOrm Serialization }
 
 type
-  /// several options to customize how TOrm will be serialized
-  // - e.g. if properties storing JSON should be serialized as an object, and not
-  // escaped as a string (which is the default, matching ORM column storage)
-  // - if an additional "ID_str":"12345" field should be added to the standard
-  // "ID":12345 field, which may exceed 53-bit integer precision of JavaScript
-  // - to generate JS-friendly "id" (and "idStr") instead of "ID" or "RowID"
-  // - to generate JS-friendly "propName": from a PropName pascal property
-  TOrmWriterOption = (
-    owoAsJsonNotAsString,
-    owoID_str,
-    owoLowCaseID,
-    owoLowCaseFirstPropChar);
-
-  /// options to customize how TOrm will be written by TOrmWriter
-  TOrmWriterOptions = set of TOrmWriterOption;
-
   /// simple writer to a Stream, specialized for writing TOrm as JSON
   // - in respect to the standard TResultsWriter as defined in mormot.db.core,
   // this class has some options dedicated to our TOrm serialization
   TOrmWriter = class(TResultsWriter)
   protected
-    fOrmOptions: TOrmWriterOptions;
     procedure SetOrmOptions(Value: TOrmWriterOptions);
   public
     /// customize TOrm.GetJsonValues serialization process
@@ -5436,7 +5418,7 @@ end;
 procedure TOrmPropInfoRttiMany.GetValueVar(Instance: TObject; ToSql: boolean;
   var result: RawUtf8; wasSqlString: PBoolean);
 begin
-  result := '';
+  FastAssignNew(result);
 end;
 
 procedure TOrmPropInfoRttiMany.SetValue(Instance: TObject; Value: PUtf8Char;
@@ -5682,13 +5664,10 @@ begin
       end;
     end
     else
-    begin
-      p := @up;
       if fEngine.CodePage = CP_WINANSI then
-        l := UpperCopyWin255(p, RawUtf8(tmp)) - p
+        l := UpperCopyWin255(@up, RawUtf8(tmp)) - PAnsiChar(@up)
       else
-        l := UpperCopy255Buf(p, tmp, l) - p;
-    end;
+        l := UpperCopy255Buf(@up, tmp, l) - PAnsiChar(@up);
   end;
   result := DefaultHasher(OrmHashSeed, p, l);
   if fGetterIsFieldPropOffset = 0 then
@@ -7365,18 +7344,14 @@ begin
 end;
 
 procedure TOrmPropInfoList.AfterAdd;
-var
-  i: PtrInt;
 begin
   SetLength(fList, fCount);
-  if fCount = 0 then
-    fLast := nil
-  else
+  fLast := nil;
+  if fCount <> 0 then
     fLast := fList[fCount - 1];
   // initialize once the ordered lookup indexes, for binary search
   SetLength(fOrderedByName, fCount);
-  for i := 0 to fCount - 1 do
-    fOrderedByName[i] := i;
+  FillIncreasingB(pointer(fOrderedByName), 0, fCount - 1);
   QuickSortByName(0, fCount - 1);
 end;
 
@@ -7788,7 +7763,7 @@ begin
       inc(len, length(List[f].Name) + 1);
   if len = 0 then
   begin
-    result := '';
+    FastAssignNew(result);
     exit;
   end;
   p := FastSetString(result, len - 1); // allocate once for all
@@ -11129,10 +11104,10 @@ function TOrmPropertiesAbstract.OrmFieldTypeToSql(FieldIndex: integer): RawUtf8;
 begin
   if (self = nil) or
     (cardinal(FieldIndex) >= cardinal(Fields.Count)) then
-    result := ''
+    FastAssignNew(result)
   else if (FieldIndex < length(fCustomCollation)) and
           (fCustomCollation[FieldIndex] <> '') then
-    result := ' TEXT COLLATE ' + fCustomCollation[FieldIndex] + ', '
+    Join([' TEXT COLLATE ', fCustomCollation[FieldIndex], ', '], result)
   else
     result := DEFAULT_ORMFIELDTYPETOSQL[Fields.List[FieldIndex].OrmFieldTypeStored];
 end;
@@ -11686,7 +11661,7 @@ function TOrmPropertiesAbstract.MainFieldName(ReturnFirstIfNoUnique: boolean): R
 begin
   if (self = nil) or
      (MainField[ReturnFirstIfNoUnique] < 0) then
-    result := ''
+    FastAssignNew(result)
   else
     result := Fields.List[MainField[ReturnFirstIfNoUnique]].Name;
 end;

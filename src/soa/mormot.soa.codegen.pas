@@ -855,7 +855,7 @@ var
   delay: Int64;
   i: PtrInt;
 begin
-  result := '';
+  FastAssignNew(result);
   if high(services) < 0 then
     exit;
   if FileName = '' then

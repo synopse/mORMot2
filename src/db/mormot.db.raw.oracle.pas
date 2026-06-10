@@ -1619,7 +1619,7 @@ end;
 function TSqlDBOracleLib.ClientRevision: RawUtf8;
 begin
   if self = nil then
-    result := ''
+    FastAssignNew(result)
   else
     FormatUtf8('% rev. %.%.%.%',
       [fLibraryPath, major_version, minor_version, update_num, patch_num], result);

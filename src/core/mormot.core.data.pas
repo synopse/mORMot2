@@ -723,6 +723,11 @@ function BinaryLoadBase64(Source: PAnsiChar; Len: PtrInt; Data: pointer;
   Info: PRttiInfo; UriCompatible: boolean; Kinds: TRttiKinds;
   WithCrc: boolean = true; TryCustomVariants: PDocVariantOptions = nil): boolean;
 
+// internal methods called for (dynamic) arrays with Data<>nil and n>0
+procedure BinaryLoadSeveral(Data: PAnsiChar; var Source: TFastReader;
+  Info: PRttiInfo; n, datasize: PtrInt);
+procedure BinarySaveSeveral(Data: PAnsiChar; Dest: TBufferWriter;
+  Info: PRttiInfo; n, datasize: PtrInt);
 
 /// check equality of two records by content
 // - will handle packed records, with binaries (byte, word, integer...) and
@@ -2419,8 +2424,7 @@ type
     // - if fNoDuplicate was set and aText already exists (using the internal
     // hash table), it will return -1 unless aRaiseExceptionIfExisting is forced
     // - thread-safe method
-    function Add(const aText: RawUtf8;
-      aRaiseExceptionIfExisting: boolean = false): PtrInt;
+    function Add(const aText: RawUtf8; aRaiseExceptionIfExisting: boolean = false): PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
     /// store a new RawUtf8 item, and its associated TObject
     // - without the fNoDuplicate flag, it will always add the supplied value
@@ -2455,7 +2459,7 @@ type
     // - thread-safe method, using an internal Hash Table to speedup IndexOf()
     function AddOrReplaceObject(const aText: RawUtf8; aObject: TObject): PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
-    /// append a specified list to the current content
+    /// append another list content to the current content
     // - thread-safe method
     procedure AddRawUtf8List(List: TRawUtf8List);
     /// delete a stored RawUtf8 item, and its associated TObject
@@ -2491,7 +2495,7 @@ type
     // - if Name is not found, Value is not modified, and false is returned
     // - thread-safe method, but not using the internal Hash Table
     // - consider using TSynNameValue if you expect efficient name/value process
-    function UpdateValue(const Name: RawUtf8; var Value: RawUtf8;
+    function ExtractValue(const Name: RawUtf8; var Value: RawUtf8;
       ThenDelete: boolean): boolean;
     /// retrieve and delete the first RawUtf8 item in the list
     // - could be used as a FIFO, calling Add() as a "push" method
@@ -2528,7 +2532,7 @@ type
     // - this method is not thread-safe since the internal list may change
     // and the returned index may not be accurate any more
     // - by design, aText lookup can't use the internal Hash Table
-    function Contains(const aText: RawUtf8; aFirstIndex: integer = 0): PtrInt;
+    function Contains(const aText: RawUtf8; aFirstIndex: PtrInt = 0): PtrInt;
     /// retrieve the all lines, separated by the supplied delimiter
     // - this method is thread-safe
     function GetText(const Delimiter: RawUtf8 = EOL): RawUtf8;
@@ -2553,6 +2557,11 @@ type
     /// write all lines into a new UTF-8 file
     // - this method is thread-safe
     procedure SaveToFile(const FileName: TFileName; const Delimiter: RawUtf8 = EOL);
+    /// append the lines into a VCL/LCL TStrings instance - ignoring Objects[]
+    procedure AddToStrings(Dest: TStrings; ClearDest: boolean = false);
+    /// convert the lines into VCL/LCL TStrings - caller should Free the result
+    // - with delayed conversion from RawUtf8 to string, and associated Objects[]
+    function ToStrings: TVirtualStringList; overload;
     /// return the count of stored RawUtf8
     // - reading this property is not thread-safe, since size may change
     property Count: PtrInt
@@ -3577,11 +3586,7 @@ begin
     begin
       if PStrCnt(PAnsiChar(s^) - _STRCNT)^ <= aMaxRefCount then // also -1
       begin
-        {$ifdef FPC}
         FastAssignNew(PRawUtf8(s)^);
-        {$else}
-        PRawUtf8(s)^ := '';
-        {$endif FPC}
         inc(result);
       end
       else
@@ -3659,7 +3664,7 @@ var
 begin
   result := false; // not added
   if aText = '' then
-    aResult := ''
+    FastAssignNew(aResult)
   else if self = nil then
     aResult := aText
   else
@@ -4328,7 +4333,7 @@ begin
         exit;
       end;
     end;
-    result := fValues.Add(aText);
+    result := fValues.Add(aText); // includes inc(fCount)
     if (fObjects <> nil) or
        (aObject <> nil) then
     begin
@@ -4360,17 +4365,22 @@ end;
 
 procedure TRawUtf8List.AddRawUtf8List(List: TRawUtf8List);
 var
-  i: PtrInt;
+  c, i: PtrInt;
 begin
-  if List <> nil then
-  begin
-    BeginUpdate; // includes Safe.Lock
-    try
-      for i := 0 to List.fCount - 1 do
-        AddObject(List.fValue[i], List.GetObject(i));
-    finally
-      EndUpdate;
-    end;
+  if (List = nil) or
+     (List.fCount = 0) then
+    exit;
+  BeginUpdate; // includes Safe.Lock
+  try
+    c := length(fValue) + List.fCount; // pre-allocate
+    SetLength(fValue, c);
+    if (fObjects <> nil) or
+       (List.fObjects <> nil) then
+      SetLength(fObjects, c);
+    for i := 0 to List.fCount - 1 do
+      AddObject(List.fValue[i], List.GetObject(i));
+  finally
+    EndUpdate;
   end;
 end;
 
@@ -4516,7 +4526,7 @@ function TRawUtf8List.Get(Index: PtrInt): RawUtf8;
 begin
   if (self = nil) or
      (PtrUInt(Index) >= PtrUInt(fCount)) then
-    result := ''
+    FastAssignNew(result)
   else
     result := fValue[Index];
 end;
@@ -4567,7 +4577,7 @@ begin
     exit;
   Index := PosExChar(NameValueSep, result);
   if Index = 0 then
-    result := ''
+    FastAssignNew(result)
   else
     SetLength(result, Index - 1);
 end;
@@ -4605,7 +4615,7 @@ end;
 
 function TRawUtf8List.GetText(const Delimiter: RawUtf8): RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if (self = nil) or
      (fCount = 0) then
     exit;
@@ -4679,7 +4689,7 @@ begin
     exit;
   Index := PosExChar(NameValueSep, result);
   if Index = 0 then
-    result := ''
+    FastAssignNew(result)
   else
     TrimChars(result, Index, 0);
 end;
@@ -4696,7 +4706,8 @@ var
   up: TByteToAnsiChar;
   table: PNormTable;
 begin
-  if self <> nil then
+  if (self <> nil) and
+     (fCount <> 0) then
   begin
     PWord(UpperCopy255(@up, Name))^ := ord(NameValueSep);
     table := @NormToUpperAnsi7;
@@ -4710,7 +4721,8 @@ end;
 function TRawUtf8List.IndexOfObject(aObject: TObject): PtrInt;
 begin
   if (self <> nil) and
-     (fObjects <> nil) then
+     (fObjects <> nil) and
+     (fCount <> 0) then
   begin
     if fThreadSafe in fFlags then
       fSafe.ReadOnlyLock;
@@ -4725,26 +4737,24 @@ begin
     result := -1;
 end;
 
-function TRawUtf8List.Contains(const aText: RawUtf8; aFirstIndex: integer): PtrInt;
+function TRawUtf8List.Contains(const aText: RawUtf8; aFirstIndex: PtrInt): PtrInt;
 var
-  i: PtrInt; // use a temp variable to make oldest Delphi happy :(
+  i: PtrInt;
 begin
   result := -1;
-  if self = nil then
+  if (self = nil) or
+     (fCount = 0) then
     exit;
   if fThreadSafe in fFlags then
     fSafe.ReadOnlyLock;
-  try
-    for i := aFirstIndex to fCount - 1 do
-      if PosEx(aText, fValue[i]) > 0 then
-      begin
-        result := i;
-        exit;
-      end;
-  finally
-    if fThreadSafe in fFlags then
-      fSafe.ReadOnlyUnLock;
-  end;
+  for i := aFirstIndex to fCount - 1 do
+    if PosEx(aText, fValue[i]) > 0 then
+    begin
+      result := i;
+      break;
+    end;
+  if fThreadSafe in fFlags then
+    fSafe.ReadOnlyUnLock;
 end;
 
 procedure TRawUtf8List.OnChangeHidden(Sender: TObject);
@@ -4862,7 +4872,7 @@ var
   i: PtrInt;
   txt: RawUtf8;
 begin
-  txt := Name + RawUtf8(NameValueSep) + Value;
+  Make([Name, NameValueSep, Value], txt);
   if fThreadSafe in fFlags then
     fSafe.WriteLock;
   try
@@ -4894,7 +4904,7 @@ begin
             (fNoDuplicate in fFlags);
 end;
 
-function TRawUtf8List.UpdateValue(const Name: RawUtf8; var Value: RawUtf8;
+function TRawUtf8List.ExtractValue(const Name: RawUtf8; var Value: RawUtf8;
   ThenDelete: boolean): boolean;
 var
   i: PtrInt;
@@ -4970,10 +4980,48 @@ begin
   end;
 end;
 
+procedure TRawUtf8List.AddToStrings(Dest: TStrings; ClearDest: boolean);
+begin
+  if (self = nil) or
+     (Dest = nil) then
+    exit;
+  if fThreadSafe in fFlags then
+    fSafe.ReadOnlyLock;
+  PRawUtf8AddStrings(pointer(fValue), fCount, Dest, ClearDest);
+  if fThreadSafe in fFlags then
+    fSafe.ReadOnlyUnLock;
+end;
+
+function TRawUtf8List.ToStrings: TVirtualStringList;
+begin
+  result := TVirtualStringList.Create(fValue, fCount, fObjects); // by ref
+end;
+
 procedure CopyRawUtf8List(Dest, Source: TRawUtf8List);
 begin
+  if Dest = nil then
+    exit;
   Dest.Clear;
-  Dest.AddRawUtf8List(Source);
+  if Source = nil then
+    exit;
+  if fThreadSafe in Source.fFlags then
+    Source.fSafe.ReadOnlyLock;
+  if fThreadSafe in Dest.fFlags then
+    Dest.fSafe.WriteLock;
+  try
+    Dest.fCount := Source.fCount;
+    Dest.fValue := copy(Source.fValue); // copy by reference, increase refcnt
+    Dest.fObjects := copy(Source.fObjects);
+    exclude(Dest.fFlags, fObjectsOwned);
+    if fNoDuplicate in Dest.fFlags then
+      Dest.fValues.ForceReHash; // assume Source has no duplicate either
+    Dest.Changed;
+  finally
+    if fThreadSafe in Source.fFlags then
+      Source.fSafe.ReadOnlyUnLock;
+    if fThreadSafe in Dest.fFlags then
+      Dest.fSafe.WriteUnLock;
+  end;
 end;
 
 
@@ -5225,9 +5273,6 @@ procedure DynArraySave(Data: PAnsiChar; ExternalCount: PInteger;
   Dest: TBufferWriter; Info: PRttiInfo);
 var
   n, itemsize: PtrInt;
-  sav: TRttiBinarySave;
-label
-  raw;
 begin
   Info := Info^.DynArrayItemType(itemsize); // nil if unmanaged
   Dest.Write1(0); // warning: store itemsize=0 (mORMot 1 ignores it anyway)
@@ -5243,19 +5288,7 @@ begin
       n := PDALen(Data - _DALEN)^ + _DAOFF;
     Dest.WriteVarUInt32(n);
     Dest.Write4(0); // warning: we don't store any Hash32 checksum any more
-    if Info = nil then
-raw:  Dest.Write(Data, itemsize * n)
-    else
-    begin
-      sav := RTTI_BINARYSAVE[Info^.Kind];
-      if Assigned(sav) then // paranoid check
-        repeat
-          inc(Data, sav(Data, Dest, Info));
-          dec(n);
-        until n = 0
-      else
-        goto raw;
-    end;
+    BinarySaveSeveral(Data, Dest, Info, n, itemsize * n);
   end;
 end;
 
@@ -5302,9 +5335,6 @@ function _BL_DynArray(Data: PAnsiChar; var Source: TFastReader; Info: PRttiInfo)
 var
   n, siz: PtrInt;
   nfo: PRttiInfo;
-  load: TRttiBinaryLoad;
-label
-  raw;
 begin
   nfo := Info^.DynArrayItemType(siz); // nil for unmanaged items
   n := DynArrayLoadHeader(Source, Info, nfo);
@@ -5313,20 +5343,7 @@ begin
   if n > 0 then
   begin
     DynArrayNew(pointer(Data), n, siz); // allocate zeroed  memory
-    Data := PPointer(Data)^; // point to first item
-    if nfo = nil then
-raw:  Source.Copy(Data, siz * n)
-    else
-    begin
-      load := RTTI_BINARYLOAD[nfo^.Kind];
-      if Assigned(load) then
-        repeat
-          inc(Data, load(Data, Source, nfo));
-          dec(n);
-        until n = 0
-      else
-        goto raw;
-    end;
+    BinaryLoadSeveral(PPointer(Data)^, Source, nfo, n, siz * n);
   end;
   result := SizeOf(pointer);
 end;
@@ -5579,47 +5596,17 @@ end;
 function _BS_Array(Data: PAnsiChar; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
 var
   n: PtrInt;
-  sav: TRttiBinarySave;
-label
-  raw;
 begin
-  Info := Info^.ArrayItemType(n, result);
-  if Info = nil then // unmanaged
-raw:Dest.Write(Data, result)
-  else
-  begin
-    sav := RTTI_BINARYSAVE[Info^.Kind];
-    if Assigned(sav) then // paranoid check
-      repeat
-        inc(Data, sav(Data, Dest, Info));
-        dec(n);
-      until n = 0
-    else
-      goto raw;
-  end;
+  Info := Info^.ArrayItemType(n, result); // nil if unmanaged
+  BinarySaveSeveral(Data, Dest, Info, n, result);
 end;
 
 function _BL_Array(Data: PAnsiChar; var Source: TFastReader; Info: PRttiInfo): PtrInt;
 var
   n: PtrInt;
-  load: TRttiBinaryLoad;
-label
-  raw;
 begin
-  Info := Info^.ArrayItemType(n, result);
-  if Info = nil then // unmanaged
-raw:Source.Copy(Data, result)
-  else
-  begin
-    load := RTTI_BINARYLOAD[Info^.Kind];
-    if Assigned(load) then // paranoid check
-      repeat
-        inc(Data, load(Data, Source, Info));
-        dec(n);
-      until n = 0
-    else
-      goto raw;
-  end;
+  Info := Info^.ArrayItemType(n, result); // nil if unmanaged
+  BinaryLoadSeveral(Data, Source, Info, n, result);
 end;
 
 function _BC_Array(A, B: pointer; Info: PRttiInfo; out Compared: integer): PtrInt;
@@ -5661,14 +5648,14 @@ end;
 
 const
   // 0 for unserialized VType, 255 for valOleStr
-  VARIANT_SIZE: array[varEmpty .. varWord64] of byte = (
-    0, 0, 2, 4, 4, 8, 8, 8, 255, 0, 0, 2, 0, 0, 0, 0, 1, 1, 2, 4, 8, 8);
+  VARIANT_SIZE: array[varEmpty .. varOleUInt] of byte = (
+    0, 0, 2, 4, 4, 8, 8, 8, 255, 0, 0, 2, 0, 0, 0, 0, 1, 1, 2, 4, 8, 8, 4, 4);
 
 function _BS_Variant(Data: PVarData; Dest: TBufferWriter; Info: PRttiInfo): PtrInt;
 var
   vt: cardinal;
 begin
-  Data := VarDataFromVariant(PVariant(Data)^); // handle varByRef
+  Data := VarDataFromVariant(PVariant(Data)^); // handle varVariantByRef
   vt := Data^.VType;
   Dest.Write2(vt);
   if vt <= high(VARIANT_SIZE) then
@@ -5680,9 +5667,8 @@ begin
       else
         Dest.Write(@Data^.VInt64, vt); // simple types are stored as binary
   end
-  else if (vt = varString) and  // expect only RawUtf8
-          (Data^.vAny <> nil) then
-    Dest.WriteVar(Data^.vAny, PStrLen(PAnsiChar(Data^.VAny) - _STRLEN)^)
+  else if vt = varString then  // expect only RawUtf8
+    Dest.WriteVar(Data^.vAny, length(RawUtf8(Data^.vAny)))
   {$ifdef HASVARUSTRING}
   else if vt = varUString then
     Dest.WriteVar(Data^.vAny, length(UnicodeString(Data^.vAny)) * 2)
@@ -5980,7 +5966,7 @@ begin
     end;
   end
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function BinarySaveBytes(Data: pointer; Info: PRttiInfo;
@@ -6081,7 +6067,7 @@ begin
     end;
   end
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function BinaryLoad(Data: pointer; Source: PAnsiChar; Info: PRttiInfo;
@@ -6152,6 +6138,44 @@ begin
   end
   else
     result := false;
+end;
+
+procedure BinaryLoadSeveral(Data: PAnsiChar; var Source: TFastReader;
+  Info: PRttiInfo; n, datasize: PtrInt);
+label
+  raw;
+var
+  load: TRttiBinaryLoad;
+begin // caller ensured Data<>nil and n>0
+  if Info = nil then
+    goto raw;
+  load := RTTI_BINARYLOAD[Info^.Kind];
+  if Assigned(load) then
+    repeat
+      inc(Data, load(Data, Source, Info));
+      dec(n);
+    until n = 0
+  else
+raw:Source.Copy(Data, datasize)
+end;
+
+procedure BinarySaveSeveral(Data: PAnsiChar; Dest: TBufferWriter;
+  Info: PRttiInfo; n, datasize: PtrInt);
+var
+  sav: TRttiBinarySave;
+label
+  raw;
+begin
+  if Info = nil then
+    goto raw;
+  sav := RTTI_BINARYSAVE[Info^.Kind];
+  if Assigned(sav) then // paranoid check
+    repeat
+      inc(Data, sav(Data, Dest, Info));
+      dec(n);
+    until n = 0
+  else
+raw:Dest.Write(Data, datasize);
 end;
 
 
@@ -6478,24 +6502,21 @@ end;
 function TDynArray.ItemCompare(A, B: pointer; CaseInSensitive: boolean): integer;
 var
   comp: TRttiCompare;
-  rtti: PRttiInfo;
 label
   raw;
 begin
   if Assigned(fCompare) then
-    result := fCompare(A^, B^)
-  else if not(rcfArrayItemManaged in fInfo.Flags) then
-     // fast binary comparison with length
-raw: result := MemCmp(A, B, fInfo.Cache.ItemSize)
-  else
   begin
-    rtti := fInfo.Cache.ItemInfoRaw;
-    comp := RTTI_COMPARE[CaseInsensitive, rtti.Kind];
-    if Assigned(comp) then
-      comp(A, B, rtti, result)
-    else
-      goto raw;
+    result := fCompare(A^, B^);
+    exit;
   end;
+  if not(rcfArrayItemManaged in fInfo.Flags) then
+    goto raw; // fast binary comparison with length
+  comp := RTTI_COMPARE[CaseInsensitive, fInfo.Cache.ItemInfoRaw.Kind];
+  if Assigned(comp) then
+    comp(A, B, fInfo.Cache.ItemInfoRaw, result)
+  else
+raw:result := MemCmp(A, B, fInfo.Cache.ItemSize)
 end;
 
 function TDynArray.Add(const Item): PtrInt;
@@ -9136,7 +9157,7 @@ procedure TDynArrayHasher.HashDelete(aArrayIndex, aHashTableIndex: PtrInt;
 var
   first, next, last, n, s, ndx, i: PtrInt;
   P: PAnsiChar;
-  indexes: array[0..511] of integer; // to be rehashed  (seen always < 32)
+  indexes: array[0..511] of integer; // to be rehashed (seen always < 32)
 begin
   // retrieve hash table entries to be recomputed
   first := aHashTableIndex;
@@ -9186,12 +9207,13 @@ begin
     end;
   end;
   // adjust all stored indexes (using SSE2/AVX2 on x86_64)
-  {$ifdef DYNARRAYHASH_16BIT}
-  if hash16bit in fState then
-    DynArrayHashTableAdjust16(pointer(fHashTableStore), aArrayIndex, fHashTableSize)
-  else
-  {$endif DYNARRAYHASH_16BIT}
-    DynArrayHashTableAdjust(pointer(fHashTableStore), aArrayIndex, fHashTableSize);
+  if fDynArray^.GetCount > 1 then // Count not yet decremented
+    {$ifdef DYNARRAYHASH_16BIT}
+    if hash16bit in fState then
+      DynArrayHashTableAdjust16(pointer(fHashTableStore), aArrayIndex, fHashTableSize)
+    else
+    {$endif DYNARRAYHASH_16BIT}
+      DynArrayHashTableAdjust(pointer(fHashTableStore), aArrayIndex, fHashTableSize);
 end;
 
 function TDynArrayHasher.FindBeforeAdd(Item: pointer; out wasAdded: boolean;
@@ -10637,7 +10659,7 @@ end;
 
 function TRadixTree.ToText: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if self <> nil then
     fRoot.ToText(result, 0);
 end;

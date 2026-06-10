@@ -4694,7 +4694,7 @@ function TInterfaceFactory.GetMethodName(aMethodIndex: integer): RawUtf8;
 begin
   if (aMethodIndex < 0) or
      (self = nil) then
-    result := ''
+    FastAssignNew(result)
   else if aMethodIndex < SERVICE_PSEUDO_METHOD_COUNT then
     result := SERVICE_PSEUDO_METHOD[TServiceInternalMethod(aMethodIndex)]
   else
@@ -4703,14 +4703,14 @@ begin
     if cardinal(aMethodIndex) < cardinal(fMethodsCount) then
       result := fMethods[aMethodIndex].Uri
     else
-      result := '';
+      FastAssignNew(result);
   end;
 end;
 
 function TInterfaceFactory.GetFullMethodName(aMethodIndex: integer): RawUtf8;
 begin
   if self = nil then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     result := GetMethodName(aMethodIndex);
@@ -5394,7 +5394,7 @@ function TInterfaceResolverForSingleInterface.GetImplementationName: RawUtf8;
 begin
   if (self = nil) or
      (fImplementation.ValueClass = nil) then
-    result := ''
+    FastAssignNew(result)
   else
     result := fImplementation.Name;
 end;
@@ -5831,7 +5831,7 @@ begin
   {$endif NOPATCHVMT}
   if (r = nil) or
      not (rcfAutoCreateFields in r.Flags) then
-    r := DoRegisterAutoCreateFields(self);
+    r := pointer(Rtti.RegisterAutoCreateFieldsClass(PClass(self)^));
   // resolve all published interface fields
   p := pointer(TRttiCustomWrapper(r).fAutoResolveInterfaces);
   if p = nil then
@@ -6116,7 +6116,7 @@ function TOnInterfaceStubExecuteParamsVariant.GetInUtf8(
 var
   wasString: boolean;
 begin
-  result := '';
+  FastAssignNew(result);
   VariantToUtf8(GetInNamed(ParamName), result, wasString);
 end;
 
@@ -6148,7 +6148,7 @@ var
   o: PVarData;
   temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
-  fResult := '';
+  FastAssignNew(fResult);
   if fOutput = nil then
     exit;
   W := TJsonWriter.CreateOwnedStream(temp);
@@ -6736,7 +6736,7 @@ var
   log: ^TInterfaceStubLog;
 begin
   if fLogCount = 0 then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     WR := TJsonWriter.CreateOwnedStream(temp);
@@ -7860,18 +7860,17 @@ type
   TSetWeakZero = class(TSynDictionary) // TClass / TPointerDynArray map
   protected
     fHookedFreeInstance: PtrUInt;
+    procedure HookedFreeInstance;
   public
     constructor Create(aClass: TClass); reintroduce;
   end;
 
-type
-  TFreeInstanceMethod = procedure(self: TObject);
-
-procedure HookedFreeInstance(self: TObject);
+procedure TSetWeakZero.HookedFreeInstance;
 var
   inst: TSetWeakZero;
   i: PtrInt;
   fields: PPointerArray; // holds a TPointerDynArray but avoid try..finally
+  next: TThreadMethod;
 begin
   inst := Rtti.FindClass(PClass(self)^).GetPrivateSlot(TSetWeakZero);
   fields := nil;
@@ -7883,7 +7882,10 @@ begin
       PPointer(fields[i])^ := nil;
     FastDynArrayClear(@fields, nil);
   end;
-  TFreeInstanceMethod(inst.fHookedFreeInstance)(self); // CleanupInstance + FreeMem()
+  // cascaded call up to TObject.FreeInstance = CleanupInstance + FreeMem()
+  TMethod(next).Code := pointer(inst.fHookedFreeInstance);
+  TMethod(next).Data := self;
+  next();
 end;
 
 constructor TSetWeakZero.Create(aClass: TClass);
@@ -7893,11 +7895,11 @@ begin
   // key = instance TObject, value = dynarray field(s) to be zeroed
   inherited Create(TypeInfo(TPointerDynArray), TypeInfo(TPointerDynArrayDynArray));
   P := pointer(PAnsiChar(aClass) + vmtFreeInstance);
-  if P^ = PtrUInt(@HookedFreeInstance) then
+  if PPointer(P)^ = @TSetWeakZero.HookedFreeInstance then
     // hook once - Create may be done twice in GetWeakZero() for SetPrivateSlot
     exit;
   fHookedFreeInstance := P^;
-  PatchCodePtrUInt(P, PtrUInt(@HookedFreeInstance), {leaveunprot=}false);
+  PatchCodePtrUInt(P, PtrUInt(@TSetWeakZero.HookedFreeInstance), {leaveunprot=}false);
 end;
 
 function GetWeakZero(aClass: TClass; CreateIfNonExisting: boolean): TSetWeakZero;
@@ -8134,7 +8136,7 @@ var
           begin
             info := ContextFromRtti(
               ClassToWrapperType(rtti.ObjArrayClass), rtti.ArrayRtti);
-            _Safe(info)^.AddValue('isObjArray', true);
+            _Safe(info)^.AddValue('isObjArray', varTrue);
           end
           else
           begin
@@ -8156,7 +8158,7 @@ var
             'camelName', LowerCamelCase(typName),
             'snakeName', SnakeCase(typName)], info);
           if rtti.Cache.ItemCount > 0 then
-            _Safe(info)^.AddValue('staticMaxIndex', rtti.Cache.ItemCount-1);
+            _Safe(info)^.AddValue('staticMaxIndex', rtti.Cache.ItemCount - 1);
         end;
     end;
     if not VarIsEmptyOrNull(info) then
@@ -8738,7 +8740,7 @@ begin
           // simple type (record, array, enumeration, set)
           if Descriptions.GetValueIndex(typeName) < 0 then
           begin
-            Descriptions.AddValue(typeName, RawUtf8ToVariant(desc));
+            Descriptions.AddValueText(typeName, desc);
             if typeName[1] = 'I' then
               interfaceName := Copy(typeName, 2, 128)
             else
@@ -8749,8 +8751,7 @@ begin
           if PropNameEquals(typeName, 'function') or
              PropNameEquals(typeName, 'procedure') then
             if GetNextFieldProp(P, typeName) then
-              Descriptions.AddValue(interfaceName + '.' + typeName,
-                RawUtf8ToVariant(desc));
+              Descriptions.AddValueText(Join([interfaceName, '.', typeName]), desc);
     end
     else
       P := GotoNextLineSmall(P);

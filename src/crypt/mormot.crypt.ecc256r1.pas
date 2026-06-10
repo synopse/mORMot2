@@ -1316,7 +1316,7 @@ var
   p: PHash512Rec;
   u: THash512Rec;
 begin
-  result := '';
+  FastAssignNew(result);
   if IsZero(Compressed) then
     exit;
   SetLength(result, SizeOf({%H-}p^) + 1);
@@ -1698,7 +1698,7 @@ end;
 function EccText(EccDate: TEccDate; Expanded: boolean): RawUtf8;
 begin
   if EccDate = 0 then
-    result := ''
+    FastAssignNew(result)
   else
     result := DateToIso8601(EccDate + ECC_DELTA, Expanded);
 end;
@@ -1708,7 +1708,7 @@ var
   tmp: array[0..1] of TEccCertificateIssuer;
 begin
   if IsZero(Issuer) then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     tmp[0] := Issuer;
@@ -1739,7 +1739,7 @@ end;
 function EccText(const ID: TEccCertificateID): RawUtf8;
 begin
   if IsZero(ID) then
-    result := ''
+    FastAssignNew(result)
   else
     result := AesBlockToString(TAesBlock(ID));
 end;
@@ -1756,7 +1756,7 @@ end;
 function EccText(const sign: TEccSignature): RawUtf8;
 begin
   if IsZero(sign) then
-    result := ''
+    FastAssignNew(result)
   else
     result := BinToBase64(@sign, SizeOf(sign));
 end;
@@ -1975,7 +1975,7 @@ begin
   if Check then
     result := BinToBase64(@self, SizeOf(self))
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function Ecc256r1DoVerify(const pub: TEccPublicKey; unc: PEccPublicKeyUncompressed;
@@ -2073,7 +2073,7 @@ begin
   if Check then
     result := BinToBase64(@self, SizeOf(self))
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TEccCertificateRevocation.From(const id: TEccCertificateID;

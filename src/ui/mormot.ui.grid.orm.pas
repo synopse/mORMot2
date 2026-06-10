@@ -1184,7 +1184,7 @@ var
   i: PtrInt;
   w: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if self <> nil then
     with TDrawGrid(Owner) do
       for i := 0 to ColCount - 1 do

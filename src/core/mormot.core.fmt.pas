@@ -147,6 +147,8 @@ function AddJsonToXml(W: TTextWriter; Json: PUtf8Char; ArrayName: PUtf8Char = ni
 
 { ************* YAML 1.2 core-schema to JSON or TDocVariant Support }
 
+{ main high-level YAML conversion functions }
+
 type
   /// exception raised by YAML parser on unsupported or invalid input
   EYamlException = class(ESynException);
@@ -220,6 +222,23 @@ var
   YamlMaxDepth: integer = 512;
 
 
+{ low-level functions which may be handy in some scenarios }
+
+/// YAML 1.2 core-schema decimal/hexa/octal integer with safe overflow detection
+// - return false on signed 64-bit overflow so caller falls back to string
+function TryYamlInt(p: PUtf8Char; out V: Int64): boolean;
+
+/// strip an unquoted trailing "# ..." YAML comment from a scalar fragment
+// - accounts for single/double quoted spans where # is literal
+procedure YamlStripLineComment(var S: RawUtf8);
+
+/// emit some text as YAML string, with JSON-escaped double-quotes if needed
+procedure WriteYamlString(W: TJsonWriter; P: PUtf8Char; L: PtrInt);
+
+/// emit some variant as YAML string, with JSON-escaped double-quotes if needed
+procedure WriteYamlVariant(W: TJsonWriter; const V: variant);
+
+
 { ************* Markup (e.g. Markdown or Emoji) process }
 
 type
@@ -266,7 +285,7 @@ function HtmlEscapeMarkdown(const md: RawUtf8;
 
 type
   /// map the first Unicode page of Emojis, from U+1F600 to U+1F64F
-  // - naming comes from github/Markdown :identifiers:
+  // - naming comes from github/Markdown :identifiers: and copied in EMOJI_RTTI[]
   TEmoji = (
     eNone,
     eGrinning,
@@ -1416,8 +1435,6 @@ type
   TYamlLines = array of TYamlLine;
   PYamlLine = ^TYamlLine;
 
-// strip an unquoted trailing "# ..." comment from a scalar fragment
-// - accounts for single/double quoted spans where # is literal
 procedure YamlStripLineComment(var S: RawUtf8);
 var
   p: PUtf8Char;
@@ -1472,8 +1489,6 @@ begin
 end;
 
 function TryYamlInt(p: PUtf8Char; out V: Int64): boolean;
-// YAML 1.2 core-schema decimal/hexa/octal integer with safe overflow detection
-// - return false on signed 64-bit overflow so caller falls back to string
 var
   neg: boolean;
   b: byte;
@@ -1797,7 +1812,7 @@ begin
       fOut.AddJsonString(K);            // JSON-escape
     end
   else
-    fOut.AddShorter('""');
+    fOut.AddShort4(ord('"') + ord('"') shl 8, 2);
 end;
 
 procedure TYamlToJson.EmitScalarFragment(const Frag: RawUtf8; LineIdx: integer);
@@ -1847,13 +1862,10 @@ end;
 procedure TYamlToJson.EmitCollectBlockScalar(MinIndent, ExplicitIndent: integer;
   Folded, Chomp: AnsiChar);
 var
-  tmp: TTextWriter;
   blockIndent, blankRun: integer;
-  len: PtrInt;
-  c: PYamlLine;
   prevWasContent: boolean;
-  text: RawUtf8;
-  buf: TTextWriterStackBuffer;
+  c: PYamlLine;
+  buf: TSynTempAdder;
 begin
   // skip leading blank lines; stop at the first non-blank line.
   c := SkipBlankLines;
@@ -1880,7 +1892,7 @@ begin
   if blockIndent < 0 then
     // empty block no chomping needed
     exit;
-  tmp := TTextWriter.CreateOwnedStream(buf);
+  buf.Init;
   try
     blankRun := 0;
     prevWasContent := false;
@@ -1898,54 +1910,52 @@ begin
       // block content line: strip blockIndent prefix
       if prevWasContent then
         if blankRun = 0 then
-          tmp.AddDirect(folded)
+          buf.AddDirect(folded)
         else
           // preserve blank-line runs literally as \n * blankRun
-          tmp.AddChars(#10, blankRun)
-      else if blankRun <> 0 then
+          buf.AddChars(#10, blankRun)
+      else
         // leading blanks before first content: keep them
-        tmp.AddChars(#10, blankRun);
-      tmp.AddChars(' ', c^.Indent - blockIndent);
-      tmp.AddString(c^.Content);
+        buf.AddChars(#10, blankRun);
+      buf.AddChars(' ', c^.Indent - blockIndent);
+      buf.Add(c^.Content);
       prevWasContent := true;
       blankRun := 0;
       inc(fIdx);
       inc(c);
     end;
-    tmp.SetText(text);
-  finally
-    tmp.Free;
-  end;
-  len := length(text);
-  // apply chomping to the trailing content
-  case Chomp of
-    '-':
-      begin
+    // apply chomping to the trailing content
+    case Chomp of
+      '-':
         // strip all trailing newlines
-        while (len > 0) and
-              (text[len] in [#13, #10]) do
-          dec(len);
-        if len <> length(text) then
-          SetLength(text, len); // seldom called
-      end;
-    '+':
-      // keep trailing newlines exactly; ensure at least one
-      if (len = 0) or
-         not (text[len] in [#13, #10]) then
-        Append(text, #10);
-    else
-      // clip: collapse trailing newlines to a single one
-      while (len >= 2) and
-            (text[len] = #10) and
-            (text[len - 1] = #10) do
-        dec(len);
-      if len <> length(text) then
-        SetLength(text, len);
-      if (len = 0) or
-         (text[len] <> #10) then
-        Append(text, #10);
+        while (buf.Store.added > 0) and
+              (PUtf8Char(buf.Buffer)[buf.Store.added - 1] in [#13, #10]) do
+          dec(buf.Store.added);
+      '+':
+        // keep trailing newlines exactly; ensure at least one
+        if (buf.Store.added = 0) or
+           not (PUtf8Char(buf.Buffer)[buf.Store.added - 1] in [#13, #10]) then
+        begin
+          PUtf8Char(buf.Buffer)[buf.Store.added] := #10; // append
+          inc(buf.Store.added);
+        end;
+      else
+        // clip: collapse trailing newlines to a single one
+        while (buf.Store.added >= 2) and
+              (PUtf8Char(buf.Buffer)[buf.Store.added - 1] = #10) and
+              (PUtf8Char(buf.Buffer)[buf.Store.added - 2] = #10) do
+          dec(buf.Store.added);
+        if (buf.Store.added <= 0) or
+           (PUtf8Char(buf.Buffer)[buf.Store.added - 1] <> #10) then
+         begin
+           PUtf8Char(buf.Buffer)[buf.Store.added] := #10; // append
+           inc(buf.Store.added);
+         end;
+    end;
+    fOut.AddJsonStringBuffer(buf.Buffer, buf.Store.added);
+  finally
+    buf.Store.Done; // almost never any allocation
   end;
-  fOut.AddJsonString(text);
 end;
 
 procedure TYamlToJson.EmitBlockScalar(const rest: RawUtf8; BaseIndent: integer);
@@ -2039,9 +2049,8 @@ var
   end;
 
 var
-  tmp: TTextWriter;
-  cur: RawUtf8; // we need a temp value since = rest first
-  buf: TTextWriterStackBuffer;
+  cur: PRawUtf8; // we need a temp value since = rest first
+  buf: TSynTempAdder;
 begin
   if rest = '' then
     exit;
@@ -2051,36 +2060,35 @@ begin
   if ScanQuoteClosed(pointer(rest), {skipOpeningQuote=}true) then
     exit; // single-line, already closed
   // multi-line merge
-  tmp := TTextWriter.CreateOwnedStream(buf);
+  buf.Init;
   try
-    cur := rest;
+    cur := @rest;
     repeat
       // absorbed line break: drop the trailing '\' and emit no separator
-      tmp.AddNoJsonEscape(pointer(cur), length(cur) - ord(trailingEscape));
+      buf.Add(pointer(cur^), length(cur^) - ord(trailingEscape));
       if not trailingEscape then
         // folded line break -> single space (per YAML 1.2 §7.5)
-        tmp.AddDirect(' ');
+        buf.AddDirect(' ');
       inc(fIdx);
       if AtEnd then
         Error(firstLineIdx, 'unterminated multi-line quoted scalar');
       // Content is already left-trimmed by SplitYamlLines via Indent metadata,
       // which is exactly the §7.5 requirement that leading ws is ignored
-      cur := fLines[fIdx].Content;
-      if cur = '' then
+      cur := @fLines[fIdx].Content;
+      if cur^ = '' then
         continue;
-      if ScanQuoteClosed(pointer(cur), {skipOpeningQuote=}false) then
+      if ScanQuoteClosed(pointer(cur^), {skipOpeningQuote=}false) then
       begin
         // last line closes the scalar; include everything up to and past the
         // closing quote (any trailing content is ignored - quoted scalars end
         // at the closing quote)
-        tmp.AddString(cur);
+        buf.Add(cur^);
         // leave fIdx pointing at this closing line; callers advance it
         break;
       end;
     until false;
-    tmp.SetText(rest);
   finally
-    tmp.Free;
+    buf.Done(rest);
   end;
 end;
 
@@ -2743,7 +2751,7 @@ begin
   if doc.InitJson(Json, DocOptions) then
     result := VariantToYaml(variant(doc), Options)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 procedure YamlToVariant(const Yaml: RawUtf8; out Doc: TDocVariantData;
@@ -2788,13 +2796,11 @@ type
   private
     fOut: TJsonWriter;
     fOptions: TYamlWriterOptions; // not used yet
-    procedure WriteValue(vd: PDocVariantData; Indent: PtrInt);
+    procedure WriteVarData(vd: PVarData; Indent: PtrInt);
     procedure WriteBlockMap(const dv: TDocVariantData; Indent: PtrInt);
     procedure WriteBlockSeq(const dv: TDocVariantData; Indent: PtrInt);
-    procedure WriteYamlKey(const K: RawUtf8);
+    procedure WriteKey(const K: RawUtf8);
       {$ifdef HASINLINE} inline; {$endif}
-    procedure WriteYamlString(const S: RawUtf8);
-    procedure WriteYamlVariantAsString(const v: variant);
     procedure WriteIndent(N: PtrInt);
       {$ifdef HASINLINE} inline; {$endif}
   public
@@ -2821,44 +2827,9 @@ begin
   fOut.AddChars(' ', N);
 end;
 
-procedure TVariantToYaml.WriteYamlString(const S: RawUtf8);
-var
-  p: PUtf8Char;
+procedure TVariantToYaml.WriteKey(const K: RawUtf8);
 begin
-  p := pointer(S);
-  if p = nil then
-    fOut.AddShorter('""')
-  else if // leading chars that need quoting
-          (p^ in [' ', #9, '!', '&', '*', '>', '|', '%', '@', '`', '"', '''',
-                  '#', '-', '?', ':', '{', '[', '}', ']', ',']) or
-          // trailing whitespace triggers quotes
-          (p[length(S) - 1] in [' ', #9]) or
-          // reserved plain-scalar forms: null, bool, numbers - must be quoted
-          // to preserve string type on round-trip
-          IsYamlNull(p) or
-          IsBooleanJson(p) or
-          IsNumberJson(p) or
-          // quick scan for chars that require escape
-          YamlSpecialChars(p) then
-    // emit as JSON-escaped double-quoted string - valid YAML 1.2 §5.7
-    // since the JSON escape set is a subset of YAML's flow-scalar escapes
-    fOut.AddJsonString(S)
-  else
-    // we can directly output this text without quotes
-    fOut.AddString(S);
-end;
-
-procedure TVariantToYaml.WriteYamlKey(const K: RawUtf8);
-begin
-  WriteYamlString(K);
-end;
-
-procedure TVariantToYaml.WriteYamlVariantAsString(const v: variant);
-var
-  s: RawUtf8;
-begin
-  VariantToUtf8(v, s);
-  WriteYamlString(s);
+  WriteYamlString(fOut, pointer(K), length(K));
 end;
 
 procedure TVariantToYaml.WriteBlockMap(const dv: TDocVariantData; Indent: PtrInt);
@@ -2875,19 +2846,19 @@ begin
   i := 0;
   v := pointer(dv.Values);
   repeat
-    WriteYamlKey(dv.Names[i]);
+    WriteKey(dv.Names[i]);
     fOut.AddDirect(':');
     if _Safe(v^, cd) and
        (cd^.Count > 0) then
     begin
       fOut.Add(#10);
       WriteIndent(Indent + 2);
-      WriteValue(cd, Indent + 2);
+      WriteVarData(PVarData(cd), Indent + 2);
     end
     else
     begin
       fOut.Add(' ');
-      WriteValue(pointer(v), Indent + 2);
+      WriteVarData(PVarData(v), Indent + 2);
     end;
     inc(i);
     if i = dv.Count then
@@ -2912,7 +2883,7 @@ begin
   i := 0;
   v := pointer(dv.Values);
   repeat
-    fOut.AddShorter('- ');
+    fOut.AddShort4(ord('-') + ord(' ') shl 8, 2);
     if _Safe(v^, cd) and
        (cd^.Count > 0) then
     begin
@@ -2927,7 +2898,7 @@ begin
       end;
     end
     else
-      WriteValue(pointer(v), Indent + 2);
+      WriteVarData(PVarData(v), Indent + 2);
     inc(i);
     if i = dv.Count then
       break;
@@ -2937,15 +2908,15 @@ begin
   until false;
 end;
 
-procedure TVariantToYaml.WriteValue(vd: PDocVariantData; Indent: PtrInt);
+procedure TVariantToYaml.WriteVarData(vd: PVarData; Indent: PtrInt);
 var
   vt: cardinal;
 begin
   repeat
-    vt := vd^.VarType;
+    vt := vd^.VType;
     if vt <> varVariantByRef then
       break;
-    vd := PVarData(vd)^.VPointer;
+    vd := vd^.VPointer;
   until false;
   if (vt <= varOleUInt) and
      (vt <> varOleStr) then
@@ -2953,23 +2924,24 @@ begin
     // let TJsonWriter.AddVariant emit them directly without any escaping
     fOut.AddVariant(PVariant(vd)^, twNone)
   else if vt = varString then
-    // in a TDocVariant, strings are usually normalized as RawUtf8 varString
-    WriteYamlString(RawUtf8(PVarData(vd)^.VAny))
-  else if (vd^.VarType = DocVariantVType) and
-          (vd^.Kind <> dvUndefined) then
+    // in a TDocVariant, varString are usually normalized as RawUtf8
+    WriteYamlString(fOut, vd^.VAny, length(RawUtf8(vd^.VAny)))
+  else if vt = DocVariantVType then
     // nested object or array
-    if vd^.IsObject then
-      WriteBlockMap(vd^, Indent)
+    if PDocVariantData(vd)^.IsObject then
+      WriteBlockMap(PDocVariantData(vd)^, Indent)
+    else if PDocVariantData(vd)^.IsArray then
+      WriteBlockSeq(PDocVariantData(vd)^, Indent)
     else
-      WriteBlockSeq(vd^, Indent)
+      fOut.AddNull
   else
     // string-like or unknown: coerce to UTF-8 and apply YAML quoting rules
-    WriteYamlVariantAsString(PVariant(vd)^);
+    WriteYamlVariant(fOut, PVariant(vd)^);
 end;
 
 function TVariantToYaml.Run(const Doc: variant): RawUtf8;
 begin
-  WriteValue(@Doc, {indent=}0);
+  WriteVarData(@Doc, {indent=}0);
   fOut.AddDirect(#10);
   fOut.SetText(result);
 end;
@@ -2993,6 +2965,43 @@ begin
   FileFromString(VariantToYaml(Doc, Options), FileName);
 end;
 
+procedure WriteYamlString(W: TJsonWriter; P: PUtf8Char; L: PtrInt);
+begin
+  if L <= 0 then
+    W.AddShort4(ord('"') + ord('"') shl 8, 2)
+  else if
+      // leading chars that need quoting
+      (P^ in [' ', #9, '!', '&', '*', '>', '|', '%', '@', '`', '"', '''',
+              '#', '-', '?', ':', '{', '[', '}', ']', ',']) or
+      // trailing whitespace triggers quotes
+      (P[L - 1] in [' ', #9]) or
+      // reserved plain-scalar forms: null, bool, numbers - must be quoted
+      // to preserve string type on round-trip
+      IsYamlNull(P) or
+      IsBooleanJson(P) or
+      IsNumberJson(P) or
+      // quick scan for chars that require escape
+      YamlSpecialChars(P) then
+    // emit as JSON-escaped double-quoted string - valid YAML 1.2 §5.7
+    // since the JSON escape set is a subset of YAML's flow-scalar escapes
+    W.AddJsonStringBuffer(P, L)
+  else
+    // we can directly output this text without quotes
+    W.AddNoJsonEscape(P, L);
+end;
+
+procedure WriteYamlVariant(W: TJsonWriter; const V: variant);
+var
+  tmp: TTempUtf8;
+begin
+  if VariantToTempUtf8(V, tmp) then
+    // wasString: apply YAML quoting rules
+    WriteYamlString(W, tmp.Text, tmp.Len)
+  else
+    // direct output of e.g. BSON content as JSON
+    W.AddNoJsonEscape(tmp.Text, tmp.Len);
+  TempUtf8Done(tmp);
+end;
 
 
 { ************* Markup (e.g. Markdown or Emoji) process }
@@ -3546,7 +3555,7 @@ begin
     begin
       P := c + 1; // continue parsing after the Emoji text
       if W <> nil then
-        W.AddShort(pointer(EMOJI_UTF8[result]), 4);
+        W.AddShort4(_EMOJI_UTF8[result].TextLo);
       exit;
     end;
   end;
@@ -3884,7 +3893,7 @@ begin
   if FindSectionFirstLine(P, @up, @PEnd) then
     FastSetString(result, P, PEnd - P)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function DeleteSection(var Content: RawUtf8; const SectionName: RawUtf8;
@@ -4467,7 +4476,7 @@ var
   end;
 
 begin
-  result := '';
+  FastAssignNew(result);
   if Instance = nil then
     exit;
   nestedcount := 0;
@@ -4627,7 +4636,7 @@ const
 { TPreProc }
 
 type
-  TPreprocIfLevel = 0 .. 15; // 0 = outer level, 1..15 = nested levels
+  TPreprocIfLevel = 0 .. 31; // 0 = outer level, 1..31 = nested levels
   TPreprocIf = (
     piNone,
     piIf,
@@ -4639,10 +4648,10 @@ type
   TPreproc = class(TPreprocAbstract)
   protected
     Vars: TBinDictionary;
-    IfLevel: TPreprocIfLevel;
-    IfSkip: set of TPreprocIfLevel;
-    IncludeDepth: byte;
-    Options: TPreprocFlags;
+    IfLevel: TPreprocIfLevel;       // 8-bit
+    IncludeDepth: byte;             // 8-bit
+    Options: TPreprocFlags;         // 8-bit
+    IfSkip: set of TPreprocIfLevel; // 32-bit
     IncludeFolder: TFileName;
     procedure DoSkip(var P: PUtf8Char);
     function DoFind(Key: pointer; KeyLen: PtrInt; var ValueLen: PtrInt): pointer;
@@ -4821,41 +4830,38 @@ end;
 
 procedure TPreproc.DoSkip(var P: PUtf8Char);
 begin
-  while true do
-    if P^ = #0 then
-      exit
-    else if P^ <> '$' then
-      inc(P) // most common case
-    else
-      case ParseIfDollar(P) of
-        piNone:
-          inc(P);
-        piIf:
-          begin
-            dec(P, 4); // caller should detect and execute DslIf()
-            exit;
-          end;
-        piIfDef:
-          begin
-            dec(P, 7);
-            exit;
-          end;
-        piEnd:
-          begin
-            DoEndif(P);
-            exit;
-          end;
-        piElse:
-          if IfLevel = 0 then // paranoid
-            exit
-          else if IfLevel in IfSkip then
-          begin
-            exclude(IfSkip, IfLevel); // include until $end$
-            exit;
-          end
-          else
-            include(IfSkip, IfLevel);  // and continue skip loop
-      end;
+  repeat
+    P := PosChar(P, '$'); // use SSE2 on x86_64
+    case ParseIfDollar(P) of
+      piNone:
+        inc(P);
+      piIf:
+        begin
+          dec(P, 4); // caller should detect and execute DslIf()
+          exit;
+        end;
+      piIfDef:
+        begin
+          dec(P, 7);
+          exit;
+        end;
+      piEnd:
+        begin
+          DoEndif(P);
+          exit;
+        end;
+      piElse:
+        if IfLevel = 0 then // paranoid
+          exit
+        else if IfLevel in IfSkip then
+        begin
+          exclude(IfSkip, IfLevel); // include until $end$
+          exit;
+        end
+        else
+          include(IfSkip, IfLevel);  // and continue skip loop
+    end;
+  until false;
 end;
 
 function TPreproc.DoIf(P: PUtf8Char): PUtf8Char;
@@ -5456,7 +5462,7 @@ var
   W: TTextWriter;
   temp: TTextWriterStackBuffer;
 begin
-  result := '';
+  FastAssignNew(result);
   if (Data = nil) or
      (Len <= 0) or
      (PerLine <= 0) then
@@ -5569,7 +5575,7 @@ var
   W: TTextWriter;
   temp: TTextWriterStackBuffer;
 begin
-  result := '';
+  FastAssignNew(result);
   if Text = '' then
     exit;
   W := TTextWriter.CreateOwnedStream(temp);

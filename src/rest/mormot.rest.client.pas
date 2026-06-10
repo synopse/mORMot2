@@ -1319,7 +1319,7 @@ begin
      (JsonDecode(pointer({%H-}resp), @AUTH_N, length(AUTH_N), @values, true) = nil) then
   begin
     Sender.fSession.Data := ''; // reset temporary 'data' field
-    result := ''; // error
+    FastAssignNew(result); // error
     exit;
   end;
   result := values[0].ToUtf8; // not ToUtf8(result) to please Delphi 2007
@@ -1413,7 +1413,7 @@ var
   rnd: THash128 absolute clientsign;
   values: array[0..1] of TValuePUtf8Char;
 begin
-  result := ''; // error
+  FastAssignNew(result); // error
   if User.LogonName = '' then
     exit;
   // compute the 160-bit client nonce (needed by ScramClientProof)
@@ -1470,7 +1470,7 @@ begin
       // success: fSession.PrivateKey computed without the server DB key
       User.PasswordHashHexa := '#'
     else
-      result := ''; // error
+      FastAssignNew(result); // error
 end;
 
 
@@ -1711,7 +1711,7 @@ var
   sec: TSecContext;
   bin: RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if not InitializeDomainAuth then
     exit;
   Sender.fSession.Data := '';
@@ -2199,7 +2199,7 @@ var
   resp: RawUtf8;
 begin
   if self = nil then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     if fSession.Version = '' then
@@ -2766,7 +2766,7 @@ begin
       aMethodName, aNameValueParameters, resp, aTable, aID) = HTTP_SUCCESS then
     result := JsonDecode(resp)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TRestClientUri.CallBackPut(const aMethodName, aSentData: RawUtf8;

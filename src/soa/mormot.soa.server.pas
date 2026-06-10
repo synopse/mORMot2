@@ -950,7 +950,7 @@ end;
 function TServiceFactoryServer.RetrieveSignature: RawUtf8;
 begin
   if self = nil then
-    result := ''
+    FastAssignNew(result)
   else
     result := fContract; // just return the current value
 end;

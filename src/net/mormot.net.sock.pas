@@ -683,6 +683,7 @@ procedure IP6Short(ip6addr: PByteArray; var s: TShort47);
 // - loopback address is returned as its '127.0.0.1' IPv4 representation
 // for consistency with our high-level HTTP/REST code
 // - does not support mapped IPv4 so never returns '::1.2.3.4' but '::102:304'
+// - won't use the Operating System network layer API so is fast and consistent
 procedure IP6Text(ip6addr: PByteArray; var result: RawUtf8);
 
 /// convert a MAC address value into its standard RawUtf8 text representation
@@ -1909,6 +1910,16 @@ function ToIP4Binary(text: PUtf8Char; var bin: RawByteString): PtrInt;
 /// compute a raw binary content from an array of ip4
 function IP4sToBinary(const ip4: TNetIP4s): RawByteString;
 
+/// check is the supplied address text is on IPv6 format '2001:b8:a0b:12f0::1'
+// - will optionally fill a 128-bit binary buffer with the decoded IPv4 address
+// - end text input parsing at final #0 in text
+// - calls the Operating System network layer API so is slower than IP6Short()
+function NetIsIP6(text: PUtf8Char; value: PByte = nil): boolean;
+
+/// just a wrapper around NetIsIP6(pointer(text), @value)
+// - calls the Operating System network layer API so is slower than IP6Text()
+function ToIP6(const text: RawUtf8; var value: TNetIP6): boolean;
+
 /// append one TNetMac instance to a dynamic array of such values
 procedure AddMac(var macs: TNetMacs; const mac: TNetMac);
 
@@ -2761,7 +2772,7 @@ function NetAddrResolve(const hostname: RawUtf8): RawUtf8;
 var
   addr: TNetAddr;
 begin
-  result := '';
+  FastAssignNew(result);
   if addr.SetFrom(hostname, '80', nlTcp) = nrOK then
     addr.IP(result);
 end;
@@ -3814,7 +3825,7 @@ begin
      NetIsIP4(pointer(netmask4), @mask) then
     ShortStringToAnsi7String(IP4Subnet(ip, mask), result)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function IP4Filter(ip4: TNetIP4; filter: TIPAddress): boolean;
@@ -3872,7 +3883,7 @@ var
 begin
   if PCardinal(ip4addr)^ = 0 then
     // '0.0.0.0' bound to any host -> ''
-    result := ''
+    FastAssignNew(result)
   else if PCardinal(ip4addr)^ = cLocalhost32 then
     // '127.0.0.1' loopback (no memory allocation)
     result := IP4local
@@ -3900,7 +3911,7 @@ var
   s: TShort16;
   i: PtrInt;
 begin
-  result := '';
+  FastAssignNew(result);
   for i := 0 to high(ip4) do
   begin
     IP4Short(@ip4[i], s);
@@ -3919,6 +3930,32 @@ begin
     exit;
   ip32 := bswap32(ip32); // to be asked in inverse byte order
   Join([IP4ToText(@ip32), '.in-addr.arpa'], reverse);
+end;
+
+function NetIsIP6(text: PUtf8Char; value: PByte): boolean;
+var
+  l: PtrInt;
+  tmp: TNetIP6;
+begin
+  result := false;
+  if text = nil then
+    exit;
+  l := 0;
+  while text[l] <> #0 do
+    if (l <= 45) and // max is 'ABCD:ABCD:ABCD:ABCD:ABCD:ABCD:192.168.158.190'
+       (text[l] in [':', '.', '0'..'9', 'a'..'f', 'A'..'F']) then
+      inc(l)
+    else
+      exit; // quickly eliminate invalid charset
+  if value = nil then
+    value := @tmp; // value is optional, just like for NetIsIP4()
+  result := (l >= 2) and
+            InetPton(text, value); // call proper OS API for RFC 4291 parsing
+end;
+
+function ToIP6(const text: RawUtf8; var value: TNetIP6): boolean;
+begin
+  result := NetIsIP6(pointer(text), @value);
 end;
 
 procedure IP6Short(ip6addr: PByteArray; var s: TShort47);
@@ -4031,7 +4068,7 @@ begin
     case ip6addr[15] of
       0: // IPv6 :: bound to any host -> ''
         begin
-          result := '';
+          FastAssignNew(result);
           exit;
         end;
       1: // IPv6 ::1 -> '127.0.0.1' loopback (with no memory allocation)
@@ -4126,7 +4163,7 @@ begin
   if (L = 0) or
      (L and 1 <> 0) then
   begin
-    result := '';
+    FastAssignNew(result);
     exit;
   end;
   L := L shr 1;
@@ -4331,7 +4368,7 @@ const
     '53', '80', '443', '123', '9'); // DNS, HTTP, HTTPS, NTP, discard
 begin
   // note: UDP connect() makes no network request but browse the kernel routage
-  result := '';
+  FastAssignNew(result);
   for i := 0 to high(PORTS) do
     if addr.SetFrom(Remote, PORTS[i], nlUdp) = nrOk then
     begin
@@ -5590,7 +5627,7 @@ function NetGetNextSpaced(var P: PUtf8Char): RawUtf8;
 var
   S: PUtf8Char;
 begin
-  result := '';
+  FastAssignNew(result);
   while P^ in [#9, ' '] do
     inc(P);
   if P^ < ' ' then
@@ -6078,7 +6115,7 @@ end;
 
 function TUri.ServerPort: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if layer = nlUnix then
   begin
     Join(['http://unix:', Server, ':/'], result); // our own layout
@@ -6132,7 +6169,7 @@ end;
 function TUri.UserPasswordBase64: RawUtf8;
 begin
   if User = '' then
-    result := ''
+    FastAssignNew(result)
   else
     result := NetBinToBase64(Join([User, ':', Password]));
 end;
@@ -6917,7 +6954,7 @@ begin
      (Length <= 0) or
      (SockInRead(FastSetString(RawUtf8(result), Length),
                  Length, UseOnlySockIn) <> Length) then
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TCrtSocket.SockInPending(aTimeOutMS: integer): integer;
@@ -7311,7 +7348,7 @@ begin
      (read <> 0) then
     FastSetRawByteString(result, @tmp, read)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TCrtSocket.TrySockRecv(Buffer: pointer; var Length: integer;

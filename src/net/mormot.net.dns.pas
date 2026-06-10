@@ -848,7 +848,7 @@ var
   res: TDnsResult;
   i: PtrInt;
 begin
-  result := '';
+  FastAssignNew(result);
   if ReverseIP4(IP4, rev) and
      DnsQuery(rev, res, drrPTR, NameServers, TimeoutMS) then
     for i := 0 to high(res.Answer) do

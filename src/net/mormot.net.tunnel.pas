@@ -1168,7 +1168,7 @@ function TTunnelLocal.LocalPort: RawUtf8;
 begin
   if (self = nil) or
      (fPort = 0) then
-    result := ''
+    FastAssignNew(result)
   else
     UInt32ToUtf8(fPort, result);
 end;

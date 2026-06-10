@@ -689,7 +689,7 @@ begin
   if (@self = nil) or
      ((FileVersionMS = 0) and
       (FileVersionLS = 0)) then // '0.0.0.0' is meaningless
-    result := ''
+    FastAssignNew(result)
   else
     FormatUtf8('%.%.%.%', [FileMajorVersion, FileMinorVersion,
                            FilePatchVersion, FileBuildVersion], result);
@@ -1146,7 +1146,7 @@ var
   firstbuf: boolean;
   buf: array[0 .. 128 shl 10 - 1] of byte; // 128KB of temp copy buffer on stack
 begin
-  result := '';
+  FastAssignNew(result);
   firstbuf := true;
   M := TFileStreamEx.Create(MainFile, fmOpenReadShared);
   try
@@ -1293,7 +1293,7 @@ var
   fixme: array[0..6] of PAnsiChar;
 begin
   // limitation: CertName is ignored and 'Dummy Cert' is forced
-  result := '';
+  FastAssignNew(result);
   pointer(dummy) := FastNewString(_DUMMYLEN);
   if RleUnCompress(@_DUMMY, pointer(dummy), SizeOf(_DUMMY)) <> _DUMMYLEN then
     exit;
@@ -1418,7 +1418,7 @@ var
   P: PAnsiChar;
   cert: RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   cert := FindExeCertificate(FileName, nil, wc, nil, nil);
   i := PosEx(_CERTNAME_, cert);
   if i = 0 then

@@ -262,10 +262,10 @@ type
     procedure ComputeNew;
     /// convert an hexadecimal string value into one ObjectID
     // - returns TRUE if conversion was made, FALSE on any error
-    function FromText(const Text: RawUtf8): boolean; overload;
+    function FromTextU(const Text: RawUtf8): boolean;
     /// convert an hexadecimal string value into one ObjectID
     // - returns TRUE if conversion was made, FALSE on any error
-    function FromText(Text: PUtf8Char): boolean; overload;
+    function FromText(Text: PUtf8Char): boolean;
     /// convert a variant into one ObjectID
     // - will first check for a TBsonVariant containing a betObjectID
     // - then will try to convert the variant from its string value, expecting
@@ -769,6 +769,7 @@ type
     fDocumentStackOffset: TCardinalDynArray;
     fDocumentArray: integer;
     procedure WriteCollectionName(Flags: integer; const CollectionName: RawUtf8);
+    function WriteLike(const name: RawUtf8; const Value: variant): boolean;
   public
     /// rewind the Stream to the position when Create() was called
     // - this will also reset the internal document offset table
@@ -1174,7 +1175,6 @@ function BsonVariant(const Json: RawUtf8): variant; overload;
 // - warning: this overloaded method will mofify the supplied JSON buffer
 // in-place: you can use the overloaded BsonVariant(const Json: RawUtf8) function
 // instead if you do not want to modify the input buffer content
-
 procedure BsonVariant(Json: PUtf8Char; var result: variant); overload;
 
 /// store some object content, supplied as (extended) JSON and parameters,
@@ -1589,7 +1589,7 @@ begin
   if (sciexp < -6) or
      (exp > 0) then
   begin
-    // scientific format
+    // scientific format 0.xxxxE+yy
     dest^ := AnsiChar(dig^ + ord('0'));
     inc(dig);
     inc(dest);
@@ -1940,11 +1940,10 @@ end;
 
 function TDecimal128.FromVariant(const value: variant): boolean;
 var
-  txt: RawUtf8;
   b: PBsonVariantData;
   v64: Int64;
   vt: cardinal;
-  wasString: boolean;
+  tmp: TTempUtf8;
 begin
   b := @value;
   if cardinal(b^.VType) = varVariantByRef then
@@ -1961,8 +1960,9 @@ begin
     FromCurr(PVariant(b)^.VCurrency)
   else
   begin
-    VariantToUtf8(PVariant(b)^, txt, wasString);
-    result := FromText(txt) <> dsvError;
+    VariantToTempUtf8(PVariant(b)^, tmp);
+    result := FromText(tmp.Text, tmp.Len) <> dsvError;
+    TempUtf8Done(tmp);
     exit;
   end;
   result := true;
@@ -2090,7 +2090,7 @@ begin
   res.VObjectID := self;
 end;
 
-function TBsonObjectID.FromText(const Text: RawUtf8): boolean;
+function TBsonObjectID.FromTextU(const Text: RawUtf8): boolean;
 begin
   if length(Text) = SizeOf(self) * 2 then
     result := mormot.core.text.HexToBin(pointer(Text), @self, SizeOf(self))
@@ -2105,9 +2105,8 @@ end;
 
 function TBsonObjectID.FromVariant(const value: variant): boolean;
 var
-  txt: RawUtf8;
   b: PBsonVariantData;
-  wasString: boolean;
+  tmp: TTempUtf8;
 begin
   b := @value;
   if cardinal(b^.VType) = varVariantByRef then
@@ -2119,10 +2118,8 @@ begin
     result := true;
   end
   else
-  begin
-    VariantToUtf8(PVariant(b)^, txt, wasString);
-    result := wasString and FromText(txt);
-  end;
+    result := VariantToTempUtf8(PVariant(b)^, tmp, [vfNoAlloc]) and
+              FromText(tmp.Text);
 end;
 
 procedure TBsonObjectID.ToText(var result: RawUtf8);
@@ -2700,7 +2697,7 @@ begin
     if wasString then
     begin
       VarClear(variant(Dest));
-      if TBsonVariantData(Dest).VObjectID.FromText(tmp) then
+      if TBsonVariantData(Dest).VObjectID.FromTextU(tmp) then
       begin
         Dest.VType := VarType;
         TBsonVariantData(Dest).VKind := betObjectID;
@@ -2992,7 +2989,7 @@ begin
      item.FromSearch(Data.DocList, aName) then
     result := item.ToRawUtf8
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TBsonElement.DocItemToInteger(
@@ -3861,6 +3858,43 @@ begin
   BsonDocumentEnd;
 end;
 
+function TBsonWriter.WriteLike(const name: RawUtf8; const Value: variant): boolean;
+var
+  like: RawUtf8;
+  len: PtrInt;
+  wasString: boolean;
+begin
+  result := false;
+  VariantToUtf8(Value, like, wasString);
+  len := length(like);
+  if (len = 0) or
+     not wasString then
+    exit;
+  if like[1] = '%' then
+    if len = 1 then
+      // LIKE '%' is invalid
+      exit
+    else if like[len] = '%' then
+      if len = 2 then
+        // LIKE '%%' is invalid
+        exit
+      else
+        // LIKE '%a%' -> /a/
+        TrimChars(like, 1, 1)
+    else
+      // LIKE '%a'  -> /a$/
+      like := copy(like, 2, len - 1) + '$'
+  else
+  if like[len] = '%' then
+    // LIKE 'a%'  -> /^a/
+    like := '^' + copy(like, 1, len - 1)
+  else
+    // LIKE 'a'   -> /^a$/
+    like := '^' + like + '$';
+  BsonWriteRegEx(name, like, 'i'); // /like/i for case-insensitivity
+  result := true;
+end;
+
 const
   QUERY_OPS: array[opNotEqualTo..opIn] of RawUtf8 = (
     '$ne',   // opNotEqualTo
@@ -3881,9 +3915,6 @@ const
 function TBsonWriter.BsonWriteQueryOperator(name: RawUtf8; inverted: boolean;
   op: TSelectStatementOperator; const Value: variant): boolean;
 var
-  wasString: boolean;
-  like: RawUtf8;
-  len: integer;
   doInvert: boolean;
 begin
   result := false; // error on premature exit
@@ -3916,35 +3947,8 @@ begin
         BsonDocumentEnd;
       end;
     opLike:
-      begin
-        VariantToUtf8(Value, like, wasString);
-        len := length(like);
-        if (len = 0) or
-           not wasString then
-          exit;
-        if like[1] = '%' then
-          if len = 1 then
-            // LIKE '%' is invalid
-            exit
-          else if like[len] = '%' then
-            if len = 2 then
-              // LIKE '%%' is invalid
-              exit
-            else
-              // LIKE '%a%' -> /a/
-              TrimChars(like, 1, 1)
-          else
-            // LIKE '%a'  -> /a$/
-            like := copy(like, 2, len - 1) + '$'
-        else
-        if like[len] = '%' then
-          // LIKE 'a%'  -> /^a/
-          like := '^' + copy(like, 1, len - 1)
-        else
-          // LIKE 'a'   -> /^a$/
-          like := '^' + like + '$';
-        BsonWriteRegEx(name, like, 'i'); // /like/i for case-insensitivity
-      end;
+      if not WriteLike(name, Value) then
+        exit; // impossible to convert this LIKE operation to the proper RegEx
     opContains:
       begin
         // http://docs.mongodb.org/manual/reference/operator/query/in
@@ -4410,7 +4414,7 @@ function ObjectID(const Hexa: RawUtf8): variant;
 var
   ID: TBsonObjectID;
 begin
-  if ID.FromText(Hexa) then
+  if ID.FromTextU(Hexa) then
     ID.ToVariant(result)
   else
     EBsonException.RaiseUtf8('Invalid ObjectID("%")', [Hexa]);

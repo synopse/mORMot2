@@ -1668,7 +1668,7 @@ end;
 function TServiceContainer.GetMethodName(ListInterfaceMethodIndex: integer): RawUtf8;
 begin
   if cardinal(ListInterfaceMethodIndex) >= cardinal(length(fInterfaceMethod)) then
-    result := ''
+    FastAssignNew(result)
   else
     with fInterfaceMethod[ListInterfaceMethodIndex] do
       result := InterfaceService.fInterface.GetMethodName(InterfaceMethodIndex);
@@ -1772,7 +1772,7 @@ var
   i: PtrInt;
   temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
-  result := '';
+  FastAssignNew(result);
   if (self = nil) or
      (fInterface = nil) then
     exit;

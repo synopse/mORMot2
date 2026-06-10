@@ -219,9 +219,6 @@ function IsOptions(const method: RawUtf8): boolean;
 function IsUrlFavIcon(P: PUtf8Char): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// check if the supplied text start with 'http://' or 'https://'
-function IsHttp(const text: RawUtf8): boolean;
-
 /// true if the supplied text is case-insensitive 'none'
 // - as in THttpRequestExtendedOptions.Proxy field
 function IsNone(const text: RawUtf8): boolean;
@@ -2708,7 +2705,7 @@ end;
 function AuthorizationBearer(const AuthToken: RawUtf8): RawUtf8;
 begin
   if AuthToken = '' then
-    result := ''
+    FastAssignNew(result)
   else
     Join(['Authorization: Bearer ', AuthToken], result);
 end;
@@ -2764,7 +2761,7 @@ begin
   end;
   // recreate an expurgated headers set
   if tot = 0 then // genocide
-    result := ''
+    FastAssignNew(result)
   else if purged = 0 then
     if (not trim) or
        (headers[PStrLen(h - _STRLEN)^] > ' ') then
@@ -2999,15 +2996,6 @@ begin
         (PCardinalArray(P)[2] =
            ord('.') + ord('i') shl 8 + ord('c') shl 16 + ord('o') shl 24) and
         (P[12] = #0);
-end;
-
-function IsHttp(const text: RawUtf8): boolean;
-begin
-  result := (length(text) > 5) and
-            (PCardinal(text)^ and $dfdfdfdf = HTTP_32) and
-            ((text[5] = ':') or
-             ((text[5] in ['s', 'S']) and
-              (text[6] = ':')));
 end;
 
 function IsNone(const text: RawUtf8): boolean;
@@ -4024,7 +4012,7 @@ function THttpRequestContext.ContentToOutput(
   aStatus: integer; aOutStream: TStream): integer;
 var
   date: TShort31;
-begin
+begin // from THttpClientSocket.Request
   if (aStatus = HTTP_SUCCESS) and
      (ContentLength = 0) then
     aStatus := HTTP_NOCONTENT;
@@ -4064,6 +4052,7 @@ function THttpRequestContext.CompressContentAndFinalizeHead(
   MaxSizeAtOnce: integer): PRawByteStringBuffer;
 var
   date: TShort31;
+  P: PUtf8Char;
 begin
   // DoRequest will use Head buffer by default (and send the body separated)
   result := @Head;
@@ -4123,8 +4112,9 @@ begin
     result^.AppendShort(date);
     result^.AppendCRLF;
   end;
-  if (ContentType <> '') and
-     (ContentType[1] <> '!') and
+  P := pointer(ContentType);
+  if (P <> nil) and
+     (P^ <> '!') and
      not (hhContentType in HeadCustom) then
   begin
     result^.AppendShort('Content-Type: ');
@@ -5672,7 +5662,7 @@ begin
     AddByte(TByteDynArray(fVariable), vn, v);
     include(fVariables, THttpLogVariable(v));
   until false;
-  result := ''; // success
+  FastAssignNew(result); // success
   if vn <> 0 then
     DynArrayFakeLength(fVariable, vn);
   if un <> 0 then
@@ -6538,7 +6528,7 @@ var
   s: THttpAnalyzerScope;
   p: THttpAnalyzerPeriod;
 begin
-  result := '';
+  FastAssignNew(result);
   if Name <> '' then
     if FromText(Name, s) then
       result := GetAsText(s)
@@ -7282,7 +7272,7 @@ var
   s: THttpAnalyzerScope;
   p: THttpAnalyzerPeriod;
 begin
-  result := '';
+  FastAssignNew(result);
   if Name <> '' then
     if FromText(Name, s) then
       result := GetAsText(Start, Stop, s)

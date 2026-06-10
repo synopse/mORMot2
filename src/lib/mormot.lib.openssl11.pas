@@ -7606,7 +7606,7 @@ var
 begin
   if (@self = nil) or
      (SSL_CIPHER_description(@self, @cipher, SizeOf(cipher)) = nil) then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     s := 0;
@@ -7809,7 +7809,7 @@ function BioSave(instance: pointer; sav: TBioSave;
 var
   bio: PBIO;
 begin
-  result := '';
+  FastAssignNew(result);
   if instance = nil then
     exit;
   bio := BIO_new(BIO_s_mem);
@@ -7941,7 +7941,7 @@ function KuText(usages: TX509Usages): RawUtf8;
 var
   u: TX509Usage;
 begin
-  result := '';
+  FastAssignNew(result);
   for u := low(KU_) to high(KU_) do
     if u in usages then
       result := Join([result, KU_[u]]);
@@ -7951,7 +7951,7 @@ function XuText(usages: TX509Usages): RawUtf8;
 var
   u: TX509Usage;
 begin
-  result := '';
+  FastAssignNew(result);
   for u := low(XU_) to high(XU_) do
     if u in usages then
       result := Join([result, XU_[u]]);
@@ -8035,7 +8035,7 @@ var
   L: PtrInt;
   tmp: TSynTempBuffer;
 begin
-  result := '';
+  FastAssignNew(result);
   if (@self = nil) or
      (NID <= 0) then
     exit;
@@ -8207,7 +8207,7 @@ end;
 function X509_REVOKED.SerialNumber: RawUtf8;
 begin
   if @self = nil then
-    result := ''
+    FastAssignNew(result)
   else
     X509_REVOKED_get0_serialNumber(@self).ToHex(result);
 end;
@@ -8296,7 +8296,7 @@ end;
 function X509_CRL.IssuerName: RawUtf8;
 begin
   if @self = nil then
-    result := ''
+    FastAssignNew(result)
   else
     X509_CRL_get_issuer(@self).ToUtf8(result);
 end;
@@ -8473,7 +8473,7 @@ begin
   try
     result := BioSave(@self, @PEM_write_bio_X509_CRL, CP_UTF8);
   except
-    result := ''; // EOpenSSL if the CRL is not signed -> ignore
+    FastAssignNew(result); // EOpenSSL if the CRL is not signed -> ignore
   end;
 end;
 
@@ -8839,7 +8839,7 @@ var
   x: PX509;
   c: PX509_CRL;
 begin
-  result := '';
+  FastAssignNew(result);
   if (@self = nil) or
      (Der = '') then
     exit;
@@ -8965,7 +8965,7 @@ function BIGNUM.ToDecimal: RawUtf8;
 var
   tmp: PUtf8Char;
 begin
-  result := '';
+  FastAssignNew(result);
   if @self = nil then
     exit;
   tmp := BN_bn2dec(@self);
@@ -8977,7 +8977,7 @@ function BIGNUM.ToHex: RawUtf8;
 var
   bin: RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if @self = nil then
     exit;
   ToBin(bin);
@@ -9257,7 +9257,7 @@ begin
     if nam = rdn then
       exit;
   end;
-  result := ''; // id not found
+  FastAssignNew(result); // id not found
 end;
 
 function X509.GetSubject(const id: RawUtf8): RawUtf8;
@@ -9325,7 +9325,7 @@ end;
 function X509.ExtensionText(nid: integer): RawUtf8;
 begin
   if @self = nil then
-    result := ''
+    FastAssignNew(result)
   else
     Extension(nid).ToUtf8(result);
 end;
@@ -9348,7 +9348,7 @@ var
   nid, md, bits: integer;
 begin
   if @self = nil then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     nid := X509_get_signature_nid(@self);
@@ -9366,7 +9366,7 @@ function X509.GetSignatureHash: RawUtf8;
 var
   md: integer;
 begin
-  result := '';
+  FastAssignNew(result);
   md := 0;
   if (@self <> nil) and
      (X509_get_signature_info(@self, @md, nil, nil, nil) = OPENSSLSUCCESS) and
@@ -9562,7 +9562,7 @@ begin
      (X509_digest(@self, md, @dig, @len) <> OPENSSLSUCCESS) or
      (len <= 0) or
      (len > SizeOf(dig)) then
-    result := ''
+    FastAssignNew(result)
   else
     result := MacToHex(@dig, len);
 end;
@@ -9697,7 +9697,7 @@ function X509.ToPkcs12(pkey: PEVP_PKEY; const password: SpiUtf8;
 var
   p12: PPKCS12;
 begin
-  result := '';
+  FastAssignNew(result);
   if (@self = nil) or
      (pkey = nil) then
     exit;
@@ -9840,7 +9840,7 @@ var
   bio: PBIO;
   res: integer;
 begin
-  result := '';
+  FastAssignNew(result);
   if @self = nil then
     exit;
   bio := BIO_new(BIO_s_mem);
@@ -9864,7 +9864,7 @@ var
   bio: PBIO;
   res: integer;
 begin
-  result := '';
+  FastAssignNew(result);
   if @self = nil then
     exit;
   bio := BIO_new(BIO_s_mem);
@@ -9899,7 +9899,7 @@ var
 begin
   // expects @self to be a private key
   // we don't check "if @self = nil" because may be called without EVP_PKEY
-  result := ''; // '' on error
+  FastAssignNew(result); // '' on error
   ctx := EVP_MD_CTX_new;
   try
     // note: ED25519 requires single-pass EVP_DigestSign()
@@ -9914,7 +9914,7 @@ begin
           SetLength(result, s); // result leading zeros may trim the size
       end
       else
-        result := '';
+        FastAssignNew(result);
     end;
   finally
     EVP_MD_CTX_free(ctx);
@@ -9946,7 +9946,7 @@ var
   s: RawUtf8;
 begin
   // self instance is not used
-  result := '';
+  FastAssignNew(result);
   for i := 0 to length(Subjects) - 1 do // in-place modified
   begin
     s := Subjects[i];
@@ -9966,7 +9966,7 @@ var
   names: PX509_NAME;
 begin
   // same logic as in TCryptCertOpenSsl.Generate
-  result := '';
+  FastAssignNew(result);
   if (@self = nil) or
      (Subjects = nil) then
     exit;
@@ -9996,7 +9996,7 @@ begin
   if @self <> nil then
     result := OBJ_nid2sn(EVP_PKEY_id(@self))
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 procedure EVP_PKEY.Free;
@@ -10029,7 +10029,7 @@ var
 begin
   // expects @self to be a public key
   // must be RSA because it is the only OpenSSL algorithm featuring key transport
-  result := '';
+  FastAssignNew(result);
   // validate input parameters
   head.plainlen := length(Msg);
   if (@self = nil) or
@@ -10060,10 +10060,10 @@ begin
       if EVP_SealFinal(ctx, pointer(p), @lf) = OPENSSLSUCCESS then
         FakeLength(result, p + lf - pointer(result))
       else
-        result := '';
+        FastAssignNew(result);
     end
     else
-      result := '';
+      FastAssignNew(result);
   end;
   EVP_CIPHER_CTX_free(ctx);
 end;
@@ -10091,7 +10091,7 @@ var
   input: PByteArray absolute Msg;
 begin
   // expects @self to be a private key
-  result := '';
+  FastAssignNew(result);
   // decode and validate the header
   lm := length(Msg);
   if (@self = nil) or
@@ -10141,7 +10141,7 @@ var
   len: PtrUInt;
 begin
   // to be used for a very small content since this may be very slow
-  result := '';
+  FastAssignNew(result);
   if @self = nil then
     exit;
   ctx := EVP_PKEY_CTX_new(@self, nil);
@@ -10169,7 +10169,7 @@ var
   ctx: PEVP_PKEY_CTX;
   len: PtrUInt;
 begin
-  result := '';
+  FastAssignNew(result);
   if @self = nil then
     exit;
   ctx := EVP_PKEY_CTX_new(@self, nil);
@@ -10280,7 +10280,7 @@ procedure OpenSSL_error(error: integer; var result: RawUtf8);
 var
   tmp: TBuffer1K;
 begin
-  result := '';
+  FastAssignNew(result);
   if error = SSL_ERROR_NONE then // no error in the queue
     exit;
   ERR_error_string_n(error, @tmp, SizeOf(tmp));
@@ -10843,7 +10843,7 @@ var
   ctx: PEVP_PKEY_CTX;
   len: PtrUInt;
 begin
-  result := '';
+  FastAssignNew(result);
   // validate parameters
   if (DestLen < 16) or
      (N <= 1) or
@@ -10869,7 +10869,7 @@ begin
    len := DestLen;
    if (EVP_PKEY_derive(ctx, FastNewRawByteString(result, len), @len) <= 0) or
       (len <> DestLen) then
-     result := '';
+     FastAssignNew(result);
   finally
     EVP_PKEY_CTX_free(ctx);
   end;
@@ -10880,7 +10880,7 @@ var
   bio: PBIO;
   i: PtrInt;
 begin
-  result := '';
+  FastAssignNew(result);
   if X509 = nil then
     exit;
   bio := BIO_new(BIO_s_mem);
@@ -10895,7 +10895,7 @@ function PX509DynArrayToText(const X509: PX509DynArray): RawUtf8;
 var
   i: PtrInt;
 begin
-  result := '';
+  FastAssignNew(result);
   for i := 0 to length(X509) - 1 do
     result := Join([result, X509[i].PeerInfo, '---------'#13#10]);
 end;
@@ -11394,7 +11394,7 @@ end;
 
 function TOpenSslNetTls.GetRawCert(SignHashName: PRawUtf8): RawByteString;
 begin
-  result := '';
+  FastAssignNew(result);
   if (fSsl = nil) or
      (fSsl.PeerCertificate = nil) then
     exit;

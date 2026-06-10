@@ -796,7 +796,7 @@ begin
   res := GetCol(Col, ftBlob);
   case res of
     colNull:
-      result := '';
+      FastAssignNew(result);
     colWrongType:
       ColumnToTypedValue(Col, ftBlob, result);
   else
@@ -811,7 +811,7 @@ begin
   res := GetCol(Col, ftUtf8);
   case res of
     colNull:
-      result := '';
+      FastAssignNew(result);
     colWrongType:
       ColumnToTypedValue(Col, ftUtf8, result);
   else

@@ -1546,7 +1546,7 @@ begin
     // complex TOrmVirtualTableJson/External queries will rely on virtual table
     result := MainEngineList(SQL, {ajax=}false, nil);
   if result = '[]'#$A then
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TRestOrmServer.InternalUpdateEvent(aEvent: TOrmEvent;

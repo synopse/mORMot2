@@ -1901,7 +1901,7 @@ function DateToIso8601Text(Date: TDateTime): RawUtf8;
 begin
   // into 'YYYY-MM-DD' date format
   if Date = 0 then
-    result := ''
+    FastAssignNew(result)
   else
     DateToIso8601PChar(Date, FastSetString(result, 10), true);
 end;
@@ -1964,7 +1964,7 @@ begin
 end;
 
 function _DoDateTimeToText(dt: TDateTime): RawUtf8;
-begin // fastger version to be injected in mormot.core.os.pas instead of RTL
+begin // faster version to be injected in mormot.core.os.pas instead of RTL
   DateTimeToIso8601Var(dt, {expanded=}true, {withms=}false, ' ', #0, result);
 end;
 
@@ -2019,7 +2019,7 @@ procedure DateTimeToIso8601TextVar(DT: TDateTime; FirstChar: AnsiChar;
   var result: RawUtf8; WithMS: boolean);
 begin
   if DT = 0 then
-    result := ''
+    FastAssignNew(result)
   else if frac(DT) = 0 then
     result := DateToIso8601(DT, true)
   else if trunc(DT) = 0 then
@@ -2494,7 +2494,7 @@ end;
 function TSynDate.ToText(Expanded: boolean): RawUtf8;
 begin
   if PInt64(@self)^ = 0 then
-    result := ''
+    FastAssignNew(result)
   else
     result := DateToIso8601(Year, Month, Day, Expanded);
 end;
@@ -3216,7 +3216,7 @@ var
 begin
   //  'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
   if DateTime = 0 then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     T.FromDateTime(DateTime);
@@ -3246,7 +3246,7 @@ var
   T: TSynSystemTime;
 begin
   if dt = 0 then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     T.FromDateTime(dt);
@@ -3549,7 +3549,7 @@ function UnixMSTimeToString(const UnixMSTime: TUnixMSTime; Expanded: boolean;
 begin
   // inlined UnixMSTimeToDateTime()
   if UnixMSTime <= 0 then
-    result := ''
+    FastAssignNew(result)
   else
     result := DateTimeMSToString(UnixMSTime * MilliSecsPerDate + UnixDateDelta,
                                  Expanded, FirstTimeChar, TZD);
@@ -4450,9 +4450,9 @@ begin
   assert(SizeOf(GlobalTime) = 128);
   assert(TTextDateWriter.InstanceSize <= SizeOf(TLocalWriter) - 256);
   // some mormot.core.text wrappers are implemented by this unit
-  _VariantToUtf8DateTimeToIso8601 := DateTimeToIso8601TextVar;
-  _Iso8601ToDateTime              := Iso8601ToDateTime;
-  DoDateTimeToText                := _DoDateTimeToText;
+  _VariantToUtf8DateTimeIso8601 := DateTimeToIso8601TextVar;
+  _Iso8601ToDateTime            := Iso8601ToDateTime;
+  DoDateTimeToText              := _DoDateTimeToText;
 end;
 
 

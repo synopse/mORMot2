@@ -1488,7 +1488,9 @@ end;
 
 function TSynEvent.WaitFor(TimeoutMS: cardinal): boolean;
 begin
+  fWaiting := true;
   WaitForSingleObject(THandle(fHandle), TimeoutMS);
+  fWaiting := false;
   result := fNotified;
 end;
 
@@ -2125,7 +2127,7 @@ var
   len: DWord;
   name: array[0..4095] of WideChar;
 begin
-  result := '';
+  FastAssignNew(result);
   if PID = 0 then
     exit;
   h := OpenProcess(OpenProcessAccess, false, PID);
@@ -3089,7 +3091,7 @@ var
   rtype, rsize, res: DWord;
   tmp: TSynTempBuffer;
 begin
-  result := '';
+  FastAssignNew(result);
   rsize := {%H-}tmp.Init; // most of the time, a single call is enough
   res := RegQueryValueExW(key, pointer(entry), nil, @rtype, tmp.buf, @rsize);
   if res <> NO_ERROR then
@@ -3115,12 +3117,12 @@ function TWinRegistry.ReadData(const entry: SynUnicode): RawByteString;
 var
   rsize: DWord;
 begin
-  result := '';
+  FastAssignNew(result);
   if RegQueryValueExW(key, pointer(entry), nil, nil, nil, @rsize) <> NO_ERROR then
     exit;
   SetLength(result, rsize);
   if RegQueryValueExW(key, pointer(entry), nil, nil, pointer(result), @rsize) <> NO_ERROR then
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TWinRegistry.ReadDword(const entry: SynUnicode): cardinal;
@@ -3325,7 +3327,7 @@ begin
         NtDllChecked := lsAvailable;
     end;
   end;
-  result := '';
+  FastAssignNew(result);
   if (size <= 4 shl 20) and // map up to 4MB
      (NtDllChecked = lsAvailable) then
   begin
@@ -3895,7 +3897,7 @@ end;
 function TService.GetArgs(Idx: integer): RawUtf8;
 begin
   if cardinal(Idx) > cardinal(high(fArgsList)) then
-    result := ''
+    FastAssignNew(result)
   else
     // avoid GPF
     result := fArgsList[Idx];
@@ -4440,7 +4442,7 @@ var
   redir: PRawByteString;
   processinfo: TProcessInformation;
 begin
-  result := '';
+  FastAssignNew(result);
   redir := nil; // if onoutput is enough (e.g. to avoid huge result)
   if setresult then
     redir := @result;

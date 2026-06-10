@@ -251,7 +251,7 @@ procedure fpexit(code: cint);
 function WaitProcess(pid: cint): cint;
 
 function fpmmap(start: pointer; len: PtrUInt; prot, flags, fd: cint; offst: Int64): pointer;
-function fpmunmap(start: pointer; len: PtrUint): cint;
+function fpmunmap(start: pointer; len: PtrUInt): cint;
 
 type
   Dir     = Posix.DirEnt.Dir;
@@ -780,7 +780,7 @@ begin
   result := mmap(start, len, prot, flags, fd, offst);
 end;
 
-function fpmunmap(start: pointer; len: PtrUint): cint;
+function fpmunmap(start: pointer; len: PtrUInt): cint;
 begin
   result := munmap(start, len);
 end;

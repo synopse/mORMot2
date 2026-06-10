@@ -168,7 +168,7 @@ function JsonUnicodeEscape(const s: RawUtf8): RawUtf8;
 function JsonUnicodeUnEscape(const s: RawUtf8): RawUtf8;
 
 /// encode one \u#### JSON escaped UTF-16 codepoint into Dest
-procedure Utf16ToJsonUnicodeEscape(var B: PUtf8Char; c: PtrUint; tab: PByteToWord);
+procedure Utf16ToJsonUnicodeEscape(var B: PUtf8Char; c: PtrUInt; tab: PByteToWord);
   {$ifdef HASINLINE} inline; {$endif}
 
 /// test if the supplied buffer is a "string" value or a numerical value
@@ -2253,17 +2253,11 @@ function JsonFileToObject(const JsonFile: TFileName; var ObjectInstance;
 // - will also register this class type, if needed, so RegisterClass() is
 // redundant to this method
 procedure AutoCreateFields(ObjectInstance: TObject);
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// should be called by T*AutoCreateFields destructors
 // - constructor should have called AutoCreateFields()
 procedure AutoDestroyFields(ObjectInstance: TObject);
   {$ifdef HASINLINE}inline;{$endif}
-
-/// internal function called by AutoCreateFields() when inlined
-// - do not call this internal function, but always AutoCreateFields()
-function DoRegisterAutoCreateFields(ObjectInstance: TObject): TRttiJson;
-
 
 type
   /// abstract TPersistent class, which will instantiate all its nested class
@@ -4123,9 +4117,9 @@ begin
     begin
       c := PInteger(Value)^;
       if c = TRUE_LOW then
-        Value := pointer(SmallUInt32Utf8[1]) // normalize true -> 1
+        Value := @UINT_999[1].TextLo // normalize true -> 1
       else if c = FALSE_LOW then
-        Value := pointer(SmallUInt32Utf8[0]) // normalize false -> 0
+        Value := @UINT_999[0].TextLo // normalize false -> 0
       else
         exit;
       ValueLen := 1; // result = '0' or '1'
@@ -4382,7 +4376,7 @@ var
   B: PUtf8Char;
   parser: TJsonParser;
 begin
-  result := '';
+  FastAssignNew(result);
   if P = nil then
     exit;
   B := GotoNextNotSpace(P);
@@ -6824,12 +6818,12 @@ begin
     save := VARIANT_JSONSAVE[vt];
     if Assigned(save) then
     begin
-      save(@v^.VAny, ctxt);
+      save(@v^.VAny, ctxt); // direct output up to varOleUInt
       exit;
     end;
   end;
-  if vt = varString then
-    AddText(RawByteString(v^.VString), Escape)
+  if vt = varString then // most common first
+    AddText(RawByteString(v^.VString), Escape) // assume normalized as RawUtf8
   else
   case vt of
     varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}:
@@ -9042,7 +9036,7 @@ function JsonDecode(Json: PUtf8Char; const aName: RawUtf8;
 var
   info: TGetJsonField;
 begin
-  result := '';
+  FastAssignNew(result);
   if Json = nil then
     exit;
   while Json^ <> '{' do
@@ -9259,7 +9253,7 @@ var
 begin
   result := 0;
   if (self = nil) or
-     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) or // no entry
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) or  // no entry
      (fSafe.Padding[DIC_TIMESEC].VInteger = 0) then // nothing in fTimeOut[]
     exit;
   if tix64 = 0 then
@@ -9304,7 +9298,8 @@ end;
 
 procedure TSynDictionary.DeleteAll;
 begin
-  if self = nil then
+  if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) then // no entry
     exit;
   fSafe.Lock; // = RWLock(cWrite);
   try
@@ -9422,7 +9417,10 @@ begin
     ESynDictionary.RaiseUtf8('%.Values: % items are not dynamic arrays',
       [self, fValues.Info.Name]);
   if aAction = iaFind then
-    fSafe.ReadLock
+    if fSafe.Padding[DIC_KEYCOUNT].VInteger = 0 then // no entry
+      exit
+    else
+      fSafe.ReadLock
   else
     fSafe.Lock; // other actions may need to write the internal data
   try
@@ -9469,16 +9467,19 @@ function TSynDictionary.FindKeyFromValue(const aValue;
 var
   ndx: PtrInt;
 begin
+  result := false;
+  if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) then // no entry
+    exit;
   fSafe.ReadLock; // cReadOnly is good enough for SetTimeoutAtIndex()
   try
     ndx := fValues.IndexOf(aValue); // use fast RTTI for value search
     result := ndx >= 0;
-    if result then
-    begin
-      fKeys.ItemCopyAt(ndx, @aKey);
-      if aUpdateTimeOut then
-        SetTimeoutAtIndex(ndx); // no cWrite lock needed
-    end;
+    if not result then
+      exit;
+    fKeys.ItemCopyAt(ndx, @aKey);
+    if aUpdateTimeOut then
+      SetTimeoutAtIndex(ndx); // no cWrite lock needed
   finally
     fSafe.ReadUnLock;
   end;
@@ -9580,7 +9581,8 @@ var
   ndx: PtrInt;
 begin
   result := false;
-  if self = nil then
+  if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) then // no entry
     exit;
   fSafe.ReadLock;
   {$ifdef HASFASTTRYFINALLY}
@@ -9608,7 +9610,8 @@ var
   ndx: PtrInt;
 begin
   result := -1;
-  if self = nil then
+  if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) then // no entry
     exit;
   tim := ComputeNextTimeOut;
   if tim = 0 then
@@ -9630,6 +9633,7 @@ var
 begin
   result := false;
   if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) or // no entry
      (aSeconds <= 0) then
     exit;
   tim := ComputeNextTimeOut;
@@ -9651,7 +9655,8 @@ var
   ndx: PtrInt;
 begin
   result := false;
-  if self = nil then
+  if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) then // no entry
     exit;
   fSafe.ReadWriteLock;
   try
@@ -9677,7 +9682,8 @@ end;
 function TSynDictionary.Exists(const aKey): boolean;
 begin
   result := false;
-  if self = nil then
+  if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) then // no entry
     exit;
   fSafe.ReadLock;
   {$ifdef HASFASTTRYFINALLY}
@@ -9697,7 +9703,8 @@ function TSynDictionary.ExistsValue(
   const aValue; aCompare: TDynArraySortCompare): boolean;
 begin
   result := false;
-  if self = nil then
+  if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) then // no entry
     exit;
   fSafe.ReadLock;
   try
@@ -9724,6 +9731,9 @@ var
   i, n, ks, vs: PtrInt;
 begin
   result := 0;
+  if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) then // no entry
+    exit;
   if MayModify then
     fSafe.ReadWriteLock
   else
@@ -9760,12 +9770,15 @@ var
   k, v: PAnsiChar;
   i, n, ks, vs: PtrInt;
 begin
+  result := 0;
+  if (self = nil) or
+     (fSafe.Padding[DIC_KEYCOUNT].VInteger = 0) then // no entry
+    exit;
   if MayModify then
     fSafe.ReadWriteLock
   else
     fSafe.ReadLock;
   try
-    result := 0;
     if (not Assigned(OnMatch)) or
        (not (Assigned(KeyCompare) or
              Assigned(ValueCompare))) then
@@ -9844,7 +9857,7 @@ function TSynDictionary.SaveValuesToJson(EnumSetsAsText: boolean;
 begin
   if self = nil then
   begin
-    result := '';
+    FastAssignNew(result);
     exit;
   end;
   fSafe.ReadLock;
@@ -9949,7 +9962,7 @@ var
   tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
   W: TBufferWriter;
 begin
-  result := '';
+  FastAssignNew(result);
   if fSafe.Padding[DIC_KEYCOUNT].VInteger = 0 then
     exit;
   W := TBufferWriter.Create(tmp{%H-});
@@ -10282,8 +10295,7 @@ begin
     varBoolean:
       // rkInteger,rkBool,rkEnumeration,rkSet using VInt64 for unsigned 32-bit
       Dest.VInt64 := RTTI_FROM_ORD[Cache.RttiOrd](Data);
-    varWord64:
-      // rkInt64, rkQWord
+    varWord64: // rkInt64, rkQWord
       begin
         if not (rcfQWord in Cache.Flags) then
           TSynVarData(Dest).VType := varInt64; // fix VType
@@ -10295,34 +10307,29 @@ begin
     varDouble,
     varCurrency:
       Dest.VInt64 := PInt64(Data)^;
-    varString:
-      // rkString
+    varString: // rkString
       begin
         Dest.VAny := nil; // avoid GPF
         RawByteString(Dest.VAny) := PRawByteString(Data)^;
       end;
-    varOleStr:
-      // rkWString
+    varOleStr: // rkWString
       begin
         Dest.VAny := nil; // avoid GPF
         WideString(Dest.VAny) := PWideString(Data)^;
       end;
     {$ifdef HASVARUSTRING}
-    varUString:
-      // rkUString
+    varUString: // rkUString
       begin
         Dest.VAny := nil; // avoid GPF
         UnicodeString(Dest.VAny) := PUnicodeString(Data)^;
       end;
     {$endif HASVARUSTRING}
-    varVariant:
-      // rkVariant
+    varVariant: // rkVariant
       begin
         TSynVarData(Dest).VType := varEmpty; // for next line
         SetVariantByValue(PVariant(Data)^, PVariant(@Dest)^, {forcenoutf8=}true);
       end;
-    varUnknown:
-      // rkChar, rkWChar, rkSString converted into temporary RawUtf8
+    varUnknown: // rkChar, rkWChar, rkSString converted into temporary RawUtf8
       begin
         TSynVarData(Dest).VType := varString;
         Dest.VAny := nil; // avoid GPF
@@ -10918,7 +10925,7 @@ var
 begin
   if length(Values) = 0 then
     if WithoutBraces then
-      result := ''
+      FastAssignNew(result)
     else
       result := '[]'
   else
@@ -10991,7 +10998,7 @@ var
 begin
   nfo := Rtti.RegisterTypeFromName(TypeName);
   if nfo = nil then
-    result := ''
+    FastAssignNew(result)
   else
     SaveJson(Value, nfo.Cache.Info, Options, result);
 end;
@@ -11074,7 +11081,7 @@ begin
   DynArray.Init(TypeInfo, Value);
   try
     if DynArray.LoadFrom(BlobValue, PAnsiChar(BlobValue) + BlobLen) = nil then
-      result := ''
+      FastAssignNew(result)
     else
       with TJsonWriter.CreateOwnedStream(temp) do
       try
@@ -11342,16 +11349,11 @@ end;
 
 { ********************* Abstract Classes with Auto-Create-Fields }
 
-function DoRegisterAutoCreateFields(ObjectInstance: TObject): TRttiJson;
-begin // sub procedure for smaller code generation in AutoCreateFields/Create
-  result := Rtti.RegisterAutoCreateFieldsClass(PClass(ObjectInstance)^) as TRttiJson;
-end;
-
 procedure AutoCreateFields(ObjectInstance: TObject);
 var
-  p: PPRttiCustomProp;
-  n: integer;
-begin
+  p: pointer;
+  n: TDALen;
+begin // not inlined, since Create() are already slow and complex enough
   {$ifdef NOPATCHVMT}
   p := pointer(Rtti.FindType(PPointer(PPAnsiChar(ObjectInstance)^ + vmtTypeInfo)^));
   {$else}
@@ -11359,17 +11361,17 @@ begin
   {$endif NOPATCHVMT}
   if (p = nil) or
      not (rcfAutoCreateFields in TRttiJson(p).Flags) then
-    p := pointer(DoRegisterAutoCreateFields(ObjectInstance));
-  p := pointer(TRttiJson(p).fAutoCreateInstances);
+    p := Rtti.RegisterAutoCreateFieldsClass(PClass(ObjectInstance)^);
+  p := TRttiJson(p).fAutoCreateInstances;
   if p = nil then
     exit;
   // create all published class (or IDocList/IDocDict) fields
   n := PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF; // length(AutoCreateClasses)
-  repeat
-    with p^^ do // NewInterface() offset = NewInstance() offset for rkInterface
+  repeat // for rkInterface, NewInterface() and NewInstance() are at same offset
+    with PPRttiCustomProp(p)^^ do
       PPointer(PAnsiChar(ObjectInstance) + OffsetGet)^ :=
         TRttiCustomNewInstance(Value.Cache.NewInstance)(Value);
-    inc(p);
+    inc(PPRttiCustomProp(p));
     dec(n);
   until n = 0;
 end;
@@ -11379,7 +11381,7 @@ var
   r: TRttiJson;
   p: PPRttiCustomProp;
   v: pointer;
-  n: integer;
+  n: TDALen;
 begin
   {$ifdef NOPATCHVMT}
   r := pointer(Rtti.FindType(PPointer(PPAnsiChar(ObjectInstance)^ + vmtTypeInfo)^));
@@ -11743,6 +11745,7 @@ begin
   CLASS_RTTI[vcRawUtf8List]   := TRawUtf8List;
   Rtti.RegisterTypes([TypeInfo(TRawUtf8DynArray), TypeInfo(TIntegerDynArray)]);
   // prepare some JSON wrappers
+  DefaultJsonWriter := TJsonWriter;
   GetDataFromJson := _GetDataFromJson;
   InitializeVariantsJson; // from mormot.core.variants
   {$ifdef FPC} // we need to call it once so that it is linked to the executable
@@ -11754,7 +11757,6 @@ end;
 
 initialization
   InitializeUnit;
-  DefaultJsonWriter := TJsonWriter;
 
 end.
 

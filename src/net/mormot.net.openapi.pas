@@ -1035,7 +1035,7 @@ end;
 function TOpenApiTag.Description: RawUtf8;
 begin
   if @self = nil then
-    result := ''
+    FastAssignNew(result)
   else
     result := TrimU(Data.U['description']);
 end;
@@ -1275,7 +1275,7 @@ begin
     FormatUtf8('%% = %;%', [fParser.fLineIndent, ToArrayTypeName({final=}true),
       ToArrayTypeName(false), fParser.LineEnd], result)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 

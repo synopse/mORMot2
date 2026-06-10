@@ -1435,7 +1435,7 @@ function Base32ToBin(const base32: RawUtf8): RawByteString; overload;
 
 // internal raw functions used to initialize Base32/58/64/64uri decoding lookup
 procedure FillLookupTable(s, d: PByteArray; his: PtrUInt);
-procedure FillBaseDecoder(s: PAnsiChar; d: PAnsiCharDec; i: PtrUInt);
+procedure FillBaseDecoder(s: PAnsiChar; d: PAnsiCharDec; i: PtrUInt = 63);
 
 /// fill a RawBlob from TEXT-encoded blob data
 // - blob data can be encoded as SQLite3 BLOB literals (X'53514C697465' e.g.) or
@@ -2680,6 +2680,7 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     fBuffer: RawUtf8; // actual storage, with length(fBuffer) as Capacity
+    procedure Realloc(needed: PtrInt); // called from Append(P,PLen)
   public
     /// how many bytes are currently used in the Buffer
     Len: PtrInt;
@@ -2698,20 +2699,21 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// add some UTF-8 buffer content to the Buffer, resizing it if needed
     procedure Append(P: pointer; PLen: PtrInt); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// add some UTF-8 string content to the Buffer, resizing it if needed
     procedure Append(const Text: RawUtf8); overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// add some number as text content to the Buffer, resizing it if needed
+    /// add some 64-bit number as text content to the Buffer, resizing it if needed
     procedure Append(Value: QWord); overload;
     /// add some UTF-8 ShortString content to the Buffer, resizing it if needed
     procedure AppendShort(const Text: ShortString);
-      {$ifdef HASINLINE}inline;{$endif}
     /// just after Append/AppendShort, append a #13#10 end of line
     procedure AppendCRLF;
       {$ifdef HASINLINE}inline;{$endif}
     /// just after Append/AppendShort, append one single character
     procedure Append(Ch: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// just after Append/AppendShort, append a 0..999 number
+    procedure Append999(U: PtrUInt);
     /// add some UTF-8 string(s) content to the Buffer, resizing it if needed
     procedure Append(const Text: array of RawUtf8); overload;
     /// add some UTF-8 buffer content to the Buffer, without resizing it
@@ -2723,6 +2725,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// use a specified string buffer as start
     procedure Reserve(const WorkingBuffer: RawByteString); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// similar to delete(fBuffer, 1, FirstBytes)
     procedure Remove(FirstBytes: PtrInt);
       {$ifdef HASINLINE}inline;{$endif}
@@ -2738,7 +2741,7 @@ type
     /// retrieve the current Buffer/Len content as RawUtf8 text
     // - with some optional overhead bytes to avoid ReallocMem at concatenation
     // - won't force Len to 0: caller should call Reset if done with it
-    procedure AsText(out Text: RawUtf8; Overhead: PtrInt = 0);
+    procedure AsText(var Text: RawUtf8; Overhead: PtrInt = 0);
   end;
 
   /// pointer reference to a TRawByteStringBuffer
@@ -5243,7 +5246,7 @@ var
   crc: cardinal;
   tmp: TBuffer16K;  // big enough to resize result in-place
 begin
-  result := '';
+  FastAssignNew(result);
   if (PlainLen = 0) or
      (Plain = nil) then
     exit;
@@ -5404,7 +5407,7 @@ begin
     exit;
   dec := FastSetString(RawUtf8(result), len + BufferOffset); // CP_UTF8 for FPC
   if not DecompressBody(Comp, dec + BufferOffset, CompLen, len, Load) then
-    result := '';
+    FastAssignNew(result);
 end;
 
 function TAlgoCompress.Decompress(const Comp: RawByteString; Load: TAlgoCompressLoad;
@@ -6684,7 +6687,7 @@ end;
 function Base64ToBinSafe(const s: RawByteString): RawByteString;
 begin
   if s = '' then
-    result := ''
+    FastAssignNew(result)
   else
     Base64ToBinSafe(pointer(s), length(s), result);
 end;
@@ -7435,7 +7438,7 @@ begin
       exit;
     end;
   end;
-  result := '';
+  FastAssignNew(result);
 end;
 
 function Base32ToBin(const base32: RawUtf8): RawByteString;
@@ -7452,7 +7455,7 @@ procedure BlobToRawBlob(P: PUtf8Char; var result: RawBlob; Len: integer);
 var
   LenHex: integer;
 begin
-  result := '';
+  FastAssignNew(result);
   if Len = 0 then
     Len := StrLen(P);
   if Len = 0 then
@@ -7481,7 +7484,7 @@ var
   Len, LenHex: integer;
   P: PUtf8Char;
 begin
-  result := '';
+  FastAssignNew(result);
   if Blob = '' then
     exit;
   Len := length(Blob);
@@ -7946,7 +7949,7 @@ function AsciiToBaudot(P: PAnsiChar; len: PtrInt): RawByteString;
 var
   tmp: TSynTempBuffer;
 begin
-  result := '';
+  FastAssignNew(result);
   if (P = nil) or
      (len = 0) then
     exit;
@@ -9216,7 +9219,7 @@ function TMemoryMapText.GetLine(aIndex: integer): RawUtf8;
 begin
   if (self = nil) or
      (cardinal(aIndex) >= cardinal(fCount)) then
-    result := ''
+    FastAssignNew(result)
   else
     FastSetString(result, fLines[aIndex], GetLineSize(fLines[aIndex], fMapEnd));
 end;
@@ -9385,11 +9388,11 @@ end;
 
 function Append999ToBuffer(Buffer: PUtf8Char; Value: PtrUInt): PUtf8Char;
 var
-  P: PAnsiChar;
+  r: PStrRecConst;
 begin
-  P := pointer(SmallUInt32Utf8[Value]);
-  PCardinal(Buffer)^ := PCardinal(P)^;
-  result := Buffer + PStrLen(P - _STRLEN)^;
+  r := @UINT_999[Value];
+  PCardinal(Buffer)^ := r.TextLo;
+  result := Buffer + r.Header.length;
 end;
 
 function AppendBufferToBuffer(Buffer: PUtf8Char; Text: pointer; Len: PtrInt): PUtf8Char;
@@ -9404,20 +9407,16 @@ var
   P: PAnsiChar;
   tmp: TTemp24;
 begin
-  {$ifndef ASMINTEL} // our StrUInt32 asm has less CPU cache pollution
-  if Value <= high(SmallUInt32Utf8) then
-  begin
-    P := pointer(SmallUInt32Utf8[Value]);
-    L := PStrLen(P - _STRLEN)^;
-    MoveByOne(P, Buffer, L);
-  end
-  else
-  {$endif ASMINTEL}
-  begin
-    P := StrUInt32(@tmp[23], Value);
-    L := @tmp[23] - P;
-    MoveFast(P^, Buffer^, L);
-  end;
+  if Value <= high(UINT_999) then
+    with UINT_999[Value] do
+    begin
+      PCardinal(Buffer)^ := TextLo;
+      result := Buffer + Header.length;
+      exit;
+    end;
+  P := StrUInt32(@tmp[23], Value);
+  L := @tmp[23] - P;
+  MoveFast(P^, Buffer^, L);
   result := Buffer + L;
 end;
 
@@ -9753,7 +9752,7 @@ function TStreamRedirect.GetProgress: RawUtf8;
 begin
   if (self = nil) or
      fTerminated then
-    result := ''
+    FastAssignNew(result)
   else
     result := fInfo.GetProgress;
 end;
@@ -10381,7 +10380,7 @@ function StreamToRawByteString(aStream: TStream; aSize: Int64;
 var
   current: Int64;
 begin
-  result := '';
+  FastAssignNew(result);
   if aStream = nil then
     exit;
   current := aStream.Position;
@@ -10406,7 +10405,7 @@ begin
   end;
   pointer(result) := FastNewString(aSize, aCodePage);
   if not StreamReadAll(aStream, pointer(result), aSize) then
-    result := '';
+    FastAssignNew(result);
   aStream.Position := current; // always restore position
 end;
 
@@ -10414,7 +10413,7 @@ function StreamChangeToRawByteString(aStream: TStream; var aPosition: Int64): Ra
 var
   current, size: Int64;
 begin
-  result := '';
+  FastAssignNew(result);
   if aStream = nil then
     exit;
   size := aStream.Size - aPosition;
@@ -10427,7 +10426,7 @@ begin
   if StreamReadAll(aStream, pointer(result), size) then
     aPosition := current
   else
-    result := '';
+    FastAssignNew(result);
   aStream.Position := current; // always restore position
 end;
 
@@ -10445,7 +10444,7 @@ begin
      (L <= 0) or
      (L > MaxAllowedSize) or
      not StreamReadAll(S, FastSetString(result, L), L) then
-    result := '';
+    FastAssignNew(result);
 end;
 
 function WriteStringToStream(S: TStream; const Text: RawUtf8): boolean;
@@ -10578,7 +10577,7 @@ end;
 function TRawByteStringGroup.AsText: RawByteString;
 begin
   if Values = nil then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     if Count > 1 then
@@ -10601,11 +10600,7 @@ begin
     for i := 1 to Count do
     begin
       MoveFast(pointer(v^.Value)^, tmp[v^.Position], length(v^.Value));
-      {$ifdef FPC}
       FastAssignNew(v^.Value);
-      {$else}
-      v^.Value := '';
-      {$endif FPC}
       inc(v);
     end;
     pointer(Values[0].Value) := tmp; // absolute compaction ;)
@@ -10909,21 +10904,26 @@ begin
   result := length(fBuffer);
 end;
 
+procedure TRawByteStringBuffer.Realloc(needed: PtrInt);
+begin
+  if Len = 0 then // buffer from scratch (fBuffer may be '' or not)
+    FastSetString(fBuffer, needed + 96) // no realloc + small initial overhead
+  else
+    SetLength(fBuffer, needed + needed shr 3 + 2048); // generous overhead
+end;
+
 procedure TRawByteStringBuffer.Append(P: pointer; PLen: PtrInt);
 var
   needed: PtrInt;
+  b: PAnsiChar;
 begin
   if PLen <= 0 then
     exit;
-  needed := Len + PLen + 32; // +32 for Append(AnsiChar), AppendCRLF
-  if needed > length(fBuffer) then
-    if Len = 0 then // buffer from scratch (fBuffer may be '' or not)
-      FastSetString(fBuffer, needed + 96) // no realloc + small initial overhead
-    else
-    begin
-      inc(needed, needed shr 3 + 2048); // generous overhead on resize
-      SetLength(fBuffer, needed);       // realloc = move existing data
-    end;
+  needed := PLen + Len + 32; // +32 for Append(AnsiChar), AppendCRLF
+  b := pointer(fBuffer);
+  if (b = nil) or
+     (needed > PStrLen(b - _STRLEN)^) then
+    Realloc(needed);
   MoveFast(P^, PByteArray(fBuffer)[Len], PLen);
   inc(Len, PLen);
 end;
@@ -10939,34 +10939,49 @@ end;
 
 procedure TRawByteStringBuffer.Append(Value: QWord);
 var
-  tmp: TTemp24;
   P: PAnsiChar;
+  l: PtrInt;
+  u: PStrRecConst;
+  tmp: TTemp24;
 begin
-  {$ifndef ASMINTEL} // our StrUInt64 asm has less CPU cache pollution
-  if Value <= high(SmallUInt32Utf8) then
-    Append(SmallUInt32Utf8[Value])
+  if {$ifndef HASQWORD} (Value >= 0) and {$endif}
+     (Value <= high(UINT_999)) then
+  begin
+    u := @UINT_999[Value];
+    p := @u^.TextLo;
+    l := u^.Header.length;
+  end
   else
-  {$endif ASMINTEL}
   begin
     P := StrUInt64(@tmp[23], Value);
-    Append(P, @tmp[23] - P);
+    l := @tmp[23] - P;
   end;
+  Append(P, l);
 end;
 
 procedure TRawByteStringBuffer.AppendCRLF;
 var
   p: PByteArray; // faster than PWord() on Intel
 begin
-  p := @PByteArray(fBuffer)[Len];
+  p := @PByteArray(fBuffer)[Len]; // within +32 Append() overhead
   p[0] := 13;
-  p[1] := 10;
+  p[1] := 10;                     // CR+LF as used e.g. in HTTP headers
   inc(Len, 2);
 end;
 
 procedure TRawByteStringBuffer.Append(Ch: AnsiChar);
 begin
-  PByteArray(fBuffer)[Len] := ord(Ch);
+  PByteArray(fBuffer)[Len] := ord(Ch); // within +32 Append() overhead
   inc(Len);
+end;
+
+procedure TRawByteStringBuffer.Append999(U: PtrUInt);
+var
+  s: PStrRecConst;
+begin
+  s := @UINT_999[MinPtrUInt(999, U)]; // within +32 Append() overhead
+  PCardinal(@PByteArray(fBuffer)[Len])^ := s^.TextLo;
+  inc(Len, s^.Header.length);
 end;
 
 procedure TRawByteStringBuffer.AppendShort(const Text: ShortString);
@@ -10977,9 +10992,14 @@ end;
 procedure TRawByteStringBuffer.Append(const Text: array of RawUtf8);
 var
   i: PtrInt;
+  p: PAnsiChar;
 begin
   for i := 0 to high(Text) do
-    Append(Text[i]);
+  begin
+    p := pointer(text[i]);
+    if p <> nil then
+      Append(p, PStrLen(p - _STRLEN)^);
+  end;
 end;
 
 function TRawByteStringBuffer.TryAppend(P: pointer; PLen: PtrInt): boolean;
@@ -11053,8 +11073,9 @@ begin
   dec(Count, result);
 end;
 
-procedure TRawByteStringBuffer.AsText(out Text: RawUtf8; Overhead: PtrInt);
+procedure TRawByteStringBuffer.AsText(var Text: RawUtf8; Overhead: PtrInt);
 begin
+  FastAssignNew(Text);
   if (Len = 0) or
      (fBuffer = '') or
      (OverHead < 0) then
@@ -11069,8 +11090,8 @@ end; // keep Len since may be not final - see e.g. TPostConnection.OnRead
 procedure InitializeUnit;
 begin
   // initialize Base64/Base64Uri encoding/decoding tables
-  FillBaseDecoder(@ConvertToBase64,    @ConvertBase64ToBin,    high(ConvertToBase64));
-  FillBaseDecoder(@ConvertToBase64Uri, @ConvertBase64uriToBin, high(ConvertToBase64Uri));
+  FillBaseDecoder(@ConvertToBase64,    @ConvertBase64ToBin);
+  FillBaseDecoder(@ConvertToBase64Uri, @ConvertBase64uriToBin);
   ConvertBase64ToBin['='] := -2; // special value for ending '='
   Base64EncodeMain     := @Base64EncodeMainPas;
   Base64DecodeMain     := @Base64DecodeMainPas;

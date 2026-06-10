@@ -4455,7 +4455,7 @@ function TSqlDBConnectionProperties.SqlGetField(
 var
   owner, table, fmt: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   case GetDbms of
     dOracle:
       fmt :=
@@ -4508,7 +4508,7 @@ var
   owner, table: RawUtf8;
   fmt: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   case GetDbms of
     dOracle:
       fmt :=
@@ -4570,7 +4570,7 @@ var
   owner, package, proc: RawUtf8;
   fmt: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   SqlSplitProcedureName(aProcName, owner, package, proc);
   case GetDbms of
     dOracle:
@@ -4629,7 +4629,7 @@ function TSqlDBConnectionProperties.SqlGetProcedure: RawUtf8;
 var
   fmt, owner: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   case GetDbms of
     dOracle:
       fmt := 'select case P.OBJECT_TYPE' +
@@ -4686,7 +4686,7 @@ begin
     dNexusDB:
       result := 'select table_name name from #tables order by table_name';
   else
-    result := ''; // others (e.g. dDB2) will retrieve info from (ODBC) driver
+    FastAssignNew(result); // others (e.g. dDB2) will retrieve info from (ODBC) driver
   end;
 end;
 
@@ -4715,7 +4715,7 @@ begin
     dNexusDB:
       result := 'select view_name name from #views order by view_name'; // NOT TESTED !!!
   else
-    result := ''; // others (e.g. dDB2) will retrieve info from (ODBC) driver
+    FastAssignNew(result); // others (e.g. dDB2) will retrieve info from (ODBC) driver
   end;
 end;
 
@@ -4733,7 +4733,7 @@ begin
           [aDatabaseName, aDefaultPageSize], result);
       end;
   else
-    result := '';
+    FastAssignNew(result);
   end;
 end;
 
@@ -4960,7 +4960,7 @@ var
   addprimarykey: RawUtf8;
 begin
   // use 'ID' instead of 'RowID' here since some DB (e.g. Oracle) use it
-  result := '';
+  FastAssignNew(result);
   if high(aFields) < 0 then
     exit; // nothing to create
   if aAddID then
@@ -5038,7 +5038,7 @@ const
 var
   indexname, fieldscsv, coldesc, owner, table: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if (self = nil) or
      (aTableName = '') or
      (high(aFieldNames) < 0) then
@@ -5518,7 +5518,7 @@ function TSqlDBConnectionProperties.FieldsFromList(
 var
   i, n: PtrInt;
 begin
-  result := '';
+  FastAssignNew(result);
   if byte(aExcludeTypes) <> 0 then
   begin
     n := length(aFields);
@@ -5545,7 +5545,7 @@ function TSqlDBConnectionProperties.SqlSelectAll(const aTableName: RawUtf8;
 begin
   if (self = nil) or
      (aTableName = '') then
-    result := ''
+    FastAssignNew(result)
   else
     Join(['select ', FieldsFromList(aFields, aExcludeTypes),
           ' from ', SqlTableName(aTableName)], result);
@@ -5559,7 +5559,7 @@ class function TSqlDBConnectionProperties.EngineName: RawUtf8;
 var
   L: PtrInt;
 begin
-  result := '';
+  FastAssignNew(result);
   if self = nil then
     exit;
   ClassToText(self, result);
@@ -6949,7 +6949,7 @@ end;
 function TSqlDBStatement.GetSqlWithInlinedParams: RawUtf8;
 begin
   if fSql = '' then
-    result := ''
+    FastAssignNew(result)
   else
   begin
     if fSqlWithInlinedParams = '' then
@@ -7146,7 +7146,7 @@ var
   F: PtrInt;
   size: integer;
 begin
-  result := '';
+  FastAssignNew(result);
   if (self = nil) or
      (TableName = '') then
     exit;
@@ -7165,7 +7165,7 @@ begin
       ftUnknown:
         begin
           Fields := nil;
-          result := ''; // not enough information
+          FastAssignNew(result); // not enough information
           exit;
         end;
     end;

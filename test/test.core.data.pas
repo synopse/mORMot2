@@ -467,6 +467,9 @@ end;
 procedure TTestCoreProcess.Variants;
 var
   v: Variant;
+  u: SynUnicode;
+  i64: Int64;
+  d: double;
   vd: TVarData absolute v;
   info: TGetJsonField;
   t: pointer;
@@ -708,6 +711,8 @@ begin
   Check(v._kind = ord(dvObject));
   Check(v._count = 0);
   v := VariantLoadJson('[1,2,3]', @JSON_[mFast]);
+  Check(not AnyVariantToInteger(v, i64));
+  CheckEqual(AnyVariantToIntegerDef(v), 0);
   Check(v._kind = ord(dvArray));
   Check(v._count = 3);
   v := VariantLoadJson(' {"a":10,b:20}', @JSON_[mFast]);
@@ -721,6 +726,37 @@ begin
   CheckEqual(vd.VType, varString);
   Check(VariantTypeName(v)^ = 'String');
   Check(v = 'toto'#13#10'toto');
+  Check(not AnyVariantToInteger(v, i64));
+  Check(not AnyVariantToDouble(v, d));
+  CheckEqual(AnyVariantToIntegerDef(v), 0);
+  CheckEqual(AnyVariantToIntegerDef(v, -1), -1);
+  v := '123';
+  i64 := 0;
+  Check(AnyVariantToInteger(v, i64));
+  CheckEqual(i64, 123);
+  d := 0;
+  Check(AnyVariantToDouble(v, d));
+  Check(d = 123.0, '123a');
+  CheckEqual(AnyVariantToIntegerDef(v), 123);
+  Check(not AnyVariantToInteger(Null, i64));
+  CheckEqual(i64, 123);
+  CheckEqual(AnyVariantToIntegerDef(Null), 0);
+  CheckEqual(AnyVariantToIntegerDef(Null, 1), 1);
+  Check(not AnyVariantToDouble(Null, d));
+  Check(d = 123.0, '123b');
+  u := '1234';
+  v := u; // as SynUnicode
+  CheckEqual(AnyVariantToIntegerDef(v), 1234);
+  Check(AnyVariantToInteger(v, i64));
+  CheckEqual(i64, 1234);
+  Check(AnyVariantToDouble(v, d));
+  Check(d = 1234, '1234');
+  v := 12.0;
+  CheckEqual(AnyVariantToIntegerDef(v), 12);
+  Check(AnyVariantToInteger(v, i64));
+  CheckEqual(i64, 12);
+  Check(AnyVariantToDouble(v, d));
+  Check(d = 12.0, '12');
 end;
 
 type
@@ -6060,7 +6096,7 @@ begin
   Check(double(o) = double(o2));
   o := ObjectID;
   Check(Abs(NowUtc - double(o)) < 0.1);
-  oid.FromText(ToUtf8(string(o)));
+  oid.FromTextU(ToUtf8(string(o)));
   Check(Abs(NowUtc - oid.CreateDateTime) < 0.1);
   oid2.ComputeNew;
   Check(oid.MachineID.b1 = oid2.MachineID.b1);
@@ -9060,7 +9096,7 @@ end;
 
 const
   // regression tests use a const table instead of our runtime-computed array
-  crc32tab: array[byte] of cardinal = ($00000000, $77073096, $EE0E612C,
+  c32t: array[byte] of cardinal = ($00000000, $77073096, $EE0E612C,
     $990951BA, $076DC419, $706AF48F, $E963A535, $9E6495A3, $0EDB8832, $79DCB8A4,
     $E0D5E91E, $97D2D988, $09B64C2B, $7EB17CBD, $E7B82D07, $90BF1D91, $1DB71064,
     $6AB020F2, $F3B97148, $84BE41DE, $1ADAD47D, $6DDDE4EB, $F4D4B551, $83D385C7,
@@ -9107,7 +9143,7 @@ begin
   result := not aCRC32;
   for i := 1 to inLen do
   begin
-    result := crc32tab[(result xor pByte(inBuf)^) and $ff] xor (result shr 8);
+    result := c32t[(result xor pByte(inBuf)^) and $ff] xor (result shr 8);
     inc(PByte(inBuf));
   end;
   result := not result;
@@ -9123,16 +9159,17 @@ var
   s, tmp: RawByteString;
   gzr: TGZRead;
 begin
-  Check(crc32(0, @crc32tab, 5) = $DF4EC16C, 'crc32');
-  Check(ReferenceCrc32(0, @crc32tab, 5) = $DF4EC16C, 'crc32');
-  Check(crc32(0, @crc32tab, 1024) = $6FCF9E13, 'crc32');
-  Check(ReferenceCrc32(0, @crc32tab, 1024) = $6FCF9E13);
-  Check(crc32(0, @crc32tab, 1024 - 5) = $70965738, 'crc32');
-  Check(ReferenceCrc32(0, @crc32tab, 1024 - 5) = $70965738);
-  Check(crc32(0, pointer(PtrInt(@crc32tab) + 1), 2) = $41D912FF, 'crc32');
-  Check(ReferenceCrc32(0, pointer(PtrInt(@crc32tab) + 1), 2) = $41D912FF);
-  Check(crc32(0, pointer(PtrInt(@crc32tab) + 3), 1024 - 5) = $E5FAEC6C, 'crc32');
-  Check(ReferenceCrc32(0, pointer(PtrInt(@crc32tab) + 3), 1024 - 5) = $E5FAEC6C, 'crc32');
+  Check(crc32(0, @c32t, 5) = $DF4EC16C, 'crc32');
+  Check(ReferenceCrc32(0, @c32t, 5) = $DF4EC16C, 'crc32');
+  Check(crc32(0, @c32t, 1024) = $6FCF9E13, 'crc32');
+  Check(ReferenceCrc32(0, @c32t, 1024) = $6FCF9E13);
+  Check(crc32(0, @c32t, 1024 - 5) = $70965738, 'crc32');
+  Check(ReferenceCrc32(0, @c32t, 1024 - 5) = $70965738);
+  Check(crc32(0, pointer(PtrInt(@c32t) + 1), 2) = $41D912FF, 'crc32');
+  Check(ReferenceCrc32(0, pointer(PtrInt(@c32t) + 1), 2) = $41D912FF);
+  Check(crc32(0, pointer(PtrInt(@c32t) + 3), 1024 - 5) = $E5FAEC6C, 'crc32');
+  Check(CompareMem(@c32t, crc32tab, SizeOf(c32t)), 'crc32tab');
+  Check(ReferenceCrc32(0, pointer(PtrInt(@c32t) + 3), 1024 - 5) = $E5FAEC6C, 'crc32');
   M := TMemoryStream.Create;
   Z := TSynZipCompressor.Create(M, 6, szcfGZ);
   L := length(Data);

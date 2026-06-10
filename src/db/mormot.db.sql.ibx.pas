@@ -1423,7 +1423,7 @@ var
   AddPrimaryKey: RawUtf8;
 begin
   // use 'ID' instead of 'RowID' here since some DB (e.g. Oracle) use it
-  result := '';
+  FastAssignNew(result);
   if high(aFields) < 0 then
     exit; // nothing to create
   if aAddID then

@@ -195,7 +195,7 @@ begin
       if p[1] in ['-', '/'] then
       begin
         if {%H-}sw <> '' then
-          fValues.AddValue(sw, true); // -flag -switch value -> flag=true
+          fValues.AddValue(sw, VarTrue); // -flag -switch value -> flag=true
         sw := LowerCase(copy(p, 2, 100));
         if sw = 'noprompt' then
         begin
@@ -205,12 +205,12 @@ begin
       end
       else if sw <> '' then
       begin
-        fValues.AddValueFromText(sw, p, true);
+        fValues.AddValueFromText(sw, p, {update=}true);
         sw := '';
       end;
   end;
   if sw <> '' then
-    fValues.AddValue(sw, true); // trailing -flag
+    fValues.AddValue(sw, VarTrue); // trailing -flag
 end;
 
 constructor TCommandLine.Create(const switches: variant;

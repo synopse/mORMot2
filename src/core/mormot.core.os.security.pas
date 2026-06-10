@@ -3196,7 +3196,7 @@ begin
   if IsValidRawSid(sid) then
     SidToText(pointer(sid), result)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function GetNextUInt32(var P: PUtf8Char): cardinal;
@@ -5574,7 +5574,7 @@ var
   pad: PtrUInt;
   bin: TSynTempAdder; // no temporary allocation needed
 begin
-  result := '';
+  FastAssignNew(result);
   if (Count = 0) or
      (Error <> atpSuccess) or
      (Root >= Count) then
@@ -5888,7 +5888,7 @@ var
   dom: RawSid;
   tmp: TSynTempAdder;
 begin
-  result := '';
+  FastAssignNew(result);
   if not TryDomainTextToSid(RidDomain, dom) then
     exit;
   tmp.Init;
@@ -6260,7 +6260,7 @@ function FileIsKeyTabMachineAccountPrincipal(const aKeytab: TFileName;
 var
   kt: TKerberosKeyTab;
 begin
-  result := '';
+  FastAssignNew(result);
   kt := TKerberosKeyTab.Create;
   try
     if kt.LoadFromFile(aKeyTab) then
@@ -6292,7 +6292,7 @@ var
   i, v, n: integer;
   r: RawUtf8;
 begin
-  result := '';
+  FastAssignNew(result);
   if pointer(ccache) = nil then
     exit;
   rd.P := pointer(ccache);
@@ -6535,7 +6535,7 @@ var
   n: integer;
   e: ^TKerberosKeyEntry;
 begin
-  result := '';
+  FastAssignNew(result);
   if self = nil then
     exit;
   e := pointer(fEntry);
@@ -6561,7 +6561,7 @@ var
   n, pos: integer;
   dest: TSynTempAdder;
 begin
-  result := '';
+  FastAssignNew(result);
   e := pointer(fEntry);
   if e = nil then
     exit; // kutil write_kt don't save anything for a void keytab
@@ -6623,7 +6623,8 @@ begin
     r^ := byte(Value) or $80;
     Value := Value shr 7;
   end;
-  AppendShortBuffer(pointer(r), PAnsiChar(@tmp[15]) - pointer(r), high(Result), @Result);
+  AppendShortBuffer(pointer(r), PAnsiChar(@tmp[15]) - pointer(r),
+    high(Result), @Result);
 end;
 
 function AsnEncOid(OidText: PUtf8Char): TAsnObject;
@@ -6702,7 +6703,7 @@ var
   p: PByte;
   tmp: THash128;
 begin
-  result := '';
+  FastAssignNew(result);
   neg := Value < 0;
   Value := Abs(Value);
   if neg then
@@ -6843,7 +6844,7 @@ function AsnArr(const Data: array of RawUtf8; AsnType: integer): TAsnObject;
 var
   i: PtrInt;
 begin
-  result := '';
+  FastAssignNew(result);
   for i := 0 to high(Data) do
     AsnAdd(result, AsnTyped(Data[i], AsnType));
 end;
@@ -7158,7 +7159,7 @@ var
   tmp: TSynTempBuffer;
 begin
   // call the Windows API to retrieve the System certificates
-  result := '';
+  FastAssignNew(result);
   store := CertOpenSystemStoreW(nil, WINDOWS_CERTSTORE[CertStore]);
   try
     ctx := CertEnumCertificatesInStore(store, nil);
@@ -7441,7 +7442,7 @@ begin
     LocalFree(HLOCAL(dst.pbData));
   end
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 function SetSystemTime(const utctime: TSystemTime): boolean;
@@ -8096,7 +8097,7 @@ function CurrentDomain: RawSid;
 begin
   CurrentRawSid(result);
   if not SidToDomain(result) then
-    result := '';
+    FastAssignNew(result);
 end;
 
 function RawTokenGroups(tok: THandle; var buf: TSynTempBuffer): PSids;
@@ -8383,7 +8384,7 @@ begin
   if LookupToken(tok, name, domain, server) then
     Join([domain, '\', name], result)
   else
-    result := '';
+    FastAssignNew(result);
 end;
 
 var // WinJoinStatus(server='') thread-safe cache for the current computer

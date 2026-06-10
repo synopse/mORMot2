@@ -40,7 +40,7 @@ uses
   mormot.core.threads,
   mormot.crypt.core,
   mormot.crypt.jwt,
-  mormot.core.perf,
+  mormot.core.perf,   // for TSynMonitor + timers in TRestOrmServerDB
   mormot.core.search, // for TRestStorageShardDB FindFiles()
   mormot.crypt.secure,
   mormot.core.log,
@@ -258,7 +258,9 @@ type
     fStatementSql: RawUtf8;
     fStatementLastException: RawUtf8;
     fStatementTruncateSqlLogLen: integer;
+    fBatch: PRestOrmServerDBBatch;
     fStatementDecoder: TExtractInlineParameters;
+    fJsonDecoder: TJsonObjectDecoder; // protected by execOrmWrite lock
     /// check if a VACUUM statement is possible
     // - VACUUM in fact DISCONNECT all virtual modules (sounds like a SQLite3
     // design problem), so calling it during process could break the engine
@@ -268,8 +270,6 @@ type
     // in this case, VACUUM will be a no-op
     function PrepareVacuum(const aSql: RawUtf8): boolean;
   protected
-    fBatch: PRestOrmServerDBBatch;
-    fJsonDecoder: TJsonObjectDecoder; // protected by execOrmWrite lock
     /// retrieve a TSqlRequest instance in fStatement
     // - will set @fStaticStatement if no :(%): internal parameters appear:
     // in this case, the TSqlRequest.Close method must be called
@@ -1912,7 +1912,7 @@ var
   rows: integer;
   msg: ShortString;
 begin
-  result := '';
+  FastAssignNew(result);
   rows := 0;
   if (self <> nil) and
      (DB <> nil) and
@@ -1958,7 +1958,7 @@ var
   msg: ShortString absolute tmp;
 begin
   // faster direct access with no ID inlining
-  result := '';
+  FastAssignNew(result);
   if (ID < 0) or
      (TableModelIndex < 0) or
      (DB = nil) then

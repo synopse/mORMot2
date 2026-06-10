@@ -2228,7 +2228,7 @@ var
   end;
 
 begin
-  result := '';
+  FastAssignNew(result);
   if (JsonObject = nil) or
      (PropPath = nil) then
     exit;
@@ -2780,7 +2780,7 @@ function TSynCache.Find(const aKey: RawUtf8; aResultTag: PPtrInt): RawUtf8;
 var
   p: PSynNameValueItem;
 begin
-  result := '';
+  FastAssignNew(result);
   if (self = nil) or
      (aKey = '') then
     exit;
@@ -3753,6 +3753,7 @@ end;
 {$else} // optimized for x86_64/ARM with more registers
 
 function SearchNoRange(aMatch: PMatch; aText: PUtf8Char; aTextLen: PtrInt): boolean;
+  {$ifdef FPC} inline; {$endif}
 var
   c: AnsiChar;
   pat, patend, txtend, txtretry, patretry: PUtf8Char;
@@ -3819,8 +3820,9 @@ end;
 {$endif CPU32}
 
 function SearchNoRangeU(aMatch: PMatch; aText: PUtf8Char; aTextLen: PtrInt): boolean;
+  {$ifdef FPC_64} inline; {$endif}
 var
-  c: AnsiChar;
+  c: PtrUInt;
   pat, txt: PtrInt;
 begin
   aMatch.T := 0;
@@ -3831,31 +3833,36 @@ begin
   repeat
     if pat <= aMatch.PMax then
     begin
-      c := aMatch.Pattern[pat];
-      case c of
-        '?':
+      c := byte(aMatch.Pattern[pat]);
+      if c <> ord('*') then
+        if c <> ord('?') then
+        begin
+          if (txt <= aMatch.TMax) and
+             (PAnsiChar(aMatch.Upper)[c] = aMatch.Upper[aMatch.Text[txt]]) then
+          begin
+            inc(pat);
+            inc(txt);
+            continue;
+          end;
+        end
+        else
+        begin
+          // '?'
           if txt <= aMatch.TMax then
           begin
             inc(pat);
             inc(txt);
             continue;
           end;
-        '*':
-          begin
-            aMatch.P := pat;
-            aMatch.T := txt + 1;
-            inc(pat);
-            continue;
-          end;
-      else
-        if (txt <= aMatch.TMax) and
-           (aMatch.Upper[c] = aMatch.Upper[aMatch.Text[txt]]) then
+        end
+        else
         begin
+          // '*'
+          aMatch.P := pat;
+          aMatch.T := txt + 1;
           inc(pat);
-          inc(txt);
           continue;
         end;
-      end;
     end
     else if txt > aMatch.TMax then
       break;
@@ -4542,22 +4549,23 @@ function _Glob(Pattern, Text: PUtf8Char; PatternLen, TextLen: PtrInt;
 var
   match: TMatch;
 begin // GLOB has no [range] -> dedicated inlined Prepare() + Match()
-  if Pattern = nil then
-    result := TextLen = 0 // most simple case for sure
-  else if TextLen = 0 then
-    result := false       // as in match.Match()
-  else
-  begin
-    match.Pattern := Pattern;
-    match.PMax := PatternLen - 1;
-    if CaseInsensitive then
+  if Pattern <> nil then
+    if TextLen <> 0 then
     begin
-      match.Upper := @NormToUpperAnsi7;
-      result := SearchNoRangeU(@match, Text, TextLen);
+      match.Pattern := Pattern;
+      match.PMax := PatternLen - 1;
+      if CaseInsensitive then
+      begin
+        match.Upper := @NormToUpperAnsi7;
+        result := SearchNoRangeU(@match, Text, TextLen); // inlined on FPC
+      end
+      else
+        result := SearchNoRange(@match, Text, TextLen);  // inlined on FPC
     end
     else
-      result := SearchNoRange(@match, Text, TextLen);
-  end;
+      result := false      // TextLen=0: as in match.Match()
+  else
+    result := TextLen = 0; // Pattern = nil: most simple case for sure
 end;
 
 function IsMatch(const Pattern, Text: RawUtf8; CaseInsensitive: boolean): boolean;
@@ -5449,7 +5457,7 @@ begin
   try
     res := parser.Parse(aExpression);
     if res = eprSuccess then
-      result := ''
+      FastAssignNew(result)
     else
       result := ToUtf8(res);
   finally
@@ -7992,7 +8000,7 @@ begin
   fSafe.ReadLock;
   ndx := GetIndex(TzId);
   if ndx < 0 then
-    result := ''
+    FastAssignNew(result)
   else
     result := fZone[ndx].display;
   fSafe.ReadUnLock;

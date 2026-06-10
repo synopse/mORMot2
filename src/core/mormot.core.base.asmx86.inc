@@ -464,64 +464,66 @@ asm
         not     eax
 end;
 
-procedure crcblockfast(crc128, data128: PBlock128);
+procedure crcblockone(crc128, data128: PBlock128; tab: PCrc32tab);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         // Delphi is not efficient about corresponding pascal code
         push    ebp
         push    edi
         push    esi
-        mov     ebp, eax  // ebp=crc128 edi=data128
+        push    ebx
+        mov     ebp, eax  // ebp=crc128 edi=data128 ebx=tab
         mov     edi, edx
+        mov     ebx, ecx
         mov     edx, dword ptr [eax]
         mov     ecx, dword ptr [eax + 4]
         xor     edx, dword ptr [edi]
         xor     ecx, dword ptr [edi + 4]
         movzx   esi, dl
-        // note: since we have "+ 1024 * n" offsets, crc32ctab is left immediate
-        mov     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 3]
+        mov     eax, dword ptr [esi * 4 + ebx + 1024 * 3]
         movzx   esi, dh
         shr     edx, 16
-        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 2]
+        xor     eax, dword ptr [esi * 4 + ebx + 1024 * 2]
         movzx   esi, dl
-        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 1]
+        xor     eax, dword ptr [esi * 4 + ebx + 1024 * 1]
         movzx   esi, dh
-        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 0]
+        xor     eax, dword ptr [esi * 4 + ebx + 1024 * 0]
         mov     edx, dword ptr [ebp + 8]
         xor     edx, dword ptr [edi + 8]
         mov     dword ptr [ebp], eax
         movzx   esi, cl
-        mov     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 3]
+        mov     eax, dword ptr [esi * 4 + ebx + 1024 * 3]
         movzx   esi, ch
         shr     ecx, 16
-        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 2]
+        xor     eax, dword ptr [esi * 4 + ebx + 1024 * 2]
         movzx   esi, cl
-        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 1]
+        xor     eax, dword ptr [esi * 4 + ebx + 1024 * 1]
         movzx   esi, ch
-        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 0]
+        xor     eax, dword ptr [esi * 4 + ebx + 1024 * 0]
         mov     dword ptr [ebp + 4], eax
         mov     ecx, dword ptr [ebp + 12]
         xor     ecx, dword ptr [edi + 12]
         movzx   esi, dl
-        mov     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 3]
+        mov     eax, dword ptr [esi * 4 + ebx + 1024 * 3]
         movzx   esi, dh
         shr     edx, 16
-        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 2]
+        xor     eax, dword ptr [esi * 4 + ebx + 1024 * 2]
         movzx   esi, dl
-        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 1]
+        xor     eax, dword ptr [esi * 4 + ebx + 1024 * 1]
         movzx   esi, dh
-        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 0]
+        xor     eax, dword ptr [esi * 4 + ebx + 1024 * 0]
         mov     dword ptr [ebp + 8], eax
         movzx   esi, cl
-        mov     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 3]
+        mov     eax, dword ptr [esi * 4 + ebx + 1024 * 3]
         movzx   esi, ch
         shr     ecx, 16
-        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 2]
+        xor     eax, dword ptr [esi * 4 + ebx + 1024 * 2]
         movzx   esi, cl
-        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 1]
+        xor     eax, dword ptr [esi * 4 + ebx + 1024 * 1]
         movzx   esi, ch
-        xor     eax, dword ptr [esi * 4 + crc32ctab + 1024 * 0]
+        xor     eax, dword ptr [esi * 4 + ebx + 1024 * 0]
         mov     dword ptr [ebp + 12], eax
+        pop     ebx
         pop     esi
         pop     edi
         pop     ebp
