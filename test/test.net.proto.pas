@@ -3239,6 +3239,9 @@ var
     Check(not IsEqual(ip3.b, ip2.b));
     Check(ToIP6(txt, ip3));
     Check(IsEqual(ip3.b, ip2.b));
+    FillZero(ip3.b);
+    Check(ToIP6(Join(['[', txt, ']']), ip3));
+    Check(IsEqual(ip3.b, ip2.b));
     Check(NetIsIP6(@s[1], @ip2));
     Check(NetIsIP6(@s[1]));
     Check(IsEqual(ip.b, ip2.b));
