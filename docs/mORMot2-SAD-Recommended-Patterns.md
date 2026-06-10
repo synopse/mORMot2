@@ -154,27 +154,15 @@ begin
 
 Switching a service from local to remote is a matter of *instance initialization* — register it on a different server, point a client at a URI — **not a code change**. The layering you design in Part B therefore survives any topology you later deploy it on.
 
-**Make the switch a single, localized decision (the client-abstraction pattern).** Concentrate the local-vs-remote choice in one *client-abstraction* unit that every consumer depends on, with two interchangeable implementations. Consumer code never changes and never learns which one it got — the only thing that varies is which implementation unit gets wired up at startup:
+**Make the switch a localized decision with the resolver pattern.** Both `TRestServer.Services` and `TRestClientURI.Services` are **`TInterfaceResolver`** descendants (`mormot.core.interfaces`), so the local-vs-remote choice collapses to *which resolver instance the composition root hands out*. Consumer code depends on one global `TInterfaceResolver` (or, better, is itself a `TInjectableObject` whose published interface properties are auto-resolved — the same mechanism [B.5](#b5-soa-composition-root-and-di) recommends inside services) and never learns where the implementation runs:
 
 ```pascal
 // AppUserClient.pas — the only unit consumer code depends on
-type
-  TUserClient = class abstract
-  public
-    Query: IUserQuery;        // filled by Resolve, in whichever subclass is linked
-    Command: IUserCommand;
-    constructor CreateLocal; virtual; abstract;
-    constructor CreateRemote(const aServer, aPort, aRoot: RawUtf8); virtual; abstract;
-    procedure Resolve; virtual; abstract;
-    class function IsLocal: boolean; virtual; abstract;
-  end;
-  TUserClientClass = class of TUserClient;
 var
-  UserClient: TUserClient;          // active instance, set once at startup
-  UserClientClass: TUserClientClass;
+  UserResolver: TInterfaceResolver;   // set once at startup by Local OR Remote unit
 ```
 
-The two concrete units share that surface and differ only in how `Resolve` obtains the interfaces — a direct object reference locally, an HTTP proxy remotely:
+The two wiring units differ only in what they assign to that variable — an in-process server's container locally, an HTTP client's container remotely:
 
 <details>
 <summary><b>AppUserClientLocal.pas</b> — builds the whole layered stack in-process (the A.6.1 monolith)</summary>
@@ -182,52 +170,23 @@ The two concrete units share that surface and differ only in how `Resolve` obtai
 ```pascal
 unit AppUserClientLocal;
 
-type
-  TUserClientLocal = class(TUserClient)
-  private
-    fModel: TOrmModel;
-    fRest: TRestServerDB;
-    fPersist: TUserPersistence;     // domain/persistence layer  (implements IDomUser)
-    fApp: TUserService;             // application layer (implements IUserQuery/IUserCommand)
-  public
-    constructor CreateLocal; override;
-    procedure Resolve; override;
-    class function IsLocal: boolean; override;
-  end;
-
 implementation
 
-constructor TUserClientLocal.CreateLocal;
-begin
-  fModel := TOrmModel.Create([TOrmUser]);
-  fRest  := TRestServerDB.Create(fModel, ':memory:');   // or a real 'data.db'
-  fRest.Model.Owner := fRest;
-  fRest.Server.CreateMissingTables;
-  // domain/persistence layer owns the ORM:
-  fPersist := TUserPersistence.Create(fRest.Orm);
-  // application layer, with the persistence interface injected (B.5 DI):
-  fApp := TUserService.CreateInjected([], [], [fPersist]);
-  // publish the app layer as services on the in-memory server:
-  fRest.ServiceDefine(fApp, [IUserQuery, IUserCommand]);
-  Resolve;
-end;
-
-procedure TUserClientLocal.Resolve;
-begin
-  Query   := fApp;     // direct assignment — no network, no marshalling
-  Command := fApp;
-end;
-
-class function TUserClientLocal.IsLocal: boolean;
-begin
-  Result := true;
-end;
+var
+  Rest: TRestServerDB;
 
 initialization
-  UserClient      := TUserClientLocal.CreateLocal;   // this unit selects "local"
-  UserClientClass := TUserClientLocal;
+  Rest := TRestServerDB.Create(TOrmModel.Create([TOrmUser]), ':memory:'); // or 'data.db'
+  Rest.Model.Owner := Rest;
+  Rest.Server.CreateMissingTables;
+  // domain/persistence layer owns the ORM; app layer gets it injected (B.5 DI):
+  Rest.ServiceDefine(
+    TUserService.CreateInjected([], [], [TUserPersistence.Create(Rest.Orm)]),
+    [IUserQuery, IUserCommand]);
+  // hand out the server's own container — Resolve() returns direct references:
+  UserResolver := Rest.Services;
 finalization
-  FreeAndNil(UserClient);
+  FreeAndNil(Rest);
 end.
 ```
 
@@ -239,42 +198,27 @@ end.
 ```pascal
 unit AppUserClientRemote;
 
-type
-  TUserClientRemote = class(TUserClient)
-  private
-    fHttp: TRestHttpClientSocket;
-  public
-    constructor CreateRemote(const aServer, aPort, aRoot: RawUtf8); override;
-    procedure Resolve; override;
-    class function IsLocal: boolean; override;
-  end;
+interface
+
+procedure ConnectUserService(const aServer, aPort, aRoot: RawUtf8);
 
 implementation
 
-constructor TUserClientRemote.CreateRemote(const aServer, aPort, aRoot: RawUtf8);
+var
+  Http: TRestHttpClientSocket;
+
+procedure ConnectUserService(const aServer, aPort, aRoot: RawUtf8);
 begin
-  fHttp := TRestHttpClientSocket.Create(aServer, aPort, TOrmModel.Create([], aRoot));
-  fHttp.Model.Owner := fHttp;
+  Http := TRestHttpClientSocket.Create(aServer, aPort, TOrmModel.Create([], aRoot));
+  Http.Model.Owner := Http;
   // declare the SAME interfaces, this time as client-side factories:
-  fHttp.ServiceDefine([IUserQuery, IUserCommand], sicShared);
-  Resolve;
+  Http.ServiceDefine([IUserQuery, IUserCommand], sicShared);
+  // hand out the client's container — Resolve() returns HTTP proxies:
+  UserResolver := Http.Services;
 end;
 
-procedure TUserClientRemote.Resolve;
-begin
-  fHttp.Services.Resolve(IUserQuery,   Query);     // resolve over HTTP
-  fHttp.Services.Resolve(IUserCommand, Command);
-end;
-
-class function TUserClientRemote.IsLocal: boolean;
-begin
-  Result := false;
-end;
-
-initialization
-  UserClientClass := TUserClientRemote;
-  // CreateRemote(host, port, root) is called explicitly at startup,
-  // because it needs connection parameters.
+finalization
+  FreeAndNil(Http);
 end.
 ```
 
@@ -287,48 +231,44 @@ uses
   AppUserClientLocal;      // <-- swap to AppUserClientRemote for distributed
 
 // consumer code, identical and unaware of the line above:
-if UserClient.Query.GetProfile(userID, profile) then
-  ...
+if UserResolver.Resolve(IUserQuery, svc) then
+  svc.GetProfile(userID, profile);
 ```
 
-`Local` is the A.6.1 monolith (one exe, full stack in-process); `Remote` is the A.6.2 distributed layout (HTTP client to a standalone server). The business code is identical; only the linked unit differs.
+`Local` is the A.6.1 monolith (one exe, full stack in-process); `Remote` is the A.6.2 distributed layout (HTTP client to a standalone server). The business code is identical; only the linked unit differs. And inside a service implementation you usually don't even touch `UserResolver` directly — a `TInjectableObject` descendant publishes `property Users: IUserQuery` and the resolver chain fills it ([B.5](#b5-soa-composition-root-and-di)).
 
-One asymmetry to be honest about. The **local** unit self-wires in its `initialization` — it needs no parameters, so linking it is genuinely all you do. The **remote** unit cannot: it needs a host/port/root, so it registers the class in `initialization` and you supply the connection parameters once at startup:
+The **local** unit self-wires in its `initialization` — it needs no parameters, so using it with the `uses` clause is all you do. The **remote** unit cannot: it needs a host/port/root, so it exposes a `ConnectUserService(...)` you call once at startup with values from configuration:
 
 ```pascal
 // startup, remote build only — connection params are configuration, not a code change:
-UserClient := UserClientClass.CreateRemote('10.0.0.7', '443', 'root');
-UserClient.Resolve;
+ConnectUserService('10.0.0.7', '443', 'root');
 ```
 
-So the *decision* is localized, not literally one line for remote: one `uses` line **plus** one `CreateRemote(...)` call fed from config. The local build is the genuinely zero-extra-code case.
+So the *decision* is localized, not literally one line for remote: one `uses` line **plus** one connect call fed from config. The local build is the genuinely zero-extra-code case.
 
 <details>
-<summary><b>Production variant</b> — select the topology with a compile-time define instead of the <code>uses</code> clause</summary>
+<summary><b>IMPORTANT</b> — select the topology with a define (`ifdef`)</summary>
 
-Putting the choice in a shared include file centralizes it in one place and turns "both" or "neither" into a *compile* error instead of a runtime surprise. The selector unit becomes:
+Putting the choice in an include file centralizes it in one place and turns "both" or "neither" into a *compile* error. The selector unit becomes:
 
 ```pascal
 // AppUserClient.pas — selects the implementation at compile time
 {$I project.inc}   // must define exactly one of USERLOCAL / USERREMOTE
 
-{$if defined(USERLOCAL) and defined(USERREMOTE)}
-  {$message fatal 'Define exactly one of USERLOCAL / USERREMOTE — not both'}
-{$elseif not defined(USERLOCAL) and not defined(USERREMOTE)}
-  {$message fatal 'Define exactly one of USERLOCAL / USERREMOTE — not neither'}
-{$ifend}
-
 uses
-  {$ifdef USERLOCAL}  AppUserClientLocal,  {$endif}
-  {$ifdef USERREMOTE} AppUserClientRemote, {$endif}
+  {$ifdef LOCALMORMOT}  
+  AppUserClientLocal,  
+  {$else}
+  AppUserClientRemote, 
+  {$endif}
   ...;
 ```
 
-Now the single switch lives in `project.inc` — flip `{$define USERLOCAL}` to `{$define USERREMOTE}` and the correct unit is linked, with the guard rejecting any misconfigured build before it compiles. (The remote build still supplies its host/port/root once at startup, exactly as above.) This is the form a production deployment tends to settle on, because the switch is one config line and a wrong build fails loudly.
+Now the single switch lives in `project.inc` — place `{$define LOCALMORMOT}` in `project.inc` and the `AppUserClientLocal` is used. The remote build still supplies its host/port/root once at startup, exactly as above. This is the form a production deployment tends to settle on, because the switch is one config line.
 
 </details>
 
-The practical consequence the rest of this section turns on: **a single-executable monolith can still be a fully layered internal stack of services.** You do not split processes to get clean layering — you get that logically, inside one exe. You split processes only when scale, isolation, or a public network boundary actually demands it. So pick the physical topology by deployment context, not by how layered you want the code to be:
+**A single-executable monolith can still be a fully layered internal stack of services.** You do not split processes to get clean layering — you get that logically, inside one exe. You split processes only when scale, isolation, or a public network boundary actually demands it. So pick the physical topology by deployment context, not by how layered you want the code to be:
 
 - **A.6.1** — a single server, the right default for a **trusted / local** deployment (one exe, still logically layered).
 - **A.6.2** — a private system-of-record plus a public edge, for an **Internet-facing or distributed** deployment.
@@ -337,7 +277,7 @@ The practical consequence the rest of this section turns on: **a single-executab
 
 #### A.6.1. Trusted / local deployment
 
-For a service that is only reachable on a trusted network (local box, corporate LAN, in-cluster), a **single server** is correct and simplest. The ORM REST routes it exposes (`/root/TUser`, …) are not an unguarded second door: they sit behind the *same* session authentication as your services, and behind `TOrmAccessRights`, which lets you make a table read-only, forbid CRUD per-table, or expose none at all.
+For a service that is only reachable on a **trusted network** (local box, corporate LAN, in-cluster), a **single server** is correct and simplest. The ORM REST routes it exposes (`/root/TUser`, …) are not an unguarded second door: they sit behind the *same* session authentication as your services, and behind `TOrmAccessRights`, which lets you make a table read-only, forbid CRUD per-table, or expose none at all.
 
 ```pascal
 // 1. Logging: turn it on early (see Chapter 25)
@@ -413,23 +353,23 @@ The names used above are concrete on purpose, but none of them is a new concept.
 
 | Term used here | Established name | Reference |
 |---|---|---|
-| Public edge | **API Gateway**; **Backend-for-Frontend (BFF)** when one edge serves one client app | Richardson, *Microservices Patterns*; Newman, *Building Microservices* |
-| Private system-of-record | **System of Record (SoR)**; the core/domain side of a **Hexagonal (Ports & Adapters)** boundary | Cockburn, *Hexagonal Architecture* |
-| Private/public split | an inbound **adapter** (the edge) in front of the core — Ports & Adapters applied at the deployment boundary | Hexagonal / Onion architecture |
+| Public edge | **API Gateway**; **Backend-for-Frontend (BFF)** when one edge serves one client app | Richardson, *Microservices Patterns* [\[8\]](#ref-8); Newman, *Building Microservices* [\[6\]](#ref-6) |
+| Private system-of-record | **System of Record (SoR)**; the core/domain side of a **Hexagonal (Ports & Adapters)** boundary | Cockburn, *Hexagonal Architecture* [\[1\]](#ref-1) |
+| Private/public split | an inbound **adapter** (the edge) in front of the core — Ports & Adapters applied at the deployment boundary | Hexagonal [\[1\]](#ref-1) / Onion architecture [\[7\]](#ref-7) |
 
 **Logical / layering axis** (Part B — in-process, independent of topology):
 
 | Term used here | Established name | Reference |
 |---|---|---|
-| Application layer / context-scoped services | **use cases / application services** | Evans, *DDD*; Martin, *Clean Architecture* |
-| Repository interface ([B.1](#b1-storage-behind-an-interface)) | **Repository pattern** | Evans, *DDD*; Fowler, *PoEAA* |
-| Query/Command split ([B.4](#b5-cqrs-read-write-split)) | **CQRS** | Young; Fowler |
-| Domain object carried on the `TOrm` ([B.3](#b3-two-types-per-entity-not-three)) | **entity / aggregate** | Evans, *DDD* |
+| Application layer / context-scoped services | **use cases / application services** | Evans, *DDD* [\[2\]](#ref-2); Martin, *Clean Architecture* [\[5\]](#ref-5) |
+| Repository interface ([B.1](#b1-storage-behind-an-interface)) | **Repository pattern** | Evans, *DDD* [\[2\]](#ref-2); Fowler, *PoEAA* [\[3\]](#ref-3) |
+| Query/Command split ([B.4](#b5-cqrs-read-write-split)) | **CQRS** | Young [\[9\]](#ref-9); Fowler [\[4\]](#ref-4) |
+| Domain object carried on the `TOrm` ([B.3](#b3-two-types-per-entity-not-three)) | **entity / aggregate** | Evans, *DDD* [\[2\]](#ref-2) |
 
 Two caveats, because it is tempting to file all of this under one label such as "Clean Architecture":
 
-- **Clean Architecture / Onion / DDD describe the *logical* axis** — in-process layering — not how many processes you run. They apply just as much to the A.6.1 monolith as to A.6.2.
-- **API Gateway / BFF / hexagonal-edge describe the *physical* axis** — the network boundary. They are what A.6.2 adds on top of the layering.
+- **Clean Architecture [\[5\]](#ref-5) / Onion [\[7\]](#ref-7) / DDD [\[2\]](#ref-2) describe the *logical* axis** — in-process layering — not how many processes you run. They apply just as much to the A.6.1 monolith as to A.6.2.
+- **API Gateway / BFF [\[8\]](#ref-8) / hexagonal-edge [\[1\]](#ref-1) describe the *physical* axis** — the network boundary. They are what A.6.2 adds on top of the layering.
 
 Picking the right body of literature per axis is the point: it keeps "private system-of-record + public edge" anchored to *System of Record + API Gateway*, rather than mislabelled as a Clean-Architecture concern.
 
@@ -494,6 +434,22 @@ The following list is a possible starting point. It is not a pattern to always f
 ## When to deviate
 
 Part A is a default you should rarely override on serialized code paths — if you find yourself using `TStringList` or `TDictionary<K,V>` on a service signature, that is almost always a mistake. Part B is a blueprint. You may collapse the DTO family to one DTO, skip CQRS, or front a legacy schema directly. That is fine.
+
+---
+
+## References
+
+The works cited in [A.6.3](#a63-mapping-to-standard-architecture-vocabulary) and throughout the text:
+
+1. <a id="ref-1"></a>Cockburn, Alistair. *Hexagonal Architecture (Ports & Adapters)*. 2005. <https://alistair.cockburn.us/hexagonal-architecture/>
+2. <a id="ref-2"></a>Evans, Eric. *Domain-Driven Design: Tackling Complexity in the Heart of Software*. Addison-Wesley, 2003. <https://fabiofumarola.github.io/nosql/readingMaterial/Evans03.pdf>
+3. <a id="ref-3"></a>Fowler, Martin. *Patterns of Enterprise Application Architecture* (PoEAA). Addison-Wesley, 2002. <https://sar.ac.id/stmik_ebook/prog_file_file/EFCofwzsj0.pdf>
+4. <a id="ref-4"></a>Fowler, Martin. *CQRS*. 2011. <https://martinfowler.com/bliki/CQRS.html>
+5. <a id="ref-5"></a>Martin, Robert C. *Clean Architecture: A Craftsman's Guide to Software Structure and Design*. Prentice Hall, 2017. <https://dl.acm.org/doi/10.5555/3175742>
+6. <a id="ref-6"></a>Newman, Sam. *Building Microservices*, 2nd edition. O'Reilly, 2021.
+7. <a id="ref-7"></a>Palermo, Jeffrey. *The Onion Architecture*. 2008. <https://jeffreypalermo.com/2008/07/the-onion-architecture-part-1/>
+8. <a id="ref-8"></a>Richardson, Chris. *Microservices Patterns*. Manning, 2018. Pattern catalogue at <https://microservices.io/patterns/>
+9. <a id="ref-9"></a>Young, Greg. *CQRS Documents*. 2010. <https://cqrs.files.wordpress.com/2010/11/cqrs_documents.pdf>
 
 ---
 
