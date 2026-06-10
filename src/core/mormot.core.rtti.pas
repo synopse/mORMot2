@@ -10167,46 +10167,40 @@ begin
   result := FindName(@Name[1], ord(Name[0]));
 end;
 
-function FindNameInArray(Pairs, PEnd: PPointerArray; ElemInfo: PRttiInfo): TRttiCustom;
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  repeat
-    result := Pairs[1]; // PRttiInfo/TRttiCustom pairs
-    if (result.ArrayRtti <> nil) and
-       (result.ArrayRtti.Info = ElemInfo) then
-      exit;
-    Pairs := @Pairs[2];
-  until Pairs = PEnd;
-  result := nil;
-end;
-
 function TRttiCustomList.FindByArrayRtti(ElemInfo: PRttiInfo): TRttiCustom;
 var
-  n: integer;
+  i, n: PtrInt;
   k: PRttiCustomListPairs;
-  p: PPointer; // TPointerDynArray
+  hash: PPointerDynArray;
+  pp: PRttiCustom;
 begin
+  result := nil;
   if ElemInfo = nil then
-  begin
-    result := nil;
     exit;
-  end;
-  k := @fHashInfo[RK_TOSLOT[rkDynArray]];
+  k := @fHashInfo[RK_TOSLOT[rkDynArray]]; // only rkDynArray in this slot
   k^.Safe.Lock;
-  p := @k^.HashInfo;
-  n := length(k^.HashInfo);
-  repeat
-    result := p^;
-    if result <> nil then
+  hash := @k^.HashInfo;
+  for i := 0 to high(k^.HashInfo) do // search whole slot
+  begin
+    pp := pointer(hash^);
+    if pp <> nil then
     begin
-      result := FindNameInArray(@PPointerArray(result)[1],
-        @PPointerArray(result)[PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF], ElemInfo);
-      if result <> nil then
-        break;
+      n := (PDALen(PAnsiChar(pp) - _DALEN)^ + _DAOFF) shr 1;
+      inc(pp); // PRttiInfo/TRttiCustom pairs so pp^ = TRttiCustom
+      repeat
+        if (pp^.ArrayRtti <> nil) and
+           (pp^.ArrayRtti.Info = ElemInfo) then
+        begin
+          result := pp^; // found matching dynamic array type
+          k^.Safe.UnLock;
+          exit;
+        end;
+        inc(pp, 2); // next pair
+        dec(n);
+      until n = 0;
     end;
-    inc(p);
-    dec(n);
-  until n = 0;
+    inc(hash);
+  end;
   k^.Safe.UnLock;
 end;
 
