@@ -2196,6 +2196,10 @@ function ExpandFileName(const FileName: TFileName): TFileName;
 
 {$else}
 
+type
+  TFileTime = TQWordRec;
+  PFileTime = ^TFileTime;
+
 /// redefined from FPC RTL sysutils for consistency
 // - warning: this function replaces ALL SysUtils.FileCreate() overloads,
 // putting aMode as the SECOND parameter, just like with FileOpen()
@@ -3101,7 +3105,7 @@ function WindowsFileTimeToDateTime(WinTime: integer): TDateTime;
 function WindowsFileTime64ToUnixMSTime(WinTime64: QWord): TUnixMSTime;
 
 /// convert a TUnixMSTime into a Windows FILETIME value
-function UnixMSTimeToWindowsFileTime64(TimeMS: TUnixMSTime): QWord;
+procedure UnixMSTimeToWindowsFileTime64(TimeMS: TUnixMSTime; var ft: TFileTime);
 
 /// low-level conversion of a TDateTime into a Windows File 32-bit TimeStamp
 // - returns 0 if the conversion failed
@@ -7173,14 +7177,14 @@ end;
 const
   FileTimePerMs = 10000; // a tick is 100ns
 
-function WindowsFileTime64ToUnixMSTime(WinTime64: QWord): TUnixMSTime;
+function WindowsFileTime64ToUnixMSTime(const ft: TFileTime): TUnixMSTime;
 begin
-  result := (Int64(WinTime64) - UnixFileTimeDelta) div FileTimePerMs;
+  result := (PInt64(@ft)^ - UnixFileTimeDelta) div FileTimePerMs;
 end;
 
-function UnixMSTimeToWindowsFileTime64(TimeMS: TUnixMSTime): QWord;
+procedure UnixMSTimeToWindowsFileTime64(TimeMS: TUnixMSTime; var ft: TFileTime);
 begin
-  result := (TimeMS * FileTimePerMs) + UnixFileTimeDelta;
+  PInt64(@ft)^ := (TimeMS * FileTimePerMs) + UnixFileTimeDelta;
 end;
 
 function FileInfoByName(const FileName: TFileName; FileId, FileSize: PInt64;
