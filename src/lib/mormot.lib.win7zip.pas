@@ -32,7 +32,7 @@ interface
 
 {$ifdef OSPOSIX}
 
-// do-nothing-unit on non Windows system
+// do-nothing-unit on non Windows system - compiles now, but is still untested
 
 implementation
 
@@ -861,7 +861,11 @@ end;
 class procedure E7Zip.RaiseAfterCheck(Caller: TObject;
   const Context: ShortString; Res: HResult);
 begin
+  {$ifdef OSWINDOWS}
   RaiseFmt(Caller, '%s', [WinLastError(context, Res)])
+  {$else}
+  RaiseFmt(Caller, '%s returned 0x%x %s', [context, Res, SystemErrorShort(Res)])
+  {$endif OSWINDOWS}
 end;
 
 class procedure E7Zip.Check(Caller: TObject; const Context: ShortString;
@@ -1523,6 +1527,7 @@ begin
   else
     // search in exe and 7-Zip folder, trying any possible .dll file name
     if TryLoad(LastFoundDll) or
+       {$ifdef OSWINDOWS}
        TryLoad(Executable.ProgramFilePath + '7z.dll') or
        TryLoad(Executable.ProgramFilePath + '7za.dll') or
        TryLoad(Executable.ProgramFilePath + '7zxa.dll') or
@@ -1531,14 +1536,18 @@ begin
        TryLoad('c:\Program Files (x86)\7-Zip\7z.dll') or
        {$endif CPU32}
        TryLoad('7z.dll') then
-      LastFoundDll := fFileName
-    else
-      lib := '7z.dll';
+       {$else}
+       TryLoad(Executable.ProgramFilePath + '7z.so') then // never system-wide
+       {$endif OSWINDOWS}
+      LastFoundDll := fFileName;
   if Assigned(fCreateObject) then
     exit;
   LastFoundDll := '';
-  E7Zip.RaiseUtf8('% is not a Win' +
-    {$ifdef CPU32} '32' {$else} '64'  {$endif CPU32} + ' 7-Zip library', [lib]);
+  if lib = '' then
+    lib := 'No'
+  else
+    lib := lib + ' is no valid';
+  E7Zip.RaiseUtf8('% ' + OS_TEXT + ' ' + CPU_ARCH_TEXT + ' 7-Zip library', [lib]);
 end;
 
 destructor T7zLib.Destroy;
@@ -1751,6 +1760,20 @@ begin
   Utf8ToSynUnicode(password, fPasswordUtf16);
   fPasswordIsDefined := true;
 end;
+
+{$ifdef OSPOSIX} // mimics CPP\Common\MyWindows.cpp
+function AllocateForBSTR(size: PtrUInt): pointer;
+  cdecl; external 'c' name 'malloc';
+
+function SysAllocStringLen(W: PWideChar; L: PtrInt): TBStr;
+begin
+  L := L * 2; // from widechars to bytes
+  result := AllocateForBSTR(L + 8);
+  PCardinal(result)^ := L; // length is stored as UINT32 bytes count
+  inc(PCardinal(result));
+  MoveFast(W^, result^, L + 2); // + 2 to copy ending #0 WideChar
+end;
+{$endif OSPOSIX}
 
 function T7zArchive.CryptoGetTextPassword(var password: TBStr): HRESULT;
 var
@@ -2171,7 +2194,11 @@ begin
       with fExtractCurrent do
         if (FileName <> '') and
            ((Written or Created or Accessed) <> 0) then
+          {$ifdef OSWINDOWS}
           FileSetTime(FileName, Created, Accessed, Written);
+          {$else}
+          FileSetDateFromUnixUtc(FileName, FileTimeToUnixTime(PFileTime(@Written)^));
+          {$endif OSWINDOWS}
   end;
   fExtractCurrent.FileName := '';
   result := S_OK;
@@ -2436,9 +2463,14 @@ var
               item.Stream := nil;
               item.FileName := fn;
               StringToUtf8(s + copy(item.FileName, lencut, 7777), item.ZipName);
-              item.CreationTime := f.FindData.ftCreationTime;
+              {$ifdef OSWINDOWS}
+              item.CreationTime  := f.FindData.ftCreationTime;
               item.LastWriteTime := f.FindData.ftLastWriteTime;
-              item.Attributes := f.FindData.dwFileAttributes;
+              item.Attributes    := f.FindData.dwFileAttributes;
+              {$else}
+              UnixTimeToFileTime(SearchRecToUnixTimeUtc(f), item.LastWriteTime);
+              item.Attributes := f.Attr;
+              {$endif OSWINDOWS}
               item.Size := f.Size;
               item.IsFolder := false;
               item.IsAnti := false;
@@ -2560,7 +2592,7 @@ begin
   VarClear(value);
   if index >= cardinal(length(fEntries)) then
   begin
-    result := ERROR_INVALID_PARAMETER;
+    result := SystemError(seInvalidParameter);
     exit;
   end;
   item := fEntries[index];
@@ -2609,7 +2641,7 @@ function T7zWriter.GetStream(index: cardinal;
   var inStream: ISequentialInStream): HRESULT;
 begin
   if index >= cardinal(length(fEntries)) then
-    result := ERROR_INVALID_PARAMETER
+    result := SystemError(seInvalidParameter)
   else
   try
     result := S_OK;
@@ -2627,10 +2659,10 @@ begin
             fCurrentItem.Stream, {owned=}false, index);
         end;
     else
-      result := ERROR_INVALID_PARAMETER;
+      result := SystemError(seInvalidParameter);
     end;
   except
-    result := ERROR_ACCESS_DENIED;
+    result := SystemError(seAccessDenied);
   end;
 end;
 
@@ -2641,7 +2673,7 @@ var
 begin
   if index >= cardinal(length(fEntries)) then
   begin
-    result := ERROR_INVALID_PARAMETER;
+    result := SystemError(seInvalidParameter);
     exit;
   end;
   {
