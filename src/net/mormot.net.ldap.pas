@@ -3923,7 +3923,7 @@ begin
             s := 'Never expires'
           else
           begin
-            ts.FromUnixMSTime(WindowsFileTime64ToUnixMSTime(TFileTime(ft)));
+            ts.FromUnixMSTime(FileTimeToUnixMSTime(TFileTime(ft)));
             ts.SetText(s, {expanded=}true); // normalize as pure ISO-8601
           end;
           exit;
