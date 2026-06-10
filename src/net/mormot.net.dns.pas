@@ -817,8 +817,8 @@ var
   res: TDnsResult;
   i: PtrInt;
 begin
-  if IsHostName(pointer(HostName)) and
-     not DnsLookupKnown(HostName, result) then // e.g. 'localhost' or '1.2.3.4'
+  if not DnsLookupKnown(HostName, result) and // e.g. 'localhost' or '1.2.3.4'
+     IsHostName(pointer(HostName)) then
     if DnsQuery(HostName, res, drrA, NameServers, TimeoutMS) then
       for i := 0 to high(res.Answer) do
         if res.Answer[i].QType = drrA then
@@ -835,10 +835,10 @@ var
   i: PtrInt;
 begin
   result := nil;
-  if IsHostName(pointer(HostName)) then
-    if DnsLookupKnown(HostName, known) then // e.g. 'localhost' or '1.2.3.4'
-      AddRawUtf8(result, known)
-    else if DnsQuery(HostName, res, drrA, NameServers, TimeoutMS) then
+  if DnsLookupKnown(HostName, known) then // e.g. 'localhost' or '1.2.3.4'
+    AddRawUtf8(result, known)
+  else if IsHostName(pointer(HostName)) then
+    if DnsQuery(HostName, res, drrA, NameServers, TimeoutMS) then
       for i := 0 to high(res.Answer) do
         if res.Answer[i].QType = drrA then
           AddRawUtf8(result, res.Answer[i].Text); // return all A records
