@@ -216,6 +216,8 @@ type
     // NewSocketIP4Lookup (mormot.net.dns)
     // - as called by SetFrom() high-level method
     function SetFromIP4(const address: RawUtf8; noNewSocketIP4Lookup: boolean): boolean;
+    /// internal host resolution from IPv6 raw addresses - wrap NetIsIP6()
+    function SetFromIP6(const address: RawUtf8): boolean;
     /// initialize this address from a standard IPv4
     // - set a given 32-bit IPv4 address and its network port (0..65535)
     function SetIP4Port(ipv4: TNetIP4; netport: TNetPort): TNetResult;
@@ -2824,6 +2826,13 @@ begin
   // we found the IPv4 matching this address
   SetFamily(AF_INET);
   result := true;
+end;
+
+function TNetAddr.SetFromIP6(const address: RawUtf8): boolean;
+begin
+  result := NetIsIP6(pointer(address), @PSockAddrIn6(@Addr)^.sin6_addr);
+  if result then
+    SetFamily(AF_INET6);
 end;
 
 function TNetAddr.Family: TNetFamily;
