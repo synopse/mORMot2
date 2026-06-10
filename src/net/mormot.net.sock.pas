@@ -1915,13 +1915,15 @@ function IP4sToBinary(const ip4: TNetIP4s): RawByteString;
 
 /// check is the supplied address text is on IPv6 format '2001:b8:a0b:12f0::1'
 // - will optionally fill a 128-bit binary buffer with the decoded IPv4 address
+// - accepts also IPv6 URI-like endpoint like '[2001:b8:a0b:12f0::1]'
 // - end text input parsing at final #0 in text
 // - calls the Operating System network layer API so is slower than IP6Short()
+// but rejects most obviously malformatted input before calling the OS
 function NetIsIP6(text: PUtf8Char; value: PByte = nil): boolean;
 
-/// just a wrapper around NetIsIP6(pointer(text), @value)
-// - calls the Operating System network layer API so is slower than IP6Text()
+/// just a convenient wrapper around NetIsIP6(pointer(text), @value)
 function ToIP6(const text: RawUtf8; var value: TNetIP6): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// append one TNetMac instance to a dynamic array of such values
 procedure AddMac(var macs: TNetMacs; const mac: TNetMac);
@@ -3938,23 +3940,61 @@ end;
 
 function NetIsIP6(text: PUtf8Char; value: PByte): boolean;
 var
-  l: PtrInt;
-  tmp: TNetIP6;
+  l, dots: PtrInt;
+  dummy: TNetIP6;
+  temp: array[0 .. 45] of AnsiChar;
 begin
   result := false;
   if text = nil then
     exit;
+  while text^ = ' ' do
+    inc(text); // allow some leading whitespace
+  if text^ = '[' then
+    inc(text); // accept [Ipv6] URI below
+  dots := 0;
   l := 0;
-  while text[l] <> #0 do
-    if (l <= 45) and // max is 'ABCD:ABCD:ABCD:ABCD:ABCD:ABCD:192.168.158.190'
-       (text[l] in [':', '.', '0'..'9', 'a'..'f', 'A'..'F']) then
-      inc(l)
+  while true do // quickly reject most invalid inputs
+    case text[l] of
+      #0:
+        break; // end of source
+      ']':
+        begin
+          if text[-1] <> '[' then // expects [Ipv6] URI addressing conventions
+            exit;
+          MoveFast(text^, temp, l);
+          text := @temp;
+          text[l] := #0;
+          break; // accept '[2001:db8::1]'  as '2001:db8::1'
+        end;
+      '.', '0'..'9', 'a'..'f', 'A'..'F':
+        begin
+          if l > 45 then
+            exit; // max is 'ABCD:ABCD:ABCD:ABCD:ABCD:ABCD:192.168.158.190'
+          inc(l);
+        end;
+      ':':
+        begin
+          if l > 45 then
+            exit;
+          inc(dots);
+          inc(l);
+        end;
     else
-      exit; // quickly eliminate invalid charset
+      exit; // invalid charset
+    end;
+  if (dots < 2) or    // from '::'
+     (dots > 7) then  // up to '1:2:3:4:5:6:7:8'
+    exit;
   if value = nil then
-    value := @tmp; // value is optional, just like for NetIsIP4()
-  result := (l >= 2) and
-            InetPton(text, value); // call proper OS API for RFC 4291 parsing
+    value := @dummy; // value is optional, just like NetIsIP4()
+  if (l = dots) and
+     (l = 2) then
+  begin
+    FillZero(PHash128(value)^); // recognized '::'
+    result := true;
+  end
+  else
+    result := InetPton(text, value); // call proper OS API for RFC 4291 parsing
 end;
 
 function ToIP6(const text: RawUtf8; var value: TNetIP6): boolean;
