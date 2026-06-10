@@ -1833,17 +1833,68 @@ begin
   result := fpgeterrno;
 end;
 
-function IsSharedViolation(ErrorCode: integer): boolean;
-begin
-  if ErrorCode = 0 then
-    ErrorCode := fpgeterrno;
-  result := ErrorCode = ESysEACCES;
-end;
-
 procedure SetLastError(error: integer);
 begin
   fpseterrno(error);
 end;
+
+function GetSystemError(error: integer): TSystemError;
+begin
+  case error of
+    0:
+      result := seSuccess;
+    ESysEPERM:
+      result := sePermissionDenied;
+    ESysEBUSY:
+      result := seBusy;
+    ESysENOENT:
+      result := seFileNotFound;
+    ESysEIO:
+      result := seIOError;
+    ESysENXIO,
+    ESysENODEV:
+      result := seNoSuchDevice;
+    ESysEACCES:
+      result := seAccessDenied;
+    ESysEBADF:
+      result := seInvalidHandle;
+    ESysEAGAIN,
+    ESysEINTR:
+      result := seInterrupted;
+    ESysENOMEM:
+      result := seOutOfMemory;
+    ESysEEXIST:
+      result := seAlreadyExists;
+    ESysENOTDIR:
+      result := seNotADirectory;
+    ESysEISDIR:
+      result := seIsADirectory;
+    ESysEINVAL:
+      result := seInvalidParameter;
+    ESysENFILE,
+    ESysEMFILE:
+      result := seTooManyOpenFiles;
+    ESysENOSPC:
+      result := seDiskFull;
+    ESysEPIPE:
+      result := seBrokenPipe;
+    ESysENAMETOOLONG:
+      result := seNameTooLong;
+    ESysENOTEMPTY:
+      result := seDirectoryNotEmpty;
+    ESysENOSYS:
+      result := seNotSupported;
+    else
+      result := seOther;
+  end;
+end;
+
+const
+  _OSERR: array[TSystemError] of byte = (
+    0, ESysEINVAL, ESysENOENT, ESysEEXIST, ESysEACCES, ESysENXIO, ESysENOMEM,
+    ESysEBADF, ESysEPERM, ESysEBUSY, ESysEIO, ESysENOTEMPTY, ESysENAMETOOLONG,
+    ESysENOTDIR, ESysEISDIR, ESysEMFILE, ESysENOSPC, ESysEPIPE, ESysEINTR,
+    ESysENOSYS, 0);
 
 procedure GetErrorShortVar(error: integer; var dest: ShortString);
 begin

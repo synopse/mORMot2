@@ -2694,17 +2694,65 @@ procedure SetEndOfFile(F: THandle);
 procedure FlushFileBuffers(F: THandle);
   {$ifdef OSWINDOWS} stdcall; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 
-/// compatibility function, wrapping Win32 API last error code or fpgeterrno
+/// compatibility function, wrapping Win32 API last error code or fpgeterrno()
 function GetLastError: integer;
   {$ifdef OSWINDOWS} stdcall; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 
-/// check if the last error reporting by the system is a file access violation
-// - call GetLastError is no ErrorCode is supplied
-function IsSharedViolation(ErrorCode: integer = 0): boolean;
-
-/// compatibility function, wrapping Win32 API last error code
+/// compatibility function, wrapping Win32 API last error code or fpseterrno()
 procedure SetLastError(error: integer);
   {$ifdef OSWINDOWS} stdcall; {$else} {$ifdef FPC} inline; {$endif} {$endif}
+
+type
+  /// some minimal cross-platform error values (maybe merged) as enumerate
+  TSystemError = (
+    seSuccess,           // No error
+    seInvalidParameter,  // EINVAL, ERROR_INVALID_PARAMETER, ERROR_INVALID_FUNCTION, etc.
+    seFileNotFound,      // ENOENT, ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND
+    seAlreadyExists,     // EEXIST, ERROR_ALREADY_EXISTS, ERROR_FILE_EXISTS
+    seAccessDenied,      // EACCES, EPERM, ERROR_ACCESS_DENIED
+    seNoSuchDevice,      // ENXIO / ENODEV, ERROR_BAD_UNIT
+    seOutOfMemory,       // ENOMEM, ERROR_NOT_ENOUGH_MEMORY
+    seInvalidHandle,     // EBADF, ERROR_INVALID_HANDLE
+    sePermissionDenied,  // EPERM, ERROR_WRITE_PROTECT, ERROR_CANNOT_MAKE
+    seBusy,              // EBUSY, ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION, etc.
+    seIOError,           // EIO, ERROR_READ_FAULT, ERROR_WRITE_FAULT, etc.
+    seDirectoryNotEmpty, // ENOTEMPTY, ERROR_DIR_NOT_EMPTY
+    seNameTooLong,       // ENAMETOOLONG, ERROR_FILENAME_EXCED_RANGE
+    seNotADirectory,     // ENOTDIR, ERROR_DIRECTORY
+    seIsADirectory,      // EISDIR, ERROR_INVALID_NAME
+    seTooManyOpenFiles,  // EMFILE, ENFILE, ERROR_TOO_MANY_OPEN_FILES
+    seDiskFull,          // ENOSPC, ERROR_DISK_FULL
+    seBrokenPipe,        // EPIPE, ERROR_BROKEN_PIPE
+    seInterrupted,       // EINTR, ERROR_OPERATION_ABORTED
+    seNotSupported,      // ENOSYS, ERROR_NOT_SUPPORTED
+    seOther              // catch-all for unmapped errors
+  );
+
+/// wrap GetLastError and convert it to our cross-platform enumerate
+function GetLastSystemError: TSystemError;
+
+/// convert an OS-specific error code to our cross-platform enumerate
+function GetSystemError(error: integer): TSystemError;
+
+/// convert a cross-platform TSystemError into the OS-specific error code
+// - by design, SystemError(seOther) = SystemError(seSuccess) = 0
+function SystemError(os: TSystemError): integer;
+
+/// add cross-platform TSystemError trimmed text e.g. 'DiskFull' for seDiskFull
+procedure SystemErrorAppend(os: TSystemError; var dest: ShortString);
+
+/// return cross-platform TSystemError trimmed text e.g. 'DiskFull' for seDiskFull
+function SystemErrorText(os: TSystemError): RawUtf8;
+
+/// return plain OS error and cross-platform TSystemError trimmed text as [##]
+// - e.g. '13 EACCES [AccessDenied]' or '32 ERROR_SHARING_VIOLATION [Busy]'
+// - call GetLastError is no ErrorCode is supplied
+function SystemErrorShort(error: integer = 0): TShort63;
+
+/// check if the last error reporting by the system is a given error
+// - call GetLastError is no ErrorCode is supplied
+// - by design, IsSystemError(seOther) = IsSystemError(seSuccess) are always false
+function IsSystemError(os: TSystemError; ErrorCode: integer = 0): boolean;
 
 /// returns a given error code as plain text
 // - redirects to WinApiErrorShort(error, nil) on Windows, or StrError() on POSIX
@@ -6542,6 +6590,60 @@ begin
     if os in LINUX_DIST[result] then
       exit;
   result := ldNotLinux;
+end;
+
+function SystemError(os: TSystemError): integer;
+begin
+  result := _OSERR[os]; // use proper constants on each system
+end;
+
+procedure SystemErrorAppend(os: TSystemError; var dest: ShortString);
+var
+  ps: PShortString;
+begin
+  ps := GetEnumNameRtti(TypeInfo(TSystemError), ord(os));
+  AppendShortBuffer(@ps^[3], ord(ps^[0]) - 2, high(dest), @dest);
+end;
+
+function SystemErrorText(os: TSystemError): RawUtf8;
+var
+  tmp: TShort23;
+begin
+  tmp[0] := #0;
+  SystemErrorAppend(os, tmp);
+  ShortStringToAnsi7String(tmp, result);
+end;
+
+function SystemErrorShort(error: integer): TShort63;
+var
+  os: TSystemError;
+begin
+  if error = 0 then
+    error := GetLastError;
+  OsErrorShort(error, @result, {noint=}false); // known E### or ERROR_###
+  os := GetSystemError(error);
+  if os in [seSuccess, seOther] then
+    exit;
+  AppendShortTwoChars(ord(' ') + ord('[') shl 8, @result);
+  SystemErrorAppend(os, result);
+  AppendShortCharSafe(']', result);
+end;
+
+function GetLastSystemError: TSystemError;
+begin
+  result := GetSystemError(GetLastError);
+end;
+
+function IsSystemError(os: TSystemError; ErrorCode: integer): boolean;
+begin
+  if os in [seSuccess, seOther] then
+  begin
+    result := false; // too vague
+    exit;
+  end;
+  if ErrorCode = 0 then
+    ErrorCode := GetLastError;
+  result := GetSystemError(ErrorCode) = os;
 end;
 
 // PUtf8Char for system error text reduces the executable size vs RawUtf8

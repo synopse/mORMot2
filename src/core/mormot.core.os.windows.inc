@@ -518,12 +518,81 @@ begin
   FileWriteAll(err, pointer(txt), length(txt));
 end;
 
-function IsSharedViolation(ErrorCode: integer): boolean;
+function GetSystemError(error: integer): TSystemError;
 begin
-  if ErrorCode = 0 then
-    ErrorCode := GetLastError;
-  result := ErrorCode in [ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION];
+  case error of
+    ERROR_SUCCESS,
+    ERROR_NO_MORE_FILES:
+      result := seSuccess;
+    ERROR_INVALID_PARAMETER,
+    ERROR_INVALID_FUNCTION,
+    ERROR_INVALID_ACCESS,
+    ERROR_INVALID_DATA,
+    ERROR_INVALID_BLOCK,
+    ERROR_BAD_FORMAT:
+      result := seInvalidParameter;
+    ERROR_FILE_NOT_FOUND,
+    ERROR_PATH_NOT_FOUND,
+    ERROR_INVALID_DRIVE:
+      result := seFileNotFound;
+    ERROR_ALREADY_EXISTS,
+    ERROR_FILE_EXISTS:
+      result := seAlreadyExists;
+    ERROR_ACCESS_DENIED,
+    ERROR_NETWORK_ACCESS_DENIED:
+      result := seAccessDenied;
+    ERROR_BAD_UNIT:
+      result := seNoSuchDevice;
+    ERROR_NOT_ENOUGH_MEMORY,
+    ERROR_OUTOFMEMORY:
+      result := seOutOfMemory;
+    ERROR_INVALID_HANDLE:
+      result := seInvalidHandle;
+    ERROR_WRITE_PROTECT,
+    ERROR_CANNOT_MAKE:
+      result := sePermissionDenied;
+    ERROR_BUSY,
+    ERROR_BUSY_DRIVE,
+    ERROR_SHARING_VIOLATION,
+    ERROR_LOCK_VIOLATION:
+      result := seBusy;
+    ERROR_READ_FAULT,
+    ERROR_WRITE_FAULT,
+    ERROR_CRC:
+      result := seIOError;
+    ERROR_DIRECTORY:
+      result := seNotADirectory;
+    ERROR_INVALID_NAME:
+      result := seIsADirectory;
+    ERROR_DIR_NOT_EMPTY:
+      result := seDirectoryNotEmpty;
+    ERROR_FILENAME_EXCED_RANGE:
+      result := seNameTooLong;
+    ERROR_TOO_MANY_OPEN_FILES:
+      result := seTooManyOpenFiles;
+    ERROR_DISK_FULL,
+    ERROR_HANDLE_DISK_FULL:
+      result := seDiskFull;
+    ERROR_BROKEN_PIPE:
+      result := seBrokenPipe;
+    ERROR_OPERATION_ABORTED:
+      result := seInterrupted;
+    ERROR_NOT_SUPPORTED,
+    ERROR_CALL_NOT_IMPLEMENTED:
+      result := seNotSupported;
+  else
+    result := seOther;
+  end;
 end;
+
+const
+  _OSERR: array[TSystemError] of cardinal = (
+    0, ERROR_INVALID_PARAMETER, ERROR_FILE_NOT_FOUND, ERROR_ALREADY_EXISTS,
+    ERROR_ACCESS_DENIED, ERROR_BAD_UNIT, ERROR_NOT_ENOUGH_MEMORY,
+    ERROR_INVALID_HANDLE, ERROR_WRITE_PROTECT, ERROR_SHARING_VIOLATION,
+    ERROR_READ_FAULT, ERROR_DIR_NOT_EMPTY, ERROR_FILENAME_EXCED_RANGE,
+    ERROR_DIRECTORY, ERROR_INVALID_NAME, ERROR_TOO_MANY_OPEN_FILES, ERROR_DISK_FULL,
+    ERROR_BROKEN_PIPE, ERROR_OPERATION_ABORTED, ERROR_NOT_SUPPORTED, 0);
 
 function GetModuleHandle(lpModuleName: PChar): HMODULE;
 begin
