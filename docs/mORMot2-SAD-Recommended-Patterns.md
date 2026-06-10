@@ -198,25 +198,20 @@ end.
 ```pascal
 unit AppUserClientRemote;
 
-interface
-
-procedure ConnectUserService(const aServer, aPort, aRoot: RawUtf8);
-
 implementation
 
 var
   Http: TRestHttpClientSocket;
 
-procedure ConnectUserService(const aServer, aPort, aRoot: RawUtf8);
-begin
-  Http := TRestHttpClientSocket.Create(aServer, aPort, TOrmModel.Create([], aRoot));
+initialization
+  // host/port/root come from your settings file — deployment config, not code
+  Http := TRestHttpClientSocket.Create(
+    Settings.Server, Settings.Port, TOrmModel.Create([], Settings.Root));
   Http.Model.Owner := Http;
   // declare the SAME interfaces, this time as client-side factories:
   Http.ServiceDefine([IUserQuery, IUserCommand], sicShared);
   // hand out the client's container — Resolve() returns HTTP proxies:
   UserResolver := Http.Services;
-end;
-
 finalization
   FreeAndNil(Http);
 end.
@@ -237,12 +232,7 @@ if UserResolver.Resolve(IUserQuery, svc) then
 
 `Local` is the A.6.1 monolith (one exe, full stack in-process); `Remote` is the A.6.2 distributed layout (HTTP client to a standalone server). The business code is identical; only the linked unit differs. And inside a service implementation you usually don't even touch `UserResolver` directly — a `TInjectableObject` descendant publishes `property Users: IUserQuery` and the resolver chain fills it ([B.5](#b5-soa-composition-root-and-di)).
 
-The **local** unit self-wires in its `initialization` — it needs no parameters, so using it with the `uses` clause is all you do. The **remote** unit cannot: it needs a host/port/root, so it exposes a `ConnectUserService(...)` you call once at startup with values from configuration:
-
-```pascal
-// startup, remote build only — connection params are configuration, not a code change:
-ConnectUserService('10.0.0.7', '443', 'root');
-```
+Both units self-wire in their `initialization`, so linking one is genuinely all you do; the only extra need of the remote unit is the host/port/root in your settings file — deployment configuration, not code. (Wiring in `initialization` does mean the settings must be loadable at unit-initialization time; if you want explicit startup control, move those few lines into your daemon's startup instead.)
 
 <details>
 <summary><b>IMPORTANT</b> — select the topology with a define (`ifdef`)</summary>
@@ -262,7 +252,7 @@ uses
   ...;
 ```
 
-Now the single switch lives in `project.inc` — place `{$define LOCALMORMOT}` in `project.inc` and the `AppUserClientLocal` is used. The remote build still supplies its host/port/root once at startup, exactly as above.
+Now the single switch lives in `project.inc` — place `{$define LOCALMORMOT}` in `project.inc` and the `AppUserClientLocal` is used.
 
 </details>
 
