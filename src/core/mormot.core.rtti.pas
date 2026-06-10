@@ -7800,16 +7800,20 @@ begin
         rfSingle:
           result := ptSingle;
         rfDouble:
-          // TDateTime/TDateTimeMS/TDate have been found above from PT_INFO[]
-          result := ptDouble;
+          if Info = TypeInfo(TDate) then
+            // TDateTime/TDateTimeMS have been found above from PT_INFO[]
+            result := ptDateTime
+          else
+            result := ptDouble;
         rfCurr:
           result := ptCurrency;
         rfExtended:
           result := ptExtended;
         // rfComp: not implemented yet
       end;
+    // rkSString have no ptShortString support yet
   end;
-  // note: KnownTypeName() is pointless here since PT_INFO[] and RTTI are enough
+  // if PT_INFO[] and RTTI are not enough, KnownParserType() won't help more
 end;
 
 function ItemSizeToDynArrayKind(size: integer): TRttiParserType;
@@ -9765,7 +9769,7 @@ begin
               if GetNextFieldProp(P, atypname) and
                  (P^ = '>') then
               begin
-                // normalize as array of KnownType
+                // normalize as array of known types
                 inc(P);
                 ac := Rtti.RegisterTypeFromName(atypname);
                 if ac = nil then
@@ -10383,6 +10387,13 @@ const
     ptDateTime, ptDateTimeMS, ptDateTime, ptDouble, ptCurrency, ptSingle,
     ptInt64, ptQWord, ptVariant, ptString);
 
+function KnownParserType(Name: PUtf8Char; NameLen: PtrInt): TRttiParserType;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := _TypeParser[FindShortStringListNoTrim(@_TypeNames[0],
+    pred(high(_TypeParser)), Name, NameLen) + 1]; // most used simple types
+end;
+
 function TRttiCustomList.RegisterTypeFromName(Name: PUtf8Char; NameLen: PtrInt;
   ParserType: PRttiParserType): TRttiCustom;
 var
@@ -10403,8 +10414,7 @@ begin
       dec(NameLen, i);
     until false;
     if Name[0] <> '[' then
-      pt := _TypeParser[FindShortStringListNoTrim(@_TypeNames[0],
-        pred(high(_TypeParser)), Name, NameLen) + 1]; // most used simple types
+      pt := KnownParserType(Name, NameLen);
     if pt <> ptNone then
       result := PT_RTTI[pt] // 'array' returns nil with ptArray as expected
     else
