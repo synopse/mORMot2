@@ -1011,6 +1011,7 @@ type
   public
     constructor Create(lib: T7zLib; fmt: T7zFormatHandler;
       libowned: boolean); reintroduce; overload;
+    destructor Destroy; override;
     function HandlerProperty(propID: T7zHandlerPropID): T7zVariant;
     property Name: string
       index hpiName read GetLibStringProperty;
@@ -1693,6 +1694,12 @@ begin
   fGetHandlerProperty := LibraryResolve(lib.fHandle, 'GetHandlerProperty');
   if not Assigned(fGetHandlerProperty) then
     E7Zip.RaiseUtf8('% is not an archive library', [lib]);
+end;
+
+destructor T7zArchive.Destroy;
+begin
+  FillZero(fPasswordUtf16);
+  inherited Destroy;
 end;
 
 function T7zArchive.ClassId: TGuid;
