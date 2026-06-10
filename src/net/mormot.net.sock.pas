@@ -2790,17 +2790,9 @@ function TNetAddr.SetFromIP4(const address: RawUtf8;
 var
   ad4: TSockAddr absolute Addr;
 begin
-  // allow to bind to any IPv6 address
-  if address = c6AnyHost then // ::
-  begin
-    SetFamily(AF_INET6);
-    FillZero(PSockAddrIn6(@Addr)^.sin6_addr.b); // all sin6_addr[] = 0
-    result := true;
-    exit;
-  end;
   result := false;
   ad4.sin_family := 0; // reset family to mark as invalid, but keep sin_port
-  ad4.sin_addr := 0; // reset
+  ad4.sin_addr := 0;   // reset
   PInt64(@ad4.sin_zero)^ := 0; // seems mandatory on Windows
   if (address = cLocalhost) or
      (address = c6Localhost) or // ::1
@@ -2811,18 +2803,20 @@ begin
     ad4.sin_addr := cAnyHost32 // 255.255.255.255
   else if address = cAnyHost then
     // keep 0.0.0.0 for bind - but connect would redirect to 127.0.0.1
-  else if NetIsIP4(pointer(address), @ad4.sin_addr) or
-          GetKnownHost(address, ad4.sin_addr) or
+  else if NetIsIP4(pointer(address), @ad4.sin_addr) then
+    // numerical IPv4
+  else if not IsHostName(pointer(address)) then
+    exit // nothing valid to lookup - maybe an IPv6 address
+  else if GetKnownHost(address, ad4.sin_addr) or
           NetAddrCache.SafeFind(address, ad4.sin_addr) then
-    // numerical IPv4, /etc/hosts, or cached entry
+    // /etc/hosts, or cached entry
   else if (Assigned(NewSocketIP4Lookup) and
           not noNewSocketIP4Lookup and
           NewSocketIP4Lookup(address, ad4.sin_addr)) then
     // cache value found from mormot.net.dns lookup for 1 shl 15 = 32 seconds
     NetAddrCache.SafeAdd(address, ad4.sin_addr, {tixshr=}15)
   else
-    // return result=false if unknown
-    exit;
+    exit; // return result=false if unknown
   // we found the IPv4 matching this address
   SetFamily(AF_INET);
   result := true;
