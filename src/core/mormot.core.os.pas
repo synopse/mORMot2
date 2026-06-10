@@ -2045,6 +2045,11 @@ type
 function W32(const FileName: TFileName; var Temp: TW32Temp; DoCopy: boolean = false): PWideChar;
 
 const
+  psapi    = 'psapi.dll';
+  ole32    = 'ole32.dll';
+  oleaut32 = 'oleaut32.dll';
+  ntdll    = 'ntdll.dll';
+
   NO_ERROR  = Windows.NO_ERROR; // = ERROR_SUCCESS
 
   ERROR_ACCESS_DENIED       = Windows.ERROR_ACCESS_DENIED;
@@ -2112,17 +2117,16 @@ function GetCurrentProcessId: DWord; stdcall;
 // - redefined in mormot.core.os to avoid dependency to the Windows unit
 function GetCurrentProcess: THandle; stdcall;
 
-/// redefined in mormot.core.os to avoid dependency to the Windows unit
-function WaitForSingleObject(hHandle: THandle; dwMilliseconds: DWord): DWord; stdcall;
-
-/// redefined in mormot.core.os to avoid dependency to the Windows unit
-function GetEnvironmentStringsW: PWideChar; stdcall;
-
-/// redefined in mormot.core.os to avoid dependency to the Windows unit
-function FreeEnvironmentStringsW(EnvBlock: PWideChar): BOOL; stdcall;
-
 /// expand any embedded environment variables, i.e %windir%
 function ExpandEnvVars(const aStr: string): string;
+
+// redefined in mormot.core.os to avoid dependency to the Windows unit
+function WaitForSingleObject(hHandle: THandle; dwMilliseconds: DWord): DWord; stdcall;
+function GetEnvironmentStringsW: PWideChar; stdcall;
+function FreeEnvironmentStringsW(EnvBlock: PWideChar): BOOL; stdcall;
+function SysAllocString(psz: PWideChar): pointer; stdcall;
+function SysAllocStringLen(psz: PWideChar; len: cardinal): pointer; stdcall;
+procedure SysFreeString(bstr: pointer); stdcall;
 
 /// try to enter a Critical Section (Lock)
 // - returns 1 if the lock was acquired, or 0 if the mutex is already locked
@@ -2584,9 +2588,22 @@ function LibraryResolve(Lib: TLibHandle; ProcName: PAnsiChar): pointer;
 /// raw cross-platform library resolution error, e.g. after LibraryOpen
 function LibraryError: string;
 
-
+type
+  // some minimal COM-like type definitions from ActiveX
+  TBstr   = PWideChar;
+  PBstr   = ^TBstr;
+  TPropID = cardinal;
+  PPropID = ^TPropID;
 const
-  /// redefined here to avoid dependency to the Windows or SyncObjs units
+  // redirect OLE/COM variant types to our mormot.core.base definitions
+  VT_BOOL     = varBoolean;
+  VT_BSTR     = varOleStr;
+  VT_UI1      = varByte;
+  VT_UI4      = varLongWord;
+  VT_UI8      = varWord64;
+  VT_CLSID    = varOleClsid;
+  VT_FILETIME = varOleFileTime;
+  // redefined here to avoid dependency to the Windows or SyncObjs units
   INFINITE = cardinal(-1);
 
 /// initialize a Critical Section (for Lock/UnLock)

@@ -509,6 +509,9 @@ function  IocpPostQueuedStatus;       external kernel32 name 'PostQueuedCompleti
 function  GetDesktopWindow;           external user32;
 function  Unicode_InPlaceUpper;       external user32 name 'CharUpperBuffW';
 function  Unicode_InPlaceLower;       external user32 name 'CharLowerBuffW';
+function  SysAllocString;             external oleaut32;
+function  SysAllocStringLen;          external oleaut32;
+procedure SysFreeString;              external oleaut32;
 
 var
   ConsoleCriticalSection: TOSLock; // too early to use TOSLightLock
@@ -2100,7 +2103,7 @@ var
   n, count: cardinal;
 begin
   result := nil;
-  if not DelayedProc(EnumProcesses, PsapiDll, 'Psapi.dll', 'EnumProcesses') then
+  if not DelayedProc(EnumProcesses, PsapiDll, psapi, 'EnumProcesses') then
     exit;
   count := 0;
   n := 2048; // retrieve 2KB of IDs, i.e. 512 processes, by default
@@ -2139,7 +2142,7 @@ begin
         if QueryFullProcessImageNameW(h, 0, name, @len) then
           Unicode_ToUtf8(name, len, result);
       end
-      else if DelayedProc(GetModuleFileNameExW, PsapiDll, 'Psapi.dll',
+      else if DelayedProc(GetModuleFileNameExW, PsapiDll, psapi,
                 'GetModuleFileNameExW') and
               (GetModuleFileNameExW(h, 0, name, high(name)) <> 0) then
         Win32PWideCharToUtf8(name, result);
@@ -2253,7 +2256,7 @@ end;
 
 function DelayedGetProcessMemoryInfo: boolean;
 begin
-  result:= DelayedProc(GetProcessMemoryInfo, PsapiDll, 'Psapi.dll',
+  result:= DelayedProc(GetProcessMemoryInfo, PsapiDll, psapi,
     'GetProcessMemoryInfo');
 end;
 
@@ -2310,7 +2313,7 @@ function GlobalMemoryStatusEx(var lpBuffer: TMemoryStatusEx): BOOL;
 {$endif UNICODE}
 
 function CoCreateGuid(out guid: THash128): HRESULT;
-  stdcall; external 'ole32.dll';
+  stdcall; external ole32;
 
 procedure XorOSEntropy(var e: THash512Rec);
 var
@@ -3306,20 +3309,20 @@ function ReadSystemMemory(address, size: PtrUInt): RawByteString;
 var
   memfile: UNICODE_STRING;
   att: OBJECT_ATTRIBUTES;
-  mem, ntdll: THandle;
+  mem, nt: THandle;
   add: TLargeInteger;
   virt: pointer;
 begin
   if NtDllChecked = lsUnTested then
   begin // late-binding until really needed to circumvent antivirus heuristic
     NtDllChecked := lsNotAvailable;
-    ntdll := GetModuleHandle('NTDLL.DLL');
-    if ntdll > 0 then
+    nt := GetModuleHandle(ntdll);
+    if nt > 0 then
     begin
-      RtlInitUnicodeString := LibraryResolve(ntdll, 'RtlInitUnicodeString');
-      NtOpenSection        := LibraryResolve(ntdll, 'NtOpenSection');
-      NtMapViewOfSection   := LibraryResolve(ntdll, 'NtMapViewOfSection');
-      NtUnmapViewOfSection := LibraryResolve(ntdll, 'NtUnmapViewOfSection');
+      RtlInitUnicodeString := LibraryResolve(nt, 'RtlInitUnicodeString');
+      NtOpenSection        := LibraryResolve(nt, 'NtOpenSection');
+      NtMapViewOfSection   := LibraryResolve(nt, 'NtMapViewOfSection');
+      NtUnmapViewOfSection := LibraryResolve(nt, 'NtUnmapViewOfSection');
       if Assigned(RtlInitUnicodeString) and
          Assigned(NtOpenSection) and
          Assigned(NtMapViewOfSection) and
@@ -3424,9 +3427,9 @@ threadvar // do not publish for compilation within Delphi packages
 
 // avoid including ActiveX unit
 function CoInitialize(_para1: pointer): HRESULT;
-  stdcall; external 'ole32.dll';
+  stdcall; external ole32;
 procedure CoUninitialize;
-  stdcall; external 'ole32.dll';
+  stdcall; external ole32;
 
 procedure CoInit;
 begin
@@ -5012,7 +5015,7 @@ begin
   OSVersion32.os := osWindows;
   OSVersion32.win := Vers;
   OSVersion32.winbuild := OSVersionInfo.dwBuildNumber;
-  h := GetModuleHandle('NTDLL.DLL'); // late binding over unstable / altered API
+  h := GetModuleHandle(ntdll); // late binding over unstable / altered API
   if h > 0 then
   begin
     wine_get_version := LibraryResolve(h, 'wine_get_version');
