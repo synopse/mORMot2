@@ -127,6 +127,18 @@ end;
 
 { ****************** Unicode, Time, File process }
 
+procedure FileTimeToInt64(FT: PFileTime; Q64: PQWordRec);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  Q64^.V := PQWord(FT)^; // TFileTime = packed record on POSIX
+end;
+
+procedure Int64ToFileTime(Q64: PQWordRec; FT: PFileTime);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  PQWord(FT)^ := Q64^.V;
+end;
+
 var // two flag sets of 8 items = 8-bit byte efficient storage and access
   _F0: set of (fIsDebuggerTested, fIsDebuggerPresent, fStdOutIsTTY,
     fNoURandom, fNoRandom, fProcFileSystemsTested,
@@ -1088,7 +1100,7 @@ end;
 
 procedure NowUtcToWindowsFileTime(var ft: TFileTime);
 begin
-  UnixMSTimeToWindowsFileTime64(UnixMSTimeUtc, ft);
+  UnixMSTimeToFileTime(UnixMSTimeUtc, ft);
 end;
 
 {$undef HAS_PTHREADSETNAMENP}

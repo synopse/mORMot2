@@ -2197,7 +2197,12 @@ function ExpandFileName(const FileName: TFileName): TFileName;
 {$else}
 
 type
-  TFileTime = TQWordRec;
+  /// our internal Win32 64-bit FILETIME value type definition for POSIX
+  TFileTime = packed record
+    dwLowDateTime:  cardinal;
+    dwHighDateTime: cardinal;
+  end;
+  /// points to one Win32 64-bit FILETIME value
   PFileTime = ^TFileTime;
 
 /// redefined from FPC RTL sysutils for consistency
@@ -2473,26 +2478,6 @@ type
 // - note: FileTimeToLocalFileTime is not to be involved here
 // - only used by mormot.lib.static for proper SQLite3 linking on Windows
 procedure UnixTimeToLocalTime(I64: TUnixTime; out Local: TSystemTime);
-
-/// convert an Unix seconds time to a Win32 64-bit FILETIME value
-procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
-
-/// convert an Unix milliseconds time to a Win32 64-bit FILETIME value
-procedure UnixMSTimeToFileTime(I64: TUnixMSTime; out FT: TFileTime);
-
-/// convert a TDateTime to a Win32 64-bit FILETIME value
-procedure DateTimeToFileTime(dt: TDateTime; out FT: TFileTime);
-
-/// convert a Win32 64-bit FILETIME value into an Unix seconds time
-function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
-  {$ifdef FPC} inline; {$endif}
-
-/// convert a Win32 64-bit FILETIME value into a TDateTime
-function FileTimeToDateTime(const FT: TFileTime): TDateTime;
-
-/// convert a Win32 64-bit FILETIME value into an Unix milliseconds time
-function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
-  {$ifdef FPC} inline; {$endif}
 
 /// detect if a file name starts with the long path '\\?\' prefix
 // - https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
@@ -3099,13 +3084,23 @@ function FileSetDateFromUnixUtc(const Dest: TFileName; Time: TUnixTime): boolean
 // - used e.g. by FileSetDateFromWindowsTime() on POSIX
 function WindowsFileTimeToDateTime(WinTime: integer): TDateTime;
 
-/// convert a Windows API File 64-bit TimeStamp into a regular TUnixMSTime
-// - i.e. a FILETIME value as returned by GetFileTime() Win32 API
-// - some binary formats (e.g. ISO 9660 or LDAP) have such FILETIME fields
-function WindowsFileTime64ToUnixMSTime(const ft: TFileTime): TUnixMSTime;
+/// convert an Unix seconds time to a Win32 64-bit FILETIME value
+procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
 
-/// convert a TUnixMSTime into a Windows FILETIME value
-procedure UnixMSTimeToWindowsFileTime64(TimeMS: TUnixMSTime; var ft: TFileTime);
+/// convert an Unix milliseconds time to a Win32 64-bit FILETIME value
+procedure UnixMSTimeToFileTime(I64: TUnixMSTime; out FT: TFileTime);
+
+/// convert a TDateTime to a Win32 64-bit FILETIME value
+procedure DateTimeToFileTime(dt: TDateTime; out FT: TFileTime);
+
+/// convert a Win32 64-bit FILETIME value into an Unix seconds time
+function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
+
+/// convert a Win32 64-bit FILETIME value into a TDateTime
+function FileTimeToDateTime(const FT: TFileTime): TDateTime;
+
+/// convert a Win32 64-bit FILETIME value into an Unix milliseconds time
+function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
 
 /// wrap GetSystemTimeAsFileTime() on Windows, or UnixMSTimeUtcFast()
 procedure NowUtcToWindowsFileTime(var ft: TFileTime);
@@ -7178,16 +7173,57 @@ begin
 end;
 
 const
-  FileTimePerMs = 10000; // a tick is 100ns
+  MilliSecsPerFileTime = 10000; // a tick is 100ns
+  SecsPerFileTime      = 10000000;
 
-function WindowsFileTime64ToUnixMSTime(const ft: TFileTime): TUnixMSTime;
+procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
 begin
-  result := (PInt64(@ft)^ - UnixFileTimeDelta) div FileTimePerMs;
+  I64 := (I64 * SecsPerFileTime) + UnixFileTimeDelta;
+  Int64ToFileTime(@I64, @FT);
 end;
 
-procedure UnixMSTimeToWindowsFileTime64(TimeMS: TUnixMSTime; var ft: TFileTime);
+procedure UnixMSTimeToFileTime(I64: TUnixMSTime; out FT: TFileTime);
 begin
-  PInt64(@ft)^ := (TimeMS * FileTimePerMs) + UnixFileTimeDelta;
+  I64 := (I64 * MilliSecsPerFileTime) + UnixFileTimeDelta;
+  Int64ToFileTime(@I64, @FT);
+end;
+
+function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
+var
+  nano100: Int64; // TFileTime is in 100 ns unit
+begin
+  FileTimeToInt64(@FT, @nano100);
+  if nano100 = 0 then
+    result := 0
+  else
+    result := (nano100 - UnixFileTimeDelta) div SecsPerFileTime;
+end;
+
+function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
+var
+  nano100: Int64; // TFileTime is in 100 ns unit
+begin
+  FileTimeToInt64(@FT, @nano100);
+  if nano100 = 0 then
+    result := 0
+  else
+    result := (nano100 - UnixFileTimeDelta) div MilliSecsPerFileTime;
+end;
+
+function FileTimeToDateTime(const FT: TFileTime): TDateTime;
+begin
+  if PInt64(@FT)^ = 0 then
+    result := 0
+  else // inlined UnixTimeToDateTime()
+    result := FileTimeToUnixMSTime(FT) * MilliSecsPerDate + UnixDateDelta;
+end;
+
+procedure DateTimeToFileTime(dt: TDateTime; out FT: TFileTime);
+begin
+  if dt = 0 then
+    PInt64(@FT)^ := 0
+  else // inlined DateTimeToUnixTime()
+    UnixTimeToFileTime(Round((dt - UnixDateDelta) * SecsPerDay), FT);
 end;
 
 function FileInfoByName(const FileName: TFileName; FileId, FileSize: PInt64;

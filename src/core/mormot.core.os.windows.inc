@@ -350,29 +350,18 @@ begin
   result := WinLastError('LoadLibrary');
 end;
 
-procedure FileTimeToInt64(const FT: TFileTime; out I64: Int64);
-  {$ifdef HASINLINE} inline; {$endif} 
+procedure FileTimeToInt64(FT: PFileTime; Q64: PQWordRec);
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  PInt64Rec(@I64)^.Lo := FT.dwLowDateTime; // Delphi 2007 bug with PInt64()
-  PInt64Rec(@I64)^.Hi := FT.dwHighDateTime;
+  Q64^.L := FT^.dwLowDateTime; // Delphi 2007 bug with PInt64()
+  Q64^.H := FT^.dwHighDateTime;
 end;
 
-const
-  MilliSecsPerFileTime = 10000; // a tick is 100ns
-  SecsPerFileTime      = 10000000;
-
-procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
+procedure Int64ToFileTime(Q64: PQWordRec; FT: PFileTime);
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  I64 := (I64 * SecsPerFileTime) + UnixFileTimeDelta;
-  FT.dwLowDateTime  := PInt64Rec(@I64)^.Lo; // Delphi 2007 bug with PInt64()
-  FT.dwHighDateTime := PInt64Rec(@I64)^.Hi;
-end;
-
-procedure UnixMSTimeToFileTime(I64: TUnixMSTime; out FT: TFileTime);
-begin
-  I64 := (I64 * MilliSecsPerFileTime) + UnixFileTimeDelta;
-  FT.dwLowDateTime  := PInt64Rec(@I64)^.Lo; // Delphi 2007 bug with PInt64()
-  FT.dwHighDateTime := PInt64Rec(@I64)^.Hi;
+  FT^.dwLowDateTime  := Q64^.L; // Delphi 2007 bug with PInt64()
+  FT^.dwHighDateTime := Q64^.H;
 end;
 
 // To account for daylight saving time when converting a file time to a local
@@ -396,60 +385,6 @@ var
 begin
   UnixTimeToFileTime(I64, lft);
   FileTimeToLocalSystemTime(lft, Local); // no FileTimeToLocalFileTime
-end;
-
-function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
-{$ifdef CPU64}
-var
-  nano100: Int64; // TFileTime is in 100 ns unit
-{$endif CPU64}
-begin
-  if PInt64(@FT)^ = 0 then
-  begin
-    result := 0;
-    exit;
-  end;
-  {$ifdef CPU64}
-  FileTimeToInt64(ft, nano100);
-  result := (nano100 - UnixFileTimeDelta) div SecsPerFileTime;
-  {$else} // use PInt64 to avoid URW699 with Delphi 6 / Kylix
-  result := (PInt64(@ft)^ - UnixFileTimeDelta) div SecsPerFileTime;
-  {$endif CPU64}
-end;
-
-function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
-{$ifdef CPU64}
-var
-  nano100: Int64; // TFileTime is in 100 ns unit
-{$endif CPU64}
-begin
-  if PInt64(@FT)^ = 0 then
-  begin
-    result := 0;
-    exit;
-  end;
-  {$ifdef CPU64}
-  FileTimeToInt64(ft, nano100);
-  result := (nano100 - UnixFileTimeDelta) div MilliSecsPerFileTime;
-  {$else} 
-  result := (PInt64(@ft)^ - UnixFileTimeDelta) div MilliSecsPerFileTime;
-  {$endif CPU64}
-end;
-
-function FileTimeToDateTime(const FT: TFileTime): TDateTime;
-begin
-  if PInt64(@FT)^ = 0 then
-    result := 0
-  else // inlined UnixTimeToDateTime()
-    result := FileTimeToUnixMSTime(FT) * MilliSecsPerDate + UnixDateDelta;
-end;
-
-procedure DateTimeToFileTime(dt: TDateTime; out FT: TFileTime);
-begin
-  if dt = 0 then
-    PInt64(@FT)^ := 0
-  else // inlined DateTimeToUnixTime()
-    UnixTimeToFileTime(Round((dt - UnixDateDelta) * SecsPerDay), FT);
 end;
 
 function UnixTimeUtc: TUnixTime;
@@ -2249,9 +2184,9 @@ begin
   result := GetSystemTimes(ftidl, ftkrn, ftusr);
   if not result then
     exit;
-  FileTimeToInt64(ftidl, IdleTime);
-  FileTimeToInt64(ftkrn, KernelTime); // on Windows, ftkrn includes ftidl
-  FileTimeToInt64(ftusr, UserTime);
+  FileTimeToInt64(@ftidl, @IdleTime);
+  FileTimeToInt64(@ftkrn, @KernelTime); // on Windows, ftkrn includes ftidl
+  FileTimeToInt64(@ftusr, @UserTime);
 end;
 
 function RetrieveLoadAvg: TShort23;
@@ -2280,8 +2215,8 @@ begin
   try
     if GetProcessTimes(h, ftp, fte, ftkrn, ftusr) then
     begin
-      FileTimeToInt64(ftkrn, KernelTime);
-      FileTimeToInt64(ftusr, UserTime);
+      FileTimeToInt64(@ftkrn, @KernelTime);
+      FileTimeToInt64(@ftusr, @UserTime);
       FillCharFast(mem, SizeOf(mem), 0);
       mem.cb := SizeOf(mem);
       if GetProcessMemoryInfo(h, mem, SizeOf(mem)) then
@@ -2367,9 +2302,9 @@ begin
   result := GetSystemTimes(ftidl, ftkrn, ftusr);
   if not result then
     exit;
-  FileTimeToInt64(ftidl, sidl);
-  FileTimeToInt64(ftkrn, skrn);
-  FileTimeToInt64(ftusr, susr);
+  FileTimeToInt64(@ftidl, @sidl);
+  FileTimeToInt64(@ftkrn, @skrn);
+  FileTimeToInt64(@ftusr, @susr);
   fDiffIdle   := sidl - fSysPrevIdle;
   fDiffKernel := skrn - fSysPrevKernel;
   fDiffUser   := susr - fSysPrevUser;
@@ -2397,8 +2332,8 @@ begin
     begin
       if Now <> nil then
         Data.Timestamp := Now^;
-      FileTimeToInt64(ftkrn, pkrn);
-      FileTimeToInt64(ftusr, pusr);
+      FileTimeToInt64(@ftkrn, @pkrn);
+      FileTimeToInt64(@ftusr, @pusr);
       if (PrevKernel <> 0) and
          (fDiffTotal > 0) then
       begin
@@ -2817,7 +2752,7 @@ begin
             if (dwFileDateLS <> 0) and
                (dwFileDateMS <> 0) then
             begin
-              ft.dwLowDateTime := dwFileDateLS; // built date from version nfo
+              ft.dwLowDateTime  := dwFileDateLS; // built date from version nfo
               ft.dwHighDateTime := dwFileDateMS;
               FileTimeToSystemTime(ft, st);
               fBuildDateTime := EncodeDate(st.wYear, st.wMonth, st.wDay);
