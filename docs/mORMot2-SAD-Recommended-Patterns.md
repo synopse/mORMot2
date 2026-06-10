@@ -244,16 +244,14 @@ The **local** unit self-wires in its `initialization` — it needs no parameters
 ConnectUserService('10.0.0.7', '443', 'root');
 ```
 
-So the *decision* is localized, not literally one line for remote: one `uses` line **plus** one connect call fed from config. The local build is the genuinely zero-extra-code case.
-
 <details>
 <summary><b>IMPORTANT</b> — select the topology with a define (`ifdef`)</summary>
 
-Putting the choice in an include file centralizes it in one place and turns "both" or "neither" into a *compile* error. The selector unit becomes:
+Centralize the choice in an include file: e.g. `project.inc` may contain `{$DEFINE LOCALMORMOT}`:
 
 ```pascal
 // AppUserClient.pas — selects the implementation at compile time
-{$I project.inc}   // must define exactly one of USERLOCAL / USERREMOTE
+{$I project.inc}   // defines LOCALMORMOT for the local build, nothing for remote
 
 uses
   {$ifdef LOCALMORMOT}  
@@ -264,7 +262,7 @@ uses
   ...;
 ```
 
-Now the single switch lives in `project.inc` — place `{$define LOCALMORMOT}` in `project.inc` and the `AppUserClientLocal` is used. The remote build still supplies its host/port/root once at startup, exactly as above. This is the form a production deployment tends to settle on, because the switch is one config line.
+Now the single switch lives in `project.inc` — place `{$define LOCALMORMOT}` in `project.inc` and the `AppUserClientLocal` is used. The remote build still supplies its host/port/root once at startup, exactly as above.
 
 </details>
 
