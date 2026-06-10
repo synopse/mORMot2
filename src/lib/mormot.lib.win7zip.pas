@@ -39,8 +39,6 @@ implementation
 {$else}
 
 uses
-  Windows,
-  ActiveX,
   sysutils,
   classes,
   types,
@@ -307,10 +305,10 @@ type
     function GetArchiveProperty(propID: TPropID; var value: T7zVariant): HRESULT; stdcall;
     function GetNumberOfProperties(numProperties: PCardinal): HRESULT; stdcall;
     function GetPropertyInfo(index: cardinal;
-      name: PBSTR; propID: PPropID; varType: PVarType): HRESULT; stdcall;
+      name: PBstr; propID: PPropID; varType: PVarType): HRESULT; stdcall;
     function GetNumberOfArchiveProperties(var numProperties: cardinal): HRESULT; stdcall;
     function GetArchivePropertyInfo(index: cardinal;
-      name: PBSTR; propID: PPropID; varType: PVarType): HRESULT; stdcall;
+      name: PBstr; propID: PPropID; varType: PVarType): HRESULT; stdcall;
   end;
 
   IArchiveUpdateCallback = interface(IProgress)
@@ -1034,7 +1032,7 @@ type
     fExtractPath: TFileName;
     fExtractCurrent: record
       FileName: TFileName;
-      Created, Accessed, Written: Int64;
+      Created, Accessed, Written: Int64; // from VT_FILETIME VInt64
     end;
     function GetProp(item: cardinal; prop: TPropID): T7zVariant;
     procedure GetPropUtf8(item: cardinal; prop: TPropID; out dest: RawUtf8);
@@ -1515,7 +1513,7 @@ begin
 end;
 
 var
-  LastFoundDll: TFileName; // do the folders ressearch once if possible
+  LastFoundDll: TFileName; // do the folders search once if possible
   
 constructor T7zLib.Create(lib: TFileName);
 begin
@@ -1680,7 +1678,6 @@ begin
 end;
 
 
-
 { T7zArchive }
 
 constructor T7zArchive.Create(lib: T7zLib; fmt: T7zFormatHandler;
@@ -1758,7 +1755,7 @@ begin
         SetPassword(fromuser);
   if fPasswordIsDefined then
   begin
-    password := SysAllocString(pointer(fPasswordUtf16));
+    password := SysAllocStringLen(pointer(fPasswordUtf16), length(fPasswordUtf16));
     result := S_OK;
   end
   else
@@ -2350,7 +2347,7 @@ begin
     item.Attributes := rd.Attributes[i];
     item.IsFolder := rd.IsFolder[i];
     item.UpdateItemIndex := i;
-    GetSystemTimeAsFileTime(item.LastWriteTime);
+    NowUtcToWindowsFileTime(item.LastWriteTime);
     ObjArrayAdd(fEntries, item);
   end;
 end;
@@ -2373,6 +2370,7 @@ function T7zWriter.AddFile(const Filename: TFileName; const ZipName: RawUtf8): b
 var
   item: T7zItem;
   Handle: THandle;
+  lw, ct: TUnixMSTime; // use mormot.core.os cross-plaform API
 begin
   Handle := FileOpen(Filename, fmOpenReadShared);
   result := ValidHandle(Handle);
@@ -2382,10 +2380,10 @@ begin
   item.SourceMode := smFile;
   item.FileName := Filename;
   item.ZipName := ZipName;
-  GetFileTime(Handle, @item.CreationTime, nil, @item.LastWriteTime);
-  item.Size := FileSize(Handle);
-  CloseHandle(Handle);
-  item.Attributes := GetFileAttributes(pointer(Filename));
+  FileInfoByHandle(Handle, nil, @item.Size, @lw, @ct, @item.Attributes);
+  UnixMSTimeToFileTime(ct, item.CreationTime);
+  UnixMSTimeToFileTime(lw, item.LastWriteTime);
+  FileClose(Handle);
   item.IsFolder := item.Attributes and faDirectory <> 0;
   item.IsAnti := false;
   item.Ownership := soOwned;
@@ -2494,7 +2492,7 @@ begin
   if LastWriteTime <> 0 then
     UnixTimeToFileTime(LastWriteTime, item.LastWriteTime)
   else
-    GetSystemTimeAsFileTime(item.LastWriteTime);
+    NowUtcToWindowsFileTime(item.LastWriteTime);
   item.ZipName := ZipName;
   item.IsFolder := IsFolder;
   item.IsAnti := IsAnti;
@@ -2940,8 +2938,6 @@ procedure T7zWriter.VolumeMode7z(mode: boolean);
 begin
   SetProperty('V', BooleanMethod[mode]);
 end;
-
-
 
 {$endif OSPOSIX}
 
