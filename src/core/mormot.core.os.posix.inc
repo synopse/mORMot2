@@ -1570,16 +1570,20 @@ var
   p: PCharIntArray;
 begin
   result := faArchive; // as LinuxToWinAttr() in fpcsrc/rtl/unix/sysutils.pp
-  p := @PCharIntArray(fn)[GetLastDelim(fn)]; // no memory allocation
+  p := PCharIntArray(fn);
+  if p <> nil then
+    p := @p[GetLastDelim(fn)]; // extract file name with no memory allocation
   if FpS_ISDIR(st.st_mode) then
   begin
     result := result or faDirectory;
-    if (p[0] = ord('.')) and
+    if (p <> nil) and
+       (p[0] = ord('.')) and
        (p[1] <> 0) and
        (PTwoCharsInt(@p[1])^ <> ord('.')) then
       result := result or faHidden{%H-}; // '.' and '..' are not hidden
   end
-  else if p[0] = ord('.') then
+  else if (p <> nil) and
+          (p[0] = ord('.')) then
     result := result or faHidden{%H-}; // e.g. '.htdigest'
   if (st.st_mode and S_IWUSR) = 0 then
     result := result or faReadOnly;
@@ -1626,7 +1630,7 @@ begin
 end;
 
 function FileInfoByHandle(aFileHandle: THandle; FileId, FileSize: PInt64;
-  LastWriteAccess, FileCreateDateTime: PUnixMSTime): boolean;
+  LastWriteAccess, FileCreateDateTime: PUnixMSTime; FileAttr: PCardinal): boolean;
 var
   mtime, atime, ctime: TUnixMSTime;
   lp: TStat;
@@ -1646,6 +1650,8 @@ begin
   StatTimeMS(lp, mtime);
   if LastWriteAccess <> nil then
     LastWriteAccess^ := mtime;
+  if FileAttr <> nil then
+    FileAttr^ := StatFileAttr('', lp);
   if FileCreateDateTime = nil then
     exit;
   // some FS don't populate all fields, so we use what we actually got

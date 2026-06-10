@@ -3176,7 +3176,7 @@ function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
 // by most Linux file systems, so the oldest timestamp available is returned
 // as failover on such systems (probably the latest file metadata writing)
 function FileInfoByHandle(aFileHandle: THandle; FileId, FileSize: PInt64;
-  LastWriteAccess, FileCreateDateTime: PUnixMSTime): boolean;
+  LastWriteAccess, FileCreateDateTime: PUnixMSTime; FileAttr: PCardinal = nil): boolean;
 
 /// get low-level file information with timings, in a cross-platform way
 // - is a wrapper around FileInfoByHandle() function - rarely called

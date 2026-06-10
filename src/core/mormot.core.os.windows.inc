@@ -893,7 +893,7 @@ begin // return the search record timestamp with no local time conversion
 end;
 
 function FileInfoByHandle(aFileHandle: THandle; FileId, FileSize: PInt64;
-  LastWriteAccess, FileCreateDateTime: PUnixMSTime): boolean;
+  LastWriteAccess, FileCreateDateTime: PUnixMSTime; FileAttr: PCardinal): boolean;
 var
   mtime, atime, ctime: Int64;
   lp: TByHandleFileInformation;
@@ -911,6 +911,8 @@ begin
     PInt64Rec(FileSize)^.lo := lp.nFileSizeLow;
     PInt64Rec(FileSize)^.hi := lp.nFileSizeHigh;
   end;
+  if FileAttr <> nil then
+    FileAttr^ := lp.dwFileAttributes;
   if (LastWriteAccess = nil) and
      (FileCreateDateTime = nil) then
     exit;
@@ -1174,7 +1176,7 @@ begin
   FileClose(s);
 end;
 
-procedure FileSetAttr(const FileName: TFileName; Attr: integer);
+procedure FileSetAttr(const FileName: TFileName; Attr: integer); // internal
 var
   tmp: TW32Temp;
 begin
