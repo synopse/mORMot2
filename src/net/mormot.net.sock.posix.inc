@@ -512,6 +512,8 @@ function TNetAddr.SetFrom(const address, addrport: RawUtf8;
 var
   h: PHostEnt;
   ad4: TSockAddr absolute Addr;
+  ad6: TSockAddrIn6 absolute Addr;
+  adu: TSockAddrUnix absolute Addr;
 begin
   Clear;
   result := nrNotFound;
@@ -521,19 +523,18 @@ begin
   if layer = nlUnix then
   begin
     // socket file name is just copied to the address struct
-    with PSockAddrUnix(@Addr)^ do
-      if length(address) >= SizeOf(sun_path) then
-        // avoid buffer overflow or truncated socket name
-        result := nrInvalidParameter
-      else
-      begin
-        sun_family := AF_UNIX;
-        {$ifdef SOCK_HAS_SINLEN}
-        sun_len := SOCKADDR_SIZE; // mandatory on OpenBSD - FreeBSD/Darwin allow 0
-        {$endif SOCK_HAS_SINLEN}
-        MoveFast(pointer(address)^, sun_path, length(address) + 1); // +1 for #0
-        result := nrOK;
-      end;
+    if length(address) >= SizeOf(adu.sun_path) then
+      // avoid buffer overflow or truncated socket name
+      result := nrInvalidParameter
+    else
+    begin
+      adu.sun_family := AF_UNIX;
+      {$ifdef SOCK_HAS_SINLEN}
+      adu.sun_len := SOCKADDR_SIZE; // mandatory on OpenBSD - FreeBSD/Darwin allow 0
+      {$endif SOCK_HAS_SINLEN}
+      MoveFast(pointer(address)^, adu.sun_path, length(address) + 1); // +1 for #0
+      result := nrOK;
+    end;
     exit;
   end;
   // check supplied IP port
@@ -541,9 +542,10 @@ begin
   if (ad4.sin_port = 0) and
      (addrport <> '0') then // explicit '0' to get ephemeral port
     exit;
-  // check most simple IPv4 resolution (maybe using mormot.net.dns)
+  // check most simple IPv4/IPv6 resolution (maybe using mormot.net.dns)
   result := nrOk;
-  if SetFromIP4(address, false) then
+  if SetFromIP4(address, false) or
+     SetFromIP6(address) then // inet_pton() OS API is faster than gethostbyname
     exit;
   // use OS API (getaddrinfo is more recent, but addrinfo is not cross-platform)
   _gethostbynamesafe.Lock;
@@ -558,7 +560,7 @@ begin
         AF_INET:
            ad4.sin_addr := h^.h_addr^^;
         AF_INET6:
-           PSockAddrIn6(@Addr)^.sin6_addr := h^.h_addr6^^;
+           ad6.sin6_addr := h^.h_addr6^^;
       else
         result := nrNotImplemented;
       end;

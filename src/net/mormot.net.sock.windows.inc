@@ -552,8 +552,7 @@ begin
   PSockAddr(@Addr)^.sin_family := fam;
 end;
 
-function TNetAddr.SetFrom(const address, addrport: RawUtf8;
-  layer: TNetLayer): TNetResult;
+function TNetAddr.SetFrom(const address, addrport: RawUtf8; layer: TNetLayer): TNetResult;
 var
   p: TNetPort;
 begin
@@ -571,6 +570,7 @@ begin
     exit;
   // first check most simple IPv4 resolution (maybe using mormot.net.dns)
   if SetFromIP4(address, false) or
+     SetFromIP6(address) or // InetPton() OS API is faster than getaddrinfo
      // fallback to OS getaddrinfo() resolution, first try as IPv4, then IPv6
      SetWinAddr(address, addrport, AF_INET, layer, Addr) or
      SetWinAddr(address, addrport, AF_INET6, layer, Addr) then
@@ -839,7 +839,7 @@ end;
 
 // documented since Windows Vista, but actually available on Windows XP SP3 :)
 function RtlIpv6StringToAddress(s: PUtf8Char; var term: PUtf8Char; in6: PByte): integer;
-  stdcall; external 'NTDLL.DLL' name 'RtlIpv6StringToAddressA';
+  stdcall; external ntdll name 'RtlIpv6StringToAddressA';
 
 function InetPton(text: PUtf8Char; value: PByte): boolean;
 var
