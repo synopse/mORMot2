@@ -2082,10 +2082,8 @@ begin
         Value := TVarData(V).VSingle;
       varCurrency:
         Value := TVarData(V).VCurrency;
-      {$ifdef OSWINDOWS}
-      varOleFileTime:
+      varOleFileTime: // may appear on POSIX e.g. for mormot.lib.win7zip
         Value := FileTimeToDateTime(PFileTime(@TVarData(V).VInt64)^);
-      {$endif OSWINDOWS}
       varString:
         begin
           Iso8601ToDateTimePUtf8CharVar(TVarData(V).VString,
