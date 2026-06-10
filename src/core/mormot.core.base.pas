@@ -4267,9 +4267,8 @@ const
   {$endif ISDELPHI}
 
   /// those TVarData.VType values are meant to be direct values
-  VTYPE_SIMPLE = [varEmpty..varDate, varBoolean, varShortInt..varWord64
-    {$ifdef OSWINDOWS} , varOleInt, varOleUInt, varOlePAnsiChar, varOlePWideChar,
-      varOleFileTime {$endif OSWINDOWS}];
+  VTYPE_SIMPLE = [varEmpty .. varDate, varBoolean, varShortInt .. varOleUInt,
+                  varOlePAnsiChar, varOlePWideChar, varOleFileTime];
   /// those TVarData.VType values are meant to be number values and need no escape
   VTYPE_NUMERIC = [varSmallInt .. varDouble, varCurrency, varBoolean .. varOleUInt];
   /// bitmask used by our inlined VarClear() to avoid unneeded VarClearProc()
