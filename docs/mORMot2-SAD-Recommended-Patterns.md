@@ -335,7 +335,7 @@ Publishing too much is the classic Internet-facing mistake; the cross-cutting ru
 
 #### A.6.3. Mapping to standard architecture vocabulary
 
-The names used above are concrete on purpose, but none of them is a new concept. So that both people and AI can cross-reference the established literature, here is how they line up — kept on the two axes from the start of A.6.
+The above wording has been picked on purpose — here is how it maps to the established literature, along the same two axes.
 
 **Physical / topology axis** (A.6.2 — the network boundary):
 
@@ -358,8 +358,6 @@ Two caveats, because it is tempting to file all of this under one label such as 
 
 - **Clean Architecture [\[5\]](#ref-5) / Onion [\[7\]](#ref-7) / DDD [\[2\]](#ref-2) describe the *logical* axis** — in-process layering — not how many processes you run. They apply just as much to the A.6.1 monolith as to A.6.2.
 - **API Gateway / BFF [\[8\]](#ref-8) / hexagonal-edge [\[1\]](#ref-1) describe the *physical* axis** — the network boundary. They are what A.6.2 adds on top of the layering.
-
-Picking the right body of literature per axis is the point: it keeps "private system-of-record + public edge" anchored to *System of Record + API Gateway*, rather than mislabelled as a Clean-Architecture concern.
 
 ---
 
