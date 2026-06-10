@@ -286,9 +286,11 @@ RestServer.ServiceDefine(TUserService, [IUserQuery, IUserCommand], sicShared);
 RestServer.AuthenticationRegister(TRestServerAuthenticationDefault);
 
 // 6. Access rights: tighten or disable the ORM REST routes you do not want
-//    exposed (per-table read-only / no-CRUD); services stay reachable.
-RestServer.OnlyJsonRequests := true;
-// e.g. RestServer.SetAccessRights(...) to lock down or drop ORM endpoints
+//    exposed (per-table CRUD bits, per TAuthGroup); services stay reachable.
+//    See Chapter 21, 21.9.1.
+Rights := SUPERVISOR_ACCESS_RIGHTS;
+Rights.Edit(Model, TInvoice, {C=}false, {R=}true, {U=}false, {D=}false); // read-only
+Group.OrmAccessRights := Rights;     // applied to the TAuthGroup row
 
 // 7. HTTP: expose over HTTP/HTTPS
 HttpServer := TRestHttpServer.Create('8080', [RestServer], '+', HTTP_DEFAULT_MODE);
