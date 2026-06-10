@@ -881,6 +881,9 @@ var
 // to the domain controller
 function GetDomainNames(usePosixEnv: boolean = false): TRawUtf8DynArray;
 
+/// quickly check if the text is a host name with only A-Z a-z 0-9 - . chars
+function IsHostName(Name: PUtf8Char): boolean;
+
 /// resolve a host name from the OS hosts file content
 // - i.e. use a cache of /etc/hosts or c:\windows\system32\drivers\etc\hosts
 // - returns true and the IPv4 address of the stored host found
@@ -4472,6 +4475,23 @@ begin
     end;
     p := GotoNextLine(p);
   end;
+end;
+
+function IsHostName(Name: PUtf8Char): boolean;
+begin
+  result := false;
+  if Name = nil then
+    exit;
+  while true do
+    case Name^ of
+      #0:
+        break;
+      '.', '-', '0'..'9', 'a'..'z', 'A'..'Z':
+        inc(Name);
+    else
+      exit;
+    end;
+  result := true;
 end;
 
 function GetKnownHost(const HostName: RawUtf8; out ip4: TNetIP4): boolean;
