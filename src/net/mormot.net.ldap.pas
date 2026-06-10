@@ -3881,7 +3881,7 @@ end;
 function AttributeValueMakeReadable(var s: RawUtf8; ats: TLdapAttributeTypeStorage;
   dom: PSid; uuid: TAppendShortUuid): boolean;
 var
-  ft: QWord;
+  ft: QWord; // TFileTime
   guid: TGuid;
   err: integer absolute guid;
   ts: TTimeLogBits absolute guid;
@@ -3923,7 +3923,7 @@ begin
             s := 'Never expires'
           else
           begin
-            ts.FromUnixMSTime(WindowsFileTime64ToUnixMSTime(ft));
+            ts.FromUnixMSTime(WindowsFileTime64ToUnixMSTime(TFileTime(ft)));
             ts.SetText(s, {expanded=}true); // normalize as pure ISO-8601
           end;
           exit;
