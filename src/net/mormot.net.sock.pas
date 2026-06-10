@@ -2667,7 +2667,7 @@ end;
 
 procedure TNetHostCache.Add(const hostname: RawUtf8; ip4: TNetIP4);
 begin
-  if hostname = '' then
+  if not IsHostName(pointer(hostname)) then
     exit;
   if Capacity = Count then
   begin
@@ -2694,7 +2694,7 @@ var
 begin
   result := false;
   if (Count = 0) or
-     (hostname = '') then
+     not IsHostName(pointer(hostname)) then
     exit;
   i := FindPropName(pointer(Host), hostname, Count); // case insensitive lookup
   if i < 0 then
@@ -2719,7 +2719,8 @@ end;
 function TNetHostCache.SafeFind(const hostname: RawUtf8; out ip4: TNetIP4): boolean;
 begin
   result := false;
-  if Count = 0 then
+  if (Count = 0) or
+     not IsHostName(pointer(hostname)) then
     exit;
   Safe.Lock;
   if TixDeprecated then
@@ -2734,7 +2735,7 @@ var
   i, n: PtrInt;
 begin
   if (Count = 0) or
-     (hostname = '') then
+     not IsHostName(pointer(hostname)) then
     exit;
   Safe.Lock;
   try
@@ -4441,7 +4442,7 @@ begin
     _GetDnsAddresses(usePosixEnv, {getAD=}true, result);
 end;
 
-var
+var // track '/etc/hosts' content
   KnownHostCache: TNetHostCache;
   KnownHostCacheFileTime: TUnixTime;
   RegKnownHostCache: TNetHostCache;
@@ -4453,7 +4454,7 @@ var
   h: RawUtf8;
 begin
   KnownHostCache.Count := 0;
-  KnownHostCache.AddFrom(RegKnownHostCache);
+  KnownHostCache.AddFrom(RegKnownHostCache); // custom values
   p := pointer(StringFromFile(host_file));
   while p <> nil do
   begin
@@ -4467,7 +4468,7 @@ begin
         inc(p);
       until p^ <= ' '; // go to end of IP text
       repeat
-        h := NetGetNextSpaced(p);
+        h := NetGetNextSpaced(p); // 'ipv4 host1 host2'
         if h = '' then
           break;
         KnownHostCache.Add(h, ip4);
@@ -4499,7 +4500,7 @@ var
   tixfile: TUnixTime;
 begin
   result := false;
-  if HostName = '' then
+  if not IsHostName(pointer(HostName)) then
     exit;
   KnownHostCache.Safe.Lock;
   try
@@ -4526,7 +4527,7 @@ procedure RegisterKnownHost(const HostName, Ip4: RawUtf8);
 var
   ip32: TNetIP4;
 begin
-  if (HostName <> '') and
+  if IsHostName(pointer(HostName)) and
      NetIsIP4(pointer(ip4), @ip32) then
   begin
     RegKnownHostCache.SafeAdd(HostName, ip32, {tixshr=}0);

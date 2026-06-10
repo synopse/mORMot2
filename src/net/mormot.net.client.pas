@@ -6148,12 +6148,15 @@ end;
 function TNewSocketAddressCache.Search(const Host: RawUtf8;
   out NetAddr: TNetAddr): boolean;
 begin
-  result := fData.FindAndCopy(Host, NetAddr);
+  result := IsHostName(pointer(Host)) and
+            fData.FindAndCopy(Host, NetAddr);
 end;
 
 procedure TNewSocketAddressCache.Add(const Host: RawUtf8;
   const NetAddr: TNetAddr);
 begin
+  if not IsHostName(pointer(Host)) then
+    exit;
   fData.DeleteDeprecated;   // flush cache only when we may need some new space
   fData.Add(Host, NetAddr); // do nothing if already added in another thread
 end;
@@ -6162,7 +6165,8 @@ procedure TNewSocketAddressCache.Force(const Host, IP: RawUtf8);
 var
   addr: TNetAddr;
 begin
-  if not NetIsIP4(pointer(IP)) or
+  if not IsHostName(pointer(Host)) or
+     not NetIsIP4(pointer(IP)) or
      not addr.SetFromIP4(IP, true) then
     exit;
   fData.DeleteDeprecated;   // flush cache only when we may need some new space
@@ -6171,7 +6175,8 @@ end;
 
 procedure TNewSocketAddressCache.Flush(const Host: RawUtf8);
 begin
-  fData.Delete(Host);
+  if IsHostName(pointer(Host)) then
+    fData.Delete(Host);
 end;
 
 procedure TNewSocketAddressCache.SetTimeOut(aSeconds: integer);
