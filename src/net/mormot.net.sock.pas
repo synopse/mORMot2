@@ -1743,8 +1743,8 @@ type
     /// optional password for authentication, as retrieved before '@'
     // - e.g. from 'https://user:password@server:port/address'
     Password: RawUtf8;
-    /// the resource address, including optional parameters
-    // - e.g. 'category/name/10?param=1'
+    /// the resource address, including optional parameters with no starting '/'
+    // - e.g. 'category/name/10?param=1' or 'url/path'
     Address: RawUtf8;
     /// reset all stored information
     procedure Clear;
@@ -1754,7 +1754,7 @@ type
     // 'https://user:password@server:port/address' (authenticated),
     // 'wss://Server/Address' (as https) or 'file://server/folder/data.xml'
     // - returns TRUE if the Server has been extracted and is not ''
-    function From(aUri: RawUtf8; const DefaultPort: RawUtf8 = ''): boolean;
+    function From(const aUri: RawUtf8; const DefaultPort: RawUtf8 = ''): boolean;
     /// check if a connection need to be re-established to follow this URI
     function Same(const aServer, aPort: RawUtf8; aHttps: boolean): boolean;
     /// check if a connection need to be re-established to follow this URI
@@ -2051,8 +2051,8 @@ type
     /// can be assigned to TSynLog.DoLog class method for low-level logging
     OnLog: TSynLogProc;
     /// common initialization of all constructors of this class
-    // - if you call it directly, you can setup all the needed parameters (e.g.
-    // TLS, Tunnel, THttpClientWebSockets.Settings) then call ConnectUri()
+    // - if you call it directly, you can setup all the needed parameters
+    // (e.g. TLS, Tunnel, THttpClientWebSockets.Settings) then call ConnectUri()
     // - see also Open/OpenUri/Bind other constructors
     constructor Create(aTimeOut: integer = 10000); reintroduce; virtual;
     /// constructor to create a client connection to aServer:aPort
@@ -6169,19 +6169,24 @@ const
   _US_PORT: array[TUriScheme] of RawUtf8 = (
     '', '', '80', '80', '443', '443', '', '', '20', '989');
 
-function TUri.From(aUri: RawUtf8; const DefaultPort: RawUtf8): boolean;
+function TUri.From(const aUri: RawUtf8; const DefaultPort: RawUtf8): boolean;
 var
   p, s, p1, p2: PAnsiChar;
-  i: integer;
+  i: PtrInt;
 begin
   Clear;
   result := false;
-  TrimSelf(aUri);
-  if aUri = '' then
+  // trim left
+  s := pointer(aUri);
+  if s = nil then
     exit;
+  while s^ <= ' ' do
+    if s^ = #0 then
+      exit
+    else
+      inc(s);
   // parse Scheme
-  p := pointer(aUri);
-  s := p;
+  p := s;
   while s^ in ['a'..'z', 'A'..'Z', '+', '-', '.', '0'..'9'] do
     inc(s);
   UriScheme := usHttp; // fallback to http:// if no scheme specified
@@ -6202,13 +6207,14 @@ begin
     p := s + 3;
   end;
   // parse Server
-  if NetStartWith(pointer(p), 'UNIX:/') then
+  if (PCardinal(p)^ and $dfdfdfdf = ord('U') + ord('N') shl 8 + ord('I') shl 16 +
+       ord('X') shl 24) and (PWord(p + 4)^ = ord(':') + ord('/') shl 8) then
   begin
     inc(p, 5); // 'http://unix:/path/to/socket.sock:/url/path'
     Layer := nlUnix;
     s := p;
     while not (s^ in [#0, ':']) do
-      inc(s); // Server='/path/to/socket.sock'
+      inc(s);
   end
   else
   begin
@@ -6224,7 +6230,7 @@ begin
         i := PosExChar(':', User);
         if i <> 0 then
         begin
-          Password := copy(User, i + 1, 1000);
+          TrimCopy(User, i + 1, 1000, Password);
           SetLength(User, i - 1);
         end;
         p := p1 + 1;
@@ -6239,7 +6245,9 @@ begin
   if Server <> '' then // we need a server to have a port
     if s^ = ':' then
     begin
-      inc(s);
+      repeat
+        inc(s);
+      until s^ <> ' ';
       p := s;
       while not (s^ in [#0, '/']) do
         inc(s);
@@ -6254,7 +6262,11 @@ begin
   begin
     if s^ <> '?' then
       inc(s);
-    FastSetString(Address, s, StrLen(s));
+    i := StrLen(s);
+    while (i > 0) and
+          (s[i - 1] <= ' ') do
+      dec(i); // trim right
+    FastSetString(Address, s, i);
   end;
   if Server <> '' then
     result := true;
