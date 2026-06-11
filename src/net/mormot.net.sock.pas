@@ -1753,6 +1753,7 @@ type
     // 'server/address' (as http), 'http://unix:/server:/address' (as nlUnix),
     // 'https://user:password@server:port/address' (authenticated),
     // 'wss://Server/Address' (as https) or 'file://server/folder/data.xml'
+    // - supports RFC 3986 IPv6 literals in URIs like 'https://[::1]:123/tata'
     // - returns TRUE if the Server has been extracted and is not ''
     function From(const aUri: RawUtf8; const DefaultPort: RawUtf8 = ''): boolean;
     /// check if a connection need to be re-established to follow this URI
@@ -6231,6 +6232,7 @@ begin
     s := p;
     while not (s^ in [#0, ':']) do
       inc(s);
+    FastSetString(Server, p, s - p); // Server='/path/to/socket.sock'
   end
   else
   begin
@@ -6253,10 +6255,27 @@ begin
       end;
     end;
     s := p;
-    while not (s^ in [#0, ':', '/', '?']) do
-      inc(s); // 'server:port/address' or 'server/address'
+    if s^ = '[' then
+    begin
+      // '[ip6::1]:port/address' or '[ip6::1]/address'
+      repeat
+        inc(s);
+        if s^ <= ' ' then
+          exit; // #0 or ' ' are invalid in an IPv6
+      until s^ = ']';
+      FastSetString(Server, p, s - p + 1);
+      repeat
+        inc(s); // ignore ending ']'
+      until s^ <> ' ';
+    end
+    else
+    begin
+      // regular 'server:port/address' or 'server/address'
+      while not (s^ in [#0, ':', '/', '?']) do
+        inc(s);
+      FastSetString(Server, p, s - p);
+    end;
   end;
-  FastSetString(Server, p, s - p);
   // optional Port
   if Server <> '' then // we need a server to have a port
     if s^ = ':' then
