@@ -6561,7 +6561,7 @@ begin
         inc(up);
       repeat
         inc(up);
-      until up^ = '|';
+      until up^ = '|'; // quickly go to the next value
       inc(result);
       inc(up);
     until up^ = #0;

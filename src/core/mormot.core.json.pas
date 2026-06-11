@@ -619,6 +619,10 @@ procedure FormatParams(const Format: RawUtf8; Args, Params: PVarRecArray;
 // - is a wrapper around FormatParams(Format, Args, Params, false, result);
 function FormatSql(const Format: RawUtf8; const Args, Params: array of const): RawUtf8;
 
+/// fast Format() function replacement, handling % but also ? inlined parameters
+procedure FormatSqlVar(const Format: RawUtf8; const Args, Params: array of const;
+  var Dest: RawUtf8);
+
 /// fast Format() function replacement, handling % but also ? parameters as JSON
 // - will include Args[] for every % in Format
 // - will include Params[] for every ? in Format, as their JSON value, with
@@ -5135,6 +5139,12 @@ function FormatSql(const Format: RawUtf8;
   const Args, Params: array of const): RawUtf8;
 begin
   FormatParams(Format, @Args[0], @Params[0], high(Args), high(Params), {json=}false, result);
+end;
+
+procedure FormatSqlVar(const Format: RawUtf8; const Args, Params: array of const;
+  var Dest: RawUtf8);
+begin
+  FormatParams(Format, @Args[0], @Params[0], high(Args), high(Params), {json=}false, Dest);
 end;
 
 function FormatJson(const Format: RawUtf8;
