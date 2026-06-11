@@ -4078,7 +4078,7 @@ begin
   VarClear(value);
 end;
 
-procedure _VariantClearSeveral(V: PVarData; n: integer);
+procedure _VariantClearSeveral(V: PVarData; n: PtrInt);
 var
   vt: cardinal;
   handler: TCustomVariantType;
@@ -4093,18 +4093,18 @@ begin
       if (vt >= varOleStr) and
          (vt <= varError) then
         if vt = varOleStr then
+          {$ifdef OSWINDOWS}
           WideString(V^.VAny) := ''
+          {$else}
+          FastAssignNew(V^.VAny) // WideString=UnicodeString on POSIX
+          {$endif OSWINDOWS}
         else
           goto clr; // varError/varDispatch
     end // note: varVariant/varUnknown are not handled because should not appear
-    else if vt = varString then
-      FastAssignNew(V^.VAny)
+    else if (vt = varString)
+            {$ifdef HASVARUSTRING} or (vt = varUString) {$endif} then
+      FastAssignNew(V^.VAny)   // both RawUtf8 and UnicodeString have PStrRec
     else if vt < varByRef then // varByRef has no refcount -> nothing to clear
-      {$ifdef HASVARUSTRING}
-      if vt = varUString then
-        UnicodeString(V^.VAny) := ''
-      else
-      {$endif HASVARUSTRING}
       if vt = DocVariantVType then
         PDocVariantData(V)^.ClearFast // inlined method, faster than Clear
       else if vt >= varArray then // custom types are below varArray

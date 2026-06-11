@@ -5342,7 +5342,7 @@ begin
         tmp := nil;
         GetUnicodeStrProp(Instance, UnicodeString(tmp));
         RawUnicodeToUtf8(tmp, length(UnicodeString(tmp)), Value);
-        UnicodeString(tmp) := '';
+        FastAssignNew(tmp); // works also with UnicodeString
       end;
     {$endif HASVARUSTRING}
   else
@@ -5401,7 +5401,7 @@ begin
         Utf8DecodeToUnicodeString(pointer(Value), length(Value), UnicodeString(u));
         SetUnicodeStrProp(Instance, UnicodeString(u));
       finally
-        UnicodeString(u) := '';
+        FastAssignNew(u); // works also with UnicodeString
       end;
     {$endif HASVARUSTRING}
   else

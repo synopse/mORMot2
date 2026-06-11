@@ -3536,7 +3536,7 @@ begin
   if fHttpApiRequest = nil then
     result := ''
   else
-    SetString(result, fHttpApiRequest^.CookedUrl.pFullUrl,
+    FastSynUnicode(result, fHttpApiRequest^.CookedUrl.pFullUrl,
       fHttpApiRequest^.CookedUrl.FullUrlLength shr 1); // length in bytes
 end;
 
