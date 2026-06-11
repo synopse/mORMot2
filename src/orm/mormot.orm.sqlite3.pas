@@ -2020,8 +2020,8 @@ end;
 
 function TRestOrmServerDB.RetrieveBlobFields(Value: TOrm): boolean;
 var
-  s: TRestOrm;
   sql: RawUtf8;
+  s: TRestOrm;
   f: PtrInt;
   size: Int64;
   data: TSqlVar;
@@ -2038,8 +2038,8 @@ begin
     with Value.Orm do
       if BlobFields <> nil then
       begin
-        sql := FormatSql('SELECT % FROM % WHERE ROWID=?',
-          [SqlTableRetrieveBlobFields, SqlTableName], [Value.ID]);
+        FormatSqlVar('SELECT % FROM % WHERE ROWID=?',
+          [SqlTableRetrieveBlobFields, SqlTableName], [Value.ID], sql);
         DB.Lock(sql);
         try
           GetAndPrepareStatement(sql, true);

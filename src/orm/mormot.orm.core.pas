@@ -7008,20 +7008,20 @@ end;
 function TOrm.FillPrepare(const aClient: IRestOrm; const FormatSqlWhere: RawUtf8;
   const BoundsSqlWhere: array of const; const FieldsCsv: RawUtf8): boolean;
 var
-  sqlwhere: RawUtf8;
+  where: RawUtf8;
 begin
-  sqlwhere := FormatSql(FormatSqlWhere, [], BoundsSqlWhere);
-  result := FillPrepare(aClient, sqlwhere, FieldsCsv);
+  FormatSqlVar(FormatSqlWhere, [], BoundsSqlWhere, where);
+  result := FillPrepare(aClient, where, FieldsCsv);
 end;
 
 function TOrm.FillPrepare(const aClient: IRestOrm; const FormatSqlWhere: RawUtf8;
   const ParamsSqlWhere, BoundsSqlWhere: array of const;
   const FieldsCsv: RawUtf8): boolean;
 var
-  sqlwhere: RawUtf8;
+  where: RawUtf8;
 begin
-  sqlwhere := FormatSql(FormatSqlWhere, ParamsSqlWhere, BoundsSqlWhere);
-  result := FillPrepare(aClient, sqlwhere, FieldsCsv);
+  FormatSqlVar(FormatSqlWhere, ParamsSqlWhere, BoundsSqlWhere, where);
+  result := FillPrepare(aClient, where, FieldsCsv);
 end;
 
 function TOrm.FillPrepare(const aClient: IRestOrm;
@@ -7805,7 +7805,7 @@ constructor TOrm.CreateAndFillPrepare(const aClient: IRestOrm;
 var
   where: RawUtf8;
 begin
-  where := FormatSql(FormatSqlWhere, [], BoundsSqlWhere);
+  FormatSqlVar(FormatSqlWhere, [], BoundsSqlWhere, where);
   CreateAndFillPrepare(aClient, where, FieldsCsv);
 end;
 
@@ -7815,7 +7815,7 @@ constructor TOrm.CreateAndFillPrepare(const aClient: IRestOrm;
 var
   where: RawUtf8;
 begin
-  where := FormatSql(FormatSqlWhere, ParamsSqlWhere, BoundsSqlWhere);
+  FormatSqlVar(FormatSqlWhere, ParamsSqlWhere, BoundsSqlWhere, where);
   CreateAndFillPrepare(aClient, where, FieldsCsv);
 end;
 
