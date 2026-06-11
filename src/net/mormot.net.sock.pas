@@ -4527,33 +4527,49 @@ begin
 end;
 
 function IsHostName(Name: PUtf8Char): boolean;
+var
+  L: PtrInt;
 begin
   result := false;
   if Name = nil then
     exit;
-  while true do
-    case Name^ of
+  L := 0;
+  repeat
+    case Name[L] of
       #0:
         break;
-      #1 .. ' ', ':', '[', ']', '/', '\', '@', '?', '#':
+      '.':
+        if (L > 0) and
+           (Name[L - 1] = '.') then
+          exit;  // reject '..' anywhere in the host name
+      #1 .. ' ', ':', '[', ']', '/', '\', '@', '?', '#', '%':
         exit;    // reject URI and IPv6 separators
-    else
-      inc(Name); // allow 'nas$' 'db~backup' 'test+lab' or UTF-8 >= $80 bytes
     end;
+    inc(L);      // allow 'nas$' 'db~backup' 'test+lab' or UTF-8 >= $80 bytes
+  until false;
   result := true;
 end;
 
 function IsDnsName(Name: PUtf8Char): boolean;
+var
+  L: PtrInt;
 begin
   result := false;
   if Name = nil then
     exit;
+  L := 0;
   while true do
-    case Name^ of
+    case Name[L] of
       #0:
         break;
-      '.', '-', '0'..'9', 'a'..'z', 'A'..'Z', '_':
-        inc(Name); // allow '_' e.g. for relaxed DNS services resolution
+      '.':
+        if (L > 0) and
+           (Name[L - 1] = '.') then
+          exit  // reject '..' anywhere in the host name
+        else
+          inc(L);
+      '-', '0'..'9', 'a'..'z', 'A'..'Z', '_':
+        inc(L); // allow '_' for DNS services resolution
     else
       exit;
     end;
