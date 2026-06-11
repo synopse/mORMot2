@@ -670,8 +670,11 @@ begin
     exit;
   end
   else if (CodePage < CP_MIN) or
+          (CodePage >= CP_RAWBLOB) or
           (LA <= 0) then
     exit(0); // clearly invalid/unsupported CodePage or void input
+  if not icu.IsAvailable then
+    exit(AnsiToWideRTL(CodePage, A, W, LA, LW)); // don't try ICU at all
   err := 0;
   cnv := icu.SharedUcnv(CodePage, ndx); // try from our thread-safe cache
   if cnv <> nil then
@@ -688,7 +691,7 @@ begin
       icu.ucnv_close(cnv);
     end
     else // fallback to cwstring/iconv
-      result := AnsiToWideRTL(CodePage, A, W, LA, LW);
+      exit(AnsiToWideRTL(CodePage, A, W, LA, LW));
   end;
   if result < 0 then
     result := 0;
@@ -709,26 +712,32 @@ begin
     exit;
   end
   else if (CodePage < CP_MIN) or
+          (CodePage >= CP_RAWBLOB) or
           (LW <= 0) then
     exit(0); // clearly invalid/unsupported CodePage or void input
-  err := 0;
-  cnv := icu.SharedUcnv(CodePage, ndx); // try from our thread-safe cache
-  if cnv <> nil then
+  if icu.IsAvailable then
   begin
-    result := icu.ucnv_fromUChars(cnv, A, LA, W, LW, err);
-    icu.SharedUcnvUnLock(ndx);
-  end
-  else
-  begin
-    cnv := icu.ucnv(CodePage); // use a transient converter if locked
+    err := 0;
+    cnv := icu.SharedUcnv(CodePage, ndx); // try from our thread-safe cache
     if cnv <> nil then
     begin
       result := icu.ucnv_fromUChars(cnv, A, LA, W, LW, err);
-      icu.ucnv_close(cnv);
+      icu.SharedUcnvUnLock(ndx);
     end
-    else // fallback to cwstring/iconv (less complete than ICU)
-      result := WideToAnsiRTL(CodePage, W, A, LW, LA);
-  end;
+    else
+    begin
+      cnv := icu.ucnv(CodePage); // use a transient converter if locked
+      if cnv <> nil then
+      begin
+        result := icu.ucnv_fromUChars(cnv, A, LA, W, LW, err);
+        icu.ucnv_close(cnv);
+      end
+      else // fallback to cwstring/iconv (less complete than ICU)
+        result := WideToAnsiRTL(CodePage, W, A, LW, LA);
+    end;
+  end
+  else
+    result := WideToAnsiRTL(CodePage, W, A, LW, LA); // don't try ICU at all
   if result <= 0 then
     result := 0
   else
