@@ -905,12 +905,12 @@ function IsCacheableDML(Sql: PUtf8Char): boolean;
 function SqlFromWhere(const Where: RawUtf8): RawUtf8;
 
 /// compute a SQL SELECT statement from its parameters
-function SqlFromSelect(const TableName, Select, Where, SimpleFields: RawUtf8): RawUtf8;
+procedure SqlFromSelect(const TableName, Select, Where, SimpleFields: RawUtf8;
+  var Sql: RawUtf8);
 
 /// find out if the supplied WHERE clause starts with one of the
 // ORDER/GROUP/LIMIT/OFFSET/JOIN keywords
 function SqlWhereIsEndClause(const Where: RawUtf8): boolean;
-  {$ifdef FPC} inline; {$endif}
 
 /// get the order table name from a SQL statement
 // - return the word following any 'ORDER BY' statement
@@ -2639,33 +2639,51 @@ begin
     Append(Where, ' and ', Condition);
 end;
 
+const
+  ENDCLAUSE = // https://synopse.info/forum/viewtopic.php?pid=38842#p38842
+   'ORDER BY |GROUP BY |LIMIT |OFFSET |LEFT |RIGHT |INNER |OUTER |JOIN |WHERE |';
 
 function SqlWhereIsEndClause(const Where: RawUtf8): boolean;
 begin
   result := (Where <> '') and
-            (IdemPCharSep(GotoNextNotSpace(pointer(Where)),
-    'ORDER BY |GROUP BY |LIMIT |OFFSET |LEFT |RIGHT |INNER |OUTER |JOIN |WHERE |'
-             ) >= 0); // https://synopse.info/forum/viewtopic.php?pid=38842#p38842
+            (IdemPCharSep(GotoNextNotSpace(pointer(Where)), ENDCLAUSE) >= 0);
 end;
 
 function SqlFromWhere(const Where: RawUtf8): RawUtf8;
 begin
   if Where = '' then
     FastAssignNew(result)
-  else if SqlWhereIsEndClause(Where) then
+  else if IdemPCharSep(GotoNextNotSpace(pointer(Where)), ENDCLAUSE) >= 0 then
     Join([' ', Where], result)
   else
     Join([' WHERE ', Where], result);
 end;
 
-function SqlFromSelect(const TableName, Select, Where, SimpleFields: RawUtf8): RawUtf8;
+procedure SqlFromSelect(const TableName, Select, Where, SimpleFields: RawUtf8;
+  var Sql: RawUtf8);
+var
+  p: PUtf8Char;
+  tmp: TSynTempAdder;
 begin
+  tmp.Init;
+  tmp.AddShort('SELECT ');
   if Select = '*' then
     // don't send BLOB values to query: retrieve simple = all non-blob fields
-    result := SimpleFields
+    tmp.Add(SimpleFields)
   else
-    result := Select;
-  result := Join(['SELECT ', result, ' FROM ', TableName, SqlFromWhere(Where)]);
+    tmp.Add(Select);
+  tmp.AddShort(' FROM ');
+  tmp.Add(TableName);
+  p := pointer(Where);
+  if p <> nil then // inlined SqlFromWhere() logic
+  begin
+    if IdemPCharSep(GotoNextNotSpace(p), ENDCLAUSE) >= 0 then
+      tmp.AddDirect(' ')
+    else
+      tmp.AddShort(' WHERE ');
+    tmp.Add(Where);
+  end;
+  tmp.Done(Sql);
 end;
 
 function SqlGetOrder(const Sql: RawUtf8): RawUtf8;
