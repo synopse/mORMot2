@@ -2790,6 +2790,70 @@ begin
     addr.IP(result);
 end;
 
+function TNetAddr.Family: TNetFamily;
+var
+  ad4: TSockAddr absolute Addr;
+begin
+  case ad4.sa_family of
+    AF_INET:
+      result := nfIP4;
+    AF_INET6:
+      result := nfIP6;
+    {$ifdef OSPOSIX}
+    AF_UNIX:
+      result := nfUnix;
+    {$endif OSPOSIX}
+  else
+    result := nfUnknown;
+  end;
+end;
+
+function TNetAddr.Size: integer;
+begin
+  case PSockAddr(@Addr)^.sa_family of
+    AF_INET:
+      result := SizeOf(TSockAddrIn);
+    AF_INET6:
+      result := SizeOf(TSockAddrIn6);
+  else
+    result := SizeOf(Addr);
+  end;
+end;
+
+procedure TNetAddr.Clear;
+begin
+  PInteger(@Addr)^ := 0; // sa_len = sin_family = sin_port = 0
+end; // other fields are initialized later on by SetFamily()
+
+procedure TNetAddr.SetFamily(fam: cardinal);
+var
+  ad4: TSockAddr absolute Addr;
+  ad6: TSockAddrIn6 absolute Addr;
+begin
+  ad4.sin_family := fam; // but keep existing sin_port
+  case fam of
+    AF_INET:
+      begin
+        {$ifdef SOCK_HAS_SINLEN}
+        ad4.sa_len := SizeOf(ad4); // for OpenBSD - FreeBSD/Darwin allow 0
+        {$endif SOCK_HAS_SINLEN}
+        ad4.sin_zero := 0; // seems mandatory on Windows
+      end;
+    AF_INET6:
+      begin
+        {$ifdef SOCK_HAS_SINLEN}
+        ad4.sa_len := SizeOf(ad6); // for OpenBSD - FreeBSD/Darwin allow 0
+        {$endif SOCK_HAS_SINLEN}
+        ad6.sin6_flowinfo := 0; // won't hurt
+        ad6.sin6_scope_id := 0;
+      end;
+  {$ifdef SOCK_HAS_SINLEN}
+  else
+    ad4.sa_len := SizeOf(Addr); // for OpenBSD - FreeBSD/Darwin allow 0
+  {$endif SOCK_HAS_SINLEN}
+  end;
+end;
+
 function TNetAddr.SetFromIP4(const address: RawUtf8;
   noNewSocketIP4Lookup: boolean): boolean;
 var
@@ -2832,24 +2896,6 @@ begin
   result := NetIsIP6(pointer(address), @PSockAddrIn6(@Addr)^.sin6_addr);
   if result then
     SetFamily(AF_INET6);
-end;
-
-function TNetAddr.Family: TNetFamily;
-var
-  ad4: TSockAddr absolute Addr;
-begin
-  case ad4.sa_family of
-    AF_INET:
-      result := nfIP4;
-    AF_INET6:
-      result := nfIP6;
-    {$ifdef OSPOSIX}
-    AF_UNIX:
-      result := nfUnix;
-    {$endif OSPOSIX}
-  else
-    result := nfUnknown;
-  end;
 end;
 
 procedure TNetAddr.IP(var res: RawUtf8; localasvoid: boolean);
@@ -2983,18 +3029,6 @@ begin
     result := nrNotFound
   else
     result := nrOk;
-end;
-
-function TNetAddr.Size: integer;
-begin
-  case PSockAddr(@Addr)^.sa_family of
-    AF_INET:
-      result := SizeOf(TSockAddrIn);
-    AF_INET6:
-      result := SizeOf(TSockAddrIn6);
-  else
-    result := SizeOf(Addr);
-  end;
 end;
 
 function TNetAddr.IPEqual(const another: TNetAddr): boolean;
@@ -4833,7 +4867,6 @@ constructor TPollSocketAbstract.Create(aOwner: TPollSockets);
 begin
   fOwner := aOwner;
 end;
-
 
 
 { TPollSockets }

@@ -85,7 +85,7 @@ type
       0: (sin_family: word;
           sin_port:   word;
           sin_addr:   TNetIP4;
-          sin_zero:   array[0..7] of AnsiChar);
+          sin_zero:   Int64);
       1: (sa_family:  word;
           sa_data:    array[0..13] of AnsiChar)
   end;
@@ -540,16 +540,6 @@ begin
     MoveFast(res^.ai_addr^, addr, res^.ai_addrlen); // return the first result
   if res <> nil then
     freeaddrinfo(res);
-end;
-
-procedure TNetAddr.Clear;
-begin
-  FillCharFast(Addr, SizeOf(Addr), 0);
-end; // some obscure Windows docs seem to state that zeroing is expected
-
-procedure TNetAddr.SetFamily(fam: cardinal);
-begin
-  PSockAddr(@Addr)^.sin_family := fam;
 end;
 
 function TNetAddr.SetFrom(const address, addrport: RawUtf8; layer: TNetLayer): TNetResult;

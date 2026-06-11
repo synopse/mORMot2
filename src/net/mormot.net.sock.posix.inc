@@ -150,7 +150,7 @@ type
       1: (sin_family: sa_family_t;
           sin_port:   cushort;
           sin_addr:   TNetIP4;
-          sin_zero:   packed array[0..7] of cuchar);
+          sin_zero:   Int64);
   end;
   PSockAddrIn = ^TSockAddrIn;
 
@@ -180,10 +180,10 @@ type
   PSockAddr = ^TSockAddr;
 
   THostEnt = record
-    h_name: PAnsiChar;
-    h_aliases: PPAnsiChar;
+    h_name:     PAnsiChar;
+    h_aliases:  PPAnsiChar;
     h_addrtype: cint;
-    h_length: TSockLen;
+    h_length:   TSockLen;
     case integer of
        0: (h_addr_list: PPAnsiChar);
        1: (h_addr:      ^PNetIP4);
@@ -493,19 +493,6 @@ var
   _gethostbynamesafe: TOSLightLock;
   // gethostbyname() result is NOT thread-safe: we need to protect its calls;
   // since this may take some time, we use a pthread mutex, not a TLightLock
-
-procedure TNetAddr.Clear;
-begin
-  PInteger(@Addr)^ := 0; // sa_len = sin_family = sin_port = 0
-end; // other fields are not supposed/required to be initialized on POSIX
-
-procedure TNetAddr.SetFamily(fam: cardinal);
-begin
-  PSockAddr(@Addr)^.sin_family := fam;
-  {$ifdef SOCK_HAS_SINLEN}
-  PSockAddr(@Addr)^.sa_len := Size; // for OpenBSD - FreeBSD/Darwin allow 0
-  {$endif SOCK_HAS_SINLEN}
-end;
 
 function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
