@@ -2251,6 +2251,8 @@ type
     procedure DoLoad(const LibName: TFileName = ''; Version: string = '');
     procedure Done;
   public
+    /// disable whole ICU library loading and force regular RTL iconv usage
+    Disabled: boolean;
     /// Initialize an ICU text converter for a given encoding
     ucnv_open: function (converterName: PAnsiChar; var err: SizeInt): pointer; cdecl;
     /// finalize the ICU text converter for a given encoding
@@ -2292,6 +2294,7 @@ type
     /// try to initialize a specific version of the ICU library
     // - first finalize any existing loaded instance
     // - returns true if was successfully loaded and setup
+    // - will reset icu.Disabled to false on success
     function ForceLoad(const LibName: TFileName; const Version: string): boolean;
     /// returns TRUE if a ICU library is available on this system
     // - will thread-safely load and initialize it if necessary
@@ -2321,6 +2324,7 @@ var
   /// low-level late-binding access to any installed ICU library
   // - typical use is to check icu.IsAvailable then the proper icu.*() functions
   // - this unit will make icu.Done in its finalization section
+  // - you can disable the whole ICU loading by setting icu.Disabled := true
   icu: TIcuLibrary;
 
   /// contains the current POSIX kernel revision, as one 24-bit integer

@@ -217,6 +217,8 @@ end;
 
 function TIcuLibrary.IsAvailable: boolean;
 begin
+  if Disabled then
+    exit(false);
   if not fLoaded then
     DoLoad;
   result := Assigned(ucnv_open);
@@ -397,6 +399,9 @@ begin
   fLoaded := false;
   DoLoad(LibName, Version);
   result := Assigned(ucnv_open);
+  if result and
+     Disabled then
+    Disabled := false; // reset on success
 end;
 
 function TIcuLibrary.ucnv(codepage: cardinal): pointer;
@@ -615,7 +620,7 @@ end;
 
 {$endif FPC}
 
-  const
+const
   // for CompareStringW() Windows-like call in Unicode_CompareString()
   LOCALE_USER_DEFAULT = $400; // ignored in practice
   NORM_IGNORECASE = 1 shl ord(coIgnoreCase); // [widestringmanager.coIgnoreCase]
