@@ -5771,12 +5771,12 @@ end;
 
 function Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt): string;
 begin
-  SetString(result, PAnsiChar(Text), Len);
+  FastSetStringCP(result, Text, Len, Unicode_CodePage);
 end;
 
 procedure Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt; var Dest: string);
 begin
-  SetString(Dest, PAnsiChar(Text), Len);
+  FastSetStringCP(Dest, Text, Len, Unicode_CodePage);
 end;
 
 function StringToAnsi7(const Text: string): RawByteString;

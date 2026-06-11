@@ -879,8 +879,8 @@ begin
      (Table = nil) then
     T := nil
   else
-    T := ExecuteList([Table], 'SELECT RowID FROM ' +
-      Table.OrmProps.SqlTableName + ' LIMIT 1');
+    T := ExecuteList([Table], Join(['SELECT RowID FROM ',
+      Table.OrmProps.SqlTableName, ' LIMIT 1']));
   if T <> nil then
   try
     result := T.RowCount > 0;
@@ -983,7 +983,7 @@ var
 begin
   if (WhereID > 0) and
      MultiFieldValue(Table, [FieldName], res,
-       'RowID=:(' + Int64ToUtf8(WhereID) + '):') then
+                     Make(['RowID=:(', WhereID, '):'])) then
     result := res[0]
   else
     FastAssignNew(result);
@@ -1003,10 +1003,10 @@ begin
      (high(FieldName) = high(FieldValue)) then
     with Table.OrmProps do
     begin
-      where := SqlTableName + SqlFromWhere(WhereClause);
+      Join([SqlTableName, SqlFromWhere(WhereClause)], where);
       if (high(FieldName) = 0) and
          IdemPChar(pointer(FieldName[0]), 'COUNT(*)') then
-        sql := 'SELECT COUNT(*) FROM ' + where
+        Join(['SELECT COUNT(*) FROM ', where], sql)
       else
       begin
         for f := 0 to high(FieldName) do
@@ -1014,10 +1014,10 @@ begin
             // prevent sql error or security breach
             exit
           else if sql = '' then
-            sql := 'SELECT ' + FieldName[f]
+            Join(['SELECT ', FieldName[f]], sql)
           else
-            sql := sql + ',' + FieldName[f];
-        sql := sql + ' FROM ' + where + ' LIMIT 1';
+            Append(sql, ',' + FieldName[f]);
+        Append(sql, [' FROM ', where, ' LIMIT 1']);
       end;
       T := ExecuteList([Table], sql);
       if T <> nil then
@@ -1055,7 +1055,7 @@ function TRestOrm.MultiFieldValue(Table: TOrmClass;
   WhereID: TID): boolean;
 begin
   result := MultiFieldValue(Table, FieldName, FieldValue,
-    'RowID=:(' + Int64ToUtf8(WhereID) + '):');
+              Make(['RowID=:(', WhereID, '):']));
 end;
 
 function TRestOrm.OneFieldValues(Table: TOrmClass;
@@ -1296,7 +1296,7 @@ begin
         [SqlTableName, SqlTableName], [MatchClause]);
   for i := 0 to high(PerFieldWeight) do
     WhereClause := FormatSql('%,?', [WhereClause], [PerFieldWeight[i]]);
-  WhereClause := WhereClause + ') DESC';
+  Append(WhereClause, ') DESC');
   if limit > 0 then
     WhereClause := FormatUtf8('% LIMIT % OFFSET %', [WhereClause, limit, offset]);
   result := FtsMatch(Table, WhereClause, DocID);
@@ -1329,8 +1329,8 @@ begin
     begin
       main := MainField[false];
       if main >= 0 then
-        SetID(OneFieldValue(Table, 'RowID', fields.List[main].Name +
-          '=:(' + QuotedStr(Value, '''') + '):'), result);
+        SetID(OneFieldValue(Table, 'RowID', Join([fields.List[main].Name,
+          '=:(', QuotedStr(Value, ''''), '):'])), result);
     end;
 end;
 
