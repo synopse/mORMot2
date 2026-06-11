@@ -134,7 +134,8 @@ type
   // we redefined most of the sockaddr structs due to OpenBSD FPC RTL bug
   // and to share the same fields between FPC and Delphi POSIX
 
-  {$ifdef SOCK_HAS_SINLEN} // as set in mormot.defines.inc (and FPC RTL)
+  // SOCK_HAS_SINLEN is set in mormot.defines.inc (and FPC RTL)
+  {$ifdef SOCK_HAS_SINLEN}
   sa_family_t = cuchar;    // 8-bit to follow a 8-bit sa_len field
   {$else}
   sa_family_t = cushort;   // 16-bit on Linux as on Windows
@@ -525,9 +526,8 @@ begin
     exit;
   end;
   // check supplied IP port
-  ad4.sin_port := bswap16(GetCardinal(pointer(addrport)));
-  if (ad4.sin_port = 0) and
-     (addrport <> '0') then // explicit '0' to get ephemeral port
+  result := nrInvalidParameter;
+  if not ParsePort(addrport) then
     exit;
   // check most simple IPv4/IPv6 resolution (maybe using mormot.net.dns)
   result := nrOk;
@@ -773,7 +773,7 @@ end;
 
 function InetPton(text: PUtf8Char; value: PByte): boolean; inline;
 begin
-  result := inet_pton(AF_INET6, text, value) = 1;
+  result := inet_pton(AF_INET6, text, value) = 1; // use the C library
 end;
 
 const

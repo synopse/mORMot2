@@ -524,12 +524,12 @@ var
 { TNetAddr }
 
 function SetWinAddr(const host, port: RawUtf8; family: cardinal; layer: TNetLayer;
-  out addr): boolean;
+  var addr): boolean;
 var
   h: TAddrInfo;
   res: PAddrInfo;
 begin
-  // use regular OS resolution for known addresses or host names
+  // use regular WinAPI resolution for known addresses or host names
   FillCharFast(h, SizeOf(h), 0);
   h.ai_family := family;
   h.ai_socktype := _ST[layer];
@@ -537,37 +537,31 @@ begin
   res := nil;
   result := getaddrinfo(pointer(host), pointer(port), @h, res) = NO_ERROR;
   if result then
-    MoveFast(res^.ai_addr^, addr, res^.ai_addrlen); // return the first result
+    // return the first result - fill the whole TSockAddr structure
+    MoveFast(res^.ai_addr^, addr, res^.ai_addrlen);
   if res <> nil then
     freeaddrinfo(res);
 end;
 
 function TNetAddr.SetFrom(const address, addrport: RawUtf8; layer: TNetLayer): TNetResult;
-var
-  p: TNetPort;
 begin
   Clear;
-  result := nrNotImplemented;
   if layer = nlUnix then
-    exit;
-  result := nrNotFound;
-  if address = '' then
-    exit;
-  // check and decode supplied IP port
-  p := GetCardinal(pointer(addrport));
-  if (p = 0) and
-     (addrport <> '0') then // explicit '0' to get ephemeral port
-    exit;
-  // first check most simple IPv4 resolution (maybe using mormot.net.dns)
-  if SetFromIP4(address, false) or
-     SetFromIP6(address) or // InetPton() OS API is faster than getaddrinfo
-     // fallback to OS getaddrinfo() resolution, first try as IPv4, then IPv6
-     SetWinAddr(address, addrport, AF_INET, layer, Addr) or
-     SetWinAddr(address, addrport, AF_INET6, layer, Addr) then
-  begin
-    PSockAddr(@Addr)^.sin_port := bswap16(p); // eventually set port
-    result := nrOk;
-  end;
+    result := nrNotImplemented
+  else if address = '' then
+    result := nrNotFound
+  else if not ParsePort(addrport) then
+    result := nrInvalidParameter
+  else
+    // first check most simple IPv4/IPv6 resolution (maybe using mormot.net.dns)
+    if SetFromIP4(address, false) or
+       SetFromIP6(address) or // InetPton() OS API is faster than getaddrinfo
+       // fallback to OS getaddrinfo() resolution, first try as IPv4, then IPv6
+       SetWinAddr(address, addrport, AF_INET,  layer, Addr) or
+       SetWinAddr(address, addrport, AF_INET6, layer, Addr) then
+    result := nrOk
+  else
+    result := nrNotFound;
 end;
 
 

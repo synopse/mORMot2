@@ -200,8 +200,9 @@ type
   private
     // opaque wrapper with len: TSockAddrUnix=110 or TSockAddrIn6=28 (Win)
     Addr: array[0..SOCKADDR_SIZE - 1] of byte;
-    procedure SetFamily(fam: cardinal); // internal function used for BSD
-      {$ifdef FPC}inline;{$endif}
+    procedure SetFamily(fam: cardinal);
+      {$ifdef HASINLINE}inline;{$endif}
+    function ParsePort(const addrport: RawUtf8): boolean;
   public
     /// fill the meaningful bytes of the internal data structure with zeros
     procedure Clear;
@@ -3001,6 +3002,22 @@ begin
     result := bswap16(ad4.sin_port)
   else
     result := 0;
+end;
+
+function TNetAddr.ParsePort(const addrport: RawUtf8): boolean;
+var
+  p: TNetPort;
+begin
+  p := GetCardinal(pointer(addrport));
+  if (p > 65535) or
+     ((p = 0) and
+      (addrport <> '0')) then // allow explicit '0' to get ephemeral port
+    result := false
+  else
+  begin
+    PSockAddr(@Addr)^.sin_port := bswap16(p);
+    result := true;
+  end;
 end;
 
 function TNetAddr.SetPort(p: TNetPort): TNetResult;
