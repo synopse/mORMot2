@@ -278,7 +278,7 @@ var
   {$ifndef OSDARWIN}
   so: string;
   {$endif OSDARWIN}
-  v, vers: string;
+  fn, v, vers: string;
   data: PAnsiChar;
 begin
   GlobalLock;
@@ -308,12 +308,16 @@ begin
       begin
         // there is no link to the library -> try e.g. 'libicudata.so.67'
         if Version <> '' then
-          icudata := LibraryOpen(string('libicudata.so.') + Version);
+        begin
+          fn := 'libicudata.so.' + Version;
+          icudata := LibraryOpen(fn);
+        end;
         if icudata = 0 then
           for i := ICU_MAX downto ICU_MIN do
           begin
             v := IntToStr(i);
-            icudata := LibraryOpen(string('libicudata.so.') + v);
+            fn := 'libicudata.so.' + v;
+            icudata := LibraryOpen(fn);
             if icudata <> 0 then
             begin
               Version := v;
@@ -326,9 +330,13 @@ begin
       {$endif OSANDROID}
       if icudata <> 0 then
       begin
-        icu := LibraryOpen(string('libicuuc.so') + so);
+        fn := 'libicuuc.so' + so;
+        icu := LibraryOpen(fn);
         if icu <> 0 then
-          icui18n := LibraryOpen(string('libicui18n.so') + so);
+        begin
+          fn := 'libicui18n.so' + so;
+          icui18n := LibraryOpen(fn);
+        end;
       end;
       {$endif OSDARWIN}
       if icui18n = 0 then
