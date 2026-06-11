@@ -1437,15 +1437,16 @@ function ToText(res: THttpServerSocketGetRequestResult): PShortString; overload;
 function ToText(state: THttpServerExecuteState): PShortString; overload;
 
 /// create an ephemeral socket-based HTTP Server, for a single request
-// - typical usage is for Single-Sign On credential entering
-// - raise an Exception on binding error
-// - returns false on timeout
+// - typical usage is for Single-Sign On credential entering, or for testing
+// - you can set aResponseContentType = STATICFILE_CONTENT_TYPE to serve a file
+// - raise an Exception on binding error, and returns false on timeout
 // - returns true on success, with encoded parameters as aParams - and the
 // received URL/Method/Content values as aParams.U['url'/'method'/'content']
 function EphemeralHttpServer(const aPort: RawUtf8; out aParams: TDocVariantData;
   aTimeOutSecs: integer = 60; aLogClass: TSynLogClass = nil;
   const aResponse: RawUtf8 = 'You can close this window.';
-  aMethods: TUriMethods = [mGET, mPOST]; aOptions: THttpServerOptions = []): boolean;
+  aMethods: TUriMethods = [mGET, mPOST]; aOptions: THttpServerOptions = [];
+  const aResponseContentType: RawUtf8 = ''): boolean;
 
 
 
@@ -5675,24 +5676,26 @@ end;
 type
   THttpServerEphemeral = class(THttpServer)
   protected
-    fResponse: RawUtf8;
+    fResponse, fResponseContentType: RawUtf8;
     fParams: PDocVariantData;
     fMethod: TUriMethods;
     fDone: TSynEvent;
     fReceived: TSynEvent;
   public
-    constructor Create(const aPort, aResponse: RawUtf8; aParams: PDocVariantData;
-      aLogClass: TSynLogClass; aMethod: TUriMethods; aOptions: THttpServerOptions); reintroduce;
+    constructor Create(const aPort, aResponse, aResponseContentType: RawUtf8;
+      aParams: PDocVariantData; aLogClass: TSynLogClass; aMethod: TUriMethods;
+      aOptions: THttpServerOptions); reintroduce;
     destructor Destroy; override;
     function Request(Ctxt: THttpServerRequestAbstract): cardinal; override;
     procedure OnResponded(var Context: TOnHttpServerAfterResponseContext);
   end;
 
-constructor THttpServerEphemeral.Create(const aPort, aResponse: RawUtf8;
-  aParams: PDocVariantData; aLogClass: TSynLogClass; aMethod: TUriMethods;
-  aOptions: THttpServerOptions);
+constructor THttpServerEphemeral.Create(const aPort, aResponse,
+  aResponseContentType: RawUtf8; aParams: PDocVariantData; aLogClass: TSynLogClass;
+  aMethod: TUriMethods; aOptions: THttpServerOptions);
 begin
   fResponse := aResponse;
+  fResponseContentType := aResponseContentType;
   fParams := aParams;
   fMethod := aMethod;
   fOnAfterResponse := OnResponded;
@@ -5716,6 +5719,8 @@ begin
   begin
     if fParams <> nil then
       THttpServerRequest(Ctxt).ToDocVariant(fParams^);
+    if fResponseContentType <> '' then
+      Ctxt.OutContentType := fResponseContentType;
     Ctxt.OutContent := fResponse;
     result := HTTP_SUCCESS;
   end
@@ -5731,13 +5736,14 @@ end;
 
 function EphemeralHttpServer(const aPort: RawUtf8; out aParams: TDocVariantData;
   aTimeOutSecs: integer; aLogClass: TSynLogClass; const aResponse: RawUtf8;
-  aMethods: TUriMethods; aOptions: THttpServerOptions): boolean;
+  aMethods: TUriMethods; aOptions: THttpServerOptions;
+  const aResponseContentType: RawUtf8): boolean;
 var
   server: THttpServerEphemeral;
 begin
   aParams.Clear;
-  server := THttpServerEphemeral.Create(
-    aPort, aResponse, @aParams, aLogClass, aMethods, aOptions);
+  server := THttpServerEphemeral.Create(aPort, aResponse, aResponseContentType,
+    @aParams, aLogClass, aMethods, aOptions);
   try
     result := server.fReceived.WaitForSafe(aTimeOutSecs * MilliSecsPerSec);
     if aLogClass <> nil then
