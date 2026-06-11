@@ -505,6 +505,16 @@ The edge service publishes interface properties that the resolver chain fills at
    └──► audit-trail service  [own DB]  ─┘  call site never changes (A.6)
 ```
 
+### B.9. The Two-server approach and its ambiguous ORM
+
+Automatic injection resolves by interface *type*: it works whenever a type has exactly one implementation in the resolver chain. That holds for your services — there is one `IOfferQuery` in the system, so resolving it has one correct answer, even when its implementation lives on another server reached through a chained resolver.
+
+`IRestOrm` is the exception. In the two-server topology of [B.8](#b8-the-application-layer--expose-commands-and-queries-not-entities), **both servers natively carry an ORM**: the private `DbServer.Orm` with the real tables, and the edge server's own void-model ORM with none. For a service hosted on the edge, the ambient answer — the inherited `Server.Orm`, or resolution by type — is the **void edge ORM**: every query would hit an empty in-memory store, silently. "Give me an `IRestOrm`" is an under-specified question in a two-server process; no resolver can know you meant the private one.
+
+The easy way to solve it: **Explicit constructor injection at the composition root** — what the B.8 wiring does: `TCheckoutService.Create(DbServer.Orm)` states *which* ORM, visibly, in one line. The right default when the dependency is one obvious ORM.
+
+The rule: let every service dependency be injected automatically, because its interface type has a single implementation. The ORM is the one dependency you wire by hand.
+
 ---
 
 ## When to deviate
