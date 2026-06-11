@@ -3984,7 +3984,8 @@ type
     // - by default, will return the SELECT statement to be used for internal
     // virtual SQLite3 table - but if ExternalTable is TRUE, then it will
     // compute a SELECT matching ExternalDB settings
-    function SqlFromSelectWhere(const SelectFields, Where: RawUtf8): RawUtf8;
+    procedure SqlFromSelectWhere(const SelectFields, Where: RawUtf8; var Res: RawUtf8);
+      {$ifdef HASINLINE} inline; {$endif}
     /// define if a FTS4/FTS5 virtual table will not store its content, but will
     // be defined as an "external content" FTS4/FTS5 table
     // - see https://www.sqlite.org/fts3.html#section_6_2_2
@@ -4174,8 +4175,8 @@ type
     /// compute the SQL statement to be executed for a specific SELECT on Tables
     // - you can set multiple Table class in Tables: the statement will contain the
     // table name ('SELECT T1.F1,T1.F2,T1.F3,T2.F1,T2.F2 FROM T1,T2 WHERE ..' e.g.)
-    function SqlFromSelectWhere(const Tables: array of TOrmClass;
-      const SqlSelect, SqlWhere: RawUtf8): RawUtf8;
+    procedure SqlFromSelectWhere(const Tables: array of TOrmClass;
+      const SqlSelect, SqlWhere: RawUtf8; var Sql: RawUtf8);
     /// set a custom SQLite3 text column collation for all fields of a given
     // type for all TOrm of this model
     // - can be used e.g. to override ALL default COLLATE SYSTEMNOCASE of RawUtf8,
@@ -6531,12 +6532,9 @@ begin
     result := rc.PrivateSlot; // Private is TOrmProperties
     if Assigned(result) then
       if result.InheritsFrom(TOrmProperties) then
-        // registered by a background thread
-        exit
-      else
-        // paranoid
-        EModelException.RaiseUtf8('%.OrmProps: vmtAutoTable=%',
-          [self, result]);
+        exit // registered by a background thread
+      else   // paranoid
+        EModelException.RaiseUtf8('%.OrmProps: vmtAutoTable=%', [self, result]);
     // create the properties information from RTTI
     result := TOrmProperties.Create(self);
     rc.PrivateSlot := result; // will be owned by this TRttiCustom
@@ -10125,44 +10123,45 @@ begin // better code generation by using the DoUriMatch() internal function
   result := DoUriMatch(pointer(Uri), pointer(fRoot), fRootLen, CheckCase);
 end;
 
-function TOrmModel.SqlFromSelectWhere(const Tables: array of TOrmClass;
-  const SqlSelect, SqlWhere: RawUtf8): RawUtf8;
-var
-  i: PtrInt;
-  p: array[0..31] of TOrmModelProperties;
+procedure TOrmModel.SqlFromSelectWhere(const Tables: array of TOrmClass;
+  const SqlSelect, SqlWhere: RawUtf8; var Sql: RawUtf8);
+
+  procedure MultiTables;
+  var
+    i: PtrInt;
+    p: array[0..31] of TOrmModelProperties;
+  begin
+    // 'SELECT T1.F1,T1.F2,T1.F3,T2.F1,T2.F2 FROM T1,T2 WHERE ..' e.g.
+    if cardinal(high(Tables)) > high(p) then
+      EModelException.RaiseUtf8('%.SqlFromSelectWhere(%) up to % Tables[]',
+        [self, SqlSelect, Length(p)]);
+    for i := 0 to high(Tables) do
+      p[i] := Props[Tables[i]]; // raise EModelException if not found
+    if SqlSelect = '*' then
+       // don't send BLOB values to query: retrieve all other fields
+      if high(Tables) = 0 then
+        Join(['SELECT ', {%H-}p[0].Sql.TableSimpleFields[true, false]], Sql)
+      else
+      begin
+        Join(['SELECT ', p[0].Sql.TableSimpleFields[true, true]], Sql);
+        for i := 1 to high(Tables) do
+          Append(Sql, ',', p[i].Sql.TableSimpleFields[true, true]);
+      end
+    else
+      Join(['SELECT ', SqlSelect]);
+    Append(Sql, ' FROM ', p[0].Props.SqlTableName);
+    for i := 1 to high(Tables) do
+      Append(Sql, ',', p[i].Props.SqlTableName);
+    Append(Sql, SqlFromWhere(SqlWhere));
+  end;
+
 begin
   if self = nil then
-    EOrmException.RaiseUtf8(
-      'SqlFromSelectWhere(%): no Model', [SqlSelect]);
-  if high(Tables) = 0 then
-  begin
-    // fastest common call with one TOrmClass
-    result := Props[Tables[0]].SqlFromSelectWhere(SqlSelect, SqlWhere);
-    exit;
-  end;
-  // 'SELECT T1.F1,T1.F2,T1.F3,T2.F1,T2.F2 FROM T1,T2 WHERE ..' e.g.
-  if cardinal(high(Tables)) > high(p) then
-    EModelException.RaiseUtf8(
-      '%.SqlFromSelectWhere(%) up to % Tables[]',
-      [self, SqlSelect, Length(p)]);
-  for i := 0 to high(Tables) do
-    p[i] := Props[Tables[i]]; // raise EModelException if not found
-  if SqlSelect = '*' then
-     // don't send BLOB values to query: retrieve all other fields
-    if high(Tables) = 0 then
-      Join(['SELECT ', {%H-}p[0].Sql.TableSimpleFields[true, false]], result)
-    else
-    begin
-      Join(['SELECT ', p[0].Sql.TableSimpleFields[true, true]], result);
-      for i := 1 to high(Tables) do
-        Append(result, ',', p[i].Sql.TableSimpleFields[true, true]);
-    end
+    EOrmException.RaiseUtf8('SqlFromSelectWhere(%): no Model', [SqlSelect]);
+  if high(Tables) = 0 then // fastest common call with one TOrmClass
+    Props[Tables[0]].SqlFromSelectWhere(SqlSelect, SqlWhere, Sql)
   else
-    Join(['SELECT ', SqlSelect]);
-  Append(result, ' FROM ', p[0].Props.SqlTableName);
-  for i := 1 to high(Tables) do
-    Append(result, ',', p[i].Props.SqlTableName);
-  Append(result, SqlFromWhere(SqlWhere));
+    MultiTables;
 end;
 
 procedure TOrmModel.SetCustomCollationForAll(aFieldType: TOrmFieldType;
@@ -10511,6 +10510,13 @@ begin
   Props.InternalRegisterModel(fModel, fModel.GetTableIndexExisting(fProps.Table), self);
 end;
 
+procedure TOrmModelProperties.SqlFromSelectWhere(
+  const SelectFields, Where: RawUtf8; var Res: RawUtf8);
+begin
+  SqlFromSelect(Props.SqlTableName, SelectFields, Where,
+    Sql.TableSimpleFields[true, false], Res);
+end;
+
 procedure TOrmModelProperties.SetKind(Value: TOrmVirtualKind);
 
   function ComputeSimpleFields(withID, withTableName: boolean): RawUtf8;
@@ -10592,19 +10598,12 @@ begin
   Sql.TableSimpleFields[true, true]   := ComputeSimpleFields(true, true);
   if Props.SqlTableSimpleFieldsNoRowID <> Sql.TableSimpleFields[false, false] then
     EModelException.RaiseUtf8('SetKind(%)', [Props.Table]);
-  Sql.SelectAllWithRowID := SqlFromSelectWhere('*', '');
+  SqlFromSelectWhere('*', '', Sql.SelectAllWithRowID);
   Sql.SelectAllWithID := Sql.SelectAllWithRowID;
   if IdemPChar(PUtf8Char(pointer(Sql.SelectAllWithID)) + 7, 'ROWID') then
     delete(Sql.SelectAllWithID, 8, 3); // 'SELECT RowID,..' -> 'SELECT ID,'
   Sql.SelectOneWithID := FormatUtf8('SELECT % FROM % WHERE RowID=?',
     [Sql.TableSimpleFields[true, false], Props.SqlTableName]);
-end;
-
-function TOrmModelProperties.SqlFromSelectWhere(
-  const SelectFields, Where: RawUtf8): RawUtf8;
-begin
-  result := SqlFromSelect(Props.SqlTableName, SelectFields, Where,
-    Sql.TableSimpleFields[true, false]);
 end;
 
 procedure TOrmModelProperties.Fts4WithoutContent(ContentTable: TOrmClass);
@@ -10780,8 +10779,8 @@ begin
     SetSql(W, true, false, fSql.TableSimpleFields[true, false]);
     SetSql(W, true, true, fSql.TableSimpleFields[true, true]);
     // Sql.SelectAll: array[withRowID: boolean]
-    fSql.SelectAllWithRowID := SqlFromSelect(
-      TableName, '*', '', fSql.TableSimpleFields[true, false]);
+    SqlFromSelect(TableName, '*', '',
+      fSql.TableSimpleFields[true, false], fSql.SelectAllWithRowID);
     fSql.SelectAllWithID := fSql.SelectAllWithRowID;
     SetSql(W, false, false, fSql.UpdateSetSimple, cUpdateSimple);
     SetSql(W, false, false, fSql.UpdateSetAll, cUpdateSetAll);
