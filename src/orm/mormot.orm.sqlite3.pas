@@ -2893,7 +2893,7 @@ begin
      (n > 0) then
   try
     // direct SQL execution, using the JSON cache if available
-    sql := fModel.SqlFromSelectWhere(Tables, SqlSelect, SqlWhere);
+    fModel.SqlFromSelectWhere(Tables, SqlSelect, SqlWhere, sql);
     if n = 1 then
       // InternalListJson will handle both static and DB tables
       result := fServer.ExecuteList(Tables, sql)

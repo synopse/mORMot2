@@ -102,8 +102,8 @@ type
     fTransactionTable: TOrmClass;
     fTempJsonWriter: TJsonWriter; // shared with a 64KB internal buffer
     /// compute SELECT ... FROM TABLE WHERE ...
-    function SqlComputeForSelect(TableModelIndex: integer; Table: TOrmClass;
-      const FieldNames, WhereClause: RawUtf8): RawUtf8;
+    procedure SqlComputeForSelect(TableModelIndex: integer; Table: TOrmClass;
+      const FieldNames, WhereClause: RawUtf8; var Sql: RawUtf8);
     /// used by all overloaded Add/Delete methods
     procedure GetJsonValuesForAdd(TableIndex: integer; Value: TOrm;
       ForceID, DoNotAutoComputeFields, WithBlobs: boolean;
@@ -633,28 +633,26 @@ begin
   fTempJsonWriter.Free;
 end;
 
-function TRestOrm.SqlComputeForSelect(TableModelIndex: integer; Table: TOrmClass;
-  const FieldNames, WhereClause: RawUtf8): RawUtf8;
+procedure TRestOrm.SqlComputeForSelect(TableModelIndex: integer; Table: TOrmClass;
+  const FieldNames, WhereClause: RawUtf8; var Sql: RawUtf8);
 begin
-  FastAssignNew(result);
+  FastAssignNew(Sql);
   if (self = nil) or
      (Table = nil) then
     exit;
   if FieldNames = '' then
-    result := fModel.TableProps[TableModelIndex].
-      SqlFromSelectWhere('*', WhereClause)
+    fModel.TableProps[TableModelIndex].SqlFromSelectWhere('*', WhereClause, Sql)
   else
     with Table.OrmProps do
       if FieldNames = '*' then
-        result := SqlFromSelect(
-          SqlTableName, SqlTableRetrieveAllFields, WhereClause, '')
+        SqlFromSelect(SqlTableName, SqlTableRetrieveAllFields, WhereClause, '', Sql)
       else if (PosExChar(',', FieldNames) = 0) and
               (PosExChar('(', FieldNames) = 0) and
               not IsFieldName(pointer(FieldNames)) then
         // prevent SQL error
-        FastAssignNew(result)
+        FastAssignNew(Sql)
       else
-        result := SqlFromSelect(SqlTableName, FieldNames, WhereClause, '');
+        SqlFromSelect(SqlTableName, FieldNames, WhereClause, '', Sql);
 end;
 
 function TRestOrm.AcquireJsonWriter(var tmp: TTextWriterStackBuffer): TJsonWriter;
@@ -1198,6 +1196,7 @@ function TRestOrm.OneFieldValues(Table: TOrmClass;
   const FieldName, WhereClause: RawUtf8; Strings: TStrings;
   IDToIndex: PID): boolean;
 var
+  sql: RawUtf8;
   Row: integer;
   aID: TID;
   T: TOrmTable;
@@ -1209,8 +1208,8 @@ begin
   try
     Strings.BeginUpdate;
     Strings.Clear;
-    T := ExecuteList([Table], SqlFromSelect(Table.SqlTableName,
-      'RowID,' + FieldName, WhereClause, ''));
+    SqlFromSelect(Table.SqlTableName, 'RowID,' + FieldName, WhereClause, '', sql);
+    T := ExecuteList([Table], sql);
     if T <> nil then
     try
       if (T.FieldCount = 2) and
@@ -1247,7 +1246,7 @@ var
   t: PtrInt;
 begin
   t := Model.GetTableIndexExisting(Table);
-  sql := SqlComputeForSelect(t, Table, FieldNames, WhereClause);
+  SqlComputeForSelect(t, Table, FieldNames, WhereClause, sql);
   result := nil;
   if sql = '' then
     exit;
@@ -1505,11 +1504,11 @@ function TRestOrm.RetrieveListJson(Table: TOrmClass;
   const SqlWhere: RawUtf8; const FieldsCsv: RawUtf8;
   aForceAjax: boolean): RawJson;
 var
-  sql: RawUtf8;
   t: PtrInt;
+  sql: RawUtf8;
 begin
   t := Model.GetTableIndexExisting(Table);
-  sql := SqlComputeForSelect(t, Table, FieldsCsv, SqlWhere);
+  SqlComputeForSelect(t, Table, FieldsCsv, SqlWhere, sql);
   if sql = '' then
     FastAssignNew(result)
   else
@@ -1680,7 +1679,7 @@ var
   async: TRestOrmEngineRetrieveAsync;
 begin
   async := NewEngineRetrieveAsync(Context, Table);
-  async.Sql := SqlComputeForSelect(async.TableIndex, Table, FieldsCsv, SqlWhere);
+  SqlComputeForSelect(async.TableIndex, Table, FieldsCsv, SqlWhere, async.Sql);
   async.ResultOne := OnResult;
   async.Execute;
 end;
@@ -1713,7 +1712,7 @@ var
   async: TRestOrmEngineRetrieveAsync;
 begin
   async := NewEngineRetrieveAsync(Context, Table);
-  async.Sql := SqlComputeForSelect(async.TableIndex, Table, FieldsCsv, SqlWhere);
+  SqlComputeForSelect(async.TableIndex, Table, FieldsCsv, SqlWhere, async.Sql);
   async.ResultJson := OnResult;
   async.Execute;
 end;

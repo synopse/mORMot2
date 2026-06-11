@@ -972,7 +972,7 @@ begin
   if high(Tables) < 0 then
   exit;
   // GET Collection
-  sql := Model.SqlFromSelectWhere(Tables, SqlSelect, SqlWhere);
+  Model.SqlFromSelectWhere(Tables, SqlSelect, SqlWhere, sql);
   if high(Tables) = 0 then
   begin
     // one Table -> use REST protocol (sql as parameters)
