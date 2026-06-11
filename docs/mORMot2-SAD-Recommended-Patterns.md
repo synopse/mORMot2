@@ -7,7 +7,7 @@ mORMot 2 is a large framework with many ways to do the same thing. That flexibil
 It is organised in two parts, which are deliberately different in tone:
 
 - **[Part A — The Default Toolbox](#part-a--the-default-toolbox)** is **framework-universal**. These are recommendations that hold for essentially any mORMot 2 project. Treat them as firm defaults: prefer the mORMot type unless you have a concrete reason not to.
-- **[Part B — An Opinionated Application Blueprint](#part-b--an-opinionated-application-blueprint)** is **one proven way to structure a service**, not a framework rule. It is a coherent, batteries-included starting point. Adopt it wholesale for a new service, or cherry-pick what is applicable to your project.
+- **[Part B — A Possible Application Blueprint](#part-b--a-possible-application-blueprint--deviate-where-required)** is **one proven way to structure a service**, not a framework rule. It is a coherent, batteries-included starting point. Adopt it wholesale for a new service, or cherry-pick what is applicable to your project.
 
 > This is a *hub* document. Each topic links to the chapter that covers it in depth. If you read nothing else, read the two cheat-sheet tables in [A.1](#a1-the-one-screen-cheat-sheet) and [A.2](#a2-recommended-type-at-each-layer).
 
@@ -353,7 +353,7 @@ The above wording has been picked on purpose — here is how it maps to the esta
 |---|---|---|
 | Application layer / context-scoped services | **use cases / application services** | Evans, *DDD* [\[2\]](#ref-2); Martin, *Clean Architecture* [\[5\]](#ref-5) |
 | Repository interface ([B.1](#b1-storage-behind-an-interface)) | **Repository pattern** | Evans, *DDD* [\[2\]](#ref-2); Fowler, *PoEAA* [\[3\]](#ref-3) |
-| Query/Command split ([B.4](#b5-cqrs-read-write-split)) | **CQRS** | Young [\[9\]](#ref-9); Fowler [\[4\]](#ref-4) |
+| Query/Command split ([B.4](#b4-cqrs-readwrite-split)) | **CQRS** | Young [\[9\]](#ref-9); Fowler [\[4\]](#ref-4) |
 | Domain object carried on the `TOrm` ([B.3](#b3-two-types-per-entity-not-three)) | **entity / aggregate** | Evans, *DDD* [\[2\]](#ref-2) |
 
 Two caveats, because it is tempting to file all of this under one label such as "Clean Architecture":
@@ -369,7 +369,7 @@ Two caveats, because it is tempting to file all of this under one label such as 
 
 ### B.1. Storage behind an interface
 
-Every service exposes an `IXxxRepository` (or a CQRS pair, see [B.4](#b5-cqrs-read-write-split)) in the domain layer. Multi-tenancy: per-tenant SQLite when data is tenant-scoped; a single shared database otherwise.
+Every service exposes an `IXxxRepository` (or a CQRS pair, see [B.4](#b4-cqrs-readwrite-split)) in the domain layer. Multi-tenancy: per-tenant SQLite when data is tenant-scoped; a single shared database otherwise.
 
 ### B.2. ORM base class and casing
 
