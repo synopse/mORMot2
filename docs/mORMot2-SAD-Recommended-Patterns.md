@@ -119,7 +119,7 @@ Is the service stateless / read-mostly (validators, calculators, cache-fronted r
 
 Two habits that prevent a large class of bugs:
 
-- **Store `IRestOrm` (the interface), not `TRestOrmServer` (the class).** This is what makes the storage backend swappable, mockable in tests, and DI-friendly. Cast up to `IRestOrmServer` *only* at the composition root, when you need server-only methods like `CreateMissingTables`.
+- **Store `IRestOrm` (the interface), not `TRestOrmServer` (the class).** This is what makes the storage backend swappable, mockable in tests, and friendly to dependency injection. Cast up to `IRestOrmServer` *only* at the composition root, when you need server-only methods like `CreateMissingTables`.
 - **Always go through `_Safe(v)` before reinterpret-casting a `variant` to `TDocVariantData`.** `_Safe` walks `varByRef` indirection and returns a sentinel empty record if the value isn't a `TDocVariant`. A direct `TVarData` cast on a `null` or RTL variant corrupts memory.
 
 ```pascal
@@ -154,7 +154,7 @@ begin
 
 Switching a service from local to remote is a matter of *instance initialization* — register it on a different server, point a client at a URI — **not a code change**. The layering you design in Part B therefore survives any topology you later deploy it on.
 
-**Make the switch a localized decision with the resolver pattern.** Both `TRestServer.Services` and `TRestClientURI.Services` are **`TInterfaceResolver`** descendants (`mormot.core.interfaces`), so the local-vs-remote choice collapses to *which resolver instance the composition root hands out*. Consumer code depends on one global `TInterfaceResolver` (or, better, is itself a `TInjectableObject` whose published interface properties are auto-resolved — the same mechanism [B.5](#b5-soa-composition-root-and-di) recommends inside services) and never learns where the implementation runs:
+**Make the switch a localized decision with the resolver pattern.** Both `TRestServer.Services` and `TRestClientURI.Services` are **`TInterfaceResolver`** descendants (`mormot.core.interfaces`), so the local-vs-remote choice collapses to *which resolver instance the composition root hands out*. Consumer code depends on one global `TInterfaceResolver` (or, better, is itself a `TInjectableObject` whose published interface properties are auto-resolved — the same mechanism [B.5](#b5-soa-composition-root-and-dependency-injection) recommends inside services) and never learns where the implementation runs:
 
 ```pascal
 // AppUserClient.pas — the only unit consumer code depends on
@@ -179,7 +179,7 @@ initialization
   Rest := TRestServerDB.Create(TOrmModel.Create([TOrmUser]), ':memory:'); // or 'data.db'
   Rest.Model.Owner := Rest;
   Rest.Server.CreateMissingTables;
-  // domain/persistence layer owns the ORM; app layer gets it injected (B.5 DI):
+  // domain/persistence layer owns the ORM; app layer gets it injected (B.5):
   Rest.ServiceDefine(
     TUserService.CreateInjected([], [], [TUserPersistence.Create(Rest.Orm)]),
     [IUserQuery, IUserCommand]);
@@ -230,7 +230,7 @@ if UserResolver.Resolve(IUserQuery, svc) then
   svc.GetProfile(userID, profile);
 ```
 
-`Local` is the A.6.1 monolith (one exe, full stack in-process); `Remote` is the A.6.2 distributed layout (HTTP client to a standalone server). The business code is identical; only the linked unit differs. And inside a service implementation you usually don't even touch `UserResolver` directly — a `TInjectableObject` descendant publishes `property Users: IUserQuery` and the resolver chain fills it ([B.5](#b5-soa-composition-root-and-di)).
+`Local` is the A.6.1 monolith (one exe, full stack in-process); `Remote` is the A.6.2 distributed layout (HTTP client to a standalone server). The business code is identical; only the linked unit differs. And inside a service implementation you usually don't even touch `UserResolver` directly — a `TInjectableObject` descendant publishes `property Users: IUserQuery` and the resolver chain fills it ([B.5](#b5-soa-composition-root-and-dependency-injection)).
 
 Both units self-wire in their `initialization`, so linking one is genuinely all you do; the only extra need of the remote unit is the host/port/root in your settings file — deployment configuration, not code. (Wiring in `initialization` does mean the settings must be loadable at unit-initialization time; if you want explicit startup control, move those few lines into your daemon's startup instead.)
 
@@ -324,7 +324,7 @@ EdgeServer := TRestServerFullMemory.Create(EdgeModel);
 // Inject the private DB ORM explicitly at the composition root: the service
 // runs on EdgeServer, whose inherited Server.Orm is the void edge ORM, so bind
 // the private ORM here rather than relying on Server.Orm (the explicit form of
-// B.5's DI). Publish only the services this application context needs.
+// B.5's injection). Publish only the services this application context needs.
 EdgeServer.ServiceDefine(
   TUserService.Create(DbServer.Orm),          // inject the private DB ORM
   [IUserQuery, IUserCommand]);                // registered as sicShared
@@ -389,7 +389,7 @@ Every service exposes an `IXxxRepository` (or a CQRS pair, see [B.4](#b5-cqrs-re
 
 **Why:** per-direction authorization (read-only clients can't reach write methods); the read side can be served by a replica or cache without touching writes; the interfaces become self-documenting. **Acceptable to skip** for genuinely trivial wrappers (one or two endpoints, no read/write asymmetry) — but skip it as an exception, not as the rule.
 
-### B.5. SOA composition root and DI
+### B.5. SOA composition root and dependency injection
 
 - **`IRestOrm` is the binding type** in business code; cast to `IRestOrmServer` only at the composition root for server-only methods.
 - **Inject via `TInjectableObjectRest` / `TInjectableObject`:** publish interface properties and let `AutoResolve` fill them through the `TRestServer.Services` resolver chain, or use the inherited `Server.Orm`. Concrete-class fields cannot be auto-injected — interfaces only.
