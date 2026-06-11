@@ -3138,7 +3138,8 @@ function GetSocketAddressFromCache(const address, port: RawUtf8; layer: TNetLaye
   out addr: TNetAddr; var fromcache, tobecached: boolean): TNetResult;
 var
   p: TNetPort;
-  ip4: TNetIP4;
+  ip6: TNetIP6;
+  ip4: TNetIP4 absolute ip6;
 begin
   fromcache := false;
   tobecached := false;
@@ -3149,12 +3150,13 @@ begin
     result := nrNotFound // port should be valid
   else if (address = '') or
           (address = cLocalhost) or
-          (address = c6Localhost) or
           PropNameEquals(address, 'localhost') or
           (address = cAnyHost) then // for client: '0.0.0.0' -> '127.0.0.1'
     result := addr.SetIP4Port(cLocalhost32, p)
   else if NetIsIP4(pointer(address), @ip4) then
     result := addr.SetIP4Port(ip4, p) // from IPv4 '1.2.3.4"
+  else if NetIsIP6(pointer(address), @ip6) then
+    result := addr.SetIP6Port(ip6, p)
   else
   begin
     if Assigned(NewSocketAddressCache) then
