@@ -7974,7 +7974,7 @@ var
     B := P;
     while tcIdentifier in TEXT_CHARS[P^] do
       inc(P); // go to end of field name
-    FastSetString(result, B, P - B);
+    FastSetString(result, B, P);
     if (result = '') or
        PropNameEquals(result, 'AND') or
        PropNameEquals(result, 'OR')  or
@@ -8137,7 +8137,7 @@ begin
       end;
       if J <> JBeg then
       begin // append ' ',')'..
-        FastSetString(aSqlFrom, JBeg, J - JBeg);
+        FastSetString(aSqlFrom, JBeg, J);
         aSqlWhere := aSqlWhere + aSqlFrom;
         JBeg := J;
       end;

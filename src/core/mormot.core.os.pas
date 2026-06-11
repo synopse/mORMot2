@@ -6282,7 +6282,7 @@ begin
   repeat
     inc(S);
   until S^ <= ' ';
-  FastSetString(result, P, S - P);
+  FastSetString(result, P, S);
   P := S;
 end;
 

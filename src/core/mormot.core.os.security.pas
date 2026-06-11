@@ -7114,7 +7114,7 @@ begin
       ASN1_BOOL:
         begin
           p := StrInt64(@tmp[23], AsnDecInt(Pos, Buffer, asnsize));
-          FastSetString(PRawUtf8(Value)^, p, @tmp[23] - p);
+          FastSetString(PRawUtf8(Value)^, p, @tmp[23]);
         end;
       ASN1_OBJID:
         begin

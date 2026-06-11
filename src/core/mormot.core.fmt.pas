@@ -2449,7 +2449,7 @@ begin
     end;
     inc(result);
   until false;
-  FastSetString(Text, p, result - p);
+  FastSetString(Text, p, result);
 end;
 
 procedure TYamlToJson.ParseFlowMap(var p: PUtf8Char; LineIdx: integer);
@@ -2503,7 +2503,7 @@ begin
       keyEnd := p;
       inc(p);
     end;
-    FastSetString(keyText, keyStart, keyEnd - keyStart);
+    FastSetString(keyText, keyStart, keyEnd);
     TrimSelf(keyText);
     CheckUnsupportedScalar(LineIdx, pointer(keyText));
     if not first then
@@ -3891,7 +3891,7 @@ begin
   P := pointer(Content);
   PWord(UpperCopy255(@up, SectionName))^ := ord(']');
   if FindSectionFirstLine(P, @up, @PEnd) then
-    FastSetString(result, P, PEnd - P)
+    FastSetString(result, P, PEnd)
   else
     FastAssignNew(result);
 end;
@@ -4187,7 +4187,7 @@ var
       if FindSectionFirstLine(nested, @up, @nestedend) then
       begin
         // multi-line text value has been stored in its own section
-        FastSetString(v, nested, nestedend - nested);
+        FastSetString(v, nested, nestedend);
         if p^.Prop^.SetValueText(obj, v) then
           result := true;
       end;
@@ -4233,7 +4233,7 @@ var
             nestedend := PosChar(nested, ']');
             if nestedend <> nil then
             begin
-              FastSetString(n, nested, nestedend - nested);
+              FastSetString(n, nested, nestedend);
               item := p^.Value.ArrayRtti.ClassNewInstance;
               if item <> nil then
                 if IniToObject(Ini, item, n, DocVariantOptions, Level + 1,

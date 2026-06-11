@@ -4384,7 +4384,7 @@ begin
   P := parser.GotoEnd(B);
   if P = nil then
     exit;
-  FastSetString(RawUtf8(result), B, P - B);
+  FastSetString(RawUtf8(result), B, P);
   while (P^ <= ' ') and
         (P^ <> #0) do
     inc(P);

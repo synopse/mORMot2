@@ -2698,11 +2698,11 @@ begin
       repeat
         inc(p);
       until p^ = '=';
-      FastSetString(_SystemEnvNames[n], b, p - b);
+      FastSetString(_SystemEnvNames[n], b, p);
       inc(p);
       b := p;
       inc(p, StrLen(p));
-      FastSetString(_SystemEnvValues[n], b, p - b);
+      FastSetString(_SystemEnvValues[n], b, p);
       inc(n);
     end;
     inc(e);

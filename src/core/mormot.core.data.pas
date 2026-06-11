@@ -4828,7 +4828,7 @@ begin
             break;
           inc(P);
         end;
-        FastSetString(Line, PBeg, P - PBeg);
+        FastSetString(Line, PBeg, P);
         AddObject(Line, nil);
         if P >= PEnd then
           break;

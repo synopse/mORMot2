@@ -1849,7 +1849,7 @@ begin
         until (v.Size = 0) or
               (p = @tmp); // truncate after 8190 digits (unlikely)
         v.Release;
-        FastSetString(result, p, PAnsiChar(@tmp[high(tmp)]) - pointer(p));
+        FastSetString(result, p, @tmp[high(tmp)]);
       end;
     end;
 end;

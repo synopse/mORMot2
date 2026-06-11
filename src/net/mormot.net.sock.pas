@@ -5829,7 +5829,7 @@ begin
   repeat
     inc(P);
   until P^ <= ' ';
-  FastSetString(result, S, P - S);
+  FastSetString(result, S, P);
 end;
 
 function NetBinToBase64(const s: RawByteString): RawUtf8;
@@ -6217,7 +6217,7 @@ begin
   UriScheme := usHttp; // fallback to http:// if no scheme specified
   if PInteger(s)^ and $ffffff = HTTP__24 then // '://'
   begin
-    FastSetString(Scheme, p, s - p);
+    FastSetString(Scheme, p, s);
     UriScheme := TUriScheme(FindPropName(@_US, Scheme, length(_US)) + ord(low(_US)));
     case UriScheme of
       usHttps,
@@ -6240,7 +6240,7 @@ begin
     s := p;
     while not (s^ in [#0, ':']) do
       inc(s);
-    FastSetString(Server, p, s - p); // Server='/path/to/socket.sock'
+    FastSetString(Server, p, s); // Server='/path/to/socket.sock'
   end
   else
   begin
@@ -6252,7 +6252,7 @@ begin
       if (p2 = nil) or
          (PtrUInt(p2) > PtrUInt(p1)) then
       begin
-        FastSetString(User, p, p1 - p);
+        FastSetString(User, p, p1);
         i := PosExChar(':', User);
         if i <> 0 then
         begin
@@ -6281,7 +6281,7 @@ begin
       // regular 'server:port/address' or 'server/address'
       while not (s^ in [#0, ':', '/', '?']) do
         inc(s);
-      FastSetString(Server, p, s - p);
+      FastSetString(Server, p, s);
     end;
   end;
   // optional Port
@@ -6294,7 +6294,7 @@ begin
       p := s;
       while not (s^ in [#0, '/']) do
         inc(s);
-      FastSetString(Port, p, s - p); // Port='' for nlUnix
+      FastSetString(Port, p, s); // Port='' for nlUnix
     end
     else if DefaultPort <> '' then
       Port := DefaultPort

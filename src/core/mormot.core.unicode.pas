@@ -4190,7 +4190,7 @@ begin
     exit;
   end;
   p := AnsiBufferToUtf8(tmp.Init(SourceChars * 3), Source, SourceChars);
-  FastSetString(Value, tmp.buf, p - tmp.buf);
+  FastSetString(Value, tmp.buf, p);
   tmp.Done;
 end;
 
@@ -8565,7 +8565,7 @@ begin
       while (source > beg) and
             (source[-1] in [#9, ' ']) do
         dec(source);
-    FastSetString(result, beg, source - beg);
+    FastSetString(result, beg, source);
     exit;
   until false;
 end;
@@ -9339,7 +9339,7 @@ begin
   b := P;
   while tcIdentifier in tab[P^] do
     inc(P); // go to end of ['_', '0'..'9', 'a'..'z', 'A'..'Z'] chars
-  FastSetString(Prop, b, P - b);
+  FastSetString(Prop, b, P);
   P := GotoNextSqlIdentifier(P, tab);
   result := Prop <> '';
 end;
@@ -9395,7 +9395,7 @@ begin
   // create unquoted string
   if internalquote = 0 then
     // no quote within
-    FastSetString(Value, beg, P - beg)
+    FastSetString(Value, beg, P)
   else
   begin
     // unescape internal quotes
@@ -10438,7 +10438,7 @@ begin
     inc(P);
     dec(len);
   end;
-  FastSetString(s, @tmp, d - PAnsiChar(@tmp));
+  FastSetString(s, @tmp, d);
 end;
 
 function SnakeCase(const text: RawUtf8; sep: AnsiChar): RawUtf8;

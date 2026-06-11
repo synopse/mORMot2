@@ -3028,7 +3028,7 @@ var
         while (P < PEnd) and
               (P^ > ' ') do
           inc(P);
-        FastSetString(U.Symbol.Name, Beg, P - Beg);
+        FastSetString(U.Symbol.Name, Beg, P);
         inc(U.Symbol.Stop, U.Symbol.Start - 1);
         if (U.Symbol.Name <> '') and
            ((U.Symbol.Start <> 0) or
@@ -3091,7 +3091,7 @@ var
           end;
         end;
         {$endif ISDELPHI2005ANDUP}
-        FastSetString(Sym.Name, Beg, P - Beg);
+        FastSetString(Sym.Name, Beg, P);
         if (Sym.Name <> '') and
            not (Sym.Name[1] in ['$', '?']) then
           fSymbols.Add(Sym);
@@ -3116,7 +3116,7 @@ var
         exit
       else
         inc(P);
-    FastSetString(aName, Beg, P - Beg);
+    FastSetString(aName, Beg, P);
     if aName = '' then
       exit;
     inc(P);
@@ -3130,7 +3130,7 @@ var
       exit;
     U := fUnits.NewPtr; // always recreate all units due to nested .inc
     U^.Symbol.Name := aName;
-    FastSetString(U^.FileName, Beg, P - Beg);
+    FastSetString(U^.FileName, Beg, P);
     NextLine;
     NextLine;
     capa := 0;
@@ -7109,7 +7109,7 @@ var
       result := false
     else
     begin
-      FastSetString(S, PBeg, P - PBeg);
+      FastSetString(S, PBeg, P);
       PBeg := P + LUP;
       result := pointer(S) <> nil;
     end;

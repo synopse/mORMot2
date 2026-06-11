@@ -2797,7 +2797,7 @@ begin
   if EnsureUniqueTableInFrom then
     if GotoNextNotSpace(p)^ = ',' then
       exit; // there is another table name
-  FastSetString(result, beg, p - beg);
+  FastSetString(result, beg, p);
 end;
 
 function GetTableNamesFromSqlSelect(const Sql: RawUtf8): TRawUtf8DynArray;
@@ -2957,7 +2957,7 @@ begin
           while P^ in ['0'..'9'] do
             inc(P);
         end;
-        FastSetString(Values[Count], beg, P - beg);
+        FastSetString(Values[Count], beg, P);
       end;
     'n':
       begin
@@ -3266,7 +3266,7 @@ var
       repeat
         inc(P);
       until not (jcJsonIdentifier in JSON_CHARS[P^]); // _-.[]$0..9a..zA..Z
-      FastSetString(select.SubField, B, P - B);
+      FastSetString(select.SubField, B, P);
       fHasSelectSubFields := true;
     end;
     if P^ in ['+', '-'] then
@@ -3320,7 +3320,7 @@ var
       repeat
         inc(P);
       until P^ in [#0..' ', ';', ')', ','];
-      FastSetString(Where.Value, B, P - B);
+      FastSetString(Where.Value, B, P);
       VariantLoadJson(Where.ValueVariant, Where.Value);
       Where.ValueInteger := GetInteger(pointer(Where.Value), err);
     end;
@@ -3337,7 +3337,7 @@ var
       until not (P^ in [#1..' ', ')']);
       while P[-1] = ' ' do
         dec(P); // trim right space
-      FastSetString(Where.ParenthesisAfter, B, P - B);
+      FastSetString(Where.ParenthesisAfter, B, P);
       P := GotoNextNotSpace(P);
     end;
     result := true;
@@ -3398,7 +3398,7 @@ var
       repeat
         inc(P);
       until not (jcJsonIdentifier in JSON_CHARS[P^]); // _-.[]$0..9a..zA..Z
-      FastSetString(Where.SubField, B, P - B); // '.subfield1.subfield2'
+      FastSetString(Where.SubField, B, P); // '.subfield1.subfield2'
       fWhereHasSubFields := true;
       P := GotoNextNotSpace(P);
     end;
@@ -3483,7 +3483,7 @@ var
                 else
                   inc(P);
               inc(P);
-              FastSetString(Where.Value, B, P - B);
+              FastSetString(Where.Value, B, P);
               Where.ValueSql := B;
               Where.ValueSqlLen := P - B;
               result := GetWhereValues(Where);
@@ -3567,7 +3567,7 @@ begin
         until not (P^ in [#1..' ', '(']);
         while P[-1] = ' ' do
           dec(P); // trim right space
-        FastSetString(whereBefore, B, P - B);
+        FastSetString(whereBefore, B, P);
         B := P;
       end;
       ndx := GetPropIndex;
@@ -3803,7 +3803,7 @@ begin
   if EndOfObject <> nil then
     EndOfObject^ := P^;
   PDest := P + 1;
-  FastSetString(result, Beg, P - Beg);
+  FastSetString(result, Beg, P);
 end;
 
 procedure GetJsonArrayOrObjectAsQuotedStr(P: PUtf8Char; out PDest: PUtf8Char;

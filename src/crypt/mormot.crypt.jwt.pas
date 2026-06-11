@@ -1360,7 +1360,7 @@ begin
     if not Base64UriToBin(PAnsiChar(B), P - B, temp) then
       break;
     if HeadPayload <> nil then
-      FastSetString(HeadPayload^, pointer(Token), P - pointer(Token));
+      FastSetString(HeadPayload^, pointer(Token), P);
     if Payload <> nil then
     begin
       VarClear(PayLoad^);

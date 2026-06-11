@@ -2768,7 +2768,7 @@ begin
   else
   begin
     S := PosChar0(P, Sep); // SSE2 asm on i386 and x86_64
-    FastSetString(result, P, S - P);
+    FastSetString(result, P, S);
     if S^ <> #0 then
       P := S + 1
     else
@@ -2991,7 +2991,7 @@ begin
     while (E > P) and
           (E[-1] in [#1..' ']) do
       dec(E); // trim right
-    FastSetString(result, P, E - P);
+    FastSetString(result, P, E);
     if S^ <> #0 then
       P := S + 1
     else
@@ -3015,7 +3015,7 @@ begin
     if (E > P) and
        (E[-1] = #13) then
       dec(E);
-    FastSetString(result, P, E - P);
+    FastSetString(result, P, E);
     if S^ <> #0 then
       P := S + 1
     else
@@ -6467,7 +6467,7 @@ begin
   else
   begin
     P := StrInt32(@tmp[23], Value);
-    FastSetString(result, P, @tmp[23] - P);
+    FastSetString(result, P, @tmp[23]);
   end;
 end;
 
@@ -6495,7 +6495,7 @@ begin
     {$else}
     P := StrInt64(@tmp[23], Value);
     {$endif CPU64}
-    FastSetString(result, P, @tmp[23] - P);
+    FastSetString(result, P, @tmp[23]);
   end;
 end;
 
@@ -6518,7 +6518,7 @@ begin
     {$else}
     P := StrUInt64(@tmp[23], Value);
     {$endif CPU64}
-    FastSetString(result, P, @tmp[23] - P);
+    FastSetString(result, P, @tmp[23]);
   end;
 end;
 
@@ -6549,7 +6549,7 @@ begin
   else
   begin
     P := StrUInt32(@tmp[23], Value);
-    FastSetString(result, P, @tmp[23] - P);
+    FastSetString(result, P, @tmp[23]);
   end;
 end;
 

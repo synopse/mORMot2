@@ -917,6 +917,10 @@ function IsPowerOfTwo(number: PtrUInt): boolean;
 procedure FastSetString(var s: RawUtf8; p: pointer; len: PtrInt); overload;
   {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
+/// wrap FastSetString(s, pbeg, pend - pbeg) from ending buffer pointer
+procedure FastSetString(var s: RawUtf8; p, pend: pointer); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// faster equivalence to SetString(s,nil,len) function
 // - returns the allocated pointer(s) value
 function FastSetString(var s: RawUtf8; len: PtrInt): pointer; overload;
@@ -5334,6 +5338,11 @@ begin
     pointer(s) := r
   else
     FastAssignNewNotVoid(s, r);
+end;
+
+procedure FastSetString(var s: RawUtf8; p, pend: pointer);
+begin
+  FastSetString(s, p, PAnsiChar(pend) - PAnsiChar(p));
 end;
 
 function FastSetString(var s: RawUtf8; len: PtrInt): pointer;
@@ -12531,7 +12540,7 @@ procedure TSynTempBuffer.Done(EndBuf: pointer; var Dest: RawUtf8);
 begin
   if EndBuf = nil then
     EndBuf := buf; // return ''
-  FastSetString(Dest, buf, PAnsiChar(EndBuf) - PAnsiChar(buf));
+  FastSetString(Dest, buf, EndBuf);
   if (buf <> @tmp) and
      (buf <> nil) then
     FreeMem(buf);

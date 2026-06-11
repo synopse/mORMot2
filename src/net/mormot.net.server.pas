@@ -9499,7 +9499,7 @@ begin
         while ((ch - p.pRawValue) < p.RawValueLength) and
               not (ch^ in [',']) do
           inc(ch);
-        FastSetString(protoname, chB, ch - chB);
+        FastSetString(protoname, chB, ch);
         for i := 0 to Length(protos) - 1 do
           if protos[i].name = protoname then
           begin

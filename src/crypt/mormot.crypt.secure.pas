@@ -4941,7 +4941,7 @@ begin
   if (info <> nil) and
      (result in mcfValid) and
      (P <> nil) then
-    FastSetString(info^, pointer(hash), P - pointer(hash));
+    FastSetString(info^, pointer(hash), P);
 end;
 
 function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;

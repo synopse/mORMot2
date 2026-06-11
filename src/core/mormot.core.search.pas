@@ -5542,7 +5542,7 @@ begin
   P := fCurrent;
   while not (P^ in STOPCHAR) do
     inc(P);
-  FastSetString(fCurrentWord, fCurrent, P - fCurrent);
+  FastSetString(fCurrentWord, fCurrent, P);
   fCurrent := P;
 end;
 
