@@ -883,7 +883,8 @@ var
 // to the domain controller
 function GetDomainNames(usePosixEnv: boolean = false): TRawUtf8DynArray;
 
-/// quickly check if the text is a host name with only A-Z a-z 0-9 - . chars
+/// quickly check if the text is likely to be a relaxed host name
+// - allow 'test+lab' or UTF-8 >= $80 disable URI but disable : [ ] / \ @ ? # %
 function IsHostName(Name: PUtf8Char): boolean;
 
 /// resolve a host name from the OS hosts file content
@@ -4530,10 +4531,10 @@ begin
     case Name^ of
       #0:
         break;
-      '.', '-', '0'..'9', 'a'..'z', 'A'..'Z':
-        inc(Name);
+      #1 .. ' ', ':', '[', ']', '/', '\', '@', '?', '#':
+        exit;    // reject URI and IPv6 separators
     else
-      exit;
+      inc(Name); // allow 'nas$' 'db~backup' 'test+lab' or UTF-8 >= $80 bytes
     end;
   result := true;
 end;
