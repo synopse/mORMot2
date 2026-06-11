@@ -34,6 +34,11 @@ interface
 
 // do-nothing-unit on non Windows system - compiles now, but is still untested
 
+{ to build the library on POSIX:
+     cd CPP/7zip/Bundles/Format7zF
+     make -j -f ../../cmpl_gcc.mak
+}
+
 implementation
 
 {$else}
