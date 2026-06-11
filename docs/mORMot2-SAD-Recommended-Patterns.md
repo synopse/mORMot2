@@ -417,6 +417,94 @@ The following list is a possible starting point. It is not a pattern to always f
 8. `RawUtf8` everywhere data crosses a boundary; `string` only where VCL/LCL forces it.
 9. A `tests/` folder, starting with mapper round-trip tests.
 
+### B.8. The Application layer — expose commands and queries, not entities
+
+Sections B.1–B.7 describe the *entity-level* machinery: `TOrm` classes, DTOs, command/query pairs, the daemon. This section covers what clients are allowed to call. Publishing the schema as services invites over-fetching. The application layer is the deliberate alternative, and it is one rule with two halves:
+
+1. **Command/query pairs belong to the edge.** Everything the network can reach is an `IXxxQuery`/`IXxxCommand` pair ([B.4](#b4-cqrs-readwrite-split)) — but scoped by *client workflow*, not by physical table. The "entity" of such a pair is the logical aggregate that B.4 already allows: `ICheckoutCommand.Confirm` may persist order rows, invoice rows and files behind one method.
+2. **The internal server is free from this rule.** Behind the edge, the implementation works directly on `TOrm` through `IRestOrm` — no interface ceremony required there. Business rules keep their one home: the `TOrm` class doubling as the domain object ([B.3](#b3-two-types-per-entity-not-three)).
+
+```text
+        mobile app / web client / desktop client
+                        │
+                        │  HTTPS — the only boundary a client can cross
+                        ▼
+ ┌─────────────────────────────────────────────────────────────┐
+ │ EDGE — the A.6.2 public server (void model, TLS, JWT)       │
+ │                                                             │
+ │   IXxxQuery   IXxxCommand                                   │
+ │   workflow-scoped pairs + reduced DTOs = the app layer      │
+ └────────────────────────────┬────────────────────────────────┘
+                              │  IRestOrm — in-process,
+                              │  no network surface
+                              ▼
+ ┌─────────────────────────────────────────────────────────────┐
+ │ INTERNAL — the A.6.1-style TRestServerDB (data + TOrm)      │
+ │                                                             │
+ │   free ORM usage: TOrm, TRestBatch, SQL — no interfaces     │
+ └─────────────────────────────────────────────────────────────┘
+```
+
+The exposure rule is mechanical: **a service is reachable from the network only if it is registered on a server handed to `TRestHttpServer`.** The internal server never is, so its `TOrm` world simply has no address a client could call.
+
+**Design the edge from the client inward**, not from the schema outward:
+
+1. Walk the actual client needs — each screen, each step of the client workflow.
+2. For each step in a workflow that requires the server, define a query or command (`ICheckoutQuery`/`ICheckoutCommand`), roughly one method per step. Each method is a **use case**: named after what the user is doing.
+3. For each screen, define a **reduced DTO** — a projection carrying exactly the fields that screen needs. Unlike the per-entity DTO family of [B.3](#b3-two-types-per-entity-not-three), a screen DTO may join several entities; composing it from the loaded `TOrm` instances is a pure mapper procedure (no I/O inside — the service gathers the inputs first).
+
+```pascal
+type
+  // reduced DTO: exactly what the checkout screen shows — possibly joining
+  // several TOrm tables; not a mirror of any single entity
+  TCheckoutSummaryDto = packed record
+    OrderRef: RawUtf8;
+    Lines: array of TCheckoutLineDto;
+    Total, Vat: currency;
+    PaymentMethods: array of RawUtf8;
+  end;
+
+  // one workflow, one pair; one step, one method
+  ICheckoutQuery = interface(IInvokable)
+    ['{1E8A39C4-5B7D-4F2A-9C61-D0B5A8E37F12}']
+    function GetSummary(const cartID: RawUtf8;
+      out summary: TCheckoutSummaryDto): TServiceResult;
+  end;
+  ICheckoutCommand = interface(IInvokable)
+    ['{6F2D81B0-3A9E-4C57-B8D4-72E1C5F90A3B}']
+    function Confirm(const cartID, paymentMethod: RawUtf8;
+      out orderRef: RawUtf8): TServiceResult;
+  end;
+```
+
+The wiring is exactly [A.6.2](#a62-internet-facing-or-distributed-deployment) with the names filled in:
+
+```pascal
+// INTERNAL: data + TOrm, free ORM usage — never handed to TRestHttpServer
+DbServer := TRestServerDB.Create(
+  TOrmModel.Create([TOrmOrder, TOrmOffer, TOrmInvoice]), 'data.db');
+DbServer.Server.CreateMissingTables;
+
+// EDGE: only the workflow pairs are network-reachable
+EdgeServer.ServiceDefine(
+  TCheckoutService.Create(DbServer.Orm),   // the body works on the ORM directly
+  [ICheckoutQuery, ICheckoutCommand]);
+HttpServer := TRestHttpServer.Create('443', [EdgeServer], '+', HTTP_DEFAULT_MODE);
+```
+
+The edge service publishes interface properties that the resolver chain fills at creation ([B.5](#b5-soa-composition-root-and-dependency-injection)), and thanks to the location transparency of [A.6](#a6-minimum-recommended-server-configuration) its body never learns whether they are local objects or HTTP proxies:
+
+```text
+ EDGE: ICheckoutCommand.Confirm — one client gesture, one use case
+   │
+   │ orchestrates via published interface properties,
+   │ auto-resolved at creation (B.5)
+   ├──► auth service         [own DB]  ─┐
+   ├──► orders service       [own DB]   ├─ each may run in-process or as a
+   ├──► invoice service      [own DB]   │  stand-alone micro-service; the
+   └──► audit-trail service  [own DB]  ─┘  call site never changes (A.6)
+```
+
 ---
 
 ## When to deviate
