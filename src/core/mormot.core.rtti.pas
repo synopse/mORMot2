@@ -6874,8 +6874,9 @@ begin
   if (p^.refCnt >= 0) and
      DACntDecFree(p^.refCnt) then
   begin
-    if ElemInfo <> nil then
-      FastFinalizeArray(Value^, ElemInfo, p^.length);
+    if (ElemInfo <> nil) and
+       (p^.length > 0) then
+       FastFinalizeArray(Value^, ElemInfo, p^.length);
     FreeMem(p);
   end;
   Value^ := nil;
