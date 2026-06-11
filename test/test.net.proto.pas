@@ -3272,6 +3272,8 @@ var
     IP6Short(@ip, s);
     CheckEqualShort(s, expected);
     AppendShortChar(#0, @s);
+    Check(not IsHostName(@s[1]));
+    Check(not IsDnsName(@s[1]));
     RandomGuid(ip2.guid);
     Check(not IsEqual(ip.b, ip2.b));
     IP6Text(@ip2, txt);
@@ -3290,6 +3292,8 @@ var
     if (txt = '') or
        (txt = '127.0.0.1') then
       exit;
+    Check(not IsHostName(pointer(txt)));
+    Check(not IsDnsName(pointer(txt)));
     FillZero(ip2.b);
     Check(not IsEqual(ip.b, ip2.b));
     Check(not IsEqual(ip3.b, ip2.b));
@@ -3315,7 +3319,17 @@ begin
   TestIP6('::1');
   IP6Text(@ip, txt);
   CheckEqual(txt, '127.0.0.1', 'IPv6 loopback');
+  ip.b[15] := 2;
+  TestIP6('::2');
+  ip.b[15] := 9;
+  TestIP6('::9');
+  ip.b[15] := 15;
+  TestIP6('::f');
+  ip.b[15] := 255;
+  TestIP6('::ff');
   ip.b[0] := 1;
+  TestIP6('100::ff');
+  ip.b[15] := 1;
   TestIP6('100::1');
   ip.b[15] := 0;
   TestIP6('100::');
