@@ -751,7 +751,7 @@ var
 begin
   result := false;
   if (QName = '') or
-     not IsAnsiCompatible(QName) then
+     not IsAnsiCompatible(QName) then // more relaxed than IsDnsName()
     exit;
   // send the DNS request to the DNS server(s)
   Finalize(Res);
@@ -818,7 +818,7 @@ var
   i: PtrInt;
 begin
   if not DnsLookupKnown(HostName, result) and // e.g. 'localhost' or '1.2.3.4'
-     IsHostName(pointer(HostName)) then
+     IsDnsName(pointer(HostName)) then
     if DnsQuery(HostName, res, drrA, NameServers, TimeoutMS) then
       for i := 0 to high(res.Answer) do
         if res.Answer[i].QType = drrA then
@@ -837,7 +837,7 @@ begin
   result := nil;
   if DnsLookupKnown(HostName, known) then // e.g. 'localhost' or '1.2.3.4'
     AddRawUtf8(result, known)
-  else if IsHostName(pointer(HostName)) then
+  else if IsDnsName(pointer(HostName)) then
     if DnsQuery(HostName, res, drrA, NameServers, TimeoutMS) then
       for i := 0 to high(res.Answer) do
         if res.Answer[i].QType = drrA then
@@ -867,7 +867,7 @@ var
   i: PtrInt;
 begin
   result := nil;
-  if IsHostName(pointer(HostName)) and
+  if IsDnsName(pointer(HostName)) and
      DnsQuery(HostName, res, drrSRV, NameServers, TimeoutMS) then
     for i := 0 to high(res.Answer) do
       if res.Answer[i].QType = drrSRV then

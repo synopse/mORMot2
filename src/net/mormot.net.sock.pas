@@ -887,6 +887,10 @@ function GetDomainNames(usePosixEnv: boolean = false): TRawUtf8DynArray;
 // - allow 'test+lab' or UTF-8 >= $80 disable URI but disable : [ ] / \ @ ? # %
 function IsHostName(Name: PUtf8Char): boolean;
 
+/// quickly check if the text is a DNS name with only A-Z a-z 0-9 - . _ chars
+// - i.e. valid RFC 952 / RFC 1123 AA/AAAA records with '_ldap._tcp.domain.com'
+function IsDnsName(Name: PUtf8Char): boolean;
+
 /// resolve a host name from the OS hosts file content
 // - i.e. use a cache of /etc/hosts or c:\windows\system32\drivers\etc\hosts
 // - returns true and the IPv4 address of the stored host found
@@ -4535,6 +4539,23 @@ begin
         exit;    // reject URI and IPv6 separators
     else
       inc(Name); // allow 'nas$' 'db~backup' 'test+lab' or UTF-8 >= $80 bytes
+    end;
+  result := true;
+end;
+
+function IsDnsName(Name: PUtf8Char): boolean;
+begin
+  result := false;
+  if Name = nil then
+    exit;
+  while true do
+    case Name^ of
+      #0:
+        break;
+      '.', '-', '0'..'9', 'a'..'z', 'A'..'Z', '_':
+        inc(Name); // allow '_' e.g. for relaxed DNS services resolution
+    else
+      exit;
     end;
   result := true;
 end;
