@@ -6130,7 +6130,7 @@ begin
   else
   begin
     tmp.Init(Len * 3); // maximum possible unicode size (if all <#128)
-    SetString(result, PWideChar(tmp.buf), Utf8ToWideChar(tmp.buf, Text, Len) shr 1);
+    FastSetWideString(result, tmp.buf, Utf8ToWideChar(tmp.buf, Text, Len) shr 1);
     tmp.Done;
   end;
 end;

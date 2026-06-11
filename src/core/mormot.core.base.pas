@@ -936,6 +936,10 @@ procedure FastSetRawByteString(var s: RawByteString; p: pointer; len: PtrInt);
 procedure FastSynUnicode(var s: SynUnicode; p: pointer; len: PtrInt);
   {$ifndef HASVARUSTRING} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
+/// equivalence to SetString(s,pwidechar,len) function but from a raw pointer
+procedure FastSetWideString(var s: WideString; p: pointer; len: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// equivalence to SetString(s,nil,len) function to allocate a new RawByteString
 // - faster especially under FPC
 function FastNewRawByteString(var s: RawByteString; len: PtrInt): pointer;
@@ -5428,9 +5432,18 @@ end;
 {$else}
 procedure FastSynUnicode(var s: SynUnicode; p: pointer; len: PtrInt);
 begin
-  SetString(s, PWideChar(p), len); // use RTL for slow WideString
+  SetString(s, PWideChar(p), len); // allocate as BSTR on Delphi 7/2007
 end;
 {$endif HASVARUSTRING}
+
+procedure FastSetWideString(var s: WideString; p: pointer; len: PtrInt);
+begin
+  {$ifdef OSWINDOWS}
+  SetString(s, PWideChar(p), len); // allocate as BSTR
+  {$else}
+  FastSynUnicode(PSynUnicode(@s)^, p, len); // POSIX WideString = UnicodeString
+  {$endif OSWINDOWS}
+end;
 
 procedure GetMemAligned(var holder: RawByteString; fillwith: pointer;
   len: PtrUInt; out aligned: pointer; alignment: PtrUInt);

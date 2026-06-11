@@ -5112,7 +5112,7 @@ end;
 function _BL_WString(Data: PWideString; var Source: TFastReader; Info: PRttiInfo): PtrInt;
 begin
   with Source.VarBlob do
-    SetString(Data^, PWideChar(Ptr), Len shr 1); // length in bytes was stored
+    FastSetWideString(Data^, Ptr, Len shr 1); // length in bytes was stored
   result := SizeOf(pointer);
 end;
 
@@ -5692,7 +5692,7 @@ begin
     if vt <> 0 then
       if vt = 255 then
         with Source.VarBlob do // varOleStr (=8)
-          SetString(WideString(Data^.vAny), PWideChar(Ptr), Len shr 1)
+          FastSetWideString(WideString(Data^.vAny), Ptr, Len shr 1)
       else
         Source.Copy(@Data^.VInt64, vt); // simple types
   end
