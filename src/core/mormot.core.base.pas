@@ -3341,6 +3341,9 @@ function PosCharU(const Str: RawUtf8; Chr: AnsiChar): PUtf8Char;
 // collision ambiguity as with SysUtils' homonymous function
 function Trim(const S: RawUtf8): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// len in BYTES for confusing RawUnicode not available in pure mORMot 2 mode
+procedure FastSetRawUnicode(var s: RawUnicode; p: pointer; len: PtrInt);
 {$endif PUREMORMOT2}
 
 /// fast dedicated RawUtf8 version of Trim()
@@ -10098,6 +10101,11 @@ end;
 function Trim(const S: RawUtf8): RawUtf8;
 begin
   result := TrimU(S);
+end;
+
+procedure FastSetRawUnicode(var s: RawUnicode; p: pointer; len: PtrInt);
+begin
+  FastSetStringCP(s, p, len, CP_UTF16); // end with four #0 bytes
 end;
 {$endif PUREMORMOT2}
 

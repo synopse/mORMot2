@@ -4143,8 +4143,7 @@ begin
   else
   begin
     u := AnsiBufferToUnicode(tmp.Init(SourceChars * 2), Source, SourceChars);
-    u^ := #0;
-    SetString(result, PAnsiChar(tmp.buf), PtrUInt(u) - PtrUInt(tmp.buf) + 1);
+    FastSetRawUnicode(result, tmp.buf, PtrUInt(u) - PtrUInt(tmp.buf));
     tmp.Done;
   end;
 end;
@@ -4600,7 +4599,7 @@ begin
     result := ''
   else
   begin
-    SetString(result, nil, SourceChars * 2 + 1);
+    FastSetRawUnicode(result, nil, SourceChars * 2);
     AnsiBufferToUnicode(pointer(result), Source, SourceChars);
   end;
 end;
@@ -5089,7 +5088,7 @@ end;
 function TSynAnsiUtf16.AnsiToRawUnicode(Source: PAnsiChar;
   SourceChars: cardinal): RawUnicode;
 begin
-  SetString(result, Source, SourceChars); // byte count
+  FastSetRawUnicode(result, Source, SourceChars); // byte count
 end;
 {$endif PUREMORMOT2}
 
@@ -5432,7 +5431,7 @@ begin
     exit;
   // +1 below is for #0 ending -> true WideChar(#0) ending
   tmp.Init(L * 3); // maximum possible unicode size (if all <#128)
-  SetString(result, PAnsiChar(tmp.buf), Utf8ToWideChar(tmp.buf, P, L) + 1);
+  FastSetRawUnicode(result, tmp.buf, Utf8ToWideChar(tmp.buf, P, L));
   tmp.Done;
 end;
 
@@ -5694,12 +5693,12 @@ end;
 
 function StringToRawUnicode(const S: string): RawUnicode;
 begin
-  SetString(result, PAnsiChar(pointer(S)), length(S) * 2 + 1); // +1 for last wide #0
+  FastSetRawUnicode(result, pointer(S), length(S) * 2);
 end;
 
 function StringToRawUnicode(P: PChar; L: integer): RawUnicode;
 begin
-  SetString(result, PAnsiChar(P), L * 2 + 1); // +1 for last wide #0
+  FastSetRawUnicode(result, P, L * 2);
 end;
 
 function RawUnicodeToString(const U: RawUnicode): string;
