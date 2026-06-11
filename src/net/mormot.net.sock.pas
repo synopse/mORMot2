@@ -4013,22 +4013,28 @@ begin
   Join([IP4ToText(@ip32), '.in-addr.arpa'], reverse);
 end;
 
+const
+  MAX_IP6 = 45; // is 'ABCD:ABCD:ABCD:ABCD:ABCD:ABCD:192.168.158.190'
+
 function NetIsIP6(text: PUtf8Char; value: PByte): boolean;
 var
   l, dots: PtrInt;
   dummy: TNetIP6;
-  temp: array[0 .. 45] of AnsiChar;
+  temp: array[0 .. MAX_IP6] of AnsiChar;
 begin
   result := false;
   if text = nil then
     exit;
+  // allow some leading whitespace
   while text^ = ' ' do
-    inc(text); // allow some leading whitespace
+    inc(text);
+  // accept [Ipv6] URI below
   if text^ = '[' then
-    inc(text); // accept [Ipv6] URI below
+    inc(text);
+  // quickly reject most invalid inputs
   dots := 0;
   l := 0;
-  while true do // quickly reject most invalid inputs
+  while true do
     case text[l] of
       #0:
         break; // end of source
@@ -4043,13 +4049,13 @@ begin
         end;
       '.', '0'..'9', 'a'..'f', 'A'..'F':
         begin
-          if l > 45 then
-            exit; // max is 'ABCD:ABCD:ABCD:ABCD:ABCD:ABCD:192.168.158.190'
+          if l > MAX_IP6 then
+            exit;
           inc(l);
         end;
       ':':
         begin
-          if l > 45 then
+          if l > MAX_IP6 then
             exit;
           inc(dots);
           inc(l);
@@ -4060,16 +4066,26 @@ begin
   if (dots < 2) or    // from '::'
      (dots > 7) then  // up to '1:2:3:4:5:6:7:8'
     exit;
-  if value = nil then
-    value := @dummy; // value is optional, just like NetIsIP4()
-  if (l = dots) and
-     (l = 2) then
+  // recognize most simple IPv6 loopback/any
+  if dots = 2 then
   begin
-    FillZero(PHash128(value)^); // recognized '::'
+    if value <> nil then
+      FillZero(PHash128(value)^);
     result := true;
-  end
-  else
-    result := InetPton(text, value); // call proper OS API for RFC 4291 parsing
+    if l = dots then
+      exit; // recognized '::'
+    if (l = 3) and
+       (text[2] in ['0' .. '9']) then
+    begin
+      if value <> nil then
+        PHash128(value)^[15] := ord(text[2]) - ord('0');
+      exit; // recognized '::1' .. '::9' IPv6 loopback
+    end;
+  end;
+  // call proper OS API for RFC 4291 parsing
+  if value = nil then // value is optional, just like NetIsIP4()
+    value := @dummy;  // but the OS API requires some destination buffer
+  result := InetPton(text, value);
 end;
 
 function ToIP6(const text: RawUtf8; var value: TNetIP6): boolean;
