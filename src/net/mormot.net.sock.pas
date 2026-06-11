@@ -50,7 +50,6 @@ const
   cBroadcast  = '255.255.255.255';
   c6Localhost = '::1';
   c6AnyHost   = '::';
-  c6Broadcast = 'ffff::1';
   cAnyPort    = '0';
 
   cLocalhost32 = $0100007f;
@@ -222,6 +221,9 @@ type
     /// initialize this address from a standard IPv4
     // - set a given 32-bit IPv4 address and its network port (0..65535)
     function SetIP4Port(ipv4: TNetIP4; netport: TNetPort): TNetResult;
+    /// initialize this address from a standard IPv6
+    // - set a given 128-bit IPv6 address and its network port (0..65535)
+    function SetIP6Port(const ipv6: TNetIP6; netport: TNetPort): TNetResult;
     /// returns the network family of this address
     function Family: TNetFamily;
     /// compare two IPv4/IPv6  network addresses
@@ -2863,13 +2865,10 @@ begin
   result := false;
   ad4.sin_family := 0; // reset family to mark as invalid, but keep sin_port
   ad4.sin_addr := 0;   // reset
-  PInt64(@ad4.sin_zero)^ := 0; // seems mandatory on Windows
-  if (address = cLocalhost) or
-     (address = c6Localhost) or // ::1
+  if (address = cLocalhost) or  // '127.0.0.1'
      PropNameEquals(address, 'localhost') then
     ad4.sin_addr := cLocalhost32 // 127.0.0.1
-  else if (address = cBroadcast) or
-          (address = c6Broadcast) then
+  else if address = cBroadcast then
     ad4.sin_addr := cAnyHost32 // 255.255.255.255
   else if address = cAnyHost then
     // keep 0.0.0.0 for bind - but connect would redirect to 127.0.0.1
@@ -2893,8 +2892,11 @@ begin
 end;
 
 function TNetAddr.SetFromIP6(const address: RawUtf8): boolean;
+var
+  ad6: TSockAddrIn6 absolute Addr;
 begin
-  result := NetIsIP6(pointer(address), @PSockAddrIn6(@Addr)^.sin6_addr);
+  ad6.sin6_family := 0; // reset family to mark as invalid, but keep sin_port
+  result := NetIsIP6(pointer(address), @ad6.sin6_addr);
   if result then
     SetFamily(AF_INET6);
 end;
@@ -3040,8 +3042,20 @@ var
 begin
   SetFamily(AF_INET);
   ad4.sin_addr := ipv4;
-  PInt64(@ad4.sin_zero)^ := 0; // seems needed on Windows
   ad4.sin_port := bswap16(netport);
+  if netport > 65535 then
+    result := nrNotFound
+  else
+    result := nrOk;
+end;
+
+function TNetAddr.SetIP6Port(const ipv6: TNetIP6; netport: TNetPort): TNetResult;
+var
+  ad6: TSockAddrIn6 absolute Addr;
+begin
+  SetFamily(AF_INET6);
+  ad6.sin6_addr := ipv6;
+  ad6.sin6_port := bswap16(netport);
   if netport > 65535 then
     result := nrNotFound
   else
