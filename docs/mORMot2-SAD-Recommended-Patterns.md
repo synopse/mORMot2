@@ -385,7 +385,7 @@ Every service exposes an `IXxxRepository` (or a CQRS pair, see [B.4](#b5-cqrs-re
 
 ### B.4. CQRS read/write split
 
-**Two interfaces per entity by default:** `IXxxCommand` (writes) and `IXxxQuery` (reads), each descending from `IInvokable`.
+**Two interfaces per entity by default:** `IXxxCommand` (writes) and `IXxxQuery` (reads), each descending from `IInvokable`. The "entity" here may be logical rather than physical — an *aggregate* in DDD terms: `IOrderCommand.Save` may persist several database tables plus files on disk behind one method.
 
 **Why:** per-direction authorization (read-only clients can't reach write methods); the read side can be served by a replica or cache without touching writes; the interfaces become self-documenting. **Acceptable to skip** for genuinely trivial wrappers (one or two endpoints, no read/write asymmetry) — but skip it as an exception, not as the rule.
 
