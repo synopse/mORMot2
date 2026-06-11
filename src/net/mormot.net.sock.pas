@@ -1753,7 +1753,7 @@ type
     // 'server/address' (as http), 'http://unix:/server:/address' (as nlUnix),
     // 'https://user:password@server:port/address' (authenticated),
     // 'wss://Server/Address' (as https) or 'file://server/folder/data.xml'
-    // - supports RFC 3986 IPv6 literals in URIs like 'https://[::1]:123/tata'
+    // - supports RFC 3986 IPv6 litterals like 'https://[::1]:123/tata'
     // - returns TRUE if the Server has been extracted and is not ''
     function From(const aUri: RawUtf8; const DefaultPort: RawUtf8 = ''): boolean;
     /// check if a connection need to be re-established to follow this URI
@@ -4621,7 +4621,11 @@ begin
   repeat
     case Name[L] of
       #0:
-        break;
+        if (L = 0) or
+           (L > 255) then
+          exit
+        else
+          break;
       '.':
         if (L > 0) and
            (Name[L - 1] = '.') then
@@ -4645,7 +4649,11 @@ begin
   while true do
     case Name[L] of
       #0:
-        break;
+        if (L = 0) or
+           (L > 255) then
+          exit
+        else
+          break;
       '.':
         if (L > 0) and
            (Name[L - 1] = '.') then
