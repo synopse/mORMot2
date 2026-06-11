@@ -4420,7 +4420,7 @@ var
   /// efficient finalization of successive variant items from a (dynamic) array
   // - this unit will include a basic version calling VarClear()
   // - mormot.core.variants will assign a more efficient implementation
-  VariantClearSeveral: procedure(V: PVarData; n: integer);
+  VariantClearSeveral: procedure(V: PVarData; n: PtrInt);
 
   /// compare two variant/TVarData values, with or without case sensitivity
   // - this unit registers the basic VariantCompSimple() case-sensitive comparer
@@ -13753,7 +13753,7 @@ begin
   VariantStringToUtf8(V, result{%H-});
 end;
 
-procedure _VariantClearSeveral(V: PVariant; n: integer);
+procedure _VariantClearSeveral(V: PVariant; n: PtrInt);
 begin
   if n > 0 then
     repeat

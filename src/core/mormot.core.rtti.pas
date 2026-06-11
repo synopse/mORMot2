@@ -1888,13 +1888,13 @@ procedure VariantDynArrayClear(var Value: TVariantDynArray);
 
 /// low-level finalization of a dynamic array of any kind
 // - faster than RTL Finalize() or setting nil, when you know ElemInfo
+// - rkClass would make ObjClear() on every item
 // - see also TRttiInfo.Clear if you want to finalize any type
 procedure FastDynArrayClear(Value: PPointer; ElemInfo: PRttiInfo);
 
-/// low-level finalization of all dynamic array items of any kind
+/// low-level finalization of all dynamic array items of ElemTypeInfo <> nil
 // - as called by FastDynArrayClear(), after dec(RefCnt) reached 0
-procedure FastFinalizeArray(Value: PPointer; ElemTypeInfo: PRttiInfo;
-  Count: integer);
+procedure FastFinalizeArray(Value: PPointer; ElemInfo: PRttiInfo; Count: PtrInt);
 
 /// clear the managed fields of a record content
 // - won't reset all values to zero, only managed fields - see RecordZero()
@@ -1904,7 +1904,7 @@ procedure FastFinalizeArray(Value: PPointer; ElemTypeInfo: PRttiInfo;
 function FastRecordClear(Value: pointer; Info: PRttiInfo): PtrInt;
 
 /// efficient finalization of successive record items from a (dynamic) array
-procedure RecordClearSeveral(v: PAnsiChar; info: PRttiInfo; n: integer);
+procedure RecordClearSeveral(v: PAnsiChar; info: PRttiInfo; n: PtrInt);
 
 /// efficient finalization of successive RawUtf8 items from a (dynamic) array
 procedure StringClearSeveral(v: PPointer; n: PtrInt);
@@ -6777,7 +6777,7 @@ begin
             IsRawUtf8(Info^.DynArrayItemType);
 end;
 
-procedure RecordClearSeveral(v: PAnsiChar; info: PRttiInfo; n: integer);
+procedure RecordClearSeveral(v: PAnsiChar; info: PRttiInfo; n: PtrInt);
 var
   fields: TRttiRecordManagedFields;
   f: PRttiRecordField;
@@ -6825,40 +6825,46 @@ begin
   until n = 0;
 end;
 
-procedure FastFinalizeArray(Value: PPointer; ElemTypeInfo: PRttiInfo;
-  Count: integer);
+procedure FastFinalizeArray(Value: PPointer; ElemInfo: PRttiInfo; Count: PtrInt);
 var
   fin: TRttiFinalizer;
 begin
-  // caller ensured ElemTypeInfo<>nil and Count>0
-  case ElemTypeInfo^.Kind of
-    {$ifdef FPC}rkObject,{$else}{$ifdef UNICODE}rkMRecord,{$endif}{$endif}
-    rkRecord:
-      // retrieve ElemTypeInfo.RecordManagedFields once
-      RecordClearSeveral(pointer(Value), ElemTypeInfo, Count);
-    {$ifdef FPC}
-    rkLStringOld,
-    {$endif FPC}
-    {$ifdef HASVARUSTRING}
-    rkUString,
-    {$endif HASVARUSTRING}
-    rkLString:
-      // optimized loop for AnsiString / UnicodeString (PStrRec header)
-      StringClearSeveral(pointer(Value), Count);
-    rkVariant:
-      // from mormot.core.variants - supporting custom variants
-      // or at least from mormot.core.base calling inlined VarClear()
-      VariantClearSeveral(pointer(Value), Count);
-    else
-      begin // other managed types, e.g. IInterface or nested dynamic arrays
-        fin := RTTI_FINALIZE[ElemTypeInfo^.Kind];
-        if Assigned(fin) then  // e.g. rkWString, rkArray, rkDynArray
-          repeat
-            inc(PByte(Value), fin(PByte(Value), ElemTypeInfo));
-            dec(Count);
-          until Count = 0;
-      end;
-  end;
+  if Count > 0 then
+    case ElemInfo^.Kind of // caller ensured ElemInfo<>nil
+      {$ifdef FPC}rkObject,{$else}{$ifdef UNICODE}rkMRecord,{$endif}{$endif}
+      rkRecord:
+        // retrieve ElemInfo.RecordManagedFields once
+        RecordClearSeveral(pointer(Value), ElemInfo, Count);
+      {$ifdef OSPOSIX}
+      rkWString,  // WideString = UnicodeString have PStrRec on POSIX
+      {$endif OSPOSIX}
+      {$ifdef FPC}
+      rkLStringOld,
+      {$endif FPC}
+      {$ifdef HASVARUSTRING}
+      rkUString,
+      {$endif HASVARUSTRING}
+      rkLString:
+        // optimized loop for AnsiString / UnicodeString (PStrRec header)
+        StringClearSeveral(pointer(Value), Count);
+      rkVariant:
+        // from mormot.core.variants - supporting custom variants
+        // or at least from mormot.core.base calling inlined VarClear()
+        VariantClearSeveral(pointer(Value), Count);
+      rkClass:
+        // like RTTI_FINALIZE[rkClass] = _ObjClear
+        RawObjectsClear(pointer(Value), Count);
+      else
+        begin
+          // other managed types, e.g. IInterface or nested dynamic arrays
+          fin := RTTI_FINALIZE[ElemInfo^.Kind];
+          if Assigned(fin) then  // e.g. rkWString, rkArray, rkDynArray
+            repeat
+              inc(PByte(Value), fin(Value, ElemInfo));
+              dec(Count);
+            until Count = 0;
+        end;
+    end;
 end;
 
 procedure FastDynArrayClear(Value: PPointer; ElemInfo: PRttiInfo);
