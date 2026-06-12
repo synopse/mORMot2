@@ -1974,6 +1974,9 @@ procedure Append(var Text: RawUtf8; Added: AnsiChar); overload;
 /// append one text buffer to a RawUtf8 variable with no code page conversion
 procedure Append(var Text: RawUtf8; Added: pointer; AddedLen: PtrInt); overload;
 
+/// append one char to a RawUtf8 variable if it is not already ended
+procedure AppendIfNone(var Text: RawUtf8; EndWith: AnsiChar);
+
 /// append one short string to a RawUtf8 variable with no code page conversion
 procedure AppendStr(var Text: RawUtf8; const Added: ShortString);
 
@@ -9582,11 +9585,23 @@ end;
 
 procedure Append(var Text: RawUtf8; Added: AnsiChar);
 var
-  t: PtrInt;
+  L: PtrInt;
 begin
-  t := length(Text);
-  SetLength(Text, t + 1);
-  PByteArray(Text)[t] := ord(Added);
+  L := length(Text);
+  SetLength(Text, L + 1);
+  PByteArray(Text)[L] := ord(Added);
+end;
+
+procedure AppendIfNone(var Text: RawUtf8; EndWith: AnsiChar);
+var
+  L: PtrInt;
+begin
+  L := length(Text);
+  if (L <> 0) and
+     (Text[L] = EndWith) then
+    exit;
+  SetLength(Text, L + 1);
+  PByteArray(Text)[L] := ord(EndWith);
 end;
 
 procedure Append(var Text: RawUtf8; Added: pointer; AddedLen: PtrInt);
