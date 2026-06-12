@@ -581,6 +581,7 @@ begin
 end;
 
 type
+  // additional context parameters to background GET into TPipeStream.Write
   TFtpHttpClientSocket = class(THttpClientSocket)
   public
     Url: RawUtf8;
@@ -616,12 +617,12 @@ begin
     // now we can return this resource
     if size > Remote.memcachesize then
     begin
-      // big files (>2MB by default) require their own HTTP connection
+      // big files (>2MB by default) require their own HTTP connection and thread
       c := nil;
       try
         c := TFtpHttpClientSocket.OpenFrom(Remote.client); // new socket connect
         c.Url := url;
-        c.Thread := TLoggedWorkThread.Create(
+        c.Thread := TLoggedWorkThread.Create(              // background thread
           fLogClass, url, c, BackgroundGet, {suspended=}true);
       except
         on E: Exception do

@@ -1872,10 +1872,10 @@ type
     /// initialize this instance with an associated TLoggedThread
     // - the supplied Thread instance will be owned and freed with this TStream
     constructor Create(aThread: TLoggedThread;
-      aBufSize: cardinal = 65536); overload; reintroduce;
+      aBufSize: cardinal = 65536); reintroduce; overload;
     /// initialize this instance executing a method in a TLoggedWorkThread
     constructor Create(Logger: TSynLogClass; const ProcessName: RawUtf8;
-      Sender: TObject; const OnExecute: TNotifyEvent); overload; reintroduce;
+      Sender: TObject; const OnExecute: TNotifyEvent); reintroduce; overload;
     /// call Thread.Terminate and finalize this TStream instance
     destructor Destroy; override;
     /// raw access to the associated background Thread
