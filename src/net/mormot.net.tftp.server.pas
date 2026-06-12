@@ -97,6 +97,21 @@ type
 
 { ******************** TTftpServerThread Server Class }
 
+  /// registered information for one RedirectUri()
+  TTftpServerRedirect = class(TObjectOSLightLock)
+  public
+    /// IdemPChar() lookup to locate this URI
+    up: RawUtf8;
+    /// the associated remote URI
+    uri: RawUtf8;
+    /// the shared main HTTP connection
+    client: THttpClientSocket;
+    /// maximum size of a resource to cache in memory
+    memcachesize: integer;
+    /// finalize this instance
+    destructor Destroy; override;
+  end;
+
   /// event signature of the TTftpServerThread.OnConnect optional callback
   // - you can change e.g. Context.FileName/FileNameFull/FileStream
   // - should return teNoError to continue the process
@@ -116,6 +131,7 @@ type
     fOptions: TTftpThreadOptions;
     fAsNobody: boolean;
     fRangeLow, fRangeHigh: word;
+    fRedirect: array of TTftpServerRedirect;
     fFileCache: TSynDictionary; // thread-safe <16MB files content cache
     {$ifdef OSPOSIX}
     fPosixFileNames: TPosixFileCaseInsensitive; // ttoCaseInsensitiveFileName
@@ -143,6 +159,11 @@ type
       CacheTimeoutSecs: integer = 15 * 60); reintroduce;
     /// finalize the server instance
     destructor Destroy; override;
+    /// register one sub-URI folder pointing to a remote HTTP location
+    // - return the internal >= 0 index in fRangeLow[], -1 on failure
+    function RedirectUri(const UriPrefix, Remote: RawUtf8;
+      MemCacheBytes: integer = 256 shl 10; Tls: PNetTlsContext = nil;
+      Schemes: TUriSchemes = [usHttp, usHttps, usFile]): PtrInt;
     /// notify the server thread(s) to be terminated, and wait for pending
     // threads to actually abort their background process
     procedure TerminateAndWaitFinished(TimeOutMs: integer = 5000); override;
@@ -340,6 +361,15 @@ end;
 
 { ******************** TTftpServerThread Server Class }
 
+{ TTftpServerRedirect }
+
+destructor TTftpServerRedirect.Destroy;
+begin
+  FreeAndNil(client);
+  inherited Destroy;
+end;
+
+
 { TTftpServerThread }
 
 constructor TTftpServerThread.Create(const SourceFolder: TFileName;
@@ -399,6 +429,7 @@ begin
   {$ifdef OSPOSIX}
   FreeAndNil(fPosixFileNames);
   {$endif OSPOSIX}
+  ObjArrayClear(fRedirect, true);
 end;
 
 procedure TTftpServerThread.OnShutdown;
@@ -457,6 +488,100 @@ begin
     result := 0
   else
     result := fConnection.Count;
+end;
+
+function TTftpServerThread.RedirectUri(const UriPrefix, Remote: RawUtf8;
+  MemCacheBytes: integer; Tls: PNetTlsContext; Schemes: TUriSchemes): PtrInt;
+var
+  one: TTftpServerRedirect;
+  client: THttpClientSocket;
+  up: RawUtf8;
+  u: TUri;
+begin
+  result := -1;
+  // validate the Remote address parameter
+  if not u.From(Remote) or
+     not (u.UriScheme in Schemes) then
+  begin
+    fLog.Log(sllWarning, 'RedirectUri remote=% failed', [Remote], self);
+    exit;
+  end;
+  AppendIfNone(u.Address, '/');
+  // validate and prepare the UriPrefix parameter
+  up := UpperCase(StringReplaceChars(TrimU(UriPrefix), '\', '/'));
+  if (up = '') or
+     not IsUrlValid(pointer(up)) then
+  begin
+    fLog.Log(sllWarning, 'RedirectUri uri=% failed', [UriPrefix], self);
+    exit;
+  end;
+  AppendIfNone(up, '/');
+  // ensure the remote URI is valid by connecting to the server
+  try
+    client := THttpClientSocket.OpenUri(u, Remote, '', 0, Tls);
+  except
+    fLog.Log(sllWarning, 'RedirectUri OpenUri=% failed', [Remote], self);
+    exit;
+  end;
+  // append to the internal list
+  one := TTftpServerRedirect.Create;
+  one.up := up;
+  one.uri := u.URI;
+  one.client := client;
+  one.memcachesize := MemCacheBytes;
+  result := ObjArrayAdd(fRedirect, one);
+  fLog.Log(sllDebug, 'RedirectUri: uri=% remote=%', [up, one.uri], self);
+end;
+
+procedure TTftpServerThread.SetRemote(const Uri: RawUtf8;
+  var Remote: TTftpServerRedirect; var Context: TTftpContext);
+var
+  url: RawUtf8;
+  fn: TFileName;
+  cached: RawByteString;
+  status: integer;
+  size: Int64;
+begin
+  Join([Remote.uri, Uri], url);
+  Remote.Lock; // protect main Remote.client connection (paranoid)
+  try
+    // make a HEAD to the remote server and retrieve its size
+    status := Remote.client.Head(url, 10000);
+    size := Remote.client.ContentLength;
+    fLog.Log(sllTrace, 'SetRemote: % HEAD=% size=%', [Uri, status, size], self);
+    if (status <> HTTP_SUCCESS) or
+       (size <= 0) then
+      exit;
+    // now we can return this resource: compute a fake TFileName
+    fn := Make([Remote.uri, Uri]);
+    // big files require its own HTTP connection
+    if size > Remote.memcachesize then
+    begin
+
+      //Context.FileStream := TPipeHttpStream.Create;
+    end
+    else
+    begin
+      // smallest files first check from in-memory cache
+      if (not fFileCache.FindAndCopy(fn, cached)) or
+         (size <> length(cached)) then
+      begin
+        // or download and cache from the main HTTP connection
+        status := Remote.client.Get(url, 10000);
+        cached := Remote.client.Content;
+        fLog.Log(sllTrace, 'SetRemote: GET=% size=%', [status, length(cached)], self);
+        if (status <> HTTP_SUCCESS) or
+           (length(cached) <> size) then
+          exit; // invalid download
+        fFileCache.AddOrUpdate(fn, cached);
+      end;
+      Context.FileStream := TRawByteStringStream.Create(cached);
+    end;
+    // success
+    Context.FileNameFull := fn;
+  finally
+    Remote.Unlock;
+  end;
 end;
 
 procedure TTftpServerThread.SetFileFolder(const Value: TFileName);
