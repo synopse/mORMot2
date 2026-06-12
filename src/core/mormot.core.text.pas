@@ -1974,9 +1974,6 @@ procedure Append(var Text: RawUtf8; Added: AnsiChar); overload;
 /// append one text buffer to a RawUtf8 variable with no code page conversion
 procedure Append(var Text: RawUtf8; Added: pointer; AddedLen: PtrInt); overload;
 
-/// append one char to a RawUtf8 variable if it is not already ended
-procedure AppendIfNone(var Text: RawUtf8; EndWith: AnsiChar);
-
 /// append one short string to a RawUtf8 variable with no code page conversion
 procedure AppendStr(var Text: RawUtf8; const Added: ShortString);
 
@@ -2003,6 +2000,12 @@ procedure Prepend(var Text: RawUtf8; const Args: array of const); overload;
 
 /// prepend some text items at the beginning of a RawByteString variable
 procedure Prepend(var Text: RawByteString; const Args: array of const); overload;
+
+/// append one char to a RawUtf8 variable if it not already ends with it
+procedure AppendIfNone(var Text: RawUtf8; EndWith: AnsiChar);
+
+/// prepend one char to a RawUtf8 variable if it not already starts with it
+procedure PrependIfNone(var Text: RawUtf8; EndWith: AnsiChar);
 
 /// append some text to a RawUtf8, ensuring previous text is separated with CRLF
 // - could be used e.g. to update HTTP headers since here EOL = #13#10
@@ -9661,12 +9664,25 @@ end;
 
 procedure Prepend(var Text: RawByteString; Added: AnsiChar);
 var
-  t: PtrInt;
+  L: PtrInt;
 begin
-  t := length(Text);
-  SetLength(Text, t + 1); // is likely to avoid any ReallocMem
-  MoveFast(PByteArray(Text)[0], PByteArray(Text)[1], t);
+  L := length(Text);
+  SetLength(Text, L + 1); // is likely to avoid any ReallocMem
+  MoveFast(PByteArray(Text)[0], PByteArray(Text)[1], L);
   PByteArray(Text)[0] := ord(Added);
+end;
+
+procedure PrependIfNone(var Text: RawUtf8; EndWith: AnsiChar);
+var
+  L: PtrInt;
+begin
+  L := length(Text);
+  if (L <> 0) and
+     (Text[1] = EndWith) then
+    exit;
+  SetLength(Text, L + 1); // is likely to avoid any ReallocMem
+  MoveFast(PByteArray(Text)[0], PByteArray(Text)[1], L);
+  PByteArray(Text)[0] := ord(EndWith);
 end;
 
 procedure Prepend(var Text: RawByteString; const Args: array of const);

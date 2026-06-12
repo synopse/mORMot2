@@ -1899,8 +1899,7 @@ begin
   end;
   if aRoot <> '' then
   begin
-    if aRoot[1] <> '/' then
-      insert('/', aRoot, 1);
+    PrependIfNone(aRoot, '/');
     AppendIfNone(aRoot, '/');
   end
   else

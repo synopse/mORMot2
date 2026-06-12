@@ -4387,10 +4387,8 @@ begin
   else
   begin
     // normalize root
-    if r[1] <> '/' then
-      insert('/', r, 1);
-    if r[length(r)] <> '/' then
-      Append(r, '/');
+    PrependIfNone(r, '/');
+    AppendIfNone(r, '/');
   end;
   // EIO        4          Mandatory, the version of the protocol
   // transport  websocket  Mandatory, the name of the transport
