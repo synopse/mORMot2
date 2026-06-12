@@ -5151,8 +5151,8 @@ end;
 
 destructor TBackgroundPipeStream.Destroy;
 begin
+  inherited Destroy; // Abort first to ensure thread finishes
   FreeAndNilSafe(fThread);
-  inherited Destroy;
 end;
 
 end.
