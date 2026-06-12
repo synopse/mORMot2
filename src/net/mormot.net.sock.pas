@@ -1708,7 +1708,9 @@ type
 type
   /// the main URI schemes recognized by TUri.UriScheme
   TUriScheme = (usUndefined, usCustom,
-    usHttp, usWs, usHttps, usWss, usUdp, usFile, usFtp, usFtps);
+    usHttp, usWs, usHttps, usWss, usUdp, usFile, usFtp, usFtps, usLdap, usLdaps);
+  /// set ofs URI schemes recognized by TUri.UriScheme
+  TUriSchemes = set of TUriScheme;
 
   /// structure used to parse an URI into its components
   // - ready to be supplied e.g. to a THttpRequest sub-class
@@ -6190,9 +6192,9 @@ end;
 
 const
   _US: array[usHttp .. high(TUriScheme)] of RawUtf8 = (
-    'http', 'ws', 'https', 'wss', 'udp', 'file', 'ftp', 'ftps');
+    'http', 'ws', 'https', 'wss', 'udp', 'file', 'ftp', 'ftps', 'ldap', 'ldaps');
   _US_PORT: array[TUriScheme] of RawUtf8 = (
-    '', '', '80', '80', '443', '443', '', '', '20', '989');
+    '', '', '80', '80', '443', '443', '', '', '20', '989', '389', '636');
 
 function TUri.From(const aUri: RawUtf8; const DefaultPort: RawUtf8): boolean;
 var

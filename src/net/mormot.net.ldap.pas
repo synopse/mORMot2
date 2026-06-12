@@ -5777,25 +5777,20 @@ begin
   fTargetPort := LDAP_PORT;
   fKerberosDN := '';
   fTls := false;
-  if not u.From(uri, '0') then
+  if not u.From(uri, LDAP_PORT) then
     exit;
   if u.Scheme <> '' then
-    if IdemPChar(pointer(u.Scheme), 'LDAP') then
-      case u.Scheme[5] of
-        #0:
-          fTls := false;
-        's', 'S':
-          fTls := true;
-      else
-        exit;
-      end
+    case u.UriScheme of
+      usLdap:
+        fTls := false;
+      usLdaps:
+        fTls := true;
     else
-      exit // not the ldap[s]:// scheme
+      exit; // unexpected scheme://
+    end
   else if u.Port = LDAP_TLS_PORT then
     fTls := true; // no scheme:// means LDAP - force LDAPS on address:636
   fTargetHost := u.Server;
-  if u.Port = '0' then
-    u.Port := LDAP_DEFAULT_PORT[fTls];
   fTargetPort := u.Port;
   if u.Address = '' then
     exit;
