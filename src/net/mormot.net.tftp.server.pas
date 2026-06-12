@@ -102,9 +102,9 @@ type
   /// registered information for one RedirectUri()
   TTftpServerRedirect = class(TObjectOSLightLock)
   public
-    /// IdemPChar() lookup to locate this URI
+    /// IdemPChar() lookup to locate this URI, ending with a '/' character
     up: RawUtf8;
-    /// the associated remote URI
+    /// the associated remote URI, ending with a '/' character
     uri: RawUtf8;
     /// the shared main HTTP connection
     client: THttpClientSocket;
@@ -203,7 +203,10 @@ type
       read fRangeHigh write fRangeHigh;
   end;
 
-
+const
+  RRQ_FILE_MAX  = 1 shl 30;   // don't send files bigger than 1 GB
+  RRQ_CACHE_MAX = 2 shl 20;   // cache files < 2MB in memory
+  RRQ_MEM_CHUNK = 128 shl 10; // huge files are read buffered in 128KB chunks
 
 
 
@@ -265,7 +268,7 @@ begin
   fLog.Log(sllDebug, 'DoExecute % % % as %',
     [fContext.Remote.IPShort({withport=}true), TFTP_OPCODE[fContext.OpCode],
      fContext.FileName, fContext.FileNameFull], self);
-  StringToUtf8(ExtractFileName(Utf8ToString(fContext.FileName)), fn);
+  fn := ExtractNameU(fContext.FileName); // exclude path in logs
   repeat
     // use poll/select and wait up to one second
     ev := fContext.Sock.WaitFor(1000, [neRead, neError]);
@@ -658,11 +661,6 @@ begin
      (PosExChar(PathDelim, u) = 0) then
     SetLocal(u, Context);
 end;
-
-const
-  RRQ_FILE_MAX  = 1 shl 30;   // don't send files bigger than 1 GB
-  RRQ_CACHE_MAX = 16 shl 20;  // cache files < 16MB in memory
-  RRQ_MEM_CHUNK = 128 shl 10; // huge file is read buffered in 128KB chunks
 
 function TTftpServerThread.SetRrqStream(var Context: TTftpContext): TTftpError;
 var

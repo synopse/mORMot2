@@ -182,12 +182,11 @@ type
     function GetNext: boolean;
     function GetNextCardinal(min, max: cardinal; out c: cardinal): boolean;
   public
-    /// the toRrq/toWrq request opcode
-    // - as filled by ParseRequest()
+    /// the toRrq/toWrq request opcode, as filled by ParseRequestFileName()
     OpCode: TTftpOpcode;
-    /// the expected toDat/toAck input opcode, as filled after ParseRequest
+    /// the expected toDat/toAck input opcode, as filled by ParseRequestOptions
     OpDataAck: TTftpOpcode;
-    /// ParseRequest will identify RFC 2347 option extensions
+    /// ParseRequestFileName will identify RFC 2347 option extensions
     HasExtendedOptions: boolean;
     /// the number of retries after a timeout
     RetryCount: byte;
@@ -225,6 +224,7 @@ type
     /// the transmitted file name, UTF-8 encoded
     FileName: RawUtf8;
     /// the full file name, as resolved locally on the file system
+    // - may be 'http://some.server/uri/FileName' by SetRemote()
     FileNameFull: TFileName;
     /// the actual transmitted file content, as a TStream
     FileStream: TStream;
