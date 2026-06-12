@@ -148,6 +148,7 @@ type
     function SetLocal(var Uri: RawUtf8; var Context: TTftpContext): TTftpError; virtual;
     function SetRemote(const Uri: RawUtf8; var Remote: TTftpServerRedirect;
       var Context: TTftpContext): TTftpError; virtual;
+    procedure BackgroundGet(Sender: TObject);
     function SetRrqStream(var Context: TTftpContext): TTftpError; virtual;
     function SetWrqStream(var Context: TTftpContext): TTftpError; virtual;
     // main processing methods for all incoming frames
@@ -579,6 +580,14 @@ begin
   fLog.Log(sllDebug, 'RedirectUri=% uri=% remote=%', [result, up, one.uri], self);
 end;
 
+type
+  TFtpHttpClientSocket = class(THttpClientSocket)
+  public
+    Url: RawUtf8;
+    Thread: TLoggedWorkThread;
+    Stream: TStream;
+  end;
+
 function TTftpServerThread.SetRemote(const Uri: RawUtf8;
   var Remote: TTftpServerRedirect; var Context: TTftpContext): TTftpError;
 var
@@ -586,6 +595,7 @@ var
   cached: RawByteString;
   size: Int64;
   status: integer;
+  c: TFtpHttpClientSocket;
 begin
   // check and compute the full remote URL
   result := teFileNotFound;
@@ -607,9 +617,25 @@ begin
     if size > Remote.memcachesize then
     begin
       // big files require their own HTTP connection
-
-      //Context.FileStream := TPipeHttpStream.Create;
+      c := nil;
+      try
+        c := TFtpHttpClientSocket.OpenFrom(Remote.client); // new socket connect
+        c.Url := url;
+        c.Thread := TLoggedWorkThread.Create(
+          fLogClass, url, c, BackgroundGet, {suspended=}true);
+      except
+        on E: Exception do
+        begin
+          fLog.Log(sllWarning, 'RedirectUri OpenFrom=% failed as %',
+                   [url, E], self);
+          c.Free;
+          exit;
+        end;
+      end;
+      c.Stream := TBackgroundPipeStream.Create(c.Thread);
+      c.Thread.Start;
       fLog.Log(sllTrace, 'SetRemote: started background GET', self);
+      Context.FileStream := c.Stream;
     end
     else
     begin
@@ -635,6 +661,20 @@ begin
     result := teNoError;
   finally
     Remote.Unlock;
+  end;
+end;
+
+procedure TTftpServerThread.BackgroundGet(Sender: TObject);
+var
+  c: TFtpHttpClientSocket absolute Sender;
+  status: integer;
+begin
+  try
+    status := c.Request(c.Url, 'GET', 30000, '', '', '', {asretry=}false,
+      {instream=}nil, {outstream=}c.Stream);
+    fLog.Log(sllDebug, 'BackgroundGet=% size=%', [status, c.ContentLength], self);
+  finally
+    c.Free;
   end;
 end;
 
