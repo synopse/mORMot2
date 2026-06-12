@@ -616,7 +616,7 @@ begin
     // now we can return this resource
     if size > Remote.memcachesize then
     begin
-      // big files require their own HTTP connection
+      // big files (>2MB by default) require their own HTTP connection
       c := nil;
       try
         c := TFtpHttpClientSocket.OpenFrom(Remote.client); // new socket connect
@@ -713,7 +713,7 @@ begin
           exit;
         // handle optional file cache in memory
         if Assigned(fFileCache) and
-           (size < RRQ_CACHE_MAX) then
+           (size < RRQ_CACHE_MAX) then // < 2MB by default in memory cache
         begin
           if fFileCache.FindAndCopy(Uri, cached) and
              (size = length(cached)) then

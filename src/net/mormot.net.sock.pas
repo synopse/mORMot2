@@ -6784,7 +6784,8 @@ end;
 constructor TCrtSocket.OpenFrom(aClient: TCrtSocket);
 begin
   if (aClient = nil) or
-     (aClient.fWasBind in fFlags) then
+     (fWasBind in aClient.fFlags) or
+     (aClient.Server = '') then
     DoRaise('OpenFrom: invalid client');
   Tunnel := aClient.Tunnel;
   TLS := aClient.TLS;
