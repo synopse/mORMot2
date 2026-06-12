@@ -35,7 +35,6 @@ uses
   Messages,
   {$endif OSWINDOWS}
   classes,
-  contnrs,
   types,
   sysutils,
   mormot.core.base;

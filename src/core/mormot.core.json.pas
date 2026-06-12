@@ -24,7 +24,6 @@ interface
 
 uses
   classes,
-  contnrs,
   sysutils,
   {$ifdef ISDELPHI}
   typinfo, // for proper Delphi inlining

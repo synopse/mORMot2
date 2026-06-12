@@ -25,7 +25,6 @@ interface
 
 uses
   classes,
-  contnrs,
   types,
   sysutils,
   {$ifdef ISDELPHI}

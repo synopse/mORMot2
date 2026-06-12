@@ -25,7 +25,6 @@ interface
 
 uses
   classes,
-  contnrs,
   sysutils,
   mormot.core.base,
   mormot.core.os,

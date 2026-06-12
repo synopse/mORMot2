@@ -27,7 +27,6 @@ uses
   sysutils,
   classes,
   variants,
-  contnrs,
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -38,10 +37,6 @@ uses
   mormot.core.data,
   mormot.core.rtti,
   mormot.core.json,
-  mormot.core.threads,
-  mormot.crypt.core,
-  mormot.crypt.jwt,
-  mormot.crypt.secure,
   mormot.core.log,
   mormot.core.interfaces,
   mormot.orm.base,
@@ -709,7 +704,7 @@ type
       read fHasher;
   end;
 
-  /// REST storage with direct access to a TObjectList memory-stored table
+  /// REST storage with direct access to a TOrmObjArray memory-stored table
   // - store the associated TOrm values in memory
   // - handle one TOrm per TRestStorageInMemory instance
   // - must be registered individualy in a TRestOrmServer to access data from a
@@ -744,7 +739,7 @@ type
     fBasicUpperSqlSelect: array[boolean] of RawUtf8;
     fUnique, fUniquePerField: array of TRestStorageInMemoryUnique;
     fMaxID: TID;
-    fValues: TDynArrayHashed; // hashed by ID
+    fValues: TDynArrayHashed; // fValue[] hashed by ID
     fTrackChangesFieldBitsOffset: PtrUInt;
     fTrackChangesPersistence: IRestOrm;
     fTrackChangesDeleted: TInt64DynArray; // TIDDynArray
@@ -1093,7 +1088,7 @@ type
   // - used e.g. by TRestOrmServerFullMemory
   TRestStorageInMemoryDynArray = array of TRestStorageInMemory;
 
-  /// class-reference type (metaclass) of our TObjectList memory-stored table storage
+  /// class-reference type (metaclass) of our TOrmObjArray memory-stored table storage
   // - may be TRestStorageInMemory or TRestStorageInMemoryExternal
   TRestStorageInMemoryClass = class of TRestStorageInMemory;
 
@@ -2079,7 +2074,7 @@ begin
     end;
   finally
     if result <= 0 then
-      rec.Free; // on success, rec is owned by fValue: TObjectList
+      rec.Free; // on success, rec is owned by fValue: TOrmObjArray
   end;
 end;
 
@@ -2148,7 +2143,7 @@ begin
   finally
     if (Encoding = encPutHexID) or
        (result <= 0) then
-      rec.Free; // on AddOne success, rec is owned by fValue: TObjectList
+      rec.Free; // on AddOne success, rec is owned by fValue: TOrmObjArray
   end;
 end;
 
