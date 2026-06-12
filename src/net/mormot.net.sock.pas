@@ -2076,6 +2076,8 @@ type
     // - returns TUri.Address as parsed from aUri
     constructor OpenUri(const aUri: TUri; const aUriFull, aTunnel: RawUtf8;
       aTimeOut: cardinal; aTLSContext: PNetTlsContext); overload; virtual;
+    /// constructor to replicate a client connection to a given URI
+    constructor OpenFrom(aClient: TCrtSocket); virtual;
     /// constructor to bind to an address
     // - just a wrapper around Create(aTimeOut) and BindPort()
     constructor Bind(const aAddress: RawUtf8; aLayer: TNetLayer = nlTcp;
@@ -6777,6 +6779,17 @@ begin
     on E: Exception do
       result := E.Message;
   end;
+end;
+
+constructor TCrtSocket.OpenFrom(aClient: TCrtSocket);
+begin
+  if (aClient = nil) or
+     (aClient.fWasBind in fFlags) then
+    DoRaise('OpenFrom: invalid client');
+  Tunnel := aClient.Tunnel;
+  TLS := aClient.TLS;
+  OnLog := aClient.OnLog;
+  OpenBind(aClient.Server, aClient.Port, {bind=}false, aClient.ServerTls);
 end;
 
 procedure TCrtSocket.AcceptRequest(aClientSock: TNetSocket; aClientAddr: PNetAddr);
