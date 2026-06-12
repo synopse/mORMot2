@@ -586,7 +586,7 @@ type
   public
     Url: RawUtf8;
     Thread: TLoggedWorkThread;
-    Stream: TStream;
+    Stream: TBackgroundPipeStream;
   end;
 
 function TTftpServerThread.SetRemote(const Uri: RawUtf8;
@@ -673,6 +673,8 @@ begin
   try
     status := c.Request(c.Url, 'GET', 30000, '', '', '', {asretry=}false,
       {instream=}nil, {outstream=}c.Stream);
+    if status <> HTTP_SUCCESS then
+      c.Stream.Abort; // to release and fail Context.FileStream.Read()
     fLog.Log(sllDebug, 'BackgroundGet=% size=%', [status, c.ContentLength], self);
   finally
     c.Free;
