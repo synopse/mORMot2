@@ -821,16 +821,13 @@ begin
     SetLength(result, n);
 end;
 
-// documented since Windows Vista, but actually available on Windows XP SP3 :)
-function RtlIpv6StringToAddress(s: PUtf8Char; var term: PUtf8Char; in6: PByte): integer;
-  stdcall; external ntdll name 'RtlIpv6StringToAddressA';
-
 function InetPton(text: PUtf8Char; value: PByte): boolean;
 var
   term: PUtf8Char;
 begin
   term := nil;
-  result := (RtlIpv6StringToAddress(text, term, value) = NO_ERROR) and
+  result := Assigned(RtlIpv6StringToAddress) and // resolved in mormot.core.os
+            (RtlIpv6StringToAddress(text, term, value) = NO_ERROR) and
             (term <> nil) and
             (term^ = #0); // requires full string match just like inet_pton()
 end;

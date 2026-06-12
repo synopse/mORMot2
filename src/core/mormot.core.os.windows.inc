@@ -5039,6 +5039,7 @@ begin
     else if IsWow64Emulation then
        OSVersionInfoEx := 'Prism'
     {$endif CPUINTEL};
+    RtlIpv6StringToAddress := LibraryResolve(h, 'RtlIpv6StringToAddressA');
   end;
   // 4. retrieve Software/Hardware information from Registry
   if reg.ReadOpen(wrLocalMachine, 'Software\Microsoft\Windows NT\CurrentVersion') then

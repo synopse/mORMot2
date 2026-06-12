@@ -2491,7 +2491,9 @@ var
   InitializeSRWLock,
   AcquireSRWLockExclusive,
   ReleaseSRWLockExclusive: procedure(var P: TOSLightMutex); stdcall;
-  TryAcquireSRWLockExclusive: function (var P: TOSLightMutex): BOOL; stdcall;
+  // documented since Windows Vista, but actually available on Windows XP SP3 :)
+  RtlIpv6StringToAddress: function(s: PUtf8Char; var term: PUtf8Char;
+    in6: PByte): integer; stdcall;
 
 {$else}
 
