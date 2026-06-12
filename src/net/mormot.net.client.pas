@@ -185,6 +185,8 @@ type
     UserAgent: RawUtf8;
     /// may be used to initialize this record on stack with zeroed values
     procedure Init;
+    /// may be used to initialize this record on stack with HTTP client values
+    procedure InitDefault;
     /// reset this record, calling FillZero() on Password/Token SpiUtf8 values
     procedure Clear;
     /// setup web authentication using the Basic access algorithm
@@ -3986,6 +3988,13 @@ begin
   RecordZero(@self, TypeInfo(THttpRequestExtendedOptions));
 end;
 
+procedure THttpRequestExtendedOptions.InitDefault;
+begin
+  Init;
+  RedirectMax := 4; // seems fair enough
+  RecreateConnectionAfterSecs := 30; // 30 secs idle -> reopen
+end;
+
 procedure THttpRequestExtendedOptions.Clear;
 begin
   FillZero(Auth.Password);
@@ -5290,8 +5299,7 @@ end;
 
 constructor TSimpleHttpClient.Create(aOnlyUseClientSocket: boolean);
 begin
-  fConnectOptions.RedirectMax := 4; // seems fair enough
-  fConnectOptions.RecreateConnectionAfterSecs := 30; // 30 secs idle -> reopen
+  fConnectOptions.InitDefault;
   {$ifdef USEHTTPREQUEST}
   fOnlyUseClientSocket := aOnlyUseClientSocket or
                           not MainHttpClass.IsAvailable;
