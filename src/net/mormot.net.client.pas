@@ -641,6 +641,10 @@ type
     procedure OpenBind(const aServer, aPort: RawUtf8; doBind: boolean;
       aTLS: boolean = false; aLayer: TNetLayer = nlTcp;
       aSock: TNetSocket = NO_SOCKET; aReusePort: boolean = false); override;
+    /// after Create(), open a client by cloning existing TCrtSocket parameters
+    // - here aClient is expected to be a THttpClientSocket instance, so that
+    // OpenOptions() could be called with all THttpRequestExtendedOptions
+    constructor OpenFrom(aClient: TCrtSocket); override;
     /// compare TUri and its options with the actual connection
     // - returns true if no new instance - i.e. Free + OpenOptions() - is needed
     // - only supports HTTP/HTTPS, not any custom RegisterNetClientProtocol()
@@ -2882,6 +2886,35 @@ begin
   aOptions.TLS := TLS; // copy back Peer information after connection
 end;
 
+constructor THttpClientSocket.OpenFrom(aClient: TCrtSocket);
+var
+  u: TUri;
+  o: THttpRequestExtendedOptions; // options are copied back with new Peer info
+begin
+  o := (aClient as THttpClientSocket).fExtendedOptions;
+  u.Clear;
+  u.Server := aClient.Server;
+  u.Port:= aClient.Port;
+  u.Https := aClient.ServerTls;
+  OpenOptions(u, o, aClient.OnLog);
+end;
+
+function THttpClientSocket.SameOpenOptions(const aUri: TUri;
+  const aOptions: THttpRequestExtendedOptions): boolean;
+var
+  tun: TUri;
+begin
+  result := (aUri.UriScheme in HTTP_SCHEME) and
+            aUri.Same(Server, Port, ServerTls) and
+            SameNetTlsContext(TLS, aOptions.TLS) and
+            fExtendedOptions.SameAuth(@aOptions.Auth);
+  if result then
+    if tun.From(aOptions.Proxy) then
+      result := tun.Same(Tunnel.Server, Tunnel.Port, Tunnel.Https)
+    else
+      result := (Tunnel.Server = '');
+end;
+
 procedure THttpClientSocket.OpenBind(const aServer, aPort: RawUtf8; doBind,
   aTLS: boolean; aLayer: TNetLayer; aSock: TNetSocket; aReusePort: boolean);
 var
@@ -2917,22 +2950,6 @@ begin
   else
     // regular socket creation if no proxy or toward https://
     inherited OpenBind(aServer, aPort, {doBind=}false, aTLS, aLayer);
-end;
-
-function THttpClientSocket.SameOpenOptions(const aUri: TUri;
-  const aOptions: THttpRequestExtendedOptions): boolean;
-var
-  tun: TUri;
-begin
-  result := (aUri.UriScheme in HTTP_SCHEME) and
-            aUri.Same(Server, Port, ServerTls) and
-            SameNetTlsContext(TLS, aOptions.TLS) and
-            fExtendedOptions.SameAuth(@aOptions.Auth);
-  if result then
-    if tun.From(aOptions.Proxy) then
-      result := tun.Same(Tunnel.Server, Tunnel.Port, Tunnel.Https)
-    else
-      result := (Tunnel.Server = '');
 end;
 
 function THttpClientSocket.RegisterCompress(aFunction: THttpSocketCompress;
