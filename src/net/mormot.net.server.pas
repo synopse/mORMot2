@@ -7602,22 +7602,22 @@ end;
 procedure THttpPeerCache.DirectFileNameBackgroundGet(Sender: TObject);
 var
   cs: THttpClientSocketPeerCache absolute Sender;
-  res: integer;
+  status: integer;
   endsize: Int64;
 begin
   // remote HTTP/HTTPS GET request executed in its own TLoggedWorkThread thread
   try
     try
       // make the actual blocking GET request in this background thread
-      res := cs.Request(cs.RemoteUri, 'GET', 30000, cs.RemoteHeaders, '', '',
+      status := cs.Request(cs.RemoteUri, 'GET', 30000, cs.RemoteHeaders, '', '',
         {AsRetry=}false, {instream=}nil, {outstream=}cs.DestStream);
       if fSettings = nil then
         exit; // shutdown
-      if not (res in HTTP_GET_OK) then
-        EHttpPeerCache.RaiseUtf8('GET % failed as %', [cs.RemoteUri, res]);
+      if not (status in HTTP_GET_OK) then
+        EHttpPeerCache.RaiseUtf8('GET % failed as %', [cs.RemoteUri, status]);
       endsize := cs.ExpectedHashOrRaiseEHttpPeerCache;
       fLog.Add.Log(sllTrace, 'DirectFileNameBackgroundGet(%)=% size=%',
-        [cs.DestFileName, res, endsize], self);
+        [cs.DestFileName, status, endsize], self);
     except
       on E: Exception do
         cs.AbortDownload(self, E);
