@@ -5453,6 +5453,7 @@ const
   SERVICE_USER_DEFINED_CONTROL = $0100;
   SERVICE_ALL_ACCESS           = $01ff;
 
+  // https://learn.microsoft.com/en-us/windows/win32/services/service-security-and-access-rights
   SC_MANAGER_CONNECT            = $0001;
   SC_MANAGER_CREATE_SERVICE     = $0002;
   SC_MANAGER_ENUMERATE_SERVICE  = $0004;

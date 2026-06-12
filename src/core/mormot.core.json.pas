@@ -25,8 +25,9 @@ interface
 uses
   classes,
   sysutils,
-  {$ifdef ISDELPHI}
-  typinfo, // for proper Delphi inlining
+  {$ifdef ISDELPHI} // needed for Delphi inlining
+  contnrs,
+  typinfo,
   {$endif ISDELPHI}
   mormot.core.base,
   mormot.core.os,
