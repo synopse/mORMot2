@@ -9511,6 +9511,7 @@ begin
   p := FindNameValue(NameValuePairs, UpperName);
   if p <> nil then
     repeat
+      len := 0;
       if UpperNameSeparator <> #0 then
         if p^ = UpperNameSeparator then
           inc(p) // e.g. THttpSocket.HeaderGetValue uses UpperNameSeparator=':'
@@ -9518,7 +9519,6 @@ begin
           break;
       while p^ in [#9, ' '] do // trim left
         inc(p);
-      len := 0;
       while p[len] > #13 do // end of line/value
         inc(len);
       while p[len - 1] = ' ' do  // trim right
