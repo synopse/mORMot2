@@ -2902,7 +2902,8 @@ type
     // - is thread-safe and non blocking during its lookup
     // - can optionally return micro seconds spent for actual filenames read on disk
     // - warning: aReadMs^ should be a 32-bit "integer" variable, not a PtrInt
-    function Find(const aSearched: TFileName; aReadMs: PInteger = nil): TFileName;
+    function Find(const aSearched: TFileName; aReadMs: PInteger = nil;
+      aFileNameUtf8: PRawUtf8 = nil): TFileName;
     /// how many file entries are currently in the internal list
     function Count: PtrInt;
     /// make a dynamic array copy of the internal file names, sorted by StrIComp
@@ -11320,7 +11321,7 @@ begin
 end;
 
 function TPosixFileCaseInsensitive.Find(const aSearched: TFileName;
-  aReadMs: PInteger): TFileName;
+  aReadMs: PInteger; aFileNameUtf8: PRawUtf8): TFileName;
 var
   start, stop: Int64;
   i: PtrInt;
@@ -11360,8 +11361,11 @@ begin
   try
     i := FastFindPUtf8CharSorted( // efficient O(log(n)) binary search
       pointer(fFiles), high(fFiles), pointer(fn), @StrIComp);
-    if i >= 0 then                       // return result = '' if not found
-      Utf8ToFileName(fFiles[i], result); // use exact file name case from OS
+    if i < 0 then
+      exit; // return result = '' if not found
+    if aFileNameUtf8 <> nil then
+      aFileNameUtf8^ := fFiles[i];
+    Utf8ToFileName(fFiles[i], result); // use exact file name case from OS
   finally
     fSafe.ReadUnLock;
   end;
