@@ -1758,6 +1758,9 @@ type
     // - supports RFC 3986 IPv6 litterals like 'https://[::1]:123/tata'
     // - returns TRUE if the Server has been extracted and is not ''
     function From(const aUri: RawUtf8; const DefaultPort: RawUtf8 = ''): boolean;
+    /// fill the members from a set of parameters and URI scheme
+    function FromScheme(aScheme: TUriScheme; const aServer: RawUtf8;
+      const aPort: RawUtf8 = ''): boolean;
     /// check if a connection need to be re-established to follow this URI
     function Same(const aServer, aPort: RawUtf8; aHttps: boolean): boolean;
     /// check if a connection need to be re-established to follow this URI
@@ -6315,6 +6318,27 @@ begin
   end;
   if Server <> '' then
     result := true;
+end;
+
+function TUri.FromScheme(aScheme: TUriScheme; const aServer, aPort: RawUtf8): boolean;
+begin
+  result := false;
+  Clear;
+  case aScheme of
+    usUndefined,
+    usCustom:
+      exit;
+    usHttps,
+    usWss:  // wss:// is just an upgraded https:
+      Https := true;
+    usUdp:  // 'udp://server:port'
+      Layer := nlUdp;
+  end;
+  Server := aServer;
+  Port := aPort;
+  if Port = '' then
+    Port := _US_PORT[aScheme];
+  result := Server <> '';
 end;
 
 function TUri.Same(const aServer, aPort: RawUtf8; aHttps: boolean): boolean;
