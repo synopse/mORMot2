@@ -5451,7 +5451,7 @@ const
   SERVICE_PAUSE_CONTINUE       = $0040;
   SERVICE_INTERROGATE          = $0080;
   SERVICE_USER_DEFINED_CONTROL = $0100;
-  SERVICE_ALL_ACCESS           = $01ff;
+  SERVICE_ALL_ACCESS           = STANDARD_RIGHTS_REQUIRED  or $01ff;
 
   // https://learn.microsoft.com/en-us/windows/win32/services/service-security-and-access-rights
   SC_MANAGER_CONNECT            = $0001;
