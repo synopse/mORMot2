@@ -3365,7 +3365,11 @@ procedure TrimCopy(const S: RawUtf8; start, count: PtrInt; var result: RawUtf8);
 procedure TrimCopyAssign(P: PAnsiChar; start, len: PtrInt; var result: RawUtf8);
 
 /// faster dedicated RawUtf8 version of delete(s, 1, 1) to avoid realloc
-procedure TrimFirstChar(var S: RawUtf8);
+procedure TrimFirstChar(var S: RawUtf8); overload;
+
+/// faster dedicated RawUtf8 version of "if s[1]=Startwith then delete(s, 1, 1)"
+procedure TrimFirstChar(var S: RawUtf8; StartWith: AnsiChar); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns the left part of a RawUtf8 string, according to SepStr separator
 // - if SepStr is found, returns Str first chars until (and excluding) SepStr
@@ -10054,6 +10058,16 @@ begin
   end
   else
     FastSetString(S, @PByteArray(S)[1], len); // need realloc
+end;
+
+procedure TrimFirstChar(var S: RawUtf8; StartWith: AnsiChar);
+var
+  p: PUtf8Char;
+begin
+  p := pointer(S);
+  if (p <> nil) and
+     (p^ = StartWith) then
+    TrimFirstChar(S);
 end;
 
 procedure TrimSelf(var S: RawUtf8);
