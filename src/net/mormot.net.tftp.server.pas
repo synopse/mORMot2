@@ -56,6 +56,7 @@ type
   // - ttoAllowSubFolders will allow RRW/WRQ to access nested files in
   // TTftpServerThread.FileFolder sub-directories
   // - ttoLowLevelLog will log each incoming/outgoing TFTP/UDP frames
+  // - ttoHttpVerboseLog will log RedirectUri() HTTP proxy request for debugging
   // - ttoDropPriviledges on POSIX would impersonate the process as 'nobody' -
   // but note that it is incompatible with the AutoRebind := true feature with
   // any port < 1024 which requires root priviledged for socket binding
@@ -71,10 +72,10 @@ type
     ttoNoWindowsize,
     ttoAllowSubFolders,
     ttoLowLevelLog,
+    ttoHttpVerboseLog,
     ttoDropPriviledges,
     ttoChangeRoot,
     ttoCaseInsensitiveFileName);
-
   TTftpThreadOptions = set of TTftpThreadOption;
 
   TTftpServerThread = class;
@@ -168,7 +169,8 @@ type
     // - return the internal >= 0 index in fRangeLow[], -1 on failure
     function RedirectUri(const UriPrefix, Remote: RawUtf8;
       MemCacheBytes: integer = 2 shl 20; Tls: PNetTlsContext = nil;
-      Schemes: TUriSchemes = [usHttp, usHttps, usFile]): PtrInt;
+      ExtOptions: PHttpRequestExtendedOptions = nil;
+      Schemes: TUriSchemes = [usHttp, usHttps]): PtrInt;
     /// notify the server thread(s) to be terminated, and wait for pending
     // threads to actually abort their background process
     procedure TerminateAndWaitFinished(TimeOutMs: integer = 5000); override;
@@ -510,11 +512,14 @@ begin
 end;
 
 function TTftpServerThread.RedirectUri(const UriPrefix, Remote: RawUtf8;
-  MemCacheBytes: integer; Tls: PNetTlsContext; Schemes: TUriSchemes): PtrInt;
+  MemCacheBytes: integer; Tls: PNetTlsContext;
+  ExtOptions: PHttpRequestExtendedOptions; Schemes: TUriSchemes): PtrInt;
 var
   one: TTftpServerRedirect;
+  opt: THttpRequestExtendedOptions;
   client: THttpClientSocket;
   up: RawUtf8;
+  onlog: TSynLogProc;
   u: TUri;
 begin
   result := -1;
@@ -541,11 +546,28 @@ begin
   end;
   AppendIfNone(u.Address, '/');
   // ensure the remote URI is valid by connecting to the server
+  if ExtOptions = nil then
+  begin
+    opt.Init; // all to 0, including RedirectMax=0
+    opt.RecreateConnectionAfterSecs := 30; // 30 secs idle -> reopen
+    if Tls <> nil then
+      opt.Tls := Tls^;
+  end
+  else
+    opt := ExtOptions^;
+  onlog := nil;
+  if (ttoHttpVerboseLog in fOptions) and
+     Assigned(fLogClass) then
+    onlog := fLogClass.DoLog;
   try
-    client := THttpClientSocket.OpenUri(u, Remote, '', 0, Tls);
+    client := THttpClientSocket.OpenOptions(u, opt, onlog);
   except
-    fLog.Log(sllWarning, 'RedirectUri OpenUri=% failed', [Remote], self);
-    exit;
+    on E: Exception do
+    begin
+      fLog.Log(sllWarning, 'RedirectUri OpenUri=% failed as %',
+               [Remote, E], self);
+      exit;
+    end;
   end;
   // append to the internal list
   one := TTftpServerRedirect.Create;
