@@ -143,10 +143,10 @@ type
     function GetContextOptions: TTftpContextOptions;
     // default implementation will read/write from FileFolder
     procedure SetFileFolder(const Value: TFileName);
-    procedure SetFileName(var Context: TTftpContext); virtual;
-    procedure SetLocal(const Uri: RawUtf8; var Context: TTftpContext); virtual;
-    procedure SetRemote(const Uri: RawUtf8; var Remote: TTftpServerRedirect;
-      var Context: TTftpContext); virtual;
+    function ParseUri(var Context: TTftpContext): TTftpError; virtual;
+    function SetLocal(var Uri: RawUtf8; var Context: TTftpContext): TTftpError; virtual;
+    function SetRemote(const Uri: RawUtf8; var Remote: TTftpServerRedirect;
+      var Context: TTftpContext): TTftpError; virtual;
     function SetRrqStream(var Context: TTftpContext): TTftpError; virtual;
     function SetWrqStream(var Context: TTftpContext): TTftpError; virtual;
     // main processing methods for all incoming frames
@@ -167,7 +167,7 @@ type
     /// register one sub-URI folder pointing to a remote HTTP location
     // - return the internal >= 0 index in fRangeLow[], -1 on failure
     function RedirectUri(const UriPrefix, Remote: RawUtf8;
-      MemCacheBytes: integer = 256 shl 10; Tls: PNetTlsContext = nil;
+      MemCacheBytes: integer = 2 shl 20; Tls: PNetTlsContext = nil;
       Schemes: TUriSchemes = [usHttp, usHttps, usFile]): PtrInt;
     /// notify the server thread(s) to be terminated, and wait for pending
     // threads to actually abort their background process
@@ -424,8 +424,8 @@ begin
       SourceFolder, ttoAllowSubFolders in fOptions);
   {$endif OSPOSIX}
   if CacheTimeoutSecs > 0 then
-    fFileCache := TSynDictionary.Create(
-      TypeInfo(TFileNameDynArray), TypeInfo(TRawByteStringDynArray),
+    fFileCache := TSynDictionary.Create({uri=}TypeInfo(TRawUtf8DynArray),
+        {content=}TypeInfo(TRawByteStringDynArray),
       PathCaseInsensitive, CacheTimeoutSecs);
 end;
 
@@ -498,6 +498,17 @@ begin
     result := fConnection.Count;
 end;
 
+procedure TTftpServerThread.SetFileFolder(const Value: TFileName);
+begin
+  if fFileFolder = Value then
+    exit;
+  fFileFolder := IncludeTrailingPathDelimiter(Value);
+  {$ifdef OSPOSIX}
+  if Assigned(fPosixFileNames) then
+    fPosixFileNames.Folder := fFileFolder;
+  {$endif OSPOSIX}
+end;
+
 function TTftpServerThread.RedirectUri(const UriPrefix, Remote: RawUtf8;
   MemCacheBytes: integer; Tls: PNetTlsContext; Schemes: TUriSchemes): PtrInt;
 var
@@ -507,6 +518,20 @@ var
   u: TUri;
 begin
   result := -1;
+  if not (ttoRrq in fOptions) then
+  begin
+    fLog.Log(sllWarning, 'RedirectUri with no RRQ support', self);
+    exit;
+  end;
+  // validate and prepare the UriPrefix parameter
+  up := UpperCase(StringReplaceChars(TrimU(UriPrefix), '\', '/'));
+  if (up = '') or
+     not IsAnsiCompatible(pointer(up)) then
+  begin
+    fLog.Log(sllWarning, 'RedirectUri uri=% failed', [UriPrefix], self);
+    exit;
+  end;
+  AppendIfNone(up, '/');
   // validate the Remote address parameter
   if not u.From(Remote) or
      not (u.UriScheme in Schemes) then
@@ -515,15 +540,6 @@ begin
     exit;
   end;
   AppendIfNone(u.Address, '/');
-  // validate and prepare the UriPrefix parameter
-  up := UpperCase(StringReplaceChars(TrimU(UriPrefix), '\', '/'));
-  if (up = '') or
-     not IsUrlValid(pointer(up)) then
-  begin
-    fLog.Log(sllWarning, 'RedirectUri uri=% failed', [UriPrefix], self);
-    exit;
-  end;
-  AppendIfNone(up, '/');
   // ensure the remote URI is valid by connecting to the server
   try
     client := THttpClientSocket.OpenUri(u, Remote, '', 0, Tls);
@@ -538,195 +554,203 @@ begin
   one.client := client;
   one.memcachesize := MemCacheBytes;
   result := ObjArrayAdd(fRedirect, one);
-  fLog.Log(sllDebug, 'RedirectUri: uri=% remote=%', [up, one.uri], self);
+  fLog.Log(sllDebug, 'RedirectUri=% uri=% remote=%', [result, up, one.uri], self);
 end;
 
-procedure TTftpServerThread.SetRemote(const Uri: RawUtf8;
-  var Remote: TTftpServerRedirect; var Context: TTftpContext);
+function TTftpServerThread.SetRemote(const Uri: RawUtf8;
+  var Remote: TTftpServerRedirect; var Context: TTftpContext): TTftpError;
 var
   url: RawUtf8;
-  fn: TFileName;
   cached: RawByteString;
-  status: integer;
   size: Int64;
+  status: integer;
 begin
+  // check and compute the full remote URL
+  result := teFileNotFound;
+  if (Uri = '') or
+     not IsAnsiCompatible(pointer(Uri)) then
+    exit;
   Join([Remote.uri, Uri], url);
   Remote.Lock; // protect main Remote.client connection (paranoid)
   try
-    // make a HEAD to the remote server and retrieve its size
+    // always perform a HEAD to the remote server and retrieve the resource size
     status := Remote.client.Head(url, 10000);
     size := Remote.client.ContentLength;
     fLog.Log(sllTrace, 'SetRemote: % HEAD=% size=%', [Uri, status, size], self);
     if (status <> HTTP_SUCCESS) or
-       (size <= 0) then
+       (size <= 0) or
+       (size >= RRQ_FILE_MAX) then
       exit;
-    // now we can return this resource: compute a fake TFileName
-    fn := MakeFileName([Remote.uri, Uri]);
-    // big files require its own HTTP connection
+    // now we can return this resource
     if size > Remote.memcachesize then
     begin
+      // big files require their own HTTP connection
 
       //Context.FileStream := TPipeHttpStream.Create;
+      fLog.Log(sllTrace, 'SetRemote: started background GET', self);
     end
     else
     begin
-      // smallest files first check from in-memory cache
-      if (not fFileCache.FindAndCopy(fn, cached)) or
+      // smallest files: first check from in-memory cache
+      if (not fFileCache.FindAndCopy(url, cached)) or
          (size <> length(cached)) then
       begin
-        // or download and cache from the main HTTP connection
+        // if unknown, download and cache from the main HTTP connection
         status := Remote.client.Get(url, 10000);
         cached := Remote.client.Content;
         fLog.Log(sllTrace, 'SetRemote: GET=% size=%', [status, length(cached)], self);
         if (status <> HTTP_SUCCESS) or
            (length(cached) <> size) then
           exit; // invalid download
-        fFileCache.AddOrUpdate(fn, cached);
-      end;
+        fFileCache.AddOrUpdate(url, cached);
+      end
+      else
+        fLog.Log(sllTrace, 'SetRemote: size=% from cache', [length(cached)], self);
       Context.FileStream := TRawByteStringStream.Create(cached);
     end;
     // success
-    Context.FileNameFull := fn;
+    Utf8ToFileName(url, Context.FileNameFull); // for logging and debug
+    result := teNoError;
   finally
     Remote.Unlock;
   end;
 end;
 
-procedure TTftpServerThread.SetFileFolder(const Value: TFileName);
-begin
-  if fFileFolder = Value then
-    exit;
-  fFileFolder := IncludeTrailingPathDelimiter(Value);
-  {$ifdef OSPOSIX}
-  fPosixFileNames.Folder := fFileFolder;
-  {$endif OSPOSIX}
-end;
-
-procedure TTftpServerThread.SetLocal(const Uri: RawUtf8;
-  var Context: TTftpContext);
+function TTftpServerThread.SetLocal(var Uri: RawUtf8;
+  var Context: TTftpContext): TTftpError;
 var
   fn: TFileName;
+  cached: RawByteString;
+  size: Int64;
   {$ifdef OSPOSIX}
   readms: integer;
   {$endif OSPOSIX}
 begin
+  result := teFileNotFound;
   Utf8ToFileName(Uri, fn);
+  // check the actual file on disk and create a proper Context.FileStream
   {$ifdef OSPOSIX}
   if Assigned(fPosixFileNames) then
   begin
-    fn := fPosixFileNames.Find(fn, @readms);
+    fn := fPosixFileNames.Find(fn, @readms, @Uri); // convert to actual casing
     if readms <> 0 then
       // e.g. 4392 filenames from /home/ab/dev/lib/ in 7.20ms
-      fLog.Log(sllDebug, 'GetFileName: cached % filenames from % in %',
+      fLog.Log(sllDebug, 'SetLocal: cached % filenames from % in %',
         [fPosixFileNames.Count, fFileFolder, MicroSecToString(readms)], self);
-    if fn = '' then
-      exit; // file does not exist
   end;
   {$endif OSPOSIX}
-  Context.FileNameFull := fFileFolder + fn;
+  case Context.OpCode of
+    toRrq:
+      begin
+        if fn = '' then
+          exit; // file does not exist after fPosixFileNames lookup
+        fn := fFileFolder + fn;
+        size := FileSize(fn);
+        if (size = 0) or
+           (size >= RRQ_FILE_MAX) then
+          exit;
+        // handle optional file cache in memory
+        if Assigned(fFileCache) and
+           (size < RRQ_CACHE_MAX) then
+        begin
+          if fFileCache.FindAndCopy(Uri, cached) and
+             (size = length(cached)) then
+            fLog.Log(sllTrace, 'SetLocal: % size=% from cache',
+              [Uri, length(cached)], self)
+          else
+          begin
+            // not yet available in cache, or changed on disk
+            cached := StringFromFile(fn);
+            fFileCache.AddOrUpdate(Uri, cached);
+            fLog.Log(sllTrace, 'SetLocal: % size=% to cache',
+              [Uri, length(cached)], self);
+          end;
+          Context.FileStream := TRawByteStringStream.Create(cached);
+        end
+        else
+          // return big files directly from disk, with 128KB buffering
+          Context.FileStream := TBufferedStreamReader.Create(fn, RRQ_MEM_CHUNK);
+      end;
+    toWrq:
+      begin
+        result := teFileAlreadyExists;
+        fn := fFileFolder + fn;
+        if FileExists(fn) then
+          exit;
+        Context.FileStream := TFileStreamEx.Create(fn, fmCreate);
+      end;
+  else
+    begin
+      result := teIllegalOperation;
+      exit;
+    end;
+  end;
+  // success
+  Context.FileNameFull := fn; // for logging and debug
+  result := teNoError;
 end;
 
-procedure TTftpServerThread.SetFileName(var Context: TTftpContext);
+function TTftpServerThread.ParseUri(var Context: TTftpContext): TTftpError;
 var
   i: PtrInt;
   r: ^TTftpServerRedirect;
   u: RawUtf8;
 begin
-  // validate the input file
+  result := teFileNotFound;
+  // validate the input resource
   u := Context.FileName;
   NormalizeFileNameU(u);
-  repeat
-    if u = '' then
-      exit;
-    if not (u[1] in ['/', '\']) then
-      break;
-    delete(u, 1, 1); // trim any leading path delimiter
-  until false;
-  if not SafeFileNameU(u) then
+  TrimFirstChar(u, PathDelim); // trim any leading path delimiter
+  if (u = '') or
+     not SafeFileNameU(u) then
     exit;
   // try any RedirectUri() registration
-  r := pointer(fRedirect);
-  if r <> nil then
-    for i := 1 to length(fRedirect) do
-    begin
-      if IdemPChar(pointer(u), pointer(r^.up)) then
+  if Context.OpCode = toRrq then
+  begin
+    r := pointer(fRedirect);
+    if r <> nil then
+      for i := 1 to length(fRedirect) do
       begin
-        SetRemote(u, r^, Context);
-        exit;
+        if IdemPChar(pointer(u), pointer(r^.up)) then
+        begin
+          delete(u, 1, length(r^.up)); // trim /local/uri/
+          result := SetRemote(u, r^, Context);
+          exit;
+        end;
+        inc(r);
       end;
-      inc(r);
-    end;
-  // serve this file from the main FileFolder
+  end;
+  // download/upload this file from the main FileFolder
   if (ttoAllowSubFolders in fOptions) or
      (PosExChar(PathDelim, u) = 0) then
-    SetLocal(u, Context);
+    result := SetLocal(u, Context);
 end;
 
 function TTftpServerThread.SetRrqStream(var Context: TTftpContext): TTftpError;
-var
-  fsize: Int64;
-  cached: RawByteString;
 begin
-  // ensure this server allows RRQ
-  result := teIllegalOperation;
-  if not (ttoRrq in fOptions) then
-    exit;
-  // OnConnect() callback may have set something
-  result := teNoError;
-  if Context.FileStream <> nil then
-    exit;
-  // parse the requested Context.FileName
-  result := teFileNotFound;
-  if Context.FileNameFull = '' then
-    SetFileName(Context);
-  if Context.FileNameFull = '' then
-    exit;
-  // GetFileName() may have set something
-  result := teNoError;
-  if Context.FileStream <> nil then
-    exit;
-  // check the actual file on disk
-  result := teFileNotFound;
-  fsize := FileSize(Context.FileNameFull);
-  if (fsize = 0) or
-     (fsize >= RRQ_FILE_MAX) then
-    exit;
-  // handle optional file cache in memory
-  if Assigned(fFileCache) and
-     (fsize < RRQ_CACHE_MAX) then
-    if (not fFileCache.FindAndCopy(Context.FileNameFull, cached)) or
-       (fsize <> length(cached)) then
-    begin
-      // not yet available in cache, or changed on disk
-      cached := StringFromFile(Context.FileNameFull);
-      fFileCache.AddOrUpdate(Context.FileNameFull, cached);
-    end;
-  // set the proper Context.FileStream from memory cache or disk
-  result := teNoError;
-  if cached <> '' then
-    Context.FileStream := TRawByteStringStream.Create(cached)
+  if ttoRrq in fOptions then
+    if Context.FileStream <> nil then
+      // OnConnect() callback have set something
+      result := teNoError
+    else
+      // parse Context.FileName and call SetLocal/SetRemote to set FileStream
+      result := ParseUri(Context)
   else
-    Context.FileStream := TBufferedStreamReader.Create(
-                            Context.FileNameFull, RRQ_MEM_CHUNK);
+    // ensure this server is not configured to allow RRQ
+    result := teIllegalOperation;
 end;
 
 function TTftpServerThread.SetWrqStream(var Context: TTftpContext): TTftpError;
 begin
   if ttoWrq in fOptions then
-  begin
-    if Context.FileStream = nil then
-    begin
-      result := teFileAlreadyExists;
-      if Context.FileNameFull = '' then // if not set by OnConnect() callback
-        SetFileName(Context);
-      if (Context.FileNameFull = '') or
-         FileExists(Context.FileNameFull) then
-        exit;
-      Context.FileStream := TFileStreamEx.Create(Context.FileNameFull, fmCreate);
-    end;
-    result := teNoError;
-  end
+    if Context.FileStream <> nil then
+      // OnConnect() callback have set something
+      result := teNoError
+    else
+      // parse Context.FileName and call SetLocal to set FileStream
+      result := ParseUri(Context)
   else
+    // ensure this server is not configured to allow WRQ
     result := teIllegalOperation;
 end;
 
@@ -807,7 +831,7 @@ begin
   c.Remote := remote;
   c.Frame := pointer(fFrame);
   res := c.ParseRequestFileName(len, GetContextOptions);
-  // allow any kind of customization (e.g. c.FileNameFull)
+  // allow any kind of customization (e.g. c.FileNameFull/FileStream)
   if Assigned(fOnConnect) and
      (res = teNoError) then
     res := fOnConnect(self, c);
