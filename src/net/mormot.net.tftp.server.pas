@@ -35,6 +35,8 @@ uses
   mormot.core.buffers,
   mormot.core.json,
   mormot.net.sock,
+  mormot.net.http,
+  mormot.net.client, // for IHttpClient
   mormot.net.server, // for TUdpServerThread
   mormot.net.tftp.client;
 
@@ -141,7 +143,10 @@ type
     function GetContextOptions: TTftpContextOptions;
     // default implementation will read/write from FileFolder
     procedure SetFileFolder(const Value: TFileName);
-    function GetFileName(const RequestedFileName: RawUtf8): TFileName; virtual;
+    procedure SetFileName(var Context: TTftpContext); virtual;
+    procedure SetLocal(const Uri: RawUtf8; var Context: TTftpContext); virtual;
+    procedure SetRemote(const Uri: RawUtf8; var Remote: TTftpServerRedirect;
+      var Context: TTftpContext); virtual;
     function SetRrqStream(var Context: TTftpContext): TTftpError; virtual;
     function SetWrqStream(var Context: TTftpContext): TTftpError; virtual;
     // main processing methods for all incoming frames
@@ -553,7 +558,7 @@ begin
        (size <= 0) then
       exit;
     // now we can return this resource: compute a fake TFileName
-    fn := Make([Remote.uri, Uri]);
+    fn := MakeFileName([Remote.uri, Uri]);
     // big files require its own HTTP connection
     if size > Remote.memcachesize then
     begin
@@ -594,16 +599,38 @@ begin
   {$endif OSPOSIX}
 end;
 
-function TTftpServerThread.GetFileName(const RequestedFileName: RawUtf8): TFileName;
+procedure TTftpServerThread.SetLocal(const Uri: RawUtf8;
+  var Context: TTftpContext);
 var
-  u: RawUtf8;
   fn: TFileName;
   {$ifdef OSPOSIX}
   readms: integer;
   {$endif OSPOSIX}
 begin
-  result := '';
-  u := RequestedFileName;
+  Utf8ToFileName(Uri, fn);
+  {$ifdef OSPOSIX}
+  if Assigned(fPosixFileNames) then
+  begin
+    fn := fPosixFileNames.Find(fn, @readms);
+    if readms <> 0 then
+      // e.g. 4392 filenames from /home/ab/dev/lib/ in 7.20ms
+      fLog.Log(sllDebug, 'GetFileName: cached % filenames from % in %',
+        [fPosixFileNames.Count, fFileFolder, MicroSecToString(readms)], self);
+    if fn = '' then
+      exit; // file does not exist
+  end;
+  {$endif OSPOSIX}
+  Context.FileNameFull := fFileFolder + fn;
+end;
+
+procedure TTftpServerThread.SetFileName(var Context: TTftpContext);
+var
+  i: PtrInt;
+  r: ^TTftpServerRedirect;
+  u: RawUtf8;
+begin
+  // validate the input file
+  u := Context.FileName;
   NormalizeFileNameU(u);
   repeat
     if u = '' then
@@ -612,25 +639,24 @@ begin
       break;
     delete(u, 1, 1); // trim any leading path delimiter
   until false;
-  if SafeFileNameU(u) and
-     ((ttoAllowSubFolders in fOptions) or
-      (PosExChar(PathDelim, u) = 0)) then
-  begin
-    Utf8ToFileName(u, fn);
-    {$ifdef OSPOSIX}
-    if Assigned(fPosixFileNames) then
+  if not SafeFileNameU(u) then
+    exit;
+  // try any RedirectUri() registration
+  r := pointer(fRedirect);
+  if r <> nil then
+    for i := 1 to length(fRedirect) do
     begin
-      fn := fPosixFileNames.Find(fn, @readms);
-      if readms <> 0 then
-        // e.g. 4392 filenames from /home/ab/dev/lib/ in 7.20ms
-        fLog.Log(sllDebug, 'GetFileName: cached % filenames from % in %',
-          [fPosixFileNames.Count, fFileFolder, MicroSecToString(readms)], self);
-      if fn = '' then
-        exit; // file does not exist
+      if IdemPChar(pointer(u), pointer(r^.up)) then
+      begin
+        SetRemote(u, r^, Context);
+        exit;
+      end;
+      inc(r);
     end;
-    {$endif OSPOSIX}
-    result := fFileFolder + fn;
-  end;
+  // serve this file from the main FileFolder
+  if (ttoAllowSubFolders in fOptions) or
+     (PosExChar(PathDelim, u) = 0) then
+    SetLocal(u, Context);
 end;
 
 const
@@ -643,38 +669,47 @@ var
   fsize: Int64;
   cached: RawByteString;
 begin
-  if ttoRrq in fOptions then
-  begin
-    if Context.FileStream = nil then
+  // ensure this server allows RRQ
+  result := teIllegalOperation;
+  if not (ttoRrq in fOptions) then
+    exit;
+  // OnConnect() callback may have set something
+  result := teNoError;
+  if Context.FileStream <> nil then
+    exit;
+  // parse the requested Context.FileName
+  result := teFileNotFound;
+  if Context.FileNameFull = '' then
+    SetFileName(Context);
+  if Context.FileNameFull = '' then
+    exit;
+  // GetFileName() may have set something
+  result := teNoError;
+  if Context.FileStream <> nil then
+    exit;
+  // check the actual file on disk
+  result := teFileNotFound;
+  fsize := FileSize(Context.FileNameFull);
+  if (fsize = 0) or
+     (fsize >= RRQ_FILE_MAX) then
+    exit;
+  // handle optional file cache in memory
+  if Assigned(fFileCache) and
+     (fsize < RRQ_CACHE_MAX) then
+    if (not fFileCache.FindAndCopy(Context.FileNameFull, cached)) or
+       (fsize <> length(cached)) then
     begin
-      result := teFileNotFound;
-      if Context.FileNameFull = '' then // if not set by OnConnect() callback
-        Context.FileNameFull := GetFileName(Context.FileName);
-      if Context.FileNameFull = '' then
-        exit;
-      fsize := FileSize(Context.FileNameFull);
-      if (fsize = 0) or
-         (fsize >= RRQ_FILE_MAX) then
-        exit;
-      if Assigned(fFileCache) and
-         (fsize < RRQ_CACHE_MAX) then
-        if (not fFileCache.FindAndCopy(Context.FileNameFull, cached)) or
-           (fsize <> length(cached)) then
-        begin
-          // not yet available in cache, or changed on disk
-          cached := StringFromFile(Context.FileNameFull);
-          fFileCache.AddOrUpdate(Context.FileNameFull, cached);
-        end;
-      if cached <> '' then
-        Context.FileStream := TRawByteStringStream.Create(cached)
-      else
-        Context.FileStream := TBufferedStreamReader.Create(
-                                Context.FileNameFull, RRQ_MEM_CHUNK);
+      // not yet available in cache, or changed on disk
+      cached := StringFromFile(Context.FileNameFull);
+      fFileCache.AddOrUpdate(Context.FileNameFull, cached);
     end;
-    result := teNoError;
-  end
+  // set the proper Context.FileStream from memory cache or disk
+  result := teNoError;
+  if cached <> '' then
+    Context.FileStream := TRawByteStringStream.Create(cached)
   else
-    result := teIllegalOperation;
+    Context.FileStream := TBufferedStreamReader.Create(
+                            Context.FileNameFull, RRQ_MEM_CHUNK);
 end;
 
 function TTftpServerThread.SetWrqStream(var Context: TTftpContext): TTftpError;
@@ -685,7 +720,7 @@ begin
     begin
       result := teFileAlreadyExists;
       if Context.FileNameFull = '' then // if not set by OnConnect() callback
-        Context.FileNameFull := GetFileName(Context.FileName);
+        SetFileName(Context);
       if (Context.FileNameFull = '') or
          FileExists(Context.FileNameFull) then
         exit;
