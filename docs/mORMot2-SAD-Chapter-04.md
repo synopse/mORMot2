@@ -11,6 +11,8 @@ The mORMot 2 framework uses custom low-level types, classes, and functions inste
 
 In mORMot 1, most of this functionality resided in a single 2.3MB `SynCommons.pas` file. In mORMot 2, this has been split into **26 focused units** in the `mormot.core.*` namespace, following SOLID principles.
 
+> **✅ Recommended default:** for a one-screen answer to *"which of these types should I actually use, and when?"*, see the [Recommended Patterns & Default Toolbox](mORMot2-SAD-Recommended-Patterns.md) guide. This chapter explains *what exists*; that guide tells you *what to pick by default*.
+
 ---
 
 ## 4.1. Conditional Defines

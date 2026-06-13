@@ -12,6 +12,8 @@ When comparing ORM to raw SQL, several advantages stand out:
 
 This chapter covers practical patterns for daily ORM usage in mORMot 2.
 
+> **✅ Recommended default:** for the consolidated "default starting point for a new service" — storage behind `IRestOrm`, the DTO/mapper pattern, instance modes — see the [Recommended Patterns & Default Toolbox](mORMot2-SAD-Recommended-Patterns.md) guide.
+
 ---
 
 ## 6.1. ORM is Not Just Database
