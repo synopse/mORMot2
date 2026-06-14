@@ -576,7 +576,23 @@ var
  already require at least 21 chars, which is very unlikely in practice.
  It uses 1000 rounds by default, and you can customize the password derivation
  using overridden parameters in JSON format instead of the plain password,
- following TSynSignerParams fields.
+ following TSynSignerParams fields, forcing e.g. a custom salt and 100000 rounds.
+
+ TODO: if stronger encryption is needed, we could implement the following
+       scheme, slightly slower than plain AES-CTR but much safer:
+ 1) change the bytes 0..3 into "SQL1" as encryption version magic
+                     4..7 into a 32-bit random seed for each file
+    then Pbkdf2 salt=SHA256(bytes 0..7) and enable point 2)
+    note that reqular 'SQLite3 ' magic in 0..7 fallback to AES-CTR encryption
+ 2) reserve 16 bytes per page (need to patch sqlite3.c) and store:
+    8-byte:nonce64 8-byte:MAC with nonce64=Random128.Lo for each write
+    then IV=(pagenum32||nonce64) and
+         MAC=trunc64(AES-GCM TAG) and AAD=pagenum
+    (alternative: MAC=trunc64(HMACSHA256(macKey,pagenum||nonce||ciphtertext) but
+                  macKey from userPassword could be stored in TAesContext.buf)
+    (note: a 64-bit nonce is enough since P(collision)=npagerewrites^2/2^65)
+ 3) enable BCrypt and SCrypt as additional hashing algorithms
+
 }
 
 const
@@ -592,7 +608,7 @@ var
 begin
   if SizeOf(TAes) > KEYLENGTH then
     ESqlite3Exception.RaiseUtf8('CodecGenerateKey: TAes=%', [SizeOf(TAes)]);
-  // userPassword may be TSynSignerParams JSON content
+  // userPassword may be TSynSignerParams JSON content with its custom salt
   s.Pbkdf2(userPassword, passwordLength, k, CODEC_PBKDF2_SALT);
   s.AssignTo(k, aes, {encrypt=}true);
 end;
@@ -637,7 +653,7 @@ begin
     if (PInt64(data)^ = SQLITE_FILE_HEADER128.lo) and
        (data[21] = #64) and
        (data[22] = #32) and
-       (data[23] = #32) then
+       (data[23] = #32) then // 0..15=header 16..23=unencrypted
       if encrypt then
       begin
         plain := PInt64(data + 16)^;
