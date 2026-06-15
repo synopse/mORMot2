@@ -2044,6 +2044,7 @@ type
       error: TNetResult = nrOK; errnumber: PNetErrorInt = nil;
       exc: ENetSockClass = nil); overload;
     procedure DoRaise(const msg: string); overload;
+    procedure DoOpenTunnel(aTls: boolean);
     procedure SetKeepAlive(aSeconds: integer); virtual;
     procedure SetLinger(aLinger: integer); virtual;
     procedure SetReceiveTimeout(aReceiveTimeout: integer); virtual;
@@ -2734,7 +2735,8 @@ begin
   result := true;
 end;
 
-procedure TNetHostCache.SafeAdd(const hostname: RawUtf8; ip4: TNetIP4; deprec: cardinal);
+procedure TNetHostCache.SafeAdd(const hostname: RawUtf8; ip4: TNetIP4;
+  deprec: cardinal);
 begin
   Safe.Lock;
   if deprec <> 0 then
@@ -2838,7 +2840,7 @@ begin
     AF_INET6:
       result := SizeOf(TSockAddrIn6);
   else
-    result := SizeOf(Addr);
+    result := SizeOf(Addr); // assume AF_UNIX
   end;
 end;
 
@@ -6678,15 +6680,66 @@ begin
     aAddress^ := u.Address;
 end;
 
-procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8; doBind,
-  aTLS: boolean; aLayer: TNetLayer; aSock: TNetSocket; aReusePort: boolean);
+procedure TCrtSocket.DoOpenTunnel(aTls: boolean);
 var
-  retry: integer;
   s: RawUtf8;
   res: TNetResult;
   addr: TNetAddr;
 begin
+  fProxyUrl := Tunnel.URI;
+  if Tunnel.Https and aTls then
+    // single TLS parameter for either the Tunnel or the destination
+    DoRaise('Open(%s:%s): %s proxy - unsupported dual TLS layers',
+      [fServer, fPort, fProxyUrl]);
+  res := nrOk;
+  try
+    res := NewTcpClientSocket(Tunnel.Server, Tunnel.Port, fTimeout,
+             fSock, @addr, {retry=}2);
+    if res = nrOK then
+    begin
+      addr.IP(fRemoteIP, {withport=}true);
+      fSocketFamily := addr.Family;
+      include(fFlags, fProxyConnect);
+      res := nrRefused;
+      if Tunnel.Https then
+        DoTlsAfter(cstaConnect); // the proxy requires a TLS connection
+      SockSendLine(['CONNECT ', fServer, ':', fPort, ' HTTP/1.0']);
+      if Tunnel.User <> '' then
+        SockSendLine(['Proxy-Authorization: Basic ', Tunnel.UserPasswordBase64]);
+      SockSendFlush(#13#10);
+      repeat
+        SockRecvLn(s);
+        if NetStartWith(pointer(s), 'HTTP/') and
+           (length(s) > 11) and
+           (s[10] = '2') then // 'HTTP/1.1 2xx xxxx' success
+          res := nrOK;
+      until s = ''; // end of response headers
+    end;
+  except
+    on E: Exception do
+      DoRaise('Open(%s:%s): %s proxy error %s',
+        [fServer, fPort, fProxyUrl, E.Message]);
+  end;
+  if res <> nrOk then
+    DoRaise('Open(%s:%s): %s proxy error',
+      [fServer, fPort, fProxyUrl], res);
+  if Assigned(OnLog) then
+    OnLog(sllTrace, 'Open(%:%) via proxy CONNECT %',
+      [fServer, fPort, fProxyUrl], self);
+  if aTls then
+    DoTlsAfter(cstaConnect); // raw TLS negotation after CONNECT
+end;
+
+procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8; doBind,
+  aTLS: boolean; aLayer: TNetLayer; aSock: TNetSocket; aReusePort: boolean);
+var
+  retry: integer;
+  res: TNetResult;
+  addr: TNetAddr;
+begin
   ResetNetTlsContext(TLS); // TLS.Enabled is set at output if aTLS=true
+  if IsUnix(pointer(aServer)) then
+    aLayer := nlUnix;      // as detected by NewSocket() below
   fSocketLayer := aLayer;
   fSocketFamily := nfUnknown;
   fFlags := [];
@@ -6711,70 +6764,22 @@ begin
             (aLayer = nlTcp) then
     begin
       // HTTP(S) tunnelling via CONNECT - see also THttpClientSocket.OpenBind
-      fProxyUrl := Tunnel.URI;
-      if Tunnel.Https and aTLS then
-        // single TLS parameter for either the Tunnel or the destination
-        DoRaise('Open(%s:%s): %s proxy - unsupported dual TLS layers',
-          [fServer, fPort, fProxyUrl]);
-      res := nrOk;
-      try
-        res := NewSocket(Tunnel.Server, Tunnel.Port, nlTcp, {doBind=}false,
-          fTimeout, fTimeout, fTimeout, {retry=}2, fSock, @addr);
-        if res = nrOK then
-        begin
-          addr.IP(fRemoteIP, true);
-          fSocketFamily := addr.Family;
-          include(fFlags, fProxyConnect);
-          res := nrRefused;
-          if Tunnel.Https then
-            DoTlsAfter(cstaConnect); // the proxy requires a TLS connection
-          SockSendLine(['CONNECT ', fServer, ':', fPort, ' HTTP/1.0']);
-          if Tunnel.User <> '' then
-            SockSendLine(['Proxy-Authorization: Basic ', Tunnel.UserPasswordBase64]);
-          SockSendFlush(#13#10);
-          repeat
-            SockRecvLn(s);
-            if NetStartWith(pointer(s), 'HTTP/') and
-               (length(s) > 11) and
-               (s[10] = '2') then // 'HTTP/1.1 2xx xxxx' success
-              res := nrOK;
-          until s = ''; // end of response headers
-        end;
-      except
-        on E: Exception do
-          DoRaise('Open(%s:%s): %s proxy error %s',
-            [fServer, fPort, fProxyUrl, E.Message]);
-      end;
-      if res <> nrOk then
-        DoRaise('Open(%s:%s): %s proxy error',
-          [fServer, fPort, fProxyUrl], res);
-      if Assigned(OnLog) then
-        OnLog(sllTrace, 'Open(%:%) via proxy CONNECT %',
-          [fServer, fPort, fProxyUrl], self);
-      if aTLS then
-        DoTlsAfter(cstaConnect); // raw TLS negotation after CONNECT
+      DoOpenTunnel(aTLS);
       exit;
     end
     else
       // direct client connection
       retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
-    s := fServer;
-    {$ifdef OSPOSIX}
-    // check if aServer is 'unix:/path/to/myapp.socket' with default nlTcp
-    if (aLayer = nlTcp) and
-       NetStartWith(pointer(s), 'UNIX:') then
-    begin
-      aLayer := nlUnix;
-      delete(s, 1, 5);
-    end;
-    {$endif OSPOSIX}
     //if Assigned(OnLog) then
     //  OnLog(sllTrace, 'Before NewSocket', [], self);
-    res := NewSocket(s, fPort, aLayer, doBind, fTimeout, fTimeout, fTimeout,
-                     retry, fSock, @addr, aReusePort);
+    res := NewSocket(fServer, fPort, aLayer, doBind,
+             fTimeout, fTimeout, fTimeout, retry, fSock, @addr, aReusePort);
     //if Assigned(OnLog) then
     //  OnLog(sllTrace, 'After NewSocket=%', [_NR[res]], self);
     addr.IP(fRemoteIP, true);
+    if  doBind and
+        (fPort = '0') then
+      addr.PortText(fPort); // retrieve the ephemeral port
     if res <> nrOK then
       DoRaise('OpenBind(%s:%s): %s [remoteip=%s]',
         [fServer, fPort, BINDMSG[doBind], fRemoteIP], res);
