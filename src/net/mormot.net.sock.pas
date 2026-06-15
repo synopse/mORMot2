@@ -4093,7 +4093,7 @@ begin
   // call proper OS API for RFC 4291 parsing
   if value = nil then // value is optional, just like NetIsIP4()
     value := @dummy;  // but the OS API requires some destination buffer
-  result := InetPton(text, value);
+  result := Inet6Pton(text, value);
 end;
 
 function ToIP6(const text: RawUtf8; var value: TNetIP6): boolean;

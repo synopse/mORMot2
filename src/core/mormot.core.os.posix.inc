@@ -5837,13 +5837,13 @@ begin
     P := pointer(auxv);
     while auxv[0] <> 0 do
     begin
-      if auxv[0] = 25 then  // AT_RANDOM: 16 random bytes (used for stacks canary)
-        with SystemEntropy do // should be available from 2.6.29 on glibc
+      if auxv[0] = 25 then    // AT_RANDOM: 16 random bytes (for stack canaries)
+        with SystemEntropy do // available since kernel 2.6.29
         begin
           LiveFeed := PHash128Rec(auxv[1])^; // great initial source from Kernel
           XorMemory(Startup, PHash128Rec(auxv[1])^); // won't hurt
         end;
-      auxv := @auxv[2];
+      auxv := @auxv[2];       // go until the end for crc32c128() below
     end;
     crc32c128(@SystemEntropy.Startup, P, PAnsiChar(auxv) - P); // all auxv info
   end;

@@ -582,7 +582,7 @@ var
        scheme, slightly slower than plain AES-CTR but much safer:
  1) change the bytes 0..3 into "SQL1" as encryption version magic
                      4..7 into a 32-bit random seed for each file
-    then Pbkdf2 salt=SHA256(bytes 0..7) and enable point 2)
+    then Pbkdf2(password) with salt=SHA256(bytes 0..7) and enable point 2)
     note that reqular 'SQLite3 ' magic in 0..7 fallback to AES-CTR encryption
  2) reserve 16 bytes per page (need to patch sqlite3.c) and store:
     8-byte:nonce64 8-byte:MAC with nonce64=Random128.Lo for each write

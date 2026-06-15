@@ -555,7 +555,7 @@ begin
   else
     // first check most simple IPv4/IPv6 resolution (maybe using mormot.net.dns)
     if SetFromIP4(address, false) or
-       SetFromIP6(address) or // InetPton() OS API is faster than getaddrinfo
+       SetFromIP6(address) or // Inet6Pton() OS API is faster than getaddrinfo
        // fallback to OS getaddrinfo() resolution, first try as IPv4, then IPv6
        SetWinAddr(address, addrport, AF_INET,  layer, Addr) or
        SetWinAddr(address, addrport, AF_INET6, layer, Addr) then
@@ -821,7 +821,7 @@ begin
     SetLength(result, n);
 end;
 
-function InetPton(text: PUtf8Char; value: PByte): boolean;
+function Inet6Pton(text: PUtf8Char; value: PByte): boolean;
 var
   term: PUtf8Char;
 begin

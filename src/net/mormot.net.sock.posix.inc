@@ -499,6 +499,7 @@ function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
 var
   h: PHostEnt;
+  len: PtrInt;
   ad4: TSockAddr absolute Addr;
   ad6: TSockAddrIn6 absolute Addr;
   adu: TSockAddrUnix absolute Addr;
@@ -511,16 +512,14 @@ begin
   if layer = nlUnix then
   begin
     // socket file name is just copied to the address struct
-    if length(address) >= SizeOf(adu.sun_path) then
+    len := length(address);
+    if len >= SizeOf(adu.sun_path) then
       // avoid buffer overflow or truncated socket name
       result := nrInvalidParameter
     else
     begin
-      adu.sun_family := AF_UNIX;
-      {$ifdef SOCK_HAS_SINLEN}
-      adu.sun_len := SOCKADDR_SIZE; // mandatory on OpenBSD - FreeBSD/Darwin allow 0
-      {$endif SOCK_HAS_SINLEN}
-      MoveFast(pointer(address)^, adu.sun_path, length(address) + 1); // +1 for #0
+      MoveFast(pointer(address)^, adu.sun_path, len + 1); // +1 for #0
+      SetFamily(AF_UNIX);
       result := nrOK;
     end;
     exit;
@@ -542,7 +541,6 @@ begin
       result := nrNotFound
     else
     begin
-      SetFamily(h^.h_addrtype);
       case h^.h_addrtype of
         AF_INET:
            ad4.sin_addr := h^.h_addr^^;
@@ -550,7 +548,9 @@ begin
            ad6.sin6_addr := h^.h_addr6^^;
       else
         result := nrNotImplemented;
+        exit;
       end;
+      SetFamily(h^.h_addrtype);
     end;
   finally
     _gethostbynamesafe.UnLock;

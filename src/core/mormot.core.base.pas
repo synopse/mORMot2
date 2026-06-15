@@ -11544,7 +11544,7 @@ end;
 
 {$ifdef FPC}
 
-const
+const // architecture-independent Linux UAPI auxiliary vector definitions
   AT_HWCAP  = 16;
   AT_RANDOM = 25;
   AT_HWCAP2 = 26;
@@ -11574,7 +11574,7 @@ begin
         AT_HWCAP2:
           caps[1] := p[1];
         AT_RANDOM: // 16 random bytes (used as stacks canaries) are just perfect
-          XorMemory(BaseEntropy.r[3], PHash128Rec(p[1])^); // 2.6.29 + glibc
+          XorMemory(BaseEntropy.r[3], PHash128Rec(p[1])^); // kernel 2.6.29
       end;
       inc(e^, ((p[0] shl 20) xor p[1]) * 3266489917); // fill BaseEntropy
       inc(e);
