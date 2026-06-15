@@ -2052,17 +2052,19 @@ procedure MsgToShort(const msg: THttpPeerCacheMessage; var result: ShortString);
 /// hash a normalized URL and the "Etag:" or "Last-Modified:" headers
 // - could be used to identify a HTTP resource as a binary hash on a given server
 // - aHeaders could be supplied as nil so that only the URI resource is hashed
+// - aUpCaseUri=true would force aUri to be hashed as uppercase
 // - returns 0 if aUrl/aHeaders have not enough information
 // - returns the number of hash bytes written to aDigest.Bin
-function HttpRequestHash(aAlgo: THashAlgo; const aUri: TUri;
-  aHeaders: PUtf8Char; out aDigest: THashDigest): integer;
+function HttpRequestHash(aAlgo: THashAlgo; const aUri: TUri; aHeaders: PUtf8Char;
+  out aDigest: THashDigest; aUpCaseUri: boolean = false): integer;
 
 /// hash an URL and the "Etag:" or "Last-Modified:" headers into 32 ascii chars
 // - aHeaders could be supplied as nil so that only the URI resource is hashed
+// - aUpCaseUri=true would force aUri to be hashed as uppercase
 // - using SHA-256 and lowercase Base-32 encoding, so perfect for a file name
 // - with Base-32, 32 chars means 160-bit or 20 bytes into aDig^ binary hash
 function HttpRequestHashBase32(const aUri: TUri; aName: PShort32 = nil;
-  aHeaders: PUtf8Char = nil; aDig: PHash160 = nil): boolean;
+  aHeaders: PUtf8Char = nil; aDig: PHash160 = nil; aUpCaseUri: boolean = false): boolean;
 
 
 {$ifdef USEWININET}
@@ -7812,13 +7814,12 @@ begin
   AppendShortUuid(msg.Uuid, result);
 end;
 
-function HttpRequestHash(aAlgo: THashAlgo; const aUri: TUri;
-  aHeaders: PUtf8Char; out aDigest: THashDigest): integer;
+function HttpRequestHash(aAlgo: THashAlgo; const aUri: TUri; aHeaders: PUtf8Char;
+  out aDigest: THashDigest; aUpCaseUri: boolean): integer;
 var
   hasher: TSynHasher;
   h: PUtf8Char;
-  hl: PtrInt; // not integer
-  up: TByteToAnsiChar; // normalize server name
+  l: PtrInt; // not integer
 begin
   result := 0;
   aDigest.Algo := aAlgo;
@@ -7827,37 +7828,41 @@ begin
     exit;
   hasher.Update(HTTPS_TEXT[aUri.Https]); // hash normalized URI
   hasher.Update(@aAlgo, 1); // separator
-  hasher.Update(@up, UpperCopy255(@up, aUri.Server) - PAnsiChar(@up));
+  hasher.UpdateUpper(pointer(aUri.Server), length(aUri.Server));
   hasher.Update(@aAlgo, 1);
   hasher.Update(aUri.Port);
   hasher.Update(@aAlgo, 1);
-  hasher.Update(pointer(aUri.Address), UriTruncAnchorLen(aUri.Address));
+  l := UriTruncAnchorLen(aUri.Address);
+  if aUpCaseUri then
+    hasher.UpdateUpper(pointer(aUri.Address), l) // normalize
+  else
+    hasher.Update(pointer(aUri.Address), l);
   if aHeaders <> nil then
   begin
     hasher.Update(@aAlgo, 1);
-    h := FindNameValuePointer(aHeaders, 'ETAG: ', hl); // ETAG + URI are genuine
+    h := FindNameValuePointer(aHeaders, 'ETAG: ', l); // ETAG + URI are genuine
     if h = nil then
     begin
       // fallback to file date and full size
-      h := FindNameValuePointer(aHeaders, 'LAST-MODIFIED: ', hl);
+      h := FindNameValuePointer(aHeaders, 'LAST-MODIFIED: ', l);
       if h = nil then
         exit;
-      hasher.Update(h, hl);
-      h := HttpRequestLength(aHeaders, @hl);
+      hasher.Update(h, l);
+      h := HttpRequestLength(aHeaders, @l);
       if h = nil then
         exit;
     end;
-    hasher.Update(h, hl);
+    hasher.Update(h, l);
   end;
   result := hasher.Final(aDigest.Bin, {noinit=}true);
 end;
 
 function HttpRequestHashBase32(const aUri: TUri; aName: PShort32;
-  aHeaders: PUtf8Char; aDig: PHash160): boolean;
+  aHeaders: PUtf8Char; aDig: PHash160; aUpCaseUri: boolean): boolean;
 var
   dig: THashDigest;
 begin // SizeOf(aDig^)=20 bytes=160-bit as 32 chars of case-insensitive base-32
-  result := HttpRequestHash(hfSHA256, aUri, aHeaders, dig) = SizeOf(THash256);
+  result := HttpRequestHash(hfSHA256, aUri, aHeaders, dig, aUpCaseUri) = SizeOf(THash256);
   if not result then
     FillZero(dig.Bin.b160);
   if aName <> nil then
