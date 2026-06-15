@@ -108,8 +108,8 @@ type
   public
     /// IdemPChar() lookup to locate this URI, ending with a '/' character
     up: RawUtf8;
-    /// the associated remote URI, ending with a '/' character
-    uri: RawUtf8;
+    /// the associated remote URI on client connection, ending with a '/'
+    address: RawUtf8;
     /// the shared main HTTP connection
     client: THttpClientSocket;
     /// maximum size of a resource to cache in memory
@@ -170,7 +170,17 @@ type
     /// finalize the server instance
     destructor Destroy; override;
     /// register one sub-URI folder pointing to a remote HTTP location
-    // - return the internal >= 0 index in fRangeLow[], -1 on failure
+    // - return the internal >= 0 index in fRangeLow[], -1 on failure, e.g. if
+    // the supplied UriPrefix overlap with a previous RedirectUri()
+    // - for instance, you can write:
+    // ! srv.RedirectUri('deb', 'https://deb.debian.org/debian/dists/stable/main');
+    // so that
+    // 'tftp://127.0.0.1:6969/deb/installer-amd64/current/images/netboot/pxelinux.0'
+    // will serve the pxe boot file directly from debian.org
+    // - note that RedirectUri('/', 'http:/...') will disable local FileFolder
+    // and redirect any request to this remote HTTP server
+    // - the redirections are evaluated in order, so the wider (e.g. '/') should
+    // be added last
     function RedirectUri(const UriPrefix, Remote: RawUtf8;
       MemCacheBytes: integer = 2 shl 20; Tls: PNetTlsContext = nil;
       ExtOptions: PHttpRequestExtendedOptions = nil;
@@ -544,7 +554,8 @@ begin
     exit;
   end;
   // validate and prepare the UriPrefix parameter
-  up := UpperCase(StringReplaceChars(TrimU(UriPrefix), '\', '/'));
+  NormalizeUriVar(TrimU(UriPrefix), up);
+  up := UpperCase(up);
   if (up = '') or
      not IsAnsiCompatible(pointer(up)) then
   begin
@@ -552,13 +563,16 @@ begin
     exit;
   end;
   AppendIfNone(up, '/');
-  for i := 0 to length(fRedirect) - 1 do
-    if IdemPChar(pointer(up), pointer(fRedirect[i].up)) then
-    begin
-      fLog.Log(sllWarning, 'RedirectUri duplicated uri=% with %',
-        [UriPrefix, fRedirect[i].up], self);
-      exit;
-    end;
+  if up = '/' then
+    FastAssignNew(up)
+  else
+    for i := 0 to length(fRedirect) - 1 do
+      if IdemPChar(pointer(up), pointer(fRedirect[i].up)) then
+      begin
+        fLog.Log(sllWarning, 'RedirectUri duplicated uri=% with %',
+          [UriPrefix, fRedirect[i].up], self);
+        exit;
+      end;
   // validate the Remote address parameter
   if not u.From(Remote) or
      not (u.UriScheme in Schemes) then
@@ -566,7 +580,8 @@ begin
     fLog.Log(sllWarning, 'RedirectUri remote=% failed', [Remote], self);
     exit;
   end;
-  AppendIfNone(u.Address, '/');
+  if u.Address <> '' then
+    AppendIfNone(u.Address, '/');
   // ensure the remote URI is valid by connecting to the server
   if ExtOptions = nil then
   begin
@@ -594,11 +609,11 @@ begin
   // append to the internal list
   one := TTftpServerRedirect.Create;
   one.up := up;
-  one.uri := u.URI;
+  one.address := u.address;
   one.client := client;
   one.memcachesize := MemCacheBytes;
   result := ObjArrayAdd(fRedirect, one);
-  fLog.Log(sllDebug, 'RedirectUri=% uri=% remote=%', [result, up, one.uri], self);
+  fLog.Log(sllDebug, 'RedirectUri=% uri=% remote=%', [result, up, one.address], self);
 end;
 
 type
@@ -627,7 +642,7 @@ begin
   url := Uri;
   if ttoLowerCaseRedirectUri in fOptions then
     LowerCaseSelf(url);
-  url := Join([Remote.uri, url]);
+  url := Join([Remote.address, url]);
   Remote.Lock; // protect main Remote.client connection (paranoid)
   try
     // always perform a HEAD to the remote server and retrieve the resource size
@@ -784,7 +799,7 @@ function TTftpServerThread.ParseUri(var Context: TTftpContext): TTftpError;
 var
   i: PtrInt;
   r: ^TTftpServerRedirect;
-  u: RawUtf8;
+  u, uri: RawUtf8;
 begin
   result := teFileNotFound;
   // validate the input resource
@@ -799,16 +814,24 @@ begin
   begin
     r := pointer(fRedirect);
     if r <> nil then
+    begin
+      NormalizeUriVar(u, uri);
       for i := 1 to length(fRedirect) do
       begin
-        if IdemPChar(pointer(u), pointer(r^.up)) then
+        if r^.up = '' then // RedirectUri('/', ...) special case
         begin
-          delete(u, 1, length(r^.up)); // trim /local/uri/
-          result := SetRemote(u, r^, Context);
+          result := SetRemote(uri, r^, Context); // redirect all to this server
+          exit;
+        end
+        else if IdemPChar(pointer(uri), pointer(r^.up)) then
+        begin
+          delete(uri, 1, length(r^.up)); // trim local/uri/
+          result := SetRemote(uri, r^, Context);
           exit;
         end;
         inc(r);
       end;
+    end;
   end;
   // download/upload this file from the main FileFolder
   if (ttoAllowSubFolders in fOptions) or
