@@ -499,7 +499,8 @@ function TNetAddr.SetFrom(const address, addrport: RawUtf8;
   layer: TNetLayer): TNetResult;
 var
   h: PHostEnt;
-  len: PtrInt;
+  ad: PUtf8Char;
+  adlen: PtrInt;
   ad4: TSockAddr absolute Addr;
   ad6: TSockAddrIn6 absolute Addr;
   adu: TSockAddrUnix absolute Addr;
@@ -509,16 +510,25 @@ begin
   if address = '' then
     exit;
   // handle unix domain socket path from address (ignoring addrport)
+  ad := pointer(address);
+  adlen := length(address);
+  if IsUnix(ad) then
+  begin
+    // detect address as 'unix:/path/to/myapp.socket' with default nlTcp
+    layer := nlUnix;
+    inc(ad, 5);
+    dec(adlen, 5);
+  end;
   if layer = nlUnix then
   begin
     // socket file name is just copied to the address struct
-    len := length(address);
-    if len >= SizeOf(adu.sun_path) then
+    if (adlen = 0) or
+       (adlen >= SizeOf(adu.sun_path)) then
       // avoid buffer overflow or truncated socket name
       result := nrInvalidParameter
     else
     begin
-      MoveFast(pointer(address)^, adu.sun_path, len + 1); // +1 for #0
+      MoveFast(ad^, adu.sun_path, adlen + 1); // +1 for #0
       SetFamily(AF_UNIX);
       result := nrOK;
     end;
@@ -771,7 +781,7 @@ end;
 
 { ******************** Mac and IP Addresses Support }
 
-function InetPton(text: PUtf8Char; value: PByte): boolean; inline;
+function Inet6Pton(text: PUtf8Char; value: PByte): boolean; inline;
 begin
   result := inet_pton(AF_INET6, text, value) = 1; // use the C library
 end;
