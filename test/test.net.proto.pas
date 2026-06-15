@@ -4382,7 +4382,7 @@ var
   http: THttpServer;
   res: TCurlResult;
   fn: TFileName;
-  uri, httpuri, s: RawUtf8;
+  uri, httpuri, tftpuri, s: RawUtf8;
   timer: TPrecisionTimer;
   orig, rd: RawByteString;
 begin
@@ -4406,7 +4406,8 @@ begin
     CheckEqual(StringFromFile(fn), orig);
     // start the TFTP server
     srv := TTftpServerThread.Create(ExtractFilePath(fn),
-      [ttoRrq {, ttoLowLevelLog}, ttoCaseInsensitiveFileName, ttoAllowSubFolders],
+      [ttoRrq {, ttoLowLevelLog}, ttoHttpVerboseLog,
+       ttoCaseInsensitiveFileName, ttoAllowSubFolders],
       TSynLogTestLog, '127.0.0.1', '6969', '');
     try
       // request the temporary file using the libcurl client
@@ -4439,25 +4440,35 @@ begin
       CheckEqual(srv.RedirectUri('http/backgrd', httpuri, 4096), 1);
       Check(srv.RedirectUri('http/cache/new', httpuri) < 0, 'dup3');
       Check(srv.RedirectUri('http/backgrd/new', httpuri) < 0, 'dup4');
-      httpuri := Join(['tftp://127.0.0.1:6969/http/cache/', uri]);
+      tftpuri := Join(['tftp://127.0.0.1:6969/http/cache/', uri]);
       rd := '';
-      res := CurlPerform(httpuri, rd);
+      res := CurlPerform(tftpuri, rd);
       Check(res = crOK, 'http cached over tftp');
       if res = crOk then
         CheckEqual(rd, orig, 'http cache');
-      httpuri := Join(['tftp://127.0.0.1:6969/http/backgrd/', uri]);
+      tftpuri := Join(['tftp://127.0.0.1:6969/http/backgrd/', uri]);
       rd := '';
-      res := CurlPerform(httpuri, rd);
+      res := CurlPerform(tftpuri, rd);
       Check(res = crOK, 'http background over tftp');
       if res = crOk then
         CheckEqual(rd, orig, 'http background');
       // wrong resource location with no RedirectUri() confusion
-      httpuri := Join(['tftp://127.0.0.1:6969/http/cachewrong/uri']);
+      tftpuri := Join(['tftp://127.0.0.1:6969/http/cachewrong/uri']);
       rd := '';
-      res := CurlPerform(httpuri, rd, {timeout=}5000);
+      res := CurlPerform(tftpuri, rd, {timeout=}5000);
       Check(res = crTFtpNotFound, 'tftp not found');
+      // redirect root to HTTP
+      rd := '';
+      res := CurlPerform('tftp://127.0.0.1:6969/pxelinux.0', rd, 100000);
+      Check(res = crTFtpNotFound, 'http background over tftp');
+      CheckEqual(srv.RedirectUri('/', httpuri), 2);
+      rd := '';
+      res := CurlPerform('tftp://127.0.0.1:6969/pxelinux.0', rd, 100000);
+      Check(res = crOK, 'http background over tftp');
+      if res = crOk then
+        CheckEqual(rd, orig, 'http root');
       // final checks and global performance benchmark
-      CheckEqual(srv.ConnectionTotal, 4, 'srv.ConnectionTotal');
+      CheckEqual(srv.ConnectionTotal, 5, 'srv.ConnectionTotal');
       NotifyTestSpeed('TFTP request', srv.ConnectionTotal,
         length(orig) * srv.ConnectionTotal, @timer);
     finally
