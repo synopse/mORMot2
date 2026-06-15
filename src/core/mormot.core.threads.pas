@@ -1871,7 +1871,7 @@ type
   public
     /// initialize this instance with an associated TLoggedThread
     // - the supplied Thread instance will be owned and freed with this TStream
-    constructor Create(aThread: TLoggedThread;
+    constructor Create(aThread: TLoggedThread; aExpectedSize: Int64 = -1;
       aBufSize: cardinal = 65536); reintroduce; overload;
     /// initialize this instance executing a method in a TLoggedWorkThread
     constructor Create(Logger: TSynLogClass; const ProcessName: RawUtf8;
@@ -5136,10 +5136,12 @@ end;
 { TBackgroundPipeStream }
 
 constructor TBackgroundPipeStream.Create(aThread: TLoggedThread;
-  aBufSize: cardinal);
+  aExpectedSize: Int64; aBufSize: cardinal);
 begin
-  fThread := aThread;
   inherited Create(aBufSize);
+  fThread := aThread;
+  if aExpectedSize >= 0 then
+    ExpectedSize := aExpectedSize;
 end;
 
 constructor TBackgroundPipeStream.Create(Logger: TSynLogClass;
@@ -5152,7 +5154,10 @@ end;
 destructor TBackgroundPipeStream.Destroy;
 begin
   inherited Destroy; // Abort first to ensure thread finishes
-  FreeAndNilSafe(fThread);
+  if not Assigned(fThread) then
+    exit;
+  fThread.TerminateAndWaitFinished;
+  fThread.Free;
 end;
 
 end.
