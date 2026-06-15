@@ -2040,6 +2040,18 @@ function NormalizeDirectoryExists(const Part: array of const;
 function NormalizeUriToFileName(const Uri: RawUtf8; var FileName: TFileName;
   const FolderName: TFileName = ''): boolean;
 
+/// ensure all \ path delimiters are normalized into / URI on Windows
+procedure NormalizeUriVar(const FileName: RawUtf8; var Uri: RawUtf8);
+  {$ifdef OSWINDOWS}{$ifdef HASINLINE} inline; {$endif}{$endif}
+
+/// ensure all \ path delimiters are normalized into / URI on Windows
+function NormalizeUriU(const FileName: RawUtf8): RawUtf8;
+  {$ifdef OSWINDOWS}{$ifdef HASINLINE} inline; {$endif}{$endif}
+
+/// ensure all \ path delimiters are normalized into / URI on Windows
+procedure NormalizeUri(const FileName: TFileName; var Uri: RawUtf8);
+  {$ifndef UNICODE}{$ifdef OSWINDOWS}{$ifdef HASINLINE} inline; {$endif}{$endif}{$endif}
+
 /// a wrapper around FileExists(MakePath(Part))
 // - can optionally set the file name into a variable if it did exist
 function FileExistsMake(const Part: array of const;
@@ -9791,6 +9803,33 @@ begin
       Utf8ToFileName(fn, FileName)
     else
       MakePath([FolderName, fn], FileName);
+end;
+
+procedure NormalizeUriVar(const FileName: RawUtf8; var Uri: RawUtf8);
+begin
+  {$ifdef OSWINDOWS}
+  Uri := StringReplaceChars(FileName, '\', '/');
+  {$else}
+  Uri := FileName;
+  {$endif OSWINDOWS}
+end;
+
+function NormalizeUriU(const FileName: RawUtf8): RawUtf8;
+begin
+  NormalizeUriVar(FileName, result);
+end;
+
+procedure NormalizeUri(const FileName: TFileName; var Uri: RawUtf8);
+begin
+  {$ifdef UNICODE}
+  {$ifdef OSWINDOWS}
+  NormalizeUriVar(StringToUtf8(FileName), Uri);
+  {$else}
+  StringToUtf8(FileName, Uri);
+  {$endif OSWINDOWS}
+  {$else}
+  NormalizeUriVar(FileName, Uri);
+  {$endif UNICODE}
 end;
 
 function FileExistsMake(const Part: array of const;
