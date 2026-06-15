@@ -36,6 +36,7 @@ When you reach for a classic RTL construct, this is the default mORMot replaceme
 | Dedupe many identical strings                  | `TRawUtf8Interning`                              | manual hash table                         | `mormot.core.data` |
 | Iterate lines of a file zero-copy              | `TMemoryMapText`                                 | `TStringList.LoadFromFile`                | `mormot.core.text` |
 | Talk to the database                           | `IRestOrm` (interface) + `TOrm` descendants      | concrete `TRestOrmServer`                  | `mormot.orm.core` |
+| Copy fields between objects / records / DTOs    | `TRttiMap` (`AutoMap`) — see [A.7](#a7-copying-between-objects-records-and-dtos) | hand-written field-by-field copy          | `mormot.core.rtti` |
 
 > **Why not just use the RTL?** Full reasoning is in [Chapter 4](mORMot2-SAD-Chapter-04.md). The short version: the mORMot types serialize automatically across the SOA/REST boundary, carry an interface-managed lifetime (no `try..finally Free`), keep UTF-8 end-to-end, and are backed by `TDynArray`/`TDynArrayHasher` for cache-friendly speed.
 
@@ -361,6 +362,71 @@ Two caveats, because it is tempting to file all of this under one label such as 
 - **Clean Architecture [\[5\]](#ref-5) / Onion [\[7\]](#ref-7) / DDD [\[2\]](#ref-2) describe the *logical* axis** — in-process layering — not how many processes you run. They apply just as much to the A.6.1 monolith as to A.6.2.
 - **API Gateway / BFF [\[8\]](#ref-8) / hexagonal-edge [\[1\]](#ref-1) describe the *physical* axis** — the network boundary. They are what A.6.2 adds on top of the layering.
 
+### A.7. Copying between objects, records and DTOs
+
+The most repetitive chore in a layered mORMot app is moving the *same* fields between a `TOrm` and its DTO, by hand, one assignment at a time. It is boring, and it fails silently: a field you forget to copy is not a compile error, it is a bug. The framework already solves the common case with RTTI, so **don't hand-write a 1:1 copy** — declare the mapping once and let mORMot run it.
+
+**The default: `TRttiMap`** (`mormot.core.rtti`). It is a small value type you set up *once* — typically a global in your DTO unit — and then reuse on every call. Once `Init` and `Map`/`AutoMap` are done it is **thread-safe to share**, so one global per entity pair is exactly right for the `sicShared` services of [A.4](#a4-service-instance-mode--default-to-sicshared).
+
+```pascal
+type
+  TOrmUser = class(TOrm)        // the ORM, doubling as the domain object (B.3)
+  published
+    property LogonName: RawUtf8 read fLogon write fLogon;
+    property DisplayName: RawUtf8 read fName write fName;
+    property YearOfBirth: integer read fYob write fYob;
+  end;
+
+  TUserDto = packed record      // its DTO — some field names differ on purpose
+    Id: Int64;
+    Email: RawUtf8;             // <- LogonName
+    Name: RawUtf8;             // <- DisplayName
+    YearOfBirth: integer;       // <- same name: AutoMap pairs it for free
+  end;
+
+var
+  UserMap: TRttiMap;            // built once, shared by all threads
+
+initialization
+  UserMap.Init(TOrmUser, TypeInfo(TUserDto)).AutoMap   // match every same-name field
+    .Map([                                             // then override the renamed ones
+      'RowID',       'Id',                             // a TOrm's key is ID/RowID
+      'LogonName',   'Email',
+      'DisplayName', 'Name']);
+```
+
+`AutoMap` pairs the fields whose names already match; the fluid `.Map(...)` calls fix only the exceptions. A field name of `''` means "ignore this field" — handy for never copying a secret or audit column.
+
+From there, three call shapes cover everything:
+
+```pascal
+UserMap.ToB(user, @dto);   // fill an existing DTO   from a TOrm   (ORM -> DTO)
+UserMap.ToA(user, @dto);   // fill an existing TOrm  from a DTO    (DTO -> ORM)
+dtoPtr := UserMap.ToB(user);          // allocate + fill a NEW DTO from a TOrm
+newUser := UserMap.ToA(@dto);         // allocate + fill a NEW TOrm from a DTO
+UserMap.ToArrayB(users, dtos);        // map a whole dynamic array at once
+```
+
+> **The one gotcha:** a `TOrm`'s primary key is `ID`/`RowID`. If your DTO calls it anything else (`Id`, `UserId`, …), pair it explicitly — `'RowID', 'Id'` — because `AutoMap` won't match different names. If your DTO field is literally `RowID`, `AutoMap` handles it and you can drop that line.
+
+**Modern compilers need no `RegisterFromText` for this.** On Delphi 2010+ and current FPC, records expose field-level RTTI natively, which is all `AutoMap` needs. Add an `Rtti.RegisterFromText(TypeInfo(TUserDto), '…')` call in `initialization` only when (a) a DTO field hits a Delphi RTTI gap — typically a *static array of an unmanaged type*, where Delphi emits no field RTTI (FPC is unaffected) — or (b) you want custom or guaranteed cross-platform serialization. Plain DTOs of `Int64` / `RawUtf8` / `currency` / `integer` and dynamic arrays of those need nothing extra.
+
+#### When to use something else
+
+`TRttiMap` is the default for a **stable, mostly 1:1** mapping. Reach for another routine when the shape is different:
+
+| Situation | Use instead | Why |
+|---|---|---|
+| The mapping is **logic, not a copy** — joins several tables, computes/derives fields, redacts conditionally (the *reduced DTOs* of [B.8](#b8-the-application-layer--expose-commands-and-queries-not-entities)) | a **hand-written mapper procedure** | This is real domain code; it deserves to be explicit and tested, not hidden in a map config |
+| A **one-off / rare** copy where a persistent map isn't worth it | `RecordToObject` / `ObjectToRecord` / `CopyObject` | One-shot name-matched copy, no setup object |
+| You are **already producing JSON** anyway (e.g. the response body) | `ObjectToJson` → `RecordLoadJson` / `ObjectLoadJson` | The round-trip is essentially free once you're in JSON |
+| The target is **schema-less / dynamic**, or you want to pick fields out by name | `ObjectToVariant` / `DocVariantToObject` | Bridges to a `TDocVariant` you can read/compose loosely |
+| A **same-type** copy (no mapping at all) | `RecordCopy` / `CopyObject` | No name matching needed |
+
+#### Test the mapping, because name-matching is silent
+
+`AutoMap` (like the JSON round-trip and `CopyObject`) matches **by name at startup**. Rename a field on one side only and that field *silently stops copying* — no error. `TRttiMap` ships the antidote: `Compare` checks two instances field-by-field, and `RandomA` / `RandomB` fill an instance with random values. A three-line round-trip test (`RandomA` → `ToB` → `Compare = 0`) catches drift the moment it happens, and is the cheapest, highest-value test you can write — see [B.6](#b6-cross-cutting-standards). See [Chapter 4: Core Units](mORMot2-SAD-Chapter-04.md) for the units these routines live in, and [Chapter 5: ORM](mORMot2-SAD-Chapter-05.md) for the `TOrm` side.
+
 ---
 
 ## Part B — A Possible Application Blueprint — Deviate Where Required
@@ -383,6 +449,8 @@ Every service exposes an `IXxxRepository` (or a CQRS pair, see [B.4](#b4-cqrs-re
 
 **Carrier choice — stay with `packed record` when possible:** cheapest carrier (value type, no heap, no constructor), serializes via cached RTTI after one `Rtti.RegisterFromText` call. `string` is forbidden on the wire — use `RawUtf8` for text and `RawByteString`/`TSQLRawBlob` for binary. Reach for `TSynPersistent`/`TSynAutoCreateFields` when the wire object needs methods or owned nested children. For lists across a SOA boundary, return `array of TXxxListItemDTO` (lighter) or `IList<TXxxListItemDTO>` (interface lifetime) — never raw `TList<T>` or `TJSONObject`.
 
+**Map the 1:1 DTO, don't hand-copy it.** When the DTO mirrors the entity field-for-field, copy it with `TRttiMap` (`AutoMap`, overriding the renamed fields) instead of writing the assignments by hand — see [A.7](#a7-copying-between-objects-records-and-dtos). Hand-written mappers are for the *projection* DTOs of [B.8](#b8-the-application-layer--expose-commands-and-queries-not-entities), where the copy is real logic.
+
 ### B.4. CQRS read/write split
 
 **Two interfaces per entity by default:** `IXxxCommand` (writes) and `IXxxQuery` (reads), each descending from `IInvokable`. The "entity" here may be logical rather than physical — an *aggregate* in DDD terms: `IOrderCommand.Save` may persist several database tables plus files on disk behind one method.
@@ -401,7 +469,7 @@ Every service exposes an `IXxxRepository` (or a CQRS pair, see [B.4](#b4-cqrs-re
 - **Result handling.** A shared base enum (e.g. `TServiceResult`: success / invalid-request / not-found / denied / db-error) plus optional per-service extensions — stops the proliferation of near-identical result enums.
 - **Auth on the consumer side.** Extract a single guard helper so every service does one `Guard.Require(Token, …)` call instead of a repeated multi-step token ritual.
 - **Scope every read to the caller.** The most common and most damaging public-service mistake is publishing too much: letting a logged-in user retrieve *all* rows when they should see only their own. Filter every query to the session's identity at the service boundary. No server-topology choice (see [A.6](#a6-minimum-recommended-server-configuration)) substitutes for this.
-- **Tests.** A `tests/` folder per service; mapper procedures are the cheapest, highest-value test target — exercise them first.
+- **Tests.** A `tests/` folder per service; mapping is the cheapest, highest-value test target — whether a `TRttiMap` (round-trip via `Compare` / `RandomA`, see [A.7](#a7-copying-between-objects-records-and-dtos)) or a hand-written projection mapper. Exercise it first.
 
 ### B.7. Default starting point for a new service
 
@@ -415,7 +483,7 @@ The following list is a possible starting point. It is not a pattern to always f
 6. Standard daemon: load settings, build the `TOrmModel`, create the persistence server, wire repositories, register services, start `TRestHttpServer`.
 7. A single auth guard consuming tokens from the shared auth service.
 8. `RawUtf8` everywhere data crosses a boundary; `string` only where VCL/LCL forces it.
-9. A `tests/` folder, starting with mapper round-trip tests.
+9. A `tests/` folder, starting with mapper round-trip tests ([A.7](#a7-copying-between-objects-records-and-dtos)'s `Compare` / `Random` for `TRttiMap`, direct assertions for projection mappers).
 
 ### B.8. The Application layer — expose commands and queries, not entities
 
@@ -451,7 +519,7 @@ The exposure rule is mechanical: **a service is reachable from the network only 
 
 1. Walk the actual client needs — each screen, each step of the client workflow.
 2. For each step in a workflow that requires the server, define a query or command (`ICheckoutQuery`/`ICheckoutCommand`), roughly one method per step. Each method is a **use case**: named after what the user is doing.
-3. For each screen, define a **reduced DTO** — a projection carrying exactly the fields that screen needs. Unlike the per-entity DTO family of [B.3](#b3-two-types-per-entity-not-three), a screen DTO may join several entities; composing it from the loaded `TOrm` instances is a pure mapper procedure (no I/O inside — the service gathers the inputs first).
+3. For each screen, define a **reduced DTO** — a projection carrying exactly the fields that screen needs. Unlike the per-entity DTO family of [B.3](#b3-two-types-per-entity-not-three), a screen DTO may join several entities; composing it from the loaded `TOrm` instances is a pure mapper procedure (no I/O inside — the service gathers the inputs first). Because this mapper is *logic* — joining, projecting, sometimes computing fields — hand-write it; `TRttiMap` ([A.7](#a7-copying-between-objects-records-and-dtos)) is for the field-for-field mirror DTO of [B.3](#b3-two-types-per-entity-not-three), not for this.
 
 ```pascal
 type
