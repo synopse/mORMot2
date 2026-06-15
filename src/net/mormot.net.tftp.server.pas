@@ -518,6 +518,7 @@ function TTftpServerThread.RedirectUri(const UriPrefix, Remote: RawUtf8;
 var
   one: TTftpServerRedirect;
   opt: THttpRequestExtendedOptions;
+  i: PtrInt;
   client: THttpClientSocket;
   up: RawUtf8;
   onlog: TSynLogProc;
@@ -538,6 +539,13 @@ begin
     exit;
   end;
   AppendIfNone(up, '/');
+  for i := 0 to length(fRedirect) - 1 do
+    if IdemPChar(pointer(up), pointer(fRedirect[i].up)) then
+    begin
+      fLog.Log(sllWarning, 'RedirectUri duplicated uri=% with %',
+        [UriPrefix, fRedirect[i].up], self);
+      exit;
+    end;
   // validate the Remote address parameter
   if not u.From(Remote) or
      not (u.UriScheme in Schemes) then
