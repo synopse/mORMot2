@@ -4252,6 +4252,13 @@ begin
   CheckEqual(Sha256DigestToString(dig.Bin.Lo),
     '19b9f18055bc3307c80f58159938f4e6bd0eb583f672fe7793e1b0df50e60bb2');
   FillCharFast(dig, SizeOf(dig), 0);
+  CheckEqual(ord(dig.Algo), 0);
+  l := HttpRequestHash(hfSHA256, U, 'etag: "1234"'#13#10, dig, {upper=}true);
+  CheckEqual(l, SizeOf(THash256));
+  Check(dig.Algo = hfSHA256);
+  CheckEqual(Sha256DigestToString(dig.Bin.Lo),
+    '5b355c973ac5542e7348831eaf439fb0fc0e61fa7f86f45b541c6d2d206ade42');
+  FillCharFast(dig, SizeOf(dig), 0);
   l := HttpRequestHash(hfSHA256, U,
     'Content-Length: 100'#13#10'Last-Modified: 2025', dig);
   CheckEqual(l, SizeOf(THash256));
@@ -4264,6 +4271,12 @@ begin
   Check(HttpRequestHashBase32(U, @s32,
     'Content-Length: 101'#13#10'Last-Modified: 2025'));
   CheckEqualShort(s32, 'utip3vleydamax5oayo7tjfyaoub6y5w');
+  Check(HttpRequestHashBase32(U, @s32, nil));
+  CheckEqualShort(s32, 'na3q2n4gw6cly5fvf5da4frmek667zk2');
+  s32[0] := #0;
+  checkEqual(U.Address, 'toto/titi');
+  U.Address := U.Address + '#ignore=10';
+  checkEqual(U.Address, 'toto/titi#ignore=10');
   Check(HttpRequestHashBase32(U, @s32, nil));
   CheckEqualShort(s32, 'na3q2n4gw6cly5fvf5da4frmek667zk2');
 end;
