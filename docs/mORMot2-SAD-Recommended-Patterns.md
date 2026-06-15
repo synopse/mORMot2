@@ -244,10 +244,10 @@ Centralize the choice in an include file: e.g. `project.inc` may contain `{$DEFI
 {$I project.inc}   // defines LOCALMORMOT for the local build, nothing for remote
 
 uses
-  {$ifdef LOCALMORMOT}  
-  AppUserClientLocal,  
+  {$ifdef LOCALMORMOT}
+  AppUserClientLocal,
   {$else}
-  AppUserClientRemote, 
+  AppUserClientRemote,
   {$endif}
   ...;
 ```
@@ -408,7 +408,7 @@ Every service exposes an `IXxxRepository` (or a CQRS pair, see [B.4](#b4-cqrs-re
 The following list is a possible starting point. It is not a pattern to always follow:
 
 1. `TOrm` per entity (in `infra/`), doubling as the domain object.
-2. A family of (possibily `packed record`) DTOs (in `app/<Entity>/`), registered with `Rtti.RegisterFromText` in the unit's `initialization`.
+2. A family of (possibly `packed record`) DTOs (in `app/<Entity>/`), registered with `Rtti.RegisterFromText` in the unit's `initialization`.
 3. Possibly pairing `IXxxCommand` + `IXxxQuery` interfaces descending from `IInvokable`.
 4. Service implementations as `TInjectableObjectRest` subclasses, `IRestOrm` injected via published property.
 5. `sicShared` instance mode unless profiling says otherwise.
