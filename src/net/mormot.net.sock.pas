@@ -209,11 +209,11 @@ type
     /// initialize this address from standard IPv4/IPv6 or nlUnix textual value
     // - calls NewSocketIP4Lookup if available from mormot.net.dns (with a 32
     // seconds cache) or the proper getaddrinfo/gethostbyname OS API
-    // - see also NewSocket() overload or GetSocketAddressFromCache() if you
-    // want to use the global NewSocketAddressCache
+    // - see also NewSocket() overload or GetSocketAddressFromCache() to use the
+    // global NewSocketAddressCache in addition to NewSocketIP4Lookup 32s cache
     function SetFrom(const address, addrport: RawUtf8; layer: TNetLayer): TNetResult;
     /// internal host resolution from IPv4, known hosts, NetAddrCache or
-    // NewSocketIP4Lookup (mormot.net.dns)
+    // NewSocketIP4Lookup (mormot.net.dns) with a 32 seconds cache
     // - as called by SetFrom() high-level method
     function SetFromIP4(const address: RawUtf8; noNewSocketIP4Lookup: boolean): boolean;
     /// internal host resolution from IPv6 raw addresses - wrap NetIsIP6()
@@ -449,7 +449,8 @@ function NetErrorFromSystem(SystemError, AnotherNonFatal: integer): TNetResult;
 /// just a wrapper around ToText(NetErrorFromSystem(SystemError)) + SystemError
 function NetErrorText(SystemError: integer): TShort47;
 
-/// create a new Socket connected or bound to a given ip:port
+/// create a new OS Socket instance connected or bound to a given ip:port
+// - on POSIX, address='unix://...' will be detected and use layer=nlUnix
 function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
   dobind: boolean; connecttimeout, sendtimeout, recvtimeout, retry: integer;
   out netsocket: TNetSocket; netaddr: PNetAddr = nil;
@@ -3157,12 +3158,13 @@ function GetSocketAddressFromCache(const address, port: RawUtf8; layer: TNetLaye
   out addr: TNetAddr; var fromcache, tobecached: boolean): TNetResult;
 var
   p: TNetPort;
-  ip6: TNetIP6;
-  ip4: TNetIP4 absolute ip6;
+  ad4: TSockAddr absolute addr;
+  ad6: TSockAddrIn6 absolute addr;
 begin
   fromcache := false;
   tobecached := false;
-  if layer = nlUnix then
+  if (layer = nlUnix) or
+     IsUnix(pointer(address)) then
     result := addr.SetFrom(address, '', nlUnix)
   else if not ToCardinal(port, p, {minimal=}1) or
           ({%H-}p > 65535) then
@@ -3172,22 +3174,24 @@ begin
           PropNameEquals(address, 'localhost') or
           (address = cAnyHost) then // for client: '0.0.0.0' -> '127.0.0.1'
     result := addr.SetIP4Port(cLocalhost32, p)
-  else if NetIsIP4(pointer(address), @ip4) then
-    result := addr.SetIP4Port(ip4, p) // from IPv4 '1.2.3.4"
-  else if NetIsIP6(pointer(address), @ip6) then
-    result := addr.SetIP6Port(ip6, p)
+  else if NetIsIP4(pointer(address), @ad4.sin_addr) then
+    result := addr.SetIP4Port(ad4.sin_addr, p) // from IPv4 '1.2.3.4"
+  else if NetIsIP6(pointer(address), @ad6.sin6_addr) then
+    result := addr.SetIP6Port(ad6.sin6_addr, p) // from IPv6 '2001:b8:a0b::1'
   else
   begin
+    // no IPv4/IPv6 -> try INewSocketAddressCache and its 10 minutes cache
     if Assigned(NewSocketAddressCache) then
       if NewSocketAddressCache.Search(address, addr) then
       begin
         fromcache := true;
-        result := addr.SetPort(p); // from cache
+        result := addr.SetPort(p); // from cached host name
         exit;
       end
       else
         tobecached := true;
-    result := addr.SetFrom(address, port, layer); // actual DNS resolution
+    // try first NewSocketIP4Lookup() 32 secs cache then actual DNS resolution
+    result := addr.SetFrom(address, port, layer);
   end;
 end;
 
