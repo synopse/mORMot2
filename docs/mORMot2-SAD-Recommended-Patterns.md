@@ -48,7 +48,7 @@ The framework marshals values as they cross layers. Use the mORMot type on every
 |---|---|---|
 | HTTP boundary | `RawUtf8` | Zero-copy on the socket buffer; UTF-8 end-to-end, no conversion |
 | API input — schema-less | `IDocDict` / `variant` | Framework recognises it and streams JSON directly |
-| API input — typed | `packed record` DTO + `Rtti.RegisterFromText` | Compile-time field checking; cheapest carrier (value type) |
+| API input — typed | `packed record` DTO (`Rtti.RegisterFromText` required per DTO on FPC ≤ 3.2.2; Delphi only when needed — see [A.7](#a7-copying-between-objects-records-and-dtos)) | Compile-time field checking; cheapest carrier (value type) |
 | Service interface signature | simple types, records-with-RTTI, `TOrm` descendants, `array of …`, `variant`, `IDocList`/`IDocDict`, `IList<T>`/`IDict<K,V>` | **Only these serialize automatically** across the SOA boundary |
 | Business logic — typed collections | `IList<T>` / `IDict<K,V>` | Interface lifetime, built-in JSON/binary, cache-friendly |
 | Business logic — schema-less | `IDocList` / `IDocDict` | Same `TDocVariantData` core, strongly-typed surface |
@@ -413,7 +413,7 @@ Two gotchas are worth knowing before you rely on it:
 
 > **Gotcha 2 — enums copy by ordinal, not by name.** `TRttiMap` copies an enum field by its **integer ordinal** (a direct value copy when both sides share the enum type; via an integer otherwise) — it never matches enum *values* by name. So if a DTO and a `TOrm` use **two different enum types** whose members are declared in a different order, the copy is silently wrong: `esActive` could land as `esDeleted`. Keep both sides on the **same enum type** (the natural choice when the `TOrm` doubles as the domain object, [B.3](#b3-two-types-per-entity-not-three)), or — if the enums genuinely diverge — map that one field by hand and leave the rest to `TRttiMap`.
 
-**Modern compilers need no `RegisterFromText` for this.** On Delphi 2010+ and current FPC, records expose field-level RTTI natively, which is all `AutoMap` needs. Add an `Rtti.RegisterFromText(TypeInfo(TUserDto), '…')` call in `initialization` only when (a) a DTO field hits a Delphi RTTI gap — typically a *static array of an unmanaged type*, where Delphi emits no field RTTI (FPC is unaffected) — or (b) you want custom or guaranteed cross-platform serialization. Plain DTOs of `Int64` / `RawUtf8` / `currency` / `integer` and dynamic arrays of those need nothing extra.
+**Compiler caveat — Delphi needs no `RegisterFromText`; FPC (≤ 3.2.2) does.** On Delphi 2010+, records expose field-level RTTI (names and types) natively — all `AutoMap` and JSON serialization need — so a plain DTO needs no `Rtti.RegisterFromText`. **FPC differs: through the current stable FPC 3.2.2, standard record RTTI does *not* expose field names, so mORMot can neither map nor serialize a record DTO by name without help.** Verified on FPC 3.2.2 + mORMot2: a record DTO with no `Rtti.RegisterFromText` serializes to an opaque binary base64 blob (`"￰BwAAAA…"`), not `{"Title":…}`. So on FPC, declare `Rtti.RegisterFromText(TypeInfo(TUserDto), '…')` in `initialization` for every record DTO you map or serialize. (FPC trunk/3.3.1 extended RTTI may lift this — unverified here; assume the 3.2.2 baseline.) On Delphi, add `RegisterFromText` only when (a) a DTO field hits a Delphi RTTI gap — typically a *static array of an unmanaged type*, where Delphi emits no field RTTI — or (b) you want custom or guaranteed cross-platform serialization. On both compilers, a dynamic array of an already-registered record element needs nothing extra (the element's RTTI drives it).
 
 #### When to use something else
 
@@ -451,7 +451,7 @@ Every service exposes an `IXxxRepository` (or a CQRS pair, see [B.4](#b4-cqrs-re
 
 - A **`TOrm` class that is also the domain object** — `Equals`, validation, and computed properties live on it directly. No separate shadow class.
 
-**Carrier choice — stay with `packed record` when possible:** cheapest carrier (value type, no heap, no constructor), serializes via cached RTTI after one `Rtti.RegisterFromText` call. `string` is forbidden on the wire — use `RawUtf8` for text and `RawByteString`/`TSQLRawBlob` for binary. Reach for `TSynPersistent`/`TSynAutoCreateFields` when the wire object needs methods or owned nested children. For lists across a SOA boundary, return `array of TXxxListItemDTO` (lighter) or `IList<TXxxListItemDTO>` (interface lifetime) — never raw `TList<T>` or `TJSONObject`.
+**Carrier choice — stay with `packed record` when possible:** cheapest carrier (value type, no heap, no constructor), serializes via cached RTTI. On Delphi 2010+ a plain DTO of simple fields needs **no** `Rtti.RegisterFromText`; **on FPC (through 3.2.2) each record DTO does need one** for field-named JSON (without it mORMot emits a binary blob — see [A.7](#a7-copying-between-objects-records-and-dtos)). Beyond that FPC baseline, register only for the [A.7](#a7-copying-between-objects-records-and-dtos) exceptions (a field alias, custom/guaranteed-cross-platform serialization, or a Delphi RTTI gap such as a static array of an unmanaged type). `string` is forbidden on the wire — use `RawUtf8` for text and `RawByteString`/`TSQLRawBlob` for binary. Reach for `TSynPersistent`/`TSynAutoCreateFields` when the wire object needs methods or owned nested children. For lists across a SOA boundary, return `array of TXxxListItemDTO` (lighter) or `IList<TXxxListItemDTO>` (interface lifetime) — never raw `TList<T>` or `TJSONObject`.
 
 **Map the 1:1 DTO, don't hand-copy it.** When the DTO mirrors the entity field-for-field, copy it with `TRttiMap` (`AutoMap`, overriding the renamed fields) instead of writing the assignments by hand — see [A.7](#a7-copying-between-objects-records-and-dtos). Hand-written mappers are for the *projection* DTOs of [B.8](#b8-the-application-layer--expose-commands-and-queries-not-entities), where the copy is real logic.
 
@@ -480,7 +480,7 @@ Every service exposes an `IXxxRepository` (or a CQRS pair, see [B.4](#b4-cqrs-re
 The following list is a possible starting point. It is not a pattern to always follow:
 
 1. `TOrm` per entity (in `infra/`), doubling as the domain object.
-2. A family of (possibly `packed record`) DTOs (in `app/<Entity>/`), registered with `Rtti.RegisterFromText` in the unit's `initialization`.
+2. A family of (possibly `packed record`) DTOs (in `app/<Entity>/`) — register each with `Rtti.RegisterFromText` in the unit's `initialization` on FPC (required through 3.2.2); on Delphi only for the [A.7](#a7-copying-between-objects-records-and-dtos) exceptions (field aliases, custom serialization, or a Delphi RTTI gap).
 3. Possibly pairing `IXxxCommand` + `IXxxQuery` interfaces descending from `IInvokable`.
 4. Service implementations as `TInjectableObjectRest` subclasses, `IRestOrm` injected via published property.
 5. `sicShared` instance mode unless profiling says otherwise.
