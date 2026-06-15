@@ -1445,13 +1445,13 @@ function ToText(state: THttpServerExecuteState): PShortString; overload;
 function EphemeralHttpServer(const aPort: RawUtf8; out aParams: TDocVariantData;
   aTimeOutSecs: integer = 60; aLogClass: TSynLogClass = nil;
   const aResponse: RawUtf8 = 'You can close this window.';
-  aMethods: TUriMethods = [mGET, mPOST]; aOptions: THttpServerOptions = [];
+  aMethods: TUriMethods = [mGET, mHEAD, mPOST]; aOptions: THttpServerOptions = [];
   const aResponseContentType: RawUtf8 = ''): boolean; overload;
 
 /// create an ephemeral socket-based HTTP Server instance with a fixed response
 // - typical usage is for testing
 function EphemeralHttpServer(aLogClass: TSynLogClass; const aResponse: RawUtf8;
-  aMethods: TUriMethods = [mGET]; aOptions: THttpServerOptions = [];
+  aMethods: TUriMethods = [mGET, mHEAD]; aOptions: THttpServerOptions = [];
   const aResponseContentType: RawUtf8 = ''): THttpServer; overload;
 
 
