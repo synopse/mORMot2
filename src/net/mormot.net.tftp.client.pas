@@ -144,7 +144,7 @@ type
           );
         TFTP_ERR:
           (
-            /// the TTftpError value, netword-ordered
+            /// the TTftpError value, netword-ordered - at Sequence offset
             ErrorCode: word;
             /// the #0 terminated Error message
             ErrorMsg: array[0 .. 511] of byte;
@@ -278,7 +278,7 @@ type
     function SendFrame: TNetResult;
     /// generate and send an ERR packet, then close Sock and FileStream
     procedure SendErrorAndShutdown(err: TTftpError; log: TSynLog;
-      obj: TObject; const caller: ShortString);
+      obj: TObject; const caller: ShortString; const msg: RawUtf8 = '');
     /// close Sock and FileStream
     procedure Shutdown;
   end;
@@ -378,10 +378,15 @@ begin
         AppendShortCardinal(seq, res);
         if seq <= ord(teLast) then
         begin
-          AppendShortTwoChars(ord(' ') + ord('(') shl 8, @res);
-          AppendShort(GetEnumName(TypeInfo(TTftpError), seq)^, res);
-          AppendShortTwoChars(ord(')') + ord(' ') shl 8, @res);
-          AppendShortBuffer(@frame.Header, StrLen(@frame.Header), high(res), @res);
+          if seq = 0 then
+            AppendShortChar(' ', @res)
+          else
+          begin
+            AppendShortTwoChars(ord(' ') + ord('(') shl 8, @res);
+            AppendShort(GetEnumName(TypeInfo(TTftpError), seq)^, res);
+            AppendShortTwoChars(ord(')') + ord(' ') shl 8, @res);
+          end;
+          AppendShortBuffer(@frame.ErrorMsg, StrLen(@frame.ErrorMsg), high(res), @res);
         end;
       end;
   end;
@@ -734,11 +739,11 @@ begin
 end;
 
 procedure TTftpContext.SendErrorAndShutdown(err: TTftpError; log: TSynLog;
-  obj: TObject; const caller: ShortString);
+  obj: TObject; const caller: ShortString; const msg: RawUtf8);
 var
   frametext: ShortString;
 begin
-  GenerateErrorFrame(err, '');
+  GenerateErrorFrame(err, msg);
   ToTextVar(Frame^, FrameLen, frametext);
   log.Log(sllTrace, '%: % % failed as %',
     [caller, TFTP_OPCODE[OpCode], FileName, frametext], obj);
