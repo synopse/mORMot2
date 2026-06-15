@@ -5692,7 +5692,7 @@ type
   public
     constructor Create(const aPort, aResponse, aResponseContentType: RawUtf8;
       aParams: PDocVariantData; aLogClass: TSynLogClass; aMethod: TUriMethods;
-      aOptions: THttpServerOptions); reintroduce;
+      aOptions: THttpServerOptions; aThreadPool: integer); reintroduce;
     destructor Destroy; override;
     function Request(Ctxt: THttpServerRequestAbstract): cardinal; override;
     procedure OnResponded(var Context: TOnHttpServerAfterResponseContext);
@@ -5700,7 +5700,7 @@ type
 
 constructor THttpServerEphemeral.Create(const aPort, aResponse,
   aResponseContentType: RawUtf8; aParams: PDocVariantData; aLogClass: TSynLogClass;
-  aMethod: TUriMethods; aOptions: THttpServerOptions);
+  aMethod: TUriMethods; aOptions: THttpServerOptions; aThreadPool: integer);
 begin
   fResponse := aResponse;
   fResponseContentType := aResponseContentType;
@@ -5708,8 +5708,7 @@ begin
   fMethod := aMethod;
   fOnAfterResponse := OnResponded;
   fReceived := TSynEvent.Create;
-  inherited Create(
-    aPort, nil, nil, 'ephemeral', {threadpool=}-1, 0, aOptions, aLogClass);
+  inherited Create(aPort, nil, nil, 'ephemeral', aThreadPool, 0, aOptions, aLogClass);
 end;
 
 destructor THttpServerEphemeral.Destroy;
@@ -5751,7 +5750,7 @@ var
 begin
   aParams.Clear;
   server := THttpServerEphemeral.Create(aPort, aResponse, aResponseContentType,
-    @aParams, aLogClass, aMethods, aOptions);
+    @aParams, aLogClass, aMethods, aOptions, {threadpool=}-1);
   try
     result := server.fReceived.WaitForSafe(aTimeOutSecs * MilliSecsPerSec);
     if aLogClass <> nil then
@@ -5769,7 +5768,7 @@ function EphemeralHttpServer(aLogClass: TSynLogClass; const aResponse: RawUtf8;
   const aResponseContentType: RawUtf8): THttpServer;
 begin
   result := THttpServerEphemeral.Create('0', aResponse, aResponseContentType,
-    nil, aLogClass, aMethods, aOptions);
+    nil, aLogClass, aMethods, aOptions, {threadpool=}2);
 end;
 
 
