@@ -4792,7 +4792,7 @@ begin
   try
     // reset this thread name for ptIdentifiedInOneFile
     if num <= length(thd^.Name) then
-      thd^.Name[num - 1] := '';
+      FastAssignNew(thd^.Name[num - 1]);
     // mark thread number to be recycled by InitThreadNumber
     AddWord(thd^.IndexReleased, thd^.IndexReleasedCount, num);
   finally
@@ -8313,6 +8313,8 @@ end;
 procedure InitializeUnit;
 begin
   SynLogGlobalLock.Init;
+  if (PtrUInt(@SynLogThreads) and POINTERAND) <> 0 then
+    ESynLogException.RaiseU('SynLogThreads alignment issue');
   GetEnumTrimmedNames(TypeInfo(TSynLogLevel), @_LogInfoText);
   GetEnumCaptions(TypeInfo(TSynLogLevel), @_LogInfoCaption);
   _LogInfoCaption[sllNone] := '';

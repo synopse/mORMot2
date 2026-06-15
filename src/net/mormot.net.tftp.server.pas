@@ -645,7 +645,7 @@ begin
     LowerCaseSelf(addr);
   addr := Join([Remote.address, addr]);
   TrimFirstChar(addr, '/');       // 'some.file'
-  Join([Remote.up, addr], cache); // 'FOLDER/some.file' for
+  Join([Remote.up, addr], cache); // 'FOLDER/some.file' for fFileCache and logs
   Remote.Lock; // protect main Remote.client connection (paranoid)
   try
     // always perform a HEAD to the remote server and retrieve the resource size
