@@ -3814,6 +3814,8 @@ end;
 
 function ToCaption(event: TSynLogLevel): string;
 begin
+  if _LogInfoCaption[high(_LogInfoCaption)] = '' then // delayed translation
+    GetEnumCaptions(TypeInfo(TSynLogLevel), @_LogInfoCaption);
   result := _LogInfoCaption[event];
 end;
 
@@ -6649,7 +6651,7 @@ begin
   with info.Context do
     if ELevel <> sllNone then
     begin
-      FormatUtf8('% % at %: % [%]', [_LogInfoCaption[ELevel], EClass,
+      FormatUtf8('% % at %: % [%]', [_LogInfoText[ELevel], EClass,
         GetInstanceDebugFile.FindLocationShort(EAddr),
         UnixTimeToString(ETimestamp, {expanded=}true, ' '),
         StringToUtf8(info.Message)], result);
@@ -7784,7 +7786,7 @@ begin
   begin
     dt := EventDateTime(aRow);
     FormatString('% %'#9'%'#9, [DateToStr(dt), FormatDateTime(TIME_FORMAT, dt),
-      _LogInfoCaption[EventLevel[aRow]]], result);
+      ToCaption(EventLevel[aRow])], result);
     if fThreads <> nil then
       result := result + IntToString(cardinal(fThreads[aRow])) + #9;
     result := result + EventString(aRow, '   ');
@@ -7804,7 +7806,7 @@ begin
         0:
           DateTimeToString(result, TIME_FORMAT, EventDateTime(aRow));
         1:
-          result := _LogInfoCaption[EventLevel[aRow]];
+          result := ToCaption(EventLevel[aRow]);
         2:
           if fThreads <> nil then
             result := IntToString(cardinal(fThreads[aRow]));
@@ -8316,8 +8318,6 @@ begin
   if (PtrUInt(@SynLogThreads) and POINTERAND) <> 0 then
     ESynLogException.RaiseU('SynLogThreads alignment issue');
   GetEnumTrimmedNames(TypeInfo(TSynLogLevel), @_LogInfoText);
-  GetEnumCaptions(TypeInfo(TSynLogLevel), @_LogInfoCaption);
-  _LogInfoCaption[sllNone] := '';
   GetEnumTrimmedNames(TypeInfo(TAppLogLevel), @_LogAppText);
   SetThreadName := _SetThreadName;
   GetCurrentThreadName := _GetCurrentThreadName;
