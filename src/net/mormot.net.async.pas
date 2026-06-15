@@ -1197,6 +1197,8 @@ type
   // - hpoClientIgnoreTlsError will ignore any HTTPS issue
   // - hpoClientAlllowWinApi will be used for THttpProxyUrl.RemoteClientHead()
   // - hpoClientNoCacheDirect disable caching of dynamic pages < HttpDirectGetKB
+  // - hpoClientLowerCaseUri will force remote http://... to be in lowercase
+  // - hpoClientNormalizeCaseHash to compute the local hash from uppercase URI
   // - hpoNoXProxyName will disable our custom 'X-Proxy-Name: xxxx' header
   // - hpNoXCache will purge any X-Cache: X-Served-By: Via: Age: headers
   THttpProxyUrlOption = (
@@ -1212,6 +1214,8 @@ type
     hpoClientIgnoreTlsError,
     hpoClientAlllowWinApi,
     hpoClientNoCacheDirect,
+    hpoClientLowerCaseUri,
+    hpoClientNormalizeCaseHash,
     hpoNoXProxyName,
     hpNoXCache);
   /// store THttpProxyUrl.Settings options for a given URI
@@ -1531,7 +1535,7 @@ type
     procedure OnIdle(Sender: TObject; NowTix: Int64);
     function OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
     function OnGetHeadLocalFolder(Ctxt: THttpServerRequest; const Uri: TUriMatchName): cardinal;
-    function OnGetHeadRemoteUri(Ctxt: THttpServerRequest; const Uri: TUriMatchName): cardinal;
+    function OnGetHeadRemoteUri(Ctxt: THttpServerRequest; var Uri: TUriMatchName): cardinal;
     procedure OnBackgroundDeleteDeprecated(Sender: TObject);
   public
     /// initialize this forward proxy instance
@@ -5671,8 +5675,8 @@ begin // this method is protected by fOsSafe.Lock
     GetHeaderInfo(fRemoteClient.Headers, cache.Size, d);
   cache.TimeMS := d * MilliSecsPerSec;
   cache.HashDigest := hfSHA1; // not SHA-1 but 160-bit trunc of safer SHA-256
-  HttpRequestHashBase32(Uri, @cache.HashB32,
-    pointer(fRemoteClient.Headers), @cache.Hash160);
+  HttpRequestHashBase32(Uri, @cache.HashB32, pointer(fRemoteClient.Headers),
+    @cache.Hash160, hpoClientNormalizeCaseHash in fSettings.Options);
   cache.PurgedHeaders := PurgeHeaders(fRemoteClient.Headers, false,
     PURGED[hpNoXCache in fSettings.Options]);
   // optionnaly cache the headers and its decoded fields
@@ -6390,7 +6394,7 @@ begin
 end;
 
 function THttpProxyServer.OnGetHeadRemoteUri(Ctxt: THttpServerRequest;
-  const Uri: TUriMatchName): cardinal;
+  var Uri: TUriMatchName): cardinal;
 var
   req: TStartProxyRequest;
   start: Int64;
@@ -6410,8 +6414,11 @@ begin
     if ByteScanIndex(pointer(Uri.Path.Text), Uri.Path.Len, ord('/')) <> 0 then
       exit;
   req.remote := req.proxy.fRemoteUri;
+  if hpoClientLowerCaseUri in req.proxy.Settings.Options then
+    CaseBuffer(Uri.Path.Text, Uri.Path.Len, @NormToLowerAnsi7); // normalize
   Append(req.remote.Address, Uri.Path.Text, Uri.Path.Len);
-  if not HttpRequestHashBase32(req.remote, nil, nil, @req.remotehash) then
+  if not HttpRequestHashBase32(req.remote, nil, nil, @req.remotehash,
+           hpoClientNormalizeCaseHash in req.proxy.Settings.Options) then
     exit; // paranoid
   // blocking to ensure file consistency and remote connection sharing
   req.proxy.fOsSafe.Lock;
