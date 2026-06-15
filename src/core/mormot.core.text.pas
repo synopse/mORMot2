@@ -2042,7 +2042,7 @@ function NormalizeUriToFileName(const Uri: RawUtf8; var FileName: TFileName;
 
 /// ensure all \ path delimiters are normalized into / URI on Windows
 procedure NormalizeUriVar(const FileName: RawUtf8; var Uri: RawUtf8);
-  {$ifdef OSWINDOWS}{$ifdef HASINLINE} inline; {$endif}{$endif}
+  {$ifdef OSLINUX} inline; {$endif}
 
 /// ensure all \ path delimiters are normalized into / URI on Windows
 function NormalizeUriU(const FileName: RawUtf8): RawUtf8;
@@ -9807,11 +9807,11 @@ end;
 
 procedure NormalizeUriVar(const FileName: RawUtf8; var Uri: RawUtf8);
 begin
-  {$ifdef OSWINDOWS}
-  Uri := StringReplaceChars(FileName, '\', '/');
-  {$else}
+  {$ifdef OSLINUX}
   Uri := FileName;
-  {$endif OSWINDOWS}
+  {$else}
+  Uri := StringReplaceChars(FileName, '\', '/');
+  {$endif OSLINUX}
 end;
 
 function NormalizeUriU(const FileName: RawUtf8): RawUtf8;
