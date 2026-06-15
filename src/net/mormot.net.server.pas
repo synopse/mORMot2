@@ -1446,7 +1446,13 @@ function EphemeralHttpServer(const aPort: RawUtf8; out aParams: TDocVariantData;
   aTimeOutSecs: integer = 60; aLogClass: TSynLogClass = nil;
   const aResponse: RawUtf8 = 'You can close this window.';
   aMethods: TUriMethods = [mGET, mPOST]; aOptions: THttpServerOptions = [];
-  const aResponseContentType: RawUtf8 = ''): boolean;
+  const aResponseContentType: RawUtf8 = ''): boolean; overload;
+
+/// create an ephemeral socket-based HTTP Server instance with a fixed response
+// - typical usage is for testing
+function EphemeralHttpServer(aLogClass: TSynLogClass; const aResponse: RawUtf8;
+  aMethods: TUriMethods = [mGET]; aOptions: THttpServerOptions = [];
+  const aResponseContentType: RawUtf8 = ''): THttpServer; overload;
 
 
 
@@ -5754,6 +5760,14 @@ begin
   finally
     server.Free;
   end;
+end;
+
+function EphemeralHttpServer(aLogClass: TSynLogClass; const aResponse: RawUtf8;
+  aMethods: TUriMethods; aOptions: THttpServerOptions;
+  const aResponseContentType: RawUtf8): THttpServer;
+begin
+  result := THttpServerEphemeral.Create('0', aResponse, aResponseContentType,
+    nil, aLogClass, aMethods, aOptions);
 end;
 
 
