@@ -1990,6 +1990,9 @@ procedure CaseSelf(var S: RawUtf8; Table: PNormTable);
 /// low-level function which could be called when S has RefCnt = 1
 procedure CaseNew(var S: RawUtf8; Table: PNormTable);
 
+/// normalize the casing of some text buffer in-place
+procedure CaseBuffer(Text: PUtf8Char; Len: PtrInt; Table: PNormTable);
+
 /// fast conversion of the supplied text into uppercase
 // - this will only convert 'a'..'z' into 'A'..'Z' (no NormToUpper use), and
 // will therefore be correct with true UTF-8 content, but only for 7-bit
@@ -8308,15 +8311,20 @@ begin
   FastAssignNew(Dest, tmp);
 end;
 
-procedure CaseConvert(p: PUtf8Char; l: integer; Table: PNormTable);
+procedure CaseConvert(p: PUtf8Char; l: PtrInt; Table: PNormTable);
   {$ifdef HASINLINE} inline; {$endif}
 begin
-  if l <> 0 then
+  if l > 0 then
     repeat
       p^ := Table[p^]; // branchless conversion
       inc(p);
       dec(l)
     until l = 0;
+end;
+
+procedure CaseBuffer(Text: PUtf8Char; Len: PtrInt; Table: PNormTable);
+begin
+  CaseConvert(Text, Len, Table);
 end;
 
 procedure CaseSelf(var S: RawUtf8; Table: PNormTable);
