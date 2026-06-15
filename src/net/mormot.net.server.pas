@@ -4740,8 +4740,8 @@ begin
     l.Log(sllTrace, 'Destroy: final connection', self);
     if Sock.SocketLayer <> nlUnix then
       Sock.Close; // shutdown TCP/UDP socket to unlock Accept() in Execute
-    if NewSocket(Sock.Server, Sock.Port, Sock.SocketLayer,
-       {dobind=}false, 10, 10, 10, 0, dummy) = nrOK then
+    if NewSocket(Sock.Server, Sock.Port, Sock.SocketLayer, {dobind=}false,
+         10, 10, 10, {retry=}0, dummy) = nrOK then
       // Windows TCP/UDP socket may not release Accept() until something happen
       dummy.ShutdownAndClose({rdwr=}false);
     if Sock.SockIsDefined then

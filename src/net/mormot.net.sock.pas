@@ -458,7 +458,11 @@ function NewSocket(const address, port: RawUtf8; layer: TNetLayer;
   out netsocket: TNetSocket; netaddr: PNetAddr = nil;
   bindReusePort: boolean = false): TNetResult;
 
-/// create a new raw TNetSocket instance
+/// create a new TCP client OS Socket connected to a given ip:port
+function NewTcpClientSocket(const address, port: RawUtf8; timeout: integer;
+  out netsocket: TNetSocket; netaddr: PNetAddr = nil; retry: integer = 0): TNetResult;
+
+/// create a new raw TNetSocket OS socket instance with no connection yet
 // - returns nil on error
 function NewRawSocket(family: TNetFamily; layer: TNetLayer): TNetSocket;
 
@@ -3382,6 +3386,13 @@ begin
     if (addr.Port <> 0) or                   // 0 = assigned by the OS
        (sock.GetName(netaddr^) <> nrOk) then // retrieve ephemeral port
       MoveFast(addr, netaddr^, addr.Size);
+end;
+
+function NewTcpClientSocket(const address, port: RawUtf8; timeout: integer;
+  out netsocket: TNetSocket; netaddr: PNetAddr; retry: integer): TNetResult;
+begin
+  result := NewSocket(address, port, nlTcp, {dobind=}false, timeout, timeout,
+    timeout, retry, netsocket, netaddr, {bindReusePort=}false);
 end;
 
 function NewRawSocket(family: TNetFamily; layer: TNetLayer): TNetSocket;

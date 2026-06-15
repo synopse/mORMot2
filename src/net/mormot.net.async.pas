@@ -3173,16 +3173,15 @@ end;
 
 function TAsyncConnections.ThreadClientsConnect: TAsyncConnection;
 var
-  res: TNetResult;
   client: TNetSocket;
+  res: TNetResult;
   addr: TNetAddr;
 begin
   result := nil;
   if Terminated then
     exit;
   with fThreadClients do
-    res := NewSocket(Address, Port, nlTcp, {bind=}false, Timeout, Timeout,
-      Timeout, {retry=}0, client, @addr);
+    res := NewTcpClientSocket(Address, Port, Timeout, client, @addr);
   if res = nrOk then
     res := client.MakeAsync;
   if res <> nrOK then
@@ -3918,8 +3917,9 @@ procedure TAsyncServer.Shutdown;
 var
   i: PtrInt;
   len: integer; // should be integer
-  touchandgo: TNetSocket; // paranoid ensure Accept() is released
   ev: TNetEvents;
+  nl: TNetLayer;
+  touchandgo: TNetSocket; // paranoid ensure Accept() is released
   host, port: RawUtf8;
 begin
   Terminate;
@@ -3933,16 +3933,16 @@ begin
       end;
   if fServer.SockIsDefined then
   begin
-    host := fServer.Server; // will also work for nlUnix
-    if fServer.SocketLayer <> nlUnix then
+    host := fServer.Server;    // will also work for nlUnix
+    nl := fServer.SocketLayer; // should match the kind of server socket
+    if nl <> nlUnix then
     begin
       if host = '0.0.0.0' then
         host := '127.0.0.1';
       port := fSockPort;
     end;
     DoLog(sllDebug, 'Shutdown %:% accept release request', [host, port], self);
-    if NewSocket(host, port{%H-}, fServer.SocketLayer, false,
-         10, 0, 0, 0, touchandgo) = nrOk then
+    if NewSocket(host, port{%H-}, nl, false, 10, 0, 0, 0, touchandgo) = nrOk then
     begin
       if fSocketsEpoll then
       begin
