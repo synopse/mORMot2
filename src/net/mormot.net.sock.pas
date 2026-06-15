@@ -256,6 +256,8 @@ type
     /// returns the network port (0..65535) of this address
     function Port: TNetPort;
       {$ifdef FPC}inline;{$endif}
+    /// returns the network port (0..65535) of this address as UTF-8 text
+    procedure PortText(var result: RawUtf8);
     /// set the network port (0..65535) of this address
     function SetPort(p: TNetPort): TNetResult;
     /// compute the number of bytes actually used in this address buffer
@@ -3017,6 +3019,14 @@ begin
     result := bswap16(ad4.sin_port)
   else
     result := 0;
+end;
+
+procedure TNetAddr.PortText(var result: RawUtf8);
+var
+  tmp: TShort23;
+begin
+  ToShortU(Port, @tmp);
+  ShortStringToAnsi7String(tmp, result);
 end;
 
 function TNetAddr.ParsePort(const addrport: RawUtf8): boolean;
