@@ -107,6 +107,7 @@ type
   TTftpServerRedirect = class(TObjectOSLightLock)
   public
     /// IdemPChar() lookup to locate this URI, ending with a '/' character
+    // - equals '' for RedirectUri('/', ...)
     up: RawUtf8;
     /// the associated remote URI on client connection, ending with a '/'
     address: RawUtf8;
@@ -628,25 +629,27 @@ type
 function TTftpServerThread.SetRemote(const Uri: RawUtf8;
   var Remote: TTftpServerRedirect; var Context: TTftpContext): TTftpError;
 var
-  url: RawUtf8;
+  addr, cache: RawUtf8;
   cached: RawByteString;
   size: Int64;
   status: integer;
   c: TFtpHttpClientSocket;
 begin
-  // check and compute the full remote URL
+  // check and compute the remote addr address
   result := teFileNotFound;
   if (Uri = '') or
      not IsAnsiCompatible(pointer(Uri)) then
     exit;
-  url := Uri;
+  addr := Uri;
   if ttoLowerCaseRedirectUri in fOptions then
-    LowerCaseSelf(url);
-  url := Join([Remote.address, url]);
+    LowerCaseSelf(addr);
+  addr := Join([Remote.address, addr]);
+  TrimFirstChar(addr, '/');       // 'some.file'
+  Join([Remote.up, addr], cache); // 'FOLDER/some.file' for
   Remote.Lock; // protect main Remote.client connection (paranoid)
   try
     // always perform a HEAD to the remote server and retrieve the resource size
-    status := Remote.client.Head(url, 10000);
+    status := Remote.client.Head(addr, 10000);
     size := Remote.client.ContentLength;
     fLog.Log(sllTrace, 'SetRemote: % HEAD=% size=%', [Uri, status, size], self);
     if (status <> HTTP_SUCCESS) or
@@ -660,14 +663,14 @@ begin
       c := nil;
       try
         c := TFtpHttpClientSocket.OpenFrom(Remote.client); // new socket connect
-        c.Url := url;
+        c.Url := addr;
         c.Thread := TLoggedWorkThread.Create(              // background thread
-          fLogClass, url, c, BackgroundGet, {suspended=}true, {manualfree=}true);
+          fLogClass, addr, c, BackgroundGet, {suspended=}true, {manualfree=}true);
       except
         on E: Exception do
         begin
           fLog.Log(sllWarning, 'RedirectUri OpenFrom=% failed as %',
-                   [url, E], self);
+                   [addr, E], self);
           c.Free;
           exit;
         end;
@@ -680,24 +683,24 @@ begin
     else
     begin
       // smallest files: first check from in-memory cache
-      if (not fFileCache.FindAndCopy(url, cached)) or
+      if (not fFileCache.FindAndCopy(cache, cached)) or
          (size <> length(cached)) then
       begin
         // if unknown, download and cache from the main HTTP connection
-        status := Remote.client.Get(url, 10000);
+        status := Remote.client.Get(addr, 10000);
         cached := Remote.client.Content;
         fLog.Log(sllTrace, 'SetRemote: GET=% size=%', [status, length(cached)], self);
         if (status <> HTTP_SUCCESS) or
            (length(cached) <> size) then
           exit; // invalid download
-        fFileCache.AddOrUpdate(url, cached);
+        fFileCache.AddOrUpdate(cache, cached);
       end
       else
         fLog.Log(sllTrace, 'SetRemote: size=% from cache', [length(cached)], self);
       Context.FileStream := TRawByteStringStream.Create(cached);
     end;
     // success
-    Utf8ToFileName(url, Context.FileNameFull); // for logging and debug
+    Utf8ToFileName(cache, Context.FileNameFull); // for logging and debug
     result := teNoError;
   finally
     Remote.Unlock;
