@@ -123,16 +123,16 @@ type
     procedure RTSPOverHTTPBufferedWrite;
     /// validate mormot.net.tunnel
     procedure Tunnel;
+    {$ifdef OSPOSIX}
+    /// validate mormot.net.tftp.server using libcurl (so only POSIX by now)
+    procedure TFTPServer;
+    /// validate Unix domain socket server bind and stale .socket file cleanup
+    procedure UnixDomainSocket;
+    {$endif OSPOSIX}
     /// validate IP processing functions
     procedure IPAddresses;
     /// validate mormot.net.openapi unit
     procedure OpenAPI;
-    {$ifdef OSPOSIX}
-    /// validate Unix domain socket server bind and stale .socket file cleanup
-    procedure UnixDomainSocket;
-    /// validate mormot.net.tftp.server using libcurl (so only POSIX by now)
-    procedure TFTPServer;
-    {$endif OSPOSIX}
   end;
 
 
@@ -4446,7 +4446,7 @@ begin
       Check(res = crOK, 'http cached over tftp');
       if res = crOk then
         CheckEqual(rd, orig, 'http cache');
-      tftpuri := Join(['tftp://127.0.0.1:6969/http/backgrd/', uri]);
+      tftpuri := Join(['tftp://127.0.0.1:6969/http/backgrd/sub/', uri]);
       rd := '';
       res := CurlPerform(tftpuri, rd);
       Check(res = crOK, 'http background over tftp');
