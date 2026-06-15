@@ -2890,11 +2890,9 @@ begin
   Check(serverinstance.LocalPort <> clientinstance.LocalPort, 'ports');
   if Assigned(log) then
     log.Log(sllTrace, 'TunnelTest: sockets start', self);
-  nr := NewSocket('127.0.0.1', clientinstance.LocalPort, nlTcp, {bind=}false,
-    1000, 1000, 1000, 0, clientsock);
+  nr := NewTcpClientSocket('127.0.0.1', clientinstance.LocalPort, 1000, clientsock);
   CheckUtf8(nr = nrOk, 'clientsock=%', [_NR[nr]]);
-  nr := NewSocket('127.0.0.1', serverinstance.LocalPort, nlTcp, {bind=}false,
-    1000, 1000, 1000, 0, serversock);
+  nr := NewTcpClientSocket('127.0.0.1', serverinstance.LocalPort, 1000, serversock);
   CheckUtf8(nr = nrOk, 'serversock=%', [_NR[nr]]);
   if not CheckFailed(Assigned(clientinstance.Thread), 'no client thread') and
      not CheckFailed(Assigned(serverinstance.Thread), 'no server thread') then
@@ -4368,9 +4366,10 @@ end;
 procedure TNetworkProtocols.TFTPServer;
 var
   srv: TTftpServerThread;
+  http: THttpServer;
   res: TCurlResult;
   fn: TFileName;
-  uri: RawUtf8;
+  uri, httpuri, s: RawUtf8;
   timer: TPrecisionTimer;
   orig, rd: RawByteString;
 begin
@@ -4383,40 +4382,69 @@ begin
     AddConsole('libcurl is not available on this system -> skip test');
     exit;
   end;
-  // create a 256KB temporary file to serve
+  // create a 256KB temporary file to serve via TFTP
   orig := RandomAnsi7(256 shl 10 + Random32(100));
   fn := TemporaryFileName; // e.g. '/tmp/mormot2tests_28F3D8C5.tmp'
+  if CheckFailed(FileFromString(orig, fn), 'fn file') then
+    exit;
+  // start an ephemeral HTTP server to validate HTTP over TFTP proxy
+  http := EphemeralHttpServer(TSynLogTestLog, orig);
   try
-    if CheckFailed(FileFromString(orig, fn), 'fn file') then
-      exit;
     CheckEqual(StringFromFile(fn), orig);
     // start the TFTP server
     srv := TTftpServerThread.Create(ExtractFilePath(fn),
-      [ttoRrq , {ttoLowLevelLog,} ttoCaseInsensitiveFileName, ttoAllowSubFolders],
+      [ttoRrq {, ttoLowLevelLog}, ttoCaseInsensitiveFileName, ttoAllowSubFolders],
       TSynLogTestLog, '127.0.0.1', '6969', '');
     try
       // request the temporary file using the libcurl client
       timer.Start;
       StringToUtf8(ExtractFileName(fn), uri); // 'mormot2tests_28F3D8C5.tmp'
+      rd := '';
       res := CurlPerform('tftp://127.0.0.1:6969/' + uri, rd);
       CheckUtf8(res = crOK, 'tftp exact case %', [ToText(res)^]);
       if res <> crOk then
         exit;
       CheckEqual(length(rd), length(orig), 'tftp1a');
       CheckEqual(rd, orig, 'tftp1b');
-      rd := '';
       // validate case-insensitive URI as e.g. 'MORMOT2TESTS_28F3D8C5.tmp'
       UpperCaseSelf(uri);
-      res := CurlPerform('tftp://127.0.0.1:6969/' + uri, rd, 1000, nil,
+      rd := '';
+      res := CurlPerform('tftp://127.0.0.1:6969/' + uri, rd, 5000, nil,
         {tftpblocksize=}1468);
       Check(res = crOK, 'tftp uppercase and custom blocksize');
       if res = crOk then
         CheckEqual(rd, orig, 'tftp2');
-      rd := '';
       // alternate HTTP over TFTP proxy validation
-
+      http.WaitStarted;
+      Join(['http://127.0.0.1:', http.Sock.Port], httpuri); // ephemeral port
+      Check(not EndWith(httpuri, ':'), 'ephemeral port');
+      s := HttpGet(httpuri);
+      CheckEqual(s, orig, 'validate ephemeral http server');
+      CheckEqual(srv.RedirectUri('http/cache', httpuri), 0);
+      Check(srv.RedirectUri('http/cache', httpuri) < 0, 'dup1');
+      Check(srv.RedirectUri('http/cache/two', httpuri) < 0, 'dup2');
+      CheckEqual(srv.RedirectUri('http/backgrd', httpuri, 4096), 1);
+      Check(srv.RedirectUri('http/cache/new', httpuri) < 0, 'dup3');
+      Check(srv.RedirectUri('http/backgrd/new', httpuri) < 0, 'dup4');
+      httpuri := Join(['tftp://127.0.0.1:6969/http/cache/', uri]);
+      rd := '';
+      res := CurlPerform(httpuri, rd);
+      Check(res = crOK, 'http cached over tftp');
+      if res = crOk then
+        CheckEqual(rd, orig, 'http cache');
+      httpuri := Join(['tftp://127.0.0.1:6969/http/backgrd/', uri]);
+      rd := '';
+      res := CurlPerform(httpuri, rd);
+      Check(res = crOK, 'http background over tftp');
+      if res = crOk then
+        CheckEqual(rd, orig, 'http background');
+      // wrong resource location with no RedirectUri() confusion
+      httpuri := Join(['tftp://127.0.0.1:6969/http/cachewrong/uri']);
+      rd := '';
+      res := CurlPerform(httpuri, rd, {timeout=}5000);
+      Check(res = crTFtpNotFound, 'tftp not found');
       // final checks and global performance benchmark
-    //  CheckEqual(srv.ConnectionTotal, 2, 'srv.ConnectionTotal');
+      CheckEqual(srv.ConnectionTotal, 4, 'srv.ConnectionTotal');
       NotifyTestSpeed('TFTP request', srv.ConnectionTotal,
         length(orig) * srv.ConnectionTotal, @timer);
     finally
@@ -4425,6 +4453,7 @@ begin
   finally
     // remove the temporary local file served via TFTP
     Check(DeleteFile(fn), 'delete tmp');
+    http.Free;
   end;
 end;
 {$endif OSPOSIX}
