@@ -407,7 +407,11 @@ newUser := UserMap.ToA(@dto);         // allocate + fill a NEW TOrm from a DTO
 UserMap.ToArrayB(users, dtos);        // map a whole dynamic array at once
 ```
 
-> **The one gotcha:** a `TOrm`'s primary key is `ID`/`RowID`. If your DTO calls it anything else (`Id`, `UserId`, …), pair it explicitly — `'RowID', 'Id'` — because `AutoMap` won't match different names. If your DTO field is literally `RowID`, `AutoMap` handles it and you can drop that line.
+Two gotchas are worth knowing before you rely on it:
+
+> **Gotcha 1 — the primary key.** A `TOrm`'s primary key is `ID`/`RowID`. If your DTO calls it anything else (`Id`, `UserId`, …), pair it explicitly — `'RowID', 'Id'` — because `AutoMap` won't match different names. If your DTO field is literally `RowID`, `AutoMap` handles it and you can drop that line.
+
+> **Gotcha 2 — enums copy by ordinal, not by name.** `TRttiMap` copies an enum field by its **integer ordinal** (a direct value copy when both sides share the enum type; via an integer otherwise) — it never matches enum *values* by name. So if a DTO and a `TOrm` use **two different enum types** whose members are declared in a different order, the copy is silently wrong: `esActive` could land as `esDeleted`. Keep both sides on the **same enum type** (the natural choice when the `TOrm` doubles as the domain object, [B.3](#b3-two-types-per-entity-not-three)), or — if the enums genuinely diverge — map that one field by hand and leave the rest to `TRttiMap`.
 
 **Modern compilers need no `RegisterFromText` for this.** On Delphi 2010+ and current FPC, records expose field-level RTTI natively, which is all `AutoMap` needs. Add an `Rtti.RegisterFromText(TypeInfo(TUserDto), '…')` call in `initialization` only when (a) a DTO field hits a Delphi RTTI gap — typically a *static array of an unmanaged type*, where Delphi emits no field RTTI (FPC is unaffected) — or (b) you want custom or guaranteed cross-platform serialization. Plain DTOs of `Int64` / `RawUtf8` / `currency` / `integer` and dynamic arrays of those need nothing extra.
 
