@@ -63,6 +63,8 @@ type
   // - ttoChangeRoot on POSIX would make the FileFolder the root folder
   // - ttoCaseInsensitiveFileName on POSIX would make file names case-insensitive
   // as they are on Windows (using an in-memory cache, refreshed every minute)
+  // for local files - but not for RedirectUri() HTTP proxy URI
+  // - ttoLowerCaseRedirectUri would force lower-case URI for RedirectUri()
   TTftpThreadOption = (
     ttoRrq,
     ttoWrq,
@@ -75,7 +77,8 @@ type
     ttoHttpVerboseLog,
     ttoDropPriviledges,
     ttoChangeRoot,
-    ttoCaseInsensitiveFileName);
+    ttoCaseInsensitiveFileName,
+    ttoLowerCaseRedirectUri);
   TTftpThreadOptions = set of TTftpThreadOption;
 
   TTftpServerThread = class;
@@ -621,7 +624,10 @@ begin
   if (Uri = '') or
      not IsAnsiCompatible(pointer(Uri)) then
     exit;
-  Join([Remote.uri, Uri], url);
+  url := Uri;
+  if ttoLowerCaseRedirectUri in fOptions then
+    LowerCaseSelf(url);
+  url := Join([Remote.uri, url]);
   Remote.Lock; // protect main Remote.client connection (paranoid)
   try
     // always perform a HEAD to the remote server and retrieve the resource size
