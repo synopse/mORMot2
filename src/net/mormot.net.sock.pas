@@ -894,6 +894,10 @@ function IsHostName(Name: PUtf8Char): boolean;
 // - i.e. valid RFC 952 / RFC 1123 AA/AAAA records with '_ldap._tcp.domain.com'
 function IsDnsName(Name: PUtf8Char): boolean;
 
+/// quickly check if the text starts with the 'unix:/' prefix
+function IsUnix(Name: PUtf8Char): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// resolve a host name from the OS hosts file content
 // - i.e. use a cache of /etc/hosts or c:\windows\system32\drivers\etc\hosts
 // - returns true and the IPv4 address of the stored host found
@@ -3141,6 +3145,13 @@ end;
 
 
 { ******** TNetSocket Cross-Platform Wrapper }
+
+function IsUnix(Name: PUtf8Char): boolean;
+begin
+  result := (Name <> nil) and (PCardinal(Name)^ and $dfdfdfdf =
+    ord('U') + ord('N') shl 8 + ord('I') shl 16 + ord('X') shl 24) and
+    (PWord(Name + 4)^ = ord(':') + ord('/') shl 8);
+end;
 
 function GetSocketAddressFromCache(const address, port: RawUtf8; layer: TNetLayer;
   out addr: TNetAddr; var fromcache, tobecached: boolean): TNetResult;

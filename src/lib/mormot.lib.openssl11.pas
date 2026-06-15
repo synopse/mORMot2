@@ -11516,7 +11516,7 @@ begin
   Finalize(result);
   if OpenSslIsAvailable and
      u.From(url) and
-     (NewSocket(u.Server, u.Port, nlTcp, false, 1000, 1000, 1000, 2, ns) = nrOk) then
+     (NewSocket(u.Server, u.Port, u.Layer, false, 1000, 1000, 1000, 2, ns) = nrOk) then
   try
     // cut-down version of TOpenSslNetTls.AfterConnection
     c := SSL_CTX_new(TLS_client_method);
