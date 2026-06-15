@@ -599,6 +599,8 @@ type
     function Init(aAlgo: THashAlgo): boolean;
     /// hash the supplied memory buffer
     procedure Update(aBuffer: pointer; aLen: integer); overload;
+    /// hash the supplied memory buffer with uppercase ASCII conversion
+    procedure UpdateUpper(aBuffer: pointer; aLen: PtrInt);
     /// hash the supplied string content
     procedure Update(const aBuffer: RawByteString); overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -4096,6 +4098,20 @@ begin
     else
       PSha3(@ctxt)^.Update(aBuffer, aLen);
     end;
+end;
+
+procedure TSynHasher.UpdateUpper(aBuffer: pointer; aLen: PtrInt);
+var
+  up: TByteToAnsiChar; // normalize aBuffer content into uppercase ASCII
+  l: PtrInt;
+begin
+  while aLen > 0 do // normalize on stack until all input buffer is hashed
+  begin
+    l := UpperCopy255Buf(@up, aBuffer, MinPtrInt(192, aLen)) - PAnsiChar(@up);
+    Update(@up, l);
+    inc(PByte(aBuffer), l);
+    dec(aLen, l);
+  end
 end;
 
 procedure TSynHasher.Update(const aBuffer: RawByteString);
