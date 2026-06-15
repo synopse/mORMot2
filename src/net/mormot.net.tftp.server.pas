@@ -631,7 +631,7 @@ begin
         c := TFtpHttpClientSocket.OpenFrom(Remote.client); // new socket connect
         c.Url := url;
         c.Thread := TLoggedWorkThread.Create(              // background thread
-          fLogClass, url, c, BackgroundGet, {suspended=}true);
+          fLogClass, url, c, BackgroundGet, {suspended=}true, {manualfree=}true);
       except
         on E: Exception do
         begin
@@ -641,7 +641,7 @@ begin
           exit;
         end;
       end;
-      c.Stream := TBackgroundPipeStream.Create(c.Thread);
+      c.Stream := TBackgroundPipeStream.Create(c.Thread, size);
       c.Thread.Start;
       fLog.Log(sllTrace, 'SetRemote: started background GET', self);
       Context.FileStream := c.Stream;
@@ -682,8 +682,9 @@ begin
     status := c.Request(c.Url, 'GET', 30000, '', '', '', {asretry=}false,
       {instream=}nil, {outstream=}c.Stream);
     if status <> HTTP_SUCCESS then
-      c.Stream.Abort; // to release and fail Context.FileStream.Read()
+      c.Stream.Abort; // to release and fail Context.FileStream.Read() ASAP
     fLog.Log(sllDebug, 'BackgroundGet=% size=%', [status, c.ContentLength], self);
+    // c.Stream is owned as Context.FileStream and will free TLoggedWorkThread
   finally
     c.Free;
   end;
