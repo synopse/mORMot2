@@ -643,6 +643,7 @@ begin
       fLog.Log(sllWarning, 'RedirectFolder invalid Folder=%', [Folder], self);
       exit;
     end;
+    client := nil; // avoid random GPF at TTftpServerRedirect.Destroy
   end;
   // append to the internal list
   one := TTftpServerRedirect.Create;
