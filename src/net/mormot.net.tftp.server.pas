@@ -103,7 +103,7 @@ type
 
 { ******************** TTftpServerThread Server Class }
 
-  /// registered information for one RedirectUri()
+  /// registered information for one RedirectUri() or RedirectFolder()
   TTftpServerRedirect = class(TObjectOSLightLock)
   public
     /// IdemPChar() lookup to locate this URI, ending with a '/' character
@@ -111,13 +111,17 @@ type
     up: RawUtf8;
     /// the associated remote URI on client connection, ending with a '/'
     address: RawUtf8;
-    /// the shared main HTTP connection
+    /// the shared main HTTP connection set from RedirectUri()
     client: THttpClientSocket;
+    /// the local folder for lookup set from RedirectFolder()
+    folder: TFileName;
     /// maximum size of a resource to cache in memory
     memcachesize: integer;
     /// finalize this instance
     destructor Destroy; override;
   end;
+  /// registered information for all RedirectUri() and RedirectFolder()
+  TTftpServerRedirectObjArray = array of TTftpServerRedirect;
 
   /// event signature of the TTftpServerThread.OnConnect optional callback
   // - you can change e.g. Context.FileName/FileNameFull/FileStream
@@ -138,7 +142,7 @@ type
     fOptions: TTftpThreadOptions;
     fAsNobody: boolean;
     fRangeLow, fRangeHigh: word;
-    fRedirect: array of TTftpServerRedirect;
+    fRedirect: TTftpServerRedirectObjArray;
     fFileCache: TSynDictionary; // thread-safe <16MB files content cache
     {$ifdef OSPOSIX}
     fPosixFileNames: TPosixFileCaseInsensitive; // ttoCaseInsensitiveFileName
@@ -148,8 +152,12 @@ type
     function GetContextOptions: TTftpContextOptions;
     // default implementation will read/write from FileFolder
     procedure SetFileFolder(const Value: TFileName);
+    function DoRedirect(const Caller, UriPrefix, Remote: RawUtf8;
+      MemCacheBytes: integer; const Folder: TFileName; Tls: PNetTlsContext;
+      ExtOptions: PHttpRequestExtendedOptions; Schemes: TUriSchemes): PtrInt;
     function ParseUri(var Context: TTftpContext): TTftpError; virtual;
-    function SetLocal(var Uri: RawUtf8; var Context: TTftpContext): TTftpError; virtual;
+    function SetLocal(var Uri: RawUtf8; var Context: TTftpContext;
+      const Folder: TFileName): TTftpError; virtual;
     function SetRemote(const Uri: RawUtf8; var Remote: TTftpServerRedirect;
       var Context: TTftpContext): TTftpError; virtual;
     procedure BackgroundGet(Sender: TObject);
@@ -171,8 +179,8 @@ type
     /// finalize the server instance
     destructor Destroy; override;
     /// register one sub-URI folder pointing to a remote HTTP location
-    // - return the internal >= 0 index in fRangeLow[], -1 on failure, e.g. if
-    // the supplied UriPrefix overlap with a previous RedirectUri()
+    // - return the internal >= 0 index in Redirect[], -1 on failure, e.g. if
+    // the supplied UriPrefix overlap with a previous RedirectUri/RedirectFolder
     // - for instance, you can write:
     // ! srv.RedirectUri('deb', 'https://deb.debian.org/debian/dists/stable/main');
     // so that
@@ -186,6 +194,12 @@ type
       MemCacheBytes: integer = 2 shl 20; Tls: PNetTlsContext = nil;
       ExtOptions: PHttpRequestExtendedOptions = nil;
       Schemes: TUriSchemes = [usHttp, usHttps]): PtrInt;
+    /// register one sub-URI folder pointing to a local folder location
+    // - return the internal >= 0 index in Redirect[], -1 on failure, e.g. if
+    // the supplied UriPrefix overlap with a previous RedirectUri/RedirectFolder
+    // - note: the ttoCaseInsensitiveFileName option won't apply to this folder
+    function RedirectFolder(const UriPrefix: RawUtf8; const Folder: TFileName;
+      MemCacheBytes: integer = 2 shl 20): PtrInt;
     /// notify the server thread(s) to be terminated, and wait for pending
     // threads to actually abort their background process
     procedure TerminateAndWaitFinished(TimeOutMs: integer = 5000); override;
@@ -207,9 +221,12 @@ type
     /// how many connections have been processed since the server start
     property ConnectionTotal: integer
       read fConnectionTotal;
-    /// the local folder where the files are read or written
+    /// the main local folder where the files are read or written
     property FileFolder: TFileName
       read fFileFolder write SetFileFolder;
+    /// registered information for all RedirectUri() and RedirectFolder()
+    property Redirect: TTftpServerRedirectObjArray
+      read fRedirect;
     /// optional lowest UDP port to be used for the responses
     // - default 0 will let the OS select an ephemeral port
     property RangeLow: word
@@ -536,8 +553,8 @@ begin
   {$endif OSPOSIX}
 end;
 
-function TTftpServerThread.RedirectUri(const UriPrefix, Remote: RawUtf8;
-  MemCacheBytes: integer; Tls: PNetTlsContext;
+function TTftpServerThread.DoRedirect(const Caller, UriPrefix, Remote: RawUtf8;
+  MemCacheBytes: integer; const Folder: TFileName; Tls: PNetTlsContext;
   ExtOptions: PHttpRequestExtendedOptions; Schemes: TUriSchemes): PtrInt;
 var
   one: TTftpServerRedirect;
@@ -545,13 +562,14 @@ var
   i: PtrInt;
   client: THttpClientSocket;
   up: RawUtf8;
+  dir: TFileName;
   onlog: TSynLogProc;
   u: TUri;
 begin
   result := -1;
   if not (ttoRrq in fOptions) then
   begin
-    fLog.Log(sllWarning, 'RedirectUri with no RRQ support', self);
+    fLog.Log(sllWarning, 'Redirect% with no RRQ support', [Caller], self);
     exit;
   end;
   // validate and prepare the UriPrefix parameter
@@ -560,50 +578,69 @@ begin
   if (up = '') or
      not IsAnsiCompatible(pointer(up)) then
   begin
-    fLog.Log(sllWarning, 'RedirectUri uri=% failed', [UriPrefix], self);
+    fLog.Log(sllWarning, 'Redirect% uri=% failed', [Caller, UriPrefix], self);
     exit;
   end;
   AppendIfNone(up, '/');
   if up = '/' then
-    FastAssignNew(up)
+    if Folder <> '' then
+    begin
+      fLog.Log(sllWarning, 'RedirectFolder invalid uri=/', self);
+      exit;
+    end
+    else
+      FastAssignNew(up) // is allowed as the last RemoteUri() registration
   else
     for i := 0 to length(fRedirect) - 1 do
       if IdemPChar(pointer(up), pointer(fRedirect[i].up)) then
       begin
-        fLog.Log(sllWarning, 'RedirectUri duplicated uri=% with %',
-          [UriPrefix, fRedirect[i].up], self);
+        fLog.Log(sllWarning, 'Redirect% duplicated uri=% with %',
+          [Caller, UriPrefix, fRedirect[i].up], self);
         exit;
       end;
-  // validate the Remote address parameter
-  if not u.From(Remote) or
-     not (u.UriScheme in Schemes) then
+  if Remote <> '' then
   begin
-    fLog.Log(sllWarning, 'RedirectUri remote=% failed', [Remote], self);
-    exit;
-  end;
-  if u.Address <> '' then
-    AppendIfNone(u.Address, '/');
-  // ensure the remote URI is valid by connecting to the server
-  if ExtOptions = nil then
-  begin
-    opt.Init; // all to 0, including RedirectMax=0
-    opt.RecreateConnectionAfterSecs := 30; // 30 secs idle -> reopen
-    if Tls <> nil then
-      opt.Tls := Tls^;
+    // RedirectUri(): validate the Remote address parameter
+    if not u.From(Remote) or
+       not (u.UriScheme in Schemes) then
+    begin
+      fLog.Log(sllWarning, 'RedirectUri remote=% failed', [Remote], self);
+      exit;
+    end;
+    if u.Address <> '' then
+      AppendIfNone(u.Address, '/');
+    // ensure the remote URI is valid by connecting to the server
+    if ExtOptions = nil then
+    begin
+      opt.Init; // all to 0, including RedirectMax=0
+      opt.RecreateConnectionAfterSecs := 30; // 30 secs idle -> reopen
+      if Tls <> nil then
+        opt.Tls := Tls^;
+    end
+    else
+      opt := ExtOptions^;
+    onlog := nil;
+    if (ttoHttpVerboseLog in fOptions) and
+       Assigned(fLogClass) then
+      onlog := fLogClass.DoLog;
+    try
+      client := THttpClientSocket.OpenOptions(u, opt, onlog);
+    except
+      on E: Exception do
+      begin
+        fLog.Log(sllWarning, 'RedirectUri OpenUri=% failed as %',
+                 [Remote, E], self);
+        exit;
+      end;
+    end;
   end
   else
-    opt := ExtOptions^;
-  onlog := nil;
-  if (ttoHttpVerboseLog in fOptions) and
-     Assigned(fLogClass) then
-    onlog := fLogClass.DoLog;
-  try
-    client := THttpClientSocket.OpenOptions(u, opt, onlog);
-  except
-    on E: Exception do
+  begin
+    // RedirectFolder(): validate supplied local folder
+    dir := EnsureDirectoryExists(Folder);
+    if dir = '' then
     begin
-      fLog.Log(sllWarning, 'RedirectUri OpenUri=% failed as %',
-               [Remote, E], self);
+      fLog.Log(sllWarning, 'RedirectFolder invalid Folder=%', [Folder], self);
       exit;
     end;
   end;
@@ -612,9 +649,24 @@ begin
   one.up := up;
   one.address := u.address;
   one.client := client;
+  one.folder := dir;
   one.memcachesize := MemCacheBytes;
   result := ObjArrayAdd(fRedirect, one);
-  fLog.Log(sllDebug, 'RedirectUri=% uri=% remote=%', [result, up, one.address], self);
+  fLog.Log(sllDebug, 'Redirect%=% uri=% remote=%',
+           [Caller, result, up, one.address], self);
+end;
+
+function TTftpServerThread.RedirectUri(const UriPrefix, Remote: RawUtf8;
+  MemCacheBytes: integer; Tls: PNetTlsContext;
+  ExtOptions: PHttpRequestExtendedOptions; Schemes: TUriSchemes): PtrInt;
+begin
+  result := DoRedirect('Uri', UriPrefix, Remote, MemCacheBytes, '', Tls, ExtOptions, Schemes);
+end;
+
+function TTftpServerThread.RedirectFolder(const UriPrefix: RawUtf8; const Folder: TFileName;
+  MemCacheBytes: integer): PtrInt;
+begin
+  result := DoRedirect('Folder', UriPrefix, '', MemCacheBytes,  Folder, nil, nil, []);
 end;
 
 type
@@ -725,34 +777,46 @@ begin
 end;
 
 function TTftpServerThread.SetLocal(var Uri: RawUtf8;
-  var Context: TTftpContext): TTftpError;
+  var Context: TTftpContext; const Folder: TFileName): TTftpError;
 var
   fn: TFileName;
   cached: RawByteString;
+  cache: RawUtf8;
   size: Int64;
   {$ifdef OSPOSIX}
   readms: integer;
   {$endif OSPOSIX}
 begin
+  // ensure we can access this URI
   result := teFileNotFound;
+  if (not (ttoAllowSubFolders in fOptions)) and
+     (PosExChar(PathDelim, Uri) <> 0) then
+    exit;
   Utf8ToFileName(Uri, fn);
   // check the actual file on disk and create a proper Context.FileStream
-  {$ifdef OSPOSIX}
-  if Assigned(fPosixFileNames) then
+  if Folder <> fFileFolder then
+    Make([Folder, Uri], cache) // genuine cache from RedirectFolder()
+  else
   begin
-    fn := fPosixFileNames.Find(fn, @readms, @Uri); // convert to actual casing
-    if readms <> 0 then
-      // e.g. 4392 filenames from /home/ab/dev/lib/ in 7.20ms
-      fLog.Log(sllDebug, 'SetLocal: cached % filenames from % in %',
-        [fPosixFileNames.Count, fFileFolder, MicroSecToString(readms)], self);
+    {$ifdef OSPOSIX}
+    if Assigned(fPosixFileNames) and
+       (Folder = fFileFolder) then
+    begin
+      fn := fPosixFileNames.Find(fn, @readms, @Uri); // convert to actual casing
+      if readms <> 0 then
+        // e.g. 4392 filenames from /home/ab/dev/lib/ in 7.20ms
+        fLog.Log(sllDebug, 'SetLocal: cached % filenames from % in %',
+          [fPosixFileNames.Count, fFileFolder, MicroSecToString(readms)], self);
+    end;
+    {$endif OSPOSIX}
+    cache := Uri; // genuine cache from main FileFolder
   end;
-  {$endif OSPOSIX}
   case Context.OpCode of
     toRrq:
       begin
         if fn = '' then
           exit; // file does not exist after fPosixFileNames lookup
-        fn := fFileFolder + fn;
+        fn := Folder + fn;
         size := FileSize(fn);
         if (size = 0) or
            (size >= RRQ_FILE_MAX) then
@@ -761,7 +825,7 @@ begin
         if Assigned(fFileCache) and
            (size < RRQ_CACHE_MAX) then // < 2MB by default in memory cache
         begin
-          if fFileCache.FindAndCopy(Uri, cached) and
+          if fFileCache.FindAndCopy(cache, cached) and
              (size = length(cached)) then
             fLog.Log(sllTrace, 'SetLocal: % size=% from cache',
               [Uri, length(cached)], self)
@@ -769,7 +833,7 @@ begin
           begin
             // not yet available in cache, or changed on disk
             cached := StringFromFile(fn);
-            fFileCache.AddOrUpdate(Uri, cached);
+            fFileCache.AddOrUpdate(cache, cached);
             fLog.Log(sllTrace, 'SetLocal: % size=% to cache',
               [Uri, length(cached)], self);
           end;
@@ -782,7 +846,7 @@ begin
     toWrq:
       begin
         result := teFileAlreadyExists;
-        fn := fFileFolder + fn;
+        fn := Folder + fn;
         if FileExists(fn) then
           exit;
         Context.FileStream := TFileStreamEx.Create(fn, fmCreate);
@@ -829,7 +893,10 @@ begin
         else if IdemPChar(pointer(uri), pointer(r^.up)) then
         begin
           delete(uri, 1, length(r^.up)); // trim local/uri/
-          result := SetRemote(uri, r^, Context);
+          if r^.folder <> '' then
+            result := SetLocal(uri, Context, r^.folder)  // from RedirectFolder
+          else
+            result := SetRemote(uri, r^, Context);       // from RedirectUri
           exit;
         end;
         inc(r);
@@ -837,9 +904,7 @@ begin
     end;
   end;
   // download/upload this file from the main FileFolder
-  if (ttoAllowSubFolders in fOptions) or
-     (PosExChar(PathDelim, u) = 0) then
-    result := SetLocal(u, Context);
+  result := SetLocal(u, Context, fFileFolder);
 end;
 
 function TTftpServerThread.SetRrqStream(var Context: TTftpContext): TTftpError;
