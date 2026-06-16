@@ -1868,7 +1868,7 @@ var
   c: TJwtClaim;
 begin
   GetEnumNames(TypeInfo(TJwtResult), @_TJwtResult);
-  GetEnumNames(TypeInfo(TJwtClaim), @_TJwtClaim);
+  GetEnumNames(TypeInfo(TJwtClaim),  @_TJwtClaim);
   for c := low(c) to high(c) do
     JWT_CLAIMS_TEXT4[c] := PInteger(JWT_CLAIMS_TEXT[c])^;
 end;

@@ -8,6 +8,8 @@ Details are available [on out GitHub repository](https://github.com/synopse/mORM
 - new `mormot.core.fmt.pas` unit
 - YAML 1.2 Read and Write Support
 - Preliminary compatibility to Delphi for Linux and Delphi for MacOS
+- HTTP Proxy Cache
+- HTTP over TFTP proxy
 ### Changed
 - refactored main units to reduce their size: you may need to explicitly add `mormot.core.fmt`, `mormot.core.datetime` or `mormot.core.search` to your uses clause now
 - refactored cross-platform and cross-cpu conditionals (e.g. new internal `ASM*` definitions)
