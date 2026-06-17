@@ -4343,7 +4343,6 @@ var
     Timer: TPrecisionTimer;
     a: string[10];
   begin
-    Timer.Start;
     a := '123456789';
     Check(hash(0, @a, 0) = 0);
     Check(hash(0, @a, 1) = $2ACF889D);
@@ -4356,6 +4355,7 @@ var
     Check(hash(0, @a, 6) = $85BF5A8C);
     Check(hash(0, @a, 7) = $8B0FB6FA);
     Check(hash(0, @a, 8) = $2E5336F0);
+    Timer.Start;
     for i := 0 to High(crc) do
       with crc[i] do
         Check(hash(0, pointer(S), length(S)) = crc);
@@ -4376,6 +4376,7 @@ var
   digest: THash256;
   tmp: RawByteString;
   hmac32: THmacCrc32c;
+  timer: TPrecisionTimer;
 begin
   test16('', $ffff);
   test16('a', $9d77);
@@ -4496,14 +4497,23 @@ begin
   {$ifndef OSDARWIN}
   // Not [yet] implemented on Darwin
   if cfSSE42 in CpuFeatures then
+  begin
     Test(crc32csse42, 'sse42');
+    AddConsole('%', [msg]);
+    Check(hashsse42(0, p, 5) = $39B69E64, 'hashsse42a');
+    Check(hashsse42(0, p, 1020) = $C43D29E6, 'hashsse42b');
+    timer.Start; // only the profiling part of Test()
+    for i := 0 to High(crc) do
+      with crc[i] do
+        CheckNotEqual(hashsse42(0, pointer(S), length(S)), crc);
+    msg := FormatUtf8(' hashsse42:%/s', [KBNoSpace(Timer.PerSec(totallen))]);
+    {$ifdef ASMX64}
+    if (cfAesNi in CpuFeatures) and
+       (cfCLMUL in CpuFeatures) then
+      Test(crc32c, 'clmul'); // use SSE4.2+pclmulqdq instructions on x64
+    {$endif ASMX64}
+  end;
   {$endif OSDARWIN}
-  {$ifdef ASMX64}
-  if (cfSSE42 in CpuFeatures) and
-     (cfAesNi in CpuFeatures) and
-     (cfCLMUL in CpuFeatures) then
-    Test(crc32c, 'aesni'); // use SSE4.2+pclmulqdq instructions on x64
-  {$endif ASMX64}
   {$else}
   if @crc32c <> @crc32cfast then
     Test(crc32c, 'armv8');

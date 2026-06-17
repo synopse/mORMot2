@@ -2714,7 +2714,7 @@ function hashsse42(seed: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
         sub     len, 1
         jnz     @by8
         jmp     @0
-end;
+end; // the i386 asm returns the very same value - no need for further optimization
 
 function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var

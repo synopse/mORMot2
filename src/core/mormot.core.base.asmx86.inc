@@ -2132,7 +2132,7 @@ asm
         mov     ecx, eax
         shr     ecx, 16
         xor     eax, ecx
-end;
+end; // the x64 asm returns the very same value - no need for further optimization
 
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
