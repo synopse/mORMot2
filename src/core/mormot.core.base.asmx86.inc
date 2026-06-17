@@ -2045,21 +2045,18 @@ asm
         jz      @0
         test    edx, edx
         jz      @0
-        jmp     @align
-@a:     {$ifdef ASMAESNI}
-        crc32   eax, byte ptr [edx]
-        {$else} // oldest Delphi don't support these opcodes
-        db      $F2, $0F, $38, $F0, $02
+@1:     sub     ecx, 8
+        jb      @rem
+@by8:   {$ifdef ASMAESNI}
+        crc32   eax, dword ptr [edx]
+        crc32   eax, dword ptr [edx + 4]
+        {$else}
+        db      $F2, $0F, $38, $F1, $02
+        db      $F2, $0F, $38, $F1, $42, $04
         {$endif ASMAESNI}
-        inc     edx
-        dec     ecx
-        jz      @0
-@align: test    dl, 3
-        jnz     @a
-        push    ecx
-        shr     ecx, 3
-        jnz     @by8
-@rem:   pop     ecx
+        add     edx, 8
+        jmp     @1
+@rem:   add     ecx, 8
         test    cl, 4
         jz      @4
         {$ifdef ASMAESNI}
@@ -2084,18 +2081,6 @@ asm
         db      $F2, $0F, $38, $F0, $02
         {$endif ASMAESNI}
 @0:     not     eax
-        ret
-        {$ifdef ASMAESNI}
-@by8:   crc32   eax, dword ptr [edx]
-        crc32   eax, dword ptr [edx + 4]
-        {$else}
-@by8:   db      $F2, $0F, $38, $F1, $02
-        db      $F2, $0F, $38, $F1, $42, $04
-        {$endif ASMAESNI}
-        add     edx, 8
-        dec     ecx
-        jnz     @by8
-        jmp     @rem
 end;
 
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
