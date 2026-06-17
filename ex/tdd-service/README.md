@@ -30,10 +30,10 @@ https://github.com/synopse/mORMot2/commit/eeefe9d61
 https://github.com/synopse/mORMot2/commit/bf55ca3b7
 
 - Step 7: Test and prepare a daemon/service container.
-See `RemoteCall` in `tests.pas`, and the shared composition root in `app.server.pas`.
+https://github.com/synopse/mORMot2/commit/f74503ccd
 
 - Step 8: Make a daemon/service stand-alone executable.
-See `AuditTrailServer.dpr`, reusing the same `app.server.pas`.
+https://github.com/synopse/mORMot2/commit/13825a625
 
 
 ## Followed Patterns
