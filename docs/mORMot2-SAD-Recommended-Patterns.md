@@ -180,7 +180,8 @@ initialization
   Rest := TRestServerDB.Create(TOrmModel.Create([TOrmUser]), ':memory:'); // or 'data.db'
   Rest.Model.Owner := Rest;
   Rest.Server.CreateMissingTables;
-  // domain/persistence layer owns the ORM; app layer gets it injected (B.5):
+  // domain/persistence layer owns the ORM; app layer gets it injected (B.5).
+  // CreateInjected's 3 arrays are [stubsByGuid], [otherResolvers], [dependencies]:
   Rest.ServiceDefine(
     TUserService.CreateInjected([], [], [TUserPersistence.Create(Rest.Orm)]),
     [IUserQuery, IUserCommand]);
@@ -465,6 +466,7 @@ Every service exposes an `IXxxRepository` (or a CQRS pair, see [B.4](#b4-cqrs-re
 
 - **`IRestOrm` is the binding type** in business code; cast to `IRestOrmServer` only at the composition root for server-only methods.
 - **Inject via `TInjectableObjectRest` / `TInjectableObject`:** publish interface properties and let `AutoResolve` fill them through the `TRestServer.Services` resolver chain, or use the inherited `Server.Orm`. Concrete-class fields cannot be auto-injected — interfaces only.
+- **Seed the injector with `CreateInjected`.** Its signature is `CreateInjected(aStubsByGuid, aOtherResolvers, aDependencies)`. Pass the concrete dependency instances a service needs — typically its repositories — in the **third** array, and leave the first two empty outside tests (the first auto-stubs interfaces by `TGuid`, the second chains in extra `TInterfaceResolver`s). `CreateInjected` is **not an alternative to `AutoResolve`** — it seeds the resolver with those instances and then calls `AutoResolve` itself, so the instances you pass are exactly what gets bound to the published interface properties. Injected `TInterfacedObject` dependencies are reference-counted and released when the service is destroyed.
 - **Instance mode:** default `sicShared`, promote only when justified — see [A.4](#a4-service-instance-mode--default-to-sicshared).
 
 ### B.6. Cross-cutting standards
