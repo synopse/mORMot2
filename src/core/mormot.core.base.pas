@@ -3055,6 +3055,7 @@ procedure LockedInc64(int64: PInt64);
 // defined here for test.core.base
 function GetBitsCountSSE42(value: PtrInt): PtrInt;
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+function hashsse42(seed: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 {$else}
 

@@ -2083,6 +2083,57 @@ asm
 @0:     not     eax
 end;
 
+// used for DefaultHasher/InterningHasher before Delphi XE4 with len<256 bytes
+function hashsse42(seed: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        // eax=seed, edx=buf, ecx=len - no "not eax" needed for hashing
+        test    edx, edx
+        jz      @0
+@1:     sub     ecx, 8
+        jb      @rem
+@by8:   {$ifdef ASMAESNI}
+        crc32   eax, dword ptr [edx]
+        crc32   eax, dword ptr [edx + 4]
+        {$else}
+        db      $F2, $0F, $38, $F1, $02
+        db      $F2, $0F, $38, $F1, $42, $04
+        {$endif ASMAESNI}
+        add     edx, 8
+        jmp     @1
+@rem:   add     ecx, 8
+        test    cl, 4
+        jz      @4
+        {$ifdef ASMAESNI}
+        crc32   eax, dword ptr [edx]
+        {$else}
+        db      $F2, $0F, $38, $F1, $02
+        {$endif ASMAESNI}
+        add     edx, 4
+@4:     test    cl, 2
+        jz      @2
+        {$ifdef ASMAESNI}
+        crc32   eax, word ptr [edx]
+        {$else}
+        db      $66, $F2, $0F, $38, $F1, $02
+        {$endif ASMAESNI}
+        add     edx, 2
+@2:     test    cl, 1
+        jz      @0
+        {$ifdef ASMAESNI}
+        crc32   eax, byte ptr [edx]
+        {$else}
+        db      $F2, $0F, $38, $F0, $02
+        {$endif ASMAESNI}
+@0:     mov     ecx, eax  // Murmur-inspired finalizer for power-of-two hash tables
+        shr     ecx, 16   // Bijective over 32-bit values: preserves CRC32C collision
+        xor     eax, ecx  // but the result is no standard CRC32C value anymore
+        imul    eax, eax, $85ebca6b   // and we can't cascade hashsse42() calls
+        mov     ecx, eax
+        shr     ecx, 16
+        xor     eax, ecx
+end;
+
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm

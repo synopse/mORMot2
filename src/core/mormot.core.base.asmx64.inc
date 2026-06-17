@@ -2646,7 +2646,7 @@ function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
         not     eax
         mov     ecx, len
         shr     len, 3
-        jnz     @by8 // no read alignment care here - but in crypto.core
+        jnz     @by8   // no read alignment care needed
 @0:     test    cl, 4
         jz      @4
         crc32   eax, dword ptr [buf]
@@ -2661,7 +2661,50 @@ function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 @1:     not     eax
 @z:     ret
         {$ifdef FPC}
-        align 16
+        align 16                     // loop within 15 bytes of aligned code
+@by8:   crc32   rax, qword ptr [buf] // hash 8 bytes per loop
+        {$else}
+        .align 16
+@by8:   db $F2,$48,$0F,$38,$F1,$02 // circumvent Delphi inline asm compiler bug
+        {$endif FPC}
+        add     buf, 8
+        sub     len, 1
+        jnz     @by8
+        jmp     @0
+end;
+
+// used for DefaultHasher/InterningHasher before Delphi XE7 with len<256 bytes
+function hashsse42(seed: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     eax, seed // seed, not crc - we can't cascade hashsse42() calls
+        mov     ecx, len
+        test    len, len
+        jz      @z
+        test    buf, buf
+        jz      @z
+        shr     len, 3
+        jnz     @by8     // no read alignment care needed
+@0:     test    cl, 4
+        jz      @4
+        crc32   eax, dword ptr [buf]
+        add     buf, 4
+@4:     test    cl, 2
+        jz      @2
+        crc32   eax, word ptr [buf]
+        add     buf, 2
+@2:     test    cl, 1
+        jz      @1
+        crc32   eax, byte ptr [buf]
+@1:     mov     ecx, eax  // Murmur-inspired finalizer for power-of-two hash tables
+        shr     ecx, 16   // Bijective over 32-bit values: preserves CRC32C collision
+        xor     eax, ecx  // but the result is no standard CRC32C value anymore
+        imul    eax, eax, $85ebca6b
+        mov     ecx, eax
+        shr     ecx, 16
+        xor     eax, ecx
+@z:     ret
+        {$ifdef FPC}
+        align 16                     // loop within 15 bytes of aligned code
 @by8:   crc32   rax, qword ptr [buf] // hash 8 bytes per loop
         {$else}
         .align 16
