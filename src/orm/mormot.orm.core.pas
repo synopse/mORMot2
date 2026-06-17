@@ -3065,7 +3065,7 @@ type
     fPrivateCopy: RawUtf8;
     /// contains the pointers/offset of start of every field value
     fJsonData: TOrmTableJsonDataArray;
-    /// contain the hash value of the last JSON data sent to ContentChanged()
+    /// contain DefaultHasher() of the last JSON data sent to ContentChanged()
     // - used to don't repeat parsing if data has not been changed
     fPrivateCopyHash: cardinal;
     /// void the whole content
@@ -3082,7 +3082,7 @@ type
     function ParseAndConvert(Buffer: PUtf8Char; BufferLen: PtrInt): boolean;
     /// will check then set (if needed) internal fPrivateCopy[Hash] values
     // - returns TRUE if fPrivateCopy content changed (then fPrivateCopyHash
-    // will be updated using crc32c hash if aUpdateHash is set)
+    // will be updated using DefaultHasher() if aUpdateHash is set)
     function PrivateCopyChanged(aJson: PUtf8Char; aLen: integer;
       aUpdateHash: boolean): boolean;
   public

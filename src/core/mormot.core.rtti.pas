@@ -9357,7 +9357,7 @@ begin
 end;
 
 function TRttiCustom.ValueFullHash(const Elem): cardinal;
-begin
+begin // may use AesNiHash32/hashsse42/crc32carm64/xxhash32
   result := DefaultHasher(PtrUInt(self), @Elem, fCache.ItemSize);
 end;
 

@@ -7771,7 +7771,7 @@ procedure sha512_sse4(data, hash: pointer; blocks: Int64);
 
 // defined in mormot.crypt.core.pas, not in mormot.core.base, to avoid
 // .o/.obj dependencies for most basic executables (for which mormot.core.base
-// crc32c x86_64 asm is already fast enough)
+// crc32csse42/hashsse42 asm is already fast enough)
 function crc32_iscsi_01(buf: PAnsiChar; len: PtrUInt; crc: cardinal): cardinal;
   {$ifdef FPC}cdecl;{$endif} external;
 

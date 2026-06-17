@@ -5435,7 +5435,7 @@ begin
          (crc32carm64(0, @uts, SizeOf(uts)) = crc32cfast(0, @uts, SizeOf(uts))) then
       begin
         crc32c          := @crc32carm64;
-        DefaultHasher   := @crc32carm64;
+        DefaultHasher   := @crc32carm64; // no murmur-like finalizer on ARMv8 yet
         InterningHasher := @crc32carm64;
         crc32cby4       := @crc32cby4arm64;
         crcblock        := @crc32blockarm64;

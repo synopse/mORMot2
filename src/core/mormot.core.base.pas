@@ -4066,16 +4066,16 @@ const
 
 var
   /// the 32-bit default hasher used by TDynArrayHashed
-  // - set to crc32csse42() if SSE4.2 or ARMv8 are available on this CPU,
-  // or fallback to xxHash32() which is faster than crc32cfast() e.g. on ARM
+  // - set to hashsse42() on SSE4.2, or crc32carm64() on compatible ARMv8 CPUs
   // - mormot.crypt.core may assign safer and faster AesNiHash32() if available
+  // - fallback/default to xxHash32() - faster than crc32cfast() e.g. on ARM
   // - so the hash value may change on another computer or after program restart
   DefaultHasher: THasher = xxHash32;
 
   /// the 32-bit hash function used by TRawUtf8Interning
-  // - set to crc32csse42() if SSE4.2 or ARMv8 are available on this CPU,
-  // or fallback to xxHash32() which performs better than crc32cfast()
+  // - set to hashsse42() on SSE4.2, or crc32carm64() on compatible ARMv8 CPUs
   // - mormot.crypt.core may assign safer and faster AesNiHash32() if available
+  // - fallback to xxHash32() which is faster than crc32cfast() e.g. on ARM
   // - so the hash value may change on another computer or after program restart
   InterningHasher: THasher = xxHash32;
 
@@ -10978,8 +10978,8 @@ begin
     crc32cby4       := @crc32cby4sse42;
     crcblock        := @crcblocksse42;
     crcblocks       := @crcblockssse42;
-    DefaultHasher   := @crc32csse42;
-    InterningHasher := @crc32csse42;
+    DefaultHasher   := @hashsse42; // = crc32csse42 + murmur-like finalizer
+    InterningHasher := @hashsse42;
   end
   else
   {$endif DISABLE_SSE42}
