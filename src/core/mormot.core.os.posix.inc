@@ -276,9 +276,9 @@ var
   err: SizeInt;
   P: PPointerArray;
   {$ifndef OSDARWIN}
-  so: string;
+  fn, so: string;
   {$endif OSDARWIN}
-  fn, v, vers: string;
+  v, vers: string;
   data: PAnsiChar;
 begin
   GlobalLock;
