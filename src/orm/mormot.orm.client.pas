@@ -21,7 +21,6 @@ uses
   sysutils,
   classes,
   variants,
-  contnrs,
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -32,7 +31,6 @@ uses
   mormot.core.data,
   mormot.core.rtti,
   mormot.core.json,
-  mormot.core.threads,
   mormot.crypt.secure,
   mormot.core.log,
   mormot.core.interfaces,
@@ -622,8 +620,11 @@ end;
 function TRestOrmClient.ListFmt(const Tables: array of TOrmClass;
   const SqlSelect, SqlWhereFormat: RawUtf8;
   const Args, Bounds: array of const): TOrmTable;
+var
+  where: RawUtf8;
 begin
-  result := List(Tables, SqlSelect, FormatSql(SqlWhereFormat, Args, Bounds));
+  FormatSqlVar(SqlWhereFormat, Args, Bounds, where);
+  result := List(Tables, SqlSelect, where);
 end;
 
 function TRestOrmClient.TransactionBeginRetry(aTable: TOrmClass;
@@ -969,7 +970,7 @@ begin
   if high(Tables) < 0 then
   exit;
   // GET Collection
-  sql := Model.SqlFromSelectWhere(Tables, SqlSelect, SqlWhere);
+  Model.SqlFromSelectWhere(Tables, SqlSelect, SqlWhere, sql);
   if high(Tables) = 0 then
   begin
     // one Table -> use REST protocol (sql as parameters)

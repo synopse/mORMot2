@@ -1990,6 +1990,9 @@ procedure CaseSelf(var S: RawUtf8; Table: PNormTable);
 /// low-level function which could be called when S has RefCnt = 1
 procedure CaseNew(var S: RawUtf8; Table: PNormTable);
 
+/// normalize the casing of some text buffer in-place
+procedure CaseBuffer(Text: PUtf8Char; Len: PtrInt; Table: PNormTable);
+
 /// fast conversion of the supplied text into uppercase
 // - this will only convert 'a'..'z' into 'A'..'Z' (no NormToUpper use), and
 // will therefore be correct with true UTF-8 content, but only for 7-bit
@@ -2902,7 +2905,8 @@ type
     // - is thread-safe and non blocking during its lookup
     // - can optionally return micro seconds spent for actual filenames read on disk
     // - warning: aReadMs^ should be a 32-bit "integer" variable, not a PtrInt
-    function Find(const aSearched: TFileName; aReadMs: PInteger = nil): TFileName;
+    function Find(const aSearched: TFileName; aReadMs: PInteger = nil;
+      aFileNameUtf8: PRawUtf8 = nil): TFileName;
     /// how many file entries are currently in the internal list
     function Count: PtrInt;
     /// make a dynamic array copy of the internal file names, sorted by StrIComp
@@ -4143,8 +4147,7 @@ begin
   else
   begin
     u := AnsiBufferToUnicode(tmp.Init(SourceChars * 2), Source, SourceChars);
-    u^ := #0;
-    SetString(result, PAnsiChar(tmp.buf), PtrUInt(u) - PtrUInt(tmp.buf) + 1);
+    FastSetRawUnicode(result, tmp.buf, PtrUInt(u) - PtrUInt(tmp.buf));
     tmp.Done;
   end;
 end;
@@ -4190,7 +4193,7 @@ begin
     exit;
   end;
   p := AnsiBufferToUtf8(tmp.Init(SourceChars * 3), Source, SourceChars);
-  FastSetString(Value, tmp.buf, p - tmp.buf);
+  FastSetString(Value, tmp.buf, p);
   tmp.Done;
 end;
 
@@ -4600,7 +4603,7 @@ begin
     result := ''
   else
   begin
-    SetString(result, nil, SourceChars * 2 + 1);
+    FastSetRawUnicode(result, nil, SourceChars * 2);
     AnsiBufferToUnicode(pointer(result), Source, SourceChars);
   end;
 end;
@@ -5089,7 +5092,7 @@ end;
 function TSynAnsiUtf16.AnsiToRawUnicode(Source: PAnsiChar;
   SourceChars: cardinal): RawUnicode;
 begin
-  SetString(result, Source, SourceChars); // byte count
+  FastSetRawUnicode(result, Source, SourceChars); // byte count
 end;
 {$endif PUREMORMOT2}
 
@@ -5432,7 +5435,7 @@ begin
     exit;
   // +1 below is for #0 ending -> true WideChar(#0) ending
   tmp.Init(L * 3); // maximum possible unicode size (if all <#128)
-  SetString(result, PAnsiChar(tmp.buf), Utf8ToWideChar(tmp.buf, P, L) + 1);
+  FastSetRawUnicode(result, tmp.buf, Utf8ToWideChar(tmp.buf, P, L));
   tmp.Done;
 end;
 
@@ -5694,12 +5697,12 @@ end;
 
 function StringToRawUnicode(const S: string): RawUnicode;
 begin
-  SetString(result, PAnsiChar(pointer(S)), length(S) * 2 + 1); // +1 for last wide #0
+  FastSetRawUnicode(result, pointer(S), length(S) * 2);
 end;
 
 function StringToRawUnicode(P: PChar; L: integer): RawUnicode;
 begin
-  SetString(result, PAnsiChar(P), L * 2 + 1); // +1 for last wide #0
+  FastSetRawUnicode(result, P, L * 2);
 end;
 
 function RawUnicodeToString(const U: RawUnicode): string;
@@ -5772,12 +5775,12 @@ end;
 
 function Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt): string;
 begin
-  SetString(result, PAnsiChar(Text), Len);
+  FastSetStringCP(result, Text, Len, Unicode_CodePage);
 end;
 
 procedure Ansi7ToString(Text: PWinAnsiChar; Len: PtrInt; var Dest: string);
 begin
-  SetString(Dest, PAnsiChar(Text), Len);
+  FastSetStringCP(Dest, Text, Len, Unicode_CodePage);
 end;
 
 function StringToAnsi7(const Text: string): RawByteString;
@@ -6130,7 +6133,7 @@ begin
   else
   begin
     tmp.Init(Len * 3); // maximum possible unicode size (if all <#128)
-    SetString(result, PWideChar(tmp.buf), Utf8ToWideChar(tmp.buf, Text, Len) shr 1);
+    FastSetWideString(result, tmp.buf, Utf8ToWideChar(tmp.buf, Text, Len) shr 1);
     tmp.Done;
   end;
 end;
@@ -6562,7 +6565,7 @@ begin
         inc(up);
       repeat
         inc(up);
-      until up^ = '|';
+      until up^ = '|'; // quickly go to the next value
       inc(result);
       inc(up);
     until up^ = #0;
@@ -8308,15 +8311,20 @@ begin
   FastAssignNew(Dest, tmp);
 end;
 
-procedure CaseConvert(p: PUtf8Char; l: integer; Table: PNormTable);
+procedure CaseConvert(p: PUtf8Char; l: PtrInt; Table: PNormTable);
   {$ifdef HASINLINE} inline; {$endif}
 begin
-  if l <> 0 then
+  if l > 0 then
     repeat
       p^ := Table[p^]; // branchless conversion
       inc(p);
       dec(l)
     until l = 0;
+end;
+
+procedure CaseBuffer(Text: PUtf8Char; Len: PtrInt; Table: PNormTable);
+begin
+  CaseConvert(Text, Len, Table);
 end;
 
 procedure CaseSelf(var S: RawUtf8; Table: PNormTable);
@@ -8565,7 +8573,7 @@ begin
       while (source > beg) and
             (source[-1] in [#9, ' ']) do
         dec(source);
-    FastSetString(result, beg, source - beg);
+    FastSetString(result, beg, source);
     exit;
   until false;
 end;
@@ -9339,7 +9347,7 @@ begin
   b := P;
   while tcIdentifier in tab[P^] do
     inc(P); // go to end of ['_', '0'..'9', 'a'..'z', 'A'..'Z'] chars
-  FastSetString(Prop, b, P - b);
+  FastSetString(Prop, b, P);
   P := GotoNextSqlIdentifier(P, tab);
   result := Prop <> '';
 end;
@@ -9395,7 +9403,7 @@ begin
   // create unquoted string
   if internalquote = 0 then
     // no quote within
-    FastSetString(Value, beg, P - beg)
+    FastSetString(Value, beg, P)
   else
   begin
     // unescape internal quotes
@@ -9512,6 +9520,7 @@ begin
   p := FindNameValue(NameValuePairs, UpperName);
   if p <> nil then
     repeat
+      len := 0;
       if UpperNameSeparator <> #0 then
         if p^ = UpperNameSeparator then
           inc(p) // e.g. THttpSocket.HeaderGetValue uses UpperNameSeparator=':'
@@ -9519,7 +9528,6 @@ begin
           break;
       while p^ in [#9, ' '] do // trim left
         inc(p);
-      len := 0;
       while p[len] > #13 do // end of line/value
         inc(len);
       while p[len - 1] = ' ' do  // trim right
@@ -10438,7 +10446,7 @@ begin
     inc(P);
     dec(len);
   end;
-  FastSetString(s, @tmp, d - PAnsiChar(@tmp));
+  FastSetString(s, @tmp, d);
 end;
 
 function SnakeCase(const text: RawUtf8; sep: AnsiChar): RawUtf8;
@@ -11321,7 +11329,7 @@ begin
 end;
 
 function TPosixFileCaseInsensitive.Find(const aSearched: TFileName;
-  aReadMs: PInteger): TFileName;
+  aReadMs: PInteger; aFileNameUtf8: PRawUtf8): TFileName;
 var
   start, stop: Int64;
   i: PtrInt;
@@ -11361,8 +11369,11 @@ begin
   try
     i := FastFindPUtf8CharSorted( // efficient O(log(n)) binary search
       pointer(fFiles), high(fFiles), pointer(fn), @StrIComp);
-    if i >= 0 then                       // return result = '' if not found
-      Utf8ToFileName(fFiles[i], result); // use exact file name case from OS
+    if i < 0 then
+      exit; // return result = '' if not found
+    if aFileNameUtf8 <> nil then
+      aFileNameUtf8^ := fFiles[i];
+    Utf8ToFileName(fFiles[i], result); // use exact file name case from OS
   finally
     fSafe.ReadUnLock;
   end;

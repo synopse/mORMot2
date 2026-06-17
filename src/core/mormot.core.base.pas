@@ -917,6 +917,10 @@ function IsPowerOfTwo(number: PtrUInt): boolean;
 procedure FastSetString(var s: RawUtf8; p: pointer; len: PtrInt); overload;
   {$ifndef HASCODEPAGE} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
+/// wrap FastSetString(s, pbeg, pend - pbeg) from ending buffer pointer
+procedure FastSetString(var s: RawUtf8; p, pend: pointer); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// faster equivalence to SetString(s,nil,len) function
 // - returns the allocated pointer(s) value
 function FastSetString(var s: RawUtf8; len: PtrInt): pointer; overload;
@@ -931,6 +935,10 @@ procedure FastSetRawByteString(var s: RawByteString; p: pointer; len: PtrInt);
 /// equivalence to SetString(s,pwidechar,len) function but from a raw pointer
 procedure FastSynUnicode(var s: SynUnicode; p: pointer; len: PtrInt);
   {$ifndef HASVARUSTRING} {$ifdef HASINLINE}inline;{$endif} {$endif}
+
+/// equivalence to SetString(s,pwidechar,len) function but from a raw pointer
+procedure FastSetWideString(var s: WideString; p: pointer; len: PtrInt);
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// equivalence to SetString(s,nil,len) function to allocate a new RawByteString
 // - faster especially under FPC
@@ -3047,6 +3055,7 @@ procedure LockedInc64(int64: PInt64);
 // defined here for test.core.base
 function GetBitsCountSSE42(value: PtrInt): PtrInt;
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+function hashsse42(seed: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 {$else}
 
@@ -3333,6 +3342,9 @@ function PosCharU(const Str: RawUtf8; Chr: AnsiChar): PUtf8Char;
 // collision ambiguity as with SysUtils' homonymous function
 function Trim(const S: RawUtf8): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// len in BYTES for confusing RawUnicode not available in pure mORMot 2 mode
+procedure FastSetRawUnicode(var s: RawUnicode; p: pointer; len: PtrInt);
 {$endif PUREMORMOT2}
 
 /// fast dedicated RawUtf8 version of Trim()
@@ -3354,7 +3366,11 @@ procedure TrimCopy(const S: RawUtf8; start, count: PtrInt; var result: RawUtf8);
 procedure TrimCopyAssign(P: PAnsiChar; start, len: PtrInt; var result: RawUtf8);
 
 /// faster dedicated RawUtf8 version of delete(s, 1, 1) to avoid realloc
-procedure TrimFirstChar(var S: RawUtf8);
+procedure TrimFirstChar(var S: RawUtf8); overload;
+
+/// faster dedicated RawUtf8 version of "if s[1]=Startwith then delete(s, 1, 1)"
+procedure TrimFirstChar(var S: RawUtf8; StartWith: AnsiChar); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// returns the left part of a RawUtf8 string, according to SepStr separator
 // - if SepStr is found, returns Str first chars until (and excluding) SepStr
@@ -4050,16 +4066,16 @@ const
 
 var
   /// the 32-bit default hasher used by TDynArrayHashed
-  // - set to crc32csse42() if SSE4.2 or ARMv8 are available on this CPU,
-  // or fallback to xxHash32() which is faster than crc32cfast() e.g. on ARM
+  // - set to hashsse42() on SSE4.2, or crc32carm64() on compatible ARMv8 CPUs
   // - mormot.crypt.core may assign safer and faster AesNiHash32() if available
+  // - fallback/default to xxHash32() - faster than crc32cfast() e.g. on ARM
   // - so the hash value may change on another computer or after program restart
   DefaultHasher: THasher = xxHash32;
 
   /// the 32-bit hash function used by TRawUtf8Interning
-  // - set to crc32csse42() if SSE4.2 or ARMv8 are available on this CPU,
-  // or fallback to xxHash32() which performs better than crc32cfast()
+  // - set to hashsse42() on SSE4.2, or crc32carm64() on compatible ARMv8 CPUs
   // - mormot.crypt.core may assign safer and faster AesNiHash32() if available
+  // - fallback to xxHash32() which is faster than crc32cfast() e.g. on ARM
   // - so the hash value may change on another computer or after program restart
   InterningHasher: THasher = xxHash32;
 
@@ -4267,9 +4283,8 @@ const
   {$endif ISDELPHI}
 
   /// those TVarData.VType values are meant to be direct values
-  VTYPE_SIMPLE = [varEmpty..varDate, varBoolean, varShortInt..varWord64
-    {$ifdef OSWINDOWS} , varOleInt, varOleUInt, varOlePAnsiChar, varOlePWideChar,
-      varOleFileTime {$endif OSWINDOWS}];
+  VTYPE_SIMPLE = [varEmpty .. varDate, varBoolean, varShortInt .. varOleUInt,
+                  varOlePAnsiChar, varOlePWideChar, varOleFileTime];
   /// those TVarData.VType values are meant to be number values and need no escape
   VTYPE_NUMERIC = [varSmallInt .. varDouble, varCurrency, varBoolean .. varOleUInt];
   /// bitmask used by our inlined VarClear() to avoid unneeded VarClearProc()
@@ -4417,7 +4432,7 @@ var
   /// efficient finalization of successive variant items from a (dynamic) array
   // - this unit will include a basic version calling VarClear()
   // - mormot.core.variants will assign a more efficient implementation
-  VariantClearSeveral: procedure(V: PVarData; n: integer);
+  VariantClearSeveral: procedure(V: PVarData; n: PtrInt);
 
   /// compare two variant/TVarData values, with or without case sensitivity
   // - this unit registers the basic VariantCompSimple() case-sensitive comparer
@@ -5337,6 +5352,11 @@ begin
     FastAssignNewNotVoid(s, r);
 end;
 
+procedure FastSetString(var s: RawUtf8; p, pend: pointer);
+begin
+  FastSetString(s, p, PAnsiChar(pend) - PAnsiChar(p));
+end;
+
 function FastSetString(var s: RawUtf8; len: PtrInt): pointer;
 begin
   result := FastNewString(len, CP_UTF8);
@@ -5420,9 +5440,18 @@ end;
 {$else}
 procedure FastSynUnicode(var s: SynUnicode; p: pointer; len: PtrInt);
 begin
-  SetString(s, PWideChar(p), len); // use RTL for slow WideString
+  SetString(s, PWideChar(p), len); // allocate as BSTR on Delphi 7/2007
 end;
 {$endif HASVARUSTRING}
+
+procedure FastSetWideString(var s: WideString; p: pointer; len: PtrInt);
+begin
+  {$ifdef OSWINDOWS}
+  SetString(s, PWideChar(p), len); // allocate as BSTR
+  {$else}
+  FastSynUnicode(PSynUnicode(@s)^, p, len); // POSIX WideString = UnicodeString
+  {$endif OSWINDOWS}
+end;
 
 procedure GetMemAligned(var holder: RawByteString; fillwith: pointer;
   len: PtrUInt; out aligned: pointer; alignment: PtrUInt);
@@ -10032,6 +10061,16 @@ begin
     FastSetString(S, @PByteArray(S)[1], len); // need realloc
 end;
 
+procedure TrimFirstChar(var S: RawUtf8; StartWith: AnsiChar);
+var
+  p: PUtf8Char;
+begin
+  p := pointer(S);
+  if (p <> nil) and
+     (p^ = StartWith) then
+    TrimFirstChar(S);
+end;
+
 procedure TrimSelf(var S: RawUtf8);
 var
   i, len: PtrInt;
@@ -10077,6 +10116,11 @@ end;
 function Trim(const S: RawUtf8): RawUtf8;
 begin
   result := TrimU(S);
+end;
+
+procedure FastSetRawUnicode(var s: RawUnicode; p: pointer; len: PtrInt);
+begin
+  FastSetStringCP(s, p, len, CP_UTF16); // end with four #0 bytes
 end;
 {$endif PUREMORMOT2}
 
@@ -10934,8 +10978,8 @@ begin
     crc32cby4       := @crc32cby4sse42;
     crcblock        := @crcblocksse42;
     crcblocks       := @crcblockssse42;
-    DefaultHasher   := @crc32csse42;
-    InterningHasher := @crc32csse42;
+    DefaultHasher   := @hashsse42; // = crc32csse42 + murmur-like finalizer
+    InterningHasher := @hashsse42;
   end
   else
   {$endif DISABLE_SSE42}
@@ -11501,7 +11545,7 @@ end;
 
 {$ifdef FPC}
 
-const
+const // architecture-independent Linux UAPI auxiliary vector definitions
   AT_HWCAP  = 16;
   AT_RANDOM = 25;
   AT_HWCAP2 = 26;
@@ -11531,7 +11575,7 @@ begin
         AT_HWCAP2:
           caps[1] := p[1];
         AT_RANDOM: // 16 random bytes (used as stacks canaries) are just perfect
-          XorMemory(BaseEntropy.r[3], PHash128Rec(p[1])^); // 2.6.29 + glibc
+          XorMemory(BaseEntropy.r[3], PHash128Rec(p[1])^); // kernel 2.6.29
       end;
       inc(e^, ((p[0] shl 20) xor p[1]) * 3266489917); // fill BaseEntropy
       inc(e);
@@ -12532,7 +12576,7 @@ procedure TSynTempBuffer.Done(EndBuf: pointer; var Dest: RawUtf8);
 begin
   if EndBuf = nil then
     EndBuf := buf; // return ''
-  FastSetString(Dest, buf, PAnsiChar(EndBuf) - PAnsiChar(buf));
+  FastSetString(Dest, buf, EndBuf);
   if (buf <> @tmp) and
      (buf <> nil) then
     FreeMem(buf);
@@ -13745,7 +13789,7 @@ begin
   VariantStringToUtf8(V, result{%H-});
 end;
 
-procedure _VariantClearSeveral(V: PVariant; n: integer);
+procedure _VariantClearSeveral(V: PVariant; n: PtrInt);
 begin
   if n > 0 then
     repeat

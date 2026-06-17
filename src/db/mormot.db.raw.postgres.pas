@@ -426,7 +426,7 @@ procedure TSqlDBPostgresLib.GetRawUtf8(res: PPGresult;
   tup_num, field_num: integer; var result: RawUtf8);
 begin
   FastSetString(result, GetValue(res, tup_num, field_num),
-    GetLength(res, tup_num, field_num));
+                        GetLength(res, tup_num, field_num));
 end;
 
 procedure TSqlDBPostgresLib.RaiseError(conn: PPGconn; const ctxt: ShortString;

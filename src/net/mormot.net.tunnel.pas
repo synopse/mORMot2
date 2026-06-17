@@ -850,8 +850,7 @@ begin
         begin
           if Assigned(log) then
             log.Log(sllDebug, 'ClosePort: release accept', self);
-          if NewSocket(cLocalhost, UInt32ToUtf8(fPort), nlTcp,
-             {dobind=}false, 10, 0, 0, 0, callback) = nrOK then
+          if NewTcpClientSocket(cLocalhost, UInt32ToUtf8(fPort), 10, callback) = nrOK then
             // Windows socket may not release Accept() until connected
             callback.ShutdownAndClose({rdwr=}false);
         end;
@@ -1008,8 +1007,8 @@ begin
   else
   begin
     // connect to a local socket on address:port
-    ENetSock.Check(NewSocket(uri.Server, uri.Port, nlTcp, {bind=}false,
-      TimeOutMS, TimeOutMS, TimeOutMS, {retry=}0, sock, @addr), 'Open');
+    ENetSock.Check(
+      NewTcpClientSocket(uri.Server, uri.Port, TimeOutMS, sock, @addr), 'Open');
     if Assigned(log) then
       log.Log(sllTrace, 'Open: connected to %:%', [uri.Server, uri.Port], self);
   end;

@@ -26,7 +26,6 @@ uses
   sysutils,
   classes,
   variants,
-  contnrs,
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -2020,8 +2019,8 @@ end;
 
 function TRestOrmServerDB.RetrieveBlobFields(Value: TOrm): boolean;
 var
-  s: TRestOrm;
   sql: RawUtf8;
+  s: TRestOrm;
   f: PtrInt;
   size: Int64;
   data: TSqlVar;
@@ -2038,8 +2037,8 @@ begin
     with Value.Orm do
       if BlobFields <> nil then
       begin
-        sql := FormatSql('SELECT % FROM % WHERE ROWID=?',
-          [SqlTableRetrieveBlobFields, SqlTableName], [Value.ID]);
+        FormatSqlVar('SELECT % FROM % WHERE ROWID=?',
+          [SqlTableRetrieveBlobFields, SqlTableName], [Value.ID], sql);
         DB.Lock(sql);
         try
           GetAndPrepareStatement(sql, true);
@@ -2893,7 +2892,7 @@ begin
      (n > 0) then
   try
     // direct SQL execution, using the JSON cache if available
-    sql := fModel.SqlFromSelectWhere(Tables, SqlSelect, SqlWhere);
+    fModel.SqlFromSelectWhere(Tables, SqlSelect, SqlWhere, sql);
     if n = 1 then
       // InternalListJson will handle both static and DB tables
       result := fServer.ExecuteList(Tables, sql)

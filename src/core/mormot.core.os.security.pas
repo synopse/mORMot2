@@ -7114,7 +7114,7 @@ begin
       ASN1_BOOL:
         begin
           p := StrInt64(@tmp[23], AsnDecInt(Pos, Buffer, asnsize));
-          FastSetString(PRawUtf8(Value)^, p, @tmp[23] - p);
+          FastSetString(PRawUtf8(Value)^, p, @tmp[23]);
         end;
       ASN1_OBJID:
         begin
@@ -7933,14 +7933,14 @@ var
   pbi: MS_PROCESS_BASIC_INFORMATION;
   peb: MS_PEB;
   peb_upp: MS_RTL_USER_PROCESS_PARAMETERS;
-  prochandle, ntdll: THandle;
+  prochandle, nt: THandle;
 begin
   if not NtQueryInformationProcessChecked then
   begin
     NtQueryInformationProcessChecked := true;
-    ntdll := GetModuleHandle('NTDLL.DLL');
-    if ntdll > 0 then
-      NtQueryInformationProcess := LibraryResolve(ntdll, 'NtQueryInformationProcess');
+    nt := GetModuleHandle(ntdll);
+    if nt > 0 then
+      NtQueryInformationProcess := LibraryResolve(nt, 'NtQueryInformationProcess');
     ReadProcessMemory := // late-binding is safer for anti-virus heuristics
       LibraryResolve(GetModuleHandle(kernel32), 'ReadProcessMemory');
   end;

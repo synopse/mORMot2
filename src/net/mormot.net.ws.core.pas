@@ -2152,7 +2152,7 @@ begin
   begin
     result := P + 1;
     if HeadFound <> nil then
-      FastSetString(HeadFound^, txt, P - txt);
+      FastSetString(HeadFound^, txt, P);
   end;
 end;
 
@@ -2343,7 +2343,7 @@ begin
   if PMax <> nil then
     PMax^ := pointer(P + PStrLen(P - _STRLEN)^);
   if HeadFound <> nil then
-    FastSetString(HeadFound^, P, PAnsiChar(result) - P);
+    FastSetString(HeadFound^, P, result);
   inc(PByte(result));
 end;
 
@@ -4387,10 +4387,8 @@ begin
   else
   begin
     // normalize root
-    if r[1] <> '/' then
-      insert('/', r, 1);
-    if r[length(r)] <> '/' then
-      Append(r, '/');
+    PrependIfNone(r, '/');
+    AppendIfNone(r, '/');
   end;
   // EIO        4          Mandatory, the version of the protocol
   // transport  websocket  Mandatory, the name of the transport

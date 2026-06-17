@@ -356,8 +356,7 @@ begin
     end;
     if get = nil then
       exit;
-    res := NewSocket(
-      fRtspServer, fRtspPort, nlTcp, {bind=}false, 1000, 1000, 1000, 0, rtsp);
+    res := NewTcpClientSocket(fRtspServer, fRtspPort, 1000, rtsp);
     if res <> nrOK then
       ERtspOverHttp.RaiseUtf8('No RTSP server on %:% (%)',
         [fRtspServer, fRtspPort, _NR[res]]);

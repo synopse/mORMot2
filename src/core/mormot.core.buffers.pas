@@ -10311,7 +10311,7 @@ var
   f: THandle;
 begin
   if not Assigned(Hasher) then
-    Hasher := DefaultHasher;
+    Hasher := DefaultHasher; // maybe AesNiHash32/hashsse42/crc32carm64/xxhash32
   result := 0;
   f := FileOpenSequentialRead(FileName);
   if ValidHandle(f) then

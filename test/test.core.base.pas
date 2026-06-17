@@ -280,6 +280,8 @@ type
     procedure DmiSmbios;
     /// test Security IDentifier (SID) process
     procedure _SID;
+    /// test OS errors support
+    procedure OsErrors;
     /// test the SecurityDescriptor / SDDL process
     procedure _SDDL;
     /// validates the median computation using the "Quick Select" algorithm
@@ -4341,7 +4343,6 @@ var
     Timer: TPrecisionTimer;
     a: string[10];
   begin
-    Timer.Start;
     a := '123456789';
     Check(hash(0, @a, 0) = 0);
     Check(hash(0, @a, 1) = $2ACF889D);
@@ -4354,6 +4355,7 @@ var
     Check(hash(0, @a, 6) = $85BF5A8C);
     Check(hash(0, @a, 7) = $8B0FB6FA);
     Check(hash(0, @a, 8) = $2E5336F0);
+    Timer.Start;
     for i := 0 to High(crc) do
       with crc[i] do
         Check(hash(0, pointer(S), length(S)) = crc);
@@ -4374,6 +4376,7 @@ var
   digest: THash256;
   tmp: RawByteString;
   hmac32: THmacCrc32c;
+  timer: TPrecisionTimer;
 begin
   test16('', $ffff);
   test16('a', $9d77);
@@ -4494,14 +4497,23 @@ begin
   {$ifndef OSDARWIN}
   // Not [yet] implemented on Darwin
   if cfSSE42 in CpuFeatures then
+  begin
     Test(crc32csse42, 'sse42');
+    AddConsole('%', [msg]);
+    Check(hashsse42(0, p, 5) = $39B69E64, 'hashsse42a');
+    Check(hashsse42(0, p, 1020) = $C43D29E6, 'hashsse42b');
+    timer.Start; // only the profiling part of Test()
+    for i := 0 to High(crc) do
+      with crc[i] do
+        CheckNotEqual(hashsse42(0, pointer(S), length(S)), crc);
+    msg := FormatUtf8(' hashsse42:%/s', [KBNoSpace(Timer.PerSec(totallen))]);
+    {$ifdef ASMX64}
+    if (cfAesNi in CpuFeatures) and
+       (cfCLMUL in CpuFeatures) then
+      Test(crc32c, 'clmul'); // use SSE4.2+pclmulqdq instructions on x64
+    {$endif ASMX64}
+  end;
   {$endif OSDARWIN}
-  {$ifdef ASMX64}
-  if (cfSSE42 in CpuFeatures) and
-     (cfAesNi in CpuFeatures) and
-     (cfCLMUL in CpuFeatures) then
-    Test(crc32c, 'aesni'); // use SSE4.2+pclmulqdq instructions on x64
-  {$endif ASMX64}
   {$else}
   if @crc32c <> @crc32cfast then
     Test(crc32c, 'armv8');
@@ -8467,32 +8479,31 @@ function ConvertSidToStringSidA(Sid: PSID; var StringSid: PAnsiChar): BOOL; stdc
 
 {$endif OSWINDOWS}
 
-procedure TTestCoreBase._SID;
+procedure TTestCoreBase.OsErrors;
 var
-  k: TWellKnownSid;
-  s: RawUtf8;
-  s1, s2: RawSid;
-  ss: TShort47;
-  {$ifdef OSWINDOWS}
-  known: TWellKnownSids;
-  sids: TRawUtf8DynArray;
-  {$endif OSWINDOWS}
+  se: TSystemError;
+  err: integer;
+  txt: RawUtf8;
+  ss: TShort63;
 begin
-  // validate cross-platform SID process
-  CheckEqual(SizeOf(TSid), 1032, 'TSid');
-  for k := low(k) to high(k) do
-  begin
-    s1 := KnownRawSid(k);
-    Check(SidToKnown(pointer(s1)) = k);
-    Check(SidCompare(pointer(s1), pointer(s1)) = 0);
-    s := RawSidToText(s1);
-    CheckEqual(s, RawUtf8(KnownSidToText(k)^));
-    CheckUtf8(SidToKnown(s) = k, s);
-    s2 := TextToRawSid(s);
-    CheckEqual(s, RawSidToText(s2));
-    CheckUtf8(SidCompare(pointer(s1), pointer(s2)) = 0, s);
-  end;
   // some cross-platform Windows/Linux/BSD error detection
+  CheckEqual(SystemError(seSuccess), 0);
+  CheckEqual(SystemError(seOther), 0);
+  CheckEqual(SystemErrorText(seSuccess), 'Success');
+  CheckEqual(SystemErrorText(seNameTooLong), 'NameTooLong');
+  CheckEqual(SystemErrorText(seOther), 'Other');
+  for se := succ(seSuccess) to pred(seOther) do
+  begin
+    err := SystemError(se);
+    CheckNotEqual(err, 0);
+    Check(GetSystemError(err) = se);
+    Check(IsSystemError(se, err), 'IsOsError');
+    ss := SystemErrorShort(err);
+    Check(ss[0] <> #0, 'SystemErrorShort');
+    txt := SystemErrorText(se);
+    CheckNotEqual(txt, '');
+    Check(PosEx(txt, ShortStringToUtf8(ss)) > 0);
+  end;
   Check(WinErrorConstant(NO_ERROR)^ = 'SUCCESS', 'weca');
   Check(WinErrorConstant(995)^ = 'OPERATION_ABORTED', 'wecb1');
   Check(WinErrorConstant(1150)^ = 'OLD_WIN_VERSION', 'wecb2');
@@ -8545,6 +8556,32 @@ begin
   Check(ss = '125', '125');
   Check(OsErrorShort(244, {noint=}false) = '244', '244a');
   Check(OsErrorShort(244, {noint=}true) = '', '244b');
+end;
+
+procedure TTestCoreBase._SID;
+var
+  k: TWellKnownSid;
+  s: RawUtf8;
+  s1, s2: RawSid;
+  {$ifdef OSWINDOWS}
+  known: TWellKnownSids;
+  sids: TRawUtf8DynArray;
+  {$endif OSWINDOWS}
+begin
+  // validate cross-platform SID process
+  CheckEqual(SizeOf(TSid), 1032, 'TSid');
+  for k := low(k) to high(k) do
+  begin
+    s1 := KnownRawSid(k);
+    Check(SidToKnown(pointer(s1)) = k);
+    Check(SidCompare(pointer(s1), pointer(s1)) = 0);
+    s := RawSidToText(s1);
+    CheckEqual(s, RawUtf8(KnownSidToText(k)^));
+    CheckUtf8(SidToKnown(s) = k, s);
+    s2 := TextToRawSid(s);
+    CheckEqual(s, RawSidToText(s2));
+    CheckUtf8(SidCompare(pointer(s1), pointer(s2)) = 0, s);
+  end;
   // validate Windows specific SID function, especially about the current user
   {$ifdef OSWINDOWS}
   CurrentRawSid(s1, wttProcess);

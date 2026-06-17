@@ -1360,7 +1360,7 @@ begin
     if not Base64UriToBin(PAnsiChar(B), P - B, temp) then
       break;
     if HeadPayload <> nil then
-      FastSetString(HeadPayload^, pointer(Token), P - pointer(Token));
+      FastSetString(HeadPayload^, pointer(Token), P);
     if Payload <> nil then
     begin
       VarClear(PayLoad^);
@@ -1868,7 +1868,7 @@ var
   c: TJwtClaim;
 begin
   GetEnumNames(TypeInfo(TJwtResult), @_TJwtResult);
-  GetEnumNames(TypeInfo(TJwtClaim), @_TJwtClaim);
+  GetEnumNames(TypeInfo(TJwtClaim),  @_TJwtClaim);
   for c := low(c) to high(c) do
     JWT_CLAIMS_TEXT4[c] := PInteger(JWT_CLAIMS_TEXT[c])^;
 end;

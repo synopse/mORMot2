@@ -4478,7 +4478,7 @@ begin
       if DestStream <> nil then
       begin
         if length({%H-}chunk) < len then
-          SetString(chunk, nil, len + len shr 3); // +shr 3 to avoid realloc
+          FastSetString(chunk, nil, len + len shr 3); // +shr 3 to avoid realloc
         SockInRead(pointer(chunk), len);
         DestStream.WriteBuffer(pointer(chunk)^, len);
       end

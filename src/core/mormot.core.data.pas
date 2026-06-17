@@ -25,7 +25,6 @@ interface
 
 uses
   classes,
-  contnrs,
   types,
   sysutils,
   {$ifdef ISDELPHI}
@@ -1847,8 +1846,7 @@ type
     // strings or binary types, and the first field for records (strings included)
     // - if no aCompare is supplied, it will use default Equals() method
     // - if no THasher function is supplied, it will use the one supplied in
-    // DefaultHasher global variable, set to crc32c() by default - using
-    // SSE4.2 instruction if available
+    // DefaultHasher global variable (typically AesNiHash32/hashsse42/xxhash32)
     // - if CaseInsensitive is set to TRUE, it will ignore difference in 7-bit
     // alphabetic characters (e.g. compare 'a' and 'A' as equal)
     procedure Init(aTypeInfo: PRttiInfo; var aValue; aHashItem: TDynArrayHashOne = nil;
@@ -3392,7 +3390,7 @@ var // filled at startup with a 32-bit random value to avoid hash flooding
 { HashAnsiString/HashAnsiStringI alternatives from PUtf8Char + length }
 
 function HashIntern(P: PUtf8Char; L: PtrUInt): cardinal;
-begin
+begin // should match exactly HashAnsiString() logic
   if P <> nil then
   begin
     if L > 256 then // no need to hash too big a content
@@ -3409,7 +3407,7 @@ end;
 function HashInternI(P: PUtf8Char; L: PtrUInt): cardinal;
 var
   up: TByteToAnsiChar; // avoid slow heap allocation
-begin
+begin // should match exactly HashAnsiStringI() logic
   if (P <> nil) and
      (L <> 0) then
     result := InterningHasher(HashSeed, @up,
@@ -4828,7 +4826,7 @@ begin
             break;
           inc(P);
         end;
-        FastSetString(Line, PBeg, P - PBeg);
+        FastSetString(Line, PBeg, P);
         AddObject(Line, nil);
         if P >= PEnd then
           break;
@@ -5112,7 +5110,7 @@ end;
 function _BL_WString(Data: PWideString; var Source: TFastReader; Info: PRttiInfo): PtrInt;
 begin
   with Source.VarBlob do
-    SetString(Data^, PWideChar(Ptr), Len shr 1); // length in bytes was stored
+    FastSetWideString(Data^, Ptr, Len shr 1); // length in bytes was stored
   result := SizeOf(pointer);
 end;
 
@@ -5692,7 +5690,7 @@ begin
     if vt <> 0 then
       if vt = 255 then
         with Source.VarBlob do // varOleStr (=8)
-          SetString(WideString(Data^.vAny), PWideChar(Ptr), Len shr 1)
+          FastSetWideString(WideString(Data^.vAny), Ptr, Len shr 1)
       else
         Source.Copy(@Data^.VInt64, vt); // simple types
   end
@@ -8436,7 +8434,7 @@ end;
 function HashAnsiString(Item: PAnsiChar; Hasher: THasher): cardinal;
 var
   l: PtrInt;
-begin
+begin // should match exactly HashIntern() logic
   Item := PPointer(Item)^; // passed as non-nil PAnsiString reference
   if Item <> nil then
   begin
@@ -8455,7 +8453,7 @@ end;
 function HashAnsiStringI(Item: PUtf8Char; Hasher: THasher): cardinal;
 var
   up: TByteToAnsiChar; // avoid any slow heap allocation
-begin
+begin // should match exactly HashInternI() logic
   Item := PPointer(Item)^; // passed as non-nil PAnsiString reference
   if Item <> nil then
     result := Hasher(HashSeed, @up,
@@ -8611,7 +8609,7 @@ var
   tmp: TByteToAnsiChar; // 256 bytes on-stack buffer, to avoid heap allocation
 begin
   if not Assigned(Hasher) then
-    Hasher := DefaultHasher;
+    Hasher := DefaultHasher; // maybe AesNiHash32/hashsse42/crc32carm64/xxhash32
   utf8 := false;
   P := @tmp;
   len := 8; // most common case is normalized to Int64 or double
@@ -8834,7 +8832,7 @@ end;
 procedure TDynArrayHasher.HashTableInit(aHasher: THasher);
 begin
   if not Assigned(aHasher) then
-    aHasher := DefaultHasher;
+    aHasher := DefaultHasher; // e.g. AesNiHash32/hashsse42/crc32carm64/xxhash32
   fHasher := aHasher;
   fHashTableStore := nil;
   if (Assigned(fHashItem) or
@@ -8845,10 +8843,10 @@ begin
     // same logic than ReHash(true) with no data - default to 256 buckets
     fHashTableSize := 256;
     {$ifdef DYNARRAYHASH_16BIT}
-    SetLength(fHashTableStore, 129);
+    SetLength(fHashTableStore, 129); // 512 bytes
     fState := [hasHasher, hash16bit];
     {$else}
-    SetLength(fHashTableStore, 257);
+    SetLength(fHashTableStore, 257); // 1KB
     byte(State) := 1 shl ord(hasHasher)
     {$endif DYNARRAYHASH_16BIT}
   end

@@ -1308,7 +1308,7 @@ function TSynMustachePartials.Add(const aName: RawUtf8;
 var
   aTemplate: RawUtf8;
 begin
-  FastSetString(aTemplate, aTemplateStart, aTemplateEnd - aTemplateStart);
+  FastSetString(aTemplate, aTemplateStart, aTemplateEnd);
   result := Add(aName, aTemplate);
 end;
 
@@ -1504,7 +1504,7 @@ begin
         dec(aEnd);
       if aEnd <> aStart then
       begin
-        FastSetString(t^.Value, aStart, aEnd - aStart);
+        FastSetString(t^.Value, aStart, aEnd);
         t^.ValueSpace := PosExChar(' ', t^.Value);
       end
       else if aKind <> mtSectionEnd then // allow {{/}}

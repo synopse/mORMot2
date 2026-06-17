@@ -24,10 +24,10 @@ interface
 
 uses
   classes,
-  contnrs,
   sysutils,
-  {$ifdef ISDELPHI}
-  typinfo, // for proper Delphi inlining
+  {$ifdef ISDELPHI} // needed for Delphi inlining
+  contnrs,
+  typinfo,
   {$endif ISDELPHI}
   mormot.core.base,
   mormot.core.os,
@@ -618,6 +618,10 @@ procedure FormatParams(const Format: RawUtf8; Args, Params: PVarRecArray;
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - is a wrapper around FormatParams(Format, Args, Params, false, result);
 function FormatSql(const Format: RawUtf8; const Args, Params: array of const): RawUtf8;
+
+/// fast Format() function replacement, handling % but also ? inlined parameters
+procedure FormatSqlVar(const Format: RawUtf8; const Args, Params: array of const;
+  var Dest: RawUtf8);
 
 /// fast Format() function replacement, handling % but also ? parameters as JSON
 // - will include Args[] for every % in Format
@@ -4384,7 +4388,7 @@ begin
   P := parser.GotoEnd(B);
   if P = nil then
     exit;
-  FastSetString(RawUtf8(result), B, P - B);
+  FastSetString(RawUtf8(result), B, P);
   while (P^ <= ' ') and
         (P^ <> #0) do
     inc(P);
@@ -5135,6 +5139,12 @@ function FormatSql(const Format: RawUtf8;
   const Args, Params: array of const): RawUtf8;
 begin
   FormatParams(Format, @Args[0], @Params[0], high(Args), high(Params), {json=}false, result);
+end;
+
+procedure FormatSqlVar(const Format: RawUtf8; const Args, Params: array of const;
+  var Dest: RawUtf8);
+begin
+  FormatParams(Format, @Args[0], @Params[0], high(Args), high(Params), {json=}false, Dest);
 end;
 
 function FormatJson(const Format: RawUtf8;

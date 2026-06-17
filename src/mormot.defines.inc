@@ -658,6 +658,7 @@
       {$define HASEXTRECORDRTTI}     // Delphi 2010 extended RTTI for records
       {$define HASIMPLICITOPERATOR}  // Delphi 2010+ "implicit operator" is ok
       {$define ISDELPHI2010_OR_FPC_NEWRTTI}
+      {$define HASQWORD}          // properly handle and inline UInt64
       {$define HASTTHREADSTART}
       {$define HASINTERFACEASTOBJECT}
       {$define HASDBFNEW}     // ftOraTimeStamp,ftShortInt,ftLongWord,ftExtended

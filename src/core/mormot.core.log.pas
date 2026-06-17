@@ -3028,7 +3028,7 @@ var
         while (P < PEnd) and
               (P^ > ' ') do
           inc(P);
-        FastSetString(U.Symbol.Name, Beg, P - Beg);
+        FastSetString(U.Symbol.Name, Beg, P);
         inc(U.Symbol.Stop, U.Symbol.Start - 1);
         if (U.Symbol.Name <> '') and
            ((U.Symbol.Start <> 0) or
@@ -3091,7 +3091,7 @@ var
           end;
         end;
         {$endif ISDELPHI2005ANDUP}
-        FastSetString(Sym.Name, Beg, P - Beg);
+        FastSetString(Sym.Name, Beg, P);
         if (Sym.Name <> '') and
            not (Sym.Name[1] in ['$', '?']) then
           fSymbols.Add(Sym);
@@ -3116,7 +3116,7 @@ var
         exit
       else
         inc(P);
-    FastSetString(aName, Beg, P - Beg);
+    FastSetString(aName, Beg, P);
     if aName = '' then
       exit;
     inc(P);
@@ -3130,7 +3130,7 @@ var
       exit;
     U := fUnits.NewPtr; // always recreate all units due to nested .inc
     U^.Symbol.Name := aName;
-    FastSetString(U^.FileName, Beg, P - Beg);
+    FastSetString(U^.FileName, Beg, P);
     NextLine;
     NextLine;
     capa := 0;
@@ -3814,6 +3814,8 @@ end;
 
 function ToCaption(event: TSynLogLevel): string;
 begin
+  if _LogInfoCaption[high(_LogInfoCaption)] = '' then // delayed translation
+    GetEnumCaptions(TypeInfo(TSynLogLevel), @_LogInfoCaption);
   result := _LogInfoCaption[event];
 end;
 
@@ -4792,7 +4794,7 @@ begin
   try
     // reset this thread name for ptIdentifiedInOneFile
     if num <= length(thd^.Name) then
-      thd^.Name[num - 1] := '';
+      FastAssignNew(thd^.Name[num - 1]);
     // mark thread number to be recycled by InitThreadNumber
     AddWord(thd^.IndexReleased, thd^.IndexReleasedCount, num);
   finally
@@ -6649,7 +6651,7 @@ begin
   with info.Context do
     if ELevel <> sllNone then
     begin
-      FormatUtf8('% % at %: % [%]', [_LogInfoCaption[ELevel], EClass,
+      FormatUtf8('% % at %: % [%]', [_LogInfoText[ELevel], EClass,
         GetInstanceDebugFile.FindLocationShort(EAddr),
         UnixTimeToString(ETimestamp, {expanded=}true, ' '),
         StringToUtf8(info.Message)], result);
@@ -7109,7 +7111,7 @@ var
       result := false
     else
     begin
-      FastSetString(S, PBeg, P - PBeg);
+      FastSetString(S, PBeg, P);
       PBeg := P + LUP;
       result := pointer(S) <> nil;
     end;
@@ -7784,7 +7786,7 @@ begin
   begin
     dt := EventDateTime(aRow);
     FormatString('% %'#9'%'#9, [DateToStr(dt), FormatDateTime(TIME_FORMAT, dt),
-      _LogInfoCaption[EventLevel[aRow]]], result);
+      ToCaption(EventLevel[aRow])], result);
     if fThreads <> nil then
       result := result + IntToString(cardinal(fThreads[aRow])) + #9;
     result := result + EventString(aRow, '   ');
@@ -7804,7 +7806,7 @@ begin
         0:
           DateTimeToString(result, TIME_FORMAT, EventDateTime(aRow));
         1:
-          result := _LogInfoCaption[EventLevel[aRow]];
+          result := ToCaption(EventLevel[aRow]);
         2:
           if fThreads <> nil then
             result := IntToString(cardinal(fThreads[aRow]));
@@ -8313,9 +8315,9 @@ end;
 procedure InitializeUnit;
 begin
   SynLogGlobalLock.Init;
+  if (PtrUInt(@SynLogThreads) and POINTERAND) <> 0 then
+    ESynLogException.RaiseU('SynLogThreads alignment issue');
   GetEnumTrimmedNames(TypeInfo(TSynLogLevel), @_LogInfoText);
-  GetEnumCaptions(TypeInfo(TSynLogLevel), @_LogInfoCaption);
-  _LogInfoCaption[sllNone] := '';
   GetEnumTrimmedNames(TypeInfo(TAppLogLevel), @_LogAppText);
   SetThreadName := _SetThreadName;
   GetCurrentThreadName := _GetCurrentThreadName;

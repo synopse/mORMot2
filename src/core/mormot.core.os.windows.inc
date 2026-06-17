@@ -350,29 +350,18 @@ begin
   result := WinLastError('LoadLibrary');
 end;
 
-procedure FileTimeToInt64(const FT: TFileTime; out I64: Int64);
-  {$ifdef HASINLINE} inline; {$endif} 
+procedure FileTimeToInt64(FT: PFileTime; Q64: PQWordRec);
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  PInt64Rec(@I64)^.Lo := FT.dwLowDateTime; // Delphi 2007 bug with PInt64()
-  PInt64Rec(@I64)^.Hi := FT.dwHighDateTime;
+  Q64^.L := FT^.dwLowDateTime; // Delphi 2007 bug with PInt64()
+  Q64^.H := FT^.dwHighDateTime;
 end;
 
-const
-  MilliSecsPerFileTime = 10000; // a tick is 100ns
-  SecsPerFileTime      = 10000000;
-
-procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
+procedure Int64ToFileTime(Q64: PQWordRec; FT: PFileTime);
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  I64 := (I64 * SecsPerFileTime) + UnixFileTimeDelta;
-  FT.dwLowDateTime  := PInt64Rec(@I64)^.Lo; // Delphi 2007 bug with PInt64()
-  FT.dwHighDateTime := PInt64Rec(@I64)^.Hi;
-end;
-
-procedure UnixMSTimeToFileTime(I64: TUnixMSTime; out FT: TFileTime);
-begin
-  I64 := (I64 * MilliSecsPerFileTime) + UnixFileTimeDelta;
-  FT.dwLowDateTime  := PInt64Rec(@I64)^.Lo; // Delphi 2007 bug with PInt64()
-  FT.dwHighDateTime := PInt64Rec(@I64)^.Hi;
+  FT^.dwLowDateTime  := Q64^.L; // Delphi 2007 bug with PInt64()
+  FT^.dwHighDateTime := Q64^.H;
 end;
 
 // To account for daylight saving time when converting a file time to a local
@@ -396,60 +385,6 @@ var
 begin
   UnixTimeToFileTime(I64, lft);
   FileTimeToLocalSystemTime(lft, Local); // no FileTimeToLocalFileTime
-end;
-
-function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
-{$ifdef CPU64}
-var
-  nano100: Int64; // TFileTime is in 100 ns unit
-{$endif CPU64}
-begin
-  if PInt64(@FT)^ = 0 then
-  begin
-    result := 0;
-    exit;
-  end;
-  {$ifdef CPU64}
-  FileTimeToInt64(ft, nano100);
-  result := (nano100 - UnixFileTimeDelta) div SecsPerFileTime;
-  {$else} // use PInt64 to avoid URW699 with Delphi 6 / Kylix
-  result := (PInt64(@ft)^ - UnixFileTimeDelta) div SecsPerFileTime;
-  {$endif CPU64}
-end;
-
-function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
-{$ifdef CPU64}
-var
-  nano100: Int64; // TFileTime is in 100 ns unit
-{$endif CPU64}
-begin
-  if PInt64(@FT)^ = 0 then
-  begin
-    result := 0;
-    exit;
-  end;
-  {$ifdef CPU64}
-  FileTimeToInt64(ft, nano100);
-  result := (nano100 - UnixFileTimeDelta) div MilliSecsPerFileTime;
-  {$else} 
-  result := (PInt64(@ft)^ - UnixFileTimeDelta) div MilliSecsPerFileTime;
-  {$endif CPU64}
-end;
-
-function FileTimeToDateTime(const FT: TFileTime): TDateTime;
-begin
-  if PInt64(@FT)^ = 0 then
-    result := 0
-  else // inlined UnixTimeToDateTime()
-    result := FileTimeToUnixMSTime(FT) * MilliSecsPerDate + UnixDateDelta;
-end;
-
-procedure DateTimeToFileTime(dt: TDateTime; out FT: TFileTime);
-begin
-  if dt = 0 then
-    PInt64(@FT)^ := 0
-  else // inlined DateTimeToUnixTime()
-    UnixTimeToFileTime(Round((dt - UnixDateDelta) * SecsPerDay), FT);
 end;
 
 function UnixTimeUtc: TUnixTime;
@@ -481,6 +416,11 @@ begin
   result := FileTimeToUnixMSTime(ft);
 end;
 
+procedure NowUtcToWindowsFileTime(var ft: TFileTime);
+begin
+  GetSystemTimeAsFileTime(ft);
+end;
+
 procedure GetSystemTime;              external kernel32;
 procedure GetLocalTime;               external kernel32;
 procedure InitializeCriticalSection;  external kernel32;
@@ -509,6 +449,9 @@ function  IocpPostQueuedStatus;       external kernel32 name 'PostQueuedCompleti
 function  GetDesktopWindow;           external user32;
 function  Unicode_InPlaceUpper;       external user32 name 'CharUpperBuffW';
 function  Unicode_InPlaceLower;       external user32 name 'CharLowerBuffW';
+function  SysAllocString;             external oleaut32;
+function  SysAllocStringLen;          external oleaut32;
+procedure SysFreeString;              external oleaut32;
 
 var
   ConsoleCriticalSection: TOSLock; // too early to use TOSLightLock
@@ -575,12 +518,81 @@ begin
   FileWriteAll(err, pointer(txt), length(txt));
 end;
 
-function IsSharedViolation(ErrorCode: integer): boolean;
+function GetSystemError(error: integer): TSystemError;
 begin
-  if ErrorCode = 0 then
-    ErrorCode := GetLastError;
-  result := ErrorCode in [ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION];
+  case error of
+    ERROR_SUCCESS,
+    ERROR_NO_MORE_FILES:
+      result := seSuccess;
+    ERROR_INVALID_PARAMETER,
+    ERROR_INVALID_FUNCTION,
+    ERROR_INVALID_ACCESS,
+    ERROR_INVALID_DATA,
+    ERROR_INVALID_BLOCK,
+    ERROR_BAD_FORMAT:
+      result := seInvalidParameter;
+    ERROR_FILE_NOT_FOUND,
+    ERROR_PATH_NOT_FOUND,
+    ERROR_INVALID_DRIVE:
+      result := seFileNotFound;
+    ERROR_ALREADY_EXISTS,
+    ERROR_FILE_EXISTS:
+      result := seAlreadyExists;
+    ERROR_ACCESS_DENIED,
+    ERROR_NETWORK_ACCESS_DENIED:
+      result := seAccessDenied;
+    ERROR_BAD_UNIT:
+      result := seNoSuchDevice;
+    ERROR_NOT_ENOUGH_MEMORY,
+    ERROR_OUTOFMEMORY:
+      result := seOutOfMemory;
+    ERROR_INVALID_HANDLE:
+      result := seInvalidHandle;
+    ERROR_WRITE_PROTECT,
+    ERROR_CANNOT_MAKE:
+      result := sePermissionDenied;
+    ERROR_BUSY,
+    ERROR_BUSY_DRIVE,
+    ERROR_SHARING_VIOLATION,
+    ERROR_LOCK_VIOLATION:
+      result := seBusy;
+    ERROR_READ_FAULT,
+    ERROR_WRITE_FAULT,
+    ERROR_CRC:
+      result := seIOError;
+    ERROR_DIRECTORY:
+      result := seNotADirectory;
+    ERROR_INVALID_NAME:
+      result := seIsADirectory;
+    ERROR_DIR_NOT_EMPTY:
+      result := seDirectoryNotEmpty;
+    ERROR_FILENAME_EXCED_RANGE:
+      result := seNameTooLong;
+    ERROR_TOO_MANY_OPEN_FILES:
+      result := seTooManyOpenFiles;
+    ERROR_DISK_FULL,
+    ERROR_HANDLE_DISK_FULL:
+      result := seDiskFull;
+    ERROR_BROKEN_PIPE:
+      result := seBrokenPipe;
+    ERROR_OPERATION_ABORTED:
+      result := seInterrupted;
+    ERROR_NOT_SUPPORTED,
+    ERROR_CALL_NOT_IMPLEMENTED:
+      result := seNotSupported;
+  else
+    result := seOther;
+  end;
 end;
+
+const
+  _OSERR: array[TSystemError] of cardinal = (
+    0, ERROR_INVALID_PARAMETER, ERROR_FILE_NOT_FOUND, ERROR_ALREADY_EXISTS,
+    ERROR_ACCESS_DENIED, ERROR_BAD_UNIT, ERROR_NOT_ENOUGH_MEMORY,
+    ERROR_INVALID_HANDLE, ERROR_WRITE_PROTECT, ERROR_SHARING_VIOLATION,
+    ERROR_READ_FAULT, ERROR_DIR_NOT_EMPTY, ERROR_FILENAME_EXCED_RANGE,
+    ERROR_DIRECTORY, ERROR_INVALID_NAME, ERROR_TOO_MANY_OPEN_FILES, ERROR_DISK_FULL,
+    ERROR_BROKEN_PIPE, ERROR_OPERATION_ABORTED, ERROR_NOT_SUPPORTED, 0);
 
 function GetModuleHandle(lpModuleName: PChar): HMODULE;
 begin
@@ -856,7 +868,7 @@ begin
       CloseHandle(h);
     end
     else
-      result := IsSharedViolation;
+      result := GetLastSystemError = seBusy;
   end;
 end;
 
@@ -950,7 +962,7 @@ begin // return the search record timestamp with no local time conversion
 end;
 
 function FileInfoByHandle(aFileHandle: THandle; FileId, FileSize: PInt64;
-  LastWriteAccess, FileCreateDateTime: PUnixMSTime): boolean;
+  LastWriteAccess, FileCreateDateTime: PUnixMSTime; FileAttr: PCardinal): boolean;
 var
   mtime, atime, ctime: Int64;
   lp: TByHandleFileInformation;
@@ -968,6 +980,8 @@ begin
     PInt64Rec(FileSize)^.lo := lp.nFileSizeLow;
     PInt64Rec(FileSize)^.hi := lp.nFileSizeHigh;
   end;
+  if FileAttr <> nil then
+    FileAttr^ := lp.dwFileAttributes;
   if (LastWriteAccess = nil) and
      (FileCreateDateTime = nil) then
     exit;
@@ -1231,7 +1245,7 @@ begin
   FileClose(s);
 end;
 
-procedure FileSetAttr(const FileName: TFileName; Attr: integer);
+procedure FileSetAttr(const FileName: TFileName; Attr: integer); // internal
 var
   tmp: TW32Temp;
 begin
@@ -2100,7 +2114,7 @@ var
   n, count: cardinal;
 begin
   result := nil;
-  if not DelayedProc(EnumProcesses, PsapiDll, 'Psapi.dll', 'EnumProcesses') then
+  if not DelayedProc(EnumProcesses, PsapiDll, psapi, 'EnumProcesses') then
     exit;
   count := 0;
   n := 2048; // retrieve 2KB of IDs, i.e. 512 processes, by default
@@ -2139,7 +2153,7 @@ begin
         if QueryFullProcessImageNameW(h, 0, name, @len) then
           Unicode_ToUtf8(name, len, result);
       end
-      else if DelayedProc(GetModuleFileNameExW, PsapiDll, 'Psapi.dll',
+      else if DelayedProc(GetModuleFileNameExW, PsapiDll, psapi,
                 'GetModuleFileNameExW') and
               (GetModuleFileNameExW(h, 0, name, high(name)) <> 0) then
         Win32PWideCharToUtf8(name, result);
@@ -2241,9 +2255,9 @@ begin
   result := GetSystemTimes(ftidl, ftkrn, ftusr);
   if not result then
     exit;
-  FileTimeToInt64(ftidl, IdleTime);
-  FileTimeToInt64(ftkrn, KernelTime); // on Windows, ftkrn includes ftidl
-  FileTimeToInt64(ftusr, UserTime);
+  FileTimeToInt64(@ftidl, @IdleTime);
+  FileTimeToInt64(@ftkrn, @KernelTime); // on Windows, ftkrn includes ftidl
+  FileTimeToInt64(@ftusr, @UserTime);
 end;
 
 function RetrieveLoadAvg: TShort23;
@@ -2253,7 +2267,7 @@ end;
 
 function DelayedGetProcessMemoryInfo: boolean;
 begin
-  result:= DelayedProc(GetProcessMemoryInfo, PsapiDll, 'Psapi.dll',
+  result:= DelayedProc(GetProcessMemoryInfo, PsapiDll, psapi,
     'GetProcessMemoryInfo');
 end;
 
@@ -2272,8 +2286,8 @@ begin
   try
     if GetProcessTimes(h, ftp, fte, ftkrn, ftusr) then
     begin
-      FileTimeToInt64(ftkrn, KernelTime);
-      FileTimeToInt64(ftusr, UserTime);
+      FileTimeToInt64(@ftkrn, @KernelTime);
+      FileTimeToInt64(@ftusr, @UserTime);
       FillCharFast(mem, SizeOf(mem), 0);
       mem.cb := SizeOf(mem);
       if GetProcessMemoryInfo(h, mem, SizeOf(mem)) then
@@ -2310,7 +2324,7 @@ function GlobalMemoryStatusEx(var lpBuffer: TMemoryStatusEx): BOOL;
 {$endif UNICODE}
 
 function CoCreateGuid(out guid: THash128): HRESULT;
-  stdcall; external 'ole32.dll';
+  stdcall; external ole32;
 
 procedure XorOSEntropy(var e: THash512Rec);
 var
@@ -2359,9 +2373,9 @@ begin
   result := GetSystemTimes(ftidl, ftkrn, ftusr);
   if not result then
     exit;
-  FileTimeToInt64(ftidl, sidl);
-  FileTimeToInt64(ftkrn, skrn);
-  FileTimeToInt64(ftusr, susr);
+  FileTimeToInt64(@ftidl, @sidl);
+  FileTimeToInt64(@ftkrn, @skrn);
+  FileTimeToInt64(@ftusr, @susr);
   fDiffIdle   := sidl - fSysPrevIdle;
   fDiffKernel := skrn - fSysPrevKernel;
   fDiffUser   := susr - fSysPrevUser;
@@ -2389,8 +2403,8 @@ begin
     begin
       if Now <> nil then
         Data.Timestamp := Now^;
-      FileTimeToInt64(ftkrn, pkrn);
-      FileTimeToInt64(ftusr, pusr);
+      FileTimeToInt64(@ftkrn, @pkrn);
+      FileTimeToInt64(@ftusr, @pusr);
       if (PrevKernel <> 0) and
          (fDiffTotal > 0) then
       begin
@@ -2809,7 +2823,7 @@ begin
             if (dwFileDateLS <> 0) and
                (dwFileDateMS <> 0) then
             begin
-              ft.dwLowDateTime := dwFileDateLS; // built date from version nfo
+              ft.dwLowDateTime  := dwFileDateLS; // built date from version nfo
               ft.dwHighDateTime := dwFileDateMS;
               FileTimeToSystemTime(ft, st);
               fBuildDateTime := EncodeDate(st.wYear, st.wMonth, st.wDay);
@@ -3306,20 +3320,20 @@ function ReadSystemMemory(address, size: PtrUInt): RawByteString;
 var
   memfile: UNICODE_STRING;
   att: OBJECT_ATTRIBUTES;
-  mem, ntdll: THandle;
+  mem, nt: THandle;
   add: TLargeInteger;
   virt: pointer;
 begin
   if NtDllChecked = lsUnTested then
   begin // late-binding until really needed to circumvent antivirus heuristic
     NtDllChecked := lsNotAvailable;
-    ntdll := GetModuleHandle('NTDLL.DLL');
-    if ntdll > 0 then
+    nt := GetModuleHandle(ntdll);
+    if nt > 0 then
     begin
-      RtlInitUnicodeString := LibraryResolve(ntdll, 'RtlInitUnicodeString');
-      NtOpenSection        := LibraryResolve(ntdll, 'NtOpenSection');
-      NtMapViewOfSection   := LibraryResolve(ntdll, 'NtMapViewOfSection');
-      NtUnmapViewOfSection := LibraryResolve(ntdll, 'NtUnmapViewOfSection');
+      RtlInitUnicodeString := LibraryResolve(nt, 'RtlInitUnicodeString');
+      NtOpenSection        := LibraryResolve(nt, 'NtOpenSection');
+      NtMapViewOfSection   := LibraryResolve(nt, 'NtMapViewOfSection');
+      NtUnmapViewOfSection := LibraryResolve(nt, 'NtUnmapViewOfSection');
       if Assigned(RtlInitUnicodeString) and
          Assigned(NtOpenSection) and
          Assigned(NtMapViewOfSection) and
@@ -3424,9 +3438,9 @@ threadvar // do not publish for compilation within Delphi packages
 
 // avoid including ActiveX unit
 function CoInitialize(_para1: pointer): HRESULT;
-  stdcall; external 'ole32.dll';
+  stdcall; external ole32;
 procedure CoUninitialize;
-  stdcall; external 'ole32.dll';
+  stdcall; external ole32;
 
 procedure CoInit;
 begin
@@ -5012,7 +5026,7 @@ begin
   OSVersion32.os := osWindows;
   OSVersion32.win := Vers;
   OSVersion32.winbuild := OSVersionInfo.dwBuildNumber;
-  h := GetModuleHandle('NTDLL.DLL'); // late binding over unstable / altered API
+  h := GetModuleHandle(ntdll); // late binding over unstable / altered API
   if h > 0 then
   begin
     wine_get_version := LibraryResolve(h, 'wine_get_version');
@@ -5025,6 +5039,7 @@ begin
     else if IsWow64Emulation then
        OSVersionInfoEx := 'Prism'
     {$endif CPUINTEL};
+    RtlIpv6StringToAddress := LibraryResolve(h, 'RtlIpv6StringToAddressA');
   end;
   // 4. retrieve Software/Hardware information from Registry
   if reg.ReadOpen(wrLocalMachine, 'Software\Microsoft\Windows NT\CurrentVersion') then

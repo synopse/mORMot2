@@ -9236,7 +9236,7 @@ begin // see GetNextItemTrimed() from mormot.core.text
   while (E > P) and
         (E[-1] in [#1..' ']) do
     dec(E); // trim right
-  FastSetString(result, P, E - P);
+  FastSetString(result, P, E);
   if S^ <> #0 then
     P := S + 1
   else
@@ -9498,7 +9498,7 @@ begin
     if s <> nil then
     begin
       SetLength(result, n + 1);
-      FastSetString(result[n], s, p - s);
+      FastSetString(result[n], s, p);
       inc(n);
     end;
   until P^ = #0;
@@ -11001,7 +11001,7 @@ begin
     while (S^ <> #0) and
           (S^ <> ',') do
       inc(S);
-    FastSetString(value, P, S - P);
+    FastSetString(value, P, S);
     if S^ <> #0 then
       P := S + 1
     else
@@ -11516,7 +11516,7 @@ begin
   Finalize(result);
   if OpenSslIsAvailable and
      u.From(url) and
-     (NewSocket(u.Server, u.Port, nlTcp, false, 1000, 1000, 1000, 2, ns) = nrOk) then
+     (NewSocket(u.Server, u.Port, u.Layer, false, 1000, 1000, 1000, 2, ns) = nrOk) then
   try
     // cut-down version of TOpenSslNetTls.AfterConnection
     c := SSL_CTX_new(TLS_client_method);

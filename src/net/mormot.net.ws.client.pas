@@ -589,7 +589,7 @@ var
   uri: TUri;
 begin
   if (aProtocol = nil) or
-     not uri.From(aUri) then
+     not uri.From(aUri) then // detect http[s]:// and ws[s]:// schemes
     EWebSockets.RaiseUtf8('%.WebSocketsConnect(nil)', [self]);
   result := WebSocketsConnect(uri.Server, uri.Port, aProtocol,
     aLog, aLogContext, uri.Address, aCustomHeaders, uri.Https, aTLSContext);
@@ -846,7 +846,7 @@ class function TSocketsIOClient.Open(const aUri: RawUtf8; aLog: TSynLogClass;
 var
   uri: TUri;
 begin
-  if uri.From(aUri) then // detect both https:// and wss:// schemes
+  if uri.From(aUri) then // detect http[s]:// and ws[s]:// schemes
     result := Open(uri.Server, uri.Port, aLog, aOptions,
       uri.Address, aCustomHeaders, uri.Https, aTLSContext)
   else

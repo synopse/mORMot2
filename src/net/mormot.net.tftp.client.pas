@@ -144,7 +144,7 @@ type
           );
         TFTP_ERR:
           (
-            /// the TTftpError value, netword-ordered
+            /// the TTftpError value, netword-ordered - at Sequence offset
             ErrorCode: word;
             /// the #0 terminated Error message
             ErrorMsg: array[0 .. 511] of byte;
@@ -182,12 +182,11 @@ type
     function GetNext: boolean;
     function GetNextCardinal(min, max: cardinal; out c: cardinal): boolean;
   public
-    /// the toRrq/toWrq request opcode
-    // - as filled by ParseRequest()
+    /// the toRrq/toWrq request opcode, as filled by ParseRequestFileName()
     OpCode: TTftpOpcode;
-    /// the expected toDat/toAck input opcode, as filled after ParseRequest
+    /// the expected toDat/toAck input opcode, as filled by ParseRequestOptions
     OpDataAck: TTftpOpcode;
-    /// ParseRequest will identify RFC 2347 option extensions
+    /// ParseRequestFileName will identify RFC 2347 option extensions
     HasExtendedOptions: boolean;
     /// the number of retries after a timeout
     RetryCount: byte;
@@ -225,6 +224,7 @@ type
     /// the transmitted file name, UTF-8 encoded
     FileName: RawUtf8;
     /// the full file name, as resolved locally on the file system
+    // - may be 'http://some.server/uri/FileName' by SetRemote()
     FileNameFull: TFileName;
     /// the actual transmitted file content, as a TStream
     FileStream: TStream;
@@ -278,7 +278,7 @@ type
     function SendFrame: TNetResult;
     /// generate and send an ERR packet, then close Sock and FileStream
     procedure SendErrorAndShutdown(err: TTftpError; log: TSynLog;
-      obj: TObject; const caller: ShortString);
+      obj: TObject; const caller: ShortString; const msg: RawUtf8 = '');
     /// close Sock and FileStream
     procedure Shutdown;
   end;
@@ -378,10 +378,15 @@ begin
         AppendShortCardinal(seq, res);
         if seq <= ord(teLast) then
         begin
-          AppendShortTwoChars(ord(' ') + ord('(') shl 8, @res);
-          AppendShort(GetEnumName(TypeInfo(TTftpError), seq)^, res);
-          AppendShortTwoChars(ord(')') + ord(' ') shl 8, @res);
-          AppendShortBuffer(@frame.Header, StrLen(@frame.Header), high(res), @res);
+          if seq = 0 then
+            AppendShortChar(' ', @res)
+          else
+          begin
+            AppendShortTwoChars(ord(' ') + ord('(') shl 8, @res);
+            AppendShort(GetEnumName(TypeInfo(TTftpError), seq)^, res);
+            AppendShortTwoChars(ord(')') + ord(' ') shl 8, @res);
+          end;
+          AppendShortBuffer(@frame.ErrorMsg, StrLen(@frame.ErrorMsg), high(res), @res);
         end;
       end;
   end;
@@ -661,7 +666,9 @@ begin
   if CurrentSize <> FileStream.Position then
     FileStream.Seek(Int64(CurrentSize), soBeginning); // may break on TPipeStream
   FrameLen := FileStream.Read(Frame^.Data,  BlockSize);
-  // data FrameLen=0 is possible for last block
+  // data FrameLen=0 is possible for last block but <0 indicates error
+  if FrameLen < 0 then
+    RaiseStreamError(FileStream, 'Read during GenerateNextDataFrame');
   inc(FrameLen, SizeOf(Frame^.Opcode) + SizeOf(Frame^.Sequence));
   inc(CurrentSize, BlockSize);
 end;
@@ -734,11 +741,11 @@ begin
 end;
 
 procedure TTftpContext.SendErrorAndShutdown(err: TTftpError; log: TSynLog;
-  obj: TObject; const caller: ShortString);
+  obj: TObject; const caller: ShortString; const msg: RawUtf8);
 var
   frametext: ShortString;
 begin
-  GenerateErrorFrame(err, '');
+  GenerateErrorFrame(err, msg);
   ToTextVar(Frame^, FrameLen, frametext);
   log.Log(sllTrace, '%: % % failed as %',
     [caller, TFTP_OPCODE[OpCode], FileName, frametext], obj);

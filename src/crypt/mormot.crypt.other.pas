@@ -449,8 +449,11 @@ procedure BCryptExpensiveKeySetup(var State: TBlowFishState;
 
 { **************** SCrypt Password-Hashing Function }
 
+{$ifndef ASMSSE2}
 /// apply in-place Salsa20/8 transformation over a 64 bytes buffer
+// - only used in pure pascal mode, when NOASMBLOCK/HASNOSSE2 are defined
 procedure Salsa20x8(B: PCardinalArray);
+{$endif ASMSSE2}
 
 /// low-level SCrypt hash computation using our pure pascal code
 // - the tuned SSE2 code of this unit is faster than mormot.lib.openssl11:
@@ -1885,8 +1888,8 @@ begin
   if PreSha256 then
   begin
     // https://passlib.readthedocs.io/en/stable/lib/passlib.hash.bcrypt_sha256.html
-    HmacSha256(saltb64, Password, dig.b);
-    pwd := BinToBase64(@dig, SizeOf(dig)); // standard Base-64 encoding
+    HmacSha256(saltb64, Password, dig.b);  // any length and zeros into 32 bytes
+    pwd := BinToBase64(@dig, SizeOf(dig)); // standard Base-64 encoding as 44 chars
     BCryptExpensiveKeySetup(state, Cost, pointer(saltbin), pwd);
     FillZero(pwd);
     Make(['$bcrypt-sha256$v=2,t=2b,r=', Cost, '$', saltb64, '$'], result);
@@ -1923,493 +1926,14 @@ end;
 
 { **************** SCrypt Password-Hashing Function }
 
-{$ifdef ASMINTEL}
-{$ifdef ASMX64}
-
-{$ifdef FPC}
-  {$WARN 7105 off : Use of -offset(%esp) }
-  {$WARN 7121 off : Check size of memory operand }
-  {$WARN 7122 off : Check size of memory operand }
-{$endif FPC}
-
-procedure Salsa20x8(B: PCardinalArray);
-{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        push    rbp
-        push    r15
-        push    r14
-        push    r13
-        push    r12
-        push    rbx
-        sub     rsp, 40
-        movups  xmm0, dqword ptr [B]
-        movups  xmm1, dqword ptr [B + 16]
-        movups  xmm2, dqword ptr [B + 32]
-        movups  xmm3, dqword ptr [B + 48]
-        mov     qword ptr [rsp - 32], B
-        movaps  [rsp - 128], xmm0
-        movaps  [rsp - 80],  xmm3
-        movaps  [rsp - 112], xmm1
-        movaps  [rsp - 96],  xmm2
-        mov     r11d, dword ptr [rsp - 128]
-        mov     r8d, dword ptr [rsp - 124]
-        mov     ecx, dword ptr [rsp - 80]
-        mov     edi, dword ptr [rsp - 76]
-        mov     eax, dword ptr [rsp - 112]
-        mov     r15d, dword ptr [rsp - 108]
-        mov     r12d, dword ptr [rsp - 96]
-        mov     ebp, dword ptr [rsp - 92]
-        mov     ebx, dword ptr [rsp - 88]
-        mov     r9d, dword ptr [rsp - 104]
-        mov     r13d, dword ptr [rsp - 72]
-        mov     edx, dword ptr [rsp - 120]
-        mov     qword ptr [rsp - 48], rdx
-        mov     r14d, dword ptr [rsp - 68]
-        mov     r10d, dword ptr [rsp - 84]
-        mov     edx, dword ptr [rsp - 116]
-        mov     qword ptr [rsp - 56], rdx
-        mov     qword ptr [rsp - 40], 4
-        mov     esi, dword ptr [rsp - 100]
-        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@s:     lea     edx, [rcx + r11]
-        rol     edx, 7
-        xor     edx, eax
-        mov     qword ptr [rsp], rdx
-        lea     eax, [rdx + r11]
-        rol     eax, 9
-        xor     eax, r12d
-        mov     r12, rax
-        mov     qword ptr [rsp + 24], rax
-        add     eax, edx
-        rol     eax, 13
-        xor     eax, ecx
-        mov     qword ptr [rsp + 32], rax
-        add     r12d, eax
-        rol     r12d, 18
-        lea     eax, [r8 + r15]
-        rol     eax, 7
-        xor     eax, ebp
-        mov     qword ptr [rsp + 8], rax
-        lea     ecx, [rax + r15]
-        rol     ecx, 9
-        xor     ecx, edi
-        mov     qword ptr [rsp + 16], rcx
-        add     eax, ecx
-        rol     eax, 13
-        xor     eax, r8d
-        lea     ebp, [rax + rcx]
-        rol     ebp, 18
-        xor     r12d, r11d
-        lea     ecx, [r9 + rbx]
-        rol     ecx, 7
-        xor     ecx, r13d
-        mov     qword ptr [rsp - 8], rcx
-        lea     r11d, [rcx + rbx]
-        rol     r11d, 9
-        xor     r11d, dword ptr [rsp - 48]
-        add     ecx, r11d
-        rol     ecx, 13
-        xor     ecx, r9d
-        lea     edx, [rcx + r11]
-        rol     edx, 18
-        xor     ebp, r15d
-        lea     r9d, [r10 + r14]
-        rol     r9d, 7
-        xor     r9d, dword ptr [rsp - 56]
-        lea     r15d, [r9 + r14]
-        rol     r15d, 9
-        xor     r15d, esi
-        lea     edi, [r15 + r9]
-        rol     edi, 13
-        xor     edi, r10d
-        lea     r13d, [rdi + r15]
-        rol     r13d, 18
-        xor     edx, ebx
-        lea     r8d, [r9 + r12]
-        rol     r8d, 7
-        xor     r8d, eax
-        lea     eax, [r8 + r12]
-        rol     eax, 9
-        xor     eax, r11d
-        lea     esi, [rax + r8]
-        rol     esi, 13
-        xor     esi, r9d
-        mov     qword ptr [rsp - 56], rsi
-        mov     qword ptr [rsp - 48], rax
-        lea     r11d, [rsi + rax]
-        rol     r11d, 18
-        xor     r13d, r14d
-        mov     r10, qword ptr [rsp]
-        lea     r9d, [r10 + rbp]
-        rol     r9d, 7
-        xor     r9d, ecx
-        lea     esi, [r9 + rbp]
-        mov     rcx, rbp
-        rol     esi, 9
-        xor     esi, r15d
-        lea     eax, [rsi + r9]
-        rol     eax, 13
-        xor     eax, r10d
-        lea     r15d, [rax + rsi]
-        rol     r15d, 18
-        xor     r11d, r12d
-        mov     qword ptr [rsp - 16], rdx
-        mov     rbx, qword ptr [rsp + 8]
-        lea     r10d, [rdx + rbx]
-        rol     r10d, 7
-        xor     r10d, edi
-        lea     r12d, [r10 + rdx]
-        rol     r12d, 9
-        xor     r12d, dword ptr [rsp + 24]
-        lea     ebp, [r12 + r10]
-        rol     ebp, 13
-        xor     ebp, ebx
-        lea     ebx, [r12 + rbp]
-        rol     ebx, 18
-        xor     r15d, ecx
-        mov     rdx, qword ptr [rsp - 8]
-        mov     qword ptr [rsp - 24], r13
-        lea     ecx, [rdx + r13]
-        rol     ecx, 7
-        xor     ecx, dword ptr [rsp + 32]
-        lea     edi, [rcx + r13]
-        rol     edi, 9
-        xor     edi, dword ptr [rsp + 16]
-        lea     r13d, [rdi + rcx]
-        rol     r13d, 13
-        xor     r13d, edx
-        lea     r14d, [rdi + r13]
-        rol     r14d, 18
-        xor     ebx, dword ptr [rsp - 16]
-        xor     r14d, dword ptr [rsp - 24]
-        dec     byte ptr [rsp - 40]
-        jnz     @s
-        mov     dword ptr [rsp - 128], r11d
-        mov     dword ptr [rsp - 80], ecx
-        mov     dword ptr [rsp - 112], eax
-        mov     dword ptr [rsp - 96], r12d
-        mov     dword ptr [rsp - 108], r15d
-        mov     dword ptr [rsp - 124], r8d
-        mov     dword ptr [rsp - 92], ebp
-        mov     dword ptr [rsp - 76], edi
-        mov     dword ptr [rsp - 88], ebx
-        mov     dword ptr [rsp - 104], r9d
-        mov     dword ptr [rsp - 72], r13d
-        mov     rax, qword ptr [rsp - 48]
-        mov     dword ptr [rsp - 120], eax
-        mov     dword ptr [rsp - 68], r14d
-        mov     dword ptr [rsp - 84], r10d
-        mov     rax, qword ptr [rsp - 56]
-        mov     dword ptr [rsp - 116], eax
-        mov     dword ptr [rsp - 100], esi
-        mov     rcx, qword ptr [rsp - 32]
-        movups  xmm0, [rcx]
-        movups  xmm1, [rcx + 16]
-        movups  xmm2, [rcx + 32]
-        paddd   xmm0, [rsp - 128]
-        movups  xmm3, [rcx + 48]
-        paddd   xmm1, [rsp + 16 - 128]
-        paddd   xmm2, [rsp + 32 - 128]
-        paddd   xmm3, [rsp + 48 - 128]
-        movups  [rcx], xmm0
-        movups  [rcx + 16], xmm1
-        movups  [rcx + 32], xmm2
-        movups  [rcx + 48], xmm3
-        add     rsp, 40
-        pop     rbx
-        pop     r12
-        pop     r13
-        pop     r14
-        pop     r15
-        pop     rbp
-end;
-{$else}
-procedure Salsa20x8(B: PCardinalArray); // old i386 version without SSE2
-{$ifdef FPC}nostackframe; assembler;{$endif}
-asm
-        push    ebp
-        push    edi
-        push    esi
-        push    ebx
-        push    eax
-        sub     esp, 156
-        mov     ebx, eax
-        mov     eax, [ebx + 16]
-        mov     edi, [ebx + 36]
-        mov     ebp, [ebx + 24]
-        mov     edx, [ebx + 48]
-        mov     [esp + 24], eax
-        mov     eax, [ebx]
-        mov     [esp + 36], edi
-        mov     edi, [ebx + 20]
-        mov     [esp + 16], eax
-        mov     eax, [ebx + 4]
-        mov     [esp + 28], edi
-        mov     ecx, [ebx + 32]
-        mov     [esp + 20], eax
-        mov     eax, [ebx + 56]
-        mov     edi, [ebx + 52]
-        mov     [esp + 44], eax
-        mov     eax, [ebx + 40]
-        mov     [esp + 48], eax
-        mov     eax, [ebx + 8]
-        mov     [esp + 52], eax
-        mov     eax, [ebx + 12]
-        mov     [esp + 56], eax
-        mov     eax, [ebx + 60]
-        mov     byte ptr [esp + 76], 4
-        mov     [esp + 12], eax
-        mov     eax, [ebx + 44]
-        mov     [esp + 64], eax
-        mov     eax, [ebx + 28]
-        mov     [esp + 60], eax
-        mov     eax, ebp
-        mov     ebp, [esp + 28]
-{$ifdef FPC} align 8 {$else} {$ifdef ASMALIGN} .align 8 {$endif}{$endif}
-@s:     mov     ebx, [esp + 16]
-        mov     esi, [esp + 24]
-        add     ebx, edx
-        rol     ebx, 7
-        xor     esi, ebx
-        mov     ebx, [esp + 16]
-        mov     [esp + 24], esi
-        add     ebx, esi
-        rol     ebx, 9
-        xor     ebx, ecx
-        lea     ecx, [esi + ebx]
-        mov     [esp + 28], ebx
-        rol     ecx, 13
-        mov     esi, ecx
-        mov     ecx, [esp + 20]
-        xor     esi, edx
-        lea     edx, [ebx + esi]
-        mov     ebx, [esp + 36]
-        mov     [esp + 32], esi
-        ror     edx, 14
-        xor     edx, [esp + 16]
-        mov     [esp + 16], edx
-        lea     edx, [ecx + ebp]
-        rol     edx, 7
-        xor     ebx, edx
-        lea     edx, [ebx + ebp]
-        mov     [esp + 36], ebx
-        rol     edx, 9
-        mov     ecx, edx
-        xor     ecx, edi
-        lea     esi, [ebx + ecx]
-        mov     [esp + 40], ecx
-        rol     esi, 13
-        xor     esi, [esp + 20]
-        lea     edx, [ecx + esi]
-        mov     ecx, [esp + 44]
-        ror     edx, 14
-        xor     edx, ebp
-        mov     ebp, [esp + 48]
-        mov     [esp + 68], edx
-        lea     edx, [ebp + 0 + eax]
-        rol     edx, 7
-        xor     ecx, edx
-        mov     edx, ebp
-        mov     edi, ecx
-        add     ecx, ebp
-        mov     ebp, [esp + 52]
-        rol     ecx, 9
-        mov     [esp + 44], edi
-        xor     ecx, ebp
-        mov     ebp, edi
-        add     ebp, ecx
-        rol     ebp, 13
-        xor     ebp, eax
-        lea     eax, [ecx + ebp]
-        mov     [esp + 48], ebp
-        mov     ebp, [esp + 64]
-        ror     eax, 14
-        xor     edx, eax
-        mov     [esp + 72], edx
-        mov     edx, [esp + 12]
-        lea     eax, [edx + ebp]
-        rol     eax, 7
-        xor     eax, [esp + 56]
-        add     edx, eax
-        rol     edx, 9
-        xor     edx, [esp + 60]
-        lea     ebx, [eax + edx]
-        rol     ebx, 13
-        xor     ebx, ebp
-        mov     ebp, [esp + 12]
-        lea     edi, [edx + ebx]
-        ror     edi, 14
-        xor     ebp, edi
-        mov     [esp + 12], ebp
-        mov     ebp, [esp + 16]
-        lea     edi, [ebp + 0 + eax]
-        rol     edi, 7
-        xor     edi, esi
-        lea     esi, [ebp + 0 + edi]
-        mov     [esp + 20], edi
-        rol     esi, 9
-        xor     esi, ecx
-        lea     ecx, [edi + esi]
-        mov     [esp + 52], esi
-        rol     ecx, 13
-        mov     edi, ecx
-        xor     edi, eax
-        lea     eax, [esi + edi]
-        mov     [esp + 56], edi
-        mov     edi, [esp + 24]
-        ror     eax, 14
-        xor     ebp, eax
-        mov     [esp + 16], ebp
-        mov     ebp, [esp + 68]
-        mov     esi, [esp + 72]
-        lea     eax, [edi + ebp]
-        rol     eax, 7
-        xor     eax, [esp + 48]
-        lea     ecx, [ebp + 0 + eax]
-        rol     ecx, 9
-        xor     ecx, edx
-        lea     edx, [eax + ecx]
-        mov     [esp + 60], ecx
-        rol     edx, 13
-        xor     edi, edx
-        lea     edx, [ecx + edi]
-        mov     [esp + 24], edi
-        mov     edi, [esp + 36]
-        ror     edx, 14
-        xor     ebp, edx
-        lea     edx, [edi + esi]
-        rol     edx, 7
-        xor     edx, ebx
-        mov     ebx, [esp + 12]
-        lea     ecx, [esi + edx]
-        mov     [esp + 64], edx
-        rol     ecx, 9
-        xor     ecx, [esp + 28]
-        lea     edx, [edx + ecx]
-        rol     edx, 13
-        xor     edi, edx
-        lea     edx, [ecx + edi]
-        mov     [esp + 36], edi
-        ror     edx, 14
-        xor     esi, edx
-        mov     [esp + 48], esi
-        mov     esi, [esp + 44]
-        lea     edx, [esi + ebx]
-        rol     edx, 7
-        xor     edx, [esp + 32]
-        lea     edi, [ebx + edx]
-        rol     edi, 9
-        xor     edi, [esp + 40]
-        lea     ebx, [edx + edi]
-        rol     ebx, 13
-        xor     esi, ebx
-        lea     ebx, [edi + esi]
-        mov     [esp + 44], esi
-        mov     esi, [esp + 12]
-        ror     ebx, 14
-        xor     esi, ebx
-        mov     [esp + 12], esi
-        dec     byte ptr [esp + 76]
-        jne     @s
-        mov     [esp + 28], ebp
-        mov     [esp + 104], eax
-        mov     eax, [esp + 20]
-        mov     [esp + 112], ecx
-        mov     [esp + 84], eax
-        mov     eax, [esp + 52]
-        mov     [esp + 132], edi
-        mov     [esp + 88], eax
-        mov     eax, [esp + 56]
-        mov     [esp + 128], edx
-        mov     [esp + 92], eax
-        mov     eax, [esp + 16]
-        mov     [esp + 80], eax
-        mov     eax, [esp + 60]
-        mov     [esp + 108], eax
-        mov     eax, [esp + 24]
-        mov     [esp + 96], eax
-        mov     eax, [esp + 28]
-        mov     [esp + 100], eax
-        mov     eax, [esp + 64]
-        mov     [esp + 124], eax
-        mov     eax, [esp + 36]
-        mov     [esp + 116], eax
-        mov     eax, [esp + 48]
-        mov     [esp + 120], eax
-        mov     eax, [esp + 44]
-        mov     [esp + 136], eax
-        mov     eax, [esp + 12]
-        mov     [esp + 140], eax
-        lea     edx, [esp + 80]
-        add     esp, 156
-        pop     ebx
-        xor     esi, esi
-        {$ifdef FPC} align 8 {$else} {$ifdef ASMALIGN} .align 8 {$endif}{$endif}
-@1:     mov     eax, [edx + esi]
-        add     [ebx + esi], eax
-        add     esi, 4
-        cmp     esi, 64
-        jb      @1
-        pop     ebx
-        pop     esi
-        pop     edi
-        pop     ebp
-end;
-{$endif ASMX64}
-{$else}
-procedure Salsa20x8(B: PCardinalArray);
-var
-  x: TBlock512;
-  i: PtrUInt;
-begin // single B parameter keep the stack small and all offsets in [rsp+0..$7f]
-  x := PBlock512(B)^;
-  for i := 1 to 4 do
-  begin
-    x[4]  := x[4]  xor RolDWord(x[0]  + x[12], 7); // RoldDWord() intrinsic FPC
-    x[8]  := x[8]  xor RolDWord(x[4]  + x[0],  9);
-    x[12] := x[12] xor RolDWord(x[8]  + x[4],  13);
-    x[0]  := x[0]  xor RolDWord(x[12] + x[8],  18);
-    x[9]  := x[9]  xor RolDWord(x[5]  + x[1],  7);
-    x[13] := x[13] xor RolDWord(x[9]  + x[5],  9);
-    x[1]  := x[1]  xor RolDWord(x[13] + x[9],  13);
-    x[5]  := x[5]  xor RolDWord(x[1]  + x[13], 18);
-    x[14] := x[14] xor RolDWord(x[10] + x[6],  7);
-    x[2]  := x[2]  xor RolDWord(x[14] + x[10], 9);
-    x[6]  := x[6]  xor RolDWord(x[2]  + x[14], 13);
-    x[10] := x[10] xor RolDWord(x[6]  + x[2],  18);
-    x[3]  := x[3]  xor RolDWord(x[15] + x[11], 7);
-    x[7]  := x[7]  xor RolDWord(x[3]  + x[15], 9);
-    x[11] := x[11] xor RolDWord(x[7]  + x[3],  13);
-    x[15] := x[15] xor RolDWord(x[11] + x[7],  18);
-    x[1]  := x[1]  xor RolDWord(x[0]  + x[3],  7);
-    x[2]  := x[2]  xor RolDWord(x[1]  + x[0],  9);
-    x[3]  := x[3]  xor RolDWord(x[2]  + x[1],  13);
-    x[0]  := x[0]  xor RolDWord(x[3]  + x[2],  18);
-    x[6]  := x[6]  xor RolDWord(x[5]  + x[4],  7);
-    x[7]  := x[7]  xor RolDWord(x[6]  + x[5],  9);
-    x[4]  := x[4]  xor RolDWord(x[7]  + x[6],  13);
-    x[5]  := x[5]  xor RolDWord(x[4]  + x[7],  18);
-    x[11] := x[11] xor RolDWord(x[10] + x[9],  7);
-    x[8]  := x[8]  xor RolDWord(x[11] + x[10], 9);
-    x[9]  := x[9]  xor RolDWord(x[8]  + x[11], 13);
-    x[10] := x[10] xor RolDWord(x[9]  + x[8],  18);
-    x[12] := x[12] xor RolDWord(x[15] + x[14], 7);
-    x[13] := x[13] xor RolDWord(x[12] + x[15], 9);
-    x[14] := x[14] xor RolDWord(x[13] + x[12], 13);
-    x[15] := x[15] xor RolDWord(x[14] + x[13], 18);
-  end;
-  for i := 0 to 15 do
-    inc(B[i], x[i]);
-end;
-{$endif ASMINTEL}
-
 {$ifdef ASMSSE2}
 
 // our SSE2 optimized version for i386 and x86_64 - faster than OpenSSL
 {
    Default layout:     SSE2 layout:
-     0  1  2  3         0  5 10 15
-     4  5  6  7        12  1  6 11
-     8  9 10 11         8 13  2  7
+     0  1  2  3         0  5 10 15   swap 1/5  2/10 3/15
+     4  5  6  7        12  1  6 11        4/12 7/11
+     8  9 10 11         8 13  2  7        9/13
     12 13 14 15         4  9 14  3
 }
 procedure SPrepareSse2(blocks: PCardinalArray; count: cardinal);
@@ -2720,7 +2244,53 @@ begin
   SPrepareSse2(X, R * 2);
 end;
 
-{$else}
+{$else} // pure pascal SBlockMix()
+
+// we had some SSE2 optimized asm but they were never used and buggy on Win64
+procedure Salsa20x8(B: PCardinalArray);
+var
+  x: TBlock512;
+  i: PtrUInt;
+begin // single B parameter keep the stack small and all offsets in [rsp+0..$7f]
+  x := PBlock512(B)^;
+  for i := 1 to 4 do
+  begin
+    x[4]  := x[4]  xor RolDWord(x[0]  + x[12], 7); // RoldDWord() intrinsic FPC
+    x[8]  := x[8]  xor RolDWord(x[4]  + x[0],  9);
+    x[12] := x[12] xor RolDWord(x[8]  + x[4],  13);
+    x[0]  := x[0]  xor RolDWord(x[12] + x[8],  18);
+    x[9]  := x[9]  xor RolDWord(x[5]  + x[1],  7);
+    x[13] := x[13] xor RolDWord(x[9]  + x[5],  9);
+    x[1]  := x[1]  xor RolDWord(x[13] + x[9],  13);
+    x[5]  := x[5]  xor RolDWord(x[1]  + x[13], 18);
+    x[14] := x[14] xor RolDWord(x[10] + x[6],  7);
+    x[2]  := x[2]  xor RolDWord(x[14] + x[10], 9);
+    x[6]  := x[6]  xor RolDWord(x[2]  + x[14], 13);
+    x[10] := x[10] xor RolDWord(x[6]  + x[2],  18);
+    x[3]  := x[3]  xor RolDWord(x[15] + x[11], 7);
+    x[7]  := x[7]  xor RolDWord(x[3]  + x[15], 9);
+    x[11] := x[11] xor RolDWord(x[7]  + x[3],  13);
+    x[15] := x[15] xor RolDWord(x[11] + x[7],  18);
+    x[1]  := x[1]  xor RolDWord(x[0]  + x[3],  7);
+    x[2]  := x[2]  xor RolDWord(x[1]  + x[0],  9);
+    x[3]  := x[3]  xor RolDWord(x[2]  + x[1],  13);
+    x[0]  := x[0]  xor RolDWord(x[3]  + x[2],  18);
+    x[6]  := x[6]  xor RolDWord(x[5]  + x[4],  7);
+    x[7]  := x[7]  xor RolDWord(x[6]  + x[5],  9);
+    x[4]  := x[4]  xor RolDWord(x[7]  + x[6],  13);
+    x[5]  := x[5]  xor RolDWord(x[4]  + x[7],  18);
+    x[11] := x[11] xor RolDWord(x[10] + x[9],  7);
+    x[8]  := x[8]  xor RolDWord(x[11] + x[10], 9);
+    x[9]  := x[9]  xor RolDWord(x[8]  + x[11], 13);
+    x[10] := x[10] xor RolDWord(x[9]  + x[8],  18);
+    x[12] := x[12] xor RolDWord(x[15] + x[14], 7);
+    x[13] := x[13] xor RolDWord(x[12] + x[15], 9);
+    x[14] := x[14] xor RolDWord(x[13] + x[12], 13);
+    x[15] := x[15] xor RolDWord(x[14] + x[13], 18);
+  end;
+  for i := 0 to 15 do
+    inc(B[i], x[i]);
+end;
 
 procedure SBlockMix(Input, Output: PByteArray; R: PtrUInt);
 var
@@ -2731,7 +2301,7 @@ begin
   i := 0;
   repeat
     Xor512(@tmp, @Input[i * 128]); // may use SSE2
-    Salsa20x8(@tmp);               // in mormot.crypt.core.pas
+    Salsa20x8(@tmp);               // pure pascal version above
     Move512(@Output[i * 64], @tmp);
     Xor512(@tmp, @Input[i * 128 + 64]);
     Salsa20x8(@tmp);

@@ -24,7 +24,6 @@ uses
   sysutils,
   classes,
   variants,
-  contnrs,
   {$ifdef DOMAINRESTAUTH}
   mormot.lib.sspi,   // void unit on POSIX
   mormot.lib.gssapi, // void unit on Windows
