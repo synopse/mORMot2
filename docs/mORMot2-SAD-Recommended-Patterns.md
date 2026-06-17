@@ -471,11 +471,65 @@ Every service exposes an `IXxxRepository` (or a CQRS pair, see [B.4](#b4-cqrs-re
 
 ### B.6. Cross-cutting standards
 
-- **Folder layout.** Keep the persistence boundary visible: lowercase `dom/`, `infra/`, `app/`, `tests/`, one subfolder per entity. Don't merge domain and infrastructure into one folder.
+- **Folder layout.** Keep the persistence boundary visible: lowercase `dom/`, `infra/`, `app/`, `tests/`, one subfolder per entity, with the daemon and client units in `serv/` and at the source root. Don't merge domain and infrastructure into one folder. See [B.6.1](#b61-suggested-folder-structure) for the full tree.
 - **Result handling.** A shared base enum (e.g. `TServiceResult`: success / invalid-request / not-found / denied / db-error) plus optional per-service extensions — stops the proliferation of near-identical result enums.
 - **Auth on the consumer side.** Extract a single guard helper so every service does one `Guard.Require(Token, …)` call instead of a repeated multi-step token ritual.
 - **Scope every read to the caller.** The most common and most damaging public-service mistake is publishing too much: letting a logged-in user retrieve *all* rows when they should see only their own. Filter every query to the session's identity at the service boundary. No server-topology choice (see [A.6](#a6-minimum-recommended-server-configuration)) substitutes for this.
 - **Tests.** A `tests/` folder per service; mapping is the cheapest, highest-value test target — whether a `TRttiMap` (round-trip via `Compare` / `RandomA`, see [A.7](#a7-copying-between-objects-records-and-dtos)) or a hand-written projection mapper. Exercise it first.
+
+#### B.6.1. Suggested folder structure
+
+The layout below realises the layering of [B.1](#b1-storage-behind-an-interface)–[B.5](#b5-soa-composition-root-and-dependency-injection) on disk. One subfolder per entity inside each layer, plus a `serv/` folder for the daemon and the topology-selecting client units of [A.6](#a6-minimum-recommended-server-configuration). `<entity>` is the lowercase entity name; `<Name>` is the service name.
+
+```text
+src/
+├── dom/                          # domain: the TOrm entity (B.3) + the port interfaces
+│   └── <entity>/                 #   uses mormot.orm.core for the TOrm base type — never IRestOrm
+│       ├── <entity>.pas               # TOrm aggregate = the domain object (B.3)
+│       ├── <entity>_repository.pas    # I<Entity>Repository — persistence port (B.1)
+│       ├── <entity>_query.pas         # I<Entity>Query   — CQRS read  (IInvokable) (B.4)
+│       └── <entity>_command.pas       # I<Entity>Command — CQRS write (IInvokable)
+├── infra/                        # infrastructure: IRestOrm runtime, SQL, FTS5, migration
+│   └── <entity>/
+│       └── <entity>_repository_orm.pas # T<Entity>RepositoryOrm implements I<Entity>Repository;
+│                                       #   owns schema migration and all SQL
+├── app/                          # application layer: DTOs, mappers, service impls (B.8)
+│   └── <entity>/
+│       ├── <entity>_dtos.pas           # packed-record DTO family (Rtti.RegisterFromText on FPC)
+│       ├── <entity>_mappers.pas        # pure OrmTo* / *ToOrm / Apply* — cheapest test target
+│       ├── <entity>_query_impl.pas     # T<Entity>QueryService  (TInjectableObjectRest, sicShared)
+│       └── <entity>_command_impl.pas   # T<Entity>CommandService
+├── serv/app/
+│   ├── ServApp<Name>.pas         # the daemon / composition root: build the TOrmModel, wire
+│   │                             #   repositories, ServiceDefine, start TRestHttpServer (B.7)
+│   └── <name>serverstart.pas     # entry point — runs ServApp<Name> as a TSynDaemon
+├── App<Name>Client.pas           # the one unit consumer code depends on (A.6)
+├── App<Name>ClientLocal.pas      # in-process stack — the A.6.1 monolith
+└── App<Name>ClientRemote.pas     # HTTP client      — the A.6.2 distributed layout
+tests/
+└── <entity>/
+    └── <entity>_tests.pas        # one TSynTestCase per entity; start with mapper round-trips
+```
+
+**The `TOrm` lives in `dom/`, on purpose.** Because the `TOrm` doubles as the domain object ([B.3](#b3-two-types-per-entity-not-three)), it belongs with the domain, not with the persistence machinery. The cost is precise and acceptable: `dom/` depends on the ORM **base type** (`mormot.orm.core`) but never on the ORM **runtime** — no `IRestOrm`, no REST server, no SQL. Those stay in `infra/`. This keeps the dependency direction clean: the port interface in `dom/` can name the entity it returns without reaching into `infra/`, and `infra/` depends on `dom/`, never the reverse. (Some older code merges the two into a single `kdom/`-style folder — that is the case this split is meant to avoid.)
+
+| Pattern | Layer | Role |
+|---|---|---|
+| `<entity>.pas` | dom | `TOrm` aggregate — the domain object ([B.3](#b3-two-types-per-entity-not-three)) |
+| `<entity>_repository.pas` | dom | `I<Entity>Repository` persistence port |
+| `<entity>_query.pas` | dom | `I<Entity>Query` — CQRS read interface |
+| `<entity>_command.pas` | dom | `I<Entity>Command` — CQRS write interface |
+| `<entity>_repository_orm.pas` | infra | `IRestOrm`-backed repository + schema migration + SQL |
+| `<entity>_dtos.pas` | app | `packed record` DTO family |
+| `<entity>_mappers.pas` | app | pure `OrmTo*` / `*ToOrm` / `Apply*` |
+| `<entity>_query_impl.pas` | app | `T<Entity>QueryService` |
+| `<entity>_command_impl.pas` | app | `T<Entity>CommandService` |
+| `ServApp<Name>.pas` | serv | daemon / composition root |
+| `<name>serverstart.pas` | serv | entry point — runs the daemon as a `TSynDaemon` |
+| `App<Name>ClientLocal.pas` / `…Remote.pas` | (root) | topology selection ([A.6](#a6-minimum-recommended-server-configuration)) |
+| `<entity>_tests.pas` | tests | one `TSynTestCase` per entity |
+
+**The one rule the layout exists to enforce:** `app/*_impl.pas` depends on the `dom/` interfaces, **never** on `infra/*_repository_orm.pas`. `serv/` is the only place that names the concrete `T<Entity>RepositoryOrm` class — it constructs each repository, registers it for injection, and hands the resolver to the services ([B.5](#b5-soa-composition-root-and-dependency-injection), [B.9](#b9-the-two-server-approach-and-its-ambiguous-orm)). Swapping SQLite for another backend, or a stub for tests, is an `infra/` change that nothing in `app/` or `dom/` sees.
 
 ### B.7. Default starting point for a new service
 
