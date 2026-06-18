@@ -953,7 +953,8 @@ end;
 
 destructor TAesAbstractOsl.Destroy;
 begin
-  fAes.Done;
+  if HasOpenSsl then // avoid GPF at shutdown if some dangling instances
+    fAes.Done;
   inherited Destroy;
 end;
 
@@ -1189,7 +1190,8 @@ end;
 
 destructor TOpenSslHash.Destroy;
 begin
-   if fCtx <> nil then
+   if (fCtx <> nil) and
+      HasOpenSsl then // paranoid at shutdown
      EVP_MD_CTX_free(fCtx);
   inherited Destroy;
 end;
@@ -1305,7 +1307,8 @@ end;
 
 destructor TOpenSslHmac.Destroy;
 begin
-  if fCtx <> nil then
+  if (fCtx <> nil) and
+     HasOpenSsl then // paranoid at shutdown
     HMAC_CTX_free(fCtx);
   inherited Destroy;
 end;
@@ -1719,7 +1722,7 @@ end;
 }
 
 var
-  prime256v1grp: PEC_GROUP;
+  prime256v1grp: PEC_GROUP; // shared instance for NewPrime256v1Key()
 
 const
   PEC_GROUP_PRIME256V1_NOTAVAILABLE = pointer(1);
@@ -1931,8 +1934,11 @@ end;
 
 destructor TEcc256r1VerifyOsl.Destroy;
 begin
-  EC_POINT_free(fPoint);
-  EC_KEY_free(fKey);
+  if HasOpenSsl then // avoid GPF at shudown on dangling instance
+  begin
+    EC_POINT_free(fPoint);
+    EC_KEY_free(fKey);
+  end;
   inherited Destroy;
 end;
 
@@ -1980,8 +1986,11 @@ begin
   FillZero(fPrivateKeyPassword);
   FillZero(fPublicKey);
   FillZero(fPublicKeyPassword);
-  fPrivKey.Free;
-  fPubKey.Free;
+  if HasOpenSsl then // avoid GPF at shudown on dangling instance
+  begin
+    fPrivKey.Free;
+    fPubKey.Free;
+  end;
   inherited Destroy;
 end;
 
@@ -2215,7 +2224,8 @@ end;
 destructor TCryptPublicKeyOpenSsl.Destroy;
 begin
   inherited Destroy;
-  fPubKey.Free;
+  if HasOpenSsl then // avoid GPF at shudown on dangling instance
+    fPubKey.Free;
 end;
 
 function TCryptPublicKeyOpenSsl.Load(Algorithm: TCryptKeyAlgo;
@@ -2276,7 +2286,8 @@ end;
 destructor TCryptPrivateKeyOpenSsl.Destroy;
 begin
   inherited Destroy;
-  fPrivKey.Free;
+  if HasOpenSsl then // avoid GPF at shudown on dangling instance
+    fPrivKey.Free;
 end;
 
 function TCryptPrivateKeyOpenSsl.Load(Algorithm: TCryptKeyAlgo;
@@ -2648,6 +2659,8 @@ end;
 
 procedure TCryptCertOpenSsl.Clear;
 begin
+  if not HasOpenSsl then
+    exit; // avoid GPF at shutdown when some dangling instances were kept
   fX509.Free;
   fPrivKey.Free;
   fX509 := nil;
@@ -3242,7 +3255,8 @@ end;
 destructor TCryptStoreOpenSsl.Destroy;
 begin
   inherited Destroy;
-  fStore.Free;
+  if HasOpenSsl then // avoid GPF at shudown on dangling instance
+    fStore.Free;
 end;
 
 function TCryptStoreOpenSsl.Save: RawByteString;
@@ -3771,6 +3785,12 @@ end;
 
 procedure FinalizeUnit;
 begin
+  // release any transient reference to our OpenSSL library wrapper
+  FillCharFast(CryptAsymOpenSsl, SizeOf(CryptAsymOpenSsl), 0);
+  FillCharFast(CryptCertOpenSsl, SizeOf(CryptCertOpenSsl), 0);
+  CryptStoreOpenSsl := nil;
+  HasOpenSsl := false;
+  // released NewPrime256v1Key() shared instance
   if (prime256v1grp <> nil) and
      (prime256v1grp <> PEC_GROUP_PRIME256V1_NOTAVAILABLE) then
     EC_GROUP_free(prime256v1grp);
