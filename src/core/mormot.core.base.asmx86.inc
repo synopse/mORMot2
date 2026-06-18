@@ -2125,14 +2125,17 @@ asm
         {$else}
         db      $F2, $0F, $38, $F0, $02
         {$endif ASMAESNI}
-@0:     mov     ecx, eax  // Murmur-inspired finalizer for power-of-two hash tables
-        shr     ecx, 16   // Bijective over 32-bit values: preserves CRC32C collision
-        xor     eax, ecx  // but the result is no standard CRC32C value anymore
-        imul    eax, eax, $85ebca6b   // and we can't cascade hashsse42() calls
+@0:     // Murmur-inspired finalizer for power-of-two hash tables - Bijective
+        // over 32-bit values: preserves CRC32C collision but the result is no
+        // standard CRC32C value anymore and we can't cascade hashsse42() calls
         mov     ecx, eax
         shr     ecx, 16
         xor     eax, ecx
-end; // the x64 asm returns the very same value - no need for further optimization
+        imul    eax, eax, $85ebca6b
+        mov     ecx, eax
+        shr     ecx, 16
+        xor     eax, ecx
+end; // the x64 asm returns the very same value - no further optimization needed
 
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}

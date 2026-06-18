@@ -2676,7 +2676,7 @@ end;
 // used for DefaultHasher/InterningHasher before Delphi XE7 with len<256 bytes
 function hashsse42(seed: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        mov     eax, seed // seed, not crc - we can't cascade hashsse42() calls
+        mov     eax, seed // seed, not crc
         mov     ecx, len
         test    len, len
         jz      @z
@@ -2695,9 +2695,12 @@ function hashsse42(seed: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 @2:     test    cl, 1
         jz      @1
         crc32   eax, byte ptr [buf]
-@1:     mov     ecx, eax  // Murmur-inspired finalizer for power-of-two hash tables
-        shr     ecx, 16   // Bijective over 32-bit values: preserves CRC32C collision
-        xor     eax, ecx  // but the result is no standard CRC32C value anymore
+@1:     // Murmur-inspired finalizer for power-of-two hash tables - Bijective
+        // over 32-bit values: preserves CRC32C collision but the result is no
+        // standard CRC32C value anymore and we can't cascade hashsse42() calls
+        mov     ecx, eax
+        shr     ecx, 16
+        xor     eax, ecx
         imul    eax, eax, $85ebca6b
         mov     ecx, eax
         shr     ecx, 16
@@ -2714,7 +2717,7 @@ function hashsse42(seed: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
         sub     len, 1
         jnz     @by8
         jmp     @0
-end; // the i386 asm returns the very same value - no need for further optimization
+end; // the i386 asm returns the very same value - no further optimization needed
 
 function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var
