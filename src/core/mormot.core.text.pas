@@ -10126,7 +10126,8 @@ end;
 
 procedure ExceptionUtf8(E: Exception; var Message: RawUtf8);
 begin
-  if E.InheritsFrom(ESynException) then
+  if E.InheritsFrom(ESynException) and
+     (ESynException(E).MessageUtf8 <> '') then
     Message := ESynException(E).MessageUtf8 // no conversion needed
   else
     StringToUtf8(E.Message, Message);
