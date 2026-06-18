@@ -647,6 +647,9 @@ type
   end;
 
 var
+  /// reject any HTTP header line which is > 8KB
+  MaxHttpHeaderLineSize: integer = 8 shl 10;
+
   /// reject any HTTP "Content-Length: chunked" part bigger than 256 MB
   // - often 8KB–128KB by default on Apache/nginx, sometimes up to a few MB
   // - used by THttpSocket.GetBody and THttpRequestContext.ProcessRead
@@ -3873,6 +3876,11 @@ var
   P: PUtf8Char;
 begin
   result := false;
+  if Len > MaxHttpHeaderLineSize then
+  begin
+    State := hrsErrorRejected;
+    exit;
+  end;
   P := st.P;
   P[Len] := #0; // replace ending #13 by #0 - HTTP expects #13#10 not #10
   if (P[Len + 1] <> #10) or
