@@ -282,6 +282,8 @@ var
   // mormot.core.log exception interception is enabled
   openssl_initialize_errormsg: string;
 
+procedure OpenSslIsAvailableInit; // for inlining
+
 {$endif OPENSSLSTATIC}
 
 
@@ -318,6 +320,7 @@ const
 // - you should never call any OpenSSL function if false is returned
 // - this method is thread safe, using function LibraryAvailable/GlobalLock
 function OpenSslIsAvailable: boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// return TRUE if OpenSSL 1.1 / 3.x library has been initialized
 // - don't try to load it if was not already done
@@ -6035,14 +6038,14 @@ end;
 
 {$endif OPENSSLUSERTLMM}
 
-procedure _OpenSslInitialize;
+procedure OpenSslIsAvailableInit;
 begin
   OpenSslInitialize; // try loading OpenSSL with default parameters
 end;
 
 function OpenSslIsAvailable: boolean;
 begin
-  result := LibraryAvailable(openssl_initialized, _OpenSslInitialize);
+  result := LibraryAvailable(openssl_initialized, OpenSslIsAvailableInit);
 end;
 
 function OpenSslIsLoaded: boolean;
@@ -11576,6 +11579,7 @@ finalization
   {$ifndef OPENSSLSTATIC}
   FreeAndNil(libssl);
   FreeAndNil(libcrypto);
+  openssl_initialized := lsNotAvailable;
   {$endif OPENSSLSTATIC}
 
 {$else}
