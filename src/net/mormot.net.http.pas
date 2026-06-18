@@ -3704,7 +3704,7 @@ begin
 end;
 
 var
-  _GETVAR, _POSTVAR, _HEADVAR: RawUtf8;
+  _GETVAR, _POSTVAR, _HEADVAR: RawUtf8; // no memory alloc for most verbs
 
 function THttpRequestContext.ParseCommand: boolean;
 var
@@ -3748,8 +3748,7 @@ begin
       inc(P);
     end;
   end;
-  // parse CommandUri and HTTP/1.x
-  B := P;
+  // extract CommandUri and check HTTP/1.x trailer
   if (PCardinal(P)^ = HTTP__32) and
      (PCardinal(P + 4)^ and $ffffff = HTTP__24) then // absolute-URI
   begin
@@ -3757,10 +3756,9 @@ begin
     // see https://datatracker.ietf.org/doc/html/rfc7230#section-5.3.2
     P := PosChar(P + 7, '/'); // may use SSE2
     if P = nil then
-      P := B // paranoid
-    else
-      B := P;
+      exit; // should point to '/pub/WWW/TheProject.html HTTP/1.1'
   end;
+  B := P;
   P := PosChar(P, ' '); // may use SSE2
   if P = nil then
     exit; // found early #0
