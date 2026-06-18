@@ -618,7 +618,8 @@ type
     // and HeaderFlags fields since HeaderGetValue() would return ''
     // - force HeadersUnFiltered=true to store all headers including the
     // connection-related fields, but increase memory and reduce performance
-    function GetHeader(HeadersUnFiltered: boolean = false): boolean;
+    function GetHeader(HeadersUnFiltered: boolean = false;
+      NoHttpReset: boolean = false): boolean;
     /// retrieve the HTTP body (after uncompression if necessary)
     // - into Content or DestStream
     procedure GetBody(DestStream: TStream = nil);
@@ -4420,13 +4421,14 @@ begin
   R[0] := AnsiChar(L);
 end;
 
-function THttpSocket.GetHeader(HeadersUnFiltered: boolean): boolean;
+function THttpSocket.GetHeader(HeadersUnFiltered, NoHttpReset: boolean): boolean;
 var
   len: integer;
   line: TBuffer8K; // avoid most memory allocations - 8KB seems enough
 begin
   result := false;
-  HttpStateReset;
+  if not NoHttpReset then
+    HttpStateReset;
   repeat
     len := SockInReadLn(line, SizeOf(line)); // very efficient readln()
     if len <= 0 then // HTTP headers end with a void line

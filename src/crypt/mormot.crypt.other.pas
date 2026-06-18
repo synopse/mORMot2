@@ -2247,6 +2247,7 @@ end;
 {$else} // pure pascal SBlockMix()
 
 // we had some SSE2 optimized asm but they were never used and buggy on Win64
+// - see https://github.com/synopse/mORMot2/commit/02c3e6f53 as reference
 procedure Salsa20x8(B: PCardinalArray);
 var
   x: TBlock512;
