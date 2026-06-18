@@ -6339,7 +6339,7 @@ begin
           begin
             // test remaining bytes
             match := DeltaComp(@PHash128Rec(NewBuf)^.c2, @o^.c2,
-                       MinPtrInt(NewBufSize, PtrUInt(OldBufSize) - ofs) - 8);
+                       MinPtrInt(NewBufSize, OldBufSize - ofs) - 8);
             //consolewrite([' ',curlevel,'/',MaxLevel,' len=',match]);
             if match > curlen then
             begin

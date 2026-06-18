@@ -11176,8 +11176,7 @@ end;
 procedure TTestCoreBase._DeltaCompress;
 var
   o, n, d, s: RawByteString;
-  i, j, buflen, size, diff: integer;
-  P: PAnsiChar;
+  i, j, size, diff: integer;
   comp, extr: TPrecisionTimer;
 begin
   n := RandomTextParagraph(100);
