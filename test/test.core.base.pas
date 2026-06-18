@@ -1529,15 +1529,44 @@ procedure TTestCoreBase.TStreamSlow(Context: TObject);
 var
   P: TPipeStream;
   R, W: TPipeThread;
-  S: RawByteString;
+  s1, s2: TStream;
+  S, D: RawUtf8;
   ps: PAnsiChar;
   Tix: Int64;
-  i, n, c: integer;
+  i, n, c, buflen, chunk: integer;
   crc: cardinal;
   timer: TPrecisionTimer;
   tmp: TBuffer1K; // small 1K buffer to stress (should be e.g. 64KB in practice)
 begin
   S := RandomAnsi7(100000);
+  // validate TBufferedStreamReader
+  D := S;
+  s1 := TRawByteStringStream.Create(S);
+  try
+    for buflen := 8 to 32 do
+      for chunk := 1 to buflen * 3 do
+      begin
+        s2 := TBufferedStreamReader.Create(s1, buflen);
+        try
+          ps := UniqueRawUtf8(D);
+          checkEqual(D, S);
+          FillCharFast(ps^, length(D), 48);
+          CheckNotEqual(D, S);
+          repeat
+            i := s2.Read(ps^, chunk);
+            Check(i >= 0, 's2.ReadA');
+            Check(i <= chunk, 's2.ReadB');
+            inc(ps, i);
+          until i = 0;
+          CheckEqual(s2.Position, length(D));
+          CheckEqual(s, D);
+        finally
+          s2.Free;
+        end;
+      end;
+  finally
+    s1.Free;
+  end;
   // basic integrity from two threads
   P := TPipeStream.Create(512);
   R := TPipeThread.Create({suspended=}true, nil, nil, TSynLog, 'rd');
@@ -11147,9 +11176,8 @@ end;
 procedure TTestCoreBase._DeltaCompress;
 var
   o, n, d, s: RawByteString;
-  i, buflen, chunk: integer;
+  i, buflen: integer;
   P: PAnsiChar;
-  s1, s2: TStream;
 begin
   n := RandomTextParagraph(100);
   d := DeltaCompress(n, o{%H-});
@@ -11188,30 +11216,7 @@ begin
   insert(RandomIdentifier(50), n, 200);
   d := DeltaCompress(n, o);
   check(DeltaExtract(d, o, s) = dsSuccess, 'delta-+');
-  if CheckFailed(s = n, 'delta extract') then
-    exit;
-  s1 := TRawByteStringStream.Create(s);
-  try
-    for buflen := 8 to 32 do
-      for chunk := 1 to buflen * 3 do
-      begin
-        s2 := TBufferedStreamReader.Create(s1, buflen);
-        try
-          P := pointer(n);
-          FillCharFast(P^, length(n), 48);
-          repeat
-            i := s2.Read(P^, chunk);
-            inc(P, i);
-          until i = 0;
-          CheckEqual(s2.Position, length(n));
-          CheckEqual(s, n);
-        finally
-          s2.Free;
-        end;
-      end;
-  finally
-    s1.Free;
-  end;
+  CheckEqual(s, n, 'delta extract');
 end;
 
 procedure TTestCoreBase.BloomFilters;
