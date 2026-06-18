@@ -3739,30 +3739,36 @@ begin
       end;
     POST_32:
       begin
+        if P[4] <> ' ' then
+          exit;
         CommandMethod := _POSTVAR;
         inc(P, 5);
       end;
     HEAD_32:
       begin
+        if P[4] <> ' ' then
+          exit;
         CommandMethod := _HEADVAR;
         inc(P, 5);
       end;
   else
     begin
-      B := P;
-      P := PosChar(P, ' '); // may use SSE2
-      if P = nil then
-        exit; // found early #0
-      L := P - B;
-      if L > 10 then
-        exit; // clearly invalid input (method name should be short)
-      SetRawUtf8(CommandMethod, B, L, {nointern=}false);
-      inc(P);
+      L := 0;
+      while P[L] in ['A' .. 'Z'] do
+        if L > 10 then
+          exit // invalid input (method name should be short and uppercase)
+        else
+          inc(L);
+      if (L = 0) or
+         (P[L] <> ' ') then
+        exit; // found early #0 or invalid binary/content (may be TLS handshake)
+      SetRawUtf8(CommandMethod, P, L, {nointern=}false);
+      inc(P, L + 1);
     end;
   end;
   // extract CommandUri and check HTTP/1.x trailer
   if (PCardinal(P)^ = HTTP__32) and
-     (PCardinal(P + 4)^ and $ffffff = HTTP__24) then // absolute-URI
+     (PCardinal(P + 3)^ = ord('p') + HTTP__24 shl 8) then // absolute-URI
   begin
     // e.g. 'GET http://www.example.org/pub/WWW/TheProject.html HTTP/1.1'
     // see https://datatracker.ietf.org/doc/html/rfc7230#section-5.3.2
@@ -3773,7 +3779,7 @@ begin
   B := P;
   P := PosChar(P, ' '); // may use SSE2
   if P = nil then
-    exit; // found early #0
+    exit; // invalid early #0
   L := P - B;
   if (L = 0) or                // paranoid (malformatted content)
      not ParseHttp(P + 1) then // parse HTTP/1.x just after P^ = ' '
