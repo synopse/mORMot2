@@ -316,8 +316,11 @@ type
   THttpRequestStates = set of THttpRequestState;
 
   /// customize THttpRequestContext process
+  // - hroHeadersUnfiltered will store all headers in memory, even the most common
+  // - hroHeadersSanitize will ensure that no #0 appear in any header line
   THttpRequestOptions = set of (
-    hroHeadersUnfiltered);
+    hroHeadersUnfiltered,
+    hroHeadersSanitize);
 
   /// map the presence of some HTTP headers for THttpRequestContext.HeaderFlags
   // - separated from THttpRequestResponseFlags so that they would both be stored
@@ -381,6 +384,7 @@ type
       nointern: boolean);
     function ProcessParseLine(var st: TProcessParseLine): boolean;
       {$ifdef HASINLINE} inline; {$endif}
+    function DoProcessParseLine(var st: TProcessParseLine; Len: PtrInt): boolean;
     function ParseHttp(P: PUtf8Char): boolean;
       {$ifdef HASINLINE} inline; {$endif}
     procedure GetTrimmed(P, P2: PUtf8Char; L: PtrInt; var result: RawUtf8;
@@ -3863,26 +3867,37 @@ begin
     FastSetString(res, P, PLen);
 end;
 
+function THttpRequestContext.DoProcessParseLine(var st: TProcessParseLine;
+  Len: PtrInt): boolean;
+var
+  P: PUtf8Char;
+begin
+  result := false;
+  P := st.P;
+  P[Len] := #0; // replace ending #13 by #0 - HTTP expects #13#10 not #10
+  if (P[Len + 1] <> #10) or
+     ((hroHeadersSanitize in Options) and
+      (StrLen(P) <> Len)) then
+  begin
+    State := hrsErrorRejected; // missing #10, or #0 within headers lines
+    exit;
+  end;
+  st.Line := P;
+  st.LineLen := Len;
+  inc(Len, 2);  // if char after #13 is not #10, parsing will fail as expected
+  inc(st.P, Len);
+  dec(st.Len, Len);
+  result := true;
+  // now we have the next full line in st.Line/st.LineLen
+end;
+
 function THttpRequestContext.ProcessParseLine(var st: TProcessParseLine): boolean;
 var
   Len: PtrInt;
-  P: PUtf8Char;
 begin
   Len := ByteScanIndex(pointer(st.P), st.Len, 13); // fast SSE2 or FPC IndexByte
-  if PtrUInt(Len) < PtrUInt(st.Len) then // handle st.Len=0 and/or Len=-1
-  begin
-    P := st.P;
-    st.Line := P;
-    P[Len] := #0; // replace ending #13 by #0 - HTTP expects #13#10 not #10
-    st.LineLen := Len;
-    inc(Len, 2);  // if char after #13 is not #10, parsing will fail as expected
-    inc(st.P, Len);
-    dec(st.Len, Len);
-    result := true;
-    // now we have the next full line in st.Line/st.LineLen
-  end
-  else
-    result := false; // not enough input
+  result := (PtrUInt(Len) < PtrUInt(st.Len)) and   // st.Len=0 and/or Len=-1
+            DoProcessParseLine(st, Len);           // enough input: sub-function
 end;
 
 function THttpRequestContext.ProcessRead(
@@ -3905,7 +3920,7 @@ begin
             State := hrsGetHeaders;
           end
           else
-            exit // not enough input
+            exit // not enough input or hrsErrorRejected
         else
           State := hrsErrorRejected; // reject e.g. TLS handshake = #22
       hrsGetHeaders:
@@ -3927,7 +3942,7 @@ begin
               // ContentLength<=0 and not chunked = no body
               State := hrsWaitProcessing
         else
-          exit; // not enough input
+          exit; // not enough input or hrsErrorRejected
       hrsGetBodyChunkedHexFirst,
       hrsGetBodyChunkedHexNext:
         if ProcessParseLine(st) then
@@ -3957,7 +3972,7 @@ begin
             State := hrsGetBodyChunkedDataLastLine; // ends with last void chunk
         end
         else
-          exit; // not enough input
+          exit; // not enough input or hrsErrorRejected
       hrsGetBodyChunkedData:
         begin
           if st.Len < fContentLeft then
