@@ -10022,6 +10022,18 @@ begin
   result := nil; // not found
 end;
 
+function RttiPointerMix(c: PtrUInt): PtrUInt;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  c := c shr 4; // RTTI pointers are likely to be 16 bytes aligned and narrow
+  c := c xor (c shr 8);                          // mix within unit
+  result := (c xor (c shr 16)) and HASHINFO_MAX; // mix between units
+  // h := xxHash32Mixup(PtrUInt(Info)) and HASHINFO_MAX; is slower
+  // Knuth's magic number had more collision (even more with KNUTH_HASHPTR_MUL)
+  // h := cardinal(Info * KNUTH_HASH32_MUL) shr (32 - HASHINFO_BITS);
+  // h := crc32cBy4(0, Info) and HASHINFO_MAX; // slower, not better
+end;
+
 function TRttiCustomList.FindType(Info: PRttiInfo): TRttiCustom;
 var
   k: PRttiCustomListPairs;
@@ -10039,11 +10051,8 @@ begin
     if (result <> nil) and
        (result.Info = Info) then // happens e.g. 12,612,097 times during tests
       exit;
-    // O(1) hash of the PRttiInfo pointer using inlined xxHash32 shuffle stage
-    h := xxHash32Mixup(PtrUInt(Info)) and HASHINFO_MAX;
-    // Knuth's magic number had more collision (even more with KNUTH_HASHPTR_MUL)
-    // h := cardinal(Info * KNUTH_HASH32_MUL) shr (32 - RTTIHASH_BITS);
-    // h := crc32cBy4(0, Info) and RTTICUSTOMTYPEINFOMAX; // slower, not better
+    // O(1) hash of the PRttiInfo pointer using RTTI-specific hashing
+    h := RttiPointerMix(PtrUInt(Info));
     // try latest found RTTI for this hash slot
     result := k^.LastHash[h];
     if (result <> nil) and
@@ -10058,7 +10067,7 @@ begin
     if p <> nil then
       result := LockedFind(p, @p[PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF], Info);
     k^.Safe.UnLock;
-    if result <> nil then // happens e.g. 864 times during tests
+    if result <> nil then // happens e.g. around 500 times during tests
     begin
       k^.LastInfo := result;   // aligned pointers are atomically accessed
       k^.LastHash[h] := result;
@@ -10325,7 +10334,7 @@ begin
   k := @fHashInfo[RK_TOSLOT[Info^.Kind]];
   k^.Safe.Lock; // needed when resizing k^.HashInfo[]
   try
-    AddPair(k^.HashInfo[xxHash32Mixup(PtrUInt(Info)) and HASHINFO_MAX], Instance, Info);
+    AddPair(k^.HashInfo[RttiPointerMix(PtrUInt(Info))], Instance, Info);
     {$ifdef FPC} // FPC extended RTTI generates no name for nested plain records
     if Info^.RawName[0] <> #0 then
     {$endif FPC}
