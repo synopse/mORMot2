@@ -3738,13 +3738,9 @@ begin
   else
     begin
       B := P;
-      while true do
-        if P^ = ' ' then
-          break
-        else if P^ = #0 then
-          exit
-        else
-          inc(P);
+      P := PosChar(P, ' '); // may use SSE2
+      if P = nil then
+        exit; // found early #0
       L := P - B;
       if L > 10 then
         exit; // clearly invalid input (method name should be short)
@@ -3755,29 +3751,26 @@ begin
   // parse CommandUri and HTTP/1.x
   B := P;
   if (PCardinal(P)^ = HTTP__32) and
-     (PCardinal(P + 4)^ and $ffffff = HTTP__24) then
+     (PCardinal(P + 4)^ and $ffffff = HTTP__24) then // absolute-URI
   begin
-    // absolute-URI from https://datatracker.ietf.org/doc/html/rfc7230#section-5.3.2
-    P := PosChar(P + 7, '/'); // use fast SSE2 asm on x86_64
+    // e.g. 'GET http://www.example.org/pub/WWW/TheProject.html HTTP/1.1'
+    // see https://datatracker.ietf.org/doc/html/rfc7230#section-5.3.2
+    P := PosChar(P + 7, '/'); // may use SSE2
     if P = nil then
       P := B // paranoid
     else
       B := P;
   end;
-  while true do
-    if P^ = ' ' then
-      break
-    else if P^ = #0 then
-      exit
-    else
-      inc(P);
+  P := PosChar(P, ' '); // may use SSE2
+  if P = nil then
+    exit; // found early #0
   L := P - B;
-  result := ParseHttp(P + 1); // parse HTTP/1.x just after P^ = ' '
+  if (L = 0) or                // paranoid (malformatted content)
+     not ParseHttp(P + 1) then // parse HTTP/1.x just after P^ = ' '
+    exit;
   MoveFast(B^, pointer(CommandUri)^, L); // in-place extract URI from Command
-  if L = 0 then
-    FastAssignNew(CommandUri) // paranoid (malformatted content)
-  else
-    FakeLength(CommandUri, L);
+  FakeLength(CommandUri, L);             // reuse: no new memory allocation
+  result := true;
 end;
 
 function THttpRequestContext.ParseResponse(out RespStatus: integer): boolean;
