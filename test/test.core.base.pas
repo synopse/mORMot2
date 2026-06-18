@@ -11176,8 +11176,9 @@ end;
 procedure TTestCoreBase._DeltaCompress;
 var
   o, n, d, s: RawByteString;
-  i, buflen: integer;
+  i, j, buflen, size, diff: integer;
   P: PAnsiChar;
+  comp, extr: TPrecisionTimer;
 begin
   n := RandomTextParagraph(100);
   d := DeltaCompress(n, o{%H-});
@@ -11187,25 +11188,42 @@ begin
   check(d = '=');
   check(DeltaExtract(d, n, s) = dsSuccess, 'delta=');
   Check(s = n);
+  comp.Init;
+  extr.Init;
+  size := 0;
   for i := 1 to 20 do
   begin
     o := n;
-    s := RandomTextParagraph(100);
-    case i and 7 of
-      2:
-        n := n + s;
-      7:
-        n := s + n;
-    else
-      insert(s, n, i * 50);
-    end;
+    s := RandomTextParagraph(200 + i shr 3);
+    for j := 1 to (i shr 2) + 1 do
+      case Random32 and 7 of
+        2:
+          Append(n, s);
+        5:
+          delete(n, i * ord(s[j]), j * 3);
+        7:
+          Prepend(n, s);
+      else
+        insert(s, n, i * ord(s[j]));
+      end;
+    inc(size, length(n));
+    comp.Resume;
     d := DeltaCompress(n, o);
-    //ConsoleWrite('d=% s=% o=% n=%', [length(d), length(s), length(o), length(n)]);
-    check(d <> '=');
-    check(length(d) < length(s), 'delta should be compressed');
+    comp.Pause;
+    diff := length(n) - length(o);
+    //ConsoleWrite('d=% o=% n=% n-o=%', [length(d), length(o), length(n), diff]);
+    if diff > 100 then
+    begin
+      check(d <> '=');
+      check(length(d) < (diff * 2), 'delta compressed');
+    end;
+    extr.Resume;
     check(DeltaExtract(d, o, s) = dsSuccess, 'delta+');
+    extr.Pause;
     Check(s = n);
   end;
+  NotifyTestSpeed('DeltaCompress', 1, size, @comp);
+  NotifyTestSpeed('DeltaExtract', 1, size, @extr);
   o := n;
   delete(n, 100, 100);
   d := DeltaCompress(n, o);
