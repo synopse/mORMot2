@@ -6076,6 +6076,8 @@ begin
   Check(SafeFileName('..path\toto.jpg'));
   Check(not SafeFileName('../toto'));
   Check(not SafeFileName('..\toto.jpg'));
+  Check(not SafeFileName('/toto.jpg'));
+  Check(not SafeFileName('\toto.jpg'));
   Check(SafePathName('one/two'));
   Check(SafePathName('one\two'));
   Check(SafePathName('one../two'));
@@ -6094,6 +6096,8 @@ begin
   Check(not SafePathName('..\two'));
   Check(not SafePathName('/../two'));
   Check(not SafePathName('\..\two'));
+  Check(not SafePathName('/toto'));
+  Check(not SafePathName('\toto'));
   Check(SafeFileNameU(''));
   Check(SafePathNameU(''));
   Check(SafeFileNameU('toto'));
@@ -6106,6 +6110,8 @@ begin
   Check(SafeFileNameU('..path\toto.jpg'));
   Check(not SafeFileNameU('../toto'));
   Check(not SafeFileNameU('..\toto.jpg'));
+  Check(not SafeFileNameU('/toto.jpg'));
+  Check(not SafeFileNameU('\toto.jpg'));
   Check(SafePathNameU('one/two'));
   Check(SafePathNameU('one\two'));
   Check(SafePathNameU('one../two'));
@@ -6124,6 +6130,8 @@ begin
   Check(not SafePathNameU('..\two'));
   Check(not SafePathNameU('/../two'));
   Check(not SafePathNameU('\..\two'));
+  Check(not SafePathNameU('/toto'));
+  Check(not SafePathNameU('\toto'));
   Check(ExtractPath('/var/toto.ext') = '/var/');
   Check(ExtractPath('c:\var\toto.ext') = 'c:\var\');
   Check(ExtractPath('toto.ext') = '');

@@ -7475,7 +7475,7 @@ begin
   if Path <> '' then
   begin
     result := false;
-    if (Path[1] = '/') or
+    if (ord(Path[1]) in [ord('/'), ord('\')]) or
        (PosExString(':', Path) <> 0) or
        (PosExString('\\', Path) <> 0) then
       exit;
@@ -7501,7 +7501,7 @@ begin
   if Path <> '' then
   begin
     result := false;
-    if (Path[1] = '/') or
+    if (Path[1] in ['/', '\']) or
        (PosExChar(':', Path) <> 0) or
        (PosEx('\\', Path) <> 0) then
       exit;
