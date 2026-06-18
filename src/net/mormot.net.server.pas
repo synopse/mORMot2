@@ -464,6 +464,7 @@ type
   // - hsoHeadersUnfiltered will store all headers, not only relevant (i.e.
   // include raw Content-Length, Content-Type and Content-Encoding entries)
   // - hsoHeadersInterning triggers TRawUtf8Interning to reduce memory usage
+  // - hsoHeadersSanitize will search and reject any #0 in headers lines
   // - hsoNoStats will disable low-level statistic counters
   // - hsoNoXPoweredHeader excludes 'X-Powered-By: mORMot 2 synopse.info' header
   // - hsoCreateSuspended won't start the server thread immediately
@@ -494,6 +495,7 @@ type
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoHeadersInterning,
+    hsoHeadersSanitize,
     hsoNoXPoweredHeader,
     hsoNoStats,
     hsoCreateSuspended,
@@ -3795,6 +3797,8 @@ begin
   fDefaultRequestOptions := [];
   if hsoHeadersUnfiltered in fOptions then
     include(fDefaultRequestOptions, hroHeadersUnfiltered);
+  if hsoHeadersSanitize in fOptions then
+    include(fDefaultRequestOptions, hroHeadersSanitize);
 end;
 
 procedure THttpServerGeneric.SetOptions(opt: THttpServerOptions);
