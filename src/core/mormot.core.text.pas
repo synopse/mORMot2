@@ -11516,11 +11516,11 @@ begin
     dec(i);
     pc[i] := PCardinal(METHODNAME[TUriMethod(i)])^;
   until i = 0;
-  ShortToUuid := _ShortToUuid;
-  AppendShortUuid := _AppendShortUuid;
-  _AddHtmlEscape := __AddHtmlEscape;
+  ShortToUuid                   := _ShortToUuid;
+  AppendShortUuid               := _AppendShortUuid;
+  _AddHtmlEscape                := __AddHtmlEscape;
   _VariantToUtf8DateTimeIso8601 := __VariantToUtf8DateTimeIso8601;
-  _VariantSaveJson := __VariantSaveJson;
+  _VariantSaveJson              := __VariantSaveJson;
 end;
 
 

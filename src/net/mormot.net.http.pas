@@ -3754,14 +3754,14 @@ begin
   else
     begin
       L := 0;
-      while P[L] in ['A' .. 'Z'] do
-        if L > 10 then
+      while P[L] in ['!' .. 'z'] do // allow rough RFC token but reject binary
+        if L > 32 then
           exit // invalid input (method name should be short and uppercase)
         else
           inc(L);
-      if (L = 0) or
+      if (L = 0) or // e.g. TLS handshake first byte is #22 so would make L=0
          (P[L] <> ' ') then
-        exit; // found early #0 or invalid binary/content (may be TLS handshake)
+        exit; // found early #0 or invalid binary/content
       SetRawUtf8(CommandMethod, P, L, {nointern=}false);
       inc(P, L + 1);
     end;
@@ -3898,13 +3898,16 @@ begin
   repeat
     case State of
       hrsGetCommand:
-        if ProcessParseLine(st) then
-        begin
-          FastSetString(CommandUri, st.Line, st.LineLen); // never interned
-          State := hrsGetHeaders;
-        end
+        if st.P^ in ['!' .. 'z'] then // expects e.g. 'GET /path HTTP/1.1'
+          if ProcessParseLine(st) then
+          begin
+            FastSetString(CommandUri, st.Line, st.LineLen); // never interned
+            State := hrsGetHeaders;
+          end
+          else
+            exit // not enough input
         else
-          exit; // not enough input
+          State := hrsErrorRejected; // reject e.g. TLS handshake = #22
       hrsGetHeaders:
         if ProcessParseLine(st) then
           if st.LineLen <> 0 then
