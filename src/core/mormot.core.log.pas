@@ -2527,8 +2527,8 @@ begin
   SetLength(u^.Line, linesn);
   for i := 0 to linesn - 1 do
   begin
-    u^.Line[i] := Lines^ and $ffffff; // low 24-bit
-    u^.Addr[i] := Lines^ shr 24;      // high 40-bit
+    u^.Line[i] := Lines^ and $00ffffff; // low 24-bit
+    u^.Addr[i] := Lines^ shr 24;        // high 40-bit
     inc(Lines);
   end;
 end;

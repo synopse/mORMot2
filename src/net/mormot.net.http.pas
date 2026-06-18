@@ -3703,8 +3703,9 @@ function THttpRequestContext.ParseHttp(P: PUtf8Char): boolean;
 begin
   result := false;
   if (PCardinal(P)^ <> HTTP_32) or
-     (PCardinal(P + 4)^ and $ffffff <> ord('/') + ord('1') shl 8 + ord('.') shl 16) then
-    exit;
+     (PCardinal(P + 3)^ <> ord('P') + ord('/') shl 8 + ord('1') shl 16 +
+                           ord('.') shl 24) then
+    exit; // RFC 9112 requires 'HTTP/1.0' or 'HTTP/1.1'
   if P[7] <> '1' then
     include(ResponseFlags, rfHttp10);
   if not (hfConnectionClose in HeaderFlags) then
