@@ -4262,6 +4262,9 @@ var
 
 /// call once Init if State is in its default lsUntested (0) value
 function LibraryAvailable(var State: TLibraryState; Init: TProcedure): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+procedure DoLibraryAvailableInit(var State: TLibraryState; Init: TProcedure); // for inlining
 
 
 { *************** Per Class Properties O(1) Lookup via vmtAutoTable Slot }
@@ -9163,18 +9166,21 @@ begin
 end;
 
 
+procedure DoLibraryAvailableInit(var State: TLibraryState; Init: TProcedure);
+begin
+  GlobalLock; // thread-safe check and initialization
+  try
+    if State = lsUntested then
+      Init; // should eventually set State as lsAvailable or lsNotAvailable
+  finally
+    GlobalUnLock;
+  end;
+end;
+
 function LibraryAvailable(var State: TLibraryState; Init: TProcedure): boolean;
 begin
   if State = lsUnTested then
-  begin
-    GlobalLock; // thread-safe check and initialization
-    try
-      if State = lsUntested then
-        Init; // should eventually set State as lsAvailable or lsNotAvailable
-    finally
-      GlobalUnLock;
-    end;
-  end;
+    DoLibraryAvailableInit(State, Init);
   result := State = lsAvailable;
 end;
 
