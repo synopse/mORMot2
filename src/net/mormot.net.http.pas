@@ -4421,7 +4421,7 @@ var
 begin
   result := false;
   if not NoHttpReset then
-    HttpStateReset;
+    HttpStateReset; // not needed from THttpServer
   repeat
     len := SockInReadLn(line, SizeOf(line)); // very efficient readln()
     if len <= 0 then // HTTP headers end with a void line

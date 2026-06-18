@@ -5248,13 +5248,13 @@ end;
 function THttpServerSocket.GetRequest(withBody: boolean;
   headerMaxTix: Int64): THttpServerSocketGetRequestResult;
 var
-  P, B: PUtf8Char;
   status, tix32, max: cardinal;
   startTix, pendingMaxTix, tix: Int64;
   pending: integer;
-  http10: boolean;
 begin
   try
+    if Http.CommandUri <> '' then
+      Http.Reset;
     // abort now with no exception if socket is obviously broken
     result := grClosed;
     // use SockIn with 1KB buffer if not already initialized: 2x faster
@@ -5315,34 +5315,19 @@ begin
       {$endif OSWINDOWS}
     until false;
     // 1st line is command: 'GET /path HTTP/1.1' e.g.
-    SockRecvLn(Http.CommandResp);
-    P := pointer(Http.CommandResp);
-    if P = nil then
-      exit; // connection is likely to be broken or closed
-    GetNextItem(P, ' ', Http.CommandMethod);           // 'GET'
-    if (PCardinal(P)^ = HTTP__32) and                  // 'http'
-       (PCardinal(P + 4)^ and $ffffff = HTTP__24) then // '://'
-    begin
-      // absolute-URI from https://datatracker.ietf.org/doc/html/rfc7230#section-5.3.2
-      B := P;
-      P := PosChar(P + 7, '/'); // use fast SSE2 asm on x86_64
-      if P = nil then
-        P := B; // paranoid
-    end;
-    GetNextItem(P, ' ', Http.CommandUri);    // '/path'
+    SockRecvLn(Http.CommandUri);
+    if Http.CommandUri = '' then
+      exit; // likely to be a broken or closed connection
     result := grRejected;
-    if (P = nil) or
-       (PCardinal(P)^ <> HTTP_32) or
-       (Http.CommandMethod = '') then
-      exit;
-    http10 := P[7] = '0';
+    if not Http.ParseCommand then
+      exit; // reject invalid command - e.g. if TLS was involved
     fKeepAliveClient := ((fServer = nil) or
                          (fServer.fServerKeepAliveTimeOut > 0)) and
-                        not http10;
-    Http.Content := '';
+                        not (rfHttp10 in Http.ResponseFlags);
     // get and parse HTTP request header
     if not GetHeader((fServer <> nil) and
-                     (hsoHeadersUnfiltered in fServer.Options)) then
+                     (hsoHeadersUnfiltered in fServer.Options),
+                     {NoHttpReset=}true) then
     begin
       SockSendFlush('HTTP/1.0 400 Bad Request'#13#10 +
         'Content-Length: 16'#13#10#13#10'Rejected Headers');
@@ -5394,7 +5379,7 @@ begin
       // support optional Basic/Digest authentication
       fRequestFlags := HTTP_TLS_FLAGS[TLS.Enabled] +
                        HTTP_UPG_FLAGS[hfConnectionUpgrade in Http.HeaderFlags] +
-                       HTTP_10_FLAGS[http10];
+                       HTTP_10_FLAGS[rfHttp10 in Http.ResponseFlags];
       if (hfHasAuthorization in Http.HeaderFlags) and
          (fServer.fAuthorize <> hraNone) then
       begin
