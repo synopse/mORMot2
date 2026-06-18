@@ -3037,7 +3037,7 @@ begin
           c := p^;
           c := c shl 28;
           inc(p);
-          result := result and $fffffff or integer(c);
+          result := result and $0fffffff or integer(c);
         end;
       end;
     end;
@@ -3075,7 +3075,7 @@ begin
     exit;
   c := Source^ shl 28;
   inc(Source);
-  result := result and $fffffff or c;
+  result := result and $0fffffff or c;
 end;
 
 function ToVarInt64(Value: Int64; Dest: PByte): PByte;
@@ -3681,7 +3681,7 @@ e:begin
   end;
   c := ord(P^) shl 28;
   inc(P);
-  result := result {%H-}and $fffffff or c;
+  result := result {%H-}and $0fffffff or c;
 end;
 
 procedure TFastReader.VarNextInt;
@@ -3762,7 +3762,7 @@ e:begin
   end;
   c := s^ shl 28;
   inc(s);
-  result := result {%H-}and $fffffff or c;
+  result := result {%H-}and $0fffffff or c;
 f:P := pointer(s);
 end;
 
