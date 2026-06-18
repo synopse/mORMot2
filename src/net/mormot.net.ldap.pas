@@ -6511,7 +6511,7 @@ begin
         if hex <> nil then
         begin
           winerr := ParseHex0x(hex + 7, {no0x=}true);
-          if winerr <> 0 then
+          if winerr <> 0 then // WinErrorShort() works also on POSIX systems :)
             Append(errmsg, [' ', WinErrorShort(winerr)]);
         end;
       end;
