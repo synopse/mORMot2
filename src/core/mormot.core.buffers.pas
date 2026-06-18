@@ -2484,6 +2484,30 @@ type
     function Read(var Buffer; Count: Longint): Longint; override;
   end;
 
+  /// TStream which raise an exception when Write() reaches a given limit
+  // - Seek() or Read() on this class instance would raise an exception
+  // - Size and Position would follow the current Write() state
+  TLimitedStreamWriter = class(TStreamWithNoSeek)
+  protected
+    fLimit: Int64;
+    fDest: TStream;
+  public
+    /// initialize the source TStream and the internal size limit
+    // - supplied aDest should be void and will be owned by this instance
+    constructor Create(aDest: TStream; aLimit: Int64);
+    /// finalize this instance and its associated destination TStream
+    destructor Destroy; override;
+    /// overriden method which will ensure Size + Count < Limit
+    function Write(const Buffer; Count: Longint): Longint; override;
+    /// the maximum size in bytes allowed by this instance - 0 to disable
+    property Limit: Int64
+      read fLimit write fLimit;
+    /// access to the associated destination TStream instance
+    property Dest: TStream
+      read fDest;
+  end;
+
+
 /// compute the crc32c checksum of a given file
 // - this function maps the THashFile signature
 function HashFileCrc32c(const FileName: TFileName): RawUtf8;
@@ -10301,6 +10325,38 @@ begin
       break;
   end;
   inc(fPosition, result);
+end;
+
+
+{ TLimitedStreamWriter }
+
+constructor TLimitedStreamWriter.Create(aDest: TStream; aLimit: Int64);
+begin
+  inherited Create;
+  fDest := aDest;
+  if (fDest = nil) or
+     (fDest.Position <> 0) or
+     (fDest.Size <> 0) then
+    RaiseStreamError(self, 'Create with invalid Dest');
+  fLimit := aLimit;
+end;
+
+destructor TLimitedStreamWriter.Destroy;
+begin
+  inherited Destroy;
+  fDest.Free;
+end;
+
+function TLimitedStreamWriter.Write(const Buffer; Count: Longint): Longint;
+begin
+  if (fLimit > 0) and
+     (fSize + Count > fLimit) then
+    RaiseStreamError(self, 'Write: reached the specified Limit');
+  result := fDest.Write(Buffer, Count);
+  if result <= 0 then
+    exit;
+   inc(fPosition, result);
+   inc(fSize, result);
 end;
 
 
