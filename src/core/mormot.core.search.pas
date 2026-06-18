@@ -6191,7 +6191,7 @@ end;
 { ****************** Binary Buffers Delta Compression }
 
 {$ifdef HASINLINE}
-function Comp(a, b: PAnsiChar; len: PtrInt): PtrInt; inline;
+function DeltaComp(a, b: PAnsiChar; len: PtrInt): PtrInt; inline;
 var
   lenptr: PtrInt;
 begin
@@ -6211,7 +6211,7 @@ begin
     until result = len;
 end;
 {$else} // eax = a, edx = b, ecx = len
-function Comp(a, b: PAnsiChar; len: PtrInt): PtrInt;
+function DeltaComp(a, b: PAnsiChar; len: PtrInt): PtrInt;
 asm // the 'rep cmpsb' version is slower on Intel Core CPU (not AMD)
         or      ecx, ecx
         push    ebx
@@ -6236,7 +6236,7 @@ asm // the 'rep cmpsb' version is slower on Intel Core CPU (not AMD)
 end;
 {$endif HASINLINE}
 
-function CompReverse(a, b: pointer; len: PtrInt): PtrInt;
+function DeltaCompReverse(a, b: pointer; len: PtrInt): PtrInt;
 begin
   result := 0;
   if len > 0 then
@@ -6247,112 +6247,71 @@ begin
     until result = len;
 end;
 
-function WriteCurOfs(curofs, curlen, curofssize: integer; sp: PAnsiChar): PAnsiChar;
+function DeltaWrite(curofs, curlen, curofssize: integer; sp: PByte): PAnsiChar;
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  if curlen = 0 then
-  begin
-    sp^ := #0;
-    inc(sp);
-  end
-  else
-  begin
-    sp := pointer(ToVarUInt32(curlen, PByte(sp)));
-    PInteger(sp)^ := curofs;
-    inc(sp, curofssize);
-  end;
-  result := sp;
-end;
-
-{$ifdef ASMINTEL} // crc32c SSE4.2 hardware accellerated dword hash
-function crc32c32sse42(buf: pointer): cardinal;
-{$ifdef ASMX86}
-{$ifdef FPC} nostackframe; assembler; {$endif}
-asm
-        mov     edx, eax
-        xor     eax, eax
-        {$ifdef ASMAESNI}
-        crc32   eax, dword ptr [edx]
-        {$else}
-        db $F2, $0F, $38, $F1, $02
-        {$endif ASMAESNI}
-end;
-{$else}
-{$ifdef FPC}nostackframe; assembler; asm {$else}
-asm // ecx=buf (Linux: edi=buf)
-        .noframe
-{$endif FPC}
-        xor     eax, eax
-        crc32   eax, dword ptr [buf]
-end;
-{$endif ASMX86}
-{$endif ASMINTEL}
-
-function hash32prime(buf: pointer): cardinal;
-begin
-  // inlined xxHash32Mixup - won't pollute L1 cache with crc lookup tables
-  result := PCardinal(buf)^;
-  result := result xor (result shr 15);
-  result := result * 2246822519;
-  result := result xor (result shr 13);
-  result := result * 3266489917;
-  result := result xor (result shr 16);
+  //consoleWrite(['ofs=',curofs,' len=',curlen]);
+  result := pointer(ToVarUInt32(curlen, sp));
+  PInteger(result)^ := curofs;
+  inc(result, curofssize);
 end;
 
 const
-  HTabBits = 18; // fits well with DeltaCompress(..,BufSize=2MB)
-  HTabMask = (1 shl HTabBits) - 1; // =$3ffff
-  HListMask = $ffffff; // HTab[]=($ff,$ff,$ff)
+  HTabBits = 18; // fits well with DELTA_BUF_DEFAULT = 2MB
+  HTabMask = (1 shl HTabBits) - 1;
+  HListMask = $00ffffff; // HTab[]=($ff,$ff,$ff)
+
+// crc32c SSE4.2 opcodes are not so good with power-of-two modulo
+function DeltaHash(c: cardinal): PtrUInt;
+  {$ifdef HASINLINE} inline; {$endif}
+begin // simple reduced avalanched from 32-bit into 19-bit - no need of multiply
+  result := (c xor (c shr 16)) and HTabMask;
+end;
 
 type
-  PHTab = ^THTab; // HTabBits=18 -> SizeOf=767KB
-  THTab = packed array[0..HTabMask] of array[0..2] of byte;
+  PHTab = ^THTab; // HTabBits=18 -> SizeOf(THTab)=768KB to fit in CPU L2 cache
+  THTab = packed array[0..HTabMask] of array[0..2] of byte; // store positions
+
+procedure DeltaPrefill(old, list: PAnsiChar; max: cardinal; tab: PHTab);
+var
+  h: PCardinal; // point to the corresponding 24-bit HTab[old^]
+  pos: cardinal;
+begin
+  pos := 0;
+  repeat
+    h := @tab^[DeltaHash(PCardinal(old)^)];
+    inc(old);
+    PCardinal(list)^ := h^; // preserve previous 24-bit HTab[] value in list
+    inc(list, 3);
+    h^ := pos or (h^ and (not HListMask));
+    inc(pos);
+  until pos = max;
+end;
 
 function DeltaCompute(NewBuf, OldBuf, OutBuf, WorkBuf: PAnsiChar;
   NewBufSize, OldBufSize, MaxLevel: PtrInt; HList, HTab: PHTab): PAnsiChar;
 var
-  i, curofs, curlen, curlevel, match, curofssize, h, oldh: PtrInt;
+  ofs, curofs, curlen, curlevel, match, curofssize, h: PtrInt;
   sp, pInBuf, pOut: PAnsiChar;
-  ofs: cardinal;
+  o: PHash128Rec;
   spb: PByte absolute sp;
-  hash: function(buf: pointer): cardinal;
 begin
   // 1. fill HTab[] with hashes for all old data
-  {$ifdef ASMINTEL}
-  if cfSSE42 in CpuFeatures then
-    hash := @crc32c32sse42
-  else
-  {$endif ASMINTEL}
-    hash := @hash32prime;
   FillCharFast(HTab^, SizeOf(HTab^), $ff); // HTab[]=HListMask by default
-  pInBuf := OldBuf;
-  oldh := -1; // force calculate first hash
-  sp := pointer(HList);
-  for i := 0 to OldBufSize - 3 do
-  begin
-    h := hash(pInBuf) and HTabMask;
-    inc(pInBuf);
-    if h = oldh then
-      continue;
-    oldh := h;
-    h := PtrInt(@HTab^[h]); // fast 24-bit data process
-    PCardinal(sp)^ := PCardinal(h)^;
-    PCardinal(h)^ := cardinal(i) or (PCardinal(h)^ and $ff000000);
-    inc(sp, 3);
-  end;
+  DeltaPrefill(OldBuf, pointer(HList), OldBufSize - 3, HTab);
   // 2. compression init
-  if OldBufSize <= $ffff then
-    curofssize := 2
-  else
-    curofssize := 3;
+  curofssize := 2;
+  if OldBufSize > $ffff then
+    curofssize := 3; // WriteCurOfs() append offsets as 2/3 bytes
   curlen := -1;
   curofs := 0;
   pOut := OutBuf + 7;
   sp := WorkBuf;
   // 3. handle identical leading bytes
-  match := Comp(OldBuf, NewBuf, MinPtrInt(OldBufSize, NewBufSize));
+  match := DeltaComp(OldBuf, NewBuf, MinPtrInt(OldBufSize, NewBufSize));
   if match > 2 then
   begin
-    sp := WriteCurOfs(0, match, curofssize, sp);
+    sp := DeltaWrite(0, match, curofssize, spb);
     sp^ := #0;
     inc(sp);
     inc(NewBuf, match);
@@ -6363,37 +6322,38 @@ begin
   if NewBufSize >= 8 then
     repeat
       // hash 4 next bytes from NewBuf, and find longest match in OldBuf
-      ofs := PCardinal(@HTab^[hash(NewBuf) and HTabMask])^ and HListMask;
+      ofs := PCardinal(@HTab^[DeltaHash(PCardinal(NewBuf)^)])^ and HListMask;
       if ofs <> HListMask then
       begin
         // brute force search loop of best hash match
         curlevel := MaxLevel;
         repeat
-          with PHash128Rec(OldBuf + ofs)^ do
-            // always test 8 bytes at once
-            {$ifdef CPU64}
-            if PHash128Rec(NewBuf)^.Lo = Lo then
-            {$else}
-            if (PHash128Rec(NewBuf)^.c0 = c0) and
-               (PHash128Rec(NewBuf)^.c1 = c1) then
-            {$endif CPU64}
+          o := PHash128Rec(OldBuf + ofs);
+          // always test 8 bytes at once
+          {$ifdef CPU642}
+          if PHash128Rec(NewBuf)^.Lo = o^.Lo then
+          {$else}
+          if (PHash128Rec(NewBuf)^.c0 = o^.c0) and // likely to match
+             (PHash128Rec(NewBuf)^.c1 = o^.c1) then
+          {$endif CPU64}
+          begin
+            // test remaining bytes
+            match := DeltaComp(@PHash128Rec(NewBuf)^.c2, @o^.c2,
+                       MinPtrInt(NewBufSize, PtrUInt(OldBufSize) - ofs) - 8);
+            //consolewrite([' ',curlevel,'/',MaxLevel,' len=',match]);
+            if match > curlen then
             begin
-              // test remaining bytes
-              match := Comp(@PHash128Rec(NewBuf)^.c2, @c2,
-                         MinPtrInt(PtrUInt(OldBufSize) - ofs, NewBufSize) - 8);
-              if match > curlen then
-              begin
-                // found a longer sequence
-                curlen := match;
-                curofs := ofs;
-              end;
+              // found a longer sequence
+              curlen := match;
+              curofs := ofs;
             end;
+          end;
           dec(curlevel);
-          ofs := PCardinal(@HList^[ofs])^ and HListMask;
-        until (ofs = HListMask) or
-              (curlevel = 0);
+          ofs := PCardinal(@HList^[ofs])^ and HListMask; // try next match
+        until (ofs = HListMask) or // end of list
+              (curlevel = 0);      // end of depth
       end;
-      // curlen = longest sequence length
+      // curlen = longest sequence length after initial o^.Lo 8 bytes
       if curlen < 0 then
       begin
        // no sequence found -> copy one byte
@@ -6406,8 +6366,9 @@ begin
         else
           break;
       end;
+      // sequence found -> copy curofs/curlen pair
       inc(curlen, 8);
-      sp := WriteCurOfs(curofs, curlen, curofssize, sp);
+      sp := DeltaWrite(curofs, curlen, curofssize, spb);
       spb := ToVarUInt32(NewBuf - pInBuf, spb);
       inc(NewBuf, curlen); // continue to search after the sequence
       dec(NewBufSize, curlen);
@@ -6517,10 +6478,10 @@ begin
 end;
 
 const
-  FLAG_COPIED = 0;
+  FLAG_COPIED   = 0;
   FLAG_COMPRESS = 1;
-  FLAG_BEGIN = 2;
-  FLAG_END = 3;
+  FLAG_BEGIN    = 2;
+  FLAG_END      = 3;
 
 function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize: integer;
   out Delta: PAnsiChar; Level, BufSize: integer): integer;
@@ -6579,7 +6540,7 @@ begin
     if bigfile then
     begin
       // test initial same chars
-      BufRead := Comp(New, Old, MinPtrInt(NewSize, OldSize));
+      BufRead := DeltaComp(New, Old, MinPtrInt(NewSize, OldSize));
       if BufRead > 9 then
       begin
         // it happens very often: modification is usually in the middle/end
@@ -6592,7 +6553,7 @@ begin
         dec(OldSize, BufRead);
       end;
       // test trailing same chars
-      BufRead := CompReverse(New + NewSize - 1, Old + OldSize - 1,
+      BufRead := DeltaCompReverse(New + NewSize - 1, Old + OldSize - 1,
         MinPtrInt(NewSize, OldSize));
       if BufRead > 5 then
       begin
