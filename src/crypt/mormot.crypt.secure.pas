@@ -3615,6 +3615,10 @@ var
   // - but more standard CryptCertOpenSsl[] will be stored here if available
   CryptCert: array[TCryptAsymAlgo] of TCryptCertAlgo;
 
+  /// global shared instances as set by InitNetTlsContextSelfSignedServer()
+  // - defined here to be properly released before the OpenSSL library unloading
+  CryptCertOpenSslSelfSigned: array[TCryptAsymAlgo] of ICryptCert;
+
 
   (* ICryptStore factories *)
 

@@ -3786,6 +3786,7 @@ end;
 procedure FinalizeUnit;
 begin
   // release any transient reference to our OpenSSL library wrapper
+  Finalize(CryptCertOpenSslSelfSigned);
   FillCharFast(CryptAsymOpenSsl, SizeOf(CryptAsymOpenSsl), 0);
   FillCharFast(CryptCertOpenSsl, SizeOf(CryptCertOpenSsl), 0);
   CryptStoreOpenSsl := nil;

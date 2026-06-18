@@ -4033,9 +4033,6 @@ begin
   FastSetRawByteString(result, @PRIVKEY_PFX, SizeOf(PRIVKEY_PFX));
 end;
 
-var
-  SelfSignedCert: array[TCryptAsymAlgo] of ICryptCert; // one generated per algo
-
 procedure InitNetTlsContextSelfSignedServer(var TLS: TNetTlsContext;
   Algo: TCryptAsymAlgo; UsePreComputed: boolean);
 begin
@@ -4050,14 +4047,14 @@ begin
     exit;
   end;
   // generate a reusable per-algo ICryptCert instance (RSA-2048 can take time)
-  if SelfSignedCert[Algo] = nil then
-    SelfSignedCert[Algo] := CryptCertOpenSsl[Algo].Generate(
+  if CryptCertOpenSslSelfSigned[Algo] = nil then
+    CryptCertOpenSslSelfSigned[Algo] := CryptCertOpenSsl[Algo].Generate(
       CU_TLS_SERVER, '127.0.0.1', nil, 3650);
   //writeln(BinToSource('PRIVKEY_PFX', '', // force SHA1-3DES p12Legacy format
   //  SelfSignedCert[Algo].Save(cccCertWithPrivateKey, '3des=pass', ccfBinary)));
   // no temporary file needed: we just provide the shared OpenSSL handles
-  TLS.CertificateRaw := SelfSignedCert[Algo].Handle;           // PX509
-  TLS.PrivateKeyRaw  := SelfSignedCert[Algo].PrivateKeyHandle; // PEVP_PKEY
+  TLS.CertificateRaw := CryptCertOpenSslSelfSigned[Algo].Handle;           // PX509
+  TLS.PrivateKeyRaw  := CryptCertOpenSslSelfSigned[Algo].PrivateKeyHandle; // PEVP_PKEY
 end;
 
 const
