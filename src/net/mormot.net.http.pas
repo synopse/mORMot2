@@ -642,6 +642,11 @@ type
       {$ifdef HASINLINE} inline; {$endif}
   end;
 
+var
+  /// reject any HTTP "Content-Length: chunked" part bigger than 256 MB
+  // - often 8KB–128KB by default on Apache/nginx, sometimes up to a few MB
+  // - used by THttpSocket.GetBody and THttpRequestContext.ProcessRead
+  MaxHttpChunkSize: integer = 256 shl 20;
 
 
 { ******************** Abstract Server-Side Types e.g. for Client-Server Protocol }
@@ -3871,6 +3876,7 @@ function THttpRequestContext.ProcessRead(
   var st: TProcessParseLine; returnOnStateChange: boolean): boolean;
 var
   previous: THttpRequestState;
+  bytes: Int64;
 begin
   result := false; // not enough input
   if st.Len = 0 then
@@ -3912,18 +3918,21 @@ begin
         begin
           fContentLeft := ParseHex0x(PAnsiChar(st.Line), {noOx=}true);
           if fContentLeft <> 0 then
-          begin
-            if ContentStream = nil then
+            if fContentLeft > MaxHttpChunkSize then // allow up to 256 MB chunk
+              State := hrsErrorPayloadTooLarge
+            else
             begin
-              // reserve appended chunk size to Content memory buffer
-              SetLength(Content, length(Content) + fContentLeft);
-              fContentPos := @PByteArray(Content)[length(Content)];
-            end;
-            inc(ContentLength, fContentLeft);
-            State := hrsGetBodyChunkedData;
-          end
+              if ContentStream = nil then
+              begin
+                // reserve appended chunk size to Content memory buffer
+                SetLength(Content, length(Content) + fContentLeft);
+                fContentPos := @PByteArray(Content)[length(Content)];
+              end;
+              inc(ContentLength, fContentLeft);
+              State := hrsGetBodyChunkedData;
+            end
           else
-            State := hrsGetBodyChunkedDataLastLine;
+            State := hrsGetBodyChunkedDataLastLine; // ends with last void chunk
         end
         else
           exit; // not enough input
@@ -4468,6 +4477,8 @@ begin
         SockRecvLn; // ignore next line (normally void)
         break;      // reached the end of input stream
       end;
+      if len > MaxHttpChunkSize then // allow up to 256 MB chunk
+        EHttpSocket.RaiseUtf8('%.GetBody: chunk size=% overflow', [self, len]);
       if DestStream <> nil then
       begin
         if length({%H-}chunk) < len then
