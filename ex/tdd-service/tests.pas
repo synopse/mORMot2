@@ -9,13 +9,18 @@ uses
   mormot.core.os,
   mormot.core.text,
   mormot.core.test,
+  mormot.core.interfaces,
+  mormot.orm.core,
+  mormot.soa.core,
+  mormot.rest.http.client,
   mormot.db.raw.sqlite3,
   mormot.db.raw.sqlite3.static,
   dom.entities,
   dom.infra,
   infra.orm,
   api.mobile,
-  api.mobile.impl;
+  api.mobile.impl,
+  app.server;
 
 
 type
@@ -129,8 +134,35 @@ begin
 end;
 
 procedure TAuditTrailMobileApiTests.RemoteCall;
+var
+  server: TAuditTrailServer;
+  client: TRestHttpClient;
+  persistence: IEventPersistence;
+  api: IApiMobile;
 begin
-
+  // same wiring as the stand-alone daemon (AuditTrailServer.dpr), in-process:
+  // an in-memory SQLite3 persistence behind the HTTP edge publishing IApiMobile
+  persistence := TEventPersistence.Create(SQLITE_MEMORY_DATABASE_NAME);
+  server := TAuditTrailServer.Create(persistence, AUDITTRAIL_HTTP_PORT);
+  try
+    // connect a real HTTP client and resolve IApiMobile as a remote proxy
+    client := TRestHttpClient.CreateWithOwnModel(
+      '127.0.0.1', AUDITTRAIL_HTTP_PORT, 'root');
+    try
+      client.ServiceDefine([IApiMobile], sicShared);
+      if CheckFailed(client.Services.Resolve(TypeInfo(IApiMobile), api),
+           'resolve IApiMobile') then
+        exit;
+      // exactly the same assertions as DirectCall, now over the wire:
+      // this is the location transparency the Clean Architecture relies on
+      TestMobile(api);
+    finally
+      api := nil;
+      client.Free;
+    end;
+  finally
+    server.Free;
+  end;
 end;
 
 end.

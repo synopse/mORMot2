@@ -30,8 +30,10 @@ https://github.com/synopse/mORMot2/commit/eeefe9d61
 https://github.com/synopse/mORMot2/commit/bf55ca3b7
 
 - Step 7: Test and prepare a daemon/service container.
+https://github.com/synopse/mORMot2/commit/f74503ccd
 
 - Step 8: Make a daemon/service stand-alone executable.
+https://github.com/synopse/mORMot2/commit/13825a625
 
 
 ## Followed Patterns
@@ -66,6 +68,8 @@ Similarly, the actual server daemon/service, with its HTTP/REST endpoint will ap
 From the *physical* point of view, most services use a 3 layers architecture: database, server, client.
 But from the *logical* point of view - i.e. the code logic itself, we may take care of not making to much dependencies between the code areas. This is what this pattern is about.
 
+These two points of view are two independent axes, and keeping them apart avoids a lot of confusion. The naming we use below - Domain Core, Infrastructure, Application - lines up with the established literature on the logical axis (Clean Architecture, Hexagonal/Ports & Adapters, Onion, DDD).
+
 #### Domain Core
 
 The "Clean Architecture" - also used in Domain-Driven-Design - is not written as horizontal layers, but as onion-like layers. The idea is to keep the domain business as clean as possible, in the "Domain Core".
@@ -93,7 +97,17 @@ In this sample, we will use a single Layer for both "Application" and "Presentat
 
 As you will see in this codebase, we don't leak the "Domain Core" entities to the presentation layers. We define custom types and `record` in the application API level. It is on purpose, mainly to reduce the extent of information to only what is actually needed on the client side, but also to reduce dependencies between the client API and the main Domain core. Using such types - known as Data Transfer Objects (DTOs) is one of the most important pattern of Clean Architecture (and TDD).
 
+In practice, `api.mobile.pas` defines the `TEvent` DTO as a `packed record`, and registers its field layout with `Rtti.RegisterFromText` in the unit `initialization` (needed by FPC for field-named JSON). Copying the `TDomEvent` entity into that DTO is not done by hand either: `api.mobile.impl.pas` declares a `TRttiMap` once and lets mORMot run the field mapping for us.
+
 ### IoC
 
 Inversion of Concerns, or Dependency Injection, is the main (and sometimes tricky) point of `interface` usage. In this example, we will first use direct injection at constructor/`Create` level. But on real more complex systems, you may follow the factory or resolver patterns, using what *mORMot* offers, or with you own dependency injection mechanism.
+
+### Daemon and Service Container
+
+Steps 7 and 8 share a single composition root, the `TAuditTrailServer` class in `app.server.pas`: it takes the persistence built in step 5, publishes the `IApiMobile` of step 3 over HTTP, and is consumed both by the remote regression test (step 7) and by the stand-alone daemon (step 8).
+
+In step 7, the `RemoteCall` test starts that server in-process and connects to it with a real HTTP client, then runs the exact same `TestMobile` assertions that `DirectCall` runs against a local object. One test body, two transports, identical results: this is the location transparency that the Clean Architecture relies on, and validating it is what "preparing the service container" means here.
+
+In step 8, `AuditTrailServer.dpr` wraps that same server in a `TSynDaemon`. The single executable then runs as a console application (`--console`), a POSIX daemon (`--run` / `--fork`), or a Windows Service (`/install` `/start` `/stop` `/uninstall`) without any code change. The HTTP endpoint, our "cherry on the cake", appears only now, once the logic has already been proven by the tests.
 
