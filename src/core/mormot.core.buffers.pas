@@ -2469,10 +2469,9 @@ type
     fOwnStream: TStream;
   public
     /// initialize the source TStream and the internal buffer
-    // - will also rewind the aSource position to its beginning, and retrieve
-    // its size
-    constructor Create(aSource: TStream;
-      aBufSize: integer = 65536); reintroduce; overload;
+    // - will rewind the aSource position to its beginning, and retrieve its size
+    constructor Create(aSource: TStream; aBufSize: integer = 65536;
+      aOwnSource: boolean = false); reintroduce; overload;
     /// initialize a source file and the internal buffer
     constructor Create(const aSourceFileName: TFileName;
       aBufSize: integer = 65536); reintroduce; overload;
@@ -2482,6 +2481,9 @@ type
     function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
     /// will read up to Count bytes from the internal buffer or source TStream
     function Read(var Buffer; Count: Longint): Longint; override;
+    /// access to the associated source TStream instance
+    property Source: TStream
+      read fSource;
   end;
 
   /// TStream which raise an exception when Write() reaches a given limit
@@ -10254,19 +10256,21 @@ end;
 
 { TBufferedStreamReader }
 
-constructor TBufferedStreamReader.Create(aSource: TStream; aBufSize: integer);
+constructor TBufferedStreamReader.Create(aSource: TStream; aBufSize: integer;
+  aOwnSource: boolean);
 begin
-  pointer(fBuffer) := FastNewString(aBufSize);
   fSource := aSource;
   fSize := fSource.Size; // get it once
   fSource.Seek(0, soBeginning);
+  pointer(fBuffer) := FastNewString(aBufSize);
+  if aOwnSource then
+    fOwnStream := fSource;
 end;
 
 constructor TBufferedStreamReader.Create(const aSourceFileName: TFileName;
   aBufSize: integer);
 begin
-  Create(TFileStreamEx.CreateRead(aSourceFileName));
-  fOwnStream := fSource;
+  Create(TFileStreamEx.CreateRead(aSourceFileName), aBufSize, {ownsource=}true);
 end;
 
 destructor TBufferedStreamReader.Destroy;
@@ -10311,12 +10315,13 @@ begin
       inc(result, avail);
       dec(Count, avail);
       if Count = 0 then
-        break;
+        break; // we got enough data from the internal buffer
       inc(dest, avail);
     end;
     if Count > length(fBuffer) then
     begin // big requests would read directly from stream
       inc(result, fSource.Read(dest^, Count));
+      fBufferLeft := 0; // invalidate buffer
       break;
     end;
     fBufferPos := pointer(fBuffer); // fill buffer and retry
