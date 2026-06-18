@@ -648,6 +648,12 @@ var
   // - used by THttpSocket.GetBody and THttpRequestContext.ProcessRead
   MaxHttpChunkSize: integer = 256 shl 20;
 
+  /// reject any Content: RawByteString bigger than 1 GB
+  // - for such huge payloads, please consider a TStream
+  // - used by THttpSocket.GetBody and THttpRequestContext.ProcessRead
+  // - could be lowered down on untrusted systems to avoid DoS attacks
+  MaxHttpInMemSize: Int64 = 1 shl 30;
+
 
 { ******************** Abstract Server-Side Types e.g. for Client-Server Protocol }
 
@@ -3925,7 +3931,13 @@ begin
               if ContentStream = nil then
               begin
                 // reserve appended chunk size to Content memory buffer
-                SetLength(Content, length(Content) + fContentLeft);
+                bytes := length(Content) + fContentLeft;
+                if bytes > MaxHttpInMemSize then // 1GB in memory max
+                begin
+                  State := hrsErrorPayloadTooLarge; // avoid memory overflow
+                  break;
+                end;
+                SetLength(Content, bytes); // realloc to append new chunk
                 fContentPos := @PByteArray(Content)[length(Content)];
               end;
               inc(ContentLength, fContentLeft);
@@ -3978,7 +3990,7 @@ begin
           begin
             if Content = '' then // we need to allocate the result memory buffer
             begin
-              if ContentLength > 1 shl 30 then // 1 GB mem chunk is fair enough
+              if ContentLength > MaxHttpInMemSize then // 1GB in memory max
               begin
                 State := hrsErrorPayloadTooLarge; // avoid memory overflow
                 break;
@@ -4454,7 +4466,7 @@ procedure THttpSocket.GetBody(DestStream: TStream);
 var
   chunk: RawUtf8;
   len: PtrInt;
-  remain: Int64;
+  bytes: Int64;
   chunksize: array[0..31] of AnsiChar; // 32 bits chunk length in hexa
 begin
   include(fFlags, fBodyRetrieved);
@@ -4488,7 +4500,10 @@ begin
       end
       else
       begin
-        SetLength(Http.Content, Http.ContentLength + len); // space for this chunk
+        bytes := Http.ContentLength + len;
+        if bytes > MaxHttpInMemSize then // 1GB in memory max
+          EHttpSocket.RaiseUtf8('%.GetBody: chunked Content mem overflow', [self]);
+        SetLength(Http.Content, bytes); // space for this chunk
         SockInRead(@PByteArray(Http.Content)[Http.ContentLength], len); // append
       end;
       inc(Http.ContentLength, len);
@@ -4500,21 +4515,25 @@ begin
     if DestStream <> nil then
     begin
       len := 256 shl 10; // not chunked: use a 256 KB temp buffer
-      remain := Http.ContentLength;
-      if remain < len then
-        len := remain;
+      bytes := Http.ContentLength;
+      if bytes < len then
+        len := bytes;
       SetLength(chunk, len);
       repeat
-        if len > remain then
-          len := remain;
+        if len > bytes then
+          len := bytes;
         SockInRead(pointer(chunk), len);
         DestStream.WriteBuffer(pointer(chunk)^, len);
-        dec(remain, len);
-      until remain = 0;
+        dec(bytes, len);
+      until bytes = 0;
     end
     else
+    begin
+      if Http.ContentLength > MaxHttpInMemSize then // 1GB in memory max
+        EHttpSocket.RaiseUtf8('%.GetBody: Content mem overflow', [self]);
       SockInRead(FastSetString(RawUtf8(Http.Content), Http.ContentLength),
-                 Http.ContentLength) // not chuncked: direct Http.Content read
+                 Http.ContentLength); // not chuncked: direct Http.Content read
+    end
   else if (Http.ContentLength < 0) and // -1 means no Content-Length header
           (hfConnectionClose in Http.HeaderFlags) then
   begin
