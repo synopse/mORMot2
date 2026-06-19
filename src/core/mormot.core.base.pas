@@ -3398,7 +3398,7 @@ function StrLenSafe(S: pointer): PtrInt;
 function StrLenWSafe(S: PWideChar): PtrInt;
 
 /// our fast version of StrLen(), to be used with PUtf8Char/PAnsiChar
-// - under x86, will detect SSE2 and use it if available, reaching e.g.
+// - under Intel/AMD, will detect SSE2 and use it if available, reaching e.g.
 // 37.5 GB/s on a Core i5-13500 under Linux x86_64
 // - on ARM/AARCH64 POSIX, mormot.core.os would redirect to optimized libc
 {$ifdef ASMX64}

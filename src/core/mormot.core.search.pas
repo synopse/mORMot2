@@ -1229,6 +1229,9 @@ const
   /// 2MB as internal chunks/window default size for DeltaCompress()
   // - will use up to 9 MB of RAM during DeltaCompress() - none in DeltaExtract()
   DELTA_BUF_DEFAULT = 2 shl 20;
+  /// how many bits are used for DeltaCompress() internal hash table
+  // - fits well with DELTA_BUF_DEFAULT = 2MB and our 64-bit hash pattern
+  DELTA_HASH_BITS = 18;
 
 /// compute difference of two binary buffers
 // - returns '=' for equal buffers, or an optimized binary delta
@@ -1248,12 +1251,13 @@ function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize: integer;
 // - returns '=' for equal buffers, or an optimized binary delta
 // - DeltaExtract() could be used later on to compute New from Old + Delta
 // - caller should call FreeMem(Delta) once finished with the output buffer
-function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize: integer;
-  out Delta: PAnsiChar; Level: integer = DELTA_LEVEL_FAST;
-  BufSize: integer = DELTA_BUF_DEFAULT): integer; overload;
+function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize: PtrInt;
+  out Delta: PAnsiChar; Level: PtrInt = DELTA_LEVEL_FAST;
+  BufSize: PtrInt = DELTA_BUF_DEFAULT): PtrInt; overload;
 
 type
   /// result of function DeltaExtract()
+  // - dsCrc* wrong crc32c checksum at some state, dsFlag/dsLen invalid input
   TDeltaError = (
     dsSuccess,
     dsCrcCopy,
@@ -6257,19 +6261,30 @@ begin
 end;
 
 const
-  HTabBits = 18; // fits well with DELTA_BUF_DEFAULT = 2MB
-  HTabMask = (1 shl HTabBits) - 1;
-  HListMask = $00ffffff; // HTab[]=($ff,$ff,$ff)
+  HTabMask = (1 shl DELTA_HASH_BITS) - 1; // DELTA_HASH_BITS=18
+  HListMask = $00ffffff;                  // 24-bit THTab=($ff,$ff,$ff)
 
-// crc32c SSE4.2 opcodes are not so good with power-of-two modulo
-function DeltaHash(c: cardinal): PtrUInt;
+function DeltaHash(p: PQWordRec): PtrUInt; // reduces from 64-bit into 18-bit
   {$ifdef HASINLINE} inline; {$endif}
-begin // simple reduced avalanched from 32-bit into 19-bit - no need of multiply
-  result := (c xor (c shr 16)) and HTabMask;
+var
+  c: PtrUInt;
+begin
+  // 64-bit gives better results since we work with PHash128Rec patterns later
+  // crc32c SSE4.2 are only 32-bit and not so good with power-of-two modulos
+  // no need of KNUTH_HASHPTR_MUL or any additional mixer step in practice
+  {$ifdef CPU32}
+  c := p^.L;
+  result := c xor (c shr 15);
+  c := p^.H;
+  result := (result xor (c xor (c shr 15))) and HTabMask;
+  {$else}
+  c := p^.V;
+  result := (c xor (c shr 15) xor (c shr 31) xor (c shr 47)) and HTabMask;
+  {$endif CPU64}
 end;
 
 type
-  PHTab = ^THTab; // HTabBits=18 -> SizeOf(THTab)=768KB to fit in CPU L2 cache
+  PHTab = ^THTab; // SizeOf(THTab)=768KB would fit in CPU L2 cache
   THTab = packed array[0..HTabMask] of array[0..2] of byte; // store positions
 
 procedure DeltaPrefill(old, list: PAnsiChar; max: cardinal; tab: PHTab);
@@ -6279,7 +6294,7 @@ var
 begin
   pos := 0;
   repeat
-    h := @tab^[DeltaHash(PCardinal(old)^)];
+    h := @tab^[DeltaHash(pointer(old))];
     inc(old);
     PCardinal(list)^ := h^; // preserve previous 24-bit HTab[] value in list
     inc(list, 3);
@@ -6298,7 +6313,7 @@ var
 begin
   // 1. fill HTab[] with hashes for all old data
   FillCharFast(HTab^, SizeOf(HTab^), $ff); // HTab[]=HListMask by default
-  DeltaPrefill(OldBuf, pointer(HList), OldBufSize - 3, HTab);
+  DeltaPrefill(OldBuf, pointer(HList), OldBufSize - 7, HTab);
   // 2. compression init
   curofssize := 2;
   if OldBufSize > $ffff then
@@ -6322,7 +6337,7 @@ begin
   if NewBufSize >= 8 then
     repeat
       // hash 4 next bytes from NewBuf, and find longest match in OldBuf
-      ofs := PCardinal(@HTab^[DeltaHash(PCardinal(NewBuf)^)])^ and HListMask;
+      ofs := PCardinal(@HTab^[DeltaHash(pointer(NewBuf))])^ and HListMask;
       if ofs <> HListMask then
       begin
         // brute force search loop of best hash match
@@ -6340,12 +6355,12 @@ begin
             // test remaining bytes
             match := DeltaComp(@PHash128Rec(NewBuf)^.c2, @o^.c2,
                        MinPtrInt(NewBufSize, OldBufSize - ofs) - 8);
-            //consolewrite([' ',curlevel,'/',MaxLevel,' len=',match]);
             if match > curlen then
             begin
               // found a longer sequence
               curlen := match;
               curofs := ofs;
+              //consolewrite([' ',curlevel,'/',MaxLevel,' len=',match]);
             end;
           end;
           dec(curlevel);
@@ -6483,8 +6498,8 @@ const
   FLAG_BEGIN    = 2;
   FLAG_END      = 3;
 
-function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize: integer;
-  out Delta: PAnsiChar; Level, BufSize: integer): integer;
+function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize: PtrInt;
+  out Delta: PAnsiChar; Level, BufSize: PtrInt): PtrInt;
 var
   HTab, HList: PHTab;
   d, workbuf: PAnsiChar;
