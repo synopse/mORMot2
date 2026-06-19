@@ -6325,7 +6325,7 @@ begin
   curofs := 0;
   // 3. handle identical leading bytes
   match := DeltaComp(Old, New, MinPtrInt(OldSize, NewSize));
-  if match > 2 then
+  if match > 7 then
   begin
     DeltaWrite(0, match, curofssize, 0, Info.Cmd);
     inc(New, match);
@@ -6516,8 +6516,8 @@ begin
   // 3. handle leading and trail identical bytes (for biggest files)
   if OldSize > chunk then
   begin
-    // huge content will be chunked: test initial same chars
-    match := DeltaComp(New, Old, MinPtrInt(NewSize, OldSize));
+    // huge content will be chunked: test initial chars up to the chunk size
+    match := DeltaComp(New, Old, MinPtrInt(NewSize, OldSize - chunk));
     if match > 9 then
     begin
       // it happens very often: modification is usually in the middle/end
@@ -6533,7 +6533,7 @@ begin
     begin
       // skip same ending chars to reduce if possible to the chunk size
       match := DeltaCompReverse(New + NewSize - 1, Old + OldSize - 1,
-                 MinPtrInt(NewSize, OldSize - chunk));
+                                MinPtrInt(NewSize, OldSize - chunk));
       if match > 9 then
       begin
         if NewSize = match then
