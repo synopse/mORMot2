@@ -1027,7 +1027,7 @@ type
     function FlushTo: RawByteString;
     /// write any pending data, then create a TBytes array from the content
     // - raise an exception if the size exceeds 800MB (_DAMAXSIZE)
-    function FlushToBytes: TBytes;
+    function FlushToBytes(MaxBytesSize: PtrInt = _DAMAXSIZE): TBytes;
     /// write any pending data, then call algo.Compress() on the buffer
     // - if algo is left to its default nil, will use global AlgoSynLZ
     // - features direct compression from internal buffer, if stream was not used
@@ -5102,13 +5102,13 @@ begin
   result := (fStream as TRawByteStringStream).DataString;
 end;
 
-function TBufferWriter.FlushToBytes: TBytes;
+function TBufferWriter.FlushToBytes(MaxBytesSize: PtrInt): TBytes;
 var
   siz: Int64;
 begin
   result := nil;
   siz := GetTotalWritten;
-  if siz > _DAMAXSIZE then
+  if siz > MaxBytesSize then
     EBufferException.RaiseUtf8('%.FlushToBytes: overflow (%)', [KB(siz)]);
   SetLength(result, siz);
   if fStream.Position = 0 then
