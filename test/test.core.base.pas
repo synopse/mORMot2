@@ -255,7 +255,7 @@ type
     /// test TSynBloomFilter class
     procedure BloomFilters;
     /// test DeltaCompress/DeltaExtract functions
-    procedure _DeltaCompress;
+    procedure DeltaCompression;
     /// the new fast Currency to/from string conversion
     procedure Curr64;
     /// the camel-case / camel-uncase features, used for i18n from Delphi RTII
@@ -11181,11 +11181,12 @@ begin
   end;
 end;
 
-procedure TTestCoreBase._DeltaCompress;
+procedure TTestCoreBase.DeltaCompression;
 var
   o, n, d, s: RawByteString;
-  i, j, size, diff: integer;
+  i, j, size, diff, percent: integer;
   comp, extr: TPrecisionTimer;
+  res: TDeltaError;
 begin
   n := RandomTextParagraph(100);
   d := DeltaCompress(n, o{%H-});
@@ -11218,16 +11219,21 @@ begin
     d := DeltaCompress(n, o);
     comp.Pause;
     diff := length(n) - length(o);
-    //ConsoleWrite('d=% o=% n=% n-o=%', [length(d), length(o), length(n), diff]);
+    percent := (100 * length(d)) div diff;
+    //ConsoleWrite('%k delta=% diff=% %%', [length(n) shr 10, length(d), diff, percent, '%']);
+    check(d <> '=');
     if diff > 100 then
-    begin
-      check(d <> '=');
-      check(length(d) < (diff * 2), 'delta compressed');
-    end;
+      check(percent < 200, 'delta compressed');
+    s := '';
     extr.Resume;
-    check(DeltaExtract(d, o, s) = dsSuccess, 'delta+');
+    res := DeltaExtract(d, o, s);
+    {if res <> dsSuccess then begin
+      d := DeltaCompress(n, o);
+      res := DeltaExtract(d, o, s);
+    end;}
+    checkUtf8(res = dsSuccess, '%', [ToText(res)^]);
     extr.Pause;
-    Check(s = n);
+    CheckEqual(s, n);
   end;
   NotifyTestSpeed('DeltaCompress', 1, size, @comp);
   NotifyTestSpeed('DeltaExtract', 1, size, @extr);
