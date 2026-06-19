@@ -6406,39 +6406,39 @@ begin
   // 7. caller should append Data + Cmd content
 end;
 
-function ExtractBuf(GoodCRC: cardinal; p: PAnsiChar;
-  var aUpd, Delta: PAnsiChar; Old: PAnsiChar): TDeltaError;
+function ExtractBuf(crc: cardinal; p, old: PAnsiChar;
+  var vUpd, vDelta: PAnsiChar): TDeltaError;
 var
-  pEnd, buf, upd, src: PAnsiChar;
+  pend, buf, upd, src: PAnsiChar;
   bufsize, datasize, leading, srclen: PtrUInt;
   curofssize: byte;
 begin
   // 1. decompression init
-  upd := aUpd;
-  bufsize := PCardinal(p)^ and $00ffffff;
+  upd := vUpd;
+  bufsize := PCardinal(p)^ and U24Mask;
   inc(p, 3);
-  datasize := PCardinal(p)^ and $00ffffff;
+  datasize := PCardinal(p)^ and U24Mask;
   inc(p, 3);
   curofssize := ord(p^);
   inc(p);
   buf := p;
   inc(p, bufsize);
-  pEnd := p + datasize;
+  pend := p + datasize;
   src := nil;
   // 2. main loop
-  while p < pEnd do
+  while p < pend do
   begin
     // src/srclen = sequence to be copied
     srclen := FromVarUInt32(PByte(p));
     if srclen > 0 then
       if curofssize = 2 then
       begin
-        src := Old + PWord(p)^;
+        src := old + PWord(p)^;
         inc(p, 2);
       end
       else
       begin
-        src := Old + PCardinal(p)^ and $00ffffff;
+        src := old + PCardinal(p)^ and U24Mask;
         inc(p, 3);
       end;
     // copy leading bytes
@@ -6460,28 +6460,14 @@ begin
     end;
   end;
   // 3. result check
-  Delta := p;
-  if (p = pEnd) and
-     (crc32c(0, aUpd, upd - aUpd) = GoodCRC) then
+  vDelta := p;
+  if (p = pend) and
+     (crc32c(0, vUpd, upd - vUpd) = crc) then
     // whole CRC is faster than incremental
     result := dsSuccess
   else
     result := dsCrcExtract;
-  aUpd := upd;
-end;
-
-procedure WriteByte(var P: PAnsiChar; V: byte);
-  {$ifdef HASINLINE}inline;{$endif}
-begin
-  PByte(P)^ := V;
-  inc(P);
-end;
-
-procedure WriteInt(var P: PAnsiChar; V: cardinal);
-  {$ifdef HASINLINE}inline;{$endif}
-begin
-  PCardinal(P)^ := V;
-  inc(P, 4);
+  vUpd := upd;
 end;
 
 const
@@ -6639,72 +6625,72 @@ end;
 
 function DeltaExtract(Delta, Old, New: PAnsiChar): TDeltaError;
 var
-  BufCRC: cardinal;
-  Code: byte;
-  Len, BufRead, OldRead: PtrInt;
+  crc: cardinal;
+  code: byte;
+  len, copied, read: PtrInt;
+  upd: PAnsiChar;
   db: PByte absolute Delta;
-  Upd: PAnsiChar;
 begin
   result := dsSuccess;
-  Len := FromVarUInt32(db);
-  Upd := New;
+  len := FromVarUInt32(db);
+  upd := New;
   repeat
-    OldRead := FromVarUInt32(db);
-    Code := db^;
+    read := FromVarUInt32(db);
+    code := db^;
     inc(db);
-    case Code of
+    case code of
       FLAG_COPIED:
         begin
           // block copied flag - copy new from Delta
-          BufRead := FromVarUInt32(db);
-          if BufRead = 0 then
-            break;
-          if crc32c(0, Delta + 4, BufRead) <> PCardinal(Delta)^ then
+          copied := FromVarUInt32(db);
+          if copied = 0 then
+            break; // is likely to be the final block
+          if crc32c(0, Delta + 4, copied) <> PCardinal(Delta)^ then
           begin
             result := dsCrcCopy;
             exit;
           end;
           inc(Delta, 4);
-          MoveFast(Delta^, New^, BufRead);
-          if BufRead >= Len then
+          MoveFast(Delta^, New^, copied);
+          if copied >= len then
             exit; // if Old=nil -> only copy new
-          inc(Delta, BufRead);
-          inc(New, BufRead);
+          inc(Delta, copied);
+          inc(New, copied);
         end;
       FLAG_COMPRESS:
         begin
           // block compressed flag - extract Delta from Old
-          BufCRC := PCardinal(Delta)^;
+          crc := PCardinal(Delta)^;
           inc(Delta, 4);
-          if crc32c(0, Old, OldRead) <> PCardinal(Delta)^ then
+          if crc32c(0, Old, read) <> PCardinal(Delta)^ then
           begin
             result := dsCrcComp;
             exit;
           end;
           inc(Delta, 4);
-          result := ExtractBuf(BufCRC, Delta, New, Delta, Old);
+          result := ExtractBuf(crc, Delta, Old, New, Delta);
           if result <> dsSuccess then
             exit;
         end;
       FLAG_BEGIN:
         begin
           // block idem begin flag
-          if crc32c(0, Old, OldRead) <> PCardinal(Delta)^ then
+          if crc32c(0, Old, read) <> PCardinal(Delta)^ then
           begin
             result := dsCrcBegin;
             exit;
           end;
           inc(Delta, 4);
-          MoveFast(Old^, New^, OldRead);
-          inc(New, OldRead);
+          MoveFast(Old^, New^, read);
+          inc(New, read);
         end;
       FLAG_END:
         begin
           // block idem end flag
-          if crc32c(0, Old, OldRead) <> PCardinal(Delta)^ then
+          if crc32c(0, Old, read) <> PCardinal(Delta)^ then
             result := dsCrcEnd;
-          MoveFast(Old^, New^, OldRead);
-          inc(New, OldRead);
+          MoveFast(Old^, New^, read);
+          inc(New, read);
           break;
         end;
     else
@@ -6712,10 +6698,10 @@ begin
         result := dsFlag;
         exit;
       end;
-    end; // Case Code of
-    inc(Old, OldRead);
+    end; // Case code of
+    inc(Old, read);
   until false;
-  if New - Upd <> Len then
+  if New - upd <> len then
     result := dsLen;
 end;
 
