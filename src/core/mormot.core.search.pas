@@ -1235,15 +1235,13 @@ const
 // - returns '=' for equal buffers, or an optimized binary delta
 // - DeltaExtract() could be used later on to compute New from Old + Delta
 function DeltaCompress(const New, Old: RawByteString;
-  Level: integer = DELTA_LEVEL_FAST;
-  BufSize: integer = DELTA_BUF_DEFAULT): RawByteString; overload;
+  Level: PtrInt = DELTA_LEVEL_FAST): RawByteString; overload;
 
 /// compute difference of two binary buffers
 // - returns '=' for equal buffers, or an optimized binary delta
 // - DeltaExtract() could be used later on to compute New from Old
-function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize: integer;
-  Level: integer = DELTA_LEVEL_FAST;
-  BufSize: integer = DELTA_BUF_DEFAULT): RawByteString; overload;
+function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize: PtrInt;
+  Level: PtrInt = DELTA_LEVEL_FAST): RawByteString; overload;
 
 /// compute difference of two binary buffers and append it into a TBufferWriter
 // - append '=' for equal buffers, or an optimized binary delta
@@ -6619,22 +6617,24 @@ begin
   end;
 end;
 
-function DeltaCompress(const New, Old: RawByteString;
-  Level, BufSize: integer): RawByteString;
+function DeltaCompress(const New, Old: RawByteString; Level: PtrInt): RawByteString;
 begin
-  result := DeltaCompress(pointer(New), pointer(Old),
-    length(New), length(Old), Level, BufSize);
+  result := DeltaCompress(
+    pointer(New), pointer(Old), length(New), length(Old), Level);
 end;
 
-function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize,
-  Level, BufSize: integer): RawByteString;
+function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize, Level: PtrInt): RawByteString;
 var
-  Delta: PAnsiChar;
-  DeltaLen: integer;
+  Delta: TBufferWriter;
+  tmp: TTextWriterStackBuffer;
 begin
-  DeltaLen := DeltaCompress(New, Old, NewSize, OldSize, Delta, Level, BufSize);
-  FastSetRawByteString(result, Delta, DeltaLen);
-  FreeMem(Delta);
+  Delta := TBufferWriter.Create(tmp);
+  try
+    DeltaCompressToWriter(New, Old, NewSize, OldSize, Delta, Level);
+    result := Delta.FlushTo;
+  finally
+    Delta.Free;
+  end;
 end;
 
 function DeltaExtract(Delta, Old, New: PAnsiChar): TDeltaError;
