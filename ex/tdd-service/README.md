@@ -30,10 +30,10 @@ https://github.com/synopse/mORMot2/commit/eeefe9d61
 https://github.com/synopse/mORMot2/commit/bf55ca3b7
 
 - Step 7: Test and prepare a daemon/service container.
-https://github.com/synopse/mORMot2/commit/f74503ccd
+https://github.com/synopse/mORMot2/commit/d7845ff3a7f2ca5f550ff050a8fe1b60946a406f
 
 - Step 8: Make a daemon/service stand-alone executable.
-https://github.com/synopse/mORMot2/commit/13825a625
+https://github.com/synopse/mORMot2/commit/37d9dcfee83757ff980d032e8baf618365ff461e
 
 
 ## Followed Patterns
