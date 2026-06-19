@@ -1220,17 +1220,15 @@ function ZeroDecompressOr(P, Dest: PAnsiChar; Len, DestLen: integer): boolean;
 { ****************** Binary Buffers Delta Compression }
 
 const
-  /// normal pattern search depth for DeltaCompress()
+  /// fastest pattern search depth for DeltaCompress()
   // - gives good results on most content
   DELTA_LEVEL_FAST = 100;
+  /// normal pattern search depth for DeltaCompress()
+  DELTA_LEVEL_MEDIUM = 200;
   /// brutal pattern search depth for DeltaCompress()
   // - may become very slow, with minor benefit, on huge content
   DELTA_LEVEL_BEST = 500;
-  /// 2MB as internal chunks/window default size for DeltaCompress()
-  // - will use up to 9 MB of RAM during DeltaCompress() - none in DeltaExtract()
-  DELTA_BUF_DEFAULT = 2 shl 20;
   /// how many bits are used for DeltaCompress() internal hash table
-  // - fits well with DELTA_BUF_DEFAULT = 2MB and our 64-bit hash pattern
   DELTA_HASH_BITS = 18;
 
 /// compute difference of two binary buffers
@@ -6221,7 +6219,6 @@ asm // the 'rep cmpsb' version is slower on Intel Core CPU (not AMD)
         push    ebx
         push    ecx
         jz      @ok
-
 @1:     mov     bx, [eax]
         lea     eax, [eax + 2]
         cmp     bl, [edx]
@@ -6233,7 +6230,6 @@ asm // the 'rep cmpsb' version is slower on Intel Core CPU (not AMD)
         jne     @ok
         dec     ecx
         jnz     @1
-
 @ok:    pop     eax
         sub     eax, ecx
         pop     ebx
@@ -6262,28 +6258,30 @@ end;
 
 const
   HTabMask = (1 shl DELTA_HASH_BITS) - 1; // DELTA_HASH_BITS=18
-  HListMask = $00ffffff;                  // 24-bit THTab=($ff,$ff,$ff)
+  U24Mask = $00ffffff;                    // 24-bit THTab=($ff,$ff,$ff)
 
 function DeltaHash(p: PQWordRec): PtrUInt; // reduces from 64-bit into 18-bit
   {$ifdef HASINLINE} inline; {$endif}
 var
   c: PtrUInt;
 begin
-  // 64-bit gives better results since we work with PHash128Rec patterns later
-  // crc32c SSE4.2 are only 32-bit and not so good with power-of-two modulos
-  // no need of KNUTH_HASHPTR_MUL or any additional mixer step in practice
+  // hash 64-bit of input since we work with PHash128Rec patterns later
+  // Knuth multiplication improves bucket distribution in practice by a few %
+  // we tried crc32 asm opcode * KNUTH_HASH64_MUL for similmar distribution
   {$ifdef CPU32}
-  c := p^.L;
+  c := p^.L * KNUTH_HASH32_MUL;
   result := c xor (c shr 15);
-  c := p^.H;
+  c := p^.H * KNUTH_HASH32_MUL;
   result := (result xor (c xor (c shr 15))) and HTabMask;
   {$else}
-  c := p^.V;
+  c := p^.V * KNUTH_HASH64_MUL;
   result := (c xor (c shr 15) xor (c shr 31) xor (c shr 47)) and HTabMask;
   {$endif CPU64}
 end;
 
 type
+  THPos = array[0 .. 2] of byte; // store positions as 24-bit
+  THTab = packed array[0 .. HTabMask] of THPos;
   PHTab = ^THTab; // SizeOf(THTab)=768KB would fit in CPU L2 cache
   THTab = packed array[0..HTabMask] of array[0..2] of byte; // store positions
 
