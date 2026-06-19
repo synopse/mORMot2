@@ -793,12 +793,12 @@ const
   // - used as high limit e.g. for TBufferWriter over a TRawByteStringStream
   // - Delphi strings have a 32-bit length so you should change your algorithm
   // - even if FPC on CPU64 can handle bigger strings, consider other patterns
-  _STRMAXSIZE = $5fffffff;
+  _STRMAXSIZE = (800 shl 20) - 1;
 
   /// in-memory TBytes process will allow up to 800 MB
   // - used as high limit e.g. for TBufferWriter.FlushToBytes
   // - even if a dynamic array can handle PtrInt length, consider other patterns
-  _DAMAXSIZE = $5fffffff;
+  _DAMAXSIZE = (800 shl 20) - 1;
 
 /// like SetLength() but without any memory resize - WARNING: len should be > 0
 procedure DynArrayFakeLength(arr: pointer; len: TDALen);
