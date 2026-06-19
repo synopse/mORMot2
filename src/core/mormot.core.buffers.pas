@@ -865,12 +865,14 @@ type
     fStream: TStream;
     fTotalFlushed, fMaxFlushed: Int64;
     fBufferInternal: pointer;
-    fInternalStream: boolean;
+    fInternalStream, fIsRawByteStream: boolean;
     fTag: PtrInt;
     procedure InternalFlush;
     function GetTotalWritten: Int64;
       {$ifdef HASINLINE}inline;{$endif}
     procedure InternalWrite(Data: pointer; DataLen: PtrInt);
+      {$ifdef HASINLINE}inline;{$endif}
+    procedure RaiseMaxFlushed;
     procedure FlushAndWrite(Data: pointer; DataLen: PtrInt);
     procedure Setup(aStream: TStream; aBuf: pointer; aLen: integer);
       {$ifdef HASINLINE}inline;{$endif}
@@ -4371,6 +4373,10 @@ begin
   fBufLen16 := aLen - 16;
   fBuffer := aBuf;
   fStream := aStream;
+  if not aStream.InheritsFrom(TRawByteStringStream) then
+    exit;
+  fIsRawByteStream := true;
+  fMaxFlushed := _STRMAXSIZE; // 800MB seems fair enough for a RawByteString
 end;
 
 constructor TBufferWriter.Create(aStream: TStream; BufLen: integer);
@@ -4432,6 +4438,13 @@ begin
   fStream.WriteBuffer(Data^, DataLen);
 end;
 
+procedure TBufferWriter.InternalFlush;
+begin
+  if fPos > 0 then
+    InternalWrite(fBuffer, fPos);
+  fPos := 0;
+end;
+
 function TBufferWriter.GetTotalWritten: Int64;
 begin
   result := fTotalFlushed + fPos;
@@ -4449,25 +4462,10 @@ procedure TBufferWriter.CancelAll;
 begin
   fTotalFlushed := 0;
   fPos := 0;
-  if PClass(fStream)^ = TRawByteStringStream then
+  if fIsRawByteStream then
     TRawByteStringStream(fStream).Size := 0
   else
     fStream.Seek(0, soBeginning);
-end;
-
-procedure TBufferWriter.FlushAndWrite(Data: pointer; DataLen: PtrInt);
-begin
-  if DataLen < 0 then
-    exit;
-  if fPos > 0 then
-    InternalFlush;
-  if DataLen > fBufLen then
-    InternalWrite(Data, DataLen)
-  else
-  begin
-    MoveFast(Data^, fBuffer^[fPos], DataLen);
-    inc(fPos, DataLen);
-  end;
 end;
 
 procedure TBufferWriter.Write(Data: pointer; DataLen: PtrInt);
@@ -4482,6 +4480,21 @@ begin
   end
   else
     FlushAndWrite(Data, DataLen); // will also handle DataLen<0
+end;
+
+procedure TBufferWriter.FlushAndWrite(Data: pointer; DataLen: PtrInt);
+begin // called from inlined Write()
+  if DataLen < 0 then
+    exit;
+  if fPos > 0 then
+    InternalFlush;
+  if DataLen > fBufLen then
+    InternalWrite(Data, DataLen)
+  else
+  begin
+    MoveFast(Data^, fBuffer^[fPos], DataLen);
+    inc(fPos, DataLen);
+  end;
 end;
 
 procedure TBufferWriter.WriteN(Data: byte; Count: integer);
