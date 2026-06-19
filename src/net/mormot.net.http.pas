@@ -3882,8 +3882,8 @@ begin
     exit;
   end;
   P := st.P;
-  P[Len] := #0; // replace ending #13 by #0 - HTTP expects #13#10 not #10
-  if (P[Len + 1] <> #10) or
+  P[Len] := #0;                // replace ending #13 by #0
+  if (P[Len + 1] <> #10) or    // HTTP requires #13#10 not #10
      ((hroHeadersSanitize in Options) and
       (StrLen(P) <> Len)) then
   begin
@@ -3892,7 +3892,7 @@ begin
   end;
   st.Line := P;
   st.LineLen := Len;
-  inc(Len, 2);  // if char after #13 is not #10, parsing will fail as expected
+  inc(Len, 2);  // consume #13 (now #0) and #10 line delimiters
   inc(st.P, Len);
   dec(st.Len, Len);
   result := true;
@@ -3904,8 +3904,8 @@ var
   Len: PtrInt;
 begin
   Len := ByteScanIndex(pointer(st.P), st.Len, 13); // fast SSE2 or FPC IndexByte
-  result := (PtrUInt(Len) < PtrUInt(st.Len)) and   // st.Len=0 and/or Len=-1
-            DoProcessParseLine(st, Len);           // enough input: sub-function
+  result := (PtrUInt(Len) < PtrUInt(st.Len)) and // detect st.Len=0 and/or Len=-1
+            DoProcessParseLine(st, Len);         // enough input: sub-function
 end;
 
 function THttpRequestContext.ProcessRead(
