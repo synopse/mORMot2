@@ -1245,13 +1245,11 @@ function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize: integer;
   Level: integer = DELTA_LEVEL_FAST;
   BufSize: integer = DELTA_BUF_DEFAULT): RawByteString; overload;
 
-/// compute difference of two binary buffers
-// - returns '=' for equal buffers, or an optimized binary delta
+/// compute difference of two binary buffers and append it into a TBufferWriter
+// - append '=' for equal buffers, or an optimized binary delta
 // - DeltaExtract() could be used later on to compute New from Old + Delta
-// - caller should call FreeMem(Delta) once finished with the output buffer
-function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize: PtrInt;
-  out Delta: PAnsiChar; Level: PtrInt = DELTA_LEVEL_FAST;
-  BufSize: PtrInt = DELTA_BUF_DEFAULT): PtrInt; overload;
+procedure DeltaCompressToWriter(New, Old: PAnsiChar; NewSize, OldSize: PtrInt;
+  Delta: TBufferWriter; Level: PtrInt = DELTA_LEVEL_FAST);
 
 type
   /// result of function DeltaExtract()
@@ -6247,13 +6245,16 @@ begin
     until result = len;
 end;
 
-function DeltaWrite(curofs, curlen, curofssize: integer; sp: PByte): PAnsiChar;
+procedure DeltaWrite(ofs, len1, ofssize, len2: PtrInt; var dest: TSynTempAdder);
   {$ifdef HASINLINE} inline; {$endif}
+var
+  p: PByte;
 begin
-  //consoleWrite(['ofs=',curofs,' len=',curlen]);
-  result := pointer(ToVarUInt32(curlen, sp));
-  PInteger(result)^ := curofs;
-  inc(result, curofssize);
+  p := AddVarUInt32(dest, len1); // and prepare for 64 bytes
+  PInteger(p)^ := ofs;
+  inc(p, ofssize); // 2 or 3 bytes
+  inc(ofssize, PAnsiChar(ToVarUInt32(len2, p)) - PAnsiChar(p));
+  inc(dest.Store.Added, ofssize);
 end;
 
 const
@@ -6283,7 +6284,12 @@ type
   THPos = array[0 .. 2] of byte; // store positions as 24-bit
   THTab = packed array[0 .. HTabMask] of THPos;
   PHTab = ^THTab; // SizeOf(THTab)=768KB would fit in CPU L2 cache
-  THTab = packed array[0..HTabMask] of array[0..2] of byte; // store positions
+
+  TDeltaCompute = record // some reusable context
+    MaxLevel: PtrInt;
+    HList, HTab: PHTab;
+    Data, Cmd: TSynTempAdder;
+  end;
 
 procedure DeltaPrefill(old, list: PAnsiChar; max: cardinal; tab: PHTab);
 var
@@ -6294,66 +6300,64 @@ begin
   repeat
     h := @tab^[DeltaHash(pointer(old))];
     inc(old);
-    PCardinal(list)^ := h^; // preserve previous 24-bit HTab[] value in list
-    inc(list, 3);
-    h^ := pos or (h^ and (not HListMask));
     inc(pos);
+    PCardinal(list)^ := h^; // preserve previous 24-bit HTab[] value in list
+    h^ := pos or (h^ and (not U24Mask)); // store pos+1 as 24-bit in HTab[]
+    inc(list, 3);
   until pos = max;
 end;
 
-function DeltaCompute(NewBuf, OldBuf, OutBuf, WorkBuf: PAnsiChar;
-  NewBufSize, OldBufSize, MaxLevel: PtrInt; HList, HTab: PHTab): PAnsiChar;
+procedure DeltaCompute(var Info: TDeltaCompute; New, Old: PAnsiChar;
+  NewSize, OldSize: PtrInt);
 var
-  ofs, curofs, curlen, curlevel, match, curofssize, h: PtrInt;
-  sp, pInBuf, pOut: PAnsiChar;
-  o: PHash128Rec;
-  spb: PByte absolute sp;
+  ofs, curofs, curlen, curlevel, match, curofssize: PtrInt;
+  p: PAnsiChar;
+  q: PHash128Rec;
 begin
-  // 1. fill HTab[] with hashes for all old data
-  FillCharFast(HTab^, SizeOf(HTab^), $ff); // HTab[]=HListMask by default
-  DeltaPrefill(OldBuf, pointer(HList), OldBufSize - 7, HTab);
+  // 1. fill HTab[] and HList[] with hashes and positions for all old data
+  FillCharFast(Info.HTab^, SizeOf(THTab), 0); // HTab[]=0 by default
+  DeltaPrefill(Old, pointer(Info.HList), OldSize - 7, Info.HTab);
   // 2. compression init
   curofssize := 2;
-  if OldBufSize > $ffff then
-    curofssize := 3; // WriteCurOfs() append offsets as 2/3 bytes
+  if OldSize > $ffff then
+    curofssize := 3;   // WriteCurOfs() append offsets as 2/3 bytes
+  Info.Data.Size := 7; // append raw data just after header (written below)
+  Info.Cmd.Size := 0;  // reset command list temporary buffer
   curlen := -1;
   curofs := 0;
-  pOut := OutBuf + 7;
-  sp := WorkBuf;
   // 3. handle identical leading bytes
-  match := DeltaComp(OldBuf, NewBuf, MinPtrInt(OldBufSize, NewBufSize));
+  match := DeltaComp(Old, New, MinPtrInt(OldSize, NewSize));
   if match > 2 then
   begin
-    sp := DeltaWrite(0, match, curofssize, spb);
-    sp^ := #0;
-    inc(sp);
-    inc(NewBuf, match);
-    dec(NewBufSize, match);
+    DeltaWrite(0, match, curofssize, 0, Info.Cmd);
+    inc(New, match);
+    dec(NewSize, match);
   end;
-  pInBuf := NewBuf;
+  p := New;
   // 4. main loop: identify longest sequences using hash, and store reference
-  if NewBufSize >= 8 then
+  if NewSize > 8 then // >=8 may overflow
     repeat
-      // hash 4 next bytes from NewBuf, and find longest match in OldBuf
-      ofs := PCardinal(@HTab^[DeltaHash(pointer(NewBuf))])^ and HListMask;
-      if ofs <> HListMask then
+      // hash 8 next bytes from New, and find longest match in Old
+      ofs := PCardinal(@Info.HTab^[DeltaHash(pointer(New))])^ and U24Mask;
+      if ofs <> 0 then
       begin
         // brute force search loop of best hash match
-        curlevel := MaxLevel;
+        curlevel := Info.MaxLevel;
         repeat
-          o := PHash128Rec(OldBuf + ofs);
+          dec(ofs);
+          q := PHash128Rec(Old + ofs);
           // always test 8 bytes at once
-          {$ifdef CPU642}
-          if PHash128Rec(NewBuf)^.Lo = o^.Lo then
+          {$ifdef CPU64}
+          if PHash128Rec(New)^.Lo = q^.Lo then
           {$else}
-          if (PHash128Rec(NewBuf)^.c0 = o^.c0) and // likely to match
-             (PHash128Rec(NewBuf)^.c1 = o^.c1) then
+          if (PHash128Rec(New)^.c0 = q^.c0) and // likely to match
+             (PHash128Rec(New)^.c1 = q^.c1) then
           {$endif CPU64}
           begin
             // test remaining bytes
-            match := DeltaComp(@PHash128Rec(NewBuf)^.c2, @o^.c2,
-                       MinPtrInt(NewBufSize, OldBufSize - ofs) - 8);
-            if match > curlen then
+            match := DeltaComp(@PHash128Rec(New)^.c2, @q^.c2,
+                       MinPtrInt(NewSize, OldSize - ofs) - 8);
+            if curlen < match then
             begin
               // found a longer sequence
               curlen := match;
@@ -6362,54 +6366,46 @@ begin
             end;
           end;
           dec(curlevel);
-          ofs := PCardinal(@HList^[ofs])^ and HListMask; // try next match
-        until (ofs = HListMask) or // end of list
-              (curlevel = 0);      // end of depth
+          if curlevel = 0 then
+            break;                                     // end of depth
+          ofs := PCardinal(@Info.HList^[ofs])^ and U24Mask; // try next match
+        until ofs = 0;                                 // end of list
       end;
       // curlen = longest sequence length after initial o^.Lo 8 bytes
       if curlen < 0 then
       begin
        // no sequence found -> copy one byte
-        dec(NewBufSize);
-        pOut^ := NewBuf^;
-        inc(NewBuf);
-        inc(pOut);
-        if NewBufSize > 8 then // >=8 may overflow
-          continue
-        else
+        dec(NewSize);
+        Info.Data.Add(New^);
+        inc(New);
+        if NewSize <= 8 then
           break;
+        continue;
       end;
       // sequence found -> copy curofs/curlen pair
       inc(curlen, 8);
-      sp := DeltaWrite(curofs, curlen, curofssize, spb);
-      spb := ToVarUInt32(NewBuf - pInBuf, spb);
-      inc(NewBuf, curlen); // continue to search after the sequence
-      dec(NewBufSize, curlen);
+      DeltaWrite(curofs, curlen, curofssize, New - p, Info.Cmd);
+      inc(New, curlen); // continue to search after the sequence
+      dec(NewSize, curlen);
       curlen := -1;
-      pInBuf := NewBuf;
-      if NewBufSize > 8 then // >=8 may overflow
-        continue
-      else
+      p := New;
+      if NewSize <= 8 then
         break;
     until false;
   // 5. write remaining bytes
-  if NewBufSize > 0 then
+  if NewSize > 0 then
   begin
-    MoveFast(NewBuf^, pOut^, NewBufSize);
-    inc(pOut, NewBufSize);
-    inc(NewBuf, NewBufSize);
+    Info.Data.Add(New, NewSize);
+    inc(New, NewSize);
   end;
-  sp^ := #0;
-  inc(sp);
-  spb := ToVarUInt32(NewBuf - pInBuf, spb);
-  // 6. write header
-  PInteger(OutBuf)^ := pOut - OutBuf - 7;
-  h := sp - WorkBuf;
-  PInteger(OutBuf + 3)^ := h;
-  OutBuf[6] := AnsiChar(curofssize);
-  // 7. copy commands
-  MoveFast(WorkBuf^, pOut^, h);
-  result := pOut + h;
+  Info.Cmd.AddDirect(#0);
+  AddVarUInt32(Info.Cmd, New - p);
+  // 6. write header to Data
+  p := Info.Data.Buffer;
+  PInteger(p)^ := Info.Data.Size - 7;
+  PInteger(p + 3)^ := Info.Cmd.Size;
+  p[6] := AnsiChar(curofssize);
+  // 7. caller should append Data + Cmd content
 end;
 
 function ExtractBuf(GoodCRC: cardinal; p: PAnsiChar;
@@ -6496,26 +6492,21 @@ const
   FLAG_BEGIN    = 2;
   FLAG_END      = 3;
 
-function DeltaCompress(New, Old: PAnsiChar; NewSize, OldSize: PtrInt;
-  out Delta: PAnsiChar; Level, BufSize: PtrInt): PtrInt;
+procedure DeltaCompressToWriter(New, Old: PAnsiChar; NewSize, OldSize: PtrInt;
+  Delta: TBufferWriter; Level: PtrInt);
 var
-  HTab, HList: PHTab;
-  d, workbuf: PAnsiChar;
-  db: PByte absolute d;
-  BufRead, OldRead, Trailing, NewSizeSave: PtrInt;
-  bigfile: boolean;
+  chunk, nb, ob, trail, match, newsizeorig: PtrInt;
+  neworig: PAnsiChar;
+  nfo: TDeltaCompute;
 
   procedure CreateCopied;
   begin
-    GetMem(Delta, NewSizeSave + 17);  // 17 = 4*integer + 1*byte
-    d := Delta;
-    db := ToVarUInt32(0, ToVarUInt32(NewSizeSave, db));
-    WriteByte(d, FLAG_COPIED); // block copied flag
-    db := ToVarUInt32(NewSizeSave, db);
-    WriteInt(d, crc32c(0, New, NewSizeSave));
-    MoveFast(New^, d^, NewSizeSave);
-    inc(d, NewSizeSave);
-    result := d - Delta;
+    Delta.WriteVarUInt32(newsizeorig);
+    Delta.Write1(0);
+    Delta.Write1(FLAG_COPIED); // block copied flag
+    Delta.WriteVarUInt32(newsizeorig);
+    Delta.Write4(crc32c(0, neworig, newsizeorig));
+    Delta.Write(neworig, newsizeorig);
   end;
 
 begin
@@ -6523,109 +6514,107 @@ begin
   if (NewSize = OldSize) and
      mormot.core.base.CompareMem(Old, New, NewSize) then
   begin
-    GetMem(Delta, 1);
-    Delta^ := '=';
-    result := 1;
+    Delta.Write1(ord('='));
     exit;
   end;
-  NewSizeSave := NewSize;
-  if OldSize = 0 then
+  neworig := New;
+  newsizeorig := NewSize;
+  if OldSize = 0 then // initial DeltaCompress() from nothing
   begin
-    // Delta from nothing -> direct copy of whole block
-    CreateCopied;
+    CreateCopied; // direct copy of whole block
     exit;
   end;
   // 2. compression init
-  bigfile := OldSize > BufSize;
-  if BufSize > NewSize then
-    BufSize := NewSize;
-  if BufSize > HListMask then
-    BufSize := HListMask; // we store offsets with 2..3 bytes -> max 16MB chunk
-  Trailing := 0;
-  GetMem(workbuf, BufSize); // compression temporary buffers
-  GetMem(HList, BufSize * SizeOf({%H-}HList[0]));
-  GetMem(HTab, SizeOf({%H-}HTab^));
-  GetMem(Delta, MaxPtrInt(NewSize, OldSize) + 4096); // Delta size max evalulation
-  try
-    d := Delta;
-    db := ToVarUInt32(NewSize, db); // Destination Size
-    // 3. handle leading and trailing identical bytes (for biggest files)
-    if bigfile then
+  chunk := MinPtrInt(8 shl 20, // 8MB < max 16MB chunk encoded as 24-bit
+                     MaxPtrInt(OldSize, NewSize));
+  Delta.WriteVarUInt32(NewSize); // Destination Size
+  trail := 0;
+  // 3. handle leading and trail identical bytes (for biggest files)
+  if OldSize > chunk then
+  begin
+    // huge content will be chunked: test initial same chars
+    match := DeltaComp(New, Old, MinPtrInt(NewSize, OldSize));
+    if match > 9 then
     begin
-      // test initial same chars
-      BufRead := DeltaComp(New, Old, MinPtrInt(NewSize, OldSize));
-      if BufRead > 9 then
+      // it happens very often: modification is usually in the middle/end
+      Delta.WriteVarUInt32(match);
+      Delta.Write1(FLAG_BEGIN);
+      Delta.Write4(crc32c(0, New, match));
+      inc(New, match);
+      dec(NewSize, match);
+      inc(Old, match);
+      dec(OldSize, match);
+    end;
+    if OldSize > chunk then
+    begin
+      // skip same ending chars to reduce if possible to the chunk size
+      match := DeltaCompReverse(New + NewSize - 1, Old + OldSize - 1,
+                 MinPtrInt(NewSize, OldSize - chunk));
+      if match > 9 then
       begin
-        // it happens very often: modification is usually in the middle/end
-        db := ToVarUInt32(BufRead, db); // blockSize = Size BufIdem
-        WriteByte(d, FLAG_BEGIN);
-        WriteInt(d, crc32c(0, New, BufRead));
-        inc(New, BufRead);
-        dec(NewSize, BufRead);
-        inc(Old, BufRead);
-        dec(OldSize, BufRead);
-      end;
-      // test trailing same chars
-      BufRead := DeltaCompReverse(New + NewSize - 1, Old + OldSize - 1,
-        MinPtrInt(NewSize, OldSize));
-      if BufRead > 5 then
-      begin
-        if NewSize = BufRead then
-          dec(BufRead); // avoid block overflow
-        dec(OldSize, BufRead);
-        dec(NewSize, BufRead);
-        Trailing := BufRead;
+        if NewSize = match then
+          dec(match); // avoid block overflow
+        dec(OldSize, match);
+        dec(NewSize, match);
+        trail := match;
       end;
     end;
-    // 4. main loop
+  end;
+  // 4. main loop
+  nfo.Data.Init; // temp buffers to store new data and commands
+  nfo.Cmd.Init;
+  nfo.MaxLevel := Level;
+  GetMem(nfo.HList, MinPtrInt(chunk, OldSize) * SizeOf(THPos));
+  GetMem(nfo.HTab, SizeOf(THTab));
+  try
     repeat
-      BufRead := MinPtrInt(BufSize, NewSize);
-      dec(NewSize, BufRead);
-      if (BufRead = 0) and
-         (Trailing > 0) then
+      nb := MinPtrInt(chunk, NewSize);
+      if (nb = 0) and
+         (trail > 0) then
       begin
-        db := ToVarUInt32(Trailing, db);
-        WriteByte(d, FLAG_END); // block idem end flag
-        WriteInt(d, crc32c(0, New, Trailing));
+        Delta.WriteVarUInt32(trail);
+        Delta.Write1(FLAG_END); // block idem end flag
+        Delta.Write4(crc32c(0, New, trail));
         break;
       end;
-      OldRead := MinPtrInt(BufSize, OldSize);
-      dec(OldSize, OldRead);
-      db := ToVarUInt32(OldRead, db);
-      if (BufRead < 4) or
-         (OldRead < 4) or
-         (BufRead shr 2 > OldRead) then
+      dec(NewSize, nb);
+      ob := MinPtrInt(chunk, OldSize);
+      dec(OldSize, ob);
+      Delta.WriteVarUInt32(ob);
+      if (nb < 16) or
+         (ob < 16) then
       begin
-        WriteByte(d, FLAG_COPIED); // block copied flag
-        db := ToVarUInt32(BufRead, db);
-        if BufRead = 0 then
+        Delta.Write1(FLAG_COPIED); // block copied - mostly ending with nb=0
+        Delta.WriteVarUInt32(nb);
+        if nb = 0 then
           break;
-        WriteInt(d, crc32c(0, New, BufRead));
-        MoveFast(New^, d^, BufRead);
-        inc(New, BufRead);
-        inc(d, BufRead);
+        Delta.Write4(crc32c(0, New, nb));
+        Delta.Write(New, nb);
+        inc(New, nb);
       end
       else
       begin
-        WriteByte(d, FLAG_COMPRESS); // block compressed flag
-        WriteInt(d, crc32c(0, New, BufRead));
-        WriteInt(d, crc32c(0, Old, OldRead));
-        d := DeltaCompute(New, Old, d, workbuf, BufRead, OldRead, Level, HList, HTab);
-        inc(New, BufRead);
-        inc(Old, OldRead);
+        Delta.Write1(FLAG_COMPRESS); // block compressed flag
+        Delta.Write4(crc32c(0, New, nb));
+        Delta.Write4(crc32c(0, Old, ob));
+        DeltaCompute(nfo, New, Old, nb, ob);
+        Delta.Write(nfo.Data.Buffer, nfo.Data.Size);
+        Delta.Write(nfo.Cmd.Buffer,  nfo.Cmd.Size);
+        inc(New, nb);
+        inc(Old, ob);
       end;
     until false;
   // 5. release temp memory
   finally
-    result := d - Delta;
-    FreeMem(HTab);
-    FreeMem(HList);
-    FreeMem(workbuf);
+    FreeMem(nfo.HTab);
+    FreeMem(nfo.HList);
+    nfo.Cmd.Store.Done;
+    nfo.Data.Store.Done;
   end;
-  if result >= NewSizeSave + 17 then
+  if Delta.TotalWritten >= newsizeorig then
   begin
-    // Delta didn't compress well -> store it (with up to 17 bytes overhead)
-    FreeMem(Delta);
+    // Delta didn't compress well -> store it
+    Delta.CancelAll;
     CreateCopied;
   end;
 end;
