@@ -192,6 +192,9 @@ type
 function FromVarBlob(Data: PByte): TValueResult;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// append an integer as a 32-bit variable-length enncoded into TSynTempAdder
+// - return a pointer to the destination, prepared for about 60 more bytes
+function AddVarUInt32(var Adder: TSynTempAdder; Value: PtrUInt): PByte;
 
 
 { ************ TAlgoCompress Compression/Decompression Classes }
@@ -3344,7 +3347,6 @@ begin
   result := Source;
 end;
 
-
 function ToVarString(const Value: RawUtf8; Dest: PByte): PByte;
 var
   Len: integer;
@@ -3460,6 +3462,15 @@ function FromVarBlob(Data: PByte): TValueResult;
 begin
   result.Len := FromVarUInt32(Data);
   result.Ptr := pointer(Data);
+end;
+
+function AddVarUInt32(var Adder: TSynTempAdder; Value: PtrUInt): PByte;
+var
+  p: PAnsiChar;
+begin
+  p := Adder.Prepare(64);
+  result := ToVarUInt32(Value, pointer(p));
+  inc(Adder.Store.added, PAnsiChar(result) - p);
 end;
 
 
