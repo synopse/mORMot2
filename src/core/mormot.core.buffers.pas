@@ -860,11 +860,10 @@ type
   // - use TFileBufferReader or TFastReader for decoding of the stored binary
   TBufferWriter = class(TSynPersistent)
   protected
-    fPos: PtrInt;
-    fBufLen, fBufLen16: PtrInt;
+    fPos, fBufLen, fBufLen16: PtrInt;
     fBuffer: PByteArray;
     fStream: TStream;
-    fTotalFlushed: Int64;
+    fTotalFlushed, fMaxFlushed: Int64;
     fBufferInternal: pointer;
     fInternalStream: boolean;
     fTag: PtrInt;
@@ -1019,7 +1018,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// write any pending data in the internal buffer to the stream
     // - after a Flush, it's possible to call FileSeek64(aFile,....)
-    // - returns the number of bytes written between two FLush method calls
+    // - returns the number of bytes written between two Flush method calls
     function Flush: Int64;
     /// write any pending data, then create a RawByteString from the content
     // - raise an exception if internal Stream is not a TRawByteStringStream
@@ -1047,6 +1046,11 @@ type
     /// get the byte count written since last Flush
     property TotalWritten: Int64
       read GetTotalWritten;
+    /// maximum bytes count over which an exception will be raised
+    // - equals _STRMAXSIZE = 800 MB if Stream is a TRawByteStringStream
+    // - otherwise, equals 0 by default to disable this feature
+    property MaxFlushed: Int64
+      read fMaxFlushed write fMaxFlushed;
     /// simple property used to store some integer content
     property Tag: PtrInt
       read fTag write fTag;
@@ -4413,23 +4417,18 @@ begin
   inherited;
 end;
 
-procedure TBufferWriter.InternalFlush;
-begin
-  if fPos > 0 then
-  begin
-    InternalWrite(fBuffer, fPos);
-    fPos := 0;
-  end;
+procedure TBufferWriter.RaiseMaxFlushed;
+begin // Delphi strings have a 32-bit length so you should change your algorithm
+  EBufferException.RaiseUtf8('%.Write: % overflow (%)',
+    [self, fStream, KBNoSpace(fTotalFlushed)]);
 end;
 
 procedure TBufferWriter.InternalWrite(Data: pointer; DataLen: PtrInt);
 begin
   inc(fTotalFlushed, DataLen);
-  if fStream.InheritsFrom(TRawByteStringStream) and
-     (fTotalFlushed > _STRMAXSIZE) then
-    // Delphi strings have a 32-bit length so you should change your algorithm
-    EBufferException.RaiseUtf8('%.Write: % overflow (%)',
-      [self, fStream, KBNoSpace(fTotalFlushed)]);
+  if (fMaxFlushed > 0) and
+     (fTotalFlushed > fMaxFlushed) then
+    RaiseMaxFlushed;
   fStream.WriteBuffer(Data^, DataLen);
 end;
 
