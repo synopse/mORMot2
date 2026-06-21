@@ -56,6 +56,10 @@ end;
 
 
 initialization
-
-  TInterfaceFactory.RegisterInterfaces([TypeInfo(IExample)]);
+  Rtti.RegisterFromText([
+    TypeInfo(TSample),     'name,question:RawUtf8',
+    TypeInfo(TSampleInfo), 'id:TID name:RawUtf8'
+  ]);
+  TInterfaceFactory.RegisterInterfaces([
+    TypeInfo(IExample)]);
 end.
