@@ -10,6 +10,7 @@ uses
   mormot.core.os,
   mormot.core.data,
   mormot.core.unicode,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.orm.rest,
   mormot.rest.server,
@@ -34,7 +35,30 @@ type
         reintroduce;  
   end;
 
+
+function CreateSampleModel: TOrmModel;
+
+
 implementation
+
+type
+  TOrmSample = class(TOrm)
+  private
+    FName: RawUTF8;
+    FQuestion: RawUTF8;
+    FTime: TModTime;
+  published
+    property Name: RawUTF8 read FName write FName;
+    property Question: RawUTF8 read FQuestion write FQuestion;
+    property Time: TModTime read FTime write FTime;
+  end;
+
+function CreateSampleModel: TOrmModel;
+begin
+  result := TOrmModel.Create([TOrmSample]);
+end;
+
+
 
 {
 ******************************* TExampleService ********************************
