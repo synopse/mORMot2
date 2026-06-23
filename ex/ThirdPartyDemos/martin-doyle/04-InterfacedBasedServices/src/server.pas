@@ -8,6 +8,7 @@ uses
   Contnrs,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.log,
   mormot.core.data,
   mormot.core.unicode,
   mormot.orm.base,
@@ -73,12 +74,12 @@ begin
     OrmSample.Question := ASample.Question;
     if Self.Server.Orm.Add(OrmSample, true) > 0 then
     begin
-      Writeln('Record created OK');
+      TSynLog.Add.Log(sllTrace, 'Add: Record created OK', self);
       Result := 0;
     end
     else
     begin
-      Writeln('Error creating Record');
+      TSynLog.Add.Log(sllWarning, 'Add: Error creating Record', self);
       Result := -1;
     end;
   finally
@@ -92,14 +93,14 @@ var
 begin
   OrmSample := TOrmSample.Create(Self.Server.Orm,'Name=?',[ASample.Name]);
   try
-    if OrmSample.ID=0 then
+    if OrmSample.ID = 0 then
     begin
-      Writeln('Error reading Record');
+      TSynLog.Add.Log(sllWarning, 'Find: Error reading Record', self);
       Result := -1;
     end
     else
     begin
-      Writeln('Record read OK');
+      TSynLog.Add.Log(sllTrace, 'Find: Record found OK', self);
       ASample.Name := OrmSample.Name;
       ASample.Question := OrmSample.Question;
       Result := 0;
@@ -128,8 +129,7 @@ begin
       ASamples[i].ID := TOrmSample(OrmSamples[i]).ID;
       ASamples[i].Name := TOrmSample(OrmSamples[i]).Name;
     end;
-    Result := OrmSamples.Count;
-    Writeln('List returned ', Result, ' records');
+    TSynLog.Add.Log(sllTrace, 'List: returned % records', [Result], self);
   finally
     OrmSamples.Free;
   end;
@@ -139,12 +139,12 @@ function TExampleService.Delete(AID: TID): Integer;
 begin
   if Self.Server.Orm.Delete(TOrmSample, AID) then
   begin
-    Writeln('Record deleted OK');
+    TSynLog.Add.Log(sllTrace, 'Delete(%) OK', [AID], self);
     Result := 0;
   end
   else
   begin
-    Writeln('Error deleting Record');
+    TSynLog.Add.Log(sllWarning, 'Delete: error deleting Record', self);
     Result := -1;
   end;
 end;
