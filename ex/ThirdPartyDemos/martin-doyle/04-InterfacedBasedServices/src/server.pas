@@ -53,6 +53,7 @@ type
     property Question: RawUTF8 read FQuestion write FQuestion;
     property Time: TModTime read FTime write FTime;
   end;
+  TOrmSampleObjArray = array of TOrmSample;
 
 function CreateSampleModel: TOrmModel;
 begin
@@ -112,27 +113,24 @@ end;
 
 function TExampleService.List(out ASamples: TSampleInfoDynArray): Integer;
 var
-  OrmSamples: TObjectList;
+  OrmSamples: TOrmSampleObjArray;
   i: Integer;
 begin
-  OrmSamples := Self.Server.Orm.RetrieveList(TOrmSample, '', []);
-  if OrmSamples = nil then
-  begin
-    SetLength(ASamples, 0);
-    Result := 0;
-    Exit;
-  end;
+  if Self.Server.Orm.RetrieveListObjArray(OrmSamples, TOrmSample, '', []) then
   try
-    SetLength(ASamples, OrmSamples.Count);
-    for i := 0 to OrmSamples.Count - 1 do
+    Result := length(OrmSamples);
+    SetLength(ASamples, Result);
+    for i := 0 to result - 1 do
     begin
       ASamples[i].ID := TOrmSample(OrmSamples[i]).ID;
       ASamples[i].Name := TOrmSample(OrmSamples[i]).Name;
     end;
-    TSynLog.Add.Log(sllTrace, 'List: returned % records', [Result], self);
   finally
-    OrmSamples.Free;
-  end;
+    ObjArrayClear(OrmSamples);
+  end
+  else
+    Result := 0;
+  TSynLog.Add.Log(sllTrace, 'List: returned % records', [Result], self);
 end;
 
 function TExampleService.Delete(AID: TID): Integer;
