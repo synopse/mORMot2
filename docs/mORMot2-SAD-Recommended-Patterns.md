@@ -158,10 +158,41 @@ Switching a service from local to remote is a matter of *instance initialization
 **Make the switch a localized decision with the resolver pattern.** Both `TRestServer.Services` and `TRestClientURI.Services` are **`TInterfaceResolver`** descendants (`mormot.core.interfaces`), so the local-vs-remote choice collapses to *which resolver instance the composition root hands out*. Consumer code depends on one global `TInterfaceResolver` (or, better, is itself a `TInjectableObject` whose published interface properties are auto-resolved — the same mechanism [B.5](#b5-soa-composition-root-and-dependency-injection) recommends inside services) and never learns where the implementation runs:
 
 ```pascal
-// AppUserClient.pas — the only unit consumer code depends on
+unit AppUserClient;   // the only unit consumer code depends on
+
+interface
+
+uses
+  mormot.core.interfaces;
+
+function UserResolver: TInterfaceResolver;                 // read — for consumers
+procedure SetUserResolver(aResolver: TInterfaceResolver);  // write once — for the wiring unit
+
+implementation
+
 var
-  UserResolver: TInterfaceResolver;   // set once at startup by Local OR Remote unit
+  fUserResolver: TInterfaceResolver;   // private: nobody can reassign it directly
+
+function UserResolver: TInterfaceResolver;
+begin
+  if fUserResolver = nil then
+    raise EServiceException.CreateUtf8(
+      'UserResolver read before wiring — link AppUserClientLocal or ...Remote', []);
+  result := fUserResolver;
+end;
+
+procedure SetUserResolver(aResolver: TInterfaceResolver);
+begin
+  if fUserResolver <> nil then
+    raise EServiceException.CreateUtf8(
+      'UserResolver already set — link exactly one wiring unit', []);
+  fUserResolver := aResolver;
+end;
+
+end.
 ```
+
+The variable stays private in the `implementation` section, so the contract is *write once, read many*: the read accessor raises if something reads it before a wiring unit ran, and `SetUserResolver` raises on a second assignment — turning the *link-two-wiring-units* mistake into a loud startup failure instead of a silent last-write-wins. Each wiring unit below `uses AppUserClient` and calls `SetUserResolver` in its `initialization`.
 
 The two wiring units differ only in what they assign to that variable — an in-process server's container locally, an HTTP client's container remotely:
 
@@ -172,6 +203,9 @@ The two wiring units differ only in what they assign to that variable — an in-
 unit AppUserClientLocal;
 
 implementation
+
+uses
+  AppUserClient;   // the shared UserResolver / SetUserResolver
 
 var
   Rest: TRestServerDB;
@@ -186,7 +220,7 @@ initialization
     TUserService.CreateInjected([], [], [TUserPersistence.Create(Rest.Orm)]),
     [IUserQuery, IUserCommand]);
   // hand out the server's own container — Resolve() returns direct references:
-  UserResolver := Rest.Services;
+  SetUserResolver(Rest.Services);
 finalization
   FreeAndNil(Rest);
 end.
@@ -202,6 +236,9 @@ unit AppUserClientRemote;
 
 implementation
 
+uses
+  AppUserClient;   // the shared UserResolver / SetUserResolver
+
 var
   Http: TRestHttpClientSocket;
 
@@ -213,7 +250,7 @@ initialization
   // declare the SAME interfaces, this time as client-side factories:
   Http.ServiceDefine([IUserQuery, IUserCommand], sicShared);
   // hand out the client's container — Resolve() returns HTTP proxies:
-  UserResolver := Http.Services;
+  SetUserResolver(Http.Services);
 finalization
   FreeAndNil(Http);
 end.
