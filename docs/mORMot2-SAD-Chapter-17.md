@@ -10,16 +10,20 @@ mORMot 2 is designed from the ground up as a **cross-platform framework**. The c
 
 ### 17.1.1. mORMot 2 Platform Coverage
 
-Unlike mORMot 1 (which required separate `SynCrossPlatform*` units), mORMot 2's main units are inherently cross-platform:
+mORMot 2's main units are inherently cross-platform, and currently supports:
 
 | Platform | Delphi | Free Pascal |
 |----------|--------|-------------|
 | Windows (32/64-bit) | ✅ | ✅ |
-| Linux (x86_64, aarch64) | ✅ (Delphi 12+) | ✅ |
-| macOS (x86_64, aarch64) | ✅ | ✅ |
+| Linux (x86_64) | ✅ | ✅ |
+| macOS (x86_64) | ✅ | ✅ |
+| Linux (aarch64) | — | ✅ |
+| macOS (aarch64) | — | ✅ |
 | FreeBSD | — | ✅ |
-| Android | ✅ (FireMonkey) | ✅ |
-| iOS | ✅ (FireMonkey) | — |
+| Android | — (FireMonkey) | ✅ |
+| iOS | — (FireMonkey) | — |
+
+You can create clients for unsupported Delphi platforms like mobile applications using Unlike mORMot 1 separate `SynCrossPlatform*` units.
 
 ### 17.1.2. Core Cross-Platform Units
 
@@ -32,10 +36,11 @@ The `mormot.core.*` units provide the foundation:
 | `mormot.core.unicode` | UTF-8/UTF-16 handling |
 | `mormot.core.text` | Text processing, formatting |
 | `mormot.core.buffers` | Binary data handling |
-| `mormot.core.data` | Collections, dynamic arrays |
-| `mormot.core.json` | JSON parsing and generation |
-| `mormot.core.variants` | TDocVariant for flexible JSON |
 | `mormot.core.rtti` | Cross-platform RTTI |
+| `mormot.core.json` | JSON parsing and generation |
+| `mormot.core.fmt` | XML, YAML, HTML, INI, JSON conversion |
+| `mormot.core.data` | Collections, dynamic arrays |
+| `mormot.core.variants` | TDocVariant for flexible JSON |
 | `mormot.core.interfaces` | Interface invocation, stubs, mocks |
 
 These units have **zero GUI dependencies** and work identically across all supported platforms.
@@ -325,6 +330,8 @@ mORMot's default authentication uses a challenge-response protocol:
 3. Client computes: `Sha256(ModelRoot+Nonce+ClientNonce+UserName+Sha256('salt'+PassWord))`
 4. Client authenticates: `GET /api/auth?UserName=xxx&Password=yyy&ClientNonce=zzz`
 5. Server returns session info
+
+Since mORMot 2.4, the SCRAM + MCF pattern could be used, with safer hashing algorithms like BCrypt/Scrypt, and proper safe password storage. Just store a `ScramPersistedKey()` encoded password in the `TOrmUser` instance.
 
 For simpler integration, consider:
 - **Basic Auth**: `Authorization: Basic base64(user:pass)`
