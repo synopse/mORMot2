@@ -4,6 +4,8 @@
 
 Domain-Driven Design (DDD) provides a set of patterns and practices for building complex business applications. mORMot's architecture aligns naturally with DDD principles through its ORM, SOA, and REST layers.
 
+> **✅ Recommended default:** Part B of the [Recommended Patterns & Default Toolbox](mORMot2-SAD-Recommended-Patterns.md) guide distills these ideas into one concrete, opinionated blueprint — `TOrm`-as-domain-object, a `packed record` DTO family, hand-written mappers, and CQRS command/query interfaces.
+
 ---
 
 ## 24.1. Introduction to DDD
