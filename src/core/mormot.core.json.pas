@@ -6853,7 +6853,7 @@ begin
       cv := FindSynVariantType(vt); // our custom types
       if cv <> nil then
         cv.ToJson(self, v)
-      else if not CustomVariantToJson(self, v, Escape) then // other custom
+      else if not CustomVariantToJson(self, v, Escape, WriteOptions) then
         EJsonException.RaiseUtf8('%.AddVariant VType=%', [self, vt]);
     end;
   end;

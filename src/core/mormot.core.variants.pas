@@ -369,8 +369,9 @@ function FindSynVariantType(aVarType: cardinal): TSynInvokeableVariantType;
 
 /// try to serialize a custom variant value into JSON
 // - as used e.g. by TJsonWriter.AddVariant
+// - would also support COM/OLE varArray/SAFEARRAY - mostly for interop
 function CustomVariantToJson(W: TJsonWriter; Value: PVarData;
-  Escape: TTextWriterKind): boolean;
+  Escape: TTextWriterKind; Options: TTextWriterWriteObjectOptions): boolean;
 
 /// low-level conversion of a Compare() result to TCustomVariantType.Compare
 function SortCompTo(cmp: integer): TVarCompareResult;
@@ -5168,13 +5169,27 @@ begin
 end;
 
 function CustomVariantToJson(W: TJsonWriter; Value: PVarData;
-  Escape: TTextWriterKind): boolean;
+  Escape: TTextWriterKind; Options: TTextWriterWriteObjectOptions): boolean;
 var
+  a: PVariant absolute Value;
   v: TCustomVariantType;
+  i: PtrInt;
   tmp: variant;
 begin
   result := true;
-  if FindCustomVariantType(Value.VType, v) then
+  if VarIsArray(a^, {byref=}true) and // COM/OLE SAFEARRAY
+     (VarArrayDimCount(a^) = 1) then  // one-dimensional array only
+  begin
+    W.BlockBegin('[', Options);
+    for i := VarArrayLowBound(a^, 1) to VarArrayHighBound(a^, 1) do
+    begin
+      W.AddVariant(a^[i]); // fast enough in slow interop context
+      W.AddComma;
+    end;
+    W.CancelLastComma;
+    W.BlockEnd(']', Options);
+  end
+  else if FindCustomVariantType(Value^.VType, v) then
     if v.InheritsFrom(TSynInvokeableVariantType) then
       TSynInvokeableVariantType(v).ToJson(W, Value)
     else
