@@ -4848,6 +4848,7 @@ begin
         end;
       hrpWait: // not yet available (rfProgressiveStatic mode)
         begin
+          fServer.fExecuteEvent.SetEvent; // wake up the write thread
           result := soWaitWrite;
           exit;
         end;
