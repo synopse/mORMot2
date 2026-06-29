@@ -11972,8 +11972,8 @@ procedure TDocVariantData.InitFromVariant(const aValue: variant;
 var
   json: RawUtf8;
 begin
-  __VariantSaveJsonEscape(aValue, json, twJsonEscape); // work e.g. with SAFEARRAY
-  InitJsonInPlace(pointer(json), aOptions);
+  VariantToUtf8(aValue, json); // e.g. SAFEARRAY or BSTR
+  InitJsonInPlace(UniqueRawUtf8(json), aOptions);
 end;
 
 
