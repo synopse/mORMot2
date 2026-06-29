@@ -4228,6 +4228,8 @@ type
         Data: TVarData); // access to all standard value members
   end;
   PSynVarData = ^TSynVarData;
+  TSynVarDataArray = array[0 .. MaxInt div SizeOf(TSynVarData) - 1] of TSynVarData;
+  PSynVarDataArray = ^TSynVarDataArray;
 
 const
   /// variant type holding a PtrInt value
@@ -4290,7 +4292,7 @@ const
   /// a slightly faster alternative to Variants.Null function with TVarData
   NullVarData:  TVarData = (VType: varNull{%H-});
   FalseVarData: TVarData = (VType: varBoolean{%H-});
-  TrueVarData:  TVarData = (VType: varBoolean; VInteger: {%H-}1);
+  TrueVarData:  TVarData = (VType: varBoolean; VInteger: {%H-}-1);
 
 var
   /// a slightly faster alternative to Variants.Null function
@@ -5412,7 +5414,7 @@ end;
 {$ifdef HASVARUSTRING}
 procedure FastSynUnicode(var s: SynUnicode; p: pointer; len: PtrInt);
 var
-  rec: PStrRec; // same header than AnsiString, but with elemSize=2
+  rec: PStrRec; // same header than AnsiString, but elemSize=SizeOf(WideChar)=2
 begin
   if pointer(s) <> nil then
     FastAssignNew(s); // works also for UnicodeString
@@ -13541,10 +13543,10 @@ begin
       varEmpty:
         Value := 0;
       varBoolean:
-        if vd^.VBoolean then
+        if vd^.VBoolean then // normalize
           Value := 1
         else
-          Value := 0; // normalize
+          Value := 0;
       varSmallint:
         Value := vd^.VSmallInt;
       varShortInt:
