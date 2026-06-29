@@ -1723,12 +1723,14 @@ type
   // spUserData points to 'C:\Users\<user>\AppData\Local',
   // spCommonDocuments to 'C:\Users\Public\Documents',
   // spUserDocuments to 'C:\Users\<user>\Documents',
+  // spUserDownloads to 'C:\Users\<user>\Downloads',
   // spTemp will call GetTempPath() or read the $TEMP environment variable,
   // pointing typically to 'C:\Users\<user>\AppData\Local\Temp\',
   // and spLog either to '<exepath>\log' or
   // 'C:\Users\<user>\AppData\Local\<exename>-log' (the first writable)
   // - on POSIX, spTemp will use $TMPDIR/$TMP environment variables,
   // spCommonData, spCommonDocuments and spUserDocuments point to $HOME,
+  // spUserDownloads maps '$HOME/Downloads' or '$HOME',
   // spUserData maps $XDG_CACHE_HOME or '$HOME/.cache' or '$TMP/<user>', and
   // spLog maps '/var/log/<exename>' or '<exepath>/log' or '$TMP/<exename>-log'
   // - on all systems, returned spTemp, spLog and spUserData folders are always
@@ -1738,6 +1740,7 @@ type
     spUserData,
     spCommonDocuments,
     spUserDocuments,
+    spUserDownloads,
     spTemp,
     spLog);
 
@@ -2047,6 +2050,7 @@ const
   psapi    = 'psapi.dll';
   ole32    = 'ole32.dll';
   oleaut32 = 'oleaut32.dll';
+  shell32  = 'shell32.dll';
   ntdll    = 'ntdll.dll';
 
   NO_ERROR  = Windows.NO_ERROR; // = ERROR_SUCCESS

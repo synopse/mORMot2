@@ -2866,28 +2866,29 @@ begin
 end;
 
 var
-  SHFolderDll: THandle;
+  Shell32Dll: THandle;
   // avoid unneeded reference to ShlObj.pas
   // - late binding is mandatory to be used on WinPE which does NOT have this dll
   // - late binding also ensure that we load libraries only when needed
   SHGetFolderPathW: function(hwnd: hwnd; csidl: integer; hToken: THandle;
-    dwFlags: DWord; pszPath: PChar): HRESULT; stdcall;
+    dwFlags: DWord; pszPath: PWideChar): HRESULT; stdcall;
+  SHGetKnownFolderPath: function(const rfid: TGuid; dwFlags:DWORD; hToken: THandle;
+    out ppszPath: PWideChar): HRESULT; stdcall;
+
+procedure CoTaskMemFree(_para1: pointer); stdcall; external ole32;
 
 const
   CSIDL_PERSONAL         = $0005;
   CSIDL_LOCAL_APPDATA    = $001C; // local non roaming user folder
   CSIDL_COMMON_APPDATA   = $0023;
   CSIDL_COMMON_DOCUMENTS = $002E;
-
+  FOLDERID_Downloads: TGUID = '{374DE290-123F-4565-9164-39C4925E467B}'; // Vista+
   CSIDL: array[TSystemPath] of integer = (
-    CSIDL_COMMON_APPDATA,   // spCommonData
-                            // C:\ProgramData
-    CSIDL_LOCAL_APPDATA,    // spUserData
-                            // C:\Users\<user>\AppData\Local
-    CSIDL_COMMON_DOCUMENTS, // spCommonDocuments
-                            // C:\Users\Public\Documents
-    CSIDL_PERSONAL,         // spUserDocuments
-                            // C:\Users\<user>\Documents
+    CSIDL_COMMON_APPDATA,   // spCommonData      C:\ProgramData
+    CSIDL_LOCAL_APPDATA,    // spUserData        C:\Users\<user>\AppData\Local
+    CSIDL_COMMON_DOCUMENTS, // spCommonDocuments C:\Users\Public\Documents
+    CSIDL_PERSONAL,         // spUserDocuments   C:\Users\<user>\Documents
+    0,                      // spUserDownloads
     0,                      // spTemp
     0);                     // spLog
   // note: for SYSTEM user, got C:\Windows\System32\config\systemprofile\AppData
@@ -2900,10 +2901,12 @@ const
     'LOCALAPPDATA',    // spUserData
     '',                // spCommonDocuments
     '',                // spUserDocuments
+    '',                // spUserDownloads
     'TEMP',            // spTemp
     '');               // spLog
 var
   tmp: array[0..MAX_PATH] of WideChar;
+  pw: PWideChar;
 begin
   result := '';
   case kind of
@@ -2930,13 +2933,24 @@ begin
         if result = '' then
           result := GetSystemEnvString(_ENV[spTemp]); // fallback
       end;
+    spUserDownloads:
+      if DelayedProc(SHGetKnownFolderPath, Shell32Dll, shell32,
+           'SHGetKnownFolderPath') and
+         (SHGetKnownFolderPath(FOLDERID_Downloads, 0, 0, pw) = S_OK) then
+      begin
+        // retrieved from Vista+ GUID
+        Win32PWideCharToFileName(pw, result);
+        CoTaskMemFree(pw);
+      end
+      else
+        result := GetSystemPath(spUserDocuments); // fallback on XP
   else
     if (CSIDL[kind] <> 0) and
-       DelayedProc(SHGetFolderPathW, SHFolderDll, 'SHFolder.dll',
+       DelayedProc(SHGetFolderPathW, Shell32Dll, shell32,
          'SHGetFolderPathW') and
        (SHGetFolderPathW(0, CSIDL[kind], 0, 0, @tmp) = S_OK) then
       // retrieved from official CSIDL
-      Win32PWideCharToFileName(tmp, result)
+      Win32PWideCharToFileName(@tmp, result)
     else
     begin
       // fallback to environment variables (very unlikely)
