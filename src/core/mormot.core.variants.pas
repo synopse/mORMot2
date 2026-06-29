@@ -367,8 +367,7 @@ function SynRegisterCustomVariantType(
 function FindSynVariantType(aVarType: cardinal): TSynInvokeableVariantType;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// try to serialize a custom variant value into JSON
-// - as used e.g. by TJsonWriter.AddVariant
+/// try to serialize a complex variant into JSON e.g. from TJsonWriter.AddVariant
 // - would also support COM/OLE varArray/SAFEARRAY - mostly for interop
 function CustomVariantToJson(W: TJsonWriter; Value: PVarData;
   Escape: TTextWriterKind; Options: TTextWriterWriteObjectOptions): boolean;
@@ -1393,6 +1392,9 @@ type
     // - returns true and copy TDocAny.fValue^ for such instances
     // - returns false and left self.VType = varEmpty otherwise
     function InitFromIDocAny(const Int: IInterface): boolean;
+    /// initialize a document from another variant e.g. a SAFEARRAY OLE/COM value
+    // - will try to convert aValue into JSON, then load from it - slow but safe
+    procedure InitFromVariant(const aValue: variant; aOptions: TDocVariantOptions);
 
     /// to be called before any Init*() method call, when a previous Init*()
     // has already be performed on the same instance, to avoid memory leaks
@@ -5189,12 +5191,12 @@ begin
     W.CancelLastComma;
     W.BlockEnd(']', Options);
   end
-  else if FindCustomVariantType(Value^.VType, v) then
+  else if FindCustomVariantType(Value^.VType, v) then // RTL lookup function
     if v.InheritsFrom(TSynInvokeableVariantType) then
-      TSynInvokeableVariantType(v).ToJson(W, Value)
+      TSynInvokeableVariantType(v).ToJson(W, Value)   // e.g. BSON/DocVariant
     else
       try
-        v.CastTo(TVarData(tmp), Value^, varNativeString);
+        v.CastTo(TVarData(tmp), Value^, varNativeString); // e.g. BCD numbers
         W.AddVariant(tmp, Escape);
       except
         result := false;
@@ -5229,8 +5231,7 @@ var
   cv: TSynInvokeableVariantType;
   vt: cardinal;
   dummy: boolean;
-begin
-  // is likely to be called from AddVariant() but can be used for simple values
+begin // supports complex or simple values
   if cardinal(V.VType) = varVariantByRef then
     V := V^.VPointer;
   cv := FindSynVariantType(V.VType);
@@ -5240,7 +5241,7 @@ begin
     if (vt >= varFirstCustom) or
        ((Escape <> twNone) and
         not (vt in VTYPE_SIMPLE)) then
-      __VariantSaveJsonEscape(PVariant(V)^, result, Escape)
+      __VariantSaveJsonEscape(PVariant(V)^, result, Escape) // AddVariant()
     else
       VariantToUtf8(PVariant(V)^, result, dummy); // no escape for simple values
   end
@@ -11964,6 +11965,15 @@ begin
   pointer(VName)  := nil; // to avoid GPF when copied from fValue^
   pointer(VValue) := nil;
   self := TDocAny(obj).fValue^;
+end;
+
+procedure TDocVariantData.InitFromVariant(const aValue: variant;
+  aOptions: TDocVariantOptions);
+var
+  json: RawUtf8;
+begin
+  __VariantSaveJsonEscape(aValue, json, twJsonEscape); // work e.g. with SAFEARRAY
+  InitJsonInPlace(pointer(json), aOptions);
 end;
 
 
