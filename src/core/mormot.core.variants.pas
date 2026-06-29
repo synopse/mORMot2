@@ -2155,6 +2155,8 @@ type
     /// inverse the order of Names and Values of this document
     // - could be applied after a content sort if needed
     procedure Reverse;
+    /// convert a dvObject into dvArray, keeping Values[] but deleting Names[]
+    procedure TrimAsArray;
     /// create a TDocVariant object, from a selection of properties of the
     // objects of this document array, by property name
     // - if the document is a dvObject, to reduction will be applied to all
@@ -8618,6 +8620,14 @@ begin
   end;
   DynArrayFakeLength(VValue, VCount);
   DynArray(TypeInfo(TVariantDynArray), VValue).Reverse;
+end;
+
+procedure TDocVariantData.TrimAsArray;
+begin
+  if not IsObject then
+    exit;
+  VName := nil;
+  VOptions := VOptions - [dvoIsObject] + [dvoIsArray]; // fast enough
 end;
 
 function TDocVariantData.Reduce(const aPropNames: array of RawUtf8;
