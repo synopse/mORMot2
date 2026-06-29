@@ -25,6 +25,7 @@ uses
   sysutils,
   classes,
   variants, // circular reference? see https://github.com/synopse/mORMot2/issues/240
+  varutils, // for SafeArrayCreate()
   mormot.core.base,
   mormot.core.os,
   mormot.core.unicode,
@@ -1652,6 +1653,9 @@ type
     // - object field names should be plain ASCII-7 RFC compatible identifiers
     // (0..9a..zA..Z_.~), otherwise their values are skipped
     function ToUrlEncode(const UriRoot: RawUtf8): RawUtf8;
+    /// save a dvArray as SAFEARRAY or a dvObject as JSON BSTR e.g. for COM interop
+    // - homogenous arrays are returned as VT_I8 VT_R8 VT_DATE VT_BOOL VT_BSTR
+    function ToOleVariant: variant;
 
     /// returns true if this is not a true TDocVariant, or Count equals 0
     function IsVoid: boolean;
@@ -10182,6 +10186,122 @@ begin
     exit;
   DocVariantType.ToJson(@self, json);
   result := UrlEncodeJsonObjectBuffer(UriRoot, pointer(json), []);
+end;
+
+function ReduceVType(v: PVariant): cardinal;
+begin
+  result := cardinal(VarDataFromVariant(v^)^.VType);
+  case result of
+    varEmpty, varNull:
+      result := varVariant;     // mixed VT_VARIANT array
+    varBoolean, varDate:
+      ;                         // keep result = varBoolean or varDate
+    varSingle, varDouble, varCurrency:
+      result := varDouble;      // normalized as VT_R8
+    varString, {$ifdef HASVARUSTRING} varUString, {$endif} varOleStr:
+      result := varOleStr;      // OLE/COM expect VT_BSTR strings
+    varSmallInt, varInteger, varShortInt .. varOleUInt:
+      result := varInt64;       // normalized as VT_I8 - error on Delphi POSIX
+  else
+    result := varEmpty;         // too complex: fallback to JSON BSTR
+  end;
+end;
+
+{$ifdef OSWINDOWS} // circumvent Delphi/FPC incompatibility
+function SafeArrayCreate(VarType, Dim: cardinal; var Bounds): PVarArray;
+  stdcall; external oleaut32;
+{$endif OSWINDOWS}
+
+function TDocVariantData.ToOleVariant: variant;
+var
+  v: PVariant;
+  ar, sa: pointer;
+  vt, vt2: cardinal;
+  ndx: PtrInt;
+  new: TVarArrayBoundArray;
+  json: RawUtf8;
+begin
+  VarClear(result);
+  if IsArray then // try to generate a single dimension SAFEARRAY
+  begin
+    if VCount = 0 then
+    begin
+      result := VarArrayCreate([0, -1], varVariant); // zero-length SAFEARRAY
+      exit;
+    end;
+    v := pointer(VValue);
+    vt := ReduceVType(v);
+    if vt <> varEmpty then
+      for ndx := 1 to VCount - 1 do
+      begin
+        inc(v);
+        vt2 := ReduceVType(v);
+        if vt2 = vt then
+          continue;                // optimistic for homogeneous arrays
+        case vt2 of
+          varEmpty:
+            begin
+              vt := varEmpty;      // too complex: use JSON BSTR
+              break;
+            end;
+          varDouble:
+            if vt = varInt64 then
+            begin
+              vt := varDouble;     // allow [1,2,3.14] as [1.0,2.0,3.14]
+              continue;
+            end;
+          varInt64:
+            if vt = varDouble then // allow [1.059,2] as [1.059,2.0]
+              continue;
+        end;
+        vt := varVariant;          // allow [null,1,"2",3.14,true]
+      end;
+    if vt <> varEmpty then
+    begin // note: VarArrayCreate() does not support VT_I8 -> SafeArrayCreate()
+      new[0].elementcount := VCount;
+      new[0].lowbound := 0;
+      sa := SafeArrayCreate(vt, 1, new); // new SAFEARRAY
+      if sa <> nil then
+      begin
+        TSynVarData(result).VType := varArray or vt;
+        TSynVarData(result).VAny := sa;
+        SafeArrayAccessData(sa, ar);
+        try
+          v := pointer(VValue);
+          for ndx := 0 to VCount - 1 do
+          begin
+            case vt of
+              varBoolean:
+                {$ifdef OSWINDOWS}
+                if VarDataFromVariant(v^)^.VBoolean then
+                  PWordArray(ar)^[ndx] := $ffff // normalize
+                else
+                  PWordArray(ar)^[ndx] := 0;
+                {$else}
+                result[ndx] := v^; // FPC bug: SizeOf(boolean) in psaElementSizes
+                {$endif OSWINDOWS}
+              varInt64:
+                VariantToInt64(v^, PInt64Array(ar)^[ndx]);
+              varDouble, varDate:
+                VariantToDouble(v^, PDoubleArray(ar)^[ndx]);
+              varOleStr:
+                SetOleStr(pointer(v), @PPointerArray(ar)^[ndx]); // force BSTR
+            else // varVariant:
+              SetOleVariant(pointer(v), @PSynVarDataArray(ar)^[ndx]); // BSTR
+            end;
+            inc(v);
+          end;
+        finally
+          SafeArrayUnaccessData(sa);
+        end;
+        exit;
+      end;
+    end;
+  end;
+  DocVariantType.ToJson(@self, json); // too complex document: as JSON BSTR
+  TSynVarData(result).VType := varOleStr;
+  TSynVarData(result).VAny := nil; // avoid GPF below
+  Utf8ToWideString(json, WideString(TSynVarData(result).VAny));
 end;
 
 function TDocVariantData.GetOrAddIndexByName(const aName: RawUtf8): integer;
