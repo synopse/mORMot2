@@ -347,12 +347,6 @@ type
   TTVarRecDynArray = array of TVarRec;
   TVarRecArray = array[ 0 .. MaxInt div SizeOf(TVarRec) - 1 ] of TVarRec;
   PVarRecArray = ^TVarRecArray;
-
-  /// a TVarData values array
-  // - is not called TVarDataArray to avoid confusion with the corresponding
-  // type already defined in RTL Variants.pas, and used for custom late-binding
-  TVarDataStaticArray = array[ 0 .. MaxInt div SizeOf(TVarData) - 1 ] of TVarData;
-  PVarDataStaticArray = ^TVarDataStaticArray;
   TVariantArray = array[ 0 .. MaxInt div SizeOf(Variant) - 1 ] of Variant;
   PVariantArray = ^TVariantArray;
   TVariantDynArray = array of variant;
