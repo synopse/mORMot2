@@ -2805,6 +2805,9 @@ begin
           // fallback to /var/tmp
           result := '/var/tmp/';
       end;
+    spUserDownloads: // try '$HOME/Downloads'
+       if not WritableFolder(GetSystemPath(spUserDocuments), 'Downloads', result) then
+         result := GetSystemPath(spUserDocuments);
   else
     // POSIX requires a value for the $HOME environment variable
     GetEnvFolder('HOME', result, {writable=}false);
