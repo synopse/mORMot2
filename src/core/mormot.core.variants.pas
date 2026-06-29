@@ -85,7 +85,14 @@ procedure SetVariantByValue(const Source: Variant; var Dest: Variant;
   const NoForceRawUtf8: boolean = false);
   {$ifdef HASINLINE}inline;{$endif}
 
+/// defined here for proper inlining from SetVariantByValue()
 procedure SetVariantComplex(vt: cardinal; s, d: PSynVarData; NoForceUtf8: boolean);
+
+/// same as Dest^ := Source^, but ensuring all strings are BSTR
+procedure SetOleVariant(Source, Dest: PSynVarData);
+
+/// same as Dest^ := WideString(Source^.VAny) with proper conversion
+function SetOleStr(Source: PSynVarData; Dest: PWideString): boolean;
 
 /// same as FillChar(Value^,SizeOf(TVarData),0)
 // - so can be used for TVarData or Variant
@@ -4015,6 +4022,38 @@ begin
     d.VType := varVariantByRef;
     d.VAny := @Source; // copy complex values by reference
   end;
+end;
+
+function SetOleStr(Source: PSynVarData; Dest: PWideString): boolean;
+begin
+  result := true;
+  PPointer(Dest)^ := nil; // avoid GPF below
+  case cardinal(Source^.Data.VType) of
+    varOleStr:
+      Dest^ := WideString(Source^.VAny);
+    varString:
+      Utf8ToWideString(RawUtf8(Source^.VAny), Dest^); // set from UTF-8
+    {$ifdef HASVARUSTRING}
+    varUString:
+      {$ifdef OSWINDOWS} // allocate Windows BSTR from UTF-16 content
+      FastSetWideString(Dest^, Source^.VAny, length(UnicodeString(Source^.VAny)));
+      {$else}
+      Dest^ := UnicodeString(Source^.VAny); // same type on POSIX
+      {$endif OSWINDOWS}
+    {$endif HASVARUSTRING}
+  else
+    result := false;
+  end;
+end;
+
+procedure SetOleVariant(Source, Dest: PSynVarData);
+begin
+  if cardinal(Source^.Data.VType) in VTYPE_SIMPLE then
+    Dest^ := Source^
+  else if SetOleStr(pointer(Source), @Dest^.VAny) then
+    Dest^.VType := varOleStr
+  else
+    Dest^.VType := varEmpty;
 end;
 
 procedure SetVariantComplex(vt: cardinal; s, d: PSynVarData; NoForceUtf8: boolean);
