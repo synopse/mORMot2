@@ -800,9 +800,9 @@ begin
                SQL_TIME_TZ,
                SQL_TYPE_TIME,
                SQL_TYPE_DATE:
-                farrParams[i].SetAsDateTime(Iso8601ToDateTime(VData))
+                 farrParams[i].SetAsDateTime(Iso8601ToDateTime(VData))
               else
-               farrParams[i].SetAsString(VData);
+                farrParams[i].SetAsString(VData);
               end;
             end;
           ftBlob:
@@ -1413,7 +1413,7 @@ begin
     ThreadingMode := tmMainConnection;
   UseCache := true;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
-  fDateTimeFirstChar:=' ';
+  fDateTimeFirstChar := ' ';
 end;
 
 destructor TSqlDBIbxConnectionProperties.Destroy;
