@@ -5423,7 +5423,7 @@ var
   ms: integer;
   {$endif USE_WINIOCP}
   tix64: Int64;
-  tix, lasttix: cardinal;
+  tix, lasttix, idle, lastidle: cardinal;
   msidle, mscallbacks: integer;
 begin
   // call ProcessIdleTix - and POSIX Send() output packets in the background
@@ -5436,6 +5436,7 @@ begin
       IdleEverySecond; // initialize idle process (e.g. fHttpDateNowUtc)
       tix := GetTickSec shr 6; // delay=500 after 64s idle
       lasttix := tix;
+      lastidle := 0;
       mscallbacks := 0;
       if fCallbackSendDelay <> nil then
         mscallbacks := fCallbackSendDelay^;
@@ -5453,14 +5454,18 @@ begin
         {$endif USE_WINIOCP}
         begin
           // no socket/poll/epoll API nedeed (most common case)
-          if (mscallbacks <> 0) and // typically = 10ms
-             (tix = lasttix) then
-            msidle := mscallbacks   // delayed SendFrames gathering
+          idle := mormot.core.os.GetTickCount64 shr 6;
+          if lastidle = idle then
+            msidle := 10                 // WaitFor(10) up to 64ms
+          else if (mscallbacks <> 0) and // typically = 10ms
+                  (tix = lasttix) then
+            msidle := mscallbacks        // delayed SendFrames gathering
           else if (fAsync.fGC1.Count = 0) or
                   (fAsync.fKeepConnectionInstanceMS > 500 * 2) then
-            msidle := 500 // idle server
-          else // default fKeepConnectionInstanceMS is 100ms
+            msidle := 500                // idle server
+          else         // default fKeepConnectionInstanceMS = 100ms
             msidle := fAsync.fKeepConnectionInstanceMS shr 1; // follow GC pace
+          lastidle := idle;
           fExecuteEvent.WaitFor(msidle);
           if fShutdownInProgress or
              Terminated or
