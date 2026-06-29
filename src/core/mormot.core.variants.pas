@@ -4078,7 +4078,7 @@ end;
 
 procedure FillZero(var value: variant);
 begin
-  if TSynVarData(value).VType and $ffff = varString then
+  if cardinal(TVarData(value).VType) = varString then
     FillZero(RawByteString(TVarData(value).VAny)); // anti-forensic
   VarClear(value);
 end;

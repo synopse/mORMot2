@@ -8277,7 +8277,7 @@ begin
       result := NULL_STR_VAR;
     varBoolean:
       if vd^.VBoolean then
-        result := SmallUInt32Utf8[1]
+        result := SmallUInt32Utf8[1] // normalize as '0' or '1'
       else
         result := SmallUInt32Utf8[0];
     varByte:
@@ -8663,10 +8663,10 @@ begin
     vtInt64:
       value := V^.VInt64^;
     vtBoolean:
-      if V^.VBoolean then
+      if V^.VBoolean then // normalize
         value := 1
       else
-        value := 0; // normalize
+        value := 0;
     vtVariant:
       value := V^.VVariant^;
   else
@@ -8690,10 +8690,10 @@ begin
       value := V^.VQWord^;
     {$endif FPC}
     vtBoolean:
-      if V^.VBoolean then
+      if V^.VBoolean then // normalize
         value := 1
       else
-        value := 0; // normalize
+        value := 0;
     vtExtended:
       value := V^.VExtended^;
     vtCurrency:
@@ -8853,7 +8853,7 @@ n:    if vfNullAsVoid in Flags then
       if vfBooleanAsInt in Flags then
       begin
         Res.Temp[0] := '0';
-        if vd^.VBoolean then
+        if vd^.VBoolean then // normalize
           inc(Res.Temp[0]);
         Res.Text := @Res.Temp;
         Res.Len := 1;
@@ -8973,7 +8973,7 @@ begin
     vtBoolean:
       begin
         isString := false;
-        if V^.VBoolean then // normalize
+        if V^.VBoolean then // normalize as '0' or '1'
           Res.Text := @UINT_999[1].TextLo
         else
           Res.Text := @UINT_999[0].TextLo;
@@ -9072,7 +9072,7 @@ begin
         RawUnicodeToUtf8(@V^.VWideChar, 1, result);
       end;
     vtBoolean:
-      if V^.VBoolean then // normalize
+      if V^.VBoolean then // normalize  as '0' or '1'
         result := SmallUInt32Utf8[1]
       else
         result := SmallUInt32Utf8[0];
