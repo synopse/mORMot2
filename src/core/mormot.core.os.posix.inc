@@ -2716,12 +2716,10 @@ begin
     p := e^;
     if p^ <> '=' then
     begin
-      b := p;
-      repeat
-        inc(p);
-      until p^ = '=';
-      FastSetString(_SystemEnvNames[n], b, p);
-      inc(p);
+      p := PosChar0(p, '=');
+      FastSetString(_SystemEnvNames[n], e^, p);
+      if p^ <> #0 then
+        inc(p); // ignore '='
       b := p;
       inc(p, StrLen(p));
       FastSetString(_SystemEnvValues[n], b, p);

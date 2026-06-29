@@ -3009,11 +3009,10 @@ begin
     else
     begin
       e := p;
-      repeat
-        inc(p);
-      until p^ = '=';
+      p := PosChar0(p, '=');
       Unicode_ToUtf8(e, p - e, _SystemEnvNames[i]);
-      inc(p);
+      if p^ <> #0 then
+        inc(p); // ignore '='
       e := p;
       inc(p, StrLenW(p));
       Unicode_ToUtf8(e, p - e, _SystemEnvValues[i]);
