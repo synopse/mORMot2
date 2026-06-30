@@ -605,8 +605,8 @@ var
   start, stop: Int64;
   tix16: cardinal;
   lenw: word;
-  tmp: TBuffer4K;
   hdr: PDnsHeader;
+  tmp: TBuffer4K;
 begin
   result := false;
   TimeElapsed := 0;
@@ -876,7 +876,7 @@ end;
 
 function DnsLdapServices(const DomainName, NameServers: RawUtf8): TRawUtf8DynArray;
 begin
-  result := DnsServices('_ldap._tcp.' + DomainName, NameServers);
+  result := DnsServices(Join(['_ldap._tcp.', DomainName]), NameServers);
 end;
 
 function DnsLdapControllers(const NameServers: RawUtf8; UsePosixEnv: boolean;
