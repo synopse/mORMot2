@@ -386,7 +386,8 @@ type
       path: PAnsiChar): cardinal; cdecl;
     /// a simple way to identify that the GSS-API library is MIT (at least 1.11)
     IsMit: boolean;
-    /// either GSSAPI_ENV_CLIENT_KT_MIT or GSSAPI_ENV_CLIENT_KT_HEIMDAL
+    /// filled with either GSSAPI_ENV_CLIENT_KT_MIT ('KRB5_CLIENT_KTNAME') or
+    // GSSAPI_ENV_CLIENT_KT_HEIMDAL ('KRB5_KTNAME') at startup
     EnvClientKtName: RawUtf8;
     /// the value of EnvClientKtName at process startup
     EnvClientKtValue: RawUtf8;
@@ -845,9 +846,9 @@ begin
       // minimal API to work on server side -> thread safe setup into GSSAPI
       api.IsMit := Assigned(api.gss_acquire_cred_from);
       if api.IsMit then
-        api.EnvClientKtName := GSSAPI_ENV_CLIENT_KT_MIT      // KRB5_CLIENT_KTNAME
+        api.EnvClientKtName := GSSAPI_ENV_CLIENT_KT_MIT // 'KRB5_CLIENT_KTNAME'
       else
-        api.EnvClientKtName := GSSAPI_ENV_CLIENT_KT_HEIMDAL; // KRB5_KTNAME
+        api.EnvClientKtName := GSSAPI_ENV_CLIENT_KT_HEIMDAL; // 'KRB5_KTNAME'
       GetSystemEnv(api.EnvClientKtName, api.EnvClientKtValue); // retrieve once
       GlobalLock;
       try
