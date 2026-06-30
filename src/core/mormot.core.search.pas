@@ -1230,6 +1230,8 @@ const
   DELTA_LEVEL_BEST = 500;
   /// how many bits are used for DeltaCompress() internal hash table
   DELTA_HASH_BITS = 18;
+  /// maximum in-memory compression chunk for DeltaCompress() - should be < 16MB
+  DELTA_MAX_CHUNK = 8 shl 20;
 
 /// compute difference of two binary buffers
 // - returns '=' for equal buffers, or an optimized binary delta
@@ -6509,7 +6511,7 @@ begin
     exit;
   end;
   // 2. compression init
-  chunk := MinPtrInt(8 shl 20, // 8MB < max 16MB chunk encoded as 24-bit
+  chunk := MinPtrInt(DELTA_MAX_CHUNK, // 8MB < max 16MB chunk encoded as 24-bit
                      MaxPtrInt(OldSize, NewSize));
   Delta.WriteVarUInt32(NewSize); // Destination Size
   trail := 0;
