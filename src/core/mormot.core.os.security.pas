@@ -2023,22 +2023,24 @@ const
   ASN1_CL_PRI   = $c0;
 
   // base ASN.1 types
-  ASN1_BOOL        = $01;
-  ASN1_INT         = $02;
-  ASN1_BITSTR      = $03;
-  ASN1_OCTSTR      = $04;
-  ASN1_NULL        = $05;
-  ASN1_OBJID       = $06;
-  ASN1_ENUM        = $0a;
-  ASN1_UTF8STRING  = $0c;
-  ASN1_PRINTSTRING = $13;
-  ASN1_IA5STRING   = $16;
-  ASN1_UTCTIME     = $17;
-  ASN1_GENTIME     = $18;
+  ASN1_BOOL            = $01;
+  ASN1_INT             = $02;
+  ASN1_BITSTR          = $03;
+  ASN1_OCTSTR          = $04;
+  ASN1_NULL            = $05;
+  ASN1_OBJID           = $06;
+  ASN1_ENUM            = $0a;
+  ASN1_UTF8STRING      = $0c;
+  ASN1_PRINTSTRING     = $13;
+  ASN1_IA5STRING       = $16;
+  ASN1_UTCTIME         = $17;
+  ASN1_GENTIME         = $18;
+  ASN1_UNIVERSALSTRING = $1c;
+  ASN1_BMPSTRING       = $1e;
 
   // base ASN1_CL_CTR types
-  ASN1_SEQ         = $30;
-  ASN1_SETOF       = $31;
+  ASN1_SEQ             = $30;
+  ASN1_SETOF           = $31;
 
   ASN1_TEXT = [
     ASN1_UTF8STRING,
@@ -2132,7 +2134,11 @@ function Asn(AsnType: integer;
   const Content: array of TAsnObject): TAsnObject; overload;
 
 /// create an ASN.1 binary from some raw data
-function AsnTyped(const Data: RawByteString; AsnType: integer): TAsnObject;
+function AsnTyped(const Data: RawByteString; AsnType: integer): TAsnObject; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// create an ASN.1 binary from some raw data
+procedure AsnTyped(Data: pointer; DataLen, AsnType: integer; var Bin: TAsnObject); overload;
 
 /// create an ASN.1 binary from several raw data - as OCTSTR by default
 function AsnArr(const Data: array of RawUtf8;
@@ -6829,15 +6835,17 @@ begin
   end;
 end;
 
-function AsnTyped(const Data: RawByteString; AsnType: integer): TAsnObject;
+procedure AsnTyped(Data: pointer; DataLen, AsnType: integer; var Bin: TAsnObject);
 var
   tmp: TQWordRec;
   len, al: PtrInt;
   p: PByte;
 begin
-  len := ord(AsnType = ASN1_BITSTR) + length(Data);
+  if Data = nil then
+    DataLen := 0;
+  len := ord(AsnType = ASN1_BITSTR) + DataLen;
   al := AsnEncLen(len, tmp);
-  p := FastNewRawByteString(result, al + len + 1);
+  p := FastNewRawByteString(Bin, al + len + 1);
   p^ := AsnType;         // type
   inc(p);
   MoveFast(tmp, p^, al); // encoded length
@@ -6847,7 +6855,12 @@ begin
     p^ := 0; // leading unused bit length
     inc(p);
   end;
-  MoveFast(pointer(Data)^, p^, length(Data)); // content
+  MoveFast(Data^, p^, DataLen); // content
+end;
+
+function AsnTyped(const Data: RawByteString; AsnType: integer): TAsnObject;
+begin
+  AsnTyped(pointer(Data), length(Data), AsnType, result);
 end;
 
 procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject);
@@ -6895,18 +6908,18 @@ begin
        (ord(v[1]) and $80 <> 0) then
       insert(#0, v, 1); // prepend 0 to ensure not parsed as negative number
   end;
-  result := AsnTyped(v, AsnType);
+  AsnTyped(pointer(v), length(v), AsnType, result);
   FillZero(v); // anti-forensic
 end;
 
 function AsnSeq(const Data: TAsnObject): TAsnObject;
 begin
-  result := AsnTyped(Data, ASN1_SEQ);
+  AsnTyped(pointer(Data), length(Data), ASN1_SEQ, result);
 end;
 
 function AsnOctStr(const Data: TAsnObject): TAsnObject;
 begin
-  result := AsnTyped(Data, ASN1_OCTSTR);
+  AsnTyped(pointer(Data), length(Data), ASN1_OCTSTR, result);
 end;
 
 function AsnSeq(const Content: array of TAsnObject): TAsnObject;
@@ -6916,17 +6929,17 @@ end;
 
 function AsnObjId(const Data: TAsnObject): TAsnObject;
 begin
-  result := AsnTyped(Data, ASN1_OBJID);
+  AsnTyped(pointer(Data), length(Data), ASN1_OBJID, result);
 end;
 
 function AsnSetOf(const Data: TAsnObject): TAsnObject;
 begin
-  result := AsnTyped(Data, ASN1_SETOF);
+  AsnTyped(pointer(Data), length(Data), ASN1_SETOF, result);
 end;
 
 function AsnBitStr(const Data: TAsnObject): TAsnObject;
 begin
-  result := AsnTyped(Data, ASN1_BITSTR);
+  AsnTyped(pointer(Data), length(Data), ASN1_BITSTR, result);
 end;
 
 function AsnEnum(Data: PtrInt): TAsnObject;
@@ -6970,7 +6983,7 @@ end;
 
 function AsnText(const Text: RawUtf8): TAsnObject;
 begin
-  result := AsnTyped(Text, AsnTypeText(pointer(Text)));
+  AsnTyped(pointer(Text), length(Text), AsnTypeText(pointer(Text)), result);
 end;
 
 function AsnSafeOct(const Content: array of TAsnObject): TAsnObject;
