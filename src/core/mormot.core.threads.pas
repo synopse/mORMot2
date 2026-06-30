@@ -1782,15 +1782,21 @@ type
   // - psoReadNonBlocking for Read() to return 0 bytes on empty buffer
   // - psoReadCheckSynchronize for Read() to detect the main thread and call
   // CheckSynchronize which is slower but allow VCL/LCL UI responsiveness
+  // - by default, Read() or Write() after Abort would return -1 unless
+  // psoReadErrorRaiseException or psoWriteErrorRaiseException are set
   // - psoCheckThread will ensure Read() and Write() are always called from
   // the very same thread - may be useful to debug some unexpected behavior
-  TPipeStreamOptions = set of (
+  TPipeStreamOption = (
     psoWritePartial,
     psoWriteNonBlocking,
     psoWritePosition,
     psoReadNonBlocking,
     psoReadCheckSynchronize,
+    psoReadErrorRaiseException,
+    psoWriteErrorRaiseException,
     psoCheckThread);
+  /// define TPipeStream optional behavior
+  TPipeStreamOptions = set of TPipeStreamOption;
 
   /// a TStream which transmits its Write() method buffer into its blocking Read()
   // - used e.g. to efficiently synchronize/pipe data between two threads,
@@ -1810,6 +1816,7 @@ type
     fOnClose: TNotifyEvent;
     fCallingThread: array[{wr=}boolean] of TThreadID;
     procedure CheckCallingThread(wr: boolean);
+    function DoClose(wr: boolean): integer;
     function GetSize: Int64; override;
     procedure DoTerminate; virtual; // called once from Abort/Destroy
   public
@@ -1821,11 +1828,13 @@ type
     /// abort/close any blocking Read/Write process
     // - as eventually called by Destroy - so you should not have to call this
     // method, unless you want to break both Read() and Write() blocking methods
+    // - will force Read() and Write() to return -1 from now on or raise exception
     procedure Abort; virtual;
     /// read up to Count bytes waiting for data sent on Write()
     // - this method blocks when the internal buffer is empty (Pending = 0)
     // - may return less than Count bytes if there is some data in the buffer
     // - return 0 if aReadTimeout has been reached or psoReadNonBlocking was set
+    // - return -1 or raise exception if the pipe has been invalidated by Abort
     // - by default, TPipeStream.Position/Size reflect the total number of bytes
     // from Read(), unless the psoWritePosition option is set
     function Read(var Buffer; Count: Longint): Longint; override;
@@ -1833,6 +1842,7 @@ type
     // - blocks when the internal buffer is full, until Count bytes are sent
     // - write less than Count bytes only if aWriteTimeout has been reached,
     // or if psoWritePartial/psoWriteNonBlocking options have been set
+    // - return -1 or raise exception if the pipe has been invalidated by Abort
     function Write(const Buffer; Count: Longint): Longint; override;
     /// check if Abort has been called and pipe process was stopped
     function Closed: boolean;
@@ -1862,6 +1872,25 @@ type
     /// called by Destroy/Abort e.g. to force shutdown of the running threads
     property OnClose: TNotifyEvent
       read fOnClose write fOnClose;
+  end;
+
+  /// abstract TPipeStream class holding a Thread for background Write() process
+  TBackgroundPipeStream = class(TPipeStream)
+  protected
+    fThread: TLoggedThread;
+  public
+    /// initialize this instance with an associated TLoggedThread
+    // - the supplied Thread instance will be owned and freed with this TStream
+    constructor Create(aThread: TLoggedThread; aExpectedSize: Int64 = -1;
+      aBufSize: cardinal = 65536); reintroduce; overload;
+    /// initialize this instance executing a method in a TLoggedWorkThread
+    constructor Create(Logger: TSynLogClass; const ProcessName: RawUtf8;
+      Sender: TObject; const OnExecute: TNotifyEvent); reintroduce; overload;
+    /// call Thread.Terminate and finalize this TStream instance
+    destructor Destroy; override;
+    /// raw access to the associated background Thread
+    property Thread: TLoggedThread
+      read fThread;
   end;
 
 
@@ -4996,9 +5025,40 @@ begin
   end;
 end;
 
+const
+  _RW: array[boolean] of TShort7 = ('Read', 'Write');
+
+procedure TPipeStream.CheckCallingThread(wr: boolean);
+var
+  tid: TThreadID;
+begin
+  tid := GetCurrentThreadId;
+  if fCallingThread[wr] <> tid then
+    if PtrUInt(fCallingThread[wr]) = 0 then
+      fCallingThread[wr] := tid // set at first call
+    else
+      ESynThread.RaiseUtf8('%.% called from wrong thread', [self, _RW[wr]]);
+end;
+
 function TPipeStream.Closed: boolean;
 begin
   result := fBuffer = nil;
+end;
+
+function TPipeStream.DoClose(wr: boolean): integer;
+begin
+  if (fSize >= 0) and
+     (fPosition = fSize) then
+    result := 0   // return 0 if reached ExpectedSize (final Abort)
+  else
+    result := -1; // by default Read() and Write() return -1 after Abort
+  if wr then
+  begin
+    if not (psoWriteErrorRaiseException in fOptions) then
+      exit;
+  end else if not (psoReadErrorRaiseException in fOptions) then
+    exit;
+  ESynThread.RaiseUtf8('%.% called after Abort', [self, _RW[wr]]);
 end;
 
 function TPipeStream.Read(var Buffer; Count: Longint): Longint;
@@ -5006,9 +5066,13 @@ var
   tail: integer;
   wakewriter: boolean;
 begin
+  if Closed then
+  begin
+    result := DoClose({wr=}false);
+    exit;
+  end;
   result := 0;
-  if (Count <= 0) or
-     Closed then
+  if Count <= 0 then
     exit;
   if psoCheckThread in fOptions then
     CheckCallingThread({wr=}false);
@@ -5017,7 +5081,10 @@ begin
     fLock.Lock;
     try
       if Closed then
+      begin
+        result := DoClose(false);
         exit;
+      end;
       fCanRead.ResetEvent;
       if fPending > 0 then
       begin
@@ -5038,9 +5105,14 @@ begin
       if wakewriter then
         fCanWrite.SetEvent; // trigger to fill some more from Write()
     end;
-  until Closed or
-        (psoReadNonBlocking in fOptions) or // return 0 on timeout or non-blocking
+    if Closed then
+    begin
+      result := DoClose(false);
+      exit;
+    end;
+  until (psoReadNonBlocking in fOptions) or
         not fCanRead.WaitForSafe(fReadTimeout, not(psoReadCheckSynchronize in fOptions));
+  result := 0; // emulate to return 0 on timeout or non-blocking
 end;
 
 function TPipeStream.Write(const Buffer; Count: Longint): Longint;
@@ -5049,9 +5121,13 @@ var
   wakereader: boolean;
   P: PAnsiChar;
 begin
-  result := 0;
-  if (Count <= 0) or
-     Closed then
+  if Closed then
+  begin
+    result := DoClose({wr=}true);
+    exit;
+  end;
+  result := 0;  // return the number of written bytes on success
+  if Count <= 0 then
     exit;
   if psoCheckThread in fOptions then
     CheckCallingThread({wr=}true);
@@ -5060,7 +5136,10 @@ begin
     fLock.Lock;
     try
       if Closed then
+      begin
+        result := DoClose(true);
         exit;
+      end;
       fCanWrite.ResetEvent;
       wakereader := fPending = 0; // Read() blocks on empty buffer
       avail := fBufferSize - fPending;
@@ -5083,8 +5162,12 @@ begin
     end;
     if wakereader then
       fCanRead.SetEvent; // trigger to consume some more from Read()
-  until Closed or
-        (result = Count) or // blocks until all Count bytes have been written
+    if Closed then
+    begin
+      result := DoClose(true);
+      exit;
+    end;
+  until (result = Count) or // blocks until all Count bytes have been written
         (psoWriteNonBlocking in fOptions) or
         ((result <> 0) and
          (psoWritePartial in fOptions)) or    // optional partial Write()
@@ -5098,19 +5181,32 @@ begin
     result := fPosition;
 end;
 
-const
-  _RW: array[boolean] of TShort7 = ('Read', 'Write');
 
-procedure TPipeStream.CheckCallingThread(wr: boolean);
-var
-  tid: TThreadID;
+{ TBackgroundPipeStream }
+
+constructor TBackgroundPipeStream.Create(aThread: TLoggedThread;
+  aExpectedSize: Int64; aBufSize: cardinal);
 begin
-  tid := GetCurrentThreadId;
-  if fCallingThread[wr] <> tid then
-    if PtrUInt(fCallingThread[wr]) = 0 then
-      fCallingThread[wr] := tid // set at first call
-    else
-      ESynThread.RaiseUtf8('%.% called from wrong thread', [self, _RW[wr]]);
+  inherited Create(aBufSize);
+  fThread := aThread;
+  if aExpectedSize >= 0 then
+    ExpectedSize := aExpectedSize;
+end;
+
+constructor TBackgroundPipeStream.Create(Logger: TSynLogClass;
+  const ProcessName: RawUtf8; Sender: TObject; const OnExecute: TNotifyEvent);
+begin
+  Create(TLoggedWorkThread.Create(Logger, ProcessName, Sender, OnExecute,
+    {suspended=}false, {manualwaitandfree=}true));
+end;
+
+destructor TBackgroundPipeStream.Destroy;
+begin
+  inherited Destroy; // Abort first to ensure thread finishes
+  if not Assigned(fThread) then
+    exit;
+  fThread.TerminateAndWaitFinished;
+  fThread.Free;
 end;
 
 end.

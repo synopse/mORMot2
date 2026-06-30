@@ -5,11 +5,9 @@ interface
 {$I mormot.defines.inc}
 uses
   mormot.core.base,
-  mormot.core.data,
+  mormot.core.rtti,
   mormot.core.json,
-  mormot.core.interfaces,
-  mormot.orm.base,
-  mormot.orm.core;
+  mormot.core.interfaces;
 
 const
   HttpPort = '11111';
@@ -34,28 +32,15 @@ type
     function Delete(AID: TID): Integer;
   end;
 
-  TOrmSample = class(TOrm)
-  private
-    FName: RawUTF8;
-    FQuestion: RawUTF8;
-    FTime: TModTime;
-  published
-    property Name: RawUTF8 read FName write FName;
-    property Question: RawUTF8 read FQuestion write FQuestion;
-    property Time: TModTime read FTime write FTime;
-  end;
-
-  function CreateSampleModel: TOrmModel;
 
 implementation
 
-function CreateSampleModel: TOrmModel;
-begin
-  result := TOrmModel.Create([TOrmSample]);
-end;
-
 
 initialization
-
-  TInterfaceFactory.RegisterInterfaces([TypeInfo(IExample)]);
+  Rtti.RegisterFromText([
+    TypeInfo(TSample),     'name,question:RawUtf8',
+    TypeInfo(TSampleInfo), 'id:TID name:RawUtf8'
+  ]);
+  TInterfaceFactory.RegisterInterfaces([
+    TypeInfo(IExample)]);
 end.

@@ -2082,10 +2082,8 @@ begin
         Value := TVarData(V).VSingle;
       varCurrency:
         Value := TVarData(V).VCurrency;
-      {$ifdef OSWINDOWS}
-      varOleFileTime:
+      varOleFileTime: // may appear on POSIX e.g. for mormot.lib.win7zip
         Value := FileTimeToDateTime(PFileTime(@TVarData(V).VInt64)^);
-      {$endif OSWINDOWS}
       varString:
         begin
           Iso8601ToDateTimePUtf8CharVar(TVarData(V).VString,
@@ -3870,8 +3868,7 @@ begin
   if Value = 0 then
     FastAssignNew(Dest)
   else
-    FastSetString(Dest, @tmp,
-      FillText(@tmp, Expanded, FirstTimeChar) - PUtf8Char(@tmp));
+    FastSetString(Dest, @tmp, FillText(@tmp, Expanded, FirstTimeChar));
 end;
 
 function TTimeLogBits.FullText(Dest: PUtf8Char; Expanded: boolean;
@@ -3907,8 +3904,7 @@ function TTimeLogBits.FullText(Expanded: boolean;
 var
   tmp: array[0..31] of AnsiChar;
 begin
-  FastSetString(result, @tmp,
-    FullText(tmp{%H-}, Expanded, FirstTimeChar, QuotedChar) - PUtf8Char(@tmp));
+  FastSetString(result, @tmp, FullText(tmp{%H-}, Expanded, FirstTimeChar, QuotedChar));
 end;
 
 function TTimeLogBits.i18nText: string;

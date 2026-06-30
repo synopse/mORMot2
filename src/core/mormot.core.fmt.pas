@@ -25,7 +25,6 @@ interface
 
 uses
   classes,
-  contnrs,
   sysutils,
   mormot.core.base,
   mormot.core.os,
@@ -2449,7 +2448,7 @@ begin
     end;
     inc(result);
   until false;
-  FastSetString(Text, p, result - p);
+  FastSetString(Text, p, result);
 end;
 
 procedure TYamlToJson.ParseFlowMap(var p: PUtf8Char; LineIdx: integer);
@@ -2503,7 +2502,7 @@ begin
       keyEnd := p;
       inc(p);
     end;
-    FastSetString(keyText, keyStart, keyEnd - keyStart);
+    FastSetString(keyText, keyStart, keyEnd);
     TrimSelf(keyText);
     CheckUnsupportedScalar(LineIdx, pointer(keyText));
     if not first then
@@ -3069,7 +3068,7 @@ function IsHttpOrHttps(P: PUtf8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 begin
   result := (PCardinal(P)^ = HTTP__32) and
-            ((PCardinal(P + 4)^ and $ffffff = HTTP__24) or
+            ((PCardinal(P + 3)^ = ord('p') + HTTP__24 shl 8) or
              (PCardinal(P + 4)^ =
              ord('s') + ord(':') shl 8 + ord('/') shl 16 + ord('/') shl 24));
 end;
@@ -3891,7 +3890,7 @@ begin
   P := pointer(Content);
   PWord(UpperCopy255(@up, SectionName))^ := ord(']');
   if FindSectionFirstLine(P, @up, @PEnd) then
-    FastSetString(result, P, PEnd - P)
+    FastSetString(result, P, PEnd)
   else
     FastAssignNew(result);
 end;
@@ -4187,7 +4186,7 @@ var
       if FindSectionFirstLine(nested, @up, @nestedend) then
       begin
         // multi-line text value has been stored in its own section
-        FastSetString(v, nested, nestedend - nested);
+        FastSetString(v, nested, nestedend);
         if p^.Prop^.SetValueText(obj, v) then
           result := true;
       end;
@@ -4233,7 +4232,7 @@ var
             nestedend := PosChar(nested, ']');
             if nestedend <> nil then
             begin
-              FastSetString(n, nested, nestedend - nested);
+              FastSetString(n, nested, nestedend);
               item := p^.Value.ArrayRtti.ClassNewInstance;
               if item <> nil then
                 if IniToObject(Ini, item, n, DocVariantOptions, Level + 1,
@@ -4805,22 +4804,22 @@ begin
         result := piIf;
         inc(P, 4);
       end;
-    ord('$') + ord('i') shl 8 + ord('f') shl 16 + ord('d') shl 24:
-      if PCardinal(P + 4)^ and $ffffff =
-           ord('e') + ord('f') shl 8 + ord(' ') shl 16 then         // '$ifdef '
+    ord('$') + ord('i') shl 8 + ord('f') shl 16 + ord('d') shl 24:  // '$ifdef '
+      if PCardinal(P + 3)^ = ord('d') + ord('e') shl 8 + ord('f') shl 16 +
+                             ord(' ') shl 24 then
       begin
         inc(P, 7);
         result := piIfDef;
       end;
-    ord('$') + ord('e') shl 8 + ord('l') shl 16 + ord('s') shl 24:
-      if cardinal(PWord(P + 4)^) = ord('e') + ord('$') shl 8 then   // '$else$'
+    ord('$') + ord('e') shl 8 + ord('l') shl 16 + ord('s') shl 24:  // '$else$'
+      if cardinal(PWord(P + 4)^) = ord('e') + ord('$') shl 8 then
       begin
         inc(P, 6);
         result := piElse;
       end;
-    ord('$') + ord('e') shl 8 + ord('n') shl 16 + ord('d') shl 24:
-      if PCardinal(P + 4)^ and $ffffff =
-           ord('i') + ord('f') shl 8 + ord('$') shl 16 then         // '$endif$'
+    ord('$') + ord('e') shl 8 + ord('n') shl 16 + ord('d') shl 24:  // '$endif$'
+      if PCardinal(P + 3)^ = ord('d') + ord('i') shl 8 + ord('f') shl 16 +
+                             ord('$') shl 24 then
       begin
         inc(P, 7);
         result := piEnd;

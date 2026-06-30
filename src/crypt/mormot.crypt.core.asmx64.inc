@@ -7650,8 +7650,9 @@ procedure _AesNiHashXmm0(seed: PtrUInt; data: pointer; len: PtrUInt);
 @65up:  // 65 bytes and up
         {$ifdef ABIWINX64}
         // Windows x64 calling convention expects to preserve XMM6-XMM15
-        movups  dqword ptr [rsp - 16], xmm6
-        movups  dqword ptr [rsp - 32], xmm7
+        sub     rsp, 32
+        movups  dqword ptr [rsp], xmm6
+        movups  dqword ptr [rsp + 16], xmm7
         {$endif ABIWINX64}
         movaps  xmm2, xmm1
         movaps  xmm3, xmm1
@@ -7703,8 +7704,9 @@ procedure _AesNiHashXmm0(seed: PtrUInt; data: pointer; len: PtrUInt);
         pxor    xmm4, xmm6  // combine result
         pxor    xmm5, xmm7
         {$ifdef ABIWINX64}
-        movups  xmm6, dqword ptr [rsp - 16]
-        movups  xmm7, dqword ptr [rsp - 32]
+        movups  xmm6, dqword ptr [rsp]
+        movups  xmm7, dqword ptr [rsp + 16]
+        add     rsp, 32
         {$endif ABIWINX64}
         pxor    xmm4, xmm5
         movaps  xmm0, xmm4
@@ -7771,7 +7773,7 @@ procedure sha512_sse4(data, hash: pointer; blocks: Int64);
 
 // defined in mormot.crypt.core.pas, not in mormot.core.base, to avoid
 // .o/.obj dependencies for most basic executables (for which mormot.core.base
-// crc32c x86_64 asm is already fast enough)
+// crc32csse42/hashsse42 asm is already fast enough)
 function crc32_iscsi_01(buf: PAnsiChar; len: PtrUInt; crc: cardinal): cardinal;
   {$ifdef FPC}cdecl;{$endif} external;
 

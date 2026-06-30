@@ -605,8 +605,8 @@ var
   start, stop: Int64;
   tix16: cardinal;
   lenw: word;
-  tmp: TBuffer4K;
   hdr: PDnsHeader;
+  tmp: TBuffer4K;
 begin
   result := false;
   TimeElapsed := 0;
@@ -751,7 +751,7 @@ var
 begin
   result := false;
   if (QName = '') or
-     not IsAnsiCompatible(QName) then
+     not IsAnsiCompatible(QName) then // more relaxed than IsDnsName()
     exit;
   // send the DNS request to the DNS server(s)
   Finalize(Res);
@@ -817,7 +817,8 @@ var
   res: TDnsResult;
   i: PtrInt;
 begin
-  if not DnsLookupKnown(HostName, result) then // e.g. 'localhost' or '1.2.3.4'
+  if not DnsLookupKnown(HostName, result) and // e.g. 'localhost' or '1.2.3.4'
+     IsDnsName(pointer(HostName)) then
     if DnsQuery(HostName, res, drrA, NameServers, TimeoutMS) then
       for i := 0 to high(res.Answer) do
         if res.Answer[i].QType = drrA then
@@ -836,10 +837,11 @@ begin
   result := nil;
   if DnsLookupKnown(HostName, known) then // e.g. 'localhost' or '1.2.3.4'
     AddRawUtf8(result, known)
-  else if DnsQuery(HostName, res, drrA, NameServers, TimeoutMS) then
-    for i := 0 to high(res.Answer) do
-      if res.Answer[i].QType = drrA then
-        AddRawUtf8(result, res.Answer[i].Text); // return all A records
+  else if IsDnsName(pointer(HostName)) then
+    if DnsQuery(HostName, res, drrA, NameServers, TimeoutMS) then
+      for i := 0 to high(res.Answer) do
+        if res.Answer[i].QType = drrA then
+          AddRawUtf8(result, res.Answer[i].Text); // return all A records
 end;
 
 function DnsReverseLookup(const IP4, NameServers: RawUtf8; TimeoutMS: integer): RawUtf8;
@@ -865,7 +867,8 @@ var
   i: PtrInt;
 begin
   result := nil;
-  if DnsQuery(HostName, res, drrSRV, NameServers, TimeoutMS) then
+  if IsDnsName(pointer(HostName)) and
+     DnsQuery(HostName, res, drrSRV, NameServers, TimeoutMS) then
     for i := 0 to high(res.Answer) do
       if res.Answer[i].QType = drrSRV then
         AddRawUtf8(result, res.Answer[i].Text, {nodup=}true, {casesens=}false);
@@ -873,7 +876,7 @@ end;
 
 function DnsLdapServices(const DomainName, NameServers: RawUtf8): TRawUtf8DynArray;
 begin
-  result := DnsServices('_ldap._tcp.' + DomainName, NameServers);
+  result := DnsServices(Join(['_ldap._tcp.', DomainName]), NameServers);
 end;
 
 function DnsLdapControllers(const NameServers: RawUtf8; UsePosixEnv: boolean;

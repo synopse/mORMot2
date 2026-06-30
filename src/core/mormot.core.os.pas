@@ -35,7 +35,6 @@ uses
   Messages,
   {$endif OSWINDOWS}
   classes,
-  contnrs,
   types,
   sysutils,
   mormot.core.base;
@@ -1724,12 +1723,14 @@ type
   // spUserData points to 'C:\Users\<user>\AppData\Local',
   // spCommonDocuments to 'C:\Users\Public\Documents',
   // spUserDocuments to 'C:\Users\<user>\Documents',
+  // spUserDownloads to 'C:\Users\<user>\Downloads',
   // spTemp will call GetTempPath() or read the $TEMP environment variable,
   // pointing typically to 'C:\Users\<user>\AppData\Local\Temp\',
   // and spLog either to '<exepath>\log' or
   // 'C:\Users\<user>\AppData\Local\<exename>-log' (the first writable)
   // - on POSIX, spTemp will use $TMPDIR/$TMP environment variables,
   // spCommonData, spCommonDocuments and spUserDocuments point to $HOME,
+  // spUserDownloads maps '$HOME/Downloads' or '$HOME',
   // spUserData maps $XDG_CACHE_HOME or '$HOME/.cache' or '$TMP/<user>', and
   // spLog maps '/var/log/<exename>' or '<exepath>/log' or '$TMP/<exename>-log'
   // - on all systems, returned spTemp, spLog and spUserData folders are always
@@ -1739,6 +1740,7 @@ type
     spUserData,
     spCommonDocuments,
     spUserDocuments,
+    spUserDownloads,
     spTemp,
     spLog);
 
@@ -2045,6 +2047,12 @@ type
 function W32(const FileName: TFileName; var Temp: TW32Temp; DoCopy: boolean = false): PWideChar;
 
 const
+  psapi    = 'psapi.dll';
+  ole32    = 'ole32.dll';
+  oleaut32 = 'oleaut32.dll';
+  shell32  = 'shell32.dll';
+  ntdll    = 'ntdll.dll';
+
   NO_ERROR  = Windows.NO_ERROR; // = ERROR_SUCCESS
 
   ERROR_ACCESS_DENIED       = Windows.ERROR_ACCESS_DENIED;
@@ -2112,17 +2120,16 @@ function GetCurrentProcessId: DWord; stdcall;
 // - redefined in mormot.core.os to avoid dependency to the Windows unit
 function GetCurrentProcess: THandle; stdcall;
 
-/// redefined in mormot.core.os to avoid dependency to the Windows unit
-function WaitForSingleObject(hHandle: THandle; dwMilliseconds: DWord): DWord; stdcall;
-
-/// redefined in mormot.core.os to avoid dependency to the Windows unit
-function GetEnvironmentStringsW: PWideChar; stdcall;
-
-/// redefined in mormot.core.os to avoid dependency to the Windows unit
-function FreeEnvironmentStringsW(EnvBlock: PWideChar): BOOL; stdcall;
-
 /// expand any embedded environment variables, i.e %windir%
 function ExpandEnvVars(const aStr: string): string;
+
+// redefined in mormot.core.os to avoid dependency to the Windows unit
+function WaitForSingleObject(hHandle: THandle; dwMilliseconds: DWord): DWord; stdcall;
+function GetEnvironmentStringsW: PWideChar; stdcall;
+function FreeEnvironmentStringsW(EnvBlock: PWideChar): BOOL; stdcall;
+function SysAllocString(psz: PWideChar): pointer; stdcall;
+function SysAllocStringLen(psz: PWideChar; len: cardinal): pointer; stdcall;
+procedure SysFreeString(bstr: pointer); stdcall;
 
 /// try to enter a Critical Section (Lock)
 // - returns 1 if the lock was acquired, or 0 if the mutex is already locked
@@ -2192,6 +2199,15 @@ function ExpandFileName(const FileName: TFileName): TFileName;
 
 {$else}
 
+type
+  /// our internal Win32 64-bit FILETIME value type definition for POSIX
+  TFileTime = packed record
+    dwLowDateTime:  cardinal;
+    dwHighDateTime: cardinal;
+  end;
+  /// points to one Win32 64-bit FILETIME value
+  PFileTime = ^TFileTime;
+
 /// redefined from FPC RTL sysutils for consistency
 // - warning: this function replaces ALL SysUtils.FileCreate() overloads,
 // putting aMode as the SECOND parameter, just like with FileOpen()
@@ -2238,6 +2254,8 @@ type
     procedure DoLoad(const LibName: TFileName = ''; Version: string = '');
     procedure Done;
   public
+    /// disable whole ICU library loading and force regular RTL iconv usage
+    Disabled: boolean;
     /// Initialize an ICU text converter for a given encoding
     ucnv_open: function (converterName: PAnsiChar; var err: SizeInt): pointer; cdecl;
     /// finalize the ICU text converter for a given encoding
@@ -2279,6 +2297,7 @@ type
     /// try to initialize a specific version of the ICU library
     // - first finalize any existing loaded instance
     // - returns true if was successfully loaded and setup
+    // - will reset icu.Disabled to false on success
     function ForceLoad(const LibName: TFileName; const Version: string): boolean;
     /// returns TRUE if a ICU library is available on this system
     // - will thread-safely load and initialize it if necessary
@@ -2308,6 +2327,7 @@ var
   /// low-level late-binding access to any installed ICU library
   // - typical use is to check icu.IsAvailable then the proper icu.*() functions
   // - this unit will make icu.Done in its finalization section
+  // - you can disable the whole ICU loading by setting icu.Disabled := true
   icu: TIcuLibrary;
 
   /// contains the current POSIX kernel revision, as one 24-bit integer
@@ -2466,26 +2486,6 @@ type
 // - only used by mormot.lib.static for proper SQLite3 linking on Windows
 procedure UnixTimeToLocalTime(I64: TUnixTime; out Local: TSystemTime);
 
-/// convert an Unix seconds time to a Win32 64-bit FILETIME value
-procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
-
-/// convert an Unix milliseconds time to a Win32 64-bit FILETIME value
-procedure UnixMSTimeToFileTime(I64: TUnixMSTime; out FT: TFileTime);
-
-/// convert a TDateTime to a Win32 64-bit FILETIME value
-procedure DateTimeToFileTime(dt: TDateTime; out FT: TFileTime);
-
-/// convert a Win32 64-bit FILETIME value into an Unix seconds time
-function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
-  {$ifdef FPC} inline; {$endif}
-
-/// convert a Win32 64-bit FILETIME value into a TDateTime
-function FileTimeToDateTime(const FT: TFileTime): TDateTime;
-
-/// convert a Win32 64-bit FILETIME value into an Unix milliseconds time
-function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
-  {$ifdef FPC} inline; {$endif}
-
 /// detect if a file name starts with the long path '\\?\' prefix
 // - https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
 function IsExtendedPathName(const Name: TFileName): boolean;
@@ -2495,7 +2495,9 @@ var
   InitializeSRWLock,
   AcquireSRWLockExclusive,
   ReleaseSRWLockExclusive: procedure(var P: TOSLightMutex); stdcall;
-  TryAcquireSRWLockExclusive: function (var P: TOSLightMutex): BOOL; stdcall;
+  // documented since Windows Vista, but actually available on Windows XP SP3 :)
+  RtlIpv6StringToAddress: function(s: PUtf8Char; var term: PUtf8Char;
+    in6: PByte): integer; stdcall;
 
 {$else}
 
@@ -2584,9 +2586,22 @@ function LibraryResolve(Lib: TLibHandle; ProcName: PAnsiChar): pointer;
 /// raw cross-platform library resolution error, e.g. after LibraryOpen
 function LibraryError: string;
 
-
+type
+  // some minimal COM-like type definitions from ActiveX
+  TBstr   = PWideChar;
+  PBstr   = ^TBstr;
+  TPropID = cardinal;
+  PPropID = ^TPropID;
 const
-  /// redefined here to avoid dependency to the Windows or SyncObjs units
+  // redirect OLE/COM variant types to our mormot.core.base definitions
+  VT_BOOL     = varBoolean;
+  VT_BSTR     = varOleStr;
+  VT_UI1      = varByte;
+  VT_UI4      = varLongWord;
+  VT_UI8      = varWord64;
+  VT_CLSID    = varOleClsid;
+  VT_FILETIME = varOleFileTime;
+  // redefined here to avoid dependency to the Windows or SyncObjs units
   INFINITE = cardinal(-1);
 
 /// initialize a Critical Section (for Lock/UnLock)
@@ -2688,17 +2703,65 @@ procedure SetEndOfFile(F: THandle);
 procedure FlushFileBuffers(F: THandle);
   {$ifdef OSWINDOWS} stdcall; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 
-/// compatibility function, wrapping Win32 API last error code or fpgeterrno
+/// compatibility function, wrapping Win32 API last error code or fpgeterrno()
 function GetLastError: integer;
   {$ifdef OSWINDOWS} stdcall; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 
-/// check if the last error reporting by the system is a file access violation
-// - call GetLastError is no ErrorCode is supplied
-function IsSharedViolation(ErrorCode: integer = 0): boolean;
-
-/// compatibility function, wrapping Win32 API last error code
+/// compatibility function, wrapping Win32 API last error code or fpseterrno()
 procedure SetLastError(error: integer);
   {$ifdef OSWINDOWS} stdcall; {$else} {$ifdef FPC} inline; {$endif} {$endif}
+
+type
+  /// some minimal cross-platform error values (maybe merged) as enumerate
+  TSystemError = (
+    seSuccess,           // No error
+    seInvalidParameter,  // EINVAL, ERROR_INVALID_PARAMETER, ERROR_INVALID_FUNCTION, etc.
+    seFileNotFound,      // ENOENT, ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND
+    seAlreadyExists,     // EEXIST, ERROR_ALREADY_EXISTS, ERROR_FILE_EXISTS
+    seAccessDenied,      // EACCES, EPERM, ERROR_ACCESS_DENIED
+    seNoSuchDevice,      // ENXIO / ENODEV, ERROR_BAD_UNIT
+    seOutOfMemory,       // ENOMEM, ERROR_NOT_ENOUGH_MEMORY
+    seInvalidHandle,     // EBADF, ERROR_INVALID_HANDLE
+    sePermissionDenied,  // EPERM, ERROR_WRITE_PROTECT, ERROR_CANNOT_MAKE
+    seBusy,              // EBUSY, ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION, etc.
+    seIOError,           // EIO, ERROR_READ_FAULT, ERROR_WRITE_FAULT, etc.
+    seDirectoryNotEmpty, // ENOTEMPTY, ERROR_DIR_NOT_EMPTY
+    seNameTooLong,       // ENAMETOOLONG, ERROR_FILENAME_EXCED_RANGE
+    seNotADirectory,     // ENOTDIR, ERROR_DIRECTORY
+    seIsADirectory,      // EISDIR, ERROR_INVALID_NAME
+    seTooManyOpenFiles,  // EMFILE, ENFILE, ERROR_TOO_MANY_OPEN_FILES
+    seDiskFull,          // ENOSPC, ERROR_DISK_FULL
+    seBrokenPipe,        // EPIPE, ERROR_BROKEN_PIPE
+    seInterrupted,       // EINTR, ERROR_OPERATION_ABORTED
+    seNotSupported,      // ENOSYS, ERROR_NOT_SUPPORTED
+    seOther              // catch-all for unmapped errors
+  );
+
+/// wrap GetLastError and convert it to our cross-platform enumerate
+function GetLastSystemError: TSystemError;
+
+/// convert an OS-specific error code to our cross-platform enumerate
+function GetSystemError(error: integer): TSystemError;
+
+/// convert a cross-platform TSystemError into the OS-specific error code
+// - by design, SystemError(seOther) = SystemError(seSuccess) = 0
+function SystemError(os: TSystemError): integer;
+
+/// add cross-platform TSystemError trimmed text e.g. 'DiskFull' for seDiskFull
+procedure SystemErrorAppend(os: TSystemError; var dest: ShortString);
+
+/// return cross-platform TSystemError trimmed text e.g. 'DiskFull' for seDiskFull
+function SystemErrorText(os: TSystemError): RawUtf8;
+
+/// return plain OS error and cross-platform TSystemError trimmed text as [##]
+// - e.g. '13 EACCES [AccessDenied]' or '32 ERROR_SHARING_VIOLATION [Busy]'
+// - call GetLastError is no ErrorCode is supplied
+function SystemErrorShort(error: integer = 0): TShort63;
+
+/// check if the last error reporting by the system is a given error
+// - call GetLastError is no ErrorCode is supplied
+// - by design, IsSystemError(seOther) = IsSystemError(seSuccess) are always false
+function IsSystemError(os: TSystemError; ErrorCode: integer = 0): boolean;
 
 /// returns a given error code as plain text
 // - redirects to WinApiErrorShort(error, nil) on Windows, or StrError() on POSIX
@@ -3078,13 +3141,26 @@ function FileSetDateFromUnixUtc(const Dest: TFileName; Time: TUnixTime): boolean
 // - used e.g. by FileSetDateFromWindowsTime() on POSIX
 function WindowsFileTimeToDateTime(WinTime: integer): TDateTime;
 
-/// convert a Windows API File 64-bit TimeStamp into a regular TUnixMSTime
-// - i.e. a FILETIME value as returned by GetFileTime() Win32 API
-// - some binary formats (e.g. ISO 9660 or LDAP) have such FILETIME fields
-function WindowsFileTime64ToUnixMSTime(WinTime64: QWord): TUnixMSTime;
+/// convert an Unix seconds time to a Win32 64-bit FILETIME value
+procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
 
-/// convert a TUnixMSTime into a Windows FILETIME value
-function UnixMSTimeToWindowsFileTime64(TimeMS: TUnixMSTime): QWord;
+/// convert an Unix milliseconds time to a Win32 64-bit FILETIME value
+procedure UnixMSTimeToFileTime(I64: TUnixMSTime; out FT: TFileTime);
+
+/// convert a TDateTime to a Win32 64-bit FILETIME value
+procedure DateTimeToFileTime(dt: TDateTime; out FT: TFileTime);
+
+/// convert a Win32 64-bit FILETIME value into an Unix seconds time
+function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
+
+/// convert a Win32 64-bit FILETIME value into a TDateTime
+function FileTimeToDateTime(const FT: TFileTime): TDateTime;
+
+/// convert a Win32 64-bit FILETIME value into an Unix milliseconds time
+function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
+
+/// wrap GetSystemTimeAsFileTime() on Windows, or UnixMSTimeUtcFast()
+procedure NowUtcToWindowsFileTime(var ft: TFileTime);
 
 /// low-level conversion of a TDateTime into a Windows File 32-bit TimeStamp
 // - returns 0 if the conversion failed
@@ -3157,7 +3233,7 @@ function FileInfoByName(const FileName: TFileName; out FileSize: Int64;
 // by most Linux file systems, so the oldest timestamp available is returned
 // as failover on such systems (probably the latest file metadata writing)
 function FileInfoByHandle(aFileHandle: THandle; FileId, FileSize: PInt64;
-  LastWriteAccess, FileCreateDateTime: PUnixMSTime): boolean;
+  LastWriteAccess, FileCreateDateTime: PUnixMSTime; FileAttr: PCardinal = nil): boolean;
 
 /// get low-level file information with timings, in a cross-platform way
 // - is a wrapper around FileInfoByHandle() function - rarely called
@@ -4190,6 +4266,9 @@ var
 
 /// call once Init if State is in its default lsUntested (0) value
 function LibraryAvailable(var State: TLibraryState; Init: TProcedure): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+procedure DoLibraryAvailableInit(var State: TLibraryState; Init: TProcedure); // for inlining
 
 
 { *************** Per Class Properties O(1) Lookup via vmtAutoTable Slot }
@@ -5381,8 +5460,9 @@ const
   SERVICE_PAUSE_CONTINUE       = $0040;
   SERVICE_INTERROGATE          = $0080;
   SERVICE_USER_DEFINED_CONTROL = $0100;
-  SERVICE_ALL_ACCESS           = $01ff;
+  SERVICE_ALL_ACCESS           = STANDARD_RIGHTS_REQUIRED or $01ff;
 
+  // https://learn.microsoft.com/en-us/windows/win32/services/service-security-and-access-rights
   SC_MANAGER_CONNECT            = $0001;
   SC_MANAGER_CREATE_SERVICE     = $0002;
   SC_MANAGER_ENUMERATE_SERVICE  = $0004;
@@ -6215,7 +6295,7 @@ begin
   repeat
     inc(S);
   until S^ <= ' ';
-  FastSetString(result, P, S - P);
+  FastSetString(result, P, S);
   P := S;
 end;
 
@@ -6523,6 +6603,60 @@ begin
     if os in LINUX_DIST[result] then
       exit;
   result := ldNotLinux;
+end;
+
+function SystemError(os: TSystemError): integer;
+begin
+  result := _OSERR[os]; // use proper constants on each system
+end;
+
+procedure SystemErrorAppend(os: TSystemError; var dest: ShortString);
+var
+  ps: PShortString;
+begin
+  ps := GetEnumNameRtti(TypeInfo(TSystemError), ord(os));
+  AppendShortBuffer(@ps^[3], ord(ps^[0]) - 2, high(dest), @dest);
+end;
+
+function SystemErrorText(os: TSystemError): RawUtf8;
+var
+  tmp: TShort23;
+begin
+  tmp[0] := #0;
+  SystemErrorAppend(os, tmp);
+  ShortStringToAnsi7String(tmp, result);
+end;
+
+function SystemErrorShort(error: integer): TShort63;
+var
+  os: TSystemError;
+begin
+  if error = 0 then
+    error := GetLastError;
+  OsErrorShort(error, @result, {noint=}false); // known E### or ERROR_###
+  os := GetSystemError(error);
+  if os in [seSuccess, seOther] then
+    exit;
+  AppendShortTwoChars(ord(' ') + ord('[') shl 8, @result);
+  SystemErrorAppend(os, result);
+  AppendShortCharSafe(']', result);
+end;
+
+function GetLastSystemError: TSystemError;
+begin
+  result := GetSystemError(GetLastError);
+end;
+
+function IsSystemError(os: TSystemError; ErrorCode: integer): boolean;
+begin
+  if os in [seSuccess, seOther] then
+  begin
+    result := false; // too vague
+    exit;
+  end;
+  if ErrorCode = 0 then
+    ErrorCode := GetLastError;
+  result := GetSystemError(ErrorCode) = os;
 end;
 
 // PUtf8Char for system error text reduces the executable size vs RawUtf8
@@ -7154,16 +7288,57 @@ begin
 end;
 
 const
-  FileTimePerMs = 10000; // a tick is 100ns
+  MilliSecsPerFileTime = 10000; // a tick is 100ns
+  SecsPerFileTime      = 10000000;
 
-function WindowsFileTime64ToUnixMSTime(WinTime64: QWord): TUnixMSTime;
+procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
 begin
-  result := (Int64(WinTime64) - UnixFileTimeDelta) div FileTimePerMs;
+  I64 := (I64 * SecsPerFileTime) + UnixFileTimeDelta;
+  Int64ToFileTime(@I64, @FT);
 end;
 
-function UnixMSTimeToWindowsFileTime64(TimeMS: TUnixMSTime): QWord;
+procedure UnixMSTimeToFileTime(I64: TUnixMSTime; out FT: TFileTime);
 begin
-  result := (TimeMS * FileTimePerMs) + UnixFileTimeDelta;
+  I64 := (I64 * MilliSecsPerFileTime) + UnixFileTimeDelta;
+  Int64ToFileTime(@I64, @FT);
+end;
+
+function FileTimeToUnixTime(const FT: TFileTime): TUnixTime;
+var
+  nano100: Int64; // TFileTime is in 100 ns unit
+begin
+  FileTimeToInt64(@FT, @nano100);
+  if nano100 = 0 then
+    result := 0
+  else
+    result := (nano100 - UnixFileTimeDelta) div SecsPerFileTime;
+end;
+
+function FileTimeToUnixMSTime(const FT: TFileTime): TUnixMSTime;
+var
+  nano100: Int64; // TFileTime is in 100 ns unit
+begin
+  FileTimeToInt64(@FT, @nano100);
+  if nano100 = 0 then
+    result := 0
+  else
+    result := (nano100 - UnixFileTimeDelta) div MilliSecsPerFileTime;
+end;
+
+function FileTimeToDateTime(const FT: TFileTime): TDateTime;
+begin
+  if PInt64(@FT)^ = 0 then
+    result := 0
+  else // inlined UnixTimeToDateTime()
+    result := FileTimeToUnixMSTime(FT) * MilliSecsPerDate + UnixDateDelta;
+end;
+
+procedure DateTimeToFileTime(dt: TDateTime; out FT: TFileTime);
+begin
+  if dt = 0 then
+    PInt64(@FT)^ := 0
+  else // inlined DateTimeToUnixTime()
+    UnixTimeToFileTime(Round((dt - UnixDateDelta) * SecsPerDay), FT);
 end;
 
 function FileInfoByName(const FileName: TFileName; FileId, FileSize: PInt64;
@@ -7304,7 +7479,7 @@ begin
   if Path <> '' then
   begin
     result := false;
-    if (Path[1] = '/') or
+    if (ord(Path[1]) in [ord('/'), ord('\')]) or
        (PosExString(':', Path) <> 0) or
        (PosExString('\\', Path) <> 0) then
       exit;
@@ -7330,7 +7505,7 @@ begin
   if Path <> '' then
   begin
     result := false;
-    if (Path[1] = '/') or
+    if (Path[1] in ['/', '\']) or
        (PosExChar(':', Path) <> 0) or
        (PosEx('\\', Path) <> 0) then
       exit;
@@ -7518,20 +7693,21 @@ constructor TFileStreamNoWriteError.CreateAndRenameIfLocked(
 var
   h: THandle;
   fn, ext: TFileName;
-  err, retry: integer;
+  retry: integer;
+  err: TSystemError;
 
   function CanOpenWrite: boolean;
   begin
     h := FileOpen(aFileName, fmOpenReadWrite or fmShareRead);
     result := ValidHandle(h);
     if not result then
-      err := GetLastError;
+      err := GetLastSystemError;
   end;
 
 begin
   // logic similar to TSynLog.CreateLogWriter
   h := INVALID_HANDLE_VALUE;
-  err := 0;
+  err := seSuccess;
   if not CanOpenWrite then
     if not FileExists(aFileName) then
       // immediately raise EOSException if this new file could not be created
@@ -7542,7 +7718,7 @@ begin
       ext := ExtractExt(aFileName);
       for retry := 1 to aAliases do
       begin
-        if IsSharedViolation(err) then
+        if err = seBusy then
         begin
           // file was locked: wait a little for a background process and retry
           SleepHiRes(50);
@@ -8994,18 +9170,21 @@ begin
 end;
 
 
+procedure DoLibraryAvailableInit(var State: TLibraryState; Init: TProcedure);
+begin
+  GlobalLock; // thread-safe check and initialization
+  try
+    if State = lsUntested then
+      Init; // should eventually set State as lsAvailable or lsNotAvailable
+  finally
+    GlobalUnLock;
+  end;
+end;
+
 function LibraryAvailable(var State: TLibraryState; Init: TProcedure): boolean;
 begin
   if State = lsUnTested then
-  begin
-    GlobalLock; // thread-safe check and initialization
-    try
-      if State = lsUntested then
-        Init; // should eventually set State as lsAvailable or lsNotAvailable
-    finally
-      GlobalUnLock;
-    end;
-  end;
+    DoLibraryAvailableInit(State, Init);
   result := State = lsAvailable;
 end;
 

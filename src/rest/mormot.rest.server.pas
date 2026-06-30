@@ -29,7 +29,6 @@ uses
   sysutils,
   classes,
   variants,
-  contnrs,
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -3856,9 +3855,10 @@ begin
             // if ORDER BY already in the where clause
             SetLength(wherecount, i - 1);
         end;
+        Server.fModel.TableProps[TableIndex].SqlFromSelectWhere(
+          'Count(*)', wherecount, sql);
         resultlist := TRestOrmServer(Server.fOrmInstance).
-          ExecuteList([Table], Server.fModel.TableProps[TableIndex].
-            SqlFromSelectWhere('Count(*)', wherecount));
+          ExecuteList([Table], sql);
         if resultlist <> nil then
         try
           totalrowcount := resultlist.GetAsInteger(1, 0);
@@ -3872,8 +3872,8 @@ begin
   else
     select := ROWID_TXT; // /root/tablename returns all IDs of this table
   // execute the select/where request on this table
-  sql := Server.fModel.TableProps[TableIndex].SqlFromSelectWhere(
-    select, TrimU(where));
+  Server.fModel.TableProps[TableIndex].SqlFromSelectWhere(
+    select, TrimU(where), sql);
   fCall^.OutBody := TRestOrmServer(Server.fOrmInstance).
     InternalListRawUtf8(TableIndex, sql);
   if fCall^.OutBody = '' then

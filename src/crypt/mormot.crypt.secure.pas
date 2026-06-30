@@ -599,6 +599,8 @@ type
     function Init(aAlgo: THashAlgo): boolean;
     /// hash the supplied memory buffer
     procedure Update(aBuffer: pointer; aLen: integer); overload;
+    /// hash the supplied memory buffer with uppercase ASCII conversion
+    procedure UpdateUpper(aBuffer: pointer; aLen: PtrInt);
     /// hash the supplied string content
     procedure Update(const aBuffer: RawByteString); overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -3271,8 +3273,8 @@ const
   // - 2048-bit is today's norm, creating 112-bit of security
   // - 3072-bit is supposed to be supported up to 2030, with 128-bit of security
   // - 4096-bit has no security advantage, just slower process
-  // - 7680-bit is highly impractical (e.g. generation can be more than 30 secs)
-  // and offers only 192-bit of security, so other algorithms may be preferred
+  // - 7680-bit or 8192-bit are highly impractical (e.g. generation can be more
+  // than 30 secs) and offers only 192-bit of security
   // - see also OpenSslDefaultRsaBits() and RSA_INTERNAL_DEFAULT_GENERATION_BITS
   RSA_DEFAULT_GENERATION_BITS = 2048;
 
@@ -3612,6 +3614,10 @@ var
   // - may map to CryptCertX509[] if only mormot.crypt.x509.pas is included
   // - but more standard CryptCertOpenSsl[] will be stored here if available
   CryptCert: array[TCryptAsymAlgo] of TCryptCertAlgo;
+
+  /// global shared instances as set by InitNetTlsContextSelfSignedServer()
+  // - defined here to be properly released before the OpenSSL library unloading
+  CryptCertOpenSslSelfSigned: array[TCryptAsymAlgo] of ICryptCert;
 
 
   (* ICryptStore factories *)
@@ -4096,6 +4102,20 @@ begin
     else
       PSha3(@ctxt)^.Update(aBuffer, aLen);
     end;
+end;
+
+procedure TSynHasher.UpdateUpper(aBuffer: pointer; aLen: PtrInt);
+var
+  up: TByteToAnsiChar; // normalize aBuffer content into uppercase ASCII
+  l: PtrInt;
+begin
+  while aLen > 0 do // normalize on stack until all input buffer is hashed
+  begin
+    l := UpperCopy255Buf(@up, aBuffer, MinPtrInt(192, aLen)) - PAnsiChar(@up);
+    Update(@up, l);
+    inc(PByte(aBuffer), l);
+    dec(aLen, l);
+  end
 end;
 
 procedure TSynHasher.Update(const aBuffer: RawByteString);
@@ -4941,7 +4961,7 @@ begin
   if (info <> nil) and
      (result in mcfValid) and
      (P <> nil) then
-    FastSetString(info^, pointer(hash), P - pointer(hash));
+    FastSetString(info^, pointer(hash), P);
 end;
 
 function ModularCryptHash(format: TModularCryptFormat; const password: RawUtf8;

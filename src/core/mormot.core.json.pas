@@ -24,10 +24,10 @@ interface
 
 uses
   classes,
-  contnrs,
   sysutils,
-  {$ifdef ISDELPHI}
-  typinfo, // for proper Delphi inlining
+  {$ifdef ISDELPHI} // needed for Delphi inlining
+  contnrs,
+  typinfo,
   {$endif ISDELPHI}
   mormot.core.base,
   mormot.core.os,
@@ -618,6 +618,10 @@ procedure FormatParams(const Format: RawUtf8; Args, Params: PVarRecArray;
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - is a wrapper around FormatParams(Format, Args, Params, false, result);
 function FormatSql(const Format: RawUtf8; const Args, Params: array of const): RawUtf8;
+
+/// fast Format() function replacement, handling % but also ? inlined parameters
+procedure FormatSqlVar(const Format: RawUtf8; const Args, Params: array of const;
+  var Dest: RawUtf8);
 
 /// fast Format() function replacement, handling % but also ? parameters as JSON
 // - will include Args[] for every % in Format
@@ -4384,7 +4388,7 @@ begin
   P := parser.GotoEnd(B);
   if P = nil then
     exit;
-  FastSetString(RawUtf8(result), B, P - B);
+  FastSetString(RawUtf8(result), B, P);
   while (P^ <= ' ') and
         (P^ <> #0) do
     inc(P);
@@ -5135,6 +5139,12 @@ function FormatSql(const Format: RawUtf8;
   const Args, Params: array of const): RawUtf8;
 begin
   FormatParams(Format, @Args[0], @Params[0], high(Args), high(Params), {json=}false, result);
+end;
+
+procedure FormatSqlVar(const Format: RawUtf8; const Args, Params: array of const;
+  var Dest: RawUtf8);
+begin
+  FormatParams(Format, @Args[0], @Params[0], high(Args), high(Params), {json=}false, Dest);
 end;
 
 function FormatJson(const Format: RawUtf8;
@@ -6843,7 +6853,7 @@ begin
       cv := FindSynVariantType(vt); // our custom types
       if cv <> nil then
         cv.ToJson(self, v)
-      else if not CustomVariantToJson(self, v, Escape) then // other custom
+      else if not CustomVariantToJson(self, v, Escape, WriteOptions) then
         EJsonException.RaiseUtf8('%.AddVariant VType=%', [self, vt]);
     end;
   end;
@@ -10310,18 +10320,18 @@ begin
     varString: // rkString
       begin
         Dest.VAny := nil; // avoid GPF
-        RawByteString(Dest.VAny) := PRawByteString(Data)^;
+        RawByteString(Dest.VAny) := PRawByteString(Data)^; // inc(refcnt)
       end;
     varOleStr: // rkWString
       begin
-        Dest.VAny := nil; // avoid GPF
-        WideString(Dest.VAny) := PWideString(Data)^;
+        TSynVarData(Dest).VType := varOleStr or varByRef; // byref
+        Dest.VAny := Data;                                // no SysAllocString
       end;
     {$ifdef HASVARUSTRING}
     varUString: // rkUString
       begin
         Dest.VAny := nil; // avoid GPF
-        UnicodeString(Dest.VAny) := PUnicodeString(Data)^;
+        UnicodeString(Dest.VAny) := PUnicodeString(Data)^; // inc(refcnt)
       end;
     {$endif HASVARUSTRING}
     varVariant: // rkVariant
@@ -10336,6 +10346,12 @@ begin
         RttiKindToUtf8(Info.Kind, Data, RawUtf8(Dest.VAny));
       end;
    else
+     if Info^.Kind = rkDynArray then // use RTTI for simple arrays
+       if Options = nil then
+         TSynVarData(Dest).VType := varNull
+       else
+         TDocVariantData(Dest).InitArrayFrom(Data^, Info, PDocVariantOptions(Options)^)
+     else
      begin
        tmp := nil; // use temporary JSON conversion
        SaveJson(Data^, Info, [], RawUtf8(tmp)); // =TJsonWriter.AddTypedJson()
@@ -10545,7 +10561,7 @@ begin
       if Path = nil then
         exit; // reach last path
       if result.Kind = rkClass then // stored by reference
-        Data := PPointer(PAnsiChar(Data) + p.OffsetGet)^;
+        Data := PPointer(Data)^;
       continue;
     end
     else

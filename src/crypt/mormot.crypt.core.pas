@@ -174,7 +174,7 @@ var
   /// 32-bit truncation of GoLang runtime aeshash, using aesni opcode
   // - just a wrapper around AesNiHash128() with proper 32-bit zeroing
   // - Assigned(AesNiHash32) only if AES-NI and SSE 3 are available on this CPU
-  // - faster than our SSE4.2+pclmulqdq crc32c() function, with less collision
+  // - faster than any SSE4.2 crc32c function, with less collision
   // - warning: the hashes will be consistent only during a process: at startup,
   // AesNiHashAntiFuzzTable is computed to prevent attacks on forged input
   // - DefaultHasher() is assigned to this function, when available on the CPU
@@ -10510,13 +10510,10 @@ begin
   if (cfSSE42 in CpuFeatures) and
      (cfAesNi in CpuFeatures) and
      (cfCLMUL in CpuFeatures) then
-  begin
     // we can use SSE4.2+pclmulqdq instructions
     crc32c := @crc32c_sse42_aesni;
-    // on old compilers, USEAESNIHASH is not set -> crc32c is a good fallback
-    DefaultHasher   := @crc32c_sse42_aesni;
-    InterningHasher := @crc32c_sse42_aesni;
-  end;
+    // but keep DefaultHasher/InterningHasher to hashsse42() which adds
+    // a murmur-like finalizer and is usually called < 256 bytes
   {$endif CRC32C_X64}
   if (cfSSE41 in CpuFeatures) and   // PINSRD/Q
      (cfSSE3 in CpuFeatures) then   // PSHUFB
@@ -10546,7 +10543,7 @@ begin
     AesNiHash32      := @_AesNiHash32;
     AesNiHash64      := @_AesNiHash64;
     AesNiHash128     := @_AesNiHash128;
-    DefaultHasher    := @_AesNiHash32;
+    DefaultHasher    := @_AesNiHash32; // better than hashsse42()
     InterningHasher  := @_AesNiHash32;
     DefaultHasher64  := @_AesNiHash64;
     DefaultHasher128 := @_AesNiHash128;

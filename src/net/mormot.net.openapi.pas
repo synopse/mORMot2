@@ -566,7 +566,7 @@ type
     fErrorHandler: TRawUtf8DynArray;
     fOperations: TPascalOperationDynArray;
     fName: RawUtf8;
-    fTitle, fGeneratedBy, fGeneratedByLine: RawUtf8;
+    fTitle, fGeneratedBy, fGeneratedByLine, fDtoTypePrefix: RawUtf8;
     fVersion: TOpenApiVersion;
     fOptions: TOpenApiParserOptions;
     fEnumCounter, fDtoCounter: integer;
@@ -637,6 +637,10 @@ type
     // generated units do coexist in the project
     property Name: RawUtf8
       read fName write fName;
+    /// optional prefix text added to each T*NameInSpecs for TPascalCustomType
+    // - set e.g. 'My' for "label" in specs becomes TMyLabel instead of TLabel
+    property DtoTypePrefix: RawUtf8
+      read fDtoTypePrefix write fDtoTypePrefix;
     /// the unit identifier name used for the DTO unit, without the '.pas' extension
     // - default value will be lowercase '{name}.dto'
     property DtoUnitName: RawUtf8
@@ -1258,7 +1262,8 @@ begin
     Make(['TDto', fParser.Name, fParser.fDtoCounter], fPascalName);
   end
   else
-    fPascalName := 'T' + SanitizePascalName(fName, {keywordcheck:}false);
+    Join(['T', fParser.DtoTypePrefix,
+      SanitizePascalName(fName, {keywordcheck:}false)], fPascalName);
 end;
 
 function TPascalCustomType.ToArrayTypeName(AsFinalType: boolean): RawUtf8;

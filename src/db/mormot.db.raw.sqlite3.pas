@@ -8612,7 +8612,7 @@ begin
   if cardinal(Col) >= cardinal(FieldCount) then
     sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldW');
   P := sqlite3.column_text16(Request, Col);
-  SetString(result, PUtf8Char(pointer(P)), StrLenW(P) * 2 + 1);
+  FastSetRawUnicode(result, P, StrLenW(P) * 2);
 end;
 {$endif PUREMORMOT2}
 

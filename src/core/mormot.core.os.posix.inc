@@ -127,6 +127,18 @@ end;
 
 { ****************** Unicode, Time, File process }
 
+procedure FileTimeToInt64(FT: PFileTime; Q64: PQWordRec);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  Q64^.V := PQWord(FT)^; // TFileTime = packed record on POSIX
+end;
+
+procedure Int64ToFileTime(Q64: PQWordRec; FT: PFileTime);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  PQWord(FT)^ := Q64^.V;
+end;
+
 var // two flag sets of 8 items = 8-bit byte efficient storage and access
   _F0: set of (fIsDebuggerTested, fIsDebuggerPresent, fStdOutIsTTY,
     fNoURandom, fNoRandom, fProcFileSystemsTested,
@@ -205,6 +217,8 @@ end;
 
 function TIcuLibrary.IsAvailable: boolean;
 begin
+  if Disabled then
+    exit(false);
   if not fLoaded then
     DoLoad;
   result := Assigned(ucnv_open);
@@ -262,7 +276,7 @@ var
   err: SizeInt;
   P: PPointerArray;
   {$ifndef OSDARWIN}
-  so: string;
+  fn, so: string;
   {$endif OSDARWIN}
   v, vers: string;
   data: PAnsiChar;
@@ -294,12 +308,16 @@ begin
       begin
         // there is no link to the library -> try e.g. 'libicudata.so.67'
         if Version <> '' then
-          icudata := LibraryOpen(string('libicudata.so.') + Version);
+        begin
+          fn := 'libicudata.so.' + Version;
+          icudata := LibraryOpen(fn);
+        end;
         if icudata = 0 then
           for i := ICU_MAX downto ICU_MIN do
           begin
             v := IntToStr(i);
-            icudata := LibraryOpen(string('libicudata.so.') + v);
+            fn := 'libicudata.so.' + v;
+            icudata := LibraryOpen(fn);
             if icudata <> 0 then
             begin
               Version := v;
@@ -312,9 +330,13 @@ begin
       {$endif OSANDROID}
       if icudata <> 0 then
       begin
-        icu := LibraryOpen(string('libicuuc.so') + so);
+        fn := 'libicuuc.so' + so;
+        icu := LibraryOpen(fn);
         if icu <> 0 then
-          icui18n := LibraryOpen(string('libicui18n.so') + so);
+        begin
+          fn := 'libicui18n.so' + so;
+          icui18n := LibraryOpen(fn);
+        end;
       end;
       {$endif OSDARWIN}
       if icui18n = 0 then
@@ -385,6 +407,9 @@ begin
   fLoaded := false;
   DoLoad(LibName, Version);
   result := Assigned(ucnv_open);
+  if result and
+     Disabled then
+    Disabled := false; // reset on success
 end;
 
 function TIcuLibrary.ucnv(codepage: cardinal): pointer;
@@ -603,7 +628,7 @@ end;
 
 {$endif FPC}
 
-  const
+const
   // for CompareStringW() Windows-like call in Unicode_CompareString()
   LOCALE_USER_DEFAULT = $400; // ignored in practice
   NORM_IGNORECASE = 1 shl ord(coIgnoreCase); // [widestringmanager.coIgnoreCase]
@@ -645,8 +670,11 @@ begin
     exit;
   end
   else if (CodePage < CP_MIN) or
+          (CodePage >= CP_RAWBLOB) or
           (LA <= 0) then
     exit(0); // clearly invalid/unsupported CodePage or void input
+  if not icu.IsAvailable then
+    exit(AnsiToWideRTL(CodePage, A, W, LA, LW)); // don't try ICU at all
   err := 0;
   cnv := icu.SharedUcnv(CodePage, ndx); // try from our thread-safe cache
   if cnv <> nil then
@@ -663,7 +691,7 @@ begin
       icu.ucnv_close(cnv);
     end
     else // fallback to cwstring/iconv
-      result := AnsiToWideRTL(CodePage, A, W, LA, LW);
+      exit(AnsiToWideRTL(CodePage, A, W, LA, LW));
   end;
   if result < 0 then
     result := 0;
@@ -684,26 +712,32 @@ begin
     exit;
   end
   else if (CodePage < CP_MIN) or
+          (CodePage >= CP_RAWBLOB) or
           (LW <= 0) then
     exit(0); // clearly invalid/unsupported CodePage or void input
-  err := 0;
-  cnv := icu.SharedUcnv(CodePage, ndx); // try from our thread-safe cache
-  if cnv <> nil then
+  if icu.IsAvailable then
   begin
-    result := icu.ucnv_fromUChars(cnv, A, LA, W, LW, err);
-    icu.SharedUcnvUnLock(ndx);
-  end
-  else
-  begin
-    cnv := icu.ucnv(CodePage); // use a transient converter if locked
+    err := 0;
+    cnv := icu.SharedUcnv(CodePage, ndx); // try from our thread-safe cache
     if cnv <> nil then
     begin
       result := icu.ucnv_fromUChars(cnv, A, LA, W, LW, err);
-      icu.ucnv_close(cnv);
+      icu.SharedUcnvUnLock(ndx);
     end
-    else // fallback to cwstring/iconv (less complete than ICU)
-      result := WideToAnsiRTL(CodePage, W, A, LW, LA);
-  end;
+    else
+    begin
+      cnv := icu.ucnv(CodePage); // use a transient converter if locked
+      if cnv <> nil then
+      begin
+        result := icu.ucnv_fromUChars(cnv, A, LA, W, LW, err);
+        icu.ucnv_close(cnv);
+      end
+      else // fallback to cwstring/iconv (less complete than ICU)
+        result := WideToAnsiRTL(CodePage, W, A, LW, LA);
+    end;
+  end
+  else
+    result := WideToAnsiRTL(CodePage, W, A, LW, LA); // don't try ICU at all
   if result <= 0 then
     result := 0
   else
@@ -1084,6 +1118,11 @@ end;
 function UnixMSTimeUtcFast: TUnixMSTime;
 begin
   result := UnixMSTimeUtc;
+end;
+
+procedure NowUtcToWindowsFileTime(var ft: TFileTime);
+begin
+  UnixMSTimeToFileTime(UnixMSTimeUtc, ft);
 end;
 
 {$undef HAS_PTHREADSETNAMENP}
@@ -1553,16 +1592,20 @@ var
   p: PCharIntArray;
 begin
   result := faArchive; // as LinuxToWinAttr() in fpcsrc/rtl/unix/sysutils.pp
-  p := @PCharIntArray(fn)[GetLastDelim(fn)]; // no memory allocation
+  p := PCharIntArray(fn);
+  if p <> nil then
+    p := @p[GetLastDelim(fn)]; // extract file name with no memory allocation
   if FpS_ISDIR(st.st_mode) then
   begin
     result := result or faDirectory;
-    if (p[0] = ord('.')) and
+    if (p <> nil) and
+       (p[0] = ord('.')) and
        (p[1] <> 0) and
        (PTwoCharsInt(@p[1])^ <> ord('.')) then
       result := result or faHidden{%H-}; // '.' and '..' are not hidden
   end
-  else if p[0] = ord('.') then
+  else if (p <> nil) and
+          (p[0] = ord('.')) then
     result := result or faHidden{%H-}; // e.g. '.htdigest'
   if (st.st_mode and S_IWUSR) = 0 then
     result := result or faReadOnly;
@@ -1609,7 +1652,7 @@ begin
 end;
 
 function FileInfoByHandle(aFileHandle: THandle; FileId, FileSize: PInt64;
-  LastWriteAccess, FileCreateDateTime: PUnixMSTime): boolean;
+  LastWriteAccess, FileCreateDateTime: PUnixMSTime; FileAttr: PCardinal): boolean;
 var
   mtime, atime, ctime: TUnixMSTime;
   lp: TStat;
@@ -1629,6 +1672,8 @@ begin
   StatTimeMS(lp, mtime);
   if LastWriteAccess <> nil then
     LastWriteAccess^ := mtime;
+  if FileAttr <> nil then
+    FileAttr^ := StatFileAttr('', lp);
   if FileCreateDateTime = nil then
     exit;
   // some FS don't populate all fields, so we use what we actually got
@@ -1810,17 +1855,68 @@ begin
   result := fpgeterrno;
 end;
 
-function IsSharedViolation(ErrorCode: integer): boolean;
-begin
-  if ErrorCode = 0 then
-    ErrorCode := fpgeterrno;
-  result := ErrorCode = ESysEACCES;
-end;
-
 procedure SetLastError(error: integer);
 begin
   fpseterrno(error);
 end;
+
+function GetSystemError(error: integer): TSystemError;
+begin
+  case error of
+    0:
+      result := seSuccess;
+    ESysEPERM:
+      result := sePermissionDenied;
+    ESysEBUSY:
+      result := seBusy;
+    ESysENOENT:
+      result := seFileNotFound;
+    ESysEIO:
+      result := seIOError;
+    ESysENXIO,
+    ESysENODEV:
+      result := seNoSuchDevice;
+    ESysEACCES:
+      result := seAccessDenied;
+    ESysEBADF:
+      result := seInvalidHandle;
+    ESysEAGAIN,
+    ESysEINTR:
+      result := seInterrupted;
+    ESysENOMEM:
+      result := seOutOfMemory;
+    ESysEEXIST:
+      result := seAlreadyExists;
+    ESysENOTDIR:
+      result := seNotADirectory;
+    ESysEISDIR:
+      result := seIsADirectory;
+    ESysEINVAL:
+      result := seInvalidParameter;
+    ESysENFILE,
+    ESysEMFILE:
+      result := seTooManyOpenFiles;
+    ESysENOSPC:
+      result := seDiskFull;
+    ESysEPIPE:
+      result := seBrokenPipe;
+    ESysENAMETOOLONG:
+      result := seNameTooLong;
+    ESysENOTEMPTY:
+      result := seDirectoryNotEmpty;
+    ESysENOSYS:
+      result := seNotSupported;
+    else
+      result := seOther;
+  end;
+end;
+
+const
+  _OSERR: array[TSystemError] of byte = (
+    0, ESysEINVAL, ESysENOENT, ESysEEXIST, ESysEACCES, ESysENXIO, ESysENOMEM,
+    ESysEBADF, ESysEPERM, ESysEBUSY, ESysEIO, ESysENOTEMPTY, ESysENAMETOOLONG,
+    ESysENOTDIR, ESysEISDIR, ESysEMFILE, ESysENOSPC, ESysEPIPE, ESysEINTR,
+    ESysENOSYS, 0);
 
 procedure GetErrorShortVar(error: integer; var dest: ShortString);
 begin
@@ -2620,15 +2716,13 @@ begin
     p := e^;
     if p^ <> '=' then
     begin
-      b := p;
-      repeat
-        inc(p);
-      until p^ = '=';
-      FastSetString(_SystemEnvNames[n], b, p - b);
-      inc(p);
+      p := PosChar0(p, '=');
+      FastSetString(_SystemEnvNames[n], e^, p);
+      if p^ <> #0 then
+        inc(p); // ignore '='
       b := p;
       inc(p, StrLen(p));
-      FastSetString(_SystemEnvValues[n], b, p - b);
+      FastSetString(_SystemEnvValues[n], b, p);
       inc(n);
     end;
     inc(e);
@@ -2709,6 +2803,9 @@ begin
           // fallback to /var/tmp
           result := '/var/tmp/';
       end;
+    spUserDownloads: // try '$HOME/Downloads'
+       if not WritableFolder(GetSystemPath(spUserDocuments), 'Downloads', result) then
+         result := GetSystemPath(spUserDocuments);
   else
     // POSIX requires a value for the $HOME environment variable
     GetEnvFolder('HOME', result, {writable=}false);
@@ -5339,7 +5436,7 @@ begin
          (crc32carm64(0, @uts, SizeOf(uts)) = crc32cfast(0, @uts, SizeOf(uts))) then
       begin
         crc32c          := @crc32carm64;
-        DefaultHasher   := @crc32carm64;
+        DefaultHasher   := @crc32carm64; // no murmur-like finalizer on ARMv8 yet
         InterningHasher := @crc32carm64;
         crc32cby4       := @crc32cby4arm64;
         crcblock        := @crc32blockarm64;
@@ -5741,13 +5838,13 @@ begin
     P := pointer(auxv);
     while auxv[0] <> 0 do
     begin
-      if auxv[0] = 25 then  // AT_RANDOM: 16 random bytes (used for stacks canary)
-        with SystemEntropy do // should be available from 2.6.29 on glibc
+      if auxv[0] = 25 then    // AT_RANDOM: 16 random bytes (for stack canaries)
+        with SystemEntropy do // available since kernel 2.6.29
         begin
           LiveFeed := PHash128Rec(auxv[1])^; // great initial source from Kernel
           XorMemory(Startup, PHash128Rec(auxv[1])^); // won't hurt
         end;
-      auxv := @auxv[2];
+      auxv := @auxv[2];       // go until the end for crc32c128() below
     end;
     crc32c128(@SystemEntropy.Startup, P, PAnsiChar(auxv) - P); // all auxv info
   end;

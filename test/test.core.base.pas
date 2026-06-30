@@ -255,7 +255,7 @@ type
     /// test TSynBloomFilter class
     procedure BloomFilters;
     /// test DeltaCompress/DeltaExtract functions
-    procedure _DeltaCompress;
+    procedure DeltaCompression;
     /// the new fast Currency to/from string conversion
     procedure Curr64;
     /// the camel-case / camel-uncase features, used for i18n from Delphi RTII
@@ -280,6 +280,8 @@ type
     procedure DmiSmbios;
     /// test Security IDentifier (SID) process
     procedure _SID;
+    /// test OS errors support
+    procedure OsErrors;
     /// test the SecurityDescriptor / SDDL process
     procedure _SDDL;
     /// validates the median computation using the "Quick Select" algorithm
@@ -1527,15 +1529,44 @@ procedure TTestCoreBase.TStreamSlow(Context: TObject);
 var
   P: TPipeStream;
   R, W: TPipeThread;
-  S: RawByteString;
+  s1, s2: TStream;
+  S, D: RawUtf8;
   ps: PAnsiChar;
   Tix: Int64;
-  i, n, c: integer;
+  i, n, c, buflen, chunk: integer;
   crc: cardinal;
   timer: TPrecisionTimer;
   tmp: TBuffer1K; // small 1K buffer to stress (should be e.g. 64KB in practice)
 begin
   S := RandomAnsi7(100000);
+  // validate TBufferedStreamReader
+  D := S;
+  s1 := TRawByteStringStream.Create(S);
+  try
+    for buflen := 8 to 32 do
+      for chunk := 1 to buflen * 3 do
+      begin
+        s2 := TBufferedStreamReader.Create(s1, buflen);
+        try
+          ps := UniqueRawUtf8(D);
+          checkEqual(D, S);
+          FillCharFast(ps^, length(D), 48);
+          CheckNotEqual(D, S);
+          repeat
+            i := s2.Read(ps^, chunk);
+            Check(i >= 0, 's2.ReadA');
+            Check(i <= chunk, 's2.ReadB');
+            inc(ps, i);
+          until i = 0;
+          CheckEqual(s2.Position, length(D));
+          CheckEqual(s, D);
+        finally
+          s2.Free;
+        end;
+      end;
+  finally
+    s1.Free;
+  end;
   // basic integrity from two threads
   P := TPipeStream.Create(512);
   R := TPipeThread.Create({suspended=}true, nil, nil, TSynLog, 'rd');
@@ -4341,7 +4372,6 @@ var
     Timer: TPrecisionTimer;
     a: string[10];
   begin
-    Timer.Start;
     a := '123456789';
     Check(hash(0, @a, 0) = 0);
     Check(hash(0, @a, 1) = $2ACF889D);
@@ -4354,6 +4384,7 @@ var
     Check(hash(0, @a, 6) = $85BF5A8C);
     Check(hash(0, @a, 7) = $8B0FB6FA);
     Check(hash(0, @a, 8) = $2E5336F0);
+    Timer.Start;
     for i := 0 to High(crc) do
       with crc[i] do
         Check(hash(0, pointer(S), length(S)) = crc);
@@ -4374,6 +4405,7 @@ var
   digest: THash256;
   tmp: RawByteString;
   hmac32: THmacCrc32c;
+  timer: TPrecisionTimer;
 begin
   test16('', $ffff);
   test16('a', $9d77);
@@ -4494,14 +4526,23 @@ begin
   {$ifndef OSDARWIN}
   // Not [yet] implemented on Darwin
   if cfSSE42 in CpuFeatures then
+  begin
     Test(crc32csse42, 'sse42');
+    AddConsole('%', [msg]);
+    Check(hashsse42(0, p, 5) = $39B69E64, 'hashsse42a');
+    Check(hashsse42(0, p, 1020) = $C43D29E6, 'hashsse42b');
+    timer.Start; // only the profiling part of Test()
+    for i := 0 to High(crc) do
+      with crc[i] do
+        CheckNotEqual(hashsse42(0, pointer(S), length(S)), crc);
+    msg := FormatUtf8(' hashsse42:%/s', [KBNoSpace(Timer.PerSec(totallen))]);
+    {$ifdef ASMX64}
+    if (cfAesNi in CpuFeatures) and
+       (cfCLMUL in CpuFeatures) then
+      Test(crc32c, 'clmul'); // use SSE4.2+pclmulqdq instructions on x64
+    {$endif ASMX64}
+  end;
   {$endif OSDARWIN}
-  {$ifdef ASMX64}
-  if (cfSSE42 in CpuFeatures) and
-     (cfAesNi in CpuFeatures) and
-     (cfCLMUL in CpuFeatures) then
-    Test(crc32c, 'aesni'); // use SSE4.2+pclmulqdq instructions on x64
-  {$endif ASMX64}
   {$else}
   if @crc32c <> @crc32cfast then
     Test(crc32c, 'armv8');
@@ -6035,6 +6076,8 @@ begin
   Check(SafeFileName('..path\toto.jpg'));
   Check(not SafeFileName('../toto'));
   Check(not SafeFileName('..\toto.jpg'));
+  Check(not SafeFileName('/toto.jpg'));
+  Check(not SafeFileName('\toto.jpg'));
   Check(SafePathName('one/two'));
   Check(SafePathName('one\two'));
   Check(SafePathName('one../two'));
@@ -6053,6 +6096,8 @@ begin
   Check(not SafePathName('..\two'));
   Check(not SafePathName('/../two'));
   Check(not SafePathName('\..\two'));
+  Check(not SafePathName('/toto'));
+  Check(not SafePathName('\toto'));
   Check(SafeFileNameU(''));
   Check(SafePathNameU(''));
   Check(SafeFileNameU('toto'));
@@ -6065,6 +6110,8 @@ begin
   Check(SafeFileNameU('..path\toto.jpg'));
   Check(not SafeFileNameU('../toto'));
   Check(not SafeFileNameU('..\toto.jpg'));
+  Check(not SafeFileNameU('/toto.jpg'));
+  Check(not SafeFileNameU('\toto.jpg'));
   Check(SafePathNameU('one/two'));
   Check(SafePathNameU('one\two'));
   Check(SafePathNameU('one../two'));
@@ -6083,6 +6130,8 @@ begin
   Check(not SafePathNameU('..\two'));
   Check(not SafePathNameU('/../two'));
   Check(not SafePathNameU('\..\two'));
+  Check(not SafePathNameU('/toto'));
+  Check(not SafePathNameU('\toto'));
   Check(ExtractPath('/var/toto.ext') = '/var/');
   Check(ExtractPath('c:\var\toto.ext') = 'c:\var\');
   Check(ExtractPath('toto.ext') = '');
@@ -8467,32 +8516,31 @@ function ConvertSidToStringSidA(Sid: PSID; var StringSid: PAnsiChar): BOOL; stdc
 
 {$endif OSWINDOWS}
 
-procedure TTestCoreBase._SID;
+procedure TTestCoreBase.OsErrors;
 var
-  k: TWellKnownSid;
-  s: RawUtf8;
-  s1, s2: RawSid;
-  ss: TShort47;
-  {$ifdef OSWINDOWS}
-  known: TWellKnownSids;
-  sids: TRawUtf8DynArray;
-  {$endif OSWINDOWS}
+  se: TSystemError;
+  err: integer;
+  txt: RawUtf8;
+  ss: TShort63;
 begin
-  // validate cross-platform SID process
-  CheckEqual(SizeOf(TSid), 1032, 'TSid');
-  for k := low(k) to high(k) do
-  begin
-    s1 := KnownRawSid(k);
-    Check(SidToKnown(pointer(s1)) = k);
-    Check(SidCompare(pointer(s1), pointer(s1)) = 0);
-    s := RawSidToText(s1);
-    CheckEqual(s, RawUtf8(KnownSidToText(k)^));
-    CheckUtf8(SidToKnown(s) = k, s);
-    s2 := TextToRawSid(s);
-    CheckEqual(s, RawSidToText(s2));
-    CheckUtf8(SidCompare(pointer(s1), pointer(s2)) = 0, s);
-  end;
   // some cross-platform Windows/Linux/BSD error detection
+  CheckEqual(SystemError(seSuccess), 0);
+  CheckEqual(SystemError(seOther), 0);
+  CheckEqual(SystemErrorText(seSuccess), 'Success');
+  CheckEqual(SystemErrorText(seNameTooLong), 'NameTooLong');
+  CheckEqual(SystemErrorText(seOther), 'Other');
+  for se := succ(seSuccess) to pred(seOther) do
+  begin
+    err := SystemError(se);
+    CheckNotEqual(err, 0);
+    Check(GetSystemError(err) = se);
+    Check(IsSystemError(se, err), 'IsOsError');
+    ss := SystemErrorShort(err);
+    Check(ss[0] <> #0, 'SystemErrorShort');
+    txt := SystemErrorText(se);
+    CheckNotEqual(txt, '');
+    Check(PosEx(txt, ShortStringToUtf8(ss)) > 0);
+  end;
   Check(WinErrorConstant(NO_ERROR)^ = 'SUCCESS', 'weca');
   Check(WinErrorConstant(995)^ = 'OPERATION_ABORTED', 'wecb1');
   Check(WinErrorConstant(1150)^ = 'OLD_WIN_VERSION', 'wecb2');
@@ -8545,6 +8593,32 @@ begin
   Check(ss = '125', '125');
   Check(OsErrorShort(244, {noint=}false) = '244', '244a');
   Check(OsErrorShort(244, {noint=}true) = '', '244b');
+end;
+
+procedure TTestCoreBase._SID;
+var
+  k: TWellKnownSid;
+  s: RawUtf8;
+  s1, s2: RawSid;
+  {$ifdef OSWINDOWS}
+  known: TWellKnownSids;
+  sids: TRawUtf8DynArray;
+  {$endif OSWINDOWS}
+begin
+  // validate cross-platform SID process
+  CheckEqual(SizeOf(TSid), 1032, 'TSid');
+  for k := low(k) to high(k) do
+  begin
+    s1 := KnownRawSid(k);
+    Check(SidToKnown(pointer(s1)) = k);
+    Check(SidCompare(pointer(s1), pointer(s1)) = 0);
+    s := RawSidToText(s1);
+    CheckEqual(s, RawUtf8(KnownSidToText(k)^));
+    CheckUtf8(SidToKnown(s) = k, s);
+    s2 := TextToRawSid(s);
+    CheckEqual(s, RawSidToText(s2));
+    CheckUtf8(SidCompare(pointer(s1), pointer(s2)) = 0, s);
+  end;
   // validate Windows specific SID function, especially about the current user
   {$ifdef OSWINDOWS}
   CurrentRawSid(s1, wttProcess);
@@ -11107,12 +11181,12 @@ begin
   end;
 end;
 
-procedure TTestCoreBase._DeltaCompress;
+procedure TTestCoreBase.DeltaCompression;
 var
   o, n, d, s: RawByteString;
-  i, buflen, chunk: integer;
-  P: PAnsiChar;
-  s1, s2: TStream;
+  i, j, size, diff, percent: integer;
+  comp, extr: TPrecisionTimer;
+  res: TDeltaError;
 begin
   n := RandomTextParagraph(100);
   d := DeltaCompress(n, o{%H-});
@@ -11122,25 +11196,47 @@ begin
   check(d = '=');
   check(DeltaExtract(d, n, s) = dsSuccess, 'delta=');
   Check(s = n);
+  comp.Init;
+  extr.Init;
+  size := 0;
   for i := 1 to 20 do
   begin
     o := n;
-    s := RandomTextParagraph(100);
-    case i and 7 of
-      2:
-        n := n + s;
-      7:
-        n := s + n;
-    else
-      insert(s, n, i * 50);
-    end;
+    s := RandomTextParagraph(200 + i shr 3);
+    for j := 1 to (i shr 2) + 1 do
+      case Random32 and 7 of
+        2:
+          Append(n, s);
+        5:
+          delete(n, i * ord(s[j]), j * 3);
+        7:
+          Prepend(n, s);
+      else
+        insert(s, n, i * ord(s[j]));
+      end;
+    inc(size, length(n));
+    comp.Resume;
     d := DeltaCompress(n, o);
-    //ConsoleWrite('d=% s=% o=% n=%', [length(d), length(s), length(o), length(n)]);
+    comp.Pause;
+    diff := length(n) - length(o);
+    percent := (100 * length(d)) div diff;
+    //ConsoleWrite('%k delta=% diff=% %%', [length(n) shr 10, length(d), diff, percent, '%']);
     check(d <> '=');
-    check(length(d) < length(s), 'delta should be compressed');
-    check(DeltaExtract(d, o, s) = dsSuccess, 'delta+');
-    Check(s = n);
+    if diff > 100 then
+      check(percent < 200, 'delta compressed');
+    s := '';
+    extr.Resume;
+    res := DeltaExtract(d, o, s);
+    {if res <> dsSuccess then begin
+      d := DeltaCompress(n, o);
+      res := DeltaExtract(d, o, s);
+    end;}
+    checkUtf8(res = dsSuccess, '%', [ToText(res)^]);
+    extr.Pause;
+    CheckEqual(s, n);
   end;
+  NotifyTestSpeed('DeltaCompress', 1, size, @comp);
+  NotifyTestSpeed('DeltaExtract', 1, size, @extr);
   o := n;
   delete(n, 100, 100);
   d := DeltaCompress(n, o);
@@ -11151,30 +11247,7 @@ begin
   insert(RandomIdentifier(50), n, 200);
   d := DeltaCompress(n, o);
   check(DeltaExtract(d, o, s) = dsSuccess, 'delta-+');
-  if CheckFailed(s = n, 'delta extract') then
-    exit;
-  s1 := TRawByteStringStream.Create(s);
-  try
-    for buflen := 8 to 32 do
-      for chunk := 1 to buflen * 3 do
-      begin
-        s2 := TBufferedStreamReader.Create(s1, buflen);
-        try
-          P := pointer(n);
-          FillCharFast(P^, length(n), 48);
-          repeat
-            i := s2.Read(P^, chunk);
-            inc(P, i);
-          until i = 0;
-          CheckEqual(s2.Position, length(n));
-          CheckEqual(s, n);
-        finally
-          s2.Free;
-        end;
-      end;
-  finally
-    s1.Free;
-  end;
+  CheckEqual(s, n, 'delta extract');
 end;
 
 procedure TTestCoreBase.BloomFilters;

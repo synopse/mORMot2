@@ -6533,6 +6533,20 @@ procedure TTestCoreProcess._TDocVariant;
     Check(Doc.I['birthyear'] = ExpectedYear);
   end;
 
+  procedure CheckOle(const json: RawUtf8; expected: cardinal);
+  var
+    d: TDocVariantData;
+    v: variant;
+  begin
+    Check(d.InitJson(json, JSON_FAST_FLOAT));
+    CheckEqual(d.ToJson, json);
+    v := d.ToOleVariant;
+    CheckEqual(PVarData(@v)^.VType, expected);
+    d.Clear;
+    d.InitFromVariant(v, JSON_FAST_FLOAT);
+    CheckEqual(d.ToJson, json);
+  end;
+
 var
   discogs: RawUtf8;
 
@@ -7461,6 +7475,35 @@ begin
     Doc.SaveToJsonFile(WorkDir + 'm1-saved2.json');
     Doc.Clear;
   end;
+  {$ifndef POSIXDELPHI}
+  CheckOle('[]', varArray or varVariant);
+  CheckOle('[1]', varArray or varInt64);
+  CheckOle('[1,2,3]', varArray or varInt64);
+  CheckOle('[-1,0,2147483647]', varArray or varInt64);
+  CheckOle('[-1,0,9223372036854775807]', varArray or varInt64);
+  CheckOle('[1.5]', varArray or varDouble);
+  CheckOle('[1.5,-2.75,3.1415926535]', varArray or varDouble);
+  CheckOle('[1,2.5,3]', varArray or varDouble);
+  CheckOle('[1.5,2,3]', varArray or varDouble);
+  CheckOle('[true]', varArray or varBoolean);
+  CheckOle('[true,false,true]', varArray or varBoolean);
+  CheckOle('[""]', varArray or varOleStr);
+  CheckOle('["one","two","th\"ee"]', varArray or varOleStr);
+  CheckOle('[null]', varArray or varVariant);
+  CheckOle('[null,null]', varArray or varVariant);
+  CheckOle('[1,null,2]', varArray or varVariant);
+  CheckOle('[1,"2",3.14]', varArray or varVariant);
+  CheckOle('[1,true,"abc",null]', varArray or varVariant);
+  CheckOle('["abc",null]', varArray or varVariant);
+  CheckOle('[true,null,false]', varArray or varVariant);
+  {$endif POSIXDELPHI}
+  CheckOle('{}', varOleStr);
+  CheckOle('{"a":1}', varOleStr);
+  CheckOle('{"a":1,"b":"text","c":true}', varOleStr);
+  CheckOle('[[1,2],[3,4]]', varOleStr);
+  CheckOle('[1,[2,3],4]', varOleStr);
+  CheckOle('{"a":[1,2,3]}', varOleStr);
+  CheckOle('{"a":{"b":1}}', varOleStr);
 end;
 
 // wrapper used to test GetPublishedMethods()

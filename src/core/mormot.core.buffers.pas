@@ -192,6 +192,9 @@ type
 function FromVarBlob(Data: PByte): TValueResult;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// append an integer as a 32-bit variable-length enncoded into TSynTempAdder
+// - return a pointer to the destination, prepared for about 60 more bytes
+function AddVarUInt32(var Adder: TSynTempAdder; Value: PtrUInt): PByte;
 
 
 { ************ TAlgoCompress Compression/Decompression Classes }
@@ -857,18 +860,19 @@ type
   // - use TFileBufferReader or TFastReader for decoding of the stored binary
   TBufferWriter = class(TSynPersistent)
   protected
-    fPos: PtrInt;
-    fBufLen, fBufLen16: PtrInt;
+    fPos, fBufLen, fBufLen16: PtrInt;
     fBuffer: PByteArray;
     fStream: TStream;
-    fTotalFlushed: Int64;
+    fTotalFlushed, fMaxFlushed: Int64;
     fBufferInternal: pointer;
-    fInternalStream: boolean;
+    fInternalStream, fIsRawByteStream: boolean;
     fTag: PtrInt;
     procedure InternalFlush;
     function GetTotalWritten: Int64;
       {$ifdef HASINLINE}inline;{$endif}
     procedure InternalWrite(Data: pointer; DataLen: PtrInt);
+      {$ifdef HASINLINE}inline;{$endif}
+    procedure RaiseMaxFlushed;
     procedure FlushAndWrite(Data: pointer; DataLen: PtrInt);
     procedure Setup(aStream: TStream; aBuf: pointer; aLen: integer);
       {$ifdef HASINLINE}inline;{$endif}
@@ -1016,14 +1020,14 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// write any pending data in the internal buffer to the stream
     // - after a Flush, it's possible to call FileSeek64(aFile,....)
-    // - returns the number of bytes written between two FLush method calls
+    // - returns the number of bytes written between two Flush method calls
     function Flush: Int64;
     /// write any pending data, then create a RawByteString from the content
     // - raise an exception if internal Stream is not a TRawByteStringStream
     function FlushTo: RawByteString;
     /// write any pending data, then create a TBytes array from the content
     // - raise an exception if the size exceeds 800MB (_DAMAXSIZE)
-    function FlushToBytes: TBytes;
+    function FlushToBytes(MaxBytesSize: PtrInt = _DAMAXSIZE): TBytes;
     /// write any pending data, then call algo.Compress() on the buffer
     // - if algo is left to its default nil, will use global AlgoSynLZ
     // - features direct compression from internal buffer, if stream was not used
@@ -1044,6 +1048,11 @@ type
     /// get the byte count written since last Flush
     property TotalWritten: Int64
       read GetTotalWritten;
+    /// maximum bytes count over which an exception will be raised
+    // - equals _STRMAXSIZE = 800 MB if Stream is a TRawByteStringStream
+    // - otherwise, equals 0 by default to disable this feature
+    property MaxFlushed: Int64
+      read fMaxFlushed write fMaxFlushed;
     /// simple property used to store some integer content
     property Tag: PtrInt
       read fTag write fTag;
@@ -2469,10 +2478,9 @@ type
     fOwnStream: TStream;
   public
     /// initialize the source TStream and the internal buffer
-    // - will also rewind the aSource position to its beginning, and retrieve
-    // its size
-    constructor Create(aSource: TStream;
-      aBufSize: integer = 65536); reintroduce; overload;
+    // - will rewind the aSource position to its beginning, and retrieve its size
+    constructor Create(aSource: TStream; aBufSize: integer = 65536;
+      aOwnSource: boolean = false); reintroduce; overload;
     /// initialize a source file and the internal buffer
     constructor Create(const aSourceFileName: TFileName;
       aBufSize: integer = 65536); reintroduce; overload;
@@ -2482,7 +2490,34 @@ type
     function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
     /// will read up to Count bytes from the internal buffer or source TStream
     function Read(var Buffer; Count: Longint): Longint; override;
+    /// access to the associated source TStream instance
+    property Source: TStream
+      read fSource;
   end;
+
+  /// TStream which raise an exception when Write() reaches a given limit
+  // - Seek() or Read() on this class instance would raise an exception
+  // - Size and Position would follow the current Write() state
+  TLimitedStreamWriter = class(TStreamWithNoSeek)
+  protected
+    fLimit: Int64;
+    fDest: TStream;
+  public
+    /// initialize the source TStream and the internal size limit
+    // - supplied aDest should be void and will be owned by this instance
+    constructor Create(aDest: TStream; aLimit: Int64);
+    /// finalize this instance and its associated destination TStream
+    destructor Destroy; override;
+    /// overriden method which will ensure Size + Count < Limit
+    function Write(const Buffer; Count: Longint): Longint; override;
+    /// the maximum size in bytes allowed by this instance - 0 to disable
+    property Limit: Int64
+      read fLimit write fLimit;
+    /// access to the associated destination TStream instance
+    property Dest: TStream
+      read fDest;
+  end;
+
 
 /// compute the crc32c checksum of a given file
 // - this function maps the THashFile signature
@@ -3011,7 +3046,7 @@ begin
           c := p^;
           c := c shl 28;
           inc(p);
-          result := result and $fffffff or integer(c);
+          result := result and $0fffffff or integer(c);
         end;
       end;
     end;
@@ -3049,7 +3084,7 @@ begin
     exit;
   c := Source^ shl 28;
   inc(Source);
-  result := result and $fffffff or c;
+  result := result and $0fffffff or c;
 end;
 
 function ToVarInt64(Value: Int64; Dest: PByte): PByte;
@@ -3318,7 +3353,6 @@ begin
   result := Source;
 end;
 
-
 function ToVarString(const Value: RawUtf8; Dest: PByte): PByte;
 var
   Len: integer;
@@ -3434,6 +3468,15 @@ function FromVarBlob(Data: PByte): TValueResult;
 begin
   result.Len := FromVarUInt32(Data);
   result.Ptr := pointer(Data);
+end;
+
+function AddVarUInt32(var Adder: TSynTempAdder; Value: PtrUInt): PByte;
+var
+  p: PAnsiChar;
+begin
+  p := Adder.Prepare(64);
+  result := ToVarUInt32(Value, pointer(p));
+  inc(Adder.Store.added, PAnsiChar(result) - p);
 end;
 
 
@@ -3655,7 +3698,7 @@ e:begin
   end;
   c := ord(P^) shl 28;
   inc(P);
-  result := result {%H-}and $fffffff or c;
+  result := result {%H-}and $0fffffff or c;
 end;
 
 procedure TFastReader.VarNextInt;
@@ -3736,7 +3779,7 @@ e:begin
   end;
   c := s^ shl 28;
   inc(s);
-  result := result {%H-}and $fffffff or c;
+  result := result {%H-}and $0fffffff or c;
 f:P := pointer(s);
 end;
 
@@ -4330,6 +4373,10 @@ begin
   fBufLen16 := aLen - 16;
   fBuffer := aBuf;
   fStream := aStream;
+  if not aStream.InheritsFrom(TRawByteStringStream) then
+    exit;
+  fIsRawByteStream := true;
+  fMaxFlushed := _STRMAXSIZE; // 800MB seems fair enough for a RawByteString
 end;
 
 constructor TBufferWriter.Create(aStream: TStream; BufLen: integer);
@@ -4376,24 +4423,26 @@ begin
   inherited;
 end;
 
-procedure TBufferWriter.InternalFlush;
-begin
-  if fPos > 0 then
-  begin
-    InternalWrite(fBuffer, fPos);
-    fPos := 0;
-  end;
+procedure TBufferWriter.RaiseMaxFlushed;
+begin // Delphi strings have a 32-bit length so you should change your algorithm
+  EBufferException.RaiseUtf8('%.Write: % overflow (%)',
+    [self, fStream, KBNoSpace(fTotalFlushed)]);
 end;
 
 procedure TBufferWriter.InternalWrite(Data: pointer; DataLen: PtrInt);
 begin
   inc(fTotalFlushed, DataLen);
-  if fStream.InheritsFrom(TRawByteStringStream) and
-     (fTotalFlushed > _STRMAXSIZE) then
-    // Delphi strings have a 32-bit length so you should change your algorithm
-    EBufferException.RaiseUtf8('%.Write: % overflow (%)',
-      [self, fStream, KBNoSpace(fTotalFlushed)]);
+  if (fMaxFlushed > 0) and
+     (fTotalFlushed > fMaxFlushed) then
+    RaiseMaxFlushed;
   fStream.WriteBuffer(Data^, DataLen);
+end;
+
+procedure TBufferWriter.InternalFlush;
+begin
+  if fPos > 0 then
+    InternalWrite(fBuffer, fPos);
+  fPos := 0;
 end;
 
 function TBufferWriter.GetTotalWritten: Int64;
@@ -4413,25 +4462,10 @@ procedure TBufferWriter.CancelAll;
 begin
   fTotalFlushed := 0;
   fPos := 0;
-  if PClass(fStream)^ = TRawByteStringStream then
+  if fIsRawByteStream then
     TRawByteStringStream(fStream).Size := 0
   else
     fStream.Seek(0, soBeginning);
-end;
-
-procedure TBufferWriter.FlushAndWrite(Data: pointer; DataLen: PtrInt);
-begin
-  if DataLen < 0 then
-    exit;
-  if fPos > 0 then
-    InternalFlush;
-  if DataLen > fBufLen then
-    InternalWrite(Data, DataLen)
-  else
-  begin
-    MoveFast(Data^, fBuffer^[fPos], DataLen);
-    inc(fPos, DataLen);
-  end;
 end;
 
 procedure TBufferWriter.Write(Data: pointer; DataLen: PtrInt);
@@ -4446,6 +4480,21 @@ begin
   end
   else
     FlushAndWrite(Data, DataLen); // will also handle DataLen<0
+end;
+
+procedure TBufferWriter.FlushAndWrite(Data: pointer; DataLen: PtrInt);
+begin // called from inlined Write()
+  if DataLen < 0 then
+    exit;
+  if fPos > 0 then
+    InternalFlush;
+  if DataLen > fBufLen then
+    InternalWrite(Data, DataLen)
+  else
+  begin
+    MoveFast(Data^, fBuffer^[fPos], DataLen);
+    inc(fPos, DataLen);
+  end;
 end;
 
 procedure TBufferWriter.WriteN(Data: byte; Count: integer);
@@ -5053,13 +5102,13 @@ begin
   result := (fStream as TRawByteStringStream).DataString;
 end;
 
-function TBufferWriter.FlushToBytes: TBytes;
+function TBufferWriter.FlushToBytes(MaxBytesSize: PtrInt): TBytes;
 var
   siz: Int64;
 begin
   result := nil;
   siz := GetTotalWritten;
-  if siz > _DAMAXSIZE then
+  if siz > MaxBytesSize then
     EBufferException.RaiseUtf8('%.FlushToBytes: overflow (%)', [KB(siz)]);
   SetLength(result, siz);
   if fStream.Position = 0 then
@@ -10230,19 +10279,21 @@ end;
 
 { TBufferedStreamReader }
 
-constructor TBufferedStreamReader.Create(aSource: TStream; aBufSize: integer);
+constructor TBufferedStreamReader.Create(aSource: TStream; aBufSize: integer;
+  aOwnSource: boolean);
 begin
-  pointer(fBuffer) := FastNewString(aBufSize);
   fSource := aSource;
   fSize := fSource.Size; // get it once
   fSource.Seek(0, soBeginning);
+  pointer(fBuffer) := FastNewString(aBufSize);
+  if aOwnSource then
+    fOwnStream := fSource;
 end;
 
 constructor TBufferedStreamReader.Create(const aSourceFileName: TFileName;
   aBufSize: integer);
 begin
-  Create(TFileStreamEx.CreateRead(aSourceFileName));
-  fOwnStream := fSource;
+  Create(TFileStreamEx.CreateRead(aSourceFileName), aBufSize, {ownsource=}true);
 end;
 
 destructor TBufferedStreamReader.Destroy;
@@ -10287,12 +10338,13 @@ begin
       inc(result, avail);
       dec(Count, avail);
       if Count = 0 then
-        break;
+        break; // we got enough data from the internal buffer
       inc(dest, avail);
     end;
     if Count > length(fBuffer) then
     begin // big requests would read directly from stream
       inc(result, fSource.Read(dest^, Count));
+      fBufferLeft := 0; // invalidate buffer
       break;
     end;
     fBufferPos := pointer(fBuffer); // fill buffer and retry
@@ -10304,6 +10356,38 @@ begin
 end;
 
 
+{ TLimitedStreamWriter }
+
+constructor TLimitedStreamWriter.Create(aDest: TStream; aLimit: Int64);
+begin
+  inherited Create;
+  fDest := aDest;
+  if (fDest = nil) or
+     (fDest.Position <> 0) or
+     (fDest.Size <> 0) then
+    RaiseStreamError(self, 'Create with invalid Dest');
+  fLimit := aLimit;
+end;
+
+destructor TLimitedStreamWriter.Destroy;
+begin
+  inherited Destroy;
+  fDest.Free;
+end;
+
+function TLimitedStreamWriter.Write(const Buffer; Count: Longint): Longint;
+begin
+  if (fLimit > 0) and
+     (fSize + Count > fLimit) then
+    RaiseStreamError(self, 'Write: reached the specified Limit');
+  result := fDest.Write(Buffer, Count);
+  if result <= 0 then
+    exit;
+   inc(fPosition, result);
+   inc(fSize, result);
+end;
+
+
 function HashFile(const FileName: TFileName; Hasher: THasher): cardinal;
 var
   buf: array[word] of cardinal; // 256KB of buffer
@@ -10311,7 +10395,7 @@ var
   f: THandle;
 begin
   if not Assigned(Hasher) then
-    Hasher := DefaultHasher;
+    Hasher := DefaultHasher; // maybe AesNiHash32/hashsse42/crc32carm64/xxhash32
   result := 0;
   f := FileOpenSequentialRead(FileName);
   if ValidHandle(f) then

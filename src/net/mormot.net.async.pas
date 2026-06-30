@@ -1197,6 +1197,8 @@ type
   // - hpoClientIgnoreTlsError will ignore any HTTPS issue
   // - hpoClientAlllowWinApi will be used for THttpProxyUrl.RemoteClientHead()
   // - hpoClientNoCacheDirect disable caching of dynamic pages < HttpDirectGetKB
+  // - hpoClientLowerCaseUri will force remote http://... to be in lowercase
+  // - hpoClientNormalizeCaseHash to compute the local hash from uppercase URI
   // - hpoNoXProxyName will disable our custom 'X-Proxy-Name: xxxx' header
   // - hpNoXCache will purge any X-Cache: X-Served-By: Via: Age: headers
   THttpProxyUrlOption = (
@@ -1212,6 +1214,8 @@ type
     hpoClientIgnoreTlsError,
     hpoClientAlllowWinApi,
     hpoClientNoCacheDirect,
+    hpoClientLowerCaseUri,
+    hpoClientNormalizeCaseHash,
     hpoNoXProxyName,
     hpNoXCache);
   /// store THttpProxyUrl.Settings options for a given URI
@@ -1531,7 +1535,7 @@ type
     procedure OnIdle(Sender: TObject; NowTix: Int64);
     function OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
     function OnGetHeadLocalFolder(Ctxt: THttpServerRequest; const Uri: TUriMatchName): cardinal;
-    function OnGetHeadRemoteUri(Ctxt: THttpServerRequest; const Uri: TUriMatchName): cardinal;
+    function OnGetHeadRemoteUri(Ctxt: THttpServerRequest; var Uri: TUriMatchName): cardinal;
     procedure OnBackgroundDeleteDeprecated(Sender: TObject);
   public
     /// initialize this forward proxy instance
@@ -3173,16 +3177,15 @@ end;
 
 function TAsyncConnections.ThreadClientsConnect: TAsyncConnection;
 var
-  res: TNetResult;
   client: TNetSocket;
+  res: TNetResult;
   addr: TNetAddr;
 begin
   result := nil;
   if Terminated then
     exit;
   with fThreadClients do
-    res := NewSocket(Address, Port, nlTcp, {bind=}false, Timeout, Timeout,
-      Timeout, {retry=}0, client, @addr);
+    res := NewTcpClientSocket(Address, Port, Timeout, client, @addr);
   if res = nrOk then
     res := client.MakeAsync;
   if res <> nrOK then
@@ -3918,8 +3921,9 @@ procedure TAsyncServer.Shutdown;
 var
   i: PtrInt;
   len: integer; // should be integer
-  touchandgo: TNetSocket; // paranoid ensure Accept() is released
   ev: TNetEvents;
+  nl: TNetLayer;
+  touchandgo: TNetSocket; // paranoid ensure Accept() is released
   host, port: RawUtf8;
 begin
   Terminate;
@@ -3933,16 +3937,16 @@ begin
       end;
   if fServer.SockIsDefined then
   begin
-    host := fServer.Server; // will also work for nlUnix
-    if fServer.SocketLayer <> nlUnix then
+    host := fServer.Server;    // will also work for nlUnix
+    nl := fServer.SocketLayer; // should match the kind of server socket
+    if nl <> nlUnix then
     begin
       if host = '0.0.0.0' then
         host := '127.0.0.1';
       port := fSockPort;
     end;
     DoLog(sllDebug, 'Shutdown %:% accept release request', [host, port], self);
-    if NewSocket(host, port{%H-}, fServer.SocketLayer, false,
-         10, 0, 0, 0, touchandgo) = nrOk then
+    if NewSocket(host, port{%H-}, nl, false, 10, 0, 0, 0, touchandgo) = nrOk then
     begin
       if fSocketsEpoll then
       begin
@@ -4844,6 +4848,7 @@ begin
         end;
       hrpWait: // not yet available (rfProgressiveStatic mode)
         begin
+          fServer.fExecuteEvent.SetEvent; // wake up the write thread
           result := soWaitWrite;
           exit;
         end;
@@ -5418,7 +5423,7 @@ var
   ms: integer;
   {$endif USE_WINIOCP}
   tix64: Int64;
-  tix, lasttix: cardinal;
+  tix, lasttix, idle, lastidle: cardinal;
   msidle, mscallbacks: integer;
 begin
   // call ProcessIdleTix - and POSIX Send() output packets in the background
@@ -5431,6 +5436,7 @@ begin
       IdleEverySecond; // initialize idle process (e.g. fHttpDateNowUtc)
       tix := GetTickSec shr 6; // delay=500 after 64s idle
       lasttix := tix;
+      lastidle := 0;
       mscallbacks := 0;
       if fCallbackSendDelay <> nil then
         mscallbacks := fCallbackSendDelay^;
@@ -5448,14 +5454,18 @@ begin
         {$endif USE_WINIOCP}
         begin
           // no socket/poll/epoll API nedeed (most common case)
-          if (mscallbacks <> 0) and // typically = 10ms
-             (tix = lasttix) then
-            msidle := mscallbacks   // delayed SendFrames gathering
+          idle := mormot.core.os.GetTickCount64 shr 6;
+          if lastidle = idle then
+            msidle := 10                 // WaitFor(10) up to 64ms
+          else if (mscallbacks <> 0) and // typically = 10ms
+                  (tix = lasttix) then
+            msidle := mscallbacks        // delayed SendFrames gathering
           else if (fAsync.fGC1.Count = 0) or
                   (fAsync.fKeepConnectionInstanceMS > 500 * 2) then
-            msidle := 500 // idle server
-          else // default fKeepConnectionInstanceMS is 100ms
+            msidle := 500                // idle server
+          else         // default fKeepConnectionInstanceMS = 100ms
             msidle := fAsync.fKeepConnectionInstanceMS shr 1; // follow GC pace
+          lastidle := idle;
           fExecuteEvent.WaitFor(msidle);
           if fShutdownInProgress or
              Terminated or
@@ -5671,8 +5681,8 @@ begin // this method is protected by fOsSafe.Lock
     GetHeaderInfo(fRemoteClient.Headers, cache.Size, d);
   cache.TimeMS := d * MilliSecsPerSec;
   cache.HashDigest := hfSHA1; // not SHA-1 but 160-bit trunc of safer SHA-256
-  HttpRequestHashBase32(Uri, @cache.HashB32,
-    pointer(fRemoteClient.Headers), @cache.Hash160);
+  HttpRequestHashBase32(Uri, @cache.HashB32, pointer(fRemoteClient.Headers),
+    @cache.Hash160, hpoClientNormalizeCaseHash in fSettings.Options);
   cache.PurgedHeaders := PurgeHeaders(fRemoteClient.Headers, false,
     PURGED[hpNoXCache in fSettings.Options]);
   // optionnaly cache the headers and its decoded fields
@@ -6390,7 +6400,7 @@ begin
 end;
 
 function THttpProxyServer.OnGetHeadRemoteUri(Ctxt: THttpServerRequest;
-  const Uri: TUriMatchName): cardinal;
+  var Uri: TUriMatchName): cardinal;
 var
   req: TStartProxyRequest;
   start: Int64;
@@ -6410,8 +6420,11 @@ begin
     if ByteScanIndex(pointer(Uri.Path.Text), Uri.Path.Len, ord('/')) <> 0 then
       exit;
   req.remote := req.proxy.fRemoteUri;
+  if hpoClientLowerCaseUri in req.proxy.Settings.Options then
+    CaseBuffer(Uri.Path.Text, Uri.Path.Len, @NormToLowerAnsi7); // normalize
   Append(req.remote.Address, Uri.Path.Text, Uri.Path.Len);
-  if not HttpRequestHashBase32(req.remote, nil, nil, @req.remotehash) then
+  if not HttpRequestHashBase32(req.remote, nil, nil, @req.remotehash,
+           hpoClientNormalizeCaseHash in req.proxy.Settings.Options) then
     exit; // paranoid
   // blocking to ensure file consistency and remote connection sharing
   req.proxy.fOsSafe.Lock;

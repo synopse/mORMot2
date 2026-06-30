@@ -24,7 +24,6 @@ interface
 
 uses
   classes,
-  contnrs,
   types,
   sysutils,
   mormot.core.base,
@@ -2001,6 +2000,12 @@ procedure Prepend(var Text: RawUtf8; const Args: array of const); overload;
 /// prepend some text items at the beginning of a RawByteString variable
 procedure Prepend(var Text: RawByteString; const Args: array of const); overload;
 
+/// append one char to a RawUtf8 variable if it not already ends with it
+procedure AppendIfNone(var Text: RawUtf8; EndWith: AnsiChar);
+
+/// prepend one char to a RawUtf8 variable if it not already starts with it
+procedure PrependIfNone(var Text: RawUtf8; EndWith: AnsiChar);
+
 /// append some text to a RawUtf8, ensuring previous text is separated with CRLF
 // - could be used e.g. to update HTTP headers since here EOL = #13#10
 procedure AppendLine(var Text: RawUtf8; const Args: array of const;
@@ -2034,6 +2039,18 @@ function NormalizeDirectoryExists(const Part: array of const;
 // - if SafeFileNameU() succeeded, convert from UTF-8 into FileName
 function NormalizeUriToFileName(const Uri: RawUtf8; var FileName: TFileName;
   const FolderName: TFileName = ''): boolean;
+
+/// ensure all \ path delimiters are normalized into / URI on Windows
+procedure NormalizeUriVar(const FileName: RawUtf8; var Uri: RawUtf8);
+  {$ifdef OSLINUX} inline; {$endif}
+
+/// ensure all \ path delimiters are normalized into / URI on Windows
+function NormalizeUriU(const FileName: RawUtf8): RawUtf8;
+  {$ifdef OSWINDOWS}{$ifdef HASINLINE} inline; {$endif}{$endif}
+
+/// ensure all \ path delimiters are normalized into / URI on Windows
+procedure NormalizeUri(const FileName: TFileName; var Uri: RawUtf8);
+  {$ifndef UNICODE}{$ifdef OSWINDOWS}{$ifdef HASINLINE} inline; {$endif}{$endif}{$endif}
 
 /// a wrapper around FileExists(MakePath(Part))
 // - can optionally set the file name into a variable if it did exist
@@ -2768,7 +2785,7 @@ begin
   else
   begin
     S := PosChar0(P, Sep); // SSE2 asm on i386 and x86_64
-    FastSetString(result, P, S - P);
+    FastSetString(result, P, S);
     if S^ <> #0 then
       P := S + 1
     else
@@ -2991,7 +3008,7 @@ begin
     while (E > P) and
           (E[-1] in [#1..' ']) do
       dec(E); // trim right
-    FastSetString(result, P, E - P);
+    FastSetString(result, P, E);
     if S^ <> #0 then
       P := S + 1
     else
@@ -3015,7 +3032,7 @@ begin
     if (E > P) and
        (E[-1] = #13) then
       dec(E);
-    FastSetString(result, P, E - P);
+    FastSetString(result, P, E);
     if S^ <> #0 then
       P := S + 1
     else
@@ -6467,7 +6484,7 @@ begin
   else
   begin
     P := StrInt32(@tmp[23], Value);
-    FastSetString(result, P, @tmp[23] - P);
+    FastSetString(result, P, @tmp[23]);
   end;
 end;
 
@@ -6495,7 +6512,7 @@ begin
     {$else}
     P := StrInt64(@tmp[23], Value);
     {$endif CPU64}
-    FastSetString(result, P, @tmp[23] - P);
+    FastSetString(result, P, @tmp[23]);
   end;
 end;
 
@@ -6518,7 +6535,7 @@ begin
     {$else}
     P := StrUInt64(@tmp[23], Value);
     {$endif CPU64}
-    FastSetString(result, P, @tmp[23] - P);
+    FastSetString(result, P, @tmp[23]);
   end;
 end;
 
@@ -6549,7 +6566,7 @@ begin
   else
   begin
     P := StrUInt32(@tmp[23], Value);
-    FastSetString(result, P, @tmp[23] - P);
+    FastSetString(result, P, @tmp[23]);
   end;
 end;
 
@@ -8260,7 +8277,7 @@ begin
       result := NULL_STR_VAR;
     varBoolean:
       if vd^.VBoolean then
-        result := SmallUInt32Utf8[1]
+        result := SmallUInt32Utf8[1] // normalize as '0' or '1'
       else
         result := SmallUInt32Utf8[0];
     varByte:
@@ -8646,10 +8663,10 @@ begin
     vtInt64:
       value := V^.VInt64^;
     vtBoolean:
-      if V^.VBoolean then
+      if V^.VBoolean then // normalize
         value := 1
       else
-        value := 0; // normalize
+        value := 0;
     vtVariant:
       value := V^.VVariant^;
   else
@@ -8673,10 +8690,10 @@ begin
       value := V^.VQWord^;
     {$endif FPC}
     vtBoolean:
-      if V^.VBoolean then
+      if V^.VBoolean then // normalize
         value := 1
       else
-        value := 0; // normalize
+        value := 0;
     vtExtended:
       value := V^.VExtended^;
     vtCurrency:
@@ -8836,7 +8853,7 @@ n:    if vfNullAsVoid in Flags then
       if vfBooleanAsInt in Flags then
       begin
         Res.Temp[0] := '0';
-        if vd^.VBoolean then
+        if vd^.VBoolean then // normalize
           inc(Res.Temp[0]);
         Res.Text := @Res.Temp;
         Res.Len := 1;
@@ -8956,7 +8973,7 @@ begin
     vtBoolean:
       begin
         isString := false;
-        if V^.VBoolean then // normalize
+        if V^.VBoolean then // normalize as '0' or '1'
           Res.Text := @UINT_999[1].TextLo
         else
           Res.Text := @UINT_999[0].TextLo;
@@ -9055,7 +9072,7 @@ begin
         RawUnicodeToUtf8(@V^.VWideChar, 1, result);
       end;
     vtBoolean:
-      if V^.VBoolean then // normalize
+      if V^.VBoolean then // normalize  as '0' or '1'
         result := SmallUInt32Utf8[1]
       else
         result := SmallUInt32Utf8[0];
@@ -9582,11 +9599,23 @@ end;
 
 procedure Append(var Text: RawUtf8; Added: AnsiChar);
 var
-  t: PtrInt;
+  L: PtrInt;
 begin
-  t := length(Text);
-  SetLength(Text, t + 1);
-  PByteArray(Text)[t] := ord(Added);
+  L := length(Text);
+  SetLength(Text, L + 1);
+  PByteArray(Text)[L] := ord(Added);
+end;
+
+procedure AppendIfNone(var Text: RawUtf8; EndWith: AnsiChar);
+var
+  L: PtrInt;
+begin
+  L := length(Text);
+  if (L <> 0) and
+     (Text[L] = EndWith) then
+    exit;
+  SetLength(Text, L + 1);
+  PByteArray(Text)[L] := ord(EndWith);
 end;
 
 procedure Append(var Text: RawUtf8; Added: pointer; AddedLen: PtrInt);
@@ -9646,12 +9675,25 @@ end;
 
 procedure Prepend(var Text: RawByteString; Added: AnsiChar);
 var
-  t: PtrInt;
+  L: PtrInt;
 begin
-  t := length(Text);
-  SetLength(Text, t + 1); // is likely to avoid any ReallocMem
-  MoveFast(PByteArray(Text)[0], PByteArray(Text)[1], t);
+  L := length(Text);
+  SetLength(Text, L + 1); // is likely to avoid any ReallocMem
+  MoveFast(PByteArray(Text)[0], PByteArray(Text)[1], L);
   PByteArray(Text)[0] := ord(Added);
+end;
+
+procedure PrependIfNone(var Text: RawUtf8; EndWith: AnsiChar);
+var
+  L: PtrInt;
+begin
+  L := length(Text);
+  if (L <> 0) and
+     (Text[1] = EndWith) then
+    exit;
+  SetLength(Text, L + 1); // is likely to avoid any ReallocMem
+  MoveFast(PByteArray(Text)[0], PByteArray(Text)[1], L);
+  PByteArray(Text)[0] := ord(EndWith);
 end;
 
 procedure Prepend(var Text: RawByteString; const Args: array of const);
@@ -9761,6 +9803,33 @@ begin
       Utf8ToFileName(fn, FileName)
     else
       MakePath([FolderName, fn], FileName);
+end;
+
+procedure NormalizeUriVar(const FileName: RawUtf8; var Uri: RawUtf8);
+begin
+  {$ifdef OSLINUX}
+  Uri := FileName;
+  {$else}
+  Uri := StringReplaceChars(FileName, '\', '/');
+  {$endif OSLINUX}
+end;
+
+function NormalizeUriU(const FileName: RawUtf8): RawUtf8;
+begin
+  NormalizeUriVar(FileName, result);
+end;
+
+procedure NormalizeUri(const FileName: TFileName; var Uri: RawUtf8);
+begin
+  {$ifdef UNICODE}
+  {$ifdef OSWINDOWS}
+  NormalizeUriVar(StringToUtf8(FileName), Uri);
+  {$else}
+  StringToUtf8(FileName, Uri);
+  {$endif OSWINDOWS}
+  {$else}
+  NormalizeUriVar(FileName, Uri);
+  {$endif UNICODE}
 end;
 
 function FileExistsMake(const Part: array of const;
@@ -10057,7 +10126,8 @@ end;
 
 procedure ExceptionUtf8(E: Exception; var Message: RawUtf8);
 begin
-  if E.InheritsFrom(ESynException) then
+  if E.InheritsFrom(ESynException) and
+     (ESynException(E).MessageUtf8 <> '') then
     Message := ESynException(E).MessageUtf8 // no conversion needed
   else
     StringToUtf8(E.Message, Message);
@@ -11446,11 +11516,11 @@ begin
     dec(i);
     pc[i] := PCardinal(METHODNAME[TUriMethod(i)])^;
   until i = 0;
-  ShortToUuid := _ShortToUuid;
-  AppendShortUuid := _AppendShortUuid;
-  _AddHtmlEscape := __AddHtmlEscape;
+  ShortToUuid                   := _ShortToUuid;
+  AppendShortUuid               := _AppendShortUuid;
+  _AddHtmlEscape                := __AddHtmlEscape;
   _VariantToUtf8DateTimeIso8601 := __VariantToUtf8DateTimeIso8601;
-  _VariantSaveJson := __VariantSaveJson;
+  _VariantSaveJson              := __VariantSaveJson;
 end;
 
 

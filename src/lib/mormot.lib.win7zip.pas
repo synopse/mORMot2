@@ -32,15 +32,18 @@ interface
 
 {$ifdef OSPOSIX}
 
-// do-nothing-unit on non Windows system
+// do-nothing-unit on non Windows system - compiles now, but is still untested
+
+{ to build the library on POSIX:
+     cd CPP/7zip/Bundles/Format7zF
+     make -j -f ../../cmpl_gcc.mak
+}
 
 implementation
 
 {$else}
 
 uses
-  Windows,
-  ActiveX,
   sysutils,
   classes,
   types,
@@ -307,10 +310,10 @@ type
     function GetArchiveProperty(propID: TPropID; var value: T7zVariant): HRESULT; stdcall;
     function GetNumberOfProperties(numProperties: PCardinal): HRESULT; stdcall;
     function GetPropertyInfo(index: cardinal;
-      name: PBSTR; propID: PPropID; varType: PVarType): HRESULT; stdcall;
+      name: PBstr; propID: PPropID; varType: PVarType): HRESULT; stdcall;
     function GetNumberOfArchiveProperties(var numProperties: cardinal): HRESULT; stdcall;
     function GetArchivePropertyInfo(index: cardinal;
-      name: PBSTR; propID: PPropID; varType: PVarType): HRESULT; stdcall;
+      name: PBstr; propID: PPropID; varType: PVarType): HRESULT; stdcall;
   end;
 
   IArchiveUpdateCallback = interface(IProgress)
@@ -863,7 +866,11 @@ end;
 class procedure E7Zip.RaiseAfterCheck(Caller: TObject;
   const Context: ShortString; Res: HResult);
 begin
+  {$ifdef OSWINDOWS}
   RaiseFmt(Caller, '%s', [WinLastError(context, Res)])
+  {$else}
+  RaiseFmt(Caller, '%s returned 0x%x %s', [context, Res, SystemErrorShort(Res)])
+  {$endif OSWINDOWS}
 end;
 
 class procedure E7Zip.Check(Caller: TObject; const Context: ShortString;
@@ -1013,6 +1020,7 @@ type
   public
     constructor Create(lib: T7zLib; fmt: T7zFormatHandler;
       libowned: boolean); reintroduce; overload;
+    destructor Destroy; override;
     function HandlerProperty(propID: T7zHandlerPropID): T7zVariant;
     property Name: string
       index hpiName read GetLibStringProperty;
@@ -1034,7 +1042,7 @@ type
     fExtractPath: TFileName;
     fExtractCurrent: record
       FileName: TFileName;
-      Created, Accessed, Written: Int64;
+      Created, Accessed, Written: Int64; // from VT_FILETIME VInt64
     end;
     function GetProp(item: cardinal; prop: TPropID): T7zVariant;
     procedure GetPropUtf8(item: cardinal; prop: TPropID; out dest: RawUtf8);
@@ -1515,7 +1523,7 @@ begin
 end;
 
 var
-  LastFoundDll: TFileName; // do the folders ressearch once if possible
+  LastFoundDll: TFileName; // do the folders search once if possible
   
 constructor T7zLib.Create(lib: TFileName);
 begin
@@ -1524,6 +1532,7 @@ begin
   else
     // search in exe and 7-Zip folder, trying any possible .dll file name
     if TryLoad(LastFoundDll) or
+       {$ifdef OSWINDOWS}
        TryLoad(Executable.ProgramFilePath + '7z.dll') or
        TryLoad(Executable.ProgramFilePath + '7za.dll') or
        TryLoad(Executable.ProgramFilePath + '7zxa.dll') or
@@ -1532,14 +1541,18 @@ begin
        TryLoad('c:\Program Files (x86)\7-Zip\7z.dll') or
        {$endif CPU32}
        TryLoad('7z.dll') then
-      LastFoundDll := fFileName
-    else
-      lib := '7z.dll';
+       {$else}
+       TryLoad(Executable.ProgramFilePath + '7z.so') then // never system-wide
+       {$endif OSWINDOWS}
+      LastFoundDll := fFileName;
   if Assigned(fCreateObject) then
     exit;
   LastFoundDll := '';
-  E7Zip.RaiseUtf8('% is not a Win' +
-    {$ifdef CPU32} '32' {$else} '64'  {$endif CPU32} + ' 7-Zip library', [lib]);
+  if lib = '' then
+    lib := 'No'
+  else
+    lib := lib + ' is no valid';
+  E7Zip.RaiseUtf8('% ' + OS_TEXT + ' ' + CPU_ARCH_TEXT + ' 7-Zip library', [lib]);
 end;
 
 destructor T7zLib.Destroy;
@@ -1680,7 +1693,6 @@ begin
 end;
 
 
-
 { T7zArchive }
 
 constructor T7zArchive.Create(lib: T7zLib; fmt: T7zFormatHandler;
@@ -1696,6 +1708,12 @@ begin
   fGetHandlerProperty := LibraryResolve(lib.fHandle, 'GetHandlerProperty');
   if not Assigned(fGetHandlerProperty) then
     E7Zip.RaiseUtf8('% is not an archive library', [lib]);
+end;
+
+destructor T7zArchive.Destroy;
+begin
+  FillZero(fPasswordUtf16);
+  inherited Destroy;
 end;
 
 function T7zArchive.ClassId: TGuid;
@@ -1748,6 +1766,20 @@ begin
   fPasswordIsDefined := true;
 end;
 
+{$ifdef OSPOSIX} // mimics CPP\Common\MyWindows.cpp
+function AllocateForBSTR(size: PtrUInt): pointer;
+  cdecl; external 'c' name 'malloc';
+
+function SysAllocStringLen(W: PWideChar; L: PtrInt): TBStr;
+begin
+  L := L * 2; // from widechars to bytes
+  result := AllocateForBSTR(L + 8);
+  PCardinal(result)^ := L; // length is stored as UINT32 bytes count
+  inc(PCardinal(result));
+  MoveFast(W^, result^, L + 2); // + 2 to copy ending #0 WideChar
+end;
+{$endif OSPOSIX}
+
 function T7zArchive.CryptoGetTextPassword(var password: TBStr): HRESULT;
 var
   fromuser: RawUtf8;
@@ -1758,7 +1790,7 @@ begin
         SetPassword(fromuser);
   if fPasswordIsDefined then
   begin
-    password := SysAllocString(pointer(fPasswordUtf16));
+    password := SysAllocStringLen(pointer(fPasswordUtf16), length(fPasswordUtf16));
     result := S_OK;
   end
   else
@@ -2167,7 +2199,11 @@ begin
       with fExtractCurrent do
         if (FileName <> '') and
            ((Written or Created or Accessed) <> 0) then
+          {$ifdef OSWINDOWS}
           FileSetTime(FileName, Created, Accessed, Written);
+          {$else}
+          FileSetDateFromUnixUtc(FileName, FileTimeToUnixTime(PFileTime(@Written)^));
+          {$endif OSWINDOWS}
   end;
   fExtractCurrent.FileName := '';
   result := S_OK;
@@ -2350,7 +2386,7 @@ begin
     item.Attributes := rd.Attributes[i];
     item.IsFolder := rd.IsFolder[i];
     item.UpdateItemIndex := i;
-    GetSystemTimeAsFileTime(item.LastWriteTime);
+    NowUtcToWindowsFileTime(item.LastWriteTime);
     ObjArrayAdd(fEntries, item);
   end;
 end;
@@ -2373,6 +2409,7 @@ function T7zWriter.AddFile(const Filename: TFileName; const ZipName: RawUtf8): b
 var
   item: T7zItem;
   Handle: THandle;
+  lw, ct: TUnixMSTime; // use mormot.core.os cross-plaform API
 begin
   Handle := FileOpen(Filename, fmOpenReadShared);
   result := ValidHandle(Handle);
@@ -2382,10 +2419,10 @@ begin
   item.SourceMode := smFile;
   item.FileName := Filename;
   item.ZipName := ZipName;
-  GetFileTime(Handle, @item.CreationTime, nil, @item.LastWriteTime);
-  item.Size := FileSize(Handle);
-  CloseHandle(Handle);
-  item.Attributes := GetFileAttributes(pointer(Filename));
+  FileInfoByHandle(Handle, nil, @item.Size, @lw, @ct, @item.Attributes);
+  UnixMSTimeToFileTime(ct, item.CreationTime);
+  UnixMSTimeToFileTime(lw, item.LastWriteTime);
+  FileClose(Handle);
   item.IsFolder := item.Attributes and faDirectory <> 0;
   item.IsAnti := false;
   item.Ownership := soOwned;
@@ -2431,9 +2468,14 @@ var
               item.Stream := nil;
               item.FileName := fn;
               StringToUtf8(s + copy(item.FileName, lencut, 7777), item.ZipName);
-              item.CreationTime := f.FindData.ftCreationTime;
+              {$ifdef OSWINDOWS}
+              item.CreationTime  := f.FindData.ftCreationTime;
               item.LastWriteTime := f.FindData.ftLastWriteTime;
-              item.Attributes := f.FindData.dwFileAttributes;
+              item.Attributes    := f.FindData.dwFileAttributes;
+              {$else}
+              UnixTimeToFileTime(SearchRecToUnixTimeUtc(f), item.LastWriteTime);
+              item.Attributes := f.Attr;
+              {$endif OSWINDOWS}
               item.Size := f.Size;
               item.IsFolder := false;
               item.IsAnti := false;
@@ -2494,7 +2536,7 @@ begin
   if LastWriteTime <> 0 then
     UnixTimeToFileTime(LastWriteTime, item.LastWriteTime)
   else
-    GetSystemTimeAsFileTime(item.LastWriteTime);
+    NowUtcToWindowsFileTime(item.LastWriteTime);
   item.ZipName := ZipName;
   item.IsFolder := IsFolder;
   item.IsAnti := IsAnti;
@@ -2555,7 +2597,7 @@ begin
   VarClear(value);
   if index >= cardinal(length(fEntries)) then
   begin
-    result := ERROR_INVALID_PARAMETER;
+    result := SystemError(seInvalidParameter);
     exit;
   end;
   item := fEntries[index];
@@ -2604,7 +2646,7 @@ function T7zWriter.GetStream(index: cardinal;
   var inStream: ISequentialInStream): HRESULT;
 begin
   if index >= cardinal(length(fEntries)) then
-    result := ERROR_INVALID_PARAMETER
+    result := SystemError(seInvalidParameter)
   else
   try
     result := S_OK;
@@ -2622,10 +2664,10 @@ begin
             fCurrentItem.Stream, {owned=}false, index);
         end;
     else
-      result := ERROR_INVALID_PARAMETER;
+      result := SystemError(seInvalidParameter);
     end;
   except
-    result := ERROR_ACCESS_DENIED;
+    result := SystemError(seAccessDenied);
   end;
 end;
 
@@ -2636,7 +2678,7 @@ var
 begin
   if index >= cardinal(length(fEntries)) then
   begin
-    result := ERROR_INVALID_PARAMETER;
+    result := SystemError(seInvalidParameter);
     exit;
   end;
   {
@@ -2940,8 +2982,6 @@ procedure T7zWriter.VolumeMode7z(mode: boolean);
 begin
   SetProperty('V', BooleanMethod[mode]);
 end;
-
-
 
 {$endif OSPOSIX}
 
