@@ -1608,7 +1608,7 @@ begin
 end;
 
 procedure TXName.FromFields(const fields: TCryptCertFields);
-begin // do not use TrimU() because some e.g. CN=' ' is a common value
+begin // do not use TrimU() because e.g. CN=' ' is accepted e.g. by OpenSSL
   Name[xaC]   := fields.Country;
   Name[xaST]  := fields.State;
   Name[xaL]   := fields.Locality;
@@ -3323,7 +3323,10 @@ begin
                     AsnSeq(extreq)
                   ])
                 ])
-              ]);
+              ])
+  else
+    // empty [0] set seems mandatory - OpenSSL and most libraries include it
+    extreq := AsnTyped('', ASN1_CTC0);
   // compute the main CSR body
   der := Asn(ASN1_SEQ, [
            Asn(0), // version
