@@ -1564,6 +1564,7 @@ type
   PPX509_REQ_INFO = ^PX509_REQ_INFO;
 
   PX509_NAME = ^X509_NAME;
+  PX509_EXTENSION = ^X509_EXTENSION;
 
   /// convenient wrapper to a PX509_REQ instance
   X509_REQ = object
@@ -1572,6 +1573,7 @@ type
     function GetPublicKey: PEVP_PKEY;
     function ToBinary: RawByteString;
     function ToPem: RawUtf8;
+    procedure AddAndFreeExtension(ext: PX509_EXTENSION);
     procedure AddExtension(nid: integer; const value: RawUtf8);
     /// set key_usage/ext_key_usage extensions
     // - any previous usage set will be first deleted
@@ -1683,7 +1685,6 @@ type
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
   end;
-  PX509_EXTENSION = ^X509_EXTENSION;
   PPX509_EXTENSION = ^PX509_EXTENSION;
   PX509_EXTENSIONS = POPENSSL_STACK;
   PPX509_EXTENSIONS = ^PX509_EXTENSIONS;
@@ -7859,21 +7860,23 @@ begin
   result := BioSave(@self, @PEM_write_bio_X509_REQ, CP_UTF8);
 end;
 
-procedure X509_REQ.AddExtension(nid: integer; const value: RawUtf8);
+procedure X509_REQ.AddAndFreeExtension(ext: PX509_EXTENSION);
 var
-  ex: PX509_EXTENSION;
   exts: Pstack_st_X509_EXTENSION;
 begin
-  if @self = nil then
-    exit;
-  ex := X509V3_EXT_conf_nid(nil, nil, nid, pointer(value));
-  if ex = nil then
+  if ext = nil then
     exit;
   exts := NewOpenSslStack;
-  exts.Add(ex);
+  exts.Add(ext);
   X509_REQ_add_extensions(@self, exts);
   exts.Free;
-  ex.Free;
+  ext.Free;
+end;
+
+procedure X509_REQ.AddExtension(nid: integer; const value: RawUtf8);
+begin
+  if @self <> nil then
+    AddAndFreeExtension(X509V3_EXT_conf_nid(nil, nil, nid, pointer(value)));
 end;
 
 function X509_REQ.Sign(pkey: PEVP_PKEY; md: PEVP_MD): integer;
