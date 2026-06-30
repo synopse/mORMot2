@@ -10561,7 +10561,7 @@ begin
       if Path = nil then
         exit; // reach last path
       if result.Kind = rkClass then // stored by reference
-        Data := PPointer(PAnsiChar(Data) + p.OffsetGet)^;
+        Data := PPointer(Data)^;
       continue;
     end
     else
