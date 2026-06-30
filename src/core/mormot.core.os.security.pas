@@ -2195,6 +2195,15 @@ procedure AsnOid(OidText: PUtf8Char; var Dest: TAsnObject); overload;
 // - will prefer ASN1_PRINTSTRING if the charset of the supplied text do suffice
 function AsnText(const Text: RawUtf8): TAsnObject;
 
+/// create an ASN.1 binary with 7-bit IA5String encoding (SAN DNS names, email)
+function AsnIA5(const Text: RawUtf8): TAsnObject;
+
+/// create an ASN.1 binary with UTF-8 encoding (subject/issuer attributes)
+function AsnUtf8(const Text: RawUtf8): TAsnObject;
+
+/// create an ASN.1 binary with UTF-16 BE encoding (Windows BMPString)
+function AsnBmp(const Text: RawUtf8): TAsnObject;
+
 /// internal function used to wipe any temporary string for anti-forensic
 // - warning: all Content[] will be filled with zeroes even if marked as  "const"
 function AsnSafeOct(const Content: array of TAsnObject): TAsnObject;
@@ -6984,6 +6993,26 @@ end;
 function AsnText(const Text: RawUtf8): TAsnObject;
 begin
   AsnTyped(pointer(Text), length(Text), AsnTypeText(pointer(Text)), result);
+end;
+
+function AsnIA5(const Text: RawUtf8): TAsnObject;
+begin
+  AsnTyped(pointer(Text), length(Text), ASN1_IA5STRING, result);
+end;
+
+function AsnUtf8(const Text: RawUtf8): TAsnObject;
+begin
+  AsnTyped(pointer(Text), length(Text), ASN1_UTF8STRING, result);
+end;
+
+function AsnBmp(const Text: RawUtf8): TAsnObject;
+var
+  tmp: TSynTempBuffer;
+begin
+  Unicode_FromUtf8(pointer(Text), length(Text), tmp);
+  bswap16array(tmp.buf, tmp.len); // into BIGendian - tmp.len is in WideChars
+  AsnTyped(tmp.buf, tmp.len shl 1, ASN1_BMPSTRING, result);
+  tmp.Done;
 end;
 
 function AsnSafeOct(const Content: array of TAsnObject): TAsnObject;
