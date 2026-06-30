@@ -1620,7 +1620,7 @@ var
   xa: TXAttr;
 begin
   FastAssignNew(result);
-  o := AsnEncOid(pointer(Oid));
+  AsnEncOidVar(pointer(Oid), o);
   if o = '' then
     exit;
   result := FindOtherAsn(pointer(Other), length(Other), o);
@@ -1771,8 +1771,7 @@ begin
     AddExtCsv(result, xeIssuerAlternativeName, ext[xeIssuerAlternativeName]);
   // non-standard ext - but defined as TCryptCertFields.Comment
   if ext[xeNetscapeComment] <> '' then
-    AddExt(result, xeNetscapeComment,
-      AsnTyped(ext[xeNetscapeComment], ASN1_IA5STRING));
+    AddExt(result, xeNetscapeComment, AsnIA5(ext[xeNetscapeComment]));
   // xeAuthorityInformationAccess and xeCertificatePolicies not yet persisted
 end;
 
@@ -4529,13 +4528,13 @@ var
   caa: TCryptAsymAlgo;
 begin
   for a := succ(low(a)) to high(a) do
-    XA_OID_ASN[a] := AsnEncOid(XA_OID[a]);
+    AsnEncOidVar(XA_OID[a], XA_OID_ASN[a]);
   for o := succ(low(o)) to high(o) do
-    XE_OID_ASN[o] := AsnEncOid(XE_OID[o]);
+    AsnEncOidVar(XE_OID[o], XE_OID_ASN[o]);
   for c := succ(low(c)) to high(c) do
-    XCE_OID_ASN[c] := AsnEncOid(XCE_OID[c]);
+    AsnEncOidVar(XCE_OID[c], XCE_OID_ASN[c]);
   for k := succ(low(k)) to high(k) do
-    XKU_OID_ASN[k] := AsnEncOid(XKU_OID[k]);
+    AsnEncOidVar(XKU_OID[k], XKU_OID_ASN[k]);
   // register this unit to our high-level cryptographic catalog
   // 'x509-rs256-int' 'x509-ps256-int' and 'x509-es256-int' match this unit
   // ('x509-rs/ps384/512-int' methods seem superfluous so are not defined)
