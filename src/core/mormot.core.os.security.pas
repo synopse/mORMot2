@@ -2115,6 +2115,13 @@ procedure AsnEncOidItem(Value: PtrUInt; var Result: ShortString);
 
 /// create an ASN.1 ObjectID from '1.x.x.x.x' text
 function AsnEncOid(OidText: PUtf8Char): TAsnObject;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// create an ASN.1 ObjectID from '1.x.x.x.x' text
+procedure AsnEncOidVar(OidText: PUtf8Char; var Dest: TAsnObject);
+
+/// create an ASN.1 ObjectID from '1.x.x.x.x' text into a ShortString buffer
+procedure AsnEncOidShort(OidText: PUtf8Char; var Dest: ShortString);
 
 /// encode the len of a ASN.1 binary item into a temporary 1..5 bytes buffer
 function AsnEncLen(Len: cardinal; var dest: TQWordRec): PtrInt;
@@ -2172,7 +2179,11 @@ function AsnEnum(Data: PtrInt): TAsnObject;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// create an ASN.1 ObjectID from 'x.x.x.x.x' text
-function AsnOid(OidText: PUtf8Char): TAsnObject;
+function AsnOid(OidText: PUtf8Char): TAsnObject; overload;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// create an ASN.1 ObjectID from 'x.x.x.x.x' text
+procedure AsnOid(OidText: PUtf8Char; var Dest: TAsnObject); overload;
 
 /// create an ASN.1 PrintableString or UTF8String from some UTF-8 text
 // - will prefer ASN1_PRINTSTRING if the charset of the supplied text do suffice
@@ -6627,12 +6638,11 @@ begin
     high(Result), @Result);
 end;
 
-function AsnEncOid(OidText: PUtf8Char): TAsnObject;
+procedure AsnEncOidShort(OidText: PUtf8Char; var Dest: ShortString);
 var
   x, y: PtrUInt;
-  tmp: ShortString; // no temporary memory allocation
 begin
-  tmp[0] := #0;
+  Dest[0] := #0;
   if OidText <> nil then
   begin
     // first byte = two first numbers modulo 40
@@ -6642,14 +6652,26 @@ begin
     begin
       y := GetNextUInt32(OidText); // warning: y=0 is a valid value
       inc(x, y);
-      AsnEncOidItem(x, tmp);
+      AsnEncOidItem(x, Dest);
       x := 0;
     end;
     if (y = 0) or   // y=0 is not a valid last item
-       (tmp[0] < #3) then
-      tmp[0] := #0; // clearly invalid input
+       (Dest[0] < #3) then
+      Dest[0] := #0; // clearly invalid input
   end;
-  FastSetRawByteString(result, @tmp[1], ord(tmp[0]));
+end;
+
+function AsnEncOid(OidText: PUtf8Char): TAsnObject;
+begin
+  AsnEncOidVar(OidText, result);
+end;
+
+procedure AsnEncOidVar(OidText: PUtf8Char; var Dest: TAsnObject);
+var
+  tmp: ShortString; // no temporary memory allocation
+begin
+  AsnEncOidShort(OidText, tmp);
+  FastSetRawByteString(Dest, @tmp[1], ord(tmp[0]));
 end;
 
 function AsnEncLen(Len: cardinal; var dest: TQWordRec): PtrInt;
@@ -6912,9 +6934,17 @@ begin
   result := Asn(Data, ASN1_ENUM);
 end;
 
+procedure AsnOid(OidText: PUtf8Char; var Dest: TAsnObject);
+var
+  tmp: ShortString; // no temporary memory allocation
+begin
+  AsnEncOidShort(OidText, tmp);
+  AsnTyped(@tmp[1], ord(tmp[0]), ASN1_OBJID, Dest);
+end;
+
 function AsnOid(OidText: PUtf8Char): TAsnObject;
 begin
-  result := AsnTyped(AsnEncOid(OidText), ASN1_OBJID);
+  AsnOid(OidText, result);
 end;
 
 function AsnTypeText(p: PUtf8Char): integer;
