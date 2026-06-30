@@ -2845,13 +2845,12 @@ const
 function CldapGetDomainInfo(var Info: TCldapDomainInfo; TimeOutMS: integer;
   const DomainName, LdapServerAddress, LdapServerPort: RawUtf8): boolean;
 var
-  id, len: integer;
+  id: integer;
   i: PtrInt;
   srv, port, filter, v: RawUtf8;
   req, response: RawByteString;
   addr, resp: TNetAddr;
   sock: TNetSocket;
-  tmp: array[0..1999] of byte; // big enough for a UDP frame
 begin
   RecordZero(@Info, TypeInfo(TCldapDomainInfo));
   result := false;
@@ -2876,8 +2875,7 @@ begin
     sock.SetReceiveTimeout(TimeOutMS);
     if sock.SendTo(pointer(req), length(req), addr) <> nrOK then
       exit;
-    len := sock.RecvFrom(@tmp, SizeOf(tmp), resp);
-    FastSetRawByteString(response, @tmp, len);
+    response := sock.RecvFrom(resp);
     if not RawLdapSearchParse(response, id, ['netlogon'], [@v]) then
       exit;
     addr.IPWithPort(Info.IP);
@@ -3002,9 +3000,7 @@ var
   addr, resp: TNetAddr;
   start, stop: Int64;
   sock: TNetSocket;
-  len: PtrInt;
   v: TCldapServer;
-  tmp: array[0..1999] of byte; // big enough for any UDP frame
 begin
   result := 0;
   if addr.SetFrom(Address, Port, nlUdp) <> nrOk then
@@ -3028,12 +3024,11 @@ begin
     if sock.SendTo(pointer(req), length(req), addr) <> nrOK then
       exit;
     repeat
-      len := sock.RecvFrom(@tmp, SizeOf(tmp), resp);
-      if (len > 5) and
-         (tmp[0] = ASN1_SEQ) then
-      begin
-        FastSetRawByteString(response, @tmp, len);
-        if RawLdapSearchParse(response, id,
+      response := sock.RecvFrom(resp);
+      if response = '' then
+        break; // stop at last recvfrom() timeout
+      if (response[1] <> AnsiChar(ASN1_SEQ)) or
+         not RawLdapSearchParse(response, id,
           ['dnsHostName',
            'defaultNamingContext',
            'ldapServiceName',
@@ -3042,17 +3037,15 @@ begin
            @v.NamingContext,
            @v.ServiceName,
            @v.VendorName]) then
-        begin
-          QueryPerformanceMicroSeconds(stop);
-          v.TimeMicroSec := stop - start;
-          resp.IP(v.IP);
-          SetLength(Servers, length(Servers) + 1);
-          Servers[high(Servers)] := v;
-          Finalize(v);
-          inc(result);
-        end;
-      end;
-    until len < 0; // stop at last recvfrom() timeout
+        continue;
+      QueryPerformanceMicroSeconds(stop);
+      v.TimeMicroSec := stop - start;
+      resp.IP(v.IP);
+      SetLength(Servers, length(Servers) + 1);
+      Servers[high(Servers)] := v;
+      Finalize(v);
+      inc(result);
+    until false;
   finally
     sock.Close;
   end;
@@ -3072,10 +3065,9 @@ var
   sorted: TRawUtf8DynArray;
   tix: Int64;
   n, i, r: PtrInt;
-  len, found: integer;
+  found: integer;
   poll: TPollSocketAbstract;
   res: TPollSocketResults;
-  tmp: array[0..1999] of byte; // big enough for a UDP frame
 begin
   n := length(Hosts);
   if n = 0 then
@@ -3118,17 +3110,15 @@ begin
           if (PtrUInt(i) >= PtrUInt(n)) or
              (sock[i] = nil) then
             continue; // paranoid
-          len := sock[i].RecvFrom(@tmp, SizeOf(tmp), resp);
-          if (len > 5) and
-             (tmp[0] = ASN1_SEQ) then
-          begin
-            FastSetRawByteString(req, @tmp, len);
-            if RawLdapSearchParse(req, 777 + i, ['dnsHostName'], [@v]) then
-              AddRawUtf8(sorted, found, Hosts[i]); // found a true LDAP server
-            poll.Unsubscribe(sock[i]); // some kind of server
-            sock[i].Close;
-            sock[i] := nil;
-          end;
+          req := sock[i].RecvFrom(resp);
+          if (req = '') or
+             (req[1] <> AnsiChar(ASN1_SEQ)) then
+            continue;
+          if RawLdapSearchParse(req, 777 + i, ['dnsHostName'], [@v]) then
+            AddRawUtf8(sorted, found, Hosts[i]); // found a true LDAP server
+          poll.Unsubscribe(sock[i]); // some kind of server
+          sock[i].Close;
+          sock[i] := nil;
        end;
     until (found > MinimalUdpCount) or // stop as soon as we got enough host(s)
           (found = n) or               // or we got all hosts
