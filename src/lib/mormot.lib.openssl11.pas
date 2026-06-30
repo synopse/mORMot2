@@ -2254,6 +2254,8 @@ function X509_delete_ext(x: PX509; loc: integer): PX509_EXTENSION; cdecl;
 procedure X509V3_set_ctx(ctx: PX509V3_CTX; issuer, subject: PX509; req: PX509_REQ; crl: PX509_CRL; flags: integer);
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function X509_gmtime_adj(s: PASN1_TIME; adj: integer): PASN1_TIME; cdecl;
+function X509_EXTENSION_create_by_OBJ(ex: PPX509_EXTENSION; obj: PASN1_OBJECT;
+  crit: integer; data: PASN1_OCTET_STRING): PX509_EXTENSION; cdecl;
 procedure X509_EXTENSION_free(a: PX509_EXTENSION); cdecl;
 procedure BASIC_CONSTRAINTS_free(a: PBASIC_CONSTRAINTS);
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
@@ -3460,6 +3462,8 @@ type
     X509_delete_ext: function(x: PX509; loc: integer): PX509_EXTENSION; cdecl;
     X509V3_set_ctx: procedure(ctx: PX509V3_CTX; issuer: PX509; subject: PX509; req: PX509_REQ; crl: PX509_CRL; flags: integer); cdecl;
     X509_gmtime_adj: function(s: PASN1_TIME; adj: integer): PASN1_TIME; cdecl;
+    X509_EXTENSION_create_by_OBJ: function(ex: PPX509_EXTENSION; obj: PASN1_OBJECT;
+      crit: integer; data: PASN1_OCTET_STRING): PX509_EXTENSION; cdecl;
     X509_EXTENSION_free: procedure(a: PX509_EXTENSION); cdecl;
     BASIC_CONSTRAINTS_free: procedure(a: PBASIC_CONSTRAINTS); cdecl;
     d2i_BASIC_CONSTRAINTS: function(a: PPBASIC_CONSTRAINTS; _in: PPByte; len: integer): PBASIC_CONSTRAINTS; cdecl;
@@ -3605,10 +3609,15 @@ type
     OPENSSL_sk_num: function(p1: POPENSSL_STACK): integer; cdecl;
     OPENSSL_sk_value: function(p1: POPENSSL_STACK; p2: integer): pointer; cdecl;
     ASN1_BIT_STRING_get_bit: function(a: PASN1_BIT_STRING; n: integer): integer; cdecl;
+    ASN1_OCTET_STRING_new: function(): PASN1_OCTET_STRING; cdecl;
+    ASN1_OCTET_STRING_free: procedure(a: PASN1_OCTET_STRING); cdecl;
+    ASN1_OCTET_STRING_set: function(str: PASN1_OCTET_STRING; data: PByte; len: integer): integer; cdecl;
     OBJ_nid2ln: function(n: integer): PUtf8Char; cdecl;
     OBJ_nid2sn: function(n: integer): PUtf8Char; cdecl;
     OBJ_txt2nid: function(s: PUtf8Char): integer; cdecl;
+    OBJ_txt2obj: function(s: PUtf8Char; no_name: integer): PASN1_OBJECT; cdecl;
     OBJ_obj2nid: function(o: PASN1_OBJECT): integer; cdecl;
+    ASN1_OBJECT_free: procedure(a: PASN1_OBJECT); cdecl;
     ASN1_STRING_data: function(x: PASN1_STRING): PByte; cdecl;
     ASN1_STRING_length: function(x: PASN1_STRING): integer; cdecl;
     ASN1_STRING_type: function(x: PASN1_STRING): integer; cdecl;
@@ -3740,7 +3749,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..352] of PAnsiChar = (
+  LIBCRYPTO_ENTRIES: array[0..358] of PAnsiChar = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3818,6 +3827,7 @@ const
     'X509_delete_ext',
     'X509V3_set_ctx',
     'X509_gmtime_adj',
+    'X509_EXTENSION_create_by_OBJ',
     'X509_EXTENSION_free',
     'BASIC_CONSTRAINTS_free',
     'd2i_BASIC_CONSTRAINTS',
@@ -3963,10 +3973,15 @@ const
     'OPENSSL_sk_num',
     'OPENSSL_sk_value',
     'ASN1_BIT_STRING_get_bit',
+    'ASN1_OCTET_STRING_new',
+    'ASN1_OCTET_STRING_free',
+    'ASN1_OCTET_STRING_set',
     'OBJ_nid2ln',
     'OBJ_nid2sn',
     'OBJ_txt2nid',
+    'OBJ_txt2obj',
     'OBJ_obj2nid',
+    'ASN1_OBJECT_free',
     'ASN1_STRING_data ASN1_STRING_get0_data', // alternate names
     'ASN1_STRING_length',
     'ASN1_STRING_type',
@@ -4502,6 +4517,12 @@ end;
 function X509_gmtime_adj(s: PASN1_TIME; adj: integer): PASN1_TIME;
 begin
   result := libcrypto.X509_gmtime_adj(s, adj);
+end;
+
+function X509_EXTENSION_create_by_OBJ(ex: PPX509_EXTENSION; obj: PASN1_OBJECT;
+   crit: integer; data: PASN1_OCTET_STRING): PX509_EXTENSION;
+begin
+ result := libcrypto.X509_EXTENSION_create_by_OBJ(ex, obj, crit, data);
 end;
 
 procedure X509_EXTENSION_free(a: PX509_EXTENSION);
@@ -5269,6 +5290,21 @@ begin
   result := libcrypto.ASN1_BIT_STRING_get_bit(a, n);
 end;
 
+function ASN1_OCTET_STRING_new(): PASN1_OCTET_STRING;
+begin
+  result := libcrypto.ASN1_OCTET_STRING_new();
+end;
+
+procedure ASN1_OCTET_STRING_free(a: PASN1_OCTET_STRING);
+begin
+  libcrypto.ASN1_OCTET_STRING_free(a);
+end;
+
+function ASN1_OCTET_STRING_set(str: PASN1_OCTET_STRING; data: PByte; len: integer): integer;
+begin
+  result := libcrypto.ASN1_OCTET_STRING_set(str, data, len);
+end;
+
 function OBJ_nid2ln(n: integer): PUtf8Char;
 begin
   result := libcrypto.OBJ_nid2ln(n);
@@ -5284,9 +5320,19 @@ begin
   result := libcrypto.OBJ_txt2nid(s);
 end;
 
+function OBJ_txt2obj(s: PUtf8Char; no_name: integer): PASN1_OBJECT;
+begin
+  result := libcrypto.OBJ_txt2obj(s, no_name);
+end;
+
 function OBJ_obj2nid(o: PASN1_OBJECT): integer;
 begin
   result := libcrypto.OBJ_obj2nid(o);
+end;
+
+procedure ASN1_OBJECT_free(a: PASN1_OBJECT);
+begin
+  libcrypto.ASN1_OBJECT_free(a);
 end;
 
 function ASN1_STRING_data(x: PASN1_STRING): PByte;
@@ -6614,6 +6660,9 @@ procedure X509V3_set_ctx(ctx: PX509V3_CTX; issuer: PX509; subject: PX509;
 function X509_gmtime_adj(s: PASN1_TIME; adj: integer): PASN1_TIME; cdecl;
   external LIB_CRYPTO name _PU + 'X509_gmtime_adj';
 
+function X509_EXTENSION_create_by_OBJ(ex: PPX509_EXTENSION; obj: PASN1_OBJECT; crit: integer; data: PASN1_OCTET_STRING): PX509_EXTENSION; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_EXTENSION_create_by_OBJ';
+
 procedure X509_EXTENSION_free(a: PX509_EXTENSION); cdecl;
   external LIB_CRYPTO name _PU + 'X509_EXTENSION_free';
 
@@ -7075,6 +7124,15 @@ function OPENSSL_sk_value(p1: POPENSSL_STACK; p2: integer): pointer; cdecl;
 function ASN1_BIT_STRING_get_bit(a: PASN1_BIT_STRING; n: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_BIT_STRING_get_bit';
 
+function ASN1_OCTET_STRING_new(): PASN1_OCTET_STRING; cdecl;
+  external LIB_CRYPTO name _PU + 'ASN1_OCTET_STRING_new';
+
+procedure ASN1_OCTET_STRING_free(a: PASN1_OCTET_STRING); cdecl;
+  external LIB_CRYPTO name _PU + 'ASN1_OCTET_STRING_free';
+
+function ASN1_OCTET_STRING_set(str: PASN1_OCTET_STRING; data: PByte; len: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'ASN1_OCTET_STRING_set';
+
 function OBJ_nid2ln(n: integer): PUtf8Char; cdecl;
   external LIB_CRYPTO name _PU + 'OBJ_nid2ln';
 
@@ -7086,6 +7144,12 @@ function OBJ_obj2nid(o: PASN1_OBJECT): integer; cdecl;
 
 function OBJ_txt2nid(s: PUtf8Char): integer; cdecl;
   external LIB_CRYPTO name _PU + 'OBJ_txt2nid';
+
+function OBJ_txt2obj(s: PUtf8Char; no_name: integer): PASN1_OBJECT; cdecl;
+  external LIB_CRYPTO name _PU + 'OBJ_txt2obj';
+
+procedure ASN1_OBJECT_free(a: PASN1_OBJECT); cdecl;
+  external LIB_CRYPTO name _PU + 'ASN1_OBJECT_free';
 
 function ASN1_STRING_data(x: PASN1_STRING): PByte; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_STRING_data';

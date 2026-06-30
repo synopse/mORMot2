@@ -12600,12 +12600,6 @@ function ASN1_GENERALIZEDTIME_set_string(s: PASN1_GENERALIZEDTIME; str: PUtf8Cha
 function ASN1_TIME_diff(pday: PInteger; psec: PInteger; from: PASN1_TIME; _to: PASN1_TIME): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_TIME_diff';
 
-function ASN1_OCTET_STRING_new(): PASN1_OCTET_STRING; cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_OCTET_STRING_new';
-
-procedure ASN1_OCTET_STRING_free(a: PASN1_OCTET_STRING); cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_OCTET_STRING_free';
-
 function d2i_ASN1_OCTET_STRING(a: PPASN1_OCTET_STRING; _in: PPByte; len: integer): PASN1_OCTET_STRING; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_ASN1_OCTET_STRING';
 
@@ -12620,9 +12614,6 @@ function ASN1_OCTET_STRING_dup(a: PASN1_OCTET_STRING): PASN1_OCTET_STRING; cdecl
 
 function ASN1_OCTET_STRING_cmp(a: PASN1_OCTET_STRING; b: PASN1_OCTET_STRING): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_OCTET_STRING_cmp';
-
-function ASN1_OCTET_STRING_set(str: PASN1_OCTET_STRING; data: PByte; len: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'ASN1_OCTET_STRING_set';
 
 function ASN1_VISIBLESTRING_new(): PASN1_VISIBLESTRING; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_VISIBLESTRING_new';
@@ -18203,9 +18194,6 @@ function X509_REVOKED_delete_ext(x: PX509_REVOKED; loc: integer): PX509_EXTENSIO
 
 function X509_EXTENSION_create_by_NID(ex: PPX509_EXTENSION; nid: integer; crit: integer; data: PASN1_OCTET_STRING): PX509_EXTENSION; cdecl;
   external LIB_CRYPTO name _PU + 'X509_EXTENSION_create_by_NID';
-
-function X509_EXTENSION_create_by_OBJ(ex: PPX509_EXTENSION; obj: PASN1_OBJECT; crit: integer; data: PASN1_OCTET_STRING): PX509_EXTENSION; cdecl;
-  external LIB_CRYPTO name _PU + 'X509_EXTENSION_create_by_OBJ';
 
 function X509at_get_attr_count(x: Pstack_st_X509_ATTRIBUTE): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509at_get_attr_count';
