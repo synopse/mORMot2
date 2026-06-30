@@ -214,6 +214,9 @@ type
 /// convert a X.501 name ASN.1 binary as a single line Distinguished Name text
 function XNameAsDN(const Der: TAsnObject): RawUtf8;
 
+/// call AddExt(Bin) for all Exts[] entries
+procedure AddOthersToSeq(const Exts: TCryptCustomExts; var Bin: TAsnObject);
+
 function ToText(a: TXAttr): PShortString; overload;
 function ToText(e: TXExtension): PShortString; overload;
 function ToText(u: TXKeyUsage): PShortString; overload;
@@ -1203,6 +1206,22 @@ begin
     result := x.AsDNText
   else
     FastAssignNew(result);
+end;
+
+procedure AddOthersToSeq(const Exts: TCryptCustomExts; var Bin: TAsnObject);
+var
+  n: integer;
+  e: PCryptCustomExt;
+begin
+  e := pointer(Exts);
+  if e = nil then
+    exit;
+  n := PDALen(PAnsiChar(e) - _DALEN)^ + _DAOFF;
+  repeat
+    AddExt(Bin, e^.Oid, e^.Value, {critical=}false);
+    inc(e);
+    dec(n);
+  until n = 0;
 end;
 
 function ToText(a: TXAttr): PShortString;
