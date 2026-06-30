@@ -6760,7 +6760,7 @@ var
   pb: PByte;
   v: PVarData;
   item: TRttiCustom;
-  json: RawUtf8;
+  tmp: pointer;
 begin
   Init(aOptions, dvArray);
   n := aItems.Count;
@@ -6771,15 +6771,20 @@ begin
   if item.Kind in (rkRecordOrDynArrayTypes + [rkClass]) then
   begin
     // use temporary non-expanded JSON conversion for complex nested content
-    aItems.SaveToJson(json, [twoNonExpandedArrays]);
-    if (json <> '') and
-       (json[1] = '{') then
-      // should be a non-expanded array, not JSON_BASE64_MAGIC_QUOTE_C
-      InitArrayFromResults(pointer(json), length(json), aOptions);
+    tmp := nil;
+    aItems.SaveToJson(RawUtf8(tmp), [twoNonExpandedArrays]);
+    if tmp <> nil then
+      case PUtf8Char(tmp)^ of
+        '{': // non-expanded array of records
+           InitArrayFromResults(tmp, length(RawUtf8(tmp)), aOptions);
+        '[': // e.g. custom serialization ignored twoNonExpandedArrays option
+           InitJsonInPlace(tmp, aOptions, nil, aItems.Count);
+      end; // JSON_BASE64_MAGIC_QUOTE_C has not enough information
+    FastAssignNew(tmp);
   end
   else
   begin
-    // handle array of simple types
+    // handle array of simple types directly from RTTI
     VCount := n;
     v := DynArrayNew(@VValue, n, SizeOf(VValue[0]));
     pb := aItems.Value^;
