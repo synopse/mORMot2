@@ -674,8 +674,8 @@ begin
           while R.FillOne do
           begin
             inc(n);
-            Check(Client.Orm.Add(R, true, true) =
-              R.FillContext.Table.GetID(n));
+            CheckEqual(Client.Orm.Add(R, true, true),
+                       R.FillContext.Table.GetID(n));
             if n > 999 then
               break; // Jet is very slow e.g. within the Delphi IDE
           end;
