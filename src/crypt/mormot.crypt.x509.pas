@@ -214,9 +214,6 @@ type
 /// convert a X.501 name ASN.1 binary as a single line Distinguished Name text
 function XNameAsDN(const Der: TAsnObject): RawUtf8;
 
-/// call AddExt(Bin) for all Exts[] entries
-procedure AddOthersToSeq(const Exts: TCryptCustomExts; var Bin: TAsnObject);
-
 function ToText(a: TXAttr): PShortString; overload;
 function ToText(e: TXExtension): PShortString; overload;
 function ToText(u: TXKeyUsage): PShortString; overload;
@@ -446,6 +443,9 @@ procedure AddExtCsv(var result: TAsnObject; const oid: RawByteString;
 /// append one X.509 v3 Certificate extension array values per known TXExtension
 procedure AddExtArray(var result: TAsnObject; xe: TXExtension;
   const values: array of RawUtf8; critical: boolean = false);
+
+/// append X.509 v3 Certificate extensions from all Exts[] entries
+procedure AddExts(var result: TAsnObject; const exts: TCryptCustomExts);
 
 
 { **************** X.509 Certificates and Certificate Signing Request (CSR) }
@@ -1208,22 +1208,6 @@ begin
     FastAssignNew(result);
 end;
 
-procedure AddOthersToSeq(const Exts: TCryptCustomExts; var Bin: TAsnObject);
-var
-  n: integer;
-  e: PCryptCustomExt;
-begin
-  e := pointer(Exts);
-  if e = nil then
-    exit;
-  n := PDALen(PAnsiChar(e) - _DALEN)^ + _DAOFF;
-  repeat
-    AddExt(Bin, e^.Oid, e^.Value, {critical=}false);
-    inc(e);
-    dec(n);
-  until n = 0;
-end;
-
 function ToText(a: TXAttr): PShortString;
 begin
   result := GetEnumName(TypeInfo(TXAttr), ord(a));
@@ -1726,6 +1710,22 @@ begin
   AddExt(result, XE_OID_ASN[xe], AsnSeq(seq), critical);
 end;
 
+procedure AddExts(var result: TAsnObject; const exts: TCryptCustomExts);
+var
+  n: integer;
+  e: PCryptCustomExt;
+begin
+  e := pointer(exts);
+  if e = nil then
+    exit;
+  n := PDALen(PAnsiChar(e) - _DALEN)^ + _DAOFF;
+  repeat
+    AddExt(result, e^.Oid, e^.Value, e^.Critical);
+    inc(e);
+    dec(n);
+  until n = 0;
+end;
+
 const
   KU: array[cuEncipherOnly .. cuDecipherOnly] of TXKeyUsage = (
     xuEncipherOnly,
@@ -1776,7 +1776,7 @@ begin
   // - current ExtensionOther[] and ExtensionRaw[] values are ignored
   if (Fields <> nil) and
      (Fields^.CustomExts <> nil) then
-    AddOthersToSeq(Fields^.CustomExts, result);
+    AddExts(result, Fields^.CustomExts);
   // ext[] RawUtf8 are used as source
   // RFC 5280 #4.2.1.2
   if ext[xeSubjectKeyIdentifier] <> '' then
@@ -1867,7 +1867,7 @@ begin
     xe := OidToXe(oid);
     if xe = xeNone then
       // unsupported OID are stored as raw binary values
-      AddOther(ExtensionOther, oid, ext)
+      AddOther(ExtensionOther, oid, ext, critical)
     else
     begin
       // decode most common extensions as RawUtf8
@@ -1897,7 +1897,7 @@ begin
                 ASN1_CTX7: // ip
                   v := AsnDecIp(pointer(v), length(v));
                 ASN1_CTX8: // registeredID
-                  AsnDecOid(1, 1 + length(v), v, RawUtf8(v));
+                  AsnDecOid(1, length(v) + 1, v, RawUtf8(v));
               else
                 continue;  // unsupported value type
               end;
