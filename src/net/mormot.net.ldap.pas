@@ -1858,6 +1858,9 @@ type
     fUserName: RawUtf8;
     fKerberosDN: RawUtf8;
     fKerberosSpn: RawUtf8;
+    {$ifdef OSPOSIX}
+    fKerberosLocal: TFileName;
+    {$endif OSPOSIX}
     fTimeout: integer;
     fPingIdleSeconds: integer;
     fTls: boolean;
@@ -1946,13 +1949,18 @@ type
     /// the user password for non-anonymous Bind/BindSaslKerberos
     // - if you can, use instead password-less Kerberos authentication, or
     // at least ensure the connection is secured via TLS
-    // - as an alternative, on POSIX you can specify a keytab as
-    // 'FILE:/full/path/to/my.keytab' into this property, and assign an UserName
-    // or let mormot.lib.gssapi.pas use TKerberosKeyTab.MachineAccountPrincipal
+    // - as an alternative, on POSIX you can specify a keytab in KerberosLocal
     // - this stored value could be obfuscated if you set the Key property
     // to a custom 32-bit value, or if you use SetPassWordPlainCurrentUser()
     property Password: SpiUtf8
       read fPassword write fPassword;
+    {$ifdef OSPOSIX}
+    /// local keytab/ccache file e.g. '/path/to/my.keytab' for Kerberos on POSIX
+    // - you may assign an UserName or let mormot.lib.gssapi.pas extract
+    // TKerberosKeyTab.MachineAccountPrincipal from this keytab file
+    property KerberosLocal: TFileName
+      read fKerberosLocal write fKerberosLocal;
+    {$endif OSPOSIX}
     /// Kerberos Canonical Domain Name
     // - as set by Connect when TargetHost is empty
     // - can be pre-set before Connect if the system is not part of the domain
@@ -6758,11 +6766,14 @@ begin
            (fResultCode = LDAP_RES_SUCCESS) then
           break;
         try
-          if pwd <> '' then
-            // note that UserName may be '' with Password='FILE:keytab'
+          if (pwd <> '') {$ifdef OSPOSIX} or
+             (fSettings.KerberosLocal <> '') {$endif} then
+            // UserName/pwd may be '' with KerberosLocal='/path/to/keytab'
             ClientSspiAuthWithPassword(fSecContext, datain,
-              fSettings.UserName, pwd, fSettings.KerberosSpn, dataout)
+              fSettings.UserName, pwd, fSettings.KerberosSpn, dataout
+              {$ifdef OSPOSIX} , nil, fSettings.KerberosLocal {$endif})
           else
+            // try current logged user
             ClientSspiAuth(fSecContext, datain, fSettings.KerberosSpn, dataout);
         except
           on E: Exception do
