@@ -367,8 +367,10 @@ type
       rawError: PNetErrorInt = nil): TNetResult;
     /// low-level UDP sending to an address of some data
     function SendTo(Buf: pointer; len: integer; const addr: TNetAddr): TNetResult;
-    /// low-level UDP receiving from an address of some data
-    function RecvFrom(Buf: pointer; len: integer; out addr: TNetAddr): integer;
+    /// low-level UDP receiving from an address of some data into a buffer
+    function RecvFrom(Buf: pointer; len: integer; out addr: TNetAddr): integer; overload;
+    /// low-level UDP receiving from an address of some data into a RawByteString
+    function RecvFrom(out addr: TNetAddr): RawByteString; overload;
     /// wait for the socket to a given set of receiving/sending state
     // - using poll() on POSIX (as required), and select() on Windows
     // - ms < 0 means an infinite timeout (blocking until events happen)
@@ -3665,6 +3667,17 @@ begin
     addrlen := SizeOf(addr);
     result := mormot.net.sock.recvfrom(TSocket(@self), Buf, len, 0, @addr, @addrlen);
   end;
+end;
+
+function TNetSocketWrap.RecvFrom(out addr: TNetAddr): RawByteString;
+var
+  len: PtrInt;
+  tmp: TBuffer4K; // big enough for most UDP frames
+begin
+  len := RecvFrom(@tmp, SizeOf(tmp), addr);
+  if len < 0 then
+    len := 0; // return '' on error
+  FastSetRawByteString(result, @tmp, len);
 end;
 
 function TNetSocketWrap.RecvPending(out pending: integer): TNetResult;
