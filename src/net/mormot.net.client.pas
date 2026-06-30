@@ -133,16 +133,34 @@ type
 type
   /// the supported authentication schemes which may be used by HTTP clients
   // - not supported by all classes (e.g. TWinINet won't support all schemes)
+  // - by design, wraNegotiatePasswordKeytab* modes only exist in POSIX/GSSAPI
+  // - serialized as its ordinal/integer value: do not change the order below
   THttpRequestAuthentication = (
     wraNone,
     wraBasic,
     wraDigest,
     wraNegotiate,
     wraNegotiateChannelBinding,
-    wraBearer);
+    wraBearer,
+    wraNegotiatePasswordKeytab,
+    wraNegotiatePasswordKeytabChannelBinding);
 
   /// pointer to some extended options for HTTP clients
   PHttpRequestExtendedOptions = ^THttpRequestExtendedOptions;
+
+  /// define THttpRequestExtendedOptions.Auth fields for HTTP clients
+  THttpRequestAuthOptions = record
+    /// the used authentication scheme
+    Scheme: THttpRequestAuthentication;
+    /// the credential user logon
+    UserName: RawUtf8;
+    /// the credential password
+    // - may be '' to use the current logged user for wraNegotiate
+    // - may be a local keytab/ccache file name for wraNegotiatePasswordKeytab*
+    Password: SpiUtf8;
+    /// the private header token value for wraBearer
+    Token: SpiUtf8;
+  end;
 
   /// a record to set some extended options for HTTP clients
   // - allow easy propagation e.g. from a TRestHttpClient* wrapper class to
@@ -168,12 +186,7 @@ type
     /// the timeout to be used for the whole connection, as supplied to Create()
     CreateTimeoutMS: integer;
     /// allow HTTP/HTTPS authentication to take place at server request
-    Auth: record
-      Scheme: THttpRequestAuthentication;
-      UserName: RawUtf8;
-      Password: SpiUtf8;
-      Token: SpiUtf8;
-    end;
+    Auth: THttpRequestAuthOptions;
     /// how many times THttpClientSocket/TWinHttp should redirect 30x responses
     // - TCurlHttp would only check for RedirectMax > 0 with no exact count
     // - TWinINet won't support this parameter
@@ -196,7 +209,11 @@ type
     /// setup web authentication using Kerberos via SSPI/GSSAPI and credentials
     // - if you want to authenticate with the current logged user, just set
     // ! Auth.Scheme := wraNegotiate;
-    procedure AuthorizeSspiUser(const UserName: RawUtf8; const Password: SpiUtf8);
+    // - wraNegotiate*ChannelBinding modes enable channel binding at TLS level
+    // - wraNegotiatePasswordKeytab* modes would expect Password to be
+    // StringToUtf8() of a local keytab/ccache full file name for authentication
+    procedure AuthorizeSspiUser(const UserName: RawUtf8; const Password: SpiUtf8;
+      NegotiateMode: THttpRequestAuthentication = wraNegotiate);
     /// setup web authentication using a given Bearer in the request headers
     procedure AuthorizeBearer(const Value: SpiUtf8);
     /// compare the Auth fields, depending on their scheme
@@ -219,6 +236,14 @@ type
     function InitFromUrl(const UrlParams: RawUtf8;
       const Secret: RawByteString = ''): boolean;
   end;
+
+const
+  /// all NEGOTIATE / Kerberos authentication modes
+  wraNegotiates =
+    [wraNegotiate,
+     wraNegotiateChannelBinding,
+     wraNegotiatePasswordKeytab,
+     wraNegotiatePasswordKeytabChannelBinding];
 
 function ToText(wra: THttpRequestAuthentication): PShortString; overload;
 
@@ -726,8 +751,9 @@ type
     /// setup web authentication using Kerberos via SSPI/GSSAPI for this instance
     // - will store the user/paswword credentials, and set OnAuthorizeSspi callback
     // - if Password is '', will search for an existing Kerberos token on UserName
-    // - set UserName='' and Password='FILE:/path/to/my.keytab' to use a keytab
-    // - an in-memory token will be used to authenticate the connection
+    // - wraNegotiate*ChannelBinding modes enable channel binding at TLS level
+    // - wraNegotiatePasswordKeytab* modes would expect Password to be
+    // StringToUtf8() of a local keytab/ccache full file name for authentication
     // - KerberosSpn could be only a 'MYDOMAIN.TLD' domain name - this method
     // will compute the full 'HTTP/server@MYDOMAIN.TLD' SPN
     // - if KerberosSpn is not set, 'HTTP/server@MYDOMAIN.TLD' will be used,
@@ -736,7 +762,8 @@ type
     // session-wide token (like kinit), not a transient token in memory - you
     // may prefer to load a proper libgssapi_krb5.dylib instead
     procedure AuthorizeSspiUser(const UserName: RawUtf8; const Password: SpiUtf8;
-      const KerberosSpn: RawUtf8 = '');
+      const KerberosSpn: RawUtf8 = '';
+      NegotiateMode: THttpRequestAuthentication = wraNegotiate);
     /// web authentication callback of the current logged user using Kerberos
     // - calling the Security Support Provider Interface (SSPI) API on Windows,
     // or GSSAPI on Linux (only Kerboros)
@@ -2867,20 +2894,18 @@ begin
   Create(fExtendedOptions.CreateTimeoutMS);
   if Assigned(aOnLog) then
     OnLog := aOnLog; // allow to debug ASAP
-  case fExtendedOptions.Auth.Scheme of
-    wraDigest:
-      begin
-        fOnAuthorize := OnAuthorizeDigest; // as AuthorizeDigest()
-        fAuthDigestAlgo := daMD5_Sess;
-      end;
-    wraNegotiate,
-    wraNegotiateChannelBinding:
-      {$ifdef DOMAINRESTAUTH}
-      fOnAuthorize := OnAuthorizeSspi;     // as AuthorizeSspiUser()
-      {$else}
-      EHttpSocket.RaiseUtf8('%.Open: unsupported wraNegotiate', [self]);
-      {$endif DOMAINRESTAUTH}
-  end;
+  if fExtendedOptions.Auth.Scheme = wraDigest then
+  begin
+    fOnAuthorize := OnAuthorizeDigest; // as AuthorizeDigest()
+    fAuthDigestAlgo := daMD5_Sess;
+  end
+  else if fExtendedOptions.Auth.Scheme in wraNegotiates then
+    {$ifdef DOMAINRESTAUTH}
+    fOnAuthorize := OnAuthorizeSspi;     // as AuthorizeSspiUser()
+    {$else}
+    EHttpSocket.RaiseUtf8('%.Open: unsupported AuthScheme=%',
+      [self, ToText(fExtendedOptions.Auth.Scheme)^]);
+    {$endif DOMAINRESTAUTH}
   TLS := fExtendedOptions.TLS;
   pu := GetSystemProxyUri(aUri.URI, fExtendedOptions.Proxy, temp);
   if pu <> nil then
@@ -3848,7 +3873,8 @@ var
   sc: TSecContext;
   bak: RawUtf8;
   unauthstatus: integer;
-  datain, dataout: RawByteString;
+  a: ^THttpRequestAuthOptions;
+  bin, bout: RawByteString;
   channelbindingtemp: THash512Rec;
 begin
   if (Sender = nil) or
@@ -3860,20 +3886,31 @@ begin
   try
     // Kerberos + TLS may require tls-server-end-point channel binding
     if Assigned(Sender.Secure) and
-       (Sender.AuthScheme = wraNegotiateChannelBinding) then
+       (Sender.AuthScheme in [wraNegotiateChannelBinding,
+                              wraNegotiatePasswordKeytabChannelBinding]) then
       KerberosChannelBinding(Sender.Secure, sc, channelbindingtemp);
     // main Kerberos loop
     repeat
-      FindNameValue(Sender.Http.Headers, pointer(InHeaderUp), RawUtf8(datain));
-      datain := Base64ToBin(TrimU(datain));
-      if Sender.fExtendedOptions.Auth.Password <> '' then // from AuthorizeSspiUser()
-        ClientSspiAuthWithPassword(sc, datain, Sender.fExtendedOptions.Auth.UserName,
-          Sender.fExtendedOptions.Auth.Password, Sender.AuthorizeSspiSpn, dataout)
-      else                               // use current logged user
-        ClientSspiAuth(sc, datain, Sender.AuthorizeSspiSpn, dataout);
-      if dataout = '' then
+      FindNameValue(Sender.Http.Headers, pointer(InHeaderUp), RawUtf8(bin));
+      bin := Base64ToBin(TrimU(bin));
+      a := @Sender.fExtendedOptions.Auth;
+      if a^.Password <> '' then
+        // from AuthorizeSspiUser()
+        {$ifdef OSPOSIX}
+        if Sender.AuthScheme in [wraNegotiatePasswordKeytab,
+                                 wraNegotiatePasswordKeytabChannelBinding] then
+          ClientSspiAuthWithPassword(sc, bin, a^.UserName, '',
+            Sender.AuthorizeSspiSpn, bout, nil, {local=}Utf8ToString(a^.Password))
+        else
+        {$endif OSPOSIX}
+          ClientSspiAuthWithPassword(sc, bin, a^.UserName, a^.Password,
+            Sender.AuthorizeSspiSpn, bout)
+      else
+        // no password supplied: try current logged user
+        ClientSspiAuth(sc, bin, Sender.AuthorizeSspiSpn, bout);
+      if bout = '' then
         break;
-      Context.header := OutHeader + BinToBase64(dataout);
+      Context.header := OutHeader + BinToBase64(bout);
       if bak <> '' then
         Append(Context.header, #13#10, bak);
       Sender.RequestInternal(Context);
@@ -3899,13 +3936,14 @@ begin
 end;
 
 procedure THttpClientSocket.AuthorizeSspiUser(const UserName: RawUtf8;
-  const Password: SpiUtf8; const KerberosSpn: RawUtf8);
+  const Password: SpiUtf8; const KerberosSpn: RawUtf8;
+  NegotiateMode: THttpRequestAuthentication);
 begin
   if not InitializeDomainAuth then
     EHttpSocket.RaiseUtf8('%.AuthorizeSspiUser: no % available on this system',
       [self, SECPKGNAMEAPI]);
   fOnAuthorize := nil;
-  fExtendedOptions.AuthorizeSspiUser(UserName, Password);
+  fExtendedOptions.AuthorizeSspiUser(UserName, Password, NegotiateMode);
   fOnAuthorize := OnAuthorizeSspi;
   // prepare a Service Principal Name (SPN) - maybe partial
   if KerberosSpn <> '' then
@@ -4030,7 +4068,7 @@ begin
   Auth.Password := Password;
   Auth.Token := '';
   if (UserName = '') and
-     not (Scheme in [wraNegotiate, wraNegotiateChannelBinding]) then
+     not (Scheme in wraNegotiates) then
     Scheme := wraNone;
   Auth.Scheme := Scheme;
 end;
@@ -4048,9 +4086,10 @@ begin
 end;
 
 procedure THttpRequestExtendedOptions.AuthorizeSspiUser(
-  const UserName: RawUtf8; const Password: SpiUtf8);
+  const UserName: RawUtf8; const Password: SpiUtf8; NegotiateMode: THttpRequestAuthentication);
 begin
-  AuthorizeUserPassword(UserName, Password, wraNegotiate);
+  if NegotiateMode in wraNegotiates then
+    AuthorizeUserPassword(UserName, Password, NegotiateMode);
 end;
 
 procedure THttpRequestExtendedOptions.AuthorizeBearer(const Value: SpiUtf8);
@@ -4071,14 +4110,13 @@ begin
             (Auth.Scheme = Another^.Auth.Scheme);
   if result then
     case Auth.Scheme of
-      wraBasic,
-      wraDigest,
-      wraNegotiate,
-      wraNegotiateChannelBinding:
-        result := (Auth.UserName = Another^.Auth.UserName) and
-                  (Auth.Password = Another^.Auth.Password);
+      wraNone:
+        ;
       wraBearer:
         result := (Auth.Token = Another^.Auth.Token);
+    else
+      result := (Auth.UserName = Another^.Auth.UserName) and
+                (Auth.Password = Another^.Auth.Password);
     end;
 end;
 
@@ -5117,6 +5155,8 @@ const
     [cauDigest],    // wraDigest
     [cauNegotiate], // wraNegotiate
     [cauNegotiate], // wraNegotiateChannelBinding
+    [cauNegotiate], // wraNegotiatePasswordKeytab
+    [cauNegotiate], // wraNegotiatePasswordKeytabChannelBinding
     [cauBearer]);   // wraBearer
 
 procedure TCurlHttp.InternalSendRequest(const aMethod: RawUtf8;
