@@ -2607,6 +2607,7 @@ var
   dns: TRawUtf8DynArray;
   req: PX509_REQ;
   key: PEVP_PKEY;
+  i: PtrInt;
 begin
   if Subjects = '' then
     RaiseError('no Subjects');
@@ -2628,9 +2629,16 @@ begin
       X509_REQ_get_subject_name(req), Usages, Fields, dns);
     if not req^.SetUsageAndAltNames(TX509Usages(Usages), altnames) then
       RaiseError('SetUsage');
-    if (Fields <> nil) and
-       (Fields^.Comment <> '') then
-       req^.AddExtension(NID_netscape_comment, Fields^.Comment);
+    // setup the CSR extensions
+    if Fields <> nil then
+    begin
+      if Fields^.Comment <> '' then
+        req^.AddExtension(NID_netscape_comment, Fields^.Comment);
+      if Fields^.CustomExts <> nil then
+        for i := 0 to high(Fields^.CustomExts) do
+          with Fields^.CustomExts[i] do
+            req^.AddExtension(Oid, Value, Critical);
+    end;
     // self-sign the CSR and return it as PEM
     EOpenSslCert.Check(X509_REQ_set_pubkey(req, key)); // include public key
     if req.Sign(key, fHash) = 0 then // returns signature size in bytes
