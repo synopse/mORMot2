@@ -8379,8 +8379,6 @@ var
   datain, dataout: RawByteString;
 begin
   result := false;
-  if ClientSspiPasswordIsFile(aPassword) then
-    exit; // don't cheat with this server credentials :)
   InvalidateSecContext(client);
   try
     try

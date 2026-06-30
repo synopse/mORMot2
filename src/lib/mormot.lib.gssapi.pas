@@ -569,10 +569,6 @@ function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aPassword: SpiUtf8; const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString; aMech: gss_OID = nil): boolean;
 
-/// check if the password is a local keytab/ccache file with a FILE: prefix
-// - e.g. as 'FILE:/path/to/my.keytab'
-function ClientSspiPasswordIsFile(const aPassword: SpiUtf8): boolean;
-
 /// check if a binary request packet from a client is using NTLM
 function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
 
@@ -1139,11 +1135,6 @@ begin
     spn := ForceSecKerberosSpn;
   // compute the first/next client-server roundtrip
   result := ClientSspiAuthWorker(aSecContext, aMech, spn, aInData, aOutData);
-end;
-
-function ClientSspiPasswordIsFile(const aPassword: SpiUtf8): boolean;
-begin
-  result := StartWithExact(aPassword, 'FILE:');
 end;
 
 procedure ClientSspiCreateCredHandle(var aSecContext: TSecContext;
