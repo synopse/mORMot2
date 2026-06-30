@@ -2470,6 +2470,8 @@ type
     SerialNumber: RawUtf8;
     /// netscapeComment extension (not a name field - OID 2.16.840.1.113730.1.13)
     Comment: RawUtf8;
+    /// raw custom extensions (not a name field) - use AddOther() to fill it
+    CustomExts: TCryptCustomExts;
   end;
   PCryptCertFields = ^TCryptCertFields;
 

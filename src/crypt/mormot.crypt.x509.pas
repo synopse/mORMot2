@@ -1747,7 +1747,7 @@ const
     xkuTimeStamping);
 
 function CertInfoCompute(usages: TCryptCertUsages; const ext: TXExtensions;
-  out xku: TXKeyUsages; out xeku: TXExtendedKeyUsages): TAsnObject;
+  out xku: TXKeyUsages; out xeku: TXExtendedKeyUsages; Fields: PCryptCertFields): TAsnObject;
 var
   r: TCryptCertUsage;
 begin
@@ -1772,8 +1772,12 @@ begin
   if xeku <> [] then
     AddExt(result, xeExtendedKeyUsage,
       AsnSeq(XkuToOids(xeku)));
+  // custom binary extension(s) could be supplied in Fields^.CustomExts
+  // - current ExtensionOther[] and ExtensionRaw[] values are ignored
+  if (Fields <> nil) and
+     (Fields^.CustomExts <> nil) then
+    AddOthersToSeq(Fields^.CustomExts, result);
   // ext[] RawUtf8 are used as source
-  // - ExtensionOther[] and ExtensionRaw[] are ignored
   // RFC 5280 #4.2.1.2
   if ext[xeSubjectKeyIdentifier] <> '' then
     AddExt(result, xeSubjectKeyIdentifier,
@@ -1801,7 +1805,7 @@ end;
 
 function TXTbsCertificate.ComputeExtensions: TAsnObject;
 begin
-  result := CertInfoCompute(CertUsages, Extension, KeyUsages, ExtendedKeyUsages);
+  result := CertInfoCompute(CertUsages, Extension, KeyUsages, ExtendedKeyUsages, nil);
 end;
 
 procedure TXTbsCertificate.ComputeCachedDer;
@@ -3311,7 +3315,7 @@ begin
   // setup the CSR fields
   FillCharFast(sub, SizeOf(sub), 0);
   CertInfoPrepare(sub, ext, Subjects, Fields);
-  extreq := CertInfoCompute(Usages, ext, xu, xku);
+  extreq := CertInfoCompute(Usages, ext, xu, xku, Fields);
   if extreq <> '' then
     // extensionRequest (PKCS #9 via CRMF)
     extreq := Asn(ASN1_CTC0, [
