@@ -1506,6 +1506,8 @@ type
     /// returns an additional error message after the last Request() call
     // - is '' on success, or is typically an exception text with its message
     function LastError: string;
+    /// returns the last server URI from Connected() or Request()
+    function LastServer: TUri;
     /// returns the HTTP headers as returned by a previous call to Request()
     function Headers: RawUtf8;
     /// retrieve a HTTP header text value after the last Request() call
@@ -1524,6 +1526,7 @@ type
     fBody: RawByteString;
     fLastError: string;
     fStatus: integer;
+    fLastServer: TUri;
   public
     /// finalize the connection
     destructor Destroy; override;
@@ -1545,6 +1548,7 @@ type
     function Status: integer;
     function Headers: RawUtf8;
     function LastError: string;
+    function LastServer: TUri;
     function Header(const Name: RawUtf8; out Value: RawUtf8): boolean; overload;
     function Header(const Name: RawUtf8; out Value: Int64): boolean; overload;
   end;
@@ -5261,6 +5265,11 @@ begin
   result := fLastError;
 end;
 
+function THttpClientAbstract.LastServer: TUri;
+begin
+  result := fLastServer;
+end;
+
 function THttpClientAbstract.Headers: RawUtf8;
 begin
   result := fHeaders;
@@ -5332,6 +5341,7 @@ end;
 
 procedure TSimpleHttpClient.RawConnect(const Server: TUri);
 begin
+  fLastServer := Server;
   {$ifdef USEHTTPREQUEST}
   if (Server.Https or
       (fConnectOptions.Proxy <> '')) and
