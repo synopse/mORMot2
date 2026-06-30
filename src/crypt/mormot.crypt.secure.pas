@@ -2435,6 +2435,8 @@ type
     // TXTbsCertificate.ExtensionOther[]
     // - as RawUtf8 for TXname.Other[]
     Value: RawByteString;
+    /// true if this extension is defined as critical
+    Critical: boolean;
   end;
   PCryptCustomExt = ^TCryptCustomExt;
 
@@ -3232,7 +3234,8 @@ function ChainConsolidate(const chain: ICryptCertChain): ICryptCertChain;
 
 /// append a new entry to a dynamic array of TCryptCustomExt
 // - use AsnEncOid() to compute the o binary from 'x.x.x.x.x' text OID
-procedure AddOther(var others: TCryptCustomExts; const o, v: RawByteString);
+procedure AddOther(var others: TCryptCustomExts; const o, v: RawByteString;
+  crit: boolean = false);
 
 /// efficient search of a TCryptCustomExt.Value from a 'x.x.x.x.x' text OID
 function FindOther(const Other: TCryptCustomExts; OidText: PUtf8Char): RawByteString;
@@ -9882,7 +9885,7 @@ begin
   DynArrayFakeLength(result, n);
 end;
 
-procedure AddOther(var others: TCryptCustomExts; const o, v: RawByteString);
+procedure AddOther(var others: TCryptCustomExts; const o, v: RawByteString; crit: boolean);
 var
   n: PtrInt;
 begin
@@ -9892,6 +9895,7 @@ begin
   begin
     Oid := o;
     Value := v;
+    Critical := crit;
   end;
 end;
 
