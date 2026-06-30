@@ -449,6 +449,26 @@ function OidToXe(const oid: RawByteString): TXExtension;
 function OidToXku(const oid: RawByteString): TXExtendedKeyUsage;
 function XkuToOids(usages: TXExtendedKeyUsages): RawByteString;
 
+/// append one X.509 v3 Certificate extension raw value per known TXExtension
+procedure AddExt(var result: TAsnObject; xe: TXExtension;
+  const value: RawByteString; critical: boolean = false); overload;
+
+/// append one X.509 extension raw value per raw OID
+procedure AddExt(var result: TAsnObject; const oid, value: RawByteString;
+  critical: boolean = false); overload;
+
+/// append one X.509 v3 Certificate extension CSV value per known TXExtension
+procedure AddExtCsv(var result: TAsnObject; xe: TXExtension;
+  const csv: RawUtf8; critical: boolean = false); overload;
+
+/// append one X.509 extension CSV value per raw OID
+procedure AddExtCsv(var result: TAsnObject; const oid: RawByteString;
+  csv: PUtf8Char; critical: boolean = false); overload;
+
+/// append one X.509 v3 Certificate extension array values per known TXExtension
+procedure AddExtArray(var result: TAsnObject; xe: TXExtension;
+  const values: array of RawUtf8; critical: boolean = false);
+
 
 { **************** X.509 Certificates and Certificate Signing Request (CSR) }
 
@@ -1704,21 +1724,47 @@ begin
   ToHumanHex(result, @rnd, SizeOf(rnd.sha1)); // 20 bytes is the usual size
 end;
 
-function CsvToDns(p: PUtf8Char): RawByteString;
-begin
-  FastAssignNew(result);
-  while p <> nil do
-    Append(result, AsnTyped(TrimU(GetNextItem(p)), ASN1_CTX2));
-end;
-
-procedure AddExt(var result: TAsnObject; xe: TXExtension;
-  const value: RawByteString; critical: boolean = false);
+procedure AddExt(var result: TAsnObject; const oid, value: RawByteString;
+  critical: boolean);
 begin
   Append(result, Asn(ASN1_SEQ, [
-                   Asn(ASN1_OBJID, [XE_OID_ASN[xe]]),
+                   Asn(ASN1_OBJID, [oid]),
                    ASN1_BOOLEAN_NONE[critical],
                    Asn(ASN1_OCTSTR, [value])
                  ]));
+end;
+
+procedure AddExt(var result: TAsnObject; xe: TXExtension;
+  const value: RawByteString; critical: boolean);
+begin
+  AddExt(result, XE_OID_ASN[xe], value, critical);
+end;
+
+procedure AddExtCsv(var result: TAsnObject; const oid: RawByteString;
+  csv: PUtf8Char; critical: boolean);
+var
+  seq: TAsnObject;
+begin
+  while csv <> nil do
+    Append(seq, AsnTyped(TrimU(GetNextItem(csv)), ASN1_CTX2));
+  AddExt(result, oid, AsnSeq(seq), critical);
+end;
+
+procedure AddExtCsv(var result: TAsnObject; xe: TXExtension;
+  const csv: RawUtf8; critical: boolean);
+begin
+  AddExtCsv(result, XE_OID_ASN[xe], pointer(csv), critical);
+end;
+
+procedure AddExtArray(var result: TAsnObject; xe: TXExtension;
+  const values: array of RawUtf8; critical: boolean);
+var
+  i: PtrInt;
+  seq: TAsnObject;
+begin
+  for i := 0 to high(values) do
+    Append(seq, AsnTyped(values[i], ASN1_CTX2));
+  AddExt(result, XE_OID_ASN[xe], AsnSeq(seq), critical);
 end;
 
 const
@@ -1779,12 +1825,10 @@ begin
       AsnSeq(AsnTyped(HumanHexToBin(ext[xeAuthorityKeyIdentifier]), ASN1_CTX0)));
   // RFC 5280 #4.2.1.6
   if ext[xeSubjectAlternativeName] <> '' then
-    AddExt(result, xeSubjectAlternativeName,
-      AsnSeq(CsvToDns(pointer(ext[xeSubjectAlternativeName]))));
+    AddExtCsv(result, xeSubjectAlternativeName, ext[xeSubjectAlternativeName]);
   // RFC 5280 #4.2.1.7
   if ext[xeIssuerAlternativeName] <> '' then
-    AddExt(result, xeIssuerAlternativeName,
-      AsnSeq(CsvToDns(pointer(ext[xeIssuerAlternativeName]))));
+    AddExtCsv(result, xeIssuerAlternativeName, ext[xeIssuerAlternativeName]);
   // non-standard ext - but defined as TCryptCertFields.Comment
   if ext[xeNetscapeComment] <> '' then
     AddExt(result, xeNetscapeComment,
@@ -2674,10 +2718,7 @@ end;
 procedure AddCrlExt(var result: TAsnObject; xce: TXCrlExtension;
   const value: RawByteString);
 begin
-  Append(result, Asn(ASN1_SEQ, [
-                   AsnObjId(XCE_OID_ASN[xce]),
-                   AsnOctStr(value)
-                 ]));
+  AddExt(result, XCE_OID_ASN[xce], value, {critical=}false);
 end;
 
 function TXTbsCertList.ToDer: TAsnObject;
@@ -2698,9 +2739,8 @@ begin
         AsnTyped(HumanHexToBin(Extension[xceAuthorityKeyIdentifier]), ASN1_CTX0)
         ));
   if Extension[xceIssuerAlternativeName] <> '' then
-    AddCrlExt(ext, xceIssuerAlternativeName,
-      AsnSeq(
-        CsvToDns(pointer(Extension[xceIssuerAlternativeName]))));
+    AddExtCsv(ext, XCE_OID_ASN[xceIssuerAlternativeName],
+      pointer(Extension[xceIssuerAlternativeName]));
   if Extension[xceCrlNumber] <> '' then
     AddCrlExt(ext, xceCrlNumber,
       Asn(GetInt64(pointer(Extension[xceCrlNumber])))); // 63-bit resolution
