@@ -555,8 +555,8 @@ function ClientSspiAuth(var aSecContext: TSecContext;
 // 'username@MYDOMAIN.TLD' if aSecKerberosSpn is not set or if
 // ClientForceSpn() has not been called ahead
 // - aPassword is the user clear text password - you may set '' if you did a
-// previous kinit for aUserName on the system and want to recover this token, or
-// force a local keytab/ccache file e.g. as aPassword = 'FILE:/path/to/my.keytab'
+// previous kinit for aUserName on the system and want to recover this token
+// - use aLocalFile to force a local keytab/ccache file e.g. '/path/to/my.keytab'
 // and if aUserName is '' it will try TKerberosKeyTab.MachineAccountPrincipal
 // - aOutData contains data that must be sent back to the server
 // - you can specify an optional Mechanism OID - default is SPNEGO / Kerberos
@@ -567,7 +567,8 @@ function ClientSspiAuth(var aSecContext: TSecContext;
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8;
   const aPassword: SpiUtf8; const aSecKerberosSpn: RawUtf8;
-  out aOutData: RawByteString; aMech: gss_OID = nil): boolean;
+  out aOutData: RawByteString; aMech: gss_OID = nil;
+  const aLocalFile: TFileName = ''): boolean;
 
 /// check if a binary request packet from a client is using NTLM
 function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
@@ -1139,13 +1140,13 @@ end;
 
 procedure ClientSspiCreateCredHandle(var aSecContext: TSecContext;
   const aUserName, aPassword: RawUtf8; var aTargetSpn: RawUtf8;
-  aMech: gss_OID_set);
+  aMech: gss_OID_set; const aLocalFile: TFileName);
 var
   maj, min, min2: cardinal;
   buf: gss_buffer_desc;
   user: gss_name_t;
   fn: TFileName;
-  n , p, spn, u: RawUtf8;
+  n , spn, u, ccfn: RawUtf8;
   orig: PUtf8Char;
   keytab: TKerberosKeyTab;
   useCredFrom, fromEnv: boolean;
@@ -1177,18 +1178,18 @@ begin
   user := nil;
   orig := nil;
   u := aUserName;
-  p := aPassword;
   try
-    // 2) support KRB5_CLIENT_KTNAME or keytab/ccache as FILE: in password
-    if (p = '') and
+    // 2) support KRB5_CLIENT_KTNAME or aLocalFile = keytab/ccache
+    if (aLocalFile = '') and
+       (aPassword = '') and
        (GssApi.EnvClientKtValue <> '') then
     begin
       fn := TFileName(GssApi.EnvClientKtValue); // RTL conversion to TFileName
       fromEnv := true;                          // the env variable(s) were set
       useCredFrom := false;                     // better continue with env var
     end
-    else if ClientSspiPasswordIsFile(p) then
-      fn := TFileName(copy(p, 6, 1023)); // e.g. 'FILE:/full/path/to/my.keytab'
+    else if aLocalFile <> '' then
+      fn := aLocalFile; // e.g. '/full/path/to/my.keytab'
     if fn <> '' then
       if not FileExists(fn) then
         fn := ''
@@ -1251,15 +1252,16 @@ begin
       GssCheck(maj, min, 'Failed to acquire credentials for keytab');
       exit; // all done in a single call
     end;
-    if (fn <> '') and
+    if (aLocalFile <> '') and
        (keytab = nil) then
     begin
-      // the supplied FILE: should be a ccache
+      // the supplied aLocalFile should be a ccache
       if not Assigned(GssApi.gss_krb5_ccache_name) then
         raise EGssApi.CreateFmt(
-          'ClientSspiAuthWithPassword(%s): missing gss_krb5_ccache_name', [p]);
-      // use the explicit 'FILE:/tmp/krb5cc_custom' param for this authentication
-      maj := GssApi.gss_krb5_ccache_name(min, pointer(p), @orig);
+          'ClientSspiAuthWithPassword(%s): missing gss_krb5_ccache_name', [aLocalFile]);
+      // use explicit aLocalFile = '/tmp/krb5cc_custom' param for authentication
+      StringToUtf8(aLocalFile, ccfn);
+      maj := GssApi.gss_krb5_ccache_name(min, pointer(ccfn), @orig);
       if GSS_ERROR(maj) then
         orig := nil;
       maj := GssApi.gss_acquire_cred(min, user, GSS_C_INDEFINITE, aMech,
@@ -1292,7 +1294,7 @@ begin
         GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
       GssCheck(maj, min, 'Failed to acquire credentials for env keytab');
     end
-    else if p = '' then
+    else if aPassword = '' then
     begin
       // recover an existing session with the supplied user or keytab
       maj := GssApi.gss_acquire_cred(min, user,
@@ -1305,8 +1307,8 @@ begin
       if not Assigned(GssApi.gss_acquire_cred_with_password) then
           raise EGssApi.CreateFmt(
             'ClientSspiAuthWithPassword(%s): missing in GSSAPI', [aUserName]);
-      buf.length := Length(p);
-      buf.value := pointer(p);
+      buf.length := Length(aPassword);
+      buf.value := pointer(aPassword);
       maj := GssApi.gss_acquire_cred_with_password(
         min, user, @buf, GSS_C_INDEFINITE, aMech,
         GSS_C_INITIATE, aSecContext.CredHandle, nil, nil);
@@ -1320,7 +1322,7 @@ begin
     if user <> nil then
       GssApi.gss_release_name(min, user);
     // restore the previous memCcache for this thread (before GssCheck)
-    if orig <> nil then // orig = e.g. 'FILE:/tmp/krb5cc_1000'
+    if orig <> nil then // orig = e.g. aLocalFile = '/tmp/krb5cc_1000'
       GssApi.gss_krb5_ccache_name(min2, orig, nil);  // ignore any error
     // note: IBM doc states that krb5_free_string(orig) should be done
     //       but Debian doc and mod_auth_gssapi.c don't: so we won't either
@@ -1330,7 +1332,7 @@ end;
 function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aInData: RawByteString; const aUserName: RawUtf8; const aPassword: SpiUtf8;
   const aSecKerberosSpn: RawUtf8; out aOutData: RawByteString;
-  aMech: gss_OID): boolean;
+  aMech: gss_OID; const aLocalFile: TFileName): boolean;
 var
   m: gss_OID_set;
   tmp: gss_OID_set_desc;
@@ -1342,7 +1344,7 @@ begin
     spn := ForceSecKerberosSpn;
   if aSecContext.CredHandle = nil then
     // first call: create the needed context for those credentials and set spn
-    ClientSspiCreateCredHandle(aSecContext, aUserName, aPassword, spn, m);
+    ClientSspiCreateCredHandle(aSecContext, aUserName, aPassword, spn, m, aLocalFile);
   // compute the first/next client-server roundtrip
   result := (aInData = 'onlypass') or // magic from TBasicAuthServerKerberos
             ClientSspiAuthWorker(aSecContext, aMech, spn, aInData, aOutData);
