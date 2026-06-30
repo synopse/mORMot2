@@ -1574,7 +1574,8 @@ type
     function ToBinary: RawByteString;
     function ToPem: RawUtf8;
     procedure AddAndFreeExtension(ext: PX509_EXTENSION);
-    procedure AddExtension(nid: integer; const value: RawUtf8);
+    procedure AddExtension(nid: integer; const value: RawUtf8); overload;
+    procedure AddExtension(const oid, value: RawByteString; critical: boolean); overload;
     /// set key_usage/ext_key_usage extensions
     // - any previous usage set will be first deleted
     function SetUsageAndAltNames(usages: TX509Usages;
@@ -7941,6 +7942,33 @@ procedure X509_REQ.AddExtension(nid: integer; const value: RawUtf8);
 begin
   if @self <> nil then
     AddAndFreeExtension(X509V3_EXT_conf_nid(nil, nil, nid, pointer(value)));
+end;
+
+procedure X509_REQ.AddExtension(const oid, value: RawByteString; critical: boolean);
+var
+  txt: RawUtf8;
+  obj: PASN1_OBJECT;
+  oct: PASN1_OCTET_STRING;
+  ext: PX509_EXTENSION;
+begin
+  if (@self = nil) or
+     (oid = '') then
+    exit;
+  AsnDecOid(1, length(oid) + 1, oid, txt);
+  obj := OBJ_txt2obj(pointer(txt), 1);
+  if obj = nil then
+    exit;
+  ext := nil;
+  oct := ASN1_OCTET_STRING_new();
+  if oct <> nil then
+  begin
+    if ASN1_OCTET_STRING_set(oct, pointer(value), length(value)) = OPENSSLSUCCESS then
+      ext := X509_EXTENSION_create_by_OBJ(nil, obj, ord(critical), oct);
+    ASN1_OCTET_STRING_free(oct); // free oct/obj ASAP: duplicated in ext
+  end;
+  ASN1_OBJECT_free(obj);
+  if ext <> nil then
+    AddAndFreeExtension(ext); // eventually add to the REQ
 end;
 
 function X509_REQ.Sign(pkey: PEVP_PKEY; md: PEVP_MD): integer;
