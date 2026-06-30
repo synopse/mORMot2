@@ -739,7 +739,7 @@ function ToText(u: TX509Usages): ShortString; overload;
 function OpenSslX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;
 
 /// globally override default RSA_DEFAULT_GENERATION_BITS = 2048 for OpenSSL
-// - works at runtime after RegisterOpenSsl - expects bits = 2048/3072/4096/7680
+// - set at runtime after RegisterOpenSsl - expects bits = 2048/3072/4096/7680/8192
 // - updates global CAA_BITSORCURVE[] and existing CryptAsymOpenSsl[] classes
 procedure OpenSslDefaultRsaBits(bits: integer);
 
@@ -3699,7 +3699,8 @@ begin
   if (bits = 2048) or
      (bits = 3072) or
      (bits = 4096) or
-     (bits = 7680) then // reject weak/unrealistic RSA key size
+     (bits = 7680) or
+     (bits = 8192) then // reject weak/unrealistic RSA key size
     for caa := caaRS256 to caaPS512 do
     begin
       // global variable for any new instances

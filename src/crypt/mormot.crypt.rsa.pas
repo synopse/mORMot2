@@ -667,11 +667,11 @@ type
     /// check that the stored key match the public key stored in another TRsa
     function MatchKey(RsaPublicKey: TRsa): boolean;
     /// compute a genuine RSA public/private key pair of a given bit size
-    // - valid bit sizes are 512, 1024, 2048 (default), 3072, 4096 and 7680;
+    // - valid bit sizes are 512, 1024, 2048 (default), 3072, 4096, 7680 and 8192;
     // today's minimal is 2048-bit, but you may consider 3072-bit for security
     // beyond 2030; note that 4096-bit have a much higher computational cost
-    // with almost the same security than 3072-bit, and 7680-bit is highly
-    // impractical (e.g. generation can be more than 30 secs)
+    // with almost the same security than 3072-bit, and 7680-bit or 8192-bit
+    // are highly impractical (e.g. generation can take more than 30 secs)
     // - since our generator is not yet officially validated by any agency,
     // anything above default 2048 would not make much sense
     // - our main goal is to have "secure enough" results with default params,
@@ -2674,7 +2674,8 @@ begin
       (Bits <> 2048) and   // 112-bit of security = RSA_DEFAULT_GENERATION_BITS
       (Bits <> 3072) and   // 128-bit of security (as ECC256): secure until 2030
       (Bits <> 4096) and   // not worth it
-      (Bits <> 7680)) then // REALLY slow for only 192-bit of security
+      (Bits <> 7680) and   // REALLY slow for only 192-bit of security
+      (Bits <> 8192)) then
     exit;                  // see https://stackoverflow.com/a/589850/458259
   // setup the timeout period
   if TimeOutMS <= 0 then
