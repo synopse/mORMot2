@@ -2424,6 +2424,25 @@ type
     ccfBase64,
     ccfBase64Uri);
 
+  /// used to store one unknown/unsupported attribute or extension
+  // - in TCryptCertFields.CustomExts, TXTbsCertificate.ExtensionOther[]
+  // or TXname.Other[]
+  TCryptCustomExt = record
+    /// the OID of this value, in raw binary form
+    Oid: RawByteString;
+    /// the value associated with this OID
+    // - as ASN1_OCTSTR raw content for TCryptCertFields.CustomExts or
+    // TXTbsCertificate.ExtensionOther[]
+    // - as RawUtf8 for TXname.Other[]
+    Value: RawByteString;
+  end;
+  PCryptCustomExt = ^TCryptCustomExt;
+
+  /// used to store the unknown attributes or extensions
+  // - in TCryptCertFields.CustomExts, TXTbsCertificate.ExtensionOther[]
+  // or TXname.Other[]
+  TCryptCustomExts = array of TCryptCustomExt;
+
   /// convenient wrapper of X.509 Certificate subject name X.501 fields
   // - not always implemented - mainly our 'syn-es256' certificate won't
   // - as defined in RFC 5280 Appendix A.1
@@ -2449,7 +2468,7 @@ type
     /// serialNumber field (OID 2.5.4.5)
     // - note that is not the main X.509 certificate serial, but e.g. a Tax Number
     SerialNumber: RawUtf8;
-    /// netscapeComment extension (not a field - OID 2.16.840.1.113730.1.13)
+    /// netscapeComment extension (not a name field - OID 2.16.840.1.113730.1.13)
     Comment: RawUtf8;
   end;
   PCryptCertFields = ^TCryptCertFields;
@@ -3208,6 +3227,16 @@ function ChainFind(var chain: ICryptCertChain; const cert: ICryptCert;
 /// sort a certificate chain by mutual authentication
 // - returns the certificates in IsAuthorizedBy() order
 function ChainConsolidate(const chain: ICryptCertChain): ICryptCertChain;
+
+/// append a new entry to a dynamic array of TCryptCustomExt
+// - use AsnEncOid() to compute the o binary from 'x.x.x.x.x' text OID
+procedure AddOther(var others: TCryptCustomExts; const o, v: RawByteString);
+
+/// efficient search of a TCryptCustomExt.Value from a 'x.x.x.x.x' text OID
+function FindOther(const Other: TCryptCustomExts; OidText: PUtf8Char): RawByteString;
+
+/// low-level search of a TCryptCustomExt.Value from a binary OID
+function FindOtherAsn(o: PCryptCustomExt; n: integer; const b: TAsnObject): RawByteString;
 
 
 type
@@ -9851,6 +9880,42 @@ begin
   DynArrayFakeLength(result, n);
 end;
 
+procedure AddOther(var others: TCryptCustomExts; const o, v: RawByteString);
+var
+  n: PtrInt;
+begin
+  n := length(others);
+  SetLength(others, n + 1);
+  with others[n] do
+  begin
+    Oid := o;
+    Value := v;
+  end;
+end;
+
+function FindOther(const Other: TCryptCustomExts; OidText: PUtf8Char): RawByteString;
+begin
+  result := FindOtherAsn(pointer(Other), length(Other), AsnEncOid(OidText));
+end;
+
+function FindOtherAsn(o: PCryptCustomExt; n: integer; const b: TAsnObject): RawByteString;
+begin
+  FastAssignNew(result);
+  if (o <> nil) and
+     (n > 0) and
+     (b <> '') then
+    repeat
+      if SortDynArrayRawByteString(o^.Oid, b) = 0 then // O(n) search
+      begin
+        result := o^.Value;
+        exit;
+      end;
+      inc(o);
+      dec(n);
+    until n = 0;
+end;
+
+
 
 { TCryptCertPerUsage }
 
@@ -11373,6 +11438,8 @@ begin
             w.AddShorter('UTC');
           ASN1_GENTIME:
             w.AddShorter('GEN');
+          ASN1_BMPSTRING:
+            w.AddShorter('BMP');
         else
           DumpClass(at, w);
         end;

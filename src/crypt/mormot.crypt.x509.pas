@@ -156,22 +156,6 @@ type
     xkaEcc512,
     xkaEdDSA);
 
-  /// used to store one unknown/unsupported attribute or extension
-  // - in TXname.Other or TXTbsCertificate.ExtensionOther
-  TXOther = record
-    /// the OID of this value, in raw binary form
-    Oid: RawByteString;
-    /// the associated value
-    // - as RawUtf8 for TXname.Other[]
-    // - as ASN1_OCTSTR raw content for TXTbsCertificate.ExtensionOther[]
-    Value: RawByteString;
-  end;
-  PXOther = ^TXOther;
-
-  /// used to store the unknown attributes or extensions
-  // - in TXname.Other or TXTbsCertificate.ExtensionOther
-  TXOthers = array of TXOther;
-
   /// store the CSV of the values of each kind of known attributes
   // - as used in TXName.Name and TX509.Issuer
   TXAttrNames = array[TXAttr] of RawUtf8;
@@ -196,7 +180,7 @@ type
     /// CSV of the values of each kind of known attributes
     Name: TXAttrNames;
     /// values which are not part of the known attributes
-    Other: TXOthers;
+    Other: TCryptCustomExts;
     /// convert Name[a] from CSV to an array of RawUtf8
     function NameArray(a: TXAttr): TRawUtf8DynArray;
     /// the raw ASN1_SEQ encoded value of this name
@@ -229,15 +213,6 @@ type
 
 /// convert a X.501 name ASN.1 binary as a single line Distinguished Name text
 function XNameAsDN(const Der: TAsnObject): RawUtf8;
-
-/// append a new entry to a dynamic array of TXOther
-procedure AddOther(var others: TXOthers; const o, v: RawByteString);
-
-/// efficient search of a TXOther.Value from a 'x.x.x.x.x' text OID
-function FindOther(const Other: TXOthers; const OidText: RawUtf8): RawByteString;
-
-/// low-level search of a TXOther.Value from a binary OID
-function FindOtherAsn(o: PXOther; n: integer; const OidBinary: TAsnObject): RawByteString;
 
 function ToText(a: TXAttr): PShortString; overload;
 function ToText(e: TXExtension): PShortString; overload;
@@ -530,7 +505,7 @@ type
     /// raw ASN1_OCTSTR of decoded Extension[] after FromDer()
     ExtensionRaw: array[TXExtension] of RawByteString;
     /// unsupported extensions as defined for X.509 v3 certificates
-    ExtensionOther: TXOthers;
+    ExtensionOther: TCryptCustomExts;
     /// declared X.509 v3 certificate Key Usages from extensions
     KeyUsages: TXKeyUsages;
     /// declared X.509 v3 certificate Extended Key Usages from extensions
@@ -1228,41 +1203,6 @@ begin
     result := x.AsDNText
   else
     FastAssignNew(result);
-end;
-
-procedure AddOther(var others: TXOthers; const o, v: RawByteString);
-var
-  n: PtrInt;
-begin
-  n := length(others);
-  SetLength(others, n + 1);
-  with others[n] do
-  begin
-    Oid := o;
-    Value := v;
-  end;
-end;
-
-function FindOther(const Other: TXOthers; const OidText: RawUtf8): RawByteString;
-begin
-  result := FindOtherAsn(pointer(Other), length(Other), AsnEncOid(pointer(OidText)));
-end;
-
-function FindOtherAsn(o: PXOther; n: integer; const OidBinary: TAsnObject): RawByteString;
-begin
-  FastAssignNew(result);
-  if (o <> nil) and
-     (n > 0) and
-     (OidBinary <> '') then
-    repeat
-      if SortDynArrayRawByteString(o^.Oid, OidBinary) = 0 then // O(n) search
-      begin
-        result := o^.Value;
-        exit;
-      end;
-      inc(o);
-      dec(n);
-    until n = 0;
 end;
 
 function ToText(a: TXAttr): PShortString;
