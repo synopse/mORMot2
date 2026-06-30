@@ -1653,8 +1653,9 @@ type
     // - object field names should be plain ASCII-7 RFC compatible identifiers
     // (0..9a..zA..Z_.~), otherwise their values are skipped
     function ToUrlEncode(const UriRoot: RawUtf8): RawUtf8;
-    /// save a dvArray as SAFEARRAY or a dvObject as JSON BSTR e.g. for COM interop
-    // - homogenous arrays are returned as VT_I8 VT_R8 VT_DATE VT_BOOL VT_BSTR
+    /// save the document as SAFEARRAY or JSON BSTR e.g. for COM/DotNet interop
+    // - homogenous arrays as VT_I8 VT_R8 VT_BOOL VT_DATE VT_BSTR or VT_VARIANT
+    // - objects and nested arrays fallback to JSON BSTR
     function ToOleVariant: variant;
 
     /// returns true if this is not a true TDocVariant, or Count equals 0
@@ -5368,7 +5369,7 @@ var
   dv: TDocVariantData absolute Instance;
 begin
   result := true;
-  if dv.IsArray and
+  if dv.Has(dvoIsArray) and
      (PWord(Name)^ = ord('_')) then
   begin
     dv.AddItem(variant(Value));
@@ -5376,7 +5377,7 @@ begin
   end;
   ndx := dv.GetValueIndex(pointer(Name), NameLen, dv.Has(dvoNameCaseSensitive));
   if ndx < 0 then
-    if dv.IsArray then
+    if dv.Has(dvoIsArray) then
       exit // avoid EDocVariant in dv.InternalAddBuf()
     else
       ndx := dv.InternalAddBuf(pointer(Name), NameLen);
@@ -5406,9 +5407,9 @@ function TDocVariant.IterateCount(const V: TVarData;
 var
   Data: TDocVariantData absolute V;
 begin
-  if Data.IsArray or
+  if Data.Has(dvoIsArray) or
      (GetObjectAsValues and
-      Data.IsObject) then
+      Data.Has(dvoIsObject)) then
     result := Data.VCount
   else
     result := -1;
@@ -5559,7 +5560,7 @@ begin
   end;
   n := dv^.VCount;
   val := pointer(dv^.VValue);
-  if dv^.IsObject then
+  if dv^.Has(dvoIsObject) then
   begin
     checkExtendedPropName := twoForceJsonExtended in W.CustomOptions;
     W.Add('{');
@@ -5575,7 +5576,7 @@ begin
       until false;
     W.ReplaceLastComma('}');
   end
-  else if dv^.IsArray then
+  else if dv^.Has(dvoIsArray) then
   begin
     W.Add('[');
     if n <> 0 then
@@ -5882,21 +5883,21 @@ end;
 function _SafeArray(const Value: variant; out DV: PDocVariantData): boolean;
 begin
   result := _Safe(Value, DV) and
-            not {%H-}DV^.IsObject;
+            not {%H-}DV^.Has(dvoIsObject);
 end;
 
 function _SafeArray(const Value: variant; ExpectedCount: integer;
   out DV: PDocVariantData): boolean;
 begin
   result := _Safe(Value, DV) and
-            {%H-}DV^.IsArray and
+            {%H-}DV^.Has(dvoIsArray) and
             (DV^.Count = ExpectedCount);
 end;
 
 function _SafeObject(const Value: variant; out DV: PDocVariantData): boolean;
 begin
   result := _Safe(Value, DV) and
-            not {%H-}DV^.IsArray;
+            not {%H-}DV^.Has(dvoIsArray);
 end;
 
 function _Safe(const DocVariant: variant;
@@ -5955,9 +5956,9 @@ end;
 function _Csv(const DocVariantOrString: variant): RawUtf8;
 begin
   with _Safe(DocVariantOrString)^ do
-    if IsArray then
+    if Has(dvoIsArray) then
       result := ToCsv
-    else if IsObject or
+    else if Has(dvoIsObject) or
             not VariantToText(DocVariantOrString, result) then
       FastAssignNew(result);
 end;
@@ -6048,7 +6049,7 @@ var
   end;
 
 begin
-  if doc.IsObject and
+  if doc.Has(dvoIsObject) and
      (doc.Count > 0) and
      (obj <> nil) then
   begin
@@ -6079,7 +6080,7 @@ begin
   if objClass = nil then
     exit;
   ObjArrayClear(obj);
-  if (not arr.IsArray) or
+  if (not arr.Has(dvoIsArray)) or
      (arr.Count = 0) then
     exit;
   info := Rtti.RegisterClass(objClass);
@@ -6465,7 +6466,7 @@ begin
   n := length(NameValuePairs);
   if (n = 0) or
      (n and 1 = 1) or
-     IsArray then
+     Has(dvoIsArray) then
     exit; // nothing to add
   arg := @NameValuePairs[0];
   n := n shr 1;
@@ -6487,8 +6488,8 @@ var
   wasAdded: boolean;
 begin
   new := _Safe(NewValues);
-  if not IsArray and
-     not new^.IsArray then
+  if not Has(dvoIsArray) and
+     not new^.Has(dvoIsArray) then
     for n := 0 to new^.Count - 1 do
     begin
       idx := AddOrUpdateValue(
@@ -6506,8 +6507,8 @@ var
   new: PDocVariantData;
 begin
   new := _Safe(NewValues);
-  if not IsArray and
-     not new^.IsArray then
+  if not Has(dvoIsArray) and
+     not new^.Has(dvoIsArray) then
     for n := 0 to new^.Count - 1 do
       SetValueByPath(new^.names[n], new^.Values[n],
         {create=}true, aPathDelim, {merge=}true);
@@ -7237,9 +7238,9 @@ begin
     pointer(VName) := nil;  // avoid GPF
     pointer(VValue) := nil;
     aOptions := aOptions - [dvoIsArray, dvoIsObject]; // may not match Source
-    if Source^.IsArray then
+    if Source^.Has(dvoIsArray) then
       system.include(aOptions, dvoIsArray)
-    else if Source^.IsObject then
+    else if Source^.Has(dvoIsObject) then
     begin
       system.include(aOptions, dvoIsObject);
       SetLength(VName, VCount);
@@ -7430,7 +7431,7 @@ begin // hash all [names and] values in-place with no memory allocation
     exit;
   propname := nil;
   prophasher := nil;
-  if IsObject then
+  if Has(dvoIsObject) then
   begin
     propname := pointer(VName);
     prophasher := DynArrayHashOne(ptRawUtf8, not Has(dvoNameCaseSensitive));
@@ -7463,13 +7464,13 @@ begin
   // first validate the type: as { or [ in JSON
   result := -1;
   nameCmp := nil;
-  if IsArray then
+  if Has(dvoIsArray) then
   begin
-    if not Another.IsArray then
+    if not Another.Has(dvoIsArray) then
       exit;
   end
-  else if IsObject then
-    if not Another.IsObject then
+  else if Has(dvoIsObject) then
+    if not Another.Has(dvoIsObject) then
       exit
     else
       nameCmp := SortDynArrayAnsiStringByCase[not Has(dvoNameCaseSensitive)];
@@ -7504,8 +7505,8 @@ var
   prev: integer; // not PtrInt
   v1, v2: PVariant;
 begin
-  if IsObject then
-    if Another.IsObject then // compare Object, possibly by specified fields
+  if Has(dvoIsObject) then
+    if Another.Has(dvoIsObject) then // compare possibly by specified fields
       if high(ObjFields) < 0 then
         result := Compare(Another, CaseInsensitive)
       else
@@ -7523,7 +7524,7 @@ begin
       end
     else
       result := 1   // Object, not Object
-  else if Another.IsObject then
+  else if Another.Has(dvoIsObject) then
     result := -1  // not Object, Object
   else
     result := 0;  // not Object, not Object
@@ -7662,7 +7663,7 @@ end;
 function TDocVariantData.GetEnumerator: TDocVariantFieldsEnumerator;
 begin
   result.State.Init(pointer(Values), VCount);
-  if IsObject then
+  if Has(dvoIsObject) then
   begin
     result.Name := pointer(Names);
     dec(result.Name);
@@ -7693,7 +7694,7 @@ end;
 
 function TDocVariantData.Fields: TDocVariantFieldsEnumerator;
 begin
-  if IsArray then
+  if Has(dvoIsArray) then
     result{%H-}.State.Void
   else
     result := GetEnumerator;
@@ -7701,7 +7702,7 @@ end;
 
 function TDocVariantData.FieldNames: TDocVariantFieldNamesEnumerator;
 begin
-  if IsArray or
+  if Has(dvoIsArray) or
      (VCount = 0) then
   begin
     result.Curr := @self; // so that MoveNext = false
@@ -7717,7 +7718,7 @@ end;
 
 function TDocVariantData.FieldValues: TDocVariantItemsEnumerator;
 begin
-  if IsArray then
+  if Has(dvoIsArray) then
     result{%H-}.State.Void
   else
     result.State.Init(pointer(Values), VCount);
@@ -7727,7 +7728,7 @@ end;
 
 procedure TDocVariantData.SetCapacity(aValue: integer);
 begin
-  if IsObject then
+  if Has(dvoIsObject) then
     SetLength(VName, aValue);
   SetLength(VValue, aValue);
   if aValue < VCount then
@@ -7784,7 +7785,7 @@ function TDocVariantData.AddValueJson(aName: PUtf8Char; aNameLen: integer;
   var aValue: TGetJsonField): integer;
 begin
   result := -1;
-  if IsArray or
+  if Has(dvoIsArray) or
      (aNameLen <= 0) then
     exit;
   result := InternalAddBuf(aName, aNameLen);
@@ -7798,7 +7799,7 @@ var
   v: PVariant;
 begin
   result := -1;
-  if IsArray or
+  if Has(dvoIsArray) or
      (aValue = nil) or
      (aRtti = nil) then
     exit;
@@ -7868,8 +7869,8 @@ var
   v: TVarData;
 begin
   if (aSource.Count = 0) or
-     (not aSource.IsObject) or
-     IsArray then
+     (not aSource.Has(dvoIsObject)) or
+     Has(dvoIsArray) then
     exit;
   for ndx := 0 to High(aPaths) do
   begin
@@ -7900,7 +7901,7 @@ begin
   v := pointer(Another.VValue);
   k := pointer(Another.VName);
   if k = nil then // source aDocVariant is a dvArray
-    if IsObject then
+    if Has(dvoIsObject) then
       exit // types should match
     else if VCount = 0 then
     begin
@@ -7913,7 +7914,7 @@ begin
         inc(v);
         dec(n)
       until n = 0
-  else if IsArray then
+  else if Has(dvoIsArray) then
       exit // types should match
     else if VCount = 0 then
     begin
@@ -8002,7 +8003,7 @@ function TDocVariantData.AddItemRtti(aItem: pointer; aRtti: TRttiCustom;
   aIndex: integer): integer;
 begin
   result := -1;
-  if IsObject then
+  if Has(dvoIsObject) then
     exit;
   result := InternalAdd('', aIndex);
   if (aItem <> nil) and
@@ -8043,7 +8044,7 @@ begin
   if PInteger(obj)^ = 0 then // most common case is adding a new value
     obj^.InitClone(self, dvoIsObject) // same options than owner document
   else if (cardinal(obj^.VType) <> cardinal(VType)) or
-          not obj^.IsObject then
+          not obj^.Has(dvoIsObject) then
     EDocVariant.RaiseUtf8('AddObject: wrong existing [%]', [aName]);
   obj^.AddNameValuesToObject(aNameValuePairs, DontAddDefault);
 end;
@@ -8058,7 +8059,7 @@ begin
   n := VCount;
   if (n = 0) or
      (aName = '') or
-     not IsObject then
+     not Has(dvoIsObject) then
     exit;
   ndx := -1;
   if aPreviousIndex <> nil then
@@ -8086,14 +8087,14 @@ var
   v, prop: PVariant;
   prev: integer; // not PtrInt
 begin
-  if IsObject then
+  if Has(dvoIsObject) then
   begin
     result := GetValueIndex(aPropName);
     if (result >= aStartIndex) and
        VariantEquals(VValue[result], aPropValue, aPropValueCaseSensitive) then
       exit;
   end
-  else if IsArray then
+  else if Has(dvoIsArray) then
   begin
     prev := -1; // optimistic search aPropName at the previous field position
     v := @VValue[aStartIndex];
@@ -8295,7 +8296,7 @@ var
   v: PDocVariantData;
   n: integer;
 begin
-  if (not IsObject) or
+  if (not Has(dvoIsObject)) or
      (VCount <= 0) then
     exit;
   if Assigned(SortCompare) then
@@ -8328,7 +8329,7 @@ var
 begin
   if VCount <= 1 then
     exit;
-  if not IsObject then
+  if not Has(dvoIsObject) then
     SortFallbackName := nil;
   qs.nameCompare := SortFallbackName;
   if not Assigned(SortCompare) then
@@ -8439,7 +8440,7 @@ begin
     for row := 0 to Doc^.VCount - 1 do
     begin
       d := _Safe(r^);
-      if d^.IsObject then // inlined GetObjectProp()
+      if d^.Has(dvoIsObject) then // inlined GetObjectProp()
         if (cardinal(ndx) < cardinal(d^.VCount)) and
            (namecomp(pointer(d^.VName[ndx]), pointer(aPropNames[0])) = 0) then
           v := @d^.VValue[ndx] // get the value at the (likely) same position
@@ -8602,7 +8603,7 @@ var
 begin
   if (VCount <= 0) or
      (aItemPropName = '') or
-     not IsArray then
+     not Has(dvoIsArray) then
     exit;
   QS.InitSort(@self, @aItemPropName, 0,
     aValueCompare, nil, aValueCompareReverse, aNameSortedCompare);
@@ -8619,7 +8620,7 @@ begin
   if aUniqueValueIndex <> nil then
     aUniqueValueIndex^ := nil;
   if (VCount <= 0) or
-     not IsArray then
+     not Has(dvoIsArray) then
     exit;
   QS.InitSort(@self, @aItemPropNames[0], high(aItemPropNames),
     aValueCompare, aValueCompareField, aValueCompareReverse, aNameSortedCompare);
@@ -8639,7 +8640,7 @@ begin
   result := -1;
   R := VCount - 1;
   if (R < 0) or
-     not IsArray then
+     not Has(dvoIsArray) then
     exit;
   if not Assigned(aValueCompare) then
     aValueCompare := VariantCompare;
@@ -8683,7 +8684,7 @@ end;
 
 procedure TDocVariantData.TrimAsArray;
 begin
-  if not IsObject then
+  if not Has(dvoIsObject) then
     exit;
   VName := nil;
   VOptions := VOptions - [dvoIsObject] + [dvoIsArray]; // fast enough
@@ -8707,7 +8708,7 @@ begin
   if (VCount = 0) or
      (high(aPropNames) < 0) then
     exit;
-  if IsObject then
+  if Has(dvoIsObject) then
     for j := 0 to high(aPropNames) do
     begin
       propname := pointer(aPropNames[j]);
@@ -8720,12 +8721,12 @@ begin
            not VarIsVoid(VValue[ndx]) then
           result.AddValue(VName[ndx], VValue[ndx]);
     end
-  else if IsArray then
+  else if Has(dvoIsArray) then
     for ndx := 0 to VCount - 1 do
     begin
       _Safe(VValue[ndx])^.Reduce( // recursive object reduction
         aPropNames, aCaseSensitive, reduced, aDoNotAddVoidProp);
-      if not reduced.IsObject then
+      if not reduced.Has(dvoIsObject) then
         continue;
       result.AddItem(variant(reduced));
       reduced.Clear;
@@ -8745,7 +8746,7 @@ begin
   n := VCount;
   if (n = 0) or
      (aKey = '') or
-     not IsArray then
+     not Has(dvoIsArray) then
     exit;
   if not Assigned(aCompare) then
     aCompare := @VariantCompare;
@@ -8842,7 +8843,7 @@ begin
   result.Init(VOptions, dvArray); // same options than the main document
   if (VCount = 0) or
      (aPropName = '') or
-     not IsArray then
+     not Has(dvoIsArray) then
     exit;
   prev := -1; // optimistic search aPropName at the previous field position
   for ndx := 0 to VCount - 1 do
@@ -8870,7 +8871,7 @@ begin
   result.Init(VOptions, dvArray); // same options than the main document
   if (VCount = 0) or
      (aPropName = '') or
-     not IsArray then
+     not Has(dvoIsArray) then
     exit;
   prev := -1; // optimistic search aPropName at the previous field position
   for ndx := 0 to VCount - 1 do
@@ -8903,7 +8904,7 @@ begin
   result := nil;
   if (VCount = 0) or
      (aPropName = '') or
-     not IsArray then
+     not Has(dvoIsArray) then
     exit;
   prev := -1; // optimistic search aPropName at the previous field position
   n := 0;
@@ -8942,7 +8943,7 @@ end;
 function TDocVariantData.GetNames: TRawUtf8DynArray;
 begin
   if (@self <> nil) and
-     IsObject and
+     Has(dvoIsObject) and
      (VCount > 0) then
   begin
     DynArrayFakeLength(VName, VCount);
@@ -8971,7 +8972,7 @@ begin
   result := false;
   if (VCount = 0) or
      (aName = nil) or
-     (not IsObject) then
+     (not Has(dvoIsObject)) then
     exit;
   PWord(UpperCopy255Buf(@Up, aName, aNameLen))^ := ord(aSepChar); // e.g. 'P.'
   for ndx := 0 to VCount - 1 do
@@ -9000,7 +9001,7 @@ var
 begin // {"a":{"b":1,"c":1},...} into {"a.b":1,"a.c":1,...}
   result := false;
   if (VCount = 0) or
-     not IsObject then
+     not Has(dvoIsObject) then
     exit;
   nested.InitClone(self);
   nested.Capacity := VCount;
@@ -9212,7 +9213,7 @@ var
 begin
   result := false;
   csv := pointer(aPath);
-  if IsArray or
+  if Has(dvoIsArray) or
      (csv = nil) then
     exit;
   dv := @self;
@@ -9274,7 +9275,7 @@ begin
   if aStartNameLen = 0 then
     aStartNameLen := StrLen(aStartName);
   if (VCount = 0) or
-     (not IsObject) or
+     (not Has(dvoIsObject)) or
      (aStartNameLen = 0) then
     exit;
   UpperCopy255Buf(@up, aStartName, aStartNameLen)^ := #0;
@@ -9461,7 +9462,7 @@ function TDocVariantData.GetAsArray(const aName: RawUtf8;
   out aArray: PDocVariantData; aSortedCompare: TUtf8Compare): boolean;
 begin
   result := GetAsDocVariant(aName, aArray, aSortedCompare) and
-            aArray^.IsArray and
+            aArray^.Has(dvoIsArray) and
             (aArray^.Count > 0);
 end;
 
@@ -9469,7 +9470,7 @@ function TDocVariantData.GetAsObject(const aName: RawUtf8;
   out aObject: PDocVariantData; aSortedCompare: TUtf8Compare): boolean;
 begin
   result := GetAsDocVariant(aName, aObject, aSortedCompare) and
-            aObject^.IsObject and
+            aObject^.Has(dvoIsObject) and
             (aObject^.Count > 0);
 end;
 
@@ -9511,7 +9512,7 @@ var
 begin
   if (@self = nil) or
      (cardinal(VType) <> DocVariantVType) or
-     (not IsObject) or
+     (not Has(dvoIsObject)) or
      (VCount = 0) or
      (aName = '') then
   begin
@@ -9656,7 +9657,7 @@ var
 begin
   VarClear(result{%H-});
   if (cardinal(VType) <> DocVariantVType) or
-     (not IsObject) or
+     (not Has(dvoIsObject)) or
      (high(aDocVariantPath) < 0) then
     exit;
   found := @self;
@@ -9697,7 +9698,7 @@ var
   ndx: integer;
 begin
   result := false;
-  if not IsArray then
+  if not Has(dvoIsArray) then
     exit;
   ndx := SearchItemByProp(aPropName, aPropValue, aPropValueCaseSensitive);
   if ndx < 0 then
@@ -9729,7 +9730,7 @@ var
   ndx: PtrInt;
 begin
   result := false;
-  if not IsArray then
+  if not Has(dvoIsArray) then
     exit;
   ndx := SearchItemByProp(aPropName, aPropValue, aPropValueCaseSensitive);
   if ndx >= 0 then
@@ -9746,7 +9747,7 @@ var
   val: PVariant;
   wr: TJsonWriter;
 begin
-  if (not IsObject) or
+  if (not Has(dvoIsObject)) or
      (VCount = 0) then
   begin
     result := NULL_STR_VAR;
@@ -9786,7 +9787,7 @@ begin
   if aStartName = '' then
     result := Variant(self)
   else
-  if (not IsObject) or
+  if (not Has(dvoIsObject)) or
      (VCount = 0) then
     SetVariantNull(result{%H-})
   else
@@ -9831,7 +9832,7 @@ begin
       break; // reached the last item of the path, which is the value to set
     if ndx < 0 then
       if aCreateIfNotExisting and
-         not v^.IsArray then // avoid EDocVariant in v^.InternalAddBuf()
+         not v^.Has(dvoIsArray) then // avoid EDocVariant in v^.InternalAddBuf()
       begin
         ndx := v^.InternalAddBuf(csv, len); // in two steps for FPC
         v := @v^.VValue[ndx];
@@ -9844,7 +9845,7 @@ begin
     inc(csv, len + 1); // next
   until false;
   if ndx < 0 then
-    if v^.IsArray then
+    if v^.Has(dvoIsArray) then
       exit // avoid EDocVariant in v^.InternalAddBuf()
     else
       ndx := v^.InternalAddBuf(csv, len);
@@ -9965,7 +9966,7 @@ end;
 function TDocVariantData.AddOrUpdateValue(const aName: RawUtf8;
   const aValue: variant; wasAdded: PBoolean; OnlyAddMissing: boolean): integer;
 begin
-  if IsArray then
+  if Has(dvoIsArray) then
     EDocVariant.RaiseUtf8('AddOrUpdateValue("%") on an array', [aName]);
   result := GetValueIndex(aName);
   if result < 0 then
@@ -10031,7 +10032,7 @@ var
   temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if (cardinal(VType) <> DocVariantVType) or
-     not IsArray then
+     not Has(dvoIsArray) then
   begin
     FastAssignNew(result);
     exit;
@@ -10043,7 +10044,7 @@ begin
   end;
   fieldCount := 0;
   with _Safe(VValue[0])^ do
-    if IsObject then
+    if Has(dvoIsObject) then
     begin
       field := VName;
       fieldCount := VCount;
@@ -10063,7 +10064,7 @@ begin
     begin
       row := _Safe(VValue[r]);
       if (r > 0) and
-         ((not row^.IsObject) or
+         ((not row^.Has(dvoIsObject)) or
           (row^.VCount <> fieldCount)) then
         EDocVariant.RaiseUtf8('ToNonExpandedJson: Value[%] not expected object', [r]);
       for f := 0 to fieldCount - 1 do
@@ -10095,9 +10096,9 @@ begin
   {$endif FPC}
   if cardinal(VType) <> DocVariantVType then
     exit;
-  if IsObject then
+  if Has(dvoIsObject) then
     EDocVariant.RaiseU('ToRawUtf8DynArray expects a dvArray');
-  if not IsArray then
+  if not Has(dvoIsArray) then
     exit; // undefined
   SetLength(Result, VCount);
   for ndx := 0 to VCount - 1 do
@@ -10130,10 +10131,10 @@ var
   temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   if (cardinal(VType) <> DocVariantVType) or
-     IsArray then
+     Has(dvoIsArray) then
     EDocVariant.RaiseU('ToTextPairs expects a dvObject');
   if (VCount > 0) and
-     IsObject then
+     Has(dvoIsObject) then
     with TJsonWriter.CreateOwnedStream(temp) do
       try
         ndx := 0;
@@ -10164,9 +10165,9 @@ begin
   Result := nil;
   {$endif FPC}
   if (cardinal(VType) <> DocVariantVType) or
-     IsObject then
+     Has(dvoIsObject) then
     EDocVariant.RaiseU('ToArrayOfConst expects a dvArray');
-  if IsArray then
+  if Has(dvoIsArray) then
     VariantsToArrayOfConst(pointer(VValue), VCount, Result);
 end;
 
@@ -10182,7 +10183,7 @@ begin
   result := UriRoot;
   if (cardinal(VType) <> DocVariantVType) or
      (VCount = 0) or
-     not IsObject then
+     not Has(dvoIsObject) then
     exit;
   DocVariantType.ToJson(@self, json);
   result := UrlEncodeJsonObjectBuffer(UriRoot, pointer(json), []);
@@ -10222,7 +10223,7 @@ var
   json: RawUtf8;
 begin
   VarClear(result);
-  if IsArray then // try to generate a single dimension SAFEARRAY
+  if Has(dvoIsArray) then // try to generate a single dimension SAFEARRAY
   begin
     if VCount = 0 then
     begin
@@ -10547,7 +10548,7 @@ var
 begin
   o := _Safe(Obj);
   if _SafeObject(Document, d) then
-    if not o.IsObject then
+    if not o.Has(dvoIsObject) then
       Obj := Document
     else
       for ndx := 0 to d^.VCount - 1 do
@@ -11768,7 +11769,7 @@ begin
       continue
     else if CompKey = '' then
     begin
-      if not dv.IsObject then
+      if not dv.Has(dvoIsObject) then
         continue; // ignore any list element which is not a IDocDict
     end
     else
@@ -11898,7 +11899,7 @@ var
   v: TDocList;
 begin
   v := nil;
-  if dv.IsArray then
+  if dv.Has(dvoIsArray) then
     v := TDocList.CreateByRef(@dv);
   result := v;
 end;
@@ -11908,7 +11909,7 @@ var
   v: TDocList;
 begin
   v := nil;
-  if dv.IsArray then
+  if dv.Has(dvoIsArray) then
     v := TDocList.CreateCopy(dv);
   result := v;
 end;
@@ -11923,7 +11924,7 @@ var
   v: TDocList;
 begin
   v := nil;
-  if dv.IsArray then
+  if dv.Has(dvoIsArray) then
   begin
     v := TDocList.CreateCopy(dv);
     v.fValue^.VOptions := JSON_[model];
@@ -11993,7 +11994,7 @@ begin
       exit;
   end
   else if not main.InitJson(json, model) or
-          not main.IsArray then
+          not main.Has(dvoIsArray) then
     exit;
   n := main.Count;
   if n = 0 then
@@ -12031,7 +12032,7 @@ end;
 
 function DocDict(const dv: TDocVariantData): IDocDict;
 begin
-  if dv.IsObject then
+  if dv.Has(dvoIsObject) then
     result := TDocDict.CreateByRef(@dv)
   else
     result := nil;
@@ -12042,7 +12043,7 @@ var
   d: TDocDict;
 begin
   d := nil;
-  if dv.IsObject then
+  if dv.Has(dvoIsObject) then
     d := TDocDict.CreateCopy(dv);
   result := d;
 end;
@@ -12057,7 +12058,7 @@ var
   d: TDocDict;
 begin
   d := nil;
-  if dv.IsObject then
+  if dv.Has(dvoIsObject) then
   begin
     d := TDocDict.CreateCopy(dv);
     d.fValue^.VOptions := JSON_[model];
@@ -12209,7 +12210,7 @@ end;
 
 function TDocAny.AsList: IDocList;
 begin
-  if fValue^.IsArray then
+  if fValue^.Has(dvoIsArray) then
     result := self as TDocList
   else
     result := nil;
@@ -12217,7 +12218,7 @@ end;
 
 function TDocAny.AsDict: IDocDict;
 begin
-  if fValue^.IsObject then
+  if fValue^.Has(dvoIsObject) then
     result := self as TDocDict
   else
     result := nil;
@@ -12572,7 +12573,7 @@ begin
   if position < 0 then
     inc(position, fValue^.Count);
   if (cardinal(position) >= cardinal(fValue^.Count)) or
-     not _Safe(fValue^.VValue[position]).IsObject then
+     not _Safe(fValue^.VValue[position]).Has(dvoIsObject) then
     exit;
   value := TDocDict.CreateOwned;
   result := fValue^.Extract(position, PVariant(value.Value)^);
