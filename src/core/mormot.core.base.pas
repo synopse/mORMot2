@@ -3565,6 +3565,9 @@ var
 function bswap16(a: cardinal): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// internal function to swap 16-bit LE/BE endianess of a buffer
+procedure bswap16array(buf: PWord; len: PtrInt);
+
 /// convert the endianness of a given unsigned 32-bit integer
 function bswap32(a: cardinal): cardinal;
   {$ifndef ASMINTEL}inline;{$endif}
@@ -10430,6 +10433,16 @@ end;
 function bswap16(a: cardinal): cardinal; // inlining is good enough
 begin
   result := ((a and 255) shl 8) or (a shr 8);
+end;
+
+procedure bswap16array(buf: PWord; len: PtrInt);
+begin
+  if len > 0 then
+    repeat
+      buf^ := bswap16(buf^); // fast enough for our purpose (hardly used)
+      inc(buf);
+      dec(len)
+    until len = 0;
 end;
 
 function bswapN(b: PByte; len: cardinal): cardinal;

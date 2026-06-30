@@ -9969,7 +9969,7 @@ begin
   n := Utf8DecodeToUnicode(up, tmp); // UTF-16 little endian
   if n = 0 then
     exit;
-  RawUnicodeSwapEndian(tmp.buf, n);  // UTF-16 big endian conversion
+  bswap16array(tmp.buf, n);  // UTF-16 big endian conversion
   sha1.Init;
   sha1.Update(@DOTNET_NAMESPACE, SizeOf(DOTNET_NAMESPACE));
   sha1.Update(tmp.buf, n * 2);
