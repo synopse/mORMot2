@@ -10320,18 +10320,18 @@ begin
     varString: // rkString
       begin
         Dest.VAny := nil; // avoid GPF
-        RawByteString(Dest.VAny) := PRawByteString(Data)^;
+        RawByteString(Dest.VAny) := PRawByteString(Data)^; // inc(refcnt)
       end;
     varOleStr: // rkWString
       begin
-        Dest.VAny := nil; // avoid GPF
-        WideString(Dest.VAny) := PWideString(Data)^;
+        TSynVarData(Dest).VType := varOleStr or varByRef; // byref
+        Dest.VAny := Data;                                // no SysAllocString
       end;
     {$ifdef HASVARUSTRING}
     varUString: // rkUString
       begin
         Dest.VAny := nil; // avoid GPF
-        UnicodeString(Dest.VAny) := PUnicodeString(Data)^;
+        UnicodeString(Dest.VAny) := PUnicodeString(Data)^; // inc(refcnt)
       end;
     {$endif HASVARUSTRING}
     varVariant: // rkVariant
@@ -10346,6 +10346,12 @@ begin
         RttiKindToUtf8(Info.Kind, Data, RawUtf8(Dest.VAny));
       end;
    else
+     if Info^.Kind = rkDynArray then // use RTTI for simple arrays
+       if Options = nil then
+         TSynVarData(Dest).VType := varNull
+       else
+         TDocVariantData(Dest).InitArrayFrom(Data^, Info, PDocVariantOptions(Options)^)
+     else
      begin
        tmp := nil; // use temporary JSON conversion
        SaveJson(Data^, Info, [], RawUtf8(tmp)); // =TJsonWriter.AddTypedJson()
