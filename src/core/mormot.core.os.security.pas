@@ -2210,13 +2210,8 @@ function AsnBmp(const Text: RawUtf8): TAsnObject;
 // - warning: all Content[] will be filled with zeroes even if marked as  "const"
 function AsnSafeOct(const Content: array of TAsnObject): TAsnObject;
 
-/// raw append some binary to an ASN.1 object buffer
-procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject);
-  overload; {$ifdef HASINLINE} inline; {$endif}
-
 /// encode and append some raw data as ASN.1
-procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject;
-  AsnType: integer); overload;
+procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject; AsnType: integer);
 
 /// decode the len of a ASN.1 binary item from a TAsnObject instance
 function AsnDecLen(var Start: integer; const Buffer: TAsnObject): cardinal;
@@ -6880,25 +6875,13 @@ begin
   AsnTyped(pointer(Data), length(Data), AsnType, result);
 end;
 
-procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject);
-var
-  d, b: PtrInt;
-begin
-  if Buffer = '' then
-    exit;
-  d := length(Data);
-  b := length(Buffer);
-  SetLength(Data, d + b);
-  MoveFast(pointer(Buffer)^, PByteArray(Data)[d], b);
-end;
-
 function AsnArr(const Data: array of RawUtf8; AsnType: integer): TAsnObject;
 var
   i: PtrInt;
 begin
   FastAssignNew(result);
   for i := 0 to high(Data) do
-    AsnAdd(result, AsnTyped(Data[i], AsnType));
+    AsnAdd(result, Data[i], AsnType);
 end;
 
 function Asn(Value: Int64; AsnType: integer): TAsnObject;
@@ -7018,7 +7001,7 @@ var
   tmp: TSynTempBuffer;
 begin
   Unicode_FromUtf8(pointer(Text), length(Text), tmp);
-  bswap16array(tmp.buf, tmp.len); // into BIGendian - tmp.len is in WideChars
+  bswap16array(tmp.buf, tmp.len); // into bigendian - tmp.len is in WideChars
   AsnTyped(tmp.buf, tmp.len shl 1, ASN1_BMPSTRING, result);
   tmp.Done;
 end;
@@ -7036,8 +7019,14 @@ begin
 end;
 
 procedure AsnAdd(var Data: TAsnObject; const Buffer: TAsnObject; AsnType: integer);
+var
+  tmp: TAsnObject;
+  d: PtrInt;
 begin
-  AsnAdd(Data, AsnTyped(Buffer, AsnType));
+  AsnTyped(pointer(Buffer), length(Buffer), AsnType, tmp);
+  d := length(Data);
+  SetLength(Data, d + length(tmp));
+  MoveFast(pointer(tmp)^, PByteArray(Data)[d], length(tmp));
 end;
 
 procedure AsnDecOid(Pos, EndPos: PtrInt; const Buffer: TAsnObject; var Dest: RawUtf8);
