@@ -3248,6 +3248,8 @@ function FindCustomExts(const Other: TCryptCustomExts; OidText: PUtf8Char): RawB
 /// low-level search of a TCryptCustomExt.Value from a binary OID
 function FindCustomExtsAsn(o: PCryptCustomExt; n: integer; const b: TAsnObject): RawByteString;
 
+/// search and decode Authority Information Access (1.3.6.1.5.5.7.1.1) extension content
+function FindAia(const ext: TCryptCustomExts; var ocsp, issuers: TRawUtf8DynArray): boolean;
 
 type
   /// maintains a list of ICryptCert, easily reachable per TCryptCertUsage
@@ -3798,6 +3800,10 @@ const
   // - is stored as prefix to CKA_OID[ckaEcc256..ckaEcc256k] parameter
   ASN1_OID_X962_PUBLICKEY  = '1.2.840.10045.2.1';
 
+  ASN1_OID_AIA         = '1.3.6.1.5.5.7.1.1';
+  ASN1_OID_AIA_OCSP    = '1.3.6.1.5.5.7.48.1';
+  ASN1_OID_AIA_ISSUERS = '1.3.6.1.5.5.7.48.2';
+
   /// the OID of all supported ICryptPublicKey/ICryptPrivateKey algorithms
   CKA_OID: array[TCryptKeyAlgo] of RawUtf8 = (
     '',                       // ckaNone
@@ -4056,8 +4062,8 @@ function AsnNextTime(var Pos: integer; const Buffer: TAsnObject;
 /// decode an OID ASN.1 IP Address buffer into human-readable text
 function AsnDecIp(p: PAnsiChar; len: integer): RawUtf8;
 
-/// decode Authority Information Access (1.3.6.1.5.5.7.1.1) extnsion content
-procedure AsnDecAia(const ext: TAsnObject; var ocsp, issuers: TRawUtf8DynArray);
+/// decode Authority Information Access (1.3.6.1.5.5.7.1.1) extension content
+function AsnDecAia(const ext: TAsnObject; var ocsp, issuers: TRawUtf8DynArray): boolean;
 
 /// serialize a TSecurityDescriptor instance into JSON
 function SecurityDescriptorToJson(const SD: TSecurityDescriptor): RawUtf8;
@@ -9934,6 +9940,14 @@ begin
     until n = 0;
 end;
 
+function FindAia(const ext: TCryptCustomExts; var ocsp, issuers: TRawUtf8DynArray): boolean;
+var
+  aia: TAsnObject;
+begin
+  aia := FindCustomExts(ext, ASN1_OID_AIA);
+  result := (aia <> '') and
+            AsnDecAia(aia, ocsp, issuers);
+end;
 
 
 { TCryptCertPerUsage }
@@ -11353,11 +11367,12 @@ begin
   end;
 end;
 
-procedure AsnDecAia(const ext: TAsnObject; var ocsp, issuers: TRawUtf8DynArray);
+function AsnDecAia(const ext: TAsnObject; var ocsp, issuers: TRawUtf8DynArray): boolean;
 var
   pos: integer;
   oid, v: RawByteString;
 begin // see xeAuthorityInformationAccess in TXTbsCertificate.AddNextExtensions
+  result := false;
   ocsp := nil;
   issuers := nil;
   pos := 1;
@@ -11366,12 +11381,13 @@ begin // see xeAuthorityInformationAccess in TXTbsCertificate.AddNextExtensions
           (AsnNext(pos, ext, @oid) = ASN1_OBJID) and
           (AsnNext(pos, ext, @v) = ASN1_CTX6) do
     begin
-      if oid = '1.3.6.1.5.5.7.48.1' then
+      result := true;
+      if oid = ASN1_OID_AIA_OCSP then
       begin
         if IsHttp(v) then
           AddRawUtf8(ocsp, v);
       end
-      else if oid = '1.3.6.1.5.5.7.48.2' then
+      else if oid = ASN1_OID_AIA_ISSUERS then
         if IsHttp(v) or
            IsLdap(v) then
           AddRawUtf8(issuers, v);

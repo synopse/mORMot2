@@ -95,7 +95,7 @@ type
     xeAuthorityKeyIdentifier,           // 2.5.29.35
     xePolicyConstraints,                // 2.5.29.36
     xeExtendedKeyUsage,                 // 2.5.29.37
-    xeAuthorityInformationAccess,       // 1.3.6.1.5.5.7.1.1
+    xeAuthorityInformationAccess,       // 1.3.6.1.5.5.7.1.1 = ASN1_OID_AIA
     xeGoogleSignedCertificateTimestamp, // 1.3.6.1.4.1.11129.2.4.2
     xeNetscapeComment);                 // 2.16.840.1.113730.1.13
 
@@ -381,7 +381,7 @@ const
     '2.5.29.35',                 // xeAuthorityKeyIdentifier
     '2.5.29.36',                 // xePolicyConstraints
     '2.5.29.37',                 // xeExtendedKeyUsage
-    '1.3.6.1.5.5.7.1.1',         // xeAuthorityInformationAccess
+    ASN1_OID_AIA,                // xeAuthorityInformationAccess
     '1.3.6.1.4.1.11129.2.4.2',   // xeGoogleSignedCertificateTimestamp
     '2.16.840.1.113730.1.13');   // xeNetscapeComment
 
@@ -519,7 +519,7 @@ type
     // - aggregate KeyUsages and ExtendedKeyUsages X.509 fields with
     // cuCA from Extension[xeBasicConstraints]
     CertUsages: TCryptCertUsages;
-    /// CA Issue URIs from declared X.509 v3 Authority Information Access extension
+    /// CA Issuer URIs from declared X.509 v3 Authority Information Access extension
     // - only http:// https:// ldap:// ldaps:// URIs are decoded here
     CaIssuers: TRawUtf8DynArray;
     /// CA OCSP URIs from declared X.509 v3 Authority Information Access extension
@@ -985,14 +985,14 @@ type
 const
   /// the OID of all known X.509 CRL v2 extensions, as in RFC 5280 5.2
   XCE_OID: array[TXCrlExtension] of PUtf8Char = (
-    '',                     // xceNone
-    '2.5.29.35',            // xceAuthorityKeyIdentifier
-    '2.5.29.18',            // xceIssuerAlternativeName
-    '2.5.29.20',            // xceCrlNumber
-    '2.5.29.27',            // xceDeltaCrlIndicator
-    '2.5.29.28',            // xceIssuingDistributionPoints
-    '2.5.29.46',            // xceDeltaCrlDistributionPoints
-    '1.3.6.1.5.5.7.1.1');   // xceAuthorityInformationAccess
+    '',             // xceNone
+    '2.5.29.35',    // xceAuthorityKeyIdentifier
+    '2.5.29.18',    // xceIssuerAlternativeName
+    '2.5.29.20',    // xceCrlNumber
+    '2.5.29.27',    // xceDeltaCrlIndicator
+    '2.5.29.28',    // xceIssuingDistributionPoints
+    '2.5.29.46',    // xceDeltaCrlDistributionPoints
+    ASN1_OID_AIA);  // xceAuthorityInformationAccess
 
 function OidToXce(const oid: RawByteString): TXCrlExtension;
 
@@ -1946,13 +1946,13 @@ begin
                   (AsnNext(extpos, ext, @oid) = ASN1_OBJID) and
                   (AsnNext(extpos, ext, @v) = ASN1_CTX6) do
             begin
-              if oid = '1.3.6.1.5.5.7.48.1' then
+              if oid = ASN1_OID_AIA_OCSP then
               begin
                 if IsHttp(v) then
                   AddRawUtf8(Ocsp, v);
                 Prepend(v, 'ocsp=');
               end
-              else if oid = '1.3.6.1.5.5.7.48.2' then
+              else if oid = ASN1_OID_AIA_ISSUERS then
               begin
                 if IsHttp(v) or
                    IsLdap(v) then
@@ -3532,7 +3532,7 @@ begin
   for xe := succ(xeNone) to high(xe) do
     if (xe <> xeNetscapeComment) and
        (fX509.Signed.ExtensionRaw[xe] <> '') then
-      AddOther(fields.CustomExts, XE_OID_ASN[xe],
+      AddCustomExts(fields.CustomExts, XE_OID_ASN[xe],
         fX509.Signed.ExtensionRaw[xe], fX509.Signed.ExtensionCritical[xe]);
   result := true;
 end;
