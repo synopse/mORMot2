@@ -1455,6 +1455,7 @@ type
       flags: cardinal = ASN1_STRFLGS_RFC2253 and not ASN1_STRFLGS_ESC_MSB);
     procedure ToHex(out result: RawUtf8); overload;
     function ToHex: RawUtf8; overload;
+    function ToBinary: RawByteString;
     function Equals(another: pointer): boolean;
   end;
   ASN1_STRING = asn1_string_st;
@@ -9201,6 +9202,11 @@ end;
 function asn1_string_st.ToHex: RawUtf8;
 begin
   ToHex(result);
+end;
+
+function asn1_string_st.ToBinary: RawByteString;
+begin
+  FastSetString(RawUtf8(result), Data, Len);
 end;
 
 function asn1_string_st.Equals(another: pointer): boolean;
