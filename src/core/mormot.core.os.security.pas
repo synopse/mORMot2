@@ -2231,6 +2231,10 @@ function AsnDecInt(var Start: integer; const Buffer: TAsnObject;
 /// decode an OID ASN.1 value into human-readable text
 procedure AsnDecOid(Pos, EndPos: PtrInt; const Buffer: TAsnObject; var Dest: RawUtf8);
 
+/// decode an OID ASN.1 value into human-readable text
+function AsnDecOidText(const Buffer: TAsnObject): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// decode an OCTSTR ASN.1 value into its raw bynary buffer
 // - returns plain input value if was not a valid ASN1_OCTSTR
 function AsnDecOctStr(const input: RawByteString): RawByteString;
@@ -7056,6 +7060,11 @@ begin
     AppendShortCardinal(x, tmp);
   end;
   FastSetString(Dest, @tmp[1], ord(tmp[0])); // last: Buffer may be = Dest
+end;
+
+function AsnDecOidText(const Buffer: TAsnObject): RawUtf8;
+begin
+  AsnDecOid(1, length(Buffer) + 1, Buffer, result);
 end;
 
 function AsnDecOctStr(const input: RawByteString): RawByteString;

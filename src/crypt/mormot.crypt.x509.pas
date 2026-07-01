@@ -1776,7 +1776,7 @@ begin
     AddExt(result, xeExtendedKeyUsage,
       AsnSeq(XkuToOids(xeku)));
   // custom binary extension(s) could be supplied in Fields^.CustomExts
-  // - current ExtensionOther[] and ExtensionRaw[] values are ignored
+  // - currently ExtensionOther[] and ExtensionRaw[] values are ignored
   if (Fields <> nil) and
      (Fields^.CustomExts <> nil) then
     AddExts(result, Fields^.CustomExts);
@@ -1900,7 +1900,7 @@ begin
                 ASN1_CTX7: // ip
                   v := AsnDecIp(pointer(v), length(v));
                 ASN1_CTX8: // registeredID
-                  AsnDecOid(1, length(v) + 1, v, RawUtf8(v));
+                  v := AsnDecOidText(v);
               else
                 continue;  // unsupported value type
               end;
