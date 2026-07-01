@@ -2468,6 +2468,7 @@ type
     function GetIssuers: TRawUtf8DynArray; override;
     function GetSubjectKey: RawUtf8; override;
     function GetAuthorityKey: RawUtf8; override;
+    function GetFields(var fields: TCryptCertFields; withexts: boolean): boolean; override;
     function IsSelfSigned: boolean; override;
     function GetNotBefore: TDateTime; override;
     function GetNotAfter: TDateTime; override;
@@ -2853,6 +2854,29 @@ end;
 function TCryptCertOpenSsl.GetAuthorityKey: RawUtf8;
 begin
   result := fX509.AuthorityKeyIdentifier;
+end;
+
+function TCryptCertOpenSsl.GetFields(var fields: TCryptCertFields; withexts: boolean): boolean;
+var
+  x: TX509_Extensions;
+  i: PtrInt;
+begin
+  result := false;
+  if fX509 = nil then
+    exit;
+  with fields do
+    fX509.GetIssuerName^.GetEntries(Country, State, Locality, Organization,
+      OrgUnit, CommonName, EmailAddress, SurName, GivenName, SerialNumber);
+  result := true;
+  if not withexts then
+    exit;
+  x := fX509.GetExtensions;
+  for i := 0 to high(x) do
+    with x[i] do
+      if nid = NID_netscape_comment then
+        fields.Comment := value^.ToBinary
+      else
+        AddCustomExts(fields.CustomExts, BinaryOid, value^.ToBinary, critical);
 end;
 
 function TCryptCertOpenSsl.IsSelfSigned: boolean;
