@@ -3445,7 +3445,7 @@ begin
           repeat
             if not GetNextRecursiveExpr then
               exit;
-            AsnAdd(result, expr);
+            Append(result, expr);
           until text = '';
         result := AsnTyped(result, ASN1_CTC0);
       end;
@@ -3456,7 +3456,7 @@ begin
           repeat
             if not GetNextRecursiveExpr then
               exit;
-            AsnAdd(result, expr);
+            Append(result, expr);
           until text = '';
         result := AsnTyped(result, ASN1_CTC1);
       end;
@@ -4664,7 +4664,7 @@ begin
      (fCount = 0) then
     exit;
   for i := 0 to fCount - 1 do
-    AsnAdd(result, AsnOctStr(fList[i]));
+    AsnAdd(result, fList[i], ASN1_OCTSTR);
   result := Asn(ASN1_SEQ, [              // attribute(s) sequence
               AsnOctStr(fAttributeName), // attribute description
               AsnSetOf(result)           // attribute value set
@@ -7022,7 +7022,7 @@ begin
   try
     query := AsnTyped(Oid, ASN1_CTX0);
     if Value <> '' then
-      AsnAdd(query, AsnTyped(Value, ASN1_CTX1));
+      AsnAdd(query, Value, ASN1_CTX1);
     decoded := SendAndReceive(AsnTyped(query, LDAP_ASN1_EXT_REQUEST));
     result := fResultCode = LDAP_RES_SUCCESS;
     if not result then
@@ -7112,7 +7112,7 @@ begin
              ]))
       ]));
   if controls <> '' then
-    Append(s, AsnTyped(controls, LDAP_ASN1_CONTROLS));
+    AsnAdd(s, controls, LDAP_ASN1_CONTROLS);
   try
     // actually send the request
     bytesIn := fSock.BytesIn;
@@ -7627,7 +7627,7 @@ begin
   query := AsnOctStr(Obj);
   Append(query, AsnOctStr(NewRdn), ASN1_BOOLEAN_VALUE[DeleteOldRdn]);
   if NewSuperior <> '' then
-    AsnAdd(query, AsnTyped(NewSuperior, ASN1_CTX0));
+    AsnAdd(query, NewSuperior, ASN1_CTX0);
   SendAndReceive(AsnTyped(query, LDAP_ASN1_MODIFYDN_REQUEST));
   result := fResultCode = LDAP_RES_SUCCESS;
   if Assigned(fLog) then
@@ -8056,9 +8056,9 @@ begin
     ELdap.RaiseUtf8('%.ExtModifyUserPassword cannot be anonymous', [self]);
   req := AsnTyped(UserDN, ASN1_CTX0);
   if OldPassword <> '' then
-    Append(req, AsnTyped(OldPassword, ASN1_CTX1));
+    AsnAdd(req, OldPassword, ASN1_CTX1);
   if NewPassword <> '' then
-    Append(req, AsnTyped(NewPassword, ASN1_CTX2));
+    AsnAdd(req, NewPassword, ASN1_CTX2);
   pos := 1;
   if Extended(ASN1_OID_PASSWDMODIFY, AsnSeq(req), nil, @v) then
     if NewPassword <> '' then

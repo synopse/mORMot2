@@ -1689,7 +1689,7 @@ var
   seq: TAsnObject;
 begin
   while csv <> nil do
-    Append(seq, AsnTyped(TrimU(GetNextItem(csv)), ASN1_CTX2));
+    AsnAdd(seq, TrimU(GetNextItem(csv)), ASN1_CTX2);
   AddExt(result, oid, AsnSeq(seq), critical);
 end;
 
@@ -1706,7 +1706,7 @@ var
   seq: TAsnObject;
 begin
   for i := 0 to high(values) do
-    Append(seq, AsnTyped(values[i], ASN1_CTX2));
+    AsnAdd(seq, values[i], ASN1_CTX2);
   AddExt(result, XE_OID_ASN[xe], AsnSeq(seq), critical);
 end;
 

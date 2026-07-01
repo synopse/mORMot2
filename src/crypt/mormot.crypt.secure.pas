@@ -2428,7 +2428,7 @@ type
   // - in TCryptCertFields.CustomExts, TXTbsCertificate.ExtensionOther[]
   // or TXname.Other[]
   TCryptCustomExt = record
-    /// the OID of this value, in raw binary form
+    /// the OID of this value, in raw binary form - e.g. from AsnEncOid('1.2.3')
     Oid: RawByteString;
     /// the value associated with this OID
     // - as ASN1_OCTSTR raw content for TCryptCertFields.CustomExts or
@@ -2472,7 +2472,7 @@ type
     SerialNumber: RawUtf8;
     /// netscapeComment extension (not a name field - OID 2.16.840.1.113730.1.13)
     Comment: RawUtf8;
-    /// raw custom extensions (not a name field) - use AddOther() to fill it
+    /// raw custom extensions (not name fields) - use AddOther() to fill it
     CustomExts: TCryptCustomExts;
   end;
   PCryptCertFields = ^TCryptCertFields;
