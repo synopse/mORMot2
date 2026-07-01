@@ -574,7 +574,7 @@ begin
           Client.Model.Owner := Client;
           try
             R.FillPrepare(fPeopleData);
-            if not CheckFailed(R.FillContext <> nil) then
+            if Check(R.FillContext <> nil) then
             begin
               Client.BatchStart(TOrmPeople);
               n := 0;
@@ -666,7 +666,7 @@ begin
   try
     R := TOrmPeople.Create;
     R.FillPrepare(fPeopleData);
-    if not CheckFailed(R.FillContext <> nil) then
+    if Check(R.FillContext <> nil) then
     try
       DeleteFile('test.mdb');
       Props := TSqlDBOleDBJetConnectionProperties.Create('test.mdb', '', '', '');
@@ -940,7 +940,7 @@ var
   begin
     Check(R.FillRewind);
     while R.FillOne do
-      if not CheckFailed(R2.FillOne) then
+      if Check(R2.FillOne) then
       begin
         Check(R.ID <> 0);
         Check(R2.ID <> 0);

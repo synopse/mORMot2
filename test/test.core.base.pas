@@ -1465,7 +1465,7 @@ begin
     j := ACities.FindHashed(N);
     if i and 127 = 0 then
       Check(j < 0, 'deteled')
-    else if not CheckFailed(j >= 0, N) then
+    else if Check(j >= 0, N) then
     begin
       Check(Cities[j].Name = N);
       CheckSame(Cities[j].Latitude, i * 3.14);
@@ -2108,7 +2108,7 @@ begin
   W.SetText(U);
   CheckHash(U, $1D682EF8, 'hash32f');
   P := pointer(U);
-  if not CheckFailed(P^ = '[') then
+  if Check(P^ = '[') then
     inc(P);
   for i := 0 to 1000 do
   begin
@@ -2247,7 +2247,7 @@ begin
   {$endif HASEXTRECORDRTTI}
   ARP.Clear;
   Check(ARP.LoadFromJson(pointer(U)) <> nil);
-  if not CheckFailed(ARP.Count = 1001) then
+  if Check(ARP.Count = 1001) then
     for i := 0 to 1000 do
       with AR[i] do
       begin
@@ -3492,7 +3492,7 @@ procedure TTestCoreBase._ParseCommandArgs;
       Check(StrComp(pointer(a[i]), pointer(expected[i])) = 0);
     Check(a[n] = nil, 'last param should be nil');
     Check(ExtractCommandArgs(cmd, p, posix) = flags);
-    if not CheckFailed(n = length(p)) then
+    if Check(n = length(p)) then
       for i := 0 to n - 1 do
         CheckEqual(p[i], expected[i]);
   end;
@@ -6984,7 +6984,7 @@ begin
   U[3] := #$B3;
   U[4] := #$92;
   Utf8ToSynUnicode(U, SU);
-  if not CheckFailed(length(SU) = 2) then
+  if Check(length(SU) = 2) then
     Check(PCardinal(SU)^ = $DCD2D863);
   CheckEqual(StrLenW(pointer(SU)), length(SU));
   Check(Utf8ToUnicodeLength(Pointer(U)) = 2);
@@ -6993,13 +6993,13 @@ begin
   if CheckEqual(Utf8ToWideChar(WU, pointer(U), SizeOf(WU), length(U), false), 4) then
     Check(PCardinal(@WU)^ = $DCD2D863);
   U := SynUnicodeToUtf8(SU);
-  if not CheckFailed(length(U) = 4) then
+  if Check(length(U) = 4) then
     Check(PCardinal(U)^ = $92b3a8f0);
   CheckEqual(StrLenW(pointer(SU)), length(SU));
   TSynAnsiConvert.Engine(CP_UTF8).UnicodeBufferToAnsiVar(
     pointer(SU), length(SU), RawByteString(U));
   Check(length(U) = 4);
-  if not CheckFailed(length(U) = 4) then
+  if Check(length(U) = 4) then
     Check(PCardinal(U)^ = $92b3a8f0);
   SetLength(res, 10);
   PB := pointer(res);
@@ -7389,8 +7389,8 @@ procedure TTestCoreBase.Charsets;
       {$ifdef OSDARWIN}
       exit;  // MacOS ICU seems to be not as expected with escape chars
       {$else}
-      if not CheckFailed(a <> '', 'kr1') then
-        if not CheckFailed(PCardinal(a)^ = 1126769691, 'kr2') then
+      if Check(a <> '', 'kr1') then
+        if Check(PCardinal(a)^ = 1126769691, 'kr2') then
           delete(a, 1, 4); // delete IEC 2022 escape char
       {$endif OSDARWIN}
     {$endif OSPOSIX}
@@ -9245,7 +9245,7 @@ begin
     Check(length(sd.Dacl) in [1, 2]);
     CheckEqual(length(sd.Sacl), 0);
     Check(sd.Dacl[0].AceType = satCallbackAccessAllowed);
-    if not CheckFailed(sd.Dacl[0].Opaque <> '') then
+    if Check(sd.Dacl[0].Opaque <> '') then
     begin
       u := sd.Dacl[0].ConditionalExpression;
       Check(u <> '');
@@ -9956,7 +9956,7 @@ begin
     CheckEqual(ct, BIN_MIME[i]);
   end;
   for i := 0 to high(HEX) do
-  if not CheckFailed(length(HEX[i]) shr 1 < length(s)) then
+  if Check(length(HEX[i]) shr 1 < length(s)) then
   begin
     Check(mormot.core.text.HexToBin(pointer(HEX[i]), pointer(s), length(HEX[i]) shr 1));
     CheckEqual(GetMimeContentType(s), HEX_MIME[i]);
@@ -10249,8 +10249,8 @@ begin
     islinux := false;
     for ld := succ(low(ld)) to high(ld) do
       if os in LINUX_DIST[ld] then
-        if not CheckFailed(not islinux, 'os twice') then
-          if not CheckFailed(LinuxDistribution(os) = ld, 'ld') then
+        if Check(not islinux, 'os twice') then
+          if Check(LinuxDistribution(os) = ld, 'ld') then
             islinux := true;
     Check((os in OS_LINUX) = islinux, 'islinux');
     Check(islinux = not (os in LINUX_DIST[ldNotLinux]));

@@ -1452,8 +1452,8 @@ begin
         Item.Name := Int32ToUtf8(Item.Color);
         Inst.CC.Collections(Item, List, Copy);
       end;
-      if not CheckFailed(List.Count = Item.Color) or
-         not CheckFailed(Copy.Count = List.Count) then
+      if Check(List.Count = Item.Color) or
+         Check(Copy.Count = List.Count) then
         for j := 0 to List.Count - 1 do
         begin
           with TCollTest(List.Items[j]) do
@@ -1774,7 +1774,7 @@ begin
   GroupID := fMain.Server.Orm.MainFieldID(TAuthGroup, 'User');
   Check(GroupID <> 0);
   Check(fMain.Server.Orm.MainFieldIDs(TAuthGroup, ['User', 'Admin'], g));
-  if not CheckFailed(length(g) = 2) then
+  if Check(length(g) = 2) then
     Check((g[0] = GroupID) or (g[1] = GroupID));
   S := fMain.Server.Services['Calculator'] as TServiceFactoryServer;
   Test([1, 2, 3, 4, 5], 'by default, all methods are allowed');

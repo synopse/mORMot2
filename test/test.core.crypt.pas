@@ -2384,7 +2384,7 @@ begin
           if not withiv then
             aes.IV := iv;
           dec := aes.DecryptPkcs7(res, withiv, {raiseonerror=}false);
-          if not CheckFailed(length(dec) = i shl 3) then
+          if Check(length(dec) = i shl 3) then
             Check(CompareMem(pointer(dec), @data, length(dec)));
         finally
           aes.Free;
@@ -3440,7 +3440,7 @@ begin
   // - should be done FIRST with no process in the background
   FillIncreasingB(@bytes, 0, high(bytes));
   if Assigned(AesNiHash128) and
-     not CheckFailed(not fBackgroundRun.Waiting, 'no background run') then
+     Check(not fBackgroundRun.Waiting, 'no background run') then
   begin
     Move512(@bak, AesNiHashAntiFuzzTable);
     Move512(AesNiHashAntiFuzzTable, @bytes); // replace to get AESNIHASH_REF
@@ -4304,7 +4304,7 @@ begin
   check(csr <> '', 'csr');
   check(priv <> '', 'priv');
   c2 := crt.GenerateFromCsr(csr);
-  if not CheckFailed(c2 <> nil, 'gen csr1') then
+  if Check(c2 <> nil, 'gen csr1') then
   begin
     if crt.AlgoName <> 'syn-es256-v1' then
       check(c2.GetUsage = [cuCA, cuDigitalSignature], 'csr usage1');
@@ -4313,7 +4313,7 @@ begin
     check(c2.IsSelfSigned, 'csr self1');
   end;
   c2 := crt.GenerateFromCsr(csr, c1);
-  if not CheckFailed(c2 <> nil, 'gen csr2') then
+  if Check(c2 <> nil, 'gen csr2') then
   begin
     if crt.AlgoName <> 'syn-es256-v1' then
       check(c2.GetUsage = [cuCA, cuDigitalSignature], 'csr usage2');
