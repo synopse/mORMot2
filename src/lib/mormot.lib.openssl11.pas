@@ -1219,7 +1219,7 @@ type
   public
     function CurrentCipher: PSSL_CIPHER;
     function PeerChain: Pstack_st_X509;
-    function PeerCertificate: PX509;
+    function PeerCertificate: PX509; // should eventually call result^.Free
     function PeerCertificates(acquire: boolean = false): PX509DynArray;
     function PeerCertificatesAsPEM: RawUtf8;
     function PeerCertificatesAsText: RawUtf8;
@@ -11491,14 +11491,19 @@ begin
 end;
 
 function TOpenSslNetTls.GetRawCert(SignHashName: PRawUtf8): RawByteString;
+var
+  x: PX509;
 begin
   FastAssignNew(result);
-  if (fSsl = nil) or
-     (fSsl.PeerCertificate = nil) then
+  if fSsl = nil then
     exit;
-  result := fSsl.PeerCertificate^.ToBinary;
+  x := fSsl.PeerCertificate; // SSL_get_peer_certificate() requires x^.Free
+  if x = nil then
+    exit;
+  result := x^.ToBinary;
   if SignHashName <> nil then
-    SignHashName^ := fSsl.PeerCertificate^.GetSignatureHash;
+    SignHashName^ := x^.GetSignatureHash;
+  x^.Free;
 end;
 
 destructor TOpenSslNetTls.Destroy;
