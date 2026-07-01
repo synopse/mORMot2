@@ -517,9 +517,12 @@ type
     // - aggregate KeyUsages and ExtendedKeyUsages X.509 fields with
     // cuCA from Extension[xeBasicConstraints]
     CertUsages: TCryptCertUsages;
-    /// CA URIs from declared X.509 v3 Authority Information Access extension
-    // - only http://... or https://... URIs are decoded here
+    /// CA Issue URIs from declared X.509 v3 Authority Information Access extension
+    // - only http:// https:// ldap:// ldaps:// URIs are decoded here
     CaIssuers: TRawUtf8DynArray;
+    /// CA OCSP URIs from declared X.509 v3 Authority Information Access extension
+    // - only http:// https:// URIs are decoded here
+    Ocsp: TRawUtf8DynArray;
     /// decimal text of a positive integer assigned by the CA to each certificate
     // - e.g. '330929475774275458452528262248458246563660'
     function SerialNumberText: RawUtf8;
@@ -1935,10 +1938,15 @@ begin
                   (AsnNext(extpos, ext, @v) = ASN1_CTX6) do
             begin
               if oid = '1.3.6.1.5.5.7.48.1' then
-                Prepend(v, 'ocsp=')
-              else if oid = '1.3.6.1.5.5.7.48.2' then
               begin
                 if IsHttp(v) then
+                  AddRawUtf8(Ocsp, v);
+                Prepend(v, 'ocsp=');
+              end
+              else if oid = '1.3.6.1.5.5.7.48.2' then
+              begin
+                if IsHttp(v) or
+                   IsLdap(v) then
                   AddRawUtf8(CaIssuers, v);
                 Prepend(v, 'caIssuers=');
               end
