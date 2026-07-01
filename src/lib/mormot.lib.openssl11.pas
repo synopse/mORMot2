@@ -11202,7 +11202,7 @@ var
   h: RawUtf8;
   threadpeer: PPointer;
   //x: PX509DynArray;
-  //ext: TX509_Extensions; exts: TRawUtf8DynArray; len: PtrInt;
+  //ext: TX509_Extensions; exts: TRawUtf8DynArray; len: PtrInt; ocsp, isssuers: TRawUtf8DynArray;
 begin
   // this method is called on the Client side once the TCP socket is established
   fSocket := Socket;
@@ -11279,7 +11279,16 @@ begin
           ext := fPeer.GetExtensions;
           writeln(length(ext));
           for len := 0 to high(ext) do
-            writeln(OBJ_nid2sn(ext[len].nid),'=',OBJ_nid2ln(ext[len].nid),'=',ext[len].nid);
+            with ext[len] do
+            begin
+              writeln(OBJ_nid2sn(nid),'=',OBJ_nid2ln(nid),'=', nid,'=',
+                AsnDecOidText(BinaryOid));
+              if nid <> NID_info_access then
+                continue;
+              AsnDecAia(value^.ToBinary, ocsp, isssuers);
+              writeln('ocsp=', RawUtf8ArrayToCsv(ocsp));
+              writeln('issuers=', RawUtf8ArrayToCsv(isssuers));
+            end;
           writeln('NotBefore= ',DateTimeToStr(fPeer.NotBefore));
           writeln('NotAfter= ',DateTimeToStr(fPeer.NotAfter));
           writeln('SubjectKeyIdentifier=',fPeer.SubjectKeyIdentifier);
