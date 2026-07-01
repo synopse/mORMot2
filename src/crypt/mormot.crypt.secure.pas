@@ -4055,6 +4055,9 @@ function AsnNextTime(var Pos: integer; const Buffer: TAsnObject;
 /// decode an OID ASN.1 IP Address buffer into human-readable text
 function AsnDecIp(p: PAnsiChar; len: integer): RawUtf8;
 
+/// decode Authority Information Access (1.3.6.1.5.5.7.1.1) extnsion content
+procedure AsnDecAia(const ext: TAsnObject; var ocsp, issuers: TRawUtf8DynArray);
+
 /// serialize a TSecurityDescriptor instance into JSON
 function SecurityDescriptorToJson(const SD: TSecurityDescriptor): RawUtf8;
 
@@ -11349,6 +11352,30 @@ begin
   end;
 end;
 
+procedure AsnDecAia(const ext: TAsnObject; var ocsp, issuers: TRawUtf8DynArray);
+var
+  pos: integer;
+  oid, v: RawByteString;
+begin // see xeAuthorityInformationAccess in TXTbsCertificate.AddNextExtensions
+  ocsp := nil;
+  issuers := nil;
+  pos := 1;
+  if AsnNext(pos, ext) = ASN1_SEQ then
+    while (AsnNext(pos, ext) = ASN1_SEQ) and
+          (AsnNext(pos, ext, @oid) = ASN1_OBJID) and
+          (AsnNext(pos, ext, @v) = ASN1_CTX6) do
+    begin
+      if oid = '1.3.6.1.5.5.7.48.1' then
+      begin
+        if IsHttp(v) then
+          AddRawUtf8(ocsp, v);
+      end
+      else if oid = '1.3.6.1.5.5.7.48.2' then
+        if IsHttp(v) or
+           IsLdap(v) then
+          AddRawUtf8(issuers, v);
+    end;
+end;
 
 function SecurityDescriptorToJson(const SD: TSecurityDescriptor): RawUtf8;
 begin
