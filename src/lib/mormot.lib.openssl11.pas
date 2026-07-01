@@ -1625,6 +1625,8 @@ type
     function Item(ndx: integer): PX509_NAME_ENTRY;
     function GetEntry(NID: integer): RawUtf8; overload; // not MBSTRING ready
     function GetEntry(const Name: RawUtf8): RawUtf8; overload;
+    procedure GetEntries(var Country, State, Locality, Organization, OrgUnit,
+      CommonName, EmailAddress, SurName, GivenName, SerialNumber: RawUtf8);
     procedure ToUtf8(out result: RawUtf8;
       flags: cardinal = XN_FLAG_RFC2253 and not ASN1_STRFLGS_ESC_MSB);
     procedure AddEntry(const Name, Value: RawUtf8);
@@ -8158,6 +8160,21 @@ end;
 function X509_NAME.GetEntry(const Name: RawUtf8): RawUtf8;
 begin
   result := GetEntry(OBJ_txt2nid(pointer(name)));
+end;
+
+procedure X509_NAME.GetEntries(var Country, State, Locality, Organization,
+  OrgUnit, CommonName, EmailAddress, SurName, GivenName, SerialNumber: RawUtf8);
+begin
+  Country      := GetEntry('C');
+  State        := GetEntry('ST');
+  Locality     := GetEntry('L');
+  Organization := GetEntry('O');
+  OrgUnit      := GetEntry('OU');
+  CommonName   := GetEntry('CN');
+  EmailAddress := GetEntry('emailAddress');
+  Surname      := GetEntry('SN');
+  GivenName    := GetEntry('GN');
+  SerialNumber := GetEntry('serialNumber');
 end;
 
 procedure X509_NAME.ToUtf8(out result: RawUtf8; flags: cardinal);
