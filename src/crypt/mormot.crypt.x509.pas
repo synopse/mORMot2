@@ -1559,7 +1559,7 @@ begin
         xa := OidToXa(oid);
         if xa = xaNone then
           // unsupported OID
-          AddOther(Other, oid, v)
+          AddCustomExts(Other, oid, v)
         else
           // known attribute
           AddToCsv(v, Name[xa]);
@@ -1646,7 +1646,7 @@ begin
   AsnEncOidVar(pointer(Oid), o);
   if o = '' then
     exit;
-  result := FindOtherAsn(pointer(Other), length(Other), o);
+  result := FindCustomExtsAsn(pointer(Other), length(Other), o);
   if result <> '' then
     exit;
   xa := OidToXa(o);
@@ -1732,18 +1732,10 @@ end;
 
 procedure AddExts(var result: TAsnObject; const exts: TCryptCustomExts);
 var
-  n: integer;
-  e: PCryptCustomExt;
+  i: PtrInt;
 begin
-  e := pointer(exts);
-  if e = nil then
-    exit;
-  n := PDALen(PAnsiChar(e) - _DALEN)^ + _DAOFF;
-  repeat
-    AddExt(result, e^.Oid, e^.Value, e^.Critical);
-    inc(e);
-    dec(n);
-  until n = 0;
+  for i := 0 to length(exts) - 1 do
+    AddExt(result, exts[i].Oid, exts[i].Value, exts[i].Critical);
 end;
 
 const
@@ -1887,7 +1879,7 @@ begin
     xe := OidToXe(oid);
     if xe = xeNone then
       // unsupported OID are stored as raw binary values
-      AddOther(ExtensionOther, oid, ext, critical)
+      AddCustomExts(ExtensionOther, oid, ext, critical)
     else
     begin
       // decode most common extensions as RawUtf8
@@ -1928,7 +1920,7 @@ begin
           if (AsnNext(extpos, ext) = ASN1_SEQ) and
              (AsnNextRaw(extpos, ext, v) = ASN1_BOOL) and
              (v = #$ff) then
-            decoded := 'CA'; // as expected by cuCA usage flag
+            decoded := 'CA';         // as expected by cuCA usage flag
         xeKeyUsage:                  // RFC 5280 #4.2.1.3
           if (AsnNextRaw(extpos, ext, v) = ASN1_BITSTR) and
              (v <> '') and

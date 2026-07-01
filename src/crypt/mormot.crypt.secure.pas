@@ -2440,7 +2440,7 @@ type
   end;
   PCryptCustomExt = ^TCryptCustomExt;
 
-  /// used to store the unknown attributes or extensions
+  /// used to store some unknown attributes or extensions
   // - in TCryptCertFields.CustomExts, TXTbsCertificate.ExtensionOther[]
   // or TXname.Other[]
   TCryptCustomExts = array of TCryptCustomExt;
@@ -2472,7 +2472,8 @@ type
     SerialNumber: RawUtf8;
     /// netscapeComment extension (not a name field - OID 2.16.840.1.113730.1.13)
     Comment: RawUtf8;
-    /// raw custom extensions (not name fields) - use AddOther() to fill it
+    /// raw custom extensions (not name fields)
+    // - use AddCustomExts() to fill it, or e.g. FindAia() to resolve OCSP/Issuers
     CustomExts: TCryptCustomExts;
   end;
   PCryptCertFields = ^TCryptCertFields;
@@ -3236,16 +3237,16 @@ function ChainFind(var chain: ICryptCertChain; const cert: ICryptCert;
 // - returns the certificates in IsAuthorizedBy() order
 function ChainConsolidate(const chain: ICryptCertChain): ICryptCertChain;
 
-/// append a new entry to a dynamic array of TCryptCustomExt
+/// append a new entry as binary pair to a dynamic array of TCryptCustomExt
 // - use AsnEncOid() to compute the o binary from 'x.x.x.x.x' text OID
-procedure AddOther(var others: TCryptCustomExts; const o, v: RawByteString;
+procedure AddCustomExts(var exts: TCryptCustomExts; const o, v: RawByteString;
   crit: boolean = false);
 
 /// efficient search of a TCryptCustomExt.Value from a 'x.x.x.x.x' text OID
-function FindOther(const Other: TCryptCustomExts; OidText: PUtf8Char): RawByteString;
+function FindCustomExts(const Other: TCryptCustomExts; OidText: PUtf8Char): RawByteString;
 
 /// low-level search of a TCryptCustomExt.Value from a binary OID
-function FindOtherAsn(o: PCryptCustomExt; n: integer; const b: TAsnObject): RawByteString;
+function FindCustomExtsAsn(o: PCryptCustomExt; n: integer; const b: TAsnObject): RawByteString;
 
 
 type
@@ -9897,13 +9898,13 @@ begin
   DynArrayFakeLength(result, n);
 end;
 
-procedure AddOther(var others: TCryptCustomExts; const o, v: RawByteString; crit: boolean);
+procedure AddCustomExts(var exts: TCryptCustomExts; const o, v: RawByteString; crit: boolean);
 var
   n: PtrInt;
 begin
-  n := length(others);
-  SetLength(others, n + 1);
-  with others[n] do
+  n := length(exts);
+  SetLength(exts, n + 1);
+  with exts[n] do
   begin
     Oid := o;
     Value := v;
@@ -9911,12 +9912,12 @@ begin
   end;
 end;
 
-function FindOther(const Other: TCryptCustomExts; OidText: PUtf8Char): RawByteString;
+function FindCustomExts(const Other: TCryptCustomExts; OidText: PUtf8Char): RawByteString;
 begin
-  result := FindOtherAsn(pointer(Other), length(Other), AsnEncOid(OidText));
+  result := FindCustomExtsAsn(pointer(Other), length(Other), AsnEncOid(OidText));
 end;
 
-function FindOtherAsn(o: PCryptCustomExt; n: integer; const b: TAsnObject): RawByteString;
+function FindCustomExtsAsn(o: PCryptCustomExt; n: integer; const b: TAsnObject): RawByteString;
 begin
   FastAssignNew(result);
   if (o <> nil) and
