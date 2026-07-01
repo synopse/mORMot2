@@ -3795,6 +3795,8 @@ type
     procedure Add16BigEndian(v: cardinal);
     /// write a 32-bit value as network/BigEndian binary
     procedure Add32BigEndian(v: cardinal);
+    /// append some binary buffer with $xx escape of non ASCII-7 content
+    procedure AddEscape(b: PByte; len: PtrInt);
     /// finalize the Add() temporary storage into a new RawUtf8 (or AnsiString)
     procedure Done(var Dest; CodePage: cardinal = CP_UTF8);
     /// could be called if Size > 0 to remove the last char in the output buffer
@@ -12716,6 +12718,23 @@ end;
 procedure TSynTempAdder.Add32BigEndian(v: cardinal);
 begin
   PCardinal(Add(4))^ := bswap32(v);
+end;
+
+procedure TSynTempAdder.AddEscape(b: PByte; len: PtrInt);
+var
+  c: PtrInt;
+begin
+  if len > 0 then
+    repeat // fast enough for a debugging function
+      c := b^;
+      if (c >= 32) and (c <= 126) then
+        Add(AnsiChar(c))
+      else
+        PCardinal(Add(3))^ := (ord(HexCharsLower[c shr 4]) shl 8) or
+                              (ord(HexCharsLower[c and $0f]) shl 16) or ord('$');
+      inc(b);
+      dec(len);
+    until len = 0;
 end;
 
 procedure TSynTempAdder.Done(var Dest; CodePage: cardinal);
