@@ -2267,6 +2267,10 @@ function AsnNextBigInt(var Pos: integer; const Buffer: TAsnObject;
 /// initialize a set of AsnNext() Pos[] with its 1 default position
 procedure AsnNextInit(var Pos: TIntegerDynArray; Count: PtrInt);
 
+/// human-readable display of a ASN.1 value binary
+// - used e.g. by the ASNDEBUG conditional
+function AsnDump(const Value: TAsnObject): RawUtf8;
+
 
 { ****************** Operating System Certificates Operation }
 
@@ -7218,6 +7222,146 @@ begin
   SetLength(Pos, Count);
   for i := 0 to Count - 1 do
     Pos[i] := 1;
+end;
+
+function IsBinaryString(var Value: RawByteString): boolean;
+var
+  n: PtrInt;
+begin
+  result := true;
+  for n := 1 to length(Value) do
+    case ord(Value[n]) of
+      0:
+        if (n = 1) or
+           (n <> length(value)) then
+          exit
+        else
+          // consider null-terminated strings as non-binary, but truncate
+          FakeLength(Value, n - 1);
+      1..8, // consider TAB (#9) char as text
+      10..31:
+        exit;
+    end;
+  result := false;
+end;
+
+procedure DumpClass(at: integer; var w: TSynTempAdder);
+begin
+  if at and ASN1_CL_APP <> 0 then
+    w.AddShort('APP ');
+  if at and ASN1_CL_CTX <> 0 then
+    w.AddShort('CTX ');
+  if at and ASN1_CL_PRI = ASN1_CL_PRI then
+    w.AddShort('PRI ');
+  if at < ASN1_CL_APP then
+    w.AddShort('unknown')
+  else
+    w.AddByteHex(at and $0f);
+end;
+
+function AsnDump(const Value: TAsnObject): RawUtf8;
+var
+  i, at, x, n, indent, ilcount: integer;
+  s: RawByteString;
+  il: TIntegerDynArray;
+  w: TSynTempAdder;
+begin
+  w.Init;
+  try
+    i := 1;
+    ilcount := 0;
+    indent := 0;
+    while i < length(Value) do
+    begin
+      for n := ilcount - 1 downto 0 do
+        if il[n] <= i then
+        begin
+          DeleteInteger(il, ilcount, n);
+          dec(indent, 2);
+        end;
+      at := AsnNext(i, Value, @s);
+      w.AddChars(' ', indent);
+      w.AddDirect('$');
+      w.AddByteHex(at);
+      if (at and ASN1_CL_CTR) <> 0 then
+      begin
+        w.Add(' ');
+        case at of
+          ASN1_SEQ:
+            w.AddShort('SEQ');
+          ASN1_SETOF:
+            w.AddShort('SETOF');
+        else
+          DumpClass(at, w);
+        end;
+        x := length(s);
+        w.AddShort(' CTR: length ');
+        w.AddU(x);
+        inc(indent, 2);
+        AddInteger(il, ilcount, x + i - 1);
+      end
+      else
+      begin
+        w.AddDirect(' ');
+        case at of
+          // base ASN.1 types
+          ASN1_BOOL:
+            w.AddShort('BOOL');
+          ASN1_INT:
+            w.AddShort('INT');
+          ASN1_BITSTR:
+            w.AddShort('BITSTR');
+          ASN1_OCTSTR:
+            w.AddShort('OCTSTR');
+          ASN1_NULL:
+            w.AddShort('NULL');
+          ASN1_OBJID:
+            w.AddShort('OBJID');
+          ASN1_ENUM:
+            w.AddShort('ENUM');
+          ASN1_UTF8STRING:
+            w.AddShort('UTF8');
+          ASN1_PRINTSTRING:
+            w.AddShort('PRINT');
+          ASN1_IA5STRING:
+            w.AddShort('IA5');
+          ASN1_UTCTIME:
+            w.AddShort('UTC');
+          ASN1_GENTIME:
+            w.AddShort('GEN');
+          ASN1_BMPSTRING:
+            w.AddShort('BMP');
+        else
+          DumpClass(at, w);
+        end;
+        w.AddDirect(':', ' ');
+        if IsBinaryString(s) then
+        begin
+          w.AddShort('binary len=');
+          w.AddU(length(s));
+          w.AddDirect(' ');
+          w.AddEscape(pointer(s), length(s));
+        end
+        else if at in ASN1_NUMBERS then
+          w.Add(s) // not quoted value
+        else if PosExChar('"', s) = 0 then
+        begin
+          w.AddDirect('"');
+          w.Add(s);
+          w.AddDirect('"');
+        end
+        else
+        begin
+          w.AddDirect('''');
+          w.Add(s); // alternate output layout for quoted text
+          w.AddDirect('''');
+        end;
+      end;
+      w.AddShort(CRLF); // adapted to the current console output
+    end;
+  finally
+    w.Done(result);
+  end;
 end;
 
 
