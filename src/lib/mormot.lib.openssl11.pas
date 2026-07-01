@@ -2428,6 +2428,7 @@ function OBJ_nid2sn(n: integer): PUtf8Char; cdecl;
 function OBJ_txt2nid(s: PUtf8Char): integer; cdecl;
 function OBJ_obj2nid(o: PASN1_OBJECT): integer;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
+function OBJ_obj2txt(buf: PUtf8Char; buf_len: integer; a: PASN1_OBJECT; no_name: integer): integer; cdecl;
 function ASN1_STRING_data(x: PASN1_STRING): PByte;
    {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function ASN1_STRING_length(x: PASN1_STRING): integer;
@@ -3618,6 +3619,7 @@ type
     OBJ_txt2nid: function(s: PUtf8Char): integer; cdecl;
     OBJ_txt2obj: function(s: PUtf8Char; no_name: integer): PASN1_OBJECT; cdecl;
     OBJ_obj2nid: function(o: PASN1_OBJECT): integer; cdecl;
+    OBJ_obj2txt: function (buf: PUtf8Char; buf_len: integer; a: PASN1_OBJECT; no_name: integer): integer; cdecl;
     ASN1_OBJECT_free: procedure(a: PASN1_OBJECT); cdecl;
     ASN1_STRING_data: function(x: PASN1_STRING): PByte; cdecl;
     ASN1_STRING_length: function(x: PASN1_STRING): integer; cdecl;
@@ -3750,7 +3752,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..358] of PAnsiChar = (
+  LIBCRYPTO_ENTRIES: array[0..359] of PAnsiChar = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3982,6 +3984,7 @@ const
     'OBJ_txt2nid',
     'OBJ_txt2obj',
     'OBJ_obj2nid',
+    'OBJ_obj2txt',
     'ASN1_OBJECT_free',
     'ASN1_STRING_data ASN1_STRING_get0_data', // alternate names
     'ASN1_STRING_length',
@@ -5329,6 +5332,11 @@ end;
 function OBJ_obj2nid(o: PASN1_OBJECT): integer;
 begin
   result := libcrypto.OBJ_obj2nid(o);
+end;
+
+function OBJ_obj2txt(buf: PUtf8Char; buf_len: integer; a: PASN1_OBJECT; no_name: integer): integer;
+begin
+  result := libcrypto.OBJ_obj2txt(buf, buf_len, a, no_name);
 end;
 
 procedure ASN1_OBJECT_free(a: PASN1_OBJECT);
@@ -7142,6 +7150,9 @@ function OBJ_nid2sn(n: integer): PUtf8Char; cdecl;
 
 function OBJ_obj2nid(o: PASN1_OBJECT): integer; cdecl;
   external LIB_CRYPTO name _PU + 'OBJ_obj2nid';
+
+function OBJ_obj2txt(buf: PUtf8Char; buf_len: integer; a: PASN1_OBJECT; no_name: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'OBJ_obj2txt';
 
 function OBJ_txt2nid(s: PUtf8Char): integer; cdecl;
   external LIB_CRYPTO name _PU + 'OBJ_txt2nid';
