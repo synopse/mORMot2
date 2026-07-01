@@ -1699,9 +1699,11 @@ type
     /// the low-level X509 extension instance
     // - use ext.ToUtf8() to return its human-readable text value
     ext: PX509_EXTENSION;
+    /// the low-level X509 object instance of this extension
+    obj: PASN1_OBJECT;
     // if this extension was marked as critical
     critical: boolean;
-    /// the NID of this extension
+    /// the NID of this extension e.g. NID_netscape_comment or NID_info_access
     // - use OBJ_nid2ln() or OBJ_nid2sn() to get its long or short name
     nid: integer;
     /// the value of this extension
@@ -1709,6 +1711,10 @@ type
     value: PASN1_STRING;
     /// set ext and compute critical/nid/value associated fields
     procedure SetExtension(x: PX509_EXTENSION);
+    /// return the text OID of this extension e.g. '1.3.6.1.5.5.7.1.1'
+    function TextOid(var Text: ShortString): boolean;
+    /// return the binary OID of this extension
+    function BinaryOid: RawByteString;
   end;
   TX509_Extensions = array of TX509_Extension;
 
@@ -8201,15 +8207,15 @@ procedure X509_NAME.AddEntries(const Country, State, Locality, Organization,
   OrgUnit, CommonName, EmailAddress, SurName, GivenName, SerialNumber: RawUtf8);
 begin
   // warning: don't check for duplicates
-  AddEntry('C',  Country);
-  AddEntry('ST', State);
-  AddEntry('L',  Locality);
-  AddEntry('O',  Organization);
-  AddEntry('OU', OrgUnit);
-  AddEntry('CN', CommonName);
+  AddEntry('C',            Country);
+  AddEntry('ST',           State);
+  AddEntry('L',            Locality);
+  AddEntry('O',            Organization);
+  AddEntry('OU',           OrgUnit);
+  AddEntry('CN',           CommonName);
   AddEntry('emailAddress', EmailAddress);
-  AddEntry('SN', Surname);
-  AddEntry('GN', GivenName);
+  AddEntry('SN',           Surname);
+  AddEntry('GN',           GivenName);
   AddEntry('serialNumber', SerialNumber);
 end;
 
@@ -9299,9 +9305,30 @@ end;
 procedure TX509_Extension.SetExtension(x: PX509_EXTENSION);
 begin
   ext := x;
-  nid := OBJ_obj2nid(X509_EXTENSION_get_object(x));
+  obj := X509_EXTENSION_get_object(x);
+  nid := OBJ_obj2nid(obj);
   value := X509_EXTENSION_get_data(x);
   critical := X509_EXTENSION_get_critical(x) <> 0;
+end;
+
+function TX509_Extension.TextOid(var Text: ShortString): boolean;
+var
+  len: integer;
+begin
+  Text[0] := #0;
+  len := OBJ_obj2txt(@Text[1], high(Text), obj, 1);
+  result := len > 0;
+  if result then
+    Text[0] := AnsiChar(len); // return '1.3.6.1.5.5.7.1.1' numerical form
+end;
+
+function TX509_Extension.BinaryOid: RawByteString;
+var
+  text: ShortString; // OBJ_obj2txt() ensures it is #0 terminated
+begin
+  FastAssignNew(result);
+  if TextOid(text) then
+    result := AsnEncOid(@text[1]);
 end;
 
 
