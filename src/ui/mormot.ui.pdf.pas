@@ -3481,14 +3481,6 @@ begin
   result := ((r shr 8) or ((g shr 8) shl 8) or ((b shr 8) shl 16) or ((a shr 8) shl 24));
 end;
 
-procedure SwapBuffer(P: PWordArray; PLen: PtrInt);
-var
-  i: PtrInt;
-begin
-  for i := 0 to PLen - 1 do
-    P^[i] := bswap16(P^[i]);
-end;
-
 function GetTtfData(aDC: HDC; aTableName: PAnsiChar; var Ref: TWordDynArray): pointer;
 var
   L: cardinal;
@@ -3501,7 +3493,7 @@ begin
   if windows.GetFontData(aDC, PCardinal(aTableName)^, 0, pointer(Ref), L) = GDI_ERROR then
     exit;
   result := pointer(Ref);
-  SwapBuffer(result, L shr 1);
+  bswap16array(result, L shr 1);
 end;
 
 function EnumFontsProcW(var LogFont: TLogFontW; var TextMetric: TTextMetric;
@@ -7770,9 +7762,9 @@ begin
       if Rec^.offset and 1 <> 0 then
       begin // fix GetTtfData() wrong SwapBuffer()
         dec(PByte(PW));
-        SwapBuffer(PW, L + 1); // restore big-endian original unaligned buffer
+        bswap16array(PW, L + 1); // restore big-endian original unaligned buffer
         inc(PByte(PW));
-        SwapBuffer(PW, L);   // convert from big-endian at correct odd offset
+        bswap16array(PW, L);     // convert from big-endian at correct odd offset
       end;
       RawUnicodeToUtf8(PW, L, aFontName);
       result := TrueTypeFontName(aFontName, AStyle); // adjust name and style

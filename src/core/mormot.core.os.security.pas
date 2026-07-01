@@ -6728,11 +6728,11 @@ begin
   p := @PByteArray(Buffer)[Start - 1];
   result := p^[0];
   inc(Start);
-  if result <= $7f then
+  if result <= $7f then             // most common case
     exit;
-  result := result and $7f; // $8x means x bytes of length
+  result := result and $7f;         // $8x means x bytes of length
   inc(Start, result);
-  result := bswapN(@p^[1], result);
+  result := bswapN(@p^[1], result); // efficiently inlined
 end;
 
 function AsnEncInt(Value: Int64): TAsnObject;
