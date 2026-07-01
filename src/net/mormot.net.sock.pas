@@ -1006,7 +1006,10 @@ type
     ClientCertificateAuthentication: boolean;
     /// input: if two-way TLS client should be verified only once on the server
     // - to be used with OnEachPeerVerify callback
-    // - on OpenSSL client or server, set SSL_VERIFY_CLIENT_ONCE mode
+    // - on OpenSSL server, set SSL_VERIFY_CLIENT_ONCE mode, i.e. do not ask for
+    // a client certificate again during renegotiation or post-authentication
+    // if a certificate was requested during the initial handshake
+    // - ignored on OpenSSL client (documented by OpenSSL man page as a bug)
     // - not used on SChannel
     ClientVerifyOnce: boolean;
     /// input: allow legacy insecure renegotiation for unpatched/unsafe servers
@@ -1083,7 +1086,7 @@ type
     /// input: preferred Cipher List
     // - not used on SChannel
     CipherList: RawUtf8;
-    /// input: a CSV list of host names to be validated
+    /// input: a CSV list of host names to be validated by AfterConnection
     // - e.g. 'smtp.example.com,example.com'
     // - not used on SChannel
     HostNamesCsv: RawUtf8;
