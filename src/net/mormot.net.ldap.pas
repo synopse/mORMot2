@@ -2817,9 +2817,13 @@ implementation
 
 { **************** CLDAP Client Functions }
 
+var
+  CLDAP_LOGON_TYPE: array[TCldapDomainLogonType] of RawUtf8;
+  SAM_ACCOUNT_TYPE: array[TSamAccountType] of RawUtf8;
+
 function ToText(lt: TCldapDomainLogonType): RawUtf8;
 begin
-  result := GetEnumNameTrimed(TypeInfo(TCldapDomainLogonType), ord(lt));
+  result := CLDAP_LOGON_TYPE[lt];
 end;
 
 function ToText(f: TCldapDomainFlags): RawUtf8;
@@ -2832,7 +2836,7 @@ begin
   VarClear(result);
   TDocVariantData(result).InitObject([
     'nt_version',       NTVersion,
-    'logon_type',       ToText(LogonType),
+    'logon_type',       CLDAP_LOGON_TYPE[LogonType],
     'flags',            ToText(Flags),
     'guid',             GuidToRawUtf8(Guid),
     'forest',           Forest,
@@ -3707,7 +3711,7 @@ begin // late discovery of the LDAP server using CLDAP
   Sender.UpdateTextNotVoid( 'ldap:guid',          GuidToRawUtf8(nfo.Guid));
   Sender.UpdateTextNotVoid( 'ldap:host',          nfo.HostName);
   Sender.UpdateTextNotVoid( 'ldap:ip',            nfo.IP);
-  Sender.UpdateTextNotVoid( 'ldap:logon',         LowerCaseU(ToText(nfo.LogonType)));
+  Sender.UpdateTextNotVoid( 'ldap:logon',         CLDAP_LOGON_TYPE[nfo.LogonType]);
   Sender.UpdateTextNotVoid( 'ldap:netbiosdomain', nfo.NetbiosDomain);
   Sender.UpdateTextNotVoid( 'ldap:netbioshost',   nfo.NetbiosHostname);
   Sender.UpdateTextNotVoid( 'ldap:unk',           nfo.Unk);
@@ -3805,6 +3809,8 @@ var
   i, n, failed: PtrInt;
 begin
   GetEnumTrimmedNames(TypeInfo(TLdapError), @LDAP_ERROR_TEXT, scLowerCaseFirst);
+  GetEnumTrimmedNames(TypeInfo(TCldapDomainLogonType), @CLDAP_LOGON_TYPE, scLowerCase);
+  GetEnumTrimmedNames(TypeInfo(TSamAccountType), @SAM_ACCOUNT_TYPE, scTrimLeft);
   LDAP_ERROR_TEXT[leEsyncRefreshRequired] := 'e-syncRefreshRequired';
   // register all our common Attribute Types names for quick search as pointer()
   _LdapIntern.Init({CaseInsensitive=}true, {Capacity=}128);
@@ -3961,7 +3967,11 @@ var
 begin
   result := nil;
   exclude(Attributes, atUndefined);
+  {$ifdef CPU64}
+  n := GetBitsCountPtrInt(Int64(Attributes)); // optimized for 64 items
+  {$else}
   n := GetBitsCount(Attributes, {bits=}SizeOf(Attributes) shl 3);
+  {$endif CPU64}
   if n = 0 then
     exit;
   SetLength(result, n);
@@ -4215,7 +4225,7 @@ end;
 
 procedure ToTextTrimmed(sat: TSamAccountType; var text: RawUtf8);
 begin
-  TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TSamAccountType), ord(sat)), text);
+  text := SAM_ACCOUNT_TYPE[sat];
 end;
 
 function ToText(oft: TObjectFilter): PShortString;
@@ -4591,7 +4601,7 @@ returni32:  v.VType := varInteger;
           if sat <> satUnknown then
           begin
             v.VType := varString;
-            ToTextTrimmed(sat, RawUtf8(v.VAny));
+            RawUtf8(v.VAny) := SAM_ACCOUNT_TYPE[sat];
           end
           else
             goto returni32;
