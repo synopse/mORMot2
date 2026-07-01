@@ -198,6 +198,8 @@ type
     function FromAsnNext(var pos: integer; const der: TAsnObject): boolean;
     /// fill Name[] attributes with TCryptCertFields information
     procedure FromFields(const fields: TCryptCertFields);
+    /// fill TCryptCertFields information with Name[] attributes
+    procedure ToFields(var fields: TCryptCertFields);
     /// return Name[] by RDN, or ToDigest() by hash name, or by FindOid()
     function Get(const Rdn: RawUtf8): RawUtf8;
     /// return the hash of the normalized Binary of this field
@@ -1585,6 +1587,20 @@ begin // do not use TrimU() because e.g. CN=' ' is accepted e.g. by OpenSSL
   Name[xaSN]  := fields.SurName;
   Name[xaGN]  := fields.GivenName;
   Name[xaSER] := fields.SerialNumber;
+end;
+
+procedure TXName.ToFields(var fields: TCryptCertFields);
+begin
+  fields.Country      := Name[xaC];
+  fields.State        := Name[xaST];
+  fields.Locality     := Name[xaL];
+  fields.Organization := Name[xaO];
+  fields.OrgUnit      := Name[xaOU];
+  fields.CommonName   := Name[xaCN];
+  fields.EmailAddress := Name[xaE];
+  fields.SurName      := Name[xaSN];
+  fields.GivenName    := Name[xaGN];
+  fields.SerialNumber := Name[xaSER];
 end;
 
 function TXName.Get(const Rdn: RawUtf8): RawUtf8;
