@@ -2129,6 +2129,8 @@ procedure AsnEncOidShort(OidText: PUtf8Char; var Dest: ShortString);
 function AsnEncLen(Len: cardinal; var dest: TQWordRec): PtrInt;
   {$ifdef HASINLINE} inline; {$endif}
 
+function AsnEncLenHigh(Len: cardinal; var dest: TQWordRec): PtrInt; // inlined
+
 /// create an ASN.1 binary from the aggregation of several binaries
 function Asn(AsnType: integer;
   const Content: array of TAsnObject): TAsnObject; overload;
@@ -6689,20 +6691,9 @@ begin
   FastSetRawByteString(Dest, @tmp[1], ord(tmp[0]));
 end;
 
-function AsnEncLen(Len: cardinal; var dest: TQWordRec): PtrInt;
+function AsnEncLenHigh(Len: cardinal; var dest: TQWordRec): PtrInt; // inlined
 begin
-  if Len <= $7f then
-  begin
-    dest.B[0] := Len; // most simple case
-    result := 1;
-  end
-  else if Len <= $ff then
-  begin
-    dest.B[0] := $81;
-    dest.B[1] := Len;
-    result := 2;
-  end
-  else if Len <= $ffff then
+  if Len <= $ffff then
   begin
     dest.B[0] := $82;
     dest.B[2] := Len;
@@ -6716,6 +6707,23 @@ begin
     PCardinal(@dest.B[1])^ := bswap32(Len); // seldom called
     result := 5;
   end;
+end;
+
+function AsnEncLen(Len: cardinal; var dest: TQWordRec): PtrInt;
+begin
+  if Len <= $7f then
+  begin
+    dest.B[0] := Len; // most simple case
+    result := 1;
+  end
+  else if Len <= $ff then
+  begin
+    dest.B[0] := $81;
+    dest.B[1] := Len;
+    result := 2;
+  end
+  else
+    result := AsnEncLenHigh(Len, dest);
 end;
 
 function AsnDecLen(var Start: integer; const Buffer: TAsnObject): cardinal;
