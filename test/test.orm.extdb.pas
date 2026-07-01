@@ -261,6 +261,13 @@ begin
   CheckEqual(s, '1:AA2:AB3:AC4:AD5:AE6:AF7:AG8:AH9:AI10:AJ11:AK12:AL x');
   CheckEqual(ReplaceParamsByNames('(1,2,3,4,5,6,7,8) values (?,?,?,?,?,?,?,?)', s), 8);
   CheckEqual(s, '(1,2,3,4,5,6,7,8) values (:AA,:AB,:AC,:AD,:AE,:AF,:AG,:AH)');
+  CheckEqual(ReplaceParamsByNames('select distinct(hd.referenzid) f0 from ha_doku ' +
+    'hd inner join #tmp_ids_FAB4C3C346934CB884E2FAB4B5F0E444 t on t.tempid = ' +
+    'hd.referenzid where (hd.referenz = ?) and (hd.werteart = ?);', s), 2);
+  CheckEqual(s,
+   'select distinct(hd.referenzid) f0 from ha_doku hd inner join #tmp_ids_FAB' +
+   '4C3C346934CB884E2FAB4B5F0E444 t on t.tempid = hd.referenzid where (hd.ref' +
+   'erenz = :AA) and (hd.werteart = :AB)');
   CheckEqual(ReplaceParamsByNumbers('', s), 0);
   CheckEqual(s, '');
   CheckEqual(ReplaceParamsByNumbers('toto titi', s), 0);
