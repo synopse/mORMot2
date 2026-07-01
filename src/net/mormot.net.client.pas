@@ -133,7 +133,7 @@ type
 type
   /// the supported authentication schemes which may be used by HTTP clients
   // - not supported by all classes (e.g. TWinINet won't support all schemes)
-  // - by design, wraNegotiatePasswordKeytab* modes only exist in POSIX/GSSAPI
+  // - by design, wraNegotiatePasswordKeytab* modes only exist on POSIX/GSSAPI
   // - serialized as its ordinal/integer value: do not change the order below
   THttpRequestAuthentication = (
     wraNone,
@@ -6260,12 +6260,33 @@ begin
 end;
 
 
+var
+  __RemoteResource: function(const Uri: RawUtf8; var Res: RawByteString): boolean;
+
+function _CryptRemoteResource(const Uri: RawUtf8; var Res: RawByteString): boolean;
+var
+  status: integer;
+begin
+  if IsHttp(Uri) then
+  begin
+    Res := HttpGet(Uri, {inhead=}'', {outhead=}nil, {notsock=}false,
+      @status, {timeout=}0, {forcesocket=}false, {ignorecerterror=}true);
+    result := StatusCodeIsSuccess(status);
+  end
+  else
+    result := Assigned(__RemoteResource) and
+              __RemoteResource(Uri, Res); // try next protocol
+end;
+
+
 procedure InitializeUnit;
 begin
   NewSocketAddressCache := TNewSocketAddressCache.Create(600); // 10 min timeout
   NetClientProtocols := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
     TypeInfo(TMethodDynArray), {caseinsensitive=}true);
   RegisterNetClientProtocol('file', TNetClientProtocolFile.Create.OnRequest);
+  __RemoteResource := CryptRemoteResource; // cascaded calls
+  CryptRemoteResource := _CryptRemoteResource;
 end;
 
 procedure FinalizeUnit;

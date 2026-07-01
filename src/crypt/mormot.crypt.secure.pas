@@ -3673,6 +3673,10 @@ var
   // - call RegisterOpenSsl once to initialize this lookup table
   CryptStoreOpenSsl: TCryptStoreAlgo;
 
+  /// abstract function placeholder to retrieve an AIA remote resource
+  // - mormot.net.client would implement http:// and https:// protocols
+  CryptRemoteResource: function(const Uri: RawUtf8; var Res: RawByteString): boolean;
+
 
 
 { ************************** Minimal PEM/DER Encoding/Decoding }
