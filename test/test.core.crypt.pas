@@ -5532,9 +5532,13 @@ begin
       '14:2e:b3:17:b7:58:56:cb:ae:50:09:40:e6:1f:af:9d:8b:14:c2:c6');
     CheckEqual(x.Extension[xeAuthorityInformationAccess],
       'ocsp=http://r3.o.lencr.org,caIssuers=http://r3.i.lencr.org/');
+    if Check(x.Signed.CaIssuers <> nil) then
+      CheckEqual(x.Signed.CaIssuers[0], 'http://r3.i.lencr.org/');
+    if Check(x.Signed.Ocsp <> nil) then
+      CheckEqual(x.Signed.Ocsp[0], 'http://r3.o.lencr.org');
     CheckSameTime(nfo.NotBefore, x.NotBefore, 'nfo nb');
     CheckSameTime(nfo.NotAfter, x.NotAfter, 'nfo na');
-    Check(FindOther(x.Signed.ExtensionOther, '1.3.6.1.5.5.7.1.1') = '');
+    Check(FindCustomExts(x.Signed.ExtensionOther, '1.3.6.1.5.5.7.1.1') = '');
     Check(x.Signed.ExtensionOther = nil);
     CheckEqual(x.Extension[xeCertificatePolicies], '2.23.140.1.2.1');
     CheckEqual(x.Extension[xeGoogleSignedCertificateTimestamp], '');
