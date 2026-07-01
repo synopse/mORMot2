@@ -2583,6 +2583,9 @@ type
     // or the authority serial number for syn-es256 (so equals GetSubjectKey
     // for a self-signed certificate)
     function GetAuthorityKey: RawUtf8;
+    /// fill TCryptCertFields information with internal certificates attributes
+    // - returns false if those fields are not supported e.g. for syn-es256
+    function GetFields(var fields: TCryptCertFields): boolean;
     /// check if this certificate has been self-signed
     function IsSelfSigned: boolean;
     /// check if this certificate has been issued by the specified certificate
@@ -2829,6 +2832,7 @@ type
     function GetIssuers: TRawUtf8DynArray; virtual; abstract;
     function GetSubjectKey: RawUtf8; virtual; abstract;
     function GetAuthorityKey: RawUtf8; virtual; abstract;
+    function GetFields(var fields: TCryptCertFields): boolean; virtual;
     function IsSelfSigned: boolean; virtual; abstract;
     function IsAuthorizedBy(const Authority: ICryptCert): boolean; virtual;
     function Compare(const Another: ICryptCert; Method: TCryptCertComparer): integer; virtual;
@@ -9119,6 +9123,11 @@ begin
     result := Generate(x.GetUsage, RawUtf8ArrayToCsv(x.GetSubjects),
       Authority, ExpireDays, ValidDays, {Fields=}nil);
     // note: Fields=nil since TCryptCertInternal does not support them
+end;
+
+function TCryptCert.GetFields(var fields: TCryptCertFields): boolean;
+begin
+  result := false; // not supported by default (e.g. for syn-es256)
 end;
 
 function TCryptCert.IsAuthorizedBy(const Authority: ICryptCert): boolean;
