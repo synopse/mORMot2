@@ -11139,24 +11139,26 @@ procedure TOpenSslNetTls.AfterConnection(Socket: TNetSocket;
 var
   P: PUtf8Char;
   h: RawUtf8;
-  peer: PPointer;
+  threadpeer: PPointer;
   //x: PX509DynArray;
   //ext: TX509_Extensions; exts: TRawUtf8DynArray; len: PtrInt;
 begin
+  // this method is called on the Client side once the TCP socket is established
   fSocket := Socket;
   fContext := @Context;
   // reset output information
   ResetNetTlsContext(Context);
   fLastError := @Context.LastError;
   fServerAddress := ServerAddress;
-  peer := @_PeerVerify;
+  threadpeer := @_PeerVerify;
   // prepare TLS connection properties
   fCtx := SSL_CTX_new(TLS_client_method);
   try
-    peer^ := self;
+    threadpeer^ := self;
     SetupCtx(Context, {bind=}false);
     fSsl := SSL_new(fCtx);
-    SSL_set_tlsext_host_name(fSsl, ServerAddress); // SNI field
+    // setup client-side SNI field for the expected server host name(s)
+    SSL_set_tlsext_host_name(fSsl, ServerAddress);
     if not Context.IgnoreCertificateErrors then
     begin
       P := pointer(Context.HostNamesCsv);
@@ -11181,7 +11183,7 @@ begin
     else
     begin
       // get OpenSSL peer certificate information
-      fPeer := fSsl.PeerCertificate;
+      fPeer := fSsl.PeerCertificate; // requires fPeer^.Free
       // writeln(fSsl.PeerCertificatesAsPEM);
       // writeln(fSsl.PeerCertificatesAsText);
       //x := LoadCertificates(fSsl.PeerCertificatesAsPEM);
@@ -11195,14 +11197,14 @@ begin
         begin
           // writeln(fPeer.SetExtension(NID_netscape_comment, 'toto est le plus bo'));
           // writeln(fPeer.SetUsage([kuCodeSign, kuDigitalSignature, kuTlsServer, kuTlsClient]));
-          Context.PeerIssuer := fPeer.IssuerName;
-          Context.PeerSubject := fPeer.SubjectName;
+          Context.PeerIssuer := fPeer^.IssuerName;
+          Context.PeerSubject := fPeer^.SubjectName;
           Context.PeerCert := fPeer;
           if Context.WithPeerInfo or
              (not Context.IgnoreCertificateErrors and
               not fSsl.IsVerified(@Context.LastError)) then
             // include full peer info on certificate verification failure
-            Context.PeerInfo := fPeer.PeerInfo;
+            Context.PeerInfo := fPeer^.PeerInfo;
           {
           writeln(#10'------------'#10#10'PeerInfo=',Context.PeerInfo);
           writeln('SerialNumber=',fPeer.SerialNumber);
@@ -11249,12 +11251,13 @@ begin
           // allow e.g. to verify CN or DNSName fields
           Context.OnAfterPeerValidate(Socket, fContext, fSsl, fPeer);
       finally
-        fPeer.Free;
+        fPeer^.Free; // SSL_get_peer_certificate() requires X509_free()
         fPeer := nil;
+        Context.PeerCert := nil; // avoid GPF on dangling pointer in client code
       end;
     end;
   finally
-    peer^ := nil; // but keep fLastError since fContext remains
+    threadpeer^ := nil; // but keep fLastError since fContext remains
   end;
 end;
 
@@ -11269,7 +11272,7 @@ var
   ca: Pstack_st_X509;
   cb: pointer;
 begin
-  // setup the peer verification patterns
+  // setup the peer verification - shared by AfterConnection and AfterBind
   cb := nil;
   if Context.IgnoreCertificateErrors then
     mode := SSL_VERIFY_NONE
@@ -11449,6 +11452,7 @@ procedure TOpenSslNetTls.AfterAccept(Socket: TNetSocket;
 var
   peer: PPointer;
 begin
+  // this method is called on the Server side for each accepted client TCP socket
   fSocket := Socket;
   fContext := @BoundContext; // main context may be shared e.g. for TAsyncServer
   // reset output information
@@ -11513,8 +11517,6 @@ begin
     if fDoSslShutdown then
       SSL_shutdown(fSsl);
     fSsl.Free;
-    if fContext <> nil then
-      fContext^.PeerCert := nil;
   end;
   if fCtx <> nil then
     fCtx.Free; // client or AfterBind server context
