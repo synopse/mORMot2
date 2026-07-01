@@ -1692,7 +1692,7 @@ begin
             one.Settings.TargetUri := clients[j];
             //one.Settings.UserName := usr;        // user from keytab
             //one.Settings.KerberosDN := dns[i];   // DN from keytab
-            one.Settings.Password := Make(['FILE:', keytabfile]);
+            one.Settings.KerberosLocal := keytabfile;
             ku := '';
             Check(one.BindSaslKerberos('', @ku), 'Bind keytab');
             AddConsole('connected via keytab to % with specific user % = %',
