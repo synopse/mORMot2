@@ -1167,6 +1167,7 @@ type
     function GetIssuers: TRawUtf8DynArray; override;
     function GetSubjectKey: RawUtf8; override;
     function GetAuthorityKey: RawUtf8; override;
+    function GetFields(var fields: TCryptCertFields): boolean; override;
     function IsSelfSigned: boolean; override;
     function IsAuthorizedBy(const Authority: ICryptCert): boolean; override;
     function Compare(const Another: ICryptCert; Method: TCryptCertComparer): integer; override;
@@ -3524,6 +3525,24 @@ begin
     FastAssignNew(result)
   else
     result := fX509.Signed.Extension[xeAuthorityKeyIdentifier];
+end;
+
+function TCryptCertX509Abstract.GetFields(var fields: TCryptCertFields): boolean;
+var
+  xe: TXExtension;
+begin
+  result := false;
+  if fX509 = nil then
+    exit;
+  fX509.Signed.Subject.ToFields(fields);
+  fields.Comment := fX509.Extension[xeNetscapeComment];
+  fields.CustomExts := fX509.Signed.ExtensionOther;
+  for xe := succ(xeNone) to high(xe) do
+    if (xe <> xeNetscapeComment) and
+       (fX509.Signed.ExtensionRaw[xe] <> '') then
+      AddOther(fields.CustomExts, XE_OID_ASN[xe],
+        fX509.Signed.ExtensionRaw[xe], fX509.Signed.ExtensionCritical[xe]);
+  result := true;
 end;
 
 function TCryptCertX509Abstract.IsSelfSigned: boolean;
