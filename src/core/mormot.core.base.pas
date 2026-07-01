@@ -3787,6 +3787,8 @@ type
     /// add two AnsiChar just after another Add() within trailing 16 bytes margin
     procedure AddDirect(const c1, c2: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// append one byte as two hexadecimal chars
+    procedure AddByteHex(b: PtrUInt);
     /// append an unsigned number as text to the internal buffer
     procedure AddU(v: PtrUInt);
     /// write a 16-bit value as network/BigEndian binary
@@ -12687,6 +12689,12 @@ procedure TSynTempAdder.AddDirect(const c1, c2: AnsiChar);
 begin
   PWord(PUtf8Char(Store.buf) + Store.added)^ := ord(c1) + ord(c2) shl 8;
   inc(Store.added, 2); // append directly within SYNTEMPTRAIL bytes
+end;
+
+procedure TSynTempAdder.AddByteHex(b: PtrUInt);
+begin
+  PCardinal(Add(2))^ := ord(HexCharsLower[b shr 4]) or
+                        (ord(HexCharsLower[b and $0f]) shl 8);
 end;
 
 procedure TSynTempAdder.AddU(v: PtrUInt);
