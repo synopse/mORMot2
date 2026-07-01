@@ -6153,7 +6153,7 @@ function RunCommand(const cmd: TRunArg; waitfor: boolean = true;
 // - will abort once waitfordelayms expires - if not its default INFINITE
 // - force setresult=false if you only need onouput() and will discard the result
 // - optional env is Windows only, (FPC popen does not support it), and should
-// be encoded as name=value#0 pairs
+// be encoded as name=value#0 pairs - with env[length(env)]=#0 to end with #0#0
 // - you can specify a wrkdir if the path specified by cmd is not good enough
 // - TRunOptions = RUN_CMD as expected from executing a transient command
 // - warning: exitcode^ should be a 32-bit "integer" variable, not a PtrInt
