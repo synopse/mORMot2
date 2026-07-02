@@ -1424,34 +1424,33 @@ var
 begin
   fSafe.Lock;
   try
-    if fCachedAsn = '' then
+    if fCachedAsn <> '' then
+      exit;
+    for a := succ(low(a)) to high(a) do
     begin
-      for a := succ(low(a)) to high(a) do
+      p := pointer(Name[a]);
+      if p <> nil then
       begin
-        p := pointer(Name[a]);
-        if p <> nil then
-        begin
-          one := '';
-          repeat
-            GetNextItemTrimed(p, ',', v);
-            Append(one, Asn(ASN1_SEQ, [
-                          Asn(ASN1_OBJID, [XA_OID_ASN[a]]),
-                          AsnText(v)
-                        ]));
-          until p = nil;
-          Append(tmp, AsnSetOf(one));
-        end;
-      end;
-      for o := 0 to high(Other) do
-        with Other[o] do
-          Append(tmp, Asn(ASN1_SETOF, [
-                        Asn(ASN1_SEQ, [
-                          Asn(ASN1_OBJID, [Oid]),
-                          AsnText(Value)
-                        ])
+        one := '';
+        repeat
+          GetNextItemTrimed(p, ',', v);
+          Append(one, Asn(ASN1_SEQ, [
+                        Asn(ASN1_OBJID, [XA_OID_ASN[a]]),
+                        AsnText(v)
                       ]));
-      fCachedAsn := AsnSeq(tmp);
+        until p = nil;
+        Append(tmp, AsnSetOf(one));
+      end;
     end;
+    for o := 0 to high(Other) do
+      with Other[o] do
+        Append(tmp, Asn(ASN1_SETOF, [
+                      Asn(ASN1_SEQ, [
+                        Asn(ASN1_OBJID, [Oid]),
+                        AsnText(Value)
+                      ])
+                    ]));
+    fCachedAsn := AsnSeq(tmp);
   finally
     fSafe.UnLock;
   end;
