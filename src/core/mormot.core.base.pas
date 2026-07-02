@@ -1160,7 +1160,6 @@ var
 // - see IdemPropName/IdemPropNameU functions in mormot.core.unicode for similar
 // comparison functions with other kind of input variables
 function PropNameEquals(P1, P2: PAnsiChar; P1Len, P2Len: PtrInt): boolean; overload;
-  {$ifdef FPC}inline;{$endif} // Delphi has troubles inlining goto/label
 
 /// case-insensitive comparison of two shortstrings only containing ASCII 7-bit
 function PropNameEquals(P1, P2: PShortString): boolean; overload;
@@ -1172,6 +1171,7 @@ function PropNameEquals(P1: PShortString; P2: PAnsiChar; P2Len: PtrInt): boolean
 
 /// case-insensitive comparison of two RawUtf8 only containing ASCII 7-bit
 function PropNameEquals(const P1, P2: RawUtf8): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif} // Delphi has troubles inlining goto/label
 
 /// case-insensitive comparison of a RawUtf8 only containing ASCII 7-bit
 function PropNameEquals(const P1: RawUtf8; P2: PAnsiChar; P2Len: PtrInt): boolean; overload;
