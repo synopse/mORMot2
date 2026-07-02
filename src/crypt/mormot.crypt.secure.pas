@@ -11234,8 +11234,8 @@ begin
     exit;
   // append the X.509 v3 known extensions
   Append(result, '  X509v3 extensions:'#13#10);
-  KeyUsage(cuCrlSign, cuDigitalSignature, 'Key Usage: critical');
-  KeyUsage(cuTlsServer, cuTimestamp, 'Extended Key Usage:');
+  KeyUsage(cuCrlSign,   cuDigitalSignature, 'Key Usage: critical');
+  KeyUsage(cuTlsServer, cuTimestamp,        'Extended Key Usage:');
   if cuCA in c.Usage then
     bits := 'TRUE'
   else

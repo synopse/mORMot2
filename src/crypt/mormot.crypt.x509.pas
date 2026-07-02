@@ -565,7 +565,7 @@ type
     fRawSubjectKeyIdentifier: RawByteString;
     fRawAuthorityKeyIdentifier: TRawByteStringDynArray;
     fIsSelfSigned: boolean;
-    fIsRevokedTag: integer; // <0 if revoked, or should = TCryptStoreX509 tag
+    fIsRevokedTag: integer; // <0 as reason if revoked, or = TCryptStoreX509 tag
     procedure AfterLoaded;
     procedure ComputeCachedDer;
     procedure ComputeCachedPeerInfo;
@@ -830,7 +830,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     procedure SetCrlNumber(Value: QWord);
   public
-    /// actual to-be-signed revoked Certificate List content
+    /// actual to-be-signed revoked Certificate List content for this AKI
     Signed: TXTbsCertList;
     /// raw binary digital signature computed upon Signed.ToDer
     property SignatureValue: RawByteString
@@ -926,7 +926,7 @@ type
   TX509CrlList = class(TSynPersistent)
   protected
     fSafe: TRWLightLock;
-    fList: TX509CrlObjArray;
+    fList: TX509CrlObjArray; // sorted by AKID for O(log(n)) search
     fCount: integer;
     fDA: TDynArray;
     function GetRevoked: integer;
@@ -963,7 +963,7 @@ type
     function IsRevoked(const AuthorityKeyIdentifiers,
       SerialNumber: RawUtf8): TCryptCertRevocationReason;
     /// quickly check if a given certificate was part of one known CRL
-    // - internal method directly working on binary buffers
+    // - internal method directly working on binary buffers and arrays
     function IsRevokedRaw(akid: PRawByteString; n: integer;
       const sn: RawByteString): TCryptCertRevocationReason;
     /// return a copy of the internal list items
@@ -1899,7 +1899,7 @@ begin
         xeIssuerAlternativeName:     // RFC 5280 #4.2.1.7
           if AsnNext(extpos, ext) = ASN1_SEQ then
             repeat
-              case AsnNextRaw(extpos, ext, v) of
+              case AsnNextRaw(extpos, ext, v) of // GeneralName
                 ASN1_NULL: // no more items
                   break;
                 ASN1_CTX1, // rfc8722Name
@@ -1943,8 +1943,8 @@ begin
           // e.g. 'ocsp=http://r3.o.lencr.org,caIssuers=http://r3.i.lencr.org/'
           if AsnNext(extpos, ext) = ASN1_SEQ then
             while (AsnNext(extpos, ext) = ASN1_SEQ) and
-                  (AsnNext(extpos, ext, @oid) = ASN1_OBJID) and
-                  (AsnNext(extpos, ext, @v) = ASN1_CTX6) do
+                  (AsnNext(extpos, ext, @oid) = ASN1_OBJID) and // accessMethod
+                  (AsnNext(extpos, ext, @v) = ASN1_CTX6) do     // GeneralName
             begin
               if oid = ASN1_OID_AIA_OCSP then
               begin
@@ -2236,20 +2236,20 @@ end;
 
 procedure TX509.ToParsedInfo(out Info: TX509Parsed);
 begin
-  Info.Serial := SerialNumber;
-  Info.SubjectDN := SubjectDN;
-  Info.IssuerDN := IssuerDN;
-  Info.SubjectID := Extension[xeSubjectKeyIdentifier];
-  Info.IssuerID := Extension[xeAuthorityKeyIdentifier];
+  Info.Serial          := SerialNumber;
+  Info.SubjectDN       := SubjectDN;
+  Info.IssuerDN        := IssuerDN;
+  Info.SubjectID       := Extension[xeSubjectKeyIdentifier];
+  Info.IssuerID        := Extension[xeAuthorityKeyIdentifier];
   Info.SubjectAltNames := StringReplaceAll(
     Extension[xeSubjectAlternativeName], ',', ', '); // more human friendly
-  Info.SigAlg := XSA_TXT[SignatureAlgorithm];
-  Info.PubAlg := GetSubjectPublicKeyAlgorithm;
-  Info.Usage := Usages;
-  Info.NotBefore := NotBefore;
-  Info.NotAfter := NotAfter;
-  Info.PubKey := Signed.SubjectPublicKey;
-  Info.PeerInfo := ParsedToText(Info); // should be the last
+  Info.SigAlg          := XSA_TXT[SignatureAlgorithm];
+  Info.PubAlg          := GetSubjectPublicKeyAlgorithm;
+  Info.Usage           := Usages;
+  Info.NotBefore       := NotBefore;
+  Info.NotAfter        := NotAfter;
+  Info.PubKey          := Signed.SubjectPublicKey;
+  Info.PeerInfo        := ParsedToText(Info); // should be the last
 end;
 
 function TX509.SaveToDer: TCertDer;
@@ -2515,12 +2515,12 @@ begin
                       Another.Signed.ExtensionRaw[xeAuthorityKeyIdentifier]);
         ccmSubjectAltName:
           result := SortDynArrayAnsiString(
-            Signed.Extension[xeSubjectAlternativeName],
-            Another.Signed.Extension[xeSubjectAlternativeName]);
+                      Signed.Extension[xeSubjectAlternativeName],
+                      Another.Signed.Extension[xeSubjectAlternativeName]);
         ccmIssuerAltName:
           result := SortDynArrayAnsiString(
-            Signed.Extension[xeIssuerAlternativeName],
-            Another.Signed.Extension[xeIssuerAlternativeName]);
+                      Signed.Extension[xeIssuerAlternativeName],
+                      Another.Signed.Extension[xeIssuerAlternativeName]);
         ccmUsage:
           result := word(Signed.CertUsages) - word(Another.Signed.CertUsages);
         ccmBinary: // fCachedDer should have been set by AfterLoaded
@@ -2804,7 +2804,7 @@ begin
           xceIssuerAlternativeName:
             if AsnNext(posv, v) = ASN1_SEQ then
               repeat
-                case AsnNextRaw(posv, v, ext) of
+                case AsnNextRaw(posv, v, ext) of // GeneralName
                   ASN1_NULL:
                     break;
                   ASN1_CTX1, // rfc8722Name
@@ -2998,7 +2998,7 @@ begin
      exit;
    result := cvUnknownAuthority;
    if (Authority.Signed.Extension[xeSubjectKeyIdentifier] <>
-        Signed.Extension[xceAuthorityKeyIdentifier]) or // no CsvContains() need
+                 Signed.Extension[xceAuthorityKeyIdentifier]) or
       (Authority.Signed.SubjectPublicKey = '') then
      exit;
    result := CanVerify(
@@ -3120,7 +3120,7 @@ end;
 
 function TX509CrlList.GetRevoked: integer;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := 0;
   if (self = nil) or
@@ -3156,7 +3156,7 @@ begin
     exit;
   fSafe.ReadLock;
   try
-    // efficient O(log(n)) binary search
+    // efficient O(log(n)) binary search of this AKI binary
     if fDA.FastLocateSorted(AuthorityKeyIdentifier, i) then
       result := fList[i]; // Add() should have made this unique per AKID
   finally
@@ -3207,7 +3207,7 @@ begin
   if (self = nil) or
      (fCount = 0) or
      (AuthorityKeyIdentifiers = '') or
-     (SerialNumber = '') then
+     not HumanHexToBin(SerialNumber, sn) then
     exit;
   p := nil;
   akid := AuthorityKeyIdentifiers;
@@ -3219,8 +3219,7 @@ begin
       if p <> nil then
         GetNextItem(p, ',', akid);
       crl := FindByKeyIssuer(akid); // O(log(n)) binary search
-      if (crl = nil) or
-         not HumanHexToBin(SerialNumber, sn)  then
+      if crl = nil then
         continue;
       res := crl.Signed.FindRevoked(sn); // few items O(n) search
       if res = nil then

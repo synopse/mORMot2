@@ -1272,7 +1272,7 @@ type
     // - warning: Index out parameter should be integer, not PtrInt
     function FastLocateSorted(const Item; out Index: integer): boolean;
     /// insert a sorted element value at the proper place
-    // - the index should have been computed by FastLocateSorted(): false
+    // - the index should have been computed by FastLocateSorted() = false
     // - you may consider using FastLocateOrAddSorted() instead
     procedure FastAddSorted(Index: PtrInt; const Item);
     /// search and add an element value inside a sorted dynamic array
