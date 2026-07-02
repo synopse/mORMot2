@@ -179,6 +179,8 @@ type
     procedure ComputeCanonical;
   public
     /// CSV of the values of each kind of known attributes
+    // - each CSV part will emit its own SETOF:  multi-valued RDNs (using + in
+    // RFC 4514 notation) are not supported nor generated
     Name: TXAttrNames;
     /// values which are not part of the known attributes
     Other: TCryptCustomExts;
@@ -1444,6 +1446,17 @@ const
     xaN    // Name
   );
 
+procedure AsnAddRdn(var data: TAsnObject; const oid, v: TAsnObject);
+begin
+  // note: multi-valued RDNs (using + in RFC 4514 notation) are not supported
+  Append(data, Asn(ASN1_SETOF, [
+                 Asn(ASN1_SEQ, [
+                   Asn(ASN1_OBJID, oid),
+                   AsnText(v)
+                 ])
+               ]));
+end;
+
 procedure TXName.ComputeAsn;
 var
   p: PUtf8Char;
@@ -1465,21 +1478,12 @@ begin
       one := '';
       repeat
         GetNextItemTrimed(p, ',', v);
-        Append(one, Asn(ASN1_SEQ, [
-                      Asn(ASN1_OBJID, [XA_OID_ASN[a]]),
-                      AsnText(v)
-                    ]));
+        AsnAddRdn(tmp, XA_OID_ASN[a], v);
       until p = nil;
-      Append(tmp, AsnSetOf(one));
     end;
     for o := 0 to high(Other) do
       with Other[o] do
-        Append(tmp, Asn(ASN1_SETOF, [
-                      Asn(ASN1_SEQ, [
-                        Asn(ASN1_OBJID, [Oid]),
-                        AsnText(Value)
-                      ])
-                    ]));
+        AsnAddRdn(tmp, Oid, Value);
     fCachedAsn := AsnSeq(tmp);
   finally
     fSafe.UnLock;
