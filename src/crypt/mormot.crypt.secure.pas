@@ -6490,7 +6490,7 @@ begin
     exit;
   inc(p, 10);
   l := GetNextItemTrimedBuffer(p, ',', a);
-  result := PropNameEquals(DIGEST_NAME[fAlgo], a, l);
+  result := IdemPropNameU(DIGEST_NAME[fAlgo], a, l);
 end;
 
 function TDigestAuthServer.DigestAuth(FromClient: PUtf8Char;
