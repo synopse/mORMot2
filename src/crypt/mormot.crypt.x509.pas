@@ -3357,9 +3357,9 @@ begin
             found := SortDynArrayAnsiString(fCachedText, Value) = 0;
           end;
         ccmSubjectCN:
-          found := IdemPropNameU(Signed.Subject.Name[xaCN], Value);
+          found := PropNameEquals(Signed.Subject.Name[xaCN], Value);
         ccmIssuerCN:
-          found := IdemPropNameU(Signed.Issuer.Name[xaCN], Value);
+          found := PropNameEquals(Signed.Issuer.Name[xaCN], Value);
         ccmSubjectKey:
           found := SortDynArrayRawByteString(
                      Signed.fRawSubjectKeyIdentifier, bin) = 0;

@@ -6490,7 +6490,7 @@ begin
     exit;
   inc(p, 10);
   l := GetNextItemTrimedBuffer(p, ',', a);
-  result := IdemPropNameU(DIGEST_NAME[fAlgo], a, l);
+  result := PropNameEquals(DIGEST_NAME[fAlgo], a, l);
 end;
 
 function TDigestAuthServer.DigestAuth(FromClient: PUtf8Char;
@@ -9078,9 +9078,9 @@ begin
       ccmIssuerName:
         found := EqualBuf(Cert^.GetIssuerName, Value);
       ccmSubjectCN:
-        found := IdemPropNameU(Cert^.GetSubject('CN'), Value);
+        found := PropNameEquals(Cert^.GetSubject('CN'), Value);
       ccmIssuerCN:
-        found := IdemPropNameU(Cert^.GetIssuer('CN'), Value);
+        found := PropNameEquals(Cert^.GetIssuer('CN'), Value);
       ccmSubjectKey:
         found := HumanHexCompare(Cert^.GetSubjectKey, Value) = 0;
       ccmAuthorityKey,
@@ -9093,9 +9093,9 @@ begin
       ccmBinary:
         found := EqualBuf(Cert^.Save, Value);
       ccmSha1:
-        found := IdemPropNameU(Cert^.GetDigest(hfSha1), Value);
+        found := PropNameEquals(Cert^.GetDigest(hfSha1), Value);
       ccmSha256:
-        found := IdemPropNameU(Cert^.GetDigest(hfSha256), Value);
+        found := PropNameEquals(Cert^.GetDigest(hfSha256), Value);
     else
       found := false; // unsupported search method (e.g. ccmUsage)
     end;
@@ -9141,7 +9141,7 @@ end;
 function TCryptCert.IsAuthorizedBy(const Authority: ICryptCert): boolean;
 begin
   result := (Authority <> nil) and
-            IdemPropNameU(GetAuthorityKey, Authority.GetSubjectKey);
+            PropNameEquals(GetAuthorityKey, Authority.GetSubjectKey);
 end;
 
 function TCryptCert.Compare(const Another: ICryptCert;
