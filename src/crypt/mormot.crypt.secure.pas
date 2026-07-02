@@ -3846,6 +3846,7 @@ function IsPem(const pem: RawUtf8): boolean;
 function IsPemEncrypted(const pem: TCertPem): boolean;
 
 /// extract pemCertificate and a private key concatenated in a PEM text file
+// - used e.g. by TCryptCertX509/TCryptCertOpenSsl.Load(cccCertWithPrivateKey)
 function PemToCertAndPrivKey(const MultiPartPem: RawUtf8;
   out Cert, PrivKey: RawByteString): boolean;
 
@@ -9734,8 +9735,8 @@ begin
       der := NextPemToDer(p, @k);
       if der = '' then
         break;
-      if not (k in [pemUnspecified, pemCertificate]) then
-        continue; // no need to try loading something which is not a X.509 cert
+      if not (k in [pemUnspecified, pemCertificate, pemSynopseCertificate]) then
+        continue; // no need to try loading something which is not a certificate
       c := Load(der);
       if c <> nil then
         ChainAdd(result, c);
@@ -10510,7 +10511,7 @@ begin
     pem := NextPem(P, @k);
     if pem = '' then
       break;
-    if k = pemCertificate then
+    if k = pemCertificate then // pemSynopseCertificate is out-of-scope here
       if {%H-}Cert <> '' then
         exit // should contain a single Certificate
       else
