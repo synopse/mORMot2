@@ -1918,6 +1918,8 @@ type
     function IsCA: boolean;
     /// if the Certificate issuer is itself
     function IsSelfSigned: boolean;
+    /// if both Issuer = x.Subject and AKI (if set) = x.SKI
+    function IsAuthorizedBy(x: PX509): boolean;
     /// retrieve the signature algorithm as human-readable text
     // - returns e.g. '128 ecdsa-with-SHA256' or '256 ecdsa-with-SHA512'
     // '128 RSA-SHA256' or '128 ED25519'
@@ -9507,7 +9509,19 @@ begin
   // X509 usually does not compare serial numbers nor SKID/AKID but the names
   // in practice, OpenSSL self-signed certificates have a SKID but no AKID
   result := (@self <> nil) and
-      (X509_get_issuer_name(@self).Compare(X509_get_subject_name(@self)) = 0);
+        (X509_get_issuer_name(@self).Compare(X509_get_subject_name(@self)) = 0);
+end;
+
+function X509.IsAuthorizedBy(x: PX509): boolean;
+var
+  aki: RawUtf8;
+begin
+  aki := AuthorityKeyIdentifier; // trim the AKID to same SKID text format
+  result := (@self <> nil) and
+            (x <> nil) and
+            ((aki = '') or
+             PropNameEquals(aki, x.SubjectKeyIdentifier)) and
+            (X509_get_issuer_name(@self).Compare(X509_get_subject_name(x)) = 0);
 end;
 
 function X509.GetSignatureAlgo: RawUtf8;
