@@ -4185,7 +4185,8 @@ begin
   c2.Sign(c1); // change signature
   CheckEqual(c2.GetAuthorityKey, c1.GetSubjectKey);
   Check(not c2.IsSelfSigned);
-  Check(c2.Verify(c1) = cvValidSigned, 'self3');
+  cv := c2.Verify(c1);
+  CheckUtf8(cv = cvValidSigned, '%:self3=%', [crt.AlgoName, ToText(cv)^]);
   Check(c2.Verify(nil) = cvUnknownAuthority, 'self4');
   if crt.AlgoName = 'syn-es256-v1' then
     check(c1.SharedSecret(c3) = c3.SharedSecret(c1), 'c1.GetUsage=CU_ALL')
