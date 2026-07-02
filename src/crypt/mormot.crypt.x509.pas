@@ -205,8 +205,8 @@ type
     function Get(const Rdn: RawUtf8): RawUtf8;
     /// return the hash of the normalized Binary of this field
     function ToDigest(algo: THashAlgo = hfSha1): RawUtf8;
-    /// compare the ToBinary content of two X.501 names
-    function Compare(var Another: TXName): integer;
+    /// compare the ToBinary DER content of two X.501 names
+    function CompareBinary(var Another: TXName): integer;
     /// compare the content of two X.501 names more relaxed than CompareBinary()
     // - use an internal normalization encoding similar to X509_NAME_cmp()
     function CompareCanonical(var Another: TXName): integer;
@@ -1507,9 +1507,9 @@ begin
   end;
 end;
 
-function TXName.Compare(var Another: TXName): integer;
+function TXName.CompareBinary(var Another: TXName): integer;
 begin
-  // update cache manually to avoid temporary strings with ToBinary calls
+  // update cache manually to avoid temporary strings with ToBinary method
   if fCachedAsn = '' then
     ComputeAsn;
   if Another.fCachedAsn = '' then
@@ -2551,9 +2551,9 @@ begin
           result := SortDynArrayRawByteString(
                       Signed.SerialNumber, Another.Signed.SerialNumber);
         ccmSubjectName:
-          result := Signed.Subject.Compare(Another.Signed.Subject);
+          result := Signed.Subject.CompareCanonical(Another.Signed.Subject);
         ccmIssuerName:
-          result := Signed.Issuer.Compare(Another.Signed.Issuer);
+          result := Signed.Issuer.CompareCanonical(Another.Signed.Issuer);
         ccmSubjectCN:
           result := SortDynArrayAnsiString(
                       Signed.Subject.Name[xaCN], Another.Signed.Subject.Name[xaCN]);
