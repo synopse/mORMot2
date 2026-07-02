@@ -309,9 +309,8 @@ type
   // - with automated generation and renewal
   // - information is located in a single aKeyStoreFolder directory, as
   // associated ##.json, ##.acme.pem, ##.crt.me, and ##.key.pem files
-  TAcmeLetsEncrypt = class(TSynPersistent)
+  TAcmeLetsEncrypt = class(TObjectRWLightLock)
   protected
-    fSafe: TRWLightLock;
     fClient: TAcmeLetsEncryptClientObjArray;
     fKeyStoreFolder: TFileName;
     fPrivateKeyPassword: SpiUtf8;

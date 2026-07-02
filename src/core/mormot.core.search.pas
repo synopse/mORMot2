@@ -290,14 +290,13 @@ type
   // internal JSON format (which is faster than a query to the SQLite3 engine)
   // - internally make use of an efficient hashing algorithm for fast response
   // (i.e. TSynNameValue will use the TDynArrayHashed wrapper mechanism)
-  TSynCache = class(TSynPersistent)
+  TSynCache = class(TObjectRWLock)
   protected
     fNameValue: TSynNameValue;
     fRamUsed: cardinal;
     fMaxRamUsed: cardinal;
     fTimeoutSeconds: cardinal;
     fTimeoutTix: cardinal;
-    fSafe: TRWLock; // writes should be reentrant for Reset
     procedure ResetIfNeeded; // call Reset after TimeoutSeconds
   public
     /// initialize the internal storage
@@ -328,10 +327,6 @@ type
     // - returns TRUE if was flushed, i.e. if there was something in cache
     // - this method is thread-safe, using the Safe R/W locker of this instance
     function Reset: boolean;
-    /// access to the internal R/W locker, for thread-safe process
-    // - Find/AddOrUpdate methods are protected by this R/W lock
-    property Safe: TRWLock
-      read fSafe;
   published
     /// number of entries in the cache
     property Count: integer
@@ -1035,9 +1030,8 @@ type
   // used, with some random seed values, to simulate several hashing functions;
   // you can customize the hash function if needed
   // - all methods are thread-safe, and MayExist can be concurrent (via a TRWLock)
-  TSynBloomFilter = class(TSynPersistent)
+  TSynBloomFilter = class(TObjectRWLock)
   private
-    fSafe: TRWLock; // need an upgradable lock for TSynBloomFilterDiff
     fHasher: THasher;
     fSize: cardinal;
     fBits: cardinal;

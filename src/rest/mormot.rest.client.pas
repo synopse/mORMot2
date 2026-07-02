@@ -531,9 +531,8 @@ type
   PRestClientCallbackItem = ^TRestClientCallbackItem;
 
   /// store the references to active interface callbacks on a REST Client
-  TRestClientCallbacks = class(TSynPersistent)
+  TRestClientCallbacks = class(TObjectLightLock)
   protected
-    fSafe: TLightLock; // very unlikely to have contention on client side
     fCurrentID: integer; // thread-safe TRestClientCallbackID sequence generator
     function UnRegisterByIndex(index: integer): boolean;
   public
@@ -557,11 +556,11 @@ type
     /// find the index of the ID in the internal list
     // - warning: this method should be called within Safe.Lock/Safe.Unlock
     function FindIndex(aID: TRestClientCallbackID): PtrInt;
-    /// find a matching callback
+    /// find a matching callback in a thread-safe way
     // - will call FindIndex(aItem.ID) within Safe.Lock/Safe.Unlock
     // - returns TRUE if aItem.ID was found and aItem filled, FALSE otherwise
     function FindEntry(var aItem: TRestClientCallbackItem): boolean;
-    /// find a matching entry
+    /// find a matching entry in a thread-safe way
     // - will call FindIndex(aID) within Safe.Lock/Safe.Unlock
     // - returns TRUE if aID was found and aInstance/aFactory set, FALSE otherwise
     function FindAndRelease(aID: TRestClientCallbackID): boolean;

@@ -437,9 +437,8 @@ type
   // - identifiers may be obfuscated as hexadecimal text, using both encryption
   // and digital signature
   // - all its methods are thread-safe, even during obfuscation processing
-  TSynUniqueIdentifierGenerator = class(TSynPersistent)
+  TSynUniqueIdentifierGenerator = class(TObjectLightLock)
   protected
-    fSafe: TLightLock;
     fLastUnixCreateTime: cardinal;
     fIdentifier: TSynUniqueIdentifierProcess;
     fIdentifierShifted: cardinal;
@@ -508,9 +507,6 @@ type
     // - may be used e.g. as system-depending salt
     property CryptoCRC: cardinal
       read fCryptoCRC;
-    /// direct access to the associated mutex
-    property Safe: TLightLock
-      read fSafe;
   published
     /// the process identifier, associated with this generator
     property Identifier: TSynUniqueIdentifierProcess
@@ -1839,9 +1835,8 @@ type
   // an (optional) associated record
   // - cookie is digitally signed, and any associated record is encrypted, using
   // the cryptographically secure AES-GCM-128 algorithm
-  TBinaryCookieGenerator = class(TSynPersistent)
+  TBinaryCookieGenerator = class(TObjectLightLock)
   protected
-    fSafe: TLightLock;
     fContext: TBinaryCookieContext;
     fCookieName: RawUtf8;
     fDefaultTimeOutMinutes: cardinal;

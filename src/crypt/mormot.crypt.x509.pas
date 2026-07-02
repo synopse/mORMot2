@@ -550,12 +550,11 @@ type
   PXTbsCertificate = ^TXTbsCertificate;
 
   /// a X.509 signed Certificate, as defined in RFC 5280
-  TX509 = class(TSynPersistent)
+  TX509 = class(TObjectLightLock)
   public
     /// actual to-be-signed Certificate content
     Signed: TXTbsCertificate;
   protected
-    fSafe: TLightLock;
     fSignatureValue: RawByteString;
     fSignatureAlgorithm: TXSignatureAlgorithm;
     fPublicKey: ICryptPublicKey;
@@ -923,9 +922,8 @@ type
   TX509CrlObjArray = array of TX509Crl;
 
   /// store several TX509Crl instances
-  TX509CrlList = class(TSynPersistent)
+  TX509CrlList = class(TObjectRWLightLock)
   protected
-    fSafe: TRWLightLock;
     fList: TX509CrlObjArray; // sorted by AKID for O(log(n)) search
     fCount: integer;
     fDA: TDynArray;

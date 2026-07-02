@@ -608,9 +608,8 @@ function ClientForcedSpn: RawUtf8;
 type
   /// allow to track keytab files and their changes at runtime
   // - calling ServerForceKeytab() on each thread, only when needed
-  TServerSspiKeyTab = class(TSynPersistent)
+  TServerSspiKeyTab = class(TObjectLightLock)
   protected
-    fSafe: TLightLock;
     fKeyTab: TFileName;
     fKeyTabSize: Int64;
     fKeyTabTime: TUnixMSTime;
