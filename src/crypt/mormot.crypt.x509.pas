@@ -216,6 +216,10 @@ type
 /// convert a X.501 name ASN.1 binary as a single line Distinguished Name text
 function XNameAsDN(const Der: TAsnObject): RawUtf8;
 
+/// normalize a X.501 name text into lowercase, removing unneeded spaces
+// - d is in fact of PShortString format, with d[0]=length and result=length+1
+function XNameNormalize(s, d: PUtf8Char): PtrInt;
+
 function ToText(a: TXAttr): PShortString; overload;
 function ToText(e: TXExtension): PShortString; overload;
 function ToText(u: TXKeyUsage): PShortString; overload;
@@ -1561,6 +1565,30 @@ begin
       end;
   end;
   result := true;
+end;
+
+function XNameNormalize(s, d: PUtf8Char): PtrInt;
+begin
+  result := 0;
+  if s <> nil then
+  begin
+    while s^ = ' ' do
+      inc(s); // trim left
+    repeat
+      while PWord(s)^ = $2020 do
+        inc(s); // trim dual spaces
+      if s^ = #0 then
+        break;
+      inc(result);
+      d[result] := NormToLowerAnsi7[s^]; // normalize case
+      inc(s);
+    until result = 255;
+    while (result > 0) and
+          (d[result] = ' ') do
+      dec(result); // trim right
+  end;
+  d[0] := AnsiChar(result);
+  inc(result); // return the total length including the initial length byte
 end;
 
 function TXName.FromAsnNext(var pos: integer; const der: TAsnObject): boolean;

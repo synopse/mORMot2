@@ -4182,7 +4182,7 @@ begin
     ConsoleWriteRaw(c2.Save(cccCertWithPrivateKey, '', ccfPem)); // for debug
   cv := c2.Verify(nil);
   CheckUtf8(cv = cvValidSelfSigned, 'self2=%', [ToText(cv)^]);
-  c2.Sign(c1); // change signature
+  c2.Sign(c1); // change signature using c1 as authority
   CheckEqual(c2.GetAuthorityKey, c1.GetSubjectKey);
   Check(not c2.IsSelfSigned);
   cv := c2.Verify(c1);
@@ -5493,14 +5493,40 @@ var
   cu: TCryptCertUsage;
   cus: TCryptCertUsages;
   utc: TDateTime;
+  ss: ShortString;
   timer: TPrecisionTimer;
 begin
+  CheckEqual(XNameNormalize(nil, @ss), 1);
+  CheckEqual(XNameNormalize(' ', @ss), 1);
+  CheckEqual(XNameNormalize('    ', @ss), 1);
+  CheckEqual(XNameNormalize('a', @ss), 2);
+  CheckEqualShort(ss, 'a');
+  CheckEqual(XNameNormalize(' a', @ss), 2);
+  CheckEqualShort(ss, 'a');
+  CheckEqual(XNameNormalize('a  ', @ss), 2);
+  CheckEqualShort(ss, 'a');
+  CheckEqual(XNameNormalize('a b c', @ss), 6);
+  CheckEqualShort(ss, 'a b c');
+  CheckEqual(XNameNormalize('  a      b     c1    ', @ss), 7);
+  CheckEqualShort(ss, 'a b c1');
+  CheckEqual(XNameNormalize('A', @ss), 2);
+  CheckEqualShort(ss, 'a');
+  CheckEqual(XNameNormalize('ABC', @ss), 4);
+  CheckEqualShort(ss, 'abc');
+  CheckEqual(XNameNormalize(' A', @ss), 2);
+  CheckEqualShort(ss, 'a');
+  CheckEqual(XNameNormalize('A  ', @ss), 2);
+  CheckEqualShort(ss, 'a');
+  CheckEqual(XNameNormalize('A b C', @ss), 6);
+  CheckEqualShort(ss, 'a b c');
+  CheckEqual(XNameNormalize('  a      B     c1    ', @ss), 7);
+  CheckEqualShort(ss, 'a b c1');
+  // validate with the synopse.info RSA certificate from Let's Encrypt
   {$ifdef OSWINDOWS}
   Check(WinX509Parse(_synopseinfo_pem, nfo)); // validate our SSPI parser
   {$else}
   Check(X509Parse(_synopseinfo_pem, nfo)); // likely to be the OpenSSL parser
   {$endif OSWINDOWS}
-  // validate with the synopse.info RSA certificate from Let's Encrypt
   x := TX509.Create;
   try
     CheckEqual(x.SerialNumber, '');
