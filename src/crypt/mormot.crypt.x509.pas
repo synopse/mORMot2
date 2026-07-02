@@ -172,10 +172,11 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     fSafe: TLightLock;
-    fCachedAsn: RawByteString;
+    fCachedAsn, fCachedCanonical: RawByteString;
     fCachedText: RawUtf8;
     procedure ComputeAsn;
     procedure ComputeText;
+    procedure ComputeCanonical;
   public
     /// CSV of the values of each kind of known attributes
     Name: TXAttrNames;
@@ -206,6 +207,9 @@ type
     function ToDigest(algo: THashAlgo = hfSha1): RawUtf8;
     /// compare the ToBinary content of two X.501 names
     function Compare(var Another: TXName): integer;
+    /// compare the content of two X.501 names more relaxed than CompareBinary()
+    // - use an internal normalization encoding similar to X509_NAME_cmp()
+    function CompareCanonical(var Another: TXName): integer;
     /// return the UTF-8 text value of a given text OID
     // - search in Other[] then Name[]
     function FindOid(const oid: RawUtf8): RawUtf8;
@@ -1014,7 +1018,7 @@ type
   // - published here to make it expandable if needed (by inheritance)
   TCryptStoreX509 = class(TCryptStore)
   protected
-    fTrust: TCryptCertList;
+    fTrust: TCryptCertList;     // certificates
     fCA: TCryptCertList;
     fSignedCrl: TX509CrlList;   // from a CA
     fUnsignedCrl: TX509CrlList; // from manual Revoke()
@@ -1513,6 +1517,17 @@ begin
   result := SortDynArrayRawByteString(fCachedAsn, Another.fCachedAsn);
 end;
 
+function TXName.CompareCanonical(var Another: TXName): integer;
+begin
+  if fCachedCanonical = '' then
+    ComputeCanonical;
+  if Another.fCachedCanonical = '' then
+    Another.ComputeCanonical;
+  result := SortDynArrayRawByteString(fCachedCanonical, Another.fCachedCanonical);
+  if result = 0 then
+    fCachedCanonical := Another.fCachedCanonical;
+end;
+
 function TXName.NameArray(a: TXAttr): TRawUtf8DynArray;
 begin
   result := nil;
@@ -1591,6 +1606,45 @@ begin
   inc(result); // return the total length including the initial length byte
 end;
 
+procedure TXName.ComputeCanonical;
+var
+  posseq, posone: integer;
+  xa: TXAttr;
+  one, oid, v: RawByteString;
+  tmp: TSynTempAdder; // 4KB work buffer on stack
+begin
+  if fCachedAsn = '' then
+    ComputeAsn; // we need some reference (before main fSafe.Lock)
+  tmp.Init;
+  fSafe.Lock;
+  try
+    if fCachedCanonical <> '' then
+      exit;
+    posseq := 1;
+    if AsnNext(posseq, fCachedAsn) = ASN1_SEQ then
+      while AsnNextRaw(posseq, fCachedAsn, one) = ASN1_SETOF do
+      begin
+        tmp.AddDirect(#255); // RDN marker
+        posone := 1;
+        while AsnNext(posone, one) = ASN1_SEQ do
+        begin
+          if (AsnNextRaw(posone, one, oid) <> ASN1_OBJID) or
+             (oid = '') or
+             not (AsnNextRaw(posone, one, v) in ASN1_TEXT) then
+            continue;
+          xa := OidToXa(oid);  // recognized attribute stored as 0..19 byte
+          tmp.AddDirect(AnsiChar(xa));
+          if xa = xaNone then  // xaNone would store #0 + the binary OID + #0
+            tmp.Add(pointer(oid), length(oid) + 1); // + 1 for ending #0
+          inc(tmp.Store.Added, XNameNormalize(pointer(v), tmp.Prepare(256)));
+        end;
+      end;
+    tmp.Done(fCachedCanonical, CP_RAWBYTESTRING);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
 function TXName.FromAsnNext(var pos: integer; const der: TAsnObject): boolean;
 var
   seq: RawByteString;
@@ -1650,6 +1704,7 @@ begin
   try
     fCachedAsn := '';
     fCachedText := '';
+    fCachedCanonical := '';
   finally
     fSafe.UnLock;
   end;
