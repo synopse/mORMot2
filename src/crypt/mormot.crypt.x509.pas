@@ -1480,7 +1480,7 @@ begin
       csv := pointer(Name[a]);
       if csv = nil then
         continue;
-      nl := TrimLeftLowerCaseP(ps, PAnsiChar(np));
+      nl := TrimLeftLowerCaseP(ps, PAnsiChar(np)); // 'DC','CN',..
       repeat
         vl := GetNextItemTrimedBuffer(csv, ',', vp);
         if vl <> 0 then
@@ -2291,14 +2291,14 @@ end;
 procedure TX509.AfterLoaded;
 begin
   ToHumanHex(Signed.SerialNumberHex, pointer(Signed.SerialNumber), length(Signed.SerialNumber));
-  if Signed.fRawSubjectKeyIdentifier = '' then // e.g. after Generate + ComputeCacheDer
-    HumanHexToBin(Signed.Extension[xeSubjectKeyIdentifier], Signed.fRawSubjectKeyIdentifier);
-  if Signed.fRawAuthorityKeyIdentifier = '' then
-    HumanHexToBin(Signed.Extension[xeAuthorityKeyIdentifier], Signed.fRawAuthorityKeyIdentifier);
   Signed.SubjectPublicKeyBits := X509PubKeyBits(Signed.SubjectPublicKey);
   if (fCachedDer = '') and
      (SignatureValue <> '') then // not possible yet (e.g. after LoadFromCsr)
     ComputeCachedDer;
+  if Signed.fRawSubjectKeyIdentifier = '' then // e.g. after Generate + ComputeCacheDer
+    HumanHexToBin(Signed.Extension[xeSubjectKeyIdentifier], Signed.fRawSubjectKeyIdentifier);
+  if Signed.fRawAuthorityKeyIdentifier = '' then
+    HumanHexToBin(Signed.Extension[xeAuthorityKeyIdentifier], Signed.fRawAuthorityKeyIdentifier);
   if Signed.Issuer.fCachedAsn = '' then
     Signed.Issuer.ComputeAsn;
   if Signed.Subject.fCachedAsn = '' then
@@ -2503,6 +2503,10 @@ begin
           result := FingerPrintCompare(Another, hfSHA1);
         ccmSha256:
           result := FingerPrintCompare(Another, hfSHA256);
+        ccmIssuedBy:
+          result := SortDynArrayAnsiString(
+                      Signed.fRawAuthorityKeyIdentifier,
+                      Another.Signed.fRawSubjectKeyIdentifier);
       else
         result := ComparePointer(self, Another); // e.g. ccmInstance
       end
@@ -3325,7 +3329,8 @@ begin
   case Method of
     ccmSerialNumber,
     ccmSubjectKey,
-    ccmAuthorityKey:
+    ccmAuthorityKey,
+    ccmIssuedBy:
       if not HumanHexToBin(Value, bin) then
         bin := Value; // allow Value to be in hexadecimal or raw binary
   end;
@@ -3358,9 +3363,12 @@ begin
         ccmIssuerCN:
           found := IdemPropNameU(Signed.Issuer.Name[xaCN], Value);
         ccmSubjectKey:
-          found := SortDynArrayRawByteString(Signed.fRawSubjectKeyIdentifier, bin) = 0;
-        ccmAuthorityKey:
-          found := SortDynArrayRawByteString(Signed.fRawAuthorityKeyIdentifier, bin) = 0;
+          found := SortDynArrayRawByteString(
+                     Signed.fRawSubjectKeyIdentifier, bin) = 0;
+        ccmAuthorityKey,
+        ccmIssuedBy:
+          found := SortDynArrayRawByteString(
+                     Signed.fRawAuthorityKeyIdentifier, bin) = 0;
         ccmSubjectAltName:
           found := CsvContains(Signed.Extension[xeSubjectAlternativeName],
                      Value, ',', {casesensitive=}false);
