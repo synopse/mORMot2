@@ -3413,9 +3413,11 @@ class procedure TCryptCertX509Abstract.InternalFind(Cert: PICryptCert;
   Count, MaxCount: integer; out Chain: ICryptCerts);
 var
   found: boolean;
-  res: integer;
+  n: integer;
   bin: RawByteString;
 begin
+  if Count = 0 then
+    exit;
   // prepare the search
   case Method of
     ccmSerialNumber,
@@ -3428,9 +3430,8 @@ begin
   if MaxCount <= 0 then
     MaxCount := MaxInt;
   // O(n) efficient search loop with no temporary memory allocation
-  res := 0;
-  while Count <> 0 do
-  begin
+  n := 0;
+  repeat
     with TX509(Cert^.Handle) do // retrieve the TX509 in a single method call
       case Method of
         ccmSerialNumber:
@@ -3477,16 +3478,23 @@ begin
       end;
     if found then
     begin
-      InterfaceArrayAddCount(Chain, res, Cert^);
+      if (Chain = nil) and
+         (MaxCount = 1) then
+      begin
+        SetLength(Chain, 1); // most common case
+        Chain[0] := Cert^;
+        exit;
+      end;
+      InterfaceArrayAddCount(Chain, n, Cert^);
       dec(MaxCount);
       if MaxCount = 0 then
         break;
     end;
     inc(Cert);
     dec(Count);
-  end;
-  if res <> length({%H-}Chain) then
-    DynArrayFakeLength(Chain, res);
+  until Count = 0;
+  if n <> length({%H-}Chain) then
+    DynArrayFakeLength(Chain, n);
 end;
 
 function TCryptCertX509Abstract.GetSerial: RawUtf8;
