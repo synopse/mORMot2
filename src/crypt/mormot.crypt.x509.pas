@@ -632,9 +632,9 @@ type
       Algo: THashAlgo = hfSha1): integer; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// check if this certificate has been issued by the specified certificate
-    // - ensure Authority xeSubjectKeyIdentifier equals xeAuthorityKeyIdentifier
+    // - i.e. Authority SubjectDN + SKI match this certificate IssuerDN + AKI
+    // - check the names but won't verify the actual digital signature
     function IsAuthorizedBy(Authority: TX509): boolean;
-      {$ifdef HASINLINE} inline; {$endif}
     /// compare two certificates
     function Compare(Another: TX509; Method: TCryptCertComparer = ccmBinary): integer;
     /// return the associated Public Key instance
@@ -2545,11 +2545,14 @@ end;
 
 function TX509.IsAuthorizedBy(Authority: TX509): boolean;
 begin
-  result := (self <> nil) and
+  result := // ensure both certificates are not void
+            (self <> nil) and
             (Authority <> nil) and
             (Authority.Signed.SubjectPublicKey <> '') and
-            (SortDynArrayRawByteString(Signed.fRawAuthorityKeyIdentifier,
-              Authority.Signed.fRawSubjectKeyIdentifier) = 0); // binary check
+            // ensure AKI (if set) is Authority SKI - first since faster
+            Signed.CompareAuthority(Authority.Signed.fRawSubjectKeyIdentifier) and
+            // ensure IssuerDN matches Authority.SubjectDN after normalization
+            (Signed.Issuer.CompareCanonical(Authority.Signed.Subject) = 0);
 end;
 
 function TX509.Compare(Another: TX509; Method: TCryptCertComparer): integer;
