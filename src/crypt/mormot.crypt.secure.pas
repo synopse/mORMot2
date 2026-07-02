@@ -9139,9 +9139,16 @@ begin
 end;
 
 function TCryptCert.IsAuthorizedBy(const Authority: ICryptCert): boolean;
+var
+  akid: RawUtf8;
 begin
-  result := (Authority <> nil) and
-            PropNameEquals(GetAuthorityKey, Authority.GetSubjectKey);
+  result := false;
+  if (Authority = nil) or
+     not PropNameEquals(GetIssuerName, Authority.GetSubjectName) then
+    exit; // IssuerDN should match Authority.SubjectDN
+  akid := GetAuthorityKey;
+  result := (akid = '') or
+            PropNameEquals(akid, Authority.GetSubjectKey);
 end;
 
 function TCryptCert.Compare(const Another: ICryptCert;
