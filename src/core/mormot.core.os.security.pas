@@ -2316,9 +2316,9 @@ function GetSystemStoreAsPem(
   FlushCache: boolean = false; OnlySystemStore: boolean = false): RawUtf8;
 
 /// retrieve all certificates of a given system store as PEM text
-// - on Windows, will use the System Crypt API
-// - on POSIX, scsRoot loads the main CA file of the known system file, and
-// scsCA the additional certificate files which may not be part of the main file
+// - on Windows, will use the System Crypt API with a clear separation
+// - on POSIX, scsRoot loads the main trusted root file of the known system file,
+// and scsCA some additional certificate files which may include scsRoot files
 // - GetSystemStoreAsPemLocalFile file and 'SSL_CA_CERT_FILE' environment
 // variables are ignored: call GetSystemStoreAsPem() instead for the global store
 // - an internal cache is refreshed every 4 minutes unless FlushCache is set
@@ -7405,49 +7405,55 @@ end;
 
 {$else}
 
-function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;
+procedure AddFolderStoreAsPem(const Folders: array of TFileName; var Pem: RawUtf8);
 var
   files: TRawUtf8DynArray;
   f: PtrInt;
 begin
+  files := TRawUtf8DynArray(StringFromFolders(Folders));
+  for f := 0 to length(files) - 1 do
+    if (PosEx('-----BEGIN', files[f]) <> 0) and
+       IsAnsiCompatible(files[f]) and
+       (PosEx(files[f], Pem) = 0) then // append PEM files once
+      Pem := Join([Pem, #10, files[f]]);
+end;
+
+function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;
+begin
   FastAssignNew(result);
   // see https://go.dev/src/crypto/x509/root_unix.go as reference
   case CertStore of
-    scsRoot:
+    scsRoot: // trusted roots
+      {$ifdef OSANDROID}
+      AddFolderStoreAsPem(['/system/etc/security/cacerts'], result);
+      {$else}
       result := StringFromFirstFile([
-        {$ifdef OSLINUXANDROID}
-          '/etc/ssl/certs/ca-certificates.crt',                // Debian/Gentoo
-      	  '/etc/pki/tls/certs/ca-bundle.crt',                  // Fedora/RHEL 6
-          '/etc/ssl/ca-bundle.pem',                            // OpenSUSE
-          '/etc/pki/tls/cacert.pem',                           // OpenELEC
-          '/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem', // CentOS/RHEL 7
-          '/etc/ssl/cert.pem'                                  // Alpine Linux
+        {$ifdef OSLINUX}
+        '/etc/ssl/certs/ca-certificates.crt',                // Debian/Gentoo
+        '/etc/pki/tls/certs/ca-bundle.crt',                  // Fedora/RHEL 6
+        '/etc/ssl/ca-bundle.pem',                            // OpenSUSE
+        '/etc/pki/tls/cacert.pem',                           // OpenELEC
+        '/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem', // CentOS/RHEL 7
+        '/etc/ssl/cert.pem'                                  // Alpine Linux
         {$else}
-      	  '/usr/local/etc/ssl/cert.pem',            // FreeBSD
-      	  '/etc/ssl/cert.pem',                      // OpenBSD
-      	  '/usr/local/share/certs/ca-root-nss.crt', // DragonFly
-      	  '/etc/openssl/certs/ca-certificates.crt'  // NetBSD
-        {$endif OSLINUXANDROID}
+        '/usr/local/etc/ssl/cert.pem',                       // FreeBSD
+        '/etc/ssl/cert.pem',                                 // OpenBSD
+        '/usr/local/share/certs/ca-root-nss.crt',            // DragonFly
+        '/etc/openssl/certs/ca-certificates.crt'             // NetBSD
+        {$endif OSLINUX}
         ]);
-    scsCA:
-      begin
-        files := TRawUtf8DynArray(StringFromFolders([
-          {$ifdef OSLINUXANDROID}
-            '/etc/ssl/certs',               // Debian/SLES10/SLES11
-            '/etc/pki/tls/certs',           // Fedora/RHEL
-      	    '/system/etc/security/cacerts'  // Android
-          {$else}
-            '/etc/ssl/certs',         // FreeBSD 12.2+
-            '/usr/local/share/certs', // FreeBSD
-            '/etc/openssl/certs'      // NetBSD
-          {$endif OSLINUXANDROID}
-          ]));
-        for f := 0 to length(files) - 1 do
-          if (PosEx('-----BEGIN', files[f]) <> 0) and
-             IsAnsiCompatible(files[f]) and
-             (PosEx(files[f], result) = 0) then // append PEM files once
-            result := Join([result, #10, files[f]]);
-      end;
+      {$endif OSANDROID}
+    scsCA: // intermediate certificates - may contain duplicates from scsRoot
+      AddFolderStoreAsPem([
+        {$ifdef OSLINUXANDROID}
+        '/etc/ssl/certs',         // Debian/SLES10/SLES11
+        '/etc/pki/tls/certs'      // Fedora/RHEL
+        {$else}
+        '/etc/ssl/certs',         // FreeBSD 12.2+
+        '/usr/local/share/certs', // FreeBSD
+        '/etc/openssl/certs'      // NetBSD
+        {$endif OSLINUXANDROID}
+        ], result);
   end;
 end;
 
