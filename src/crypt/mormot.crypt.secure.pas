@@ -11389,9 +11389,9 @@ begin // see xeAuthorityInformationAccess in TXTbsCertificate.AddNextExtensions
           (AsnNext(pos, ext, @v) = ASN1_CTX6) do
     begin
       result := true;
-      if oid = ASN1_OID_AIA_OCSP then
+      if oid{%H-} = ASN1_OID_AIA_OCSP then
       begin
-        if IsHttp(v) then
+        if IsHttp(v{%H-}) then
           AddRawUtf8(ocsp, v);
       end
       else if oid = ASN1_OID_AIA_ISSUERS then

@@ -59,7 +59,7 @@ type
   TXAttr = (
     xaNone,
     xaDC,   // domainComponent
-    xeUID,  // userID
+    xaUID,  // userID
     xaCN,   // commonName (2.5.4.3)
     xaSER,  // serialNumber (2.5.4.5)
     xaC,    // countryName (2.5.4.6)
@@ -353,7 +353,7 @@ const
   XA_OID: array[TXAttr] of PUtf8Char = (
     '',                           // xaNone
     '0.9.2342.19200300.100.1.25', // xaDC  domainComponent
-    '0.9.2342.19200300.100.1.1',  // xeUID userID
+    '0.9.2342.19200300.100.1.1',  // xaUID userID
     '2.5.4.3',                    // xaCN  commonName
     '2.5.4.5',                    // xaSER serialNumber
     '2.5.4.6',                    // xaC   countryName
@@ -1417,11 +1417,38 @@ end;
 
 { TX509Name }
 
+const
+  // preferred presentation order when constructing a new RDN
+  // - this is NOT the DER canonical order. DER sorts SET members by their
+  // complete DER encodings (X.690). Existing RDNs decoded from DER should
+  // preserve their original attribute order.
+  XSORT: array[0 .. ord(pred(high(TXAttr)))] of TXAttr = (
+    xaCN,  // Common Name
+    xaUID, // User ID
+    xaSN,  // Surname
+    xaGN,  // Given Name
+    xaI,   // Initials
+    xaGQ,  // Generation Qualifier
+    xaP,   // Pseudonym
+    xaSER, // Serial Number
+    xaT,   // Title
+    xaOU,  // Organizational Unit
+    xaO,   // Organization
+    xaL,   // Locality
+    xaST,  // State/Province
+    xaC,   // Country
+    xaDC,  // Domain Component
+    xaE,   // Email
+    xaTN,  // Telephone Number
+    xaQ,   // DN Qualifier
+    xaN    // Name
+  );
+
 procedure TXName.ComputeAsn;
 var
-  a: TXAttr;
   p: PUtf8Char;
   o: PtrInt;
+  a: TXAttr;
   v: RawUtf8;
   tmp, one: RawByteString;
 begin
@@ -1429,21 +1456,21 @@ begin
   try
     if fCachedAsn <> '' then
       exit;
-    for a := succ(low(a)) to high(a) do
+    for o := 0 to high(XSORT) do
     begin
+      a := XSORT[o];
       p := pointer(Name[a]);
-      if p <> nil then
-      begin
-        one := '';
-        repeat
-          GetNextItemTrimed(p, ',', v);
-          Append(one, Asn(ASN1_SEQ, [
-                        Asn(ASN1_OBJID, [XA_OID_ASN[a]]),
-                        AsnText(v)
-                      ]));
-        until p = nil;
-        Append(tmp, AsnSetOf(one));
-      end;
+      if p = nil then
+        continue;
+      one := '';
+      repeat
+        GetNextItemTrimed(p, ',', v);
+        Append(one, Asn(ASN1_SEQ, [
+                      Asn(ASN1_OBJID, [XA_OID_ASN[a]]),
+                      AsnText(v)
+                    ]));
+      until p = nil;
+      Append(tmp, AsnSetOf(one));
     end;
     for o := 0 to high(Other) do
       with Other[o] do
