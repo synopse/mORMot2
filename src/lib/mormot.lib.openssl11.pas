@@ -1685,6 +1685,7 @@ type
   X509_EXTENSION = object
   public
     function BasicConstraintIsCA: boolean;
+    function IsDataEqual(x: PX509_EXTENSION): boolean;
     procedure ToUtf8(out result: RawUtf8; flags: cardinal = X509V3_EXT_DEFAULT);
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
@@ -1943,7 +1944,7 @@ type
     function SubjectKeyIdentifier: RawUtf8;
     /// the X509v3 Authority Key Identifier (AKID) of this Certificate
     // - e.g. '14:2E:B3:17:B7:58:56:CB:AE:50:09:40:E6:1F:AF:9D:8B:14:C2:C6'
-    // - if there are several AKID, only returns the first
+    // - return only the AKID, not any associated GeneralName or Serial
     function AuthorityKeyIdentifier: RawUtf8;
     /// set the Not Before / Not After Vailidy of this Certificate
     // - ValidDays and ExpireDays are relative to the current time - ValidDays
@@ -8260,7 +8261,7 @@ begin
   if @self = another then // not done in OpenSSL C code
     result := 0
   else
-    result := X509_NAME_cmp(@self, another); // will compare the DER binary
+    result := X509_NAME_cmp(@self, another); // X.500 canonical comparison
 end;
 
 function X509_NAME.Hash: cardinal;
@@ -9265,6 +9266,13 @@ begin
     exit;
   result := c^.ca <> 0;
   BASIC_CONSTRAINTS_free(c);
+end;
+
+function X509_EXTENSION.IsDataEqual(x: PX509_EXTENSION): boolean;
+begin
+  result := (@self <> nil) and
+            (x <> nil) and
+    X509_EXTENSION_get_data(@self).Equals(X509_EXTENSION_get_data(x));
 end;
 
 procedure X509_EXTENSION.ToUtf8(out result: RawUtf8; flags: cardinal);
