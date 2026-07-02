@@ -464,6 +464,7 @@ type
   private
     fSafe: TLightLock;
     fCachedDer: RawByteString; // for ToDer
+    fRawSubjectKeyIdentifier, fRawAuthorityKeyIdentifier: RawByteString;
     procedure ComputeCachedDer;
     procedure ComputeCertUsages;
     procedure AddNextExtensions(pos: integer; const der: TAsnObject);
@@ -562,8 +563,6 @@ type
     fCachedHash: array[THashAlgo] of RawUtf8;
     fCachedPeerInfo: RawUtf8;
     fLastVerifyAuthPublicKey: RawByteString;
-    fRawSubjectKeyIdentifier: RawByteString;
-    fRawAuthorityKeyIdentifier: TRawByteStringDynArray;
     fIsSelfSigned: boolean;
     fIsRevokedTag: integer; // <0 as reason if revoked, or = TCryptStoreX509 tag
     procedure AfterLoaded;
@@ -623,7 +622,7 @@ type
       Algo: THashAlgo = hfSha1): integer; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// check if this certificate has been issued by the specified certificate
-    // - ensure Authority xeSubjectKeyIdentifier is in xeAuthorityKeyIdentifier
+    // - ensure Authority xeSubjectKeyIdentifier equals xeAuthorityKeyIdentifier
     function IsAuthorizedBy(Authority: TX509): boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// compare two certificates
@@ -1890,11 +1889,18 @@ begin
       case xe of
         xeAuthorityKeyIdentifier:    // RFC 5280 #4.2.1.1
           if (AsnNext(extpos, ext) = ASN1_SEQ) and
-             (AsnNextRaw(extpos, ext, v) <> ASN1_NULL) then
-            ToHumanHex(decoded, pointer(v), length(v));
+             (AsnNextRaw(extpos, ext, v) = ASN1_CTX0) then
+             begin
+               fRawAuthorityKeyIdentifier := v; // for fast AKI=SKI comparison
+               ToHumanHex(decoded, pointer(v), length(v));
+             end;
+             // ASN1_CTX1:GeneralNames ASN1_CTX2:SerialNumber in ExtensionRaw[]
         xeSubjectKeyIdentifier:       // RFC 5280 #4.2.1.2
           if AsnNextRaw(extpos, ext, v) = ASN1_OCTSTR then
+          begin
+            fRawSubjectKeyIdentifier := v;     // for fast AKI=SKI comparison
             ToHumanHex(decoded, pointer(v), length(v));
+          end;
         xeSubjectAlternativeName,    // RFC 5280 #4.2.1.6
         xeIssuerAlternativeName:     // RFC 5280 #4.2.1.7
           if AsnNext(extpos, ext) = ASN1_SEQ then
@@ -2114,8 +2120,6 @@ begin
   Finalize(fCachedHash);
   fCachedPeerInfo := '';
   fLastVerifyAuthPublicKey := '';
-  fRawSubjectKeyIdentifier := '';
-  fRawAuthorityKeyIdentifier := nil;
   fSignatureAlgorithm := xsaNone;
   fSignatureValue := '';
   fPublicKey := nil;
@@ -2155,7 +2159,7 @@ begin
        exit;
      result := cvUnknownAuthority;
      if not IsAuthorizedBy(Authority) then
-       exit; // Auth xeSubjectKeyIdentifier is not in xeAuthorityKeyIdentifier
+       exit; // Auth xeSubjectKeyIdentifier <> xeAuthorityKeyIdentifier
    end;
    // check the verification context (e.g. date, usage)
    result := CanVerify(
@@ -2287,11 +2291,12 @@ begin
 end;
 
 procedure TX509.AfterLoaded;
-var
-  akid: TRawUtf8DynArray;
-  i: PtrInt;
 begin
   ToHumanHex(Signed.SerialNumberHex, pointer(Signed.SerialNumber), length(Signed.SerialNumber));
+  if Signed.fRawSubjectKeyIdentifier = '' then // e.g. after Generate + ComputeCacheDer
+    HumanHexToBin(Signed.Extension[xeSubjectKeyIdentifier], Signed.fRawSubjectKeyIdentifier);
+  if Signed.fRawAuthorityKeyIdentifier = '' then
+    HumanHexToBin(Signed.Extension[xeAuthorityKeyIdentifier], Signed.fRawAuthorityKeyIdentifier);
   Signed.SubjectPublicKeyBits := X509PubKeyBits(Signed.SubjectPublicKey);
   if (fCachedDer = '') and
      (SignatureValue <> '') then // not possible yet (e.g. after LoadFromCsr)
@@ -2300,12 +2305,7 @@ begin
     Signed.Issuer.ComputeAsn;
   if Signed.Subject.fCachedAsn = '' then
     Signed.Subject.ComputeAsn;
-  fIsSelfSigned := Signed.Issuer.fCachedAsn = Signed.Subject.fCachedAsn;
-  HumanHexToBin(Signed.Extension[xeSubjectKeyIdentifier], fRawSubjectKeyIdentifier);
-  CsvToRawUtf8DynArray(pointer(Signed.Extension[xeAuthorityKeyIdentifier]), akid);
-  SetLength(fRawAuthorityKeyIdentifier, length(akid));
-  for i := 0 to length(akid) - 1 do
-    HumanHexToBin(akid[i], fRawAuthorityKeyIdentifier[i]);
+  fIsSelfSigned := Signed.Issuer.fCachedAsn = Signed.Subject.fCachedAsn; // not AKI=SKI
   fIsRevokedTag := 0;
   fLastVerifyAuthPublicKey := '';
 end;
@@ -2454,36 +2454,12 @@ begin
 end;
 
 function TX509.IsAuthorizedBy(Authority: TX509): boolean;
-var
-  n: integer;
-  s, a: PRawByteString;
 begin
-  if (self <> nil) and
-     (Authority <> nil) and
-     (Authority.Signed.SubjectPublicKey <> '') then
-  begin
-    // fast search with no memory allocation
-    result := true;
-    s := @Authority.fRawSubjectKeyIdentifier;
-    a := pointer(fRawAuthorityKeyIdentifier);
-    if a <> nil then
-    begin
-      n := PDALen(PAnsiChar(pointer(a)) - _DALEN)^ + _DAOFF;
-      repeat
-        if SortDynArrayRawByteString(a^, s^) = 0 then
-        begin
-          if PPointer(a)^ <> PPointer(s)^ then
-            a^ := s^; // for a faster pointer comparison next time
-          exit;
-        end;
-        dec(n);
-        if n = 0 then
-          break;
-        inc(a);
-      until false;
-    end;
-  end;
-  result := false;
+  result := (self <> nil) and
+            (Authority <> nil) and
+            (Authority.Signed.SubjectPublicKey <> '') and
+            (SortDynArrayRawByteString(Signed.fRawAuthorityKeyIdentifier,
+              Authority.Signed.fRawSubjectKeyIdentifier) = 0); // binary check
 end;
 
 function TX509.Compare(Another: TX509; Method: TCryptCertComparer): integer;
@@ -3386,7 +3362,8 @@ begin
   // prepare the search
   case Method of
     ccmSerialNumber,
-    ccmSubjectKey:
+    ccmSubjectKey,
+    ccmAuthorityKey:
       if not HumanHexToBin(Value, bin) then
         bin := Value; // allow Value to be in hexadecimal or raw binary
   end;
@@ -3419,10 +3396,9 @@ begin
         ccmIssuerCN:
           found := IdemPropNameU(Signed.Issuer.Name[xaCN], Value);
         ccmSubjectKey:
-          found := SortDynArrayRawByteString(
-               Signed.ExtensionRaw[xeSubjectKeyIdentifier], bin) = 0;
+          found := SortDynArrayRawByteString(Signed.fRawSubjectKeyIdentifier, bin) = 0;
         ccmAuthorityKey:
-          found := CsvContains(Signed.Extension[xeAuthorityKeyIdentifier], Value);
+          found := SortDynArrayRawByteString(Signed.fRawAuthorityKeyIdentifier, bin) = 0;
         ccmSubjectAltName:
           found := CsvContains(Signed.Extension[xeSubjectAlternativeName],
                      Value, ',', {casesensitive=}false);
@@ -3552,7 +3528,7 @@ begin
   begin
     a := pointer(Authority.Instance);
     result := a.InheritsFrom(TCryptCertX509Abstract) and
-      // ensure Authority xeSubjectKeyIdentifier is in xeAuthorityKeyIdentifier
+      // ensure Authority xeSubjectKeyIdentifier equals xeAuthorityKeyIdentifier
       fX509.IsAuthorizedBy(a.fX509);
   end
   else
@@ -4282,23 +4258,18 @@ end;
 function TCryptStoreX509.ComputeIsRevoked(cert: TX509): TCryptCertRevocationReason;
 var
   id: PRawByteString;
-  idcount, ownertag: integer;
+  ownertag: integer;
 begin
   // multi-thread safety: get tag sequence number before searches
   ownertag := fIsRevokedTag;
   // retrieve the AKID of this certificate (maybe SKID if self-signed)
-  id := pointer(cert.fRawAuthorityKeyIdentifier);
-  if id = nil then
-  begin
-    id := @cert.fRawSubjectKeyIdentifier; // self-signed
-    idcount := 1;
-  end
-  else
-    idcount := PDALen(PAnsiChar(pointer(id)) - _DALEN)^ + _DAOFF;
+  id := @cert.Signed.fRawAuthorityKeyIdentifier;
+  if id^ = '' then
+    id := @cert.Signed.fRawSubjectKeyIdentifier; // happens with self-signed
   // ask the fSignedCrl and fUnsignedCrl lists
-  result := fSignedCrl.IsRevokedRaw(id, idcount, cert.Signed.SerialNumber);
+  result := fSignedCrl.IsRevokedRaw(id, 1, cert.Signed.SerialNumber);
   if result = crrNotRevoked then
-    result := fUnsignedCrl.IsRevokedRaw(id, idcount, cert.Signed.SerialNumber);
+    result := fUnsignedCrl.IsRevokedRaw(id, 1, cert.Signed.SerialNumber);
   // cache the result into cert.fIsRevokedTag
   if result = crrNotRevoked then
     cert.fIsRevokedTag := ownertag // no need to test until next revocation
@@ -4447,9 +4418,9 @@ begin
     exit;
   // search within our database of known certificates
   result := cvCorrupted;
-  skid := @x.fRawSubjectKeyIdentifier;
+  skid := @x.Signed.fRawSubjectKeyIdentifier;
   if skid^ = '' then
-    exit;
+    exit; // we need a SKI
   f := fTrust.FindBySubjectKeyRaw(skid^);
   if (f <> nil) and
      (x.Compare(f.Handle, ccmBinary) <> 0) then
@@ -4468,12 +4439,12 @@ begin
   for level := 0 to ValidDepth do
   begin
     result := cvCorrupted;
-    akid := pointer(x.fRawAuthorityKeyIdentifier); // check only first auth
-    if akid = nil then
+    akid := @x.Signed.fRawAuthorityKeyIdentifier;
+    if akid^ = '' then
       if x.IsSelfSigned then
-        akid := skid // typical on X.509
+        akid := skid // self-signed X.509 may have no AKI but IssuerDN=SubjectDN
       else
-        exit; // missing field
+        exit; // missing AKI field
     result := cvUnknownAuthority;
     a := fTrust.FindBySubjectKeyRaw(akid^);
     if a = nil then
