@@ -3579,7 +3579,7 @@ end;
 function CsvContains(Csv, Value: PUtf8Char; ValueLen: PtrInt;
   Sep: AnsiChar; CaseSensitive, TrimValue: boolean): boolean;
 var
-  o: PUtf8Char;
+  o: PUtf8Char; // no temporary memory allocation
   l: PtrInt;
 begin
   result := (Csv <> nil) and
@@ -3609,7 +3609,7 @@ end;
 function CsvContains(Csv, Value: PUtf8Char; CsvLen, ValueLen: PtrInt;
   Sep: AnsiChar; CaseSensitive, TrimValue: boolean): boolean;
 var
-  o: PUtf8Char;
+  o: PUtf8Char; // no temporary memory allocation
   l: PtrInt;
 begin
   result := (Csv <> nil) and

@@ -6098,20 +6098,24 @@ function TCryptCertInternal.Save(Content: TCryptCertContent;
 var
   pk: PEccPrivateKey;
   der: RawByteString;
+  pem: TPemKind;
 begin
-  FastAssignNew(result);
+  // hexa or base64 encoding of the ccfBinary output is handled by TCryptCert
   if not (Format in [ccfBinary, ccfPem]) then
-    // hexa or base64 encoding of the ccfBinary output is handled by TCryptCert
-    result := inherited Save(Content, PrivatePassword, Format)
-  else
+  begin
+    result := inherited Save(Content, PrivatePassword, Format);
+    exit;
+  end;
   // we implement ccfPem and ccfBinary here
+  FastAssignNew(result);
+  pem := pemUnspecified;
   case Content of
     cccCertOnly:
       if fEcc <> nil then
       begin
         result := fEcc.SaveToBinary({publickeyonly=}true);
         if Format = ccfPem then
-          result := DerToPem(result, pemSynopseCertificate);
+          pem := pemSynopseCertificate;
       end;
     cccCertWithPrivateKey:
       if fEcc <> nil then
@@ -6120,11 +6124,7 @@ begin
           RaiseError('Save(cccCertWithPrivateKey) with no Private Key');
         result := TEccCertificateSecret(fEcc).SaveToSecureBinary(PrivatePassword);
         if Format = ccfPem then
-        begin
-          der := result;
-          result := DerToPem(der, pemSynopsePrivateKeyAndCertificate);
-          FillZero(der);
-        end;
+          pem := pemSynopsePrivateKeyAndCertificate;
       end;
     cccPrivateKeyOnly:
       begin
@@ -6135,23 +6135,23 @@ begin
            (PrivatePassword = '') then
         begin
           // -----BEGIN SYNECC PRIVATE KEY----- has a real DER encoding
-          der := EccToDer(pk^);
-          result := DerToPem(der, pemSynopseUnencryptedPrivateKey);
-          FillZero(der);
+          result := EccToDer(pk^);
+          pem := pemSynopseUnencryptedPrivateKey;
         end
         else
         begin
           // other formats use our encrypted TEccPrivateKey binary
           result := EccPrivateKeyEncrypt(pk^, PrivatePassword);
-         if Format = ccfPem then
-         begin
-           der := result;
-           result := DerToPem(der, pemSynopseEccEncryptedPrivateKey);
-           FillZero(der);
-         end;
+          if Format = ccfPem then
+           pem := pemSynopseEccEncryptedPrivateKey;
         end;
       end;
   end;
+  if pem = pemUnspecified then
+    exit;
+  der := result; // anti-forensic measure
+  result := DerToPem(der, pem);
+  FillZero(der);
 end;
 
 function TCryptCertInternal.Load(const Saved: RawByteString;
