@@ -141,7 +141,7 @@ type
     {$ifndef UNICODE}
     fForceInt64AsFloat: boolean;
     {$endif UNICODE}
-    fForceUseWideString: boolean;
+    fForceUseWideString, fDisallowSemicolonInSql: boolean;
   public
     /// initialize the properties to connect via TDataSet database access
     // - this overridden method will enable the BATCH process (emulated in
@@ -174,6 +174,10 @@ type
     // but it appeared that some providers expects it to be defined
     property ForceUseWideString: boolean
       read fForceUseWideString write fForceUseWideString;
+    /// by default, any ';' in the middle of a SQL is allowed
+    // - if you don't like such "multi-statements", please set this to true
+    property DisallowSemicolonInSql: boolean
+      read fDisallowSemicolonInSql write fDisallowSemicolonInSql;
   end;
 
   ///	implements an abstract statement via the DB.pas TDataSet/TQuery-like
@@ -183,9 +187,8 @@ type
   TSqlDBDatasetStatementAbstract = class(TSqlDBStatementWithParamsAndColumns)
   protected
     fQuery: TDataSet;
-    fPrepared: boolean;
-    fDatasetSupportBatchBinding: boolean;
-    fForceUseWideString: boolean;
+    fPrepared, fDatasetSupportBatchBinding, fForceUseWideString,
+    fDisallowSemicolonInSql: boolean;
     fPreparedParamsCount: integer;
   protected
     /// convert SqlDBParamType to a standard DB.TParamType to be used in TQuery.Param
@@ -677,9 +680,12 @@ begin
 end;
 
 constructor TSqlDBDatasetStatementAbstract.Create(aConnection: TSqlDBConnection);
+var
+  props: TSqlDBDatasetConnectionProperties;
 begin
-  fForceUseWideString := (aConnection.Properties
-    as TSqlDBDatasetConnectionProperties).ForceUseWideString;
+  props := aConnection.Properties as TSqlDBDatasetConnectionProperties;
+  fForceUseWideString := props.ForceUseWideString;
+  fDisallowSemicolonInSql := props.DisallowSemicolonInSql;
   inherited Create(aConnection);
   try
     DatasetCreate;
@@ -704,7 +710,8 @@ begin
   if fPrepared then
     ESqlDBDataset.RaiseUtf8('%.Prepare(%) shall be called once', [self, aSQL]);
   inherited Prepare(aSQL, ExpectResults); // connect if necessary
-  fPreparedParamsCount := ReplaceParamsByNames(aSQL, sqlu);
+  fPreparedParamsCount := ReplaceParamsByNames(aSQL, sqlu, {strip=}true,
+    {allowsemicol=}not fDisallowSemicolonInSql);
   fPrepared := DatasetPrepare(Utf8ToString(sqlu));
   SQLLogEnd;
   if not fPrepared then
