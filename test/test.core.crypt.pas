@@ -5482,6 +5482,7 @@ var
   bin, der: RawByteString;
   pem, sav, sn: RawUtf8;
   x, a: TX509;
+  ocsp, issuers: TRawUtf8DynArray;
   i: integer;
   nfo: TX509Parsed;
   crl: TX509Crl;
@@ -5563,6 +5564,12 @@ begin
       CheckEqual(x.Signed.CaIssuers[0], 'http://r3.i.lencr.org/');
     if Check(x.Signed.Ocsp <> nil) then
       CheckEqual(x.Signed.Ocsp[0], 'http://r3.o.lencr.org');
+    Check(AsnDecAia(x.Signed.ExtensionRaw[xeAuthorityInformationAccess],
+      ocsp, issuers), 'aia');
+    if CheckEqual(length(ocsp), 1) then
+      CheckEqual(ocsp[0], 'http://r3.o.lencr.org');
+    if CheckEqual(length(issuers), 1) then
+      CheckEqual(issuers[0], 'http://r3.i.lencr.org/');
     CheckSameTime(nfo.NotBefore, x.NotBefore, 'nfo nb');
     CheckSameTime(nfo.NotAfter, x.NotAfter, 'nfo na');
     Check(FindCustomExts(x.Signed.ExtensionOther, '1.3.6.1.5.5.7.1.1') = '');
