@@ -542,6 +542,9 @@ type
     /// check a date/time coherency with NotBefore/NotAfter
     // - a grace period of CERT_DEPRECATION_THRESHOLD (half a day) is applied
     function IsValidDate(timeutc: TDateTime = 0): boolean;
+    /// ensure AKI (if set) matches auth.SKI
+    function CompareAuthority(const aki: RawByteString): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// reset all internal context
     procedure Clear;
     /// serialize those fields into ASN.1 DER binary
@@ -2123,6 +2126,16 @@ begin
              (timeutc < NotAfter + CERT_DEPRECATION_THRESHOLD)) and
             ((NotBefore = 0) or
              (timeutc + CERT_DEPRECATION_THRESHOLD > NotBefore));
+end;
+
+function TXTbsCertificate.CompareAuthority(const aki: RawByteString): boolean;
+begin
+  result := true;
+  if fRawAuthorityKeyIdentifier <> '' then
+    if SortDynArrayRawByteString(fRawAuthorityKeyIdentifier, aki) <> 0 then
+      result := false
+    else
+      fRawAuthorityKeyIdentifier := aki; // faster per-pointer comparison
 end;
 
 function TXTbsCertificate.ToDer: TAsnObject;
