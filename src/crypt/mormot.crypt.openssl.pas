@@ -2470,6 +2470,7 @@ type
     function GetAuthorityKey: RawUtf8; override;
     function GetFields(var fields: TCryptCertFields; withexts: boolean): boolean; override;
     function IsSelfSigned: boolean; override;
+    function IsAuthorizedBy(const Authority: ICryptCert): boolean; override;
     function GetNotBefore: TDateTime; override;
     function GetNotAfter: TDateTime; override;
     function GetUsage: TCryptCertUsages; override;
@@ -2882,6 +2883,20 @@ end;
 function TCryptCertOpenSsl.IsSelfSigned: boolean;
 begin
   result := fX509.IsSelfSigned;
+end;
+
+function TCryptCertOpenSsl.IsAuthorizedBy(const Authority: ICryptCert): boolean;
+var
+  a: TCryptCertOpenSsl;
+begin
+  if Assigned(Authority) then
+  begin
+    a := pointer(Authority.Instance);
+    result := a.InheritsFrom(TCryptCertOpenSsl) and
+      fX509.IsAuthorizedBy(a.fX509); // use X509_NAME_cmp() canonalization
+  end
+  else
+    result := inherited IsAuthorizedBy(Authority);
 end;
 
 function TCryptCertOpenSsl.GetNotBefore: TDateTime;
