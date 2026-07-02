@@ -2505,7 +2505,8 @@ type
     ccmUsage,
     ccmBinary,
     ccmSha1,
-    ccmSha256);
+    ccmSha256,
+    ccmIssuedBy);
 
   TCryptCert = class;
   TCryptCertAlgo = class;
@@ -9086,7 +9087,8 @@ begin
         found := IdemPropNameU(Cert^.GetIssuer('CN'), Value);
       ccmSubjectKey:
         found := HumanHexCompare(Cert^.GetSubjectKey, Value) = 0;
-      ccmAuthorityKey:
+      ccmAuthorityKey,
+      ccmIssuedBy:
         found := CsvContains(Cert^.GetAuthorityKey, Value);
       ccmSubjectAltName:
         found := FindRawUtf8(Cert^.GetSubjects, Value, {casesens=}false) >= 0;
@@ -9181,6 +9183,8 @@ begin
         result := CompareBuf(GetDigest(hfSHA1), Another.GetDigest(hfSHA1));
       ccmSha256:
         result := CompareBuf(GetDigest(hfSHA256), Another.GetDigest(hfSHA256));
+      ccmIssuedBy:
+        result := CompareBuf(GetAuthorityKey, Another.GetSubjectKey);
     else // e.g. ccmInstance
       result := ComparePointer(pointer(self), pointer(Another));
     end

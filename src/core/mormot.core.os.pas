@@ -5012,6 +5012,23 @@ type
   end;
 
   /// a thread-safe class with a virtual constructor and properties persistence
+  // - publishes our lightweight exclusive non-reentrant lock
+  TObjectLightLock = class(TSynPersistent)
+  protected
+    fSafe: TLightLock;
+  public
+    /// access to the associated lightweight exclusive non-reentrant lock instance
+    property Safe: TLightLock
+      read fSafe;
+    /// could be used as a short-cut to Safe.Lock
+    procedure Lock;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// could be used as a short-cut to Safe.UnLock
+    procedure Unlock;
+      {$ifdef HASINLINE}inline;{$endif}
+  end;
+
+  /// a thread-safe class with a virtual constructor and properties persistence
   // - publishes one Operating System standard lock without the TSynLocker overhead
   // - on high contention, for proper padding over the 64-bytes CPU cache line,
   // you should add at least 36 bytes on CPU32 (i.e. 9 integer/pointer fields)
@@ -5026,10 +5043,10 @@ type
     /// access to the associated non-reentrant Operating System lock instance
     property Safe: TOSLock
       read fSafe;
-    /// could be used as a short-cut to Safe^.Lock
+    /// could be used as a short-cut to Safe.Lock
     procedure Lock;
       {$ifdef HASINLINE}inline;{$endif}
-    /// could be used as a short-cut to Safe^.UnLock
+    /// could be used as a short-cut to Safe.UnLock
     procedure Unlock;
       {$ifdef HASINLINE}inline;{$endif}
   end;
@@ -5047,10 +5064,10 @@ type
     /// access to the associated non-reentrant Operating System lock instance
     property Safe: TOSLightLock
       read fSafe;
-    /// could be used as a short-cut to Safe^.Lock
+    /// could be used as a short-cut to Safe.Lock
     procedure Lock;
       {$ifdef HASINLINE}inline;{$endif}
-    /// could be used as a short-cut to Safe^.UnLock
+    /// could be used as a short-cut to Safe.UnLock
     procedure Unlock;
       {$ifdef HASINLINE}inline;{$endif}
   end;
@@ -11622,6 +11639,21 @@ procedure TSynLocked.Unlock;
 begin
   if self <> nil then
     fSafe^.UnLock;
+end;
+
+
+{ TObjectLightLock }
+
+procedure TObjectLightLock.Lock;
+begin
+  if self <> nil then
+    fSafe.Lock;
+end;
+
+procedure TObjectLightLock.Unlock;
+begin
+  if self <> nil then
+    fSafe.UnLock;
 end;
 
 
