@@ -956,16 +956,13 @@ type
     function FindByAlternativeName(const DnsName: RawUtf8;
       TimeUtc: TDateTime = 0): TX509CrlObjArray;
     /// quickly check if a given certificate was part of one known CRL
-    // - the proper CRL(s) will be first checked with AuthorityKeyIdentifiers,
-    // then the method will search if the Serial Number is part of it
     // - returns crrNotRevoked is the serial is not known as part of the CRL
     // - returns the reason why this certificate has been revoked otherwise
-    function IsRevoked(const AuthorityKeyIdentifiers,
+    function IsRevoked(const AuthorityKeyIdentifier,
       SerialNumber: RawUtf8): TCryptCertRevocationReason;
     /// quickly check if a given certificate was part of one known CRL
-    // - internal method directly working on binary buffers and arrays
-    function IsRevokedRaw(akid: PRawByteString; n: integer;
-      const sn: RawByteString): TCryptCertRevocationReason;
+    // - internal method directly working on binary buffers
+    function IsRevokedRaw(const akid, sn: RawByteString): TCryptCertRevocationReason;
     /// return a copy of the internal list items
     // - the list is sorted by AuthorityKeyIdentifier and CrlNumber
     // - caller should NOT free the returned items
@@ -3172,46 +3169,21 @@ begin
   end;
 end;
 
-function TX509CrlList.IsRevoked(const AuthorityKeyIdentifiers,
+function TX509CrlList.IsRevoked(const AuthorityKeyIdentifier,
   SerialNumber: RawUtf8): TCryptCertRevocationReason;
 var
-  akid: RawUtf8;
-  sn: RawByteString;
-  p: PUtf8Char;
-  crl: TX509Crl;
-  res: PXCrlRevokedCert;
+  akid, sn: RawByteString;
 begin
-  result := crrNotRevoked;
-  if (self = nil) or
-     (fCount = 0) or
-     (AuthorityKeyIdentifiers = '') or
-     not HumanHexToBin(SerialNumber, sn) then
-    exit;
-  p := nil;
-  akid := AuthorityKeyIdentifiers;
-  if PosExChar(',', akid) <> 0 then
-    p := pointer(akid); // needs specific CSV process
-  fSafe.ReadLock; // reentrant multi-read lock
-  try
-    repeat
-      if p <> nil then
-        GetNextItem(p, ',', akid);
-      crl := FindByKeyIssuer(akid); // O(log(n)) binary search
-      if crl = nil then
-        continue;
-      res := crl.Signed.FindRevoked(sn); // few items O(n) search
-      if res = nil then
-        continue;
-      result := res^.ReasonCode;
-      break;
-    until p = nil;
-  finally
-    fSafe.ReadUnLock;
-  end;
+  if (self <> nil) and
+     (fCount <> 0) and
+     HumanHexToBin(AuthorityKeyIdentifier, akid) and
+     HumanHexToBin(SerialNumber, sn) then
+    result := IsRevokedRaw(akid, sn)
+  else
+    result := crrNotRevoked;
 end;
 
-function TX509CrlList.IsRevokedRaw(akid: PRawByteString; n: integer;
-  const sn: RawByteString): TCryptCertRevocationReason;
+function TX509CrlList.IsRevokedRaw(const akid, sn: RawByteString): TCryptCertRevocationReason;
 var
   i: integer;
   res: PXCrlRevokedCert;
@@ -3219,28 +3191,16 @@ begin
   result := crrNotRevoked;
   if (self = nil) or
      (fCount = 0) or
-     (akid = nil) or
-     (n = 0) or
+     (akid = '') or
      (sn = '') then
     exit;
   fSafe.ReadLock; // reentrant multi-read lock
   try
-    repeat
-      if fDA.FastLocateSorted(akid^, i) then // inlined FindByKeyIssuerRaw()
-        with fList[i].Signed do
-        begin
-          res := FindRevoked(sn); // few items O(n) search
-          if res <> nil then
-          begin
-            result := res^.ReasonCode;
-            exit;
-          end;
-        end;
-      dec(n);
-      if n = 0 then
-        break;
-      inc(akid);
-    until false;
+    if not fDA.FastLocateSorted(akid, i) then // inlined FindByKeyIssuerRaw()
+      exit;
+    res := fList[i].Signed.FindRevoked(sn); // few items O(n) search
+    if res <> nil then
+      result := res^.ReasonCode;
   finally
     fSafe.ReadUnLock;
   end;
@@ -4261,21 +4221,21 @@ end;
 function TCryptStoreX509.ComputeIsRevoked(cert: TX509): TCryptCertRevocationReason;
 var
   id: PRawByteString;
-  ownertag: integer;
+  tag: integer;
 begin
   // multi-thread safety: get tag sequence number before searches
-  ownertag := fIsRevokedTag;
+  tag := fIsRevokedTag;
   // retrieve the AKID of this certificate (maybe SKID if self-signed)
   id := @cert.Signed.fRawAuthorityKeyIdentifier;
   if id^ = '' then
-    id := @cert.Signed.fRawSubjectKeyIdentifier; // happens with self-signed
+    id := @cert.Signed.fRawSubjectKeyIdentifier; // happens when self-signed
   // ask the fSignedCrl and fUnsignedCrl lists
-  result := fSignedCrl.IsRevokedRaw(id, 1, cert.Signed.SerialNumber);
+  result := fSignedCrl.IsRevokedRaw(id^, cert.Signed.SerialNumber);
   if result = crrNotRevoked then
-    result := fUnsignedCrl.IsRevokedRaw(id, 1, cert.Signed.SerialNumber);
+    result := fUnsignedCrl.IsRevokedRaw(id^, cert.Signed.SerialNumber);
   // cache the result into cert.fIsRevokedTag
   if result = crrNotRevoked then
-    cert.fIsRevokedTag := ownertag // no need to test until next revocation
+    cert.fIsRevokedTag := tag // no need to test until next revocation
   else
     cert.fIsRevokedTag := -(integer(result) + 1); // -1..-11 to mark as revoked
     // as a nice side effect: once revoked, always revoked
@@ -4283,16 +4243,16 @@ end;
 
 function TCryptStoreX509.IsRevokedX509(cert: TX509): TCryptCertRevocationReason;
 var
-  flags: integer;
+  tag: integer;
 begin
   // very quick resolution using the per-TX509 instance cache tag
   result := crrNotRevoked; // most common case is "known as not revoked"
   if cert = nil then
     exit;
-  flags := cert.fIsRevokedTag;
-  if flags <> fIsRevokedTag then // are we in sync with the store?
-    if flags < 0 then
-      result := TCryptCertRevocationReason(-(flags + 1)) // revoked
+  tag := cert.fIsRevokedTag;
+  if tag <> fIsRevokedTag then // are we in sync with the store?
+    if tag < 0 then
+      result := TCryptCertRevocationReason(-(tag + 1)) // revoked
     else
       result := ComputeIsRevoked(cert); // ask once both TX509CrlList
 end;
