@@ -2391,11 +2391,7 @@ begin
     HumanHexToBin(Signed.Extension[xeSubjectKeyIdentifier], Signed.fRawSubjectKeyIdentifier);
   if Signed.fRawAuthorityKeyIdentifier = '' then
     HumanHexToBin(Signed.Extension[xeAuthorityKeyIdentifier], Signed.fRawAuthorityKeyIdentifier);
-  if Signed.Issuer.fCachedAsn = '' then
-    Signed.Issuer.ComputeAsn;
-  if Signed.Subject.fCachedAsn = '' then
-    Signed.Subject.ComputeAsn;
-  fIsSelfSigned := Signed.Issuer.fCachedAsn = Signed.Subject.fCachedAsn; // not AKI=SKI
+  fIsSelfSigned := Signed.Issuer.CompareCanonical(Signed.Subject) = 0; // not AKI=SKI
   fIsRevokedTag := 0;
   fLastVerifyAuthPublicKey := '';
 end;
