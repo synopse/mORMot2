@@ -1542,8 +1542,7 @@ end;
 
 procedure TXName.Clear;
 begin
-  Finalize(self);
-  FillCharFast(self, SizeOf(self), 0);
+  Finalize(self); // but keep fSafe
 end;
 
 function TXName.FromAsn(const seq: TAsnObject): boolean;
@@ -1553,8 +1552,8 @@ var
   one, oid, v: RawByteString;
 begin
   result := false;
+  Clear;
   fCachedAsn := seq; // store exact binary since used for comparison
-  fCachedText := '';
   posseq := 1;
   if AsnNext(posseq, seq) <> ASN1_SEQ then
     exit;
