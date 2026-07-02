@@ -803,6 +803,8 @@ type
     Extension: TXCrlExtensions;
     /// raw ASN1_OCTSTR of decoded Extension[] after FromDer()
     ExtensionRaw: array[TXCrlExtension] of RawByteString;
+    /// raw binary Extension[xceAuthorityKeyIdentifier] value after FromDer()
+    RawAuthorityKeyIdentifier: RawByteString;
     /// reset all internal context
     procedure Clear;
     /// return the entry in Revoked[] from the supplied binary Serial Number
@@ -822,7 +824,6 @@ type
     fSignatureValue: RawByteString;
     fSignatureAlgorithm: TXSignatureAlgorithm;
     fCrlNumber: QWord;
-    fRawAuthorityKeyIdentifier: RawByteString; // for TX509CrlList search
     function GetIssuerDN: RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
     function GetCrlNumber: QWord;
@@ -2774,9 +2775,12 @@ begin
         case xce of
           xceAuthorityKeyIdentifier:
             if (AsnNext(posv, v) = ASN1_SEQ) and
-               (AsnNextRaw(posv, v, ext) <> ASN1_NULL) then
+               (AsnNextRaw(posv, v, ext) = ASN1_CTX0) then
+            begin
+              RawAuthorityKeyIdentifier := ext;
               ToHumanHex(Extension[xceAuthorityKeyIdentifier],
                 pointer(ext), length(ext));
+            end; // ASN1_CTX1:GeneralNames ASN1_CTX2:Serial in ExtensionRaw[]
           xceIssuerAlternativeName:
             if AsnNext(posv, v) = ASN1_SEQ then
               repeat
@@ -2990,8 +2994,8 @@ end;
 
 function TX509CrlCompareWithAkid(const A, B): integer;
 begin
-  // FastLocateSorted() calls fCompare(Item, P[n * fInfo.Cache.ItemSize])
-  result := SortDynArrayAnsiString(A, TX509Crl(B).fRawAuthorityKeyIdentifier);
+  // FastLocateSorted() calls fCompare(RawAKI, P[n * fInfo.Cache.ItemSize])
+  result := SortDynArrayAnsiString(A, TX509Crl(B).Signed.RawAuthorityKeyIdentifier);
 end;
 
 constructor TX509CrlList.Create;
@@ -3009,20 +3013,18 @@ end;
 
 procedure TX509CrlList.Add(Crl: TX509Crl);
 var
-  i: integer;
-  akid: RawByteString;
+  i: integer; // not PtrInt
 begin
   if (Crl = nil) or
-     not HumanHexToBin(Crl.Signed.Extension[xceAuthorityKeyIdentifier], akid) then
+     (Crl.Signed.RawAuthorityKeyIdentifier = '') then
   begin
     Crl.Free; // avoid memory leak
     exit;
   end;
-  Crl.fRawAuthorityKeyIdentifier := akid; // as expected by FastLocateSorted()
   fSafe.WriteLock;
   try
     // use fast O(log(n)) binary search of this AKID
-    if fDA.FastLocateSorted(akid, i) then
+    if fDA.FastLocateSorted(Crl.Signed.RawAuthorityKeyIdentifier, i) then
       // there is already a CRL with this AKID
       if fList[i].CrlNumber < Crl.CrlNumber then
       begin
@@ -3032,7 +3034,7 @@ begin
       else
         Crl.Free // this supplied CRL is older than the existing -> ignore
     else if i >= 0 then
-      // add this CRL with its unknown SKID at the expected sorted position
+      // add this CRL with its unknown AKID at the expected sorted position
       fDA.FastAddSorted(i, Crl)
     else
       EX509.RaiseUtf8('Inconsistent %.Add order', [self]); // paranoid
@@ -3081,7 +3083,7 @@ begin
       crl := TX509Crl.Create;
       crl.Signed.Issuer.Name[xaCN] := Executable.Host;
       crl.Signed.Extension[xceAuthorityKeyIdentifier] := AuthorityKeyIdentifier;
-      crl.fRawAuthorityKeyIdentifier := akid; // for internal search
+      crl.Signed.RawAuthorityKeyIdentifier := akid; // for internal search
       fDA.FastAddSorted(i, crl);
     end
     else
@@ -4113,7 +4115,8 @@ begin
     // assign the Issuer information
     Signed.Issuer := auth.fX509.Signed.Subject;
     Signed.Extension[xceAuthorityKeyIdentifier] :=
-      auth.fX509.Signed.Extension[xeSubjectKeyIdentifier];
+                     auth.fX509.Signed.Extension[xeSubjectKeyIdentifier];
+    Signed.RawAuthorityKeyIdentifier := auth.fX509.Signed.fRawSubjectKeyIdentifier;
     if AuthorityCrlNumber = 0 then
       // we need some increasing value for conformity
       AuthorityCrlNumber := UnixTimeMinimalUtc; // increase every second
