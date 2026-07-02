@@ -633,8 +633,9 @@ function TrimLeftSchema(const TableName: RawUtf8): RawUtf8;
 // - won't generate any SQL keyword parameters (e.g. :AS :OF :BY), to be
 // compliant with Oracle OCI expectations - allow up to 656 parameters
 // - any ending ';' character is deleted, unless aStripSemicolon is unset
+// - but any ';' inside aSql is allowed unless aAllowSemicolon is set to false
 function ReplaceParamsByNames(const aSql: RawUtf8; var aNewSql: RawUtf8;
-  aStripSemicolon: boolean = true): integer;
+  aStripSemicolon: boolean = true; aAllowSemicolon: boolean = true): integer;
 
 /// replace all '?' in the SQL statement with indexed parameters like $1 $2 ...
 // - returns the number of ? parameters found within aSql
@@ -3200,9 +3201,8 @@ begin
   w.Dest := nil; // mark success
 end;
 
-
 function ReplaceParamsByNames(const aSql: RawUtf8; var aNewSql: RawUtf8;
-  aStripSemicolon: boolean): integer;
+  aStripSemicolon, aAllowSemicolon: boolean): integer;
 var
   L: PtrInt;
   w: TReplaceSql;
@@ -3226,6 +3226,8 @@ begin // only called by mormot.db.rad.pas with a TDataSet: less optimized
      (ByteScanIndex(pointer(aNewSql), L, ord('?')) < 0) then // may use SSE2
     exit;
   w.Flags := [];
+  if aAllowSemicolon then
+    w.Flags := [fAllowSemicolon];
   w.IndexChar := ':';
   w.Name[0] := 'A';
   w.Name[1] := 'A';
