@@ -225,7 +225,7 @@ function XNameAsDN(const Der: TAsnObject): RawUtf8;
 
 /// normalize a X.501 name text into lowercase, removing unneeded spaces
 // - d is in fact of PShortString format, with d[0]=length and result=length+1
-function XNameNormalize(s, d: PUtf8Char): PtrInt;
+function XNameNormalize(s, send, d: PUtf8Char): PtrInt;
 
 function ToText(a: TXAttr): PShortString; overload;
 function ToText(e: TXExtension): PShortString; overload;
@@ -1559,7 +1559,7 @@ begin
     Another.ComputeCanonical;
   result := SortDynArrayRawByteString(fCachedCanonical, Another.fCachedCanonical);
   if result = 0 then
-    fCachedCanonical := Another.fCachedCanonical;
+    fCachedCanonical := Another.fCachedCanonical; // for fast pointer comparison
 end;
 
 function TXName.NameArray(a: TXAttr): TRawUtf8DynArray;
@@ -1615,17 +1615,19 @@ begin
   result := true;
 end;
 
-function XNameNormalize(s, d: PUtf8Char): PtrInt;
+function XNameNormalize(s, send, d: PUtf8Char): PtrInt;
 begin
   result := 0;
   if s <> nil then
   begin
-    while s^ = ' ' do
+    while (s < send) and
+          (s^ = ' ') do
       inc(s); // trim left
     repeat
-      while PWord(s)^ = $2020 do
+      while (s < send) and
+            (PWord(s)^ = $2020) do
         inc(s); // trim dual spaces
-      if s^ = #0 then
+      if s >= send then
         break;
       inc(result);
       d[result] := NormToLowerAnsi7[s^]; // normalize case
@@ -1641,7 +1643,7 @@ end;
 
 procedure TXName.ComputeCanonical;
 var
-  posseq, posone: integer;
+  pos: integer;
   xa: TXAttr;
   one, v: RawByteString;
   oid: TAsnBuffer;
