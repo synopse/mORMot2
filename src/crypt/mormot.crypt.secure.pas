@@ -4056,6 +4056,10 @@ function AsnTime(dt: TDateTime): TAsnObject;
 function AsnNextTime(var Pos: integer; const Buffer: TAsnObject;
   out Value: TDateTime): boolean;
 
+/// parse the next GeneralName value within a ASN1_SEQ
+function AsnNextGeneralName(var Pos: integer; const Buffer: TAsnObject;
+  var Name: RawUtf8): boolean;
+
 /// decode an OID ASN.1 IP Address buffer into human-readable text
 procedure AsnDecIp(p: PAnsiChar; len: integer; var text: RawUtf8);
 
@@ -11358,6 +11362,29 @@ begin
   insert('T', raw, 9); // make ISO-8601 compatible 'YYYYMMDDThhmmss'
   Iso8601ToDateTimePUtf8CharVar(pointer(raw), length(raw), Value);
   result := Value <> 0;
+end;
+
+function AsnNextGeneralName(var Pos: integer; const Buffer: TAsnObject;
+  var Name: RawUtf8): boolean;
+var
+  v: TAsnBuffer;
+begin
+  case AsnNextBuffer(Pos, Buffer, v) of // most GeneralName types decoding
+    ASN1_NULL: // no more items
+      begin
+        result := false;
+        exit;
+      end;
+    ASN1_CTX1, // rfc8722Name
+    ASN1_CTX2, // dnsName
+    ASN1_CTX6: // uri
+      FastSetString(Name, v.Data, v.Len); // was stored as IA5String
+    ASN1_CTX7: // ip
+      AsnDecIp(v.Data, v.Len, Name);
+  else
+    FastAssignNew(Name);  // unsupported value type
+  end;
+  result := true;
 end;
 
 procedure AsnDecIp(p: PAnsiChar; len: integer; var text: RawUtf8);
