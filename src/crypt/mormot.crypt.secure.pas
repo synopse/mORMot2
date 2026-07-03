@@ -3236,7 +3236,12 @@ function ChainConsolidate(const chain: ICryptCertChain): ICryptCertChain;
 /// append a new entry as binary pair to a dynamic array of TCryptCustomExt
 // - use AsnEncOid() to compute the o binary from 'x.x.x.x.x' text OID
 procedure AddCustomExts(var exts: TCryptCustomExts; const o, v: RawByteString;
-  crit: boolean = false);
+  crit: boolean = false); overload;
+
+/// append a new entry as binary pair to a dynamic array of TCryptCustomExt
+// - use AsnEncOid() to compute the o binary from 'x.x.x.x.x' text OID
+procedure AddCustomExts(var exts: TCryptCustomExts; const o: TAsnBuffer;
+  const v: RawByteString; crit: boolean = false); overload;
 
 /// efficient search of a TCryptCustomExt.Value from a 'x.x.x.x.x' text OID
 function FindCustomExts(const Other: TCryptCustomExts; OidText: PUtf8Char): RawByteString;
@@ -9927,6 +9932,15 @@ begin
     Value := v;
     Critical := crit;
   end;
+end;
+
+procedure AddCustomExts(var exts: TCryptCustomExts; const o: TAsnBuffer;
+  const v: RawByteString; crit: boolean);
+var
+  oid: RawByteString;
+begin
+  FastSetRawByteString(oid, o.Data, o.Len); // seldom called
+  AddCustomExts(exts, oid, v, crit);
 end;
 
 function FindCustomExts(const Other: TCryptCustomExts; OidText: PUtf8Char): RawByteString;
