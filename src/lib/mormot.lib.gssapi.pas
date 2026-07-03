@@ -1137,6 +1137,9 @@ begin
   result := ClientSspiAuthWorker(aSecContext, aMech, spn, aInData, aOutData);
 end;
 
+var
+  MemCcacheSeq: integer; // for MEMORY:tmp_xxxxxxxx
+
 procedure ClientSspiCreateCredHandle(var aSecContext: TSecContext;
   const aUserName, aPassword: RawUtf8; var aTargetSpn: RawUtf8;
   aMech: gss_OID_set; const aLocalFile: TFileName);
@@ -1156,14 +1159,15 @@ var
     val1: PUtf8Char;
   end;
   credSet: gss_key_value_set_desc;
-  memCcache: TShort31;
+  memCcache: TShort23;
 
   function SetMemCcache: pointer;
   begin
-    // setup a thread-specific temporary memory ccache for this credential
+    // setup a genuine temporary memory ccache for this credential
     // as done by mag_auth_basic() in NGINX's mod_auth_gssapi.c
-    memCcache := 'MEMORY:tmp_'; // threadid seems cleaner than random here
-    AppendShortIntHex(PtrUInt(GetCurrentThreadId), memCcache);
+    memCcache := 'MEMORY:tmp_';
+    AppendShortIntHex((SystemEntropy.Startup.i3 xor // random origin
+      InterlockedIncrement(MemCcacheSeq)) and $ffffffff, memCcache);
     memCcache[ord(memCcache[0]) + 1] := #0; // make ASCIIZ
     result := @memCcache[1];
   end;
