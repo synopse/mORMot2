@@ -2963,7 +2963,7 @@ var
     var
       plen: PtrInt;
       {$ifdef UNICODE}
-      tmp: TSynTempBuffer;
+      tmp: TSynTempBuffer; // sub-optimal: may use RawUtf8 everywhere
       {$endif UNICODE}
     begin
       if path <> '' then // fn := path + d_name
@@ -2998,21 +2998,22 @@ var
     if ExcludesDir then
       addedpath := subpath;
     repeat
-      ent := FpReaddir(dir^); // FPC RTL use getdents64 syscall on Linux and BSD :)
+      ent := FpReaddir(dir^); // FPC RTL use getdents64 syscall on Linux+BSD :)
       if ent = nil then
         break;
       // handle this entry type
       entlen := StrLen(@ent^.d_name);
       case ent^.d_type of
         DT_UNKNOWN, // assume modern FS over BSD or Linux Kernel >= 2.6.4
-        DT_REG:
+        DT_LNK,     // symbolic link
+        DT_REG:     // regular file
           if Assigned(OnFile) and
              not OnFile(OnFileOpaque, @ent^.d_name, entlen) then
             continue // e.g. no MatchAnyP()
           else if (not IncludeHiddenFiles) and
                   (AnsiChar(ent^.d_name[0]) = '.') then
             continue;
-        DT_DIR:
+        DT_DIR:     // directory
           begin
             if (AnsiChar(ent^.d_name[0]) = '.') and
                ((not IncludeHiddenFiles) or
@@ -3039,7 +3040,7 @@ var
               continue; // simulate a FindFirst(mask) as in FindFilesRtl()
           end;
       else
-        continue; // not a real file (e.g. link, sysproc or blockdev)
+        continue; // not a real file (e.g. sysproc or blockdev)
       end;
       if n = 0 then // generous initial result capacity
         SetLength(result, 128)
