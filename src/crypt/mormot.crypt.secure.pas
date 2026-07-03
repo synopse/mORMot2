@@ -11352,18 +11352,20 @@ end;
 function AsnNextTime(var Pos: integer; const Buffer: TAsnObject;
   out Value: TDateTime): boolean;
 var
-  vt: integer;
-  raw: RawByteString;
+  vt: PtrInt;
+  raw: TAsnBuffer;
+  tmp: TShort63;
 begin
-  vt := AsnNextRaw(pos, Buffer, raw);
+  vt := AsnNextBuffer(pos, Buffer, raw);
   result := false;
-  if length(raw) < 12 then
+  if (raw.Len < 12) or (raw.Len > 60) then
     exit;
+  tmp[0] := #0;
   case vt of
     ASN1_UTCTIME:
-      Prepend(raw, '20'); // YY -> YYYY
+      PCardinal(@tmp)^ := 2 + ord('2') shl 8 + ord('0') shl 16; // YY -> YYYY
     ASN1_GENTIME:
-      if raw = '99991231235959Z' then
+      if EqualBuf('99991231235959Z', raw.Data, raw.Len) then
       begin
         Value := 0; // special value for unspecified NotAfter
         result := true;
@@ -11372,8 +11374,11 @@ begin
   else
     exit;
   end;
-  insert('T', raw, 9); // make ISO-8601 compatible 'YYYYMMDDThhmmss'
-  Iso8601ToDateTimePUtf8CharVar(pointer(raw), length(raw), Value);
+  vt := 8 - ord(tmp[0]);
+  AppendShortBuffer(raw.Data, vt, high(tmp), @tmp);
+  AppendShortChar('T', @tmp); // make ISO-8601 compatible 'YYYYMMDDThhmmss'
+  AppendShortBuffer(PAnsiChar(raw.Data) + vt, raw.Len - vt, high(tmp), @tmp);
+  Iso8601ToDateTimePUtf8CharVar(@tmp[1], ord(tmp[0]), Value);
   result := Value <> 0;
 end;
 
