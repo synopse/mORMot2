@@ -2725,7 +2725,7 @@ begin
                 [NetLastErrorMsg], self);
               break;
             end;
-            if CompareBuf(UDP_SHUTDOWN, fFrame, len) <> 0 then // from Destroy
+            if not EqualBuf(UDP_SHUTDOWN, fFrame, len) then // from Destroy
             begin
               inc(fReceived);
               OnFrameReceived(len, remote); // new request

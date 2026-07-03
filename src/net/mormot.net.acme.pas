@@ -630,7 +630,7 @@ begin
   c := pointer(fChallenges);
   if aUriLen > 0 then
     for i := 1 to length(fChallenges) do
-      if CompareBuf(c^.Token, aUri, aUriLen) = 0 then
+      if EqualBuf(c^.Token, aUri, aUriLen) then
       begin
         if Assigned(fLog) then
           fLog.Add.Log(sllTrace, 'GetChallenge %', [c^.SubjectValue], self);
