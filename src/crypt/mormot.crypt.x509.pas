@@ -227,7 +227,9 @@ function XNameAsDN(const Der: TAsnObject): RawUtf8;
 // - d is in fact of PShortString format, with d[0]=length and result=length+1
 function XNameNormalize(s, send, d: PUtf8Char): PtrInt;
 
-function ToText(a: TXAttr): PShortString; overload;
+/// append an escaped X.501 name text according to RFC 4514 rules
+procedure XNameRfc4514(var tmp: TSynTempAdder; p, pend: PUtf8Char);
+
 function ToText(e: TXExtension): PShortString; overload;
 function ToText(u: TXKeyUsage): PShortString; overload;
 function ToText(x: TXExtendedKeyUsage): PShortString; overload;
@@ -1227,11 +1229,6 @@ begin
     FastAssignNew(result);
 end;
 
-function ToText(a: TXAttr): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TXAttr), ord(a));
-end;
-
 function ToText(e: TXExtension): PShortString;
 begin
   result := GetEnumName(TypeInfo(TXExtension), ord(e));
@@ -1443,10 +1440,8 @@ end;
 { TX509Name }
 
 const
-  // preferred presentation order when constructing a new RDN
-  // - this is NOT the DER canonical order. DER sorts SET members by their
-  // complete DER encodings (X.690). Existing RDNs decoded from DER should
-  // preserve their original attribute order.
+  // preferred presentation order for ASN generation of RDNs
+  // - this is NOT the DER canonical order but a common reference
   XSORT: array[0 .. ord(pred(high(TXAttr)))] of TXAttr = (
     xaCN,  // Common Name
     xaUID, // User ID
@@ -1518,6 +1513,51 @@ begin
   if fCachedAsn = '' then
     ComputeAsn;
   result := fCachedAsn;
+end;
+
+procedure XNameRfc4514(var tmp: TSynTempAdder; p, pend: PUtf8Char);
+var
+  trailingspaces: integer;
+begin
+  trailingspaces := 0;
+  while (p < pend) and
+        (pend[-1] = ' ') do
+  begin
+    dec(pend);
+    inc(trailingspaces);   // escaped eventually below
+  end;
+  if (p < pend) and
+     (p^ = '#') then
+    tmp.AddDirect('\')     // escape one leading #
+  else
+    while (p < pend) and
+          (p^ = ' ') do
+    begin
+      tmp.AddDirect('\', ' ');
+      inc(p);              // escape leading spaces
+      if p = pend then
+        break;
+    end;
+  while p < pend do
+  begin
+    if p^ < ' ' then
+    begin
+      tmp.AddDirect('\');   // \xx control char
+      tmp.AddByteHex(ord(p^));
+    end
+    else
+    begin
+      if p^ in [',', '+', '"', '\', '<', '>', ';'] then
+        tmp.AddDirect('\'); // escape , + " \ < > ;
+      tmp.Add(p^);          // assume UTF-8
+    end;
+    inc(p);
+  end;
+  while trailingspaces > 0 do
+  begin
+    tmp.AddShort('\ ');    // escape trailing spaces
+    dec(trailingspaces);
+  end;
 end;
 
 procedure TXName.ComputeText;
