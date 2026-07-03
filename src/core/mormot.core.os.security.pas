@@ -2254,7 +2254,20 @@ function AsnNextInt32(var Pos: integer; const Buffer: TAsnObject;
 /// parse the next ASN.1 value as raw buffer
 // - returns the ASN.1 value type, and the ASN.1 raw value blob itself
 function AsnNextRaw(var Pos: integer; const Buffer: TAsnObject;
-  out Value: RawByteString; IncludeHeader: boolean = false): integer;
+  var Value: RawByteString; IncludeHeader: boolean = false): integer;
+
+type
+  /// response of AsnNextBuffer() parsed value
+  TAsnBuffer = record
+    Data: PUtf8Char;
+    Len: integer;
+  end;
+
+/// parse the next ASN.1 value as buffer and len
+// - returns the ASN.1 value type, and pointers to the ASN.1 raw value itself
+function AsnNextBuffer(var Pos: integer; const Buffer: TAsnObject;
+  var Value: TAsnBuffer): integer;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// parse the next ASN1_INT value as raw Big Integer binary
 function AsnNextBigInt(var Pos: integer; const Buffer: TAsnObject;
@@ -7125,25 +7138,40 @@ begin
 end;
 
 function AsnNextRaw(var Pos: integer; const Buffer: TAsnObject;
-  out Value: RawByteString; IncludeHeader: boolean): integer;
+  var Value: RawByteString; IncludeHeader: boolean): integer;
 var
   headpos, asnsize: integer;
 begin
+  FastAssignNew(Value);
   result := ASN1_NULL;
   headpos := Pos;
-  if AsnDecHeader(Pos, Buffer, result, asnsize) then
+  if not AsnDecHeader(Pos, Buffer, result, asnsize) then
+    exit;
+  if result = ASN1_BITSTR then
   begin
-    if result = ASN1_BITSTR then
-    begin
-      inc(Pos); // ignore bit length
-      dec(asnsize);
-    end;
-    if IncludeHeader then
-      Value := copy(Buffer, headpos, asnsize + Pos - headpos)
-    else
-      Value := copy(Buffer, Pos, asnsize);
-    inc(Pos, asnsize);
+    inc(Pos); // ignore bit length
+    dec(asnsize);
   end;
+  if IncludeHeader then
+    Value := copy(Buffer, headpos, asnsize + Pos - headpos)
+  else
+    Value := copy(Buffer, Pos, asnsize);
+  inc(Pos, asnsize);
+end;
+
+function AsnNextBuffer(var Pos: integer; const Buffer: TAsnObject;
+  var Value: TAsnBuffer): integer;
+begin
+  result := ASN1_NULL;
+  if not AsnDecHeader(Pos, Buffer, result, Value.Len) then
+    exit;
+  if result = ASN1_BITSTR then
+  begin
+    inc(Pos); // ignore bit length
+    dec(Value.Len);
+  end;
+  Value.Data := @PByteArray(Buffer)[Pos - 1];
+  inc(Pos, Value.Len);
 end;
 
 function AsnNextBigInt(var Pos: integer; const Buffer: TAsnObject;
@@ -7164,7 +7192,7 @@ var
   p: PAnsiChar;
 begin
   if Value <> nil then
-    Value^ := '';
+    FastAssignNew(Value^);
   result := ASN1_NULL;
   if not AsnDecHeader(Pos, Buffer, result, asnsize) then
     exit;
