@@ -9117,7 +9117,12 @@ begin
        ord('i') + ord('c') shl 8 + ord('a') shl 16 + ord('t') shl 24) or
      (PCardinalArray(ContentType)[2] or $00202020 <>
        ord('i') + ord('o') shl 8 + ord('n') shl 16 + ord('/') shl 24) then
-    exit; // not application/*
+  begin // not application/*
+    result := (ContentType[ContentTypeLen + (12 - 5)] = '/') and
+              (PCardinal(@ContentType[ContentTypeLen + (12 - 4)])^ or $20202020 =
+                 ord('j') + ord('s') shl 8 + ord('o') shl 16 + ord('n') shl 24);
+    exit; // consider '*/json' as JSON
+  end;
   case PCardinalArray(ContentType)[3] or $20202020 of
     ord('j') + ord('s') shl 8 + ord('o') shl 16 + ord('n') shl 24:
       ; // found

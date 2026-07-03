@@ -10024,6 +10024,11 @@ begin
   Check(not IsContentTypeJsonU('application/vnd.mysoft.v1+'));
   Check(IsContentTypeJsonU('application/+json'));
   Check(not IsContentTypeJsonU('application/xml'));
+  Check(IsContentTypeJsonU('anything/json'));
+  Check(IsContentTypeJsonU('something/JSON'));
+  Check(not IsContentTypeJsonU('something/SON'));
+  Check(not IsContentTypeJsonU('something/iSON'));
+  Check(not IsContentTypeJsonU('something/JS0N'));
   Check(IsContentTypeTextU('text/plain'));
   Check(IsContentTypeTextU('text/xml'));
   Check(IsContentTypeTextU('text/css'));
