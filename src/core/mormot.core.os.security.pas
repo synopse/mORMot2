@@ -2224,10 +2224,19 @@ function AsnDecChunk(const der: RawByteString; exptyp: integer = ASN1_SEQ): bool
 function AsnDecInt(var Start: integer; const Buffer: TAsnObject;
   AsnSize: integer): Int64;
 
-/// decode an OID ASN.1 value into human-readable text
+/// decode an OID ASN.1 value into human-readable text as RawUtf8 local variable
 procedure AsnDecOid(Pos, EndPos: PtrInt; const Buffer: TAsnObject; var Dest: RawUtf8);
 
-/// decode an OID ASN.1 value into human-readable text
+/// decode an OID ASN.1 value into human-readable text as RawUtf8 local variable
+procedure AsnDecOidBuffer(Bin: PByte; Len: PtrInt; var Dest: RawUtf8);
+
+/// decode an OID ASN.1 value into human-readable text as ShortString
+procedure AsnDecOidShort(Bin: PByte; Len: PtrInt; var Dest: ShortString);
+
+/// decode an OID ASN.1 value into human-readable text added to a TSynTempAdder
+procedure AsnDecOidAdd(Bin: PByte; Len: PtrInt; var Dest: TSynTempAdder);
+
+/// decode an OID ASN.1 value into human-readable text as RawUtf8
 function AsnDecOidText(const Buffer: TAsnObject): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -7044,38 +7053,59 @@ begin
   MoveFast(pointer(tmp)^, PByteArray(Data)[d], length(tmp));
 end;
 
-procedure AsnDecOid(Pos, EndPos: PtrInt; const Buffer: TAsnObject; var Dest: RawUtf8);
+procedure AsnDecOidShort(Bin: PByte; Len: PtrInt; var Dest: ShortString);
 var
   b: byte;
   x, y: cardinal;
-  tmp: ShortString; // the longest OID described in the repository has 171 chars
-begin
-  tmp[0] := #0;
+begin // the longest OID described in the standard repository has 171 chars
+  Dest[0] := #0;
   y := 0;
-  while Pos < EndPos do
+  while Len > 0 do
   begin
     x := 0;
     repeat
       x := x shl 7;
-      b := ord(Buffer[Pos]);
-      inc(Pos);
+      b := Bin^;
+      inc(Bin);
+      dec(Len);
       inc(x, cardinal(b) and $7F);
     until (b and $80) = 0;
     if y = 0 then
     begin
       y := x div 40; // first byte = two first numbers modulo 40
       dec(x, y * 40);
-      AppendShortByte(y, @tmp); // in range '0'..'39'
+      AppendShortByte(y, @Dest); // in range '0'..'39'
     end;
-    {%H-}AppendShortCharSafe('.', tmp);
-    AppendShortCardinal(x, tmp);
+    {%H-}AppendShortCharSafe('.', Dest);
+    AppendShortCardinal(x, Dest);
   end;
+  Dest[ord(Dest[0]) + 1] := #0; // make ASCIIZ
+end;
+
+procedure AsnDecOidAdd(Bin: PByte; Len: PtrInt; var Dest: TSynTempAdder);
+var
+  tmp: ShortString;
+begin
+  AsnDecOidShort(Bin, Len, tmp);
+  Dest.Addshort(tmp);
+end;
+
+procedure AsnDecOidBuffer(Bin: PByte; Len: PtrInt; var Dest: RawUtf8);
+var
+  tmp: ShortString;
+begin
+  AsnDecOidShort(Bin, Len, tmp);
   FastSetString(Dest, @tmp[1], ord(tmp[0])); // last: Buffer may be = Dest
+end;
+
+procedure AsnDecOid(Pos, EndPos: PtrInt; const Buffer: TAsnObject; var Dest: RawUtf8);
+begin
+  AsnDecOidBuffer(@PByteArray(Buffer)[Pos - 1], EndPos - Pos, Dest);
 end;
 
 function AsnDecOidText(const Buffer: TAsnObject): RawUtf8;
 begin
-  AsnDecOid(1, length(Buffer) + 1, Buffer, result);
+  AsnDecOidBuffer(pointer(Buffer), length(Buffer), result);
 end;
 
 function AsnDecOctStr(const input: RawByteString): RawByteString;
