@@ -3270,6 +3270,10 @@ function CompareBuf(const P1, P2: RawByteString): integer;
 function EqualBuf(const P1, P2: RawByteString): boolean;
   overload; {$ifdef HASINLINE}inline;{$endif}
 
+/// overload wrapper to EqualBuf() but using pointer for one item
+function EqualBuf(const P1: RawByteString; P2: pointer; P2Len: PtrInt): boolean;
+  overload; {$ifdef HASINLINE}inline;{$endif}
+
 /// a CompareMem()-like function designed for small and fixed-sized content
 // - here, Length is expected to be a constant value - typically from SizeOf() -
 // so that inlining has better performance than calling the CompareMem() function
@@ -13313,6 +13317,12 @@ end;
 function EqualBuf(const P1, P2: RawByteString): boolean;
 begin
   result := SortDynArrayRawByteString(P1, P2) = 0;
+end;
+
+function EqualBuf(const P1: RawByteString; P2: pointer; P2Len: PtrInt): boolean;
+begin
+  result := (length(P1) = P2Len) and
+            CompareMemSmall(pointer(P1), P2, P2Len);
 end;
 
 function CompareShort(P1: pointer; const P2: ShortString): boolean;
