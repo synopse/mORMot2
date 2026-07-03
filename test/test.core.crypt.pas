@@ -5488,6 +5488,17 @@ procedure TTestCoreCrypto._X509;
     Check(EqualBuf(exp, @ss[1], ord(ss[0])));
   end;
 
+  procedure CheckX4514(const s, exp: RawUtf8);
+  var
+    tmp: TSynTempAdder;
+    res: RawUtf8;
+  begin
+    tmp.Init;
+    XNameRfc4514(tmp, pointer(s), PUtf8Char(pointer(s)) + length(s));
+    tmp.Done(res);
+    CheckEqual(res, exp);
+  end;
+
 var
   bin, der: RawByteString;
   pem, sav, sn: RawUtf8;
@@ -5532,6 +5543,39 @@ begin
   CheckXNorm(' A  B  c ', 'a b c');
   CheckXNorm('  A   b   C  ', 'a b c');
   CheckXNorm(RawUtf8OfChar('Z', 100), RawUtf8OfChar('z', 100));
+  CheckX4514('', '');
+  CheckX4514(' ', '\ ');
+  CheckX4514('  ', '\ \ ');
+  CheckX4514('a', 'a');
+  CheckX4514(' a', '\ a');
+  CheckX4514('a ', 'a\ ');
+  CheckX4514('  a  ', '\ \ a\ \ ');
+  CheckX4514('#a', '\#a');
+  CheckX4514(' #a', '\ #a');
+  CheckX4514('a#', 'a#');
+  CheckX4514('#', '\#');
+  CheckX4514('#  ', '\#\ \ ');
+  CheckX4514('abc', 'abc');
+  CheckX4514('a b c', 'a b c');
+  CheckX4514('a  b   c', 'a  b   c');
+  CheckX4514('a\bc', 'a\\bc');
+  CheckX4514('abc"', 'abc\"');
+  CheckX4514('a,bc', 'a\,bc');
+  CheckX4514(' a,bc', '\ a\,bc');
+  CheckX4514('a, bc', 'a\, bc');
+  CheckX4514('a+b', 'a\+b');
+  CheckX4514('a<b', 'a\<b');
+  CheckX4514('a>b', 'a\>b');
+  CheckX4514('a;b', 'a\;b');
+  CheckX4514('a\b', 'a\\b');
+  CheckX4514('\\', '\\\\');
+  CheckX4514('"', '\"');
+  CheckX4514('abc'#0, 'abc\00');
+  CheckX4514('abc'#2, 'abc\02');
+  CheckX4514('abc'#31, 'abc\1f');
+  CheckX4514('abc'#0'd', 'abc\00d');
+  CheckX4514('a'#13'b', 'a\0db');
+  CheckX4514('a'#10'b', 'a\0ab');
   // validate with the synopse.info RSA certificate from Let's Encrypt
   {$ifdef OSWINDOWS}
   Check(WinX509Parse(_synopseinfo_pem, nfo)); // validate our SSPI parser
