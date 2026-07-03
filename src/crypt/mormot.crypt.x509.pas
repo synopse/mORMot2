@@ -2032,16 +2032,17 @@ end;
 
 procedure TXTbsCertificate.AddNextExtensions(pos: integer; const der: TAsnObject);
 var
-  ext, oid, seq, v: RawByteString;
+  buf, seq: TAsnBuffer;
+  ext, oid2, v: RawByteString;
   decoded: RawUtf8;
-  vt, extpos, seqpos: integer;
+  vt, extpos: integer;
   xe: TXExtension;
   xku: TXExtendedKeyUsage;
   critical: boolean;
   w: word;
 begin
   while (AsnNext(pos, der) = ASN1_SEQ) and
-        (AsnNextRaw(pos, der, oid) = ASN1_OBJID) do
+        (AsnNextBuffer(pos, der, buf) = ASN1_OBJID) do
   begin
     // loop for each X.509 v3 extension
     critical := false;
@@ -2053,16 +2054,16 @@ begin
     end;
     if vt <> ASN1_OCTSTR then // extnValue
       exit;
-    xe := OidToXe(oid);
+    xe := OidToXe(buf.Data, buf.Len);
     if xe = xeNone then
-      // unsupported OID are stored as raw binary values
-      AddCustomExts(ExtensionOther, oid, ext, critical)
+      // unsupported buf are stored as raw binary values
+      AddCustomExts(ExtensionOther, buf, ext, critical)
     else
     begin
-      // decode most common extensions as RawUtf8
+      // decode most common extensions as RawUtf8 in Extension[xe]
       ExtensionCritical[xe] := critical;
       ExtensionRaw[xe] := ext;
-      decoded := '';
+      FastAssignNew(decoded);
       extpos := 1;
       case xe of
         xeAuthorityKeyIdentifier:    // RFC 5280 #4.2.1.1
@@ -2087,24 +2088,27 @@ begin
                 AddToCsv(v, decoded);
         xeBasicConstraints:          // RFC 5280 #4.2.1.9
           if (AsnNext(extpos, ext) = ASN1_SEQ) and
-             (AsnNextRaw(extpos, ext, v) = ASN1_BOOL) and
-             (v = #$ff) then
+             (AsnNextBuffer(extpos, ext, buf) = ASN1_BOOL) and
+             (buf.Len = 1) and
+             (PByte(buf.Data)^ = $ff) then
             decoded := 'CA';         // as expected by cuCA usage flag
         xeKeyUsage:                  // RFC 5280 #4.2.1.3
-          if (AsnNextRaw(extpos, ext, v) = ASN1_BITSTR) and
-             (v <> '') and
-             (length(v) <= 2) then
+          if (AsnNextBuffer(extpos, ext, buf) = ASN1_BITSTR) and
+             (PtrUInt(buf.Len - 1) < 2) then
           begin
-            w := PWord(v)^; // length=1 ends with a #0
+            if buf.Len = 1 then
+              w := PByte(buf.Data)^
+            else
+              w := PWord(buf.Data)^;
             KeyUsages := TXKeyUsages(w and $ff);
             if w and $8000 <> 0 then
               include(KeyUsages, xuDecipherOnly);
           end;
         xeExtendedKeyUsage:          // RFC 5280 #4.2.1.12
           if AsnNext(extpos, ext) = ASN1_SEQ then
-            while AsnNextRaw(extpos, ext, oid) = ASN1_OBJID do
+            while AsnNextBuffer(extpos, ext, buf) = ASN1_OBJID do
             begin
-              xku := OidToXku(oid);
+              xku := OidToXku(buf.Data, buf.Len);
               if xku <> xkuNone then
                 include(ExtendedKeyUsages, xku);
             end;
@@ -2112,16 +2116,16 @@ begin
           // e.g. 'ocsp=http://r3.o.lencr.org,caIssuers=http://r3.i.lencr.org/'
           if AsnNext(extpos, ext) = ASN1_SEQ then
             while (AsnNext(extpos, ext) = ASN1_SEQ) and
-                  (AsnNext(extpos, ext, @oid) = ASN1_OBJID) and // accessMethod
+                  (AsnNext(extpos, ext, @oid2) = ASN1_OBJID) and // accessMethod
                   (AsnNext(extpos, ext, @v) = ASN1_CTX6) do     // GeneralName
             begin
-              if oid = ASN1_OID_AIA_OCSP then
+              if oid2 = ASN1_OID_AIA_OCSP then
               begin
                 if IsHttp(v) then
                   AddRawUtf8(Ocsp, v);
                 Prepend(v, 'ocsp=');
               end
-              else if oid = ASN1_OID_AIA_ISSUERS then
+              else if oid2 = ASN1_OID_AIA_ISSUERS then
               begin
                 if IsHttp(v) or
                    IsLdap(v) then
@@ -2129,18 +2133,18 @@ begin
                 Prepend(v, 'caIssuers=');
               end
               else
-                Prepend(v, [oid, '=']); // not part of RFC 5280
+                Prepend(v, [oid2, '=']); // not part of RFC 5280
               EnsureRawUtf8(v);
               AddToCsv(v, decoded);
             end;
         xeCertificatePolicies:      // RFC 5280 #4.2.1.4
           if AsnNext(extpos, ext) = ASN1_SEQ then
-            while AsnNextRaw(extpos, ext, seq) = ASN1_SEQ do
-            begin
-              seqpos := 1;
-              if AsnNext(seqpos, seq, @oid) = ASN1_OBJID then
-                AddToCsv(oid, decoded);
-            end;
+            while AsnNextBuffer(extpos, ext, seq) = ASN1_SEQ do
+              if AsnNextBuffer(seq, buf) = ASN1_OBJID then
+              begin
+                AsnDecOidBuffer(buf.Data, buf.Len, RawUtf8(v));
+                AddToCsv(v, decoded);
+              end;
         xeNetscapeComment:
           if AsnNext(extpos, ext, @v) in ASN1_TEXT then // typically IA5String
             decoded := v;
