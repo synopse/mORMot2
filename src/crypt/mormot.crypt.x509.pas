@@ -429,6 +429,10 @@ const
   ASN1_OID_X509_CRL_INVDATE = '2.5.29.24';
   ASN1_OID_X509_CRL_ISSUER  = '2.5.29.29';
 
+var
+  /// the standard text of each known X.501 Type Name, e.g. 'DC', 'OU' or 'O'
+  XA_TEXT: array[TXAttr] of RawUtf8;
+
 function XsaToSeq(xsa: TXSignatureAlgorithm): TAsnObject;
 function OidToXsa(const oid: RawUtf8; out xsa: TXSignatureAlgorithm): boolean;
 function OidToXka(const oid, oid2: RawUtf8; out xka: TXPublicKeyAlgorithm): boolean;
@@ -4665,6 +4669,8 @@ begin
     AsnEncOidVar(XCE_OID[c], XCE_OID_ASN[c]);
   for k := succ(low(k)) to high(k) do
     AsnEncOidVar(XKU_OID[k], XKU_OID_ASN[k]);
+  GetEnumTrimmedNames(TypeInfo(TXAttr), @XA_TEXT);
+  FastAssignNew(XA_TEXT[xaNone]);
   // register this unit to our high-level cryptographic catalog
   // 'x509-rs256-int' 'x509-ps256-int' and 'x509-es256-int' match this unit
   // ('x509-rs/ps384/512-int' methods seem superfluous so are not defined)
