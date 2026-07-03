@@ -199,6 +199,7 @@ type
     function FromAsn(const seq: TAsnObject): boolean;
     /// unserialize the X.501 Type Name from the next raw ASN1_SEQ binary
     function FromAsnNext(var pos: integer; const der: TAsnObject): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// fill Name[] attributes with TCryptCertFields information
     procedure FromFields(const fields: TCryptCertFields);
     /// fill TCryptCertFields information with Name[] attributes
@@ -431,7 +432,7 @@ const
 function XsaToSeq(xsa: TXSignatureAlgorithm): TAsnObject;
 function OidToXsa(const oid: RawUtf8; out xsa: TXSignatureAlgorithm): boolean;
 function OidToXka(const oid, oid2: RawUtf8; out xka: TXPublicKeyAlgorithm): boolean;
-function OidToXa(const oid: RawByteString): TXAttr;
+function OidToXa(bin: pointer; len: PtrInt): TXAttr;
 function OidToXe(const oid: RawByteString): TXExtension;
 function OidToXku(const oid: RawByteString): TXExtendedKeyUsage;
 function XkuToOids(usages: TXExtendedKeyUsages): RawByteString;
@@ -1307,23 +1308,24 @@ begin
 end;
 
 function AsnNextAlgoOid(var pos: integer; const der: TAsnObject;
-  out oid, oid2: RawByteString): boolean;
+  var oid, oid2: RawByteString): boolean;
 var
   seq: RawByteString;
-  p: integer;
+  pseq: integer;
 begin
-  p := 1;
+  FastAssignNew(oid2);
+  pseq := 1;
   result := (AsnNextRaw(pos, der, seq) = ASN1_SEQ) and
-            (AsnNext(p, seq, @oid) = ASN1_OBJID); // decode OID as text
+            (AsnNext(pseq, seq, @oid) = ASN1_OBJID); // decode OID as text
   if result then
-    case AsnNext(p, seq, @oid2) of
+    case AsnNext(pseq, seq, @oid2) of
       ASN1_OBJID:
         ; // e.g. xkaEcc256 or xsaSha256Ecc256 will check oid2 = ECDSA_P256
       ASN1_SEQ:
         // e.g. for xsaSha256RsaPss
-        if (AsnNext(p, seq) <> ASN1_CTC0) or
-           (AsnNext(p, seq) <> ASN1_SEQ) or
-           (AsnNext(p, seq, @oid2) <> ASN1_OBJID) then
+        if (AsnNext(pseq, seq) <> ASN1_CTC0) or
+           (AsnNext(pseq, seq) <> ASN1_SEQ) or
+           (AsnNext(pseq, seq, @oid2) <> ASN1_OBJID) then
           oid2 := ''
         else
           // ASN1_OID_SIGNATURE[xsa] is the hash algorithm for RSA-PSS
@@ -1358,15 +1360,15 @@ end;
 
 var
   // fast OID binary comparison search - initialized at unit startup
-  XA_OID_ASN: array[TXAttr] of TAsnObject;
-  XE_OID_ASN: array[TXExtension] of TAsnObject;
+  XA_OID_ASN:  array[TXAttr] of TAsnObject;
+  XE_OID_ASN:  array[TXExtension] of TAsnObject;
   XCE_OID_ASN: array[TXCrlExtension] of TAsnObject;
   XKU_OID_ASN: array[TXExtendedKeyUsage] of TAsnObject;
 
-function OidToXa(const oid: RawByteString): TXAttr;
+function OidToXa(bin: pointer; len: PtrInt): TXAttr;
 begin
   for result := succ(low(result)) to high(result) do
-    if SortDynArrayRawByteString(oid, XA_OID_ASN[result]) = 0 then
+    if CompareBuf(XA_OID_ASN[result], bin, len) = 0 then
       exit;
   result := xaNone;
 end;
@@ -1601,7 +1603,7 @@ begin
         exit
       else
       begin
-        xa := OidToXa(oid);
+        xa := OidToXa(pointer(oid), length(oid));
         if xa = xaNone then
           // unsupported OID
           AddCustomExts(Other, oid, v)
@@ -1641,7 +1643,8 @@ procedure TXName.ComputeCanonical;
 var
   posseq, posone: integer;
   xa: TXAttr;
-  one, oid, v: RawByteString;
+  one, v: RawByteString;
+  oid: TAsnBuffer;
   tmp: TSynTempAdder; // 4KB work buffer on stack
 begin
   if fCachedAsn = '' then
@@ -1659,14 +1662,14 @@ begin
         posone := 1;
         while AsnNext(posone, one) = ASN1_SEQ do
         begin
-          if (AsnNextRaw(posone, one, oid) <> ASN1_OBJID) or
-             (oid = '') or
+          if (AsnNextBuffer(posone, one, oid) <> ASN1_OBJID) or
+             (oid.Len = 0) or
              not (AsnNextRaw(posone, one, v) in ASN1_TEXT) then
             continue;
-          xa := OidToXa(oid);  // recognized attribute stored as 0..19 byte
+          xa := OidToXa(oid.Data, oid.Len); // known attribute stored as #0..#19
           tmp.AddDirect(AnsiChar(xa));
-          if xa = xaNone then  // xaNone would store #0 + the binary OID + #0
-            tmp.Add(pointer(oid), length(oid) + 1); // + 1 for ending #0
+          if xa = xaNone then  // xaNone would store #0 + the binary OID
+            tmp.Add(oid.Data, oid.Len);
           inc(tmp.Store.Added, XNameNormalize(pointer(v), tmp.Prepare(256)));
         end;
       end;
@@ -1758,7 +1761,7 @@ begin
   result := FindCustomExtsAsn(pointer(Other), length(Other), o);
   if result <> '' then
     exit;
-  xa := OidToXa(o);
+  xa := OidToXa(pointer(o), length(o));
   if xa <> xaNone then
     result := Name[xa];
 end;
@@ -2014,24 +2017,9 @@ begin
         xeSubjectAlternativeName,    // RFC 5280 #4.2.1.6
         xeIssuerAlternativeName:     // RFC 5280 #4.2.1.7
           if AsnNext(extpos, ext) = ASN1_SEQ then
-            repeat
-              case AsnNextRaw(extpos, ext, v) of // GeneralName
-                ASN1_NULL: // no more items
-                  break;
-                ASN1_CTX1, // rfc8722Name
-                ASN1_CTX2, // dnsName
-                ASN1_CTX6: // uri
-                  EnsureRawUtf8(v); // was stored as IA5String
-                ASN1_CTX7: // ip
-                  v := AsnDecIp(pointer(v), length(v));
-                ASN1_CTX8: // registeredID
-                  v := AsnDecOidText(v);
-              else
-                continue;  // unsupported value type
-              end;
+            while AsnNextGeneralName(extpos, ext, RawUtf8(v)) do
               if v <> '' then
                 AddToCsv(v, decoded);
-            until false;
         xeBasicConstraints:          // RFC 5280 #4.2.1.9
           if (AsnNext(extpos, ext) = ASN1_SEQ) and
              (AsnNextRaw(extpos, ext, v) = ASN1_BOOL) and
@@ -2841,6 +2829,7 @@ var
   pos, posv, vt, nrev: integer;
   v64: QWord;
   oid, oid2, v, rev, ext: RawByteString;
+  u: RawUtf8;
   xce: TXCrlExtension;
 begin
   result := false;
@@ -2905,18 +2894,9 @@ begin
             end; // ASN1_CTX1:GeneralNames ASN1_CTX2:Serial in ExtensionRaw[]
           xceIssuerAlternativeName:
             if AsnNext(posv, v) = ASN1_SEQ then
-              repeat
-                case AsnNextRaw(posv, v, ext) of // GeneralName
-                  ASN1_NULL:
-                    break;
-                  ASN1_CTX1, // rfc8722Name
-                  ASN1_CTX2, // dnsName
-                  ASN1_CTX6: // uri
-                    EnsureRawUtf8(v); // was stored as IA5String
-                end;
-                if v <> '' then
-                  AddToCsv(v, Extension[xceIssuerAlternativeName]);
-              until false;
+              while AsnNextGeneralName(posv, v, u) do
+                if u <> '' then
+                  AddToCsv(u, Extension[xceIssuerAlternativeName]);
           xceCrlNumber:
             begin
               v64 := AsnNextInteger(posv, v, vt);
