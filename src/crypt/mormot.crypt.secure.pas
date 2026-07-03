@@ -4057,7 +4057,7 @@ function AsnNextTime(var Pos: integer; const Buffer: TAsnObject;
   out Value: TDateTime): boolean;
 
 /// decode an OID ASN.1 IP Address buffer into human-readable text
-function AsnDecIp(p: PAnsiChar; len: integer): RawUtf8;
+procedure AsnDecIp(p: PAnsiChar; len: integer; var text: RawUtf8);
 
 /// decode Authority Information Access (1.3.6.1.5.5.7.1.1) extension content
 function AsnDecAia(const ext: TAsnObject; var ocsp, issuers: TRawUtf8DynArray): boolean;
@@ -11360,17 +11360,17 @@ begin
   result := Value <> 0;
 end;
 
-function AsnDecIp(p: PAnsiChar; len: integer): RawUtf8;
+procedure AsnDecIp(p: PAnsiChar; len: integer; var text: RawUtf8);
 begin
   case len of
     4:
       with PDWordRec(p)^ do
-        FormatUtf8('%.%.%.%', [B[0], B[1], B[2], B[3]], result);
+        FormatUtf8('%.%.%.%', [B[0], B[1], B[2], B[3]], text);
    16:
      // expanded IPv6 xx:xx:xx:...:xx content (no mormot.net.sock dependency)
-     ToHumanHex(result, pointer(p), len);
+     ToHumanHex(text, pointer(p), len);
   else
-    BinToHexLower(p, len, result);
+    BinToHexLower(p, len, text);
   end;
 end;
 
