@@ -433,8 +433,8 @@ function XsaToSeq(xsa: TXSignatureAlgorithm): TAsnObject;
 function OidToXsa(const oid: RawUtf8; out xsa: TXSignatureAlgorithm): boolean;
 function OidToXka(const oid, oid2: RawUtf8; out xka: TXPublicKeyAlgorithm): boolean;
 function OidToXa(bin: pointer; len: PtrInt): TXAttr;
-function OidToXe(const oid: RawByteString): TXExtension;
-function OidToXku(const oid: RawByteString): TXExtendedKeyUsage;
+function OidToXe(bin: pointer; len: PtrInt): TXExtension;
+function OidToXku(bin: pointer; len: PtrInt): TXExtendedKeyUsage;
 function XkuToOids(usages: TXExtendedKeyUsages): RawByteString;
 
 /// append one X.509 v3 Certificate extension raw value per known TXExtension
@@ -1366,18 +1366,30 @@ var
   XKU_OID_ASN: array[TXExtendedKeyUsage] of TAsnObject;
 
 function OidToXa(bin: pointer; len: PtrInt): TXAttr;
+var
+  p: PPUtf8Char;
 begin
+  p := @XA_OID_ASN[succ(low(result))];
   for result := succ(low(result)) to high(result) do
-    if CompareBuf(XA_OID_ASN[result], bin, len) = 0 then
-      exit;
+    if (PStrLen(p^ - _STRLEN)^ = len) and
+       CompareMemSmall(p^, bin, len) then
+      exit
+    else
+      inc(p);
   result := xaNone;
 end;
 
-function OidToXe(const oid: RawByteString): TXExtension;
+function OidToXe(bin: pointer; len: PtrInt): TXExtension;
+var
+  p: PPUtf8Char;
 begin
+  p := @XE_OID_ASN[succ(low(result))];
   for result := succ(low(result)) to high(result) do
-    if SortDynArrayRawByteString(oid, XE_OID_ASN[result]) = 0 then
-      exit;
+    if (PStrLen(p^ - _STRLEN)^ = len) and
+       CompareMemSmall(p^, bin, len) then
+      exit
+    else
+      inc(p);
   result := xeNone;
 end;
 
@@ -1389,11 +1401,17 @@ begin
   result := xceNone;
 end;
 
-function OidToXku(const oid: RawByteString): TXExtendedKeyUsage;
+function OidToXku(bin: pointer; len: PtrInt): TXExtendedKeyUsage;
+var
+  p: PPUtf8Char;
 begin
+  p := @XKU_OID_ASN[succ(low(result))];
   for result := succ(low(result)) to high(result) do
-    if SortDynArrayRawByteString(oid, XKU_OID_ASN[result]) = 0 then
-      exit;
+    if (PStrLen(p^ - _STRLEN)^ = len) and
+       CompareMemSmall(p^, bin, len) then
+      exit
+    else
+      inc(p);
   result := xkuNone;
 end;
 
