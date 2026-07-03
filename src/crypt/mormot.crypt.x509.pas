@@ -1649,36 +1649,33 @@ end;
 
 function TXName.FromAsn(const seq: TAsnObject): boolean;
 var
-  posseq, posone: integer;
+  posseq: integer;
   xa: TXAttr;
-  one, oid, v: RawByteString;
+  one, oid: TAsnBuffer;
+  v: RawByteString;
 begin
   result := false;
   Clear;
-  fCachedAsn := seq; // store exact binary since used for comparison
+  fCachedAsn := seq; // store exact binary to reuse for saving or comparison
   posseq := 1;
   if AsnNext(posseq, seq) <> ASN1_SEQ then
     exit;
-  while AsnNextRaw(posseq, seq, one) = ASN1_SETOF do
-  begin
-    posone := 1;
-    while AsnNext(posone, one) = ASN1_SEQ do
-      if (AsnNextRaw(posone, one, oid) <> ASN1_OBJID) or
-         (oid = '') or
-         not (AsnNext(posone, one, @v) in ASN1_TEXT) or
-         not IsValidUtf8Small(v) then
-        exit
-      else
+  while AsnNextBuffer(posseq, seq, one) = ASN1_SETOF do
+    while AsnNextBuffer(one) = ASN1_SEQ do
       begin
-        xa := OidToXa(pointer(oid), length(oid));
-        if xa = xaNone then
-          // unsupported OID
+        if (AsnNextBuffer(one, oid) <> ASN1_OBJID) or
+           (oid.Len = 0) or
+           not (AsnNextBuffer(one, @v) in ASN1_TEXT) then
+          exit;
+        xa := OidToXa(oid.Data, oid.Len);
+        if (xa = xaNone) or
+           not IsValidUtf8Small(v) then
+          // unsupported OID or not true UTF-8 content
           AddCustomExts(Other, oid, v)
         else
           // known attribute
           AddToCsv(v, Name[xa]);
       end;
-  end;
   result := true;
 end;
 
