@@ -2111,10 +2111,6 @@ function AsnEncInt(Value: Int64): TAsnObject; overload;
 /// encode a raw binary-encoded integer value into ASN.1 binary
 function AsnEncInt(Value: pointer; ValueLen: PtrUInt): TAsnObject; overload;
 
-/// encode a 64-bit unsigned OID integer value into ASN.1 binary
-// - append the encoded value into the Result shortstring existing content
-procedure AsnEncOidItem(Value: PtrUInt; var Result: ShortString);
-
 /// create an ASN.1 ObjectID from '1.x.x.x.x' text
 function AsnEncOid(OidText: PUtf8Char): TAsnObject;
   {$ifdef HASINLINE} inline; {$endif}
@@ -3231,22 +3227,26 @@ begin
 end;
 
 function GetNextUInt32(var P: PUtf8Char): cardinal;
+  {$ifdef HASINLINE} inline; {$endif}
 var
   c: cardinal;
+  u: PUtf8Char;
 begin
   result := 0;
-  if P = nil then
+  u := P;
+  if u = nil then
     exit;
   repeat
-    c := ord(P^) - 48;
+    c := ord(u^) - 48;
     if c > 9 then
       break
     else
       result := result * 10 + c;
-    inc(P);
+    inc(u);
   until false;
-  while P^ in ['.', '-', ' '] do
-    inc(P);
+  while u^ in ['.', '-', ' '] do
+    inc(u);
+  P := u;
 end;
 
 function TextToSid(var P: PUtf8Char; out sid: TSid): boolean;
@@ -6640,27 +6640,11 @@ end;
 // the greatest number for an OID arc has 39 digits, but we limit to 32-bit
 // see https://oid-base.com/faq.htm#size-limitations
 
-procedure AsnEncOidItem(Value: PtrUInt; var Result: ShortString);
-var
-  tmp: THash128; // written in reverse order (big endian)
-  r: PByte;
-begin
-  r := @tmp[14];
-  r^ := byte(Value) and $7f;
-  Value := Value shr 7;
-  while Value <> 0 do
-  begin
-    dec(r);
-    r^ := byte(Value) or $80;
-    Value := Value shr 7;
-  end;
-  AppendShortBuffer(pointer(r), PAnsiChar(@tmp[15]) - pointer(r),
-    high(Result), @Result);
-end;
-
 procedure AsnEncOidShort(OidText: PUtf8Char; var Dest: ShortString);
 var
+  r: PByte;
   x, y: PtrUInt;
+  tmp: THash128; // written in reverse order (big endian)
 begin
   Dest[0] := #0;
   if OidText <> nil then
@@ -6672,7 +6656,17 @@ begin
     begin
       y := GetNextUInt32(OidText); // warning: y=0 is a valid value
       inc(x, y);
-      AsnEncOidItem(x, Dest);
+      r := @tmp[14];
+      r^ := x and $7f;
+      x := x shr 7;
+      if x <> 0 then
+        repeat
+          dec(r);
+          r^ := byte(x) or $80;
+          x := x shr 7;
+        until x = 0;
+      AppendShortBuffer(pointer(r), PAnsiChar(@tmp[15]) - pointer(r),
+        high(Dest), @Dest);
       x := 0;
     end;
     if (y = 0) or   // y=0 is not a valid last item

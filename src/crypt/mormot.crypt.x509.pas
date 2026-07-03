@@ -1266,7 +1266,6 @@ begin
   end;
 end;
 
-
 function XsaToSeq(xsa: TXSignatureAlgorithm): TAsnObject;
 begin
   case xsa of
