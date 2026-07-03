@@ -1709,34 +1709,33 @@ procedure TXName.ComputeCanonical;
 var
   pos: integer;
   xa: TXAttr;
-  one, v: RawByteString;
-  oid: TAsnBuffer;
-  tmp: TSynTempAdder; // 4KB work buffer on stack
+  one, oid, v: TAsnBuffer; // no transient memory allocation
+  tmp: TSynTempAdder;      // 4KB work buffer on stack
 begin
   if fCachedAsn = '' then
     ComputeAsn; // we need some reference (before main fSafe.Lock)
-  tmp.Init;
   fSafe.Lock;
   try
     if fCachedCanonical <> '' then
       exit;
-    posseq := 1;
-    if AsnNext(posseq, fCachedAsn) = ASN1_SEQ then
-      while AsnNextRaw(posseq, fCachedAsn, one) = ASN1_SETOF do
+    tmp.Init;
+    pos := 1;
+    if AsnNext(pos, fCachedAsn) = ASN1_SEQ then
+      while AsnNextBuffer(pos, fCachedAsn, one) = ASN1_SETOF do
       begin
         tmp.AddDirect(#255); // RDN marker
-        posone := 1;
-        while AsnNext(posone, one) = ASN1_SEQ do
+        while AsnNextBuffer(one) = ASN1_SEQ do
         begin
-          if (AsnNextBuffer(posone, one, oid) <> ASN1_OBJID) or
+          if (AsnNextBuffer(one, oid) <> ASN1_OBJID) or
              (oid.Len = 0) or
-             not (AsnNextRaw(posone, one, v) in ASN1_TEXT) then
+             not (AsnNextBuffer(one, v) in ASN1_TEXT) then
             continue;
           xa := OidToXa(oid.Data, oid.Len); // known attribute stored as #0..#19
           tmp.AddDirect(AnsiChar(xa));
           if xa = xaNone then  // xaNone would store #0 + the binary OID
             tmp.Add(oid.Data, oid.Len);
-          inc(tmp.Store.Added, XNameNormalize(pointer(v), tmp.Prepare(256)));
+          inc(tmp.Store.Added,
+            XNameNormalize(v.Data, PUtf8Char(v.Data) + v.Len, tmp.Prepare(256)));
         end;
       end;
     tmp.Done(fCachedCanonical, CP_RAWBYTESTRING);
@@ -1747,7 +1746,7 @@ end;
 
 function TXName.FromAsnNext(var pos: integer; const der: TAsnObject): boolean;
 var
-  seq: RawByteString;
+  seq: RawByteString; // will be stored in fCachedAsn anyway
 begin
   result := (AsnNextRaw(pos, der, seq, {includeheader=}true) = ASN1_SEQ) and
             FromAsn(seq);
