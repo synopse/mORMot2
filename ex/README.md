@@ -67,6 +67,12 @@ The source code was made and first shown during a WorkShop at [EKON 29](https://
 
 You may follow the initial commits history to find out a proposed way of implementing such pattern.
 
+### recommended-patterns
+
+[A DDD + CQRS task manager](./recommended-patterns), following the *mORMot2 SAD* [*Recommended Patterns*](https://github.com/synopse/mORMot2/blob/master/docs/mORMot2-SAD-Recommended-Patterns.md) guide.
+
+It is a fully featured sample built with FPC, hosting its own *SQLite3* database with *FTS5* full-text search, and exposing interface-based **CQRS** services (separate Query/Command per feature) over an SOA layer. The code is organized as DDD feature modules across the canonical `dom/ infra/ app/` layers, with a transport-agnostic client port backed by two interchangeable in-process and HTTP backends (location transparency). It ships a CLI client and two HTML web clients, and the `§`/`A.x`/`B.x` references throughout its docs point back to the SAD guide.
+
 ### rest-websockets
 
 [Demonstrate a SOA service and clients over WebSockets](./rest-websockets), using binary transfer with encryption, and callbacks.
