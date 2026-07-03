@@ -1310,22 +1310,22 @@ end;
 function AsnNextAlgoOid(var pos: integer; const der: TAsnObject;
   var oid, oid2: RawByteString): boolean;
 var
+  posseq: integer;
   seq: RawByteString;
-  pseq: integer;
 begin
   FastAssignNew(oid2);
-  pseq := 1;
+  posseq := 1;
   result := (AsnNextRaw(pos, der, seq) = ASN1_SEQ) and
-            (AsnNext(pseq, seq, @oid) = ASN1_OBJID); // decode OID as text
+            (AsnNext(posseq, seq, @oid) = ASN1_OBJID); // decode OID as text
   if result then
-    case AsnNext(pseq, seq, @oid2) of
+    case AsnNext(posseq, seq, @oid2) of
       ASN1_OBJID:
         ; // e.g. xkaEcc256 or xsaSha256Ecc256 will check oid2 = ECDSA_P256
       ASN1_SEQ:
         // e.g. for xsaSha256RsaPss
-        if (AsnNext(pseq, seq) <> ASN1_CTC0) or
-           (AsnNext(pseq, seq) <> ASN1_SEQ) or
-           (AsnNext(pseq, seq, @oid2) <> ASN1_OBJID) then
+        if (AsnNext(posseq, seq) <> ASN1_CTC0) or
+           (AsnNext(posseq, seq) <> ASN1_SEQ) or
+           (AsnNext(posseq, seq, @oid2) <> ASN1_OBJID) then
           oid2 := ''
         else
           // ASN1_OID_SIGNATURE[xsa] is the hash algorithm for RSA-PSS
