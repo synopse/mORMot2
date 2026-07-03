@@ -1562,41 +1562,46 @@ end;
 
 procedure TXName.ComputeText;
 var
-  a: TXAttr;
-  first: boolean;
-  csv, np, vp: PUtf8Char;
-  ps: PShortString;
-  nl, vl: PtrInt;
-  tmp: TSynTempAdder; // 4KB work buffer on stack
+  pos: integer;
+  xa: TXAttr;
+  first, multivaluerdn: boolean;
+  one, oid, v: TAsnBuffer; // no transient memory allocation
+  tmp: TSynTempAdder;      // 4KB work buffer on stack for the output text
 begin
+  if fCachedAsn = '' then
+    ComputeAsn; // we need some reference (before main fSafe.Lock)
   fSafe.Lock;
   try
     if fCachedText <> '' then
       exit;
     tmp.Init;
     first := true;
-    GetEnumType(TypeInfo(TXAttr), ps);
-    for a := succ(low(a)) to high(a) do
-    begin
-      ps := @ps^[ord(ps^[0]) + 1];
-      csv := pointer(Name[a]);
-      if csv = nil then
-        continue;
-      nl := TrimLeftLowerCaseP(ps, PAnsiChar(np)); // 'DC','CN',..
-      repeat
-        vl := GetNextItemTrimedBuffer(csv, ',', vp);
-        if vl <> 0 then
+    pos := 1;
+    if AsnNext(pos, fCachedAsn) = ASN1_SEQ then
+      while AsnNextBuffer(pos, fCachedAsn, one) = ASN1_SETOF do
+      begin
+        multivaluerdn := false;
+        while AsnNextBuffer(one) = ASN1_SEQ do
         begin
-          if first then
-            first := false
-          else
-            tmp.AddDirect(',', ' ');
-          tmp.Add(np, nl);
+          if (AsnNextBuffer(one, oid) <> ASN1_OBJID) or
+             (oid.Len = 0) or
+             not (AsnNextBuffer(one, v) in ASN1_TEXT) then
+            continue;
+          if multivaluerdn then
+            tmp.AddDirect('+')
+          else if not first then
+            tmp.AddDirect(',');
+          xa := OidToXa(oid.Data, oid.Len);
+          if xa <> xaNone then   // known attribute e.g. CN=Toto
+            tmp.Add(XA_TEXT[xa])
+          else                   // as OID text e.g. 1.2.3.4=Something
+            AsnDecOidAdd(oid.Data, oid.Len, tmp);
           tmp.AddDirect('=');
-          tmp.Add(vp, vl);
+          XNameRfc4514(tmp, v.Data, PUtf8Char(v.Data) + v.Len);
+          multivaluerdn := true;
+          first := false;
         end;
-      until csv = nil;
-    end;
+      end;
     tmp.Done(fCachedText);
   finally
     fSafe.UnLock;
