@@ -5600,7 +5600,7 @@ begin
     CheckEqual(x.Issuer[xaC],   'US');
     CheckEqual(x.SubjectDN,     'CN=synopse.info');
     CheckEqual(x.SubjectDN, nfo.SubjectDN);
-    CheckEqual(x.IssuerDN,      'CN=R3, C=US, O=Let''s Encrypt');
+    CheckEqual(x.IssuerDN,      'C=US,O=Let''s Encrypt,CN=R3');
     Check(x.Usages =
       [cuDigitalSignature, cuKeyEncipherment, cuTlsServer, cuTlsClient]);
     Check(x.Usages = nfo.Usage, 'nfo u');
@@ -5641,9 +5641,9 @@ begin
       'ea0f4f07abb685f2aaf864a28d9f275ac1e9bb29e82d6a8dc9111cd9162da4e7');
     CheckEqual(x.SubjectPublicKeyAlgorithm, '2048-bit RSA encryption');
     //writeln(x.PeerInfo);
-    CheckHash(x.PeerInfo, $DF9578B9, 'peerinfo1a');
+    CheckHash(x.PeerInfo, $6F660240, 'peerinfo1a');
     Check(TX509Parse(_synopseinfo_pem, nfo), 'TX509Parse');
-    CheckHash(nfo.PeerInfo, $DF9578B9, 'peerinfo1b'); // very same parser
+    CheckHash(nfo.PeerInfo, $6F660240, 'peerinfo1b'); // very same parser
     a := TX509.Create;
     try
       // check synopse.info against Let's Encrypt authority certificate
@@ -5651,10 +5651,10 @@ begin
       CheckEqual(a.Signed.SerialNumberText,
         '192961496339968674994309121183282847578');
       CheckEqual(a.Subject[xaCN], 'R3');
-      CheckEqual(a.SubjectDN, 'CN=R3, C=US, O=Let''s Encrypt');
+      CheckEqual(a.SubjectDN, 'C=US,O=Let''s Encrypt,CN=R3');
       CheckEqual(a.SubjectDN, x.IssuerDN);
       CheckEqual(a.IssuerDN,
-        'CN=ISRG Root X1, C=US, O=Internet Security Research Group');
+        'C=US,O=Internet Security Research Group,CN=ISRG Root X1');
       CheckEqual(a.Extension[xeSubjectKeyIdentifier],
                  x.Extension[xeAuthorityKeyIdentifier]);
       Check(cuCa in a.Usages, 'ca2');
@@ -5672,9 +5672,10 @@ begin
         length(x.SignatureValue), length(bin), [], _synopse_date) =
           cvValidSigned, 'verbuf syn');
       CheckEqual(a.SubjectPublicKeyAlgorithm, '2048-bit RSA encryption');
-      CheckHash(a.PeerInfo, $FFE7466C, 'peerinfo2');
-      CheckHash(ObjectToJson(a), $F7A82903);
-      CheckHash(ObjectToJson(x), $7C73C7E0);
+      //writeln(a.PeerInfo);
+      CheckHash(a.PeerInfo, $19AB4A9E, 'peerinfo2');
+      CheckHash(ObjectToJson(a), $541F97B5);
+      CheckHash(ObjectToJson(x), $EBE4582E);
       CheckEqual(x.SignatureSecurityBits, 112, '2048=112');
     finally
       a.Free;
@@ -5699,7 +5700,7 @@ begin
     CheckEqual(x.Issuer[xaO],   'Synopse Info');
     CheckEqual(x.Issuer[xaC],   'FR');
     CheckEqual(x.IssuerDN,
-      'CN=synopse.info, C=FR, ST=Some-State, O=Synopse Info, OU=Administration');
+      'C=FR,ST=Some-State,O=Synopse Info,OU=Administration,CN=synopse.info');
     CheckEqual(x.Extension[xeSubjectAlternativeName], '');
     Check(x.SubjectAlternativeNames = nil);
     CheckEqual(x.Extension[xeSubjectKeyIdentifier],
@@ -5722,8 +5723,8 @@ begin
       length(x.SignatureValue), length(bin), [cvWrongUsage]) =
         cvValidSelfSigned, 'verbuf self');
     CheckEqual(x.SubjectPublicKeyAlgorithm, '256-bit prime256v1 ECDSA');
-    CheckHash(x.PeerInfo, $BCB82372, 'peerinfo3');
-    CheckHash(ObjectToJson(x), $BBCBCFEB);
+    CheckHash(x.PeerInfo, $D8E4E82D, 'peerinfo3');
+    CheckHash(ObjectToJson(x), $158D943B);
     Check(AsnDecChunk(x.SaveToDer), 'x.SaveToDer');
   finally
     x.Free;
@@ -5746,7 +5747,7 @@ begin
     Check(crl.IsRevoked('08efb79382c3c67f6fa59ed03c222fec') = crrUnspecified);
     Check(crl.IsRevoked('08efb79382c3c67f6fa59ed03c222feb') = crrNotRevoked);
     CheckEqual(crl.IssuerDN,
-      'CN=Cloudflare Inc ECC CA-3, C=US, O=Cloudflare, O=Inc.');
+      'C=US,O=Cloudflare\, Inc.,CN=Cloudflare Inc ECC CA-3');
     der := crl.SaveToDer;
     Check(AsnDecChunk(der), 'crl.SaveToDer');
     pem := DerToPem(der, pemCrl);
