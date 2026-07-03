@@ -7283,7 +7283,8 @@ end;
 
 function AsnDump(const Value: TAsnObject): RawUtf8;
 var
-  i, at, x, n, indent, ilcount: integer;
+  i, at, x, indent, ilcount: integer;
+  n: PtrInt;
   s: RawByteString;
   il: TIntegerDynArray;
   w: TSynTempAdder;
@@ -7357,7 +7358,10 @@ begin
           DumpClass(at, w);
         end;
         w.AddDirect(':', ' ');
-        if IsBinaryString(s) then
+        if at = ASN1_BITSTR then
+          for n := 1 to length(s) do
+            w.AddByteHex(ord(s[n]))
+        else if IsBinaryString(s) then
         begin
           w.AddShort('binary len=');
           w.AddU(length(s));
