@@ -3206,7 +3206,7 @@ function ReplaceParamsByNames(const aSql: RawUtf8; var aNewSql: RawUtf8;
 var
   L: PtrInt;
   w: TReplaceSql;
-begin // only called by mormot.db.rad.pas with a TDataSet: less optimized
+begin // only called by mormot.db.rad.pas with a TDataSet
   result := 0;
   L := Length(aSql);
   if aStripSemicolon then
@@ -3251,10 +3251,9 @@ begin
   if (L = 0) or
      (ByteScanIndex(pointer(aSql), L, ord('?')) < 0) then // may use SSE2
     exit;
+  w.Flags := [fByNumber];
   if AllowSemicolon then
-    w.Flags := [fByNumber, fAllowSemicolon]
-  else
-    w.Flags := [fByNumber];
+    w.Flags := [fByNumber, fAllowSemicolon];
   w.IndexChar := IndexChar;
   w.Dest := @aNewSql;
   w.Temp.Init(L + L shr 2);
