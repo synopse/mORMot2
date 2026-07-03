@@ -11363,7 +11363,7 @@ begin
   tmp[0] := #0;
   case vt of
     ASN1_UTCTIME:
-      PCardinal(@tmp)^ := 2 + ord('2') shl 8 + ord('0') shl 16; // YY -> YYYY
+      PCardinal(@tmp)^ := 2 + ord('2') shl 8 + ord('0') shl 16; // YY -> '20YY'
     ASN1_GENTIME:
       if EqualBuf('99991231235959Z', raw.Data, raw.Len) then
       begin

@@ -2267,7 +2267,7 @@ function AsnNextRaw(var Pos: integer; const Buffer: TAsnObject;
   var Value: RawByteString; IncludeHeader: boolean = false): integer;
 
 type
-  /// response of AsnNextBuffer() parsed value
+  /// allocation-free input/output of AsnNextBuffer() decoding functions
   TAsnBuffer = record
     Data: pointer;
     Len: PtrInt;

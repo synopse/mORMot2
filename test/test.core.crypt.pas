@@ -5517,6 +5517,7 @@ var
   utc: TDateTime;
   timer: TPrecisionTimer;
 begin
+  // validate XName 500 normalization and escaping
   CheckXNorm('', '');
   CheckXNorm(' ', '');
   CheckXNorm('   ', '');
@@ -5576,7 +5577,7 @@ begin
   CheckX4514('abc'#0'd', 'abc\00d');
   CheckX4514('a'#13'b', 'a\0db');
   CheckX4514('a'#10'b', 'a\0ab');
-  // validate with the synopse.info RSA certificate from Let's Encrypt
+  // validate with one synopse.info RSA certificate from Let's Encrypt
   {$ifdef OSWINDOWS}
   Check(WinX509Parse(_synopseinfo_pem, nfo)); // validate our SSPI parser
   {$else}
