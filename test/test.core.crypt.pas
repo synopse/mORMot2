@@ -5478,6 +5478,16 @@ const
     '-----END X509 CRL-----'#13#10;
 
 procedure TTestCoreCrypto._X509;
+
+  procedure CheckXNorm(const s, exp: RawUtf8);
+  var
+    ss: ShortString;
+  begin
+    CheckEqual(XNameNormalize(pointer(s), PUtf8Char(pointer(s)) + length(s),
+      @ss), length(exp) + 1);
+    Check(EqualBuf(exp, @ss[1], ord(ss[0])));
+  end;
+
 var
   bin, der: RawByteString;
   pem, sav, sn: RawUtf8;
@@ -5494,34 +5504,34 @@ var
   cu: TCryptCertUsage;
   cus: TCryptCertUsages;
   utc: TDateTime;
-  ss: ShortString;
   timer: TPrecisionTimer;
 begin
-  CheckEqual(XNameNormalize(nil, @ss), 1);
-  CheckEqual(XNameNormalize(' ', @ss), 1);
-  CheckEqual(XNameNormalize('    ', @ss), 1);
-  CheckEqual(XNameNormalize('a', @ss), 2);
-  CheckEqualShort(ss, 'a');
-  CheckEqual(XNameNormalize(' a', @ss), 2);
-  CheckEqualShort(ss, 'a');
-  CheckEqual(XNameNormalize('a  ', @ss), 2);
-  CheckEqualShort(ss, 'a');
-  CheckEqual(XNameNormalize('a b c', @ss), 6);
-  CheckEqualShort(ss, 'a b c');
-  CheckEqual(XNameNormalize('  a      b     c1    ', @ss), 7);
-  CheckEqualShort(ss, 'a b c1');
-  CheckEqual(XNameNormalize('A', @ss), 2);
-  CheckEqualShort(ss, 'a');
-  CheckEqual(XNameNormalize('ABC', @ss), 4);
-  CheckEqualShort(ss, 'abc');
-  CheckEqual(XNameNormalize(' A', @ss), 2);
-  CheckEqualShort(ss, 'a');
-  CheckEqual(XNameNormalize('A  ', @ss), 2);
-  CheckEqualShort(ss, 'a');
-  CheckEqual(XNameNormalize('A b C', @ss), 6);
-  CheckEqualShort(ss, 'a b c');
-  CheckEqual(XNameNormalize('  a      B     c1    ', @ss), 7);
-  CheckEqualShort(ss, 'a b c1');
+  CheckXNorm('', '');
+  CheckXNorm(' ', '');
+  CheckXNorm('   ', '');
+  CheckXNorm('a', 'a');
+  CheckXNorm(' a', 'a');
+  CheckXNorm('a ', 'a');
+  CheckXNorm(' a ', 'a');
+  CheckXNorm('  a  ', 'a');
+  CheckXNorm('abc', 'abc');
+  CheckXNorm(' abc ', 'abc');
+  CheckXNorm('a b c', 'a b c');
+  CheckXNorm('a  b  c', 'a b c');
+  CheckXNorm(' a  b  c ', 'a b c');
+  CheckXNorm('  a   b   c  ', 'a b c');
+  CheckXNorm('A', 'a');
+  CheckXNorm(' A', 'a');
+  CheckXNorm('A ', 'a');
+  CheckXNorm(' A ', 'a');
+  CheckXNorm('  A  ', 'a');
+  CheckXNorm('ABC', 'abc');
+  CheckXNorm(' ABC ', 'abc');
+  CheckXNorm('A B C', 'a b c');
+  CheckXNorm('A  B  c', 'a b c');
+  CheckXNorm(' A  B  c ', 'a b c');
+  CheckXNorm('  A   b   C  ', 'a b c');
+  CheckXNorm(RawUtf8OfChar('Z', 100), RawUtf8OfChar('z', 100));
   // validate with the synopse.info RSA certificate from Let's Encrypt
   {$ifdef OSWINDOWS}
   Check(WinX509Parse(_synopseinfo_pem, nfo)); // validate our SSPI parser
