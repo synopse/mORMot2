@@ -7969,7 +7969,7 @@ end;
 
 procedure X509_REQ.AddExtension(const oid, value: RawByteString; critical: boolean);
 var
-  txt: RawUtf8;
+  txt: ShortString;
   obj: PASN1_OBJECT;
   oct: PASN1_OCTET_STRING;
   ext: PX509_EXTENSION;
@@ -7977,8 +7977,8 @@ begin
   if (@self = nil) or
      (oid = '') then
     exit;
-  AsnDecOid(1, length(oid) + 1, oid, txt);
-  obj := OBJ_txt2obj(pointer(txt), 1);
+  AsnDecOidShort(pointer(oid), length(oid), txt);
+  obj := OBJ_txt2obj(@txt[1], 1);
   if obj = nil then
     exit;
   ext := nil;
