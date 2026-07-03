@@ -11052,8 +11052,9 @@ end;
 function SeqToEccPrivKey(cka: TCryptKeyAlgo; const seq: RawByteString;
   rfcpub: PRawByteString): RawByteString;
 var
-  oid, oct, key: RawByteString;
-  pos, posoct, vt, vers: integer;
+  oid, key: TAsnObject;
+  pos, vt, vers: integer;
+  oct: TAsnBuffer;
 begin
   FastAssignNew(result);
   if rfcpub <> nil then
@@ -11083,11 +11084,10 @@ begin
           if oid <> CKA_OID[cka] then
             exit;
           // private key raw binary extraction
-          posoct := 1;
-          if (AsnNextRaw(pos, seq, oct) = ASN1_OCTSTR) and // privateKey
-             (AsnNext(posoct, oct{%H-}) = ASN1_SEQ) and
-             (AsnNext(posoct, oct) = ASN1_INT) and
-             (AsnNextRaw(posoct, oct, key) = ASN1_OCTSTR) then
+          if (AsnNextBuffer(pos, seq, oct) = ASN1_OCTSTR) and // privateKey
+             (AsnNextBuffer(oct{%H-}) = ASN1_SEQ) and
+             (AsnNextBuffer(oct) = ASN1_INT) and
+             (AsnNextBuffer(oct, @key) = ASN1_OCTSTR) then
             result := key;
         end;
       1: // https://www.rfc-editor.org/rfc/rfc5915 EC key pair alternate format
@@ -11109,7 +11109,6 @@ begin
         end;
       end;
     end;
-  FillZero(oct);
   FillZero(key);
 end;
 
@@ -11156,11 +11155,11 @@ end;
 function X509PubKeyFromDer(const PkcsDer: RawByteString): RawByteString;
 var
   pos: integer;
-  algoseq: RawByteString; // algorithm OID(s) as encoded by CkaToSeq()
+  algoseq: TAsnBuffer; // algorithm OID(s) as encoded by CkaToSeq()
 begin
   pos := 1;
   if (AsnNext(pos, PkcsDer) <> ASN1_SEQ) or
-     (AsnNextRaw(pos, PkcsDer, algoseq) <> ASN1_SEQ) or
+     (AsnNextBuffer(pos, PkcsDer, algoseq) <> ASN1_SEQ) or // CkaToSeq()
      (AsnNextRaw(pos, PkcsDer, result) <> ASN1_BITSTR) then
     FastAssignNew(result);
 end;
