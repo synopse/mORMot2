@@ -2221,8 +2221,7 @@ function AsnDecHeader(var Pos: integer; const Buffer: TAsnObject;
 function AsnDecChunk(const der: RawByteString; exptyp: integer = ASN1_SEQ): boolean;
 
 /// decode an ASN1_INT ASN1_ENUM ASN1_BOOL value
-function AsnDecInt(var Start: integer; const Buffer: TAsnObject;
-  AsnSize: integer): Int64;
+function AsnDecInt(Buffer: PByte; AsnSize: integer): Int64;
 
 /// decode an OID ASN.1 value into human-readable text as RawUtf8 local variable
 procedure AsnDecOid(Pos, EndPos: PtrInt; const Buffer: TAsnObject; var Dest: RawUtf8);
@@ -6830,27 +6829,24 @@ begin // same logic as DerAppend() but for any value size
   result := Asn(ASN1_INT, [result]);
 end;
 
-function AsnDecInt(var Start: integer; const Buffer: TAsnObject;
-  AsnSize: integer): Int64;
+function AsnDecInt(Buffer: PByte; AsnSize: integer): Int64;
 var
   x: byte;
   neg: boolean;
 begin
   result := 0;
-  if (AsnSize <= 0) or
-     (Start - 1 + AsnSize > length(Buffer)) then
+  if AsnSize <= 0 then
     exit;
-  neg := ord(Buffer[Start]) > $7f;
-  while AsnSize > 0 do
-  begin
-    x := ord(Buffer[Start]);
+  neg := Buffer^ > $7f;
+  repeat
+    x := Buffer^;
     if neg then
       x := not x;
     result := result shl 8;
     inc(result, x);
-    inc(Start);
+    inc(Buffer);
     dec(AsnSize);
-  end;
+  until AsnSize = 0;
   if neg then
     result := -(result + 1);
 end;
@@ -7165,7 +7161,10 @@ var
 begin
   if AsnDecHeader(Pos, Buffer, ValueType, asnsize) and
      (ValueType in [ASN1_INT, ASN1_ENUM, ASN1_BOOL]) then
-    result := AsnDecInt(Pos, Buffer, asnsize)
+  begin
+    result := AsnDecInt(@PByteArray(Buffer)[Pos - 1], asnsize);
+    inc(Pos, asnsize);
+  end
   else
   begin
     ValueType := ASN1_NULL;
