@@ -2249,8 +2249,8 @@ function AsnDecOidText(const Buffer: TAsnObject): RawUtf8;
 function AsnDecOctStr(const input: RawByteString): RawByteString;
 
 /// parse the next ASN.1 value as text
-// - returns the ASN.1 value type, and optionally set the ASN.1 Value^ binary
-// - Pos is kept just after any constructed header (SEQ/SETOF)
+// - returns the ASN.1 value type, and store the ASN.1 as UTF-8 text into Value^
+// - just after any constructed header (SEQ/SETOF), Pos is kept
 function AsnNext(var Pos: integer; const Buffer: TAsnObject;
   Value: PRawByteString = nil; CtrEndPos: PInteger = nil): integer;
 
@@ -2289,8 +2289,8 @@ function AsnNextBuffer(var Pos: integer; const Buffer: TAsnObject;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// parse the next ASN.1 value as TAsnObject, from TAsnBuffer input
-// - returns the ASN.1 value type, and store the raw ASN.1 into Value^
-// - if Value = nil, Input is kept just after any constructed header (SEQ/SETOF)
+// - returns the ASN.1 value type, and store the ASN.1 as UTF-8 text into Value^
+// - just after any constructed header (SEQ/SETOF), Input is kept
 function AsnNextBuffer(var Input: TAsnBuffer; const Value: PAsnObject = nil): integer; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -7304,16 +7304,38 @@ end;
 function AsnNextBuffer(var Input: TAsnBuffer; const Value: PAsnObject): integer;
 var
   v: TAsnBuffer;
-begin
+begin // same logic than AsnNext() below
   result := AsnNextBuffer(Input, v);
-  if result <> ASN1_NULL then
-    if Value <> nil then
-      FastSetString(PRawUtf8(Value)^, v.Data, v.Len)
-    else if (result and ASN1_CL_CTR) <> 0 then // constructed (e.g. SEQ/SETOF)
-    begin
-      dec(PByte(Input.Data), v.Len); // Value=nil -> keep Input within SEQ/SETOF
-      inc(Input.Len, v.Len);
-    end;
+  if result = ASN1_NULL then
+    exit;
+  if Value <> nil then
+    // decode into Value^ - use AsnNextBuffer(TAsnBuffer) to avoid decoding
+    SetAsnText(PRawUtf8(Value)^, result, v.Data, v.Len);
+  if (result and ASN1_CL_CTR) = 0 then
+    exit;
+  // constructed (e.g. SEQ/SETOF): keep Input position just after header
+  dec(PByte(Input.Data), v.Len);
+  inc(Input.Len, v.Len);
+end;
+
+function AsnNext(var Pos: integer; const Buffer: TAsnObject;
+  Value: PRawByteString; CtrEndPos: PInteger): integer;
+var
+  asnsize: integer;
+begin
+  if Value <> nil then
+    FastAssignNew(Value^);
+  result := ASN1_NULL;
+  if not AsnDecHeader(Pos, Buffer, result, asnsize) then
+    exit;
+  if CtrEndPos <> nil then
+    CtrEndPos^ := Pos + asnsize;
+  if Value <> nil then
+    // decode into Value^ - use AsnNextRaw() to avoid decoding
+    SetAsnText(PRawUtf8(Value)^, result, @PByteArray(Buffer)[Pos - 1], asnsize);
+  if (result and ASN1_CL_CTR) = 0 then
+    // only constructed (e.g. SEQ/SETOF) keep Pos just after header
+    inc(Pos, asnsize);
 end;
 
 function AsnNextBigInt(var Pos: integer; const Buffer: TAsnObject;
@@ -7324,59 +7346,6 @@ begin
     while (Value <> '') and
           (Value[1] = #0) do
       delete(Value, 1, 1);
-end;
-
-function AsnNext(var Pos: integer; const Buffer: TAsnObject;
-  Value: PRawByteString; CtrEndPos: PInteger): integer;
-var
-  asnsize: integer;
-  tmp: TTemp24;
-  p: PAnsiChar;
-begin
-  if Value <> nil then
-    FastAssignNew(Value^);
-  result := ASN1_NULL;
-  if not AsnDecHeader(Pos, Buffer, result, asnsize) then
-    exit;
-  if CtrEndPos <> nil then
-    CtrEndPos^ := Pos + asnsize;
-  if Value = nil then
-  begin
-    // no need to allocate and return the whole Value^: just compute position
-    if (result and ASN1_CL_CTR) = 0 then
-      // constructed (e.g. SEQ/SETOF): keep Pos after header
-      inc(Pos, asnsize);
-    exit;
-  end;
-  // we need to decode and return the Value^
-  if (result and ASN1_CL_CTR) <> 0 then
-    // constructed (e.g. SEQ/SETOF): return whole data, but keep Pos after header
-    FastSetRawByteString(Value^, @PByteArray(Buffer)[Pos - 1], asnsize)
-  else
-    // decode Value^ as text - use AsnNextRaw() AsnNextBuffer() to avoid decoding
-    case result of
-      ASN1_INT,
-      ASN1_ENUM,
-      ASN1_BOOL:
-        begin
-          p := StrInt64(@tmp[23], AsnDecInt(Pos, Buffer, asnsize));
-          FastSetString(PRawUtf8(Value)^, p, @tmp[23]);
-        end;
-      ASN1_OBJID:
-        begin
-          AsnDecOid(Pos, Pos + asnsize, Buffer, PRawUtf8(Value)^);
-          inc(Pos, asnsize);
-        end;
-      ASN1_NULL:
-        inc(Pos, asnsize);
-    else
-      // ASN1_UTF8STRING, ASN1_OCTSTR or unknown - return as CP_UTF8 for FPC
-      if asnsize > 0 then
-      begin
-        FastSetString(PRawUtf8(Value)^, @PByteArray(Buffer)[Pos - 1], asnsize);
-        inc(Pos, asnsize);
-      end;
-    end;
 end;
 
 procedure AsnNextInit(var Pos: TIntegerDynArray; Count: PtrInt);
