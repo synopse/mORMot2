@@ -5503,6 +5503,7 @@ var
   bin, der: RawByteString;
   pem, sav, sn: RawUtf8;
   x, a: TX509;
+  a1, a2: TXAttr;
   ocsp, issuers: TRawUtf8DynArray;
   i: integer;
   nfo: TX509Parsed;
@@ -5518,6 +5519,12 @@ var
   timer: TPrecisionTimer;
 begin
   // validate XName 500 normalization and escaping
+  Check(TextToXa('') = xaNone);
+  for a1 := succ(low(a1)) to high(a1) do
+    Check(TextToXa(XA_TEXT[a1]) = a1);
+  Check(TextToXa('der') = xaNone);
+  for a1 := succ(low(a1)) to high(a1) do
+    Check((TextToXa(LowerCase(XA_TEXT[a1]))) = a1);
   CheckXNorm('', '');
   CheckXNorm(' ', '');
   CheckXNorm('   ', '');
