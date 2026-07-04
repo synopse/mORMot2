@@ -237,7 +237,7 @@ function ToText(a: TXSignatureAlgorithm): PShortString; overload;
 function ToText(a: TXPublicKeyAlgorithm): PShortString; overload;
 
 /// identifies the known RDN text e.g. 'CN' as xaCN or 'OU' as xaOU
-function TextToXa(const Rdn: RawUtf8; out Xa: TXAttr): boolean;
+function TextToXa(const Rdn: RawUtf8): TXAttr;
 
 const
   /// internal lookup table from X.509 Signature to Public Key Algorithms
@@ -1254,18 +1254,9 @@ begin
   result := GetEnumName(TypeInfo(TXPublicKeyAlgorithm), ord(a));
 end;
 
-function TextToXa(const Rdn: RawUtf8; out Xa: TXAttr): boolean;
-var
-  i: integer;
+function TextToXa(const Rdn: RawUtf8): TXAttr;
 begin
-  i := GetEnumNameValueTrimmed(TypeInfo(TXAttr), pointer(Rdn), length(Rdn));
-  if i <= 0 then
-    result := false
-  else
-  begin
-    Xa := TXAttr(i);
-    result := true;
-  end;
+  result := TXAttr(FindPropName(@XA_TEXT[succ(low(result))], Rdn, ord(high(result))) + 1);
 end;
 
 function XsaToSeq(xsa: TXSignatureAlgorithm): TAsnObject;
@@ -1785,9 +1776,11 @@ var
   xa: TXAttr;
   h: THashAlgo;
 begin
+  FastAssignNew(result);
   if Rdn = '' then
-    FastAssignNew(result)
-  else if TextToXa(Rdn, xa) then
+    exit;
+  xa := TextToXa(Rdn);
+  if xa <> xaNone then
     result := Name[xa]
   else if IsDer(Rdn) then
     result := ToBinary
