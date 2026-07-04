@@ -2202,6 +2202,11 @@ function AsnUtf8(const Text: RawUtf8): TAsnObject;
 /// create an ASN.1 binary with UTF-16 BE encoding (Windows BMPString)
 function AsnBmp(const Text: RawUtf8): TAsnObject;
 
+/// convert most ASN.1 binary into UTF-8 text (including OID, BMPSTR or INT/ENUM)
+// - other values (e.g. constructed SEQ/SETOF) are returned as raw binary which
+// may not be valid UTF-8 - caller should check vt for logic consistency
+procedure SetAsnText(var Dest: RawUtf8; vt: integer; p: pointer; len: PtrInt);
+
 /// internal function used to wipe any temporary string for anti-forensic
 // - warning: all Content[] will be filled with zeroes even if marked as  "const"
 function AsnSafeOct(const Content: array of TAsnObject): TAsnObject;
@@ -7033,9 +7038,38 @@ var
   tmp: TSynTempBuffer;
 begin
   Unicode_FromUtf8(pointer(Text), length(Text), tmp);
-  bswap16array(tmp.buf, tmp.len); // into bigendian - tmp.len is in WideChars
+  bswap16array(tmp.buf, tmp.len); // into BigEndian - tmp.len is in WideChars
   AsnTyped(tmp.buf, tmp.len shl 1, ASN1_BMPSTRING, result);
   tmp.Done;
+end;
+
+procedure SetAsnText(var Dest: RawUtf8; vt: integer; p: pointer; len: PtrInt);
+var
+  tmp: TTemp24;
+begin
+  if Dest <> '' then
+    FastAssignNew(Dest);
+  if len > 0 then
+    case vt of
+      ASN1_INT,
+      ASN1_ENUM,
+      ASN1_BOOL:
+        FastSetString(Dest, StrInt64(@tmp[23], AsnDecInt(p, len)), @tmp[23]);
+      ASN1_NULL:
+        ;
+      ASN1_BMPSTRING:
+        if len and 1 = 0 then
+        begin
+          bswap16array(p, len); // in-place LittleEndian conversion
+          Unicode_ToUtf8(p, len shr 1, Dest);
+          bswap16array(p, len); // back to BigEndian
+        end;
+      ASN1_OBJID:
+        AsnDecOidBuffer(p, len, Dest);
+    else
+      // ASN1_UTF8STRING, ASN1_OCTSTR or unknown/ASN1_CL_CTR - return as CP_UTF8
+      FastSetString(Dest, p, len);
+    end;
 end;
 
 function AsnSafeOct(const Content: array of TAsnObject): TAsnObject;
