@@ -8210,7 +8210,10 @@ begin
         {$ifdef OSWINDOWS} '\', ':' {$else} '/' {$endif}:
           exit; // reached end of filename
         '.':
-          begin
+          case Str[i - 1] of
+            {$ifdef OSWINDOWS} '\', ':' {$else} '/' {$endif}:
+              exit; // not '/var/www/website/.htdigest'
+          else
             result := @Str[i + 1]; // compare extension just after '.'
             exit;
           end;

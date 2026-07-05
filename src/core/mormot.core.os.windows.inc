@@ -10,8 +10,6 @@
 
 {$Z4} // enumerates should be DWORD / 32-bit - see jediapilib.inc
 
-function PosExtString(Str: PChar): PChar; forward;
-
 function _utf16toascii(s: PWordArray; d: PByteArray; l: PtrInt): pointer; forward;
 procedure _utf16fromascii(s: PByteArray; d: PWordArray; l: PtrInt); forward;
 
@@ -196,7 +194,7 @@ var
   flags: cardinal;
 begin
   flags := 0;
-  if CodePage < 50220 then // wild guess - FPC RTL would always use 0 anyway
+  if CodePage < 50220 then // MBCS wild guess - FPC RTL would always use 0 anyway
     if CodePage = 951 then // 951 is a "fake" code page
       CodePage := 950
     else if (CodePage <> 932) and (CodePage <> 949) then
@@ -209,7 +207,7 @@ var
   defchar: PAnsiChar;
 begin
   defchar := nil;
-  if CodePage < 50220 then // wild guess - FPC RTL would always use 0 anyway
+  if CodePage < 50220 then // MBCS wild guess - FPC RTL would always use 0 anyway
     if CodePage = 951 then // 951 is a "fake" code page
       CodePage := 950
     else if (CodePage <> 932) and (CodePage <> 949) then

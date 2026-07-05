@@ -61,7 +61,6 @@ uses
 
 function _GetNextSpaced(var P: PAnsiChar): RawUtf8; forward;
 function _GetNextCardinal(var P: PAnsiChar): PtrUInt; forward;
-function PosExtString(Str: PChar): PChar; forward; // to extract extension
 
 procedure LowerSelf(p: PAnsiChar);
 begin
