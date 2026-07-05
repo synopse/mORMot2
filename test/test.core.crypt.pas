@@ -5499,6 +5499,22 @@ procedure TTestCoreCrypto._X509;
     CheckEqual(res, exp);
   end;
 
+  procedure CheckXName(const s: RawUtf8);
+  var
+    x, y: TXName;
+  begin
+    x.Init;
+    CheckUtf8(x.FromText(s), s);
+    CheckEqual(x.AsDNText, s);
+    y.Init;
+    Check(x.CompareBinary(y) <> 0, 'bin0');
+    Check(x.CompareCanonical(y) <> 0, 'can0');
+    CheckUtf8(y.FromAsn(x.ToBinary), 'asn:%', [s]);
+    Check(x.CompareBinary(y) = 0, 'bin');
+    Check(x.CompareCanonical(y) = 0, 'can');
+    CheckEqual(y.AsDNText, s);
+  end;
+
 var
   bin, der: RawByteString;
   pem, sav, sn: RawUtf8;
@@ -5584,6 +5600,58 @@ begin
   CheckX4514('abc'#0'd', 'abc\00d');
   CheckX4514('a'#13'b', 'a\0db');
   CheckX4514('a'#10'b', 'a\0ab');
+  CheckXName('CN=Alice');
+  CheckXName('CN=www.example.com');
+  CheckXName('CN=R3,O=Let''s Encrypt,C=US');
+  CheckXName('CN=Cloudflare Inc ECC CA-3,O=Cloudflare\, Inc.,C=US');
+  CheckXName('CN=John Doe,OU=Engineering,O=Example Corp,L=Paris,ST=Ile-de-France,C=FR');
+  CheckXName('DC=com');
+  CheckXName('DC=example,DC=com');
+  CheckXName('CN=John Doe,OU=People,DC=example,DC=com');
+  CheckXName('CN=John Doe+UID=123456,O=Example Corp,C=US');
+  CheckXName('O=Example Corp,C=US,CN=John Doe+SER=ABC123');
+  CheckXName('OU=Security+OU=PKI,O=Example Corp,C=US');
+  CheckXName('CN=John Doe+UID=42+SER=ABC123,O=Example,C=US');
+  CheckXName('CN=Cloudflare\, Inc.,C=US');
+  CheckXName('CN=Alice\+Bob,O=Example,C=US');
+  CheckXName('CN=John \"Johnny\" Doe,O=Example,C=US');
+  CheckXName('CN=C:\\Windows,O=Example,C=US');
+  CheckXName('OU=Research\;Development,O=Example,C=US');
+  CheckXName('CN=Server \<Primary\>,O=Example,C=US');
+  CheckXName('CN=\ John,O=Example,C=US');
+  CheckXName('CN=John\ ,O=Example,C=US');
+  CheckXName('CN=\ John\ ,O=Example,C=US');
+  CheckXName('CN=\ \ John\ \ ,O=Example,C=US');
+  CheckXName('CN=\#12345,O=Example,C=US');
+  CheckXName('CN=\#,O=Example,C=US');
+  CheckXName('CN=abc\04def,O=Example,C=US');
+  CheckXName('CN=Line1\0aLine2,O=Example,C=US');
+  CheckXName('CN=Line1\0d\0aLine2,O=Example,C=US');
+  CheckXName('CN=Tab\09Character,O=Example,C=US');
+  CheckXName('1.2.3.4=Some Value,CN=Example');
+  CheckXName('1.2.840.113549.1.9.2=alice@example.com,CN=Alice');
+  CheckXName('CN=Alice+1.2.3.4=Employee,O=Example,C=US');
+  CheckXName('CN=R3,O=Let''s Encrypt,C=US');
+  CheckXName('CN=ISRG Root X1,O=Internet Security Research Group,C=US');
+  CheckXName('CN=DigiCert Global Root G2,OU=www.digicert.com,O=DigiCert Inc,C=US');
+  CheckXName('CN=GlobalSign Root CA,OU=Root CA,O=GlobalSign nv-sa,C=BE');
+  CheckXName('CN=Amazon Root CA 1,O=Amazon,C=US');
+  CheckXName('CN=');
+  CheckXName('CN=\ ');
+  CheckXName('CN=\#');
+  CheckXName('CN=\\');
+  CheckXName('CN=Quote\"');
+  CheckXName('CN=Plus\+');
+  CheckXName('CN=Semi\;');
+  CheckXName('CN=Less\<');
+  CheckXName('CN=Greater\>');
+  CheckXName('CN=Comma\,');
+  CheckXName('CN=\ John\, Jr.\ +UID=12345+1.2.3.4=R\0aD,OU=Research\;' +
+    'Development,O=Example\, Inc.,L=Montreal,ST=Quebec,C=CA');
+  CheckXName('CN=+UID=42');
+  CheckXName('CN=John+UID=');
+  CheckXName('1.2.3.4=Employee+CN=Alice,O=Example,C=US');
+  CheckXName('CN=\\\\');
   // validate with one synopse.info RSA certificate from Let's Encrypt
   {$ifdef OSWINDOWS}
   Check(WinX509Parse(_synopseinfo_pem, nfo)); // validate our SSPI parser
