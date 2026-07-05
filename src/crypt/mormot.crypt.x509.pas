@@ -1802,6 +1802,7 @@ var
   pos: integer;
   xa: TXAttr;
   one, oid, v: TAsnBuffer; // no transient memory allocation
+  utf: ShortString;        // for ASN1_BMPSTRING conversion from UTF-16 BE
   tmp: TSynTempAdder;      // 4KB work buffer on stack
 begin
   if fCachedAsn = '' then
@@ -1820,7 +1821,7 @@ begin
         begin
           if (AsnNextBuffer(one, oid) <> ASN1_OBJID) or
              (oid.Len = 0) or
-             not (AsnNextBuffer(one, v) in ASN1_TEXT) then
+             not (AsnNextBufferUtf8(one, v, utf) in ASN1_TEXT) then
             continue;
           xa := OidToXa(oid.Data, oid.Len); // known attribute stored as #0..#19
           tmp.AddDirect(AnsiChar(xa));
