@@ -2282,6 +2282,12 @@ type
 // - this function is the fastest way to parse some ASN.1 content
 function AsnNextBuffer(var Input, Value: TAsnBuffer): integer; overload;
 
+/// parse the next ASN.1 value using TAsnBuffer as input/output into UTF-8 text
+// - same logic than SetAsnText() but into Value with no memory alloc
+// - convert UTF-16 BE ASN1_BMPSTRING into UTF-8 using tmp if necessary
+function AsnNextBufferUtf8(var Input, Value: TAsnBuffer;
+  var tmp: ShortString): integer;
+
 /// parse the next ASN.1 value as buffer and len, from TAsnObject input
 // - returns the ASN.1 value type, and pointers to the ASN.1 raw value itself
 function AsnNextBuffer(var Pos: integer; const Buffer: TAsnObject;
@@ -7281,6 +7287,35 @@ begin // very optimized code
   end;
   Value.Data := p;
   Value.Len := vlen;
+end;
+
+function AsnNextBufferUtf8(var Input, Value: TAsnBuffer;
+  var tmp: ShortString): integer;
+begin
+  result := AsnNextBuffer(Input, Value);
+  case result of
+    ASN1_BMPSTRING:
+      begin
+        if Value.Len and 1 <> 0 then
+          exit;
+        bswap16array(Value.Data, Value.Len); // in-place LittleEndian conversion
+        Unicode_WideToShort(Value.Data, Value.Len shr 1, CP_UTF8, tmp);
+        bswap16array(Value.Data, Value.Len); // back to BigEndian
+      end;
+    ASN1_INT,
+    ASN1_ENUM,
+    ASN1_BOOL:
+      begin
+        tmp[0] := #0;
+        AppendShortInt64(AsnDecInt(Value.Data, Value.Len), tmp);
+      end;
+    ASN1_OBJID:
+      AsnDecOidShort(Value.Data, Value.Len, tmp);
+  else
+    exit; // assume already in UTF-8
+  end;
+  Value.Data := @tmp[1];
+  Value.Len := ord(tmp[0]);
 end;
 
 function AsnNextBuffer(var Pos: integer; const Buffer: TAsnObject;
