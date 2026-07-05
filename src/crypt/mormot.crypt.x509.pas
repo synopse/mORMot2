@@ -191,7 +191,7 @@ type
     /// the raw ASN1_SEQ encoded value of this name
     // - is cached internally for efficiency
     function ToBinary: RawByteString;
-    /// return the values as a single line RFC 4514 Distinguished Name text
+    /// return the values as a single line RFC 4514 Distinguished Name (DN) text
     // - e.g. 'C=US,O=Let''s Encrypt,CN=R3'
     // - is cached internally for efficiency
     function AsDNText: RawUtf8;
@@ -204,9 +204,9 @@ type
     /// unserialize the X.501 Type Name from the next raw ASN1_SEQ binary
     function FromAsnNext(var pos: integer; const der: TAsnObject): boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    /// fill the whole record from a single RFC 4514 Distinguished Name text
+    /// fill the whole record from RFC 4514 Distinguished Name (DN) text
     // - e.g. 'CN=John Doe+UID=123,O=Example\, Inc.,C=US' supporting multiple RDN
-    // - is encoded directly in the internal ASN.1 binary in the same exact order
+    // - is encoded directly into internal ASN.1 binary in the same exact order
     // - returns false on incorrect input, e.g. invalid RFC 4514 escaped UTF-8
     function FromDNText(const text: RawUtf8): boolean;
     /// fill Name[] attributes with TCryptCertFields information
@@ -1754,7 +1754,7 @@ begin
       AddToCsv(v, Name[xa])
     else
       AddCustomExts(Other, oid, v);
-    // append the corresponding ASN.1
+    // append the corresponding ASN.1 with proper multi-values RDN '+' support
     if lastsep = ',' then
     begin
       AsnAddRdn(tmp, rdn);
