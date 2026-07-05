@@ -189,11 +189,13 @@ type
     /// the raw ASN1_SEQ encoded value of this name
     // - is cached internally for efficiency
     function ToBinary: RawByteString;
-    /// return the values as a single line Distinguished Name text
-    // - e.g. 'CN=R3, C=US, O=Let''s Encrypt'
+    /// return the values as a single line RFC 4514 Distinguished Name text
+    // - e.g. 'C=US,O=Let''s Encrypt,CN=R3'
     // - is cached internally for efficiency
     function AsDNText: RawUtf8;
-    /// fill the whole record with zeros
+    /// could be used when TXName was not initialized as part of a class
+    procedure Init;
+    /// fill the whole record with zeros - but keep internal fSafe counter
     procedure Clear;
     /// unserialize the X.501 Type Name from raw ASN1_SEQ binary
     function FromAsn(const seq: TAsnObject): boolean;
@@ -1506,6 +1508,9 @@ begin
   result := fCachedAsn;
 end;
 
+const
+  RFC4514_ESC = [',', '+', '"', '\', '<', '>', ';'];
+
 procedure XNameRfc4514(var tmp: TSynTempAdder; p, pend: PUtf8Char);
 var
   trailingspaces: integer;
@@ -1538,7 +1543,7 @@ begin
     end
     else
     begin
-      if p^ in [',', '+', '"', '\', '<', '>', ';'] then
+      if p^ in RFC4514_ESC then
         tmp.AddDirect('\'); // escape , + " \ < > ;
       tmp.Add(p^);          // assume UTF-8
     end;
@@ -1632,6 +1637,12 @@ begin
   if fCachedText = '' then
     ComputeText;
   result := fCachedText;
+end;
+
+procedure TXName.Init;
+begin
+  fSafe.Init;
+  Finalize(self);
 end;
 
 procedure TXName.Clear;
