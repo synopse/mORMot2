@@ -6670,6 +6670,18 @@ begin
   until len < 0;
   for i := 1 to length(su) do
     Check(SU[i] = #0);
+  fn := 'test.htdigest';
+  Check(PosExtString(pointer(fn))^ = 'h');
+  fn := PathDelim + 'test.htdigest';
+  Check(PosExtString(pointer(fn))^ = 'h');
+  fn := '.htdigest';
+  Check(PosExtString(pointer(fn)) = nil);
+  fn := PathDelim + '.htdigest';
+  Check(PosExtString(pointer(fn)) = nil);
+  fn := 'htdigest';
+  Check(PosExtString(pointer(fn)) = nil);
+  fn := PathDelim + 'htdigest';
+  Check(PosExtString(pointer(fn)) = nil);
   for i := 0 to 1000 do
   begin
     len := i * 5;

@@ -3494,6 +3494,9 @@ function GetFileNameWithoutExt(const FileName: TFileName;
 // - used e.g. to compute Executable.ProgramName
 function GetFileNameWithoutExtOrPath(const FileName: TFileName): RawUtf8;
 
+/// return the position of a file extension from AnsiString or UnicodeString
+function PosExtString(Str: PChar): PChar;
+
 /// compare two "array of TFileName" elements, grouped by file extension
 // - i.e. with no case sensitivity on Windows
 // - the expected string type for A and B is the RTL string, i.e. TFileName
