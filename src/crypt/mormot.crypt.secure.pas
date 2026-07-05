@@ -11399,6 +11399,7 @@ begin
       FastSetString(Name, v.Data, v.Len); // was stored as IA5String
     ASN1_CTX7: // ip
       AsnDecIp(v.Data, v.Len, Name);
+    // ASN1_CTX4 = directoryName = TXName
   else
     FastAssignNew(Name);  // unsupported value type
   end;
