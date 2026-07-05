@@ -182,7 +182,7 @@ type
     // - each CSV part will emit its own SETOF: multi-valued RDNs (using + in
     // RFC 4514 notation) are not supported nor generated
     // - only a naive CSV is used, and it is encoded in a fixed conventional
-    // order - use FromText() if you want to specify any kind of RFC 4514 DN
+    // order - use FromDNText() if you want to specify any kind of RFC 4514 DN
     Name: TXAttrNames;
     /// values which are not part of the known attributes
     Other: TCryptCustomExts;
@@ -208,7 +208,7 @@ type
     // - e.g. 'CN=John Doe+UID=123,O=Example\, Inc.,C=US' supporting multiple RDN
     // - is encoded directly in the internal ASN.1 binary in the same exact order
     // - returns false on incorrect input, e.g. invalid RFC 4514 escaped UTF-8
-    function FromText(const text: RawUtf8): boolean;
+    function FromDNText(const text: RawUtf8): boolean;
     /// fill Name[] attributes with TCryptCertFields information
     procedure FromFields(const fields: TCryptCertFields);
     /// fill TCryptCertFields information with Name[] attributes
@@ -1490,7 +1490,7 @@ var
   tmp, one: RawByteString;
 begin
   // note: multi-valued RDNs (using + in RFC 4514 notation) are not supported
-  // from Name[] and Other[] fields, but via the canonical FromText() method
+  // from Name[] and Other[] fields, but via the canonical FromDNText() method
   fSafe.Lock;
   try
     if fCachedAsn <> '' then
@@ -1697,7 +1697,7 @@ begin
   result := true;
 end;
 
-function TXName.FromText(const text: RawUtf8): boolean;
+function TXName.FromDNText(const text: RawUtf8): boolean;
 var
   p: PUTf8Char;
   n, v: RawUtf8;

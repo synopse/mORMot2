@@ -5504,7 +5504,7 @@ procedure TTestCoreCrypto._X509;
     x, y: TXName;
   begin
     x.Init;
-    CheckUtf8(x.FromText(s), s);
+    CheckUtf8(x.FromDNText(s), s);
     CheckEqual(x.AsDNText, s);
     y.Init;
     Check(x.CompareBinary(y) <> 0, 'bin0');
