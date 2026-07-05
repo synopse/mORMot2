@@ -179,8 +179,10 @@ type
     procedure ComputeCanonical;
   public
     /// CSV of the values of each kind of known attributes
-    // - each CSV part will emit its own SETOF:  multi-valued RDNs (using + in
+    // - each CSV part will emit its own SETOF: multi-valued RDNs (using + in
     // RFC 4514 notation) are not supported nor generated
+    // - only a naive CSV is used, and it is encoded in a fixed conventional
+    // order - use FromText() if you want to specify any kind of RFC 4514 DN
     Name: TXAttrNames;
     /// values which are not part of the known attributes
     Other: TCryptCustomExts;
@@ -202,6 +204,11 @@ type
     /// unserialize the X.501 Type Name from the next raw ASN1_SEQ binary
     function FromAsnNext(var pos: integer; const der: TAsnObject): boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// fill the whole record from a single RFC 4514 Distinguished Name text
+    // - e.g. 'CN=John Doe+UID=123,O=Example\, Inc.,C=US' supporting multiple RDN
+    // - is encoded directly in the internal ASN.1 binary in the same exact order
+    // - returns false on incorrect input, e.g. invalid RFC 4514 escaped UTF-8
+    function FromText(const text: RawUtf8): boolean;
     /// fill Name[] attributes with TCryptCertFields information
     procedure FromFields(const fields: TCryptCertFields);
     /// fill TCryptCertFields information with Name[] attributes
@@ -1457,15 +1464,21 @@ const
     xaN    // Name
   );
 
-procedure AsnAddRdn(var data: TAsnObject; const oid, v: TAsnObject);
+function AsnRdn(const oid, v: TAsnObject): TAsnObject;
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  // note: multi-valued RDNs (using + in RFC 4514 notation) are not supported
-  Append(data, Asn(ASN1_SETOF, [
-                 Asn(ASN1_SEQ, [
-                   Asn(ASN1_OBJID, oid),
-                   AsnText(v)
-                 ])
-               ]));
+  result := Asn(ASN1_SEQ, [Asn(ASN1_OBJID, oid), AsnText(v)])
+end;
+
+procedure AsnAddRdn(var data: TAsnObject; const rdn: TAsnObject); overload;
+begin
+  if rdn <> '' then
+    Append(data, AsnTyped(rdn, ASN1_SETOF));
+end;
+
+procedure AsnAddRdn(var data: TAsnObject; const oid, v: TAsnObject); overload;
+begin
+  AsnAddRdn(data, AsnRdn(oid, v));
 end;
 
 procedure TXName.ComputeAsn;
@@ -1476,6 +1489,8 @@ var
   v: RawUtf8;
   tmp, one: RawByteString;
 begin
+  // note: multi-valued RDNs (using + in RFC 4514 notation) are not supported
+  // from Name[] and Other[] fields, but via the canonical FromText() method
   fSafe.Lock;
   try
     if fCachedAsn <> '' then
@@ -1679,6 +1694,80 @@ begin
           // known attribute
           AddToCsv(v, Name[xa]);
       end;
+  result := true;
+end;
+
+function TXName.FromText(const text: RawUtf8): boolean;
+var
+  p: PUTf8Char;
+  n, v: RawUtf8;
+  xa: TXAttr;
+  c, lastsep: AnsiChar;
+  tmp, oid, rdn: TAsnObject;
+  s: ShortString;
+begin
+  result := false;
+  if (text = '') or
+     not IsValidUtf8(text) then
+    exit;
+  Clear;
+  lastsep := #0;
+  p := pointer(text);
+  repeat
+    // find the attribute type
+    GetNextItem(p, '=', n);
+    if (p = nil) or
+       (n = '') then
+      exit;
+    xa := TextToXa(n);
+    if xa = xaNone then
+      AsnEncOidVar(pointer(n), oid) // 1.2.3.4=value
+    else
+      oid := XA_OID_ASN[xa];        // DC=value
+    if oid = '' then
+      exit;
+    // parse the attribute value
+    s[0] := #0;
+    while not (p^ in [#0, ',', '+']) do
+    begin
+      if s[0] = #255 then
+        exit;          // should usually be < 64 bytes
+      if p^ = '\' then // unescape as expected by RFC 4514
+        if p[1] in RFC4514_ESC + [' ', '#', '=', ''''] then // more tolerant
+          inc(p)
+        else
+        begin
+          if not HexToChar(@p[1], @c) then
+            exit;      // \z or \X are not valid
+          inc(p, 3);   // \## hexadecimal
+          AppendShortChar(c, @s);
+          continue;
+        end;
+      AppendShortChar(p^, @s);
+      inc(p);
+    end;
+    FastSetString(v, @s[1], ord(s[0]));
+    if not IsValidUtf8Small(v) then
+      exit;
+    // update internal high-level fields just like FromAsn()
+    if xa <> xaNone then
+      AddToCsv(v, Name[xa])
+    else
+      AddCustomExts(Other, oid, v);
+    // append the corresponding ASN.1
+    if lastsep = ',' then
+    begin
+      AsnAddRdn(tmp, rdn);
+      rdn := '';
+    end;
+    Append(rdn, AsnRdn(oid, v));
+    if p^ = #0 then
+      break;
+    lastsep := p^;
+    inc(p);
+  until false;
+  AsnAddRdn(tmp, rdn); // trailing RDN
+  fCachedAsn := AsnSeq(tmp);
   result := true;
 end;
 
