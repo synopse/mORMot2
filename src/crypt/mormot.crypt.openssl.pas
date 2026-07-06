@@ -1338,19 +1338,21 @@ var
 
 const
   HF_MD: array[THashAlgo] of PUtf8Char = (
-    'md5',        // hfMD5
-    'sha1',       // hfSHA1
-    'sha256',     // hfSHA256
-    'sha384',     // hfSHA384
-    'sha512',     // hfSHA512
-    'sha512-256', // hfSHA512_256
-    'sha3-256',   // hfSHA3_256
-    'sha3-512',   // hfSHA3_512
-    'sha224',     // hfSHA224
-    'sha3-224',   // hfSHA3_224
-    'sha3-384',   // hfSHA3_384
-    'shake128',   // hfShake128
-    'shake256');  // hfShake256
+    'md5',         // hfMD5
+    'sha1',        // hfSHA1
+    'sha256',      // hfSHA256
+    'sha384',      // hfSHA384
+    'sha512',      // hfSHA512
+    'sha512-256',  // hfSHA512_256
+    'sha3-256',    // hfSHA3_256
+    'sha3-512',    // hfSHA3_512
+    'sha224',      // hfSHA224
+    'sha3-224',    // hfSHA3_224
+    'sha3-384',    // hfSHA3_384
+    'shake128',    // hfShake128
+    'shake256',    // hfShake256
+    '',            // SHA-256 truncated to 128-bit is not known by OpenSSL
+    '');           // SHA-256 truncated to 160-bit is not known by OpenSSL
 
   CAA_MD: array[TCryptAsymAlgo] of RawUtf8 = (
     'SHA256', // caaES256
@@ -2643,7 +2645,7 @@ begin
     end;
     // self-sign the CSR and return it as PEM
     EOpenSslCert.Check(X509_REQ_set_pubkey(req, key)); // include public key
-    if req.Sign(key, fHash) = 0 then // returns signature size in bytes
+    if req^.Sign(key, fHash) = 0 then // returns signature size in bytes
       RaiseError('SelfSign');
     result := req^.ToPem;
     // save the generated private key (if was not previously loaded)
@@ -2652,9 +2654,9 @@ begin
       PrivateKeyPem := key.PrivateToPem(PrivateKeyPassword);
   finally
     if Assigned(req) then
-      req.Free;
+      req^.Free;
     if Assigned(Key) then
-      key.Free;
+      key^.Free;
   end;
 end;
 

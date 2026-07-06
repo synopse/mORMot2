@@ -538,6 +538,10 @@ type
 
 type
   /// hash algorithms available for TSynHasher wrapper and HashFile/HashFull
+  // - hfSHA256_128 and hfSHA256_160 compute SHA-256 and return the leftmost
+  // 128 or 160 bits as non-standard convenience algorithms for shorter digests,
+  // offering a safer alternative to MD5 and SHA-1 while benefiting from SHA
+  // hardware acceleration on newer Intel/AMD or ARM processors
   THashAlgo = (
     hfMD5,
     hfSHA1,
