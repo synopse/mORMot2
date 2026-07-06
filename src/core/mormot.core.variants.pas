@@ -4826,21 +4826,6 @@ var
   DispInvokeArgOrderInverted: boolean; // circumvent FPC 3.2+ breaking change
 {$endif FPC}
 
-// On Delphi POSIX 64-bit Intel (Linux/macOS/Android x86_64), the RTL's
-// DispInvokeCore passes Params as a pointer to a SysV AMD64 ABI va_list
-// (24-byte struct), not as a flat argument buffer like on Win64. We need to use
-// va_arg semantics to read each argument from the right register save slot or
-// stack overflow area. The walker below is SysV-AMD64-specific - the AArch64
-// va_list layout (__va_list with stack/gr_top/vr_top/gr_offs/vr_offs) is
-// entirely different, so a future Delphi POSIX ARM64 port will need its own
-// walker; until then it must fall through to the flat-buffer path, which is
-// the wrong answer but at least matches today's Win64 behavior.
-{$ifdef POSIXDELPHI}
-  {$ifdef CPUX64}
-    {$define DISPINVOKE_SYSVAMD64}
-  {$endif CPUX64}
-{$endif POSIXDELPHI}
-
 {$ifdef DISPINVOKE_SYSVAMD64}
 // Linux/macOS/Android Delphi 64-bit Intel: Params is a SysV AMD64 va_list
 // pointer; use va_arg semantics. ARGREF (var/out) params are passed as pointers
@@ -10258,7 +10243,7 @@ begin
     begin // note: VarArrayCreate() does not support VT_I8 on FPC and old Delphi
       new[0].elementcount := VCount;
       new[0].lowbound := 0;
-      sa := SafeArrayCreate(vt, 1, {$ifdef ISDELPHIPOSIX}@{$endif}new);
+      sa := SafeArrayCreate(vt, 1, {$ifdef DELPHIPOSIX}@{$endif}new);
       if sa <> nil then
       begin
         TSynVarData(result).VType := varArray or vt;
