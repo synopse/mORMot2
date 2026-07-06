@@ -4884,19 +4884,8 @@ begin
 end;
 {$endif DISPINVOKE_SYSVAMD64}
 
-{$ifdef FPC_VARIANTSETVAR}
-procedure TSynInvokeableVariantType.DispInvoke(
-  Dest: PVarData; var Source: TVarData; CallDesc: PCallDesc; Params: pointer);
-{$else} // see http://mantis.freepascal.org/view.php?id=26773
-  {$ifdef ISDELPHIXE7}
-procedure TSynInvokeableVariantType.DispInvoke(
-  Dest: PVarData; [ref] const Source: TVarData; // why not just "var" ????
-  CallDesc: PCallDesc; Params: pointer);
-  {$else}
-procedure TSynInvokeableVariantType.DispInvoke(
-  Dest: PVarData; const Source: TVarData; CallDesc: PCallDesc; Params: pointer);
-  {$endif ISDELPHIXE7}
-{$endif FPC_VARIANTSETVAR}
+procedure DispInvokeNamed(VT: TSynInvokeableVariantType; NamePtr: pointer;
+  NameLen: PtrInt; Dest, Source: PVarData; CallDesc: PCallDesc; Params: pointer);
 var
   name: string;
   res: TSynVarData;
@@ -4911,24 +4900,15 @@ var
 
   procedure RaiseInvalid;
   begin
-    ESynVariant.RaiseUtf8('%.DispInvoke: invalid %(%) call',
-      [self, name, CallDesc^.ArgCount]);
+    ESynVariant.RaiseUtf8('%.DispInvoke: invalid %(%) call', [VT, name, n]);
   end;
 
 begin
   // circumvent https://bugs.freepascal.org/view.php?id=38653 and
   // inverted args order FPC bugs, avoid unneeded conversion to varOleString
   // for Delphi, and implement direct IntGet/IntSet calls for all
+  Ansi7ToString(NamePtr, NameLen, name);
   n := CallDesc^.ArgCount;
-  nameptr := @CallDesc^.ArgTypes[n];
-  namelen := StrLen(nameptr);
-  // faster direct property getter
-  if (Dest <> nil) and
-     (n = 0) and
-     (CallDesc^.CallType in [DISPATCH_METHOD, DISPATCH_PROPERTYGET]) and
-     IntGet(Dest^, Source, nameptr, namelen, {noexception=}false) then
-    exit;
-  Ansi7ToString(pointer(nameptr), namelen, name);
   if n > 0 then
   begin
     // convert varargs Params buffer into an array of TVarData
@@ -5051,6 +5031,31 @@ begin
   else
     RaiseInvalid;
   end;
+end;
+
+{$ifdef FPC_VARIANTSETVAR}
+procedure TSynInvokeableVariantType.DispInvoke(Dest: PVarData;
+  var Source: TVarData; CallDesc: PCallDesc; Params: pointer);
+{$else} // see http://mantis.freepascal.org/view.php?id=26773
+  {$ifdef ISDELPHIXE7}
+procedure TSynInvokeableVariantType.DispInvoke(Dest: PVarData; [ref]
+  const Source: TVarData; CallDesc: PCallDesc; Params: pointer);
+  {$else}
+procedure TSynInvokeableVariantType.DispInvoke(Dest: PVarData;
+  const Source: TVarData; CallDesc: PCallDesc; Params: pointer);
+  {$endif ISDELPHIXE7}
+{$endif FPC_VARIANTSETVAR}
+var
+  namelen: PtrInt;
+  nameptr: PAnsiChar;
+begin // fast direct property getter if possible
+  nameptr := @CallDesc^.ArgTypes[CallDesc^.ArgCount];
+  namelen := StrLen(nameptr);
+  if (Dest = nil) or
+     (CallDesc^.ArgCount <> 0) or
+     not (CallDesc^.CallType in [DISPATCH_METHOD, DISPATCH_PROPERTYGET]) or
+     not IntGet(Dest^, Source, nameptr, namelen, {noexception=}false) then
+   DispInvokeNamed(self, nameptr, namelen, Dest, @Source, CallDesc, Params);
 end;
 
 procedure TSynInvokeableVariantType.Clear(var V: TVarData);
