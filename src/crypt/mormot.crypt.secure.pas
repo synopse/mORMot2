@@ -537,8 +537,7 @@ type
   expects JSON support, which requires mormot.core.json }
 
 type
-  /// hash algorithms available for HashFile/HashFull functions
-  // and TSynHasher object
+  /// hash algorithms available for TSynHasher wrapper and HashFile/HashFull
   THashAlgo = (
     hfMD5,
     hfSHA1,
@@ -552,7 +551,9 @@ type
     hfSHA3_224,
     hfSHA3_384,
     hfShake128,
-    hfShake256);
+    hfShake256,
+    hfSHA256_128,
+    hfSHA256_160);
   /// a pointer to one of our hash algorithms
   PHashAlgo = ^THashAlgo;
 
@@ -688,6 +689,18 @@ type
     class function GetAlgo: THashAlgo; override;
   end;
 
+  /// TStreamRedirect with SHA-256/128 cryptographic hashing
+  TStreamRedirectSha256_128 = class(TStreamRedirectSynHasher)
+  public
+    class function GetAlgo: THashAlgo; override;
+  end;
+
+  /// TStreamRedirect with SHA-256/160 cryptographic hashing
+  TStreamRedirectSha256_160 = class(TStreamRedirectSynHasher)
+  public
+    class function GetAlgo: THashAlgo; override;
+  end;
+
   /// TStreamRedirect with SHA-256 cryptographic hashing
   TStreamRedirectSha256 = class(TStreamRedirectSynHasher)
   public
@@ -751,30 +764,32 @@ type
 const
   /// convert a THashAlgo into a TStreamRedirectSynHasher class
   HASH_STREAMREDIRECT: array[THashAlgo] of TStreamRedirectClass = (
-    TStreamRedirectMd5,        // hfMD5
-    TStreamRedirectSha1,       // hfSHA1
-    TStreamRedirectSha256,     // hfSHA256
-    TStreamRedirectSha384,     // hfSHA384
-    TStreamRedirectSha512,     // hfSHA512
-    TStreamRedirectSha512_256, // hfSHA512_256
-    TStreamRedirectSha3_256,   // hfSHA3_256
-    TStreamRedirectSha3_512,   // hfSHA3_512
-    TStreamRedirectSha224,     // hfSHA224
-    TStreamRedirectSha3_224,   // hfSHA3_224
-    TStreamRedirectSha3_384,   // hfSHA3_384
-    TStreamRedirectShake128,   // hfShake128
-    TStreamRedirectShake256);  // hfShake256)
+    TStreamRedirectMd5,         // hfMD5
+    TStreamRedirectSha1,        // hfSHA1
+    TStreamRedirectSha256,      // hfSHA256
+    TStreamRedirectSha384,      // hfSHA384
+    TStreamRedirectSha512,      // hfSHA512
+    TStreamRedirectSha512_256,  // hfSHA512_256
+    TStreamRedirectSha3_256,    // hfSHA3_256
+    TStreamRedirectSha3_512,    // hfSHA3_512
+    TStreamRedirectSha224,      // hfSHA224
+    TStreamRedirectSha3_224,    // hfSHA3_224
+    TStreamRedirectSha3_384,    // hfSHA3_384
+    TStreamRedirectShake128,    // hfShake128
+    TStreamRedirectShake256,    // hfShake256
+    TStreamRedirectSha256_128,  // hfSHA256_128
+    TStreamRedirectSha256_160); // hfSHA256_160
 
   /// the standard text of a THashAlgo (in uppercase characters)
   HASH_TXT: array[THashAlgo] of RawUtf8 = (
     'MD5', 'SHA-1', 'SHA-256', 'SHA-384', 'SHA-512', 'SHA-512/256',
     'SHA3-256', 'SHA3-512', 'SHA-224', 'SHA3-224', 'SHA3-384',
-    'SHAKE128', 'SHAKE256');
+    'SHAKE128', 'SHAKE256', 'SHA-256/128', 'SHA-256/160');
   /// the standard text of a THashAlgo (in lowercase characters)
   HASH_TXT_LOWER: array[THashAlgo] of RawUtf8 = (
     'md5', 'sha-1', 'sha-256', 'sha-384', 'sha-512', 'sha-512/256',
     'sha3-256', 'sha3-512', 'sha-224', 'sha3-224', 'sha3-384',
-    'shake128', 'shake256');
+    'shake128', 'shake256', 'sha-256/128', 'sha-256/160');
 
 type
   /// the HMAC/SHA-1 HMAC/SHA-2 and SHA-3 algorithms known by TSynSigner
@@ -982,24 +997,28 @@ const
     SizeOf(THash224),      // 28 bytes for hfSHA3_224
     SizeOf(THash384),      // 48 bytes for hfSHA3_384
     SizeOf(THash128),      // 16 bytes for hfShake128
-    SizeOf(THash256));     // 32 bytes for hfShake256
+    SizeOf(THash256),      // 32 bytes for hfShake256
+    SizeOf(THash128),      // 16 bytes for hfSHA256_128
+    SizeOf(THash160));     // 20 bytes for hfSHA256_160
 
   /// map the file extension text of any THashAlgo digest
   // - TextToHashAlgo() is able to recognize those values
   HASH_EXT: array[THashAlgo] of RawUtf8 = (
-    '.md5',        // hfMD5
-    '.sha1',       // hfSHA1
-    '.sha256',     // hfSHA256
-    '.sha384',     // hfSHA384
-    '.sha512',     // hfSHA512
-    '.sha512-256', // hfSHA512_256
-    '.sha3-256',   // hfSHA3_256
-    '.sha3-512',   // hfSHA3_512
-    '.sha224',     // hfSHA224
-    '.sha3-224',   // hfSHA3_224
-    '.sha3-384',   // hfSHA3_384
-    '.shake128',   // hfShake128
-    '.shake256');  // hfShake256
+    '.md5',         // hfMD5
+    '.sha1',        // hfSHA1
+    '.sha256',      // hfSHA256
+    '.sha384',      // hfSHA384
+    '.sha512',      // hfSHA512
+    '.sha512-256',  // hfSHA512_256
+    '.sha3-256',    // hfSHA3_256
+    '.sha3-512',    // hfSHA3_512
+    '.sha224',      // hfSHA224
+    '.sha3-224',    // hfSHA3_224
+    '.sha3-384',    // hfSHA3_384
+    '.shake128',    // hfShake128
+    '.shake256',    // hfShake256
+    '.sha256-128',  // hfSHA256_128
+    '.sha256-160'); // hfSHA256_160
 
   /// convert a TSignAlgo / TSynSigner algorithm into a THashAlgo / TSynHasher
   SIGN_HASH: array[TSignAlgo] of THashAlgo = (
@@ -3800,7 +3819,9 @@ const
     '2.16.840.1.101.3.4.2.7',   // hfSHA3_224
     '2.16.840.1.101.3.4.2.9',   // hfSHA3_384
     '2.16.840.1.101.3.4.2.11',  // hfShake128
-    '2.16.840.1.101.3.4.2.12'); // hfShake256
+    '2.16.840.1.101.3.4.2.12',  // hfShake256
+    '2.16.840.1.101.3.4.2.1',   // hfSHA256_128 is SHA-256 truncated to 128-bit
+    '2.16.840.1.101.3.4.2.1');  // hfSHA256_160 is SHA-256 truncated to 160-bit
 
   /// the OID of all ECC public keys (X962)
   // - is stored as prefix to CKA_OID[ckaEcc256..ckaEcc256k] parameter
@@ -4106,7 +4127,9 @@ begin
     hfSHA1:
       PSha1(@ctxt)^.Init;
     hfSHA224:
-      PSha256(@ctxt)^.Init224;
+      PSha256(@ctxt)^.Init224; // specific init vectors
+    hfSHA256_128,
+    hfSHA256_160,
     hfSHA256:
       PSha256(@ctxt)^.Init;
     hfSHA384:
@@ -4128,7 +4151,7 @@ const
     SizeOf(TMd5),    SizeOf(TSha1),       SizeOf(TSha256), SizeOf(TSha384),
     SizeOf(TSha512), SizeOf(TSha512_256), SizeOf(TSha3),   SizeOf(TSha3),
     SizeOf(TSha256), SizeOf(TSha3),       SizeOf(TSha3),   SizeOf(TSha3),
-    SizeOf(TSha3));
+    SizeOf(TSha3),   SizeOf(TSha256),     SizeOf(TSha256));
 
 procedure TSynHasher.CopyTo(out aHasher: TSynHasher);
 begin
@@ -4149,6 +4172,8 @@ begin
         PMd5(@ctxt)^.Update(aBuffer^, aLen);
       hfSHA1:
         PSha1(@ctxt)^.Update(aBuffer, aLen);
+      hfSHA256_128,
+      hfSHA256_160,
       hfSHA224,
       hfSHA256:
         PSha256(@ctxt)^.Update(aBuffer, aLen);
@@ -4216,12 +4241,14 @@ begin
       PMd5(@ctxt)^.Final(aDigest.h0, aNoInit);
     hfSHA1:
       PSha1(@ctxt)^.Final(aDigest.b160, aNoInit);
-    hfSHA224: // SHA-224 is just a truncated SHA-256 result
+    hfSHA224: // SHA-224 is just a truncated SHA-256 result with other Init
       begin
         PSha256(@ctxt)^.Final(aDigest.Lo, {aNoInit=}true);
         if not aNoInit then
           PSha256(@ctxt)^.Init224; // but it needs its own re-initialization
       end;
+    hfSHA256_128, // plain SHA-256 truncated to 128/160-bit (no RFC existing)
+    hfSHA256_160,
     hfSHA256:
       PSha256(@ctxt)^.Final(aDigest.Lo, aNoInit);
     hfSHA384:
@@ -4585,91 +4612,77 @@ begin
   result := mormot.core.text.HexToBin(pointer(HexaHash), @Digest.Bin, HASH_SIZE[Digest.Algo]);
 end;
 
-{ TStreamRedirectShake256 }
+{ TStreamRedirect* inherited classes }
 
 class function TStreamRedirectShake256.GetAlgo: THashAlgo;
 begin
   result := hfShake256;
 end;
 
-{ TStreamRedirectShake128 }
-
 class function TStreamRedirectShake128.GetAlgo: THashAlgo;
 begin
   result := hfShake128;
 end;
-
-{ TStreamRedirectSha3_512 }
 
 class function TStreamRedirectSha3_512.GetAlgo: THashAlgo;
 begin
   result := hfSHA3_512;
 end;
 
-{ TStreamRedirectSha3_224 }
-
 class function TStreamRedirectSha3_224.GetAlgo: THashAlgo;
 begin
   result := hfSHA3_224;
 end;
-
-{ TStreamRedirectSha3_256 }
 
 class function TStreamRedirectSha3_256.GetAlgo: THashAlgo;
 begin
   result := hfSHA3_256;
 end;
 
-{ TStreamRedirectSha3_384 }
-
 class function TStreamRedirectSha3_384.GetAlgo: THashAlgo;
 begin
   result := hfSHA3_384;
 end;
-
-{ TStreamRedirectSha512 }
 
 class function TStreamRedirectSha512.GetAlgo: THashAlgo;
 begin
   result := hfSHA512;
 end;
 
-{ TStreamRedirectSha512_256 }
-
 class function TStreamRedirectSha512_256.GetAlgo: THashAlgo;
 begin
   result := hfSHA512_256;
 end;
-
-{ TStreamRedirectSha384 }
 
 class function TStreamRedirectSha384.GetAlgo: THashAlgo;
 begin
   result := hfSHA384;
 end;
 
-{ TStreamRedirectSha256 }
-
 class function TStreamRedirectSha256.GetAlgo: THashAlgo;
 begin
   result := hfSHA256;
 end;
 
-{ TStreamRedirectSha224 }
+class function TStreamRedirectSha256_128.GetAlgo: THashAlgo;
+begin
+  result := hfSHA256_128;
+end;
+
+class function TStreamRedirectSha256_160.GetAlgo: THashAlgo;
+begin
+  result := hfSHA256_160;
+end;
 
 class function TStreamRedirectSha224.GetAlgo: THashAlgo;
 begin
   result := hfSHA224;
 end;
 
-{ TStreamRedirectSha1 }
-
 class function TStreamRedirectSha1.GetAlgo: THashAlgo;
 begin
   result := hfSHA1;
 end;
-
-{ TStreamRedirectMd5 }
 
 class function TStreamRedirectMd5.GetAlgo: THashAlgo;
 begin
