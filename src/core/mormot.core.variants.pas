@@ -4875,7 +4875,7 @@ procedure TSynInvokeableVariantType.DispInvoke(
 var
   name: string;
   res: TSynVarData;
-  namelen, i, asize, n: PtrInt;
+  namelen, i, {$ifndef DISPINVOKE_SYSVAMD64} asize, {$endif} n: PtrInt;
   nameptr, a: PAnsiChar;
   v: PVarData;
   args: TVarDataArray; // DoProcedure/DoFunction require a dynamic array
@@ -4956,7 +4956,7 @@ begin
     {$endif DISPINVOKE_SYSVAMD64}
     for i := 0 to n - 1 do
     begin
-      asize := SizeOf(pointer);
+      {$ifndef DISPINVOKE_SYSVAMD64} asize := SizeOf(pointer); {$endif}
       t := cardinal(CallDesc^.ArgTypes[i]) and ARGTYPE_MASK;
       case t of
         {$ifdef HASVARUSTRARG}
@@ -4989,7 +4989,7 @@ begin
           varError:
             begin
               v^.VError := VAR_PARAMNOTFOUND;
-              asize := 0;
+              {$ifndef DISPINVOKE_SYSVAMD64} asize := 0; {$endif}
             end;
           varVariant:
             {$ifdef DISPINVOKEBYVALUE}
@@ -5007,7 +5007,7 @@ begin
           varWord64:
             begin
               v^.VInt64 := PInt64(a)^;
-              asize := SizeOf(Int64);
+              {$ifndef DISPINVOKE_SYSVAMD64} asize := SizeOf(Int64); {$endif}
             end;
           // small values are stored as pointers on stack but pushed as 32-bit
           varSingle,
@@ -10213,11 +10213,6 @@ begin
   end;
 end;
 
-{$ifdef OSWINDOWS} // circumvent Delphi/FPC incompatibility
-function SafeArrayCreate(VarType, Dim: cardinal; var Bounds): PVarArray;
-  stdcall; external oleaut32;
-{$endif OSWINDOWS}
-
 function TDocVariantData.ToOleVariant: variant;
 var
   v: PVariant;
@@ -10266,7 +10261,7 @@ begin
     begin // note: VarArrayCreate() does not support VT_I8 -> SafeArrayCreate()
       new[0].elementcount := VCount;
       new[0].lowbound := 0;
-      sa := SafeArrayCreate(vt, 1, new); // new SAFEARRAY
+      sa := SafeArrayCreate(vt, 1, {$ifdef ISDELPHI}@{$endif}new);
       if sa <> nil then
       begin
         TSynVarData(result).VType := varArray or vt;
