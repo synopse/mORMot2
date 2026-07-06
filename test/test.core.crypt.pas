@@ -1480,7 +1480,7 @@ const
 
   OPENSSL_HASH: array[bSHA1O .. bSHA3_512O] of THashAlgo = (
     hfSHA1, hfSHA1, hfSHA256, hfSHA256, hfSHA384, hfSHA384, hfSHA512, hfSHA384,
-    hfSHA512, hfSHA3_256, hfSHA3_512
+    hfSHA512, hfSHA3_256, hfSHA3_512 // hfSHA256_128/160 are not supported
   {$endif USE_OPENSSL});
 var
   b: TBenchmark;

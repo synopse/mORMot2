@@ -290,6 +290,8 @@ type
   THttpPartial = record
     /// genuine 31-bit positive number, 0 if empty/recyclable after ReleaseSlot
     ID: THttpPartialID;
+    /// the internal state of this partial download
+    Flags: set of (pFinished, pHash);
     /// the expected full size of this download
     FullSize: Int64;
     /// the timestamp to be affected to the file, when it is fully downloaded
@@ -298,8 +300,6 @@ type
     PartFile: TFileName;
     /// background HTTP requests which are waiting for data on this download
     HttpContext: array of PHttpRequestContext;
-    /// the internal state of this partial download
-    Flags: set of (pFinished, pHash);
     /// up to 512-bit of raw binary hash, prefixed by THashAlgo identifier
     // - actual file hash for THttpPeerCache, but URI hash for THttpProxyServer
     Digest: THashDigest;
@@ -2385,7 +2385,7 @@ begin // optimized O(n) loop with aggressively inlined HashDigestEqual()
   if result = nil then
     exit;
   n := PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF;
-  l := HASH_SIZE[PHashAlgo(h)^] - (SizeOf(PtrInt) - 1);
+  l := HASH_SIZE[PHashAlgo(h)^] - (SizeOf(PtrInt) - SizeOf(THashAlgo));
   repeat
     if (result^.ID <> 0) and // not a recycled slot
        (pHash in result^.Flags) then
