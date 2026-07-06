@@ -58,13 +58,14 @@ type
   // RTTI, e.g. 'CN' for xaCN or 'OU' for xaOU - as in TextToXa()
   TXAttr = (
     xaNone,
-    xaDC,   // domainComponent
-    xaUID,  // userID
+    xaDC,   // domainComponent (0.9.2342.19200300.100.1.25)
+    xaUID,  // userID (0.9.2342.19200300.100.1.1)
     xaCN,   // commonName (2.5.4.3)
     xaSER,  // serialNumber (2.5.4.5)
     xaC,    // countryName (2.5.4.6)
     xaL,    // localityName (2.5.4.7)
     xaST,   // stateOrProvinceName (2.5.4.8)
+    xaSA,   // streetAddress (2.5.4.9)
     xaO,    // organizationName (2.5.4.10)
     xaOU,   // organizationalUnitName (2.5.4.11)
     xaT,    // title (2.5.4.12)
@@ -76,7 +77,7 @@ type
     xaGQ,   // generationQualifier (2.5.4.44)
     xaQ,    // distinguishedNameQualifier (2.5.4.46)
     xaP,    // pseudonym (2.5.4.65)
-    xaE);   // email
+    xaE);   // emailAddress (1.2.840.113549.1.9.1)
 
   /// known X.509 v3 Certificate extensions
   // - standard extensions as defined in RFC 5280 4.2.1
@@ -373,6 +374,7 @@ const
     '2.5.4.6',                    // xaC   countryName
     '2.5.4.7',                    // xaL   localityName
     '2.5.4.8',                    // xaST  stateOrProvinceName
+    '2.5.4.9',                    // xaSA  streetAddress
     '2.5.4.10',                   // xaO   organizationName
     '2.5.4.11',                   // xaOU  organizationalUnitName
     '2.5.4.12',                   // xaT   title
@@ -384,7 +386,7 @@ const
     '2.5.4.44',                   // xaGQ  generationQualifier
     '2.5.4.46',                   // xaQ   distinguishedNameQualifier
     '2.5.4.65',                   // xaP   pseudonym
-    '1.2.840.113549.1.9.1');      // xaE   email
+    '1.2.840.113549.1.9.1');      // xaE   emailAddress
 
   /// the OID of all known X.509 v3 Certificate extensions, as in RFC 5280 4.2.1
   // - with some additional common values
@@ -1314,7 +1316,7 @@ var
   posseq: integer;
   seq: RawByteString;
 begin
-  FastAssignNew(oid2);
+  FastAssignNew(oid2); // note: oid/oid2 are returned as '1.2.xx' text
   posseq := 1;
   result := (AsnNextRaw(pos, der, seq) = ASN1_SEQ) and
             (AsnNext(posseq, seq, @oid) = ASN1_OBJID); // decode OID as text
