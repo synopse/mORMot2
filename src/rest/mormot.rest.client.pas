@@ -683,6 +683,8 @@ type
     // - return TRUE on success, FALSE on any connection error
     // - follows ConnectRetrySeconds property for optional retrial
     // - calls OnConnected/OnConnectionFailed events if set
+    // - could be used e.g. if you need to access the Socket property before any
+    // REST command like ClientSetUser(), e.g. to call Socket.AuthorizeBasic()
     function IsOpen: boolean; virtual;
     /// main method calling the remote Server via a RESTful command
     // - redirect to the InternalUri() abstract method, which should be
