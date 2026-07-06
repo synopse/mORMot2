@@ -10205,7 +10205,7 @@ begin
   end;
 end;
 
-{$ifdef OSWINDOWS} // circumvent Delphi/FPC incompatibility
+{$ifdef OSWINDOWS} // circumvent old Delphi and FPC incompatibility
 function SafeArrayCreate(VarType, Dim: cardinal; var Bounds): PVarArray;
   stdcall; external oleaut32;
 {$endif OSWINDOWS}
@@ -10255,7 +10255,7 @@ begin
         vt := varVariant;          // allow [null,1,"2",3.14,true]
       end;
     if vt <> varEmpty then
-    begin // note: VarArrayCreate() does not support VT_I8 -> SafeArrayCreate()
+    begin // note: VarArrayCreate() does not support VT_I8 on FPC and old Delphi
       new[0].elementcount := VCount;
       new[0].lowbound := 0;
       sa := SafeArrayCreate(vt, 1, {$ifdef ISDELPHIPOSIX}@{$endif}new);
@@ -10270,14 +10270,14 @@ begin
           begin
             case vt of
               varBoolean:
-                {$ifdef OSWINDOWS}
+                {$ifdef FPCPOSIX}
+                result[ndx] := v^; // FPC bug: SizeOf(boolean) in psaElementSizes
+                {$else}
                 if VarDataFromVariant(v^)^.VBoolean then
-                  PWordArray(ar)^[ndx] := $ffff // normalize
+                  PWordArray(ar)^[ndx] := $ffff // normalize as OLE WordBool
                 else
                   PWordArray(ar)^[ndx] := 0;
-                {$else}
-                result[ndx] := v^; // FPC bug: SizeOf(boolean) in psaElementSizes
-                {$endif OSWINDOWS}
+                {$endif FPCPOSIX}
               varInt64:
                 VariantToInt64(v^, PInt64Array(ar)^[ndx]);
               varDouble, varDate:

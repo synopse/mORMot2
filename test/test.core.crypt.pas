@@ -5519,7 +5519,7 @@ var
   bin, der: RawByteString;
   pem, sav, sn: RawUtf8;
   x, a: TX509;
-  a1, a2: TXAttr;
+  a1: TXAttr;
   ocsp, issuers: TRawUtf8DynArray;
   i: integer;
   nfo: TX509Parsed;

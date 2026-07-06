@@ -7475,7 +7475,6 @@ begin
     Doc.SaveToJsonFile(WorkDir + 'm1-saved2.json');
     Doc.Clear;
   end;
-  {$ifndef POSIXDELPHI}
   CheckOle('[]', varArray or varVariant);
   CheckOle('[1]', varArray or varInt64);
   CheckOle('[1,2,3]', varArray or varInt64);
@@ -7496,7 +7495,6 @@ begin
   CheckOle('[1,true,"abc",null]', varArray or varVariant);
   CheckOle('["abc",null]', varArray or varVariant);
   CheckOle('[true,null,false]', varArray or varVariant);
-  {$endif POSIXDELPHI}
   CheckOle('{}', varOleStr);
   CheckOle('{"a":1}', varOleStr);
   CheckOle('{"a":1,"b":"text","c":true}', varOleStr);
