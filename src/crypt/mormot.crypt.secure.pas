@@ -537,7 +537,7 @@ type
   expects JSON support, which requires mormot.core.json }
 
 type
-  /// hash algorithms available for TSynHasher wrapper and HashFile/HashFull
+  /// algorithms available for TSynHasher wrapper and HashFile/HashFull
   // - hfSHA256_128 and hfSHA256_160 compute SHA-256 and return the leftmost
   // 128 or 160 bits as non-standard convenience algorithms for shorter digests,
   // offering a safer alternative to MD5 and SHA-1 while benefiting from SHA
@@ -561,7 +561,7 @@ type
   /// a pointer to one of our hash algorithms
   PHashAlgo = ^THashAlgo;
 
-  /// set of algorithms available for HashFile/HashFull functions and TSynHasher object
+  /// set of algorithms available for TSynHasher and HashFile/HashFull
   THashAlgos = set of THashAlgo;
 
   /// store a hash value and its algorithm, e.g. for THttpPeerCacheMessage.Hash
@@ -569,9 +569,9 @@ type
   // the hash, to avoid any potential attack about (unlikely) hash collisions
   // between algorithms, and allow any change of algo restrictions in the future
   THashDigest = packed record
-    /// the algorithm used for Hash
+    /// the algorithm used for hashing the input into Bin
     Algo: THashAlgo;
-    /// up to 512-bit of raw binary hash, according to Algo
+    /// up to 512-bit of raw binary hash, according to HASH_SIZE[Algo]
     Bin: THash512Rec;
   end;
   /// a pointer to one hash value and its algorithm
@@ -987,7 +987,7 @@ type
 
 const
   /// map the size in bytes (16..64) of any THashAlgo digest
-  // - note that SHA-3 or SHA512-256 share the same size with other algos
+  // - note that some algorithms share the same size with other algos
   HASH_SIZE: array[THashAlgo] of byte = (
     SizeOf(TMd5Digest),    // 16 bytes for hfMD5
     SizeOf(TSHA1Digest),   // 20 bytes for hfSHA1
@@ -1278,8 +1278,10 @@ type
 { our own SCRAM-MCF client/server pattern, using ModularCryptHash() }
 
 /// compute the SCRAM challenge to be stored on DB for a given "Modular Crypt" hash
-// - the value is bound to the User logon, so that it can't be reassigned to
+// - expects a true KDF/MCF Hash in '$MCF prefix$hash' format as input
+// - the result is bound to the User logon, so that it can't be reassigned to
 // a more sensitive user on a compromised database ("key swap" attack)
+// - returns '#MCF prefix' + base64uri(StoredKey + ServerKey) as output
 function ScramPersistedKey(const Hash, User: RawUtf8): RawUtf8; overload;
 
 /// compute the SCRAM challenge to be stored for a given "Modular Crypt" hash
@@ -1291,6 +1293,9 @@ function ScramPersistedKey(Mcf: TModularCryptFormat;
 function ScramPersistedKey(const McfFormat, Password, User: RawUtf8): RawUtf8; overload;
 
 /// compute the SCRAM client proof for a given "Modular Crypt" hash
+// - the Server should have returned a  ModularCryptIdentify(info^) MCF prefix
+// of the algorithm, parameters and salt, suitable for Hash computation via
+// ModularCryptHash()
 function ScramClientProof(const Hash, User: RawUtf8; var ClientSignature: THash256;
   const Msg: array of RawByteString): RawUtf8;
 
