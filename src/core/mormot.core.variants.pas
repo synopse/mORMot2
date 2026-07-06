@@ -4836,27 +4836,52 @@ var
 // walker; until then it must fall through to the flat-buffer path, which is
 // the wrong answer but at least matches today's Win64 behavior.
 {$ifdef POSIXDELPHI}
-  {$ifdef CPU64}
-    {$ifdef CPUINTEL}
-      {$define DISPINVOKE_SYSVAMD64}
-    {$else}
-      {$ifdef CPUAARCH64}
-        {$message warn 'TSynInvokeableVariantType.DispInvoke: AArch64 va_list layout not yet implemented; variant late-binding with arguments will read garbage'}
-      {$endif CPUAARCH64}
-    {$endif CPUINTEL}
-  {$endif CPU64}
+  {$ifdef CPUX64}
+    {$define DISPINVOKE_SYSVAMD64}
+  {$endif CPUX64}
 {$endif POSIXDELPHI}
 
 {$ifdef DISPINVOKE_SYSVAMD64}
+// Linux/macOS/Android Delphi 64-bit Intel: Params is a SysV AMD64 va_list
+// pointer; use va_arg semantics. ARGREF (var/out) params are passed as pointers
+// in GP registers; float types (double/date) go to SSE; everything else to GP
 type
   // SysV AMD64 va_list layout (see System V AMD64 ABI section 3.5.7)
   PSynVAListSysVAmd64 = ^TSynVAListSysVAmd64;
   TSynVAListSysVAmd64 = packed record
-    gp_offset: cardinal;       // 0..48 step 8 (6 GP registers * 8 bytes)
-    fp_offset: cardinal;       // 48..176 step 16 (8 SSE registers * 16 bytes)
-    overflow_arg_area: PByte;  // pointer to stack-passed args
-    reg_save_area: PByte;      // pointer to 6 GP + 8 SSE register save area
+    gp_offset: cardinal;           // 0..48 step 8 (6 GP registers * 8 bytes)
+    fp_offset: cardinal;           // 48..176 step 16 (8 SSE registers * 16 bytes)
+    overflow_arg_area: PAnsiChar;  // pointer to stack-passed args
+    reg_save_area: PAnsiChar;      // pointer to 6 GP + 8 SSE register save area
   end;
+
+function VAFPArgSysVAmd64(va: PSynVAListSysVAmd64): PAnsiChar;
+begin
+  if va^.fp_offset < 176 then
+  begin
+    result := va^.reg_save_area + va^.fp_offset;
+    inc(va^.fp_offset, 16);
+  end
+  else
+  begin
+    result := va^.overflow_arg_area;
+    inc(va^.overflow_arg_area, 8);
+  end;
+end;
+
+function VAGPArgSysVAmd64(va: PSynVAListSysVAmd64): PAnsiChar;
+begin
+  if va^.gp_offset < 48 then
+  begin
+    result := va^.reg_save_area + va^.gp_offset;
+    inc(va^.gp_offset, 8);
+  end
+  else
+  begin
+    result := va^.overflow_arg_area;
+    inc(va^.overflow_arg_area, 8);
+  end;
+end;
 {$endif DISPINVOKE_SYSVAMD64}
 
 {$ifdef FPC_VARIANTSETVAR}
@@ -4875,47 +4900,14 @@ procedure TSynInvokeableVariantType.DispInvoke(
 var
   name: string;
   res: TSynVarData;
-  namelen, i, {$ifndef DISPINVOKE_SYSVAMD64} asize, {$endif} n: PtrInt;
-  nameptr, a: PAnsiChar;
+  i, {$ifndef DISPINVOKE_SYSVAMD64} asize, {$endif} n: PtrInt;
+  a: PAnsiChar;
   v: PVarData;
   args: TVarDataArray; // DoProcedure/DoFunction require a dynamic array
   t: cardinal;
   {$ifdef FPC}
   inverted: boolean;
   {$endif FPC}
-  {$ifdef DISPINVOKE_SYSVAMD64}
-  va: PSynVAListSysVAmd64;
-
-  function VAArgSysVAmd64(isFloat: boolean): PAnsiChar;
-  begin
-    if isFloat then
-    begin
-      if va^.fp_offset < 176 then
-      begin
-        result := PAnsiChar(va^.reg_save_area) + va^.fp_offset;
-        inc(va^.fp_offset, 16);
-      end
-      else
-      begin
-        result := PAnsiChar(va^.overflow_arg_area);
-        inc(va^.overflow_arg_area, 8);
-      end;
-    end
-    else
-    begin
-      if va^.gp_offset < 48 then
-      begin
-        result := PAnsiChar(va^.reg_save_area) + va^.gp_offset;
-        inc(va^.gp_offset, 8);
-      end
-      else
-      begin
-        result := PAnsiChar(va^.overflow_arg_area);
-        inc(va^.overflow_arg_area, 8);
-      end;
-    end;
-  end;
-  {$endif DISPINVOKE_SYSVAMD64}
 
   procedure RaiseInvalid;
   begin
@@ -4949,14 +4941,11 @@ begin
     else
     {$endif FPC}
       v := pointer(args);
-    {$ifdef DISPINVOKE_SYSVAMD64}
-    va := pointer(Params);
-    {$else}
+    {$ifndef DISPINVOKE_SYSVAMD64}
     a := Params;
     {$endif DISPINVOKE_SYSVAMD64}
     for i := 0 to n - 1 do
     begin
-      {$ifndef DISPINVOKE_SYSVAMD64} asize := SizeOf(pointer); {$endif}
       t := cardinal(CallDesc^.ArgTypes[i]) and ARGTYPE_MASK;
       case t of
         {$ifdef HASVARUSTRARG}
@@ -4967,24 +4956,22 @@ begin
           t := varString;
       end;
       {$ifdef DISPINVOKE_SYSVAMD64}
-      // Linux/macOS/Android Delphi 64-bit Intel: Params is a SysV AMD64 va_list
-      // pointer; use va_arg semantics. ARGREF (var/out) params are passed as
-      // pointers in GP registers; float types (double/date) go to SSE;
-      // everything else to GP.
       if (CallDesc^.ArgTypes[i] and ARGREF_MASK <> 0) or
          not (t in [varSingle, varDouble, varDate]) then
-        a := VAArgSysVAmd64({isFloat=}false)
+        a := VAGPArgSysVAmd64(Params)
       else
-        a := VAArgSysVAmd64({isFloat=}true);
+        a := VAFPArgSysVAmd64(Params);
+      {$else}
+      asize := SizeOf(pointer); // most arguments in flat-buffer are pointers
       {$endif DISPINVOKE_SYSVAMD64}
       if CallDesc^.ArgTypes[i] and ARGREF_MASK <> 0 then
       begin
-        TSynVarData(v^).VType := t or varByRef;
+        PSynVarData(v)^.VType := t or varByRef;
         v^.VPointer := PPointer(a)^;
       end
       else
       begin
-        TSynVarData(v^).VType := t;
+        PSynVarData(v)^.VType := t;
         case t of
           varError:
             begin
@@ -5024,7 +5011,7 @@ begin
         end;
       end;
       {$ifndef DISPINVOKE_SYSVAMD64}
-      inc(a, asize); // flat-buffer advancement (VAArgSysVAmd64 already advanced va)
+      inc(a, asize); // flat-buffer advancement (VAArgSysVAmd64 has its own list)
       {$endif DISPINVOKE_SYSVAMD64}
       {$ifdef FPC}
       if inverted then
@@ -5039,14 +5026,14 @@ begin
     DISPATCH_METHOD:
       if Dest <> nil then
       begin
-        if not DoFunction(Dest^, Source, name, args) then
+        if not VT.DoFunction(Dest^, Source^, name, args) then
           RaiseInvalid;
       end
-      else if not DoProcedure(Source, name, args) then
+      else if not VT.DoProcedure(Source^, name, args) then
       begin
         res.VType := varEmpty; // we can't use Dest=nil here
         try
-          if not DoFunction(res.Data, Source, name, args) then
+          if not VT.DoFunction(res.Data, Source^, name, args) then
             RaiseInvalid;
         finally
           VarClearProc(res.Data);
@@ -5054,12 +5041,12 @@ begin
       end;
     DISPATCH_PROPERTYGET:
       if (Dest = nil) or
-         not DoFunction(Dest^, Source, name, args) then
+         not VT.DoFunction(Dest^, Source^, name, args) then
         RaiseInvalid;
     DISPATCH_PROPERTYPUT:
       if (Dest <> nil) or
          (n <> 1) or
-         not IntSet(Source, args[0], nameptr, namelen) then
+         not VT.IntSet(Source^, args[0], NamePtr, NameLen) then
         RaiseInvalid;
   else
     RaiseInvalid;
