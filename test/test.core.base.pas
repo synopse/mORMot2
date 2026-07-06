@@ -7023,6 +7023,12 @@ begin
   PB := pointer(res);
   FromVarString(PB, U2);
   check(U2 = U);
+  U := HexTobin('2800541D251D541D2900'); // a nice Unicode mORMot glyph
+  FastSynUnicode(SU, pointer(U), length(U) shr 1);
+  U := HexToBin('28E1B594E1B4A5E1B59429');
+  EnsureRawUtf8(U);
+  CheckEqual(SynUnicodeToUtf8(SU), U);
+  Check(Utf8ToSynUnicode(U) = SU);
   for i := 0 to high(UTF8_UCS4) do
   begin
     RawUcs4ToUtf8(@UTF8_UCS4[i], 1, U);
