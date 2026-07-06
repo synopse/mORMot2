@@ -54,8 +54,8 @@ type
 
   /// known X.501 Type Names, as stored in X.509 Certificates attributes
   // - as defined in RFC 5280 appendix A, and available via TXName.Names[]
-  // - corresponding Relative Distinguished Name (RDN) text is extracted via
-  // RTTI, e.g. 'CN' for xaCN or 'OU' for xaOU - as in TextToXa()
+  // - corresponding Relative Distinguished Name (RDN) text follows most
+  // identifiers, e.g. xaCN for 'CN' - see also TextToXa() and XA_TEXT[]
   TXAttr = (
     xaNone,
     xaDC,   // domainComponent (0.9.2342.19200300.100.1.25)
@@ -193,7 +193,7 @@ type
     // - is cached internally for efficiency
     function ToBinary: RawByteString;
     /// return the values as a single line RFC 4514 Distinguished Name (DN) text
-    // - e.g. 'C=US,O=Let''s Encrypt,CN=R3'
+    // - e.g. 'C=US,O=Let''s Encrypt,CN=R3' - following XA_TEXT[] attribute names
     // - is cached internally for efficiency
     function AsDNText: RawUtf8;
     /// could be used when TXName was not initialized as part of a class
@@ -209,6 +209,7 @@ type
     // - e.g. 'CN=John Doe+UID=123,O=Example\, Inc.,C=US' supporting multiple RDN
     // - is encoded directly into internal ASN.1 binary in the same exact order
     // - returns false on incorrect input, e.g. invalid RFC 4514 escaped UTF-8
+    // - is the reverse to AsDNText method - following XA_TEXT[] attribute names
     function FromDNText(const text: RawUtf8): boolean;
     /// fill Name[] attributes with TCryptCertFields information
     procedure FromFields(const fields: TCryptCertFields);
@@ -444,7 +445,30 @@ const
 
 var
   /// the standard text of each known X.501 Type Name, e.g. 'DC', 'OU' or 'O'
-  XA_TEXT: array[TXAttr] of RawUtf8;
+  // - follow RFC 4514 recommended string representation and common LDAP
+  // descriptors as per RFC 4519 - use numerical OID for any other attributes
+  XA_TEXT: array[TXAttr] of RawUtf8 = (
+     '',
+     'DC',                  // domainComponent (0.9.2342.19200300.100.1.25)
+     'UID',                 // userID (0.9.2342.19200300.100.1.1)
+     'CN',                  // commonName (2.5.4.3)
+     'serialNumber',        // serialNumber (2.5.4.5)
+     'C',                   // countryName (2.5.4.6)
+     'L',                   // localityName (2.5.4.7)
+     'ST',                  // stateOrProvinceName (2.5.4.8)
+     'street',              // streetAddress (2.5.4.9)
+     'O',                   // organizationName (2.5.4.10)
+     'OU',                  // organizationalUnitName (2.5.4.11)
+     'title',               // title (2.5.4.12)
+     'telephoneNumber',     // telephoneNumber (2.5.4.20)
+     'name',                // name (2.5.4.41)
+     'SN',                  // surname (2.5.4.4)
+     'GN',                  // givenName (2.5.4.42)
+     'initials',            // initials (2.5.4.43)
+     'generationQualifier', // generationQualifier (2.5.4.44)
+     'dnQualifier',         // distinguishedNameQualifier (2.5.4.46)
+     'pseudonym',           // pseudonym (2.5.4.65)
+     'emailAddress');       // emailAddress (1.2.840.113549.1.9.1) - from PKCS#9
 
 function XsaToSeq(xsa: TXSignatureAlgorithm): TAsnObject;
 function OidToXsa(const oid: RawUtf8; out xsa: TXSignatureAlgorithm): boolean;
@@ -4817,8 +4841,6 @@ begin
     AsnEncOidVar(XCE_OID[c], XCE_OID_ASN[c]);
   for k := succ(low(k)) to high(k) do
     AsnEncOidVar(XKU_OID[k], XKU_OID_ASN[k]);
-  GetEnumTrimmedNames(TypeInfo(TXAttr), @XA_TEXT);
-  FastAssignNew(XA_TEXT[xaNone]);
   // register this unit to our high-level cryptographic catalog
   // 'x509-rs256-int' 'x509-ps256-int' and 'x509-es256-int' match this unit
   // ('x509-rs/ps384/512-int' methods seem superfluous so are not defined)
