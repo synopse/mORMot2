@@ -42,9 +42,9 @@ type
     fDestinationFolder: TFileName;
     fOptions: TOpenApiParserOptions;
   published
-    property DestinationFolder: TFileName
+    property destinationFolder: TFileName
       read fDestinationFolder write fDestinationFolder;
-    property Options: TOpenApiParserOptions
+    property options: TOpenApiParserOptions
       read fOptions write fOptions;
   end;
 
@@ -52,7 +52,7 @@ var
   c: TExecutableCommandLine;
   o: TOptions;
   oa: TOpenApiParser;
-  name: RawUtf8;
+  name, prefix: RawUtf8;
   source: TFileName;
   i: PtrInt;
 begin
@@ -60,13 +60,14 @@ begin
   try
     // validate command line parameters
     c := Executable.Command;
-    source := c.ArgFile(0, 'Source json #filename', {optional=}false);
-    name := TrimControlChars(c.ArgU(1, 'Short description #name of the service'));
+    source := c.ArgFile(0, 'source json #filename', {optional=}false);
+    name := TrimControlChars(c.ArgU(1, 'short description #name of the service'));
     SetObjectFromExecutableCommandLine(o, '', '');
     if o.DestinationFolder <> '' then
       o.DestinationFolder := c.CheckFileName(o.DestinationFolder, {folder=}true);
-    if c.Option('&concise', 'Generate a single API unit') then
+    if c.Option('&concise', 'generate a single API unit') then
       o.Options :=  o.Options + OPENAPI_CONCISE;
+    c.Get('&prefix', prefix, 'optional prefix for pascal T* type names');
     if c.ConsoleHelpFailed('mORMot ' + SYNOPSE_FRAMEWORK_VERSION +
                            ' OpenAPI/Swagger Code Generator') then
     begin
@@ -78,9 +79,9 @@ begin
       // if no short description name is supplied, extract from specs file name
       name := GetFileNameWithoutExtOrPath(source);
       for i := length(name) downto 1 do
-        if name[i] in ['A' .. 'Z'] then
+        if name[i] in ['A' .. 'Z'] then // search last uppercase char
         begin
-          delete(name, 1, i - 1); // 'OpenApiTest' -> 'Test'
+          delete(name, 1, i - 1);       // 'OpenApiTest' -> 'Test'
           break;
         end;
     end;
@@ -88,6 +89,7 @@ begin
       // do the actual specs parsing and code generation
       oa := TOpenApiParser.Create(name, o.Options);
       try
+        oa.DtoTypePrefix := prefix;
         oa.ParseFile(source);
         oa.ExportToDirectory(o.DestinationFolder);
         if not (opoGenerateSingleApiUnit in oa.Options) then
