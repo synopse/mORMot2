@@ -443,7 +443,6 @@ const
   ASN1_OID_X509_CRL_INVDATE = '2.5.29.24';
   ASN1_OID_X509_CRL_ISSUER  = '2.5.29.29';
 
-var
   /// the standard text of each known X.501 Type Name, e.g. 'DC', 'OU' or 'O'
   // - follow RFC 4514 recommended string representation and common LDAP
   // descriptors as per RFC 4519 - use numerical OID for any other attributes
@@ -1397,12 +1396,13 @@ var
   p: PPUtf8Char;
 begin
   p := @XA_OID_ASN[succ(low(result))];
-  for result := succ(low(result)) to high(result) do
-    if (PStrLen(p^ - _STRLEN)^ = len) and
-       CompareMemSmall(p^, bin, len) then
-      exit
-    else
-      inc(p);
+  if len > 0 then
+    for result := succ(low(result)) to high(result) do
+      if (PStrLen(p^ - _STRLEN)^ = len) and
+         CompareMemSmall(p^, bin, len) then
+        exit
+      else
+        inc(p);
   result := xaNone;
 end;
 
@@ -1411,20 +1411,22 @@ var
   p: PPUtf8Char;
 begin
   p := @XE_OID_ASN[succ(low(result))];
-  for result := succ(low(result)) to high(result) do
-    if (PStrLen(p^ - _STRLEN)^ = len) and
-       CompareMemSmall(p^, bin, len) then
-      exit
-    else
-      inc(p);
+  if len > 0 then
+    for result := succ(low(result)) to high(result) do
+      if (PStrLen(p^ - _STRLEN)^ = len) and
+         CompareMemSmall(p^, bin, len) then
+        exit
+      else
+        inc(p);
   result := xeNone;
 end;
 
 function OidToXce(const oid: RawByteString): TXCrlExtension;
 begin
-  for result := succ(low(result)) to high(result) do
-    if SortDynArrayRawByteString(oid, XCE_OID_ASN[result]) = 0 then
-      exit;
+  if oid <> '' then
+    for result := succ(low(result)) to high(result) do
+      if SortDynArrayRawByteString(oid, XCE_OID_ASN[result]) = 0 then
+        exit;
   result := xceNone;
 end;
 
@@ -1433,12 +1435,13 @@ var
   p: PPUtf8Char;
 begin
   p := @XKU_OID_ASN[succ(low(result))];
-  for result := succ(low(result)) to high(result) do
-    if (PStrLen(p^ - _STRLEN)^ = len) and
-       CompareMemSmall(p^, bin, len) then
-      exit
-    else
-      inc(p);
+  if len > 0 then
+    for result := succ(low(result)) to high(result) do
+      if (PStrLen(p^ - _STRLEN)^ = len) and
+         CompareMemSmall(p^, bin, len) then
+        exit
+      else
+        inc(p);
   result := xkuNone;
 end;
 
