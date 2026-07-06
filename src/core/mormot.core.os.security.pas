@@ -2251,6 +2251,7 @@ function AsnDecOctStr(const input: RawByteString): RawByteString;
 
 /// parse the next ASN.1 value as text
 // - returns the ASN.1 value type, and store the ASN.1 as UTF-8 text into Value^
+// - see AsnNextRaw() if you don't want the conversion to text e.g. of OID or INT
 // - just after any constructed header (SEQ/SETOF), Pos is kept
 function AsnNext(var Pos: integer; const Buffer: TAsnObject;
   Value: PRawByteString = nil; CtrEndPos: PInteger = nil): integer;
@@ -6692,32 +6693,32 @@ var
   tmp: THash128; // written in reverse order (big endian)
 begin
   Dest[0] := #0;
-  if OidText <> nil then
+  if (OidText = nil) or
+     not (OidText^ in ['0'..'9']) then // typically 0.xx 1.xx 2.xx
+    exit;
+  // first byte = two first numbers modulo 40
+  x := GetNextUInt32(OidText) * 40;
+  y := 0;
+  while OidText^ in ['0'..'9'] do
   begin
-    // first byte = two first numbers modulo 40
-    x := GetNextUInt32(OidText) * 40;
-    y := 0;
-    while OidText^ <> #0 do
-    begin
-      y := GetNextUInt32(OidText); // warning: y=0 is a valid value
-      inc(x, y);
-      r := @tmp[14];
-      r^ := x and $7f;
-      x := x shr 7;
-      if x <> 0 then
-        repeat
-          dec(r);
-          r^ := byte(x) or $80;
-          x := x shr 7;
-        until x = 0;
-      AppendShortBuffer(pointer(r), PAnsiChar(@tmp[15]) - pointer(r),
-        high(Dest), @Dest);
-      x := 0;
-    end;
-    if (y = 0) or   // y=0 is not a valid last item
-       (Dest[0] < #3) then
-      Dest[0] := #0; // clearly invalid input
+    y := GetNextUInt32(OidText); // warning: y=0 is a valid value
+    inc(x, y);
+    r := @tmp[14];
+    r^ := x and $7f;
+    x := x shr 7;
+    if x <> 0 then
+      repeat
+        dec(r);
+        r^ := byte(x) or $80;
+        x := x shr 7;
+      until x = 0;
+    AppendShortBuffer(pointer(r), PAnsiChar(@tmp[15]) - pointer(r),
+      high(Dest), @Dest);
+    x := 0;
   end;
+  if (y = 0) or   // y=0 is not a valid last item
+     (Dest[0] < #3) then
+    Dest[0] := #0; // clearly invalid input
 end;
 
 function AsnEncOid(OidText: PUtf8Char): TAsnObject;
