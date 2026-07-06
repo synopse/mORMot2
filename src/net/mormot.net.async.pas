@@ -5683,7 +5683,7 @@ begin // this method is protected by fOsSafe.Lock
   if StatusCodeIsSuccess(status) then // 2xx..3xx range
     GetHeaderInfo(fRemoteClient.Headers, cache.Size, d);
   cache.TimeMS := d * MilliSecsPerSec;
-  cache.HashDigest := hfSHA1; // not SHA-1 but 160-bit trunc of safer SHA-256
+  cache.HashDigest := hfSHA256_160; // SHA-256 truncated to 160-bit
   HttpRequestHashBase32(Uri, @cache.HashB32, pointer(fRemoteClient.Headers),
     @cache.Hash160, hpoClientNormalizeCaseHash in fSettings.Options);
   cache.PurgedHeaders := PurgeHeaders(fRemoteClient.Headers, false,
