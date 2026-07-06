@@ -9947,7 +9947,7 @@ begin
             delete(pwd, 1, 5); // trim
             fmt := p12Legacy;
           end;
-        ord('a') + ord('e') shl 8 + ord('s') shl 16 + ord('=') shl 24:
+        AES_LO + ord('=') shl 24:
           begin // start with PKCS12_AES_PREFIX = 'aes='
             delete(pwd, 1, 4);
             fmt := p12New;

@@ -5881,11 +5881,9 @@ begin
       '-', '/':
         if not onlyalphanum then
           if ((tmp[0] = #4) and // '.sha3-256' -> 'sha3_256'
-              (PCardinal(@tmp[1])^ and $ffdfdfdf =
-                ord('S') + ord('H') shl 8 + ord('A') shl 16 + ord('3') shl 24)) or
-             ((tmp[0] = #6) and // '.sha512-256' -> 'sha512_256'
-              (PCardinal(@tmp[1])^ and $ffdfdfdf =
-                ord('S') + ord('H') shl 8 + ord('A') shl 16 + ord('5') shl 24)) then
+              (PCardinal(@tmp[1])^ and $ffdfdfdf = SHA_HI + ord('3') shl 24)) or
+             ((tmp[0] = #6) and // '.sha512-256' or '.sha256-160'
+              (PCardinal(@tmp[1])^ and $80dfdfdf = SHA_HI)) then
             AppendShortChar('_', @tmp);
     end;
     inc(P);

@@ -1356,7 +1356,7 @@ end;
 function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
 begin
   result := (aInData <> '') and
-            (PCardinal(aInData)^ or $20202020 = NTLM_LOW);
+            (PCardinal(aInData)^ or $20202020 = NTLM_LO);
 end;
 
 function ServerSspiAuth(var aSecContext: TSecContext;

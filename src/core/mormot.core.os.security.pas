@@ -2380,6 +2380,14 @@ var
   // - this global setting is used as default for all our units
   CERT_DEPRECATION_THRESHOLD: TDateTime = 0.5;
 
+const
+  MD5_LO  = ord('m') + ord('d') shl 8 + ord('5') shl 16;
+  AES_HI  = ord('A') + ord('E') shl 8 + ord('S') shl 16;
+  AES_LO  = ord('a') + ord('e') shl 8 + ord('s') shl 16;
+  SHA_HI  = ord('S') + ord('H') shl 8 + ord('A') shl 16;
+  SHA_LO  = ord('s') + ord('h') shl 8 + ord('a') shl 16;
+  NTLM_LO = ord('n') + ord('t') shl 8 + ord('l') shl 16 + ord('m') shl 24;
+
 
 { ****************** Windows API Specific Security Types and Functions }
 

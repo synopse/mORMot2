@@ -31,6 +31,7 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security,
   mormot.core.data,
   mormot.core.unicode,
   mormot.core.text,
@@ -5585,11 +5586,11 @@ begin
   if ext = nil then
     exit;
   case PCardinal(ext)^ of
-    ord('m') + ord('d') shl 8 + ord('5') shl 16:
+    MD5_LO:
       hf := hfMd5;
-    ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('1') shl 24:
+    SHA_LO + ord('1') shl 24:
       hf := hfSHA1;
-    ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('2') shl 24:
+    SHA_LO + ord('2') shl 24:
       hf := hfSHA256;
   else
     exit;
