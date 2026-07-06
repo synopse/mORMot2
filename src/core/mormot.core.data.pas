@@ -3949,6 +3949,10 @@ function GlobalInfoFind(Key: pointer; KeyLen: PtrInt; var ValueLen: PtrInt): poi
 var
   i: PtrInt;
 begin
+  result := nil;
+  ValueLen := 0;
+  if ByteScanIndex(Key, KeyLen, ord(':')) < 0 then
+    exit; // expects 'namespace:value' key format
   _GlobalInfoSafe.Lock;
   if _GlobalInfo = nil then
     _GlobalInfo := RegisterGlobalShutdownRelease(TBinDictionary.Create);
@@ -3961,8 +3965,7 @@ begin
       _GlobalInfoAdd[i](_GlobalInfo); // may take some time
       PtrArrayDelete(_GlobalInfoPre, i);
       PtrArrayDelete(_GlobalInfoAdd, i);
-      if result = nil then
-        result := _GlobalInfo.Find(Key, KeyLen, @ValueLen); // may appear now
+      result := _GlobalInfo.Find(Key, KeyLen, @ValueLen); // may appear now
     until false;
   _GlobalInfoSafe.UnLock;
 end;
@@ -3970,10 +3973,10 @@ end;
 function GlobalInfoFind(const Key: RawUtf8): RawUtf8;
 var
   v: pointer;
-  l: PtrInt;
+  l: PtrInt; // not integer
 begin
   v := GlobalInfoFind(pointer(Key), length(Key), l);
-  FastSetString(result, v, l);
+  FastSetString(result, v, l); // we need to allocate a new RawUtf8 string
 end;
 
 function GlobalInfoRegisterAll: TBinDictionary;
