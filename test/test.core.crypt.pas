@@ -5609,9 +5609,9 @@ begin
   CheckXName('DC=example,DC=com');
   CheckXName('CN=John Doe,OU=People,DC=example,DC=com');
   CheckXName('CN=John Doe+UID=123456,O=Example Corp,C=US');
-  CheckXName('O=Example Corp,C=US,CN=John Doe+SER=ABC123');
+  CheckXName('O=Example Corp,C=US,CN=John Doe+serialNumber=ABC123');
   CheckXName('OU=Security+OU=PKI,O=Example Corp,C=US');
-  CheckXName('CN=John Doe+UID=42+SER=ABC123,O=Example,C=US');
+  CheckXName('CN=John Doe+UID=42+serialNumber=ABC123,O=Example,C=US');
   CheckXName('CN=Cloudflare\, Inc.,C=US');
   CheckXName('CN=Alice\+Bob,O=Example,C=US');
   CheckXName('CN=John \"Johnny\" Doe,O=Example,C=US');
