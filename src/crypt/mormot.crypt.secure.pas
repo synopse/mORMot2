@@ -2467,6 +2467,11 @@ type
     SerialNumber: RawUtf8;
     /// netscapeComment extension (not a name field - OID 2.16.840.1.113730.1.13)
     Comment: RawUtf8;
+    /// set all subject name X.501 fields as RFC 4514 Distinguished Name (DN) text
+    // - e.g. 'CN=John Doe+UID=123,O=Example\, Inc.,C=US' supporting multiple RDN
+    // - other fields like Country/State/...SerialNumber would be ignored
+    // - only currently supported by TXName.FromDNText from mormot.crypt.x509.pas
+    DistinguishedName: RawUtf8;
     /// raw custom extensions (not name fields)
     // - use AddCustomExts() to fill it, or e.g. FindAia() to resolve OCSP/Issuers
     CustomExts: TCryptCustomExts;

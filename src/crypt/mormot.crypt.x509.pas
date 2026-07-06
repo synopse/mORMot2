@@ -1847,6 +1847,11 @@ end;
 
 procedure TXName.FromFields(const fields: TCryptCertFields);
 begin // do not use TrimU() because e.g. CN=' ' is accepted e.g. by OpenSSL
+  if fields.DistinguishedName <> '' then
+  begin
+    FromDNText(fields.DistinguishedName);
+    exit; // exclusive to other single fields
+  end;
   Name[xaC]   := fields.Country;
   Name[xaST]  := fields.State;
   Name[xaL]   := fields.Locality;
@@ -3737,7 +3742,8 @@ begin
     result := fX509.Signed.Extension[xeAuthorityKeyIdentifier];
 end;
 
-function TCryptCertX509Abstract.GetFields(var fields: TCryptCertFields; withexts: boolean): boolean;
+function TCryptCertX509Abstract.GetFields(var fields: TCryptCertFields;
+  withexts: boolean): boolean;
 var
   xe: TXExtension;
 begin
