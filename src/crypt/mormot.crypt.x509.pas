@@ -1469,10 +1469,11 @@ end;
 { TX509Name }
 
 const
-  // preferred presentation order for ASN generation of RDNs
-  // - this is NOT the DER canonical order but a common reference
+  // preferred presentation order for ASN.1 generation of RDNs from Name[] fields
+  // - this is NOT the DER/RFC canonical order but a common reference used
+  // to produce deterministic output for new certificates
   XSORT: array[0 .. ord(pred(high(TXAttr)))] of TXAttr = (
-    xaCN,  // Common Name
+    xaCN,  // Common Name - identity first
     xaUID, // User ID
     xaSN,  // Surname
     xaGN,  // Given Name
@@ -1480,15 +1481,16 @@ const
     xaGQ,  // Generation Qualifier
     xaP,   // Pseudonym
     xaSER, // Serial Number
-    xaT,   // Title
+    xaO,   // Organization - organization second
     xaOU,  // Organizational Unit
-    xaO,   // Organization
+    xaSA,  // streetAddress - address third
     xaL,   // Locality
     xaST,  // State/Province
     xaC,   // Country
-    xaDC,  // Domain Component
-    xaE,   // Email
-    xaTN,  // Telephone Number
+    xaDC,  // Domain Component - domain information
+    xaE,   // EmailAddress
+    xaTN,  // Telephone Number - contact information
+    xaT,   // Title - rarely-used
     xaQ,   // DN Qualifier
     xaN    // Name
   );
