@@ -10213,6 +10213,11 @@ begin
   end;
 end;
 
+{$ifdef OSWINDOWS} // circumvent Delphi/FPC incompatibility
+function SafeArrayCreate(VarType, Dim: cardinal; var Bounds): PVarArray;
+  stdcall; external oleaut32;
+{$endif OSWINDOWS}
+
 function TDocVariantData.ToOleVariant: variant;
 var
   v: PVariant;
@@ -10261,7 +10266,7 @@ begin
     begin // note: VarArrayCreate() does not support VT_I8 -> SafeArrayCreate()
       new[0].elementcount := VCount;
       new[0].lowbound := 0;
-      sa := SafeArrayCreate(vt, 1, {$ifdef ISDELPHI}@{$endif}new);
+      sa := SafeArrayCreate(vt, 1, {$ifdef ISDELPHIPOSIX}@{$endif}new);
       if sa <> nil then
       begin
         TSynVarData(result).VType := varArray or vt;
