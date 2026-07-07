@@ -43,7 +43,7 @@ begin
   Tag := fRepo.GetByID(aTagID);
   if Tag = nil then
   begin
-    TSynLog.Add.Log(sllWarning, 'GetTagView: tag % not found', [aTagID]);
+    TSynLog.Add.Log(sllDebug, 'GetTagView: tag % not found', [aTagID]);
     FillChar(Result, SizeOf(Result), 0);
     exit;
   end;

@@ -61,7 +61,7 @@ begin
   try
     if not CreateTaskDTOToOrm(aData, Task, DueDateValue, ErrMsg) then
     begin
-      TSynLog.Add.Log(sllWarning, 'CreateTask: %', [ErrMsg]);
+      TSynLog.Add.Log(sllDebug, 'CreateTask: %', [ErrMsg]);
       Result := CommandError(ErrMsg);
       exit;
     end;

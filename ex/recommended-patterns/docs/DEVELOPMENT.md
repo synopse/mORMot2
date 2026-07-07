@@ -374,7 +374,10 @@ Add the new folders to `src/fpc/compile.sh` and `src/fpc/compile_cli.sh`:
 Logging is enabled by `EnableSynLogs` in `src/app_config.pas`:
 - **Log files**: Full verbose detail in `logs/`
 - **Console**: Warnings, errors, and exceptions echoed to stdout
-- **Service logging**: Use `TSynLog.Add.Log(sllWarning, 'message')` or `sllInfo`
+- **Service logging**: Use `TSynLog.Add.Log(sllInfo, 'message')` for notable
+  events and `sllDebug` for expected client-side outcomes (validation
+  rejections, not-found lookups). Reserve `sllWarning` for genuine server-side
+  degradation, since warnings are echoed to the console
 
 ### Database Inspection
 

@@ -47,7 +47,7 @@ begin
   Task := fRepo.GetByID(aTaskID);
   if Task = nil then
   begin
-    TSynLog.Add.Log(sllWarning, 'GetTaskView: task % not found', [aTaskID]);
+    TSynLog.Add.Log(sllDebug, 'GetTaskView: task % not found', [aTaskID]);
     FillChar(Result, SizeOf(Result), 0);
     exit;
   end;
