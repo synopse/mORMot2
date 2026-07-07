@@ -10,8 +10,6 @@
 
 {$Z4} // enumerates should be DWORD / 32-bit - see jediapilib.inc
 
-function PosExtString(Str: PChar): PChar; forward;
-
 function _utf16toascii(s: PWordArray; d: PByteArray; l: PtrInt): pointer; forward;
 procedure _utf16fromascii(s: PByteArray; d: PWordArray; l: PtrInt); forward;
 
@@ -196,7 +194,7 @@ var
   flags: cardinal;
 begin
   flags := 0;
-  if CodePage < 50220 then // wild guess - FPC RTL would always use 0 anyway
+  if CodePage < 50220 then // MBCS wild guess - FPC RTL would always use 0 anyway
     if CodePage = 951 then // 951 is a "fake" code page
       CodePage := 950
     else if (CodePage <> 932) and (CodePage <> 949) then
@@ -209,7 +207,7 @@ var
   defchar: PAnsiChar;
 begin
   defchar := nil;
-  if CodePage < 50220 then // wild guess - FPC RTL would always use 0 anyway
+  if CodePage < 50220 then // MBCS wild guess - FPC RTL would always use 0 anyway
     if CodePage = 951 then // 951 is a "fake" code page
       CodePage := 950
     else if (CodePage <> 932) and (CodePage <> 949) then
@@ -2983,7 +2981,7 @@ var
 procedure _GetSystemEnv;
 var
   p, e, env: PWideChar;
-  i, n: PtrInt;
+  n: PtrInt;
 begin
   env := GetEnvironmentStringsW;
   p := env;
@@ -2996,31 +2994,33 @@ begin
       inc(n);
     inc(p, StrLenW(p) + 1);
   end;
-  if n = 0 then
-    exit; // should never happen
-  FastSynUnicode(_SystemEnvUnicode, env, (PtrUInt(p) - PtrUInt(env)) shr 1);
-  SetLength(_SystemEnvNames, n);
-  SetLength(_SystemEnvValues, n);
-  p := env;
-  i := 0;
-  repeat
-    if p^ = '=' then
-      inc(p, StrLenW(p)) // no void string in _SystemEnvNames[]
-    else
-    begin
-      e := p;
-      repeat
-        inc(p);
-      until p^ = '=';
-      Unicode_ToUtf8(e, p - e, _SystemEnvNames[i]);
-      inc(p); // ignore '='
-      e := p;
-      inc(p, StrLenW(p));
-      Unicode_ToUtf8(e, p - e, _SystemEnvValues[i]);
-      inc(i);
-    end;
-    inc(p);
-  until p^ = #0;
+  FastSynUnicode(_SystemEnvUnicode, env, p - env);
+  if n <> 0 then // empty environment block (#0#0)
+  begin
+    SetLength(_SystemEnvNames, n);
+    SetLength(_SystemEnvValues, n);
+    n := 0;
+    p := env;
+    repeat
+      if p^ = '=' then
+        inc(p, StrLenW(p)) // no void string in _SystemEnvNames[]
+      else
+      begin
+        e := p;
+        repeat
+          inc(p);
+        until (p^ = #0) or (p^ = '=');
+        Unicode_ToUtf8(e, p - e, _SystemEnvNames[n]);
+        if p^ <> #0 then
+          inc(p); // ignore '='
+        e := p;
+        inc(p, StrLenW(p));
+        Unicode_ToUtf8(e, p - e, _SystemEnvValues[n]);
+        inc(n);
+      end;
+      inc(p); // ignore #0 for this entry
+    until p^ = #0;
+  end;
   FreeEnvironmentStringsW(env);
 end;
 

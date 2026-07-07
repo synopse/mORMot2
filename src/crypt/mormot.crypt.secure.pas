@@ -437,9 +437,8 @@ type
   // - identifiers may be obfuscated as hexadecimal text, using both encryption
   // and digital signature
   // - all its methods are thread-safe, even during obfuscation processing
-  TSynUniqueIdentifierGenerator = class(TSynPersistent)
+  TSynUniqueIdentifierGenerator = class(TObjectLightLock)
   protected
-    fSafe: TLightLock;
     fLastUnixCreateTime: cardinal;
     fIdentifier: TSynUniqueIdentifierProcess;
     fIdentifierShifted: cardinal;
@@ -508,9 +507,6 @@ type
     // - may be used e.g. as system-depending salt
     property CryptoCRC: cardinal
       read fCryptoCRC;
-    /// direct access to the associated mutex
-    property Safe: TLightLock
-      read fSafe;
   published
     /// the process identifier, associated with this generator
     property Identifier: TSynUniqueIdentifierProcess
@@ -541,8 +537,11 @@ type
   expects JSON support, which requires mormot.core.json }
 
 type
-  /// hash algorithms available for HashFile/HashFull functions
-  // and TSynHasher object
+  /// algorithms available for TSynHasher wrapper and HashFile/HashFull
+  // - hfSHA256_128 and hfSHA256_160 compute SHA-256 and return the leftmost
+  // 128 or 160 bits as non-standard convenience algorithms for shorter digests,
+  // offering a safer alternative to MD5 and SHA-1 while benefiting from SHA
+  // hardware acceleration on newer Intel/AMD or ARM processors
   THashAlgo = (
     hfMD5,
     hfSHA1,
@@ -556,11 +555,13 @@ type
     hfSHA3_224,
     hfSHA3_384,
     hfShake128,
-    hfShake256);
+    hfShake256,
+    hfSHA256_128,
+    hfSHA256_160);
   /// a pointer to one of our hash algorithms
   PHashAlgo = ^THashAlgo;
 
-  /// set of algorithms available for HashFile/HashFull functions and TSynHasher object
+  /// set of algorithms available for TSynHasher and HashFile/HashFull
   THashAlgos = set of THashAlgo;
 
   /// store a hash value and its algorithm, e.g. for THttpPeerCacheMessage.Hash
@@ -568,9 +569,9 @@ type
   // the hash, to avoid any potential attack about (unlikely) hash collisions
   // between algorithms, and allow any change of algo restrictions in the future
   THashDigest = packed record
-    /// the algorithm used for Hash
+    /// the algorithm used for hashing the input into Bin
     Algo: THashAlgo;
-    /// up to 512-bit of raw binary hash, according to Algo
+    /// up to 512-bit of raw binary hash, according to HASH_SIZE[Algo]
     Bin: THash512Rec;
   end;
   /// a pointer to one hash value and its algorithm
@@ -692,6 +693,18 @@ type
     class function GetAlgo: THashAlgo; override;
   end;
 
+  /// TStreamRedirect with SHA-256/128 cryptographic hashing
+  TStreamRedirectSha256_128 = class(TStreamRedirectSynHasher)
+  public
+    class function GetAlgo: THashAlgo; override;
+  end;
+
+  /// TStreamRedirect with SHA-256/160 cryptographic hashing
+  TStreamRedirectSha256_160 = class(TStreamRedirectSynHasher)
+  public
+    class function GetAlgo: THashAlgo; override;
+  end;
+
   /// TStreamRedirect with SHA-256 cryptographic hashing
   TStreamRedirectSha256 = class(TStreamRedirectSynHasher)
   public
@@ -755,30 +768,32 @@ type
 const
   /// convert a THashAlgo into a TStreamRedirectSynHasher class
   HASH_STREAMREDIRECT: array[THashAlgo] of TStreamRedirectClass = (
-    TStreamRedirectMd5,        // hfMD5
-    TStreamRedirectSha1,       // hfSHA1
-    TStreamRedirectSha256,     // hfSHA256
-    TStreamRedirectSha384,     // hfSHA384
-    TStreamRedirectSha512,     // hfSHA512
-    TStreamRedirectSha512_256, // hfSHA512_256
-    TStreamRedirectSha3_256,   // hfSHA3_256
-    TStreamRedirectSha3_512,   // hfSHA3_512
-    TStreamRedirectSha224,     // hfSHA224
-    TStreamRedirectSha3_224,   // hfSHA3_224
-    TStreamRedirectSha3_384,   // hfSHA3_384
-    TStreamRedirectShake128,   // hfShake128
-    TStreamRedirectShake256);  // hfShake256)
+    TStreamRedirectMd5,         // hfMD5
+    TStreamRedirectSha1,        // hfSHA1
+    TStreamRedirectSha256,      // hfSHA256
+    TStreamRedirectSha384,      // hfSHA384
+    TStreamRedirectSha512,      // hfSHA512
+    TStreamRedirectSha512_256,  // hfSHA512_256
+    TStreamRedirectSha3_256,    // hfSHA3_256
+    TStreamRedirectSha3_512,    // hfSHA3_512
+    TStreamRedirectSha224,      // hfSHA224
+    TStreamRedirectSha3_224,    // hfSHA3_224
+    TStreamRedirectSha3_384,    // hfSHA3_384
+    TStreamRedirectShake128,    // hfShake128
+    TStreamRedirectShake256,    // hfShake256
+    TStreamRedirectSha256_128,  // hfSHA256_128
+    TStreamRedirectSha256_160); // hfSHA256_160
 
   /// the standard text of a THashAlgo (in uppercase characters)
   HASH_TXT: array[THashAlgo] of RawUtf8 = (
     'MD5', 'SHA-1', 'SHA-256', 'SHA-384', 'SHA-512', 'SHA-512/256',
     'SHA3-256', 'SHA3-512', 'SHA-224', 'SHA3-224', 'SHA3-384',
-    'SHAKE128', 'SHAKE256');
+    'SHAKE128', 'SHAKE256', 'SHA-256/128', 'SHA-256/160');
   /// the standard text of a THashAlgo (in lowercase characters)
   HASH_TXT_LOWER: array[THashAlgo] of RawUtf8 = (
     'md5', 'sha-1', 'sha-256', 'sha-384', 'sha-512', 'sha-512/256',
     'sha3-256', 'sha3-512', 'sha-224', 'sha3-224', 'sha3-384',
-    'shake128', 'shake256');
+    'shake128', 'shake256', 'sha-256/128', 'sha-256/160');
 
 type
   /// the HMAC/SHA-1 HMAC/SHA-2 and SHA-3 algorithms known by TSynSigner
@@ -972,7 +987,7 @@ type
 
 const
   /// map the size in bytes (16..64) of any THashAlgo digest
-  // - note that SHA-3 or SHA512-256 share the same size with other algos
+  // - note that some algorithms share the same size with other algos
   HASH_SIZE: array[THashAlgo] of byte = (
     SizeOf(TMd5Digest),    // 16 bytes for hfMD5
     SizeOf(TSHA1Digest),   // 20 bytes for hfSHA1
@@ -986,24 +1001,28 @@ const
     SizeOf(THash224),      // 28 bytes for hfSHA3_224
     SizeOf(THash384),      // 48 bytes for hfSHA3_384
     SizeOf(THash128),      // 16 bytes for hfShake128
-    SizeOf(THash256));     // 32 bytes for hfShake256
+    SizeOf(THash256),      // 32 bytes for hfShake256
+    SizeOf(THash128),      // 16 bytes for hfSHA256_128
+    SizeOf(THash160));     // 20 bytes for hfSHA256_160
 
   /// map the file extension text of any THashAlgo digest
   // - TextToHashAlgo() is able to recognize those values
   HASH_EXT: array[THashAlgo] of RawUtf8 = (
-    '.md5',        // hfMD5
-    '.sha1',       // hfSHA1
-    '.sha256',     // hfSHA256
-    '.sha384',     // hfSHA384
-    '.sha512',     // hfSHA512
-    '.sha512-256', // hfSHA512_256
-    '.sha3-256',   // hfSHA3_256
-    '.sha3-512',   // hfSHA3_512
-    '.sha224',     // hfSHA224
-    '.sha3-224',   // hfSHA3_224
-    '.sha3-384',   // hfSHA3_384
-    '.shake128',   // hfShake128
-    '.shake256');  // hfShake256
+    '.md5',         // hfMD5
+    '.sha1',        // hfSHA1
+    '.sha256',      // hfSHA256
+    '.sha384',      // hfSHA384
+    '.sha512',      // hfSHA512
+    '.sha512-256',  // hfSHA512_256
+    '.sha3-256',    // hfSHA3_256
+    '.sha3-512',    // hfSHA3_512
+    '.sha224',      // hfSHA224
+    '.sha3-224',    // hfSHA3_224
+    '.sha3-384',    // hfSHA3_384
+    '.shake128',    // hfShake128
+    '.shake256',    // hfShake256
+    '.sha256-128',  // hfSHA256_128
+    '.sha256-160'); // hfSHA256_160
 
   /// convert a TSignAlgo / TSynSigner algorithm into a THashAlgo / TSynHasher
   SIGN_HASH: array[TSignAlgo] of THashAlgo = (
@@ -1259,8 +1278,10 @@ type
 { our own SCRAM-MCF client/server pattern, using ModularCryptHash() }
 
 /// compute the SCRAM challenge to be stored on DB for a given "Modular Crypt" hash
-// - the value is bound to the User logon, so that it can't be reassigned to
+// - expects a true KDF/MCF Hash in '$MCF prefix$hash' format as input
+// - the result is bound to the User logon, so that it can't be reassigned to
 // a more sensitive user on a compromised database ("key swap" attack)
+// - returns '#MCF prefix' + base64uri(StoredKey + ServerKey) as output
 function ScramPersistedKey(const Hash, User: RawUtf8): RawUtf8; overload;
 
 /// compute the SCRAM challenge to be stored for a given "Modular Crypt" hash
@@ -1272,6 +1293,9 @@ function ScramPersistedKey(Mcf: TModularCryptFormat;
 function ScramPersistedKey(const McfFormat, Password, User: RawUtf8): RawUtf8; overload;
 
 /// compute the SCRAM client proof for a given "Modular Crypt" hash
+// - the Server should have returned a  ModularCryptIdentify(info^) MCF prefix
+// of the algorithm, parameters and salt, suitable for Hash computation via
+// ModularCryptHash()
 function ScramClientProof(const Hash, User: RawUtf8; var ClientSignature: THash256;
   const Msg: array of RawByteString): RawUtf8;
 
@@ -1839,9 +1863,8 @@ type
   // an (optional) associated record
   // - cookie is digitally signed, and any associated record is encrypted, using
   // the cryptographically secure AES-GCM-128 algorithm
-  TBinaryCookieGenerator = class(TSynPersistent)
+  TBinaryCookieGenerator = class(TObjectLightLock)
   protected
-    fSafe: TLightLock;
     fContext: TBinaryCookieContext;
     fCookieName: RawUtf8;
     fDefaultTimeOutMinutes: cardinal;
@@ -2424,6 +2447,27 @@ type
     ccfBase64,
     ccfBase64Uri);
 
+  /// used to store one unknown/unsupported attribute or extension
+  // - in TCryptCertFields.CustomExts, TXTbsCertificate.ExtensionOther[]
+  // or TXname.Other[]
+  TCryptCustomExt = record
+    /// the OID of this value, in raw binary form - e.g. from AsnEncOid('1.2.3')
+    Oid: RawByteString;
+    /// the value associated with this OID
+    // - as ASN1_OCTSTR raw content for TCryptCertFields.CustomExts or
+    // TXTbsCertificate.ExtensionOther[]
+    // - as RawUtf8 for TXname.Other[]
+    Value: RawByteString;
+    /// true if this extension is defined as critical
+    Critical: boolean;
+  end;
+  PCryptCustomExt = ^TCryptCustomExt;
+
+  /// used to store some unknown attributes or extensions
+  // - in TCryptCertFields.CustomExts, TXTbsCertificate.ExtensionOther[]
+  // or TXname.Other[]
+  TCryptCustomExts = array of TCryptCustomExt;
+
   /// convenient wrapper of X.509 Certificate subject name X.501 fields
   // - not always implemented - mainly our 'syn-es256' certificate won't
   // - as defined in RFC 5280 Appendix A.1
@@ -2449,8 +2493,16 @@ type
     /// serialNumber field (OID 2.5.4.5)
     // - note that is not the main X.509 certificate serial, but e.g. a Tax Number
     SerialNumber: RawUtf8;
-    /// netscapeComment extension (not a field - OID 2.16.840.1.113730.1.13)
+    /// netscapeComment extension (not a name field - OID 2.16.840.1.113730.1.13)
     Comment: RawUtf8;
+    /// set all subject name X.501 fields as RFC 4514 Distinguished Name (DN) text
+    // - e.g. 'CN=John Doe+UID=123,O=Example\, Inc.,C=US' supporting multiple RDN
+    // - other fields like Country/State/...SerialNumber would be ignored
+    // - only currently supported by TXName.FromDNText from mormot.crypt.x509.pas
+    DistinguishedName: RawUtf8;
+    /// raw custom extensions (not name fields)
+    // - use AddCustomExts() to fill it, or e.g. FindAia() to resolve OCSP/Issuers
+    CustomExts: TCryptCustomExts;
   end;
   PCryptCertFields = ^TCryptCertFields;
 
@@ -2481,7 +2533,8 @@ type
     ccmUsage,
     ccmBinary,
     ccmSha1,
-    ccmSha256);
+    ccmSha256,
+    ccmIssuedBy);
 
   TCryptCert = class;
   TCryptCertAlgo = class;
@@ -2560,6 +2613,9 @@ type
     // or the authority serial number for syn-es256 (so equals GetSubjectKey
     // for a self-signed certificate)
     function GetAuthorityKey: RawUtf8;
+    /// fill TCryptCertFields information with internal certificates attributes
+    // - returns false if those fields are not supported e.g. for syn-es256
+    function GetFields(var fields: TCryptCertFields; withexts: boolean = false): boolean;
     /// check if this certificate has been self-signed
     function IsSelfSigned: boolean;
     /// check if this certificate has been issued by the specified certificate
@@ -2806,6 +2862,7 @@ type
     function GetIssuers: TRawUtf8DynArray; virtual; abstract;
     function GetSubjectKey: RawUtf8; virtual; abstract;
     function GetAuthorityKey: RawUtf8; virtual; abstract;
+    function GetFields(var fields: TCryptCertFields; withexts: boolean): boolean; virtual;
     function IsSelfSigned: boolean; virtual; abstract;
     function IsAuthorizedBy(const Authority: ICryptCert): boolean; virtual;
     function Compare(const Another: ICryptCert; Method: TCryptCertComparer): integer; virtual;
@@ -3209,6 +3266,24 @@ function ChainFind(var chain: ICryptCertChain; const cert: ICryptCert;
 // - returns the certificates in IsAuthorizedBy() order
 function ChainConsolidate(const chain: ICryptCertChain): ICryptCertChain;
 
+/// append a new entry as binary pair to a dynamic array of TCryptCustomExt
+// - use AsnEncOid() to compute the o binary from 'x.x.x.x.x' text OID
+procedure AddCustomExts(var exts: TCryptCustomExts; const o, v: RawByteString;
+  crit: boolean = false); overload;
+
+/// append a new entry as binary pair to a dynamic array of TCryptCustomExt
+// - use AsnEncOid() to compute the o binary from 'x.x.x.x.x' text OID
+procedure AddCustomExts(var exts: TCryptCustomExts; const o: TAsnBuffer;
+  const v: RawByteString; crit: boolean = false); overload;
+
+/// efficient search of a TCryptCustomExt.Value from a 'x.x.x.x.x' text OID
+function FindCustomExts(const Other: TCryptCustomExts; OidText: PUtf8Char): RawByteString;
+
+/// low-level search of a TCryptCustomExt.Value from a binary OID
+function FindCustomExtsAsn(o: PCryptCustomExt; n: integer; const b: TAsnObject): RawByteString;
+
+/// search and decode Authority Information Access (1.3.6.1.5.5.7.1.1) extension content
+function FindAia(const ext: TCryptCustomExts; var ocsp, issuers: TRawUtf8DynArray): boolean;
 
 type
   /// maintains a list of ICryptCert, easily reachable per TCryptCertUsage
@@ -3639,6 +3714,10 @@ var
   // - call RegisterOpenSsl once to initialize this lookup table
   CryptStoreOpenSsl: TCryptStoreAlgo;
 
+  /// abstract function placeholder to retrieve an AIA remote resource
+  // - mormot.net.client would implement http:// and https:// protocols
+  CryptRemoteResource: function(const Uri: RawUtf8; var Res: RawByteString): boolean;
+
 
 
 { ************************** Minimal PEM/DER Encoding/Decoding }
@@ -3749,11 +3828,17 @@ const
     '2.16.840.1.101.3.4.2.7',   // hfSHA3_224
     '2.16.840.1.101.3.4.2.9',   // hfSHA3_384
     '2.16.840.1.101.3.4.2.11',  // hfShake128
-    '2.16.840.1.101.3.4.2.12'); // hfShake256
+    '2.16.840.1.101.3.4.2.12',  // hfShake256
+    '2.16.840.1.101.3.4.2.1',   // hfSHA256_128 is SHA-256 truncated to 128-bit
+    '2.16.840.1.101.3.4.2.1');  // hfSHA256_160 is SHA-256 truncated to 160-bit
 
   /// the OID of all ECC public keys (X962)
   // - is stored as prefix to CKA_OID[ckaEcc256..ckaEcc256k] parameter
   ASN1_OID_X962_PUBLICKEY  = '1.2.840.10045.2.1';
+
+  ASN1_OID_AIA         = '1.3.6.1.5.5.7.1.1';
+  ASN1_OID_AIA_OCSP    = '1.3.6.1.5.5.7.48.1';
+  ASN1_OID_AIA_ISSUERS = '1.3.6.1.5.5.7.48.2';
 
   /// the OID of all supported ICryptPublicKey/ICryptPrivateKey algorithms
   CKA_OID: array[TCryptKeyAlgo] of RawUtf8 = (
@@ -3801,6 +3886,7 @@ function IsPem(const pem: RawUtf8): boolean;
 function IsPemEncrypted(const pem: TCertPem): boolean;
 
 /// extract pemCertificate and a private key concatenated in a PEM text file
+// - used e.g. by TCryptCertX509/TCryptCertOpenSsl.Load(cccCertWithPrivateKey)
 function PemToCertAndPrivKey(const MultiPartPem: RawUtf8;
   out Cert, PrivKey: RawByteString): boolean;
 
@@ -4010,12 +4096,15 @@ function AsnTime(dt: TDateTime): TAsnObject;
 function AsnNextTime(var Pos: integer; const Buffer: TAsnObject;
   out Value: TDateTime): boolean;
 
-/// decode an OID ASN.1 IP Address buffer into human-readable text
-function AsnDecIp(p: PAnsiChar; len: integer): RawUtf8;
+/// parse the next GeneralName value within a ASN1_SEQ
+function AsnNextGeneralName(var Pos: integer; const Buffer: TAsnObject;
+  var Name: RawUtf8): boolean;
 
-/// human-readable display of a ASN.1 value binary
-// - used e.g. by the ASNDEBUG conditional
-function AsnDump(const Value: TAsnObject): RawUtf8;
+/// decode an OID ASN.1 IP Address buffer into human-readable text
+procedure AsnDecIp(p: PAnsiChar; len: integer; var text: RawUtf8);
+
+/// decode Authority Information Access (1.3.6.1.5.5.7.1.1) extension content
+function AsnDecAia(const ext: TAsnObject; var ocsp, issuers: TRawUtf8DynArray): boolean;
 
 /// serialize a TSecurityDescriptor instance into JSON
 function SecurityDescriptorToJson(const SD: TSecurityDescriptor): RawUtf8;
@@ -4047,7 +4136,9 @@ begin
     hfSHA1:
       PSha1(@ctxt)^.Init;
     hfSHA224:
-      PSha256(@ctxt)^.Init224;
+      PSha256(@ctxt)^.Init224; // specific init vectors
+    hfSHA256_128,
+    hfSHA256_160,
     hfSHA256:
       PSha256(@ctxt)^.Init;
     hfSHA384:
@@ -4069,7 +4160,7 @@ const
     SizeOf(TMd5),    SizeOf(TSha1),       SizeOf(TSha256), SizeOf(TSha384),
     SizeOf(TSha512), SizeOf(TSha512_256), SizeOf(TSha3),   SizeOf(TSha3),
     SizeOf(TSha256), SizeOf(TSha3),       SizeOf(TSha3),   SizeOf(TSha3),
-    SizeOf(TSha3));
+    SizeOf(TSha3),   SizeOf(TSha256),     SizeOf(TSha256));
 
 procedure TSynHasher.CopyTo(out aHasher: TSynHasher);
 begin
@@ -4090,6 +4181,8 @@ begin
         PMd5(@ctxt)^.Update(aBuffer^, aLen);
       hfSHA1:
         PSha1(@ctxt)^.Update(aBuffer, aLen);
+      hfSHA256_128,
+      hfSHA256_160,
       hfSHA224,
       hfSHA256:
         PSha256(@ctxt)^.Update(aBuffer, aLen);
@@ -4157,12 +4250,14 @@ begin
       PMd5(@ctxt)^.Final(aDigest.h0, aNoInit);
     hfSHA1:
       PSha1(@ctxt)^.Final(aDigest.b160, aNoInit);
-    hfSHA224: // SHA-224 is just a truncated SHA-256 result
+    hfSHA224: // SHA-224 is just a truncated SHA-256 result with other Init
       begin
         PSha256(@ctxt)^.Final(aDigest.Lo, {aNoInit=}true);
         if not aNoInit then
           PSha256(@ctxt)^.Init224; // but it needs its own re-initialization
       end;
+    hfSHA256_128, // plain SHA-256 truncated to 128/160-bit (no RFC existing)
+    hfSHA256_160,
     hfSHA256:
       PSha256(@ctxt)^.Final(aDigest.Lo, aNoInit);
     hfSHA384:
@@ -4526,91 +4621,77 @@ begin
   result := mormot.core.text.HexToBin(pointer(HexaHash), @Digest.Bin, HASH_SIZE[Digest.Algo]);
 end;
 
-{ TStreamRedirectShake256 }
+{ TStreamRedirect* inherited classes }
 
 class function TStreamRedirectShake256.GetAlgo: THashAlgo;
 begin
   result := hfShake256;
 end;
 
-{ TStreamRedirectShake128 }
-
 class function TStreamRedirectShake128.GetAlgo: THashAlgo;
 begin
   result := hfShake128;
 end;
-
-{ TStreamRedirectSha3_512 }
 
 class function TStreamRedirectSha3_512.GetAlgo: THashAlgo;
 begin
   result := hfSHA3_512;
 end;
 
-{ TStreamRedirectSha3_224 }
-
 class function TStreamRedirectSha3_224.GetAlgo: THashAlgo;
 begin
   result := hfSHA3_224;
 end;
-
-{ TStreamRedirectSha3_256 }
 
 class function TStreamRedirectSha3_256.GetAlgo: THashAlgo;
 begin
   result := hfSHA3_256;
 end;
 
-{ TStreamRedirectSha3_384 }
-
 class function TStreamRedirectSha3_384.GetAlgo: THashAlgo;
 begin
   result := hfSHA3_384;
 end;
-
-{ TStreamRedirectSha512 }
 
 class function TStreamRedirectSha512.GetAlgo: THashAlgo;
 begin
   result := hfSHA512;
 end;
 
-{ TStreamRedirectSha512_256 }
-
 class function TStreamRedirectSha512_256.GetAlgo: THashAlgo;
 begin
   result := hfSHA512_256;
 end;
-
-{ TStreamRedirectSha384 }
 
 class function TStreamRedirectSha384.GetAlgo: THashAlgo;
 begin
   result := hfSHA384;
 end;
 
-{ TStreamRedirectSha256 }
-
 class function TStreamRedirectSha256.GetAlgo: THashAlgo;
 begin
   result := hfSHA256;
 end;
 
-{ TStreamRedirectSha224 }
+class function TStreamRedirectSha256_128.GetAlgo: THashAlgo;
+begin
+  result := hfSHA256_128;
+end;
+
+class function TStreamRedirectSha256_160.GetAlgo: THashAlgo;
+begin
+  result := hfSHA256_160;
+end;
 
 class function TStreamRedirectSha224.GetAlgo: THashAlgo;
 begin
   result := hfSHA224;
 end;
 
-{ TStreamRedirectSha1 }
-
 class function TStreamRedirectSha1.GetAlgo: THashAlgo;
 begin
   result := hfSHA1;
 end;
-
-{ TStreamRedirectMd5 }
 
 class function TStreamRedirectMd5.GetAlgo: THashAlgo;
 begin
@@ -5822,11 +5903,9 @@ begin
       '-', '/':
         if not onlyalphanum then
           if ((tmp[0] = #4) and // '.sha3-256' -> 'sha3_256'
-              (PCardinal(@tmp[1])^ and $ffdfdfdf =
-                ord('S') + ord('H') shl 8 + ord('A') shl 16 + ord('3') shl 24)) or
-             ((tmp[0] = #6) and // '.sha512-256' -> 'sha512_256'
-              (PCardinal(@tmp[1])^ and $ffdfdfdf =
-                ord('S') + ord('H') shl 8 + ord('A') shl 16 + ord('5') shl 24)) then
+              (PCardinal(@tmp[1])^ and $ffdfdfdf = SHA_HI + ord('3') shl 24)) or
+             ((tmp[0] = #6) and // '.sha512-256' or '.sha256-160'
+              (PCardinal(@tmp[1])^ and $80dfdfdf = SHA_HI)) then
             AppendShortChar('_', @tmp);
     end;
     inc(P);
@@ -9033,12 +9112,13 @@ begin
       ccmIssuerName:
         found := EqualBuf(Cert^.GetIssuerName, Value);
       ccmSubjectCN:
-        found := IdemPropNameU(Cert^.GetSubject('CN'), Value);
+        found := PropNameEquals(Cert^.GetSubject('CN'), Value);
       ccmIssuerCN:
-        found := IdemPropNameU(Cert^.GetIssuer('CN'), Value);
+        found := PropNameEquals(Cert^.GetIssuer('CN'), Value);
       ccmSubjectKey:
         found := HumanHexCompare(Cert^.GetSubjectKey, Value) = 0;
-      ccmAuthorityKey:
+      ccmAuthorityKey,
+      ccmIssuedBy:
         found := CsvContains(Cert^.GetAuthorityKey, Value);
       ccmSubjectAltName:
         found := FindRawUtf8(Cert^.GetSubjects, Value, {casesens=}false) >= 0;
@@ -9047,9 +9127,9 @@ begin
       ccmBinary:
         found := EqualBuf(Cert^.Save, Value);
       ccmSha1:
-        found := IdemPropNameU(Cert^.GetDigest(hfSha1), Value);
+        found := PropNameEquals(Cert^.GetDigest(hfSha1), Value);
       ccmSha256:
-        found := IdemPropNameU(Cert^.GetDigest(hfSha256), Value);
+        found := PropNameEquals(Cert^.GetDigest(hfSha256), Value);
     else
       found := false; // unsupported search method (e.g. ccmUsage)
     end;
@@ -9087,10 +9167,22 @@ begin
     // note: Fields=nil since TCryptCertInternal does not support them
 end;
 
-function TCryptCert.IsAuthorizedBy(const Authority: ICryptCert): boolean;
+function TCryptCert.GetFields(var fields: TCryptCertFields; withexts: boolean): boolean;
 begin
-  result := (Authority <> nil) and
-            IdemPropNameU(GetAuthorityKey, Authority.GetSubjectKey);
+  result := false; // not supported by default (e.g. for syn-es256)
+end;
+
+function TCryptCert.IsAuthorizedBy(const Authority: ICryptCert): boolean;
+var
+  akid: RawUtf8;
+begin
+  result := false;
+  if (Authority = nil) or
+     not PropNameEquals(GetIssuerName, Authority.GetSubjectName) then
+    exit; // IssuerDN should match Authority.SubjectDN
+  akid := GetAuthorityKey;
+  result := (akid = '') or
+            PropNameEquals(akid, Authority.GetSubjectKey);
 end;
 
 function TCryptCert.Compare(const Another: ICryptCert;
@@ -9128,6 +9220,8 @@ begin
         result := CompareBuf(GetDigest(hfSHA1), Another.GetDigest(hfSHA1));
       ccmSha256:
         result := CompareBuf(GetDigest(hfSHA256), Another.GetDigest(hfSHA256));
+      ccmIssuedBy:
+        result := CompareBuf(GetAuthorityKey, Another.GetSubjectKey);
     else // e.g. ccmInstance
       result := ComparePointer(pointer(self), pointer(Another));
     end
@@ -9682,8 +9776,8 @@ begin
       der := NextPemToDer(p, @k);
       if der = '' then
         break;
-      if not (k in [pemUnspecified, pemCertificate]) then
-        continue; // no need to try loading something which is not a X.509 cert
+      if not (k in [pemUnspecified, pemCertificate, pemSynopseCertificate]) then
+        continue; // no need to try loading something which is not a certificate
       c := Load(der);
       if c <> nil then
         ChainAdd(result, c);
@@ -9849,6 +9943,60 @@ begin
   MoveFast(pointer(chain)^, ref[0], count * SizeOf(ref[0]));
   RecursiveCompute(ref[0]); // fill result[0..n-1] in auth order
   DynArrayFakeLength(result, n);
+end;
+
+procedure AddCustomExts(var exts: TCryptCustomExts; const o, v: RawByteString; crit: boolean);
+var
+  n: PtrInt;
+begin
+  n := length(exts);
+  SetLength(exts, n + 1);
+  with exts[n] do
+  begin
+    Oid := o;
+    Value := v;
+    Critical := crit;
+  end;
+end;
+
+procedure AddCustomExts(var exts: TCryptCustomExts; const o: TAsnBuffer;
+  const v: RawByteString; crit: boolean);
+var
+  oid: RawByteString;
+begin
+  FastSetRawByteString(oid, o.Data, o.Len); // seldom called
+  AddCustomExts(exts, oid, v, crit);
+end;
+
+function FindCustomExts(const Other: TCryptCustomExts; OidText: PUtf8Char): RawByteString;
+begin
+  result := FindCustomExtsAsn(pointer(Other), length(Other), AsnEncOid(OidText));
+end;
+
+function FindCustomExtsAsn(o: PCryptCustomExt; n: integer; const b: TAsnObject): RawByteString;
+begin
+  FastAssignNew(result);
+  if (o <> nil) and
+     (n > 0) and
+     (b <> '') then
+    repeat
+      if SortDynArrayRawByteString(o^.Oid, b) = 0 then // O(n) search
+      begin
+        result := o^.Value;
+        exit;
+      end;
+      inc(o);
+      dec(n);
+    until n = 0;
+end;
+
+function FindAia(const ext: TCryptCustomExts; var ocsp, issuers: TRawUtf8DynArray): boolean;
+var
+  aia: TAsnObject;
+begin
+  aia := FindCustomExts(ext, ASN1_OID_AIA);
+  result := (aia <> '') and
+            AsnDecAia(aia, ocsp, issuers);
 end;
 
 
@@ -10413,7 +10561,7 @@ begin
     pem := NextPem(P, @k);
     if pem = '' then
       break;
-    if k = pemCertificate then
+    if k = pemCertificate then // pemSynopseCertificate is out-of-scope here
       if {%H-}Cert <> '' then
         exit // should contain a single Certificate
       else
@@ -10929,8 +11077,9 @@ end;
 function SeqToEccPrivKey(cka: TCryptKeyAlgo; const seq: RawByteString;
   rfcpub: PRawByteString): RawByteString;
 var
-  oid, oct, key: RawByteString;
-  pos, posoct, vt, vers: integer;
+  oid, key: TAsnObject;
+  pos, vt, vers: integer;
+  oct: TAsnBuffer;
 begin
   FastAssignNew(result);
   if rfcpub <> nil then
@@ -10960,11 +11109,10 @@ begin
           if oid <> CKA_OID[cka] then
             exit;
           // private key raw binary extraction
-          posoct := 1;
-          if (AsnNextRaw(pos, seq, oct) = ASN1_OCTSTR) and // privateKey
-             (AsnNext(posoct, oct{%H-}) = ASN1_SEQ) and
-             (AsnNext(posoct, oct) = ASN1_INT) and
-             (AsnNextRaw(posoct, oct, key) = ASN1_OCTSTR) then
+          if (AsnNextBuffer(pos, seq, oct) = ASN1_OCTSTR) and // privateKey
+             (AsnNextBuffer(oct{%H-}) = ASN1_SEQ) and
+             (AsnNextBuffer(oct) = ASN1_INT) and
+             (AsnNextBuffer(oct, @key) = ASN1_OCTSTR) then
             result := key;
         end;
       1: // https://www.rfc-editor.org/rfc/rfc5915 EC key pair alternate format
@@ -10986,7 +11134,6 @@ begin
         end;
       end;
     end;
-  FillZero(oct);
   FillZero(key);
 end;
 
@@ -11033,11 +11180,11 @@ end;
 function X509PubKeyFromDer(const PkcsDer: RawByteString): RawByteString;
 var
   pos: integer;
-  algoseq: RawByteString; // algorithm OID(s) as encoded by CkaToSeq()
+  algoseq: TAsnBuffer; // algorithm OID(s) as encoded by CkaToSeq()
 begin
   pos := 1;
   if (AsnNext(pos, PkcsDer) <> ASN1_SEQ) or
-     (AsnNextRaw(pos, PkcsDer, algoseq) <> ASN1_SEQ) or
+     (AsnNextBuffer(pos, PkcsDer, algoseq) <> ASN1_SEQ) or // CkaToSeq()
      (AsnNextRaw(pos, PkcsDer, result) <> ASN1_BITSTR) then
     FastAssignNew(result);
 end;
@@ -11136,8 +11283,8 @@ begin
     exit;
   // append the X.509 v3 known extensions
   Append(result, '  X509v3 extensions:'#13#10);
-  KeyUsage(cuCrlSign, cuDigitalSignature, 'Key Usage: critical');
-  KeyUsage(cuTlsServer, cuTimestamp, 'Extended Key Usage:');
+  KeyUsage(cuCrlSign,   cuDigitalSignature, 'Key Usage: critical');
+  KeyUsage(cuTlsServer, cuTimestamp,        'Extended Key Usage:');
   if cuCA in c.Usage then
     bits := 'TRUE'
   else
@@ -11230,18 +11377,20 @@ end;
 function AsnNextTime(var Pos: integer; const Buffer: TAsnObject;
   out Value: TDateTime): boolean;
 var
-  vt: integer;
-  raw: RawByteString;
+  vt: PtrInt;
+  raw: TAsnBuffer;
+  tmp: TShort63;
 begin
-  vt := AsnNextRaw(pos, Buffer, raw);
+  vt := AsnNextBuffer(pos, Buffer, raw);
   result := false;
-  if length(raw) < 12 then
+  if (raw.Len < 12) or (raw.Len > 60) then
     exit;
+  tmp[0] := #0;
   case vt of
     ASN1_UTCTIME:
-      Prepend(raw, '20'); // YY -> YYYY
+      PCardinal(@tmp)^ := 2 + ord('2') shl 8 + ord('0') shl 16; // YY -> '20YY'
     ASN1_GENTIME:
-      if raw = '99991231235959Z' then
+      if EqualBuf('99991231235959Z', raw.Data, raw.Len) then
       begin
         Value := 0; // special value for unspecified NotAfter
         result := true;
@@ -11250,161 +11399,78 @@ begin
   else
     exit;
   end;
-  insert('T', raw, 9); // make ISO-8601 compatible 'YYYYMMDDThhmmss'
-  Iso8601ToDateTimePUtf8CharVar(pointer(raw), length(raw), Value);
+  vt := 8 - ord(tmp[0]);
+  AppendShortBuffer(raw.Data, vt, high(tmp), @tmp);
+  AppendShortChar('T', @tmp); // make ISO-8601 compatible 'YYYYMMDDThhmmss'
+  AppendShortBuffer(PAnsiChar(raw.Data) + vt, raw.Len - vt, high(tmp), @tmp);
+  Iso8601ToDateTimePUtf8CharVar(@tmp[1], ord(tmp[0]), Value);
   result := Value <> 0;
 end;
 
-function AsnDecIp(p: PAnsiChar; len: integer): RawUtf8;
+function AsnNextGeneralName(var Pos: integer; const Buffer: TAsnObject;
+  var Name: RawUtf8): boolean;
+var
+  v: TAsnBuffer;
+begin
+  case AsnNextBuffer(Pos, Buffer, v) of // most GeneralName types decoding
+    ASN1_NULL: // no more items
+      begin
+        result := false;
+        exit;
+      end;
+    ASN1_CTX1, // rfc8722Name
+    ASN1_CTX2, // dnsName
+    ASN1_CTX6: // uri
+      FastSetString(Name, v.Data, v.Len); // was stored as IA5String
+    ASN1_CTX7: // ip
+      AsnDecIp(v.Data, v.Len, Name);
+    // ASN1_CTX4 = directoryName = TXName
+  else
+    FastAssignNew(Name);  // unsupported value type
+  end;
+  result := true;
+end;
+
+procedure AsnDecIp(p: PAnsiChar; len: integer; var text: RawUtf8);
 begin
   case len of
     4:
       with PDWordRec(p)^ do
-        FormatUtf8('%.%.%.%', [B[0], B[1], B[2], B[3]], result);
+        FormatUtf8('%.%.%.%', [B[0], B[1], B[2], B[3]], text);
    16:
      // expanded IPv6 xx:xx:xx:...:xx content (no mormot.net.sock dependency)
-     ToHumanHex(result, pointer(p), len);
+     ToHumanHex(text, pointer(p), len);
   else
-    BinToHexLower(p, len, result);
+    BinToHexLower(p, len, text);
   end;
 end;
 
-function IsBinaryString(var Value: RawByteString): boolean;
+function AsnDecAia(const ext: TAsnObject; var ocsp, issuers: TRawUtf8DynArray): boolean;
 var
-  n: PtrInt;
-begin
-  result := true;
-  for n := 1 to length(Value) do
-    case ord(Value[n]) of
-      0:
-        if n <> length(value) then
-          exit
-        else
-          // consider null-terminated strings as non-binary, but truncate
-          SetLength(Value, n - 1);
-      1..8, // consider TAB (#9) char as text
-      10..31:
-        exit;
-    end;
+  pos: integer;
+  oid, v: RawByteString;
+begin // see xeAuthorityInformationAccess in TXTbsCertificate.AddNextExtensions
   result := false;
-end;
-
-procedure DumpClass(at: integer; w: TTextWriter);
-begin
-  if at and ASN1_CL_APP <> 0 then
-    w.AddShorter('APP ');
-  if at and ASN1_CL_CTX <> 0 then
-    w.AddShorter('CTX ');
-  if at and ASN1_CL_PRI = ASN1_CL_PRI then
-    w.AddShorter('PRI ');
-  if at < ASN1_CL_APP then
-    w.AddShorter('unknown')
-  else
-    w.AddByteToHex(at and $0f);
-end;
-
-function AsnDump(const Value: TAsnObject): RawUtf8;
-var
-  i, at, x, n, indent, ilcount: integer;
-  s: RawByteString;
-  il: TIntegerDynArray;
-  w: TTextWriter;
-  tmp: TTextWriterStackBuffer;
-begin
-  w := TTextWriter.CreateOwnedStream(tmp);
-  try
-    i := 1;
-    ilcount := 0;
-    indent := 0;
-    while i < length(Value) do
+  ocsp := nil;
+  issuers := nil;
+  pos := 1;
+  if AsnNext(pos, ext) = ASN1_SEQ then
+    while (AsnNext(pos, ext) = ASN1_SEQ) and
+          (AsnNext(pos, ext, @oid) = ASN1_OBJID) and
+          (AsnNext(pos, ext, @v) = ASN1_CTX6) do
     begin
-      for n := ilcount - 1 downto 0 do
-        if il[n] <= i then
-        begin
-          DeleteInteger(il, ilcount, n);
-          dec(indent, 2);
-        end;
-      at := AsnNext(i, Value, @s);
-      w.AddChars(' ', indent);
-      w.Add('$');
-      w.AddByteToHexLower(at);
-      if (at and ASN1_CL_CTR) <> 0 then
+      result := true;
+      if oid{%H-} = ASN1_OID_AIA_OCSP then
       begin
-        w.Add(' ');
-        case at of
-          ASN1_SEQ:
-            w.AddShorter('SEQ');
-          ASN1_SETOF:
-            w.AddShorter('SETOF');
-        else
-          DumpClass(at, w);
-        end;
-        x := length(s);
-        w.Add(' CTR: length %', [x]);
-        inc(indent, 2);
-        AddInteger(il, ilcount, x + i - 1);
+        if IsHttp(v{%H-}) then
+          AddRawUtf8(ocsp, v);
       end
-      else
-      begin
-        w.Add(' ');
-        case at of
-          // base ASN.1 types
-          ASN1_BOOL:
-            w.AddShorter('BOOL');
-          ASN1_INT:
-            w.AddShorter('INT');
-          ASN1_BITSTR:
-            w.AddShorter('BITSTR');
-          ASN1_OCTSTR:
-            w.AddShorter('OCTSTR');
-          ASN1_NULL:
-            w.AddShorter('NULL');
-          ASN1_OBJID:
-            w.AddShorter('OBJID');
-          ASN1_ENUM:
-            w.AddShorter('ENUM');
-          ASN1_UTF8STRING:
-            w.AddShorter('UTF8');
-          ASN1_PRINTSTRING:
-            w.AddShorter('PRINT');
-          ASN1_IA5STRING:
-            w.AddShorter('IA5');
-          ASN1_UTCTIME:
-            w.AddShorter('UTC');
-          ASN1_GENTIME:
-            w.AddShorter('GEN');
-        else
-          DumpClass(at, w);
-        end;
-        w.Add(':', ' ');
-        if IsBinaryString(s) then
-        begin
-          w.Add('binary len=% ', [length(s)]);
-          w.AddShort(EscapeToShort(s));
-        end
-        else if at in ASN1_NUMBERS then
-          w.AddString(s) // not quoted value
-        else if PosExChar('"', s) = 0 then
-        begin
-          w.Add('"');
-          w.AddString(s);
-          w.AddDirect('"');
-        end
-        else
-        begin
-          w.Add('''');
-          w.AddString(s); // alternate output layout for quoted text
-          w.AddDirect('''');
-        end;
-      end;
-      w.AddDirectNewLine; // adapted to the current console output
+      else if oid = ASN1_OID_AIA_ISSUERS then
+        if IsHttp(v) or
+           IsLdap(v) then
+          AddRawUtf8(issuers, v);
     end;
-    w.SetText(result);
-  finally
-    w.Free;
-  end;
 end;
-
 
 function SecurityDescriptorToJson(const SD: TSecurityDescriptor): RawUtf8;
 begin

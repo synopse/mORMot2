@@ -7202,8 +7202,7 @@ begin
   if ValidAesKeyBits(KeyBits) then
   begin
     Result[0] := #11;
-    PCardinal(@Result[1])^ :=
-      ord('a') + ord('e') shl 8 + ord('s') shl 16 + ord('-') shl 24;
+    PCardinal(@Result[1])^ := AES_LO + ord('-') shl 24;
     PCardinal(@Result[5])^ := UINT_999[KeyBits].TextLo;
     Result[8] := '-'; // UINT_999[] put a #0 there
     PCardinal(@Result[9])^ := PCardinal(@AESMODE_TXT[Mode])^;
@@ -7228,8 +7227,7 @@ var
 begin
   result := false;
   if (AesAlgoName = nil) or
-     (PCardinal(AesAlgoName)^ and $ffdfdfdf <>
-        ord('A') + ord('E') shl 8 + ord('S') shl 16 + ord('-') shl 24) then
+     (PCardinal(AesAlgoName)^ and $ffdfdfdf <> AES_HI + ord('-') shl 24) then
     exit;
   case PCardinal(AesAlgoName + 4)^ of
     ord('1') + ord('2') shl 8 + ord('8') shl 16 + ord('-') shl 24:
@@ -9969,7 +9967,7 @@ begin
   n := Utf8DecodeToUnicode(up, tmp); // UTF-16 little endian
   if n = 0 then
     exit;
-  RawUnicodeSwapEndian(tmp.buf, n);  // UTF-16 big endian conversion
+  bswap16array(tmp.buf, n);  // UTF-16 big endian conversion
   sha1.Init;
   sha1.Update(@DOTNET_NAMESPACE, SizeOf(DOTNET_NAMESPACE));
   sha1.Update(tmp.buf, n * 2);

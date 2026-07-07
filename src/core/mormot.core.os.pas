@@ -3494,6 +3494,9 @@ function GetFileNameWithoutExt(const FileName: TFileName;
 // - used e.g. to compute Executable.ProgramName
 function GetFileNameWithoutExtOrPath(const FileName: TFileName): RawUtf8;
 
+/// return the position of a file extension from AnsiString or UnicodeString
+function PosExtString(Str: PChar): PChar;
+
 /// compare two "array of TFileName" elements, grouped by file extension
 // - i.e. with no case sensitivity on Windows
 // - the expected string type for A and B is the RTL string, i.e. TFileName
@@ -5012,6 +5015,23 @@ type
   end;
 
   /// a thread-safe class with a virtual constructor and properties persistence
+  // - publishes our lightweight exclusive non-reentrant lock
+  TObjectLightLock = class(TSynPersistent)
+  protected
+    fSafe: TLightLock;
+  public
+    /// access to the associated lightweight exclusive non-reentrant lock instance
+    property Safe: TLightLock
+      read fSafe;
+    /// could be used as a short-cut to Safe.Lock
+    procedure Lock;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// could be used as a short-cut to Safe.UnLock
+    procedure Unlock;
+      {$ifdef HASINLINE}inline;{$endif}
+  end;
+
+  /// a thread-safe class with a virtual constructor and properties persistence
   // - publishes one Operating System standard lock without the TSynLocker overhead
   // - on high contention, for proper padding over the 64-bytes CPU cache line,
   // you should add at least 36 bytes on CPU32 (i.e. 9 integer/pointer fields)
@@ -5026,10 +5046,10 @@ type
     /// access to the associated non-reentrant Operating System lock instance
     property Safe: TOSLock
       read fSafe;
-    /// could be used as a short-cut to Safe^.Lock
+    /// could be used as a short-cut to Safe.Lock
     procedure Lock;
       {$ifdef HASINLINE}inline;{$endif}
-    /// could be used as a short-cut to Safe^.UnLock
+    /// could be used as a short-cut to Safe.UnLock
     procedure Unlock;
       {$ifdef HASINLINE}inline;{$endif}
   end;
@@ -5047,10 +5067,10 @@ type
     /// access to the associated non-reentrant Operating System lock instance
     property Safe: TOSLightLock
       read fSafe;
-    /// could be used as a short-cut to Safe^.Lock
+    /// could be used as a short-cut to Safe.Lock
     procedure Lock;
       {$ifdef HASINLINE}inline;{$endif}
-    /// could be used as a short-cut to Safe^.UnLock
+    /// could be used as a short-cut to Safe.UnLock
     procedure Unlock;
       {$ifdef HASINLINE}inline;{$endif}
   end;
@@ -6153,7 +6173,7 @@ function RunCommand(const cmd: TRunArg; waitfor: boolean = true;
 // - will abort once waitfordelayms expires - if not its default INFINITE
 // - force setresult=false if you only need onouput() and will discard the result
 // - optional env is Windows only, (FPC popen does not support it), and should
-// be encoded as name=value#0 pairs
+// be encoded as name=value#0 pairs - with env[length(env)]=#0 to end with #0#0
 // - you can specify a wrkdir if the path specified by cmd is not good enough
 // - TRunOptions = RUN_CMD as expected from executing a transient command
 // - warning: exitcode^ should be a 32-bit "integer" variable, not a PtrInt
@@ -8190,7 +8210,10 @@ begin
         {$ifdef OSWINDOWS} '\', ':' {$else} '/' {$endif}:
           exit; // reached end of filename
         '.':
-          begin
+          case Str[i - 1] of
+            {$ifdef OSWINDOWS} '\', ':' {$else} '/' {$endif}:
+              exit; // not '/var/www/website/.htdigest'
+          else
             result := @Str[i + 1]; // compare extension just after '.'
             exit;
           end;
@@ -11622,6 +11645,21 @@ procedure TSynLocked.Unlock;
 begin
   if self <> nil then
     fSafe^.UnLock;
+end;
+
+
+{ TObjectLightLock }
+
+procedure TObjectLightLock.Lock;
+begin
+  if self <> nil then
+    fSafe.Lock;
+end;
+
+procedure TObjectLightLock.Unlock;
+begin
+  if self <> nil then
+    fSafe.UnLock;
 end;
 
 

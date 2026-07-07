@@ -31,6 +31,7 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security,
   mormot.core.data,
   mormot.core.unicode,
   mormot.core.text,
@@ -1035,9 +1036,8 @@ type
   /// implement HTTP async client requests
   // - reusing the threads pool and sockets polling of an associated
   // TAsyncConnections instance (typically a THttpAsyncServer)
-  THttpAsyncClientConnections = class(TSynPersistent)
+  THttpAsyncClientConnections = class(TObjectLightLock)
   protected
-    fLock: TLightLock;
     fOwner: TAsyncConnections;
     fConnectionTimeoutMS: integer;
     fUserAgent: RawUtf8;
@@ -1196,6 +1196,7 @@ type
   // is accessed, so that the cache is always flushed after HttpHeadCacheSec
   // - hpoClientIgnoreTlsError will ignore any HTTPS issue
   // - hpoClientAlllowWinApi will be used for THttpProxyUrl.RemoteClientHead()
+  // - hpoClientAllowRedirect enable 30x HTTP redirections (disabled by default)
   // - hpoClientNoCacheDirect disable caching of dynamic pages < HttpDirectGetKB
   // - hpoClientLowerCaseUri will force remote http://... to be in lowercase
   // - hpoClientNormalizeCaseHash to compute the local hash from uppercase URI
@@ -1213,6 +1214,7 @@ type
     hpoClientHeadNoRefresh,
     hpoClientIgnoreTlsError,
     hpoClientAlllowWinApi,
+    hpoClientAllowRedirect,
     hpoClientNoCacheDirect,
     hpoClientLowerCaseUri,
     hpoClientNormalizeCaseHash,
@@ -5584,11 +5586,11 @@ begin
   if ext = nil then
     exit;
   case PCardinal(ext)^ of
-    ord('m') + ord('d') shl 8 + ord('5') shl 16:
+    MD5_LO:
       hf := hfMd5;
-    ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('1') shl 24:
+    SHA_LO + ord('1') shl 24:
       hf := hfSHA1;
-    ord('s') + ord('h') shl 8 + ord('a') shl 16 + ord('2') shl 24:
+    SHA_LO + ord('2') shl 24:
       hf := hfSHA256;
   else
     exit;
@@ -5636,7 +5638,8 @@ begin
   client := TSimpleHttpClient.Create(
     not (hpoClientAlllowWinApi in fSettings.Options));
   fRemoteClient := client;
-  client.Options^.RedirectMax := 0; // no automatic redirection
+  if not (hpoClientAllowRedirect in fSettings.Options) then
+    client.Options^.RedirectMax := 0; // no automatic redirection by default
   if hpoClientIgnoreTlsError in fSettings.Options then
     client.Options^.TLS.IgnoreCertificateErrors := true;
   if Assigned(fSettings.OnRemoteClient) then
@@ -5680,7 +5683,7 @@ begin // this method is protected by fOsSafe.Lock
   if StatusCodeIsSuccess(status) then // 2xx..3xx range
     GetHeaderInfo(fRemoteClient.Headers, cache.Size, d);
   cache.TimeMS := d * MilliSecsPerSec;
-  cache.HashDigest := hfSHA1; // not SHA-1 but 160-bit trunc of safer SHA-256
+  cache.HashDigest := hfSHA256_160; // SHA-256 truncated to 160-bit
   HttpRequestHashBase32(Uri, @cache.HashB32, pointer(fRemoteClient.Headers),
     @cache.Hash160, hpoClientNormalizeCaseHash in fSettings.Options);
   cache.PurgedHeaders := PurgeHeaders(fRemoteClient.Headers, false,

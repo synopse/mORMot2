@@ -2483,16 +2483,17 @@ end;
 
 class procedure TSynMustache.Info(const Value: variant; out Result: variant);
 var
-  u: RawUtf8;
+  u: TTempUtf8;
   v: PUtf8Char;
-  l: PtrInt;
+  l: PtrInt; // not integer
 begin
   PCardinal(@Result)^ := varNull;
-  if not VariantToText(Value, u) then
+  if not VariantToTempUtf8(Value, u, [vfNoComplex, vfNullAsVoid]) then
     exit;
-  v := GlobalInfoFind(pointer(u), length(u), l);
+  v := GlobalInfoFind(u.Text, u.Len, l);
   if v <> nil then
     RawUtf8ToVariant(v, l, Result);
+  TempUtf8Done(u);
 end;
 
 procedure DoCase(const Value: variant; out Result: variant; Kind: TSetCase);

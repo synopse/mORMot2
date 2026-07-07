@@ -913,9 +913,6 @@ function StringFromBomFile(const FileName: TFileName; var FileContent: RawByteSt
 function RawUtf8FromFile(const FileName: TFileName): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// internal function to swap 16-bit LE/BE endianess of a buffer with len > 0
-procedure RawUnicodeSwapEndian(buf: PWord; len: PtrInt);
-
 /// read a File content into a RawUtf8, detecting any leading BOM
 // - assume file with no BOM is encoded with the current Ansi code page, not
 // UTF-8, unless AssumeUtf8IfNoBom is true and it behaves like RawUtf8FromFile()
@@ -5167,15 +5164,6 @@ begin
   result := AnyTextFileToRawUtf8(FileName, {AssumeUtf8IfNoBom=}true);
 end;
 
-procedure RawUnicodeSwapEndian(buf: PWord; len: PtrInt);
-begin // internal function used with len > 0
-  repeat
-    buf^ := bswap16(buf^); // fast enough for our purpose (hardly used)
-    inc(buf);
-    dec(len)
-  until len = 0;
-end;
-
 function AnyTextFileToRawUtf8(const FileName: TFileName; AssumeUtf8IfNoBom: boolean): RawUtf8;
 var
   tmp: RawByteString;
@@ -5195,7 +5183,7 @@ begin
       RawUnicodeToUtf8(PWideChar(buf), chars, result);
     bomUtf16BE: // here chars = WideChar length
       begin
-        RawUnicodeSwapEndian(buf, chars); // in-place conversion from Big-Endian
+        bswap16array(buf, chars); // in-place conversion from Big-Endian
         RawUnicodeToUtf8(PWideChar(buf), chars, result);
       end;
     bomUtf8: // may appear on Windows
@@ -5225,7 +5213,7 @@ begin
       FastSynUnicode(result, buf, chars);
     bomUtf16BE: // here chars = WideChar length
       begin
-        RawUnicodeSwapEndian(buf, chars); // in-place conversion from Big-Endian
+        bswap16array(buf, chars); // in-place conversion from Big-Endian
         FastSynUnicode(result, buf, chars);
       end;
     bomUtf8: // may appear on Windows
@@ -5261,7 +5249,7 @@ begin
       CurrentAnsiConvert.UnicodeBufferToAnsiVar(buf, chars, RawByteString(result));
     bomUtf16BE: // here chars = WideChar length
       begin
-        RawUnicodeSwapEndian(buf, chars); // in-place conversion from Big-Endian
+        bswap16array(buf, chars); // in-place conversion from Big-Endian
         CurrentAnsiConvert.UnicodeBufferToAnsiVar(buf, chars, RawByteString(result));
       end;
     bomUtf8: // may appear on Windows

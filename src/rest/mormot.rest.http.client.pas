@@ -298,6 +298,8 @@ type
   published
     /// internal HTTP/1.1 compatible client
     // - can be used e.g. to access SendTimeout and ReceiveTimeout properties
+    // - call first IsOpen e.g. to initialize this Socket property before any
+    // REST command like ClientSetUser(), e.g. to call Socket.AuthorizeBasic()
     property Socket: THttpClientSocket
       read fSocket;
   end;
