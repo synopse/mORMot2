@@ -1850,6 +1850,9 @@ procedure VarRecToUtf8(V: PVarRec; var result: RawUtf8;
 function VarRecToUtf8IsString(const V: TVarRec; var value: RawUtf8): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// append an open array (const Args: array of const) argument to a TSynTempAdder
+procedure VarRecToAdder(var Adder: TSynTempAdder; V: PVarRec);
+
 /// convert an open array (const Args: array of const) argument to an Int64
 // - returns TRUE and set Value if the supplied argument is a vtInteger, vtInt64
 // or vtBoolean
@@ -9127,6 +9130,15 @@ end;
 function VarRecToUtf8IsString(const V: TVarRec; var value: RawUtf8): boolean;
 begin
   VarRecToUtf8(@V, value, @result);
+end;
+
+procedure VarRecToAdder(var Adder: TSynTempAdder; V: PVarRec);
+var
+  tmp: TTempUtf8;
+begin
+  VarRecToTempUtf8(V, tmp, nil);
+  Adder.Add(tmp.Text, tmp.Len);
+  TempUtf8Done(tmp);
 end;
 
 procedure VarRecToInlineValue(const V: TVarRec; var result: RawUtf8);
