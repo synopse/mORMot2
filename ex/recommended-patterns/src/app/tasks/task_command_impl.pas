@@ -9,7 +9,6 @@ uses
   SysUtils,
   mormot.core.base,
   mormot.core.log,
-  mormot.core.perf,
   mormot.core.unicode,
   mormot.core.interfaces,
   mormot.orm.core,
@@ -26,7 +25,6 @@ type
   /// Thread-safety: sicShared instance.
   /// `Repo` is auto-resolved by `TInjectableObjectRest.AutoResolve` against
   /// the server's service container (globally-registered ITaskRepository).
-  /// `TSynMonitor` is internally locked.
   ///
   /// The service is pure use-case orchestration: it validates the request,
   /// loads the aggregate, asks the aggregate to mutate itself (TTask owns its
@@ -35,10 +33,7 @@ type
   TTaskCommandService = class(TInjectableObjectRest, ITaskCommand)
   private
     fRepo: ITaskRepository;
-    fMonitor: TSynMonitor;
   public
-    constructor Create; override;
-    destructor Destroy; override;
     function CreateTask(const aData: TTaskCreateDTO): TCommandResult;
     function UpdateTask(const aData: TTaskUpdateDTO): TCommandResult;
     function DeleteTask(aTaskID: TID): TCommandResult;
@@ -55,18 +50,6 @@ type
 
 implementation
 
-constructor TTaskCommandService.Create;
-begin
-  inherited Create;
-  fMonitor := TSynMonitor.Create('TaskCommand');
-end;
-
-destructor TTaskCommandService.Destroy;
-begin
-  fMonitor.Free;
-  inherited Destroy;
-end;
-
 function TTaskCommandService.CreateTask(const aData: TTaskCreateDTO): TCommandResult;
 var
   Task: TTask;
@@ -74,37 +57,32 @@ var
   ErrMsg: RawUtf8;
   NewID: TID;
 begin
-  fMonitor.ProcessStart;
+  Task := TTask.Create;
   try
-    Task := TTask.Create;
+    if not CreateTaskDTOToOrm(aData, Task, DueDateValue, ErrMsg) then
+    begin
+      TSynLog.Add.Log(sllWarning, 'CreateTask: %', [ErrMsg]);
+      Result := CommandError(ErrMsg);
+      exit;
+    end;
     try
-      if not CreateTaskDTOToOrm(aData, Task, DueDateValue, ErrMsg) then
+      NewID := fRepo.Add(Task); // atomic: transaction + FTS5 sync inside
+      if NewID > 0 then
       begin
-        TSynLog.Add.Log(sllWarning, 'CreateTask: %', [ErrMsg]);
-        Result := CommandError(ErrMsg);
-        exit;
+        TSynLog.Add.Log(sllInfo, 'CreateTask: created ID=%', [NewID]);
+        Result := CommandSuccess(NewID);
+      end
+      else
+        Result := CommandError('Failed to create task', srDbError);
+    except
+      on E: Exception do
+      begin
+        TSynLog.Add.Log(sllError, 'CreateTask: %', [E.Message]);
+        Result := CommandError(StringToUtf8(E.Message), srDbError);
       end;
-      try
-        NewID := fRepo.Add(Task); // atomic: transaction + FTS5 sync inside
-        if NewID > 0 then
-        begin
-          TSynLog.Add.Log(sllInfo, 'CreateTask: created ID=%', [NewID]);
-          Result := CommandSuccess(NewID);
-        end
-        else
-          Result := CommandError('Failed to create task', srDbError);
-      except
-        on E: Exception do
-        begin
-          TSynLog.Add.Log(sllError, 'CreateTask: %', [E.Message]);
-          Result := CommandError(StringToUtf8(E.Message), srDbError);
-        end;
-      end;
-    finally
-      Task.Free;
     end;
   finally
-    fMonitor.ProcessEnd;
+    Task.Free;
   end;
 end;
 
@@ -113,34 +91,29 @@ var
   Task: TTask;
   ErrMsg: RawUtf8;
 begin
-  fMonitor.ProcessStart;
+  Task := fRepo.GetByID(aData.TaskID);
+  if Task = nil then
+  begin
+    Result := CommandError('Task not found', srNotFound);
+    exit;
+  end;
   try
-    Task := fRepo.GetByID(aData.TaskID);
-    if Task = nil then
+    if not ApplyUpdateTaskDTO(aData, Task, ErrMsg) then
     begin
-      Result := CommandError('Task not found', srNotFound);
+      Result := CommandError(ErrMsg);
       exit;
     end;
     try
-      if not ApplyUpdateTaskDTO(aData, Task, ErrMsg) then
-      begin
-        Result := CommandError(ErrMsg);
-        exit;
-      end;
-      try
-        if fRepo.Update(Task) then // atomic: transaction + FTS5 sync inside
-          Result := CommandSuccess(Task.ID)
-        else
-          Result := CommandError('Failed to update task', srDbError);
-      except
-        on E: Exception do
-          Result := CommandError(StringToUtf8(E.Message), srDbError);
-      end;
-    finally
-      Task.Free;
+      if fRepo.Update(Task) then // atomic: transaction + FTS5 sync inside
+        Result := CommandSuccess(Task.ID)
+      else
+        Result := CommandError('Failed to update task', srDbError);
+    except
+      on E: Exception do
+        Result := CommandError(StringToUtf8(E.Message), srDbError);
     end;
   finally
-    fMonitor.ProcessEnd;
+    Task.Free;
   end;
 end;
 
@@ -148,30 +121,25 @@ function TTaskCommandService.DeleteTask(aTaskID: TID): TCommandResult;
 var
   Task: TTask;
 begin
-  fMonitor.ProcessStart;
-  try
-    Task := fRepo.GetByID(aTaskID);
-    if Task = nil then
-    begin
-      Result := CommandError('Task not found', srNotFound);
-      exit;
-    end;
-    Task.Free;
+  Task := fRepo.GetByID(aTaskID);
+  if Task = nil then
+  begin
+    Result := CommandError('Task not found', srNotFound);
+    exit;
+  end;
+  Task.Free;
 
-    try
-      if fRepo.Delete(aTaskID) then // atomic: transaction + FTS5 row removal
-      begin
-        TSynLog.Add.Log(sllInfo, 'DeleteTask: deleted ID=%', [aTaskID]);
-        Result := CommandSuccess(aTaskID);
-      end
-      else
-        Result := CommandError('Failed to delete task', srDbError);
-    except
-      on E: Exception do
-        Result := CommandError(StringToUtf8(E.Message), srDbError);
-    end;
-  finally
-    fMonitor.ProcessEnd;
+  try
+    if fRepo.Delete(aTaskID) then // atomic: transaction + FTS5 row removal
+    begin
+      TSynLog.Add.Log(sllInfo, 'DeleteTask: deleted ID=%', [aTaskID]);
+      Result := CommandSuccess(aTaskID);
+    end
+    else
+      Result := CommandError('Failed to delete task', srDbError);
+  except
+    on E: Exception do
+      Result := CommandError(StringToUtf8(E.Message), srDbError);
   end;
 end;
 
@@ -179,25 +147,20 @@ function TTaskCommandService.MarkComplete(aTaskID: TID; aIsComplete: boolean): T
 var
   Task: TTask;
 begin
-  fMonitor.ProcessStart;
+  Task := fRepo.GetByID(aTaskID);
+  if Task = nil then
+  begin
+    Result := CommandError('Task not found', srNotFound);
+    exit;
+  end;
   try
-    Task := fRepo.GetByID(aTaskID);
-    if Task = nil then
-    begin
-      Result := CommandError('Task not found', srNotFound);
-      exit;
-    end;
-    try
-      Task.SetCompleted(aIsComplete);
-      if fRepo.Update(Task) then
-        Result := CommandSuccess(aTaskID)
-      else
-        Result := CommandError('Failed to update task', srDbError);
-    finally
-      Task.Free;
-    end;
+    Task.SetCompleted(aIsComplete);
+    if fRepo.Update(Task) then
+      Result := CommandSuccess(aTaskID)
+    else
+      Result := CommandError('Failed to update task', srDbError);
   finally
-    fMonitor.ProcessEnd;
+    Task.Free;
   end;
 end;
 
@@ -206,45 +169,40 @@ var
   Task: TTask;
   NewComment: TTaskComment;
 begin
-  fMonitor.ProcessStart;
-  try
-    if Length(aData.Content) = 0 then
-    begin
-      Result := CommandError('Comment content cannot be empty');
-      exit;
-    end;
-    if Length(aData.Content) > 10000 then
-    begin
-      Result := CommandError('Comment content too long');
-      exit;
-    end;
-    if Length(aData.Author) = 0 then
-    begin
-      Result := CommandError('Comment author is required');
-      exit;
-    end;
+  if Length(aData.Content) = 0 then
+  begin
+    Result := CommandError('Comment content cannot be empty');
+    exit;
+  end;
+  if Length(aData.Content) > 10000 then
+  begin
+    Result := CommandError('Comment content too long');
+    exit;
+  end;
+  if Length(aData.Author) = 0 then
+  begin
+    Result := CommandError('Comment author is required');
+    exit;
+  end;
 
-    Task := fRepo.GetByID(aData.TaskID);
-    if Task = nil then
+  Task := fRepo.GetByID(aData.TaskID);
+  if Task = nil then
+  begin
+    Result := CommandError('Task not found', srNotFound);
+    exit;
+  end;
+  try
+    AddCommentDTOToComment(aData, NewComment);
+    Task.AppendComment(NewComment);
+    if fRepo.Update(Task) then
     begin
-      Result := CommandError('Task not found', srNotFound);
-      exit;
-    end;
-    try
-      AddCommentDTOToComment(aData, NewComment);
-      Task.AppendComment(NewComment);
-      if fRepo.Update(Task) then
-      begin
-        TSynLog.Add.Log(sllInfo, 'AddComment: added to task %', [aData.TaskID]);
-        Result := CommandSuccess(aData.TaskID);
-      end
-      else
-        Result := CommandError('Failed to add comment', srDbError);
-    finally
-      Task.Free;
-    end;
+      TSynLog.Add.Log(sllInfo, 'AddComment: added to task %', [aData.TaskID]);
+      Result := CommandSuccess(aData.TaskID);
+    end
+    else
+      Result := CommandError('Failed to add comment', srDbError);
   finally
-    fMonitor.ProcessEnd;
+    Task.Free;
   end;
 end;
 
@@ -253,39 +211,34 @@ var
   Task: TTask;
   Changed: boolean;
 begin
-  fMonitor.ProcessStart;
+  if Length(aData.Content) = 0 then
+  begin
+    Result := CommandError('Comment content cannot be empty');
+    exit;
+  end;
+  Task := fRepo.GetByID(aData.TaskID);
+  if Task = nil then
+  begin
+    Result := CommandError('Task not found', srNotFound);
+    exit;
+  end;
   try
-    if Length(aData.Content) = 0 then
+    if not Task.UpdateCommentContent(aData.CommentIndex, aData.Content, Changed) then
     begin
-      Result := CommandError('Comment content cannot be empty');
+      Result := CommandError('Comment index out of range');
       exit;
     end;
-    Task := fRepo.GetByID(aData.TaskID);
-    if Task = nil then
+    if not Changed then
     begin
-      Result := CommandError('Task not found', srNotFound);
+      Result := CommandSuccess(aData.TaskID);
       exit;
     end;
-    try
-      if not Task.UpdateCommentContent(aData.CommentIndex, aData.Content, Changed) then
-      begin
-        Result := CommandError('Comment index out of range');
-        exit;
-      end;
-      if not Changed then
-      begin
-        Result := CommandSuccess(aData.TaskID);
-        exit;
-      end;
-      if fRepo.Update(Task) then
-        Result := CommandSuccess(aData.TaskID)
-      else
-        Result := CommandError('Failed to update comment', srDbError);
-    finally
-      Task.Free;
-    end;
+    if fRepo.Update(Task) then
+      Result := CommandSuccess(aData.TaskID)
+    else
+      Result := CommandError('Failed to update comment', srDbError);
   finally
-    fMonitor.ProcessEnd;
+    Task.Free;
   end;
 end;
 
@@ -293,29 +246,24 @@ function TTaskCommandService.DeleteComment(aTaskID: TID; aCommentIndex: integer)
 var
   Task: TTask;
 begin
-  fMonitor.ProcessStart;
+  Task := fRepo.GetByID(aTaskID);
+  if Task = nil then
+  begin
+    Result := CommandError('Task not found', srNotFound);
+    exit;
+  end;
   try
-    Task := fRepo.GetByID(aTaskID);
-    if Task = nil then
+    if not Task.DeleteComment(aCommentIndex) then
     begin
-      Result := CommandError('Task not found', srNotFound);
+      Result := CommandError('Comment index out of range');
       exit;
     end;
-    try
-      if not Task.DeleteComment(aCommentIndex) then
-      begin
-        Result := CommandError('Comment index out of range');
-        exit;
-      end;
-      if fRepo.Update(Task) then
-        Result := CommandSuccess(aTaskID)
-      else
-        Result := CommandError('Failed to delete comment', srDbError);
-    finally
-      Task.Free;
-    end;
+    if fRepo.Update(Task) then
+      Result := CommandSuccess(aTaskID)
+    else
+      Result := CommandError('Failed to delete comment', srDbError);
   finally
-    fMonitor.ProcessEnd;
+    Task.Free;
   end;
 end;
 
@@ -323,30 +271,25 @@ function TTaskCommandService.AddTag(aTaskID: TID; aTagID: TID): TCommandResult;
 var
   Task: TTask;
 begin
-  fMonitor.ProcessStart;
+  Task := fRepo.GetByID(aTaskID);
+  if Task = nil then
+  begin
+    Result := CommandError('Task not found', srNotFound);
+    exit;
+  end;
   try
-    Task := fRepo.GetByID(aTaskID);
-    if Task = nil then
+    if not Task.AddTag(aTagID) then
     begin
-      Result := CommandError('Task not found', srNotFound);
+      // already present — idempotent success, no write needed
+      Result := CommandSuccess(aTaskID);
       exit;
     end;
-    try
-      if not Task.AddTag(aTagID) then
-      begin
-        // already present — idempotent success, no write needed
-        Result := CommandSuccess(aTaskID);
-        exit;
-      end;
-      if fRepo.Update(Task) then
-        Result := CommandSuccess(aTaskID)
-      else
-        Result := CommandError('Failed to add tag', srDbError);
-    finally
-      Task.Free;
-    end;
+    if fRepo.Update(Task) then
+      Result := CommandSuccess(aTaskID)
+    else
+      Result := CommandError('Failed to add tag', srDbError);
   finally
-    fMonitor.ProcessEnd;
+    Task.Free;
   end;
 end;
 
@@ -354,30 +297,25 @@ function TTaskCommandService.RemoveTag(aTaskID: TID; aTagID: TID): TCommandResul
 var
   Task: TTask;
 begin
-  fMonitor.ProcessStart;
+  Task := fRepo.GetByID(aTaskID);
+  if Task = nil then
+  begin
+    Result := CommandError('Task not found', srNotFound);
+    exit;
+  end;
   try
-    Task := fRepo.GetByID(aTaskID);
-    if Task = nil then
+    if not Task.RemoveTag(aTagID) then
     begin
-      Result := CommandError('Task not found', srNotFound);
+      // not present — idempotent success, no write needed
+      Result := CommandSuccess(aTaskID);
       exit;
     end;
-    try
-      if not Task.RemoveTag(aTagID) then
-      begin
-        // not present — idempotent success, no write needed
-        Result := CommandSuccess(aTaskID);
-        exit;
-      end;
-      if fRepo.Update(Task) then
-        Result := CommandSuccess(aTaskID)
-      else
-        Result := CommandError('Failed to remove tag', srDbError);
-    finally
-      Task.Free;
-    end;
+    if fRepo.Update(Task) then
+      Result := CommandSuccess(aTaskID)
+    else
+      Result := CommandError('Failed to remove tag', srDbError);
   finally
-    fMonitor.ProcessEnd;
+    Task.Free;
   end;
 end;
 
