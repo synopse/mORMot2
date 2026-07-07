@@ -1,11 +1,12 @@
 #!/bin/bash
 # CLI Client - Compilation Script
 # Usage:
-#   ./compile_cli.sh         # Remote mode (HTTP client)
-#   ./compile_cli.sh local   # Local mode (embedded SQLite)
+#   ./src/fpc/compile_cli.sh         # Remote mode (HTTP client)
+#   ./src/fpc/compile_cli.sh local   # Local mode (embedded SQLite)
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "$SCRIPT_DIR"
+# Determine the project root (two levels above this script)
+ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )"
+cd "$ROOT_DIR"
 
 mkdir -p bin
 mkdir -p bin/units
@@ -27,7 +28,7 @@ echo "Compiling cli_client ($MODE mode)..."
 fpc src/cli_client.pas \
     -obin/cli_client \
     -FUbin/units \
-    -Fl"$SCRIPT_DIR/../../static/x86_64-linux" \
+    -Fl"$ROOT_DIR/../../static/x86_64-linux" \
     -O1 -Mobjfpc \
     -Fi../../src \
     -Fusrc \

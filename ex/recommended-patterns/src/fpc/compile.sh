@@ -6,12 +6,12 @@ echo "mORMot2 Task Manager - Compilation Script"
 echo "=========================================="
 echo ""
 
+# Determine the project root (two levels above this script)
+ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )"
+cd "$ROOT_DIR"
+
 mkdir -p bin
 mkdir -p bin/units
-
-# Determine the script directory
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "$SCRIPT_DIR"
 
 # Check if FPC is installed
 if ! command -v fpc &> /dev/null; then
@@ -23,7 +23,7 @@ echo "Compiling task_manager..."
 fpc src/task_manager.pas \
     -obin/task_manager \
     -FUbin/units \
-    -Fl"$SCRIPT_DIR/../../static/x86_64-linux" \
+    -Fl"$ROOT_DIR/../../static/x86_64-linux" \
     -O1 -Mobjfpc \
     -Fi../../src \
     -Fusrc \
@@ -52,7 +52,7 @@ if [ $? -eq 0 ]; then
     echo "Binary: bin/task_manager"
     echo ""
     echo "To run the server:"
-    echo "  cd $SCRIPT_DIR && ./bin/task_manager"
+    echo "  cd $ROOT_DIR && ./bin/task_manager"
     echo ""
     echo "The server will be available at:"
     echo "  http://localhost:8080"

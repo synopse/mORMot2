@@ -38,20 +38,20 @@ The hard rule: `app/*` depends on `dom/*_repository.pas` (interface), **never** 
 ### Compile Server
 
 ```bash
-./compile.sh
+./src/fpc/compile.sh
 ```
 
 ### Compile CLI Client
 
 ```bash
 # Remote mode (connects to running server)
-./compile_cli.sh
+./src/fpc/compile_cli.sh
 
 # Local mode (embedded SQLite, no server needed)
-./compile_cli.sh local
+./src/fpc/compile_cli.sh local
 ```
 
-### Key Compiler Flags (in compile.sh)
+### Key Compiler Flags (in src/fpc/compile.sh)
 
 - `-Fl../../static/x86_64-linux`: Link static SQLite3 library
 - `-Fusrc -Fusrc/dom/{tasks,tags} -Fusrc/infra/{tasks,tags} -Fusrc/app/{tasks,tags} -Fusrc/serv/app -Futests/{tasks,tags}`: Unit search paths
@@ -62,7 +62,7 @@ The hard rule: `app/*` depends on `dom/*_repository.pas` (interface), **never** 
 ## Running
 
 ```bash
-./run.sh
+./src/fpc/run.sh
 # or directly:
 ./bin/task_manager
 ```
@@ -97,7 +97,7 @@ Feature files are split across `src/dom/<entity>/`, `src/infra/<entity>/`, `src/
 ### 2. Compile
 
 ```bash
-./compile.sh
+./src/fpc/compile.sh
 ```
 
 ### 3. Test
@@ -342,7 +342,7 @@ No manual cleanup needed: `InjectInstance` ref-counts the repos, and `Dispatcher
 
 ### 11. Update compile scripts
 
-Add the new folders to `compile.sh` and `compile_cli.sh`:
+Add the new folders to `src/fpc/compile.sh` and `src/fpc/compile_cli.sh`:
 
 ```
 -Fusrc/dom/myfeature \

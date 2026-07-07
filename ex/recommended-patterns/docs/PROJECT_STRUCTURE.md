@@ -61,8 +61,9 @@ The layout and the `§…` / `A.x` / `B.x` citations in this document follow the
 ├── <a href="../data/">data/</a>                                 # SQLite database (runtime)
 ├── <a href="../logs/">logs/</a>                                 # Log files (runtime)
 ├── <a href="../bin/">bin/</a>                                  # Compiled binaries
-├── <a href="../compile.sh">compile.sh</a>                            # Server compilation
-├── <a href="../compile_cli.sh">compile_cli.sh</a>                        # CLI compilation
+├── <a href="../src/fpc/">src/fpc/</a>                              # Build and run scripts
+│   ├── <a href="../src/fpc/compile.sh">compile.sh</a>                        # Server compilation
+│   └── <a href="../src/fpc/compile_cli.sh">compile_cli.sh</a>                    # CLI compilation
 └── *.md                                  # Documentation
 </pre>
 
@@ -203,4 +204,4 @@ The key rule: `app/*_impl.pas` depends on `dom/*_repository.pas` (interface), **
     - Seed it into the dispatcher's resolver before `ServiceDefine`: `Dispatcher.ServiceContainer.InjectInstance([RepoImpl])` (add to the existing array).
     - Register services on the dispatcher (class form): `Dispatcher.ServiceDefine(T<Entity>QueryService, [I<Entity>Query], sicShared)`; same for Command.
     - Add the test case to the `TSynTests` suite.
-11. **compile.sh / compile_cli.sh**: nothing to add — the existing `-Fusrc/dom/<entity> -Fusrc/infra/<entity> -Fusrc/app/<entity>` patterns already cover any new entity once the folder exists; just add new `-Fu` lines per entity folder.
+11. **src/fpc/compile.sh / src/fpc/compile_cli.sh**: nothing to add — the existing `-Fusrc/dom/<entity> -Fusrc/infra/<entity> -Fusrc/app/<entity>` patterns already cover any new entity once the folder exists; just add new `-Fu` lines per entity folder.

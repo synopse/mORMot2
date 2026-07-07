@@ -47,20 +47,20 @@ A modern, high-performance task management system built with Free Pascal and the
 
 3. **Compile the server**
    ```bash
-   ./compile.sh
+   ./src/fpc/compile.sh
    ```
    On Windows:
    ```bat
-   compile.bat
+   src\fpc\compile.bat
    ```
 
 4. **Run the server**
    ```bash
-   ./run.sh
+   ./src/fpc/run.sh
    ```
    On Windows:
    ```bat
-   run.bat
+   src\fpc\run.bat
    ```
 
 5. **Open the web interface**
@@ -123,10 +123,10 @@ The CLI client uses mORMot2's typed SOA interfaces to call the CQRS services:
 
 ```bash
 # Build remote mode (talks to server on localhost:8080)
-./compile_cli.sh
+./src/fpc/compile_cli.sh
 
 # Build local mode (embedded SQLite, no server needed)
-./compile_cli.sh local
+./src/fpc/compile_cli.sh local
 
 # Usage
 ./bin/cli_client list
@@ -139,7 +139,7 @@ The CLI client uses mORMot2's typed SOA interfaces to call the CQRS services:
 ./bin/cli_client comment 1 "Great progress!" "Author"
 ```
 
-On Windows the equivalents are `compile_cli.bat` / `compile_cli.bat local` and
+On Windows the equivalents are `src\fpc\compile_cli.bat` / `src\fpc\compile_cli.bat local` and
 `bin\cli_client.exe list`, `bin\cli_client.exe add "My Task" "Description" 3`, etc.
 
 ## Project Structure
@@ -197,12 +197,13 @@ On Windows the equivalents are `compile_cli.bat` / `compile_cli.bat local` and
 │   ├── task_manager                 # Server executable
 │   ├── cli_client                   # CLI client executable
 │   └── units/                       # Compiled units
-├── <a href="compile.sh">compile.sh</a>                       # Server build script (Linux)
-├── <a href="compile.bat">compile.bat</a>                      # Server build script (Windows)
-├── <a href="compile_cli.sh">compile_cli.sh</a>                   # CLI client build script (Linux)
-├── <a href="compile_cli.bat">compile_cli.bat</a>                  # CLI client build script (Windows)
-├── <a href="run.sh">run.sh</a>                           # Run script (Linux)
-└── <a href="run.bat">run.bat</a>                          # Run script (Windows)
+└── <a href="src/fpc/">src/fpc/</a>
+    ├── <a href="src/fpc/compile.sh">compile.sh</a>                   # Server build script (Linux)
+    ├── <a href="src/fpc/compile.bat">compile.bat</a>                  # Server build script (Windows)
+    ├── <a href="src/fpc/compile_cli.sh">compile_cli.sh</a>               # CLI client build script (Linux)
+    ├── <a href="src/fpc/compile_cli.bat">compile_cli.bat</a>              # CLI client build script (Windows)
+    ├── <a href="src/fpc/run.sh">run.sh</a>                       # Run script (Linux)
+    └── <a href="src/fpc/run.bat">run.bat</a>                      # Run script (Windows)
 </pre>
 
 ## Architecture

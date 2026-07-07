@@ -1,11 +1,12 @@
 @echo off
 REM CLI Client - Compilation Script (Windows)
 REM Usage:
-REM   compile_cli.bat         # Remote mode (HTTP client)
-REM   compile_cli.bat local   # Local mode (embedded SQLite)
+REM   src\fpc\compile_cli.bat         # Remote mode (HTTP client)
+REM   src\fpc\compile_cli.bat local   # Local mode (embedded SQLite)
 
-set "SCRIPT_DIR=%~dp0"
-cd /d "%SCRIPT_DIR%"
+REM Determine the project root (two levels above this script) and switch to it
+cd /d "%~dp0..\.."
+set "ROOT_DIR=%CD%"
 
 if not exist bin mkdir bin
 if not exist bin\units mkdir bin\units
@@ -28,7 +29,7 @@ echo Compiling cli_client (%MODE% mode)...
 fpc src/cli_client.pas ^
     -obin/cli_client ^
     -FUbin/units ^
-    -Fl"%SCRIPT_DIR%..\..\static\x86_64-win64" ^
+    -Fl"%ROOT_DIR%\..\..\static\x86_64-win64" ^
     -O1 -Mobjfpc ^
     -Fi../../src ^
     -Fusrc ^

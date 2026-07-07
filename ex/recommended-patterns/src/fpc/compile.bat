@@ -5,9 +5,9 @@ echo mORMot2 Task Manager - Compilation Script
 echo ==========================================
 echo.
 
-REM Determine the script directory and switch to it
-set "SCRIPT_DIR=%~dp0"
-cd /d "%SCRIPT_DIR%"
+REM Determine the project root (two levels above this script) and switch to it
+cd /d "%~dp0..\.."
+set "ROOT_DIR=%CD%"
 
 if not exist bin mkdir bin
 if not exist bin\units mkdir bin\units
@@ -23,7 +23,7 @@ echo Compiling task_manager...
 fpc src/task_manager.pas ^
     -obin/task_manager ^
     -FUbin/units ^
-    -Fl"%SCRIPT_DIR%..\..\static\x86_64-win64" ^
+    -Fl"%ROOT_DIR%\..\..\static\x86_64-win64" ^
     -O1 -Mobjfpc ^
     -Fi../../src ^
     -Fusrc ^
@@ -57,7 +57,7 @@ echo Compilation successful!
 echo Binary: bin\task_manager.exe
 echo.
 echo To run the server:
-echo   cd %SCRIPT_DIR% ^&^& bin\task_manager.exe
+echo   cd %ROOT_DIR% ^&^& bin\task_manager.exe
 echo.
 echo The server will be available at:
 echo   http://localhost:8080

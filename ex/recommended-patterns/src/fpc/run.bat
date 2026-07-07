@@ -5,12 +5,12 @@ echo Starting mORMot2 Task Manager Server...
 echo =======================================
 echo.
 
-set "SCRIPT_DIR=%~dp0"
-cd /d "%SCRIPT_DIR%"
+REM Determine the project root (two levels above this script) and switch to it
+cd /d "%~dp0..\.."
 
 if not exist "bin\task_manager.exe" (
     echo Error: task_manager binary not found
-    echo Please run compile.bat first
+    echo Please run src\fpc\compile.bat first
     exit /b 1
 )
 
