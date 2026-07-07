@@ -14,13 +14,14 @@ unit AppTaskManagerClient;
   identical regardless of topology — that is the location transparency the
   patterns document is after. }
 
-{$mode objfpc}{$H+}
+{$ifdef FPC}{$mode objfpc}{$H+}{$endif}
 
 interface
 
 uses
   mormot.core.base,
   mormot.core.interfaces,
+  app_settings,
   task_command,
   task_query,
   tag_command,
@@ -37,6 +38,11 @@ type
     function TagCommand: ITagCommand;
     function TagQuery: ITagQuery;
   end;
+
+  /// Signature of the CreateClient factory both backends implement.
+  /// The program file links exactly one backend and hands its CreateClient to
+  /// the presentation layer, which stays backend-agnostic.
+  TCreateClientFunc = function(aSettings: TTaskManagerSettings): ITaskManagerClient;
 
 /// Register the RPC-exposed CQRS interfaces with the mORMot interface factory.
 /// Idempotent; call once before creating a client (both backends need it).

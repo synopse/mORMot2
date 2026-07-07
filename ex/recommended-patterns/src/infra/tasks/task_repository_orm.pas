@@ -1,7 +1,7 @@
 
 unit task_repository_orm;
 
-{$mode delphi}{$H+}
+{$ifdef FPC}{$mode delphi}{$H+}{$endif}
 
 interface
 

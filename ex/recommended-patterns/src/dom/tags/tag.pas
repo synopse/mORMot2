@@ -7,7 +7,7 @@ unit tag;
   ORM *base type* (mormot.orm.core), never the ORM *runtime*. The IRestOrm-based
   lazy migration is a persistence concern and lives in infra/tag_repository_orm. }
 
-{$mode objfpc}{$H+}
+{$ifdef FPC}{$mode objfpc}{$H+}{$endif}
 
 interface
 

@@ -1,7 +1,7 @@
 
 unit app_settings;
 
-{$mode objfpc}{$H+}
+{$ifdef FPC}{$mode objfpc}{$H+}{$endif}
 
 interface
 

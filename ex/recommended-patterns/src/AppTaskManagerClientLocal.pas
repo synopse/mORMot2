@@ -11,7 +11,7 @@ unit AppTaskManagerClientLocal;
   them back behind ITaskManagerClient; the returned object owns the whole
   topology and tears it down on release. }
 
-{$mode objfpc}{$H+}
+{$ifdef FPC}{$mode objfpc}{$H+}{$endif}
 
 interface
 

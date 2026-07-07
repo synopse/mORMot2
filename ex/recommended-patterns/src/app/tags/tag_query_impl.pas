@@ -1,7 +1,7 @@
 
 unit tag_query_impl;
 
-{$mode delphi}{$H+}
+{$ifdef FPC}{$mode delphi}{$H+}{$endif}
 
 interface
 

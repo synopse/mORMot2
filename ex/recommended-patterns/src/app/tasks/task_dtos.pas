@@ -1,7 +1,7 @@
 
 unit task_dtos;
 
-{$mode objfpc}{$H+}
+{$ifdef FPC}{$mode objfpc}{$H+}{$endif}
 
 interface
 

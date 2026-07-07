@@ -13,7 +13,8 @@ The layout and the `§…` / `A.x` / `B.x` citations in this document follow the
 /
 ├── <a href="../src/">src/</a>
 │   ├── <a href="../src/task_manager.pas">task_manager.pas</a>                  # Thin server entry point (cthreads + RunTaskManagerDaemon)
-│   ├── <a href="../src/cli_client.pas">cli_client.pas</a>                    # Thin CLI consumer (arg parsing only; links one backend)
+│   ├── <a href="../src/cli_client.pas">cli_client.pas</a>                    # Thin CLI entry point (links one backend, calls RunCliClient)
+│   ├── <a href="../src/cli_client_core.pas">cli_client_core.pas</a>               # CLI presentation logic (arg parsing; backend-agnostic)
 │   ├── <a href="../src/AppTaskManagerClient.pas">AppTaskManagerClient.pas</a>          # Consumer port: ITaskManagerClient + RegisterTaskManagerInterfaces (<a href="https://github.com/synopse/mORMot2/blob/master/docs/mORMot2-SAD-Recommended-Patterns.md#b61-suggested-folder-structure">B.6.1</a>)
 │   ├── <a href="../src/AppTaskManagerClientLocal.pas">AppTaskManagerClientLocal.pas</a>     # In-process backend: embedded SQLite + dispatcher (<a href="https://github.com/synopse/mORMot2/blob/master/docs/mORMot2-SAD-Recommended-Patterns.md#a61-trusted--local-deployment">A.6.1</a>)
 │   ├── <a href="../src/AppTaskManagerClientRemote.pas">AppTaskManagerClientRemote.pas</a>    # HTTP backend: TRestHttpClient to the daemon (<a href="https://github.com/synopse/mORMot2/blob/master/docs/mORMot2-SAD-Recommended-Patterns.md#a62-internet-facing-or-distributed-deployment">A.6.2</a>)
@@ -47,9 +48,14 @@ The layout and the `§…` / `A.x` / `B.x` citations in this document follow the
 │           ├── <a href="../src/app/tags/tag_mappers.pas">tag_mappers.pas</a>
 │           ├── <a href="../src/app/tags/tag_query_impl.pas">tag_query_impl.pas</a>
 │           └── <a href="../src/app/tags/tag_command_impl.pas">tag_command_impl.pas</a>
-│   └── <a href="../src/serv/">serv/</a>                             # Daemon / composition root (the only place infra classes are named)
-│       └── <a href="../src/serv/app/">app/</a>
-│           └── <a href="../src/serv/app/ServAppTaskManager.pas">ServAppTaskManager.pas</a>    # Builds the two-server topology, wires repos, registers services
+│   ├── <a href="../src/serv/">serv/</a>                             # Daemon / composition root (the only place infra classes are named)
+│   │   └── <a href="../src/serv/app/">app/</a>
+│   │       └── <a href="../src/serv/app/ServAppTaskManager.pas">ServAppTaskManager.pas</a>    # Builds the two-server topology, wires repos, registers services
+│   ├── <a href="../src/fpc/">fpc/</a>                              # Command-line build/run scripts (FPC)
+│   │   ├── <a href="../src/fpc/compile.sh">compile.sh</a>                    # Server compilation
+│   │   └── <a href="../src/fpc/compile_cli.sh">compile_cli.sh</a>                # CLI compilation
+│   ├── <a href="../src/delphi/">delphi/</a>                           # Delphi project files (.dpr; also main sources of the .lpi)
+│   └── <a href="../src/lazarus/">lazarus/</a>                          # Lazarus project files (.lpi; require the mormot2 package)
 ├── <a href="../tests/">tests/</a>                                # Test units, one folder per entity
 │   ├── <a href="../tests/tasks/">tasks/</a>
 │   │   └── <a href="../tests/tasks/task_tests.pas">task_tests.pas</a>                # TTestTask (TSynTestCase) — 10 test methods
@@ -61,9 +67,6 @@ The layout and the `§…` / `A.x` / `B.x` citations in this document follow the
 ├── <a href="../data/">data/</a>                                 # SQLite database (runtime)
 ├── <a href="../logs/">logs/</a>                                 # Log files (runtime)
 ├── <a href="../bin/">bin/</a>                                  # Compiled binaries
-├── <a href="../src/fpc/">src/fpc/</a>                              # Build and run scripts
-│   ├── <a href="../src/fpc/compile.sh">compile.sh</a>                        # Server compilation
-│   └── <a href="../src/fpc/compile_cli.sh">compile_cli.sh</a>                    # CLI compilation
 └── *.md                                  # Documentation
 </pre>
 
@@ -141,7 +144,8 @@ Following the Recommended-Patterns [B.6.1](https://github.com/synopse/mORMot2/bl
 - **`AppTaskManagerClient.pas`** — the consumer dependency unit. Declares `ITaskManagerClient` (exposes the four CQRS ports) and `RegisterTaskManagerInterfaces`. Knows nothing about transport.
 - **`AppTaskManagerClientLocal.pas`** — in-process backend ([A.6.1](https://github.com/synopse/mORMot2/blob/master/docs/mORMot2-SAD-Recommended-Patterns.md#a61-trusted--local-deployment)). Its `CreateClient` builds the server's two-server layout (persistence + dispatcher), seeds the repos into the dispatcher's resolver (`InjectInstance`), and resolves services via `Dispatcher.Services.Resolve`. The returned `ITaskManagerClient` owns the topology and tears it down on release.
 - **`AppTaskManagerClientRemote.pas`** — HTTP backend ([A.6.2](https://github.com/synopse/mORMot2/blob/master/docs/mORMot2-SAD-Recommended-Patterns.md#a62-internet-facing-or-distributed-deployment)). Its `CreateClient` connects via `TRestHttpClient`, calls `ServiceDefine([…], sicShared)`, and resolves through the client's stub container. No local service composition.
-- **`cli_client.pas`** — pure presentation: parses arguments, calls `CreateClient` once, and drives the ports. `uses` exactly one backend, selected by `{$define LOCAL_MODE}`.
+- **`cli_client_core.pas`** — pure presentation: parses arguments, calls the backend's `CreateClient` factory once, and drives the ports. Backend-agnostic: it receives the factory as a `TCreateClientFunc` parameter of `RunCliClient`.
+- **`cli_client.pas`** (and `delphi/cli_client.dpr`) — thin entry point: `uses` exactly one backend, selected by `{$define LOCAL_MODE}`, and passes its `CreateClient` to `RunCliClient`. The selection stays in the program file so that switching `-dLOCAL_MODE` always takes effect — program files are recompiled on every build, cached units are not.
 
 ## Module Dependencies
 

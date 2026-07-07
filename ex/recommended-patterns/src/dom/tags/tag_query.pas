@@ -1,7 +1,7 @@
 
 unit tag_query;
 
-{$mode objfpc}{$H+}
+{$ifdef FPC}{$mode objfpc}{$H+}{$endif}
 
 interface
 

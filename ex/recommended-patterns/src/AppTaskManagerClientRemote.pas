@@ -8,7 +8,7 @@ unit AppTaskManagerClientRemote;
   back behind ITaskManagerClient; the returned object owns the HTTP connection
   and closes it on release. No ORM, no SQLite — the wire contract is the DTOs. }
 
-{$mode objfpc}{$H+}
+{$ifdef FPC}{$mode objfpc}{$H+}{$endif}
 
 interface
 

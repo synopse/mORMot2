@@ -51,6 +51,24 @@ The hard rule: `app/*` depends on `dom/*_repository.pas` (interface), **never** 
 ./src/fpc/compile_cli.sh local
 ```
 
+### Building from the IDE
+
+- **Lazarus**: open `src/lazarus/task_manager.lpi` or `src/lazarus/cli_client.lpi`.
+  Both require the `mormot2` package (`packages/lazarus/mormot2.lpk` in the
+  enclosing repository). The `cli_client.lpi` "local" build mode adds
+  `-dLOCAL_MODE`. Headless builds work too:
+
+  ```bash
+  lazbuild --add-package-link ../../packages/lazarus/mormot2.lpk   # once
+  lazbuild src/lazarus/task_manager.lpi
+  lazbuild --build-mode=local src/lazarus/cli_client.lpi
+  ```
+
+- **Delphi**: open `src/delphi/task_manager.dpr` or `src/delphi/cli_client.dpr`,
+  with the mORMot2 `src` folders on the library path. The `.dpr` files list
+  every project unit with explicit `in` paths, and double as the main sources
+  of the Lazarus projects.
+
 ### Key Compiler Flags (in src/fpc/compile.sh)
 
 - `-Fl../../static/x86_64-linux`: Link static SQLite3 library

@@ -14,7 +14,7 @@ unit ServAppTaskManager;
    - Dispatcher  = TRestServerFullMemory (void model) hosts the CQRS services
      and is the only server handed to TRestHttpServer. }
 
-{$mode objfpc}{$H+}
+{$ifdef FPC}{$mode objfpc}{$H+}{$endif}
 
 interface
 
