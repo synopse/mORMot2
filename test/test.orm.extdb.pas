@@ -261,6 +261,13 @@ begin
   CheckEqual(s, '1:AA2:AB3:AC4:AD5:AE6:AF7:AG8:AH9:AI10:AJ11:AK12:AL x');
   CheckEqual(ReplaceParamsByNames('(1,2,3,4,5,6,7,8) values (?,?,?,?,?,?,?,?)', s), 8);
   CheckEqual(s, '(1,2,3,4,5,6,7,8) values (:AA,:AB,:AC,:AD,:AE,:AF,:AG,:AH)');
+  CheckEqual(ReplaceParamsByNames('select distinct(hd.referenzid) f0 from ha_doku ' +
+    'hd inner join #tmp_ids_FAB4C3C346934CB884E2FAB4B5F0E444 t on t.tempid = ' +
+    'hd.referenzid where (hd.referenz = ?) and (hd.werteart = ?);', s), 2);
+  CheckEqual(s,
+   'select distinct(hd.referenzid) f0 from ha_doku hd inner join #tmp_ids_FAB' +
+   '4C3C346934CB884E2FAB4B5F0E444 t on t.tempid = hd.referenzid where (hd.ref' +
+   'erenz = :AA) and (hd.werteart = :AB)');
   CheckEqual(ReplaceParamsByNumbers('', s), 0);
   CheckEqual(s, '');
   CheckEqual(ReplaceParamsByNumbers('toto titi', s), 0);
@@ -567,7 +574,7 @@ begin
           Client.Model.Owner := Client;
           try
             R.FillPrepare(fPeopleData);
-            if not CheckFailed(R.FillContext <> nil) then
+            if Check(R.FillContext <> nil) then
             begin
               Client.BatchStart(TOrmPeople);
               n := 0;
@@ -659,7 +666,7 @@ begin
   try
     R := TOrmPeople.Create;
     R.FillPrepare(fPeopleData);
-    if not CheckFailed(R.FillContext <> nil) then
+    if Check(R.FillContext <> nil) then
     try
       DeleteFile('test.mdb');
       Props := TSqlDBOleDBJetConnectionProperties.Create('test.mdb', '', '', '');
@@ -674,8 +681,8 @@ begin
           while R.FillOne do
           begin
             inc(n);
-            Check(Client.Orm.Add(R, true, true) =
-              R.FillContext.Table.GetID(n));
+            CheckEqual(Client.Orm.Add(R, true, true),
+                       R.FillContext.Table.GetID(n));
             if n > 999 then
               break; // Jet is very slow e.g. within the Delphi IDE
           end;
@@ -933,7 +940,7 @@ var
   begin
     Check(R.FillRewind);
     while R.FillOne do
-      if not CheckFailed(R2.FillOne) then
+      if Check(R2.FillOne) then
       begin
         Check(R.ID <> 0);
         Check(R2.ID <> 0);

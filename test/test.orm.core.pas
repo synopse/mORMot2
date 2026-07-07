@@ -340,7 +340,7 @@ begin
         end;
         {$ifdef ORMGENERICS}
         Check(Client.Orm.RetrieveIList(TOrmTest, List, '*'));
-        if not CheckFailed(List <> nil) then
+        if Check(List <> nil) then
         begin
           Check(List.Count = 9999);
           for R in List do

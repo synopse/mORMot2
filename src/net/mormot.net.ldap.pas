@@ -1858,6 +1858,9 @@ type
     fUserName: RawUtf8;
     fKerberosDN: RawUtf8;
     fKerberosSpn: RawUtf8;
+    {$ifdef OSPOSIX}
+    fKerberosLocal: TFileName;
+    {$endif OSPOSIX}
     fTimeout: integer;
     fPingIdleSeconds: integer;
     fTls: boolean;
@@ -1946,13 +1949,18 @@ type
     /// the user password for non-anonymous Bind/BindSaslKerberos
     // - if you can, use instead password-less Kerberos authentication, or
     // at least ensure the connection is secured via TLS
-    // - as an alternative, on POSIX you can specify a keytab as
-    // 'FILE:/full/path/to/my.keytab' into this property, and assign an UserName
-    // or let mormot.lib.gssapi.pas use TKerberosKeyTab.MachineAccountPrincipal
+    // - as an alternative, on POSIX you can specify a keytab in KerberosLocal
     // - this stored value could be obfuscated if you set the Key property
     // to a custom 32-bit value, or if you use SetPassWordPlainCurrentUser()
     property Password: SpiUtf8
       read fPassword write fPassword;
+    {$ifdef OSPOSIX}
+    /// local keytab/ccache file e.g. '/path/to/my.keytab' for Kerberos on POSIX
+    // - you may assign an UserName or let mormot.lib.gssapi.pas extract
+    // TKerberosKeyTab.MachineAccountPrincipal from this keytab file
+    property KerberosLocal: TFileName
+      read fKerberosLocal write fKerberosLocal;
+    {$endif OSPOSIX}
     /// Kerberos Canonical Domain Name
     // - as set by Connect when TargetHost is empty
     // - can be pre-set before Connect if the system is not part of the domain
@@ -2809,9 +2817,13 @@ implementation
 
 { **************** CLDAP Client Functions }
 
+var
+  CLDAP_LOGON_TYPE: array[TCldapDomainLogonType] of RawUtf8;
+  SAM_ACCOUNT_TYPE: array[TSamAccountType] of RawUtf8;
+
 function ToText(lt: TCldapDomainLogonType): RawUtf8;
 begin
-  result := GetEnumNameTrimed(TypeInfo(TCldapDomainLogonType), ord(lt));
+  result := CLDAP_LOGON_TYPE[lt];
 end;
 
 function ToText(f: TCldapDomainFlags): RawUtf8;
@@ -2824,7 +2836,7 @@ begin
   VarClear(result);
   TDocVariantData(result).InitObject([
     'nt_version',       NTVersion,
-    'logon_type',       ToText(LogonType),
+    'logon_type',       CLDAP_LOGON_TYPE[LogonType],
     'flags',            ToText(Flags),
     'guid',             GuidToRawUtf8(Guid),
     'forest',           Forest,
@@ -3437,7 +3449,7 @@ begin
           repeat
             if not GetNextRecursiveExpr then
               exit;
-            AsnAdd(result, expr);
+            Append(result, expr);
           until text = '';
         result := AsnTyped(result, ASN1_CTC0);
       end;
@@ -3448,7 +3460,7 @@ begin
           repeat
             if not GetNextRecursiveExpr then
               exit;
-            AsnAdd(result, expr);
+            Append(result, expr);
           until text = '';
         result := AsnTyped(result, ASN1_CTC1);
       end;
@@ -3699,7 +3711,7 @@ begin // late discovery of the LDAP server using CLDAP
   Sender.UpdateTextNotVoid( 'ldap:guid',          GuidToRawUtf8(nfo.Guid));
   Sender.UpdateTextNotVoid( 'ldap:host',          nfo.HostName);
   Sender.UpdateTextNotVoid( 'ldap:ip',            nfo.IP);
-  Sender.UpdateTextNotVoid( 'ldap:logon',         LowerCaseU(ToText(nfo.LogonType)));
+  Sender.UpdateTextNotVoid( 'ldap:logon',         CLDAP_LOGON_TYPE[nfo.LogonType]);
   Sender.UpdateTextNotVoid( 'ldap:netbiosdomain', nfo.NetbiosDomain);
   Sender.UpdateTextNotVoid( 'ldap:netbioshost',   nfo.NetbiosHostname);
   Sender.UpdateTextNotVoid( 'ldap:unk',           nfo.Unk);
@@ -3797,6 +3809,8 @@ var
   i, n, failed: PtrInt;
 begin
   GetEnumTrimmedNames(TypeInfo(TLdapError), @LDAP_ERROR_TEXT, scLowerCaseFirst);
+  GetEnumTrimmedNames(TypeInfo(TCldapDomainLogonType), @CLDAP_LOGON_TYPE, scLowerCase);
+  GetEnumTrimmedNames(TypeInfo(TSamAccountType), @SAM_ACCOUNT_TYPE, scTrimLeft);
   LDAP_ERROR_TEXT[leEsyncRefreshRequired] := 'e-syncRefreshRequired';
   // register all our common Attribute Types names for quick search as pointer()
   _LdapIntern.Init({CaseInsensitive=}true, {Capacity=}128);
@@ -3953,7 +3967,11 @@ var
 begin
   result := nil;
   exclude(Attributes, atUndefined);
+  {$ifdef CPU64}
+  n := GetBitsCountPtrInt(Int64(Attributes)); // optimized for 64 items
+  {$else}
   n := GetBitsCount(Attributes, {bits=}SizeOf(Attributes) shl 3);
+  {$endif CPU64}
   if n = 0 then
     exit;
   SetLength(result, n);
@@ -4207,7 +4225,7 @@ end;
 
 procedure ToTextTrimmed(sat: TSamAccountType; var text: RawUtf8);
 begin
-  TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TSamAccountType), ord(sat)), text);
+  text := SAM_ACCOUNT_TYPE[sat];
 end;
 
 function ToText(oft: TObjectFilter): PShortString;
@@ -4583,7 +4601,7 @@ returni32:  v.VType := varInteger;
           if sat <> satUnknown then
           begin
             v.VType := varString;
-            ToTextTrimmed(sat, RawUtf8(v.VAny));
+            RawUtf8(v.VAny) := SAM_ACCOUNT_TYPE[sat];
           end
           else
             goto returni32;
@@ -4656,7 +4674,7 @@ begin
      (fCount = 0) then
     exit;
   for i := 0 to fCount - 1 do
-    AsnAdd(result, AsnOctStr(fList[i]));
+    AsnAdd(result, fList[i], ASN1_OCTSTR);
   result := Asn(ASN1_SEQ, [              // attribute(s) sequence
               AsnOctStr(fAttributeName), // attribute description
               AsnSetOf(result)           // attribute value set
@@ -6758,11 +6776,14 @@ begin
            (fResultCode = LDAP_RES_SUCCESS) then
           break;
         try
-          if pwd <> '' then
-            // note that UserName may be '' with Password='FILE:keytab'
+          if (pwd <> '') {$ifdef OSPOSIX} or
+             (fSettings.KerberosLocal <> '') {$endif} then
+            // UserName/pwd may be '' with KerberosLocal='/path/to/keytab'
             ClientSspiAuthWithPassword(fSecContext, datain,
-              fSettings.UserName, pwd, fSettings.KerberosSpn, dataout)
+              fSettings.UserName, pwd, fSettings.KerberosSpn, dataout
+              {$ifdef OSPOSIX} , nil, fSettings.KerberosLocal {$endif})
           else
+            // try current logged user
             ClientSspiAuth(fSecContext, datain, fSettings.KerberosSpn, dataout);
         except
           on E: Exception do
@@ -7011,7 +7032,7 @@ begin
   try
     query := AsnTyped(Oid, ASN1_CTX0);
     if Value <> '' then
-      AsnAdd(query, AsnTyped(Value, ASN1_CTX1));
+      AsnAdd(query, Value, ASN1_CTX1);
     decoded := SendAndReceive(AsnTyped(query, LDAP_ASN1_EXT_REQUEST));
     result := fResultCode = LDAP_RES_SUCCESS;
     if not result then
@@ -7101,7 +7122,7 @@ begin
              ]))
       ]));
   if controls <> '' then
-    Append(s, AsnTyped(controls, LDAP_ASN1_CONTROLS));
+    AsnAdd(s, controls, LDAP_ASN1_CONTROLS);
   try
     // actually send the request
     bytesIn := fSock.BytesIn;
@@ -7616,7 +7637,7 @@ begin
   query := AsnOctStr(Obj);
   Append(query, AsnOctStr(NewRdn), ASN1_BOOLEAN_VALUE[DeleteOldRdn]);
   if NewSuperior <> '' then
-    AsnAdd(query, AsnTyped(NewSuperior, ASN1_CTX0));
+    AsnAdd(query, NewSuperior, ASN1_CTX0);
   SendAndReceive(AsnTyped(query, LDAP_ASN1_MODIFYDN_REQUEST));
   result := fResultCode = LDAP_RES_SUCCESS;
   if Assigned(fLog) then
@@ -8045,9 +8066,9 @@ begin
     ELdap.RaiseUtf8('%.ExtModifyUserPassword cannot be anonymous', [self]);
   req := AsnTyped(UserDN, ASN1_CTX0);
   if OldPassword <> '' then
-    Append(req, AsnTyped(OldPassword, ASN1_CTX1));
+    AsnAdd(req, OldPassword, ASN1_CTX1);
   if NewPassword <> '' then
-    Append(req, AsnTyped(NewPassword, ASN1_CTX2));
+    AsnAdd(req, NewPassword, ASN1_CTX2);
   pos := 1;
   if Extended(ASN1_OID_PASSWDMODIFY, AsnSeq(req), nil, @v) then
     if NewPassword <> '' then
@@ -8379,8 +8400,6 @@ var
   datain, dataout: RawByteString;
 begin
   result := false;
-  if ClientSspiPasswordIsFile(aPassword) then
-    exit; // don't cheat with this server credentials :)
   InvalidateSecContext(client);
   try
     try

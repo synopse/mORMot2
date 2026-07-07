@@ -20,6 +20,7 @@ unit mormot.net.openapi;
    - Support of nested "$ref" for objects, parameters or types
    - Support "allOf" attribute, with proper properties inheritance/overloading
    - Support "oneOf" attribute, for strings or alternate record types
+   - Support of "explode" and "deepObject" nested array/object URI parameters
    - Support of "in":"header" and "in":"cookie" parameter attributes
    - Fallback to variant pascal type for "oneOf" or "anyOf" JSON values
    - Generated source code units are very small and easy to use, read and debug
@@ -180,6 +181,7 @@ type
     function Default: PVariant;
     function Required: boolean;
     function Explode: boolean;
+    function DeepObject: boolean;
     function Schema(Parser: TOpenApiParser): POpenApiSchema;
   end;
   /// pointer wrapper to TDocVariantData / variant content of an OpenAPI Parameter
@@ -323,7 +325,7 @@ type
     // TODO: Handle RecordArrayType in RTTI definition
     function ToPascalName(AsFinalType: boolean = true;
       NoRecordArrayTypes: boolean = false): RawUtf8;
-    function ToFormatUtf8Arg(const VarName: RawUtf8): RawUtf8;
+    function ToFormatUtf8Arg(const VarName, UrlName: RawUtf8): RawUtf8;
     function ToDefaultParameterValue(aParam: TPascalParameter): RawUtf8;
 
     function IsBuiltin: boolean;
@@ -1018,6 +1020,12 @@ begin
     result := true; // default is true
 end;
 
+function TOpenApiParameter.DeepObject: boolean;
+begin
+  if not Data.GetAsBoolean('deepObject', result) then
+    result := false; // default is false
+end;
+
 function TOpenApiParameter.Schema(Parser: TOpenApiParser): POpenApiSchema;
 begin
   if Parser.Version = oav2 then
@@ -1669,15 +1677,17 @@ procedure TPascalOperation.Body(W: TTextWriter;
           w.AddShorter('    ''');
           case p^.Location of
             oplQuery:
-              if p^.ParamType.IsArray and
-                 p^.Parameter^.Explode then
-                w.AddDirect('*'); // ueStarNameIsCsv for UrlEncodeFull()
+              if p^.ParamType.IsArray then // assume p^.Parameter^.Explode
+                w.AddDirect('*')           // ueStarNameIsCsv in UrlEncodeFull()
+              else if p^.ParamType.IsRecord then // assume Parameter^.DeepObject
+                w.AddDirect('=');      // ueEqualNameIsDirect in UrlEncodeFull()
             // oplHeader uses natively CSV in OpenAPI default "simple" style
             oplCookie:
               w.AddShorter('Cookie: ');
               // warning: arrays may not be properly written in cookies
           end;
-          w.AddStrings([p^.Name, ''', ', p^.ParamType.ToFormatUtf8Arg(p^.PascalName)]);
+          w.AddStrings([p^.Name, ''', ',
+            p^.ParamType.ToFormatUtf8Arg(p^.PascalName, p^.Name)]);
           dec(n);
           if n = 0 then
             break;
@@ -1704,7 +1714,7 @@ begin
     p := fParameters[fUrlParamIndex[i]];
     if i > 0 then
       w.AddDirect(',', ' ');
-    w.AddString(p.ParamType.ToFormatUtf8Arg(p.PascalName));
+    w.AddString(p.ParamType.ToFormatUtf8Arg(p.PascalName, p.Name));
   end;
   w.AddDirect(']');
   // Query and Header parameters
@@ -2022,7 +2032,7 @@ begin
   end;
 end;
 
-function TPascalType.ToFormatUtf8Arg(const VarName: RawUtf8): RawUtf8;
+function TPascalType.ToFormatUtf8Arg(const VarName, UrlName: RawUtf8): RawUtf8;
 var
   func: RawUtf8;
   e: TPascalEnum;
@@ -2071,6 +2081,13 @@ begin
           [e.PascalName, VarName, func], result)
     else
       FormatUtf8('%[%]', [func, VarName], result);
+    exit;
+  end
+  else if IsRecord then
+  begin
+    FormatUtf8('DeepObjectEncode(@%, TypeInfo(%), %)',
+      [VarName, (fCustomType as TPascalRecord).PascalName,
+       QuotedStr(Join([UrlName, '[']))], result);
     exit;
   end;
   if func <> '' then
@@ -3157,9 +3174,8 @@ begin
       'constructor ', fClientClassName, '.Create(const aClient: IJsonClient);', LineEnd,
       'begin', LineEnd,
       '  fClient := aClient;', LineEnd,
-      '  fClient.Options := [jcoParseTolerant, jcoHttpErrorRaise];', LineEnd,
-      '  fClient.UrlEncoder :=', LineEnd,
-      '    [ueEncodeNames, ueSkipVoidString, ueSkipVoidValue, ueStarNameIsCsv];', LineEnd,
+      '  fClient.Options := OPENAPI_OPTIONS;', LineEnd,
+      '  fClient.UrlEncoder := OPENAPI_URLENCODER;', LineEnd,
       'end;', LineEnd, LineEnd]);
     // status responses to exception events
     for i := 0 to high(fErrorHandler) do

@@ -1697,11 +1697,11 @@ function SortDynArrayAnsiString(const A, B): integer;
         mov     rax, qword ptr [A]
         mov     rdx, qword ptr [B]
         cmp     rax, rdx
-        je      @z
+        je      @z                    // A=B at pointer level
         test    rax, rdx
         jz      @maynil
-@f:     movzx   ecx, byte ptr [rax]    // first char comparison
-        movzx   r8d, byte ptr [rdx]    // 32-bit to avoid overflow
+@f:     movzx   ecx, byte ptr [rax]   // first char comparison
+        movzx   r8d, byte ptr [rdx]   // 32-bit to avoid overflow
         sub     ecx, r8d
         je      @s
         mov     eax, ecx              // branchless execution on Quicksort
@@ -1710,7 +1710,7 @@ function SortDynArrayAnsiString(const A, B): integer;
         ret
 @z:     xor     eax, eax
         ret
-@maynil:test    rdx, rdx       // A or B may be ''
+@maynil:test    rdx, rdx              // A or B may be ''
         jz      @1
         test    rax, rax
         jnz     @f
@@ -1729,7 +1729,7 @@ function SortDynArrayAnsiString(const A, B): integer;
         {$endif FPC}
         adc     rcx, -1
         and     rcx, r9
-        sub     rcx, r8                  // rcx = -min(length(A),length(B))
+        sub     rcx, r8               // rcx = -min(length(A),length(B))
         sub     rax, rcx
         sub     rdx, rcx
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}

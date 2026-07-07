@@ -1219,7 +1219,7 @@ type
   public
     function CurrentCipher: PSSL_CIPHER;
     function PeerChain: Pstack_st_X509;
-    function PeerCertificate: PX509;
+    function PeerCertificate: PX509; // should eventually call result^.Free
     function PeerCertificates(acquire: boolean = false): PX509DynArray;
     function PeerCertificatesAsPEM: RawUtf8;
     function PeerCertificatesAsText: RawUtf8;
@@ -1455,6 +1455,7 @@ type
       flags: cardinal = ASN1_STRFLGS_RFC2253 and not ASN1_STRFLGS_ESC_MSB);
     procedure ToHex(out result: RawUtf8); overload;
     function ToHex: RawUtf8; overload;
+    function ToBinary: RawByteString;
     function Equals(another: pointer): boolean;
   end;
   ASN1_STRING = asn1_string_st;
@@ -1564,6 +1565,7 @@ type
   PPX509_REQ_INFO = ^PX509_REQ_INFO;
 
   PX509_NAME = ^X509_NAME;
+  PX509_EXTENSION = ^X509_EXTENSION;
 
   /// convenient wrapper to a PX509_REQ instance
   X509_REQ = object
@@ -1572,7 +1574,9 @@ type
     function GetPublicKey: PEVP_PKEY;
     function ToBinary: RawByteString;
     function ToPem: RawUtf8;
-    procedure AddExtension(nid: integer; const value: RawUtf8);
+    procedure AddAndFreeExtension(ext: PX509_EXTENSION);
+    procedure AddExtension(nid: integer; const value: RawUtf8); overload;
+    procedure AddExtension(const oid, value: RawByteString; critical: boolean); overload;
     /// set key_usage/ext_key_usage extensions
     // - any previous usage set will be first deleted
     function SetUsageAndAltNames(usages: TX509Usages;
@@ -1621,6 +1625,8 @@ type
     function Item(ndx: integer): PX509_NAME_ENTRY;
     function GetEntry(NID: integer): RawUtf8; overload; // not MBSTRING ready
     function GetEntry(const Name: RawUtf8): RawUtf8; overload;
+    procedure GetEntries(var Country, State, Locality, Organization, OrgUnit,
+      CommonName, EmailAddress, SurName, GivenName, SerialNumber: RawUtf8);
     procedure ToUtf8(out result: RawUtf8;
       flags: cardinal = XN_FLAG_RFC2253 and not ASN1_STRFLGS_ESC_MSB);
     procedure AddEntry(const Name, Value: RawUtf8);
@@ -1679,11 +1685,11 @@ type
   X509_EXTENSION = object
   public
     function BasicConstraintIsCA: boolean;
+    function IsDataEqual(x: PX509_EXTENSION): boolean;
     procedure ToUtf8(out result: RawUtf8; flags: cardinal = X509V3_EXT_DEFAULT);
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
   end;
-  PX509_EXTENSION = ^X509_EXTENSION;
   PPX509_EXTENSION = ^PX509_EXTENSION;
   PX509_EXTENSIONS = POPENSSL_STACK;
   PPX509_EXTENSIONS = ^PX509_EXTENSIONS;
@@ -1694,9 +1700,11 @@ type
     /// the low-level X509 extension instance
     // - use ext.ToUtf8() to return its human-readable text value
     ext: PX509_EXTENSION;
+    /// the low-level X509 object instance of this extension
+    obj: PASN1_OBJECT;
     // if this extension was marked as critical
     critical: boolean;
-    /// the NID of this extension
+    /// the NID of this extension e.g. NID_netscape_comment or NID_info_access
     // - use OBJ_nid2ln() or OBJ_nid2sn() to get its long or short name
     nid: integer;
     /// the value of this extension
@@ -1704,6 +1712,10 @@ type
     value: PASN1_STRING;
     /// set ext and compute critical/nid/value associated fields
     procedure SetExtension(x: PX509_EXTENSION);
+    /// return the text OID of this extension e.g. '1.3.6.1.5.5.7.1.1'
+    function TextOid(var Text: ShortString): boolean;
+    /// return the binary OID of this extension
+    function BinaryOid: RawByteString;
   end;
   TX509_Extensions = array of TX509_Extension;
 
@@ -1906,6 +1918,8 @@ type
     function IsCA: boolean;
     /// if the Certificate issuer is itself
     function IsSelfSigned: boolean;
+    /// if both Issuer = x.Subject and AKI (if set) = x.SKI
+    function IsAuthorizedBy(x: PX509): boolean;
     /// retrieve the signature algorithm as human-readable text
     // - returns e.g. '128 ecdsa-with-SHA256' or '256 ecdsa-with-SHA512'
     // '128 RSA-SHA256' or '128 ED25519'
@@ -1932,7 +1946,7 @@ type
     function SubjectKeyIdentifier: RawUtf8;
     /// the X509v3 Authority Key Identifier (AKID) of this Certificate
     // - e.g. '14:2E:B3:17:B7:58:56:CB:AE:50:09:40:E6:1F:AF:9D:8B:14:C2:C6'
-    // - if there are several AKID, only returns the first
+    // - return only the AKID, not any associated GeneralName or Serial
     function AuthorityKeyIdentifier: RawUtf8;
     /// set the Not Before / Not After Vailidy of this Certificate
     // - ValidDays and ExpireDays are relative to the current time - ValidDays
@@ -2253,6 +2267,8 @@ function X509_delete_ext(x: PX509; loc: integer): PX509_EXTENSION; cdecl;
 procedure X509V3_set_ctx(ctx: PX509V3_CTX; issuer, subject: PX509; req: PX509_REQ; crl: PX509_CRL; flags: integer);
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function X509_gmtime_adj(s: PASN1_TIME; adj: integer): PASN1_TIME; cdecl;
+function X509_EXTENSION_create_by_OBJ(ex: PPX509_EXTENSION; obj: PASN1_OBJECT;
+  crit: integer; data: PASN1_OCTET_STRING): PX509_EXTENSION; cdecl;
 procedure X509_EXTENSION_free(a: PX509_EXTENSION); cdecl;
 procedure BASIC_CONSTRAINTS_free(a: PBASIC_CONSTRAINTS);
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
@@ -2424,6 +2440,7 @@ function OBJ_nid2sn(n: integer): PUtf8Char; cdecl;
 function OBJ_txt2nid(s: PUtf8Char): integer; cdecl;
 function OBJ_obj2nid(o: PASN1_OBJECT): integer;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
+function OBJ_obj2txt(buf: PUtf8Char; buf_len: integer; a: PASN1_OBJECT; no_name: integer): integer; cdecl;
 function ASN1_STRING_data(x: PASN1_STRING): PByte;
    {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function ASN1_STRING_length(x: PASN1_STRING): integer;
@@ -3459,6 +3476,8 @@ type
     X509_delete_ext: function(x: PX509; loc: integer): PX509_EXTENSION; cdecl;
     X509V3_set_ctx: procedure(ctx: PX509V3_CTX; issuer: PX509; subject: PX509; req: PX509_REQ; crl: PX509_CRL; flags: integer); cdecl;
     X509_gmtime_adj: function(s: PASN1_TIME; adj: integer): PASN1_TIME; cdecl;
+    X509_EXTENSION_create_by_OBJ: function(ex: PPX509_EXTENSION; obj: PASN1_OBJECT;
+      crit: integer; data: PASN1_OCTET_STRING): PX509_EXTENSION; cdecl;
     X509_EXTENSION_free: procedure(a: PX509_EXTENSION); cdecl;
     BASIC_CONSTRAINTS_free: procedure(a: PBASIC_CONSTRAINTS); cdecl;
     d2i_BASIC_CONSTRAINTS: function(a: PPBASIC_CONSTRAINTS; _in: PPByte; len: integer): PBASIC_CONSTRAINTS; cdecl;
@@ -3604,10 +3623,16 @@ type
     OPENSSL_sk_num: function(p1: POPENSSL_STACK): integer; cdecl;
     OPENSSL_sk_value: function(p1: POPENSSL_STACK; p2: integer): pointer; cdecl;
     ASN1_BIT_STRING_get_bit: function(a: PASN1_BIT_STRING; n: integer): integer; cdecl;
+    ASN1_OCTET_STRING_new: function(): PASN1_OCTET_STRING; cdecl;
+    ASN1_OCTET_STRING_free: procedure(a: PASN1_OCTET_STRING); cdecl;
+    ASN1_OCTET_STRING_set: function(str: PASN1_OCTET_STRING; data: PByte; len: integer): integer; cdecl;
     OBJ_nid2ln: function(n: integer): PUtf8Char; cdecl;
     OBJ_nid2sn: function(n: integer): PUtf8Char; cdecl;
     OBJ_txt2nid: function(s: PUtf8Char): integer; cdecl;
+    OBJ_txt2obj: function(s: PUtf8Char; no_name: integer): PASN1_OBJECT; cdecl;
     OBJ_obj2nid: function(o: PASN1_OBJECT): integer; cdecl;
+    OBJ_obj2txt: function (buf: PUtf8Char; buf_len: integer; a: PASN1_OBJECT; no_name: integer): integer; cdecl;
+    ASN1_OBJECT_free: procedure(a: PASN1_OBJECT); cdecl;
     ASN1_STRING_data: function(x: PASN1_STRING): PByte; cdecl;
     ASN1_STRING_length: function(x: PASN1_STRING): integer; cdecl;
     ASN1_STRING_type: function(x: PASN1_STRING): integer; cdecl;
@@ -3739,7 +3764,7 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..352] of PAnsiChar = (
+  LIBCRYPTO_ENTRIES: array[0..359] of PAnsiChar = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
@@ -3817,6 +3842,7 @@ const
     'X509_delete_ext',
     'X509V3_set_ctx',
     'X509_gmtime_adj',
+    'X509_EXTENSION_create_by_OBJ',
     'X509_EXTENSION_free',
     'BASIC_CONSTRAINTS_free',
     'd2i_BASIC_CONSTRAINTS',
@@ -3962,10 +3988,16 @@ const
     'OPENSSL_sk_num',
     'OPENSSL_sk_value',
     'ASN1_BIT_STRING_get_bit',
+    'ASN1_OCTET_STRING_new',
+    'ASN1_OCTET_STRING_free',
+    'ASN1_OCTET_STRING_set',
     'OBJ_nid2ln',
     'OBJ_nid2sn',
     'OBJ_txt2nid',
+    'OBJ_txt2obj',
     'OBJ_obj2nid',
+    'OBJ_obj2txt',
+    'ASN1_OBJECT_free',
     'ASN1_STRING_data ASN1_STRING_get0_data', // alternate names
     'ASN1_STRING_length',
     'ASN1_STRING_type',
@@ -4501,6 +4533,12 @@ end;
 function X509_gmtime_adj(s: PASN1_TIME; adj: integer): PASN1_TIME;
 begin
   result := libcrypto.X509_gmtime_adj(s, adj);
+end;
+
+function X509_EXTENSION_create_by_OBJ(ex: PPX509_EXTENSION; obj: PASN1_OBJECT;
+   crit: integer; data: PASN1_OCTET_STRING): PX509_EXTENSION;
+begin
+ result := libcrypto.X509_EXTENSION_create_by_OBJ(ex, obj, crit, data);
 end;
 
 procedure X509_EXTENSION_free(a: PX509_EXTENSION);
@@ -5268,6 +5306,21 @@ begin
   result := libcrypto.ASN1_BIT_STRING_get_bit(a, n);
 end;
 
+function ASN1_OCTET_STRING_new(): PASN1_OCTET_STRING;
+begin
+  result := libcrypto.ASN1_OCTET_STRING_new();
+end;
+
+procedure ASN1_OCTET_STRING_free(a: PASN1_OCTET_STRING);
+begin
+  libcrypto.ASN1_OCTET_STRING_free(a);
+end;
+
+function ASN1_OCTET_STRING_set(str: PASN1_OCTET_STRING; data: PByte; len: integer): integer;
+begin
+  result := libcrypto.ASN1_OCTET_STRING_set(str, data, len);
+end;
+
 function OBJ_nid2ln(n: integer): PUtf8Char;
 begin
   result := libcrypto.OBJ_nid2ln(n);
@@ -5283,9 +5336,24 @@ begin
   result := libcrypto.OBJ_txt2nid(s);
 end;
 
+function OBJ_txt2obj(s: PUtf8Char; no_name: integer): PASN1_OBJECT;
+begin
+  result := libcrypto.OBJ_txt2obj(s, no_name);
+end;
+
 function OBJ_obj2nid(o: PASN1_OBJECT): integer;
 begin
   result := libcrypto.OBJ_obj2nid(o);
+end;
+
+function OBJ_obj2txt(buf: PUtf8Char; buf_len: integer; a: PASN1_OBJECT; no_name: integer): integer;
+begin
+  result := libcrypto.OBJ_obj2txt(buf, buf_len, a, no_name);
+end;
+
+procedure ASN1_OBJECT_free(a: PASN1_OBJECT);
+begin
+  libcrypto.ASN1_OBJECT_free(a);
 end;
 
 function ASN1_STRING_data(x: PASN1_STRING): PByte;
@@ -6613,6 +6681,9 @@ procedure X509V3_set_ctx(ctx: PX509V3_CTX; issuer: PX509; subject: PX509;
 function X509_gmtime_adj(s: PASN1_TIME; adj: integer): PASN1_TIME; cdecl;
   external LIB_CRYPTO name _PU + 'X509_gmtime_adj';
 
+function X509_EXTENSION_create_by_OBJ(ex: PPX509_EXTENSION; obj: PASN1_OBJECT; crit: integer; data: PASN1_OCTET_STRING): PX509_EXTENSION; cdecl;
+  external LIB_CRYPTO name _PU + 'X509_EXTENSION_create_by_OBJ';
+
 procedure X509_EXTENSION_free(a: PX509_EXTENSION); cdecl;
   external LIB_CRYPTO name _PU + 'X509_EXTENSION_free';
 
@@ -7074,6 +7145,15 @@ function OPENSSL_sk_value(p1: POPENSSL_STACK; p2: integer): pointer; cdecl;
 function ASN1_BIT_STRING_get_bit(a: PASN1_BIT_STRING; n: integer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_BIT_STRING_get_bit';
 
+function ASN1_OCTET_STRING_new(): PASN1_OCTET_STRING; cdecl;
+  external LIB_CRYPTO name _PU + 'ASN1_OCTET_STRING_new';
+
+procedure ASN1_OCTET_STRING_free(a: PASN1_OCTET_STRING); cdecl;
+  external LIB_CRYPTO name _PU + 'ASN1_OCTET_STRING_free';
+
+function ASN1_OCTET_STRING_set(str: PASN1_OCTET_STRING; data: PByte; len: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'ASN1_OCTET_STRING_set';
+
 function OBJ_nid2ln(n: integer): PUtf8Char; cdecl;
   external LIB_CRYPTO name _PU + 'OBJ_nid2ln';
 
@@ -7083,8 +7163,17 @@ function OBJ_nid2sn(n: integer): PUtf8Char; cdecl;
 function OBJ_obj2nid(o: PASN1_OBJECT): integer; cdecl;
   external LIB_CRYPTO name _PU + 'OBJ_obj2nid';
 
+function OBJ_obj2txt(buf: PUtf8Char; buf_len: integer; a: PASN1_OBJECT; no_name: integer): integer; cdecl;
+  external LIB_CRYPTO name _PU + 'OBJ_obj2txt';
+
 function OBJ_txt2nid(s: PUtf8Char): integer; cdecl;
   external LIB_CRYPTO name _PU + 'OBJ_txt2nid';
+
+function OBJ_txt2obj(s: PUtf8Char; no_name: integer): PASN1_OBJECT; cdecl;
+  external LIB_CRYPTO name _PU + 'OBJ_txt2obj';
+
+procedure ASN1_OBJECT_free(a: PASN1_OBJECT); cdecl;
+  external LIB_CRYPTO name _PU + 'ASN1_OBJECT_free';
 
 function ASN1_STRING_data(x: PASN1_STRING): PByte; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_STRING_data';
@@ -7859,21 +7948,50 @@ begin
   result := BioSave(@self, @PEM_write_bio_X509_REQ, CP_UTF8);
 end;
 
-procedure X509_REQ.AddExtension(nid: integer; const value: RawUtf8);
+procedure X509_REQ.AddAndFreeExtension(ext: PX509_EXTENSION);
 var
-  ex: PX509_EXTENSION;
   exts: Pstack_st_X509_EXTENSION;
 begin
-  if @self = nil then
-    exit;
-  ex := X509V3_EXT_conf_nid(nil, nil, nid, pointer(value));
-  if ex = nil then
+  if ext = nil then
     exit;
   exts := NewOpenSslStack;
-  exts.Add(ex);
+  exts.Add(ext);
   X509_REQ_add_extensions(@self, exts);
   exts.Free;
-  ex.Free;
+  ext.Free;
+end;
+
+procedure X509_REQ.AddExtension(nid: integer; const value: RawUtf8);
+begin
+  if @self <> nil then
+    AddAndFreeExtension(X509V3_EXT_conf_nid(nil, nil, nid, pointer(value)));
+end;
+
+procedure X509_REQ.AddExtension(const oid, value: RawByteString; critical: boolean);
+var
+  txt: ShortString;
+  obj: PASN1_OBJECT;
+  oct: PASN1_OCTET_STRING;
+  ext: PX509_EXTENSION;
+begin
+  if (@self = nil) or
+     (oid = '') then
+    exit;
+  AsnDecOidShort(pointer(oid), length(oid), txt);
+  obj := OBJ_txt2obj(@txt[1], 1);
+  if obj = nil then
+    exit;
+  ext := nil;
+  oct := ASN1_OCTET_STRING_new();
+  if oct <> nil then
+  begin
+    if ASN1_OCTET_STRING_set(oct, pointer(value), length(value)) = OPENSSLSUCCESS then
+      ext := X509_EXTENSION_create_by_OBJ(nil, obj, ord(critical), oct);
+    ASN1_OCTET_STRING_free(oct); // free oct/obj ASAP: duplicated in ext
+  end;
+  ASN1_OBJECT_free(obj);
+  if ext <> nil then
+    AddAndFreeExtension(ext); // eventually add to the REQ
 end;
 
 function X509_REQ.Sign(pkey: PEVP_PKEY; md: PEVP_MD): integer;
@@ -8053,6 +8171,21 @@ begin
   result := GetEntry(OBJ_txt2nid(pointer(name)));
 end;
 
+procedure X509_NAME.GetEntries(var Country, State, Locality, Organization,
+  OrgUnit, CommonName, EmailAddress, SurName, GivenName, SerialNumber: RawUtf8);
+begin
+  Country      := GetEntry('C');
+  State        := GetEntry('ST');
+  Locality     := GetEntry('L');
+  Organization := GetEntry('O');
+  OrgUnit      := GetEntry('OU');
+  CommonName   := GetEntry('CN');
+  EmailAddress := GetEntry('emailAddress');
+  Surname      := GetEntry('SN');
+  GivenName    := GetEntry('GN');
+  SerialNumber := GetEntry('serialNumber');
+end;
+
 procedure X509_NAME.ToUtf8(out result: RawUtf8; flags: cardinal);
 var
   bio: PBIO;
@@ -8077,15 +8210,15 @@ procedure X509_NAME.AddEntries(const Country, State, Locality, Organization,
   OrgUnit, CommonName, EmailAddress, SurName, GivenName, SerialNumber: RawUtf8);
 begin
   // warning: don't check for duplicates
-  AddEntry('C',  Country);
-  AddEntry('ST', State);
-  AddEntry('L',  Locality);
-  AddEntry('O',  Organization);
-  AddEntry('OU', OrgUnit);
-  AddEntry('CN', CommonName);
+  AddEntry('C',            Country);
+  AddEntry('ST',           State);
+  AddEntry('L',            Locality);
+  AddEntry('O',            Organization);
+  AddEntry('OU',           OrgUnit);
+  AddEntry('CN',           CommonName);
   AddEntry('emailAddress', EmailAddress);
-  AddEntry('SN', Surname);
-  AddEntry('GN', GivenName);
+  AddEntry('SN',           Surname);
+  AddEntry('GN',           GivenName);
   AddEntry('serialNumber', SerialNumber);
 end;
 
@@ -8130,7 +8263,7 @@ begin
   if @self = another then // not done in OpenSSL C code
     result := 0
   else
-    result := X509_NAME_cmp(@self, another); // will compare the DER binary
+    result := X509_NAME_cmp(@self, another); // X.500 canonical comparison
 end;
 
 function X509_NAME.Hash: cardinal;
@@ -9097,6 +9230,11 @@ begin
   ToHex(result);
 end;
 
+function asn1_string_st.ToBinary: RawByteString;
+begin
+  FastSetString(RawUtf8(result), Data, Len);
+end;
+
 function asn1_string_st.Equals(another: pointer): boolean;
 var
   n1, n2: PtrInt;
@@ -9130,6 +9268,13 @@ begin
     exit;
   result := c^.ca <> 0;
   BASIC_CONSTRAINTS_free(c);
+end;
+
+function X509_EXTENSION.IsDataEqual(x: PX509_EXTENSION): boolean;
+begin
+  result := (@self <> nil) and
+            (x <> nil) and
+    X509_EXTENSION_get_data(@self).Equals(X509_EXTENSION_get_data(x));
 end;
 
 procedure X509_EXTENSION.ToUtf8(out result: RawUtf8; flags: cardinal);
@@ -9170,9 +9315,30 @@ end;
 procedure TX509_Extension.SetExtension(x: PX509_EXTENSION);
 begin
   ext := x;
-  nid := OBJ_obj2nid(X509_EXTENSION_get_object(x));
+  obj := X509_EXTENSION_get_object(x);
+  nid := OBJ_obj2nid(obj);
   value := X509_EXTENSION_get_data(x);
   critical := X509_EXTENSION_get_critical(x) <> 0;
+end;
+
+function TX509_Extension.TextOid(var Text: ShortString): boolean;
+var
+  len: integer;
+begin
+  Text[0] := #0;
+  len := OBJ_obj2txt(@Text[1], high(Text), obj, 1);
+  result := len > 0;
+  if result then
+    Text[0] := AnsiChar(len); // return '1.3.6.1.5.5.7.1.1' numerical form
+end;
+
+function TX509_Extension.BinaryOid: RawByteString;
+var
+  text: ShortString; // OBJ_obj2txt() ensures it is #0 terminated
+begin
+  FastAssignNew(result);
+  if TextOid(text) then
+    result := AsnEncOid(@text[1]);
 end;
 
 
@@ -9343,7 +9509,19 @@ begin
   // X509 usually does not compare serial numbers nor SKID/AKID but the names
   // in practice, OpenSSL self-signed certificates have a SKID but no AKID
   result := (@self <> nil) and
-      (X509_get_issuer_name(@self).Compare(X509_get_subject_name(@self)) = 0);
+        (X509_get_issuer_name(@self).Compare(X509_get_subject_name(@self)) = 0);
+end;
+
+function X509.IsAuthorizedBy(x: PX509): boolean;
+var
+  aki: RawUtf8;
+begin
+  aki := AuthorityKeyIdentifier; // trim the AKID to same SKID text format
+  result := (@self <> nil) and
+            (x <> nil) and
+            ((aki = '') or
+             PropNameEquals(aki, x.SubjectKeyIdentifier)) and
+            (X509_get_issuer_name(@self).Compare(X509_get_subject_name(x)) = 0);
 end;
 
 function X509.GetSignatureAlgo: RawUtf8;
@@ -9769,7 +9947,7 @@ begin
             delete(pwd, 1, 5); // trim
             fmt := p12Legacy;
           end;
-        ord('a') + ord('e') shl 8 + ord('s') shl 16 + ord('=') shl 24:
+        AES_LO + ord('=') shl 24:
           begin // start with PKCS12_AES_PREFIX = 'aes='
             delete(pwd, 1, 4);
             fmt := p12New;
@@ -11044,24 +11222,26 @@ procedure TOpenSslNetTls.AfterConnection(Socket: TNetSocket;
 var
   P: PUtf8Char;
   h: RawUtf8;
-  peer: PPointer;
+  threadpeer: PPointer;
   //x: PX509DynArray;
-  //ext: TX509_Extensions; exts: TRawUtf8DynArray; len: PtrInt;
+  //ext: TX509_Extensions; exts: TRawUtf8DynArray; len: PtrInt; ocsp, isssuers: TRawUtf8DynArray;
 begin
+  // this method is called on the Client side once the TCP socket is established
   fSocket := Socket;
   fContext := @Context;
   // reset output information
   ResetNetTlsContext(Context);
   fLastError := @Context.LastError;
   fServerAddress := ServerAddress;
-  peer := @_PeerVerify;
+  threadpeer := @_PeerVerify;
   // prepare TLS connection properties
   fCtx := SSL_CTX_new(TLS_client_method);
   try
-    peer^ := self;
+    threadpeer^ := self;
     SetupCtx(Context, {bind=}false);
     fSsl := SSL_new(fCtx);
-    SSL_set_tlsext_host_name(fSsl, ServerAddress); // SNI field
+    // setup client-side SNI field for the expected server host name(s)
+    SSL_set_tlsext_host_name(fSsl, ServerAddress);
     if not Context.IgnoreCertificateErrors then
     begin
       P := pointer(Context.HostNamesCsv);
@@ -11086,7 +11266,7 @@ begin
     else
     begin
       // get OpenSSL peer certificate information
-      fPeer := fSsl.PeerCertificate;
+      fPeer := fSsl.PeerCertificate; // requires fPeer^.Free
       // writeln(fSsl.PeerCertificatesAsPEM);
       // writeln(fSsl.PeerCertificatesAsText);
       //x := LoadCertificates(fSsl.PeerCertificatesAsPEM);
@@ -11100,14 +11280,14 @@ begin
         begin
           // writeln(fPeer.SetExtension(NID_netscape_comment, 'toto est le plus bo'));
           // writeln(fPeer.SetUsage([kuCodeSign, kuDigitalSignature, kuTlsServer, kuTlsClient]));
-          Context.PeerIssuer := fPeer.IssuerName;
-          Context.PeerSubject := fPeer.SubjectName;
+          Context.PeerIssuer := fPeer^.IssuerName;
+          Context.PeerSubject := fPeer^.SubjectName;
           Context.PeerCert := fPeer;
           if Context.WithPeerInfo or
              (not Context.IgnoreCertificateErrors and
               not fSsl.IsVerified(@Context.LastError)) then
             // include full peer info on certificate verification failure
-            Context.PeerInfo := fPeer.PeerInfo;
+            Context.PeerInfo := fPeer^.PeerInfo;
           {
           writeln(#10'------------'#10#10'PeerInfo=',Context.PeerInfo);
           writeln('SerialNumber=',fPeer.SerialNumber);
@@ -11121,7 +11301,16 @@ begin
           ext := fPeer.GetExtensions;
           writeln(length(ext));
           for len := 0 to high(ext) do
-            writeln(OBJ_nid2sn(ext[len].nid),'=',OBJ_nid2ln(ext[len].nid),'=',ext[len].nid);
+            with ext[len] do
+            begin
+              writeln(OBJ_nid2sn(nid),'=',OBJ_nid2ln(nid),'=', nid,'=',
+                AsnDecOidText(BinaryOid));
+              if nid <> NID_info_access then
+                continue;
+              AsnDecAia(value^.ToBinary, ocsp, isssuers);
+              writeln('ocsp=', RawUtf8ArrayToCsv(ocsp));
+              writeln('issuers=', RawUtf8ArrayToCsv(isssuers));
+            end;
           writeln('NotBefore= ',DateTimeToStr(fPeer.NotBefore));
           writeln('NotAfter= ',DateTimeToStr(fPeer.NotAfter));
           writeln('SubjectKeyIdentifier=',fPeer.SubjectKeyIdentifier);
@@ -11154,12 +11343,13 @@ begin
           // allow e.g. to verify CN or DNSName fields
           Context.OnAfterPeerValidate(Socket, fContext, fSsl, fPeer);
       finally
-        fPeer.Free;
+        fPeer^.Free; // SSL_get_peer_certificate() requires X509_free()
         fPeer := nil;
+        Context.PeerCert := nil; // avoid GPF on dangling pointer in client code
       end;
     end;
   finally
-    peer^ := nil; // but keep fLastError since fContext remains
+    threadpeer^ := nil; // but keep fLastError since fContext remains
   end;
 end;
 
@@ -11174,7 +11364,7 @@ var
   ca: Pstack_st_X509;
   cb: pointer;
 begin
-  // setup the peer verification patterns
+  // setup the peer verification - shared by AfterConnection and AfterBind
   cb := nil;
   if Context.IgnoreCertificateErrors then
     mode := SSL_VERIFY_NONE
@@ -11354,6 +11544,7 @@ procedure TOpenSslNetTls.AfterAccept(Socket: TNetSocket;
 var
   peer: PPointer;
 begin
+  // this method is called on the Server side for each accepted client TCP socket
   fSocket := Socket;
   fContext := @BoundContext; // main context may be shared e.g. for TAsyncServer
   // reset output information
@@ -11396,14 +11587,19 @@ begin
 end;
 
 function TOpenSslNetTls.GetRawCert(SignHashName: PRawUtf8): RawByteString;
+var
+  x: PX509;
 begin
   FastAssignNew(result);
-  if (fSsl = nil) or
-     (fSsl.PeerCertificate = nil) then
+  if fSsl = nil then
     exit;
-  result := fSsl.PeerCertificate^.ToBinary;
+  x := fSsl.PeerCertificate; // SSL_get_peer_certificate() requires x^.Free
+  if x = nil then
+    exit;
+  result := x^.ToBinary;
   if SignHashName <> nil then
-    SignHashName^ := fSsl.PeerCertificate^.GetSignatureHash;
+    SignHashName^ := x^.GetSignatureHash;
+  x^.Free;
 end;
 
 destructor TOpenSslNetTls.Destroy;
@@ -11413,8 +11609,6 @@ begin
     if fDoSslShutdown then
       SSL_shutdown(fSsl);
     fSsl.Free;
-    if fContext <> nil then
-      fContext^.PeerCert := nil;
   end;
   if fCtx <> nil then
     fCtx.Free; // client or AfterBind server context

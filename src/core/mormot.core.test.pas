@@ -191,7 +191,7 @@ type
     destructor Destroy; override;
     /// used by the published methods to run a test assertion
     // - condition must equals TRUE to pass the test
-    procedure Check(condition: boolean; const msg: string = '');
+    function Check(condition: boolean; const msg: string = ''): boolean;
       {$ifdef HASSAFEINLINE}inline;{$endif} // Delphi 2007 has trouble inlining this
     /// used by the published methods to run a test assertion
     // - condition must equals TRUE to pass the test
@@ -839,41 +839,27 @@ begin
   fOwner.DoLog(LEV[condition], '%', [msg], {notify=}not condition);
 end;
 
-procedure TSynTestCase.Check(condition: boolean; const msg: string);
+function TSynTestCase.Check(condition: boolean; const msg: string): boolean;
 begin
+  result := condition;
   if self = nil then
     exit;
   inc(fAssertions);
   if (msg <> '') and
      (tcoLogEachCheck in fOptions) then
-    AddLog(condition, msg);
-  if not condition then
+    AddLog(result, msg);
+  if not result then
     TestFailed(msg);
 end;
 
 function TSynTestCase.CheckFailed(condition: boolean; const msg: string): boolean;
 begin
-  if self = nil then
-  begin
-    result := false;
-    exit;
-  end;
-  inc(fAssertions);
-  if (msg <> '') and
-     (tcoLogEachCheck in fOptions) then
-    AddLog(condition, msg);
-  if condition then
-    result := false
-  else
-  begin
-    TestFailed(msg);
-    result := true;
-  end;
+  result := not Check(condition, msg);
 end;
 
 function TSynTestCase.CheckNot(condition: boolean; const msg: string): boolean;
 begin
-  result := CheckFailed(not condition, msg);
+  result := not Check(not condition, msg);
 end;
 
 procedure TSynTestCase.DoCheckUtf8(condition: boolean; const msg: RawUtf8;
