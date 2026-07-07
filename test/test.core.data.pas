@@ -8231,6 +8231,9 @@ begin
   CheckEqual(value, 'fields[a]=A&fields[b]=1');
   CheckEqual(UrlEncodeFull('', [], ['num', 10, '=fields', value],
     OPENAPI_URLENCODER), '?num=10&fields[a]=A&fields[b]=1');
+  rec.a := 'Hello world & test';
+  value := DeepObjectEncode(@rec, TypeInfo(TSubAB), 'fields[');
+  CheckEqual(value, 'fields[a]=Hello+world+%26+test&fields[b]=1');
   rec.a := '';
   value := DeepObjectEncode(@rec, TypeInfo(TSubAB), 'fields[');
   CheckEqual(value, 'fields[b]=1');
