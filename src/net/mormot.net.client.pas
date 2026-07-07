@@ -1924,6 +1924,9 @@ var
 function FindCustomEnum(const CustomText: array of RawUtf8;
   const Value: RawUtf8): integer;
 
+/// convert a record using RTTI into URI-encoded mormot.net.openapi "deepObject"
+function DeepObjectEncode(Value: pointer; Info: PRttiInfo; const Prefix: RawUtf8): RawUtf8;
+
 
 { ************** Cached HTTP Connection to a Remote Server }
 
@@ -5499,6 +5502,18 @@ begin
     result := FindRawUtf8(@CustomText[1], Value, high(CustomText), {casesens=}true) + 1
   else
     result := 0;
+end;
+
+function DeepObjectEncode(Value: pointer; Info: PRttiInfo; const Prefix: RawUtf8): RawUtf8;
+var
+  json: RawUtf8;
+begin
+  FastAssignNew(result);
+  if IsRecordDefaultOrVoid(Value, Info) then
+    exit;
+  SaveJson(Value^, Info, [twoForceJsonExtended, twoIgnoreDefaultInRecord], json);
+  result := UrlEncodeJsonObjectBuffer('', pointer(json), [], {include?=}false,
+    {deepObjectName=}Prefix);
 end;
 
 
