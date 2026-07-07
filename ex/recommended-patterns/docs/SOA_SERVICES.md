@@ -64,7 +64,7 @@ end;
 
 **Implementation** (`app/tasks/task_query_impl.pas`):
 - Descends from `TInjectableObjectRest`; publishes `Repo: ITaskRepository`, filled by `AutoResolve` from the repo seeded into the dispatcher's resolver (`InjectInstance`). No `IRestOrm` in sight.
-- Uses `TSynMonitor` for per-call timing (internally locked, safe for `sicShared`).
+- No monitoring code: per-method timing and counters come from the framework's built-in SOA statistics (`GET /taskmanager/stat?withall=1`; persisted to the `MonitorUsage` table by the composition root).
 - Reads receive aggregates **already migrated** to the current schema — the repository's `GetByID` / `List` / `Search` migrate internally, so the service never calls migration itself.
 - `SearchTasks` just normalises the status filter and calls `fRepo.Search`; the FTS5-vs-`LIKE` choice and the fallback live entirely inside the repository.
 - Lists are returned as `IList<TTask>` — interface-managed lifetime, no `try…finally Free`.

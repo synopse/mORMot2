@@ -296,15 +296,11 @@ type
 ```pascal
 // src/app/myfeature/my_command_impl.pas
 type
-  // sicShared: fRepo is filled by AutoResolve and immutable after construction;
-  // fMonitor is internally locked.
+  // sicShared: fRepo is filled by AutoResolve and immutable after construction.
   TMyCommandService = class(TInjectableObjectRest, IMyCommand)
   private
     fRepo: IMyRepository;        // filled by AutoResolve, NEVER IRestOrm
-    fMonitor: TSynMonitor;
   public
-    constructor Create; override;             // allocate TSynMonitor
-    destructor Destroy; override;
     function Create(const aData: TCreateMyDTO): TCommandResult;
     function Delete(aID: TID): TCommandResult;
   published
@@ -312,6 +308,8 @@ type
       read fRepo write fRepo;                  // resolved at construction
   end;
 ```
+
+No monitoring code is needed: the framework already tracks call counts, timing, input/output sizes and errors for every interface-based service method (`GET /<root>/stat?withall=1`), and the composition root persists them to the `MonitorUsage` table via `TSynMonitorUsageRest`.
 
 ### 9. Add tests (tests)
 

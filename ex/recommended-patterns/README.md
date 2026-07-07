@@ -16,7 +16,7 @@ A modern, high-performance task management system built with Free Pascal and the
 - **Comments** - Embedded comment threads on tasks
 - **Tags** - Color-coded tags with task associations
 - **Record Versioning** - Schema migration via lazy upgrades
-- **Performance Monitoring** - TSynMonitor per service
+- **Performance Monitoring** - framework built-in per-method SOA statistics, persisted to SQLite
 - **Automated Tests** - 18 TSynTestCase methods (Task: 10, Tag: 8)
 
 ## Documentation
@@ -231,7 +231,7 @@ This application uses **CQRS (Command Query Responsibility Segregation)** with *
 - **Typed DTOs**: Packed record DTOs for all data transfer (no Variant types)
 - **Record Versioning**: SchemaVersion field with lazy migration on read
 - **FTS5 Search**: Full-text search index synced on write operations
-- **Performance Monitoring**: TSynMonitor tracks per-service timing
+- **Performance Monitoring**: the framework collects per-method statistics for every SOA service out of the box (call counts, timing, input/output sizes, errors) — no instrumentation code in the services. `TSynMonitorUsageRest` aggregates them into the `MonitorUsage` table of the SQLite database, and `GET /taskmanager/stat?withall=1` serves live numbers
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture documentation.
 

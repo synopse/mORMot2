@@ -97,7 +97,7 @@ All SQL/FTS5 knowledge lives here. If the application layer ever calls `IRestOrm
   - `<Dto>ToOrm` for create (fills a fresh `TOrm`, sets `CreatedAt`, defaults, validations).
   - `Apply<Dto>` for update (mutates an already-loaded `TOrm`, preserves `CreatedAt`, refreshes `UpdatedAt`).
   - No DB lookups, no `IRestOrm` calls — pure transforms. The cheapest unit-test target in the codebase.
-- **`<entity>_query_impl.pas`** / **`<entity>_command_impl.pas`** — `T<Entity>QueryService` / `T<Entity>CommandService` descend from `TInjectableObjectRest` and implement the CQRS interfaces. They hold a single collaborator (`I<Entity>Repository`) as a **published interface property** filled by `AutoResolve` against the repo seeded into the dispatcher's resolver (`InjectInstance`). Stateless (sicShared); per-call thread-safety comes from `TSynMonitor`'s internal locker and from never sharing `TOrm` instances across threads.
+- **`<entity>_query_impl.pas`** / **`<entity>_command_impl.pas`** — `T<Entity>QueryService` / `T<Entity>CommandService` descend from `TInjectableObjectRest` and implement the CQRS interfaces. They hold a single collaborator (`I<Entity>Repository`) as a **published interface property** filled by `AutoResolve` against the repo seeded into the dispatcher's resolver (`InjectInstance`). Stateless (sicShared); thread-safety comes from never sharing `TOrm` instances across threads. No monitoring code — per-method statistics are collected by the framework itself (see `serv/app/ServAppTaskManager.pas`).
 
 ### `tests/`
 
@@ -136,6 +136,8 @@ HttpServer := TRestHttpServer.Create(Settings.HttpPort, [Dispatcher], '+', useBi
 ```
 
 Class-form `ServiceDefine` → the framework constructs each service via `CreateWithResolverAndRest`, which runs `AutoResolve` and fills the published `Repo` property. Only `Dispatcher` is exposed via HTTP — `Persistence` is in-process state behind the repositories.
+
+The composition root also wires the framework's **built-in SOA statistics** persistence: `Dispatcher.StatUsage := TSynMonitorUsageRest.Create(Persistence.Orm, 0)` aggregates the per-method counters (collected automatically for every interface-based service) into the `TOrmMonitorUsage` table per hour/day/month/year. On shutdown it is released explicitly (`Dispatcher.StatUsage := nil`, which saves pending slices) while `Persistence` is still alive — `TRestServer` does not free `StatUsage` in its destructor. Live numbers: `GET /taskmanager/stat?withall=1`.
 
 ### `src/cli_client.pas` + the `AppTaskManagerClient*` units
 
@@ -199,7 +201,7 @@ The key rule: `app/*_impl.pas` depends on `dom/*_repository.pas` (interface), **
 5. **App**: define the DTO family in `<entity>_dtos.pas` and register each shape with `Rtti.RegisterFromText` in `initialization`.
 6. **App**: write the mappers in `<entity>_mappers.pas` (pure — no `IRestOrm`).
 7. **Dom**: declare `I<Entity>Query` and `I<Entity>Command` (with fresh GUIDs).
-8. **App**: implement `T<Entity>QueryService` and `T<Entity>CommandService` (descend from `TInjectableObjectRest`, publish `Repo: I<Entity>Repository`; override `constructor Create` to allocate the `TSynMonitor`).
+8. **App**: implement `T<Entity>QueryService` and `T<Entity>CommandService` (descend from `TInjectableObjectRest`, publish `Repo: I<Entity>Repository`). No monitoring code — the framework tracks every service method automatically.
 9. **Tests**: write `T<Entity>Tests` in `tests/<entity>/<entity>_tests.pas`.
 10. **Composition root** (`serv/app/ServAppTaskManager.pas` and `AppTaskManagerClientLocal.pas`; the remote backend needs only the new Query/Command `TypeInfo()`s in `RegisterTaskManagerInterfaces`):
     - Add the `TOrm` class to the persistence `TOrmModel.Create([...])`.

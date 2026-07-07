@@ -481,6 +481,16 @@ curl -s -X POST http://localhost:8080/taskmanager/TagQuery.ListTags \
   -H "Content-Type: application/json" -d '[]'
 ```
 
+## Statistics
+
+The framework's built-in `stat` method-based service reports per-method statistics for every CQRS service — call counts, timing, input/output sizes and error counts — collected automatically, with no instrumentation code in the services:
+
+```bash
+curl -s "http://localhost:8080/taskmanager/stat?withall=1"
+```
+
+The same counters are aggregated per hour/day/month/year into the `MonitorUsage` table of the SQLite database (see `TSynMonitorUsageRest` in `serv/app/ServAppTaskManager.pas`).
+
 ## CORS
 
 The server is configured with CORS enabled (`Access-Control-Allow-Origin: *`).

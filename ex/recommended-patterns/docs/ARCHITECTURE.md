@@ -176,18 +176,15 @@ Each service implementation:
 
 - Inherits from `TInjectableObjectRest` (`mormot.soa.server`).
 - Publishes `Repo: I<Entity>Repository` as a **published interface property** — `AutoResolve` fills it from the dispatcher's resolver (seeded via `InjectInstance`) on construction.
-- Holds a `TSynMonitor` for per-call timing (internally locked, safe for `sicShared`).
 - Delegates persistence to the repository; delegates field copying to the mappers.
 - Logs operations via `TSynLog`.
+- Contains **no monitoring code** — per-method timing and counters come from the framework's built-in SOA statistics (see [Performance](#performance)).
 
 ```pascal
 TTaskCommandService = class(TInjectableObjectRest, ITaskCommand)
 private
   fRepo: ITaskRepository;
-  fMonitor: TSynMonitor;
 public
-  constructor Create; override;          // creates the TSynMonitor
-  destructor Destroy; override;
   // ... ITaskCommand methods
 published
   property Repo: ITaskRepository
@@ -198,7 +195,7 @@ end;
 The service has no `Create(aRepo)` overload — the framework's `TServiceFactoryServer.CreateInstance` calls `CreateWithResolverAndRest`, which runs `AutoResolve` against the dispatcher's `TServiceContainer`, where the repos were seeded via `ServiceContainer.InjectInstance([repoImpl])` before the services were defined.
 
 **Thread-safety contract** (sicShared):
-- Fields are immutable after construction (`fRepo`) or internally locked (`fMonitor`).
+- Fields are immutable after construction (`fRepo`).
 - `TOrm` instances are created per call and never shared between threads.
 - Transactions begin/commit/rollback through the repository — never around a shared `TOrm`.
 
@@ -329,7 +326,7 @@ Browser → POST /taskmanager/TaskQuery.ListTasks
 
 ## Performance
 
-1. **TSynMonitor** per service — tracks ProcessStart/ProcessEnd timing.
+1. **Built-in SOA statistics** — the framework collects per-method call counts, timing, input/output sizes and error counts for every interface-based service (`mlInterfaces` is in `TRestServer.StatLevels` by default), with zero code in the service classes. Live numbers: `GET /taskmanager/stat?withall=1`. The composition root additionally wires `TSynMonitorUsageRest`, which aggregates the counters per hour/day/month/year into the `TOrmMonitorUsage` table of the SQLite database. One subtlety: `TRestServer` does not free `StatUsage` in its destructor, so the composition root releases it explicitly (`Dispatcher.StatUsage := nil`, which saves pending slices) while the persistence server is still alive.
 2. **Async HTTP server** (`useBidirSocket`) — high concurrency.
 3. **FTS5 full-text search** — indexed search with `LIKE` fallback when FTS5 is unavailable.
 4. **SQLite WAL mode** — concurrent reads alongside writes.
