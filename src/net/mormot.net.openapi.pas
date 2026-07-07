@@ -3157,9 +3157,8 @@ begin
       'constructor ', fClientClassName, '.Create(const aClient: IJsonClient);', LineEnd,
       'begin', LineEnd,
       '  fClient := aClient;', LineEnd,
-      '  fClient.Options := [jcoParseTolerant, jcoHttpErrorRaise];', LineEnd,
-      '  fClient.UrlEncoder :=', LineEnd,
-      '    [ueEncodeNames, ueSkipVoidString, ueSkipVoidValue, ueStarNameIsCsv];', LineEnd,
+      '  fClient.Options := OPENAPI_OPTIONS;', LineEnd,
+      '  fClient.UrlEncoder := OPENAPI_URLENCODER;', LineEnd,
       'end;', LineEnd, LineEnd]);
     // status responses to exception events
     for i := 0 to high(fErrorHandler) do
