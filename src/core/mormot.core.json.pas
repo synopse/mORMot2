@@ -547,7 +547,7 @@ function JsonRetrieveObjectRttiCustom(var Json: PUtf8Char;
 // - warning: the ParametersJson input buffer will be modified in-place
 function UrlEncodeJsonObjectBuffer(const UriName: RawUtf8;
   ParametersJson: PUtf8Char; const PropNamesToIgnore: array of RawUtf8;
-  IncludeQueryDelimiter: boolean = true): RawUtf8;
+  IncludeQueryDelimiter: boolean = true; const DeepObjectName: RawUtf8 = ''): RawUtf8;
 
 /// encode a JSON object UTF-8 buffer into URI parameters
 // - you can specify property names to ignore during the object decoding
@@ -4835,48 +4835,49 @@ begin
 end;
 
 function UrlEncodeJsonObjectBuffer(const UriName: RawUtf8; ParametersJson: PUtf8Char;
-  const PropNamesToIgnore: array of RawUtf8; IncludeQueryDelimiter: boolean): RawUtf8;
+  const PropNamesToIgnore: array of RawUtf8; IncludeQueryDelimiter: boolean;
+  const DeepObjectName: RawUtf8): RawUtf8;
 var
   i, j: PtrInt;
   sep: AnsiChar;
-  w: TTextWriter;
   Params: TNameValuePUtf8CharDynArray;
-  temp: TTextWriterStackBuffer;
+  w: TSynTempAdder;
 begin
   if (ParametersJson = nil) or
      (JsonDecode(ParametersJson, Params, true) = nil) or
      (Params = nil)  then
-    result := UriName // no valid parameter to encode
-  else
   begin
-    w := TTextWriter.CreateOwnedStream(temp);
-    try
-      w.AddString(UriName);
-      sep := '?';
-      for i := 0 to length(Params) - 1 do
-        with Params[i] do
-        begin
-          for j := 0 to high(PropNamesToIgnore) do
-            if IdemPropNameU(PropNamesToIgnore[j], Name.Text, Name.Len) then
-            begin
-              Name.Len := 0;
-              break;
-            end;
-          if Name.Len = 0 then
-            continue; // was within PropNamesToIgnore[]
-          if IncludeQueryDelimiter then
-            w.AddDirect(sep);
-          sep := '&';
-          IncludeQueryDelimiter := true;
-          w.AddShort(Name.Text, Name.Len);
-          w.AddDirect('=');
-          UrlEncode(w, Value.Text, Value.Len);
-        end;
-      w.SetText(result);
-    finally
-      w.Free;
-    end;
+    result := UriName; // no valid parameter to encode
+    exit;
   end;
+  w.Init;
+  w.Add(UriName);
+  sep := '?';
+  for i := 0 to length(Params) - 1 do
+    with Params[i] do
+    begin
+      for j := 0 to high(PropNamesToIgnore) do
+        if IdemPropNameU(PropNamesToIgnore[j], Name.Text, Name.Len) then
+        begin
+          Name.Len := 0;
+          break;
+        end;
+      if Name.Len = 0 then
+        continue; // was within PropNamesToIgnore[]
+      if IncludeQueryDelimiter then
+        w.AddDirect(sep);
+      sep := '&';
+      IncludeQueryDelimiter := true;
+      if DeepObjectName <> '' then
+        w.Add(DeepObjectName); // e.g. 'fields['
+      w.Add(Name.Text, Name.Len);
+      if DeepObjectName <> '' then
+        w.AddDirect(']', '=')  // e.g. 'fields[uid]='
+      else
+        w.AddDirect('=');
+      UrlEncodeAdder(w, Value.Text, Value.Len, {space=}32);
+    end;
+  w.Done(result);
 end;
 
 function UrlEncodeJsonObject(const UriName, ParametersJson: RawUtf8;
