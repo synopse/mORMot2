@@ -1595,10 +1595,10 @@ function UrlEncode(const Text: RawUtf8): RawUtf8; overload;
 /// encode a string as URI parameter encoding, i.e. ' ' as '+'
 function UrlEncode(Text: PUtf8Char): RawUtf8; overload;
 
-/// append a string as URI parameter encoding, i.e. ' ' as '+'
+/// append a string as URI parameter encoding, i.e. ' ' as '+' to TTextWriter
 procedure UrlEncode(W: TTextWriter; Text: PUtf8Char; TextLen: PtrInt); overload;
 
-/// append a string as URI parameter encoding, i.e. ' ' as '+'
+/// append a string as URI parameter encoding, i.e. ' ' as '+' to TTextWriter
 procedure UrlEncode(W: TTextWriter; const Text: RawUtf8); overload;
 
 /// encode a string as URI network name encoding, i.e. ' ' as %20
@@ -1609,13 +1609,16 @@ function UrlEncodeName(const Text: RawUtf8): RawUtf8; overload;
 // - only parameters - i.e. after '?' - should replace spaces by '+'
 function UrlEncodeName(Text: PUtf8Char): RawUtf8; overload;
 
-/// append a string as URI network name encoding, i.e. ' ' as %20
+/// append a string as URI network name encoding, i.e. ' ' as %20 to TTextWriter
 // - only parameters - i.e. after '?' - should replace spaces by '+'
 procedure UrlEncodeName(W: TTextWriter; Text: PUtf8Char; TextLen: PtrInt); overload;
 
-/// append a string as URI network name encoding, i.e. ' ' as %20
+/// append a string as URI network name encoding, i.e. ' ' as %20 to TTextWriter
 // - only parameters - i.e. after '?' - should replace spaces by '+'
 procedure UrlEncodeName(W: TTextWriter; const Text: RawUtf8); overload;
+
+/// append URI name (space2plus=48) or parameter (space2plus=32) to a TSynTempAdder
+procedure UrlEncodeAdder(var W: TSynTempAdder; Text: pointer; TextLen: PtrInt; space2plus: cardinal);
 
 type
   /// some options for UrlEncode()
@@ -8101,13 +8104,23 @@ end;
 
 procedure _UrlEncodeW(W: TTextWriter; Text: pointer; TextLen: PtrInt; space2plus: cardinal);
 begin
-  if (Text = nil) or
-     (W = nil) then
+  if (W = nil) or
+     (Text = nil) then
     exit;
-  TextLen := TextLen * 3; // worse case would fit most of the time
-  if TextLen > W.BEnd - W.B then // need to compute exact length (seldom needed)
+  TextLen := TextLen * 3;        // worse case would fit most of the time
+  if TextLen > W.BEnd - W.B then // better compute exact length (seldom)
     TextLen := _UrlEncode_ComputeLen(Text, @TEXT_BYTES, space2plus);
   inc(W.B, _UrlEncode_Write(Text, W.AddPrepare(TextLen), @TEXT_BYTES, space2plus));
+end;
+
+procedure UrlEncodeAdder(var W: TSynTempAdder; Text: pointer; TextLen: PtrInt; space2plus: cardinal);
+begin
+  if Text = nil then
+    exit;
+  TextLen := TextLen * 3;               // worse case would fit most of the time
+  if TextLen > W.Capacity - W.Size then // better compute exact length (seldom)
+    TextLen := _UrlEncode_ComputeLen(Text, @TEXT_BYTES, space2plus);
+  inc(W.Store.Added, _UrlEncode_Write(Text, W.Prepare(TextLen), @TEXT_BYTES, space2plus));
 end;
 
 function UrlEncode(const Text: RawUtf8): RawUtf8;
