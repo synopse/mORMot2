@@ -318,7 +318,10 @@ begin
     WriteLn('Port:     ', Settings.HttpPort);
 
     // ----- Persistence server (internal) -----
-    PersistenceModel := TOrmModel.Create([TTask, TTag, TTaskFts5], Settings.Root);
+    // TOrmMonitorUsage stores the framework's aggregated SOA statistics
+    // (see the TSynMonitorUsageRest wiring below).
+    PersistenceModel := TOrmModel.Create([TTask, TTag, TTaskFts5, TOrmMonitorUsage],
+      Settings.Root);
     try
       Persistence := TRestServerDB.Create(PersistenceModel, DBFileName);
       try
@@ -351,6 +354,18 @@ begin
           Dispatcher.ServiceDefine(TTagQueryService, [ITagQuery], sicShared);
           Dispatcher.ServiceDefine(TTagCommandService, [ITagCommand], sicShared);
           WriteLn('Services registered: ITaskQuery, ITaskCommand, ITagQuery, ITagCommand');
+
+          // ----- Built-in SOA statistics -----
+          // The framework already collects per-method statistics for every
+          // interface-based service (mlInterfaces is in TRestServer.StatLevels
+          // by default): call counts, timing, input/output sizes, error counts.
+          // No instrumentation code is needed in the service classes.
+          // TSynMonitorUsageRest additionally aggregates those counters per
+          // time period (hour/day/month/year) into the TOrmMonitorUsage table
+          // of the SQLite database. It is released via `StatUsage := nil` in
+          // the finally block below, which saves pending data — and must
+          // happen while Persistence (its storage) is still alive.
+          Dispatcher.StatUsage := TSynMonitorUsageRest.Create(Persistence.Orm, 0);
 
           if Persistence.Orm.TableRowCount(TTask) = 0 then
             CreateSampleData;
@@ -387,6 +402,9 @@ begin
             WriteLn('  http://localhost:', ListenURI, '/', Settings.Root, '/TagQuery');
             WriteLn('  http://localhost:', ListenURI, '/', Settings.Root, '/TagCommand');
             WriteLn('');
+            WriteLn('Statistics (built-in, per service method):');
+            WriteLn('  http://localhost:', ListenURI, '/', Settings.Root, '/stat?withall=1');
+            WriteLn('');
             WriteLn('Web Interface:');
             WriteLn('  http://localhost:', ListenURI, '/static/index.html');
             WriteLn('');
@@ -401,6 +419,12 @@ begin
           end;
           end;
         finally
+          // Assigning nil frees the TSynMonitorUsageRest, saving pending
+          // statistics into TOrmMonitorUsage. TRestServer does NOT free
+          // StatUsage in its destructor, and the save needs Persistence
+          // (the storage target) to still be alive — so release it here,
+          // before both servers go down.
+          Dispatcher.StatUsage := nil;
           // Dispatcher.Free releases its DI resolver, which ref-count-frees the
           // repositories seeded via InjectInstance — before Persistence (whose
           // IRestOrm they hold) is freed below.
