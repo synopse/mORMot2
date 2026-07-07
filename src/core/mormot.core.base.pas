@@ -5138,7 +5138,7 @@ begin
   // algorithm similar to TFPList.Expand for the increasing ranges
   result := capacity;
   if result <= 8 then
-    inc(result, 4) // faster for smaller capacity (called often)
+    inc(result, 4)            // faster for smaller capacity (called often)
   else if result <= 128 then
     inc(result, 16)           // increase by 16 bytes up to 128 bytes
   else if result < 8 shl 20 then
@@ -5151,11 +5151,11 @@ end;
 
 function NextPowerOfTwo(number: cardinal): cardinal;
 begin // O(1) branchless algorithm for 32-bit values
-  result := number - cardinal(number <> 0);
-  result := result or (result shr 1);
-  result := result or (result shr 2);
-  result := result or (result shr 4);
-  result := result or (result shr 8);
+  result :=  number - cardinal(number <> 0);
+  result :=  result or (result shr 1);
+  result :=  result or (result shr 2);
+  result :=  result or (result shr 4);
+  result :=  result or (result shr 8);
   result := (result or (result shr 16)) + 1;
 end;
 

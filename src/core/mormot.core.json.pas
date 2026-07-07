@@ -9106,10 +9106,10 @@ begin
         SetLength(Values, NextGrow(n));
       with Values[n] do
       begin
-        Name.Text := nametext;
-        Name.Len := namelen;
+        Name.Text  := nametext;
+        Name.Len   := namelen;
         Value.Text := info.Value;
-        Value.Len := info.ValueLen;
+        Value.Len  := info.ValueLen;
       end;
       inc(n);
     until (info.Json = nil) or
