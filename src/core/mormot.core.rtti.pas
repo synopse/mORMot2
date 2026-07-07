@@ -1606,6 +1606,10 @@ function SetValueObject(Instance: TObject; const Path: RawUtf8;
 // - check nested TRttiCustom.Props and TRttiCustom.ValueIterateCount
 function IsObjectDefaultOrVoid(Value: TObject): boolean;
 
+/// returns TRUE on a nil record instance or if all its properties are default/0
+// - check nested TRttiCustom.Props so our RTTI properties, not binary level
+function IsRecordDefaultOrVoid(Value: pointer; Info: PRttiInfo): boolean;
+
 /// will reset all the object properties to their default
 // - strings will be set to '', numbers to 0
 // - if FreeAndNilNestedObjects is the default FALSE, will recursively reset
@@ -6035,6 +6039,14 @@ begin
      (rc.ValueIterateCount(@Value) > 0) then
     exit; // e.g. TObjectList.Count or TCollection.Count > 0 = not void
   result := rc.Props.IsVoid(pointer(Value)); // check object properties
+end;
+
+function IsRecordDefaultOrVoid(Value: pointer; Info: PRttiInfo): boolean;
+var
+  rc: TRttiCustom;
+begin
+  rc := Rtti.RegisterType(Info);
+  result := (rc <> nil) and rc.Props.IsVoid(Value); // check record fields
 end;
 
 function SetValueFromExecutableCommandLine(var Value; ValueInfo: PRttiInfo;
