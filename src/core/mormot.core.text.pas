@@ -9245,50 +9245,51 @@ begin
   L := 0;
   c := @blocks;
   F := pointer(Format);
-  repeat
-    if F^ = #0 then
-      break
-    else if F^ <> '%' then
-    begin
-      FDeb := F;
-      repeat
-        inc(F);
-      until (F^ = '%') or
-            (F^ = #0);
-      c^.Text := FDeb;
-      c^.Len := F - FDeb;
-      inc(L, c^.Len);
-      c^.TempRawUtf8 := nil;
-      inc(c);
+  if F <> nil then
+    repeat
       if F^ = #0 then
-        break;
-    end;
-    inc(F); // jump '%'
-    if ArgCount <> 0 then
-    begin
-      if VarRecToTempUtf8(Arg, c^) then
+        break
+      else if F^ <> '%' then
       begin
+        FDeb := F;
+        repeat
+          inc(F);
+        until (F^ = '%') or
+              (F^ = #0);
+        c^.Text := FDeb;
+        c^.Len := F - FDeb;
         inc(L, c^.Len);
+        c^.TempRawUtf8 := nil;
         inc(c);
+        if F^ = #0 then
+          break;
       end;
-      inc(Arg);
-      dec(ArgCount);
+      inc(F); // jump '%'
+      if ArgCount <> 0 then
+      begin
+        if VarRecToTempUtf8(Arg, c^) then
+        begin
+          inc(L, c^.Len);
+          inc(c);
+        end;
+        inc(Arg);
+        dec(ArgCount);
+        if F^ = #0 then
+          break;
+      end
+      else
       if F^ = #0 then
+        break
+      else // no more available Args -> add all remaining text
+      begin
+        c^.Text := F;
+        c^.Len := length(Format) - (F - pointer(Format));
+        inc(L, c^.Len);
+        c^.TempRawUtf8 := nil;
+        inc(c);
         break;
-    end
-    else
-    if F^ = #0 then
-      break
-    else // no more available Args -> add all remaining text
-    begin
-      c^.Text := F;
-      c^.Len := length(Format) - (F - pointer(Format));
-      inc(L, c^.Len);
-      c^.TempRawUtf8 := nil;
-      inc(c);
-      break;
-    end;
-  until false;
+      end;
+    until false;
   last := c;
 end;
 
