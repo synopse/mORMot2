@@ -8059,11 +8059,12 @@ var
   s, t, d: RawUtf8;
   hf: TTextWriterHtmlFormat;
   w: TTextWriter;
-  tmp: TTextWriterStackBuffer;
   name, value, utf: RawUtf8;
   str: string;
   P: PUtf8Char;
   Guid2: TGuid;
+  rec: TSubAB;
+  tmp: TTextWriterStackBuffer;
 const
   guid: TGuid = '{c9a646d3-9c61-4cb7-bfcd-ee2522c8f633}';
 
@@ -8220,6 +8221,27 @@ begin
     [ueStarNameIsCsv]), '?select=&where=1&where=2&where=and+three');
   CheckEqual(UrlEncodeFull('', [], ['select', '', '*where', ''],
     [ueStarNameIsCsv, ueSkipVoidString]), '');
+  value := '123';
+  CheckEqual(UrlEncodeFull('', [], ['one', value, 'another', 'toto'],
+    OPENAPI_URLENCODER), '?one=123&another=toto');
+  Rtti.RegisterFromText(TypeInfo(TSubAB), __TSubAB);
+  rec.a := 'A';
+  rec.b := 1;
+  value := DeepObjectEncode(@rec, TypeInfo(TSubAB), 'fields[');
+  CheckEqual(value, 'fields[a]=A&fields[b]=1');
+  CheckEqual(UrlEncodeFull('', [], ['num', 10, '=fields', value],
+    OPENAPI_URLENCODER), '?num=10&fields[a]=A&fields[b]=1');
+  rec.a := '';
+  value := DeepObjectEncode(@rec, TypeInfo(TSubAB), 'fields[');
+  CheckEqual(value, 'fields[b]=1');
+  CheckEqual(UrlEncodeFull('', [], ['=fields', value],
+    OPENAPI_URLENCODER), '?fields[b]=1');
+  CheckEqual(UrlEncodeFull('', [], ['=fields', value, 'another', 'toto',
+    'three', 3], OPENAPI_URLENCODER), '?fields[b]=1&another=toto&three=3');
+  rec.b := 0;
+  value := DeepObjectEncode(@rec, TypeInfo(TSubAB), 'fields[');
+  CheckEqual(value, '');
+  CheckEqual(UrlEncodeFull('', [], ['=fields', value], OPENAPI_URLENCODER), '');
   for i := 1 to 100 do
   begin
     s := RandomIdentifier(i);
