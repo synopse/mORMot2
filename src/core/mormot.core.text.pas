@@ -1950,6 +1950,9 @@ function FormatString(const Format: RawUtf8; const Args: array of const): string
 /// fast Format() function replacement, for UTF-8 content stored in variant
 function FormatVariant(const Format: RawUtf8; const Args: array of const): variant;
 
+/// fast Format() function replacement in to a TSynTempAdder
+procedure FormatAdder(var Dest: TSynTempAdder; const Format: RawUtf8; const Args: array of const);
+
 /// concatenate several arguments into an UTF-8 string
 function Make(const Args: array of const): RawUtf8; overload;
 
@@ -9487,6 +9490,14 @@ function FormatToShort(const Format: RawUtf8;
 begin
   result[0] := AnsiChar(FormatBufferRaw(
     Format, @Args[0], length(Args), @result[1], high(result)) - @result[1]);
+end;
+
+procedure FormatAdder(var Dest: TSynTempAdder; const Format: RawUtf8; const Args: array of const);
+var
+  f: TFormatUtf8;
+begin
+  f.Parse(Format, @Args[0], length(Args));
+  f.WriteAll(Dest.Add(f.L), @f.blocks);
 end;
 
 procedure FormatString(const Format: RawUtf8; const Args: array of const;
