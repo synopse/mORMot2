@@ -2544,6 +2544,8 @@ type
     /// retrieve all List[] items as text
     procedure AsText(out Result: RawUtf8; IncludePropType: boolean;
       const Prefix, Suffix: RawUtf8);
+    /// check if Data is nil or all List[] properties are void
+    function IsVoid(Data: PAnsiChar): boolean;
     /// finalize and fill with zero all properties of this class instance
     // - it will individually fill the properties, not the whole memory
     // as TRttiCustom.FinalizeAndClear would on a record
@@ -6024,25 +6026,15 @@ end;
 function IsObjectDefaultOrVoid(Value: TObject): boolean;
 var
   rc: TRttiCustom;
-  p: PRttiCustomProp;
-  i: integer;
 begin
   result := Value = nil;
   if result then
     exit;
-  // check e.g. TObjectList.Count or TCollection.Count > 0
   rc := Rtti.RegisterClass(Value);
   if (rc.ValueRtlClass <> vcNone) and
      (rc.ValueIterateCount(@Value) > 0) then
-    exit;
-  // a class instance is void if all its published properties are void
-  p := pointer(rc.Props.List);
-  for i := 1 to rc.Props.Count do
-    if p^.ValueIsVoid(Value) then
-      inc(p)
-    else
-      exit;
-  result := true;
+    exit; // e.g. TObjectList.Count or TCollection.Count > 0 = not void
+  result := rc.Props.IsVoid(pointer(Value)); // check object properties
 end;
 
 function SetValueFromExecutableCommandLine(var Value; ValueInfo: PRttiInfo;
@@ -8869,6 +8861,23 @@ begin
     inc(f);
     inc(p);
   end;
+end;
+
+function TRttiCustomProps.IsVoid(Data: PAnsiChar): boolean;
+var
+  p: PRttiCustomProp;
+  i: integer;
+begin
+  p := pointer(List);
+  result := (p = nil) or (Data = nil);
+  if result then
+    exit;
+  for i := 1 to Count do
+    if p^.ValueIsVoid(Data) then
+      inc(p)
+    else
+      exit;
+  result := true;
 end;
 
 procedure TRttiCustomProps.FinalizeAndClearPublishedProperties(Instance: TObject);
