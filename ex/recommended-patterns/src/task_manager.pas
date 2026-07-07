@@ -7,7 +7,7 @@ program task_manager;
   ServAppTaskManager. This file only brings in cthreads (must be the first unit
   on Unix for thread support) and hands control to the daemon. }
 
-{$ifdef FPC}{$mode objfpc}{$H+}{$endif}
+{$I mormot.defines.inc}
 
 uses
   {$ifdef unix}

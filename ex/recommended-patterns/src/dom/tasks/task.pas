@@ -9,7 +9,7 @@ unit task;
   REST server, no SQL). The FTS5 index schema and the IRestOrm-based lazy
   migration are persistence concerns and live in infra/task_repository_orm. }
 
-{$ifdef FPC}{$mode objfpc}{$H+}{$endif}
+{$I mormot.defines.inc}
 
 interface
 

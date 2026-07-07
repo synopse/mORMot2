@@ -165,7 +165,7 @@ The `TOrm` doubles as the domain object, so it lives in `dom/` and depends only 
 ```pascal
 // src/dom/myfeature/my.pas
 unit my;
-{$mode objfpc}{$H+}
+{$I mormot.defines.inc}
 interface
 uses mormot.core.base, mormot.orm.core;
 
@@ -190,7 +190,7 @@ end.
 ```pascal
 // src/dom/myfeature/my_repository.pas
 unit my_repository;
-{$mode objfpc}{$H+}
+{$I mormot.defines.inc}
 interface
 uses mormot.core.base, mormot.core.collections, mormot.core.interfaces, mormot.orm.core, my;
 

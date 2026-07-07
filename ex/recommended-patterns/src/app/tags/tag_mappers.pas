@@ -1,7 +1,7 @@
 
 unit tag_mappers;
 
-{$ifdef FPC}{$mode objfpc}{$H+}{$endif}
+{$I mormot.defines.inc}
 
 interface
 

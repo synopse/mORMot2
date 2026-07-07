@@ -14,7 +14,7 @@ unit ServAppTaskManager;
    - Dispatcher  = TRestServerFullMemory (void model) hosts the CQRS services
      and is the only server handed to TRestHttpServer. }
 
-{$ifdef FPC}{$mode objfpc}{$H+}{$endif}
+{$I mormot.defines.inc}
 
 interface
 
@@ -375,8 +375,8 @@ begin
           );
           try
             HttpServer.AccessControlAllowOrigin := '*';
-            HttpServer.Route.Get('/static/<path:path>', @StaticServer.ServeFile);
-            HttpServer.Route.Get('/static', @StaticServer.ServeFile);
+            HttpServer.Route.Get('/static/<path:path>', StaticServer.ServeFile);
+            HttpServer.Route.Get('/static', StaticServer.ServeFile);
 
             WriteLn('');
             WriteLn('Server running!');

@@ -11,7 +11,7 @@ unit AppTaskManagerClientLocal;
   them back behind ITaskManagerClient; the returned object owns the whole
   topology and tears it down on release. }
 
-{$ifdef FPC}{$mode objfpc}{$H+}{$endif}
+{$I mormot.defines.inc}
 
 interface
 

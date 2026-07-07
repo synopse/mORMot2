@@ -12,7 +12,7 @@ program cli_client;
   backend (A.6.1); leave it undefined to link the HTTP-client backend that
   talks to the daemon (A.6.2). }
 
-{$ifdef FPC}{$mode objfpc}{$H+}{$endif}
+{$I mormot.defines.inc}
 
 uses
   {$ifdef unix}

@@ -13,7 +13,7 @@ unit cli_client_core;
   The program files (src/cli_client.pas for the scripts, src/delphi/cli_client.dpr
   for the IDEs) are thin shells around RunCliClient. }
 
-{$ifdef FPC}{$mode objfpc}{$H+}{$endif}
+{$I mormot.defines.inc}
 
 interface
 

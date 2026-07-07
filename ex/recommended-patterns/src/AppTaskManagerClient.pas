@@ -14,7 +14,7 @@ unit AppTaskManagerClient;
   identical regardless of topology — that is the location transparency the
   patterns document is after. }
 
-{$ifdef FPC}{$mode objfpc}{$H+}{$endif}
+{$I mormot.defines.inc}
 
 interface
 

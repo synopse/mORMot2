@@ -1,7 +1,7 @@
 
 unit task_command;
 
-{$ifdef FPC}{$mode objfpc}{$H+}{$endif}
+{$I mormot.defines.inc}
 
 interface
 

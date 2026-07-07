@@ -1,7 +1,7 @@
 
 unit tag_repository;
 
-{$ifdef FPC}{$mode delphi}{$H+}{$endif}
+{$I mormot.defines.inc}
 
 interface
 

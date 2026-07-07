@@ -1,7 +1,7 @@
 
 unit task_query_impl;
 
-{$ifdef FPC}{$mode delphi}{$H+}{$endif}
+{$I mormot.defines.inc}
 
 interface
 

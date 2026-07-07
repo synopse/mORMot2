@@ -1,7 +1,7 @@
 
 unit shared_types;
 
-{$ifdef FPC}{$mode objfpc}{$H+}{$endif}
+{$I mormot.defines.inc}
 
 interface
 
@@ -42,8 +42,8 @@ type
     Status: TServiceResult;
   end;
 
-function CommandSuccess(aID: TID): TCommandResult;
-function CommandSuccess: TCommandResult;
+function CommandSuccess(aID: TID): TCommandResult; overload;
+function CommandSuccess: TCommandResult; overload;
 function CommandError(const aMessage: RawUtf8;
   aStatus: TServiceResult = srInvalidRequest): TCommandResult;
 

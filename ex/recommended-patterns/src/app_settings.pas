@@ -1,7 +1,7 @@
 
 unit app_settings;
 
-{$ifdef FPC}{$mode objfpc}{$H+}{$endif}
+{$I mormot.defines.inc}
 
 interface
 
