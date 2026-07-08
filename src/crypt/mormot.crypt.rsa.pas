@@ -110,6 +110,7 @@ type
     fNextFree: PBigInt; // next bigint in the Owner free instance cache
     function UsedBytes: integer;
     procedure Resize(n: integer; nozero: boolean = false);
+    procedure FillMillerRabinWitness(Lecuyer: PLecuyer; W: PBigInt);
     {$ifdef USEBARRET}
     function TruncateMod(modulus: integer): PBigInt;
       {$ifdef HASINLINE} inline; {$endif}
@@ -1605,12 +1606,33 @@ begin
   result := false;
 end;
 
+procedure TBigInt.FillMillerRabinWitness(Lecuyer: PLecuyer; W: PBigInt);
+var
+  c: cardinal;
+begin
+  for c := 1 to 16 do // safeguard against TLecuyer regression
+  begin
+    if W.Size = 1 then
+      Value[0] := Lecuyer^.Next(W.Value[0]) or 1 // odd a < w
+    else
+    begin
+      Size := W.Size - 1; // ensure a < w
+      Lecuyer^.Fill(Value, Size * HALF_BYTES);
+      Value[0] := Value[0] or 1; // odd
+      Trim; // needed for Compare() to work with new size
+    end;
+    if (Compare(1) > 0) and // expects 1 < a < w
+       (Compare(W) < 0) then
+      exit;
+  end;
+  ERsaException.RaiseU('TBigInt.FillMillerRabinWitness failed');
+end;
+
 function TBigInt.IsPrime(Extend: TBigIntSimplePrime; Iterations: integer;
   Lecuyer: PLecuyer): boolean;
 var
   r, a, w: PBigInt;
-  s, n, attempt, bak: integer;
-  v: PtrUInt;
+  s, n, bak: integer;
   rnd: TLecuyer;
 begin
   // first check if not a factor of a well-known small prime
@@ -1622,11 +1644,11 @@ begin
      MatchKnownPrime(Extend) then // detect most of the composite integers
     exit;
   // validate is a prime number using Miller-Rabin iterative tests (HAC 4.24)
-  if Lecuyer = nil then // 88-bit CSPRNG seed - if not supplied by caller
+  if Lecuyer = nil then    // 88-bit CSPRNG seed - if not supplied by caller
     Lecuyer := RandomLecuyer(rnd); // new gsl_rng_taus2 uniform distribution
   bak := RefCnt;
   RefCnt := -1; // make permanent for use as modulo below
-  w := Clone.IntSub(1); // w = value-1
+  w := Clone.IntSub(1); // w = value - 1
   r := w.Clone;
   a := Owner.Allocate(Size, []);
   try
@@ -1637,32 +1659,7 @@ begin
     begin
       dec(Iterations);
       // generate random 1 < a < value - 1
-      attempt := 0;
-      repeat
-        inc(attempt);
-        if attempt = 30 then
-          exit; // random generator seems pretty weak
-        if Size > 2 then
-        begin
-          repeat
-            n := Lecuyer^.Next(Size);
-          until n > 1;
-          Lecuyer^.Fill(@a^.Value[0], n * HALF_BYTES); // TLecuyer generator
-          a^.Value[0] := a^.Value[0] or 1; // odd
-          a^.Size := n;
-          a^.Trim;
-        end
-        else
-        begin
-          if Size = 1 then
-            v := Lecuyer^.Next(Value[0]) // ensure a<w
-          else
-            v := Lecuyer^.Next; // only lower HalfUInt is enough for a<w
-          a^.Value[0] := v or 1; // odd
-          a^.Size := 1;
-        end;
-      until (a.Compare(1) > 0) and
-            (a.Compare(w) < 0);
+      a.FillMillerRabinWitness(Lecuyer, w);
       // search if a is composite
       a := Owner.ModPower(a, r.Copy, @self); // a = a^r mod value
       if (a.Compare(1) = 0) or
