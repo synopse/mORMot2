@@ -2086,30 +2086,54 @@ end;
 
 function TBigInt.IntAdd(b: HalfUInt): PBigInt;
 var
-  tmp: PBigInt;
+  n, c: PtrUInt;
+  p: PHalfUInt;
 begin
-  if b <> 0 then
-  begin
-    tmp := Owner.Allocate(Size);
-    tmp^.Value[0] := b;
-    result := Add(tmp); // seldom called
-  end
-  else
-    result := @self;
+  p := pointer(Value);
+  n := PtrUInt(Size);
+  c := b;
+  if (c <> 0) and
+     (n <> 0) then
+    repeat
+      inc(c, PtrUInt(p^));  // 16/32-bit per iteration
+      p^ := c;
+      c := c shr HALF_BITS; // carry propagation
+      if c = 0 then
+        break;              // most common case is early leave with no carry
+      inc(p);
+      dec(n);
+      if n = 0 then
+      begin
+        n := Size;
+        Resize(n + 1);      // we have a trailing carry <> 0 to store
+        Value[n] := c;
+        break;
+      end;
+    until false;
+  result := @self;
 end;
 
 function TBigInt.IntSub(b: HalfUInt): PBigInt;
 var
-  tmp: PBigInt;
+  n, c: PtrUInt;
+  p: PHalfUInt;
 begin
-  if b <> 0 then
-  begin
-    tmp := Owner.Allocate(Size);
-    tmp^.Value[0] := b;
-    result := Substract(tmp); // seldom called
-  end
-  else
-    result := @self;
+  p := pointer(Value);
+  n := PtrUInt(Size);
+  c := b;
+  if (c <> 0) and
+     (n <> 0) then
+    repeat
+      c := PtrUInt(p^) - c;  // 16/32-bit per iteration
+      p^ := c;
+      c := c shr HALF_BITS; // carry propagation
+      if c = 0 then
+        break;              // most common case is early leave with no carry
+      c := 1;
+      inc(p);
+      dec(n);
+    until n = 0;
+  result := Trim;
 end;
 
 
