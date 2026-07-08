@@ -2484,7 +2484,7 @@ type
 /// a wrapper calling SystemTimeToTzSpecificLocalTime Windows API
 // - note: FileTimeToLocalFileTime is not to be involved here
 // - only used by mormot.lib.static for proper SQLite3 linking on Windows
-procedure UnixTimeToLocalTime(I64: TUnixTime; out Local: TSystemTime);
+procedure UnixTimeToLocal(I64: TUnixTime; out Local: TSystemTime);
 
 /// detect if a file name starts with the long path '\\?\' prefix
 // - https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation

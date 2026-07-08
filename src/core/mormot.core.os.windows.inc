@@ -377,7 +377,7 @@ begin
       lt := st;
 end;
 
-procedure UnixTimeToLocalTime(I64: TUnixTime; out Local: TSystemTime);
+procedure UnixTimeToLocal(I64: TUnixTime; out Local: TSystemTime);
 var
   lft: TFileTime;
 begin
