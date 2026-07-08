@@ -2366,6 +2366,8 @@ begin
     if exponent.IsOdd then
       result := Reduce(result.Multiply(base.Copy), m);
     exponent.ShrBits;
+    if exponent.IsZero then
+      break;
     base := Reduce(base.Square, m);
   end;
   base.Release;
