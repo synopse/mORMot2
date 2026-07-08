@@ -5035,7 +5035,7 @@ begin
           v := v.IntMultiply(1);
           CheckEqual(c.ActiveCount, 3);
           CheckEqual(v.Compare(b), 0);
-          CheckEqual(v.Compare(0), CompareBI(rnd, 0), 'bi0');
+          CheckEqual(v.Compare(0), CompareHalfUInt(rnd, 0), 'bi0');
           if rnd > 1 then
             CheckEqual(v.Trim.Compare(1), 1, 'bi1');
           // verify b * 0 = 0
