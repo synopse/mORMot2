@@ -315,7 +315,7 @@ type
     // - n is the number of TBitInt.Value[] items to initialize
     function Allocate(n: integer; opt: TRsaAllocate = [raZeroed]): PBigint;
     /// allocate a new Big Integer value from a 16/32-bit unsigned integer
-    function AllocateFrom(v: HalfUInt): PBigInt;
+    function AllocateFrom(v: HalfUInt; size: integer = 1): PBigInt;
     /// allocate a new Big Integer value from a ToHexa dump
     function AllocateFromHex(const hex: RawUtf8): PBigInt;
     /// call b^^.Release and set b^ := nil
@@ -2157,9 +2157,9 @@ begin
   end;
 end;
 
-function TRsaContext.AllocateFrom(v: HalfUInt): PBigInt;
+function TRsaContext.AllocateFrom(v: HalfUInt; size: integer): PBigInt;
 begin
-  result := Allocate(1, []);
+  result := Allocate(size);
   result^.Value[0] := v;
 end;
 
