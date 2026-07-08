@@ -7518,7 +7518,7 @@ function TAesPrngAbstract.AFSplit(const Buffer;
   BufferBytes, StripesCount: integer): RawByteString;
 var
   dst: pointer;
-  tmp: TByteDynArray;
+  tmp: TBytes;
   i: integer;
 begin
   FastAssignNew(result);
@@ -7530,11 +7530,12 @@ begin
   SetLength(tmp, BufferBytes); // filled with zeros
   for i := 1 to StripesCount do
   begin
-    FillRandom(dst, BufferBytes);
-    AFDiffusion(pointer(tmp), dst, BufferBytes);
+    FillRandom(dst, BufferBytes);                // each stripe is random
+    AFDiffusion(pointer(tmp), dst, BufferBytes); // TKS1 SHA-256 accumulation
     inc(PByte(dst), BufferBytes);
   end;
-  XorMemory(dst, @Buffer, pointer(tmp), BufferBytes);
+  XorMemory(dst, @Buffer, pointer(tmp), BufferBytes); // to final stripe
+  FillZero(tmp);
 end;
 
 function TAesPrngAbstract.AFSplit(const Buffer: RawByteString;
@@ -7548,7 +7549,7 @@ class function TAesPrngAbstract.AFUnsplit(const Split: RawByteString;
 var
   len, unsplit, i: cardinal;
   src: pointer;
-  tmp: TByteDynArray;
+  tmp: TBytes;
 begin
   len := length(Split);
   unsplit := len div cardinal(BufferBytes);
@@ -7557,13 +7558,14 @@ begin
   if not result then
     exit;
   src := pointer(Split);
-  SetLength(tmp, BufferBytes);
+  SetLength(tmp, BufferBytes); // // filled with zeros
   for i := 2 to unsplit do
   begin
-    AFDiffusion(pointer(tmp), src, BufferBytes);
-    inc(PByte(src), BufferBytes);
+    AFDiffusion(pointer(tmp), src, BufferBytes); // TKS1 SHA-256 accumulation
+    inc(PByte(src), BufferBytes);                // next stripe
   end;
-  XorMemory(@Buffer, src, pointer(tmp), BufferBytes);
+  XorMemory(@Buffer, src, pointer(tmp), BufferBytes); // from final stripe
+  FillZero(tmp);
 end;
 
 class function TAesPrngAbstract.AFUnsplit(const Split: RawByteString;
