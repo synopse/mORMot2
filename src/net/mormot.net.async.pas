@@ -6330,7 +6330,7 @@ begin // folder timestamp check is called every 17 minutes, and may be slow
       n := 0;
       size := 0;
       ok := DirectoryDeleteOlderFiles(cache.Path,
-        cache.TimeoutSec / SecsPerDay, FILES_ALL,
+        cache.TimeoutSec * SecsPerDate, FILES_ALL,
         {recursive=}hpoClientCacheSubFolder in one^.fSettings.Options, @size);
       if (n <> 0) or
          not ok then // something changed on disk
