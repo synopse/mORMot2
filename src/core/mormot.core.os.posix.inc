@@ -873,6 +873,11 @@ begin
 end;
 {$endif FPC}
 
+function DateTimeToLocal(utc: TDateTime): TDateTime;
+begin
+  result := UtcToLocal(utc);
+end;
+
 function UnixTimeToLocal(I64: TUnixTime): TUnixTime;
 begin
   result := EpochToLocal(I64);

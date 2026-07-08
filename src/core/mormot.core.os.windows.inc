@@ -393,6 +393,16 @@ begin
   result := FileTimeToUnixTime(ft);
 end;
 
+function DateTimeToLocal(utc: TDateTime): TDateTime;
+var
+  ft: TFileTime;
+  st: TSystemTime;
+begin
+  DateTimeToFileTime(utc, ft);
+  FileTimeToLocalSystemTime(ft, st);
+  result := SystemTimeToDateTime(st);
+end;
+
 function UnixTimeUtc: TUnixTime;
 var
   ft: TFileTime;
