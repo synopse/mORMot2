@@ -2215,7 +2215,8 @@ begin
   if self = nil then
     ERsaException.RaiseUtf8('TRsa.Allocate(%): Owner=nil', [n]);
   result := fFreeList;
-  if result <> nil then
+  if (result <> nil) and
+     (n <= result^.Capacity) then
   begin
     // we can recycle a pre-allocated instance
     if result^.RefCnt <> 0 then
@@ -2223,11 +2224,6 @@ begin
         '%.Allocate(%): % RefCnt=%', [self, n, result, result^.RefCnt]);
     fFreeList := result^.fNextFree;
     dec(FreeCount);
-    if n > result^.Capacity then // need a bigger buffer (dedicated Resize)
-    begin
-      FreeMem(result^.Value); // Resize = ReallocMem = would move pointless data
-      result^.Value := nil;
-    end;
   end
   else
   begin
