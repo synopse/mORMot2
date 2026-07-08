@@ -845,12 +845,12 @@ end;
 
 {$ifdef FPC}
 {$ifdef OSANDROID}
-function GetLocalBias(I64: TUnixTime): PtrInt;
+function GetLocalBias(I64: TUnixTime): PtrInt; inline;
 begin
   result := TZSeconds; // fallback to libc localtime() on Android
 end;
 {$else}
-function GetLocalBias(I64: TUnixTime): PtrInt;
+function GetLocalBias(I64: TUnixTime): PtrInt; inline;
 var
   nfo: TTZInfo;
 begin
@@ -863,7 +863,7 @@ end;
 
 function UtcToLocal(const utc: TDateTime): TDateTime; inline;
 begin
-  result := utc + GetLocalBias(Round((utc - UnixDateDelta) * SecsPerDay)) / SecsPerDay;
+  result := utc + GetLocalBias(Round((utc - UnixDateDelta) * SecsPerDay)) * SecsPerDate;
   // result := UniversalTimeToLocal(utc);
 end;
 

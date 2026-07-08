@@ -2976,7 +2976,7 @@ const
 // accurate after a time shift during the process execution - but any
 // long-running process (like a service) should use UTC timestamps only
 // - on Delphi POSIX, System.DateUtils TTimeZone is used
-// - see UnixTimeToLocal() to convert any existing but non-current timestamp
+// - see rather UnixTimeToLocal() and DateTimeToLocal() functions
 var
   TimeZoneLocalBias: integer;
 
@@ -3139,13 +3139,13 @@ function FileSetDateFromUnixUtc(const Dest: TFileName; Time: TUnixTime): boolean
 function WindowsFileTimeToDateTime(WinTime: integer): TDateTime;
 
 /// convert an Unix Epoch UTC seconds into Local time as TSystemTime from the OS
-// - calls e.g. the efficient FileTimeToLocalSystemTime() API on Windows
+// - calls e.g. the efficient SystemTimeToTzSpecificLocalTime() API on Windows
 procedure UnixTimeToLocal(I64: TUnixTime; out Local: TSystemTime); overload;
 
 /// convert an Unix Epoch UTC seconds into Unix Epoch Local time
 function UnixTimeToLocal(I64: TUnixTime): TUnixTime; overload;
 
-/// convert an UTC TDateTime into Local TDateTime
+/// convert an UTC TDateTime into a local TDateTime
 // - similar to FPC UniversalTimeToLocal() function
 function DateTimeToLocal(utc: TDateTime): TDateTime;
 

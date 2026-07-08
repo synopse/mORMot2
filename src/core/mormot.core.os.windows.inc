@@ -382,7 +382,7 @@ var
   ft: TFileTime;
 begin
   UnixTimeToFileTime(I64, ft);
-  FileTimeToLocalSystemTime(ft, Local);
+  FileTimeToLocalSystemTime(ft, Local); // may return Local=0
 end;
 
 function UnixTimeToLocal(I64: TUnixTime): TUnixTime;
@@ -399,8 +399,10 @@ var
   st: TSystemTime;
 begin
   DateTimeToFileTime(utc, ft);
-  FileTimeToLocalSystemTime(ft, st);
-  result := SystemTimeToDateTime(st);
+  if FileTimeToLocalSystemTime(ft, st) then
+    result := SystemTimeToDateTime(st)
+  else
+    result := 0;
 end;
 
 function UnixTimeUtc: TUnixTime;
