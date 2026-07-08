@@ -52,9 +52,6 @@ uses
   - used by mormot.crypt.x509 to handle RSA signatures of its X.509 Certificates
 }
 
-{.$define USEBARRET}
-// could be defined to enable Barret reduction (slower and with wrong results)
-
 
 { **************** RSA Oriented Big-Integer Computation }
 
@@ -112,14 +109,6 @@ type
     procedure Resize(n: integer; nozero: boolean = false);
     procedure XorStrongRandom(last32: PCardinal);
     procedure FillMillerRabinWitness(Lecuyer: PLecuyer; W: PBigInt);
-    {$ifdef USEBARRET}
-    function TruncateMod(modulus: integer): PBigInt;
-      {$ifdef HASINLINE} inline; {$endif}
-    /// partial multiplication between two Big Integer values
-    // - will eventually release both self and b instances
-    function MultiplyPartial(b: PBigInt; InnerPartial: PtrInt;
-      OuterPartial: PtrInt): PBigInt;
-    {$endif USEBARRET}
   public
     /// the associated Big Integer RSA context
     // - used to store modulo constants, and maintain an internal instance cache
@@ -295,12 +284,6 @@ type
     fMod: TRsaModulos;
     /// contains the normalized storage
     fNormMod: TRsaModulos;
-    {$ifdef USEBARRET}
-    /// contains mu
-    fMu: TRsaModulos;
-    /// contains b(k+1)
-    fBk1: TRsaModulos;
-    {$endif USEBARRET}
   public
     /// the size of the sliding window
     Window: integer;
@@ -334,7 +317,6 @@ type
     procedure ResetModulo(modulo: TRsaModulo);
     /// compute the reduction of a Big Integer value in a given modulo
     // - if m is nil, SetModulo() should have previously be called
-    // - redirect to Divide() or use the Barret algorithm
     // - will eventually release the b instance
     function Reduce(b, m: PBigint): PBigInt;
     /// compute a modular exponentiation, i.e. b^exp mod m
@@ -1105,15 +1087,6 @@ begin
   end;
   result := @self;
 end;
-
-{$ifdef USEBARRET}
-function TBigInt.TruncateMod(modulus: integer): PBigInt;
-begin
-  if Size > modulus then
-    Size := modulus;
-  result := @self;
-end;
-{$endif USEBARRET}
 
 function TBigInt.Copy: PBigInt;
 begin
@@ -2039,46 +2012,6 @@ begin
   result := r.Trim;
 end;
 
-{$ifdef USEBARRET}
-function TBigInt.MultiplyPartial(b: PBigInt;
-  InnerPartial, OuterPartial: PtrInt): PBigInt;
-var
-  r: PBigInt;
-  i, j, k, n: PtrInt;
-  v: PtrUInt;
-begin
-  n := Size;
-  r := Owner.Allocate(n + b^.Size);
-  for i := 0 to b^.Size - 1 do
-  begin
-    v := 0; // initial carry value
-    k := i;
-    j := 0;
-    if (OuterPartial > 0) and
-       (OuterPartial > i) and
-       (OuterPartial < n) then
-    begin
-      k := OuterPartial - 1;
-      j := k - i;
-    end;
-    repeat
-      if (InnerPartial > 0) and
-         (k >= InnerPartial) then
-        break;
-      inc(v, PtrUInt(r^.Value[k]) + PtrUInt(Value[j]) * b^.Value[i]);
-      r^.Value[k] := v;
-      inc(k);
-      v := v shr HALF_BITS; // carry
-      inc(j);
-    until j >= n;
-    r^.Value[k] := v;
-  end;
-  Release;
-  b.Release;
-  result := r.Trim;
-end;
-{$endif USEBARRET}
-
 function TBigInt.Square: PBigint;
 begin
   result := Multiply(Copy);
@@ -2270,79 +2203,14 @@ begin
   fMod[modulo] := b;
   d := RSA_RADIX div (PtrUInt(b^.Value[k - 1]) + 1);
   fNormMod[modulo] := b.IntMultiply(d).SetPermanent;
-  {$ifdef USEBARRET}
-  b := AllocateFrom(1).LeftShift(k * 2);
-  fMu[modulo] := b.Divide(fMod[modulo]).SetPermanent;
-  b.Release;
-  fBk1[modulo] := AllocateFrom(1).LeftShift(k + 1).SetPermanent; // = b(k+1)
-  {$endif USEBARRET}
 end;
 
 procedure TRsaContext.ResetModulo(modulo: TRsaModulo);
 begin
   fMod[modulo].ResetPermanentAndRelease;
   fNormMod[modulo].ResetPermanentAndRelease;
-  {$ifdef USEBARRET}
-  fMu[modulo].ResetPermanentAndRelease;
-  fBk1[modulo].ResetPermanentAndRelease;
-  {$endif USEBARRET}
 end;
 
-{$ifdef USEBARRET}
-function TRsaContext.Reduce(b, m: PBigint): PBigInt;
-var
-  q1, q2, q3, r1, r2: PBigInt;
-  k: integer;
-begin
-  if m <> nil then
-  begin
-    result := b^.Divide(m, bidMod); // custom modulo has no pre-computed const
-    b^.Release;
-    exit;
-  end;
-  m := fMod[CurrentModulo];
-  if b^.Compare(m) < 0 then
-  begin
-    result := b; // just return b if b < m
-    exit;
-  end;
-  k := m^.Size;
-  if b^.Size > k * 2 then
-  begin
-    // use regular divide/modulo method - Barrett cannot help
-    result := b^.Divide(m, bidModNorm);
-    b^.Release;
-    exit;
-  end;
-  // q1 = [x / b**(k-1)]
-  q1 := b^.Clone.RightShift(k - 1);
-  //writeln(#10'q1=',q1.ToHexa);
-  //writeln(#10'mu=',fMu[CurrentModulo].ToHexa);
-  // Do outer partial multiply
-  // q2 = q1 * mu
-  q2 := q1.MultiplyPartial(fMu[CurrentModulo], 0, k - 1);
-  //writeln(#10'q2=',q2.tohexa);
-  // q3 = [q2 / b**(k+1)]
-  q3 := q2.RightShift(k + 1);
-  //writeln(#10'q3=',q3.tohexa);
-  // r1 = x mod b**(k+1)
-  r1 := b^.TruncateMod(k + 1);
-  //writeln(#10'r1=',r1.tohexa);
-  // Do inner partial multiply
-  // r2 = q3 * m mod b**(k+1)
-  r2 := q3.MultiplyPartial(m, k + 1, 0).TruncateMod(k + 1);
-  //writeln(#10'r2=',r2.tohexa);
-  // if (r1 < r2) r1 = r1 + b**(k+1)
-  if r1.Compare(r2) < 0 then
-    r1 := r1.Add(fBk1[CurrentModulo]);
-  // r = r1-r2
-  result := r1.Substract(r2);
-  //writeln(#10'r=',result.tohexa);
-  // while (r >= m) do r = r-m
-  while result.Compare(m) >= 0 do
-    result.Substract(m);
-end;
-{$else}
 function TRsaContext.Reduce(b, m: PBigint): PBigInt;
 begin
   if m = nil then
@@ -2351,7 +2219,6 @@ begin
     result := b^.Divide(m, bidMod); // custom modulo has no pre-computed const
   b^.Release;
 end;
-{$endif USEBARRET}
 
 function TRsaContext.ModPower(b, exp, m: PBigInt): PBigInt;
 var
