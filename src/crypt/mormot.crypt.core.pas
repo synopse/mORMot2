@@ -1953,8 +1953,8 @@ var
   HasOpenSsl: boolean;
 
 /// low-level TKS1 anti-forensic diffusion of a memory buffer using SHA-256
+// - shuffle in-place buf[size] using rnd[size] as reference material
 // - as used by TAesPrng.AFSplit and TAesPrng.AFUnSplit
-// - could also be used to expand some PRNG output into any size
 procedure AFDiffusion(buf, rnd: pointer; size: cardinal);
 
 /// get 128-bit of unpredictable random, suitable for Initialization Vectors
@@ -7335,7 +7335,7 @@ begin
   begin
     sha.UpdateBigEndian(i); // host byte order independent (as in TKS1/LUKS)
     sha.Update(buf, SizeOf(dig));
-    sha.Final(PSha256Digest(buf)^);
+    sha.Final(PSha256Digest(buf)^); // shuffle each 32-byte block via SHA-256
     inc(PSha256Digest(buf));
   end;
   dec(size, last * SizeOf(dig));
@@ -7344,7 +7344,7 @@ begin
   sha.UpdateBigEndian(last);
   sha.Update(buf, size);
   sha.Final(dig);
-  MoveFast(dig, buf^, size);
+  MoveFast(dig, buf^, size); // shuffle trailing 1..31 bytes
 end;
 
 
