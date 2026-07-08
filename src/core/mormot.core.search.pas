@@ -3057,7 +3057,7 @@ var
   names: TRawUtf8DynArray;
   n, r, i: PtrInt;
   d: PFindFiles;
-  ts, tolocal: TUnixMSTime;
+  ts: TUnixMSTime;
   da: TDynArray;
 begin
   result := nil;
@@ -3072,7 +3072,6 @@ begin
   // compute TFindFilesDynArray from names[]
   if not (ffoExcludesDir in Options) then
     dir := '';
-  tolocal := TimeZoneLocalBias * 60000; // local TSearchRec: use TZSeconds * 60
   SetLength(result, n);
   r := 0;
   d := pointer(result);
@@ -3085,7 +3084,7 @@ begin
     {$endif UNICODE}
     if FileInfoByName(dir + d^.Name, d^.Size, ts, @d^.Attr) then // = fpStat()
     begin
-      d^.Timestamp := UnixMSTimeToDateTime(ts + tolocal);
+      d^.Timestamp := UnixTimeToLocal(ts div MSecsPerSec);
       inc(d); // will leave d^.Attr = 0
       inc(r);
     end;
