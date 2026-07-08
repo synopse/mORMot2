@@ -26,7 +26,7 @@ unit mormot.net.openapi;
    - Generated source code units are very small and easy to use, read and debug
    - Can generate very detailed comment documentation in the unit source code
    - Tunable engine, with plenty of generation options (e.g. about verbosity)
-   - Leverage the mORMot RTTI and JSON kernel for its internal plumbing
+   - Leverage the mORMot RTTI and JSON kernel for all process
    - Compatible with FPC and oldest Delphi (7-2009)
    - Tested with several Swagger 2 and OpenAPI 2-3 reference content
   But still not fully compliant to all existing files: feedback is welcome!
