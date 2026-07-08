@@ -1001,8 +1001,7 @@ var
   tz: TTimeVal;
 begin
   fpgettimeofday(@tz, nil);
-  // + unixutil.TZSeconds = UTC to local time conversion
-  EpochToSystemTime(tz.tv_sec + TZSeconds, result);
+  EpochToSystemTime(EpochToLocal(tz.tv_sec), result);
   result.MilliSecond := tz.tv_usec div MicroSecsPerMilliSec;
 end;
 
@@ -1118,8 +1117,7 @@ var
 begin
   // faster than fpgettimeofday() which makes a syscall and don't use vDSO
   clock_gettime(CLOCK_REALTIME_FAST, @r);
-  // + unixutil.TZSeconds = UTC to local time conversion
-  EpochToSystemTime(r.tv_sec + TZSeconds, result);
+  EpochToSystemTime(EpochToLocal(r.tv_sec), result);
   result.MilliSecond := PtrUInt(r.tv_nsec) div PtrUInt(NanoSecsPerMilliSec);
 end;
 
@@ -1442,8 +1440,7 @@ begin
   if FileDate <= 0 then
     result := 0
   else
-    // + unixutil.TZSeconds = UTC to local time conversion
-    result := Int64(FileDate + TZSeconds) / Int64(SecsPerDay) + Int64(UnixDelta);
+    result := EpochToLocal(FileDate) / Int64(SecsPerDay) + Int64(UnixDelta);
 end;
 
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
