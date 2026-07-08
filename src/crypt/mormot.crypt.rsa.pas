@@ -137,7 +137,8 @@ type
     function Compare(b: PBigInt; andrelease: boolean = false): integer; overload;
     /// comparison with another Unsigned Integer value
     // - values should have been Trim-med for the size to match
-    function Compare(u: HalfUInt; andrelease: boolean = false): integer; overload;
+    function Compare(u: HalfUInt; const andrelease: boolean = false): integer; overload;
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     /// make a COW instance, increasing RefCnt and returning self
     function Copy: PBigInt;
       {$ifdef HASSAFEINLINE} inline; {$endif}
@@ -185,9 +186,9 @@ type
     function ShrBits(bits: integer = 1): PBigInt;
     /// shift left the internal data by some bits = mul per 2/4/8...
     function ShlBits(bits: integer = 1): PBigInt;
-    /// shift right the internal data HalfUInt by a number of slots
+    /// shift right the internal data HalfUInt by a number of HalfUInt
     function RightShift(n: integer): PBigInt;
-    /// shift left the internal data HalfUInt by a number of slots
+    /// shift left the internal data HalfUInt by a number of HalfUInt
     function LeftShift(n: integer): PBigInt;
     /// compute the GCD of two numbers using Euclidean algorithm
     function GreatestCommonDivisor(b: PBigInt): PBigInt;
@@ -547,7 +548,7 @@ var
 function BigIntToText(const der: TCertDer): RawUtf8;
 
 /// branchless comparison of two Big Integer internal buffer values
-function CompareBI(A, B: HalfUInt): integer;
+function CompareHalfUInt(A, B: HalfUInt): integer;
   {$ifdef HASINLINE} inline; {$endif}
 
 
@@ -911,7 +912,7 @@ implementation
 
 { **************** RSA Oriented Big-Integer Computation }
 
-function CompareBI(A, B: HalfUInt): integer;
+function CompareHalfUInt(A, B: HalfUInt): integer;
 begin
   result := ord(A > B) - ord(A < B);
 end;
@@ -1039,7 +1040,7 @@ begin
   if result = 0 then
     for i := Size - 1 downto 0 do
     begin
-      result := CompareBI(Value[i], b^.Value[i]);
+      result := CompareHalfUInt(Value[i], b^.Value[i]);
       if result <> 0 then
         break;
     end;
@@ -1047,11 +1048,11 @@ begin
     Release;
 end;
 
-function TBigInt.Compare(u: HalfUInt; andrelease: boolean): integer;
+function TBigInt.Compare(u: HalfUInt; const andrelease: boolean): integer;
 begin
   result := CompareInteger(Size, 1);
   if result = 0 then
-    result := CompareBI(Value[0], u);
+    result := CompareHalfUInt(Value[0], u);
   if andrelease then
     Release;
 end;
