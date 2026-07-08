@@ -385,12 +385,16 @@ begin
   FileTimeToLocalSystemTime(ft, Local); // may return Local=0
 end;
 
-function UnixTimeToLocal(I64: TUnixTime): TUnixTime;
+function UnixTimeToLocal(I64: TUnixTime): TDateTime;
 var
   ft: TFileTime;
+  st: TSystemTime;
 begin
   UnixTimeToFileTime(I64, ft);
-  result := FileTimeToUnixTime(ft);
+  if FileTimeToLocalSystemTime(ft, st) then
+    result := SystemTimeToDateTime(st)
+  else
+    result := 0;
 end;
 
 function DateTimeToLocal(utc: TDateTime): TDateTime;

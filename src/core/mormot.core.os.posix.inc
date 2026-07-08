@@ -878,9 +878,9 @@ begin
   result := UtcToLocal(utc);
 end;
 
-function UnixTimeToLocal(I64: TUnixTime): TUnixTime;
+function UnixTimeToLocal(I64: TUnixTime): TDateTime;
 begin
-  result := EpochToLocal(I64);
+  result := EpochToLocal(I64) * SecsPerDate + UnixDateDelta;
 end;
 
 procedure UnixTimeToLocal(I64: TUnixTime; out Local: TSystemTime);
