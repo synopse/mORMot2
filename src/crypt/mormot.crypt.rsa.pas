@@ -110,6 +110,7 @@ type
     fNextFree: PBigInt; // next bigint in the Owner free instance cache
     function UsedBytes: integer;
     procedure Resize(n: integer; nozero: boolean = false);
+    procedure XorStrongRandom(last32: PCardinal);
     procedure FillMillerRabinWitness(Lecuyer: PLecuyer; W: PBigInt);
     {$ifdef USEBARRET}
     function TruncateMod(modulus: integer): PBigInt;
@@ -1694,7 +1695,7 @@ function FipsMinIterations(bits: integer): integer;
 begin
   // ensure 2^-112 error probability - see FIPS 186-5 appendix B.3 table B.1
   if bits >= 1536  then
-    result := 4
+    result := 4   // absolute allowed minimum, even with bits=8192
   else if bits >= 1024 shr HALF_SHR then
     result := 5
   else if bits >= 512 shr HALF_SHR then
@@ -1703,43 +1704,13 @@ begin
     result := 51; // never used in practice for RSA
 end;
 
-function TBigInt.FillPrime(Extend: TBigIntSimplePrime; Iterations: integer;
-  EndTix: Int64): boolean;
+procedure TBigInt.XorStrongRandom(last32: PCardinal);
 var
-  min, bytes: integer;
-  last32: PCardinal;
-  rnd: RawByteString;
-  lecuyer: TLecuyer; // convenient local thread-safe randomness source
+  min: integer;
 begin
-  // ensure it is worth searching (paranoid)
-  if Size <= 2 then
-    ERsaException.RaiseU('TBigInt.FillPrime: unsupported size');
-  // never wait forever - 1 min seems enough even on slow Arm (tested on RaspPi)
-  if EndTix <= 0 then
-    EndTix := GetTickCount64 + MilliSecsPerMin; // time on Intel is around 1 sec
-  // compute number of Miller-Rabin rounds for 2^-112 error probability
-  min := FipsMinIterations(Size shl HALF_SHR);
-  if Iterations < min then // ensure at least FIPS recommendation
-    Iterations := min;
-  // compute a random number following FIPS 186-4 B.3.3 steps 4.4, 5.5
   min := 16;
-  last32 := @Value[Size - 1 {$ifdef CPU32} - 1 {$endif}];
-  // since randomness may be a weak point, consolidate several trusted sources
-  // see https://ieeexplore.ieee.org/document/9014350
-  // note that RSA-2048 requires only 128-bit of true cryptographic randomness
-  bytes := Size * HALF_BYTES;
-  pointer(rnd) := FastNewString(bytes);
-  FillSystemRandom(pointer(rnd), bytes, {mayblock=}true); // official OS API
-  {$ifdef ASMINTEL} // claimed to be NIST SP 800-90A and FIPS 140-2 compliant
-  RdRand32(pointer(rnd), bytes shr 2); // xor with HW CPU prng
-  {$endif ASMINTEL}
-  AFDiffusion(pointer(Value), pointer(rnd), bytes); // sha-256 diffusion
-  DefaultHasher128(@lecuyer, pointer(rnd), bytes);  // may be AesNiHash128
-  lecuyer.SeedGenerator; // setup 88-bit gsl_rng_taus2 uniform distribution
-  FillZero(rnd);         // anti-forensic counter measure
   repeat
-    // xor the original trusted sources with our CSPRNG until we get enough bits
-    TAesPrng.Main.XorRandom(Value, bytes);
+    TAesPrng.Main.XorRandom(Value, Size * HALF_BYTES);
     if GetBitsCount(Value^, Size * HALF_BITS) < Size * (HALF_BITS div 3) then
     begin
       // one CSPRNG iteration is usually enough to reach 1/3 of the bits set
@@ -1755,34 +1726,72 @@ begin
       last32^ := last32^ or $b5050000; // let's grow up
     if (Value[Size - 1] or (RSA_RADIX shr 1) <> 0) and // absolute big enough
        (last32^ >= FIPS_MIN) then
-      break;
+      exit;
     ERsaException.RaiseU('TBigInt.FillPrime FIPS_MIN'); // paranoid
   until false;
+end;
+
+function TBigInt.FillPrime(Extend: TBigIntSimplePrime; Iterations: integer;
+  EndTix: Int64): boolean;
+var
+  min, bytes: integer;
+  last32: PCardinal;
+  rnd: RawByteString;
+  lecuyer: TLecuyer; // convenient local thread-safe randomness for Miller-Rabin
+begin
+  // ensure it is worth searching (paranoid)
+  if Size <= 2 then
+    ERsaException.RaiseU('TBigInt.FillPrime: unsupported size');
+  // never wait forever - 1 min seems enough even on slow Arm (tested on RaspPi)
+  if EndTix <= 0 then
+    EndTix := GetTickCount64 + MilliSecsPerMin; // time on Intel is around 1 sec
+  // compute number of Miller-Rabin rounds for 2^-112 error probability
+  min := FipsMinIterations(Size shl HALF_SHR);
+  if Iterations < min then // ensure at least FIPS recommendation
+    Iterations := min;
+  // compute a random number following FIPS 186-4 B.3.3 steps 4.4, 5.5
+  bytes := Size * HALF_BYTES;
+  pointer(rnd) := FastNewString(bytes);
+  // since randomness may be a weak point, consolidate several trusted sources
+  // see https://ieeexplore.ieee.org/document/9014350
+  // note that RSA-2048 requires only 128-bit of true cryptographic randomness
+  FillSystemRandom(pointer(rnd), bytes, {mayblock=}true); // official OS API
+  {$ifdef ASMINTEL} // claimed to be NIST SP 800-90A and FIPS 140-2 compliant
+  RdRand32(pointer(rnd), bytes shr 2);                    // xor HW CPU prng
+  {$endif ASMINTEL}
+  // compute initial trusted random Value = TKS1-sha-256(rnd)
+  AFDiffusion(pointer(Value), pointer(rnd), bytes);
+  // xor Value original trusted sources with our CSPRNG until we get enough bits
+  last32 := @Value[Size - 1 {$ifdef CPU32} - 1 {$endif}];
+  XorStrongRandom(last32);
+  // setup a 88-bit gsl_rng_taus2 uniform distribution from these rnd bytes
+  DefaultHasher128(@lecuyer, pointer(rnd), bytes); // may be AesNiHash128
+  lecuyer.SeedGenerator;
+  FillZero(rnd); // anti-forensic counter measure
   // brute force search for the next prime starting at this point
-  result := true;
+  result := false; // timeout
+  min := 0;
   repeat
-    if IsPrime(Extend, Iterations, @lecuyer) then
-      exit; // we got lucky
-    IntAdd(2); // incremental search of odd number - see HAC 4.51
-    while last32^ < FIPS_MIN do
+    if IsPrime(Extend, Iterations, @lecuyer) then // small primes + Miller-Rabin
     begin
-      // handle IntAdd overflow - paranoid but safe
-      TAesPrng.Main.XorRandom(Value, bytes);
-      Value[0] := Value[0] or 1;
+      result := true; // we got lucky
+      exit;
     end;
-    // note 1: HAC 4.53 advices for Gordon's algorithm to generate a "strong
-    //      prime", but it seems not used by mbedtls nor OpenSSL
-    // note 2: mbedtls can ensure (Value-1)/2 is also a prime for DH primes, but
-    //      it seems not necessary for RSA because ECM algo negates its benefits
-    // note 3: our version seems compliant anyway with FIPS 186-5 appendix A+B
-    //      especially because having multiple rounds of Miller-Rabin is plenty
-    //      with keysize >= 2048-bit (FIPS 186-4 appendix B.3.1 item A)
-    // - see https://security.stackexchange.com/a/176396/155098
-    //   and https://crypto.stackexchange.com/a/15761/40200
+    IntAdd(2); // incremental search of odd number - see HAC 4.51
+    if last32^ < FIPS_MIN then
+      XorStrongRandom(last32); // handle IntAdd overflow - paranoid but safe
     inc(min);
   until (min and 63 = 0) and       // check only once in a while (avoid OS call)
         (GetTickCount64 > EndTix); // IsPrime() may be slow for sure
-  result := false; // timed out
+  // note 1: HAC 4.53 advices for Gordon's algorithm to generate a "strong
+  //      prime", but it seems not used by mbedtls nor OpenSSL
+  // note 2: mbedtls can ensure (Value-1)/2 is also a prime for DH primes, but
+  //      it seems not necessary for RSA because ECM algo negates its benefits
+  // note 3: our version seems compliant anyway with FIPS 186-5 appendix A+B
+  //      especially because having multiple rounds of Miller-Rabin is plenty
+  //      with keysize >= 2048-bit (FIPS 186-4 appendix B.3.1 item A)
+  // - see https://security.stackexchange.com/a/176396/155098
+  //   and https://crypto.stackexchange.com/a/15761/40200
 end;
 
 procedure TBigInt.Debug(const name: ShortString; full: boolean);
