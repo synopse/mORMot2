@@ -2817,9 +2817,9 @@ begin
      (zone <> 0) then
   begin
     // need to apply some time zone shift
-    if tolocaltime then
-      dec(zone, TimeZoneLocalBias);
     dt := ToDateTime - zone div MinsPerDay;
+    if tolocaltime then
+      dt := DateTimeToLocal(dt);
     v := abs(zone mod MinsPerDay);
     if not TryEncodeTime(v div 60, v mod 60, 0, 0, t) then
       exit;
