@@ -1330,7 +1330,7 @@ begin
       repeat // 16/32-bit per iteration
         v := PtrUInt(pa^) - pb^ - v;
         pa^ := v;
-        v := ord((v shr HALF_BITS) <> 0); // branchless carry
+        v := (v shr HALF_BITS) and 1; // branchless carry
         inc(pa);
         inc(pb);
         dec(n);
