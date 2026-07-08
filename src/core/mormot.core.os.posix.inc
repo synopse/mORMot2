@@ -12,7 +12,7 @@ uses
   unix,
   unixcp,
   unixtype,
-  unixutil, // for TZSeconds - as used by sysutils anyway
+  unixutil, // for TZInfo/TZSeconds - as used by sysutils anyway
   {$ifdef OSBSDDARWIN}
   sysctl,
   {$else}
@@ -842,6 +842,48 @@ begin
   result.Minute := t;
   result.Second := epoch - t * SecsPerMin;
 end;
+
+{$ifdef FPC}
+{$ifdef OSANDROID}
+function GetLocalBias(I64: TUnixTime): PtrInt;
+begin
+  result := TZSeconds; // fallback to libc localtime() on Android
+end;
+{$else}
+function GetLocalBias(I64: TUnixTime): PtrInt;
+var
+  nfo: TTZInfo;
+begin
+  if GetLocalTimezone(I64, {utc=}true, nfo) then
+    result := nfo.seconds
+  else
+    result := TZInfo.seconds; // fallback to TZSeconds global value
+end;
+{$endif OSANDROID}
+
+function UtcToLocal(const utc: TDateTime): TDateTime; inline;
+begin
+  result := utc + GetLocalBias(Round((utc - UnixDateDelta) * SecsPerDay)) / SecsPerDay;
+  // result := UniversalTimeToLocal(utc);
+end;
+
+function EpochToLocal(I64: TUnixTime): TUnixTime; inline;
+begin
+  result := I64 + GetLocalBias(I64);
+end;
+{$endif FPC}
+
+function UnixTimeToLocal(I64: TUnixTime): TUnixTime;
+begin
+  result := EpochToLocal(I64);
+end;
+
+procedure UnixTimeToLocal(I64: TUnixTime; out Local: TSystemTime);
+begin
+  EpochToSystemTime(EpochToLocal(i64), Local);
+end;
+
+
 
 {$ifdef OSDARWIN} // OSX has no clock_gettime() API but its own MACH API
 

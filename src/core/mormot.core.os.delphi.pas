@@ -192,6 +192,8 @@ function fpsettimeofday(tp: ptimeval; tzp: pointer): cint;
 function fpnanosleep(t, rem: ptimespec): cint;
 function GetLocalTimeOffset: integer;
 function TZSeconds: integer;
+function UtcToLocal(const utc: TDateTime): TDateTime;
+function EpochToLocal(I64: TUnixTime): TUnixTime;
 function fpuname(var uts: UtsName): cint;
 
 function fpstat(path: PWideChar; var buf: _stat): cint;
@@ -547,6 +549,16 @@ end;
 function TZSeconds: integer;
 begin
   result := -GetLocalTimeOffset * 60; // GetLocalTimeOffset = -TZseconds div 60
+end;
+
+function UtcToLocal(const utc: TDateTime): TDateTime;
+begin
+  result := TTimeZone.Local.ToLocalTime(utc);
+end;
+
+function EpochToLocal(I64: TUnixTime): TUnixTime;
+begin
+  result := DateTimeToUnix(TTimeZone.Local.ToLocalTime(UnixToDateTime(I64)));
 end;
 
 function fpuname(var uts: UtsName): cint;

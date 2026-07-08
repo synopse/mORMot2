@@ -379,10 +379,18 @@ end;
 
 procedure UnixTimeToLocal(I64: TUnixTime; out Local: TSystemTime);
 var
-  lft: TFileTime;
+  ft: TFileTime;
 begin
-  UnixTimeToFileTime(I64, lft);
-  FileTimeToLocalSystemTime(lft, Local); // no FileTimeToLocalFileTime
+  UnixTimeToFileTime(I64, ft);
+  FileTimeToLocalSystemTime(ft, Local);
+end;
+
+function UnixTimeToLocal(I64: TUnixTime): TUnixTime;
+var
+  ft: TFileTime;
+begin
+  UnixTimeToFileTime(I64, ft);
+  result := FileTimeToUnixTime(ft);
 end;
 
 function UnixTimeUtc: TUnixTime;

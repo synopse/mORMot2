@@ -2481,11 +2481,6 @@ type
   /// handle for Slim Reader/Writer (SRW) locks in exclusive mode
   TOSLightMutex = pointer;
 
-/// a wrapper calling SystemTimeToTzSpecificLocalTime Windows API
-// - note: FileTimeToLocalFileTime is not to be involved here
-// - only used by mormot.lib.static for proper SQLite3 linking on Windows
-procedure UnixTimeToLocal(I64: TUnixTime; out Local: TSystemTime);
-
 /// detect if a file name starts with the long path '\\?\' prefix
 // - https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
 function IsExtendedPathName(const Name: TFileName): boolean;
@@ -2689,6 +2684,7 @@ procedure GetSystemTime(out result: TSystemTime);
 // - under Linux/POSIX, calls clock_gettime(CLOCK_REALTIME_COARSE) if available
 // or fpgettimeofday() on Darwin/MacOS, with FPC RTL TZSeconds adjustment (so
 // will be fixed for the whole process lifetime and won't change at daylight)
+// - see UnixTimeToLocal() to convert any existing but non-current timestamp
 // - warning: do not call this function directly, but rather mormot.core.datetime
 // TSynSystemTime.FromNowLocal cross-platform method instead
 procedure GetLocalTime(out result: TSystemTime);
@@ -2980,6 +2976,7 @@ const
 // accurate after a time shift during the process execution - but any
 // long-running process (like a service) should use UTC timestamps only
 // - on Delphi POSIX, System.DateUtils TTimeZone is used
+// - see UnixTimeToLocal() to convert any existing but non-current timestamp
 var
   TimeZoneLocalBias: integer;
 
@@ -3140,6 +3137,13 @@ function FileSetDateFromUnixUtc(const Dest: TFileName; Time: TUnixTime): boolean
 // - returns 0 if the conversion failed
 // - used e.g. by FileSetDateFromWindowsTime() on POSIX
 function WindowsFileTimeToDateTime(WinTime: integer): TDateTime;
+
+/// convert an Unix Epoch UTC seconds into Local time as TSystemTime from the OS
+// - calls e.g. the efficient FileTimeToLocalSystemTime() API on Windows
+procedure UnixTimeToLocal(I64: TUnixTime; out Local: TSystemTime); overload;
+
+/// convert an Unix Epoch UTC seconds into Unix Epoch Local time
+function UnixTimeToLocal(I64: TUnixTime): TUnixTime; overload;
 
 /// convert an Unix seconds time to a Win32 64-bit FILETIME value
 procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
