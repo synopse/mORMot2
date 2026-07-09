@@ -333,6 +333,7 @@ const // some time conversion constants with Milli/Micro/NanoSec resolution
   MilliSecsPerDate     = 1 / MilliSecsPerDay;
   MicroSecsPerMilliSec = 1000;
   MicroSecsPerSec      = MicroSecsPerMilliSec * MilliSecsPerSec;
+  MicroSecsPerDay      = QWord(MicroSecsPerSec) * SecsPerDay;
   NanoSecsPerMicroSec  = 1000;
   NanoSecsPerMilliSec  = NanoSecsPerMicroSec  * MicroSecsPerMilliSec;
   NanoSecsPerSec       = NanoSecsPerMilliSec  * MilliSecsPerSec;

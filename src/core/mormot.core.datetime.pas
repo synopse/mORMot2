@@ -1390,7 +1390,7 @@ begin
     AppendShortCardinal(Micro, result);
     AppendShortTwoChars(ord('u') + ord('s') shl 8, @result);
   end
-  else if Micro < 1000000 then
+  else if Micro < MicroSecsPerSec then
     AppendShortBy100(
       {$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif} div 10, 'ms', result)
   else if Micro < 60000000 then
@@ -1399,11 +1399,11 @@ begin
   else if Micro < QWord(3600000000) then
     AppendShortTime(
       {$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif} div 1000000, 'm', result)
-  else if Micro < QWord(86400000000 * 2) then
+  else if Micro < QWord(MicroSecsPerDay * 2) then
     AppendShortTime(Micro div 60000000, 'h', result)
   else
   begin
-    AppendShortCardinal(Micro div QWord(86400000000), result);
+    AppendShortCardinal(Micro div MicroSecsPerDay, result);
     AppendShortChar('d', @result);
   end;
 end;
@@ -4339,7 +4339,7 @@ label
 begin
   // fast decode 00.020.006 at the end of the line
   tab := @ConvertHexToBin;
-  B := tab[P[0]];   // 00
+  B := tab[P[0]];   // 00 seconds
   if B > 9 then
     goto err;
   result := B;
@@ -4347,7 +4347,7 @@ begin
   if B > 9 then
     goto err;
   result := result * 10 + B;
-  B := tab[P[3]]; // 020
+  B := tab[P[3]]; // 020 milliseconds
   if B > 9 then
     goto err;
   result := result * 10 + B;
@@ -4359,7 +4359,7 @@ begin
   if B > 9 then
     goto err;
   result := result * 10 + B;
-  B := tab[P[7]]; // 006
+  B := tab[P[7]]; // 006 microseconds
   if B > 9 then
     goto err;
   result := result * 10 + B;
