@@ -8168,29 +8168,20 @@ begin
     '1492-10-12T16:00:00');
 end;
 
-function LocalTimeToUniversal(LT: TDateTime; TZOffset: Integer): TDateTime;
-begin
-  result := EncodeTime(Abs(TZOffset) div 60, Abs(TZOffset) mod 60, 0, 0);
-  if TZOffset > 0 then
-    result := LT - result
-  else if TZOffset < 0 then
-    result := LT + result
-  else
-    result := LT;
-end;
-
 {$R ..\src\mormot.tz.res} // validate our Win10-generated resource file
 
 procedure TTestCoreBase.TimeZonesSlow(Context: TObject);
 var
   tz: TSynTimeZone;
+  st: TSystemTime;
+  t: TSynSystemTime;
   d: TTimeZoneData;
   i, bias: integer;
   m: word;
   hdl, reload: boolean;
   buf: RawByteString;
-  dt: TDateTime;
-  local: TDateTime;
+  dt, dtl: TDateTime;
+  ut: TUnixTime;
   s31: TShort31;
 
   procedure testBias(year, expected: integer);
@@ -8349,22 +8340,49 @@ begin
   finally
     tz.Free;
   end;
-  // validate NowUtc / TimeZoneLocalBias
-  dt := NowUtc;
-  CheckSame(LocalTimeToUniversal(Now(), TimeZoneLocalBias), dt, 0.01,
-    'NowUtc should not shift nor truncate time in respect to RTL Now');
+  // validate mormot.core.os time conversions
+  repeat // don't test at the edge of a minute
+    dt := NowUtc;
+    dtl := UtcToLocal(dt);
+    CheckSameTime(dtl, Now(), 'RTL Now should match mormot.core.os');
+    ut := UnixTimeUtc;
+    t.FromNow({localtime=}true);
+    UnixTimeToLocal(ut, st);
+  until st.{$ifdef OSPOSIX}Second{$else}wSecond{$endif} <> 0;
+  //writeln(#10'utc=',DateTimeToSql(dt),#10'loc=',DateTimeToSql(dtl));
+  CheckSameTime(UtcToLocal(dt), dtl, 'UtcToLocal');
+  CheckSameTime(LocalToUtc(dtl), dt, 'LocalToUtc');
+  CheckSameTime(UnixTimeToLocal(ut), dtl, 'UnixTimeToLocal');
+  CheckEqual(LocalToUnixTime(dtl) shr 1, ut shr 1, 'LocalToUnixTime');
+  {$ifdef FPC}
+  CheckSameTime(LocalTimeToUniversal(dtl), dt, 'LocalTimeToUniversal');
+  CheckSameTime(UniversalTimeToLocal(dt), dtl, 'UniversalTimeToLocal');
+  {$endif FPC}
+  {$ifdef OSPOSIX} // half-backed cross-platform Delphi and FPC RTL TSystemTime
+  CheckEqual(t.Year, st.Year, 'Y');
+  CheckEqual(t.Month, st.Month, 'M');
+  CheckEqual(t.Day, st.Day, 'D');
+  CheckEqual(t.Hour, st.Hour, 'h');
+  CheckEqual(t.Minute, st.Minute, 'm');
+  CheckEqual(t.Second shr 1, st.Second shr 1, 's');
+  {$else}
+  CheckEqual(t.Year, st.wYear, 'Y');
+  CheckEqual(t.Month, st.wMonth, 'M');
+  CheckEqual(t.Day, st.wDay, 'D');
+  CheckEqual(t.Hour, st.wHour, 'h');
+  CheckEqual(t.Minute, st.wMinute, 'm');
+  CheckEqual(t.Second shr 1, st.wSecond shr 1, 's');
+  {$endif OSPOSIX}
   sleep(200);
-  Check(not SameValue(dt, NowUtc),
-    'NowUtc should not truncate time (e.g. to 5 sec resolution)');
+  Check(dt < NowUtc, 'NowUtc should not truncate time within 200ms period');
   // validate zones taken from Windows registry or mormot.tz.res on POSIX
   tz := TSynTimeZone.Default;
-  local := tz.UtcToLocal(dt, 'UTC');
-  check(SameValue(local, dt));
+  CheckSameTime(tz.UtcToLocal(dt, 'UTC'), dt);
   check(tz.GetBiasForDateTime(dt, 'UTC', bias, hdl));
   check(bias = 0);
   check(not hdl);
-  local := tz.UtcToLocal(dt, 'Romance Standard Time');
-  check(not SameValue(local, dt), 'Perfide Albion never matches the continent');
+  dtl := tz.UtcToLocal(dt, 'Romance Standard Time');
+  check(not SameValue(dtl, dt,SecsPerDate), 'Perfide Albion');
   check(tz.GetBiasForDateTime(dt, 'Romance Standard Time', bias, hdl));
   check(hdl);
   check(bias < 0, 'Paris is always ahead of London');
@@ -8372,11 +8390,11 @@ begin
   tz := TSynTimeZone.Create;
   try
     tz.LoadFromBuffer(buf);
-    CheckSame(local, tz.UtcToLocal(dt, 'Romance Standard Time'));
+    CheckSameTime(dtl, tz.UtcToLocal(dt, 'Romance Standard Time'));
   finally
     tz.Free;
   end;
-  CheckSame(local, UtcToLocal(dt, 'Romance Standard Time'));
+  CheckSameTime(dtl, UtcToLocal(dt, 'Romance Standard Time'));
 end;
 
 const
