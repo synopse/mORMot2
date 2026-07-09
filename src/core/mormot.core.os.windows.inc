@@ -3205,6 +3205,14 @@ begin
   tmp.Done;
 end;
 
+function TWinRegistry.ReadStringU(const entry: RawUtf8; andtrim: boolean): RawUtf8;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := ReadString(Utf8ToWin32PWideChar(entry, tmp), andtrim);
+  tmp.Done;
+end;
+
 function TWinRegistry.ReadData(entry: PWideChar): RawByteString;
 var
   rsize: DWord;

@@ -1983,6 +1983,9 @@ type
     // (return the first value of the multi-list) - use ReadData() to retrieve
     // all REG_MULTI_SZ values as one blob or ReadStrings() as RawUtf8 array
     function ReadString(entry: PWideChar; andtrim: boolean = true): RawUtf8;
+    /// read a UTF-8 string from the Windows Registry after ReadOpen()
+    // - alternative to ReadString() allowing the key name as UTF-8
+    function ReadStringU(const entry: RawUtf8; andtrim: boolean = true): RawUtf8;
     /// read a Windows Registry content after ReadOpen()
     // - works with any kind of key, but was designed for REG_BINARY
     function ReadData(entry: PWideChar): RawByteString;
