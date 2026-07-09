@@ -1954,6 +1954,21 @@ type
     wrCurrentUser,
     wrLocalMachine,
     wrUsers);
+  /// the known Windows Registry entry types, matching REG_* constant order
+  TWinRegistryKind = (
+    wrkNone,
+    wrkString,
+    wrkExpandString,
+    wrkBinary,
+    wrkDWord,
+    wrkDWordBE,
+    wrkLink,
+    wrkMultiString,
+    wrkResList,
+    wrkResDesc,
+    wrkResReq,
+    wrkQWord);
+  PWinRegistryKind = ^TWinRegistryKind;
 
   /// direct access to the Windows Registry
   // - could be used as alternative to TRegistry, which doesn't behave the same on
@@ -2001,7 +2016,7 @@ type
     function ReadMax(entry: PWideChar; data: pointer; maxdatalen: DWord): DWord;
     /// retrieve a Windows Registry content size as binary bytes after ReadOpen()
     // - returns -1 if the entry is not found
-    function ReadSize(entry: PWideChar: integer;
+    function ReadSize(entry: PWideChar; kind: PWinRegistryKind = nil): integer;
     /// enumeration of all sub-entries names of a Windows Registry key
     function ReadEnumEntries: TRawUtf8DynArray;
   end;

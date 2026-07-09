@@ -3178,6 +3178,16 @@ begin
   key := 0;
 end;
 
+procedure SetWinRegistryKind(kind: PWinRegistryKind; rtype: DWord);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  if kind = nil then
+    exit;
+  if rtype > byte(high(TWinRegistryKind)) then
+    rtype := REG_NONE; // return wrkNone
+  PByte(kind)^ := rtype;
+end;
+
 function TWinRegistry.ReadString(const entry: SynUnicode; andtrim: boolean): RawUtf8;
 var
   rtype, rsize, res: DWord;
@@ -3264,12 +3274,17 @@ begin
   MoveFast(pointer(tmp)^, Data^, result);
 end;
 
-function TWinRegistry.ReadSize(entry: PWideChar): integer;
+function TWinRegistry.ReadSize(entry: PWideChar; kind: PWinRegistryKind): integer;
 var
-  n: cardinal; // safer with an explicit local variable
+  n, rtype: cardinal; // safer with an explicit local variable
 begin
-  if RegQueryValueExW(key, pointer(entry), nil, nil, nil, @n) = NO_ERROR then
-    result := n
+  n := 0;
+  rtype := 0;
+  if RegQueryValueExW(key, entry, nil, @rtype, nil, @n) = NO_ERROR then
+  begin
+    SetWinRegistryKind(kind, rtype);
+    result := n;
+  end
   else
     result := -1;
 end;
