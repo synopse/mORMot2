@@ -1903,9 +1903,12 @@ type
   // conversions within the current Operating System time zone - this class is
   // more likely to be used on Web/REST server side, or to bypass the system
   // regional settings for an end-user application
+  // - the information stored in this class seems more complete and accurate
+  // than the one used by FPC TZInfo for instance (e.g. no per-year definition)
   // - for Linux/POSIX our mORMot 2 repository supplies a ready-to-use
   // ! {$R mormot.tz.res}
-  // - note that each instance is thread-safe
+  // - note that could have several instances, which are thread-safe by design,
+  // but you are likely to need to call only TSynTimeZone.Default in practice
   TSynTimeZone = class(TObjectRWLightLock)
   protected
     fZone: TTimeZoneDataDynArray;
@@ -2030,21 +2033,18 @@ function GetDisplay(const TzId: TTimeZoneID): RawUtf8;
 
 /// compute the UTC date/time corrected for a given TzId
 // - will use a global shared thread-safe TSynTimeZone instance for the request
-function UtcToLocal(const UtcDateTime: TDateTime; const TzId: TTimeZoneID): TDateTime;
-  overload; {$ifdef HASINLINE} inline; {$endif}
+function UtcToLocal(const Utc: TDateTime; const TzId: TTimeZoneID): TDateTime; overload;
 
 /// compute the current date/time corrected for a given TzId
 // - will use a global shared thread-safe TSynTimeZone instance for the request
 function NowToLocal(const TzId: TTimeZoneID): TDateTime;
-  {$ifdef HASINLINE} inline; {$endif}
 
 /// compute the UTC date/time for a given local TzId value
 // - by definition, a local time may correspond to two UTC times, during the
 // time bias period, so the returned value is informative only, and any
 // stored value should be following UTC
 // - will use a global shared thread-safe TSynTimeZone instance for the request
-function LocalToUtc(const LocalDateTime: TDateTime; const TzID: TTimeZoneID): TDateTime;
-  overload; {$ifdef HASINLINE} inline; {$endif}
+function LocalToUtc(const Local: TDateTime; const TzID: TTimeZoneID): TDateTime; overload;
 
 
 implementation
@@ -7969,9 +7969,9 @@ begin
   result := false;
   if TzId = '' then
     exit;
-  result := IsNotVoidUtc(TzId);
+  result := IsNotVoidUtc(TzId); // 'UTC' could directly return Bias=0
   if result then
-    exit; // 'UTC' returns Bias=0
+    exit;
   // use the internal hash table
   fSafe.ReadLock;
   try
@@ -8049,7 +8049,7 @@ begin
     result := LocalDateTime
   else
   begin
-    GetBiasForDateTime(LocalDateTime, TzID, Bias, HaveDaylight);
+    GetBiasForDateTime(LocalDateTime, TzID, Bias, HaveDaylight, {fromutc=}false);
     result := ((LocalDateTime * MinsPerDay) + Bias) / MinsPerDay;
   end;
 end;
@@ -8109,9 +8109,9 @@ begin
   result := TSynTimeZone.Default.GetDisplay(TzId);
 end;
 
-function UtcToLocal(const UtcDateTime: TDateTime; const TzId: TTimeZoneID): TDateTime;
+function UtcToLocal(const Utc: TDateTime; const TzId: TTimeZoneID): TDateTime;
 begin
-  result := TSynTimeZone.Default.UtcToLocal(UtcDateTime, TzId);
+  result := TSynTimeZone.Default.UtcToLocal(Utc, TzId);
 end;
 
 function NowToLocal(const TzId: TTimeZoneID): TDateTime;
@@ -8119,9 +8119,9 @@ begin
   result := TSynTimeZone.Default.NowToLocal(TzId);
 end;
 
-function LocalToUtc(const LocalDateTime: TDateTime; const TzID: TTimeZoneID): TDateTime;
+function LocalToUtc(const Local: TDateTime; const TzID: TTimeZoneID): TDateTime;
 begin
-  result := TSynTimeZone.Default.LocalToUtc(LocalDateTime, TzId);
+  result := TSynTimeZone.Default.LocalToUtc(Local, TzId);
 end;
 
 
