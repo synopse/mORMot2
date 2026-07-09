@@ -366,6 +366,13 @@ end;
 // use the following functions in place of using Win32 FileTimeToLocalFileTime API:
 // https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-filetimetolocalfiletime
 
+function SystemTimeToTzSpecificLocalTime(lpTimeZoneInformation: pointer;
+  var lpUniversalTime, lpLocalTime: TSystemTime): BOOL;
+  stdcall; external kernel32;
+function TzSpecificLocalTimeToSystemTime(lpTimeZoneInformation: pointer;
+  var lpLocalTime, lpUniversalTime: TSystemTime): BOOL;
+  stdcall; external kernel32; // missing in FPC and oldest Delphi
+
 function FileTimeToLocalSystemTime(const ft: FILETIME; out lt: TSystemTime): boolean;
 var
   st: TSystemTime;
@@ -404,6 +411,17 @@ var
 begin
   DateTimeToFileTime(utc, ft);
   if FileTimeToLocalSystemTime(ft, st) then
+    result := SystemTimeToDateTime(st)
+  else
+    result := 0;
+end;
+
+function LocalToUtc(local: TDateTime): TDateTime;
+var
+  st: TSystemTime;
+begin
+  DateTimeToSystemTime(local, st);
+  if TzSpecificLocalTimeToSystemTime(nil, st, st) then
     result := SystemTimeToDateTime(st)
   else
     result := 0;

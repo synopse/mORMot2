@@ -3149,6 +3149,10 @@ function UnixTimeToLocal(I64: TUnixTime): TDateTime; overload;
 // - similar to FPC UniversalTimeToLocal() function
 function UtcToLocal(utc: TDateTime): TDateTime; overload;
 
+/// convert a local TDateTime into an UTC TDateTime using the current OS time zone
+// - similar to FPC LocalTimeToUniversal() function
+function LocalToUtc(local: TDateTime): TDateTime; overload;
+
 /// convert an Unix seconds time to a Win32 64-bit FILETIME value
 procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
 

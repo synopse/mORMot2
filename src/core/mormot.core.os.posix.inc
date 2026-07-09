@@ -903,6 +903,11 @@ begin
   result := ToLocalTime(utc);
 end;
 
+function LocalToUtc(local: TDateTime): TDateTime;
+begin
+  result := ToUtcTime(local);
+end;
+
 function UnixTimeToLocal(I64: TUnixTime): TDateTime;
 begin
   result := EpochToLocal(I64) * SecsPerDate + UnixDateDelta;
