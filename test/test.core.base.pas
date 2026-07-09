@@ -8168,17 +8168,18 @@ begin
     '1492-10-12T16:00:00');
 end;
 
-{$R ..\src\mormot.tz.res} // validate our Win10-generated resource file
+{$R ..\src\mormot.tz.res} // validate our Win11-generated resource file
 
 procedure TTestCoreBase.TimeZonesSlow(Context: TObject);
 var
   tz: TSynTimeZone;
-  st: TSystemTime;
+  st, stl: TSystemTime;
   t: TSynSystemTime;
   d: TTimeZoneData;
   i, bias: integer;
   m: word;
   hdl, reload: boolean;
+  endtix: Int64;
   buf: RawByteString;
   dt, dtl: TDateTime;
   ut: TUnixTime;
@@ -8341,40 +8342,31 @@ begin
     tz.Free;
   end;
   // validate mormot.core.os time conversions
-  repeat // don't test at the edge of a minute
-    dt := NowUtc;
-    dtl := UtcToLocal(dt);
-    CheckSameTime(dtl, Now(), 'RTL Now should match mormot.core.os');
-    ut := UnixTimeUtc;
-    t.FromNow({localtime=}true);
-    UnixTimeToLocal(ut, st);
-  until st.{$ifdef OSPOSIX}Second{$else}wSecond{$endif} <> 0;
+  dt := NowUtc;
+  dtl := UtcToLocal(dt);
+  CheckSameTime(dtl, Now(), 'RTL Now should match mormot.core.os');
+  ut := UnixTimeUtc;
+  t.FromNow({localtime=}true);
+  GetLocalTime(stl);
   //writeln(#10'utc=',DateTimeToSql(dt),#10'loc=',DateTimeToSql(dtl));
   CheckSameTime(UtcToLocal(dt), dtl, 'UtcToLocal');
   CheckSameTime(LocalToUtc(dtl), dt, 'LocalToUtc');
   CheckSameTime(UnixTimeToLocal(ut), dtl, 'UnixTimeToLocal');
-  CheckEqual(LocalToUnixTime(dtl) shr 1, ut shr 1, 'LocalToUnixTime');
+  Check(abs(LocalToUnixTime(dtl) - ut) < 2, 'LocalToUnixTime');
+  UnixTimeToLocal(ut, st);
+  {$ifndef POSIXDELPHI} // SystemTimeToDateTime() not available on Delphi POSIX
+  CheckSameTime(SystemTimeToDateTime(st), SystemTimeToDateTime(stl), 'UnixTimeToLocal');
+  {$endif POSIXDELPHI}
   {$ifdef FPC}
   CheckSameTime(LocalTimeToUniversal(dtl), dt, 'LocalTimeToUniversal');
   CheckSameTime(UniversalTimeToLocal(dt), dtl, 'UniversalTimeToLocal');
   {$endif FPC}
-  {$ifdef OSPOSIX} // half-backed cross-platform Delphi and FPC RTL TSystemTime
-  CheckEqual(t.Year, st.Year, 'Y');
-  CheckEqual(t.Month, st.Month, 'M');
-  CheckEqual(t.Day, st.Day, 'D');
-  CheckEqual(t.Hour, st.Hour, 'h');
-  CheckEqual(t.Minute, st.Minute, 'm');
-  CheckEqual(t.Second shr 1, st.Second shr 1, 's');
-  {$else}
-  CheckEqual(t.Year, st.wYear, 'Y');
-  CheckEqual(t.Month, st.wMonth, 'M');
-  CheckEqual(t.Day, st.wDay, 'D');
-  CheckEqual(t.Hour, st.wHour, 'h');
-  CheckEqual(t.Minute, st.wMinute, 'm');
-  CheckEqual(t.Second shr 1, st.wSecond shr 1, 's');
-  {$endif OSPOSIX}
-  sleep(200);
-  Check(dt < NowUtc, 'NowUtc should not truncate time within 200ms period');
+  endtix := GetTickCount64 + 100; // 16ms resolution at worst on Windows
+  repeat
+    sleep(10); // likely to be executed in a background thread
+  until CheckFailed(GetTickCount64 < endtix,
+          'NowUtc should not truncate time within 100ms period') or
+        (NowUtc > dt);
   // validate zones taken from Windows registry or mormot.tz.res on POSIX
   tz := TSynTimeZone.Default;
   CheckSameTime(tz.UtcToLocal(dt, 'UTC'), dt);
