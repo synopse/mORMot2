@@ -3178,7 +3178,7 @@ begin
   key := 0;
 end;
 
-procedure SetWinRegistryKind(kind: PWinRegistryKind; rtype: DWord);
+procedure SetWinRegistryKind(const kind: PWinRegistryKind; rtype: DWord);
   {$ifdef HASINLINE} inline; {$endif}
 begin
   if kind = nil then
@@ -3189,14 +3189,19 @@ begin
 end;
 
 function TWinRegistry.ReadTempBuffer(entry: PWideChar; var data: TSynTempBuffer;
-  kind: PWinRegistryKind): boolean;
+  allowed: TWinRegistryKinds; kind: PWinRegistryKind): boolean;
 var
   rsize, res, rtype: DWord;
+  k: TWinRegistryKind;
 begin
   result := false;
   rsize := {%H-}data.Init; // most of the time, a single call is enough
   rtype := 0;
   res := RegQueryValueExW(key, entry, nil, @rtype, data.buf, @rsize);
+  SetWinRegistryKind(@k, rtype);
+  if (allowed <> []) and
+     not (k in allowed) then
+    exit;
   if res <> NO_ERROR then
     if res = ERROR_MORE_DATA then // need more than 4KB of data (unlikely)
       res := RegQueryValueExW(key, entry, nil, nil, data.Init(rsize), @rsize)
@@ -3205,9 +3210,10 @@ begin
   if res = NO_ERROR then
   begin
     PCardinal(data.BufEnd)^ := 0; // ensure is #0#0 terminated: the string might
+    if kind <> nil then
+      kind^ := k;
     // NOT have been stored with the proper terminating null characters
     // https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryvalueexw
-    SetWinRegistryKind(kind, rtype);
     result := true;
   end
   else
@@ -3220,11 +3226,10 @@ var
   tmp: TSynTempBuffer;
 begin
   FastAssignNew(result);
-  if not ReadTempBuffer(entry, tmp, @k) or
+  if not ReadTempBuffer(entry, tmp, wrkStrings, @k) or
      (tmp.Len = 0) then
     exit;
-  if k in [wrkString, wrkExpandString, wrkMultiString] then
-    Win32PWideCharToUtf8(tmp.buf, result); // use StrLenW() to get first string
+  Win32PWideCharToUtf8(tmp.buf, result); // use StrLenW() to get first string
   if andtrim then
     TrimSelf(result);
   tmp.Done;
@@ -3239,7 +3244,7 @@ var
   tmp: TSynTempBuffer;
 begin
   Finalize(result);
-  if not ReadTempBuffer(entry, tmp, @k) or
+  if not ReadTempBuffer(entry, tmp, wrkStrings, @k) or
      (tmp.Len = 0) then
     exit;
   p := tmp.buf;
@@ -3297,14 +3302,13 @@ end;
 
 function TWinRegistry.ReadDword(entry: PWideChar): cardinal;
 var
-  n, t: cardinal; // safer with an explicit local variable
+  n, t: DWord; // safer with an explicit n local variable
 begin
   if ReadBuffer(entry, @n, SizeOf(n), @t) then
-  begin
-    result := n;
     if t = REG_DWORD_BIG_ENDIAN then
-      result := bswap32(n);
-  end
+      result := bswap32(n)
+    else
+      result := n
   else
     result := 0;
 end;

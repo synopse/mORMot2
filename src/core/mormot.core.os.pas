@@ -1969,6 +1969,7 @@ type
     wrkResReq,
     wrkQWord);
   PWinRegistryKind = ^TWinRegistryKind;
+  TWinRegistryKinds = set of TWinRegistryKind;
 
   /// direct access to the Windows Registry
   // - could be used as alternative to TRegistry, which doesn't behave the same on
@@ -2018,7 +2019,7 @@ type
     /// read a Windows Registry content as binary buffer after ReadOpen()
     // - return true and allocate and fill data.buf/len - caller should make data.Done
     function ReadTempBuffer(entry: PWideChar; var data: TSynTempBuffer;
-      kind: PWinRegistryKind = nil): boolean;
+      allowed: TWinRegistryKinds = []; kind: PWinRegistryKind = nil): boolean;
     /// read a Windows Registry content as binary buffer after ReadOpen()
     // - alternative to ReadBuffer() allowing the key name as UTF-8
     function ReadBufferU(const entry: RawUtf8; data: pointer; datalen: DWord): boolean;
@@ -2059,6 +2060,8 @@ function DelayedProc(var api; var lib: THandle;
   libname: PChar; procname: PAnsiChar): boolean;
 
 const
+  wrkStrings = [wrkString, wrkExpandString, wrkMultiString];
+
   /// Windows file APIs have hardcoded MAX_PATH = 260 :(
   // - but more than 260 chars are possible with the \\?\..... prefix
   // or by disabling the limitation in registry since Windows 10, version 1607
