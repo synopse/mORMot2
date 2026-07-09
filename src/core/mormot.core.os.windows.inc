@@ -3286,19 +3286,25 @@ var
   rsize: DWord;
 begin
   FastAssignNew(result);
-  if RegQueryValueExW(key, pointer(entry), nil, nil, nil, @rsize) <> NO_ERROR then
+  rsize := 0;
+  if (RegQueryValueExW(key, entry, nil, nil, nil, @rsize) <> NO_ERROR) and
+     (rsize <> 0) then
     exit;
-  SetLength(result, rsize);
-  if RegQueryValueExW(key, pointer(entry), nil, nil, pointer(result), @rsize) <> NO_ERROR then
+  if RegQueryValueExW(key, entry, nil, nil,
+       FastNewRawByteString(result, rsize), @rsize) <> NO_ERROR then
     FastAssignNew(result);
 end;
 
 function TWinRegistry.ReadDword(entry: PWideChar): cardinal;
 var
-  n: cardinal; // safer with an explicit local variable
+  n, t: cardinal; // safer with an explicit local variable
 begin
-  if ReadBuffer(entry, @n, SizeOf(n)) then
-    result := n
+  if ReadBuffer(entry, @n, SizeOf(n), @t) then
+  begin
+    result := n;
+    if t = REG_DWORD_BIG_ENDIAN then
+      result := bswap32(n);
+  end
   else
     result := 0;
 end;
