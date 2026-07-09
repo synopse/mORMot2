@@ -12,7 +12,7 @@ uses
   unix,
   unixcp,
   unixtype,
-  unixutil, // for TZInfo/TZSeconds - as used by sysutils anyway
+  unixutil, // for TTZInfo/TZSeconds - as used by sysutils anyway
   {$ifdef OSBSDDARWIN}
   sysctl,
   {$else}
@@ -857,7 +857,7 @@ begin
   if GetLocalTimezone(I64, {utc=}true, nfo) then
     result := nfo.seconds
   else
-    result := TZInfo.seconds; // fallback to TZSeconds global value
+    result := TZSeconds; // fallback to global value
 end;
 {$endif OSANDROID}
 
