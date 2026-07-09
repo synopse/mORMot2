@@ -2031,7 +2031,7 @@ function GetDisplay(const TzId: TTimeZoneID): RawUtf8;
 /// compute the UTC date/time corrected for a given TzId
 // - will use a global shared thread-safe TSynTimeZone instance for the request
 function UtcToLocal(const UtcDateTime: TDateTime; const TzId: TTimeZoneID): TDateTime;
-  {$ifdef HASINLINE} inline; {$endif}
+  overload; {$ifdef HASINLINE} inline; {$endif}
 
 /// compute the current date/time corrected for a given TzId
 // - will use a global shared thread-safe TSynTimeZone instance for the request
@@ -2044,7 +2044,7 @@ function NowToLocal(const TzId: TTimeZoneID): TDateTime;
 // stored value should be following UTC
 // - will use a global shared thread-safe TSynTimeZone instance for the request
 function LocalToUtc(const LocalDateTime: TDateTime; const TzID: TTimeZoneID): TDateTime;
-  {$ifdef HASINLINE} inline; {$endif}
+  overload; {$ifdef HASINLINE} inline; {$endif}
 
 
 implementation
