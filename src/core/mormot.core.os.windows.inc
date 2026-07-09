@@ -377,11 +377,8 @@ function FileTimeToLocalSystemTime(const ft: FILETIME; out lt: TSystemTime): boo
 var
   st: TSystemTime;
 begin
-  FillCharFast(lt, SizeOf(lt), 0);
-  result := FileTimeToSystemTime(ft, st);
-  if result then
-    if not SystemTimeToTzSpecificLocalTime(nil, st, lt) then
-      lt := st;
+  result := FileTimeToSystemTime(ft, st) and
+            SystemTimeToTzSpecificLocalTime(nil, st, lt);
 end;
 
 procedure UnixTimeToLocal(I64: TUnixTime; out Local: TSystemTime);
@@ -389,7 +386,8 @@ var
   ft: TFileTime;
 begin
   UnixTimeToFileTime(I64, ft);
-  FileTimeToLocalSystemTime(ft, Local); // may return Local=0
+  if not FileTimeToLocalSystemTime(ft, Local) then
+    FillCharFast(Local, SizeOf(Local), 0);
 end;
 
 function UnixTimeToLocal(I64: TUnixTime): TDateTime;
