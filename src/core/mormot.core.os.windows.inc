@@ -3188,29 +3188,87 @@ begin
   PByte(kind)^ := rtype;
 end;
 
-function TWinRegistry.ReadString(const entry: SynUnicode; andtrim: boolean): RawUtf8;
+function TWinRegistry.ReadTempBuffer(entry: PWideChar; var data: TSynTempBuffer;
+  kind: PWinRegistryKind): boolean;
 var
-  rtype, rsize, res: DWord;
+  rsize, res, rtype: DWord;
+begin
+  result := false;
+  rsize := {%H-}data.Init; // most of the time, a single call is enough
+  rtype := 0;
+  res := RegQueryValueExW(key, entry, nil, @rtype, data.buf, @rsize);
+  if res <> NO_ERROR then
+    if res = ERROR_MORE_DATA then // need more than 4KB of data (unlikely)
+      res := RegQueryValueExW(key, entry, nil, nil, data.Init(rsize), @rsize)
+    else
+      exit; // most probably ERROR_FILE_NOT_FOUND for unknown entry name
+  if res = NO_ERROR then
+  begin
+    PCardinal(data.BufEnd)^ := 0; // ensure is #0#0 terminated: the string might
+    // NOT have been stored with the proper terminating null characters
+    // https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryvalueexw
+    SetWinRegistryKind(kind, rtype);
+    result := true;
+  end
+  else
+    data.Done;
+end;
+
+function TWinRegistry.ReadString(entry: PWideChar; andtrim: boolean): RawUtf8;
+var
+  k: TWinRegistryKind;
   tmp: TSynTempBuffer;
 begin
   FastAssignNew(result);
-  rsize := {%H-}tmp.Init; // most of the time, a single call is enough
-  res := RegQueryValueExW(key, pointer(entry), nil, @rtype, tmp.buf, @rsize);
-  if res <> NO_ERROR then
-    if res = ERROR_MORE_DATA then // more than 4KB of data (unlikely)
-      res := RegQueryValueExW(key, pointer(entry), nil, nil, tmp.Init(rsize), @rsize)
-    else
-      exit;
-  if res = NO_ERROR then
+  if not ReadTempBuffer(entry, tmp, @k) or
+     (tmp.Len = 0) then
+    exit;
+  if k in [wrkString, wrkExpandString, wrkMultiString] then
+    Win32PWideCharToUtf8(tmp.buf, result); // use StrLenW() to get first string
+  if andtrim then
+    TrimSelf(result);
+  tmp.Done;
+end;
+
+function TWinRegistry.ReadStrings(entry: PWideChar; andtrim: boolean): TRawUtf8DynArray;
+var
+  n, l: PtrUInt;
+  p: PWideChar;
+  d: PRawUtf8;
+  k: TWinRegistryKind;
+  tmp: TSynTempBuffer;
+begin
+  Finalize(result);
+  if not ReadTempBuffer(entry, tmp, @k) or
+     (tmp.Len = 0) then
+    exit;
+  p := tmp.buf;
+  n := 0;
+  case k of
+    wrkString,
+    wrkExpandString:
+      n := 1;
+    wrkMultiString:
+      while p^ <> #0 do
+      begin
+        inc(p, StrLenW(p) + 1); // first pass to compute length(result)
+        inc(n);
+      end;
+  end;
+  if n <> 0 then
   begin
-    case rtype of
-      REG_SZ,
-      REG_EXPAND_SZ,
-      REG_MULTI_SZ: // StrLen() will return the first value of REG_MULTI_SZ
-        Win32PWideCharToUtf8(tmp.buf, result);
-    end;
-    if andtrim then
-      TrimSelf(result);
+    p := tmp.buf;
+    SetLength(result, n);
+    d := pointer(result);
+    repeat
+      l := StrLenW(p);
+      Win32PWideCharToUtf8(p, l, d^);
+      if andtrim then
+        TrimSelf(d^);
+      inc(d);
+      inc(p, l + 1);
+      dec(n);
+    until n = 0;
   end;
   tmp.Done;
 end;
@@ -3255,10 +3313,23 @@ begin
     result := 0;
 end;
 
-function TWinRegistry.ReadBuffer(entry: PWideChar;
-  data: pointer; datalen: DWord): boolean;
+function TWinRegistry.ReadBuffer(entry: PWideChar; data: pointer; datalen: DWord;
+  kind: PWinRegistryKind): boolean;
+var
+  rtype: DWord;
 begin
-  result := RegQueryValueExW(key, pointer(entry), nil, nil, data, @datalen) = NO_ERROR;
+  rtype := 0;
+  result := RegQueryValueExW(key, entry, nil, @rtype, data, @datalen) = NO_ERROR;
+  if result then
+    SetWinRegistryKind(kind, rtype);
+end;
+
+function TWinRegistry.ReadBufferU(const entry: RawUtf8; data: pointer; datalen: DWord): boolean;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := ReadBuffer(Utf8ToWin32PWideChar(entry, tmp), data, datalen);
+  tmp.Done;
 end;
 
 function TWinRegistry.ReadMax(entry: PWideChar; Data: pointer; MaxDataLen: DWord): DWord;

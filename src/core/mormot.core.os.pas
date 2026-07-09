@@ -2010,7 +2010,15 @@ type
     function ReadQword(entry: PWideChar): QWord;
     /// read a Windows Registry content as binary buffer after ReadOpen()
     // - just a wrapper around RegQueryValueExW() API call
-    function ReadBuffer(entry: PWideChar; data: pointer; datalen: DWord): boolean;
+    function ReadBuffer(entry: PWideChar; data: pointer; datalen: DWord;
+      kind: PWinRegistryKind = nil): boolean;
+    /// read a Windows Registry content as binary buffer after ReadOpen()
+    // - return true and allocate and fill data.buf/len - caller should make data.Done
+    function ReadTempBuffer(entry: PWideChar; var data: TSynTempBuffer;
+      kind: PWinRegistryKind = nil): boolean;
+    /// read a Windows Registry content as binary buffer after ReadOpen()
+    // - alternative to ReadBuffer() allowing the key name as UTF-8
+    function ReadBufferU(const entry: RawUtf8; data: pointer; datalen: DWord): boolean;
     /// read a Windows Registry content as length-specified buffer after ReadOpen()
     // - returns the number of bytes written to Data
     function ReadMax(entry: PWideChar; data: pointer; maxdatalen: DWord): DWord;
