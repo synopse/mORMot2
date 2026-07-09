@@ -544,7 +544,7 @@ begin
   // return the offset in MINUTES, positive west of UTC (e.g. +240 for EDT) -
   // i.e. the FPC RTL convention, as expected by TZSeconds and TimeZoneLocalBias
   // (TTimeZone.UtcOffset is local-minus-UTC, so negative west of UTC: negate it)
-  result := -Round(TTimeZone.Local.UtcOffset.TotalMinutes);
+  result := -round(TTimeZone.Local.UtcOffset.TotalMinutes);
 end;
 
 function TZSeconds: integer;

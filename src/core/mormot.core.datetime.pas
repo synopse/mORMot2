@@ -3474,7 +3474,7 @@ end;
 
 function DateTimeToUnixTime(const AValue: TDateTime): TUnixTime;
 begin
-  result := Round((AValue - UnixDateDelta) * SecsPerDay);
+  result := round((AValue - UnixDateDelta) * SecsPerDay);
 end;
 
 function UnixTimeToString(const UnixTime: TUnixTime; Expanded: boolean;
@@ -3541,7 +3541,7 @@ begin
   if AValue = 0 then
     result := 0
   else
-    result := Round((AValue - UnixDateDelta) * MilliSecsPerDay);
+    result := round((AValue - UnixDateDelta) * MilliSecsPerDay);
 end;
 
 function UnixMSTimeToString(const UnixMSTime: TUnixMSTime; Expanded: boolean;

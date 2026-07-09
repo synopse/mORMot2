@@ -841,11 +841,11 @@ begin
   t := epoch div SecsPerMin;
   result.Minute := t;
   result.Second := epoch - t * SecsPerMin;
-end;
+end; // caller should set result.MilliSecond
 
 function ToEpoch(const utc: TDateTime): TUnixTime; inline;
 begin // inlined DateTimeToUnixTime() from mormot.core.datetime.pas
-  result := Round((utc - UnixDateDelta) * SecsPerDay);
+  result := round((utc - UnixDateDelta) * SecsPerDay);
 end;
 
 {$ifdef FPC} // if not in mormot.core.os.delphi.pas
@@ -916,6 +916,7 @@ end;
 procedure UnixTimeToLocal(I64: TUnixTime; out Local: TSystemTime);
 begin
   EpochToSystemTime(EpochToLocal(i64), Local);
+  Local.MilliSecond := 0;
 end;
 
 function LocalToUnixTime(local: TDateTime): TUnixTime;
