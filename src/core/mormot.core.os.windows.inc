@@ -390,6 +390,19 @@ begin
     FillCharFast(Local, SizeOf(Local), 0);
 end;
 
+function LocalToUnixTime(local: TDateTime): TUnixTime;
+var
+  ft: TFileTime;
+  st: TSystemTime;
+begin
+  DateTimeToSystemTime(local, st);
+  if TzSpecificLocalTimeToSystemTime(nil, st, st) and
+     SystemTimeToFileTime(st, ft)  then
+    result := FileTimeToUnixTime(ft)
+  else
+    result := 0;
+end;
+
 function UnixTimeToLocal(I64: TUnixTime): TDateTime;
 var
   ft: TFileTime;

@@ -918,7 +918,10 @@ begin
   EpochToSystemTime(EpochToLocal(i64), Local);
 end;
 
-
+function LocalToUnixTime(local: TDateTime): TUnixTime;
+begin
+  result := ToEpoch(ToUtcTime(local));
+end;
 
 {$ifdef OSDARWIN} // OSX has no clock_gettime() API but its own MACH API
 
