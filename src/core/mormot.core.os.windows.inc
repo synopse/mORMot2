@@ -362,8 +362,8 @@ begin
   FT^.dwHighDateTime := Q64^.H;
 end;
 
-// To account for daylight saving time when converting a file time to a local
-// time, use the following function in place of using FileTimeToLocalFileTime:
+// To account for daylight saving time when converting a file time to a local time,
+// use the following functions in place of using Win32 FileTimeToLocalFileTime API:
 // https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-filetimetolocalfiletime
 
 function FileTimeToLocalSystemTime(const ft: FILETIME; out lt: TSystemTime): boolean;
@@ -397,7 +397,7 @@ begin
     result := 0;
 end;
 
-function DateTimeToLocal(utc: TDateTime): TDateTime;
+function UtcToLocal(utc: TDateTime): TDateTime;
 var
   ft: TFileTime;
   st: TSystemTime;

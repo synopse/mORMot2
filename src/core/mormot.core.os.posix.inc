@@ -513,7 +513,7 @@ begin
   syslog(priority, '%s', [msg]);
 end;
 
-{$ifdef FPC}
+{$ifdef FPC} // if not in mormot.core.os.delphi.pas
 
 {$ifdef NODIRECTTHREADMANAGER} // try to stabilize MacOS/BSD pthreads API calls
 
@@ -843,39 +843,64 @@ begin
   result.Second := epoch - t * SecsPerMin;
 end;
 
-{$ifdef FPC}
-{$ifdef OSANDROID}
-function GetLocalBias(I64: TUnixTime): PtrInt; inline;
-begin
-  result := TZSeconds; // fallback to libc localtime() on Android
+function ToEpoch(const utc: TDateTime): TUnixTime; inline;
+begin // inlined DateTimeToUnixTime() from mormot.core.datetime.pas
+  result := Round((utc - UnixDateDelta) * SecsPerDay);
 end;
-{$else}
+
+{$ifdef FPC} // if not in mormot.core.os.delphi.pas
+
+{$ifdef OSANDROID} // fallback to TZSeconds i.e. libc localtime() on Android
+
+function ToLocalTime(const utc: TDateTime): TDateTime; inline;
+begin
+  result := utc + TZSeconds * SecsPerDate;
+end;
+
+function ToUtcTime(const local: TDateTime): TDateTime; inline;
+begin
+  result := local - TZSeconds * SecsPerDate;
+end;
+
+function EpochToLocal(I64: TUnixTime): TUnixTime; inline;
+begin
+  result := I64 + TZSeconds;
+end;
+
+{$else} // TTZInfo is the native FPC way of handling time zones on POSIX
+
 function GetLocalBias(I64: TUnixTime): PtrInt; inline;
 var
-  nfo: TTZInfo;
+  nfo: TTZInfo; // thread-safe local copy
 begin
-  if GetLocalTimezone(I64, {utc=}true, nfo) then
+  if GetLocalTimezone(I64, {utc=}true, nfo) then // very fast RTL function
     result := nfo.seconds
   else
-    result := TZSeconds; // fallback to global value
+    result := TZSeconds; // fallback to old global value (paranoid)
 end;
-{$endif OSANDROID}
 
-function UtcToLocal(const utc: TDateTime): TDateTime; inline;
+function ToLocalTime(const utc: TDateTime): TDateTime; inline;
 begin
-  result := utc + GetLocalBias(Round((utc - UnixDateDelta) * SecsPerDay)) * SecsPerDate;
-  // result := UniversalTimeToLocal(utc);
+  result := utc + GetLocalBias(ToEpoch(utc)) * SecsPerDate;
+end;
+
+function ToUtcTime(const local: TDateTime): TDateTime; inline;
+begin // use TZSeconds to assume it is the current local time
+  result := local - GetLocalBias(ToEpoch(local) - TZSeconds) * SecsPerDate;
 end;
 
 function EpochToLocal(I64: TUnixTime): TUnixTime; inline;
 begin
   result := I64 + GetLocalBias(I64);
 end;
+
+{$endif OSANDROID}
+
 {$endif FPC}
 
-function DateTimeToLocal(utc: TDateTime): TDateTime;
+function UtcToLocal(utc: TDateTime): TDateTime;
 begin
-  result := UtcToLocal(utc);
+  result := ToLocalTime(utc);
 end;
 
 function UnixTimeToLocal(I64: TUnixTime): TDateTime;

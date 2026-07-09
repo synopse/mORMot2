@@ -2976,7 +2976,7 @@ const
 // accurate after a time shift during the process execution - but any
 // long-running process (like a service) should use UTC timestamps only
 // - on Delphi POSIX, System.DateUtils TTimeZone is used
-// - see rather UnixTimeToLocal() and DateTimeToLocal() functions
+// - see rather UtcToLocal/LocalToUtc() and UnixTimeToLocal() functions
 var
   TimeZoneLocalBias: integer;
 
@@ -3147,7 +3147,7 @@ function UnixTimeToLocal(I64: TUnixTime): TDateTime; overload;
 
 /// convert an UTC TDateTime into a local TDateTime
 // - similar to FPC UniversalTimeToLocal() function
-function DateTimeToLocal(utc: TDateTime): TDateTime;
+function UtcToLocal(utc: TDateTime): TDateTime; overload;
 
 /// convert an Unix seconds time to a Win32 64-bit FILETIME value
 procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
@@ -5432,7 +5432,7 @@ procedure GlobalUnLock;
 
 /// framework will register here some instances to be released eventually
 // - better in this root unit than in each finalization section
-// - its use is protected by the GlobalLock
+// - its use is protected by the GlobalLock so you could also use it
 function RegisterGlobalShutdownRelease(Instance: TObject;
   SearchExisting: boolean = false): pointer;
 
