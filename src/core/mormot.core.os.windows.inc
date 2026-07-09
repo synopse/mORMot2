@@ -3156,15 +3156,26 @@ begin
   if closefirst then
     Close;
   key := 0;
-  result := RegOpenKeyExW(
-    _HKEY[root], Utf8ToWin32PWideChar(keyname, tmp), 0, KEY_READ, key) = NO_ERROR;
+  result := RegOpenKeyExW(_HKEY[root],
+              Utf8ToWin32PWideChar(keyname, tmp), 0, KEY_READ, key) = NO_ERROR;
   tmp.Done;
+end;
+
+function TWinRegistry.ReadOpen(root: TWinRegistryRoot;
+  const keynames: array of RawByteString; closefirst: boolean): boolean;
+var
+  name: RawUtf8;
+begin
+  Join(keynames, name);
+  result := ReadOpen(root, name, closefirst);
 end;
 
 procedure TWinRegistry.Close;
 begin
-  if key <> 0 then
-    RegCloseKey(key);
+  if key = 0 then
+    exit;
+  RegCloseKey(key);
+  key := 0;
 end;
 
 function TWinRegistry.ReadString(const entry: SynUnicode; andtrim: boolean): RawUtf8;

@@ -1968,9 +1968,14 @@ type
     /// the opened HKEY handle
     key: HKEY;
     /// start low-level read access to a Windows Registry node
-    // - on success (returned true), Close method should be eventually called
+    // - on success (returned true), Close method should be eventually called or
+    // you can set closefirst = true on a consecutive ReadOpen() call
     function ReadOpen(root: TWinRegistryRoot; const keyname: RawUtf8;
-      closefirst: boolean = false): boolean;
+      closefirst: boolean = false): boolean; overload;
+    /// start low-level read access to a Windows Registry node
+    // - overloaded to ReadOpen() allowing Join() keynames concatenation
+    function ReadOpen(root: TWinRegistryRoot; const keynames: array of RawByteString;
+      closefirst: boolean = false): boolean; overload;
     /// finalize low-level read access to the Windows Registry after ReadOpen()
     procedure Close;
     /// read a UTF-8 string from the Windows Registry after ReadOpen()
