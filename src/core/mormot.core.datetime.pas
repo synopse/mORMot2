@@ -498,7 +498,7 @@ type
   PSynDate = ^TSynDate;
 
   /// a cross-platform and cross-compiler TSystemTime 128-bit structure
-  // - FPC's TSystemTime in datih.inc does NOT match Windows TSystemTime fields!
+  // - on POSIX TSystemTime definition for Delphi or FPC do NOT match Windows'
   // - also used to store a Date/Time in TSynTimeZone internal structures, or
   // for fast conversion from TDateTime to its ready-to-display members
   // - DayOfWeek field is not handled by most methods by default, but could be
@@ -2817,9 +2817,11 @@ begin
      (zone <> 0) then
   begin
     // need to apply some time zone shift
-    dt := ToDateTime - zone div MinsPerDay;
+    dt := ToDateTime;
+    if zone <> 0 then
+      dt := dt - zone div MinsPerDay;
     if tolocaltime then
-      dt := DateTimeToLocal(dt);
+      dt := UtcToLocal(dt);
     v := abs(zone mod MinsPerDay);
     if not TryEncodeTime(v div 60, v mod 60, 0, 0, t) then
       exit;
