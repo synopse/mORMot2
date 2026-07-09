@@ -6143,40 +6143,42 @@ end;
 
 procedure BinaryLoadSeveral(Data: PAnsiChar; var Source: TFastReader;
   Info: PRttiInfo; n, datasize: PtrInt);
-label
-  raw;
 var
   load: TRttiBinaryLoad;
 begin // caller ensured Data<>nil and n>0
-  if Info = nil then
-    goto raw;
-  load := RTTI_BINARYLOAD[Info^.Kind];
-  if Assigned(load) then
-    repeat
-      inc(Data, load(Data, Source, Info));
-      dec(n);
-    until n = 0
-  else
-raw:Source.Copy(Data, datasize)
+  if Info <> nil then
+  begin
+    load := RTTI_BINARYLOAD[Info^.Kind];
+    if Assigned(load) then
+    begin
+      repeat
+        inc(Data, load(Data, Source, Info));
+        dec(n);
+      until n = 0;
+      exit;
+    end;
+  end;
+  Source.Copy(Data, datasize)
 end;
 
 procedure BinarySaveSeveral(Data: PAnsiChar; Dest: TBufferWriter;
   Info: PRttiInfo; n, datasize: PtrInt);
 var
   sav: TRttiBinarySave;
-label
-  raw;
 begin
-  if Info = nil then
-    goto raw;
-  sav := RTTI_BINARYSAVE[Info^.Kind];
-  if Assigned(sav) then // paranoid check
-    repeat
-      inc(Data, sav(Data, Dest, Info));
-      dec(n);
-    until n = 0
-  else
-raw:Dest.Write(Data, datasize);
+  if Info <> nil then
+  begin
+    sav := RTTI_BINARYSAVE[Info^.Kind];
+    if Assigned(sav) then
+    begin
+      repeat
+        inc(Data, sav(Data, Dest, Info));
+        dec(n);
+      until n = 0;
+      exit;
+    end;
+  end;
+  Dest.Write(Data, datasize);
 end;
 
 
