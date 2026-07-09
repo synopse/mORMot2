@@ -3205,7 +3205,7 @@ begin
   tmp.Done;
 end;
 
-function TWinRegistry.ReadData(const entry: SynUnicode): RawByteString;
+function TWinRegistry.ReadData(entry: PWideChar): RawByteString;
 var
   rsize: DWord;
 begin
@@ -3217,7 +3217,7 @@ begin
     FastAssignNew(result);
 end;
 
-function TWinRegistry.ReadDword(const entry: SynUnicode): cardinal;
+function TWinRegistry.ReadDword(entry: PWideChar): cardinal;
 var
   n: cardinal; // safer with an explicit local variable
 begin
@@ -3227,7 +3227,7 @@ begin
     result := 0;
 end;
 
-function TWinRegistry.ReadQword(const entry: SynUnicode): QWord;
+function TWinRegistry.ReadQword(entry: PWideChar): QWord;
 var
   q: QWord; // safer with an explicit local variable
 begin
@@ -3237,14 +3237,13 @@ begin
     result := 0;
 end;
 
-function TWinRegistry.ReadBuffer(const entry: SynUnicode;
+function TWinRegistry.ReadBuffer(entry: PWideChar;
   data: pointer; datalen: DWord): boolean;
 begin
   result := RegQueryValueExW(key, pointer(entry), nil, nil, data, @datalen) = NO_ERROR;
 end;
 
-function TWinRegistry.ReadMax(const entry: SynUnicode;
-  Data: pointer; MaxDataLen: DWord): DWord;
+function TWinRegistry.ReadMax(entry: PWideChar; Data: pointer; MaxDataLen: DWord): DWord;
 var
   tmp: RawByteString;
 begin
@@ -3257,7 +3256,7 @@ begin
   MoveFast(pointer(tmp)^, Data^, result);
 end;
 
-function TWinRegistry.ReadSize(const entry: SynUnicode): integer;
+function TWinRegistry.ReadSize(entry: PWideChar): integer;
 var
   n: cardinal; // safer with an explicit local variable
 begin

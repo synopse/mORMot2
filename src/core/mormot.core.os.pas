@@ -1980,27 +1980,25 @@ type
     procedure Close;
     /// read a UTF-8 string from the Windows Registry after ReadOpen()
     // - in respect to Delphi's TRegistry, will properly handle REG_MULTI_SZ
-    // (return the first value of the multi-list) - use ReadData to retrieve
-    // all REG_MULTI_SZ values as one blob
-    // - we don't use string here since it would induce a dependency to
-    // mormot.core.unicode and UTF-8 is needed on Delphi 7/2007
-    function ReadString(const entry: SynUnicode; andtrim: boolean = true): RawUtf8;
+    // (return the first value of the multi-list) - use ReadData() to retrieve
+    // all REG_MULTI_SZ values as one blob or ReadStrings() as RawUtf8 array
+    function ReadString(entry: PWideChar; andtrim: boolean = true): RawUtf8;
     /// read a Windows Registry content after ReadOpen()
     // - works with any kind of key, but was designed for REG_BINARY
-    function ReadData(const entry: SynUnicode): RawByteString;
+    function ReadData(entry: PWideChar): RawByteString;
     /// read a Windows Registry 32-bit REG_DWORD value after ReadOpen()
-    function ReadDword(const entry: SynUnicode): cardinal;
+    function ReadDword(entry: PWideChar): cardinal;
     /// read a Windows Registry 64-bit REG_QWORD value after ReadOpen()
-    function ReadQword(const entry: SynUnicode): QWord;
+    function ReadQword(entry: PWideChar): QWord;
     /// read a Windows Registry content as binary buffer after ReadOpen()
     // - just a wrapper around RegQueryValueExW() API call
-    function ReadBuffer(const entry: SynUnicode; data: pointer; datalen: DWord): boolean;
+    function ReadBuffer(entry: PWideChar; data: pointer; datalen: DWord): boolean;
     /// read a Windows Registry content as length-specified buffer after ReadOpen()
     // - returns the number of bytes written to Data
-    function ReadMax(const entry: SynUnicode; data: pointer; maxdatalen: DWord): DWord;
+    function ReadMax(entry: PWideChar; data: pointer; maxdatalen: DWord): DWord;
     /// retrieve a Windows Registry content size as binary bytes after ReadOpen()
     // - returns -1 if the entry is not found
-    function ReadSize(const entry: SynUnicode): integer;
+    function ReadSize(entry: PWideChar: integer;
     /// enumeration of all sub-entries names of a Windows Registry key
     function ReadEnumEntries: TRawUtf8DynArray;
   end;
