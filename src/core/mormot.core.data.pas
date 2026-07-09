@@ -6505,21 +6505,22 @@ end;
 function TDynArray.ItemCompare(A, B: pointer; CaseInSensitive: boolean): integer;
 var
   comp: TRttiCompare;
-label
-  raw;
 begin
   if Assigned(fCompare) then
   begin
-    result := fCompare(A^, B^);
+    result := fCompare(A^, B^); // custom comparison
     exit;
   end;
-  if not(rcfArrayItemManaged in fInfo.Flags) then
-    goto raw; // fast binary comparison with length
-  comp := RTTI_COMPARE[CaseInsensitive, fInfo.Cache.ItemInfoRaw.Kind];
-  if Assigned(comp) then
-    comp(A, B, fInfo.Cache.ItemInfoRaw, result)
-  else
-raw:result := MemCmp(A, B, fInfo.Cache.ItemSize)
+  if rcfArrayItemManaged in fInfo.Flags then
+  begin
+    comp := RTTI_COMPARE[CaseInsensitive, fInfo.Cache.ItemInfoRaw.Kind];
+    if Assigned(comp) then
+    begin
+      comp(A, B, fInfo.Cache.ItemInfoRaw, result); // RTTI comparison
+      exit;
+    end;
+  end;
+  result := MemCmp(A, B, fInfo.Cache.ItemSize); // fallback to binary comparison
 end;
 
 function TDynArray.Add(const Item): PtrInt;
@@ -8034,25 +8035,26 @@ var
   rtti: PRttiInfo;
   cmp: TRttiCompare;
   n: PtrInt;
-label
-  bin;
 begin
   n := GetCount;
   if (n <> 0) and
      (@Item <> nil) then
-    if not(rcfArrayItemManaged in fInfo.Flags) then
-bin:  result := AnyScanIndex(fValue^, @Item, n, fInfo.Cache.ItemSize)
-    else
+  begin
+    if rcfArrayItemManaged in fInfo.Flags then
     begin
       rtti := fInfo.Cache.ItemInfoManaged;
-      if rtti = nil then
-        goto bin; // unmanaged items
-      cmp := RTTI_COMPARE[CaseInSensitive, rtti.Kind];
-      if Assigned(cmp) then
-        result := IndexFind(fValue^, @Item, cmp, rtti, n)
-      else
-        goto bin;
-    end
+      if rtti <> nil then
+      begin
+        cmp := RTTI_COMPARE[CaseInSensitive, rtti.Kind];
+        if Assigned(cmp) then
+        begin
+          result := IndexFind(fValue^, @Item, cmp, rtti, n); // RTTI search
+          exit;
+        end;
+      end;
+    end;
+    result := AnyScanIndex(fValue^, @Item, n, fInfo.Cache.ItemSize); // binary
+  end
   else
     result := -1;
 end;
