@@ -1894,14 +1894,17 @@ type
 
   {$A+}
 
-  /// handle cross-platform time conversions, following Microsoft time zones
+  /// handle cross-platform time conversions, following Microsoft zones naming
   // - is able to retrieve accurate information from the Windows registry,
   // or from a binary compressed file on other platforms (which should have been
-  // saved from a Windows system first)
+  // saved from a Windows system first) using uniform and user-friendly naming
+  // of time zones, as defined by Microsoft for Windows
+  // - consider mormot.core.os.pas LocalToUtc/UtcToLocal() functions for regular
+  // conversions within the current Operating System time zone - this class is
+  // more likely to be used on Web/REST server side, or to bypass the system
+  // regional settings for an end-user application
   // - for Linux/POSIX our mORMot 2 repository supplies a ready-to-use
   // ! {$R mormot.tz.res}
-  // - each time zone will be identified by its TzId string, as defined by
-  // Microsoft for its Windows Operating system
   // - note that each instance is thread-safe
   TSynTimeZone = class(TObjectRWLightLock)
   protected
@@ -1926,7 +1929,8 @@ type
     destructor Destroy; override;
     /// will retrieve the default shared TSynTimeZone instance
     // - on Windows, will call LoadFromRegistry
-    // - under Linux, try first with LoadFromResource, then LoadFromFile do should be located with the executable,
+    // - under Linux, try first with LoadFromResource, then LoadFromFile with
+    // a local ExecutableName.tz file
     // - see also the NowToLocal/LocalToUtc/UtcToLocal global functions
     class function Default: TSynTimeZone;
       {$ifdef HASINLINE} static; inline; {$endif}
@@ -7967,7 +7971,7 @@ begin
     exit;
   result := IsNotVoidUtc(TzId);
   if result then
-    exit;
+    exit; // 'UTC' returns Bias=0
   // use the internal hash table
   fSafe.ReadLock;
   try
