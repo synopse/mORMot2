@@ -7850,7 +7850,7 @@ begin
     n := length(keys);
     fZones.Capacity := n;
     for i := 0 to n - 1 do
-      if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i], {reopen=}true) then
+      if reg.ReadOpen(wrLocalMachine, [REGKEY, keys[i]], {reopen=}true) then
       begin
         z.Clear;
         z.id := keys[i]; // registry keys are genuine by definition
@@ -7860,7 +7860,7 @@ begin
            (current <> '') and
            (reg.ReadString('Std') = current) then
           fCurrentIndex := fZoneCount;
-        if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i] + '\Dynamic DST', true) then
+        if reg.ReadOpen(wrLocalMachine, [REGKEY, keys[i], '\Dynamic DST'], true) then
         begin
           // warning: never defined on XP/2003, and not for all entries
           first := reg.ReadDword('FirstEntry');
@@ -7871,8 +7871,8 @@ begin
             n := 0;
             SetLength(z.dyn, last - first + 1);
             for year := first to last do
-              if reg.ReadBuffer(Utf8ToSynUnicode(UInt32ToUtf8(year)),
-                @z.dyn[n].tzi, SizeOf(TTimeZoneInfo)) then
+              if reg.ReadBufferU(
+                   UInt32ToUtf8(year), @z.dyn[n].tzi, SizeOf(TTimeZoneInfo)) then
               begin
                 z.dyn[n].year := year;
                 inc(n);
@@ -7925,7 +7925,7 @@ begin
   info.TimeZone.DaylightBias := z^.tzi.bias_dlt;
   Utf8ToWideChar(@info.TimeZoneKeyName, pointer(z^.id), 128, length(z^.id), true);
   // retrieve additional information from the registry
-  if not reg.ReadOpen(wrLocalMachine, REGKEY + z^.id) then
+  if not reg.ReadOpen(wrLocalMachine, [REGKEY, z^.id]) then
     ESynException.RaiseUtf8('%.ChangeOperatingSystemTimeZone: missing % key',
       [self, z^.id]); // paranoid
   try // direct copy of the UTF-16 buffer from registry
