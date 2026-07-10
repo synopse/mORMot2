@@ -1268,7 +1268,10 @@ begin
      (PosExChar('`', fName) > 0) then
   begin
     inc(fParser.fDtoCounter); // TDto### is simple and convenient
-    Make(['TDto', fParser.Name, fParser.fDtoCounter], fPascalName);
+    if fParser.DtoTypePrefix = '' then
+      Make(['TDto', fParser.Name, fParser.fDtoCounter], fPascalName)
+    else
+      Make(['T', fParser.DtoTypePrefix, 'Dto', fParser.fDtoCounter], fPascalName)
   end
   else
     Join(['T', fParser.DtoTypePrefix,
@@ -2584,7 +2587,10 @@ begin
           if nam = '' then
           begin
             inc(fEnumCounter); // TEnum### seems easier
-            Make(['Enum', fName, fEnumCounter], nam);
+            if fDtoTypePrefix = '' then
+              Make(['Enum', fName, fEnumCounter], nam)
+            else
+              Make([fDtoTypePrefix, 'Enum', fEnumCounter], nam);
           end;
           enumType := TPascalEnum.Create(self, nam, aSchema);
           fEnums.AddObject(fmt, enumType);
