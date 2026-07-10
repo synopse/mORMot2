@@ -396,7 +396,6 @@ type
   TPascalRecord = class(TPascalCustomType)
   private
     fProperties: TRawUtf8List; // Objects are owned TPascalProperty
-    fRttiTextRepresentation: RawUtf8;
     fTypes: set of TOpenApiBuiltInType;
     fFlags: set of (fNeedsDummyField, fIsVoidVariant, fIsInlined);
     procedure ResolveDependencies(var all, pending: TPascalRecordDynArray);
@@ -573,12 +572,12 @@ type
     fTitle, fGeneratedBy, fGeneratedByLine, fDtoTypePrefix: RawUtf8;
     fVersion: TOpenApiVersion;
     fOptions: TOpenApiParserOptions;
-    fEnumCounter, fDtoCounter: integer;
+    fEnumCounter, fDtoCounter, fInlineCounter: integer;
     fDtoUnitName, fClientUnitName, fClientClassName: RawUtf8;
     fOrderedRecords: TPascalRecordDynArray;
     fEnumPrefix: TRawUtf8DynArray;
     function ParseRecordDefinition(const aDefinitionName: RawUtf8;
-      aSchema: POpenApiSchema; aTemporary: boolean = false): TPascalRecord;
+      aSchema: POpenApiSchema; aInlined: boolean = false): TPascalRecord;
     procedure ParsePath(const aPath: RawUtf8; aPathItem: POpenApiPathItem);
     function NewPascalTypeFromSchema(aSchema: POpenApiSchema;
       aSchemaName: RawUtf8 = ''): TPascalType;
@@ -2392,6 +2391,7 @@ begin
   fEnumPrefix := nil;
   fEnumCounter := 0;
   fDtoCounter := 0;
+  fInlineCounter := 0;
   fDtoUnitName := '';
   fClientUnitName := '';
   fClientClassName := '';
@@ -2500,8 +2500,6 @@ function TOpenApiParser.NewPascalTypeFromSchema(aSchema: POpenApiSchema;
 var
   all: POpenApiSchemaDynArray;
   ref, fmt, nam: RawUtf8;
-  i: integer;
-  rec, rectemp: TPascalRecord;
   items: POpenApiSchema;
   enum, props: PDocVariantData;
   enumType: TPascalEnum;
@@ -2538,26 +2536,11 @@ begin
         result := TPascalType.CreateBuiltin(self, obtVariant, aSchema);
         exit;
       end;
-      nam := '#' + RawUtf8ArrayToCsv(props^.GetNames, '_'); // unique
-      aSchemaName := nam;
-      for i := 2 to 20 do // try if this type does not already exist as such
-      begin
-        rec := fRecords.GetObjectFrom(aSchemaName);
-        if rec = nil then
-          break;
-        if fmt = '' then
-        begin
-          rectemp := ParseRecordDefinition(aSchemaName, aSchema, {temp=}true);
-          fmt := rectemp.ToRttiTextRepresentation; // just field names and types
-          rectemp.Free;
-        end;
-        if rec.ToRttiTextRepresentation = fmt then // same raw pascal definition
-        begin
-          result := TPascalType.CreateCustom(rec);
-          exit;
-        end;
-        Make([nam, i], aSchemaName);
-      end;
+      inc(fInlineCounter);
+      Make(['#inline', fInlineCounter], aSchemaName); // eventually renamed as TDto
+      result := TPascalType.CreateCustom(
+        ParseRecordDefinition(aSchemaName, aSchema, {inlined=}true));
+      exit;
     end;
     result := TPascalType.CreateCustom(GetRecord(aSchemaName, aSchema));
   end
@@ -2702,7 +2685,7 @@ begin
 end;
 
 function TOpenApiParser.ParseRecordDefinition(const aDefinitionName: RawUtf8;
-  aSchema: POpenApiSchema; aTemporary: boolean): TPascalRecord;
+  aSchema: POpenApiSchema; aInlined: boolean): TPascalRecord;
 var
   i, j: PtrInt;
   def: POpenApiSchemaDynArray;
@@ -2717,8 +2700,9 @@ begin
     EOpenApi.RaiseUtf8('%.ParseRecordDefinition: no % definition in schema',
       [self, aDefinitionName]);
   result := TPascalRecord.Create(self, aDefinitionName, aSchema);
-  if not aTemporary then
-    fRecords.AddObject(aDefinitionName, result); // allow recursive props
+  if aInlined then
+    include(result.fFlags, fIsInlined);
+  fRecords.AddObject(aDefinitionName, result); // allow recursive props
   // aggregate all needed information
   def := aSchema^.AllOf;
   if def = nil then
