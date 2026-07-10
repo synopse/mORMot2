@@ -10060,6 +10060,7 @@ begin
   Check(not IsContentTypeJsonU('application/vnd.mysoft.v1+'));
   Check(IsContentTypeJsonU('application/+json'));
   Check(not IsContentTypeJsonU('application/xml'));
+  Check(not IsContentTypeJsonU(XML_CONTENT_TYPE));
   Check(IsContentTypeJsonU('anything/json'));
   Check(IsContentTypeJsonU('something/JSON'));
   Check(not IsContentTypeJsonU('something/SON'));
@@ -10072,6 +10073,7 @@ begin
   Check(IsContentTypeTextU('application/json'));
   Check(IsContentTypeTextU('APPLICATION/JSON'));
   Check(IsContentTypeTextU('application/xml'));
+  Check(IsContentTypeTextU(XML_CONTENT_TYPE));
   Check(not IsContentTypeTextU('application/octet-stream'));
   Check(IsContentTypeTextU('application/javascript'));
   Check(IsContentTypeTextU('application/VND.API+JSON'));
