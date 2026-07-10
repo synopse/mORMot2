@@ -329,7 +329,9 @@ type
     function ToDefaultParameterValue(aParam: TPascalParameter): RawUtf8;
 
     function IsBuiltin: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     function IsEnum: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     function IsRecord: boolean;
       {$ifdef HASINLINE} inline; {$endif}
     property IsArray: boolean
@@ -404,7 +406,7 @@ type
     destructor Destroy; override;
     procedure CopyProperties(aDest: TPascalRecord);
     procedure ToTypeDefinition(W: TTextWriter); override;
-    function ToRttiTextRepresentation: RawUtf8;
+    procedure ToRttiTextRepresentation(W: TTextWriter);
     function ToRttiRegisterDefinitions: RawUtf8;
     property Properties: TRawUtf8List
       read fProperties;
@@ -1614,7 +1616,7 @@ begin
   if ClassName <> '' then
     Append(line, ClassName, '.');
   Append(line, FunctionName, '(');
-  // path + query parmaeters
+  // path + query parameters
   for i := 0 to Length(fParameters) - 1 do
   begin
     p := fParameters[i];
@@ -2203,22 +2205,22 @@ begin
     ToArrayTypeDefinition, fParser.LineEnd]);
 end;
 
-function TPascalRecord.ToRttiTextRepresentation: RawUtf8;
+procedure TPascalRecord.ToRttiTextRepresentation(W: TTextWriter);
 var
   i: PtrInt;
   p: TPascalProperty;
   line, name: RawUtf8;
 begin
-  result := fRttiTextRepresentation;
-  if (result <> '') or
-     fIsVoidVariant then
+  if (fIsVoidVariant in fFlags) or
+     (fDuplicateOf <> nil) then
     exit;
+  W.AddDirect(' ', ' ');
   FormatUtf8('_% = ''', [PascalName], line);
   for i := 0 to fProperties.Count - 1 do
   begin
     if length(line) > 70 then // Delphi IDE is limited to 255 chars per line
     begin
-      Append(result, [line, ''' +', fParser.LineEnd, '    ''']);
+      W.AddStrings([line, ''' +', fParser.LineEnd, '    ''']);
       line := '';
     end;
     name := fProperties[i];
@@ -2227,12 +2229,11 @@ begin
     p := fProperties.ObjectPtr[i];
     Append(line, [name, ':', p.PropType.ToPascalName(true, true), ' ']);
   end;
-  if fNeedsDummyField then
+  if fNeedsDummyField in fFlags then
     Append(line, '_:RawUtf8''')
   else
     line[length(line)] := '''';
-  Append(result, line, ';');
-  fRttiTextRepresentation := result; // cached internally
+  W.AddStrings([line, ';', fParser.LineEnd]);
 end;
 
 function TPascalRecord.ToRttiRegisterDefinitions: RawUtf8;
@@ -2479,11 +2480,12 @@ begin
   if aRef[2] = '/' then
     delete(aRef, 1, 2)
   else
-    delete(aRef, 1, 1); // malformed "#components/parameters/JobID" link
+    delete(aRef, 1, 1); // allow malformed "#components/parameters/JobID" link
   fSpecs.Data.GetDocVariantByPath(aRef, PDocVariantData(result), '/');
 end;
 
 function PascalNameFromRef(const ref: RawUtf8): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
 begin
   result := SplitRight(ref, '/');
 end;
@@ -2923,7 +2925,7 @@ begin
       '  // exact definition of the DTOs expected JSON serialization', LineEnd]);
     for i := 0 to high(rec) do
       if rec[i].Properties.Count <> 0 then
-        w.AddStrings([fLineIndent, rec[i].ToRttiTextRepresentation, LineEnd]);
+        rec[i].ToRttiTextRepresentation(W);
   end;
   // define the private RTTI registration procedure
   w.AddStrings([LineEnd, LineEnd,
