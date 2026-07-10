@@ -3550,8 +3550,8 @@ begin
   end;
   if TServiceFactoryServer(Service).ResultAsXMLObjectIfAcceptOnlyXML and
      FindNameValue(Call^.InHead, 'ACCEPT:', fTemp) and
-     (PropNameEquals(fTemp, 'application/xml') or
-      PropNameEquals(fTemp, 'text/xml')) then
+     (IdemPChar(pointer(fTemp), 'APPLICATION/XML') or
+      IdemPChar(pointer(fTemp), 'TEXT/XML')) then
     ForceServiceResultAsXMLObject := true;
   try
     InternalExecuteSoaByInterfaceComputeResult;
