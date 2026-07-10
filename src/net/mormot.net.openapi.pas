@@ -398,7 +398,10 @@ type
     fProperties: TRawUtf8List; // Objects are owned TPascalProperty
     fTypes: set of TOpenApiBuiltInType;
     fFlags: set of (fNeedsDummyField, fIsVoidVariant, fIsInlined);
+    fNestedHash: Int64;
+    fDuplicateOf: TPascalRecord;
     procedure ResolveDependencies(var all, pending: TPascalRecordDynArray);
+    function NestedHash: Int64;
   public
     constructor Create(aParser: TOpenApiParser; const SchemaName: RawUtf8;
       Schema: POpenApiSchema = nil);
@@ -2286,6 +2289,41 @@ begin
   PtrArrayDelete(pending, self);
 end;
 
+function TPascalRecord.NestedHash: Int64;
+var
+  i: PtrInt;
+  p: TPascalProperty;
+  t: TPascalType;
+  c: TPascalCustomType;
+  h: TQWordRec;
+begin
+  result := fNestedHash;
+  if (result <> 0) or
+     ((opoDtoNoReduceNested in fParser.Options) and
+      not (obtRecord in fTypes)) then
+    exit;
+  h.V := 0; // h.L = name h.H = type
+  for i := 0 to fProperties.Count - 1 do
+  begin
+    p := fProperties.ObjectPtr[i];
+    h.L := crc32c(h.L, pointer(p.PascalName), length(p.PascalName) + 1);
+    t := p.PropType;
+    h.H := crc32cBy4(h.H, ord(t.BuiltInType));
+    c := t.CustomType;
+    if c <> nil then
+      if c.InheritsFrom(TPascalRecord) and
+         (c <> self) then
+        h.H := crc32cBy4(h.H, TPascalRecord(c).NestedHash)
+      else
+        h.H := crc32c(h.H, pointer(c.PascalName), length(c.PascalName) + 1);
+    if t.IsArray then
+      h.H := not h.H;
+  end;
+  result := h.V;
+  inc(result, ord(result = 0)); // ensure <> 0
+  fNestedHash := result;
+end;
+
 
 { TPascalException }
 
@@ -2800,17 +2838,46 @@ end;
 
 function TOpenApiParser.GetOrderedRecords: TPascalRecordDynArray;
 var
-  i: PtrInt;
+  i, j: PtrInt;
+  ri, rj: TPascalRecord;
   pending: TPascalRecordDynArray;
 begin
-  result := fOrderedRecords; // first check if not already cached
+  // first check if not already cached
+  result := fOrderedRecords;
   if result <> nil then
     exit;
+  // compute the dependency chain to emit one-pass pascal type definitions
   for i := 0 to fRecords.Count - 1 do
     TPascalRecord(fRecords.ObjectPtr[i]).ResolveDependencies(result, pending);
   if pending <> nil then // paranoid
     EOpenApi.RaiseUtf8('%.GetOrderedRecords: pending=%', [self, length(pending)]);
-  fOrderedRecords := result; // compute once
+  // computed once
+  fOrderedRecords := result;
+  // identify all similar records once we have a clean dependency chain
+  if opoDtoNoReduce in fOptions then
+    exit;
+  for i := 0 to length(result) - 1 do
+    result[i].NestedHash;
+  for i := 0 to length(result) - 1 do
+  begin
+    ri := result[i];
+    if (ri.fDuplicateOf = nil) and
+       ((opoDtoReduceNamed in fOptions) or
+        (fIsInlined in ri.fFlags)) and
+       ((not (opoDtoNoReduceNested in fOptions)) or
+        (not (obtRecord in ri.fTypes))) then
+      for j := 0 to length(result) - 1 do
+      begin
+        rj := result[j];
+        if (ri.fNestedHash = rj.fNestedHash) and
+           (rj <> ri) and
+           ((opoDtoReduceNamed in fOptions) or
+            (fIsInlined in rj.fFlags)) and
+           (rj.fDuplicateOf = nil) and
+           (ri.Properties.Count = rj.Properties.Count) then
+          rj.fDuplicateOf := ri;
+      end;
+  end;
 end;
 
 function TOpenApiParser.GetOperationsByTag: TPascalOperationsByTagDynArray;
