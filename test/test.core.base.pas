@@ -9702,11 +9702,14 @@ begin
   for i := 1 to 100 do
   begin
     s := DateTimeToIso8601(Now / 20 + rnd.NextDouble * 20, true);
-    t := UrlEncode(s);
+    t := UrlEncode(s); // e.g. '1906-05-18T02%3A02%3A22'
     CheckEqual(UrlDecode(t), s);
     d := 'seleCT=' + t + '&where=' + Int32ToUtf8(i);
     Check(UrlDecodeNeedParameters(pointer(d), 'where,select'));
     Check(not UrlDecodeNeedParameters(pointer(d), 'foo,select'));
+    Check(not UrlDecodeNeedParameters(pointer(d), 'wher,select'));
+    Check(not UrlDecodeNeedParameters(pointer(d), 'where,selected'));
+    Check(not UrlDecodeNeedParameters(pointer(d), 'wheres,select'));
     Check(UrlDecodeValue(pointer(d), 'SELECT=', t, @U));
     CheckEqual(t, s, 'UrlDecodeValue');
     Check(IdemPChar(U, 'WHERE='), 'Where');
