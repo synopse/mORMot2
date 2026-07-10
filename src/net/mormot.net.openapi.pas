@@ -525,6 +525,10 @@ type
   // - opoDtoNoRefFrom generates no 'from #/....' comment for the DTOs
   // - opoDtoNoExample generates no 'Example:' comment for the DTOs
   // - opoDtoNoPattern generates no 'Pattern:' comment for the DTOs
+  // - opoDtoNoReduce won't search for duplicated inlined types
+  // - opoDtoNoReduceNested will deduplicate inlined types of simple fields only
+  // - opoDtoReduceNamed will deduplicate types with an explicit $ref definition
+  // (not enabled by default since tends to make false positives)
   // - opoClientExcludeDeprecated removes any operation marked as deprecated
   // - opoClientNoDescription generates only the minimal comments for the client
   // - opoClientNoException won't generate any exception, and fallback to EJsonClient
@@ -547,6 +551,9 @@ type
     opoDtoNoRefFrom,
     opoDtoNoExample,
     opoDtoNoPattern,
+    opoDtoNoReduce,
+    opoDtoNoReduceNested,
+    opoDtoReduceNamed,
     opoClientExcludeDeprecated,
     opoClientNoDescription,
     opoClientNoException,
@@ -2014,6 +2021,11 @@ begin
   ct := CustomType;
   if Assigned(ct) then
   begin
+    if AsFinalType and
+       NoRecordArrayTypes and // from ToRttiTextRepresentation
+       ct.InheritsFrom(TPascalRecord) and
+       (TPascalRecord(ct).fDuplicateOf <> nil) then
+       ct := TPascalRecord(ct).fDuplicateOf; // use original type definition
     result := ct.PascalName;
     if (result = 'variant') or
        not IsArray then
@@ -2173,7 +2185,14 @@ begin
      (fParser.Options * [opoDtoNoRefFrom, opoDtoNoDescription] = []) then
     fParser.Comment(w, ['from ', fFromRef]);
   // generate the record type definition
-  w.AddStrings([fParser.fLineIndent, PascalName, ' = packed record', fParser.LineEnd]);
+  w.AddStrings([fParser.fLineIndent, PascalName, ' = ']);
+  if fDuplicateOf <> nil then
+  begin
+    w.AddStrings([fDuplicateOf.PascalName, ';', fParser.LineEnd,
+                  ToArrayTypeDefinition, fParser.LineEnd]);
+    exit; // use a pascal type alias for this exact fields match
+  end;
+  w.AddStrings(['packed record', fParser.LineEnd]);
   for i := 0 to fProperties.Count - 1 do
   begin
     p := fProperties.ObjectPtr[i];
@@ -3010,7 +3029,8 @@ begin
   begin
     w.AddStrings(['  Rtti.RegisterFromText([', LineEnd]);
     for i := 0 to high(rec) do
-      if rec[i].Properties.Count <> 0 then
+      if (rec[i].Properties.Count <> 0) and
+         (rec[i].fDuplicateOf = nil) then
       begin
         if i > 0 then
           w.AddStrings([',', LineEnd]);
