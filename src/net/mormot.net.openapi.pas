@@ -398,7 +398,7 @@ type
     fProperties: TRawUtf8List; // Objects are owned TPascalProperty
     fRttiTextRepresentation: RawUtf8;
     fTypes: set of TOpenApiBuiltInType;
-    fNeedsDummyField, fIsVoidVariant: boolean;
+    fFlags: set of (fNeedsDummyField, fIsVoidVariant, fIsInlined);
     procedure ResolveDependencies(var all, pending: TPascalRecordDynArray);
   public
     constructor Create(aParser: TOpenApiParser; const SchemaName: RawUtf8;
@@ -2003,16 +2003,21 @@ begin
 end;
 
 function TPascalType.ToPascalName(AsFinalType, NoRecordArrayTypes: boolean): RawUtf8;
+var
+  ct: TPascalCustomType;
 begin
-  if Assigned(CustomType) then
+  ct := CustomType;
+  if Assigned(ct) then
   begin
-    result := CustomType.PascalName;
+    result := ct.PascalName;
     if (result = 'variant') or
        not IsArray then
       exit;
-    if AsFinalType and NoRecordArrayTypes and IsRecord then
+    if AsFinalType and
+       NoRecordArrayTypes and
+       IsRecord then
       AsFinalType := false;
-    result := CustomType.ToArrayTypeName(AsFinalType);
+    result := ct.ToArrayTypeName(AsFinalType);
   end
   else
   begin
@@ -2157,7 +2162,7 @@ var
   p: TPascalProperty;
   s: POpenApiSchema;
 begin
-  if fIsVoidVariant then
+  if fIsVoidVariant in fFlags then
     exit;
   if (fFromRef <> '') and
      (fParser.Options * [opoDtoNoRefFrom, opoDtoNoDescription] = []) then
@@ -2194,7 +2199,7 @@ begin
         p.PropType.ToPascalName({final=}true, {noarray=}p.PropType.CustomType = self),
         ';', fParser.LineEnd]);
   end;
-  if fNeedsDummyField then
+  if fNeedsDummyField in fFlags then
     w.AddStrings([
       fParser.fLineIndent, '  // for Delphi 7-2009 compatibility', fParser.LineEnd,
       fParser.fLineIndent, '  dummy_: RawUtf8;', fParser.LineEnd]);
@@ -2721,7 +2726,7 @@ begin
             aSchema^.HasProperties) then
     begin
       // this is no true record, but e.g. a regular value in object disguise
-      result.fIsVoidVariant := true;
+      include(result.fFlags, fIsVoidVariant);
       result.fPascalName := 'variant';
     end
     else
@@ -2758,12 +2763,12 @@ begin
   if result.fProperties.Count = 0 then
   begin
     // this is no fixed record, but maybe a "oneOf" or "anyOf" object
-    result.fIsVoidVariant := true;
+    include(result.fFlags, fIsVoidVariant);
     result.fPascalName := 'variant';
   end
-  else
-    result.fNeedsDummyField := (opoGenerateOldDelphiCompatible in fOptions) and
-                               (result.fTypes - [obtInteger .. obtGuid] = []);
+  else if (opoGenerateOldDelphiCompatible in fOptions) and
+          (result.fTypes - [obtInteger .. obtGuid] = []) then
+      include(result.fFlags, fNeedsDummyField);
 end;
 
 procedure TOpenApiParser.ParsePath(
