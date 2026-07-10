@@ -3348,6 +3348,8 @@ var
   id: TSynMonitorUsageID;
   g: TSynMonitorUsageGranularity;
 begin
+  if fPrevious.Value = 0 then
+    exit; // nothing was tracked yet - nothing to save
   id.FromTimeLog(fPrevious.Value);
   Save(id, mugHour, Scope); // always save current minutes values
   for g := mugDay to mugYear do
