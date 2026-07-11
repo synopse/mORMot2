@@ -2964,7 +2964,7 @@ function Utf8ICompReference(u1, u2: PUtf8Char): PtrInt;
 // - won't call the Operating System, so is consistent on all platforms, and
 // don't require any temporary UTF-16 decoding
 // - has a branchless optimized process of 7-bit ASCII charset [a..z] -> [A..Z]
-function Utf8ILCompReference(u1, u2: PUtf8Char; L1, L2: integer): PtrInt;
+function Utf8ILCompReference(u1, u2: PUtf8Char; L1, L2: PtrInt): PtrInt;
 
 /// compare two UCS-4 strings
 function Ucs4Compare(const a, b: RawUcs4): integer;
@@ -4746,12 +4746,12 @@ begin
       extra := utf8.Lookup[ord(Utf8Text^)];
       inc(Utf8Text);
       if extra = UTF8_ASCII then
-        continue
+        continue // 7-bit
       else if extra > UTF8_MAX then
         if extra = UTF8_ZERO then
-          break // end of input
+          break  // end of input
         else
-          exit // invalid
+          exit   // invalid
       else
       begin
         n := extra;
@@ -7918,10 +7918,9 @@ begin
         if c = UTF8_INVALID then
           exit // invalid leading byte (allow full UTF-8/UCS-4 range)
         else
-          // just ignore surrogates for soundex
-          inc(U, c);
+          inc(U, c); // ignore surrogates for soundex (assume valid UTF-8)
       end;
-      until false;
+    until false;
     // here we had the first char match -> check if this word match UpperValue
     UpperValue := beg;
     repeat
@@ -7953,7 +7952,7 @@ begin
         if c = UTF8_INVALID then
           exit // invalid leading byte (allow full UTF-8/UCS-4 range)
         else
-          inc(U, c);
+          inc(U, c); // assume input is valid UTF-8
         break;
       end;
       inc(UpperValue);
@@ -8449,7 +8448,7 @@ t1:dec(P, 2);
 tt:len := lenSub;
   if lenSub <> 0 then
     repeat
-      if (Lookup[Sub[len]] <> Lookup[P[len + 1]]) or
+      if (Lookup[Sub[len]]     <> Lookup[P[len + 1]]) or
          (Lookup[Sub[len + 1]] <> Lookup[P[len + 2]]) then
         goto s0;
       inc(len, 2);
@@ -8461,7 +8460,7 @@ tt:len := lenSub;
 t0:len := lenSub;
   if lenSub <> 0 then
     repeat
-      if (Lookup[Sub[len]] <> Lookup[P[len]]) or
+      if (Lookup[Sub[len]]     <> Lookup[P[len]]) or
          (Lookup[Sub[len + 1]] <> Lookup[P[len + 1]]) then
         goto s1;
       inc(len, 2);
@@ -11827,16 +11826,15 @@ begin
     repeat
       c := ord(S^);
       if c <= $7f then
+      begin
         if c = 0 then
-          break
-        else
-        begin
-          inc(c, tab.Block[0, c]); // branchless a..z -> A..Z
-          D^ := AnsiChar(c);
-          inc(S);
-          inc(D);
-          continue;
-        end
+          break;
+        inc(c, tab.Block[0, c]); // branchless a..z -> A..Z
+        D^ := AnsiChar(c);
+        inc(S);
+        inc(D);
+        continue;
+      end
       else if c and $20 = 0 then
       begin
         c := (c shl 6) + byte(S[1]) - UTF8_EXTRA1_OFFSET; // process $0..$7ff
@@ -11844,7 +11842,7 @@ begin
       end
       else
       begin
-        s2 := S;
+        s2 := S;                             // var s2 on stack, s as register
         c := UTF8_TABLE.GetHighUtf8Ucs4(s2); // handle even surrogates
         S := s2;
         if c = 0 then
@@ -12152,10 +12150,9 @@ c2low:          if c2 = 0 then
     result := 0;    // u1=u2
 end;
 
-function Utf8ILCompReference(u1, u2: PUtf8Char; L1, L2: integer): PtrInt;
+function Utf8ILCompReference(u1, u2: PUtf8Char; L1, L2: PtrInt): PtrInt;
 var
-  c2: PtrUInt;
-  extra, i: integer;
+  c2, extra, i: PtrUInt;
   {$ifdef CPUX86NOTPIC}
   tab: TUnicodeUpperTable absolute UU;
   utf8: TUtf8Table absolute UTF8_TABLE;
