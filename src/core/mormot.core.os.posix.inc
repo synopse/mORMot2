@@ -850,24 +850,8 @@ end;
 
 {$ifdef FPC} // if not in mormot.core.os.delphi.pas
 
-{$ifdef OSANDROID} // fallback to TZSeconds i.e. libc localtime() on Android
-
-function ToLocalTime(const utc: TDateTime): TDateTime; inline;
-begin
-  result := utc + TZSeconds * SecsPerDate;
-end;
-
-function ToUtcTime(const local: TDateTime): TDateTime; inline;
-begin
-  result := local - TZSeconds * SecsPerDate;
-end;
-
-function EpochToLocal(I64: TUnixTime): TUnixTime; inline;
-begin
-  result := I64 + TZSeconds;
-end;
-
-{$else} // TTZInfo is the native FPC way of handling time zones on POSIX
+{$if declared(GetLocalTimezone)}
+// TTZInfo is the native FPC way of handling time zones on POSIX
 
 function GetLocalBias(I64: TUnixTime): PtrInt; inline;
 var
@@ -894,7 +878,26 @@ begin
   result := I64 + GetLocalBias(I64);
 end;
 
-{$endif OSANDROID}
+{$else}
+
+// fallback to TZSeconds i.e. libc localtime() on Android or FPC 3.2.0/3.2.2
+
+function ToLocalTime(const utc: TDateTime): TDateTime; inline;
+begin
+  result := utc + TZSeconds * SecsPerDate;
+end;
+
+function ToUtcTime(const local: TDateTime): TDateTime; inline;
+begin
+  result := local - TZSeconds * SecsPerDate;
+end;
+
+function EpochToLocal(I64: TUnixTime): TUnixTime; inline;
+begin
+  result := I64 + TZSeconds;
+end;
+
+{$endif declared(GetLocalTimezone)}
 
 {$endif FPC}
 
