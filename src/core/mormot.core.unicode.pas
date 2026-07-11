@@ -11837,8 +11837,12 @@ begin
       end
       else if c and $20 = 0 then
       begin
-        c := (c shl 6) + byte(S[1]) - UTF8_EXTRA1_OFFSET; // process $0..$7ff
-        inc(S, 2);
+        inc(S);
+        c := c shl 6;
+        if (byte(S^) and $c0) <> $80 then
+          exit; // invalid input content
+        inc(c, PtrUInt(S^) - UTF8_EXTRA1_OFFSET); // process $0..$7ff
+        inc(S);
       end
       else
       begin
@@ -12216,7 +12220,9 @@ begin
             i := 0;
             repeat
               result := result shl 6;
-              inc(result, ord(u1[i]));
+              if (byte(u1[i]) and $c0) <> $80 then
+                exit; // invalid input content
+              inc(result, PtrUInt(u1[i]));
               inc(i);
             until i = extra;
             inc(u1, extra);
@@ -12243,7 +12249,9 @@ begin
             i := 0;
             repeat
               c2 := c2 shl 6;
-              inc(c2, ord(u2[i]));
+              if (byte(u2[i]) and $c0) <> $80 then
+                exit; // invalid input content
+              inc(c2, PtrUInt(u2[i]));
               inc(i);
             until i = extra;
             inc(u2, extra);
@@ -12318,7 +12326,9 @@ nxt:u0 := U;
       i := 0;
       repeat
         c := c shl 6;
-        inc(c, ord(U[i]));
+        if (byte(U[i]) and $c0) <> $80 then
+          exit; // invalid input content
+        inc(c, PtrUInt(U[i]));
         inc(i);
       until i = extra;
       inc(U, extra);
@@ -12354,7 +12364,9 @@ nxt:u0 := U;
         i := 0;
         repeat
           c := c shl 6;
-          inc(c, ord(u2[i]));
+          if (byte(u2[i]) and $c0) <> $80 then
+            exit; // invalid input content
+          inc(c, PtrUInt(u2[i]));
           inc(i);
         until i = extra;
         inc(u2, extra);
