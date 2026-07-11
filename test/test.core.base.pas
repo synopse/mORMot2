@@ -8357,10 +8357,10 @@ begin
   {$ifndef POSIXDELPHI} // SystemTimeToDateTime() not available on Delphi POSIX
   CheckSameTime(SystemTimeToDateTime(st), SystemTimeToDateTime(stl), 'UnixTimeToLocal');
   {$endif POSIXDELPHI}
-  {$ifdef FPC}
+  {$ifdef VER3_2_4}
   CheckSameTime(LocalTimeToUniversal(dtl), dt, 'LocalTimeToUniversal');
   CheckSameTime(UniversalTimeToLocal(dt), dtl, 'UniversalTimeToLocal');
-  {$endif FPC}
+  {$endif VER3_2_4}
   endtix := GetTickCount64 + 100; // 16ms resolution at worst on Windows
   repeat
     sleep(10); // likely to be executed in a background thread
