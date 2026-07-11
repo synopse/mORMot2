@@ -3022,7 +3022,7 @@ begin
   inc(p);
   repeat
     if p^ and $c0 <> $80 then
-      exit; // invalid input content
+      exit; // invalid input content -> return 0
     c := (c shl 6) + p^;
     inc(p);
     dec(n);
@@ -3366,7 +3366,7 @@ begin // slightly slower overload with explicit destlen
     else if extra = 1 then // optimized for U+80..U+7FF common range
     begin
       if byte(source^) and $c0 <> $80 then
-        break;
+        break; // stop at invalid input content
       c := (c shl 6) + cardinal(source^) - UTF8_EXTRA1_OFFSET; // c <= $ffff
       inc(source);
 by2:  if PtrUInt(dest) >= MaxDestChars then
@@ -3383,7 +3383,7 @@ by2:  if PtrUInt(dest) >= MaxDestChars then
     i := 0; // handle extra in 2..3 range
     repeat
       if byte(source[i]) and $c0 <> $80 then
-        goto quit; // invalid input content
+        goto quit; // stop at invalid input content
       c := (c shl 6) + cardinal(source[i]);
       inc(i);
     until i = extra;
@@ -3487,7 +3487,7 @@ next:   if PtrUInt(source) >= sourceBytes then
       else if extra = 1 then // optimized for U+80..U+7FF common range
       begin
         if byte(source^) and $c0 <> $80 then
-          break;
+          break; // stop at invalid input content
         c := (c shl 6) + cardinal(source^) - UTF8_EXTRA1_OFFSET; // c <= $ffff
         inc(source);
         PWord(dest)^ := c;  // most simple encoding as a single WideChar
@@ -3499,7 +3499,7 @@ next:   if PtrUInt(source) >= sourceBytes then
       i := 0; // handle extra in 2..3 range
       repeat
         if byte(source[i]) and $c0 <> $80 then
-          goto quit; // invalid input content
+          goto quit; // stop at invalid input content
         c := (c shl 6) + cardinal(source[i]);
         inc(i);
       until i = extra;
@@ -3508,7 +3508,7 @@ next:   if PtrUInt(source) >= sourceBytes then
       begin
         dec(c, offset);
         if c < minimum then
-          break; // invalid input content
+          break; // stop at invalid input content
       end;
       if c <= $ffff then // check for surrogates code range
         if (c < UTF16_HISURROGATE_MIN) or    // U+800 .. U+D800
@@ -3578,7 +3578,7 @@ begin
       end;
     repeat
       if byte(source^) and $c0 <> $80 then
-        goto done;
+        goto done; // stop at invalid input content
       inc(source); // length check is done below - may read after source[len]
       dec(c);
     until c = 0;
@@ -3667,7 +3667,7 @@ begin
       // check valid UTF-8 content
       repeat
         if byte(source^) and $c0 <> $80 then
-          exit;
+          exit; // invalid encoding
         inc(source);
         dec(c);
       until c = 0;
@@ -3707,7 +3707,7 @@ begin
     // check valid UTF-8 content
     repeat
       if source^ and $c0 <> $80 then
-        exit;
+        exit; // invalid encoding
       inc(source);
       dec(c);
     until c = 0;
@@ -3790,7 +3790,7 @@ begin
         if maxUtf16 <> 0 then
           continue;
 trunc:  SetLength(text, source - pointer(text));
-        result := true;
+        result := true; // reached end of requested UTF-16 input size
         exit;
       end
       else if c > UTF8_MAX then
@@ -3803,12 +3803,12 @@ trunc:  SetLength(text, source - pointer(text));
         // check valid UTF-8 content
         repeat
           if byte(source^) and $c0 <> $80 then
-            break;
+            goto trunc; // stop at invalid input content
           inc(source);
           dec(c);
         until c = 0;
         if maxUtf16 = 0 then
-          goto trunc;
+          goto trunc; // reached end of requested UTF-16 input size
       end;
     until false;
   result := false;
@@ -4758,7 +4758,7 @@ begin
         c := ord(Utf8Text[-1]);
         repeat
           if byte(Utf8Text^) and $c0 <> $80 then
-            exit; // invalid UTF-8 content
+            exit; // invalid UTF-8 content -> return false
           c := (c shl 6) + byte(Utf8Text^);
           inc(Utf8Text);
           dec(n)
@@ -4766,7 +4766,7 @@ begin
         dec(c, utf8.Extra[extra].offset);
         if (c > $ffff) or
            (fWideToAnsi[c] = ord('?')) then
-          exit; // invalid char in the WinAnsi code page
+          exit; // invalid char in the WinAnsi code page -> return false
       end;
     until false;
   result := true;
@@ -4801,7 +4801,7 @@ begin
       begin // here extra = 1 for 00000080 - 000007FF range
         c := ord(Utf8Text[-1]);
         if byte(Utf8Text^) and $c0 <> $80 then
-          exit; // invalid UTF-8 content
+          exit; // invalid UTF-8 content -> return false
         c := (c shl 6) + byte(Utf8Text^);
         inc(Utf8Text);
         dec(c, UTF8_EXTRA1_OFFSET);
@@ -4926,7 +4926,7 @@ by1:  c := byte(Source^);
         i := extra;
         repeat
           if byte(Source^) and $c0 <> $80 then
-            goto quit; // invalid UTF-8 content
+            goto quit; // stop at invalid UTF-8 content
           c := (c shl 6) + byte(Source^);
           inc(Source);
           dec(i);
@@ -7506,7 +7506,7 @@ begin
       i := 0;
       repeat
         if byte(P[i]) and $c0 <> $80 then
-          exit; // invalid input content
+          exit; // stop at invalid input content
         c := (c shl 6) + byte(P[i]);
         inc(i);
       until i = extra;
@@ -7514,7 +7514,7 @@ begin
       begin
         dec(c, offset);
         if c < minimum then
-          exit; // invalid input content
+          exit; // stop at invalid input content
       end;
       if (c <= 255) and
          (Table[c] <= $7f) then
@@ -11840,7 +11840,7 @@ begin
         inc(S);
         c := c shl 6;
         if (byte(S^) and $c0) <> $80 then
-          exit; // invalid input content
+          break; // stop at invalid input content
         inc(c, PtrUInt(S^) - UTF8_EXTRA1_OFFSET); // process $0..$7ff
         inc(S);
       end
@@ -12221,7 +12221,7 @@ begin
             repeat
               result := result shl 6;
               if (byte(u1[i]) and $c0) <> $80 then
-                exit; // invalid input content
+                goto neg; // invalid input content
               inc(result, PtrUInt(u1[i]));
               inc(i);
             until i = extra;
@@ -12250,7 +12250,7 @@ begin
             repeat
               c2 := c2 shl 6;
               if (byte(u2[i]) and $c0) <> $80 then
-                exit; // invalid input content
+                goto pos; // invalid input content
               inc(c2, PtrUInt(u2[i]));
               inc(i);
             until i = extra;
@@ -12327,7 +12327,7 @@ nxt:u0 := U;
       repeat
         c := c shl 6;
         if (byte(U[i]) and $c0) <> $80 then
-          exit; // invalid input content
+          exit; // invalid input content -> return nil
         inc(c, PtrUInt(U[i]));
         inc(i);
       until i = extra;
@@ -12365,7 +12365,7 @@ nxt:u0 := U;
         repeat
           c := c shl 6;
           if (byte(u2[i]) and $c0) <> $80 then
-            exit; // invalid input content
+            exit; // invalid input content -> return nil
           inc(c, PtrUInt(u2[i]));
           inc(i);
         until i = extra;
@@ -12431,7 +12431,7 @@ const
     3, 0, 6, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 5, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1);
-  _CHARS: array[#1 .. 'z'] of byte = (   // = TEXT_CHARS[]
+  _CHARS: array[#1 .. 'z'] of byte = (   // = TEXT_CHARS[] from Set_Chars()
     13, 13, 13, 13, 13, 13, 13, 13, 13, 10, 13, 13, 10, 13, 13, 13, 13, 13, 13,
     13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 1, 1, 1, 1, 1, 1, 1, 1,
     1, 1, 1, 1, 129, 129, 1, 209, 209, 209, 209, 209, 209, 209, 209, 209, 209,
