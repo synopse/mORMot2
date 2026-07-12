@@ -1716,6 +1716,7 @@ type
     // is cryptographic secure - probably pointless for a 32-bit value
     // - returns a value in range 0 <= Random32(max) < max
     function Random32(max: cardinal): cardinal; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// returns a 64-bit unsigned random number
     function Random64: QWord;
     /// returns a floating-point random number in range [0..1]
