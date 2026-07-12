@@ -1661,7 +1661,7 @@ begin
 end;
 
 const
-  // ensure generated number is at least (nbits - 1) + 0.5 bits
+  // ensure generated number is at least (nbits - 1) + 0.5 bits = sqrt(2)*2^31
   FIPS_MIN = $b504f334;
 
 function FipsMinIterations(bits: integer): integer;
@@ -1681,26 +1681,23 @@ procedure TBigInt.XorStrongRandom(last32: PCardinal);
 var
   min: integer;
 begin
-  min := 16;
+  min := 4; // paranoid
   repeat
     TAesPrng.Main.XorRandom(Value, Size * HALF_BYTES);
-    if GetBitsCount(Value^, Size * HALF_BITS) < Size * (HALF_BITS div 3) then
+    // one CSPRNG iteration generates on average 1/2 of bits = 1: check > 1/3
+    // - this sanity check is no RSA requirement, just weak CSPRNG detection
+    if GetBitsCount(Value^, Size * HALF_BITS) > Size * (HALF_BITS div 3) then
     begin
-      // one CSPRNG iteration is usually enough to reach 1/3 of the bits set
-      // - with our TAesPrng, it never occurred after 1,000,000,000 trials
-      dec(min);
-      if min = 0 then // paranoid
-        ERsaException.RaiseU('TBigInt.FillPrime: weak CSPRNG');
-      continue;
+      // should be a big enough odd number
+      Value[0] := Value[0] or 1; // set lower bit to ensure it is an odd number
+      if last32^ < FIPS_MIN then // FIPS 186 range requirement
+        last32^ := FIPS_MIN + TAesPrng.Main.Random32(high(last32^) - FIPS_MIN);
+      if last32^ >= FIPS_MIN then
+        exit; // correct random number
     end;
-    // should be a big enough odd number
-    Value[0] := Value[0] or 1; // set lower bit to ensure it is an odd number
-    if last32^ < FIPS_MIN then
-      last32^ := last32^ or $b5050000; // let's grow up
-    if (Value[Size - 1] or (RSA_RADIX shr 1) <> 0) and // absolute big enough
-       (last32^ >= FIPS_MIN) then
-      exit;
-    ERsaException.RaiseU('TBigInt.FillPrime FIPS_MIN'); // paranoid
+    dec(min); // with our TAesPrng, it never occurred after 1,000,000,000 trials
+    if min = 0 then // paranoid
+      ERsaException.RaiseU('TBigInt.FillPrime: weak');
   until false;
 end;
 
