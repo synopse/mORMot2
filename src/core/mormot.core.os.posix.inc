@@ -850,7 +850,7 @@ end;
 
 {$ifdef FPC} // if not in mormot.core.os.delphi.pas
 
-{$if declared(GetLocalTimezone)}
+{$if declared(TTZInfo)}
 // TTZInfo is the new native FPC way of handling time zones on POSIX
 
 function GetLocalBias(I64: TUnixTime): PtrInt; inline;
@@ -897,7 +897,7 @@ begin
   result := I64 + TZSeconds;
 end;
 
-{$endif declared(GetLocalTimezone)}
+{$endif declared(TTZInfo)}
 
 {$endif FPC}
 
