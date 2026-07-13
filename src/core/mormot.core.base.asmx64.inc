@@ -1006,9 +1006,9 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         jmp     @2
         // trailing indexes (never appearing within DYNARRAYHASH_PO2 range)
 @1:     sub     r8, 1
-        cmp     word ptr [rcx + r8 * 4], dx
+        cmp     word ptr [rcx + r8 * 2], dx
         setg    al
-        sub     word ptr [rcx + r8 * 4], ax
+        sub     word ptr [rcx + r8 * 2], ax
 @2:     test    r8, r8
         jnz     @1
 {$ifdef ABIWINX64}
