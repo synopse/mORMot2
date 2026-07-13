@@ -3702,7 +3702,7 @@ begin
         (p[l - 1] <= ' ') do // trim right
     dec(l);
   if IsDefaultString(p, l) then
-    l := 0; // e.g. on ProxMox containers or VMs
+    l := 0; // 'Default string' e.g. on ProxMox containers or VMs
   FastSetString(result, p, l);
 end;
 

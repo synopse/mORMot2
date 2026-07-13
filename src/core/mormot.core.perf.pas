@@ -4803,7 +4803,7 @@ begin
             until s[0] = 0;
           inc(PByte(s));
           if length(info.Oem) <> c then
-            SetLength(info.Oem, c);
+            SetLength(info.Oem, c); // skipped 'Default string' or ''
           continue;
         end;
       16: // Physical Memory Array (type 16)

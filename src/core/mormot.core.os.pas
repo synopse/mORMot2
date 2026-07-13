@@ -1587,7 +1587,7 @@ type
     // - the very same executable on the very same computer run by the very
     // same user on the same OS should always have the same Hash value
     // - is computed from the crc32c of this TExecutable fields: c0 from
-    // Version32, CpuFeatures and Host, c1 from User, c2 from ProgramFullSpec
+    // Version32 + CpuFeatures + Host, c1 from User, c2 from ProgramFullSpec
     // and c3 from InstanceFileName
     // - may be used as an entropy seed, or to identify a process execution
     Hash: THash128Rec;
@@ -1864,7 +1864,7 @@ type
   /// the text fields stored by GetSmbios/DecodeSmbios functions
   TSmbiosBasicInfos = array[TSmbiosBasicInfo] of RawUtf8;
 
-/// check if a string value should be ignored when parsed e.g. from SMBIOS fields
+/// check if string matches 'Default string' when parsed e.g. from SMBIOS fields
 function IsDefaultString(p: pointer; l: PtrInt): boolean;
 
 /// decode basic SMBIOS information as text from a TRawSmbiosInfo binary blob
@@ -10584,7 +10584,7 @@ begin // single pass efficient decoding
             len := StrLen(s);
             if (len <> 0) and
                (info[sbiOem] = '') and // keep only the first
-               not IsDefaultString(s, len) then
+               not IsDefaultString(s, len) then // skip 'Default string'
               FastSetString(info[sbiOem], s, len);
             s := @s[len + 1]; // next string
           until s[0] = 0;
