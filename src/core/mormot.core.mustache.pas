@@ -377,13 +377,18 @@ type
     fSectionMaxCount: integer;
     fCachedContextVariant: TSynMustacheContextVariant;
     fCachedContextData: TSynMustacheContextData;
+  public
     // standard helpers implementation
     class procedure DateTimeToText(const Value: variant; out Result: variant);
     class procedure DateToText(const Value: variant; out Result: variant);
     class procedure DateFmt(const Value: variant; out Result: variant);
     class procedure TimeLogToText(const Value: variant; out Result: variant);
+    class procedure LocalDateTime(const Value: variant; out Result: variant);
+    class procedure LocalDate(const Value: variant; out Result: variant);
+    class procedure LocalTime(const Value: variant; out Result: variant);
     class procedure BlobToBase64(const Value: variant; out Result: variant);
     class procedure ToJson(const Value: variant; out Result: variant);
+    class procedure ToJson2(const Value: variant; out Result: variant);
     class procedure JsonQuote(const Value: variant; out Result: variant);
     class procedure JsonQuoteUri(const Value: variant; out Result: variant);
     class procedure WikiToHtml(const Value: variant; out Result: variant);
@@ -2223,23 +2228,60 @@ begin
     Result := Time.i18nText;
 end;
 
-class procedure TSynMustache.ToJson(const Value: variant; out Result: variant);
+class procedure TSynMustache.LocalDateTime(const Value: variant; out Result: variant);
+var
+  dt: TDateTime;
+begin
+  PCardinal(@Result)^ := varNull;
+  if VariantToDateTime(Value, dt) then
+    Result := DateTimeToStr(UtcToLocal(dt));
+end;
+
+class procedure TSynMustache.LocalDate(const Value: variant; out Result: variant);
+var
+  dt: TDateTime;
+begin
+  PCardinal(@Result)^ := varNull;
+  if VariantToDateTime(Value, dt) then
+    Result := DateToStr(UtcToLocal(dt));
+end;
+
+class procedure TSynMustache.LocalTime(const Value: variant; out Result: variant);
+var
+  dt: TDateTime;
+begin
+  PCardinal(@Result)^ := varNull;
+  if VariantToDateTime(Value, dt) then
+    Result := TimeToStr(UtcToLocal(dt));
+end;
+
+procedure DoJson(const v: variant; var res: variant; fmt: TTextWriterJsonFormat);
 var
   u, r: RawUtf8;
   wasstring: boolean;
 begin
-  PCardinal(@Result)^ := varNull;
-  if VarIsEmptyOrNull(Value) then
+  PCardinal(@res)^ := varNull;
+  if VarIsEmptyOrNull(v) then
     exit;
-  VariantToUtf8(Value, u, wasstring);
+  VariantToUtf8(v, u, wasstring);
   if wasstring then
     QuotedStrJson(u, r)
   else if (u <> '') and
           (GotoNextNotSpace(pointer(u))^ in ['[', '{']) then
-    r := JsonReformat(u, jsonHumanReadable) // e.g. from TDocVariantData
+    r := JsonReformat(u, fmt) // e.g. from TDocVariantData
   else
     r := u; // false, true, number
-  RawUtf8ToVariant(r, Result);
+  RawUtf8ToVariant(r, res);
+end;
+
+class procedure TSynMustache.ToJson(const Value: variant; out Result: variant);
+begin
+  DoJson(Value, Result, jsonHumanReadable);
+end;
+
+class procedure TSynMustache.ToJson2(const Value: variant; out Result: variant);
+begin
+  DoJson(Value, Result, jsonEscapeUnicode);
 end;
 
 class procedure TSynMustache.JsonQuote(const Value: variant; out Result: variant);
