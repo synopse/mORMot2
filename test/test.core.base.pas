@@ -10947,7 +10947,8 @@ begin
     json := dict.SaveToJson;
     Check(IsValidUtf8(json));
     Check(IsValidJson(json));
-    CheckHash(json, $F67B5FA8, 'dict.savetojson');
+    if MAX = 10000 then
+      CheckHash(json, $F67B5FA8, 'dict.savetojson');
     for i := 1 to MAX do
     begin
       i64 := i;
@@ -10960,7 +10961,8 @@ begin
   dict := TSynDictionary.Create(TypeInfo(TInt64DynArray), TypeInfo(tvalues));
   try
     check(dict.LoadFromJson(json));
-    CheckHash(json, $F67B5FA8, 'untouched after loadfromjson');
+    if MAX = 10000 then
+      CheckHash(json, $F67B5FA8, 'untouched after loadfromjson');
     checkEqual(json, dict.SaveToJson);
     for i := 1 to MAX do
     begin
