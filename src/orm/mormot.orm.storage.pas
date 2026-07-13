@@ -3429,7 +3429,7 @@ const
 var
   f: PtrInt;
   dup: integer; // should be an integer and not a PtrInt for ForceRehash(@dup)
-  dupfield: RawUtf8;
+  dupfield: PUtf8Char;
   start: Int64;
 begin
   // now fValue[] contains the just loaded data
@@ -3437,14 +3437,14 @@ begin
   fCount := length(fValue);
   fValues.Hasher.ForceReHash(@dup);
   if dup > 0 then
-    dupfield := ID_TXT
+    dupfield := pointer(ID_TXT)
   else
     for f := 0 to length(fUnique) - 1 do
     begin
       fUnique[f].Hasher.ForceReHash(@dup);
       if dup > 0 then
       begin
-        dupfield := fUnique[f].PropInfo.Name;
+        dupfield := pointer(fUnique[f].PropInfo.Name);
         break;
       end;
     end;
