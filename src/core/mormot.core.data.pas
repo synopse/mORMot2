@@ -927,7 +927,7 @@ const
 {$endif PUREMORMOT2}
 
 type
-  /// the kind of exceptions raised during TDynArray/TDynArrayHashed process
+  /// the kind of exceptions raised during TDynArray process
   EDynArray = class(ESynException);
 
   /// a pointer to a TDynArray Wrapper instance
@@ -1653,6 +1653,9 @@ const
 {$endif DYNARRAYHASH_PO2}
 
 type
+  /// the kind of exceptions raised during TDynArrayHasher/TDynArrayHashed process
+  EDynArrayHash = class(ESynException);
+
   /// function prototype to be used for hashing of a dynamic array element
   // - this function must use the supplied hasher on the Item data
   TDynArrayHashOne = function(const Item; Hasher: THasher): cardinal;
@@ -1693,10 +1696,10 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     function HashTableIndexToIndex(aHashTableIndex: PtrInt): PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
+    procedure RaiseNoHasher;
     procedure HashAdd(aHashCode: cardinal; var result: PtrInt);
     procedure HashDelete(aArrayIndex, aHashTableIndex: PtrInt; aHashCode: cardinal);
     function RaiseFatalCollision(const caller: ShortString; aHashCode: cardinal): PtrInt;
-    procedure RaiseNoHasher;
     procedure HashTableInit(aHasher: THasher);
     function FindAfterGrow(const aHashCode: cardinal): PtrInt;
     procedure SetEventCompare(const Value: TOnDynArraySortCompare);
@@ -8908,7 +8911,7 @@ end;
 procedure TDynArrayHasher.SetEventCompare(const Value: TOnDynArraySortCompare);
 begin
   if fDynArray^.GetCount <> 0 then
-    EDynArray.RaiseU('TDynArrayHasher: late SetEventCompare');
+    EDynArrayHash.RaiseU('Unexpected SetEventCompare');
   fEventCompare := Value;
   HashTableInit(fHasher);
 end;
@@ -8916,7 +8919,7 @@ end;
 procedure TDynArrayHasher.SetEventHash(const Value: TOnDynArrayHashOne);
 begin
   if fDynArray^.GetCount <> 0 then
-    EDynArray.RaiseU('TDynArrayHasher: late SetEventHash');
+    EDynArrayHash.RaiseU('Unexpected SetEventHash');
   fEventHash := Value;
   HashTableInit(fHasher);
 end;
@@ -8992,6 +8995,11 @@ begin
   {$endif DYNARRAYHASH_LEMIRE}
 end;
 
+procedure TDynArrayHasher.RaiseNoHasher;
+begin
+  EDynArrayHash.RaiseUtf8('% has no RTTI - use InitSpecific()', [fDynArray^.Info.Name]);
+end;
+
 function TDynArrayHasher.HashTableIndexSafe(const aHashCode: PtrUInt): PtrUInt;
 begin
   if not (hasHasher in fState) then
@@ -9008,12 +9016,6 @@ begin
   else
   {$endif DYNARRAYHASH_16BIT}
     result := PIntegerArray(result)[aHashTableIndex];
-end;
-
-procedure TDynArrayHasher.RaiseNoHasher;
-begin
-  EDynArray.RaiseUtf8('TDynArrayHasher: % has no RTTI - use InitSpecific()',
-    [fDynArray^.Info.Name]);
 end;
 
 function TDynArrayHasher.FindAfterGrow(const aHashCode: cardinal): PtrInt;
@@ -9240,13 +9242,10 @@ end;
 function TDynArrayHasher.FindBeforeAdd(Item: pointer; out wasAdded: boolean;
   aHashCode: cardinal): PtrInt;
 begin
-  if not (hasHasher in fState) then
-    RaiseNoHasher;
   wasAdded := false;
   result := FindOrNew(aHashCode, Item, nil);
   if result >= 0 then
-    exit;
-  // found no matching item
+    exit; // found an existing matching item
   wasAdded := true;
   HashAdd(aHashCode, result);
 end;
@@ -9273,7 +9272,7 @@ function TDynArrayHasher.RaiseFatalCollision(const caller: ShortString;
   aHashCode: cardinal): PtrInt;
 begin   // a dedicated sub-procedure reduces code size
   result := 0; // make compiler happy
-  EDynArray.RaiseUtf8('TDynArrayHasher.% fatal collision: ' +
+  EDynArrayHash.RaiseUtf8('% fatal collision: ' +
     'aHashCode=% HashTableSize=% Count=% Capacity=% Array=% Parser=%',
     [caller, CardinalToHexShort(aHashCode), fHashTableSize, fDynArray^.Count,
      fDynArray^.Capacity, fDynArray^.Info.Name, ToText(fDynArray^.Info.Parser)^]);
@@ -9425,7 +9424,7 @@ s:  if Assigned(Hasher^.fEventHash) then // inlined HashOne()
         continue;
       // reached the end -> search from HashTable[0] to HashTable[first-1]
       if ndx = first then
-        Hasher.RaiseFatalCollision('ReHash', hc);
+        Hasher.RaiseFatalCollision('TFastReHash', hc); // paranoid
       ndx := 0;
       last := first;
     until false;
@@ -9712,8 +9711,7 @@ begin
     if added then
       break;
     if j = 9999 then // never loop forever
-      EDynArray.RaiseUtf8(
-        'TDynArrayHashed.AddAndMakeUniqueName(%) overflow', [aName]);
+      EDynArrayHash.RaiseUtf8('AddAndMakeUniqueName(%) overflow', [aName]);
     inc(j);
     Make([aName, '_', j], n); // try 'name_1', 'name_2', ... until genuine
   until false;
@@ -9736,9 +9734,9 @@ begin
   ndx := FindHashedForAdding(aName, added);
   if not added then
     if ExceptionMsg = '' then
-      EDynArray.RaiseUtf8('TDynArrayHashed: Duplicated [%] name', [aName])
+      EDynArrayHash.RaiseUtf8('Duplicated [%] name', [aName])
     else
-      EDynArray.RaiseUtf8(ExceptionMsg, ExceptionArgs);
+      EDynArrayHash.RaiseUtf8(ExceptionMsg, ExceptionArgs);
   if aNewIndex <> nil then
     aNewIndex^ := ndx;
   result := PAnsiChar(Value^) + ndx * Info.Cache.ItemSize;
