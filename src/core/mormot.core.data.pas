@@ -2539,7 +2539,7 @@ type
     function Contains(const aText: RawUtf8; aFirstIndex: PtrInt = 0): PtrInt;
     /// retrieve the all lines, separated by the supplied delimiter
     // - this method is thread-safe
-    function GetText(const Delimiter: RawUtf8 = EOL): RawUtf8;
+    function GetText(const Delimiter: RawUtf8 = EOL; Reverse: boolean = false): RawUtf8;
     /// the OnChange event will be raised only when EndUpdate will be called
     // - this method will also call Safe.Lock for thread-safety
     procedure BeginUpdate;
@@ -4625,7 +4625,7 @@ begin
   end;
 end;
 
-function TRawUtf8List.GetText(const Delimiter: RawUtf8): RawUtf8;
+function TRawUtf8List.GetText(const Delimiter: RawUtf8; Reverse: boolean): RawUtf8;
 begin
   FastAssignNew(result);
   if (self = nil) or
@@ -4633,7 +4633,7 @@ begin
     exit;
   if fThreadSafe in fFlags then
     fSafe.ReadOnlyLock;
-  PRawUtf8ToCsv(pointer(fValue), fCount, Delimiter, {rev=}false, result);
+  PRawUtf8ToCsv(pointer(fValue), fCount, Delimiter, Reverse, result);
   if fThreadSafe in fFlags then
     fSafe.ReadOnlyUnLock;
 end;
