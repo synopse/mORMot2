@@ -1105,6 +1105,32 @@ var
   sl: TStrings;
   timer: TPrecisionTimer;
 
+  procedure TestSort;
+  begin
+    L.Clear;
+    Check(L.Count = 0);
+    Check(L.IndexOf('5') < 0);
+    Check(L.Add('toto') = 0);
+    Check(L.Count = 1);
+    Check(L.IndexOf('titi') < 0);
+    Check(L.IndexOf('toto') = 0);
+    CheckEqual(L.Text, 'toto');
+    L.Sort;
+    CheckEqual(L.Text, 'toto');
+    Check(L.AddObject('titi', TObject.Create) = 1);
+    CheckEqual(L.IndexOf('toto'), 0);
+    CheckEqual(L.IndexOf('titi'), 1);
+    Check(L.Objects[0] = nil);
+    Check(L.Objects[1] <> nil);
+    CheckEqual(L.GetText(','), 'toto,titi');
+    L.Sort;
+    CheckEqual(L.GetText(','), 'titi,toto');
+    Check(L.Objects[0] <> nil);
+    Check(L.Objects[1] = nil);
+    CheckEqual(L.IndexOf('toto'), 1);
+    CheckEqual(L.IndexOf('titi'), 0);
+  end;
+
   procedure TestBinDictionary;
   var
     i, len: PtrInt; // @len = PPtrInt
@@ -1169,13 +1195,7 @@ begin
     Check(L.IndexOf('6') < 0);
     Check(L.Exists('5'));
     Check(not L.Exists('6'));
-    L.Clear;
-    Check(L.Count = 0);
-    Check(L.IndexOf('5') < 0);
-    Check(L.Add('toto') = 0);
-    Check(L.Count = 1);
-    Check(L.IndexOf('titi') < 0);
-    Check(L.IndexOf('toto') = 0);
+    TestSort;
   finally
     L.Free;
   end;
@@ -1217,17 +1237,7 @@ begin
     for i := 1 to MAX do
       Check((L.IndexOf(v[i]) >= 0) = (i and 127 <> 0));
     DeleteFile(WorkDir + 'utf8list.txt');
-    L.Clear;
-    Check(L.Count = 0);
-    Check(L.Add('toto') = 0);
-    Check(L.Count = 1);
-    Check(L.IndexOf('titi') < 0);
-    Check(L.IndexOf('toto') = 0);
-    Check(L.IndexOf('') < 0);
-    Check(L.Add('') = 1);
-    Check(L.Count = 2);
-    Check(L.IndexOf('') = 1);
-    Check(L.IndexOf('toto') = 0);
+    TestSort;
   finally
     L.Free;
   end;
