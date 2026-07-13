@@ -2388,6 +2388,8 @@ type
     function GetCaseSensitive: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetCaseSensitive(Value: boolean); virtual;
+    procedure RehashAfterChanged;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure Changed; virtual;
     procedure InternalDelete(Index: PtrInt);
     procedure OnChangeHidden(Sender: TObject);
@@ -4219,6 +4221,13 @@ begin
   inherited Destroy;
 end;
 
+procedure TRawUtf8List.RehashAfterChanged;
+begin
+  if fNoDuplicate in fFlags then
+    fValues.ForceReHash;
+  Changed;
+end;
+
 procedure TRawUtf8List.SetCaseSensitive(Value: boolean);
 begin
   if (self = nil) or
@@ -4232,7 +4241,7 @@ begin
     else
       exclude(fFlags, fCaseSensitive);
     fValues.Hasher.InitSpecific(@fValues, ptRawUtf8, not Value, nil);
-    Changed;
+    RehashAfterChanged;
   finally
     if fThreadSafe in fFlags then
       fSafe.WriteUnLock;
@@ -4256,9 +4265,7 @@ begin
           fObjects := nil;
         end;
         fValues.Clear;
-        if fNoDuplicate in fFlags then
-          fValues.ForceReHash;
-        Changed;
+        RehashAfterChanged;
       end
       else
       begin
@@ -4273,9 +4280,7 @@ begin
             SetLength(fObjects, capa);
           end;
           fValues.Count := capa;
-          if fNoDuplicate in fFlags then
-            fValues.ForceReHash;
-          Changed;
+          RehashAfterChanged;
         end;
         if capa > length(fValue) then
         begin
@@ -4870,8 +4875,7 @@ begin
     fCount := n;
     fValue := aText;
     fObjects := aObject;
-    if fNoDuplicate in fFlags then
-      fValues.ForceReHash;
+    RehashAfterChanged;
   finally
     EndUpdate;
   end;
@@ -4892,9 +4896,7 @@ begin
     else if fValue[i] <> txt then
     begin
       fValue[i] := txt;
-      if fNoDuplicate in fFlags then
-        fValues.Hasher.ForceReHash; // invalidate internal hash table
-      Changed;
+      RehashAfterChanged;
     end;
   finally
     if fThreadSafe in fFlags then
@@ -5023,9 +5025,7 @@ begin
     Dest.fValue := copy(Source.fValue); // copy by reference, increase refcnt
     Dest.fObjects := copy(Source.fObjects);
     exclude(Dest.fFlags, fObjectsOwned);
-    if fNoDuplicate in Dest.fFlags then
-      Dest.fValues.ForceReHash; // assume Source has no duplicate either
-    Dest.Changed;
+    Dest.RehashAfterChanged; // assume Source has no duplicate either
   finally
     if fThreadSafe in Source.fFlags then
       Source.fSafe.ReadOnlyUnLock;
