@@ -2339,6 +2339,9 @@ type
     function Count: integer;
   end;
 
+  /// exception class raised by TRawUtf8List
+  ERawUtf8List = class(ESynException);
+
   /// possible values used by TRawUtf8List.Flags
   TRawUtf8ListFlags = set of (
     fObjectsOwned,
@@ -4335,11 +4338,11 @@ begin
           aFreeAndReturnExistingObject^ := obj;
         end;
         if aRaiseExceptionIfExisting then
-          ESynException.RaiseUtf8('%.Add duplicate [%]', [self, aText]);
+          ERawUtf8List.RaiseUtf8('%.Add duplicate [%]', [self, aText]);
         if aReplaceExistingObject then
         begin
           if obj = nil then
-            ESynException.RaiseUtf8(
+            ERawUtf8List.RaiseUtf8(
               '%.AddOrReplaceObject with no object at [%]', [self, aText]);
           if fObjectsOwned in fFlags then
             FreeAndNil(fObjects[result]);
@@ -4816,7 +4819,7 @@ begin
      (PtrUInt(Index) < PtrUInt(fCount)) then
   begin
     if fNoDuplicate in fFlags then
-      ESynException.RaiseUtf8('%[%] := ... is forbidden with ' +
+      ERawUtf8List.RaiseUtf8('%[%] := ... is forbidden with ' +
         'fNoDuplicate: use Delete + Add instead', [self, Index]);
     fValue[Index] := Value;
     if Assigned(fOnChange) then
