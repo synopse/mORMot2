@@ -9336,34 +9336,36 @@ type // dedicated TFastReHash engine for better register allocation
   TFastReHash = object
   {$endif USERECORDWITHMETHODS}
   public
-    hc: cardinal;
-    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-    collisions: integer;
-    {$endif DYNARRAYHASHCOLLISIONCOUNT}
-    ht: integer;
+    count, ht: integer;
     values, first, last, siz: PtrInt;
     duplicates: PInteger;
     P: PAnsiChar;
-    // fill fHashTableStore[] from all stored items
-    procedure Process(Hasher: PDynArrayHasher; count: PtrInt);
+    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+    collisions: integer;
+    {$endif DYNARRAYHASHCOLLISIONCOUNT}
+    procedure Fill(Hasher: PDynArrayHasher);
   end;
 
-procedure TFastReHash.Process(Hasher: PDynArrayHasher; count: PtrInt);
+procedure TFastReHash.Fill(Hasher: PDynArrayHasher);
 var
+  hc: cardinal;
   fnd, ndx: PtrInt;
-label
-  s;
 begin
-  // should match FindOrNew() logic
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
   collisions := 0;
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
   P := Hasher^.fDynArray^.Value^;
   values := PtrUInt(P);
   siz := Hasher^.fDynArray^.Info.Cache.ItemSize;
-  ht := 1; // store index + 1
+  dec(P, siz);
+  ht := 0;                               // store index + 1
   repeat
-s:  if Assigned(Hasher^.fEventHash) then // inlined HashOne()
+    if count = 0 then
+      exit;
+    inc(P, siz);                         // next item
+    inc(ht);
+    dec(count);
+    if Assigned(Hasher^.fEventHash) then // inlined HashOne()
       hc := Hasher^.fEventHash(P^)
     else
       hc := Hasher^.fHashItem(P^, Hasher^.fHasher);
@@ -9371,32 +9373,22 @@ s:  if Assigned(Hasher^.fEventHash) then // inlined HashOne()
     first := ndx;
     last := Hasher^.fHashTableSize;
     repeat
-      {$ifdef DYNARRAYHASH_16BIT} // inlined HashTableIndexToIndex()
+      {$ifdef DYNARRAYHASH_16BIT}        // inlined HashTableIndexToIndex()
       if hash16bit in Hasher^.fState then
       begin
-        if PWordArray(Hasher^.fHashTableStore)[ndx] = 0 then // store index + 1
+        if PWordArray(Hasher^.fHashTableStore)[ndx] = 0 then // void entry
         begin
           // we can use this void entry (most common case)
-          PWordArray(Hasher^.fHashTableStore)[ndx] := ht;
-          inc(P, siz); // next item
-          inc(ht);
-          dec(count);
-          if count <> 0 then
-            goto s;
-          exit;
+          PWordArray(Hasher^.fHashTableStore)[ndx] := ht;    // store index + 1
+          break;                                             // go to main loop
         end;
       end
       else
       {$endif DYNARRAYHASH_16BIT}
-      if Hasher^.fHashTableStore[ndx] = 0 then // void entry
+      if Hasher^.fHashTableStore[ndx] = 0 then               // void entry
       begin
-        Hasher^.fHashTableStore[ndx] := ht;
-        inc(P, siz); // next item
-        inc(ht);
-        dec(count);
-        if count <> 0 then
-          goto s;
-        exit;
+        Hasher^.fHashTableStore[ndx] := ht;                  // store index + 1
+        break;                                               // go to main loop
       end;
       {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
       inc(collisions);
@@ -9415,7 +9407,7 @@ s:  if Assigned(Hasher^.fEventHash) then // inlined HashOne()
             (Hasher^.fEventCompare(pointer(fnd)^, P^) = 0)) then
         begin
           inc(duplicates^); // report but ignore duplicates
-          break;
+          break;            // go to main loop
         end;
       end;
       inc(ndx);
@@ -9427,15 +9419,12 @@ s:  if Assigned(Hasher^.fEventHash) then // inlined HashOne()
       ndx := 0;
       last := first;
     until false;
-    inc(P, siz); // next item
-    inc(ht);
-    dec(count);
-  until count = 0;
+  until false;
 end;
 
 procedure TDynArrayHasher.ForceReHash(duplicates: PInteger);
 var
-  n, cap, siz: PtrInt;
+  cap, siz: PtrInt;
   fastrehash: TFastReHash;
 begin
   if duplicates <> nil then
@@ -9446,40 +9435,39 @@ begin
   cap := fDynArray^.Capacity * 2;
   {$ifdef DYNARRAYHASH_PO2}
   if cap <= _PRIMESLOW then
-    siz := _PRIMESLOW          // minimal capacity is 256 slots
+    siz := _PRIMESLOW           // minimal capacity is 256 slots
   else if cap <= HASH_PO2 then
-    siz := NextPowerOfTwo(cap) // for fast bitwise division
+    siz := NextPowerOfTwo(cap)  // for fast bitwise division
   else
   {$endif DYNARRAYHASH_PO2}
-    siz := NextPrime(cap);
-//QueryPerformanceMicroSeconds(t1); write('rehash count=',n,' old=',HashTableSize,
-//' new=', siz, ' oldcol=',CountCollisionsCurrent);
-  fHashTableStore := nil; // re-allocate + fill with zero
+    siz := NextPrime(cap);      // minimal capacity is 251 slots
+//QueryPerformanceMicroSeconds(t1); write('rehash count=', n, ' old=',
+//HashTableSize, ' new=', siz, ' oldcol=', CountCollisionsCurrent);
   fHashTableSize := siz;
+  fHashTableStore := nil;       // SetLength() will re-allocate + fill with zero
   {$ifdef DYNARRAYHASH_16BIT}
   if siz <= 1 shl 16 then
   begin
     include(fState, hash16bit); // we can store indexes as 16-bit word values
-    siz := siz shr 1; // 32-bit count
+    siz := siz shr 1;           // 32-bit count for SetLength()
   end
   else
     exclude(fState, hash16bit);
   {$endif DYNARRAYHASH_16BIT}
   SetLength(fHashTableStore, siz + 1); // fill with 0 (void slot)
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-  CountCollisionsCurrent := 0; // count collision for this HashTable[] only
+  CountCollisionsCurrent := 0;  // count collision for this HashTable[] only
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
   // fill fHashTableStore[]=index+1 from all existing items
-  n := fDynArray^.Count;
-  if n <> 0 then
-  begin
-    fastrehash.duplicates := duplicates;
-    fastrehash.Process(@self, n);
-    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-    inc(CountCollisions, fastrehash.collisions);
-    inc(CountCollisionsCurrent, fastrehash.collisions);
-    {$endif DYNARRAYHASHCOLLISIONCOUNT}
-  end;
+  fastrehash.Count := fDynArray^.Count;
+  if fastrehash.Count = 0 then
+    exit;
+  fastrehash.duplicates := duplicates; // slower with values comparison
+  fastrehash.Fill(@self);
+  {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+  inc(CountCollisions, fastrehash.collisions);
+  inc(CountCollisionsCurrent, fastrehash.collisions);
+  {$endif DYNARRAYHASHCOLLISIONCOUNT}
 //QueryPerformanceMicroSeconds(t2); writeln(' newcol=',CountCollisionsCurrent,' ',
 //(CountCollisionsCurrent * 100) div cardinal(n), '%  ',MicroSecToString(t2-t1));
 end;
@@ -9673,8 +9661,7 @@ begin
 end;
 
 function TDynArrayHashed.FindFromHash(const Item; aHashCode: cardinal): PtrInt;
-begin
-  // overload FindHashed() trigger F2084 Internal Error: C2130 on Delphi XE3
+begin // overload FindHashed() trigger F2084 Internal Error: C2130 on Delphi XE3
   result := fHash.FindOrNew(aHashCode, @Item); // no fallback to Scan()
   if result < 0 then
     result := -1; // for coherency with most methods
