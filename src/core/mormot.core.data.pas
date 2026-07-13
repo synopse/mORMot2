@@ -2388,7 +2388,7 @@ type
     function GetCaseSensitive: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetCaseSensitive(Value: boolean); virtual;
-    procedure RehashAfterChanged;
+    procedure RehashChanged;
       {$ifdef HASINLINE}inline;{$endif}
     procedure Changed; virtual;
     procedure InternalDelete(Index: PtrInt);
@@ -4224,7 +4224,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TRawUtf8List.RehashAfterChanged;
+procedure TRawUtf8List.RehashChanged;
 begin
   if fNoDuplicate in fFlags then
     fValues.ForceReHash;
@@ -4244,7 +4244,7 @@ begin
     else
       exclude(fFlags, fCaseSensitive);
     fValues.Hasher.InitSpecific(@fValues, ptRawUtf8, not Value, nil);
-    RehashAfterChanged;
+    RehashChanged;
   finally
     if fThreadSafe in fFlags then
       fSafe.WriteUnLock;
@@ -4268,7 +4268,7 @@ begin
           fObjects := nil;
         end;
         fValues.Clear;
-        RehashAfterChanged;
+        RehashChanged;
       end
       else
       begin
@@ -4283,7 +4283,7 @@ begin
             SetLength(fObjects, capa);
           end;
           fValues.Count := capa;
-          RehashAfterChanged;
+          RehashChanged;
         end;
         if capa > length(fValue) then
         begin
@@ -4455,7 +4455,7 @@ begin
       FillIncreasing(pointer(obj), 0, fCount); // synchronize fObjects[obj[i]]
     end;
     QuickSortRawUtf8(fValue, fCount, @obj, StrCompByCase[not (fCaseSensitive in fFlags)]);
-    RehashAfterChanged;
+    RehashChanged;
     if obj = nil then
       exit; // no fObjects[] to synchronize
     SetLength(tmp, length(fObjects));
@@ -4814,8 +4814,8 @@ begin
      (PtrUInt(Index) < PtrUInt(fCount)) then
   begin
     if fNoDuplicate in fFlags then
-      ESynException.RaiseUtf8(
-        '%[%] := ... is forbidden with fNoDuplicate: use Add()', [self, Index]);
+      ESynException.RaiseUtf8('%[%] := ... is forbidden with ' +
+        'fNoDuplicate: use Delete + Add instead', [self, Index]);
     fValue[Index] := Value;
     if Assigned(fOnChange) then
       Changed;
@@ -4908,7 +4908,7 @@ begin
     fCount := n;
     fValue := aText;
     fObjects := aObject;
-    RehashAfterChanged;
+    RehashChanged;
   finally
     EndUpdate;
   end;
@@ -4929,7 +4929,7 @@ begin
     else if fValue[i] <> txt then
     begin
       fValue[i] := txt;
-      RehashAfterChanged;
+      RehashChanged;
     end;
   finally
     if fThreadSafe in fFlags then
@@ -5058,7 +5058,7 @@ begin
     Dest.fValue := copy(Source.fValue); // copy by reference, increase refcnt
     Dest.fObjects := copy(Source.fObjects);
     exclude(Dest.fFlags, fObjectsOwned);
-    Dest.RehashAfterChanged; // assume Source has no duplicate either
+    Dest.RehashChanged; // assume Source has no duplicate either
   finally
     if fThreadSafe in Source.fFlags then
       Source.fSafe.ReadOnlyUnLock;
