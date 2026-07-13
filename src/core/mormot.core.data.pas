@@ -9049,10 +9049,10 @@ function TDynArrayHasher.FindOrNew(aHashCode: cardinal; Item: pointer;
   aHashTableIndex: PPtrInt): PtrInt;
 var
   first, last, hashndx, ndx: PtrInt;
+  P: PAnsiChar;
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
   collisions: integer;
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
-  P: PAnsiChar;
 begin
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
   collisions := 0;
@@ -9297,30 +9297,24 @@ end;
 function TDynArrayHasher.Scan(Item: pointer): PtrInt;
 var
   P: PAnsiChar;
-  i, max, siz: PtrInt;
+  max, siz: PtrInt;
 begin
-  result := -1;
   max := fDynArray^.Count - 1;
   P := fDynArray^.Value^;
   siz := fDynArray^.Info.Cache.ItemSize;
   if Assigned(fEventCompare) then // custom callback for comparison
-    for i := 0 to max do
+    for result := 0 to max do
       if fEventCompare(P^, Item^) = 0 then
-      begin
-        result := i;
-        break;
-      end
+        exit
       else
         inc(P, siz)
   else if Assigned(fCompare) then // custom function for comparison
-    for i := 0 to max do
+    for result := 0 to max do
       if fCompare(P^, Item^) = 0 then
-      begin
-        result := i;
-        break;
-      end
+        exit
       else
         inc(P, siz);
+  result := -1;
 end;
 
 function TDynArrayHasher.Find(Item: pointer; aHashCode: cardinal): PtrInt;
