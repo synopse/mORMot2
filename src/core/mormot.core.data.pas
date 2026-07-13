@@ -8883,6 +8883,36 @@ begin
   HashTableInit(aHasher);
 end;
 
+const
+  // reduces memory consumption and enhances distribution at hash table growing
+  _PRIMES: array[0..38 {$ifndef DYNARRAYHASH_PO2} + 11 {$endif}] of integer = (
+    {$ifndef DYNARRAYHASH_PO2}
+    251, 499, 1259, 3203, 5087, 8089, 12853, 20399, 81649, 129607, 205759,
+    {$endif DYNARRAYHASH_PO2}
+    // start after HASH_PO2=2^18=262,144 for DYNARRAYHASH_PO2 (poor 64-bit mul)
+    326617, 411527, 518509, 653267, 823117, 1037059, 1306601, 1646237,
+    2074129, 2613229, 3292489, 4148279, 5226491, 6584983, 8296553, 10453007,
+    13169977, 16593127, 20906033, 26339969, 33186281, 41812097, 52679969,
+    66372617, 83624237, 105359939, 132745199, 167248483, 210719881, 265490441,
+    334496971, 421439783, 530980861, 668993977, 842879579, 1061961721,
+    1337987929, 1685759167, 2123923447);
+  _PRIMESLOW = {$ifdef DYNARRAYHASH_PO2} 256 {$else} 251 {$endif};
+
+// as used internally by TDynArrayHasher.ForceReHash()
+function NextPrime(v: integer): integer; {$ifdef HASINLINE}inline;{$endif}
+var
+  i: PtrInt;
+  P: PIntegerArray;
+begin
+  P := @_PRIMES;
+  for i := 0 to high(_PRIMES) do
+  begin
+    result := P^[i];
+    if result > v then // no need of O(log(n)) binary search algorithm
+      exit;
+  end;
+end;
+
 procedure TDynArrayHasher.HashTableInit(aHasher: THasher);
 begin
   if not Assigned(aHasher) then
@@ -8894,8 +8924,8 @@ begin
      (Assigned(fCompare) or
       Assigned(fEventCompare)) then
   begin
-    // same logic than ReHash(true) with no data - default to 256 buckets
-    fHashTableSize := 256;
+    // same logic than ForceReHash() with no data
+    fHashTableSize := _PRIMESLOW;    // default to 256/251 buckets
     {$ifdef DYNARRAYHASH_16BIT}
     SetLength(fHashTableStore, 129); // 512 bytes
     fState := [hasHasher, hash16bit];
@@ -8946,35 +8976,6 @@ begin
     result := fEventCompare(pointer(ndx)^, Item^) = 0
   else
     result := fCompare(pointer(ndx)^, Item^) = 0;
-end;
-
-const
-  // reduces memory consumption and enhances distribution at hash table growing
-  _PRIMES: array[0..38 {$ifndef DYNARRAYHASH_PO2} + 13 {$endif}] of integer = (
-    {$ifndef DYNARRAYHASH_PO2}
-    251, 499, 797, 1259, 2011, 3203, 5087, 8089, 12853, 20399, 81649, 129607, 205759,
-    {$endif DYNARRAYHASH_PO2}
-    // start after HASH_PO2=2^18=262,144 for DYNARRAYHASH_PO2 (poor 64-bit mul)
-    326617, 411527, 518509, 653267, 823117, 1037059, 1306601, 1646237,
-    2074129, 2613229, 3292489, 4148279, 5226491, 6584983, 8296553, 10453007,
-    13169977, 16593127, 20906033, 26339969, 33186281, 41812097, 52679969,
-    66372617, 83624237, 105359939, 132745199, 167248483, 210719881, 265490441,
-    334496971, 421439783, 530980861, 668993977, 842879579, 1061961721,
-    1337987929, 1685759167, 2123923447);
-
-// as used internally by TDynArrayHasher.ForceReHash()
-function NextPrime(v: integer): integer; {$ifdef HASINLINE}inline;{$endif}
-var
-  i: PtrInt;
-  P: PIntegerArray;
-begin
-  P := @_PRIMES;
-  for i := 0 to high(_PRIMES) do
-  begin
-    result := P^[i];
-    if result > v then // no need of O(log(n)) binary search algorithm
-      exit;
-  end;
 end;
 
 // see TTestCoreBase._TSynDictionary for some numbers, and why
@@ -9450,8 +9451,8 @@ begin
   // Capacity better than Count or HashTableSize, * 2 to reserve some void slots
   cap := fDynArray^.Capacity * 2;
   {$ifdef DYNARRAYHASH_PO2}
-  if cap <= 256 then
-    siz := 256
+  if cap <= _PRIMESLOW then
+    siz := _PRIMESLOW          // minimal capacity is 256 slots
   else if cap <= HASH_PO2 then
     siz := NextPowerOfTwo(cap) // for fast bitwise division
   else
