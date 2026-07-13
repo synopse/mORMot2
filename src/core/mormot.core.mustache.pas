@@ -414,6 +414,7 @@ type
     class procedure NewGuid(const Value: variant; out Result: variant);
     class procedure ExtractFileName(const Value: variant; out Result: variant);
     class procedure HumanBytes(const Value: variant; out Result: variant);
+    class procedure Join(const Value: variant; out Result: variant);
     class procedure Sub(const Value: variant; out Result: variant);
     class procedure Values(const Value: variant; out Result: variant);
     class procedure Keys(const Value: variant; out Result: variant);
@@ -2454,6 +2455,27 @@ begin
   RawUtf8ToVariant(u, Result);
 end;
 
+class procedure TSynMustache.Join(const Value: variant; out Result: variant);
+var
+  v, a: PDocVariantData;
+  sep, r: RawUtf8;
+begin
+  PCardinal(@Result)^ := varNull;
+  if not _Safe(Value, v) or
+     (v^.Count = 0) then
+    exit;
+  if v^.IsArray and
+     (v^.Count = 2) and
+     _Safe(v^.Values[0], a) and
+     VariantToUtf8(v^.Values[1], sep) then
+    v := a // {{ join alist,"," }
+  else
+    sep := ',';
+  r := v^.ToCsv(sep); // returns CSV of dvArray Values[] or dvObject Names[]
+  if r <> '' then
+    RawUtf8ToVariant(r, Result);
+end;
+
 class procedure TSynMustache.Sub(const Value: variant; out Result: variant);
 var
   u: RawUtf8;
@@ -2479,7 +2501,7 @@ begin
   TDocVariantData(Result).InitArrayFromObjectNames(Value, JSON_FAST);
 end;
 
-procedure DoMatchGlob(const Value: variant; ci, match: boolean; var res: variant);
+procedure DoMatchGlob(const v: variant; ci, match: boolean; var res: variant);
 var
   dv: PDocVariantData;
   m: TMatch;
@@ -2487,7 +2509,7 @@ var
 begin
   // {{Match AString,APattern}} or {{Glob AString,APattern}}
   PCardinal(@res)^ := varNull;
-  if not _SafeArray(Value, 2, dv) then
+  if not _SafeArray(v, 2, dv) then
     exit;
   VariantToTempUtf8(dv^.Values[0], str, [vfNullAsVoid]);
   VariantToTempUtf8(dv^.Values[1], pat, [vfNoComplex, vfNullAsVoid]);
@@ -2538,7 +2560,7 @@ begin
   TempUtf8Done(u);
 end;
 
-procedure DoCase(const Value: variant; out Result: variant; Kind: TSetCase);
+procedure DoCase(const Value: variant; var Result: variant; Kind: TSetCase);
 var
   u: RawUtf8;
 begin
