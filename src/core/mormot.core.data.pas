@@ -1678,7 +1678,7 @@ type
   TDynArrayHasher = object
   {$endif USERECORDWITHMETHODS}
   private
-    fDynArray: PDynArray;
+    fDynArray: PDynArray;              // may be defined without TDynArrayHashed
     fHashItem: TDynArrayHashOne;       // function
     fEventHash: TOnDynArrayHashOne;    // function of object
     fHashTableStore: TIntegerDynArray; // store 0 for void entry, or Index+1
@@ -1687,13 +1687,15 @@ type
     fCompare: TDynArraySortCompare;        // function
     fEventCompare: TOnDynArraySortCompare; // function of object
     fHasher: THasher;                      // function
-    function HashTableIndex(aHashCode: PtrUInt): PtrUInt;
+    function HashTableIndex(const aHashCode: PtrUInt): PtrUInt;
+      {$ifdef HASINLINE}inline;{$endif}
+    function HashTableIndexSafe(const aHashCode: PtrUInt): PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
     function HashTableIndexToIndex(aHashTableIndex: PtrInt): PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
     procedure HashAdd(aHashCode: cardinal; var result: PtrInt);
     procedure HashDelete(aArrayIndex, aHashTableIndex: PtrInt; aHashCode: cardinal);
-    function RaiseFatalCollision(const caller: ShortString; aHashCode: cardinal): integer;
+    function RaiseFatalCollision(const caller: ShortString; aHashCode: cardinal): PtrInt;
     procedure RaiseNoHasher;
     procedure HashTableInit(aHasher: THasher);
     procedure SetEventCompare(const Value: TOnDynArraySortCompare);
@@ -8827,11 +8829,11 @@ begin
     aKind := fDynArray^.Info.ArrayFirstFieldSort; // use RTTI if not enough
   fEventHash := nil;
   fHashItem := PT_HASH[aCaseInsensitive, aKind];
-  if not Assigned(fHashItem) then // fallback
+  if not Assigned(fHashItem) then // fallback to binary hash of ItemSize
     fEventHash := fDynArray^.Info.ValueFullHash;
   fEventCompare := nil;
   fCompare := PT_SORT[aCaseInsensitive, aKind];
-  if not Assigned(fCompare) then // fallback
+  if not Assigned(fCompare) then // fallback to binary MemCmp()
     fEventCompare := fDynArray^.Info.ValueFullCompare;
   HashTableInit(aHasher);
 end;
@@ -8932,7 +8934,7 @@ end;
 
 // see TTestCoreBase._TSynDictionary for some numbers, and why
 //  DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2 are defined by default
-function TDynArrayHasher.HashTableIndex(aHashCode: PtrUInt): PtrUInt;
+function TDynArrayHasher.HashTableIndex(const aHashCode: PtrUInt): PtrUInt;
 begin
   result := fHashTableSize;
   {$ifdef DYNARRAYHASH_PO2}
@@ -8950,6 +8952,13 @@ begin
     // regular 32-bit modulo over a Prime: slower but best from our tests
     result := aHashCode mod result;
   {$endif DYNARRAYHASH_LEMIRE}
+end;
+
+function TDynArrayHasher.HashTableIndexSafe(const aHashCode: PtrUInt): PtrUInt;
+begin
+  if not (hasHasher in fState) then
+    RaiseNoHasher;
+  result := HashTableIndex(aHashCode);
 end;
 
 function TDynArrayHasher.HashTableIndexToIndex(aHashTableIndex: PtrInt): PtrInt;
@@ -8974,9 +8983,7 @@ var
   first, last, ndx, siz: PtrInt;
   P: PAnsiChar;
 begin
-  if not (hasHasher in fState) then
-    RaiseNoHasher;
-  result := HashTableIndex(aHashCode);
+  result := HashTableIndexSafe(aHashCode);
   first := result;
   last := fHashTableSize;
   P := fDynArray^.Value^;
@@ -9018,12 +9025,10 @@ var
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
   P: PAnsiChar;
 begin
-  if not (hasHasher in fState) then
-    RaiseNoHasher;
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
   collisions := 0;
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
-  result := HashTableIndex(aHashCode);
+  result := HashTableIndexSafe(aHashCode);
   first := result;
   last := fHashTableSize;
   repeat
@@ -9075,11 +9080,9 @@ function TDynArrayHasher.FindIndex(aHashCode: cardinal; Item: pointer;
 var
   first, last, ndx: PtrInt;
 begin // cut-down version of FindOrNew()
-  if not (hasHasher in fState) then
-    RaiseNoHasher;
   if not Assigned(Comp) then
     Comp := fCompare;
-  ndx := HashTableIndex(aHashCode);
+  ndx := HashTableIndexSafe(aHashCode);
   first := ndx;
   last := fHashTableSize;
   repeat
@@ -9254,7 +9257,7 @@ begin
 end;
 
 function TDynArrayHasher.RaiseFatalCollision(const caller: ShortString;
-  aHashCode: cardinal): integer;
+  aHashCode: cardinal): PtrInt;
 begin   // a dedicated sub-procedure reduces code size
   result := 0; // make compiler happy
   EDynArray.RaiseUtf8('TDynArrayHasher.% fatal collision: ' +
