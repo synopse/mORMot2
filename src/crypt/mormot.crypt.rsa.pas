@@ -1660,10 +1660,6 @@ begin
   end;
 end;
 
-const
-  // ensure generated number is at least (nbits - 1) + 0.5 bits = sqrt(2)*2^31
-  FIPS_MIN = $b504f334;
-
 function FipsMinIterations(bits: integer): integer;
 begin
   // ensure 2^-112 error probability - see FIPS 186-5 appendix B.3 table B.1
@@ -1677,6 +1673,11 @@ begin
     result := 51; // never used in practice for RSA
 end;
 
+const
+  // FIPS 186: require p >= 2^(nbits - 0.5) = sqrt(2) * 2^(nbits - 1)
+  FIPS_MIN = $b504f334; // = ceil(sqrt(2) * 2^31) for the top 32-bit dword
+  FIPS_RANGE = high(cardinal) - FIPS_MIN + 1; // allowed top-dword interval size
+
 procedure TBigInt.XorStrongRandom(last32: PCardinal);
 var
   min: integer;
@@ -1684,16 +1685,15 @@ begin
   min := 4; // paranoid
   repeat
     TAesPrng.Main.XorRandom(Value, Size * HALF_BYTES);
-    // one CSPRNG iteration generates on average 1/2 of bits = 1: check > 1/3
-    // - this sanity check is no RSA requirement, just weak CSPRNG detection
+    // CSPRNG sanity check (no RSA requirement): half the bits are set on average
     if GetBitsCount(Value^, Size * HALF_BITS) > Size * (HALF_BITS div 3) then
     begin
       // should be a big enough odd number
-      Value[0] := Value[0] or 1; // set lower bit to ensure it is an odd number
-      if last32^ < FIPS_MIN then // FIPS 186 range requirement
-        last32^ := FIPS_MIN + TAesPrng.Main.Random32(high(last32^) - FIPS_MIN);
-      if last32^ >= FIPS_MIN then
-        exit; // correct random number
+      Value[0] := Value[0] or 1;  // set lower bit to ensure it is an odd number
+      if last32^ < FIPS_MIN then  // FIPS 186 range requirement
+        last32^ := FIPS_MIN + TAesPrng.Main.Random32(FIPS_RANGE);
+      if last32^ >= FIPS_MIN then // paranoid
+        exit;                     // correct random number
     end;
     dec(min); // with our TAesPrng, it never occurred after 1,000,000,000 trials
     if min = 0 then // paranoid

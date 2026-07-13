@@ -4181,8 +4181,8 @@ procedure LoadProcFileTrimed(fn: PAnsiChar; var result: RawUtf8); overload;
 /// low-level function returning some random binary from the Operating System
 // - Windows version calling the CryptGenRandom API is in mormot.core.os.security
 // - on POSIX, only up to 256 bytes (2048-bits) are retrieved from /dev/urandom
-// or /dev/random as stated by "man urandom" Usage - then padded with our shared
-// gsl_rng_taus2 "L'Ecuyer" random generator
+// or /dev/random (or Linux getrandom syscall) as stated by "man urandom" Usage -
+// then padded with our shared gsl_rng_taus2 "L'Ecuyer" random generator
 // - so you may consider that the output Buffer is always filled with random
 // - you should not have to call this low-level procedure, but faster and safer
 // TAesPrng from mormot.crypt.core - also consider the TSystemPrng class

@@ -4196,7 +4196,7 @@ begin
   result := false;
   if Len <= 0 then
     exit;
-  // retrieve up to MAXFROMOS=256 bytes max
+  // retrieve up to MAXFROMOS=256 bytes max - as required by "man urandom"
   rd := MinPtrInt(Len, MAXFROMOS);
   {$ifdef HASGETRANDOM} // a single syscall to rule them all on Linux
   result := LinuxGetRandom(Buffer, rd);

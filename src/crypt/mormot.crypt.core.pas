@@ -7847,7 +7847,7 @@ end;
 { TSystemPrng }
 
 procedure TSystemPrng.FillRandom(Buffer: pointer; Len: PtrInt);
-begin
+begin // call mormot.core.os[.security] function
   inc(fTotalBytes, Len);
   FillSystemRandom(Buffer, Len, {allowblocking=}false);
 end;
