@@ -4195,7 +4195,7 @@ function RleUnCompressPartial(src, dst: PByteArray; size, max: PtrUInt): PtrUInt
 
 /// internal hash table adjustment as called from TDynArrayHasher.HashDelete
 // - decrement any integer greater or equal to a deleted value
-// - brute force O(n) indexes fix after deletion (much faster than full ReHash)
+// - brute force O(n) indexes fix after deletion (much faster than full re-hash)
 // - we offer very optimized SSE2 and AVX2 versions on x86_64 - therefore is
 // defined in this unit to put this asm code in mormot.core.base.asmx64.inc
 procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
@@ -11211,7 +11211,7 @@ begin
     if p1 <> nil then
       if p2 <> nil then
       begin
-        result := p1[0] - p2[0]; // compare first char for quicksort
+        result := p1[0] - p2[0]; // compare first char for QuickSort
         if result <> 0 then
           exit;
         l1 := PStrLen(PtrUInt(p1) - _STRLEN)^;

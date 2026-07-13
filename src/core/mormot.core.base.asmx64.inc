@@ -826,7 +826,7 @@ end;
 
 {
   Some numbers, with CITIES_MAX=200000, deleting 1/128 entries
-  first column (3..23) is the max number of indexes[] chunk to rehash
+  first column (3..23) is the max number of indexes[] chunk to re-hash
   #abc is the number of slots in the hash table
   adjust=.. match DynArrayHashTableAdjust() time fixing the indexes
   hash=ms is the time needed to hash input (not impacted by adjusting algorithm)
@@ -848,7 +848,7 @@ end;
     23 #195075  adjust=161.73ms 14.1GB/s hash=2.57ms
 }
 
-// brute force O(n) indexes fix after deletion (much faster than full ReHash)
+// brute force O(n) indexes fix after deletion (much faster than full re-hash)
 procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
 {$ifdef ABIWINX64}
 var

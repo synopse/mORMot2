@@ -834,7 +834,7 @@ asm
         je      @0
         test    s1, s2
         jz      @maybe0
-@first: mov     al, byte ptr [s1] // we can check the first char (for quicksort)
+@first: mov     al, byte ptr [s1] // we can check the first char (for QuickSort)
         movzx   r8, byte ptr [s2]
         sub     rax, r8
         je      @s
@@ -1001,12 +1001,11 @@ end;
 function _lstrcp(const s: RawByteString; cp: integer): integer; inline;
 begin
   result := cp;
-  if s <> '' then
-  begin
-    result := PStrRec(PtrUInt(s) - _STRRECSIZE)^.codePage;
-    if result <= CP_OEMCP then
-      result := CP_UTF8;
-  end;
+  if s = '' then
+    exit;
+  result := PStrRec(PtrUInt(s) - _STRRECSIZE)^.codePage;
+  if result <= CP_OEMCP then
+    result := CP_UTF8;
 end;
 
 procedure _ansistr_concat_utf8(var dest: RawByteString;

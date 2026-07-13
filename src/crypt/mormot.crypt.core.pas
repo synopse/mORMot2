@@ -7735,7 +7735,7 @@ begin
       fAes.Done;                                  // anti-forensic + set IV = 0
       fAes.EncryptInit(key, fAesKeySize);         // from PBKDF2-SHA-256 output
       TAesContext(fAes).iv.L := PQWord(entropy)^; // keep CTR = zero
-      fBytesSinceSeed := 0;
+      fBytesSinceSeed := 0;                       // reset counter for next Seed
       fSeeding := false;
     finally
       fSafe.UnLock;

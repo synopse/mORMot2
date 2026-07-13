@@ -1678,10 +1678,10 @@ type
   TDynArrayHasher = object
   {$endif USERECORDWITHMETHODS}
   private
-    fDynArray: PDynArray;              // may be defined without TDynArrayHashed
-    fHashItem: TDynArrayHashOne;       // function
-    fEventHash: TOnDynArrayHashOne;    // function of object
-    fHashTableStore: TIntegerDynArray; // store 0 for void entry, or Index+1
+    fDynArray: PDynArray;                  // may exist with no TDynArrayHashed
+    fHashItem: TDynArrayHashOne;           // function
+    fEventHash: TOnDynArrayHashOne;        // function of object
+    fHashTableStore: TIntegerDynArray;     // store 0 for void entry, or Index+1
     fHashTableSize: integer;
     fState: TDynArrayHasherState;
     fCompare: TDynArraySortCompare;        // function
@@ -1731,6 +1731,7 @@ type
     /// returns position in array, or -1 if not found with an optional custom comparer
     function FindIndex(aHashCode: cardinal; Item: pointer; Comp: TDynArraySortCompare = nil): PtrInt;
     /// returns pointer in array, or nil if not found
+    // - will use Compare() but won't support EventCompare()
     function FindHash(aHashCode: cardinal; Item: pointer): pointer;
     /// search an hashed element value for adding, updating the internal hash table
     // - trigger hashing if Count reaches CountTrigger
@@ -1742,7 +1743,8 @@ type
     function FindBeforeDelete(Item: pointer): PtrInt;
     /// full computation of the internal hash table
     // - to be called after items have been manually updated - e.g. after Clear
-    // - can return the number of duplicated values found (likely to be 0)
+    // - by default, will re-hash the values without comparing them - but you
+    // can set duplicates <> nil for such slower detection e.g. after loading
     procedure ForceReHash(duplicates: PInteger = nil);
     {$ifndef PUREMORMOT2}
     function ReHash(forced: boolean = false): integer;
@@ -1755,7 +1757,7 @@ type
     // - using either EventCompare() or Compare() functions
     function Equals(Item: pointer; ndx: PtrInt): boolean;
        {$ifdef FPC_OR_DELPHIXE4}inline;{$endif}
-    /// retrieve the low-level hash of a given item
+    /// retrieve the low-level hash of a given item by calling HashOne()
     function GetHashFromIndex(aIndex: PtrInt): cardinal;
     /// low-level access to the associated TDynArrayinstance holding the data
     property DynArray: PDynArray
@@ -1907,7 +1909,7 @@ type
     // - returns either the index in the dynamic array if found (and set wasAdded
     // to false), either the newly created index in the dynamic array (and set
     // wasAdded to true)
-    // - for faster process (avoid rehash), please set the Capacity property
+    // - for faster process (avoid growing re-hash), please set Capacity first
     // - warning: in contrast to the Add() method, if an entry is added to the
     // array (wasAdded=true), the entry is left VOID: you must set the field
     // content to expecting value - in short, Item is used only for searching,
@@ -1950,11 +1952,10 @@ type
     // this case, you should first call FindHashedAndDelete(OldItem) then
     // FindHashedForAdding(NewItem) to properly handle the internal hash table
     // - if AddIfNotExisting is FALSE, returns the index found (0..Count-1),
-    // or -1 if Item was not found - Update will force slow rehash all content
+    // or -1 if Item was not found - Update will force slow re-hash all content
     // - if AddIfNotExisting is TRUE, returns the index found (0..Count-1),
-    // or the index newly created/added is the Item value was not matching -
-    // add won't rehash all content - for even faster process (avoid rehash),
-    // please set the Capacity property
+    // or the index newly created/added if the Item value was not matching - for
+    // even faster process please set Capacity first
     // - Item should be of the type expected by the dynamic array, since its
     // content will be copied into the dynamic array, and by design it must
     // refer to a variable: e.g. you can't write FindHashedAndUpdate(i+10)
@@ -1976,7 +1977,7 @@ type
     // e.g. you can't write Scan(i+10)
     // - returns -1 if not found, or the index in the dynamic array if found
     function Scan(const Item): PtrInt;
-    /// retrieve the hash value of a given item, from its index
+    /// retrieve the low-level hash of a given item by calling Hasher.HashOne()
     property Hash[aIndex: PtrInt]: cardinal
       read GetHashFromIndex;
     /// alternative event-oriented Compare function to be used for Sort and Find
@@ -9064,7 +9065,7 @@ begin
       {$endif DYNARRAYHASHCOLLISIONCOUNT}
       exit;
     end;
-    // comparison with item is faster than hash e.g. for huge strings
+    // direct inlined Equals() is faster than hash+Equals() e.g. for huge strings
     with fDynArray^ do
       P := PAnsiChar(Value^) + ndx * fInfo.Cache.ItemSize;
     if ((not Assigned(fEventCompare)) and
@@ -9124,7 +9125,7 @@ end;
 function TDynArrayHasher.FindHash(aHashCode: cardinal; Item: pointer): pointer;
 var
   first, last, ndx, pos: PtrInt;
-begin // cut-down version of FindIndex()
+begin // cut-down version of FindIndex() to return a pointer
   ndx := HashTableIndex(aHashCode);
   first := ndx;
   last := fHashTableSize;
@@ -9150,24 +9151,22 @@ end;
 
 procedure TDynArrayHasher.HashAdd(aHashCode: cardinal; var result: PtrInt);
 var
-  n, ndx: PtrInt;
+  n, ndx, s: PtrInt;
 begin
-  // on input: HashTable[result] slot is already computed
   n := fDynArray^.Count;
-  ndx := result;
-  result := n;
-  if fHashTableSize < n then
-    RaiseFatalCollision('HashAdd HashTableSize', aHashCode);
-  if fHashTableSize - n < n shr 2 then
-  begin
+  ndx := result; // on input: result is FindOrNew() HashTable[-(result+1)] slot
+  result := n;   // on output: result is the new appended index in fDynArray
+  s := fHashTableSize - n;
+  if s < n shr 2 then
     // grow hash table when 25% void (192/256,384/512,768/1024,1536/2048...)
-    ForceReHash;
-    ndx := FindForAdd(aHashCode); // recompute position
-    if ndx >= 0 then
-      RaiseFatalCollision('HashAdd', aHashCode);
-  end;
-  ndx := -ndx - 1; // store Index+1 (0 means void slot)
-  inc(n);
+    // _PRIMES[] values ensure it would always trigger a new hash table size
+    if s < 0 then
+      RaiseFatalCollision('HashAdd HashTableSize', aHashCode)
+    else
+      ndx := FindAfterGrow(aHashCode) // grow hash table and recompute position
+  else
+    ndx := -(ndx + 1); // retrieve the new slot position
+  inc(n); // store Index+1 (0 means void slot)
   {$ifdef DYNARRAYHASH_16BIT}
   if hash16bit in fState then
     PWordArray(fHashTableStore)[ndx] := n
@@ -9197,13 +9196,12 @@ begin
       fHashTableStore[next] := 0; // Clear slots
     inc(next);
     if next = last then
+    begin
       if next = first then
-        RaiseFatalCollision('HashDelete down', aHashCode)
-      else
-      begin
-        next := 0;
-        last := first;
-      end;
+        RaiseFatalCollision('HashDelete down', aHashCode);
+      next := 0;
+      last := first;
+    end;
     ndx := HashTableIndexToIndex(next) - 1; // index+1 was stored
     if ndx < 0 then
       break; // stop at void entry
@@ -9212,23 +9210,22 @@ begin
     indexes[n] := ndx;
     inc(n);
   until false;
-  // ReHash collided entries - note: item is not yet deleted in Value^[]
+  // re-hash collided entries - note: item is not yet deleted in Value^[]
   s := fDynArray^.Info.Cache.ItemSize;
   for i := 0 to n - 1 do
   begin
     P := PAnsiChar(fDynArray^.Value^) + {%H-}indexes[i] * s;
-    ndx := FindOrNew(HashOne(P), P, nil);
-    if ndx < 0 then // ignore ndx>=0 dups (like ReHash)
-    begin
-      ndx := -(ndx + 1);   // compute the new slot position
-      n := indexes[i] + 1; // store index+1
-      {$ifdef DYNARRAYHASH_16BIT}
-      if hash16bit in fState then
-        PWordArray(fHashTableStore)[ndx] := n
-      else
-      {$endif DYNARRAYHASH_16BIT}
-        fHashTableStore[ndx] := n;
-    end;
+    ndx := FindOrNew(HashOne(P), P);
+    if ndx >= 0 then
+      continue;          // ignore duplicates (like ForceReHash)
+    ndx := -(ndx + 1);   // compute the new slot position
+    n := indexes[i] + 1; // store index+1
+    {$ifdef DYNARRAYHASH_16BIT}
+    if hash16bit in fState then
+      PWordArray(fHashTableStore)[ndx] := n
+    else
+    {$endif DYNARRAYHASH_16BIT}
+      fHashTableStore[ndx] := n;
   end;
   // adjust all stored indexes (using SSE2/AVX2 on x86_64)
   if fDynArray^.GetCount > 1 then // Count not yet decremented
@@ -9257,7 +9254,7 @@ end;
 function TDynArrayHasher.FindBeforeDelete(Item: pointer): PtrInt;
 var
   h: cardinal;
-  ndx: PtrInt;
+  ndx: PtrInt; // not integer
 begin
   if hasHasher in fState then
   begin
@@ -9302,7 +9299,7 @@ begin
   max := fDynArray^.Count - 1;
   P := fDynArray^.Value^;
   siz := fDynArray^.Info.Cache.ItemSize;
-  if Assigned(fEventCompare) then // custom comparison
+  if Assigned(fEventCompare) then // custom callback for comparison
     for i := 0 to max do
       if fEventCompare(P^, Item^) = 0 then
       begin
@@ -9311,7 +9308,7 @@ begin
       end
       else
         inc(P, siz)
-  else if Assigned(fCompare) then
+  else if Assigned(fCompare) then // custom function for comparison
     for i := 0 to max do
       if fCompare(P^, Item^) = 0 then
       begin
@@ -9319,9 +9316,7 @@ begin
         break;
       end
       else
-        inc(P, siz)
-  else
-    exit;
+        inc(P, siz);
 end;
 
 function TDynArrayHasher.Find(Item: pointer; aHashCode: cardinal): PtrInt;
@@ -9415,7 +9410,7 @@ s:  if Assigned(Hasher^.fEventHash) then // inlined HashOne()
           fnd := PWordArray(Hasher^.fHashTableStore)[ndx]
         else
           fnd := Hasher^.fHashTableStore[ndx];
-        fnd := values + (fnd - 1) * siz; // stored index + 1
+        fnd := values + (fnd - 1) * siz; // we know from above that fnd <> 0
         if ((not Assigned(Hasher^.fEventCompare)) and
             (Hasher^.fCompare(pointer(fnd)^, P^) = 0)) or
            (Assigned(Hasher^.fEventCompare) and
@@ -9461,7 +9456,7 @@ begin
     siz := NextPrime(cap);
 //QueryPerformanceMicroSeconds(t1); write('rehash count=',n,' old=',HashTableSize,
 //' new=', siz, ' oldcol=',CountCollisionsCurrent);
-  fHashTableStore := nil;
+  fHashTableStore := nil; // re-allocate + fill with zero
   fHashTableSize := siz;
   {$ifdef DYNARRAYHASH_16BIT}
   if siz <= 1 shl 16 then
@@ -9771,7 +9766,7 @@ begin
     if result < 0 then
       if AddIfNotExisting then
       begin
-        fHash.HashAdd(hc, result); // ReHash only if necessary + set result
+        fHash.HashAdd(hc, result); // ForceReHash only if necessary + set result
         SetCount(result + 1);      // add new item at the end
       end
       else
