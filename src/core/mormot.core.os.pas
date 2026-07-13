@@ -9501,9 +9501,13 @@ begin
     Command.Parse;
   end;
   AfterExecutableInfoChanged; // set Executable.ProgramFullSpec+Hash
-  // finalize SystemEntropy.Startup and setup SharedRandom instance
+  // finalize SystemEntropy and setup SharedRandom instance
   rnd := @SystemEntropy.Startup;
   crcblocks(rnd, @BaseEntropy, SizeOf(BaseEntropy) shr 4); // cpuid+rdrand+rdtsc
+  {$ifndef CPUINTEL}
+  if SystemEntropy.LiveFeed.c0 = 0 then // may happen on BSD and MAC ARM
+    SystemEntropy.LiveFeed.c := rnd^;   // put something here
+  {$endif CPUINTEL}
   PBlock128(@SharedRandom.Generator)^ := rnd^;
   SharedRandom.Generator.SeedGenerator; // we have enough entropy yet
   crcblock(rnd, @Executable.Hash);

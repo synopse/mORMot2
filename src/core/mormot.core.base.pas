@@ -10501,7 +10501,7 @@ begin
   {$ifdef FPC}
   e.q[0] := GetTickCount64;         // always available in FPC RTL
   {$else}
-  PDouble(@e)^ := Now;              // good enough as fallback
+  PDouble(@e)^ := Now;              // good enough as Delphi POSIX  fallback
   {$endif FPC}
   crc256c(@e, SizeOf(e.q[0]), e.b); // weak but not void
 end; // mormot.core.os.posix.inc overrides to use OS API - but not /dev/urandom
@@ -10514,8 +10514,8 @@ begin
   _Fill256FromOs(tmp);              // fast 256-bit entropy from OS APIs
   XorMemory(e.r[0], tmp.l);
   XorMemory(e.r[1], tmp.h);
-  e.r[2].L := e.r[2].L xor PtrUInt(@tmp) xor tmp.d3;
-  e.r[2].H := e.r[2].H xor tmp.d2 xor PtrUInt(
+  e.r[2].L := e.r[2].L xor PtrUInt(@tmp) xor tmp.d3; // stack address
+  e.r[2].H := e.r[2].H xor tmp.d2 xor PtrUInt(       // thread ID
     {$ifdef POSIXDELPHI} MainThreadID {$else} GetCurrentThreadId {$endif});
   {$ifdef ASMINTEL}
   if cfTSC in CpuFeatures then      // may trigger GPF if CR4.TSD bit is set
@@ -10524,7 +10524,7 @@ begin
   if cfTSC in CpuFeatures then
     e.r[2].L := e.r[2].L xor Rdtsc; // has changed during slow RdRand32()
   {$else}
-  {$ifdef FPC} e.r[2].L := e.r[2].L xor GetTickCount64; {$endif FPC}
+  {$ifdef FPC} e.r[2].L := e.r[2].L xor sysutils.GetTickCount64; {$endif FPC}
   {$endif ASMINTEL}
   crcblock(@e.r[3], @tmp.l);        // crc32c 128-bit diffusion
 end; // note: RTL Random() not used because it is not thread-safe nor consistent
@@ -14346,7 +14346,7 @@ begin
   // initialize CPU-specific asm
   TestCpuFeatures;
   {$ifndef ASMINTELNOTPIC}
-  if BaseEntropy.i0 = 0 then // BSD or MAC arm/aarch64
+  if BaseEntropy.i0 = 0 then // may happen on BSD or MAC arm/aarch64
     XorEntropy(BaseEntropy); // ensure not void
   {$endif ASMINTELNOTPIC}
 end;

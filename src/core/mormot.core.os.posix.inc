@@ -4171,12 +4171,7 @@ begin
   crcblock(@e.l, @SystemEntropy.LiveFeed); // obfuscate
   RetrieveSysInfo(si); // at least uptime + cpu load + free mem on all OS
   DefaultHasher128(@e.h, @si, SizeOf(si)); // maybe AesNiHash128
-  {$ifndef CPUINTEL}
-  if SystemEntropy.LiveFeed.c0 = 0 then       // may happen on BSD and MAC ARM
-    crcblocks(@SystemEntropy.LiveFeed, @e, 2) // put something here
-  else
-  {$endif CPUINTEL}
-    crcblock(@e.h, @SystemEntropy.Startup);  // obfuscate
+  crcblock(@e.h, @SystemEntropy.Startup);  // obfuscate
 end;
 
 const
