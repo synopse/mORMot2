@@ -1726,7 +1726,9 @@ type
     function Find(Item: pointer; aHashCode: cardinal): PtrInt; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// search for a hash position inside the dynamic array with hashing
-    function Find(aHashCode: cardinal; aForAdd: boolean): PtrInt; overload;
+    function Find(const aHashCode: cardinal): PtrInt; overload;
+    /// search for added hash position inside the dynamic array with hashing
+    function FindForAdd(const aHashCode: cardinal): PtrInt; overload;
     /// returns position in array, or next void index in HashTable[] as -(index+1)
     function FindOrNew(aHashCode: cardinal; Item: pointer; aHashTableIndex: PPtrInt): PtrInt;
     /// returns position in array, or -1 if not found with an optional custom comparer
@@ -8978,15 +8980,13 @@ begin
     [fDynArray^.Info.Name]);
 end;
 
-function TDynArrayHasher.Find(aHashCode: cardinal; aForAdd: boolean): PtrInt;
+function TDynArrayHasher.Find(const aHashCode: cardinal): PtrInt;
 var
   first, last, ndx, siz: PtrInt;
-  P: PAnsiChar;
 begin
   result := HashTableIndexSafe(aHashCode);
   first := result;
   last := fHashTableSize;
-  P := fDynArray^.Value^;
   siz := fDynArray^.Info.Cache.ItemSize;
   repeat
     ndx := HashTableIndexToIndex(result) - 1; // index+1 was stored
@@ -8996,24 +8996,49 @@ begin
       result := -(result + 1);
       exit;
     end
-    else if not aForAdd and
-            (HashOne(P + ndx * siz) = aHashCode) then
+    else if HashOne(PAnsiChar(fDynArray^.Value^) + ndx * siz) = aHashCode then
     begin
       result := ndx;
       exit;
     end;
     inc(result); // try next entry on hash collision
     if result = last then
-      // reached the end -> search once from HashTable[0] to HashTable[first-1]
+    // reached the end -> search once from HashTable[0] to HashTable[first-1]
+    begin
       if result = first then
-        break
-      else
-      begin
-        result := 0;
-        last := first;
-      end;
+        break;
+      result := 0;
+      last := first;
+    end;
   until false;
-  result := RaiseFatalCollision('Find', aHashCode);
+  RaiseFatalCollision('Find', aHashCode);
+end;
+
+function TDynArrayHasher.FindForAdd(const aHashCode: cardinal): PtrInt;
+var
+  first, last, ndx: PtrInt;
+begin
+  result := HashTableIndexSafe(aHashCode);
+  first := result;
+  last := fHashTableSize;
+  repeat
+    ndx := HashTableIndexToIndex(result) - 1; // index+1 was stored
+    if ndx < 0 then
+    begin
+      // found void entry
+      result := -(result + 1);
+      exit;
+    end;
+    inc(result); // try next entry on hash collision
+    if result <> last then
+      continue;
+    // reached the end -> search once from HashTable[0] to HashTable[first-1]
+    if result = first then
+      break;
+    result := 0;
+    last := first;
+  until false;
+  RaiseFatalCollision('FindForAdd', aHashCode);
 end;
 
 function TDynArrayHasher.FindOrNew(aHashCode: cardinal; Item: pointer;
@@ -9141,7 +9166,7 @@ begin
   begin
     // grow hash table when 25% void (192/256,384/512,768/1024,1536/2048...)
     ForceReHash;
-    ndx := Find(aHashCode, {foradd=}true); // recompute position
+    ndx := FindForAdd(aHashCode); // recompute position
     if ndx >= 0 then
       RaiseFatalCollision('HashAdd', aHashCode);
   end;
