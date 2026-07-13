@@ -489,10 +489,9 @@ type
 
   /// REST class with direct access to an external database engine
   // - you can set an alternate per-table database engine by using this class
-  // - this abstract class is to be overridden with a proper implementation
-  // (e.g. TRestStorageInMemory in this unit, or TRestStorageExternal
-  // from mormot.orm.sql unit, or TRestStorageMongoDB from
-  // mormot.orm.mongodb.pas unit)
+  // - this abstract class is to be overridden with a proper implementation,
+  // e.g. TRestStorageInMemory in this unit, or TRestStorageExternal from
+  // mormot.orm.sql.pas unit, or TRestStorageMongoDB from mormot.orm.mongodb.pas
   TRestStorage = class(TRestOrm)
   protected
     fStoredClass: TOrmClass;
@@ -723,13 +722,14 @@ type
   // the TRestStorageInMemory instance
   // - our TRestStorageInMemory database engine is very optimized and is a lot
   // faster than SQLite3 for such queries - but its values remain in RAM,
-  // therefore it is not meant to deal with more than 100,000 rows or if
-  // ACID commit on disk is required
+  // therefore it is not meant to deal with more than 100,000 rows or if ACID
+  // commit on disk is required
+  // - another benefit is that you can access the TOrm array directly in memory
+  // so you can apply very fast search or process on Value[] in native code
   TRestStorageInMemory = class(TRestStorageTOrm)
   protected
     fValue: TOrmObjArray;
     fCount: integer;
-    fCommitShouldNotUpdateFile: boolean;
     fBinaryFile: boolean;
     fExpandedJson: boolean;
     fUnSortedID: boolean;
@@ -744,6 +744,7 @@ type
     fTrackChangesPersistence: IRestOrm;
     fTrackChangesDeleted: TInt64DynArray; // TIDDynArray
     fTrackChangesDeletedCount: integer;
+    fCommitShouldNotUpdateFile: boolean;
     function UniqueFieldsUpdateOK(aRec: TOrm; aUpdateIndex: integer;
       aFields: PFieldBits): boolean;
     procedure RaiseGetItemOutOfRange(Index: integer);
@@ -3436,6 +3437,7 @@ begin
   QueryPerformanceMicroSeconds(start);
   fCount := length(fValue);
   fValues.Hasher.ForceReHash(@dup);
+  dupfield := nil;
   if dup > 0 then
     dupfield := pointer(ID_TXT)
   else
