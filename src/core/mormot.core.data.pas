@@ -2348,8 +2348,8 @@ type
   /// thread-safe TStringList-class optimized for our native UTF-8 string type
   // - can optionally store associated some TObject instances
   // - high-level methods of this class are thread-safe
-  // - if fNoDuplicate flag is defined, an internal hash table will be
-  // maintained to perform IndexOf() lookups in O(1) linear way
+  // - if fNoDuplicate flag is defined, Add/AddObject will maintain an internal
+  // hash table to perform IndexOf() lookups in O(1) linear way
   // - not thread-safe by default, unless fThreadSafe is set to use the TRWLock
   TRawUtf8List = class(TObjectRWLock)
   protected
@@ -2400,8 +2400,8 @@ type
     /// initialize the RawUtf8/Objects storage with extended flags
     // - by default, any associated Objects[] are just weak references;
     // you may supply fOwnObjects flag to force object instance management
-    // - if you want the stored text items to be unique, set fNoDuplicate
-    // and then an internal hash table will be maintained for fast IndexOf()
+    // - if you want the stored text items to be unique, set fNoDuplicate and
+    // Add/AddObject will maintain an internal hash table for fast IndexOf()
     // - you can set fCaseSensitive to let the UTF-8 lookup be case-sensitive
     // - not thread-safe by default, unless fThreadSafe is set to use a R/W lock
     // - is defined as CreateEx instead of overload Create to avoid weird Delphi
@@ -2589,12 +2589,14 @@ type
     // - returns '' and raise no exception in case of out of range supplied index
     // - if you want to use it with the UI, use Utf8ToString() function
     // - reading this property is not thread-safe, since content may change
+    // - writing this property is not allowed if fNoDuplicate is set in Flags
     property Strings[Index: PtrInt]: RawUtf8
       read Get write Put; default;
     /// get or set an item as RTL string, ready to be used with the UI
     // - returns '' and raise no exception in case of out of range supplied index
     // - wrap Strings[] with Utf8ToString/StringToUtf8 functions
     // - reading this property is not thread-safe, since content may change
+    // - writing this property is not allowed if fNoDuplicate is set in Flags
     property Str[Index: PtrInt]: string
       read GetS write PutS;
     /// get or set a Object item
@@ -3932,7 +3934,7 @@ begin
   for i := 0 to fCount - 1 do
     Make([PShortString(fValue[i])^, Sep, PUtf8Char(Values(i))], u[i]);
   QuickSortRawUtf8(u, fCount);
-  PRawUtf8ToCsv(pointer(u), fCount, Feed, false, result);
+  PRawUtf8ToCsv(pointer(u), fCount, Feed, {rev=}false, result);
 end;
 
 var // late resolution e.g. of ldap: macros by GlobalInfoRegister()
@@ -4773,6 +4775,9 @@ begin
   if (self <> nil) and
      (PtrUInt(Index) < PtrUInt(fCount)) then
   begin
+    if fNoDuplicate in fFlags then
+      ESynException.RaiseUtf8(
+        '%[%] := ... is forbidden with fNoDuplicate: use Add()', [self, Index]);
     fValue[Index] := Value;
     if Assigned(fOnChange) then
       Changed;
@@ -4815,7 +4820,7 @@ var
   Line: RawUtf8;
 begin
   DelimLen := length(Delimiter);
-  BeginUpdate; // also makes fSafe.Lock
+  BeginUpdate; // also makes fSafe.WriteLock
   try
     Clear;
     if (P <> nil) and
@@ -4855,7 +4860,7 @@ procedure TRawUtf8List.SetFrom(const aText: TRawUtf8DynArray;
 var
   n: integer;
 begin
-  BeginUpdate; // also makes fSafe.Lock
+  BeginUpdate; // also makes fSafe.WriteLock
   try
     Clear;
     n := length(aText);
