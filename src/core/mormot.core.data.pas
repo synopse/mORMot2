@@ -1730,8 +1730,9 @@ type
     function Find(Item: pointer; aHashCode: cardinal): PtrInt; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// returns position in array, or next void index in HashTable[] as -(index+1)
-    function FindOrNew(aHashCode: cardinal; Item: pointer; aHashTableIndex: PPtrInt): PtrInt;
-    /// returns position in array, or -1 if not found with an optional custom comparer
+    function FindOrNew(aHashCode: cardinal; Item: pointer; aHashTableIndex: PPtrInt = nil): PtrInt;
+    /// returns position in array or -1 if not found, with an optional custom comparer
+    // - will use Compare() or supplied Comp() or but won't support EventCompare()
     function FindIndex(aHashCode: cardinal; Item: pointer; Comp: TDynArraySortCompare = nil): PtrInt;
     /// returns pointer in array, or nil if not found
     // - will use Compare() but won't support EventCompare()
@@ -9243,7 +9244,7 @@ function TDynArrayHasher.FindBeforeAdd(Item: pointer; out wasAdded: boolean;
   aHashCode: cardinal): PtrInt;
 begin
   wasAdded := false;
-  result := FindOrNew(aHashCode, Item, nil);
+  result := FindOrNew(aHashCode, Item);
   if result >= 0 then
     exit; // found an existing matching item
   wasAdded := true;
@@ -9320,7 +9321,7 @@ end;
 
 function TDynArrayHasher.Find(Item: pointer; aHashCode: cardinal): PtrInt;
 begin
-  result := FindOrNew(aHashCode, Item, nil); // fallback to Scan() if needed
+  result := FindOrNew(aHashCode, Item); // no fallback to Scan()
   if result < 0 then
     result := -1; // for coherency with most search methods
 end;
@@ -9668,7 +9669,7 @@ end;
 
 function TDynArrayHashed.FindHashed(const Item): PtrInt;
 begin
-  result := fHash.FindOrNew(fHash.HashOne(@Item), @Item, nil);
+  result := fHash.FindOrNew(fHash.HashOne(@Item), @Item);
   if result < 0 then
     result := -1; // for coherency with most methods
 end;
@@ -9676,7 +9677,7 @@ end;
 function TDynArrayHashed.FindFromHash(const Item; aHashCode: cardinal): PtrInt;
 begin
   // overload FindHashed() trigger F2084 Internal Error: C2130 on Delphi XE3
-  result := fHash.FindOrNew(aHashCode, @Item, nil); // fallback to Scan() if needed
+  result := fHash.FindOrNew(aHashCode, @Item); // no fallback to Scan()
   if result < 0 then
     result := -1; // for coherency with most methods
 end;
@@ -9745,7 +9746,7 @@ end;
 
 function TDynArrayHashed.FindHashedAndFill(var ItemToFill): PtrInt;
 begin
-  result := fHash.FindOrNew(fHash.HashOne(@ItemToFill), @ItemToFill, nil);
+  result := fHash.FindOrNew(fHash.HashOne(@ItemToFill), @ItemToFill);
   if result < 0 then
     result := -1
   else
@@ -9760,7 +9761,7 @@ begin
   if hasHasher in fHash.fState then
   begin
     hc := fHash.HashOne(@Item);
-    result := fHash.FindOrNew(hc, @Item, nil);
+    result := fHash.FindOrNew(hc, @Item);
     if result < 0 then
       if AddIfNotExisting then
       begin

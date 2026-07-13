@@ -9533,7 +9533,7 @@ begin
   // caller is expected to call fSafe.Lock/Unlock
   if self <> nil then
   begin
-    result := fKeys.Hasher.FindOrNew(fKeys.Hasher.HashOne(@aKey), @aKey, nil);
+    result := fKeys.Hasher.FindOrNew(fKeys.Hasher.HashOne(@aKey), @aKey);
     if result < 0 then
       result := -1
     else if aUpdateTimeOut then
