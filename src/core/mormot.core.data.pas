@@ -2513,6 +2513,9 @@ type
     // - and corresponding objects (if aOwnObjects was true at constructor)
     // - thread-safe method, also clearing the internal Hash Table
     procedure Clear; virtual;
+    /// sort in-place all RawUtf8 items, following fCaseSensitive flag
+    // - any associated Objects[] would also be moved in synch
+    procedure Sort;
     /// find a RawUtf8 item in the stored Strings[] list
     // - this search is case sensitive if fCaseSensitive flag was set (which
     // is the default)
@@ -4433,6 +4436,36 @@ end;
 procedure TRawUtf8List.Clear;
 begin
   SetCapacity(0); // will also call Changed
+end;
+
+procedure TRawUtf8List.Sort;
+var
+  obj: TIntegerDynArray;
+  tmp: TObjectDynArray;
+  i: PtrInt;
+begin
+  if fThreadSafe in fFlags then
+    fSafe.WriteLock;
+  try
+    if fCount <= 1 then
+      exit; // nothing to sort
+    if fObjects <> nil then
+    begin
+      SetLength(obj, fCount);
+      FillIncreasing(pointer(obj), 0, fCount); // synchronize fObjects[obj[i]]
+    end;
+    QuickSortRawUtf8(fValue, fCount, @obj, StrCompByCase[not (fCaseSensitive in fFlags)]);
+    RehashAfterChanged;
+    if obj = nil then
+      exit; // no fObjects[] to synchronize
+    SetLength(tmp, length(fObjects));
+    for i := 0 to fCount - 1 do
+      tmp[i] := fObjects[obj[i]];
+    fObjects := tmp;
+  finally
+    if fThreadSafe in fFlags then
+      fSafe.WriteUnLock;
+  end;
 end;
 
 procedure TRawUtf8List.InternalDelete(Index: PtrInt);
