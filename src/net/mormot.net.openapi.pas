@@ -133,7 +133,7 @@ type
     // high-level OpenAPI Schema Helpers
     function IsArray: boolean;
     function IsObject: boolean;
-    function IsNamedEnum: boolean;
+    function IsString: boolean;
     function BuiltInType(Parser: TOpenApiParser): TOpenApiBuiltInType;
     function HasDescription: boolean;
     function HasItems: boolean;
@@ -842,18 +842,17 @@ end;
 
 function TOpenApiSchema.IsArray: boolean;
 begin
-  result := _Type = 'array';
+  result := Data.CompareText('type', 'array') = 0;
 end;
 
 function TOpenApiSchema.IsObject: boolean;
 begin
-  result := _Type = 'object';
+  result := Data.CompareText('type', 'object') = 0;
 end;
 
-function TOpenApiSchema.IsNamedEnum: boolean;
+function TOpenApiSchema.IsString: boolean;
 begin
-  result := (Enum <> nil) and
-            (_Format <> '');
+  result := Data.CompareText('type', 'string') = 0;
 end;
 
 function TOpenApiSchema.BuiltInType(Parser: TOpenApiParser): TOpenApiBuiltInType;
