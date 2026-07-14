@@ -1482,6 +1482,7 @@ type
     /// compare a TTDocVariantData object property with a given text value
     function CompareText(const aName, aValue: RawUtf8;
       aCaseInsensitive: boolean = false): integer;
+      {$ifdef HASSAFEINLINE}inline;{$endif}
     /// low-level method called internally to reserve place for new values
     // - returns the index of the newly created item in Values[]/Names[] arrays
     // - you should not have to use it, unless you want to add some items
