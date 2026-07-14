@@ -7025,16 +7025,15 @@ begin
   else
     start := nil;
   result := parser.Reformat(Json);
-  if start <> nil then // manual ending } of HJson implicit object
-  begin
-    if (jrfTrailingComma in parser.Fmt) and
-       not (parser.State in [stObjectNameFirst, stValueFirst]) then
-      AddDirect(',');
-    dec(fHumanReadableLevel);
-    if jrfIndent in parser.Fmt then
-      AddCRAndIndent;
-    AddDirect('}');
-  end;
+  if start = nil then // no manual ending } of HJson implicit object
+    exit;
+  if (jrfTrailingComma in parser.Fmt) and
+     not (parser.State in [stObjectNameFirst, stValueFirst]) then
+    AddDirect(',');
+  dec(fHumanReadableLevel);
+  if jrfIndent in parser.Fmt then
+    AddCRAndIndent;
+  AddDirect('}');
 end;
 
 procedure TJsonWriter.AddJsonEscape(P: pointer; Len: PtrInt);
