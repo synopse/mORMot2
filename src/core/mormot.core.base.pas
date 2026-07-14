@@ -961,7 +961,7 @@ procedure FastAssignNewNotVoid(var d; s: pointer = nil); overload;
 function FastNewString(len: PtrInt; codepage: PtrInt = CP_RAWBYTESTRING): pointer;
   {$ifdef HASSAFEFPCINLINE}inline;{$endif}
 
-procedure FastSetStrRec(var Rec: TStrRec; Len: TStrLen);
+procedure FastSetStrRec(var Rec: TStrRec; const Len: TStrLen; const RefCnt: TStrCnt);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fill a RawUtf8 constant with up to 7 chars of UTF-8 content
@@ -4358,6 +4358,7 @@ function VarIsEmptyOrNull(const V: Variant): boolean;
 
 /// same as VarIsStr() but handling varVariantByRef weak references
 function VarIsString(const V: Variant): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// same as VarIsEmpty(PVariant(V)^) or VarIsNull(PVariant(V)^), but faster
 // - we also discovered some issues with FPC's Variants unit, so this function
@@ -5210,10 +5211,10 @@ begin
   inc(PStrRec(result));
   {$endif FPC}
   {$ifdef HASCODEPAGE} // also set elemSize := 1
-  {$ifdef FPC}
-  rec^.codePageElemSize := codepage + (1 shl 16); // with constant propagation
+  {$ifdef FPC}         // with constant propagation
+  rec^.codePageElemSize := codepage + (SizeOf(AnsiChar) shl 16);
   {$else}
-  PCardinal(@rec^.codePage)^ := codepage + (1 shl 16);
+  PCardinal(@rec^.codePage)^ := codepage + (SizeOf(AnsiChar) shl 16);
   {$endif FPC}
   {$endif HASCODEPAGE}
   rec^.refCnt := 1;
@@ -5399,22 +5400,22 @@ begin
     FastAssignNewNotVoid(s, result);
 end;
 
-procedure FastSetStrRec(var Rec: TStrRec; Len: TStrLen);
+procedure FastSetStrRec(var Rec: TStrRec; const Len: TStrLen; const RefCnt: TStrCnt);
 begin
   {$ifdef HASCODEPAGE}
   {$ifdef FPC}
-  Rec.codePageElemSize := CP_UTF8 + (1 shl 16);
+  Rec.codePageElemSize := CP_UTF8 + (SizeOf(AnsiChar) shl 16);
   {$else}
-  PCardinal(@Rec.codePage)^ := cardinal(CP_UTF8) + (1 shl 16);
+  PCardinal(@Rec.codePage)^ := cardinal(CP_UTF8) + (SizeOf(AnsiChar) shl 16);
   {$endif FPC}
   {$endif HASCODEPAGE}
-  Rec.refCnt := -1; // make it constant, out of the MM allocation space
+  Rec.refCnt := RefCnt; // -1 could make copy on Delphi; 2 to be out of heap
   Rec.length := Len;
 end;
 
 function FastSetConst(var S; var Rec: TStrRecConst; P: pointer; Len: TStrLen): PUtf8Char;
 begin
-  FastSetStrRec(Rec.Header, Len);
+  FastSetStrRec(Rec.Header, Len, -1);
   result := @Rec.TextLo;
   if P <> nil then
     PInt64(result)^ := PInt64(P)^; // up to 7 chars
