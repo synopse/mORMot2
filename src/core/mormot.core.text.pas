@@ -8321,8 +8321,8 @@ begin
       Curr64ToStr(vd^.VInt64, result);
     varDate:
       begin
-        _VariantToUtf8DateTimeIso8601(vd^.VDate, 'T', result, {withms=}false);
         wasString := true;
+        _VariantToUtf8DateTimeIso8601(vd^.VDate, 'T', result, {withms=}false);
       end;
     varOleStr:
       begin

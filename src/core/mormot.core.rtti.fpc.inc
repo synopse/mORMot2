@@ -1046,7 +1046,7 @@ begin
     begin
       // dest := dest+s2 -> resize dest inplace
       new := PAnsiChar(pointer(dest)) - _STRRECSIZE;
-      PStrRec(new)^.codePageElemSize := cp + (1 shl 16); // always force
+      PStrRec(new)^.codePageElemSize := cp + (SizeOf(AnsiChar) shl 16); // force
       PStrRec(new)^.length := l1 + _lstrlen(s2);
       pointer(dest) := new;
       new := ReallocMem(pointer(dest),
@@ -1159,7 +1159,7 @@ begin
     begin
       // dest := dest+s... -> realloc dest in-place
       new := PAnsiChar(pointer(dest)) - _STRRECSIZE;
-      PStrRec(new)^.codePageElemSize := cp + (1 shl 16); // always force
+      PStrRec(new)^.codePageElemSize := cp + (SizeOf(AnsiChar) shl 16); // force
       PStrRec(new)^.length := len;
       pointer(dest) := new;
       new := ReallocMem(pointer(dest), len + (_STRRECSIZE + 16)) + _STRRECSIZE;
