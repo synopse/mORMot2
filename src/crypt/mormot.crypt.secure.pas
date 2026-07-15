@@ -2035,7 +2035,8 @@ type
     /// retrieve some random bytes into a buffer
     procedure Get(dst: pointer; dstlen: PtrInt); overload; virtual; abstract;
     /// retrieve some random bytes into a RawByteString
-    function Get(len: PtrInt): RawByteString; overload; virtual;
+    // - defined as procedure to ensure RefCnt=1 so that FillZero(dst) works
+    procedure Get(var dst: RawByteString; len: PtrInt); overload; virtual;
     /// retrieve some random bytes into a TBytes
     function GetBytes(len: PtrInt): TBytes;
     /// retrieve a random 32-bit value
@@ -8133,9 +8134,9 @@ end;
 
 { TCryptRandom }
 
-function TCryptRandom.Get(len: PtrInt): RawByteString;
+procedure TCryptRandom.Get(var dst: RawByteString; len: PtrInt);
 begin
-  Get(FastNewRawByteString(result, len), len);
+  Get(FastNewRawByteString(dst, len), len);
 end;
 
 function TCryptRandom.GetBytes(len: PtrInt): TBytes;
@@ -8149,7 +8150,7 @@ function TCryptRandom.Get32: cardinal;
 var
   n: cardinal; // safer with a local variable
 begin
-  Get(@n, 4);
+  Get(@n, SizeOf(n));
   result := n;
 end;
 
@@ -8197,7 +8198,7 @@ type
     fSource: TAesPrngGetEntropySource;
   public
     constructor Create(const name: RawUtf8); override;
-    function Get(len: PtrInt): RawByteString; override;
+    procedure Get(var dst: RawByteString; len: PtrInt); override;
     procedure Get(dst: pointer; dstlen: PtrInt); override;
   end;
 
@@ -8207,16 +8208,16 @@ begin
   inherited Create(name); // should be done after InternalResolve()
 end;
 
-function TCryptRandomEntropy.Get(len: PtrInt): RawByteString;
+procedure TCryptRandomEntropy.Get(var dst: RawByteString; len: PtrInt);
 begin
-  result := TAesPrng.GetEntropy(len, fSource);
+  dst := TAesPrng.GetEntropy(len, fSource); // may be slow for a few bytes
 end;
 
 procedure TCryptRandomEntropy.Get(dst: pointer; dstlen: PtrInt);
 var
   tmp: RawByteString;
 begin
-  tmp := TAesPrng.GetEntropy(dstlen, fSource); // may be slow for a few bytes
+  Get(tmp, dstlen);
   MoveFast(pointer(tmp)^, dst^, dstlen);
   FillZero(tmp);
 end;
