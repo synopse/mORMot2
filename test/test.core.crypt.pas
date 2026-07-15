@@ -893,6 +893,7 @@ var
   b1, b2: TAesBlock;
   a1, a2: TAesPrngAbstract;
   s1, s2, split: RawByteString;
+  spi: SpiUtf8;
   c: cardinal;
   d: double;
   e: TSynExtended;
@@ -918,6 +919,27 @@ begin
   Check(not IsZero(b2));
   Check(not IsEqual(b1, b2));
   Check(not CompareMem(@b1, @b2, SizeOf(b1)));
+  // validate reusable MakeStrongPassWord() algorithm
+  Check(MakeStrongPassWord(spi));
+  spi := ' ';
+  Check(MakeStrongPassWord(spi));
+  CheckEqual(spi, 'G');
+  spi := '  ';
+  Check(MakeStrongPassWord(spi));
+  CheckEqual(spi, 'GG');
+  spi := '    ';
+  Check(MakeStrongPassWord(spi));
+  CheckEqual(spi, 'GGGG');
+  spi := '     ';
+  CheckNot(MakeStrongPassWord(spi));
+  CheckEqual(spi, 'GGGGG');
+  Check(not MakeStrongPassWord(spi));
+  CheckEqual(spi, 'jjjjj');
+  spi := '0123456789';
+  CheckNot(MakeStrongPassWord(spi));
+  CheckEqual(spi, 'WXYZ012345');
+  Check(MakeStrongPassWord(spi));
+  CheckEqual(spi, 'z+BCWXYZ01');
   // validate this PRNG class
   clo := 0;
   chi := 0;
