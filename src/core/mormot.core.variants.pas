@@ -1829,8 +1829,10 @@ type
     // - this method will only handle nested TDocVariant values: use the
     // slightly slower GetValueByPath() overloaded methods, if any nested object
     // may be of another type (e.g. a TBsonVariant)
-    function GetPVariantByPath(const aPath: RawUtf8;
-      aPathDelim: AnsiChar = '.'): PVariant;
+    function GetPVariantByPath(const aPath: RawUtf8; aPathDelim: AnsiChar = '.'): PVariant;
+    /// low-level PUtf8Char function called from GetPVariantByPath()
+    function GetPVariantByPathP(csv: PUtf8Char; delim: AnsiChar = '.'): PVariant;
+      {$ifdef HASINLINE}inline;{$endif}
     /// retrieve a reference to a value, given its path
     // - if the supplied aPath does not match any object, it will follow
     // dvoReturnNullForUnknownProperty option
@@ -9568,15 +9570,18 @@ end;
 
 function TDocVariantData.GetPVariantByPath(const aPath: RawUtf8;
   aPathDelim: AnsiChar): PVariant;
+begin
+  result := GetPVariantByPathP(pointer(aPath), aPathDelim);
+end;
+
+function TDocVariantData.GetPVariantByPathP(csv: PUtf8Char; delim: AnsiChar): PVariant;
 var
   ndx, len: PtrInt;
   vt: cardinal;
-  csv: PUtf8Char;
 begin
   result := @self;
-  csv := pointer(aPath);
   if (result <> nil) and
-     (aPath <> '') then
+     (csv <> nil) then
     repeat
       repeat
         vt := PVarData(result)^.VType; // inlined dv := _Safe(result^)
@@ -9586,14 +9591,14 @@ begin
       until false;
       if vt <> DocVariantVType then
         break;
-      ndx := PDocVariantData(result)^.InternalNextPath(csv, aPathDelim, len);
+      ndx := PDocVariantData(result)^.InternalNextPath(csv, delim, len);
       if ndx < 0 then
-        break; // this nested level in path does not exist
+        break;  // this nested level in path does not exist
       inc(csv, len);
       result := @PDocVariantData(result)^.VValue[ndx];
       if csv^ = #0 then
-        exit; // exhausted whole path, so result is the found item
-      inc(csv); // aPathDelim
+        exit;   // exhausted whole path, so result is the found item
+      inc(csv); // delim
     until false;
   result := nil;
 end;

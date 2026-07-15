@@ -6685,7 +6685,7 @@ begin
     json := sqlite3.value_text(argv[0]);
     doc.InitJsonInPlace(tmp.Init(json), JSON_FAST_FLOAT);
     tmp.Done;
-    v := doc.GetPVariantByPath(sqlite3.value_text(argv[1]));
+    v := doc.GetPVariantByPathP(sqlite3.value_text(argv[1]));
     if v <> nil then
     begin
       // update the field, then return whole JSON
