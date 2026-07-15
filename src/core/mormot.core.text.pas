@@ -1655,6 +1655,10 @@ procedure VariantToUtf8(const V: Variant; var result: RawUtf8;
 function VariantToUtf8(const V: Variant; var Text: RawUtf8): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// combine VarIsString() and VariantToUtf8() functions
+function VarIsUtf8(const V: Variant; var Text: RawUtf8): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// convert any non-null Variant into UTF-8 encoded String
 // - empty and null variants will return false (usable e.g. for mustache data)
 function VariantToText(const V: Variant; var Text: RawUtf8): boolean; overload;
@@ -1837,6 +1841,10 @@ procedure TempUtf8Done(var Res: TTempUtf8);
 // - you MUST eventually call TempUtf8Done(Res) unless vfNoAlloc has been set
 function VariantToTempUtf8(const V: variant; var Res: TTempUtf8;
   Flags: TVariantToTempUtf8Flags = []): boolean;
+
+/// append any Variant to a TSynTempAdder using TTempUtf8
+procedure VariantToAdder(var Adder: TSynTempAdder; const V: variant;
+  Flags: TVariantToTempUtf8Flags = []);
 
 /// convert an open array (const Args: array of const) argument into a TTempUtf8
 // - it would return true if Res.Len > 0, so Res could be added or processed
@@ -8437,15 +8445,19 @@ begin
   VariantToUtf8(V, Text, result);
 end;
 
-function VariantToText(const V: Variant; var Text: RawUtf8): boolean;
+function VarIsUtf8(const V: Variant; var Text: RawUtf8): boolean;
 begin
   result := false;
+  if VarIsString(V) then
+    VariantToUtf8(V, Text, result);
+end;
+
+function VariantToText(const V: Variant; var Text: RawUtf8): boolean;
+begin
   if VarIsEmptyOrNull(V) then
-  begin
-    FastAssignNew(Text);
-    exit;
-  end;
-  VariantToUtf8(V, Text);
+    FastAssignNew(Text)
+  else
+    VariantToUtf8(V, Text, result);
   result := Text <> '';
 end;
 
@@ -8990,6 +9002,18 @@ n:    if vfNullAsVoid in Flags then
         VariantToTempUtf8(SetVarDataUnRef(vt, vd, tmp)^, Res, Flags);
     end;
   end;
+end;
+
+procedure VariantToAdder(var Adder: TSynTempAdder; const V: variant;
+  Flags: TVariantToTempUtf8Flags);
+var
+  u: TTempUtf8;
+begin
+  VariantToTempUtf8(V, u, Flags);
+  if u.Len <= 0 then
+    exit;
+  Adder.Add(u.Text, u.Len);
+  TempUtf8Done(u);
 end;
 
 function VarRecToTempUtf8(V: PVarRec; var Res: TTempUtf8; wasString: PBoolean): boolean;
