@@ -2176,7 +2176,8 @@ type
     function SockInReadLn(Buffer: PAnsiChar; Size: PtrInt): PtrInt;
     /// returns the number of bytes in SockIn^.Buffer or pending in the OS stack
     // - it first checks and quickly returns any length pending in SockIn^.Buffer
-    // - if buffer is void, will call InputSock to fill it or check the socket API
+    // - if buffer is void, will call InputSock to fill the buffer or check the
+    // socket API within aTimeOutMS - SockInPending(-1) will only check the buffer
     // - returns -1/-2 in case of a socket error (e.g. broken/closed connection)
     // - returns the number of bytes available in input buffers (SockIn or TLS):
     // there may be more waiting at the socket level
@@ -7281,14 +7282,13 @@ function TCrtSocket.SockInPending(aTimeOutMS: integer): integer;
 var
   backup: PtrInt;
 begin
-  if aTimeOutMS < 0 then
-    DoRaise('SockInPending(-1)');
   // first try in SockIn^.Buffer
   result := 0;
   if SockIn <> nil then
     with PTextRec(SockIn)^ do
       result := BufEnd - BufPos;
-  if result <> 0 then
+  if (result <> 0) or
+     (aTimeOutMS < 0) then // SockInPending(-1) to check only SockIn^.Buffer
     exit;
   // no data in SockIn^.Buffer, so try if some pending at socket/TLS level
   case SockReceivePending(aTimeOutMS) of // check both TLS and socket levels
