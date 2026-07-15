@@ -4574,12 +4574,11 @@ begin
     len := SockInPending(-1); // aTimeOutMS=-1 to check only the buffer
     if len > 0 then
       Http.Content := SockInRead(len, {UseOnlySockIn=}true);
-    // reads the raw socket directly until the socket is closed
-    repeat
-      chunk := SockReceiveString; // rough process at socket level
-      Append(RawUtf8(Http.Content), chunk);
-    until chunk = '';
     CloseSockIn; // we have hfConnectionClose anyway
+    // reads the raw socket directly until the socket is closed
+    while SockReceiveStringAppend(Http.Content) do
+      if length(Http.Content) > MaxHttpInMemSize then // 1GB in memory max
+        EHttpSocket.RaiseUtf8('%.GetBody: 1.0 Content mem overflow', [self]);
     Http.ContentLength := length(Http.Content); // update Content-Length
     if DestStream <> nil then
     begin

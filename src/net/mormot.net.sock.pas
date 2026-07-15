@@ -1177,7 +1177,7 @@ type
     /// check if there are some input data within the TLS buffers
     // - may be the case even with no data any more at TCP/socket level
     // - returns -1 if there is no TLS connection opened
-    // - returns the number of bytes in the internal buffer
+    // - returns the number of bytes in the internal TLS buffer
     // - returns 0 if the internal buffer is void - but there may be some
     // data ready to be unciphered at socket level
     function ReceivePending: integer;
