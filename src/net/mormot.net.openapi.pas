@@ -70,6 +70,7 @@ type
     oav3);
 
   /// define the native built-in pascal types
+  // - don't change the order: expects obtInteger .. obtDateTime to set fNoConst
   TOpenApiBuiltInType = (
     obtVariant,
     obtRecord,
@@ -602,7 +603,7 @@ type
     procedure Description(W: TTextWriter; const Described: RawUtf8);
     procedure Comment(W: TTextWriter; const Args: array of const;
       const Desc: RawUtf8 = '');
-    procedure Code(W: TTextWriter; var Line: RawUtf8; Separator: AnsiChar;
+    procedure WrapCode(W: TTextWriter; var Line: RawUtf8; Separator: AnsiChar;
       const Args: array of const);
     // main internal parsing function
     procedure ParseSpecs;
@@ -1629,7 +1630,7 @@ var
       Append(line, '; ')
     else
       prev := true;
-    fParser.Code(W, line, ';', Args);
+    fParser.WrapCode(W, line, ';', Args);
   end;
 
 begin
@@ -1671,7 +1672,7 @@ begin
     AddParam([def[i]]);
   // function result
   if Assigned(fSuccessResponseType) then
-    fParser.Code(w, Line, ';', ['): ', fSuccessResponseType.ToPascalName, ';'])
+    fParser.WrapCode(w, Line, ';', ['): ', fSuccessResponseType.ToPascalName, ';'])
   else
     Append(line, ');');
   w.AddString(Line);
@@ -1885,7 +1886,7 @@ begin
         Append(item, [i]); // duplicated, or no ascii within -> make unique
     end;
     AddRawUtf8(items, itemscount, item);
-    fParser.Code(w, line, ',', [fPrefix, item]);
+    fParser.WrapCode(w, line, ',', [fPrefix, item]);
   end;
   w.AddStrings([line, ');', fParser.LineEnd,
     ToArrayTypeDefinition]);
@@ -1926,7 +1927,7 @@ begin
     item := mormot.core.unicode.QuotedStr(VariantToUtf8(fChoices.Values[i]));
     if i < fChoices.Count - 1 then
       Append(item, ', ');
-    fParser.Code(w, line, ',', [item]);
+    fParser.WrapCode(w, line, ',', [item]);
   end;
   w.AddStrings([line, ');', fParser.LineEnd]);
 end;
@@ -1999,7 +2000,7 @@ begin
   if fBuiltInTypeName = '' then
     EOpenApi.RaiseUtf8('Unexpected %.CreateBuiltin(%)', [self, ToText(aBuiltInType)^]);
   fBuiltinSchema := aSchema;
-  SetArray(aIsArray);
+  SetArray(aIsArray); // also set fNoConst
 end;
 
 constructor TPascalType.CreateCustom(aCustomType: TPascalCustomType);
@@ -2704,17 +2705,17 @@ begin
   until p = nil;
 end;
 
-procedure TOpenApiParser.Code(W: TTextWriter; var Line: RawUtf8;
+procedure TOpenApiParser.WrapCode(W: TTextWriter; var Line: RawUtf8;
   Separator: AnsiChar; const Args: array of const);
 var
   i, l: PtrInt;
 begin
   Append(Line, Args);
-  while length(Line) > 85 do
+  while length(Line) > 85 do // wrap the lines until they are not too long
   begin
     l := 0;
     for i := 85 downto 1 do
-      if Line[i] in [Separator, '('] then
+      if Line[i] in [Separator, '('] then // insert line feed after Separator
       begin
         W.AddNoJsonEscape(pointer(Line), i);
         W.AddString(LineEnd);
