@@ -415,6 +415,7 @@ type
     class procedure ExtractFileName(const Value: variant; out Result: variant);
     class procedure HumanBytes(const Value: variant; out Result: variant);
     class procedure Join(const Value: variant; out Result: variant);
+    class procedure JoinValues(const Value: variant; out Result: variant);
     class procedure Sub(const Value: variant; out Result: variant);
     class procedure Values(const Value: variant; out Result: variant);
     class procedure Keys(const Value: variant; out Result: variant);
@@ -2457,23 +2458,49 @@ end;
 
 class procedure TSynMustache.Join(const Value: variant; out Result: variant);
 var
-  v, a: PDocVariantData;
+  a, v: PDocVariantData;
   sep, r: RawUtf8;
 begin
   PCardinal(@Result)^ := varNull;
-  if not _Safe(Value, v) or
-     (v^.Count = 0) then
+  if not _Safe(Value, a) or
+     (a^.Count = 0) then
     exit;
-  if v^.IsArray and
-     (v^.Count = 2) and
-     _Safe(v^.Values[0], a) and
-     VariantToUtf8(v^.Values[1], sep) then
-    v := a // {{ join alist,"," }
+  if a^.IsArray and
+     (a^.Count = 2) and
+     _Safe(a^.Values[0], v) and
+     VarIsUtf8(a^.Values[1], sep) then
+    a := v           // {{ join objorarr,"," }}
   else
-    sep := ',';
-  r := v^.ToCsv(sep); // returns CSV of dvArray Values[] or dvObject Names[]
+    sep := ',';      // {{ join objorarr }}
+  r := a^.ToCsv(sep); // returns CSV of dvArray Values[] or dvObject Names[]
   if r <> '' then
     RawUtf8ToVariant(r, Result);
+end;
+
+class procedure TSynMustache.JoinValues(const Value: variant; out Result: variant);
+var
+  a, v: PDocVariantData;
+  sep, key, r: RawUtf8;
+begin
+  PCardinal(@Result)^ := varNull;
+  if _Safe(Value, a) and
+     (a^.Count in [1 .. 3]) and
+     _Safe(a^.Value[0], v) then
+  begin
+    if a^.Count = 1 then // {{ joinvalues obj }}
+      sep := ','
+    else if not VarIsUtf8(a^.Value[1], sep) then
+      exit;
+    if a^.Count < 3 then // {{ joinvalues obj,"," }}
+    begin
+      if v^.IsObject then
+        PVariantToCsv(pointer(v^.Values), v^.Count, sep, {rev=}false, r);
+    end
+    else if VarIsUtf8(a^.Value[2], key) then
+      r := v^.ReduceAsCsv(key, sep); // {{ joinvalues objorarr,",","keyname" }}
+    if r <> '' then
+      RawUtf8ToVariant(r, Result);
+  end;
 end;
 
 class procedure TSynMustache.Sub(const Value: variant; out Result: variant);
