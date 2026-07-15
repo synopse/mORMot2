@@ -5030,6 +5030,38 @@ begin
   CheckEqualShort(TwoDigits(0.0551), '0.06');
   CheckEqualShort(TwoDigits(0.0015), '0');
   CheckEqualShort(TwoDigits(0.0055), '0.01');
+  UInt32DigitsToUtf8(94287082, 10, s);
+  CheckEqual(s, '0094287082');
+  UInt32DigitsToUtf8(94287082, 8, s);
+  CheckEqual(s, '94287082');
+  UInt32DigitsToUtf8(94287082, 6, s);
+  CheckEqual(s, '287082');
+  UInt32DigitsToUtf8(94287082, 4, s);
+  CheckEqual(s, '7082');
+  for i := 0 to 8 do
+  begin
+    UInt32DigitsToUtf8(i, 0, s);
+    CheckEqual(s, '');
+    UInt32DigitsToUtf8(111111111, i, s);
+    CheckEqual(length(s), i);
+    for j := 1 to i do
+      Check(s[i] = '1');
+    UInt32DigitsToUtf8(7, i, s);
+    CheckEqual(length(s), i);
+    if i = 0 then
+      continue;
+    for j := 1 to i - 1 do
+      Check(s[j] = '0');
+    Check(s[i] = '7');
+  end;
+  UInt32DigitsToUtf8(7, 20, s);
+  CheckEqual(s, '00000000000000000007');
+  UInt32DigitsToUtf8(7, 23, s);
+  CheckEqual(s, '00000000000000000000007');
+  UInt32DigitsToUtf8(7, 24, s);
+  CheckEqual(s, '00000000000000000000007');
+  UInt32DigitsToUtf8(7, 25, s);
+  CheckEqual(s, '00000000000000000000007');
   n := 100000;
   Timer.Start;
   crc := 0;
