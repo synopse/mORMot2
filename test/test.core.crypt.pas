@@ -579,7 +579,7 @@ procedure TTestCoreCrypto._SHA512;
     i: PtrInt;
     sha: TSha512;
     c: AnsiChar;
-    temp, sec, pin: RawByteString;
+    temp: RawByteString;
   begin
     // includes SHA-384 and SHA-512/256, which are truncated SHA-512
     CheckEqual(SHA384(''),

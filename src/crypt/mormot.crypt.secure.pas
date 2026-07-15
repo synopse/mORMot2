@@ -1375,7 +1375,9 @@ function ScramClientServerAuth(const Hash, User, ServerProof: RawUtf8;
 { User 2FA authentication via TOTP as defined in RFC 6238 }
 
 const
-  TOTP_DIGITS = 6;
+  TOTP_DIGITS = 6;      // 6 digits seems fine as default
+  TOTP_PERIOD = 30;     // our code fixes the period to default 30 seconds
+  TOTP_SECRET_MIN = 16; // 128-bit is the bare minimum
 
 /// compute the RFC 6238 TOTP user code from its base32 (or binary) secret
 // - supports digits in [4..8] and at least 128-bit = 16-byte of binary secret
@@ -1392,7 +1394,8 @@ function TotpValidate(const secret, usercode: RawUtf8; window: integer = 1;
 
 /// encode Google Authenticator otpauth:// URI scheme value
 function TotpUrl(const issuer, account, b32secret: RawUtf8;
-  digits: integer = TOTP_DIGITS; algo: TSignAlgo = saSha1): RawUtf8;
+  digits: integer = TOTP_DIGITS; algo: TSignAlgo = saSha1;
+  period: integer = TOTP_PERIOD): RawUtf8;
 
 
 { **************** Client and Server HTTP Access Authentication }
@@ -6108,8 +6111,6 @@ end;
 { User 2FA authentication via TOTP as defined in RFC 6238 }
 
 const
-  TOTP_PERIOD = 30;     // our code fixes the period to default 30 seconds
-  TOTP_SECRET_MIN = 16; // 128-bit is the bare minimum
   TOTP_MOD: array[4..8] of cardinal = (10000, 100000, 1000000, 10000000, 100000000);
 
 function TotpGenerate(const secret: RawUtf8; digits: integer; algo: TSignAlgo;
@@ -6159,7 +6160,7 @@ begin
   if (cardinal(window) > 100) or
      not (digits in [low(TOTP_MOD) .. high(TOTP_MOD)]) or
      not ToCardinal(usercode, key) then
-    exit;
+    exit; // reject weak usercode ASAP
   if binary then
     sec := secret
   else
@@ -6179,14 +6180,14 @@ begin
 end;
 
 function TotpUrl(const issuer, account, b32secret: RawUtf8; digits: integer;
-  algo: TSignAlgo): RawUtf8;
+  algo: TSignAlgo; period: integer): RawUtf8;
 var
   iss, acc: RawUtf8;
 begin
   iss := UrlEncodeName(issuer); // favor %20 for spaces here, not +
   acc := UrlEncodeName(account);
   FormatUtf8('otpauth://totp/%:%?secret=%&issuer=%&digits=%&period=%',
-    [iss, acc, Split(b32secret, '='), iss, digits, TOTP_PERIOD], result);
+    [iss, acc, Split(b32secret, '='), iss, digits, period], result);
   if algo <> saSha1 then
     Append(result, '&algorithm=', SIGNER_NAME[algo]);
 end;
