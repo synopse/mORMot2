@@ -6863,6 +6863,9 @@ begin
   end;
   s := _Safe(a.ReduceAsArray('source'))^.ToCsv;
   CheckEqual(s, 'source0,source1,source2', 'ReduceAsArray');
+  CheckEqual(a.ReduceAsCsv('source'), s, 'ReduceAsCsv');
+  CheckEqual(RawUtf8ArrayToCsv(a.ReduceAsRawUtf8Array('source')), s,
+    'ReduceAsRawUtf8Array');
   s := _Safe(a.Reduce(['source', 'target'], False))^.ToCsv;
   CheckEqual(s, '{"source":"source0","target":"target0"},' +
                 '{"source":"source1","target":"target1"},' +

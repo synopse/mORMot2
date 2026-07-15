@@ -2241,7 +2241,7 @@ type
     function ReduceAsRawUtf8Array(const aPropName: RawUtf8;
       const OnReduce: TOnReducePerItem = nil): TRawUtf8DynArray;
     // return the values of a named property of the objects of this document as CSV
-    function ReduceAsCsv(const aPropName, aSeparator: RawUtf8;
+    function ReduceAsCsv(const aPropName: RawUtf8; const aSeparator: RawUtf8 = ',';
       const OnReduce: TOnReducePerItem = nil; Flags: TVariantToTempUtf8Flags = []): RawUtf8;
     /// rename some properties of a TDocVariant object
     // - returns the number of property names modified
