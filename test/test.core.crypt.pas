@@ -1480,7 +1480,7 @@ const
 
   OPENSSL_HASH: array[bSHA1O .. bSHA3_512O] of THashAlgo = (
     hfSHA1, hfSHA1, hfSHA256, hfSHA256, hfSHA384, hfSHA384, hfSHA512, hfSHA384,
-    hfSHA512, hfSHA3_256, hfSHA3_512
+    hfSHA512, hfSHA3_256, hfSHA3_512 // hfSHA256_128/160 are not supported
   {$endif USE_OPENSSL});
 var
   b: TBenchmark;
@@ -2384,7 +2384,7 @@ begin
           if not withiv then
             aes.IV := iv;
           dec := aes.DecryptPkcs7(res, withiv, {raiseonerror=}false);
-          if not CheckFailed(length(dec) = i shl 3) then
+          if Check(length(dec) = i shl 3) then
             Check(CompareMem(pointer(dec), @data, length(dec)));
         finally
           aes.Free;
@@ -3440,7 +3440,7 @@ begin
   // - should be done FIRST with no process in the background
   FillIncreasingB(@bytes, 0, high(bytes));
   if Assigned(AesNiHash128) and
-     not CheckFailed(not fBackgroundRun.Waiting, 'no background run') then
+     Check(not fBackgroundRun.Waiting, 'no background run') then
   begin
     Move512(@bak, AesNiHashAntiFuzzTable);
     Move512(AesNiHashAntiFuzzTable, @bytes); // replace to get AESNIHASH_REF
@@ -4182,10 +4182,11 @@ begin
     ConsoleWriteRaw(c2.Save(cccCertWithPrivateKey, '', ccfPem)); // for debug
   cv := c2.Verify(nil);
   CheckUtf8(cv = cvValidSelfSigned, 'self2=%', [ToText(cv)^]);
-  c2.Sign(c1); // change signature
+  c2.Sign(c1); // change signature using c1 as authority
   CheckEqual(c2.GetAuthorityKey, c1.GetSubjectKey);
   Check(not c2.IsSelfSigned);
-  Check(c2.Verify(c1) = cvValidSigned, 'self3');
+  cv := c2.Verify(c1);
+  CheckUtf8(cv = cvValidSigned, '%:self3=%', [crt.AlgoName, ToText(cv)^]);
   Check(c2.Verify(nil) = cvUnknownAuthority, 'self4');
   if crt.AlgoName = 'syn-es256-v1' then
     check(c1.SharedSecret(c3) = c3.SharedSecret(c1), 'c1.GetUsage=CU_ALL')
@@ -4304,7 +4305,7 @@ begin
   check(csr <> '', 'csr');
   check(priv <> '', 'priv');
   c2 := crt.GenerateFromCsr(csr);
-  if not CheckFailed(c2 <> nil, 'gen csr1') then
+  if Check(c2 <> nil, 'gen csr1') then
   begin
     if crt.AlgoName <> 'syn-es256-v1' then
       check(c2.GetUsage = [cuCA, cuDigitalSignature], 'csr usage1');
@@ -4313,7 +4314,7 @@ begin
     check(c2.IsSelfSigned, 'csr self1');
   end;
   c2 := crt.GenerateFromCsr(csr, c1);
-  if not CheckFailed(c2 <> nil, 'gen csr2') then
+  if Check(c2 <> nil, 'gen csr2') then
   begin
     if crt.AlgoName <> 'syn-es256-v1' then
       check(c2.GetUsage = [cuCA, cuDigitalSignature], 'csr usage2');
@@ -5034,7 +5035,7 @@ begin
           v := v.IntMultiply(1);
           CheckEqual(c.ActiveCount, 3);
           CheckEqual(v.Compare(b), 0);
-          CheckEqual(v.Compare(0), CompareBI(rnd, 0), 'bi0');
+          CheckEqual(v.Compare(0), CompareHalfUInt(rnd, 0), 'bi0');
           if rnd > 1 then
             CheckEqual(v.Trim.Compare(1), 1, 'bi1');
           // verify b * 0 = 0
@@ -5477,10 +5478,49 @@ const
     '-----END X509 CRL-----'#13#10;
 
 procedure TTestCoreCrypto._X509;
+
+  procedure CheckXNorm(const s, exp: RawUtf8);
+  var
+    ss: ShortString;
+  begin
+    CheckEqual(XNameNormalize(pointer(s), PUtf8Char(pointer(s)) + length(s),
+      @ss), length(exp) + 1);
+    Check(EqualBuf(exp, @ss[1], ord(ss[0])));
+  end;
+
+  procedure CheckX4514(const s, exp: RawUtf8);
+  var
+    tmp: TSynTempAdder;
+    res: RawUtf8;
+  begin
+    tmp.Init;
+    XNameRfc4514(tmp, pointer(s), PUtf8Char(pointer(s)) + length(s));
+    tmp.Done(res);
+    CheckEqual(res, exp);
+  end;
+
+  procedure CheckXName(const s: RawUtf8);
+  var
+    x, y: TXName;
+  begin
+    x.Init;
+    CheckUtf8(x.FromDNText(s), s);
+    CheckEqual(x.AsDNText, s);
+    y.Init;
+    Check(x.CompareBinary(y) <> 0, 'bin0');
+    Check(x.CompareCanonical(y) <> 0, 'can0');
+    CheckUtf8(y.FromAsn(x.ToBinary), 'asn:%', [s]);
+    Check(x.CompareBinary(y) = 0, 'bin');
+    Check(x.CompareCanonical(y) = 0, 'can');
+    CheckEqual(y.AsDNText, s);
+  end;
+
 var
   bin, der: RawByteString;
   pem, sav, sn: RawUtf8;
   x, a: TX509;
+  a1: TXAttr;
+  ocsp, issuers: TRawUtf8DynArray;
   i: integer;
   nfo: TX509Parsed;
   crl: TX509Crl;
@@ -5494,12 +5534,130 @@ var
   utc: TDateTime;
   timer: TPrecisionTimer;
 begin
+  // validate XName 500 normalization and escaping
+  Check(TextToXa('') = xaNone);
+  for a1 := succ(low(a1)) to high(a1) do
+    Check(TextToXa(XA_TEXT[a1]) = a1);
+  Check(TextToXa('der') = xaNone);
+  for a1 := succ(low(a1)) to high(a1) do
+    Check((TextToXa(LowerCase(XA_TEXT[a1]))) = a1);
+  CheckXNorm('', '');
+  CheckXNorm(' ', '');
+  CheckXNorm('   ', '');
+  CheckXNorm('a', 'a');
+  CheckXNorm(' a', 'a');
+  CheckXNorm('a ', 'a');
+  CheckXNorm(' a ', 'a');
+  CheckXNorm('  a  ', 'a');
+  CheckXNorm('abc', 'abc');
+  CheckXNorm(' abc ', 'abc');
+  CheckXNorm('a b c', 'a b c');
+  CheckXNorm('a  b  c', 'a b c');
+  CheckXNorm(' a  b  c ', 'a b c');
+  CheckXNorm('  a   b   c  ', 'a b c');
+  CheckXNorm('A', 'a');
+  CheckXNorm(' A', 'a');
+  CheckXNorm('A ', 'a');
+  CheckXNorm(' A ', 'a');
+  CheckXNorm('  A  ', 'a');
+  CheckXNorm('ABC', 'abc');
+  CheckXNorm(' ABC ', 'abc');
+  CheckXNorm('A B C', 'a b c');
+  CheckXNorm('A  B  c', 'a b c');
+  CheckXNorm(' A  B  c ', 'a b c');
+  CheckXNorm('  A   b   C  ', 'a b c');
+  CheckXNorm(RawUtf8OfChar('Z', 100), RawUtf8OfChar('z', 100));
+  CheckX4514('', '');
+  CheckX4514(' ', '\ ');
+  CheckX4514('  ', '\ \ ');
+  CheckX4514('a', 'a');
+  CheckX4514(' a', '\ a');
+  CheckX4514('a ', 'a\ ');
+  CheckX4514('  a  ', '\ \ a\ \ ');
+  CheckX4514('#a', '\#a');
+  CheckX4514(' #a', '\ #a');
+  CheckX4514('a#', 'a#');
+  CheckX4514('#', '\#');
+  CheckX4514('#  ', '\#\ \ ');
+  CheckX4514('abc', 'abc');
+  CheckX4514('a b c', 'a b c');
+  CheckX4514('a  b   c', 'a  b   c');
+  CheckX4514('a\bc', 'a\\bc');
+  CheckX4514('abc"', 'abc\"');
+  CheckX4514('a,bc', 'a\,bc');
+  CheckX4514(' a,bc', '\ a\,bc');
+  CheckX4514('a, bc', 'a\, bc');
+  CheckX4514('a+b', 'a\+b');
+  CheckX4514('a<b', 'a\<b');
+  CheckX4514('a>b', 'a\>b');
+  CheckX4514('a;b', 'a\;b');
+  CheckX4514('a\b', 'a\\b');
+  CheckX4514('\\', '\\\\');
+  CheckX4514('"', '\"');
+  CheckX4514('abc'#0, 'abc\00');
+  CheckX4514('abc'#2, 'abc\02');
+  CheckX4514('abc'#31, 'abc\1f');
+  CheckX4514('abc'#0'd', 'abc\00d');
+  CheckX4514('a'#13'b', 'a\0db');
+  CheckX4514('a'#10'b', 'a\0ab');
+  CheckXName('CN=Alice');
+  CheckXName('CN=www.example.com');
+  CheckXName('CN=R3,O=Let''s Encrypt,C=US');
+  CheckXName('CN=Cloudflare Inc ECC CA-3,O=Cloudflare\, Inc.,C=US');
+  CheckXName('CN=John Doe,OU=Engineering,O=Example Corp,L=Paris,ST=Ile-de-France,C=FR');
+  CheckXName('DC=com');
+  CheckXName('DC=example,DC=com');
+  CheckXName('CN=John Doe,OU=People,DC=example,DC=com');
+  CheckXName('CN=John Doe+UID=123456,O=Example Corp,C=US');
+  CheckXName('O=Example Corp,C=US,CN=John Doe+serialNumber=ABC123');
+  CheckXName('OU=Security+OU=PKI,O=Example Corp,C=US');
+  CheckXName('CN=John Doe+UID=42+serialNumber=ABC123,O=Example,C=US');
+  CheckXName('CN=Cloudflare\, Inc.,C=US');
+  CheckXName('CN=Alice\+Bob,O=Example,C=US');
+  CheckXName('CN=John \"Johnny\" Doe,O=Example,C=US');
+  CheckXName('CN=C:\\Windows,O=Example,C=US');
+  CheckXName('OU=Research\;Development,O=Example,C=US');
+  CheckXName('CN=Server \<Primary\>,O=Example,C=US');
+  CheckXName('CN=\ John,O=Example,C=US');
+  CheckXName('CN=John\ ,O=Example,C=US');
+  CheckXName('CN=\ John\ ,O=Example,C=US');
+  CheckXName('CN=\ \ John\ \ ,O=Example,C=US');
+  CheckXName('CN=\#12345,O=Example,C=US');
+  CheckXName('CN=\#,O=Example,C=US');
+  CheckXName('CN=abc\04def,O=Example,C=US');
+  CheckXName('CN=Line1\0aLine2,O=Example,C=US');
+  CheckXName('CN=Line1\0d\0aLine2,O=Example,C=US');
+  CheckXName('CN=Tab\09Character,O=Example,C=US');
+  CheckXName('1.2.3.4=Some Value,CN=Example');
+  CheckXName('1.2.840.113549.1.9.2=alice@example.com,CN=Alice');
+  CheckXName('CN=Alice+1.2.3.4=Employee,O=Example,C=US');
+  CheckXName('CN=R3,O=Let''s Encrypt,C=US');
+  CheckXName('CN=ISRG Root X1,O=Internet Security Research Group,C=US');
+  CheckXName('CN=DigiCert Global Root G2,OU=www.digicert.com,O=DigiCert Inc,C=US');
+  CheckXName('CN=GlobalSign Root CA,OU=Root CA,O=GlobalSign nv-sa,C=BE');
+  CheckXName('CN=Amazon Root CA 1,O=Amazon,C=US');
+  CheckXName('CN=');
+  CheckXName('CN=\ ');
+  CheckXName('CN=\#');
+  CheckXName('CN=\\');
+  CheckXName('CN=Quote\"');
+  CheckXName('CN=Plus\+');
+  CheckXName('CN=Semi\;');
+  CheckXName('CN=Less\<');
+  CheckXName('CN=Greater\>');
+  CheckXName('CN=Comma\,');
+  CheckXName('CN=\ John\, Jr.\ +UID=12345+1.2.3.4=R\0aD,OU=Research\;' +
+    'Development,O=Example\, Inc.,L=Montreal,ST=Quebec,C=CA');
+  CheckXName('CN=+UID=42');
+  CheckXName('CN=John+UID=');
+  CheckXName('1.2.3.4=Employee+CN=Alice,O=Example,C=US');
+  CheckXName('CN=\\\\');
+  // validate with one synopse.info RSA certificate from Let's Encrypt
   {$ifdef OSWINDOWS}
   Check(WinX509Parse(_synopseinfo_pem, nfo)); // validate our SSPI parser
   {$else}
   Check(X509Parse(_synopseinfo_pem, nfo)); // likely to be the OpenSSL parser
   {$endif OSWINDOWS}
-  // validate with the synopse.info RSA certificate from Let's Encrypt
   x := TX509.Create;
   try
     CheckEqual(x.SerialNumber, '');
@@ -5518,7 +5676,7 @@ begin
     CheckEqual(x.Issuer[xaC],   'US');
     CheckEqual(x.SubjectDN,     'CN=synopse.info');
     CheckEqual(x.SubjectDN, nfo.SubjectDN);
-    CheckEqual(x.IssuerDN,      'CN=R3, C=US, O=Let''s Encrypt');
+    CheckEqual(x.IssuerDN,      'C=US,O=Let''s Encrypt,CN=R3');
     Check(x.Usages =
       [cuDigitalSignature, cuKeyEncipherment, cuTlsServer, cuTlsClient]);
     Check(x.Usages = nfo.Usage, 'nfo u');
@@ -5532,9 +5690,19 @@ begin
       '14:2e:b3:17:b7:58:56:cb:ae:50:09:40:e6:1f:af:9d:8b:14:c2:c6');
     CheckEqual(x.Extension[xeAuthorityInformationAccess],
       'ocsp=http://r3.o.lencr.org,caIssuers=http://r3.i.lencr.org/');
+    if Check(x.Signed.CaIssuers <> nil) then
+      CheckEqual(x.Signed.CaIssuers[0], 'http://r3.i.lencr.org/');
+    if Check(x.Signed.Ocsp <> nil) then
+      CheckEqual(x.Signed.Ocsp[0], 'http://r3.o.lencr.org');
+    Check(AsnDecAia(x.Signed.ExtensionRaw[xeAuthorityInformationAccess],
+      ocsp, issuers), 'aia');
+    if CheckEqual(length(ocsp), 1) then
+      CheckEqual(ocsp[0], 'http://r3.o.lencr.org');
+    if CheckEqual(length(issuers), 1) then
+      CheckEqual(issuers[0], 'http://r3.i.lencr.org/');
     CheckSameTime(nfo.NotBefore, x.NotBefore, 'nfo nb');
     CheckSameTime(nfo.NotAfter, x.NotAfter, 'nfo na');
-    Check(FindOther(x.Signed.ExtensionOther, '1.3.6.1.5.5.7.1.1') = '');
+    Check(FindCustomExts(x.Signed.ExtensionOther, '1.3.6.1.5.5.7.1.1') = '');
     Check(x.Signed.ExtensionOther = nil);
     CheckEqual(x.Extension[xeCertificatePolicies], '2.23.140.1.2.1');
     CheckEqual(x.Extension[xeGoogleSignedCertificateTimestamp], '');
@@ -5549,9 +5717,9 @@ begin
       'ea0f4f07abb685f2aaf864a28d9f275ac1e9bb29e82d6a8dc9111cd9162da4e7');
     CheckEqual(x.SubjectPublicKeyAlgorithm, '2048-bit RSA encryption');
     //writeln(x.PeerInfo);
-    CheckHash(x.PeerInfo, $DF9578B9, 'peerinfo1a');
+    CheckHash(x.PeerInfo, $6F660240, 'peerinfo1a');
     Check(TX509Parse(_synopseinfo_pem, nfo), 'TX509Parse');
-    CheckHash(nfo.PeerInfo, $DF9578B9, 'peerinfo1b'); // very same parser
+    CheckHash(nfo.PeerInfo, $6F660240, 'peerinfo1b'); // very same parser
     a := TX509.Create;
     try
       // check synopse.info against Let's Encrypt authority certificate
@@ -5559,10 +5727,10 @@ begin
       CheckEqual(a.Signed.SerialNumberText,
         '192961496339968674994309121183282847578');
       CheckEqual(a.Subject[xaCN], 'R3');
-      CheckEqual(a.SubjectDN, 'CN=R3, C=US, O=Let''s Encrypt');
+      CheckEqual(a.SubjectDN, 'C=US,O=Let''s Encrypt,CN=R3');
       CheckEqual(a.SubjectDN, x.IssuerDN);
       CheckEqual(a.IssuerDN,
-        'CN=ISRG Root X1, C=US, O=Internet Security Research Group');
+        'C=US,O=Internet Security Research Group,CN=ISRG Root X1');
       CheckEqual(a.Extension[xeSubjectKeyIdentifier],
                  x.Extension[xeAuthorityKeyIdentifier]);
       Check(cuCa in a.Usages, 'ca2');
@@ -5580,9 +5748,10 @@ begin
         length(x.SignatureValue), length(bin), [], _synopse_date) =
           cvValidSigned, 'verbuf syn');
       CheckEqual(a.SubjectPublicKeyAlgorithm, '2048-bit RSA encryption');
-      CheckHash(a.PeerInfo, $FFE7466C, 'peerinfo2');
-      CheckHash(ObjectToJson(a), $F7A82903);
-      CheckHash(ObjectToJson(x), $7C73C7E0);
+      //writeln(a.PeerInfo);
+      CheckHash(a.PeerInfo, $19AB4A9E, 'peerinfo2');
+      CheckHash(ObjectToJson(a), $541F97B5);
+      CheckHash(ObjectToJson(x), $EBE4582E);
       CheckEqual(x.SignatureSecurityBits, 112, '2048=112');
     finally
       a.Free;
@@ -5607,7 +5776,7 @@ begin
     CheckEqual(x.Issuer[xaO],   'Synopse Info');
     CheckEqual(x.Issuer[xaC],   'FR');
     CheckEqual(x.IssuerDN,
-      'CN=synopse.info, C=FR, ST=Some-State, O=Synopse Info, OU=Administration');
+      'C=FR,ST=Some-State,O=Synopse Info,OU=Administration,CN=synopse.info');
     CheckEqual(x.Extension[xeSubjectAlternativeName], '');
     Check(x.SubjectAlternativeNames = nil);
     CheckEqual(x.Extension[xeSubjectKeyIdentifier],
@@ -5630,8 +5799,8 @@ begin
       length(x.SignatureValue), length(bin), [cvWrongUsage]) =
         cvValidSelfSigned, 'verbuf self');
     CheckEqual(x.SubjectPublicKeyAlgorithm, '256-bit prime256v1 ECDSA');
-    CheckHash(x.PeerInfo, $BCB82372, 'peerinfo3');
-    CheckHash(ObjectToJson(x), $BBCBCFEB);
+    CheckHash(x.PeerInfo, $D8E4E82D, 'peerinfo3');
+    CheckHash(ObjectToJson(x), $158D943B);
     Check(AsnDecChunk(x.SaveToDer), 'x.SaveToDer');
   finally
     x.Free;
@@ -5654,7 +5823,7 @@ begin
     Check(crl.IsRevoked('08efb79382c3c67f6fa59ed03c222fec') = crrUnspecified);
     Check(crl.IsRevoked('08efb79382c3c67f6fa59ed03c222feb') = crrNotRevoked);
     CheckEqual(crl.IssuerDN,
-      'CN=Cloudflare Inc ECC CA-3, C=US, O=Cloudflare, O=Inc.');
+      'C=US,O=Cloudflare\, Inc.,CN=Cloudflare Inc ECC CA-3');
     der := crl.SaveToDer;
     Check(AsnDecChunk(der), 'crl.SaveToDer');
     pem := DerToPem(der, pemCrl);

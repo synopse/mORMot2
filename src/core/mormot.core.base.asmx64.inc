@@ -826,7 +826,7 @@ end;
 
 {
   Some numbers, with CITIES_MAX=200000, deleting 1/128 entries
-  first column (3..23) is the max number of indexes[] chunk to rehash
+  first column (3..23) is the max number of indexes[] chunk to re-hash
   #abc is the number of slots in the hash table
   adjust=.. match DynArrayHashTableAdjust() time fixing the indexes
   hash=ms is the time needed to hash input (not impacted by adjusting algorithm)
@@ -848,7 +848,7 @@ end;
     23 #195075  adjust=161.73ms 14.1GB/s hash=2.57ms
 }
 
-// brute force O(n) indexes fix after deletion (much faster than full ReHash)
+// brute force O(n) indexes fix after deletion (much faster than full re-hash)
 procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
 {$ifdef ABIWINX64}
 var
@@ -1006,9 +1006,9 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         jmp     @2
         // trailing indexes (never appearing within DYNARRAYHASH_PO2 range)
 @1:     sub     r8, 1
-        cmp     word ptr [rcx + r8 * 4], dx
+        cmp     word ptr [rcx + r8 * 2], dx
         setg    al
-        sub     word ptr [rcx + r8 * 4], ax
+        sub     word ptr [rcx + r8 * 2], ax
 @2:     test    r8, r8
         jnz     @1
 {$ifdef ABIWINX64}
@@ -1697,11 +1697,11 @@ function SortDynArrayAnsiString(const A, B): integer;
         mov     rax, qword ptr [A]
         mov     rdx, qword ptr [B]
         cmp     rax, rdx
-        je      @z
+        je      @z                    // A=B at pointer level
         test    rax, rdx
         jz      @maynil
-@f:     movzx   ecx, byte ptr [rax]    // first char comparison
-        movzx   r8d, byte ptr [rdx]    // 32-bit to avoid overflow
+@f:     movzx   ecx, byte ptr [rax]   // first char comparison
+        movzx   r8d, byte ptr [rdx]   // 32-bit to avoid overflow
         sub     ecx, r8d
         je      @s
         mov     eax, ecx              // branchless execution on Quicksort
@@ -1710,7 +1710,7 @@ function SortDynArrayAnsiString(const A, B): integer;
         ret
 @z:     xor     eax, eax
         ret
-@maynil:test    rdx, rdx       // A or B may be ''
+@maynil:test    rdx, rdx              // A or B may be ''
         jz      @1
         test    rax, rax
         jnz     @f
@@ -1729,7 +1729,7 @@ function SortDynArrayAnsiString(const A, B): integer;
         {$endif FPC}
         adc     rcx, -1
         and     rcx, r9
-        sub     rcx, r8                  // rcx = -min(length(A),length(B))
+        sub     rcx, r8               // rcx = -min(length(A),length(B))
         sub     rax, rcx
         sub     rdx, rcx
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}

@@ -339,6 +339,8 @@ begin
         //oa.Options := oa.Options + [opoGenerateOldDelphiCompatible];
         //oa.Options := oa.Options + [opoClientOnlySummary];
         //oa.Options := oa.Options + [opoDtoNoDescription, opoClientNoDescription];
+        //oa.Options := oa.Options + [opoDtoNoReduce];
+        //oa.Options := oa.Options + [opoDtoReduceNamed];
         oa.ParseJson(api[i]);
         // ensure there was something properly parsed
         Check(oa.Version <> oavUnknown, 'version');
@@ -1692,7 +1694,7 @@ begin
             one.Settings.TargetUri := clients[j];
             //one.Settings.UserName := usr;        // user from keytab
             //one.Settings.KerberosDN := dns[i];   // DN from keytab
-            one.Settings.Password := Make(['FILE:', keytabfile]);
+            one.Settings.KerberosLocal := keytabfile;
             ku := '';
             Check(one.BindSaslKerberos('', @ku), 'Bind keytab');
             AddConsole('connected via keytab to % with specific user % = %',
@@ -2840,7 +2842,7 @@ var
 begin
   exec := Sender as TTunnelExecute;
   // one of the two handshakes should be done in another thread
-  if not CheckFailed(exec <> nil) then
+  if Check(exec <> nil) then
   try
     check(exec.local <> nil);
     check(exec.session <> 0);
@@ -2894,8 +2896,8 @@ begin
   CheckUtf8(nr = nrOk, 'clientsock=%', [_NR[nr]]);
   nr := NewTcpClientSocket('127.0.0.1', serverinstance.LocalPort, 1000, serversock);
   CheckUtf8(nr = nrOk, 'serversock=%', [_NR[nr]]);
-  if not CheckFailed(Assigned(clientinstance.Thread), 'no client thread') and
-     not CheckFailed(Assigned(serverinstance.Thread), 'no server thread') then
+  if Check(Assigned(clientinstance.Thread), 'no client thread') and
+     Check(Assigned(serverinstance.Thread), 'no server thread') then
   try
     // validate raw TCP tunnelling
     if Assigned(log) then

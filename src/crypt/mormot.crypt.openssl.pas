@@ -1338,19 +1338,21 @@ var
 
 const
   HF_MD: array[THashAlgo] of PUtf8Char = (
-    'md5',        // hfMD5
-    'sha1',       // hfSHA1
-    'sha256',     // hfSHA256
-    'sha384',     // hfSHA384
-    'sha512',     // hfSHA512
-    'sha512-256', // hfSHA512_256
-    'sha3-256',   // hfSHA3_256
-    'sha3-512',   // hfSHA3_512
-    'sha224',     // hfSHA224
-    'sha3-224',   // hfSHA3_224
-    'sha3-384',   // hfSHA3_384
-    'shake128',   // hfShake128
-    'shake256');  // hfShake256
+    'md5',         // hfMD5
+    'sha1',        // hfSHA1
+    'sha256',      // hfSHA256
+    'sha384',      // hfSHA384
+    'sha512',      // hfSHA512
+    'sha512-256',  // hfSHA512_256
+    'sha3-256',    // hfSHA3_256
+    'sha3-512',    // hfSHA3_512
+    'sha224',      // hfSHA224
+    'sha3-224',    // hfSHA3_224
+    'sha3-384',    // hfSHA3_384
+    'shake128',    // hfShake128
+    'shake256',    // hfShake256
+    '',            // SHA-256 truncated to 128-bit is not known by OpenSSL
+    '');           // SHA-256 truncated to 160-bit is not known by OpenSSL
 
   CAA_MD: array[TCryptAsymAlgo] of RawUtf8 = (
     'SHA256', // caaES256
@@ -2468,7 +2470,9 @@ type
     function GetIssuers: TRawUtf8DynArray; override;
     function GetSubjectKey: RawUtf8; override;
     function GetAuthorityKey: RawUtf8; override;
+    function GetFields(var fields: TCryptCertFields; withexts: boolean): boolean; override;
     function IsSelfSigned: boolean; override;
+    function IsAuthorizedBy(const Authority: ICryptCert): boolean; override;
     function GetNotBefore: TDateTime; override;
     function GetNotAfter: TDateTime; override;
     function GetUsage: TCryptCertUsages; override;
@@ -2607,6 +2611,7 @@ var
   dns: TRawUtf8DynArray;
   req: PX509_REQ;
   key: PEVP_PKEY;
+  i: PtrInt;
 begin
   if Subjects = '' then
     RaiseError('no Subjects');
@@ -2628,12 +2633,19 @@ begin
       X509_REQ_get_subject_name(req), Usages, Fields, dns);
     if not req^.SetUsageAndAltNames(TX509Usages(Usages), altnames) then
       RaiseError('SetUsage');
-    if (Fields <> nil) and
-       (Fields^.Comment <> '') then
-       req^.AddExtension(NID_netscape_comment, Fields^.Comment);
+    // setup the CSR extensions
+    if Fields <> nil then
+    begin
+      if Fields^.Comment <> '' then
+        req^.AddExtension(NID_netscape_comment, Fields^.Comment);
+      if Fields^.CustomExts <> nil then
+        for i := 0 to high(Fields^.CustomExts) do
+          with Fields^.CustomExts[i] do
+            req^.AddExtension(Oid, Value, Critical);
+    end;
     // self-sign the CSR and return it as PEM
     EOpenSslCert.Check(X509_REQ_set_pubkey(req, key)); // include public key
-    if req.Sign(key, fHash) = 0 then // returns signature size in bytes
+    if req^.Sign(key, fHash) = 0 then // returns signature size in bytes
       RaiseError('SelfSign');
     result := req^.ToPem;
     // save the generated private key (if was not previously loaded)
@@ -2642,9 +2654,9 @@ begin
       PrivateKeyPem := key.PrivateToPem(PrivateKeyPassword);
   finally
     if Assigned(req) then
-      req.Free;
+      req^.Free;
     if Assigned(Key) then
-      key.Free;
+      key^.Free;
   end;
 end;
 
@@ -2847,9 +2859,46 @@ begin
   result := fX509.AuthorityKeyIdentifier;
 end;
 
+function TCryptCertOpenSsl.GetFields(var fields: TCryptCertFields; withexts: boolean): boolean;
+var
+  x: TX509_Extensions;
+  i: PtrInt;
+begin
+  result := false;
+  if fX509 = nil then
+    exit;
+  with fields do
+    fX509.GetIssuerName^.GetEntries(Country, State, Locality, Organization,
+      OrgUnit, CommonName, EmailAddress, SurName, GivenName, SerialNumber);
+  result := true;
+  if not withexts then
+    exit;
+  x := fX509.GetExtensions;
+  for i := 0 to high(x) do
+    with x[i] do
+      if nid = NID_netscape_comment then
+        fields.Comment := value^.ToBinary
+      else
+        AddCustomExts(fields.CustomExts, BinaryOid, value^.ToBinary, critical);
+end;
+
 function TCryptCertOpenSsl.IsSelfSigned: boolean;
 begin
   result := fX509.IsSelfSigned;
+end;
+
+function TCryptCertOpenSsl.IsAuthorizedBy(const Authority: ICryptCert): boolean;
+var
+  a: TCryptCertOpenSsl;
+begin
+  if Assigned(Authority) then
+  begin
+    a := pointer(Authority.Instance);
+    result := a.InheritsFrom(TCryptCertOpenSsl) and
+      fX509.IsAuthorizedBy(a.fX509); // use X509_NAME_cmp() canonalization
+  end
+  else
+    result := inherited IsAuthorizedBy(Authority);
 end;
 
 function TCryptCertOpenSsl.GetNotBefore: TDateTime;
@@ -3775,7 +3824,7 @@ begin
   CryptStoreOpenSsl := TCryptStoreAlgoOpenSsl.Implements(['x509-store']);
   // OpenSSL is slower than our SSE2 mormot.crypt.other.pas RawSCrypt() :)
   {$ifndef ASMSSE2}
-  if OpenSslVersion >= OPENSSL3_VERNUM then // OpenSSL 1.1 has only macros
+  if OpenSslVersion >= OPENSSL3_VERNUM then // OpenSSL 1.1 use macros for SCrypt
     SCrypt := @OpenSslSCrypt;
   {$endif ASMSSE2}
   // we can use OpenSSL for StuffExeCertificate() stuffed certificate generation

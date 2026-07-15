@@ -460,7 +460,7 @@ begin
   if FileExists(WorkDir + discogsFileName) then
     exit;
   refzip := DownloadFile('https://synopse.info/files/process-ref.zip');
-  if not CheckFailed(refzip <> '', 'process-ref') then
+  if Check(refzip <> '', 'process-ref') then
     Check(UnZipMemAll(refzip, WorkDir), 'process-unzip');
 end;
 
@@ -1666,7 +1666,7 @@ var
       Check(Valid);
       Check(CA.One.Color = 2);
       Check(CA.One.Name = 'test2');
-      if not CheckFailed(CA.Coll.Count = 1) then
+      if Check(CA.Coll.Count = 1) then
         Check(CA.Coll[0].Name = 'test');
       Check(CA.One.Length = 10);
       Check(CA.Str.Count = 10000);
@@ -1887,7 +1887,7 @@ var
     CheckEqual(JsonReformat(U, jsonCompact), YamlToJson(y), 'YamlToJson zend');
     Check(DynArrayLoadJsonInPlace(
       git2, pointer(U), TypeInfo(TTestCustomJsonGitHubs)) <> nil);
-    if not CheckFailed(length(git) = Length(git2)) then
+    if Check(length(git) = Length(git2)) then
       for i := 0 to high(git) do
       begin
         Check(git[i].name = git2[i].name);
@@ -2279,7 +2279,7 @@ var
     RecordLoadJsonInPlace(JAV, UniqueRawUtf8(U), TypeInfo(TTestCustomJsonArrayVariant));
     Check(JAV.A = 1);
     Check(JAV.B = 2);
-    if not CheckFailed(length(JAV.C) = 4) then
+    if Check(length(JAV.C) = 4) then
     begin
       Check(JAV.C[0] = 'one');
       Check(JAV.C[1] = 2);
@@ -3712,7 +3712,7 @@ begin
     J := '{"ClassName":"TComplexNumber", "Real": 10.3, "Imaginary": 7.92 }';
     P := UniqueRawUtf8(J); // make local copy of source constant
     Comp := TComplexNumber(JsonToNewObject(P, Valid));
-    if not CheckFailed(Comp <> nil) then
+    if Check(Comp <> nil) then
     begin
       Check(Valid);
       Check(Comp.ClassType = TComplexNumber);
@@ -4184,7 +4184,7 @@ begin
   RecordLoadJsonInPlace(Disco, UniqueRawUtf8(U), TypeInfo(TTestCustomDiscogs));
   Check(Disco.pagination.per_page = 1);
   Check(Disco.pagination.page = 0);
-  if not CheckFailed(length(Disco.releases) = 1) then
+  if Check(length(Disco.releases) = 1) then
   begin
     Check(Disco.releases[0].title = 'TEST');
     Check(Disco.releases[0].id = 10);
@@ -4196,7 +4196,7 @@ begin
   RecordLoadJsonInPlace(Disco, UniqueRawUtf8(U), TypeInfo(TTestCustomDiscogs));
   Check(Disco.pagination.per_page = 0);
   Check(Disco.pagination.page = 0);
-  if not CheckFailed(length(Disco.releases) = 2) then
+  if Check(length(Disco.releases) = 2) then
   begin
     Check(Disco.releases[0].title = '');
     Check(Disco.releases[0].id = 10);
@@ -4208,7 +4208,7 @@ begin
   RecordLoadJsonInPlace(Disco, UniqueRawUtf8(U), TypeInfo(TTestCustomDiscogs));
   Check(Disco.pagination.per_page = 0);
   Check(Disco.pagination.page = 1);
-  if not CheckFailed(length(Disco.releases) = 1) then
+  if Check(length(Disco.releases) = 1) then
   begin
     Check(Disco.releases[0].title = 'abc');
     Check(Disco.releases[0].id = 2);
@@ -4602,9 +4602,9 @@ begin
   for i := 1 to ITER div 10 do // div 10 since fpjson is slower
   begin
     fpjson := GetJSON(people, {utf8=}true);
-    if not CheckFailed(fpjson <> nil) then
+    if Check(fpjson <> nil) then
       try
-        if not CheckFailed(fpjson.JSONType = jtArray) then
+        if Check(fpjson.JSONType = jtArray) then
           Check((fpjson as TJSONArray).Count = count);
       finally
         fpjson.Free;
@@ -4619,7 +4619,7 @@ begin
   begin
     jt := TJsonNode.Create;
     try // note: on i386, jsontools raises a parsing EJsonException :(
-      //if not CheckFailed(jt.TryParse('["XS\"\"\"."]')) then
+      //if Check(jt.TryParse('["XS\"\"\"."]')) then
       begin
         Check(jt.TryParse(peoples), 'jtparse');
         Check(jt.Kind = nkArray, 'jtarray');
@@ -4636,9 +4636,9 @@ begin
   for i := 1 to ITER div 10 do // div 10 since Delphi json is dead slow
   begin
     djson := system.json.TJSONObject.ParseJSONValue(people);
-    if not CheckFailed(djson <> nil) then
+    if Check(djson <> nil) then
       try
-        if not CheckFailed(djson is system.json.TJSONArray) then
+        if Check(djson is system.json.TJSONArray) then
           Check((djson as system.json.TJSONArray).Count = count);
       finally
         djson.Free;
@@ -4651,9 +4651,9 @@ begin
   for i := 1 to ITER do // JsonDataObjects speed is 40 MB/s ;)
   begin
     jdo := TJsonBaseObject.ParseUtf8(people);
-    if not CheckFailed(jdo <> nil) then
+    if Check(jdo <> nil) then
       try
-        if not CheckFailed(jdo is JsonDataObjects.TJsonArray) then
+        if Check(jdo is JsonDataObjects.TJsonArray) then
           Check((jdo as JsonDataObjects.TJsonArray).Count = count);
       finally
         jdo.Free;
@@ -4667,8 +4667,8 @@ begin
   for i := 1 to ITER div 10 do
   begin
     so := superobject.SO(s);
-    if not CheckFailed(so <> nil) then
-      if not CheckFailed(so.IsType(stArray)) then
+    if Check(so <> nil) then
+      if Check(so.IsType(stArray)) then
         Check(so.AsArray.Length = count);
     so := nil;
   end;
@@ -4679,7 +4679,7 @@ begin
   for i := 1 to 1 do // X-SuperObject is 1.5 MB/s 8(
   begin
     xso := xsuperobject.SA(peoples);
-    if not CheckFailed(xso <> nil) then
+    if Check(xso <> nil) then
       Check(xso.Length = count);
     xso := nil;
   end;
@@ -4716,7 +4716,7 @@ begin
       try
         ws := Parse(peoples);
         try
-          if not CheckFailed(ws.IsArray) then
+          if Check(ws.IsArray) then
             Check((ws as WinJson.TJsonArray).ElementCount = Count);
         finally
           ws.Free;
@@ -4793,9 +4793,9 @@ begin
     for i := 1 to ITER div 10 do // div 10 since fpjson is slower
     begin
       fpjson := GetJSON(sample, {utf8=}true);
-      if not CheckFailed(fpjson <> nil) then
+      if Check(fpjson <> nil) then
         try
-          if not CheckFailed(fpjson.JSONType = jtObject) then
+          if Check(fpjson.JSONType = jtObject) then
             Check((fpjson as TJSONObject).Count = 3);
         finally
           fpjson.Free;
@@ -4865,7 +4865,7 @@ begin
   CheckEqual(HtmlUnescape('te&st'), 'te&st');
   for i := 1 to high(HTML_UNESCAPE) do
   begin
-    if i <= 6 then
+    if i <= high(HTML_UNESCAPED) then
       exp := HTML_UNESCAPED[i]
     else if i = 8 then
       exp := '...'
@@ -6970,7 +6970,7 @@ begin
   Check(variant(Doc)._count = 3);
   Check(Doc.GetModel(model));
   Check(model = mVoid);
-  if not CheckFailed(Doc.Count = 3) then
+  if Check(Doc.Count = 3) then
   begin
     Check(Doc.Values[0] = 'one');
     Check(Doc.Values[1] = 2);
@@ -7287,7 +7287,7 @@ begin
   Doc.Clear;
   CheckEqual(Doc.Count, 0);
   p := PosCharU(s, '?');
-  if not CheckFailed(p <> nil) then
+  if Check(p <> nil) then
     Doc.InitFromUrl(p + 1, JSON_FAST);
   CheckEqual(Doc.Count, 3);
   CheckEqual(Doc.ToJson, '{"ab":1,"ab2":10,"d":3}');
@@ -7475,7 +7475,6 @@ begin
     Doc.SaveToJsonFile(WorkDir + 'm1-saved2.json');
     Doc.Clear;
   end;
-  {$ifndef POSIXDELPHI}
   CheckOle('[]', varArray or varVariant);
   CheckOle('[1]', varArray or varInt64);
   CheckOle('[1,2,3]', varArray or varInt64);
@@ -7496,7 +7495,6 @@ begin
   CheckOle('[1,true,"abc",null]', varArray or varVariant);
   CheckOle('["abc",null]', varArray or varVariant);
   CheckOle('[true,null,false]', varArray or varVariant);
-  {$endif POSIXDELPHI}
   CheckOle('{}', varOleStr);
   CheckOle('{"a":1}', varOleStr);
   CheckOle('{"a":1,"b":"text","c":true}', varOleStr);
@@ -8061,11 +8059,12 @@ var
   s, t, d: RawUtf8;
   hf: TTextWriterHtmlFormat;
   w: TTextWriter;
-  tmp: TTextWriterStackBuffer;
   name, value, utf: RawUtf8;
   str: string;
   P: PUtf8Char;
   Guid2: TGuid;
+  rec: TSubAB;
+  tmp: TTextWriterStackBuffer;
 const
   guid: TGuid = '{c9a646d3-9c61-4cb7-bfcd-ee2522c8f633}';
 
@@ -8222,6 +8221,30 @@ begin
     [ueStarNameIsCsv]), '?select=&where=1&where=2&where=and+three');
   CheckEqual(UrlEncodeFull('', [], ['select', '', '*where', ''],
     [ueStarNameIsCsv, ueSkipVoidString]), '');
+  value := '123';
+  CheckEqual(UrlEncodeFull('', [], ['one', value, 'another', 'toto'],
+    OPENAPI_URLENCODER), '?one=123&another=toto');
+  Rtti.RegisterFromText(TypeInfo(TSubAB), __TSubAB);
+  rec.a := 'A';
+  rec.b := 1;
+  value := DeepObjectEncode(@rec, TypeInfo(TSubAB), 'fields[');
+  CheckEqual(value, 'fields[a]=A&fields[b]=1');
+  CheckEqual(UrlEncodeFull('', [], ['num', 10, '=fields', value],
+    OPENAPI_URLENCODER), '?num=10&fields[a]=A&fields[b]=1');
+  rec.a := 'Hello world & test';
+  value := DeepObjectEncode(@rec, TypeInfo(TSubAB), 'fields[');
+  CheckEqual(value, 'fields[a]=Hello+world+%26+test&fields[b]=1');
+  rec.a := '';
+  value := DeepObjectEncode(@rec, TypeInfo(TSubAB), 'fields[');
+  CheckEqual(value, 'fields[b]=1');
+  CheckEqual(UrlEncodeFull('', [], ['=fields', value],
+    OPENAPI_URLENCODER), '?fields[b]=1');
+  CheckEqual(UrlEncodeFull('', [], ['=fields', value, 'another', 'toto',
+    'three', 3], OPENAPI_URLENCODER), '?fields[b]=1&another=toto&three=3');
+  rec.b := 0;
+  value := DeepObjectEncode(@rec, TypeInfo(TSubAB), 'fields[');
+  CheckEqual(value, '');
+  CheckEqual(UrlEncodeFull('', [], ['=fields', value], OPENAPI_URLENCODER), '');
   for i := 1 to 100 do
   begin
     s := RandomIdentifier(i);
@@ -9317,7 +9340,7 @@ var
       if CheckFailed(Count = aCount, 'count') then
         exit;
       for i := 0 to Count - 1 do
-        if not CheckFailed(RetrieveLocalFileHeader(i, local)) then
+        if Check(RetrieveLocalFileHeader(i, local)) then
           Check(CompareMem(@Entry[i].dir^.fileInfo, @local.fileInfo,
             SizeOf(TFileInfo) - SizeOf(Entry[i].dir^.fileInfo.extraLen)));
       i := NameToIndex('REP1\ONE.exe');
@@ -9730,7 +9753,7 @@ begin
       tot1 := 0;
       for i := 0 to zin.Count - 1 do
         inc(tot1, zin.Size[i]);
-      {with zin do
+      {allocconsole; with zin do
         for i := 0 to Count - 1 do
            writeln('fullname=',FullName[i], ' zipname=',ZipName[i],
           ' size=',Size[i], ' packsize=',packsize[i], ' method=',Method[i],

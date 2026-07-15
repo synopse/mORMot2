@@ -547,7 +547,7 @@ function JsonRetrieveObjectRttiCustom(var Json: PUtf8Char;
 // - warning: the ParametersJson input buffer will be modified in-place
 function UrlEncodeJsonObjectBuffer(const UriName: RawUtf8;
   ParametersJson: PUtf8Char; const PropNamesToIgnore: array of RawUtf8;
-  IncludeQueryDelimiter: boolean = true): RawUtf8;
+  IncludeQueryDelimiter: boolean = true; const DeepObjectName: RawUtf8 = ''): RawUtf8;
 
 /// encode a JSON object UTF-8 buffer into URI parameters
 // - you can specify property names to ignore during the object decoding
@@ -4835,48 +4835,49 @@ begin
 end;
 
 function UrlEncodeJsonObjectBuffer(const UriName: RawUtf8; ParametersJson: PUtf8Char;
-  const PropNamesToIgnore: array of RawUtf8; IncludeQueryDelimiter: boolean): RawUtf8;
+  const PropNamesToIgnore: array of RawUtf8; IncludeQueryDelimiter: boolean;
+  const DeepObjectName: RawUtf8): RawUtf8;
 var
   i, j: PtrInt;
   sep: AnsiChar;
-  w: TTextWriter;
   Params: TNameValuePUtf8CharDynArray;
-  temp: TTextWriterStackBuffer;
+  w: TSynTempAdder;
 begin
   if (ParametersJson = nil) or
      (JsonDecode(ParametersJson, Params, true) = nil) or
      (Params = nil)  then
-    result := UriName // no valid parameter to encode
-  else
   begin
-    w := TTextWriter.CreateOwnedStream(temp);
-    try
-      w.AddString(UriName);
-      sep := '?';
-      for i := 0 to length(Params) - 1 do
-        with Params[i] do
-        begin
-          for j := 0 to high(PropNamesToIgnore) do
-            if IdemPropNameU(PropNamesToIgnore[j], Name.Text, Name.Len) then
-            begin
-              Name.Len := 0;
-              break;
-            end;
-          if Name.Len = 0 then
-            continue; // was within PropNamesToIgnore[]
-          if IncludeQueryDelimiter then
-            w.AddDirect(sep);
-          sep := '&';
-          IncludeQueryDelimiter := true;
-          w.AddShort(Name.Text, Name.Len);
-          w.AddDirect('=');
-          UrlEncode(w, Value.Text, Value.Len);
-        end;
-      w.SetText(result);
-    finally
-      w.Free;
-    end;
+    result := UriName; // no valid parameter to encode
+    exit;
   end;
+  w.Init;
+  w.Add(UriName);
+  sep := '?';
+  for i := 0 to length(Params) - 1 do
+    with Params[i] do
+    begin
+      for j := 0 to high(PropNamesToIgnore) do
+        if IdemPropNameU(PropNamesToIgnore[j], Name.Text, Name.Len) then
+        begin
+          Name.Len := 0;
+          break;
+        end;
+      if Name.Len = 0 then
+        continue; // was within PropNamesToIgnore[]
+      if IncludeQueryDelimiter then
+        w.AddDirect(sep);
+      sep := '&';
+      IncludeQueryDelimiter := true;
+      if DeepObjectName <> '' then
+        w.Add(DeepObjectName); // e.g. 'fields['
+      w.Add(Name.Text, Name.Len);
+      if DeepObjectName <> '' then
+        w.AddDirect(']', '=')  // e.g. 'fields[uid]='
+      else
+        w.AddDirect('=');
+      UrlEncodeAdder(w, Value.Text, Value.Len, {space=}32);
+    end;
+  w.Done(result);
 end;
 
 function UrlEncodeJsonObject(const UriName, ParametersJson: RawUtf8;
@@ -7024,16 +7025,15 @@ begin
   else
     start := nil;
   result := parser.Reformat(Json);
-  if start <> nil then // manual ending } of HJson implicit object
-  begin
-    if (jrfTrailingComma in parser.Fmt) and
-       not (parser.State in [stObjectNameFirst, stValueFirst]) then
-      AddDirect(',');
-    dec(fHumanReadableLevel);
-    if jrfIndent in parser.Fmt then
-      AddCRAndIndent;
-    AddDirect('}');
-  end;
+  if start = nil then // no manual ending } of HJson implicit object
+    exit;
+  if (jrfTrailingComma in parser.Fmt) and
+     not (parser.State in [stObjectNameFirst, stValueFirst]) then
+    AddDirect(',');
+  dec(fHumanReadableLevel);
+  if jrfIndent in parser.Fmt then
+    AddCRAndIndent;
+  AddDirect('}');
 end;
 
 procedure TJsonWriter.AddJsonEscape(P: pointer; Len: PtrInt);
@@ -9106,10 +9106,10 @@ begin
         SetLength(Values, NextGrow(n));
       with Values[n] do
       begin
-        Name.Text := nametext;
-        Name.Len := namelen;
+        Name.Text  := nametext;
+        Name.Len   := namelen;
         Value.Text := info.Value;
-        Value.Len := info.ValueLen;
+        Value.Len  := info.ValueLen;
       end;
       inc(n);
     until (info.Json = nil) or
@@ -9532,7 +9532,7 @@ begin
   // caller is expected to call fSafe.Lock/Unlock
   if self <> nil then
   begin
-    result := fKeys.Hasher.FindOrNew(fKeys.Hasher.HashOne(@aKey), @aKey, nil);
+    result := fKeys.Hasher.FindOrNew(fKeys.Hasher.HashOne(@aKey), @aKey);
     if result < 0 then
       result := -1
     else if aUpdateTimeOut then

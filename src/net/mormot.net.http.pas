@@ -2348,9 +2348,8 @@ type
   // - Find() method allows to quickly retrieve any range of information for
   // a given time period and metric type
   // - supports up to 10,485,760 metrics per instance (see HTTPMETRICS_MAXCOUNT)
-  THttpMetrics = class(TSynPersistent)
+  THttpMetrics = class(TObjectLightLock)
   protected
-    fSafe: TLightLock;
     fCount: integer;
     fPeriodLastCount: integer;
     fState: TRawByteStringGroup; // avoid in-memory fragmentation
@@ -2457,9 +2456,6 @@ type
     // file content, as plain text or JSON
     property Metadata: RawUtf8
       read fMetadata write fMetadata;
-    /// access to the thread-safety NOT reentrant lock
-    property Safe: TLightLock
-      read fSafe write fSafe;
   published
     /// how many rows are currently in State[] memory buffer
     property Count: integer

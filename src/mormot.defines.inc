@@ -160,8 +160,8 @@
     FPC_X64MM
 
   Delphi only:
-    ISDELPHI ISDELPHIxxx WIN32DELPHI WIN64DELPHI WINTELDELPHI WINARMDELPHI
-    DISPINVOKEBYVALUE
+    ISDELPHI ISDELPHIUNICODE ISDELPHIxxx
+    WIN32DELPHI WIN64DELPHI WINTELDELPHI WINARMDELPHI DELPHIPOSIX
 
 ********************** Conditionals **********************)
 
@@ -785,8 +785,11 @@
     {$endif CPUARM64}
   {$else}
     {$define POSIXDELPHI}
-    {$define NOASMBLOCK}    // no "asm .. end" blocks support by LLVM compilers
-    {$define NOEXCEPTIONINTERCEPT}  // TODO: interception for Delphi POSIX
+    {$define NOASMBLOCK}             // no "asm" block support by LLVM compilers
+    {$define NOEXCEPTIONINTERCEPT}   // TODO: interception for Delphi POSIX
+    {$ifdef CPUX64}
+      {$define DISPINVOKE_SYSVAMD64} // use SysV AMD64 va_list layout
+    {$endif CPUX64}                  // TODO: check aarch64 ABI on Delphi
   {$endif OSWINDOWS}
   {$ifdef CPU32}
     {$define HASSLOWMUL64}  // Delphi 32-bit has slow 64-bit mul: favor shl

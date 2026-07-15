@@ -3348,6 +3348,8 @@ var
   id: TSynMonitorUsageID;
   g: TSynMonitorUsageGranularity;
 begin
+  if fPrevious.Value = 0 then
+    exit; // nothing was tracked yet - nothing to save
   id.FromTimeLog(fPrevious.Value);
   Save(id, mugHour, Scope); // always save current minutes values
   for g := mugDay to mugYear do
@@ -4801,7 +4803,7 @@ begin
             until s[0] = 0;
           inc(PByte(s));
           if length(info.Oem) <> c then
-            SetLength(info.Oem, c);
+            SetLength(info.Oem, c); // skipped 'Default string' or ''
           continue;
         end;
       16: // Physical Memory Array (type 16)

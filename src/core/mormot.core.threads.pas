@@ -1557,9 +1557,8 @@ type
   // - in respect to TSynThreadPool, threads will be created and released on need
   // - tasks should better take at least some dozen milliseconds to leverage the
   // cost of creating a thread by the Operating System
-  TLoggedWorker = class(TSynPersistent)
+  TLoggedWorker = class(TObjectLightLock)
   protected
-    fSafe: TLightLock;
     fRunning: integer;
     fMaxRunning: integer;
     fPending: array of TLoggedWork; // pending Run() if ForcedThreaded

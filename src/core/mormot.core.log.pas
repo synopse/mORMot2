@@ -1650,11 +1650,13 @@ type
   TSynLogFileProc = record
     /// the index of the sllEnter event in the TSynLogFile.fLevels[] array
     Index: cardinal;
-    /// the associated time elapsed in this method (in micro seconds)
+    /// the associated time elapsed in this method (in microseconds)
     // - computed from the sllLeave time difference (high resolution timer)
+    // - 32-bit microseconds value would overflow after 1 hour and 11 minutes
     Time: cardinal;
     /// the time elapsed in this method and not in nested methods
     // - computed from Time property, minus the nested calls
+    // - 32-bit microseconds value would overflow after 1 hour and 11 minutes
     ProperTime: cardinal;
   end;
   PSynLogFileProc = ^TSynLogFileProc;
@@ -7002,7 +7004,7 @@ end;
 procedure TSynLogFile.RecomputeTime(p: PSynLogFileProc);
 var
   ndx, lev: PtrInt;
-  enter64, leave64: Int64;
+  enter64, leave64, time64: Int64;
   thd: cardinal;
 begin // only called when out-of-range '99.xxx.xxx' was written in sllLeave
   lev := 0;
@@ -7025,17 +7027,21 @@ begin // only called when out-of-range '99.xxx.xxx' was written in sllLeave
           begin
             if fFreq = 0 then
               // adjust huge seconds timing from date/time column
-              p^.Time := Round(
-                (EventDateTime(ndx) -
-                 EventDateTime(p^.Index)) * 86400000000.0) +
-                p^.Time mod 1000000
+              time64 := round(
+                (EventDateTime(ndx) - EventDateTime(p^.Index)) * MicroSecsPerDay) +
+                Int64(p^.Time mod 1000000)
             else
             begin
               // directly use high resolution timestamps as 64-bit integers
               HexDisplayToBin(fLines[p^.Index], @enter64, SizeOf(enter64));
               HexDisplayToBin(fLines[ndx],      @leave64, SizeOf(leave64));
-              p^.Time := ((leave64 - enter64) * (1000 * 1000)) div fFreq;
+              time64 := leave64 - enter64;
+              if fFreq <> MicroSecsPerSec then
+                time64 := (time64 * MicroSecsPerSec) div fFreq;
             end;
+            if time64 shr 32 <> 0 then
+              time64 := high(cardinal); // overflow over 1 hour and 11 minutes
+            p^.Time := time64;
             break;
           end
           else

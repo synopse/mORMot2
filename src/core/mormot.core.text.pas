@@ -1850,6 +1850,9 @@ procedure VarRecToUtf8(V: PVarRec; var result: RawUtf8;
 function VarRecToUtf8IsString(const V: TVarRec; var value: RawUtf8): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// append an open array (const Args: array of const) argument to a TSynTempAdder
+procedure VarRecToAdder(var Adder: TSynTempAdder; V: PVarRec);
+
 /// convert an open array (const Args: array of const) argument to an Int64
 // - returns TRUE and set Value if the supplied argument is a vtInteger, vtInt64
 // or vtBoolean
@@ -1946,6 +1949,9 @@ function FormatString(const Format: RawUtf8; const Args: array of const): string
 
 /// fast Format() function replacement, for UTF-8 content stored in variant
 function FormatVariant(const Format: RawUtf8; const Args: array of const): variant;
+
+/// fast Format() function replacement in to a TSynTempAdder
+procedure FormatAdder(var Dest: TSynTempAdder; const Format: RawUtf8; const Args: array of const);
 
 /// concatenate several arguments into an UTF-8 string
 function Make(const Args: array of const): RawUtf8; overload;
@@ -2364,6 +2370,9 @@ function IsInvalidHttpHeader(const Headers: RawUtf8): boolean;
 /// check if the supplied text start with 'http://' or 'https://'
 function IsHttp(const text: RawUtf8): boolean;
 
+/// check if the supplied text start with 'ldap://' or 'ldaps://'
+function IsLdap(const text: RawUtf8): boolean;
+
 
 { **************** Hexadecimal Text And Binary Conversion }
 
@@ -2445,10 +2454,16 @@ function HexToBin(Hex: PAnsiChar; HexLen: PtrInt;
   var Bin: RawByteString): boolean; overload;
 
 /// fast conversion from ToHumanHex() hexa chars into binary data
-function HumanHexToBin(const hex: RawUtf8; var Bin: RawByteString): boolean; overload;
+function HumanHexToBin(const hex: RawUtf8; var Bin: RawByteString;
+  CP: cardinal = CP_RAWBYTESTRING): boolean; overload;
 
 /// fast conversion from ToHumanHex() hexa chars into binary data
 function HumanHexToBin(const hex: RawUtf8): RawByteString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast conversion from ToHumanHex() hexa chars into an UTF-8 string
+// - may be a convenient way to generate some UTF-8 constant from ASCII-7 source
+function HexToUtf8(const hex: RawUtf8): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast comparison between two ToHumanHex() hexa values
@@ -3576,7 +3591,7 @@ end;
 function CsvContains(Csv, Value: PUtf8Char; ValueLen: PtrInt;
   Sep: AnsiChar; CaseSensitive, TrimValue: boolean): boolean;
 var
-  o: PUtf8Char;
+  o: PUtf8Char; // no temporary memory allocation
   l: PtrInt;
 begin
   result := (Csv <> nil) and
@@ -3606,7 +3621,7 @@ end;
 function CsvContains(Csv, Value: PUtf8Char; CsvLen, ValueLen: PtrInt;
   Sep: AnsiChar; CaseSensitive, TrimValue: boolean): boolean;
 var
-  o: PUtf8Char;
+  o: PUtf8Char; // no temporary memory allocation
   l: PtrInt;
 begin
   result := (Csv <> nil) and
@@ -8306,8 +8321,8 @@ begin
       Curr64ToStr(vd^.VInt64, result);
     varDate:
       begin
-        _VariantToUtf8DateTimeIso8601(vd^.VDate, 'T', result, {withms=}false);
         wasString := true;
+        _VariantToUtf8DateTimeIso8601(vd^.VDate, 'T', result, {withms=}false);
       end;
     varOleStr:
       begin
@@ -9126,6 +9141,15 @@ begin
   VarRecToUtf8(@V, value, @result);
 end;
 
+procedure VarRecToAdder(var Adder: TSynTempAdder; V: PVarRec);
+var
+  tmp: TTempUtf8;
+begin
+  VarRecToTempUtf8(V, tmp, nil);
+  Adder.Add(tmp.Text, tmp.Len);
+  TempUtf8Done(tmp);
+end;
+
 procedure VarRecToInlineValue(const V: TVarRec; var result: RawUtf8);
 var
   wasString: boolean;
@@ -9230,50 +9254,51 @@ begin
   L := 0;
   c := @blocks;
   F := pointer(Format);
-  repeat
-    if F^ = #0 then
-      break
-    else if F^ <> '%' then
-    begin
-      FDeb := F;
-      repeat
-        inc(F);
-      until (F^ = '%') or
-            (F^ = #0);
-      c^.Text := FDeb;
-      c^.Len := F - FDeb;
-      inc(L, c^.Len);
-      c^.TempRawUtf8 := nil;
-      inc(c);
+  if F <> nil then
+    repeat
       if F^ = #0 then
-        break;
-    end;
-    inc(F); // jump '%'
-    if ArgCount <> 0 then
-    begin
-      if VarRecToTempUtf8(Arg, c^) then
+        break
+      else if F^ <> '%' then
       begin
+        FDeb := F;
+        repeat
+          inc(F);
+        until (F^ = '%') or
+              (F^ = #0);
+        c^.Text := FDeb;
+        c^.Len := F - FDeb;
         inc(L, c^.Len);
+        c^.TempRawUtf8 := nil;
         inc(c);
+        if F^ = #0 then
+          break;
       end;
-      inc(Arg);
-      dec(ArgCount);
+      inc(F); // jump '%'
+      if ArgCount <> 0 then
+      begin
+        if VarRecToTempUtf8(Arg, c^) then
+        begin
+          inc(L, c^.Len);
+          inc(c);
+        end;
+        inc(Arg);
+        dec(ArgCount);
+        if F^ = #0 then
+          break;
+      end
+      else
       if F^ = #0 then
+        break
+      else // no more available Args -> add all remaining text
+      begin
+        c^.Text := F;
+        c^.Len := length(Format) - (F - pointer(Format));
+        inc(L, c^.Len);
+        c^.TempRawUtf8 := nil;
+        inc(c);
         break;
-    end
-    else
-    if F^ = #0 then
-      break
-    else // no more available Args -> add all remaining text
-    begin
-      c^.Text := F;
-      c^.Len := length(Format) - (F - pointer(Format));
-      inc(L, c^.Len);
-      c^.TempRawUtf8 := nil;
-      inc(c);
-      break;
-    end;
-  until false;
+      end;
+    until false;
   last := c;
 end;
 
@@ -9471,6 +9496,14 @@ function FormatToShort(const Format: RawUtf8;
 begin
   result[0] := AnsiChar(FormatBufferRaw(
     Format, @Args[0], length(Args), @result[1], high(result)) - @result[1]);
+end;
+
+procedure FormatAdder(var Dest: TSynTempAdder; const Format: RawUtf8; const Args: array of const);
+var
+  f: TFormatUtf8;
+begin
+  f.Parse(Format, @Args[0], length(Args));
+  f.WriteAll(Dest.Add(f.L), @f.blocks);
 end;
 
 procedure FormatString(const Format: RawUtf8; const Args: array of const;
@@ -10362,6 +10395,15 @@ begin
               (text[6] = ':')));
 end;
 
+function IsLdap(const text: RawUtf8): boolean;
+begin
+  result := (length(text) > 5) and
+            (PCardinal(text)^ and $dfdfdfdf = LDAP_32) and
+            ((text[5] = ':') or
+             ((text[5] in ['s', 'S']) and
+              (text[6] = ':')));
+end;
+
 
 { THttpCookies }
 
@@ -10552,7 +10594,7 @@ begin
   result := false; // mark error
 end;
 
-function HumanHexToBin(const hex: RawUtf8; var Bin: RawByteString): boolean;
+function HumanHexToBin(const hex: RawUtf8; var Bin: RawByteString; CP: cardinal): boolean;
 var
   len: PtrInt;
   h, p: PAnsiChar;
@@ -10562,7 +10604,7 @@ begin
   len := length(hex);
   if len = 0 then
     exit;
-  p := FastNewString(len shr 1); // shr 1 = maximum length
+  p := FastNewString(len shr 1, CP); // shr 1 = maximum length
   pointer(Bin) := p;
   h := pointer(hex);
   repeat
@@ -10657,6 +10699,11 @@ end;
 function HumanHexToBin(const hex: RawUtf8): RawByteString;
 begin
   HumanHexToBin(hex, result);
+end;
+
+function HexToUtf8(const hex: RawUtf8): RawUtf8;
+begin
+  HumanHexToBin(hex, RawByteString(result), CP_UTF8);
 end;
 
 function ByteToHex(P: PAnsiChar; Value: byte): PAnsiChar;

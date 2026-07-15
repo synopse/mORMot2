@@ -10,8 +10,6 @@
 
 {$Z4} // enumerates should be DWORD / 32-bit - see jediapilib.inc
 
-function PosExtString(Str: PChar): PChar; forward;
-
 function _utf16toascii(s: PWordArray; d: PByteArray; l: PtrInt): pointer; forward;
 procedure _utf16fromascii(s: PByteArray; d: PWordArray; l: PtrInt); forward;
 
@@ -196,7 +194,7 @@ var
   flags: cardinal;
 begin
   flags := 0;
-  if CodePage < 50220 then // wild guess - FPC RTL would always use 0 anyway
+  if CodePage < 50220 then // MBCS wild guess - FPC RTL would always use 0 anyway
     if CodePage = 951 then // 951 is a "fake" code page
       CodePage := 950
     else if (CodePage <> 932) and (CodePage <> 949) then
@@ -209,7 +207,7 @@ var
   defchar: PAnsiChar;
 begin
   defchar := nil;
-  if CodePage < 50220 then // wild guess - FPC RTL would always use 0 anyway
+  if CodePage < 50220 then // MBCS wild guess - FPC RTL would always use 0 anyway
     if CodePage = 951 then // 951 is a "fake" code page
       CodePage := 950
     else if (CodePage <> 932) and (CodePage <> 949) then
@@ -364,27 +362,80 @@ begin
   FT^.dwHighDateTime := Q64^.H;
 end;
 
-// To account for daylight saving time when converting a file time to a local
-// time, use the following function in place of using FileTimeToLocalFileTime:
+// To account for daylight saving time when converting a file time to a local time,
+// use the following functions in place of using Win32 FileTimeToLocalFileTime API:
 // https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-filetimetolocalfiletime
+
+function SystemTimeToTzSpecificLocalTime(lpTimeZoneInformation: pointer;
+  var lpUniversalTime, lpLocalTime: TSystemTime): BOOL;
+  stdcall; external kernel32;
+function TzSpecificLocalTimeToSystemTime(lpTimeZoneInformation: pointer;
+  var lpLocalTime, lpUniversalTime: TSystemTime): BOOL;
+  stdcall; external kernel32; // missing in FPC and oldest Delphi
 
 function FileTimeToLocalSystemTime(const ft: FILETIME; out lt: TSystemTime): boolean;
 var
   st: TSystemTime;
 begin
-  FillCharFast(lt, SizeOf(lt), 0);
-  result := FileTimeToSystemTime(ft, st);
-  if result then
-    if not SystemTimeToTzSpecificLocalTime(nil, st, lt) then
-      lt := st;
+  result := FileTimeToSystemTime(ft, st) and
+            SystemTimeToTzSpecificLocalTime(nil, st, lt);
 end;
 
-procedure UnixTimeToLocalTime(I64: TUnixTime; out Local: TSystemTime);
+procedure UnixTimeToLocal(I64: TUnixTime; out Local: TSystemTime);
 var
-  lft: TFileTime;
+  ft: TFileTime;
 begin
-  UnixTimeToFileTime(I64, lft);
-  FileTimeToLocalSystemTime(lft, Local); // no FileTimeToLocalFileTime
+  UnixTimeToFileTime(I64, ft);
+  if not FileTimeToLocalSystemTime(ft, Local) then
+    FillCharFast(Local, SizeOf(Local), 0);
+end;
+
+function LocalToUnixTime(local: TDateTime): TUnixTime;
+var
+  ft: TFileTime;
+  st: TSystemTime;
+begin
+  DateTimeToSystemTime(local, st);
+  if TzSpecificLocalTimeToSystemTime(nil, st, st) and
+     SystemTimeToFileTime(st, ft)  then
+    result := FileTimeToUnixTime(ft)
+  else
+    result := 0;
+end;
+
+function UnixTimeToLocal(I64: TUnixTime): TDateTime;
+var
+  ft: TFileTime;
+  st: TSystemTime;
+begin
+  UnixTimeToFileTime(I64, ft);
+  if FileTimeToLocalSystemTime(ft, st) then
+    result := SystemTimeToDateTime(st)
+  else
+    result := 0;
+end;
+
+function UtcToLocal(utc: TDateTime): TDateTime;
+var
+  ft: TFileTime;
+  st: TSystemTime;
+begin
+  DateTimeToFileTime(utc, ft);
+  if FileTimeToLocalSystemTime(ft, st) then
+    result := SystemTimeToDateTime(st)
+  else
+    result := 0;
+end;
+
+function LocalToUtc(local: TDateTime): TDateTime;
+var
+  st: TSystemTime;
+begin
+  DateTimeToSystemTime(local, st);
+  if TzSpecificLocalTimeToSystemTime(nil, st, st) then
+    result := SystemTimeToDateTime(st)
+  else
+    result := 0;
 end;
 
 function UnixTimeUtc: TUnixTime;
@@ -2983,7 +3034,7 @@ var
 procedure _GetSystemEnv;
 var
   p, e, env: PWideChar;
-  i, n: PtrInt;
+  n: PtrInt;
 begin
   env := GetEnvironmentStringsW;
   p := env;
@@ -2996,31 +3047,33 @@ begin
       inc(n);
     inc(p, StrLenW(p) + 1);
   end;
-  if n = 0 then
-    exit; // should never happen
-  FastSynUnicode(_SystemEnvUnicode, env, (PtrUInt(p) - PtrUInt(env)) shr 1);
-  SetLength(_SystemEnvNames, n);
-  SetLength(_SystemEnvValues, n);
-  p := env;
-  i := 0;
-  repeat
-    if p^ = '=' then
-      inc(p, StrLenW(p)) // no void string in _SystemEnvNames[]
-    else
-    begin
-      e := p;
-      repeat
-        inc(p);
-      until p^ = '=';
-      Unicode_ToUtf8(e, p - e, _SystemEnvNames[i]);
-      inc(p); // ignore '='
-      e := p;
-      inc(p, StrLenW(p));
-      Unicode_ToUtf8(e, p - e, _SystemEnvValues[i]);
-      inc(i);
-    end;
-    inc(p);
-  until p^ = #0;
+  FastSynUnicode(_SystemEnvUnicode, env, p - env);
+  if n <> 0 then // empty environment block (#0#0)
+  begin
+    SetLength(_SystemEnvNames, n);
+    SetLength(_SystemEnvValues, n);
+    n := 0;
+    p := env;
+    repeat
+      if p^ = '=' then
+        inc(p, StrLenW(p)) // no void string in _SystemEnvNames[]
+      else
+      begin
+        e := p;
+        repeat
+          inc(p);
+        until (p^ = #0) or (p^ = '=');
+        Unicode_ToUtf8(e, p - e, _SystemEnvNames[n]);
+        if p^ <> #0 then
+          inc(p); // ignore '='
+        e := p;
+        inc(p, StrLenW(p));
+        Unicode_ToUtf8(e, p - e, _SystemEnvValues[n]);
+        inc(n);
+      end;
+      inc(p); // ignore #0 for this entry
+    until p^ = #0;
+  end;
   FreeEnvironmentStringsW(env);
 end;
 
@@ -3103,67 +3156,164 @@ begin
   if closefirst then
     Close;
   key := 0;
-  result := RegOpenKeyExW(
-    _HKEY[root], Utf8ToWin32PWideChar(keyname, tmp), 0, KEY_READ, key) = NO_ERROR;
+  result := RegOpenKeyExW(_HKEY[root],
+              Utf8ToWin32PWideChar(keyname, tmp), 0, KEY_READ, key) = NO_ERROR;
   tmp.Done;
+end;
+
+function TWinRegistry.ReadOpen(root: TWinRegistryRoot;
+  const keynames: array of RawByteString; closefirst: boolean): boolean;
+var
+  name: RawUtf8;
+begin
+  Join(keynames, name);
+  result := ReadOpen(root, name, closefirst);
 end;
 
 procedure TWinRegistry.Close;
 begin
-  if key <> 0 then
-    RegCloseKey(key);
+  if key = 0 then
+    exit;
+  RegCloseKey(key);
+  key := 0;
 end;
 
-function TWinRegistry.ReadString(const entry: SynUnicode; andtrim: boolean): RawUtf8;
+procedure SetWinRegistryKind(const kind: PWinRegistryKind; rtype: DWord);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  if kind = nil then
+    exit;
+  if rtype > byte(high(TWinRegistryKind)) then
+    rtype := REG_NONE; // return wrkNone
+  PByte(kind)^ := rtype;
+end;
+
+function TWinRegistry.ReadTempBuffer(entry: PWideChar; var data: TSynTempBuffer;
+  allowed: TWinRegistryKinds; kind: PWinRegistryKind): boolean;
 var
-  rtype, rsize, res: DWord;
+  rsize, res, rtype: DWord;
+  k: TWinRegistryKind;
+begin
+  result := false;
+  rsize := {%H-}data.Init; // most of the time, a single call is enough
+  rtype := 0;
+  res := RegQueryValueExW(key, entry, nil, @rtype, data.buf, @rsize);
+  SetWinRegistryKind(@k, rtype);
+  if (allowed <> []) and
+     not (k in allowed) then
+    exit;
+  if res <> NO_ERROR then
+    if res = ERROR_MORE_DATA then // need more than 4KB of data (unlikely)
+      res := RegQueryValueExW(key, entry, nil, nil, data.Init(rsize), @rsize)
+    else
+      exit; // most probably ERROR_FILE_NOT_FOUND for unknown entry name
+  if res = NO_ERROR then
+  begin
+    PCardinal(data.BufEnd)^ := 0; // ensure is #0#0 terminated: the string might
+    if kind <> nil then
+      kind^ := k;
+    // NOT have been stored with the proper terminating null characters
+    // https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryvalueexw
+    result := true;
+  end
+  else
+    data.Done;
+end;
+
+function TWinRegistry.ReadString(entry: PWideChar; andtrim: boolean): RawUtf8;
+var
+  k: TWinRegistryKind;
   tmp: TSynTempBuffer;
 begin
   FastAssignNew(result);
-  rsize := {%H-}tmp.Init; // most of the time, a single call is enough
-  res := RegQueryValueExW(key, pointer(entry), nil, @rtype, tmp.buf, @rsize);
-  if res <> NO_ERROR then
-    if res = ERROR_MORE_DATA then // more than 4KB of data (unlikely)
-      res := RegQueryValueExW(key, pointer(entry), nil, nil, tmp.Init(rsize), @rsize)
-    else
-      exit;
-  if res = NO_ERROR then
+  if not ReadTempBuffer(entry, tmp, wrkStrings, @k) or
+     (tmp.Len = 0) then
+    exit;
+  Win32PWideCharToUtf8(tmp.buf, result); // use StrLenW() to get first string
+  if andtrim then
+    TrimSelf(result);
+  tmp.Done;
+end;
+
+function TWinRegistry.ReadStrings(entry: PWideChar; andtrim: boolean): TRawUtf8DynArray;
+var
+  n, l: PtrUInt;
+  p: PWideChar;
+  d: PRawUtf8;
+  k: TWinRegistryKind;
+  tmp: TSynTempBuffer;
+begin
+  Finalize(result);
+  if not ReadTempBuffer(entry, tmp, wrkStrings, @k) or
+     (tmp.Len = 0) then
+    exit;
+  p := tmp.buf;
+  n := 0;
+  case k of
+    wrkString,
+    wrkExpandString:
+      n := 1;
+    wrkMultiString:
+      while p^ <> #0 do
+      begin
+        inc(p, StrLenW(p) + 1); // first pass to compute length(result)
+        inc(n);
+      end;
+  end;
+  if n <> 0 then
   begin
-    case rtype of
-      REG_SZ,
-      REG_EXPAND_SZ,
-      REG_MULTI_SZ: // StrLen() will return the first value of REG_MULTI_SZ
-        Win32PWideCharToUtf8(tmp.buf, result);
-    end;
-    if andtrim then
-      TrimSelf(result);
+    p := tmp.buf;
+    SetLength(result, n);
+    d := pointer(result);
+    repeat
+      l := StrLenW(p);
+      Win32PWideCharToUtf8(p, l, d^);
+      if andtrim then
+        TrimSelf(d^);
+      inc(d);
+      inc(p, l + 1);
+      dec(n);
+    until n = 0;
   end;
   tmp.Done;
 end;
 
-function TWinRegistry.ReadData(const entry: SynUnicode): RawByteString;
+function TWinRegistry.ReadStringU(const entry: RawUtf8; andtrim: boolean): RawUtf8;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := ReadString(Utf8ToWin32PWideChar(entry, tmp), andtrim);
+  tmp.Done;
+end;
+
+function TWinRegistry.ReadData(entry: PWideChar): RawByteString;
 var
   rsize: DWord;
 begin
   FastAssignNew(result);
-  if RegQueryValueExW(key, pointer(entry), nil, nil, nil, @rsize) <> NO_ERROR then
+  rsize := 0;
+  if (RegQueryValueExW(key, entry, nil, nil, nil, @rsize) <> NO_ERROR) and
+     (rsize <> 0) then
     exit;
-  SetLength(result, rsize);
-  if RegQueryValueExW(key, pointer(entry), nil, nil, pointer(result), @rsize) <> NO_ERROR then
+  if RegQueryValueExW(key, entry, nil, nil,
+       FastNewRawByteString(result, rsize), @rsize) <> NO_ERROR then
     FastAssignNew(result);
 end;
 
-function TWinRegistry.ReadDword(const entry: SynUnicode): cardinal;
+function TWinRegistry.ReadDword(entry: PWideChar): cardinal;
 var
-  n: cardinal; // safer with an explicit local variable
+  n, t: DWord; // safer with an explicit n local variable
 begin
-  if ReadBuffer(entry, @n, SizeOf(n)) then
-    result := n
+  if ReadBuffer(entry, @n, SizeOf(n), @t) then
+    if t = REG_DWORD_BIG_ENDIAN then
+      result := bswap32(n)
+    else
+      result := n
   else
     result := 0;
 end;
 
-function TWinRegistry.ReadQword(const entry: SynUnicode): QWord;
+function TWinRegistry.ReadQword(entry: PWideChar): QWord;
 var
   q: QWord; // safer with an explicit local variable
 begin
@@ -3173,14 +3323,26 @@ begin
     result := 0;
 end;
 
-function TWinRegistry.ReadBuffer(const entry: SynUnicode;
-  data: pointer; datalen: DWord): boolean;
+function TWinRegistry.ReadBuffer(entry: PWideChar; data: pointer; datalen: DWord;
+  kind: PWinRegistryKind): boolean;
+var
+  rtype: DWord;
 begin
-  result := RegQueryValueExW(key, pointer(entry), nil, nil, data, @datalen) = NO_ERROR;
+  rtype := 0;
+  result := RegQueryValueExW(key, entry, nil, @rtype, data, @datalen) = NO_ERROR;
+  if result then
+    SetWinRegistryKind(kind, rtype);
 end;
 
-function TWinRegistry.ReadMax(const entry: SynUnicode;
-  Data: pointer; MaxDataLen: DWord): DWord;
+function TWinRegistry.ReadBufferU(const entry: RawUtf8; data: pointer; datalen: DWord): boolean;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := ReadBuffer(Utf8ToWin32PWideChar(entry, tmp), data, datalen);
+  tmp.Done;
+end;
+
+function TWinRegistry.ReadMax(entry: PWideChar; Data: pointer; MaxDataLen: DWord): DWord;
 var
   tmp: RawByteString;
 begin
@@ -3193,12 +3355,17 @@ begin
   MoveFast(pointer(tmp)^, Data^, result);
 end;
 
-function TWinRegistry.ReadSize(const entry: SynUnicode): integer;
+function TWinRegistry.ReadSize(entry: PWideChar; kind: PWinRegistryKind): integer;
 var
-  n: cardinal; // safer with an explicit local variable
+  n, rtype: cardinal; // safer with an explicit local variable
 begin
-  if RegQueryValueExW(key, pointer(entry), nil, nil, nil, @n) = NO_ERROR then
-    result := n
+  n := 0;
+  rtype := 0;
+  if RegQueryValueExW(key, entry, nil, @rtype, nil, @n) = NO_ERROR then
+  begin
+    SetWinRegistryKind(kind, rtype);
+    result := n;
+  end
   else
     result := -1;
 end;

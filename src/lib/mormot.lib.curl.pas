@@ -1518,11 +1518,11 @@ begin
     {$else}
 
     curl := TLibCurl.Create;
-    curl.TryLoadResolve([
     {$ifdef OSWINDOWS}
-      // first try the libcurl.dll in the local executable folder
-      Executable.ProgramFilePath + dllname,
+    // search library in the local executable folder
+    curl.TryFromExecutableFolder := True;
     {$endif OSWINDOWS}
+    curl.TryLoadResolve([
       // search standard library in path
       dllname
     {$ifdef OSDARWIN}

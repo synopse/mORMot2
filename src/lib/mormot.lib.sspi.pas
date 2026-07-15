@@ -777,10 +777,6 @@ function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aPassword: SpiUtf8;  const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString): boolean;
 
-/// check if the password is a local keytab/ccache file with a FILE: prefix
-// - always return false with SSPI which does not support those keytabs
-function ClientSspiPasswordIsFile(const aPassword: SpiUtf8): boolean;
-
 /// check if a binary request packet from a client is using NTLM
 function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
 
@@ -1853,15 +1849,10 @@ begin
   //FillCharFast(pointer(password)^, length(password) * 2, 0); // anti-forensic
 end;
 
-function ClientSspiPasswordIsFile(const aPassword: SpiUtf8): boolean;
-begin
-  result := false;
-end;
-
 function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
 begin
   result := (aInData <> '') and
-            (PCardinal(aInData)^ or $20202020 = NTLM_LOW);
+            (PCardinal(aInData)^ or $20202020 = NTLM_LO);
 end;
 
 function ServerSspiAuth(var aSecContext: TSecContext;
