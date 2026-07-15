@@ -4570,15 +4570,13 @@ begin
     // mainly for HTTP/1.0: https://www.rfc-editor.org/rfc/rfc7230#section-3.3.3
     if Assigned(OnLog) then
       OnLog(sllTrace, 'GetBody deprecated loop', [], self);
-    // first consume any body bytes already buffered in SockIn together with the
-    // response header: SockReceiveString below reads the raw socket directly and
-    // those leading bytes would otherwise be lost (truncated head on 'Connection:
-    // close' replies without Content-Length nor chunked encoding)
-    len := SockInPending(0);
+    // first consume any body bytes already buffered in SockIn
+    len := SockInPending(-1); // aTimeOutMS=-1 to check only the buffer
     if len > 0 then
-      Append(RawUtf8(Http.Content), RawUtf8(SockInRead(len, {UseOnlySockIn=}true)));
+      Http.Content := SockInRead(len, {UseOnlySockIn=}true);
+    // reads the raw socket directly until the socket is closed
     repeat
-      chunk := SockReceiveString; // rough process
+      chunk := SockReceiveString; // rough process at socket level
       Append(RawUtf8(Http.Content), chunk);
     until chunk = '';
     CloseSockIn; // we have hfConnectionClose anyway
