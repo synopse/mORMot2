@@ -2047,6 +2047,11 @@ type
     function Get64: QWord; virtual;
     /// retrieve a random floating point value in the [0..1) range calling Get32
     function GetDouble: double;
+    /// computes a random ASCII password following proper common safety rules
+    // - will contain uppercase/lower letters, digits and $.:()?%!-+*/@#
+    // excluding ;,= to allow direct use in CSV content
+    // - won't return the letters O and I to avoid confusion with digits 0 and 1
+    function GetPassword(len: PtrInt): SpiUtf8;
   end;
 
   /// an abstract TCryptRandom class which will call Get32 as its random source
@@ -8176,6 +8181,15 @@ begin
   result := Get32 * COEFF32; // 32-bit resolution is enough for our purpose
 end;
 
+function TCryptRandom.GetPassword(len: PtrInt): SpiUtf8;
+begin
+  repeat
+    FillZero(result);
+    Get(RawByteString(result), Len);
+  until MakeStrongPassword(result);
+end;
+
+
 { TCryptRandomAesPrng }
 
 type
@@ -8183,6 +8197,7 @@ type
   public
     procedure Get(dst: pointer; dstlen: PtrInt); override;
     function Get32: cardinal; override;
+    function Get64: QWord; override;
   end;
 
 procedure TCryptRandomAesPrng.Get(dst: pointer; dstlen: PtrInt);
@@ -8194,6 +8209,12 @@ function TCryptRandomAesPrng.Get32: cardinal;
 begin
   result := TAesPrng.Main.Random32; // a CSPRNG is pointless for 32-bit anyway
 end;
+
+function TCryptRandomAesPrng.Get64: QWord;
+begin
+  result := TAesPrng.Main.Random64;
+end;
+
 
 { TCryptRandomEntropy }
 
