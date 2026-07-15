@@ -3323,6 +3323,11 @@ var
   c: cardinal;
   begd: PWideChar;
   i, extra: PtrUInt;
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: PUtf8Table;
+  {$endif CPUX86NOTPIC}
 label
   quit, nosource, by2;
 begin // slightly slower overload with explicit destlen
@@ -3345,6 +3350,9 @@ begin // slightly slower overload with explicit destlen
   end;
   inc(sourceBytes, PtrUInt(source)); // PUtf8Char(sourceBytes)  = endSource
   inc(MaxDestChars, PtrUInt(dest));  // PUtf8Char(MaxDestChars) = endDest
+  {$ifndef CPUX86NOTPIC}
+  utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
   begd := dest;
   repeat
     c := byte(source^);
@@ -3360,7 +3368,7 @@ begin // slightly slower overload with explicit destlen
       else
         break;
     end;
-    extra := UTF8_TABLE.Lookup[c]; // a local variable won't help even on CPU64
+    extra := utf8.Lookup[c]; // a local variable won't help even on CPU64
     if PtrUInt(@source[extra]) > sourceBytes then
       break
     else if extra = 1 then // optimized for U+80..U+7FF common range
@@ -3388,7 +3396,7 @@ by2:  if PtrUInt(dest) >= MaxDestChars then
       inc(i);
     until i = extra;
     inc(source, extra);
-    with UTF8_TABLE.Extra[extra] do
+    with utf8.Extra[extra] do
     begin
       dec(c, offset);
       if c < minimum then
@@ -3424,6 +3432,11 @@ var
   begd: PWideChar;
   endSourceBy4: PUtf8Char;
   i, extra: PtrInt;
+  {$ifdef CPUX86NOTPIC}
+  utf8: TUtf8Table absolute UTF8_TABLE;
+  {$else}
+  utf8: PUtf8Table; // a local variable also circumvent FPC trunk bug
+  {$endif CPUX86NOTPIC}
 label
   quit, nosource, by1, by4, next;
 begin // expects dest to have source*3 bytes: more used than overload destlen
@@ -3444,6 +3457,9 @@ begin // expects dest to have source*3 bytes: more used than overload destlen
     until source[sourcebytes] = #0;
     {$endif ASMX86}
   end;
+  {$ifndef CPUX86NOTPIC}
+  utf8 := @UTF8_TABLE;
+  {$endif CPUX86NOTPIC}
   begd := dest;
   endSourceBy4 := @source[sourceBytes - 4];
   inc(sourceBytes, PtrUInt(source)); // PUtf8Char(sourceBytes) = endSource
@@ -3481,7 +3497,7 @@ next:   if PtrUInt(source) >= sourceBytes then
         end;
         continue;
       end;
-      extra := UTF8_TABLE.Lookup[c]; // a local variable won't help even on CPU64
+      extra := utf8.Lookup[c];
       if PtrUInt(source + extra) > sourceBytes then
         break
       else if extra = 1 then // optimized for U+80..U+7FF common range
@@ -3504,7 +3520,7 @@ next:   if PtrUInt(source) >= sourceBytes then
         inc(i);
       until i = extra;
       inc(source, extra);
-      with UTF8_TABLE.Extra[extra] do
+      with utf8.Extra[extra] do
       begin
         dec(c, offset);
         if c < minimum then
