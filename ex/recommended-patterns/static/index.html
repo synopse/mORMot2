@@ -612,10 +612,12 @@
             }
         }
 
+        // Date-only ISO strings are parsed as UTC by new Date(), which shifts
+        // the day in western timezones — force local midnight instead
         function formatDate(dateStr) {
             if (!dateStr || dateStr === '0000-00-00' || dateStr === '') return 'No due date';
             try {
-                const date = new Date(dateStr);
+                const date = new Date(dateStr.slice(0, 10) + 'T00:00:00');
                 if (isNaN(date.getTime()) || date.getFullYear() < 2000) return 'No due date';
                 return date.toLocaleDateString();
             } catch (e) {

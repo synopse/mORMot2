@@ -753,7 +753,7 @@
                             ${escapeHtml(task.priorityName)}
                         </span>
                         <span class="badge badge-status">${task.status}</span>
-                        ${task.dueDate ? `<span>📅 ${formatDate(task.dueDate)}</span>` : ''}
+                        ${task.dueDate ? `<span>📅 ${formatDay(task.dueDate)}</span>` : ''}
                         ${task.commentCount > 0 ? `<span>💬 ${task.commentCount}</span>` : ''}
                         ${task.tagCount > 0 ? `<span>🏷️ ${task.tagCount}</span>` : ''}
                     </div>
@@ -789,8 +789,8 @@
                     <p><strong>Description:</strong> ${escapeHtml(task.description || 'No description')}</p>
                     <p><strong>Priority:</strong> <span class="badge badge-priority ${getPriorityClass(task.priority)}">${escapeHtml(task.priorityName)}</span></p>
                     <p><strong>Status:</strong> ${task.status}</p>
-                    <p><strong>Due Date:</strong> ${formatDate(task.dueDate)}</p>
-                    <p><strong>Created:</strong> ${formatDate(task.createdAt)}</p>
+                    <p><strong>Due Date:</strong> ${formatDay(task.dueDate)}</p>
+                    <p><strong>Created:</strong> ${formatTimestamp(task.createdAt)}</p>
                 </div>
 
                 <div style="margin-bottom: 20px;">
@@ -902,7 +902,7 @@
                     <div class="comment">
                         <div class="comment-header">
                             <span class="comment-author">${escapeHtml(comment.author)}</span>
-                            <span class="comment-date">${formatDate(comment.createdAt)}${comment.isEdited ? ' (edited)' : ''}</span>
+                            <span class="comment-date">${formatTimestamp(comment.createdAt)}${comment.isEdited ? ' (edited)' : ''}</span>
                         </div>
                         <div class="comment-content">${escapeHtml(comment.content)}</div>
                         <div class="comment-actions">
@@ -1021,9 +1021,20 @@
             return priority >= 3 ? 'high' : priority === 2 ? 'medium' : 'low';
         }
 
-        function formatDate(dateStr) {
+        // Calendar dates (dueDate): date-only ISO strings are parsed as UTC by
+        // new Date(), which shifts the day in western timezones — force local midnight
+        function formatDay(dateStr) {
             if (!dateStr || dateStr === '0000-00-00' || dateStr === '') return 'Not set';
-            const date = new Date(dateStr);
+            const date = new Date(dateStr.slice(0, 10) + 'T00:00:00');
+            if (isNaN(date.getTime()) || date.getFullYear() < 2000) return 'Not set';
+            return date.toLocaleDateString();
+        }
+
+        // Timestamps (createdAt, updatedAt): the server stores UTC but omits the
+        // 'Z' suffix, so mark them as UTC before converting to local time
+        function formatTimestamp(dateStr) {
+            if (!dateStr || dateStr === '') return 'Not set';
+            const date = new Date(dateStr.endsWith('Z') ? dateStr : dateStr + 'Z');
             if (isNaN(date.getTime()) || date.getFullYear() < 2000) return 'Not set';
             return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
         }
