@@ -1610,7 +1610,7 @@ type
     // - a dvArray document would return the CSV of VariantToUtf8(Values[]), so
     // nested TDocVariant would be stored as JSON in the result
     // - a dvObject document would return the CSV of its Names[]
-    function ToCsv(const Separator: RawUtf8 = ','): RawUtf8;
+    function ToCsv(const Separator: RawUtf8 = ','; DoReverse: boolean = false): RawUtf8;
     /// save a document as UTF-8 encoded Name=Value pairs
     // - will follow by default the .INI format, but you can specify your
     // own expected layout
@@ -8850,8 +8850,7 @@ var
 begin
   result.Init(VOptions, dvArray); // same options than the main document
   if (VCount = 0) or
-     (aPropName = '') or
-     not Has(dvoIsArray) then
+     (aPropName = '') then // reduce both dvArray or dvObject Values[]
     exit;
   prev := -1; // optimistic search aPropName at the previous field position
   for ndx := 0 to VCount - 1 do
@@ -10096,20 +10095,15 @@ begin
     AddRawUtf8ToStringList(ToRawUtf8DynArray, Dest, ClearDest);
 end;
 
-function TDocVariantData.ToCsv(const Separator: RawUtf8): RawUtf8;
-var
-  tmp: TRawUtf8DynArray; // fast enough in practice
+function TDocVariantData.ToCsv(const Separator: RawUtf8; DoReverse: boolean): RawUtf8;
 begin
   FastAssignNew(result);
   if (cardinal(VType) = DocVariantVType) and
      (VCount <> 0) then
     if Has(dvoIsArray) then
-    begin
-      ToRawUtf8DynArray(tmp);
-      RawUtf8ArrayToCsvVar(tmp, result, Separator);
-    end
+      PVariantToCsv(pointer(VValue), VCount, Separator, DoReverse, result)
     else if Has(dvoIsObject) then
-      PRawUtf8ToCsv(pointer(Names), VCount, Separator, {rev=}false, result);
+      PRawUtf8ToCsv(pointer(VName), VCount, Separator, DoReverse, result);
 end;
 
 procedure TDocVariantData.ToTextPairsVar(out Result: RawUtf8;
