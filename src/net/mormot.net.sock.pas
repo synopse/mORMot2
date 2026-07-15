@@ -2244,13 +2244,19 @@ type
     function SockReceivePending(TimeOutMS: integer;
       loerr: PNetErrorInt = nil): TCrtSocketPending;
     /// return how many pending bytes are in the receiving socket or INetTls queue
-    // - returns 0 if no data is available, or if the connection is broken: call
-    // SockReceivePending() to check for the actual state of the connection
+    // - returns 0 if no data is available, or if the connection is broken
+    // - on TLS use rather SockReceivePending() to check also the socket state
     function SockReceiveHasData: integer;
-    /// returns the socket input stream as a string
+    /// returns the socket input stream as a RawByteString
     // - returns up to 64KB from the OS or TLS buffers within TimeOut
+    // - returns '' on nrTimeout or nrClosed
     function SockReceiveString(NetResult: PNetResult = nil;
       RawError: PNetErrorInt = nil): RawByteString;
+    /// append the socket input stream to a RawByteString Buffer
+    // - append up to 64KB from the OS or TLS buffers within TimeOut
+    // - returns false on nrTimeout or nrClosed, or true on success
+    function SockReceiveStringAppend(var Buffer: RawByteString;
+      NetResult: PNetResult = nil; RawError: PNetErrorInt = nil): boolean;
     /// fill the Buffer with Length bytes
     // - use TimeOut milliseconds wait for incoming data
     // - bypass the SockIn^.Buffer
@@ -7669,6 +7675,18 @@ begin
     FastSetRawByteString(result, @tmp, read)
   else
     FastAssignNew(result);
+end;
+
+function TCrtSocket.SockReceiveStringAppend(var Buffer: RawByteString;
+  NetResult: PNetResult; RawError: PNetErrorInt): boolean;
+var
+  read: integer;
+  tmp: TBuffer64K; // big enough for INetTls or the socket API
+begin
+  read := SizeOf(tmp);
+  result := TrySockRecv(@tmp, read, {StopBeforeLength=}true, NetResult, RawError);
+  if result then
+    AppendBufferToUtf8(@tmp, read, RawUtf8(Buffer));
 end;
 
 function TCrtSocket.TrySockRecv(Buffer: pointer; var Length: integer;
