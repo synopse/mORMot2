@@ -277,6 +277,14 @@ function JoinCsv(const Sep: RawUtf8; const Values: array of RawUtf8;
 procedure PRawUtf8ToCsv(v: PPUtf8Char; n: integer; const sep: RawUtf8;
   Reverse: boolean; var result: RawUtf8);
 
+type
+  TVariantToTempUtf8Flags = set of (
+    vfNoAlloc, vfNoComplex, vfNullAsVoid, vfBooleanAsInt, vfDateAsFloat);
+
+/// return the corresponding CSV text from an array of variants using TTempUtf8
+procedure PVariantToCsv(v: PVariant; n: integer; const sep: RawUtf8;
+  Reverse: boolean; var result: RawUtf8; flags: TVariantToTempUtf8Flags = []);
+
 /// return the corresponding CSV quoted text from a dynamic array of UTF-8 strings
 // - apply QuoteStr() function to each Values[] item
 function RawUtf8ArrayToQuotedCsv(const Values: array of RawUtf8;
@@ -1814,8 +1822,6 @@ type
     Temp: TTemp24;
   end;
   PTempUtf8 = ^TTempUtf8;
-  TVariantToTempUtf8Flags = set of (
-    vfNoAlloc, vfNoComplex, vfNullAsVoid, vfBooleanAsInt, vfDateAsFloat);
 
 /// release Res.TempRawUtf8 after VariantToTempUtf8/VarRecToTempUtf8
 // - is faster than FastAssignNew() since we know that its RefCnt = 1
@@ -3843,6 +3849,29 @@ begin
     MoveFast(pointer(sep)^, p^, seplen);
     inc(p, seplen);
   until false;
+end;
+
+procedure PVariantToCsv(v: PVariant; n: integer; const sep: RawUtf8;
+  Reverse: boolean; var result: RawUtf8; flags: TVariantToTempUtf8Flags);
+var
+  tmp: TSynTempAdder;
+begin
+  tmp.Init;
+  if Reverse then
+    v := @PVariantArray(v)[n - 1];
+  if n > 0 then
+    repeat
+      VariantToAdder(tmp, v^, flags); // use TTempUtf8
+      dec(n);
+      if n = 0 then
+        break;
+      if Reverse then
+        dec(v)
+      else
+        inc(v);
+      tmp.Add(sep);
+    until false;
+  tmp.Done(result);
 end;
 
 function RawUtf8ArrayToCsv(const Values: TRawUtf8DynArray; const Sep: RawUtf8;
