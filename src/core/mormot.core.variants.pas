@@ -2210,32 +2210,31 @@ type
       aMatch: TCompareOperator; aCompare: TVariantCompare; aLimit: integer;
       aPathDelim: AnsiChar; var result: TDocVariantData); overload;
     /// create a TDocVariant array, from the values of a single property of the
-    // objects of this document array, specified by name
+    // objects of this document values, specified by name
     // - you can optionally apply an additional filter to each reduced item
     procedure ReduceAsArray(const aPropName: RawUtf8;
-      var result: TDocVariantData; const OnReduce: TOnReducePerItem = nil); overload;
+      var result: TDocVariantData; const OnReduce: TOnReducePerItem); overload;
     /// create a TDocVariant array, from the values of a single property of the
-    // objects of this document array, specified by name
+    // objects of this document value, specified by name
     // - always returns a TDocVariantData, even if no property name did match
     // (in this case, it is dvUndefined)
     // - you can optionally apply an additional filter to each reduced item
     function ReduceAsArray(const aPropName: RawUtf8;
-      const OnReduce: TOnReducePerItem = nil): variant; overload;
+      const OnReduce: TOnReducePerItem): variant; overload;
     /// create a TDocVariant array, from the values of a single property of the
-    // objects of this document array, specified by name
+    // objects of this document values, specified by name
     // - this overloaded method accepts an additional filter to each reduced item
     procedure ReduceAsArray(const aPropName: RawUtf8;
-      var result: TDocVariantData; const OnReduce: TOnReducePerValue); overload;
+      var result: TDocVariantData; const OnReduce: TOnReducePerValue = nil); overload;
     /// create a TDocVariant array, from the values of a single property of the
-    // objects of this document array, specified by name
+    // objects of this document values, specified by name
     // - always returns a TDocVariantData, even if no property name did match
     // (in this case, it is dvUndefined)
     // - this overloaded method accepts an additional filter to each reduced item
     function ReduceAsArray(const aPropName: RawUtf8;
-      const OnReduce: TOnReducePerValue): variant; overload;
+      const OnReduce: TOnReducePerValue = nil): variant; overload;
     /// return the variant values of a single property of the objects of this
-    // document array, specified by name
-    // - returns nil if the document is not a dvArray
+    // document values, specified by name
     function ReduceAsVariantArray(const aPropName: RawUtf8;
       aDuplicates: TSearchDuplicate = sdNone): TVariantDynArray;
     /// rename some properties of a TDocVariant object
@@ -8884,8 +8883,7 @@ var
 begin
   result := nil;
   if (VCount = 0) or
-     (aPropName = '') or
-     not Has(dvoIsArray) then
+     (aPropName = '') then // reduce both dvArray or dvObject Values[]
     exit;
   prev := -1; // optimistic search aPropName at the previous field position
   n := 0;
@@ -10078,12 +10076,9 @@ begin
   {$ifdef FPC}
   Result := nil;
   {$endif FPC}
-  if cardinal(VType) <> DocVariantVType then
+  if (cardinal(VType) <> DocVariantVType) or
+     (VCount = 0) then
     exit;
-  if Has(dvoIsObject) then
-    EDocVariant.RaiseU('ToRawUtf8DynArray expects a dvArray');
-  if not Has(dvoIsArray) then
-    exit; // undefined
   SetLength(Result, VCount);
   for ndx := 0 to VCount - 1 do
     VariantToUtf8(VValue[ndx], Result[ndx], wasString);
