@@ -277,6 +277,7 @@ With proper Unicode and ZIP64 support, and faster libdeflate usage if available.
 Logic-Less `{{Mustache}}` Templates Rendering
 - *Mustache* Execution Data Context Types
 - `TSynMustache` Template Processing
+- `TSynMustache` Standard Expression Helpers
 
 The `TSynMustache` data context could be a `TDocVariant` document, or any kind of data using direct RTTI lookup.
 
