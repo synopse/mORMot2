@@ -700,7 +700,7 @@ var
   id: RawUtf8;
   s: string;
   methods: TPublishedMethodInfoDynArray;
-  i: integer;
+  i: PtrInt;
 begin
   inherited Create; // may have been overriden
   if Ident <> '' then

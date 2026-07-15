@@ -343,7 +343,6 @@ type
   end;
 
 
-
 { ************ TSynMustache Template Processing }
 
   /// handles one {{mustache}} pre-rendered template
@@ -478,6 +477,11 @@ type
     class procedure HelperAdd(var Helpers: TSynMustacheHelpers;
       const aNames: array of RawUtf8;
       const aEvents: array of TSynMustacheHelperEvent); overload;
+    /// register several Expression Helper callbacks for published methods
+    // of a class using RTTI
+    // - all published methods of the class should be TSynMustacheHelperEvent
+    class procedure HelperAddMethods(var Helpers: TSynMustacheHelpers;
+      ReferenceClass: TClass);
     /// unregister one Expression Helper callback for a given list of helpers
     class procedure HelperDelete(var Helpers: TSynMustacheHelpers;
       const aName: RawUtf8);
@@ -2035,6 +2039,8 @@ class procedure TSynMustache.HelperAdd(var Helpers: TSynMustacheHelpers;
 var
   n, i: PtrInt;
 begin
+  if aName = '' then
+    exit;
   n := length(Helpers);
   for i := 0 to n - 1 do
     if PropNameEquals(Helpers[i].Name, aName) then
@@ -2057,6 +2063,21 @@ begin
   if n = length(aEvents) then
     for i := 0 to n - 1 do
       HelperAdd(Helpers, aNames[i], aEvents[i]);
+end;
+
+class procedure TSynMustache.HelperAddMethods(var Helpers: TSynMustacheHelpers;
+  ReferenceClass: TClass);
+var
+  methods: TPublishedMethodInfoDynArray;
+  i: PtrInt;
+begin
+  for i := 0 to GetPublishedMethods(nil, methods, ReferenceClass) - 1 do
+    with methods[i] do
+    begin
+      if Name[length(Name)] = '_' then
+        SetLength(Name, length(Name) - 1); // e.g. If_() into 'If'
+      HelperAdd(Helpers, Name, TSynMustacheHelperEvent(Method));
+    end;
 end;
 
 class procedure TSynMustache.HelperDelete(var Helpers: TSynMustacheHelpers;
