@@ -2237,6 +2237,12 @@ type
     // document values, specified by name
     function ReduceAsVariantArray(const aPropName: RawUtf8;
       aDuplicates: TSearchDuplicate = sdNone): TVariantDynArray;
+    // return the RawUf8 values of a named property of the objects of this document
+    function ReduceAsRawUtf8Array(const aPropName: RawUtf8;
+      const OnReduce: TOnReducePerItem = nil): TRawUtf8DynArray;
+    // return the values of a named property of the objects of this document as CSV
+    function ReduceAsCsv(const aPropName, aSeparator: RawUtf8;
+      const OnReduce: TOnReducePerItem = nil; Flags: TVariantToTempUtf8Flags = []): RawUtf8;
     /// rename some properties of a TDocVariant object
     // - returns the number of property names modified
     function Rename(const aFromPropName, aToPropName: TRawUtf8DynArray): integer;
@@ -8899,6 +8905,64 @@ begin
       end;
   if n <> 0 then
     DynArrayFakeLength(result, n);
+end;
+
+function TDocVariantData.ReduceAsRawUtf8Array(const aPropName: RawUtf8;
+  const OnReduce: TOnReducePerItem): TRawUtf8DynArray;
+var
+  ndx, n: PtrInt;
+  prev: integer; // not PtrInt
+  wasString: boolean;
+  item: PDocVariantData;
+  v: PVariant;
+begin
+  result := nil;
+  if (VCount = 0) or
+     (aPropName = '') then // reduce both dvArray or dvObject Values[]
+    exit;
+  n := 0;
+  prev := -1; // optimistic search aPropName at the previous field position
+  for ndx := 0 to VCount - 1 do
+    if _Safe(VValue[ndx], item) and
+       {%H-}item^.GetObjectProp(aPropName, v, @prev) then
+      if (not Assigned(OnReduce)) or
+         OnReduce(item) then
+      begin
+        if length(result) = n then
+          SetLength(result, NextGrow(n));
+        VariantToUtf8(v^, result[n], wasString);
+        inc(n);
+      end;
+  if n <> 0 then
+    DynArrayFakeLength(result, n);
+end;
+
+function TDocVariantData.ReduceAsCsv(const aPropName, aSeparator: RawUtf8;
+  const OnReduce: TOnReducePerItem; Flags: TVariantToTempUtf8Flags): RawUtf8;
+var
+  ndx: PtrInt;
+  prev: integer; // not PtrInt
+  item: PDocVariantData;
+  v: PVariant;
+  tmp: TSynTempAdder;
+begin
+  FastAssignNew(result);
+  if (VCount = 0) or
+     (aPropName = '') then // reduce both dvArray or dvObject Values[]
+    exit;
+  tmp.Init;
+  prev := -1; // optimistic search aPropName at the previous field position
+  for ndx := 0 to VCount - 1 do
+    if _Safe(VValue[ndx], item) and
+       {%H-}item^.GetObjectProp(aPropName, v, @prev) then
+      if (not Assigned(OnReduce)) or
+         OnReduce(item) then
+      begin
+        if tmp.Size <> 0 then
+          tmp.Add(aSeparator);
+        VariantToAdder(tmp, v^, Flags); // use TTempUtf8
+      end;
+  tmp.Done(result);
 end;
 
 function TDocVariantData.Rename(
