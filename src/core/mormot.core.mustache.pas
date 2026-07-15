@@ -2491,13 +2491,10 @@ begin
   begin
     if a^.Count = 1 then // {{ joinvalues obj }}
       sep := ','
-    else if not VarIsUtf8(a^.Value[1], sep) then
+    else if not VarIsUtf8(a^.Value[1], sep) then // a^.Count in [2,3]
       exit;
     if a^.Count < 3 then // {{ joinvalues obj,"," }}
-    begin
-      if v^.IsObject then
-        PVariantToCsv(pointer(v^.Values), v^.Count, sep, {rev=}false, r);
-    end
+      PVariantToCsv(pointer(v^.Values), v^.Count, sep, {rev=}false, r)
     else if VarIsUtf8(a^.Value[2], key) then
       r := v^.ReduceAsCsv(key, sep); // {{ joinvalues objorarr,",","keyname" }}
     if r <> '' then
