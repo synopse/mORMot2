@@ -976,7 +976,9 @@ begin
       CheckEqual(length(s1), i * 2);
       check(mormot.core.text.HexToBin(pointer(s1), nil, i));
       s1 := a1.RandomPassword(i);
-      CheckEqual(length(s1), i);
+      CheckEqual(length(s1), i, 'rndpass len');
+      if i > 4 then
+        Check(not (IsUpper(s1) or IsLower(s1)), 'rndpass case');
       for j := 1 to i do
         check(s1[j] in [#33 .. #126]);
       // verify Random32 / RandomDouble / RandomDouble distribution
@@ -4537,7 +4539,7 @@ procedure TTestCoreCrypto.Catalog;
 var
   m: TAesMode;
   k, k2: integer;
-  a, i, rounds, bytes: PtrInt;
+  a, i, j, rounds, bytes: PtrInt;
   c32, cprev: cardinal;
   d, dprev: double;
   n, h, nprev, aead: RawUtf8;
@@ -4611,7 +4613,8 @@ begin
     dprev := 0;
     bytes := 0;
     rounds := 100;
-    if PosEx('blocking', rnd.AlgoName) > 0 then
+    if (PosEx('blocking', rnd.AlgoName) > 0) or
+       (PosEx('entropy', rnd.AlgoName) > 0) then
       rounds := 10; // some system random generators may be slow/blocking
     for i := 1 to rounds do
     begin
@@ -4623,11 +4626,18 @@ begin
       d := rnd.GetDouble;
       check(d <> dprev);
       dprev := d;
-      n := rnd.Get(i); // up to 10 bytes is fine on slow/blocking OS random API
-      CheckEqual(length(n), i);
-      inc(bytes, 12 + i);
+      rnd.Get(s, i); // up to 10 bytes is fine on slow/blocking OS random API
+      CheckEqual(length(s), i);
+      n := rnd.GetPassword(i);
+      CheckEqual(length(n), i, 'getpass len');
+      if i > 4 then
+        Check(not (IsUpper(n) or IsLower(n)), 'getpass case');
+      for j := 1 to i do
+        check(n[j] in [#33 .. #126]);
+      inc(bytes, 12 + i * 2);
     end;
-    NotifyTestSpeed('%', [rnd.AlgoName], 0, bytes, @timer, {onlylog=}true);
+    NotifyTestSpeed('%', [rnd.AlgoName], 0, bytes, @timer, {onlylog=}false);
+    CheckEqual(rnd.GetPassword(0), '');
   end;
   // validate Hash() High-Level Algorithms Factory
   alg := TCryptHasher.Instances;
