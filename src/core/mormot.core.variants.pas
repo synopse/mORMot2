@@ -1593,10 +1593,9 @@ type
     // - can be unserialized using the InitArrayFromResults() method
     function ToNonExpandedJson: RawUtf8;
     /// save a document as an array of UTF-8 encoded JSON
-    // - will expect the document to be a dvArray - otherwise, will raise a
-    // EDocVariant exception
-    // - will use VariantToUtf8() to populate the result array: as a consequence,
-    // any nested custom variant types (e.g. TDocVariant) will be stored as JSON
+    // - accept the document to be either dvArray or dvObject
+    // - will use VariantToUtf8() to populate the result from Values[]: any
+    // nested custom variant types (e.g. TDocVariant) will be stored as JSON
     procedure ToRawUtf8DynArray(out Result: TRawUtf8DynArray); overload;
     /// save a document as an array of UTF-8 encoded JSON
     // - will expect the document to be a dvArray - otherwise, will raise a
@@ -8824,8 +8823,7 @@ var
 begin
   result.Init(VOptions, dvArray); // same options than the main document
   if (VCount = 0) or
-     (aPropName = '') or
-     not Has(dvoIsArray) then
+     (aPropName = '') then // reduce both dvArray or dvObject Values[]
     exit;
   prev := -1; // optimistic search aPropName at the previous field position
   for ndx := 0 to VCount - 1 do
