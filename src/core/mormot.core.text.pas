@@ -1413,6 +1413,10 @@ function UInt32ToUtf8(Value: PtrUInt): RawUtf8; overload;
 /// optimized conversion of a cardinal into RawUtf8
 procedure UInt32ToUtf8(Value: PtrUInt; var result: RawUtf8); overload;
 
+/// optimized conversion of a cardinal into RawUtf8 for a given number of Digits
+// - will always return the last Digits chars, or prepend '0' if necessary
+procedure UInt32DigitsToUtf8(Value, Digits: PtrUInt; var result: RawUtf8);
+
 /// fast RawUtf8 version of 64-bit IntToStr(), with proper QWord support
 procedure UInt64ToUtf8(Value: QWord; var result: RawUtf8);
 
@@ -6583,6 +6587,20 @@ begin
     P := StrUInt32(@tmp[23], Value);
     FastSetString(result, P, @tmp[23]);
   end;
+end;
+
+procedure UInt32DigitsToUtf8(Value, Digits: PtrUInt; var result: RawUtf8);
+var
+  tmp: TTemp24;
+  p: PUtf8Char;
+  prepend: PtrInt;
+begin
+  Digits := MinPtrUInt(Digits, 23); // support up to 23 digits
+  p := @tmp[23 - Digits];
+  prepend := StrUInt32(@tmp[23], Value) - p;
+  if prepend > 0 then
+    FillCharFast(p^, prepend, ord('0'));
+  FastSetString(result, p, digits);
 end;
 
 function UInt32ToUtf8(Value: PtrUInt): RawUtf8;
