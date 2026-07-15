@@ -40,6 +40,7 @@ Authentication and Security types shared by all framework units.
 - `TSyn*Password` and `TSynConnectionDefinition` Classes
 - Reusable Authentication Classes
 - High-Level `TSynSigner`/`TSynHasher` Multi-Algorithm Wrappers
+- HMAC/PBKDF2 MCF SCRAM SCRAM-MCF TOTP High-Level Protocols
 - Client and Server Digest Access Authentication
 - 64-bit `TSynUniqueIdentifier` and its efficient Generator
 - `IProtocol` Safe Communication with Unilateral or Mutual Authentication

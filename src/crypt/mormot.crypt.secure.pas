@@ -10,7 +10,7 @@ unit mormot.crypt.secure;
     - Password-Safe and TSynConnectionDefinition Classes
     - Reusable Authentication Classes
     - High-Level TSynSigner/TSynHasher Multi-Algorithm Wrappers
-    - HMAC/PBKDF2 MCF SCRAM SCRAM-MCF High-Level Protocols
+    - HMAC/PBKDF2 MCF SCRAM SCRAM-MCF TOTP High-Level Protocols
     - Client and Server HTTP Access Authentication
     - 64-bit TSynUniqueIdentifier and its efficient Generator
     - IProtocol Safe Communication with Unilateral or Mutual Authentication
@@ -1371,6 +1371,28 @@ function ScramServerProof(const PersistedKey, ClientProof: RawUtf8;
 // to compute the URI secret)
 function ScramClientServerAuth(const Hash, User, ServerProof: RawUtf8;
   var ClientSignature: THash256): boolean;
+
+{ User 2FA authentication via TOTP as defined in RFC 6238 }
+
+const
+  TOTP_DIGITS = 6;
+
+/// compute the RFC 6238 TOTP user code from its base32 (or binary) secret
+// - supports digits in [4..8] and at least 128-bit = 16-byte of binary secret
+function TotpGenerate(const secret: RawUtf8; digits: integer = TOTP_DIGITS;
+  algo: TSignAlgo = saSha1; binary: boolean = false; timestep: Int64 = -1): RawUtf8;
+
+/// compute a base32-encoded RFC 6238 TOTP secret to share with the client
+// - any len < 16 bytes would be rounded up to 16 (i.e. 128-bit)
+function TotpGenerateSecret(len: PtrInt = 20): RawUtf8;
+
+/// verify a RFC 6238 TOTP user code from its base32 (or binary) secret
+function TotpValidate(const secret, usercode: RawUtf8; window: integer = 1;
+  algo: TSignAlgo = saSha1; timestep: Int64 = -1; binary: boolean = false): boolean;
+
+/// encode Google Authenticator otpauth:// URI scheme value
+function TotpUrl(const issuer, account, b32secret: RawUtf8;
+  digits: integer = TOTP_DIGITS; algo: TSignAlgo = saSha1): RawUtf8;
 
 
 { **************** Client and Server HTTP Access Authentication }
@@ -6081,6 +6103,92 @@ begin
       fLastError := 'invalid Server proof'
   else
     fLastError := 'invalid Server last response';
+end;
+
+{ User 2FA authentication via TOTP as defined in RFC 6238 }
+
+const
+  TOTP_PERIOD = 30;     // our code fixes the period to default 30 seconds
+  TOTP_SECRET_MIN = 16; // 128-bit is the bare minimum
+  TOTP_MOD: array[4..8] of cardinal = (10000, 100000, 1000000, 10000000, 100000000);
+
+function TotpGenerate(const secret: RawUtf8; digits: integer; algo: TSignAlgo;
+  binary: boolean; timestep: Int64): RawUtf8;
+var
+  sec: RawByteString;
+  signer: TSynSigner;
+  h: THash512;
+  v: cardinal;
+begin
+  FastAssignNew(result);
+  if binary then
+    sec := secret
+  else
+    sec := Base32ToBin(secret);
+  if (length(sec) < TOTP_SECRET_MIN) or
+     not (digits in [low(TOTP_MOD) .. high(TOTP_MOD)]) then
+    exit;
+  if timestep < 0 then
+    timestep := UnixTimeUtc div TOTP_PERIOD;
+  timestep := bswap64(timestep);
+  signer.Init(algo, pointer(sec), length(sec));
+  signer.Update(@timestep, SizeOf(timestep));
+  signer.Final(@h);
+  v := bswap32(PCardinal(@h[h[signer.SignatureSize - 1] and 15])^) and $7fffffff;
+  UInt32DigitsToUtf8(v mod TOTP_MOD[digits], digits, result);
+end;
+
+function TotpGenerateSecret(len: PtrInt): RawUtf8;
+var
+  bin: RawByteString;
+begin
+  bin := TAesPrng.Main.FillRandom(MaxPtrInt(len, TOTP_SECRET_MIN));
+  result := BinToBase32(bin);
+  FillZero(bin);
+end;
+
+function TotpValidate(const secret, usercode: RawUtf8; window: integer;
+  algo: TSignAlgo; timestep: Int64; binary: boolean): boolean;
+var
+  sec: RawByteString;
+  digits, key: cardinal;
+  w: PtrInt;
+begin
+  result := false;
+  digits := length(usercode);
+  if (cardinal(window) > 100) or
+     not (digits in [low(TOTP_MOD) .. high(TOTP_MOD)]) or
+     not ToCardinal(usercode, key) then
+    exit;
+  if binary then
+    sec := secret
+  else
+    sec := Base32ToBin(secret); // decode once into binary
+  if length(sec) < TOTP_SECRET_MIN then
+    exit;
+  if timestep < 0 then
+    timestep := UnixTimeUtc div TOTP_PERIOD;
+  result := true;
+  if TotpGenerate(sec, digits, algo, {bin=}true, timestep) = userCode then
+    exit; // first check current time step (most common)
+  for w := -window to +window do
+    if (w <> 0) and
+       (TotpGenerate(sec, digits, algo, {bin=}true, timestep + w) = userCode) then
+      exit; // verify previous and next time steps
+  result := false;
+end;
+
+function TotpUrl(const issuer, account, b32secret: RawUtf8; digits: integer;
+  algo: TSignAlgo): RawUtf8;
+var
+  iss, acc: RawUtf8;
+begin
+  iss := UrlEncodeName(issuer); // favor %20 for spaces here, not +
+  acc := UrlEncodeName(account);
+  FormatUtf8('otpauth://totp/%:%?secret=%&issuer=%&digits=%&period=%',
+    [iss, acc, Split(b32secret, '='), iss, digits, TOTP_PERIOD], result);
+  if algo <> saSha1 then
+    Append(result, '&algorithm=', SIGNER_NAME[algo]);
 end;
 
 
