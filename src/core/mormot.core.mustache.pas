@@ -419,6 +419,8 @@ type
     class procedure Sub(const Value: variant; out Result: variant);
     class procedure Values(const Value: variant; out Result: variant);
     class procedure Keys(const Value: variant; out Result: variant);
+    class procedure Count(const Value: variant; out Result: variant);
+    class procedure Get(const Value: variant; out Result: variant);
   public
     /// parse a {{mustache}} template, and returns the corresponding
     // TSynMustache instance
@@ -2509,7 +2511,7 @@ var
   dv: PDocVariantData;
   i, n: integer;
 begin
-  // {{Sub AString,12,3}}
+  // {{sub textvalue,12,3}}
   PCardinal(@Result)^ := varNull;
   if _SafeArray(Value, 3, dv) and
       VariantToText(dv^.Values[0], u) and
@@ -2526,6 +2528,36 @@ end;
 class procedure TSynMustache.Keys(const Value: variant; out Result: variant);
 begin
   TDocVariantData(Result).InitArrayFromObjectNames(Value, JSON_FAST);
+end;
+
+class procedure TSynMustache.Count(const Value: variant; out Result: variant);
+var
+  dv: PDocVariantData;
+begin
+  if _Safe(Value, dv) then // {{ count objectorarray }}
+    Result := dv^.Count
+  else
+    PCardinal(@Result)^ := varNull;
+end;
+
+class procedure TSynMustache.Get(const Value: variant; out Result: variant);
+var
+  a, o: PDocVariantData;
+  k: TTempUtf8;
+  v: PVariant;
+begin
+  PCardinal(@Result)^ := varNull;
+  if not _SafeArray(Value, 3, a) or // {{ get object,keypath,default }}
+     not _SafeObject(a^.Values[0], o) or
+     not VarIsStr(a^.Values[1]) then
+    exit;
+  VariantToTempUtf8(a^.Values[1], k);
+  v := a^.GetPVariantByPathP(k.Text);
+  TempUtf8Done(k);
+  if v = nil then
+    Result := a^.Values[2] // return default
+  else
+    Result := v^;          // return object[keypath]
 end;
 
 procedure DoMatchGlob(const v: variant; ci, match: boolean; var res: variant);
