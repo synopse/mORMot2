@@ -6632,7 +6632,7 @@ var
   p: PUtf8Char;
   prepend: PtrInt;
 begin
-  Digits := MinPtrUInt(Digits, 23); // support up to 23 digits
+  Digits := MinPtrUInt(23, Digits); // support up to 23 digits
   p := @tmp[23 - Digits];
   prepend := StrUInt32(@tmp[23], Value) - p;
   if prepend > 0 then

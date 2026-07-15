@@ -1725,7 +1725,7 @@ type
     function RandomDouble: double;
     /// returns a contemporary date/time, starting from Jan 14, 2004
     function RandomDateTime: TDateTime;
-    /// computes a random ASCII password
+    /// computes a random ASCII password following proper common safety rules
     // - will contain uppercase/lower letters, digits and $.:()?%!-+*/@#
     // excluding ;,= to allow direct use in CSV content
     // - won't return the letters O and I to avoid confusion with digits 0 and 1
@@ -1853,6 +1853,7 @@ type
     fSeeding: boolean;
   public
     /// initialize the internal secret key, using Operating System entropy
+    // - never call this constructor directly, but use the Main class function
     constructor Create; overload; override;
     /// initialize the internal secret key, using Operating System entropy
     // - entropy is gathered from the OS, using GetEntropy() method
@@ -1932,7 +1933,6 @@ type
     class function Main: TAesPrngAbstract; override;
   end;
 
-
 {$ifndef PUREMORMOT2}
 type
   /// most Operating System PRNG are very unlikely AES based - confusing
@@ -1952,6 +1952,11 @@ var
 
   /// global flag set by mormot.crypt.openssl when the OpenSSL engine is used
   HasOpenSsl: boolean;
+
+/// low-level function as called by TAesPrngAbstract.RandomPassword()
+// - for length>4, reduce to uppercase/lower letters, digits and $.:()?%!-+*/@#
+// excluding ;,= to allow direct use in CSV content and OI against 01 confusion
+function MakeStrongPassWord(var Rnd: SpiUtf8): boolean;
 
 /// low-level TKS1 anti-forensic diffusion of a memory buffer using SHA-256
 // - shuffle in-place buf[size] using rnd[size] as reference material
@@ -7465,7 +7470,7 @@ begin
   result := 38000 + Int64(Random32) / (maxInt shr 12);
 end;
 
-function TAesPrngAbstract.RandomPassword(Len: integer): SpiUtf8;
+function MakeStrongPassWord(var Rnd: SpiUtf8): boolean;
 const
   CHARS: array[0..127] of AnsiChar =
     'abcdefghijklmnopqrstuvwxyzABCDEFGH[JKLMN0PQRSTUVWXYZ0123456789' +
@@ -7474,6 +7479,26 @@ var
   i: integer;
   haspunct: boolean;
   P: PAnsiChar;
+begin
+  result := true;
+  if Rnd = '' then
+    exit;
+  haspunct := false;
+  P := UniqueRawUtf8(RawUtf8(Rnd)); // Rnd likely to have been just allocated
+  for i := 1 to length(Rnd) do
+  begin
+    P^ := CHARS[ord(P^) and 127];
+    if not haspunct and
+       not (tcWord in TEXT_BYTES[ord(P^)]) then // not 0..9 a..z A..Z
+      haspunct := true;
+    inc(P);
+  end;
+  FakeCodePage(RawByteString(Rnd), CP_UTF8);
+  result := (length(Rnd) <= 4) or
+            (haspunct and (not (IsUpper(Rnd) or IsLower(Rnd))));
+end;
+
+function TAesPrngAbstract.RandomPassword(Len: integer): SpiUtf8;
 begin
   repeat
     result := FillRandom(Len);
