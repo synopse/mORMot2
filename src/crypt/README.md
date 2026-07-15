@@ -47,6 +47,7 @@ Authentication and Security types shared by all framework units.
 - `TBinaryCookieGenerator` Simple Cookie Generator
 - `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym`/`Cert`/`Store` High-Level Algorithms Factories
 - Minimal `PEM`/`DER` Encoding/Decoding
+- `TSynMustache` Cryptographic Expression Helpers
 
 ### mormot.crypt.ecc256r1
 

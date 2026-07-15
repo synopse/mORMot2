@@ -8,7 +8,7 @@ unit mormot.rest.mvc;
 
    Model-View-Controller (MVC) pattern and Mustache over TRestServer and TOrm
    - MVC/MVVM Application over a TRestServer
-   - Expression Helpers for the ORM Data Model
+   - TSynMustache Expression Helpers for the ORM Data Model
 
   *****************************************************************************
 }
@@ -113,7 +113,7 @@ var
   MVCINFO_URI: RawUtf8 = 'mvc-info';
 
 
-{ ************ Expression Helpers for the ORM Data Model }
+{ ************ TSynMustache Expression Helpers for the ORM Data Model }
 
 /// define Expression Helpers for some ORM tables
 // - e.g. to read a TMyOrm from its ID value and put its fields
@@ -351,7 +351,7 @@ begin
 end;
 
 
-{ ************ Expression Helpers for the ORM Data Model }
+{ ************ TSynMustache Expression Helpers for the ORM Data Model }
 
 type
   TExpressionHelperForTable = class

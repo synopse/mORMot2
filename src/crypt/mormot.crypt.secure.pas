@@ -17,6 +17,7 @@ unit mormot.crypt.secure;
     - TBinaryCookieGenerator Simple Cookie Generator
     - Rnd/Hash/Sign/Cipher/Asym/Cert/Store High-Level Algorithms Factories
     - Minimal PEM/DER Encoding/Decoding
+    - TSynMustache Cryptographic Expression Helpers
 
    Uses optimized mormot.crypt.core.pas for its actual cryptographic process.
 
@@ -4152,6 +4153,24 @@ function SecurityDescriptorToJson(const SD: TSecurityDescriptor): RawUtf8;
 /// unserialize a TSecurityDescriptor instance from JSON
 function SecurityDescriptorFromJson(const Json: RawUtf8;
   out SD: TSecurityDescriptor): boolean;
+
+
+{ **************** TSynMustache Cryptographic Expression Helpers }
+
+type
+  /// the published properties of this class implement cryptographic expression
+  // helpers via TSynMustache.HelperAddMethods(helpers, TSynMustacheCryptoHelpers)
+  // - could be registered individually using TSynMustache.HelperAdd()
+  // - used e.g. by TMvcViewsMustache.RegisterExpressionHelpersForCrypto
+  // - would allow e.g. to compute a Gravatar URI via:
+  // ! <img src=http://www.gravatar.com/avatar/{{md5 email}}?s=200></img>
+  TSynMustacheCryptoHelpers = class(TSynPersistent)
+  published
+    class procedure Md5(const Value: variant; out Result: variant);
+    class procedure Sha1(const Value: variant; out Result: variant);
+    class procedure Sha256(const Value: variant; out Result: variant);
+    class procedure Sha512(const Value: variant; out Result: variant);
+  end;
 
 
 implementation
@@ -11637,6 +11656,34 @@ begin
   SD.Clear;
   result := RecordLoadJson(SD, Json, TypeInfo(TSecurityDescriptor));
 end;
+
+
+{ **************** TSynMustache Cryptographic Expression Helpers }
+
+class procedure TSynMustacheCryptoHelpers.Md5(const Value: variant;
+  out Result: variant);
+begin
+  RawUtf8ToVariant(mormot.crypt.core.Md5(ToUtf8(Value)), Result);
+end;
+
+class procedure TSynMustacheCryptoHelpers.Sha1(const Value: variant;
+  out Result: variant);
+begin
+  RawUtf8ToVariant(mormot.crypt.core.Sha1(ToUtf8(Value)), Result);
+end;
+
+class procedure TSynMustacheCryptoHelpers.Sha256(const Value: variant;
+  out Result: variant);
+begin
+  RawUtf8ToVariant(mormot.crypt.core.Sha256(ToUtf8(Value)), Result);
+end;
+
+class procedure TSynMustacheCryptoHelpers.Sha512(const Value: variant;
+  out Result: variant);
+begin
+  RawUtf8ToVariant(mormot.crypt.core.Sha512(ToUtf8(Value)), Result);
+end;
+
 
 // some callbacks for custom JSON serialization of security related types
 

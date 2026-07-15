@@ -231,11 +231,6 @@ type
     function Render(methodIndex: integer; const Context: variant;
       var Answer: TServiceCustomAnswer): TMvcViewFlags; override;
     function RenderFlags(methodIndex: PtrInt): TMvcViewFlags; override;
-    // some helpers defined here to avoid mormot.crypt.core link
-    class procedure md5(const Value: variant; out Result: variant);
-    class procedure sha1(const Value: variant; out Result: variant);
-    class procedure sha256(const Value: variant; out Result: variant);
-    class procedure sha512(const Value: variant; out Result: variant);
   public
     /// create an instance of this ViewModel implementation class
     // - define the associated REST instance, the interface definition and the
@@ -1190,28 +1185,9 @@ end;
 
 function TMvcViewsMustache.RegisterExpressionHelpersForCrypto: TMvcViewsMustache;
 begin
-  result := RegisterExpressionHelpers(['md5', 'sha1', 'sha256', 'sha512'],
-                                      [ md5,   sha1,   sha256,   sha512 ]);
-end;
-
-class procedure TMvcViewsMustache.md5(const Value: variant; out Result: variant);
-begin
-  RawUtf8ToVariant(mormot.crypt.core.Md5(ToUtf8(Value)), Result);
-end;
-
-class procedure TMvcViewsMustache.sha1(const Value: variant; out Result: variant);
-begin
-  RawUtf8ToVariant(mormot.crypt.core.Sha1(ToUtf8(Value)), Result);
-end;
-
-class procedure TMvcViewsMustache.sha256(const Value: variant; out Result: variant);
-begin
-  RawUtf8ToVariant(mormot.crypt.core.Sha256(ToUtf8(Value)), Result);
-end;
-
-class procedure TMvcViewsMustache.sha512(const Value: variant; out Result: variant);
-begin
-  RawUtf8ToVariant(mormot.crypt.core.Sha512(ToUtf8(Value)), Result);
+  if self <> nil then
+    TSynMustache.HelperAddMethods(fViewHelpers, TSynMustacheCryptoHelpers);
+  result := self;
 end;
 
 function TMvcViewsMustache.FindTemplateFileNames(const Mask: TFileName): TFileNameDynArray;
