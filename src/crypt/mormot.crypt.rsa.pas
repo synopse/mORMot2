@@ -52,9 +52,6 @@ uses
   - used by mormot.crypt.x509 to handle RSA signatures of its X.509 Certificates
 }
 
-{.$define USEBARRET}
-// could be defined to enable Barret reduction (slower and with wrong results)
-
 
 { **************** RSA Oriented Big-Integer Computation }
 
@@ -110,14 +107,8 @@ type
     fNextFree: PBigInt; // next bigint in the Owner free instance cache
     function UsedBytes: integer;
     procedure Resize(n: integer; nozero: boolean = false);
-    {$ifdef USEBARRET}
-    function TruncateMod(modulus: integer): PBigInt;
-      {$ifdef HASINLINE} inline; {$endif}
-    /// partial multiplication between two Big Integer values
-    // - will eventually release both self and b instances
-    function MultiplyPartial(b: PBigInt; InnerPartial: PtrInt;
-      OuterPartial: PtrInt): PBigInt;
-    {$endif USEBARRET}
+    procedure XorStrongRandom(last32: PCardinal);
+    procedure FillMillerRabinWitness(Lecuyer: PLecuyer; W: PBigInt);
   public
     /// the associated Big Integer RSA context
     // - used to store modulo constants, and maintain an internal instance cache
@@ -136,7 +127,8 @@ type
     function Compare(b: PBigInt; andrelease: boolean = false): integer; overload;
     /// comparison with another Unsigned Integer value
     // - values should have been Trim-med for the size to match
-    function Compare(u: HalfUInt; andrelease: boolean = false): integer; overload;
+    function Compare(u: HalfUInt; const andrelease: boolean = false): integer; overload;
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     /// make a COW instance, increasing RefCnt and returning self
     function Copy: PBigInt;
       {$ifdef HASSAFEINLINE} inline; {$endif}
@@ -184,9 +176,9 @@ type
     function ShrBits(bits: integer = 1): PBigInt;
     /// shift left the internal data by some bits = mul per 2/4/8...
     function ShlBits(bits: integer = 1): PBigInt;
-    /// shift right the internal data HalfUInt by a number of slots
+    /// shift right the internal data HalfUInt by a number of HalfUInt
     function RightShift(n: integer): PBigInt;
-    /// shift left the internal data HalfUInt by a number of slots
+    /// shift left the internal data HalfUInt by a number of HalfUInt
     function LeftShift(n: integer): PBigInt;
     /// compute the GCD of two numbers using Euclidean algorithm
     function GreatestCommonDivisor(b: PBigInt): PBigInt;
@@ -292,12 +284,6 @@ type
     fMod: TRsaModulos;
     /// contains the normalized storage
     fNormMod: TRsaModulos;
-    {$ifdef USEBARRET}
-    /// contains mu
-    fMu: TRsaModulos;
-    /// contains b(k+1)
-    fBk1: TRsaModulos;
-    {$endif USEBARRET}
   public
     /// the size of the sliding window
     Window: integer;
@@ -313,7 +299,7 @@ type
     // - n is the number of TBitInt.Value[] items to initialize
     function Allocate(n: integer; opt: TRsaAllocate = [raZeroed]): PBigint;
     /// allocate a new Big Integer value from a 16/32-bit unsigned integer
-    function AllocateFrom(v: HalfUInt): PBigInt;
+    function AllocateFrom(v: HalfUInt; size: integer = 1): PBigInt;
     /// allocate a new Big Integer value from a ToHexa dump
     function AllocateFromHex(const hex: RawUtf8): PBigInt;
     /// call b^^.Release and set b^ := nil
@@ -331,7 +317,6 @@ type
     procedure ResetModulo(modulo: TRsaModulo);
     /// compute the reduction of a Big Integer value in a given modulo
     // - if m is nil, SetModulo() should have previously be called
-    // - redirect to Divide() or use the Barret algorithm
     // - will eventually release the b instance
     function Reduce(b, m: PBigint): PBigInt;
     /// compute a modular exponentiation, i.e. b^exp mod m
@@ -546,7 +531,7 @@ var
 function BigIntToText(const der: TCertDer): RawUtf8;
 
 /// branchless comparison of two Big Integer internal buffer values
-function CompareBI(A, B: HalfUInt): integer;
+function CompareHalfUInt(A, B: HalfUInt): integer;
   {$ifdef HASINLINE} inline; {$endif}
 
 
@@ -910,7 +895,7 @@ implementation
 
 { **************** RSA Oriented Big-Integer Computation }
 
-function CompareBI(A, B: HalfUInt): integer;
+function CompareHalfUInt(A, B: HalfUInt): integer;
 begin
   result := ord(A > B) - ord(A < B);
 end;
@@ -1038,7 +1023,7 @@ begin
   if result = 0 then
     for i := Size - 1 downto 0 do
     begin
-      result := CompareBI(Value[i], b^.Value[i]);
+      result := CompareHalfUInt(Value[i], b^.Value[i]);
       if result <> 0 then
         break;
     end;
@@ -1046,11 +1031,11 @@ begin
     Release;
 end;
 
-function TBigInt.Compare(u: HalfUInt; andrelease: boolean): integer;
+function TBigInt.Compare(u: HalfUInt; const andrelease: boolean): integer;
 begin
   result := CompareInteger(Size, 1);
   if result = 0 then
-    result := CompareBI(Value[0], u);
+    result := CompareHalfUInt(Value[0], u);
   if andrelease then
     Release;
 end;
@@ -1102,15 +1087,6 @@ begin
   end;
   result := @self;
 end;
-
-{$ifdef USEBARRET}
-function TBigInt.TruncateMod(modulus: integer): PBigInt;
-begin
-  if Size > modulus then
-    Size := modulus;
-  result := @self;
-end;
-{$endif USEBARRET}
 
 function TBigInt.Copy: PBigInt;
 begin
@@ -1328,7 +1304,7 @@ begin
       repeat // 16/32-bit per iteration
         v := PtrUInt(pa^) - pb^ - v;
         pa^ := v;
-        v := ord((v shr HALF_BITS) <> 0); // branchless carry
+        v := (v shr HALF_BITS) and 1; // branchless carry
         inc(pa);
         inc(pb);
         dec(n);
@@ -1605,12 +1581,33 @@ begin
   result := false;
 end;
 
+procedure TBigInt.FillMillerRabinWitness(Lecuyer: PLecuyer; W: PBigInt);
+var
+  c: cardinal;
+begin
+  for c := 1 to 16 do // safeguard against TLecuyer regression
+  begin
+    if W.Size = 1 then
+      Value[0] := Lecuyer^.Next(W.Value[0]) or 1 // odd a < w
+    else
+    begin
+      Size := W.Size - 1; // ensure a < w
+      Lecuyer^.Fill(Value, Size * HALF_BYTES);
+      Value[0] := Value[0] or 1; // odd
+      Trim; // needed for Compare() to work with new size
+    end;
+    if (Compare(1) > 0) and // expects 1 < a < w
+       (Compare(W) < 0) then
+      exit;
+  end;
+  ERsaException.RaiseU('TBigInt.FillMillerRabinWitness failed');
+end;
+
 function TBigInt.IsPrime(Extend: TBigIntSimplePrime; Iterations: integer;
   Lecuyer: PLecuyer): boolean;
 var
   r, a, w: PBigInt;
-  s, n, attempt, bak: integer;
-  v: PtrUInt;
+  s, n, bak: integer;
   rnd: TLecuyer;
 begin
   // first check if not a factor of a well-known small prime
@@ -1622,11 +1619,11 @@ begin
      MatchKnownPrime(Extend) then // detect most of the composite integers
     exit;
   // validate is a prime number using Miller-Rabin iterative tests (HAC 4.24)
-  if Lecuyer = nil then // 88-bit CSPRNG seed - if not supplied by caller
+  if Lecuyer = nil then    // 88-bit CSPRNG seed - if not supplied by caller
     Lecuyer := RandomLecuyer(rnd); // new gsl_rng_taus2 uniform distribution
   bak := RefCnt;
   RefCnt := -1; // make permanent for use as modulo below
-  w := Clone.IntSub(1); // w = value-1
+  w := Clone.IntSub(1); // w = value - 1
   r := w.Clone;
   a := Owner.Allocate(Size, []);
   try
@@ -1637,32 +1634,7 @@ begin
     begin
       dec(Iterations);
       // generate random 1 < a < value - 1
-      attempt := 0;
-      repeat
-        inc(attempt);
-        if attempt = 30 then
-          exit; // random generator seems pretty weak
-        if Size > 2 then
-        begin
-          repeat
-            n := Lecuyer^.Next(Size);
-          until n > 1;
-          Lecuyer^.Fill(@a^.Value[0], n * HALF_BYTES); // TLecuyer generator
-          a^.Value[0] := a^.Value[0] or 1; // odd
-          a^.Size := n;
-          a^.Trim;
-        end
-        else
-        begin
-          if Size = 1 then
-            v := Lecuyer^.Next(Value[0]) // ensure a<w
-          else
-            v := Lecuyer^.Next; // only lower HalfUInt is enough for a<w
-          a^.Value[0] := v or 1; // odd
-          a^.Size := 1;
-        end;
-      until (a.Compare(1) > 0) and
-            (a.Compare(w) < 0);
+      a.FillMillerRabinWitness(Lecuyer, w);
       // search if a is composite
       a := Owner.ModPower(a, r.Copy, @self); // a = a^r mod value
       if (a.Compare(1) = 0) or
@@ -1688,15 +1660,11 @@ begin
   end;
 end;
 
-const
-  // ensure generated number is at least (nbits - 1) + 0.5 bits
-  FIPS_MIN = $b504f334;
-
 function FipsMinIterations(bits: integer): integer;
 begin
   // ensure 2^-112 error probability - see FIPS 186-5 appendix B.3 table B.1
   if bits >= 1536  then
-    result := 4
+    result := 4   // absolute allowed minimum, even with bits=8192
   else if bits >= 1024 shr HALF_SHR then
     result := 5
   else if bits >= 512 shr HALF_SHR then
@@ -1705,13 +1673,41 @@ begin
     result := 51; // never used in practice for RSA
 end;
 
+const
+  // FIPS 186: require p >= 2^(nbits - 0.5) = sqrt(2) * 2^(nbits - 1)
+  FIPS_MIN = $b504f334; // = ceil(sqrt(2) * 2^31) for the top 32-bit dword
+  FIPS_RANGE = high(cardinal) - FIPS_MIN + 1; // allowed top-dword interval size
+
+procedure TBigInt.XorStrongRandom(last32: PCardinal);
+var
+  min: integer;
+begin
+  min := 4; // paranoid
+  repeat
+    TAesPrng.Main.XorRandom(Value, Size * HALF_BYTES);
+    // CSPRNG sanity check (no RSA requirement): half the bits are set on average
+    if GetBitsCount(Value^, Size * HALF_BITS) > Size * (HALF_BITS div 3) then
+    begin
+      // should be a big enough odd number
+      Value[0] := Value[0] or 1;  // set lower bit to ensure it is an odd number
+      if last32^ < FIPS_MIN then  // FIPS 186 range requirement
+        last32^ := FIPS_MIN + TAesPrng.Main.Random32(FIPS_RANGE);
+      if last32^ >= FIPS_MIN then // paranoid
+        exit;                     // correct random number
+    end;
+    dec(min); // with our TAesPrng, it never occurred after 1,000,000,000 trials
+    if min = 0 then // paranoid
+      ERsaException.RaiseU('TBigInt.FillPrime: weak');
+  until false;
+end;
+
 function TBigInt.FillPrime(Extend: TBigIntSimplePrime; Iterations: integer;
   EndTix: Int64): boolean;
 var
   min, bytes: integer;
   last32: PCardinal;
   rnd: RawByteString;
-  lecuyer: TLecuyer; // convenient local thread-safe randomness source
+  lecuyer: TLecuyer; // convenient local thread-safe randomness for Miller-Rabin
 begin
   // ensure it is worth searching (paranoid)
   if Size <= 2 then
@@ -1724,67 +1720,48 @@ begin
   if Iterations < min then // ensure at least FIPS recommendation
     Iterations := min;
   // compute a random number following FIPS 186-4 B.3.3 steps 4.4, 5.5
-  min := 16;
-  last32 := @Value[Size - 1 {$ifdef CPU32} - 1 {$endif}];
+  bytes := Size * HALF_BYTES;
+  pointer(rnd) := FastNewString(bytes);
   // since randomness may be a weak point, consolidate several trusted sources
   // see https://ieeexplore.ieee.org/document/9014350
   // note that RSA-2048 requires only 128-bit of true cryptographic randomness
-  bytes := Size * HALF_BYTES;
-  pointer(rnd) := FastNewString(bytes);
   FillSystemRandom(pointer(rnd), bytes, {mayblock=}true); // official OS API
   {$ifdef ASMINTEL} // claimed to be NIST SP 800-90A and FIPS 140-2 compliant
-  RdRand32(pointer(rnd), bytes shr 2); // xor with HW CPU prng
+  RdRand32(pointer(rnd), bytes shr 2);                    // xor HW CPU prng
   {$endif ASMINTEL}
-  AFDiffusion(pointer(Value), pointer(rnd), bytes); // sha-256 diffusion
-  DefaultHasher128(@lecuyer, pointer(rnd), bytes);  // may be AesNiHash128
-  lecuyer.SeedGenerator; // setup 88-bit gsl_rng_taus2 uniform distribution
-  FillZero(rnd);         // anti-forensic counter measure
-  repeat
-    // xor the original trusted sources with our CSPRNG until we get enough bits
-    TAesPrng.Main.XorRandom(Value, bytes);
-    if GetBitsCount(Value^, Size * HALF_BITS) < Size * (HALF_BITS div 3) then
-    begin
-      // one CSPRNG iteration is usually enough to reach 1/3 of the bits set
-      // - with our TAesPrng, it never occurred after 1,000,000,000 trials
-      dec(min);
-      if min = 0 then // paranoid
-        ERsaException.RaiseU('TBigInt.FillPrime: weak CSPRNG');
-      continue;
-    end;
-    // should be a big enough odd number
-    Value[0] := Value[0] or 1; // set lower bit to ensure it is an odd number
-    if last32^ < FIPS_MIN then
-      last32^ := last32^ or $b5050000; // let's grow up
-    if (Value[Size - 1] or (RSA_RADIX shr 1) <> 0) and // absolute big enough
-       (last32^ >= FIPS_MIN) then
-      break;
-    ERsaException.RaiseU('TBigInt.FillPrime FIPS_MIN'); // paranoid
-  until false;
+  // compute initial trusted random Value = TKS1-sha-256(rnd)
+  AFDiffusion(pointer(Value), pointer(rnd), bytes);
+  // xor Value original trusted sources with our CSPRNG until we get enough bits
+  last32 := @Value[Size - 1 {$ifdef CPU32} - 1 {$endif}];
+  XorStrongRandom(last32);
+  // setup a 88-bit gsl_rng_taus2 uniform distribution from these rnd bytes
+  DefaultHasher128(@lecuyer, pointer(rnd), bytes); // may be AesNiHash128
+  lecuyer.SeedGenerator;
+  FillZero(rnd); // anti-forensic counter measure
   // brute force search for the next prime starting at this point
-  result := true;
+  result := false; // timeout
+  min := 0;
   repeat
-    if IsPrime(Extend, Iterations, @lecuyer) then
-      exit; // we got lucky
-    IntAdd(2); // incremental search of odd number - see HAC 4.51
-    while last32^ < FIPS_MIN do
+    if IsPrime(Extend, Iterations, @lecuyer) then // small primes + Miller-Rabin
     begin
-      // handle IntAdd overflow - paranoid but safe
-      TAesPrng.Main.XorRandom(Value, bytes);
-      Value[0] := Value[0] or 1;
+      result := true; // we got lucky
+      exit;
     end;
-    // note 1: HAC 4.53 advices for Gordon's algorithm to generate a "strong
-    //      prime", but it seems not used by mbedtls nor OpenSSL
-    // note 2: mbedtls can ensure (Value-1)/2 is also a prime for DH primes, but
-    //      it seems not necessary for RSA because ECM algo negates its benefits
-    // note 3: our version seems compliant anyway with FIPS 186-5 appendix A+B
-    //      especially because having multiple rounds of Miller-Rabin is plenty
-    //      with keysize >= 2048-bit (FIPS 186-4 appendix B.3.1 item A)
-    // - see https://security.stackexchange.com/a/176396/155098
-    //   and https://crypto.stackexchange.com/a/15761/40200
+    IntAdd(2); // incremental search of odd number - see HAC 4.51
+    if last32^ < FIPS_MIN then
+      XorStrongRandom(last32); // handle IntAdd overflow - paranoid but safe
     inc(min);
   until (min and 63 = 0) and       // check only once in a while (avoid OS call)
         (GetTickCount64 > EndTix); // IsPrime() may be slow for sure
-  result := false; // timed out
+  // note 1: HAC 4.53 advices for Gordon's algorithm to generate a "strong
+  //      prime", but it seems not used by mbedtls nor OpenSSL
+  // note 2: mbedtls can ensure (Value-1)/2 is also a prime for DH primes, but
+  //      it seems not necessary for RSA because ECM algo negates its benefits
+  // note 3: our version seems compliant anyway with FIPS 186-5 appendix A+B
+  //      especially because having multiple rounds of Miller-Rabin is plenty
+  //      with keysize >= 2048-bit (FIPS 186-4 appendix B.3.1 item A)
+  // - see https://security.stackexchange.com/a/176396/155098
+  //   and https://crypto.stackexchange.com/a/15761/40200
 end;
 
 procedure TBigInt.Debug(const name: ShortString; full: boolean);
@@ -2032,46 +2009,6 @@ begin
   result := r.Trim;
 end;
 
-{$ifdef USEBARRET}
-function TBigInt.MultiplyPartial(b: PBigInt;
-  InnerPartial, OuterPartial: PtrInt): PBigInt;
-var
-  r: PBigInt;
-  i, j, k, n: PtrInt;
-  v: PtrUInt;
-begin
-  n := Size;
-  r := Owner.Allocate(n + b^.Size);
-  for i := 0 to b^.Size - 1 do
-  begin
-    v := 0; // initial carry value
-    k := i;
-    j := 0;
-    if (OuterPartial > 0) and
-       (OuterPartial > i) and
-       (OuterPartial < n) then
-    begin
-      k := OuterPartial - 1;
-      j := k - i;
-    end;
-    repeat
-      if (InnerPartial > 0) and
-         (k >= InnerPartial) then
-        break;
-      inc(v, PtrUInt(r^.Value[k]) + PtrUInt(Value[j]) * b^.Value[i]);
-      r^.Value[k] := v;
-      inc(k);
-      v := v shr HALF_BITS; // carry
-      inc(j);
-    until j >= n;
-    r^.Value[k] := v;
-  end;
-  Release;
-  b.Release;
-  result := r.Trim;
-end;
-{$endif USEBARRET}
-
 function TBigInt.Square: PBigint;
 begin
   result := Multiply(Copy);
@@ -2079,30 +2016,54 @@ end;
 
 function TBigInt.IntAdd(b: HalfUInt): PBigInt;
 var
-  tmp: PBigInt;
+  n, c: PtrUInt;
+  p: PHalfUInt;
 begin
-  if b <> 0 then
-  begin
-    tmp := Owner.Allocate(Size);
-    tmp^.Value[0] := b;
-    result := Add(tmp); // seldom called
-  end
-  else
-    result := @self;
+  p := pointer(Value);
+  n := PtrUInt(Size);
+  c := b;
+  if (c <> 0) and
+     (n <> 0) then
+    repeat
+      inc(c, PtrUInt(p^));  // 16/32-bit per iteration
+      p^ := c;
+      c := c shr HALF_BITS; // carry propagation
+      if c = 0 then
+        break;              // most common case is early leave with no carry
+      inc(p);
+      dec(n);
+      if n = 0 then
+      begin
+        n := Size;
+        Resize(n + 1);      // we have a trailing carry <> 0 to store
+        Value[n] := c;
+        break;
+      end;
+    until false;
+  result := @self;
 end;
 
 function TBigInt.IntSub(b: HalfUInt): PBigInt;
 var
-  tmp: PBigInt;
+  n, c: PtrUInt;
+  p: PHalfUInt;
 begin
-  if b <> 0 then
-  begin
-    tmp := Owner.Allocate(Size);
-    tmp^.Value[0] := b;
-    result := Substract(tmp); // seldom called
-  end
-  else
-    result := @self;
+  p := pointer(Value);
+  n := PtrUInt(Size);
+  c := b;
+  if (c <> 0) and
+     (n <> 0) then
+    repeat
+      c := PtrUInt(p^) - c;  // 16/32-bit per iteration
+      p^ := c;
+      c := c shr HALF_BITS; // carry propagation
+      if c = 0 then
+        break;              // most common case is early leave with no carry
+      c := 1;
+      inc(p);
+      dec(n);
+    until n = 0;
+  result := Trim;
 end;
 
 
@@ -2159,9 +2120,9 @@ begin
   end;
 end;
 
-function TRsaContext.AllocateFrom(v: HalfUInt): PBigInt;
+function TRsaContext.AllocateFrom(v: HalfUInt; size: integer): PBigInt;
 begin
-  result := Allocate(1, []);
+  result := Allocate(size);
   result^.Value[0] := v;
 end;
 
@@ -2184,7 +2145,8 @@ begin
   if self = nil then
     ERsaException.RaiseUtf8('TRsa.Allocate(%): Owner=nil', [n]);
   result := fFreeList;
-  if result <> nil then
+  if (result <> nil) and
+     (n <= result^.Capacity) then
   begin
     // we can recycle a pre-allocated instance
     if result^.RefCnt <> 0 then
@@ -2192,11 +2154,6 @@ begin
         '%.Allocate(%): % RefCnt=%', [self, n, result, result^.RefCnt]);
     fFreeList := result^.fNextFree;
     dec(FreeCount);
-    if n > result^.Capacity then // need a bigger buffer (dedicated Resize)
-    begin
-      FreeMem(result^.Value); // Resize = ReallocMem = would move pointless data
-      result^.Value := nil;
-    end;
   end
   else
   begin
@@ -2243,79 +2200,14 @@ begin
   fMod[modulo] := b;
   d := RSA_RADIX div (PtrUInt(b^.Value[k - 1]) + 1);
   fNormMod[modulo] := b.IntMultiply(d).SetPermanent;
-  {$ifdef USEBARRET}
-  b := AllocateFrom(1).LeftShift(k * 2);
-  fMu[modulo] := b.Divide(fMod[modulo]).SetPermanent;
-  b.Release;
-  fBk1[modulo] := AllocateFrom(1).LeftShift(k + 1).SetPermanent; // = b(k+1)
-  {$endif USEBARRET}
 end;
 
 procedure TRsaContext.ResetModulo(modulo: TRsaModulo);
 begin
   fMod[modulo].ResetPermanentAndRelease;
   fNormMod[modulo].ResetPermanentAndRelease;
-  {$ifdef USEBARRET}
-  fMu[modulo].ResetPermanentAndRelease;
-  fBk1[modulo].ResetPermanentAndRelease;
-  {$endif USEBARRET}
 end;
 
-{$ifdef USEBARRET}
-function TRsaContext.Reduce(b, m: PBigint): PBigInt;
-var
-  q1, q2, q3, r1, r2: PBigInt;
-  k: integer;
-begin
-  if m <> nil then
-  begin
-    result := b^.Divide(m, bidMod); // custom modulo has no pre-computed const
-    b^.Release;
-    exit;
-  end;
-  m := fMod[CurrentModulo];
-  if b^.Compare(m) < 0 then
-  begin
-    result := b; // just return b if b < m
-    exit;
-  end;
-  k := m^.Size;
-  if b^.Size > k * 2 then
-  begin
-    // use regular divide/modulo method - Barrett cannot help
-    result := b^.Divide(m, bidModNorm);
-    b^.Release;
-    exit;
-  end;
-  // q1 = [x / b**(k-1)]
-  q1 := b^.Clone.RightShift(k - 1);
-  //writeln(#10'q1=',q1.ToHexa);
-  //writeln(#10'mu=',fMu[CurrentModulo].ToHexa);
-  // Do outer partial multiply
-  // q2 = q1 * mu
-  q2 := q1.MultiplyPartial(fMu[CurrentModulo], 0, k - 1);
-  //writeln(#10'q2=',q2.tohexa);
-  // q3 = [q2 / b**(k+1)]
-  q3 := q2.RightShift(k + 1);
-  //writeln(#10'q3=',q3.tohexa);
-  // r1 = x mod b**(k+1)
-  r1 := b^.TruncateMod(k + 1);
-  //writeln(#10'r1=',r1.tohexa);
-  // Do inner partial multiply
-  // r2 = q3 * m mod b**(k+1)
-  r2 := q3.MultiplyPartial(m, k + 1, 0).TruncateMod(k + 1);
-  //writeln(#10'r2=',r2.tohexa);
-  // if (r1 < r2) r1 = r1 + b**(k+1)
-  if r1.Compare(r2) < 0 then
-    r1 := r1.Add(fBk1[CurrentModulo]);
-  // r = r1-r2
-  result := r1.Substract(r2);
-  //writeln(#10'r=',result.tohexa);
-  // while (r >= m) do r = r-m
-  while result.Compare(m) >= 0 do
-    result.Substract(m);
-end;
-{$else}
 function TRsaContext.Reduce(b, m: PBigint): PBigInt;
 begin
   if m = nil then
@@ -2324,7 +2216,6 @@ begin
     result := b^.Divide(m, bidMod); // custom modulo has no pre-computed const
   b^.Release;
 end;
-{$endif USEBARRET}
 
 function TRsaContext.ModPower(b, exp, m: PBigInt): PBigInt;
 var
@@ -2339,6 +2230,8 @@ begin
     if exponent.IsOdd then
       result := Reduce(result.Multiply(base.Copy), m);
     exponent.ShrBits;
+    if exponent.IsZero then
+      break;
     base := Reduce(base.Square, m);
   end;
   base.Release;

@@ -1105,6 +1105,32 @@ var
   sl: TStrings;
   timer: TPrecisionTimer;
 
+  procedure TestSort;
+  begin
+    L.Clear;
+    Check(L.Count = 0);
+    Check(L.IndexOf('5') < 0);
+    Check(L.Add('toto') = 0);
+    Check(L.Count = 1);
+    Check(L.IndexOf('titi') < 0);
+    Check(L.IndexOf('toto') = 0);
+    CheckEqual(L.Text, 'toto');
+    L.Sort;
+    CheckEqual(L.Text, 'toto');
+    Check(L.AddObject('titi', TObject.Create) = 1);
+    CheckEqual(L.IndexOf('toto'), 0);
+    CheckEqual(L.IndexOf('titi'), 1);
+    Check(L.Objects[0] = nil);
+    Check(L.Objects[1] <> nil);
+    CheckEqual(L.GetText(','), 'toto,titi');
+    L.Sort;
+    CheckEqual(L.GetText(','), 'titi,toto');
+    Check(L.Objects[0] <> nil);
+    Check(L.Objects[1] = nil);
+    CheckEqual(L.IndexOf('toto'), 1);
+    CheckEqual(L.IndexOf('titi'), 0);
+  end;
+
   procedure TestBinDictionary;
   var
     i, len: PtrInt; // @len = PPtrInt
@@ -1169,13 +1195,7 @@ begin
     Check(L.IndexOf('6') < 0);
     Check(L.Exists('5'));
     Check(not L.Exists('6'));
-    L.Clear;
-    Check(L.Count = 0);
-    Check(L.IndexOf('5') < 0);
-    Check(L.Add('toto') = 0);
-    Check(L.Count = 1);
-    Check(L.IndexOf('titi') < 0);
-    Check(L.IndexOf('toto') = 0);
+    TestSort;
   finally
     L.Free;
   end;
@@ -1217,17 +1237,7 @@ begin
     for i := 1 to MAX do
       Check((L.IndexOf(v[i]) >= 0) = (i and 127 <> 0));
     DeleteFile(WorkDir + 'utf8list.txt');
-    L.Clear;
-    Check(L.Count = 0);
-    Check(L.Add('toto') = 0);
-    Check(L.Count = 1);
-    Check(L.IndexOf('titi') < 0);
-    Check(L.IndexOf('toto') = 0);
-    Check(L.IndexOf('') < 0);
-    Check(L.Add('') = 1);
-    Check(L.Count = 2);
-    Check(L.IndexOf('') = 1);
-    Check(L.IndexOf('toto') = 0);
+    TestSort;
   finally
     L.Free;
   end;
@@ -7024,9 +7034,14 @@ begin
   FromVarString(PB, U2);
   check(U2 = U);
   U := HexTobin('2800541D251D541D2900'); // a nice Unicode mORMot glyph
+  {$ifdef HASCODEPAGE}
+  CheckEqual(GetCodePage(U), CP_RAWBYTESTRING);
+  {$endif HASCODEPAGE}
   FastSynUnicode(SU, pointer(U), length(U) shr 1);
-  U := HexToBin('28E1B594E1B4A5E1B59429');
-  EnsureRawUtf8(U);
+  U := HexToUtf8('28E1B594E1B4A5E1B59429');
+  {$ifdef HASCODEPAGE}
+  CheckEqual(GetCodePage(U), CP_UTF8);
+  {$endif HASCODEPAGE}
   CheckEqual(SynUnicodeToUtf8(SU), U);
   Check(Utf8ToSynUnicode(U) = SU);
   for i := 0 to high(UTF8_UCS4) do
@@ -8163,29 +8178,21 @@ begin
     '1492-10-12T16:00:00');
 end;
 
-function LocalTimeToUniversal(LT: TDateTime; TZOffset: Integer): TDateTime;
-begin
-  result := EncodeTime(Abs(TZOffset) div 60, Abs(TZOffset) mod 60, 0, 0);
-  if TZOffset > 0 then
-    result := LT - result
-  else if TZOffset < 0 then
-    result := LT + result
-  else
-    result := LT;
-end;
-
-{$R ..\src\mormot.tz.res} // validate our Win10-generated resource file
+{$R ..\src\mormot.tz.res} // validate our Win11-generated resource file
 
 procedure TTestCoreBase.TimeZonesSlow(Context: TObject);
 var
   tz: TSynTimeZone;
+  st, stl: TSystemTime;
+  t: TSynSystemTime;
   d: TTimeZoneData;
   i, bias: integer;
   m: word;
   hdl, reload: boolean;
+  endtix: Int64;
   buf: RawByteString;
-  dt: TDateTime;
-  local: TDateTime;
+  dt, dtl: TDateTime;
+  ut: TUnixTime;
   s31: TShort31;
 
   procedure testBias(year, expected: integer);
@@ -8344,22 +8351,40 @@ begin
   finally
     tz.Free;
   end;
-  // validate NowUtc / TimeZoneLocalBias
+  // validate mormot.core.os time conversions
   dt := NowUtc;
-  CheckSame(LocalTimeToUniversal(Now(), TimeZoneLocalBias), dt, 0.01,
-    'NowUtc should not shift nor truncate time in respect to RTL Now');
-  sleep(200);
-  Check(not SameValue(dt, NowUtc),
-    'NowUtc should not truncate time (e.g. to 5 sec resolution)');
+  dtl := UtcToLocal(dt);
+  CheckSameTime(dtl, Now(), 'RTL Now should match mormot.core.os');
+  ut := UnixTimeUtc;
+  t.FromNow({localtime=}true);
+  GetLocalTime(stl);
+  //writeln(#10'utc=',DateTimeToSql(dt),#10'loc=',DateTimeToSql(dtl));
+  CheckSameTime(UtcToLocal(dt), dtl, 'UtcToLocal');
+  CheckSameTime(LocalToUtc(dtl), dt, 'LocalToUtc');
+  CheckSameTime(UnixTimeToLocal(ut), dtl, 'UnixTimeToLocal');
+  Check(abs(LocalToUnixTime(dtl) - ut) < 2, 'LocalToUnixTime');
+  UnixTimeToLocal(ut, st);
+  {$ifndef POSIXDELPHI} // SystemTimeToDateTime() not available on Delphi POSIX
+  CheckSameTime(SystemTimeToDateTime(st), SystemTimeToDateTime(stl), 'UnixTimeToLocal');
+  {$endif POSIXDELPHI}
+  {$ifdef VER3_2_4}
+  CheckSameTime(LocalTimeToUniversal(dtl), dt, 'LocalTimeToUniversal');
+  CheckSameTime(UniversalTimeToLocal(dt), dtl, 'UniversalTimeToLocal');
+  {$endif VER3_2_4}
+  endtix := GetTickCount64 + 100; // 16ms resolution at worst on Windows
+  repeat
+    sleep(10); // likely to be executed in a background thread
+  until CheckFailed(GetTickCount64 < endtix,
+          'NowUtc should not truncate time within 100ms period') or
+        (NowUtc > dt);
   // validate zones taken from Windows registry or mormot.tz.res on POSIX
   tz := TSynTimeZone.Default;
-  local := tz.UtcToLocal(dt, 'UTC');
-  check(SameValue(local, dt));
+  CheckSameTime(tz.UtcToLocal(dt, 'UTC'), dt);
   check(tz.GetBiasForDateTime(dt, 'UTC', bias, hdl));
   check(bias = 0);
   check(not hdl);
-  local := tz.UtcToLocal(dt, 'Romance Standard Time');
-  check(not SameValue(local, dt), 'Perfide Albion never matches the continent');
+  dtl := tz.UtcToLocal(dt, 'Romance Standard Time');
+  check(not SameValue(dtl, dt,SecsPerDate), 'Perfide Albion');
   check(tz.GetBiasForDateTime(dt, 'Romance Standard Time', bias, hdl));
   check(hdl);
   check(bias < 0, 'Paris is always ahead of London');
@@ -8367,11 +8392,11 @@ begin
   tz := TSynTimeZone.Create;
   try
     tz.LoadFromBuffer(buf);
-    CheckSame(local, tz.UtcToLocal(dt, 'Romance Standard Time'));
+    CheckSameTime(dtl, tz.UtcToLocal(dt, 'Romance Standard Time'));
   finally
     tz.Free;
   end;
-  CheckSame(local, UtcToLocal(dt, 'Romance Standard Time'));
+  CheckSameTime(dtl, UtcToLocal(dt, 'Romance Standard Time'));
 end;
 
 const
@@ -9687,11 +9712,14 @@ begin
   for i := 1 to 100 do
   begin
     s := DateTimeToIso8601(Now / 20 + rnd.NextDouble * 20, true);
-    t := UrlEncode(s);
+    t := UrlEncode(s); // e.g. '1906-05-18T02%3A02%3A22'
     CheckEqual(UrlDecode(t), s);
     d := 'seleCT=' + t + '&where=' + Int32ToUtf8(i);
     Check(UrlDecodeNeedParameters(pointer(d), 'where,select'));
     Check(not UrlDecodeNeedParameters(pointer(d), 'foo,select'));
+    Check(not UrlDecodeNeedParameters(pointer(d), 'wher,select'));
+    Check(not UrlDecodeNeedParameters(pointer(d), 'where,selected'));
+    Check(not UrlDecodeNeedParameters(pointer(d), 'wheres,select'));
     Check(UrlDecodeValue(pointer(d), 'SELECT=', t, @U));
     CheckEqual(t, s, 'UrlDecodeValue');
     Check(IdemPChar(U, 'WHERE='), 'Where');
@@ -10042,6 +10070,7 @@ begin
   Check(not IsContentTypeJsonU('application/vnd.mysoft.v1+'));
   Check(IsContentTypeJsonU('application/+json'));
   Check(not IsContentTypeJsonU('application/xml'));
+  Check(not IsContentTypeJsonU(XML_CONTENT_TYPE));
   Check(IsContentTypeJsonU('anything/json'));
   Check(IsContentTypeJsonU('something/JSON'));
   Check(not IsContentTypeJsonU('something/SON'));
@@ -10054,6 +10083,7 @@ begin
   Check(IsContentTypeTextU('application/json'));
   Check(IsContentTypeTextU('APPLICATION/JSON'));
   Check(IsContentTypeTextU('application/xml'));
+  Check(IsContentTypeTextU(XML_CONTENT_TYPE));
   Check(not IsContentTypeTextU('application/octet-stream'));
   Check(IsContentTypeTextU('application/javascript'));
   Check(IsContentTypeTextU('application/VND.API+JSON'));
@@ -10917,7 +10947,8 @@ begin
     json := dict.SaveToJson;
     Check(IsValidUtf8(json));
     Check(IsValidJson(json));
-    CheckHash(json, $F67B5FA8, 'dict.savetojson');
+    if MAX = 10000 then
+      CheckHash(json, $F67B5FA8, 'dict.savetojson');
     for i := 1 to MAX do
     begin
       i64 := i;
@@ -10930,7 +10961,8 @@ begin
   dict := TSynDictionary.Create(TypeInfo(TInt64DynArray), TypeInfo(tvalues));
   try
     check(dict.LoadFromJson(json));
-    CheckHash(json, $F67B5FA8, 'untouched after loadfromjson');
+    if MAX = 10000 then
+      CheckHash(json, $F67B5FA8, 'untouched after loadfromjson');
     checkEqual(json, dict.SaveToJson);
     for i := 1 to MAX do
     begin

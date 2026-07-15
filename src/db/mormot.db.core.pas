@@ -336,6 +336,10 @@ function IsSqliteReserved(const Text: RawUtf8): boolean;
 // - only returns VBlobLen / StrLen(VText) size, 0 otherwise
 function SqlVarLength(const Value: TSqlVar): integer;
 
+/// convert a TSqlVar database value into 64-bit integer
+// - returns false for unsupported ftUnknown/ftBlob
+function SqlVarToInt64(const Value: TSqlVar; var Int: Int64): boolean;
+
 /// convert any Variant into a database value
 // - ftBlob kind won't be handled by this function
 // - complex variant types would be converted into ftUtf8 JSON object/array
@@ -1795,6 +1799,26 @@ begin
       result := StrLen(Value.VText); // fast enough for our purpose
   else
     result := 0; // simple/ordinal values, or ftNull
+  end;
+end;
+
+function SqlVarToInt64(const Value: TSqlVar; var Int: Int64): boolean;
+begin
+  result := true;
+  case Value.VType of
+    ftNull:
+      Int := 0;
+    ftInt64:
+      Int := Value.VInt64;
+    ftDouble,
+    ftDate:
+      Int := trunc(Value.VDouble);
+    ftCurrency:
+      Int := trunc(Value.VCurrency);
+    ftUtf8:
+      Int:= GetInt64(Value.VText);
+  else
+    result := false; // ftUnknown/ftBlob not supported
   end;
 end;
 

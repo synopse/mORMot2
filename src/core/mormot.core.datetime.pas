@@ -498,7 +498,7 @@ type
   PSynDate = ^TSynDate;
 
   /// a cross-platform and cross-compiler TSystemTime 128-bit structure
-  // - FPC's TSystemTime in datih.inc does NOT match Windows TSystemTime fields!
+  // - on POSIX TSystemTime definition for Delphi or FPC do NOT match Windows'
   // - also used to store a Date/Time in TSynTimeZone internal structures, or
   // for fast conversion from TDateTime to its ready-to-display members
   // - DayOfWeek field is not handled by most methods by default, but could be
@@ -1390,7 +1390,7 @@ begin
     AppendShortCardinal(Micro, result);
     AppendShortTwoChars(ord('u') + ord('s') shl 8, @result);
   end
-  else if Micro < 1000000 then
+  else if Micro < MicroSecsPerSec then
     AppendShortBy100(
       {$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif} div 10, 'ms', result)
   else if Micro < 60000000 then
@@ -1399,11 +1399,11 @@ begin
   else if Micro < QWord(3600000000) then
     AppendShortTime(
       {$ifdef CPU32} PCardinal(@Micro)^ {$else} Micro {$endif} div 1000000, 'm', result)
-  else if Micro < QWord(86400000000 * 2) then
+  else if Micro < QWord(MicroSecsPerDay * 2) then
     AppendShortTime(Micro div 60000000, 'h', result)
   else
   begin
-    AppendShortCardinal(Micro div QWord(86400000000), result);
+    AppendShortCardinal(Micro div MicroSecsPerDay, result);
     AppendShortChar('d', @result);
   end;
 end;
@@ -2817,9 +2817,11 @@ begin
      (zone <> 0) then
   begin
     // need to apply some time zone shift
+    dt := ToDateTime;
+    if zone <> 0 then
+      dt := dt - zone div MinsPerDay;
     if tolocaltime then
-      dec(zone, TimeZoneLocalBias);
-    dt := ToDateTime - zone div MinsPerDay;
+      dt := UtcToLocal(dt);
     v := abs(zone mod MinsPerDay);
     if not TryEncodeTime(v div 60, v mod 60, 0, 0, t) then
       exit;
@@ -3472,7 +3474,7 @@ end;
 
 function DateTimeToUnixTime(const AValue: TDateTime): TUnixTime;
 begin
-  result := Round((AValue - UnixDateDelta) * SecsPerDay);
+  result := round((AValue - UnixDateDelta) * SecsPerDay);
 end;
 
 function UnixTimeToString(const UnixTime: TUnixTime; Expanded: boolean;
@@ -3539,7 +3541,7 @@ begin
   if AValue = 0 then
     result := 0
   else
-    result := Round((AValue - UnixDateDelta) * MilliSecsPerDay);
+    result := round((AValue - UnixDateDelta) * MilliSecsPerDay);
 end;
 
 function UnixMSTimeToString(const UnixMSTime: TUnixMSTime; Expanded: boolean;
@@ -4337,7 +4339,7 @@ label
 begin
   // fast decode 00.020.006 at the end of the line
   tab := @ConvertHexToBin;
-  B := tab[P[0]];   // 00
+  B := tab[P[0]];   // 00 seconds
   if B > 9 then
     goto err;
   result := B;
@@ -4345,7 +4347,7 @@ begin
   if B > 9 then
     goto err;
   result := result * 10 + B;
-  B := tab[P[3]]; // 020
+  B := tab[P[3]]; // 020 milliseconds
   if B > 9 then
     goto err;
   result := result * 10 + B;
@@ -4357,7 +4359,7 @@ begin
   if B > 9 then
     goto err;
   result := result * 10 + B;
-  B := tab[P[7]]; // 006
+  B := tab[P[7]]; // 006 microseconds
   if B > 9 then
     goto err;
   result := result * 10 + B;

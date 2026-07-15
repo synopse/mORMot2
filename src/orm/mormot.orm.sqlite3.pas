@@ -817,24 +817,10 @@ var
 begin
   result := SQLITE_ERROR;
   if TOrmVirtualTableCursor(pVtabCursor.pInstance).Column(-1, res) then
-  begin
-    case res.VType of
-      ftInt64:
-        pRowid := res.VInt64;
-      ftDouble:
-        pRowid := trunc(res.VDouble);
-      ftCurrency:
-        pRowid := trunc(res.VCurrency);
-      ftUtf8:
-        pRowid := GetInt64(res.VText);
+    if SqlVarToInt64(res, pRowID) then
+      result := SQLITE_OK
     else
-      begin
-        Notify('vt_Rowid res=%', [ord(res.VType)]);
-        exit;
-      end;
-    end;
-    result := SQLITE_OK;
-  end
+      Notify('vt_Rowid res=%', [ord(res.VType)])
   else
     Notify('vt_Rowid Column', []);
 end;

@@ -192,6 +192,9 @@ function fpsettimeofday(tp: ptimeval; tzp: pointer): cint;
 function fpnanosleep(t, rem: ptimespec): cint;
 function GetLocalTimeOffset: integer;
 function TZSeconds: integer;
+function ToLocalTime(const utc: TDateTime): TDateTime;
+function ToUtcTime(const local: TDateTime): TDateTime;
+function EpochToLocal(I64: TUnixTime): TUnixTime;
 function fpuname(var uts: UtsName): cint;
 
 function fpstat(path: PWideChar; var buf: _stat): cint;
@@ -286,22 +289,22 @@ type
   end;
 
   TSysInfo = record
-    uptime: clong;                     //* Seconds since boot */
-    loads: array[0..2] of culong;      //* 1, 5, and 15 minute load averages */
-    totalram: culong;                  //* Total usable main memory size */
-    freeram: culong;                   //* Available memory size */
-    sharedram: culong;                 //* Amount of shared memory */
-    bufferram: culong;                 //* Memory used by buffers */
-    totalswap: culong;                 //* Total swap space size */
-    freeswap: culong;                  //* swap space still available */
-    procs: cushort;                    //* Number of current processes */
-    pad: cushort;                      //* explicit padding for m68k */
-    totalhigh: culong;                 //* Total high memory size */
-    freehigh: culong;                  //* Available high memory size */
-    mem_unit: cuint;                   //* Memory unit size in bytes */
+    uptime: clong;                     // Seconds since boot
+    loads: array[0..2] of culong;      // 1, 5, and 15 minute load averages
+    totalram: culong;                  // Total usable main memory size
+    freeram: culong;                   // Available memory size
+    sharedram: culong;                 // Amount of shared memory
+    bufferram: culong;                 // Memory used by buffers
+    totalswap: culong;                 // Total swap space size
+    freeswap: culong;                  // swap space still available
+    procs: cushort;                    // Number of current processes
+    pad: cushort;                      // explicit padding for m68k
+    totalhigh: culong;                 // Total high memory size
+    freehigh: culong;                  // Available high memory size
+    mem_unit: cuint;                   // Memory unit size in bytes
 {$ifndef cpu64}
     { the upper bound of the array below is negative for 64 bit cpus }
-    _f: array[0..19-2*sizeof(clong)-sizeof(cint)] of cChar;  //* Padding: libc5 uses this.. */
+    _f: array[0..19-2*sizeof(clong)-sizeof(cint)] of cChar;  // Padding as libc5
 {$endif cpu64}
   end;
   PSysInfo = ^TSysInfo;
@@ -541,12 +544,27 @@ begin
   // return the offset in MINUTES, positive west of UTC (e.g. +240 for EDT) -
   // i.e. the FPC RTL convention, as expected by TZSeconds and TimeZoneLocalBias
   // (TTimeZone.UtcOffset is local-minus-UTC, so negative west of UTC: negate it)
-  result := -Round(TTimeZone.Local.UtcOffset.TotalMinutes);
+  result := -round(TTimeZone.Local.UtcOffset.TotalMinutes);
 end;
 
 function TZSeconds: integer;
 begin
   result := -GetLocalTimeOffset * 60; // GetLocalTimeOffset = -TZseconds div 60
+end;
+
+function ToLocalTime(const utc: TDateTime): TDateTime;
+begin
+  result := TTimeZone.Local.ToLocalTime(utc);
+end;
+
+function ToUtcTime(const local: TDateTime): TDateTime;
+begin
+  result := TTimeZone.Local.ToUniversalTime(local);
+end;
+
+function EpochToLocal(I64: TUnixTime): TUnixTime;
+begin
+  result := DateTimeToUnix(TTimeZone.Local.ToLocalTime(UnixToDateTime(I64)));
 end;
 
 function fpuname(var uts: UtsName): cint;

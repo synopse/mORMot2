@@ -4865,7 +4865,7 @@ begin
   CheckEqual(HtmlUnescape('te&st'), 'te&st');
   for i := 1 to high(HTML_UNESCAPE) do
   begin
-    if i <= 6 then
+    if i <= high(HTML_UNESCAPED) then
       exp := HTML_UNESCAPED[i]
     else if i = 8 then
       exp := '...'

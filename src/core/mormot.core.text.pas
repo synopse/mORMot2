@@ -2454,10 +2454,16 @@ function HexToBin(Hex: PAnsiChar; HexLen: PtrInt;
   var Bin: RawByteString): boolean; overload;
 
 /// fast conversion from ToHumanHex() hexa chars into binary data
-function HumanHexToBin(const hex: RawUtf8; var Bin: RawByteString): boolean; overload;
+function HumanHexToBin(const hex: RawUtf8; var Bin: RawByteString;
+  CP: cardinal = CP_RAWBYTESTRING): boolean; overload;
 
 /// fast conversion from ToHumanHex() hexa chars into binary data
 function HumanHexToBin(const hex: RawUtf8): RawByteString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast conversion from ToHumanHex() hexa chars into an UTF-8 string
+// - may be a convenient way to generate some UTF-8 constant from ASCII-7 source
+function HexToUtf8(const hex: RawUtf8): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast comparison between two ToHumanHex() hexa values
@@ -8315,8 +8321,8 @@ begin
       Curr64ToStr(vd^.VInt64, result);
     varDate:
       begin
-        _VariantToUtf8DateTimeIso8601(vd^.VDate, 'T', result, {withms=}false);
         wasString := true;
+        _VariantToUtf8DateTimeIso8601(vd^.VDate, 'T', result, {withms=}false);
       end;
     varOleStr:
       begin
@@ -10588,7 +10594,7 @@ begin
   result := false; // mark error
 end;
 
-function HumanHexToBin(const hex: RawUtf8; var Bin: RawByteString): boolean;
+function HumanHexToBin(const hex: RawUtf8; var Bin: RawByteString; CP: cardinal): boolean;
 var
   len: PtrInt;
   h, p: PAnsiChar;
@@ -10598,7 +10604,7 @@ begin
   len := length(hex);
   if len = 0 then
     exit;
-  p := FastNewString(len shr 1); // shr 1 = maximum length
+  p := FastNewString(len shr 1, CP); // shr 1 = maximum length
   pointer(Bin) := p;
   h := pointer(hex);
   repeat
@@ -10693,6 +10699,11 @@ end;
 function HumanHexToBin(const hex: RawUtf8): RawByteString;
 begin
   HumanHexToBin(hex, result);
+end;
+
+function HexToUtf8(const hex: RawUtf8): RawUtf8;
+begin
+  HumanHexToBin(hex, RawByteString(result), CP_UTF8);
 end;
 
 function ByteToHex(P: PAnsiChar; Value: byte): PAnsiChar;

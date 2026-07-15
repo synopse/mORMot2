@@ -6886,8 +6886,8 @@ var
     if not result then
       // TStreamRedirect requires full rewind for full content re-hash
       if outStreamInitialPos = 0 then
-        result := OutStream.Seek(0, soBeginning) = 0; // will call ReHash
-      // TODO: fix range support - TStreamRedirect.Seek() Rehash after Append()
+        result := OutStream.Seek(0, soBeginning) = 0; // will call ResetHash
+      // TODO: fix range support - TStreamRedirect.Seek/ResetHash after Append()
   end;
 
 begin

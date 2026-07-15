@@ -12,7 +12,7 @@ uses
   unix,
   unixcp,
   unixtype,
-  unixutil, // for TZSeconds - as used by sysutils anyway
+  unixutil, // for TTZInfo/TZSeconds - as used by sysutils anyway
   {$ifdef OSBSDDARWIN}
   sysctl,
   {$else}
@@ -513,7 +513,7 @@ begin
   syslog(priority, '%s', [msg]);
 end;
 
-{$ifdef FPC}
+{$ifdef FPC} // if not in mormot.core.os.delphi.pas
 
 {$ifdef NODIRECTTHREADMANAGER} // try to stabilize MacOS/BSD pthreads API calls
 
@@ -841,6 +841,90 @@ begin
   t := epoch div SecsPerMin;
   result.Minute := t;
   result.Second := epoch - t * SecsPerMin;
+end; // caller should set result.MilliSecond
+
+function ToEpoch(const utc: TDateTime): TUnixTime; inline;
+begin // inlined DateTimeToUnixTime() from mormot.core.datetime.pas
+  result := round((utc - UnixDateDelta) * SecsPerDay);
+end;
+
+{$ifdef FPC} // if not in mormot.core.os.delphi.pas
+
+{$if declared(TTZInfo)}
+// TTZInfo is the new native FPC way of handling time zones on POSIX
+
+function GetLocalBias(I64: TUnixTime): PtrInt; inline;
+var
+  nfo: TTZInfo; // thread-safe local copy
+begin
+  if GetLocalTimezone(I64, {utc=}true, nfo) then // very fast RTL function
+    result := nfo.seconds
+  else
+    result := TZSeconds; // fallback to old global value (paranoid)
+end;
+
+function ToLocalTime(const utc: TDateTime): TDateTime; inline;
+begin
+  result := utc + GetLocalBias(ToEpoch(utc)) * SecsPerDate;
+end;
+
+function ToUtcTime(const local: TDateTime): TDateTime; inline;
+begin // use TZSeconds to assume it is the current local time
+  result := local - GetLocalBias(ToEpoch(local) - TZSeconds) * SecsPerDate;
+end;
+
+function EpochToLocal(I64: TUnixTime): TUnixTime; inline;
+begin
+  result := I64 + GetLocalBias(I64);
+end;
+
+{$else}
+
+// fallback to TZSeconds i.e. libc localtime() on Android or FPC 3.2.0/3.2.2
+
+function ToLocalTime(const utc: TDateTime): TDateTime; inline;
+begin
+  result := utc + TZSeconds * SecsPerDate;
+end;
+
+function ToUtcTime(const local: TDateTime): TDateTime; inline;
+begin
+  result := local - TZSeconds * SecsPerDate;
+end;
+
+function EpochToLocal(I64: TUnixTime): TUnixTime; inline;
+begin
+  result := I64 + TZSeconds;
+end;
+
+{$endif declared(TTZInfo)}
+
+{$endif FPC}
+
+function UtcToLocal(utc: TDateTime): TDateTime;
+begin
+  result := ToLocalTime(utc);
+end;
+
+function LocalToUtc(local: TDateTime): TDateTime;
+begin
+  result := ToUtcTime(local);
+end;
+
+function UnixTimeToLocal(I64: TUnixTime): TDateTime;
+begin
+  result := EpochToLocal(I64) * SecsPerDate + UnixDateDelta;
+end;
+
+procedure UnixTimeToLocal(I64: TUnixTime; out Local: TSystemTime);
+begin
+  EpochToSystemTime(EpochToLocal(i64), Local);
+  Local.MilliSecond := 0;
+end;
+
+function LocalToUnixTime(local: TDateTime): TUnixTime;
+begin
+  result := ToEpoch(ToUtcTime(local));
 end;
 
 {$ifdef OSDARWIN} // OSX has no clock_gettime() API but its own MACH API
@@ -954,8 +1038,7 @@ var
   tz: TTimeVal;
 begin
   fpgettimeofday(@tz, nil);
-  // + unixutil.TZSeconds = UTC to local time conversion
-  EpochToSystemTime(tz.tv_sec + TZSeconds, result);
+  EpochToSystemTime(EpochToLocal(tz.tv_sec), result);
   result.MilliSecond := tz.tv_usec div MicroSecsPerMilliSec;
 end;
 
@@ -1071,8 +1154,7 @@ var
 begin
   // faster than fpgettimeofday() which makes a syscall and don't use vDSO
   clock_gettime(CLOCK_REALTIME_FAST, @r);
-  // + unixutil.TZSeconds = UTC to local time conversion
-  EpochToSystemTime(r.tv_sec + TZSeconds, result);
+  EpochToSystemTime(EpochToLocal(r.tv_sec), result);
   result.MilliSecond := PtrUInt(r.tv_nsec) div PtrUInt(NanoSecsPerMilliSec);
 end;
 
@@ -1395,8 +1477,7 @@ begin
   if FileDate <= 0 then
     result := 0
   else
-    // + unixutil.TZSeconds = UTC to local time conversion
-    result := Int64(FileDate + TZSeconds) / Int64(SecsPerDay) + Int64(UnixDelta);
+    result := EpochToLocal(FileDate) / Int64(SecsPerDay) + Int64(UnixDelta);
 end;
 
 function FileAgeToDateTime(const FileName: TFileName): TDateTime;
@@ -3621,7 +3702,7 @@ begin
         (p[l - 1] <= ' ') do // trim right
     dec(l);
   if IsDefaultString(p, l) then
-    l := 0; // e.g. on ProxMox containers or VMs
+    l := 0; // 'Default string' e.g. on ProxMox containers or VMs
   FastSetString(result, p, l);
 end;
 
@@ -4090,12 +4171,7 @@ begin
   crcblock(@e.l, @SystemEntropy.LiveFeed); // obfuscate
   RetrieveSysInfo(si); // at least uptime + cpu load + free mem on all OS
   DefaultHasher128(@e.h, @si, SizeOf(si)); // maybe AesNiHash128
-  {$ifndef CPUINTEL}
-  if SystemEntropy.LiveFeed.c0 = 0 then       // may happen on BSD and MAC ARM
-    crcblocks(@SystemEntropy.LiveFeed, @e, 2) // put something here
-  else
-  {$endif CPUINTEL}
-    crcblock(@e.h, @SystemEntropy.Startup);  // obfuscate
+  crcblock(@e.h, @SystemEntropy.Startup);  // obfuscate
 end;
 
 const
@@ -4115,7 +4191,7 @@ begin
   result := false;
   if Len <= 0 then
     exit;
-  // retrieve up to MAXFROMOS=256 bytes max
+  // retrieve up to MAXFROMOS=256 bytes max - as required by "man urandom"
   rd := MinPtrInt(Len, MAXFROMOS);
   {$ifdef HASGETRANDOM} // a single syscall to rule them all on Linux
   result := LinuxGetRandom(Buffer, rd);

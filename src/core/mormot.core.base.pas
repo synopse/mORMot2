@@ -961,7 +961,7 @@ procedure FastAssignNewNotVoid(var d; s: pointer = nil); overload;
 function FastNewString(len: PtrInt; codepage: PtrInt = CP_RAWBYTESTRING): pointer;
   {$ifdef HASSAFEFPCINLINE}inline;{$endif}
 
-procedure FastSetStrRec(var Rec: TStrRec; Len: TStrLen);
+procedure FastSetStrRec(var Rec: TStrRec; const Len: TStrLen; const RefCnt: TStrCnt);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fill a RawUtf8 constant with up to 7 chars of UTF-8 content
@@ -4195,7 +4195,7 @@ function RleUnCompressPartial(src, dst: PByteArray; size, max: PtrUInt): PtrUInt
 
 /// internal hash table adjustment as called from TDynArrayHasher.HashDelete
 // - decrement any integer greater or equal to a deleted value
-// - brute force O(n) indexes fix after deletion (much faster than full ReHash)
+// - brute force O(n) indexes fix after deletion (much faster than full re-hash)
 // - we offer very optimized SSE2 and AVX2 versions on x86_64 - therefore is
 // defined in this unit to put this asm code in mormot.core.base.asmx64.inc
 procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
@@ -4358,6 +4358,7 @@ function VarIsEmptyOrNull(const V: Variant): boolean;
 
 /// same as VarIsStr() but handling varVariantByRef weak references
 function VarIsString(const V: Variant): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// same as VarIsEmpty(PVariant(V)^) or VarIsNull(PVariant(V)^), but faster
 // - we also discovered some issues with FPC's Variants unit, so this function
@@ -5210,10 +5211,10 @@ begin
   inc(PStrRec(result));
   {$endif FPC}
   {$ifdef HASCODEPAGE} // also set elemSize := 1
-  {$ifdef FPC}
-  rec^.codePageElemSize := codepage + (1 shl 16); // with constant propagation
+  {$ifdef FPC}         // with constant propagation
+  rec^.codePageElemSize := codepage + (SizeOf(AnsiChar) shl 16);
   {$else}
-  PCardinal(@rec^.codePage)^ := codepage + (1 shl 16);
+  PCardinal(@rec^.codePage)^ := codepage + (SizeOf(AnsiChar) shl 16);
   {$endif FPC}
   {$endif HASCODEPAGE}
   rec^.refCnt := 1;
@@ -5399,22 +5400,22 @@ begin
     FastAssignNewNotVoid(s, result);
 end;
 
-procedure FastSetStrRec(var Rec: TStrRec; Len: TStrLen);
+procedure FastSetStrRec(var Rec: TStrRec; const Len: TStrLen; const RefCnt: TStrCnt);
 begin
   {$ifdef HASCODEPAGE}
   {$ifdef FPC}
-  Rec.codePageElemSize := CP_UTF8 + (1 shl 16);
+  Rec.codePageElemSize := CP_UTF8 + (SizeOf(AnsiChar) shl 16);
   {$else}
-  PCardinal(@Rec.codePage)^ := cardinal(CP_UTF8) + (1 shl 16);
+  PCardinal(@Rec.codePage)^ := cardinal(CP_UTF8) + (SizeOf(AnsiChar) shl 16);
   {$endif FPC}
   {$endif HASCODEPAGE}
-  Rec.refCnt := -1; // make it constant, out of the MM allocation space
+  Rec.refCnt := RefCnt; // -1 could make copy on Delphi; 2 to be out of heap
   Rec.length := Len;
 end;
 
 function FastSetConst(var S; var Rec: TStrRecConst; P: pointer; Len: TStrLen): PUtf8Char;
 begin
-  FastSetStrRec(Rec.Header, Len);
+  FastSetStrRec(Rec.Header, Len, -1);
   result := @Rec.TextLo;
   if P <> nil then
     PInt64(result)^ := PInt64(P)^; // up to 7 chars
@@ -10501,7 +10502,7 @@ begin
   {$ifdef FPC}
   e.q[0] := GetTickCount64;         // always available in FPC RTL
   {$else}
-  PDouble(@e)^ := Now;              // good enough as fallback
+  PDouble(@e)^ := Now;              // good enough as Delphi POSIX  fallback
   {$endif FPC}
   crc256c(@e, SizeOf(e.q[0]), e.b); // weak but not void
 end; // mormot.core.os.posix.inc overrides to use OS API - but not /dev/urandom
@@ -10514,8 +10515,8 @@ begin
   _Fill256FromOs(tmp);              // fast 256-bit entropy from OS APIs
   XorMemory(e.r[0], tmp.l);
   XorMemory(e.r[1], tmp.h);
-  e.r[2].L := e.r[2].L xor PtrUInt(@tmp) xor tmp.d3;
-  e.r[2].H := e.r[2].H xor tmp.d2 xor PtrUInt(
+  e.r[2].L := e.r[2].L xor PtrUInt(@tmp) xor tmp.d3; // stack address
+  e.r[2].H := e.r[2].H xor tmp.d2 xor PtrUInt(       // thread ID
     {$ifdef POSIXDELPHI} MainThreadID {$else} GetCurrentThreadId {$endif});
   {$ifdef ASMINTEL}
   if cfTSC in CpuFeatures then      // may trigger GPF if CR4.TSD bit is set
@@ -10524,7 +10525,7 @@ begin
   if cfTSC in CpuFeatures then
     e.r[2].L := e.r[2].L xor Rdtsc; // has changed during slow RdRand32()
   {$else}
-  {$ifdef FPC} e.r[2].L := e.r[2].L xor GetTickCount64; {$endif FPC}
+  {$ifdef FPC} e.r[2].L := e.r[2].L xor sysutils.GetTickCount64; {$endif FPC}
   {$endif ASMINTEL}
   crcblock(@e.r[3], @tmp.l);        // crc32c 128-bit diffusion
 end; // note: RTL Random() not used because it is not thread-safe nor consistent
@@ -11211,7 +11212,7 @@ begin
     if p1 <> nil then
       if p2 <> nil then
       begin
-        result := p1[0] - p2[0]; // compare first char for quicksort
+        result := p1[0] - p2[0]; // compare first char for QuickSort
         if result <> 0 then
           exit;
         l1 := PStrLen(PtrUInt(p1) - _STRLEN)^;
@@ -14346,7 +14347,7 @@ begin
   // initialize CPU-specific asm
   TestCpuFeatures;
   {$ifndef ASMINTELNOTPIC}
-  if BaseEntropy.i0 = 0 then // BSD or MAC arm/aarch64
+  if BaseEntropy.i0 = 0 then // may happen on BSD or MAC arm/aarch64
     XorEntropy(BaseEntropy); // ensure not void
   {$endif ASMINTELNOTPIC}
 end;

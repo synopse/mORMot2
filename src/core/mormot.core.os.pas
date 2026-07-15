@@ -233,7 +233,7 @@ const
   HTML_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + HTML_CONTENT_TYPE;
 
   /// MIME content type used for UTF-8 encoded XML
-  XML_CONTENT_TYPE = 'text/xml';
+  XML_CONTENT_TYPE = 'application/xml; charset=utf-8';
 
   /// HTTP header for MIME content type used for UTF-8 encoded XML
   XML_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE + XML_CONTENT_TYPE;
@@ -333,6 +333,7 @@ const // some time conversion constants with Milli/Micro/NanoSec resolution
   MilliSecsPerDate     = 1 / MilliSecsPerDay;
   MicroSecsPerMilliSec = 1000;
   MicroSecsPerSec      = MicroSecsPerMilliSec * MilliSecsPerSec;
+  MicroSecsPerDay      = QWord(MicroSecsPerSec) * SecsPerDay;
   NanoSecsPerMicroSec  = 1000;
   NanoSecsPerMilliSec  = NanoSecsPerMicroSec  * MicroSecsPerMilliSec;
   NanoSecsPerSec       = NanoSecsPerMilliSec  * MilliSecsPerSec;
@@ -1586,7 +1587,7 @@ type
     // - the very same executable on the very same computer run by the very
     // same user on the same OS should always have the same Hash value
     // - is computed from the crc32c of this TExecutable fields: c0 from
-    // Version32, CpuFeatures and Host, c1 from User, c2 from ProgramFullSpec
+    // Version32 + CpuFeatures + Host, c1 from User, c2 from ProgramFullSpec
     // and c3 from InstanceFileName
     // - may be used as an entropy seed, or to identify a process execution
     Hash: THash128Rec;
@@ -1863,7 +1864,7 @@ type
   /// the text fields stored by GetSmbios/DecodeSmbios functions
   TSmbiosBasicInfos = array[TSmbiosBasicInfo] of RawUtf8;
 
-/// check if a string value should be ignored when parsed e.g. from SMBIOS fields
+/// check if string matches 'Default string' when parsed e.g. from SMBIOS fields
 function IsDefaultString(p: pointer; l: PtrInt): boolean;
 
 /// decode basic SMBIOS information as text from a TRawSmbiosInfo binary blob
@@ -1953,6 +1954,22 @@ type
     wrCurrentUser,
     wrLocalMachine,
     wrUsers);
+  /// the known Windows Registry entry types, matching REG_* constant order
+  TWinRegistryKind = (
+    wrkNone,
+    wrkString,
+    wrkExpandString,
+    wrkBinary,
+    wrkDWord,
+    wrkDWordBE,
+    wrkLink,
+    wrkMultiString,
+    wrkResList,
+    wrkResDesc,
+    wrkResReq,
+    wrkQWord);
+  PWinRegistryKind = ^TWinRegistryKind;
+  TWinRegistryKinds = set of TWinRegistryKind;
 
   /// direct access to the Windows Registry
   // - could be used as alternative to TRegistry, which doesn't behave the same on
@@ -1967,34 +1984,51 @@ type
     /// the opened HKEY handle
     key: HKEY;
     /// start low-level read access to a Windows Registry node
-    // - on success (returned true), Close method should be eventually called
+    // - on success (returned true), Close method should be eventually called or
+    // you can set closefirst = true on a consecutive ReadOpen() call
     function ReadOpen(root: TWinRegistryRoot; const keyname: RawUtf8;
-      closefirst: boolean = false): boolean;
+      closefirst: boolean = false): boolean; overload;
+    /// start low-level read access to a Windows Registry node
+    // - overloaded to ReadOpen() allowing Join() keynames concatenation
+    function ReadOpen(root: TWinRegistryRoot; const keynames: array of RawByteString;
+      closefirst: boolean = false): boolean; overload;
     /// finalize low-level read access to the Windows Registry after ReadOpen()
     procedure Close;
     /// read a UTF-8 string from the Windows Registry after ReadOpen()
     // - in respect to Delphi's TRegistry, will properly handle REG_MULTI_SZ
-    // (return the first value of the multi-list) - use ReadData to retrieve
-    // all REG_MULTI_SZ values as one blob
-    // - we don't use string here since it would induce a dependency to
-    // mormot.core.unicode and UTF-8 is needed on Delphi 7/2007
-    function ReadString(const entry: SynUnicode; andtrim: boolean = true): RawUtf8;
+    // (return the first value of the multi-list) - use ReadData() to retrieve
+    // all REG_MULTI_SZ values as one blob or ReadStrings() as RawUtf8 array
+    function ReadString(entry: PWideChar; andtrim: boolean = true): RawUtf8;
+    /// read a UTF-8 string from the Windows Registry after ReadOpen()
+    // - alternative to ReadString() allowing the key name as UTF-8
+    function ReadStringU(const entry: RawUtf8; andtrim: boolean = true): RawUtf8;
+    /// read one or several UTF-8 string from the Windows Registry after ReadOpen()
+    // - will properly decode REG_MULTI_SZ values, but also plain REG_SZ
+    function ReadStrings(entry: PWideChar; andtrim: boolean = true): TRawUtf8DynArray;
     /// read a Windows Registry content after ReadOpen()
     // - works with any kind of key, but was designed for REG_BINARY
-    function ReadData(const entry: SynUnicode): RawByteString;
+    function ReadData(entry: PWideChar): RawByteString;
     /// read a Windows Registry 32-bit REG_DWORD value after ReadOpen()
-    function ReadDword(const entry: SynUnicode): cardinal;
+    function ReadDword(entry: PWideChar): cardinal;
     /// read a Windows Registry 64-bit REG_QWORD value after ReadOpen()
-    function ReadQword(const entry: SynUnicode): QWord;
+    function ReadQword(entry: PWideChar): QWord;
     /// read a Windows Registry content as binary buffer after ReadOpen()
     // - just a wrapper around RegQueryValueExW() API call
-    function ReadBuffer(const entry: SynUnicode; data: pointer; datalen: DWord): boolean;
+    function ReadBuffer(entry: PWideChar; data: pointer; datalen: DWord;
+      kind: PWinRegistryKind = nil): boolean;
+    /// read a Windows Registry content as binary buffer after ReadOpen()
+    // - return true and allocate and fill data.buf/len - caller should make data.Done
+    function ReadTempBuffer(entry: PWideChar; var data: TSynTempBuffer;
+      allowed: TWinRegistryKinds = []; kind: PWinRegistryKind = nil): boolean;
+    /// read a Windows Registry content as binary buffer after ReadOpen()
+    // - alternative to ReadBuffer() allowing the key name as UTF-8
+    function ReadBufferU(const entry: RawUtf8; data: pointer; datalen: DWord): boolean;
     /// read a Windows Registry content as length-specified buffer after ReadOpen()
     // - returns the number of bytes written to Data
-    function ReadMax(const entry: SynUnicode; data: pointer; maxdatalen: DWord): DWord;
+    function ReadMax(entry: PWideChar; data: pointer; maxdatalen: DWord): DWord;
     /// retrieve a Windows Registry content size as binary bytes after ReadOpen()
     // - returns -1 if the entry is not found
-    function ReadSize(const entry: SynUnicode): integer;
+    function ReadSize(entry: PWideChar; kind: PWinRegistryKind = nil): integer;
     /// enumeration of all sub-entries names of a Windows Registry key
     function ReadEnumEntries: TRawUtf8DynArray;
   end;
@@ -2026,6 +2060,8 @@ function DelayedProc(var api; var lib: THandle;
   libname: PChar; procname: PAnsiChar): boolean;
 
 const
+  wrkStrings = [wrkString, wrkExpandString, wrkMultiString];
+
   /// Windows file APIs have hardcoded MAX_PATH = 260 :(
   // - but more than 260 chars are possible with the \\?\..... prefix
   // or by disabling the limitation in registry since Windows 10, version 1607
@@ -2481,11 +2517,6 @@ type
   /// handle for Slim Reader/Writer (SRW) locks in exclusive mode
   TOSLightMutex = pointer;
 
-/// a wrapper calling SystemTimeToTzSpecificLocalTime Windows API
-// - note: FileTimeToLocalFileTime is not to be involved here
-// - only used by mormot.lib.static for proper SQLite3 linking on Windows
-procedure UnixTimeToLocalTime(I64: TUnixTime; out Local: TSystemTime);
-
 /// detect if a file name starts with the long path '\\?\' prefix
 // - https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
 function IsExtendedPathName(const Name: TFileName): boolean;
@@ -2689,6 +2720,7 @@ procedure GetSystemTime(out result: TSystemTime);
 // - under Linux/POSIX, calls clock_gettime(CLOCK_REALTIME_COARSE) if available
 // or fpgettimeofday() on Darwin/MacOS, with FPC RTL TZSeconds adjustment (so
 // will be fixed for the whole process lifetime and won't change at daylight)
+// - see UnixTimeToLocal() to convert any existing but non-current timestamp
 // - warning: do not call this function directly, but rather mormot.core.datetime
 // TSynSystemTime.FromNowLocal cross-platform method instead
 procedure GetLocalTime(out result: TSystemTime);
@@ -2980,6 +3012,7 @@ const
 // accurate after a time shift during the process execution - but any
 // long-running process (like a service) should use UTC timestamps only
 // - on Delphi POSIX, System.DateUtils TTimeZone is used
+// - see rather UtcToLocal/LocalToUtc() and UnixTimeToLocal() functions
 var
   TimeZoneLocalBias: integer;
 
@@ -3140,6 +3173,24 @@ function FileSetDateFromUnixUtc(const Dest: TFileName; Time: TUnixTime): boolean
 // - returns 0 if the conversion failed
 // - used e.g. by FileSetDateFromWindowsTime() on POSIX
 function WindowsFileTimeToDateTime(WinTime: integer): TDateTime;
+
+/// convert an Unix Epoch UTC seconds into Local time as TSystemTime from the OS
+// - calls e.g. the efficient SystemTimeToTzSpecificLocalTime() API on Windows
+procedure UnixTimeToLocal(I64: TUnixTime; out Local: TSystemTime); overload;
+
+/// convert an Unix Epoch UTC seconds into a local TDateTime
+function UnixTimeToLocal(I64: TUnixTime): TDateTime; overload;
+
+/// convert a local TDateTime into an Unix Epoch UTC seconds
+function LocalToUnixTime(local: TDateTime): TUnixTime;
+
+/// convert an UTC TDateTime into a local TDateTime using the current OS time zone
+// - similar to FPC UniversalTimeToLocal() function
+function UtcToLocal(utc: TDateTime): TDateTime; overload;
+
+/// convert a local TDateTime into an UTC TDateTime using the current OS time zone
+// - similar to FPC LocalTimeToUniversal() function
+function LocalToUtc(local: TDateTime): TDateTime; overload;
 
 /// convert an Unix seconds time to a Win32 64-bit FILETIME value
 procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);
@@ -4130,8 +4181,8 @@ procedure LoadProcFileTrimed(fn: PAnsiChar; var result: RawUtf8); overload;
 /// low-level function returning some random binary from the Operating System
 // - Windows version calling the CryptGenRandom API is in mormot.core.os.security
 // - on POSIX, only up to 256 bytes (2048-bits) are retrieved from /dev/urandom
-// or /dev/random as stated by "man urandom" Usage - then padded with our shared
-// gsl_rng_taus2 "L'Ecuyer" random generator
+// or /dev/random (or Linux getrandom syscall) as stated by "man urandom" Usage -
+// then padded with our shared gsl_rng_taus2 "L'Ecuyer" random generator
 // - so you may consider that the output Buffer is always filled with random
 // - you should not have to call this low-level procedure, but faster and safer
 // TAesPrng from mormot.crypt.core - also consider the TSystemPrng class
@@ -5424,7 +5475,7 @@ procedure GlobalUnLock;
 
 /// framework will register here some instances to be released eventually
 // - better in this root unit than in each finalization section
-// - its use is protected by the GlobalLock
+// - its use is protected by the GlobalLock so you could also use it
 function RegisterGlobalShutdownRelease(Instance: TObject;
   SearchExisting: boolean = false): pointer;
 
@@ -9450,9 +9501,13 @@ begin
     Command.Parse;
   end;
   AfterExecutableInfoChanged; // set Executable.ProgramFullSpec+Hash
-  // finalize SystemEntropy.Startup and setup SharedRandom instance
+  // finalize SystemEntropy and setup SharedRandom instance
   rnd := @SystemEntropy.Startup;
   crcblocks(rnd, @BaseEntropy, SizeOf(BaseEntropy) shr 4); // cpuid+rdrand+rdtsc
+  {$ifndef CPUINTEL}
+  if SystemEntropy.LiveFeed.c0 = 0 then // may happen on BSD and MAC ARM
+    SystemEntropy.LiveFeed.c := rnd^;   // put something here
+  {$endif CPUINTEL}
   PBlock128(@SharedRandom.Generator)^ := rnd^;
   SharedRandom.Generator.SeedGenerator; // we have enough entropy yet
   crcblock(rnd, @Executable.Hash);
@@ -10529,7 +10584,7 @@ begin // single pass efficient decoding
             len := StrLen(s);
             if (len <> 0) and
                (info[sbiOem] = '') and // keep only the first
-               not IsDefaultString(s, len) then
+               not IsDefaultString(s, len) then // skip 'Default string'
               FastSetString(info[sbiOem], s, len);
             s := @s[len + 1]; // next string
           until s[0] = 0;

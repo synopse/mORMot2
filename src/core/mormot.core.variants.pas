@@ -1482,6 +1482,7 @@ type
     /// compare a TTDocVariantData object property with a given text value
     function CompareText(const aName, aValue: RawUtf8;
       aCaseInsensitive: boolean = false): integer;
+      {$ifdef HASSAFEINLINE}inline;{$endif}
     /// low-level method called internally to reserve place for new values
     // - returns the index of the newly created item in Values[]/Names[] arrays
     // - you should not have to use it, unless you want to add some items
@@ -1607,10 +1608,9 @@ type
     /// save a document into a TStrings list of encoded JSON
     procedure ToStrings(Dest: TStrings; ClearDest: boolean = false);
     /// save a document as an CSV of UTF-8 encoded JSON
-    // - will expect the document to be a dvArray - otherwise, will raise a
-    // EDocVariant exception
-    // - will use VariantToUtf8() to populate the result array: as a consequence,
-    // any nested custom variant types (e.g. TDocVariant) will be stored as JSON
+    // - a dvArray document would return the CSV of VariantToUtf8(Values[]), so
+    // nested TDocVariant would be stored as JSON in the result
+    // - a dvObject document would return the CSV of its Names[]
     function ToCsv(const Separator: RawUtf8 = ','): RawUtf8;
     /// save a document as UTF-8 encoded Name=Value pairs
     // - will follow by default the .INI format, but you can specify your
@@ -10102,8 +10102,16 @@ function TDocVariantData.ToCsv(const Separator: RawUtf8): RawUtf8;
 var
   tmp: TRawUtf8DynArray; // fast enough in practice
 begin
-  ToRawUtf8DynArray(tmp);
-  RawUtf8ArrayToCsvVar(tmp, result, Separator);
+  FastAssignNew(result);
+  if (cardinal(VType) = DocVariantVType) and
+     (VCount <> 0) then
+    if Has(dvoIsArray) then
+    begin
+      ToRawUtf8DynArray(tmp);
+      RawUtf8ArrayToCsvVar(tmp, result, Separator);
+    end
+    else if Has(dvoIsObject) then
+      PRawUtf8ToCsv(pointer(Names), VCount, Separator, {rev=}false, result);
 end;
 
 procedure TDocVariantData.ToTextPairsVar(out Result: RawUtf8;

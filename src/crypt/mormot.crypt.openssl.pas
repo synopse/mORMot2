@@ -3824,7 +3824,7 @@ begin
   CryptStoreOpenSsl := TCryptStoreAlgoOpenSsl.Implements(['x509-store']);
   // OpenSSL is slower than our SSE2 mormot.crypt.other.pas RawSCrypt() :)
   {$ifndef ASMSSE2}
-  if OpenSslVersion >= OPENSSL3_VERNUM then // OpenSSL 1.1 has only macros
+  if OpenSslVersion >= OPENSSL3_VERNUM then // OpenSSL 1.1 use macros for SCrypt
     SCrypt := @OpenSslSCrypt;
   {$endif ASMSSE2}
   // we can use OpenSSL for StuffExeCertificate() stuffed certificate generation

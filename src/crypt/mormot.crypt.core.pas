@@ -1716,6 +1716,7 @@ type
     // is cryptographic secure - probably pointless for a 32-bit value
     // - returns a value in range 0 <= Random32(max) < max
     function Random32(max: cardinal): cardinal; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// returns a 64-bit unsigned random number
     function Random64: QWord;
     /// returns a floating-point random number in range [0..1]
@@ -1953,8 +1954,8 @@ var
   HasOpenSsl: boolean;
 
 /// low-level TKS1 anti-forensic diffusion of a memory buffer using SHA-256
+// - shuffle in-place buf[size] using rnd[size] as reference material
 // - as used by TAesPrng.AFSplit and TAesPrng.AFUnSplit
-// - could also be used to expand some PRNG output into any size
 procedure AFDiffusion(buf, rnd: pointer; size: cardinal);
 
 /// get 128-bit of unpredictable random, suitable for Initialization Vectors
@@ -7335,7 +7336,7 @@ begin
   begin
     sha.UpdateBigEndian(i); // host byte order independent (as in TKS1/LUKS)
     sha.Update(buf, SizeOf(dig));
-    sha.Final(PSha256Digest(buf)^);
+    sha.Final(PSha256Digest(buf)^); // shuffle each 32-byte block via SHA-256
     inc(PSha256Digest(buf));
   end;
   dec(size, last * SizeOf(dig));
@@ -7344,7 +7345,7 @@ begin
   sha.UpdateBigEndian(last);
   sha.Update(buf, size);
   sha.Final(dig);
-  MoveFast(dig, buf^, size);
+  MoveFast(dig, buf^, size); // shuffle trailing 1..31 bytes
 end;
 
 
@@ -7518,7 +7519,7 @@ function TAesPrngAbstract.AFSplit(const Buffer;
   BufferBytes, StripesCount: integer): RawByteString;
 var
   dst: pointer;
-  tmp: TByteDynArray;
+  tmp: TBytes;
   i: integer;
 begin
   FastAssignNew(result);
@@ -7530,11 +7531,12 @@ begin
   SetLength(tmp, BufferBytes); // filled with zeros
   for i := 1 to StripesCount do
   begin
-    FillRandom(dst, BufferBytes);
-    AFDiffusion(pointer(tmp), dst, BufferBytes);
+    FillRandom(dst, BufferBytes);                // each stripe is random
+    AFDiffusion(pointer(tmp), dst, BufferBytes); // TKS1 SHA-256 accumulation
     inc(PByte(dst), BufferBytes);
   end;
-  XorMemory(dst, @Buffer, pointer(tmp), BufferBytes);
+  XorMemory(dst, @Buffer, pointer(tmp), BufferBytes); // to final stripe
+  FillZero(tmp);
 end;
 
 function TAesPrngAbstract.AFSplit(const Buffer: RawByteString;
@@ -7548,7 +7550,7 @@ class function TAesPrngAbstract.AFUnsplit(const Split: RawByteString;
 var
   len, unsplit, i: cardinal;
   src: pointer;
-  tmp: TByteDynArray;
+  tmp: TBytes;
 begin
   len := length(Split);
   unsplit := len div cardinal(BufferBytes);
@@ -7557,13 +7559,14 @@ begin
   if not result then
     exit;
   src := pointer(Split);
-  SetLength(tmp, BufferBytes);
+  SetLength(tmp, BufferBytes); // // filled with zeros
   for i := 2 to unsplit do
   begin
-    AFDiffusion(pointer(tmp), src, BufferBytes);
-    inc(PByte(src), BufferBytes);
+    AFDiffusion(pointer(tmp), src, BufferBytes); // TKS1 SHA-256 accumulation
+    inc(PByte(src), BufferBytes);                // next stripe
   end;
-  XorMemory(@Buffer, src, pointer(tmp), BufferBytes);
+  XorMemory(@Buffer, src, pointer(tmp), BufferBytes); // from final stripe
+  FillZero(tmp);
 end;
 
 class function TAesPrngAbstract.AFUnsplit(const Split: RawByteString;
@@ -7732,6 +7735,7 @@ begin
       fAes.Done;                                  // anti-forensic + set IV = 0
       fAes.EncryptInit(key, fAesKeySize);         // from PBKDF2-SHA-256 output
       TAesContext(fAes).iv.L := PQWord(entropy)^; // keep CTR = zero
+      fBytesSinceSeed := 0;                       // reset counter for next Seed
       fSeeding := false;
     finally
       fSafe.UnLock;
@@ -7843,7 +7847,7 @@ end;
 { TSystemPrng }
 
 procedure TSystemPrng.FillRandom(Buffer: pointer; Len: PtrInt);
-begin
+begin // call mormot.core.os[.security] function
   inc(fTotalBytes, Len);
   FillSystemRandom(Buffer, Len, {allowblocking=}false);
 end;

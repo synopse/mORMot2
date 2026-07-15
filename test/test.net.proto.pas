@@ -339,6 +339,8 @@ begin
         //oa.Options := oa.Options + [opoGenerateOldDelphiCompatible];
         //oa.Options := oa.Options + [opoClientOnlySummary];
         //oa.Options := oa.Options + [opoDtoNoDescription, opoClientNoDescription];
+        //oa.Options := oa.Options + [opoDtoNoReduce];
+        //oa.Options := oa.Options + [opoDtoReduceNamed];
         oa.ParseJson(api[i]);
         // ensure there was something properly parsed
         Check(oa.Version <> oavUnknown, 'version');

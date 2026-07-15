@@ -1894,15 +1894,21 @@ type
 
   {$A+}
 
-  /// handle cross-platform time conversions, following Microsoft time zones
+  /// handle cross-platform time conversions, following Microsoft zones naming
   // - is able to retrieve accurate information from the Windows registry,
   // or from a binary compressed file on other platforms (which should have been
-  // saved from a Windows system first)
+  // saved from a Windows system first) using uniform and user-friendly naming
+  // of time zones, as defined by Microsoft for Windows
+  // - consider mormot.core.os.pas LocalToUtc/UtcToLocal() functions for regular
+  // conversions within the current Operating System time zone - this class is
+  // more likely to be used on Web/REST server side, or to bypass the system
+  // regional settings for an end-user application
+  // - the information stored in this class seems more complete and accurate
+  // than the one used by FPC TZInfo for instance (e.g. no per-year definition)
   // - for Linux/POSIX our mORMot 2 repository supplies a ready-to-use
   // ! {$R mormot.tz.res}
-  // - each time zone will be identified by its TzId string, as defined by
-  // Microsoft for its Windows Operating system
-  // - note that each instance is thread-safe
+  // - note that could have several instances, which are thread-safe by design,
+  // but you are likely to need to call only TSynTimeZone.Default in practice
   TSynTimeZone = class(TObjectRWLightLock)
   protected
     fZone: TTimeZoneDataDynArray;
@@ -1926,7 +1932,8 @@ type
     destructor Destroy; override;
     /// will retrieve the default shared TSynTimeZone instance
     // - on Windows, will call LoadFromRegistry
-    // - under Linux, try first with LoadFromResource, then LoadFromFile do should be located with the executable,
+    // - under Linux, try first with LoadFromResource, then LoadFromFile with
+    // a local ExecutableName.tz file
     // - see also the NowToLocal/LocalToUtc/UtcToLocal global functions
     class function Default: TSynTimeZone;
       {$ifdef HASINLINE} static; inline; {$endif}
@@ -2026,21 +2033,18 @@ function GetDisplay(const TzId: TTimeZoneID): RawUtf8;
 
 /// compute the UTC date/time corrected for a given TzId
 // - will use a global shared thread-safe TSynTimeZone instance for the request
-function UtcToLocal(const UtcDateTime: TDateTime; const TzId: TTimeZoneID): TDateTime;
-  {$ifdef HASINLINE} inline; {$endif}
+function UtcToLocal(const Utc: TDateTime; const TzId: TTimeZoneID): TDateTime; overload;
 
 /// compute the current date/time corrected for a given TzId
 // - will use a global shared thread-safe TSynTimeZone instance for the request
 function NowToLocal(const TzId: TTimeZoneID): TDateTime;
-  {$ifdef HASINLINE} inline; {$endif}
 
 /// compute the UTC date/time for a given local TzId value
 // - by definition, a local time may correspond to two UTC times, during the
 // time bias period, so the returned value is informative only, and any
 // stored value should be following UTC
 // - will use a global shared thread-safe TSynTimeZone instance for the request
-function LocalToUtc(const LocalDateTime: TDateTime; const TzID: TTimeZoneID): TDateTime;
-  {$ifdef HASINLINE} inline; {$endif}
+function LocalToUtc(const Local: TDateTime; const TzID: TTimeZoneID): TDateTime; overload;
 
 
 implementation
@@ -3057,7 +3061,7 @@ var
   names: TRawUtf8DynArray;
   n, r, i: PtrInt;
   d: PFindFiles;
-  ts, tolocal: TUnixMSTime;
+  ts: TUnixMSTime;
   da: TDynArray;
 begin
   result := nil;
@@ -3072,7 +3076,6 @@ begin
   // compute TFindFilesDynArray from names[]
   if not (ffoExcludesDir in Options) then
     dir := '';
-  tolocal := TimeZoneLocalBias * 60000; // local TSearchRec: use TZSeconds * 60
   SetLength(result, n);
   r := 0;
   d := pointer(result);
@@ -3085,7 +3088,7 @@ begin
     {$endif UNICODE}
     if FileInfoByName(dir + d^.Name, d^.Size, ts, @d^.Attr) then // = fpStat()
     begin
-      d^.Timestamp := UnixMSTimeToDateTime(ts + tolocal);
+      d^.Timestamp := UnixTimeToLocal(ts div MSecsPerSec);
       inc(d); // will leave d^.Attr = 0
       inc(r);
     end;
@@ -7847,7 +7850,7 @@ begin
     n := length(keys);
     fZones.Capacity := n;
     for i := 0 to n - 1 do
-      if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i], {reopen=}true) then
+      if reg.ReadOpen(wrLocalMachine, [REGKEY, keys[i]], {reopen=}true) then
       begin
         z.Clear;
         z.id := keys[i]; // registry keys are genuine by definition
@@ -7857,7 +7860,7 @@ begin
            (current <> '') and
            (reg.ReadString('Std') = current) then
           fCurrentIndex := fZoneCount;
-        if reg.ReadOpen(wrLocalMachine, REGKEY + keys[i] + '\Dynamic DST', true) then
+        if reg.ReadOpen(wrLocalMachine, [REGKEY, keys[i], '\Dynamic DST'], true) then
         begin
           // warning: never defined on XP/2003, and not for all entries
           first := reg.ReadDword('FirstEntry');
@@ -7868,8 +7871,8 @@ begin
             n := 0;
             SetLength(z.dyn, last - first + 1);
             for year := first to last do
-              if reg.ReadBuffer(Utf8ToSynUnicode(UInt32ToUtf8(year)),
-                @z.dyn[n].tzi, SizeOf(TTimeZoneInfo)) then
+              if reg.ReadBufferU(
+                   UInt32ToUtf8(year), @z.dyn[n].tzi, SizeOf(TTimeZoneInfo)) then
               begin
                 z.dyn[n].year := year;
                 inc(n);
@@ -7922,7 +7925,7 @@ begin
   info.TimeZone.DaylightBias := z^.tzi.bias_dlt;
   Utf8ToWideChar(@info.TimeZoneKeyName, pointer(z^.id), 128, length(z^.id), true);
   // retrieve additional information from the registry
-  if not reg.ReadOpen(wrLocalMachine, REGKEY + z^.id) then
+  if not reg.ReadOpen(wrLocalMachine, [REGKEY, z^.id]) then
     ESynException.RaiseUtf8('%.ChangeOperatingSystemTimeZone: missing % key',
       [self, z^.id]); // paranoid
   try // direct copy of the UTF-16 buffer from registry
@@ -7966,7 +7969,7 @@ begin
   result := false;
   if TzId = '' then
     exit;
-  result := IsNotVoidUtc(TzId);
+  result := IsNotVoidUtc(TzId); // 'UTC' could directly return Bias=0
   if result then
     exit;
   // use the internal hash table
@@ -8046,7 +8049,7 @@ begin
     result := LocalDateTime
   else
   begin
-    GetBiasForDateTime(LocalDateTime, TzID, Bias, HaveDaylight);
+    GetBiasForDateTime(LocalDateTime, TzID, Bias, HaveDaylight, {fromutc=}false);
     result := ((LocalDateTime * MinsPerDay) + Bias) / MinsPerDay;
   end;
 end;
@@ -8106,9 +8109,9 @@ begin
   result := TSynTimeZone.Default.GetDisplay(TzId);
 end;
 
-function UtcToLocal(const UtcDateTime: TDateTime; const TzId: TTimeZoneID): TDateTime;
+function UtcToLocal(const Utc: TDateTime; const TzId: TTimeZoneID): TDateTime;
 begin
-  result := TSynTimeZone.Default.UtcToLocal(UtcDateTime, TzId);
+  result := TSynTimeZone.Default.UtcToLocal(Utc, TzId);
 end;
 
 function NowToLocal(const TzId: TTimeZoneID): TDateTime;
@@ -8116,9 +8119,9 @@ begin
   result := TSynTimeZone.Default.NowToLocal(TzId);
 end;
 
-function LocalToUtc(const LocalDateTime: TDateTime; const TzID: TTimeZoneID): TDateTime;
+function LocalToUtc(const Local: TDateTime; const TzID: TTimeZoneID): TDateTime;
 begin
-  result := TSynTimeZone.Default.LocalToUtc(LocalDateTime, TzId);
+  result := TSynTimeZone.Default.LocalToUtc(Local, TzId);
 end;
 
 
