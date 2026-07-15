@@ -2043,6 +2043,8 @@ type
     function Get32: cardinal; overload; virtual;
     /// retrieve a random 32-bit value
     function Get32(max: cardinal): cardinal; overload;
+    /// returns a 64-bit unsigned random number
+    function Get64: QWord; virtual;
     /// retrieve a random floating point value in the [0..1) range calling Get32
     function GetDouble: double;
   end;
@@ -8157,6 +8159,14 @@ end;
 function TCryptRandom.Get32(max: cardinal): cardinal;
 begin
   result := (QWord(Get32) * max) shr 32;
+end;
+
+function TCryptRandom.Get64: QWord;
+var
+  n: QWord; // safer with a local variable
+begin
+  Get(@n, SizeOf(n));
+  result := n;
 end;
 
 function TCryptRandom.GetDouble: double;
