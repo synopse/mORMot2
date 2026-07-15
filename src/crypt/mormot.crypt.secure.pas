@@ -10,6 +10,7 @@ unit mormot.crypt.secure;
     - Password-Safe and TSynConnectionDefinition Classes
     - Reusable Authentication Classes
     - High-Level TSynSigner/TSynHasher Multi-Algorithm Wrappers
+    - HMAC/PBKDF2 MCF SCRAM SCRAM-MCF High-Level Protocols
     - Client and Server HTTP Access Authentication
     - 64-bit TSynUniqueIdentifier and its efficient Generator
     - IProtocol Safe Communication with Unilateral or Mutual Authentication
@@ -784,7 +785,7 @@ const
     TStreamRedirectSha256_128,  // hfSHA256_128
     TStreamRedirectSha256_160); // hfSHA256_160
 
-  /// the standard text of a THashAlgo (in uppercase characters)
+  /// the NIST/FIPS standard text of a THashAlgo (in uppercase characters)
   HASH_TXT: array[THashAlgo] of RawUtf8 = (
     'MD5', 'SHA-1', 'SHA-256', 'SHA-384', 'SHA-512', 'SHA-512/256',
     'SHA3-256', 'SHA3-512', 'SHA-224', 'SHA3-224', 'SHA3-384',
@@ -846,10 +847,14 @@ type
 const
   SIGN_SIZE: array[TSignAlgo] of byte = (
     20, 32, 48, 64, 28, 32, 48, 64, 32, 64, 28);
-  /// the standard text of a TSignAlgo
+  /// the NIST/FIPS standard text of a TSignAlgo
   SIGNER_TXT: array[TSignAlgo] of RawUtf8 = (
-    'SHA-1',    'SHA-256',  'SHA-384',  'SHA-512', 'SHA3-224', 'SHA3-256',
+    'SHA-1',    'SHA-256',  'SHA-384',  'SHA-512',  'SHA3-224', 'SHA3-256',
     'SHA3-384', 'SHA3-512', 'SHAKE128', 'SHAKE256', 'SHA-224');
+  /// alternative TSignAlgo identifiers as used at API level (e.g. OpenSSL)
+  SIGNER_NAME: array[TSignAlgo] of RawUtf8 = (
+    'SHA1',     'SHA256',   'SHA384',   'SHA512',   'SHA3-224', 'SHA3-256',
+    'SHA3-384', 'SHA3-512', 'SHAKE128', 'SHAKE256', 'SHA224');
   SIGNER_SHA3 = [saSha3224 .. saSha3S256];
   SIGNER_DEFAULT_SALT = 'I6sWioAidNnhXO9BK';
   SIGNER_DEFAULT_ALGO = saSha3S128;
@@ -983,7 +988,6 @@ type
 
   /// reference to a TSynSigner wrapper object
   PSynSigner = ^TSynSigner;
-
 
 const
   /// map the size in bytes (16..64) of any THashAlgo digest
@@ -1143,6 +1147,65 @@ function HashFileSha3_256(const FileName: TFileName): RawUtf8;
 // - this function maps the THashFile signature as defined in mormot.core.buffers
 function HashFileSha3_512(const FileName: TFileName): RawUtf8;
 
+
+{ **************** HMAC/PBKDF2 MCF SCRAM SCRAM-MCF TOTP High-Level Protocols }
+
+{ some HMAC/PBKDF2 common wrappers defined here to redirect to TSynSigner }
+
+/// compute the HMAC message authentication code using any hash function
+procedure Hmac(algo: TSignAlgo; key, msg: pointer; keylen, msglen: integer;
+  result: PHash512Rec);
+
+/// compute the PBKDF2 derivation of a password using HMAC over any hash function
+function Pbkdf2(algo: TSignAlgo; const password, salt: RawByteString;
+  count: integer; digest: PHash512Rec): integer; overload;
+
+/// compute the PBKDF2 derivation of a password using HMAC over any hash function
+// - this overloaded function will return any size of the derived password
+function Pbkdf2(algo: TSignAlgo; const password, salt: RawByteString;
+  count, destlen: integer): RawByteString; overload;
+
+/// compute the HMAC message authentication code using SHA-1 as hash function
+procedure HmacSha1(const key, msg: RawByteString;
+  out result: TSha1Digest); overload;
+
+/// compute the HMAC message authentication code using SHA-1 as hash function
+procedure HmacSha1(const key: TSha1Digest; const msg: RawByteString;
+  out result: TSha1Digest); overload;
+
+/// compute the PBKDF2 derivation of a password using HMAC over SHA-1
+// - this function expect the resulting key length to match SHA-1 digest size
+procedure Pbkdf2HmacSha1(const password, salt: RawByteString;
+  count: integer; out result: TSha1Digest);
+
+/// compute the HMAC message authentication code using SHA-384 as hash function
+procedure HmacSha384(const key, msg: RawByteString;
+  out result: TSha384Digest); overload;
+
+/// compute the HMAC message authentication code using SHA-384 as hash function
+procedure HmacSha384(const key: TSha384Digest; const msg: RawByteString;
+  out result: TSha384Digest); overload;
+
+/// compute the PBKDF2 derivation of a password using HMAC over SHA-384
+// - this function expect the resulting key length to match SHA-384 digest size
+procedure Pbkdf2HmacSha384(const password, salt: RawByteString;
+  count: integer; out result: TSha384Digest);
+
+/// compute the HMAC message authentication code using SHA-512 as hash function
+procedure HmacSha512(const key, msg: RawByteString;
+  out result: TSha512Digest); overload;
+
+/// compute the HMAC message authentication code using SHA-512 as hash function
+procedure HmacSha512(const key: TSha512Digest; const msg: RawByteString;
+  out result: TSha512Digest); overload;
+
+/// compute the PBKDF2 derivation of a password using HMAC over SHA-512
+// - this function expect the resulting key length to match SHA-512 digest size
+procedure Pbkdf2HmacSha512(const password, salt: RawByteString;
+  count: integer; out result: TSha512Digest);
+
+{ Extended "Modular Crypt" support }
+
 const
   MCF_ALGO: array[TModularCryptFormat] of THashAlgo = (hfShake128, hfShake128,
     hfMD5, hfSHA256, hfSHA512, hfSHA1, hfSHA256, hfSHA512, hfSHA3_512,
@@ -1232,8 +1295,7 @@ function SCryptHash(const Password: RawUtf8; const Salt: RawUtf8 = '';
   LogN: PtrUInt = 16; BlockSize: PtrUInt = 8; Parallel: PtrUInt = 2;
   HashPos: PInteger = nil; Api: TSCriptRaw = nil): RawUtf8;
 
-
-{ Official SCRAM Client/Server mutual authentication }
+{ SCRAM Client/Server mutual authentication as defined in RFC 5802/7677 }
 
 type
   /// RFC 5802/7677 SCRAM client, as used e.g. by MongoDB
@@ -1309,61 +1371,6 @@ function ScramServerProof(const PersistedKey, ClientProof: RawUtf8;
 // to compute the URI secret)
 function ScramClientServerAuth(const Hash, User, ServerProof: RawUtf8;
   var ClientSignature: THash256): boolean;
-
-
-{ some HMAC/PBKDF2 common wrappers defined here to redirect to TSynSigner }
-
-/// compute the HMAC message authentication code using any hash function
-procedure Hmac(algo: TSignAlgo; key, msg: pointer; keylen, msglen: integer;
-  result: PHash512Rec);
-
-/// compute the PBKDF2 derivation of a password using HMAC over any hash function
-function Pbkdf2(algo: TSignAlgo; const password, salt: RawByteString;
-  count: integer; digest: PHash512Rec): integer; overload;
-
-/// compute the PBKDF2 derivation of a password using HMAC over any hash function
-// - this overloaded function will return any size of the derived password
-function Pbkdf2(algo: TSignAlgo; const password, salt: RawByteString;
-  count, destlen: integer): RawByteString; overload;
-
-/// compute the HMAC message authentication code using SHA-1 as hash function
-procedure HmacSha1(const key, msg: RawByteString;
-  out result: TSha1Digest); overload;
-
-/// compute the HMAC message authentication code using SHA-1 as hash function
-procedure HmacSha1(const key: TSha1Digest; const msg: RawByteString;
-  out result: TSha1Digest); overload;
-
-/// compute the PBKDF2 derivation of a password using HMAC over SHA-1
-// - this function expect the resulting key length to match SHA-1 digest size
-procedure Pbkdf2HmacSha1(const password, salt: RawByteString;
-  count: integer; out result: TSha1Digest);
-
-/// compute the HMAC message authentication code using SHA-384 as hash function
-procedure HmacSha384(const key, msg: RawByteString;
-  out result: TSha384Digest); overload;
-
-/// compute the HMAC message authentication code using SHA-384 as hash function
-procedure HmacSha384(const key: TSha384Digest; const msg: RawByteString;
-  out result: TSha384Digest); overload;
-
-/// compute the PBKDF2 derivation of a password using HMAC over SHA-384
-// - this function expect the resulting key length to match SHA-384 digest size
-procedure Pbkdf2HmacSha384(const password, salt: RawByteString;
-  count: integer; out result: TSha384Digest);
-
-/// compute the HMAC message authentication code using SHA-512 as hash function
-procedure HmacSha512(const key, msg: RawByteString;
-  out result: TSha512Digest); overload;
-
-/// compute the HMAC message authentication code using SHA-512 as hash function
-procedure HmacSha512(const key: TSha512Digest; const msg: RawByteString;
-  out result: TSha512Digest); overload;
-
-/// compute the PBKDF2 derivation of a password using HMAC over SHA-512
-// - this function expect the resulting key length to match SHA-512 digest size
-procedure Pbkdf2HmacSha512(const password, salt: RawByteString;
-  count: integer; out result: TSha512Digest);
 
 
 { **************** Client and Server HTTP Access Authentication }
@@ -4910,10 +4917,606 @@ begin
   result := HashFile(FileName, hfSHA3_512);
 end;
 
+
+{ TSynSigner }
+
+const
+  BLOCK_SIZE: array[TSignAlgo] of byte = (
+    15, 15, 31, 31, 0, 0, 0, 0, 0, 0, 15);
+
+procedure TSynSigner.Init(aAlgo: TSignAlgo; aSecret: pointer; aSecretLen: integer);
+var
+  k0: TBlock1024;
+  a: THashAlgo;
+begin
+  fAlgo := aAlgo;
+  a := SIGN_HASH[Algo];
+  fSignatureSize := SIGN_SIZE[fAlgo];
+  fBlockMax := BLOCK_SIZE[fAlgo]; // typically 15 (256-bit) or 31 (512-bit)
+  fBlockSize := (fBlockMax + 1) shl 2;
+  if fBlockMax = 0 then
+  begin // we estimate that the HMAC pattern is part of the SHA-3 sponge design
+    fHasher.Init(a);
+    fHasher.Update(aSecret, aSecretLen);
+    exit;
+  end;
+  FillCharFast(k0, fBlockSize, 0);
+  if aSecretLen > fBlockSize then
+    fHasher.Full(a, aSecret, aSecretLen, PHash512Rec(@k0)^)
+  else
+    MoveFast(aSecret^, k0, aSecretLen);
+  Xor32By128(@fStep7data, @k0, fBlockMax, $5c5c5c5c);
+  Xor32By128(@k0, @k0, fBlockMax, $36363636);
+  fHasher.Init(a);
+  fHasher.Update(@k0, fBlockSize);
+  FillCharFast(k0, fBlockSize, 0);
+end;
+
+procedure TSynSigner.Init(aAlgo: TSignAlgo; const aSecret: RawUtf8);
+begin
+  Init(aAlgo, pointer(aSecret), length(aSecret));
+end;
+
+procedure TSynSigner.Init(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
+  aSecretPbkdf2Round: integer; aPbkdf2Secret: PHash512Rec);
+var
+  temp: THash512Rec;
+begin
+  if aSecretPbkdf2Round > 1 then
+  begin
+    FillZero(temp.b);
+    Pbkdf2(aAlgo, aSecret, aSalt, aSecretPbkdf2Round, @temp);
+    Init(aAlgo, @temp, fSignatureSize);
+    if aPbkdf2Secret <> nil then
+      aPbkdf2Secret^ := temp;
+    FillZero(temp.b);
+  end
+  else
+    Init(aAlgo, aSecret);
+end;
+
+procedure TSynSigner.Update(const aBuffer: RawByteString);
+begin
+  fHasher.Update(pointer(aBuffer), length(aBuffer));
+end;
+
+procedure TSynSigner.Update(aBuffer: pointer; aLen: integer);
+begin
+  fHasher.Update(aBuffer, aLen);
+end;
+
+procedure TSynSigner.UpdateBigEndian(aValue: cardinal);
+begin
+  fHasher.UpdateBigEndian(aValue);
+end;
+
+function TSynSigner.Final(aSignature: PHash512Rec; aNoInit: boolean): integer;
+begin
+  result := fHasher.Final(aSignature^);
+  if fBlockMax = 0 then
+    exit; // SHA-3 needs no HMAC
+  fHasher.Update(@fStep7data, fBlockSize);
+  fHasher.Update(aSignature, fSignatureSize);
+  fHasher.Final(aSignature^, aNoInit);
+  if not aNoInit then
+    FillCharFast(fStep7data, fBlockSize, 0);
+end;
+
+function TSynSigner.Final: RawUtf8;
+var
+  sig: THash512Rec;
+begin
+  Final(@sig);
+  result := BinToHexLower(@sig, fSignatureSize);
+end;
+
+function TSynSigner.Full(aAlgo: TSignAlgo; const aSecret: RawUtf8;
+  aBuffer: pointer; aLen: integer): RawUtf8;
+begin
+  Init(aAlgo, aSecret);
+  Update(aBuffer, aLen);
+  result := Final;
+end;
+
+function TSynSigner.Full(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
+  aSecretPbkdf2Round: integer; aBuffer: pointer; aLen: integer): RawUtf8;
+begin
+  Init(aAlgo, aSecret, aSalt, aSecretPbkdf2Round);
+  Update(aBuffer, aLen);
+  result := Final;
+end;
+
+function TSynSigner.Full(aAlgo: TSignAlgo; aSecret: pointer; aSecretLen: PtrInt;
+  const aMessage: RawByteString; aHmac: PHash512Rec): integer;
+begin
+  Init(aAlgo, aSecret, aSecretLen);
+  Update(aMessage);
+  result := Final(aHMac);
+end;
+
+function TSynSigner.Hash(aAlgo: TSignAlgo; aBuffer: pointer; aLen: integer;
+  out aDigest: THash512Rec): integer;
+begin
+  result := fHasher.Full(SIGN_HASH[aAlgo], aBuffer, aLen, aDigest);
+end;
+
+function TSynSigner.Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
+  aSecretPbkdf2Round: integer; aDerivatedKey: PHash512Rec; aPartNumber: integer): PtrInt;
+var
+  bak: TSynHasher;
+  tmp: THash512Rec;
+begin
+  Init(aAlgo, aSecret); // = PRF(secret)
+  dec(aSecretPbkdf2Round);
+  if aSecretPbkdf2Round <> 0 then
+    fHasher.CopyTo(bak); // save initial PRF(secret) state
+  Update(aSalt);
+  if not (fAlgo in SIGNER_SHA3) then // padding + XOF mode are part of SHA-3
+    // U1 = PRF(secret, salt + INT_32_BE(part))
+    UpdateBigEndian(aPartNumber);  // is a 1-based index
+  Final(aDerivatedKey, {noinit=}true);
+  if aSecretPbkdf2Round <> 0 then
+  begin
+    // F(secret, salt, c, i) = U1 ^ U2 ^ .. ^ Uc  with Uc = PRF(secret, Uc-1)
+    MoveFast(aDerivatedKey^, tmp, fSignatureSize);
+    repeat
+      MoveFast({%H-}bak.ctxt, fHasher.ctxt, HASH_INSTANCE[fHasher.fAlgo]); // restore
+      Update(@tmp, fSignatureSize);
+      Final(@tmp, {noinit=}true);
+      XorMemory(pointer(aDerivatedKey), @tmp, fSignatureSize);
+      dec(aSecretPbkdf2Round);
+    until aSecretPbkdf2Round = 0;
+    bak.Clear;
+    FillZero(tmp.b);
+  end;
+  Done;
+  result := fSignatureSize;
+end;
+
+procedure TSynSigner.Pbkdf2(const aParams: TSynSignerParams;
+  out aDerivatedKey: THash512Rec);
+begin
+  Pbkdf2(aParams.algo, aParams.secret, aParams.salt, aParams.rounds, @aDerivatedKey);
+end;
+
+procedure TSynSigner.Pbkdf2(aParamsJson: PUtf8Char; aParamsJsonLen: integer;
+  out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUtf8;
+  aDefaultAlgo: TSignAlgo);
+var
+  k: TSynSignerParams;
+  tmp: TSynTempBuffer;
+
+  procedure SetDefault;
+  begin
+    k.algo := aDefaultAlgo;
+    k.secret := '';
+    k.salt := aDefaultSalt;
+    k.rounds := 1000;
+  end;
+
+begin
+  SetDefault;
+  if (aParamsJson = nil) or
+     (aParamsJsonLen <= 0) then
+    k.secret := aDefaultSalt
+  else if GotoNextNotSpace(aParamsJson)^ <> '{' then
+    FastSetString(k.secret, aParamsJson, aParamsJsonLen)
+  else
+  begin
+    tmp.Init(aParamsJson, aParamsJsonLen);
+    try
+      if (RecordLoadJsonInPlace(k, tmp.buf, TypeInfo(TSynSignerParams)) = nil) or
+         (ord(k.algo) > ord(high(k.algo))) or
+         (k.secret = '') or
+         (k.salt = '') then
+      begin
+        SetDefault;
+        FastSetString(k.secret, aParamsJson, aParamsJsonLen);
+      end;
+    finally
+      FillCharFast(tmp.buf^, tmp.len, 0); // anti-forensic
+      tmp.Done;
+    end;
+  end;
+  Pbkdf2(k.algo, k.secret, k.salt, k.rounds, @aDerivatedKey);
+  FillZero(k.secret);
+end;
+
+procedure TSynSigner.Pbkdf2(const aParamsJson: RawUtf8;
+  out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUtf8;
+  aDefaultAlgo: TSignAlgo);
+begin
+  Pbkdf2(pointer(aParamsJson), length(aParamsJson),
+    aDerivatedKey, aDefaultSalt, aDefaultAlgo);
+end;
+
+function TSynSigner.Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
+  aSecretPbkdf2Round, aDestLen: PtrUInt): RawByteString;
+var
+  hlen, l, r, part: cardinal;
+  p: PHash512Rec;
+begin
+  // see https://www.rfc-editor.org/rfc/rfc2898#section-5.2
+  FastAssignNew(result);
+  if (aSecret = '') or
+     (aSecretPbkdf2Round = 0) or
+     (aSecretPbkdf2Round > 1 shl 20) or
+     (aDestLen = 0) or
+     (aDestLen > 1 shl 20) then
+    exit;
+  hlen := SIGN_SIZE[aAlgo];
+  l := aDestLen div hlen;
+  r := aDestLen - (l * hlen); // mod
+  if r <> 0 then
+    inc(l); // ceil()
+  if (aAlgo in SIGNER_SHA3) and
+     (l > 1) then
+    ESynCrypto.RaiseUtf8('TSynSigner.Pbkdf2(%) with DestLen=%: use SHAKE instead',
+      [ToText(aAlgo)^, aDestLen]);
+  // DK = T1 + T2 + .. + Tl with Ti = F(secret, salt, round, part)
+  p := FastNewString(l * hlen); // pre-allocate destination buffer
+  pointer(result) := p;
+  for part := 1 to l do
+  begin
+    Pbkdf2(aAlgo, aSecret, aSalt, aSecretPbkdf2Round, p, part);
+    inc(PByte(p), hlen); // just concatenate each Ti
+  end;
+  if r <> 0 then
+    FakeLength(result, aDestLen); // truncate to the expected destination size
+end;
+
 const
   MCF_IDENT: array[mcfMd5Crypt.. high(TModularCryptFormat)] of RawUtf8 = (
     '1', '5', '6', 'pbkdf2', 'pbkdf2-sha256', 'pbkdf2-sha512', 'pbkdf2-sha3',
     '2b', 'bcrypt-sha256', 'scrypt');
+  MCF_SIGN: array[mcfPbkdf2Sha1 .. mcfPbkdf2Sha3] of TSignAlgo = (
+    saSHA1, saSHA256, saSHA512, saSha3512);
+  HASH64_ENC: TChar64 = // the current encoding used by "$pbkdf2" passlib
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789./';
+var
+  HASH64_DEC: TAnsiCharDec;
+
+function TSynSigner.Pbkdf2ModularCrypt(aAlgo: TModularCryptFormat;
+  const aPassword: RawUtf8; aRounds, aSaltSize: cardinal;
+  const aSalt: RawUtf8; aHashPos: PInteger): RawUtf8;
+var
+  siz: PtrUInt;
+  bin, b64: RawByteString;
+  dig: THash512;
+begin
+  FastAssignNew(result);
+  if (aPassword = '') or
+     not (aAlgo in [low(MCF_SIGN) .. high(MCF_SIGN)]) then
+    exit;
+  if aRounds = 0 then
+    aRounds := MCF_ROUNDS[aAlgo] // use default of each algorithm
+  else if aRounds > MAX_PBKDF2_ROUNDS then
+    exit; // avoid naive DoS attacks
+  if aSaltSize = 0 then
+    aSaltSize := 16;
+  if HASH64_DEC[#255] = 0 then // check the last byte for thread-safe init
+    FillBaseDecoder(@HASH64_ENC, @HASH64_DEC);
+  if not TAesPrng.Main.RandomSalt(bin, b64, aSaltSize, aSalt, @HASH64_ENC, @HASH64_DEC) then
+    exit;
+  Make(['$', MCF_IDENT[aAlgo], '$', aRounds, '$', b64, '$'], result);
+  siz := Pbkdf2(MCF_SIGN[aAlgo], aPassword, bin, aRounds, @dig);
+  Base64uriEncode(b64append(result, siz, aHashPos), @dig, siz, @HASH64_ENC);
+  FillZero(bin);
+  FillZero(b64);
+end;
+
+function TSynSigner.KdfSP800(aAlgo: TSignAlgo; aDestLen: cardinal;
+  const aKey, aLabel, aContext: RawByteString): RawByteString;
+var
+  dig: PHash512Rec;
+  diglen, counter: cardinal;
+begin
+  FastAssignNew(result);
+  if (aKey = '') or
+     (aLabel = '') or
+     (aDestLen = 0) then
+    exit;
+  diglen := SIGN_SIZE[aAlgo];
+  dig := FastNewRawByteString(result, ((aDestLen div diglen) + 1) * diglen);
+  counter := 1;
+  repeat
+    Init(aAlgo, aKey);
+    // Ki = HMAC-SHA-###(key, i | label | 0 | context | bits)
+    UpdateBigEndian(counter);
+    Update(pointer(aLabel), length(aLabel) + 1); // include ending #0
+    Update(aContext);
+    UpdateBigEndian(aDestLen shl 3); // bits
+    Final(dig);
+    inc(PByte(dig), diglen);
+    inc(counter);
+  until PtrUInt(dig) - PtrUInt(result) >= aDestLen;
+  FakeLength(result, aDestLen); // k-truncate
+end;
+
+procedure TSynSigner.AssignTo(var aDerivatedKey: THash512Rec;
+  out aAes: TAes; aEncrypt: boolean);
+var
+  ks: integer;
+begin
+  case fAlgo of
+    saSha3S128:
+      ks := 128; // truncate to Keccak sponge precision
+    saSha3S256:
+      ks := 256;
+  else
+    case SignatureSize of
+      SizeOf(THash160): // e.g. SHA-1
+        begin
+          ks := 128;
+          aDerivatedKey.i0 := aDerivatedKey.i0 xor aDerivatedKey.i4;
+        end;
+      SizeOf(THash224):
+        ks := 192;
+      SizeOf(THash256):
+        ks := 256;
+      SizeOf(THash384):
+        begin
+          ks := 256;
+          aDerivatedKey.d0 := aDerivatedKey.d0 xor aDerivatedKey.d4;
+          aDerivatedKey.d1 := aDerivatedKey.d1 xor aDerivatedKey.d5;
+        end;
+      SizeOf(THash512):
+        begin
+          ks := 256;
+          aDerivatedKey.d0 := aDerivatedKey.d0 xor aDerivatedKey.d4;
+          aDerivatedKey.d1 := aDerivatedKey.d1 xor aDerivatedKey.d5;
+          aDerivatedKey.d2 := aDerivatedKey.d0 xor aDerivatedKey.d6;
+          aDerivatedKey.d3 := aDerivatedKey.d1 xor aDerivatedKey.d7;
+        end;
+    else
+      exit;
+    end;
+  end;
+  aAes.DoInit(aDerivatedKey, ks, aEncrypt);
+  FillZero(aDerivatedKey.b);
+end;
+
+procedure TSynSigner.Done;
+begin
+  FillCharFast(fHasher.ctxt, HASH_INSTANCE[fHasher.fAlgo], 0);
+  FillCharFast(fStep7data, fBlockSize, 0);
+end;
+
+
+function ToText(algo: TSignAlgo): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSignAlgo), ord(algo));
+end;
+
+function ToUtf8(algo: TSignAlgo): RawUtf8;
+begin
+  result := SIGNER_TXT[algo];
+end;
+
+function ToText(algo: THashAlgo): PShortString;
+begin
+  result := GetEnumName(TypeInfo(THashAlgo), ord(algo));
+end;
+
+function ToUtf8(algo: THashAlgo): RawUtf8;
+begin
+  result := HASH_TXT[algo];
+end;
+
+function ToText(algo: TCrc32Algo): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TCrc32Algo), ord(algo));
+end;
+
+function ToText(const Digest: THashDigest): RawUtf8;
+begin
+  if Digest.Algo <= high(THashAlgo) then // don't include the algorithm
+    BinToHexLower(PAnsiChar(@Digest.Bin), HASH_SIZE[Digest.Algo], result)
+  else
+    FastAssignNew(result);
+end;
+
+function ToText(fmt: TModularCryptFormat): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TModularCryptFormat), ord(fmt));
+end;
+
+function SanitizeAlgoName(P: PUtf8Char; L: PtrInt; var tmp: TShort15;
+  trimprefix: cardinal; onlyalphanum: boolean): boolean;
+begin
+  tmp[0] := #0;
+  result := false;
+  if (L < 3) or
+     (L > 20) then
+    exit;
+  if PWord(P)^ = trimprefix then
+    inc(P, 2); // recognize plain un-trimmed ToText() e.g. 'hfMD5'
+  repeat
+    case P^ of
+      #0:
+        break;
+      'A' .. 'Z', '0' .. '9', 'a' .. 'z':
+        AppendShortChar(P^, @tmp);
+      '_':
+        if not onlyalphanum then
+          AppendShortChar('_', @tmp);
+      '-', '/':
+        if not onlyalphanum then
+          if ((tmp[0] = #4) and // '.sha3-256' -> 'sha3_256'
+              (PCardinal(@tmp[1])^ and $ffdfdfdf = SHA_HI + ord('3') shl 24)) or
+             ((tmp[0] = #6) and // '.sha512-256' or '.sha256-160'
+              (PCardinal(@tmp[1])^ and $80dfdfdf = SHA_HI)) then
+            AppendShortChar('_', @tmp);
+    end;
+    inc(P);
+  until tmp[0] > #10;
+  result := tmp[0] in [#3 .. #10];
+end;
+
+function TextToSignAlgo(const Text: RawUtf8; out Algo: TSignAlgo): boolean;
+begin
+  result := TextToSignAlgo(pointer(Text), length(Text), Algo);
+end;
+
+function TextToSignAlgo(P: PUtf8Char; Len: PtrInt; out Algo: TSignAlgo): boolean;
+var
+  tmp: TShort15;
+  i: integer;
+begin
+  result := false;
+  if not SanitizeAlgoName(P, Len, tmp, ord('s') + ord('a') shl 8, true) then
+    exit;
+  i := GetEnumNameValueTrimmed(TypeInfo(TSignAlgo), @tmp[1], ord(tmp[0]));
+  if i >= 0 then
+    Algo := TSignAlgo(i)
+  else if IdemPropName(tmp, 'SHAKE128') then
+    Algo := saSha3S128
+  else if IdemPropName(tmp, 'SHAKE256') then
+    Algo := saSha3S256
+  else
+    exit;
+  result := true;
+end;
+
+function TextToHashAlgo(const Text: RawUtf8; out Algo: THashAlgo): boolean;
+begin
+  result := TextToHashAlgo(pointer(Text), length(Text), Algo);
+end;
+
+function TextToHashAlgo(P: PUtf8Char; Len: PtrInt; out Algo: THashAlgo): boolean;
+var
+  tmp: TShort15;
+  i: integer;
+begin
+  result := false;
+  if not SanitizeAlgoName(P, Len, tmp, ord('h') + ord('f') shl 8, false) then
+    exit;
+  i := GetEnumNameValueTrimmed(TypeInfo(THashAlgo), @tmp[1], ord(tmp[0]));
+  if i < 0 then
+    exit;
+  Algo := THashAlgo(i);
+  result := true;
+end;
+
+function HashDetect(const Hash: RawUtf8; out Digest: THashDigest): boolean;
+var
+  s: byte;
+  a: THashAlgo;
+begin
+  result := false;
+  FillCharFast(Digest, SizeOf(Digest), 0);
+  s := length(Hash) shr 1;
+  if (s >= SizeOf(TMd5Digest)) and
+     (s <= SizeOf(Digest.Bin)) then
+    for a := low(a) to high(a) do // would miss SHA-3 or SHA-512-256 for sure
+      if HASH_SIZE[a] = s then
+      begin
+        Digest.Algo := a;
+        result := mormot.core.text.HexToBin(pointer(Hash), @Digest.Bin, s);
+        break;
+      end;
+end;
+
+function HashDigestEqual(a, b: PPtrIntArray): boolean;
+begin
+  result := (a[0] = b[0]) and // compare first 4/8 bytes (much faster in loops)
+            (PHashAlgo(a)^ <= high(THashAlgo)) and // avoid buffer overflow
+     (MemCmp(@a[1], @b[1], HASH_SIZE[PHashAlgo(a)^] - (SizeOf(a[0]) - 1)) = 0);
+end;
+
+procedure FillZero(var Digest: THashDigest);
+begin
+  if Digest.Algo <= high(THashAlgo) then // avoid buffer overflow
+    FillZero(Digest.Bin, HASH_SIZE[Digest.Algo]);
+  Digest.Algo := low(Digest.Algo);
+end;
+
+
+{ **************** HMAC/PBKDF2 MCF SCRAM SCRAM-MCF TOTP High-Level Protocols}
+
+{ some HMAC/PBKDF2 common wrappers defined here to redirect to TSynSigner }
+
+procedure Hmac(algo: TSignAlgo; key, msg: pointer; keylen, msglen: integer;
+  result: PHash512Rec);
+var
+  signer: TSynSigner;
+begin
+  signer.Init(algo, key, keylen);
+  signer.Update(msg, msglen);
+  signer.Final(result);
+end;
+
+function Pbkdf2(algo: TSignAlgo; const password, salt: RawByteString;
+  count: integer; digest: PHash512Rec): integer;
+var
+  signer: TSynSigner;
+begin
+  result := signer.Pbkdf2(algo, password, salt, count, digest);
+end;
+
+function Pbkdf2(algo: TSignAlgo; const password, salt: RawByteString;
+  count, destlen: integer): RawByteString;
+var
+  signer: TSynSigner;
+begin
+  result := signer.Pbkdf2(algo, password, salt, count, destlen);
+end;
+
+procedure HmacSha1(const key, msg: RawByteString;
+  out result: TSha1Digest);
+begin
+  Hmac(saSha1, pointer(key), pointer(msg), length(key), length(msg), @result);
+end;
+
+procedure HmacSha1(const key: TSha1Digest; const msg: RawByteString;
+  out result: TSha1Digest);
+begin
+  Hmac(saSha1, @key, pointer(msg), SizeOf(key), length(msg), @result);
+end;
+
+procedure Pbkdf2HmacSha1(const password, salt: RawByteString;
+  count: integer; out result: TSha1Digest);
+begin
+  Pbkdf2(saSha1, password, salt, count, @result);
+end;
+
+procedure HmacSha384(const key, msg: RawByteString;
+  out result: TSha384Digest);
+begin
+  Hmac(saSha384, pointer(key), pointer(msg), length(key), length(msg), @result);
+end;
+
+procedure HmacSha384(const key: TSha384Digest; const msg: RawByteString;
+  out result: TSha384Digest);
+begin
+  Hmac(saSha384, @key, pointer(msg), SizeOf(key), length(msg), @result);
+end;
+
+procedure Pbkdf2HmacSha384(const password, salt: RawByteString;
+  count: integer; out result: TSha384Digest);
+begin
+  Pbkdf2(saSha384, password, salt, count, @result);
+end;
+
+procedure HmacSha512(const key, msg: RawByteString;
+  out result: TSha512Digest);
+begin
+  Hmac(saSha512, pointer(key), pointer(msg), length(key), length(msg), @result);
+end;
+
+procedure HmacSha512(const key: TSha512Digest; const msg: RawByteString;
+  out result: TSha512Digest);
+begin
+  Hmac(saSha512, @key, pointer(msg), SizeOf(key), length(msg), @result);
+end;
+
+procedure Pbkdf2HmacSha512(const password, salt: RawByteString;
+  count: integer; out result: TSha512Digest);
+begin
+  Pbkdf2(saSha512, password, salt, count, @result);
+end;
+
+{ Extended "Modular Crypt" support }
 
 function ModularCryptParse(var P: PUtf8Char; var rounds: cardinal;
   var salt: RawUtf8): TModularCryptFormat;
@@ -5478,597 +6081,6 @@ begin
       fLastError := 'invalid Server proof'
   else
     fLastError := 'invalid Server last response';
-end;
-
-
-{ TSynSigner }
-
-const
-  BLOCK_SIZE: array[TSignAlgo] of byte = (
-    15, 15, 31, 31, 0, 0, 0, 0, 0, 0, 15);
-
-procedure TSynSigner.Init(aAlgo: TSignAlgo; aSecret: pointer; aSecretLen: integer);
-var
-  k0: TBlock1024;
-  a: THashAlgo;
-begin
-  fAlgo := aAlgo;
-  a := SIGN_HASH[Algo];
-  fSignatureSize := SIGN_SIZE[fAlgo];
-  fBlockMax := BLOCK_SIZE[fAlgo]; // typically 15 (256-bit) or 31 (512-bit)
-  fBlockSize := (fBlockMax + 1) shl 2;
-  if fBlockMax = 0 then
-  begin // we estimate that the HMAC pattern is part of the SHA-3 sponge design
-    fHasher.Init(a);
-    fHasher.Update(aSecret, aSecretLen);
-    exit;
-  end;
-  FillCharFast(k0, fBlockSize, 0);
-  if aSecretLen > fBlockSize then
-    fHasher.Full(a, aSecret, aSecretLen, PHash512Rec(@k0)^)
-  else
-    MoveFast(aSecret^, k0, aSecretLen);
-  Xor32By128(@fStep7data, @k0, fBlockMax, $5c5c5c5c);
-  Xor32By128(@k0, @k0, fBlockMax, $36363636);
-  fHasher.Init(a);
-  fHasher.Update(@k0, fBlockSize);
-  FillCharFast(k0, fBlockSize, 0);
-end;
-
-procedure TSynSigner.Init(aAlgo: TSignAlgo; const aSecret: RawUtf8);
-begin
-  Init(aAlgo, pointer(aSecret), length(aSecret));
-end;
-
-procedure TSynSigner.Init(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-  aSecretPbkdf2Round: integer; aPbkdf2Secret: PHash512Rec);
-var
-  temp: THash512Rec;
-begin
-  if aSecretPbkdf2Round > 1 then
-  begin
-    FillZero(temp.b);
-    Pbkdf2(aAlgo, aSecret, aSalt, aSecretPbkdf2Round, @temp);
-    Init(aAlgo, @temp, fSignatureSize);
-    if aPbkdf2Secret <> nil then
-      aPbkdf2Secret^ := temp;
-    FillZero(temp.b);
-  end
-  else
-    Init(aAlgo, aSecret);
-end;
-
-procedure TSynSigner.Update(const aBuffer: RawByteString);
-begin
-  fHasher.Update(pointer(aBuffer), length(aBuffer));
-end;
-
-procedure TSynSigner.Update(aBuffer: pointer; aLen: integer);
-begin
-  fHasher.Update(aBuffer, aLen);
-end;
-
-procedure TSynSigner.UpdateBigEndian(aValue: cardinal);
-begin
-  fHasher.UpdateBigEndian(aValue);
-end;
-
-function TSynSigner.Final(aSignature: PHash512Rec; aNoInit: boolean): integer;
-begin
-  result := fHasher.Final(aSignature^);
-  if fBlockMax = 0 then
-    exit; // SHA-3 needs no HMAC
-  fHasher.Update(@fStep7data, fBlockSize);
-  fHasher.Update(aSignature, fSignatureSize);
-  fHasher.Final(aSignature^, aNoInit);
-  if not aNoInit then
-    FillCharFast(fStep7data, fBlockSize, 0);
-end;
-
-function TSynSigner.Final: RawUtf8;
-var
-  sig: THash512Rec;
-begin
-  Final(@sig);
-  result := BinToHexLower(@sig, fSignatureSize);
-end;
-
-function TSynSigner.Full(aAlgo: TSignAlgo; const aSecret: RawUtf8;
-  aBuffer: pointer; aLen: integer): RawUtf8;
-begin
-  Init(aAlgo, aSecret);
-  Update(aBuffer, aLen);
-  result := Final;
-end;
-
-function TSynSigner.Full(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-  aSecretPbkdf2Round: integer; aBuffer: pointer; aLen: integer): RawUtf8;
-begin
-  Init(aAlgo, aSecret, aSalt, aSecretPbkdf2Round);
-  Update(aBuffer, aLen);
-  result := Final;
-end;
-
-function TSynSigner.Full(aAlgo: TSignAlgo; aSecret: pointer; aSecretLen: PtrInt;
-  const aMessage: RawByteString; aHmac: PHash512Rec): integer;
-begin
-  Init(aAlgo, aSecret, aSecretLen);
-  Update(aMessage);
-  result := Final(aHMac);
-end;
-
-function TSynSigner.Hash(aAlgo: TSignAlgo; aBuffer: pointer; aLen: integer;
-  out aDigest: THash512Rec): integer;
-begin
-  result := fHasher.Full(SIGN_HASH[aAlgo], aBuffer, aLen, aDigest);
-end;
-
-function TSynSigner.Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-  aSecretPbkdf2Round: integer; aDerivatedKey: PHash512Rec; aPartNumber: integer): PtrInt;
-var
-  bak: TSynHasher;
-  tmp: THash512Rec;
-begin
-  Init(aAlgo, aSecret); // = PRF(secret)
-  dec(aSecretPbkdf2Round);
-  if aSecretPbkdf2Round <> 0 then
-    fHasher.CopyTo(bak); // save initial PRF(secret) state
-  Update(aSalt);
-  if not (fAlgo in SIGNER_SHA3) then // padding + XOF mode are part of SHA-3
-    // U1 = PRF(secret, salt + INT_32_BE(part))
-    UpdateBigEndian(aPartNumber);  // is a 1-based index
-  Final(aDerivatedKey, {noinit=}true);
-  if aSecretPbkdf2Round <> 0 then
-  begin
-    // F(secret, salt, c, i) = U1 ^ U2 ^ .. ^ Uc  with Uc = PRF(secret, Uc-1)
-    MoveFast(aDerivatedKey^, tmp, fSignatureSize);
-    repeat
-      MoveFast({%H-}bak.ctxt, fHasher.ctxt, HASH_INSTANCE[fHasher.fAlgo]); // restore
-      Update(@tmp, fSignatureSize);
-      Final(@tmp, {noinit=}true);
-      XorMemory(pointer(aDerivatedKey), @tmp, fSignatureSize);
-      dec(aSecretPbkdf2Round);
-    until aSecretPbkdf2Round = 0;
-    bak.Clear;
-    FillZero(tmp.b);
-  end;
-  Done;
-  result := fSignatureSize;
-end;
-
-procedure TSynSigner.Pbkdf2(const aParams: TSynSignerParams;
-  out aDerivatedKey: THash512Rec);
-begin
-  Pbkdf2(aParams.algo, aParams.secret, aParams.salt, aParams.rounds, @aDerivatedKey);
-end;
-
-procedure TSynSigner.Pbkdf2(aParamsJson: PUtf8Char; aParamsJsonLen: integer;
-  out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUtf8;
-  aDefaultAlgo: TSignAlgo);
-var
-  k: TSynSignerParams;
-  tmp: TSynTempBuffer;
-
-  procedure SetDefault;
-  begin
-    k.algo := aDefaultAlgo;
-    k.secret := '';
-    k.salt := aDefaultSalt;
-    k.rounds := 1000;
-  end;
-
-begin
-  SetDefault;
-  if (aParamsJson = nil) or
-     (aParamsJsonLen <= 0) then
-    k.secret := aDefaultSalt
-  else if GotoNextNotSpace(aParamsJson)^ <> '{' then
-    FastSetString(k.secret, aParamsJson, aParamsJsonLen)
-  else
-  begin
-    tmp.Init(aParamsJson, aParamsJsonLen);
-    try
-      if (RecordLoadJsonInPlace(k, tmp.buf, TypeInfo(TSynSignerParams)) = nil) or
-         (ord(k.algo) > ord(high(k.algo))) or
-         (k.secret = '') or
-         (k.salt = '') then
-      begin
-        SetDefault;
-        FastSetString(k.secret, aParamsJson, aParamsJsonLen);
-      end;
-    finally
-      FillCharFast(tmp.buf^, tmp.len, 0); // anti-forensic
-      tmp.Done;
-    end;
-  end;
-  Pbkdf2(k.algo, k.secret, k.salt, k.rounds, @aDerivatedKey);
-  FillZero(k.secret);
-end;
-
-procedure TSynSigner.Pbkdf2(const aParamsJson: RawUtf8;
-  out aDerivatedKey: THash512Rec; const aDefaultSalt: RawUtf8;
-  aDefaultAlgo: TSignAlgo);
-begin
-  Pbkdf2(pointer(aParamsJson), length(aParamsJson),
-    aDerivatedKey, aDefaultSalt, aDefaultAlgo);
-end;
-
-function TSynSigner.Pbkdf2(aAlgo: TSignAlgo; const aSecret, aSalt: RawUtf8;
-  aSecretPbkdf2Round, aDestLen: PtrUInt): RawByteString;
-var
-  hlen, l, r, part: cardinal;
-  p: PHash512Rec;
-begin
-  // see https://www.rfc-editor.org/rfc/rfc2898#section-5.2
-  FastAssignNew(result);
-  if (aSecret = '') or
-     (aSecretPbkdf2Round = 0) or
-     (aSecretPbkdf2Round > 1 shl 20) or
-     (aDestLen = 0) or
-     (aDestLen > 1 shl 20) then
-    exit;
-  hlen := SIGN_SIZE[aAlgo];
-  l := aDestLen div hlen;
-  r := aDestLen - (l * hlen); // mod
-  if r <> 0 then
-    inc(l); // ceil()
-  if (aAlgo in SIGNER_SHA3) and
-     (l > 1) then
-    ESynCrypto.RaiseUtf8('TSynSigner.Pbkdf2(%) with DestLen=%: use SHAKE instead',
-      [ToText(aAlgo)^, aDestLen]);
-  // DK = T1 + T2 + .. + Tl with Ti = F(secret, salt, round, part)
-  p := FastNewString(l * hlen); // pre-allocate destination buffer
-  pointer(result) := p;
-  for part := 1 to l do
-  begin
-    Pbkdf2(aAlgo, aSecret, aSalt, aSecretPbkdf2Round, p, part);
-    inc(PByte(p), hlen); // just concatenate each Ti
-  end;
-  if r <> 0 then
-    FakeLength(result, aDestLen); // truncate to the expected destination size
-end;
-
-const
-  MCF_SIGN: array[mcfPbkdf2Sha1 .. mcfPbkdf2Sha3] of TSignAlgo = (
-    saSHA1, saSHA256, saSHA512, saSha3512);
-  HASH64_ENC: TChar64 = // the current encoding used by "$pbkdf2" passlib
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789./';
-var
-  HASH64_DEC: TAnsiCharDec;
-
-function TSynSigner.Pbkdf2ModularCrypt(aAlgo: TModularCryptFormat;
-  const aPassword: RawUtf8; aRounds, aSaltSize: cardinal;
-  const aSalt: RawUtf8; aHashPos: PInteger): RawUtf8;
-var
-  siz: PtrUInt;
-  bin, b64: RawByteString;
-  dig: THash512;
-begin
-  FastAssignNew(result);
-  if (aPassword = '') or
-     not (aAlgo in [low(MCF_SIGN) .. high(MCF_SIGN)]) then
-    exit;
-  if aRounds = 0 then
-    aRounds := MCF_ROUNDS[aAlgo] // use default of each algorithm
-  else if aRounds > MAX_PBKDF2_ROUNDS then
-    exit; // avoid naive DoS attacks
-  if aSaltSize = 0 then
-    aSaltSize := 16;
-  if HASH64_DEC[#255] = 0 then // check the last byte for thread-safe init
-    FillBaseDecoder(@HASH64_ENC, @HASH64_DEC);
-  if not TAesPrng.Main.RandomSalt(bin, b64, aSaltSize, aSalt, @HASH64_ENC, @HASH64_DEC) then
-    exit;
-  Make(['$', MCF_IDENT[aAlgo], '$', aRounds, '$', b64, '$'], result);
-  siz := Pbkdf2(MCF_SIGN[aAlgo], aPassword, bin, aRounds, @dig);
-  Base64uriEncode(b64append(result, siz, aHashPos), @dig, siz, @HASH64_ENC);
-  FillZero(bin);
-  FillZero(b64);
-end;
-
-function TSynSigner.KdfSP800(aAlgo: TSignAlgo; aDestLen: cardinal;
-  const aKey, aLabel, aContext: RawByteString): RawByteString;
-var
-  dig: PHash512Rec;
-  diglen, counter: cardinal;
-begin
-  FastAssignNew(result);
-  if (aKey = '') or
-     (aLabel = '') or
-     (aDestLen = 0) then
-    exit;
-  diglen := SIGN_SIZE[aAlgo];
-  dig := FastNewRawByteString(result, ((aDestLen div diglen) + 1) * diglen);
-  counter := 1;
-  repeat
-    Init(aAlgo, aKey);
-    // Ki = HMAC-SHA-###(key, i | label | 0 | context | bits)
-    UpdateBigEndian(counter);
-    Update(pointer(aLabel), length(aLabel) + 1); // include ending #0
-    Update(aContext);
-    UpdateBigEndian(aDestLen shl 3); // bits
-    Final(dig);
-    inc(PByte(dig), diglen);
-    inc(counter);
-  until PtrUInt(dig) - PtrUInt(result) >= aDestLen;
-  FakeLength(result, aDestLen); // k-truncate
-end;
-
-procedure TSynSigner.AssignTo(var aDerivatedKey: THash512Rec;
-  out aAes: TAes; aEncrypt: boolean);
-var
-  ks: integer;
-begin
-  case fAlgo of
-    saSha3S128:
-      ks := 128; // truncate to Keccak sponge precision
-    saSha3S256:
-      ks := 256;
-  else
-    case SignatureSize of
-      SizeOf(THash160): // e.g. SHA-1
-        begin
-          ks := 128;
-          aDerivatedKey.i0 := aDerivatedKey.i0 xor aDerivatedKey.i4;
-        end;
-      SizeOf(THash224):
-        ks := 192;
-      SizeOf(THash256):
-        ks := 256;
-      SizeOf(THash384):
-        begin
-          ks := 256;
-          aDerivatedKey.d0 := aDerivatedKey.d0 xor aDerivatedKey.d4;
-          aDerivatedKey.d1 := aDerivatedKey.d1 xor aDerivatedKey.d5;
-        end;
-      SizeOf(THash512):
-        begin
-          ks := 256;
-          aDerivatedKey.d0 := aDerivatedKey.d0 xor aDerivatedKey.d4;
-          aDerivatedKey.d1 := aDerivatedKey.d1 xor aDerivatedKey.d5;
-          aDerivatedKey.d2 := aDerivatedKey.d0 xor aDerivatedKey.d6;
-          aDerivatedKey.d3 := aDerivatedKey.d1 xor aDerivatedKey.d7;
-        end;
-    else
-      exit;
-    end;
-  end;
-  aAes.DoInit(aDerivatedKey, ks, aEncrypt);
-  FillZero(aDerivatedKey.b);
-end;
-
-procedure TSynSigner.Done;
-begin
-  FillCharFast(fHasher.ctxt, HASH_INSTANCE[fHasher.fAlgo], 0);
-  FillCharFast(fStep7data, fBlockSize, 0);
-end;
-
-
-function ToText(algo: TSignAlgo): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TSignAlgo), ord(algo));
-end;
-
-function ToUtf8(algo: TSignAlgo): RawUtf8;
-begin
-  result := SIGNER_TXT[algo];
-end;
-
-function ToText(algo: THashAlgo): PShortString;
-begin
-  result := GetEnumName(TypeInfo(THashAlgo), ord(algo));
-end;
-
-function ToUtf8(algo: THashAlgo): RawUtf8;
-begin
-  result := HASH_TXT[algo];
-end;
-
-function ToText(algo: TCrc32Algo): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TCrc32Algo), ord(algo));
-end;
-
-function ToText(const Digest: THashDigest): RawUtf8;
-begin
-  if Digest.Algo <= high(THashAlgo) then // don't include the algorithm
-    BinToHexLower(PAnsiChar(@Digest.Bin), HASH_SIZE[Digest.Algo], result)
-  else
-    FastAssignNew(result);
-end;
-
-function ToText(fmt: TModularCryptFormat): PShortString; overload;
-begin
-  result := GetEnumName(TypeInfo(TModularCryptFormat), ord(fmt));
-end;
-
-function SanitizeAlgoName(P: PUtf8Char; L: PtrInt; var tmp: TShort15;
-  trimprefix: cardinal; onlyalphanum: boolean): boolean;
-begin
-  tmp[0] := #0;
-  result := false;
-  if (L < 3) or
-     (L > 20) then
-    exit;
-  if PWord(P)^ = trimprefix then
-    inc(P, 2); // recognize plain un-trimmed ToText() e.g. 'hfMD5'
-  repeat
-    case P^ of
-      #0:
-        break;
-      'A' .. 'Z', '0' .. '9', 'a' .. 'z':
-        AppendShortChar(P^, @tmp);
-      '_':
-        if not onlyalphanum then
-          AppendShortChar('_', @tmp);
-      '-', '/':
-        if not onlyalphanum then
-          if ((tmp[0] = #4) and // '.sha3-256' -> 'sha3_256'
-              (PCardinal(@tmp[1])^ and $ffdfdfdf = SHA_HI + ord('3') shl 24)) or
-             ((tmp[0] = #6) and // '.sha512-256' or '.sha256-160'
-              (PCardinal(@tmp[1])^ and $80dfdfdf = SHA_HI)) then
-            AppendShortChar('_', @tmp);
-    end;
-    inc(P);
-  until tmp[0] > #10;
-  result := tmp[0] in [#3 .. #10];
-end;
-
-function TextToSignAlgo(const Text: RawUtf8; out Algo: TSignAlgo): boolean;
-begin
-  result := TextToSignAlgo(pointer(Text), length(Text), Algo);
-end;
-
-function TextToSignAlgo(P: PUtf8Char; Len: PtrInt; out Algo: TSignAlgo): boolean;
-var
-  tmp: TShort15;
-  i: integer;
-begin
-  result := false;
-  if not SanitizeAlgoName(P, Len, tmp, ord('s') + ord('a') shl 8, true) then
-    exit;
-  i := GetEnumNameValueTrimmed(TypeInfo(TSignAlgo), @tmp[1], ord(tmp[0]));
-  if i >= 0 then
-    Algo := TSignAlgo(i)
-  else if IdemPropName(tmp, 'SHAKE128') then
-    Algo := saSha3S128
-  else if IdemPropName(tmp, 'SHAKE256') then
-    Algo := saSha3S256
-  else
-    exit;
-  result := true;
-end;
-
-function TextToHashAlgo(const Text: RawUtf8; out Algo: THashAlgo): boolean;
-begin
-  result := TextToHashAlgo(pointer(Text), length(Text), Algo);
-end;
-
-function TextToHashAlgo(P: PUtf8Char; Len: PtrInt; out Algo: THashAlgo): boolean;
-var
-  tmp: TShort15;
-  i: integer;
-begin
-  result := false;
-  if not SanitizeAlgoName(P, Len, tmp, ord('h') + ord('f') shl 8, false) then
-    exit;
-  i := GetEnumNameValueTrimmed(TypeInfo(THashAlgo), @tmp[1], ord(tmp[0]));
-  if i < 0 then
-    exit;
-  Algo := THashAlgo(i);
-  result := true;
-end;
-
-function HashDetect(const Hash: RawUtf8; out Digest: THashDigest): boolean;
-var
-  s: byte;
-  a: THashAlgo;
-begin
-  result := false;
-  FillCharFast(Digest, SizeOf(Digest), 0);
-  s := length(Hash) shr 1;
-  if (s >= SizeOf(TMd5Digest)) and
-     (s <= SizeOf(Digest.Bin)) then
-    for a := low(a) to high(a) do // would miss SHA-3 or SHA-512-256 for sure
-      if HASH_SIZE[a] = s then
-      begin
-        Digest.Algo := a;
-        result := mormot.core.text.HexToBin(pointer(Hash), @Digest.Bin, s);
-        break;
-      end;
-end;
-
-function HashDigestEqual(a, b: PPtrIntArray): boolean;
-begin
-  result := (a[0] = b[0]) and // compare first 4/8 bytes (much faster in loops)
-            (PHashAlgo(a)^ <= high(THashAlgo)) and // avoid buffer overflow
-     (MemCmp(@a[1], @b[1], HASH_SIZE[PHashAlgo(a)^] - (SizeOf(a[0]) - 1)) = 0);
-end;
-
-procedure FillZero(var Digest: THashDigest);
-begin
-  if Digest.Algo <= high(THashAlgo) then // avoid buffer overflow
-    FillZero(Digest.Bin, HASH_SIZE[Digest.Algo]);
-  Digest.Algo := low(Digest.Algo);
-end;
-
-procedure Hmac(algo: TSignAlgo; key, msg: pointer; keylen, msglen: integer;
-  result: PHash512Rec);
-var
-  signer: TSynSigner;
-begin
-  signer.Init(algo, key, keylen);
-  signer.Update(msg, msglen);
-  signer.Final(result);
-end;
-
-function Pbkdf2(algo: TSignAlgo; const password, salt: RawByteString;
-  count: integer; digest: PHash512Rec): integer;
-var
-  signer: TSynSigner;
-begin
-  result := signer.Pbkdf2(algo, password, salt, count, digest);
-end;
-
-function Pbkdf2(algo: TSignAlgo; const password, salt: RawByteString;
-  count, destlen: integer): RawByteString;
-var
-  signer: TSynSigner;
-begin
-  result := signer.Pbkdf2(algo, password, salt, count, destlen);
-end;
-
-procedure HmacSha1(const key, msg: RawByteString;
-  out result: TSha1Digest);
-begin
-  Hmac(saSha1, pointer(key), pointer(msg), length(key), length(msg), @result);
-end;
-
-procedure HmacSha1(const key: TSha1Digest; const msg: RawByteString;
-  out result: TSha1Digest);
-begin
-  Hmac(saSha1, @key, pointer(msg), SizeOf(key), length(msg), @result);
-end;
-
-procedure Pbkdf2HmacSha1(const password, salt: RawByteString;
-  count: integer; out result: TSha1Digest);
-begin
-  Pbkdf2(saSha1, password, salt, count, @result);
-end;
-
-procedure HmacSha384(const key, msg: RawByteString;
-  out result: TSha384Digest);
-begin
-  Hmac(saSha384, pointer(key), pointer(msg), length(key), length(msg), @result);
-end;
-
-procedure HmacSha384(const key: TSha384Digest; const msg: RawByteString;
-  out result: TSha384Digest);
-begin
-  Hmac(saSha384, @key, pointer(msg), SizeOf(key), length(msg), @result);
-end;
-
-procedure Pbkdf2HmacSha384(const password, salt: RawByteString;
-  count: integer; out result: TSha384Digest);
-begin
-  Pbkdf2(saSha384, password, salt, count, @result);
-end;
-
-procedure HmacSha512(const key, msg: RawByteString;
-  out result: TSha512Digest);
-begin
-  Hmac(saSha512, pointer(key), pointer(msg), length(key), length(msg), @result);
-end;
-
-procedure HmacSha512(const key: TSha512Digest; const msg: RawByteString;
-  out result: TSha512Digest);
-begin
-  Hmac(saSha512, @key, pointer(msg), SizeOf(key), length(msg), @result);
-end;
-
-procedure Pbkdf2HmacSha512(const password, salt: RawByteString;
-  count: integer; out result: TSha512Digest);
-begin
-  Pbkdf2(saSha512, password, salt, count, @result);
 end;
 
 
