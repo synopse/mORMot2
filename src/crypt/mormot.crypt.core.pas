@@ -7501,20 +7501,9 @@ end;
 function TAesPrngAbstract.RandomPassword(Len: integer): SpiUtf8;
 begin
   repeat
-    result := FillRandom(Len);
-    haspunct := false;
-    P := pointer(result);
-    for i := 1 to Len do
-    begin
-      P^ := CHARS[ord(P^) and 127];
-      if not haspunct and
-         not (ord(P^) in [ord('A')..ord('Z'), ord('a')..ord('z'), ord('0')..ord('9')]) then
-        haspunct := true;
-      inc(P);
-    end;
-  until (Len <= 4) or
-        (haspunct and
-         (LowerCase(result) <> result));
+    FillZero(result);
+    FillRandom(FastSetString(RawUtf8(result), Len), Len);
+  until MakeStrongPassword(result);
 end;
 
 function TAesPrngAbstract.RandomSalt(var bin, b64: RawByteString;
