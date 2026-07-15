@@ -259,6 +259,8 @@ procedure TTestCoreCrypto._SHA1;
     CheckEqual(s, '4b007901b765489abead49d926f721d065a429c1');
   end;
 
+const
+  sec = '12345678901234567890';
 begin
   DoTest;
   {$ifdef ASMX64NOTPIC}
@@ -284,6 +286,16 @@ begin
   OpenSslTest(hfSHA1, '', '', 'fbdb1d1b18aa6c08324b7d64b71fb76370690e1d');
   OpenSslTest(hfSHA1, 'The quick brown fox jumps over the lazy dog', 'key',
     'de7c9b85b8b78aa6bc8a7a36f70a90701c9db4d9');
+  // RFC 6238 Appendix B - SHA1
+  CheckEqual(TotpGenerate(sec, 8, saSha1, true,          59 div 30), '94287082');
+  CheckEqual(TotpGenerate(sec, 8, saSha1, true,  1111111109 div 30), '07081804');
+  CheckEqual(TotpGenerate(sec, 8, saSha1, true,  1111111111 div 30), '14050471');
+  CheckEqual(TotpGenerate(sec, 8, saSha1, true,  1234567890 div 30), '89005924');
+  CheckEqual(TotpGenerate(sec, 8, saSha1, true,  2000000000 div 30), '69279037');
+  CheckEqual(TotpGenerate(sec, 8, saSha1, true, 20000000000 div 30), '65353130');
+  CheckEqual(TotpGenerate(sec, 6, saSha1, true,          59 div 30), '287082');
+  CheckEqual(TotpGenerate(sec, 6, saSha1, true,  1111111109 div 30), '081804');
+  CheckEqual(TotpGenerate(sec, 6, saSha1, true,  1111111111 div 30), '050471');
 end;
 
 procedure TTestCoreCrypto._SHA256;
@@ -373,6 +385,8 @@ procedure TTestCoreCrypto._SHA256;
     OpenSslTest(hfSha224, 'The quick brown fox jumps over the lazy dog.', s);
   end;
 
+const
+  sec = '12345678901234567890123456789012';
 begin
   DoTest;
   {$ifdef ASMX64NOTPIC}
@@ -412,6 +426,15 @@ begin
   Kdf(saSha256, '3705D96080C17728A0E800EAB6E0D23C',
    '9FDA0E56AB2D85E1569A688696C26A6C',
    'Kc128', HexToBin('0000000255'));
+  // RFC 6238 Appendix B - SHA256
+  CheckEqual(TotpGenerate(sec, 8, saSha256, true,          59 div 30), '46119246');
+  CheckEqual(TotpGenerate(sec, 8, saSha256, true,  1111111109 div 30), '68084774');
+  CheckEqual(TotpGenerate(sec, 8, saSha256, true,  1111111111 div 30), '67062674');
+  CheckEqual(TotpGenerate(sec, 8, saSha256, true,  1234567890 div 30), '91819424');
+  CheckEqual(TotpGenerate(sec, 8, saSha256, true,  2000000000 div 30), '90698825');
+  CheckEqual(TotpGenerate(sec, 8, saSha256, true, 20000000000 div 30), '77737706');
+  CheckEqual(TotpGenerate(sec, 6, saSha256, true,          59 div 30), '119246');
+  CheckEqual(TotpGenerate(sec, 4, saSha256, true,  1111111109 div 30), '4774');
 end;
 
 procedure TTestCoreCrypto._RC4;
@@ -556,7 +579,7 @@ procedure TTestCoreCrypto._SHA512;
     i: PtrInt;
     sha: TSha512;
     c: AnsiChar;
-    temp: RawByteString;
+    temp, sec, pin: RawByteString;
   begin
     // includes SHA-384 and SHA-512/256, which are truncated SHA-512
     CheckEqual(SHA384(''),
@@ -651,6 +674,8 @@ procedure TTestCoreCrypto._SHA512;
     }
   end;
 
+const
+  sec = '1234567890123456789012345678901234567890123456789012345678901234';
 begin
   DoTest;
   {$ifdef ASMX86NOTPIC}
@@ -692,6 +717,15 @@ begin
   Kdf(saSha384, '6D404D37FAF79F9DF0D33568D320669800EB4836472EA8A026D16B7182460C52',
    '69B16514E3CD8E56B82010D5C73012B622C4D00FFC23ED1F',
    'Ki256', HexToBin('0000000255'));
+  // RFC 6238 Appendix B - SHA512
+  CheckEqual(TotpGenerate(sec, 8, saSha512, true,          59 div 30), '90693936');
+  CheckEqual(TotpGenerate(sec, 8, saSha512, true,  1111111109 div 30), '25091201');
+  CheckEqual(TotpGenerate(sec, 8, saSha512, true,  1111111111 div 30), '99943326');
+  CheckEqual(TotpGenerate(sec, 8, saSha512, true,  1234567890 div 30), '93441116');
+  CheckEqual(TotpGenerate(sec, 8, saSha512, true,  2000000000 div 30), '38618901');
+  CheckEqual(TotpGenerate(sec, 8, saSha512, true, 20000000000 div 30), '47863826');
+  CheckEqual(TotpGenerate(sec, 6, saSha512, true,          59 div 30), '693936');
+  CheckEqual(TotpGenerate(sec, 4, saSha512, true,  1111111109 div 30), '1201');
 end;
 
 procedure TTestCoreCrypto._SHA3;
@@ -1875,11 +1909,11 @@ const
 
 var
   buf: RawByteString;
-  u, pw, nfo, nfo2, exp, db, proof, mech: RawUtf8;
+  u, pw, nfo, nfo2, exp, db, proof, mech, sec, pin: RawUtf8;
   iv: Int64;
   P: PAnsiChar;
   unalign: PtrInt;
-  n, rnd: integer;
+  n, rnd, dig: integer;
   i64: Int64;
   logN, blocksize, parallel, r,
   exp321, exp322, exp323, exp324, exp325, exp326: cardinal;
@@ -2295,6 +2329,47 @@ begin
   finally
     sc.Free;
   end;
+  // validate multi-algorithm TOTP
+  for s := saSha1 to saSha512 do
+    for dig := 4 to 8 do
+    begin
+      sec := TotpGenerateSecret(16 + dig);
+      Check(sec <> '', 'TotpGenerateSecret');
+      pin := TotpGenerate(sec, dig, s);
+      Check(pin <> '', 'TotpGenerate');
+      CheckEqual(length(pin), dig);
+      Check(TotpValidate(sec, pin, 1, s), 'TotpValidate with current time');
+      Check(TotpValidate(Base32ToBin(sec), pin, 1, s, -1, true), 'Totp bin');
+      Check(TotpValidate(sec, pin, 0, s, 123) =
+            (TotpGenerate(sec, dig, s, false, 123) = pin),
+            'TotpValidate with time=123');
+      CheckEqual(TotpGenerate('', 6, s), '', 'no sec');
+      CheckEqual(TotpGenerate(sec, 3, s), '', 'dig=3<4');
+      CheckEqual(TotpGenerate(sec, 9, s), '', 'dig=9>8');
+      Check(not TotpValidate(sec, '', 1, s));
+      Check(not TotpValidate(sec, '123', 1, s));
+      Check(not TotpValidate(sec, '123456789', 1, s));
+    end;
+  CheckEqual(TotpUrl('Google', 'alice@google.com', 'JBSWY3DPEHPK3PXP'),
+    'otpauth://totp/Google:alice%40google.com?secret=JBSWY3DPEHPK3PXP&issuer=' +
+    'Google&digits=6&period=30');
+  CheckEqual(TotpUrl('GitHub', 'bob', 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ======'),
+    'otpauth://totp/GitHub:bob?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=' +
+    'GitHub&digits=6&period=30');
+  CheckEqual(TotpUrl('Example', 'user', 'ABCDEF123456', 6, saSha256),
+    'otpauth://totp/Example:user?secret=ABCDEF123456&issuer=Example&digits=6&' +
+    'period=30&algorithm=SHA256');
+  CheckEqual(TotpUrl('MyService', 'john.doe', '1234567890', 8, saSha512),
+    'otpauth://totp/MyService:john.doe?secret=1234567890&issuer=MyService&' +
+    'digits=8&period=30&algorithm=SHA512');
+  CheckEqual(TotpUrl('Company & Co', 'user+test@domain.com', 'TESTSECRET1234'),
+    'otpauth://totp/Company%20%26%20Co:user%2Btest%40domain.com?' +
+    'secret=TESTSECRET1234&issuer=Company%20%26%20Co&digits=6&period=30');
+  CheckEqual(TotpUrl('Test', 'simple', 'GEZDGNBVGY3TQOJQ'),
+    'otpauth://totp/Test:simple?secret=GEZDGNBVGY3TQOJQ&issuer=Test&' +
+    'digits=6&period=30');
+  CheckEqual(TotpUrl('A', 'B', 'C'),
+    'otpauth://totp/A:B?secret=C&issuer=A&digits=6&period=30');
   // reference vectors from https://en.wikipedia.org/wiki/Mask_generation_function
   buf := 'foo';
   CheckEqualHex(hasher.Mgf1(hfSHA1, pointer(buf), length(buf), 3), '1ac907');
@@ -2307,6 +2382,7 @@ begin
   CheckEqualHex(hasher.Mgf1(hfSHA256, pointer(buf), length(buf), 50),
     '382576a7841021cc28fc4c0948753fb8312090cea942ea4c4e73' +
     '5d10dc724b155f9f6069f289d61daca0cb814502ef04eae1');
+  // validate some OpenSSL specific functions
   {$ifdef USE_OPENSSL}
   if OpenSslIsAvailable then
   begin
