@@ -848,12 +848,12 @@ type
 const
   SIGN_SIZE: array[TSignAlgo] of byte = (
     20, 32, 48, 64, 28, 32, 48, 64, 32, 64, 28);
-  /// the NIST/FIPS standard text of a TSignAlgo
+  /// the NIST/FIPS standard text of each TSignAlgo
   SIGNER_TXT: array[TSignAlgo] of RawUtf8 = (
     'SHA-1',    'SHA-256',  'SHA-384',  'SHA-512',  'SHA3-224', 'SHA3-256',
     'SHA3-384', 'SHA3-512', 'SHAKE128', 'SHAKE256', 'SHA-224');
   /// alternative TSignAlgo identifiers as used at API level (e.g. OpenSSL)
-  SIGNER_NAME: array[TSignAlgo] of RawUtf8 = (
+  SIGNER_API: array[TSignAlgo] of RawUtf8 = (
     'SHA1',     'SHA256',   'SHA384',   'SHA512',   'SHA3-224', 'SHA3-256',
     'SHA3-384', 'SHA3-512', 'SHAKE128', 'SHAKE256', 'SHA224');
   SIGNER_SHA3 = [saSha3224 .. saSha3S256];
@@ -6216,7 +6216,7 @@ begin
   FormatUtf8('otpauth://totp/%:%?secret=%&issuer=%&digits=%&period=%',
     [iss, acc, Split(b32secret, '='), iss, digits, period], result);
   if algo <> saSha1 then
-    Append(result, '&algorithm=', SIGNER_NAME[algo]);
+    Append(result, '&algorithm=', SIGNER_API[algo]);
 end;
 
 
@@ -8162,6 +8162,7 @@ end;
 
 procedure TCryptRandom.Get(var dst: RawByteString; len: PtrInt);
 begin
+  FillZero(dst);
   Get(FastNewRawByteString(dst, len), len);
 end;
 
@@ -8203,7 +8204,6 @@ end;
 function TCryptRandom.GetPassword(len: PtrInt): SpiUtf8;
 begin
   repeat
-    FillZero(result);
     Get(RawByteString(result), Len);
   until MakeStrongPassword(result);
 end;
