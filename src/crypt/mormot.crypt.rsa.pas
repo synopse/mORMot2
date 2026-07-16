@@ -3302,7 +3302,7 @@ begin
   bits := ModulusBits - 1;
   len := (bits + 7) shr 3; // could be one less than ModulusLen
   // RFC 8017 9.1.1 encoding operation with saltlen = hashlen
-  SharedRandom.Fill(@salt, hlen); // TLecuyer is good enough for public salt
+  TAesPrng.Main.Fill(@salt, hlen); // public salt requires unpredictable CSPRNG
   RsaPssComputeSaltedHash(Hash, @salt, HashAlgo, hlen, h);
   pslen := len - (hlen * 2 + 2);
   if pslen < 0 then
