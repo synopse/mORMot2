@@ -3574,6 +3574,15 @@ begin
   reg.Close;
 end;
 
+function ReadRegDWord(Root: TWinRegistryRoot; Path, Value: PWideChar): cardinal;
+var
+  reg: TWinRegistry;
+begin
+  reg.ReadOpenValue(Root, Path);
+  result := reg.ReadDword(Value); // return 0 if not found
+  reg.Close;
+end;
+
 function SearchSmbios(const mem: RawByteString; var info: TRawSmbiosInfo): PtrUInt;
   forward; // implemented later in mormot.core.os.pas
 

@@ -2051,6 +2051,10 @@ function IsUacVirtualizationEnabled: boolean;
 // - could be used if TWinRegistry is overkill, e.g. for a single value
 function ReadRegString(Root: TWinRegistryRoot; Path, Value: PWideChar): string;
 
+/// quickly retrieve a 32-bit integer value from Registry
+// - could be used if TWinRegistry is overkill, e.g. for a single value
+function ReadRegDWord(Root: TWinRegistryRoot; Path, Value: PWideChar): cardinal;
+
 /// convenient late-binding of any external library function
 // - thread-safe wrapper around LoadLibray + GetProcAddress once over a pointer
 function DelayedProc(var api; var lib: THandle;
