@@ -1981,6 +1981,8 @@ type
     // you can set closefirst = true on a consecutive ReadOpen() call
     function ReadOpen(root: TWinRegistryRoot; const keyname: RawUtf8;
       closefirst: boolean = false): boolean;
+    /// start low-level read access to a Windows Registry node but not enumerate
+    function ReadOpenValue(root: TWinRegistryRoot; keyname: PWideChar): boolean;
     /// start low-level read access to a Windows Registry node after ReadOpen()
     // - overload to ReadOpen(closefirst=true) with Join() keynames concatenation
     function ReadReOpen(root: TWinRegistryRoot; const keynames: array of RawByteString;
@@ -1998,6 +2000,8 @@ type
     /// read one or several UTF-8 string from the Windows Registry after ReadOpen()
     // - will properly decode REG_MULTI_SZ values, but also plain REG_SZ
     function ReadStrings(entry: PWideChar; andtrim: boolean = true): TRawUtf8DynArray;
+    /// read a RTL string from the Windows Registry after ReadOpen()
+    function ReadFileName(entry: PWideChar): TFileName;
     /// read a Windows Registry content after ReadOpen()
     // - works with any kind of key, but was designed for REG_BINARY
     function ReadData(entry: PWideChar): RawByteString;

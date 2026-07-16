@@ -3156,9 +3156,15 @@ begin
   if closefirst then
     Close;
   key := 0;
-  result := RegOpenKeyExW(_HKEY[root],
-              Utf8ToWin32PWideChar(keyname, tmp), 0, KEY_READ, key) = NO_ERROR;
+  result := RegOpenKeyExW(_HKEY[root], Utf8ToWin32PWideChar(keyname, tmp), 0,
+              KEY_READ, key) = NO_ERROR;
   tmp.Done;
+end;
+
+function TWinRegistry.ReadOpenValue(root: TWinRegistryRoot; keyname: PWideChar): boolean;
+begin
+  key := 0;
+  result := RegOpenKeyExW(_HKEY[root], keyname, 0, KEY_QUERY_VALUE, key) = NO_ERROR;
 end;
 
 function TWinRegistry.ReadReOpen(root: TWinRegistryRoot;
@@ -3195,6 +3201,8 @@ var
   k: TWinRegistryKind;
 begin
   result := false;
+  if key = 0 then
+    exit;
   rsize := {%H-}data.Init; // most of the time, a single call is enough
   rtype := 0;
   res := RegQueryValueExW(key, entry, nil, @rtype, data.buf, @rsize);
@@ -3286,6 +3294,17 @@ begin
   tmp.Done;
 end;
 
+function TWinRegistry.ReadFileName(entry: PWideChar): TFileName;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := '';
+  if not ReadTempBuffer(entry, tmp, wrkStrings) then
+    exit;
+  Win32PWideCharToFileName(tmp.buf, result); // use StrLenW()
+  tmp.Done;
+end;
+
 function TWinRegistry.ReadData(entry: PWideChar): RawByteString;
 var
   rsize: DWord;
@@ -3329,7 +3348,8 @@ var
   rtype: DWord;
 begin
   rtype := 0;
-  result := RegQueryValueExW(key, entry, nil, @rtype, data, @datalen) = NO_ERROR;
+  result := (key <> 0) and
+            (RegQueryValueExW(key, entry, nil, @rtype, data, @datalen) = NO_ERROR);
   if result then
     SetWinRegistryKind(kind, rtype);
 end;
