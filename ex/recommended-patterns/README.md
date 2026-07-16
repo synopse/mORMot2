@@ -205,19 +205,6 @@ On Windows the equivalents are `prj\fpc\compile_cli.bat` / `prj\fpc\compile_cli.
     └── units/                       # Compiled units
 </pre>
 
-## Architecture
-
-This application uses **CQRS (Command Query Responsibility Segregation)** with **DDD (Domain-Driven Design)** patterns on mORMot2:
-
-- **DDD Aggregates**: TTask is the aggregate root with embedded Comments and TagIDs
-- **CQRS Interfaces**: Separate ITaskQuery/ITaskCommand and ITagQuery/ITagCommand
-- **Typed DTOs**: Packed record DTOs for all data transfer (no Variant types)
-- **Record Versioning**: SchemaVersion field with lazy migration on read
-- **FTS5 Search**: Full-text search index synced on write operations
-- **Performance Monitoring**: the framework collects per-method statistics for every SOA service out of the box (call counts, timing, input/output sizes, errors) — no instrumentation code in the services. `TSynMonitorUsageRest` aggregates them into the `MonitorUsage` table of the SQLite database, and `GET /taskmanager/stat?withall=1` serves live numbers
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture documentation.
-
 ## CQRS Service Endpoints
 
 ### TaskQuery (Read Operations)
@@ -331,7 +318,7 @@ binary's parent directory (`bin/../data`), i.e. `data/` at the project root.
 ## Technical Stack
 
 **Backend**:
-- Language: Free Pascal (Object Pascal)
+- Language: Object Pascal
 - Framework: mORMot2
 - Database: SQLite3
 - ORM: mORMot2 ORM with DDD aggregates
@@ -342,11 +329,6 @@ binary's parent directory (`bin/../data`), i.e. `data/` at the project root.
 - HTML5, CSS3, Vanilla JavaScript (ES6+)
 - Fetch API for SOA calls
 
-## Acknowledgments
-
-- Built with [mORMot2](https://github.com/synopse/mORMot2) by Arnaud Bouchez
-- Compiled with [Free Pascal](https://www.freepascal.org/)
-
 ## Learning Resources
 
 - [mORMot2 SAD — Recommended Patterns](https://github.com/synopse/mORMot2/blob/master/docs/mORMot2-SAD-Recommended-Patterns.md) — the design guide this project follows; the `§`, `A.x`, and `B.x` references throughout the docs point here
@@ -354,6 +336,3 @@ binary's parent directory (`bin/../data`), i.e. `data/` at the project root.
 - [mORMot2 GitHub Repository](https://github.com/synopse/mORMot2)
 - [Free Pascal Documentation](https://www.freepascal.org/docs.html)
 
----
-
-**Made with Free Pascal and mORMot2**
