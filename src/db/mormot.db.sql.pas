@@ -5633,7 +5633,7 @@ begin
   Definition.ServerName := ServerName;
   Definition.DatabaseName := DatabaseName;
   Definition.User := UserID;
-  Definition.PassWordPlain := PassWord;
+  Definition.PasswordPlain := PassWord;
 end;
 
 function TSqlDBConnectionProperties.DefinitionToJson(Key: cardinal): RawUtf8;

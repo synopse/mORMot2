@@ -184,7 +184,7 @@ type
       read fUser write fUser;
     /// the associated Password, e.g. for storage or transmission encryption
     // - will be persisted encrypted with a private key
-    // - use the PassWordPlain property to access to its uncyphered value
+    // - use the PasswordPlain property to access to its uncyphered value
     property Password: SpiUtf8
       read fPassword write fPassword;
   end;
@@ -7058,7 +7058,7 @@ begin
   begin
     i := PosExChar(':', fPassword);
     if i > 0 then
-      ECrypt.RaiseUtf8('%.PassWordPlain unable to retrieve the stored ' +
+      ECrypt.RaiseUtf8('%.GetPasswordSafe unable to retrieve the stored ' +
         'v: current user is [%], but password in % was encoded for [%]',
         [self, Executable.User, app, copy(fPassword, 1, i - 1)]);
   end;

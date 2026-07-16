@@ -6934,11 +6934,10 @@ constructor TAesPkcs7Writer.Create(outStream: TStream; const key;
 begin
   inherited Create(outStream, key, keySizeBits, aesMode, IV, bufferSize);
   SetLength(fBuf, fBufAvailable + SizeOf(TAesBlock)); // space for padding
-  if IV = nil then // not supplied by caller
-  begin
-    Random128(@fAes.fIV); // unpredictable
-    fStream.WriteBuffer(fAes.fIV, SizeOf(fAes.fIV)); // stream starts with IV
-  end;
+  if IV <> nil then
+    exit; // IV supplied by caller: don't include here
+  Random128(@fAes.fIV); // unpredictable
+  fStream.WriteBuffer(fAes.fIV, SizeOf(fAes.fIV)); // stream starts with IV
 end;
 
 destructor TAesPkcs7Writer.Destroy;
