@@ -2,28 +2,6 @@
 
 A source code example of the mORMot2 [*Recommended Patterns*](https://github.com/synopse/mORMot2/blob/master/docs/mORMot2-SAD-Recommended-Patterns.md) guide: a **task manager** built with CQRS and DDD patterns, made of an HTTP server, a web client, a CLI client and an automated test suite. It compiles with FPC, Lazarus or Delphi.
 
-## Features
-
-- **CQRS Architecture** - Separate Query and Command interfaces for clean read/write separation
-- **DDD Aggregates** - Task aggregate with embedded comments and tag references
-- **Typed DTOs** - Packed record DTOs with full JSON serialization
-- **Full-Text Search** - FTS5-powered search with LIKE fallback
-- **Web Interface** - Modern, responsive web client
-- **CLI Client** - Command-line client with local/remote modes
-- **SQLite Database** - Embedded SQLite3 with ORM support
-- **Automated Tests** - 18 TSynTestCase methods (Task: 10, Tag: 8)
-
-## Documentation
-
-- [README.md](README.md) - This file (overview and quick start)
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - System architecture and design
-- [docs/API.md](docs/API.md) - Complete API reference
-- [docs/WEB_CLIENTS.md](docs/WEB_CLIENTS.md) - Web client guide (basic and full-featured)
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) - Development guide
-- [docs/SOA_SERVICES.md](docs/SOA_SERVICES.md) - CQRS services documentation
-- [docs/COMMENTS_FEATURE.md](docs/COMMENTS_FEATURE.md) - Embedded comments feature
-- [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) - Code organization
-
 ## Quick Start
 
 This sample ships inside the [mORMot2](https://github.com/synopse/mORMot2) tree, so the framework sources are already at hand: the enclosing repository at `../../` (relative to this project). No installation is needed beyond your usual toolchain setup:
@@ -306,14 +284,22 @@ binary's parent directory (`bin/../data`), i.e. `data/` at the project root.
 - Ensure you have write permissions to the `data/` directory
 
 **Compilation fails**:
-- Verify FPC is installed: `fpc -version`
-- Check mORMot2 location: `../../src/` must exist
 - Ensure static libraries are present: `../../static/x86_64-linux/` (Linux) or `../../static/x86_64-win64/` (Windows)
 
 **Web interface doesn't load tasks**:
 - Ensure the server is running
 - Check browser console for errors
-- Verify CORS is enabled (it is by default)
+
+## Documentation
+
+- [README.md](README.md) - This file (overview and quick start)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - System architecture and design
+- [docs/API.md](docs/API.md) - Complete API reference
+- [docs/WEB_CLIENTS.md](docs/WEB_CLIENTS.md) - Web client guide (basic and full-featured)
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) - Development guide
+- [docs/SOA_SERVICES.md](docs/SOA_SERVICES.md) - CQRS services documentation
+- [docs/COMMENTS_FEATURE.md](docs/COMMENTS_FEATURE.md) - Embedded comments feature
+- [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) - Code organization
 
 ## Technical Stack
 
