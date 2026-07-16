@@ -1842,6 +1842,15 @@ type
     lcbDigest,
     lcbKerberos);
 
+  /// how TLdapClient Kerberos "sign and seal" is negotiated with the server
+  // - lksDefault follows server expectations, e.g sometimes disable it over TLS
+  // - on Windows, lksOsPolicy will follow LDAPClientIntegrity in OS Registry
+  // - lksForced will always force "sign and seal" even over TLS
+  TLdapKerberosSignSeal = (
+    lksDefault,
+    lksOsPolicy,
+    lksForced);
+
   /// define possible values for TLdapClient.SearchSDFlags
   // - LDAP_SERVER_SD_FLAGS_OID control
   TLdapSearchSDFlags = set of (
@@ -1866,7 +1875,7 @@ type
     fTls: boolean;
     fAllowUnsafePasswordBind: boolean;
     fKerberosDisableChannelBinding: boolean;
-    fKerberosForceSignSeal: boolean;
+    fKerberosSignSeal: TLdapKerberosSignSeal;
     fAutoReconnect: boolean;
     fAutoBind: TLdapClientBound;
     function GetTargetUri: RawUtf8;
@@ -1983,8 +1992,8 @@ type
     property KerberosDisableChannelBinding: boolean
       read fKerberosDisableChannelBinding write fKerberosDisableChannelBinding;
     /// option to force "sign and seal" on Kerberos even over TLS
-    property KerberosForceSignSeal: boolean
-      read fKerberosForceSignSeal write fKerberosForceSignSeal;
+    property KerberosSignSeal: TLdapKerberosSignSeal
+      read fKerberosSignSeal write fKerberosSignSeal;
   end;
 
   TLdapClient = class;
@@ -6744,7 +6753,16 @@ begin
   end;
   fLog.EnterLocal(log, 'BindSaslKerberos(%) on %',
     [fSettings.UserName, fSettings.KerberosSpn], self);
-  needencrypt := fSettings.KerberosForceSignSeal;
+  needencrypt := false; // for lksDefault
+  case fSettings.KerberosSignSeal of
+    {$ifdef OSWINDOWS}
+    lksOsPolicy:
+      needencrypt := ReadRegDWord(wrLocalMachine,
+        'SYSTEM\CurrentControlSet\Services\LDAP', 'LDAPClientIntegrity') = 2;
+    {$endif OSWINDOWS}
+    lksForced:
+      needencrypt := true;
+  end;
   try
     req1 := Asn(LDAP_ASN1_BIND_REQUEST, [
               Asn(fVersion),
