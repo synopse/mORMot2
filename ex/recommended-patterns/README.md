@@ -11,12 +11,6 @@ The worked example of the mORMot2 [*Recommended Patterns*](https://github.com/sy
 - **Web Interface** - Modern, responsive web client
 - **CLI Client** - Command-line client with local/remote modes
 - **SQLite Database** - Embedded SQLite3 with ORM support
-- **Task Priorities** - Low, Medium, High, Urgent, Critical (1-5)
-- **Task Status** - Pending, In Progress, Completed states
-- **Comments** - Embedded comment threads on tasks
-- **Tags** - Color-coded tags with task associations
-- **Record Versioning** - Schema migration via lazy upgrades
-- **Performance Monitoring** - framework built-in per-method SOA statistics, persisted to SQLite
 - **Automated Tests** - 18 TSynTestCase methods (Task: 10, Tag: 8)
 
 ## Documentation
