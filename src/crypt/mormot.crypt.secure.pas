@@ -66,14 +66,14 @@ type
   // mormot.crypt.core.pas' CryptDataForCurrentUser()
   // - a published property should be defined as such in inherited class:
   // ! property PasswordPropertyName: RawUtf8 read fPassword write fPassword;
-  // - use the PassWordPlain property to access to its uncyphered value
+  // - use the PasswordPlain property to access to its uncyphered value
   TObjectWithPassword = class(TSynPersistent)
   protected
     fPassWord: SpiUtf8;
     fKey: cardinal;
     procedure XorKey(var Value: RawByteString);
-    function GetPassWordPlain: SpiUtf8;
-    procedure SetPassWordPlain(const Value: SpiUtf8);
+    function GetPasswordPlain: SpiUtf8;
+    procedure SetPasswordPlain(const Value: SpiUtf8);
   public
     /// finalize the instance
     destructor Destroy; override;
@@ -6170,7 +6170,7 @@ function TotpGenerateSecret(len: PtrInt): RawUtf8;
 var
   bin: RawByteString;
 begin
-  bin := TAesPrng.Main.FillRandom(MaxPtrInt(len, TOTP_SECRET_MIN));
+  TAesPrng.Main.FillRandomVar(bin, MaxPtrInt(len, TOTP_SECRET_MIN));
   result := BinToBase32(bin);
   FillZero(bin);
 end;
