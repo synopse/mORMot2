@@ -1866,6 +1866,7 @@ type
     fTls: boolean;
     fAllowUnsafePasswordBind: boolean;
     fKerberosDisableChannelBinding: boolean;
+    fKerberosForceSignSeal: boolean;
     fAutoReconnect: boolean;
     fAutoBind: TLdapClientBound;
     function GetTargetUri: RawUtf8;
@@ -1981,6 +1982,9 @@ type
     // $ ldap server require strong auth = allow_sasl_without_tls_channel_bindings
     property KerberosDisableChannelBinding: boolean
       read fKerberosDisableChannelBinding write fKerberosDisableChannelBinding;
+    /// option to force "sign and seal" on Kerberos even over TLS
+    property KerberosForceSignSeal: boolean
+      read fKerberosForceSignSeal write fKerberosForceSignSeal;
   end;
 
   TLdapClient = class;
@@ -6740,7 +6744,7 @@ begin
   end;
   fLog.EnterLocal(log, 'BindSaslKerberos(%) on %',
     [fSettings.UserName, fSettings.KerberosSpn], self);
-  needencrypt := false;
+  needencrypt := fSettings.KerberosForceSignSeal;
   try
     req1 := Asn(LDAP_ASN1_BIND_REQUEST, [
               Asn(fVersion),
@@ -6871,7 +6875,7 @@ begin
       fBoundAs := lcbKerberos;
       fBoundKerberosAuthIdentify := AuthIdentify;
       if needencrypt then
-        include(fFlags, fSecContextEncrypt);
+        include(fFlags, fSecContextEncrypt); // sign and seal
       result := true;
     finally
       if not result then
