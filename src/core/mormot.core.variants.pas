@@ -11113,7 +11113,7 @@ var
   c: AnsiChar;
   flags: set of (fNeg, fNegExp, fValid);
   v64: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
-  d, d64: double;
+  d: double;
 begin
   // 1. parse input text as number into v64, frac, digit, exp
   result := nil; // return nil to indicate parsing error
@@ -11223,7 +11223,6 @@ begin
   else if AllowVarDouble and
           (frac > -324) then // 5.0 x 10^-324 .. 1.7 x 10^308
   begin // convert into a double value
-    d64 := v64;
     {$ifdef CPUX86NOTPIC}
     f := frac;
     if f >= -31 then
@@ -11242,7 +11241,7 @@ begin
     exp := PtrUInt(@POW10);
     if frac >= -31 then
       if frac <= 31 then
-        d := PPow10(exp)[frac] // -31 .. + 31
+        d := PPow10(exp)[frac] // -31 .. + 31 is the most common case
       else if (18 - remdigit) + integer(frac) >= 308 then
         exit                   // +308 ..
       else                     // +32 .. +307
@@ -11253,7 +11252,7 @@ begin
       d := PPow10(exp)[(frac and not 31) shr 5 + 45] / PPow10(exp)[frac and 31];
     end;
     {$endif CPUX86NOTPIC}
-    Value.VDouble := d * d64;
+    Value.VDouble := d * v64;
     TSynVarData(Value).VType := varDouble;
   end
   else
