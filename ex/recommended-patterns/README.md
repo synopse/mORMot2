@@ -1,6 +1,6 @@
 # Simple FPC mORMot2 Task Manager
 
-The worked example of the mORMot2 [*Recommended Patterns*](https://github.com/synopse/mORMot2/blob/master/docs/mORMot2-SAD-Recommended-Patterns.md) guide: a task manager built with CQRS and DDD patterns, made of an HTTP server, a web client, a CLI client and an automated test suite. It compiles with FPC, Lazarus or Delphi.
+A source code example of the mORMot2 [*Recommended Patterns*](https://github.com/synopse/mORMot2/blob/master/docs/mORMot2-SAD-Recommended-Patterns.md) guide: a **task manager** built with CQRS and DDD patterns, made of an HTTP server, a web client, a CLI client and an automated test suite. It compiles with FPC, Lazarus or Delphi.
 
 ## Features
 
