@@ -1695,6 +1695,9 @@ type
     // - this method is thread-safe, and its AES process is non blocking
     function FillRandom(Len: integer): RawByteString; overload;
     /// returns a binary buffer filled with some pseudorandom data
+    // - defined as procedure to ensure RefCnt=1 so that FillZero(Buffer) works
+    procedure FillRandomVar(var Buffer: RawByteString; Len: integer);
+    /// returns a binary buffer filled with some pseudorandom data
     // - this method is thread-safe, and its AES process is non blocking
     function FillRandomBytes(Len: integer): TBytes;
     /// returns an hexa-encoded binary buffer filled with some pseudorandom data
@@ -7376,7 +7379,13 @@ end;
 
 function TAesPrngAbstract.FillRandom(Len: integer): RawByteString;
 begin
-  FillRandom(FastNewRawByteString(result, Len), Len);
+  FillRandomVar(result, Len);
+end;
+
+procedure TAesPrngAbstract.FillRandomVar(var Buffer: RawByteString; Len: integer);
+begin
+  FillZero(Buffer);
+  FillRandom(FastNewRawByteString(Buffer, Len), Len);
 end;
 
 function TAesPrngAbstract.FillRandomBytes(Len: integer): TBytes;
@@ -7495,8 +7504,7 @@ end;
 function TAesPrngAbstract.RandomPassword(Len: integer): SpiUtf8;
 begin
   repeat
-    FillZero(result);
-    FillRandom(FastSetString(RawUtf8(result), Len), Len);
+    FillRandomVar(RawByteString(result), Len);
   until MakeStrongPassword(result);
 end;
 
@@ -7611,7 +7619,7 @@ end;
 
 class function TAesPrngAbstract.Fill(Len: integer): RawByteString;
 begin
-  result := Main.FillRandom(Len);
+  Main.FillRandomVar(result, Len);
 end;
 
 class function TAesPrngAbstract.Bytes(Len: integer): TBytes;

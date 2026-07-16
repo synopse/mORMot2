@@ -11150,7 +11150,6 @@ begin
   DoubleToCurrency(Value, P);
 end;
 
-
 procedure InitializeUnit;
 begin
   RTTI_FROM_ORD[roSByte]         := @FromRttiOrdSByte;
