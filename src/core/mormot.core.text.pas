@@ -1428,6 +1428,75 @@ procedure UInt32DigitsToUtf8(Value, Digits: PtrUInt; var result: RawUtf8);
 /// fast RawUtf8 version of 64-bit IntToStr(), with proper QWord support
 procedure UInt64ToUtf8(Value: QWord; var result: RawUtf8);
 
+{$ifndef WIN32DELPHI} // Delphi has its own x86/x87 asm version
+/// get the extended floating point value stored in P^
+// - set the err content to the index of any faulty character, 0 if conversion
+// was successful (same as the standard val function)
+// - this optimized function is consistent on all platforms/compilers and return
+// the decoded value even if err is not 0 (e.g. if P^ is not #0 ended)
+function GetExtended(P: PUtf8Char; out err: integer): TSynExtended; overload;
+{$endif WIN32DELPHI}
+
+/// get the extended floating point value stored in P^
+// - this overloaded version returns 0 as a result if the content of P is invalid
+function GetExtended(P: PUtf8Char): TSynExtended; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// get a 64-bit floating-point value stored in a RawUtf8 string
+// - returns TRUE if the supplied text was successfully converted into a double
+function ToDouble(const text: RawUtf8; out value: double): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+type
+  /// the non-number values potentially stored in an IEEE floating point
+  TFloatNan = (
+    fnNumber, fnNan, fnInf, fnNegInf);
+
+  TPow10 = array[-31..55] of TSynExtended;
+  PPow10 = ^TPow10;
+
+const
+  // some constants also available in the Math unit - see ShortToFloatNan()
+  NaN         =  0.0 / 0.0;
+  Infinity    =  1.0 / 0.0;
+  NegInfinity = -1.0 / 0.0;
+
+  /// the JavaScript-like values of non-number IEEE constants
+  // - as recognized by ShortToFloatNan, and used by TTextWriter.Add()
+  // when serializing such single/double/extended floating-point values
+  // - GetExtended() should also detect those values
+  JSON_NAN: array[TFloatNan] of TShort15 = (
+    '0', '"NaN"', '"Infinity"', '"-Infinity"');
+
+  /// most common 10 ^ exponent constants, ending with values for HugePower10*()
+  POW10: TPow10 = (
+    1E-31, 1E-30, 1E-29, 1E-28, 1E-27, 1E-26, 1E-25, 1E-24, 1E-23, 1E-22,
+    1E-21, 1E-20, 1E-19, 1E-18, 1E-17, 1E-16, 1E-15, 1E-14, 1E-13, 1E-12,
+    1E-11, 1E-10, 1E-9,  1E-8,  1E-7,  1E-6,  1E-5,  1E-4,  1E-3,  1E-2,
+    1E-1,  1E0,   1E1,   1E2,   1E3,   1E4,   1E5,   1E6,   1E7,   1E8,
+    1E9,   1E10,  1E11,  1E12,  1E13,  1E14,  1E15,  1E16,  1E17,  1E18,
+    1E19,  1E20,  1E21,  1E22,  1E23,  1E24,  1E25,  1E26,  1E27,  1E28,
+    1E29,  1E30,  1E31,  0,{32} -1,{33} 1E0,{34} 1E32, 1E64, 1E96, 1E128,
+    1E160, 1E192, 1E224, 1E256, 1E288, 1E320, 1E-0,{45} 1E-32, 1E-64,
+    1E-96, 1E-128, 1E-160, 1E-192, 1E-224, 1E-256, 1E-288, 1E-320);
+
+var
+  /// best possible precision when rendering a "single" kind of float
+  // - can be used as parameter for ExtendedToShort/ExtendedToStr
+  // - is defined as a var, so that you may be able to override the default
+  // settings, for the whole process
+  SINGLE_PRECISION: integer = 8;
+  /// best possible precision when rendering a "double" kind of float
+  // - can be used as parameter for ExtendedToShort/ExtendedToStr
+  // - is defined as a var, so that you may be able to override the default
+  // settings, for the whole process
+  DOUBLE_PRECISION: integer = 15;
+  /// best possible precision when rendering a "extended" kind of float
+  // - can be used as parameter for ExtendedToShort/ExtendedToStr
+  // - is defined as a var, so that you may be able to override the default
+  // settings, for the whole process
+  EXTENDED_PRECISION: integer = 18;
+
 /// convert a string into its INTEGER Curr64 (value*10000) representation
 // - this type is compatible with currency memory mapping with PInt64(@Curr)^
 // - fast conversion, using only integer operations
@@ -6643,6 +6712,153 @@ end;
 function UInt32ToUtf8(Value: PtrUInt): RawUtf8;
 begin
   UInt32ToUtf8(Value, result);
+end;
+
+function GetExtended(P: PUtf8Char): TSynExtended;
+var
+  err: integer;
+begin
+  result := GetExtended(P, err);
+  if err <> 0 then
+    result := 0;
+end;
+
+{$ifndef WIN32DELPHI} // Delphi has its own x86/x87 asm version
+
+function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
+var
+  remdigit: integer;
+  frac, exp: PtrInt;
+  flags: set of (fNeg, fNegExp, fValid);
+  v64: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
+  d64: TSynExtended;
+label
+  e;
+begin
+  byte(flags) := 0;
+  v64 := 0;
+  frac := 0;
+  if P = nil then
+    goto e; // will return 0 but err=1
+  if P^ = ' ' then
+    repeat
+      inc(P);
+    until P^ <> ' '; // trailing spaces
+  if P^ = '+' then
+    inc(P)
+  else if P^ = '-' then
+  begin
+    inc(P);
+    include(flags, fNeg);
+  end;
+  if P^ > '9' then
+    case PCardinal(P)^ and $00dfdfdf of
+      ord('N') + ord('A') shl 8 + ord('N') shl 16:
+        begin
+          err := frac; // =0 for success
+          result := NaN;
+          exit;
+        end;
+      ord('I') + ord('N') shl 8 + ord('F') shl 16:
+      begin
+        err := frac;
+        if fNeg in flags then
+          result := NegInfinity
+        else
+          result := Infinity;
+        exit;
+      end;
+    end;
+  remdigit := 18; // v64=-9,223,372,036,854,775,808..+9,223,372,036,854,775,807
+  repeat
+    if byte(ord(P^) - ord('0')) <= 9 then
+    begin
+      if (remdigit <> 0) or // avoid 64-bit overflow, but allow 19 digits
+         (v64 > 922337203685477580) then
+        dec(remdigit);
+      if remdigit >= 0 then // over-required digits are just ignored
+      begin
+        v64 := v64 * 10; // FPC generates fast imul + mul on i386
+        inc(v64, Int64(P^) - ord('0'));
+        include(flags, fValid);
+        dec(frac, ord(frac <> 0)); // digits after '.' (branchless)
+        inc(P);
+        continue;
+      end;
+      inc(frac, ord(frac >= 0)); // handle #############00000
+      inc(P);
+      continue;
+    end;
+    if P^ <> '.' then
+      break;
+    inc(P);
+    if frac > 0 then
+      goto e; // will return partial value but err=1
+    dec(frac);
+  until false;
+  inc(frac, ord(frac < 0)); // adjust digits after '.'
+  if ord(P^) or $20 = ord('e') then
+  begin
+    exp := 0;
+    exclude(flags, fValid);
+    inc(P);
+    if P^ = '+' then
+      inc(P)
+    else if P^ = '-' then
+    begin
+      inc(P);
+      include(flags, fNegExp);
+    end;
+    repeat
+      if byte(ord(P^) - ord('0')) > 9 then
+        break;
+      exp := (exp * 10) + ord(P^) - ord('0');
+      include(flags, fValid);
+      inc(P);
+    until false;
+    if fNegExp in flags then
+      dec(frac, exp)
+    else
+      inc(frac, exp);
+    if (frac <= -324) or
+       (frac >= 308) then
+    begin
+      frac := 0;
+      goto e; // limit to 5.0 x 10^-324 .. 1.7 x 10^308 double range
+    end;
+  end;
+  if (fValid in flags) and
+     (P^ = #0) then
+    err := 0
+  else
+e:  err := 1; // return the (partial) value even if not ended with #0
+  d64 := v64;
+  if frac >= -31 then
+    if frac <= 31 then // -31 .. + 31
+      result := POW10[frac]
+    else // +32 ..
+      result := POW10[(frac and not 31) shr 5 + 34] * POW10[frac and 31]
+  else  // .. -32
+  begin
+    frac := -frac;
+    result := POW10[(frac and not 31) shr 5 + 45] / POW10[frac and 31];
+  end;
+  if fNeg in flags then
+    result := result * POW10[33]; // * -1
+  result := result * d64;
+end;
+
+{$endif WIN32DELPHI}
+
+function ToDouble(const text: RawUtf8; out value: double): boolean;
+var
+  err: integer;
+  v: double;
+begin
+  v := GetExtended(pointer(text), err);
+  result := err = 0;
+  if result then
+    value := v;
 end;
 
 procedure Curr64ToStr(const Value: Int64; var result: RawUtf8);
