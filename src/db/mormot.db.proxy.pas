@@ -29,6 +29,7 @@ uses
   variants,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security, // for SymmetricEncrypt()
   mormot.core.buffers,
   mormot.core.data,
   mormot.core.unicode,

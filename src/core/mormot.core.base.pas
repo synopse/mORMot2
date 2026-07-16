@@ -3829,7 +3829,7 @@ var
 // with better error detection - https://datatracker.ietf.org/doc/html/rfc3385
 // - tables content is created from code in initialization section below
 // - will also be used internally by SymmetricEncrypt and
-// TSynUniqueIdentifierGenerator as 1KB master/reference key tables
+// TSynUniqueIdentifierGenerator as 4KB/1KB master/reference key tables
 function crc32ctab: PCrc32tab;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -4152,16 +4152,6 @@ procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: Ptr
 
 /// DynArrayHashTableAdjust() version for 16-bit HashTable[] - SSE2 asm on x86_64
 procedure DynArrayHashTableAdjust16(P: PWordArray; deleted: cardinal; count: PtrInt);
-
-/// simple symmetric obfuscation scheme using a 32-bit key and crc32c lookup tables
-// - used e.g. by TObjectWithPassword and mormot.db.proxy from mormot.crypt.secure
-//  to obfuscate password or content - so it is not a real encryption
-// - fast, but not cryptographically secure, since naively xor data bytes with
-// crc32ctab[]: consider using mormot.crypt.core proven algorithms instead
-procedure SymmetricEncrypt(key: cardinal; var data: RawByteString); overload;
-
-/// simple symmetric obfuscation scheme using a 32-bit key and crc32c lookup tables
-procedure SymmetricEncrypt(key: PtrUInt; data: PCardinal; len: PtrInt); overload;
 
 
 { ************ Efficient Variant Values Conversion }
@@ -11615,33 +11605,6 @@ begin // 256 bytes of code to generate 2 x 8KB lookup tables
     inc(i);
   until false;
   result := tab;
-end;
-
-procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
-begin
-  if data = '' then
-    exit; // nothing to cypher
-  {$ifdef FPC}
-  UniqueString(data); // @data[1] won't call UniqueString() under FPC :(
-  {$endif FPC}
-  SymmetricEncrypt(key, @data[1], length(data));
-end;
-
-procedure SymmetricEncrypt(key: PtrUInt; data: PCardinal; len: PtrInt); overload;
-var
-  i: PtrInt;
-  tab: PCardinalArray;
-begin
-  tab := pointer(crc32ctab); // use first 4KB of this lazy-generated table
-  key := key xor PtrUInt(len);
-  for i := 0 to (len shr 2) - 1 do
-  begin
-    key := key xor tab[(PtrUInt(i) xor key) and 1023];
-    data^ := data^ xor key; // 32-bit loop
-    inc(data);
-  end;
-  for i := 0 to (len and 3) - 1 do // trailing 1..3 bytes from tab[17..136]
-    PByteArray(data)^[i] := PByteArray(data)^[i] xor key xor tab[17 shl i];
 end;
 
 {$ifndef ASMX64} // there is fast branchless SSE2 assembly on x86-64
