@@ -3161,7 +3161,7 @@ begin
   tmp.Done;
 end;
 
-function TWinRegistry.ReadOpen(root: TWinRegistryRoot;
+function TWinRegistry.ReadReOpen(root: TWinRegistryRoot;
   const keynames: array of RawByteString; closefirst: boolean): boolean;
 var
   name: RawUtf8;

@@ -288,13 +288,6 @@ const
   BOOL_STR: array[boolean] of TShort7 = (
     'false', 'true');
 
-  /// the JavaScript-like values of non-number IEEE constants
-  // - as recognized by ShortToFloatNan, and used by TTextWriter.Add()
-  // when serializing such single/double/extended floating-point values
-  // - GetExtended() should also detect those values
-  JSON_NAN: array[TFloatNan] of TShort15 = (
-    '0', '"NaN"', '"Infinity"', '"-Infinity"');
-
 var
   /// MIME content type used for JSON communication
   // - i.e. 'application/json' as stated by datatracker.ietf.org/doc/html/rfc7159
@@ -1987,11 +1980,11 @@ type
     // - on success (returned true), Close method should be eventually called or
     // you can set closefirst = true on a consecutive ReadOpen() call
     function ReadOpen(root: TWinRegistryRoot; const keyname: RawUtf8;
-      closefirst: boolean = false): boolean; overload;
-    /// start low-level read access to a Windows Registry node
-    // - overloaded to ReadOpen() allowing Join() keynames concatenation
-    function ReadOpen(root: TWinRegistryRoot; const keynames: array of RawByteString;
-      closefirst: boolean = false): boolean; overload;
+      closefirst: boolean = false): boolean;
+    /// start low-level read access to a Windows Registry node after ReadOpen()
+    // - overload to ReadOpen(closefirst=true) with Join() keynames concatenation
+    function ReadReOpen(root: TWinRegistryRoot; const keynames: array of RawByteString;
+      closefirst: boolean = true): boolean;
     /// finalize low-level read access to the Windows Registry after ReadOpen()
     procedure Close;
     /// read a UTF-8 string from the Windows Registry after ReadOpen()
