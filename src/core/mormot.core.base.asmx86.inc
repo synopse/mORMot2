@@ -2621,8 +2621,8 @@ end;
 function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
 const
   _Ten:  double = 10.0;
-  _NaN:  double = Nan;
-  _Inf:  double = Infinity;
+  _NaN:  double = 0.0 / 0.0;
+  _Inf:  double = 1.0 / 0.0;
 asm
         // in: eax=text, edx=@err  out: st(0)=result
         push    ebx                 // save used registers
