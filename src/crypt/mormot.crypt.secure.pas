@@ -4170,6 +4170,7 @@ type
     class procedure Sha1(const Value: variant; out Result: variant);
     class procedure Sha256(const Value: variant; out Result: variant);
     class procedure Sha512(const Value: variant; out Result: variant);
+    class procedure PasswordGenerate(const Value: variant; out Result: variant);
   end;
 
 
@@ -11684,6 +11685,11 @@ begin
   RawUtf8ToVariant(mormot.crypt.core.Sha512(ToUtf8(Value)), Result);
 end;
 
+class procedure TSynMustacheCryptoHelpers.PasswordGenerate(const Value: variant;
+  out Result: variant);
+begin // {{ passwordgenerate len }}
+  RawUtf8ToVariant(TAesPrng.Main.RandomPassword(AnyVariantToIntegerDef(Value)));
+end;
 
 // some callbacks for custom JSON serialization of security related types
 
