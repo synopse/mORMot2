@@ -2318,7 +2318,7 @@ function AsnDump(const Value: TAsnObject): RawUtf8;
 
 type
   /// identify the (Windows) system certificate stores for GetSystemStoreAsPem()
-  // - ignored on POSIX systems, in which the main cacert.pem file is used
+  // - as used by GetSystemStoreAsPem() and GetOneSystemStoreAsPem() functions
   // - scsCA contains known Certification Authority certificates, i.e. from
   // entities entrusted to issue certificates that assert that the recipient
   // individual, computer, or organization requesting the certificate fulfills

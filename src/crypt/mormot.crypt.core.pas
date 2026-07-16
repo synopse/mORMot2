@@ -5573,26 +5573,24 @@ var
   len, enclen: cardinal;
   pcd: PMacAndCryptData absolute Data;
   rcd: PMacAndCryptData absolute result;
-  nonce: THash256;
+  nonce: THash256Rec;
   P: PByteArray;
 begin
   FastAssignNew(result); // e.g. MacSetNonce not supported
   // our non-standard mCfc/mOfc/mCtc modes with 256-bit crc32c
   if Encrypt then
   begin
-    SharedRandom.Fill(@nonce, SizeOf(nonce)); // TLecuyer is enough with crc32c
-    if not MacSetNonce({encrypt=}true, nonce, Associated) then
-      // leave ASAP if this class doesn't support AEAD process
-      exit;
-    // inlined EncryptPkcs7() + RecordSave()
-    len := length(Data);
+    Random128(@nonce.Lo, @nonce.Hi); // safer than TLecuyer, not really slower
+    if not MacSetNonce({encrypt=}true, nonce.b, Associated) then
+      exit; // leave ASAP if this class doesn't support AEAD process
+    len := length(Data); // inlined EncryptPkcs7() + RecordSave()
     enclen := EncryptPkcs7Length(len, IVAtBeginning);
     rcd := FastNewString(SIZ + ToVarUInt32Length(enclen) + enclen + EndingSize);
     P := pointer(ToVarUInt32(enclen, @rcd^.data));
     if EncryptPkcs7Buffer(pointer(Data), P, len, enclen, IVAtBeginning) and
-       MacEncryptGetTag(rcd.mac) then
+       MacEncryptGetTag(rcd.mac) then // hi=crc(encrypted) lo=aes(crc(plain))
     begin
-      rcd.nonce := nonce;
+      rcd.nonce := nonce.b;
       rcd.crc := crc32c(VERSION, @rcd.nonce, CRCSIZ);
     end
     else
@@ -5600,21 +5598,17 @@ begin
   end
   else
   begin
-    // decrypt: validate header
-    enclen := cardinal(length(Data)) - EndingSize;
+    enclen := cardinal(length(Data)) - EndingSize; // decrypt: validate header
     if (enclen <= SIZ) or
        (pcd^.crc <> crc32c(VERSION, @pcd.nonce, CRCSIZ)) then
       exit;
-    // inlined RecordLoad() for paranoid safety
-    P := @pcd^.data;
+    P := @pcd^.data; // inlined RecordLoad() for paranoid safety
     len := FromVarUInt32(PByte(P));
     if enclen - len <> PtrUInt(PAnsiChar(P) - pointer(Data)) then
-      // to avoid buffer overflow
-      exit;
-    // decrypt and check MAC
+      exit; // avoid buffer overflow
     if MacSetNonce({encrypt=}false, pcd^.nonce, Associated) then
       DecryptPkcs7Var(P, len, IVAtBeginning, result);
-    if result <> '' then
+    if result <> '' then // decrypt and check MAC
       if not MacDecryptCheckTag(pcd^.mac) then
       begin
         FillZero(result);
