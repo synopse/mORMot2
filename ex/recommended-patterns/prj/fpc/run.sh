@@ -12,7 +12,7 @@ cd "$ROOT_DIR"
 
 if [ ! -f "bin/task_manager" ]; then
     echo "Error: task_manager binary not found"
-    echo "Please run ./src/fpc/compile.sh first"
+    echo "Please run ./prj/fpc/compile.sh first"
     exit 1
 fi
 

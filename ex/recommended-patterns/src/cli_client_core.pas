@@ -10,7 +10,7 @@ unit cli_client_core;
   so the ports may be reached in-process or over HTTP without this unit
   knowing (location transparency, A.6).
 
-  The program files (src/cli_client.pas for the scripts, src/delphi/cli_client.dpr
+  The program files (src/cli_client.pas for the scripts, prj/delphi/cli_client.dpr
   for the IDEs) are thin shells around RunCliClient. }
 
 {$I mormot.defines.inc}

@@ -142,7 +142,7 @@ shapes and business rules, and `API.md` for the full endpoint reference.
 
 1. Compile and run the server:
    ```bash
-   ./src/fpc/compile.sh && ./src/fpc/run.sh
+   ./prj/fpc/compile.sh && ./prj/fpc/run.sh
    ```
 
 2. Open in browser:

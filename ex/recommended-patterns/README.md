@@ -47,20 +47,20 @@ A modern, high-performance task management system built with Free Pascal and the
 
 3. **Compile the server**
    ```bash
-   ./src/fpc/compile.sh
+   ./prj/fpc/compile.sh
    ```
    On Windows:
    ```bat
-   src\fpc\compile.bat
+   prj\fpc\compile.bat
    ```
 
 4. **Run the server**
    ```bash
-   ./src/fpc/run.sh
+   ./prj/fpc/run.sh
    ```
    On Windows:
    ```bat
-   src\fpc\run.bat
+   prj\fpc\run.bat
    ```
 
 5. **Open the web interface**
@@ -71,11 +71,11 @@ A modern, high-performance task management system built with Free Pascal and the
 
 Instead of the shell scripts you can open the IDE projects:
 
-- **Lazarus**: `src/lazarus/task_manager.lpi` and `src/lazarus/cli_client.lpi`.
+- **Lazarus**: `prj/lazarus/task_manager.lpi` and `prj/lazarus/cli_client.lpi`.
   They require the `mormot2` package (`packages/lazarus/mormot2.lpk` in the
   enclosing repository). The `cli_client.lpi` "local" build mode compiles the
-  embedded-SQLite backend. Headless: `lazbuild src/lazarus/task_manager.lpi`.
-- **Delphi**: `src/delphi/task_manager.dpr` and `src/delphi/cli_client.dpr`,
+  embedded-SQLite backend. Headless: `lazbuild prj/lazarus/task_manager.lpi`.
+- **Delphi**: `prj/delphi/task_manager.dpr` and `prj/delphi/cli_client.dpr`,
   with the mORMot2 `src` folders on the library path. The same `.dpr` files
   are the main sources of the Lazarus projects.
 
@@ -135,10 +135,10 @@ The CLI client uses mORMot2's typed SOA interfaces to call the CQRS services:
 
 ```bash
 # Build remote mode (talks to server on localhost:8080)
-./src/fpc/compile_cli.sh
+./prj/fpc/compile_cli.sh
 
 # Build local mode (embedded SQLite, no server needed)
-./src/fpc/compile_cli.sh local
+./prj/fpc/compile_cli.sh local
 
 # Usage
 ./bin/cli_client list
@@ -151,7 +151,7 @@ The CLI client uses mORMot2's typed SOA interfaces to call the CQRS services:
 ./bin/cli_client comment 1 "Great progress!" "Author"
 ```
 
-On Windows the equivalents are `src\fpc\compile_cli.bat` / `src\fpc\compile_cli.bat local` and
+On Windows the equivalents are `prj\fpc\compile_cli.bat` / `prj\fpc\compile_cli.bat local` and
 `bin\cli_client.exe list`, `bin\cli_client.exe add "My Task" "Description" 3`, etc.
 
 ## Project Structure
@@ -183,30 +183,31 @@ On Windows the equivalents are `src\fpc\compile_cli.bat` / `src\fpc\compile_cli.
 │   │   │   └── <a href="src/infra/tasks/task_repository_orm.pas">task_repository_orm.pas</a>  # TTaskRepositoryOrm, TTaskFts5 schema, migration
 │   │   └── <a href="src/infra/tags/">tags/</a>
 │   │       └── <a href="src/infra/tags/tag_repository_orm.pas">tag_repository_orm.pas</a>   # TTagRepositoryOrm, migration
-│   └── <a href="src/app/">app/</a>                         # Application: DTOs, mappers, services
-│       ├── <a href="src/app/tasks/">tasks/</a>
-│       │   ├── <a href="src/app/tasks/task_dtos.pas">task_dtos.pas</a>          # packed-record DTO family
-│       │   ├── <a href="src/app/tasks/task_mappers.pas">task_mappers.pas</a>       # OrmTo* / *ToOrm / Apply* (pure)
-│       │   ├── <a href="src/app/tasks/task_query_impl.pas">task_query_impl.pas</a>    # TTaskQueryService (sicShared)
-│       │   └── <a href="src/app/tasks/task_command_impl.pas">task_command_impl.pas</a>  # TTaskCommandService (sicShared)
-│       └── <a href="src/app/tags/">tags/</a>
-│           ├── <a href="src/app/tags/tag_dtos.pas">tag_dtos.pas</a>
-│           ├── <a href="src/app/tags/tag_mappers.pas">tag_mappers.pas</a>
-│           ├── <a href="src/app/tags/tag_query_impl.pas">tag_query_impl.pas</a>
-│           └── <a href="src/app/tags/tag_command_impl.pas">tag_command_impl.pas</a>
-│   ├── <a href="src/serv/">serv/</a>                        # Composition root: server wiring + daemon host
-│   │   └── <a href="src/serv/app/">app/</a>
-│   │       └── <a href="src/serv/app/ServAppTaskManager.pas">ServAppTaskManager.pas</a>   # RunTaskManagerDaemon: two-server topology, HTTP host
-│   ├── <a href="src/fpc/">fpc/</a>                         # Command-line build/run scripts (FPC)
-│   │   ├── <a href="src/fpc/compile.sh">compile.sh</a> / <a href="src/fpc/compile.bat">compile.bat</a>  # Server build (Linux / Windows)
-│   │   ├── <a href="src/fpc/compile_cli.sh">compile_cli.sh</a> / <a href="src/fpc/compile_cli.bat">compile_cli.bat</a>  # CLI build
-│   │   └── <a href="src/fpc/run.sh">run.sh</a> / <a href="src/fpc/run.bat">run.bat</a>          # Run the server
-│   ├── <a href="src/delphi/">delphi/</a>                      # Delphi project files
-│   │   ├── <a href="src/delphi/task_manager.dpr">task_manager.dpr</a>         # Server project (also main source of the .lpi)
-│   │   └── <a href="src/delphi/cli_client.dpr">cli_client.dpr</a>           # CLI project (also main source of the .lpi)
-│   └── <a href="src/lazarus/">lazarus/</a>                     # Lazarus project files (need the mormot2 package)
-│       ├── <a href="src/lazarus/task_manager.lpi">task_manager.lpi</a>         # Server project
-│       └── <a href="src/lazarus/cli_client.lpi">cli_client.lpi</a>           # CLI project ("local" build mode = -dLOCAL_MODE)
+│   ├── <a href="src/app/">app/</a>                         # Application: DTOs, mappers, services
+│   │   ├── <a href="src/app/tasks/">tasks/</a>
+│   │   │   ├── <a href="src/app/tasks/task_dtos.pas">task_dtos.pas</a>          # packed-record DTO family
+│   │   │   ├── <a href="src/app/tasks/task_mappers.pas">task_mappers.pas</a>       # OrmTo* / *ToOrm / Apply* (pure)
+│   │   │   ├── <a href="src/app/tasks/task_query_impl.pas">task_query_impl.pas</a>    # TTaskQueryService (sicShared)
+│   │   │   └── <a href="src/app/tasks/task_command_impl.pas">task_command_impl.pas</a>  # TTaskCommandService (sicShared)
+│   │   └── <a href="src/app/tags/">tags/</a>
+│   │       ├── <a href="src/app/tags/tag_dtos.pas">tag_dtos.pas</a>
+│   │       ├── <a href="src/app/tags/tag_mappers.pas">tag_mappers.pas</a>
+│   │       ├── <a href="src/app/tags/tag_query_impl.pas">tag_query_impl.pas</a>
+│   │       └── <a href="src/app/tags/tag_command_impl.pas">tag_command_impl.pas</a>
+│   └── <a href="src/serv/">serv/</a>                        # Composition root: server wiring + daemon host
+│       └── <a href="src/serv/app/">app/</a>
+│           └── <a href="src/serv/app/ServAppTaskManager.pas">ServAppTaskManager.pas</a>   # RunTaskManagerDaemon: two-server topology, HTTP host
+├── <a href="prj/">prj/</a>                             # Per-toolchain project files and build scripts
+│   ├── <a href="prj/fpc/">fpc/</a>                         # Command-line build/run scripts (FPC)
+│   │   ├── <a href="prj/fpc/compile.sh">compile.sh</a> / <a href="prj/fpc/compile.bat">compile.bat</a>  # Server build (Linux / Windows)
+│   │   ├── <a href="prj/fpc/compile_cli.sh">compile_cli.sh</a> / <a href="prj/fpc/compile_cli.bat">compile_cli.bat</a>  # CLI build
+│   │   └── <a href="prj/fpc/run.sh">run.sh</a> / <a href="prj/fpc/run.bat">run.bat</a>          # Run the server
+│   ├── <a href="prj/delphi/">delphi/</a>                      # Delphi project files
+│   │   ├── <a href="prj/delphi/task_manager.dpr">task_manager.dpr</a>         # Server project (also main source of the .lpi)
+│   │   └── <a href="prj/delphi/cli_client.dpr">cli_client.dpr</a>           # CLI project (also main source of the .lpi)
+│   └── <a href="prj/lazarus/">lazarus/</a>                     # Lazarus project files (need the mormot2 package)
+│       ├── <a href="prj/lazarus/task_manager.lpi">task_manager.lpi</a>         # Server project
+│       └── <a href="prj/lazarus/cli_client.lpi">cli_client.lpi</a>           # CLI project ("local" build mode = -dLOCAL_MODE)
 ├── <a href="tests/">tests/</a>                           # Test units, one folder per entity
 │   ├── <a href="tests/tasks/task_tests.pas">tasks/task_tests.pas</a>         # TTestTask (TSynTestCase) — 10 test methods
 │   └── <a href="tests/tags/tag_tests.pas">tags/tag_tests.pas</a>           # TTestTag (TSynTestCase) — 8 test methods

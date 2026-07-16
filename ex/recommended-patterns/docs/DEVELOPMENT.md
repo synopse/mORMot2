@@ -38,38 +38,38 @@ The hard rule: `app/*` depends on `dom/*_repository.pas` (interface), **never** 
 ### Compile Server
 
 ```bash
-./src/fpc/compile.sh
+./prj/fpc/compile.sh
 ```
 
 ### Compile CLI Client
 
 ```bash
 # Remote mode (connects to running server)
-./src/fpc/compile_cli.sh
+./prj/fpc/compile_cli.sh
 
 # Local mode (embedded SQLite, no server needed)
-./src/fpc/compile_cli.sh local
+./prj/fpc/compile_cli.sh local
 ```
 
 ### Building from the IDE
 
-- **Lazarus**: open `src/lazarus/task_manager.lpi` or `src/lazarus/cli_client.lpi`.
+- **Lazarus**: open `prj/lazarus/task_manager.lpi` or `prj/lazarus/cli_client.lpi`.
   Both require the `mormot2` package (`packages/lazarus/mormot2.lpk` in the
   enclosing repository). The `cli_client.lpi` "local" build mode adds
   `-dLOCAL_MODE`. Headless builds work too:
 
   ```bash
   lazbuild --add-package-link ../../packages/lazarus/mormot2.lpk   # once
-  lazbuild src/lazarus/task_manager.lpi
-  lazbuild --build-mode=local src/lazarus/cli_client.lpi
+  lazbuild prj/lazarus/task_manager.lpi
+  lazbuild --build-mode=local prj/lazarus/cli_client.lpi
   ```
 
-- **Delphi**: open `src/delphi/task_manager.dpr` or `src/delphi/cli_client.dpr`,
+- **Delphi**: open `prj/delphi/task_manager.dpr` or `prj/delphi/cli_client.dpr`,
   with the mORMot2 `src` folders on the library path. The `.dpr` files list
   every project unit with explicit `in` paths, and double as the main sources
   of the Lazarus projects.
 
-### Key Compiler Flags (in src/fpc/compile.sh)
+### Key Compiler Flags (in prj/fpc/compile.sh)
 
 - `-Fl../../static/x86_64-linux`: Link static SQLite3 library
 - `-Fusrc -Fusrc/dom/{tasks,tags} -Fusrc/infra/{tasks,tags} -Fusrc/app/{tasks,tags} -Fusrc/serv/app -Futests/{tasks,tags}`: Unit search paths
@@ -80,7 +80,7 @@ The hard rule: `app/*` depends on `dom/*_repository.pas` (interface), **never** 
 ## Running
 
 ```bash
-./src/fpc/run.sh
+./prj/fpc/run.sh
 # or directly:
 ./bin/task_manager
 ```
@@ -115,7 +115,7 @@ Feature files are split across `src/dom/<entity>/`, `src/infra/<entity>/`, `src/
 ### 2. Compile
 
 ```bash
-./src/fpc/compile.sh
+./prj/fpc/compile.sh
 ```
 
 ### 3. Test
@@ -358,7 +358,7 @@ No manual cleanup needed: `InjectInstance` ref-counts the repos, and `Dispatcher
 
 ### 11. Update compile scripts
 
-Add the new folders to `src/fpc/compile.sh` and `src/fpc/compile_cli.sh`:
+Add the new folders to `prj/fpc/compile.sh` and `prj/fpc/compile_cli.sh`:
 
 ```
 -Fusrc/dom/myfeature \

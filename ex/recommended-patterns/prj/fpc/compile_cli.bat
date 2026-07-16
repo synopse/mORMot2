@@ -1,8 +1,8 @@
 @echo off
 REM CLI Client - Compilation Script (Windows)
 REM Usage:
-REM   src\fpc\compile_cli.bat         # Remote mode (HTTP client)
-REM   src\fpc\compile_cli.bat local   # Local mode (embedded SQLite)
+REM   prj\fpc\compile_cli.bat         # Remote mode (HTTP client)
+REM   prj\fpc\compile_cli.bat local   # Local mode (embedded SQLite)
 
 REM Determine the project root (two levels above this script) and switch to it
 cd /d "%~dp0..\.."

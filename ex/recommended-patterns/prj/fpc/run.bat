@@ -10,7 +10,7 @@ cd /d "%~dp0..\.."
 
 if not exist "bin\task_manager.exe" (
     echo Error: task_manager binary not found
-    echo Please run src\fpc\compile.bat first
+    echo Please run prj\fpc\compile.bat first
     exit /b 1
 )
 

@@ -114,7 +114,7 @@
         <IsPartOfProject Value="True"/>
       </Unit0>
       <Unit1>
-        <Filename Value="..\cli_client_core.pas"/>
+        <Filename Value="..\..\src\cli_client_core.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit1>
     </Units>

@@ -117,7 +117,7 @@
         <IsPartOfProject Value="True"/>
       </Unit0>
       <Unit1>
-        <Filename Value="..\serv\app\ServAppTaskManager.pas"/>
+        <Filename Value="..\..\src\serv\app\ServAppTaskManager.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit1>
     </Units>

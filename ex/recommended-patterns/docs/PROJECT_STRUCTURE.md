@@ -37,25 +37,26 @@ The layout and the `§…` / `A.x` / `B.x` citations in this document follow the
 │   │   │   └── <a href="../src/infra/tasks/task_repository_orm.pas">task_repository_orm.pas</a>   # TTaskRepositoryOrm, TTaskFts5 schema, migration
 │   │   └── <a href="../src/infra/tags/">tags/</a>
 │   │       └── <a href="../src/infra/tags/tag_repository_orm.pas">tag_repository_orm.pas</a>    # TTagRepositoryOrm, migration
-│   └── <a href="../src/app/">app/</a>                              # Application layer: DTOs, mappers, services
-│       ├── <a href="../src/app/tasks/">tasks/</a>
-│       │   ├── <a href="../src/app/tasks/task_dtos.pas">task_dtos.pas</a>             # Family of packed-record DTOs (view/list/create/update/…)
-│       │   ├── <a href="../src/app/tasks/task_mappers.pas">task_mappers.pas</a>          # OrmTo* / *ToOrm / Apply* — pure procedures
-│       │   ├── <a href="../src/app/tasks/task_query_impl.pas">task_query_impl.pas</a>       # TTaskQueryService (sicShared)
-│       │   └── <a href="../src/app/tasks/task_command_impl.pas">task_command_impl.pas</a>     # TTaskCommandService (sicShared)
-│       └── <a href="../src/app/tags/">tags/</a>
-│           ├── <a href="../src/app/tags/tag_dtos.pas">tag_dtos.pas</a>
-│           ├── <a href="../src/app/tags/tag_mappers.pas">tag_mappers.pas</a>
-│           ├── <a href="../src/app/tags/tag_query_impl.pas">tag_query_impl.pas</a>
-│           └── <a href="../src/app/tags/tag_command_impl.pas">tag_command_impl.pas</a>
-│   ├── <a href="../src/serv/">serv/</a>                             # Daemon / composition root (the only place infra classes are named)
-│   │   └── <a href="../src/serv/app/">app/</a>
-│   │       └── <a href="../src/serv/app/ServAppTaskManager.pas">ServAppTaskManager.pas</a>    # Builds the two-server topology, wires repos, registers services
-│   ├── <a href="../src/fpc/">fpc/</a>                              # Command-line build/run scripts (FPC)
-│   │   ├── <a href="../src/fpc/compile.sh">compile.sh</a>                    # Server compilation
-│   │   └── <a href="../src/fpc/compile_cli.sh">compile_cli.sh</a>                # CLI compilation
-│   ├── <a href="../src/delphi/">delphi/</a>                           # Delphi project files (.dpr; also main sources of the .lpi)
-│   └── <a href="../src/lazarus/">lazarus/</a>                          # Lazarus project files (.lpi; require the mormot2 package)
+│   ├── <a href="../src/app/">app/</a>                              # Application layer: DTOs, mappers, services
+│   │   ├── <a href="../src/app/tasks/">tasks/</a>
+│   │   │   ├── <a href="../src/app/tasks/task_dtos.pas">task_dtos.pas</a>             # Family of packed-record DTOs (view/list/create/update/…)
+│   │   │   ├── <a href="../src/app/tasks/task_mappers.pas">task_mappers.pas</a>          # OrmTo* / *ToOrm / Apply* — pure procedures
+│   │   │   ├── <a href="../src/app/tasks/task_query_impl.pas">task_query_impl.pas</a>       # TTaskQueryService (sicShared)
+│   │   │   └── <a href="../src/app/tasks/task_command_impl.pas">task_command_impl.pas</a>     # TTaskCommandService (sicShared)
+│   │   └── <a href="../src/app/tags/">tags/</a>
+│   │       ├── <a href="../src/app/tags/tag_dtos.pas">tag_dtos.pas</a>
+│   │       ├── <a href="../src/app/tags/tag_mappers.pas">tag_mappers.pas</a>
+│   │       ├── <a href="../src/app/tags/tag_query_impl.pas">tag_query_impl.pas</a>
+│   │       └── <a href="../src/app/tags/tag_command_impl.pas">tag_command_impl.pas</a>
+│   └── <a href="../src/serv/">serv/</a>                             # Daemon / composition root (the only place infra classes are named)
+│       └── <a href="../src/serv/app/">app/</a>
+│           └── <a href="../src/serv/app/ServAppTaskManager.pas">ServAppTaskManager.pas</a>    # Builds the two-server topology, wires repos, registers services
+├── <a href="../prj/">prj/</a>                                  # Per-toolchain project files and build scripts
+│   ├── <a href="../prj/fpc/">fpc/</a>                              # Command-line build/run scripts (FPC)
+│   │   ├── <a href="../prj/fpc/compile.sh">compile.sh</a>                    # Server compilation
+│   │   └── <a href="../prj/fpc/compile_cli.sh">compile_cli.sh</a>                # CLI compilation
+│   ├── <a href="../prj/delphi/">delphi/</a>                           # Delphi project files (.dpr; also main sources of the .lpi)
+│   └── <a href="../prj/lazarus/">lazarus/</a>                          # Lazarus project files (.lpi; require the mormot2 package)
 ├── <a href="../tests/">tests/</a>                                # Test units, one folder per entity
 │   ├── <a href="../tests/tasks/">tasks/</a>
 │   │   └── <a href="../tests/tasks/task_tests.pas">task_tests.pas</a>                # TTestTask (TSynTestCase) — 10 test methods
@@ -210,4 +211,4 @@ The key rule: `app/*_impl.pas` depends on `dom/*_repository.pas` (interface), **
     - Seed it into the dispatcher's resolver before `ServiceDefine`: `Dispatcher.ServiceContainer.InjectInstance([RepoImpl])` (add to the existing array).
     - Register services on the dispatcher (class form): `Dispatcher.ServiceDefine(T<Entity>QueryService, [I<Entity>Query], sicShared)`; same for Command.
     - Add the test case to the `TSynTests` suite.
-11. **src/fpc/compile.sh / src/fpc/compile_cli.sh**: nothing to add — the existing `-Fusrc/dom/<entity> -Fusrc/infra/<entity> -Fusrc/app/<entity>` patterns already cover any new entity once the folder exists; just add new `-Fu` lines per entity folder.
+11. **prj/fpc/compile.sh / prj/fpc/compile_cli.sh**: nothing to add — the existing `-Fusrc/dom/<entity> -Fusrc/infra/<entity> -Fusrc/app/<entity>` patterns already cover any new entity once the folder exists; just add new `-Fu` lines per entity folder.

@@ -1,8 +1,8 @@
 #!/bin/bash
 # CLI Client - Compilation Script
 # Usage:
-#   ./src/fpc/compile_cli.sh         # Remote mode (HTTP client)
-#   ./src/fpc/compile_cli.sh local   # Local mode (embedded SQLite)
+#   ./prj/fpc/compile_cli.sh         # Remote mode (HTTP client)
+#   ./prj/fpc/compile_cli.sh local   # Local mode (embedded SQLite)
 
 # Determine the project root (two levels above this script)
 ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )"
