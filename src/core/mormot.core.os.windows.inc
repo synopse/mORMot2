@@ -3210,10 +3210,10 @@ begin
   if res = NO_ERROR then
   begin
     PCardinal(data.BufEnd)^ := 0; // ensure is #0#0 terminated: the string might
-    if kind <> nil then
-      kind^ := k;
     // NOT have been stored with the proper terminating null characters
     // https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryvalueexw
+    if kind <> nil then
+      kind^ := k;
     result := true;
   end
   else
@@ -3633,9 +3633,9 @@ end;
 procedure CoUninit;
 begin
   if CoInitCounter <= 0 then
-    raise EOleSysError.Create('You should call TOleDBConnection.Free from the same ' +
-      'thread which called its Create: i.e. call MyProps.EndCurrentThread from an ' +
-      'THttpServerGeneric.OnHttpThreadTerminate event - see ticket 213544b2f5');
+    raise EOleSysError.Create('Should call TOleDBConnection.Free/CoUninit from ' +
+      'the same thread which called Create: i.e. call MyProps.EndCurrentThread ' +
+      'from an THttpServerGeneric.OnHttpThreadTerminate event');
   dec(CoInitCounter);
   if CoInitCounter = 0 then
     CoUninitialize;
