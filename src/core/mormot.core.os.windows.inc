@@ -3565,20 +3565,13 @@ begin
   end;
 end;
 
-function ReadRegString(Key: THandle; const Path, Value: string): string;
+function ReadRegString(Root: TWinRegistryRoot; Path, Value: PWideChar): string;
 var
-  siz, typ: DWord;
-  tmp: array[byte] of char;
-  k: HKey;
+  reg: TWinRegistry;
 begin
-  result := '';
-  if RegOpenKeyEx(Key, pointer(Path), 0, KEY_QUERY_VALUE, k) <> ERROR_SUCCESS then
-    exit;
-  siz := 250;
-  typ := REG_SZ;
-  if RegQueryValueEx(k, pointer(Value), nil, @typ, @tmp, @siz) = ERROR_SUCCESS then
-    result := tmp;
-  RegCloseKey(k);
+  reg.ReadOpenValue(Root, Path);
+  result := reg.ReadFileName(Value); // return '' if not found
+  reg.Close;
 end;
 
 function SearchSmbios(const mem: RawByteString; var info: TRawSmbiosInfo): PtrUInt;

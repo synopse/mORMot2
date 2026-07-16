@@ -2047,9 +2047,9 @@ function IsUacVirtualFolder(const Folder: TFileName): boolean;
 function IsUacVirtualizationEnabled: boolean;
   {$ifdef CPU64} inline; {$endif}
 
-/// quickly retrieve a Text value from Registry
-// - could be used if TWinRegistry is not needed, e.g. for a single value
-function ReadRegString(Key: THandle; const Path, Value: string): string;
+/// quickly retrieve a RTL string/TFileName value (not RawUtf8) from Registry
+// - could be used if TWinRegistry is overkill, e.g. for a single value
+function ReadRegString(Root: TWinRegistryRoot; Path, Value: PWideChar): string;
 
 /// convenient late-binding of any external library function
 // - thread-safe wrapper around LoadLibray + GetProcAddress once over a pointer

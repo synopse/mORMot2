@@ -1005,8 +1005,8 @@ begin
       {$ifdef WIN64}
       aDllFileName := ''; // Office is a 32 bit app with 32 bit dlls :)
       {$else}
-      aDllFileName := ReadRegString(HKEY_CLASSES_ROOT,
-        'Applications\Winword.exe\shell\edit\command', '');
+      aDllFileName := ReadRegString(wrClasses,
+        'Applications\Winword.exe\shell\edit\command', nil);
       if aDllFileName <> '' then
       begin
         delete(aDllFileName, 1, 1);
