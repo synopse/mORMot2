@@ -16,6 +16,7 @@ src/
 ├── AppTaskManagerClient{,Local,Remote}.pas  # CLI backends: LOCAL (embedded) / REMOTE (HTTP)
 ├── shared_types.pas, app_config.pas, app_settings.pas
 tests/<entity>/       # TSynTestCase per entity
+prj/                  # Per-toolchain build scripts (fpc/) and IDE project files (delphi/, lazarus/)
 ```
 
 The hard rule: `app/*` depends on `dom/*_repository.pas` (interface), **never** on `infra/*_repository_orm.pas` (implementation). The composition root is the only place where the concrete `T<Entity>RepositoryOrm` class is named — it constructs it and seeds it into the dispatcher's resolver via `Dispatcher.ServiceContainer.InjectInstance([repoImpl])` so service `Repo` properties resolve through `AutoResolve`.
