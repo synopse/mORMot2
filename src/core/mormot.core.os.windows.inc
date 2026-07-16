@@ -5045,7 +5045,7 @@ var
   process, machine: word;
   P: pointer;
   Vers: TWindowsVersion;
-  cpu, manuf, prod, prodver: RawUtf8;
+  cpu: RawUtf8;
   reg: TWinRegistry;
   rnd: PHash128;
   proc: array of TSystemLogicalProcessorInformation;
@@ -5214,19 +5214,19 @@ begin
     if Assigned(wine_get_version) then
     begin
       OSVersionInfoEx := wine_get_version;
-      OSVersionInfoEx := TrimU('Wine ' + TrimU(OSVersionInfoEx));
+      OSVersionInfoEx := TrimU(Join(['Wine ', TrimU(OSVersionInfoEx)]));
     end
     {$ifdef CPUINTEL}
     else if IsWow64Emulation then
-       OSVersionInfoEx := 'Prism'
+      OSVersionInfoEx := 'Prism'
     {$endif CPUINTEL};
     RtlIpv6StringToAddress := LibraryResolve(h, 'RtlIpv6StringToAddressA');
   end;
   // 4. retrieve Software/Hardware information from Registry
   if reg.ReadOpen(wrLocalMachine, 'Software\Microsoft\Windows NT\CurrentVersion') then
   begin
-    WindowsUbr := reg.ReadDword('UBR');
-    WindowsProductName := reg.ReadString('ProductName');
+    WindowsUbr            := reg.ReadDword('UBR');
+    WindowsProductName    := reg.ReadString('ProductName');
     WindowsDisplayVersion := reg.ReadString('DisplayVersion');
   end;
   with OSVersionInfo do
@@ -5240,10 +5240,10 @@ begin
   if WindowsUbr <> 0 then
     insert(_fmt('.%d', [WindowsUbr]), OSVersionText, length(OSVersionText));
   if WindowsDisplayVersion <> '' then // append e.g. '25H2'
-    insert(WindowsDisplayVersion + ' ', OSVersionText,
+    insert(Join([WindowsDisplayVersion, ' ']), OSVersionText,
       PosExChar('(', OSVersionText));
   if OSVersionInfoEx <> '' then
-    OSVersionText := OSVersionText + ' - ' + OSVersionInfoEx;
+    OSVersionText := Join([OSVersionText, ' - ', OSVersionInfoEx]);
   if reg.ReadOpen(wrLocalMachine,
        'Hardware\Description\System\CentralProcessor\0', {closefirst=}true) then
   begin
@@ -5253,29 +5253,29 @@ begin
   end;
   if reg.ReadOpen(wrLocalMachine, 'Hardware\Description\System\BIOS', true) then
   begin
-    manuf := reg.ReadString('SystemManufacturer');
-    if manuf <> '' then
-      manuf := manuf + ' ';
-    prod := reg.ReadString('SystemProductName');
-    prodver := reg.ReadString('SystemVersion');
-    if prodver = '' then
-      prodver := reg.ReadString('BIOSVersion');
+    _Smbios[sbiManufacturer]      := reg.ReadString('SystemManufacturer');
+    _Smbios[sbiProductName]       := reg.ReadString('SystemProductName');
+    _Smbios[sbiVersion]           := reg.ReadString('SystemVersion');
+    _Smbios[sbiBiosVersion]       := reg.ReadString('BIOSVersion');
+    _Smbios[sbiBiosVendor]        := reg.ReadString('BIOSVendor');
+    _Smbios[sbiBiosDate]          := reg.ReadString('BIOSReleaseDate');
+    _Smbios[sbiSku]               := reg.ReadString('SystemSKU');
+    _Smbios[sbiBoardManufacturer] := reg.ReadString('BaseBoardManufacturer');
+    _Smbios[sbiBoardProductName]  := reg.ReadString('BaseBoardProduct');
+    _Smbios[sbiBoardVersion]      := reg.ReadString('BaseBoardVersion');
   end;
-  if ({%H-}prod = '') or
-     ({%H-}prodver = '') then
-  begin
+  if (_Smbios[sbiProductName] = '') or
+     (_Smbios[sbiBiosVersion] = '') then // e.g. XP has no System\BIOS entry
     if reg.ReadOpen(wrLocalMachine, 'Hardware\Description\System', true) then
     begin
-      if prod = '' then
-        prod := reg.ReadString('SystemBiosVersion');
-      if prodver = '' then
-        prodver := reg.ReadString('VideoBiosVersion');
+      if _Smbios[sbiProductName] = '' then
+        _Smbios[sbiProductName] := reg.ReadString('SystemBiosVersion');
+      if _Smbios[sbiBiosVersion] = '' then
+        _Smbios[sbiBiosVersion] := reg.ReadString('VideoBiosVersion');
     end;
-  end;
   reg.Close;
-  BiosInfoText := manuf{%H-} + prod;
-  if prodver <> '' then
-    BiosInfoText := BiosInfoText + ' ' + prodver;
+  Join([_Smbios[sbiManufacturer], ' ', _Smbios[sbiProductName], ' ',
+        _Smbios[sbiBiosVersion]], BiosInfoText);
   if {%H-}cpu = '' then
    cpu := GetSystemEnv('PROCESSOR_IDENTIFIER');
   siz := 0;
