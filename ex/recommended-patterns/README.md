@@ -39,81 +39,6 @@ or launch `bin/task_manager` directly (`--test` runs the test suite headlessly a
 - Streamlined client: `http://localhost:8080/static/index.html`
 - Full-featured client (tags + comments): `http://localhost:8080/static/app.html`
 
-## Usage
-
-### Web Interface
-
-The web interface provides an intuitive way to manage tasks:
-
-1. **Create Task**: Fill in the form with task details and click "Create Task"
-2. **View Tasks**: All tasks are displayed in card format
-3. **Filter Tasks**: Use filter buttons to show All, Pending, In Progress, or Completed tasks
-4. **Complete Task**: Click the "Complete" button to mark as done
-5. **Delete Task**: Click the "Delete" button to remove a task
-
-### CQRS API Access
-
-All operations use POST requests to SOA endpoints with JSON array parameters:
-
-```bash
-# List all tasks
-curl -X POST http://localhost:8080/taskmanager/TaskQuery.ListTasks \
-  -H "Content-Type: application/json" \
-  -d '[""]'
-
-# Get task details
-curl -X POST http://localhost:8080/taskmanager/TaskQuery.GetTaskView \
-  -H "Content-Type: application/json" \
-  -d '[1]'
-
-# Create task
-curl -X POST http://localhost:8080/taskmanager/TaskCommand.CreateTask \
-  -H "Content-Type: application/json" \
-  -d '[{"title":"My Task","description":"Task description","priority":2,"dueDate":"2026-04-01"}]'
-
-# Mark task complete
-curl -X POST http://localhost:8080/taskmanager/TaskCommand.MarkComplete \
-  -H "Content-Type: application/json" \
-  -d '[1, true]'
-
-# Delete task
-curl -X POST http://localhost:8080/taskmanager/TaskCommand.DeleteTask \
-  -H "Content-Type: application/json" \
-  -d '[1]'
-
-# Search tasks
-curl -X POST http://localhost:8080/taskmanager/TaskQuery.SearchTasks \
-  -H "Content-Type: application/json" \
-  -d '[{"searchTerm":"keyword","status":""}]'
-```
-
-See [docs/API.md](docs/API.md) for complete API documentation.
-
-### CLI Client
-
-The CLI client uses mORMot2's typed SOA interfaces to call the CQRS services:
-
-```bash
-# Build remote mode (talks to server on localhost:8080)
-./prj/fpc/compile_cli.sh
-
-# Build local mode (embedded SQLite, no server needed)
-./prj/fpc/compile_cli.sh local
-
-# Usage
-./bin/cli_client list
-./bin/cli_client list pending
-./bin/cli_client add "My Task" "Description" 3
-./bin/cli_client get 1
-./bin/cli_client complete 1
-./bin/cli_client delete 1
-./bin/cli_client search "keyword"
-./bin/cli_client comment 1 "Great progress!" "Author"
-```
-
-On Windows the equivalents are `prj\fpc\compile_cli.bat` / `prj\fpc\compile_cli.bat local` and
-`bin\cli_client.exe list`, `bin\cli_client.exe add "My Task" "Description" 3`, etc.
-
 ## Project Structure
 <pre>
 /
@@ -182,6 +107,71 @@ On Windows the equivalents are `prj\fpc\compile_cli.bat` / `prj\fpc\compile_cli.
     ├── cli_client                   # CLI client executable
     └── units/                       # Compiled units
 </pre>
+
+## Usage
+
+### CQRS API Access
+
+All operations use POST requests to SOA endpoints with JSON array parameters:
+
+```bash
+# List all tasks
+curl -X POST http://localhost:8080/taskmanager/TaskQuery.ListTasks \
+  -H "Content-Type: application/json" \
+  -d '[""]'
+
+# Get task details
+curl -X POST http://localhost:8080/taskmanager/TaskQuery.GetTaskView \
+  -H "Content-Type: application/json" \
+  -d '[1]'
+
+# Create task
+curl -X POST http://localhost:8080/taskmanager/TaskCommand.CreateTask \
+  -H "Content-Type: application/json" \
+  -d '[{"title":"My Task","description":"Task description","priority":2,"dueDate":"2026-04-01"}]'
+
+# Mark task complete
+curl -X POST http://localhost:8080/taskmanager/TaskCommand.MarkComplete \
+  -H "Content-Type: application/json" \
+  -d '[1, true]'
+
+# Delete task
+curl -X POST http://localhost:8080/taskmanager/TaskCommand.DeleteTask \
+  -H "Content-Type: application/json" \
+  -d '[1]'
+
+# Search tasks
+curl -X POST http://localhost:8080/taskmanager/TaskQuery.SearchTasks \
+  -H "Content-Type: application/json" \
+  -d '[{"searchTerm":"keyword","status":""}]'
+```
+
+See [docs/API.md](docs/API.md) for complete API documentation.
+
+### CLI Client
+
+The CLI client uses mORMot2's typed SOA interfaces to call the CQRS services:
+
+```bash
+# Build remote mode (talks to server on localhost:8080)
+./prj/fpc/compile_cli.sh
+
+# Build local mode (embedded SQLite, no server needed)
+./prj/fpc/compile_cli.sh local
+
+# Usage
+./bin/cli_client list
+./bin/cli_client list pending
+./bin/cli_client add "My Task" "Description" 3
+./bin/cli_client get 1
+./bin/cli_client complete 1
+./bin/cli_client delete 1
+./bin/cli_client search "keyword"
+./bin/cli_client comment 1 "Great progress!" "Author"
+```
+
+On Windows the equivalents are `prj\fpc\compile_cli.bat` / `prj\fpc\compile_cli.bat local` and
+`bin\cli_client.exe list`, `bin\cli_client.exe add "My Task" "Description" 3`, etc.
 
 ## CQRS Service Endpoints
 
@@ -320,5 +310,4 @@ binary's parent directory (`bin/../data`), i.e. `data/` at the project root.
 - [mORMot2 SAD — Recommended Patterns](https://github.com/synopse/mORMot2/blob/master/docs/mORMot2-SAD-Recommended-Patterns.md) — the design guide this project follows; the `§`, `A.x`, and `B.x` references throughout the docs point here
 - [mORMot2 Documentation](https://synopse.info)
 - [mORMot2 GitHub Repository](https://github.com/synopse/mORMot2)
-- [Free Pascal Documentation](https://www.freepascal.org/docs.html)
 
