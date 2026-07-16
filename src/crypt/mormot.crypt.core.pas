@@ -7487,7 +7487,7 @@ begin
   if Rnd = '' then
     exit;
   haspunct := false;
-  P := UniqueRawUtf8(RawUtf8(Rnd)); // Rnd likely to have been just allocated
+  P := UniqueRawUtf8(RawUtf8(Rnd)); // Rnd is likely to have been just allocated
   for i := 1 to length(Rnd) do
   begin
     P^ := CHARS[ord(P^) and 127];
@@ -7497,8 +7497,8 @@ begin
     inc(P);
   end;
   FakeCodePage(RawByteString(Rnd), CP_UTF8);
-  result := (length(Rnd) <= 4) or
-            (haspunct and (not (IsUpper(Rnd) or IsLower(Rnd))));
+  if length(Rnd) > 4 then
+    result := haspunct and (not (IsUpper(Rnd) or IsLower(Rnd)));
 end;
 
 function TAesPrngAbstract.RandomPassword(Len: integer): SpiUtf8;
