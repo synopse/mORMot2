@@ -1,6 +1,6 @@
 # Simple FPC mORMot2 Task Manager
 
-A modern, high-performance task management system built with Free Pascal and the mORMot2 framework, using CQRS and DDD patterns.
+The worked example of the mORMot2 [*Recommended Patterns*](https://github.com/synopse/mORMot2/blob/master/docs/mORMot2-SAD-Recommended-Patterns.md) guide: a task manager built with CQRS and DDD patterns, made of an HTTP server, a web client, a CLI client and an automated test suite. It compiles with FPC, Lazarus or Delphi.
 
 ## Features
 
@@ -32,52 +32,40 @@ A modern, high-performance task management system built with Free Pascal and the
 
 ## Quick Start
 
-### Prerequisites
+This sample ships inside the [mORMot2](https://github.com/synopse/mORMot2) tree, so the framework sources are already at hand: the enclosing repository at `../../` (relative to this project). No installation is needed beyond your usual toolchain setup:
 
-- Free Pascal Compiler (FPC) 3.2.2 or later
-- mORMot2 framework
-- Modern web browser
+- A Pascal toolchain: Free Pascal (FPC) 3.2.2 or later, [Lazarus](https://www.lazarus-ide.org/), or Delphi
+- The pre-compiled mORMot2 static libraries, extracted from [mormot2static.tgz](https://synopse.info/files/mormot2static.tgz) / [mormot2static.7z](https://synopse.info/files/mormot2static.7z) into `../../static/` — see the [main repository README](../../README.md#quick-start) if you have not done this yet
 
-### Installation
+### Compile the server — pick your toolchain
 
-1. **Clone the repository**
+Each subfolder of [`prj/`](prj/) targets one toolchain; all three build the same sources from [`src/`](src/) into [`bin/`](bin/):
 
-2. **Ensure mORMot2 is available**
-   - This sample ships inside the [mORMot2](https://github.com/synopse/mORMot2) tree, so the framework sources are the enclosing repository at `../../` (relative to this project), with static libraries under `../../static/x86_64-linux/` (Linux) or `../../static/x86_64-win64/` (Windows)
+- **FPC** (command line):
+  ```bash
+  ./prj/fpc/compile.sh        # Windows: prj\fpc\compile.bat
+  ```
+- **Lazarus**: open and build `prj/lazarus/task_manager.lpi` and
+  `prj/lazarus/cli_client.lpi`. They require the `mormot2` package
+  (`packages/lazarus/mormot2.lpk` in the enclosing repository). The
+  `cli_client.lpi` "local" build mode compiles the embedded-SQLite backend.
+  Headless: `lazbuild prj/lazarus/task_manager.lpi`.
+- **Delphi**: open and build `prj/delphi/task_manager.dpr` and
+  `prj/delphi/cli_client.dpr`, with the mORMot2 `src` folders on the library
+  path. The same `.dpr` files are the main sources of the Lazarus projects.
 
-3. **Compile the server**
-   ```bash
-   ./prj/fpc/compile.sh
-   ```
-   On Windows:
-   ```bat
-   prj\fpc\compile.bat
-   ```
+### Run the server
 
-4. **Run the server**
-   ```bash
-   ./prj/fpc/run.sh
-   ```
-   On Windows:
-   ```bat
-   prj\fpc\run.bat
-   ```
+```bash
+./prj/fpc/run.sh              # Windows: prj\fpc\run.bat
+```
 
-5. **Open the web interface**
-   - Streamlined client: `http://localhost:8080/static/index.html`
-   - Full-featured client (tags + comments): `http://localhost:8080/static/app.html`
+or launch `bin/task_manager` directly (`--test` runs the test suite headlessly and exits).
 
-### Building from the IDE
+### Open the web interface
 
-Instead of the shell scripts you can open the IDE projects:
-
-- **Lazarus**: `prj/lazarus/task_manager.lpi` and `prj/lazarus/cli_client.lpi`.
-  They require the `mormot2` package (`packages/lazarus/mormot2.lpk` in the
-  enclosing repository). The `cli_client.lpi` "local" build mode compiles the
-  embedded-SQLite backend. Headless: `lazbuild prj/lazarus/task_manager.lpi`.
-- **Delphi**: `prj/delphi/task_manager.dpr` and `prj/delphi/cli_client.dpr`,
-  with the mORMot2 `src` folders on the library path. The same `.dpr` files
-  are the main sources of the Lazarus projects.
+- Streamlined client: `http://localhost:8080/static/index.html`
+- Full-featured client (tags + comments): `http://localhost:8080/static/app.html`
 
 ## Usage
 
