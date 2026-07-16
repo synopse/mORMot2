@@ -848,6 +848,8 @@ const
   /// HTTP header pattern received for authentication
   SECPKGNAMEHTTPAUTHORIZATION = 'AUTHORIZATION: NEGOTIATE ';
 
+  /// by default, no GSSAPI is to be loaded with the Windows SSPI
+  GssApi_LastLoadError = '';
 
 
 { ****************** Lan Manager Access Functions }
