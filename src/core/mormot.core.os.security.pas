@@ -3150,6 +3150,12 @@ function SetSystemSecurityDescriptor(const fn: TFileName;
   kind: TNamedResourceType = nrtFile;
   privileges: TWinSystemPrivileges = [wspSecurity]): boolean;
 
+/// check the Windows registry to see if AIA automatic retrieval has been disabled
+// - in HKLM:Software\Policies\Microsoft\SystemCertificates\ChainEngine\Config as documented in
+// https://learn.microsoft.com/en-us/windows-server/security/authority-information-access-retrieval
+function IsAiaDisabledInWindowsRegistry: boolean;
+
+
 {$endif OSWINDOWS}
 
 
@@ -8969,6 +8975,12 @@ begin
     priv.Done; // restore initial privileges ASAP
   if not result then
     SetLastError(bak); // so that WinLastError / RaiseLastError would work
+end;
+
+function IsAiaDisabledInWindowsRegistry: boolean;
+begin
+  result := ReadRegDWord(wrLocalMachine,
+    'Software\Policies\Microsoft\SystemCertificates\ChainEngine', 'Config') = 2;
 end;
 
 
