@@ -3534,7 +3534,7 @@ begin
       c := fList[i];
       if WithExplanatoryText then
         // see https://datatracker.ietf.org/doc/html/rfc7468#section-5.2
-        W.Add('Issuer: %'#13#10'Validity: from % to %'#13#10'Signature: %'#13#10,
+        W.Add('Issuer: %'#13#10'Validity: from %Z to %Z'#13#10'Signature: %'#13#10,
          [c.IssuerDN, DateTimeToIso8601Short(c.ThisUpdate),
           DateTimeToIso8601Short(c.NextUpdate), XSA_TXT[c.SignatureAlgorithm]]);
       W.AddString(c.SaveToPem);
@@ -4512,7 +4512,6 @@ begin
     fTrust.SaveToPem(W, {WithExplanatoryText=}true);
     w.AddCR;
     fSignedCrl.SaveToPem(W, {WithExplanatoryText=}true);
-    w.AddCR;
     fUnsignedCrl.SaveToPem(W, {WithExplanatoryText=}true);
     w.SetText(RawUtf8(result));
   finally
