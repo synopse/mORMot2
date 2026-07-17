@@ -3026,11 +3026,27 @@ type
       read fCaa;
   end;
 
+  /// define the available source of trust for ICryptStore.IsValid/IsValidChain
+  // - cstOsRoot to lookup trusted roots from the OS
+  // - cstOsIntermediate to lookup OS intermediate CA cache/store
+  // - cstAiaIntermediate retrieve missing intermediates via AIA web requests
+  TCertStoreTrust = (
+    cstOsRoot,
+    cstOsIntermediate,
+    cstAiaIntermediate
+  );
+  /// define the source of trust for ICryptStore.IsValid/IsValidChain
+  // - [] would only search for certificates within the ICryptStore internal list
+  // - you could allow certificate lookup from OS or remote AIA sources
+  TCertStoreTrusts = set of TCertStoreTrust;
+
   TCryptCertCache = class;
 
   /// abstract interface to a Certificates Store, as returned by Store() factory
   // - may be X.509 or not, OpenSSL implemented or not
   ICryptStore = interface
+    procedure SetTrust(const Value: TCertStoreTrusts);
+    function GetTrust: TCertStoreTrusts;
     /// delete all stored Certificates or CRL information
     procedure Clear;
     /// load a Certificates Store from a ICryptStore.Save memory buffer content
@@ -3126,12 +3142,20 @@ type
     /// return the preferred algo to be used with this store
     // - call e.g. CertAlgo.New to prepare a new ICryptCert to add to this store
     function DefaultCertAlgo: TCryptCertAlgo;
+    /// customize the source of trust for IsValid/IsValidChain of this instance
+    // - if filled with global DefaultCryptStoreTrusts variable by default
+    // - only supported by TCryptStore
+    property Trust: TCertStoreTrusts
+      read GetTrust write SetTrust;
   end;
 
   /// abstract parent class to implement ICryptCert, as returned by Cert() factory
   TCryptStore = class(TCryptInstance, ICryptStore)
   protected
     fCache: TCryptCertCache;
+    fTrust: TCertStoreTrusts;
+    procedure SetTrust(const Value: TCertStoreTrusts); virtual;
+    function GetTrust: TCertStoreTrusts;
   public
     destructor Destroy; override;
     // ICryptStore methods
@@ -9637,6 +9661,16 @@ function TCryptStore.Load(const Saved: RawByteString): boolean;
 begin
   Clear;
   result := AddFromBuffer(Saved) <> nil; // expect chain of PEM Cert + CRLs
+end;
+
+procedure TCryptStore.SetTrust(const Value: TCertStoreTrusts);
+begin
+  fTrust := Value;
+end;
+
+function TCryptStore.GetTrust: TCertStoreTrusts;
+begin
+  result := fTrust;
 end;
 
 function TCryptStore.Cache: TCryptCertCache;
