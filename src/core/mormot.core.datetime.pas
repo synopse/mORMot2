@@ -741,6 +741,10 @@ function DateTimeMSToString(HH, MM, SS, MS, Y, M, D: cardinal; Expanded: boolean
 // using TSynTimeZone.LocalToUtc, or tz should be properly set
 function DateTimeToHttpDate(dt: TDateTime; const tz: RawUtf8 = 'GMT'): RawUtf8; overload;
 
+/// convert some date/time to the "HTTP-date" format as defined by RFC 7231
+function DateTimeToHttpDateShort(dt: TDateTime; const tz: RawUtf8 = 'UTC'): TShort31;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// convert some "HTTP-date" format as defined by RFC 7231 into date/time
 // - wrapper around TSynSystemTime.FromHttpDate() conversion algorithm
 function HttpDateToDateTime(const httpdate: RawUtf8; var datetime: TDateTime;
@@ -3251,6 +3255,19 @@ begin
   begin
     T.FromDateTime(dt);
     T.ToHttpDate(result, tz);
+  end;
+end;
+
+function DateTimeToHttpDateShort(dt: TDateTime; const tz: RawUtf8): TShort31;
+var
+  T: TSynSystemTime;
+begin
+  if dt = 0 then
+    result[0] := #0
+  else
+  begin
+    T.FromDateTime(dt);
+    T.ToHttpDateShort(result, tz);
   end;
 end;
 
