@@ -8114,7 +8114,7 @@ begin
   result := GetEnumName(TypeInfo(TLdapClientTransmission), ord(lct));
 end;
 
-function ToText(lks: TLdapKerberosSignSeal): PShortString; overload;
+function ToText(lks: TLdapKerberosSignSeal): PShortString;
 begin
   result := GetEnumName(TypeInfo(TLdapKerberosSignSeal), ord(lks));
 end;
