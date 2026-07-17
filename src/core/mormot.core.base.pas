@@ -62,6 +62,10 @@ const
   // - for a client application, the branch main revision is safe and meaningful
   SYNOPSE_FRAMEWORK_BRANCH = '4';
 
+  /// the current commit number as plain integer constant
+  // - e.g. 15007 for SYNOPSE_FRAMEWORK_VERSION = '2.4.15007'
+  SYNOPSE_FRAMEWORK_COMMIT = {$I ..\mormot.commit-num.inc};
+
   /// a text including the version and the main active conditional options
   // - usefull for low-level debugging purpose
   SYNOPSE_FRAMEWORK_FULLVERSION  = SYNOPSE_FRAMEWORK_VERSION
