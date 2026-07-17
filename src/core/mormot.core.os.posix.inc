@@ -897,7 +897,7 @@ begin
   result := I64 + TZSeconds;
 end;
 
-{$endif declared(TTZInfo)}
+{$ifend declared(TTZInfo)}
 
 {$endif FPC}
 
