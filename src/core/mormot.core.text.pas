@@ -10534,7 +10534,7 @@ const
    'Length Required',                   // HTTP_LENGTHREQUIRED
    'Precondition Failed',               // 412
    'URI Too Long',                      // 414
-   'Unsupported Media Type',            // 415
+   'Unsupported Media Type',            // HTTP_UNSUPPORTEDMEDIATYPE
    'Requested Range Not Satisfiable',   // HTTP_RANGENOTSATISFIABLE
    'I''m a teapot',                     // HTTP_TEAPOT
    'Unprocessable Content',             // HTTP_UNPROCESSABLE_CONTENT
@@ -10582,7 +10582,7 @@ const
     HTTP_LENGTHREQUIRED,
     412,
     414,
-    415,
+    HTTP_UNSUPPORTEDMEDIATYPE,
     HTTP_RANGENOTSATISFIABLE,
     HTTP_TEAPOT,
     HTTP_UNPROCESSABLE_CONTENT,

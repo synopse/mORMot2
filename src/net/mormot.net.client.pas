@@ -462,7 +462,7 @@ type
     Alternate: IWGetAlternate;
     /// how Alternate should operate this file
     AlternateOptions: TWGetAlternateOptions;
-    /// how much time this connection should be kept alive
+    /// how much milliseconds time this connection should be kept alive
     // - as redirected to the internal Request() parameter
     KeepAlive: cardinal;
     /// allow to continue an existing .part file download
