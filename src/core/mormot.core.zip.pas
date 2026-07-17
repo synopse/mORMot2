@@ -58,6 +58,8 @@ type
     {$endif FPC}
     function GetSize: Int64; override;
   public
+    /// release associated DestStream if DestStreamOwned was set
+    destructor Destroy; override;
     /// this method will raise an error: it's a compression-only stream
     function Read(var Buffer; Count: Longint): Longint; override;
     /// used to return the current position, i.e. the real byte written count
@@ -76,6 +78,12 @@ type
     /// the current crc32 of the read or written data, i.e. the uncompressed CRC
     property Crc: cardinal
       read fCrc;
+    /// access to the raw associated destination TStream
+    property DestStream: TStream
+      read fDestStream;
+    /// by default, true for TSynZipCompressor and false for TSynZipDecompressor
+    property DestStreamOwned: boolean
+      read fDestStreamOwned write fDestStreamOwned;
   end;
 
   /// a TStream descendant for compressing data into a stream using Zip/Deflate
@@ -972,6 +980,12 @@ begin
   result := 0; // make compiler happy
 end;
 
+destructor TSynZipStream.Destroy;
+begin
+  inherited Destroy;
+  if fDestStreamOwned then
+    FreeAndNil(fDestStream);
+end;
 
 
 { TSynZipCompressor }
@@ -1014,9 +1028,7 @@ begin
     end;
     Z.CompressEnd;
   end;
-  inherited Destroy;
-  if fDestStreamOwned then
-    FreeAndNil(fDestStream);
+  inherited Destroy; // handle fDestStreamOwned
 end;
 
 function TSynZipCompressor.Write(const Buffer; Count: Longint): Longint;
