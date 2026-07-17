@@ -3143,7 +3143,7 @@ type
     // - call e.g. CertAlgo.New to prepare a new ICryptCert to add to this store
     function DefaultCertAlgo: TCryptCertAlgo;
     /// customize the source of trust for IsValid/IsValidChain of this instance
-    // - if filled with global DefaultCryptStoreTrusts variable by default
+    // - if filled with global DefaultCryptStoreTrust variable by default
     // - only supported by TCryptStore
     property Trust: TCertStoreTrusts
       read GetTrust write SetTrust;
@@ -3157,6 +3157,7 @@ type
     procedure SetTrust(const Value: TCertStoreTrusts); virtual;
     function GetTrust: TCertStoreTrusts;
   public
+    constructor Create(algo: TCryptAlgo); override;
     destructor Destroy; override;
     // ICryptStore methods
     procedure Clear; virtual; abstract;
@@ -3317,6 +3318,13 @@ type
     function NewList(const Pem: RawUtf8): TCryptCertList; overload;
   end;
 
+var
+  /// the default source of trust used for new ICryptStore instances
+  // - equals [cstOsRoot] on POSIX, as most libraries (e.g. OpenSSL) do
+  // - on Windows, contains [cstOsRoot, cstOsIntermediate, cstAiaIntermediate]
+  // unless IsAiaDisabledInWindowsRegistry result is true at startup
+  DefaultCryptStoreTrust: TCertStoreTrusts = [cstOsRoot]
+    {$ifdef OSWINDOWS} + [cstOsIntermediate, cstAiaIntermediate] {$endif};
 
 /// append a ICryptCert to a certificates chain
 procedure ChainAdd(var chain: ICryptCertChain; const cert: ICryptCert);
@@ -9651,6 +9659,12 @@ end;
 
 { TCryptStore }
 
+constructor TCryptStore.Create(algo: TCryptAlgo);
+begin
+  fTrust := DefaultCryptStoreTrust;
+  inherited Create(algo);
+end;
+
 destructor TCryptStore.Destroy;
 begin
   inherited Destroy;
@@ -9888,7 +9902,7 @@ begin
     begin
       if WithExplanatoryText then
         // see https://datatracker.ietf.org/doc/html/rfc7468#section-5.2
-        W.Add('Subject: %'#13#10'Issuer: %'#13#10'Validity: from % to %'#13#10,
+        W.Add('Subject: %'#13#10'Issuer: %'#13#10'Validity: from %Z to %Z'#13#10,
          [c^.GetSubjectName, c^.GetIssuerName, DateTimeToIso8601Short(
             c^.GetNotBefore), DateTimeToIso8601Short(c^.GetNotAfter)]);
       W.AddString(c^.Save(cccCertOnly, '', ccfPem));
@@ -9911,7 +9925,7 @@ end;
 
 constructor TCryptCertCache.Create(TimeOutSeconds: integer);
 begin
-  fList := TSynDictionary.Create(TypeInfo(TRawByteStringDynArray),
+  fList := TSynDictionary.Create(TypeInfo(TRawByteStringDynArray), // DER
     TypeInfo(ICryptCerts), {caseins=}false, TimeOutSeconds);
   fList.OnCanDeleteDeprecated := OnDelete;
   fList.ThreadUse := uRWLock; // non-blocking Load() and Find()
@@ -10022,8 +10036,8 @@ end;
 constructor TCryptCertList.Create;
 begin
   inherited Create;
-  fList := TSynDictionary.Create(
-    TypeInfo(TRawByteStringDynArray), TypeInfo(ICryptCerts));
+  fList := TSynDictionary.Create(TypeInfo(TRawByteStringDynArray), // key=SKID
+    TypeInfo(ICryptCerts));
   fList.ThreadUse := uRWLock; // non-blocking Find()
 end;
 
@@ -11856,6 +11870,8 @@ begin
   {$ifdef OSWINDOWS}
   X509Parse         := @WinX509Parse; // use mormot.lib.sspi.pas WinCertDecode()
   WinCertInfoToText := @Win2Text;
+  if IsAiaDisabledInWindowsRegistry then
+    exclude(DefaultCryptStoreTrust, cstAiaIntermediate);
   {$endif OSWINDOWS}
 end;
 
