@@ -1833,7 +1833,7 @@ var
   end;
 
 begin
-  native := {$ifdef OSWINDOWS}not IsWow64Emulation{$else}true{$endif};
+  native := {$ifdef OSWINDOWS}not (wsPrism in WindowsSpecs){$else}true{$endif};
   // most client test cases would be run in their own thread (if possible)
   {$ifndef OSANDROID} // no "main" thread on Android?
   One(ClientSideRESTThread,           csMainThread); // should be native

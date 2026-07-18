@@ -850,7 +850,7 @@ begin
       DoTest(TSqlDBSocketConnectionProperties.Create(
         ADDR, 'root', 'user', 'pass'), 'socket');
       {$ifdef USEWININET}
-      if not IsWow64Emulation then
+      if not (wsWeakHttpApi in WindowsSpecs) then // e.g. PRISM or Wine
       begin
         DoTest(TSqlDBWinHTTPConnectionProperties.Create(
           ADDR, 'root', 'user', 'pass'), 'winhttp');

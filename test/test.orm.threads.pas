@@ -416,7 +416,7 @@ begin
   fOperationCount := clients
     {$ifndef FORCE_HTTP10} * 7 {$endif}; // divided among threads
   {$ifdef OSWINDOWS}
-  if IsWow64Emulation then // PRISM seems inconsistent with a lot of threads
+  if wsFavorFewThreads in WindowsSpecs then // PRISM is bad with lots of threads
   begin
     fMaxThreads := 2;
     clients := 2;

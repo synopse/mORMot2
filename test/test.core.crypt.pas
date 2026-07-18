@@ -1074,11 +1074,11 @@ begin
     {$ifdef OSWINDOWS}
     0:
       begin
-        if IsWow64Emulation then // PRISM seems inconsistent about this API
+        if wsWeakDpApi in WindowsSpecs then // PRISM seems inconsistent here
           exit;
         func := CryptDataForCurrentUserDPAPI;
         if OSVersion < wVista then
-          max := 100; // slow API on Windows XP
+          max := 100; // very slow API on Windows XP
       end;
     {$endif OSWINDOWS}
     1:
