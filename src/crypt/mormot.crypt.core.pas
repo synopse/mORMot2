@@ -7918,7 +7918,7 @@ begin
     {$ifdef OSWINDOWS}
     // Windows is case insensitive, so mORMot 1 Base64-URI file name may collide
     fn := FormatString('%syn_%', [usrdata, BinToHexLower(@k256, 15)]);
-    if IsWow64Emulation then // inconsistent CryptDataForCurrentUserDPAPI()
+    if wsWeakDpApi in WindowsSpecs then // inconsistent CryptProtectData() API
       fn := fn + '_prism';   // another encryption of local key for PRISM
     if not FileExists(fn) then
     begin
@@ -10549,7 +10549,7 @@ begin
   {$endif ASMX64NOTPIC}
   {$ifdef USEAESNIHASH}
   {$ifdef OSWINDOWS}
-  if not IsWow64Emulation then // PRISM seems inconsistent with only few aesenc
+  if not (wsPrism in WindowsSpecs) then // seems inconsistent with only few aesenc
   {$endif OSWINDOWS}
   if (cfAesNi in CpuFeatures) and   // AES-NI
      (cfSSE3 in CpuFeatures) then   // PSHUFB

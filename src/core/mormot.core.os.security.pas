@@ -7867,7 +7867,7 @@ var
   e: PDATA_BLOB;
   ok: boolean;
 begin
-  if IsWow64Emulation then // PRISM seems inconsistent about these API calls
+  if wsWeakDpApi in WindowsSpecs then // PRISM/Wine seem inconsistent about it
   begin
     result := Data;
     SymmetricEncrypt(crc32cHash(AppSecret), result); // weak but consistent

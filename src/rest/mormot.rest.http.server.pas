@@ -864,7 +864,7 @@ begin
     include(hso, hsoThreadSmooting); // regular HW tends to like it
   {$ifdef USEHTTPSYS}
   if aUse in HTTP_API_MODES then // Windows system's http.sys
-    if PosEx('Wine', OSVersionInfoEx) > 0 then
+    if wsWine in WindowsSpecs then
     begin
       fLog.Add.Log(sllWarning, '%: httpapi probably not well supported on % -> ' +
           'fallback to useHttpAsync', [ToText(aUse)^, OSVersionInfoEx], self);

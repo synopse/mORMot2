@@ -4965,7 +4965,7 @@ end;
 procedure ThreadCountAdjust(var aThreadPoolCount: integer);
 begin
   {$ifdef OSWINDOWS}
-  if IsWow64Emulation then
+  if wsFavorFewThreads in WindowsSpecs then
     if aThreadPoolCount > 4 then
       aThreadPoolCount := 4; // Windows PRISM does not like too many threads
   {$endif OSWINDOWS}

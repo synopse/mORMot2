@@ -64,7 +64,7 @@ Implementation notes:
 - In respect to OpenSSL 1.0.x, the new 1.1 / 3.x API hide most structures behind getter/setter functions, and does not require complex initialization.
 - OpenSSL 1.1 features TLS 1.3, but is now deprecated.
 - OpenSSL 3.x is supported as the current major version.
-- OpenSSL 1.1 / 3.x API adaptation is done at runtime by dynamic loading.
+- OpenSSL 1.1 / 3.x API adaptation is done at runtime by dynamic loading and function check.
 
 **Warning:**
 - On Windows, the USE_OPENSSL conditional is defined, but the OpenSSL lib*.dll will be loaded at runtime, only if needed, and silently fail if they are not available or in an unexpected version. Therefore, the SChannel layer will be used for TLS support by default, until OpenSslInitialize or OpenSslIsAvailable are called and succeeded.
