@@ -452,6 +452,16 @@ type
       utsrelease: array[0..2] of byte);
   end;
 
+  /// Windows specific detected context e.g. WOW64 translation, PRISM or Wine
+  TWindowsSpecs = set of (
+   wsWow64,
+   wsWow64Emulation,
+   wsPrism,
+   wsWine,
+   wsFavorFewThreads,
+   wsWeakDpApi,
+   wsWeakHttpApi);
+
   /// notable Linux distributions, organized by their package management system
   TLinuxDistribution = (
     ldNotLinux,
@@ -717,7 +727,7 @@ var
   OSVersionText: RawUtf8;
   /// some addition system information as text, e.g. 'Wine 1.1.5' or 'Prism'
   // - also always appended to OSVersionText high-level description
-  // - use if PosEx('Wine', OSVersionInfoEx) > 0 then to check for Wine presence
+  // - rather use wsWine/wsPrism in WindowsSpecs to check for the running context
   OSVersionInfoEx: RawUtf8;
   /// the current Operating System version, as retrieved for the current process
   // and computed by ToTextOSU(OSVersionInt32)
@@ -1629,7 +1639,10 @@ var
   IsWow64: boolean;
   /// is set to TRUE if the current process running through a software emulation
   // - e.g. a Win32/Win64 Intel application running via Prism on Windows for Arm
+  // - consider WindowsSpecs more precise set of flags
   IsWow64Emulation: boolean;
+  /// a set of flags to identify the Windows "flavor" for the current process
+  WindowsSpecs: TWindowsSpecs;
   /// low-level Operating System information, as retrieved for the current process
   OSVersionInfo: TOSVersionInfoEx;
   /// on Windows, the ready-to-be-displayed text version of the system

@@ -5110,8 +5110,11 @@ begin
              IsWow64Process(GetCurrentProcess, res) and
              res;
   if IsWow64 then
+  begin
     // see http://msdn.microsoft.com/en-us/library/ms724381(v=VS.85).aspx
-    GetNativeSystemInfo := LibraryResolve(h, 'GetNativeSystemInfo')
+    GetNativeSystemInfo := LibraryResolve(h, 'GetNativeSystemInfo');
+    include(WindowsSpecs, wsWow64);
+  end
   else
     @GetNativeSystemInfo := nil;
   // see https://learn.microsoft.com/en-us/windows/arm/apps-on-arm-x86-emulation
@@ -5124,6 +5127,9 @@ begin
     {$ifdef CPUINTEL} not {$endif} // detecting PRISM is enough by now
     ((machine = IMAGE_FILE_MACHINE_I386) or
      (machine = IMAGE_FILE_MACHINE_AMD64));
+  if IsWow64Emulation then
+    WindowsSpecs := WindowsSpecs + // adapt to PRISM limitations at runtime
+      [wsWow64Emulation, wsPrism, wsFavorFewThreads, wsWeakDpAPI, wsWeakHttpApi];
   // Vista+ kernel32.dll APIs
   GetTickCount64 := LibraryResolve(h, 'GetTickCount64'); // Vista+
   if not Assigned(GetTickCount64) then
@@ -5237,6 +5243,7 @@ begin
     begin
       OSVersionInfoEx := wine_get_version;
       OSVersionInfoEx := TrimU(Join(['Wine ', TrimU(OSVersionInfoEx)]));
+      WindowsSpecs := WindowsSpecs + [wsWine, wsWeakDpAPI, wsWeakHttpApi];
     end
     {$ifdef CPUINTEL}
     else if IsWow64Emulation then
