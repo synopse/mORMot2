@@ -41,11 +41,7 @@ uses
   mormot.rest.client;
 
 const
-  {$ifdef OSWINDOWS}
-  HTTP_DEFAULTPORT = '888';
-  {$else}
-  HTTP_DEFAULTPORT = '8888'; // under Linux, port<1024 needs root user
-  {$endif OSWINDOWS}
+  HTTP_DEFAULTPORT = '8888'; // under Linux/Wine port<1024 needs root user
 
 
 {$ifdef FPC_EXTRECORDRTTI}
@@ -7437,7 +7433,8 @@ procedure TTestCoreBase.Charsets;
     {$endif HASCODEPAGE}
     {$ifdef OSWINDOWS}
     // skip old Windows (XP/Vista/Seven) which may miss some/most encodings
-    if OSVersion < wTen then
+    if (OSVersion < wTen) or
+       (wsWine in WindowsSpecs) then // Wine/ICU also behind
       exit; // seems not available without a specific language pack
     {$endif OSWINDOWS}
     // validate mORMot conversion
@@ -9112,8 +9109,11 @@ begin
     Check(SecurityDescriptorToText(bin, u), 'sdtt1');
     CheckEqual(u, SD_TXT[i]);
     {$ifdef OSWINDOWS} // validate against the OS API
-    Check(CryptoApi.SecurityDescriptorToText(pointer(bin), u), 'winapi1');
-    CheckEqual(u, SD_TXT[i], 'winapi2');
+    if not (wsWine in WindowsSpecs) then
+    begin
+      Check(CryptoApi.SecurityDescriptorToText(pointer(bin), u), 'winapi1');
+      CheckEqual(u, SD_TXT[i], 'winapi2');
+    end;
     {$endif OSWINDOWS}
     // TSecurityDescriptor binary load and export as SDDL or binary
     sd.Clear;
@@ -9131,8 +9131,11 @@ begin
     Check(SecurityDescriptorToText(saved, u), 'sdtt2');
     CheckEqual(u, SD_TXT[i]);
     {$ifdef OSWINDOWS}
-    Check(CryptoApi.SecurityDescriptorToText(pointer(saved), u), 'winapi3');
-    CheckEqual(u, SD_TXT[i], 'winapi4');
+    if not (wsWine in WindowsSpecs) then
+    begin
+      Check(CryptoApi.SecurityDescriptorToText(pointer(saved), u), 'winapi3');
+      CheckEqual(u, SD_TXT[i], 'winapi4');
+    end;
     {$endif OSWINDOWS}
     if i in [1, 2, 8] then
       // serialization offsets are not consistent between XP or later

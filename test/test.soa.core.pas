@@ -1824,19 +1824,19 @@ end;
 
 procedure TTestServiceOrientedArchitecture.ClientSide;
 var
-  native: boolean;
+  threaded: boolean;
 
   procedure One(const Event: TNotifyEvent; cs: TClientSide);
   begin
     Run(Event, NewClient(cs), SmallUInt32Utf8[ord(cs)],
-      {native=}native, {notify=}false, {forcedThreaded=}native);
+      threaded, {notify=}false, {forcedThreaded=}threaded);
   end;
 
 begin
-  native := {$ifdef OSWINDOWS}not (wsPrism in WindowsSpecs){$else}true{$endif};
+  threaded := {$ifdef OSWINDOWS}not (wsFavorFewThreads in WindowsSpecs){$else}true{$endif};
   // most client test cases would be run in their own thread (if possible)
   {$ifndef OSANDROID} // no "main" thread on Android?
-  One(ClientSideRESTThread,           csMainThread); // should be native
+  One(ClientSideRESTThread,           csMainThread); // should be threaded
   {$endif OSANDROID}
   One(ClientSideRESTThread,           csBackground); // (slowest first)
   One(ClientSideRESTAsJsonObject,     csJsonObject);
@@ -1844,7 +1844,7 @@ begin
   One(ClientSideRESTThread,           csLocked);
   One(ClientSideRESTSign,             csCrc32);
   One(ClientSideRESTSign,             csCrc32c);
-  if native then // PRISM does not seem to properly handle so much at once
+  if threaded then // PRISM does not seem to properly handle so much at once
   begin
     One(ClientSideRESTSign,           csXxhash);
     One(ClientSideRESTSign,           csMd5);
