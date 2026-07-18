@@ -4615,13 +4615,12 @@ end;
 
 procedure THttpSocket.HeadersPrepare(const aRemoteIP: RawUtf8);
 begin
-  if (aRemoteIP <> '') and
-     not (hfHasRemoteIP in Http.HeaderFlags) then
-  begin
-    // Http.ParseHeaderFinalize did reserve 40 bytes for fast realloc
-    AppendLine(Http.Headers, ['RemoteIP: ', aRemoteIP]);
-    include(Http.HeaderFlags, hfHasRemoteIP);
-  end;
+  if (aRemoteIP = '') or
+     (hfHasRemoteIP in Http.HeaderFlags) then
+    exit;
+  // Http.ParseHeaderFinalize did reserve 40 bytes for fast realloc
+  AppendLine(Http.Headers, ['RemoteIP: ', aRemoteIP]);
+  include(Http.HeaderFlags, hfHasRemoteIP);
 end;
 
 function THttpSocket.HeaderGetValue(const aUpperName: RawUtf8): RawUtf8;

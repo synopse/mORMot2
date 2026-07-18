@@ -140,6 +140,7 @@ const
     - on Windows, try http://wiki.overbyte.eu/wiki/index.php/ICS_Download
       or https://slproweb.com/products/Win32OpenSSL.html (which is WinXP ready)
     - on Mac, you could try our https://synopse.info/files/OpenSSLMacX64.tgz
+      and or https://synopse.info/files/OpenSSLMacA64.tgz (for arm)
       or the now deprecated https://github.com/grijjy/DelphiOpenSsl
     - in practice, we found out that OpenSSL 3.0 seems slower than OpenSSL 1.1
       not in its raw process, but due to some API overhead (small blocks)
@@ -206,6 +207,7 @@ const
           _PU = '';
         {$endif CPUINTEL}
         // regular OpenSSL 3 from https://synopse.info/files/OpenSSLMacX64.tgz
+        // and https://synopse.info/files/OpenSSLMacA64.tgz (for arm).
         // the system dylib fails as "xxx is loading libcrypto in an unsafe way"
         // because Apple deprecates its OpenSSL API since 10.7 days (2011) in
         // favor of its own "Cryptographic Services", so we won't try to load

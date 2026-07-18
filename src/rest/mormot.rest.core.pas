@@ -1261,8 +1261,7 @@ type
     procedure Init(const aUri, aMethod, aInHead, aInBody: RawUtf8); overload;
     /// retrieve the "Content-Type" value from InHead
     // - if GuessJsonIfNoneSet is TRUE, returns JSON if none was set in headers
-    procedure InBodyType(var ContentType: RawUtf8;
-      GuessJsonIfNoneSet: boolean = true);
+    procedure InBodyType(var ContentType: RawUtf8; GuessJsonIfNoneSet: boolean = true);
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the "Content-Type" value from OutHead
     // - if GuessJsonIfNoneSet is TRUE, returns JSON if none was set in headers
