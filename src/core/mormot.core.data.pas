@@ -4156,10 +4156,12 @@ begin
     Sender.UpdateText(['exe:version'], [Executable.Version.Detailed]);
   end;
   {$ifdef OSWINDOWS}
-  if IsWow64 then
+  if wsWow64 in WindowsSpecs then
     Sender.UpdateText('exe:wow64', 'true');
-  if IsWow64Emulation then
+  if wsPrism in WindowsSpecs then
     Sender.UpdateText('exe:prism', 'true');
+  if wsWine in WindowsSpecs then
+    Sender.UpdateText('exe:wine', 'true');
   {$endif OSWINDOWS}
 end;
 
