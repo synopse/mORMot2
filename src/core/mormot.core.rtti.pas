@@ -2898,8 +2898,7 @@ type
     // store PRttiInfo/TRttiCustom pairs by Name - protected by RegisterSafe
     fHashName: array of TPointerDynArray;
     fLastHashName: TRttiCustom; // speedup search by name e.g. from a loop
-    // used to release memory used by registered customizations
-    fInstances: array of TRttiCustom;
+    fInstances: array of TRttiCustom; // of Count length - released in Destroy
     fGlobalClass: TRttiCustomClass;
     fOwnedRtti: array of TRttiCustom; // for SetPropsFromText(NoRegister=true)
     function GetByClass(ObjectClass: TClass): TRttiCustom;
@@ -2911,7 +2910,7 @@ type
     procedure SetGlobalClass(RttiClass: TRttiCustomClass); // ensure Count=0
   public
     /// how many TRttiCustom instances have been registered
-    Count: integer;
+    Count: PtrInt;
     /// a global lock shared for high-level RTTI registration process
     // - is used e.g. to protect DoRegister() or TRttiCustom.PrivateSlot
     // - should be a reentrant lock, even if seldom called
@@ -10253,15 +10252,12 @@ begin
   end;
   RegisterSafe.Lock;
   try
-    result := FindType(Info);  // search again (within RegisterSafe context)
-    if result <> nil then
-      exit; // already registered in the background
-    // initialize a new TRttiCustom/TRttiJson instance for this type
-    result := GlobalClass.Create;
-    // register ASAP to avoid endless recursion in FromRtti
-    AddToPairs(result, Info);
-    // now we can parse and process the RTTI
-    result.FromRtti(Info);
+    result := FindType(Info);
+    if result <> nil then // unlikely race condition but better safe than sorry
+      exit;
+    result := GlobalClass.Create;  // initialize a new TRttiCustom/TRttiJson
+    AddToPairs(result, Info); // register ASAP avoids endless FromRtti recursion
+    result.FromRtti(Info);    // now we can parse and process the RTTI
   finally
     RegisterSafe.UnLock;
   end;
@@ -10356,15 +10352,13 @@ begin
   k^.Safe.Lock; // needed when resizing k^.HashInfo[]
   try
     AddPair(k^.HashInfo[RttiPointerMix(PtrUInt(Info))], Instance, Info);
-    {$ifdef FPC} // FPC extended RTTI generates no name for nested plain records
-    if Info^.RawName[0] <> #0 then
-    {$endif FPC}
-    ObjArrayAddCount(fInstances, Instance, Count); // to release memory
+    ObjArrayAdd(fInstances, Instance); // to be released in Destroy
+    inc(Count);
     inc(Counts[Info^.Kind]); // Instance.Kind is not available from DoRegister
   finally
     k^.Safe.UnLock;
   end;
-  if (Info^.RawName[0] <> #0) and
+  if (Info^.RawName[0] <> #0) and // e.g. FPC extended RTTI of nested records
      (PosExChar('$', Instance.Name) = 0) then // e.g. 'TArray$1$crcA5831B1D'
     AddPair(fHashName[RttiHashName(@Info.RawName[1], ord(Info.RawName[0]))], Instance, Info);
 end;
