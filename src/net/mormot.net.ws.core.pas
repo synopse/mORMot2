@@ -3583,7 +3583,7 @@ var
   needed: PtrInt;
 begin
   needed := count - pos;
-  if needed >= 0 then
+  if needed > 0 then
   begin
     // TWebCrtSocketProcess SockInRead() would raise a ENetSock error on failure
     // TWebSocketAsyncProcess would just return the bytes available from its buffers
@@ -3597,7 +3597,7 @@ end;
 
 function TWebProcessInFrame.HasHeader: boolean;
 begin
-  result := HasBytes(@hdr, hdr.lensize);
+  result := HasBytes(@hdr, PtrInt(hdr.lensize) + hdr.masksize);
 end;
 
 function TWebProcessInFrame.GetHeader: boolean;
@@ -3615,30 +3615,30 @@ begin
   end;
   hdr.lensize := 2; // first+two
   if not HasHeader then
-    exit;           // not enough input
+    exit; // not enough input
   opcode := TWebSocketFrameOpCode(hdr.first and 15);
   // note: FRAME_OPCODE_FIN is implemented below in TWebProcessInFrame.Step
   b := hdr.two;
   if b and FRAME_LEN_MASK <> 0 then
   begin
     // client-to-server masking is mandatory (but not from server to client)
-    b := b and (FRAME_LEN_MASK - 1);
+    b := b and pred(FRAME_LEN_MASK);
     hdr.masksize := 4;
   end;
   if b < FRAME_LEN_2BYTES then
     hdr.payloadlen := b
   else if b = FRAME_LEN_2BYTES then
   begin
-    hdr.lensize := 4; // opcode+126+payloadlen.W[0]
+    hdr.lensize := 4; // opcode+126+payloadlen.Word
     if not HasHeader then
-      exit;           // not enough input
+      exit; // not enough input
     hdr.payloadlen := bswap16(PWord(@hdr.len64)^);
   end
   else if b = FRAME_LEN_8BYTES then
   begin
     hdr.lensize := 10; // opcode+127+len.V
     if not HasHeader then
-      exit;            // not enough input
+      exit; // not enough input
     len64 := bswap64(hdr.len64);
     if len64 > WebSocketsMaxFrameMB shl 20 then
       EWebSockets.RaiseUtf8('%.GetFrame: length = % should be < % MB',
@@ -3647,7 +3647,7 @@ begin
   end;
   if hdr.masksize <> 0 then // = 4 for masked input
   begin
-    if not HasBytes(@hdr, hdr.lensize + 4) then
+    if not HasHeader then
       exit; // not enough input
     hdr.mask32 := PCardinal(PAnsiChar(@hdr) + hdr.lensize)^; // at ending
     if hdr.mask32 = 0 then
