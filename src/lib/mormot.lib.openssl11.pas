@@ -1,4 +1,4 @@
-/// low-level access to the OpenSSL 1.1 / 3.x Library
+/// low-level access to the OpenSSL 1.1 / 3.x / 4.x Library
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.lib.openssl11;
@@ -6,7 +6,7 @@ unit mormot.lib.openssl11;
 {
   *****************************************************************************
 
-   Cross-Platform and Cross-Compiler OpenSSL 1.1 / 3.x API
+   Cross-Platform and Cross-Compiler OpenSSL 1.1 / 3.x / 4.x API
    - Dynamic or Static OpenSSL Library Loading
    - OpenSSL Library Constants
    - OpenSSL Library Types and Structures
@@ -17,8 +17,8 @@ unit mormot.lib.openssl11;
     In respect to OpenSSL 1.0.x, the new 1.1 API hides most structures
    behind getter/setter functions, and does not require complex initialization.
     OpenSSL 1.1 features TLS 1.3, but is now deprecated.
-    OpenSSL 3.x is supported as the current major version.
-    OpenSSL 1.1 / 3.x API adaptation is done at runtime by dynamic loading.
+    OpenSSL 3.x / 4.x are supported as the current major version.
+    OpenSSL 1.1 / 3.x / 4.x API adaptation is done at runtime by dynamic loading.
 
   *****************************************************************************
 
@@ -67,7 +67,8 @@ unit mormot.lib.openssl11;
 // define this to disable OpenSSL 1.1 API - safer on any recent system
 
 {.$define NOOPENSSL3}
-// define this to disable OpenSSL 3.x API - not a good idea
+{.$define NOOPENSSL4}
+// define this to disable OpenSSL 3.x / 4.x API - not a good idea
 
 
 {$ifdef FPCMM_REPORTMEMORYLEAKS}
@@ -142,8 +143,8 @@ const
     - on Mac, you could try our https://synopse.info/files/OpenSSLMacX64.tgz
       and or https://synopse.info/files/OpenSSLMacA64.tgz (for arm)
       or the now deprecated https://github.com/grijjy/DelphiOpenSsl
-    - in practice, we found out that OpenSSL 3.0 seems slower than OpenSSL 1.1
-      not in its raw process, but due to some API overhead (small blocks)
+    - in practice, we found out that OpenSSL 3.x seems slower than OpenSSL 1.1
+      not in its raw process, but due to some API overhead (for small blocks)
   }
   {$ifdef OSWINDOWS}
     {$ifdef CPU32}
@@ -151,6 +152,8 @@ const
     LIB_SSL1    = 'libssl-1_1.dll';
     LIB_CRYPTO3 = 'libcrypto-3.dll';
     LIB_SSL3    = 'libssl-3.dll';
+    LIB_CRYPTO4 = 'libcrypto-4.dll';
+    LIB_SSL4    = 'libssl-4.dll';
     _PU = '';
     {$else}
     {$ifdef OSWINARM}
@@ -158,11 +161,15 @@ const
     LIB_SSL1    = 'libssl-1_1-arm64.dll';
     LIB_CRYPTO3 = 'libcrypto-3-arm64.dll';
     LIB_SSL3    = 'libssl-3-arm64.dll';
+    LIB_CRYPTO4 = 'libcrypto-4-arm64.dll';
+    LIB_SSL4    = 'libssl-4-arm64.dll';
     {$else}
     LIB_CRYPTO1 = 'libcrypto-1_1-x64.dll';
     LIB_SSL1    = 'libssl-1_1-x64.dll';
     LIB_CRYPTO3 = 'libcrypto-3-x64.dll';
     LIB_SSL3    = 'libssl-3-x64.dll';
+    LIB_CRYPTO4 = 'libcrypto-4-x64.dll';
+    LIB_SSL4    = 'libssl-4-x64.dll';
     {$endif OSWINARM}
     _PU = '';
     {$endif CPU32}
@@ -214,19 +221,21 @@ const
         // plain libcrypto/libssl.dylib but search for modern custom .dylib
         LIB_CRYPTO3 = 'libcrypto.3.dylib';
         LIB_SSL3    = 'libssl.3.dylib';
+        LIB_CRYPTO4 = 'libcrypto.4.dylib';
+        LIB_SSL4    = 'libssl.4.dylib';
       {$else}
         {$ifdef OSLINUX}
         // specific versions on Linux
         LIB_CRYPTO1 = 'libcrypto.so.1.1';
         LIB_SSL1    = 'libssl.so.1.1';
-        LIB_CRYPTO3 = 'libcrypto.so.3';
-        LIB_SSL3    = 'libssl.so.3';
         {$else} // not tested on OpenBSD/FreeBSD yet
-        LIB_CRYPTO1 = 'libcrypto.so'; // should redirect to 1.1 or 3
+        LIB_CRYPTO1 = 'libcrypto.so'; // should redirect to 1.1 or 3/4
         LIB_SSL1    = 'libssl.so';
+        {$endif OSLINUX}
         LIB_CRYPTO3 = 'libcrypto.so.3';
         LIB_SSL3    = 'libssl.so.3';
-        {$endif OSLINUX}
+        LIB_CRYPTO4 = 'libcrypto.so.4';
+        LIB_SSL4    = 'libssl.so.4';
         _PU = '';
       {$endif OSDARWIN}
     {$endif OSANDROID}
@@ -298,6 +307,8 @@ const
   OPENSSL3_VERNUM = $30000000;
   /// the minimal 32-bit OpenSslVersion value for Open SSL 3.1.0
   OPENSSL31_VERNUM = $30100000;
+  /// the minimal 32-bit OpenSslVersion value for Open SSL 4.0.0
+  OPENSSL4_VERNUM = $40000000;
 
   {$ifdef NOOPENSSL3}
   LIB_TXT = '1.1';
@@ -312,7 +323,7 @@ const
   {$endif NOOPENSSL1}
   {$endif NOOPENSSL3}
 
-/// return TRUE if OpenSSL 1.1 / 3.x library can be used
+/// return TRUE if OpenSSL 1.1 / 3.x / 4.x library can be used
 // - will load and initialize it, calling OpenSslInitialize if necessary with
 // the global/default search paths, catching any exception during the process
 // - always return true if OPENSSLFULLAPI or OPENSSLSTATIC conditionals are set
@@ -324,7 +335,7 @@ const
 function OpenSslIsAvailable: boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// return TRUE if OpenSSL 1.1 / 3.x library has been initialized
+/// return TRUE if OpenSSL 1.1 / 3.x / 4.x library has been initialized
 // - don't try to load it if was not already done
 // - could be run before OpenSslInitialize() is called
 function OpenSslIsLoaded: boolean;
@@ -333,8 +344,8 @@ function OpenSslIsLoaded: boolean;
 /// initialize the OpenSSL 1.1 / 3.x API, accessible via the global functions
 // - will raise EOpenSsl exception on any loading issue
 // - you can force the library path names to load as parameters, but by default
-// OpenSSL 3.x / 1.1 libraries will be searched from OpenSslDefaultCrypto and
-// OpenSslDefaultSsl global variables or OPENSSL_LIBPATH environment variable,
+// OpenSSL 4.x / 3.x / 1.1 libraries will be searched from OpenSslDefaultCrypto
+// and OpenSslDefaultSsl global variables or OPENSSL_LIBPATH environment variable,
 // then within the executable folder, and then in the system path
 // - do nothing if the library has already been loaded or if
 // OPENSSLFULLAPI or OPENSSLSTATIC conditionals have been defined
@@ -2181,10 +2192,8 @@ procedure CRYPTO_free(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
 function CRYPTO_get_ex_new_index(class_index: integer;
   argl: integer; argp: pointer; new_func: PCRYPTO_EX_new;
   dup_func: PCRYPTO_EX_dup; free_func: PCRYPTO_EX_free): integer; cdecl;
-procedure ERR_remove_state(pid: cardinal); cdecl;
 procedure ERR_error_string_n(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
 function ERR_get_error(): cardinal; cdecl;
-procedure ERR_remove_thread_state(p1: pointer); cdecl;
 function ERR_load_BIO_strings(): integer; cdecl;
 function EVP_PKEY_new(): PEVP_PKEY; cdecl;
 function EVP_PKEY_size(pkey: PEVP_PKEY): integer; cdecl;
@@ -2802,14 +2811,14 @@ function LoadPkcs12(const Der: RawByteString): PPKCS12;
 function ParsePkcs12(const Saved: RawByteString; const Password: SpiUtf8;
   out Cert: PX509; out PrivateKey: PEVP_PKEY; CA: PPstack_st_X509 = nil): boolean;
 
-/// low-level SCrypt hash computation as available since OpenSSL 3.x
+/// low-level SCrypt hash computation as available since OpenSSL 3.x / 4.x
 // - see http://www.tarsnap.com/scrypt.html and RFC 7914
 // - OpenSSL is slower than mormot.crypt.other.pas i386/x86_64 tuned SSE2 code:
 // $ on Win32:     RawSCrypt in 101ms, OpenSslScrypt in 157ms
 // $ on Win64:     RawSCrypt in 92ms,  OpenSslScrypt in 124ms
 // $ on Linux x64: RawSCrypt in 74ms,  OpenSslScrypt in 103ms
-// - assigned with OpenSSL 3.x to mormot.crypt.core.pas SCrypt() redirection on
-// non-Intel (e.g. ARM) platforms - where RawSCrypt() is less optimized
+// - assigned with OpenSSL 3.x / 4.x to mormot.crypt.core.pas SCrypt() redirection
+// on non-Intel (e.g. ARM) platforms - where RawSCrypt() is less optimized
 function OpenSslSCrypt(const Password: RawUtf8; const Salt: RawByteString;
   N, R, P, DestLen: PtrUInt): RawByteString;
 
@@ -3405,10 +3414,8 @@ type
     CRYPTO_set_mem_functions: function (m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn; f: dyn_MEM_free_fn): integer; cdecl;
     CRYPTO_free: procedure(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
     CRYPTO_get_ex_new_index: function(class_index: integer; argl: integer; argp: pointer; new_func: PCRYPTO_EX_new; dup_func: PCRYPTO_EX_dup; free_func: PCRYPTO_EX_free): integer; cdecl;
-    ERR_remove_state: procedure(pid: cardinal); cdecl;
     ERR_error_string_n: procedure(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
     ERR_get_error: function(): cardinal; cdecl;
-    ERR_remove_thread_state: procedure(p1: pointer); cdecl;
     ERR_load_BIO_strings: function(): integer; cdecl;
     EVP_PKEY_new: function(): PEVP_PKEY; cdecl;
     EVP_PKEY_size: function(pkey: PEVP_PKEY): integer; cdecl;
@@ -3766,15 +3773,13 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..359] of PAnsiChar = (
+  LIBCRYPTO_ENTRIES: array[0..357] of PAnsiChar = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
     'CRYPTO_get_ex_new_index',
-    'ERR_remove_state',
     'ERR_error_string_n',
     'ERR_get_error',
-    'ERR_remove_thread_state',
     'ERR_load_BIO_strings',
     'EVP_PKEY_new',
     'EVP_PKEY_get_size EVP_PKEY_size', // OpenSSL 3.0 / 1.1 alternate names
@@ -4154,11 +4159,6 @@ begin
     class_index, argl, argp, new_func, dup_func, free_func);
 end;
 
-procedure ERR_remove_state(pid: cardinal);
-begin
-  libcrypto.ERR_remove_state(pid);
-end;
-
 procedure ERR_error_string_n(e: cardinal; buf: PUtf8Char; len: PtrUInt);
 begin
   libcrypto.ERR_error_string_n(e, buf, len);
@@ -4167,11 +4167,6 @@ end;
 function ERR_get_error(): cardinal;
 begin
   result := libcrypto.ERR_get_error;
-end;
-
-procedure ERR_remove_thread_state(p1: pointer);
-begin
-  libcrypto.ERR_remove_thread_state(p1);
 end;
 
 function ERR_load_BIO_strings(): integer;
@@ -4245,7 +4240,7 @@ function EVP_DigestSign(ctx: PEVP_MD_CTX; sigret: PByte; var siglen: PtrUInt;
    tbs: PByte; tbslen: PtrUInt): integer;
 begin
   if Assigned(libcrypto.EVP_DigestSign) then
-    // new 1.1/3.x API - as required e.g. by ED25519
+    // new >= 1.1 API - as required e.g. by ED25519
     result := libcrypto.EVP_DigestSign(ctx, sigret, siglen, tbs, tbslen)
   else
   begin
@@ -4263,7 +4258,7 @@ function EVP_DigestVerify(ctx: PEVP_MD_CTX; sigret: PByte; siglen: PtrUInt;
    tbs: PByte; tbslen: PtrUInt): integer;
 begin
   if Assigned(libcrypto.EVP_DigestVerify) then
-    // new 1.1/3.x API - as required e.g. by ED25519
+    // new >= 1.1 - as required e.g. by ED25519
     result := libcrypto.EVP_DigestVerify(ctx, sigret, siglen, tbs, tbslen)
   else
   begin
@@ -6127,7 +6122,8 @@ function OpenSslInitialize(const libcryptoname, libsslname: TFileName;
   const libprefix: RawUtf8): boolean;
 var
   error: string;
-  libenv, libsys1, libsys3, libexe1, libexe3, libpath, libexact, libname: TFileName;
+  libenv, libsys1, libsys3, libsys4, libexe1, libexe3, libexe4,
+  libpath, libexact, libname: TFileName;
 begin
   // not thread-safe: use manual GlobalLock/GlobalUnLock or OpenSslIsAvailable
   result := openssl_initialized = lsAvailable;
@@ -6164,6 +6160,12 @@ begin
           libexe3 := '';
         libsys3 := libenv + LIB_CRYPTO3;
         {$endif NOOPENSSL3}
+        {$ifndef NOOPENSSL4}
+        libexe4 := Executable.ProgramFilePath + LIB_CRYPTO4;
+        if not FileExists(libexe4) then
+          libexe4 := '';
+        libsys4 := libenv + LIB_CRYPTO4;
+        {$endif NOOPENSSL4}
       end;
       // attempt to load libcrypto
       if not libcrypto.TryLoadResolve([
@@ -6172,9 +6174,11 @@ begin
         // try with the global variable
         OpenSslDefaultCrypto,
         // try from executable folder
+        libexe4,
         libexe3,
         libexe1,
         // try the library from OPENSSL_LIBPATH or somewhere in the system
+        libsys4,
         libsys3,
         libsys1
         {$ifdef OSPOSIX}
@@ -6201,8 +6205,10 @@ begin
       libpath := ExtractFilePath(libcrypto.LibraryPath);
       if OpenSslVersion < OPENSSL3_VERNUM then
         libexact := libpath + LIB_SSL1
+      else if OpenSslVersion < OPENSSL4_VERNUM then
+        libexact := libpath + LIB_SSL3
       else
-        libexact := libpath + LIB_SSL3;
+        libexact := libpath + LIB_SSL4;
       libname := libpath + StringReplace(ExtractFileName(libcrypto.LibraryPath),
         'libcrypto', 'libssl', [rfReplaceAll {$ifdef OSWINDOWS}, rfIgnoreCase{$endif}]);
       // attempt to load libssl
@@ -6457,17 +6463,11 @@ function CRYPTO_get_ex_new_index(class_index: integer; argl: integer;
   free_func: PCRYPTO_EX_free): integer; cdecl;
   external LIB_CRYPTO name _PU + 'CRYPTO_get_ex_new_index';
 
-procedure ERR_remove_state(pid: cardinal); cdecl;
-  external LIB_CRYPTO name _PU + 'ERR_remove_state';
-
 procedure ERR_error_string_n(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
   external LIB_CRYPTO name _PU + 'ERR_error_string_n';
 
 function ERR_get_error(): cardinal; cdecl;
   external LIB_CRYPTO name _PU + 'ERR_get_error';
-
-procedure ERR_remove_thread_state(p1: pointer); cdecl;
-  external LIB_CRYPTO name _PU + 'ERR_remove_thread_state';
 
 function ERR_load_BIO_strings(): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ERR_load_BIO_strings';
@@ -9910,7 +9910,7 @@ begin
     p12Legacy:
       // force legacy compatibility with Windows Server 2012 or MacOS/iOS
       // - warning: OpenSSL 1.x uses legacy 40bit-RC2 by default, which is sadly
-      // incompatible with OpenSSL 3.x, so we force those safer (but still
+      // incompatible with OpenSSL >= 3.x, so we force those safer (but still
       // downward compatible with Windows XP) parameters on all OpenSSL versions
       begin
         nid := NID_pbe_WithSHA1And3_Key_TripleDES_CBC; // old SHA1-3DES algo
@@ -9918,7 +9918,7 @@ begin
         md_type := EVP_sha1;
       end;
     p12New:
-      // force OpenSSL 3.x new algorithm on OpenSSL 1.x (keep default otherwise)
+      // force OpenSSL >= 3.x new algorithm on OpenSSL 1.x (keep default otherwise)
       if OpenSslVersion < OPENSSL3_VERNUM then
       begin
         nid := NID_aes_256_cbc; // new AES-256-CBC safer algo

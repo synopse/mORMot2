@@ -52,7 +52,7 @@ Cross-Platform and Cross-Compiler `libcurl` API
 
 ## mormot.lib.openssl11
 
-Cross-Platform and Cross-Compiler `OpenSSL` 1.1/ 3.x API
+Cross-Platform and Cross-Compiler `OpenSSL` 1.1/3.x/4.x API
 - Dynamic or Static OpenSSL Library Loading
 - OpenSSL Library Constants
 - OpenSSL Library Types and Structures
@@ -61,10 +61,10 @@ Cross-Platform and Cross-Compiler `OpenSSL` 1.1/ 3.x API
 - TLS / HTTPS Encryption Layer using OpenSSL for `mormot.net.sock` / `TCrtSocket`
 
 Implementation notes:
-- In respect to OpenSSL 1.0.x, the new 1.1 / 3.x API hide most structures behind getter/setter functions, and does not require complex initialization.
+- In respect to OpenSSL 1.0.x, the new 1.1 / 3.x / 4.x API hide most structures behind getter/setter functions, and does not require complex initialization.
 - OpenSSL 1.1 features TLS 1.3, but is now deprecated.
-- OpenSSL 3.x is supported as the current major version.
-- OpenSSL 1.1 / 3.x API adaptation is done at runtime by dynamic loading and function check.
+- OpenSSL 3.x / 4.x are supported as the current major version.
+- OpenSSL 1.1 / 3.x / 4.x API adaptation is done at runtime by dynamic loading and function check.
 
 **Warning:**
 - On Windows, the USE_OPENSSL conditional is defined, but the OpenSSL lib*.dll will be loaded at runtime, only if needed, and silently fail if they are not available or in an unexpected version. Therefore, the SChannel layer will be used for TLS support by default, until OpenSslInitialize or OpenSslIsAvailable are called and succeeded.

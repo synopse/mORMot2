@@ -92,7 +92,7 @@ JSON Web Tokens (JWT) Implementation - see RFC 7797
 
 ### mormot.crypt.openssl
 
-High-Performance Cryptographic Features using *OpenSSL* 1.1 / 3.x
+High-Performance Cryptographic Features using *OpenSSL* 1.1 / 3.x / 4.x
 - *OpenSSL* Cryptographic Pseudorandom Number Generator (CSPRNG)
 - AES Cypher/Uncypher in various Modes
 - Hashers and Signers OpenSSL Wrappers

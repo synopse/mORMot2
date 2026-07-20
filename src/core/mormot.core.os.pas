@@ -4276,7 +4276,7 @@ type
     /// cross-platform resolution of a function entry in this library
     // - if RaiseExceptionOnFailure is set, missing entry will call FreeLib then raise it
     // - ProcName can be a space-separated list of procedure names, to try
-    // alternate API names (e.g. for OpenSSL 1.1.1/3.x compatibility)
+    // alternate API names (e.g. for OpenSSL 1.1.1/3.x/4.x compatibility)
     // - if ProcName starts with '?' then RaiseExceptionOnFailure = nil is set
     function Resolve(const Prefix: RawUtf8; ProcName: PAnsiChar; Entry: PPointer;
       RaiseExceptionOnFailure: ExceptionClass = nil; SilentError: PString = nil): boolean;
