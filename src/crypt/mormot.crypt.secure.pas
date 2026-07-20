@@ -9386,8 +9386,8 @@ begin
      not PropNameEquals(GetIssuerName, Authority.GetSubjectName) then
     exit; // IssuerDN should match Authority.SubjectDN
   akid := GetAuthorityKey;
-  result := (akid = '') or
-            PropNameEquals(akid, Authority.GetSubjectKey);
+  result := (akid = '') or // self-signed
+            PropNameEquals(akid, Authority.GetSubjectKey); // AKI = SKI
 end;
 
 function TCryptCert.Compare(const Another: ICryptCert;

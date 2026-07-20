@@ -3801,16 +3801,12 @@ begin
 end;
 
 function TCryptCertX509Abstract.IsAuthorizedBy(const Authority: ICryptCert): boolean;
-var
-  a: TCryptCertX509Abstract;
 begin
   if Assigned(Authority) then
-  begin
-    a := pointer(Authority.Instance);
-    result := a.InheritsFrom(TCryptCertX509Abstract) and
-      // ensure Authority xeSubjectKeyIdentifier equals xeAuthorityKeyIdentifier
-      fX509.IsAuthorizedBy(a.fX509);
-  end
+    if Authority.Instance.InheritsFrom(TCryptCertX509Abstract) then
+      result := fX509.IsAuthorizedBy(Authority.Instance.Handle)
+    else
+      result := inherited IsAuthorizedBy(Authority) // support other classes
   else
     result := false;
 end;
