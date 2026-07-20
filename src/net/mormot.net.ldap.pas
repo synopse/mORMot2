@@ -6693,8 +6693,8 @@ type
   // see https://www.rfc-editor.org/rfc/rfc4752#section-3.3
   TKerbSecLayer = set of (
     kslNone,
-    kslIntegrity,
-    kslConfidentiality);
+    kslIntegrity,         // sign only
+    kslConfidentiality);  // sign and seal
 
 const
   /// the bit-mask of the security layer to be used (if any wanted by the server)
