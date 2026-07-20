@@ -956,6 +956,7 @@ type
     procedure Init(Owner: TWebSocketProcess; output: PWebSocketFrame);
     function HasBytes(P: PAnsiChar; count: integer): boolean;
       {$ifdef HASINLINE} inline; {$endif}
+    function HasHeader: boolean;
     function GetHeader: boolean;
     function GetData: boolean;
     function Step(ErrorWithoutException: PInteger): TWebProcessInFrameState;
@@ -1027,7 +1028,7 @@ var
   WebSocketsBinarySynLzThreshold: integer = 450;
 
   /// the allowed maximum size, in MB, of a WebSockets frame
-  WebSocketsMaxFrameMB: cardinal = 256;
+  WebSocketsMaxFrameMB: PtrUInt = 256;
 
 
 { ****************** Socket.IO / Engine.IO Raw Protocols }
@@ -3578,17 +3579,25 @@ begin
 end;
 
 function TWebProcessInFrame.HasBytes(P: PAnsiChar; count: integer): boolean;
+var
+  needed: PtrInt;
 begin
-  if pos >= count then
-    // we already got that much input data
-    result := true
-  else
+  needed := count - pos;
+  if needed >= 0 then
   begin
     // TWebCrtSocketProcess SockInRead() would raise a ENetSock error on failure
     // TWebSocketAsyncProcess would just return the bytes available from its buffers
-    inc(pos, process.ReceiveBytes(P + pos, count - pos));
+    inc(pos, process.ReceiveBytes(P + pos, needed));
     result := pos = count;
-  end;
+  end
+  else
+    // we already got that much input data
+    result := true;
+end;
+
+function TWebProcessInFrame.HasHeader: boolean;
+begin
+  result := HasBytes(@hdr, hdr.lensize);
 end;
 
 function TWebProcessInFrame.GetHeader: boolean;
@@ -3605,7 +3614,7 @@ begin
     FillCharFast(hdr, SizeOf(hdr), 0);
   end;
   hdr.lensize := 2; // first+two
-  if not HasBytes(@hdr, 2) then
+  if not HasHeader then
     exit;           // not enough input
   opcode := TWebSocketFrameOpCode(hdr.first and 15);
   // note: FRAME_OPCODE_FIN is implemented below in TWebProcessInFrame.Step
@@ -3621,14 +3630,14 @@ begin
   else if b = FRAME_LEN_2BYTES then
   begin
     hdr.lensize := 4; // opcode+126+payloadlen.W[0]
-    if not HasBytes(@hdr, 4) then
+    if not HasHeader then
       exit;           // not enough input
     hdr.payloadlen := bswap16(PWord(@hdr.len64)^);
   end
   else if b = FRAME_LEN_8BYTES then
   begin
     hdr.lensize := 10; // opcode+127+len.V
-    if not HasBytes(@hdr, 10) then
+    if not HasHeader then
       exit;            // not enough input
     len64 := bswap64(hdr.len64);
     if len64 > WebSocketsMaxFrameMB shl 20 then
@@ -3636,7 +3645,7 @@ begin
         [process, KB(len64), WebSocketsMaxFrameMB]);
     hdr.payloadlen := len64;
   end;
-  if hdr.masksize <> 0 then
+  if hdr.masksize <> 0 then // = 4 for masked input
   begin
     if not HasBytes(@hdr, hdr.lensize + 4) then
       exit; // not enough input
