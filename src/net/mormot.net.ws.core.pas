@@ -947,12 +947,11 @@ type
   {$endif USERECORDWITHMETHODS}
   public
     hdr: TFrameHeader;
+    pos: integer;
     opcode: TWebSocketFrameOpCode;
-    masked: boolean;
     state: TWebProcessInFrameState;
     process: TWebSocketProcess;
     outputframe: PWebSocketFrame;
-    len: integer;
     data: RawByteString; // will eventually be appended to outputframe.payload
     procedure Init(Owner: TWebSocketProcess; output: PWebSocketFrame);
     function HasBytes(P: PAnsiChar; count: integer): boolean;
@@ -3575,78 +3574,91 @@ begin
   process := owner;
   outputframe := output;
   state := pfsHeader1;
-  len := 0;
+  pos := 0;
 end;
 
 function TWebProcessInFrame.HasBytes(P: PAnsiChar; count: integer): boolean;
 begin
-  if len > count then
+  if pos >= count then
     // we already got that much input data
     result := true
   else
   begin
     // TWebCrtSocketProcess SockInRead() would raise a ENetSock error on failure
-    inc(len, process.ReceiveBytes(P + len, count - len));
-    result := len = count;
+    // TWebSocketAsyncProcess would just return the bytes available from its buffers
+    inc(pos, process.ReceiveBytes(P + pos, count - pos));
+    result := pos = count;
   end;
 end;
 
 function TWebProcessInFrame.GetHeader: boolean;
+var
+  // use local variables to easy decode and keep hdr content untouched
+  b: byte;
+  len64: Int64;
 begin
   result := false;
-  if len = 0 then
+  if pos = 0 then
   begin
-    data := '';
+    // reset for every decoded frame
+    FastAssignNew(data);
     FillCharFast(hdr, SizeOf(hdr), 0);
   end;
-  if not HasBytes(@hdr, 2) then // first+len8
-    exit;
+  hdr.lensize := 2; // first+two
+  if not HasBytes(@hdr, 2) then
+    exit;           // not enough input
   opcode := TWebSocketFrameOpCode(hdr.first and 15);
-  masked := hdr.len8 and FRAME_LEN_MASK <> 0;
-  if masked then
-    hdr.len8 := hdr.len8 and (FRAME_LEN_MASK - 1);
-  if hdr.len8 < FRAME_LEN_2BYTES then
-    hdr.len32 := hdr.len8
-  else if hdr.len8 = FRAME_LEN_2BYTES then
+  // note: FRAME_OPCODE_FIN is implemented below in TWebProcessInFrame.Step
+  b := hdr.two;
+  if b and FRAME_LEN_MASK <> 0 then
   begin
-    if not HasBytes(@hdr, 4) then // first+len8+len32.low
-      exit;
-    hdr.len32 := bswap16(hdr.len32);
+    // client-to-server masking is mandatory (but not from server to client)
+    b := b and (FRAME_LEN_MASK - 1);
+    hdr.masksize := 4;
+  end;
+  if b < FRAME_LEN_2BYTES then
+    hdr.payloadlen := b
+  else if b = FRAME_LEN_2BYTES then
+  begin
+    hdr.lensize := 4; // opcode+126+payloadlen.W[0]
+    if not HasBytes(@hdr, 4) then
+      exit;           // not enough input
+    hdr.payloadlen := bswap16(PWord(@hdr.len64)^);
   end
-  else if hdr.len8 = FRAME_LEN_8BYTES then
+  else if b = FRAME_LEN_8BYTES then
   begin
-    if not HasBytes(@hdr, 10) then // first+len8+len32+len64.low
-      exit;
-    if hdr.len32 <> 0 then // size is more than 32 bits (4GB) -> reject
-      hdr.len32 := maxInt
-    else
-      hdr.len32 := bswap32(hdr.len64);
-    if hdr.len32 > WebSocketsMaxFrameMB shl 20 then
+    hdr.lensize := 10; // opcode+127+len.V
+    if not HasBytes(@hdr, 10) then
+      exit;            // not enough input
+    len64 := bswap64(hdr.len64);
+    if len64 > WebSocketsMaxFrameMB shl 20 then
       EWebSockets.RaiseUtf8('%.GetFrame: length = % should be < % MB',
-        [process, KB(hdr.len32), WebSocketsMaxFrameMB]);
+        [process, KB(len64), WebSocketsMaxFrameMB]);
+    hdr.payloadlen := len64;
   end;
-  if masked then
+  if hdr.masksize <> 0 then
   begin
-    len := 0; // not appended to hdr
-    if not HasBytes(@hdr.mask, 4) then
-      EWebSockets.RaiseUtf8('%.GetFrame: truncated mask', [process]);
+    if not HasBytes(@hdr, hdr.lensize + 4) then
+      exit; // not enough input
+    hdr.mask32 := PCardinal(PAnsiChar(@hdr) + hdr.lensize)^; // at ending
+    if hdr.mask32 = 0 then
+      EWebSockets.RaiseUtf8('%.GetFrame: unexpected mask=0', [process]);
   end;
-  len := 0; // prepare upcoming GetData
+  pos := 0; // prepare upcoming GetData
   result := true;
 end;
 
 function TWebProcessInFrame.GetData: boolean;
 begin
-  if length(data) <> integer(hdr.len32) then
-    FastNewRawByteString(data, hdr.len32);
-  result := HasBytes(pointer(data), hdr.len32);
-  if result then
-  begin
-    if hdr.mask <> 0 then
-      // client-to-server masking is mandatory (but not from server to client)
-      ProcessMask(pointer(data), hdr.mask, hdr.len32);
-    len := 0; // prepare next upcoming GetHeader
-  end;
+  result := false;
+  if length(data) <> PtrInt(hdr.payloadlen) then
+    FastNewRawByteString(data, hdr.payloadlen);
+  if not HasBytes(pointer(data), hdr.payloadlen) then
+    exit; // not enough input
+  if hdr.mask32 <> 0 then
+    ProcessMask(pointer(data), hdr.mask32, hdr.payloadlen);
+  pos := 0; // prepare next upcoming GetHeader
+  result := true;
 end;
 
 function TWebProcessInFrame.Step(ErrorWithoutException: PInteger): TWebProcessInFrameState;
@@ -3698,7 +3710,7 @@ begin
       pfsDataN:
         if GetData then
         begin
-          outputframe.payload := outputframe.payload + data;
+          Append(outputframe.payload, data);
           if hdr.first and FRAME_OPCODE_FIN = 0 then
             state := pfsHeaderN
           else
