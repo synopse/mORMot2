@@ -10467,6 +10467,7 @@ begin
   if error = SSL_ERROR_NONE then // no error in the queue
     exit;
   ERR_error_string_n(error, @tmp, SizeOf(tmp));
+  tmp[SizeOf(tmp) - 1] := #0;  // ensure termination (paranoid)
   FastSetString(result, @tmp, mormot.core.base.StrLen(@tmp));
 end;
 
@@ -10475,7 +10476,8 @@ begin
   result[0] := #0;
   if error = SSL_ERROR_NONE then // no error in the queue
     exit;
-  ERR_error_string_n(error, @result[1], high(result) - 1);
+  ERR_error_string_n(error, @result[1], high(result));
+  result[high(result)] := #0;  // ensure termination (paranoid)
   result[0] := AnsiChar(mormot.core.base.StrLen(@result[1]));
 end;
 
