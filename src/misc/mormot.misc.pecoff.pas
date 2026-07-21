@@ -478,8 +478,6 @@ function AlignPos(Offset: cardinal; PW: pointer; Base: cardinal): cardinal;
 
 { ************ High-Level PE (.exe, .dll...) File Reader }
 
-{ TSynPELoader }
-
 type
   /// Cross platform PE (Portable Executable) file parser
   // - see @https://learn.microsoft.com/en-us/windows/win32/debug/pe-format
@@ -802,8 +800,7 @@ function AlignPos(Offset: cardinal; PW: pointer; Base: cardinal): cardinal;
 begin
   if PW <> nil then
     inc(Offset, (StrLenW(PW) + 1) * SizeOf(WideChar));
-  result := ((Offset + Base + 3) and $fffffffc) -
-            (Base and $fffffffc);
+  result := ((Offset + Base + 3) and cardinal(-4)) - (Base and cardinal(-4));
 end;
 
 
@@ -1446,6 +1443,7 @@ end;
 
 initialization
   InitializeUnit;
+
 
 end.
 
