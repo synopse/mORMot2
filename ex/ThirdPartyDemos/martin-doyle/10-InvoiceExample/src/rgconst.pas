@@ -68,50 +68,16 @@ implementation
 
 uses
   SysUtils,
-  {$ifdef OSPOSIX}
-  fileinfo,
-  {$ifdef OSDARWIN}
-  machoreader,
-  {$else}
-  elfreader,
-  {$endif OSDARWIN}
-  {$endif OSPOSIX}
   mormot.core.base,
+  mormot.core.os,
   mormot.core.log,
-  mormot.core.os;
-
-{$ifdef OSPOSIX}
-procedure InitVersionFromResources;
-var
-  Info: TVersionInfo;
-begin
-  Info := TVersionInfo.Create;
-  try
-    try
-      Info.Load(HInstance);
-      SetExecutableVersion(
-        Info.FixedInfo.FileVersion[0],
-        Info.FixedInfo.FileVersion[1],
-        Info.FixedInfo.FileVersion[2],
-        Info.FixedInfo.FileVersion[3]);
-    except
-      // no version resource embedded
-    end;
-  finally
-    Info.Free;
-  end;
-end;
-{$endif OSPOSIX}
+  mormot.core.text;
 
 begin
-  {$ifdef OSWINDOWS}
-  GetExecutableVersion;
-  {$else}
-  InitVersionFromResources;
-  {$endif OSWINDOWS}
+  GetExecutableVersionNumbers; // for the About dialog
   ApplicationPath := Executable.ProgramFilePath;
-  DataPath := ExpandFileName(IncludeTrailingPathDelimiter(ApplicationPath) +
-    '..\' + IniDataPath + '\');
+  DataPath := MakeExpandedPath([ApplicationPath, '..', IniDataPath],
+    {endwithdelim=}true);
   TSynLog.Family.DestinationPath:='log';
   TSynLog.Family.ArchivePath:='log';
   TSynLog.Family.RotateFileDailyAtHour:=0;
