@@ -1702,15 +1702,15 @@ procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer); overl
 // - e.g. SetExecutableVersion('7.1.2.512');
 procedure SetExecutableVersion(const aVersionText: RawUtf8); overload;
 
-/// return a function/method location according to the supplied code address
-// - returns the address as hexadecimal by default, e.g. '4cb765'
-// - if mormot.core.log.pas is defined in the project, will redirect to
-// TDebugFile.FindLocationShort() method using .map/.dbg/.mab information, and
-// return filename, symbol name and line number (if any) as plain text, e.g.
-// '4cb765 ../src/core/mormot.core.base.pas statuscodeissuccess (11183)' on FPC
 var
+  /// return a function/method location according to the supplied code address
+  // - returns the address as hexadecimal by default, e.g. '4cb765'
+  // - if mormot.core.log.pas is defined in the project, will redirect to
+  // TDebugFile.FindLocationShort() method using .map/.dbg/.mab information, and
+  // return filename, symbol name and line number (if any) as plain text, e.g.
+  // '4cb765 ../src/core/mormot.core.base.pas statuscodeissuccess (11183)' on FPC
   GetExecutableLocation: function(aAddress: pointer): ShortString;
-var
+
   /// retrieve the MAC addresses of all hardware network adapters
   // - mormot.net.sock.pas will inject here its own cross-platform version
   // - this unit will include a simple parser of /sys/class/net/* for Linux only
@@ -3785,6 +3785,9 @@ type
     /// unlock and finalize a resource
     procedure Close;
   end;
+
+/// quickly check if a resource do exist - just cross-platform wrapper to FindResource()
+function ResourceExists(ResourceName, ResType: PChar; Instance: TLibHandle = 0): boolean;
 
 type
   /// store CPU and RAM usage for a given process
@@ -8731,18 +8734,20 @@ function TExecutableResource.Open(ResourceName, ResType: PChar;
   Instance: TLibHandle): boolean;
 begin
   result := false;
+  {$ifdef DELPHIPOSIX}
   if Instance = 0 then
-    Instance := HInstance;
+    Instance := HInstance; // always 0 on FPC POSIX for the current process
+  {$endif DELPHIPOSIX}
   HResInfo := FindResource(Instance, ResourceName, ResType);
   if HResInfo = 0 then
     exit;
   HGlobal := LoadResource(Instance, HResInfo);
-  if HGlobal = 0 then // direct decompression from memory mapped .exe content
+  if HGlobal = 0 then
     exit;
   Buffer := LockResource(HGlobal);
   Size := SizeofResource(Instance, HResInfo);
   if Size > 0 then
-    result := true
+    result := true // direct access from memory mapped .exe content
   else
     Close; // paranoid check
 end;
@@ -8754,6 +8759,15 @@ begin
   UnlockResource(HGlobal); // only needed outside of Windows
   FreeResource(HGlobal);
   HGlobal := 0;
+end;
+
+function ResourceExists(ResourceName, ResType: PChar; Instance: TLibHandle): boolean;
+begin
+  {$ifdef DELPHIPOSIX}
+  if Instance = 0 then
+    Instance := HInstance; // always 0 on FPC POSIX for the current process
+  {$endif DELPHIPOSIX}
+  result := FindResource(Instance, ResourceName, ResType) <> 0;
 end;
 
 
@@ -9287,14 +9301,6 @@ begin
   SetBuildDateTime(aBuildDate);
 end;
 
-function TFileVersion.Version32: integer;
-begin
-  if self = nil then
-    result := 0
-  else
-    result := Major shl 16 + Minor shl 8 + Release;
-end;
-
 procedure TFileVersion.SetBuildDateTime(Value: TDateTime);
 var
   m, d: word;
@@ -9358,21 +9364,21 @@ var
   nfo: ^VS_VERSIONINFO;
 begin
   result := false;
-  if (self <> nil) and
-     (fFileName = Executable.ProgramFileName) and // only for the current exe
-     res.Open(PChar(1), PChar(16)) then           // get from instance resource
-    try
-      if res.Size < SizeOf(nfo^) then
-        exit;
-      nfo := res.Buffer;
-      if nfo^.Signature <> $FEEF04BD then
-        exit;
+  if (self = nil) or
+     (fFileName <> Executable.ProgramFileName) or // only for the current exe
+     not res.Open(PChar(1), PChar(16)) then       // get from instance resource
+    exit;
+  if res.Size >= SizeOf(nfo^) then
+  begin
+    nfo := res.Buffer;
+    if nfo^.Signature = $FEEF04BD then
+    begin
       SetVersionRaw(nfo^.FileVersionMS, nfo^.FileVersionLS,
                     nfo^.FileDateMS,    nfo^.FileDateLS);
       result := true; // we only extract the main version numbers here
-    finally
-      res.Close;
     end;
+  end;
+  res.Close;
 end;
 
 function TFileVersion.SetVersionRaw(fMS, fLS, dMS, dLS: cardinal): boolean;
@@ -9386,6 +9392,14 @@ begin
   ft.dwLowDateTime  := dLS; // built date from version info FILETIME
   ft.dwHighDateTime := dMS;
   SetBuildDateTime(FileTimeToDateTime(ft)); // cross-platform
+end;
+
+function TFileVersion.Version32: integer;
+begin
+  if self = nil then
+    result := 0
+  else
+    result := Major shl 16 + Minor shl 8 + Release;
 end;
 
 function TFileVersion.BuildDateTimeString: RawUtf8;
@@ -9484,12 +9498,12 @@ begin
     _fmt('%s %s (%s)', [ProgramFileName,
       Version.DetailedOrVoid, Version.BuildDateTimeString], ProgramFullSpec);
     Hash.c0 := Version.Version32;
-    {$ifdef OSLINUXANDROID}
+    {$ifdef OSLINUXANDROID} // /proc/cpuinfo seems as detailed as it gets
     Hash.c0 := crc32c(Hash.c0, pointer(CpuInfoLinux), length(CpuInfoLinux));
     {$else}
-    {$ifdef HASCPUFEATURES}
+    {$ifdef HASCPUFEATURES} // populated on Intel/AMD and arm/aarch64
     Hash.c0 := crc32c(Hash.c0, @CpuFeatures, SizeOf(CpuFeatures));
-    {$else}
+    {$else}                 // fallback on other targets
     Hash.c0 := crc32c(Hash.c0, pointer(CpuInfoText), length(CpuInfoText));
     {$endif OSLINUXANDROID}
     {$endif HASCPUFEATURES}
