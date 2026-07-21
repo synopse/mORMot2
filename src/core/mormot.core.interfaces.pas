@@ -4492,15 +4492,16 @@ begin
       if vPassedByReference in a^.ValueKindAsm then
         if vIsOnStack in a^.ValueKindAsm then
           if a^.SizeInStack <> POINTERBYTES then
-            EInterfaceFactory.RaiseUtf8('Unexpected I% % ref with no pointer',
-              [m^.InterfaceDotMethodName, a^.ParamName^])
+            EInterfaceFactory.RaiseUtf8('Unexpected I% %:% with size=% <> %',
+              [m^.InterfaceDotMethodName, a^.ParamName^, a^.ArgTypeName^,
+               a^.SizeInStack, POINTERBYTES])
           else
             a^.RawExecute := reRefStack
         else if a^.RegisterIdent > 0 then
           a^.RawExecute := reRefReg
         else
-          EInterfaceFactory.RaiseUtf8('Unexpected I% % reference with no slot',
-            [m^.InterfaceDotMethodName, a^.ParamName^])
+          EInterfaceFactory.RaiseUtf8('Unexpected I% %:% reference with no slot',
+            [m^.InterfaceDotMethodName, a^.ParamName^, a^.ArgTypeName^])
       else // pass by value
         if vIsOnStack in a^.ValueKindAsm then
           a^.RawExecute := reValStack
