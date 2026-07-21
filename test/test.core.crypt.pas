@@ -4613,7 +4613,7 @@ begin
     dprev := 0;
     bytes := 0;
     rounds := 100;
-    if (PosEx('blocking', rnd.AlgoName) > 0) or
+    if {$ifdef OSPOSIX} (PosEx('blocking', rnd.AlgoName) > 0) or {$endif}
        (PosEx('entropy', rnd.AlgoName) > 0) then
       rounds := 10; // some system random generators may be slow/blocking
     for i := 1 to rounds do
@@ -4636,7 +4636,7 @@ begin
         check(n[j] in [#33 .. #126]);
       inc(bytes, 12 + i * 2);
     end;
-    NotifyTestSpeed('%', [rnd.AlgoName], 0, bytes, @timer, {onlylog=}false);
+    NotifyTestSpeed('%', [rnd.AlgoName], 0, bytes, @timer, {onlylog=}true);
     CheckEqual(rnd.GetPassword(0), '');
   end;
   // validate Hash() High-Level Algorithms Factory
