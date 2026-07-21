@@ -2830,22 +2830,25 @@ end;
 function TFileVersion.RetrieveInformationFromFileName: boolean;
 var
   siz, siz2: DWord;
-  pt: pointer;
   trans: PWordArray;
   lngnfo: RawUtf8;
+  pt: RawByteString;
   nfo: ^TVSFixedFileInfo;
   tmp: TW32Temp;
 
-  procedure ReadResourceByName(const From: RawUtf8; out Res: RawUtf8);
+  procedure ReadResourceByName(const From: RawUtf8; var Res: RawUtf8);
   var
     str: pointer;
     sz: DWord;
     u: TSynTempBuffer;
   begin
     sz := 0;
-    if VerQueryValueW(pt, Utf8ToWin32PWideChar(Join([lngnfo, From]), u), str, sz) and
+    if VerQueryValueW(pointer(pt),
+         Utf8ToWin32PWideChar(Join([lngnfo, From]), u), str, sz) and
        (sz > 0) then
-      Win32PWideCharToUtf8(str, Res);
+      Win32PWideCharToUtf8(str, Res)
+    else
+      FastAssignNew(Res);
     u.Done;
   end;
 
@@ -2856,35 +2859,29 @@ begin
   // GetFileVersionInfo() modifies the filename parameter data while parsing
   // -> copy the FileName into local tmp buffer to create a writable copy
   siz := GetFileVersionInfoSizeW(W32(fFileName, tmp, {copy=}true), siz2);
-  if siz > 0 then
-  begin
-    GetMem(pt, siz);
-    try
-      if GetFileVersionInfoW(W32(fFileName, tmp, {copy=}true), 0, siz, pt) then
-      begin
-        if VerQueryValueW(pt, '\', pointer(nfo), siz2) then
-          SetVersionRaw(nfo^.dwFileVersionMS, nfo^.dwFileVersionLS,
-                        nfo^.dwFileDateMS,    nfo^.dwFileDateLS);
-        if VerQueryValueW(pt, '\VarFileInfo\Translation', pointer(trans), siz2) and
-           (siz2 >= 4) then
-        begin
-          _fmt('\StringFileInfo\%4.4x%4.4x\', [trans^[0], trans^[1]], lngnfo);
-          ReadResourceByName('CompanyName',      CompanyName);
-          ReadResourceByName('FileDescription',  FileDescription);
-          ReadResourceByName('FileVersion',      FileVersion);
-          ReadResourceByName('InternalName',     InternalName);
-          ReadResourceByName('LegalCopyright',   LegalCopyright);
-          ReadResourceByName('OriginalFilename', OriginalFilename);
-          ReadResourceByName('ProductName',      ProductName);
-          ReadResourceByName('ProductVersion',   ProductVersion);
-          ReadResourceByName('Comments',         Comments);
-        end;
-        result := true;
-      end;
-    finally
-      FreeMem(pt);
-    end;
-  end;
+  if siz <= 0 then
+    exit;
+  FastNewRawByteString(pt, siz);
+  if not GetFileVersionInfoW(W32(fFileName, tmp, {copy=}true), 0, siz, pointer(pt)) then
+    exit;
+  result := true;
+  if VerQueryValueW(pointer(pt), '\', pointer(nfo), siz2) and
+     (siz2 >= SizeOf(nfo^))  then
+    SetVersionRaw(nfo^.dwFileVersionMS, nfo^.dwFileVersionLS,
+                  nfo^.dwFileDateMS,    nfo^.dwFileDateLS);
+  if not VerQueryValueW(pointer(pt), '\VarFileInfo\Translation', pointer(trans), siz2) or
+     (siz2 < 4) then
+    exit;
+  _fmt('\StringFileInfo\%4.4x%4.4x\', [trans^[0], trans^[1]], lngnfo);
+  ReadResourceByName('CompanyName',      CompanyName);
+  ReadResourceByName('FileDescription',  FileDescription);
+  ReadResourceByName('FileVersion',      FileVersion);
+  ReadResourceByName('InternalName',     InternalName);
+  ReadResourceByName('LegalCopyright',   LegalCopyright);
+  ReadResourceByName('OriginalFilename', OriginalFilename);
+  ReadResourceByName('ProductName',      ProductName);
+  ReadResourceByName('ProductVersion',   ProductVersion);
+  ReadResourceByName('Comments',         Comments);
 end;
 
 procedure GetUserHost(out User, Host: RawUtf8);
