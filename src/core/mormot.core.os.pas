@@ -1294,8 +1294,9 @@ type
       aBuildDate: TDateTime = 0); reintroduce;
     /// open and extract file information from the executable FileName
     // - on Windows, will use the corresponding file version information API
-    // - on POSIX, would only work with the main executable by default - define
+    // - on POSIX, only workw with the main executable by default - define
     // FPCUSEVERSIONINFO conditional in the project options to parse any file
+    // - returns true if the version numbers did change
     // - for the main executable, don't call from Executable.Version, but just
     // run GetExecutableVersion global procedure instead
     function RetrieveInformationFromFileName: boolean;
@@ -1679,8 +1680,7 @@ var
   /// global information about the current executable and computer
   // - this structure is initialized in this unit's initialization block below
   // but you need to call GetExecutableVersion to initialize its Version fields
-  // from the executable version resource (if any)
-  // - you can call SetExecutableVersion() with a custom version, if needed
+  // from the executable version resource (if any) or call SetExecutableVersion()
   Executable: TExecutable;
 
   {$ifndef PUREMORMOT2}
@@ -1688,18 +1688,13 @@ var
   ExeVersion: TExecutable absolute Executable;
   {$endif PUREMORMOT2}
 
-/// initialize Executable global variable, from the program version resources
-// - is not retrieved at startup, unless this function is especially called
-// - on POSIX, requires FPCUSEVERSIONINFO conditional to be set for the project
+/// initialize Executable.Version from project options included at build time
+// - not retrieved at startup by default: you should call explicitly this function
 // - use SetExecutableVersion() if you want to force a custom version
-// - is in fact just a wrapper around SetExecutableVersion(0, 0, 0, 0)
 procedure GetExecutableVersion;
 
 /// initialize Executable global variable with custom version numbers
-// - GetExecutableVersion will retrieve version information from the
-// executable itself (if it was included at build time and FPCUSEVERSIONINFO
-// conditional was specified for the project)
-// - but you can use this function to set any custom version number
+// - replace or override GetExecutableVersion values
 procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer); overload;
 
 /// initialize Executable global variable, supplying the version as text
@@ -9436,18 +9431,6 @@ begin
   result := true;
 end;
 
-procedure SetExecutableVersion(const aVersionText: RawUtf8);
-var
-  p: PAnsiChar;
-  i: PtrInt;
-  ver: array[0 .. 3] of integer;
-begin
-  p := pointer(aVersionText);
-  for i := 0 to 3 do
-    ver[i] := _GetNextCardinal(p);
-  SetExecutableVersion(ver[0], ver[1], ver[2], ver[3]);
-end;
-
 procedure AfterExecutableInfoChanged; // set Executable.ProgramFullSpec+Hash
 begin
   with Executable do
@@ -9474,7 +9457,25 @@ end;
 procedure GetExecutableVersion;
 begin
   if Executable.Version.RetrieveInformationFromFileName then
+    AfterExecutableInfoChanged; // re-compute if changed
+end;
+
+procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer);
+begin
+  if Executable.Version.SetVersion(aMajor, aMinor, aRelease, aBuild) then
     AfterExecutableInfoChanged;
+end;
+
+procedure SetExecutableVersion(const aVersionText: RawUtf8);
+var
+  p: PAnsiChar;
+  i: PtrInt;
+  ver: array[0 .. 3] of integer;
+begin
+  p := pointer(aVersionText);
+  for i := 0 to 3 do
+    ver[i] := _GetNextCardinal(p);
+  SetExecutableVersion(ver[0], ver[1], ver[2], ver[3]);
 end;
 
 procedure TrimDualSpaces(var s: RawUtf8);
@@ -9551,11 +9552,6 @@ begin
   crcblocks(rnd, @CpuCache, SizeOf(CpuCache) div SizeOf(THash128));
 end;
 
-procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer);
-begin
-  if Executable.Version.SetVersion(aMajor, aMinor, aRelease, aBuild) then
-    AfterExecutableInfoChanged; // re-compute if changed
-end;
 
 
 { TExecutableCommandLine }
