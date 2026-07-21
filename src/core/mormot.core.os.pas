@@ -1233,12 +1233,9 @@ type
 
 type
   /// used to retrieve version information from any EXE
-  // - under Linux, all version numbers are set to 0 by default, unless
-  // you define the FPCUSEVERSIONINFO conditional and information is
-  // extracted from executable resources
-  // - for the main executable, do not create once instance of this class, but
-  // call GetExecutableVersion / SetExecutableVersion and access the Executable
-  // global variable
+  // - for the main executable/process, use Executable.Version global variable
+  // - on POSIX, FPCUSEVERSIONINFO conditional should be set in the project
+  // if you want to use TFileVersion.Create() on any TFileName
   TFileVersion = class(TSynPersistent)
   protected
     fDetailed: string;
@@ -1285,29 +1282,28 @@ type
     /// associated Language Translation string version resource
     LanguageInfo: RawUtf8;
     /// initialize the version information, with optional custom values
-    // - will set the version numbers, and get BuildDateTime/BuildYear
-    // - call RetrieveInformationFromFileName to parse its internal resources
-    // - for the main executable, do not use this constructor, but call
-    // GetExecutableVersion / SetExecutableVersion and access the Executable
-    // global variable
+    // - will set the supplied version numbers, and set BuildDateTime
+    // - if no version number is supplied, calls RetrieveInformationFromFileName
+    // so on POSIX, FPCUSEVERSIONINFO conditional should be set for the project
+    // - for the main executable/process, use Executable.Version global variable
     constructor Create(const aFileName: TFileName; aMajor: integer = 0;
       aMinor: integer = 0; aRelease: integer = 0; aBuild: integer = 0;
       aBuildDate: TDateTime = 0); reintroduce;
     /// open and extract file information from the executable FileName
+    // - as called by the Create(aFileName) constructor
     // - on Windows, will use the corresponding file version information API
-    // - on POSIX, only workw with the main executable by default - define
-    // FPCUSEVERSIONINFO conditional in the project options to parse any file
+    // - on POSIX, FPCUSEVERSIONINFO conditional should be set in the project
     // - returns true if the version numbers did change
-    // - for the main executable, don't call from Executable.Version, but just
-    // run GetExecutableVersion global procedure instead
+    // - for the main executable/process, use Executable.Version global variable
     function RetrieveInformationFromFileName: boolean;
     /// retrieve the version as a 32-bit integer with Major.Minor.Release
-    // - following Major shl 16+Minor shl 8+Release bit pattern
+    // - following "Major shl 16 + Minor shl 8 + Release" pattern
     function Version32: integer;
     /// build date and time of this exe file, as plain text
     function BuildDateTimeString: RawUtf8;
     /// version info of the exe file as '3.1.0.123' or ''
     // - this method returns '' if Detailed is '0.0.0.0'
+    // - see Main property if '3.1' is enough e.g. to safely identify a server
     function DetailedOrVoid: string;
     /// returns the version information of this exe file as text
     // - includes FileName (without path), Detailed and BuildDateTime properties
@@ -1326,8 +1322,7 @@ type
   published
     /// version info of the exe file as '3.1.0.123'
     // - return "string" type, i.e. UnicodeString for Delphi 2009+
-    // - under Linux, always return '0.0.0.0' if no custom version number
-    // has been defined
+    // - return '0.0.0.0' if no custom version number has been defined
     // - consider using DetailedOrVoid method if '0.0.0.0' is not expected
     property Detailed: string
       read fDetailed write fDetailed;
@@ -9294,10 +9289,14 @@ end;
 { TFileVersion }
 
 constructor TFileVersion.Create(const aFileName: TFileName;
-  aMajor, aMinor, aRelease, aBuild: integer; aBuildDate: TDateTime);
+  aMajor, aMinor, aRelease, aBuild: integer; const aBuildDate: TDateTime);
 begin
   fFileName := aFileName;
-  SetVersion(aMajor, aMinor, aRelease, aBuild);
+  if ((aMajor or aMinor) = 0) and
+     (fFileName <> '') then // use  FPC TVersionInfo
+    RetrieveInformationFromFileName
+  else
+    SetVersion(aMajor, aMinor, aRelease, aBuild);
   SetBuildDateTime(aBuildDate);
 end;
 
@@ -9305,7 +9304,7 @@ procedure TFileVersion.SetBuildDateTime(Value: TDateTime);
 var
   m, d: word;
 begin
-  if Value = 0 then // get build date from executable file timestamp
+  if Value = 0 then // get build date from executable file timestamp as fallback
     Value := FileAgeToDateTime(fFileName);
   fBuildDateTime := Value;
   if Value <> 0 then
