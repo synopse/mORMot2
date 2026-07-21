@@ -2834,8 +2834,6 @@ var
   trans: PWordArray;
   lngnfo: RawUtf8;
   nfo: ^TVSFixedFileInfo;
-  ft: TFILETIME;
-  st: TSYSTEMTIME;
   tmp: TW32Temp;
 
   procedure ReadResourceByName(const From: RawUtf8; out Res: RawUtf8);
@@ -2865,22 +2863,8 @@ begin
       if GetFileVersionInfoW(W32(fFileName, tmp, {copy=}true), 0, siz, pt) then
       begin
         if VerQueryValueW(pt, '\', pointer(nfo), siz2) then
-          with nfo^ do
-          begin
-            SetVersion({major=}   dwFileVersionMS shr 16,
-                       {minor=}   dwFileVersionMS and 65535,
-                       {release=} dwFileVersionLS shr 16,
-                       {build=}   dwFileVersionLS and 65535);
-            if (dwFileDateLS <> 0) and
-               (dwFileDateMS <> 0) then
-            begin
-              ft.dwLowDateTime  := dwFileDateLS; // built date from version nfo
-              ft.dwHighDateTime := dwFileDateMS;
-              FileTimeToSystemTime(ft, st);
-              fBuildDateTime := EncodeDate(st.wYear, st.wMonth, st.wDay);
-              fBuildDateTimeString := '';
-            end;
-          end;
+          SetVersionRaw(nfo^.dwFileVersionMS, nfo^.dwFileVersionLS,
+                        nfo^.dwFileDateMS,    nfo^.dwFileDateLS);
         if VerQueryValueW(pt, '\VarFileInfo\Translation', pointer(trans), siz2) and
            (siz2 >= 4) then
         begin

@@ -1247,6 +1247,7 @@ type
     fBuildDateTimeString, fVersionInfo, fUserAgent: RawUtf8;
     // change the version - returns true if supplied values are actually new
     function SetVersion(aMajor, aMinor, aRelease, aBuild: integer): boolean;
+    function SetVersionRaw(fMS, fLS, dMS, dLS: cardinal): boolean;
   public
     /// executable major version number
     Major: integer;
@@ -9325,6 +9326,20 @@ begin
   fUserAgent := '';
 end;
 
+function TFileVersion.SetVersionRaw(fMS, fLS, dMS, dLS: cardinal): boolean;
+var
+  ft: TFILETIME;
+begin
+  SetVersion(fMS shr 16, fMS and 65535, fLS shr 16, fLS and 65535);
+  if (dLS = 0) or
+     (dMS = 0) then
+    exit;
+  ft.dwLowDateTime  := dLS; // built date from version info
+  ft.dwHighDateTime := dMS;
+  fBuildDateTime := FileTimeToDateTime(ft); // cross-platform
+  fBuildDateTimeString := '';
+end;
+
 function TFileVersion.BuildDateTimeString: RawUtf8;
 begin
   if (fBuildDateTimeString = '') and
@@ -9336,7 +9351,7 @@ end;
 function TFileVersion.DetailedOrVoid: string;
 begin
   if (self = nil) or
-     (Major or Minor or Release or Build = 0) then
+     ((Major or Minor or Release or Build) = 0) then
     result := ''
   else
     result := fDetailed;
