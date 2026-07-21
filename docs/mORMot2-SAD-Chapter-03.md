@@ -164,7 +164,7 @@ end;
 | Unit | External Library |
 |------|------------------|
 | `mormot.lib.z` | zlib/libdeflate compression |
-| `mormot.lib.openssl11` | OpenSSL 1.1/3.x |
+| `mormot.lib.openssl11` | OpenSSL 1.1/3.x/4.x |
 | `mormot.lib.curl` | libcurl HTTP client |
 | `mormot.lib.sspi` | Windows SSPI (Kerberos) |
 | `mormot.lib.gssapi` | POSIX GSSAPI |

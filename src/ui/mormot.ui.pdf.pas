@@ -3016,7 +3016,7 @@ type
       read fUseMetaFileTextPositioning write fUseMetaFileTextPositioning;
     /// defines how TMetaFile text clipping should be applied
     // - tcNeverClip has been reported to work better e.g. when app is running
-    // on Wine
+    // on Wine (wsWine in WindowsSpecs)
     property UseMetaFileTextClipping: TPdfCanvasRenderMetaFileTextClipping
       read fUseMetaFileTextClipping write fUseMetaFileTextClipping;
     /// the % limit below which Font Kerning is transformed into PDF Horizontal
