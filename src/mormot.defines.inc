@@ -33,8 +33,7 @@
 // serialization) - left undefined by default to ensure minimal impact
 
 {.$define FPCUSEVERSIONINFO}
-// link low-level fileinfo/machoreader/elfreader for TFileVersion/TExeVersion
-// from mormot.core.os.pas => disabled by default, to preserve code size
+// link POSIX fileinfo/machoreader/elfreader units to retrieve more information
 
 {.$define NOSETTHREADNAME}
 // Delphi Wintel only: if defined, SetThreadName() would not raise the "thread

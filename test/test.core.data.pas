@@ -1753,8 +1753,8 @@ var
     i: integer;
     Valid: boolean;
   begin
-    V := TFileVersion.Create('', 0, 0, 0, 0);
-    F := TFileVersion.Create('', 0, 0, 0, 0);
+    V := TFileVersion.Create('');
+    F := TFileVersion.Create('');
     try
       for i := 1 to 1000 do
       begin

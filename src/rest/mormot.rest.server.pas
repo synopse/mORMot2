@@ -5279,9 +5279,9 @@ begin
   if Executable.Version.Major <> 0 then
   begin
     if saoFullServerVersion in fOptions then
-      vers := Executable.Version.DetailedOrVoid
+      vers := Executable.Version.Detailed // '3.1.2.3'
     else
-      vers := Executable.Version.Main;
+      vers := Executable.Version.Main;    // '3.1'
     body.AddValue('version', StringToVariant(vers));
   end;
   if Assigned(fServer.Services) and
@@ -6875,7 +6875,7 @@ begin
     'nowutc',    now.Text(true, ' '),
     'timestamp', now.Value,
     'exe',       Executable.ProgramName,
-    'version',   Executable.Version.DetailedOrVoid,
+    'version',   Executable.Version.DetailedOrVoid, // '3.1.2.3'
     'host',      Executable.Host,
     {$ifdef OSWINDOWS}
     'cpuhist',   TSystemUse.CurrentHistoryText(0, 15, @mem),
