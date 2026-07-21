@@ -128,6 +128,17 @@ type
     vIsOnStack,
     vIsHFA);
 
+  /// define how TInterfaceMethodExecuteRaw.RawExecute should handle a parameter
+  TInterfaceMethodRawExecute = (
+    reValReg,
+    reValRegs,
+    reValStack,
+    reRefReg,
+    reRefStack,
+    reValFpReg,
+    reValFpRegs,
+    reNone);
+
   /// a pointer to an interface-based service provider method description
   // - since TInterfaceFactory instances are shared in a global list, we
   // can safely use such pointers in our code to refer to a particular method
@@ -178,8 +189,7 @@ type
     // - may be -1 if pure register parameter with no backup on stack (x86)
     InStackOffset: SmallInt;
     /// how TInterfaceMethodExecuteRaw.RawExecute should handle this value
-    RawExecute: (reValReg, reValRegs, reValStack, reRefReg, reRefStack,
-                 reValFpReg, reValFpRegs, reNone);
+    RawExecute: TInterfaceMethodRawExecute;
     /// 64-bit aligned position in TInterfaceMethod.ArgsSizeAsValue memory
     OffsetAsValue: cardinal;
     /// true if is a const/var input argument
@@ -7374,7 +7384,7 @@ begin
   begin
     inc(arg);
     inc(pv);
-    case arg^.RawExecute of
+    case arg^.RawExecute of // use pre-computed parameter access modes
       reValReg:
         call.ParamRegs[arg^.RegisterIdent] := PPtrInt(pv^)^;
       reValRegs:
