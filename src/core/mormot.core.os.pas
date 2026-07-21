@@ -1695,6 +1695,7 @@ procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer); overl
 
 /// initialize Executable global variable, supplying the version numbers as text
 // - e.g. SetExecutableVersion('7.1.2.512');
+// - you can call SetExecutableVersion('') to reset to the exe resource info
 procedure SetExecutableVersion(const aVersionText: RawUtf8); overload;
 
 var
@@ -9539,6 +9540,12 @@ var
   i: PtrInt;
   ver: array[0 .. 3] of integer;
 begin
+  if aVersionText = '' then
+  begin
+    if Executable.Version.RetrieveNumbersFromResource then
+      AfterExecutableInfoChanged;
+    exit;
+  end;
   p := pointer(aVersionText);
   for i := 0 to 3 do
     ver[i] := _GetNextCardinal(p);
