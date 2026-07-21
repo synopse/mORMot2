@@ -2765,7 +2765,8 @@ end;
 {$else}
 function TFileVersion.RetrieveInformationFromFileName: boolean;
 begin
-  result := RetrieveNumbersFromResource; // only for the current exe anyway
+  result := ((Major or Minor) = 0) and   // no need to ask it twice
+            RetrieveNumbersFromResource; // only for the current exe anyway
 end;
 {$endif FPCUSEVERSIONINFO}
 

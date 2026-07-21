@@ -261,8 +261,10 @@ begin
   Utf8ToStringVar(fServiceDisplayName, result{%H-});
   v := Executable.Version;
   versionnumber := v.DetailedOrVoid;
-  if versionnumber <> '' then
-    result := result + ' ' + versionnumber;
+  if versionnumber = '' then
+    exit;
+  result := result + ' ' + versionnumber;
+  v.RetrieveInformationFromFileName; // to retrieve v.CompanyName
   if v.CompanyName <> '' then
     result := FormatString('% - (c)% %', [result, v.BuildYear, v.CompanyName]);
 end;
