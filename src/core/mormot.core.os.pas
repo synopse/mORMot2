@@ -1248,6 +1248,7 @@ type
     // change the version - returns true if supplied values are actually new
     function SetVersion(aMajor, aMinor, aRelease, aBuild: integer): boolean;
     function SetVersionRaw(fMS, fLS, dMS, dLS: cardinal): boolean;
+    procedure SetBuildDateTime(Value: TDateTime);
   public
     /// executable major version number
     Major: integer;
@@ -1330,7 +1331,7 @@ type
       read fDetailed write fDetailed;
     /// build date and time of this exe file
     property BuildDateTime: TDateTime
-      read fBuildDateTime write fBuildDateTime;
+      read fBuildDateTime write SetBuildDateTime;
   end;
 
 /// quickly parse the TFileVersion.UserAgent content
@@ -9284,16 +9285,10 @@ end;
 
 constructor TFileVersion.Create(const aFileName: TFileName;
   aMajor, aMinor, aRelease, aBuild: integer; aBuildDate: TDateTime);
-var
-  m, d: word;
 begin
   fFileName := aFileName;
   SetVersion(aMajor, aMinor, aRelease, aBuild);
-  if aBuildDate = 0 then // get build date from file age
-    aBuildDate := FileAgeToDateTime(aFileName);
-  fBuildDateTime := aBuildDate;
-  if aBuildDate <> 0 then
-    DecodeDate(aBuildDate, BuildYear, m, d);
+  SetBuildDateTime(aBuildDate);
 end;
 
 function TFileVersion.Version32: integer;
@@ -9302,6 +9297,18 @@ begin
     result := 0
   else
     result := Major shl 16 + Minor shl 8 + Release;
+end;
+
+procedure TFileVersion.SetBuildDateTime(Value: TDateTime);
+var
+  m, d: word;
+begin
+  if Value = 0 then // get build date from executable file timestamp
+    Value := FileAgeToDateTime(fFileName);
+  fBuildDateTime := Value;
+  if Value <> 0 then
+    DecodeDate(Value, BuildYear, m, d);
+  fBuildDateTimeString := ''; // delayed cached value in BuildDateTimeString
 end;
 
 function TFileVersion.SetVersion(aMajor, aMinor, aRelease, aBuild: integer): boolean;
@@ -9331,14 +9338,13 @@ function TFileVersion.SetVersionRaw(fMS, fLS, dMS, dLS: cardinal): boolean;
 var
   ft: TFILETIME;
 begin
-  SetVersion(fMS shr 16, fMS and 65535, fLS shr 16, fLS and 65535);
+  result := SetVersion(fMS shr 16, fMS and 65535, fLS shr 16, fLS and 65535);
   if (dLS = 0) or
      (dMS = 0) then
     exit;
-  ft.dwLowDateTime  := dLS; // built date from version info
+  ft.dwLowDateTime  := dLS; // built date from version info FILETIME
   ft.dwHighDateTime := dMS;
-  fBuildDateTime := FileTimeToDateTime(ft); // cross-platform
-  fBuildDateTimeString := '';
+  SetBuildDateTime(FileTimeToDateTime(ft)); // cross-platform
 end;
 
 function TFileVersion.BuildDateTimeString: RawUtf8;
