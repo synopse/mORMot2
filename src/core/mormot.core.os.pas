@@ -1288,7 +1288,9 @@ type
     // - for the main executable/process, use Executable.Version global variable
     constructor Create(const aFileName: TFileName; aMajor: integer = 0;
       aMinor: integer = 0; aRelease: integer = 0; aBuild: integer = 0;
-      aBuildDate: TDateTime = 0); reintroduce;
+      const aBuildDate: TDateTime = 0); reintroduce;
+    /// FOR INTERNAL USE ONLY - assigned to Executable.Version at startup
+    constructor CreateFromResource(aBuildDate: TDateTime);
     /// open and extract file information from the executable FileName
     // - as called by the Create(aFileName) constructor
     // - on Windows, will use the corresponding file version information API
@@ -9298,6 +9300,14 @@ begin
   else
     SetVersion(aMajor, aMinor, aRelease, aBuild);
   SetBuildDateTime(aBuildDate);
+end;
+
+constructor TFileVersion.CreateFromResource(aBuildDate: TDateTime);
+begin
+  fFileName := Executable.ProgramFileName;
+  RetrieveNumbersFromResource;
+  if fBuildDateTime = 0 then // if not set from resource
+    SetBuildDateTime(aBuildDate);
 end;
 
 procedure TFileVersion.SetBuildDateTime(Value: TDateTime);
