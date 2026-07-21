@@ -1569,27 +1569,28 @@ type
     ProgramName: RawUtf8;
     /// the main executable details, as used e.g. by TSynLog
     // - e.g. 'C:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.123 (2011-03-29 11:09:06)'
-    // - you should have called GetExecutableVersion or SetExecutableVersion
-    // to populate this field
     ProgramFullSpec: RawUtf8;
     /// the main executable file name (including full path)
     // - same as paramstr(0)
     ProgramFileName: TFileName;
     /// the main executable full path (excluding .exe file name)
-    // - same as ExtractFilePath(paramstr(0))
+    // - same as ExtractFilePath(paramstr(0)) - including an ending PathDelim
     ProgramFilePath: TFileName;
     /// the full path of the running executable or library
     // - for an executable, same as paramstr(0)
     // - for a library, will contain the whole .dll file name
     InstanceFileName: TFileName;
-    /// the current executable version
-    // - you should have called GetExecutableVersion or SetExecutableVersion
-    // to populate this field
+    /// the current executable Version information
+    // - by default, will decode main version numbers from process resource
+    // - call explicitly Executable.Version.RetrieveInformationFromFileName to
+    // populate all Version text fields like CompanyName or LegalCopyright
     Version: TFileVersion;
     /// the current computer host name
     Host: RawUtf8;
     /// the current computer user name
     User: RawUtf8;
+    /// the Command Line arguments, parsed during unit initialization
+    Command: TExecutableCommandLine;
     /// some hash representation of this information
     // - the very same executable on the very same computer run by the very
     // same user on the same OS should always have the same Hash value
@@ -1598,8 +1599,6 @@ type
     // and c3 from InstanceFileName
     // - may be used as an entropy seed, or to identify a process execution
     Hash: THash128Rec;
-    /// the Command Line arguments, parsed during unit initialization
-    Command: TExecutableCommandLine;
   end;
 
 var
@@ -1677,8 +1676,9 @@ var
 
   /// global information about the current executable and computer
   // - this structure is initialized in this unit's initialization block below
-  // but you need to call GetExecutableVersion to initialize its Version fields
-  // from the executable version resource (if any) or call SetExecutableVersion()
+  // - Version will only include numbers from process resource by default
+  // - call explicitly Executable.Version.RetrieveInformationFromFileName if you
+  // want to populate all Version text fields like CompanyName or LegalCopyright
   Executable: TExecutable;
 
   {$ifndef PUREMORMOT2}
@@ -9574,11 +9574,10 @@ begin
     OSVersionShort := ToTextOSU(OSVersionInt32);
   with Executable do            // retrieve Executable + Host/User info
   begin
+    dt := 0;
     {$ifdef OSWINDOWS}
     ProgramFileName := ParamStr(0); // RTL seems just fine here
-    dt := FileAgeToDateTime(ProgramFileName);
     {$else}
-    dt := 0;
     dladdr(@InitializeProcessInfo, @PosixProgramInfo);
     GetDlInfoName(PosixProgramInfo, ProgramFileName);
     if ProgramFileName <> '' then
@@ -9602,7 +9601,7 @@ begin
       Host := 'unknown';
     if User = '' then
       User := 'unknown';
-    Version := TFileVersion.Create(ProgramFileName, 0, 0, 0, 0, dt);
+    Version := TFileVersion.CreateFromResource(dt); // specific constructor
     Command := TExecutableCommandLine.Create;
     Command.ExeDescription := ProgramName;
     Command.Parse;
