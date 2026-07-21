@@ -1681,21 +1681,19 @@ var
   // want to populate all Version text fields like CompanyName or LegalCopyright
   Executable: TExecutable;
 
-  {$ifndef PUREMORMOT2}
+{$ifndef PUREMORMOT2}
   /// deprecated global: use Executable variable instead
   ExeVersion: TExecutable absolute Executable;
-  {$endif PUREMORMOT2}
 
-/// initialize Executable.Version from project options included at build time
-// - not retrieved at startup by default: you should call explicitly this function
-// - use SetExecutableVersion() if you want to force a custom version
+/// deprecated function: version numbers are always retrieved since mORMot 2.5
 procedure GetExecutableVersion;
+{$endif PUREMORMOT2}
 
-/// initialize Executable global variable with custom version numbers
-// - replace or override GetExecutableVersion values
+/// override Executable global variable with custom version numbers
+// - and recompute other fields like Executable.ProgramFullSpec and Hash
 procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer); overload;
 
-/// initialize Executable global variable, supplying the version as text
+/// initialize Executable global variable, supplying the version numbers as text
 // - e.g. SetExecutableVersion('7.1.2.512');
 procedure SetExecutableVersion(const aVersionText: RawUtf8); overload;
 
@@ -9523,11 +9521,11 @@ begin
   end;
 end;
 
+{$ifndef PUREMORMOT2}
 procedure GetExecutableVersion;
 begin
-  if Executable.Version.RetrieveInformationFromFileName then
-    AfterExecutableInfoChanged; // re-compute if changed
 end;
+{$endif PUREMORMOT2}
 
 procedure SetExecutableVersion(aMajor, aMinor, aRelease, aBuild: integer);
 begin
