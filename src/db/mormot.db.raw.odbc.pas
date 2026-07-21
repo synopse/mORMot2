@@ -977,19 +977,19 @@ const
 
 {$ifdef OSWINDOWS}
 
+function GetFullFileVersion(const aFileName: TFileName): string;
+begin
+  with TFileVersion.Create(aFileName) do
+  try
+    // five digits by section for easy version number comparison as string
+    result := Format('%0.5d.%0.5d.%0.5d.%0.5d', [Major, Minor, Release, Build]);
+  finally
+    Free;
+  end;
+end;
+
 function OdbcInstalledDriversList(const aIncludeVersion: boolean;
   var aDrivers: TStrings): boolean;
-
-  function GetFullFileVersion(const aFileName: TFileName): string;
-  begin
-    with TFileVersion.Create(aFileName, 0, 0, 0, 0) do
-    try // five digits by section for easy version number comparison as string
-      result := Format('%0.5d.%0.5d.%0.5d.%0.5d', [Major, Minor, Release, Build]);
-    finally
-      Free;
-    end;
-  end;
-
 var
   i: PtrInt;
   s: string;
@@ -1011,7 +1011,7 @@ begin
           result := OpenKeyReadOnly('Software\ODBC\ODBCINST.INI\'  +  aDrivers[i]);
           if result then
           begin
-            // expand environment variable, i.e %windir%
+            // expand environment variable, e.g. %windir%
             s := ExpandEnvVars(ReadString('Driver'));
             aDrivers[i] := aDrivers[i]  +  '='  +  GetFullFileVersion(s);
           end;
