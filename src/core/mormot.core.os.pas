@@ -1249,6 +1249,7 @@ type
     function SetVersion(aMajor, aMinor, aRelease, aBuild: integer): boolean;
     function SetVersionRaw(fMS, fLS, dMS, dLS: cardinal): boolean;
     procedure SetBuildDateTime(Value: TDateTime);
+    function RetrieveNumbersFromResource: boolean;
   public
     /// executable major version number
     Major: integer;
@@ -9327,6 +9328,51 @@ begin
     fDetailed := Main;
   fVersionInfo :=  '';
   fUserAgent := '';
+end;
+
+type // see also TSynPELoader in mormot.misc.pecoff.pas for full parsing
+  VS_VERSIONINFO = packed record
+    Length: word;
+    ValueLength: word;
+    VersionType: word;
+    Key: array[0..15] of WideChar; // 'VS_VERSION_INFO'
+    Padding: word;
+    Signature: cardinal;
+    StructVersion: cardinal;
+    FileVersionMS: cardinal;
+    FileVersionLS: cardinal;
+    ProductVersionMS: cardinal;
+    ProductVersionLS: cardinal;
+    FileFlagsMask: cardinal;
+    FileFlags: cardinal;
+    FileOS: cardinal;
+    FileType: cardinal;
+    FileSubtype: cardinal;
+    FileDateMS: cardinal;
+    FileDateLS: cardinal;
+  end;
+
+function TFileVersion.RetrieveNumbersFromResource: boolean;
+var
+  res: TExecutableResource; // fast direct access to VS_VERSION_INFO resource
+  nfo: ^VS_VERSIONINFO;
+begin
+  result := false;
+  if (self <> nil) and
+     (fFileName = Executable.ProgramFileName) and // only for the current exe
+     res.Open(PChar(1), PChar(16)) then           // get from instance resource
+    try
+      if res.Size < SizeOf(nfo^) then
+        exit;
+      nfo := res.Buffer;
+      if nfo^.Signature <> $FEEF04BD then
+        exit;
+      SetVersionRaw(nfo^.FileVersionMS, nfo^.FileVersionLS,
+                    nfo^.FileDateMS,    nfo^.FileDateLS);
+      result := true; // we only extract the main version numbers here
+    finally
+      res.Close;
+    end;
 end;
 
 function TFileVersion.SetVersionRaw(fMS, fLS, dMS, dLS: cardinal): boolean;
