@@ -1292,8 +1292,9 @@ type
       aMinor: integer = 0; aRelease: integer = 0; aBuild: integer = 0;
       aBuildDate: TDateTime = 0); reintroduce;
     /// open and extract file information from the executable FileName
-    // - note that resource extraction is not available on POSIX, unless the
-    // FPCUSEVERSIONINFO conditional has been specified in the project options
+    // - on Windows, will use the corresponding file version information API
+    // - on POSIX, would only work with the main executable by default - define
+    // FPCUSEVERSIONINFO conditional in the project options to parse any file
     // - for the main executable, don't call from Executable.Version, but just
     // run GetExecutableVersion global procedure instead
     function RetrieveInformationFromFileName: boolean;

@@ -2697,8 +2697,7 @@ begin
   try
     try
       // extract information - v.Load() may raise EResNotFound
-      if (fFileName <> '') and
-         (fFileName <> ParamStr(0)) then
+      if fFileName <> Executable.ProgramFileName then
         v.Load(fFileName)
       else
         v.Load(HInstance); // load info for currently running program
@@ -2764,10 +2763,56 @@ begin
   end;
 end;
 {$else}
+{$ifdef FPC}
+type // see also TSynPELoader in mormot.misc.pecoff.pas for full parsing
+  VS_VERSIONINFO = packed record
+    Length: word;
+    ValueLength: word;
+    VersionType: word;
+    Key: array[0..15] of WideChar; // 'VS_VERSION_INFO'
+    Padding: word;
+    Signature: cardinal;
+    StructVersion: cardinal;
+    FileVersionMS: cardinal;
+    FileVersionLS: cardinal;
+    ProductVersionMS: cardinal;
+    ProductVersionLS: cardinal;
+    FileFlagsMask: cardinal;
+    FileFlags: cardinal;
+    FileOS: cardinal;
+    FileType: cardinal;
+    FileSubtype: cardinal;
+    FileDateMS: cardinal;
+    FileDateLS: cardinal;
+  end;
+
+function TFileVersion.RetrieveInformationFromFileName: boolean;
+var
+  res: TExecutableResource;
+  nfo: ^VS_VERSIONINFO;
+begin
+  result := false;
+  if (fFileName = Executable.ProgramFileName) and // only for the current exe
+     res.Open(PChar(1), PChar(16)) then           // get from instance resource
+    try
+      if res.Size < SizeOf(nfo^) then
+        exit;
+      nfo := res.Buffer;
+      if nfo^.Signature <> $FEEF04BD then
+        exit;
+      SetVersionRaw(nfo^.FileVersionMS, nfo^.FileVersionLS,
+                    nfo^.FileDateMS,    nfo^.FileDateLS);
+      result := true; // we only extract the main version numbers yet
+    finally
+      res.Close;
+    end;
+end;
+{$else}
 function TFileVersion.RetrieveInformationFromFileName: boolean;
 begin
-  result := false; // nothing to be done
+  result := false; // nothing validated yet on Delphi for LINUX - may work
 end;
+{$endif FPC}
 {$endif FPCUSEVERSIONINFO}
 
 procedure _GetSystemEnv;
