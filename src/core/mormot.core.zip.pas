@@ -2729,7 +2729,7 @@ constructor TZipRead.Create(Instance: TLibHandle;
   const ResName: string; ResType: PChar);
 // resources are memory maps of the executable -> direct access
 begin
-  if fResource.Open(ResName, ResType, Instance) then
+  if fResource.Open(PChar(ResName), ResType, Instance) then
     // warning: resources size may be aligned rounded up -> handled in Create()
     Create(fResource.Buffer, fResource.Size);
 end;
@@ -2862,7 +2862,7 @@ end;
 
 destructor TZipRead.Destroy;
 begin
-  fResource.Close;
+  fResource.Close; // do nothing if fResource.Open() was not called
   FreeAndNilSafe(fSource);
   inherited Destroy;
 end;

@@ -6162,7 +6162,7 @@ procedure ResourceToRawByteString(const ResName: string; ResType: PChar;
 var
   res: TExecutableResource;
 begin
-  if res.Open(ResName, ResType, Instance) then
+  if res.Open(PChar(ResName), ResType, Instance) then
   begin
     FastSetRawByteString(buf, res.Buffer, res.Size);
     res.Close;
@@ -6174,7 +6174,7 @@ procedure ResourceSynLZToRawByteString(const ResName: string;
 var
   res: TExecutableResource;
 begin
-  if res.Open(ResName, PChar(10), Instance) then
+  if res.Open(PChar(ResName), PChar(10), Instance) then
   begin
     AlgoSynLZ.Decompress(res.Buffer, res.Size, buf);
     res.Close;

@@ -3782,8 +3782,7 @@ type
     /// locate and lock a resource
     // - use the current executable if Instance is left to its 0 default value
     // - returns TRUE if the resource has been found, and Buffer/Size are set
-    function Open(const ResourceName: string; ResType: PChar;
-      Instance: TLibHandle = 0): boolean;
+    function Open(ResourceName, ResType: PChar; Instance: TLibHandle = 0): boolean;
     /// unlock and finalize a resource
     procedure Close;
   end;
@@ -8729,13 +8728,13 @@ end;
 
 { TExecutableResource }
 
-function TExecutableResource.Open(const ResourceName: string; ResType: PChar;
+function TExecutableResource.Open(ResourceName, ResType: PChar;
   Instance: TLibHandle): boolean;
 begin
   result := false;
   if Instance = 0 then
     Instance := HInstance;
-  HResInfo := FindResource(Instance, PChar(ResourceName), ResType);
+  HResInfo := FindResource(Instance, ResourceName, ResType);
   if HResInfo = 0 then
     exit;
   HGlobal := LoadResource(Instance, HResInfo);
