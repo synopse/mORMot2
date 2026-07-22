@@ -1685,8 +1685,8 @@ type
     fHashItem: TDynArrayHashOne;           // function
     fEventHash: TOnDynArrayHashOne;        // function of object
     fHashTableStore: TIntegerDynArray;     // store 0 for void entry, or Index+1
-    fHashTableSize: integer;
-    fState: TDynArrayHasherState;
+    fHashTableSize: integer;               // 32-bit
+    fState: TDynArrayHasherState;          // 8-bit
     fCompare: TDynArraySortCompare;        // function
     fEventCompare: TOnDynArraySortCompare; // function of object
     fHasher: THasher;                      // function
@@ -3992,7 +3992,7 @@ var
   l: PtrInt; // not integer
 begin
   v := GlobalInfoFind(pointer(Key), length(Key), l);
-  FastSetString(result, v, l); // we need to allocate a new RawUtf8 string
+  FastSetString(result, v, l); // allocate a new RawUtf8 string
 end;
 
 function GlobalInfoRegisterAll: TBinDictionary;
@@ -4034,6 +4034,12 @@ begin
   if WindowsUbr <> 0 then
     Sender.UpdateText(['os:build'], [WindowsUbr]);
   Sender.UpdateTextNotVoid('os:winver',   WindowsDisplayVersion);
+  if wsWow64 in WindowsSpecs then
+    Sender.UpdateText('os:wow64', 'true');
+  if wsPrism in WindowsSpecs then
+    Sender.UpdateText('os:prism', 'true');
+  if wsWine in WindowsSpecs then
+    Sender.UpdateText('os:wine',  'true');
   {$endif OSPOSIX}
 end;
 
@@ -4044,12 +4050,12 @@ begin
   Sender.UpdateText(['cpu:cores'],      [CpuCores]);
   Sender.UpdateText(['cpu:sockets'],    [CpuSockets]);
   if HasHWAes then
-    Sender.UpdateText('cpu:aes',        'true');
+    Sender.UpdateText('cpu:aes',  'true');
   {$ifdef ASMINTEL}
   if cfAVX in CpuFeatures then
-    Sender.UpdateText('cpu:avx',        'true');
+    Sender.UpdateText('cpu:avx',  'true');
   if cfAVX2 in CpuFeatures then
-    Sender.UpdateText('cpu:avx2',       'true');
+    Sender.UpdateText('cpu:avx2', 'true');
   if IntelAvx10 > 0 then
     Sender.UpdateText(['cpu:avx10'],     [IntelAvx10]);
   Sender.UpdateText(  ['cpu:family'],    [CpuFamily]);
@@ -4148,21 +4154,21 @@ begin
   Sender.UpdateText(['exe:log'],  [GetSystemPath(spLog)]);
   Sender.UpdateText(['exe:pid'],  [GetCurrentProcessId]);
   Sender.UpdateText(['exe:ppid'], [GetParentProcess]);
-  if Assigned(Executable.Version) and
-     (Executable.Version.Major <> 0) then
+  if not Assigned(Executable.Version) then
+    exit;
+  if Executable.Version.BuildYear <> 0 then
+  begin
+    Sender.UpdateText( 'exe:build', Executable.Version.BuildDateTimeString);
+    Sender.UpdateText(['exe:buildyear'], [Executable.Version.BuildYear]);
+  end;
+  if Executable.Version.Major <> 0 then
   begin
     Sender.UpdateText(['exe:major'],   [Executable.Version.Major]);
     Sender.UpdateText(['exe:minor'],   [Executable.Version.Minor]);
+    Sender.UpdateText(['exe:release'], [Executable.Version.Release]);
+    Sender.UpdateText(['exe:build'],   [Executable.Version.Build]);
     Sender.UpdateText(['exe:version'], [Executable.Version.Detailed]);
   end;
-  {$ifdef OSWINDOWS}
-  if wsWow64 in WindowsSpecs then
-    Sender.UpdateText('exe:wow64', 'true');
-  if wsPrism in WindowsSpecs then
-    Sender.UpdateText('exe:prism', 'true');
-  if wsWine in WindowsSpecs then
-    Sender.UpdateText('exe:wine', 'true');
-  {$endif OSWINDOWS}
 end;
 
 procedure _GlobalInfoEnv(Sender: TBinDictionary);
@@ -4172,6 +4178,7 @@ begin
   for i := 0 to length(_SystemEnvNames) - 1 do
     Sender.UpdateText(['env:', _SystemEnvNames[i]], [_SystemEnvValues[i]]);
 end;
+
 
 { TRawUtf8List }
 
