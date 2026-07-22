@@ -208,6 +208,8 @@ type
     {$ifdef OSWINDOWS}
     Tot7z: Int64;
     function Callback7z(const sender: I7zArchive; current, total: Int64): HRESULT;
+    procedure Run7zExtract(const Params: array of const);
+    procedure Run7zUpdate(const Params: array of const);
     {$endif OSWINDOWS}
   public
     procedure Setup; override;
@@ -9723,7 +9725,40 @@ end;
 
 const
   ZIP_EXTS = '*.zip;*.jar;*.docx;*.pptx;*.xlsx;*.xpi;*.odt;*.ods';
-  
+
+procedure TTestCoreCompression.Run7zExtract(const Params: array of const);
+var
+  fn, pw: RawUtf8;
+  f: TFileName;
+  ms: TMemoryStream;
+begin
+  // open archive Params[0] with password Params[1] and extract its first entry
+  Check(VarRecToUtf8IsString(Params[0], fn));
+  Check(VarRecToUtf8IsString(Params[1], pw));
+  Utf8ToFileName(fn, f);
+  ms := TMemoryStream.Create;
+  try
+    New7zReader(f, fhUndefined,
+      Executable.ProgramFilePath + '7z.dll', pw).Extract(0, ms);
+  finally
+    ms.Free;
+  end;
+end;
+
+procedure TTestCoreCompression.Run7zUpdate(const Params: array of const);
+var
+  fn, pw: RawUtf8;
+  f: TFileName;
+  lib: I7zLib;
+begin
+  // open archive Params[0] for update with password Params[1]
+  Check(VarRecToUtf8IsString(Params[0], fn));
+  Check(VarRecToUtf8IsString(Params[1], pw));
+  Utf8ToFileName(fn, f);
+  lib := T7zLib.Create(Executable.ProgramFilePath + '7z.dll');
+  lib.NewWriter(f, fhUndefined, pw);
+end;
+
 procedure TTestCoreCompression._7Zip;
 var
   s: RawByteString;
@@ -9844,6 +9879,52 @@ begin
       Check(DeleteFile(newfile2));
       DirectoryDelete(folder);
       Check(FindFiles(folder) = nil);
+      // validate ZipCrypto password and extraction failure detection
+      newfile1 := WorkDir + 'pass.zip';
+      zout := zlib.NewWriter(fhZip);
+      zout.SetPassword('password');
+      zout.SetEncryptionMethod(emZipCrypto);
+      zout.AddBuffer('A.1mb', Data);
+      zout.SaveToFile(newfile1);
+      zout := nil;
+      // the correct password round-trips the content
+      zin := zlib.NewReader(newfile1, fhZip, 'password');
+      CheckEqual(zin.Count, 1, 'pw1');
+      Check(zin.Extract('A.1mb') = Data, 'pw2');
+      zin := nil;
+      // a wrong password is reported as failure, not silently swallowed
+      zin := zlib.NewReader(newfile1, fhZip, 'wrongpassword');
+      Check(not zin.Extract('A.1mb', folder, {nosubfolder=}true), 'pw3');
+      CheckEqual(zin.Extract('A.1mb'), '', 'pw4');
+      zin := nil;
+      // a wrong password raises E7Zip on direct item extraction
+      CheckRaised(Run7zExtract, [newfile1, 'wrongpassword'], E7Zip, 'pw5');
+      DirectoryDelete(folder);
+      Check(DeleteFile(newfile1));
+      // validate a .7z with encrypted headers (7z -mhe=on)
+      newfile2 := WorkDir + 'mhe.7z';
+      zout := zlib.NewWriter(fh7z);
+      zout.SetPassword('password');
+      zout.EncryptHeaders7z(true);
+      zout.AddBuffer('A.1mb', Data);
+      zout.SaveToFile(newfile2);
+      zout := nil;
+      // without the password, it can neither be opened nor updated
+      CheckRaised(Run7zExtract, [newfile2, ''], E7Zip, 'mhe1');
+      CheckRaised(Run7zUpdate, [newfile2, ''], E7Zip, 'mhe2');
+      // NewWriter() with the password can update the existing archive
+      zout := zlib.NewWriter(newfile2, fh7z, 'password');
+      zout.SetPassword('password');
+      zout.EncryptHeaders7z(true);
+      zout.AddBuffer('B.1mb', Data);
+      zout.SaveToFile(newfile2);
+      zout := nil;
+      zin := zlib.NewReader(newfile2, fh7z, 'password');
+      CheckEqual(zin.Count, 2, 'mhe3');
+      Check(zin.Extract('A.1mb') = Data, 'mhe4');
+      Check(zin.Extract('B.1mb') = Data, 'mhe5');
+      zin := nil;
+      Check(DeleteFile(newfile2));
     end;
   Check(DeleteFile(ZipFile));
 end;
