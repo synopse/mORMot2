@@ -284,6 +284,10 @@ type
     procedure ToJson(Value: PVarData; var Json: RawUtf8;
       const Prefix: RawUtf8 = ''; const Suffix: RawUtf8 = '';
       Format: TTextWriterJsonFormat = jsonCompact); overload; virtual;
+    /// save the content into a record/dynamic array value via RTTI
+    // - will use temporary persistence via ToJson then LoadJsonInPlace()
+    function ToRtti(Value: PVarData; var Dest; RttiInfo: PRttiInfo;
+      Options: PDocVariantOptions): boolean; virtual;
     /// clear the content
     // - this default implementation will set VType := varEmpty
     // - override it if your custom type needs to manage its internal memory
@@ -5097,6 +5101,22 @@ begin
     if Suffix <> '' then
       W.AddString(Suffix);
     W.SetText(Json, Format);
+  finally
+    W.Free;
+  end;
+end;
+
+function TSynInvokeableVariantType.ToRtti(Value: PVarData; var Dest;
+  RttiInfo: PRttiInfo; Options: PDocVariantOptions): boolean;
+var
+  W: TJsonWriter;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
+begin
+  W := TJsonWriter.CreateOwnedStream(temp);
+  try
+    ToJson(W, Value);
+    result := LoadJsonInPlace(Dest, W.GetTextAsBuffer, RttiInfo,
+      {endofbj=}nil, Options, JSONPARSER_TOLERANTOPTIONS) <> nil;
   finally
     W.Free;
   end;
