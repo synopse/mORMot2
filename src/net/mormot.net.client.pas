@@ -6146,7 +6146,7 @@ var
 
 var
   P: PUtf8Char;
-  rec, ToList, head: RawUtf8;
+  rec, ToList, head, subj, frm: RawUtf8;
 begin
   result := false;
   P := pointer(CsvDest);
@@ -6184,10 +6184,19 @@ begin
         Append(ToList, ', ', rec);
     until P = nil;
     Exec('DATA', '354');
-    sock.SockSendLine([
-      'Subject: ', Subject, #13#10 +
-      'From: ', From, ToList]);
+    // merge the From/Subject parameters with any matching lines in Headers:
+    // a non-empty parameter wins (its header duplicate is removed), an empty
+    // parameter is filled from the corresponding header value
     head := trimU(Headers);
+    subj := Subject;
+    frm := From;
+    if subj = '' then
+      GetHeader(head, 'Subject', subj);
+    if frm = '' then
+      GetHeader(head, 'From', frm);
+    head := DeleteHeader(head, 'Subject');
+    head := DeleteHeader(head, 'From');
+    sock.SockSendLine(['Subject: ', subj, #13#10 + 'From: ', frm, ToList]);
     if (TextCharSet <> '') or
        (head = '') then
       sock.SockSend([
@@ -6198,8 +6207,13 @@ begin
     sock.SockSendCRLF;            // end of headers
     sock.SockSend(Text);
     Exec('.', '25');
-    Exec('QUIT', '22');
-    result := true;
+    result := true; // the message is accepted once the final '.' returns 250
+    try
+      Exec('QUIT', '221'); // polite session close (best effort)
+    except
+      on Exception do
+        ; // some servers close right after '.', so ignore any QUIT error
+    end;
   finally
     sock.Free;
   end;
