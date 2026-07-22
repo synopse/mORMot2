@@ -833,7 +833,7 @@ function WinErrorConstant(Code: cardinal): PShortString;
 // - e.g. WinErrorShort(5) = '5 ERROR_ACCESS_DENIED' or
 // WinErrorShort($c00000fd) = 'c00000fd EXCEPTION_STACK_OVERFLOW'
 function WinErrorShort(Code: cardinal; NoInt: boolean = false): TShort47; overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef FPC} inline; {$endif} // Delphi has sometimes issues inlining this
 
 /// return the error code number, and its regular constant on Windows (if known)
 procedure WinErrorShort(Code: cardinal; var Dest: ShortString; NoInt: boolean = false); overload;
@@ -854,7 +854,7 @@ procedure OsErrorShort(Code: cardinal; var Dest: ShortString; NoInt: boolean = f
 // - redirect to WinErrorShort/LinuxErrorShort/BsdErrorShort() functions
 // - e.g. OsErrorShort(5) = '5 ERROR_ACCESS_DENIED' on Windows or '5 EIO' on POSIX
 function OsErrorShort(Code: cardinal = 0; NoInt: boolean = false): TShort47; overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef FPC} inline; {$endif} // Delphi has sometimes issues inlining this
 
 /// append the error code number, and its regular constant on the current OS
 procedure OsErrorAppend(Code: cardinal; var Dest: ShortString;

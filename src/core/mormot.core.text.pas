@@ -1611,6 +1611,7 @@ function ExtendedToJson(tmp: PShortString; Value: TSynExtended;
 // - on other platforms, i.e. Delphi Win64 and all FPC targets, will use our own
 // faster Fabian Loitsch's Grisu algorithm implementation
 // - returns the count of chars stored into S, i.e. length(S)
+// - S should be a true ShortString with enough chars, not e.g. TShort7
 function DoubleToShort(S: PShortString; const Value: double): integer;
 
 /// convert a 64-bit floating-point value to its numerical text equivalency
