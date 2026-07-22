@@ -9735,117 +9735,121 @@ var
   zout: I7zWriter;
   files: TFindFilesDynArray;
 begin
-  ZipFile := WorkDir + 'test1.zip';
+  // T7zLib formats detection
   CheckEqual(ToUtf8(T7zLib.FormatGuid(fhGZip)),
-    '23170F69-40C1-278A-1000-000110EF0000');
+             '23170F69-40C1-278A-1000-000110EF0000');
   Check(T7zLib.FormatDetect(Zipfile, {onlyext=}true) = fhZip);
   Check(T7zLib.FormatDetect(Zipfile, false) = fhZip);
   Check(T7zLib.FormatDetect(Executable.ProgramFileName, true) = fhPe);
   Check(T7zLib.FormatDetect(Executable.ProgramFileName, false) = fhPe);
   Check(T7zLib.FormatFileExtension(fhZip) = 'zip');
   Check(T7zLib.FormatFileExtensions(fhZip) = ZIP_EXTS);
-  lib := Executable.ProgramFilePath + '7z.dll';
-  if FileExists(lib) then
-    begin
-      // validate I7zReader
-      zin := New7zReader(ZipFile, fhUndefined, lib);
-      Check(zin.Format = fhZip);
-      Check(zin.FormatExt = 'zip');
-      Check(zin.FormatExts = ZIP_EXTS);
-      CheckEqual(zin.Count, 5, 'count');
-      tot1 := 0;
-      for i := 0 to zin.Count - 1 do
-        inc(tot1, zin.Size[i]);
-      {allocconsole; with zin do
-        for i := 0 to Count - 1 do
-           writeln('fullname=',FullName[i], ' zipname=',ZipName[i],
-          ' size=',Size[i], ' packsize=',packsize[i], ' method=',Method[i],
-          ' date=', DateTimeToIso8601text(ModDate[i]));}
-      zin.SetProgressCallback(Callback7z);
-      Tot7z := 0;
-      s := zin.Extract('REP1\ONE.exe');
-      Check(s = Data, 'one');
-      CheckEqual(length(s), Tot7z, 'callbacksizeone');
-      Tot7z := 0;
-      s := zin.Extract('exe.1mb');
-      Check(s = Data, 'exe');
-      CheckEqual(length(s), Tot7z, 'callbacksizeexe');
-      Tot7z := 0;
-      zin.ExtractAll;
-      CheckEqual(tot1, Tot7z, 'callbacksize1');
-      folder := WorkDir + '7zipout';
-      DirectoryDelete(folder);
-      Check(FindFiles(folder) = nil);
-      Tot7z := 0;
-      zin.ExtractAll(folder, {nosubfolder=}true);
-      CheckEqual(tot1, Tot7z, 'callbacksize2');
-      files := FindFiles(folder);
-      CheckEqual(length(files), zin.Count, 'extractto');
-      tot2 := 0;
-      for i := 0 to high(files) do
-        inc(tot2, files[i].Size);
-      CheckEqual(tot1, tot2, 'extractsize');
-      DirectoryDelete(folder);
-      Check(FindFiles(folder) = nil);
-      Tot7z := 0;
-      zin.Extract('exe.1mb', folder);
-      CheckEqual(length(Data), Tot7z, 'extractfileto');
-      Check(length(FindFiles(folder)) = 1);
-      // validate I7zWriter
-      newfile1 := WorkDir + 'from7zadd.zip';
-      newfile2 := WorkDir + 'from7zupd.zip';
-      zout := New7ZWriter(fhZip, lib);
-      zout.AddFile(folder + '\exe.1mb', 'A.1mb');
-      zout.AddBuffer('B.1mb', data);
-      zout.SaveToFile(newfile1);
-      zin := New7zReader(newfile1, fhUndefined, lib);
-      CheckEqual(zin.Count, 2);
-      zin.SetProgressCallback(Callback7z);
-      Tot7z := 0;
-      s := zin.Extract('A.1mb');
-      Check(s = Data, 'a');
-      CheckEqual(length(s), Tot7z, 'callbacksizeexe');
-      s := zin.Extract('B.1mb');
-      Check(s = Data, 'b');
-      s := zin.Extract('C.1mb');
-      CheckEqual(s, '', 'c');
-      zin := nil; // so that we could change the file
-      zout := nil;
-      zout := New7zWriter(newfile1, fhUndefined, lib);
-      zout.SetProgressCallback(Callback7z);
-      Tot7z := 0;
-      zout.AddFile(folder + '\exe.1mb', 'C.1mb');
-      zout.AddBuffer('A.1mb', copy(Data, 1, 200));
-      zout.AddBuffer('void.txt', '');
-      {with zout do
-        for i := 0 to Count - 1 do
-           writeln('fullname=',FullName[i], ' zipname=',ZipName[i],
-          ' size=',Size[i], ' packsize=',packsize[i], ' method=',Method[i],
-          ' date=', DateTimeToIso8601text(ModDate[i]));}
-      CheckEqual(Tot7z, 0);
-      Tot7z := 0;
-      zout.SaveToFile(newfile2);
-      Check(Tot7z <> 0);
-      zout := nil; // so that we could read the file
-      zlib := T7zLib.Create(lib);
-      zin := zlib.NewReader(newfile2);
-      CheckEqual(zin.Count, 4);
-      s := zin.Extract('A.1mb');
-      Check(length(s) = 200, 'ua1');
-      Check(CompareMem(pointer(Data), pointer(s), 200), 'ua2');
-      s := zin.Extract('B.1mb');
-      Check(s = Data, 'ub');
-      s := zin.Extract('C.1mb');
-      Check(s = Data, 'uc');
-      s := zin.Extract('void.txt');
-      CheckEqual(s, '', 'uv');
-      zin := nil; // so that we could delete the file
-      Check(DeleteFile(newfile1));
-      Check(DeleteFile(newfile2));
-      DirectoryDelete(folder);
-      Check(FindFiles(folder) = nil);
-    end;
-  Check(DeleteFile(ZipFile));
+  // validate our 7z wrapper with test1.zip as created by ZipFormat method
+  ZipFile := WorkDir + 'test1.zip';
+  try
+    lib := Executable.ProgramFilePath + '7z.dll';
+    if not FileExists(lib) then
+      exit;
+    // validate I7zReader
+    zin := New7zReader(ZipFile, fhUndefined, lib);
+    Check(zin.Format = fhZip);
+    Check(zin.FormatExt = 'zip');
+    Check(zin.FormatExts = ZIP_EXTS);
+    CheckEqual(zin.Count, 5, 'count');
+    tot1 := 0;
+    for i := 0 to zin.Count - 1 do
+      inc(tot1, zin.Size[i]);
+    {allocconsole; with zin do
+      for i := 0 to Count - 1 do
+         writeln('fullname=',FullName[i], ' zipname=',ZipName[i],
+        ' size=',Size[i], ' packsize=',packsize[i], ' method=',Method[i],
+        ' date=', DateTimeToIso8601text(ModDate[i]));}
+    zin.SetProgressCallback(Callback7z);
+    Tot7z := 0;
+    s := zin.Extract('REP1\ONE.exe');
+    Check(s = Data, 'one');
+    CheckEqual(length(s), Tot7z, 'callbacksizeone');
+    Tot7z := 0;
+    s := zin.Extract('exe.1mb');
+    Check(s = Data, 'exe');
+    CheckEqual(length(s), Tot7z, 'callbacksizeexe');
+    Tot7z := 0;
+    zin.ExtractAll;
+    CheckEqual(tot1, Tot7z, 'callbacksize1');
+    folder := WorkDir + '7zipout';
+    DirectoryDelete(folder);
+    Check(FindFiles(folder) = nil);
+    Tot7z := 0;
+    zin.ExtractAll(folder, {nosubfolder=}true);
+    CheckEqual(tot1, Tot7z, 'callbacksize2');
+    files := FindFiles(folder);
+    CheckEqual(length(files), zin.Count, 'extractto');
+    tot2 := 0;
+    for i := 0 to high(files) do
+      inc(tot2, files[i].Size);
+    CheckEqual(tot1, tot2, 'extractsize');
+    DirectoryDelete(folder);
+    Check(FindFiles(folder) = nil);
+    Tot7z := 0;
+    zin.Extract('exe.1mb', folder);
+    CheckEqual(length(Data), Tot7z, 'extractfileto');
+    Check(length(FindFiles(folder)) = 1);
+    // validate I7zWriter
+    newfile1 := WorkDir + 'from7zadd.zip';
+    newfile2 := WorkDir + 'from7zupd.zip';
+    zout := New7ZWriter(fhZip, lib);
+    zout.AddFile(folder + '\exe.1mb', 'A.1mb');
+    zout.AddBuffer('B.1mb', data);
+    zout.SaveToFile(newfile1);
+    zin := New7zReader(newfile1, fhUndefined, lib);
+    CheckEqual(zin.Count, 2);
+    zin.SetProgressCallback(Callback7z);
+    Tot7z := 0;
+    s := zin.Extract('A.1mb');
+    Check(s = Data, 'a');
+    CheckEqual(length(s), Tot7z, 'callbacksizeexe');
+    s := zin.Extract('B.1mb');
+    Check(s = Data, 'b');
+    s := zin.Extract('C.1mb');
+    CheckEqual(s, '', 'c');
+    zin := nil; // so that we could change the file
+    zout := nil;
+    zout := New7zWriter(newfile1, fhUndefined, lib);
+    zout.SetProgressCallback(Callback7z);
+    Tot7z := 0;
+    zout.AddFile(folder + '\exe.1mb', 'C.1mb');
+    zout.AddBuffer('A.1mb', copy(Data, 1, 200));
+    zout.AddBuffer('void.txt', '');
+    {with zout do
+      for i := 0 to Count - 1 do
+         writeln('fullname=',FullName[i], ' zipname=',ZipName[i],
+        ' size=',Size[i], ' packsize=',packsize[i], ' method=',Method[i],
+        ' date=', DateTimeToIso8601text(ModDate[i]));}
+    CheckEqual(Tot7z, 0);
+    Tot7z := 0;
+    zout.SaveToFile(newfile2);
+    Check(Tot7z <> 0);
+    zout := nil; // so that we could read the file
+    zlib := T7zLib.Create(lib);
+    zin := zlib.NewReader(newfile2);
+    CheckEqual(zin.Count, 4);
+    s := zin.Extract('A.1mb');
+    Check(length(s) = 200, 'ua1');
+    Check(CompareMem(pointer(Data), pointer(s), 200), 'ua2');
+    s := zin.Extract('B.1mb');
+    Check(s = Data, 'ub');
+    s := zin.Extract('C.1mb');
+    Check(s = Data, 'uc');
+    s := zin.Extract('void.txt');
+    CheckEqual(s, '', 'uv');
+    zin := nil; // so that we could delete the file
+    Check(DeleteFile(newfile1));
+    Check(DeleteFile(newfile2));
+    DirectoryDelete(folder);
+    Check(FindFiles(folder) = nil);
+  finally
+    Check(DeleteFile(ZipFile));
+  end;
 end;
 
 function TTestCoreCompression.Callback7z(const sender: I7zArchive;
