@@ -1022,12 +1022,17 @@
         }
 
         // Calendar dates (dueDate): date-only ISO strings are parsed as UTC by
-        // new Date(), which shifts the day in western timezones — force local midnight
+        // new Date(), which shifts the day in western timezones — force local midnight.
+        // Render as ISO YYYY-MM-DD (matching the input field) so the day/month
+        // order is unambiguous regardless of the browser's locale.
         function formatDay(dateStr) {
             if (!dateStr || dateStr === '0000-00-00' || dateStr === '') return 'Not set';
             const date = new Date(dateStr.slice(0, 10) + 'T00:00:00');
             if (isNaN(date.getTime()) || date.getFullYear() < 2000) return 'Not set';
-            return date.toLocaleDateString();
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
         }
 
         // Timestamps (createdAt, updatedAt): the server stores UTC but omits the

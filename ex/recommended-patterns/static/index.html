@@ -613,13 +613,18 @@
         }
 
         // Date-only ISO strings are parsed as UTC by new Date(), which shifts
-        // the day in western timezones — force local midnight instead
+        // the day in western timezones — force local midnight instead.
+        // Render as ISO YYYY-MM-DD (matching the input field) so the day/month
+        // order is unambiguous regardless of the browser's locale.
         function formatDate(dateStr) {
             if (!dateStr || dateStr === '0000-00-00' || dateStr === '') return 'No due date';
             try {
                 const date = new Date(dateStr.slice(0, 10) + 'T00:00:00');
                 if (isNaN(date.getTime()) || date.getFullYear() < 2000) return 'No due date';
-                return date.toLocaleDateString();
+                const y = date.getFullYear();
+                const m = String(date.getMonth() + 1).padStart(2, '0');
+                const d = String(date.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
             } catch (e) {
                 return 'No due date';
             }
