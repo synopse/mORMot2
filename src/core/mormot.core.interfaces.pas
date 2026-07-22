@@ -4330,7 +4330,7 @@ begin
         imvDouble,
         imvDateTime:
           if not (vPassedByReference in a^.ValueKindAsm) then
-            SizeInFPR := 1; // stored in one double
+            SizeInFPR := 1; // stored in one FP register
         {$endif HAS_FPREG}
         imvDynArray:
           if (a^.ArgRtti.ArrayRtti <> nil) and
@@ -4353,13 +4353,13 @@ begin
                 'should be at least % bytes (i.e. bigger than a pointer) to be on stack',
                 [self, a^.ArgTypeName^, fInterfaceName, m^.URI,
                  a^.ParamName^, POINTERBYTES + 1]);
-              // to be fair, both ABIWINX64 and ABISYSVX64 could handle those and
-              // transmit them within a register
+              // to be fair, both ABIWINX64 and ABISYSVX64 could handle those
+              // and transmit them within a register
             if RecordIsHfa(a^.ArgRtti.Props) then
             begin
               include(a^.ValueKindAsm, vIsHFA); // e.g. record x, y: double end;
               {$ifdef HAS_FPREG}
-              SizeInFPR := a^.ArgRtti.Size shr 3;
+              SizeInFPR := a^.ArgRtti.Size shr 3; // how many FP registers
               {$endif HAS_FPREG}
             end;
          end;

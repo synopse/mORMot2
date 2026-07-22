@@ -642,7 +642,7 @@ const
     [osGentoo, osCoreOs],                                                  // ldPortage
     [osAndroid]);                                                          // ldAndroid
 
-  /// the recobnized Linux package management systems, as plain text
+  /// the recognized Linux package management systems, as plain text
   DISTRI_NAME: array[TLinuxDistribution] of TShort7 = (
     '', '', 'apt', 'rpm', 'pacman', 'portage', 'android');
 

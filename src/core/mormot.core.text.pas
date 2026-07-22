@@ -1381,9 +1381,7 @@ type
 
 var
   /// naive but efficient cache to avoid string memory allocation for 0 .. 999
-  // small numbers by Int32ToUtf8/UInt32ToUtf8
   // - filled with statically allocated UINT_999[] constant values at startup
-  // - noticeable when RawUtf8 strings are used as array indexes (e.g. in BSON)
   // - is defined globally, since may be used from an inlined function
   SmallUInt32Utf8: array[0 .. 999] of RawUtf8;
   /// raw pre-allocated SmallUInt32Utf8[] values as L1-friendly constants
