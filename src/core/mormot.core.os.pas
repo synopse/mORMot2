@@ -848,7 +848,7 @@ procedure BsdErrorShort(Code: cardinal; var Dest: ShortString; NoInt: boolean = 
 // - redirect to WinErrorShort/LinuxErrorShort/BsdErrorShort() functions
 // - e.g. OsErrorShort(5) = '5 ERROR_ACCESS_DENIED' on Windows or '5 EIO' on POSIX
 procedure OsErrorShort(Code: cardinal; var Dest: ShortString; NoInt: boolean = false); overload;
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef FPC} inline; {$endif} // Delphi can't inline a ShortString var :(
 
 /// return the error code number, and its regular constant on the current OS
 // - redirect to WinErrorShort/LinuxErrorShort/BsdErrorShort() functions
