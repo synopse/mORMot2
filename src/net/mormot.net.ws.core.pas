@@ -946,7 +946,7 @@ type
   TWebProcessInFrame = object
   {$endif USERECORDWITHMETHODS}
   public
-    hdr: TFrameHeader;
+    header: TFrameHeader;
     pos: integer;
     opcode: TWebSocketFrameOpCode;
     state: TWebProcessInFrameState;
@@ -1498,7 +1498,7 @@ begin
   end;
   for i := 0 to (len and 3) - 1 do
   begin
-    PByteArray(data)^[i] := PByteArray(data)^[i] xor mask;
+    PByteArray(data)^[i] := PByteArray(data)^[i] xor byte(mask);
     mask := mask shr 8;
   end;
 end;
@@ -3597,12 +3597,12 @@ end;
 
 function TWebProcessInFrame.HasHeader: boolean;
 begin
-  result := HasBytes(@hdr, PtrInt(hdr.lensize) + hdr.masksize);
+  result := HasBytes(@header, PtrInt(header.lensize) + header.masksize);
 end;
 
 function TWebProcessInFrame.GetHeader: boolean;
 var
-  // use local variables to easy decode and keep hdr content untouched
+  // use local variables to ease decoding and keep the header content untouched
   b: byte;
   len64: Int64;
 begin
@@ -3611,46 +3611,46 @@ begin
   begin
     // reset for every decoded frame
     FastAssignNew(data);
-    FillCharFast(hdr, SizeOf(hdr), 0);
+    FillCharFast(header, SizeOf(header), 0);
   end;
-  hdr.lensize := 2; // first+two
+  header.lensize := 2; // first=opcode + two=len
   if not HasHeader then
     exit; // not enough input
-  opcode := TWebSocketFrameOpCode(hdr.first and 15);
+  opcode := TWebSocketFrameOpCode(header.first and 15);
   // note: FRAME_OPCODE_FIN is implemented below in TWebProcessInFrame.Step
-  b := hdr.two;
+  b := header.two;
   if b and FRAME_LEN_MASK <> 0 then
   begin
     // client-to-server masking is mandatory (but not from server to client)
     b := b and pred(FRAME_LEN_MASK);
-    hdr.masksize := 4;
+    header.masksize := SizeOf(header.mask32); // = 4 for masked input
   end;
   if b < FRAME_LEN_2BYTES then
-    hdr.payloadlen := b
+    header.payloadlen := b
   else if b = FRAME_LEN_2BYTES then
   begin
-    hdr.lensize := 4; // opcode+126+payloadlen.Word
+    header.lensize := 4; // opcode + b=126 + 16-bit len
     if not HasHeader then
       exit; // not enough input
-    hdr.payloadlen := bswap16(PWord(@hdr.len64)^);
+    header.payloadlen := bswap16(PWord(@header.len64)^);
   end
   else if b = FRAME_LEN_8BYTES then
   begin
-    hdr.lensize := 10; // opcode+127+len.V
+    header.lensize := 10; // opcode + b=127 + 64-bit len
     if not HasHeader then
       exit; // not enough input
-    len64 := bswap64(hdr.len64);
+    len64 := bswap64(header.len64);
     if len64 > WebSocketsMaxFrameMB shl 20 then
       EWebSockets.RaiseUtf8('%.GetFrame: length = % should be < % MB',
         [process, KB(len64), WebSocketsMaxFrameMB]);
-    hdr.payloadlen := len64;
+    header.payloadlen := len64;
   end;
-  if hdr.masksize <> 0 then // = 4 for masked input
+  if header.masksize <> 0 then // = 4 for masked input
   begin
     if not HasHeader then
       exit; // not enough input
-    hdr.mask32 := PCardinal(PAnsiChar(@hdr) + hdr.lensize)^; // at ending
-    if hdr.mask32 = 0 then
+    header.mask32 := PCardinal(PAnsiChar(@header) + header.lensize)^; // at ending
+    if header.mask32 = 0 then
       EWebSockets.RaiseUtf8('%.GetFrame: unexpected mask=0', [process]);
   end;
   pos := 0; // prepare upcoming GetData
@@ -3660,12 +3660,12 @@ end;
 function TWebProcessInFrame.GetData: boolean;
 begin
   result := false;
-  if length(data) <> PtrInt(hdr.payloadlen) then
-    FastNewRawByteString(data, hdr.payloadlen);
-  if not HasBytes(pointer(data), hdr.payloadlen) then
+  if length(data) <> PtrInt(header.payloadlen) then
+    FastNewRawByteString(data, header.payloadlen);
+  if not HasBytes(pointer(data), header.payloadlen) then
     exit; // not enough input
-  if hdr.mask32 <> 0 then
-    ProcessMask(pointer(data), hdr.mask32, hdr.payloadlen);
+  if header.mask32 <> 0 then
+    ProcessMask(pointer(data), header.mask32, header.payloadlen);
   pos := 0; // prepare next upcoming GetHeader
   result := true;
 end;
@@ -3687,7 +3687,7 @@ begin
         if GetData then
         begin
           outputframe.payload := data;
-          if hdr.first and FRAME_OPCODE_FIN = 0 then
+          if header.first and FRAME_OPCODE_FIN = 0 then
             state := pfsHeaderN
           else
             state := pfsDone;
@@ -3720,7 +3720,7 @@ begin
         if GetData then
         begin
           Append(outputframe.payload, data);
-          if hdr.first and FRAME_OPCODE_FIN = 0 then
+          if header.first and FRAME_OPCODE_FIN = 0 then
             state := pfsHeaderN
           else
             state := pfsDone;
