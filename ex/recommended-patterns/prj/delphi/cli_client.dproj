@@ -44,6 +44,8 @@
         <DCC_S>false</DCC_S>
         <DCC_ImageBase>00400000</DCC_ImageBase>
         <SanitizedProjectName>cli_client</SanitizedProjectName>
+        <DCC_ExeOutput>..\..\bin</DCC_ExeOutput>
+        <DCC_DcuOutput>..\..\bin\units\delphi-$(Platform)</DCC_DcuOutput>
         <DCC_UnitSearchPath>..\..\..\..\src;..\..\..\..\src\core;..\..\..\..\src\lib;..\..\..\..\src\crypt;..\..\..\..\src\db;..\..\..\..\src\orm;..\..\..\..\src\soa;..\..\..\..\src\rest;..\..\..\..\src\net;..\..\..\..\src\app;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
         <DCC_IncludePath>..\..\..\..\src;$(DCC_IncludePath)</DCC_IncludePath>
         <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;Winapi;System.Win;$(DCC_Namespace)</DCC_Namespace>
