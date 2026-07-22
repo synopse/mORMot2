@@ -8646,9 +8646,9 @@ begin
   CheckEqualShort(WinErrorShort($00090321), '590625 SEC_I_RENEGOTIATE', 'w8');
   CheckEqualShort(WinErrorShort(244, {noint=}false), '244', '244w');
   CheckEqualShort(WinErrorShort(245, {noint=}true), '', '245w');
-  WinErrorShort($80092012, ss);
+  WinErrorShortVar($80092012, ss);
   CheckEqualShort(ss, '80092012 CRYPT_E_NO_REVOCATION_CHECK', 'winrevoc');
-  WinErrorShort($80092012, s7);
+  WinErrorShortVar($80092012, s7);
   CheckEqualShort(s7, '8009201', 'trunc to string[7]');
   BsdErrorShort(1, ss);
   CheckEqualShort(ss, '1 EPERM', '1bsd');
