@@ -1761,7 +1761,7 @@ function TBlowFishCtr.Encrypt(const Input: RawByteString;
 var
   len: PtrInt;
   d, piv: PQWord;
-  tmpiv: QWord;
+  tmpiv: THash128Rec;
 begin
   FastAssignNew(result);
   len := length(Input);
@@ -1771,14 +1771,13 @@ begin
   piv := @fIV; // update the main IV by default
   if IVAtBeginning then
   begin
-    piv := @tmpiv; // use a local IV on stack to be thread-safe
-    d^ := TAesPrng.Main.Random64; // even a small IV benefits from CSPRNG
-    piv^ := d^;
+    piv := @tmpiv;     // use a local IV on stack to be thread-safe
+    Random128(@tmpiv); // unpredictable
+    d^ := piv^;
     inc(d);
   end;
   BlowFishEncryptCtr(pointer(Input), d, len, fState^, piv);
-  if IVAtBeginning then
-    tmpiv := 0; // anti-forensic
+  tmpiv.L := 0; // anti-forensic
 end;
 
 function TBlowFishCtr.Decrypt(const Input: RawByteString;
@@ -1804,8 +1803,7 @@ begin
     inc(s);
   end;
   BlowFishEncryptCtr(s, FastSetString(RawUtf8(result), len), len, fState^, piv);
-  if IVAtBeginning then
-    tmpiv := 0; // anti-forensic
+  tmpiv := 0; // anti-forensic
 end;
 
 
