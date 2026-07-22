@@ -713,7 +713,7 @@ begin
     WinError(error, 0, @dest, nil); // fallback to FormatMessageW
 end;
 
-procedure OsErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
+procedure OsErrorShort(Code: cardinal; var Dest: ShortString; NoInt: boolean);
 begin
   WinErrorShort(Code, Dest, NoInt);
 end;

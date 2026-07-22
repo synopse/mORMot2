@@ -836,18 +836,18 @@ function WinErrorShort(Code: cardinal; NoInt: boolean = false): TShort47; overlo
   {$ifdef HASINLINE} inline; {$endif}
 
 /// return the error code number, and its regular constant on Windows (if known)
-procedure WinErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean = false); overload;
+procedure WinErrorShort(Code: cardinal; var Dest: ShortString; NoInt: boolean = false); overload;
 
 /// return the error code number, and its regular constant on Linux (if known)
-procedure LinuxErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean = false);
+procedure LinuxErrorShort(Code: cardinal; var Dest: ShortString; NoInt: boolean = false);
 
 /// return the error code number, and its regular constant on Bsd (if known)
-procedure BsdErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean = false);
+procedure BsdErrorShort(Code: cardinal; var Dest: ShortString; NoInt: boolean = false);
 
 /// return the error code number, and its regular constant on the current OS
 // - redirect to WinErrorShort/LinuxErrorShort/BsdErrorShort() functions
 // - e.g. OsErrorShort(5) = '5 ERROR_ACCESS_DENIED' on Windows or '5 EIO' on POSIX
-procedure OsErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean = false); overload;
+procedure OsErrorShort(Code: cardinal; var Dest: ShortString; NoInt: boolean = false); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// return the error code number, and its regular constant on the current OS
@@ -6717,7 +6717,7 @@ var
 begin
   if error = 0 then
     error := GetLastError;
-  OsErrorShort(error, @result, {noint=}false); // known E### or ERROR_###
+  OsErrorShort(error, result, {noint=}false); // known E### or ERROR_###
   os := GetSystemError(error);
   if os in [seSuccess, seOther] then
     exit;
@@ -6924,21 +6924,21 @@ end;
 
 function WinErrorShort(Code: cardinal; NoInt: boolean): TShort47;
 begin
-  WinErrorShort(Code, @result, NoInt);
+  WinErrorShort(Code, result, NoInt);
 end;
 
-procedure WinErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
+procedure WinErrorShort(Code: cardinal; var Dest: ShortString; NoInt: boolean);
 begin
-  Dest^[0] := #0;
+  Dest[0] := #0;
   if NoInt then
-    AppendWinErrorText(Code, Dest^, #0)
+    AppendWinErrorText(Code, Dest, #0)
   else
   begin
     if integer(Code) < 0 then
-      AppendShortIntHex(Code, Dest^) // e.g. '80092002 CRYPT_E_BAD_ENCODE'
+      AppendShortIntHex(Code, Dest) // e.g. '80092002 CRYPT_E_BAD_ENCODE'
     else
-      AppendShortCardinal(Code, Dest^); // e.g. '5 ERROR_ACCESS_DENIED'
-    AppendWinErrorText(Code, Dest^, ' ');
+      AppendShortCardinal(Code, Dest); // e.g. '5 ERROR_ACCESS_DENIED'
+    AppendWinErrorText(Code, Dest, ' ');
   end;
 end;
 
@@ -6956,7 +6956,7 @@ begin
   if txt^[0] = #0 then
     exit; // unknown
   if Sep <> #0 then
-    AppendShortChar(Sep, @Dest);
+    AppendShortCharSafe(Sep, Dest);
   case Code of
     10000 .. 11999:
       Code := 0;  // main Windows Socket API errors
@@ -7008,32 +7008,36 @@ type
     bSTALE, bREMOTE, bBADRPC, bRPCMISMATCH, bPROGUNAVAIL, bPROGMISMATCH, bPROCUNAVAIL, bNOLCK, bNOSYS,
     bFTYPE, bAUTH, bNEEDAUTH);
 
-procedure _PosixError(Code, Max: cardinal; Dest: PShortString;
+procedure _PosixError(Code, Max: cardinal; var Dest: ShortString;
   Info: pointer; NoInt: boolean);
 var
   ps: PShortString;
   d: PAnsiChar;
+  l: PtrInt;
 begin
-  Dest^[0] := #0;
+  Dest[0] := #0;
   if not NoInt then
-    AppendShortCardinal(Code, Dest^); // e.g. '1 EPERM'
+    AppendShortCardinal(Code, Dest); // e.g. '1 EPERM'
   if Code > Max then
     exit;
   if not NoInt then
-    AppendShortChar(' ', pointer(Dest));
+    AppendShortCharSafe(' ', Dest);
   ps := GetEnumNameRtti(Info, Code);
-  d := @Dest^[ord(Dest^[0]) + 1];
-  inc(Dest^[0], ord(ps^[0]));
+  l := ord(Dest[0]) + ord(ps^[0]);
+  if l > high(Dest) then
+    exit; // avoid buffer overflow
+  d := @Dest[ord(Dest[0]) + 1];
+  Dest[0] := AnsiChar(l);
   d[0] := 'E'; // ignore 'l' or 'b' prefix and write 'E' instead
   MoveFast(ps^[2], d[1], ord(ps^[0]) - 1);
 end;
 
-procedure LinuxErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
+procedure LinuxErrorShort(Code: cardinal; var Dest: ShortString; NoInt: boolean);
 begin
   _PosixError(Code, ord(high(TLinuxError)), Dest, TypeInfo(TLinuxError), NoInt);
 end;
 
-procedure BsdErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
+procedure BsdErrorShort(Code: cardinal; var Dest: ShortString; NoInt: boolean);
 begin
   _PosixError(Code, ord(high(TBsdError)), Dest, TypeInfo(TBsdError), NoInt);
 end;
@@ -7042,7 +7046,7 @@ function OsErrorShort(Code: cardinal; NoInt: boolean): TShort47;
 begin
   if Code = 0 then
     Code := GetLastError;
-  OsErrorShort(Code, @result, NoInt); // redirect to Win/Linux/BsdErrorShort()
+  OsErrorShort(Code, result, NoInt); // redirect to Win/Linux/BsdErrorShort()
 end;
 
 procedure OsErrorAppend(Code: cardinal; var Dest: ShortString;
@@ -7050,7 +7054,7 @@ procedure OsErrorAppend(Code: cardinal; var Dest: ShortString;
 var
   os: TShort47;
 begin
-  OsErrorShort(Code, @os, NoInt); // redirect to Win/Linux/BsdErrorShort()
+  OsErrorShort(Code, os, NoInt); // redirect to Win/Linux/BsdErrorShort()
   if Sep <> #0 then
     AppendShortCharSafe(Sep, Dest);
   AppendShort(os, Dest);

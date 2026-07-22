@@ -10423,7 +10423,7 @@ begin
   begin
     WR.AddDirect(' ', '(');
     {$ifdef OSWINDOWS}
-    WinErrorShort(PtrUInt(Context.ECode), @s); // decode most known error codes
+    WinErrorShort(PtrUInt(Context.ECode), s); // decode most known error codes
     WR.AddShort(s);
     {$else}
     WR.AddPointer(Context.ECode);

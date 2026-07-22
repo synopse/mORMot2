@@ -2000,7 +2000,7 @@ const
 
 procedure GetErrorShortVar(error: integer; var dest: ShortString);
 begin
-  OsErrorShort(error, @dest, {noint=}true); // known 'E###' on Linux + BSD
+  OsErrorShort(error, dest, {noint=}true); // known 'E###' on Linux + BSD
   if dest[0] = #0 then
   {$ifdef FPC}
     dest := StrError(error) // FPC RTL returns its plain text as shortstring
@@ -3178,7 +3178,7 @@ end;
 
 {$ifdef OSBSDDARWIN}
 
-procedure OsErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
+procedure OsErrorShort(Code: cardinal; var Dest: ShortString; NoInt: boolean);
 begin
   BsdErrorShort(Code, Dest, NoInt);
 end;
@@ -3553,7 +3553,7 @@ end;
 
 {$else} // Linux (and Android) specific code
 
-procedure OsErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
+procedure OsErrorShort(Code: cardinal; var Dest: ShortString; NoInt: boolean);
 begin
   LinuxErrorShort(Code, Dest, NoInt);
 end;
