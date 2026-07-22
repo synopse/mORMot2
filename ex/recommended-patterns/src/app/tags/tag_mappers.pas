@@ -26,6 +26,9 @@ function NormalizeTagName(const aName: RawUtf8): RawUtf8;
 
 implementation
 
+uses
+  mormot.orm.core;
+
 function OrmToTagViewDTO(aTag: TTag): TTagViewDTO;
 begin
   Result.ID := aTag.ID;

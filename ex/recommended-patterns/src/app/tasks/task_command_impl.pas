@@ -1,4 +1,4 @@
-
+﻿
 unit task_command_impl;
 
 {$I mormot.defines.inc}
@@ -49,6 +49,10 @@ type
   end;
 
 implementation
+
+uses
+  mormot.core.os,
+  mormot.core.rtti;
 
 function TTaskCommandService.CreateTask(const aData: TTaskCreateDTO): TCommandResult;
 var

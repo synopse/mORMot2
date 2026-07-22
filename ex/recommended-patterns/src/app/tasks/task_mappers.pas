@@ -36,6 +36,9 @@ procedure AddCommentDTOToComment(const aDto: TTaskAddCommentDTO;
 
 implementation
 
+uses
+  mormot.orm.core;
+
 function OrmToTaskViewDTO(aTask: TTask): TTaskViewDTO;
 begin
   Result.ID := aTask.ID;

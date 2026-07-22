@@ -13,7 +13,8 @@ uses
   SysUtils,
   mormot.core.base,
   mormot.core.os,
-  mormot.core.log;
+  mormot.core.log,
+  mormot.core.rtti;
 
 procedure EnableSynLogs;
 var

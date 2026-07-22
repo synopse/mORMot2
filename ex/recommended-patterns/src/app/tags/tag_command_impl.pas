@@ -1,4 +1,4 @@
-
+﻿
 unit tag_command_impl;
 
 {$I mormot.defines.inc}
@@ -37,6 +37,9 @@ type
   end;
 
 implementation
+
+uses
+  mormot.core.rtti;
 
 function TTagCommandService.CreateTag(const aData: TTagCreateDTO): TCommandResult;
 var

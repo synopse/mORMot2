@@ -36,6 +36,9 @@ type
 
 implementation
 
+uses
+  mormot.core.rtti;
+
 function TTagQueryService.GetTagView(aTagID: TID): TTagViewDTO;
 var
   Tag: TTag;

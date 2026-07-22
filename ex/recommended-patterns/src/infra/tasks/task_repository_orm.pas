@@ -57,6 +57,11 @@ type
 
 implementation
 
+uses
+  mormot.core.os,
+  mormot.core.rtti,
+  Classes;
+
 { Lazy migration: upgrades a task record to the current schema version.
   Persistence concern (it writes through IRestOrm), so it lives here in infra/
   alongside the repository rather than in the dom/ aggregate. }

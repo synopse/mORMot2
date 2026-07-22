@@ -40,6 +40,9 @@ type
 
 implementation
 
+uses
+  mormot.core.rtti;
+
 function TTaskQueryService.GetTaskView(aTaskID: TID): TTaskViewDTO;
 var
   Task: TTask;
