@@ -1660,6 +1660,9 @@ type
     // - homogenous arrays as VT_I8 VT_R8 VT_BOOL VT_DATE VT_BSTR or VT_VARIANT
     // - objects and nested arrays fallback to JSON BSTR
     function ToOleVariant: variant;
+    /// save the document into a record/dynamic array value via RTTI
+    // - will use a temporary persistence into JSON then LoadJsonInPlace()
+    function ToRtti(var Value; RttiInfo: PRttiInfo): boolean;
 
     /// returns true if this is not a true TDocVariant, or Count equals 0
     function IsVoid: boolean;
@@ -10369,6 +10372,18 @@ begin
   TSynVarData(result).VType := varOleStr;
   TSynVarData(result).VAny := nil; // avoid GPF below
   Utf8ToWideString(json, WideString(TSynVarData(result).VAny));
+end;
+
+function TDocVariantData.ToRtti(var Value; RttiInfo: PRttiInfo): boolean;
+begin
+  result := (RttiInfo <> nil) and
+            (VCount <> 0) and
+            (cardinal(VType) = DocVariantVType) and
+            (((RttiInfo^.Kind in [rkDynArray, rkClass]) and
+              Has(dvoIsArray)) or
+             ((RttiInfo^.Kind in rkRecordTypes + [rkClass]) and
+               Has(dvoIsObject))) and
+            DocVariantType.ToRtti(@self, Value, RttiInfo, @VOptions);
 end;
 
 function TDocVariantData.GetOrAddIndexByName(const aName: RawUtf8): integer;
