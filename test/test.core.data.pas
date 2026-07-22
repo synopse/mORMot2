@@ -7023,6 +7023,16 @@ begin
   Check(V._(3) = 4);
   Check(V._(4) = 'a5');
   Check(V._Json = '["one",2,3,4,"a5"]');
+  uu := nil;
+  CheckEqual(length(uu), 0);
+  _Safe(V)^.ToRawUtf8DynArray(uu);
+  CheckEqual(length(uu), 5);
+  CheckEqual(RawUtf8ArrayToCsv(uu), 'one,2,3,4,a5');
+  uu := nil;
+  CheckEqual(length(uu), 0);
+  Check(_Safe(V)^.ToRtti(uu, TypeInfo(TRawUtf8DynArray)), 'ToRtti');
+  CheckEqual(length(uu), 5);
+  CheckEqual(RawUtf8ArrayToCsv(uu), 'one,2,3,4,a5');
   discogs := StringFromFile(WorkDir + discogsFileName);
   CheckNestedDoc([]);
   CheckNestedDoc([dvoValueCopiedByReference]);
