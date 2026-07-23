@@ -139,7 +139,7 @@ begin
 end;
 
 var // two flag sets of 8 items = 8-bit byte efficient storage and access
-  _F0: set of (fIsDebuggerTested, fIsDebuggerPresent, fStdOutIsTTY,
+  _F0: set of (fIsDebuggerTested, fIsDebuggerPresent, fStdOutHasColors,
     fNoURandom, fNoRandom, fProcFileSystemsTested,
     fLinuxEventFdFailed, fLinuxGetRandomFailed);
   _F1: set of (fMachTimeNanoSec, fNoTryProcExe, fStubMemoryExecXorWrite,
@@ -2550,7 +2550,7 @@ function StdOutIsTTY: boolean;
 begin
   if not (fIsDebuggerTested in _F0) then
     TestOnceDebuggerTty;
-  result := (fStdOutIsTTY in _F0);
+  result := (fStdOutHasColors in _F0);
 end;
 
 const
@@ -3991,17 +3991,20 @@ end;
 
 procedure TestOnceDebuggerTty;
 var
-  term: RawUtf8;
+  env: RawUtf8;
 begin
   include(_F0, fIsDebuggerTested);
-  if _IsDebuggerPresent then // actual syscall
+  if _IsDebuggerPresent then // search TRACERPID: in /proc/self/status
+  begin
     include(_F0, fIsDebuggerPresent);
-  if (not (fIsDebuggerPresent in _F0)) and
-     (IsATTY(StdOut) = 1) and
-     GetSystemEnv('TERM', term) and
-     (IdemPChars(term, 'XTERM'#0'SCREEN'#0'TMUX'#0'RXVT'#0 +
-       'LINUX'#0'CYGWIN'#0) >= 0) then
-    include(_F0, fStdOutIsTTY);
+    exit; // no color in Lazarus console windows
+  end;
+  if GetSystemEnv('NO_COLOR', 8) = nil then // see https://no-color.org
+    if (IsATTY(StdOut) = 1) and
+       GetSystemEnv('TERM', env) and
+       (IdemPChars(env, 'XTERM'#0'SCREEN'#0'TMUX'#0'RXVT'#0 +
+         'LINUX'#0'CYGWIN'#0'ANSI'#0'VT100'#0) >= 0) then
+      include(_F0, fStdOutHasColors);
 end;
 
 function IsDebuggerPresent: boolean;
