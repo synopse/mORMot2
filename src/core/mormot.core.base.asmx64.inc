@@ -3129,7 +3129,7 @@ function IsXmmYmmOSEnabled: boolean;
         sete    al        // true if OS enabled both XMM and YMM
 end;
 
-procedure GetCpuid(cpueax, cpuecx: cardinal; var regs: TIntelRegisters);
+procedure _GetCpuid(cpueax, cpuecx: cardinal; var regs: TIntelRegisters);
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     eax, cpueax
         mov     ecx, cpuecx

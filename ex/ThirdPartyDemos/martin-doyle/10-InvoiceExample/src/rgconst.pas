@@ -74,7 +74,6 @@ uses
   mormot.core.text;
 
 begin
-  GetExecutableVersionNumbers; // for the About dialog
   ApplicationPath := Executable.ProgramFilePath;
   DataPath := MakeExpandedPath([ApplicationPath, '..', IniDataPath],
     {endwithdelim=}true);

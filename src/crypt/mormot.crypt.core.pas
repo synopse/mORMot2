@@ -4152,7 +4152,7 @@ var
   rnd: THash256;
 begin // note: we can't use Random128() here to avoid endless recursion
   if Bits = 0 then
-    Bits := 128 shl ord(HasHWAes); // AES-128 or AES-256
+    Bits := 128 shl ord(HasHWAes); // AES-128 or AES-256 with HW AES opcodes
   {$ifdef OSLINUX}
   if (MainAesPrng <> nil) or
      not LinuxGetRandom(@rnd, Bits shr 3) then // 128/256-bit in 1 syscall

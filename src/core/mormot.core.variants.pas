@@ -284,6 +284,10 @@ type
     procedure ToJson(Value: PVarData; var Json: RawUtf8;
       const Prefix: RawUtf8 = ''; const Suffix: RawUtf8 = '';
       Format: TTextWriterJsonFormat = jsonCompact); overload; virtual;
+    /// save the content into a record/dynamic array value via RTTI
+    // - will use temporary persistence via ToJson then LoadJsonInPlace()
+    function ToRtti(Value: PVarData; var Dest; RttiInfo: PRttiInfo;
+      Options: PDocVariantOptions): boolean; virtual;
     /// clear the content
     // - this default implementation will set VType := varEmpty
     // - override it if your custom type needs to manage its internal memory
@@ -1656,6 +1660,9 @@ type
     // - homogenous arrays as VT_I8 VT_R8 VT_BOOL VT_DATE VT_BSTR or VT_VARIANT
     // - objects and nested arrays fallback to JSON BSTR
     function ToOleVariant: variant;
+    /// save the document into a record/dynamic array value via RTTI
+    // - will use a temporary persistence into JSON then LoadJsonInPlace()
+    function ToRtti(var Dest; RttiInfo: PRttiInfo): boolean;
 
     /// returns true if this is not a true TDocVariant, or Count equals 0
     function IsVoid: boolean;
@@ -5097,6 +5104,22 @@ begin
     if Suffix <> '' then
       W.AddString(Suffix);
     W.SetText(Json, Format);
+  finally
+    W.Free;
+  end;
+end;
+
+function TSynInvokeableVariantType.ToRtti(Value: PVarData; var Dest;
+  RttiInfo: PRttiInfo; Options: PDocVariantOptions): boolean;
+var
+  W: TJsonWriter;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
+begin
+  W := TJsonWriter.CreateOwnedStream(temp);
+  try
+    ToJson(W, Value);
+    result := LoadJsonInPlace(Dest, W.GetTextAsBuffer, RttiInfo,
+      {endofbj=}nil, Options, JSONPARSER_TOLERANTOPTIONS) <> nil;
   finally
     W.Free;
   end;
@@ -10349,6 +10372,18 @@ begin
   TSynVarData(result).VType := varOleStr;
   TSynVarData(result).VAny := nil; // avoid GPF below
   Utf8ToWideString(json, WideString(TSynVarData(result).VAny));
+end;
+
+function TDocVariantData.ToRtti(var Dest; RttiInfo: PRttiInfo): boolean;
+begin
+  result := (RttiInfo <> nil) and
+            (VCount <> 0) and
+            (cardinal(VType) = DocVariantVType) and
+            (((RttiInfo^.Kind in [rkDynArray, rkClass]) and
+              Has(dvoIsArray)) or
+             ((RttiInfo^.Kind in rkRecordTypes + [rkClass]) and
+               Has(dvoIsObject))) and
+            DocVariantType.ToRtti(@self, Dest, RttiInfo, @VOptions);
 end;
 
 function TDocVariantData.GetOrAddIndexByName(const aName: RawUtf8): integer;

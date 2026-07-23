@@ -1058,65 +1058,68 @@ procedure ShortStringToAnsi7String(const source: ShortString; var result: RawUtf
 procedure Ansi7StringToShortString(const source: RawUtf8; var result: ShortString);
   {$ifdef FPC}inline;{$endif}
 
-/// simple concatenation of a 32-bit unsigned integer as text into a shorstring
+/// shortstring concatenation of a 32-bit unsigned integer as text
 procedure AppendShortCardinal(value: cardinal; var dest: ShortString);
 
-/// simple concatenation of a 8-bit unsigned integer as text into a shorstring
+/// shortstring concatenation of a 8-bit unsigned integer as text
 procedure AppendShortByte(value: PtrUInt; dest: PAnsiChar);
 
-/// simple concatenation of a signed 64-bit integer as text into a shorstring
+/// shortstring concatenation of a signed 64-bit integer as text
 procedure AppendShortInt64(const value: Int64; var dest: ShortString);
 
-/// simple concatenation of an unsigned 64-bit integer as text into a shorstring
+/// shortstring concatenation of an unsigned 64-bit integer as text
 procedure AppendShortQWord(const value: QWord; var dest: ShortString);
 
-/// simple concatenation of INTEGER Curr64 (value*10000) into a shorstring
+/// shortstring concatenation of INTEGER Curr64 (value*10000)
 // - will emit 0, 2 or 4 decimals in the output text (e.g. '1', '1.23', '1.2345')
 procedure AppendShortCurr64(const value: Int64; var dest: ShortString;
   fixeddecimals: PtrInt = 0);
 
-/// simple concatenation of no banker rounding floating point value as TwoDigits()
+/// shortstring concatenation of no banker rounding floating point value as TwoDigits()
 procedure AppendShortTwoDigits(const Value: double; var Dest: ShortString);
 
-/// simple concatenation of a character into a @shorstring, checking its length
+/// shortstring concatenation of a character into a @shorstring, checking its length
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
 procedure AppendShortCharSafe(chr: AnsiChar; var dest: ShortString);
   {$ifdef FPC} inline; {$endif}
 
-/// simple concatenation of a character into a @shorstring
+/// shortstring concatenation of a character into a @shorstring
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
 procedure AppendShortChar(chr: AnsiChar; dest: PAnsiChar);
   {$ifdef HASINLINE} inline; {$endif}
 
-/// simple concatenation of two characters into a @shorstring
+/// shortstring concatenation of two characters into a @shorstring
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
 procedure AppendShortTwoChars(twochars, dest: PAnsiChar); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// simple concatenation of two characters (as 16-bit integer) into a @shorstring
+/// shortstring concatenation of two characters (as 16-bit integer) into a @shorstring
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
 procedure AppendShortTwoChars(twochars: cardinal; dest: PAnsiChar); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// simple concatenation of a #0 ending text into a @shorstring
+/// shortstring concatenation of a #0 ending text into a @shorstring
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
 procedure AppendShortBuffer(buf: PAnsiChar; len, max: PtrInt; dest: PAnsiChar);
   {$ifdef HASINLINE} inline; {$endif}
 
-/// simple concatenation of hexadecimal binary buffer into a shorstring
+/// shortstring concatenation of hexadecimal binary buffer
 procedure AppendShortHex(value: PByte; len: PtrInt; var dest: ShortString);
 
-/// simple concatenation of an integer as lowercase hexadecimal into a shorstring
+/// shortstring concatenation of an integer as lowercase hexadecimal
 procedure AppendShortIntHex(value: Int64; var dest: ShortString);
 
-/// simple concatenation of a byte as uppercase hexadecimal into a shorstring
+/// shortstring concatenation of a byte as uppercase hexadecimal
 procedure AppendShortByteHex(value: PtrUInt; var dest: ShortString);
 
-/// simple concatenation of a ShortString text into a shorstring
+/// shortstring concatenation of a ShortString text
 procedure AppendShort(const src: ShortString; var dest: ShortString);
 
-/// simple concatenation of an ANSI-7 AnsiString into a shorstring
+/// shortstring concatenation of an ANSI-7 AnsiString
 procedure AppendShortAnsi7String(const buf: RawByteString; var dest: ShortString);
+
+/// shortstring concatenation of TDateTime as 'yyyy-mm-dd hh:nn:ss' text
+procedure AppendShortDateTime(const dt: TDateTime; var dest: ShortString);
 
 /// simple concatenation of a text buffer into a RawUtf8
 procedure AppendBufferToUtf8(src: PUtf8Char; srclen: PtrInt; var dest: RawUtf8);
@@ -1180,11 +1183,11 @@ function PropNameEquals(const P1, P2: RawUtf8): boolean; overload;
 function PropNameEquals(const P1: RawUtf8; P2: PAnsiChar; P2Len: PtrInt): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// raw internal method as published by FindNonVoid[false]
+/// raw internal method as published by FindNonVoid[false] with count>0 and len>0
 function FindNonVoidRawUtf8(n: PPointerArray; name: pointer; len: TStrLen;
   count: PtrInt): PtrInt;
 
-/// raw internal method as published by FindNonVoid[true]
+/// raw internal method as published by FindNonVoid[true] with count>0 and len>0
 function FindNonVoidRawUtf8I(n: PPointerArray; name: pointer; len: TStrLen;
   count: PtrInt): PtrInt;
 
@@ -1193,8 +1196,8 @@ type
     function(p: PPointerArray; n: pointer; l: TStrLen; c: PtrInt): PtrInt;
 const
   /// raw internal methods for case sensitive (or not) search for a RawUtf8
-  // - expects non-void RawUtf8 values, with ASCII-7 encoding, e.g. as with
-  // TDocVariantData.GetValueIndex() property names
+  // - expects count > 0 and len > 0, i.e. non-void RawUtf8 values, with ASCII-7
+  // encoding, e.g. as with TDocVariantData.GetValueIndex() property names
   FindNonVoid: array[{casesensitive:}boolean] of TFindNonVoid = (
     FindNonVoidRawUtf8I,
     FindNonVoidRawUtf8);
@@ -2813,6 +2816,14 @@ procedure UnSetBit64(var Bits: Int64; aIndex: PtrInt);
 { ************ Low-level CPU Detection and Intrinsics }
 
 type
+  /// define mormot.core.base IntelCpuCache and mormot.core.os CpuCache globals
+  // - Intel introduced a Level 4 cache (eDRAM) with some Haswell/Iris CPUs
+  // - only Unified or Data caches are included (not Instruction or Trace)
+  // - note: some CPU - like the Apple M1 - have 128 bytes of LineSize
+  TCpuCaches = array[1 .. 4] of record
+    Count, Size, LineSize: cardinal;
+  end;
+
   /// the potential features, retrieved from an Intel/AMD CPU
   // - cf https://en.wikipedia.org/wiki/CPUID#EAX.3D1:_Processor_Info_and_Feature_Bits
   // - is defined on all platforms, so that e.g. an ARM desktop may browse
@@ -2938,18 +2949,23 @@ function HasHWAes: boolean;
 {$ifdef ASMINTEL}
 
 var
-  /// the available Intel/AMD CPU features, as recognized at program startup
-  // - on LINUX, consider CpuInfoArm or the textual CpuInfoFeatures from
-  // mormot.core.os.pas
+  /// the available Intel/AMD CPU features retrieved using CPUID
   CpuFeatures: TIntelCpuFeatures;
 
   // additional low-level Intel/AMD CPU information retrieved using CPUID
   CpuManufacturer: TIntelCpuManufacturer;
-  CpuFamily, CpuModel: byte;
+  CpuFamily, CpuModel, IntelCpuCacheCount: byte;
 
+  /// Level 1 to 4 CPU caches retrieved via CPUID from Intel/AMD new processor
+  // - only Unified or Data caches are included (not Instruction or Trace)
+  // - see also cross-platform CpuCache[] information in mormot.core.os.pas
+  IntelCpuCache: TCpuCaches;
   /// twelve-character ASCII vendor string returned by Intel/AMD cpuid
   // - typical values are 'AuthenticAMD' or 'GenuineIntel'
   IntelManufacturer: RawUtf8;
+  /// ASCII brand manufacturer string returned by Intel/AMD cpuid
+  // - e.g. '13th Gen Intel(R) Core(TM) i5-13500'
+  IntelBrand: RawUtf8;
 
 /// twelve-character ASCII hypervisor string returned by Intel/AMD cpuid
 // - returns '' if cfHYP is not part of CpuFeatures
@@ -5707,6 +5723,36 @@ begin
   AppendShortCurr64(v, Dest, {decimals=}2);
 end;
 
+procedure AppendShortDateTime(const dt: TDateTime; var dest: ShortString);
+var
+  yy, mm, dd, h, m, s, ms: word;
+  d100: PtrUInt;
+  p: PAnsiChar;
+  tab: PWordArray;
+begin
+  if (dt = 0) or
+     (ord(dest[0]) + 19 > high(dest)) then // 'yyyy-mm-dd hh:nn:ss' output
+    exit;
+  DecodeDate(dt, yy, mm, dd);
+  DecodeTime(dt, h, m, s, ms);
+  p := @dest[ord(dest[0]) + 1];
+  inc(dest[0], 19);
+  tab := @TwoDigitLookupW;
+  d100 := yy div 100; // FPC will use fast reciprocal
+  PCardinal(p)^ := tab[d100];
+  PCardinal(p + 2)^ := tab[yy - (d100 * 100)];
+  p[4] := '-';
+  PCardinal(p + 5)^ := tab[mm];
+  p[7] := '-';
+  PCardinal(p + 8)^ := tab[dd];
+  p[10] := ' ';
+  PCardinal(p + 11)^ := tab[h];
+  p[13] := ':';
+  PCardinal(p + 14)^ := tab[m];
+  p[16] := ':';
+  PCardinal(p + 17)^ := tab[s];
+end;
+
 procedure AppendBufferToUtf8(src: PUtf8Char; srclen: PtrInt; var dest: RawUtf8);
 var
   n: PtrInt;
@@ -5836,7 +5882,7 @@ var
   p1, p2, l: PUtf8Char;
 label
   no;
-begin
+begin // caller ensured count > 0 and len > 0
   result := 0;
   p2 := name;
   repeat // inlined CompareMemFixed()
@@ -5866,8 +5912,7 @@ begin
 no:   p2 := name;
     end;
     inc(result);
-    dec(count);
-  until count = 0;
+  until result = count;
   result := -1;
 end;
 
@@ -5877,7 +5922,7 @@ var
   p1, p2, l: PUtf8Char;
 label
   no;
-begin
+begin // caller ensured count > 0 and len > 0
   result := 0;
   p2 := name;
   repeat // inlined IdemPropNameUSameLenNotNull(p, name, len)
@@ -5907,8 +5952,7 @@ begin
 no:   p2 := name;
     end;
     inc(result);
-    dec(count);
-  until count = 0;
+  until result = count;
   result := -1;
 end;
 
@@ -9447,6 +9491,7 @@ end;
 function GetBitsCount(const Bits; Count: PtrInt): PtrInt;
 var
   p: PPtrInt;
+  v: PtrInt;
   popcnt: function(value: PtrInt): PtrInt; // fast redirection within loop
 begin
   p := @Bits;
@@ -9455,7 +9500,9 @@ begin
   if Count >= POINTERBITS then
     repeat
       dec(Count, POINTERBITS);
-      inc(result, popcnt(p^)); // use SSE4.2 if available
+      v := p^;
+      if v <> 0 then            // don't call the function if not needed
+        inc(result, popcnt(v)); // use SSE4.2 if available
       inc(p);
     until Count < POINTERBITS;
   if Count > 0 then
@@ -10669,6 +10716,19 @@ begin
     until n = 0;
 end;
 
+var
+  _be: PHash128Rec;
+
+procedure GetCpuid(cpueax, cpuecx: cardinal; var Registers: TIntelRegisters);
+begin
+  _GetCpuId(cpueax, cpuecx, Registers);         // call raw i386 or x86_64 asm
+  if PtrUInt(_be) <= PtrUInt(@BaseEntropy) then // at startup or after 512-bit
+    _be := @BaseEntropy.h3
+  else
+    dec(_be);
+  XorMemory(_be^, PHash128Rec(@Registers)^); // round-robin BaseEntropy[] fill
+end;
+
 function IntelHypervisor: RawUtf8;
 var
   regs: TIntelRegisters;
@@ -10677,7 +10737,7 @@ begin
   FastAssignNew(result);
   if not(cfHYP in CpuFeatures) then
     exit;
-  GetCpuid($40000000, 0, regs); // EAX=40000000h: Hypervisor ID
+  _GetCpuid($40000000, 0, regs); // EAX=40000000h: Hypervisor ID
   PCardinalArray(@id)[0] := regs.ebx; // 12-character ID in EBX,ECX,EDX
   PCardinalArray(@id)[1] := regs.ecx;
   PCardinalArray(@id)[2] := regs.edx;
@@ -10691,7 +10751,7 @@ var
 begin
   regs.ebx := 0;
   if cfAVX10 in CpuFeatures then
-    GetCpuid($24, 0, regs); // EAX=24h, ECX=0: AVX10 Converged Vector ISA
+    _GetCpuid($24, 0, regs); // EAX=24h, ECX=0: AVX10 Converged Vector ISA
   result := ToByte(regs.ebx);
 end; // no "vector width" bits any more: AVX10 means 128-, 256- and 512-bit
 
@@ -10699,31 +10759,13 @@ procedure TestCpuFeatures;
 var
   regs: TIntelRegisters;
   flags: PIntegerArray;
-  id: array[0..3] of cardinal;
+  maxleaf, leaf, sub, level: cardinal;
+  brand: record r2, r3, r4: TIntelRegisters; z: byte; end;
+  id: array[0..3] of cardinal absolute brand;
 begin
   // retrieve CPUID raw flags
-  GetCpuid({eax=}1, {ecx=}0, regs); // EAX=1: Processor Info and Feature Bits
-  CpuFamily := (regs.eax shr 8) and $0f;
-  if CpuFamily = $0f then
-    inc(CpuFamily, (regs.eax shr 20) and $0f);
-  CpuModel := (((regs.eax shr 16) and $0f) shl 4) or ((regs.eax shr 4) and $0f);
-  flags := @CpuFeatures;
-  flags^[0] := regs.edx;
-  flags^[1] := regs.ecx;
-  BaseEntropy.h0 := PHash128(@regs)^;
-  GetCpuid(7, 0, regs);             // EAX=7, ECX=0: Extended flags
-  flags^[2] := regs.ebx;
-  flags^[3] := regs.ecx;
-  flags^[4] := regs.edx;
-  BaseEntropy.h1 := PHash128(@regs)^;
-  if regs.eax in [1..9] then        // maximum ecx value for EAX=7
-  begin
-    GetCpuid(7, 1, regs);           // EAX=7, ECX=1: Extended flags
-    flags^[5] := regs.eax;
-    flags^[6] := regs.edx;          // just ignoring regs.ebx and regs.ecx
-    BaseEntropy.h2 := PHash128(@regs)^;
-  end;
   GetCpuid(0, 0, regs); // EAX=0: Manufacturer ID in EBX,EDX,ECX
+  maxleaf := regs.eax;  // Highest Function Parameter in EAX
   if (regs.ebx = $756e6547) and
      (regs.edx = $49656e69) and
      (regs.ecx = $6c65746e) then
@@ -10732,11 +10774,75 @@ begin
           (regs.edx = $69746e65) and
           (regs.ecx = $444d4163) then
     CpuManufacturer := icmAmd;   // 'AuthenticAMD'
-  id[0] := regs.ebx; // 12-character ID
+  id[0] := regs.ebx; // 12-character ID in proper order
   id[1] := regs.edx;
   id[2] := regs.ecx;
   id[3] := 0;
   FastSetString(IntelManufacturer, @id, StrLen(@id));
+  GetCpuid(1, 0, regs); // EAX=1: Processor Info and Feature Bits
+  CpuFamily := (regs.eax shr 8) and $0f;
+  if CpuFamily = $0f then
+    inc(CpuFamily, (regs.eax shr 20) and $0f);
+  CpuModel := (((regs.eax shr 16) and $0f) shl 4) or ((regs.eax shr 4) and $0f);
+  flags := @CpuFeatures;
+  flags^[0] := regs.edx;
+  flags^[1] := regs.ecx;
+  if maxleaf >= 7 then            // since Core Duo (introduced in 2007)
+  begin
+    GetCpuid(7, 0, regs);         // EAX=7, ECX=0: Extended flags
+    flags^[2] := regs.ebx;
+    flags^[3] := regs.ecx;
+    flags^[4] := regs.edx;
+    if regs.eax in [1..9] then    // maximum ecx value for EAX=7
+    begin
+      GetCpuid(7, 1, regs);       // EAX=7, ECX=1: Extended flags
+      flags^[5] := regs.eax;
+      flags^[6] := regs.edx;      // just ignoring regs.ebx and regs.ecx
+    end;
+  end;
+  GetCpuId($80000000, 0, regs); // EAX = Highest Extended Function Implemented
+  if regs.eax >= $80000004 then
+  begin // EAX=80000002,80000003,80000004: Processor Brand String
+    GetCpuId($80000002, 0, brand.r2);
+    GetCpuId($80000003, 0, brand.r3);
+    GetCpuId($80000004, 0, brand.r4);
+    brand.z := 0; // ensure is ASCIIZ
+    FastSetString(IntelBrand, @brand, StrLen(@brand));
+    leaf := 0; // EAX=4 and EAX=8000001d: Cache Hierarchy and Topology
+    case CpuManufacturer of
+      icmAmd:
+        if regs.eax >= $8000001d then
+          leaf := $8000001d;
+      icmIntel:
+        if maxleaf >= 4 then
+          leaf := 4;
+    end;
+    if leaf <> 0 then
+    begin
+      sub := 0;
+      repeat
+        GetCpuid(leaf, sub, regs);
+        case regs.eax and $1f of
+          0:     // end of sub-leaf
+            break;
+          1, 3: // Data or Unified cache
+            begin
+              level := (regs.eax shr 5) and 7;
+              if level in [low(TCpuCaches) .. high(TCpuCaches)] then
+                with IntelCpuCache[level] do
+                begin
+                  LineSize := (regs.ebx and $FFF) + 1;
+                  Size := (((regs.ebx shr 22) and $3FF) + 1) * // ways
+                          (((regs.ebx shr 12) and $3FF) + 1) * // parts
+                          LineSize * (regs.ecx + 1);           // sets
+                  inc(IntelCpuCacheCount); // mark as known
+                end; // keep Count=0 since CPUID involve only the current core
+            end;
+        end; // 2 = Instruction Cache or 4-31 = Reserved are just ignored
+        inc(sub);
+      until false;
+    end;
+  end;
   // validate accuracy of most used HW opcodes against flags reported by CPUID
   if cfTSC in CpuFeatures then
     try
@@ -10754,7 +10860,7 @@ begin
     except // may trigger an illegal instruction exception on some Ivy Bridge
       exclude(CpuFeatures, cfRAND);
     end;
-  BaseEntropy.h3 := PHash128(@regs)^;
+  XorMemory(BaseEntropy.r[0], PHash128Rec(@regs)^);
   {$ifdef DISABLE_SSE42}
   // force fallback on Darwin x64 (as reported by alf) - clang asm bug?
   CpuFeatures := CpuFeatures -
@@ -11395,7 +11501,7 @@ begin
         AT_RANDOM: // 16 random bytes (used as stacks canaries) are just perfect
           XorMemory(BaseEntropy.r[3], PHash128Rec(p[1])^); // kernel 2.6.29
       end;
-      inc(e^, ((p[0] shl 20) xor p[1]) * 3266489917); // fill BaseEntropy
+      inc(e^, ((p[0] shl 20) xor p[1]) * 3266489917); // fill BaseEntropy[]
       inc(e);
       if e = eend then
         dec(PByte(e), SizeOf(BaseEntropy));

@@ -642,7 +642,7 @@ const
     [osGentoo, osCoreOs],                                                  // ldPortage
     [osAndroid]);                                                          // ldAndroid
 
-  /// the recobnized Linux package management systems, as plain text
+  /// the recognized Linux package management systems, as plain text
   DISTRI_NAME: array[TLinuxDistribution] of TShort7 = (
     '', '', 'apt', 'rpm', 'pacman', 'portage', 'android');
 
@@ -720,6 +720,11 @@ var
   /// the current Linux Distribution, depending on its package management system
   OS_DISTRI: TLinuxDistribution;
 
+  /// the running Operating System
+  OSVersion32: TOperatingSystemVersion;
+  /// the running Operating System, encoded as a 32-bit integer
+  OSVersionInt32: integer absolute OSVersion32;
+
   /// the current Operating System version, as retrieved for the current process
   // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or 'Windows XP SP3 (5.1.2600)' or
   // 'Windows 10 64bit 22H2 (10.0.19045.4046)' or 'macOS 15.7.3 Sequoia (Darwin 24.6.0)' or
@@ -738,46 +743,41 @@ var
   // - contains e.g. '4 x Intel(R) Core(TM) i5-7300U CPU @ 2.60GHz [3MB]'
   CpuInfoText: RawUtf8;
   /// the available cache information as returned by the OS
-  // - e.g. 'L1=2*32KB  L2=256KB  L3=3MB' on Windows or '3072 KB' on Linux
+  // - e.g. 'L1=2*32KB  L2=256KB  L3=3MB' or '3072 KB' on non Intel/AMD Linux
   CpuCacheText: RawUtf8;
 
-  /// the on-chip cache size, in bytes, as returned by the OS
-  // - retrieved from /proc/cpuinfo "cache size" entry (L3 cache) on Linux or
-  // CpuCache[3/4].Size (from GetLogicalProcessorInformation) on Windows
+  /// the on-chip main/shared cache size, in bytes, as returned by the OS
+  // - retrieved from CpuCache[3/4].Size at startup
+  // - detailed info is available in CpuCache[] array in mormot.core.base
   CpuCacheSize: cardinal;
-  /// how many hardware CPU sockets are defined on this system
-  // - i.e. the number of physical CPU slots
-  // - CpuThreads = SystemInfo.dwNumberOfProcessors is the logical CPU count
-  // - as used e.g. by SetThreadAffinity()
-  CpuSockets: cardinal;
-  /// how many hardware CPU cores are defined on this system
-  // - i.e. the number of physical CPU cores
-  // - CpuThreads = SystemInfo.dwNumberOfProcessors is the logical CPU count
-  CpuCores: cardinal;
-  /// the number of available logical CPUs threads
-  // - just an alias to SystemInfo.dwNumberOfProcessors compatibility value
-  CpuThreads: cardinal;
+  /// Level 1 to 4 CPU caches as returned by GetLogicalProcessorInformation()
+  // - on POSIX Intel/AMD is copied from IntelCpuCache[] as retrieved from CPUID
+  // - only Unified or Data caches are included (not Instruction or Trace)
+  CpuCache: TCpuCaches;
 
-  /// Level 1 to 4 CPU caches as returned by GetLogicalProcessorInformation
-  // - yes, Intel introduced a Level 4 cache (eDRAM) with some Haswell/Iris CPUs
-  // - this information is not retrieved on all Linux / POSIX systems yet
-  // - only Unified or Data caches are include (not Instruction or Trace)
-  // - note: some CPU - like the Apple M1 - have 128 bytes of LineSize
-  CpuCache: array[1..4] of record
-    Count, Size, LineSize: cardinal;
-  end;
+/// how many hardware CPU sockets are defined on this system
+// - i.e. the number of physical CPU slots
+// - CpuThreads = SystemInfo.dwNumberOfProcessors is the logical CPU count
+// - as used e.g. by SetThreadAffinity()
+{$ifdef OSLINUXANDROID} function {$endif} CpuSockets: cardinal;
+/// how many hardware CPU cores are defined on this system
+// - i.e. the number of physical CPU cores
+// - CpuThreads = SystemInfo.dwNumberOfProcessors is the logical CPU count
+{$ifdef OSLINUXANDROID} function {$endif} CpuCores: cardinal;
 
-  {$ifdef OSLINUXANDROID}
-  /// contains the content of Linux /proc/cpuinfo as retrieved at startup
+/// the number of available logical CPUs threads
+// - just an alias to SystemInfo.dwNumberOfProcessors compatibility value
+// - on Linux will make fast sched_getaffinity syscall for the current state
+{$ifdef OSLINUXANDROID} function {$endif} CpuThreads: cardinal;
+
+{$ifdef OSLINUXANDROID}
+var
+  /// contains the content of Linux /proc/cpuinfo if retrieved (may be '')
   CpuInfoLinux: RawUtf8;
-  /// contains the Flags: or Features: value of Linux /proc/cpuinfo
-  CpuInfoFeatures: RawUtf8;
-  {$endif OSLINUXANDROID}
 
-  /// the running Operating System
-  OSVersion32: TOperatingSystemVersion;
-  /// the running Operating System, encoded as a 32-bit integer
-  OSVersionInt32: integer absolute OSVersion32;
+/// contains the Flags: or Features: value of Linux /proc/cpuinfo
+function CpuInfoFeatures: RawUtf8;
+{$endif OSLINUXANDROID}
 
 /// some textual information about the current computer hardware, from BIOS
 // - contains e.g. 'LENOVO 20HES23B0U ThinkPad T470'
@@ -832,29 +832,31 @@ function WinErrorConstant(Code: cardinal): PShortString;
 /// return the error code number, and its regular constant on Windows (if known)
 // - e.g. WinErrorShort(5) = '5 ERROR_ACCESS_DENIED' or
 // WinErrorShort($c00000fd) = 'c00000fd EXCEPTION_STACK_OVERFLOW'
-function WinErrorShort(Code: cardinal; NoInt: boolean = false): TShort47; overload;
-  {$ifdef HASINLINE} inline; {$endif}
+function WinErrorShort(Code: cardinal; NoInt: boolean = false): TShort47;
+  {$ifdef FPC} inline; {$endif} // Delphi has sometimes issues inlining this
 
-/// return the error code number, and its regular constant on Windows (if known)
-procedure WinErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean = false); overload;
+/// fill Dest with the error code number and its regular constant on Windows
+// - not defined as WinErrorShort() overload to avoid a Delphi 7 compiler error
+procedure WinErrorShortVar(Code: cardinal; var Dest: ShortString; NoInt: boolean = false);
 
 /// return the error code number, and its regular constant on Linux (if known)
-procedure LinuxErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean = false);
+procedure LinuxErrorShortVar(Code: cardinal; var Dest: ShortString; NoInt: boolean = false);
 
 /// return the error code number, and its regular constant on Bsd (if known)
-procedure BsdErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean = false);
+procedure BsdErrorShortVar(Code: cardinal; var Dest: ShortString; NoInt: boolean = false);
 
 /// return the error code number, and its regular constant on the current OS
-// - redirect to WinErrorShort/LinuxErrorShort/BsdErrorShort() functions
+// - redirect to WinErrorShortVar/LinuxErrorShortVar/BsdErrorShortVar() functions
+// - not defined as OsErrorShor() overload to avoid a Delphi 7 compiler error
 // - e.g. OsErrorShort(5) = '5 ERROR_ACCESS_DENIED' on Windows or '5 EIO' on POSIX
-procedure OsErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean = false); overload;
-  {$ifdef HASINLINE} inline; {$endif}
+procedure OsErrorShortVar(Code: cardinal; var Dest: ShortString; NoInt: boolean = false);
+  {$ifdef FPC} inline; {$endif} // Delphi can't inline a ShortString var :(
 
 /// return the error code number, and its regular constant on the current OS
-// - redirect to WinErrorShort/LinuxErrorShort/BsdErrorShort() functions
+// - redirect to WinErrorShortVar/LinuxErrorShortVar/BsdErrorShortVar() functions
 // - e.g. OsErrorShort(5) = '5 ERROR_ACCESS_DENIED' on Windows or '5 EIO' on POSIX
-function OsErrorShort(Code: cardinal = 0; NoInt: boolean = false): TShort47; overload;
-  {$ifdef HASINLINE} inline; {$endif}
+function OsErrorShort(Code: cardinal = 0; NoInt: boolean = false): TShort47;
+  {$ifdef FPC} inline; {$endif} // Delphi has sometimes issues inlining this
 
 /// append the error code number, and its regular constant on the current OS
 procedure OsErrorAppend(Code: cardinal; var Dest: ShortString;
@@ -1301,8 +1303,6 @@ type
     /// retrieve the version as a 32-bit integer with Major.Minor.Release
     // - following "Major shl 16 + Minor shl 8 + Release" pattern
     function Version32: integer;
-    /// build date and time of this exe file, as plain text
-    function BuildDateTimeString: RawUtf8;
     /// version info of the exe file as '3.1.0.123' or ''
     // - this method returns '' if Detailed is '0.0.0.0'
     // - see Main property if '3.1' is enough e.g. to safely identify a server
@@ -1321,6 +1321,9 @@ type
     // - includes FileName (without path), Detailed and BuildDateTime properties
     // - e.g. 'myprogram.exe 3.1.0.123 2016-06-14 19:07:55'
     class function GetVersionInfo(const aFileName: TFileName): RawUtf8;
+    /// build date and time of this exe file, as plain text
+    property BuildDateTimeString: RawUtf8
+      read fBuildDateTimeString;
   published
     /// version info of the exe file as '3.1.0.123'
     // - return "string" type, i.e. UnicodeString for Delphi 2009+
@@ -1657,19 +1660,27 @@ var
 
   /// emulate only the most used fields of Windows' TSystemInfo
   SystemInfo: record
-    /// retrieved from libc's getpagesize() - is expected to not be 0
+    /// OS allocation page size retrieved from libc's getpagesize() or AT_PAGESZ
     dwPageSize: cardinal;
     /// the number of available logical CPUs threads
     // - from HW_NCPU (BSD), hw.logicalcpu (macOS) or /proc/cpuinfo (Linux)
-    // - prefer the CpuThreads global variable instead of this legacy Windowism
+    // - prefer the CpuThreads global variable/function instead of this Windowism
     // - see CpuSockets/CpuCores for the number of physical CPU sockets/cores
     dwNumberOfProcessors: cardinal;
     /// meaningful system information, as returned by fpuname()
     uts: record
       sysname, release, version, nodename: RawUtf8;
     end;
+    {$ifdef OSLINUXANDROID}
     /// Linux Distribution release name, retrieved from /etc/*-release
     release: RawUtf8;
+    /// the AT_PLATFORM value on Linux, typically 'x86_64'
+    platform: PUtf8Char;
+    /// the AT_EXECFN value on Linux, typically '/opt/bin/myprogram'
+    execfn: PUtf8Char;
+    /// the AT_CLKTCK value on Linux, typically 100
+    clktck: cardinal;
+    {$endif OSLINUXANDROID}
   end;
 
 {$endif OSWINDOWS}
@@ -2815,6 +2826,7 @@ function GetErrorText(error: integer = 0): RawUtf8;
 function GetErrorShort(error: integer = 0): TShort63;
 
 /// returns a given error code as plain text ShortString
+// - not defined as GetErrorShort() overload to avoid a Delphi 7 compiler error
 procedure GetErrorShortVar(error: integer; var dest: ShortString);
 
 {$ifdef OSWINDOWS}
@@ -4043,7 +4055,7 @@ const HasConsole = true; // assume POSIX has always a console somewhere
 
 /// POSIX only: true if StdOut has the TTY flag and env has a known TERM
 // - equals false if the console does not support colors, e.g. piped to a file
-// or from the Lazarus debugger
+// or from the Lazarus debugger - true means that colors could be set
 function StdOutIsTTY: boolean; {$ifdef FPC} inline; {$endif}
 {$endif OSWINDOWS}
 
@@ -4174,13 +4186,13 @@ function PosixFileNames(const Folder: TFileName; Recursive: boolean;
 // - Windows does not allow to change the process name at all
 function PosixSetProcessName(const Name: RawUtf8): boolean;
 
-/// return the UID of the current POSIX User
-function PosixUid: cardinal;
-
-/// return the GID of the current POSIX User
-function PosixGid: cardinal;
-
 {$ifdef OSLINUXANDROID}
+var
+  /// the UID of the current POSIX User retrieved at startup from aux vectors
+  PosixUid: cardinal;
+  /// the GID of the current POSIX User retrieved at startup from aux vectors
+  PosixGid: cardinal;
+
 /// read a File content into a string, without using FileSize()
 // - result will be filled using a buffer as required e.g. for POSIX char files
 // like /proc/... or /sys/...
@@ -4189,6 +4201,12 @@ function StringFromFileNoSize(const FileName: TFileName): RawByteString;
 /// read a small File content into a string, without using FileSize()
 // - in respect to StringFromFileNoSize(), this will make a single read()
 procedure LoadProcFileTrimed(fn: PAnsiChar; var result: RawUtf8); overload;
+{$else}
+/// return the UID of the current POSIX User
+function PosixUid: cardinal;
+
+/// return the GID of the current POSIX User
+function PosixGid: cardinal;
 {$endif OSLINUXANDROID}
 
 /// low-level function returning some random binary from the Operating System
@@ -4219,6 +4237,9 @@ function KB(Size: Int64): TShort16; overload;
 function KBNoSpace(Size: Int64): TShort16;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
+/// return a date/time value as '2026-03-27 13:59:30' UTF-8 text
+function OsDateTimeToText(dt: TDateTime): RawUtf8;
+
 type
   /// function prototype for AppendShortUuid()
   TAppendShortUuid = procedure(const u: TGuid; var s: ShortString);
@@ -4233,10 +4254,6 @@ var
   /// append a TGuid into lower-cased '3f2504e0-4f89-11d3-9a0c-0305e82c3301' text
   // - this unit defaults to the RTL, but mormot.core.text.pas will override it
   AppendShortUuid: TAppendShortUuid;
-
-  /// return a date/time value as '2026-03-27 13:59:30' UTF-8 text
-  // - slow RTL function in this unit, properly set by mormot.core.datetime.pas
-  DoDateTimeToText: function(dt: TDateTime): RawUtf8;
 
   /// late binding to binary encoding to Base64 or Base64-URI
   // - as used by mormot.net.sock.pas for its NetBinToBase64() function
@@ -5391,10 +5408,11 @@ type
   /// store a bitmask of logical CPU cores, as used by SetThreadMaskAffinity
   // - has 32/64-bit pointer-size on Windows, or 1024 bits on POSIX
   TCpuSet = {$ifdef OSWINDOWS} PtrUInt {$else} array[0..127] of byte {$endif};
-var
-  /// low-level bitmasks of logical CPU cores hosted on each hardware CPU socket
-  // - filled at process startup as CpuSocketsMask[0 .. CpuSockets - 1] range
-  CpuSocketsMask: array of TCpuSet;
+  TCpuSets = array of TCpuSet;
+
+/// low-level bitmasks of logical CPU cores hosted on each hardware CPU socket
+// - filled with CpuSocketsMask[0 .. CpuSockets - 1] range
+{$ifdef OSLINUXANDROID} function {$else} var {$endif} CpuSocketsMask: TCpuSets;
 
 /// fill a bitmask of CPU cores with zeros
 procedure ResetCpuSet(out CpuSet: TCpuSet);
@@ -6430,12 +6448,13 @@ begin
   AppendShortAnsi7String(AnsiString(LowerCase(copy(GUIDToString(u), 2, 36))), s);
 end;
 
-function _DoDateTimeToText(dt: TDateTime): RawUtf8;
+function OsDateTimeToText(dt: TDateTime): RawUtf8;
 var
-  tmp: string; // avoid to link mormot.core.datetime
+  tmp: TShort23; // avoid to link mormot.core.datetime
 begin
-  DateTimeToString(tmp, 'yyyy-mm-dd hh:nn:ss', dt);
-  _toutf8(tmp, result);
+  tmp[0] := #0;
+  AppendShortDateTime(dt, tmp);
+  ShortStringToAnsi7String(tmp, result);
 end;
 
 function TextToUuid(const text: RawUtf8; out uuid: TGuid): boolean;
@@ -6717,7 +6736,7 @@ var
 begin
   if error = 0 then
     error := GetLastError;
-  OsErrorShort(error, @result, {noint=}false); // known E### or ERROR_###
+  OsErrorShortVar(error, result, {noint=}false); // known E### or ERROR_###
   os := GetSystemError(error);
   if os in [seSuccess, seOther] then
     exit;
@@ -6924,21 +6943,21 @@ end;
 
 function WinErrorShort(Code: cardinal; NoInt: boolean): TShort47;
 begin
-  WinErrorShort(Code, @result, NoInt);
+  WinErrorShortVar(Code, result, NoInt);
 end;
 
-procedure WinErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
+procedure WinErrorShortVar(Code: cardinal; var Dest: ShortString; NoInt: boolean);
 begin
-  Dest^[0] := #0;
+  Dest[0] := #0;
   if NoInt then
-    AppendWinErrorText(Code, Dest^, #0)
+    AppendWinErrorText(Code, Dest, #0)
   else
   begin
     if integer(Code) < 0 then
-      AppendShortIntHex(Code, Dest^) // e.g. '80092002 CRYPT_E_BAD_ENCODE'
+      AppendShortIntHex(Code, Dest) // e.g. '80092002 CRYPT_E_BAD_ENCODE'
     else
-      AppendShortCardinal(Code, Dest^); // e.g. '5 ERROR_ACCESS_DENIED'
-    AppendWinErrorText(Code, Dest^, ' ');
+      AppendShortCardinal(Code, Dest); // e.g. '5 ERROR_ACCESS_DENIED'
+    AppendWinErrorText(Code, Dest, ' ');
   end;
 end;
 
@@ -6956,7 +6975,7 @@ begin
   if txt^[0] = #0 then
     exit; // unknown
   if Sep <> #0 then
-    AppendShortChar(Sep, @Dest);
+    AppendShortCharSafe(Sep, Dest);
   case Code of
     10000 .. 11999:
       Code := 0;  // main Windows Socket API errors
@@ -7008,32 +7027,36 @@ type
     bSTALE, bREMOTE, bBADRPC, bRPCMISMATCH, bPROGUNAVAIL, bPROGMISMATCH, bPROCUNAVAIL, bNOLCK, bNOSYS,
     bFTYPE, bAUTH, bNEEDAUTH);
 
-procedure _PosixError(Code, Max: cardinal; Dest: PShortString;
+procedure _PosixError(Code, Max: cardinal; var Dest: ShortString;
   Info: pointer; NoInt: boolean);
 var
   ps: PShortString;
   d: PAnsiChar;
+  l: PtrInt;
 begin
-  Dest^[0] := #0;
+  Dest[0] := #0;
   if not NoInt then
-    AppendShortCardinal(Code, Dest^); // e.g. '1 EPERM'
+    AppendShortCardinal(Code, Dest); // e.g. '1 EPERM'
   if Code > Max then
     exit;
   if not NoInt then
-    AppendShortChar(' ', pointer(Dest));
+    AppendShortCharSafe(' ', Dest);
   ps := GetEnumNameRtti(Info, Code);
-  d := @Dest^[ord(Dest^[0]) + 1];
-  inc(Dest^[0], ord(ps^[0]));
+  l := ord(Dest[0]) + ord(ps^[0]);
+  if l > high(Dest) then
+    exit; // avoid buffer overflow
+  d := @Dest[ord(Dest[0]) + 1];
+  Dest[0] := AnsiChar(l);
   d[0] := 'E'; // ignore 'l' or 'b' prefix and write 'E' instead
   MoveFast(ps^[2], d[1], ord(ps^[0]) - 1);
 end;
 
-procedure LinuxErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
+procedure LinuxErrorShortVar(Code: cardinal; var Dest: ShortString; NoInt: boolean);
 begin
   _PosixError(Code, ord(high(TLinuxError)), Dest, TypeInfo(TLinuxError), NoInt);
 end;
 
-procedure BsdErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
+procedure BsdErrorShortVar(Code: cardinal; var Dest: ShortString; NoInt: boolean);
 begin
   _PosixError(Code, ord(high(TBsdError)), Dest, TypeInfo(TBsdError), NoInt);
 end;
@@ -7042,7 +7065,7 @@ function OsErrorShort(Code: cardinal; NoInt: boolean): TShort47;
 begin
   if Code = 0 then
     Code := GetLastError;
-  OsErrorShort(Code, @result, NoInt); // redirect to Win/Linux/BsdErrorShort()
+  OsErrorShortVar(Code, result, NoInt); // redirect to Win/Linux/BsdErrorShort
 end;
 
 procedure OsErrorAppend(Code: cardinal; var Dest: ShortString;
@@ -7050,7 +7073,7 @@ procedure OsErrorAppend(Code: cardinal; var Dest: ShortString;
 var
   os: TShort47;
 begin
-  OsErrorShort(Code, @os, NoInt); // redirect to Win/Linux/BsdErrorShort()
+  OsErrorShortVar(Code, os, NoInt); // redirect to Win/Linux/BsdErrorShortVar
   if Sep <> #0 then
     AppendShortCharSafe(Sep, Dest);
   AppendShort(os, Dest);
@@ -9310,15 +9333,12 @@ begin
 end;
 
 procedure TFileVersion.SetBuildDateTime(Value: TDateTime);
-var
-  m, d: word;
 begin
   if Value = 0 then // get build date from executable file timestamp as fallback
     Value := FileAgeToDateTime(fFileName);
   fBuildDateTime := Value;
-  if Value <> 0 then
-    DecodeDate(Value, BuildYear, m, d);
-  fBuildDateTimeString := ''; // delayed cached value in BuildDateTimeString
+  fBuildDateTimeString := OsDateTimeToText(Value);
+  BuildYear := GetCardinal(pointer(fBuildDateTimeString));
 end;
 
 function TFileVersion.SetVersion(aMajor, aMinor, aRelease, aBuild: integer): boolean;
@@ -9395,9 +9415,9 @@ var
 begin
   result := SetVersion(fMS shr 16, fMS and 65535, fLS shr 16, fLS and 65535);
   if (dLS = 0) or
-     (dMS = 0) then
+     (dMS = 0) then // not build date in the resource - will use file timestamp
     exit;
-  ft.dwLowDateTime  := dLS; // built date from version info FILETIME
+  ft.dwLowDateTime  := dLS;
   ft.dwHighDateTime := dMS;
   SetBuildDateTime(FileTimeToDateTime(ft)); // cross-platform
 end;
@@ -9408,14 +9428,6 @@ begin
     result := 0
   else
     result := Major shl 16 + Minor shl 8 + Release;
-end;
-
-function TFileVersion.BuildDateTimeString: RawUtf8;
-begin
-  if (fBuildDateTimeString = '') and
-     (PInt64(@fBuildDateTime)^ <> 0) then
-    fBuildDateTimeString := DoDateTimeToText(fBuildDateTime);
-  result := fBuildDateTimeString;
 end;
 
 function TFileVersion.DetailedOrVoid: string;
@@ -9506,14 +9518,10 @@ begin
     _fmt('%s %s (%s)', [ProgramFileName,
       Version.DetailedOrVoid, Version.BuildDateTimeString], ProgramFullSpec);
     Hash.c0 := Version.Version32;
-    {$ifdef OSLINUXANDROID} // /proc/cpuinfo seems as detailed as it gets
-    Hash.c0 := crc32c(Hash.c0, pointer(CpuInfoLinux), length(CpuInfoLinux));
-    {$else}
     {$ifdef HASCPUFEATURES} // populated on Intel/AMD and arm/aarch64
     Hash.c0 := crc32c(Hash.c0, @CpuFeatures, SizeOf(CpuFeatures));
     {$else}                 // fallback on other targets
     Hash.c0 := crc32c(Hash.c0, pointer(CpuInfoText), length(CpuInfoText));
-    {$endif OSLINUXANDROID}
     {$endif HASCPUFEATURES}
     Hash.c0 := crc32c(Hash.c0, pointer(Host), length(Host));
     Hash.c1 := crc32c(Hash.c0, pointer(User), length(User));
@@ -9570,13 +9578,69 @@ procedure InitializeProcessInfo; // called once at startup
 var
   dt: TDateTime;
   rnd: PBlock128;
+  i: PtrInt;
+  tmp: ShortString;
 begin
-  TrimDualSpaces(OSVersionText); // clean InitializeSpecificUnit info
+  // consolidate and clean InitializeSpecificUnit info
+  TrimDualSpaces(OSVersionText);
   TrimDualSpaces(OSVersionInfoEx);
-  {$ifndef OSLINUXANDROID} TrimDualSpaces(BiosInfoText); {$endif}
-  TrimDualSpaces(CpuInfoText);
   if OSVersionShort = '' then
     OSVersionShort := ToTextOSU(OSVersionInt32);
+  {$ifdef ASMINTEL} // from CPUID
+  if CpuInfoText = '' then
+    CpuInfoText := IntelBrand;
+  if IsZero(@CpuCache, SizeOf(CpuCache)) then
+    if IntelCpuCacheCount <> 0 then
+      CpuCache := IntelCpuCache;
+  {$endif ASMINTEL}
+  tmp[0] := #0;
+  AppendShortCardinal(SystemInfo.dwNumberOfProcessors, tmp);
+  AppendShort(' x ', tmp);
+  if CpuInfoText = '' then
+    AppendShortAnsi7String('generic cpu', tmp)
+  else
+    AppendShortAnsi7String(CpuInfoText, tmp);
+  for i := high(CpuCache) downto low(CpuCache) do
+  begin
+    CpuCacheSize := CpuCache[i].Size;
+    if CpuCacheSize = 0 then // append the highest level Cache size
+      continue;
+    AppendShortTwoChars(32 + ord('[') shl 8, @tmp);
+    AppendKb(CpuCacheSize, tmp);
+    AppendShortChar(']', @tmp);
+    break;
+  end;
+  AppendShort(' (' + CPU_ARCH_TEXT + ')', tmp);
+  ShortStringToAnsi7String(tmp, CpuInfoText);
+  tmp[0] := #0;
+  for i := low(CpuCache) to high(CpuCache) do
+    with CpuCache[i] do
+      if Size <> 0 then
+      begin
+        if tmp[0] <> #0 then
+          AppendShortTwoChars($2020, @tmp);
+        AppendShortChar('L', @tmp);
+        AppendShortByte(i, @tmp);
+        AppendShortChar('=', @tmp);
+        AppendKb(Size, tmp);
+        if Count > 1 then
+        begin
+          AppendShortChar('*', @tmp);
+          AppendShortCardinal(Count, tmp);
+        end;
+      end;
+  ShortStringToAnsi7String(tmp, CpuCacheText);
+  TrimDualSpaces(CpuInfoText);
+  {$ifdef OSLINUXANDROID}
+  StartupObfuscate := nil;
+  {$else} // those are global variables, not functions
+  TrimDualSpaces(BiosInfoText);
+  CpuThreads := SystemInfo.dwNumberOfProcessors;
+  if CpuSockets = 0 then
+    CpuSockets := 1;
+  if CpuCores = 0 then
+    CpuCores := CpuThreads;
+  {$endif OSLINUXANDROID}
   with Executable do            // retrieve Executable + Host/User info
   begin
     dt := 0;
@@ -9584,6 +9648,7 @@ begin
     ProgramFileName := ParamStr(0); // RTL seems just fine here
     {$else}
     dladdr(@InitializeProcessInfo, @PosixProgramInfo);
+    crcblock(@SystemEntropy.Startup, @PosixProgramInfo); // won't hurt
     GetDlInfoName(PosixProgramInfo, ProgramFileName);
     if ProgramFileName <> '' then
     begin
@@ -9593,7 +9658,6 @@ begin
     end;
     if ProgramFileName = '' then
       ProgramFileName := ExpandFileName(ParamStr(0));
-    crcblock(@SystemEntropy.Startup, @PosixProgramInfo); // won't hurt
     {$endif OSWINDOWS}
     ProgramFilePath := ExtractFilePath(ProgramFileName);
     if IsLibrary then
@@ -12251,9 +12315,12 @@ begin
 end;
 
 function SetThreadSocketAffinity(Thread: TThread; SocketIndex: cardinal): boolean;
+var
+  mask: TCpuSets;
 begin
-  result := (SocketIndex < cardinal(length(CpuSocketsMask))) and
-            SetThreadMaskAffinity(Thread, CpuSocketsMask[SocketIndex]);
+  mask := CpuSocketsMask; // is a function under OSLINUXANDROID
+  result := (SocketIndex < cardinal(length(mask))) and
+            SetThreadMaskAffinity(Thread, mask[SocketIndex]);
 end;
 
 procedure _SetThreadName(ThreadID: TThreadID; const Format: RawUtf8;
@@ -12559,7 +12626,13 @@ procedure InitializeUnit;
 begin
   // early initialization needed for those functions
   DoWideCharToUtf8Temp  := _DoWideCharToUtf8Temp;  // mormot.core.unicode
-  DoDateTimeToText      := _DoDateTimeToText;      // mormot.core.datetime
+  {$ifdef ASMINTEL}
+  TrimDualSpaces(IntelBrand);
+  if (CpuManufacturer = icmAmd) and
+     (CpuFamily = $19) and
+     (CpuModel >= $30) then // Zen 3 or later
+    SpinFactor := 10;       // "pause" opcode is only 1-2 cycles
+  {$endif ASMINTEL}
   {$ifdef ISFPC27}
   // we force UTF-8 everywhere on FPC for consistency with Lazarus
   SetMultiByteConversionCodePage(CP_UTF8);
@@ -12567,6 +12640,7 @@ begin
   {$endif ISFPC27}
   GlobalCriticalSection.Init;
   ConsoleCriticalSection.Init;
+  // main initialization sub-functions
   InitializeSpecificUnit; // in mormot.core.os.posix/windows.inc files
   InitializeProcessInfo;  // cross-platform info - e.g. User/Host + Executable
   // setup some constants
@@ -12575,12 +12649,6 @@ begin
   NULL_STR_VAR     := 'null';
   BOOL_UTF8[false] := 'false';
   BOOL_UTF8[true]  := 'true';
-  {$ifdef ASMINTEL}
-  if (CpuManufacturer = icmAmd) and
-     (CpuFamily = $19) and
-     (CpuModel >= $30) then // Zen 3 or later
-    SpinFactor := 10;       // "pause" opcode is only 1-2 cycles
-  {$endif ASMINTEL}
   // minimal stubs which will be properly implemented in other mormot.core units
   ShortToUuid           := _ShortToUuid;           // mormot.core.text
   AppendShortUuid       := _AppendShortUuid;
