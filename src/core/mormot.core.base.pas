@@ -9479,6 +9479,7 @@ end;
 function GetBitsCount(const Bits; Count: PtrInt): PtrInt;
 var
   p: PPtrInt;
+  v: PtrInt;
   popcnt: function(value: PtrInt): PtrInt; // fast redirection within loop
 begin
   p := @Bits;
@@ -9487,7 +9488,9 @@ begin
   if Count >= POINTERBITS then
     repeat
       dec(Count, POINTERBITS);
-      inc(result, popcnt(p^)); // use SSE4.2 if available
+      v := p^;
+      if v <> 0 then            // don't call the function if not needed
+        inc(result, popcnt(v)); // use SSE4.2 if available
       inc(p);
     until Count < POINTERBITS;
   if Count > 0 then
