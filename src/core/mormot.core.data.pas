@@ -4147,16 +4147,17 @@ end;
 
 procedure _GlobalInfoExe(Sender: TBinDictionary);
 begin
-  Sender.UpdateText( 'exe:arch',   CPU_ARCH_TEXT);
-  Sender.UpdateText( 'exe:name',   Executable.ProgramName);
-  Sender.UpdateText(['exe:cmd'],  [Executable.ProgramFileName]);
-  Sender.UpdateText(['exe:path'], [Executable.ProgramFilePath]);
-  Sender.UpdateText( 'exe:agent',  Executable.Version.UserAgent);
-  Sender.UpdateText(['exe:log'],  [GetSystemPath(spLog)]);
-  Sender.UpdateText(['exe:pid'],  [GetCurrentProcessId]);
-  Sender.UpdateText(['exe:ppid'], [GetParentProcess]);
+  Sender.UpdateText( 'exe:arch',    CPU_ARCH_TEXT);
+  Sender.UpdateText( 'exe:name',    Executable.ProgramName);
+  Sender.UpdateText(['exe:cmd'],   [Executable.ProgramFileName]);
+  Sender.UpdateText(['exe:path'],  [Executable.ProgramFilePath]);
+  Sender.UpdateText(['exe:log'],   [GetSystemPath(spLog)]);
+  Sender.UpdateText(['exe:pid'],   [GetCurrentProcessId]);
+  Sender.UpdateText(['exe:ppid'],  [GetParentProcess]);
   if not Assigned(Executable.Version) then
     exit;
+  Sender.UpdateText('exe:info',  Executable.Version.VersionInfo);
+  Sender.UpdateText('exe:agent', Executable.Version.UserAgent);
   if Executable.Version.BuildYear <> 0 then
   begin
     Sender.UpdateText( 'exe:build', Executable.Version.BuildDateTimeString);
@@ -4164,6 +4165,7 @@ begin
   end;
   if Executable.Version.Major <> 0 then
   begin
+    Sender.UpdateText(['exe:main'],    [Executable.Version.Main]);
     Sender.UpdateText(['exe:major'],   [Executable.Version.Major]);
     Sender.UpdateText(['exe:minor'],   [Executable.Version.Minor]);
     Sender.UpdateText(['exe:release'], [Executable.Version.Release]);
