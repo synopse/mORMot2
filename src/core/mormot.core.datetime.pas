@@ -1967,11 +1967,6 @@ begin
                 @result[1], D, Expanded, FirstChar, WithMS, QuotedChar));
 end;
 
-function _DoDateTimeToText(dt: TDateTime): RawUtf8;
-begin // faster version to be injected in mormot.core.os.pas instead of RTL
-  DateTimeToIso8601Var(dt, {expanded=}true, {withms=}false, ' ', #0, result);
-end;
-
 function DateToIso8601(Date: TDateTime; Expanded: boolean): RawUtf8;
 begin // 'YYYYMMDD' format if not Expanded, 'YYYY-MM-DD' format if Expanded
   DateToIso8601PChar(Date,
@@ -4457,7 +4452,6 @@ begin
 end;
 
 
-
 procedure InitializeUnit;
 begin
   // as expected by ParseMonth() to call FindShortStringListNoTrim()
@@ -4467,7 +4461,6 @@ begin
   // some mormot.core.text wrappers are implemented by this unit
   _VariantToUtf8DateTimeIso8601 := DateTimeToIso8601TextVar;
   _Iso8601ToDateTime            := Iso8601ToDateTime;
-  DoDateTimeToText              := _DoDateTimeToText;
 end;
 
 
