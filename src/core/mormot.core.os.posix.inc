@@ -3663,6 +3663,9 @@ begin
   FileClose(h);
 end;
 
+var
+  StartupObfuscate: PHash128;
+
 function LoadProcFile(fn: PAnsiChar; var dest: TBuffer4K): PtrInt;
 var
   h: THandle;
@@ -3679,6 +3682,8 @@ begin
   else
     result := 0; // don't return length = -1 on reading error
   FileClose(h);
+  if StartupObfuscate <> nil then // obfuscate SystemEntropy.Startup
+    crc32c128(StartupObfuscate, @dest, result);
 end;
 
 procedure LoadProcFileTrimed(fn: PAnsiChar; var result: RawUtf8);
@@ -5731,6 +5736,7 @@ begin
   SystemMemorySize := fpsysctlhwint(HW_PHYSMEM);
   {$endif OSDARWIN}
   {$else}
+  StartupObfuscate := @SystemEntropy.Startup; // for LoadProcFile()
   {$ifdef OSANDROID}
   // pure ANDROID branch
   release := GetSystemProperty('ro.build.version.release');
@@ -5888,11 +5894,11 @@ begin
   else if clock_gettime(CLOCK_UPTIME, @tp[3]) <> 0 then
     tpfail := tpfail or 8;
   {$endif OSLINUX}
-  crc32c128(@SystemEntropy.Startup, @tp, SizeOf(tp)); // tp[0..n] in nanoseconds
   // CpuCache, Executable.Hash, CpuFeatures will be added in main mormot.core.os
   if tpfail <> 0 then
     ConsoleErrorWrite(_fmt('clock_gettime(%d) failed on %s - errno=%d',
       [tpfail, OSVersionText, fpgeterrno])); // process is likely to fail anyway
+  crc32c128(@SystemEntropy.Startup, @tp, SizeOf(tp)); // tp[0..n] in nanoseconds
   // direct access to the pthread library if possible (Linux only)
   {$ifdef OSPTHREADSLIB}
   // mutex_lock() is blocking when dlopen run from a .so: cthreads uses both
