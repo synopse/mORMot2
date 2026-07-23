@@ -1446,21 +1446,15 @@ begin
   {$endif HAS_PTHREADSETAFFINITY}
 end;
 
-{$ifdef HAS_PTHREADSETAFFINITY}
-function sched_getaffinity(pid: integer;
-  cpusetsize: SizeUInt; cpuset: pointer): integer;
-    cdecl external clib name 'sched_getaffinity';
-{$endif HAS_PTHREADSETAFFINITY}
-
 function GetMaskAffinity(out CpuSet: TCpuSet): boolean;
 begin
-  {$ifdef HAS_PTHREADSETAFFINITY}
-  result := sched_getaffinity(0, SizeOf(CpuSet), @CpuSet) = 0;
+  {$ifdef OSLINUXANDROID} // syscall returns the number of set bytes
+  result := Do_SysCall(syscall_nr_sched_getaffinity, 0,
+              SizeOf(CpuSet), PtrUInt(@CpuSet)) <> 0;
   {$else}
   result := false; // unsupported by now
-  {$endif HAS_PTHREADSETAFFINITY}
+  {$endif OSLINUXANDROID}
 end;
-
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 
