@@ -7025,6 +7025,16 @@ begin
   Check(V._(3) = 4);
   Check(V._(4) = 'a5');
   Check(V._Json = '["one",2,3,4,"a5"]');
+  uu := nil;
+  CheckEqual(length(uu), 0);
+  _Safe(V)^.ToRawUtf8DynArray(uu);
+  CheckEqual(length(uu), 5, 'ToRawUtf8DynArray');
+  CheckEqual(RawUtf8ArrayToCsv(uu), 'one,2,3,4,a5');
+  uu := nil;
+  CheckEqual(length(uu), 0);
+  Check(_Safe(V)^.ToRtti(uu, TypeInfo(TRawUtf8DynArray)), 'ToRtti');
+  CheckEqual(length(uu), 5);
+  CheckEqual(RawUtf8ArrayToCsv(uu), 'one,2,3,4,a5');
   discogs := StringFromFile(WorkDir + discogsFileName);
   CheckNestedDoc([]);
   CheckNestedDoc([dvoValueCopiedByReference]);
@@ -9770,9 +9780,9 @@ var
   zout: I7zWriter;
   files: TFindFilesDynArray;
 begin
-  ZipFile := WorkDir + 'test1.zip';
+  // T7zLib formats detection
   CheckEqual(ToUtf8(T7zLib.FormatGuid(fhGZip)),
-    '23170F69-40C1-278A-1000-000110EF0000');
+             '23170F69-40C1-278A-1000-000110EF0000');
   Check(T7zLib.FormatDetect(Zipfile, {onlyext=}true) = fhZip);
   Check(T7zLib.FormatDetect(Zipfile, false) = fhZip);
   Check(T7zLib.FormatDetect(Executable.ProgramFileName, true) = fhPe);

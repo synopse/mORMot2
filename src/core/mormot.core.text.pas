@@ -1381,9 +1381,7 @@ type
 
 var
   /// naive but efficient cache to avoid string memory allocation for 0 .. 999
-  // small numbers by Int32ToUtf8/UInt32ToUtf8
   // - filled with statically allocated UINT_999[] constant values at startup
-  // - noticeable when RawUtf8 strings are used as array indexes (e.g. in BSON)
   // - is defined globally, since may be used from an inlined function
   SmallUInt32Utf8: array[0 .. 999] of RawUtf8;
   /// raw pre-allocated SmallUInt32Utf8[] values as L1-friendly constants
@@ -1611,6 +1609,7 @@ function ExtendedToJson(tmp: PShortString; Value: TSynExtended;
 // - on other platforms, i.e. Delphi Win64 and all FPC targets, will use our own
 // faster Fabian Loitsch's Grisu algorithm implementation
 // - returns the count of chars stored into S, i.e. length(S)
+// - S should be a true ShortString with enough chars, not e.g. TShort7
 function DoubleToShort(S: PShortString; const Value: double): integer;
 
 /// convert a 64-bit floating-point value to its numerical text equivalency
@@ -10423,7 +10422,7 @@ begin
   begin
     WR.AddDirect(' ', '(');
     {$ifdef OSWINDOWS}
-    WinErrorShort(PtrUInt(Context.ECode), @s); // decode most known error codes
+    WinErrorShortVar(PtrUInt(Context.ECode), s); // decode most known error codes
     WR.AddShort(s);
     {$else}
     WR.AddPointer(Context.ECode);

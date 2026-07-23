@@ -882,12 +882,12 @@ begin
     props := TSqlDBSQLite3ConnectionProperties.Create('server', '', '', '');
     try
       json := props.DefinitionToJson(14);
-      Check(json = '{"Kind":"TSqlDBSQLite3ConnectionProperties",' +
+      CheckEqual(json, '{"Kind":"TSqlDBSQLite3ConnectionProperties",' +
         '"ServerName":"server","DatabaseName":"","User":"","Password":""}');
       props.Free;
       props := TSqlDBSQLite3ConnectionProperties.Create('server', '', '', '1234');
       json := props.DefinitionToJson(14);
-      Check(json = '{"Kind":"TSqlDBSQLite3ConnectionProperties",' +
+      CheckEqual(json, '{"Kind":"TSqlDBSQLite3ConnectionProperties",' +
         '"ServerName":"server","DatabaseName":"","User":"","Password":"MnVfJg=="}');
       props.DefinitionToFile(WorkDir + 'connectionprops.json');
       def.Key := 14; // same encoding as props.DefinitionToJson(14) above

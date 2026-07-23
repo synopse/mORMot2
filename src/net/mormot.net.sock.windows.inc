@@ -995,6 +995,7 @@ var
   n, l: PtrInt;
   siz: ULONG;
   p: PIP_ADDR_STRING_LINKED_LIST;
+  dom: RawUtf8;
   tmp: RawByteString;
 begin
   result := nil;
@@ -1009,9 +1010,13 @@ begin
   begin
     l := StrLen(@PFIXED_INFO(tmp)^.DomainName);
     if l <> 0 then
+      FastSetString(dom, @PFIXED_INFO(tmp)^.DomainName, l)
+    else
+      GetSystemEnv('USERDNSDOMAIN', dom);
+    if dom <> '' then
     begin
       SetLength(result, 1);
-      FastSetString(result[0], @PFIXED_INFO(tmp)^.DomainName, l);
+      result[0] := dom;
     end;
     exit;
   end;

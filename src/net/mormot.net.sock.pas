@@ -884,11 +884,13 @@ procedure RegisterDnsAddress(const DnsResolver: RawUtf8);
 var
   /// if manually set, GetDomainNames() will return this value
   // - e.g. 'ad.mycompany.com'
+  // - you could also set USERDNSDOMAIN on Windows before calling the executable
   ForcedDomainName: RawUtf8;
 
 /// retrieve the AD Domain Name addresses known by the Operating System
 // - on POSIX, return all "search" from /etc/resolv.conf unless usePosixEnv is set
-// - on Windows, calls GetNetworkParams API from iphlpapi to retrieve a single item
+// - on Windows, calls GetNetworkParams API from iphlpapi to retrieve a single
+// item, and if none if found, will check the USERDNSDOMAIN environment variable
 // - a 64 seconds cache is used for this function on POSIX
 // - you can force for a given value using ForcedDomainName, e.g. if the
 // machine is not actually registered for / part of the domain, but has access
