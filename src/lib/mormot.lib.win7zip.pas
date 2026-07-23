@@ -145,6 +145,9 @@ type
     uorError,
     uorError_FileChanged);
 
+function ToText(eor: T7zExtractOperationResult): PShortString; overload;
+function ToText(uor: T7zUpdateOperationResult): PShortString; overload;
+
 const
   kpidNoProperty       = 0;
   kpidHandlerItemIndex = 2;
@@ -834,7 +837,7 @@ type
 // - will guess the file format from its existing content
 // - will own its own TZlib instance to access the 7z.dll library
 function New7zReader(const name: TFileName; fmt: T7zFormatHandler = fhUndefined;
-  const lib: TFileName = '';  const pw: RawUtf8 = ''): I7zReader;
+  const lib: TFileName = ''; const pw: RawUtf8 = ''): I7zReader;
 
 /// global factory of the main I7zWriter high-level archive compressor
 // - will own its own TZlib instance to access the 7z.dll library
@@ -860,6 +863,16 @@ end;
 function TIME_PREC_TO_ARC_FLAGS_TIME_DEFAULT(x: cardinal): cardinal;
 begin
   result := x shl kTime_Prec_Default_bit_index;
+end;
+
+function ToText(eor: T7zExtractOperationResult): PShortString;
+begin
+  result := GetEnumNameRtti(TypeInfo(T7zExtractOperationResult), ord(eor));
+end;
+
+function ToText(uor: T7zUpdateOperationResult): PShortString;
+begin
+  result := GetEnumNameRtti(TypeInfo(T7zUpdateOperationResult), ord(uor));
 end;
 
 
@@ -2236,8 +2249,8 @@ end;
 procedure T7zReader.RaiseIfExtractFailed(const Context: ShortString);
 begin
   if fExtractOpResult <> eorOK then
-    E7Zip.RaiseUtf8('%.%: extract failed (operation result %)',
-      [self, Context, ord(fExtractOpResult)]);
+    E7Zip.RaiseUtf8('%.%: Extract failed [% (%)]',
+      [self, Context, ToText(fExtractOpResult)^, ord(fExtractOpResult)]);
 end;
 
 function T7zReader.SetTotal(files, bytes: PInt64): HRESULT;
