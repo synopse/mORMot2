@@ -2941,9 +2941,7 @@ function HasHWAes: boolean;
 {$ifdef ASMINTEL}
 
 var
-  /// the available Intel/AMD CPU features, as recognized at program startup
-  // - on LINUX, consider CpuInfoArm or the textual CpuInfoFeatures from
-  // mormot.core.os.pas
+  /// the available Intel/AMD CPU features retrieved using CPUID
   CpuFeatures: TIntelCpuFeatures;
 
   // additional low-level Intel/AMD CPU information retrieved using CPUID
@@ -2953,6 +2951,9 @@ var
   /// twelve-character ASCII vendor string returned by Intel/AMD cpuid
   // - typical values are 'AuthenticAMD' or 'GenuineIntel'
   IntelManufacturer: RawUtf8;
+  /// ASCII brand manufacturer string returned by Intel/AMD cpuid
+  // - e.g. '13th Gen Intel(R) Core(TM) i5-13500'
+  IntelBrand: RawUtf8;
 
 /// twelve-character ASCII hypervisor string returned by Intel/AMD cpuid
 // - returns '' if cfHYP is not part of CpuFeatures
@@ -10743,28 +10744,13 @@ procedure TestCpuFeatures;
 var
   regs: TIntelRegisters;
   flags: PIntegerArray;
-  id: array[0..3] of cardinal;
+  maxleaf, leaf, sub, level: cardinal;
+  brand: record r2, r3, r4: TIntelRegisters; z: byte; end;
+  id: array[0..3] of cardinal absolute brand;
 begin
   // retrieve CPUID raw flags
-  GetCpuid({eax=}1, {ecx=}0, regs); // EAX=1: Processor Info and Feature Bits
-  CpuFamily := (regs.eax shr 8) and $0f;
-  if CpuFamily = $0f then
-    inc(CpuFamily, (regs.eax shr 20) and $0f);
-  CpuModel := (((regs.eax shr 16) and $0f) shl 4) or ((regs.eax shr 4) and $0f);
-  flags := @CpuFeatures;
-  flags^[0] := regs.edx;
-  flags^[1] := regs.ecx;
-  GetCpuid(7, 0, regs);             // EAX=7, ECX=0: Extended flags
-  flags^[2] := regs.ebx;
-  flags^[3] := regs.ecx;
-  flags^[4] := regs.edx;
-  if regs.eax in [1..9] then        // maximum ecx value for EAX=7
-  begin
-    GetCpuid(7, 1, regs);           // EAX=7, ECX=1: Extended flags
-    flags^[5] := regs.eax;
-    flags^[6] := regs.edx;          // just ignoring regs.ebx and regs.ecx
-  end;
   GetCpuid(0, 0, regs); // EAX=0: Manufacturer ID in EBX,EDX,ECX
+  maxleaf := regs.eax;  // Highest Function Parameter in EAX
   if (regs.ebx = $756e6547) and
      (regs.edx = $49656e69) and
      (regs.ecx = $6c65746e) then
@@ -10773,11 +10759,41 @@ begin
           (regs.edx = $69746e65) and
           (regs.ecx = $444d4163) then
     CpuManufacturer := icmAmd;   // 'AuthenticAMD'
-  id[0] := regs.ebx; // 12-character ID
+  id[0] := regs.ebx; // 12-character ID in proper order
   id[1] := regs.edx;
   id[2] := regs.ecx;
   id[3] := 0;
   FastSetString(IntelManufacturer, @id, StrLen(@id));
+  GetCpuid(1, 0, regs); // EAX=1: Processor Info and Feature Bits
+  CpuFamily := (regs.eax shr 8) and $0f;
+  if CpuFamily = $0f then
+    inc(CpuFamily, (regs.eax shr 20) and $0f);
+  CpuModel := (((regs.eax shr 16) and $0f) shl 4) or ((regs.eax shr 4) and $0f);
+  flags := @CpuFeatures;
+  flags^[0] := regs.edx;
+  flags^[1] := regs.ecx;
+  if maxleaf >= 7 then            // since Core Duo (introduced in 2007)
+  begin
+    GetCpuid(7, 0, regs);         // EAX=7, ECX=0: Extended flags
+    flags^[2] := regs.ebx;
+    flags^[3] := regs.ecx;
+    flags^[4] := regs.edx;
+    if regs.eax in [1..9] then    // maximum ecx value for EAX=7
+    begin
+      GetCpuid(7, 1, regs);       // EAX=7, ECX=1: Extended flags
+      flags^[5] := regs.eax;
+      flags^[6] := regs.edx;      // just ignoring regs.ebx and regs.ecx
+    end;
+  end;
+  GetCpuId($80000000, 0, regs); // EAX = Highest Extended Function Implemented
+  if regs.eax >= $80000004 then
+  begin // EAX=80000002,80000003,80000004: Processor Brand String
+    GetCpuId($80000002, 0, brand.r2);
+    GetCpuId($80000003, 0, brand.r3);
+    GetCpuId($80000004, 0, brand.r4);
+    brand.z := 0; // ensure is ASCIIZ
+    FastSetString(IntelBrand, @brand, StrLen(@brand));
+  end;
   // validate accuracy of most used HW opcodes against flags reported by CPUID
   if cfTSC in CpuFeatures then
     try
