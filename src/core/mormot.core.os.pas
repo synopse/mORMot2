@@ -5391,10 +5391,11 @@ type
   /// store a bitmask of logical CPU cores, as used by SetThreadMaskAffinity
   // - has 32/64-bit pointer-size on Windows, or 1024 bits on POSIX
   TCpuSet = {$ifdef OSWINDOWS} PtrUInt {$else} array[0..127] of byte {$endif};
-var
-  /// low-level bitmasks of logical CPU cores hosted on each hardware CPU socket
-  // - filled at process startup as CpuSocketsMask[0 .. CpuSockets - 1] range
-  CpuSocketsMask: array of TCpuSet;
+  TCpuSets = array of TCpuSet;
+
+/// low-level bitmasks of logical CPU cores hosted on each hardware CPU socket
+// - filled with CpuSocketsMask[0 .. CpuSockets - 1] range
+{$ifdef OSLINUXANDROID} function {$else} var {$endif} CpuSocketsMask: TCpuSets;
 
 /// fill a bitmask of CPU cores with zeros
 procedure ResetCpuSet(out CpuSet: TCpuSet);
@@ -12241,9 +12242,12 @@ begin
 end;
 
 function SetThreadSocketAffinity(Thread: TThread; SocketIndex: cardinal): boolean;
+var
+  mask: TCpuSets;
 begin
-  result := (SocketIndex < cardinal(length(CpuSocketsMask))) and
-            SetThreadMaskAffinity(Thread, CpuSocketsMask[SocketIndex]);
+  mask := CpuSocketsMask; // is a function under OSLINUXANDROID
+  result := (SocketIndex < cardinal(length(mask))) and
+            SetThreadMaskAffinity(Thread, mask[SocketIndex]);
 end;
 
 procedure _SetThreadName(ThreadID: TThreadID; const Format: RawUtf8;
