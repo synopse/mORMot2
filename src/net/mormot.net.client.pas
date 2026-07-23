@@ -6168,7 +6168,7 @@ var
 
 var
   P: PUtf8Char;
-  rec, ToList, head, caps: RawUtf8;
+  rec, ToList, head, caps, subj, frm: RawUtf8;
 begin
   result := false;
   P := pointer(CsvDest);
@@ -6217,9 +6217,9 @@ begin
         Append(ToList, ', ', rec);
     until P = nil;
     Exec('DATA', '354');
-    sock.SockSendLine([
-      'Subject: ', Subject, (#13#10 +
-      'From: '), From, ToList]);
+    // merge the From/Subject parameters with any matching lines in Headers:
+    // a non-empty parameter wins (its header duplicate is removed), an empty
+    // parameter is filled from the corresponding header value
     head := trimU(Headers);
     subj := Subject;
     frm := From;
@@ -6229,7 +6229,8 @@ begin
       GetHeader(head, 'From', frm);
     head := DeleteHeader(head, 'Subject');
     head := DeleteHeader(head, 'From');
-    sock.SockSendLine(['Subject: ', subj, #13#10 + 'From: ', frm, ToList]);
+    sock.SockSendLine(['Subject: ', subj, (#13#10 +
+                       'From: '), frm, ToList]);
     if (TextCharSet <> '') or
        (head = '') then
       sock.SockSend([
