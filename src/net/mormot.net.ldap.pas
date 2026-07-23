@@ -2020,7 +2020,8 @@ type
     fBoundAs: TLdapClientBound;
     fBoundDigestAlgo: TDigestAlgo; // for Reconnect
     fFlags: set of (
-      fSecContextEncrypt, fRetrieveRootDseInfo, fRetrievedDefaultDNInfo);
+      fSecContextEncrypt, fRetrieveRootDseInfo, fRetrievedDefaultDNInfo,
+      fAborted);
     fResultError: TLdapError;
     fSearchScope: TLdapSearchScope;
     fSearchAliases: TLdapSearchAliases;
@@ -2355,6 +2356,8 @@ type
       const BaseDN: RawUtf8 = ''; MaxCount: integer = 0): boolean; 
     /// determine whether a given entry has a specified attribute value
     function Compare(const Obj, AttrName, AttrValue: RawUtf8): boolean;
+    /// set an internal flag to abort a SearchAll/SearchAllDoc paged request
+    procedure SearchAllAbort;
 
     { write methods }
 
@@ -2617,6 +2620,7 @@ type
     /// callback raised if paging is enabled during each TLdapClient.Search
     // - called once for SearchBegin then for each Search()
     // - see SearchResult SearchPageSize SearchPageCount and SearchCookie fields
+    // - you can call Sender.SearchAllAbort to stop the search
     property OnSearchPage: TOnLdapClientEvent
       read fOnSearchPage write fOnSearchPage;
   end;
@@ -7449,6 +7453,11 @@ begin
   end;
 end;
 
+procedure TLdapClient.SearchAllAbort;
+begin
+  include(fFlags, fAborted);
+end;
+
 function TLdapClient.SearchAllDocRaw(out Dest: TDocVariantData;
   const BaseDN, Filter: RawUtf8; const Attributes: array of RawUtf8;
   Options: TLdapResultOptions; const ObjectAttributeField: RawUtf8;
@@ -7475,6 +7484,7 @@ begin
     SearchRangeBegin;
   if PerPage <= 100 then
     PerPage := 100;
+  exclude(fFlags, fAborted);
   SearchBegin(PerPage); // force pagination for the loop below
   try
     // retrieve all result pages
@@ -7485,13 +7495,20 @@ begin
       inc(n, fSearchResult.Count);
       inc(recv, fSearchResult.Recv);
     until (SearchCookie = '') or
+          (fAborted in fFlags) or
           ((MaxCount > 0) and
            (n > MaxCount));
     result := fResultCode = LDAP_RES_SUCCESS;
   finally
     SearchEnd;
-    // additional requests to fill any "paging attributes" auto-range results
-    if fSearchRange <> nil then
+    if fAborted in fFlags then
+    begin
+      SetUnknownError('Stopped by SearchAllAbort');
+      result := false;
+      exclude(fFlags, fAborted);
+    end
+    else if fSearchRange <> nil then
+      // additional requests to fill any "paging attributes" auto-range results
       SearchRangeEnd(Dest, Options, ObjectAttributeField); // as TDocVariant
   end;
   if Assigned(ilog) then

@@ -982,7 +982,7 @@ type
 var
   // some other iphlpapi.dll late-binded API via DelayedProc()
   GetAdaptersAddresses: function(Family: ULONG; Flags: DWord; Reserved: pointer;
-      pAdapterAddresses: PIP_ADAPTER_ADDRESSES; pOutBufLen: PULONG): DWord; stdcall;
+    pAdapterAddresses: PIP_ADAPTER_ADDRESSES; pOutBufLen: PULONG): DWord; stdcall;
   SendARP: function(DestIp: DWord; srcIP: DWord; pMacAddr: pointer;
     PhyAddrLen: pointer): DWord; stdcall;
   GetNetworkParams: function(pFixedInfo: PFIXED_INFO;
