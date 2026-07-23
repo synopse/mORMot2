@@ -1658,19 +1658,27 @@ var
 
   /// emulate only the most used fields of Windows' TSystemInfo
   SystemInfo: record
-    /// retrieved from libc's getpagesize() - is expected to not be 0
+    /// OS allocation page size retrieved from libc's getpagesize() or AT_PAGESZ
     dwPageSize: cardinal;
     /// the number of available logical CPUs threads
     // - from HW_NCPU (BSD), hw.logicalcpu (macOS) or /proc/cpuinfo (Linux)
-    // - prefer the CpuThreads global variable instead of this legacy Windowism
+    // - prefer the CpuThreads global variable/function instead of this Windowism
     // - see CpuSockets/CpuCores for the number of physical CPU sockets/cores
     dwNumberOfProcessors: cardinal;
     /// meaningful system information, as returned by fpuname()
     uts: record
       sysname, release, version, nodename: RawUtf8;
     end;
+    {$ifdef OSLINUXANDROID}
     /// Linux Distribution release name, retrieved from /etc/*-release
     release: RawUtf8;
+    /// the AT_PLATFORM value on Linux, typically 'x86_64'
+    platform: PUtf8Char;
+    /// the AT_EXECFN value on Linux, typically '/opt/bin/myprogram'
+    execfn: PUtf8Char;
+    /// the AT_CLKTCK value on Linux, typically 100
+    clktck: cardinal;
+    {$endif OSLINUXANDROID}
   end;
 
 {$endif OSWINDOWS}
@@ -4044,7 +4052,7 @@ const HasConsole = true; // assume POSIX has always a console somewhere
 
 /// POSIX only: true if StdOut has the TTY flag and env has a known TERM
 // - equals false if the console does not support colors, e.g. piped to a file
-// or from the Lazarus debugger
+// or from the Lazarus debugger - true means that colors could be set
 function StdOutIsTTY: boolean; {$ifdef FPC} inline; {$endif}
 {$endif OSWINDOWS}
 
@@ -4175,13 +4183,13 @@ function PosixFileNames(const Folder: TFileName; Recursive: boolean;
 // - Windows does not allow to change the process name at all
 function PosixSetProcessName(const Name: RawUtf8): boolean;
 
-/// return the UID of the current POSIX User
-function PosixUid: cardinal;
-
-/// return the GID of the current POSIX User
-function PosixGid: cardinal;
-
 {$ifdef OSLINUXANDROID}
+var
+  /// the UID of the current POSIX User retrieved at startup from aux vectors
+  PosixUid: cardinal;
+  /// the GID of the current POSIX User retrieved at startup from aux vectors
+  PosixGid: cardinal;
+
 /// read a File content into a string, without using FileSize()
 // - result will be filled using a buffer as required e.g. for POSIX char files
 // like /proc/... or /sys/...
@@ -4190,6 +4198,12 @@ function StringFromFileNoSize(const FileName: TFileName): RawByteString;
 /// read a small File content into a string, without using FileSize()
 // - in respect to StringFromFileNoSize(), this will make a single read()
 procedure LoadProcFileTrimed(fn: PAnsiChar; var result: RawUtf8); overload;
+{$else}
+/// return the UID of the current POSIX User
+function PosixUid: cardinal;
+
+/// return the GID of the current POSIX User
+function PosixGid: cardinal;
 {$endif OSLINUXANDROID}
 
 /// low-level function returning some random binary from the Operating System
