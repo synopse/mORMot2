@@ -4178,6 +4178,8 @@ procedure _GlobalInfoEnv(Sender: TBinDictionary);
 var
   i: PtrInt;
 begin
+  if _SystemEnvNames = nil then
+    GetSystemEnv('none', 4); // populate the in-memory cache once
   for i := 0 to length(_SystemEnvNames) - 1 do
     Sender.UpdateText(['env:', _SystemEnvNames[i]], [_SystemEnvValues[i]]);
 end;
