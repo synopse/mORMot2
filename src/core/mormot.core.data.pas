@@ -4015,7 +4015,8 @@ begin
   Sender.UpdateText( 'os:name',           OSVersionShort);
   Sender.UpdateText( 'os:family',         LowerCaseU(OS_TEXT));
   Sender.UpdateText( 'os:version',        OSVersionText);
-  Sender.UpdateText(['os:ram'],          [SystemMemorySize]);
+  Sender.UpdateText(['os:ram'],          [Int64(SystemMemorySize)]);
+  Sender.UpdateText(['os:mem'],          [KBNoSpace(SystemMemorySize)]);
   Sender.UpdateText( 'os:hostname',       Executable.Host);
   Sender.UpdateText(['os:temp'],         [GetSystemPath(spTemp)]);
   Sender.UpdateText(['os:cwd'],          [GetCurrentDir]);
