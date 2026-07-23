@@ -5299,6 +5299,19 @@ begin
   // it is much faster to not use the Linux syscall but the libc vDSO call
   result := gettimeofday(tp, tzp);
 end;
+
+function fpc_time(var tloc: TTime): TTime; external name 'FPC_SYSC_TIME';
+
+function fptime_c(tloc : pTime_t): Time_t; // = 'FPC_SYSC_TIME'
+var
+  r: TTimeSpec;
+begin
+  // it is much faster to not use the Linux syscall but the libc vDSO call
+  clock_gettime(CLOCK_REALTIME_FAST, @r);
+  result := r.tv_sec;
+  if tloc <> nil then
+    tloc^ := result;
+end;
 {$endif NOPATCHRTL}
 
 function GetSmbEfiMem: RawByteString;
@@ -5824,6 +5837,21 @@ begin
   {$ifdef OSANDROID}
   OSVersionText := Join(['Android (', OSVersionText, ')']);
   {$endif OSANDROID}
+  if SystemInfo.dwNumberOfProcessors = 0 then
+    SystemInfo.dwNumberOfProcessors := 1; // at least one CPU
+  {$ifdef CPUX64}
+  {$ifdef OSLINUX}
+  {$ifndef NOPATCHRTL}
+  // redirect some syscall FPC RTL functions to faster vDSO libc variant
+  {$ifndef FPC_USE_LIBC}
+  RedirectCode(@Linux.clock_gettime, @clock_gettime_c);
+  // will avoid syscall e.g. for events timeout in cthreads.pp
+  RedirectCode(@fpgettimeofday, @gettimeofday_c);
+  RedirectCode(@fpc_time, @fptime_c);
+  {$endif FPC_USE_LIBC}
+  {$endif NOPATCHRTL}
+  {$endif OSLINUX}
+  {$endif CPUX64}
   // initialize supported APIs
   TimeZoneLocalBias := -GetLocalTimeOffset; // = Tzseconds div 60
   _Fill256FromOs    := @__Fill256FromOs;
@@ -5919,18 +5947,6 @@ begin
     {$endif HAS_PTHREADSETAFFINITY}
   end;
   {$endif OSPTHREADSLIB}
-  {$ifdef CPUX64}
-  {$ifdef OSLINUX}
-  {$ifndef NOPATCHRTL}
-  // redirect some syscall FPC RTL functions to faster vDSO libc variant
-  {$ifndef FPC_USE_LIBC}
-  RedirectCode(@Linux.clock_gettime, @clock_gettime_c);
-  // will avoid syscall e.g. for events timeout in cthreads.pp
-  RedirectCode(@fpgettimeofday, @gettimeofday_c);
-  {$endif FPC_USE_LIBC}
-  {$endif NOPATCHRTL}
-  {$endif OSLINUX}
-  {$endif CPUX64}
   {$endif OSDARWIN}
   {$ifdef OSLINUXANDROID}
   // add entropy from auxiliary vectors - https://lwn.net/Articles/519085/
