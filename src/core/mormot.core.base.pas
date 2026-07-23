@@ -10669,6 +10669,19 @@ begin
     until n = 0;
 end;
 
+var
+  _be: PHash128Rec;
+
+procedure GetCpuid(cpueax, cpuecx: cardinal; var Registers: TIntelRegisters);
+begin
+  _GetCpuId(cpueax, cpuecx, Registers);         // call raw i386 or x86_64 asm
+  if PtrUInt(_be) <= PtrUInt(@BaseEntropy) then // at startup or after 512-bit
+    _be := @BaseEntropy.h3
+  else
+    dec(_be);
+  XorMemory(_be^, PHash128Rec(@Registers)^); // round-robin BaseEntropy[] fill
+end;
+
 function IntelHypervisor: RawUtf8;
 var
   regs: TIntelRegisters;
@@ -10677,7 +10690,7 @@ begin
   FastAssignNew(result);
   if not(cfHYP in CpuFeatures) then
     exit;
-  GetCpuid($40000000, 0, regs); // EAX=40000000h: Hypervisor ID
+  _GetCpuid($40000000, 0, regs); // EAX=40000000h: Hypervisor ID
   PCardinalArray(@id)[0] := regs.ebx; // 12-character ID in EBX,ECX,EDX
   PCardinalArray(@id)[1] := regs.ecx;
   PCardinalArray(@id)[2] := regs.edx;
@@ -10691,7 +10704,7 @@ var
 begin
   regs.ebx := 0;
   if cfAVX10 in CpuFeatures then
-    GetCpuid($24, 0, regs); // EAX=24h, ECX=0: AVX10 Converged Vector ISA
+    _GetCpuid($24, 0, regs); // EAX=24h, ECX=0: AVX10 Converged Vector ISA
   result := ToByte(regs.ebx);
 end; // no "vector width" bits any more: AVX10 means 128-, 256- and 512-bit
 
@@ -10710,18 +10723,15 @@ begin
   flags := @CpuFeatures;
   flags^[0] := regs.edx;
   flags^[1] := regs.ecx;
-  BaseEntropy.h0 := PHash128(@regs)^;
   GetCpuid(7, 0, regs);             // EAX=7, ECX=0: Extended flags
   flags^[2] := regs.ebx;
   flags^[3] := regs.ecx;
   flags^[4] := regs.edx;
-  BaseEntropy.h1 := PHash128(@regs)^;
   if regs.eax in [1..9] then        // maximum ecx value for EAX=7
   begin
     GetCpuid(7, 1, regs);           // EAX=7, ECX=1: Extended flags
     flags^[5] := regs.eax;
     flags^[6] := regs.edx;          // just ignoring regs.ebx and regs.ecx
-    BaseEntropy.h2 := PHash128(@regs)^;
   end;
   GetCpuid(0, 0, regs); // EAX=0: Manufacturer ID in EBX,EDX,ECX
   if (regs.ebx = $756e6547) and
@@ -10754,7 +10764,7 @@ begin
     except // may trigger an illegal instruction exception on some Ivy Bridge
       exclude(CpuFeatures, cfRAND);
     end;
-  BaseEntropy.h3 := PHash128(@regs)^;
+  XorMemory(BaseEntropy.r[0], PHash128Rec(@regs)^);
   {$ifdef DISABLE_SSE42}
   // force fallback on Darwin x64 (as reported by alf) - clang asm bug?
   CpuFeatures := CpuFeatures -
