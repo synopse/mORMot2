@@ -6221,6 +6221,15 @@ begin
       'Subject: ', Subject, (#13#10 +
       'From: '), From, ToList]);
     head := trimU(Headers);
+    subj := Subject;
+    frm := From;
+    if subj = '' then
+      GetHeader(head, 'Subject', subj);
+    if frm = '' then
+      GetHeader(head, 'From', frm);
+    head := DeleteHeader(head, 'Subject');
+    head := DeleteHeader(head, 'From');
+    sock.SockSendLine(['Subject: ', subj, #13#10 + 'From: ', frm, ToList]);
     if (TextCharSet <> '') or
        (head = '') then
       sock.SockSend([
@@ -6231,8 +6240,13 @@ begin
     sock.SockSendCRLF;            // end of headers
     sock.SockSend(Text);
     Exec('.', '25');
-    Exec('QUIT', '22');
-    result := true;
+    result := true; // the message is accepted once the final '.' returns 250
+    try
+      Exec('QUIT', '221'); // polite session close (best effort)
+    except
+      on Exception do
+        ; // some servers close right after '.', so ignore any QUIT error
+    end;
   finally
     sock.Free;
   end;
