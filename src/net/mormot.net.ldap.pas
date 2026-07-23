@@ -1998,7 +1998,7 @@ type
 
   TLdapClient = class;
 
-  /// callback signature used e.g. for TLdapClient.OnDisconnect event
+  /// callback signature used for TLdapClient.OnDisconnect/OnSearchPage
   TOnLdapClientEvent = procedure(Sender: TLdapClient) of object;
 
   /// implementation of LDAP client version 2 and 3
@@ -2048,6 +2048,7 @@ type
     fLastPingTix: cardinal;
     fLog: TSynLogClass;
     fOnDisconnect: TOnLdapClientEvent;
+    fOnSearchPage: TOnLdapClientEvent;
     fWellKnownObjects: TLdapKnownCommonNames;
     fExtWhoAmI: TAsnObject;
     // protocol methods
@@ -2613,6 +2614,11 @@ type
     // - if not defined, will follow Settings.AutoReconnect property
     property OnDisconnect: TOnLdapClientEvent
       read fOnDisconnect write fOnDisconnect;
+    /// callback raised if paging is enabled during each TLdapClient.Search
+    // - called once for SearchBegin then for each Search()
+    // - see SearchResult SearchPageSize SearchPageCount and SearchCookie fields
+    property OnSearchPage: TOnLdapClientEvent
+      read fOnSearchPage write fOnSearchPage;
   end;
 
 const
@@ -7095,6 +7101,8 @@ begin
   AddInteger(fSearchBeginBak, fSearchBeginCount, fSearchPageSize);
   fSearchPageSize := PageSize;
   fSearchPageCount := 0;
+  if Assigned(fOnSearchPage) then
+    fOnSearchPage(self);
 end;
 
 procedure TLdapClient.SearchEnd;
@@ -7224,12 +7232,16 @@ begin
     if result and
        (fSearchRange <> nil) then // within SearchRangeBegin .. SearchRangeEnd
       fSearchRange.ExtractPagedAttributes(fSearchResult);
-    if fSearchBeginCount <> 0 then
-      inc(fSearchPageCount, fSearchResult.Count);
     QueryPerformanceMicroSeconds(stop);
     fSearchResult.fMicroSec := stop - start;
     fSearchResult.fIn := fSock.BytesIn - bytesIn;
     fSearchResult.fOut := fSock.BytesOut - bytesOut;
+    if fSearchBeginCount <> 0 then
+    begin
+      inc(fSearchPageCount, fSearchResult.Count);
+      if Assigned(fOnSearchPage) then
+        fOnSearchPage(self);
+    end;
   finally
     if Assigned(fLog) then
       if result then
