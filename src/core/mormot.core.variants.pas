@@ -1662,7 +1662,7 @@ type
     function ToOleVariant: variant;
     /// save the document into a record/dynamic array value via RTTI
     // - will use a temporary persistence into JSON then LoadJsonInPlace()
-    function ToRtti(var Value; RttiInfo: PRttiInfo): boolean;
+    function ToRtti(var Dest; RttiInfo: PRttiInfo): boolean;
 
     /// returns true if this is not a true TDocVariant, or Count equals 0
     function IsVoid: boolean;
@@ -10374,7 +10374,7 @@ begin
   Utf8ToWideString(json, WideString(TSynVarData(result).VAny));
 end;
 
-function TDocVariantData.ToRtti(var Value; RttiInfo: PRttiInfo): boolean;
+function TDocVariantData.ToRtti(var Dest; RttiInfo: PRttiInfo): boolean;
 begin
   result := (RttiInfo <> nil) and
             (VCount <> 0) and
@@ -10383,7 +10383,7 @@ begin
               Has(dvoIsArray)) or
              ((RttiInfo^.Kind in rkRecordTypes + [rkClass]) and
                Has(dvoIsObject))) and
-            DocVariantType.ToRtti(@self, Value, RttiInfo, @VOptions);
+            DocVariantType.ToRtti(@self, Dest, RttiInfo, @VOptions);
 end;
 
 function TDocVariantData.GetOrAddIndexByName(const aName: RawUtf8): integer;
