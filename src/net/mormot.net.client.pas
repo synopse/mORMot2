@@ -2068,13 +2068,13 @@ type
 // (e.g. a multi-part encoded message)
 // - set Tls to stlsImplicit for TLS-from-start (port 465) or stlsStartTls to
 // upgrade a plain connection via the STARTTLS command (port 587)
-// - optional aTLS could supply a TNetTlsContext to customize the TLS handshake
-// (e.g. aTLS^.IgnoreCertificateErrors), used for stlsImplicit and stlsStartTls
+// - optional TlsCtx could supply a TNetTlsContext to customize the TLS handshake
+// (e.g. TlsCtx^.IgnoreCertificateErrors), used for stlsImplicit and stlsStartTls
 function SendEmail(const Server, From, CsvDest, Subject: RawUtf8;
   const Text: RawByteString; const Headers: RawUtf8 = ''; const User: RawUtf8 = '';
   const Pass: RawUtf8 = ''; const Port: RawUtf8 = '25';
   const TextCharSet: RawUtf8  =  'ISO-8859-1'; Tls: TSmtpTls = stlsNone;
-  aTLS: PNetTlsContext = nil): boolean; overload;
+  TlsCtx: PNetTlsContext = nil): boolean; overload;
 
 /// send an email using the SMTP protocol via a TSmtpConnection definition
 // - retry true on success
@@ -2089,7 +2089,7 @@ function SendEmail(const Server, From, CsvDest, Subject: RawUtf8;
 function SendEmail(const Server: TSmtpConnection;
   const From, CsvDest, Subject: RawUtf8; const Text: RawByteString;
   const Headers: RawUtf8 = ''; const TextCharSet: RawUtf8  = 'ISO-8859-1';
-  Tls: TSmtpTls = stlsNone; aTLS: PNetTlsContext = nil): boolean; overload;
+  Tls: TSmtpTls = stlsNone; TlsCtx: PNetTlsContext = nil): boolean; overload;
 
 /// convert a supplied subject text into an Unicode encoding
 // - will convert the text into UTF-8 and append '=?UTF-8?B?'
@@ -3635,7 +3635,7 @@ begin
     parthash := params.Hasher.GetHashFileExt;
     if parthash <> '' then
     begin
-      parthash := url + parthash; // e.g. 'files/somefile.zip.md5'
+      parthash := Join([url, parthash]); // e.g. 'files/somefile.zip.md5'
       if Get(parthash, 5000) = 200 then
         // handle 'c7d8e61e82a14404169af3fa5a72be85 *file.name' format
         params.Hash := Split(TrimU(Http.Content), ' ');
@@ -4352,17 +4352,17 @@ function THttpRequest.Request(const url, method: RawUtf8; KeepAlive: cardinal;
   out OutHeader: RawUtf8; out OutData: RawByteString): integer;
 var
   data: RawByteString;
-  acceptEnc, contentEnc, aUrl: RawUtf8;
+  acceptEnc, contentEnc, u: RawUtf8;
   comp: PHttpSocketCompressRec;
   upload: boolean;
 begin
   if (url = '') or
      (url[1] <> '/') then
-    aUrl := '/' + url
+    u := Join(['/', url])
   else // need valid url according to the HTTP/1.1 RFC
-    aUrl := url;
+    u := url;
   fKeepAlive := KeepAlive;
-  InternalCreateRequest(method, aUrl); // should raise an exception on error
+  InternalCreateRequest(method, u); // should raise an exception on error
   try
     // common headers
     InternalAddHeader(InHeader);
@@ -5111,7 +5111,7 @@ procedure TCurlHttp.InternalCreateRequest(const aMethod, aUrl: RawUtf8);
 const
   CERT_PEM: RawUtf8 = 'PEM';
 begin
-  fIn.URL := fRootURL + aUrl;
+  fIn.URL := Join([fRootURL, aUrl]);
   if fExtendedOptions.RedirectMax > 0 then // url redirection (as TWinHttp)
     curl.easy_setopt(fHandle, coFollowLocation, 1);
   //curl.easy_setopt(fHandle,coTCPNoDelay,0); // disable Nagle
@@ -5915,7 +5915,7 @@ begin
   Response.Method := Method;
   fSafe.Lock; // blocking thread-safe HTTP request
   try
-    fServerUri.Address := fBaseUri + a;
+    fServerUri.Address := Join([fBaseUri, a]);
     Response.Url := fServerUri.Root; // excluding ?parameters=...
     fHttp.Request(fServerUri, Method, h, b, t, fKeepAlive);
     Response.Status := fHttp.Status;
@@ -6122,7 +6122,7 @@ end;
 
 function SendEmail(const Server: TSmtpConnection;
   const From, CsvDest, Subject: RawUtf8; const Text: RawByteString;
-  const Headers, TextCharSet: RawUtf8; Tls: TSmtpTls; aTLS: PNetTlsContext): boolean;
+  const Headers, TextCharSet: RawUtf8; Tls: TSmtpTls; TlsCtx: PNetTlsContext): boolean;
 begin
   if Tls = stlsNone then // guess the TLS mode from the well-known port numbers
     if Server.Port = '465' then
@@ -6131,12 +6131,12 @@ begin
       Tls := stlsStartTls;
   result := SendEmail(
     Server.Host, From, CsvDest, Subject, Text, Headers,
-    Server.User, Server.Pass, Server.Port, TextCharSet, Tls, aTLS);
+    Server.User, Server.Pass, Server.Port, TextCharSet, Tls, TlsCtx);
 end;
 
 function SendEmail(const Server, From, CsvDest, Subject: RawUtf8;
   const Text: RawByteString; const Headers, User, Pass, Port, TextCharSet: RawUtf8;
-  Tls: TSmtpTls; aTLS: PNetTlsContext): boolean;
+  Tls: TSmtpTls; TlsCtx: PNetTlsContext): boolean;
 var
   sock: TCrtSocket;
 
@@ -6155,7 +6155,7 @@ var
     result := '';
     repeat
       sock.SockRecvLn(res);
-      result := result + res + #13#10;
+      Append(result, res, #13#10);
     until (Length(res) < 4) or
           (res[4] <> '-'); // '-' indicates there are other lines following
     if IdemPChar(pointer(res), pointer(Answer)) then
@@ -6174,21 +6174,21 @@ begin
   P := pointer(CsvDest);
   if P = nil then
     exit;
-  sock := SocketOpen(Server, Port, {tls=}Tls = stlsImplicit, aTLS, nil);
+  sock := SocketOpen(Server, Port, {tls=}Tls = stlsImplicit, TlsCtx, nil);
   if sock <> nil then
   try
     sock.CreateSockIn; // we use SockIn for buffered SockRecvLn() in Exec()
     Exec('', '220');
     // EHLO is always sent first: needed for STARTTLS and AUTH capabilities
-    caps := Exec('EHLO ' + Server, '250');
+    caps := Exec(Join(['EHLO ', Server]), '250');
     if Tls = stlsStartTls then
     begin
       // upgrade the plain connection to TLS via the STARTTLS command
       Exec('STARTTLS', '220');
-      if aTLS <> nil then
-        sock.TLS := aTLS^; // apply the caller TLS options before the handshake
+      if TlsCtx <> nil then
+        sock.TLS := TlsCtx^; // apply the caller TLS options before the handshake
       sock.DoTlsAfter(cstaConnect); // perform the TLS handshake on this socket
-      caps := Exec('EHLO ' + Server, '250'); // re-issue EHLO over TLS
+      caps := Exec(Join(['EHLO ',  Server]), '250'); // re-issue EHLO over TLS
     end;
     if (User <> '') and
        (Pass <> '') then
@@ -6199,7 +6199,7 @@ begin
         Exec(BinToBase64(Pass), '235');
       end
       else // AUTH PLAIN fallback: base64(#0 user #0 pass)
-        Exec('AUTH PLAIN ' + BinToBase64(Join([#0, User, #0, Pass])), '235');
+        Exec(Join(['AUTH PLAIN ', BinToBase64(Join([#0, User, #0, Pass]))]), '235');
     sock.SockSendLine(['MAIL FROM:<', From, '>']);
     sock.SockSendFlush;
     Exec('', '250');
@@ -6209,8 +6209,8 @@ begin
       if rec = '' then
         continue;
       if PosExChar('<', rec) = 0 then
-        rec := '<' + rec + '>';
-      Exec('RCPT TO:' + rec, '25');
+        rec := Join(['<', rec, '>']);
+      Exec(Join(['RCPT TO:', rec]), '25');
       if {%H-}ToList = '' then
         Join([#13#10'To: ', rec], ToList)
       else
@@ -6218,14 +6218,14 @@ begin
     until P = nil;
     Exec('DATA', '354');
     sock.SockSendLine([
-      'Subject: ', Subject, #13#10 +
-      'From: ', From, ToList]);
+      'Subject: ', Subject, (#13#10 +
+      'From: '), From, ToList]);
     head := trimU(Headers);
     if (TextCharSet <> '') or
        (head = '') then
       sock.SockSend([
-        'Content-Type: text/plain;charset=', TextCharSet, #13#10 +
-        'Content-Transfer-Encoding: 8bit']);
+        'Content-Type: text/plain;charset=', TextCharSet, (#13#10 +
+        'Content-Transfer-Encoding: 8bit')]);
     if head <> '' then
       sock.SockSendHeaders(head); // normalizing CRLF
     sock.SockSendCRLF;            // end of headers
