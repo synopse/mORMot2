@@ -720,6 +720,11 @@ var
   /// the current Linux Distribution, depending on its package management system
   OS_DISTRI: TLinuxDistribution;
 
+  /// the running Operating System
+  OSVersion32: TOperatingSystemVersion;
+  /// the running Operating System, encoded as a 32-bit integer
+  OSVersionInt32: integer absolute OSVersion32;
+
   /// the current Operating System version, as retrieved for the current process
   // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or 'Windows XP SP3 (5.1.2600)' or
   // 'Windows 10 64bit 22H2 (10.0.19045.4046)' or 'macOS 15.7.3 Sequoia (Darwin 24.6.0)' or
@@ -738,46 +743,41 @@ var
   // - contains e.g. '4 x Intel(R) Core(TM) i5-7300U CPU @ 2.60GHz [3MB]'
   CpuInfoText: RawUtf8;
   /// the available cache information as returned by the OS
-  // - e.g. 'L1=2*32KB  L2=256KB  L3=3MB' on Windows or '3072 KB' on Linux
+  // - e.g. 'L1=2*32KB  L2=256KB  L3=3MB' or '3072 KB' on non Intel/AMD Linux
   CpuCacheText: RawUtf8;
 
-  /// the on-chip cache size, in bytes, as returned by the OS
-  // - retrieved from /proc/cpuinfo "cache size" entry (L3 cache) on Linux or
-  // CpuCache[3/4].Size (from GetLogicalProcessorInformation) on Windows
+  /// the on-chip main/shared cache size, in bytes, as returned by the OS
+  // - retrieved from CpuCache[3/4].Size at startup
+  // - detailed info is available in CpuCache[] array in mormot.core.base
   CpuCacheSize: cardinal;
-  /// how many hardware CPU sockets are defined on this system
-  // - i.e. the number of physical CPU slots
-  // - CpuThreads = SystemInfo.dwNumberOfProcessors is the logical CPU count
-  // - as used e.g. by SetThreadAffinity()
-  CpuSockets: cardinal;
-  /// how many hardware CPU cores are defined on this system
-  // - i.e. the number of physical CPU cores
-  // - CpuThreads = SystemInfo.dwNumberOfProcessors is the logical CPU count
-  CpuCores: cardinal;
-  /// the number of available logical CPUs threads
-  // - just an alias to SystemInfo.dwNumberOfProcessors compatibility value
-  CpuThreads: cardinal;
+  /// Level 1 to 4 CPU caches as returned by GetLogicalProcessorInformation()
+  // - on POSIX Intel/AMD is copied from IntelCpuCache[] as retrieved from CPUID
+  // - only Unified or Data caches are included (not Instruction or Trace)
+  CpuCache: TCpuCaches;
 
-  /// Level 1 to 4 CPU caches as returned by GetLogicalProcessorInformation
-  // - yes, Intel introduced a Level 4 cache (eDRAM) with some Haswell/Iris CPUs
-  // - this information is not retrieved on all Linux / POSIX systems yet
-  // - only Unified or Data caches are include (not Instruction or Trace)
-  // - note: some CPU - like the Apple M1 - have 128 bytes of LineSize
-  CpuCache: array[1..4] of record
-    Count, Size, LineSize: cardinal;
-  end;
+/// how many hardware CPU sockets are defined on this system
+// - i.e. the number of physical CPU slots
+// - CpuThreads = SystemInfo.dwNumberOfProcessors is the logical CPU count
+// - as used e.g. by SetThreadAffinity()
+{$ifdef OSLINUXANDROID} function {$endif} CpuSockets: cardinal;
+/// how many hardware CPU cores are defined on this system
+// - i.e. the number of physical CPU cores
+// - CpuThreads = SystemInfo.dwNumberOfProcessors is the logical CPU count
+{$ifdef OSLINUXANDROID} function {$endif} CpuCores: cardinal;
 
-  {$ifdef OSLINUXANDROID}
-  /// contains the content of Linux /proc/cpuinfo as retrieved at startup
+/// the number of available logical CPUs threads
+// - just an alias to SystemInfo.dwNumberOfProcessors compatibility value
+// - on Linux will make fast sched_getaffinity syscall for the current state
+{$ifdef OSLINUXANDROID} function {$endif} CpuThreads: cardinal;
+
+{$ifdef OSLINUXANDROID}
+var
+  /// contains the content of Linux /proc/cpuinfo if retrieved (may be '')
   CpuInfoLinux: RawUtf8;
-  /// contains the Flags: or Features: value of Linux /proc/cpuinfo
-  CpuInfoFeatures: RawUtf8;
-  {$endif OSLINUXANDROID}
 
-  /// the running Operating System
-  OSVersion32: TOperatingSystemVersion;
-  /// the running Operating System, encoded as a 32-bit integer
-  OSVersionInt32: integer absolute OSVersion32;
+/// contains the Flags: or Features: value of Linux /proc/cpuinfo
+function CpuInfoFeatures: RawUtf8;
+{$endif OSLINUXANDROID}
 
 /// some textual information about the current computer hardware, from BIOS
 // - contains e.g. 'LENOVO 20HES23B0U ThinkPad T470'
@@ -9510,14 +9510,10 @@ begin
     _fmt('%s %s (%s)', [ProgramFileName,
       Version.DetailedOrVoid, Version.BuildDateTimeString], ProgramFullSpec);
     Hash.c0 := Version.Version32;
-    {$ifdef OSLINUXANDROID} // /proc/cpuinfo seems as detailed as it gets
-    Hash.c0 := crc32c(Hash.c0, pointer(CpuInfoLinux), length(CpuInfoLinux));
-    {$else}
     {$ifdef HASCPUFEATURES} // populated on Intel/AMD and arm/aarch64
     Hash.c0 := crc32c(Hash.c0, @CpuFeatures, SizeOf(CpuFeatures));
     {$else}                 // fallback on other targets
     Hash.c0 := crc32c(Hash.c0, pointer(CpuInfoText), length(CpuInfoText));
-    {$endif OSLINUXANDROID}
     {$endif HASCPUFEATURES}
     Hash.c0 := crc32c(Hash.c0, pointer(Host), length(Host));
     Hash.c1 := crc32c(Hash.c0, pointer(User), length(User));
@@ -9588,6 +9584,7 @@ begin
     ProgramFileName := ParamStr(0); // RTL seems just fine here
     {$else}
     dladdr(@InitializeProcessInfo, @PosixProgramInfo);
+    crcblock(@SystemEntropy.Startup, @PosixProgramInfo); // won't hurt
     GetDlInfoName(PosixProgramInfo, ProgramFileName);
     if ProgramFileName <> '' then
     begin
@@ -9597,7 +9594,6 @@ begin
     end;
     if ProgramFileName = '' then
       ProgramFileName := ExpandFileName(ParamStr(0));
-    crcblock(@SystemEntropy.Startup, @PosixProgramInfo); // won't hurt
     {$endif OSWINDOWS}
     ProgramFilePath := ExtractFilePath(ProgramFileName);
     if IsLibrary then
