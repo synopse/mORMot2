@@ -5899,8 +5899,7 @@ begin // caller ensured count > 0 and len > 0
 no:   p2 := name;
     end;
     inc(result);
-    dec(count);
-  until count = 0;
+  until result = count;
   result := -1;
 end;
 
@@ -5940,8 +5939,7 @@ begin // caller ensured count > 0 and len > 0
 no:   p2 := name;
     end;
     inc(result);
-    dec(count);
-  until count = 0;
+  until result = count;
   result := -1;
 end;
 
