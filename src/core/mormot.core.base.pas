@@ -2816,6 +2816,14 @@ procedure UnSetBit64(var Bits: Int64; aIndex: PtrInt);
 { ************ Low-level CPU Detection and Intrinsics }
 
 type
+  /// define mormot.core.base IntelCpuCache and mormot.core.os CpuCache globals
+  // - Intel introduced a Level 4 cache (eDRAM) with some Haswell/Iris CPUs
+  // - only Unified or Data caches are included (not Instruction or Trace)
+  // - note: some CPU - like the Apple M1 - have 128 bytes of LineSize
+  TCpuCaches = array[1 .. 4] of record
+    Count, Size, LineSize: cardinal;
+  end;
+
   /// the potential features, retrieved from an Intel/AMD CPU
   // - cf https://en.wikipedia.org/wiki/CPUID#EAX.3D1:_Processor_Info_and_Feature_Bits
   // - is defined on all platforms, so that e.g. an ARM desktop may browse
@@ -2946,8 +2954,12 @@ var
 
   // additional low-level Intel/AMD CPU information retrieved using CPUID
   CpuManufacturer: TIntelCpuManufacturer;
-  CpuFamily, CpuModel: byte;
+  CpuFamily, CpuModel, IntelCpuCacheCount: byte;
 
+  /// Level 1 to 4 CPU caches retrieved via CPUID from Intel/AMD new processor
+  // - only Unified or Data caches are included (not Instruction or Trace)
+  // - see also cross-platform CpuCache[] information in mormot.core.os.pas
+  IntelCpuCache: TCpuCaches;
   /// twelve-character ASCII vendor string returned by Intel/AMD cpuid
   // - typical values are 'AuthenticAMD' or 'GenuineIntel'
   IntelManufacturer: RawUtf8;
@@ -10796,6 +10808,40 @@ begin
     GetCpuId($80000004, 0, brand.r4);
     brand.z := 0; // ensure is ASCIIZ
     FastSetString(IntelBrand, @brand, StrLen(@brand));
+    leaf := 0; // EAX=4 and EAX=8000001d: Cache Hierarchy and Topology
+    case CpuManufacturer of
+      icmAmd:
+        if regs.eax >= $8000001d then
+          leaf := $8000001d;
+      icmIntel:
+        if maxleaf >= 4 then
+          leaf := 4;
+    end;
+    if leaf <> 0 then
+    begin
+      sub := 0;
+      repeat
+        GetCpuid(leaf, sub, regs);
+        case regs.eax and $1f of
+          0:     // end of sub-leaf
+            break;
+          1, 3: // Data or Unified cache
+            begin
+              level := (regs.eax shr 5) and 7;
+              if level in [low(TCpuCaches) .. high(TCpuCaches)] then
+                with IntelCpuCache[level] do
+                begin
+                  LineSize := (regs.ebx and $FFF) + 1;
+                  Size := (((regs.ebx shr 22) and $3FF) + 1) * // ways
+                          (((regs.ebx shr 12) and $3FF) + 1) * // parts
+                          LineSize * (regs.ecx + 1);           // sets
+                  inc(IntelCpuCacheCount); // mark as known
+                end; // keep Count=0 since CPUID involve only the current core
+            end;
+        end; // 2 = Instruction Cache or 4-31 = Reserved are just ignored
+        inc(sub);
+      until false;
+    end;
   end;
   // validate accuracy of most used HW opcodes against flags reported by CPUID
   if cfTSC in CpuFeatures then
