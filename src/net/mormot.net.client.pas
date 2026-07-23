@@ -2048,6 +2048,16 @@ type
   /// exception class raised by SendEmail() on raw SMTP process
   ESendEmail = class(ESynException);
 
+  /// how TLS should be applied when sending an email via SendEmail()
+  // - stlsNone: plain text connection (typically port 25)
+  // - stlsImplicit: TLS from the first byte of the connection (typically port 465)
+  // - stlsStartTls: plain connection upgraded to TLS via the STARTTLS command
+  // after EHLO (typically the submission port 587, as expected by most providers)
+  TSmtpTls = (
+    stlsNone,
+    stlsImplicit,
+    stlsStartTls);
+
 /// send an email using the SMTP protocol
 // - retry true on success
 // - the Subject is expected to be in plain 7-bit ASCII, so you could use
@@ -2056,11 +2066,15 @@ type
 // - you can optionally set another encoding charset or force TextCharSet='' to
 // expect the 'Content-Type:' to be set in Headers and Text to be the raw body
 // (e.g. a multi-part encoded message)
+// - set Tls to stlsImplicit for TLS-from-start (port 465) or stlsStartTls to
+// upgrade a plain connection via the STARTTLS command (port 587)
+// - optional aTLS could supply a TNetTlsContext to customize the TLS handshake
+// (e.g. aTLS^.IgnoreCertificateErrors), used for stlsImplicit and stlsStartTls
 function SendEmail(const Server, From, CsvDest, Subject: RawUtf8;
   const Text: RawByteString; const Headers: RawUtf8 = ''; const User: RawUtf8 = '';
   const Pass: RawUtf8 = ''; const Port: RawUtf8 = '25';
-  const TextCharSet: RawUtf8  =  'ISO-8859-1'; TLS: boolean = false;
-  TLSIgnoreCertError: boolean = false): boolean; overload;
+  const TextCharSet: RawUtf8  =  'ISO-8859-1'; Tls: TSmtpTls = stlsNone;
+  aTLS: PNetTlsContext = nil): boolean; overload;
 
 /// send an email using the SMTP protocol via a TSmtpConnection definition
 // - retry true on success
@@ -2070,11 +2084,12 @@ function SendEmail(const Server, From, CsvDest, Subject: RawUtf8;
 // - you can optionally set another encoding charset or force TextCharSet='' to
 // expect the 'Content-Type:' to be set in Headers and Text to be the raw body
 // (e.g. a multi-part encoded message)
-// - TLS will be forced if the port is either 465 or 587
+// - if Tls is left to stlsNone, it will be guessed from the port number:
+// stlsImplicit for port 465, or stlsStartTls for port 587
 function SendEmail(const Server: TSmtpConnection;
   const From, CsvDest, Subject: RawUtf8; const Text: RawByteString;
   const Headers: RawUtf8 = ''; const TextCharSet: RawUtf8  = 'ISO-8859-1';
-  TLS: boolean = false; TLSIgnoreCertError: boolean = false): boolean; overload;
+  Tls: TSmtpTls = stlsNone; aTLS: PNetTlsContext = nil): boolean; overload;
 
 /// convert a supplied subject text into an Unicode encoding
 // - will convert the text into UTF-8 and append '=?UTF-8?B?'
@@ -6107,29 +6122,43 @@ end;
 
 function SendEmail(const Server: TSmtpConnection;
   const From, CsvDest, Subject: RawUtf8; const Text: RawByteString;
-  const Headers, TextCharSet: RawUtf8; TLS, TLSIgnoreCertError: boolean): boolean;
+  const Headers, TextCharSet: RawUtf8; Tls: TSmtpTls; aTLS: PNetTlsContext): boolean;
 begin
+  if Tls = stlsNone then // guess the TLS mode from the well-known port numbers
+    if Server.Port = '465' then
+      Tls := stlsImplicit
+    else if Server.Port = '587' then
+      Tls := stlsStartTls;
   result := SendEmail(
     Server.Host, From, CsvDest, Subject, Text, Headers,
-    Server.User, Server.Pass, Server.Port, TextCharSet,
-    TLS or (Server.Port = '465') or (Server.Port = '587'), TLSIgnoreCertError);
+    Server.User, Server.Pass, Server.Port, TextCharSet, Tls, aTLS);
 end;
 
 function SendEmail(const Server, From, CsvDest, Subject: RawUtf8;
   const Text: RawByteString; const Headers, User, Pass, Port, TextCharSet: RawUtf8;
-  TLS, TLSIgnoreCertError: boolean): boolean;
+  Tls: TSmtpTls; aTLS: PNetTlsContext): boolean;
 var
   sock: TCrtSocket;
 
-  procedure Expect(const answer: RawUtf8);
+  // send the optional Command, read the whole (multi-line) answer, check the
+  // reply code, raise ESendEmail on mismatch, and return the full answer text
+  // - Command = '' is used to read the initial greeting or a previous send
+  function Exec(const Command, Answer: RawUtf8): RawUtf8;
   var
     res: RawUtf8;
   begin
+    if Command <> '' then
+    begin
+      sock.SockSend(Command);
+      sock.SockSendFlush;
+    end;
+    result := '';
     repeat
       sock.SockRecvLn(res);
+      result := result + res + #13#10;
     until (Length(res) < 4) or
-          (res[4] <> '-'); // - indicates there are other headers following
-    if IdemPChar(pointer(res), pointer(answer)) then
+          (res[4] <> '-'); // '-' indicates there are other lines following
+    if IdemPChar(pointer(res), pointer(Answer)) then
       exit;
     if res = '' then
       res := 'Undefined Error';
@@ -6137,39 +6166,43 @@ var
       [User, Server, Port, res]);
   end;
 
-  procedure Exec(const Command, answer: RawUtf8);
-  begin
-    sock.SockSend(Command);
-    sock.SockSendFlush;
-    Expect(answer)
-  end;
-
 var
   P: PUtf8Char;
-  rec, ToList, head: RawUtf8;
+  rec, ToList, head, caps: RawUtf8;
 begin
   result := false;
   P := pointer(CsvDest);
   if P = nil then
     exit;
-  sock := SocketOpen(Server, Port, TLS, nil, nil, TLSIgnoreCertError);
+  sock := SocketOpen(Server, Port, {tls=}Tls = stlsImplicit, aTLS, nil);
   if sock <> nil then
   try
-    sock.CreateSockIn; // we use SockIn for buffered SockRecvLn() in Expect()
-    Expect('220');
+    sock.CreateSockIn; // we use SockIn for buffered SockRecvLn() in Exec()
+    Exec('', '220');
+    // EHLO is always sent first: needed for STARTTLS and AUTH capabilities
+    caps := Exec('EHLO ' + Server, '250');
+    if Tls = stlsStartTls then
+    begin
+      // upgrade the plain connection to TLS via the STARTTLS command
+      Exec('STARTTLS', '220');
+      if aTLS <> nil then
+        sock.TLS := aTLS^; // apply the caller TLS options before the handshake
+      sock.DoTlsAfter(cstaConnect); // perform the TLS handshake on this socket
+      caps := Exec('EHLO ' + Server, '250'); // re-issue EHLO over TLS
+    end;
     if (User <> '') and
        (Pass <> '') then
-    begin
-      Exec('EHLO ' + Server, '25');
-      Exec('AUTH LOGIN', '334');
-      Exec(BinToBase64(User), '334');
-      Exec(BinToBase64(Pass), '235');
-    end
-    else
-      Exec('HELO ' + Server, '25');
+      if PosI('LOGIN', caps) <> 0 then
+      begin
+        Exec('AUTH LOGIN', '334');
+        Exec(BinToBase64(User), '334');
+        Exec(BinToBase64(Pass), '235');
+      end
+      else // AUTH PLAIN fallback: base64(#0 user #0 pass)
+        Exec('AUTH PLAIN ' + BinToBase64(Join([#0, User, #0, Pass])), '235');
     sock.SockSendLine(['MAIL FROM:<', From, '>']);
     sock.SockSendFlush;
-    Expect('250');
+    Exec('', '250');
     repeat
       GetNextItem(P, ',', rec);
       TrimSelf(rec);
