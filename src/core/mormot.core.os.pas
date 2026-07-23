@@ -9575,13 +9575,69 @@ procedure InitializeProcessInfo; // called once at startup
 var
   dt: TDateTime;
   rnd: PBlock128;
+  i: PtrInt;
+  tmp: ShortString;
 begin
-  TrimDualSpaces(OSVersionText); // clean InitializeSpecificUnit info
+  // consolidate and clean InitializeSpecificUnit info
+  TrimDualSpaces(OSVersionText);
   TrimDualSpaces(OSVersionInfoEx);
-  {$ifndef OSLINUXANDROID} TrimDualSpaces(BiosInfoText); {$endif}
-  TrimDualSpaces(CpuInfoText);
   if OSVersionShort = '' then
     OSVersionShort := ToTextOSU(OSVersionInt32);
+  {$ifdef ASMINTEL} // from CPUID
+  if CpuInfoText = '' then
+    CpuInfoText := IntelBrand;
+  if IsZero(@CpuCache, SizeOf(CpuCache)) then
+    if IntelCpuCacheCount <> 0 then
+      CpuCache := IntelCpuCache;
+  {$endif ASMINTEL}
+  tmp[0] := #0;
+  AppendShortCardinal(SystemInfo.dwNumberOfProcessors, tmp);
+  AppendShort(' x ', tmp);
+  if CpuInfoText = '' then
+    AppendShortAnsi7String('generic cpu', tmp)
+  else
+    AppendShortAnsi7String(CpuInfoText, tmp);
+  for i := high(CpuCache) downto low(CpuCache) do
+  begin
+    CpuCacheSize := CpuCache[i].Size;
+    if CpuCacheSize = 0 then // append the highest level Cache size
+      continue;
+    AppendShortTwoChars(32 + ord('[') shl 8, @tmp);
+    AppendKb(CpuCacheSize, tmp);
+    AppendShortChar(']', @tmp);
+    break;
+  end;
+  AppendShort(' (' + CPU_ARCH_TEXT + ')', tmp);
+  ShortStringToAnsi7String(tmp, CpuInfoText);
+  tmp[0] := #0;
+  for i := low(CpuCache) to high(CpuCache) do
+    with CpuCache[i] do
+      if Size <> 0 then
+      begin
+        if tmp[0] <> #0 then
+          AppendShortTwoChars($2020, @tmp);
+        AppendShortChar('L', @tmp);
+        AppendShortByte(i, @tmp);
+        AppendShortChar('=', @tmp);
+        AppendKb(Size, tmp);
+        if Count > 1 then
+        begin
+          AppendShortChar('*', @tmp);
+          AppendShortCardinal(Count, tmp);
+        end;
+      end;
+  ShortStringToAnsi7String(tmp, CpuCacheText);
+  TrimDualSpaces(CpuInfoText);
+  {$ifdef OSLINUXANDROID}
+  StartupObfuscate := nil;
+  {$else} // those are global variables, not functions
+  TrimDualSpaces(BiosInfoText);
+  CpuThreads := SystemInfo.dwNumberOfProcessors;
+  if CpuSockets = 0 then
+    CpuSockets := 1;
+  if CpuCores = 0 then
+    CpuCores := CpuThreads;
+  {$endif OSLINUXANDROID}
   with Executable do            // retrieve Executable + Host/User info
   begin
     dt := 0;
@@ -12567,6 +12623,13 @@ procedure InitializeUnit;
 begin
   // early initialization needed for those functions
   DoWideCharToUtf8Temp  := _DoWideCharToUtf8Temp;  // mormot.core.unicode
+  {$ifdef ASMINTEL}
+  TrimDualSpaces(IntelBrand);
+  if (CpuManufacturer = icmAmd) and
+     (CpuFamily = $19) and
+     (CpuModel >= $30) then // Zen 3 or later
+    SpinFactor := 10;       // "pause" opcode is only 1-2 cycles
+  {$endif ASMINTEL}
   {$ifdef ISFPC27}
   // we force UTF-8 everywhere on FPC for consistency with Lazarus
   SetMultiByteConversionCodePage(CP_UTF8);
@@ -12574,6 +12637,7 @@ begin
   {$endif ISFPC27}
   GlobalCriticalSection.Init;
   ConsoleCriticalSection.Init;
+  // main initialization sub-functions
   InitializeSpecificUnit; // in mormot.core.os.posix/windows.inc files
   InitializeProcessInfo;  // cross-platform info - e.g. User/Host + Executable
   // setup some constants
@@ -12582,12 +12646,6 @@ begin
   NULL_STR_VAR     := 'null';
   BOOL_UTF8[false] := 'false';
   BOOL_UTF8[true]  := 'true';
-  {$ifdef ASMINTEL}
-  if (CpuManufacturer = icmAmd) and
-     (CpuFamily = $19) and
-     (CpuModel >= $30) then // Zen 3 or later
-    SpinFactor := 10;       // "pause" opcode is only 1-2 cycles
-  {$endif ASMINTEL}
   // minimal stubs which will be properly implemented in other mormot.core units
   ShortToUuid           := _ShortToUuid;           // mormot.core.text
   AppendShortUuid       := _AppendShortUuid;
