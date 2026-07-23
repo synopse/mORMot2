@@ -4452,14 +4452,12 @@ procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
   LeaveUnprotected: boolean);
 var
   OsPageSize, PageSize, AlignedAddr: PtrUInt;
-  i: PtrInt;
   ProtectedResult, ProtectedMemory: boolean;
 begin
   if Size <= 0 then
     exit;
   if Backup <> nil then
-    for i := 0 to Size - 1 do // do not use Move() here
-      PByteArray(Backup)^[i] := PByteArray(Old)^[i];
+    MoveByOne(Old, Backup, Size); // do not use Move() here
   OsPageSize := SystemInfo.dwPageSize;
   PageSize := OsPageSize;
   AlignedAddr := (PtrUInt(Old) div OsPageSize) * OsPageSize;
