@@ -3177,7 +3177,7 @@ end;
 
 procedure OsErrorShortVar(Code: cardinal; var Dest: ShortString; NoInt: boolean);
 begin
-  BsdErrorShort(Code, Dest, NoInt);
+  BsdErrorShortVar(Code, Dest, NoInt);
 end;
 
 function IsValidPid(pid: cardinal): boolean;
@@ -3552,7 +3552,7 @@ end;
 
 procedure OsErrorShortVar(Code: cardinal; var Dest: ShortString; NoInt: boolean);
 begin
-  LinuxErrorShort(Code, Dest, NoInt);
+  LinuxErrorShortVar(Code, Dest, NoInt);
 end;
 
 procedure FindNameValue(p: PUtf8Char; const up: ShortString; var res: RawUtf8);

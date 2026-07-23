@@ -836,24 +836,24 @@ function WinErrorShort(Code: cardinal; NoInt: boolean = false): TShort47;
   {$ifdef FPC} inline; {$endif} // Delphi has sometimes issues inlining this
 
 /// fill Dest with the error code number and its regular constant on Windows
-// - not named WinErrorShort() to avoid a function/procedure overload that
-// Delphi 7 cannot resolve at the call site
+// - not defined as WinErrorShort() overload to avoid a Delphi 7 compiler error
 procedure WinErrorShortVar(Code: cardinal; var Dest: ShortString; NoInt: boolean = false);
 
 /// return the error code number, and its regular constant on Linux (if known)
-procedure LinuxErrorShort(Code: cardinal; var Dest: ShortString; NoInt: boolean = false);
+procedure LinuxErrorShortVar(Code: cardinal; var Dest: ShortString; NoInt: boolean = false);
 
 /// return the error code number, and its regular constant on Bsd (if known)
-procedure BsdErrorShort(Code: cardinal; var Dest: ShortString; NoInt: boolean = false);
+procedure BsdErrorShortVar(Code: cardinal; var Dest: ShortString; NoInt: boolean = false);
 
 /// return the error code number, and its regular constant on the current OS
-// - redirect to WinErrorShort/LinuxErrorShort/BsdErrorShort() functions
+// - redirect to WinErrorShortVar/LinuxErrorShortVar/BsdErrorShortVar() functions
+// - not defined as OsErrorShor() overload to avoid a Delphi 7 compiler error
 // - e.g. OsErrorShort(5) = '5 ERROR_ACCESS_DENIED' on Windows or '5 EIO' on POSIX
 procedure OsErrorShortVar(Code: cardinal; var Dest: ShortString; NoInt: boolean = false);
   {$ifdef FPC} inline; {$endif} // Delphi can't inline a ShortString var :(
 
 /// return the error code number, and its regular constant on the current OS
-// - redirect to WinErrorShort/LinuxErrorShort/BsdErrorShort() functions
+// - redirect to WinErrorShortVar/LinuxErrorShortVar/BsdErrorShortVar() functions
 // - e.g. OsErrorShort(5) = '5 ERROR_ACCESS_DENIED' on Windows or '5 EIO' on POSIX
 function OsErrorShort(Code: cardinal = 0; NoInt: boolean = false): TShort47;
   {$ifdef FPC} inline; {$endif} // Delphi has sometimes issues inlining this
@@ -2826,6 +2826,7 @@ function GetErrorText(error: integer = 0): RawUtf8;
 function GetErrorShort(error: integer = 0): TShort63;
 
 /// returns a given error code as plain text ShortString
+// - not defined as GetErrorShort() overload to avoid a Delphi 7 compiler error
 procedure GetErrorShortVar(error: integer; var dest: ShortString);
 
 {$ifdef OSWINDOWS}
@@ -7050,12 +7051,12 @@ begin
   MoveFast(ps^[2], d[1], ord(ps^[0]) - 1);
 end;
 
-procedure LinuxErrorShort(Code: cardinal; var Dest: ShortString; NoInt: boolean);
+procedure LinuxErrorShortVar(Code: cardinal; var Dest: ShortString; NoInt: boolean);
 begin
   _PosixError(Code, ord(high(TLinuxError)), Dest, TypeInfo(TLinuxError), NoInt);
 end;
 
-procedure BsdErrorShort(Code: cardinal; var Dest: ShortString; NoInt: boolean);
+procedure BsdErrorShortVar(Code: cardinal; var Dest: ShortString; NoInt: boolean);
 begin
   _PosixError(Code, ord(high(TBsdError)), Dest, TypeInfo(TBsdError), NoInt);
 end;
@@ -7064,7 +7065,7 @@ function OsErrorShort(Code: cardinal; NoInt: boolean): TShort47;
 begin
   if Code = 0 then
     Code := GetLastError;
-  OsErrorShortVar(Code, result, NoInt); // redirect to Win/Linux/BsdErrorShort()
+  OsErrorShortVar(Code, result, NoInt); // redirect to Win/Linux/BsdErrorShort
 end;
 
 procedure OsErrorAppend(Code: cardinal; var Dest: ShortString;
@@ -7072,7 +7073,7 @@ procedure OsErrorAppend(Code: cardinal; var Dest: ShortString;
 var
   os: TShort47;
 begin
-  OsErrorShortVar(Code, os, NoInt); // redirect to Win/Linux/BsdErrorShort()
+  OsErrorShortVar(Code, os, NoInt); // redirect to Win/Linux/BsdErrorShortVar
   if Sep <> #0 then
     AppendShortCharSafe(Sep, Dest);
   AppendShort(os, Dest);
