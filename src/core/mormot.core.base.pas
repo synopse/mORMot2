@@ -1058,64 +1058,64 @@ procedure ShortStringToAnsi7String(const source: ShortString; var result: RawUtf
 procedure Ansi7StringToShortString(const source: RawUtf8; var result: ShortString);
   {$ifdef FPC}inline;{$endif}
 
-/// simple concatenation of a 32-bit unsigned integer as text into a shorstring
+/// shortstring concatenation of a 32-bit unsigned integer as text
 procedure AppendShortCardinal(value: cardinal; var dest: ShortString);
 
-/// simple concatenation of a 8-bit unsigned integer as text into a shorstring
+/// shortstring concatenation of a 8-bit unsigned integer as text
 procedure AppendShortByte(value: PtrUInt; dest: PAnsiChar);
 
-/// simple concatenation of a signed 64-bit integer as text into a shorstring
+/// shortstring concatenation of a signed 64-bit integer as text
 procedure AppendShortInt64(const value: Int64; var dest: ShortString);
 
-/// simple concatenation of an unsigned 64-bit integer as text into a shorstring
+/// shortstring concatenation of an unsigned 64-bit integer as text
 procedure AppendShortQWord(const value: QWord; var dest: ShortString);
 
-/// simple concatenation of INTEGER Curr64 (value*10000) into a shorstring
+/// shortstring concatenation of INTEGER Curr64 (value*10000)
 // - will emit 0, 2 or 4 decimals in the output text (e.g. '1', '1.23', '1.2345')
 procedure AppendShortCurr64(const value: Int64; var dest: ShortString;
   fixeddecimals: PtrInt = 0);
 
-/// simple concatenation of no banker rounding floating point value as TwoDigits()
+/// shortstring concatenation of no banker rounding floating point value as TwoDigits()
 procedure AppendShortTwoDigits(const Value: double; var Dest: ShortString);
 
-/// simple concatenation of a character into a @shorstring, checking its length
+/// shortstring concatenation of a character into a @shorstring, checking its length
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
 procedure AppendShortCharSafe(chr: AnsiChar; var dest: ShortString);
   {$ifdef FPC} inline; {$endif}
 
-/// simple concatenation of a character into a @shorstring
+/// shortstring concatenation of a character into a @shorstring
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
 procedure AppendShortChar(chr: AnsiChar; dest: PAnsiChar);
   {$ifdef HASINLINE} inline; {$endif}
 
-/// simple concatenation of two characters into a @shorstring
+/// shortstring concatenation of two characters into a @shorstring
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
 procedure AppendShortTwoChars(twochars, dest: PAnsiChar); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// simple concatenation of two characters (as 16-bit integer) into a @shorstring
+/// shortstring concatenation of two characters (as 16-bit integer) into a @shorstring
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
 procedure AppendShortTwoChars(twochars: cardinal; dest: PAnsiChar); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// simple concatenation of a #0 ending text into a @shorstring
+/// shortstring concatenation of a #0 ending text into a @shorstring
 // - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
 procedure AppendShortBuffer(buf: PAnsiChar; len, max: PtrInt; dest: PAnsiChar);
   {$ifdef HASINLINE} inline; {$endif}
 
-/// simple concatenation of hexadecimal binary buffer into a shorstring
+/// shortstring concatenation of hexadecimal binary buffer
 procedure AppendShortHex(value: PByte; len: PtrInt; var dest: ShortString);
 
-/// simple concatenation of an integer as lowercase hexadecimal into a shorstring
+/// shortstring concatenation of an integer as lowercase hexadecimal
 procedure AppendShortIntHex(value: Int64; var dest: ShortString);
 
-/// simple concatenation of a byte as uppercase hexadecimal into a shorstring
+/// shortstring concatenation of a byte as uppercase hexadecimal
 procedure AppendShortByteHex(value: PtrUInt; var dest: ShortString);
 
-/// simple concatenation of a ShortString text into a shorstring
+/// shortstring concatenation of a ShortString text
 procedure AppendShort(const src: ShortString; var dest: ShortString);
 
-/// simple concatenation of an ANSI-7 AnsiString into a shorstring
+/// shortstring concatenation of an ANSI-7 AnsiString
 procedure AppendShortAnsi7String(const buf: RawByteString; var dest: ShortString);
 
 /// simple concatenation of a text buffer into a RawUtf8
@@ -1180,11 +1180,11 @@ function PropNameEquals(const P1, P2: RawUtf8): boolean; overload;
 function PropNameEquals(const P1: RawUtf8; P2: PAnsiChar; P2Len: PtrInt): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// raw internal method as published by FindNonVoid[false]
+/// raw internal method as published by FindNonVoid[false] with count>0 and len>0
 function FindNonVoidRawUtf8(n: PPointerArray; name: pointer; len: TStrLen;
   count: PtrInt): PtrInt;
 
-/// raw internal method as published by FindNonVoid[true]
+/// raw internal method as published by FindNonVoid[true] with count>0 and len>0
 function FindNonVoidRawUtf8I(n: PPointerArray; name: pointer; len: TStrLen;
   count: PtrInt): PtrInt;
 
@@ -5836,7 +5836,7 @@ var
   p1, p2, l: PUtf8Char;
 label
   no;
-begin
+begin // caller ensured count > 0 and len > 0
   result := 0;
   p2 := name;
   repeat // inlined CompareMemFixed()
@@ -5877,7 +5877,7 @@ var
   p1, p2, l: PUtf8Char;
 label
   no;
-begin
+begin // caller ensured count > 0 and len > 0
   result := 0;
   p2 := name;
   repeat // inlined IdemPropNameUSameLenNotNull(p, name, len)
@@ -11405,7 +11405,7 @@ begin
         AT_RANDOM: // 16 random bytes (used as stacks canaries) are just perfect
           XorMemory(BaseEntropy.r[3], PHash128Rec(p[1])^); // kernel 2.6.29
       end;
-      inc(e^, ((p[0] shl 20) xor p[1]) * 3266489917); // fill BaseEntropy
+      inc(e^, ((p[0] shl 20) xor p[1]) * 3266489917); // fill BaseEntropy[]
       inc(e);
       if e = eend then
         dec(PByte(e), SizeOf(BaseEntropy));

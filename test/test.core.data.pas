@@ -7026,7 +7026,7 @@ begin
   uu := nil;
   CheckEqual(length(uu), 0);
   _Safe(V)^.ToRawUtf8DynArray(uu);
-  CheckEqual(length(uu), 5);
+  CheckEqual(length(uu), 5, 'ToRawUtf8DynArray');
   CheckEqual(RawUtf8ArrayToCsv(uu), 'one,2,3,4,a5');
   uu := nil;
   CheckEqual(length(uu), 0);
