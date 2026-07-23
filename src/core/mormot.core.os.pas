@@ -4219,6 +4219,9 @@ function KB(Size: Int64): TShort16; overload;
 function KBNoSpace(Size: Int64): TShort16;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
+/// return a date/time value as '2026-03-27 13:59:30' UTF-8 text
+function OsDateTimeToText(dt: TDateTime): RawUtf8;
+
 type
   /// function prototype for AppendShortUuid()
   TAppendShortUuid = procedure(const u: TGuid; var s: ShortString);
@@ -4233,10 +4236,6 @@ var
   /// append a TGuid into lower-cased '3f2504e0-4f89-11d3-9a0c-0305e82c3301' text
   // - this unit defaults to the RTL, but mormot.core.text.pas will override it
   AppendShortUuid: TAppendShortUuid;
-
-  /// return a date/time value as '2026-03-27 13:59:30' UTF-8 text
-  // - slow RTL function in this unit, properly set by mormot.core.datetime.pas
-  DoDateTimeToText: function(dt: TDateTime): RawUtf8;
 
   /// late binding to binary encoding to Base64 or Base64-URI
   // - as used by mormot.net.sock.pas for its NetBinToBase64() function
@@ -6430,12 +6429,13 @@ begin
   AppendShortAnsi7String(AnsiString(LowerCase(copy(GUIDToString(u), 2, 36))), s);
 end;
 
-function _DoDateTimeToText(dt: TDateTime): RawUtf8;
+function OsDateTimeToText(dt: TDateTime): RawUtf8;
 var
-  tmp: string; // avoid to link mormot.core.datetime
+  tmp: TShort23; // avoid to link mormot.core.datetime
 begin
-  DateTimeToString(tmp, 'yyyy-mm-dd hh:nn:ss', dt);
-  _toutf8(tmp, result);
+  tmp[0] := #0;
+  AppendShortDateTime(dt, tmp);
+  ShortStringToAnsi7String(tmp, result);
 end;
 
 function TextToUuid(const text: RawUtf8; out uuid: TGuid): boolean;
@@ -9418,7 +9418,7 @@ function TFileVersion.BuildDateTimeString: RawUtf8;
 begin
   if (fBuildDateTimeString = '') and
      (PInt64(@fBuildDateTime)^ <> 0) then
-    fBuildDateTimeString := DoDateTimeToText(fBuildDateTime);
+    fBuildDateTimeString := OsDateTimeToText(fBuildDateTime);
   result := fBuildDateTimeString;
 end;
 
@@ -12563,7 +12563,6 @@ procedure InitializeUnit;
 begin
   // early initialization needed for those functions
   DoWideCharToUtf8Temp  := _DoWideCharToUtf8Temp;  // mormot.core.unicode
-  DoDateTimeToText      := _DoDateTimeToText;      // mormot.core.datetime
   {$ifdef ISFPC27}
   // we force UTF-8 everywhere on FPC for consistency with Lazarus
   SetMultiByteConversionCodePage(CP_UTF8);

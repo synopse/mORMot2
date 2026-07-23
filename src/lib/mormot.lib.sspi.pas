@@ -1688,8 +1688,8 @@ begin
     '  Signature Algorithm: ', c.AlgorithmName, #13#10 +
     '  Issuer: ', c.IssuerName, #13#10 +
     '  Validity:'#13#10 +
-    '    Not Before: ', DoDateTimeToText(c.NotBefore), #13#10 +
-    '    Not After : ', DoDateTimeToText(c.NotAfter), #13#10 +
+    '    Not Before: ', OsDateTimeToText(c.NotBefore), #13#10 +
+    '    Not After : ', OsDateTimeToText(c.NotAfter), #13#10 +
     '  Subject: ', c.SubjectName, #13#10 +
     '  Subject Public Key Info:'#13#10 +
     '    Public Key Algorithm: ', c.PublicKeyAlgorithmName, #13#10 +
