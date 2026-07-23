@@ -1118,6 +1118,9 @@ procedure AppendShort(const src: ShortString; var dest: ShortString);
 /// shortstring concatenation of an ANSI-7 AnsiString
 procedure AppendShortAnsi7String(const buf: RawByteString; var dest: ShortString);
 
+/// shortstring concatenation of TDateTime as 'yyyy-mm-dd hh:nn:ss' text
+procedure AppendShortDateTime(const dt: TDateTime; var dest: ShortString);
+
 /// simple concatenation of a text buffer into a RawUtf8
 procedure AppendBufferToUtf8(src: PUtf8Char; srclen: PtrInt; var dest: RawUtf8);
 
@@ -1193,8 +1196,8 @@ type
     function(p: PPointerArray; n: pointer; l: TStrLen; c: PtrInt): PtrInt;
 const
   /// raw internal methods for case sensitive (or not) search for a RawUtf8
-  // - expects non-void RawUtf8 values, with ASCII-7 encoding, e.g. as with
-  // TDocVariantData.GetValueIndex() property names
+  // - expects count > 0 and len > 0, i.e. non-void RawUtf8 values, with ASCII-7
+  // encoding, e.g. as with TDocVariantData.GetValueIndex() property names
   FindNonVoid: array[{casesensitive:}boolean] of TFindNonVoid = (
     FindNonVoidRawUtf8I,
     FindNonVoidRawUtf8);
@@ -5705,6 +5708,36 @@ begin
   DoubleToCurrency(Value, PCurrency(@v)^); // specific code for x87
   SimpleRoundTo2DigitsCurr64(v);
   AppendShortCurr64(v, Dest, {decimals=}2);
+end;
+
+procedure AppendShortDateTime(const dt: TDateTime; var dest: ShortString);
+var
+  yy, mm, dd, h, m, s, ms: word;
+  d100: PtrUInt;
+  p: PAnsiChar;
+  tab: PWordArray;
+begin
+  if (dt = 0) or
+     (ord(dest[0]) + 19 > high(dest)) then // 'yyyy-mm-dd hh:nn:ss' output
+    exit;
+  DecodeDate(dt, yy, mm, dd);
+  DecodeTime(dt, h, m, s, ms);
+  p := @dest[ord(dest[0]) + 1];
+  inc(dest[0], 19);
+  tab := @TwoDigitLookupW;
+  d100 := yy div 100; // FPC will use fast reciprocal
+  PCardinal(p)^ := tab[d100];
+  PCardinal(p + 2)^ := tab[yy - (d100 * 100)];
+  p[4] := '-';
+  PCardinal(p + 5)^ := tab[mm];
+  p[7] := '-';
+  PCardinal(p + 8)^ := tab[dd];
+  p[10] := ' ';
+  PCardinal(p + 11)^ := tab[h];
+  p[13] := ':';
+  PCardinal(p + 14)^ := tab[m];
+  p[16] := ':';
+  PCardinal(p + 17)^ := tab[s];
 end;
 
 procedure AppendBufferToUtf8(src: PUtf8Char; srclen: PtrInt; var dest: RawUtf8);
