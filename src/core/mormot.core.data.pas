@@ -4029,7 +4029,9 @@ begin
   if OS_DISTRI > ldUndefined then
     Sender.UpdateText(['os:dist'],       [DISTRI_NAME[OS_DISTRI]]);
   Sender.UpdateTextNotVoid('os:build',    SystemInfo.uts.release);
+  {$ifdef OSLINUXANDROID}
   Sender.UpdateTextNotVoid('os:release',  SystemInfo.release);
+  {$endif OSLINUXANDROID}
   {$else}
   Sender.UpdateTextNotVoid('os:product',  WindowsProductName);
   if WindowsUbr <> 0 then

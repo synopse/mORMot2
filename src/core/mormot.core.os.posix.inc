@@ -5845,7 +5845,7 @@ begin
         AT_CLKTCK:
           SystemInfo.clktck := auxv[1];
       end;
-      auxv := @auxv[2];       // go until the end for crc32c128() below
+      auxv := @auxv[2];
     end;
     crc32c128(@SystemEntropy.Startup, P, PAnsiChar(auxv) - P); // all auxv info
   end;
@@ -5868,8 +5868,10 @@ begin
   SystemInfo.uts.version  := uts.Version;
   SystemInfo.uts.nodename := uts.NodeName;
   OSVersionText := Join([SystemInfo.uts.sysname, ' ', SystemInfo.uts.release]);
+  {$ifdef OSLINUXANDROID}
   if SystemInfo.release <> '' then
     OSVersionText := Join([SystemInfo.release, ' - ', OSVersionText]);
+  {$endif OSLINUXANDROID}
   P := @uts.release[0];
   KernelRevision := _GetNextCardinal(P) shl 16 +
                     _GetNextCardinal(P) shl 8 +
