@@ -208,6 +208,8 @@ type
     {$ifdef OSWINDOWS}
     Tot7z: Int64;
     function Callback7z(const sender: I7zArchive; current, total: Int64): HRESULT;
+    procedure Run7zExtract(const Params: array of const);
+    procedure Run7zUpdate(const Params: array of const);
     {$endif OSWINDOWS}
   public
     procedure Setup; override;
@@ -9733,7 +9735,40 @@ end;
 
 const
   ZIP_EXTS = '*.zip;*.jar;*.docx;*.pptx;*.xlsx;*.xpi;*.odt;*.ods';
-  
+
+procedure TTestCoreCompression.Run7zExtract(const Params: array of const);
+var
+  fn, pw: RawUtf8;
+  f: TFileName;
+  ms: TMemoryStream;
+begin
+  // open archive Params[0] with password Params[1] and extract its first entry
+  Check(VarRecToUtf8IsString(Params[0], fn));
+  Check(VarRecToUtf8IsString(Params[1], pw));
+  Utf8ToFileName(fn, f);
+  ms := TMemoryStream.Create;
+  try
+    New7zReader(f, fhUndefined,
+      Executable.ProgramFilePath + '7z.dll', pw).Extract(0, ms);
+  finally
+    ms.Free;
+  end;
+end;
+
+procedure TTestCoreCompression.Run7zUpdate(const Params: array of const);
+var
+  fn, pw: RawUtf8;
+  f: TFileName;
+  lib: I7zLib;
+begin
+  // open archive Params[0] for update with password Params[1]
+  Check(VarRecToUtf8IsString(Params[0], fn));
+  Check(VarRecToUtf8IsString(Params[1], pw));
+  Utf8ToFileName(fn, f);
+  lib := T7zLib.Create(Executable.ProgramFilePath + '7z.dll');
+  lib.NewWriter(f, fhUndefined, pw);
+end;
+
 procedure TTestCoreCompression._7Zip;
 var
   s: RawByteString;
@@ -9754,112 +9789,154 @@ begin
   Check(T7zLib.FormatDetect(Executable.ProgramFileName, false) = fhPe);
   Check(T7zLib.FormatFileExtension(fhZip) = 'zip');
   Check(T7zLib.FormatFileExtensions(fhZip) = ZIP_EXTS);
-  // validate our 7z wrapper with test1.zip as created by ZipFormat method
-  ZipFile := WorkDir + 'test1.zip';
-  try
-    lib := Executable.ProgramFilePath + '7z.dll';
-    if not FileExists(lib) then
-      exit;
-    // validate I7zReader
-    zin := New7zReader(ZipFile, fhUndefined, lib);
-    Check(zin.Format = fhZip);
-    Check(zin.FormatExt = 'zip');
-    Check(zin.FormatExts = ZIP_EXTS);
-    CheckEqual(zin.Count, 5, 'count');
-    tot1 := 0;
-    for i := 0 to zin.Count - 1 do
-      inc(tot1, zin.Size[i]);
-    {allocconsole; with zin do
-      for i := 0 to Count - 1 do
-         writeln('fullname=',FullName[i], ' zipname=',ZipName[i],
-        ' size=',Size[i], ' packsize=',packsize[i], ' method=',Method[i],
-        ' date=', DateTimeToIso8601text(ModDate[i]));}
-    zin.SetProgressCallback(Callback7z);
-    Tot7z := 0;
-    s := zin.Extract('REP1\ONE.exe');
-    Check(s = Data, 'one');
-    CheckEqual(length(s), Tot7z, 'callbacksizeone');
-    Tot7z := 0;
-    s := zin.Extract('exe.1mb');
-    Check(s = Data, 'exe');
-    CheckEqual(length(s), Tot7z, 'callbacksizeexe');
-    Tot7z := 0;
-    zin.ExtractAll;
-    CheckEqual(tot1, Tot7z, 'callbacksize1');
-    folder := WorkDir + '7zipout';
-    DirectoryDelete(folder);
-    Check(FindFiles(folder) = nil);
-    Tot7z := 0;
-    zin.ExtractAll(folder, {nosubfolder=}true);
-    CheckEqual(tot1, Tot7z, 'callbacksize2');
-    files := FindFiles(folder);
-    CheckEqual(length(files), zin.Count, 'extractto');
-    tot2 := 0;
-    for i := 0 to high(files) do
-      inc(tot2, files[i].Size);
-    CheckEqual(tot1, tot2, 'extractsize');
-    DirectoryDelete(folder);
-    Check(FindFiles(folder) = nil);
-    Tot7z := 0;
-    zin.Extract('exe.1mb', folder);
-    CheckEqual(length(Data), Tot7z, 'extractfileto');
-    Check(length(FindFiles(folder)) = 1);
-    // validate I7zWriter
-    newfile1 := WorkDir + 'from7zadd.zip';
-    newfile2 := WorkDir + 'from7zupd.zip';
-    zout := New7ZWriter(fhZip, lib);
-    zout.AddFile(folder + '\exe.1mb', 'A.1mb');
-    zout.AddBuffer('B.1mb', data);
-    zout.SaveToFile(newfile1);
-    zin := New7zReader(newfile1, fhUndefined, lib);
-    CheckEqual(zin.Count, 2);
-    zin.SetProgressCallback(Callback7z);
-    Tot7z := 0;
-    s := zin.Extract('A.1mb');
-    Check(s = Data, 'a');
-    CheckEqual(length(s), Tot7z, 'callbacksizeexe');
-    s := zin.Extract('B.1mb');
-    Check(s = Data, 'b');
-    s := zin.Extract('C.1mb');
-    CheckEqual(s, '', 'c');
-    zin := nil; // so that we could change the file
-    zout := nil;
-    zout := New7zWriter(newfile1, fhUndefined, lib);
-    zout.SetProgressCallback(Callback7z);
-    Tot7z := 0;
-    zout.AddFile(folder + '\exe.1mb', 'C.1mb');
-    zout.AddBuffer('A.1mb', copy(Data, 1, 200));
-    zout.AddBuffer('void.txt', '');
-    {with zout do
-      for i := 0 to Count - 1 do
-         writeln('fullname=',FullName[i], ' zipname=',ZipName[i],
-        ' size=',Size[i], ' packsize=',packsize[i], ' method=',Method[i],
-        ' date=', DateTimeToIso8601text(ModDate[i]));}
-    CheckEqual(Tot7z, 0);
-    Tot7z := 0;
-    zout.SaveToFile(newfile2);
-    Check(Tot7z <> 0);
-    zout := nil; // so that we could read the file
-    zlib := T7zLib.Create(lib);
-    zin := zlib.NewReader(newfile2);
-    CheckEqual(zin.Count, 4);
-    s := zin.Extract('A.1mb');
-    Check(length(s) = 200, 'ua1');
-    Check(CompareMem(pointer(Data), pointer(s), 200), 'ua2');
-    s := zin.Extract('B.1mb');
-    Check(s = Data, 'ub');
-    s := zin.Extract('C.1mb');
-    Check(s = Data, 'uc');
-    s := zin.Extract('void.txt');
-    CheckEqual(s, '', 'uv');
-    zin := nil; // so that we could delete the file
-    Check(DeleteFile(newfile1));
-    Check(DeleteFile(newfile2));
-    DirectoryDelete(folder);
-    Check(FindFiles(folder) = nil);
-  finally
-    Check(DeleteFile(ZipFile));
-  end;
+  lib := Executable.ProgramFilePath + '7z.dll';
+  if FileExists(lib) then
+    begin
+      // validate I7zReader
+      zin := New7zReader(ZipFile, fhUndefined, lib);
+      Check(zin.Format = fhZip);
+      Check(zin.FormatExt = 'zip');
+      Check(zin.FormatExts = ZIP_EXTS);
+      CheckEqual(zin.Count, 5, 'count');
+      tot1 := 0;
+      for i := 0 to zin.Count - 1 do
+        inc(tot1, zin.Size[i]);
+      {allocconsole; with zin do
+        for i := 0 to Count - 1 do
+           writeln('fullname=',FullName[i], ' zipname=',ZipName[i],
+          ' size=',Size[i], ' packsize=',packsize[i], ' method=',Method[i],
+          ' date=', DateTimeToIso8601text(ModDate[i]));}
+      zin.SetProgressCallback(Callback7z);
+      Tot7z := 0;
+      s := zin.Extract('REP1\ONE.exe');
+      Check(s = Data, 'one');
+      CheckEqual(length(s), Tot7z, 'callbacksizeone');
+      Tot7z := 0;
+      s := zin.Extract('exe.1mb');
+      Check(s = Data, 'exe');
+      CheckEqual(length(s), Tot7z, 'callbacksizeexe');
+      Tot7z := 0;
+      zin.ExtractAll;
+      CheckEqual(tot1, Tot7z, 'callbacksize1');
+      folder := WorkDir + '7zipout';
+      DirectoryDelete(folder);
+      Check(FindFiles(folder) = nil);
+      Tot7z := 0;
+      zin.ExtractAll(folder, {nosubfolder=}true);
+      CheckEqual(tot1, Tot7z, 'callbacksize2');
+      files := FindFiles(folder);
+      CheckEqual(length(files), zin.Count, 'extractto');
+      tot2 := 0;
+      for i := 0 to high(files) do
+        inc(tot2, files[i].Size);
+      CheckEqual(tot1, tot2, 'extractsize');
+      DirectoryDelete(folder);
+      Check(FindFiles(folder) = nil);
+      Tot7z := 0;
+      zin.Extract('exe.1mb', folder);
+      CheckEqual(length(Data), Tot7z, 'extractfileto');
+      Check(length(FindFiles(folder)) = 1);
+      // validate I7zWriter
+      newfile1 := WorkDir + 'from7zadd.zip';
+      newfile2 := WorkDir + 'from7zupd.zip';
+      zout := New7ZWriter(fhZip, lib);
+      zout.AddFile(folder + '\exe.1mb', 'A.1mb');
+      zout.AddBuffer('B.1mb', data);
+      zout.SaveToFile(newfile1);
+      zin := New7zReader(newfile1, fhUndefined, lib);
+      CheckEqual(zin.Count, 2);
+      zin.SetProgressCallback(Callback7z);
+      Tot7z := 0;
+      s := zin.Extract('A.1mb');
+      Check(s = Data, 'a');
+      CheckEqual(length(s), Tot7z, 'callbacksizeexe');
+      s := zin.Extract('B.1mb');
+      Check(s = Data, 'b');
+      s := zin.Extract('C.1mb');
+      CheckEqual(s, '', 'c');
+      zin := nil; // so that we could change the file
+      zout := nil;
+      zout := New7zWriter(newfile1, fhUndefined, lib);
+      zout.SetProgressCallback(Callback7z);
+      Tot7z := 0;
+      zout.AddFile(folder + '\exe.1mb', 'C.1mb');
+      zout.AddBuffer('A.1mb', copy(Data, 1, 200));
+      zout.AddBuffer('void.txt', '');
+      {with zout do
+        for i := 0 to Count - 1 do
+           writeln('fullname=',FullName[i], ' zipname=',ZipName[i],
+          ' size=',Size[i], ' packsize=',packsize[i], ' method=',Method[i],
+          ' date=', DateTimeToIso8601text(ModDate[i]));}
+      CheckEqual(Tot7z, 0);
+      Tot7z := 0;
+      zout.SaveToFile(newfile2);
+      Check(Tot7z <> 0);
+      zout := nil; // so that we could read the file
+      zlib := T7zLib.Create(lib);
+      zin := zlib.NewReader(newfile2);
+      CheckEqual(zin.Count, 4);
+      s := zin.Extract('A.1mb');
+      Check(length(s) = 200, 'ua1');
+      Check(CompareMem(pointer(Data), pointer(s), 200), 'ua2');
+      s := zin.Extract('B.1mb');
+      Check(s = Data, 'ub');
+      s := zin.Extract('C.1mb');
+      Check(s = Data, 'uc');
+      s := zin.Extract('void.txt');
+      CheckEqual(s, '', 'uv');
+      zin := nil; // so that we could delete the file
+      Check(DeleteFile(newfile1));
+      Check(DeleteFile(newfile2));
+      DirectoryDelete(folder);
+      Check(FindFiles(folder) = nil);
+      // validate ZipCrypto password and extraction failure detection
+      newfile1 := WorkDir + 'pass.zip';
+      zout := zlib.NewWriter(fhZip);
+      zout.SetPassword('password');
+      zout.SetEncryptionMethod(emZipCrypto);
+      zout.AddBuffer('A.1mb', Data);
+      zout.SaveToFile(newfile1);
+      zout := nil;
+      // the correct password round-trips the content
+      zin := zlib.NewReader(newfile1, fhZip, 'password');
+      CheckEqual(zin.Count, 1, 'pw1');
+      Check(zin.Extract('A.1mb') = Data, 'pw2');
+      zin := nil;
+      // a wrong password is reported as failure, not silently swallowed
+      zin := zlib.NewReader(newfile1, fhZip, 'wrongpassword');
+      Check(not zin.Extract('A.1mb', folder, {nosubfolder=}true), 'pw3');
+      CheckEqual(zin.Extract('A.1mb'), '', 'pw4');
+      zin := nil;
+      // a wrong password raises E7Zip on direct item extraction
+      CheckRaised(Run7zExtract, [newfile1, 'wrongpassword'], E7Zip, 'pw5');
+      DirectoryDelete(folder);
+      Check(DeleteFile(newfile1));
+      // validate a .7z with encrypted headers (7z -mhe=on)
+      newfile2 := WorkDir + 'mhe.7z';
+      zout := zlib.NewWriter(fh7z);
+      zout.SetPassword('password');
+      zout.EncryptHeaders7z(true);
+      zout.AddBuffer('A.1mb', Data);
+      zout.SaveToFile(newfile2);
+      zout := nil;
+      // without the password, it can neither be opened nor updated
+      CheckRaised(Run7zExtract, [newfile2, ''], E7Zip, 'mhe1');
+      CheckRaised(Run7zUpdate, [newfile2, ''], E7Zip, 'mhe2');
+      // NewWriter() with the password can update the existing archive
+      zout := zlib.NewWriter(newfile2, fh7z, 'password');
+      zout.SetPassword('password');
+      zout.EncryptHeaders7z(true);
+      zout.AddBuffer('B.1mb', Data);
+      zout.SaveToFile(newfile2);
+      zout := nil;
+      zin := zlib.NewReader(newfile2, fh7z, 'password');
+      CheckEqual(zin.Count, 2, 'mhe3');
+      Check(zin.Extract('A.1mb') = Data, 'mhe4');
+      Check(zin.Extract('B.1mb') = Data, 'mhe5');
+      zin := nil;
+      Check(DeleteFile(newfile2));
+    end;
+  Check(DeleteFile(ZipFile));
 end;
 
 function TTestCoreCompression.Callback7z(const sender: I7zArchive;

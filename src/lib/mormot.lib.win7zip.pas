@@ -780,8 +780,11 @@ type
     function NewWriter(fmt: T7zFormatHandler): I7zWriter; overload;
     /// factory of the main I7zWriter high-level archive compressor
     // - will guess the file format from its existing content by default
+    // - supply pw to update an archive with encrypted headers (7z -mhe=on),
+    // which can not be opened - not even to list it - without the password
     function NewWriter(const name: TFileName;
-      fmt: T7zFormatHandler = fhUndefined): I7zWriter; overload;
+      fmt: T7zFormatHandler = fhUndefined;
+      const pw: RawUtf8 = ''): I7zWriter; overload;
   end;
 
   /// implement the main loader and factory for 7z.dll
@@ -822,7 +825,8 @@ type
       const pw: RawUtf8 = ''): I7zReader; overload;
     function NewWriter(fmt: T7zFormatHandler): I7zWriter; overload;
     function NewWriter(const name: TFileName;
-      fmt: T7zFormatHandler = fhUndefined): I7zWriter; overload;
+      fmt: T7zFormatHandler = fhUndefined;
+      const pw: RawUtf8 = ''): I7zWriter; overload;
   end;
 
 
@@ -1044,6 +1048,11 @@ type
       FileName: TFileName;
       Created, Accessed, Written: Int64; // from VT_FILETIME VInt64
     end;
+    // worst per-item result seen since the last extraction started; recorded by
+    // SetOperationResult (never raised there - that runs inside a 7z.dll stdcall
+    // callback) and checked on the Delphi side by RaiseIfExtractFailed
+    fExtractOpResult: T7zExtractOperationResult;
+    procedure RaiseIfExtractFailed(const Context: ShortString);
     function GetProp(item: cardinal; prop: TPropID): T7zVariant;
     procedure GetPropUtf8(item: cardinal; prop: TPropID; out dest: RawUtf8);
     function GetPropDateTime(item: cardinal; prop: TPropID): TDateTime;
@@ -1593,9 +1602,12 @@ begin
   result := T7zWriter.Create(self, fmt, {libowned=}false);
 end;
 
-function T7zLib.NewWriter(const name: TFileName; fmt: T7zFormatHandler): I7zWriter;
+function T7zLib.NewWriter(const name: TFileName; fmt: T7zFormatHandler;
+  const pw: RawUtf8): I7zWriter;
 begin
-  result := T7zWriter.Create(self, NewReader(name, fmt), {libowned=}false);
+  // pw is needed for the update reader below to open an archive with encrypted
+  // headers (7z -mhe=on), whose entry list is unreadable without it
+  result := T7zWriter.Create(self, NewReader(name, fmt, pw), {libowned=}false);
 end;
 
 
@@ -2064,10 +2076,12 @@ procedure T7zReader.Extract(item: cardinal; Stream: TStream);
 begin
   EnsureOpened;
   fStream := Stream;
+  fExtractOpResult := eorOK;
   try
     E7Zip.CheckOk(self, 'Extract',
       fInArchive.Extract(
         @item, 1, ord(Stream = nil), self as IArchiveExtractCallback));
+    RaiseIfExtractFailed('Extract'); // e.g. wrong ZipCrypto password -> eorCRCError
   finally
     fStream := nil;
   end;
@@ -2079,10 +2093,12 @@ begin
   EnsureOpened;
   fExtractPath := EnsureDirectoryExists(path, E7Zip);
   fExtractPathNoSubFolder := nosubfolder;
+  fExtractOpResult := eorOK;
   try
     E7Zip.CheckOk(self, 'Extract',
       fInArchive.Extract(
         @item, 1, {test=}0, self as IArchiveExtractCallback));
+    RaiseIfExtractFailed('Extract');
   finally
     fExtractPath := '';
   end;
@@ -2204,9 +2220,24 @@ begin
           {$else}
           FileSetDateFromUnixUtc(FileName, FileTimeToUnixTime(PFileTime(@Written)^));
           {$endif OSWINDOWS}
+  else
+    // record the first failure (e.g. eorWrongPassword / eorCRCError); do NOT
+    // raise here - this runs inside a 7z.dll stdcall callback. The Delphi-side
+    // Extract*/ RaiseIfExtractFailed turns it into an exception once the DLL
+    // call returns. Without this, a wrong password or corrupt entry was silently
+    // ignored and produced a garbage output file.
+    if fExtractOpResult = eorOK then
+      fExtractOpResult := opResult;
   end;
   fExtractCurrent.FileName := '';
   result := S_OK;
+end;
+
+procedure T7zReader.RaiseIfExtractFailed(const Context: ShortString);
+begin
+  if fExtractOpResult <> eorOK then
+    E7Zip.RaiseUtf8('%.%: extract failed (operation result %)',
+      [self, Context, ord(fExtractOpResult)]);
 end;
 
 function T7zReader.SetTotal(files, bytes: PInt64): HRESULT;
@@ -2247,9 +2278,11 @@ begin
   MoveFast(items[0], sorted[0], n shl 2);
   QuickSortInteger(sorted); // indexes should be sorted
   fExtractCallback := callback;
+  fExtractOpResult := eorOK;
   try
     E7Zip.CheckOk(self, 'Extract', fInArchive.Extract(pointer(sorted), n,
       ord(Assigned(callback)), self as IArchiveExtractCallback));
+    RaiseIfExtractFailed('Extract');
   finally
     fExtractCallback := nil;
   end;
@@ -2259,9 +2292,11 @@ procedure T7zReader.ExtractAll(const callback: T7zGetStreamCallBack);
 begin
   EnsureOpened;
   fExtractCallback := callback;
+  fExtractOpResult := eorOK;
   try
     E7Zip.CheckOk(self, 'ExtractAll', fInArchive.Extract(
       nil, $ffffffff, ord(Assigned(callback)), self as IArchiveExtractCallback));
+    RaiseIfExtractFailed('ExtractAll');
   finally
     fExtractCallback := nil;
   end;
@@ -2272,9 +2307,11 @@ begin
   EnsureOpened;
   fExtractPath := EnsureDirectoryExists(path, E7Zip);
   fExtractPathNoSubFolder := nosubfolder;
+  fExtractOpResult := eorOK;
   try
     E7Zip.CheckOk(self, 'ExtractAll', fInArchive.Extract(
       nil, $ffffffff, 0, self as IArchiveExtractCallback));
+    RaiseIfExtractFailed('ExtractAll');
   finally
     fExtractPath := '';
   end;
