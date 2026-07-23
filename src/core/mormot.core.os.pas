@@ -1301,8 +1301,6 @@ type
     /// retrieve the version as a 32-bit integer with Major.Minor.Release
     // - following "Major shl 16 + Minor shl 8 + Release" pattern
     function Version32: integer;
-    /// build date and time of this exe file, as plain text
-    function BuildDateTimeString: RawUtf8;
     /// version info of the exe file as '3.1.0.123' or ''
     // - this method returns '' if Detailed is '0.0.0.0'
     // - see Main property if '3.1' is enough e.g. to safely identify a server
@@ -1321,6 +1319,9 @@ type
     // - includes FileName (without path), Detailed and BuildDateTime properties
     // - e.g. 'myprogram.exe 3.1.0.123 2016-06-14 19:07:55'
     class function GetVersionInfo(const aFileName: TFileName): RawUtf8;
+    /// build date and time of this exe file, as plain text
+    property BuildDateTimeString: RawUtf8
+      read fBuildDateTimeString;
   published
     /// version info of the exe file as '3.1.0.123'
     // - return "string" type, i.e. UnicodeString for Delphi 2009+
@@ -9314,15 +9315,12 @@ begin
 end;
 
 procedure TFileVersion.SetBuildDateTime(Value: TDateTime);
-var
-  m, d: word;
 begin
   if Value = 0 then // get build date from executable file timestamp as fallback
     Value := FileAgeToDateTime(fFileName);
   fBuildDateTime := Value;
-  if Value <> 0 then
-    DecodeDate(Value, BuildYear, m, d);
-  fBuildDateTimeString := ''; // delayed cached value in BuildDateTimeString
+  fBuildDateTimeString := OsDateTimeToText(Value);
+  BuildYear := GetCardinal(pointer(fBuildDateTimeString));
 end;
 
 function TFileVersion.SetVersion(aMajor, aMinor, aRelease, aBuild: integer): boolean;
@@ -9399,9 +9397,9 @@ var
 begin
   result := SetVersion(fMS shr 16, fMS and 65535, fLS shr 16, fLS and 65535);
   if (dLS = 0) or
-     (dMS = 0) then
+     (dMS = 0) then // not build date in the resource - will use file timestamp
     exit;
-  ft.dwLowDateTime  := dLS; // built date from version info FILETIME
+  ft.dwLowDateTime  := dLS;
   ft.dwHighDateTime := dMS;
   SetBuildDateTime(FileTimeToDateTime(ft)); // cross-platform
 end;
@@ -9412,14 +9410,6 @@ begin
     result := 0
   else
     result := Major shl 16 + Minor shl 8 + Release;
-end;
-
-function TFileVersion.BuildDateTimeString: RawUtf8;
-begin
-  if (fBuildDateTimeString = '') and
-     (PInt64(@fBuildDateTime)^ <> 0) then
-    fBuildDateTimeString := OsDateTimeToText(fBuildDateTime);
-  result := fBuildDateTimeString;
 end;
 
 function TFileVersion.DetailedOrVoid: string;
