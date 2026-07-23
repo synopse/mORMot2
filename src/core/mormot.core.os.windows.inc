@@ -713,9 +713,9 @@ begin
     WinError(error, 0, @dest, nil); // fallback to FormatMessageW
 end;
 
-procedure OsErrorShort(Code: cardinal; var Dest: ShortString; NoInt: boolean);
+procedure OsErrorShortVar(Code: cardinal; var Dest: ShortString; NoInt: boolean);
 begin
-  WinErrorShort(Code, Dest, NoInt);
+  WinErrorShortVar(Code, Dest, NoInt);
 end;
 
 procedure RaiseLastModuleError(const Context: ShortString; Lib: HMODULE;
