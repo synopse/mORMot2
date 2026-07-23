@@ -5610,6 +5610,15 @@ begin
   result := _BiosInfoText;
 end;
 
+const // from auxvec.h - note: AT_*_CACHESIZE only for riscv/powerpc
+  AT_PAGESZ        = 6;
+  AT_UID           = 11;
+  AT_GID           = 13;
+  AT_PLATFORM      = 15;
+  AT_CLKTCK        = 17;
+  AT_RANDOM        = 25;
+  AT_EXECFN        = 31;
+
 {$endif OSLINUXANDROID}
 
 {$ifdef CPUARM3264} // POSIX libc is faster than FPC RTL or our pascal code
@@ -5807,6 +5816,39 @@ begin
   // OSLINUXANDROID branch
   SystemInfo.release := release;
   OS_DISTRI := LinuxDistribution(OS_KIND);
+  auxv := pointer(envp); // read auxiliary vectors
+  if auxv <> nil then
+  begin
+    while auxv[0] <> 0 do
+      auxv := @auxv[1];
+    auxv := @auxv[1]; // set by kernel's ELF binary loader after all env PPAnsiChar
+    P := pointer(auxv);
+    while auxv[0] <> 0 do
+    begin
+      case auxv[0] of
+        AT_RANDOM: // 16 random bytes (for stack canaries) since kernel 2.6.29
+          with SystemEntropy do // see https://lwn.net/Articles/519085/
+          begin
+            LiveFeed := PHash128Rec(auxv[1])^; // great initial source from Kernel
+            XorMemory(Startup, PHash128Rec(auxv[1])^); // won't hurt
+          end;
+        AT_PAGESZ:
+          SystemInfo.dwPageSize := auxv[1];
+        AT_UID:
+          PosixUid := auxv[1];
+        AT_GID:
+          PosixGid := auxv[1];
+        AT_PLATFORM:
+          SystemInfo.platform := pointer(auxv[1]);
+        AT_EXECFN:
+          SystemInfo.execfn := pointer(auxv[1]);
+        AT_CLKTCK:
+          SystemInfo.clktck := auxv[1];
+      end;
+      auxv := @auxv[2];       // go until the end for crc32c128() below
+    end;
+    crc32c128(@SystemEntropy.Startup, P, PAnsiChar(auxv) - P); // all auxv info
+  end;
   if SystemInfo.dwPageSize = 0 then
     SystemInfo.dwPageSize := 4096; // paranoid - the libc uses AT_PAGESZ also
   SystemInfo.dwNumberOfProcessors := CpuThreads; // sched_getaffinity syscall
@@ -5948,28 +5990,6 @@ begin
   end;
   {$endif OSPTHREADSLIB}
   {$endif OSDARWIN}
-  {$ifdef OSLINUXANDROID}
-  // add entropy from auxiliary vectors - https://lwn.net/Articles/519085/
-  auxv := pointer(envp);
-  if auxv <> nil then
-  begin
-    while auxv[0] <> 0 do
-      auxv := @auxv[1];
-    auxv := @auxv[1]; // set by kernel's ELF binary loader after all env PPAnsiChar
-    P := pointer(auxv);
-    while auxv[0] <> 0 do
-    begin
-      if auxv[0] = 25 then    // AT_RANDOM: 16 random bytes (for stack canaries)
-        with SystemEntropy do // available since kernel 2.6.29
-        begin
-          LiveFeed := PHash128Rec(auxv[1])^; // great initial source from Kernel
-          XorMemory(Startup, PHash128Rec(auxv[1])^); // won't hurt
-        end;
-      auxv := @auxv[2];       // go until the end for crc32c128() below
-    end;
-    crc32c128(@SystemEntropy.Startup, P, PAnsiChar(auxv) - P); // all auxv info
-  end;
-  {$endif OSLINUXANDROID}
   // CpuCache, Executable.Hash, CpuFeatures will be added in main mormot.core.os
 end;
 
