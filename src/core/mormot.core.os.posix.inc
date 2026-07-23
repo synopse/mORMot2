@@ -850,7 +850,8 @@ end;
 
 {$ifdef FPC} // if not in mormot.core.os.delphi.pas
 
-{$if declared(TTZInfo)}
+{$if declared(TTZInfo) and
+     not defined(OSANDROID)}
 // TTZInfo is the new native FPC way of handling time zones on POSIX
 
 function GetLocalBias(I64: TUnixTime): PtrInt; inline;
