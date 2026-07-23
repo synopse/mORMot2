@@ -477,6 +477,8 @@ Two gotchas are worth knowing before you rely on it:
 
 > **This section is not about a framework rule. It is about a possible blueprint** Use it as a possible starting point. It is a coherent default for a new service in a non-trivial codebase. You can adopt it and deviate where your domain differs. It consolidates the SOA/DDD guidance from [Chapter 15](mORMot2-SAD-Chapter-15.md), [Chapter 16](mORMot2-SAD-Chapter-16.md), and [Chapter 24](mORMot2-SAD-Chapter-24.md).
 
+> **Worked example.** The [`recommended-patterns`](../ex/recommended-patterns) sample is a full, compilable application that follows this blueprint end to end: a DDD + CQRS task manager built with FPC, hosting its own *SQLite3* database with *FTS5* full-text search, exposing interface-based Query/Command services over SOA, and organised as `dom/ infra/ app/` feature modules with interchangeable in-process and HTTP client backends. The `§`/`A.x`/`B.x` references throughout its docs point back to this guide.
+
 ### B.1. Storage behind an interface
 
 Every service exposes an `IXxxRepository` (or a CQRS pair, see [B.4](#b4-cqrs-readwrite-split)) in the domain layer. Multi-tenancy: per-tenant SQLite when data is tenant-scoped; a single shared database otherwise.

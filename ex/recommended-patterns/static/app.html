@@ -1,0 +1,1048 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mORMot2 Task Manager - Full Featured</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .sidebar {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+
+        .main-panel {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .section-title {
+            font-size: 1.3em;
+            margin-bottom: 15px;
+            color: #667eea;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input[type="text"],
+        input[type="date"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .btn-success {
+            background: #28a745;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .filter-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            flex: 1;
+            min-width: 100px;
+        }
+
+        .filter-btn.active {
+            background: #764ba2;
+        }
+
+        .tasks-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .task-card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            border-left: 4px solid #667eea;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .task-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+
+        .task-card.completed {
+            opacity: 0.7;
+            border-left-color: #28a745;
+        }
+
+        .task-card.priority-high {
+            border-left-color: #dc3545;
+        }
+
+        .task-card.priority-medium {
+            border-left-color: #ffc107;
+        }
+
+        .task-card.priority-low {
+            border-left-color: #17a2b8;
+        }
+
+        .task-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .task-description {
+            color: #666;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+        }
+
+        .task-meta {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+            font-size: 0.85em;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .badge-priority {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .badge-priority.high {
+            background: #dc3545;
+            color: white;
+        }
+
+        .badge-priority.medium {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .badge-priority.low {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .badge-status {
+            background: #6c757d;
+            color: white;
+        }
+
+        .task-tags {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .tag {
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            color: white;
+            font-weight: 500;
+        }
+
+        .task-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .message {
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .modal-title {
+            font-size: 1.8em;
+            color: #333;
+        }
+
+        .close-btn {
+            background: none;
+            color: #999;
+            font-size: 2em;
+            padding: 0;
+            width: 40px;
+            height: 40px;
+            line-height: 40px;
+            text-align: center;
+        }
+
+        .close-btn:hover {
+            color: #333;
+            background: #f0f0f0;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .comments-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #e0e0e0;
+        }
+
+        .comment {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 3px solid #667eea;
+        }
+
+        .comment-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .comment-author {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .comment-date {
+            font-size: 0.85em;
+            color: #999;
+        }
+
+        .comment-content {
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .comment-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .tag-list {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+
+        .tag-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.9em;
+        }
+
+        .tag-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 0 3px rgba(0,0,0,0.3);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            .tasks-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📋 mORMot2 Task Manager</h1>
+            <p>Full-Featured Task Management with Comments & Tags</p>
+        </header>
+
+        <div id="messageContainer"></div>
+
+        <div class="main-content">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <h2 class="section-title">➕ Create Task</h2>
+                <form id="createTaskForm">
+                    <div class="form-group">
+                        <label for="taskTitle">Title *</label>
+                        <input type="text" id="taskTitle" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="taskDescription">Description</label>
+                        <textarea id="taskDescription"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="taskPriority">Priority</label>
+                        <select id="taskPriority">
+                            <option value="1">Low</option>
+                            <option value="2" selected>Medium</option>
+                            <option value="3">High</option>
+                            <option value="4">Urgent</option>
+                            <option value="5">Critical</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="taskDueDate">Due Date</label>
+                        <input type="date" id="taskDueDate">
+                    </div>
+                    <button type="submit">Create Task</button>
+                </form>
+
+                <h2 class="section-title" style="margin-top: 30px;">🏷️ Tag Management</h2>
+                <form id="createTagForm">
+                    <div class="form-group">
+                        <label for="tagName">Tag Name *</label>
+                        <input type="text" id="tagName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="tagColor">Color</label>
+                        <input type="color" id="tagColor" value="#667eea">
+                    </div>
+                    <button type="submit">Create Tag</button>
+                </form>
+
+                <div id="tagsList" style="margin-top: 15px;"></div>
+            </div>
+
+            <!-- Main Panel -->
+            <div class="main-panel">
+                <div class="stats-grid" id="statsGrid"></div>
+
+                <div class="filter-buttons">
+                    <button class="filter-btn active" data-filter="all">All Tasks</button>
+                    <button class="filter-btn" data-filter="pending">Pending</button>
+                    <button class="filter-btn" data-filter="in_progress">In Progress</button>
+                    <button class="filter-btn" data-filter="completed">Completed</button>
+                </div>
+
+                <div id="tasksContainer" class="tasks-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Task Detail Modal -->
+    <div id="taskModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalTaskTitle"></h2>
+                <button class="close-btn" onclick="closeTaskModal()">&times;</button>
+            </div>
+            <div id="modalTaskContent"></div>
+        </div>
+    </div>
+
+    <script>
+        // This page talks to the CQRS SOA services exposed by the server:
+        //   TaskQuery / TaskCommand / TagQuery / TagCommand
+        // Each method is called as POST /taskmanager/<Service>.<Method> with a
+        // JSON array of parameters, and DTO fields travel in camelCase
+        // (see API.md). Comments and tag IDs are embedded in TTaskViewDTO, so
+        // the detail view needs a single GetTaskView call.
+        const API_BASE = '/taskmanager';
+        let currentFilter = 'all';
+        let allTasks = [];          // TTaskListItemDTO[]
+        let allTags = [];           // TTagViewDTO[]
+        let tagCache = {};          // tag id -> TTagViewDTO
+        let currentTaskId = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            setupEventListeners();
+            // tags first so the cache is ready when tasks/detail render
+            loadTags().then(loadTasks);
+        });
+
+        function setupEventListeners() {
+            document.getElementById('createTaskForm').addEventListener('submit', createTask);
+            document.getElementById('createTagForm').addEventListener('submit', createTag);
+
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentFilter = btn.dataset.filter;
+                    displayTasks();
+                });
+            });
+        }
+
+        // --- SOA/CQRS API helpers (same contract as static/index.html) ---
+        async function soaCall(service, method, params) {
+            const response = await fetch(`${API_BASE}/${service}.${method}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(params)
+            });
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(`${response.status}: ${text}`);
+            }
+            return response.json();
+        }
+
+        // mORMot wraps a method result as {"Result": <value>} (with
+        // ResultAsJsonObjectWithoutResult) or {"result": [<value>]} (default).
+        function unwrapResult(data) {
+            if (data && data.Result !== undefined) {
+                return data.Result;
+            }
+            if (data && data.result !== undefined) {
+                const r = data.result;
+                if (Array.isArray(r) && r.length === 1) {
+                    return r[0];
+                }
+                return r;
+            }
+            return data;
+        }
+
+        // --- Loading ---
+        async function loadTags() {
+            try {
+                const tags = unwrapResult(await soaCall('TagQuery', 'ListTags', []));
+                allTags = Array.isArray(tags) ? tags : [];
+                tagCache = {};
+                allTags.forEach(t => { tagCache[t.iD] = t; });
+                displayTagsList();
+            } catch (error) {
+                console.error('Error loading tags:', error);
+            }
+        }
+
+        async function loadTasks() {
+            try {
+                const tasks = unwrapResult(await soaCall('TaskQuery', 'ListTasks', ['']));
+                allTasks = Array.isArray(tasks) ? tasks : [];
+                displayTasks();
+                updateStats();
+            } catch (error) {
+                showMessage(`Error loading tasks: ${error.message}`, 'error');
+            }
+        }
+
+        // --- Commands ---
+        async function createTask(e) {
+            e.preventDefault();
+            const dto = {
+                title: document.getElementById('taskTitle').value,
+                description: document.getElementById('taskDescription').value,
+                priority: parseInt(document.getElementById('taskPriority').value),
+                dueDate: document.getElementById('taskDueDate').value || ''
+            };
+            try {
+                const result = unwrapResult(await soaCall('TaskCommand', 'CreateTask', [dto]));
+                if (result && result.success) {
+                    showMessage('Task created successfully!', 'success');
+                    document.getElementById('createTaskForm').reset();
+                    loadTasks();
+                } else {
+                    showMessage(`Error: ${result ? result.errorMessage : 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Error creating task: ${error.message}`, 'error');
+            }
+        }
+
+        async function createTag(e) {
+            e.preventDefault();
+            const dto = {
+                name: document.getElementById('tagName').value,
+                color: document.getElementById('tagColor').value
+            };
+            try {
+                const result = unwrapResult(await soaCall('TagCommand', 'CreateTag', [dto]));
+                if (result && result.success) {
+                    showMessage('Tag created successfully!', 'success');
+                    document.getElementById('createTagForm').reset();
+                    loadTags();
+                } else {
+                    showMessage(`Error: ${result ? result.errorMessage : 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Error creating tag: ${error.message}`, 'error');
+            }
+        }
+
+        async function deleteTask(taskId) {
+            if (!confirm('Are you sure you want to delete this task?')) return;
+            try {
+                const result = unwrapResult(await soaCall('TaskCommand', 'DeleteTask', [taskId]));
+                if (result && result.success) {
+                    showMessage('Task deleted!', 'success');
+                    closeTaskModal();
+                    loadTasks();
+                } else {
+                    showMessage(`Error: ${result ? result.errorMessage : 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Error deleting task: ${error.message}`, 'error');
+            }
+        }
+
+        async function toggleComplete(taskId, isCompleted) {
+            try {
+                const result = unwrapResult(
+                    await soaCall('TaskCommand', 'MarkComplete', [taskId, !isCompleted]));
+                if (result && result.success) {
+                    showMessage('Task updated!', 'success');
+                    loadTasks();
+                } else {
+                    showMessage(`Error: ${result ? result.errorMessage : 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Error updating task: ${error.message}`, 'error');
+            }
+        }
+
+        // --- Task list rendering ---
+        function displayTasks() {
+            const container = document.getElementById('tasksContainer');
+            let tasks = allTasks;
+
+            if (currentFilter !== 'all') {
+                tasks = tasks.filter(task => task.status === currentFilter);
+            }
+
+            if (tasks.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <h3>No tasks found</h3>
+                        <p>Create your first task to get started!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = tasks.map(task => `
+                <div class="task-card ${task.isCompleted ? 'completed' : ''} priority-${getPriorityClass(task.priority)}"
+                     onclick="showTaskDetail(${task.iD})">
+                    <div class="task-title">${escapeHtml(task.title)}</div>
+                    <div class="task-meta">
+                        <span class="badge badge-priority ${getPriorityClass(task.priority)}">
+                            ${escapeHtml(task.priorityName)}
+                        </span>
+                        <span class="badge badge-status">${task.status}</span>
+                        ${task.dueDate ? `<span>📅 ${formatDay(task.dueDate)}</span>` : ''}
+                        ${task.commentCount > 0 ? `<span>💬 ${task.commentCount}</span>` : ''}
+                        ${task.tagCount > 0 ? `<span>🏷️ ${task.tagCount}</span>` : ''}
+                    </div>
+                    <div class="task-actions" onclick="event.stopPropagation()">
+                        <button class="btn-small ${task.isCompleted ? 'btn-secondary' : 'btn-success'}"
+                                onclick="toggleComplete(${task.iD}, ${task.isCompleted})">
+                            ${task.isCompleted ? '↩️ Reopen' : '✓ Complete'}
+                        </button>
+                        <button class="btn-small btn-danger" onclick="deleteTask(${task.iD})">
+                            🗑️ Delete
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // --- Task detail modal (driven by a single GetTaskView) ---
+        async function showTaskDetail(taskId) {
+            currentTaskId = taskId;
+            let task;
+            try {
+                task = unwrapResult(await soaCall('TaskQuery', 'GetTaskView', [taskId]));
+            } catch (error) {
+                showMessage(`Error loading task: ${error.message}`, 'error');
+                return;
+            }
+            if (!task) return;
+
+            document.getElementById('modalTaskTitle').textContent = task.title;
+
+            const content = `
+                <div style="margin-bottom: 20px;">
+                    <p><strong>Description:</strong> ${escapeHtml(task.description || 'No description')}</p>
+                    <p><strong>Priority:</strong> <span class="badge badge-priority ${getPriorityClass(task.priority)}">${escapeHtml(task.priorityName)}</span></p>
+                    <p><strong>Status:</strong> ${task.status}</p>
+                    <p><strong>Due Date:</strong> ${formatDay(task.dueDate)}</p>
+                    <p><strong>Created:</strong> ${formatTimestamp(task.createdAt)}</p>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <h3>Tags</h3>
+                    <div id="taskDetailTags"></div>
+                    <div style="margin-top: 10px;">
+                        <select id="addTagSelect" style="width: 200px; display: inline-block; margin-right: 10px;">
+                            <option value="">-- Select Tag --</option>
+                        </select>
+                        <button class="btn-small" onclick="addTagToTask()">Add Tag</button>
+                    </div>
+                </div>
+
+                <div class="comments-section">
+                    <h3>Comments</h3>
+                    <div id="commentsContainer"></div>
+
+                    <h4 style="margin-top: 20px;">Add Comment</h4>
+                    <form id="addCommentForm" onsubmit="addComment(event)">
+                        <div class="form-group">
+                            <input type="text" id="commentAuthor" placeholder="Your name" required>
+                        </div>
+                        <div class="form-group">
+                            <textarea id="commentContent" placeholder="Write a comment..." required></textarea>
+                        </div>
+                        <button type="submit">Add Comment</button>
+                    </form>
+                </div>
+            `;
+
+            document.getElementById('modalTaskContent').innerHTML = content;
+            document.getElementById('taskModal').classList.add('active');
+
+            // Populate the tag <select> from the loaded tag list
+            const tagSelect = document.getElementById('addTagSelect');
+            allTags.forEach(tag => {
+                const option = document.createElement('option');
+                option.value = tag.iD;
+                option.textContent = tag.name;
+                tagSelect.appendChild(option);
+            });
+
+            renderTaskDetailTags(task.tagIDs);
+            renderComments(task.comments);
+        }
+
+        function renderTaskDetailTags(tagIDs) {
+            const container = document.getElementById('taskDetailTags');
+            if (!container) return;
+            if (tagIDs && tagIDs.length > 0) {
+                container.innerHTML = tagIDs.map(id => {
+                    const tag = tagCache[id];
+                    const color = tag ? tag.color : '#999999';
+                    const name = tag ? tag.name : ('#' + id);
+                    return `
+                        <span class="tag-item" style="background-color: ${color}20; color: ${color}; border: 1px solid ${color};">
+                            <span class="tag-color" style="background-color: ${color}"></span>
+                            ${escapeHtml(name)}
+                            <button class="btn-small" style="padding: 2px 6px; margin-left: 5px;"
+                                    onclick="removeTagFromTask(${id})">×</button>
+                        </span>
+                    `;
+                }).join('');
+            } else {
+                container.innerHTML = '<p style="color: #999;">No tags assigned</p>';
+            }
+        }
+
+        async function addTagToTask() {
+            const tagId = parseInt(document.getElementById('addTagSelect').value);
+            if (!tagId) return;
+            try {
+                const result = unwrapResult(
+                    await soaCall('TaskCommand', 'AddTag', [currentTaskId, tagId]));
+                if (result && result.success) {
+                    showMessage('Tag added!', 'success');
+                    await showTaskDetail(currentTaskId); // refresh modal
+                    loadTasks();                          // refresh tag counts
+                } else {
+                    showMessage(`Error: ${result ? result.errorMessage : 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Error adding tag: ${error.message}`, 'error');
+            }
+        }
+
+        async function removeTagFromTask(tagId) {
+            try {
+                const result = unwrapResult(
+                    await soaCall('TaskCommand', 'RemoveTag', [currentTaskId, tagId]));
+                if (result && result.success) {
+                    showMessage('Tag removed!', 'success');
+                    await showTaskDetail(currentTaskId);
+                    loadTasks();
+                } else {
+                    showMessage(`Error: ${result ? result.errorMessage : 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Error removing tag: ${error.message}`, 'error');
+            }
+        }
+
+        // --- Comments (embedded in the task aggregate, addressed by index) ---
+        function renderComments(comments) {
+            const container = document.getElementById('commentsContainer');
+            if (!container) return;
+            if (comments && comments.length > 0) {
+                container.innerHTML = comments.map((comment, index) => `
+                    <div class="comment">
+                        <div class="comment-header">
+                            <span class="comment-author">${escapeHtml(comment.author)}</span>
+                            <span class="comment-date">${formatTimestamp(comment.createdAt)}${comment.isEdited ? ' (edited)' : ''}</span>
+                        </div>
+                        <div class="comment-content">${escapeHtml(comment.content)}</div>
+                        <div class="comment-actions">
+                            <button class="btn-small btn-danger" onclick="deleteComment(${index})">Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                container.innerHTML = '<p style="color: #999;">No comments yet. Be the first to comment!</p>';
+            }
+        }
+
+        async function addComment(e) {
+            e.preventDefault();
+            const dto = {
+                taskID: currentTaskId,
+                content: document.getElementById('commentContent').value,
+                author: document.getElementById('commentAuthor').value
+            };
+            try {
+                const result = unwrapResult(await soaCall('TaskCommand', 'AddComment', [dto]));
+                if (result && result.success) {
+                    showMessage('Comment added!', 'success');
+                    await showTaskDetail(currentTaskId);
+                    loadTasks(); // refresh comment counts
+                } else {
+                    showMessage(`Error: ${result ? result.errorMessage : 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Error adding comment: ${error.message}`, 'error');
+            }
+        }
+
+        async function deleteComment(commentIndex) {
+            if (!confirm('Delete this comment?')) return;
+            try {
+                const result = unwrapResult(
+                    await soaCall('TaskCommand', 'DeleteComment', [currentTaskId, commentIndex]));
+                if (result && result.success) {
+                    showMessage('Comment deleted!', 'success');
+                    await showTaskDetail(currentTaskId);
+                    loadTasks();
+                } else {
+                    showMessage(`Error: ${result ? result.errorMessage : 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`Error deleting comment: ${error.message}`, 'error');
+            }
+        }
+
+        // --- Sidebar tag list ---
+        function displayTagsList() {
+            const container = document.getElementById('tagsList');
+            if (!allTags || allTags.length === 0) {
+                container.innerHTML = '<p style="color: #999; font-size: 0.9em;">No tags yet</p>';
+                return;
+            }
+            container.innerHTML = '<div style="font-size: 0.9em;">' + allTags.map(tag => `
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 5px; background: ${tag.color}20; border-radius: 5px;">
+                    <span class="tag-color" style="background-color: ${tag.color}; width: 12px; height: 12px;"></span>
+                    <span style="flex: 1;">${escapeHtml(tag.name)}</span>
+                </div>
+            `).join('') + '</div>';
+        }
+
+        // --- Stats ---
+        function updateStats() {
+            const total = allTasks.length;
+            const completed = allTasks.filter(t => t.isCompleted).length;
+            const pending = allTasks.filter(t => t.status === 'pending').length;
+            const inProgress = allTasks.filter(t => t.status === 'in_progress').length;
+
+            document.getElementById('statsGrid').innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-value">${total}</div>
+                    <div class="stat-label">Total Tasks</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${pending}</div>
+                    <div class="stat-label">Pending</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${inProgress}</div>
+                    <div class="stat-label">In Progress</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${completed}</div>
+                    <div class="stat-label">Completed</div>
+                </div>
+            `;
+        }
+
+        function closeTaskModal() {
+            document.getElementById('taskModal').classList.remove('active');
+            currentTaskId = null;
+        }
+
+        function showMessage(text, type = 'success') {
+            const container = document.getElementById('messageContainer');
+            const message = document.createElement('div');
+            message.className = `message ${type}`;
+            message.textContent = text;
+            container.appendChild(message);
+            setTimeout(() => message.remove(), 5000);
+        }
+
+        // --- Helpers ---
+        function escapeHtml(text) {
+            if (text === null || text === undefined) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function getPriorityClass(priority) {
+            return priority >= 3 ? 'high' : priority === 2 ? 'medium' : 'low';
+        }
+
+        // Calendar dates (dueDate): date-only ISO strings are parsed as UTC by
+        // new Date(), which shifts the day in western timezones — force local midnight.
+        // Render as ISO YYYY-MM-DD (matching the input field) so the day/month
+        // order is unambiguous regardless of the browser's locale.
+        function formatDay(dateStr) {
+            if (!dateStr || dateStr === '0000-00-00' || dateStr === '') return 'Not set';
+            const date = new Date(dateStr.slice(0, 10) + 'T00:00:00');
+            if (isNaN(date.getTime()) || date.getFullYear() < 2000) return 'Not set';
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        // Timestamps (createdAt, updatedAt): the server stores UTC but omits the
+        // 'Z' suffix, so mark them as UTC before converting to local time
+        function formatTimestamp(dateStr) {
+            if (!dateStr || dateStr === '') return 'Not set';
+            const date = new Date(dateStr.endsWith('Z') ? dateStr : dateStr + 'Z');
+            if (isNaN(date.getTime()) || date.getFullYear() < 2000) return 'Not set';
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+        }
+    </script>
+</body>
+</html>
