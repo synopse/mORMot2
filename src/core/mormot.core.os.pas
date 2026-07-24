@@ -4016,10 +4016,10 @@ procedure XorOSEntropy(var e: THash512Rec);
 // - on Windows, calls ProcessPrng() since Windows 8 or fallback to RtlGenRandom()
 // - on POSIX, following "man urandom", only up to 256 bytes (2048-bits) are
 // retrieved from /dev/urandom or /dev/random or Linux 3.17+ getrandom syscall,
-// then any Len > 256 will be padded with "L'Ecuyer" gsl_rng_taus2  - so you
+// then any Len > 256 will be padded with "L'Ecuyer" gsl_rng_taus2 - so you
 // may consider that the output Buffer is always filled with randomness
 // - AllowBlocking=false would try /dev/random if /dev/urandom did fail
-// - you should not have to call this low-level procedure, but faster and safer
+// - you should not have to call this low-level procedure, but faster and broader
 // TAesPrng from mormot.crypt.core - also consider the TSystemPrng class
 // - if you need some entropy source, consider TAesPrng.GetEntropy() instead
 function FillSystemRandom(Buffer: PByteArray; Len: integer; AllowBlocking: boolean): boolean;
@@ -10837,12 +10837,12 @@ end;
 { **************** TSynLocker Threading Features }
 
 const
-  // default value for all spining, up to 993 "pause" opcode calls
-  // - on Intel, taking around 5us on old CPU, but modern Intel have bigger pause
-  // latency (up to 100 cycles) so takes up to 50us
-  // - AMD Zen 3 and later has a latency of only 1-2 cycles so we identify them
-  // via CPUID and adjust a SpinFactor global variable at startup to reach 5us
-  // - 5..50us range seems consistent with our eventual nanosleep(10us) syscall
+  // default adaptive spin count: up to 992 "pause"/"yield" instructions
+  // - on Intel, this is typically a few microseconds on older CPUs, but newer
+  // CPUs may have longer pause latency (tens of cycles)
+  // - AMD Zen 3+ has shorter pause latency, detected via CPUID at startup
+  // to adjust SpinFactor variable and keep a similar waiting duration
+  // - this 5-50us range matches the eventual nanosleep(10us) fallback
   SPIN_COUNT = pred(6 shl 5); // = 191
 
 // as reference, take a look at Linus insight (TL&WR: better use futex)
