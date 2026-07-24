@@ -7713,18 +7713,9 @@ end;
 
 procedure TAesPrng.Seed;
 var
-  alreadyseeding: boolean;
   entropy: RawByteString;
   e: PHash512Rec;
 begin
-  if fSeedAfterBytes = 0 then
-    exit;
-  fSafe.Lock;
-  alreadyseeding := fSeeding; // atomic flag
-  fSeeding := true;
-  fSafe.UnLock;
-  if alreadyseeding then // a single thread should do the entropy seeding
-    exit;
   // gather 512-bit seed of SHAKE-256 XOF from several sources of entropy
   entropy := GetEntropy(SizeOf(e^), fSeedEntropySource, fSeedNonce);
   e := pointer(entropy);
@@ -7733,11 +7724,10 @@ begin
   try
     fAes.Done;                           // anti-forensic + set IV = 0
     fAes.EncryptInit(e^.l, fAesKeySize); // up to 256-bit
-    _EntropyChain := e^.h;               // perfect forward secrecy
-    fBytesSinceSeed := 0;                // reset counter for next Seed
+    TAesContext(fAes).iv.L := e^.q[7];   // keep high part = CTR = 0
+    fBytesSinceSeed := 1;                // reset counter for next Seed (not 0)
   finally
     FillZero(e^.b);                      // anti-forensic
-    fSeeding := false;
     fSafe.UnLock;
   end;
 end;
@@ -10499,7 +10489,6 @@ var
   i: PtrInt;
 {$endif USEARMCRYPTO}
 begin
-  _EntropyChain := BaseEntropy.l; // not void
   {$ifndef USEAESNI}
   ComputeAesStaticTables; // ARM or pure pascal would need those tables anyway
   {$endif USEAESNI}
