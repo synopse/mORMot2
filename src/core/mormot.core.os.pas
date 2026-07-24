@@ -4005,7 +4005,11 @@ function GetDiskAvailable(aDriveFolderOrFile: TFileName): QWord;
 /// retrieve low-level information about all mounted disk partitions of the system
 function GetDiskPartitions: TDiskPartitions;
 
-/// call several Operating System APIs to gather 512-bit of entropy information
+/// call several high-level Operating System APIs to XOR a 512-bit buffer
+// - in respect to XorEntropy() from mormot.core.base, call some more entropy-rich,
+// but also (much) slower APIs like /proc/* files on Linux or system times counters
+// - not to be called by itself, but as part of entropy gathering
+// - consider TAesPrng.GetEntropy() from mormot.crypt.core instead
 procedure XorOSEntropy(var e: THash512Rec);
 
 /// low-level function returning some random binary from the Operating System
@@ -4017,6 +4021,7 @@ procedure XorOSEntropy(var e: THash512Rec);
 // - AllowBlocking=false would try /dev/random if /dev/urandom did fail
 // - you should not have to call this low-level procedure, but faster and safer
 // TAesPrng from mormot.crypt.core - also consider the TSystemPrng class
+// - if you need some entropy source, consider TAesPrng.GetEntropy() instead
 function FillSystemRandom(Buffer: PByteArray; Len: integer; AllowBlocking: boolean): boolean;
 
 type
