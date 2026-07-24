@@ -79,14 +79,6 @@ begin
   LowerSelf(pointer(result));
 end;
 
-(*procedure WrDeb(const t: ShortString; const p; l: PtrInt); // internal use below
-var
-  tmp: RawUtf8;
-begin
-  ToHumanHex(tmp, @p, l);
-  {$I-}writeln(t, ' = ',tmp);{$I+}
-end;*)
-
 function IdemPChar(p, up: PUtf8Char): boolean; inline;
 var
   c, u: AnsiChar;
@@ -3315,7 +3307,7 @@ begin
 end;
 
 type
-  // emulate sysinfo() Linux syscall on BSD/Mac
+  // emulate sysinfo() Linux syscall on BSD/Mac for RetrieveSysInfoText()
   TSysInfo = packed record
     uptime: cardinal;                    // Seconds since boot
     loads: array[0 .. 2] of cardinal;    // 1, 5, and 15 minute load averages
@@ -4320,6 +4312,14 @@ end;
 // and Darwin has no /etc/mtab - so we use the getfsstat() BSD/Mac API
 
 {$ifdef OSBSDDARWIN}
+
+(*procedure WrDeb(const t: ShortString; const p; l: PtrInt); // internal use below
+var
+  tmp: RawUtf8;
+begin
+  ToHumanHex(tmp, @p, l);
+  {$I-}writeln(t, ' = ',tmp);{$I+}
+end;*)
 
 const
   MNT_WAIT = 1;

@@ -2536,7 +2536,7 @@ begin
 end;
 
 type
-  // emulate sysinfo() Linux syscall on Windows
+  // emulate sysinfo() Linux syscall on Windows for RetrieveSysInfoText()
   TSysInfo = packed record
     uptime: cardinal;                    // Seconds since boot
     loads: array[0 .. 1] of cardinal;    // User and Kernel current percent

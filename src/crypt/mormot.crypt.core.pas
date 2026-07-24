@@ -1829,7 +1829,7 @@ type
   // - use as a shared instance via TAesPrng.Fill() overloaded class methods
   // - this class is able to generate some random output by encrypting successive
   // values of a counter with AES-256-CTR and a secret key
-  // - an internal secret key is generated via SHAKE-256 XOF from OS and HW entropy
+  // - a genuine key is generated via SHAKE-256 XOF from OS and HW entropy
   // - by design, such a PRNG is as good as the cypher used - for reference, see
   // https://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator
   // - FillRandom() is thread-safe, and its AES process is not blocking: only
@@ -1867,8 +1867,8 @@ type
     // - is just a wrapper around FillSystemRandom()
     procedure FillRandom(Buffer: pointer; Len: PtrInt); override;
     /// would force the internal generator to re-seed its private key
-    // - as called by FillRandom() methods once SeedAfterBytes limit is reached
-    // - (re)initialize the internal AES-CTR engine from SHAKE-256  GetEntropy()
+    // - as called by FillRandom() methods when SeedAfterBytes limit is reached
+    // - (re)initialize the internal AES-CTR engine from SHAKE-256 GetEntropy()
     // to avoid potential attacks on backward or forward secrecy
     // - this method is thread-safe
     procedure Seed; override;
@@ -2313,9 +2313,8 @@ type
     // - Digest destination buffer must contain enough bytes
     // - default DigestBits=0 will write the default number of bits to Digest
     // output memory buffer, according to the current TSha3Algo
-    // - you can call this method several times, to use this SHA-3 hasher as
-    // "Extendable-Output Function" (XOF), e.g. for stream encryption (ensure
-    // NoInit is set to true, to enable recall)
+    // - with NoInit=true, you can call this method several times, to use this
+    // SHA-3 hasher in "Extendable-Output Function" (XOF) mode
     procedure Final(Digest: pointer; DigestBits: integer = 0;
       NoInit: boolean = false); overload;
     /// compute a SHA-3 hash 256-bit Digest from a buffer, in one call
@@ -9191,7 +9190,7 @@ end;
 
 procedure TSha3.Cypher(Source, Dest: pointer; DataLen: integer);
 begin
-  Final(Dest, DataLen shl 3, true); // in XOF mode
+  Final(Dest, DataLen shl 3, {noinit=}true); // in XOF mode
   XorMemory(Dest, Source, DataLen);
 end;
 
@@ -10514,7 +10513,7 @@ begin
   {$endif ASMX64NOTPIC}
   {$ifdef USEAESNIHASH}
   {$ifdef OSWINDOWS}
-  if not (wsPrism in WindowsSpecs) then // seems inconsistent with only few aesenc
+  if not (wsPrism in WindowsSpecs) then // seems inconsistent with a few aesenc
   {$endif OSWINDOWS}
   if (cfAesNi in CpuFeatures) and   // AES-NI
      (cfSSE3 in CpuFeatures) then   // PSHUFB
