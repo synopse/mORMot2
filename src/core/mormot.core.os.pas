@@ -4008,6 +4008,17 @@ function GetDiskPartitions: TDiskPartitions;
 /// call several Operating System APIs to gather 512-bit of entropy information
 procedure XorOSEntropy(var e: THash512Rec);
 
+/// low-level function returning some random binary from the Operating System
+// - on Windows, calls ProcessPrng() since Windows 8 or fallback to RtlGenRandom()
+// - on POSIX, following "man urandom", only up to 256 bytes (2048-bits) are
+// retrieved from /dev/urandom or /dev/random or Linux 3.17+ getrandom syscall,
+// then any Len > 256 will be padded with "L'Ecuyer" gsl_rng_taus2  - so you
+// may consider that the output Buffer is always filled with randomness
+// - AllowBlocking=false would try /dev/random if /dev/urandom did fail
+// - you should not have to call this low-level procedure, but faster and safer
+// TAesPrng from mormot.crypt.core - also consider the TSystemPrng class
+function FillSystemRandom(Buffer: PByteArray; Len: integer; AllowBlocking: boolean): boolean;
+
 type
   /// available console colors for TextColor/TextBackground functions
   TConsoleColor = (
@@ -4208,17 +4219,6 @@ function PosixUid: cardinal;
 /// return the GID of the current POSIX User
 function PosixGid: cardinal;
 {$endif OSLINUXANDROID}
-
-/// low-level function returning some random binary from the Operating System
-// - Windows version calling the CryptGenRandom API is in mormot.core.os.security
-// - on POSIX, only up to 256 bytes (2048-bits) are retrieved from /dev/urandom
-// or /dev/random (or Linux getrandom syscall) as stated by "man urandom" Usage -
-// then padded with our shared gsl_rng_taus2 "L'Ecuyer" random generator
-// - so you may consider that the output Buffer is always filled with random
-// - you should not have to call this low-level procedure, but faster and safer
-// TAesPrng from mormot.crypt.core - also consider the TSystemPrng class
-function FillSystemRandom(Buffer: PByteArray; Len: integer;
-  AllowBlocking: boolean): boolean;
 
 {$endif OSWINDOWS}
 
@@ -9688,7 +9688,6 @@ begin
   crcblock(rnd, @Executable.Hash);
   crcblocks(rnd, @CpuCache, SizeOf(CpuCache) div SizeOf(THash128));
 end;
-
 
 
 { TExecutableCommandLine }

@@ -2403,15 +2403,6 @@ procedure SymmetricEncrypt(key: PtrUInt; data: PCardinal; len: PtrInt); overload
 
 {$ifdef OSWINDOWS}
 
-/// low-level function returning some random binary from the Operating System
-// - POSIX version (using /dev/urandom or /dev/random) is located in mormot.core.os
-// - will call CryptGenRandom API on Windows then return TRUE, or fallback to
-// mormot.core.base gsl_rng_taus2's generator and return FALSE if the API failed
-// - you should not have to call this low-level procedure, but faster and safer
-// TAesPrng from mormot.crypt.core - also consider the TSystemPrng class
-function FillSystemRandom(Buffer: PByteArray; Len: integer;
-  AllowBlocking: boolean): boolean;
-
 /// protect some data for the current user, using Windows DPAPI
 // - the application can specify a secret salt text, which should reflect the
 // current execution context, to ensure nobody could decrypt the data without
@@ -2615,10 +2606,6 @@ type
     /// decrypts data previously encrypted by using the CryptEncrypt function
     Decrypt: function(hKey: HCRYPTKEY; hHash: HCRYPTHASH; Final: BOOL;
       dwFlags: DWord; pbData: pointer; var pdwDataLen: DWord): BOOL; stdcall;
-    /// fills a buffer with cryptographically random bytes
-    // - since Windows Vista with Service Pack 1 (SP1), an AES counter-mode
-    // based PRNG specified in NIST Special Publication 800-90 is used
-    GenRandom: function(hProv: HCRYPTPROV; dwLen: DWord; pbBuffer: pointer): BOOL; stdcall;
     /// converts a security descriptor to a string format
     ConvertSecurityDescriptorToStringSecurityDescriptorA: function(
       SecurityDescriptor: PSECURITY_DESCRIPTOR; RequestedStringSDRevision: DWord;
@@ -2654,7 +2641,6 @@ const
   CRYPT_MODE_CTS                  = 5;
   HCRYPTPROV_NOTTESTED            = HCRYPTPROV(-1);
   NTE_BAD_KEYSET                  = HRESULT($80090016);
-  BCRYPT_USE_SYSTEM_PREFERRED_RNG = $00000002;
 
 var
   /// direct access to the Windows CryptoApi - with late binding
@@ -7752,7 +7738,7 @@ end;
 
 procedure TWinCryptoApi.Resolve;
 const
-  NAMES: array[0..8] of PAnsiChar = (
+  NAMES: array[0..7] of PAnsiChar = (
     'CryptAcquireContextA',
     'CryptReleaseContext',
     'CryptImportKey',
@@ -7760,7 +7746,6 @@ const
     'CryptDestroyKey',
     'CryptEncrypt',
     'CryptDecrypt',
-    'CryptGenRandom',
     'ConvertSecurityDescriptorToStringSecurityDescriptorA');
 var
   p: PPointer;
@@ -7805,37 +7790,8 @@ begin
   result := true;
 end;
 
-var
-  BCryptApi: THandle;
-  BCryptGenRandom: function(hAlgorithm, pBuffer: pointer;
-    cbBuffer, dwFlags: ULONG): cardinal; stdcall;
-  CryptProv: HCRYPTPROV; // use GenRandom() as XP fallback
 
-function FillSystemRandom(Buffer: PByteArray; Len: integer;
-  AllowBlocking: boolean): boolean;
-begin
-  result := false;
-  if Len <= 0 then
-    exit;
-  if (OSVersion >= wVista) and
-     DelayedProc(BCryptGenRandom, BCryptApi, 'bcrypt.dll', 'BCryptGenRandom') then
-    // use the new Vista+ API
-    result := BCryptGenRandom(nil, Buffer, Len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) = NOERROR;
-  if not result then
-  begin
-    if (CryptProv = nil) and
-       CryptoApi.Available then
-      CryptoApi.AcquireContextA(CryptProv, nil, nil,
-        PROV_RSA_FULL, CRYPT_VERIFYCONTEXT); // initialize once for XP fallback
-    if CryptProv <> nil then
-      result := CryptoApi.GenRandom(CryptProv, Len, Buffer);
-  end;
-  if not result then
-    // OS API call failed -> fallback to our TLecuyer gsl_rng_taus2 generator
-    SharedRandom.Fill(pointer(Buffer), Len)
-  else if Len >= SizeOf(SystemEntropy.LiveFeed) then
-    crcblock(@SystemEntropy.LiveFeed, pointer(Buffer)); // shuffle live state
-end;
+{ Direct Access to Other Security-Related Windows API }
 
 type
   {$ifdef FPC}
@@ -8987,8 +8943,6 @@ end;
 initialization
 
 finalization
-  if CryptProv <> nil then // used as fallback on XP
-    CryptoApi.ReleaseContext(CryptProv, 0);
   RawTokenOpenSafe.Done;
 
 {$endif OSWINDOWS}

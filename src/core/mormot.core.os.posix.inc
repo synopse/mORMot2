@@ -4192,8 +4192,7 @@ const
   // - "man getrandom" states that the Linux syscall can always return 256 bytes
   MAXFROMOS = 256;
 
-function FillSystemRandom(Buffer: PByteArray; Len: integer;
-  AllowBlocking: boolean): boolean;
+function FillSystemRandom(Buffer: PByteArray; Len: integer; AllowBlocking: boolean): boolean;
 var
   rd, dev: integer;
 begin
