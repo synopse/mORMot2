@@ -1448,9 +1448,13 @@ end;
 
 function GetMaskAffinity(out CpuSet: TCpuSet): boolean;
 begin
-  {$ifdef OSLINUXANDROID} // syscall returns the number of set bytes
+  {$ifdef OSLINUXANDROID}
+  {$ifdef FPC} // syscall returns the number of set bytes
   result := Do_SysCall(syscall_nr_sched_getaffinity, 0,
               SizeOf(CpuSet), PtrUInt(@CpuSet)) <> 0;
+  {$else}
+  result := sched_getaffinity(0, SizeOf(CpuSet), @CpuSet) = 0; // Delphi Linux
+  {$endif FPC}
   {$else}
   result := false; // unsupported by now
   {$endif OSLINUXANDROID}
@@ -5379,18 +5383,26 @@ var
   _CpuCores, _CpuSockets: cardinal;
   _CpuSocketsMask: TCpuSets;
 
-function CpuThreads: cardinal; // a very fast function on OSLINUXANDROID
+{$ifdef FPC}
+function CpuThreads: cardinal;
 var
   tmp: TCpuSet; // up to 1024 cores - no need to fill with zero first
 begin
+  // very fast syscall to retrieve the current number of active cores
   result := Do_SysCall(syscall_nr_sched_getaffinity, 0, SizeOf(tmp), PtrUInt(@tmp));
   if integer(result) > 0 then
     // syscall returned the number of set bytes
     result := GetBitsCount(tmp, result shl 3) // may use SSE4.2 popcnt
   else
-    // on syscall failure, fallback to libc /sys/devices/system/cpu/online
+    // on syscall failure, fallback to /proc/cpuinfo or get_nprocs
     result := SystemInfo.dwNumberOfProcessors;
 end;
+{$else}
+function CpuThreads: cardinal; // static fallback for Delphi for Linux
+begin
+  result := SystemInfo.dwNumberOfProcessors; // from /proc/cpuinfo or get_nprocs
+end;
+{$endif FPC}
 
 function ReadCpuInfo: PUtf8Char; // read slow /proc/cpuinfo and return modname
 var

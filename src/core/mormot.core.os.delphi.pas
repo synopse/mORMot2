@@ -229,6 +229,7 @@ function FpS_ISLNK(m: cint): boolean;
 
 function fpkill(pid, sig: cint): cint; cdecl;
   external clib name 'kill';
+
 function fpfork: TPid; cdecl;
   external clib name 'fork';
 
@@ -251,6 +252,7 @@ const
 function fpsysctl(name: pcint; namelen: cuint; oldp: pointer;
     oldlenp: psize_t; newp: pointer; newlen: size_t): cint; cdecl;
   external clib name 'sysctl';
+
 function fpsysctlbyname(name: PAnsiChar; oldp: pointer; oldlenp: psize_t;
     newp: pointer; newlen: size_t): cint; cdecl;
   external clib name 'sysctlbyname';
@@ -280,6 +282,7 @@ function fpreaddir(var dirp: Dir): pDirent;
 function fpclosedir(var dirp: Dir): cint;
 
 {$ifdef OSLINUX}
+
 type
   TStatfs = record
     fstype, bsize: clong;
@@ -311,6 +314,11 @@ type
 
 function SysInfo(Info: PSysinfo): cInt; cdecl;
   external clib name 'sysinfo';
+
+function sched_getaffinity(pid: integer;
+    cpusetsize: PtrUInt; cpuset: pointer): integer; cdecl
+  external clib name 'sched_getaffinity';
+
 {$endif OSLINUX}
 
 function fpstatfs(path: PWideChar; nfo: pointer): cint;
@@ -410,8 +418,10 @@ type
 
 function epoll_create(size: cint): cint; cdecl;
   external clib name 'epoll_create';
+
 function epoll_ctl(epfd, op, fd: cint; event: PEPoll_Event): cint; cdecl;
   external clib name 'epoll_ctl';
+
 function epoll_wait(epfd: cint; events: PEPoll_Event;
     maxevents, timeout: cint): cint; cdecl;
   external clib name 'epoll_wait';
