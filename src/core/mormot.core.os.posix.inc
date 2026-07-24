@@ -3208,6 +3208,20 @@ begin
   result := PosEx('lazarus', LowerU(EnumProcessName(FpGetppid))) <> 0;
 end;
 
+procedure __Fill256FromOs(out e: THash256Rec);
+begin
+  // no FillSystemRandom() to avoid endless recursive calls in XorEntropy()
+  {$ifdef OSDARWIN} // OSX has no clock_gettime() API but nanosec functions
+  e.d0 := mach_absolute_time;
+  e.d2 := mach_continuous_time;
+  {$else}
+  clock_gettime(CLOCK_REALTIME_FAST, @e.l);  // fast libc call
+  if SizeOf(e.h) >= SizeOf(TTimeSpec) then   // paranoid compile-time check
+    clock_gettime(CLOCK_MONOTONIC_FAST, @e.h);
+  {$endif OSDARWIN}
+  crcblocks(@e, @SystemEntropy, SizeOf(e) div SizeOf(TBlock128)); // obfuscate
+end;
+
 function GetParentProcess(PID: cardinal): cardinal;
 begin
   if PID = 0 then
@@ -3863,6 +3877,22 @@ begin
   result := (UserTime + KernelTime) <> 0;
 end;
 
+procedure __Fill256FromOs(out e: THash256Rec);
+var
+  si: TSysInfo;
+begin
+  // no FillSystemRandom() to avoid endless recursive calls in XorEntropy()
+  {$ifdef HASGETRANDOM}
+  // try to get whole 256-bit from OS crypto-PRNG in 1 syscall - kernel >= 3.17
+  if LinuxGetRandom(@e, SizeOf(e)) then
+    exit;
+  {$endif HASGETRANDOM}
+  clock_gettime(CLOCK_MONOTONIC_FAST, @e.l); // fast VDSO call
+  RetrieveSysInfo(si); // 1 fast syscall on Linux but slowly emulated on Mac/BSD
+  DefaultHasher128(@e.h, @si, SizeOf(si)); // maybe AesNiHash128
+  crcblocks(@e, @SystemEntropy, SizeOf(e) div SizeOf(TBlock128)); // obfuscate
+end;
+
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;
 var
   tmp: TBuffer4K;
@@ -4151,29 +4181,6 @@ begin
   Idle   := 100 - Kernel - User; // ensure sum is always 100%
   result := true;
 end; { TODO : use a diff approach for TProcessInfo.PerSystem on Linux? }
-
-procedure __Fill256FromOs(out e: THash256Rec);
-var
-  si: TSysInfo;  // Linuxism, but properly emulated by thit unit on Mac/BSD
-begin
-  {$ifdef HASGETRANDOM}
-  // try to get whole 256-bit from OS crypto-PRNG in 1 syscall
-  if LinuxGetRandom(@e, SizeOf(e)) then
-    exit;
-  {$endif HASGETRANDOM}
-  // no FillSystemRandom() to avoid endless recursive calls in XorEntropy()
-  {$ifdef OSDARWIN} // OSX has no clock_gettime() API
-  e.d0 := mach_absolute_time   * 2654435761;
-  e.d1 := mach_continuous_time * 3266489917;
-  {$else}
-  if SizeOf(TTimeSpec) <= SizeOf(e) then // paranoid (max 128-bit) -> no-op
-    clock_gettime(CLOCK_MONOTONIC_FAST, @e); // fast VDSO call
-  {$endif OSDARWIN}
-  crcblock(@e.l, @SystemEntropy.LiveFeed); // obfuscate
-  RetrieveSysInfo(si); // at least uptime + cpu load + free mem on all OS
-  DefaultHasher128(@e.h, @si, SizeOf(si)); // maybe AesNiHash128
-  crcblock(@e.h, @SystemEntropy.Startup);  // obfuscate
-end;
 
 const
   // FillSystemRandom() retrieves 256 bytes max (2048-bit) from the OS API
