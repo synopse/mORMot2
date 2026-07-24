@@ -1890,9 +1890,10 @@ type
     // Operating System random bytes, so the returned entropy remains secure as
     // long as either the OS CSPRNG or the internal entropy accumulator remains
     // unpredictable, so it is safer than a plain FillSystemRandom() call
-    class function GetEntropy(Len: integer;
+    // - defined as procedure to ensure RefCnt=1 so that FillZero(Buffer) works
+    class procedure GetEntropy(var Buffer: RawByteString; Len: integer;
       Source: TAesPrngGetEntropySource = gesSystemFast;
-      const AppNonce: RawByteString = ''): RawByteString; overload;
+      const AppNonce: RawByteString = ''); overload;
     /// retrieve some entropy bytes from the Operating System and process state
     // - overloaded low-level method filling a raw memory buffer
     class procedure GetEntropy(Dest: pointer; Len: integer;
@@ -7638,12 +7639,12 @@ begin
   fSeedNonce := 'mORMot AES-PRNG Seed'; // default personaliation string
 end;
 
-class function TAesPrng.GetEntropy(Len: integer;
-  Source: TAesPrngGetEntropySource; const AppNonce: RawByteString): RawByteString;
+class procedure TAesPrng.GetEntropy(var Buffer: RawByteString; Len: integer;
+  Source: TAesPrngGetEntropySource; const AppNonce: RawByteString);
 begin
-  FillZero(result);
+  FillZero(Buffer);
   if Len > 0 then
-    GetEntropy(FastNewRawByteString(result, Len), Len, Source, AppNonce);
+    GetEntropy(FastNewRawByteString(Buffer, Len), Len, Source, AppNonce);
 end;
 
 var
