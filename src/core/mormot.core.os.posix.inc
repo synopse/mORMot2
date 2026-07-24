@@ -3955,7 +3955,10 @@ begin
   {$ifdef HASGETRANDOM}
   // eventually XOR with 512-bit getrandom syscall if available
   if LinuxGetRandom(@tmp, SizeOf(e)) then
-    XorMemory(@e, @tmp, SizeOf(e))
+  begin
+    XorMemory(@e, @tmp, SizeOf(e));
+    FillZero(PHash512(@tmp)^);
+  end
   else
   {$endif HASGETRANDOM}
     // read-only 122-bit random UUID text '6fd5a44b-35f4-4ad4-a9b9-6b9be13e1fe9'
