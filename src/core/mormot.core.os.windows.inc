@@ -2496,6 +2496,45 @@ begin
   end;
 end;
 
+
+var
+  BCryptPrimitives, BCryptApi: THandle;
+  ProcessPrng: function(dest: pointer; len: PtrUInt): BOOL; stdcall; // Win8+
+  RtlGenRandom: function(dest: pointer; len: cardinal): boolean; stdcall;
+  BCryptGenRandom: function(hAlgorithm, pBuffer: pointer;
+    cbBuffer, dwFlags: ULONG): cardinal; stdcall; // Vista+
+const
+  SYSTEM_PREFERRED_RNG = $00000002;
+
+function FillSystemRandom(Buffer: PByteArray; Len: integer; AllowBlocking: boolean): boolean;
+begin
+  result := false;
+  if (Buffer = nil) or
+     (Len <= 0) then
+    exit;
+  // try the newest per-processor AES-CTR-DRBG first
+  if (OSVersion >= wEight) and
+     DelayedProc(ProcessPrng, BCryptPrimitives, 'BCryptPrimitives.dll', 'ProcessPrng') then
+    result := ProcessPrng(Buffer, Len);
+  if not result then
+  begin
+    // fallback to RtlGenRandom() or BCryptGenRandom() on older systems
+    if not Assigned(RtlGenRandom) then // always available on XP/Vista/Seven
+      RtlGenRandom := LibraryResolve(GetModuleHandle(advapi32), 'SystemFunction036');
+    if Assigned(RtlGenRandom) then
+      result := RtlGenRandom(Buffer, Len);
+    if (not result) and // never called in practice
+       (OSVersion >= wVista) and
+       DelayedProc(BCryptGenRandom, BCryptApi, 'bcrypt.dll', 'BCryptGenRandom') then
+     result := BCryptGenRandom(nil, Buffer, Len, SYSTEM_PREFERRED_RNG) = NOERROR;
+  end;
+  if not result then
+    // OS API call failed -> fallback to our TLecuyer gsl_rng_taus2 generator
+    SharedRandom.Fill(pointer(Buffer), Len)
+  else if Len >= SizeOf(SystemEntropy.LiveFeed) then
+    crcblock(@SystemEntropy.LiveFeed, pointer(Buffer)); // shuffle live state
+end;
+
 type
   // emulate sysinfo() Linux syscall on Windows
   TSysInfo = packed record
