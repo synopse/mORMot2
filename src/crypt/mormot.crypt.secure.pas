@@ -3583,7 +3583,8 @@ function SaveAsJwk(algo: TCryptAsymAlgo; const x, y: RawByteString): RawUtf8;
 // follows the weak but known Delphi RTL Random(), and 'rnd-rdrand' which calls
 // the homonymous CPU HW opcode (if cfRAND in CpuFeatures)
 // - call Rnd('rnd-entropy').Get() to gather OS entropy (which may be slow),
-// optionally as 'rnd-entropysys', 'rnd-entropysysblocking', 'rnd-entropyuser'
+// optionally as 'rnd-entropy-full', 'rnd-entropy-sys', 'rnd-entropy-sysblocking'
+// and 'rnd-entropy-user'
 function Rnd(const name: RawUtf8 = 'rnd-default'): TCryptRandom;
 
 /// main resolver of the registered hashers
@@ -8272,13 +8273,14 @@ end;
 
 const
   // CSV text of TAesPrngGetEntropySource items as used for Rnd() factory naming
-  RndAlgosText: PUtf8Char =
-    'rnd-entropy,rnd-entropysys,rnd-entropysysblocking,rnd-entropyuser';
+  RndAlgosText: PUtf8Char = 'rnd-entropy,rnd-entropy-full,rnd-entropy-sys,' +
+    'rnd-entropy-sysblocking,rnd-entropy-user';
 
 type
   TCryptRandomEntropy = class(TCryptRandom)
   protected
     fSource: TAesPrngGetEntropySource;
+    fNonce: RawByteString;
   public
     constructor Create(const name: RawUtf8); override;
     procedure Get(var dst: RawByteString; len: PtrInt); override;
@@ -8288,12 +8290,13 @@ type
 constructor TCryptRandomEntropy.Create(const name: RawUtf8);
 begin
   fSource := TAesPrngGetEntropySource(InternalResolve(name, RndAlgosText));
-  inherited Create(name); // should be done after InternalResolve()
+  RandomByteString(16, fNonce); // good enough for per-instance naming
+  inherited Create(name);       // should be done after InternalResolve()
 end;
 
 procedure TCryptRandomEntropy.Get(var dst: RawByteString; len: PtrInt);
-begin
-  dst := TAesPrng.GetEntropy(len, fSource); // may be slow for a few bytes
+begin // warning: may be slow for a few bytes
+  dst := TAesPrng.GetEntropy(len, fSource, fNonce);
 end;
 
 procedure TCryptRandomEntropy.Get(dst: pointer; dstlen: PtrInt);
