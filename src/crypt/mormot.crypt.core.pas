@@ -1892,7 +1892,12 @@ type
     // unpredictable, so it is safer than a plain FillSystemRandom() call
     class function GetEntropy(Len: integer;
       Source: TAesPrngGetEntropySource = gesSystemFast;
-      const AppNonce: RawByteString = ''): RawByteString; virtual;
+      const AppNonce: RawByteString = ''): RawByteString; overload;
+    /// retrieve some entropy bytes from the Operating System and process state
+    // - overloaded low-level method filling a raw memory buffer
+    class procedure GetEntropy(Dest: pointer; Len: integer;
+      Source: TAesPrngGetEntropySource = gesSystemFast;
+      const AppNonce: RawByteString = ''); virtual; overload;
     /// returns a shared instance of a TAesPrng instance
     // - if you need to generate some random content, just call the
     // TAesPrng.Main.FillRandom() overloaded methods, or directly TAesPrng.Fill()
@@ -7633,29 +7638,33 @@ begin
   fSeedNonce := 'mORMot AES-PRNG Seed'; // default personaliation string
 end;
 
+class function TAesPrng.GetEntropy(Len: integer;
+  Source: TAesPrngGetEntropySource; const AppNonce: RawByteString): RawByteString;
+begin
+  if Len > 0 then
+    GetEntropy(FastNewRawByteString(result, Len), Len, Source, AppNonce)
+  else
+    FastAssignNew(result);
+end;
+
 var
   _EntropyChainSafe: TLightLock;
   _EntropyChain: THash256Rec; // 256-bit secret chaining for forward security
 
-class function TAesPrng.GetEntropy(Len: integer;
-  Source: TAesPrngGetEntropySource; const AppNonce: RawByteString): RawByteString;
+class procedure TAesPrng.GetEntropy(Dest: pointer; Len: integer;
+  Source: TAesPrngGetEntropySource; const AppNonce: RawByteString);
 var
-  fromos: RawByteString; // sha3.Cipher() requires source <> dest buffers
   data: THash512Rec;
   sha3: TSha3;
+  tmp: TSynTempBuffer; // sha3.Cipher() requires source <> dest buffers
 begin
-  FastAssignNew(result);
   if Len <= 0 then
     exit;
   // first pass to fill result with official "system" entropy
-  pointer(fromos) := FastNewString(Len);
   if Source <> gesUserOnly then
-    FillSystemRandom(pointer(fromos), Len, Source = gesSystemOnlyMayBlock);
+    FillSystemRandom(Dest, Len, Source = gesSystemOnlyMayBlock);
   if Source in [gesSystemOnly, gesSystemOnlyMayBlock] then
-  begin
-    result := fromos; // standard, but weaker if OS is outdated/corrupted
-    exit;
-  end;
+    exit; // standard, but weaker if OS is outdated/corrupted
   // XOR result with some "userland" entropy
   sha3.Init(SHAKE_256); // SHA-3 in XOF mode for variable-length output
   try
@@ -7683,6 +7692,7 @@ begin
     // append the supplied nonce (library name by default) as domain separation
     sha3.Update(AppNonce);
     // thread-safe state ratcheting and final XOR to result
+    tmp.Init(Len);
     _EntropyChainSafe.Lock;
     try
       // ensure proper initialization from OS e.g. for gesUserOnly mode
@@ -7690,38 +7700,38 @@ begin
         FillSystemRandom(@_EntropyChain, SizeOf(_EntropyChain), {block=}false);
       // 256-bit hash of previous state
       sha3.Update(@_EntropyChain, SizeOf(_EntropyChain));
-      // XOR previously retrieved OS entropy using SHAKE-256 in XOF mode
-      result := sha3.Cypher(fromos);
       // perfect forward secrecy by squeezing next seed chain from SHAKE-256
       sha3.Final(_EntropyChain.b, {NoInit=}true);
     finally
       _EntropyChainSafe.UnLock;
+      // XOR previously retrieved OS entropy using SHAKE-256 in XOF mode
+      sha3.Final(tmp.buf, {bits=}Len shl 3, {NoInit=}true);
+      XorMemory(Dest, tmp.buf, Len);
+      FillZero(tmp.buf^, Len);
+      tmp.Done;
     end;
   finally
     sha3.Done;
-    FillZero(fromos);
     FillZero(data.b);
   end;
 end;
 
 procedure TAesPrng.Seed;
 var
-  entropy: RawByteString;
-  e: PHash512Rec;
+  e: THash512Rec;
 begin
   // gather 512-bit seed of SHAKE-256 XOF from several sources of entropy
-  entropy := GetEntropy(SizeOf(e^), fSeedEntropySource, fSeedNonce);
-  e := pointer(entropy);
+  GetEntropy(@e, SizeOf(e), fSeedEntropySource, fSeedNonce);
   // initialize the new thread-safe state as its AES-CTR key
   fSafe.Lock;
   try
-    fAes.Done;                           // anti-forensic + set IV = 0
-    fAes.EncryptInit(e^.l, fAesKeySize); // up to 256-bit
-    TAesContext(fAes).iv.L := e^.q[7];   // keep high part = CTR = 0
-    fBytesSinceSeed := 1;                // reset counter for next Seed (not 0)
+    fAes.Done;                          // anti-forensic + set IV = 0
+    fAes.EncryptInit(e.l, fAesKeySize); // up to 256-bit
+    TAesContext(fAes).iv.L := e.q[7];   // keep high part = CTR = 0
+    fBytesSinceSeed := 1;               // reset counter for next Seed (not 0)
   finally
-    FillZero(e^.b);                      // anti-forensic
     fSafe.UnLock;
+    FillZero(e.b);                      // anti-forensic
   end;
 end;
 
