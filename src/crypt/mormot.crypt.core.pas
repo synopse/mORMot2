@@ -4134,15 +4134,14 @@ var
   rnd: THash256;
 begin // note: we can't use Random128() here to avoid endless recursion
   if Bits = 0 then
-    Bits := 128 shl ord(HasHWAes); // AES-128 or AES-256 with HW AES opcodes
-  {$ifdef OSLINUX}
-  if (MainAesPrng <> nil) or
-     not LinuxGetRandom(@rnd, Bits shr 3) then // 128/256-bit in 1 syscall
-  {$endif OSLINUX}
-    TAesPrng.Main.FillRandom(rnd);     // 256-bit from our CSPRNG (if available)
-  EncryptInit(rnd, Bits);              // transient AES-128/256 secret
-  FillZero(TAesContext(Context).iv.b); // as per NIST SP 800-90A
-  FillZero(rnd);                       // anti-forensic
+    Bits := 128 shl ord(HasHWAes);      // AES-128 or AES-256 with HW AES opcodes
+  if MainAesPrng <> nil then
+    MainAesPrng.FillRandom(rnd)         // favor our CSPRNG if available
+  else
+    FillSystemRandom(@rnd, Bits shr 3, false); // seed from OS
+  EncryptInit(rnd, Bits);               // transient AES-128/256 secret
+  FillZero(TAesContext(Context).iv.b);  // as per NIST SP 800-90A
+  FillZero(rnd);                        // anti-forensic
 end;
 
 function TAes.DecryptInitFrom(const Encryption: TAes; const Key;
