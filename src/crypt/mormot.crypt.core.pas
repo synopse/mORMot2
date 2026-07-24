@@ -7663,20 +7663,20 @@ begin
   try
     // 128-bit system/process information used as salt/padding
     sha3.Update(@Executable.Hash, SizeOf(Executable.Hash));
-    // 512-bit startup entropy from mormot.core.base
+    // 512-bit of mormot.core.base startup entropy
     sha3.Update(@BaseEntropy, SizeOf(BaseEntropy));
     // 256-bit of mormot.core.os randomness state with strong forward secrecy
     sha3.Update(@SystemEntropy, SizeOf(SystemEntropy));
-    if Source <> gesSystemFast then // bypasss this slow function by default
-    begin
-      // 512-bit of low-level Operating System current state from mormot.core.os
-      XorOSEntropy(data); // detailed system cpu and memory info + system random
-      sha3.Update(@data, SizeOf(data));
-    end;
     // 512-bit from OpenSSL audited random generator from mormot.crypt.openssl
     if Assigned(OpenSslRandBytes) then
     begin
       OpenSslRandBytes(@data, SizeOf(data));
+      sha3.Update(@data, SizeOf(data));
+    end;
+    if Source <> gesSystemFast then // bypasss this slow function by default
+    begin
+      // 512-bit of low-level Operating System current state from mormot.core.os
+      XorOSEntropy(data); // detailed system cpu and memory info + system random
       sha3.Update(@data, SizeOf(data));
     end;
     // 512-bit from mormot.core.base _Fill256FromOs + RdRand/Rdtsc + threadid
@@ -7685,7 +7685,10 @@ begin
     // append the supplied nonce (library name by default) as domain separation
     sha3.Update(AppNonce);
     // thread-safe state ratcheting and final XOR to result
-    tmp.Init(Len);
+    if Source = gesUserOnly then
+      tmp.buf := Dest // no OS random to XOR with
+    else
+      tmp.Init(Len);  // store transient SHAKE-256 output
     _EntropyChainSafe.Lock;
     try
       // ensure proper initialization from OS e.g. for gesUserOnly mode
@@ -7699,9 +7702,12 @@ begin
       _EntropyChainSafe.UnLock;
       // XOR previously retrieved OS entropy using SHAKE-256 in XOF mode
       sha3.Final(tmp.buf, {bits=}Len shl 3, {NoInit=}true);
-      XorMemory(Dest, tmp.buf, Len);
-      FillZero(tmp.buf^, Len);
-      tmp.Done;
+      if Source <> gesUserOnly then
+      begin
+        XorMemory(Dest, tmp.buf, Len);
+        FillZero(tmp.buf^, Len);
+        tmp.Done;
+      end;
     end;
   finally
     sha3.Done;
