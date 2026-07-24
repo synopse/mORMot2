@@ -1878,7 +1878,8 @@ type
     // - to gather randomness, use TAesPrng.Main.FillRandom() or TAesPrng.Fill()
     // methods, but NOT this class method - which will be much slower
     class function GetEntropy(Len: integer;
-      Source: TAesPrngGetEntropySource = gesSystemAndUser): RawByteString; virtual;
+      Source: TAesPrngGetEntropySource = gesSystemFast;
+      const AppNonce: RawByteString = ''): RawByteString; virtual;
     /// returns a shared instance of a TAesPrng instance
     // - if you need to generate some random content, just call the
     // TAesPrng.Main.FillRandom() overloaded methods, or directly TAesPrng.Fill()
@@ -7639,10 +7640,11 @@ begin
 end;
 
 var
+  _EntropyChainSafe: TLightLock;
   _EntropyChain: THash256Rec; // 256-bit secret chaining for forward security
 
-class function TAesPrng.GetEntropy(
-  Len: integer; Source: TAesPrngGetEntropySource): RawByteString;
+class function TAesPrng.GetEntropy(Len: integer;
+  Source: TAesPrngGetEntropySource; const AppNonce: RawByteString): RawByteString;
 var
   fromos: RawByteString;
   data: THash512Rec;
@@ -7651,7 +7653,7 @@ begin
   FastAssignNew(result);
   if Len <= 0 then
     exit;
-  // retrieve official "system" entropy (not for gesUserOnly)
+  // first pass to fill result with official "system" entropy
   pointer(fromos) := FastNewString(Len);
   if Source <> gesUserOnly then
     FillSystemRandom(pointer(fromos), Len, Source = gesSystemOnlyMayBlock);
@@ -7660,17 +7662,18 @@ begin
     result := fromos; // standard, but weaker if OS is outdated/corrupted
     exit;
   end;
-  // XOR with some "userland" entropy
+  // XOR result with some "userland" entropy
   sha3.Init(SHAKE_256); // SHA-3 in XOF mode for variable-length output
   try
-    // use the library version as domain separation
-    sha3.Update('mORMot AES-PRNG Seed ' + SYNOPSE_FRAMEWORK_VERSION);
     // system/process information used as salt/padding from mormot.core.os
     sha3.Update(@Executable.Hash, SizeOf(Executable.Hash));
     // 512-bit startup entropy from mormot.core.base
     sha3.Update(@BaseEntropy, SizeOf(BaseEntropy));
     // 256-bit of mormot.core.os randomness state with strong forward secrecy
     sha3.Update(@SystemEntropy, SizeOf(SystemEntropy));
+    // 512-bit of low-level Operating System current state from mormot.core.os
+    XorOSEntropy(data); // detailed system cpu and memory info + system random
+    sha3.Update(@data, SizeOf(data));
     // 512-bit from OpenSSL audited random generator from mormot.crypt.openssl
     if Assigned(OpenSslRandBytes) then
     begin
@@ -7680,13 +7683,23 @@ begin
     // 512-bit from mormot.core.base _Fill256FromOs + RdRand/Rdtsc + threadid
     XorEntropy(data);
     sha3.Update(@data, SizeOf(data));
-    // 512-bit of low-level Operating System current state from mormot.core.os
-    XorOSEntropy(data); // detailed system cpu and memory info + system random
-    sha3.Update(@data, SizeOf(data));
-    // 256-bit hash of previous state
-    sha3.Update(@_EntropyChain, SizeOf(_EntropyChain));
-    // XOR previously retrieved OS entropy using SHA-3 in 256-bit XOF mode
-    result := sha3.Cypher(fromos);
+    // append the supplied nonce (library name by default) as domain separation
+    sha3.Update(AppNonce);
+    // thread-safe state ratcheting and final XOR to result
+    _EntropyChainSafe.Lock;
+    try
+      // ensure proper initialization from OS e.g. for gesUserOnly mode
+      if _EntropyChain.i0 = 0 then
+        FillSystemRandom(@_EntropyChain, SizeOf(_EntropyChain), {block=}false);
+      // 256-bit hash of previous state
+      sha3.Update(@_EntropyChain, SizeOf(_EntropyChain));
+      // XOR previously retrieved OS entropy using SHAKE-256 in XOF mode
+      result := sha3.Cypher(fromos);
+      // perfect forward secrecy by squeezing next seed chain from SHAKE-256
+      sha3.Final(_EntropyChain.b, {NoInit=}true);
+    finally
+      _EntropyChainSafe.UnLock;
+    end;
   finally
     sha3.Done;
     FillZero(fromos);
