@@ -2386,7 +2386,7 @@ type
       Algo: TSha3Algo = SHAKE_256); overload;
     /// uses SHA-3 in "Extendable-Output Function" (XOF) to cypher some content
     // - this overloaded function expects the instance to have been prepared
-    // by previous InitCypher call
+    // by previous InitCypher call and requires Source <> Dest by design
     // - resulting Dest buffer will have the very same size than the Source
     // - XOF is implemented as a symmetrical algorithm: use this Cypher()
     // method for both encryption and decryption of any buffer
@@ -7640,7 +7640,7 @@ var
 class function TAesPrng.GetEntropy(Len: integer;
   Source: TAesPrngGetEntropySource; const AppNonce: RawByteString): RawByteString;
 var
-  fromos: RawByteString;
+  fromos: RawByteString; // sha3.Cipher() requires source <> dest buffers
   data: THash512Rec;
   sha3: TSha3;
 begin
@@ -9205,6 +9205,8 @@ end;
 
 procedure TSha3.Cypher(Source, Dest: pointer; DataLen: integer);
 begin
+  if Source = Dest then
+    ESynCrypto.RaiseU('Unexpected TSha3.Cypher(Source=Dest)');
   Final(Dest, DataLen shl 3, {noinit=}true); // in XOF mode
   XorMemory(Dest, Source, DataLen);
 end;
