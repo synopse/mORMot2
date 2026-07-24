@@ -7641,10 +7641,9 @@ end;
 class function TAesPrng.GetEntropy(Len: integer;
   Source: TAesPrngGetEntropySource; const AppNonce: RawByteString): RawByteString;
 begin
+  FillZero(result);
   if Len > 0 then
-    GetEntropy(FastNewRawByteString(result, Len), Len, Source, AppNonce)
-  else
-    FastAssignNew(result);
+    GetEntropy(FastNewRawByteString(result, Len), Len, Source, AppNonce);
 end;
 
 var

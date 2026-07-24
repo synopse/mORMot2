@@ -8283,7 +8283,6 @@ type
     fNonce: RawByteString;
   public
     constructor Create(const name: RawUtf8); override;
-    procedure Get(var dst: RawByteString; len: PtrInt); override;
     procedure Get(dst: pointer; dstlen: PtrInt); override;
   end;
 
@@ -8294,19 +8293,11 @@ begin
   inherited Create(name);       // should be done after InternalResolve()
 end;
 
-procedure TCryptRandomEntropy.Get(var dst: RawByteString; len: PtrInt);
+procedure TCryptRandomEntropy.Get(dst: pointer; dstlen: PtrInt);
 begin // warning: may be slow for a few bytes
-  dst := TAesPrng.GetEntropy(len, fSource, fNonce);
+  TAesPrng.GetEntropy(dst, dstlen, fSource, fNonce);
 end;
 
-procedure TCryptRandomEntropy.Get(dst: pointer; dstlen: PtrInt);
-var
-  tmp: RawByteString;
-begin
-  Get(tmp, dstlen);
-  MoveFast(pointer(tmp)^, dst^, dstlen);
-  FillZero(tmp);
-end;
 
 { TCryptRandomSysPrng }
 
