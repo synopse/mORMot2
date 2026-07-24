@@ -906,7 +906,7 @@ type
     UseLobChunks: boolean;
     /// load the oci.dll library
     // - and retrieve all Oci*() addresses for OCI_ENTRIES[] items
-    constructor Create(LibraryFileName: TFileName = '');
+    constructor Create(LibraryFileName: TFileName = ''); reintroduce;
     /// retrieve the client version as 'oci.dll rev. 11.2.0.1'
     function ClientRevision: RawUtf8;
     /// retrieve the OCI charset ID from a Windows Code Page
@@ -1681,6 +1681,7 @@ constructor TSqlDBOracleLib.Create(LibraryFileName: TFileName);
 var
   l1, l2, l3: TFileName;
 begin
+  inherited Create;
   if LibraryFileName = '' then
     LibraryFileName := LIBNAME;
   if (SynDBOracleOCIpath <> '') and

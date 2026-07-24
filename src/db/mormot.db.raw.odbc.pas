@@ -770,7 +770,7 @@ type
   public
     /// load the ODBC library
     // - and retrieve all SQL*() addresses for ODBC_ENTRIES[] items
-    constructor Create;
+    constructor Create; override;
     /// raise an exception on error
     procedure Check(Conn: TSqlDBConnection; Stmt: TSqlDBStatement; Status: SqlReturn;
       HandleType: SqlSmallint; Handle: SqlHandle; InfoRaiseException: boolean = false;
@@ -1042,6 +1042,7 @@ end;
 
 constructor TOdbcLib.Create;
 begin
+  inherited Create;
   try
     TryLoadResolve([ODBC_LIB], 'SQL', @ODBC_ENTRIES, @@AllocEnv, EOdbcException);
   except

@@ -4289,6 +4289,8 @@ type
     fDisableLibrarySetDirectory: boolean;
     {$endif OSPOSIX}
   public
+    /// setup this instance
+    constructor Create; virtual;
     /// cross-platform resolution of a function entry in this library
     // - if RaiseExceptionOnFailure is set, missing entry will call FreeLib then raise it
     // - ProcName can be a space-separated list of procedure names, to try
@@ -4333,6 +4335,7 @@ type
       read fTryFromExecutableFolder write fTryFromExecutableFolder;
     {$ifdef OSWINDOWS}
     /// if set, will disable LibrarySetDirectory() Windows API logic in loading
+    // - see also DefaultDisableLibrarySetDirectory global variable
     property DisableLibrarySetDirectory: boolean
       read fDisableLibrarySetDirectory write fDisableLibrarySetDirectory;
     {$endif OSWINDOWS}
@@ -4354,6 +4357,12 @@ var
   // or - even worse - some unattended exploits: the safest is to always
   // specify the expected full path of a library, if possible
   LibraryGlobalPath: TFileName;
+
+  {$ifdef OSWINDOWS}
+  /// the default value of TSynLibrary.DisableLibrarySetDirectory property
+  // - could be used if you want to call manually LibrarySetDirectory()
+  DefaultDisableLibrarySetDirectory: boolean;
+  {$endif OSWINDOWS}
 
 /// call once Init if State is in its default lsUntested (0) value
 function LibraryAvailable(var State: TLibraryState; Init: TProcedure): boolean;
@@ -9101,6 +9110,13 @@ var
   GlobalCriticalSection: TOSLock;
 
 { TSynLibrary }
+
+constructor TSynLibrary.Create;
+begin
+  {$ifdef OSWINDOWS}
+  fDisableLibrarySetDirectory := DefaultDisableLibrarySetDirectory; // global
+  {$endif OSWINDOWS}
+end;
 
 function TSynLibrary.Resolve(const Prefix: RawUtf8; ProcName: PAnsiChar;
   Entry: PPointer; RaiseExceptionOnFailure: ExceptionClass; SilentError: PString): boolean;
