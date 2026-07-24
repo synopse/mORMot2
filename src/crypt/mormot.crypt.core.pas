@@ -1897,7 +1897,7 @@ type
     // - overloaded low-level method filling a raw memory buffer
     class procedure GetEntropy(Dest: pointer; Len: integer;
       Source: TAesPrngGetEntropySource = gesSystemFast;
-      const AppNonce: RawByteString = ''); virtual; overload;
+      const AppNonce: RawByteString = ''); overload; virtual;
     /// returns a shared instance of a TAesPrng instance
     // - if you need to generate some random content, just call the
     // TAesPrng.Main.FillRandom() overloaded methods, or directly TAesPrng.Fill()
