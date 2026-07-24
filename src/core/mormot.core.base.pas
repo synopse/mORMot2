@@ -3478,6 +3478,7 @@ type
     // function with the same entropy again WON'T seed the generator with the same
     // sequence (as with RTL's RandomSeed function), but initiate a new one
     // - calls XorEntropy(), so OS API and RdRand32/Rdtsc opcodes on Intel/AMD
+    // - entropy is accumulated as forward secrecy via global BaseEntropy[]
     procedure Seed(entropy: PByteArray = nil; entropylen: PtrInt = 0);
     /// force a well-defined seed of the generator from a fixed initial point
     // - to be called before Next/Fill to generate the very same output
@@ -3516,23 +3517,25 @@ procedure LecuyerDiffusion(dest: pointer; destsize: PtrUInt; src: PHash128);
 
 /// retrieve 512-bit of entropy, as used to seed our gsl_rng_taus2 TLecuyer
 // - XOR _Fill256FromOs() then ThreadID and RdRand32/Rdtsc on Intel/AMD
-// - the resulting output is expected to contain at least 88-bit of true
-// entropy, and is to be hashed - e.g. with DefaultHasher128() by TLecuyer.Seed
-// - execution is fast and safe, but not secure enough for a cryptographic PRNG:
-// TAesPrng.GetEntropy will call it as one of its entropy sources, in addition
-// to the more complete mormot.core.os.pas' XorOSEntropy() function
+// - the resulting output is expected to be hashed - e.g. with DefaultHasher128()
+// by TLecuyer.Seed or as part of TAesPrng.GetEntropy SHAKE-256 absorption -
+// and to be accumulated by storing the previous state for forward secrecy
+// - execution is fast and safe, but real entropy varies a lot from the system:
+// more than 128-bit on Windows, Linux or Intel/AMD, but only 30-bit on
+// macOS/BSD without Intel/AMD - and entropy is not cumulative between calls
 procedure XorEntropy(var e: THash512Rec);
 
 var
   /// 512-bit filled at startup from Intel cpuid/rdtsc/rdrand and/or Linux auxv
   // - is likely to be weak (but not void) on BSD/Mac ARM just after start
-  // - used and updated in-place by TLecuyer.Seed for its forward secrecy
+  // - accumulated in-place by TLecuyer.Seed for its forward secrecy
   BaseEntropy: THash512Rec;
 
-  /// internal stub used by XorEntropy() to quickly get 256-bit of OS entropy
-  // - this default unit with call sysutils.CreateGuid() twice - fine on Windows
-  // - mormot.core.os.posix.inc will override it to properly call fast OS APIs
-  // - consider rather XorEntropy() XorOSEntropy() or TAesPrng.GetEntropy()
+  /// internal stub used by XorEntropy() to quickly get 256-bit of OS state
+  // - warning: this provides some system-derived unpredictable state, not real
+  // OS entropy: consider XorEntropy() XorOSEntropy() or TAesPrng.GetEntropy()
+  // - Windows CoCreateGuid returns at least 122-bit, Linux modern getrandom
+  // syscall 256-bit, but fallback to raw POSIX clocks may be less than 30-bit
   _Fill256FromOs: procedure(out e: THash256Rec);
 
 /// convert the endianness of a given unsigned 16-bit integer
@@ -10327,16 +10330,12 @@ end;
 
 {$ifdef OSWINDOWS} // not defined in the Delphi RTL but in its Windows unit :(
 function GetCurrentThreadId: PtrUInt; stdcall; external 'kernel32';
-function CoCreateGuid(var h: THash128): PtrUInt; stdcall; external 'ole32.dll';
-{$ifndef CPUINTEL} // always available on WinARM but not defined in Delphi RTL
-function GetTickCount64: UInt64; stdcall; external 'kernel32';
-{$endif CPUINTEL}
-
+function CoCreateGuid(var h: THash128Rec): PtrUInt; stdcall; external 'ole32.dll';
 procedure __Fill256FromOs(out e: THash256Rec);
 begin
-  CoCreateGuid(e.Lo); // fast but not CSPRNG
-  CoCreateGuid(e.Hi);
-end;
+  CoCreateGuid(e.l); // 122-bit of entropy from Windows CSPRNG
+  CoCreateGuid(e.h);
+end; // seldom called: RtlGenRandom/SystemFunction036 is not worth it
 {$else}
 {$ifdef OSDARWIN} // lighter than sysutil's fpgettimeofday(), and in nanoseconds
 function GetTickCount64: UInt64; cdecl external 'c' name 'mach_absolute_time';
@@ -10356,13 +10355,14 @@ procedure XorEntropy(var e: THash512Rec);
 var
   tmp: THash256Rec;  // keep existing (custom) entropy in e
 begin
-  _Fill256FromOs(tmp);              // fast 256-bit entropy from OS APIs
+  _Fill256FromOs(tmp); // 256-bit of OS-derived unpredictable state
   XorMemory(e.r[0], tmp.l);
   XorMemory(e.r[1], tmp.h);
   e.r[2].L := e.r[2].L xor PtrUInt(@tmp) xor tmp.d3; // stack address
   e.r[2].H := e.r[2].H xor tmp.d2 xor PtrUInt(       // thread ID
     {$ifdef POSIXDELPHI} MainThreadID {$else} GetCurrentThreadId {$endif});
   {$ifdef ASMINTEL}
+  // Intel/AMD RDRAND may add 128-bit and RDTSC add 30-bit of entropy
   if cfTSC in CpuFeatures then      // may trigger GPF if CR4.TSD bit is set
     tmp.d0 := tmp.d0 xor Rdtsc;     // 64-bit CPU cycles
   RdRand32(@tmp.l, 4);              // xor 128-bit HW CSPRNG: no-op if no SSE42
@@ -10372,6 +10372,7 @@ begin
   {$ifdef FPC} e.r[2].L := e.r[2].L xor sysutils.GetTickCount64; {$endif FPC}
   {$endif ASMINTEL}
   crcblock(@e.r[3], @tmp.l);        // crc32c 128-bit diffusion
+  FillZero(tmp.b);                  // anti-forensic
 end; // note: RTL Random() not used because it is not thread-safe nor consistent
 
 procedure AdjustShortStringFromRandom(dest: PByteArray; size: PtrUInt);
