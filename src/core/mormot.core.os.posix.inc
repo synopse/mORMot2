@@ -5863,7 +5863,10 @@ begin
   end;
   if SystemInfo.dwPageSize = 0 then
     SystemInfo.dwPageSize := 4096; // paranoid - the libc uses AT_PAGESZ also
-  SystemInfo.dwNumberOfProcessors := CpuThreads; // sched_getaffinity syscall
+  {$ifdef ASMINTEL} // Intel/AMD CPUID could avoid reading /proc/cpuinfo
+  if IntelCpuCacheCount <> 0 then
+    SystemInfo.dwNumberOfProcessors := CpuThreads; // sched_getaffinity syscall
+  {$endif ASMINTEL}
   if SystemInfo.dwNumberOfProcessors = 0 then
   begin
     modname := ReadCpuInfo; // need to read /proc/cpuinfo
