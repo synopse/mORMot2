@@ -4285,6 +4285,8 @@ type
     fTryFromExecutableFolder: boolean;
     {$ifdef OSPOSIX}
     fLibraryPathTested: boolean;
+    {$else}
+    fDisableLibrarySetDirectory: boolean;
     {$endif OSPOSIX}
   public
     /// cross-platform resolution of a function entry in this library
@@ -4329,6 +4331,11 @@ type
     // - see also the even more unsafe LibraryGlobalPath variable
     property TryFromExecutableFolder: boolean
       read fTryFromExecutableFolder write fTryFromExecutableFolder;
+    {$ifdef OSWINDOWS}
+    /// if set, will disable LibrarySetDirectory() Windows API logic in loading
+    property DisableLibrarySetDirectory: boolean
+      read fDisableLibrarySetDirectory write fDisableLibrarySetDirectory;
+    {$endif OSWINDOWS}
   end;
 
   /// used to track e.g. a library or API availability at runtime
@@ -9234,7 +9241,8 @@ var
     // change the current folder at loading on Windows
     {$ifdef OSWINDOWS}
     try
-      if nwd <> '' then
+      if (nwd <> '') and
+         not fDisableLibrarySetDirectory then
       begin
         GlobalLock; // SetDllDirectoryW() is for the whole process not thread
         if not LibrarySetDirectory(nwd) then // as documented on microsoft.com
@@ -9245,7 +9253,8 @@ var
       end;
       fHandle := LibraryOpen(lib); // preserve x87 flags and prevent msg box
     finally
-      if nwd <> '' then
+      if (nwd <> '') and
+         not fDisableLibrarySetDirectory then
       begin
         SetDllDirectoryW(nil); // revert to default
         GlobalUnLock;
