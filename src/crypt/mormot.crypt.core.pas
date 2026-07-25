@@ -1704,7 +1704,7 @@ type
     // - mixes several independent entropy sources (OS CSPRNG, internal process
     // state and optional external providers) using SHAKE-256 in XOF mode
     // - maintains a 256-bit secret chaining state updated on every call, for
-    // forward secrecy and prediction resistance across successive invocations
+    // forward secrecy and backtracking resistance across successive invocations
     // - the supplied AppNonce is used as a personalization/domain-separation
     // string, allowing independent applications or protocols to derive
     // unrelated entropy streams from the same implementation
@@ -7649,16 +7649,18 @@ class procedure TAesPrngAbstract.GetEntropy(Dest: pointer; Len: integer;
 var
   data: THash512Rec;
   sha3: TSha3;
-  tmp: TSynTempBuffer; // sha3.Cipher() requires source <> dest buffers
+  tmp: TSynTempBuffer; // SHAKE-256 output
 begin
   if Len <= 0 then
     exit;
-  // first pass to fill result with official "system" entropy
+  // fill Dest with Len bytes of official "system" entropy
   if Source <> gesUserOnly then
+  begin
     FillSystemRandom(Dest, Len, Source = gesSystemOnlyMayBlock);
-  if Source in [gesSystemOnly, gesSystemOnlyMayBlock] then
-    exit; // standard, but weaker if OS is outdated/corrupted
-  // XOR result with some "userland" entropy
+    if Source in [gesSystemOnly, gesSystemOnlyMayBlock] then
+      exit; // enough for some usecases
+  end;
+  // XOR with Len bytes of "userland" entropy
   sha3.Init(SHAKE_256); // SHA-3 in XOF mode for variable-length output
   try
     // 128-bit system/process information used as salt/padding
@@ -7673,7 +7675,7 @@ begin
       OpenSslRandBytes(@data, SizeOf(data));
       sha3.Update(@data, SizeOf(data));
     end;
-    if Source <> gesSystemFast then // bypasss this slow function by default
+    if Source <> gesSystemFast then // bypass this slow function by default
     begin
       // 512-bit of low-level Operating System current state from mormot.core.os
       XorOSEntropy(data); // detailed system cpu and memory info + system random
@@ -7684,15 +7686,11 @@ begin
     sha3.Update(@data, SizeOf(data));
     // append the supplied nonce (library name by default) as domain separation
     sha3.Update(AppNonce);
-    // thread-safe state ratcheting and final XOR to result
-    if Source = gesUserOnly then
-      tmp.buf := Dest // no OS random to XOR with
-    else
-      tmp.Init(Len);  // store transient SHAKE-256 output
+    // thread-safe 256-bit state ratcheting
     _EntropyChainSafe.Lock;
     try
       // ensure proper initialization from OS e.g. for gesUserOnly mode
-      if _EntropyChain.i0 = 0 then
+      if _EntropyChain.d0 = 0 then
         FillSystemRandom(@_EntropyChain, SizeOf(_EntropyChain), {block=}false);
       // 256-bit hash of previous state
       sha3.Update(@_EntropyChain, SizeOf(_EntropyChain));
@@ -7700,15 +7698,17 @@ begin
       sha3.Final(_EntropyChain.b, {NoInit=}true);
     finally
       _EntropyChainSafe.UnLock;
-      // XOR previously retrieved OS entropy using SHAKE-256 in XOF mode
-      sha3.Final(tmp.buf, {bits=}Len shl 3, {NoInit=}true);
-      if Source <> gesUserOnly then
-      begin
-        XorMemory(Dest, tmp.buf, Len);
-        FillZero(tmp.buf^, Len);
-        tmp.Done;
-      end;
     end;
+    // squeeze Len bytes of SHAKE-256 output as "userland" entropy
+    if Source = gesUserOnly then
+    begin
+      sha3.Final(Dest, {bits=}Len shl 3, {NoInit=}true); // direct expand
+      exit;
+    end;
+    sha3.Final(tmp.Init(Len), {bits=}Len shl 3, {NoInit=}true);
+    XorMemory(Dest, tmp.buf, Len); // returns "system" XOR "userland"
+    FillZero(tmp.buf^, Len);
+    tmp.Done;
   finally
     sha3.Done;
     FillZero(data.b);
