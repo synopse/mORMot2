@@ -1778,8 +1778,9 @@ type
     function RandomSalt(var bin, b64: RawByteString; defsiz: integer = 0;
       const salt: RawUtf8 = ''; enc: PChar64 = nil; dec: PAnsiCharDec = nil): boolean;
     /// would force the internal generator to re-seed its private key
-    // - avoid potential attacks on backward or forward secrecy
-    // - would be called by FillRandom() methods, according to SeedAfterBytes
+    // - would be called by FillRandom() methods to periodically reinitialize
+    // the internal state of the generator e.g. from SHAKE-256 GetEntropy(),
+    // for forward secrecy and backtracking resistance to state compromise
     // - this method is thread-safe, and does nothing by default
     procedure Seed; virtual;
     /// create a TKS1 anti-forensic representation of a key for safe storage
@@ -1881,7 +1882,7 @@ type
     fAesKeySize: integer;
     fSeedEntropySource: TAesPrngGetEntropySource;
     fSeedNonce: RawByteString;
-    procedure PrepareFill(Len: PtrInt); {$ifdef HASINLINE} inline; {$endif}
+    procedure LockAndPrepareFill(Len: PtrInt); {$ifdef HASINLINE} inline; {$endif}
   public
     /// initialize the internal secret key, using Operating System entropy
     // - once created, you can tune this instance before any Fill() by setting
@@ -7745,7 +7746,7 @@ begin
   end;
 end;
 
-procedure TAesPrng.PrepareFill(Len: PtrInt);
+procedure TAesPrng.LockAndPrepareFill(Len: PtrInt);
 begin
   if (fBytesSinceSeed = 0) or // never seeded
      ((fSeedAfterBytes <> 0) and
@@ -7766,14 +7767,14 @@ end;
 
 procedure TAesPrng.FillRandom(out Block: TAesBlock);
 begin
-  PrepareFill(16);
+  LockAndPrepareFill(16);
   DoRndBlock(TAesContext(fAes), Block);
   fSafe.UnLock;
 end;
 
 procedure TAesPrng.FillRandom(out Buffer: THash256);
 begin
-  PrepareFill(32);
+  LockAndPrepareFill(32);
   DoRndBlock(TAesContext(fAes), THash256Rec({%H-}Buffer).Lo);
   DoRndBlock(TAesContext(fAes), THash256Rec({%H-}Buffer).Hi);
   fSafe.UnLock;
@@ -7819,7 +7820,7 @@ begin
   Len := main shl AesBlockShift;
   if remain <> 0 then
     inc(Len, SizeOf(TAesBlock));
-  PrepareFill(Len);
+  LockAndPrepareFill(Len);
   if main <= 16 then
   begin
     // small buffers (up to 16 * 16 = 256 bytes) are filled within the lock
