@@ -4422,6 +4422,8 @@ end;
 {$else}
   {$ifdef OSANDROID}
     {$define USEMPROTECT}
+  {$else}
+    {$define USEMPROTECT64K} // maintain a list of unprotected 64KB pages
   {$endif OSANDROID}
 {$endif OSBSDDARWIN}
 
@@ -4443,24 +4445,25 @@ begin
   {$endif UNIX}
 end;
 
-{$ifdef OSLINUX}
+{$ifdef USEMPROTECT64K}
 var
   Patched: TPtrUIntDynArray;
   PatchedCount: integer;
+  PatchedSize: cardinal = 65536; // mprotect() per $10000 bytes pages
 
 procedure PatchCodeProtectBack;
 var
   i: PtrInt;
 begin
   for i := 0 to PatchedCount - 1 do
-    SynMProtect(Patched[i], SystemInfo.dwPageSize, PROT_READ or PROT_EXEC);
+    SynMProtect(Patched[i], PatchedSize, PROT_READ or PROT_EXEC);
   PatchedCount := 0;
 end;
 {$else}
 procedure PatchCodeProtectBack;
 begin // nothing to do on Android/BSD/Darwin: not tested yet
 end;
-{$endif OSLINUX}
+{$endif USEMPROTECT64K}
 
 procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
   LeaveUnprotected: boolean);
@@ -4473,19 +4476,30 @@ begin
   if Backup <> nil then
     MoveByOne(Old, Backup, Size); // do not use Move() here
   OsPageSize := SystemInfo.dwPageSize;
+  {$ifdef USEMPROTECT64K}
+  if OsPageSize > PatchedSize then
+    PatchedSize := OSPageSize // very unlikely OS page size > 64KB
+  else
+    OsPageSize := PatchedSize;
+  {$endif USEMPROTECT64K}
   PageSize := OsPageSize;
   AlignedAddr := (PtrUInt(Old) div OsPageSize) * OsPageSize;
   while PtrUInt(Old) + PtrUInt(Size) >= AlignedAddr + PageSize do
+  begin
     inc(PageSize, OsPageSize);
-  {$ifdef OSLINUX}
-  if LeaveUnprotected and
-     (PageSize = OsPageSize) and
+    {$ifdef USEMPROTECT64K}
+    LeaveUnprotected := true; // we can't safely put it back
+    {$endif USEMPROTECT64K}
+  end;
+  {$ifdef USEMPROTECT64K}
+  if (PageSize = OsPageSize) and
      PtrUIntScanExists(pointer(Patched), PatchedCount, AlignedAddr) then
   begin
+    // this page is already writable: we can patch directly
     MoveByOne(New, Old, Size); // do not use Move() here
     exit;
   end;
-  {$endif OSLINUX}
+  {$endif USEMPROTECT64K}
   ProtectedResult := SynMProtect(
     AlignedAddr, PageSize, PROT_READ or PROT_WRITE or PROT_EXEC) = 0;
   ProtectedMemory := not ProtectedResult;
@@ -4494,11 +4508,18 @@ begin
       AlignedAddr, PageSize, PROT_READ or PROT_WRITE) = 0;
   if ProtectedResult then
     try
-      MoveByOne(New, Old, Size);// do not use Move() here
+      MoveByOne(New, Old, Size); // do not use Move() here
       if LeaveUnprotected then
-        {$ifdef OSLINUX}
-        AddPtrUInt(Patched, PatchedCount, AlignedAddr)
-        {$endif OSLINUX}
+        {$ifdef USEMPROTECT64K}
+        repeat
+          if not PtrUIntScanExists(pointer(Patched), PatchedCount, AlignedAddr) then
+            AddPtrUInt(Patched, PatchedCount, AlignedAddr);
+          dec(PageSize, OsPageSize);
+          if PageSize = 0 then
+            break;
+          inc(AlignedAddr, OsPageSize);
+        until false
+        {$endif USEMPROTECT64K}
       else if ProtectedMemory then
         SynMProtect(AlignedAddr, PageSize, PROT_READ or PROT_EXEC);
     except
