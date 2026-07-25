@@ -3884,13 +3884,14 @@ begin
   // no FillSystemRandom() to avoid endless recursive calls in XorEntropy()
   {$ifdef HASGETRANDOM}
   // try to get whole 256-bit from OS crypto-PRNG in 1 syscall - kernel >= 3.17
-  if LinuxGetRandom(@e, SizeOf(e)) then
-    exit;
+  if not LinuxGetRandom(@e, SizeOf(e)) then
   {$endif HASGETRANDOM}
-  clock_gettime(CLOCK_MONOTONIC_FAST, @e.l); // fast VDSO call
-  RetrieveSysInfo(si); // 1 fast syscall on Linux but slowly emulated on Mac/BSD
+  begin
+    clock_gettime(CLOCK_MONOTONIC_FAST, @e.l); // fast VDSO call as fallback
+    crcblock(@e.l, @SystemEntropy.LiveFeed);   // obfuscate
+  end;
+  SysInfo(@si); // this very fast syscall won't hurt
   DefaultHasher128(@e.h, @si, SizeOf(si)); // maybe AesNiHash128
-  crcblocks(@e, @SystemEntropy, SizeOf(e) div SizeOf(TBlock128)); // obfuscate
 end;
 
 function GetMemoryInfo(out info: TMemoryInfo; withalloc: boolean): boolean;

@@ -7650,7 +7650,7 @@ class procedure TAesPrngAbstract.GetEntropy(Dest: pointer; Len: integer;
 var
   data: THash512Rec;
   sha3: TSha3;
-  tmp: TSynTempBuffer; // SHAKE-256 output
+  tmp: TSynTempBuffer; // for SHAKE-256 output
 begin
   if Len <= 0 then
     exit;
