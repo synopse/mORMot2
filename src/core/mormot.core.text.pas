@@ -9460,64 +9460,62 @@ begin
 end;
 
 type
-  // 3KB info on stack - only supported token is %, with any const arguments
+  // 4KB info on stack - only supported token is %, with any const arguments
   {$ifdef USERECORDWITHMETHODS}
   TFormatUtf8 = record
   {$else}
   TFormatUtf8 = object
   {$endif USERECORDWITHMETHODS}
   public
-    last: PTempUtf8;
-    L: PtrInt;
-    blocks: array[0..63] of TTempUtf8; // to avoid most heap allocations
+    max, last: PTempUtf8;
+    size: PtrInt;
+    blocks: array[0..80] of TTempUtf8; // 4KB to avoid most heap allocations
     procedure Init;
       {$ifdef HASINLINE} inline; {$endif}
-    procedure Parse(const Format: RawUtf8; Arg: PVarRec; ArgCount: PtrInt);
-    procedure DoDelim(Arg: PVarRec; ArgCount: integer; EndWithDelim: boolean;
+    procedure InitParse(const Format: RawUtf8; Arg: PVarRec; ArgCount: PtrInt);
+    procedure InitDelim(Arg: PVarRec; ArgCount: integer; EndWithDelim: boolean;
       Delim: AnsiChar);
     procedure AddText(const SomeText: RawUtf8);
     procedure AddVarRec(Arg: PVarRec; ArgCount: PtrUInt);
-      {$ifdef HASINLINE} inline; {$endif}
     procedure DoAppend(var Text: RawUtf8; Arg: PVarRec; ArgCount: PtrInt);
     procedure DoPrepend(var Text: RawUtf8; Arg: PVarRec; ArgCount, CodePage: PtrInt);
     procedure WriteAll(Dest: PUtf8Char; d: PTempUtf8);
       {$ifdef HASINLINE} inline; {$endif}
     procedure WriteString(var result: string);
-    function WriteMax(Dest: PUtf8Char; Max: PtrUInt): PUtf8Char;
+    function WriteMax(Dest: PUtf8Char; MaxSize: PtrUInt): PUtf8Char;
   end;
 
 procedure TFormatUtf8.Init;
 begin
-  L := 0;
   last := @blocks;
+  max := @PByteArray(last)[SizeOf(blocks)];
+  size := 0;
 end;
 
 procedure TooManyArgs;
-begin
+begin // blocks[] allows up to 40 arguments
   ESynException.RaiseU('TFormatUtf8: too many arguments');
 end;
 
 procedure TFormatUtf8.AddVarRec(Arg: PVarRec; ArgCount: PtrUInt);
 var
-  d: PTempUtf8;
+  c: PTempUtf8;
 begin
   if ArgCount = 0 then
     exit;
-  d := last;
-  inc(d, ArgCount);
-  if PtrUInt(d) > PtrUInt(@blocks[high(blocks)]) then
-    TooManyArgs;
-  d := last;
+  c := last;
   repeat
-    if VarRecToTempUtf8(Arg, d^) then
+    if PtrUInt(c) >= PtrUInt(max) then
+      TooManyArgs;
+    if VarRecToTempUtf8(Arg, c^) then
     begin
-      inc(L, d^.Len);
-      inc(d);
+      inc(size, c^.Len);
+      inc(c);
     end;
     inc(Arg);
     dec(ArgCount)
   until ArgCount = 0;
-  last := d;
+  last := c;
 end;
 
 procedure TFormatUtf8.WriteAll(Dest: PUtf8Char; d: PTempUtf8);
@@ -9530,89 +9528,96 @@ begin
   until d = last;
 end;
 
-procedure TFormatUtf8.Parse(const Format: RawUtf8; Arg: PVarRec; ArgCount: PtrInt);
+procedure TFormatUtf8.InitParse(const Format: RawUtf8; Arg: PVarRec; ArgCount: PtrInt);
 var
   F, FDeb: PUtf8Char;
   c: PTempUtf8;
 begin
-  if ArgCount >= length(blocks) div 2 then
-    TooManyArgs;
-  L := 0;
   c := @blocks;
+  max := @PByteArray(c)[SizeOf(blocks)];
+  size := 0;
   F := pointer(Format);
   if F <> nil then
     repeat
       if F^ = #0 then
-        break
-      else if F^ <> '%' then
+        break;
+      if PtrUInt(c) >= PtrUInt(max) then
+        TooManyArgs;
+      if F^ <> '%' then
       begin
         FDeb := F;
         repeat
           inc(F);
         until (F^ = '%') or
               (F^ = #0);
-        c^.Text := FDeb;
         c^.Len := F - FDeb;
-        inc(L, c^.Len);
-        c^.TempRawUtf8 := nil;
-        inc(c);
-        if F^ = #0 then
-          break;
+        if c^.Len <> 0 then // %%% does not need any blocks[] slot
+        begin
+          c^.Text := FDeb;
+          inc(size, c^.Len);
+          c^.TempRawUtf8 := nil;
+          inc(c);
+        end;
+        continue;
       end;
       inc(F); // jump '%'
       if ArgCount <> 0 then
       begin
         if VarRecToTempUtf8(Arg, c^) then
         begin
-          inc(L, c^.Len);
+          inc(size, c^.Len);
           inc(c);
         end;
         inc(Arg);
         dec(ArgCount);
-        if F^ = #0 then
-          break;
+        continue;
       end
-      else
-      if F^ = #0 then
-        break
-      else // no more available Args -> add all remaining text
+      else // ArgCount = 0 -> no more available Args -> add all remaining text
       begin
-        c^.Text := F;
-        c^.Len := length(Format) - (F - pointer(Format));
-        inc(L, c^.Len);
-        c^.TempRawUtf8 := nil;
-        inc(c);
+        if F^ <> #0 then
+        begin
+          if PtrUInt(c) >= PtrUInt(max) then
+            TooManyArgs;
+          c^.Text := F;
+          c^.Len := length(Format) - (F - pointer(Format));
+          inc(size, c^.Len);
+          c^.TempRawUtf8 := nil;
+          inc(c);
+        end;
         break;
       end;
     until false;
   last := c;
 end;
 
-procedure TFormatUtf8.DoDelim(Arg: PVarRec; ArgCount: integer;
+procedure TFormatUtf8.InitDelim(Arg: PVarRec; ArgCount: integer;
   EndWithDelim: boolean; Delim: AnsiChar);
 var
   c: PTempUtf8;
 begin
-  L := 0;
+  c := @blocks;
+  max := @PByteArray(c)[SizeOf(blocks)];
+  size := 0;
   if ArgCount <= 0 then
    exit;
-  if ArgCount >= length(blocks) div 2 then
-    TooManyArgs;
-  c := @blocks;
   repeat
+    if PtrUInt(c) >= PtrUInt(max) then
+      TooManyArgs;
     if VarRecToTempUtf8(Arg, c^) then
     begin
-      inc(L, c^.Len);
+      inc(size, c^.Len);
       if (c^.Text[c^.Len - 1] <> Delim) and
          (EndWithDelim or
           (ArgCount <> 1)) then // append delimiter
       begin
         inc(c);
+        if PtrUInt(c) >= PtrUInt(max) then
+          TooManyArgs;
         c^.Len := 1;
         c^.Text := @c^.Temp;
         c^.Temp[0] := Delim;
         c^.TempRawUtf8 := nil;
-        inc(L);
+        inc(size);
       end;
       inc(c);
     end;
@@ -9623,26 +9628,26 @@ begin
 end;
 
 procedure TFormatUtf8.AddText(const SomeText: RawUtf8);
+var
+  c: PTempUtf8;
 begin // in our internal usage, we know that SomeText is <> ''
-  if PtrUInt(last) > PtrUInt(@blocks[high(blocks)]) then
+  c := last;
+  if PtrUInt(c) >= PtrUInt(max) then
     TooManyArgs;
-  with last^ do
-  begin
-    Len := length(SomeText);
-    inc(L, Len);
-    Text := pointer(SomeText);
-    TempRawUtf8 := nil;
-  end;
+  c^.Len := length(SomeText);
+  inc(size, c^.Len);
+  c^.Text := pointer(SomeText);
+  c^.TempRawUtf8 := nil;
   inc(last);
 end;
 
 procedure TFormatUtf8.DoAppend(var Text: RawUtf8; Arg: PVarRec; ArgCount: PtrInt);
 begin
   AddVarRec(Arg, ArgCount);
-  if L = 0 then
+  if size = 0 then
     exit; // nothing to add
   ArgCount := length(Text);
-  SetLength(Text, ArgCount + L);
+  SetLength(Text, ArgCount + size);
   WriteAll(PUtf8Char(@PByteArray(Text)[ArgCount]), @blocks); // append Arg[] text
 end;
 
@@ -9655,28 +9660,28 @@ begin
     exit;
   Init;
   AddVarRec(Arg, ArgCount);
-  if L = 0 then
+  if size = 0 then
     exit; // nothing to add
   ArgCount := length(Text);
-  new := FastNewString(L + ArgCount, CodePage);
-  MoveFast(pointer(Text)^, new[L], ArgCount);
+  new := FastNewString(size + ArgCount, CodePage);
+  MoveFast(pointer(Text)^, new[size], ArgCount);
   FastAssignNew(Text, new);
   WriteAll(new, @blocks);
 end;
 
-function TFormatUtf8.WriteMax(Dest: PUtf8Char; Max: PtrUInt): PUtf8Char;
+function TFormatUtf8.WriteMax(Dest: PUtf8Char; MaxSize: PtrUInt): PUtf8Char;
 var
   d: PTempUtf8;
   avail: PtrUInt;
 begin
-  if (Max > 0) and
-     (L <> 0) and
+  if (MaxSize > 0) and
+     (size <> 0) and
      (Dest <> nil) then
   begin
-    inc(Max, PtrUInt(Dest));
+    inc(MaxSize, PtrUInt(Dest));
     d := @blocks;
     repeat
-      avail := Max - PtrUInt(Dest);
+      avail := MaxSize - PtrUInt(Dest);
       if PtrUInt(d^.Len) > avail then // avoid buffer overflow
       begin
         MoveFast(d^.Text^, Dest^, avail);
@@ -9684,7 +9689,7 @@ begin
           TempUtf8Done(d^);
           inc(d);
         until d = last; // avoid memory leak
-        result := PUtf8Char(Max);
+        result := PUtf8Char(MaxSize);
         exit;
       end;
       MoveFast(d^.Text^, Dest^, d^.Len);
@@ -9701,18 +9706,18 @@ var
   temp: TSynTempBuffer; // will avoid most memory allocations
 begin
   result := '';
-  if L = 0 then
+  if size = 0 then
     exit;
   {$ifndef UNICODE}
   if Unicode_CodePage = CP_UTF8 then // e.g. on POSIX or Windows + Lazarus
   begin
-    WriteAll(FastSetString(RawUtf8(result), L), @blocks);
+    WriteAll(FastSetString(RawUtf8(result), size), @blocks);
     exit; // here string=UTF8String=RawUtf8
   end;
   {$endif UNICODE}
-  temp.Init(L);
+  temp.Init(size);
   WriteAll(temp.buf, @blocks);
-  Utf8DecodeToString(temp.buf, L, result);
+  Utf8DecodeToString(temp.buf, size, result);
   temp.Done;
 end;
 
@@ -9728,9 +9733,9 @@ begin
     VarRecToUtf8(@Args[0], Result)
   else
   begin
-    f.Parse(Format, @Args[0], length(Args)); // handle all supplied Args[]
-    if f.L <> 0 then
-      f.WriteAll(FastSetString(Result, f.L), @f.blocks)
+    f.InitParse(Format, @Args[0], length(Args)); // handle all supplied Args[]
+    if f.size <> 0 then
+      f.WriteAll(FastSetString(Result, f.size), @f.blocks)
     else
       FastAssignNew(Result);
   end;
@@ -9741,9 +9746,9 @@ procedure FormatUtf8Raw(const Format: RawUtf8; Args: PVarRec; ArgsCount: PtrInt;
 var
   f: TFormatUtf8 absolute Temp;
 begin
-  f.Parse(Format, Args, ArgsCount); // handle all supplied Args[]
-  if f.L <> 0 then
-    f.WriteAll(FastSetString(Result, f.L), @f.blocks)
+  f.InitParse(Format, Args, ArgsCount); // handle all supplied Args[]
+  if f.size <> 0 then
+    f.WriteAll(FastSetString(Result, f.size), @f.blocks)
   else
     FastAssignNew(Result);
 end;
@@ -9753,7 +9758,7 @@ function FormatBufferRaw(const Format: RawUtf8; Args: PVarRec; ArgsCount: PtrInt
 var
   f: TFormatUtf8;
 begin
-  f.Parse(Format, Args, ArgsCount);
+  f.InitParse(Format, Args, ArgsCount);
   result := f.WriteMax(Dest, DestLen);
 end;
 
@@ -9773,7 +9778,7 @@ procedure FormatShort(const Format: RawUtf8; const Args: array of const;
 var
   f: TFormatUtf8;
 begin
-  f.Parse(Format, @Args[0], length(Args));
+  f.InitParse(Format, @Args[0], length(Args));
   result[0] := AnsiChar(f.WriteMax(@result[1], high(result)) - @result[1]);
 end;
 
@@ -9788,8 +9793,8 @@ procedure FormatAdder(var Dest: TSynTempAdder; const Format: RawUtf8; const Args
 var
   f: TFormatUtf8;
 begin
-  f.Parse(Format, @Args[0], length(Args));
-  f.WriteAll(Dest.Add(f.L), @f.blocks);
+  f.InitParse(Format, @Args[0], length(Args));
+  f.WriteAll(Dest.Add(f.size), @f.blocks);
 end;
 
 procedure FormatString(const Format: RawUtf8; const Args: array of const;
@@ -9803,7 +9808,7 @@ begin
     Utf8ToStringVar(Format, result)
   else
   begin
-    f.Parse(Format, @Args[0], length(Args));
+    f.InitParse(Format, @Args[0], length(Args));
     f.WriteString(result);
   end;
 end;
@@ -9834,7 +9839,7 @@ begin
          f.blocks[0].Len := seplen;
          f.blocks[0].Text := pointer(Separator);
          f.blocks[0].TempRawUtf8 := nil;
-         f.L := seplen;
+         f.size := seplen;
          inc(f.last);
        end;
     end;
@@ -10029,14 +10034,14 @@ var
 begin
   if high(Args) = 0 then
   begin
-    VarRecToUtf8(@Args[0], result); // can be returned e.g. by reference
+    VarRecToUtf8(@Args[0], result); // could be returned e.g. by reference
     exit;
   end;
   {%H-}f.Init;
   f.AddVarRec(@Args[0], length(Args));
-  if f.L <> 0 then
+  if f.size <> 0 then
   begin
-    new := FastNewString(f.L, CP_UTF8); // inlined FastSetString()
+    new := FastNewString(f.size, CP_UTF8); // inlined FastSetString()
     f.WriteAll(new, @f.blocks);
   end
   else
@@ -10054,9 +10059,9 @@ begin
   f.AddVarRec(@Args[0], length(Args));
   if IncludeLast <> '' then
     f.AddText(IncludeLast);
-  if f.L <> 0 then
+  if f.size <> 0 then
   begin
-    new := FastNewString(f.L, CP_UTF8); // inlined FastSetString()
+    new := FastNewString(f.size, CP_UTF8); // inlined FastSetString()
     f.WriteAll(new, @f.blocks);
   end
   else
@@ -10078,7 +10083,7 @@ function MakePath(const Part: array of const; EndWithDelim: boolean;
 var
   f: TFormatUtf8;
 begin
-  {%H-}f.DoDelim(@Part[0], length(Part), EndWithDelim, Delim);
+  {%H-}f.InitDelim(@Part[0], length(Part), EndWithDelim, Delim);
   f.WriteString(string(result));
 end;
 
@@ -10087,7 +10092,7 @@ procedure MakePath(const Part: array of const; var Dest: TFileName;
 var
   f: TFormatUtf8;
 begin
-  {%H-}f.DoDelim(@Part[0], length(Part), EndWithDelim, Delim);
+  {%H-}f.InitDelim(@Part[0], length(Part), EndWithDelim, Delim);
   f.WriteString(string(Dest));
 end;
 
@@ -10188,7 +10193,7 @@ begin
       dec(hipart)
     else
       ext := '';
-  f.DoDelim(@Part[0], hipart + 1, false, PathDelim);
+  f.InitDelim(@Part[0], hipart + 1, false, PathDelim);
   if ext <> '' then
   begin
     if ext[1] <> '.' then
@@ -10203,9 +10208,9 @@ function MakeCsv(const Value: array of const; EndWithComma: boolean;
 var
   f: TFormatUtf8;
 begin
-  f.DoDelim(@Value[0], length(Value), EndWithComma, Comma);
-  if f.L <> 0 then
-    f.WriteAll(FastSetString(result, f.L), @f.blocks)
+  f.InitDelim(@Value[0], length(Value), EndWithComma, Comma);
+  if f.size <> 0 then
+    f.WriteAll(FastSetString(result, f.size), @f.blocks)
   else
     FastAssignNew(result);
 end;
