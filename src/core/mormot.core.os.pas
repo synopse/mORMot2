@@ -3794,14 +3794,20 @@ type
     procedure Close;
   end;
 
+  TExeFormat = (
+    efUnknown,
+    efPE,
+    efElf32,
+    efElf64);
+
 /// quickly check if a resource do exist - just cross-platform wrapper to FindResource()
 function ResourceExists(ResourceName, ResType: PChar; Instance: TLibHandle = 0): boolean;
 
-/// retrieve raw information about one section from a memory-mapped ELF file
-// - cross-plaform function able to parse Little-Endian ELF32/ELF64 files
+/// retrieve raw information about one section from a memory-mapped ELF/PE file
+// - cross-plaform function able to parse Little-Endian ELF32/ELF64 or PE files
 // - is a much faster alternative to exeinfo FindExeSection()
-function FindElfSection(const exe: TMemoryMap; name: PUtf8Char;
-  var offset, size: integer): boolean;
+function FindExeSection(const exe: TMemoryMap; name: PUtf8Char;
+  var offset, size: integer): TExeFormat;
 
 type
   /// store CPU and RAM usage for a given process
@@ -8825,6 +8831,26 @@ begin
 end;
 
 type
+  TDosHeader = packed record
+    e_magic: word;
+    padding: array[0..28] of word;
+    e_lfanew: cardinal;
+  end;
+  PDosHeader = ^TDosHeader;
+  TPeHeader = packed record
+    Signature: cardinal;
+    Machine, NumberOfSections: word;
+    TimeDateStamp, PointerToSymbolTable, NumberOfSymbols: cardinal;
+    SizeOfOptionalHeader, Characteristics: word;
+  end;
+  TPeSection = packed record
+    Name8: QWord;
+    VirtualSize, VirtualAddress, SizeOfRawData, PointerToRawData,
+    PointerToRelocations, PointerToLinenumbers: cardinal;
+    NumberOfRelocations, NumberOfLinenumbers: word;
+    Characteristics: cardinal;
+  end;
+
   TElfIdent = packed record
     magic: cardinal;
     file_class, data_encoding, file_version, os_abi: byte;
@@ -8853,86 +8879,122 @@ type
     sh_addralign, sh_entsize: QWord;
   end;
 
-function FindElfSection(const exe: TMemoryMap; name: PUtf8Char;
-  var offset, size: integer): boolean;
+function FindExeSection(const exe: TMemoryMap; name: PUtf8Char;
+  var offset, size: integer): TExeFormat;
 var
-  id: ^TElfIdent;
-  h32: ^TElfHeader32;
-  h64: ^TElfHeader64;
-  s32, str32: ^TElfSection32;
-  s64, str64: ^TElfSection64;
-  names: PAnsiChar;
+  eid: ^TElfIdent;
+  eh32: ^TElfHeader32;
+  eh64: ^TElfHeader64;
+  es32, estr32: ^TElfSection32;
+  es64, estr64: ^TElfSection64;
+  pe: ^TPeHeader;
+  ps: ^TPeSection;
+  tmp: TTemp16;
+  names, one: PAnsiChar;
   n: PtrUInt;
 begin
-  result := false;
-  id := pointer(exe.Buffer);
-  if (id <> nil) and
-     (name <> nil) and
-     (exe.Size > SizeOf(TElfHeader64)) and
-     (id^.magic = $464c457f) and  // ELF
-     (id^.file_version = 1) and
-     (id^.data_encoding = 1) then // Little Endian
-  case id^.file_class of
+  result := efUnknown;
+  eid := pointer(exe.Buffer);
+  if (eid = nil) or
+     (name = nil) then
+    exit;
+  if (exe.Size > SizeOf(TElfHeader64)) and
+     (eid^.magic = $464c457f) and  // ELF
+     (eid^.file_version = 1) and
+     (eid^.data_encoding = 1) then // Little Endian
+  case eid^.file_class of
     1: // ELFCLASS32
       begin
-        inc(id);
-        h32 := pointer(id);
-        n := h32^.e_shnum;
+        inc(eid);
+        eh32 := pointer(eid);
+        n := eh32^.e_shnum;
         if (n = 0) or
-           (h32^.e_shoff = 0) or
-           (h32^.e_shstrndx >= n) or
-           (h32^.e_shentsize <> SizeOf(s32^)) or
-           (Int64(h32^.e_shoff) + PtrInt(n * SizeOf(s32^)) > exe.Size) then
+           (eh32^.e_shoff = 0) or
+           (eh32^.e_shstrndx >= n) or
+           (eh32^.e_shentsize <> SizeOf(es32^)) or
+           (Int64(eh32^.e_shoff) + PtrInt(n * SizeOf(es32^)) > exe.Size) then
           exit;
-        s32 := pointer(exe.Buffer + h32^.e_shoff);
-        str32 := @PByteArray(s32)[h32^.e_shstrndx * SizeOf(s32^)];
-        names := exe.Buffer + str32^.sh_offset;
+        es32 := pointer(exe.Buffer + eh32^.e_shoff);
+        estr32 := @PByteArray(es32)[eh32^.e_shstrndx * SizeOf(es32^)];
+        names := exe.Buffer + estr32^.sh_offset;
         repeat
-          if (s32^.sh_name < str32^.sh_size) and
-             (mormot.core.base.StrComp(names + s32^.sh_name, name) = 0) then
+          if (es32^.sh_name < estr32^.sh_size) and
+             (mormot.core.base.StrComp(names + es32^.sh_name, name) = 0) then
           begin
-            if Int64(s32^.sh_offset) + PtrInt(s32^.sh_size) > exe.Size then
+            if Int64(es32^.sh_offset) + PtrInt(es32^.sh_size) > exe.Size then
               exit;
-            offset := s32^.sh_offset;
-            size := s32^.sh_size;
-            result := true;
+            offset := es32^.sh_offset;
+            size := es32^.sh_size;
+            result := efElf32;
             exit;
           end;
-          inc(s32);
+          inc(es32);
           dec(n);
         until n = 0;
       end;
     2: // ELFCLASS64
       begin
-        inc(id);
-        h64 := pointer(id);
-        n := h64^.e_shnum;
+        inc(eid);
+        eh64 := pointer(eid);
+        n := eh64^.e_shnum;
         if (n = 0) or
-           (h64^.e_shoff = 0) or
-           (h64^.e_shstrndx >= n) or
-           (h64^.e_shentsize <> SizeOf(s64^)) or
-           (Int64(h64^.e_shoff) + PtrInt(n * SizeOf(s64^)) > exe.Size) then
+           (eh64^.e_shoff = 0) or
+           (eh64^.e_shstrndx >= n) or
+           (eh64^.e_shentsize <> SizeOf(es64^)) or
+           (Int64(eh64^.e_shoff) + PtrInt(n * SizeOf(es64^)) > exe.Size) then
           exit;
-        s64 := pointer(exe.Buffer + h64^.e_shoff);
-        str64 := @PByteArray(s64)[h64^.e_shstrndx * SizeOf(s64^)];
-        names := exe.Buffer + str64^.sh_offset;
+        es64 := pointer(exe.Buffer + eh64^.e_shoff);
+        estr64 := @PByteArray(es64)[eh64^.e_shstrndx * SizeOf(es64^)];
+        names := exe.Buffer + estr64^.sh_offset;
         repeat
-          if (s64^.sh_name < str64^.sh_size) and
-             (mormot.core.base.StrComp(names + s64^.sh_name, name) = 0) then
+          if (es64^.sh_name < estr64^.sh_size) and
+             (mormot.core.base.StrComp(names + es64^.sh_name, name) = 0) then
           begin
-            if (Int64(s64^.sh_offset) + PtrInt(s64^.sh_size) > exe.Size) or
-               (s64^.sh_offset > MaxInt) or // output args are 32-bit integers
-               (s64^.sh_size > MaxInt) then
+            if (Int64(es64^.sh_offset) + PtrInt(es64^.sh_size) > exe.Size) or
+               (es64^.sh_offset > MaxInt) or // output args are 32-bit integers
+               (es64^.sh_size > MaxInt) then
               exit;
-            offset := s64^.sh_offset;
-            size := s64^.sh_size;
-            result := true;
+            offset := es64^.sh_offset;
+            size := es64^.sh_size;
+            result := efElf64;
             exit;
           end;
-          inc(s64);
+          inc(es64);
           dec(n);
         until n = 0;
       end;
+  end
+  else if (PDosHeader(eid)^.e_magic = $5A4D) and // DOS
+          (PDosHeader(eid)^.e_lfanew < exe.Size) then
+  begin
+    pe := pointer(exe.Buffer + PDosHeader(eid)^.e_lfanew); // COFF
+    n := pe^.NumberOfSections;
+    if (pe^.Signature <> $00004550) or
+       (pe^.SizeOfOptionalHeader = 0) or
+       (pe^.NumberOfSymbols = 0) or
+       (n = 0) or
+       (Int64(PDosHeader(eid)^.e_lfanew) + SizeOf(pe^) +
+        pe^.SizeOfOptionalHeader + n * SizeOf(ps^) > exe.Size) then
+      exit;
+    names := exe.Buffer + pe^.PointerToSymbolTable + pe^.NumberOfSymbols * 18;
+    tmp[8] := #0; // ensure ps^.Name8 with 8 chars are #0 terminated
+    ps := @PByteArray(pe)[SizeOf(pe^) + pe^.SizeOfOptionalHeader];
+    repeat
+      one := @tmp;
+      PQWord(one)^ := ps^.Name8;
+      if one^ = '/' then
+        one := names + GetCardinal(one + 1); // length>8 stored as /asciioffset
+      if mormot.core.base.StrComp(one, name) = 0 then
+      begin
+        offset := ps^.PointerToRawData;
+        size := MinPtrUInt(ps^.VirtualSize, ps^.SizeOfRawData);
+        if Int64(offset) + size < exe.Size then
+          result := efPE; // found
+        exit;
+      end;
+      inc(ps);
+      dec(n)
+    until n = 0;
   end;
 end;
 
