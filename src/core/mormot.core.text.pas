@@ -9803,8 +9803,7 @@ var
   f: TFormatUtf8;
 begin
   if (Format = '') or
-     (high(Args) < 0) then
-    // no formatting needed
+     (high(Args) < 0) then // no formatting needed
     Utf8ToStringVar(Format, result)
   else
   begin
@@ -9835,7 +9834,7 @@ begin
       seplen := PStrLen(seplen - _STRLEN)^;
       if (seplen <= textlen) and
          (text[textlen] <> Separator[seplen]) then
-       begin // not already ending with last Separator char
+       begin // not already ending with last Separator chars
          f.blocks[0].Len := seplen;
          f.blocks[0].Text := pointer(Separator);
          f.blocks[0].TempRawUtf8 := nil;

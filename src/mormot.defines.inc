@@ -897,7 +897,7 @@
     {$undef FPC_CPUX64}
     {$undef FPC_PICX64}
     {$undef FPC_CPUAARCH64}
-    // the vmtAutoTable tricks seems to fail
+    // the vmtAutoTable tricks seems to fail - TODO: check again
     {$define NOPATCHVMT}
     // no static linking
     {$define NOLIBCSTATIC}

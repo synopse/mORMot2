@@ -11318,6 +11318,7 @@ begin
   {$ifdef FPC_CPUX64}
   RedirectRtl;
   {$endif FPC_CPUX64}
+  PatchCodeProtectBack; // restore back all RWX sections to the original RX
 end;
 
 
