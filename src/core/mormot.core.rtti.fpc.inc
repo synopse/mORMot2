@@ -719,8 +719,10 @@ procedure fpc_rtl_freemem;           external name 'SYSTEM_$$_FREEMEM$POINTER$$Q
 procedure PatchJmp(old, new: PByteArray; size: PtrInt; jmp: PtrUInt = 0);
 var
   rel: PCardinal;
+  mov: cardinal;
 begin
-  PatchCode(old, new, size, nil, {unprotected=}true);
+  if not PatchProcess(old, new, size) then
+    exit;
   if jmp = 0 then
     jmp := PtrUInt(@fpc_freemem);
   repeat // search and fix "jmp rel fpc_freemem"
@@ -733,7 +735,8 @@ begin
     rel := @old[size + 1];
   until (old[size] = $e9) and
         (rel^ = cardinal(jmp - PtrUInt(@new[size]) - 5));
-  rel^ := jmp - PtrUInt(rel) - 4;
+  mov := jmp - PtrUInt(rel) - 4;
+  PatchProcess(rel, @mov, 4); // rel^ := mov;
 end;
 
 procedure _ansistr_decr_ref(var p: pointer); nostackframe; assembler;
@@ -1203,23 +1206,24 @@ var
 {$endif NOPATCHRTL}
 begin
   {$ifndef NOPATCHRTL}
-  RedirectCode(@system.Move,            @MoveFast);
-  RedirectCode(@system.FillChar,        @FillCharFast);
-  PatchCode(@fpc_ansistr_incr_ref,      @_ansistr_incr_ref, $17);     // fpclen=$2f
-  PatchJmp(@fpc_ansistr_decr_ref,       @_ansistr_decr_ref, $27);     // fpclen=$3f
-  PatchJmp(@fpc_ansistr_assign,         @_ansistr_assign, $3f);       // fpclen=$3f
-  PatchCode(@fpc_ansistr_compare,       @_ansistr_compare, $7f);      // fpclen=$12f
-  PatchCode(@fpc_ansistr_compare_equal, @_ansistr_compare_equal, $57);// fpc=$cf
-  PatchCode(@fpc_unicodestr_incr_ref,   @_ansistr_incr_ref, $17);     // fpc=$2f
-  PatchJmp(@fpc_unicodestr_decr_ref,    @_ansistr_decr_ref, $27);     // fpc=$3f
-  PatchJmp(@fpc_unicodestr_assign,      @_ansistr_assign, $3f);       // fpc=$3f
-  PatchCode(@fpc_dynarray_incr_ref,     @_dynarray_incr_ref, $17);    // fpc=$2f
-  PatchJmp(@fpc_dynarray_clear,         @_dynarray_decr_ref, $2f,
+  if not RedirectCode(@system.Move, @MoveFast) then
+    exit; // do not try anything more on hardened systems
+  RedirectCode(@system.FillChar,           @FillCharFast);
+  PatchProcess(@fpc_ansistr_incr_ref,      @_ansistr_incr_ref, $17);     // fpclen=$2f
+  PatchJmp(@fpc_ansistr_decr_ref,          @_ansistr_decr_ref, $27);     // fpclen=$3f
+  PatchJmp(@fpc_ansistr_assign,            @_ansistr_assign, $3f);       // fpclen=$3f
+  PatchProcess(@fpc_ansistr_compare,       @_ansistr_compare, $7f);      // fpclen=$12f
+  PatchProcess(@fpc_ansistr_compare_equal, @_ansistr_compare_equal, $57);// fpc=$cf
+  PatchProcess(@fpc_unicodestr_incr_ref,   @_ansistr_incr_ref, $17);     // fpc=$2f
+  PatchJmp(@fpc_unicodestr_decr_ref,       @_ansistr_decr_ref, $27);     // fpc=$3f
+  PatchJmp(@fpc_unicodestr_assign,         @_ansistr_assign, $3f);       // fpc=$3f
+  PatchProcess(@fpc_dynarray_incr_ref,     @_dynarray_incr_ref, $17);    // fpc=$2f
+  PatchJmp(@fpc_dynarray_clear,            @_dynarray_decr_ref, $2f,
     PtrUInt(@_dynarray_decr_ref_free));
-  RedirectCode(@fpc_dynarray_decr_ref,  @fpc_dynarray_clear);
-  PatchCode(@fpc_variant_init,          @_variant_init, $0f);      // fpclen=$1f
+  RedirectCode(@fpc_dynarray_decr_ref,     @fpc_dynarray_clear);
+  PatchProcess(@fpc_variant_init,          @_variant_init, $0f);      // fpclen=$1f
   {$ifdef FPC_HAS_CPSTRING}
-  RedirectCode(@fpc_setstring_ansistr,  @_setstring_ansistr_pansichar);
+  RedirectCode(@fpc_setstring_ansistr,     @_setstring_ansistr_pansichar);
   // Delphi/Windows is never natively UTF-8, but FPC+Lazarus is very likely :)
   if Unicode_CodePage = CP_UTF8 then
   begin

@@ -7910,7 +7910,7 @@ begin
     // hook once - Create may be done twice in GetWeakZero() for SetPrivateSlot
     exit;
   fHookedFreeInstance := P^;
-  PatchCodePtrUInt(P, PtrUInt(@TSetWeakZero.HookedFreeInstance), {leaveunprot=}false);
+  PatchPointer(P, PtrUInt(@TSetWeakZero.HookedFreeInstance));
 end;
 
 function GetWeakZero(aClass: TClass; CreateIfNonExisting: boolean): TSetWeakZero;

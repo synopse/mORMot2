@@ -9033,7 +9033,7 @@ begin
   // set vmtAutoTable slot for efficient Find(TClass) - to be done asap
   vmt := pointer(PAnsiChar(aClass) + vmtAutoTable);
   if vmt^ = nil then
-    PatchCodePtrUInt(pointer(vmt), PtrUInt(self));
+    PatchPointer(pointer(vmt), PtrUInt(self));
   if vmt^ <> self then
     ERttiException.RaiseUtf8(
       '%.SetValueClass(%): vmtAutoTable set to %', [self, aClass, vmt^]);
@@ -11323,7 +11323,6 @@ end;
 
 initialization
   InitializeUnit;
-
 
 end.
 
