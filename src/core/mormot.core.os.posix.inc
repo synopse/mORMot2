@@ -1491,7 +1491,9 @@ end;
 
 function ValidHandle(Handle: THandle): boolean;
 begin
-  result := PtrInt(Handle) >= 0; // 0=StdIn is a valid POSIX file descriptor
+  // 0=StdIn is a valid POSIX file descriptor, and descriptors are 32-bit signed
+  // "int" values - so truncate before testing the sign.
+  result := integer(Handle) >= 0;
 end;
 
 function FileHandleToUnixTimeUtc(F: THandle): TUnixTime;
