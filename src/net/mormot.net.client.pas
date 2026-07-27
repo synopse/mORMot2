@@ -8,6 +8,7 @@ unit mormot.net.client;
 
    HTTP Client Classes
    - THttpMultiPartStream for multipart/formdata HTTP POST
+   - THttpMultiPartDecoder Processing multipart/formdata Input
    - THttpClientSocket Implementing HTTP client over plain sockets
    - Additional Client Protocols Support
    - THttpRequest Abstract HTTP client class
@@ -124,6 +125,182 @@ type
     property FilesCount: integer
       read fFilesCount;
   end;
+
+
+{ ******************** THttpMultiPartDecoder Processing multipart/formdata Input }
+
+type
+  /// exception class raised by THttpMultiPartDecoder
+  EHttpMultiPart = class(ESynException);
+
+  THttpMultiPartDecoder = class;
+
+  /// TStream to retrieve the current THttpMultiPartDecoder section content
+  // - as returned by THttpMultiPartDecoder.Current.Content
+  // - Read() will return 0 at the end of the current section: the data is
+  // decoded incrementally from the input stream, so Seek() is not supported,
+  // and the section size is not known in advance - Size does not return the
+  // section length, but the number of bytes read so far
+  // - warning: as a consequence, don't use Delphi's TStream.CopyFrom(src, 0)
+  // which would read Size (i.e. 0) and silently copy nothing: consume this
+  // stream with StreamCopyUntilEnd() or an explicit Read() loop instead
+  // - Read() will raise EHttpMultiPart on malformed or truncated input, so
+  // that a partially received file section is never mistaken for a complete
+  // one - see also THttpMultiPartDecoder.Close for final validation
+  // - this instance is owned and reused by its THttpMultiPartDecoder: it is
+  // valid only until the next NextPart call, and should not outlive it
+  THttpMultiPartDecoderStream = class(TStreamWithNoSeek)
+  protected
+    fOwner: THttpMultiPartDecoder;
+    procedure Rewind; // reset Position/Size before a new section
+      {$ifdef HASINLINE}inline;{$endif}
+  public
+    /// read up to Count bytes of the current section content
+    // - returns 0 once the section has been fully consumed
+    // - raise EHttpMultiPart on malformed or truncated multipart input
+    function Read(var Buffer; Count: Longint): Longint; override;
+  end;
+
+  /// decoded information about one multipart/formdata section, as made
+  // available by THttpMultiPartDecoder.NextPart in Current
+  // - maps the TMultiPart fields from mormot.core.buffers, but with a
+  // Content stream to be consumed incrementally, not an in-memory buffer
+  THttpMultiPartDecoderSection = record
+    /// the "name" parameter of this section
+    Name: RawUtf8;
+    /// the "filename" parameter of this section, '' for a plain form field
+    // - warning: this value comes straight from untrusted client input -
+    // never use it directly to build a local file name without strict
+    // sanitization (e.g. reject path delimiters, reserved names and '..')
+    FileName: RawUtf8;
+    /// the Content-Type header of this section
+    ContentType: RawUtf8;
+    /// the Content-Transfer-Encoding header of this section
+    // - is only reported, and never applied: Content below always returns the
+    // raw section bytes, so it is up to the caller to e.g. call Base64ToBin()
+    // on a 'base64' encoded section - as MultiPartFormDataAddFile() generates
+    Encoding: RawUtf8;
+    /// incremental access to this section content
+    // - read it until Read() returns 0, before the next NextPart call - any
+    // unread content will be drained and discarded by the next NextPart
+    // - use StreamCopyUntilEnd() or a Read() loop, not TStream.CopyFrom(x, 0)
+    Content: TStream;
+  end;
+
+  /// the internal processing state of THttpMultiPartDecoder
+  THttpMultiPartDecoderState = (
+    mpdsPreamble,
+    mpdsHeaders,
+    mpdsContent,
+    mpdsFinished,
+    mpdsError);
+
+  /// server-side incremental decoder of multipart/formdata content
+  // - decoding counterpart of the client-side THttpMultiPartStream encoder,
+  // e.g. to implement server-side handling of huge file uploads - see
+  // https://github.com/synopse/mORMot2/issues/292
+  // - input is any TStream, e.g. a spooled temporary file, or a TPipeStream
+  // filled from the incoming HTTP request body: the source Read() should
+  // block until some data is available, and return 0 only once the whole
+  // body has been supplied, since a first Read()=0 is taken as a definitive
+  // end of input - so don't supply a TPipeStream with a read timeout or the
+  // psoReadNonBlocking option, which both may return 0 while still active
+  // - this class is not thread-safe: a single consumer should drive NextPart
+  // and the Current.Content stream, e.g. from one request processing thread
+  // - mimics the pull API of the Go mime/multipart.Reader type: repeatedly
+  // call NextPart, consume the Current.Content stream (e.g. into one target
+  // file per section), then eventually call Close to check the final boundary
+  // - a single small work buffer is used, so content of any size can be
+  // processed (e.g. much bigger than 2GB), with no memory allocation while
+  // decoding the section content itself
+  THttpMultiPartDecoder = class
+  protected
+    fSource: TStream;
+    fState: THttpMultiPartDecoderState;
+    fCurrent: THttpMultiPartDecoderSection;
+    fDelimiter: RawUtf8;    // #13#10'--' + boundary
+    fBuffer: RawByteString; // sliding window over fSource content
+    fBufPos, fBufLen: PtrInt;
+    fScanned: PtrInt;        // ReadLine watermark to avoid re-scanning
+    fContentPending: PtrInt; // known section content bytes not yet consumed
+    fSourceEof: boolean;
+    function Refill: boolean;
+    function EnsureBytes(Count: PtrInt): boolean;
+    function FindDelimiter(MaxLen: PtrInt; out SafeLen: PtrInt): PtrInt;
+    function CheckTail(Offset: PtrInt; out Consumed: PtrInt;
+      out Final: boolean): integer;
+    function SkipPreamble: boolean;
+    function ReadLine(out Line: RawUtf8): boolean;
+    function ParseHeaders: boolean;
+    function PartRead(var Dest; Count: PtrInt): PtrInt;
+    procedure DrainPart;
+  public
+    /// initialize the decoder over a given input stream and boundary
+    // - aBoundary is the raw boundary value, as extracted from the
+    // 'multipart/form-data; boundary=xxx' header - see also
+    // CreateFromContentType and MultiPartFormDataBoundary()
+    // - raise EHttpMultiPart if aBoundary is void or unreasonably long
+    // (RFC 2046 limits boundaries to 70 characters)
+    // - aSource ownership stays with the caller: it is not freed by Destroy,
+    // and should remain available during the whole decoding loop
+    constructor Create(aSource: TStream; const aBoundary: RawUtf8;
+      aBufferSize: PtrInt = 65536); reintroduce;
+    /// initialize the decoder from a full Content-Type header value
+    // - raise EHttpMultiPart if aContentType has no valid boundary parameter
+    constructor CreateFromContentType(aSource: TStream;
+      const aContentType: RawUtf8; aBufferSize: PtrInt = 65536);
+    /// finalize this decoder instance
+    destructor Destroy; override;
+    /// move to the next section of the multipart content
+    // - returns true if a new section is available in Current - then caller
+    // should consume Current.Content until Read() returns 0
+    // - any unread content of the previous section is drained and discarded
+    // - returns false at the end of the multipart content, or on malformed
+    // input (check State = mpdsFinished for graceful termination)
+    function NextPart: boolean;
+    /// can be called after the NextPart loop to validate the input
+    // - drain any pending section, then returns true if the multipart
+    // content did properly end with a final --boundary-- delimiter
+    // - a caller should trust the received sections only after this method
+    // returned true, e.g. before moving uploaded files to their final place
+    // - any epilogue after the final delimiter is not read from the source:
+    // with a piped input, the caller should drain or close it afterwards
+    function Close: boolean;
+    /// the current section information, as decoded by NextPart
+    // - note: reading this property copies the whole record - the Name /
+    // FileName / ContentType / Encoding / Content properties below give
+    // direct access to the individual fields with no copy
+    property Current: THttpMultiPartDecoderSection
+      read fCurrent;
+    /// the "name" parameter of the current section, as decoded by NextPart
+    property Name: RawUtf8
+      read fCurrent.Name;
+    /// the "filename" parameter of the current section - '' for plain fields
+    // - this value comes straight from the client, so should be considered
+    // untrusted user input, exactly as Current.FileName
+    property FileName: RawUtf8
+      read fCurrent.FileName;
+    /// the Content-Type header value of the current section
+    property ContentType: RawUtf8
+      read fCurrent.ContentType;
+    /// the Content-Transfer-Encoding header value of the current section
+    // - only reported, never applied - see Current.Encoding for details
+    property Encoding: RawUtf8
+      read fCurrent.Encoding;
+    /// the raw content of the current section, to be read until 0 is returned
+    property Content: TStream
+      read fCurrent.Content;
+    /// the internal decoding state machine position
+    property State: THttpMultiPartDecoderState
+      read fState;
+  end;
+
+/// extract the boundary=xxx parameter of a multipart/formdata content type
+// - parameter name matching is case-insensitive and anchored, as RFC 2045;
+// quoted values are unquoted, rejecting an unbalanced trailing quote
+// - returns false if MimeType has no valid boundary= parameter
+function MultiPartFormDataBoundary(const MimeType: RawUtf8;
+  out Boundary: RawUtf8): boolean;
 
 
 { ************** THttpClientSocket Implementing HTTP client over plain sockets }
@@ -2222,6 +2399,621 @@ begin
     mormot.core.text.Append(s, ['--', fBounds[i], '--'#13#10]);
   Append(s);
   inherited Flush; // compute fSize
+end;
+
+
+{ ******************** THttpMultiPartDecoder Processing multipart/formdata Input }
+
+function GetQuotedParamValue(var P: PUtf8Char; out Value: RawUtf8): boolean;
+var
+  b, d: PUtf8Char;
+  tmp: TSynTempBuffer;
+begin
+  // decode a "quoted-string" parameter value, unescaping any \x quoted-pair
+  result := false;
+  b := P;
+  while not (P^ in ['"', #0]) do
+    if (P^ = '\') and
+       (P[1] <> #0) then
+      inc(P, 2) // an escaped char is part of the value
+    else
+      inc(P);
+  if P^ <> '"' then
+    exit; // unbalanced quote: caller will stop parsing this line
+  if ByteScanIndex(pointer(b), P - b, ord('\')) < 0 then
+    FastSetString(Value, b, P - b) // no quoted-pair: just copy the value
+  else
+  begin
+    d := tmp.Init(P - b); // unescape into a transient buffer
+    while b < P do
+    begin
+      if (b^ = '\') and
+         (b + 1 < P) then
+        inc(b);
+      d^ := b^;
+      inc(d);
+      inc(b);
+    end;
+    FastSetString(Value, tmp.buf, d - PUtf8Char(tmp.buf));
+    tmp.Done;
+  end;
+  inc(P); // ignore the ending quote
+  result := true;
+end;
+
+function MultiPartFormDataBoundary(const MimeType: RawUtf8;
+  out Boundary: RawUtf8): boolean;
+var
+  p, b: PUtf8Char;
+begin
+  result := false;
+  p := pointer(MimeType);
+  if p = nil then
+    exit;
+  // search for an anchored, case-insensitive boundary= parameter
+  repeat
+    while not (p^ in [';', '"', #0]) do
+      inc(p);
+    if p^ = '"' then
+    begin
+      // skip a quoted parameter value, which may contain ';' - and handle
+      // \" quoted-pair escapes as of RFC 9110
+      inc(p);
+      while not (p^ in ['"', #0]) do
+        if (p^ = '\') and
+           (p[1] <> #0) then
+          inc(p, 2)
+        else
+          inc(p);
+      if p^ = #0 then
+        exit; // unbalanced quotes
+      inc(p);
+      continue;
+    end;
+    if p^ = #0 then
+      exit; // no boundary= parameter
+    inc(p); // p^ = ';'
+    while p^ in [' ', #9] do
+      inc(p);
+    if IdemPChar(p, 'BOUNDARY=') then
+      break;
+  until false;
+  inc(p, 9);
+  if p^ = '"' then
+  begin
+    inc(p);
+    if not GetQuotedParamValue(p, Boundary) then
+      exit; // unbalanced trailing quote
+  end
+  else
+  begin
+    b := p;
+    while not (p^ in [';', ' ', #9, #0]) do
+      inc(p);
+    FastSetString(Boundary, b, p - b);
+  end;
+  result := Boundary <> '';
+end;
+
+
+{ THttpMultiPartDecoderStream }
+
+procedure THttpMultiPartDecoderStream.Rewind;
+begin
+  fPosition := 0;
+  fSize := 0;
+end;
+
+function THttpMultiPartDecoderStream.Read(var Buffer; Count: Longint): Longint;
+begin
+  result := fOwner.PartRead(Buffer, Count);
+  if result > 0 then
+  begin
+    inc(fPosition, result);
+    inc(fSize, result); // Size = content length seen so far
+  end
+  else if fOwner.fState = mpdsError then
+    // never mistake a truncated section for a complete one
+    raise EHttpMultiPart.CreateUtf8(
+      '%.Read: malformed or truncated multipart content', [self]);
+end;
+
+
+{ THttpMultiPartDecoder }
+
+constructor THttpMultiPartDecoder.Create(aSource: TStream;
+  const aBoundary: RawUtf8; aBufferSize: PtrInt);
+var
+  i: PtrInt;
+begin
+  inherited Create;
+  if (aBoundary = '') or
+     (length(aBoundary) > 256) then
+    // RFC 2046 limits boundaries to 70 chars - be lenient, but bounded, so
+    // that the minimal work buffer below always holds a full delimiter
+    raise EHttpMultiPart.CreateUtf8('%.Create: invalid boundary length = %',
+      [self, length(aBoundary)]);
+  for i := 1 to length(aBoundary) do
+    if aBoundary[i] < ' ' then // e.g. CR/LF would corrupt the delimiter
+      raise EHttpMultiPart.CreateUtf8(
+        '%.Create: control char #% in boundary', [self, ord(aBoundary[i])]);
+  fSource := aSource;
+  Join([#13#10'--', aBoundary], fDelimiter);
+  if aBufferSize < 4096 then
+    aBufferSize := 4096; // enough for any delimiter (checked above)
+  SetLength(fBuffer, aBufferSize);
+  fCurrent.Content := THttpMultiPartDecoderStream.Create;
+  THttpMultiPartDecoderStream(fCurrent.Content).fOwner := self;
+  fState := mpdsPreamble;
+end;
+
+constructor THttpMultiPartDecoder.CreateFromContentType(aSource: TStream;
+  const aContentType: RawUtf8; aBufferSize: PtrInt);
+var
+  b: RawUtf8;
+begin
+  if not MultiPartFormDataBoundary(aContentType, b) then
+    raise EHttpMultiPart.CreateUtf8(
+      '%.CreateFromContentType: no boundary in [%]', [self, aContentType]);
+  Create(aSource, b, aBufferSize);
+end;
+
+destructor THttpMultiPartDecoder.Destroy;
+begin
+  fCurrent.Content.Free;
+  inherited Destroy;
+end;
+
+function THttpMultiPartDecoder.Refill: boolean;
+var
+  n: PtrInt;
+begin
+  result := false;
+  if fBufPos = fBufLen then
+  begin
+    fBufPos := 0; // void window: just reset, no need to move anything
+    fBufLen := 0;
+  end
+  else if (fBufPos > 0) and
+          (fBufLen = length(fBuffer)) then
+  begin
+    // compact the buffer only once its tail space is exhausted
+    n := fBufLen - fBufPos;
+    MoveFast(PByteArray(fBuffer)[fBufPos], pointer(fBuffer)^, n);
+    fBufLen := n;
+    fBufPos := 0;
+  end;
+  n := length(fBuffer) - fBufLen;
+  if (n = 0) or
+     fSourceEof then
+    exit;
+  n := fSource.Read(PByteArray(fBuffer)[fBufLen], n); // may block (pipe)
+  if n <= 0 then
+    // end of spooled file or closed TPipeStream: the source is expected to
+    // block until data is available, and return 0 only at the body end
+    fSourceEof := true
+  else
+  begin
+    inc(fBufLen, n);
+    result := true;
+  end;
+end;
+
+function THttpMultiPartDecoder.EnsureBytes(Count: PtrInt): boolean;
+begin
+  result := true;
+  while fBufLen - fBufPos < Count do
+    if not Refill then
+    begin
+      result := false;
+      exit;
+    end;
+end;
+
+const
+  MPD_MAXPADDING = 64;      // cap RFC 2046 transport padding after a boundary
+  MPD_MAXHEADERLINES = 100; // paranoid limit of header lines per section
+
+function THttpMultiPartDecoder.FindDelimiter(MaxLen: PtrInt;
+  out SafeLen: PtrInt): PtrInt;
+var
+  p: PAnsiChar;
+  win, dlen, i, j: PtrInt;
+begin
+  // search the window for #13#10--boundary, returning its 0-based offset
+  // - scan at most MaxLen bytes, so that a small Read() request does not
+  // pay for scanning the whole window again and again
+  // - if not found, returns -1 and SafeLen = leading bytes which can not
+  // be part of a delimiter (i.e. safe to consume as section content)
+  result := -1;
+  p := PAnsiChar(pointer(fBuffer)) + fBufPos;
+  win := fBufLen - fBufPos;
+  if win > MaxLen then
+    win := MaxLen;
+  dlen := length(fDelimiter);
+  i := 0;
+  while i + dlen <= win do
+  begin
+    j := ByteScanIndex(pointer(p + i), win - i, 13); // fast SSE2 asm on Intel
+    if j < 0 then
+    begin
+      i := win; // no CR at all -> whole window is content
+      break;
+    end;
+    inc(i, j);
+    if i + dlen > win then
+      break; // this CR may start a delimiter -> keep in buffer
+    if CompareMem(p + i, pointer(fDelimiter), dlen) then
+    begin
+      SafeLen := i;
+      result := i;
+      exit;
+    end;
+    inc(i); // not a delimiter: skip this CR
+  end;
+  SafeLen := i;
+end;
+
+function THttpMultiPartDecoder.CheckTail(Offset: PtrInt;
+  out Consumed: PtrInt; out Final: boolean): integer;
+var
+  p: PAnsiChar;
+  avail, i: PtrInt;
+begin
+  // classify the bytes right after a '--boundary' match at window Offset
+  // - returns 1 = genuine boundary, with Consumed tail bytes and Final set
+  // for the '--' closing delimiter, 0 = false positive (i.e. the matched
+  // bytes are plain section content), -1 = more input needed to decide
+  // - a genuine delimiter ends with '--', or LWSP padding and CRLF
+  Consumed := 0;
+  Final := false;
+  result := -1;
+  p := PAnsiChar(pointer(fBuffer)) + fBufPos + Offset;
+  avail := fBufLen - fBufPos - Offset;
+  if avail = 0 then
+    exit; // need more input
+  if p[0] = '-' then
+  begin
+    if avail = 1 then
+      exit; // need more input
+    if p[1] = '-' then
+    begin
+      Consumed := 2; // final --boundary-- reached: ignore any epilogue
+      Final := true;
+      result := 1;
+    end
+    else
+      result := 0; // single '-' is content, not a closing delimiter
+    exit;
+  end;
+  i := 0;
+  repeat
+    if i >= avail then
+      exit; // need more input
+    case p[i] of
+      #13:
+        begin
+          if i + 1 >= avail then
+            exit; // need more input
+          if p[i + 1] = #10 then
+          begin
+            Consumed := i + 2; // padding + CRLF: a new section follows
+            result := 1;
+          end
+          else
+            result := 0; // CR not followed by LF is content
+          exit;
+        end;
+      ' ', #9:
+        begin
+          inc(i); // skip optional transport padding (RFC 2046)
+          if i > MPD_MAXPADDING then
+          begin
+            result := 0; // unreasonable padding is handled as content
+            exit;
+          end;
+        end;
+    else
+      begin
+        result := 0; // unexpected char: not a delimiter, but content
+        exit;
+      end;
+    end;
+  until false;
+end;
+
+function THttpMultiPartDecoder.SkipPreamble: boolean;
+var
+  d, dlen, safe, tail: PtrInt;
+  final: boolean;
+begin
+  result := false;
+  dlen := length(fDelimiter);
+  // the first delimiter may appear at the very start with no leading CRLF
+  repeat
+    if not EnsureBytes(dlen) then
+      exit;
+    if not CompareMem(PAnsiChar(pointer(fBuffer)) + fBufPos,
+             PAnsiChar(pointer(fDelimiter)) + 2, dlen - 2) then
+      break;
+    case CheckTail(dlen - 2, tail, final) of
+      1:
+        begin
+          inc(fBufPos, dlen - 2 + tail);
+          if final then
+            fState := mpdsFinished // void multipart content
+          else
+            fState := mpdsHeaders;
+          result := true;
+          exit;
+        end;
+      0:
+        break; // fake first delimiter: handle as preamble below
+    else
+      if not Refill then
+        exit; // truncated right after the first delimiter
+    end;
+  until false;
+  // there is some preamble: discard it up to the first genuine delimiter
+  repeat
+    d := FindDelimiter(MaxInt, safe); // no scan limit in the preamble
+    if d >= 0 then
+      case CheckTail(d + dlen, tail, final) of
+        1:
+          begin
+            inc(fBufPos, d + dlen + tail);
+            if final then
+              fState := mpdsFinished
+            else
+              fState := mpdsHeaders;
+            result := true;
+            exit;
+          end;
+        0:
+          begin
+            inc(fBufPos, d + 1); // false positive: skip this CR and rescan
+            continue;
+          end;
+      else
+        begin
+          inc(fBufPos, d); // discard preamble, but keep the pending delimiter
+          if not Refill then
+            exit; // truncated within a delimiter
+          continue;
+        end;
+      end;
+    inc(fBufPos, safe);
+    if not Refill then
+      exit; // no genuine delimiter in the whole input
+  until false;
+end;
+
+function THttpMultiPartDecoder.ReadLine(out Line: RawUtf8): boolean;
+var
+  p: PAnsiChar;
+  win, i, j: PtrInt;
+begin
+  result := false;
+  repeat
+    p := PAnsiChar(pointer(fBuffer)) + fBufPos;
+    win := fBufLen - fBufPos;
+    i := fScanned; // don't re-scan bytes already checked before a Refill
+    repeat
+      j := ByteScanIndex(pointer(p + i), win - i, 13);
+      if (j < 0) or
+         (i + j + 2 > win) then
+      begin
+        if j < 0 then
+          fScanned := win // no CR in the whole window
+        else
+          fScanned := i + j; // resume at this pending CR
+        break; // no CRLF in the current window
+      end;
+      inc(i, j);
+      if p[i + 1] = #10 then
+      begin
+        FastSetString(Line, p, i);
+        inc(fBufPos, i + 2);
+        fScanned := 0;
+        result := true;
+        exit;
+      end;
+      inc(i);
+    until false;
+    if not Refill then
+    begin
+      fScanned := 0;
+      exit; // premature end, or header line bigger than the work buffer
+    end;
+  until false;
+end;
+
+function THttpMultiPartDecoder.ParseHeaders: boolean;
+var
+  line: RawUtf8;
+  P, s: PUtf8Char;
+  v: PRawUtf8;
+  n: PtrInt;
+begin
+  result := false;
+  fCurrent.Name := '';
+  fCurrent.FileName := '';
+  fCurrent.ContentType := '';
+  fCurrent.Encoding := '';
+  n := 0;
+  repeat
+    if not ReadLine(line) then
+      exit; // malformed input
+    if line = '' then
+      break; // void line = end of this section headers
+    inc(n);
+    if n > MPD_MAXHEADERLINES then
+      exit; // paranoid: don't let a hostile input spin here forever
+    // note: matching tolerates any spacing after ':' - more lenient than
+    // MultiPartFormDataDecode from mormot.core.buffers, as needed for a
+    // server-side decoder receiving requests from any client stack
+    P := pointer(line);
+    if IdemPChar(P, 'CONTENT-DISPOSITION:') then
+    begin
+      inc(P, 20);
+      // parse name=.. and filename=.. in any order, quoted or as plain token
+      repeat
+        while P^ in [' ', #9, ';'] do
+          inc(P);
+        if P^ = #0 then
+          break;
+        v := nil;
+        if IdemPChar(P, 'FILENAME=') then
+        begin
+          inc(P, 9);
+          v := @fCurrent.FileName;
+        end
+        else if IdemPChar(P, 'NAME=') then
+        begin
+          inc(P, 5);
+          v := @fCurrent.Name;
+        end;
+        if v = nil then
+        begin
+          while not (P^ in [';', #0]) do
+            inc(P); // e.g. skip the form-data token itself
+          continue;
+        end;
+        if P^ = '"' then
+        begin
+          inc(P);
+          if not GetQuotedParamValue(P, v^) then
+            break; // unbalanced quote: don't parse this line any further
+        end
+        else
+        begin
+          s := P;
+          while not (P^ in [';', ' ', #9, #0]) do
+            inc(P);
+          FastSetString(v^, s, P - s);
+        end;
+      until false;
+    end
+    else if IdemPChar(P, 'CONTENT-TYPE:') then
+    begin
+      inc(P, 13);
+      while P^ in [' ', #9] do
+        inc(P);
+      FastSetString(fCurrent.ContentType, P, StrLen(P));
+    end
+    else if IdemPChar(P, 'CONTENT-TRANSFER-ENCODING:') then
+    begin
+      inc(P, 26);
+      while P^ in [' ', #9] do
+        inc(P);
+      FastSetString(fCurrent.Encoding, P, StrLen(P));
+    end;
+  until false;
+  THttpMultiPartDecoderStream(fCurrent.Content).Rewind;
+  fState := mpdsContent;
+  result := true;
+end;
+
+function THttpMultiPartDecoder.PartRead(var Dest; Count: PtrInt): PtrInt;
+var
+  dlen, d, safe, tail: PtrInt;
+  final: boolean;
+begin
+  result := 0;
+  if (fState <> mpdsContent) or
+     (Count <= 0) then
+    exit;
+  if Count > length(fBuffer) then
+    Count := length(fBuffer); // keeps all computations below overflow-free
+  dlen := length(fDelimiter);
+  while fContentPending = 0 do
+  begin
+    // scan for the next delimiter, tracking known content in fContentPending
+    // so that consecutive small Read() calls don't re-scan the same bytes
+    d := FindDelimiter(Count + dlen + MPD_MAXPADDING + 2, safe);
+    if d >= 0 then
+      case CheckTail(d + dlen, tail, final) of
+        1:
+          if d = 0 then
+          begin
+            // we reached this section ending delimiter
+            inc(fBufPos, dlen + tail);
+            if final then
+              fState := mpdsFinished
+            else
+              fState := mpdsHeaders;
+            exit; // returns 0 = end of this section content
+          end
+          else
+            safe := d; // all bytes up to the delimiter are section content
+        0:
+          safe := d + 1; // false positive: the CR is plain section content
+      else
+        if fSourceEof then
+        begin
+          fState := mpdsError; // truncated within a delimiter tail
+          exit;
+        end
+        else
+          safe := d; // emit the content before the pending delimiter
+      end;
+    if safe > 0 then
+    begin
+      fContentPending := safe;
+      break;
+    end;
+    // not enough content in the window yet
+    if not Refill then
+    begin
+      fState := mpdsError; // premature end: final boundary is missing
+      exit;
+    end;
+  end;
+  result := fContentPending;
+  if Count < result then
+    result := Count;
+  MoveFast(PByteArray(fBuffer)[fBufPos], Dest, result);
+  inc(fBufPos, result);
+  dec(fContentPending, result);
+end;
+
+procedure THttpMultiPartDecoder.DrainPart;
+var
+  tmp: TBuffer64K; // transient stack buffer, as e.g. StreamCopyUntilEnd()
+begin
+  while PartRead(tmp, SizeOf(tmp)) > 0 do
+    ;
+end;
+
+function THttpMultiPartDecoder.NextPart: boolean;
+begin
+  result := false;
+  case fState of
+    mpdsPreamble:
+      if not SkipPreamble then
+      begin
+        fState := mpdsError;
+        exit;
+      end;
+    mpdsContent:
+      DrainPart; // discard any unread content of the previous section
+    mpdsHeaders:
+      ; // previous section was fully consumed: ready for the next one
+  else
+    exit; // mpdsFinished, mpdsError
+  end;
+  if fState <> mpdsHeaders then
+    exit;
+  result := ParseHeaders;
+  if not result then
+    fState := mpdsError;
+end;
+
+function THttpMultiPartDecoder.Close: boolean;
+begin
+  while NextPart do
+    ; // drain any remaining section
+  result := fState = mpdsFinished;
 end;
 
 

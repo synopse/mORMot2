@@ -265,8 +265,10 @@ type
     /// test UrlEncode() and UrlDecode() functions
     // - this method use some ISO-8601 encoded dates and times for the testing
     procedure UrlDecoding;
-    /// test mime types recognition and multipart encoding
+    /// test mime types recognition
     procedure MimeTypes;
+    /// test multipart/formdata encoding and incremental decoding
+    procedure MultiPartDecoder;
     /// test ASCII Baudot encoding
     procedure BaudotCode;
     /// the ISO-8601 date and time encoding
@@ -9786,8 +9788,45 @@ begin
   {$endif OSWINDOWS}
 end;
 
-procedure TTestCoreBase.MimeTypes;
+type
+  /// TStream returning only a few bytes per Read, as a slow network source
+  // - used by TTestCoreBase.MultiPartDecoder to validate the incremental
+  // decoding of any content split at unpredictable positions
+  TTrickleStream = class(TStreamWithNoSeek)
+  protected
+    fData: RawByteString;
+    fMax: PtrInt;
+  public
+    constructor Create(const aData: RawByteString; aMax: PtrInt); reintroduce;
+    function Read(var Buffer; Count: Longint): Longint; override;
+  end;
+
+constructor TTrickleStream.Create(const aData: RawByteString; aMax: PtrInt);
+begin
+  inherited Create;
+  fData := aData;
+  fMax := aMax;
+  fSize := length(aData);
+end;
+
+function TTrickleStream.Read(var Buffer; Count: Longint): Longint;
+begin
+  result := length(fData) - fPosition;
+  if result > fMax then
+    result := fMax;
+  if result > Count then
+    result := Count;
+  if result <= 0 then
+  begin
+    result := 0;
+    exit;
+  end;
+  MoveFast(PByteArray(fData)[fPosition], Buffer, result);
+  inc(fPosition, result);
+end;
+
 const
+  // test data shared by TTestCoreBase.MimeTypes and MultiPartDecoder
   MIM: array[0 .. 27 * 2 - 1] of RawUtf8 = (
     'png',      'image/png',
     'PNg',      'image/png',
@@ -9816,6 +9855,9 @@ const
     'h264',     'video/H264',
     'x',        'application/x-compress',
     'ogv',      'video/ogg');
+
+procedure TTestCoreBase.MimeTypes;
+const
   BIN: array[0 .. 2] of Cardinal = (
     $04034B50, $38464947, $fd2fb528);
   BIN_MIME: array[0 .. high(BIN)] of RawUtf8 = (
@@ -9833,38 +9875,8 @@ const
     'video/mp4', 'image/heic', 'video/H264', 'image/avif',
     'audio/ogg', 'video/ogg');
 var
-  i, j, n: integer;
-  fa: TFileAge;
-  fdt: TDateTime;
-  fs: Int64;
-  fu: TUnixMSTime;
-  fn: array[0..10] of TFileName;
-  mp, mp2: TMultiPartDynArray;
-  s, ct, mpc, mpct: RawUtf8;
-  st: THttpMultiPartStream;
-  rfc2388: boolean;
-
-  procedure DecodeAndTest;
-  var
-    i: integer;
-  begin
-    mp2 := nil;
-    Check(MultiPartFormDataDecode(mpct, mpc, mp2));
-    CheckEqual(length(mp2), length(mp));
-    for i := 0 to high(mp2) do
-      if i <= n then
-      begin
-        CheckEqual(mp2[i].Name,    MIM[i * 2]);
-        CheckEqual(mp2[i].Content, MIM[i * 2 + 1]);
-      end
-      else
-      begin
-        j := i - n - 1;
-        CheckEqual(mp2[i].FileName, StringToUtf8(ExtractFileName(fn[j])));
-        CheckEqual(mp2[i].Content,  MIM[j * 2 + 1]);
-      end;
-  end;
-
+  i: integer;
+  s, ct: RawUtf8;
 begin
   // user agent bot detection
   Check(not IsHttpUserAgentBot(
@@ -10134,7 +10146,172 @@ begin
   Check(IsContentTypeTextU('image/svg'));
   Check(not IsContentTypeTextU('image/X-ico'));
   Check(not IsContentTypeTextU('image/X-ICO'));
-  // mime multipart encoding
+end;
+
+procedure TTestCoreBase.MultiPartDecoder;
+var
+  i, j, n: integer;
+  fa: TFileAge;
+  fdt: TDateTime;
+  fs: Int64;
+  fu: TUnixMSTime;
+  fn: array[0..10] of TFileName;
+  mp, mp2: TMultiPartDynArray;
+  s, mpc, mpct, bound: RawUtf8;
+  st: THttpMultiPartStream;
+  rfc2388, raised: boolean;
+  big, got: RawByteString;
+  src: TStream;
+  dec: THttpMultiPartDecoder;
+  onebyte: array[0 .. 0] of byte;
+
+  procedure DecodeAndTest;
+  var
+    i: integer;
+  begin
+    mp2 := nil;
+    Check(MultiPartFormDataDecode(mpct, mpc, mp2));
+    CheckEqual(length(mp2), length(mp));
+    for i := 0 to high(mp2) do
+      if i <= n then
+      begin
+        CheckEqual(mp2[i].Name,    MIM[i * 2]);
+        CheckEqual(mp2[i].Content, MIM[i * 2 + 1]);
+      end
+      else
+      begin
+        j := i - n - 1;
+        CheckEqual(mp2[i].FileName, StringToUtf8(ExtractFileName(fn[j])));
+        CheckEqual(mp2[i].Content,  MIM[j * 2 + 1]);
+      end;
+  end;
+
+  function ReadAll(strm: TStream): RawByteString;
+  var
+    tmp: array[0 .. 998] of byte; // odd size to exercise the sliding window
+    r, len: PtrInt;
+  begin
+    result := '';
+    len := 0;
+    repeat
+      r := strm.Read(tmp, SizeOf(tmp));
+      if r > 0 then
+      begin
+        SetLength(result, len + r);
+        MoveFast(tmp, PByteArray(result)[len], r);
+        inc(len, r);
+      end;
+    until r = 0;
+  end;
+
+  procedure DecodeStreamAndTest(aBufferSize: PtrInt);
+  var
+    ssrc: TRawByteStringStream;
+    sdec, nested: THttpMultiPartDecoder;
+    i, f: integer;
+    sgot: RawByteString;
+
+    function ReadContent(part: THttpMultiPartDecoder): RawByteString;
+    begin
+      // the streaming decoder returns the raw section bytes: any
+      // Content-Transfer-Encoding is up to the caller, as with Go
+      result := ReadAll(part.Content); // also validate per-field properties
+      if PropNameEquals(part.Encoding, 'base64') then
+        result := Base64ToBin(result);
+    end;
+
+  begin
+    // same expectations as DecodeAndTest, but using the incremental decoder
+    ssrc := TRawByteStringStream.Create(mpc);
+    sdec := THttpMultiPartDecoder.CreateFromContentType(ssrc, mpct, aBufferSize);
+    try
+      i := 0;
+      f := 0;
+      while sdec.NextPart do
+        if IdemPChar(pointer(sdec.Current.ContentType), 'MULTIPART/MIXED') then
+        begin
+          // rfc2388 nested "files" section: decode it recursively
+          nested := THttpMultiPartDecoder.CreateFromContentType(
+            sdec.Current.Content, sdec.Current.ContentType, aBufferSize);
+          try
+            while nested.NextPart do
+            begin
+              CheckEqual(nested.Current.FileName,
+                StringToUtf8(ExtractFileName(fn[f])), 'nested filename');
+              sgot := ReadContent(nested);
+              CheckEqual(sgot, MIM[f * 2 + 1]);
+              inc(f);
+            end;
+            Check(nested.Close, 'nested Close');
+          finally
+            nested.Free;
+          end;
+        end
+        else if sdec.Current.FileName <> '' then
+        begin
+          CheckEqual(sdec.Current.FileName,
+            StringToUtf8(ExtractFileName(fn[f])), 'filename');
+          sgot := ReadContent(sdec);
+          CheckEqual(sgot, MIM[f * 2 + 1]);
+          inc(f);
+        end
+        else
+        begin
+          CheckEqual(sdec.Current.Name, MIM[i * 2], 'field name');
+          sgot := ReadContent(sdec);
+          CheckEqual(sgot, MIM[i * 2 + 1]);
+          inc(i);
+        end;
+      Check(sdec.Close, 'Close');
+      CheckEqual(i, n + 1, 'field count');
+      CheckEqual(f, length(fn), 'file count');
+    finally
+      sdec.Free;
+      ssrc.Free;
+    end;
+  end;
+
+  procedure TestOne(const body: RawByteString; const ctxt: RawUtf8;
+    expparts: integer; expclose: boolean;
+    const expcontent: RawByteString = ''; checkcontent: boolean = true);
+  var
+    tsrc: TRawByteStringStream;
+    tdec: THttpMultiPartDecoder;
+    parts: integer;
+    tgot: RawByteString;
+  begin
+    // decode a hand-made body with the fixed 'xyz' boundary
+    tsrc := TRawByteStringStream.Create(body);
+    tdec := THttpMultiPartDecoder.Create(tsrc, 'xyz', 4096);
+    try
+      parts := 0;
+      tgot := '';
+      while tdec.NextPart do
+      begin
+        inc(parts);
+        if parts = 1 then
+          tgot := ReadAll(tdec.Current.Content);
+      end;
+      CheckEqual(parts, expparts, ctxt);
+      CheckUtf8(tdec.Close = expclose, ctxt);
+      CheckUtf8((tdec.State = mpdsFinished) = tdec.Close, ctxt);
+      if checkcontent and
+         (expparts <> 0) then
+        CheckEqual(tgot, expcontent, ctxt); // '' = expect a void section
+    finally
+      tdec.Free;
+      tsrc.Free;
+    end;
+  end;
+
+const
+  TRUNC: array[0 .. 3] of RawByteString = (
+    'partial data without a final boundary', // eof within the content
+    'data'#13#10'--xyz',                     // eof just after the delimiter
+    'data'#13#10'--xyz'#13,                  // eof within the final crlf
+    'data'#13#10'--xyz-');                   // eof within the final --
+begin
+  // mime multipart encoding, and round-trip with the incremental decoder
   for rfc2388 := false to true do
   begin
     mp := nil;
@@ -10172,6 +10349,7 @@ begin
     end;
     Check(MultiPartFormDataEncode(mp, mpct, mpc, rfc2388));
     DecodeAndTest;
+    DecodeStreamAndTest(4096);
     st := THttpMultiPartStream.Create;
     st.Rfc2388NestedFiles := rfc2388;
     for i := 0 to n do
@@ -10182,9 +10360,263 @@ begin
     mpct := st.MultipartContentType;
     mpc := StreamToRawByteString(st);
     DecodeAndTest;
+    DecodeStreamAndTest(4096);
+    DecodeStreamAndTest(65536);
     st.Free;
     for i := 0 to high(fn) do
       check(DeleteFile(fn[i]));
+  end;
+  // incremental decoding of a huge section using a small work buffer, with
+  // '--xyz' delimiter near-misses so that the scanner has to handle
+  // delimiter prefixes split by the work buffer boundaries
+  big := '';
+  while length(big) < 300000 do
+    Append(big, [#13#10'--xyzZ', length(big),      // wrong delimiter tail
+                 #13#10'---xyz'#13#10,             // one dash too many
+                 #13'--xyz'#13#10,                 // CR without LF
+                 #13#10'--xyz'#13, 'no LF here'#10,// truncated CRLF tail
+                 'plain content bytes'#13#10]);
+  SetLength(big, 300000);
+  mpc := Join(['--xyz'#13#10'Content-Disposition: form-data; name="f"'#13#10 +
+    'Content-Type: application/octet-stream'#13#10#13#10, big, #13#10'--xyz--'#13#10]);
+  // decode it with several work buffer sizes and consumer read sizes
+  for i := 0 to 3 do
+  begin
+    case i of
+      0: j := 4096;
+      1: j := 4097;
+      2: j := 8192;
+    else
+      j := 65536;
+    end;
+    src := TRawByteStringStream.Create(mpc);
+    dec := THttpMultiPartDecoder.Create(src, 'xyz', j);
+    try
+      Check(dec.NextPart, 'big');
+      CheckEqual(dec.Current.Name, 'f');
+      CheckEqual(ReadAll(dec.Current.Content), big, 'big content');
+      Check(not dec.NextPart, 'big end');
+      Check(dec.Close, 'big Close');
+    finally
+      dec.Free;
+      src.Free;
+    end;
+  end;
+  // same, but from a source trickling only a few bytes per Read()
+  for i := 1 to 7 do
+  begin
+    src := TTrickleStream.Create(mpc, i);
+    dec := THttpMultiPartDecoder.Create(src, 'xyz', 4096);
+    try
+      Check(dec.NextPart, 'trickle');
+      CheckEqual(ReadAll(dec.Current.Content), big, 'trickle content');
+      Check(dec.Close, 'trickle Close');
+    finally
+      dec.Free;
+      src.Free;
+    end;
+  end;
+  // delimiters split at every possible offset around the work buffer edge
+  for i := 4060 to 4110 do
+  begin
+    s := '';
+    SetLength(s, i);
+    FillCharFast(pointer(s)^, i, ord('a'));
+    src := TRawByteStringStream.Create(Join(['--xyz'#13#10 +
+      'Content-Disposition: form-data; name="s"'#13#10#13#10, s,
+      #13#10'--xyz--'#13#10]));
+    dec := THttpMultiPartDecoder.Create(src, 'xyz', 4096);
+    try
+      Check(dec.NextPart, 'edge');
+      CheckEqual(ReadAll(dec.Current.Content), s, 'edge content');
+      Check(dec.Close, 'edge Close');
+    finally
+      dec.Free;
+      src.Free;
+    end;
+  end;
+  // delimiter-like bytes within the content should be decoded as content
+  TestOne('--xyz'#13#10'Content-Disposition: form-data; name="a"'#13#10#13#10 +
+    'AAA'#13#10'--xyzZZZ more'#13#10'BBB'#13#10'--xyz--'#13#10,
+    'fake delimiter', 1, true, 'AAA'#13#10'--xyzZZZ more'#13#10'BBB');
+  TestOne('--xyz'#13#10'Content-Disposition: form-data; name="a"'#13#10#13#10 +
+    'x'#13#10'--xyz-not-final'#13#10'y'#13#10'--xyz--'#13#10,
+    'single dash', 1, true, 'x'#13#10'--xyz-not-final'#13#10'y');
+  // preamble, transport padding and epilogue
+  TestOne('some preamble'#13#10'--xyz '#9' '#13#10 +
+    'Content-Disposition: form-data; name="p"'#13#10#13#10 +
+    'v'#13#10'--xyz--  epilogue ignored', 'preamble padding', 1, true, 'v');
+  SetLength(s, 80);
+  FillCharFast(pointer(s)^, 80, 32); // 80 spaces > padding cap = content
+  TestOne('--xyz'#13#10'Content-Disposition: form-data; name="a"'#13#10#13#10 +
+    'x'#13#10'--xyz' + s + #13#10'y'#13#10'--xyz--'#13#10,
+    'huge padding', 1, true, 'x'#13#10'--xyz' + s + #13#10'y');
+  // void section, void multipart, no Content-Disposition
+  TestOne('--xyz'#13#10'Content-Disposition: form-data; name="e"'#13#10#13#10 +
+    #13#10'--xyz--'#13#10, 'void section', 1, true);
+  TestOne('--xyz--'#13#10, 'void multipart', 0, true);
+  TestOne('--xyz'#13#10'Content-Type: text/plain'#13#10#13#10 +
+    'plain'#13#10'--xyz--'#13#10, 'no disposition', 1, true, 'plain');
+  // header lines in any order/case/spacing, and unterminated quoted value
+  src := TRawByteStringStream.Create(
+    '--xyz'#13#10 +
+    'content-disposition: form-data; filename="f.bin"; name="upload"'#13#10 +
+    'content-type:application/octet-stream'#13#10#13#10 +
+    'DATA'#13#10'--xyz--'#13#10);
+  dec := THttpMultiPartDecoder.Create(src, 'xyz', 4096);
+  try
+    Check(dec.NextPart, 'hdr');
+    CheckEqual(dec.Name, 'upload'); // direct per-field properties
+    CheckEqual(dec.FileName, 'f.bin');
+    CheckEqual(dec.ContentType, 'application/octet-stream');
+    CheckEqual(ReadAll(dec.Content), 'DATA');
+    Check(dec.Close, 'hdr Close');
+  finally
+    dec.Free;
+    src.Free;
+  end;
+  TestOne('--xyz'#13#10 +
+    'Content-Disposition: form-data; name="unterminated'#13#10#13#10 +
+    'v'#13#10'--xyz--'#13#10, 'unterminated quote', 1, true, 'v');
+  // token (unquoted) parameter values, and \" quoted-pairs in a value
+  src := TRawByteStringStream.Create(
+    '--xyz'#13#10'Content-Disposition: form-data; name=plain'#13#10#13#10 +
+    'tok'#13#10'--xyz'#13#10 +
+    'Content-Disposition: form-data; name="n"; filename="a\"b\\c.txt"'#13#10 +
+    #13#10'esc'#13#10'--xyz--'#13#10);
+  dec := THttpMultiPartDecoder.Create(src, 'xyz', 4096);
+  try
+    Check(dec.NextPart, 'token');
+    CheckEqual(dec.Current.Name, 'plain', 'token name');
+    CheckEqual(ReadAll(dec.Current.Content), 'tok');
+    Check(dec.NextPart, 'quotedpair');
+    CheckEqual(dec.Current.Name, 'n');
+    CheckEqual(dec.Current.FileName, 'a"b\c.txt', 'quoted-pair filename');
+    CheckEqual(ReadAll(dec.Current.Content), 'esc');
+    Check(dec.Close, 'token Close');
+  finally
+    dec.Free;
+    src.Free;
+  end;
+  // header lines flood: up to 100 lines per section, then rejected
+  s := '';
+  for i := 1 to 99 do
+    Append(s, ['X-', i, ': v'#13#10]);
+  TestOne('--xyz'#13#10'Content-Disposition: form-data; name="a"'#13#10 + s +
+    #13#10'v'#13#10'--xyz--'#13#10, 'headers below limit', 1, true, 'v');
+  TestOne('--xyz'#13#10'Content-Disposition: form-data; name="a"'#13#10 + s +
+    'X-100: v'#13#10#13#10'v'#13#10'--xyz--'#13#10,
+    'headers above limit', 0, false);
+  // truncated input before any content -> no part, error state
+  TestOne('preamble bytes with no boundary at all', 'trunc preamble', 0, false);
+  TestOne('--xy', 'trunc first delimiter', 0, false);
+  TestOne('--xyz'#13#10'Content-Type: text/pl', 'trunc headers', 0, false);
+  // truncated content should raise EHttpMultiPart on Read
+  for i := 0 to high(TRUNC) do
+  begin
+    src := TRawByteStringStream.Create(
+      '--xyz'#13#10'Content-Disposition: form-data; name="a"'#13#10#13#10 +
+      TRUNC[i]);
+    dec := THttpMultiPartDecoder.Create(src, 'xyz', 4096);
+    try
+      Check(dec.NextPart, 'trunc');
+      raised := false;
+      try
+        ReadAll(dec.Current.Content);
+      except
+        on EHttpMultiPart do
+          raised := true;
+      end;
+      Check(raised, 'trunc raised');
+      Check(dec.State = mpdsError, 'trunc state');
+      Check(not dec.Close, 'trunc Close');
+    finally
+      dec.Free;
+      src.Free;
+    end;
+  end;
+  // one-byte consumer reads
+  src := TRawByteStringStream.Create(
+    '--xyz'#13#10'Content-Disposition: form-data; name="s"'#13#10#13#10 +
+    'abcdefghij'#13#10'--xyz--'#13#10);
+  dec := THttpMultiPartDecoder.Create(src, 'xyz', 4096);
+  try
+    Check(dec.NextPart, 'onebyte');
+    got := '';
+    while dec.Current.Content.Read(onebyte, 1) = 1 do
+      Append(RawUtf8(got), [AnsiChar(onebyte[0])]);
+    CheckEqual(got, 'abcdefghij', 'onebyte content');
+    Check(dec.Close, 'onebyte Close');
+  finally
+    dec.Free;
+    src.Free;
+  end;
+  // MultiPartFormDataBoundary() edge cases
+  Check(MultiPartFormDataBoundary(
+    'multipart/form-data; boundary=abc', bound) and (bound = 'abc'), 'b1');
+  Check(MultiPartFormDataBoundary(
+    'multipart/form-data; Boundary=abc', bound) and (bound = 'abc'), 'b2');
+  Check(MultiPartFormDataBoundary(
+    'multipart/form-data; boundary="q1"', bound) and (bound = 'q1'), 'b3');
+  Check(MultiPartFormDataBoundary(
+    'multipart/form-data; notboundary=evil; boundary=real', bound) and
+    (bound = 'real'), 'b4');
+  Check(MultiPartFormDataBoundary(
+    'multipart/form-data; foo="boundary=fake"; boundary=real', bound) and
+    (bound = 'real'), 'b5');
+  Check(MultiPartFormDataBoundary(
+    'multipart/form-data; boundary=abc; charset=utf-8', bound) and
+    (bound = 'abc'), 'b6');
+  Check(MultiPartFormDataBoundary(
+    'multipart/form-data; note="x\"; boundary=evil"; boundary=good', bound) and
+    (bound = 'good'), 'b7');
+  Check(not MultiPartFormDataBoundary(
+    'multipart/form-data; boundary="abc', bound), 'b8');
+  Check(not MultiPartFormDataBoundary(
+    'multipart/form-data; charset=utf-8', bound), 'b9');
+  Check(MultiPartFormDataBoundary( // \: quoted-pair is unescaped
+    'multipart/form-data; boundary="ab\:cd"', bound) and
+    (bound = 'ab:cd'), 'b10');
+  Check(MultiPartFormDataBoundary(
+    'multipart/form-data;boundary=nospace', bound) and
+    (bound = 'nospace'), 'b11');
+  Check(MultiPartFormDataBoundary(
+    'MULTIPART/FORM-DATA; BOUNDARY=upper', bound) and
+    (bound = 'upper'), 'b12');
+  // invalid boundaries are rejected in the constructors
+  src := TRawByteStringStream.Create('X');
+  try
+    raised := false;
+    try
+      SetLength(bound, 500);
+      FillCharFast(pointer(bound)^, 500, ord('A'));
+      dec := THttpMultiPartDecoder.Create(src, bound, 4096);
+      dec.Free;
+    except
+      on EHttpMultiPart do
+        raised := true;
+    end;
+    Check(raised, 'oversized boundary');
+    raised := false;
+    try
+      dec := THttpMultiPartDecoder.Create(src, 'bad'#10'bnd', 4096);
+      dec.Free;
+    except
+      on EHttpMultiPart do
+        raised := true;
+    end;
+    Check(raised, 'control char boundary');
+    raised := false;
+    try
+      dec := THttpMultiPartDecoder.CreateFromContentType(src, 'text/plain', 4096);
+      dec.Free;
+    except
+      on EHttpMultiPart do
+        raised := true;
+    end;
+    Check(raised, 'no boundary content type');
+  finally
+    src.Free;
   end;
 end;
 
