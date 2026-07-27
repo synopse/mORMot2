@@ -2114,8 +2114,10 @@ procedure TrimSynLogMessage(var P: PUtf8Char; var len: PtrInt;
 implementation
 
 {$ifdef FPC}
+{$ifdef OSELF} // we cannot use mormot.core.os.FindElfSection()
 uses
-  exeinfo; // cross-platform executable raw access for GDB DWARF support
+  exeinfo; // MachO executable raw access for GDB DWARF support
+{$endif OSELF}
 {$endif FPC}
 
 
@@ -2227,17 +2229,17 @@ type
   TDwarfReader = object
   public
     read: TFastReader;
-    DebugLineSectionOffset, DebugLineSection_Size, // debug_line section
-    DebugInfoSectionOffset, DebugInfoSection_Size, // debug_info section
+    DebugLineSectionOffset, DebugLineSectionSize, // debug_line section
+    DebugInfoSectionOffset, DebugInfoSectionSize, // debug_info section
     DebugAbbrevSectionOffset, DebugAbbrevSectionSize: integer; // debug_abbrev
     Abbrev: array of TDwarfDebugAbbrev; // debug_abbrev content
     Lines: TInt64DynArray;              // store TDebugUnit.Addr[]/Line[]
     dirs, files: TRawUtf8DynArray;
     filesdir: TIntegerDynArray;
-    isdwarf64, debugtoconsole: boolean;
+    isdwarf64: boolean;
     debug: TDebugFile;
     Map: TMemoryMap;
-    function FindSections(const filename: ShortString): boolean;
+    function LoadSections(const filename: TFileName): boolean;
     procedure ReadInit(aBase, aLimit: Int64);
     function ReadLeb128: Int64;
     function ReadAddress(addr_size: PtrInt): QWord; inline;
@@ -2266,10 +2268,47 @@ end;
 
 {.$define DWARFDEBUG} // for internal raw debugging
 
-function TDwarfReader.FindSections(const filename: ShortString): boolean;
+{$ifdef OSELF} // use faster mormot.core.os.FindElfSection(TMemoryMap)
+function TDwarfReader.LoadSections(const filename: TFileName): boolean;
+var
+  off, siz, dbglen: integer; // not PtrInt
+  crc: cardinal;
+  dbgname: PUtf8Char;
+  fn: string;
+begin
+  result := false;
+  if not Map.Map(filename, {forcemap=}true) then // main exe
+    exit;
+  if FindElfSection(Map, '.gnu_debuglink', off, siz) then
+  begin
+    dbgname := pointer(Map.Buffer + off);
+    dbglen := StrLen(dbgname);
+    if (dbglen = 0) or
+       (dbglen > siz) or
+       not IsValidUtf8WithoutControlChars(pointer(dbgname), dbglen) then
+      exit;
+    crc := PCardinal(dbgname + ((dbglen + 4) and not 3))^;
+    Utf8DecodeToString(dbgname, dbglen, fn); // e.g. mormot2tests.dbg
+    Map.UnMap; // close main exe
+    if Map.Map(Executable.ProgramFilePath + fn) then // search dbg in exe folder
+      if crc32(0, Map.Buffer, Map.Size) <> crc then
+        Map.UnMap; // the located debug file does not match the executable
+  end;
+  if FindElfSection(Map, '.debug_line',
+       DebugLineSectionOffset, DebugLineSectionSize) and
+     FindElfSection(Map, '.debug_info',
+       DebugInfoSectionOffset, DebugInfoSectionSize) and
+     FindElfSection(Map, '.debug_abbrev',
+       DebugAbbrevSectionOffset, DebugAbbrevSectionSize) then
+    result := true;
+  if not result then
+    Map.UnMap;
+end;
+{$else} // use FPC RTL's cross-OS exeinfo.pp unit for Darwin macho format
+function TDwarfReader.LoadSections(const filename: TFileName): boolean;
 var
   dbgfn: ShortString;
-  e: TExeFile; // use RTL's cross-OS exeinfo.pp unit
+  e: TExeFile;
 begin
   result := false;
   // open exe filename or follow '.gnu_debuglink' redirection
@@ -2293,16 +2332,17 @@ begin
   end
   else
     dbgfn := filename;
-  // locate debug_* sections
+  // locate debug_* sections after successfull OpenExeFile()
   if FindExeSection(e, '.debug_line',
-       DebugLineSectionOffset, DebugLineSection_size) and
+       DebugLineSectionOffset, DebugLineSectionSize) and
      FindExeSection(e, '.debug_info',
-       DebugInfoSectionOffset, DebugInfoSection_size) and
+       DebugInfoSectionOffset, DebugInfoSectionSize) and
      FindExeSection(e, '.debug_abbrev',
        DebugAbbrevSectionOffset, DebugAbbrevSectionSize) then
     result := Map.Map(dbgfn);
   CloseExeFile(e);
 end;
+{$endif OSELF}
 
 procedure TDwarfReader.ReadInit(aBase, aLimit: Int64);
 begin
@@ -2873,26 +2913,25 @@ begin
   result := CompareInteger(TDebugSymbol(A).Start, TDebugSymbol(B).Start);
 end;
 
-procedure TDebugFile.GenerateFromMapOrDbg(aDebugToConsole: boolean);
+procedure TDebugFile.GenerateFromMapOrDbg;
 var
   dwarf: TDwarfReader;
   current_offset, end_offset: QWord;
 begin
   FillCharFast(dwarf, SizeOf(dwarf), 0);
-  dwarf.debugtoconsole := aDebugToConsole;
-  if dwarf.FindSections(fDebugFile) then
+  if dwarf.LoadSections(fDebugFile) then
   try
     // retrieve units name and line numbers
     dwarf.debug := self;
     current_offset := dwarf.DebugLineSectionOffset;
-    end_offset := current_offset + dwarf.DebugLineSection_Size;
+    end_offset := current_offset + dwarf.DebugLineSectionSize;
     while current_offset < end_offset do
       current_offset := dwarf.ParseCompilationUnits(
         current_offset, end_offset - current_offset);
     fUnits.Sort(SymbolSortByAddr);
     // retrieve function names
     current_offset := dwarf.DebugInfoSectionOffset;
-    end_offset := current_offset + dwarf.DebugInfoSection_Size;
+    end_offset := current_offset + dwarf.DebugInfoSectionSize;
     while current_offset < end_offset do
       current_offset := dwarf.ParseCompilationFunctions(current_offset,
         end_offset - current_offset);

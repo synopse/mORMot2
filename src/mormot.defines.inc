@@ -149,7 +149,7 @@
     OSWINDOWS OSWINTEL OSWINARM
     OSPOSIX OSBSD OSDARWIN OSBSDDARWIN OSOPENBSD OSFREEBSD
     OSLINUX OSANDROID OSLINUXINTEL OSLINUXX64 OSLINUXX86
-    OSLINUXANDROID OSANDROIDARM64
+    OSLINUXANDROID OSANDROIDARM64 OSELF
     PUREMORMOT2
 
   FPC only:
@@ -922,6 +922,7 @@
   {$endif CPU32}
   {$ifdef OSLINUX}
     {$define OSLINUXANDROID}
+    {$define OSELF}
     {$ifdef ABIX86}
       {$define OSLINUXINTEL}
       {$define OSLINUXX86}
@@ -939,6 +940,7 @@
   {$endif OSLINUX}
   {$ifdef OSANDROID}
     {$define OSLINUXANDROID}
+    {$define OSELF}
     {$ifdef ABIA64}
       {$define OSANDROIDARM64}
     {$endif ABIA64}
@@ -948,6 +950,7 @@
   {$endif OSDARWIN}
   {$ifdef OSBSD}
     {$define OSBSDDARWIN}     // OSBSDDARWIN = OSBSD or OSDARWIN
+    {$define OSELF}           // OSX has its own macho executable format
   {$endif OSBSD}
 {$endif OSWINDOW}
 
