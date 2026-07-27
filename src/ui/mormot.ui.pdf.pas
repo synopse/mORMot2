@@ -657,7 +657,7 @@ type
     fDestStreamPosition: integer;
     fAddGlyphFont: (fNone, fMain, fFallBack);
     fDoc: TPdfDocument;
-    fTmp: array[0..511] of AnsiChar;
+    fTmp: TTemp512;
     /// internal Ansi->Unicode conversion, using the CodePage used in Create()
     // - returned Dest.len is in WideChar count, not in bytes
     // - caller must release the returned memory via Dest.Done
@@ -4770,7 +4770,7 @@ end;
 
 function TPdfWrite.Add(Value, DigitCount: integer): TPdfWrite;
 var
-  t: array[0..15] of AnsiChar;
+  t: TTemp16;
   i64: array[0..1] of Int64 absolute t;
 begin
 //  assert(DigitCount<high(t));
@@ -4882,7 +4882,7 @@ begin
 end;
 
 const // should be local for better code generation
-  HexChars: array[0..15] of AnsiChar = '0123456789ABCDEF';
+  HexChars: TTemp16 = '0123456789ABCDEF';
   ESCAPENAME: TSynAnsicharSet = [
     #1..#31, '%', '(', ')', '<', '>', '[', ']', '{', '}', '/', '#', #127..#255];
 
@@ -6297,7 +6297,7 @@ type
 const
   // see http://www.4real.gr/technical-documents-ttf-subset.html and
   // https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6.html
-  TTF_SUBSET: array[0..9] of array[0..3] of AnsiChar = (
+  TTF_SUBSET: array[0..9] of TTemp4 = (
     'head', 'cvt ', 'fpgm', 'prep', 'hhea', 'maxp', 'hmtx', 'cmap', 'loca', 'glyf');
 
 procedure ReduceTTF(out ttf: PdfString; SubSetData: pointer; SubSetSize: integer);

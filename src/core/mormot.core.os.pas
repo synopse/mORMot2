@@ -6572,7 +6572,7 @@ const // cf https://preview.changewindows.org/platforms/pc
      10240,  10586,  14393,  15063,  16299,  17134,  17763,  18362,  18363,
      19041,  19042,  19043,  19044,  19045,  22000,  22621,  22631,  26100,
      26200,  27881); // detect 26H2 Canary builds since 19/6/2025
-  DESKTOP_TXT: array[0 .. high(DESKTOP_INT), 0 .. 3] of AnsiChar = (
+  DESKTOP_TXT: array[0 .. high(DESKTOP_INT)] of TTemp4  = (
     '1507', '1511', '1607', '1703', '1709', '1803', '1809', '1903', '1909',
     '2004', '20H2', '21H1', '21H2', '22H2', '21H2', '22H2', '23H2', '24H2',
     '25H2', '26H2'); // stored as 32-bit cardinal = array[0..3] of AnsiChar

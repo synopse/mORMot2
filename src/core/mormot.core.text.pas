@@ -148,7 +148,7 @@ function GetNextItemHexDisplayToBin(var P: PUtf8Char; Bin: PByte;
 type
   /// some stack-allocated zero-terminated character buffer
   // - as used by GetNextTChar64 or ConvertToBase64 lookup tables
-  TChar64 = array[0..63] of AnsiChar;
+  TChar64 = TTemp64;
   PChar64 = ^TChar64;
 
 /// return next CSV string from P as a #0-ended buffer, false if no more
@@ -4964,7 +4964,7 @@ end;
 
 procedure TTextWriter.AddCurr64(Value: PInt64);
 var
-  tmp: array[0..31] of AnsiChar;
+  tmp: TTemp32;
   P: PAnsiChar;
   Len: PtrInt;
 begin
@@ -6862,7 +6862,7 @@ end;
 
 procedure Curr64ToStr(const Value: Int64; var result: RawUtf8);
 var
-  tmp: array[0..31] of AnsiChar;
+  tmp: TTemp32;
   P: PAnsiChar;
   decim, L: cardinal;
 begin
@@ -6896,7 +6896,7 @@ end;
 
 function Curr64ToPChar(const Value: Int64; Dest: PUtf8Char): PtrInt;
 var
-  tmp: array[0..31] of AnsiChar;
+  tmp: TTemp32;
   P: PAnsiChar;
   decim: cardinal; // = 4 last digits to check if 0/2 decimals
 begin
@@ -7046,7 +7046,7 @@ end;
 
 function IntToString(Value: Int64): string;
 var
-  tmp: array[0..31] of AnsiChar;
+  tmp: TTemp32;
   P: PAnsiChar;
 begin
   P := StrInt64(@tmp[31], Value);
@@ -7065,7 +7065,7 @@ end;
 
 function Curr64ToString(Value: Int64): string;
 var
-  tmp: array[0..31] of AnsiChar;
+  tmp: TTemp32;
 begin
   Ansi7ToString(tmp, Curr64ToPChar(Value, tmp), result);
 end;
@@ -7102,7 +7102,7 @@ end;
 
 function IntToString(Value: Int64): string;
 var
-  tmp: array[0..31] of AnsiChar;
+  tmp: TTemp32;
   P: PAnsiChar;
 begin
   if (Value >= 0) and
@@ -11811,7 +11811,7 @@ var
   P: PAnsiChar;
   B, B4: PByteArray;
   pc: PCardinalArray;
-  tmp: array[0..15] of AnsiChar;
+  tmp: TTemp16;
 begin
   // initialize internal lookup tables for various text conversions
   HexLookup(@TwoDigitsHex,      '0123456789ABCDEF');

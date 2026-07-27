@@ -882,7 +882,7 @@ procedure TSqlDBOdbcStatement.ColumnToJson(Col: integer; W: TJsonWriter);
 var
   p: PSqlDBColumnProperty;
   v: pointer;
-  tmp: array[0..31] of AnsiChar;
+  tmp: TTemp32;
 begin
   if (not Assigned(fStatement)) or
      (CurrentRow <= 0) then

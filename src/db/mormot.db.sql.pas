@@ -3128,7 +3128,7 @@ type
   TReplaceSql = record
     Flags: set of (fAllowSemicolon, fByNumber);
     IndexChar: AnsiChar;
-    Name: array[0..1] of AnsiChar;
+    Name: TTemp2;
     Number: Integer;
     Dest: PRawUtf8;
     Temp: TSynTempAdder; // 4KB temp output on stack is almost always enough

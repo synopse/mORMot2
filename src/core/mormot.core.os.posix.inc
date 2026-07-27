@@ -1349,7 +1349,7 @@ end;
 
 procedure PosixSetThreadName(ThreadID: TThreadID; const Name: RawByteString);
 var
-  {%H-}trunc: array[0..15] of AnsiChar; // trunc to 16 non space chars (including #0)
+  {%H-}trunc: TTemp16; // trunc to 16 non space chars (including #0)
   i, L, c4: integer;
 begin
   if Name = '' then
@@ -2367,7 +2367,7 @@ begin
 end;
 
 const
-  _MESSAGE: array[0..7] of AnsiChar = 'MESSAGE=';
+  _MESSAGE: TTemp8 = 'MESSAGE=';
 
 function TSystemD.Send(priority: integer; msg: PUtf8Char; len: PtrInt): boolean;
 var
@@ -2421,7 +2421,7 @@ const
 function LinuxSetProcessName(const NewName: RawUtf8): boolean;
 var
   L: PtrInt;
-  {%H-}trunc: array[0..15] of AnsiChar; // truncate to 16 chars (including #0)
+  {%H-}trunc: TTemp16; // truncate to 16 chars (including #0)
 begin
   L := MinPtrInt(15, length(NewName));
   MoveFast(NewName[1], trunc[0], L);

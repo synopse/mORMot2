@@ -2114,7 +2114,7 @@ procedure TrimSynLogMessage(var P: PUtf8Char; var len: PtrInt;
 implementation
 
 {$ifdef FPC}
-{$ifdef OSELF} // we cannot use mormot.core.os.FindElfSection()
+{$ifndef OSELF} // we cannot use mormot.core.os.FindElfSection()
 uses
   exeinfo; // MachO executable raw access for GDB DWARF support
 {$endif OSELF}

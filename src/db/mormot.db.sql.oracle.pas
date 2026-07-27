@@ -930,7 +930,7 @@ var
   v: pointer;
   p: PSqlDBColumnProperty;
   indicator: integer;
-  tmp: array[0..31] of AnsiChar;
+  tmp: TTemp32;
   U: RawUtf8;
 begin
   // dedicated version to avoid as much memory allocation than possible

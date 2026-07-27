@@ -5587,7 +5587,7 @@ implementation
 function SqlVarToSQlite3Context(const Res: TSqlVar;
   Context: TSqlite3FunctionContext): boolean;
 var
-  tmp: array[0 .. 31] of AnsiChar;
+  tmp: TTemp32;
 begin
   case Res.VType of
     ftNull:

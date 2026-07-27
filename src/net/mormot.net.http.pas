@@ -4496,7 +4496,7 @@ var
   chunk: RawUtf8;
   len: PtrInt;
   bytes: Int64;
-  chunksize: array[0..31] of AnsiChar; // 32 bits chunk length in hexa
+  chunksize: TTemp32; // 32 bits chunk length in hexa
 begin
   include(fFlags, fBodyRetrieved);
   Http.Content := '';

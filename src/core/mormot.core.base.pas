@@ -640,9 +640,6 @@ type
   TShortGuid = TShort39;
   PShortGuid = ^TShortGuid;
 
-  /// internal temporary buffer on stack used e.g. by StrInt32() or StrInt64()
-  TTemp24 = array[0..23] of AnsiChar;
-
   /// cross-compiler type used for string length
   // - FPC uses PtrInt/SizeInt, Delphi uses 32-bit integer even on CPU64 (!)
   TStrLen = {$ifdef FPC} SizeInt {$else} integer {$endif};
@@ -3643,6 +3640,16 @@ function EventEquals(const eventA, eventB): boolean;
 { ************ Buffers (e.g. Hashing and SynLZ compression) Raw Functions }
 
 type
+  // internal temporary buffers on stack used e.g. by StrInt32() or StrInt64()
+  TTemp2   = array[0..1] of AnsiChar;
+  TTemp4   = array[0..3] of AnsiChar;
+  TTemp8   = array[0..7] of AnsiChar;
+  TTemp16  = array[0..15] of AnsiChar;
+  TTemp24  = array[0..23] of AnsiChar;
+  TTemp32  = array[0..31] of AnsiChar;
+  TTemp64  = array[0..63] of AnsiChar;
+  TTemp512 = array[0..511] of AnsiChar;
+
   /// define a buffer of 1KB of data
   TBuffer1K = array[0 .. pred(1 shl 10)] of AnsiChar;
   /// define a buffer of 2KB of data
@@ -5599,8 +5606,8 @@ begin
 end;
 
 const
-  HexCharsUpper: array[0..15] of AnsiChar = '0123456789ABCDEF';
-  HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
+  HexCharsUpper: TTemp16 = '0123456789ABCDEF';
+  HexCharsLower: TTemp16 = '0123456789abcdef';
 
 procedure AppendShortByteHex(value: PtrUInt; var dest: ShortString);
 var
@@ -5692,7 +5699,7 @@ end;
 procedure AppendShortCurr64(const value: Int64; var dest: ShortString;
   fixeddecimals: PtrInt);
 var
-  tmp: array[0..31] of AnsiChar;
+  tmp: TTemp32;
   p: PAnsiChar;
   l: PtrInt;
 begin

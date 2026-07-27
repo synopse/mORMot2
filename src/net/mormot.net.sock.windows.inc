@@ -950,7 +950,7 @@ type
     // DHCP v6 Info following (not used by our code)
   end;
 
-  IP_ADDRESS_STRING = array[0..15] of AnsiChar;
+  IP_ADDRESS_STRING = TTemp16;
   IP_ADDR_IP4 = TNetIP4;
 
   IP_ADDR_STRING = packed record

@@ -271,7 +271,7 @@ type
   /// Section Table
   _IMAGE_SECTION_HEADER = object
   public
-    Name8: array[0..7] of AnsiChar;
+    Name8: TTemp8;
     VirtualSize: cardinal;
     VirtualAddress: cardinal;
     SizeOfRawData: cardinal;
@@ -953,7 +953,7 @@ var
   tab, tabEnd, ent, entEnd, P: PAnsiChar;
   lang, key, value: pointer;
   offset, i: integer;
-  lnghex: array[0..7] of AnsiChar;
+  lnghex: TTemp8;
   lngint: LongRec;
   lng: TLanguage;
 begin

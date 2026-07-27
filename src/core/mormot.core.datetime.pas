@@ -1950,7 +1950,7 @@ end;
 procedure DateTimeToIso8601Var(D: TDateTime; Expanded, WithMS: boolean;
   FirstChar, QuotedChar: AnsiChar; var Result: RawUtf8);
 var
-  tmp: array[0 .. 31] of AnsiChar;
+  tmp: TTemp32;
 begin
   // D=0 is handled in DateTimeToIso8601Text()
   FastSetString(result, @tmp,
@@ -2115,7 +2115,7 @@ const
     -5, -6, -6, -7, -7, -8, -8, -9, -9,
     -10, -10, -10, -10, -11, -12, -12);
 
-  HTML_MONTH_NAMES_32: array[0..11] of array[0..3] of AnsiChar = (
+  HTML_MONTH_NAMES_32: array[0..11] of TTemp4 = (
     'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
     'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC');
 
@@ -3877,7 +3877,7 @@ end;
 
 procedure TTimeLogBits.SetText(var Dest: RawUtf8; Expanded: boolean; FirstTimeChar: AnsiChar);
 var
-  tmp: array[0..31] of AnsiChar;
+  tmp: TTemp32;
 begin
   if Value = 0 then
     FastAssignNew(Dest)
@@ -3916,7 +3916,7 @@ end;
 function TTimeLogBits.FullText(Expanded: boolean;
   FirstTimeChar, QuotedChar: AnsiChar): RawUtf8;
 var
-  tmp: array[0..31] of AnsiChar;
+  tmp: TTemp32;
 begin
   FastSetString(result, @tmp, FullText(tmp{%H-}, Expanded, FirstTimeChar, QuotedChar));
 end;

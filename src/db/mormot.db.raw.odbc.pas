@@ -1056,7 +1056,7 @@ end;
 
 function TOdbcLib.GetDiagField(StatementHandle: SqlHStmt): RawUtf8;
 var
-  Status: array[0..7] of AnsiChar;
+  Status: TTemp8;
   StringLength: SqlSmallint;
 begin
   if ODBC.GetDiagFieldA(SQL_HANDLE_STMT, StatementHandle, 1, SQL_DIAG_SQLSTATE,

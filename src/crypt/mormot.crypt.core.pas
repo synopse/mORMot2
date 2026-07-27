@@ -7202,7 +7202,7 @@ begin
 end;
 
 const
-  AESMODE_TXT: array[TAesMode] of array[0..3] of AnsiChar = (
+  AESMODE_TXT: array[TAesMode] of TTemp4 = (
     'ecb', 'cbc', 'cfb', 'ofb', 'c64', 'ctr', 'cfc', 'ofc', 'ctc', 'gcm');
 
 procedure AesAlgoNameEncode(Mode: TAesMode; KeyBits: integer;

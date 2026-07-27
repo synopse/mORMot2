@@ -1408,8 +1408,8 @@ function Base58ToBin(const base58: RawUtf8): RawByteString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 const
-  b32encUpper: array[0..31] of AnsiChar = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  b32encLower: array[0..31] of AnsiChar = 'abcdefghijklmnopqrstuvwxyz234567';
+  b32encUpper: TTemp32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  b32encLower: TTemp32 = 'abcdefghijklmnopqrstuvwxyz234567';
 
 /// compute the length resulting of Base32 encoding of a binary buffer
 // - RFC4648 Base32 is defined as upper alphanumeric without misleading 0O 1I 8B
@@ -2117,7 +2117,7 @@ function EscapeBuffer(s: PAnsiChar; slen: PtrInt; d: PAnsiChar; dmax: PtrInt): P
 
 type
   /// 512 bytes buffer to be allocated on stack when using LogEscape()
-  TLogEscape = array[0..511] of AnsiChar;
+  TLogEscape = TTemp512;
 
 /// fill TLogEscape stack buffer with the (hexadecimal) chars of the input binary
 // - up to 512 bytes will be escaped and appended to a local temp: TLogEscape

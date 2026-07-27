@@ -3865,7 +3865,7 @@ end;
 { ******************** Mac and IP Addresses Support }
 
 const // should be local for better code generation
-  HexCharsLower: array[0..15] of AnsiChar = '0123456789abcdef';
+  HexCharsLower: TTemp16 = '0123456789abcdef';
 
 function IsPublicIP(ip4: TNetIP4): boolean;
 begin

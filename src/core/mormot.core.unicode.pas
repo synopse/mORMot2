@@ -518,7 +518,7 @@ const
     LANG_UZBEK,      LANG_VIETNAMESE);
 
  /// ISO 639-1 compatible language abbreviations (not to be translated)
- LANG_ISO_SHORT: array[TLanguage] of array[0..1] of AnsiChar = ('',
+ LANG_ISO_SHORT: array[TLanguage] of TTemp2 = ('',
    'af', 'sq', 'al', 'ar', 'hy',   'as', 'az', 'ba', 'eu', 'be',
    'bn', 'bs', 'br', 'bg', 'ca',   'zh', 'co', 'hr', 'cz', 'da',
    'ad', 'dv', 'nl', 'en', 'et',   'fo', 'fa', 'fi', 'fr', 'fy',
@@ -4363,7 +4363,7 @@ end;
 procedure TSynAnsiConvert.Utf8BufferToAnsi(Source: PUtf8Char; SourceChars: cardinal;
   var result: RawByteString);
 var
-  tmp: array[word] of AnsiChar;
+  tmp: TBuffer64K;
   max: PtrInt;
 begin
   if (Source = nil) or
