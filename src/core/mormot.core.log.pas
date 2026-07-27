@@ -2789,7 +2789,7 @@ var
   unit_length, low_pc, high_pc: QWord;
   abbr, level: cardinal;
   i: PtrInt;
-  name, typname: ShortString;
+  name, typname, fullname: ShortString;
 begin
   // check if DWARF 32-bit or 64-bit format
   ReadInit(file_offset, file_size);
@@ -2830,7 +2830,7 @@ begin
       begin
         low_pc := 1;
         high_pc := 0;
-        name := '';
+        name[0] := #0;
         for i := 0 to AttrsCount - 1 do
           with Attrs[i] do
           begin
@@ -2849,12 +2849,17 @@ begin
         if low_pc < high_pc then
         begin
           s := debug.fSymbols.NewPtr;
-          if (typname[0] <> #0) and
-             (typname[ord(typname[0])] <> '.') then
-            AppendShortCharSafe('.', typname);
+          if typname[0] = #0 then
+            ShortStringToAnsi7String(name, s^.name)
+          else
+          begin
+            fullname := typname;
+            AppendShort(name, fullname);
+            ShortStringToAnsi7String(fullname, s^.name);
+          end;
           // DWARF2 symbols are emitted as UPPER by FPC -> lower for esthetics
           if header64.version < 3 then
-            ShortStringToAnsi7String(lowercase(typname + name), s^.name);
+            LowerCaseSelf(s^.name);
           s^.Start := low_pc;
           s^.Stop := high_pc - 1;
           {$ifdef DWARFDEBUG}
@@ -2872,7 +2877,12 @@ begin
           with Attrs[i] do
             if (attr = DW_AT_name) and
                (form = DW_FORM_string) then
-              read.NextAsciiz(typname)
+            begin
+              read.NextAsciiz(typname);
+              if (typname[0] <> #0) and
+                 (typname[ord(typname[0])] <> '.') then
+                AppendShortCharSafe('.', typname);
+            end
             else
               SkipAttr(form, header64);
       end
