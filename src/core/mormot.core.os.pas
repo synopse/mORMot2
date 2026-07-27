@@ -8974,7 +8974,7 @@ begin
        (pe^.NumberOfSymbols = 0) or
        (n = 0) or
        (Int64(PDosHeader(eid)^.e_lfanew) + SizeOf(pe^) +
-        pe^.SizeOfOptionalHeader + n * SizeOf(ps^) > exe.Size) then
+        pe^.SizeOfOptionalHeader + PtrInt(n * SizeOf(ps^)) > exe.Size) then
       exit;
     names := exe.Buffer + pe^.PointerToSymbolTable + pe^.NumberOfSymbols * 18;
     tmp[8] := #0; // ensure ps^.Name8 with 8 chars are #0 terminated
@@ -8982,8 +8982,8 @@ begin
     repeat
       one := @tmp;
       PQWord(one)^ := ps^.Name8;
-      if one^ = '/' then
-        one := names + GetCardinal(one + 1); // length>8 stored as /asciioffset
+      if one^ = '/' then // length>8 stored as /asciioffset
+        one := names + GetCardinal(pointer(one + 1));
       if mormot.core.base.StrComp(one, name) = 0 then
       begin
         offset := ps^.PointerToRawData;
