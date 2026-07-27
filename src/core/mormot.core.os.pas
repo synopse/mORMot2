@@ -4378,27 +4378,33 @@ procedure DoLibraryAvailableInit(var State: TLibraryState; Init: TProcedure); //
 
 { *************** Per Class Properties O(1) Lookup via vmtAutoTable Slot }
 
-/// self-modifying code - change some memory buffer in the code segment
+/// self-modifying code - change some memory buffer in the code/data segment
+// - is Size < 0 then it is not a code segment but a data segment (e.g. a VMT)
+// so the page would be marked as RW and not RWX
 // - if Backup is not nil, it should point to a Size array of bytes, ready
 // to contain the overridden code buffer, for further hook disabling
-// - some systems do forbid such live patching: consider setting NOPATCHVMT
-// and NOPATCHRTL conditionals for such projects
-procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer = nil;
-  LeaveUnprotected: boolean = {$ifdef OSLINUX} true {$else} false {$endif});
+// - some systems do forbid such live patching: your code should have a fallback
+// mechanism if the patch was not applied - also consider forcing NOPATCHVMT and
+// NOPATCHRTL conditionals at project level e.g. on SELinux or hardened containairs
+// - on Linux maintains a list of patched pages until PatchCodeProtectBack is called
+// - Android and BSD/Mac will restore to RX (Size>0) or R (Size<0) ASAP
+// - on Linux, try to maintain a list of RWX and RW pages to reduce syscalls
+function PatchProcess(Old, New: pointer; Size: PtrInt; Backup: pointer = nil): boolean;
 
-/// self-modifying code - change one PtrUInt in the code segment
-procedure PatchCodePtrUInt(Code: PPtrUInt; Value: PtrUInt;
-  LeaveUnprotected: boolean = {$ifdef OSLINUX} true {$else} false {$endif});
+/// self-modifying code - change one PtrUInt/pointer value in a data segment
+function PatchPointer(Vmt: PPtrUInt; Value: PtrUInt): boolean;
 
 {$ifdef CPUINTEL}
 /// low-level i386/x86_64 asm routine patch and redirection
-procedure RedirectCode(Func, RedirectFunc: pointer);
+function RedirectCode(Func, RedirectFunc: pointer): boolean;
 {$endif CPUINTEL}
 
-/// close any LeaveUnprotected=true R/W/X memory-mapped paged back as R/X
-// - could be used to harden back all memory regions at once, when every RTTI,
-// ORM or SOA features are eventually initialized
-// - only implemented and tested on Linux by now
+/// close any RedirectCode() RWX memory-mapped paged back as RX
+// - could be used to harden back all memory regions at once, when every unit
+// have eventually been initialized and all RTL code has been patched
+// - won't restore PatchPointer(VMT) pages from RW to R since it triggers GPF
+// - only implemented and tested on Linux by now - Android BSD MacOS does not
+// allow mprotect() with RWX - as some hardened SELinux/containers do
 procedure PatchCodeProtectBack;
 
 
@@ -7157,13 +7163,13 @@ end;
 
 { *************** Per Class Properties O(1) Lookup via vmtAutoTable Slot }
 
-procedure PatchCodePtrUInt(Code: PPtrUInt; Value: PtrUInt; LeaveUnprotected: boolean);
+function PatchPointer(Vmt: PPtrUInt; Value: PtrUInt): boolean;
 begin
-  PatchCode(Code, @Value, SizeOf(Code^), nil, LeaveUnprotected);
+  result := PatchProcess(Vmt, @Value, -SizeOf(Vmt^)); // < 0 for a data segment
 end;
 
 {$ifdef CPUINTEL}
-procedure RedirectCode(Func, RedirectFunc: pointer);
+function RedirectCode(Func, RedirectFunc: pointer): boolean;
 var
   rel: PtrInt;
   NewJump: packed record
@@ -7171,6 +7177,7 @@ var
     Distance: integer; // relative jump is 32-bit even on CPU64
   end;
 begin
+  result := false;
   if (Func = nil) or
      (RedirectFunc = nil) or
      (Func = RedirectFunc) then
@@ -7182,8 +7189,7 @@ begin
   if NewJump.Distance <> rel then
     exit; // RedirectFunc is too far away from the original code :(
   {$endif CPU64}
-  PatchCode(Func, @NewJump, SizeOf(NewJump));
-  assert(PByte(Func)^ = $e9);
+  result := PatchProcess(Func, @NewJump, SizeOf(NewJump));
 end;
 {$endif CPUINTEL}
 
