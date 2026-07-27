@@ -4379,19 +4379,19 @@ procedure DoLibraryAvailableInit(var State: TLibraryState; Init: TProcedure); //
 { *************** Per Class Properties O(1) Lookup via vmtAutoTable Slot }
 
 /// self-modifying code - change some memory buffer in the code/data segment
-// - is Size < 0 then it is not a code segment but a data segment (e.g. a VMT)
-// so the page would be marked as RW and not RWX
 // - if Backup is not nil, it should point to a Size array of bytes, ready
 // to contain the overridden code buffer, for further hook disabling
 // - some systems do forbid such live patching: your code should have a fallback
 // mechanism if the patch was not applied - also consider forcing NOPATCHVMT and
 // NOPATCHRTL conditionals at project level e.g. on SELinux or hardened containairs
+// - called with Size < 0 e.g. from PatchPointer() to mark it is not a code
+// segment but a data segment to call mprotect(RW) and not mprotect(RWX)
+// - Android and BSD/Mac will restore to R (Size<0) or RX (Size>0) immediately
 // - on Linux maintains a list of patched pages until PatchCodeProtectBack is called
-// - Android and BSD/Mac will restore to RX (Size>0) or R (Size<0) ASAP
-// - on Linux, try to maintain a list of RWX and RW pages to reduce syscalls
 function PatchProcess(Old, New: pointer; Size: PtrInt; Backup: pointer = nil): boolean;
 
 /// self-modifying code - change one PtrUInt/pointer value in a data segment
+// - typically one function redirection entry in a class VMT table
 function PatchPointer(Vmt: PPtrUInt; Value: PtrUInt): boolean;
 
 {$ifdef CPUINTEL}
@@ -4401,11 +4401,13 @@ function RedirectCode(Func, RedirectFunc: pointer): boolean;
 
 /// close any RedirectCode() RWX memory-mapped paged back as RX
 // - could be used to harden back all memory regions at once, when every unit
-// have eventually been initialized and all RTL code has been patched
+// has eventually been initialized and all RTL code has been patched
 // - won't restore PatchPointer(VMT) pages from RW to R since it triggers GPF
-// - only implemented and tested on Linux by now - Android BSD MacOS does not
-// allow mprotect() with RWX - as some hardened SELinux/containers do
+// and is not unsafe by design (only the PROT_EXEC is involved for NX protection)
+// - only implemented and tested on Linux by now - Android BSD MacOS (and some
+// hardened SELinux/containers policy) do not allow mprotect() with RWX anyway
 procedure PatchCodeProtectBack;
+  {$ifndef OSLINUX} {$ifdef HASINLINE} inline; {$endif} {$endif}
 
 
 { **************** TSynLocker/TSynLocked and Low-Level Threading Features }

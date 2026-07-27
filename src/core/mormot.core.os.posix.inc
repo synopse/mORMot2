@@ -4460,10 +4460,10 @@ begin
 end;
 
 {$ifdef USEPATCHRWX} // maintain RX/R -> RWX/RW lists of unprotected pages
-var
+var // we tried 64KB pages: slightly faster but GPF (overlap 4KB boundaries)
   PatchedCode, PatchedVmt: TPtrUIntDynArray;
   PatchedCodeCount, PatchedVmtCount: integer;
-  PatchedHardened: boolean; // RWX disabled e.g. by SELinux/container policies
+  PatchedHardened: boolean; // RWX disabled e.g. by SELinux/container policy
 
 function PatchProcess(Old, New: pointer; Size: PtrInt; Backup: pointer): boolean;
 var
@@ -4490,9 +4490,8 @@ begin
             AddPtrUInt(PatchedVmt, PatchedVmtCount, adr) // mark set to RW
           else
             PatchedHardened := true;
-      end
-      else // from RedirectCode()
-        if not PtrUIntScanExists(pointer(PatchedCode), PatchedCodeCount, adr) then
+      end // Size > 0 from RedirectCode()
+      else if not PtrUIntScanExists(pointer(PatchedCode), PatchedCodeCount, adr) then
           if mprotect(adr, siz, PROT_READ or PROT_WRITE or PROT_EXEC) = 0 then
             AddPtrUInt(PatchedCode, PatchedCodeCount, adr) // mark set to RWX
           else
@@ -4504,13 +4503,13 @@ begin
       end;
       inc(adr, siz); // need another page ?
     until adr >= PtrUInt(Old) + bytes;
+    // if we reached here, all the pages are in RW or RWX state
+    if Backup <> nil then
+      MoveByOne(Old, Backup, bytes); // do not use Move() here
+    MoveByOne(New, Old, bytes);
   finally
     OSSafe.UnLock;
   end;
-  // if we reached here, all the pages are in RW or RWX state
-  if Backup <> nil then
-    MoveByOne(Old, Backup, bytes); // do not use Move() here
-  MoveByOne(New, Old, bytes);
   result := CompareMem(Old, New, bytes);
 end;
 
@@ -4523,13 +4522,13 @@ begin
   OSSafe.Lock;
   try
     QuickSortPtrInt(pointer(PatchedCode), 0, PatchedCodeCount - 1);
-    for i := PatchedCodeCount - 1 downto 0 do
+    for i := 0 to PatchedCodeCount - 1 do
       mprotect(PatchedCode[i], SystemInfo.dwPageSize, PROT_READ or PROT_EXEC);
     PatchedCodeCount := 0;
   finally
     OSSafe.UnLock;
   end;
-end; // mprotect(PatchedVmt[]) triggers some unexepected GPF but is less needed
+end; // mprotect(PatchedVmt[]) triggers some GPF but RW is not unsafe by design
 
 {$else} // BSD and Android require RX -> RW -> RX
 
