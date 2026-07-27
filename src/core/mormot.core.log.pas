@@ -2113,12 +2113,10 @@ procedure TrimSynLogMessage(var P: PUtf8Char; var len: PtrInt;
 
 implementation
 
-{$ifdef FPC}
-{$ifndef OSELF} // we cannot use mormot.core.os.FindElfSection()
+{$ifdef FPCDARWIN}
 uses
   exeinfo; // MachO executable raw access for GDB DWARF support
-{$endif OSELF}
-{$endif FPC}
+{$endif FPCDARWIN}
 
 
 { ************** Debug Symbols Processing from Delphi .map or FPC/GDB DWARF }
@@ -2268,43 +2266,8 @@ end;
 
 {.$define DWARFDEBUG} // for internal raw debugging
 
-{$ifdef OSELF} // use faster mormot.core.os.FindElfSection(TMemoryMap)
-function TDwarfReader.LoadSections(const filename: TFileName): boolean;
-var
-  off, siz, dbglen: integer; // not PtrInt
-  crc: cardinal;
-  dbgname: PUtf8Char;
-  fn: string;
-begin
-  result := false;
-  if not Map.Map(filename, {forcemap=}true) then // main exe
-    exit;
-  if FindElfSection(Map, '.gnu_debuglink', off, siz) then
-  begin
-    dbgname := pointer(Map.Buffer + off);
-    dbglen := StrLen(dbgname);
-    if (dbglen = 0) or
-       (dbglen > siz) or
-       not IsValidUtf8WithoutControlChars(pointer(dbgname), dbglen) then
-      exit;
-    crc := PCardinal(dbgname + ((dbglen + 4) and not 3))^;
-    Utf8DecodeToString(dbgname, dbglen, fn); // e.g. mormot2tests.dbg
-    Map.UnMap; // close main exe
-    if Map.Map(Executable.ProgramFilePath + fn) then // search dbg in exe folder
-      if crc32(0, Map.Buffer, Map.Size) <> crc then
-        Map.UnMap; // the located debug file does not match the executable
-  end;
-  if FindElfSection(Map, '.debug_line',
-       DebugLineSectionOffset, DebugLineSectionSize) and
-     FindElfSection(Map, '.debug_info',
-       DebugInfoSectionOffset, DebugInfoSectionSize) and
-     FindElfSection(Map, '.debug_abbrev',
-       DebugAbbrevSectionOffset, DebugAbbrevSectionSize) then
-    result := true;
-  if not result then
-    Map.UnMap;
-end;
-{$else} // use FPC RTL's cross-OS exeinfo.pp unit for Darwin macho format
+{$ifdef FPCDARWIN}
+// use FPC RTL's cross-OS exeinfo.pp unit for macho format
 function TDwarfReader.LoadSections(const filename: TFileName): boolean;
 var
   dbgfn: ShortString;
@@ -2342,7 +2305,44 @@ begin
     result := Map.Map(dbgfn);
   CloseExeFile(e);
 end;
-{$endif OSELF}
+{$else}
+// use our faster mormot.core.os.FindExeSection(TMemoryMap) on Linux+BSD+Windows
+function TDwarfReader.LoadSections(const filename: TFileName): boolean;
+var
+  off, siz, dbglen: integer; // not PtrInt
+  crc: cardinal;
+  dbgname: PUtf8Char;
+  fn: string;
+begin
+  result := false;
+  if not Map.Map(filename, {forcemap=}true) then // main exe
+    exit;
+  if FindExeSection(Map, '.gnu_debuglink', off, siz) <> efUnknown then
+  begin
+    dbgname := pointer(Map.Buffer + off);
+    dbglen := StrLen(dbgname);
+    if (dbglen = 0) or
+       (dbglen > siz) or
+       not IsValidUtf8WithoutControlChars(pointer(dbgname), dbglen) then
+      exit;
+    crc := PCardinal(dbgname + ((dbglen + 4) and not 3))^;
+    Utf8DecodeToString(dbgname, dbglen, fn); // e.g. mormot2tests.dbg
+    Map.UnMap; // close main exe
+    if Map.Map(Executable.ProgramFilePath + fn) then // search dbg in exe folder
+      if crc32(0, Map.Buffer, Map.Size) <> crc then
+        Map.UnMap; // the located debug file does not match the executable
+  end;
+  if (FindExeSection(Map, '.debug_line',
+       DebugLineSectionOffset, DebugLineSectionSize) <> efUnknown) and
+     (FindExeSection(Map, '.debug_info',
+       DebugInfoSectionOffset, DebugInfoSectionSize) <> efUnknown) and
+     (FindExeSection(Map, '.debug_abbrev',
+       DebugAbbrevSectionOffset, DebugAbbrevSectionSize) <> efUnknown) then
+    result := true;
+  if not result then
+    Map.UnMap;
+end;
+{$endif FPCDARWIN}
 
 procedure TDwarfReader.ReadInit(aBase, aLimit: Int64);
 begin
