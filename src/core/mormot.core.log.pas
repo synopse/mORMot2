@@ -2241,7 +2241,6 @@ type
     procedure ReadInit(aBase, aLimit: Int64);
     function ReadLeb128: Int64;
     function ReadAddress(addr_size: PtrInt): QWord; inline;
-    procedure ReadString(var s: ShortString);
     function SkipString: PtrInt;
     procedure SkipAttr(form: QWord; const header64: TDwarfDebugInfoHeader64);
     procedure ReadAbbrevTable(file_offset, file_size: QWord);
@@ -2386,16 +2385,6 @@ function TDwarfReader.ReadAddress(addr_size: PtrInt): QWord;
 begin
   result := 0;
   read.Copy(@result, addr_size);
-end;
-
-procedure TDwarfReader.ReadString(var s: ShortString);
-var
-  c: AnsiChar;
-begin
-  s[0] := #0;
-  while read.NextByteSafe(@c) and
-        ({%H-}c <> #0) do
-    AppendShortCharSafe(c, s);
 end;
 
 procedure TDwarfReader.ReadAbbrevTable(file_offset, file_size: QWord);
@@ -2635,7 +2624,7 @@ begin
   // read directory and file names
   dirsn := 0;
   repeat
-    ReadString(s);
+    read.NextAsciiz(s);
     if s[0] = #0 then
       break;
     c := PathDelim;
@@ -2650,7 +2639,7 @@ begin
   filesn := 0;
   filedirsn := 0;
   repeat
-    ReadString(s);
+    read.NextAsciiz(s);
     if s[0] = #0 then
       break;
     AddRawUtf8(files, filesn, ShortStringToUtf8(s));
@@ -2853,7 +2842,7 @@ begin
               high_pc := ReadAddress(header64.address_size)
             else if (attr = DW_AT_name) and
                     (form = DW_FORM_string) then
-              ReadString(name)
+              read.NextAsciiz(name)
             else
               SkipAttr(form, header64);
           end;
@@ -2883,7 +2872,7 @@ begin
           with Attrs[i] do
             if (attr = DW_AT_name) and
                (form = DW_FORM_string) then
-              ReadString(typname)
+              read.NextAsciiz(typname)
             else
               SkipAttr(form, header64);
       end
