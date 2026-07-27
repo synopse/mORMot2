@@ -1471,7 +1471,7 @@ end; // warning: FPC's GetTickCount64 doesn't handle 49.7 days wrap on XP :(
 
 procedure InitializeSRWLockForXP(var P: TOSLightMutex); stdcall;
 begin
-  TLightLock(P).Init; // TLightLock is good enough on XP
+  TLightLock(P).Init; // our TLightLock is good enough on XP
 end;
 
 procedure AcquireSRWLockExclusiveForXP(var P: TOSLightMutex); stdcall;
@@ -3107,28 +3107,33 @@ begin
   v.Done;
 end;
 
-procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
-  LeaveUnprotected: boolean);
+function PatchProcess(Old, New: pointer; Size: PtrInt; Backup: pointer): boolean;
 var
   restore, ignore: DWord;
 begin
-  if Size <= 0 then
+  result := false;
+  Size := abs(Size); // here restore would now the kind of segment
+  if Size = 0 then
     exit;
-  if VirtualProtect(Old, Size, PAGE_EXECUTE_READWRITE, restore) then
-  begin
-    if Backup <> nil then
-      MoveByOne(Old, Backup, Size); // do not use Move() here
-    MoveByOne(New, Old, Size);
-    if not LeaveUnprotected then
-      VirtualProtect(Old, Size, restore, ignore);
-    FlushInstructionCache(GetCurrentProcess, Old, Size);
-    if not CompareMemFixed(Old, New, Size) then
-      raise Exception.Create('PatchCode?');
+  if Backup <> nil then
+    MoveByOne(Old, Backup, Size); // do not use Move() here
+  OSSafe.Lock;
+  try
+    if VirtualProtect(Old, Size, PAGE_EXECUTE_READWRITE, restore) then // RW
+    try
+      MoveByOne(New, Old, Size);
+    finally
+      VirtualProtect(Old, Size, restore, ignore);          // back to RX or R
+      FlushInstructionCache(GetCurrentProcess, Old, Size); // for ARM64
+    end;
+  finally
+    OSSafe.UnLock;
   end;
+  result := CompareMem(Old, New, Size);
 end;
 
 procedure PatchCodeProtectBack;
-begin // nothing to do on Windows - LeaveUnprotected=false by default
+begin // nothing to do on Windows
 end;
 
 function StubMemoryAlloc: pointer;
