@@ -4417,115 +4417,133 @@ end;
 
 {$endif OSBSDDARWIN}
 
-{$ifdef OSBSDDARWIN}
-  {$define USEMPROTECT}
-{$else}
-  {$ifdef OSANDROID}
-    {$define USEMPROTECT}
-  {$else}
-    {$define USEMPROTECT64K} // maintain a list of unprotected 64KB pages
-  {$endif OSANDROID}
-{$endif OSBSDDARWIN}
+// BSD/MacOS and Android: default safe/slow RX -> RW -> RX pattern
+{$ifdef OSLINUX}
+  // Linux allow direct RX -> RWX and keep list of unprotected pages
+  {$define USEPATCHRWX}
+{$endif OSLINUX}
 
-{$ifdef USEMPROTECT}
 function mprotect(Addr: PtrUInt; Len: size_t; Prot: integer): integer;
   cdecl external clib name 'mprotect';
-{$endif USEMPROTECT}
 
-function SynMProtect(addr: PtrUInt; size: size_t; prot: integer): integer;
+function PatchHardened(Old, New: pointer; Size: PtrInt; Backup: pointer): boolean;
+var
+  siz, adr, restore: PtrUInt;
 begin
-  result := -1;
-  {$ifdef UNIX}
-    {$ifdef USEMPROTECT}
-    result := mprotect(addr, size, prot);
-    {$else}
-    if Do_SysCall(syscall_nr_mprotect, TSysParam(addr), size, prot) >= 0 then
-      result := 0;
-    {$endif USEMPROTECT}
-  {$endif UNIX}
+  result := false;
+  if Size = 0 then
+    exit;
+  restore := PROT_READ or PROT_EXEC; // from RedirectCode()
+  if Size < 0 then
+  begin
+    restore := PROT_READ; // from PatchPointer(VMT)
+    Size := -Size;
+  end;
+  if Backup <> nil then
+    MoveByOne(Old, Backup, Size); // do not use Move() here
+  siz := SystemInfo.dwPageSize;
+  adr := (PtrUInt(Old) div siz) * siz;
+  while PtrUInt(Old) + PtrUInt(Size) > adr + siz do
+    inc(siz, SystemInfo.dwPageSize);
+  OSSafe.Lock;
+  try
+    if mprotect(adr, siz, PROT_READ or PROT_WRITE) <> 0 then // RW
+      exit;
+    // no try..finally since could be part of the RTL
+    MoveByOne(New, Old, Size);
+    if mprotect(adr, siz, restore) <> 0 then // back to RX (code) / R (data)
+      exit; // process execution is likely to break anyway
+  finally
+    OSSafe.UnLock;
+  end;
+  result := CompareMem(Old, New, Size);
 end;
 
-{$ifdef USEMPROTECT64K}
+{$ifdef USEPATCHRWX} // maintain RX/R -> RWX/RW lists of unprotected pages
 var
-  Patched: TPtrUIntDynArray;
-  PatchedCount: integer;
-  PatchedSize: cardinal = 65536; // mprotect() per $10000 bytes pages
+  PatchedCode, PatchedVmt: TPtrUIntDynArray;
+  PatchedCodeCount, PatchedVmtCount: integer;
+  PatchedHardened: boolean; // RWX disabled e.g. by SELinux/container policies
+
+function PatchProcess(Old, New: pointer; Size: PtrInt; Backup: pointer): boolean;
+var
+  siz, adr, bytes: PtrUInt;
+begin
+  result := false;
+  if Size = 0 then
+    exit;
+  if PatchedHardened then // won't try any more - but is likely to fail
+  begin
+    result := PatchHardened(Old, New, Size, Backup); // e.g. SELinux
+    exit;
+  end;
+  bytes := abs(Size);
+  siz := SystemInfo.dwPageSize;
+  adr := (PtrUInt(Old) div siz) * siz;
+  OSSafe.Lock;
+  try
+    repeat
+      if Size < 0 then // from PatchPointer(VMT)
+      begin
+        if not PtrUIntScanExists(pointer(PatchedVmt), PatchedVmtCount, adr) then
+          if mprotect(adr, siz, PROT_READ or PROT_WRITE) = 0 then
+            AddPtrUInt(PatchedVmt, PatchedVmtCount, adr) // mark set to RW
+          else
+            PatchedHardened := true;
+      end
+      else // from RedirectCode()
+        if not PtrUIntScanExists(pointer(PatchedCode), PatchedCodeCount, adr) then
+          if mprotect(adr, siz, PROT_READ or PROT_WRITE or PROT_EXEC) = 0 then
+            AddPtrUInt(PatchedCode, PatchedCodeCount, adr) // mark set to RWX
+          else
+            PatchedHardened := true;
+      if PatchedHardened then
+      begin
+        result := PatchHardened(Old, New, Size, Backup);
+        exit;
+      end;
+      inc(adr, siz); // need another page ?
+    until adr >= PtrUInt(Old) + bytes;
+  finally
+    OSSafe.UnLock;
+  end;
+  // if we reached here, all the pages are in RW or RWX state
+  if Backup <> nil then
+    MoveByOne(Old, Backup, bytes); // do not use Move() here
+  MoveByOne(New, Old, bytes);
+  result := CompareMem(Old, New, bytes);
+end;
 
 procedure PatchCodeProtectBack;
 var
   i: PtrInt;
 begin
-  for i := 0 to PatchedCount - 1 do
-    SynMProtect(Patched[i], PatchedSize, PROT_READ or PROT_EXEC);
-  PatchedCount := 0;
-end;
-{$else}
-procedure PatchCodeProtectBack;
-begin // nothing to do on Android/BSD/Darwin: not tested yet
-end;
-{$endif USEMPROTECT64K}
+  if PatchedCodeCount = 0 then
+    exit;
+  OSSafe.Lock;
+  try
+    QuickSortPtrInt(pointer(PatchedCode), 0, PatchedCodeCount - 1);
+    for i := PatchedCodeCount - 1 downto 0 do
+      mprotect(PatchedCode[i], SystemInfo.dwPageSize, PROT_READ or PROT_EXEC);
+    PatchedCodeCount := 0;
+  finally
+    OSSafe.UnLock;
+  end;
+end; // mprotect(PatchedVmt[]) triggers some unexepected GPF but is less needed
 
-procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
-  LeaveUnprotected: boolean);
-var
-  OsPageSize, PageSize, AlignedAddr: PtrUInt;
-  ProtectedResult, ProtectedMemory: boolean;
+{$else} // BSD and Android require RX -> RW -> RX
+
+function PatchProcess(Old, New: pointer; Size: PtrInt; Backup: pointer): boolean;
 begin
-  if Size <= 0 then
-    exit;
-  if Backup <> nil then
-    MoveByOne(Old, Backup, Size); // do not use Move() here
-  OsPageSize := SystemInfo.dwPageSize;
-  {$ifdef USEMPROTECT64K}
-  if OsPageSize > PatchedSize then
-    PatchedSize := OSPageSize // very unlikely OS page size > 64KB
-  else
-    OsPageSize := PatchedSize;
-  {$endif USEMPROTECT64K}
-  PageSize := OsPageSize;
-  AlignedAddr := (PtrUInt(Old) div OsPageSize) * OsPageSize;
-  while PtrUInt(Old) + PtrUInt(Size) >= AlignedAddr + PageSize do
-  begin
-    inc(PageSize, OsPageSize);
-    {$ifdef USEMPROTECT64K}
-    LeaveUnprotected := true; // we can't safely put it back
-    {$endif USEMPROTECT64K}
-  end;
-  {$ifdef USEMPROTECT64K}
-  if (PageSize = OsPageSize) and
-     PtrUIntScanExists(pointer(Patched), PatchedCount, AlignedAddr) then
-  begin
-    // this page is already writable: we can patch directly
-    MoveByOne(New, Old, Size); // do not use Move() here
-    exit;
-  end;
-  {$endif USEMPROTECT64K}
-  ProtectedResult := SynMProtect(
-    AlignedAddr, PageSize, PROT_READ or PROT_WRITE or PROT_EXEC) = 0;
-  ProtectedMemory := not ProtectedResult;
-  if ProtectedMemory then
-    ProtectedResult := SynMProtect(
-      AlignedAddr, PageSize, PROT_READ or PROT_WRITE) = 0;
-  if ProtectedResult then
-    try
-      MoveByOne(New, Old, Size); // do not use Move() here
-      if LeaveUnprotected then
-        {$ifdef USEMPROTECT64K}
-        repeat
-          if not PtrUIntScanExists(pointer(Patched), PatchedCount, AlignedAddr) then
-            AddPtrUInt(Patched, PatchedCount, AlignedAddr);
-          dec(PageSize, OsPageSize);
-          if PageSize = 0 then
-            break;
-          inc(AlignedAddr, OsPageSize);
-        until false
-        {$endif USEMPROTECT64K}
-      else if ProtectedMemory then
-        SynMProtect(AlignedAddr, PageSize, PROT_READ or PROT_EXEC);
-    except
-      // we ignore any exception here - it should work anyway
-    end;
+  result := PatchHardened(Old, New, Size, Backup);
 end;
+
+procedure PatchCodeProtectBack;
+begin // nothing to do on Android/BSD/Darwin
+end;
+
+{$endif USEPATCHRWX}
+
 
 // on most platforms, Compute_FAKEVMT is run once with all JITted stubs
 // on i386, it needs ArgsSizeInStack adjustement, but only 24 bytes per method
@@ -4626,7 +4644,7 @@ begin
     flags := PROT_READ OR PROT_EXEC
   else
     flags := PROT_READ or PROT_WRITE;
-  if SynMProtect(aligned, pagesize shl 1, flags) < 0 then
+  if mprotect(aligned, pagesize shl 1, flags) < 0 then
      raise EOSException.Create('ReserveExecutableMemoryPageAccess: mprotect fail');
 end;
 
@@ -5892,8 +5910,6 @@ begin
     end;
     crc32c128(@SystemEntropy.Startup, P, PAnsiChar(auxv) - P); // all auxv info
   end;
-  if SystemInfo.dwPageSize = 0 then
-    SystemInfo.dwPageSize := 4096; // paranoid - the libc uses AT_PAGESZ also
   {$ifdef ASMINTEL} // Intel/AMD CPUID could avoid reading /proc/cpuinfo
   if IntelCpuCacheCount <> 0 then
     SystemInfo.dwNumberOfProcessors := CpuThreads; // sched_getaffinity syscall
@@ -5929,13 +5945,14 @@ begin
   {$endif OSANDROID}
   if SystemInfo.dwNumberOfProcessors = 0 then
     SystemInfo.dwNumberOfProcessors := 1; // at least one CPU
+  if SystemInfo.dwPageSize = 0 then
+    SystemInfo.dwPageSize := 4096; // paranoid - the libc uses AT_PAGESZ also
   {$ifdef CPUX64}
   {$ifdef OSLINUX}
   {$ifndef NOPATCHRTL}
   // redirect some syscall FPC RTL functions to faster vDSO libc variant
   {$ifndef FPC_USE_LIBC}
   RedirectCode(@Linux.clock_gettime, @clock_gettime_c);
-  // will avoid syscall e.g. for events timeout in cthreads.pp
   RedirectCode(@fpgettimeofday, @gettimeofday_c);
   RedirectCode(@fpc_time, @fptime_c);
   {$endif FPC_USE_LIBC}
