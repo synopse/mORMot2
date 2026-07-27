@@ -778,9 +778,9 @@ end;
 function _IMAGE_SECTION_HEADER.NameLen: integer;
 begin
   if Name8[7] = #0 then
-    result := 8 // max size
+    result := StrLen(@Name8)
   else
-    result := StrLen(@Name8);
+    result := 8; // max size
 end;
 
 function _IMAGE_SECTION_HEADER.Name: RawUtf8;
