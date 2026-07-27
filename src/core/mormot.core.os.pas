@@ -3797,6 +3797,12 @@ type
 /// quickly check if a resource do exist - just cross-platform wrapper to FindResource()
 function ResourceExists(ResourceName, ResType: PChar; Instance: TLibHandle = 0): boolean;
 
+/// retrieve raw information about one section from a memory-mapped ELF file
+// - cross-plaform function able to parse Little-Endian ELF32/ELF64 files
+// - is a much faster alternative to exeinfo FindExeSection()
+function FindElfSection(const exe: TMemoryMap; name: PUtf8Char;
+  var offset, size: integer): boolean;
+
 type
   /// store CPU and RAM usage for a given process
   // - as used by TSystemUse class
@@ -8816,6 +8822,118 @@ begin
     Instance := HInstance; // always 0 on FPC POSIX for the current process
   {$endif DELPHIPOSIX}
   result := FindResource(Instance, ResourceName, ResType) <> 0;
+end;
+
+type
+  TElfIdent = packed record
+    magic: cardinal;
+    file_class, data_encoding, file_version, os_abi: byte;
+    padding: array[0..7] of byte;
+    e_type, e_machine: word;
+    e_version: cardinal;
+  end;
+  TElfHeader32 = packed record
+    e_entry, e_phoff, e_shoff: cardinal;
+    e_flags: cardinal;
+    e_ehsize, e_phentsize, e_phnum, e_shentsize, e_shnum, e_shstrndx: word;
+  end;
+  TElfHeader64 = packed record
+    e_entry, e_phoff, e_shoff: QWord;
+    e_flags: cardinal;
+    e_ehsize, e_phentsize, e_phnum, e_shentsize, e_shnum, e_shstrndx: word;
+  end;
+  TElfSection32 = packed record
+    sh_name, sh_type, sh_flags, sh_addr, sh_offset, sh_size,
+    sh_link, sh_info, sh_addralign, sh_entsize: cardinal;
+  end;
+  TElfSection64 = packed record
+    sh_name, sh_type: cardinal;
+    sh_flags, sh_addr, sh_offset, sh_size: QWord;
+    sh_link, sh_info: cardinal;
+    sh_addralign, sh_entsize: QWord;
+  end;
+
+function FindElfSection(const exe: TMemoryMap; name: PUtf8Char;
+  var offset, size: integer): boolean;
+var
+  id: ^TElfIdent;
+  h32: ^TElfHeader32;
+  h64: ^TElfHeader64;
+  s32, str32: ^TElfSection32;
+  s64, str64: ^TElfSection64;
+  names: PAnsiChar;
+  n: PtrUInt;
+begin
+  result := false;
+  id := pointer(exe.Buffer);
+  if (id <> nil) and
+     (name <> nil) and
+     (exe.Size > SizeOf(TElfHeader64)) and
+     (id^.magic = $464c457f) and  // ELF
+     (id^.file_version = 1) and
+     (id^.data_encoding = 1) then // Little Endian
+  case id^.file_class of
+    1: // ELFCLASS32
+      begin
+        inc(id);
+        h32 := pointer(id);
+        n := h32^.e_shnum;
+        if (n = 0) or
+           (h32^.e_shoff = 0) or
+           (h32^.e_shstrndx >= n) or
+           (h32^.e_shentsize <> SizeOf(s32^)) or
+           (Int64(h32^.e_shoff) + PtrInt(n * SizeOf(s32^)) > exe.Size) then
+          exit;
+        s32 := pointer(exe.Buffer + h32^.e_shoff);
+        str32 := @PByteArray(s32)[h32^.e_shstrndx * SizeOf(s32^)];
+        names := exe.Buffer + str32^.sh_offset;
+        repeat
+          if (s32^.sh_name < str32^.sh_size) and
+             (mormot.core.base.StrComp(names + s32^.sh_name, name) = 0) then
+          begin
+            if Int64(s32^.sh_offset) + PtrInt(s32^.sh_size) > exe.Size then
+              exit;
+            offset := s32^.sh_offset;
+            size := s32^.sh_size;
+            result := true;
+            exit;
+          end;
+          inc(s32);
+          dec(n);
+        until n = 0;
+      end;
+    2: // ELFCLASS64
+      begin
+        inc(id);
+        h64 := pointer(id);
+        n := h64^.e_shnum;
+        if (n = 0) or
+           (h64^.e_shoff = 0) or
+           (h64^.e_shstrndx >= n) or
+           (h64^.e_shentsize <> SizeOf(s64^)) or
+           (Int64(h64^.e_shoff) + PtrInt(n * SizeOf(s64^)) > exe.Size) then
+          exit;
+        s64 := pointer(exe.Buffer + h64^.e_shoff);
+        str64 := @PByteArray(s64)[h64^.e_shstrndx * SizeOf(s64^)];
+        names := exe.Buffer + str64^.sh_offset;
+        repeat
+          if (s64^.sh_name < str64^.sh_size) and
+             (mormot.core.base.StrComp(names + s64^.sh_name, name) = 0) then
+          begin
+            if (Int64(s64^.sh_offset) + PtrInt(s64^.sh_size) > exe.Size) or
+               (s64^.sh_offset > MaxInt) or // output args are 32-bit integers
+               (s64^.sh_size > MaxInt) then
+              exit;
+            offset := s64^.sh_offset;
+            size := s64^.sh_size;
+            result := true;
+            exit;
+          end;
+          inc(s64);
+          dec(n);
+        until n = 0;
+      end;
+  end;
 end;
 
 
