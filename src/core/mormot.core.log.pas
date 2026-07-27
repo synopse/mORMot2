@@ -89,7 +89,7 @@ type
     fCodeOffset: PtrUInt;
     fHasDebugInfo: boolean;
     // called by Create() constructor
-    procedure GenerateFromMapOrDbg(aDebugToConsole: boolean);
+    procedure GenerateFromMapOrDbg;
     function LoadMab(const aMabFile: TFileName): boolean;
   public
     /// get the available debugging information
@@ -102,8 +102,7 @@ type
     // - if no .mab is available, will search for a .mab appended to the .exe/.dll
     // - if nothing is available, will log as hexadecimal pointers, without
     // debugging information
-    constructor Create(const aExeName: TFileName = ''; MabCreate: boolean = true;
-      DebugToConsole: boolean = false); reintroduce;
+    constructor Create(const aExeName: TFileName = ''; MabCreate: boolean = true); reintroduce;
     /// save all debugging information in the .mab custom binary format
     // - if no file name is specified, it will be saved as ExeName.mab or DllName.mab
     // - this file content can be appended to the executable via SaveToExe method
@@ -2265,7 +2264,7 @@ begin
   appendrow := false;
 end;
 
-{$I-} // for debugtoconsole
+{.$define DWARFDEBUG} // for internal raw debugging
 
 function TDwarfReader.FindSections(const filename: ShortString): boolean;
 var
@@ -2276,7 +2275,9 @@ begin
   // open exe filename or follow '.gnu_debuglink' redirection
   if not OpenExeFile(e, filename) then
   begin
+    {$ifdef DWARFDEBUG}
     DisplayError('OpenExeFile failed on  %s', [filename]);
+    {$endif DWARFDEBUG}
     exit;
   end;
   if ReadDebugLink(e, dbgfn) then // is there an external .dbg file?
@@ -2284,7 +2285,9 @@ begin
     CloseExeFile(e);
     if not OpenExeFile(e, dbgfn) then
     begin
+      {$ifdef DWARFDEBUG}
       DisplayError('OpenExeFile failed on  %s', [dbgfn]);
+      {$endif DWARFDEBUG}
       exit;
     end;
   end
@@ -2510,7 +2513,9 @@ begin
     DW_FORM_flag_present:
       ; // none
   else
+    {$ifdef DWARFDEBUG}
     DisplayError('Internal error: unknown dwarf form: %x', [form]);
+    {$endif DWARFDEBUG}
   end;
 end;
 
@@ -2718,8 +2723,9 @@ begin
           linesn := 0; // reuse the same 64-bit Lines[] buffer for Addr[]+Line[]
           prevaddr := 0;
           prevfile := state.fileid - 1;
-          if debugtoconsole then
-            writeln('-------------- ', files[prevfile]);
+          {$ifdef DWARFDEBUG}
+          ConsoleWrite(['-------------- ', files[prevfile]]);
+          {$endif DWARFDEBUG}
           u := debug.fUnits.NewPtr;
           u^.Symbol.Name := StringToAnsi7(GetFileNameWithoutExt(
             Ansi7ToString(files[prevfile])));
@@ -2734,9 +2740,10 @@ begin
           unsorted := true;
         prevaddr := state.address;
         AddInt64(Lines, linesn, QWord(state.address) shl 24 + state.line);
-        if debugtoconsole then
-          writeln(files[state.fileid - 1], ' ', state.line, ' ',
-            CardinalToHexShort(state.address));
+        {$ifdef DWARFDEBUG}
+        ConsoleWrite([files[state.fileid - 1], ' ', state.line, ' ',
+          CardinalToHexShort(state.address)]);
+        {$endif DWARFDEBUG}
       end;
       if state.endsequence then
         state.Init(header64.default_is_stmt);
@@ -2821,9 +2828,10 @@ begin
             ShortStringToAnsi7String(lowercase(typname + name), s^.name);
           s^.Start := low_pc;
           s^.Stop := high_pc - 1;
-          if debugtoconsole then
-            writeln(s^.name, ' ', CardinalToHexShort(low_pc), '-',
-              CardinalToHexShort(high_pc));
+          {$ifdef DWARFDEBUG}
+          ConsoleWrite([s^.name, ' ', CardinalToHexShort(low_pc), '-',
+            CardinalToHexShort(high_pc)]);
+          {$endif DWARFDEBUG}
         end;
       end
       else if (level = 2) and
@@ -2859,8 +2867,6 @@ begin
     end;
   end;
 end;
-
-{$I+}
 
 function SymbolSortByAddr(const A, B): integer;
 begin
@@ -2962,7 +2968,7 @@ begin
   Dest := P;
 end;
 
-procedure TDebugFile.GenerateFromMapOrDbg(aDebugToConsole: boolean);
+procedure TDebugFile.GenerateFromMapOrDbg;
 var
   P, PEnd: PUtf8Char;
   sections: TDebugUnitDynArray;
@@ -3293,8 +3299,7 @@ begin
   end;
 end;
 
-constructor TDebugFile.Create(const aExeName: TFileName;
-  MabCreate, DebugToConsole: boolean);
+constructor TDebugFile.Create(const aExeName: TFileName; MabCreate: boolean);
 var
   i: PtrInt;
   ExeFile, MabFile: TFileName;
@@ -3342,7 +3347,7 @@ begin
        (MabAge < MapAge) then
       // recompute from .map/.dbg if no faster-to-load .mab available
       try
-        GenerateFromMapOrDbg(DebugToConsole);
+        GenerateFromMapOrDbg;
         fSymbols.Capacity := fSymbolsCount; // only consume the needed memory
         fUnits.Capacity := fUnitsCount;
         for i := 0 to fUnitsCount - 2 do
