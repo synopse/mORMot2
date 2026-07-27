@@ -796,6 +796,9 @@ type
     /// returns the current position, and move ahead the specified bytes
     function NextSafe(out Data: pointer; DataLen: PtrInt): boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// read the next #0 terminated text into a ShortString
+    procedure NextAsciiz(var s: ShortString);
+      {$ifdef HASINLINE}inline;{$endif}
     /// copy data from the current position, and move ahead the specified bytes
     procedure Copy(Dest: pointer; DataLen: PtrInt);
       {$ifdef HASINLINE}inline;{$endif}
@@ -3616,6 +3619,17 @@ begin
     inc(P, DataLen);
     result := true;
   end;
+end;
+
+procedure TFastReader.NextAsciiz(var s: ShortString);
+var
+  l: PtrInt;
+begin
+  l := ByteScanIndex(pointer(P), Last - P, 0);
+  if l < 0 then
+    ErrorOverflow;
+  SetString(s, P, l);
+  inc(P, l + 1);
 end;
 
 procedure TFastReader.Copy(Dest: pointer; DataLen: PtrInt);
