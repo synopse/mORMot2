@@ -10059,7 +10059,7 @@ var
   k: PRttiCustomListPairs;
   h: PtrUInt;
   p: PPointerArray; // ^TPointerDynArray
-begin
+begin // vmtAuto: 8894966/31321/1265 NOPATCHVMT: 10137568/312233/14624
   {$ifndef NOPATCHVMT}
   if Info^.Kind <> rkClass then
   begin
@@ -10069,14 +10069,14 @@ begin
     // try latest found RTTI for this slot of type definition (very effective)
     result := k^.LastInfo;
     if (result <> nil) and
-       (result.Info = Info) then // happens e.g. 12,612,097 times during tests
+       (result.Info = Info) then // happens 99.6% (96% NOPATCH) during tests
       exit;
     // O(1) hash of the PRttiInfo pointer using RTTI-specific hashing
     h := RttiPointerMix(PtrUInt(Info));
     // try latest found RTTI for this hash slot
     result := k^.LastHash[h];
     if (result <> nil) and
-       (result.Info = Info) then // happens e.g. 1280 times during tests
+       (result.Info = Info) then // happens e.g. 0.35% (3% NOPATCH) during tests
     begin
       k^.LastInfo := result; // for faster lookup next time
       exit; // avoid most ReadLock/ReadUnLock and LockedFind() search
@@ -10087,7 +10087,7 @@ begin
     if p <> nil then
       result := LockedFind(p, @p[PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF], Info);
     k^.Safe.UnLock;
-    if result <> nil then // happens e.g. around 500 times during tests
+    if result <> nil then // happens e.g. 0.01% 82us (0.14% 494us NOPATCH)
     begin
       k^.LastInfo := result;   // aligned pointers are atomically accessed
       k^.LastHash[h] := result;
