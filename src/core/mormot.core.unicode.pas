@@ -1647,6 +1647,9 @@ function IdemPCharW(p: PWideChar; up: PUtf8Char): boolean;
 // - see StartWithExact() from this unit for a case-sensitive version
 function StartWith(const text, upTextStart: RawUtf8): boolean;
 
+/// check case-insensitive matching starting of text in lowerTextStart
+function StartWithLower(const text, lowerTextStart: RawUtf8): boolean;
+
 /// check case-insensitive matching ending of text in upTextEnd
 // - returns true if the item matched
 // - ignore case - upTextEnd must be already in upper case
@@ -6402,13 +6405,13 @@ begin
   while true do
     if up^ = #0 then
       break
-    else if table[up[PtrUInt(p)]] <> up^ then
+    else if table[up[PtrUInt(p)]] = up^ then
+      inc(up)
+    else
     begin
       result := false;
       exit;
-    end
-    else
-      inc(up);
+    end;
   result := true;
 end;
 
@@ -6425,13 +6428,13 @@ begin
   while true do
     if up^ = #0 then
       break
-    else if table[PtrInt(up[PtrUInt(p)])] <> PByte(up)^ then
+    else if table[PtrInt(up[PtrUInt(p)])] = PByte(up)^ then
+      inc(up)
+    else
     begin
       result := false;
       exit;
-    end
-    else
-      inc(up);
+    end;
   result := true;
 end;
 
@@ -6626,6 +6629,16 @@ begin
               PStrLen(PAnsiChar(pointer(upTextStart)) - _STRLEN)^) and
             IdemPCharAnsi({$ifndef CPUX86NOTPIC}@{$endif}NormToUpperAnsi7,
               pointer(text), pointer(upTextStart));
+end;
+
+function StartWithLower(const text, lowerTextStart: RawUtf8): boolean;
+begin
+  result := (PtrUInt(text) <> 0) and
+            (PtrUInt(lowerTextStart) <> 0) and
+            (PStrLen(PAnsiChar(pointer(text)) - _STRLEN)^ >=
+              PStrLen(PAnsiChar(pointer(lowerTextStart)) - _STRLEN)^) and
+            IdemPCharAnsi({$ifndef CPUX86NOTPIC}@{$endif}NormToLowerAnsi7,
+              pointer(text), pointer(lowerTextStart));
 end;
 
 function EndWith(const text, upTextEnd: RawUtf8): boolean;
@@ -8514,7 +8527,11 @@ var
 begin
   l := length(textStart);
   result := (length(text) >= l) and
+    {$ifdef ASMX64}
+    (MemCmp(pointer(text), pointer(textStart), l) = 0);
+    {$else}
     mormot.core.base.CompareMem(pointer(text), pointer(textStart), l);
+    {$endif ASMX64}
 end;
 
 function EndWithExact(const text, textEnd: RawUtf8): boolean;
@@ -8524,7 +8541,11 @@ begin
   l := length(textEnd);
   o := length(text) - l;
   result := (o >= 0) and
-    mormot.core.base.CompareMem(PUtf8Char(pointer(text)) + o, pointer(textEnd), l);
+    {$ifdef ASMX64}
+    (MemCmp(@PByteArray(text)[o], pointer(textEnd), l) = 0);
+    {$else}
+    mormot.core.base.CompareMem(@PByteArray(text)[o], pointer(textEnd), l);
+    {$endif ASMX64}
 end;
 
 function GetNextLine(source: PUtf8Char; out next: PUtf8Char; andtrim: boolean): RawUtf8;
