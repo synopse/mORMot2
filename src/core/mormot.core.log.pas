@@ -98,6 +98,25 @@ type
     // called by Create() constructor
     procedure GenerateFromMapOrDbg;
     function LoadMab(const aMabFile: TFileName): boolean;
+    { those functions are not public any more to avoid end-user misuse }
+    /// compute the relative memory address from its absolute (pointer) value
+    // - return the virtual address corresponding to the executable ImageBase,
+    // which will be a 32-bit offset even on 64-bit systems
+    // - internal function used by high-level IsCode/FindLocation methods
+    function AbsoluteToOffset(aAddressAbsolute: PtrUInt): integer;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// retrieve a symbol according to a relative code address
+    // - use fast O(log n) binary search
+    function FindSymbol(aAddressOffset: integer): PDebugSymbol;
+    /// retrieve Lines[] index and source line, according to a relative code address
+    // - use fast O(log n) binary search and return a PDebugLines or nil
+    function FindLines(aAddressOffset: integer; out LineNumber: integer): PDebugLines; overload;
+    /// retrieve Lines[] index, according to a relative code address
+    // - use fast O(log n) binary search and return a PDebugLines or nil
+    function FindLines(aAddressOffset: integer): PDebugLines; overload;
+    /// retrieve Lines[] index, according to the unit identifier
+    // - will search within Lines array and return the first matching Symbol.Name
+    function FindLinesByName(const aUnitName: RawUtf8): PDebugLines;
   public
     /// get the available debugging information
     // - if aExeName is specified, will use it in its search for .map/.dbg/.mab
@@ -135,23 +154,8 @@ type
     // the raw address pointer as hexadecimal
     class function Log(W: TTextWriter; aAddressAbsolute: PtrUInt;
       AllowNotCodeAddr: boolean; SymbolNameNotFilename: boolean = false): boolean;
-    /// compute the relative memory address from its absolute (pointer) value
-    function AbsoluteToOffset(aAddressAbsolute: PtrUInt): integer;
-      {$ifdef HASINLINE}inline;{$endif}
     /// check if this memory address is part of the code segments
     function IsCode(aAddressAbsolute: PtrUInt): boolean;
-    /// retrieve a symbol according to a relative code address
-    // - use fast O(log n) binary search
-    function FindSymbol(aAddressOffset: integer): PDebugSymbol;
-    /// retrieve Lines[] index and source line, according to a relative code address
-    // - use fast O(log n) binary search and return a PDebugLines or nil
-    function FindLines(aAddressOffset: integer; out LineNumber: integer): PDebugLines; overload;
-    /// retrieve Lines[] index, according to a relative code address
-    // - use fast O(log n) binary search and return a PDebugLines or nil
-    function FindLines(aAddressOffset: integer): PDebugLines; overload;
-    /// retrieve Lines[] index, according to the unit identifier
-    // - will search within Lines array and return the first matching Symbol.Name
-    function FindLinesByName(const aUnitName: RawUtf8): PtrInt;
     /// return the symbol location according to the supplied absolute address
     // - filename, symbol name and line number (if any), as plain text, e.g.
     // $ 4cb765 ../src/core/mormot.core.base.pas statuscodeissuccess (11183)
@@ -170,7 +174,7 @@ type
     // - i.e. unit name, symbol name and line number (if any), as plain text
     class function FindLocation(exc: ESynException): RawUtf8; overload;
     /// load .map/.gdb info and returns the file name of a given unit
-    // - if unitname = '', returns the main file name of the current executable
+    // - if unitname is '', returns the main file name of the current executable
     class function FindFileName(const unitname: RawUtf8): TFileName;
     {$ifdef FPC}
     /// load DWARF .gdb info and replace FPC RTL BacktraceStrFunc()
@@ -3863,7 +3867,7 @@ end;
 
 procedure TDebugFile.FindLocationShort(aAddressAbsolute: PtrUInt; var aInfo: ShortString);
 var
-  line, offset: integer;
+  line, offset: integer; // not PtrInt
   s: PDebugSymbol;
   l: PDebugLines;
   c: PUtf8Char;
@@ -3921,21 +3925,28 @@ begin
   GetInstanceDebugFile.FindLocationShort(PtrUInt(aAddress), result);
 end;
 
-function TDebugFile.FindLinesByName(const aUnitName: RawUtf8): PtrInt;
+function TDebugFile.FindLinesByName(const aUnitName: RawUtf8): PDebugLines;
+var
+  i: integer;
 begin
   if (self <> nil) and
      (aUnitName <> '') then
-    for result := 0 to high(fLine) do
-      if IdemPropNameU(fLine[result].Symbol.Name, aUnitName) then // inlined
-        exit; // return the first occurence skipping any next nested inclusion
-  result := -1;
+  begin
+    result := pointer(fLine);
+    for i := 1 to fLinesCount do
+      if IdemPropNameU(result^.Symbol.Name, aUnitName) then // inlined
+        exit // return the first occurence skipping any next nested inclusion
+      else
+        inc(result);
+  end;
+  result := nil;
 end;
 
 class function TDebugFile.FindFileName(const unitname: RawUtf8): TFileName;
 var
   map: TDebugFile;
   name: RawUtf8;
-  u: integer;
+  l: PDebugLines;
 begin
   result := '';
   map := GetInstanceDebugFile;
@@ -3945,9 +3956,9 @@ begin
     name := Executable.ProgramName
   else
     name := unitname;
-  u := map.FindLinesByName(name);
-  if u >= 0 then
-    Utf8ToFileName(map.fLine[u].FileName, result);
+  l := map.FindLinesByName(name);
+  if l <> nil then
+    Utf8ToFileName(l^.FileName, result);
 end;
 
 class procedure TDebugFile.IncludeFilePath(Value: boolean);
