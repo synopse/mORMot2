@@ -3794,9 +3794,11 @@ type
     procedure Close;
   end;
 
+  /// the executable formats recognized by FindExeSection() function
   TExeFormat = (
     efUnknown,
-    efPE,
+    efPE32,
+    efPE32Plus,
     efElf32,
     efElf64);
 
@@ -8850,6 +8852,14 @@ type
     NumberOfRelocations, NumberOfLinenumbers: word;
     Characteristics: cardinal;
   end;
+  TPeOptHeader = packed record
+    Magic, Linker: word;
+    SizeOfCode, SizeOfInitializedData, SizeOfUninitializedData,
+    AddressOfEntryPoint, BaseOfCode: cardinal;
+    case integer of
+      0: (BaseOfData32, ImageBase32: cardinal);
+      1: (ImageBase64: QWord);
+  end;
 
   TElfIdent = packed record
     magic: cardinal;
@@ -8888,7 +8898,9 @@ var
   es32, estr32: ^TElfSection32;
   es64, estr64: ^TElfSection64;
   pe: ^TPeHeader;
+  coff: ^TPeOptHeader;
   ps: ^TPeSection;
+  ef: TExeFormat;
   tmp: TTemp16;
   names, one: PAnsiChar;
   n: PtrUInt;
@@ -8965,19 +8977,28 @@ begin
       end;
   end
   else if (PDosHeader(eid)^.e_magic = $5A4D) and // DOS
-          (PDosHeader(eid)^.e_lfanew < exe.Size) then
+          (PDosHeader(eid)^.e_lfanew + SizeOf(pe^) < exe.Size) then
   begin
     pe := pointer(exe.Buffer + PDosHeader(eid)^.e_lfanew); // COFF
     n := pe^.NumberOfSections; // pe^.NumberOfSymbols=0 if external .dbg file
     if (pe^.Signature <> $00004550) or
-       (pe^.SizeOfOptionalHeader = 0) or
+       (pe^.SizeOfOptionalHeader < SizeOf(coff^)) or
        (n = 0) or
        (Int64(PDosHeader(eid)^.e_lfanew) + SizeOf(pe^) +
         pe^.SizeOfOptionalHeader + PtrInt(n * SizeOf(ps^)) > exe.Size) then
       exit;
+    coff := @PByteArray(pe)[SizeOf(pe^)]; // optional header
+    case coff^.Magic of
+      $010b:
+        ef := efPE32;
+      $020b:
+        ef := efPE32Plus;
+    else
+      exit;
+    end;
     names := exe.Buffer + pe^.PointerToSymbolTable + pe^.NumberOfSymbols * 18;
     tmp[8] := #0; // ensure ps^.Name8 with 8 chars are #0 terminated
-    ps := @PByteArray(pe)[SizeOf(pe^) + pe^.SizeOfOptionalHeader];
+    ps := @PByteArray(coff)[pe^.SizeOfOptionalHeader];
     repeat
       one := @tmp;
       PQWord(one)^ := ps^.Name8;
@@ -8988,7 +9009,7 @@ begin
         offset := ps^.PointerToRawData;
         size := MinPtrUInt(ps^.VirtualSize, ps^.SizeOfRawData);
         if Int64(offset) + size < exe.Size then
-          result := efPE; // found
+          result := ef;
         exit;
       end;
       inc(ps);
