@@ -2247,10 +2247,12 @@ type
     read: TFastReader;
     Abbrev: array of TDwarfDebugAbbrev; // debug_abbrev content
     AttrsMax: cardinal;
+    exeformat: TExeFormat;
     isdwarf64, includesdir: boolean;
     DebugLineSectionOffset, DebugLineSectionSize,              // debug_line
     DebugInfoSectionOffset, DebugInfoSectionSize,              // debug_info
     DebugAbbrevSectionOffset, DebugAbbrevSectionSize: integer; // debug_abbrev
+    ImageBase: QWord; // e.g. 0100000000 on Win64, 00400000 on Win32, 0 on ELF
     debug: TDebugFile;
     Lines: TInt64DynArray;              // store TDebugLines.Addr[]/Line[]
     dirs, files: TRawUtf8DynArray;
@@ -2260,7 +2262,7 @@ type
     function LoadSections: boolean;
     procedure ReadInit(aBase, aLimit: Int64);
     function ReadLeb128: Int64;
-    function ReadAddress(addr_size: PtrInt): QWord; inline;
+    function ReadAddress(addr_size: PtrInt; ctx: PUtf8Char): cardinal; inline;
     procedure SkipAttr(form: PtrUInt; const header64: TDwarfDebugInfoHeader64);
     procedure ReadAbbrevTable(file_offset, file_size: QWord);
     function ParseCompilationUnit(file_offset, file_size: QWord): QWord;
@@ -2344,12 +2346,13 @@ begin
       if crc32(0, Map.Buffer, Map.Size) <> crc then
         Map.UnMap; // the located debug file does not match the executable
   end;
-  if (FindExeSection(Map, '.debug_line',
-       DebugLineSectionOffset, DebugLineSectionSize) <> efUnknown) and
-     (FindExeSection(Map, '.debug_info',
-       DebugInfoSectionOffset, DebugInfoSectionSize) <> efUnknown) and
+  exeformat := FindExeSection(Map, '.debug_line',
+    DebugLineSectionOffset, DebugLineSectionSize, @ImageBase);
+  ConsoleWrite(['ImageBase=',Int64ToHexShort(ImageBase)]);
+  if (FindExeSection(Map, '.debug_info',
+       DebugInfoSectionOffset, DebugInfoSectionSize) = exeformat) and
      (FindExeSection(Map, '.debug_abbrev',
-       DebugAbbrevSectionOffset, DebugAbbrevSectionSize) <> efUnknown) then
+       DebugAbbrevSectionOffset, DebugAbbrevSectionSize) = exeformat) then
     result := true;
   if result then
     SetLength(files, 64) // good enough for most executables
@@ -2389,15 +2392,23 @@ begin // LEB-128 encoding does not match our FromVarInt64 sign extension
   result := (not ((result and (Int64(1) shl (shift - 1))) - 1)) or result;
 end;
 
-function TDwarfReader.ReadAddress(addr_size: PtrInt): QWord;
+function TDwarfReader.ReadAddress(addr_size: PtrInt; ctx: PUtf8Char): cardinal;
 var
-  tmp: QWord; // safer with temporary variable on stack
+  tmp: QWord; // temporary 64-bit variable on stack
 begin
+  if addr_size > SizeOf(tmp) then
+    read.ErrorData('DWARF: ReadAddress % len=%', [ctx, addr_size]);
   tmp := 0;
   read.Copy(@tmp, addr_size);
-  if tmp > MaxInt then
-    read.ErrorData('DWARF: ReadAddress=% overflow',[tmp]);
-  result := tmp;
+  if tmp > ImageBase then
+  begin
+    dec(tmp, ImageBase);  // e.g. 0100000000 Win64, 00400000 Win32, 0 ELF
+    if tmp > MaxInt then
+      read.ErrorData('DWARF: ReadAddress=% overflow %',[Int64ToHexShort(tmp), addr_size]);
+    result := tmp; // it is fine to truncate to 32-bit
+  end
+  else
+    result := 0; // skip null/invalid values emitted by FPC
 end;
 
 procedure TDwarfReader.ReadAbbrevTable(file_offset, file_size: QWord);
@@ -2690,7 +2701,7 @@ begin
               state.flags := state.flags + [endsequence, appendrow];
             DW_LNE_SET_ADDRESS:
               begin
-                state.address := ReadAddress(opcodeextlen - 1);
+                state.address := ReadAddress(opcodeextlen - 1, 'CU');
                 if state.address = 0 then // FPC sometimes emits these :(
                   include(state.flags, invalidaddress) // just ignore
                 else
@@ -2899,10 +2910,10 @@ begin
         repeat
           if (a^.attr = DW_AT_low_pc) and
              (a^.form = DW_FORM_addr) then
-            low_pc := ReadAddress(header64.address_size)
+            low_pc := ReadAddress(header64.address_size, 'low_pc')
           else if (a^.attr = DW_AT_high_pc) and
                   (a^.form = DW_FORM_addr) then
-            high_pc := ReadAddress(header64.address_size)
+            high_pc := ReadAddress(header64.address_size, 'high_pc')
           else if (a^.attr = DW_AT_name) and
                   (a^.form = DW_FORM_string) then
             read.NextAsciiz(name)
