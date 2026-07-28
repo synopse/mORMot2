@@ -107,10 +107,11 @@ type
   protected
     fSymbol: TDebugSymbolDynArray;
     fLine: TDebugLinesDynArray;
-    fSymbols, fLines: TDynArray;
-    fDebugFile: TFileName;
     fCodeOffset: PtrUInt;
+    fDebugFile: TFileName;
+    fProducer: RawUtf8;
     fHasDebugInfo: boolean;
+    fSymbols, fLines: TDynArray;
     fLoadingMicroSec: Int64;
     fSymbolsCount, fLinesCount: integer;
     // called by Create() constructor
@@ -219,6 +220,9 @@ type
     /// how many microseconds did it need to parse .map/.dbg or .mab input
     property LoadingMicroSec: Int64
       read fLoadingMicroSec;
+    /// details about the compiler version - only available for FPC yet
+    property Producer: RawUtf8
+      read fProducer;
   end;
 
 {$ifndef PUREMORMOT2}
@@ -2494,6 +2498,7 @@ const
   DW_TAG_class_type     = $02; // map Object Pascal class or object
   DW_TAG_compile_unit   = $11; // map Object pascal unit
   DW_TAG_structure_type = $13; // map Object Pascal record
+  DW_AT_producer        = $25;
   DW_TAG_subprogram     = $2e; // map object function or method
 
   DW_AT_name    = $03;
@@ -2912,17 +2917,24 @@ begin
         high_pc := 0;
         name := '';
         repeat
-          if (a^.attr = DW_AT_low_pc) and
-             (a^.form = DW_FORM_addr) then
-            low_pc := ReadAddress(header64.address_size, 'low_pc')
-          else if (a^.attr = DW_AT_high_pc) and
-                  (a^.form = DW_FORM_addr) then
-            high_pc := ReadAddress(header64.address_size, 'high_pc')
-          else if (a^.attr = DW_AT_name) and
-                  (a^.form = DW_FORM_string) then
-            read.NextAsciiz(name)
+          case cardinal(PWord(a)^) of
+            DW_AT_low_pc + DW_FORM_addr shl 8:
+              low_pc := ReadAddress(header64.address_size, 'low_pc');
+            DW_AT_high_pc + DW_FORM_addr shl 8:
+              high_pc := ReadAddress(header64.address_size, 'high_pc');
+            DW_AT_name + DW_FORM_string shl 8:
+              read.NextAsciiz(name);
+            DW_AT_producer + DW_FORM_string shl 8:
+              if debug.fProducer = '' then
+              begin
+                read.NextAsciiz(fullname);
+                ShortStringToAnsi7String(fullname, debug.fProducer);
+              end
+              else
+                read.NextAsciiz;
           else
             SkipAttr(a^.form, header64);
+          end;
           inc(a);
           dec(n);
         until n = 0;
@@ -3400,6 +3412,8 @@ begin
         R.ReadVarUInt32Array(u^.Addr);
         inc(u);
       end;
+      if not R.EOF then
+        R.VarUtf8(fProducer);
       result := true;
     finally
       MS.Free;
@@ -3571,6 +3585,8 @@ begin
       W.WriteVarUInt32Array(u^.Addr, length(u^.Addr), wkOffsetU);
       inc(u);
     end;
+    if fProducer <> '' then
+      W.Write(fProducer);
     W.Flush; // now MS contains the uncompressed binary data
     AlgoSynLZ.StreamCompress(MS, aStream, MAGIC_MAB, {hash32=}true, {trailer=}true);
   finally
