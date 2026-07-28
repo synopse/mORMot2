@@ -2231,16 +2231,12 @@ type
 
   TDwarfMachineState = record
   public
+    flags: set of (isstmt, basicblock, endsequence,
+      prologueend, epiloguebegin, appendrow, invalidaddress);
     address: cardinal;
     line: cardinal;
     fileid: cardinal;
     column: cardinal;
-    isstmt: boolean;
-    basicblock: boolean;
-    endsequence: boolean;
-    prologueend: boolean;
-    epiloguebegin: boolean;
-    appendrow: boolean;
     isa: cardinal;
     procedure Init(aIs_Stmt: ByteBool);
   end;
@@ -2272,17 +2268,14 @@ type
 
 procedure TDwarfMachineState.Init(aIs_Stmt: ByteBool);
 begin
+  byte(flags) := 0;
+  if aIs_Stmt then
+    include(flags, isstmt);
   address := 0;
-  fileid := 1;
   line := 1;
+  fileid := 1;
   column := 0;
-  isstmt := aIs_Stmt;
-  basicblock := false;
-  endsequence := false;
-  prologueend := false;
-  epiloguebegin := false;
   isa := 0;
-  appendrow := false;
 end;
 
 {.$define DWARFDEBUG} // for internal raw debugging
@@ -2706,12 +2699,15 @@ begin
           opcodeext := read.NextByte;
           case opcodeext of
             DW_LNE_END_SEQUENCE:
-              begin
-                state.endsequence := true;
-                state.appendrow := true;
-              end;
+              state.flags := state.flags + [endsequence, appendrow];
             DW_LNE_SET_ADDRESS:
-              state.address := ReadAddress(opcodeextlen - 1);
+              begin
+                state.address := ReadAddress(opcodeextlen - 1);
+                if state.address = 0 then // FPC sometimes emits these :(
+                  include(state.flags, invalidaddress)
+                else
+                  exclude(state.flags, invalidaddress)
+              end;
             DW_LNE_DEFINE_FILE:
               begin
                 SkipString;
@@ -2723,12 +2719,8 @@ begin
           end;
         end;
       DW_LNS_COPY:
-        begin
-          state.basicblock := false;
-          state.prologueend := false;
-          state.epiloguebegin := false;
-          state.appendrow := true;
-        end;
+        state.flags := state.flags - [basicblock, prologueend, epiloguebegin]
+                                   + [appendrow];
       DW_LNS_ADVANCE_PC:
         inc(state.address, read.VarUInt32 * header64.minimum_instruction_length);
       DW_LNS_ADVANCE_LINE:
@@ -2739,17 +2731,20 @@ begin
       DW_LNS_SET_COLUMN:
         state.column := read.VarUInt64;
       DW_LNS_NEGATE_STMT:
-        state.isstmt := not state.isstmt;
+        if isstmt in state.flags then
+          exclude(state.flags, isstmt)
+        else
+          include(state.flags, isstmt);
       DW_LNS_SET_BASIC_BLOCK:
-        state.basicblock := true;
+        include(state.flags, basicblock);
       DW_LNS_CONST_ADD_PC:
         inc(state.address, CalculateAddressIncrement(255, header64));
       DW_LNS_FIXED_ADVANCE_PC:
         inc(state.address, read.Next2);
       DW_LNS_SET_PROLOGUE_END:
-        state.prologueend := true;
+        include(state.flags, prologueend);
       DW_LNS_SET_EPILOGUE_BEGIN:
-        state.epiloguebegin := true;
+        include(state.flags, epiloguebegin);
       DW_LNS_SET_ISA:
         state.isa := read.VarUInt64;
     else
@@ -2770,19 +2765,17 @@ begin
         else
           // FPC set line_range=255 and prefer explicit DW_LNS_ADVANCE_PC
           inc(state.line, header64.line_base + PtrInt(opcodeadjust));
-        state.basicblock := false;
-        state.prologueend := false;
-        state.epiloguebegin := false;
-        state.appendrow := true;
+        state.flags := state.flags - [basicblock, prologueend, epiloguebegin]
+                                   + [appendrow];
       end;
     end;
-    if state.appendrow then
+    if appendrow in state.flags then
     begin
-      state.appendrow := false;
-      if state.isstmt and
+      exclude(state.flags, appendrow);
+      if (isstmt in state.flags) and
          (state.line <> prevline) and
-         (state.address <> 0) and
-         (state.line > 1) then
+         (state.line > 1) and
+         not (invalidaddress in state.flags) then
       begin
         prevline := state.line;
         if prevfile <> state.fileid then
@@ -2800,7 +2793,7 @@ begin
           u^.Symbol.Name := files[ndx]; // will eventually be replaced with CU
           if includesdir and
              (filesdir[ndx] > 0) then
-            u^.FileName := dirs[filesdir[ndx] - 1] + files[ndx]
+            Join([dirs[filesdir[ndx] - 1], files[ndx]], u^.FileName)
           else
             u^.FileName := files[ndx];
           u^.Symbol.Start := state.address;
@@ -2815,7 +2808,7 @@ begin
           CardinalToHexShort(state.address)]);
         {$endif DWARFDEBUG}
       end;
-      if state.endsequence then
+      if endsequence in state.flags then
         state.Init(header64.default_is_stmt);
     end;
   end;
