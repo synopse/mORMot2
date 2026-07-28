@@ -2404,9 +2404,14 @@ begin
 end;
 
 function TDwarfReader.ReadAddress(addr_size: PtrInt): QWord;
+var
+  tmp: QWord; // safer with temporary variable on stack
 begin
-  result := 0;
-  read.Copy(@result, addr_size);
+  tmp := 0;
+  read.Copy(@tmp, addr_size);
+  if tmp > MaxInt then
+    read.ErrorData('DWARF: ReadAddress=% overflow',[tmp]);
+  result := tmp;
 end;
 
 procedure TDwarfReader.ReadAbbrevTable(file_offset, file_size: QWord);
@@ -2577,9 +2582,7 @@ begin
     DW_FORM_flag_present:
       ; // none
   else
-    {$ifdef DWARFDEBUG}
-    DisplayError('Internal error: unknown dwarf form: %x', [form]);
-    {$endif DWARFDEBUG}
+    read.ErrorData('DWARF: unknown form: %', [form]);
   end;
 end;
 
@@ -2860,6 +2863,8 @@ begin
   typname[0] := #0;
   while abbr <> 0 do
   begin
+    if abbr > AttrsMax then
+      read.ErrorData('DWARF: unexpected abbr=%>%', [abbr, AttrsMax]);
     with Abbrev[abbr] do
     begin
       if Child <> 0 then
