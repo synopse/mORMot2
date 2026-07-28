@@ -174,6 +174,10 @@ type
     // - is much faster: around 10us per call, whereas lnfodwrf is 20ms
     class function RegisterBacktraceStrFunc: boolean;
     {$endif FPC}
+    /// force to include the GDB relative path of TDebugUnit.FileName
+    // - the naked file name with no path is stored by default on all platforms
+    // - do nothing on Delphi since the .map file does not include the path
+    class procedure IncludeFilePath(Value: boolean);
     /// all symbols, mainly function and method names and addresses
     property Symbols: TDebugSymbolDynArray
       read fSymbol;
@@ -2130,6 +2134,7 @@ uses
 
 var
   ExeInstanceDebugFile: TDebugFile;
+  ExeIncludeFilePath: boolean; // from TDebugFile.IncludeFilePath class method
 
 function GetInstanceDebugFile: TDebugFile;
 begin
@@ -2241,7 +2246,7 @@ type
     Lines: TInt64DynArray;              // store TDebugUnit.Addr[]/Line[]
     dirs, files: TRawUtf8DynArray;
     filesdir: TIntegerDynArray;
-    isdwarf64: boolean;
+    isdwarf64, includesdir: boolean;
     debug: TDebugFile;
     Map: TMemoryMap;
     function LoadSections(const filename: TFileName): boolean;
@@ -2634,6 +2639,8 @@ begin
     read.NextAsciiz(s);
     if s[0] = #0 then
       break;
+    if not includesdir then
+      continue;
     c := PathDelim;
     if Pos('/', s) > 0 then
       c := '/'
@@ -2765,7 +2772,8 @@ begin
           u := debug.fUnits.NewPtr;
           u^.Symbol.Name := StringToAnsi7(GetFileNameWithoutExt(
             Ansi7ToString(files[prevfile])));
-          if filesdir[prevfile] > 0 then
+          if includesdir and
+             (filesdir[prevfile] > 0) then
             u^.FileName := dirs[filesdir[prevfile] - 1];
           u^.FileName := u^.FileName + files[prevfile];
           u^.Symbol.Start := state.address;
@@ -2925,6 +2933,7 @@ var
   current_offset, end_offset: QWord;
 begin
   FillCharFast(dwarf, SizeOf(dwarf), 0);
+  dwarf.includesdir := ExeIncludeFilePath;
   if dwarf.LoadSections(fDebugFile) then
   try
     // retrieve units name and line numbers
@@ -3849,6 +3858,11 @@ begin
   u := map.FindUnitByName(name);
   if u >= 0 then
     Utf8ToFileName(map.fUnit[u].FileName, result);
+end;
+
+class procedure TDebugFile.IncludeFilePath(Value: boolean);
+begin
+  ExeIncludeFilePath := Value;
 end;
 
 
