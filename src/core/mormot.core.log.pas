@@ -48,27 +48,30 @@ type
     /// end offset of this symbol in the executable
     Stop: integer;
   end;
-
   PDebugSymbol = ^TDebugSymbol;
 
   /// a dynamic array of symbols, as decoded by TDebugFile from a .map/.dbg file
   TDebugSymbolDynArray = array of TDebugSymbol;
 
-  /// a debugger unit, as decoded by TDebugFile from a .map/.dbg file
+  /// a debugger source block, as decoded by TDebugFile from a .map/.dbg file
+  // - not a real pascal "unit", but a block within an unit for a code range
+  // - so may refer to the main unit itself, or a nested .inc file, or some
+  // inlined logic or generics template insertion
   TDebugUnit = packed record
-    /// Name, Start and Stop of this Unit
+    /// Name, Start and Stop of this source block
+    // - Name is the main pascal source unit identifier, e.g. 'mormot.core.base'
     Symbol: TDebugSymbol;
-    /// associated source file name
+    /// associated source file name for source block
+    // - may match Symbol.Name but could be e.g. 'mormot.core.base.asmx64.inc'
     FileName: RawUtf8;
-    /// list of all mapped source code lines of this unit
+    /// list of all mapped source code lines of this block
     Line: TIntegerDynArray;
-    /// start code address of each source code line
+    /// start code address of each source code block
     Addr: TIntegerDynArray;
   end;
-
   PDebugUnit = ^TDebugUnit;
 
-  /// a dynamic array of units, as decoded by TDebugFile from a .map/.dbg file
+  /// a dynamic array of blocks, as decoded by TDebugFile from a .map/.dbg file
   TDebugUnitDynArray = array of TDebugUnit;
 
   /// process a .map/.dbg file content, to be used e.g. with TSynLog to provide
@@ -136,15 +139,15 @@ type
     /// retrieve a symbol according to a relative code address
     // - use fast O(log n) binary search
     function FindSymbol(aAddressOffset: integer): PtrInt;
-    /// retrieve an unit and source line, according to a relative code address
+    /// retrieve an Units[] index and source line, according to a relative code address
     // - use fast O(log n) binary search
     function FindUnit(aAddressOffset: integer; out LineNumber: integer): PtrInt; overload;
-    /// retrieve an unit, according to a relative code address
+    /// retrieve Units[] index, according to a relative code address
     // - use fast O(log n) binary search
     function FindUnit(aAddressOffset: integer): PtrInt; overload;
-    /// retrieve an unit information, according to the unit name
-    // - will search within Units array
-    function FindUnit(const aUnitName: RawUtf8): PtrInt; overload;
+    /// retrieve an Units[] index, according to the unit name
+    // - will search within Units array and return the first matching Symbol.Name
+    function FindUnitByName(const aUnitName: RawUtf8): PtrInt;
     /// return the symbol location according to the supplied absolute address
     // - filename, symbol name and line number (if any), as plain text, e.g.
     // '4cb765 ../src/core/mormot.core.base.pas statuscodeissuccess (11183)' on FPC
@@ -3503,8 +3506,8 @@ begin
 end;
 
 const
-  _TDebugSymbol = 'Name:RawUtf8 Start,Stop:integer';
-  _TDebugUnit ='Symbol:TDebugSymbol FileName:RawUtf8 Line,Addr:TIntegerDynArray';
+  _TDebugSymbol = 'name:RawUtf8 start,stop:integer';
+  _TDebugUnit ='symbol:TDebugSymbol filename:RawUtf8 line,addr:TIntegerDynArray';
 
 procedure TDebugFile.SaveToJson(W: TTextWriter);
 begin
@@ -3811,13 +3814,13 @@ begin
   result := GetInstanceDebugFile.FindLocationShort(PtrUInt(aAddress));
 end;
 
-function TDebugFile.FindUnit(const aUnitName: RawUtf8): PtrInt;
+function TDebugFile.FindUnitByName(const aUnitName: RawUtf8): PtrInt;
 begin
   if (self <> nil) and
      (aUnitName <> '') then
     for result := 0 to high(fUnit) do
       if IdemPropNameU(fUnit[result].Symbol.Name, aUnitName) then // inlined
-        exit;
+        exit; // return the first occurence skipping any next nested inclusion
   result := -1;
 end;
 
@@ -3835,7 +3838,7 @@ begin
     name := Executable.ProgramName
   else
     name := unitname;
-  u := map.FindUnit(name);
+  u := map.FindUnitByName(name);
   if u >= 0 then
     Utf8ToFileName(map.fUnit[u].FileName, result);
 end;
