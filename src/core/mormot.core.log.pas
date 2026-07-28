@@ -2220,7 +2220,7 @@ type
     Child: byte;
   end;
 
-  TDwarfMachineState = object
+  TDwarfMachineState = record
   public
     address: cardinal;
     line: cardinal;
@@ -2236,7 +2236,7 @@ type
     procedure Init(aIs_Stmt: ByteBool);
   end;
 
-  TDwarfReader = object
+  TDwarfReader = record
   public
     read: TFastReader;
     DebugLineSectionOffset, DebugLineSectionSize, // debug_line section
@@ -2440,57 +2440,59 @@ begin
     header.minimum_instruction_length;
 end;
 
-// DWARF 2 default opcodes
+// DWARF 2/3 most common opcodes
 const
-  DW_LNS_LNE = 0; // see DW_LNE_*
-  DW_LNS_COPY = 1;
-  DW_LNS_ADVANCE_PC = 2;
-  DW_LNS_ADVANCE_LINE = 3;
-  DW_LNS_SET_FILE = 4;
-  DW_LNS_SET_COLUMN = 5;
-  DW_LNS_NEGATE_STMT = 6;
-  DW_LNS_SET_BASIC_BLOCK = 7;
-  DW_LNS_CONST_ADD_PC = 8;
-  DW_LNS_FIXED_ADVANCE_PC = 9;
-  DW_LNS_SET_PROLOGUE_END = 10;
+  DW_LNS_LNE                = 0; // see DW_LNE_*
+  DW_LNS_COPY               = 1;
+  DW_LNS_ADVANCE_PC         = 2;
+  DW_LNS_ADVANCE_LINE       = 3;
+  DW_LNS_SET_FILE           = 4;
+  DW_LNS_SET_COLUMN         = 5;
+  DW_LNS_NEGATE_STMT        = 6;
+  DW_LNS_SET_BASIC_BLOCK    = 7;
+  DW_LNS_CONST_ADD_PC       = 8;
+  DW_LNS_FIXED_ADVANCE_PC   = 9;
+  DW_LNS_SET_PROLOGUE_END   = 10;
   DW_LNS_SET_EPILOGUE_BEGIN = 11;
-  DW_LNS_SET_ISA = 12;
+  DW_LNS_SET_ISA            = 12;
 
   DW_LNE_END_SEQUENCE = 1;
-  DW_LNE_SET_ADDRESS = 2;
-  DW_LNE_DEFINE_FILE = 3;
+  DW_LNE_SET_ADDRESS  = 2;
+  DW_LNE_DEFINE_FILE  = 3;
 
-  DW_TAG_class_type = 2;      // map Object Pascal class or object
-  DW_TAG_structure_type = 19; // map Object Pascal record
-  DW_TAG_subprogram = 46;     // map object function or method
+  DW_TAG_padding        = $00;
+  DW_TAG_class_type     = $02; // map Object Pascal class or object
+  DW_TAG_compile_unit   = $11; // map Object pascal unit
+  DW_TAG_structure_type = $13; // map Object Pascal record
+  DW_TAG_subprogram     = $2e; // map object function or method
 
-  DW_AT_name = $3;
-  DW_AT_low_pc = $11;
+  DW_AT_name    = $03;
+  DW_AT_low_pc  = $11;
   DW_AT_high_pc = $12;
 
-  DW_FORM_addr = $1;
-  DW_FORM_block2 = $3;
-  DW_FORM_block4 = $4;
-  DW_FORM_data2 = $5;
-  DW_FORM_data4 = $6;
-  DW_FORM_data8 = $7;
-  DW_FORM_string = $8;
-  DW_FORM_block = $9;
-  DW_FORM_block1 = $a;
-  DW_FORM_data1 = $b;
-  DW_FORM_flag = $c;
-  DW_FORM_sdata = $d;
-  DW_FORM_strp = $e;
-  DW_FORM_udata = $f;
-  DW_FORM_ref_addr = $10;
-  DW_FORM_ref1 = $11;
-  DW_FORM_ref2 = $12;
-  DW_FORM_ref4 = $13;
-  DW_FORM_ref8 = $14;
-  DW_FORM_ref_udata = $15;
-  DW_FORM_indirect = $16;
-  DW_FORM_sec_offset = $17;
-  DW_FORM_exprloc = $18;
+  DW_FORM_addr         = $01;
+  DW_FORM_block2       = $03;
+  DW_FORM_block4       = $04;
+  DW_FORM_data2        = $05;
+  DW_FORM_data4        = $06;
+  DW_FORM_data8        = $07;
+  DW_FORM_string       = $08;
+  DW_FORM_block        = $09;
+  DW_FORM_block1       = $0a;
+  DW_FORM_data1        = $0b;
+  DW_FORM_flag         = $0c;
+  DW_FORM_sdata        = $0d;
+  DW_FORM_strp         = $0e;
+  DW_FORM_udata        = $0f;
+  DW_FORM_ref_addr     = $10;
+  DW_FORM_ref1         = $11;
+  DW_FORM_ref2         = $12;
+  DW_FORM_ref4         = $13;
+  DW_FORM_ref8         = $14;
+  DW_FORM_ref_udata    = $15;
+  DW_FORM_indirect     = $16;
+  DW_FORM_sec_offset   = $17;
+  DW_FORM_exprloc      = $18;
   DW_FORM_flag_present = $19;
 
 procedure TDwarfReader.SkipAttr(form: QWord;
@@ -2587,7 +2589,7 @@ var
   opcode, opcodeext, opcodeadjust, divlinerange,
   prevaddr, prevfile, prevline: cardinal;
   unitlen: QWord;
-  opcodeextlen, headerlen: PtrInt;
+  opcodeextlen, headerlen, ndx: PtrInt;
   dirsn, filedirsn, filesn, linesn: integer;
   state: TDwarfMachineState;
   c: ansichar;
@@ -2765,19 +2767,19 @@ begin
           FinalizeLines(u, linesn, pointer(Lines), unsorted);
           linesn := 0; // reuse the same 64-bit Lines[] buffer for Addr[]+Line[]
           prevaddr := 0;
-          prevfile := state.fileid - 1;
+          prevfile := state.fileid;
+          ndx := prevfile - 1;
           {$ifdef DWARFDEBUG}
-          ConsoleWrite(['-------------- ', files[prevfile]]);
+          ConsoleWrite(['-------------- ', files[ndx]]);
           {$endif DWARFDEBUG}
           u := debug.fUnits.NewPtr;
-          u^.Symbol.Name := StringToAnsi7(GetFileNameWithoutExt(
-            Ansi7ToString(files[prevfile])));
+          u^.Symbol.Name := files[ndx];
           if includesdir and
-             (filesdir[prevfile] > 0) then
-            u^.FileName := dirs[filesdir[prevfile] - 1];
-          u^.FileName := u^.FileName + files[prevfile];
+             (filesdir[ndx] > 0) then
+            u^.FileName := dirs[filesdir[ndx] - 1] + files[ndx]
+          else
+            u^.FileName := files[ndx];
           u^.Symbol.Start := state.address;
-          inc(prevfile);
         end;
         if state.address < prevaddr then
           // not increasing: need to sort u^.Addr[]+Line[] and u^.Symbol.Start
