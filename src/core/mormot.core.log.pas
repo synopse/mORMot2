@@ -154,12 +154,13 @@ type
     function FindLinesByName(const aUnitName: RawUtf8): PtrInt;
     /// return the symbol location according to the supplied absolute address
     // - filename, symbol name and line number (if any), as plain text, e.g.
-    // '4cb765 ../src/core/mormot.core.base.pas statuscodeissuccess (11183)' on FPC
+    // $ 4cb765 ../src/core/mormot.core.base.pas statuscodeissuccess (11183)
     // - returns only the hexadecimal value if no match is found in .map/.gdb info
     function FindLocation(aAddressAbsolute: PtrUInt): RawUtf8; overload;
     /// return the symbol location according to the supplied absolute address
     // - filename, symbol name and line number (if any), as plain text, e.g.
-    // '4cb765 ../src/core/mormot.core.base.pas statuscodeissuccess (11183)' on FPC
+    // $ 5880ea mormot.core.log.pas InitializeUnit (8475)
+    // $ 4a0a40 mormot.core.base.asmx64.inc (mormot.core.base) Rdtsc (3005)
     // - returns only the hexadecimal value if no match is found in .map/.gdb info
     // - won't allocate any heap memory during the text creation
     // - mormot.core.os.pas' GetExecutableLocation() redirects to this method
@@ -2220,13 +2221,15 @@ type
     address_size: byte;
   end;
 
+  TDwarfDebugAttr = packed record
+    attr, form: byte;
+  end;
+
   TDwarfDebugAbbrev = record
     Tag: HalfUInt;
     AttrsCount: byte;
     Child: byte;
-    Attrs: array of record
-      attr, form: byte;
-    end;
+    Attrs: array of TDwarfDebugAttr;
   end;
 
   TDwarfMachineState = record
@@ -2242,22 +2245,22 @@ type
   TDwarfReader = record
   public
     read: TFastReader;
+    Abbrev: array of TDwarfDebugAbbrev; // debug_abbrev content
+    AttrsMax: cardinal;
+    isdwarf64, includesdir: boolean;
     DebugLineSectionOffset, DebugLineSectionSize,              // debug_line
     DebugInfoSectionOffset, DebugInfoSectionSize,              // debug_info
     DebugAbbrevSectionOffset, DebugAbbrevSectionSize: integer; // debug_abbrev
-    Abbrev: array of TDwarfDebugAbbrev; // debug_abbrev content
+    debug: TDebugFile;
     Lines: TInt64DynArray;              // store TDebugLines.Addr[]/Line[]
     dirs, files: TRawUtf8DynArray;
     filesdir: TIntegerDynArray;
-    AttrsMax: cardinal;
-    isdwarf64, includesdir: boolean;
-    debug: TDebugFile;
     Map: TMemoryMap;
-    function LoadSections(const filename: TFileName): boolean;
+    name, typname, fullname: ShortString;
+    function LoadSections: boolean;
     procedure ReadInit(aBase, aLimit: Int64);
     function ReadLeb128: Int64;
     function ReadAddress(addr_size: PtrInt): QWord; inline;
-    function SkipString: PtrInt;
     procedure SkipAttr(form: PtrUInt; const header64: TDwarfDebugInfoHeader64);
     procedure ReadAbbrevTable(file_offset, file_size: QWord);
     function ParseCompilationUnit(file_offset, file_size: QWord): QWord;
@@ -2280,7 +2283,6 @@ end;
 // use FPC RTL's cross-OS exeinfo.pp unit for macho format
 function TDwarfReader.LoadSections(const filename: TFileName): boolean;
 var
-  dbgfn: ShortString;
   e: TExeFile;
 begin
   result := false;
@@ -2292,19 +2294,19 @@ begin
     {$endif DWARFDEBUG}
     exit;
   end;
-  if ReadDebugLink(e, dbgfn) then // is there an external .dbg file?
+  if ReadDebugLink(e, name) then // is there an external .dbg file?
   begin
     CloseExeFile(e);
-    if not OpenExeFile(e, dbgfn) then
+    if not OpenExeFile(e, name) then
     begin
       {$ifdef DWARFDEBUG}
-      DisplayError('OpenExeFile failed on  %s', [dbgfn]);
+      DisplayError('OpenExeFile failed on  %s', [name]);
       {$endif DWARFDEBUG}
       exit;
     end;
   end
   else
-    dbgfn := filename;
+    name := filename;
   // locate debug_* sections after successfull OpenExeFile()
   if FindExeSection(e, '.debug_line',
        DebugLineSectionOffset, DebugLineSectionSize) and
@@ -2312,12 +2314,12 @@ begin
        DebugInfoSectionOffset, DebugInfoSectionSize) and
      FindExeSection(e, '.debug_abbrev',
        DebugAbbrevSectionOffset, DebugAbbrevSectionSize) then
-    result := Map.Map(dbgfn);
+    result := Map.Map(name);
   CloseExeFile(e);
 end;
 {$else}
 // use our faster mormot.core.os.FindExeSection(TMemoryMap) on Linux+BSD+Windows
-function TDwarfReader.LoadSections(const filename: TFileName): boolean;
+function TDwarfReader.LoadSections: boolean;
 var
   off, siz, dbglen: integer; // not PtrInt
   crc: cardinal;
@@ -2325,7 +2327,7 @@ var
   fn: string;
 begin
   result := false;
-  if not Map.Map(filename, {forcemap=}true) then // main exe
+  if not Map.Map(debug.fDebugFile, {forcemap=}true) then // main exe
     exit;
   if FindExeSection(Map, '.gnu_debuglink', off, siz) <> efUnknown then
   begin
@@ -2350,7 +2352,7 @@ begin
        DebugAbbrevSectionOffset, DebugAbbrevSectionSize) <> efUnknown) then
     result := true;
   if result then
-    SetLength(files, 64)
+    SetLength(files, 64) // good enough for most executables
   else
     Map.UnMap;
 end;
@@ -2361,13 +2363,6 @@ begin
   if aBase + aLimit > Int64(Map.Size) then
     read.ErrorOverflow;
   read.Init(Map.Buffer + aBase, aLimit);
-end;
-
-function TDwarfReader.SkipString: PtrInt;
-begin
-  result := 0; // return length
-  while read.NextByte <> 0 do // almost never called
-    inc(result);
 end;
 
 function TDwarfReader.ReadLeb128: Int64;
@@ -2409,16 +2404,17 @@ procedure TDwarfReader.ReadAbbrevTable(file_offset, file_size: QWord);
 var
   nr, t, a, f, n: PtrUInt;
   p: ^TDwarfDebugAbbrev;
-  prev: TFastReader;
+  bakp, baklast: pointer;
 begin
-  prev := read;
+  bakp := read.P;
+  baklast := read.Last;
   ReadInit(file_offset, file_size);
   AttrsMax := 0;
   repeat
-    nr := read.VarUInt64;
+    nr := read.VarUInt32;
     if nr = 0 then
       break;
-    AttrsMax := MaxPtrUInt(AttrsMax, nr);
+    AttrsMax := MaxPtrUInt(nr, AttrsMax);
     if nr >= PtrUInt(length(Abbrev)) then
       SetLength(Abbrev, nr + 256);
     p := @Abbrev[nr];
@@ -2448,7 +2444,8 @@ begin
     until false;
     p^.AttrsCount := n;
   until false;
-  read := prev;
+  read.P := bakp;
+  read.Last := baklast;
 end;
 
 function CalculateAddressIncrement(opcode: PtrInt;
@@ -2520,7 +2517,7 @@ begin
       read.Next(header64.address_size);
     DW_FORM_block,
     DW_FORM_exprloc:
-      read.Next(read.VarUInt64);
+      read.Next(read.VarUInt32);
     DW_FORM_block1:
       read.Next(read.NextByte);
     DW_FORM_block2:
@@ -2541,7 +2538,7 @@ begin
     DW_FORM_data8:
       read.Next8;
     DW_FORM_string:
-      SkipString;
+      read.NextAsciiz;
     DW_FORM_ref_udata,
     DW_FORM_udata,
     DW_FORM_sdata:
@@ -2563,7 +2560,7 @@ begin
       else
         read.Next4;
     DW_FORM_indirect:
-      SkipAttr(read.VarUInt64, header64);
+      SkipAttr(read.VarUInt32, header64);
     DW_FORM_flag_present:
       ; // none
   else
@@ -2595,7 +2592,7 @@ end;
 
 function TDwarfReader.ParseCompilationUnit(file_offset, file_size: QWord): QWord;
 var
-  opcode, opcodeext, opcodeadjust, divlinerange,
+  opcode, opcodeadjust, divlinerange,
   prevaddr, prevfile, prevline: cardinal;
   unitlen: QWord;
   opcodeextlen, headerlen, ndx: PtrInt;
@@ -2606,7 +2603,6 @@ var
   header64: TDwarfLineInfoHeader64;
   header32: TDwarfLineInfoHeader32;
   u: PDebugLines;
-  s: ShortString;
   numoptable: array[1..255] of byte;
 begin
   // check if DWARF 32-bit or 64-bit format
@@ -2620,7 +2616,13 @@ begin
   result := file_offset + unitlen;
   // process debug_line header
   ReadInit(file_offset, unitlen);
-  if header32.unit_length <> $ffffffff then
+  if isdwarf64 then
+  begin
+    read.Copy(@header64, SizeOf(header64));
+    headerlen := SizeOf(header64.magic) + SizeOf(header64.unit_length) +
+      SizeOf(header64.version) + SizeOf(header64.length) + header64.length;
+  end
+  else
   begin
     read.Copy(@header32, SizeOf(header32));
     header64.magic := $ffffffff;
@@ -2633,13 +2635,7 @@ begin
     header64.line_range := header32.line_range;
     header64.opcode_base := header32.opcode_base;
     headerlen := SizeOf(header32.version) + SizeOf(header32.unit_length) +
-      SizeOf(header32.length) + header32.length;
-  end
-  else
-  begin
-    read.Copy(@header64, SizeOf(header64));
-    headerlen := SizeOf(header64.magic) + SizeOf(header64.unit_length) +
-      SizeOf(header64.version) + SizeOf(header64.length) + header64.length;
+                 SizeOf(header32.length) + header32.length;
   end;
   // read opcode parameter count table
   FillcharFast(numoptable, SizeOf(numoptable), 0);
@@ -2647,28 +2643,28 @@ begin
   // read directory and file names
   dirsn := 0;
   repeat
-    read.NextAsciiz(s);
-    if s[0] = #0 then
+    read.NextAsciiz(name);
+    if name[0] = #0 then
       break;
     if not includesdir then
       continue;
     c := PathDelim;
-    if Pos('/', s) > 0 then
+    if Pos('/', name) > 0 then
       c := '/'
-    else if Pos('\', s) > 0 then
+    else if Pos('\', name) > 0 then
       c := '\';
-    if s[ord(s[0])] <> c then
-      AppendShortCharSafe(c, s);
-    AddRawUtf8(dirs, dirsn, ShortStringToUtf8(s));
+    if name[ord(name[0])] <> c then
+      AppendShortCharSafe(c, name);
+    AddRawUtf8(dirs, dirsn, ShortStringToUtf8(name));
   until false;
   filesn := 0;
   repeat
-    read.NextAsciiz(s);
-    if s[0] = #0 then
+    read.NextAsciiz(name);
+    if name[0] = #0 then
       break;
     if filesn = length(files) then
       SetLength(files, NextGrow(filesn));
-    ShortStringToAnsi7String(s, files[filesn]);
+    ShortStringToAnsi7String(name, files[filesn]);
     AddInteger(filesdir, filesn, read.VarUInt32);
     read.VarNextInt(2); // we ignore the attributes
   until false;
@@ -2689,21 +2685,20 @@ begin
         begin
           // extended opcode
           opcodeextlen := read.VarUInt32;
-          opcodeext := read.NextByte;
-          case opcodeext of
+          case read.NextByte of
             DW_LNE_END_SEQUENCE:
               state.flags := state.flags + [endsequence, appendrow];
             DW_LNE_SET_ADDRESS:
               begin
                 state.address := ReadAddress(opcodeextlen - 1);
                 if state.address = 0 then // FPC sometimes emits these :(
-                  include(state.flags, invalidaddress)
+                  include(state.flags, invalidaddress) // just ignore
                 else
                   exclude(state.flags, invalidaddress)
               end;
             DW_LNE_DEFINE_FILE:
               begin
-                SkipString;
+                read.NextAsciiz;
                 read.VarNextInt(3);
               end;
           else
@@ -2720,7 +2715,7 @@ begin
         // most of the time, to decrease state.line
         state.line := Int64(state.line) + ReadLeb128;
       DW_LNS_SET_FILE:
-        state.fileid := read.VarUInt64;
+        state.fileid := read.VarUInt32;
       DW_LNS_NEGATE_STMT:
         if isstmt in state.flags then
           exclude(state.flags, isstmt)
@@ -2806,15 +2801,55 @@ begin
   FinalizeLines(u, linesn, pointer(Lines), unsorted);
 end;
 
+procedure FinalizeLinesSymbol(u: PDebugLines; n, low_pc, high_pc: PtrInt;
+  ident: PShortstring);
+var
+  start, len, i: PtrInt;
+  name: RawUtf8;
+begin // set Symbol.Name as main Pascal unit identifier as with Delphi .map
+  if u <> nil then
+    repeat
+      start := u^.Symbol.Start; // note: u^.Symbol.Stop = 0 at this point
+      if start >= high_pc then
+        break // GenerateFromMapOrDbg made fLines.Sort(SymbolSortByStartAddr)
+      else if start >= low_pc then
+      begin
+        if name = '' then
+        begin
+          start := 0;
+          len := 0;
+          for i := ord(ident^[0]) downto 1 do
+            case ident^[i] of
+              '/', '\':
+                begin // ../src/mormot.core.os.pas -> mormot.core.os.pas
+                  start := i;
+                  break;
+                end;
+              '.': // mormot.core.os.pas -> mormot.core.os
+                if len = 0 then
+                  len := i - 1;
+            end;
+          if len = 0 then
+            len := ord(ident^[0]);
+          LowerCaseCopy(@ident^[start + 1], len - start, name);
+        end;
+        u^.Symbol.Name := name;
+      end;
+      inc(u);
+      dec(n);
+    until n = 0;
+end;
+
 function TDwarfReader.ParseCompilationFunctions(file_offset, file_size: QWord): QWord;
 var
   s: ^TDebugSymbol;
+  ab: ^TDwarfDebugAbbrev;
+  a: ^TDwarfDebugAttr;
   header64: TDwarfDebugInfoHeader64;
   header32: TDwarfDebugInfoHeader32;
-  unit_length, low_pc, high_pc: QWord;
-  abbr, level: cardinal;
-  i: PtrInt;
-  name, typname, fullname: ShortString;
+  unit_length: QWord;
+  low_pc, high_pc: integer;
+  abbr, level, n: cardinal;
 begin
   // check if DWARF 32-bit or 64-bit format
   ReadInit(file_offset, file_size);
@@ -2849,33 +2884,35 @@ begin
   begin
     if abbr > AttrsMax then
       read.ErrorData('DWARF: unexpected abbr=%>%', [abbr, AttrsMax]);
-    with Abbrev[abbr] do
-    begin
-      if Child <> 0 then
-        inc(level);
-      if (Tag = DW_TAG_subprogram) or
-         (Tag = DW_TAG_compile_unit) then
+    ab := @Abbrev[abbr];
+    if ab^.Child <> 0 then
+      inc(level);
+    a := pointer(ab^.Attrs);
+    n := ab^.AttrsCount;
+    if n <> 0 then
+      if (ab^.Tag = DW_TAG_subprogram) or
+         (ab^.Tag = DW_TAG_compile_unit) then
       begin
         low_pc := 1;
         high_pc := 0;
         name := '';
-        for i := 0 to AttrsCount - 1 do
-          with Attrs[i] do
-          begin
-            if (attr = DW_AT_low_pc) and
-               (form = DW_FORM_addr) then
-              low_pc := ReadAddress(header64.address_size)
-            else if (attr = DW_AT_high_pc) and
-                    (form = DW_FORM_addr) then
-              high_pc := ReadAddress(header64.address_size)
-            else if (attr = DW_AT_name) and
-                    (form = DW_FORM_string) then
-              read.NextAsciiz(name)
-            else
-              SkipAttr(form, header64);
-          end;
+        repeat
+          if (a^.attr = DW_AT_low_pc) and
+             (a^.form = DW_FORM_addr) then
+            low_pc := ReadAddress(header64.address_size)
+          else if (a^.attr = DW_AT_high_pc) and
+                  (a^.form = DW_FORM_addr) then
+            high_pc := ReadAddress(header64.address_size)
+          else if (a^.attr = DW_AT_name) and
+                  (a^.form = DW_FORM_string) then
+            read.NextAsciiz(name)
+          else
+            SkipAttr(a^.form, header64);
+          inc(a);
+          dec(n);
+        until n = 0;
         if low_pc < high_pc then
-          if Tag = DW_TAG_subprogram then
+          if ab^.Tag = DW_TAG_subprogram then
           begin
             s := debug.fSymbols.NewPtr;
             if typname[0] = #0 then
@@ -2886,9 +2923,6 @@ begin
               AppendShort(name, fullname);
               ShortStringToAnsi7String(fullname, s^.name);
             end;
-            // DWARF2 symbols are emitted as UPPER by FPC -> lower for esthetics
-            if header64.version < 3 then
-              LowerCaseSelf(s^.name);
             s^.Start := low_pc;
             s^.Stop := high_pc - 1;
             {$ifdef DWARFDEBUG}
@@ -2896,31 +2930,37 @@ begin
               CardinalToHexShort(high_pc)]);
             {$endif DWARFDEBUG}
           end
-          else
-            writeln('DW_TAG_compile_unit ',name, ' lo=',low_pc,' hi=',high_pc);
+          else // Tag = DW_TAG_compile_unit
+            // e.g. 'mormot.core.base.asmx86.inc' -> 'mormot.core.base.pas'
+            FinalizeLinesSymbol(
+              pointer(debug.fLine), debug.fLinesCount, low_pc, high_pc, @name);
       end
       else if (level = 2) and
-              ((Tag = DW_TAG_class_type) or
-               (Tag = DW_TAG_structure_type)) then
+              ((ab^.Tag = DW_TAG_class_type) or
+               (ab^.Tag = DW_TAG_structure_type)) then
       begin
         typname[0] := #0;
-        for i := 0 to AttrsCount - 1 do
-          with Attrs[i] do
-            if (attr = DW_AT_name) and
-               (form = DW_FORM_string) then
-            begin
-              read.NextAsciiz(typname);
-              if (typname[0] <> #0) and
-                 (typname[ord(typname[0])] <> '.') then
-                AppendShortCharSafe('.', typname);
-            end
-            else
-              SkipAttr(form, header64);
+        repeat
+          if (a^.attr = DW_AT_name) and
+             (a^.form = DW_FORM_string) then
+          begin
+            read.NextAsciiz(typname);
+            if (typname[0] <> #0) and
+               (typname[ord(typname[0])] <> '.') then
+              AppendShortCharSafe('.', typname);
+          end
+          else
+            SkipAttr(a^.form, header64);
+          inc(a);
+          dec(n);
+        until n = 0;
       end
       else
-        for i := 0 to AttrsCount - 1 do
-          SkipAttr(Attrs[i].form, header64);
-    end;
+        repeat
+          SkipAttr(a^.form, header64);
+          inc(a);
+          dec(n);
+        until n = 0;
     if read.EOF then
       exit;
     abbr := read.VarUInt32;
@@ -2933,12 +2973,12 @@ begin
       dec(level);
       if read.EOF then
         exit;
-      abbr := read.VarUInt64;
+      abbr := read.VarUInt32;
     end;
   end;
 end;
 
-function SymbolSortByAddr(const A, B): integer;
+function SymbolSortByStartAddr(const A, B): integer;
 begin
   result := CompareInteger(TDebugSymbol(A).Start, TDebugSymbol(B).Start);
 end;
@@ -2949,24 +2989,24 @@ var
   current_offset, end_offset: QWord;
 begin
   FillCharFast(dwarf, SizeOf(dwarf), 0);
+  dwarf.debug := self;
   dwarf.includesdir := ExeIncludeFilePath;
-  if dwarf.LoadSections(fDebugFile) then
+  if dwarf.LoadSections then
   try
     // retrieve line numbers and addresses into Lines[]
-    dwarf.debug := self;
     current_offset := dwarf.DebugLineSectionOffset;
     end_offset := current_offset + dwarf.DebugLineSectionSize;
     while current_offset < end_offset do
       current_offset := dwarf.ParseCompilationUnit(
         current_offset, end_offset - current_offset);
-    fLines.Sort(SymbolSortByAddr);
+    fLines.Sort(SymbolSortByStartAddr);
     // retrieve function names into Symbols[]
     current_offset := dwarf.DebugInfoSectionOffset;
     end_offset := current_offset + dwarf.DebugInfoSectionSize;
     while current_offset < end_offset do
       current_offset := dwarf.ParseCompilationFunctions(current_offset,
         end_offset - current_offset);
-    fSymbols.Sort(SymbolSortByAddr);
+    fSymbols.Sort(SymbolSortByStartAddr);
   finally
     dwarf.Map.UnMap;
   end;
@@ -3773,10 +3813,11 @@ begin
     AddHex;
     if u >= 0 then
     begin
-      if SymbolNameNotFilename then
-        W.AddString(debug.Lines[u].Symbol.Name)
-      else
-        W.AddString(debug.Lines[u].FileName);
+      with debug.Lines[u] do
+        if SymbolNameNotFilename then
+          W.AddString(Symbol.Name)
+        else
+          W.AddString(FileName);
       W.AddDirect(' ');
     end;
     if s >= 0 then
