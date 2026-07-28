@@ -8968,10 +8968,9 @@ begin
           (PDosHeader(eid)^.e_lfanew < exe.Size) then
   begin
     pe := pointer(exe.Buffer + PDosHeader(eid)^.e_lfanew); // COFF
-    n := pe^.NumberOfSections;
+    n := pe^.NumberOfSections; // pe^.NumberOfSymbols=0 if external .dbg file
     if (pe^.Signature <> $00004550) or
        (pe^.SizeOfOptionalHeader = 0) or
-       (pe^.NumberOfSymbols = 0) or
        (n = 0) or
        (Int64(PDosHeader(eid)^.e_lfanew) + SizeOf(pe^) +
         pe^.SizeOfOptionalHeader + PtrInt(n * SizeOf(ps^)) > exe.Size) then
