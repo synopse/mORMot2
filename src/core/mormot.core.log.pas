@@ -142,13 +142,13 @@ type
     function IsCode(aAddressAbsolute: PtrUInt): boolean;
     /// retrieve a symbol according to a relative code address
     // - use fast O(log n) binary search
-    function FindSymbol(aAddressOffset: integer): PtrInt;
+    function FindSymbol(aAddressOffset: integer): PDebugSymbol;
     /// retrieve Lines[] index and source line, according to a relative code address
-    // - use fast O(log n) binary search
-    function FindLines(aAddressOffset: integer; out LineNumber: integer): PtrInt; overload;
+    // - use fast O(log n) binary search and return a PDebugLines or nil
+    function FindLines(aAddressOffset: integer; out LineNumber: integer): PDebugLines; overload;
     /// retrieve Lines[] index, according to a relative code address
-    // - use fast O(log n) binary search
-    function FindLines(aAddressOffset: integer): PtrInt; overload;
+    // - use fast O(log n) binary search and return a PDebugLines or nil
+    function FindLines(aAddressOffset: integer): PDebugLines; overload;
     /// retrieve Lines[] index, according to the unit identifier
     // - will search within Lines array and return the first matching Symbol.Name
     function FindLinesByName(const aUnitName: RawUtf8): PtrInt;
@@ -2254,7 +2254,7 @@ type
     DebugAbbrevSectionOffset, DebugAbbrevSectionSize: integer; // debug_abbrev
     ImageBase: QWord; // e.g. 0100000000 on Win64, 00400000 on Win32, 0 on ELF
     debug: TDebugFile;
-    Lines: TInt64DynArray;              // store TDebugLines.Addr[]/Line[]
+    Lines: TInt64DynArray; // TDebugLines.Addr[] in high 40-bit, Line[] in lower
     dirs, files: TRawUtf8DynArray;
     filesdir: TIntegerDynArray;
     Map: TMemoryMap;
@@ -2339,17 +2339,18 @@ begin
        (dbglen > siz) or
        not IsValidUtf8WithoutControlChars(pointer(dbgname), dbglen) then
       exit;
-    crc := PCardinal(dbgname + ((dbglen + 4) and not 3))^;
+    crc := PCardinal(dbgname + ((dbglen + 4) and not 3))^; // read before UnMap
     Utf8DecodeToString(dbgname, dbglen, fn); // e.g. mormot2tests.dbg
     Map.UnMap; // close main exe
     if Map.Map(Executable.ProgramFilePath + fn) then // search dbg in exe folder
-      if crc32(0, Map.Buffer, Map.Size) <> crc then
+      if crc32(0, Map.Buffer, Map.Size) <> crc then  // zlib algorithm
         Map.UnMap; // the located debug file does not match the executable
   end;
   exeformat := FindExeSection(Map, '.debug_line',
     DebugLineSectionOffset, DebugLineSectionSize, @ImageBase);
   //ConsoleWrite(['ImageBase=',Int64ToHexShort(ImageBase)]);
-  if (FindExeSection(Map, '.debug_info',
+  if (exeformat <> efUnknown) and
+     (FindExeSection(Map, '.debug_info',
        DebugInfoSectionOffset, DebugInfoSectionSize) = exeformat) and
      (FindExeSection(Map, '.debug_abbrev',
        DebugAbbrevSectionOffset, DebugAbbrevSectionSize) = exeformat) then
@@ -2723,7 +2724,7 @@ begin
       DW_LNS_ADVANCE_PC:
         inc(state.address, read.VarUInt32 * header64.minimum_instruction_length);
       DW_LNS_ADVANCE_LINE:
-        // most of the time, to decrease state.line
+        // use ReadLeb128 < 0 to decrease state.line when needed
         state.line := Int64(state.line) + ReadLeb128;
       DW_LNS_SET_FILE:
         state.fileid := read.VarUInt32;
@@ -3568,7 +3569,7 @@ end;
 procedure TDebugFile.SaveToStream(aStream: TStream);
 var
   W: TBufferWriter;
-  i: PtrInt;
+  i: integer;
   MS: TMemoryStream;
   u: PDebugLines;
 begin
@@ -3580,7 +3581,7 @@ begin
     for i := 0 to high(fLine) do
       W.Write(fLine[i].FileName); // group for better compression
     u := pointer(fLine);
-    for i := 1 to length(fLine) do
+    for i := 1 to fLinesCount do
     begin
       // Line values are not always increasing -> wkOffsetI
       W.WriteVarUInt32Array(u^.Line, length(u^.Line), wkOffsetI);
@@ -3680,80 +3681,76 @@ begin
   end;
 end;
 
-function TDebugFile.FindSymbol(aAddressOffset: integer): PtrInt;
+function TDebugFile.FindSymbol(aAddressOffset: integer): PDebugSymbol;
 var
-  L, R: PtrInt;
-  s: PDebugSymbol;
+  i, L, R: PtrInt;
 begin
-  R := length(fSymbol) - 1;
+  R := fSymbolsCount - 1;
   L := 0;
   if (R >= 0) and
      (aAddressOffset >= fSymbol[0].Start) and
      (aAddressOffset <= fSymbol[R].Stop) then
     repeat
-      result := (L + R) shr 1;
-      s := @fSymbol[result];
-      if aAddressOffset < s^.Start then
-        R := result - 1
-      else if aAddressOffset > s^.Stop then
-        L := result + 1
+      i := (L + R) shr 1;
+      result := @fSymbol[i];
+      if aAddressOffset < result^.Start then
+        R := i - 1
+      else if aAddressOffset > result^.Stop then
+        L := i + 1
       else
         exit; // found
     until L > R;
-  result := -1;
+  result := nil;
 end;
 
-function TDebugFile.FindLines(aAddressOffset: integer): PtrInt;
+function TDebugFile.FindLines(aAddressOffset: integer): PDebugLines;
 var
-  L, R: PtrInt;
-  s: PDebugSymbol;
+  i, L, R: PtrInt;
 begin
-  R := length(fLine) - 1;
+  R := fLinesCount - 1;
   L := 0;
   if (R >= 0) and
      (aAddressOffset >= fLine[0].Symbol.Start) and
      (aAddressOffset <= fLine[R].Symbol.Stop) then
     repeat // efficient O(log(n)) binary search
-      result := (L + R) shr 1;
-      s := @fLine[result].Symbol;
-      if aAddressOffset < s^.Start then
-        R := result - 1
-      else if aAddressOffset > s^.Stop then
-        L := result + 1
+      i := (L + R) shr 1;
+      result := @fLine[i];
+      if aAddressOffset < result^.Symbol.Start then
+        R := i - 1
+      else if aAddressOffset > result^.Symbol.Stop then
+        L := i + 1
       else
         exit;
     until L > R;
-  result := -1;
+  result := nil;
 end;
 
 function TDebugFile.FindLines(aAddressOffset: integer;
-  out LineNumber: integer): PtrInt;
+  out LineNumber: integer): PDebugLines;
 var
   L, R, n, max: PtrInt;
-  u: PDebugLines;
 begin
   LineNumber := 0;
   result := FindLines(aAddressOffset);
-  if result < 0 then
+  if result = nil then
     exit;
   // unit found -> search line number
-  u := @fLine[result];
-  if u^.Addr = nil then
+  if result^.Addr = nil then
     exit;
-  max := length(u^.Addr) - 1;
+  max := length(result^.Addr) - 1;
   L := 0;
   R := max;
   if R >= 0 then
     repeat // efficient O(log(n)) binary search
       n := (L + R) shr 1;
-      if aAddressOffset < u^.Addr[n] then
+      if aAddressOffset < result^.Addr[n] then
         R := n - 1
       else if (n < max) and
-              (aAddressOffset >= u^.Addr[n + 1]) then
+              (aAddressOffset >= result^.Addr[n + 1]) then
         L := n + 1
       else
       begin
-        LineNumber := u^.Line[n];
+        LineNumber := result^.Line[n];
         exit;
       end;
     until L > R;
@@ -3777,16 +3774,17 @@ begin
             HasDebugInfo and
             (((fLine <> nil) and
               (offset >= fLine[0].Symbol.Start) and
-              (offset <= fLine[length(fLine) - 1].Symbol.Stop)) or
+              (offset <= fLine[fLinesCount - 1].Symbol.Stop)) or
              ((fSymbol <> nil) and
               (offset >= fSymbol[0].Start) and
-              (offset <= fSymbol[length(fSymbol) - 1].Stop)));
+              (offset <= fSymbol[fSymbolsCount - 1].Stop)));
 end;
 
 class function TDebugFile.Log(W: TTextWriter; aAddressAbsolute: PtrUInt;
   AllowNotCodeAddr, SymbolNameNotFilename: boolean): boolean;
 var
-  u, s, Line, offset: integer;
+  line, offset: integer; // not PtrInt
+  s: PDebugSymbol;
   l: PDebugLines;
   debug: TDebugFile;
 
@@ -3814,40 +3812,39 @@ begin
     end;
     offset := debug.AbsoluteToOffset(aAddressAbsolute);
     s := debug.FindSymbol(offset);
-    u := debug.FindLines(offset, Line);
-    if (s < 0) and
-       (u < 0) then
+    l := debug.FindLines(offset, line);
+    if (s = nil) and
+       (l = nil) then
     begin
       AddHex;
       exit;
     end;
     {$ifdef ISDELPHI}
-    if (s >= 0) and
+    if (s <> nil) and
        not AllowNotCodeAddr and
        (FindPropName(['SynRtlUnwind', '@HandleAnyException',  'LogExcept',
          '@HandleOnException', 'ThreadWrapper', 'ThreadProc'],
-         debug.Symbols[s].Name) >= 0) then
+         s^.Name) >= 0) then
       // no stack trace within the Delphi exception interception functions
       exit;
     {$endif ISDELPHI}
     AddHex;
-    if u >= 0 then
+    if l <> nil then
     begin
-      l := @debug.Lines[u];
       if SymbolNameNotFilename and
-         (Line = 0) then
-        W.AddString(l^.Symbol.Name)
+         (line = 0) then
+        W.AddString(l^.Symbol.Name) // unit name for convenience
       else
-        W.AddString(l^.FileName);
+        W.AddString(l^.FileName);   // line number is always against a file
       W.AddDirect(' ');
     end;
-    if s >= 0 then
-      W.AddString(debug.Symbols[s].Name);
+    if s <> nil then
+      W.AddString(s^.Name);
     W.AddDirect(' ');
-    if Line > 0 then
+    if line > 0 then
     begin
       W.AddDirect('(');
-      W.AddU(Line);
+      W.AddU(line);
       W.AddDirect(')', ' ');
     end;
     result := true;
@@ -3866,8 +3863,9 @@ end;
 
 procedure TDebugFile.FindLocationShort(aAddressAbsolute: PtrUInt; var aInfo: ShortString);
 var
-  u, s, line, offset: integer;
-  p: PDebugLines;
+  line, offset: integer;
+  s: PDebugSymbol;
+  l: PDebugLines;
   c: PUtf8Char;
 begin
   aInfo := PointerToHexShort(pointer(aAddressAbsolute));
@@ -3877,31 +3875,30 @@ begin
     exit;
   offset := AbsoluteToOffset(aAddressAbsolute);
   s := FindSymbol(offset);
-  u := FindLines(offset, line);
-  if (s < 0) and
-     (u < 0) then
+  l := FindLines(offset, line);
+  if (s = nil) and
+     (l = nil) then
      exit;
   AppendShortChar(' ', @aInfo);
-  if u >= 0 then
+  if l <> nil then
   begin
-    p := @Lines[u];
-    AppendShortAnsi7String(p^.FileName, aInfo);
-    c := PUtf8Char(pointer(p^.FileName)) + length(p^.Symbol.Name);
-    if not StartWithLower(p^.FileName, p^.Symbol.Name) or
+    AppendShortAnsi7String(l^.FileName, aInfo);
+    c := PUtf8Char(pointer(l^.FileName)) + length(l^.Symbol.Name);
+    if not StartWithLower(l^.FileName, l^.Symbol.Name) or
        (c^ <> '.') or
        (PosChar(c + 1, '.') <> nil) then
     begin
       // e.g. 'a0a40 mormot.core.base.asmx64.inc (mormot.core.base) Rdtsc (3005)'
       AppendShort(' (', aInfo);
-      AppendShortAnsi7String(p^.Symbol.Name, aInfo);
+      AppendShortAnsi7String(l^.Symbol.Name, aInfo);
       AppendShortCharSafe(')', aInfo);
     end;
     AppendShortCharSafe(' ', aInfo);
   end
   else
     aInfo[0] := #0;
-  if s >= 0 then
-    AppendShortAnsi7String(Symbols[s].Name, aInfo);
+  if s <> nil then
+    AppendShortAnsi7String(s^.Name, aInfo);
   if line > 0 then
   begin
     AppendShortTwoChars(ord(' ') + ord('(') shl 8, @aInfo);
