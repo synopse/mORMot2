@@ -1490,9 +1490,13 @@ begin
 end;
 
 function ValidHandle(Handle: THandle): boolean;
-begin
-  result := PtrInt(Handle) >= 0; // 0=StdIn is a valid POSIX file descriptor
-end;
+begin // FPC doc states THandle should be stated opaque
+  {$if SizeOf(THandle) = 8}
+  result := PtrInt(Handle) >= 0;
+  {$else}
+  result := integer(Handle) >= 0; // 32-bit integer even on POSIX 64-bit targets
+  {$ifend}
+end; // 0=StdIn is a valid POSIX file descriptor
 
 function FileHandleToUnixTimeUtc(F: THandle): TUnixTime;
 var
