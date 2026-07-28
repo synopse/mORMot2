@@ -3807,9 +3807,10 @@ function ResourceExists(ResourceName, ResType: PChar; Instance: TLibHandle = 0):
 
 /// retrieve raw information about one section from a memory-mapped ELF/PE file
 // - cross-plaform function able to parse Little-Endian ELF32/ELF64 or PE files
+// - can optionally return the ImageBase value from COFF extended header
 // - is a much faster alternative to exeinfo FindExeSection()
 function FindExeSection(const exe: TMemoryMap; name: PUtf8Char;
-  var offset, size: integer): TExeFormat;
+  var offset, size: integer; imgbase: PQWord = nil): TExeFormat;
 
 type
   /// store CPU and RAM usage for a given process
@@ -8890,7 +8891,7 @@ type
   end;
 
 function FindExeSection(const exe: TMemoryMap; name: PUtf8Char;
-  var offset, size: integer): TExeFormat;
+  var offset, size: integer; imgbase: PQWord): TExeFormat;
 var
   eid: ^TElfIdent;
   eh32: ^TElfHeader32;
@@ -8906,6 +8907,8 @@ var
   n: PtrUInt;
 begin
   result := efUnknown;
+  if imgbase <> nil then
+    imgbase^ := 0; // reset to 0 - and stays 0 on efElf32/efElf64
   eid := pointer(exe.Buffer);
   if (eid = nil) or
      (name = nil) then
@@ -8990,9 +8993,17 @@ begin
     coff := @PByteArray(pe)[SizeOf(pe^)]; // optional header
     case coff^.Magic of
       $010b:
-        ef := efPE32;
+        begin
+          ef := efPE32;
+          if imgbase <> nil then
+            imgbase^ := coff^.ImageBase32;
+        end;
       $020b:
-        ef := efPE32Plus;
+        begin
+          ef := efPE32Plus;
+          if imgbase <> nil then
+            imgbase^ := coff^.ImageBase64;
+        end;
     else
       exit;
     end;
