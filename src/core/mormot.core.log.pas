@@ -3170,19 +3170,18 @@ var
 
   procedure ReadLines;
   var
-    Beg: PAnsiChar;
+    Beg, SymbolBeg, SymbolEnd: PAnsiChar;
     n, capa: PtrInt;
-    aName: RawUtf8;
     U: PDebugUnit;
   begin
-    Beg := pointer(P);
+    SymbolBeg := pointer(P);
     while P^ <> '(' do
       if P = PEnd then
         exit
       else
         inc(P);
-    FastSetString(aName, Beg, P);
-    if aName = '' then
+    SymbolEnd := pointer(P);
+    if SymbolEnd = SymbolBeg then
       exit;
     inc(P);
     Beg := pointer(P);
@@ -3194,8 +3193,8 @@ var
     if not IdemPChar(P, ') SEGMENT .TEXT') then
       exit;
     U := fUnits.NewPtr; // always recreate all units due to nested .inc
-    U^.Symbol.Name := aName;
-    FastSetString(U^.FileName, Beg, P);
+    FastSetString(U^.Symbol.Name, SymbolBeg, SymbolEnd); // unit name
+    FastSetString(U^.FileName, Beg, P); // may be nested .inc
     NextLine;
     NextLine;
     capa := 0;
