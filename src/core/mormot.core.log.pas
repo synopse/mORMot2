@@ -2348,7 +2348,7 @@ begin
   end;
   exeformat := FindExeSection(Map, '.debug_line',
     DebugLineSectionOffset, DebugLineSectionSize, @ImageBase);
-  ConsoleWrite(['ImageBase=',Int64ToHexShort(ImageBase)]);
+  //ConsoleWrite(['ImageBase=',Int64ToHexShort(ImageBase)]);
   if (FindExeSection(Map, '.debug_info',
        DebugInfoSectionOffset, DebugInfoSectionSize) = exeformat) and
      (FindExeSection(Map, '.debug_abbrev',
@@ -8498,8 +8498,8 @@ begin
   LogCompressAlgoArchive := @_LogCompressAlgoArchive;
   //writeln(BacktraceStrFpc(Get_pc_addr));
   //writeln(GetExecutableLocation(get_caller_addr(get_frame)));
-  //writeln(GetInstanceDebugFile.FindLocationShort(PtrUInt(@TDynArray.InitFrom)));
-  //GetInstanceDebugFile.SaveToJson(NowToFileShort+'.json',jsonUnquotedPropName);
+  //writeln(GetInstanceDebugFile.FindLocation(PtrUInt(@TDynArray.InitFrom)));
+  //GetInstanceDebugFile.SaveToJson('debug.json',jsonUnquotedPropName);
 end;
 
 procedure FinalizeUnit;
