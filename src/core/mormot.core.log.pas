@@ -164,7 +164,7 @@ type
     // - returns only the hexadecimal value if no match is found in .map/.gdb info
     // - won't allocate any heap memory during the text creation
     // - mormot.core.os.pas' GetExecutableLocation() redirects to this method
-    function FindLocationShort(aAddressAbsolute: PtrUInt): ShortString;
+    procedure FindLocationShort(aAddressAbsolute: PtrUInt; var aInfo: ShortString);
     /// load .map/.gdb info and return the symbol location according
     // to the supplied ESynException
     // - i.e. unit name, symbol name and line number (if any), as plain text
@@ -3014,7 +3014,7 @@ end;
 
 function BacktraceStrFpc(Addr: CodePointer): ShortString;
 begin
-  result := GetInstanceDebugFile.FindLocationShort(PtrUInt(Addr));
+  GetInstanceDebugFile.FindLocationShort(PtrUInt(Addr), result);
 end;
 
 class function TDebugFile.RegisterBacktraceStrFunc: boolean;
@@ -3836,17 +3836,20 @@ begin
 end;
 
 function TDebugFile.FindLocation(aAddressAbsolute: PtrUInt): RawUtf8;
+var
+  tmp: ShortString;
 begin
-  ShortStringToAnsi7String(FindLocationShort(aAddressAbsolute), result);
+  FindLocationShort(aAddressAbsolute, tmp);
+  ShortStringToAnsi7String(tmp, result);
 end;
 
-function TDebugFile.FindLocationShort(aAddressAbsolute: PtrUInt): ShortString;
+procedure TDebugFile.FindLocationShort(aAddressAbsolute: PtrUInt; var aInfo: ShortString);
 var
   u, s, line, offset: integer;
   p: PDebugLines;
   c: PUtf8Char;
 begin
-  result := PointerToHexShort(pointer(aAddressAbsolute));
+  aInfo := PointerToHexShort(pointer(aAddressAbsolute));
   if (self = nil) or
      (aAddressAbsolute = 0) or
      not HasDebugInfo then
@@ -3857,32 +3860,32 @@ begin
   if (s < 0) and
      (u < 0) then
      exit;
-  AppendShortChar(' ', @result);
+  AppendShortChar(' ', @aInfo);
   if u >= 0 then
   begin
     p := @Lines[u];
-    AppendShortAnsi7String(p^.FileName, result);
+    AppendShortAnsi7String(p^.FileName, aInfo);
     c := PUtf8Char(pointer(p^.FileName)) + length(p^.Symbol.Name);
     if not StartWithLower(p^.FileName, p^.Symbol.Name) or
        (c^ <> '.') or
        (PosChar(c + 1, '.') <> nil) then
     begin
       // e.g. 'a0a40 mormot.core.base.asmx64.inc (mormot.core.base) Rdtsc (3005)'
-      AppendShort(' (', result);
-      AppendShortAnsi7String(p^.Symbol.Name, result);
-      AppendShortCharSafe(')', result);
+      AppendShort(' (', aInfo);
+      AppendShortAnsi7String(p^.Symbol.Name, aInfo);
+      AppendShortCharSafe(')', aInfo);
     end;
-    AppendShortCharSafe(' ', result);
+    AppendShortCharSafe(' ', aInfo);
   end
   else
-    result[0] := #0;
+    aInfo[0] := #0;
   if s >= 0 then
-    AppendShortAnsi7String(Symbols[s].Name, result);
+    AppendShortAnsi7String(Symbols[s].Name, aInfo);
   if line > 0 then
   begin
-    AppendShortTwoChars(ord(' ') + ord('(') shl 8, @result);
-    AppendShortCardinal(line, result);
-    AppendShortCharSafe(')', result);
+    AppendShortTwoChars(ord(' ') + ord('(') shl 8, @aInfo);
+    AppendShortCardinal(line, aInfo);
+    AppendShortCharSafe(')', aInfo);
   end;
 end;
 
@@ -3897,7 +3900,7 @@ end;
 
 function _GetExecutableLocation(aAddress: pointer): ShortString;
 begin
-  result := GetInstanceDebugFile.FindLocationShort(PtrUInt(aAddress));
+  GetInstanceDebugFile.FindLocationShort(PtrUInt(aAddress), result);
 end;
 
 function TDebugFile.FindLinesByName(const aUnitName: RawUtf8): PtrInt;
@@ -3965,10 +3968,11 @@ begin
 end;
 
 function ToText(const Event: TMethod): RawUtf8;
+var
+  tmp: ShortString;
 begin
-  FormatUtf8('% using %(%)', [
-    GetInstanceDebugFile.FindLocationShort(PtrUInt(Event.Code)),
-    TObject(Event.Data), Event.Data], result);
+  GetInstanceDebugFile.FindLocationShort(PtrUInt(Event.Code), tmp);
+  FormatUtf8('% using %(%)', [tmp, TObject(Event.Data), Event.Data], result);
 end;
 
 function ToText(apl: TAppLogLevel): RawUtf8;
@@ -6787,18 +6791,21 @@ end;
 function ToText(var info: TSynLogExceptionInfo): RawUtf8;
 var
   i: PtrInt;
+  tmp: ShortString;
 begin
   with info.Context do
     if ELevel <> sllNone then
     begin
-      FormatUtf8('% % at %: % [%]', [_LogInfoText[ELevel], EClass,
-        GetInstanceDebugFile.FindLocationShort(EAddr),
+      GetInstanceDebugFile.FindLocationShort(EAddr, tmp);
+      FormatUtf8('% % at %: % [%]', [_LogInfoText[ELevel], EClass, tmp,
         UnixTimeToString(ETimestamp, {expanded=}true, ' '),
         StringToUtf8(info.Message)], result);
       if EStack <> nil then
         for i := 0 to EStackCount - 1 do
-          result := FormatUtf8('%, %',
-            [result, ExeInstanceDebugFile.FindLocationShort(EStack[i])]);
+        begin
+          ExeInstanceDebugFile.FindLocationShort(EStack[i], tmp);
+          Append(result, [', ', tmp]);
+        end;
     end
     else
       FastAssignNew(result);
