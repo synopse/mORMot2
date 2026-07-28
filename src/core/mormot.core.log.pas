@@ -2236,8 +2236,6 @@ type
     address: cardinal;
     line: cardinal;
     fileid: cardinal;
-    column: cardinal;
-    isa: cardinal;
     procedure Init(aIs_Stmt: ByteBool);
   end;
 
@@ -2274,8 +2272,6 @@ begin
   address := 0;
   line := 1;
   fileid := 1;
-  column := 0;
-  isa := 0;
 end;
 
 {.$define DWARFDEBUG} // for internal raw debugging
@@ -2353,7 +2349,9 @@ begin
      (FindExeSection(Map, '.debug_abbrev',
        DebugAbbrevSectionOffset, DebugAbbrevSectionSize) <> efUnknown) then
     result := true;
-  if not result then
+  if result then
+    SetLength(files, 64)
+  else
     Map.UnMap;
 end;
 {$endif FPCDARWIN}
@@ -2368,7 +2366,7 @@ end;
 function TDwarfReader.SkipString: PtrInt;
 begin
   result := 0; // return length
-  while read.NextByte <> 0 do
+  while read.NextByte <> 0 do // almost never called
     inc(result);
 end;
 
@@ -2377,7 +2375,7 @@ var
   shift: byte;
   data: PtrInt;
   val: Int64;
-begin
+begin // LEB-128 encoding does not match our FromVarInt64 sign extension
   data := read.NextByte;
   if data <= 127 then
     // optimize the most common case of -64..+63 range
@@ -2392,7 +2390,7 @@ begin
       break;
     data := read.NextByte;
   until false;
-  // extend sign from current shifted bits - do not match FromVarInt64 encoding
+  // extend sign from current shifted bits
   result := (not ((result and (Int64(1) shl (shift - 1))) - 1)) or result;
 end;
 
@@ -2520,26 +2518,32 @@ begin
   case form of
     DW_FORM_addr:
       read.Next(header64.address_size);
-    DW_FORM_block2:
-      read.Next(read.Next2);
-    DW_FORM_block4:
-      read.Next(read.Next4);
-    DW_FORM_data2:
-      read.Next2;
-    DW_FORM_data4:
-      read.Next4;
-    DW_FORM_data8:
-      read.Next8;
-    DW_FORM_string:
-      SkipString;
     DW_FORM_block,
     DW_FORM_exprloc:
       read.Next(read.VarUInt64);
     DW_FORM_block1:
       read.Next(read.NextByte);
+    DW_FORM_block2:
+      read.Next(read.Next2);
+    DW_FORM_block4:
+      read.Next(read.Next4);
+    DW_FORM_ref1,
     DW_FORM_data1,
     DW_FORM_flag:
       read.NextByte;
+    DW_FORM_ref2,
+    DW_FORM_data2:
+      read.Next2;
+    DW_FORM_ref4,
+    DW_FORM_data4:
+      read.Next4;
+    DW_FORM_ref8,
+    DW_FORM_data8:
+      read.Next8;
+    DW_FORM_string:
+      SkipString;
+    DW_FORM_ref_udata,
+    DW_FORM_udata,
     DW_FORM_sdata:
       read.VarNextInt;
     DW_FORM_ref_addr:
@@ -2558,18 +2562,6 @@ begin
         read.Next8
       else
         read.Next4;
-    DW_FORM_udata:
-      read.VarUInt64;
-    DW_FORM_ref1:
-      read.NextByte;
-    DW_FORM_ref2:
-      read.Next2;
-    DW_FORM_ref4:
-      read.Next4;
-    DW_FORM_ref8:
-      read.Next8;
-    DW_FORM_ref_udata:
-      read.VarUInt64;
     DW_FORM_indirect:
       SkipAttr(read.VarUInt64, header64);
     DW_FORM_flag_present:
@@ -2607,7 +2599,7 @@ var
   prevaddr, prevfile, prevline: cardinal;
   unitlen: QWord;
   opcodeextlen, headerlen, ndx: PtrInt;
-  dirsn, filedirsn, filesn, linesn: integer;
+  dirsn, filesn, linesn: integer;
   state: TDwarfMachineState;
   c: ansichar;
   unsorted: boolean;
@@ -2670,13 +2662,14 @@ begin
     AddRawUtf8(dirs, dirsn, ShortStringToUtf8(s));
   until false;
   filesn := 0;
-  filedirsn := 0;
   repeat
     read.NextAsciiz(s);
     if s[0] = #0 then
       break;
-    AddRawUtf8(files, filesn, ShortStringToUtf8(s));
-    AddInteger(filesdir, filedirsn, read.VarUInt32);
+    if filesn = length(files) then
+      SetLength(files, NextGrow(filesn));
+    ShortStringToAnsi7String(s, files[filesn]);
+    AddInteger(filesdir, filesn, read.VarUInt32);
     read.VarNextInt(2); // we ignore the attributes
   until false;
   // main decoding loop
@@ -2728,8 +2721,6 @@ begin
         state.line := Int64(state.line) + ReadLeb128;
       DW_LNS_SET_FILE:
         state.fileid := read.VarUInt64;
-      DW_LNS_SET_COLUMN:
-        state.column := read.VarUInt64;
       DW_LNS_NEGATE_STMT:
         if isstmt in state.flags then
           exclude(state.flags, isstmt)
@@ -2745,8 +2736,9 @@ begin
         include(state.flags, prologueend);
       DW_LNS_SET_EPILOGUE_BEGIN:
         include(state.flags, epiloguebegin);
+      DW_LNS_SET_COLUMN,
       DW_LNS_SET_ISA:
-        state.isa := read.VarUInt64;
+        read.VarNextInt;
     else
       if opcode < header64.opcode_base then
         // skip unsupported standard opcode
@@ -2772,10 +2764,9 @@ begin
     if appendrow in state.flags then
     begin
       exclude(state.flags, appendrow);
-      if (isstmt in state.flags) and
-         (state.line <> prevline) and
+      if (state.flags * [isstmt, invalidaddress] = [isstmt]) and
          (state.line > 1) and
-         not (invalidaddress in state.flags) then
+         (state.line <> prevline) then
       begin
         prevline := state.line;
         if prevfile <> state.fileid then
