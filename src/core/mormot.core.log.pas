@@ -3843,6 +3843,8 @@ end;
 function TDebugFile.FindLocationShort(aAddressAbsolute: PtrUInt): ShortString;
 var
   u, s, line, offset: integer;
+  p: PDebugLines;
+  c: PUtf8Char;
 begin
   result := PointerToHexShort(pointer(aAddressAbsolute));
   if (self = nil) or
@@ -3858,7 +3860,18 @@ begin
   AppendShortChar(' ', @result);
   if u >= 0 then
   begin
-    AppendShortAnsi7String(Lines[u].FileName, result);
+    p := @Lines[u];
+    AppendShortAnsi7String(p^.FileName, result);
+    c := PUtf8Char(pointer(p^.FileName)) + length(p^.Symbol.Name);
+    if not StartWithLower(p^.FileName, p^.Symbol.Name) or
+       (c^ <> '.') or
+       (PosChar(c + 1, '.') <> nil) then
+    begin
+      // e.g. 'a0a40 mormot.core.base.asmx64.inc (mormot.core.base) Rdtsc (3005)'
+      AppendShort(' (', result);
+      AppendShortAnsi7String(p^.Symbol.Name, result);
+      AppendShortCharSafe(')', result);
+    end;
     AppendShortCharSafe(' ', result);
   end
   else
