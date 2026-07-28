@@ -2221,12 +2221,12 @@ type
   end;
 
   TDwarfDebugAbbrev = record
-    Tag: QWord;
-    Attrs: array of record
-      attr, form: cardinal;
-    end;
-    AttrsCount: integer;
+    Tag: HalfUInt;
+    AttrsCount: byte;
     Child: byte;
+    Attrs: array of record
+      attr, form: byte;
+    end;
   end;
 
   TDwarfMachineState = record
@@ -2248,13 +2248,14 @@ type
   TDwarfReader = record
   public
     read: TFastReader;
-    DebugLineSectionOffset, DebugLineSectionSize, // debug_line section
-    DebugInfoSectionOffset, DebugInfoSectionSize, // debug_info section
+    DebugLineSectionOffset, DebugLineSectionSize,              // debug_line
+    DebugInfoSectionOffset, DebugInfoSectionSize,              // debug_info
     DebugAbbrevSectionOffset, DebugAbbrevSectionSize: integer; // debug_abbrev
     Abbrev: array of TDwarfDebugAbbrev; // debug_abbrev content
     Lines: TInt64DynArray;              // store TDebugLines.Addr[]/Line[]
     dirs, files: TRawUtf8DynArray;
     filesdir: TIntegerDynArray;
+    AttrsMax: cardinal;
     isdwarf64, includesdir: boolean;
     debug: TDebugFile;
     Map: TMemoryMap;
@@ -2263,7 +2264,7 @@ type
     function ReadLeb128: Int64;
     function ReadAddress(addr_size: PtrInt): QWord; inline;
     function SkipString: PtrInt;
-    procedure SkipAttr(form: QWord; const header64: TDwarfDebugInfoHeader64);
+    procedure SkipAttr(form: PtrUInt; const header64: TDwarfDebugInfoHeader64);
     procedure ReadAbbrevTable(file_offset, file_size: QWord);
     function ParseCompilationUnit(file_offset, file_size: QWord): QWord;
     function ParseCompilationFunctions(file_offset, file_size: QWord): QWord;
@@ -2410,34 +2411,46 @@ end;
 
 procedure TDwarfReader.ReadAbbrevTable(file_offset, file_size: QWord);
 var
-  nr, attr, form: PtrInt;
+  nr, t, a, f, n: PtrUInt;
+  p: ^TDwarfDebugAbbrev;
   prev: TFastReader;
 begin
   prev := read;
   ReadInit(file_offset, file_size);
+  AttrsMax := 0;
   repeat
     nr := read.VarUInt64;
     if nr = 0 then
       break;
-    if nr > high(Abbrev) then
+    AttrsMax := MaxPtrUInt(AttrsMax, nr);
+    if nr >= PtrUInt(length(Abbrev)) then
       SetLength(Abbrev, nr + 256);
-    with Abbrev[nr] do
-    begin
-      Tag := read.VarUInt64;
-      Child := read.NextByte;
-      AttrsCount := 0;
-      repeat
-        attr := read.VarUInt32;
-        form := read.VarUInt32;
-        if attr = 0 then
-          break;
-        if AttrsCount >= length(Attrs) then
-          SetLength(Attrs, AttrsCount + 32);
-        Attrs[AttrsCount].attr := attr;
-        Attrs[AttrsCount].form := form;
-        inc(AttrsCount);
-      until false;
-    end;
+    p := @Abbrev[nr];
+    if p^.Attrs = nil then
+      SetLength(p^.Attrs, 250);
+    t := read.VarUInt32;
+    if t > high(p^.Tag) then
+      read.ErrorData('DWARF: tag=% overflow', [t]);
+    p^.Tag := t;
+    p^.Child := read.NextByte;
+    n := 0;
+    repeat
+      a := read.VarUInt32;
+      f := read.VarUInt32;
+      if a = 0 then
+        break;
+      if (a > 255) or
+         (f > 255) or
+         (n > 250) then
+        read.ErrorData('DWARF: a=% f=% n=% overflow', [a, f, n]);
+      with p^.Attrs[n] do
+      begin
+        attr := a;
+        form := f;
+      end;
+      inc(n);
+    until false;
+    p^.AttrsCount := n;
   until false;
   read := prev;
 end;
@@ -2504,8 +2517,7 @@ const
   DW_FORM_exprloc      = $18;
   DW_FORM_flag_present = $19;
 
-procedure TDwarfReader.SkipAttr(form: QWord;
-  const header64: TDwarfDebugInfoHeader64);
+procedure TDwarfReader.SkipAttr(form: PtrUInt; const header64: TDwarfDebugInfoHeader64);
 begin
   case form of
     DW_FORM_addr:
