@@ -3041,15 +3041,23 @@ end;
 {  Delphi can export detailed .map info from the project options.
 
    Our TDebugFile is able to export the function names and line numbers into
-   an optimized .mab binary, e.g. for our regression tests:
+   an optimized .mab binary, e.g. for our regression tests with Delphi 13.1:
 
-   31/01/2021  16:10    5 380 096 mormot2tests.exe
-   31/01/2021  16:10      286 931 mormot2tests.mab
-   31/01/2021  16:10    4 339 623 mormot2tests.map
+   07/28/2026  06:02 PM        12,912,640 mormot2tests.exe
+   07/28/2026  06:02 PM        18,159,799 mormot2tests.map
+   07/28/2026  06:02 PM           518,119 mormot2tests.mab
 
-   For a 5MB executable, .map text was 4MB but our .mab is only 280KB...
+   For a 5MB executable, Delphi .map text was 4MB but our .mab is only 280KB...
    Then this .mab file can be distributed along the executable, or just
-   appended to it after build. }
+   appended to it after build.
+
+   The benefit seems even more obvious with FPC Win32 and GDB information:
+
+   07/28/2026  05:56 PM         8,024,595 mormot2tests.exe
+   07/28/2026  05:56 PM        33,427,255 mormot2tests.dbg
+   07/28/2026  05:56 PM           452,689 mormot2tests.mab
+
+}
 
 
 function MatchPattern(P, PEnd, Up: PUtf8Char; var Dest: PUtf8Char): boolean;
@@ -3440,11 +3448,11 @@ begin
     // guess the debug information source for the current process
     {$ifdef OSWINDOWS}
     ExeFile := GetModuleName(hInstance);
+    fCodeOffset := GetModuleHandle(pointer(ExtractFileName(ExeFile)));
     {$ifdef FPC}
     fDebugFile := ExeFile;
     {$else}
-    fCodeOffset := GetModuleHandle(pointer(ExtractFileName(ExeFile))) +
-      $1000; // fixed .map offset on Delphi Windows
+    inc(fCodeOffset, $1000); // Delphi include BaseOfCode as .map offset
     fDebugFile := ChangeFileExt(ExeFile, '.map');
     {$endif FPC}
     {$else}
