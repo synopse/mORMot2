@@ -798,7 +798,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// read the next #0 terminated text into a ShortString
     procedure NextAsciiz(var s: ShortString);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif} // Delphi can't inline var ShortString :(
     /// copy data from the current position, and move ahead the specified bytes
     procedure Copy(Dest: pointer; DataLen: PtrInt);
       {$ifdef HASINLINE}inline;{$endif}
