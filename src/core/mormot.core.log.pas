@@ -91,6 +91,7 @@ type
     fSymbolsCount, fUnitsCount: integer;
     fCodeOffset: PtrUInt;
     fHasDebugInfo: boolean;
+    fLoadingMicroSec: Int64;
     // called by Create() constructor
     procedure GenerateFromMapOrDbg;
     function LoadMab(const aMabFile: TFileName): boolean;
@@ -187,6 +188,9 @@ type
     /// equals true if a .map/.dbg or .mab debugging information has been loaded
     property HasDebugInfo: boolean
       read fHasDebugInfo;
+    /// how many microseconds did it need to parse the FileName
+    property LoadingMicroSec: Int64
+      read fLoadingMicroSec;
   end;
 
 {$ifndef PUREMORMOT2}
@@ -3345,7 +3349,9 @@ var
   i: PtrInt;
   ExeFile, MabFile: TFileName;
   MapAge, MabAge: TUnixTime;
+  start: Int64;
 begin
+  QueryPerformanceMicroSeconds(start);
   inherited Create; // may have been overriden
   fSymbols.InitSpecific(TypeInfo(TDebugSymbolDynArray), fSymbol, ptRawUtf8,
     @fSymbolsCount, true);
@@ -3440,6 +3446,8 @@ begin
   finally
     SynLogGlobalLock.UnLock;
   end;
+  QueryPerformanceMicroSeconds(fLoadingMicroSec);
+  dec(fLoadingMicroSec, start);
 end;
 
 procedure WriteSymbol(var W: TBufferWriter; const A: TDynArray);
