@@ -38,6 +38,25 @@ uses
 
 { ************** Debug Symbols Processing from Delphi .map or FPC/GDB DWARF }
 
+{
+   Our TDebugFile is able to export the function names and line numbers into
+   an optimized .mab binary, e.g. for our regression tests with Delphi 13.1:
+
+   07/28/2026  06:02 PM        12,912,640 mormot2tests.exe
+   07/28/2026  06:02 PM        18,159,799 mormot2tests.map
+   07/28/2026  06:02 PM           518,119 mormot2tests.mab
+
+   For a 13MB executable, Delphi .map text was 18MB but our .mab is only 500KB...
+   Then this .mab file can be distributed along the executable, or just
+   appended to it after build. See also /src/tools/mab/mab.dpr
+
+   The benefit seems even more obvious with FPC Win32 and GDB information:
+
+   07/28/2026  05:56 PM         8,024,595 mormot2tests.exe
+   07/28/2026  05:56 PM        33,427,255 mormot2tests.dbg
+   07/28/2026  05:56 PM           452,689 mormot2tests.mab
+}
+
 type
   /// a debugger symbol, as decoded by TDebugFile from a .map/.dbg file
   TDebugSymbol = packed record
@@ -80,7 +99,6 @@ type
   /// process a .map/.dbg file content, to be used e.g. with TSynLog to provide
   // additional debugging information for a given executable
   // - debug info can be saved as .mab file in a much more optimized format
-  // (e.g. mormot2tests 4MB .map into a 280KB .mab, 13MB .dbg into a 290KB .mab)
   // - on FPC, DWARF symbols embedded to the executable can also be retrieved - but
   // you would better use an external .dbg file then convert it into a .mab
   // - on FPC, you don't need to specifly the -gl compiler switch
@@ -99,23 +117,15 @@ type
     procedure GenerateFromMapOrDbg;
     function LoadMab(const aMabFile: TFileName): boolean;
     { those functions are not public any more to avoid end-user misuse }
-    /// compute the relative memory address from its absolute (pointer) value
-    // - return the virtual address corresponding to the executable ImageBase,
+    // return the virtual address corresponding to the executable ImageBase,
     // which will be a 32-bit offset even on 64-bit systems
-    // - internal function used by high-level IsCode/FindLocation methods
     function AbsoluteToOffset(aAddressAbsolute: PtrUInt): integer;
       {$ifdef HASINLINE}inline;{$endif}
-    /// retrieve a symbol according to a relative code address
-    // - use fast O(log n) binary search
+    // use fast O(log n) binary search to locate a symbol or line number
     function FindSymbol(aAddressOffset: integer): PDebugSymbol;
-    /// retrieve Lines[] index and source line, according to a relative code address
-    // - use fast O(log n) binary search and return a PDebugLines or nil
     function FindLines(aAddressOffset: integer; out LineNumber: integer): PDebugLines; overload;
-    /// retrieve Lines[] index, according to a relative code address
-    // - use fast O(log n) binary search and return a PDebugLines or nil
     function FindLines(aAddressOffset: integer): PDebugLines; overload;
-    /// retrieve Lines[] index, according to the unit identifier
-    // - will search within Lines array and return the first matching Symbol.Name
+    // search within Lines[] array and return the first matching Symbol.Name
     function FindLinesByName(const aUnitName: RawUtf8): PDebugLines;
   public
     /// get the available debugging information
@@ -2172,18 +2182,6 @@ end;
 {$ifdef FPC}
 
 {  FPC can export DWARF/GDB info on POSIX and Windows from the project options.
-
-   Our TDebugFile is able to export the function names and line numbers into
-   an optimized .mab binary, e.g. for our regression tests:
-
-  -rwxrwxr-x 1 ab ab  6 541 672 Jan 31 16:10 mormot2tests*
-  -rwxrwxr-x 1 ab ab 13 352 584 Jan 31 16:10 mormot2tests.dbg*
-  -rw-rw-r-- 1 ab ab    291 057 Jan 31 16:10 mormot2tests.mab
-
-   For a 6MB executable, raw DWARF/GDB was 13MB but our .mab is only 290KB...
-   Then this .mab file can be distributed along the executable, or just
-   appended to it after build.
-
    Code below was inspired - but highly rewritten - from RTL's linfodwrf.pp }
 
 type
@@ -2266,7 +2264,7 @@ type
     function LoadSections: boolean;
     procedure ReadInit(aBase, aLimit: Int64);
     function ReadLeb128: Int64;
-    function ReadAddress(addr_size: PtrInt; ctx: PUtf8Char): cardinal; inline;
+    function ReadAddress(addr_size: PtrInt; ctx: PUtf8Char): cardinal;
     procedure SkipAttr(form: PtrUInt; const header64: TDwarfDebugInfoHeader64);
     procedure ReadAbbrevTable(file_offset, file_size: QWord);
     function ParseCompilationUnit(file_offset, file_size: QWord): QWord;
@@ -2401,7 +2399,7 @@ function TDwarfReader.ReadAddress(addr_size: PtrInt; ctx: PUtf8Char): cardinal;
 var
   tmp: QWord; // temporary 64-bit variable on stack
 begin
-  if addr_size > SizeOf(tmp) then
+  if addr_size > SizeOf(tmp) then // typically 4 or 8
     read.ErrorData('DWARF: ReadAddress % len=%', [ctx, addr_size]);
   tmp := 0;
   read.Copy(@tmp, addr_size);
@@ -2409,7 +2407,8 @@ begin
   begin
     dec(tmp, ImageBase);  // e.g. 0100000000 Win64, 00400000 Win32, 0 ELF
     if tmp > MaxInt then
-      read.ErrorData('DWARF: ReadAddress=% overflow %',[Int64ToHexShort(tmp), addr_size]);
+      read.ErrorData('DWARF: ReadAddress %=% overflow %',
+        [ctx, Int64ToHexShort(tmp), addr_size]);
     result := tmp; // it is fine to truncate to 32-bit
   end
   else
@@ -3042,28 +3041,7 @@ end;
 
 {$else}
 
-
-{  Delphi can export detailed .map info from the project options.
-
-   Our TDebugFile is able to export the function names and line numbers into
-   an optimized .mab binary, e.g. for our regression tests with Delphi 13.1:
-
-   07/28/2026  06:02 PM        12,912,640 mormot2tests.exe
-   07/28/2026  06:02 PM        18,159,799 mormot2tests.map
-   07/28/2026  06:02 PM           518,119 mormot2tests.mab
-
-   For a 5MB executable, Delphi .map text was 4MB but our .mab is only 280KB...
-   Then this .mab file can be distributed along the executable, or just
-   appended to it after build.
-
-   The benefit seems even more obvious with FPC Win32 and GDB information:
-
-   07/28/2026  05:56 PM         8,024,595 mormot2tests.exe
-   07/28/2026  05:56 PM        33,427,255 mormot2tests.dbg
-   07/28/2026  05:56 PM           452,689 mormot2tests.mab
-
-}
-
+{ Delphi can export detailed .map info as text from the project options }
 
 function MatchPattern(P, PEnd, Up: PUtf8Char; var Dest: PUtf8Char): boolean;
 begin
