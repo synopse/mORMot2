@@ -3787,6 +3787,7 @@ class function TDebugFile.Log(W: TTextWriter; aAddressAbsolute: PtrUInt;
   AllowNotCodeAddr, SymbolNameNotFilename: boolean): boolean;
 var
   u, s, Line, offset: integer;
+  l: PDebugLines;
   debug: TDebugFile;
 
   procedure AddHex;
@@ -3832,11 +3833,12 @@ begin
     AddHex;
     if u >= 0 then
     begin
-      with debug.Lines[u] do
-        if SymbolNameNotFilename then
-          W.AddString(Symbol.Name)
-        else
-          W.AddString(FileName);
+      l := @debug.Lines[u];
+      if SymbolNameNotFilename and
+         (Line = 0) then
+        W.AddString(l^.Symbol.Name)
+      else
+        W.AddString(l^.FileName);
       W.AddDirect(' ');
     end;
     if s >= 0 then
