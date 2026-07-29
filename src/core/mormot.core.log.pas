@@ -3484,8 +3484,8 @@ begin
         MabAge := FileAgeToUnixTimeUtc(MabFile);
       end;
     end;
-    if (MabAge <> 0) and
-       (abs(DbgAge - MabAge) < SecsPerMin) then
+    if (MabAge <> 0) and // SaveToFile() set FileSetDateFrom(fExeFile);
+       (abs(DbgAge - MabAge) < 2) then
       LoadMab(MabFile);
     if fLinesCount + fSymbolsCount = 0 then
     try
@@ -3672,6 +3672,8 @@ begin
   finally
     F.Free;
   end;
+  if fExeFile <> '' then
+    FileSetDateFrom(aFileName, fExeFile);
 end;
 
 procedure TDebugFile.SaveToExe(const aExeName: TFileName; Scope: TDebugFileScope);
