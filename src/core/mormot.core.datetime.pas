@@ -53,7 +53,7 @@ procedure KBU(bytes: Int64; var result: RawUtf8);
 
 /// convert a count to a human readable value power-of-two metric value
 // - append E, P, T, G, M, K symbol, with one fractional digit
-procedure K(value: Int64; out result: TShort16); overload;
+procedure K(value: Int64; var result: ShortString); overload;
 
 /// convert a count to a human readable value power-of-two metric value
 // - append E, P, T, G, M, K symbol, with one fractional digit
@@ -88,7 +88,7 @@ function MicroSecFrom(Start: QWord): TShort15;
 /// convert a micro seconds elapsed time into a human readable value
 // - append 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value range,
 // with two fractional digits
-procedure MicroSecToString(Micro: QWord; out result: TShort16); overload;
+procedure MicroSecToString(Micro: QWord; var result: ShortString); overload;
 
 /// convert a micro seconds elapsed time into a human readable value
 // - append 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value range,
@@ -98,7 +98,7 @@ function MicroSecToText(Micro: QWord): RawUtf8;
 /// convert a nano seconds elapsed time into a human readable value
 // - append 'ns', 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value
 // range, with two fractional digits
-procedure NanoSecToString(Nano: QWord; out result: TShort16);
+procedure NanoSecToString(Nano: QWord; var result: ShortString);
 
 /// convert "valueunit" values into x or x.xx text with up to 2 digits
 // - supplied value should be the actual unit value * 100
@@ -644,7 +644,7 @@ type
     /// convert the stored date and time into a timestamped local file name
     // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits,
     // expecting a date > 1999 (a current date would be fine)
-    procedure ToFileShort(out result: TShort16);
+    procedure ToFileShort(var result: ShortString);
     /// convert the stored date and time into e.g. '19 Mar 2025, 13:56:52'
     procedure ToHuman(var Text: RawUtf8);
     /// fill the DayOfWeek field from the stored Year/Month/Day
@@ -788,7 +788,7 @@ function DateTimeToFileShort(const DateTime: TDateTime): TShort15;
 /// convert some TDateTime to a small text layout, perfect e.g. for naming a local file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
 // a date > 1999 (a current date would be fine)
-procedure DateTimeToFileShortVar(const DateTime: TDateTime; out result: TShort16);
+procedure DateTimeToFileShortVar(const DateTime: TDateTime; var result: ShortString);
 
 /// get the current time a small text layout, perfect e.g. for naming a file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits
@@ -867,7 +867,7 @@ function UnixTimeToString(const UnixTime: TUnixTime; Expanded: boolean = true;
 // a small text layout, perfect e.g. for naming a local file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
 // a date > 1999 (a current date would be fine)
-procedure UnixTimeToFileShort(const UnixTime: TUnixTime; out result: TShort16); overload;
+procedure UnixTimeToFileShort(const UnixTime: TUnixTime; var result: ShortString); overload;
 
 /// convert some second-based c-encoded time (from Unix epoch 1/1/1970) to
 // a small text layout, perfect e.g. for naming a local file
@@ -1297,11 +1297,12 @@ begin
   FastSetString(result, @tmp[1], ord(tmp[0]));
 end;
 
-procedure K(value: Int64; out result: TShort16);
+procedure K(value: Int64; var result: ShortString);
 begin
   result[0] := #0;
   AppendKb(value, result, {withspace=}false);
-  if result[0] <> #0 then
+  if (result[0] <> #0) and
+     (result[ord(result[0])] = 'B') then
     dec(result[0]); // just trim last 'B' ;)
 end;
 
@@ -1386,7 +1387,7 @@ begin
   AppendShortTwoCharsSafe(TwoDigitLookupW[value - (d * 60)], result);
 end;
 
-procedure MicroSecToString(Micro: QWord; out result: TShort16);
+procedure MicroSecToString(Micro: QWord; var result: ShortString);
 begin
   result[0] := #0;
   if Int64(Micro) <= 0 then // warning: QWord=Int64 on pre-Unicode Delphi
@@ -1422,7 +1423,7 @@ begin
   FastSetString(result, @tmp[1], ord(tmp[0]));
 end;
 
-procedure NanoSecToString(Nano: QWord; out result: TShort16);
+procedure NanoSecToString(Nano: QWord; var result: ShortString);
 begin
   result[0] := #0;
   if Int64(Nano) <= 0 then // warning: QWord=Int64 on pre-Unicode Delphi
@@ -3055,7 +3056,7 @@ begin
   date := PSynDate(@self)^; // first 4 fields do match
 end;
 
-procedure TSynSystemTime.ToFileShort(out result: TShort16);
+procedure TSynSystemTime.ToFileShort(var result: ShortString);
 var
   {$ifdef CPUX86NOTPIC}
   tab: TWordArray absolute TwoDigitLookupW;
@@ -3063,7 +3064,8 @@ var
   tab: PWordArray;
   {$endif CPUX86NOTPIC}
 begin
-  if IsZero then
+  if IsZero or
+     (high(result) < 12) then
   begin
     PWord(@result[0])^ := 1 + ord('0') shl 8;
     exit;
@@ -3378,7 +3380,7 @@ begin
   DateTimeToFileShortVar(DateTime, result);
 end;
 
-procedure DateTimeToFileShortVar(const DateTime: TDateTime; out result: TShort16);
+procedure DateTimeToFileShortVar(const DateTime: TDateTime; var result: ShortString);
 var
   T: TSynSystemTime;
 begin
@@ -3499,7 +3501,7 @@ begin
     Expanded, false, FirstTimeChar, #0, result);
 end;
 
-procedure UnixTimeToFileShort(const UnixTime: TUnixTime; out result: TShort16);
+procedure UnixTimeToFileShort(const UnixTime: TUnixTime; var result: ShortString);
 begin
   // use 'YYMMDDHHMMSS' format
   if UnixTime <= 0 then
