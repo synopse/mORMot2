@@ -1715,7 +1715,8 @@ var
   // - if mormot.core.log.pas is defined in the project, will redirect to
   // TDebugFile.FindLocationShort() method using .map/.dbg/.mab information, and
   // return filename, symbol name and line number (if any) as plain text, e.g.
-  // '4cb765 ../src/core/mormot.core.base.pas statuscodeissuccess (11183)' on FPC
+  // $ 57f480 mormot.core.log.pas TSynLog.LogEscape (5782)
+  // $ 4a0a40 mormot.core.base.asmx64.inc (mormot.core.base) Rdtsc (3005)
   GetExecutableLocation: function(aAddress: pointer): ShortString;
 
   /// retrieve the MAC addresses of all hardware network adapters
@@ -7353,7 +7354,7 @@ end;
 
 procedure Unicode_CodePageName(CodePage: cardinal; var Name: ShortString);
 begin // cut-down and fixed version of FPC rtl/objpas/sysutils/syscodepages.inc
-  case codepage of
+  case CodePage of
     932:
       Name  := 'SHIFT_JIS';
     936:
@@ -7377,7 +7378,7 @@ begin // cut-down and fixed version of FPC rtl/objpas/sysutils/syscodepages.inc
     28591 .. 28606:
       begin
         Name := 'ISO-8859-';
-        AppendShortByte(codepage - 28590, @Name); // append '0'..'16'
+        AppendShortByte(CodePage - 28590, @Name); // append '0'..'16'
       end;
     50220, 50222:
       Name := 'ISO-2022-JP';
@@ -7399,8 +7400,10 @@ begin // cut-down and fixed version of FPC rtl/objpas/sysutils/syscodepages.inc
       Name := 'UTF8';
   else
     begin  // 'WINDOWS-####' is enough for most code pages
-      Name := 'WINDOWS-';
-      AppendShortCardinal(codepage, Name);
+      Name[0] := #0;
+      if (CodePage shr 16) = 0 then
+        Name := 'WINDOWS-';
+      AppendShortCardinal(CodePage, Name);
     end; // ICU expects 'CP####' for IBM codepages which are not Windows'
   end;
   Name[ord(Name[0]) + 1] := #0; // ensure is ASCIIZ - e.g. for ucnv_open()
