@@ -9938,28 +9938,28 @@ begin
   {$endif OSLINUXANDROID}
   with Executable do            // retrieve Executable + Host/User info
   begin
+    ProgramFileName := ParamStr(0); // RTL always returns the main executable
+    ProgramFilePath := ExtractFilePath(ProgramFileName);
+    ProgramName := GetFileNameWithoutExtOrPath(ProgramFileName);
     dt := 0;
     {$ifdef OSWINDOWS}
-    ProgramFileName := ParamStr(0); // RTL seems just fine here
-    {$else}
-    dladdr(@InitializeProcessInfo, @PosixProgramInfo);
-    crcblock(@SystemEntropy.Startup, @PosixProgramInfo); // won't hurt
-    GetDlInfoName(PosixProgramInfo, ProgramFileName);
-    if ProgramFileName <> '' then
-    begin
-      dt := FileAgeToDateTime(ProgramFileName);
-      if dt = 0 then
-        ProgramFileName := '';
-    end;
-    if ProgramFileName = '' then
-      ProgramFileName := ExpandFileName(ParamStr(0));
-    {$endif OSWINDOWS}
-    ProgramFilePath := ExtractFilePath(ProgramFileName);
     if IsLibrary then
       InstanceFileName := GetModuleName(HInstance)
     else
       InstanceFileName := ProgramFileName;
-    ProgramName := GetFileNameWithoutExtOrPath(ProgramFileName);
+    {$else}
+    dladdr(@InitializeProcessInfo, @PosixProgramInfo); // function in this .so
+    crcblock(@SystemEntropy.Startup, @PosixProgramInfo); // won't hurt
+    GetDlInfoName(PosixProgramInfo, InstanceFileName);
+    if InstanceFileName <> '' then
+    begin
+      dt := FileAgeToDateTime(InstanceFileName); // TFileVersion needs it anyway
+      if dt = 0 then
+        InstanceFileName := '';
+    end;
+    if InstanceFileName = '' then
+      InstanceFileName := ProgramFileName; // fallback (unlikely)
+    {$endif OSWINDOWS}
     GetUserHost(User, Host);
     if Host = '' then
       Host := 'unknown';
