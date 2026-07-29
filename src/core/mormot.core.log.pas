@@ -2256,9 +2256,7 @@ type
   public
     flags: set of (isstmt, basicblock, endsequence,
       prologueend, epiloguebegin, appendrow, invalidaddress);
-    address: cardinal;
-    line: cardinal;
-    fileid: cardinal;
+    line, address, fileid: cardinal; // PInt64(@state.line)^ stored in Lines[]
     procedure Init(aIs_Stmt: ByteBool);
   end;
 
@@ -2273,7 +2271,7 @@ type
     AbbrevOffset, AbbrevSize: integer; // debug_abbrev
     ImageBase: QWord; // e.g. 0100000000 on Win64 or 00400000 on Win32
     debug: TDebugFile;
-    Lines: TInt64DynArray; // TDebugLines.Addr[] in high 40-bit, Line[] in lower
+    Lines: TInt64DynArray; // TDebugLines.Addr[] in high 32-bit, Line[] in lower
     dirs, files: TRawUtf8DynArray;
     filesdir: TIntegerDynArray;
     Map: TMemoryMap;
@@ -2601,15 +2599,15 @@ begin
     exit;
   if unsorted then
   begin
-    QuickSortInt64(pointer(Lines), 0, linesn - 1); // sort by Addr (high 40-bit)
-    u^.Symbol.Start := Lines^ shr 24; // set to unit first function Addr
+    QuickSortInt64(pointer(Lines), 0, linesn - 1); // sort by Addr (high 32-bit)
+    u^.Symbol.Start := Lines^ shr 32; // set to unit first function Addr
   end;
   SetLength(u^.Addr, linesn);
   SetLength(u^.Line, linesn);
   for i := 0 to linesn - 1 do
   begin
-    u^.Line[i] := Lines^ and $00ffffff; // low 24-bit
-    u^.Addr[i] := Lines^ shr 24;        // high 40-bit
+    u^.Line[i] := Lines^;        // low 32-bit
+    u^.Addr[i] := Lines^ shr 32; // high 32-bit
     inc(Lines);
   end;
 end;
@@ -2720,11 +2718,6 @@ begin
                 else
                   exclude(state.flags, invalidaddress)
               end;
-            DW_LNE_DEFINE_FILE:
-              begin
-                read.NextAsciiz;
-                read.VarNextInt(3);
-              end;
           else
             // Unknown extended opcode
             read.Next(opcodeextlen - 1);
@@ -2812,7 +2805,7 @@ begin
           // not increasing: need to sort u^.Addr[]+Line[] and u^.Symbol.Start
           unsorted := true;
         prevaddr := state.address;
-        AddInt64(Lines, linesn, QWord(state.address) shl 24 + state.line);
+        AddInt64(Lines, linesn, PInt64(@state.line)^); // address=hi 32-bit
         {$ifdef DWARFDEBUG}
         ConsoleWrite([files[state.fileid - 1], ' ', state.line, ' ',
           CardinalToHexShort(state.address)]);
