@@ -3173,17 +3173,14 @@ var
   ext: TFileName;
   P: PChar;
 begin
-  result := -1;
-  P := pointer(CsvExt);
   ext := ExtractExt(FileName, {withoutdot=}true);
-  if (P = nil) or
-     (ext = '') then
-    exit;
-  repeat
-    inc(result);
+  result := 0;
+  P := pointer(CsvExt); // allow '' e.g. for POSIX exe as ','
+  while P <> nil do
     if SameTextS(GetNextItemString(P), ext) then
-      exit;
-  until P = nil;
+      exit
+    else
+      inc(result);
   result := -1;
 end;
 
