@@ -3730,7 +3730,7 @@ begin
     fAlgoID := COMPRESS_DEFLATE; // 2
   fAlgoFileExt := '.synz';
   inherited Create;
-  fDeflateLevel := Z_USUAL_COMPRESSION;
+  fDeflateLevel := Z_USUAL_COMPRESSION; // 6
 end;
 
 function TAlgoDeflate.RawProcess(src, dst: pointer; srcLen, dstLen,
@@ -3770,7 +3770,7 @@ begin
   fAlgoID := COMPRESS_DEFLATEFAST; // 3
   fAlgoFileExt := '.synz';
   inherited Create;
-  fDeflateLevel := Z_BEST_SPEED; // = 1
+  fDeflateLevel := Z_BEST_SPEED; // 1
 end;
 
 type

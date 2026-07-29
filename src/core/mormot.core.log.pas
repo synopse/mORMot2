@@ -199,7 +199,7 @@ type
     {$ifdef FPC}
     /// load DWARF .dbg/.mab info and replace FPC RTL BacktraceStrFunc()
     // - uses much less disk space (e.g. 33MB .dbg into 500KB)
-    // - is much faster: around 10us per call, whereas lnfodwrf is 20ms
+    // - is much faster: around 1us per lookup, whereas lnfodwrf is 20ms
     class function RegisterBacktraceStrFunc: boolean;
     {$endif FPC}
     /// force to include the GDB relative path of TDebugLines.FileName
@@ -217,6 +217,9 @@ type
     // - e.g. 'exec.map', 'exec.dbg' or even plain 'exec'/'exec.exe'
     property FileName: TFileName
       read fDebugFile;
+    /// details about the compiler version - only available for FPC yet
+    property Producer: RawUtf8
+      read fProducer;
     /// equals true if a .map/.dbg or .mab debugging information has been loaded
     property HasDebugInfo: boolean
       read fHasDebugInfo;
@@ -229,9 +232,6 @@ type
     /// how many microseconds did it need to parse .map/.dbg or .mab input
     property LoadingMicroSec: Int64
       read fLoadingMicroSec;
-    /// details about the compiler version - only available for FPC yet
-    property Producer: RawUtf8
-      read fProducer;
   end;
 
 {$ifndef PUREMORMOT2}
@@ -3599,13 +3599,13 @@ end;
 
 const
   _TDebugSymbol = 'name:RawUtf8 start,stop:integer';
-  _TDebugLines ='symbol:TDebugSymbol filename:RawUtf8 line,addr:TIntegerDynArray';
+  _TDebugLines = 'symbol:TDebugSymbol filename:RawUtf8 line,addr:TIntegerDynArray';
 
 procedure TDebugFile.SaveToJson(W: TTextWriter);
 begin
   if Rtti.RegisterType(TypeInfo(TDebugSymbol)).Props.Count = 0 then
     Rtti.RegisterFromText([TypeInfo(TDebugSymbol), _TDebugSymbol,
-                           TypeInfo(TDebugLines),   _TDebugLines]);
+                           TypeInfo(TDebugLines),  _TDebugLines]);
   W.AddShort('{"symbols":');
   fSymbols.SaveToJson(W, []);
   W.AddShort(',"lines":');

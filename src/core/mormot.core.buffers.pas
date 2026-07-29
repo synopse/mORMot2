@@ -985,6 +985,7 @@ type
     // - could be decoded later on via TFastReader.ReadVarUInt32Array
     procedure WriteVarUInt32Array(const Values: TIntegerDynArray;
       ValuesCount: integer; DataLayout: TBufferWriterKind);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append cardinal values (NONE must be negative!) using 32-bit
     // variable-length integer encoding or other specialized algorithms,
     // depending on the data layout

@@ -3175,7 +3175,7 @@ var
 begin
   ext := ExtractExt(FileName, {withoutdot=}true);
   result := 0;
-  P := pointer(CsvExt); // allow '' e.g. for POSIX exe as ','
+  P := pointer(CsvExt); // allow void extension e.g. for POSIX exe as 'exe,'
   while P <> nil do
     if SameTextS(GetNextItemString(P), ext) then
       exit
