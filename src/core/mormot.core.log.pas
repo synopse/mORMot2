@@ -127,7 +127,7 @@ type
     fSymbol: TDebugSymbolDynArray;
     fLine: TDebugLinesDynArray;
     fCodeOffset: PtrUInt;
-    fDebugFile: TFileName;
+    fExeFile, fDebugFile: TFileName;
     fProducer: RawUtf8;
     fHasDebugInfo: boolean;
     fSymbols, fLines: TDynArray;
@@ -3428,8 +3428,8 @@ end;
 constructor TDebugFile.Create(const aExeName: TFileName; Scope: TDebugFileScope);
 var
   i: PtrInt;
-  ExeFile, MabFile, MabPath: TFileName;
-  MapAge, MabAge: TUnixTime;
+  ExeAge, DbgAge, MabAge: TUnixTime;
+  MabFile, MabPath: TFileName;
   savemab: boolean;
   start: Int64;
 begin
@@ -3441,78 +3441,85 @@ begin
     @fLinesCount, true);
   if SynLogFileFreeing then // avoid GPF
     exit;
-  // search for an external .map/.dbg file matching the running .exe/.dll name
+  // check the supplied aExeName
   if aExeName = '' then
-  begin
-    // guess the debug information source for the current process
-    {$ifdef OSWINDOWS}
-    ExeFile := GetModuleName(hInstance);
-    fCodeOffset := GetModuleHandle(pointer(ExtractFileName(ExeFile)));
-    {$ifdef FPC}
-    fDebugFile := ExeFile;
-    {$else}
-    inc(fCodeOffset, $1000); // Delphi include BaseOfCode as .map offset
-    fDebugFile := ChangeFileExt(ExeFile, '.map');
-    {$endif FPC}
-    {$else}
-    fCodeOffset := GetExecutableBase; // for the current exe/so
-    ExeFile := Executable.InstanceFileName;
-    fDebugFile := ExeFile; // exeinfo's ReadDebugLink() would redirect to .dbg
-    {$endif OSWINDOWS}
-  end
+    fExeFile := Executable.InstanceFileName // use current dll/exe instance
   else
-    // supplied e.g. 'exec.map', 'exec.dbg' or even plain 'exec'/'exec.exe'
-    fDebugFile := aExeName;
+    fExeFile := aExeName;
+  ExeAge := FileAgeToUnixTimeUtc(fExeFile);
+  if ExeAge = 0 then
+    exit;
+  fDebugFile := fExeFile;
+  DbgAge := ExeAge;
+  {$ifdef OSWINDOWS}
+  // get execution location in the current process - especially for .dll or ASLR
+  fCodeOffset := GetModuleHandle(pointer(fExeFile));
+  {$ifdef ISDELPHI}
+  if fCodeOffset <> 0 then   // this exe/dll runs in the current process
+    inc(fCodeOffset, $1000); // Delphi include BaseOfCode as .map offset
+  // search for an external .map file matching the running .exe/.dll name
+  fDebugFile := ChangeFileExt(fExeFile, '.map'); // information is in .map
+  DbgAge := FileAgeToUnixTimeUtc(fDebugFile);
+  if (DbgAge = 0) or
+     (abs(DbgAge - ExeAge) > SecsPerMin) then // deprecated .map
+    DbgAge := 0;
+  {$endif ISDELPHI}
+  {$else}
+  fCodeOffset := GetExecutableBase; // for the current exe/so
+  {$endif OSWINDOWS}
+  // main thread-safe process
   savemab := false;
-  MabFile := ChangeFileExt(ExpandFileName(fDebugFile), '.mab');
-  if not FileExists(MabFile) then
-  begin
-    MabPath := ExtractFilePath(MabFile);
-    if not IsDirectoryWritable(MabPath) then
-      // ([idwExcludeWinSys] not needed because if we are admin then fine)
-      // read/only exe folder -> store .mab in local non roaming user folder
-      MabFile := MakeString([GetSystemPath(spUserData),
-        crc32cStringToHexShort(MabPath), '-', // make it unique per-path
-        ExtractFileName(Mabfile)]);
-  end;
   SynLogGlobalLock.Lock;
   try
-    MapAge := FileAgeToUnixTimeUtc(fDebugFile);
+    // search for a .mab file matching the running .exe/.dll name
+    MabFile := ChangeFileExt(ExpandFileName(fDebugFile), '.mab');
     MabAge := FileAgeToUnixTimeUtc(MabFile);
-    if (MapAge > 0) and
-       (MabAge < MapAge) then
-      // recompute from .map/.dbg if no faster-to-load .mab available
-      try
-        GenerateFromMapOrDwarf;
-        fSymbols.Capacity := fSymbolsCount; // only consume the needed memory
-        fLines.Capacity := fLinesCount;
-        for i := 0 to fLinesCount - 2 do
-          if fLine[i].Symbol.Stop = 0 then
-            fLine[i].Symbol.Stop := fLine[i + 1].Symbol.Start - 1;
-        if fLinesCount <> 0 then // wild guess of the last unit end of code
-          with fLine[fLinesCount - 1] do
-            if Symbol.Stop = 0 then
-              if Addr <> nil then
-                // Lines[] blocks may overlap with .inc -> use Addr[]
-                Symbol.Stop := Addr[high(Addr)] + 64
-              else
-                Symbol.Stop := Symbol.Start;
-        if fLinesCount + fSymbolsCount <> 0 then
-          savemab := true; // trigger SaveToFile(MabFile) below
-      except
-        fSymbols.ClearSafe;
-        fLines.ClearSafe;
+    if MabAge = 0 then
+    begin
+      MabPath := ExtractFilePath(MabFile);
+      if not IsDirectoryWritable(MabPath) then
+      begin
+        // ([idwExcludeWinSys] not needed because if we are admin then fine)
+        // read/only exe folder -> store .mab in local non roaming user folder
+        MabFile := MakeString([GetSystemPath(spUserData),
+          crc32cStringToHexShort(MabPath), '-', // make it unique per-path
+          ExtractFileName(Mabfile)]);
+        MabAge := FileAgeToUnixTimeUtc(MabFile);
       end;
+    end;
+    if (MabAge <> 0) and
+       (abs(DbgAge - MabAge) < SecsPerMin) then
+      LoadMab(MabFile);
+    if fLinesCount + fSymbolsCount = 0 then
+    try
+      // recompute from .map/.dbg if no faster-to-load .mab available
+      DeleteFile(MabFile);
+      GenerateFromMapOrDwarf(dfsIncludePathInFileName in Scope);
+      fSymbols.Capacity := fSymbolsCount; // only consume the needed memory
+      fLines.Capacity := fLinesCount;
+      for i := 0 to fLinesCount - 2 do
+        if fLine[i].Symbol.Stop = 0 then
+          fLine[i].Symbol.Stop := fLine[i + 1].Symbol.Start - 1;
+      if fLinesCount <> 0 then // wild guess of the last unit end of code
+        with fLine[fLinesCount - 1] do
+          if Symbol.Stop = 0 then
+            if Addr <> nil then
+              // Lines[] blocks may overlap with .inc -> use Addr[]
+              Symbol.Stop := Addr[high(Addr)] + 64
+            else
+              Symbol.Stop := Symbol.Start;
+      if fLinesCount + fSymbolsCount <> 0 then
+        savemab := true; // trigger SaveToFile(MabFile) below
+    except
+      fSymbols.Clear;
+      fLines.Clear;
+    end;
     // search for a .mab file matching the running .exe/.dll name
     if (fLinesCount + fSymbolsCount = 0) and
        (MabAge <> 0) then
-      LoadMab(MabFile);
     // search for an embedded compressed .mab file appended to the .exe/.dll
     if fLinesCount + fSymbolsCount = 0 then
-      if aExeName = '' then
-        LoadMab(ExeFile)
-      else
-        LoadMab(aExeName);
+      LoadMab(fExeFile);
     // finalize (and optionally persist as .mab) this instance
     if fLinesCount + fSymbolsCount <> 0 then
     begin
