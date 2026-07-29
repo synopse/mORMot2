@@ -2671,6 +2671,13 @@ function CardinalToHexShort(aCardinal: cardinal): TShort15;
 // - wrapper around CardinalToHex(crc32c(...))
 function crc32cUtf8ToHex(const str: RawUtf8): RawUtf8;
 
+/// compute the crc32c of the UTF-8 representation of a string/TFileName
+function crc32cString(const str: string): cardinal;
+
+/// compute the hexadecimal crc32c of the UTF-8 of a string/TFileName
+function crc32cStringToHexShort(const str: string): TShort15;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// fast conversion from a Int64 value into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
 // - reverse function of HexDisplayToInt64()
@@ -11157,6 +11164,21 @@ end;
 function crc32cUtf8ToHex(const str: RawUtf8): RawUtf8;
 begin
   result := CardinalToHex(crc32c(0, pointer(str), length(str)));
+end;
+
+function crc32cString(const str: string): cardinal;
+var
+  temp: TSynTempBuffer;
+  p: pointer; // in explicit two steps for safety
+begin
+  p := StringToUtf8Temp(str, temp); // returns str if already ASCII-7 or UTF-8
+  result := crc32c(0, p, temp.len);
+  temp.Done;
+end;
+
+function crc32cStringToHexShort(const str: string): TShort15;
+begin
+  CardinalToHexShort(crc32cString(str));
 end;
 
 function ToHexShort(P: pointer; Len: PtrInt): TShort64;
