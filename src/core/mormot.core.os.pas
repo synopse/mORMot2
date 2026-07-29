@@ -8888,6 +8888,13 @@ type
     e_flags: cardinal;
     e_ehsize, e_phentsize, e_phnum, e_shentsize, e_shnum, e_shstrndx: word;
   end;
+  TElfProg32 = packed record
+    p_type, p_offset, p_vaddr, p_paddr, p_filesz, p_memsz, p_flags, p_align: cardinal;
+  end;
+  TElfProg64 = packed record
+    p_type, p_flags: cardinal;
+    p_offset, p_vaddr, p_paddr, p_filesz, p_memsz, p_align: QWord;
+  end;
   TElfSection32 = packed record
     sh_name, sh_type, sh_flags, sh_addr, sh_offset, sh_size,
     sh_link, sh_info, sh_addralign, sh_entsize: cardinal;
@@ -8907,13 +8914,15 @@ var
   eh64: ^TElfHeader64;
   es32, estr32: ^TElfSection32;
   es64, estr64: ^TElfSection64;
+  ep32: ^TElfProg32;
+  ep64: ^TElfProg64;
   pe: ^TPeHeader;
   coff: ^TPeOptHeader;
   ps: ^TPeSection;
   ef: TExeFormat;
   tmp: TTemp16;
   names, one: PAnsiChar;
-  n: PtrUInt;
+  n, a, c: PtrUInt;
 begin
   result := efUnknown;
   if imgbase <> nil then
@@ -8938,6 +8947,20 @@ begin
            (eh32^.e_shentsize <> SizeOf(es32^)) or
            (Int64(eh32^.e_shoff) + PtrInt(n * SizeOf(es32^)) > exe.Size) then
           exit;
+        if (imgbase <> nil) and
+           (Int64(eh32^.e_phoff) + PtrInt(eh32^.e_phnum) * SizeOf(ep32^) <= exe.Size) then
+        begin
+          ep32 := pointer(exe.Buffer + eh32^.e_phoff);
+          a := high(a);
+          for c := 1 to eh32^.e_phnum do
+          begin
+            if ep32^.p_type = 1 then
+              a := MinPtrUInt(a, ep32^.p_vaddr);
+            inc(ep32);
+          end;
+          if a <> high(a) then
+            imgbase^ := a;
+        end;
         es32 := pointer(exe.Buffer + eh32^.e_shoff);
         estr32 := @PByteArray(es32)[eh32^.e_shstrndx * SizeOf(es32^)];
         names := exe.Buffer + estr32^.sh_offset;
@@ -8967,6 +8990,20 @@ begin
            (eh64^.e_shentsize <> SizeOf(es64^)) or
            (Int64(eh64^.e_shoff) + PtrInt(n * SizeOf(es64^)) > exe.Size) then
           exit;
+        if (imgbase <> nil) and
+           (Int64(eh64^.e_phoff) + PtrInt(eh64^.e_phnum) * SizeOf(ep64^) <= exe.Size) then
+        begin
+          ep64 := pointer(exe.Buffer + eh64^.e_phoff);
+          a := high(a);
+          for c := 1 to eh64^.e_phnum do
+          begin
+            if ep64^.p_type = 1 then
+              a := MinPtrUInt(a, ep64^.p_vaddr);
+            inc(ep64);
+          end;
+          if a <> high(a) then
+            imgbase^ := a;
+        end;
         es64 := pointer(exe.Buffer + eh64^.e_shoff);
         estr64 := @PByteArray(es64)[eh64^.e_shstrndx * SizeOf(es64^)];
         names := exe.Buffer + estr64^.sh_offset;
@@ -9003,15 +9040,15 @@ begin
     case coff^.Magic of
       $010b:
         begin
-          ef := efPE32;
           if imgbase <> nil then
             imgbase^ := coff^.ImageBase32;
+          ef := efPE32;
         end;
       $020b:
         begin
-          ef := efPE32Plus;
           if imgbase <> nil then
             imgbase^ := coff^.ImageBase64;
+          ef := efPE32Plus;
         end;
     else
       exit;
