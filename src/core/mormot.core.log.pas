@@ -109,6 +109,7 @@ type
 
   /// allow to customize TDebugFile.Create and TDebugFile.SaveToFile process
   TDebugFileScope = set of (
+    dfsIncludePathInFileName,
     dfsNoMabSaveAtCreate,
     dfsNoSymbols,
     dfsNoLines,
@@ -132,7 +133,7 @@ type
     fSymbols, fLines: TDynArray;
     fLoadingMicroSec: Int64;
     fSymbolsCount, fLinesCount: integer;
-    procedure GenerateFromMapOrDwarf; // from Create()
+    procedure GenerateFromMapOrDwarf(includedir: boolean); // from Create()
     function LoadMab(const aMabFile: TFileName): boolean;
     function AbsoluteToRelative(aAddressAbsolute: PtrUInt): TDebugAddress;
       {$ifdef HASINLINE}inline;{$endif}
@@ -211,10 +212,6 @@ type
     // - is much faster: around 1us per lookup, whereas lnfodwrf is 20ms
     class function RegisterBacktraceStrFunc: boolean;
     {$endif FPC}
-    /// force to include the GDB relative path of TDebugLines.FileName
-    // - the naked file name with no path is stored by default on all platforms
-    // - do nothing on Delphi since the .map file does not include the path
-    class procedure IncludeFilePath(Value: boolean);
     /// all symbols, mainly function and method names and addresses
     property Symbols: TDebugSymbolDynArray
       read fSymbol;
@@ -2180,7 +2177,6 @@ uses
 
 var
   ExeInstanceDebugFile: TDebugFile;
-  ExeIncludeFilePath: boolean; // from TDebugFile.IncludeFilePath class method
 
 function GetInstanceDebugFile: TDebugFile;
 begin
@@ -3017,14 +3013,14 @@ begin
   result := CompareInteger(TDebugSymbol(A).Start, TDebugSymbol(B).Start);
 end;
 
-procedure TDebugFile.GenerateFromMapOrDwarf;
+procedure TDebugFile.GenerateFromMapOrDwarf(includedir: boolean);
 var
   dwarf: TDwarfReader;
   curr, last: QWord;
 begin
   FillCharFast(dwarf, SizeOf(dwarf), 0);
   dwarf.debug := self;
-  dwarf.includesdir := ExeIncludeFilePath;
+  dwarf.includesdir := includedir;
   if dwarf.LoadSections then
   try
     // retrieve line numbers and addresses into Lines[]
@@ -3097,7 +3093,7 @@ begin
   Dest := P;
 end;
 
-procedure TDebugFile.GenerateFromMapOrDwarf;
+procedure TDebugFile.GenerateFromMapOrDwarf(includedir: boolean);
 var
   P, PEnd: PUtf8Char;
   sections: TDebugLinesDynArray;
@@ -3398,7 +3394,6 @@ var
   u: PDebugLines;
 begin
   result := false;
-  fDebugFile := aMabFile;
   if FileExists(aMabFile) then
   try
     // StreamUnCompress() will try from the end if aMabFile is an executable
@@ -3419,6 +3414,7 @@ begin
       end;
       if not R.EOF then
         R.VarUtf8(fProducer);
+      fDebugFile := aMabFile;
       result := true;
     finally
       MS.Free;
@@ -3969,11 +3965,6 @@ begin
   l := map.FindLinesByName(name);
   if l <> nil then
     Utf8ToFileName(l^.FileName, result);
-end;
-
-class procedure TDebugFile.IncludeFilePath(Value: boolean);
-begin
-  ExeIncludeFilePath := Value;
 end;
 
 
