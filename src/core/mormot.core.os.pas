@@ -1725,6 +1725,11 @@ var
   // - as used e.g. by GetComputerUuid() fallback if SMBIOS is not available
   GetSystemMacAddress: function: TRawUtf8DynArray;
 
+/// retrieve the base address of the executable/library holding a function
+// - calls dladdr() on POSIX, or GetModuleHandleEx() on Windows
+// - return the current executable module base (exe or dll) with aAddress = nil
+function GetExecutableBase(aAddress: pointer = nil): PtrUInt;
+
 /// try to retrieve the file name of the executable/library holding a function
 // - calls dladdr() on POSIX, or GetModuleFileName() on Windows
 function GetExecutableName(aAddress: pointer): TFileName;

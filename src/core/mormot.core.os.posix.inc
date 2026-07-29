@@ -1791,8 +1791,8 @@ begin
             not FpS_ISDIR(st.st_mode);
 end;
 
-var
-  PosixProgramInfo: dl_info; // set at startup
+var // set at startup about the module (exe or so) running this mormot unit
+  PosixProgramInfo: dl_info;
 
 procedure GetDlInfoName(var dlinfo: dl_info; var result: TFileName);
 begin
@@ -1804,6 +1804,17 @@ begin
   if (result <> '') and
      (result[1] <> '/') then
     result := ExpandFileName(string(result));
+end;
+
+function GetExecutableBase(aAddress: pointer): PtrUInt;
+var
+  dlinfo: dl_info;
+begin
+  if aAddress = nil then
+    exit(PtrUInt(PosixProgramInfo.dli_fbase));
+  FillCharFast(dlinfo, sizeof(dlinfo), 0);
+  dladdr(aAddress, @dlinfo);
+  result := PtrUInt(dlinfo.dli_fbase);
 end;
 
 function GetExecutableName(aAddress: pointer): TFileName;

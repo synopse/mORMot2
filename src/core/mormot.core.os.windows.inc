@@ -1062,12 +1062,25 @@ begin
             (header = $5A4D); // DOS Magic Number
 end;
 
-function GetModuleHandleExA(dwFlags: cardinal; lpModuleName: pointer;
- var phModule: HMODULE): BOOL; stdcall; external kernel32;
+function GetModuleHandleExW(dwFlags: cardinal; lpModuleName: pointer;
+ var phModule: PtrUInt): BOOL; stdcall; external kernel32;
 
 const
   GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT = $00000002;
   GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS       = $00000004;
+
+function GetExecutableBase(aAddress: pointer): PtrUInt;
+var
+  hm: PtrUInt;
+begin
+  if aAddress = nil then
+    result := PtrUInt(HInstance) // current exe/dll
+  else if GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS or
+            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, aAddress, hm) then
+    result := hm
+  else
+    result := 0;
+end;
 
 function GetExecutableName(aAddress: pointer): TFileName;
 var
