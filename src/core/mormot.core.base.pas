@@ -1095,6 +1095,10 @@ procedure AppendShortTwoChars(twochars, dest: PAnsiChar); overload;
 procedure AppendShortTwoChars(twochars: cardinal; dest: PAnsiChar); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// ShortString concatenation of two characters (as 16-bit integer) into a shorstring
+procedure AppendShortTwoCharsSafe(twochars: cardinal; var dest: ShortString);
+  {$ifdef FPC} inline; {$endif}
+
 /// ShortString concatenation of a #0 ending text into a @shorstring
 // - dest is @ShortString and not ShortString to circumvent a Delphi inlining bug
 procedure AppendShortBuffer(buf: PAnsiChar; len, max: PtrInt; dest: PAnsiChar);
@@ -5568,8 +5572,6 @@ end;
 
 procedure AppendShortTwoChars(twochars, dest: PAnsiChar);
 begin
-  if dest[0] >= #254 then
-    exit;
   PWord(dest + ord(dest[0]) + 1)^ := PWord(twochars)^;
   inc(dest[0], 2);
 end;
@@ -5578,6 +5580,17 @@ procedure AppendShortTwoChars(twochars: cardinal; dest: PAnsiChar);
 begin
   PWord(dest + ord(dest[0]) + 1)^ := twochars;
   inc(dest[0], 2);
+end;
+
+procedure AppendShortTwoCharsSafe(twochars: cardinal; var dest: ShortString);
+var
+  l: PtrInt;
+begin
+  l := ord(dest[0]) + 1;
+  if l >= high(dest) then
+    exit;
+  inc(dest[0], 2);
+  PWord(PAnsiChar(@dest) + l)^ := twochars;
 end;
 
 procedure AppendShortBuffer(buf: PAnsiChar; len, max: PtrInt; dest: PAnsiChar);
