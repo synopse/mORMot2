@@ -133,6 +133,7 @@ type
     fSymbols, fLines: TDynArray;
     fLoadingMicroSec: Int64;
     fSymbolsCount, fLinesCount: integer;
+    fStart, fStop: PtrUInt; // efficient IsCode()
     procedure GenerateFromMapOrDwarf(includedir: boolean); // from Create()
     function LoadMab(const aMabFile: TFileName): boolean;
     function AbsoluteToRelative(aAddressAbsolute: PtrUInt): TDebugAddress;
@@ -182,8 +183,9 @@ type
     // the raw address pointer as hexadecimal
     class function Log(W: TTextWriter; aAddressAbsolute: PtrUInt;
       AllowNotCodeAddr: boolean; SymbolNameNotFilename: boolean = false): boolean;
-    /// check if this memory address is part of the code segments
+    /// check if this memory address is part of the code segments of this instance
     function IsCode(aAddressAbsolute: PtrUInt): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// return the symbol location according to the supplied absolute address
     // - filename, symbol name and line number (if any), as plain text, e.g.
     // $ 57f480 mormot.core.log.pas TSynLog.LogEscape (5782)
@@ -3443,7 +3445,6 @@ begin
   if ExeAge = 0 then
     exit;
   fDebugFile := fExeFile;
-  DbgAge := ExeAge;
   {$ifdef OSWINDOWS}
   // get execution location in the current process - especially for .dll or ASLR
   fCodeOffset := GetModuleHandle(pointer(fExeFile));
@@ -3456,9 +3457,12 @@ begin
   if (DbgAge = 0) or
      (abs(DbgAge - ExeAge) > SecsPerMin) then // deprecated .map
     DbgAge := 0;
+  {$else}
+  DbgAge := ExeAge;
   {$endif ISDELPHI}
   {$else}
   fCodeOffset := GetExecutableBase; // for the current exe/so
+  DbgAge := ExeAge;
   {$endif OSWINDOWS}
   // main thread-safe process
   savemab := false;
@@ -3498,7 +3502,7 @@ begin
           if Symbol.Stop = 0 then
             if Addr <> nil then
               // Lines[] blocks may overlap with .inc -> use Addr[]
-              Symbol.Stop := Addr[high(Addr)] + 64
+              Symbol.Stop := Addr[high(Addr)]
             else
               Symbol.Stop := Symbol.Start;
       if fLinesCount + fSymbolsCount <> 0 then
@@ -3516,6 +3520,16 @@ begin
     // finalize (and optionally persist as .mab) this instance
     if fLinesCount + fSymbolsCount <> 0 then
     begin
+      if fLine <> nil then
+      begin
+        fStart := fLine[0].Symbol.Start;
+        fStop := fLine[fLinesCount - 1].Symbol.Stop;
+      end;
+      if fSymbol <> nil then
+      begin
+        fStart := MinPtrInt(fStart, fSymbol[0].Start);
+        fStop := MaxPtrInt(fStop, fSymbol[fSymbolsCount - 1].Stop);
+      end;
       fHasDebugInfo := true; // mark as success
       if savemab and // just created from .map/.dbg -> create .mab file
          not (dfsNoMabSaveAtCreate in Scope) then
@@ -3767,27 +3781,18 @@ end;
 
 function TDebugFile.AbsoluteToRelative(aAddressAbsolute: PtrUInt): TDebugAddress;
 begin
-  if (self = nil) or
-     (aAddressAbsolute <= fCodeOffset) then
-    result := 0
-  else
-    result := aAddressAbsolute - fCodeOffset;
+  dec(aAddressAbsolute, fCodeOffset);
+  if PtrInt(aAddressAbsolute) < 0 then
+    aAddressAbsolute := 0; // our RVA should be positive and in 32-bit range
+  result := aAddressAbsolute;
 end;
 
 function TDebugFile.IsCode(aAddressAbsolute: PtrUInt): boolean;
-var
-  rva: TDebugAddress;
 begin
-  rva := AbsoluteToRelative(aAddressAbsolute);
-  result := (rva <> 0) and
-            (self <> nil) and
-            fHasDebugInfo and
-            (((fLine <> nil) and
-              (rva >= fLine[0].Symbol.Start) and
-              (rva <= fLine[fLinesCount - 1].Symbol.Stop)) or
-             ((fSymbol <> nil) and
-              (rva >= fSymbol[0].Start) and
-              (rva <= fSymbol[fSymbolsCount - 1].Stop)));
+  dec(aAddressAbsolute, fCodeOffset); // inlined AbsoluteToRelative()
+  result := (PtrInt(aAddressAbsolute) >= 0) and
+            (aAddressAbsolute >= fStart) and
+            (aAddressAbsolute <= fStop);
 end;
 
 class function TDebugFile.Log(W: TTextWriter; aAddressAbsolute: PtrUInt;
