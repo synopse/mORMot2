@@ -3424,7 +3424,7 @@ end;
 constructor TDebugFile.Create(const aExeName: TFileName; MabCreate: boolean);
 var
   i: PtrInt;
-  ExeFile, MabFile: TFileName;
+  ExeFile, MabFile, MabPath: TFileName;
   MapAge, MabAge: TUnixTime;
   start: Int64;
 begin
@@ -3459,10 +3459,15 @@ begin
     fDebugFile := aExeName;
   MabFile := ChangeFileExt(ExpandFileName(fDebugFile), '.mab');
   if not FileExists(MabFile) then
-    if not IsDirectoryWritable(ExtractFilePath(MabFile)) then
-      // (do not include [idwExcludeWinSys] because if we can as admin then fine)
+  begin
+    MabPath := ExtractFilePath(MabFile);
+    if not IsDirectoryWritable(MabPath) then
+      // ([idwExcludeWinSys] not needed because if we are admin then fine)
       // read/only exe folder -> store .mab in local non roaming user folder
-      MabFile := GetSystemPath(spUserData) + ExtractFileName(Mabfile);
+      MabFile := MakeString([GetSystemPath(spUserData),
+        crc32cStringToHexShort(MabPath), '-', // make it unique per-path
+        ExtractFileName(Mabfile)]);
+  end;
   SynLogGlobalLock.Lock;
   try
     MapAge := FileAgeToUnixTimeUtc(fDebugFile);
