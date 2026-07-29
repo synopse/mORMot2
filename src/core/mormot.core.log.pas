@@ -47,7 +47,7 @@ uses
    07/28/2026  06:02 PM           518,119 mormot2tests.mab
 
    For a 13MB executable, Delphi .map text was 18MB but our .mab is only 500KB...
-   Then this .mab file can be distributed along the executable, or just
+   Then this .mab file can be distributed alongside the executable, or just
    appended to it after build. See also /src/tools/mab/mab.dpr
 
    The benefit seems even more obvious with FPC Win32 and GDB information:
@@ -58,25 +58,35 @@ uses
 }
 
 type
-  /// a debugger symbol, as decoded by TDebugFile from a .map/.dbg file
+  /// we store 32-bit relative virtual addresses (RVA) in memory and in .mab files
+  // - for PE executables they are computed as VirtualAddress - ImageBase;
+  // for ELF executables, ImageBase is assumed to be 0
+  // - 32-bit RVAs are sufficient in practice for any executable or shared
+  // library supported by mORMot; larger executables are typically installers with
+  // compressed payloads appended after an initial Setup executable of a few MB
+  // - enable efficient TBufferWriter.WriteVarUInt32Array encoding in .mab files
+  TDebugAddress = integer;
+  TDebugAddressDynArray = TIntegerDynArray;
+
+  /// a debugger symbol, as decoded by TDebugFile from a .map/.dbg/.mab file
   TDebugSymbol = packed record
     /// symbol identifier
     Name: RawUtf8;
-    /// starting offset of this symbol in the executable
-    Start: integer;
-    /// end offset of this symbol in the executable
-    Stop: integer;
+    /// relative virtual address where this symbol starts
+    Start: TDebugAddress;
+    /// last relative virtual address belonging to this symbol
+    Stop: TDebugAddress;
   end;
   PDebugSymbol = ^TDebugSymbol;
 
-  /// a dynamic array of symbols, as decoded by TDebugFile from a .map/.dbg file
+  /// a dynamic array of symbols, as decoded by TDebugFile from .map/.dbg/.mab
+  // - stored in Start increasing order in memory for fast O(log(n)) lookup
   TDebugSymbolDynArray = array of TDebugSymbol;
 
   /// line number information for one contiguous source code range
-  // - as decoded by TDebugFile from a .map/.dbg file
+  // - as decoded by TDebugFile from a .map/.dbg/.mab file
   // - may refer to the main .pas file, a nested .inc file, or source locations
-  // associated with compiler-generated code such as inlined routines or
-  // generic specializations
+  // generated for compiler features such as inlined routines or generics
   TDebugLines = packed record
     /// identifier and address range of this source block
     // - Name is the main Pascal unit identifier, e.g. 'mormot.core.base'
@@ -88,12 +98,14 @@ type
     FileName: RawUtf8;
     /// list of all mapped source code lines of this block
     Line: TIntegerDynArray;
-    /// start code address of each mapped source line
-    Addr: TIntegerDynArray;
+    /// relative virtual address of each mapped source line
+    // - stored in increasing order in memory for fast O(log(n)) lookup
+    Addr: TDebugAddressDynArray;
   end;
   PDebugLines = ^TDebugLines;
 
-  /// a dynamic array of blocks, as decoded by TDebugFile from a .map/.dbg file
+  /// a dynamic array of blocks, as decoded by TDebugFile from .map/.dbg/.mab
+  // - stored in Start increasing order in memory for fast O(log(n)) lookup
   TDebugLinesDynArray = array of TDebugLines;
 
   /// process a .map/.dbg file content, to be used e.g. with TSynLog to provide
@@ -114,19 +126,14 @@ type
     fSymbols, fLines: TDynArray;
     fLoadingMicroSec: Int64;
     fSymbolsCount, fLinesCount: integer;
-    // called by Create() constructor
-    procedure GenerateFromMapOrDbg;
+    procedure GenerateFromMapOrDwarf; // from Create()
     function LoadMab(const aMabFile: TFileName): boolean;
-    { those functions are not public any more to avoid end-user misuse }
-    // return the virtual address corresponding to the executable ImageBase,
-    // which will be a 32-bit offset even on 64-bit systems
-    function AbsoluteToOffset(aAddressAbsolute: PtrUInt): integer;
+    function AbsoluteToRelative(aAddressAbsolute: PtrUInt): TDebugAddress;
       {$ifdef HASINLINE}inline;{$endif}
     // use fast O(log n) binary search to locate a symbol or line number
-    function FindSymbol(aAddressOffset: integer): PDebugSymbol;
-    function FindLines(aAddressOffset: integer; out LineNumber: integer): PDebugLines; overload;
-    function FindLines(aAddressOffset: integer): PDebugLines; overload;
-    // search within Lines[] array and return the first matching Symbol.Name
+    function FindSymbol(rva: TDebugAddress): PDebugSymbol;
+    function FindLines(rva: TDebugAddress; out line: integer): PDebugLines; overload;
+    function FindLines(rva: TDebugAddress): PDebugLines; overload;
     function FindLinesByName(const aUnitName: RawUtf8): PDebugLines;
   public
     /// get the available debugging information
@@ -169,27 +176,29 @@ type
     function IsCode(aAddressAbsolute: PtrUInt): boolean;
     /// return the symbol location according to the supplied absolute address
     // - filename, symbol name and line number (if any), as plain text, e.g.
-    // $ 4cb765 ../src/core/mormot.core.base.pas statuscodeissuccess (11183)
-    // - returns only the hexadecimal value if no match is found in .map/.gdb info
+    // $ 57f480 mormot.core.log.pas TSynLog.LogEscape (5782)
+    // $ 4a0a40 mormot.core.base.asmx64.inc (mormot.core.base) Rdtsc (3005)
+    // - returns only the hexadecimal value if no match is found in .map/.dbg/.mab
     function FindLocation(aAddressAbsolute: PtrUInt): RawUtf8; overload;
     /// return the symbol location according to the supplied absolute address
     // - filename, symbol name and line number (if any), as plain text, e.g.
     // $ 5880ea mormot.core.log.pas InitializeUnit (8475)
+    // $ 57f480 mormot.core.log.pas TSynLog.LogEscape (5782)
     // $ 4a0a40 mormot.core.base.asmx64.inc (mormot.core.base) Rdtsc (3005)
-    // - returns only the hexadecimal value if no match is found in .map/.gdb info
+    // - returns only the hexadecimal value if no match is found in .map/.dbg/.mab
     // - won't allocate any heap memory during the text creation
     // - mormot.core.os.pas' GetExecutableLocation() redirects to this method
     procedure FindLocationShort(aAddressAbsolute: PtrUInt; var aInfo: ShortString);
-    /// load .map/.gdb info and return the symbol location according
+    /// load .map/.dbg/.mab info and return the symbol location according
     // to the supplied ESynException
     // - i.e. unit name, symbol name and line number (if any), as plain text
     class function FindLocation(exc: ESynException): RawUtf8; overload;
-    /// load .map/.gdb info and returns the file name of a given unit
+    /// load .map/.dbg/.mab info and returns the file name of a given unit
     // - if unitname is '', returns the main file name of the current executable
     class function FindFileName(const unitname: RawUtf8): TFileName;
     {$ifdef FPC}
-    /// load DWARF .gdb info and replace FPC RTL BacktraceStrFunc()
-    // - uses much less disk space (e.g. 13MB .gdb into 284KB)
+    /// load DWARF .dbg/.mab info and replace FPC RTL BacktraceStrFunc()
+    // - uses much less disk space (e.g. 33MB .dbg into 500KB)
     // - is much faster: around 10us per call, whereas lnfodwrf is 20ms
     class function RegisterBacktraceStrFunc: boolean;
     {$endif FPC}
@@ -678,7 +687,7 @@ type
   /// callback signature used by TSynLogFamilly.OnBeforeException
   // - should return false to log the exception, or true to ignore it
   TOnBeforeException = function(const Context: TSynLogExceptionContext;
-    const ThreadName: shortstring): boolean of object;
+    const ThreadName: ShortString): boolean of object;
   {$endif NOEXCEPTIONINTERCEPT}
 
   /// available TSynLogThreadInfo.Flags definition
@@ -2255,9 +2264,9 @@ type
     AttrsMax: cardinal;
     exeformat: TExeFormat;
     isdwarf64, includesdir: boolean;
-    DebugLineSectionOffset, DebugLineSectionSize,              // debug_line
-    DebugInfoSectionOffset, DebugInfoSectionSize,              // debug_info
-    DebugAbbrevSectionOffset, DebugAbbrevSectionSize: integer; // debug_abbrev
+    LineOffset, LineSize,              // debug_line
+    InfoOffset, InfoSize,              // debug_info
+    AbbrevOffset, AbbrevSize: integer; // debug_abbrev
     ImageBase: QWord; // e.g. 0100000000 on Win64, 00400000 on Win32, 0 on ELF
     debug: TDebugFile;
     Lines: TInt64DynArray; // TDebugLines.Addr[] in high 40-bit, Line[] in lower
@@ -2316,12 +2325,9 @@ begin
   else
     name := filename;
   // locate debug_* sections after successfull OpenExeFile()
-  if FindExeSection(e, '.debug_line',
-       DebugLineSectionOffset, DebugLineSectionSize) and
-     FindExeSection(e, '.debug_info',
-       DebugInfoSectionOffset, DebugInfoSectionSize) and
-     FindExeSection(e, '.debug_abbrev',
-       DebugAbbrevSectionOffset, DebugAbbrevSectionSize) then
+  if FindExeSection(e, '.debug_line', LineOffset, LineSize) and
+     FindExeSection(e, '.debug_info', InfoOffset, InfoSize) and
+     FindExeSection(e, '.debug_abbrev', AbbrevOffset, AbbrevSize) then
     result := Map.Map(name);
   CloseExeFile(e);
 end;
@@ -2352,14 +2358,11 @@ begin
       if crc32(0, Map.Buffer, Map.Size) <> crc then  // zlib algorithm
         Map.UnMap; // the located debug file does not match the executable
   end;
-  exeformat := FindExeSection(Map, '.debug_line',
-    DebugLineSectionOffset, DebugLineSectionSize, @ImageBase);
+  exeformat := FindExeSection(Map, '.debug_line', LineOffset, LineSize, @ImageBase);
   //ConsoleWrite(['ImageBase=',Int64ToHexShort(ImageBase)]);
   if (exeformat <> efUnknown) and
-     (FindExeSection(Map, '.debug_info',
-       DebugInfoSectionOffset, DebugInfoSectionSize) = exeformat) and
-     (FindExeSection(Map, '.debug_abbrev',
-       DebugAbbrevSectionOffset, DebugAbbrevSectionSize) = exeformat) then
+     (FindExeSection(Map, '.debug_info', InfoOffset, InfoSize) = exeformat) and
+     (FindExeSection(Map, '.debug_abbrev', AbbrevOffset, AbbrevSize) = exeformat) then
     result := true;
   if result then
     SetLength(files, 64) // good enough for most executables
@@ -2831,7 +2834,7 @@ begin // set Symbol.Name as main Pascal unit identifier as with Delphi .map
     repeat
       start := u^.Symbol.Start; // note: u^.Symbol.Stop = 0 at this point
       if start >= high_pc then
-        break // GenerateFromMapOrDbg made fLines.Sort(SymbolSortByStartAddr)
+        break // GenerateFromMapOrDwarf made fLines.Sort(SymbolSortByStartAddr)
       else if start >= low_pc then
       begin
         if name = '' then
@@ -2894,8 +2897,7 @@ begin
   else
     read.Copy(@header64, SizeOf(header64));
   // read the debug_abbrev section corresponding to this debug_info section
-  ReadAbbrevTable(DebugAbbrevSectionOffset + header64.debug_abbrev_offset,
-    DebugAbbrevSectionSize);
+  ReadAbbrevTable(AbbrevOffset + header64.debug_abbrev_offset, AbbrevSize);
   // main decoding loop
   level := 0;
   abbr := read.VarUInt32;
@@ -3010,10 +3012,10 @@ begin
   result := CompareInteger(TDebugSymbol(A).Start, TDebugSymbol(B).Start);
 end;
 
-procedure TDebugFile.GenerateFromMapOrDbg;
+procedure TDebugFile.GenerateFromMapOrDwarf;
 var
   dwarf: TDwarfReader;
-  current_offset, end_offset: QWord;
+  curr, last: QWord;
 begin
   FillCharFast(dwarf, SizeOf(dwarf), 0);
   dwarf.debug := self;
@@ -3021,18 +3023,16 @@ begin
   if dwarf.LoadSections then
   try
     // retrieve line numbers and addresses into Lines[]
-    current_offset := dwarf.DebugLineSectionOffset;
-    end_offset := current_offset + dwarf.DebugLineSectionSize;
-    while current_offset < end_offset do
-      current_offset := dwarf.ParseCompilationUnit(
-        current_offset, end_offset - current_offset);
+    curr := dwarf.LineOffset;
+    last := curr + dwarf.LineSize;
+    while curr < last do
+      curr := dwarf.ParseCompilationUnit(curr, last - curr);
     fLines.Sort(SymbolSortByStartAddr);
     // retrieve function names into Symbols[]
-    current_offset := dwarf.DebugInfoSectionOffset;
-    end_offset := current_offset + dwarf.DebugInfoSectionSize;
-    while current_offset < end_offset do
-      current_offset := dwarf.ParseCompilationFunctions(current_offset,
-        end_offset - current_offset);
+    curr := dwarf.InfoOffset;
+    last := curr + dwarf.InfoSize;
+    while curr < last do
+      curr := dwarf.ParseCompilationFunctions(curr, last - curr);
     fSymbols.Sort(SymbolSortByStartAddr);
   finally
     dwarf.Map.UnMap;
@@ -3092,7 +3092,7 @@ begin
   Dest := P;
 end;
 
-procedure TDebugFile.GenerateFromMapOrDbg;
+procedure TDebugFile.GenerateFromMapOrDwarf;
 var
   P, PEnd: PUtf8Char;
   sections: TDebugLinesDynArray;
@@ -3474,7 +3474,7 @@ begin
        (MabAge < MapAge) then
       // recompute from .map/.dbg if no faster-to-load .mab available
       try
-        GenerateFromMapOrDbg;
+        GenerateFromMapOrDwarf;
         fSymbols.Capacity := fSymbolsCount; // only consume the needed memory
         fLines.Capacity := fLinesCount;
         for i := 0 to fLinesCount - 2 do
@@ -3506,7 +3506,7 @@ begin
     if fSymbolsCount > 0 then
     begin
       // in DWARF, fSymbol[i].Start/Stop sometimes overlap -> ignore on FPC
-      // GenerateFromMapOrDbg() did Sort() by Start so we can guess its enough
+      // GenerateFromMapOrDwarf() did Sort() by Start so we can guess its enough
       {$ifdef ISDELPHI}
       for i := 1 to fSymbolsCount - 1 do
         if fSymbol[i].Start <= fSymbol[i - 1].Stop then
@@ -3679,21 +3679,21 @@ begin
   end;
 end;
 
-function TDebugFile.FindSymbol(aAddressOffset: integer): PDebugSymbol;
+function TDebugFile.FindSymbol(rva: TDebugAddress): PDebugSymbol;
 var
   i, L, R: PtrInt;
 begin
   R := fSymbolsCount - 1;
   L := 0;
   if (R >= 0) and
-     (aAddressOffset >= fSymbol[0].Start) and
-     (aAddressOffset <= fSymbol[R].Stop) then
+     (rva >= fSymbol[0].Start) and
+     (rva <= fSymbol[R].Stop) then
     repeat
       i := (L + R) shr 1;
       result := @fSymbol[i];
-      if aAddressOffset < result^.Start then
+      if rva < result^.Start then
         R := i - 1
-      else if aAddressOffset > result^.Stop then
+      else if rva > result^.Stop then
         L := i + 1
       else
         exit; // found
@@ -3701,21 +3701,21 @@ begin
   result := nil;
 end;
 
-function TDebugFile.FindLines(aAddressOffset: integer): PDebugLines;
+function TDebugFile.FindLines(rva: TDebugAddress): PDebugLines;
 var
   i, L, R: PtrInt;
 begin
   R := fLinesCount - 1;
   L := 0;
   if (R >= 0) and
-     (aAddressOffset >= fLine[0].Symbol.Start) and
-     (aAddressOffset <= fLine[R].Symbol.Stop) then
+     (rva >= fLine[0].Symbol.Start) and
+     (rva <= fLine[R].Symbol.Stop) then
     repeat // efficient O(log(n)) binary search
       i := (L + R) shr 1;
       result := @fLine[i];
-      if aAddressOffset < result^.Symbol.Start then
+      if rva < result^.Symbol.Start then
         R := i - 1
-      else if aAddressOffset > result^.Symbol.Stop then
+      else if rva > result^.Symbol.Stop then
         L := i + 1
       else
         exit;
@@ -3723,13 +3723,12 @@ begin
   result := nil;
 end;
 
-function TDebugFile.FindLines(aAddressOffset: integer;
-  out LineNumber: integer): PDebugLines;
+function TDebugFile.FindLines(rva: TDebugAddress; out line: integer): PDebugLines;
 var
   L, R, n, max: PtrInt;
 begin
-  LineNumber := 0;
-  result := FindLines(aAddressOffset);
+  line := 0;
+  result := FindLines(rva);
   if result = nil then
     exit;
   // unit found -> search line number
@@ -3741,23 +3740,23 @@ begin
   if R >= 0 then
     repeat // efficient O(log(n)) binary search
       n := (L + R) shr 1;
-      if aAddressOffset < result^.Addr[n] then
+      if rva < result^.Addr[n] then
         R := n - 1
       else if (n < max) and
-              (aAddressOffset >= result^.Addr[n + 1]) then
+              (rva >= result^.Addr[n + 1]) then
         L := n + 1
       else
       begin
-        LineNumber := result^.Line[n];
+        line := result^.Line[n];
         exit;
       end;
     until L > R;
 end;
 
-function TDebugFile.AbsoluteToOffset(aAddressAbsolute: PtrUInt): integer;
+function TDebugFile.AbsoluteToRelative(aAddressAbsolute: PtrUInt): TDebugAddress;
 begin
   if (self = nil) or
-     (aAddressAbsolute = 0) then
+     (aAddressAbsolute <= fCodeOffset) then
     result := 0
   else
     result := PtrInt(aAddressAbsolute) - PtrInt(fCodeOffset);
@@ -3765,23 +3764,25 @@ end;
 
 function TDebugFile.IsCode(aAddressAbsolute: PtrUInt): boolean;
 var
-  offset: integer;
+  rva: TDebugAddress;
 begin
-  offset := AbsoluteToOffset(aAddressAbsolute);
-  result := (offset <> 0) and
-            HasDebugInfo and
+  rva := AbsoluteToRelative(aAddressAbsolute);
+  result := (rva <> 0) and
+            (self <> nil) and
+            fHasDebugInfo and
             (((fLine <> nil) and
-              (offset >= fLine[0].Symbol.Start) and
-              (offset <= fLine[fLinesCount - 1].Symbol.Stop)) or
+              (rva >= fLine[0].Symbol.Start) and
+              (rva <= fLine[fLinesCount - 1].Symbol.Stop)) or
              ((fSymbol <> nil) and
-              (offset >= fSymbol[0].Start) and
-              (offset <= fSymbol[fSymbolsCount - 1].Stop)));
+              (rva >= fSymbol[0].Start) and
+              (rva <= fSymbol[fSymbolsCount - 1].Stop)));
 end;
 
 class function TDebugFile.Log(W: TTextWriter; aAddressAbsolute: PtrUInt;
   AllowNotCodeAddr, SymbolNameNotFilename: boolean): boolean;
 var
-  line, offset: integer; // not PtrInt
+  line: integer; // not PtrInt
+  rva: TDebugAddress;
   s: PDebugSymbol;
   l: PDebugLines;
   debug: TDebugFile;
@@ -3808,9 +3809,9 @@ begin
       AddHex;
       exit;
     end;
-    offset := debug.AbsoluteToOffset(aAddressAbsolute);
-    s := debug.FindSymbol(offset);
-    l := debug.FindLines(offset, line);
+    rva := debug.AbsoluteToRelative(aAddressAbsolute);
+    s := debug.FindSymbol(rva);
+    l := debug.FindLines(rva, line);
     if (s = nil) and
        (l = nil) then
     begin
@@ -3861,7 +3862,8 @@ end;
 
 procedure TDebugFile.FindLocationShort(aAddressAbsolute: PtrUInt; var aInfo: ShortString);
 var
-  line, offset: integer; // not PtrInt
+  line: integer; // not PtrInt
+  rva: TDebugAddress;
   s: PDebugSymbol;
   l: PDebugLines;
   c: PUtf8Char;
@@ -3871,9 +3873,9 @@ begin
      (aAddressAbsolute = 0) or
      not HasDebugInfo then
     exit;
-  offset := AbsoluteToOffset(aAddressAbsolute);
-  s := FindSymbol(offset);
-  l := FindLines(offset, line);
+  rva := AbsoluteToRelative(aAddressAbsolute);
+  s := FindSymbol(rva);
+  l := FindLines(rva, line);
   if (s = nil) and
      (l = nil) then
      exit;
@@ -3892,14 +3894,12 @@ begin
       AppendShortCharSafe(')', aInfo);
     end;
     AppendShortCharSafe(' ', aInfo);
-  end
-  else
-    aInfo[0] := #0;
+  end;
   if s <> nil then
     AppendShortAnsi7String(s^.Name, aInfo);
   if line > 0 then
   begin
-    AppendShortTwoChars(ord(' ') + ord('(') shl 8, @aInfo);
+    AppendShortTwoCharsSafe(ord(' ') + ord('(') shl 8, aInfo);
     AppendShortCardinal(line, aInfo);
     AppendShortCharSafe(')', aInfo);
   end;
