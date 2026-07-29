@@ -8871,22 +8871,18 @@ type
       1: (ImageBase64: QWord);
   end;
 
-  TElfIdent = packed record
+  TElfHeader = packed record
     magic: cardinal;
     file_class, data_encoding, file_version, os_abi: byte;
     padding: array[0..7] of byte;
     e_type, e_machine: word;
     e_version: cardinal;
-  end;
-  TElfHeader32 = packed record
-    e_entry, e_phoff, e_shoff: cardinal;
-    e_flags: cardinal;
-    e_ehsize, e_phentsize, e_phnum, e_shentsize, e_shnum, e_shstrndx: word;
-  end;
-  TElfHeader64 = packed record
-    e_entry, e_phoff, e_shoff: QWord;
-    e_flags: cardinal;
-    e_ehsize, e_phentsize, e_phnum, e_shentsize, e_shnum, e_shstrndx: word;
+    case integer of
+      0: (entry32, phoff32, shoff32, flags32: cardinal;
+          ehsize32, phentsize32, phnum32, shentsize32, shnum32, shstrndx32: word);
+      1: (entry64, phoff64, shoff64: QWord;
+          flags64: cardinal;
+          ehsize64, phentsize64, phnum64, shentsize64, shnum64, shstrndx64: word);
   end;
   TElfProg32 = packed record
     p_type, p_offset, p_vaddr, p_paddr, p_filesz, p_memsz, p_flags, p_align: cardinal;
@@ -8909,9 +8905,7 @@ type
 function FindExeSection(const exe: TMemoryMap; name: PUtf8Char;
   var offset, size: integer; imgbase: PQWord): TExeFormat;
 var
-  eid: ^TElfIdent;
-  eh32: ^TElfHeader32;
-  eh64: ^TElfHeader64;
+  e: ^TElfHeader;
   es32, estr32: ^TElfSection32;
   es64, estr64: ^TElfSection64;
   ep32: ^TElfProg32;
@@ -8926,33 +8920,31 @@ var
 begin
   result := efUnknown;
   if imgbase <> nil then
-    imgbase^ := 0; // reset to 0 - and stays 0 on efElf32/efElf64
-  eid := pointer(exe.Buffer);
-  if (eid = nil) or
+    imgbase^ := 0; // reset to 0
+  e := pointer(exe.Buffer);
+  if (e = nil) or
      (name = nil) then
     exit;
-  if (exe.Size > SizeOf(TElfHeader64)) and
-     (eid^.magic = $464c457f) and  // ELF
-     (eid^.file_version = 1) and
-     (eid^.data_encoding = 1) then // Little Endian
-  case eid^.file_class of
+  if (exe.Size > SizeOf(e^)) and
+     (e^.magic = $464c457f) and  // ELF
+     (e^.file_version = 1) and
+     (e^.data_encoding = 1) then // Little Endian
+  case e^.file_class of
     1: // ELFCLASS32
       begin
-        inc(eid);
-        eh32 := pointer(eid);
-        n := eh32^.e_shnum;
+        n := e^.shnum32;
         if (n = 0) or
-           (eh32^.e_shoff = 0) or
-           (eh32^.e_shstrndx >= n) or
-           (eh32^.e_shentsize <> SizeOf(es32^)) or
-           (Int64(eh32^.e_shoff) + PtrInt(n * SizeOf(es32^)) > exe.Size) then
+           (e^.shoff32 = 0) or
+           (e^.shstrndx32 >= n) or
+           (e^.shentsize32 <> SizeOf(es32^)) or
+           (Int64(e^.shoff32) + PtrInt(n * SizeOf(es32^)) > exe.Size) then
           exit;
         if (imgbase <> nil) and
-           (Int64(eh32^.e_phoff) + PtrInt(eh32^.e_phnum) * SizeOf(ep32^) <= exe.Size) then
+           (Int64(e^.phoff32) + PtrInt(e^.phnum32) * SizeOf(ep32^) <= exe.Size) then
         begin
-          ep32 := pointer(exe.Buffer + eh32^.e_phoff);
+          ep32 := pointer(exe.Buffer + e^.phoff32);
           a := high(a);
-          for c := 1 to eh32^.e_phnum do
+          for c := 1 to e^.phnum32 do
           begin
             if ep32^.p_type = 1 then
               a := MinPtrUInt(a, ep32^.p_vaddr);
@@ -8961,8 +8953,8 @@ begin
           if a <> high(a) then
             imgbase^ := a;
         end;
-        es32 := pointer(exe.Buffer + eh32^.e_shoff);
-        estr32 := @PByteArray(es32)[eh32^.e_shstrndx * SizeOf(es32^)];
+        es32 := pointer(exe.Buffer + e^.shoff32);
+        estr32 := @PByteArray(es32)[e^.shstrndx32 * SizeOf(es32^)];
         names := exe.Buffer + estr32^.sh_offset;
         repeat
           if (es32^.sh_name < estr32^.sh_size) and
@@ -8981,21 +8973,19 @@ begin
       end;
     2: // ELFCLASS64
       begin
-        inc(eid);
-        eh64 := pointer(eid);
-        n := eh64^.e_shnum;
+        n := e^.shnum64;
         if (n = 0) or
-           (eh64^.e_shoff = 0) or
-           (eh64^.e_shstrndx >= n) or
-           (eh64^.e_shentsize <> SizeOf(es64^)) or
-           (Int64(eh64^.e_shoff) + PtrInt(n * SizeOf(es64^)) > exe.Size) then
+           (e^.shoff64 = 0) or
+           (e^.shstrndx64 >= n) or
+           (e^.shentsize64 <> SizeOf(es64^)) or
+           (Int64(e^.shoff64) + PtrInt(n * SizeOf(es64^)) > exe.Size) then
           exit;
         if (imgbase <> nil) and
-           (Int64(eh64^.e_phoff) + PtrInt(eh64^.e_phnum) * SizeOf(ep64^) <= exe.Size) then
+           (Int64(e^.phoff64) + PtrInt(e^.phnum64) * SizeOf(ep64^) <= exe.Size) then
         begin
-          ep64 := pointer(exe.Buffer + eh64^.e_phoff);
+          ep64 := pointer(exe.Buffer + e^.phoff64);
           a := high(a);
-          for c := 1 to eh64^.e_phnum do
+          for c := 1 to e^.phnum64 do
           begin
             if ep64^.p_type = 1 then
               a := MinPtrUInt(a, ep64^.p_vaddr);
@@ -9004,8 +8994,8 @@ begin
           if a <> high(a) then
             imgbase^ := a;
         end;
-        es64 := pointer(exe.Buffer + eh64^.e_shoff);
-        estr64 := @PByteArray(es64)[eh64^.e_shstrndx * SizeOf(es64^)];
+        es64 := pointer(exe.Buffer + e^.shoff64);
+        estr64 := @PByteArray(es64)[e^.shstrndx64 * SizeOf(es64^)];
         names := exe.Buffer + estr64^.sh_offset;
         repeat
           if (es64^.sh_name < estr64^.sh_size) and
@@ -9025,15 +9015,15 @@ begin
         until n = 0;
       end;
   end
-  else if (PDosHeader(eid)^.e_magic = $5A4D) and // DOS
-          (PDosHeader(eid)^.e_lfanew + SizeOf(pe^) < exe.Size) then
+  else if (PDosHeader(e)^.e_magic = $5A4D) and // DOS
+          (PDosHeader(e)^.e_lfanew + SizeOf(pe^) < exe.Size) then
   begin
-    pe := pointer(exe.Buffer + PDosHeader(eid)^.e_lfanew); // COFF
+    pe := pointer(exe.Buffer + PDosHeader(e)^.e_lfanew); // COFF
     n := pe^.NumberOfSections; // pe^.NumberOfSymbols=0 if external .dbg file
     if (pe^.Signature <> $00004550) or
        (pe^.SizeOfOptionalHeader < SizeOf(coff^)) or
        (n = 0) or
-       (Int64(PDosHeader(eid)^.e_lfanew) + SizeOf(pe^) +
+       (Int64(PDosHeader(e)^.e_lfanew) + SizeOf(pe^) +
         pe^.SizeOfOptionalHeader + PtrInt(n * SizeOf(ps^)) > exe.Size) then
       exit;
     coff := @PByteArray(pe)[SizeOf(pe^)]; // optional header
@@ -9074,7 +9064,6 @@ begin
     until n = 0;
   end;
 end;
-
 
 { ReserveExecutableMemory() / TFakeStubBuffer }
 
