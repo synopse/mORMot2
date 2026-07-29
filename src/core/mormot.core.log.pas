@@ -59,8 +59,7 @@ uses
 
 type
   /// we store 32-bit relative virtual addresses (RVA) in memory and in .mab files
-  // - for PE executables they are computed as VirtualAddress - ImageBase;
-  // for ELF executables, ImageBase is assumed to be 0
+  // - they are computed and persisted as VirtualAddress - ImageBase
   // - 32-bit RVAs are sufficient in practice for any executable or shared
   // library supported by mORMot; larger executables are typically installers with
   // compressed payloads appended after an initial Setup executable of a few MB
@@ -748,7 +747,7 @@ type
     {$ifdef OSWINDOWS}
     fNoEnvironmentVariable: boolean;
     {$endif OSWINDOWS}
-    fHandleExceptions, fExceptionIgnoreLibrary: boolean;
+    fHandleExceptions, fExceptionIgnoreExternal: boolean;
     {$ifndef NOEXCEPTIONINTERCEPT}
     fOnBeforeException: TOnBeforeException;
     {$endif NOEXCEPTIONINTERCEPT}
@@ -2276,7 +2275,7 @@ type
     LineOffset, LineSize,              // debug_line
     InfoOffset, InfoSize,              // debug_info
     AbbrevOffset, AbbrevSize: integer; // debug_abbrev
-    ImageBase: QWord; // e.g. 0100000000 on Win64, 00400000 on Win32, 0 on ELF
+    ImageBase: QWord; // e.g. 0100000000 on Win64 or 00400000 on Win32
     debug: TDebugFile;
     Lines: TInt64DynArray; // TDebugLines.Addr[] in high 40-bit, Line[] in lower
     dirs, files: TRawUtf8DynArray;
@@ -2366,7 +2365,6 @@ begin
       if crc32(0, Map.Buffer, Map.Size) <> crc then  // zlib algorithm
         Map.UnMap; // the located debug file does not match the executable
   end;
-  //ConsoleWrite(['ImageBase=',Int64ToHexShort(ImageBase)]);
   if (FindExeSection(Map, '.debug_line', LineOffset, LineSize, @ImageBase) <> efUnknown) and
      (FindExeSection(Map, '.debug_info', InfoOffset, InfoSize) <> efUnknown) and
      (FindExeSection(Map, '.debug_abbrev', AbbrevOffset, AbbrevSize) <> efUnknown) then
@@ -2419,7 +2417,7 @@ begin
   read.Copy(@tmp, addr_size);
   if tmp > ImageBase then
   begin
-    dec(tmp, ImageBase);  // e.g. 0100000000 Win64, 00400000 Win32, 0 ELF
+    dec(tmp, ImageBase);  // e.g. 0100000000 on Win64 or 00400000 on Win32
     if tmp > MaxInt then
       read.ErrorData('DWARF: ReadAddress %=% overflow %',
         [ctx, Int64ToHexShort(tmp), addr_size]);
@@ -3461,6 +3459,7 @@ begin
     fDebugFile := ChangeFileExt(ExeFile, '.map');
     {$endif FPC}
     {$else}
+    fCodeOffset := GetExecutableBase; // for the current exe/so
     ExeFile := Executable.InstanceFileName;
     fDebugFile := ExeFile; // exeinfo's ReadDebugLink() would redirect to .dbg
     {$endif OSWINDOWS}
@@ -3653,7 +3652,7 @@ var
   F: TStream;
 begin
   if aFileName = '' then
-    result := ChangeFileExt(GetModuleName(hInstance), '.mab')
+    result := ChangeFileExt(Executable.InstanceFileName, '.mab')
   else
     result := aFileName;
   DeleteFile(result);
@@ -3776,7 +3775,7 @@ begin
      (aAddressAbsolute <= fCodeOffset) then
     result := 0
   else
-    result := PtrInt(aAddressAbsolute) - PtrInt(fCodeOffset);
+    result := aAddressAbsolute - fCodeOffset;
 end;
 
 function TDebugFile.IsCode(aAddressAbsolute: PtrUInt): boolean;
