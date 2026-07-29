@@ -4162,7 +4162,7 @@ begin
   i := SDDL_WKS_INDEX[k];
   if i <> 0 then
   begin
-    AppendShortTwoChars(@SID_SDDLW[i - 1], @s); // e.g. WD SY
+    AppendShortTwoCharsSafe(SID_SDDLW[i - 1], s); // e.g. WD SY
     exit;
   end
   else if (k = wksNull) and
@@ -4176,7 +4176,7 @@ begin
       i := SDDL_WKR_INDEX[TWellKnownRid(i)];
       if i <> 0 then
       begin
-        AppendShortTwoChars(@SID_SDDLW[i - 1], @s); // e.g. DA DU
+        AppendShortTwoCharsSafe(SID_SDDLW[i - 1], s); // e.g. DA DU
         exit;
       end;
     end
@@ -4297,16 +4297,16 @@ begin
     SddlInitialize;
   i := IntegerScanIndex(@SAR_MASK, length(SAR_MASK), cardinal(mask));
   if i >= 0 then
-    AppendShortTwoChars(@SAR_SDDL[TSecAccessRight(i)][1], @s)
+    AppendShortTwoCharsSafe(PWord(@SAR_SDDL[TSecAccessRight(i)][1])^, s)
   else if mask - samWithSddl <> [] then
   begin
-    AppendShortTwoChars(ord('0') + ord('x') shl 8, @s);  // missing token
+    AppendShortTwoCharsSafe(ord('0') + ord('x') shl 8, s);  // missing token
     AppendShortIntHex(cardinal(mask), s); // stored as @x##### hexadecimal
   end
   else
     for a := low(a) to high(a) do
-      if a in mask then
-        AppendShortTwoChars(@SAM_SDDL[a][1], @s); // store as SDDL pairs
+      if a in mask then // store as SDDL pairs
+        AppendShortTwoCharsSafe(PWord(@SAM_SDDL[a][1])^, s);
 end;
 
 function SddlNextOpaque(var p: PUtf8Char; var ace: TSecAce): TAceTextParse;
@@ -4453,7 +4453,7 @@ begin
     sctInt64:
       if v^.Int.Base <> scbDecimal then // scbOctal does fallback to hexa
       begin
-        AppendShortTwoChars(ord('0') + ord('x') shl 8, @s);
+        AppendShortTwoCharsSafe(ord('0') + ord('x') shl 8, s);
         AppendShortIntHex(v^.Int.Value, s);
       end
       else if v^.Int.Sign = scsNegative then
@@ -4853,7 +4853,7 @@ begin
     AppendShort(SAT_SDDL[AceType], s)
   else
   begin
-    AppendShortTwoChars(ord('0') + ord('x') shl 8, @s);
+    AppendShortTwoCharsSafe(ord('0') + ord('x') shl 8, s);
     AppendShortIntHex(RawType, s); // fallback to lower hex - paranoid
   end;
   AppendShortCharSafe(';', s);
@@ -5898,9 +5898,9 @@ begin
   if SCOPE_P[scope] in Flags then
     AppendShortChar('P', @tmp);
   if SCOPE_AR[scope] in Flags then
-    AppendShortTwoChars(ord('A') + ord('R') shl 8, @tmp);
+    AppendShortTwoCharsSafe(ord('A') + ord('R') shl 8, tmp);
   if SCOPE_AI[scope] in Flags then
-    AppendShortTwoChars(ord('A') + ord('I') shl 8, @tmp);
+    AppendShortTwoCharsSafe(ord('A') + ord('I') shl 8, tmp);
   acl := @Dacl;
   if scope = sasSacl then
     acl := @Sacl;
@@ -5991,12 +5991,12 @@ begin
   tmp[0] := #0;
   if Owner <> '' then
   begin
-    AppendShortTwoChars(ord('O') + ord(':') shl 8, @tmp);
+    AppendShortTwoCharsSafe(ord('O') + ord(':') shl 8, tmp);
     SddlAppendSid(tmp, pointer(Owner), dom);
   end;
   if Group <> '' then
   begin
-    AppendShortTwoChars(ord('G') + ord(':') shl 8, @tmp);
+    AppendShortTwoCharsSafe(ord('G') + ord(':') shl 8, tmp);
     SddlAppendSid(tmp, pointer(Group), dom);
   end;
   sddl.AddShort(tmp);

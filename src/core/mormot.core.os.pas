@@ -6784,7 +6784,7 @@ begin
   os := GetSystemError(error);
   if os in [seSuccess, seOther] then
     exit;
-  AppendShortTwoChars(ord(' ') + ord('[') shl 8, @result);
+  AppendShortTwoCharsSafe(ord(' ') + ord('[') shl 8, result);
   SystemErrorAppend(os, result);
   AppendShortCharSafe(']', result);
 end;
@@ -9214,7 +9214,7 @@ begin
   AppendFreeTotalKB(info.memtotal - info.memfree, info.memtotal, result);
   AppendShortChar('(', @result);
   AppendShortByte(info.percent, @result); // append '0'..'99' range
-  AppendShortTwoChars(ord('%') + ord(')') shl 8, @result);
+  AppendShortTwoCharsSafe(ord('%') + ord(')') shl 8, result);
 end;
 
 function GetDiskAvailable(aDriveFolderOrFile: TFileName): QWord;

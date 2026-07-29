@@ -10538,7 +10538,7 @@ begin
           get_error := ERR_get_error; // unqueue earliest error code
           if get_error <> SSL_ERROR_NONE then
           begin
-            AppendShortTwoChars(ord(' ') + ord('(') shl 8, @dest);
+            AppendShortTwoCharsSafe(ord(' ') + ord('(') shl 8, dest);
             OpenSSL_error_short(get_error, tmp);
             AppendShort(tmp, dest);
             AppendShortCharSafe(')', dest)

@@ -1356,6 +1356,8 @@ var
 begin
   if value < 100 then
   begin
+    if ord(result[0]) + 4 > high(result) then
+      exit;
     PCardinal(PAnsiChar(@result) + ord(result[0]) + 1)^ :=
       ord('0') + ord('.') shl 8 + cardinal(TwoDigitLookupW[value]) shl 16;
     inc(result[0], 4);
@@ -1366,8 +1368,8 @@ begin
     AppendShortCardinal(d100.d, result);
     if d100.m <> 0 then
     begin
-      AppendShortChar('.', @result);
-      AppendShortTwoChars(TwoDigitLookupW[d100.m], @result);
+      AppendShortCharSafe('.', result);
+      AppendShortTwoCharsSafe(TwoDigitLookupW[d100.m], result);
     end;
   end;
   AppendShort(valueunit, result)
@@ -1381,7 +1383,7 @@ begin
   d := value div 60;
   AppendShortCardinal(d, result);
   AppendShort(u, result);
-  AppendShortTwoChars(TwoDigitLookupW[value - (d * 60)], @result);
+  AppendShortTwoCharsSafe(TwoDigitLookupW[value - (d * 60)], result);
 end;
 
 procedure MicroSecToString(Micro: QWord; out result: TShort16);
@@ -1392,7 +1394,7 @@ begin
   else if Int64(Micro) < 1000 then
   begin
     AppendShortCardinal(Micro, result);
-    AppendShortTwoChars(ord('u') + ord('s') shl 8, @result);
+    AppendShortTwoCharsSafe(ord('u') + ord('s') shl 8, result);
   end
   else if Micro < MicroSecsPerSec then
     AppendShortBy100(
@@ -1408,7 +1410,7 @@ begin
   else
   begin
     AppendShortCardinal(Micro div MicroSecsPerDay, result);
-    AppendShortChar('d', @result);
+    AppendShortCharSafe('d', result);
   end;
 end;
 
@@ -1428,7 +1430,7 @@ begin
   else if Nano < 1000 then
   begin
     AppendShortCardinal(Nano, result);
-    AppendShortTwoChars(ord('n') + ord('s') shl 8, @result);
+    AppendShortTwoCharsSafe(ord('n') + ord('s') shl 8, result);
   end
   else if Nano < 1000000 then
     AppendShortBy100(

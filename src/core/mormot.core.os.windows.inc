@@ -1882,7 +1882,7 @@ begin
       result := true;
     end;
   if result then
-    AppendShortChar(']', @dest)
+    AppendShortCharSafe(']', dest)
 end;
 
 function TSynLogExceptionContext.AdditionalInfo(var dest: ShortString): boolean;

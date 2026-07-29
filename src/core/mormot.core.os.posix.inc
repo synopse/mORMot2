@@ -1991,7 +1991,7 @@ begin
     dest := StrError(error) // FPC RTL returns its plain text as ShortString
   else
   begin
-    AppendShortTwoChars(ord(' ') + ord('(') shl 8, @dest);
+    AppendShortTwoCharsSafe(ord(' ') + ord('(') shl 8, dest);
     AppendShort(StrError(error), dest); // e.g. 'ECHILD (No child processes)'
     AppendShortCharSafe(')', dest);
   end;

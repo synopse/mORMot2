@@ -382,9 +382,9 @@ begin
             AppendShortChar(' ', @res)
           else
           begin
-            AppendShortTwoChars(ord(' ') + ord('(') shl 8, @res);
+            AppendShortTwoCharsSafe(ord(' ') + ord('(') shl 8, res);
             AppendShort(GetEnumName(TypeInfo(TTftpError), seq)^, res);
-            AppendShortTwoChars(ord(')') + ord(' ') shl 8, @res);
+            AppendShortTwoCharsSafe(ord(')') + ord(' ') shl 8, res);
           end;
           AppendShortBuffer(@frame.ErrorMsg, StrLen(@frame.ErrorMsg), high(res), @res);
         end;

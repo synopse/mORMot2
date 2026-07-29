@@ -9798,7 +9798,7 @@ begin
   begin
     PCardinal(@persec)^ := $2001; // ' '
     AppendKB(PerSecond, persec, {withspace=}false);
-    AppendShortTwoChars(ord('/') + ord('s') shl 8, @persec);
+    AppendShortTwoCharsSafe(ord('/') + ord('s') shl 8, persec);
   end;
   curr[0] := #0;
   AppendKB(CurrentSize, curr, {withspace=}false);

@@ -10379,7 +10379,7 @@ begin
     result[0] := #0;
     for cu := low(cu) to high(cu) do
       if cu in u then
-        AppendShortTwoChars(@CU_TEXT[cu], @result);
+        AppendShortTwoCharsSafe(PWord(@CU_TEXT[cu])^, result);
   end
   else
     GetSetNameShort(TypeInfo(TCryptCertUsages), u, result, {trim=}true);
