@@ -1098,14 +1098,9 @@ begin
   Win32PWideCharToFileName(tmp, result);
 end;
 
-function IsMainExecutable(aAddress: pointer): boolean;
-var
-  hm: HMODULE;
+function IsCurrentExecutable(aAddress: pointer): boolean;
 begin
-  hm := 0;
-  result := GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT or
-              GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, aAddress, hm) and
-            (hm = HINSTANCE);
+  result := GetExecutableBase(aAddress) = PtrUInt(HInstance); // current exe/dll
 end;
 
 function FileIsWritable(const FileName: TFileName): boolean;

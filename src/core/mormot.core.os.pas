@@ -1734,9 +1734,10 @@ function GetExecutableBase(aAddress: pointer = nil): PtrUInt;
 // - calls dladdr() on POSIX, or GetModuleHandleEx() on Windows
 function GetExecutableName(aAddress: pointer; aBase: PPtrUInt = nil): TFileName;
 
-/// check if a function address is known within the main executable module
-// - calls dladdr() on POSIX, or GetModuleHandleEx() on Windows
-function IsMainExecutable(aAddress: pointer): boolean;
+/// check if a function address is known within the current running module
+// - not the main process, but the current module - maybe a dll
+// - calls dladdr() on POSIX, or GetModuleHandleEx() against HInstance on Windows
+function IsCurrentExecutable(aAddress: pointer): boolean;
 
 type
   /// identify an operating system folder for GetSystemPath()

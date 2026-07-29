@@ -1828,13 +1828,9 @@ begin
     aBase^ := PtrUInt(dlinfo.dli_fbase);
 end;
 
-function IsMainExecutable(aAddress: pointer): boolean;
-var
-  dlinfo: dl_info;
+function IsCurrentExecutable(aAddress: pointer): boolean;
 begin
-  FillCharFast(dlinfo, sizeof(dlinfo), 0);
-  dladdr(aAddress, @dlinfo);
-  result := (dlinfo.dli_fbase = PosixProgramInfo.dli_fbase);
+  result := (GetExecutableBase(aAddress) = PtrUInt(PosixProgramInfo.dli_fbase));
 end;
 
 function CopyFile(const Source, Target: TFileName; FailIfExists: boolean): boolean;

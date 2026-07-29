@@ -27,13 +27,13 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
-  mormot.core.buffers,
-  mormot.core.rtti,
-  mormot.core.data,
-  mormot.core.json,
   mormot.core.unicode,
   mormot.core.text,
-  mormot.core.datetime;
+  mormot.core.datetime,
+  mormot.core.rtti,
+  mormot.core.buffers,
+  mormot.core.data,
+  mormot.core.json;
 
 
 { ************** Debug Symbols Processing from Delphi .map or FPC/GDB DWARF }
@@ -854,11 +854,11 @@ type
     // - do nothing if exceptions are not intercepted on this target platform
     property ExceptionIgnoreCurrentThread: boolean
       index tiExceptionIgnore read GetCurrentThreadFlag write SetCurrentThreadFlag;
-    /// set true will log exceptions only from the main executable, not from library
-    // - will follow IsMainExecutable() result
+    /// set true will log exceptions only from the current (exe/dll) module
+    // - will follow IsCurrentExecutable() logic against HInstance
     // - do nothing if exceptions are not intercepted on this target platform
-    property ExceptionIgnoreLibrary: boolean
-      read fExceptionIgnoreLibrary write fExceptionIgnoreLibrary;
+    property ExceptionIgnoreExternal: boolean
+      read fExceptionIgnoreExternal write fExceptionIgnoreExternal;
     /// allow to temporarly avoid logging in the current thread
     // - won't affect exceptions logging, as one would expect for safety reasons
     // - after setting true to this property, should eventually be reset to false:
@@ -6655,9 +6655,9 @@ begin
   log := HandleExceptionFamily.Add;
   if log = nil then
     exit;
-  if log.fFamily.ExceptionIgnoreLibrary and
+  if log.fFamily.ExceptionIgnoreExternal and
      (Ctxt.EAddr <> 0) and
-     not IsMainExecutable(pointer(Ctxt.EAddr)) then // fast guess
+     not IsCurrentExecutable(pointer(Ctxt.EAddr)) then // fast guess
     exit;
   thrdnam := CurrentThreadNameShort;
   bak := nfo^.Flags;
