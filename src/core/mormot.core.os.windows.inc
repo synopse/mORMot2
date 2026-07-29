@@ -1082,18 +1082,19 @@ begin
     result := 0;
 end;
 
-function GetExecutableName(aAddress: pointer): TFileName;
+function GetExecutableName(aAddress: pointer; aBase: PPtrUInt): TFileName;
 var
   tmp: TByteToWideChar;
-  hm: HMODULE;
+  base: PtrUInt;
 begin
   result := '';
-  hm := 0;
-  if not GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT or
-           GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, aAddress, hm) then
+  base := GetExecutableBase(aAddress);
+  if base = 0 then
     exit;
+  if aBase <> nil then
+    aBase^ := base;
   FillcharFast(tmp, SizeOf(tmp), 0);
-  GetModuleFileNameW(hm, tmp, SizeOf(tmp));
+  GetModuleFileNameW(HMODULE(base), tmp, SizeOf(tmp));
   Win32PWideCharToFileName(tmp, result);
 end;
 

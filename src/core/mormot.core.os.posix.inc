@@ -1817,13 +1817,15 @@ begin
   result := PtrUInt(dlinfo.dli_fbase);
 end;
 
-function GetExecutableName(aAddress: pointer): TFileName;
+function GetExecutableName(aAddress: pointer; aBase: PPtrUInt): TFileName;
 var
   dlinfo: dl_info;
 begin
   FillCharFast(dlinfo, sizeof(dlinfo), 0);
   dladdr(aAddress, @dlinfo);
   GetDlInfoName(dlinfo, result);
+  if aBase <> nil then
+    aBase^ := PtrUInt(dlinfo.dli_fbase);
 end;
 
 function IsMainExecutable(aAddress: pointer): boolean;

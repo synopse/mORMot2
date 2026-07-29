@@ -1731,8 +1731,8 @@ var
 function GetExecutableBase(aAddress: pointer = nil): PtrUInt;
 
 /// try to retrieve the file name of the executable/library holding a function
-// - calls dladdr() on POSIX, or GetModuleFileName() on Windows
-function GetExecutableName(aAddress: pointer): TFileName;
+// - calls dladdr() on POSIX, or GetModuleHandleEx() on Windows
+function GetExecutableName(aAddress: pointer; aBase: PPtrUInt = nil): TFileName;
 
 /// check if a function address is known within the main executable module
 // - calls dladdr() on POSIX, or GetModuleHandleEx() on Windows
