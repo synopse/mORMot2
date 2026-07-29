@@ -53,11 +53,11 @@ procedure KBU(bytes: Int64; var result: RawUtf8);
 
 /// convert a count to a human readable value power-of-two metric value
 // - append E, P, T, G, M, K symbol, with one fractional digit
-procedure K(value: Int64; var result: ShortString); overload;
+procedure KVar(value: Int64; var result: ShortString);
 
 /// convert a count to a human readable value power-of-two metric value
 // - append E, P, T, G, M, K symbol, with one fractional digit
-function K(value: Int64): TShort15; overload;
+function K(value: Int64): TShort15; 
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert a seconds elapsed time into a human readable value
@@ -75,7 +75,7 @@ function MilliSecToString(MS: QWord): TShort15;
 /// convert a micro seconds elapsed time into a human readable value
 // - append 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value range,
 // with two fractional digits
-function MicroSecToString(Micro: QWord): TShort15; overload;
+function MicroSecToString(Micro: QWord): TShort15; 
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// compute elapsed time into a human readable value, from a Start value
@@ -88,7 +88,7 @@ function MicroSecFrom(Start: QWord): TShort15;
 /// convert a micro seconds elapsed time into a human readable value
 // - append 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value range,
 // with two fractional digits
-procedure MicroSecToString(Micro: QWord; var result: ShortString); overload;
+procedure MicroSecToStringVar(Micro: QWord; var result: ShortString); 
 
 /// convert a micro seconds elapsed time into a human readable value
 // - append 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value range,
@@ -867,13 +867,13 @@ function UnixTimeToString(const UnixTime: TUnixTime; Expanded: boolean = true;
 // a small text layout, perfect e.g. for naming a local file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
 // a date > 1999 (a current date would be fine)
-procedure UnixTimeToFileShort(const UnixTime: TUnixTime; var result: ShortString); overload;
+procedure UnixTimeToFileShortVar(const UnixTime: TUnixTime; var result: ShortString);
 
 /// convert some second-based c-encoded time (from Unix epoch 1/1/1970) to
 // a small text layout, perfect e.g. for naming a local file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
 // a date > 1999 (a current date would be fine)
-function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort15; overload;
+function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort15; 
   {$ifdef FPC_OR_UNICODE} inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert some second-based c-encoded time to the ISO 8601 text layout, either
@@ -1297,7 +1297,7 @@ begin
   FastSetString(result, @tmp[1], ord(tmp[0]));
 end;
 
-procedure K(value: Int64; var result: ShortString);
+procedure KVar(value: Int64; var result: ShortString);
 begin
   result[0] := #0;
   AppendKb(value, result, {withspace=}false);
@@ -1308,7 +1308,7 @@ end;
 
 function K(value: Int64): TShort15;
 begin
-  K(Value, result);
+  KVar(Value, result);
 end;
 
 function IntToThousandString(Value: PtrInt; const Sep: ShortString): TShort31;
@@ -1329,17 +1329,17 @@ end;
 
 function SecToString(S: QWord): TShort15;
 begin
-  MicroSecToString(S * MicroSecsPerSec, result);
+  MicroSecToStringVar(S * MicroSecsPerSec, result);
 end;
 
 function MilliSecToString(MS: QWord): TShort15;
 begin
-  MicroSecToString(MS * MicroSecsPerMilliSec, result);
+  MicroSecToStringVar(MS * MicroSecsPerMilliSec, result);
 end;
 
 function MicroSecToString(Micro: QWord): TShort15;
 begin
-  MicroSecToString(Micro, result);
+  MicroSecToStringVar(Micro, result);
 end;
 
 function MicroSecFrom(Start: QWord): TShort15;
@@ -1347,7 +1347,7 @@ var
   stop: Int64;
 begin
   QueryPerformanceMicroSeconds(stop);
-  MicroSecToString(stop - Int64(Start), result);
+  MicroSecToStringVar(stop - Int64(Start), result);
 end;
 
 procedure AppendShortBy100(value: cardinal; const valueunit: ShortString;
@@ -1387,7 +1387,7 @@ begin
   AppendShortTwoCharsSafe(TwoDigitLookupW[value - (d * 60)], result);
 end;
 
-procedure MicroSecToString(Micro: QWord; var result: ShortString);
+procedure MicroSecToStringVar(Micro: QWord; var result: ShortString);
 begin
   result[0] := #0;
   if Int64(Micro) <= 0 then // warning: QWord=Int64 on pre-Unicode Delphi
@@ -1419,7 +1419,7 @@ function MicroSecToText(Micro: QWord): RawUtf8;
 var
   tmp: TShort15;
 begin
-  MicroSecToString(Micro, tmp);
+  MicroSecToStringVar(Micro, tmp);
   FastSetString(result, @tmp[1], ord(tmp[0]));
 end;
 
@@ -1437,7 +1437,7 @@ begin
     AppendShortBy100(
       {$ifdef CPU32} PCardinal(@Nano)^ {$else} Nano {$endif} div 10, 'us', result)
   else
-    MicroSecToString(Nano div NanoSecsPerMicroSec, result);
+    MicroSecToStringVar(Nano div NanoSecsPerMicroSec, result);
 end;
 
 
@@ -3501,7 +3501,7 @@ begin
     Expanded, false, FirstTimeChar, #0, result);
 end;
 
-procedure UnixTimeToFileShort(const UnixTime: TUnixTime; var result: ShortString);
+procedure UnixTimeToFileShortVar(const UnixTime: TUnixTime; var result: ShortString);
 begin
   // use 'YYMMDDHHMMSS' format
   if UnixTime <= 0 then
@@ -3512,12 +3512,12 @@ end;
 
 function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort15;
 begin
-  UnixTimeToFileShort(UnixTime, result);
+  UnixTimeToFileShortVar(UnixTime, result);
 end;
 
 function UnixMSTimeToFileShort(const UnixMSTime: TUnixMSTime): TShort15;
 begin
-  UnixTimeToFileShort(UnixMSTime div MilliSecsPerSec, result);
+  UnixTimeToFileShortVar(UnixMSTime div MilliSecsPerSec, result);
 end;
 
 function UnixTimePeriodToString(const UnixTime: TUnixTime;
@@ -4125,7 +4125,7 @@ begin
   len := @tmp[23] - p;
   if len > Width then
   begin
-    K(Value, alt); // truncate to xxxK or xxxM
+    KVar(Value, alt); // truncate to xxxK or xxxM
     p := @alt[1];
     len := ord(alt[0]);
   end;

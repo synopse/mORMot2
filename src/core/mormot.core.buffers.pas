@@ -216,7 +216,7 @@ type
   TAlgoCompress = class
   protected
     fAlgoID: byte;
-    fAlgoHasForcedFormat: boolean;
+    fAlgoHasForcedFormat: boolean; // e.g. AlgoGZ forces .gz layout
     fAlgoFileExt: TFileName;
     procedure EnsureAlgoHasNoForcedFormat(const caller: ShortString);
   public

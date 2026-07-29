@@ -5378,7 +5378,7 @@ function TLdapResultList.GetElapsed: RawUtf8;
 var
   tmp: TShort16;
 begin
-  MicroSecToString(fMicroSec, tmp);
+  MicroSecToStringVar(fMicroSec, tmp);
   FastSetString(result, @tmp[1], ord(tmp[0]));
 end;
 

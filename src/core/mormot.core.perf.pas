@@ -2420,7 +2420,7 @@ function TPrecisionTimer.Stop: TShort15;
 begin
   if fStart <> 0 then
     Pause;
-  MicroSecToString(fTime, result);
+  MicroSecToStringVar(fTime, result);
 end;
 
 function TPrecisionTimer.StopInMicroSec: TSynMonitorTotalMicroSec;
@@ -2434,14 +2434,14 @@ function TPrecisionTimer.Time: TShort15;
 begin
   if fStart <> 0 then
     Pause;
-  MicroSecToString(fTime, result);
+  MicroSecToStringVar(fTime, result);
 end;
 
 function TPrecisionTimer.LastTime: TShort15;
 begin
   if fStart <> 0 then
     Pause;
-  MicroSecToString(fLastTime, result);
+  MicroSecToStringVar(fLastTime, result);
 end;
 
 function TPrecisionTimer.ByCount(Count: QWord): TShort15;
@@ -2536,7 +2536,7 @@ function TLocalPrecisionTimer.Stop: TShort15;
 begin
   if fTimer.fStart <> 0 then
     fTimer.Pause;
-  MicroSecToString(fTimer.fTime, result);
+  MicroSecToStringVar(fTimer.fTime, result);
 end;
 
 constructor TLocalPrecisionTimer.CreateAndStart;
@@ -2552,7 +2552,7 @@ end;
 
 function TSynMonitorTime.GetAsText: TShort15;
 begin
-  MicroSecToString(fMicroSeconds, result);
+  MicroSecToStringVar(fMicroSeconds, result);
 end;
 
 procedure TSynMonitorTime.AddTime(MicroSeconds: TSynMonitorTotalMicroSec);
@@ -2577,7 +2577,7 @@ end;
 
 function TSynMonitorOneTime.GetAsText: TShort15;
 begin
-  MicroSecToString(fMicroSeconds, result);
+  MicroSecToStringVar(fMicroSeconds, result);
 end;
 
 function TSynMonitorOneTime.PerSecond(const Count: QWord): QWord;

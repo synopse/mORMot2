@@ -5636,7 +5636,7 @@ begin
       end;
     end;
     QueryPerformanceMicroSeconds(stop);
-    MicroSecToString(stop - start, us);
+    MicroSecToStringVar(stop - start, us);
     AppendShortCharSafe(' ', us);
   end;
   // notify the scope

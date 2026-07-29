@@ -6241,7 +6241,7 @@ var
       QueryPerformanceMicroSeconds(stop);
       dec(stop, fOwner.fBroadcastStart);
       if stop > 0 then
-        MicroSecToString(stop, us);
+        MicroSecToStringVar(stop, us);
     end;
     fOwner.fLog.Add.Log(sllTrace, 'OnFrameReceived: % % %',
       [remote.IP4Short, txt, us], self);
