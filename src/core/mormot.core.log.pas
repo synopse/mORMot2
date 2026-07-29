@@ -3715,7 +3715,7 @@ begin
   R := fSymbolsCount - 1;
   if (R >= 0) and
      (rva > 0) then
-    repeat
+    repeat // efficient O(log(n)) binary search
       i := (L + R) shr 1;
       result := @fSymbol[i];
       if rva < result^.Start then
@@ -3725,7 +3725,7 @@ begin
       else
         exit; // found
     until L > R;
-  result := nil;
+  result := nil; // not found
 end;
 
 function TDebugFile.FindLines(rva: TDebugAddress): PDebugLines;
@@ -3744,36 +3744,38 @@ begin
       else if rva > result^.Symbol.Stop then
         L := i + 1
       else
-        exit;
+        exit; // found
     until L > R;
-  result := nil;
+  result := nil; // not found
 end;
 
 function TDebugFile.FindLines(rva: TDebugAddress; out line: integer): PDebugLines;
 var
-  L, R, n, max: PtrInt;
+  i, L, R, max: PtrInt;
+  a: PIntegerArray;
 begin
   line := 0;
   result := FindLines(rva);
   if result = nil then
     exit;
-  // unit found -> search line number
+  // unit found -> search line number from within matching Addr[]
   if result^.Addr = nil then
     exit;
-  max := length(result^.Addr) - 1;
+  max := PDALen(PAnsiChar(result^.Addr) - _DALEN)^ + (_DAOFF- 1);
   L := 0;
   R := max;
   if R >= 0 then
-    repeat // efficient O(log(n)) binary search
-      n := (L + R) shr 1;
-      if rva < result^.Addr[n] then
-        R := n - 1
-      else if (n < max) and
-              (rva >= result^.Addr[n + 1]) then
-        L := n + 1
+    repeat // efficient O(log(i)) binary search
+      i := (L + R) shr 1;
+      a := @result^.Addr[i];
+      if rva < a^[0] then
+        R := i - 1
+      else if (i < max) and
+              (rva >= a^[1]) then
+        L := i + 1
       else
       begin
-        line := result^.Line[n];
+        line := result^.Line[i]; // found
         exit;
       end;
     until L > R;
