@@ -3711,11 +3711,10 @@ function TDebugFile.FindSymbol(rva: TDebugAddress): PDebugSymbol;
 var
   i, L, R: PtrInt;
 begin
-  R := fSymbolsCount - 1;
   L := 0;
+  R := fSymbolsCount - 1;
   if (R >= 0) and
-     (rva >= fSymbol[0].Start) and
-     (rva <= fSymbol[R].Stop) then
+     (rva > 0) then
     repeat
       i := (L + R) shr 1;
       result := @fSymbol[i];
@@ -3733,11 +3732,10 @@ function TDebugFile.FindLines(rva: TDebugAddress): PDebugLines;
 var
   i, L, R: PtrInt;
 begin
-  R := fLinesCount - 1;
   L := 0;
+  R := fLinesCount - 1;
   if (R >= 0) and
-     (rva >= fLine[0].Symbol.Start) and
-     (rva <= fLine[R].Symbol.Stop) then
+     (rva > 0) then
     repeat // efficient O(log(n)) binary search
       i := (L + R) shr 1;
       result := @fLine[i];
@@ -3784,7 +3782,8 @@ end;
 function TDebugFile.AbsoluteToRelative(aAddressAbsolute: PtrUInt): TDebugAddress;
 begin
   dec(aAddressAbsolute, fCodeOffset);
-  if PtrInt(aAddressAbsolute) < 0 then
+  if (PtrInt(aAddressAbsolute) < PtrInt(fStart)) or
+     (aAddressAbsolute > fStop) then
     aAddressAbsolute := 0; // our RVA should be positive and in 32-bit range
   result := aAddressAbsolute;
 end;
@@ -3792,8 +3791,7 @@ end;
 function TDebugFile.IsCode(aAddressAbsolute: PtrUInt): boolean;
 begin
   dec(aAddressAbsolute, fCodeOffset); // inlined AbsoluteToRelative()
-  result := (PtrInt(aAddressAbsolute) >= 0) and
-            (aAddressAbsolute >= fStart) and
+  result := (PtrInt(aAddressAbsolute) >= PtrInt(fStart)) and
             (aAddressAbsolute <= fStop);
 end;
 
@@ -3893,6 +3891,8 @@ begin
      not HasDebugInfo then
     exit;
   rva := AbsoluteToRelative(aAddressAbsolute);
+  if rva = 0 then
+    exit;
   s := FindSymbol(rva);
   l := FindLines(rva, line);
   if (s = nil) and
