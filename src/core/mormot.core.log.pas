@@ -108,6 +108,13 @@ type
   // - stored in Start increasing order in memory for fast O(log(n)) lookup
   TDebugLinesDynArray = array of TDebugLines;
 
+  /// allow to customize TDebugFile.Create and TDebugFile.SaveToFile process
+  TDebugFileScope = set of (
+    dfsNoMabSaveAtCreate,
+    dfsNoSymbols,
+    dfsNoLines,
+    dfsNoProducer);
+
   /// process a .map/.dbg file content, to be used e.g. with TSynLog to provide
   // additional debugging information for a given executable
   // - debug info can be saved as .mab file in a much more optimized format
@@ -144,21 +151,24 @@ type
     // file will be also created in the same directory (if MabCreate is TRUE)
     // - if .map/.dbg is not not available, will search for the .mab file
     // - if no .mab is available, will search for a .mab appended to the .exe/.dll
-    // - if nothing is available, will log as hexadecimal pointers, without
-    // debugging information
-    constructor Create(const aExeName: TFileName = ''; MabCreate: boolean = true); reintroduce;
+    // - if nothing is available, will eventually log as hexadecimal pointers,
+    // without debugging information
+    constructor Create(const aExeName: TFileName = '';
+      Scope: TDebugFileScope = []); reintroduce;
     /// save all debugging information in the .mab custom binary format
     // - if no file name is specified, it will be saved as ExeName.mab or DllName.mab
     // - this file content can be appended to the executable via SaveToExe method
     // - this function returns the created file name
-    function SaveToFile(const aFileName: TFileName = ''): TFileName;
+    function SaveToFile(const aFileName: TFileName = '';
+      Scope: TDebugFileScope = []): TFileName;
     /// save all debugging informat in our custom binary format
-    procedure SaveToStream(aStream: TStream);
+    procedure SaveToStream(aStream: TStream; Scope: TDebugFileScope);
     /// append all debugging information to an executable (or library)
     // - the executable name must be specified, because it's impossible to
     // write to the executable of a running process
     // - this method will work for .exe and for .dll (or .ocx)
-    procedure SaveToExe(const aExeName: TFileName);
+    procedure SaveToExe(const aExeName: TFileName;
+      Scope: TDebugFileScope = []);
     /// save all debugging information as JSON content
     // - may be useful from debugging purposes
     procedure SaveToJson(W: TTextWriter); overload;
@@ -3421,11 +3431,12 @@ begin
   end;
 end;
 
-constructor TDebugFile.Create(const aExeName: TFileName; MabCreate: boolean);
+constructor TDebugFile.Create(const aExeName: TFileName; Scope: TDebugFileScope);
 var
   i: PtrInt;
   ExeFile, MabFile, MabPath: TFileName;
   MapAge, MabAge: TUnixTime;
+  savemab: boolean;
   start: Int64;
 begin
   QueryPerformanceMicroSeconds(start);
@@ -3457,6 +3468,7 @@ begin
   else
     // supplied e.g. 'exec.map', 'exec.dbg' or even plain 'exec'/'exec.exe'
     fDebugFile := aExeName;
+  savemab := false;
   MabFile := ChangeFileExt(ExpandFileName(fDebugFile), '.mab');
   if not FileExists(MabFile) then
   begin
@@ -3490,38 +3502,29 @@ begin
                 Symbol.Stop := Addr[high(Addr)] + 64
               else
                 Symbol.Stop := Symbol.Start;
+        if fLinesCount + fSymbolsCount <> 0 then
+          savemab := true; // trigger SaveToFile(MabFile) below
       except
         fSymbols.ClearSafe;
         fLines.ClearSafe;
       end;
     // search for a .mab file matching the running .exe/.dll name
-    if (fSymbolsCount = 0) and
+    if (fLinesCount + fSymbolsCount = 0) and
        (MabAge <> 0) then
-      MabCreate := not LoadMab(MabFile);
+      LoadMab(MabFile);
     // search for an embedded compressed .mab file appended to the .exe/.dll
-    if fSymbolsCount = 0 then
+    if fLinesCount + fSymbolsCount = 0 then
       if aExeName = '' then
-        MabCreate := not LoadMab(ExeFile)
+        LoadMab(ExeFile)
       else
-        MabCreate := not LoadMab(aExeName);
-    // verify available symbols
-    if fSymbolsCount > 0 then
+        LoadMab(aExeName);
+    // finalize (and optionally persist as .mab) this instance
+    if fLinesCount + fSymbolsCount <> 0 then
     begin
-      // in DWARF, fSymbol[i].Start/Stop sometimes overlap -> ignore on FPC
-      // GenerateFromMapOrDwarf() did Sort() by Start so we can guess its enough
-      {$ifdef ISDELPHI}
-      for i := 1 to fSymbolsCount - 1 do
-        if fSymbol[i].Start <= fSymbol[i - 1].Stop then
-        begin
-          // on Delphi, there should be no overlap
-          fLines.ClearSafe;
-          fSymbols.ClearSafe;
-          exit;
-        end;
-      {$endif ISDELPHI}
-      if MabCreate then // just created from .map/.dbg -> create .mab file
-        SaveToFile(MabFile);
-      fHasDebugInfo := true;
+      fHasDebugInfo := true; // mark as success
+      if savemab and // just created from .map/.dbg -> create .mab file
+         not (dfsNoMabSaveAtCreate in Scope) then
+        SaveToFile(MabFile, Scope);
     end
     else
       fDebugFile := '';
@@ -3535,7 +3538,7 @@ end;
 procedure WriteSymbol(var W: TBufferWriter; const A: TDynArray);
 var
   i, n: integer;
-  prev: integer;
+  prev: TDebugAddress;
   S: PDebugSymbol;
   P, Beg: PByte;
   tmp: RawByteString;
@@ -3557,14 +3560,14 @@ begin
   end;
   W.DirectWriteFlush(PtrUInt(P) - PtrUInt(Beg), tmp);
   S := A.Value^;
-  for i := 1 to n do
-  begin
+  repeat
     W.Write(S^.Name); // group for better compression
     inc(PByte(S), A.Info.Cache.ItemSize);
-  end;
+    dec(n);
+  until n = 0;
 end;
 
-procedure TDebugFile.SaveToStream(aStream: TStream);
+procedure TDebugFile.SaveToStream(aStream: TStream; Scope: TDebugFileScope);
 var
   W: TBufferWriter;
   i: integer;
@@ -3572,27 +3575,43 @@ var
   u: PDebugLines;
 begin
   MS := TMemoryStream.Create;
-  W := TBufferWriter.Create(MS, 1 shl 20); // 1 MB should be enough at first
   try
-    WriteSymbol(W, fSymbols);
-    WriteSymbol(W, fLines);
-    for i := 0 to high(fLine) do
-      W.Write(fLine[i].FileName); // group for better compression
-    u := pointer(fLine);
-    for i := 1 to fLinesCount do
-    begin
-      // Line values are not always increasing -> wkOffsetI
-      W.WriteVarUInt32Array(u^.Line, length(u^.Line), wkOffsetI);
-      // Addr are sorted, so always increasing -> wkOffsetU
-      W.WriteVarUInt32Array(u^.Addr, length(u^.Addr), wkOffsetU);
-      inc(u);
+    W := TBufferWriter.Create(MS, 1 shl 20); // 1 MB should be enough at first
+    try
+      if dfsNoSymbols in Scope then
+        W.Write1(0)
+      else
+        WriteSymbol(W, fSymbols);
+      if dfsNoLines in Scope then
+        W.Write1(0)
+      else
+      begin
+        WriteSymbol(W, fLines);
+        u := pointer(fLine);
+        for i := 1 to fLinesCount do
+        begin
+          W.Write(u^.FileName); // group for better compression
+          inc(u);
+        end;
+        u := pointer(fLine);
+        for i := 1 to fLinesCount do
+        begin
+          // Line values are not always increasing -> wkOffsetI
+          W.WriteVarUInt32Array(u^.Line, length(u^.Line), wkOffsetI);
+          // Addr are sorted, so always increasing -> wkOffsetU
+          W.WriteVarUInt32Array(u^.Addr, length(u^.Addr), wkOffsetU);
+          inc(u);
+        end;
+      end;
+      if (fProducer <> '') and
+         not (dfsNoProducer in Scope) then
+        W.Write(fProducer);
+      W.Flush; // now MS contains the uncompressed binary data
+    finally
+      W.Free;
     end;
-    if fProducer <> '' then
-      W.Write(fProducer);
-    W.Flush; // now MS contains the uncompressed binary data
     AlgoSynLZ.StreamCompress(MS, aStream, MAGIC_MAB, {hash32=}true, {trailer=}true);
   finally
-    W.Free;
     MS.Free;
   end;
 end;
@@ -3629,7 +3648,7 @@ begin
   end;
 end;
 
-function TDebugFile.SaveToFile(const aFileName: TFileName): TFileName;
+function TDebugFile.SaveToFile(const aFileName: TFileName; Scope: TDebugFileScope): TFileName;
 var
   F: TStream;
 begin
@@ -3640,44 +3659,40 @@ begin
   DeleteFile(result);
   F := TFileStreamEx.Create(result, fmCreate);
   try
-    SaveToStream(F);
+    SaveToStream(F, Scope);
   finally
     F.Free;
   end;
 end;
 
-procedure TDebugFile.SaveToExe(const aExeName: TFileName);
+procedure TDebugFile.SaveToExe(const aExeName: TFileName; Scope: TDebugFileScope);
 var
-  mabfilename: TFileName;
   exe, mab: TMemoryStream;
   exesize, mabsize: PtrUInt;
 begin
   if not FileExists(aExeName) then
     exit;
-  mabfilename := SaveToFile(ChangeFileExt(aExeName, '.mab'));
+  mab := TMemoryStream.Create;
   try
+    // generate the .mab content in memory
+    SaveToStream(mab, Scope);
+    mabsize := mab.Size;
+    // open the executable file in memory, trim any existing mab, append new mab
     exe := TMemoryStream.Create;
-    mab := TMemoryStream.Create;
     try
-      // load both files
-      mab.LoadFromFile(mabfilename);
-      mabsize := mab.Size;
       exe.LoadFromFile(aExeName);
       exesize := exe.Size;
       if exesize < 16 then
         exit;
-      // trim existing mab content
       exesize := AlgoSynLZ.StreamComputeLen(exe.Memory, exesize, MAGIC_MAB);
-      exe.Size := exesize + mabsize;
-      // append mab content to exe
-      MoveFast(mab.Memory^, PAnsiChar(exe.Memory)[exesize], mabsize);
-      exe.SaveToFile(aExeName);
+      exe.Size := exesize + mabsize; // trim and reserve space for .mab
+      MoveFast(mab.Memory^, PAnsiChar(exe.Memory)[exesize], mabsize); // append
+      exe.SaveToFile(aExeName); // save
     finally
-      mab.Free;
       exe.Free;
     end;
   finally
-    DeleteFile(mabfilename);
+    mab.Free;
   end;
 end;
 
