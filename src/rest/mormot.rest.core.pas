@@ -539,11 +539,11 @@ type
       Level: TSynLogLevel = sllTrace); overload;
     /// ease logging of some response in the context of the current TRest
     procedure InternalLogResponse(const aContent: RawByteString;
-      const aContext: shortstring; Level: TSynLogLevel = sllServiceReturn); overload;
+      const aContext: ShortString; Level: TSynLogLevel = sllServiceReturn); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// ease logging of some response in the context of the current TRest
     procedure InternalLogResponse(aContent: PUtf8Char; aContentLen: PtrInt;
-      const aContext: shortstring; Level: TSynLogLevel = sllServiceReturn); overload;
+      const aContext: ShortString; Level: TSynLogLevel = sllServiceReturn); overload;
     /// ease logging of method enter/leave in the context of the current TRest
     function Enter(TextFmt: PUtf8Char; const TextArgs: array of const;
       aInstance: TObject = nil): ISynLog;
@@ -2136,13 +2136,13 @@ begin
 end;
 
 procedure TRest.InternalLogResponse(const aContent: RawByteString;
-  const aContext: shortstring; Level: TSynLogLevel);
+  const aContext: ShortString; Level: TSynLogLevel);
 begin // caller checked that (self <> nil) and (Level in fLogLevel)
   InternalLogResponse(pointer(aContent), length(aContent), aContext, Level);
 end;
 
 procedure TRest.InternalLogResponse(aContent: PUtf8Char; aContentLen: PtrInt;
-  const aContext: shortstring; Level: TSynLogLevel);
+  const aContext: ShortString; Level: TSynLogLevel);
 var
   max: PtrInt;
 begin // caller checked that (self <> nil) and (Level in fLogLevel)

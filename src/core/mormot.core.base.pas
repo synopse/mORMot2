@@ -584,7 +584,7 @@ type
   {$M-}
 
 type
-  /// 128-bytes aligned shortstring - e.g. for TNetAddr.IPShort()
+  /// 128-bytes aligned ShortString - e.g. for TNetAddr.IPShort()
   TShort127 = string[127];
   PShort127 = ^TShort127;
 
@@ -592,26 +592,26 @@ type
   TShort64 = string[64];
   PShort64 = ^TShort64;
 
-  /// 64-bytes aligned shortstring - e.g. for GetCurrentThreadInfo
+  /// 64-bytes aligned ShortString - e.g. for GetCurrentThreadInfo
   TShort63 = string[63];
   PShort63 = ^TShort63;
 
-  /// 48-bytes aligned shortstring - e.g. for StatusCodeToShort
+  /// 48-bytes aligned ShortString - e.g. for StatusCodeToShort
   TShort47 = string[47];
   PShort47 = ^TShort47;
 
-  /// 40-bytes aligned shortstring - e.g. for THttpDateNowUtc/TShortGuid
+  /// 40-bytes aligned ShortString - e.g. for THttpDateNowUtc/TShortGuid
   TShort39 = string[39];
 
   /// used to serialize up to 128-bit binary as hexadecimal
   TShort32 = string[32];
   PShort32 = ^TShort32;
 
-  /// 32-bytes aligned shortstring - e.g. for SetThreadName
+  /// 32-bytes aligned ShortString - e.g. for SetThreadName
   TShort31 = string[31];
   PShort31 = ^TShort31;
 
-  /// 24-bytes aligned shortstring - e.g. for TwoDigits/ToShort/Int64ToHttpEtag
+  /// 24-bytes aligned ShortString - e.g. for TwoDigits/ToShort/Int64ToHttpEtag
   TShort23 = string[23];
   PShort23 = ^TShort23;
 
@@ -619,7 +619,7 @@ type
   TShort16 = string[16];
   PShort16 = ^TShort16;
 
-  /// 16-bytes aligned shortstring - e.g. for TSynSystemTime.ToTextDateShort
+  /// 16-bytes aligned ShortString - e.g. for TSynSystemTime.ToTextDateShort
   TShort15 = string[15];
   PShort15 = ^TShort15;
 
@@ -627,13 +627,13 @@ type
   TShort8 = string[8];
   PShort8 = ^TShort8;
 
-  /// 8-bytes aligned shortstring - e.g. for WinOsBuild()
+  /// 8-bytes aligned ShortString - e.g. for WinOsBuild()
   TShort7 = string[7];
 
-  /// 4-bytes aligned shortstring - e.g. as efficient array[] constants
+  /// 4-bytes aligned ShortString - e.g. as efficient array[] constants
   TShort3 = string[3];
 
-  /// shortstring used to store none or one character
+  /// ShortString used to store none or one character
   TShort1 = string[1];
 
   /// stack-allocated ASCII string, for mormot.core.text GuidToShort() function
@@ -1055,67 +1055,67 @@ procedure ShortStringToAnsi7String(const source: ShortString; var result: RawUtf
 procedure Ansi7StringToShortString(const source: RawUtf8; var result: ShortString);
   {$ifdef FPC}inline;{$endif}
 
-/// shortstring concatenation of a 32-bit unsigned integer as text
+/// ShortString concatenation of a 32-bit unsigned integer as text
 procedure AppendShortCardinal(value: cardinal; var dest: ShortString);
 
-/// shortstring concatenation of a 8-bit unsigned integer as text
+/// ShortString concatenation of a 8-bit unsigned integer as text
 procedure AppendShortByte(value: PtrUInt; dest: PAnsiChar);
 
-/// shortstring concatenation of a signed 64-bit integer as text
+/// ShortString concatenation of a signed 64-bit integer as text
 procedure AppendShortInt64(const value: Int64; var dest: ShortString);
 
-/// shortstring concatenation of an unsigned 64-bit integer as text
+/// ShortString concatenation of an unsigned 64-bit integer as text
 procedure AppendShortQWord(const value: QWord; var dest: ShortString);
 
-/// shortstring concatenation of INTEGER Curr64 (value*10000)
+/// ShortString concatenation of INTEGER Curr64 (value*10000)
 // - will emit 0, 2 or 4 decimals in the output text (e.g. '1', '1.23', '1.2345')
 procedure AppendShortCurr64(const value: Int64; var dest: ShortString;
   fixeddecimals: PtrInt = 0);
 
-/// shortstring concatenation of no banker rounding floating point value as TwoDigits()
+/// ShortString concatenation of no banker rounding floating point value as TwoDigits()
 procedure AppendShortTwoDigits(const Value: double; var Dest: ShortString);
 
-/// shortstring concatenation of a character into a @shorstring, checking its length
-// - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
+/// ShortString concatenation of a character into a @shorstring, checking its length
+// - dest is @ShortString and not ShortString to circumvent a Delphi inlining bug
 procedure AppendShortCharSafe(chr: AnsiChar; var dest: ShortString);
   {$ifdef FPC} inline; {$endif}
 
-/// shortstring concatenation of a character into a @shorstring
-// - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
+/// ShortString concatenation of a character into a @shorstring
+// - dest is @ShortString and not ShortString to circumvent a Delphi inlining bug
 procedure AppendShortChar(chr: AnsiChar; dest: PAnsiChar);
   {$ifdef HASINLINE} inline; {$endif}
 
-/// shortstring concatenation of two characters into a @shorstring
-// - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
+/// ShortString concatenation of two characters into a @shorstring
+// - dest is @ShortString and not ShortString to circumvent a Delphi inlining bug
 procedure AppendShortTwoChars(twochars, dest: PAnsiChar); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// shortstring concatenation of two characters (as 16-bit integer) into a @shorstring
-// - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
+/// ShortString concatenation of two characters (as 16-bit integer) into a @shorstring
+// - dest is @ShortString and not ShortString to circumvent a Delphi inlining bug
 procedure AppendShortTwoChars(twochars: cardinal; dest: PAnsiChar); overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// shortstring concatenation of a #0 ending text into a @shorstring
-// - dest is @shortstring and not shortstring to circumvent a Delphi inlining bug
+/// ShortString concatenation of a #0 ending text into a @shorstring
+// - dest is @ShortString and not ShortString to circumvent a Delphi inlining bug
 procedure AppendShortBuffer(buf: PAnsiChar; len, max: PtrInt; dest: PAnsiChar);
   {$ifdef HASINLINE} inline; {$endif}
 
-/// shortstring concatenation of hexadecimal binary buffer
+/// ShortString concatenation of hexadecimal binary buffer
 procedure AppendShortHex(value: PByte; len: PtrInt; var dest: ShortString);
 
-/// shortstring concatenation of an integer as lowercase hexadecimal
+/// ShortString concatenation of an integer as lowercase hexadecimal
 procedure AppendShortIntHex(value: Int64; var dest: ShortString);
 
-/// shortstring concatenation of a byte as uppercase hexadecimal
+/// ShortString concatenation of a byte as uppercase hexadecimal
 procedure AppendShortByteHex(value: PtrUInt; var dest: ShortString);
 
-/// shortstring concatenation of a ShortString text
+/// ShortString concatenation of a ShortString text
 procedure AppendShort(const src: ShortString; var dest: ShortString);
 
-/// shortstring concatenation of an ANSI-7 AnsiString
+/// ShortString concatenation of an ANSI-7 AnsiString
 procedure AppendShortAnsi7String(const buf: RawByteString; var dest: ShortString);
 
-/// shortstring concatenation of TDateTime as 'yyyy-mm-dd hh:nn:ss' text
+/// ShortString concatenation of TDateTime as 'yyyy-mm-dd hh:nn:ss' text
 procedure AppendShortDateTime(const dt: TDateTime; var dest: ShortString);
 
 /// simple concatenation of a text buffer into a RawUtf8
@@ -1591,7 +1591,7 @@ function StrUInt64(P: PAnsiChar; const val: QWord): PAnsiChar;
 // - is called by Curr64ToPChar() and Curr64ToStr() functions
 function StrCurr64(P: PAnsiChar; const Value: Int64): PAnsiChar;
 
-/// fast convert an Int64 value into a temporary shortstring on stack
+/// fast convert an Int64 value into a temporary ShortString on stack
 function ToShort(const val: Int64): TShort23;
 
 /// fast convert an unsigned value into a string[>=23] variable
@@ -3251,7 +3251,7 @@ function CompareMemFixed(P1, P2: pointer; Length: PtrInt): boolean;
 function CompareMemSmall(P1, P2: pointer; Length: PtrInt): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// a CompareMem()-like function designed for comparison with a small shortstring
+/// a CompareMem()-like function designed for comparison with a small ShortString
 function CompareShort(P1: pointer; const P2: ShortString): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -4521,7 +4521,7 @@ function SortDynArrayUnicodeString(const A, B): integer;
 // - the expected string type is the RTL string
 function SortDynArrayString(const A, B): integer;
 
-/// compare two "array of shortstring" elements, with case sensitivity
+/// compare two "array of ShortString" elements, with case sensitivity
 function SortDynArrayShortString(const A, B): integer;
 
 /// compare two "array of variant" elements, with case sensitivity
@@ -10392,7 +10392,7 @@ begin
   if size = 31 then
     size := len and 31  // optimized for FillShort31()
   else if size = 255 then
-    size := ToByte(len) // optimized for shortstring
+    size := ToByte(len) // optimized for ShortString
   else
     size := len mod size;
   dest[0] := size;

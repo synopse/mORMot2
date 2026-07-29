@@ -243,10 +243,10 @@ type
     /// convert an IPv4 value into text, or '' for AF_INET6 or AF_UNIX
     function IP4Short: TShort16;
       {$ifdef FPC} inline; {$endif}
-    /// convert this address into its shortstring IPv4/IPv6 textual representation
+    /// convert this address into its ShortString IPv4/IPv6 textual representation
     function IPShort(withport: boolean = false): TShort127; overload;
       {$ifdef HASINLINE}inline;{$endif}
-      /// convert this address into its shortstring IPv4/IPv6 textual representation
+      /// convert this address into its ShortString IPv4/IPv6 textual representation
     procedure IPShort(var result: TShort127; withport: boolean = false); overload;
     /// convert this address into its 'IPv4/IPv6:port' textual representation
     function IPWithPort: RawUtf8; overload;
@@ -705,7 +705,7 @@ procedure IP6Text(ip6addr: PByteArray; var result: RawUtf8);
 function MacToText(mac: pointer): RawUtf8;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// convert a MAC address into a 17-chars shortstring like '12:50:b6:1e:c6:aa'
+/// convert a MAC address into a 17-chars ShortString like '12:50:b6:1e:c6:aa'
 function MacToShort(mac: pointer): TShort23;
   {$ifdef HASINLINE} inline; {$endif}
 

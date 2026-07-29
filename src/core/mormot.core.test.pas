@@ -218,7 +218,7 @@ type
     /// used by the published methods to run test assertion against UTF-8/Ansi strings
     // - will ignore the a+b string codepages, and call SortDynArrayRawByteString()
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
-    function CheckEqualShort(const a, b: shortstring; const msg: RawUtf8 = ''): boolean;
+    function CheckEqualShort(const a, b: ShortString; const msg: RawUtf8 = ''): boolean;
     /// used by the published methods to run test assertion against
     // - if BinToHexLower(a)<>b, will fail and include '#<>#' hexa before the supplied msg
     function CheckEqualHex(const a: RawByteString; const b: RawUtf8;
@@ -947,7 +947,7 @@ begin
     DoCheckUtf8(result, EQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckEqualShort(const a, b: shortstring; const msg: RawUtf8): boolean;
+function TSynTestCase.CheckEqualShort(const a, b: ShortString; const msg: RawUtf8): boolean;
 begin
   inc(fAssertions);
   result := (a = b);

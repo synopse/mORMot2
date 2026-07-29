@@ -280,7 +280,7 @@ const
 
 {$endif FPC}
 
-  /// maps string/text types in TRttiKind RTTI enumerates, excluding shortstring
+  /// maps string/text types in TRttiKind RTTI enumerates, excluding ShortString
   rkStringTypes =
     [rkLString,
      {$ifdef FPC}

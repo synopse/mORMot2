@@ -771,7 +771,7 @@ type
 
 /// returns the current UTC timestamp as the full 'Date' HTTP header line
 // - e.g. as 'Date: Tue, 15 Nov 1994 12:45:26 GMT'#13#10
-// - returns as a 40-bytes shortstring to avoid a memory allocation by caller
+// - returns as a 40-bytes ShortString to avoid a memory allocation by caller
 // - use an internal cache for every second refresh
 function HttpDateNowUtc(Tix64: Int64 = 0): THttpDateNowUtc;
 

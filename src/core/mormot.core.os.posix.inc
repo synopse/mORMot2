@@ -1988,7 +1988,7 @@ begin
   OsErrorShortVar(error, dest, {noint=}true); // known 'E###' on Linux + BSD
   if dest[0] = #0 then
   {$ifdef FPC}
-    dest := StrError(error) // FPC RTL returns its plain text as shortstring
+    dest := StrError(error) // FPC RTL returns its plain text as ShortString
   else
   begin
     AppendShortTwoChars(ord(' ') + ord('(') shl 8, @dest);

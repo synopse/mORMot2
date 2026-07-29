@@ -1885,7 +1885,7 @@ begin
     AppendShortChar(']', @dest)
 end;
 
-function TSynLogExceptionContext.AdditionalInfo(var dest: shortstring): boolean;
+function TSynLogExceptionContext.AdditionalInfo(var dest: ShortString): boolean;
 begin
   result := ClassInheritsFromName(EClass, 'EOleSysError') and
             Win32DotNetExceptions(EOleSysError(EInstance).ErrorCode, dest);

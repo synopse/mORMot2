@@ -2451,10 +2451,10 @@ procedure SetCase(var Dest: RawUtf8; Text: pointer; TextLen: PtrInt; aKind: TSet
 function SetCase(const Text: RawUtf8; aKind: TSetCase): RawUtf8; overload;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// compute a RawUtf8 from a shortstring RTTI identifier with custom casing
+/// compute a RawUtf8 from a ShortString RTTI identifier with custom casing
 procedure ShortTrim(aShort: PShortString; var aDest: RawUtf8; aKind: TSetCase); overload;
 
-/// compute a RawUtf8 from a shortstring RTTI identifier with custom casing
+/// compute a RawUtf8 from a ShortString RTTI identifier with custom casing
 function ShortTrim(aShort: PShortString; aKind: TSetCase = scTrimLeft): RawUtf8; overload;
   {$ifdef HASINLINE} inline; {$endif}
 

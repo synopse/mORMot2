@@ -2841,7 +2841,7 @@ function WinApiErrorString(Code: cardinal; Lib: HMODULE = 0): string;
 
 /// return the error message - maybe of a given library - as UTF-8 ShortString
 // - may be used e.g. in conjunction with Exception.CreateUtf8()
-function WinApiErrorShort(Code: cardinal; Lib: HMODULE = 0): shortstring;
+function WinApiErrorShort(Code: cardinal; Lib: HMODULE = 0): ShortString;
 
 /// return the error message - maybe of a given library - as UTF-8 string
 function WinApiErrorUtf8(Code: cardinal; Lib: HMODULE = 0): RawUtf8;
@@ -3073,7 +3073,7 @@ type
     ELevel: TSynLogLevel;
     {$ifdef OSWINDOWS}
     /// retrieve some DotNet CLR extended information about a given Exception
-    function AdditionalInfo(var dest: shortstring): boolean;
+    function AdditionalInfo(var dest: ShortString): boolean;
     {$endif OSWINDOWS}
   end;
 
@@ -7132,7 +7132,7 @@ end;
 
 function GetErrorText(error: integer): RawUtf8;
 var
-  txt: shortstring;
+  txt: ShortString;
 begin
   if error = 0 then
     error := GetLastError;

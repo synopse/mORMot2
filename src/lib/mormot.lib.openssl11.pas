@@ -2634,7 +2634,7 @@ function OpenSSL_error_eof(error: integer): boolean;
 
 function SSL_is_fatal_error(get_error: integer): boolean;
 procedure SSL_get_error_text(get_error: integer; var result: RawUtf8);
-procedure SSL_get_error_short(get_error: integer; var dest: shortstring);
+procedure SSL_get_error_short(get_error: integer; var dest: ShortString);
 function SSL_get_ex_new_index(l: integer; p: pointer; newf: PCRYPTO_EX_new;
   dupf: PCRYPTO_EX_dup; freef: PCRYPTO_EX_free): integer;
 
@@ -10524,7 +10524,7 @@ const
     'WANT_ASYNC_JOB',
     'WANT_CLIENT_HELLO_CB');
 
-procedure SSL_get_error_short(get_error: integer; var dest: shortstring);
+procedure SSL_get_error_short(get_error: integer; var dest: ShortString);
 var
   tmp: ShortString;
 begin

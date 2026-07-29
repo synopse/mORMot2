@@ -1919,7 +1919,7 @@ procedure VariantToAdder(var Adder: TSynTempAdder; const V: variant;
 // - note that, due to a Delphi compiler limitation, cardinal values should be
 // type-casted to Int64() (otherwise the integer mapped value will be converted)
 // - any supplied TObject instance will be written as their class name
-// - Res.Text may NOT be #0 terminated if the TVarRec is a shortstring
+// - Res.Text may NOT be #0 terminated if the TVarRec is a ShortString
 // - you MUST eventually release any TempRawUtf8 by calling TempUtf8Done(Res)
 function VarRecToTempUtf8(V: PVarRec; var Res: TTempUtf8;
   wasString: PBoolean = nil): boolean;
@@ -5716,7 +5716,7 @@ end;
 procedure TTextWriter.AddOnSameLine(P: PUtf8Char; Len: PtrInt);
 var
   i, s: PtrInt;
-begin // mostly used for TSynLog shortstring append or Reformat() comments
+begin // mostly used for TSynLog ShortString append or Reformat() comments
   i := 0;
   if (P <> nil) and
      (i < Len) then
@@ -10403,7 +10403,7 @@ function DefaultSynLogExceptionToStr(WR: TTextWriter;
   const Context: TSynLogExceptionContext; WithAdditionalInfo: boolean): boolean;
 {$ifdef OSWINDOWS} // no TSynLogExceptionContext.AdditionalInfo() on POSIX
 var
-  s: shortstring;
+  s: ShortString;
 {$endif OSWINDOWS}
 begin
   WR.AddClassName(Context.EClass);

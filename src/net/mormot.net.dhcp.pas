@@ -469,11 +469,11 @@ function IsValidRfc3925(op: PAnsiChar; len: integer): boolean;
 function TlvOptionToJson(opt: pointer; recognize: boolean): RawJson;
 
 /// convert a DNS wire format aka binary "canonical form" into plain ASCII text
-function DnsLabelToText(v: pointer; len: PtrInt; var txt: shortstring): boolean;
-function DnsLabelAppendText(var v: PByteArray; var len: PtrInt; var txt: shortstring): boolean;
+function DnsLabelToText(v: pointer; len: PtrInt; var txt: ShortString): boolean;
+function DnsLabelAppendText(var v: PByteArray; var len: PtrInt; var txt: ShortString): boolean;
 
 /// convert plain ASCII text as DNS wire format aka binary "canonical form"
-function DnsLabelAppendBin(p: PUtf8Char; var bin: shortstring): PUtf8Char;
+function DnsLabelAppendBin(p: PUtf8Char; var bin: ShortString): PUtf8Char;
 
 /// parse a CIDR route(s) text into a RFC 3442 compliant binary blob
 // - expect '192.168.1.0/24,10.0.0.5,10.0.0.0/8,192.168.1.1' readable format
@@ -2068,7 +2068,7 @@ end;
 
 // uncompressed DNS label format: [len + part] + ending len=0
 
-function DnsLabelAppendText(var v: PByteArray; var len: PtrInt; var txt: shortstring): boolean;
+function DnsLabelAppendText(var v: PByteArray; var len: PtrInt; var txt: ShortString): boolean;
 var
   vlen: PtrInt;
 begin
@@ -2095,13 +2095,13 @@ begin
   result := true;
 end;
 
-function DnsLabelToText(v: pointer; len: PtrInt; var txt: shortstring): boolean;
+function DnsLabelToText(v: pointer; len: PtrInt; var txt: ShortString): boolean;
 begin
   txt[0] := #0;
   result := DnsLabelAppendText(PByteArray(v), len, txt);
 end;
 
-function DnsLabelAppendBin(p: PUtf8Char; var bin: shortstring): PUtf8Char;
+function DnsLabelAppendBin(p: PUtf8Char; var bin: ShortString): PUtf8Char;
 var
   len: PtrInt;
 begin
