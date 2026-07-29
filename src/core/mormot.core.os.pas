@@ -4249,12 +4249,12 @@ procedure AppendKb(Size: Int64; var Dest: ShortString; WithSpace: boolean = fals
 
 /// convert a size to a human readable value
 // - append EB, PB, TB, GB, MB, KB or B symbol with preceding space
-function KB(Size: Int64): TShort16; overload;
+function KB(Size: Int64): TShort15; overload;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert a size to a human readable value
 // - append EB, PB, TB, GB, MB, KB or B symbol without preceding space
-function KBNoSpace(Size: Int64): TShort16;
+function KBNoSpace(Size: Int64): TShort15;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// return a date/time value as '2026-03-27 13:59:30' UTF-8 text
@@ -6522,13 +6522,13 @@ begin
   FastSetString(result, @tmp[1], ord(tmp[0]));
 end;
 
-function KB(Size: Int64): TShort16;
+function KB(Size: Int64): TShort15;
 begin
   result[0] := #0;
   AppendKb(Size, result, {withspace=}true);
 end;
 
-function KBNoSpace(Size: Int64): TShort16;
+function KBNoSpace(Size: Int64): TShort15;
 begin
   result[0] := #0;
   AppendKb(Size, result, {withspace=}false);

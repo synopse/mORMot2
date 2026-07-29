@@ -37,13 +37,13 @@ uses
 /// convert a size to a human readable value
 // - append EB, PB, TB, GB, MB, KB or B symbol with or without preceding space
 // - for EB, PB, TB, GB, MB and KB, add one fractional digit
-function KB(bytes: Int64; nospace: boolean): TShort16; overload;
+function KB(bytes: Int64; nospace: boolean): TShort15; overload;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert a string size to a human readable value
 // - append EB, PB, TB, GB, MB, KB or B symbol
 // - for EB, PB, TB, GB, MB and KB, add one fractional digit
-function KB(const buffer: RawByteString): TShort16; overload;
+function KB(const buffer: RawByteString): TShort15; overload;
   {$ifdef FPC_OR_UNICODE}inline;{$endif}
 
 /// convert a size to a human readable value
@@ -57,32 +57,32 @@ procedure K(value: Int64; out result: TShort16); overload;
 
 /// convert a count to a human readable value power-of-two metric value
 // - append E, P, T, G, M, K symbol, with one fractional digit
-function K(value: Int64): TShort16; overload;
+function K(value: Int64): TShort15; overload;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert a seconds elapsed time into a human readable value
 // - append 's', 'm', 'h' and 'd' symbol for the given value range,
 // with two fractional digits
-function SecToString(S: QWord): TShort16;
+function SecToString(S: QWord): TShort15;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert a milliseconds elapsed time into a human readable value
 // - append 'ms', 's', 'm', 'h' and 'd' symbol for the given value range,
 // with two fractional digits
-function MilliSecToString(MS: QWord): TShort16;
+function MilliSecToString(MS: QWord): TShort15;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert a micro seconds elapsed time into a human readable value
 // - append 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value range,
 // with two fractional digits
-function MicroSecToString(Micro: QWord): TShort16; overload;
+function MicroSecToString(Micro: QWord): TShort15; overload;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// compute elapsed time into a human readable value, from a Start value
 // - will get current QueryPerformanceMicroSeconds() and compute against Start
 // - append 'us', 'ms', 's', 'm', 'h' and 'd' symbol for the given value range,
 // with two fractional digits
-function MicroSecFrom(Start: QWord): TShort16;
+function MicroSecFrom(Start: QWord): TShort15;
   {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert a micro seconds elapsed time into a human readable value
@@ -229,7 +229,7 @@ function DateTimeToIso8601(D: TDateTime; Expanded: boolean; FirstChar: AnsiChar 
 procedure DateTimeToIso8601Var(D: TDateTime; Expanded, WithMS: boolean;
   FirstChar, QuotedChar: AnsiChar; var Result: RawUtf8);
 
-/// raw basic Date/Time conversion into ISO-8601 shortstring
+/// raw basic Date/Time conversion into ISO-8601 ShortString
 function DateTimeToIso8601Short(D: TDateTime; Expanded: boolean = true;
   WithMS: boolean = false; FirstChar: AnsiChar = 'T';
   QuotedChar: AnsiChar = #0): TShort31;
@@ -782,7 +782,7 @@ procedure UnixMSTimeUtcToHttpDate(UnixMSTime: TUnixMSTime; var Text: TShort31);
 /// convert some TDateTime to a small text layout, perfect e.g. for naming a local file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
 // a date > 1999 (a current date would be fine)
-function DateTimeToFileShort(const DateTime: TDateTime): TShort16;
+function DateTimeToFileShort(const DateTime: TDateTime): TShort15;
   {$ifdef FPC_OR_UNICODE} inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert some TDateTime to a small text layout, perfect e.g. for naming a local file
@@ -792,7 +792,7 @@ procedure DateTimeToFileShortVar(const DateTime: TDateTime; out result: TShort16
 
 /// get the current time a small text layout, perfect e.g. for naming a file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits
-function NowToFileShort(localtime: boolean = false): TShort16;
+function NowToFileShort(localtime: boolean = false): TShort15;
 
 /// get the current year/month a small text layout
 // - use 'YYYYMM' format, perfect e.g. for naming a per-month metrics file
@@ -873,7 +873,7 @@ procedure UnixTimeToFileShort(const UnixTime: TUnixTime; out result: TShort16); 
 // a small text layout, perfect e.g. for naming a local file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
 // a date > 1999 (a current date would be fine)
-function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort16; overload;
+function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort15; overload;
   {$ifdef FPC_OR_UNICODE} inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert some second-based c-encoded time to the ISO 8601 text layout, either
@@ -908,7 +908,7 @@ function UnixMSTimeToString(const UnixMSTime: TUnixMSTime; Expanded: boolean = t
 // naming a local file
 // - use 'YYMMDDHHMMSS' format so year is truncated to last 2 digits, expecting
 // a date > 1999 (a current date would be fine)
-function UnixMSTimeToFileShort(const UnixMSTime: TUnixMSTime): TShort16;
+function UnixMSTimeToFileShort(const UnixMSTime: TUnixMSTime): TShort15;
   {$ifdef FPC_OR_UNICODE} inline;{$endif} // Delphi 2007 is buggy as hell
 
 /// convert some millisecond-based c-encoded time to the ISO 8601 text layout,
@@ -1276,13 +1276,13 @@ implementation
 
 { ************ Size and Elapsed Time to Text Conversion }
 
-function KB(bytes: Int64; nospace: boolean): TShort16;
+function KB(bytes: Int64; nospace: boolean): TShort15;
 begin
   result[0] := #0;
   AppendKb(bytes, result, not nospace);
 end;
 
-function KB(const buffer: RawByteString): TShort16;
+function KB(const buffer: RawByteString): TShort15;
 begin
   result[0] := #0;
   AppendKb(length(buffer), result, {withspace=}true);
@@ -1290,7 +1290,7 @@ end;
 
 procedure KBU(bytes: Int64; var result: RawUtf8);
 var
-  tmp: TShort16;
+  tmp: TShort15;
 begin
   tmp[0] := #0;
   AppendKb(bytes, tmp, {withspace=}true);
@@ -1305,7 +1305,7 @@ begin
     dec(result[0]); // just trim last 'B' ;)
 end;
 
-function K(value: Int64): TShort16;
+function K(value: Int64): TShort15;
 begin
   K(Value, result);
 end;
@@ -1326,22 +1326,22 @@ begin
     insert('-', result, 1); // seldom called
 end;
 
-function SecToString(S: QWord): TShort16;
+function SecToString(S: QWord): TShort15;
 begin
   MicroSecToString(S * MicroSecsPerSec, result);
 end;
 
-function MilliSecToString(MS: QWord): TShort16;
+function MilliSecToString(MS: QWord): TShort15;
 begin
   MicroSecToString(MS * MicroSecsPerMilliSec, result);
 end;
 
-function MicroSecToString(Micro: QWord): TShort16;
+function MicroSecToString(Micro: QWord): TShort15;
 begin
   MicroSecToString(Micro, result);
 end;
 
-function MicroSecFrom(Start: QWord): TShort16;
+function MicroSecFrom(Start: QWord): TShort15;
 var
   stop: Int64;
 begin
@@ -1414,7 +1414,7 @@ end;
 
 function MicroSecToText(Micro: QWord): RawUtf8;
 var
-  tmp: TShort16;
+  tmp: TShort15;
 begin
   MicroSecToString(Micro, tmp);
   FastSetString(result, @tmp[1], ord(tmp[0]));
@@ -3371,7 +3371,7 @@ begin
   result := bits.Text(true, ' ');
 end;
 
-function DateTimeToFileShort(const DateTime: TDateTime): TShort16;
+function DateTimeToFileShort(const DateTime: TDateTime): TShort15;
 begin
   DateTimeToFileShortVar(DateTime, result);
 end;
@@ -3391,7 +3391,7 @@ begin
   end;
 end;
 
-function NowToFileShort(localtime: boolean): TShort16;
+function NowToFileShort(localtime: boolean): TShort15;
 var
   T: TSynSystemTime;
 begin
@@ -3506,12 +3506,12 @@ begin
     DateTimeToFileShortVar(UnixTime * SecsPerDate + UnixDateDelta, result);
 end;
 
-function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort16;
+function UnixTimeToFileShort(const UnixTime: TUnixTime): TShort15;
 begin
   UnixTimeToFileShort(UnixTime, result);
 end;
 
-function UnixMSTimeToFileShort(const UnixMSTime: TUnixMSTime): TShort16;
+function UnixMSTimeToFileShort(const UnixMSTime: TUnixMSTime): TShort15;
 begin
   UnixTimeToFileShort(UnixMSTime div MilliSecsPerSec, result);
 end;
@@ -4113,7 +4113,7 @@ end;
 procedure TTextDateWriter.AddSpaced(Value: QWord; Width: PtrInt; SepChar: AnsiChar);
 var
   tmp: TTemp24;
-  alt: TShort16;
+  alt: TShort15;
   p: PAnsiChar;
   len: PtrInt;
 begin

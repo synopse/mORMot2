@@ -449,7 +449,7 @@ type
     /// returns the algorithm name, from its classname
     // - e.g. TAlgoSynLZ->'synlz' TAlgoLizard->'lizard' nil->'none'
     // TAlgoDeflateFast->'deflatefast'
-    function AlgoName: TShort16;
+    function AlgoName: TShort15;
   end;
 
   /// implement our fast SynLZ compression as a TAlgoCompress class
@@ -837,7 +837,7 @@ type
   EBufferException = class(ESynException);
 
   /// available kind of integer array storage, corresponding to the data layout
-  // of TBufferWriter
+  // of TBufferWriter.WriteVarUInt32Array
   // - wkUInt32 will write the content as "plain" 4 bytes binary (this is the
   // preferred way if the integers can be negative)
   // - wkVarUInt32 will write the content using our 32-bit variable-length integer
@@ -5264,7 +5264,7 @@ begin
   result := Algo(Comp).DecompressHeader(pointer(Comp), length(Comp));
 end;
 
-function TAlgoCompress.AlgoName: TShort16;
+function TAlgoCompress.AlgoName: TShort15;
 var
   s: PShortString;
   i: integer;
@@ -5281,8 +5281,8 @@ begin
     end
     else
       result[0] := s^[0];
-    if result[0] > #16 then
-      result[0] := #16;
+    if result[0] > #15 then
+      result[0] := #15;
     for i := 1 to ord(result[0]) do
       result[i] := NormToLower[s^[i]];
   end;
@@ -9780,7 +9780,7 @@ end;
 function TProgressInfo.GetProgress: RawUtf8;
 var
   ctx, remain: TShort47;
-  persec, expect, curr: TShort16;
+  persec, expect, curr: TShort15;
 begin
   result := LastProgress;
   if result <> '' then

@@ -206,7 +206,7 @@ function ToText(Field: TSqlDBFieldType): PShortString; overload;
 
 /// retrieve the ready-to-be displayed text of a given Database field
 // type enumeration
-function TSqlDBFieldTypeToString(aType: TSqlDBFieldType): TShort16;
+function TSqlDBFieldTypeToString(aType: TSqlDBFieldType): TShort15;
 
 
 /// returns TRUE if no bit inside this TFieldBits is set
@@ -1522,7 +1522,7 @@ begin
   result := GetEnumName(TypeInfo(TSqlDBFieldType), ord(Field));
 end;
 
-function TSqlDBFieldTypeToString(aType: TSqlDBFieldType): TShort16;
+function TSqlDBFieldTypeToString(aType: TSqlDBFieldType): TShort15;
 begin
   if aType <= high(aType) then
     TrimLeftLowerCaseToShort(ToText(aType), result)

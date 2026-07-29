@@ -3985,7 +3985,7 @@ end;
 
 function CodePageToText(aCodePage: cardinal): RawUtf8;
 var
-  tmp: TShort16;
+  tmp: TShort15;
 begin
   Unicode_CodePageName(aCodePage, tmp);
   LowerCaseCopy(@tmp[1], ord(tmp[0]), result); // more convenient as lower ident
