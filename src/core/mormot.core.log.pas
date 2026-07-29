@@ -46,7 +46,7 @@ uses
    07/28/2026  06:02 PM        18,159,799 mormot2tests.map
    07/28/2026  06:02 PM           518,119 mormot2tests.mab
 
-   For a 13MB executable, Delphi .map text was 18MB but our .mab is only 500KB...
+   For a 13MB executable, Delphi .map text was 18MB but our .mab is only 500KB.
    Then this .mab file can be distributed alongside the executable, or just
    appended to it after build. See also /src/tools/mab/mab.dpr
 
@@ -2262,7 +2262,6 @@ type
     read: TFastReader;
     Abbrev: array of TDwarfDebugAbbrev; // debug_abbrev content
     AttrsMax: cardinal;
-    exeformat: TExeFormat;
     isdwarf64, includesdir: boolean;
     LineOffset, LineSize,              // debug_line
     InfoOffset, InfoSize,              // debug_info
@@ -2298,16 +2297,17 @@ end;
 
 {$ifdef FPCDARWIN}
 // use FPC RTL's cross-OS exeinfo.pp unit for macho format
-function TDwarfReader.LoadSections(const filename: TFileName): boolean;
+function TDwarfReader.LoadSections: boolean;
 var
   e: TExeFile;
 begin
   result := false;
   // open exe filename or follow '.gnu_debuglink' redirection
-  if not OpenExeFile(e, filename) then
+  name := debug.fDebugFile;
+  if not OpenExeFile(e, name) then
   begin
     {$ifdef DWARFDEBUG}
-    DisplayError('OpenExeFile failed on  %s', [filename]);
+    DisplayError('OpenExeFile failed on  %s', [name]);
     {$endif DWARFDEBUG}
     exit;
   end;
@@ -2321,9 +2321,7 @@ begin
       {$endif DWARFDEBUG}
       exit;
     end;
-  end
-  else
-    name := filename;
+  end;
   // locate debug_* sections after successfull OpenExeFile()
   if FindExeSection(e, '.debug_line', LineOffset, LineSize) and
      FindExeSection(e, '.debug_info', InfoOffset, InfoSize) and
@@ -2358,11 +2356,10 @@ begin
       if crc32(0, Map.Buffer, Map.Size) <> crc then  // zlib algorithm
         Map.UnMap; // the located debug file does not match the executable
   end;
-  exeformat := FindExeSection(Map, '.debug_line', LineOffset, LineSize, @ImageBase);
   //ConsoleWrite(['ImageBase=',Int64ToHexShort(ImageBase)]);
-  if (exeformat <> efUnknown) and
-     (FindExeSection(Map, '.debug_info', InfoOffset, InfoSize) = exeformat) and
-     (FindExeSection(Map, '.debug_abbrev', AbbrevOffset, AbbrevSize) = exeformat) then
+  if (FindExeSection(Map, '.debug_line', LineOffset, LineSize, @ImageBase) <> efUnknown) and
+     (FindExeSection(Map, '.debug_info', InfoOffset, InfoSize) <> efUnknown) and
+     (FindExeSection(Map, '.debug_abbrev', AbbrevOffset, AbbrevSize) <> efUnknown) then
     result := true;
   if result then
     SetLength(files, 64) // good enough for most executables
