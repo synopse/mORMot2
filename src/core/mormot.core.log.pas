@@ -6239,6 +6239,7 @@ begin
   if fn = '' then
     // compute the default filename as '<exename>(<user>@<host>)'
     with Executable do
+    begin
       if fFamily.IncludeComputerNameInFileName then
         if fFamily.IncludeUserNameInFileName then
           fn := FormatString('%(%@%)', [ProgramName, User, Host])
@@ -6248,6 +6249,9 @@ begin
         fn := FormatString('%(%)', [ProgramName, User])
       else
         Utf8ToFileName(ProgramName, fn);
+      if IsLibrary then // include library name
+        fn := fn + ' ' + ExtractFileName(Executable.InstanceFileName);
+    end;
   // prepare for any file flush or rotation - as checked in OnFlushToStream
   fRotateBytes := 0;
   fFlushTix32 := 0;
@@ -6273,19 +6277,14 @@ begin
      (fRotateDailyTix32 = 0) then
     fn := FormatString('% %',
       [fn, NowToFileShort(fFamily.LocalTimestamp)]);
-  {$ifdef OSWINDOWS}
-  // include library name
-  if IsLibrary and
-     (fFamily.fCustomFileName = '') then
-    fn := fn + ' ' + ExtractFileName(GetModuleName(HInstance));
-  {$else}
-  // normalize file name to be more readable and usable on POSIX command line
-  fn := StringReplace(fn, ' ', '-', [rfReplaceAll]);
-  {$endif OSWINDOWS}
   // include thread ID in ptOneFilePerThread mode
   if fFamily.fPerThreadLog = ptOneFilePerThread then
     fn := FormatString('% %',
       [fn, PointerToHexShort({%H-}pointer(GetCurrentThreadId))]);
+  {$ifdef OSPOSIX}
+  // normalize file name to be more readable and usable on POSIX command line
+  fn := StringReplace(fn, ' ', '-', [rfReplaceAll]);
+  {$endif OSPOSIX}
   // include inherited TSynLog class name as suffix
   if PClass(self)^ <> TSynLog then
   begin
@@ -6296,7 +6295,7 @@ begin
       delete(classn, 1, 1); // TCustomLog -> 'customlog'
     LowerCaseSelf(classn);
     if SetName([fn, '-', classn]) then
-      exit; // exename-secondary.log is not yet active
+      exit; // exename-secondary.log was not yet active so has been selected
   end;
   // ensure this file name is unique among all opened files
   if SetName([fn]) then
