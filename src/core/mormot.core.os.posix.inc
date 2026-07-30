@@ -1791,19 +1791,31 @@ begin
             not FpS_ISDIR(st.st_mode);
 end;
 
-var // set at startup about the module (exe or so) running this mormot unit
-  PosixProgramInfo: dl_info;
+var
+  OSSafe: TLightLock; // when GlobalLock is overkill
+  LastExecutableChar: pointer;
+  LastExecutableName: TFileName;
+  PosixProgramInfo: dl_info; // set at startup about the current exe or so
 
 procedure GetDlInfoName(var dlinfo: dl_info; var result: TFileName);
 begin
-  {$ifdef UNICODE}
-  result := string(dlinfo.dli_fname); // use RTL from PAnsiChar to TFileName
-  {$else}
-  FastSetString(RawUtf8(result), dlinfo.dli_fname, StrLen(dlinfo.dli_fname));
-  {$endif UNICODE}
-  if (result <> '') and
-     (result[1] <> '/') then
-    result := ExpandFileName(string(result));
+  OSSafe.Lock;
+  if LastExecutableChar = dlinfo.dli_fname then
+    result := LastExecutableName // naive thread-safe cache
+  else
+  begin
+    {$ifdef UNICODE}
+    result := string(dlinfo.dli_fname); // use RTL from PAnsiChar to TFileName
+    {$else}
+    FastSetString(RawUtf8(result), dlinfo.dli_fname, StrLen(dlinfo.dli_fname));
+    {$endif UNICODE}
+    if (result <> '') and
+       (result[1] <> '/') then
+      result := ExpandFileName(string(result));
+    LastExecutableChar := dlinfo.dli_fname;
+    LastExecutableName := result;
+  end;
+  OSSafe.UnLock;
 end;
 
 function GetExecutableBase(aAddress: pointer): PtrUInt;
@@ -2091,9 +2103,6 @@ begin
   fpnanosleep(@timeout, nil)
   // no retry loop on ESysEINTR (as with regular RTL's Sleep)
 end;
-
-var
-  OSSafe: TLightLock; // when GlobalLock is overkill
 
 {$undef HASEVENTFD}
 {$undef HASGETRANDOM}

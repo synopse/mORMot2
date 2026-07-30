@@ -9313,7 +9313,7 @@ var
   si: TSysInfo;  // Linuxism, but properly emulated in thit unit on Win/Mac/BSD
 begin
   text[0] := #0;
-  AppendShortCardinal(CpuThreads, text);
+  AppendShortCardinal(SystemInfo.dwNumberOfProcessors, text); // no syscall
   if not RetrieveSysInfo(si) then // single syscall on Linux/Android
     exit;
   AppendShortChar(' ', @text); // si.loads[0/1] = user kern on Windows
