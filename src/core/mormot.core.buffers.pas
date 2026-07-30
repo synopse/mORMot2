@@ -413,7 +413,7 @@ type
     // - follow the FileUnSynLZ() deprecated function format, if ForceHash32=true
     // so that Hash32() is used instead of the AlgoHash() of this instance
     // - may be overriden to support a standard file layout (e.g. AlgoGZ)
-    class function FileUnCompress(const Source, Dest: TFileName; Magic: cardinal;
+    function FileUnCompress(const Source, Dest: TFileName; Magic: cardinal;
       ForceHash32: boolean = false): boolean; virtual;
 
     /// get the TAlgoCompress instance corresponding to the AlgoID stored
@@ -5896,11 +5896,12 @@ begin
     end;
 end;
 
-class function TAlgoCompress.FileUnCompress(const Source, Dest: TFileName;
+function TAlgoCompress.FileUnCompress(const Source, Dest: TFileName;
   Magic: cardinal; ForceHash32: boolean): boolean;
 var
   S, D: THandleStream;
 begin
+  EnsureAlgoHasNoForcedFormat('FileUnCompress'); // should be overriden
   result := false;
   S := FileStreamSequentialRead(Source);
   if S <> nil then
