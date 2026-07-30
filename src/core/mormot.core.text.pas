@@ -11175,7 +11175,7 @@ end;
 
 function crc32cStringToHexShort(const str: string): TShort15;
 begin
-  CardinalToHexShort(crc32cString(str));
+  result := CardinalToHexShort(crc32cString(str));
 end;
 
 function ToHexShort(P: pointer; Len: PtrInt): TShort64;
