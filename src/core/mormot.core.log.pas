@@ -127,7 +127,10 @@ type
     fSymbol: TDebugSymbolDynArray;
     fLine: TDebugLinesDynArray;
     fCodeOffset: PtrUInt;
-    fExeFile, fDebugFile: TFileName;
+    fSymbolsCount, fLinesCount: integer;
+    fStart, fStop: PtrUInt; // efficient IsCode()
+    fExeFile, fExePath, fMabFile: TFileName;
+    fExeAge: TUnixTime;
     fProducer: RawUtf8;
     fHasDebugInfo: boolean;
     fSymbols, fLines: TDynArray;
@@ -2308,7 +2311,7 @@ var
 begin
   result := false;
   // open exe filename or follow '.gnu_debuglink' redirection
-  name := debug.fDebugFile;
+  name := debug.fExeFile;
   if not OpenExeFile(e, name) then
   begin
     {$ifdef DWARFDEBUG}
@@ -2344,7 +2347,7 @@ var
   fn: string;
 begin
   result := false;
-  if not Map.Map(debug.fDebugFile, {forcemap=}true) then // main exe
+  if not Map.Map(debug.fExeFile, {forcemap=}true) then // main exe
     exit;
   if FindExeSection(Map, '.gnu_debuglink', off, siz) <> efUnknown then
   begin
@@ -3293,9 +3296,16 @@ var
 
 var
   i, j, l: PtrInt;
+  mapage: TUnixTime;
+  mapfile: TFileName;
   mapcontent: RawUtf8;
 begin
-  mapcontent := StringFromFile(fDebugFile);
+  mapfile := ChangeFileExt(fExeFile, '.map'); // information is in .map
+  mapage := FileAgeToUnixTimeUtc(mapfile);
+  if (mapage = 0) or
+     (abs(mapage - fExeAge) > SecsPerMin) then // deprecated .map
+    exit;
+  mapcontent := StringFromFile(mapfile);
   P := pointer(mapcontent);
   l := length(mapcontent);
   if (P = nil) or
@@ -3409,7 +3419,6 @@ begin
       end;
       if not R.EOF then
         R.VarUtf8(fProducer);
-      fDebugFile := aMabFile;
       result := true;
     finally
       MS.Free;
@@ -3423,9 +3432,8 @@ end;
 constructor TDebugFile.Create(const aExeName: TFileName; Scope: TDebugFileScope);
 var
   i: PtrInt;
-  ExeAge, DbgAge, MabAge: TUnixTime;
-  MabFile, MabPath: TFileName;
   savemab: boolean;
+  MabAge: TUnixTime;
   start: Int64;
 begin
   QueryPerformanceMicroSeconds(start);
@@ -3437,109 +3445,79 @@ begin
   if SynLogFileFreeing then // avoid GPF
     exit;
   // check the supplied aExeName
-  if aExeName = '' then
-    fExeFile := Executable.InstanceFileName // use current dll/exe instance
-  else
-    fExeFile := aExeName;
-  ExeAge := FileAgeToUnixTimeUtc(fExeFile);
-  if ExeAge = 0 then
+  fExeFile := ExpandFileName(aExeName);
+  fExeAge := FileAgeToUnixTimeUtc(fExeFile);
+  if fExeAge = 0 then
     exit;
-  fDebugFile := fExeFile;
-  {$ifdef OSWINDOWS}
-  // get execution location in the current process - especially for .dll or ASLR
-  fCodeOffset := GetModuleHandle(pointer(fExeFile));
-  {$ifdef ISDELPHI}
-  if fCodeOffset <> 0 then   // this exe/dll runs in the current process
-    inc(fCodeOffset, $1000); // Delphi include BaseOfCode as .map offset
-  // search for an external .map file matching the running .exe/.dll name
-  fDebugFile := ChangeFileExt(fExeFile, '.map'); // information is in .map
-  DbgAge := FileAgeToUnixTimeUtc(fDebugFile);
-  if (DbgAge = 0) or
-     (abs(DbgAge - ExeAge) > SecsPerMin) then // deprecated .map
-    DbgAge := 0;
-  {$else}
-  DbgAge := ExeAge;
-  {$endif ISDELPHI}
-  {$else}
-  fCodeOffset := GetExecutableBase; // for the current exe/so
-  DbgAge := ExeAge;
-  {$endif OSWINDOWS}
-  // main thread-safe process
+  fExePath := ExtractFilePath(fExeFile);
+  fMabFile := ChangeFileExt(fExeFile, '.mab');
   savemab := false;
-  SynLogGlobalLock.Lock;
-  try
-    // search for a .mab file matching the running .exe/.dll name
-    MabFile := ChangeFileExt(ExpandFileName(fDebugFile), '.mab');
-    MabAge := FileAgeToUnixTimeUtc(MabFile);
-    if MabAge = 0 then
+  // search for a .mab file matching the running .exe/.dll name
+  MabAge := FileAgeToUnixTimeUtc(fMabFile);
+  if MabAge = 0 then
+  begin
+    if not IsDirectoryWritable(fExePath) then
     begin
-      MabPath := ExtractFilePath(MabFile);
-      if not IsDirectoryWritable(MabPath) then
-      begin
-        // ([idwExcludeWinSys] not needed because if we are admin then fine)
-        // read/only exe folder -> store .mab in local non roaming user folder
-        MabFile := MakeString([GetSystemPath(spUserData),
-          crc32cStringToHexShort(MabPath), '-', // make it unique per-path
-          ExtractFileName(Mabfile)]);
-        MabAge := FileAgeToUnixTimeUtc(MabFile);
-      end;
+      // ([idwExcludeWinSys] not needed because if we are admin then fine)
+      // read/only exe folder -> store .mab in local non roaming user folder
+      fMabFile := MakeString([GetSystemPath(spUserData),
+        crc32cStringToHexShort(fExePath), '-', // unique per-path
+        ExtractFileName(fMabfile)]);
+      MabAge := FileAgeToUnixTimeUtc(fMabFile);
     end;
-    if (MabAge <> 0) and // SaveToFile() set FileSetDateFrom(fExeFile);
-       (abs(DbgAge - MabAge) < 2) then
-      LoadMab(MabFile);
-    if fLinesCount + fSymbolsCount = 0 then
-    try
-      // recompute from .map/.dbg if no faster-to-load .mab available
-      DeleteFile(MabFile);
-      GenerateFromMapOrDwarf(dfsIncludePathInFileName in Scope);
-      fSymbols.Capacity := fSymbolsCount; // only consume the needed memory
-      fLines.Capacity := fLinesCount;
-      for i := 0 to fLinesCount - 2 do
-        if fLine[i].Symbol.Stop = 0 then
-          fLine[i].Symbol.Stop := fLine[i + 1].Symbol.Start - 1;
-      if fLinesCount <> 0 then // wild guess of the last unit end of code
-        with fLine[fLinesCount - 1] do
-          if Symbol.Stop = 0 then
-            if Addr <> nil then
-              // Lines[] blocks may overlap with .inc -> use Addr[]
-              Symbol.Stop := Addr[high(Addr)]
-            else
-              Symbol.Stop := Symbol.Start;
-      if fLinesCount + fSymbolsCount <> 0 then
-        savemab := true; // trigger SaveToFile(MabFile) below
-    except
-      fSymbols.Clear;
-      fLines.Clear;
-    end;
-    // search for a .mab file matching the running .exe/.dll name
-    if (fLinesCount + fSymbolsCount = 0) and
-       (MabAge <> 0) then
-    // search for an embedded compressed .mab file appended to the .exe/.dll
-    if fLinesCount + fSymbolsCount = 0 then
-      LoadMab(fExeFile);
-    // finalize (and optionally persist as .mab) this instance
+  end;
+  if (MabAge <> 0) and // SaveToFile() set FileSetDateFrom(fExeFile);
+     (abs(fExeAge - MabAge) < 2) then // same exact age
+    LoadMab(fMabFile);
+  // recompute from .map/.dbg if no faster-to-load .mab available
+  if fLinesCount or fSymbolsCount = 0 then
+  try
+    if MabAge <> 0 then
+      DeleteFile(fMabFile);
+    GenerateFromMapOrDwarf(dfsIncludePathInFileName in Scope);
     if fLinesCount + fSymbolsCount <> 0 then
     begin
-      if fLine <> nil then
+      fSymbols.Capacity := fSymbolsCount; // only consume the needed memory
+      fLines.Capacity := fLinesCount;
+      if fLinesCount <> 0 then // finalize fLine[] missing fields
       begin
-        fStart := fLine[0].Symbol.Start;
-        fStop := fLine[fLinesCount - 1].Symbol.Stop;
+        for i := 0 to fLinesCount - 2 do
+          if fLine[i].Symbol.Stop = 0 then
+            fLine[i].Symbol.Stop := fLine[i + 1].Symbol.Start - 1;
+          with fLine[fLinesCount - 1] do
+            if Symbol.Stop = 0 then
+              if Addr <> nil then
+                // Lines[] blocks may overlap with .inc -> use Addr[]
+                Symbol.Stop := Addr[high(Addr)]
+              else
+                Symbol.Stop := Symbol.Start;
       end;
-      if fSymbol <> nil then
-      begin
-        fStart := MinPtrInt(fStart, fSymbol[0].Start);
-        fStop := MaxPtrInt(fStop, fSymbol[fSymbolsCount - 1].Stop);
-      end;
-      fHasDebugInfo := true; // mark as success
-      if savemab and // just created from .map/.dbg -> create .mab file
-         not (dfsNoMabSaveAtCreate in Scope) then
-        SaveToFile(MabFile, Scope);
-    end
-    else
-      fDebugFile := '';
-  finally
-    SynLogGlobalLock.UnLock;
+      savemab := true; // trigger SaveToFile(MabFile) below
+    end;
+  except
+    fSymbols.Clear;
+    fLines.Clear;
   end;
+  // search for an embedded compressed .mab file appended to the .exe/.dll
+  if fLinesCount or fSymbolsCount = 0 then
+    LoadMab(fExeFile);
+  // finalize (and optionally persist as .mab) this instance
+  if fLinesCount <> 0 then
+  begin
+    fStart := fLine[0].Symbol.Start;
+    fStop := fLine[fLinesCount - 1].Symbol.Stop;
+    fHasDebugInfo := true; // mark as success
+  end;
+  if fSymbolsCount <> 0 then
+  begin
+    fStart := MinPtrInt(fStart, fSymbol[0].Start);
+    fStop := MaxPtrInt(fStop, fSymbol[fSymbolsCount - 1].Stop);
+    fHasDebugInfo := true; // mark as success
+  end;
+  if fHasDebugInfo and
+     savemab and // just created from .map/.dbg -> create .mab file
+     not (dfsNoMabSaveAtCreate in Scope) then
+    SaveToFile(fMabFile, Scope);
   QueryPerformanceMicroSeconds(fLoadingMicroSec);
   dec(fLoadingMicroSec, start);
 end;
