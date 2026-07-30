@@ -5615,10 +5615,7 @@ begin
   head.Magic := Magic;
   repeat
     // compress Source into Dest with proper chunking
-    if count > ChunkBytes then
-      head.UnCompressedSize := ChunkBytes
-    else
-      head.UnCompressedSize := count;
+    head.UnCompressedSize := MinPtrInt(count, ChunkBytes);
     if S = nil then
     begin
       S := FastNewString(head.UnCompressedSize);
@@ -5684,9 +5681,9 @@ function TAlgoCompress.StreamUnCompress(Source, Dest: TStream; Magic: cardinal;
 var
   S, D: PAnsiChar;
   sourcePosition, resultSize, sourceSize: Int64;
-  Head: TAlgoCompressHead;
+  head: TAlgoCompressHead;
   offs, rd: cardinal;
-  Trailer: TAlgoCompressTrailer absolute Head;
+  trailer: TAlgoCompressTrailer absolute head;
   tmps, tmpd: RawByteString;
   stored: boolean;
 
@@ -5696,17 +5693,15 @@ var
     t: PAlgoCompressTrailer;
     tmplen: PtrInt;
     tmp: TBuffer64K;
-    Trailer: TAlgoCompressTrailer absolute tmp;
+    trailer: TAlgoCompressTrailer absolute tmp;
   begin
     result := false;
-    Source.Position := sourceSize - SizeOf(Trailer);
-    if (Source.Read(Trailer, SizeOf(Trailer)) <> SizeOf(Trailer)) or
-       (Trailer.Magic <> Magic) then
+    Source.Position := sourceSize - SizeOf(trailer);
+    if (Source.Read(trailer, SizeOf(trailer)) <> SizeOf(trailer)) or
+       (trailer.Magic <> Magic) then
     begin
       // may have been appended before a digital signature -> try last 64KB
-      tmplen := SizeOf(tmp);
-      if sourcesize < tmplen then
-        tmplen := sourcesize;
+      tmplen := MinPtrInt(SizeOf(tmp), sourcesize);
       Source.Position := sourceSize - tmplen;
       if not StreamReadAll(Source, @tmp, tmplen) then
         exit;
@@ -5721,10 +5716,10 @@ var
       sourcePosition := sourceSize - t^.HeaderRelativeOffset; // found
     end
     else
-      sourcePosition := sourceSize - Trailer.HeaderRelativeOffset;
+      sourcePosition := sourceSize - trailer.HeaderRelativeOffset;
     Source.Position := sourcePosition;
-    if (Source.Read(Head, SizeOf(Head)) <> SizeOf(Head)) or
-       (Head.Magic <> Magic) then
+    if (Source.Read(head, SizeOf(head)) <> SizeOf(head)) or
+       (head.Magic <> Magic) then
       exit;
     result := true;
   end;
@@ -5737,79 +5732,79 @@ begin
   EnsureAlgoHasNoForcedFormat('StreamUnCompress');
   sourceSize := Source.Size;
   sourcePosition := Source.Position;
-  if Source.Read(Head, SizeOf(Head)) <> SizeOf(Head) then
+  if Source.Read(head, SizeOf(head)) <> SizeOf(head) then
     exit;
-  if (Head.Magic <> Magic) and
+  if (head.Magic <> Magic) and
      not MagicSeek then
     exit;
   offs := 0;
   resultSize := 0;
   repeat
     // read next chunk from Source
-    inc(sourcePosition, SizeOf(Head));
+    inc(sourcePosition, SizeOf(head));
     S := GetStreamBuffer(Source);
     if S <> nil then
     begin
-      if sourcePosition + Head.CompressedSize > sourceSize then
+      if sourcePosition + head.CompressedSize > sourceSize then
         break;
       inc(S, sourcePosition);
-      Source.Seek(Head.CompressedSize, soCurrent);
+      Source.Seek(head.CompressedSize, soCurrent);
     end
     else
     begin
-      if Head.CompressedSize > length({%H-}tmps) then
-        FastNewRawByteString(tmps, Head.CompressedSize);
+      if head.CompressedSize > length({%H-}tmps) then
+        FastNewRawByteString(tmps, head.CompressedSize);
       S := pointer(tmps);
-      if not StreamReadAll(Source, S, Head.CompressedSize) then
+      if not StreamReadAll(Source, S, head.CompressedSize) then
         exit;
     end;
-    inc(sourcePosition, Head.CompressedSize);
+    inc(sourcePosition, head.CompressedSize);
     // decompress chunk into Dest
-    stored := (Head.CompressedSize = Head.UnCompressedSize) and
-              (Head.CompressedHash = Head.UncompressedHash);
+    stored := (head.CompressedSize = head.UnCompressedSize) and
+              (head.CompressedHash = head.UncompressedHash);
     if not stored then
-      if AlgoDecompressDestLen(S) <> Head.UnCompressedSize then
+      if AlgoDecompressDestLen(S) <> head.UnCompressedSize then
         break;
-    if AlgoHash(ForceHash32, S, Head.CompressedSize) <> Head.CompressedHash then
+    if AlgoHash(ForceHash32, S, head.CompressedSize) <> head.CompressedHash then
       break;
     if IsStreamBuffer(Dest) then
     begin
-      Dest.Size := resultSize + Head.UnCompressedSize;    // resize output
+      Dest.Size := resultSize + head.UnCompressedSize;    // resize output
       D := PAnsiChar(GetStreamBuffer(Dest)) + resultSize; // in-place decompress
-      inc(resultSize, Head.UnCompressedSize);
+      inc(resultSize, head.UnCompressedSize);
     end
     else
     begin
-      if Head.UnCompressedSize > length({%H-}tmpd) then
-        FastNewRawByteString(tmpd, Head.UnCompressedSize);
+      if head.UnCompressedSize > length({%H-}tmpd) then
+        FastNewRawByteString(tmpd, head.UnCompressedSize);
       D := pointer(tmpd);
     end;
     if stored then
-      MoveFast(S^, D^, Head.CompressedSize)
-    else if (AlgoDecompress(S, Head.CompressedSize, D) <> Head.UnCompressedSize) or
-       (AlgoHash(ForceHash32, D, Head.UnCompressedSize) <> Head.UncompressedHash) then
+      MoveFast(S^, D^, head.CompressedSize)
+    else if (AlgoDecompress(S, head.CompressedSize, D) <> head.UnCompressedSize) or
+       (AlgoHash(ForceHash32, D, head.UnCompressedSize) <> head.UncompressedHash) then
       break; // invalid decompression
     if D = pointer({%H-}tmpd) then
-      Dest.WriteBuffer(D^, Head.UnCompressedSize);
+      Dest.WriteBuffer(D^, head.UnCompressedSize);
     result := true; // if we reached here, we uncompressed a block
     // try if we have some other pending chunk(s)
     if (sourceSize <> 0) and
        (sourcePosition = sourceSize) then
       break; // end of source with no trailer or next block
-    inc(offs, Head.CompressedSize + SizeOf(Head));
-    rd := Source.Read(Trailer, SizeOf(Trailer));
-    if rd <> SizeOf(Trailer) then
+    inc(offs, head.CompressedSize + SizeOf(head));
+    rd := Source.Read(trailer, SizeOf(trailer));
+    if rd <> SizeOf(trailer) then
     begin
       if rd <> 0 then
         Source.Position := sourcePosition; // rewind source
       break; // valid uncompressed data with no more chunk
     end;
-    if (Trailer.Magic = Magic) and
-       (Trailer.HeaderRelativeOffset = offs + SizeOf(Trailer)) then
+    if (trailer.Magic = Magic) and
+       (trailer.HeaderRelativeOffset = offs + SizeOf(trailer)) then
       break; // we reached the end trailer
-    if (Source.Read(PByteArray(@Head)[SizeOf(Trailer)],
-         SizeOf(Head) - SizeOf(Trailer)) <> SizeOf(Head) - SizeOf(Trailer)) or
-       (Head.Magic <> Magic) then
+    if (Source.Read(PByteArray(@head)[SizeOf(trailer)],
+         SizeOf(head) - SizeOf(trailer)) <> SizeOf(head) - SizeOf(trailer)) or
+       (head.Magic <> Magic) then
     begin
       Source.Position := sourcePosition; // rewind source
       break; // valid uncompressed data with no more chunk
