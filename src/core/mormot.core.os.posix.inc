@@ -164,12 +164,12 @@ begin
   begin
     // try to load as absolute file name so that dladdr() returns full path
     exp := ExpandFileName(LibraryName);
-    result := TLibHandle(dlopen(pointer(exp), RTLD_LAZY));
+    result := TLibHandle(dlopen(pointer(exp), RTLD_NOW));
     if result <> 0 then
       exit;
   end;
   // absolute '/path/to/lib.so' or system-resolved plain 'lib.so'
-  result := TLibHandle(dlopen(pointer(LibraryName), RTLD_LAZY));
+  result := TLibHandle(dlopen(pointer(LibraryName), RTLD_NOW));
 end;
 
 procedure LibraryClose(Lib: TLibHandle);

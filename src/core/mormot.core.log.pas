@@ -6741,9 +6741,7 @@ begin
         last^.StackCount := 0
       else
       begin
-        n := Ctxt.EStackCount;
-        if n > high(last^.Stack) + 1 then
-          n := high(last^.Stack) + 1;
+        n := MinPtrInt(high(last^.Stack) + 1, Ctxt.EStackCount);
         last^.StackCount := n;
         MoveFast(Ctxt.EStack[0], last^.Stack[0], n * SizeOf(PtrUInt));
       end;

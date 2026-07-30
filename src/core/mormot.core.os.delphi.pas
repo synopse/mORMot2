@@ -147,6 +147,7 @@ const
   StdOutputHandle   = 1;
   StdErrorHandle    = 2;
   RTLD_LAZY         = Posix.Dlfcn.RTLD_LAZY;
+  RTLD_NOW          = Posix.Dlfcn.RTLD_NOW;
   O_RDONLY          = O_RDONLY;
   O_NONBLOCK        = O_NONBLOCK;
   SEEK_CUR          = SEEK_CUR;
