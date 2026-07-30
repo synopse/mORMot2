@@ -2477,9 +2477,14 @@ begin
     crc := PCardinal(dbgname + ((dbglen + 4) and not 3))^; // read before UnMap
     Utf8DecodeToString(dbgname, dbglen, fn); // e.g. mormot2tests.dbg
     Map.UnMap; // close main exe
-    if Map.Map(Executable.ProgramFilePath + fn) then // search dbg in exe folder
-      if crc32(0, Map.Buffer, Map.Size) <> crc then  // zlib algorithm
+    if Map.Map(debug.fExePath + fn) or  // search dbg in dll/exe folder
+       ((Executable.ProgramFilePath <> debug.fExePath) and
+        Map.Map(Executable.ProgramFilePath + fn)) then // search dbg with exe
+      if crc32(0, Map.Buffer, Map.Size) <> crc then    // zlib algorithm
+      begin
         Map.UnMap; // the located debug file does not match the executable
+        exit;
+      end;
   end;
   if (FindExeSection(Map, '.debug_line', LineOffset, LineSize, @ImageBase) <> efUnknown) and
      (FindExeSection(Map, '.debug_info', InfoOffset, InfoSize) <> efUnknown) and
@@ -2752,6 +2757,8 @@ begin
   // check if DWARF 32-bit or 64-bit format
   ReadInit(file_offset, file_size);
   header32.unit_length := read.Next4;
+  if header32.unit_length = 1 then // Elf64_Chdr.ch_type = ELFCOMPRESS_ZLIB
+    read.ErrorData('DWARF: unsupported SHF_COMPRESSED format', []);
   isdwarf64 := header32.unit_length = $ffffffff;
   if isdwarf64 then
     unitlen := read.Next8 + SizeOf(header64.magic) + SizeOf(header64.unit_length)
@@ -3514,7 +3521,6 @@ var
   u: PDebugLines;
 begin
   result := false;
-  if FileExists(aMabFile) then
   try
     // StreamUnCompress() will try from the end if aMabFile is an executable
     MS := AlgoSynLZ.StreamUnCompress(aMabFile, MAGIC_MAB, {hash32=}true);
