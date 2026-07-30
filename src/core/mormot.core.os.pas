@@ -1731,7 +1731,10 @@ var
 function GetExecutableBase(aAddress: pointer = nil): PtrUInt;
 
 /// try to retrieve the file name of the executable/library holding a function
-// - calls dladdr() on POSIX, or GetModuleHandleEx() on Windows
+// - calls dladdr() on POSIX - so could return a relative path for a library
+// (but the main exe/lib will return properly expanded Executable.InstanceName)
+// - calls GetModuleHandleEx() then GetModuleFileNameW() on Windows so
+// always returns an absolute path
 function GetExecutableName(aAddress: pointer; aBase: PPtrUInt = nil): TFileName;
 
 /// check if a function address is known within the current running module
@@ -9959,7 +9962,8 @@ begin
     crcblock(@SystemEntropy.Startup, @PosixProgramInfo); // won't hurt
     GetDlInfoName(PosixProgramInfo, InstanceFileName);
     if InstanceFileName <> '' then
-    begin
+    begin // could be e.g. './mormot2tests'
+      InstanceFileName := ExpandFileName(InstanceFileName); // expand at startup
       dt := FileAgeToDateTime(InstanceFileName); // TFileVersion needs it anyway
       if dt = 0 then
         InstanceFileName := '';

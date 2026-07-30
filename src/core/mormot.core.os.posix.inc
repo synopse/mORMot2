@@ -115,6 +115,9 @@ begin
   result := -1;
 end;
 
+var
+  OSSafe: TLightLock; // when GlobalLock is overkill
+
 
 { ****************** Unicode, Time, File process }
 
@@ -1792,31 +1795,7 @@ begin
 end;
 
 var
-  OSSafe: TLightLock; // when GlobalLock is overkill
-  LastExecutableChar: pointer;
-  LastExecutableName: TFileName;
-  PosixProgramInfo: dl_info; // set at startup about the current exe or so
-
-procedure GetDlInfoName(var dlinfo: dl_info; var result: TFileName);
-begin
-  OSSafe.Lock;
-  if LastExecutableChar = dlinfo.dli_fname then
-    result := LastExecutableName // naive thread-safe cache
-  else
-  begin
-    {$ifdef UNICODE}
-    result := string(dlinfo.dli_fname); // use RTL from PAnsiChar to TFileName
-    {$else}
-    FastSetString(RawUtf8(result), dlinfo.dli_fname, StrLen(dlinfo.dli_fname));
-    {$endif UNICODE}
-    if (result <> '') and
-       (result[1] <> '/') then
-      result := ExpandFileName(string(result));
-    LastExecutableChar := dlinfo.dli_fname;
-    LastExecutableName := result;
-  end;
-  OSSafe.UnLock;
-end;
+  PosixProgramInfo: dl_info; // set at startup about the main exec/library
 
 function GetExecutableBase(aAddress: pointer): PtrUInt;
 var
@@ -1825,8 +1804,22 @@ begin
   if aAddress = nil then
     exit(PtrUInt(PosixProgramInfo.dli_fbase));
   FillCharFast(dlinfo, sizeof(dlinfo), 0);
-  dladdr(aAddress, @dlinfo);
-  result := PtrUInt(dlinfo.dli_fbase);
+  if dladdr(aAddress, @dlinfo) = 0 then
+    result := 0
+  else
+    result := PtrUInt(dlinfo.dli_fbase);
+end;
+
+procedure GetDlInfoName(var dlinfo: dl_info; var result: TFileName);
+begin
+  if dlinfo.dli_fname = nil then
+    result := ''
+  else
+    {$ifdef UNICODE}
+    result := string(dlinfo.dli_fname); // use RTL from PAnsiChar to TFileName
+    {$else}
+    FastSetString(RawUtf8(result), dlinfo.dli_fname, StrLen(dlinfo.dli_fname));
+    {$endif UNICODE}
 end;
 
 function GetExecutableName(aAddress: pointer; aBase: PPtrUInt): TFileName;
@@ -1834,8 +1827,14 @@ var
   dlinfo: dl_info;
 begin
   FillCharFast(dlinfo, sizeof(dlinfo), 0);
-  dladdr(aAddress, @dlinfo);
-  GetDlInfoName(dlinfo, result);
+  if dladdr(aAddress, @dlinfo) = 0 then
+    result := ''
+  else if dlinfo.dli_fbase = PosixProgramInfo.dli_fbase then
+    // main exec/library maybe e.g. './mormot2tests'
+    result := Executable.InstanceFileName // this value was expanded at startup
+  else
+    // expected to be absolute for libraries
+    GetDlInfoName(dlinfo, result);
   if aBase <> nil then
     aBase^ := PtrUInt(dlinfo.dli_fbase);
 end;
