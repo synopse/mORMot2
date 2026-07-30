@@ -2556,7 +2556,7 @@ type
     mem_unit: cardinal;                  // Memory unit size in bytes
   end;
 
-function RetrieveSysInfo(var si: TSysInfo): boolean;
+function _RetrieveSysInfo(var si: TSysInfo): boolean;
 var
   global: TMemoryStatusEx;
   I, K, U, S: Int64;

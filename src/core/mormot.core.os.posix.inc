@@ -3346,7 +3346,7 @@ type
     mem_unit: cardinal;                  // Memory unit size in bytes
   end;
 
-function RetrieveSysInfo(var si: TSysInfo): boolean;
+function _RetrieveSysInfo(var si: TSysInfo): boolean;
 var
   avg: TLoadAvg;
   i: PtrInt;
@@ -3853,12 +3853,19 @@ begin
   result := FindFileCardinal('/proc/self/status', 'TRACERPID:') <> 0;
 end;
 
+function _RetrieveSysInfo(var si: TSysInfo): boolean;
+begin // single syscall gives enough information on Linux
+  result := SysInfo(@si) = 0;
+end;
+
+function RetrieveSysInfo(var si: TSysInfo): boolean; forward; // 1 second cache
+
 function RetrieveLoadAvg: TShort23;
 var
   si: TSysInfo;  // Linuxism
 begin
   result[0] := #0;
-  if SysInfo(@si) <> 0 then // one syscall is faster than /proc/loadavg access
+  if not RetrieveSysInfo(si) then // cache or syscall faster than /proc/loadavg
     exit;
   AppendShort(TwoDigits(si.loads[0] / double(65536.0)), result);
   AppendShortChar(' ', @result);
@@ -3866,11 +3873,6 @@ begin
   AppendShortChar(' ', @result);
   AppendShort(TwoDigits(si.loads[2] / double(65536.0)), result);
 end; // we didn't use AppendShortCurr64() because of expected rounding
-
-function RetrieveSysInfo(var si: TSysInfo): boolean;
-begin // single syscall gives enough information on Linux
-  result := SysInfo(@si) = 0;
-end;
 
 function RetrieveSystemTimes(out IdleTime, KernelTime, UserTime: Int64): boolean;
 var

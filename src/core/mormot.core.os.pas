@@ -9277,6 +9277,8 @@ end;
 var
   _Shell: RawUtf8;
   _SystemInfoText: TCachedValue;
+  _SysInfoTix: cardinal;
+  _SysInfoCache: TSysInfo;
 
 function GetSystemInfoText: RawUtf8;
 begin
@@ -9288,6 +9290,22 @@ begin
   result := _Shell;
   if result = '' then
     _SetShell(_Shell, result);
+end;
+
+function RetrieveSysInfo(var si: TSysInfo): boolean;
+var
+  tix: cardinal;
+begin
+  tix := GetTickSec;
+  OSSafe.Lock;
+  if _SysInfoTix <> tix then
+  begin
+    _SysInfoTix := tix;
+    _RetrieveSysInfo(_SysInfoCache)
+  end;
+  si := _SysInfoCache;
+  OSSafe.UnLock;
+  result := si.uptime <> 0;
 end;
 
 procedure RetrieveSysInfoText(var text: ShortString);
