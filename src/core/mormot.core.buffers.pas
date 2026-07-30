@@ -5214,10 +5214,7 @@ class function TAlgoCompress.Algo(Comp: PAnsiChar; CompLen: integer): TAlgoCompr
 begin
   if (Comp <> nil) and
      (CompLen > 9) then
-    if ord(Comp[4]) <= 1 then // inline-friendly Comp[4]<=COMPRESS_SYNLZ
-      result := AlgoSynLZ
-    else // COMPRESS_STORED is also handled as SynLZ
-      result := Algo(ord(Comp[4]))
+    result := Algo(ord(Comp[4]))
   else
     result := nil;
 end;
@@ -5241,20 +5238,20 @@ end;
 class function TAlgoCompress.Algo(aAlgoID: byte): TAlgoCompress;
 var
   n: integer;
-  ptr: ^TAlgoCompress;
+  a: ^TAlgoCompress;
 begin
-  if aAlgoID <= COMPRESS_SYNLZ then // COMPRESS_STORED is handled as SynLZ
-    result := AlgoSynLZ
+  if aAlgoID <= COMPRESS_SYNLZ then
+    result := AlgoSynLZ // List[0] = AlgoSynLZ or COMPRESS_STORED
   else
   begin
-    ptr := pointer(SynCompressAlgos);
-    if ptr <> nil then
+    a := pointer(SynCompressAlgos);
+    if a <> nil then
     begin
-      n := PDALen(PAnsiChar(ptr) - _DALEN)^ + ( _DAOFF - 1 ); // - 1 for List[0]
-      if n > 0 then
+      n := PDALen(PAnsiChar(a) - _DALEN)^ + ( _DAOFF - 1 ); // - 1 for List[0]
+      if n <> 0 then
         repeat
-          inc(ptr); // ignore List[0] = AlgoSynLZ
-          result := ptr^;
+          inc(a); // ignore List[0] = AlgoSynLZ
+          result := a^;
           if result.fAlgoID = aAlgoID then
             exit;
           dec(n);
@@ -5295,7 +5292,8 @@ end;
 
 procedure TAlgoCompress.EnsureAlgoHasNoForcedFormat(const caller: ShortString);
 begin
-  if fAlgoHasForcedFormat then
+  if (self = nil) or
+     fAlgoHasForcedFormat then
     EAlgoCompress.RaiseUtf8('%.% is unsupported', [self, caller]);
 end;
 
