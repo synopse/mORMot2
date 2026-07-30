@@ -3810,7 +3810,7 @@ type
       Magic: cardinal): boolean; override;
     function FileCompress(const Source, Dest: TFileName; Magic: cardinal;
       ForceHash32: boolean; ChunkBytes: Int64; WithTrailer: boolean): boolean; override;
-    function FileUnCompress(const Source, Dest: TFileName; Magic: cardinal;
+    class function FileUnCompress(const Source, Dest: TFileName; Magic: cardinal;
       ForceHash32: boolean): boolean; override;
   end;
 
@@ -3940,7 +3940,7 @@ begin
   result := GZFile(Source, Dest, fCompressionLevel, {copydate=}true);
 end;
 
-function TAlgoGZ.FileUnCompress(const Source, Dest: TFileName; Magic: cardinal;
+class function TAlgoGZ.FileUnCompress(const Source, Dest: TFileName; Magic: cardinal;
   ForceHash32: boolean): boolean;
 var
   gzr: TGZRead;
