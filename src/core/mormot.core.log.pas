@@ -2241,7 +2241,7 @@ begin
   result := nil;
   fn := GetExecutableName(pointer(a), @base); // e.g. fast dladdr()
   if fn = '' then
-    exit; 
+    exit;
   DebugFilesSafe.WriteLock; // safe blocking process
   try
     if SynLogFileFreeing or
@@ -2275,7 +2275,6 @@ begin
       DebugFileCurrent := result
     else
       DebugFileLast := result;   
-    ConsoleObject(result);
   finally
     DebugFilesSafe.WriteUnLock;
   end;
@@ -8579,8 +8578,8 @@ begin
   LogCompressAlgoArchive := @_LogCompressAlgoArchive;
   //writeln(BacktraceStrFpc(Get_pc_addr));
   //writeln(GetExecutableLocation(get_caller_addr(get_frame)));
-  //writeln(GetInstanceDebugFile.FindLocation(PtrUInt(@TDynArray.InitFrom)));
-  //GetInstanceDebugFile.SaveToJson('debug.json',jsonUnquotedPropName);
+  //writeln(TDebugFile.FindLocation(@TDynArray.InitFrom));
+  //TDebugFile.CurrentDebugFile.SaveToJson('debug.json',jsonUnquotedPropName);
 end;
 
 procedure FinalizeUnit;
