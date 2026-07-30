@@ -217,13 +217,13 @@ type
   protected
     fSource: TStream;
     fState: THttpMultiPartDecoderState;
+    fSourceEof: boolean;
     fCurrent: THttpMultiPartDecoderSection;
     fDelimiter: RawUtf8;    // #13#10'--' + boundary
     fBuffer: RawByteString; // sliding window over fSource content
     fBufPos, fBufLen: PtrInt;
     fScanned: PtrInt;        // ReadLine watermark to avoid re-scanning
     fContentPending: PtrInt; // known section content bytes not yet consumed
-    fSourceEof: boolean;
     function Refill: boolean;
     function EnsureBytes(Count: PtrInt): boolean;
     function FindDelimiter(MaxLen: PtrInt; out SafeLen: PtrInt): PtrInt;
@@ -2407,22 +2407,26 @@ end;
 function GetQuotedParamValue(var P: PUtf8Char; out Value: RawUtf8): boolean;
 var
   b, d: PUtf8Char;
+  needescape: boolean;
   tmp: TSynTempBuffer;
 begin
   // decode a "quoted-string" parameter value, unescaping any \x quoted-pair
   result := false;
   b := P;
+  needescape := false;
   while not (P^ in ['"', #0]) do
-    if (P^ = '\') and
-       (P[1] <> #0) then
-      inc(P, 2) // an escaped char is part of the value
-    else
-      inc(P);
+  begin
+    if P^ = '\' then
+      if P[1] <> #0 then
+      begin
+        inc(P); // an escaped char is part of the value
+        needescape := true;
+      end;
+    inc(P);
+  end;
   if P^ <> '"' then
     exit; // unbalanced quote: caller will stop parsing this line
-  if ByteScanIndex(pointer(b), P - b, ord('\')) < 0 then
-    FastSetString(Value, b, P - b) // no quoted-pair: just copy the value
-  else
+  if needescape then
   begin
     d := tmp.Init(P - b); // unescape into a transient buffer
     while b < P do
@@ -2434,9 +2438,10 @@ begin
       inc(d);
       inc(b);
     end;
-    FastSetString(Value, tmp.buf, d - PUtf8Char(tmp.buf));
-    tmp.Done;
-  end;
+    tmp.Done(d, Value);
+  end
+  else
+    FastSetString(Value, b, P - b); // no quoted-pair: just copy the value
   inc(P); // ignore the ending quote
   result := true;
 end;
