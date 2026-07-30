@@ -135,11 +135,9 @@ type
     fHasDebugInfo: boolean;
     fSymbols, fLines: TDynArray;
     fLoadingMicroSec: Int64;
-    fSymbolsCount, fLinesCount: integer;
-    fStart, fStop: PtrUInt; // efficient IsCode()
     procedure GenerateFromMapOrDwarf(includedir: boolean); // from Create()
     function LoadMab(const aMabFile: TFileName): boolean;
-    function AbsoluteToRelative(aAddressAbsolute: PtrUInt): TDebugAddress;
+    function AbsoluteToRelative(aPointer: PtrUInt): TDebugAddress;
       {$ifdef HASINLINE}inline;{$endif}
     // use fast O(log n) binary search to locate a symbol or line number
     function FindSymbol(rva: TDebugAddress): PDebugSymbol;
@@ -217,6 +215,14 @@ type
     // - is much faster: around 1us per lookup, whereas lnfodwrf is 20ms
     class function RegisterBacktraceStrFunc: boolean;
     {$endif FPC}
+    /// low-level resolution of a TDebugFile instance from a code address
+    // - this is the main internal thread-safe factory method for this process
+    // - returns nil if this code address has no known debug information
+    class function Get(aPointer: pointer): TDebugFile;
+      {$ifdef HASINLINE} static; {$endif}
+    /// low-level resolution of the main TDebugFile from the current exe/dll
+    class function CurrentDebugFile: TDebugFile;
+      {$ifdef HASINLINE} static; {$endif}
     /// all symbols, mainly function and method names and addresses
     property Symbols: TDebugSymbolDynArray
       read fSymbol;
@@ -2180,27 +2186,134 @@ uses
 
 { ************** Debug Symbols Processing from Delphi .map or FPC/GDB DWARF }
 
-var
-  ExeInstanceDebugFile: TDebugFile;
+{ TDebugFile }
 
-function GetInstanceDebugFile: TDebugFile;
+function TDebugFile.AbsoluteToRelative(aPointer: PtrUInt): TDebugAddress;
 begin
-  result := ExeInstanceDebugFile;
-  if (result <> nil) or
-     SynLogFileFreeing then // avoid GPF
-    exit;
-  SynLogGlobalLock.Lock;
+  dec(aPointer, fCodeOffset);
+  if (PtrInt(aPointer) < PtrInt(fStart)) or
+     (aPointer > fStop) then
+    aPointer := 0; // our RVA should be positive and in 32-bit range
+  result := aPointer;
+end;
+
+function TDebugFile.IsCode(aPointer: PtrUInt): boolean;
+begin
+  dec(aPointer, fCodeOffset); // inlined AbsoluteToRelative()
+  result := (PtrInt(aPointer) >= PtrInt(fStart)) and
+            (aPointer <= fStop);
+end;
+
+var
+  DebugFileLast, DebugFileCurrent: TDebugFile; // aligned pointer access is atomic
+  DebugFilesSafe: TRWLightLock;
+  DebugFiles: array of TDebugFile;
+  DebugFileNamesUnknown: TStringDynArray; // search once
+
+function DebugFileSearch(f: PDebugFile; a: PtrUInt): TDebugFile;
+var
+  n: integer;
+begin
+  if f <> nil then
+  begin
+    n := PDALen(PAnsiChar(f) - _DALEN)^ + _DAOFF;
+    repeat
+      result := f^;
+      if result.IsCode(a) then
+        exit;
+      inc(f);
+      dec(n);
+    until n = 0;
+  end;
+  result := nil;
+end;
+
+function DebugFileRegister(a: PtrUInt): TDebugFile;
+var
+  base: PtrUInt;
+  i: PtrInt;
+  fn: TFileName;
+begin
+  result := nil;
+  fn := GetExecutableName(pointer(a), @base); // e.g. fast dladdr()
+  if fn = '' then
+    exit; 
+  DebugFilesSafe.WriteLock; // safe blocking process
   try
-    if ExeInstanceDebugFile = nil then
-      ExeInstanceDebugFile := TDebugFile.Create;
-    result := ExeInstanceDebugFile;
+    if SynLogFileFreeing or
+       (FindString(DebugFileNamesUnknown, fn) >= 0) then // known to be unknown
+      exit;
+    result := DebugFileSearch(pointer(DebugFiles), a); // paranoid
+    if result <> nil then
+      exit; // was registered in another background thread
+    for i := 0 to length(DebugFiles) - 1 do
+      if DebugFiles[i].fExeFile = fn then
+        exit; // a is part of this exe/dll but outside of the debug info range
+    try
+      result := TDebugFile.Create(fn);
+    except
+      FreeAndNil(result);
+    end;
+    if (result = nil) or
+       not result.HasDebugInfo then
+    begin
+      AddString(DebugFileNamesUnknown, fn);
+      FreeAndNil(result);
+      exit;
+    end;
+    {$ifdef ISDELPHI}
+    if base <> 0 then
+      inc(base, $1000); // Delphi include BaseOfCode as .map offset
+    {$endif ISDELPHI}
+    result.fCodeOffset := base; // may be random for .dll or ASLR
+    ObjArrayAdd(DebugFiles, result);
+    if result.IsCode(PtrUInt(@DebugFileRegister)) then
+      DebugFileCurrent := result
+    else
+      DebugFileLast := result;   
+    ConsoleObject(result);
   finally
-    SynLogGlobalLock.UnLock;
+    DebugFilesSafe.WriteUnLock;
   end;
 end;
 
+class function TDebugFile.Get(aPointer: pointer): TDebugFile;
+begin
+  result := nil;
+  if SynLogFileFreeing then
+    exit;   
+  // naive but very efficient cache of last used TDebugFile instances
+  result := DebugFileCurrent;
+  if (result <> nil) and
+     result.IsCode(PtrUInt(aPointer)) then
+    exit;
+  result := DebugFileLast;
+  if (result <> nil) and
+     result.IsCode(PtrUInt(aPointer)) then
+    exit; 
+  // non-blocking search of this address in existing TDebugFile instances
+  DebugFilesSafe.ReadLock;
+  result := DebugFileSearch(pointer(DebugFiles), PtrUInt(aPointer));
+  DebugFilesSafe.ReadUnLock;
+  // call GetExecutableName() and try to create a new TDebugFile instance
+  if result = nil then
+    result := DebugFileRegister(PtrUInt(aPointer))
+  else
+    DebugFileLast := result;
+end;
 
-{ TDebugFile }
+class function TDebugFile.CurrentDebugFile: TDebugFile;
+begin
+  if DebugFileCurrent = nil then // resolve local procedure
+  begin
+    DebugFileCurrent := Get(@TDebugFile.CurrentDebugFile);
+    if DebugFileCurrent = nil then
+      DebugFileCurrent := pointer(1);
+  end;
+  result := DebugFileCurrent;
+  if result = pointer(1) then
+    result := nil;
+end;
 
 {$ifdef FPC}
 
