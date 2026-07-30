@@ -140,6 +140,7 @@ type
     function AbsoluteToRelative(aPointer: PtrUInt): TDebugAddress;
       {$ifdef HASINLINE}inline;{$endif}
     procedure AppendLocationShort(aPointer: PtrUInt; var aInfo: ShortString);
+    function AppendLog(W: TTextWriter; aPointer: PtrUInt; NoHex: boolean): boolean;
     // use fast O(log n) binary search to locate a symbol or line number
     function FindSymbol(rva: TDebugAddress): PDebugSymbol;
     function FindLines(rva: TDebugAddress; out line: integer): PDebugLines; overload;
@@ -180,12 +181,6 @@ type
     // - may be useful from debugging purposes
     procedure SaveToJson(const aJsonFile: TFileName;
       aJsonFormat: TTextWriterJsonFormat = jsonCompact); overload;
-    /// add some debugging information about the supplied absolute memory address
-    // - create a global TDebugFile instance for the current process, if needed
-    // - if no debugging information is available (.map/.dbg/.mab), will write
-    // the raw address pointer as hexadecimal
-    class function Log(W: TTextWriter; aAddressAbsolute: PtrUInt;
-      AllowNotCodeAddr: boolean; SymbolNameNotFilename: boolean = false): boolean;
     /// check if this memory address is part of the code segments of this instance
     function IsCode(aPointer: PtrUInt): boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -221,6 +216,9 @@ type
     // - is much faster: around 1us per lookup, whereas lnfodwrf is 20ms
     class function RegisterBacktraceStrFunc: boolean; static;
     {$endif FPC}
+    /// add some debugging information about the supplied absolute memory address
+    class function AddLog(W: TTextWriter; aPointer: PtrUInt;
+      NoHex: boolean = false): boolean; {$ifdef HASINLINE} static; {$endif}
     /// low-level resolution of a TDebugFile instance from a code address
     // - this is the main internal thread-safe factory method for this process
     // - returns nil if this code address has no known debug information
@@ -3876,102 +3874,62 @@ begin
     until L > R;
 end;
 
-function TDebugFile.AbsoluteToRelative(aAddressAbsolute: PtrUInt): TDebugAddress;
-begin
-  dec(aAddressAbsolute, fCodeOffset);
-  if (PtrInt(aAddressAbsolute) < PtrInt(fStart)) or
-     (aAddressAbsolute > fStop) then
-    aAddressAbsolute := 0; // our RVA should be positive and in 32-bit range
-  result := aAddressAbsolute;
-end;
-
-function TDebugFile.IsCode(aAddressAbsolute: PtrUInt): boolean;
-begin
-  dec(aAddressAbsolute, fCodeOffset); // inlined AbsoluteToRelative()
-  result := (PtrInt(aAddressAbsolute) >= PtrInt(fStart)) and
-            (aAddressAbsolute <= fStop);
-end;
-
-class function TDebugFile.Log(W: TTextWriter; aAddressAbsolute: PtrUInt;
-  AllowNotCodeAddr, SymbolNameNotFilename: boolean): boolean;
+function TDebugFile.AppendLog(W: TTextWriter; aPointer: PtrUInt; NoHex: boolean): boolean;
 var
-  line: integer; // not PtrInt
   rva: TDebugAddress;
+  line: integer; // not PtrInt
   s: PDebugSymbol;
   l: PDebugLines;
-  debug: TDebugFile;
-
-  procedure AddHex;
-  begin
-    if not AllowNotCodeAddr then
-      exit;
-    W.AddPointer(aAddressAbsolute);
-    W.AddDirect(' ');
-  end;
-
 begin
   result := false;
-  if (W <> nil) and
-     (aAddressAbsolute <> 0) then
-  try
-    debug := ExeInstanceDebugFile;
-    if debug = nil then
-      debug := GetInstanceDebugFile;
-    if (debug = nil) or
-       not debug.HasDebugInfo then
-    begin
-      AddHex;
-      exit;
-    end;
-    rva := debug.AbsoluteToRelative(aAddressAbsolute);
-    s := debug.FindSymbol(rva);
-    l := debug.FindLines(rva, line);
-    if (s = nil) and
-       (l = nil) then
-    begin
-      AddHex;
-      exit;
-    end;
-    {$ifdef ISDELPHI}
-    if (s <> nil) and
-       not AllowNotCodeAddr and
-       (FindPropName(['SynRtlUnwind', '@HandleAnyException',  'LogExcept',
-         '@HandleOnException', 'ThreadWrapper', 'ThreadProc'],
-         s^.Name) >= 0) then
-      // no stack trace within the Delphi exception interception functions
-      exit;
-    {$endif ISDELPHI}
-    AddHex;
-    if l <> nil then
-    begin
-      if SymbolNameNotFilename and
-         (line = 0) then
-        W.AddString(l^.Symbol.Name) // unit name for convenience
-      else
-        W.AddString(l^.FileName);   // line number is always against a file
-      W.AddDirect(' ');
-    end;
-    if s <> nil then
-      W.AddString(s^.Name);
+  rva := AbsoluteToRelative(aPointer);
+  if rva = 0 then
+    exit;
+  s := FindSymbol(rva);
+  {$ifdef ISDELPHI}
+  if (s <> nil) and
+     (FindPropName(['SynRtlUnwind', '@HandleAnyException',  'LogExcept',
+       '@HandleOnException', 'ThreadWrapper', 'ThreadProc'],
+       s^.Name) >= 0) then
+    // no stack trace within the Delphi exception interception functions
+    exit;
+  {$endif ISDELPHI}
+  result := true;
+  if not NoHex then
+  begin
+    W.AddPointer(aPointer);
     W.AddDirect(' ');
-    if line > 0 then
-    begin
-      W.AddDirect('(');
-      W.AddU(line);
-      W.AddDirect(')', ' ');
-    end;
-    result := true;
-  except
-    result := false;
   end;
+  l := FindLines(rva, line);
+  if l <> nil then
+  begin
+    if line = 0 then
+      W.AddString(l^.Symbol.Name) // main unit name for convenience
+    else
+      W.AddString(l^.FileName);   // line number is always against a file
+    W.AddDirect(' ');
+  end;
+  if s <> nil then
+    W.AddString(s^.Name);
+  W.AddDirect(' ');
+  if line = 0 then
+    exit;
+  W.AddDirect('(');
+  W.AddU(line);
+  W.AddDirect(')', ' '); // always end with a ' '
 end;
 
-function TDebugFile.FindLocation(aAddressAbsolute: PtrUInt): RawUtf8;
+class function TDebugFile.AddLog(W: TTextWriter; aPointer: PtrUInt; NoHex: boolean): boolean;
 var
-  tmp: ShortString;
+  debug: TDebugFile;
 begin
-  FindLocationShort(aAddressAbsolute, tmp);
-  ShortStringToAnsi7String(tmp, result);
+  result := false;
+  if (W = nil) or
+     (aPointer = 0) then
+    exit;
+  debug := TDebugFile.Get(pointer(aPointer));
+  if debug <> nil then
+    result := debug.AppendLog(W, aPointer, NoHex);
 end;
 
 procedure TDebugFile.AppendLocationShort(aPointer: PtrUInt; var aInfo: ShortString);
@@ -5401,7 +5359,7 @@ begin
     {$ifdef ISDELPHI}
     else if addr <> 0 then
       // no method name specified -> try from map/mab symbols
-      TDebugFile.Log(fWriter, addr, {notcode=}false, {symbol=}true)
+      TDebugFile.AddLog(fWriter, addr, {nohex=}true)
     {$endif ISDELPHI};
     fWriterEcho.AddEndOfLine(sllEnter);
   {$ifdef HASFASTTRYFINALLY}
@@ -5847,7 +5805,7 @@ begin
     end;
     {$endif USEASMX86STACKBACKTRACE}
     if addr <> 0 then
-      TDebugFile.Log(fWriter, addr - 5, {notcode=}false, {symbol=}true);
+      TDebugFile.AddLog(fWriter, addr - 5, {nohex=}true);
     {$endif ISDELPHI}
     LogTrailer(Level);
   finally
@@ -6535,7 +6493,7 @@ end;
 
 procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
 var
-  frames: array[0..61] of pointer; // on Win64, RtlCaptureStackBackTrace < 62
+  frames: array[0..61] of PtrUInt; // on Win64, RtlCaptureStackBackTrace < 62
   i, depth: PtrInt;
 begin
   depth := fFamily.StackTraceLevel;
@@ -6545,8 +6503,7 @@ begin
       for i := 0 to CaptureBacktrace(2, length(frames), @frames[0]) - 1 do
         if (i = 0) or
            (frames[i] <> frames[i - 1]) then
-          if TDebugFile.Log(fWriter, PtrUInt(frames[i]),
-               {notcode=}false, {assymbol=}false) then
+          if TDebugFile.AddLog(fWriter, frames[i]) then
           begin
             dec(depth);
             if depth = 0 then
@@ -6591,7 +6548,6 @@ procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
 
   var
     st, max_stack, min_stack, depth: PtrUInt;
-    debug: TDebugFile;
   begin
     asm
         mov     min_stack, ebp
@@ -6602,32 +6558,28 @@ procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
       Stack := pointer(min_stack)
     else if PtrUInt(Stack) < min_stack then
       exit;
-    debug := GetInstanceDebugFile;
-    if (debug <> nil) and
-       not debug.HasDebugInfo then
-      // slow SeemsRealPointer/VirtualQuery validation if no .map info
-      debug := nil;
     fWriter.Add(' ');
     depth := fFamily.StackTraceLevel;
     try
-      while PtrUInt(Stack) < max_stack do
+      while (PtrUInt(Stack) < max_stack) and
+            (depth > 0) do
       begin
         st := Stack^;
         inc(Stack);
-        if ((st >= min_stack) and  // on-stack pointer is no code
-            (st <= max_stack)) or
-           ((debug <> nil) and // faster than SeemsRealPointer/VirtualQuery
-            not debug.IsCode(st)) or
-           ((debug = nil) and
-            not SeemsRealPointer(pointer(st - 8))) then
+        if (st >= min_stack) and
+           (st <= max_stack) then
+          continue; // on-stack pointer is no code
+        if not SeemsRealPointer(pointer(st - 8)) or
+           not CheckAsmX86(st) then
           continue;
-        if CheckAsmX86(st) then
-          if TDebugFile.Log(fWriter, st, false) then
-          begin
-            dec(depth);
-            if depth = 0 then
-              break;
-          end;
+        if not TDebugFile.AddLog(fWriter, st) then
+        begin
+          fWriter.AddPointer(st);
+          fWriter.AddDirect(' ');
+        end;
+        dec(depth);
+        if depth = 0 then
+          break;
       end;
     except
       // just ignore any access violation here
@@ -6663,7 +6615,7 @@ begin
       begin
         fWriter.AddDirect(' ');
         for i := 0 to n - 1 do
-          if TDebugFile.Log(fWriter, BackTrace[i], false) then
+          if TDebugFile.AddLog(fWriter, BackTrace[i]) then
             inc(logged);
       end;
     end;
@@ -6811,7 +6763,9 @@ adr:  // regular exception context log with its stack trace
       log.fWriter.AddShort(thrdnam^);
       log.fWriter.AddShorter('] at ');
       try
-        TDebugFile.Log(log.fWriter, Ctxt.EAddr, {notcode=}true, {symbol=}false);
+        log.fWriter.AddPointer(Ctxt.EAddr);
+        log.fWriter.AddDirect(' ');
+        TDebugFile.AddLog(log.fWriter, Ctxt.EAddr, {nohex=}true);
         {$ifdef FPC}
         prev := Ctxt.EAddr;
         // we rely on the stack trace supplied by the FPC RTL
@@ -6820,7 +6774,7 @@ adr:  // regular exception context log with its stack trace
           curr := Ctxt.EStack[i];
           if curr = prev then
             continue; // don't log twice
-          TDebugFile.Log(log.fWriter, curr, {notcode=}false, {symbol=}false);
+          TDebugFile.AddLog(log.fWriter, curr);
           prev := curr;
         end;
         {$else}
@@ -6841,7 +6795,7 @@ fin:  if Ctxt.ELevel in log.fFamily.fLevelSysInfo then
         fam := SynLogFamily[i];
         if (fam <> HandleExceptionFamily) and // if not already logged above
            (Ctxt.ELevel in fam.Level) then
-        try
+        try // only DefaultSynLogExceptionToStr() but with no stack trace
           DoLogException(fam.fGlobalLog, nfo, Ctxt);
         except
           // paranoid: don't try this family again (without SetLevel)
