@@ -139,10 +139,12 @@ type
     function LoadMab(const aMabFile: TFileName): boolean;
     function AbsoluteToRelative(aPointer: PtrUInt): TDebugAddress;
       {$ifdef HASINLINE}inline;{$endif}
+    procedure AppendLocationShort(aPointer: PtrUInt; var aInfo: ShortString);
     // use fast O(log n) binary search to locate a symbol or line number
     function FindSymbol(rva: TDebugAddress): PDebugSymbol;
     function FindLines(rva: TDebugAddress; out line: integer): PDebugLines; overload;
     function FindLines(rva: TDebugAddress): PDebugLines; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     function FindLinesByName(const aUnitName: RawUtf8): PDebugLines;
   public
     /// get the available debugging information
@@ -185,14 +187,8 @@ type
     class function Log(W: TTextWriter; aAddressAbsolute: PtrUInt;
       AllowNotCodeAddr: boolean; SymbolNameNotFilename: boolean = false): boolean;
     /// check if this memory address is part of the code segments of this instance
-    function IsCode(aAddressAbsolute: PtrUInt): boolean;
+    function IsCode(aPointer: PtrUInt): boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    /// return the symbol location according to the supplied absolute address
-    // - filename, symbol name and line number (if any), as plain text, e.g.
-    // $ 57f480 mormot.core.log.pas TSynLog.LogEscape (5782)
-    // $ 4a0a40 mormot.core.base.asmx64.inc (mormot.core.base) Rdtsc (3005)
-    // - returns only the hexadecimal value if no match is found in .map/.dbg/.mab
-    function FindLocation(aAddressAbsolute: PtrUInt): RawUtf8; overload;
     /// return the symbol location according to the supplied absolute address
     // - filename, symbol name and line number (if any), as plain text, e.g.
     // $ 5880ea mormot.core.log.pas InitializeUnit (8475)
@@ -201,19 +197,29 @@ type
     // - returns only the hexadecimal value if no match is found in .map/.dbg/.mab
     // - won't allocate any heap memory during the text creation
     // - mormot.core.os.pas' GetExecutableLocation() redirects to this method
-    procedure FindLocationShort(aAddressAbsolute: PtrUInt; var aInfo: ShortString);
+    class procedure FindLocationShort(aPointer: pointer; var aInfo: ShortString);
+      {$ifdef HASINLINE} static; {$endif}
+    /// return the symbol location according to the supplied absolute address
+    // - filename, symbol name and line number (if any), as plain text, e.g.
+    // $ 57f480 mormot.core.log.pas TSynLog.LogEscape (5782)
+    // $ 4a0a40 mormot.core.base.asmx64.inc (mormot.core.base) Rdtsc (3005)
+    // - returns only the hexadecimal value if no match is found in .map/.dbg/.mab
+    class function FindLocation(aPointer: pointer): RawUtf8; overload;
+      {$ifdef HASINLINE} static; {$endif}
     /// load .map/.dbg/.mab info and return the symbol location according
-    // to the supplied ESynException
+    // to the supplied ESynException.RaisedAt value
     // - i.e. unit name, symbol name and line number (if any), as plain text
-    class function FindLocation(exc: ESynException): RawUtf8; overload;
+    class function FindLocationRaisedAt(exc: ESynException): RawUtf8;
+      {$ifdef HASINLINE} static; {$endif}
     /// load .map/.dbg/.mab info and returns the file name of a given unit
     // - if unitname is '', returns the main file name of the current executable
     class function FindFileName(const unitname: RawUtf8): TFileName;
+      {$ifdef HASINLINE} static; {$endif}
     {$ifdef FPC}
     /// load DWARF .dbg/.mab info and replace FPC RTL BacktraceStrFunc()
     // - uses much less disk space (e.g. 33MB .dbg into 500KB)
     // - is much faster: around 1us per lookup, whereas lnfodwrf is 20ms
-    class function RegisterBacktraceStrFunc: boolean;
+    class function RegisterBacktraceStrFunc: boolean; static;
     {$endif FPC}
     /// low-level resolution of a TDebugFile instance from a code address
     // - this is the main internal thread-safe factory method for this process
@@ -230,10 +236,9 @@ type
     property Lines: TDebugLinesDynArray
       read fLine;
   published
-    /// the associated file name
-    // - e.g. 'exec.map', 'exec.dbg' or even plain 'exec'/'exec.exe'
+    /// the associated executable or library file 
     property FileName: TFileName
-      read fDebugFile;
+      read fExeFile;
     /// details about the compiler version - only available for FPC yet
     property Producer: RawUtf8
       read fProducer;
@@ -250,6 +255,7 @@ type
     property LoadingMicroSec: Int64
       read fLoadingMicroSec;
   end;
+  PDebugFile = ^TDebugFile;
 
 {$ifndef PUREMORMOT2}
   // backward compatibility type redirection
@@ -3153,14 +3159,12 @@ end;
 
 function BacktraceStrFpc(Addr: CodePointer): ShortString;
 begin
-  GetInstanceDebugFile.FindLocationShort(PtrUInt(Addr), result);
+  TDebugFile.FindLocationShort(Addr, result);
 end;
 
 class function TDebugFile.RegisterBacktraceStrFunc: boolean;
 begin
-  result := GetInstanceDebugFile.HasDebugInfo;
-  if result then
-    BacktraceStrFunc := BacktraceStrFpc; // use our fast version from now on
+  BacktraceStrFunc := BacktraceStrFpc; // use our fast version from now on
 end;
 
 {$else}
@@ -3970,7 +3974,7 @@ begin
   ShortStringToAnsi7String(tmp, result);
 end;
 
-procedure TDebugFile.FindLocationShort(aAddressAbsolute: PtrUInt; var aInfo: ShortString);
+procedure TDebugFile.AppendLocationShort(aPointer: PtrUInt; var aInfo: ShortString);
 var
   line: integer; // not PtrInt
   rva: TDebugAddress;
@@ -3978,12 +3982,10 @@ var
   l: PDebugLines;
   c: PUtf8Char;
 begin
-  aInfo := PointerToHexShort(pointer(aAddressAbsolute));
   if (self = nil) or
-     (aAddressAbsolute = 0) or
      not HasDebugInfo then
     exit;
-  rva := AbsoluteToRelative(aAddressAbsolute);
+  rva := AbsoluteToRelative(aPointer);
   if rva = 0 then
     exit;
   s := FindSymbol(rva);
@@ -4017,18 +4019,33 @@ begin
   end;
 end;
 
-class function TDebugFile.FindLocation(exc: ESynException): RawUtf8;
+class function TDebugFile.FindLocation(aPointer: pointer): RawUtf8;
+var
+  tmp: ShortString;
+begin
+  FindLocationShort(aPointer, tmp);
+  ShortStringToAnsi7String(tmp, result);
+end;
+
+class procedure TDebugFile.FindLocationShort(aPointer: pointer;
+  var aInfo: ShortString);
+begin
+  aInfo := PointerToHexShort(aPointer);
+  Get(aPointer).AppendLocationShort(PtrUInt(aPointer), aInfo);
+end;
+
+class function TDebugFile.FindLocationRaisedAt(exc: ESynException): RawUtf8;
 begin
   if (exc = nil) or
      (exc.RaisedAt = nil) then
     FastAssignNew(result)
   else
-    result := GetInstanceDebugFile.FindLocation(PtrUInt(exc.RaisedAt));
+    result := FindLocation(exc.RaisedAt);
 end;
 
 function _GetExecutableLocation(aAddress: pointer): ShortString;
 begin
-  GetInstanceDebugFile.FindLocationShort(PtrUInt(aAddress), result);
+  TDebugFile.FindLocationShort(aAddress, result);
 end;
 
 function TDebugFile.FindLinesByName(const aUnitName: RawUtf8): PDebugLines;
@@ -4050,19 +4067,15 @@ end;
 
 class function TDebugFile.FindFileName(const unitname: RawUtf8): TFileName;
 var
-  map: TDebugFile;
   name: RawUtf8;
   l: PDebugLines;
 begin
   result := '';
-  map := GetInstanceDebugFile;
-  if map = nil then
-    exit;
   if unitname = '' then
     name := Executable.ProgramName
   else
     name := unitname;
-  l := map.FindLinesByName(name);
+  l := TDebugFile.CurrentDebugFile.FindLinesByName(name);
   if l <> nil then
     Utf8ToFileName(l^.FileName, result);
 end;
@@ -4101,7 +4114,7 @@ function ToText(const Event: TMethod): RawUtf8;
 var
   tmp: ShortString;
 begin
-  GetInstanceDebugFile.FindLocationShort(PtrUInt(Event.Code), tmp);
+  TDebugFile.FindLocationShort(Event.Code, tmp);
   FormatUtf8('% using %(%)', [tmp, TObject(Event.Data), Event.Data], result);
 end;
 
@@ -6925,14 +6938,14 @@ begin
   with info.Context do
     if ELevel <> sllNone then
     begin
-      GetInstanceDebugFile.FindLocationShort(EAddr, tmp);
+      TDebugFile.FindLocationShort(pointer(EAddr), tmp);
       FormatUtf8('% % at %: % [%]', [_LogInfoText[ELevel], EClass, tmp,
         UnixTimeToString(ETimestamp, {expanded=}true, ' '),
         StringToUtf8(info.Message)], result);
       if EStack <> nil then
         for i := 0 to EStackCount - 1 do
         begin
-          ExeInstanceDebugFile.FindLocationShort(EStack[i], tmp);
+          TDebugFile.FindLocationShort(pointer(EStack[i]), tmp);
           Append(result, [', ', tmp]);
         end;
     end
@@ -8635,7 +8648,7 @@ begin
   if @BacktraceStrFunc = @BacktraceStrFpc then
     BacktraceStrFunc := SysBacktraceStr; // avoid instability
   {$endif FPC}
-  FreeAndNilSafe(ExeInstanceDebugFile);
+  ObjArrayClear(DebugFiles);
   SynLogGlobalLock.Done;
 end;
 
