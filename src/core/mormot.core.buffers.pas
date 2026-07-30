@@ -708,7 +708,8 @@ type
     /// raise a EFastReader with "Reached End of Input" error message
     procedure ErrorOverflow;
     /// raise a EFastReader with "Incorrect Data: ...." error message
-    procedure ErrorData(const fmt: RawUtf8; const args: array of const); overload;
+    procedure ErrorData(const fmt: RawUtf8; const args: array of const;
+      Exc: ESynExceptionClass = nil); overload;
     /// raise a EFastReader with "Incorrect Data: ...." error message
     procedure ErrorData(const msg: ShortString); overload;
     /// read the next 32-bit signed value from the buffer
@@ -3517,12 +3518,15 @@ begin
     EFastReader.RaiseU('Reached End of Input');
 end;
 
-procedure TFastReader.ErrorData(const fmt: RawUtf8; const args: array of const);
+procedure TFastReader.ErrorData(const fmt: RawUtf8; const args: array of const;
+  Exc: ESynExceptionClass);
 begin
+  if Exc = nil then
+    Exc := EFastReader;
   if Assigned(OnErrorData) then
     OnErrorData(fmt, args)
   else
-    EFastReader.RaiseUtf8('Incorrect Data: ' + fmt, args);
+    Exc.RaiseUtf8('Incorrect Data: ' + fmt, args);
 end;
 
 procedure TFastReader.ErrorData(const msg: ShortString);
