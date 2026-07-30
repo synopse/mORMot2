@@ -157,7 +157,18 @@ begin
 end;
 
 function LibraryOpen(const LibraryName: TFileName): TLibHandle;
+var
+  exp: TFileName;
 begin
+  if Pos('/', LibraryName) > 1 then // relative path but not 'libcrypto.so.4'
+  begin
+    // try to load as absolute file name so that dladdr() returns full path
+    exp := ExpandFileName(LibraryName);
+    result := TLibHandle(dlopen(pointer(exp), RTLD_LAZY));
+    if result <> 0 then
+      exit;
+  end;
+  // absolute '/path/to/lib.so' or system-resolved plain 'lib.so'
   result := TLibHandle(dlopen(pointer(LibraryName), RTLD_LAZY));
 end;
 
@@ -1833,7 +1844,7 @@ begin
     // main exec/library maybe e.g. './mormot2tests'
     result := Executable.InstanceFileName // this value was expanded at startup
   else
-    // expected to be absolute for libraries
+    // expected to be absolute for libraries loaded via our LibraryOpen()
     GetDlInfoName(dlinfo, result);
   if aBase <> nil then
     aBase^ := PtrUInt(dlinfo.dli_fbase);
