@@ -2862,6 +2862,9 @@ type
 /// add the Value to Values[] string array
 function AddString(var Values: TStringDynArray; const Value: string): PtrInt;
 
+/// case-sensitive search a Value to Values[] string array
+function FindString(const Values: TStringDynArray; const Value: string): PtrInt;
+
 /// convert the string dynamic array into a dynamic array of UTF-8 strings
 procedure StringDynArrayToRawUtf8DynArray(const Source: array of string;
   var result: TRawUtf8DynArray); overload;
@@ -10724,6 +10727,14 @@ begin
   result := length(Values);
   SetLength(Values, result + 1);
   Values[result] := Value;
+end;
+
+function FindString(const Values: TStringDynArray; const Value: string): PtrInt;
+begin
+  for result := 0 to length(Values) - 1 do
+    if Values[result] = Value then
+      exit;
+  result := -1;
 end;
 
 procedure StringDynArrayToRawUtf8DynArray(const Source: array of string;
