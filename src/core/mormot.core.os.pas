@@ -9405,9 +9405,6 @@ var
   name, search: RawUtf8;
   ignoremissing: boolean;
   error: string;
-  {$ifdef OSPOSIX}
-  dlinfo: dl_info;
-  {$endif OSPOSIX}
 begin
   result := false;
   if (Entry = nil) or
@@ -9436,11 +9433,8 @@ begin
   if result and
      not fLibraryPathTested then
   begin
-    fLibraryPathTested := true;
-    FillCharFast(dlinfo, SizeOf(dlinfo), 0);
-    dladdr(Entry^, @dlinfo);
-    if dlinfo.dli_fname <> nil then
-      fLibraryPath := TFileName(dlinfo.dli_fname);
+    fLibraryPath := GetExecutableName(Entry^);
+    fLibraryPathTested := fLibraryPath <> '';
   end;
   {$endif OSPOSIX}
   result := result or ignoremissing;
