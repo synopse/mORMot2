@@ -942,6 +942,7 @@ procedure TTestCoreBase.IniFiles;
 var
   Content, S, N, V: RawUtf8;
   Si, Ni, Vi, i, j: integer;
+  fs, fd, f2: TFileName;
   P: PUtf8Char;
 const
   VUP: array[0..3] of PAnsiChar = ('VALUE', 'value', 'value2', nil);
@@ -964,14 +965,15 @@ begin
     Check(FindIniEntry(Content, S, 'no') = '');
     Check(FindIniEntry(Content, 'no', N) = '');
   end;
-  Check(FileFromString(Content, WorkDir + 'test.ini'), 'test.ini');
-  Check(AlgoSynLZ.FileCompress(WorkDir + 'test.ini',
-     WorkDir + 'test.ini.synlz', $ABA51051), 'synLZ');
-  if CheckFailed(AlgoSynLZ.FileUnCompress(WorkDir + 'test.ini.synlz',
-     WorkDir + 'test2.ini', $ABA51051), 'unSynLZ') then
+  fs := WorkDir + 'test.ini';
+  fd := WorkDir + 'test.ini.synlz';
+  f2 := WorkDir + 'test2.ini';
+  Check(FileFromString(Content, fs), 'test.ini');
+  Check(AlgoSynLZ.FileCompress(fs, fd, $ABA51051), 'synLZ');
+  if CheckFailed(AlgoSynLZ.FileUnCompress(fd, f2, $ABA51051), 'unSynLZ') then
     exit;
-  S := StringFromFile(WorkDir + 'test2.ini');
-  Check(S = Content, WorkDir + 'test2.ini');
+  S := StringFromFile(f2);
+  Check(S = Content, f2);
   Content := 'name=value'#13#10' name2= value2 '#13#10 +
              ' name 3  =  value3 '#13#10' name4: value 4 '#13#10;
   CheckEqual(FindIniNameValueU(Content, 'NAME='), 'value');
@@ -5731,7 +5733,7 @@ begin
     PC := ToVarInt32(j, @varint);
     Check(PC <> nil);
     PB := @varint;
-    Check(FromVarInt32(PB) = j);
+    CheckEqual(FromVarInt32(PB), j);
     Check(PB = PC);
     PC := ToVarInt32(i - 1, @varint);
     Check(PC <> nil);
@@ -5750,9 +5752,9 @@ begin
     PC := ToVarInt64(k, @varint);
     Check(PC <> nil);
     PB := @varint;
-    Check(FromVarInt64(PB) = k);
+    CheckEqual(FromVarInt64(PB), k);
     Check(PB = PC);
-    Check(FromVarInt64Value(@varint) = k);
+    CheckEqual(FromVarInt64Value(@varint), k);
     PC := ToVarInt64(i, @varint);
     Check(PC <> nil);
     PB := @varint;
