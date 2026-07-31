@@ -134,6 +134,7 @@ type
     fProducer: RawUtf8;
     fHasDebugInfo: boolean;
     fSymbols, fLines: TDynArray;
+    fSymbolsTemp, fLinesTemp: RawByteString;
     fLoadingMicroSec: Int64;
     procedure GenerateFromMapOrDwarf(includedir: boolean); // from Create()
     function LoadMab(const aMabFile: TFileName): boolean;
@@ -160,6 +161,8 @@ type
     // without debugging information
     constructor Create(const aExeName: TFileName = '';
       Scope: TDebugFileScope = []); reintroduce;
+    /// finalize this instance
+    destructor Destroy; override;
     /// save all debugging information in the .mab custom binary format
     // - if no file name is specified, it will be saved as ExeName.mab or DllName.mab
     // - this file content can be appended to the executable via SaveToExe method
@@ -3478,19 +3481,18 @@ const
   // .mab layout changed with mORMot 2 -> magic changed too
   MAGIC_MAB = $A5A5A55A;
 
-procedure ReadSymbol(var R: TFastReader; var A: TDynArray);
+procedure ReadSymbol(var P: PByte; var A: TDynArray; out tmp: RawByteString);
 var
   i, n, L: PtrInt;
   S: PDebugSymbol;
   prev: cardinal;
-  P: PByte;
+  sr: PStrRec;
 begin
-  n := R.VarUInt32;
-  A.Count := n;
-  P := pointer(R.P);
-  if (n = 0) or
-     (P = nil) then
+  A.Clear;
+  n := FromVarUInt32(P);
+  if n = 0 then
     exit;
+  A.Count := n; // allocate TDebugSymbolDynArray/TDebugLinesDynArray
   S := A.Value^;
   prev := 0;
   for i := 1 to n do
@@ -3502,14 +3504,24 @@ begin
     inc(PByte(S), A.Info.Cache.ItemSize); // may be TDebugSymbol or TDebugLines
   end;
   S := A.Value^;
-  for i := 1 to n do
+  if PInteger(P)^ = -1 then // new encoding with namesize prefix
   begin
-    L := FromVarUInt32(P); // inlined R.Read(S^.Name)
-    FastSetString(S^.Name, P, L);
-    inc(P, L);
-    inc(PByte(S), A.Info.Cache.ItemSize);
-  end;
-  R.P := pointer(P);
+    inc(PInteger(P));
+    sr := StrRecAlloc(tmp, n, FromVarUInt32(P)); // allocate names at once
+    for i := 1 to n do
+    begin
+      FromVarStrRec(P, sr, S^.Name); // inlined R.Read(S^.Name) over tmp
+      inc(PByte(S), A.Info.Cache.ItemSize);
+    end;
+  end
+  else // backward compatibility
+    for i := 1 to n do
+    begin
+      L := FromVarUInt32(P);
+      FastSetString(S^.Name, P, L);
+      inc(P, L);
+      inc(PByte(S), A.Info.Cache.ItemSize);
+    end;
 end;
 
 function TDebugFile.LoadMab(const aMabFile: TFileName): boolean;
@@ -3526,8 +3538,8 @@ begin
     if MS <> nil then
     try
       R.Init(MS.Memory, MS.Size);
-      ReadSymbol(R, fSymbols);
-      ReadSymbol(R, fLines);
+      ReadSymbol(PByte(R.P), fSymbols, fSymbolsTemp);
+      ReadSymbol(PByte(R.P), fLines, fLinesTemp);
       for i := 0 to fLinesCount - 1 do
         R.VarUtf8(fLine[i].FileName);
       u := pointer(fLine);
@@ -3642,30 +3654,44 @@ begin
   dec(fLoadingMicroSec, start);
 end;
 
+destructor TDebugFile.Destroy;
+begin
+  fSymbols.Clear; // ensure are released BEFORE fSymbolsTemp and fLinesTemp
+  fLines.Clear;
+  inherited Destroy;
+end;
+
 procedure WriteSymbol(var W: TBufferWriter; const A: TDynArray);
 var
-  i, n: integer;
+  i, n, namesize: integer;
   prev: TDebugAddress;
   S: PDebugSymbol;
   P, Beg: PByte;
   tmp: RawByteString;
 begin
   n := A.Count;
-  W.WriteVarUInt32(n);
   if n = 0 then
+  begin
+    W.Write1(0);
     exit;
-  S := A.Value^;
+  end;
+  W.WriteVarUInt32(n);
   P := pointer(W.DirectWritePrepare(n * 10, tmp));
   Beg := P;
   prev := 0;
+  namesize := 0;
+  S := A.Value^;
   for i := 1 to n do
   begin
+    inc(namesize, length(S^.Name));
     P := ToVarUInt32(S^.Start - prev, P);
     P := ToVarUInt32(S^.Stop - S^.Start, P);
     prev := S^.Stop;
     inc(PByte(S), A.Info.Cache.ItemSize); // may be TDebugSymbol or TDebugLines
   end;
   W.DirectWriteFlush(PtrUInt(P) - PtrUInt(Beg), tmp);
+  W.Write4(-1); // marker for new format with namesize prefix
+  W.WriteVarUInt32(namesize);
   S := A.Value^;
   repeat
     W.Write(S^.Name); // group for better compression
