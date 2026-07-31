@@ -211,6 +211,8 @@ type
     procedure SaxOptions;
     /// malformed input and the "basic profile" rejection set (e.g. DTD)
     procedure SaxErrors;
+    /// XmlToVariant/TryXmlToVariant/XmlToJson mapping conventions
+    procedure ToVariant;
   end;
 
   /// this test case will test most functions, classes and types defined and
@@ -9306,6 +9308,48 @@ begin
   ExpectRaise('eof in comment', '<a><!-- x</a>');
   ExpectRaise('eof in cdata', '<a><![CDATA[x</a>');
   ExpectRaise('void name', '< a></a>');
+end;
+
+procedure TTestCoreXml.ToVariant;
+var
+  doc: TDocVariantData;
+begin
+  // plain string value for text-only elements
+  CheckEqual(XmlToJson('<a>hello</a>'), '{"a":"hello"}');
+  // void element as an empty string
+  CheckEqual(XmlToJson('<a/>'), '{"a":""}');
+  // attribute-only element
+  CheckEqual(XmlToJson('<a d="x"/>'), '{"a":{"@d":"x"}}');
+  // all values remain (lossless) strings
+  CheckEqual(XmlToJson('<c><sipId>34020000001320000001</sipId>' +
+    '<port>5060</port></c>'),
+    '{"c":{"sipId":"34020000001320000001","port":"5060"}}');
+  // attributes with '@' prefix, repeated siblings as arrays, mixed as #text
+  CheckEqual(XmlToJson('<a><b>1</b><b>2</b><c d="x">t</c></a>'),
+    '{"a":{"b":["1","2"],"c":{"@d":"x","#text":"t"}}}');
+  CheckEqual(XmlToJson('<a><b>1</b><b>2</b><b>3</b></a>'),
+    '{"a":{"b":["1","2","3"]}}');
+  // mixed content
+  CheckEqual(XmlToJson('<a>pre<b/>post</a>'),
+    '{"a":{"b":"","#text":"prepost"}}');
+  // entities and CDATA
+  CheckEqual(XmlToJson('<a>x &amp; y</a>'), '{"a":"x & y"}');
+  CheckEqual(XmlToJson('<a><![CDATA[<raw> & unescaped]]></a>'),
+    '{"a":"<raw> & unescaped"}');
+  // XML declaration and comments are ignored
+  CheckEqual(XmlToJson(XMLUTF8_HEADER + '<a><!-- c --><b>1</b></a>'),
+    '{"a":{"b":"1"}}');
+  // namespace prefixes kept by default, stripped on request
+  CheckEqual(XmlToJson('<s:e><s:b>x</s:b></s:e>'),
+    '{"s:e":{"s:b":"x"}}');
+  CheckEqual(XmlToJson('<s:e xmlns:s="u"><s:b>x</s:b></s:e>',
+    [xpoStripNamespacePrefix]),
+    '{"e":{"@s":"u","b":"x"}}');
+  // TryXmlToVariant
+  Check(TryXmlToVariant('<a><b>1</b></a>', doc), 'try ok');
+  CheckEqual(doc.ToJson, '{"a":{"b":"1"}}');
+  Check(not TryXmlToVariant('<a><b></a>', doc), 'try mismatch');
+  CheckEqual(doc.Count, 0);
 end;
 
 

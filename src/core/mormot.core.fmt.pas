@@ -257,6 +257,38 @@ type
 // - raises EXmlException on any other (i.e. undefined) entity
 procedure XmlUnescape(Text: PUtf8Char; TextLen: PtrInt; out result: RawUtf8);
 
+const
+  /// TDocVariant options used by default for XmlToVariant()
+  // - no number type inference is done: XML content is text by nature, so
+  // all values are stored as (lossless) strings
+  JSON_XML = JSON_FAST;
+
+/// parse XML UTF-8 content into a TDocVariant document
+// - a late-binding-friendly mapping, following common XML-to-JSON conventions:
+// each element becomes an object field named after it; repeated sibling
+// elements of the same name are gathered into an array; attributes appear as
+// fields with a '@' prefix; an element with no attribute and only text becomes
+// a plain string value; mixed content stores its text as a '#text' field;
+// CDATA sections are handled as text; comments and PI are ignored
+// - all values are stored as strings - XML is untyped text by nature
+// - only xpoStripNamespacePrefix is used from ParseOptions
+// - raises EXmlException on any malformed or unsupported input (e.g. DTD)
+procedure XmlToVariant(const Xml: RawUtf8; out Doc: TDocVariantData;
+  ParseOptions: TXmlParserOptions = [];
+  Options: TDocVariantOptions = JSON_XML);
+
+/// convenient wrapper around XmlToVariant() with no EXmlException
+// - will catch internally any EXmlException and return false on failure
+function TryXmlToVariant(const Xml: RawUtf8; out Doc: TDocVariantData;
+  ParseOptions: TXmlParserOptions = [];
+  Options: TDocVariantOptions = JSON_XML): boolean;
+
+/// convert XML UTF-8 content into a JSON object
+// - just a wrapper around XmlToVariant() + TDocVariantData.ToJson
+// - see JsonToXml() for the reverse process
+function XmlToJson(const Xml: RawUtf8;
+  ParseOptions: TXmlParserOptions = []): RawUtf8;
+
 
 { ************* YAML 1.2 core-schema to JSON or TDocVariant Support }
 
@@ -1983,6 +2015,147 @@ begin
   finally
     W.Free;
   end;
+end;
+
+const
+  XMLPARSER_MAX_DEPTH = 512; // avoid EStackOverflow on pathological input
+
+procedure XmlDocAddOrAppend(var doc: TDocVariantData; const name: RawUtf8;
+  const v: variant; const opt: TDocVariantOptions);
+var
+  i: PtrInt;
+  arr: PDocVariantData;
+  a: TDocVariantData;
+  prev: variant;
+begin
+  // gather repeated sibling elements of the same name into an array
+  i := doc.GetValueIndex(name);
+  if i < 0 then
+    doc.AddValue(name, v)
+  else
+  begin
+    arr := _Safe(doc.Values[i]);
+    if arr^.IsArray then
+      arr^.AddItem(v)
+    else
+    begin
+      prev := doc.Values[i];
+      a.Init(opt, dvArray);
+      a.AddItem(prev);
+      a.AddItem(v);
+      doc.Value[name] := variant(a);
+    end;
+  end;
+end;
+
+procedure XmlElementToVariant(var x: TXmlParser;
+  const opt: TDocVariantOptions; out result: variant);
+var
+  obj: TDocVariantData;
+  n, txt, seg: RawUtf8;
+  v: variant;
+begin
+  // fill from attributes and content, until the matching xtElementEnd
+  if x.Depth > XMLPARSER_MAX_DEPTH then
+    x.ParseError(x.Name.Text, 'too much nesting');
+  obj.Init(opt, dvObject);
+  txt := '';
+  while x.Next do
+    case x.Kind of
+      xtAttribute:
+        begin
+          x.NameToUtf8(n);
+          x.ValueToUtf8(seg);
+          RawUtf8ToVariant(seg, v);
+          obj.AddValue('@' + n, v);
+        end;
+      xtElementStart:
+        begin
+          x.NameToUtf8(n);
+          XmlElementToVariant(x, opt, v);
+          XmlDocAddOrAppend(obj, n, v, opt);
+        end;
+      xtText,
+      xtCData:
+        begin
+          x.ValueToUtf8(seg);
+          txt := txt + seg;
+        end;
+      xtElementEnd:
+        break;
+    end;
+  if obj.Count = 0 then
+  begin
+    // no attribute nor child element: as a plain string value
+    RawUtf8ToVariant(txt, result);
+    obj.Clear;
+  end
+  else
+  begin
+    if txt <> '' then
+    begin
+      RawUtf8ToVariant(txt, v);
+      obj.AddValue('#text', v);
+    end;
+    result := variant(obj);
+  end;
+end;
+
+procedure XmlToVariant(const Xml: RawUtf8; out Doc: TDocVariantData;
+  ParseOptions: TXmlParserOptions; Options: TDocVariantOptions);
+var
+  x: TXmlParser;
+  n, txt, seg: RawUtf8;
+  v: variant;
+begin
+  Doc.Init(Options, dvObject);
+  x.Init(pointer(Xml), length(Xml),
+    ParseOptions * [xpoStripNamespacePrefix]);
+  txt := '';
+  while x.Next do
+    case x.Kind of
+      xtElementStart:
+        begin
+          x.NameToUtf8(n);
+          XmlElementToVariant(x, Options, v);
+          XmlDocAddOrAppend(Doc, n, v, Options);
+        end;
+      xtText,
+      xtCData:
+        begin
+          x.ValueToUtf8(seg);
+          txt := txt + seg;
+        end;
+    end;
+  if txt <> '' then
+  begin
+    RawUtf8ToVariant(txt, v);
+    Doc.AddValue('#text', v);
+  end;
+end;
+
+function TryXmlToVariant(const Xml: RawUtf8; out Doc: TDocVariantData;
+  ParseOptions: TXmlParserOptions; Options: TDocVariantOptions): boolean;
+begin
+  try
+    XmlToVariant(Xml, Doc, ParseOptions, Options);
+    result := true;
+  except
+    on EXmlException do
+    begin
+      Doc.Clear;
+      result := false;
+    end;
+  end;
+end;
+
+function XmlToJson(const Xml: RawUtf8;
+  ParseOptions: TXmlParserOptions): RawUtf8;
+var
+  doc: TDocVariantData;
+begin
+  XmlToVariant(Xml, doc, ParseOptions);
+  result := doc.ToJson;
 end;
 
 
