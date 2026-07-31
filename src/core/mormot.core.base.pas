@@ -795,8 +795,8 @@ const
   // - even if a dynamic array can handle PtrInt length, consider other patterns
   _DAMAXSIZE = (800 shl 20) - 1;
 
-  /// cross-compiler refCnt for a constant - 2 for Delphi since -1 make a copy
-  _CNTCONST = {$ifdef FPC} -1 {$else} 2 {$endif};
+  /// cross-compiler refCnt for a constant string or dynamic array instance
+  _REFCNTCONST = -1;
 
 /// like SetLength() but without any memory resize - WARNING: len should be > 0
 procedure DynArrayFakeLength(arr: pointer; len: TDALen);
@@ -2061,6 +2061,14 @@ function FromU64(const Values: array of QWord): TQWordDynArray;
 
 /// internal function called e.g. by DeleteWord/DeleteInteger/DeleteInt64
 procedure UnmanagedDynArrayDelete(var v; Count, Index, ItemSize: PtrUInt);
+
+/// prepare a RawByteString to pre-allocate several constant dynamic array values
+// - see TDebugFile.LoadMab in mormot.core.log for an usage sample
+function DARecAlloc(var temp: RawByteString; count, size: PtrInt): PDynArrayRec;
+
+/// append a new RawUtf8 to a StrRecAlloc() pre-allocate array
+function DARecNew(A: PPointer; da: PDynArrayRec; P: pointer; const len: PtrInt): PDynArrayRec;
+  {$ifdef HASINLINE}inline;{$endif}
 
 type
   /// used to store and retrieve Words in a sorted array
@@ -5401,7 +5409,7 @@ end;
 
 function FastSetConst(var S; var Rec: TStrRecConst; P: pointer; Len: TStrLen): PUtf8Char;
 begin
-  FastSetStrRec(Rec.Header, Len, _CNTCONST);
+  FastSetStrRec(Rec.Header, Len, _REFCNTCONST);
   result := @Rec.TextLo;
   if P <> nil then
     PInt64(result)^ := PInt64(P)^; // up to 7 chars
@@ -5416,7 +5424,7 @@ end;
 
 function StrRecNew(U: PPointer; sr: PStrRec; P: pointer; const len: PtrInt): PStrRec;
 begin
-  FastSetStrRec(sr^, len, _CNTCONST);
+  FastSetStrRec(sr^, len, _REFCNTCONST);
   inc(sr);
   U^ := sr;
   MoveFast(P^, sr^, len);
@@ -7354,6 +7362,21 @@ begin // ensured (Last > 0) and (Index <= Last) and made Finalize(Values[Index])
   p := PAnsiChar(Values) + Index * ValueSize;
   MoveFast(p[ValueSize], p[0], Last * ValueSize);
   //FillCharFast(p[Last * ValueSize], ValueSize, 0); // not needed: dec(length)
+end;
+
+function DARecAlloc(var temp: RawByteString; count, size: PtrInt): PDynArrayRec;
+begin
+  result := FastNewRawByteString(temp, count * SizeOf(result^) + size);
+end;
+
+function DARecNew(A: PPointer; da: PDynArrayRec; P: pointer; const len: PtrInt): PDynArrayRec;
+begin
+  da^.length := len;
+  da^.refCnt := _REFCNTCONST;
+  inc(da);
+  A^ := da;
+  MoveFast(P^, da^, len);
+  result := pointer(@PAnsiChar(da)[len]);
 end;
 
 {$ifdef FPC} // some FPC-specific low-level code due to diverse compiler or RTL
