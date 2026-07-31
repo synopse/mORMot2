@@ -143,6 +143,120 @@ procedure AddXmlEscape(W: TTextWriter; Text: PUtf8Char);
 function AddJsonToXml(W: TTextWriter; Json: PUtf8Char; ArrayName: PUtf8Char = nil;
   EndOfObject: PUtf8Char = nil): PUtf8Char;
 
+type
+  /// exception raised by TXmlParser on invalid or unsupported XML input
+  EXmlException = class(ESynException);
+
+  /// the kind of tokens returned by TXmlParser.Next
+  // - xtEof is set once the end of the input buffer has been reached
+  // - xtElementStart is returned for each opening <name> or <name ...> tag,
+  // with the parser Name filled - any attribute following as xtAttribute
+  // - xtElementEnd is returned for each </name> or self-closing '/>' mark,
+  // with the parser Name filled
+  // - xtAttribute is returned for each name="value" pair, Name/Value filled
+  // - xtText is returned for any text content between markup, Value filled
+  // with the raw (possibly escaped) text - see ValueToUtf8 to unescape it
+  // - xtCData is returned for each <![CDATA[...]]> section, Value filled
+  // with the verbatim content
+  // - xtComment is returned for each <!--...--> section, if xpoKeepComments
+  // option was defined at Init - silently skipped otherwise
+  // - xtPI is returned for each <?name ...?> processing instruction, if the
+  // xpoKeepPI option was defined at Init - silently skipped otherwise
+  TXmlToken = (
+    xtEof,
+    xtElementStart,
+    xtElementEnd,
+    xtAttribute,
+    xtText,
+    xtCData,
+    xtComment,
+    xtPI);
+
+  /// option to refine TXmlParser process
+  // - xpoStripNamespacePrefix would remove any 'ns:' prefix from the reported
+  // element and attribute names - the prefix is part of the name otherwise
+  // (this "basic" parser does no URI namespace binding by design)
+  // - xpoKeepComments and xpoKeepPI would return xtComment / xtPI tokens,
+  // which are silently skipped by default
+  // - xpoKeepWhiteSpace would return xtText tokens made only of whitespace,
+  // which are silently skipped by default
+  TXmlParserOption = (
+    xpoStripNamespacePrefix,
+    xpoKeepComments,
+    xpoKeepPI,
+    xpoKeepWhiteSpace);
+
+  /// options to refine TXmlParser process
+  TXmlParserOptions = set of TXmlParserOption;
+
+  /// zero-allocation SAX-like parser over an XML UTF-8 memory buffer
+  // - a "basic" parser, from actual simple needs: no DTD support (which makes
+  // it immune to entity expansion attacks by design), only the five XML
+  // predefined entities and numeric character references, prefixes kept as
+  // part of the names with no URI namespace binding
+  // - the input buffer is expected to be UTF-8 encoded and to remain available
+  // in memory during the whole parsing: Name and Value do point within it,
+  // with no memory allocation during the scan - see NameToUtf8/ValueToUtf8
+  // - well-formedness of the tags nesting is verified, and any syntax or
+  // nesting error would raise an EXmlException with the faulty line number
+  // - usage: call Init() then Next in a loop, e.g. as
+  // ! x.Init(pointer(xml), length(xml));
+  // ! while x.Next do
+  // !   case x.Kind of
+  // !     ...
+  {$ifdef USERECORDWITHMETHODS}
+  TXmlParser = record
+  {$else}
+  TXmlParser = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    fCur, fBegin, fAfter, fToken: PUtf8Char;
+    fOptions: TXmlParserOptions;
+    fInElement: boolean; // scanning attributes, up to '>' or '/>'
+    fStack: array of TValuePUtf8Char; // opened elements raw names
+    procedure ParseError(pos: PUtf8Char; const reason: RawUtf8);
+    function ParseName(var p: PUtf8Char): TValuePUtf8Char;
+    procedure SetName(const raw: TValuePUtf8Char);
+  public
+    /// the current token kind, as set by the last Next call
+    Kind: TXmlToken;
+    /// how many elements are currently opened
+    // - incremented after a xtElementStart, decremented after a xtElementEnd
+    Depth: PtrInt;
+    /// the current token name, pointing within the input buffer
+    // - set for xtElementStart, xtElementEnd, xtAttribute and xtPI tokens
+    Name: TValuePUtf8Char;
+    /// the current token raw value, pointing within the input buffer
+    // - set for xtAttribute, xtText, xtCData, xtComment and xtPI tokens
+    // - may still contain XML entities: use ValueToUtf8 to decode them
+    Value: TValuePUtf8Char;
+    /// prepare the parsing of a given XML UTF-8 buffer
+    // - any UTF-8 BOM would be ignored
+    // - the buffer is expected to remain available during the whole parsing
+    procedure Init(Text: PUtf8Char; TextLen: PtrInt;
+      Options: TXmlParserOptions = []);
+    /// iterate to the next token of the input, returning false at xtEof
+    // - raises an EXmlException on any malformed or unsupported input
+    function Next: boolean;
+    /// returns the current Name as an allocated UTF-8 string
+    procedure NameToUtf8(out result: RawUtf8);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// returns the current Value as an allocated UTF-8 string
+    // - decoding any XML entity, unless the current token is a verbatim
+    // xtCData/xtComment section
+    procedure ValueToUtf8(out result: RawUtf8);
+    /// the offset of the current token in the input buffer
+    // - could be used to store a position, then resume a scan from it
+    function Position: PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
+  end;
+
+/// decode the five XML predefined entities and numeric character references
+// - i.e.   &lt; &gt; &amp; &apos; &quot;   and   &#nnn; &#xhh;   patterns
+// - as used by TXmlParser.ValueToUtf8, or to be called directly
+// - raises EXmlException on any other (i.e. undefined) entity
+procedure XmlUnescape(Text: PUtf8Char; TextLen: PtrInt; out result: RawUtf8);
+
 
 { ************* YAML 1.2 core-schema to JSON or TDocVariant Support }
 
@@ -1399,6 +1513,475 @@ begin
     JsonBufferToXml(tmp.buf, Header, NameSpace, result);
   finally
     tmp.Done;
+  end;
+end;
+
+
+{ TXmlParser }
+
+procedure TXmlParser.ParseError(pos: PUtf8Char; const reason: RawUtf8);
+var
+  line: PtrInt;
+  p: PUtf8Char;
+begin
+  line := 1;
+  p := fBegin;
+  if p <> nil then
+    while p < pos do
+    begin
+      if p^ = #10 then
+        inc(line);
+      inc(p);
+    end;
+  EXmlException.RaiseUtf8('XML error at line %: %', [line, reason]);
+end;
+
+function TXmlParser.ParseName(var p: PUtf8Char): TValuePUtf8Char;
+var
+  s: PUtf8Char;
+begin
+  s := p;
+  while (p < fAfter) and
+        not (p^ in [#0..' ', '<', '>', '/', '=', '?', '"', '''']) do
+    inc(p);
+  result.Text := s;
+  result.Len := p - s;
+  if result.Len = 0 then
+    ParseError(s, 'void or invalid name');
+end;
+
+procedure TXmlParser.SetName(const raw: TValuePUtf8Char);
+var
+  i: PtrInt;
+begin
+  Name := raw;
+  if xpoStripNamespacePrefix in fOptions then
+  begin
+    i := ByteScanIndex(pointer(raw.Text), raw.Len, ord(':'));
+    if i >= 0 then
+    begin
+      inc(Name.Text, i + 1);
+      dec(Name.Len, i + 1);
+    end;
+  end;
+end;
+
+procedure TXmlParser.Init(Text: PUtf8Char; TextLen: PtrInt;
+  Options: TXmlParserOptions);
+begin
+  if (Text <> nil) and
+     (TextLen >= 3) and
+     (PCardinal(Text)^ and $00ffffff = $00bfbbef) then
+  begin
+    inc(Text, 3); // ignore any UTF-8 BOM
+    dec(TextLen, 3);
+  end;
+  fBegin := Text;
+  fCur := Text;
+  fToken := Text;
+  fAfter := Text + TextLen;
+  fOptions := Options;
+  fInElement := false;
+  Depth := 0;
+  Kind := xtEof;
+  Name.Text := nil;
+  Name.Len := 0;
+  Value.Text := nil;
+  Value.Len := 0;
+end;
+
+function TXmlParser.Position: PtrInt;
+begin
+  result := fToken - fBegin;
+end;
+
+function TXmlParser.Next: boolean;
+var
+  p, e, s: PUtf8Char;
+  q: AnsiChar;
+  i: PtrInt;
+  n: TValuePUtf8Char;
+begin
+  result := true;
+  Name.Text := nil;
+  Name.Len := 0;
+  Value.Text := nil;
+  Value.Len := 0;
+  p := fCur;
+  e := fAfter;
+  repeat
+    if fInElement then
+    begin
+      // within <name ... : expect attributes until '>' or '/>'
+      while (p < e) and
+            (p^ <= ' ') do
+        inc(p);
+      if p = e then
+        ParseError(p, 'unexpected end of input within a tag');
+      fToken := p;
+      case p^ of
+        '>':
+          begin
+            inc(p);
+            fInElement := false;
+            continue; // parse the following content
+          end;
+        '/':
+          begin
+            inc(p);
+            if (p = e) or
+               (p^ <> '>') then
+              ParseError(p, 'invalid "/" within a tag');
+            inc(p);
+            fInElement := false;
+            dec(Depth);
+            SetName(fStack[Depth]);
+            Kind := xtElementEnd;
+            break;
+          end;
+      else
+        begin
+          // name="value" attribute pair
+          n := ParseName(p);
+          while (p < e) and
+                (p^ <= ' ') do
+            inc(p);
+          if (p = e) or
+             (p^ <> '=') then
+            ParseError(p, 'attribute expects "="');
+          inc(p);
+          while (p < e) and
+                (p^ <= ' ') do
+            inc(p);
+          if (p = e) or
+             not (p^ in ['"', '''']) then
+            ParseError(p, 'attribute value expects quotes');
+          q := p^;
+          inc(p);
+          i := ByteScanIndex(pointer(p), e - p, ord(q));
+          if i < 0 then
+            ParseError(p, 'unfinished attribute value');
+          SetName(n);
+          Value.Text := p;
+          Value.Len := i;
+          inc(p, i + 1);
+          Kind := xtAttribute;
+          break;
+        end;
+      end;
+    end
+    else if p = e then
+    begin
+      // end of input
+      if Depth > 0 then
+        ParseError(p, 'unexpected end of input: unclosed element');
+      fToken := p;
+      Kind := xtEof;
+      result := false;
+      break;
+    end
+    else if p^ = '<' then
+    begin
+      fToken := p;
+      inc(p);
+      if p = e then
+        ParseError(p, 'unexpected end of input after "<"');
+      case p^ of
+        '/':
+          begin
+            // </name> end tag
+            inc(p);
+            n := ParseName(p);
+            while (p < e) and
+                  (p^ <= ' ') do
+              inc(p);
+            if (p = e) or
+               (p^ <> '>') then
+              ParseError(p, 'end tag expects ">"');
+            inc(p);
+            if Depth = 0 then
+              ParseError(n.Text, 'unexpected end tag');
+            dec(Depth);
+            if (fStack[Depth].Len <> n.Len) or
+               not CompareMemSmall(fStack[Depth].Text, n.Text, n.Len) then
+              ParseError(n.Text, 'mismatched end tag');
+            SetName(n);
+            Kind := xtElementEnd;
+            break;
+          end;
+        '!':
+          begin
+            inc(p);
+            if (e - p >= 2) and
+               (PWord(p)^ = ord('-') + ord('-') shl 8) then
+            begin
+              // <!-- comment -->
+              inc(p, 2);
+              s := p;
+              while (e - p >= 3) and
+                    ((p^ <> '-') or
+                     (p[1] <> '-') or
+                     (p[2] <> '>')) do
+                inc(p);
+              if e - p < 3 then
+                ParseError(s, 'unfinished comment');
+              if xpoKeepComments in fOptions then
+              begin
+                Value.Text := s;
+                Value.Len := p - s;
+                inc(p, 3);
+                Kind := xtComment;
+                break;
+              end;
+              inc(p, 3);
+              continue;
+            end;
+            if (e - p >= 7) and
+               CompareMemSmall(p, PAnsiChar('[CDATA['), 7) then
+            begin
+              // <![CDATA[ ... ]]> verbatim section
+              inc(p, 7);
+              s := p;
+              while (e - p >= 3) and
+                    ((p^ <> ']') or
+                     (p[1] <> ']') or
+                     (p[2] <> '>')) do
+                inc(p);
+              if e - p < 3 then
+                ParseError(s, 'unfinished CDATA');
+              Value.Text := s;
+              Value.Len := p - s;
+              inc(p, 3);
+              Kind := xtCData;
+              break;
+            end;
+            ParseError(p, 'DTD and <!..> markup are not supported');
+          end;
+        '?':
+          begin
+            // <?name ...?> processing instruction
+            inc(p);
+            n := ParseName(p);
+            while (p < e) and
+                  (p^ <= ' ') do
+              inc(p);
+            s := p;
+            while (e - p >= 2) and
+                  ((p^ <> '?') or
+                   (p[1] <> '>')) do
+              inc(p);
+            if e - p < 2 then
+              ParseError(s, 'unfinished processing instruction');
+            if xpoKeepPI in fOptions then
+            begin
+              SetName(n);
+              Value.Text := s;
+              Value.Len := p - s;
+              while (Value.Len > 0) and
+                    (Value.Text[Value.Len - 1] <= ' ') do
+                dec(Value.Len); // right trim
+              inc(p, 2);
+              Kind := xtPI;
+              break;
+            end;
+            inc(p, 2);
+            continue;
+          end;
+      else
+        begin
+          // <name> element start
+          n := ParseName(p);
+          if Depth = length(fStack) then
+            SetLength(fStack, NextGrow(Depth));
+          fStack[Depth] := n;
+          inc(Depth);
+          fInElement := true;
+          SetName(n);
+          Kind := xtElementStart;
+          break;
+        end;
+      end;
+    end
+    else
+    begin
+      // text content until the next markup
+      fToken := p;
+      s := p;
+      i := ByteScanIndex(pointer(p), e - p, ord('<'));
+      if i < 0 then
+        p := e
+      else
+        inc(p, i);
+      if not (xpoKeepWhiteSpace in fOptions) then
+      begin
+        while (s < p) and
+              (s^ <= ' ') do
+          inc(s);
+        if s = p then
+          continue; // ignore any pure-whitespace text
+        s := fToken;
+      end;
+      Value.Text := s;
+      Value.Len := p - s;
+      Kind := xtText;
+      break;
+    end;
+  until false;
+  fCur := p;
+end;
+
+procedure TXmlParser.NameToUtf8(out result: RawUtf8);
+begin
+  FastSetString(result, Name.Text, Name.Len);
+end;
+
+procedure TXmlParser.ValueToUtf8(out result: RawUtf8);
+begin
+  if (Kind in [xtCData, xtComment]) or
+     (ByteScanIndex(pointer(Value.Text), Value.Len, ord('&')) < 0) then
+    FastSetString(result, Value.Text, Value.Len)
+  else
+    XmlUnescape(Value.Text, Value.Len, result);
+end;
+
+procedure XmlUnescape(Text: PUtf8Char; TextLen: PtrInt; out result: RawUtf8);
+var
+  W: TTextWriter;
+  tmp: TTextWriterStackBuffer;
+  p, e, s, a, amp: PUtf8Char;
+  i: PtrInt;
+  c: cardinal;
+  ch: AnsiChar;
+  ent: RawUtf8;
+  buf: array[0..7] of AnsiChar;
+begin
+  p := Text;
+  if (p = nil) or
+     (ByteScanIndex(pointer(p), TextLen, ord('&')) < 0) then
+  begin
+    FastSetString(result, Text, TextLen);
+    exit;
+  end;
+  e := Text + TextLen;
+  W := TTextWriter.CreateOwnedStream(tmp);
+  try
+    repeat
+      i := ByteScanIndex(pointer(p), e - p, ord('&'));
+      if i < 0 then
+      begin
+        W.AddNoJsonEscape(p, e - p);
+        break;
+      end;
+      W.AddNoJsonEscape(p, i);
+      amp := p + i;
+      a := amp + 1; // just after '&'
+      s := a;
+      while (s < e) and
+            (s^ <> ';') and
+            (s - a < 12) do
+        inc(s);
+      if (s = e) or
+         (s^ <> ';') then
+        s := nil
+      else if a^ = '#' then
+      begin
+        // decode &#nnn; or &#xhh; numeric character reference
+        inc(a);
+        c := 0;
+        if (a < s) and
+           (a^ in ['x', 'X']) then
+        begin
+          inc(a);
+          if a = s then
+            s := nil
+          else
+            while a < s do
+            begin
+              case a^ of
+                '0'..'9':
+                  c := c shl 4 + cardinal(ord(a^) - ord('0'));
+                'a'..'f':
+                  c := c shl 4 + cardinal(ord(a^) - ord('a') + 10);
+                'A'..'F':
+                  c := c shl 4 + cardinal(ord(a^) - ord('A') + 10);
+              else
+                begin
+                  s := nil;
+                  break;
+                end;
+              end;
+              if c > $10ffff then
+              begin
+                s := nil;
+                break;
+              end;
+              inc(a);
+            end;
+        end
+        else if a = s then
+          s := nil
+        else
+          while a < s do
+            if a^ in ['0'..'9'] then
+            begin
+              c := c * 10 + cardinal(ord(a^) - ord('0'));
+              if c > $10ffff then
+              begin
+                s := nil;
+                break;
+              end;
+              inc(a);
+            end
+            else
+            begin
+              s := nil;
+              break;
+            end;
+        if (s <> nil) and
+           ((c = 0) or
+            ((c >= $d800) and
+             (c <= $dfff))) then
+          s := nil; // reject #0 and surrogates
+        if s <> nil then
+          W.AddNoJsonEscape(@buf, Ucs4ToUtf8(c, @buf));
+      end
+      else
+      begin
+        // decode one of the five predefined entities
+        ch := #0;
+        case s - a of
+          2:
+            if PWord(a)^ = ord('l') + ord('t') shl 8 then
+              ch := '<'
+            else if PWord(a)^ = ord('g') + ord('t') shl 8 then
+              ch := '>';
+          3:
+            if CompareMemSmall(a, PAnsiChar('amp'), 3) then
+              ch := '&';
+          4:
+            if CompareMemSmall(a, PAnsiChar('apos'), 4) then
+              ch := ''''
+            else if CompareMemSmall(a, PAnsiChar('quot'), 4) then
+              ch := '"';
+        end;
+        if ch = #0 then
+          s := nil
+        else
+          W.Add(ch);
+      end;
+      if s = nil then
+      begin
+        i := e - amp;
+        if i > 16 then
+          i := 16;
+        FastSetString(ent, amp, i);
+        EXmlException.RaiseUtf8('XmlUnescape: invalid entity in "%"', [ent]);
+      end;
+      p := s + 1;
+    until p >= e;
+    W.SetText(result);
+  finally
+    W.Free;
   end;
 end;
 
