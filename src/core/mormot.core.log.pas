@@ -2399,7 +2399,7 @@ type
     dirs, files: TRawUtf8DynArray;
     filesdir: TIntegerDynArray;
     Map: TMemoryMap;
-    name, typname, fullname: ShortString;
+    temp: ShortString;
     function LoadSections: boolean;
     procedure ReadInit(aBase, aLimit: Int64);
     function ReadLeb128: Int64;
@@ -2430,21 +2430,21 @@ var
 begin
   result := false;
   // open exe filename or follow '.gnu_debuglink' redirection
-  name := debug.fExeFile;
-  if not OpenExeFile(e, name) then
+  temp := debug.fExeFile;
+  if not OpenExeFile(e, temp) then
   begin
     {$ifdef DWARFDEBUG}
-    DisplayError('OpenExeFile failed on  %s', [name]);
+    DisplayError('OpenExeFile failed on  %s', [temp]);
     {$endif DWARFDEBUG}
     exit;
   end;
-  if ReadDebugLink(e, name) then // is there an external .dbg file?
+  if ReadDebugLink(e, temp) then // is there an external .dbg file?
   begin
     CloseExeFile(e);
-    if not OpenExeFile(e, name) then
+    if not OpenExeFile(e, temp) then
     begin
       {$ifdef DWARFDEBUG}
-      DisplayError('OpenExeFile failed on  %s', [name]);
+      DisplayError('OpenExeFile failed on  %s', [temp]);
       {$endif DWARFDEBUG}
       exit;
     end;
@@ -2453,7 +2453,7 @@ begin
   if FindExeSection(e, '.debug_line', LineOffset, LineSize) and
      FindExeSection(e, '.debug_info', InfoOffset, InfoSize) and
      FindExeSection(e, '.debug_abbrev', AbbrevOffset, AbbrevSize) then
-    result := Map.Map(name);
+    result := Map.Map(temp);
   CloseExeFile(e);
 end;
 {$else}
@@ -2754,6 +2754,8 @@ var
   header64: TDwarfLineInfoHeader64;
   header32: TDwarfLineInfoHeader32;
   u: PDebugLines;
+  name: PAnsiChar;
+  namelen: integer;
   numoptable: array[1..255] of byte;
 begin
   // check if DWARF 32-bit or 64-bit format
@@ -2796,28 +2798,27 @@ begin
   // read directory and file names
   dirsn := 0;
   repeat
-    read.NextAsciiz(name);
-    if name[0] = #0 then
+    namelen := read.NextAsciiz(@name);
+    if namelen = 0 then
       break;
     if not includesdir then
       continue;
     c := PathDelim;
-    if Pos('/', name) > 0 then
-      c := '/'
-    else if Pos('\', name) > 0 then
-      c := '\';
-    if name[ord(name[0])] <> c then
-      AppendShortCharSafe(c, name);
-    AddRawUtf8(dirs, dirsn, ShortStringToUtf8(name));
+    if ByteScanIndex(pointer(name), namelen, ord(InvertedPathDelim)) >= 0 then
+      c := InvertedPathDelim;
+    SetString(temp, name, namelen);
+    if name[namelen - 1] <> c then
+      AppendShortCharSafe(c, temp);
+    AddRawUtf8(dirs, dirsn, ShortStringToUtf8(temp));
   until false;
   filesn := 0;
   repeat
-    read.NextAsciiz(name);
-    if name[0] = #0 then
+    namelen := read.NextAsciiz(@name);
+    if namelen = 0 then
       break;
     if filesn = length(files) then
       SetLength(files, NextGrow(filesn));
-    ShortStringToAnsi7String(name, files[filesn]);
+    FastSetString(files[filesn], name, namelen);
     AddInteger(filesdir, filesn, read.VarUInt32);
     read.VarNextInt(2); // we ignore the attributes
   until false;
@@ -2950,7 +2951,7 @@ begin
 end;
 
 procedure FinalizeLinesSymbol(u: PDebugLines; n, low_pc, high_pc: PtrInt;
-  ident: PShortstring);
+  id: PUtf8Char; idlen: PtrInt);
 var
   start, len, i: PtrInt;
   name: RawUtf8;
@@ -2965,21 +2966,19 @@ begin // set Symbol.Name as main Pascal unit identifier as with Delphi .map
         if name = '' then
         begin
           start := 0;
-          len := 0;
-          for i := ord(ident^[0]) downto 1 do
-            case ident^[i] of
+          len := idlen;
+          for i := len - 1 downto 0 do
+            case id[i] of
               '/', '\':
                 begin // ../src/mormot.core.os.pas -> mormot.core.os.pas
-                  start := i;
+                  start := i + 1;
                   break;
                 end;
               '.': // mormot.core.os.pas -> mormot.core.os
-                if len = 0 then
-                  len := i - 1;
+                if len = idlen then
+                  len := i;
             end;
-          if len = 0 then
-            len := ord(ident^[0]);
-          LowerCaseCopy(@ident^[start + 1], len - start, name);
+          LowerCaseCopy(id + start, len - start, name);
         end;
         u^.Symbol.Name := name;
       end;
@@ -2996,8 +2995,9 @@ var
   header64: TDwarfDebugInfoHeader64;
   header32: TDwarfDebugInfoHeader32;
   unit_length: QWord;
-  low_pc, high_pc: integer;
+  low_pc, high_pc, namelen, typlen, txtlen: integer;
   abbr, level, n: cardinal;
+  name, typ, txt: PAnsiChar;
 begin
   // check if DWARF 32-bit or 64-bit format
   ReadInit(file_offset, file_size);
@@ -3026,7 +3026,7 @@ begin
   // main decoding loop
   level := 0;
   abbr := read.VarUInt32;
-  typname[0] := #0;
+  typlen := 0;
   while abbr <> 0 do
   begin
     if abbr > AttrsMax then
@@ -3042,7 +3042,7 @@ begin
       begin
         low_pc := 1;
         high_pc := 0;
-        name := '';
+        namelen := 0;
         repeat
           case cardinal(PWord(a)^) of
             DW_AT_low_pc + DW_FORM_addr shl 8:
@@ -3050,12 +3050,12 @@ begin
             DW_AT_high_pc + DW_FORM_addr shl 8:
               high_pc := ReadAddress(header64.address_size, 'high_pc');
             DW_AT_name + DW_FORM_string shl 8:
-              read.NextAsciiz(name);
+              namelen := read.NextAsciiz(@name);
             DW_AT_producer + DW_FORM_string shl 8:
               if debug.fProducer = '' then
               begin
-                read.NextAsciiz(fullname);
-                ShortStringToAnsi7String(fullname, debug.fProducer);
+                txtlen := read.NextAsciiz(@txt);
+                FastSetString(debug.fProducer, txt, txtlen);
               end
               else
                 read.NextAsciiz;
@@ -3069,40 +3069,46 @@ begin
           if ab^.Tag = DW_TAG_subprogram then
           begin
             s := debug.fSymbols.NewPtr;
-            if typname[0] = #0 then
-              ShortStringToAnsi7String(name, s^.name)
+            if typlen = 0 then
+              FastSetString(s^.Name, name, namelen)
             else
             begin
-              fullname := typname;
-              AppendShort(name, fullname);
-              ShortStringToAnsi7String(fullname, s^.name);
+              if temp[0] = #0 then
+              begin
+                MoveFast(typ^, temp[1], typlen);
+                if (typ[typlen - 1] <> '.') and
+                   (typlen < 255) then
+                begin
+                  inc(typlen);
+                  temp[typlen] := '.';
+                end;
+              end;
+              temp[0] := AnsiChar(typlen); // truncate back to 'type.'
+              AppendShortBuffer(name, namelen, high(temp), @temp);
+              ShortStringToAnsi7String(temp, s^.Name);
             end;
             s^.Start := low_pc;
             s^.Stop := high_pc - 1;
             {$ifdef DWARFDEBUG}
-            ConsoleWrite([s^.name, ' ', CardinalToHexShort(low_pc), '-',
+            ConsoleWrite([s^.Name, ' ', CardinalToHexShort(low_pc), '-',
               CardinalToHexShort(high_pc)]);
             {$endif DWARFDEBUG}
           end
           else // Tag = DW_TAG_compile_unit
             // e.g. 'mormot.core.base.asmx86.inc' -> 'mormot.core.base.pas'
-            FinalizeLinesSymbol(
-              pointer(debug.fLine), debug.fLinesCount, low_pc, high_pc, @name);
+            FinalizeLinesSymbol(pointer(debug.fLine), debug.fLinesCount,
+              low_pc, high_pc, name, namelen);
       end
       else if (level = 2) and
               ((ab^.Tag = DW_TAG_class_type) or
                (ab^.Tag = DW_TAG_structure_type)) then
       begin
-        typname[0] := #0;
+        typlen := 0;
+        temp[0] := #0; // computed on demand
         repeat
           if (a^.attr = DW_AT_name) and
              (a^.form = DW_FORM_string) then
-          begin
-            read.NextAsciiz(typname);
-            if (typname[0] <> #0) and
-               (typname[ord(typname[0])] <> '.') then
-              AppendShortCharSafe('.', typname);
-          end
+            typlen := read.NextAsciiz(@typ)
           else
             SkipAttr(a^.form, header64);
           inc(a);
@@ -3122,7 +3128,7 @@ begin
           (abbr = 0) do
     begin
       if level = 1 then
-        typname[0] := #0;
+        typlen := 0; // reset type name
       // skip entries signaling that no more child entries are following
       dec(level);
       if read.EOF then
