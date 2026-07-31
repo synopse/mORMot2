@@ -300,6 +300,9 @@ const
      rkWString
     ];
 
+  /// maps heap-allocated string types with PStrRec header - not WinAPI BSTR
+  rkStrRecTypes = rkStringTypes {$ifdef OSWINDOWS} - [rkWString] {$endif};
+
   /// maps types with proper TRttiProp.RttiOrd field
   // - i.e. rkOrdinalTypes excluding the 64-bit values
   rkHasRttiOrdTypes =
@@ -6792,21 +6795,44 @@ begin
   if fields.Count = 0 then
     exit;
   fin := @RTTI_FINALIZE;
-  repeat
-    f := fields.Fields;
-    i := fields.Count;
+  case fields.Count of
+    0:
+      exit;
+    1: // optimized for a record with a single managed field - especially string
+      begin
+        p := fields.Fields^.{$ifdef HASDIRECTTYPEINFO}TypeInfo{$else}TypeInfoRef^{$endif};
+        if p^.Kind in rkStrRecTypes then
+          StringClearSeveral(pointer(v + fields.Fields^.Offset), n, fields.Size)
+        else
+        begin
+          fin := @fin[p^.Kind];
+          {$ifdef FPC_OLDRTTI}
+          if Assigned(fin) then
+          {$endif FPC_OLDRTTI}
+            repeat
+              TRttiFinalizer(fin)(v + fields.Fields^.Offset, p);
+              inc(v, fields.Size);
+              dec(n);
+            until n = 0;
+        end;
+      end;
+  else // generic case with several managed fields
     repeat
-      p := f^.{$ifdef HASDIRECTTYPEINFO}TypeInfo{$else}TypeInfoRef^{$endif};
-      {$ifdef FPC_OLDRTTI}
-      if Assigned(fin[p^.Kind]) then
-      {$endif FPC_OLDRTTI}
-        fin[p^.Kind](v + f^.Offset, p);
-      inc(f);
-      dec(i);
-    until i = 0;
-    inc(v, fields.Size);
-    dec(n);
-  until n = 0;
+      f := fields.Fields;
+      i := fields.Count;
+      repeat
+        p := f^.{$ifdef HASDIRECTTYPEINFO}TypeInfo{$else}TypeInfoRef^{$endif};
+        {$ifdef FPC_OLDRTTI}
+        if Assigned(fin[p^.Kind]) then
+        {$endif FPC_OLDRTTI}
+          fin[p^.Kind](v + f^.Offset, p);
+        inc(f);
+        dec(i);
+      until i = 0;
+      inc(v, fields.Size);
+      dec(n);
+    until n = 0;
+  end;
 end;
 
 procedure StringClearSeveral(v: PPointer; n, siz: PtrInt);
