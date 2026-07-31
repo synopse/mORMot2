@@ -795,6 +795,9 @@ const
   // - even if a dynamic array can handle PtrInt length, consider other patterns
   _DAMAXSIZE = (800 shl 20) - 1;
 
+  /// cross-compiler refCnt for a constant - 2 for Delphi since -1 make a copy
+  _CNTCONST = {$ifdef FPC} -1 {$else} 2 {$endif};
+
 /// like SetLength() but without any memory resize - WARNING: len should be > 0
 procedure DynArrayFakeLength(arr: pointer; len: TDALen);
   {$ifdef HASINLINE} inline; {$endif}
@@ -967,6 +970,14 @@ procedure FastSetStrRec(var Rec: TStrRec; const Len: TStrLen; const RefCnt: TStr
 
 /// fill a RawUtf8 constant with up to 7 chars of UTF-8 content
 function FastSetConst(var S; var Rec: TStrRecConst; P: pointer; Len: TStrLen): PUtf8Char;
+
+/// prepare a RawByteString to pre-allocate several constant RawUtf8 values
+// - see ReadSymbol() in mormot.core.log for an usage sample
+function StrRecAlloc(var temp: RawByteString; count, size: PtrInt): PStrRec;
+
+/// append a new RawUtf8 to a StrRecAlloc() pre-allocate array
+function StrRecNew(U: PPointer; sr: PStrRec; P: pointer; const len: PtrInt): PStrRec;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// ensure the supplied variable will have a CP_UTF8 code page
 // - making it unique if needed
@@ -5390,12 +5401,27 @@ end;
 
 function FastSetConst(var S; var Rec: TStrRecConst; P: pointer; Len: TStrLen): PUtf8Char;
 begin
-  FastSetStrRec(Rec.Header, Len, -1);
+  FastSetStrRec(Rec.Header, Len, _CNTCONST);
   result := @Rec.TextLo;
   if P <> nil then
     PInt64(result)^ := PInt64(P)^; // up to 7 chars
   result[Len] := #0;
   pointer(S) := result;
+end;
+
+function StrRecAlloc(var temp: RawByteString; count, size: PtrInt): PStrRec;
+begin
+  result := FastNewRawByteString(temp, count * (SizeOf(result^) + 1) + size);
+end;
+
+function StrRecNew(U: PPointer; sr: PStrRec; P: pointer; const len: PtrInt): PStrRec;
+begin
+  FastSetStrRec(sr^, len, _CNTCONST);
+  inc(sr);
+  U^ := sr;
+  MoveFast(P^, sr^, len);
+  PAnsiChar(sr)[len] := #0;
+  result := pointer(@PAnsiChar(sr)[len + 1]);
 end;
 
 {$ifdef HASVARUSTRING}
@@ -7569,7 +7595,8 @@ var
   n: PtrInt;
 begin
   dec(old);
-  dec(old^.refCnt);
+  if old^.refCnt > 0 then
+    dec(old^.refCnt);
   n := (old^.length * ItemSize) + SizeOf(new^);
   new := AllocMem(n);
   MoveFast(old^, new^, n); // copy header + all ordinal values
