@@ -7181,7 +7181,7 @@ end;
 
 { RTTI_FINALIZE[] implementation functions }
 
-function _StringClear(V: PPointer; Info: PRttiInfo): PtrInt;
+function _StringClear(V: PPointer; Info: PRttiInfo): PtrInt; {$ifdef OSPOSIX}inline;{$endif}
 var
   p: PStrRec;
 begin
@@ -7199,13 +7199,13 @@ end;
 
 function _WStringClear(V: PWideString; Info: PRttiInfo): PtrInt;
 begin
+  {$ifdef OSWINDOWS}
   if V^ <> '' then
-    {$ifdef FPC}
-    Finalize(V^);
-    {$else}
-    V^ := '';
-    {$endif FPC}
+    V^ := ''; // let RTL call SysFreeString() for this BSTR instance
   result := SizeOf(V^);
+  {$else}
+  result := _StringClear(pointer(V), Info); // PStrRec UnicodeString on OSPOSIX
+  {$endif OSWINDOWS}
 end;
 
 function _VariantClear(V: PVarData; Info: PRttiInfo): PtrInt;

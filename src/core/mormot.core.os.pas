@@ -9317,7 +9317,7 @@ var
 begin
   text[0] := #0;
   AppendShortCardinal(SystemInfo.dwNumberOfProcessors, text); // no syscall
-  if not RetrieveSysInfo(si) then // single syscall on Linux/Android
+  if not RetrieveSysInfo(si) then // single syscall on Linux - 1 second cache
     exit;
   AppendShortChar(' ', @text); // si.loads[0/1] = user kern on Windows
   AppendShortCurr64((Int64(si.loads[0]) * CURR_RES + 5000) shr 16, text, 2);
