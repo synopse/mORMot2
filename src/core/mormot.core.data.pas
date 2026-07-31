@@ -3575,7 +3575,7 @@ procedure TRawUtf8InterningSlot.Clear;
 begin
   fSafe.WriteLock;
   try
-    fHash.Values.SetCount(0); // Values.Clear
+    fHash.Values.Clear;
     fHash.Values.Hasher.ForceReHash;
   finally
     fSafe.WriteUnLock;
@@ -6677,13 +6677,14 @@ end;
 
 procedure TDynArray.Clear;
 begin
-  SetCount(0);
+  if fValue^ <> nil then
+    SetCount(0);
 end;
 
 function TDynArray.ClearSafe: boolean;
 begin
   try
-    SetCount(0);
+    Clear;
     result := true;
   except // weak code, but may be a good idea in a destructor
     result := false;
@@ -7112,7 +7113,7 @@ function TDynArray.LoadFromJson(P: PUtf8Char; EndOfObject: PUtf8Char;
   CustomVariantOptions: PDocVariantOptions; Tolerant: boolean;
   Interning: TRawUtf8InterningAbstract): PUtf8Char;
 begin
-  SetCount(0); // faster to use our own routine now
+  Clear; // faster to use our own routine now
   GetDataFromJson(fValue, P,
     EndOfObject, Info, CustomVariantOptions, Tolerant, Interning);
   if fCountP <> nil then
@@ -9567,7 +9568,7 @@ end;
 
 procedure TDynArrayHashed.Clear;
 begin
-  InternalDynArray.SetCount(0);
+  InternalDynArray.Clear;
 end;
 
 function TDynArrayHashed.Add(const Item): PtrInt;
