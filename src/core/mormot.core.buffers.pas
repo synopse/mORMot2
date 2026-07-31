@@ -187,6 +187,10 @@ procedure FromVarString(var Source: PByte; var Value: TSynTempBuffer); overload;
 function FromVarString(var Source: PByte; SourceMax: PByte;
   var Value: TSynTempBuffer): boolean; overload;
 
+/// retrieve a variable-length UTF-8 encoded text buffer in a StrRecAlloc() item
+procedure FromVarStrRec(var Source: PByte; var StrRec: PStrRec; var Value: RawUtf8);
+  {$ifdef HASINLINE}inline;{$endif}
+
 type
   /// kind of result returned by FromVarBlob() function
   TValueResult = record
@@ -3365,6 +3369,15 @@ function FromVarBlob(Data: PByte): TValueResult;
 begin
   result.Len := FromVarUInt32(Data);
   result.Ptr := pointer(Data);
+end;
+
+procedure FromVarStrRec(var Source: PByte; var StrRec: PStrRec; var Value: RawUtf8);
+var
+  L: PtrInt;
+begin
+  L := FromVarUInt32(Source); // FromVarString() over pre-allocated buffer
+  StrRec := StrRecNew(@Value, StrRec, Source, L);
+  inc(Source, L);
 end;
 
 function AddVarUInt32(var Adder: TSynTempAdder; Value: PtrUInt): PByte;
