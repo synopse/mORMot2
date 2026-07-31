@@ -1911,7 +1911,7 @@ function FastRecordClear(Value: pointer; Info: PRttiInfo): PtrInt;
 procedure RecordClearSeveral(v: PAnsiChar; info: PRttiInfo; n: PtrInt);
 
 /// efficient finalization of successive RawUtf8 items from a (dynamic) array
-procedure StringClearSeveral(v: PPointer; n: PtrInt);
+procedure StringClearSeveral(v: PPointer; n: PtrInt; siz: PtrInt = SizeOf(RawUtf8));
 
 /// low-level finalization of a dynamic array of RawUtf8
 // - faster than RTL Finalize() or setting nil
@@ -6809,7 +6809,7 @@ begin
   until n = 0;
 end;
 
-procedure StringClearSeveral(v: PPointer; n: PtrInt);
+procedure StringClearSeveral(v: PPointer; n, siz: PtrInt);
 var
   p: PStrRec;
 begin
@@ -6823,7 +6823,7 @@ begin
          StrCntDecFree(p^.refCnt) then
         FreeMem(p); // works for both rkLString + rkUString
     end;
-    inc(v);
+    inc(PByte(v), siz);
     dec(n);
   until n = 0;
 end;
