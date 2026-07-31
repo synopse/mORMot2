@@ -37,7 +37,7 @@ uses
 
 { ************ Variable Length Integer Encoding / Decoding }
 
-// internal function used for branchless zigzag encoding of integer values
+// internal functions used for branchless zigzag encoding/decoding of integers
 function ZagZigPtrInt(r: PtrUInt): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 function ZagZigInt64(r: Int64): QWord;
@@ -2812,7 +2812,7 @@ var
   c: PtrUInt;
 begin
   r := -r; // branchless encoding into 0=0,1=1,2=-1,3=2,4=-2... values
-  c := -(r shr (POINTERBYTES * 8 - 1));
+  c := -(r shr (POINTERBITS - 1));
   result := (r shl 1) xor c;
 end;
 
@@ -2824,7 +2824,7 @@ begin
   else
     result := (r shl 1) - 1; // 1->1, 2->3..
   {$else}
-  result := ZagZigPtrInt(r); // branchless version using CPU registers
+  result := ZagZigPtrInt(r); // branchless version using CPU64 registers
   {$endif CPU32}
 end;
 
@@ -2845,7 +2845,7 @@ begin
   else
     inc(result); // 1->1, 3->2..
   {$else}
-  result := ZigZagPtrInt(r); // branchless version using CPU registers
+  result := ZigZagPtrInt(r); // branchless version using CPU64 registers
   {$endif CPU32}
 end;
 

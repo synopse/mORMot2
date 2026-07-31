@@ -2235,7 +2235,7 @@ begin
   result := nil;
 end;
 
-function DebugFileRegister(a: PtrUInt): TDebugFile;
+function DebugFileRegister(a: PtrUInt; s: PRawUtf8): TDebugFile;
 var
   base: PtrUInt;
   i: PtrInt;
@@ -2280,32 +2280,41 @@ begin
       DebugFileLast := result;   
   finally
     DebugFilesSafe.WriteUnLock;
+    if (s <> nil) and
+       (result = nil) then
+      Make([' ', ExtractFileName(fn)], s^);
   end;
+end;
+
+function DebugFileGet(a: PtrUInt; s: PRawUtf8): TDebugFile;
+begin
+  result := nil;
+  if SynLogFileFreeing or
+     (a = 0) then
+    exit;
+  // naive but very efficient cache of last used TDebugFile instances
+  result := DebugFileCurrent;
+  if (result <> nil) and
+     result.IsCode(a) then
+    exit; // most common case
+  result := DebugFileLast;
+  if (result <> nil) and
+     result.IsCode(a) then
+    exit;
+  // non-blocking search of this address in existing TDebugFile instances
+  DebugFilesSafe.ReadLock;
+  result := DebugFileSearch(pointer(DebugFiles), a);
+  DebugFilesSafe.ReadUnLock;
+  // call GetExecutableName() and try to create a new TDebugFile instance
+  if result = nil then
+    result := DebugFileRegister(a, s)
+  else
+    DebugFileLast := result;
 end;
 
 class function TDebugFile.Get(aPointer: pointer): TDebugFile;
 begin
-  result := nil;
-  if SynLogFileFreeing then
-    exit;   
-  // naive but very efficient cache of last used TDebugFile instances
-  result := DebugFileCurrent;
-  if (result <> nil) and
-     result.IsCode(PtrUInt(aPointer)) then
-    exit;
-  result := DebugFileLast;
-  if (result <> nil) and
-     result.IsCode(PtrUInt(aPointer)) then
-    exit; 
-  // non-blocking search of this address in existing TDebugFile instances
-  DebugFilesSafe.ReadLock;
-  result := DebugFileSearch(pointer(DebugFiles), PtrUInt(aPointer));
-  DebugFilesSafe.ReadUnLock;
-  // call GetExecutableName() and try to create a new TDebugFile instance
-  if result = nil then
-    result := DebugFileRegister(PtrUInt(aPointer))
-  else
-    DebugFileLast := result;
+  result := DebugFileGet(PtrUInt(aPointer), nil);
 end;
 
 class function TDebugFile.CurrentDebugFile: TDebugFile;
@@ -4024,9 +4033,20 @@ end;
 
 class procedure TDebugFile.FindLocationShort(aPointer: pointer;
   var aInfo: ShortString);
+var
+  deb: TDebugFile;
+  tmp: pointer; // RawUtf8
 begin
   aInfo := PointerToHexShort(aPointer);
-  Get(aPointer).AppendLocationShort(PtrUInt(aPointer), aInfo);
+  tmp := nil;
+  deb := DebugFileGet(PtrUInt(aPointer), @tmp);
+  if deb <> nil then
+    deb.AppendLocationShort(PtrUInt(aPointer), aInfo)
+  else if tmp <> nil then
+  begin
+    AppendShortAnsi7String(RawUtf8(tmp), aInfo);
+    FastAssignNew(tmp);
+  end;
 end;
 
 class function TDebugFile.FindLocationRaisedAt(exc: ESynException): RawUtf8;
