@@ -37,6 +37,16 @@ uses
 
 { ************ Variable Length Integer Encoding / Decoding }
 
+// internal function used for branchless zigzag encoding of integer values
+function ZagZigPtrInt(r: PtrUInt): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+function ZagZigInt64(r: Int64): QWord;
+  {$ifdef HASINLINE}inline;{$endif}
+function ZigZagPtrInt(r: PtrUInt): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
+function ZigZagInt64(r: QWord): Int64;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// convert a cardinal into a 32-bit variable-length integer buffer
 function ToVarUInt32(Value: cardinal; Dest: PByte): PByte;
 
@@ -50,9 +60,7 @@ function ToVarUInt32Length(Value: PtrUInt): PtrUInt;
 function ToVarUInt32LengthWithData(Value: PtrUInt): PtrUInt;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert an integer into a 32-bit variable-length integer buffer
-// - store negative values as cardinal two-complement, i.e.
-// 0=0,1=1,2=-1,3=2,4=-2...
+/// store a 32-bit integer with zigzag encoding 0=0,1=1,2=-1,3=2,4=-2,...
 function ToVarInt32(Value: PtrInt; Dest: PByte): PByte;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -96,10 +104,9 @@ function FromVarUInt32Up128(var Source: PByte): cardinal;
 // - this version must be called if Source^ has already been checked to be > $7f
 function FromVarUInt32High(var Source: PByte): cardinal;
 
-/// convert a 32-bit variable-length integer buffer into an integer
-// - decode negative values from cardinal two-complement, i.e.
-// 0=0,1=1,2=-1,3=2,4=-2...
-function FromVarInt32(var Source: PByte): integer;
+/// get a 32-bit integer from zigzag encoded buffer 0=0,1=1,2=-1,3=2,4=-2,...
+function FromVarInt32(var Source: PByte): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a UInt64 into a 64-bit variable-length integer buffer
 function ToVarUInt64(Value: QWord; Dest: PByte): PByte;
@@ -121,14 +128,15 @@ function FromVarUInt64(var Source: PByte; SourceMax: PByte;
   out Value: Qword): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert a Int64 into a 64-bit variable-length integer buffer
+/// store a 64-bit integer with zigzag encoing 0=0,1=1,2=-1,3=2,4=-2,...
 function ToVarInt64(Value: Int64; Dest: PByte): PByte;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert a 64-bit variable-length integer buffer into a Int64
+/// get a 64-bit integer from zigzag encoded buffer 0=0,1=1,2=-1,3=2,4=-2,...
 function FromVarInt64(var Source: PByte): Int64;
+  {$ifdef CPU64}inline;{$endif}
 
-/// convert a 64-bit variable-length integer buffer into a Int64
+/// get a 64-bit integer from zigzag encoded buffer 0=0,1=1,2=-1,3=2,4=-2,...
 // - this version won't update the Source pointer
 function FromVarInt64Value(Source: PByte): Int64;
 
@@ -712,12 +720,12 @@ type
       Exc: ESynExceptionClass = nil); overload;
     /// raise a EFastReader with "Incorrect Data: ...." error message
     procedure ErrorData(const msg: ShortString); overload;
-    /// read the next 32-bit signed value from the buffer
-    function VarInt32: integer;
+    /// read a 32-bit integer from zigzag encoded buffer 0=0,1=1,2=-1,3=2,4=-2,...
+    function VarInt32: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
     /// read the next 32-bit unsigned value from the buffer
     function VarUInt32: cardinal;
-    /// try to read the next 32-bit signed value from the buffer
+    /// read a 32-bit integer from zigzag encoded buffer 0=0,1=1,2=-1,3=2,4=-2,...
     // - don't change the current position
     function PeekVarInt32(out value: PtrInt): boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -728,9 +736,9 @@ type
     // - this version won't call ErrorOverflow, but return false on error
     // - returns true on read success
     function VarUInt32Safe(out Value: cardinal): boolean;
-    /// read the next 64-bit signed value from the buffer
+    /// read a 64-bit integer from zigzag encoded buffer 0=0,1=1,2=-1,3=2,4=-2,...
     function VarInt64: Int64;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC}inline;{$endif}
     /// read the next 64-bit unsigned value from the buffer
     function VarUInt64: QWord;
     /// read the next RawUtf8 value from the buffer
@@ -971,11 +979,9 @@ type
     procedure WriteXor(New, Old: PAnsiChar; Len: PtrInt; crc: PCardinal = nil);
     /// append a cardinal value using 32-bit variable-length integer encoding
     procedure WriteVarUInt32(Value: PtrUInt);
-    /// append an integer value using 32-bit variable-length integer encoding of
-    // the by-two complement of the given value
+    /// append a 32-bit value with zigzag encoding 0=0,1=1,2=-1,3=2,4=-2,...
     procedure WriteVarInt32(Value: PtrInt);
-    /// append an integer value using 64-bit variable-length integer encoding of
-    // the by-two complement of the given value
+    /// append a 64-bit value with zigzag encoding 0=0,1=1,2=-1,3=2,4=-2,...
     procedure WriteVarInt64(Value: Int64);
     /// append an unsigned integer value using 64-bit variable-length encoding
     procedure WriteVarUInt64(Value: QWord);
@@ -2800,17 +2806,51 @@ implementation
 
 { ************ Variable Length Integer Encoding / Decoding }
 
+function ZagZigPtrInt(r: PtrUInt): PtrInt;
+var
+  c: PtrUInt;
+begin
+  r := -r; // branchless encoding into 0=0,1=1,2=-1,3=2,4=-2... values
+  c := -(r shr (POINTERBYTES * 8 - 1));
+  result := (r shl 1) xor c;
+end;
+
+function ZagZigInt64(r: Int64): QWord;
+begin
+  {$ifdef CPU32}
+  if r <= 0 then
+    result := (-r) shl 1 // 0->0, -1->2, -2->4..
+  else
+    result := (r shl 1) - 1; // 1->1, 2->3..
+  {$else}
+  result := ZagZigPtrInt(r); // branchless version using CPU registers
+  {$endif CPU32}
+end;
+
+function ZigZagPtrInt(r: PtrUInt): PtrInt;
+var
+  c: PtrUInt;
+begin
+  c := r and 1; // branchless decoding of 0=0,1=1,2=-1,3=2,4=-2... values
+  result := r shr 1 * (c * 2 - 1) + c;
+end;
+
+function ZigZagInt64(r: QWord): Int64;
+begin
+  {$ifdef CPU32}
+  result := r shr 1;
+  if cardinal(r) and 1 = 0 then
+    result := -result // 0->0, 2->-1, 4->-2..
+  else
+    inc(result); // 1->1, 3->2..
+  {$else}
+  result := ZigZagPtrInt(r); // branchless version using CPU registers
+  {$endif CPU32}
+end;
+
 function ToVarInt32(Value: PtrInt; Dest: PByte): PByte;
 begin
-  // 0=0,1=1,2=-1,3=2,4=-2...
-  if Value < 0 then
-    // -1->2, -2->4..
-    Value := (-Value) shl 1
-  else if Value > 0 then
-    // 1->1, 2->3..
-    Value := (Value shl 1) - 1;
-    // 0->0
-  result := ToVarUInt32(Value, Dest);
+  result := ToVarUInt32(ZagZigPtrInt(Value), Dest);
 end;
 
 function ToVarUInt32(Value: cardinal; Dest: PByte): PByte;
@@ -3026,51 +3066,9 @@ begin
   result := Source; // safely decoded
 end;
 
-function FromVarInt32(var Source: PByte): integer;
-var
-  c: cardinal;
-  p: PByte;
+function FromVarInt32(var Source: PByte): PtrInt;
 begin
-  // fast stand-alone function with no FromVarUInt32 call
-  p := Source;
-  result := p^;
-  inc(p);
-  if result > $7f then
-  begin
-    c := p^;
-    c := c shl 7;
-    result := result and $7f or integer(c);
-    inc(p);
-    if c > $7f shl 7 then
-    begin
-      c := p^;
-      c := c shl 14;
-      inc(p);
-      result := result and $3fff or integer(c);
-      if c > $7f shl 14 then
-      begin
-        c := p^;
-        c := c shl 21;
-        inc(p);
-        result := result and $1fffff or integer(c);
-        if c > $7f shl 21 then
-        begin
-          c := p^;
-          c := c shl 28;
-          inc(p);
-          result := result and $0fffffff or integer(c);
-        end;
-      end;
-    end;
-  end;
-  Source := p;
-  // 0=0,1=1,2=-1,3=2,4=-2...
-  if result and 1 <> 0 then
-    // 1->1, 3->2..
-    result := result shr 1 + 1
-  else
-    // 0->0, 2->-1, 4->-2..
-    result := -(result shr 1);
+  result := ZigZagPtrInt(FromVarUInt32(Source));
 end;
 
 function FromVarUInt32High(var Source: PByte): cardinal;
@@ -3101,23 +3099,7 @@ end;
 
 function ToVarInt64(Value: Int64; Dest: PByte): PByte;
 begin
-  // 0=0,1=1,2=-1,3=2,4=-2...
-{$ifdef CPU32}
-  if Value <= 0 then
-    // 0->0, -1->2, -2->4..
-    result := ToVarUInt64((-Value) shl 1, Dest)
-  else
-     // 1->1, 2->3..
-    result := ToVarUInt64((Value shl 1) - 1, Dest);
-{$else}
-  if Value <= 0 then
-    // 0->0, -1->2, -2->4..
-    Value := (-Value) shl 1
-  else
-    // 1->1, 2->3..
-    Value := (Value shl 1) - 1;
-  result := ToVarUInt64(Value, Dest);
-{$endif CPU32}
+  result := ToVarUInt64(ZagZigInt64(Value), Dest);
 end;
 
 function ToVarUInt64(Value: QWord; Dest: PByte): PByte;
@@ -3246,110 +3228,13 @@ begin
 end;
 
 function FromVarInt64(var Source: PByte): Int64;
-var
-  c, n: PtrUInt;
 begin
-  // 0=0,1=1,2=-1,3=2,4=-2...
-{$ifdef CPU64}
-  result := Source^;
-  if result > $7f then
-  begin
-    result := result and $7f;
-    n := 0;
-    inc(Source);
-    repeat
-      c := Source^;
-      inc(n, 7);
-      if c <= $7f then
-        break;
-      result := result or (Int64(c and $7f) shl n);
-      inc(Source);
-    until false;
-    result := result or (Int64(c) shl n);
-  end;
-  if result and 1 <> 0 then
-    // 1->1, 3->2..
-    result := result shr 1 + 1
-  else
-    // 0->0, 2->-1, 4->-2..
-    result := -(result shr 1);
-{$else}
-  c := Source^;
-  if c > $7f then
-  begin
-    result := c and $7f;
-    n := 0;
-    inc(Source);
-    repeat
-      c := Source^;
-      inc(n, 7);
-      if c <= $7f then
-        break;
-      result := result or (Int64(c and $7f) shl n);
-      inc(Source);
-    until false;
-    result := result or (Int64(c) shl n);
-    if PCardinal(@result)^ and 1 <> 0 then
-      // 1->1, 3->2..
-      result := result shr 1 + 1
-    else
-      // 0->0, 2->-1, 4->-2..
-      result := -(result shr 1);
-  end
-  else
-  begin
-    if c = 0 then
-      result := 0
-    else if c and 1 = 0 then
-      // 0->0, 2->-1, 4->-2..
-      result := -Int64(c shr 1)
-    else
-      // 1->1, 3->2..
-      result := (c shr 1) + 1;
-  end;
-{$endif CPU64}
-  inc(Source);
+  result := ZigZagInt64(FromVarUInt64(Source));
 end;
 
 function FromVarInt64Value(Source: PByte): Int64;
-var
-  c, n: PtrUInt;
 begin
-// 0=0,1=1,2=-1,3=2,4=-2...
-  c := Source^;
-  if c > $7f then
-  begin
-    result := c and $7f;
-    n := 0;
-    inc(Source);
-    repeat
-      c := Source^;
-      inc(n, 7);
-      if c <= $7f then
-        break;
-      result := result or (Int64(c and $7f) shl n);
-      inc(Source);
-    until false;
-    result := result or (Int64(c) shl n);
-    {$ifdef CPU64}
-    if result and 1 <> 0 then
-    {$else}
-    if PCardinal(@result)^ and 1 <> 0 then
-    {$endif CPU64}
-      // 1->1, 3->2..
-      result := result shr 1 + 1
-    else
-      // 0->0, 2->-1, 4->-2..
-      result := -Int64(result shr 1);
-  end
-  else if c = 0 then
-    result := 0
-  else if c and 1 = 0 then
-    // 0->0, 2->-1, 4->-2..
-    result := -Int64(c shr 1)
-  else
-    // 1->1, 3->2..
-    result := (c shr 1) + 1;
+  result := ZigZagInt64(FromVarUInt64(Source));
 end;
 
 function GotoNextVarInt(Source: PByte): pointer;
@@ -3670,24 +3555,14 @@ begin
   end;
 end;
 
-function TFastReader.VarInt32: integer;
+function TFastReader.VarInt32: PtrInt;
 begin
-  result := VarUInt32;
-  if result and 1 <> 0 then
-    // 1->1, 3->2..
-    result := result shr 1 + 1
-  else    // 0->0, 2->-1, 4->-2..
-    result := -(result shr 1);
+  result := ZigZagPtrInt(VarUInt32);
 end;
 
 function TFastReader.VarInt64: Int64;
 begin
-  result := VarUInt64;
-  if result and 1 <> 0 then
-    // 1->1, 3->2..
-    result := result shr 1 + 1
-  else    // 0->0, 2->-1, 4->-2..
-    result := -(result shr 1);
+  result := ZigZagInt64(VarUInt64);
 end;
 
 {$ifdef CPUX86} // not enough CPU registers
@@ -3862,14 +3737,12 @@ end;
 {$endif CPUX86}
 
 function TFastReader.PeekVarInt32(out value: PtrInt): boolean;
+var
+  tmp: PtrUInt;
 begin
-  result := PeekVarUInt32(PtrUInt(value));
+  result := PeekVarUInt32(tmp);
   if result then
-    if value and 1 <> 0 then
-      // 1->1, 3->2..
-      value := value shr 1 + 1
-    else      // 0->0, 2->-1, 4->-2..
-      value := -(value shr 1);
+    value := ZigZagPtrInt(tmp);
 end;
 
 function TFastReader.PeekVarUInt32(out value: PtrUInt): boolean;
@@ -4223,18 +4096,20 @@ begin
     case k of
       wkVarInt32:
         repeat
-          pi^ := FromVarInt32(PByte(chunk));
+          pi^ := ZigZagPtrInt(FromVarUInt32(PByte(chunk)));
           inc(pi);
           dec(n);
-        until (n = 0) or
-              (chunk >= chunkend);
+          if n = 0 then
+            exit;
+        until chunk >= chunkend;
       wkVarUInt32:
         repeat
           pi^ := FromVarUInt32Big(PByte(chunk));
           inc(pi);
           dec(n);
-        until (n = 0) or
-              (chunk >= chunkend);
+          if n = 0 then
+            exit;
+        until chunk >= chunkend;
       wkSorted:
         begin
           diff := CleverReadInteger(pointer(chunk), pointer(chunkend), pi);
@@ -4243,18 +4118,20 @@ begin
         end;
       wkOffsetU:
         repeat
-          PIntegerArray(pi)[1] := pi^ + integer(FromVarUInt32(PByte(chunk)));
+          PIntegerArray(pi)[1] := integer(FromVarUInt32(PByte(chunk))) + pi^;
           inc(pi);
           dec(n);
-        until (n = 0) or
-              (chunk >= chunkend);
+          if n = 0 then
+            exit;
+        until chunk >= chunkend;
       wkOffsetI:
         repeat
-          PIntegerArray(pi)[1] := pi^ + FromVarInt32(PByte(chunk));
+          PIntegerArray(pi)[1] := ZigZagPtrInt(FromVarUInt32(PByte(chunk))) + pi^;
           inc(pi);
           dec(n);
-        until (n = 0) or
-              (chunk >= chunkend);
+          if n = 0 then
+            exit;
+        until chunk >= chunkend;
     else
       ErrorData('ReadVarUInt32Array got kind=%', [ord(k)]);
     end;
@@ -4808,12 +4685,9 @@ end;
 
 procedure TBufferWriter.WriteVarInt32(Value: PtrInt);
 begin
-  if Value <= 0 then
-    // 0->0, -1->2, -2->4..
-    Value := (-Value) shl 1
-  else    // 1->1, 2->3..
-    Value := (Value shl 1) - 1;
-  WriteVarUInt32(Value);
+  if fPos > fBufLen16 then
+    InternalFlush;
+  fPos := PtrUInt(ToVarUInt32(ZagZigPtrInt(Value), @fBuffer^[fPos])) - PtrUInt(fBuffer);
 end;
 
 procedure TBufferWriter.WriteVarUInt32(Value: PtrUInt);
@@ -4827,7 +4701,7 @@ procedure TBufferWriter.WriteVarInt64(Value: Int64);
 begin
   if fPos > fBufLen16 then
     InternalFlush;
-  fPos := PtrUInt(ToVarInt64(Value, @fBuffer^[fPos])) - PtrUInt(fBuffer);
+  fPos := PtrUInt(ToVarUInt64(ZagZigInt64(Value), @fBuffer^[fPos])) - PtrUInt(fBuffer);
 end;
 
 procedure TBufferWriter.WriteVarUInt64(Value: QWord);
@@ -5020,13 +4894,13 @@ begin
               v := Values^[i];
               case DataLayout of
                 wkVarInt32:
-                  P := ToVarInt32(v, P);
+                  P := ToVarUInt32(ZagZigPtrInt(v), P);
                 wkVarUInt32:
                   P := ToVarUInt32(v, P);
                 wkOffsetU:
                   P := ToVarUInt32(v - vp, P);
                 wkOffsetI:
-                  P := ToVarInt32(v - vp, P);
+                  P := ToVarUInt32(ZagZigPtrInt(v - vp), P);
               end;
               vp := v;
               if PtrUInt(P) >= PtrUInt(PEnd) then
