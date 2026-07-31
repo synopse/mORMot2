@@ -276,6 +276,13 @@ type
     ClientSide: TClientSide;
   end;
 
+  /// a simple ViewModel/Controller service, used by
+  // TTestServiceOrientedArchitecture.MvcViewsMustache
+  IMvcViewsService = interface(IInvokable)
+    ['{A0D9C7E5-7A3B-4E64-9D28-61C1B0F4C8A2}']
+    procedure Welcome(const name: RawUtf8);
+  end;
+
   /// a test case which will test the interface-based SOA implementation of
   // the mORMot framework
   TTestServiceOrientedArchitecture = class(TSynTestCase)
@@ -292,6 +299,7 @@ type
     procedure IntSubtractJson(Ctxt: TOnInterfaceStubExecuteParamsJson);
     procedure IntSubtractVariant(Ctxt: TOnInterfaceStubExecuteParamsVariant);
     procedure IntSubtractVariantVoid(Ctxt: TOnInterfaceStubExecuteParamsVariant);
+    procedure MustacheViewsTranslate(var English: string);
   public
     { all threaded callbacks for validating all client side modes }
     /// test the client-side in RESTful mode with values transmitted as Json objects
@@ -327,6 +335,8 @@ type
     procedure ClientSide;
     /// test interface stubbing / mocking
     procedure MocksAndStubs;
+    /// test TMvcViewsMustache rendering, including the OnTranslate property
+    procedure MvcViewsMustache;
   end;
 
 
@@ -2571,6 +2581,47 @@ begin
   begin
     Delete(IndexOf(EInterfaceFactory));
     Delete(IndexOf(ESynException));
+  end;
+end;
+
+type
+  TMvcViewsMustacheHack = class(TMvcViewsMustache); // to call protected Render
+
+procedure TTestServiceOrientedArchitecture.MustacheViewsTranslate(
+  var English: string);
+begin
+  if English = 'Hello' then
+    English := 'Bonjour';
+end;
+
+procedure TTestServiceOrientedArchitecture.MvcViewsMustache;
+var
+  folder: TFileName;
+  params: TMvcViewsMustacheParameters;
+  views: TMvcViewsMustache;
+  ndx: integer;
+  answer: TServiceCustomAnswer;
+begin
+  folder := WorkDir + 'mvcviews';
+  ForceDirectories(folder);
+  FileFromString('{{"Hello}} {{name}}!', MakePath([folder, 'Welcome.html']));
+  FillCharFast(params, SizeOf(params), 0);
+  params.Folder := folder;
+  views := TMvcViewsMustache.Create(TypeInfo(IMvcViewsService), params);
+  try
+    ndx := views.Factory.FindMethodIndex('Welcome');
+    Check(ndx >= 0);
+    TMvcViewsMustacheHack(views).Render(ndx, _ObjFast(['name', 'world']), answer);
+    CheckEqual(answer.Content, 'Hello world!');
+    Check(IdemPChar(pointer(answer.Header), 'CONTENT-TYPE: TEXT/HTML'));
+    // wire the translation callback of the {{"text}} tags
+    views.OnTranslate := MustacheViewsTranslate;
+    answer.Content := '';
+    TMvcViewsMustacheHack(views).Render(ndx, _ObjFast(['name', 'world']), answer);
+    CheckEqual(answer.Content, 'Bonjour world!');
+  finally
+    views.Free;
+    DirectoryDelete(folder);
   end;
 end;
 
