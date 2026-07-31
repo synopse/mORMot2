@@ -809,11 +809,8 @@ type
     /// returns the current position, and move ahead the specified bytes
     function NextSafe(out Data: pointer; DataLen: PtrInt): boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    /// read the next #0 terminated text into a ShortString
-    procedure NextAsciiz(var s: ShortString); overload;
-      {$ifdef FPC}inline;{$endif} // Delphi can't inline var ShortString :(
-    /// fast ignore the next #0 terminated text
-    procedure NextAsciiz; overload;
+    /// read the next #0 terminated text into a PUtf8Char and return its length
+    function NextAsciiz(const text: PPointer = nil): PtrInt; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// copy data from the current position, and move ahead the specified bytes
     procedure Copy(Dest: pointer; DataLen: PtrInt);
@@ -3527,25 +3524,14 @@ begin
   end;
 end;
 
-procedure TFastReader.NextAsciiz(var s: ShortString);
-var
-  l: PtrInt;
+function TFastReader.NextAsciiz(const text: PPointer): PtrInt;
 begin
-  l := ByteScanIndex(pointer(P), Last - P, 0);
-  if l < 0 then
+  if text <> nil then
+    text^ := P;
+  result := ByteScanIndex(pointer(P), Last - P, 0);
+  if result < 0 then
     ErrorOverflow;
-  SetString(s, P, l);
-  inc(P, l + 1);
-end;
-
-procedure TFastReader.NextAsciiz;
-var
-  l: PtrInt;
-begin
-  l := ByteScanIndex(pointer(P), Last - P, 0);
-  if l < 0 then
-    ErrorOverflow;
-  inc(P, l + 1);
+  inc(P, result + 1);
 end;
 
 procedure TFastReader.Copy(Dest: pointer; DataLen: PtrInt);
