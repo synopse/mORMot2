@@ -5542,8 +5542,19 @@ begin
       strm.Free; // any spooled file remains during the request processing
     end;
   except
-    Http.ProcessDone; // delete any partially spooled file
-    raise;
+    on EStreamError do
+    begin
+      // e.g. ENOSPC when spooling the body: report it before closing
+      Http.ProcessDone; // delete any partially spooled file
+      fServer.ComputeRejectBody(Http.Content, 0, HTTP_INSUFFICIENTSTORAGE);
+      SockSendFlush(Http.Content);
+      raise; // the caller will close the connection
+    end;
+    on Exception do
+    begin
+      Http.ProcessDone; // delete any partially spooled file
+      raise;
+    end;
   end;
 end;
 

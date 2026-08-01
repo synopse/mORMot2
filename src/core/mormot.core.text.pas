@@ -10536,7 +10536,7 @@ end;
 
 const
   // last item is fake HTTP status 513 = 'Invalid Request'
-  INDEX_HTTP_INVALID = 46;
+  INDEX_HTTP_INVALID = 47;
   // sorted by actual usage order for WordScanIndex() in matching HTTP_CODE[]
   HTTP_REASON: array[0 .. INDEX_HTTP_INVALID] of RawUtf8 = (
    'OK',                                // HTTP_SUCCESS - should be first
@@ -10583,6 +10583,7 @@ const
    'Service Unavailable',               // HTTP_UNAVAILABLE
    'Gateway Timeout',                   // HTTP_GATEWAYTIMEOUT
    'HTTP Version Not Supported',        // HTTP_HTTPVERSIONNONSUPPORTED
+   'Insufficient Storage',              // HTTP_INSUFFICIENTSTORAGE
    'Network Authentication Required',   // 511
    'Client Side Connection Error',      // HTTP_CLIENTERROR = 666
    'Invalid Request');                  // last INDEX_HTTP_INVALID = 513
@@ -10631,6 +10632,7 @@ const
     HTTP_UNAVAILABLE,
     HTTP_GATEWAYTIMEOUT,
     HTTP_HTTPVERSIONNONSUPPORTED,
+    HTTP_INSUFFICIENTSTORAGE,
     511,
     HTTP_CLIENTERROR,
     513); // last INDEX_HTTP_INVALID = fake 'Invalid Request' fallback code

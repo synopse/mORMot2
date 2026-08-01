@@ -4295,15 +4295,43 @@ begin
   CheckEqualShort(s32, 'na3q2n4gw6cly5fvf5da4frmek667zk2');
 end;
 
+type
+  // simulate e.g. a full disk: raise EWriteError after 64KB
+  TFailingStream = class(TStream)
+  protected
+    fWritten: Int64;
+  public
+    function Write(const Buffer; Count: Longint): Longint; override;
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+  end;
+
+function TFailingStream.Write(const Buffer; Count: Longint): Longint;
+begin
+  inc(fWritten, Count);
+  if fWritten > 65536 then
+    raise EWriteError.Create('TFailingStream: simulated full disk');
+  result := Count;
+end;
+
+function TFailingStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  result := 0;
+end;
+
 function TNetworkProtocols.DoBodyDownload(const aUrl, aMethod, aInHeaders,
   aInContentType, aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
 begin
   result := nil;
   if aUrl = '/mem' then
     exit; // in-memory Content fallback
+  inc(bodystreamed);
+  if aUrl = '/fail' then
+  begin
+    result := TFailingStream.Create;
+    exit;
+  end;
   bodyfile := TemporaryFileName;
   result := TFileStreamEx.Create(bodyfile, fmCreate);
-  inc(bodystreamed);
 end;
 
 function TNetworkProtocols.DoBodyRequest(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -4490,6 +4518,46 @@ begin
         CheckEqual(status, 1, '415 identity');
       finally
         raw.Free;
+      end;
+      // simulate a full disk while spooling: EStreamError -> 507 + close
+      prev := bodystreamed;
+      raw := TCrtSocket.Open('127.0.0.1', port);
+      try
+        raw.SockSend(['POST /fail HTTP/1.1']);
+        raw.SockSend(['Host: 127.0.0.1:', port]);
+        raw.SockSend(['Content-Length: 200000']);
+        raw.SockSend(['Content-Type: application/dummy']);
+        raw.SockSend([]); // void line: end of headers
+        for status := 1 to 10 do
+          raw.SockSendRaw([mptext]); // = the announced 200000 bytes
+        raw.SockSendFlush;
+        if fam = 0 then
+        begin
+          // the blocking server reads the whole body before the failing
+          // write, so the 507 response is deterministic here
+          raw.SockRecvLn(line);
+          CheckUtf8(PosEx(' 507 ', line) > 0, 'enospc %', [line]);
+        end;
+        // on the async family the failure occurs in the middle of the body,
+        // so the 507 is best effort: the reset may reach the client first
+      finally
+        raw.Free;
+      end;
+      endtix := GetTickCount64 + 5000;
+      while (bodystreamed = prev) and
+            (GetTickCount64 < endtix) do
+        SleepHiRes(5); // the event fires in a server thread
+      CheckEqual(bodystreamed, prev + 1, 'enospc streamed');
+      // the server must still serve further requests after the disk error
+      clt := THttpClientSocket.Open('127.0.0.1', port);
+      try
+        bodytype := 'application/dummy';
+        bodyhash := Sha256(mptext);
+        status := clt.Post('/big', mptext, bodytype);
+        CheckEqual(status, HTTP_SUCCESS, 'alive after enospc');
+        WaitDeleted('after enospc');
+      finally
+        clt.Free;
       end;
       begin
         // on abort, the server should delete the truncated spool file

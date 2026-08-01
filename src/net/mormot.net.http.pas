@@ -808,6 +808,12 @@ type
   // registered compression algorithm - can not be streamed, and is rejected
   // as HTTP_UNSUPPORTEDMEDIATYPE = 415; an unknown/unregistered encoding is
   // spooled verbatim, exactly as the in-memory process would supply it
+  // - if writing to the stream fails (e.g. on a full disk), the request is
+  // aborted as HTTP_INSUFFICIENTSTORAGE = 507 - notified as best effort,
+  // since the client may still be sending - and the connection is closed
+  // - on a broken connection, the stream is released and any spool file
+  // deleted, but maybe deferred until the connection instance is actually
+  // released (e.g. after the THttpAsyncServer connections GC)
   TOnHttpServerBodyDownload = function(const aUrl, aMethod, aInHeaders,
     aInContentType, aRemoteIP: RawUtf8; aContentLength: Int64): TStream of object;
 

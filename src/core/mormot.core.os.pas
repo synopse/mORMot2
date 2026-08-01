@@ -193,6 +193,8 @@ const
   HTTP_GATEWAYTIMEOUT = 504;
   /// HTTP Status Code for "HTTP Version Not Supported"
   HTTP_HTTPVERSIONNONSUPPORTED = 505;
+  /// HTTP Status Code for "Insufficient Storage"
+  HTTP_INSUFFICIENTSTORAGE = 507;
 
   /// a fake response code, generated for client side panic failure/exception
   // - for it is the number of a man, and that number is 666
