@@ -200,7 +200,7 @@ type
   protected
     procedure Walk(var p: TXmlParser; kind: TXmlToken;
       const name: RawUtf8 = ''; const value: RawUtf8 = '');
-    procedure ExpectRaise(const Context, Xml: RawUtf8;
+    procedure ExpectRaise(const Context: string; const Xml: RawUtf8;
       Options: TXmlParserOptions = []);
   published
     /// SAX-level tokens over elements, attributes, text and CData
@@ -9172,8 +9172,8 @@ begin
   CheckEqual(v, value, 'value');
 end;
 
-procedure TTestCoreXml.ExpectRaise(const Context, Xml: RawUtf8;
-  Options: TXmlParserOptions);
+procedure TTestCoreXml.ExpectRaise(const Context: string;
+  const Xml: RawUtf8; Options: TXmlParserOptions);
 var
   p: TXmlParser;
   n, v: RawUtf8;
@@ -9232,13 +9232,18 @@ end;
 procedure TTestCoreXml.SaxEntities;
 var
   p: TXmlParser;
+  chinese: RawUtf8;
+  buf: array[0..7] of AnsiChar;
 const
   X: RawUtf8 = '<r q="&quot;&apos;">&lt;&amp;&gt; &#65;&#x42;c &#x4E2D;</r>';
 begin
+  // compute the U+4E2D UTF-8 bytes at runtime: a #$e4#$b8#$ad literal would
+  // be re-encoded from UTF-16 chars by the Delphi compiler
+  SetString(chinese, PAnsiChar(@buf), Ucs4ToUtf8($4E2D, @buf));
   p.Init(pointer(X), length(X));
   Walk(p, xtElementStart, 'r');
   Walk(p, xtAttribute, 'q', '"''');
-  Walk(p, xtText, '', '<&> ABc ' + #$e4#$b8#$ad); // U+4E2D as UTF-8
+  Walk(p, xtText, '', '<&> ABc ' + chinese);
   Walk(p, xtElementEnd, 'r');
   Check(not p.Next);
 end;
