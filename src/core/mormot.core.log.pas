@@ -2240,15 +2240,16 @@ end;
 
 function DebugFileRegister(a: PtrUInt; s: PRawUtf8): TDebugFile;
 var
-  base: PtrUInt;
+  base: PtrUInt;     // where this exe/lib has been loaded
+  symbol: PUtf8Char; // hold dlinfo.dli_sname - nil on Windows
   i: PtrInt;
   fn: TFileName;
 begin
   result := nil;
-  fn := GetExecutableName(pointer(a), @base); // e.g. fast dladdr()
+  fn := GetExecutableName(pointer(a), @base, @symbol); // e.g. fast dladdr()
   if fn = '' then
     exit;
-  DebugFilesSafe.WriteLock; // safe blocking process
+  DebugFilesSafe.WriteLock; // safe blocking registration process
   try
     if SynLogFileFreeing or
        (FindString(DebugFileNamesUnknown, fn) >= 0) then // known to be unknown
@@ -2280,12 +2281,14 @@ begin
     if result.IsCode(PtrUInt(@DebugFileRegister)) then
       DebugFileCurrent := result
     else
-      DebugFileLast := result;   
+      DebugFileLast := result;
+    if not result.IsCode(a) then
+      result := nil; // we loaded this exe/lib debug info but a is outside
   finally
     DebugFilesSafe.WriteUnLock;
     if (s <> nil) and
        (result = nil) then
-      Make([' ', ExtractFileName(fn)], s^);
+      Make([' ', ExtractFileName(fn), ' ', symbol], s^);
   end;
 end;
 
