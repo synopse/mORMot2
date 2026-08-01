@@ -137,16 +137,15 @@ begin
   result := @Temp;
 end;
 
+procedure Win32SynUnicodeConvert(P: PWideChar; l: PtrInt; var s: string);
+var
+  u: SynUnicode; // transient UTF-16 variable
+begin
+  SetString(u, P, l);
+  s := string(u); // let the RTL do the conversion
+end;
+
 procedure Win32PWideCharToString(P: PWideChar; l: PtrInt; var s: string);
-
-  procedure DoSynUnicodeConv;
-  var
-    u: SynUnicode; // transient UTF-16 variable
-  begin
-    SetString(u, P, l);
-    s := string(u); // let the RTL do the conversion
-  end;
-
 begin
   if IsAnsiCompatibleW(P, l) then // most common case
   begin
@@ -159,7 +158,7 @@ begin
     Unicode_ToUtf8(P, l, RawUtf8(s)) // use RTL or mormot.core.unicode
   {$endif FPC}
   else
-    DoSynUnicodeConv;
+    Win32SynUnicodeConvert(P, l, s);
 end;
 
 procedure SetStringFromAnsi7Buffer(var d: string; s: PAnsiChar; l: PtrInt);
