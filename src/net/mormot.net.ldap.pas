@@ -2384,6 +2384,9 @@ type
     /// make one or more changes to the set of attribute values in an entry
     function Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
       Attribute: TLdapAttribute): boolean; overload;
+    /// make one or more changes to the set of attributes values in an entry
+    function Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
+      Attributes: TLdapAttributeList): boolean; overload;
     /// change an entry Distinguished Name
     // - it can be used to rename the entry (by changing its RDN), move it to a
     // different location in the DIT (by specifying a new parent entry), or both
@@ -7678,6 +7681,17 @@ begin
   result := Modify(Obj, [Modifier(Op, Attribute.ExportToAsnSeq)]);
 end;
 
+function TLdapClient.Modify(const Obj: RawUtf8; Op: TLdapModifyOp;
+  Attributes: TLdapAttributeList): boolean;
+var
+  Modifiers: array of TAsnObject;
+  i: Integer;
+begin
+  SetLength(Modifiers, Attributes.Count);
+  for i := 0 to Attributes.Count - 1 do
+    Modifiers[i] := Modifier(Op, Attributes.Items[i].ExportToAsnSeq);
+  result := Modify(Obj, Modifiers);
+end;
 
 // https://ldap.com/ldapv3-wire-protocol-reference-modify-dn
 
