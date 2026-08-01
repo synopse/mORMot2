@@ -9246,6 +9246,8 @@ begin
   Walk(p, xtText, '', '<&> ABc ' + chinese);
   Walk(p, xtElementEnd, 'r');
   Check(not p.Next);
+  // the shared NumCharToUcs4() decoder is also wired into HTML unescape
+  CheckEqual(HtmlUnescape('x &#65;&#x42; &amp; y'), 'x AB & y');
 end;
 
 procedure TTestCoreXml.SaxOptions;
@@ -9299,6 +9301,9 @@ begin
 end;
 
 procedure TTestCoreXml.SaxErrors;
+var
+  deep, big: RawUtf8;
+  i: integer;
 begin
   ExpectRaise('dtd', '<!DOCTYPE foo [<!ENTITY x "y">]><a>&x;</a>');
   ExpectRaise('mismatch', '<a><b></a>');
@@ -9313,6 +9318,14 @@ begin
   ExpectRaise('eof in comment', '<a><!-- x</a>');
   ExpectRaise('eof in cdata', '<a><![CDATA[x</a>');
   ExpectRaise('void name', '< a></a>');
+  ExpectRaise('dangling amp', '<a>&</a>');
+  deep := '';
+  for i := 1 to 300 do
+    deep := deep + '<a>';
+  ExpectRaise('too much nesting', deep);
+  SetLength(big, 130);
+  FillCharFast(pointer(big)^, 130, ord('n'));
+  ExpectRaise('name too long', '<' + big + '/>');
 end;
 
 procedure TTestCoreXml.ToVariant;

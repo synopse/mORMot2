@@ -56,6 +56,13 @@ function NeedsHtmlEscape(text: PUtf8Char; fmt: TTextWriterHtmlFormat): boolean;
 /// low-level conversion of an &amp; HTML entity into 32-bit Unicode Code Point
 function EntityToUcs4(entity: PUtf8Char; len: byte): Ucs4CodePoint;
 
+/// low-level decoding of a '#nnn' or '#xhh' numeric character reference
+// - entity should point at the '#' char, len being the reference length
+// (excluding any trailing ';')
+// - returns 0 on invalid input - as used by AddHtmlUnescape/AddXmlUnescape
+function NumCharToUcs4(entity: PUtf8Char; len: PtrUInt): Ucs4CodePoint;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// escape some UTF-8 text into HTML
 // - just a wrapper around TTextWriter.AddHtmlEscape() process,
 // replacing < > & " chars depending on the HTML layer
@@ -210,10 +217,15 @@ type
   TXmlParser = object
   {$endif USERECORDWITHMETHODS}
   private
-    fCur, fBegin, fAfter, fToken: PUtf8Char;
+    fCur, fBegin, fAfter, fToken, fNameOrigin: PUtf8Char;
     fOptions: TXmlParserOptions;
     fInElement: boolean; // scanning attributes, up to '>' or '/>'
-    fStack: array of TValuePUtf8Char; // opened elements raw names
+    // opened element names, as packed 25-bit offsets from fNameOrigin and
+    // 7-bit lengths - a static 1KB stack, favoring the common SAX use case:
+    // up to 256 nesting levels and 127-byte names, with the offsets origin
+    // reset each time the nesting level returns to 0 (so no 32MB limit for
+    // any consecutive documents/fragments, but only within a single root)
+    fStack: array[byte] of cardinal;
     procedure ParseError(pos: PUtf8Char; const reason: RawUtf8);
     function ParseName(var p: PUtf8Char): TValuePUtf8Char;
     procedure SetName(const raw: TValuePUtf8Char);
@@ -251,8 +263,17 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
+/// unescape some XML text into a TTextWriter instance
+// - decode the five XML predefined entities and numeric character references,
+// i.e.   &lt; &gt; &amp; &apos; &quot;   and   &#nnn; &#xhh;   patterns
+// - as AddHtmlUnescape(), the first '&' position could be supplied in amp,
+// if the caller did already search for it
+// - raises EXmlException on any other (i.e. undefined) entity
+procedure AddXmlUnescape(W: TTextWriter; p, amp: PUtf8Char; plen: PtrUInt);
+
 /// decode the five XML predefined entities and numeric character references
-// - i.e.   &lt; &gt; &amp; &apos; &quot;   and   &#nnn; &#xhh;   patterns
+// - just a wrapper around AddXmlUnescape(), with no allocation if no '&'
+// entity appears in the input text
 // - as used by TXmlParser.ValueToUtf8, or to be called directly
 // - raises EXmlException on any other (i.e. undefined) entity
 procedure XmlUnescape(Text: PUtf8Char; TextLen: PtrInt; out result: RawUtf8);
@@ -1017,12 +1038,25 @@ begin
     inc(p); // ignore '&'
     dec(plen);
     l := 0;
-    while (l < plen) and
-          (p[l] in ['a'..'z', 'A'..'Z', '1'..'4']) do
+    if (plen <> 0) and
+       (p^ = '#') then
+    begin
+      // numeric character reference, e.g. &#233; or &#xE9;
       inc(l);
+      while (l < plen) and
+            (p[l] in ['0'..'9', 'x', 'X', 'a'..'f', 'A'..'F']) do
+        inc(l);
+    end
+    else
+      while (l < plen) and
+            (p[l] in ['a'..'z', 'A'..'Z', '1'..'4']) do
+        inc(l);
     if p[l] = ';' then
     begin
-      c := EntityToUcs4(p, l); // &lt; -> ord('<')
+      if p^ = '#' then
+        c := NumCharToUcs4(p, l)
+      else
+        c := EntityToUcs4(p, l); // &lt; -> ord('<')
       if c <> 0 then
       begin
         if c = $00a0 then             // &nbsp;
@@ -1032,7 +1066,7 @@ begin
         else if c = $2026 then
           W.AddShort4(DOT_24, 3)      // &hellip;
         else
-          W.AddWideChar(WideChar(c)); // &Eacute;
+          W.AddUcs4(c);               // &Eacute; or any code point
         inc(l); // consume ending ;
         inc(p, l);
         dec(plen, l);
@@ -1198,6 +1232,56 @@ begin
      else
        inc(ndx, $00a0 - 7); // &nbsp; = U+00A0, &iexcl; = U+00A1, ...
 ok:result := ndx;
+end;
+
+function NumCharToUcs4(entity: PUtf8Char; len: PtrUInt): Ucs4CodePoint;
+var
+  c: cardinal;
+begin
+  result := 0; // 0 = invalid
+  inc(entity); // ignore leading '#'
+  dec(len);
+  if len = 0 then
+    exit;
+  c := 0;
+  if entity^ in ['x', 'X'] then
+  begin
+    inc(entity);
+    dec(len);
+    if len = 0 then
+      exit;
+    repeat
+      case entity^ of
+        '0' .. '9':
+          c := c shl 4 + cardinal(ord(entity^) - ord('0'));
+        'a' .. 'f':
+          c := c shl 4 + cardinal(ord(entity^) - (ord('a') - 10));
+        'A' .. 'F':
+          c := c shl 4 + cardinal(ord(entity^) - (ord('A') - 10));
+      else
+        exit;
+      end;
+      if c > $10ffff then
+        exit;
+      inc(entity);
+      dec(len);
+    until len = 0;
+  end
+  else
+    repeat
+      if entity^ in ['0' .. '9'] then
+        c := c * 10 + cardinal(ord(entity^) - ord('0'))
+      else
+        exit;
+      if c > $10ffff then
+        exit;
+      inc(entity);
+      dec(len);
+    until len = 0;
+  if (c >= $d800) and
+     (c <= $dfff) then
+    exit; // reject UTF-16 surrogates
+  result := c;
 end;
 
 function HtmlUnescape(const text: RawUtf8): RawUtf8;
@@ -1570,14 +1654,16 @@ end;
 
 function TXmlParser.ParseName(var p: PUtf8Char): TValuePUtf8Char;
 var
-  s: PUtf8Char;
+  s, e: PUtf8Char; // scan on locals (i.e. registers), not the var parameter
 begin
   s := p;
-  while (p < fAfter) and
-        not (p^ in [#0..' ', '<', '>', '/', '=', '?', '"', '''']) do
-    inc(p);
+  e := fAfter;
   result.Text := s;
-  result.Len := p - s;
+  while (s < e) and
+        not (s^ in [#0..' ', '<', '>', '/', '=', '?', '"', '''']) do
+    inc(s);
+  result.Len := s - p;
+  p := s;
   if result.Len = 0 then
     ParseError(s, 'void or invalid name');
 end;
@@ -1611,6 +1697,7 @@ begin
   fBegin := Text;
   fCur := Text;
   fToken := Text;
+  fNameOrigin := Text;
   fAfter := Text + TextLen;
   fOptions := Options;
   fInElement := false;
@@ -1667,7 +1754,9 @@ begin
             inc(p);
             fInElement := false;
             dec(Depth);
-            SetName(fStack[Depth]);
+            n.Text := fNameOrigin + (fStack[Depth] shr 7);
+            n.Len := fStack[Depth] and 127;
+            SetName(n);
             Kind := xtElementEnd;
             break;
           end;
@@ -1734,8 +1823,9 @@ begin
             if Depth = 0 then
               ParseError(n.Text, 'unexpected end tag');
             dec(Depth);
-            if (fStack[Depth].Len <> n.Len) or
-               not CompareMemSmall(fStack[Depth].Text, n.Text, n.Len) then
+            if ((fStack[Depth] and 127) <> cardinal(n.Len)) or
+               not CompareMemSmall(fNameOrigin + (fStack[Depth] shr 7),
+                 n.Text, n.Len) then
               ParseError(n.Text, 'mismatched end tag');
             SetName(n);
             Kind := xtElementEnd;
@@ -1823,9 +1913,17 @@ begin
         begin
           // <name> element start
           n := ParseName(p);
-          if Depth = length(fStack) then
-            SetLength(fStack, NextGrow(Depth));
-          fStack[Depth] := n;
+          if Depth = 0 then
+            // no more opened element: reset the packed offsets origin
+            fNameOrigin := n.Text
+          else if Depth > high(fStack) then
+            ParseError(n.Text, 'too much nesting');
+          if n.Len > 127 then
+            ParseError(n.Text, 'unexpectedly long name');
+          if n.Text - fNameOrigin >= 1 shl 25 then
+            ParseError(n.Text, 'single root spanning over 32MB');
+          fStack[Depth] := cardinal(n.Text - fNameOrigin) shl 7 +
+                           cardinal(n.Len);
           inc(Depth);
           fInElement := true;
           SetName(n);
@@ -1869,156 +1967,114 @@ end;
 
 procedure TXmlParser.ValueToUtf8(out result: RawUtf8);
 begin
-  if (Kind in [xtCData, xtComment]) or
-     (ByteScanIndex(pointer(Value.Text), Value.Len, ord('&')) < 0) then
-    FastSetString(result, Value.Text, Value.Len)
+  if Kind in [xtCData, xtComment] then
+    FastSetString(result, Value.Text, Value.Len) // verbatim sections
   else
     XmlUnescape(Value.Text, Value.Len, result);
 end;
 
+procedure AddXmlUnescape(W: TTextWriter; p, amp: PUtf8Char; plen: PtrUInt);
+var
+  l: PtrUInt;
+  c: Ucs4CodePoint;
+  ent: RawUtf8;
+begin
+  repeat
+    if amp = nil then
+    begin
+      amp := PosChar(p, plen, '&');
+      if amp = nil then
+      begin
+        W.AddNoJsonEscape(p, plen); // no more entity to decode
+        exit;
+      end;
+    end;
+    l := amp - p;
+    if l <> 0 then
+    begin
+      W.AddNoJsonEscape(p, l);
+      dec(plen, l);
+      p := amp;
+    end;
+    amp := nil; // call PosChar() on next iteration
+    inc(p); // ignore '&'
+    dec(plen);
+    // scan up to ';' (references are short - cap the search)
+    l := 0;
+    while (l < plen) and
+          (l < 12) and
+          (p[l] <> ';') do
+      inc(l);
+    c := 0;
+    if (l < plen) and
+       (p[l] = ';') then
+      // cascaded case of the five predefined entities + numeric references
+      case p^ of
+        '#':
+          c := NumCharToUcs4(p, l);
+        'l':
+          if (l = 2) and
+             (p[1] = 't') then
+            c := ord('<');
+        'g':
+          if (l = 2) and
+             (p[1] = 't') then
+            c := ord('>');
+        'a':
+          if (l = 3) and
+             (PCardinal(p)^ and $00ffffff =
+              ord('a') + ord('m') shl 8 + ord('p') shl 16) then
+            c := ord('&')
+          else if (l = 4) and
+             (PCardinal(p)^ =
+              ord('a') + ord('p') shl 8 + ord('o') shl 16 + ord('s') shl 24) then
+            c := ord('''');
+        'q':
+          if (l = 4) and
+             (PCardinal(p)^ =
+              ord('q') + ord('u') shl 8 + ord('o') shl 16 + ord('t') shl 24) then
+            c := ord('"');
+      end;
+    if c = 0 then
+    begin
+      l := plen + 1;
+      if l > 16 then
+        l := 16;
+      FastSetString(ent, p - 1, l);
+      EXmlException.RaiseUtf8('XmlUnescape: invalid entity in "%"', [ent]);
+    end;
+    if c <= $7f then
+      W.AddDirect(AnsiChar(c))
+    else
+      W.AddUcs4(c);
+    inc(l); // consume ending ';'
+    inc(p, l);
+    dec(plen, l);
+  until plen = 0;
+end;
+
 procedure XmlUnescape(Text: PUtf8Char; TextLen: PtrInt; out result: RawUtf8);
 var
+  amp: PUtf8Char;
   W: TTextWriter;
   tmp: TTextWriterStackBuffer;
-  p, e, s, a, amp: PUtf8Char;
-  i: PtrInt;
-  c: cardinal;
-  ch: AnsiChar;
-  ent: RawUtf8;
-  buf: array[0..7] of AnsiChar;
 begin
-  p := Text;
-  if (p = nil) or
-     (ByteScanIndex(pointer(p), TextLen, ord('&')) < 0) then
+  amp := nil;
+  if TextLen > 0 then
+    amp := PosChar(Text, TextLen, '&');
+  if amp = nil then
   begin
-    FastSetString(result, Text, TextLen);
+    FastSetString(result, Text, TextLen); // no allocation if no entity
     exit;
   end;
-  e := Text + TextLen;
   W := TTextWriter.CreateOwnedStream(tmp);
   try
-    repeat
-      i := ByteScanIndex(pointer(p), e - p, ord('&'));
-      if i < 0 then
-      begin
-        W.AddNoJsonEscape(p, e - p);
-        break;
-      end;
-      W.AddNoJsonEscape(p, i);
-      amp := p + i;
-      a := amp + 1; // just after '&'
-      s := a;
-      while (s < e) and
-            (s^ <> ';') and
-            (s - a < 12) do
-        inc(s);
-      if (s = e) or
-         (s^ <> ';') then
-        s := nil
-      else if a^ = '#' then
-      begin
-        // decode &#nnn; or &#xhh; numeric character reference
-        inc(a);
-        c := 0;
-        if (a < s) and
-           (a^ in ['x', 'X']) then
-        begin
-          inc(a);
-          if a = s then
-            s := nil
-          else
-            while a < s do
-            begin
-              case a^ of
-                '0'..'9':
-                  c := c shl 4 + cardinal(ord(a^) - ord('0'));
-                'a'..'f':
-                  c := c shl 4 + cardinal(ord(a^) - ord('a') + 10);
-                'A'..'F':
-                  c := c shl 4 + cardinal(ord(a^) - ord('A') + 10);
-              else
-                begin
-                  s := nil;
-                  break;
-                end;
-              end;
-              if c > $10ffff then
-              begin
-                s := nil;
-                break;
-              end;
-              inc(a);
-            end;
-        end
-        else if a = s then
-          s := nil
-        else
-          while a < s do
-            if a^ in ['0'..'9'] then
-            begin
-              c := c * 10 + cardinal(ord(a^) - ord('0'));
-              if c > $10ffff then
-              begin
-                s := nil;
-                break;
-              end;
-              inc(a);
-            end
-            else
-            begin
-              s := nil;
-              break;
-            end;
-        if (s <> nil) and
-           ((c = 0) or
-            ((c >= $d800) and
-             (c <= $dfff))) then
-          s := nil; // reject #0 and surrogates
-        if s <> nil then
-          W.AddNoJsonEscape(@buf, Ucs4ToUtf8(c, @buf));
-      end
-      else
-      begin
-        // decode one of the five predefined entities
-        ch := #0;
-        case s - a of
-          2:
-            if PWord(a)^ = ord('l') + ord('t') shl 8 then
-              ch := '<'
-            else if PWord(a)^ = ord('g') + ord('t') shl 8 then
-              ch := '>';
-          3:
-            if CompareMemSmall(a, PAnsiChar('amp'), 3) then
-              ch := '&';
-          4:
-            if CompareMemSmall(a, PAnsiChar('apos'), 4) then
-              ch := ''''
-            else if CompareMemSmall(a, PAnsiChar('quot'), 4) then
-              ch := '"';
-        end;
-        if ch = #0 then
-          s := nil
-        else
-          W.Add(ch);
-      end;
-      if s = nil then
-      begin
-        i := e - amp;
-        if i > 16 then
-          i := 16;
-        FastSetString(ent, amp, i);
-        EXmlException.RaiseUtf8('XmlUnescape: invalid entity in "%"', [ent]);
-      end;
-      p := s + 1;
-    until p >= e;
+    AddXmlUnescape(W, Text, amp, TextLen);
     W.SetText(result);
   finally
     W.Free;
   end;
 end;
-
-const
-  XMLPARSER_MAX_DEPTH = 512; // avoid EStackOverflow on pathological input
 
 procedure XmlDocAddOrAppend(var doc: TDocVariantData; const name: RawUtf8;
   const v: variant; const opt: TDocVariantOptions);
@@ -2056,8 +2112,7 @@ var
   v: variant;
 begin
   // fill from attributes and content, until the matching xtElementEnd
-  if x.Depth > XMLPARSER_MAX_DEPTH then
-    x.ParseError(x.Name.Text, 'too much nesting');
+  // (nesting is bounded by the TXmlParser 256 levels static stack)
   obj.Init(opt, dvObject);
   txt := '';
   while x.Next do
