@@ -1004,6 +1004,8 @@ type
     // quickly reject incorrect requests (payload/timeout/OnBeforeBody)
     function DoReject(status: integer;
       const ExtraHeader: RawUtf8 = ''): TPollAsyncSocketOnReadWrite;
+    // implement fServer.OnBodyDownload event - may reject as 415
+    function DoBodyDownload: TPollAsyncSocketOnReadWrite; virtual;
     function DecodeHeaders: integer; virtual; // e.g. hfConnectionUpgrade override
     function DoHeaders: TPollAsyncSocketOnReadWrite;
     function DoRequest: TPollAsyncSocketOnReadWrite;
@@ -4974,11 +4976,43 @@ begin
   end;
 end;
 
+function THttpAsyncServerConnection.DoBodyDownload: TPollAsyncSocketOnReadWrite;
+var
+  strm: TStream;
+  fn: TFileName; // managed local variables are on purpose in this sub-method
+begin
+  result := soContinue;
+  strm := fServer.fOnBodyDownload(fHttp.CommandUri, fHttp.CommandMethod,
+    fHttp.Headers, fHttp.ContentType, fRemoteIP, fHttp.ContentLength);
+  if strm = nil then
+    exit; // in-memory Content buffering
+  if fHttp.ContentEncoding <> nil then
+  begin
+    // a streamed body does not support Content-Encoding: compression
+    fn := '';
+    if strm.InheritsFrom(TFileStreamEx) then
+      fn := TFileStreamEx(strm).FileName;
+    strm.Free;
+    if fn <> '' then
+      DeleteFile(fn); // remove the (void) spool file
+    result := DoReject(HTTP_UNSUPPORTEDMEDIATYPE,
+      'Accept-Encoding: identity'#13#10);
+  end
+  else
+  begin
+    // ProcessRead will download the body into this stream
+    fHttp.ContentStream := strm; // freed by ProcessDone/Reset on abort
+    include(fHttp.ResponseFlags, rfContentStreamNeedFree);
+    if strm.InheritsFrom(TFileStreamEx) then
+      fHttp.ContentInputName := TFileStreamEx(strm).FileName;
+    // needed to track and limit the cumulated chunked body size
+    fHttp.ContentMaxSize := fServer.MaximumAllowedContentLength;
+  end;
+end;
+
 function THttpAsyncServerConnection.DoHeaders: TPollAsyncSocketOnReadWrite;
 var
   status: integer;
-  strm: TStream;
-  fn: TFileName;
 begin
   // finalize the headers
   result := soClose;
@@ -5012,38 +5046,11 @@ begin
   else
   begin
     // allow OnBodyDownload callback to supply a stream for the body
+    result := soContinue;
     if (fHttp.State in
          [hrsGetBodyChunkedHexFirst, hrsGetBodyContentLengthFirst]) and
        Assigned(fServer.fOnBodyDownload) then
-    begin
-      strm := fServer.fOnBodyDownload(fHttp.CommandUri, fHttp.CommandMethod,
-        fHttp.Headers, fHttp.ContentType, fRemoteIP, fHttp.ContentLength);
-      if strm <> nil then
-        if fHttp.ContentEncoding <> nil then
-        begin
-          // a streamed body does not support Content-Encoding: compression
-          fn := '';
-          if strm.InheritsFrom(TFileStreamEx) then
-            fn := TFileStreamEx(strm).FileName;
-          strm.Free;
-          if fn <> '' then
-            DeleteFile(fn); // remove the (void) spool file
-          result := DoReject(HTTP_UNSUPPORTEDMEDIATYPE,
-            'Accept-Encoding: identity'#13#10);
-          exit;
-        end
-        else
-        begin
-          // ProcessRead will download the body into this stream
-          fHttp.ContentStream := strm; // freed by ProcessDone/Reset on abort
-          include(fHttp.ResponseFlags, rfContentStreamNeedFree);
-          if strm.InheritsFrom(TFileStreamEx) then
-            fHttp.ContentInputName := TFileStreamEx(strm).FileName;
-          // needed to track and limit the cumulated chunked body size
-          fHttp.ContentMaxSize := fServer.MaximumAllowedContentLength;
-        end;
-    end;
-    result := soContinue;
+      result := DoBodyDownload;
   end;
 end;
 

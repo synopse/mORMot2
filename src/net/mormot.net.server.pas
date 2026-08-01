@@ -924,6 +924,8 @@ type
       aHeaderResult: THttpServerSocketGetRequestResult): boolean;
     // GetBody into Http.Content, or the OnBodyDownload event stream
     procedure DownloadBody;
+    // implement fServer.OnBodyDownload in GetRequest - false if rejected as 415
+    function DoBodyDownload: boolean; virtual;
   public
     /// create the socket according to a server
     // - will register the THttpSocketCompress functions from the server
@@ -5274,8 +5276,6 @@ var
   status, tix32, max: cardinal;
   startTix, pendingMaxTix, tix: Int64;
   pending: integer;
-  strm: TStream;
-  fn: TFileName;
 begin
   try
     if Http.CommandUri <> '' then
@@ -5458,37 +5458,11 @@ begin
          not HttpMethodWithNoBody(Http.CommandMethod) and
          ((Http.ContentLength > 0) or
           (hfTransferChunked in Http.HeaderFlags)) then
-      begin
-        HeadersPrepare(fRemoteIP); // will include remote IP to Http.Headers
-        strm := fServer.fOnBodyDownload(Http.CommandUri, Http.CommandMethod,
-          Http.Headers, Http.ContentType, fRemoteIP, Http.ContentLength);
-        if strm <> nil then
-          if Http.ContentEncoding <> nil then
-          begin
-            // a streamed body does not support Content-Encoding: compression
-            fn := '';
-            if strm.InheritsFrom(TFileStreamEx) then
-              fn := TFileStreamEx(strm).FileName;
-            strm.Free;
-            if fn <> '' then
-              DeleteFile(fn); // remove the (void) spool file
-            fServer.ComputeRejectBody(Http.Content, 0,
-              HTTP_UNSUPPORTEDMEDIATYPE, 'Accept-Encoding: identity'#13#10);
-            SockSendFlush(Http.Content);
-            result := grRejected;
-            exit;
-          end
-          else
-          begin
-            // the (maybe deferred) DownloadBody will fill this stream
-            Http.ContentStream := strm; // freed by Reset on broken connection
-            include(Http.ResponseFlags, rfContentStreamNeedFree);
-            if strm.InheritsFrom(TFileStreamEx) then
-              Http.ContentInputName := TFileStreamEx(strm).FileName;
-            // needed to track and limit the cumulated chunked body size
-            Http.ContentMaxSize := fServer.MaximumAllowedContentLength;
-          end;
-      end;
+        if not DoBodyDownload then
+        begin
+          result := grRejected;
+          exit;
+        end;
     end;
     // implement 'Expect: 100-Continue' Header
     if hfExpect100 in Http.HeaderFlags then
@@ -5508,6 +5482,43 @@ begin
   except
     on E: Exception do
       result := grException;
+  end;
+end;
+
+function THttpServerSocket.DoBodyDownload: boolean;
+var
+  strm: TStream;
+  fn: TFileName; // managed local variables are on purpose in this sub-method
+begin
+  result := true;
+  HeadersPrepare(fRemoteIP); // will include remote IP to Http.Headers
+  strm := fServer.fOnBodyDownload(Http.CommandUri, Http.CommandMethod,
+    Http.Headers, Http.ContentType, fRemoteIP, Http.ContentLength);
+  if strm = nil then
+    exit; // in-memory Content buffering
+  if Http.ContentEncoding <> nil then
+  begin
+    // a streamed body does not support Content-Encoding: compression
+    fn := '';
+    if strm.InheritsFrom(TFileStreamEx) then
+      fn := TFileStreamEx(strm).FileName;
+    strm.Free;
+    if fn <> '' then
+      DeleteFile(fn); // remove the (void) spool file
+    fServer.ComputeRejectBody(Http.Content, 0,
+      HTTP_UNSUPPORTEDMEDIATYPE, 'Accept-Encoding: identity'#13#10);
+    SockSendFlush(Http.Content);
+    result := false;
+  end
+  else
+  begin
+    // the (maybe deferred) DownloadBody will fill this stream
+    Http.ContentStream := strm; // freed by Reset on broken connection
+    include(Http.ResponseFlags, rfContentStreamNeedFree);
+    if strm.InheritsFrom(TFileStreamEx) then
+      Http.ContentInputName := TFileStreamEx(strm).FileName;
+    // needed to track and limit the cumulated chunked body size
+    Http.ContentMaxSize := fServer.MaximumAllowedContentLength;
   end;
 end;
 
