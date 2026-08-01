@@ -219,8 +219,8 @@ type
     fViewTemplateFileTimestampMonitor: cardinal;
     fViewPartials: TSynMustachePartials;
     fViewHelpers: TSynMustacheHelpers;
-    fOnTranslate: TOnStringTranslate;
     fViews: array of TMvcViewMustache; // follows fFactory.Methods[]
+    fOnTranslate: TOnStringTranslate;
     procedure NotifyContentChanged; override;
     /// search for template files in ViewTemplateFolder
     function FindTemplateFileNames(const Mask: TFileName): TFileNameDynArray; virtual;

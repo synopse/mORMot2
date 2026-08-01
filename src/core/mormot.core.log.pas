@@ -122,6 +122,7 @@ type
   // you would better use an external .dbg file then convert it into a .mab
   // - on FPC, you don't need to specifly the -gl compiler switch
   // - location of a source code information from its address is below 10us
+  // - never instantiate this class directly, but call TDebugFile.FindLocation()
   TDebugFile = class(TSynPersistent)
   protected
     fSymbol: TDebugSymbolDynArray;
@@ -134,7 +135,7 @@ type
     fProducer: RawUtf8;
     fHasDebugInfo: boolean;
     fSymbols, fLines: TDynArray;
-    fSymbolsTemp, fLinesTemp: RawByteString;
+    fSymbolsTemp, fLinesTemp: RawByteString; // pre-allocate all names at once
     fLoadingMicroSec: Int64;
     procedure GenerateFromMapOrDwarf(includedir: boolean); // from Create()
     function LoadMab(const aMabFile: TFileName): boolean;
@@ -150,6 +151,8 @@ type
     function FindLinesByName(const aUnitName: RawUtf8): PDebugLines;
   public
     /// get the available debugging information
+    // - you should NEVER call this constructor, but TDebugFile.CurrentDebugFile
+    // or TDebugFile.Get() class functions or just TDebugFile.FindLocation()
     // - if aExeName is specified, will use it in its search for .map/.dbg/.mab
     // - if aExeName is not specified, will use the currently running .exe/.dll
     // - it will first search for a .map/.dbg matching the file name: if found,
@@ -3496,7 +3499,7 @@ const
   // .mab layout changed with mORMot 2 -> magic changed too
   MAGIC_MAB = $A5A5A55A;
 
-procedure ReadSymbol(var P: PByte; var A: TDynArray; out tmp: RawByteString);
+procedure ReadSymbol(var P: PByte; var A: TDynArray; var tmp: RawByteString);
 var
   i, n, L: PtrInt;
   S: PDebugSymbol;
@@ -3521,7 +3524,7 @@ begin
   S := A.Value^;
   if PInteger(P)^ = -1 then // new encoding with namesize prefix
   begin
-    inc(PInteger(P));
+    inc(PInteger(P)); // skip marker
     sr := StrRecAlloc(tmp, n, FromVarUInt32(P)); // allocate names at once
     for i := 1 to n do
     begin
@@ -3529,7 +3532,7 @@ begin
       inc(PByte(S), A.Info.Cache.ItemSize);
     end;
   end
-  else // backward compatibility
+  else // backward compatibility for existing .mab content
     for i := 1 to n do
     begin
       L := FromVarUInt32(P);
