@@ -88,6 +88,7 @@ uses
   mormot.core.rtti,
   mormot.core.json,
   mormot.core.fmt,
+  mormot.core.i18n,
   mormot.core.variants,
   mormot.crypt.core,
   mormot.crypt.secure,
@@ -213,6 +214,17 @@ type
     procedure _XML;
     /// regression tests for the mormot.core.fmt YAML parser
     procedure _YAML;
+  end;
+
+  /// regression tests for the mormot.core.i18n unit
+  TTestCoreI18n = class(TSynTestCase)
+  published
+    /// TSynLanguage table load and translation with fallback
+    procedure LanguageTable;
+    /// TSynLanguages registry, thread language and Mustache wiring
+    procedure LanguagesRegistry;
+    /// global hooks: captions and date/time rendering
+    procedure GlobalHooks;
   end;
 
   /// this test case will test most functions, classes and types defined and
@@ -9973,6 +9985,118 @@ begin
       inc(n);
     end;
   CheckEqual(n, 2);
+end;
+
+
+{ TTestCoreI18n }
+
+procedure TTestCoreI18n.LanguageTable;
+var
+  l: TSynLanguage;
+  t: RawUtf8;
+  s: string;
+begin
+  l := TSynLanguage.Create(lngFrench);
+  try
+    CheckEqual(l.Iso, 'fr');
+    Check(l.Language = lngFrench);
+    CheckEqual(l.Count, 0);
+    CheckEqual(l.AddFromJson('{"Hello":"Bonjour","World":"Monde"}'), 2);
+    CheckEqual(l.Count, 2);
+    CheckEqual(l.AddFromJson('invalid'), -1);
+    t := 'Hello';
+    Check(l.Translate(t));
+    CheckEqual(t, 'Bonjour');
+    t := 'Missing';
+    Check(not l.Translate(t));
+    CheckEqual(t, 'Missing', 'fallback keeps input');
+    s := 'World';
+    l.TranslateString(s);
+    Check(s = 'Monde');
+    s := 'Missing';
+    l.TranslateString(s);
+    Check(s = 'Missing');
+  finally
+    l.Free;
+  end;
+end;
+
+procedure TTestCoreI18n.LanguagesRegistry;
+var
+  langs: TSynLanguages;
+  m: TSynMustache;
+  u: RawUtf8;
+begin
+  langs := TSynLanguages.Create;
+  try
+    CheckEqual(langs.Language[lngFrench].AddFromJson('{"Hello":"Bonjour"}'), 1);
+    CheckEqual(langs.Language[lngChinese].AddFromJson('{"Hello":"NiHao"}'), 1);
+    Check(langs.Find(lngFrench) <> nil);
+    Check(langs.Find(lngGerman) = nil);
+    Check(langs.FindIso('fr') = langs.Find(lngFrench));
+    Check(langs.FindIso('xx') = nil);
+    // no thread language nor default: passthrough
+    Check(TSynLanguages.ThreadLanguage = lngUndefined);
+    Check(langs.Current = nil);
+    u := 'Hello';
+    Check(not langs.Translate(u));
+    CheckEqual(u, 'Hello');
+    // per-thread selection
+    TSynLanguages.SetThreadLanguage(lngFrench);
+    Check(TSynLanguages.ThreadLanguage = lngFrench);
+    Check(langs.Current = langs.Find(lngFrench));
+    u := 'Hello';
+    Check(langs.Translate(u));
+    CheckEqual(u, 'Bonjour');
+    // fallback to DefaultLanguage when no thread language is set
+    TSynLanguages.SetThreadLanguage(lngUndefined);
+    langs.DefaultLanguage := lngChinese;
+    Check(langs.Current = langs.Find(lngChinese));
+    u := 'Hello';
+    Check(langs.Translate(u));
+    CheckEqual(u, 'NiHao');
+    // Mustache {{"text}} channel end-to-end
+    TSynLanguages.SetThreadLanguage(lngFrench);
+    m := TSynMustache.Parse('{{"Hello}} {{name}}!');
+    CheckEqual(m.Render(_ObjFast(['name', 'world']), nil, nil,
+      langs.TranslateString), 'Bonjour world!');
+    TSynLanguages.SetThreadLanguage(lngUndefined);
+    langs.DefaultLanguage := lngUndefined;
+    CheckEqual(m.Render(_ObjFast(['name', 'world']), nil, nil,
+      langs.TranslateString), 'Hello world!', 'passthrough fallback');
+  finally
+    TSynLanguages.SetThreadLanguage(lngUndefined);
+    langs.Free;
+  end;
+end;
+
+procedure TTestCoreI18n.GlobalHooks;
+var
+  langs: TSynLanguages;
+  s: string;
+begin
+  Check(I18n = nil);
+  langs := TSynLanguages.Create;
+  try
+    langs.Language[lngFrench].AddFromJson('{"Hello world":"Bonjour monde"}');
+    langs.Language[lngFrench].DateTimeFormat := 'yyyy/mm/dd hh:nn';
+    langs.SetGlobal;
+    Check(I18n = langs);
+    TSynLanguages.SetThreadLanguage(lngFrench);
+    // LoadResStringTranslate is consumed by the GetCaptionFrom* family
+    GetCaptionFromPCharLen('HelloWorld', s);
+    Check(s = 'Bonjour monde', 'caption translation');
+    // date/time hooks
+    Check(Assigned(i18nDateTimeText));
+    s := i18nDateTimeText(EncodeDate(2026, 7, 31) + EncodeTime(12, 30, 0, 0));
+    Check(s = '2026/07/31 12:30', 'DateTimeFormat pattern');
+  finally
+    TSynLanguages.SetThreadLanguage(lngUndefined);
+    langs.Free; // also unhooks the global slots
+  end;
+  Check(I18n = nil, 'unhooked');
+  Check(not Assigned(LoadResStringTranslate));
+  Check(not Assigned(i18nDateTimeText));
 end;
 
 
