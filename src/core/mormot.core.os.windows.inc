@@ -1082,20 +1082,23 @@ begin
     result := 0;
 end;
 
-function GetExecutableName(aAddress: pointer; aBase: PPtrUInt): TFileName;
+function GetExecutableName(aAddress: pointer; aBase: PPtrUInt;
+  aSymbol: PPUtf8Char): TFileName;
 var
-  tmp: TByteToWideChar;
-  base: PtrUInt;
+  tmp: TW32Temp;
+  base, len: PtrUInt;
 begin
   result := '';
   base := GetExecutableBase(aAddress);
   if base = 0 then
-    exit;
+    exit; // not found
   if aBase <> nil then
     aBase^ := base;
-  FillcharFast(tmp, SizeOf(tmp), 0);
-  GetModuleFileNameW(HMODULE(base), tmp, SizeOf(tmp));
-  Win32PWideCharToFileName(tmp, result);
+  if aSymbol <> nil then
+    aSymbol^ := nil; // no simple API on Windows to retrieve the symbol name
+  len := GetModuleFileNameW(HMODULE(base), @tmp, SizeOf(tmp));
+  if len <> 0 then
+    Win32PWideCharToString(@tmp, len, string(result));
 end;
 
 function IsCurrentExecutable(aAddress: pointer): boolean;

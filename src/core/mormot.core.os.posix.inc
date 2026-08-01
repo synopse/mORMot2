@@ -1833,7 +1833,8 @@ begin
     {$endif UNICODE}
 end;
 
-function GetExecutableName(aAddress: pointer; aBase: PPtrUInt): TFileName;
+function GetExecutableName(aAddress: pointer; aBase: PPtrUInt;
+  aSymbol: PPUtf8Char): TFileName;
 var
   dlinfo: dl_info;
 begin
@@ -1841,13 +1842,15 @@ begin
   if dladdr(aAddress, @dlinfo) = 0 then
     result := ''
   else if dlinfo.dli_fbase = PosixProgramInfo.dli_fbase then
-    // main exec/library maybe e.g. './mormot2tests'
+    // main exec/library may return e.g. './mormot2tests'
     result := Executable.InstanceFileName // this value was expanded at startup
   else
     // expected to be absolute for libraries loaded via our LibraryOpen()
     GetDlInfoName(dlinfo, result);
   if aBase <> nil then
     aBase^ := PtrUInt(dlinfo.dli_fbase);
+  if aSymbol <> nil then
+    aSymbol^ := pointer(dlinfo.dli_sname);
 end;
 
 function IsCurrentExecutable(aAddress: pointer): boolean;

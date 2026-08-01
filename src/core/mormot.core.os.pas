@@ -1735,7 +1735,8 @@ function GetExecutableBase(aAddress: pointer = nil): PtrUInt;
 // (but the main exe/lib will return properly expanded Executable.InstanceName)
 // - calls GetModuleHandleEx() then GetModuleFileNameW() on Windows so
 // always returns an absolute path
-function GetExecutableName(aAddress: pointer; aBase: PPtrUInt = nil): TFileName;
+function GetExecutableName(aAddress: pointer; aBase: PPtrUInt = nil;
+  aSymbol: PPUtf8Char = nil): TFileName;
 
 /// check if a function address is known within the current running module
 // - not the main process, but the current module - maybe a dll
