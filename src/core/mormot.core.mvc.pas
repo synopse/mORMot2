@@ -219,6 +219,7 @@ type
     fViewTemplateFileTimestampMonitor: cardinal;
     fViewPartials: TSynMustachePartials;
     fViewHelpers: TSynMustacheHelpers;
+    fOnTranslate: TOnStringTranslate;
     fViews: array of TMvcViewMustache; // follows fFactory.Methods[]
     procedure NotifyContentChanged; override;
     /// search for template files in ViewTemplateFolder
@@ -259,6 +260,13 @@ type
     // ! <img src=http://www.gravatar.com/avatar/{{md5 email}}?s=200></img>
     // - returns self so that may be called in a fluent interface
     function RegisterExpressionHelpersForCrypto: TMvcViewsMustache;
+    /// optional callback used to translate any {{"text}} tag of the views
+    // - is the way to implement i18n over this MVC Views engine, matching the
+    // optional OnTranslate parameter of TSynMustache.Render()
+    // - the callback is expected to handle its own per-request language
+    // selection, e.g. via a threadvar set at each request start
+    property OnTranslate: TOnStringTranslate
+      read fOnTranslate write fOnTranslate;
   end;
 
 /// check if a method has no TMvcAction result parameter using RTTI
@@ -1272,7 +1280,7 @@ begin
     v^.Safe.UnLock;
   end;
   // render the TSynMustache template
-  Answer.Content := m.Render(Context, fViewPartials, fViewHelpers);
+  Answer.Content := m.Render(Context, fViewPartials, fViewHelpers, fOnTranslate);
   if Answer.Content <> '' then
     exit;
   // rendering failure
