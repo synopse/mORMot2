@@ -195,6 +195,26 @@ type
     procedure OpenapiEquivalence;
   end;
 
+  /// regression tests for the mormot.core.fmt XML parser
+  TTestCoreXml = class(TSynTestCase)
+  protected
+    procedure Walk(var p: TXmlParser; kind: TXmlToken;
+      const name: RawUtf8 = ''; const value: RawUtf8 = '');
+    procedure ExpectRaise(const Context: string; const Xml: RawUtf8;
+      Options: TXmlParserOptions = []);
+  published
+    /// SAX-level tokens over elements, attributes, text and CData
+    procedure SaxTokens;
+    /// the five predefined entities and numeric character references
+    procedure SaxEntities;
+    /// xpoStripNamespacePrefix/xpoKeepComments/xpoKeepPI/xpoKeepWhiteSpace
+    procedure SaxOptions;
+    /// malformed input and the "basic profile" rejection set (e.g. DTD)
+    procedure SaxErrors;
+    /// XmlToVariant/TryXmlToVariant/XmlToJson mapping conventions
+    procedure ToVariant;
+  end;
+
   /// this test case will test most functions, classes and types defined and
   // implemented e.g. in the mormot.core.zip / mormot.lib.lizard units
   TTestCoreCompression = class(TSynTestCase)
@@ -9136,6 +9156,219 @@ begin
     'OpenAPI-shaped YAML must match JSON equivalent');
 end;
 
+
+{ TTestCoreXml }
+
+procedure TTestCoreXml.Walk(var p: TXmlParser; kind: TXmlToken;
+  const name, value: RawUtf8);
+var
+  n, v: RawUtf8;
+begin
+  Check(p.Next, 'no more tokens');
+  Check(p.Kind = kind, 'kind');
+  p.NameToUtf8(n);
+  p.ValueToUtf8(v);
+  CheckEqual(n, name, 'name');
+  CheckEqual(v, value, 'value');
+end;
+
+procedure TTestCoreXml.ExpectRaise(const Context: string;
+  const Xml: RawUtf8; Options: TXmlParserOptions);
+var
+  p: TXmlParser;
+  n, v: RawUtf8;
+  ok: boolean;
+begin
+  ok := false;
+  try
+    p.Init(pointer(Xml), length(Xml), Options);
+    while p.Next do
+    begin
+      p.NameToUtf8(n);
+      p.ValueToUtf8(v);
+    end;
+  except
+    on EXmlException do
+      ok := true;
+  end;
+  Check(ok, Context);
+end;
+
+const
+  XML1: RawUtf8 = '<?xml version="1.0" encoding="UTF-8"?>'#13#10 +
+    '<root a="1" b=''two''>'#10 +
+    '  <item>some text</item>'#10 +
+    '  <empty/>'#10 +
+    '  <![CDATA[raw <>&'' " ]]>'#10 +
+    '  <!-- a comment -->tail</root>';
+
+procedure TTestCoreXml.SaxTokens;
+var
+  p: TXmlParser;
+begin
+  p.Init(pointer(XML1), length(XML1));
+  CheckEqual(p.Depth, 0);
+  Walk(p, xtElementStart, 'root');
+  CheckEqual(p.Depth, 1);
+  Walk(p, xtAttribute, 'a', '1');
+  Walk(p, xtAttribute, 'b', 'two');
+  Walk(p, xtElementStart, 'item');
+  CheckEqual(p.Depth, 2);
+  Walk(p, xtText, '', 'some text');
+  Walk(p, xtElementEnd, 'item');
+  CheckEqual(p.Depth, 1);
+  Walk(p, xtElementStart, 'empty');
+  Walk(p, xtElementEnd, 'empty');
+  CheckEqual(p.Depth, 1);
+  Walk(p, xtCData, '', 'raw <>&'' " ');
+  Walk(p, xtText, '', 'tail');
+  Walk(p, xtElementEnd, 'root');
+  CheckEqual(p.Depth, 0);
+  Check(not p.Next, 'eof');
+  Check(p.Kind = xtEof);
+  Check(not p.Next, 'still eof');
+end;
+
+procedure TTestCoreXml.SaxEntities;
+var
+  p: TXmlParser;
+  chinese: RawUtf8;
+  buf: array[0..7] of AnsiChar;
+const
+  X: RawUtf8 = '<r q="&quot;&apos;">&lt;&amp;&gt; &#65;&#x42;c &#x4E2D;</r>';
+begin
+  // compute the U+4E2D UTF-8 bytes at runtime: a #$e4#$b8#$ad literal would
+  // be re-encoded from UTF-16 chars by the Delphi compiler
+  SetString(chinese, PAnsiChar(@buf), Ucs4ToUtf8($4E2D, @buf));
+  p.Init(pointer(X), length(X));
+  Walk(p, xtElementStart, 'r');
+  Walk(p, xtAttribute, 'q', '"''');
+  Walk(p, xtText, '', '<&> ABc ' + chinese);
+  Walk(p, xtElementEnd, 'r');
+  Check(not p.Next);
+  // the shared NumCharToUcs4() decoder is also wired into HTML unescape
+  CheckEqual(HtmlUnescape('x &#65;&#x42; &amp; y'), 'x AB & y');
+end;
+
+procedure TTestCoreXml.SaxOptions;
+var
+  p: TXmlParser;
+const
+  NS: RawUtf8 = '<ns:a xsi:x="1"><ns:b/></ns:a>';
+  WS: RawUtf8 = '<a>  <b/>  </a>';
+begin
+  // namespace prefixes are part of the names by default
+  p.Init(pointer(NS), length(NS));
+  Walk(p, xtElementStart, 'ns:a');
+  Walk(p, xtAttribute, 'xsi:x', '1');
+  Walk(p, xtElementStart, 'ns:b');
+  Walk(p, xtElementEnd, 'ns:b');
+  Walk(p, xtElementEnd, 'ns:a');
+  Check(not p.Next);
+  // ... but can be stripped on request
+  p.Init(pointer(NS), length(NS), [xpoStripNamespacePrefix]);
+  Walk(p, xtElementStart, 'a');
+  Walk(p, xtAttribute, 'x', '1');
+  Walk(p, xtElementStart, 'b');
+  Walk(p, xtElementEnd, 'b');
+  Walk(p, xtElementEnd, 'a');
+  Check(not p.Next);
+  // comments and processing instructions on request
+  p.Init(pointer(XML1), length(XML1), [xpoKeepComments, xpoKeepPI]);
+  Walk(p, xtPI, 'xml', 'version="1.0" encoding="UTF-8"');
+  Walk(p, xtElementStart, 'root');
+  Walk(p, xtAttribute, 'a', '1');
+  Walk(p, xtAttribute, 'b', 'two');
+  Walk(p, xtElementStart, 'item');
+  Walk(p, xtText, '', 'some text');
+  Walk(p, xtElementEnd, 'item');
+  Walk(p, xtElementStart, 'empty');
+  Walk(p, xtElementEnd, 'empty');
+  Walk(p, xtCData, '', 'raw <>&'' " ');
+  Walk(p, xtComment, '', ' a comment ');
+  Walk(p, xtText, '', 'tail');
+  Walk(p, xtElementEnd, 'root');
+  Check(not p.Next);
+  // pure whitespace text nodes on request
+  p.Init(pointer(WS), length(WS), [xpoKeepWhiteSpace]);
+  Walk(p, xtElementStart, 'a');
+  Walk(p, xtText, '', '  ');
+  Walk(p, xtElementStart, 'b');
+  Walk(p, xtElementEnd, 'b');
+  Walk(p, xtText, '', '  ');
+  Walk(p, xtElementEnd, 'a');
+  Check(not p.Next);
+end;
+
+procedure TTestCoreXml.SaxErrors;
+var
+  deep, big: RawUtf8;
+  i: integer;
+begin
+  ExpectRaise('dtd', '<!DOCTYPE foo [<!ENTITY x "y">]><a>&x;</a>');
+  ExpectRaise('mismatch', '<a><b></a>');
+  ExpectRaise('unclosed', '<a><b>text');
+  ExpectRaise('eof in tag', '<a');
+  ExpectRaise('eof in attr', '<a b="c');
+  ExpectRaise('unquoted attr', '<a b=c/>');
+  ExpectRaise('unknown entity', '<a>&nbsp;</a>');
+  ExpectRaise('bad numeric ref', '<a>&#xzz;</a>');
+  ExpectRaise('overflow ref', '<a>&#x110000;</a>');
+  ExpectRaise('lone end tag', '</a>');
+  ExpectRaise('eof in comment', '<a><!-- x</a>');
+  ExpectRaise('eof in cdata', '<a><![CDATA[x</a>');
+  ExpectRaise('void name', '< a></a>');
+  ExpectRaise('dangling amp', '<a>&</a>');
+  deep := '';
+  for i := 1 to 300 do
+    deep := deep + '<a>';
+  ExpectRaise('too much nesting', deep);
+  SetLength(big, 130);
+  FillCharFast(pointer(big)^, 130, ord('n'));
+  ExpectRaise('name too long', '<' + big + '/>');
+end;
+
+procedure TTestCoreXml.ToVariant;
+var
+  doc: TDocVariantData;
+begin
+  // plain string value for text-only elements
+  CheckEqual(XmlToJson('<a>hello</a>'), '{"a":"hello"}');
+  // void element as an empty string
+  CheckEqual(XmlToJson('<a/>'), '{"a":""}');
+  // attribute-only element
+  CheckEqual(XmlToJson('<a d="x"/>'), '{"a":{"@d":"x"}}');
+  // all values remain (lossless) strings
+  CheckEqual(XmlToJson('<c><sipId>34020000001320000001</sipId>' +
+    '<port>5060</port></c>'),
+    '{"c":{"sipId":"34020000001320000001","port":"5060"}}');
+  // attributes with '@' prefix, repeated siblings as arrays, mixed as #text
+  CheckEqual(XmlToJson('<a><b>1</b><b>2</b><c d="x">t</c></a>'),
+    '{"a":{"b":["1","2"],"c":{"@d":"x","#text":"t"}}}');
+  CheckEqual(XmlToJson('<a><b>1</b><b>2</b><b>3</b></a>'),
+    '{"a":{"b":["1","2","3"]}}');
+  // mixed content
+  CheckEqual(XmlToJson('<a>pre<b/>post</a>'),
+    '{"a":{"b":"","#text":"prepost"}}');
+  // entities and CDATA
+  CheckEqual(XmlToJson('<a>x &amp; y</a>'), '{"a":"x & y"}');
+  CheckEqual(XmlToJson('<a><![CDATA[<raw> & unescaped]]></a>'),
+    '{"a":"<raw> & unescaped"}');
+  // XML declaration and comments are ignored
+  CheckEqual(XmlToJson(XMLUTF8_HEADER + '<a><!-- c --><b>1</b></a>'),
+    '{"a":{"b":"1"}}');
+  // namespace prefixes kept by default, stripped on request
+  CheckEqual(XmlToJson('<s:e><s:b>x</s:b></s:e>'),
+    '{"s:e":{"s:b":"x"}}');
+  CheckEqual(XmlToJson('<s:e xmlns:s="u"><s:b>x</s:b></s:e>',
+    [xpoStripNamespacePrefix]),
+    '{"e":{"@s":"u","b":"x"}}');
+  // TryXmlToVariant
+  Check(TryXmlToVariant('<a><b>1</b></a>', doc), 'try ok');
+  CheckEqual(doc.ToJson, '{"a":{"b":"1"}}');
+  Check(not TryXmlToVariant('<a><b></a>', doc), 'try mismatch');
+  CheckEqual(doc.Count, 0);
+end;
 
 
 { TTestCoreCompression }
