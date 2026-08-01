@@ -9,6 +9,7 @@ interface
 
 uses
   sysutils,
+  classes,
   mormot.core.base,
   mormot.core.os,
   mormot.core.os.security,
@@ -71,6 +72,10 @@ type
     request: integer;
     reqthree: boolean;
     reqfour: Int64;
+    // for BodyDownload
+    bodyfile: TFileName;
+    bodyhash, bodytype: RawUtf8;
+    bodystreamed: integer;
     // for _TTunnelLocal
     tunnelappsec: RawUtf8;
     tunneloptions: TTunnelOptions;
@@ -91,6 +96,10 @@ type
     function OnPeerCacheDirect(var aUri: TUri; var aHeader: RawUtf8;
       var aOptions: THttpRequestExtendedOptions): integer;
     function OnPeerCacheRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+    // both events used by BodyDownload
+    function DoBodyDownload(const aUrl, aMethod, aInHeaders, aInContentType,
+      aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
+    function DoBodyRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     // several methods used by _TUriTree
     function DoRequest_(Ctxt: THttpServerRequestAbstract): cardinal;
     function DoRequest0(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -113,6 +122,8 @@ type
     procedure _THttpPeerCache;
     /// some HTTP shared/low-level process
     procedure HTTP;
+    /// validate THttpServerGeneric.OnBodyDownload streamed body upload
+    procedure BodyDownload;
     /// validate THttpProxyCache process
     procedure _THttpProxyCache;
     /// validate TUriTree high-level structure
@@ -4282,6 +4293,232 @@ begin
   checkEqual(U.Address, 'toto/titi#ignore=10');
   Check(HttpRequestHashBase32(U, @s32, nil));
   CheckEqualShort(s32, 'na3q2n4gw6cly5fvf5da4frmek667zk2');
+end;
+
+function TNetworkProtocols.DoBodyDownload(const aUrl, aMethod, aInHeaders,
+  aInContentType, aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
+begin
+  result := nil;
+  if aUrl = '/mem' then
+    exit; // in-memory Content fallback
+  bodyfile := TemporaryFileName;
+  result := TFileStreamEx.Create(bodyfile, fmCreate);
+  inc(bodystreamed);
+end;
+
+function TNetworkProtocols.DoBodyRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+var
+  ct: RawUtf8;
+  fn: TFileName;
+  fs: TFileStreamEx;
+  dec: THttpMultiPartDecoder;
+  ms: TRawByteStringStream;
+begin
+  result := HTTP_SUCCESS;
+  if Ctxt.Url = '/mem' then
+  begin
+    // default in-memory process, since DoBodyDownload returned nil
+    CheckEqual(Ctxt.InContentType, bodytype, 'mem typ');
+    CheckEqual(Sha256(Ctxt.InContent), bodyhash, 'mem hash');
+  end
+  else
+  begin
+    // the body has been spooled into a local temporary file
+    CheckEqual(Ctxt.InContentType, STATICFILE_CONTENT_TYPE, 'static typ');
+    Check(FindNameValue(Ctxt.InHeaders, 'CONTENT-TYPE:', ct), 'headers typ');
+    CheckEqual(ct, bodytype, 'original typ');
+    fn := Utf8ToString(Ctxt.InContent); // as ProcessStaticFile does
+    Check(fn = bodyfile, 'spool name');
+    Check(FileExists(fn), 'spool exists');
+    if Ctxt.Url = '/mp' then
+    begin
+      // decode a multipart body directly from the spooled file - see #292
+      fs := TFileStreamEx.CreateRead(fn);
+      try
+        dec := THttpMultiPartDecoder.CreateFromContentType(fs, ct);
+        try
+          Check(dec.NextPart, 'mp part');
+          CheckEqual(dec.Name, 'field', 'mp name');
+          ms := TRawByteStringStream.Create;
+          try
+            StreamCopyUntilEnd(dec.Content, ms);
+            CheckEqual(Sha256(ms.DataString), bodyhash, 'mp hash');
+          finally
+            ms.Free;
+          end;
+          Check(dec.Close, 'mp close');
+        finally
+          dec.Free;
+        end;
+      finally
+        fs.Free;
+      end;
+    end
+    else
+      CheckEqual(Sha256(StringFromFile(fn)), bodyhash, 'spool hash');
+  end;
+  Ctxt.OutContent := 'ok ' + bodyhash;
+  Ctxt.OutContentType := TEXT_CONTENT_TYPE;
+end;
+
+procedure TNetworkProtocols.BodyDownload;
+var
+  srv: THttpServerSocketGeneric;
+  clt: THttpClientSocket;
+  raw: TCrtSocket;
+  fam, status, prev: integer;
+  port: RawUtf8;
+  body, mp: RawByteString;
+  mpct, mptext, line: RawUtf8;
+  mpa: TMultiPartDynArray;
+  endtix: Int64;
+
+  procedure WaitDeleted(const ctxt: RawUtf8);
+  begin
+    // the spool file should be deleted just after the request processing
+    endtix := GetTickCount64 + 5000; // never wait forever
+    while FileExists(bodyfile) and
+          (GetTickCount64 < endtix) do
+      SleepHiRes(5);
+    CheckUtf8(not FileExists(bodyfile), 'no spool left %', [ctxt]);
+  end;
+
+begin
+  body := RandomString(8 shl 20); // 8MB, way above any socket buffer
+  // some pure ASCII-7 text of exactly $4e20 bytes for the chunked request
+  // (SockSend() of a non-ASCII AnsiString may involve codepage conversion)
+  mptext := RandomTextParagraph(5000);
+  while length(mptext) < 20000 do
+    Append(mptext, mptext);
+  SetLength(mptext, 20000);
+  mpa := nil;
+  Check(MultiPartFormDataAddField('field', mptext, mpa), 'mp add');
+  Check(MultiPartFormDataEncode(mpa, mpct, RawUtf8(mp)), 'mp encode');
+  for fam := 0 to 1 do
+  begin
+    // validate both socket server families with the very same steps
+    if fam = 0 then
+    begin
+      port := '8891';
+      srv := THttpServer.Create(port, nil, nil, 'bodydl', 2);
+    end
+    else
+    begin
+      port := '8892';
+      srv := THttpAsyncServer.Create(port, nil, nil, 'bodydl', 2, 30000, [], nil);
+    end;
+    try
+      srv.OnBodyDownload := DoBodyDownload;
+      srv.OnRequest := DoBodyRequest;
+      srv.RegisterCompress(CompressGZip); // detect Content-Encoding: gzip
+      srv.WaitStarted(10);
+      clt := THttpClientSocket.Open('127.0.0.1', port);
+      try
+        // spool a huge body into a temporary file
+        prev := bodystreamed;
+        bodytype := 'application/dummy';
+        bodyhash := Sha256(body);
+        status := clt.Post('/big', body, bodytype);
+        CheckEqual(status, HTTP_SUCCESS, 'big status');
+        CheckEqual(clt.Content, 'ok ' + bodyhash, 'big resp');
+        CheckEqual(bodystreamed, prev + 1, 'big streamed');
+        WaitDeleted('big');
+        // in-memory fallback when the event returns nil
+        status := clt.Post('/mem', body, bodytype);
+        CheckEqual(status, HTTP_SUCCESS, 'mem status');
+        CheckEqual(clt.Content, 'ok ' + bodyhash, 'mem resp');
+        CheckEqual(bodystreamed, prev + 1, 'mem not streamed');
+        // a spooled JSON body should keep its Content-Type: in InHeaders
+        // (this is the single content type not stored as header text)
+        bodytype := JSON_CONTENT_TYPE;
+        bodyhash := Sha256(mptext);
+        status := clt.Post('/big', mptext, bodytype);
+        CheckEqual(status, HTTP_SUCCESS, 'json status');
+        CheckEqual(clt.Content, 'ok ' + bodyhash, 'json resp');
+        WaitDeleted('json');
+        // decode a multipart body directly from the spooled file
+        bodytype := mpct;
+        bodyhash := Sha256(mptext);
+        status := clt.Post('/mp', mp, mpct);
+        CheckEqual(status, HTTP_SUCCESS, 'mp status');
+        CheckEqual(clt.Content, 'ok ' + bodyhash, 'mp resp');
+        WaitDeleted('mp');
+        // spool a chunked body, i.e. with no Content-Length
+        bodytype := 'application/dummy';
+        bodyhash := Sha256(mptext);
+        raw := TCrtSocket.Open('127.0.0.1', port);
+        try
+          raw.SockSend(['POST /big HTTP/1.1']);
+          raw.SockSend(['Host: 127.0.0.1:', port]);
+          raw.SockSend(['Transfer-Encoding: chunked']);
+          raw.SockSend(['Content-Type: application/dummy']);
+          raw.SockSend(['Connection: close']);
+          raw.SockSend([]); // void line: end of headers
+          raw.SockSend(['4e20']); // = length(mptext) as an hexadecimal chunk
+          raw.SockSend([mptext]);
+          raw.SockSend(['0']);
+          raw.SockSend([]); // final void line
+          raw.SockSendFlush;
+          raw.SockRecvLn(line);
+          CheckUtf8(PosEx(' 200 ', line) > 0, 'chunked %', [line]);
+        finally
+          raw.Free;
+        end;
+        WaitDeleted('chunked');
+      finally
+        clt.Free;
+      end;
+      // a compressed body can not be streamed -> rejected as 415 (before any
+      // body byte is sent, so use a raw socket and no actual body here)
+      raw := TCrtSocket.Open('127.0.0.1', port);
+      try
+        raw.SockSend(['POST /big HTTP/1.1']);
+        raw.SockSend(['Host: 127.0.0.1:', port]);
+        raw.SockSend(['Content-Length: 100000']);
+        raw.SockSend(['Content-Type: application/dummy']);
+        raw.SockSend(['Content-Encoding: gzip']);
+        raw.SockSend([]); // void line: end of headers
+        raw.SockSendFlush;
+        raw.SockRecvLn(line);
+        CheckUtf8(PosEx(' 415 ', line) > 0, '415 %', [line]);
+        status := 0;
+        repeat
+          raw.SockRecvLn(line);
+          if line = 'Accept-Encoding: identity' then
+            inc(status);
+        until line = '';
+        CheckEqual(status, 1, '415 identity');
+      finally
+        raw.Free;
+      end;
+      begin
+        // on abort, the server should delete the truncated spool file
+        prev := bodystreamed;
+        raw := TCrtSocket.Open('127.0.0.1', port);
+        try
+          raw.SockSend(['POST /big HTTP/1.1']);
+          raw.SockSend(['Host: 127.0.0.1:', port]);
+          raw.SockSend(['Content-Length: 100000']);
+          raw.SockSend(['Content-Type: application/dummy']);
+          raw.SockSend([]); // void line: end of headers
+          raw.SockSendRaw(['truncated body']);
+          raw.SockSendFlush;
+          endtix := GetTickCount64 + 5000;
+          while (bodystreamed = prev) and
+                (GetTickCount64 < endtix) do
+            SleepHiRes(5); // wait until OnBodyDownload created the spool file
+          CheckEqual(bodystreamed, prev + 1, 'abort streamed');
+        finally
+          raw.Free; // close the socket in the middle of the body
+        end;
+      end;
+    finally
+      srv.Free;
+    end;
+    // the server shutdown should have deleted the truncated spool file
+    // (maybe with a delay on THttpAsyncServer due to its connections GC)
+    WaitDeleted('abort');
+  end;
 end;
 
 procedure TNetworkProtocols._THttpProxyCache;
