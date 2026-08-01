@@ -4797,14 +4797,19 @@ begin
       end;
     except
       on E: EStreamError do
-      begin
-        // e.g. ENOSPC when spooling into a TOnHttpServerBodyDownload stream:
-        // notify the client - as best effort - before closing the connection
-        fOwner.DoLog(sllWarning, 'OnRead: % when downloading the body',
-          [PClass(E)^], self);
-        DoReject(HTTP_INSUFFICIENTSTORAGE);
-        result := soClose;
-      end;
+        if (fHttp.State in HTTP_REQUEST_READ) and
+           (fHttp.ContentStream <> nil) and
+           (rfContentStreamNeedFree in fHttp.ResponseFlags) then
+        begin
+          // e.g. ENOSPC when spooling into a TOnHttpServerBodyDownload stream:
+          // notify the client - as best effort - before closing the connection
+          fOwner.DoLog(sllWarning, 'OnRead: % when downloading the body',
+            [PClass(E)^], self);
+          DoReject(HTTP_INSUFFICIENTSTORAGE);
+          result := soClose;
+        end
+        else
+          raise; // e.g. from the response process: close the connection
     end;
     // no more available input
     if pWrite in fPipelineState then // time to flush the pipelined responses

@@ -4301,9 +4301,15 @@ type
   protected
     fWritten: Int64;
   public
+    function Read(var Buffer; Count: Longint): Longint; override;
     function Write(const Buffer; Count: Longint): Longint; override;
     function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
   end;
+
+function TFailingStream.Read(var Buffer; Count: Longint): Longint;
+begin
+  result := 0; // never read from, but avoid an abstract method
+end;
 
 function TFailingStream.Write(const Buffer; Count: Longint): Longint;
 begin
