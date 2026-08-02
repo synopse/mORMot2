@@ -1044,40 +1044,43 @@ begin
     dec(plen);
     l := 0;
     if (plen <> 0) and
-       (p^ = '#') then
-    begin
-      // numeric character reference, e.g. &#233; or &#xE9;
+       (p^ = '#') then // numeric character reference, e.g. &#233; or &#xE9;
       inc(l);
-      while (l < plen) and
-            (p[l] in ['0'..'9', 'x', 'X', 'a'..'f', 'A'..'F']) do
-        inc(l);
-    end
-    else
-      while (l < plen) and
-            (p[l] in ['a'..'z', 'A'..'Z', '1'..'4']) do
-        inc(l);
+    while (l < plen) and
+          (tcWord in TEXT_CHARS[p[l]]) do // 0..9 A..Z a..z
+      inc(l);
     if p[l] = ';' then
-    begin
       if p^ = '#' then
-        c := NumCharToUcs4(p, l)
-      else
-        c := EntityToUcs4(p, l); // &lt; -> ord('<')
-      if c <> 0 then
       begin
-        if c = $00a0 then             // &nbsp;
-          c := ord(' ');
-        if c <= $7f then              // &amp;
-          W.Add(AnsiChar(c))
-        else if c = $2026 then
-          W.AddShort4(DOT_24, 3)      // &hellip;
-        else
-          W.AddUcs4(c);               // &Eacute; or any code point
-        inc(l); // consume ending ;
-        inc(p, l);
-        dec(plen, l);
-        continue;
+        c := NumCharToUcs4(p, l);
+        if c <> 0 then
+        begin
+          W.AddUcs4(c);
+          inc(l); // consume ending ;
+          inc(p, l);
+          dec(plen, l);
+          continue;
+        end;
+      end
+      else
+      begin
+        c := EntityToUcs4(p, l); // &lt; -> ord('<')
+        if c <> 0 then
+        begin
+          if c = $00a0 then             // &nbsp;
+            c := ord(' ');
+          if c <= $7f then              // &amp;
+            W.Add(AnsiChar(c))
+          else if c = $2026 then
+            W.AddShort4(DOT_24, 3)      // &hellip;
+          else
+            W.AddWideChar(WideChar(c)); // &Eacute; or any code point
+          inc(l); // consume ending ;
+          inc(p, l);
+          dec(plen, l);
+          continue;
+        end;
       end;
-    end;
     W.AddDirect('&');
   until plen = 0;
 end;
