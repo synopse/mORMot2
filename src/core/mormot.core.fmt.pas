@@ -239,7 +239,7 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     procedure ParseError(pos, reason: PUtf8Char);
-    function ParseName(p, e: PUtf8Char): PUtf8Char;
+    function ParseName(p, e, reason: PUtf8Char): PUtf8Char;
       {$ifdef HASINLINE} inline; {$endif}
   public
     /// the current token kind, as set by the last Next call
@@ -1744,7 +1744,7 @@ end;
 
 procedure TXmlParser.ParseError(pos, reason: PUtf8Char);
 var
-  line: PtrInt;
+  line: integer;
   p: PUtf8Char;
 begin
   line := 1;
@@ -1759,7 +1759,7 @@ begin
   EXmlException.RaiseUtf8('XML error at line %: %', [line, reason]);
 end;
 
-function TXmlParser.ParseName(p, e: PUtf8Char): PUtf8Char;
+function TXmlParser.ParseName(p, e, reason: PUtf8Char): PUtf8Char;
 begin
   Name.Text := p;
   if xpoStripNamespacePrefix in Options then
@@ -1776,7 +1776,7 @@ begin
       inc(p);
   Name.Len := p - Name.Text;
   if Name.Len = 0 then
-    ParseError(p, 'void or invalid name');
+    ParseError(p, reason);
   while (p < e) and
         (p^ <= ' ') do
     inc(p);
@@ -1866,7 +1866,7 @@ begin
       else
         begin
           // name="value" attribute pair
-          p := ParseName(p, e);
+          p := ParseName(p, e, 'void or invalid attribute name');
           if (p = e) or
              (p^ <> '=') then
             ParseError(p, 'attribute expects "="');
@@ -1908,7 +1908,7 @@ begin
           begin
             // </name> end tag
             inc(p);
-            p := ParseName(p, e);
+            p := ParseName(p, e, 'void or invalid end tag name');
             if (p = e) or
                (p^ <> '>') then
               ParseError(p, 'end tag expects ">"');
@@ -1980,7 +1980,7 @@ begin
           begin
             // <?name ...?> processing instruction
             inc(p);
-            p := ParseName(p, e);
+            p := ParseName(p, e, 'void or invalid PI name');
             fCur := p;
             dec(e, 2);
             while (p < e) and
@@ -2008,9 +2008,9 @@ begin
       else
         begin
           // <name> element start
-          p := ParseName(p, e);
+          p := ParseName(p, e, 'void or invalid name');
           if Name.Len > 127 then
-            ParseError(Name.Text, 'unexpectedly long name');
+            ParseError(Name.Text, 'unexpectedly long name (max 127)');
           if Depth = 0 then
             // no more opened element: reset the packed offsets origin
             fNameOrigin := Name.Text
