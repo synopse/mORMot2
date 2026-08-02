@@ -3665,6 +3665,9 @@ begin
   begin
     fStart := MinPtrInt(fStart, fSymbol[0].Start);
     fStop := MaxPtrInt(fStop, fSymbol[fSymbolsCount - 1].Stop);
+    if (fProducer = '') and
+       (fExeFile = Executable.InstanceFileName) then
+      fProducer := COMPILER_VERSION; // we know it for this compiled instance
     fHasDebugInfo := true; // mark as success
   end;
   if fHasDebugInfo and
