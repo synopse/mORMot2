@@ -149,6 +149,21 @@ procedure AddXmlEscape(W: TTextWriter; Text: PUtf8Char);
 function AddJsonToXml(W: TTextWriter; Json: PUtf8Char; ArrayName: PUtf8Char = nil;
   EndOfObject: PUtf8Char = nil): PUtf8Char;
 
+/// unescape some XML text into a TTextWriter instance
+// - decode the five XML predefined entities and numeric character references,
+// i.e.   &lt; &gt; &amp; &apos; &quot;   and   &#nnn; &#xhh;   patterns
+// - as AddHtmlUnescape(), the first '&' position could be supplied in amp,
+// if the caller did already search for it
+// - raises EXmlException on any other (i.e. undefined) entity
+procedure AddXmlUnescape(W: TTextWriter; p, amp: PUtf8Char; plen: PtrUInt);
+
+/// decode the five XML predefined entities and numeric character references
+// - just a wrapper around AddXmlUnescape(), with no allocation if no '&'
+// entity appears in the input text
+// - as used by TXmlParser.ValueToUtf8, or to be called directly
+// - raises EXmlException on any other (i.e. undefined) entity
+procedure XmlUnescape(Text: PUtf8Char; TextLen: PtrInt; var result: RawUtf8);
+
 type
   /// exception raised by TXmlParser on invalid or unsupported XML input
   EXmlException = class(ESynException);
@@ -272,21 +287,6 @@ type
     // any consecutive documents/fragments, but only within a single root)
     fStack: array[byte] of cardinal;
   end;
-
-/// unescape some XML text into a TTextWriter instance
-// - decode the five XML predefined entities and numeric character references,
-// i.e.   &lt; &gt; &amp; &apos; &quot;   and   &#nnn; &#xhh;   patterns
-// - as AddHtmlUnescape(), the first '&' position could be supplied in amp,
-// if the caller did already search for it
-// - raises EXmlException on any other (i.e. undefined) entity
-procedure AddXmlUnescape(W: TTextWriter; p, amp: PUtf8Char; plen: PtrUInt);
-
-/// decode the five XML predefined entities and numeric character references
-// - just a wrapper around AddXmlUnescape(), with no allocation if no '&'
-// entity appears in the input text
-// - as used by TXmlParser.ValueToUtf8, or to be called directly
-// - raises EXmlException on any other (i.e. undefined) entity
-procedure XmlUnescape(Text: PUtf8Char; TextLen: PtrInt; out result: RawUtf8);
 
 const
   /// TDocVariant options used by default for XmlToVariant()
@@ -1638,6 +1638,106 @@ begin
   end;
 end;
 
+procedure AddXmlUnescape(W: TTextWriter; p, amp: PUtf8Char; plen: PtrUInt);
+var
+  l: PtrUInt;
+  c: Ucs4CodePoint;
+  ent: TShort15;
+begin
+  repeat
+    if amp = nil then
+    begin
+      amp := PosChar(p, plen, '&');
+      if amp = nil then
+      begin
+        W.AddNoJsonEscape(p, plen); // no more entity to decode
+        exit;
+      end;
+    end;
+    l := amp - p;
+    if l <> 0 then
+    begin
+      W.AddNoJsonEscape(p, l);
+      dec(plen, l);
+      p := amp;
+    end;
+    amp := nil; // call PosChar() on next iteration
+    inc(p);     // ignore '&'
+    dec(plen);
+    // scan up to ';' (references are short - cap the search)
+    l := 0;
+    while (l < plen) and
+          (p[l] <> ';') do
+      inc(l);   // don't call PosChar() for a few char
+    c := 0;
+    if (l < plen) and
+       (l < 12) and
+       (p[l] = ';') then
+      // cascaded case of the five predefined entities + numeric references
+      case p^ of
+        '#':
+          c := NumCharToUcs4(p, l);
+        'l':
+          if (l = 2) and
+             (p[1] = 't') then
+            c := ord('<');
+        'g':
+          if (l = 2) and
+             (p[1] = 't') then
+            c := ord('>');
+        'a':
+          if (l = 3) and
+             (PCardinal(p)^ and $00ffffff =
+              ord('a') + ord('m') shl 8 + ord('p') shl 16) then
+            c := ord('&')
+          else if (l = 4) and
+             (PCardinal(p)^ =
+              ord('a') + ord('p') shl 8 + ord('o') shl 16 + ord('s') shl 24) then
+            c := ord('''');
+        'q':
+          if (l = 4) and
+             (PCardinal(p)^ =
+              ord('q') + ord('u') shl 8 + ord('o') shl 16 + ord('t') shl 24) then
+            c := ord('"');
+      end;
+    if c = 0 then
+    begin
+      SetString(ent, p - 1, plen); // truncate to TShort15
+      EXmlException.RaiseUtf8('XmlUnescape: invalid entity in "%"', [ent]);
+    end;
+    if c <= $7f then
+      W.AddDirect(AnsiChar(c))
+    else
+      W.AddUcs4(c);
+    inc(l); // consume ending ';'
+    inc(p, l);
+    dec(plen, l);
+  until plen = 0;
+end;
+
+procedure XmlUnescape(Text: PUtf8Char; TextLen: PtrInt; var result: RawUtf8);
+var
+  amp: PUtf8Char;
+  W: TTextWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  amp := nil;
+  if TextLen > 0 then
+    amp := PosChar(Text, TextLen, '&');
+  if amp = nil then
+  begin
+    FastSetString(result, Text, TextLen); // direct allocation if no entity
+    exit;
+  end;
+  W := TTextWriter.CreateOwnedStream(tmp);
+  try
+    AddXmlUnescape(W, Text, amp, TextLen);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
 
 { TXmlParser }
 
@@ -1959,108 +2059,6 @@ begin
     XmlUnescape(Value.Text, Value.Len, result);
 end;
 
-procedure AddXmlUnescape(W: TTextWriter; p, amp: PUtf8Char; plen: PtrUInt);
-var
-  l: PtrUInt;
-  c: Ucs4CodePoint;
-  ent: RawUtf8;
-begin
-  repeat
-    if amp = nil then
-    begin
-      amp := PosChar(p, plen, '&');
-      if amp = nil then
-      begin
-        W.AddNoJsonEscape(p, plen); // no more entity to decode
-        exit;
-      end;
-    end;
-    l := amp - p;
-    if l <> 0 then
-    begin
-      W.AddNoJsonEscape(p, l);
-      dec(plen, l);
-      p := amp;
-    end;
-    amp := nil; // call PosChar() on next iteration
-    inc(p); // ignore '&'
-    dec(plen);
-    // scan up to ';' (references are short - cap the search)
-    l := 0;
-    while (l < plen) and
-          (l < 12) and
-          (p[l] <> ';') do
-      inc(l);
-    c := 0;
-    if (l < plen) and
-       (p[l] = ';') then
-      // cascaded case of the five predefined entities + numeric references
-      case p^ of
-        '#':
-          c := NumCharToUcs4(p, l);
-        'l':
-          if (l = 2) and
-             (p[1] = 't') then
-            c := ord('<');
-        'g':
-          if (l = 2) and
-             (p[1] = 't') then
-            c := ord('>');
-        'a':
-          if (l = 3) and
-             (PCardinal(p)^ and $00ffffff =
-              ord('a') + ord('m') shl 8 + ord('p') shl 16) then
-            c := ord('&')
-          else if (l = 4) and
-             (PCardinal(p)^ =
-              ord('a') + ord('p') shl 8 + ord('o') shl 16 + ord('s') shl 24) then
-            c := ord('''');
-        'q':
-          if (l = 4) and
-             (PCardinal(p)^ =
-              ord('q') + ord('u') shl 8 + ord('o') shl 16 + ord('t') shl 24) then
-            c := ord('"');
-      end;
-    if c = 0 then
-    begin
-      l := plen + 1;
-      if l > 16 then
-        l := 16;
-      FastSetString(ent, p - 1, l);
-      EXmlException.RaiseUtf8('XmlUnescape: invalid entity in "%"', [ent]);
-    end;
-    if c <= $7f then
-      W.AddDirect(AnsiChar(c))
-    else
-      W.AddUcs4(c);
-    inc(l); // consume ending ';'
-    inc(p, l);
-    dec(plen, l);
-  until plen = 0;
-end;
-
-procedure XmlUnescape(Text: PUtf8Char; TextLen: PtrInt; out result: RawUtf8);
-var
-  amp: PUtf8Char;
-  W: TTextWriter;
-  tmp: TTextWriterStackBuffer;
-begin
-  amp := nil;
-  if TextLen > 0 then
-    amp := PosChar(Text, TextLen, '&');
-  if amp = nil then
-  begin
-    FastSetString(result, Text, TextLen); // no allocation if no entity
-    exit;
-  end;
-  W := TTextWriter.CreateOwnedStream(tmp);
-  try
-    AddXmlUnescape(W, Text, amp, TextLen);
-    W.SetText(result);
-  finally
-    W.Free;
-  end;
-end;
 
 procedure XmlDocAddOrAppend(var doc: TDocVariantData; const name: RawUtf8;
   const v: variant; const opt: TDocVariantOptions);
