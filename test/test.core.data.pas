@@ -4939,6 +4939,7 @@ begin
     '<p><a href="https://test" rel="nofollow">https://test</a></p>');
   CheckEqual(HtmlEscapeWiki('test'#13#10'click on http://coucouc.net toto'),
     '<p>test</p><p>click on <a href="http://coucouc.net" rel="nofollow">http://coucouc.net</a> toto</p>');
+  CheckEqual(HtmlEscapeWiki(':)'), Join(['<p>', EMOJI_UTF8[eSmiley], '</p>']));
   CheckEqual(HtmlEscapeWiki(':test: :) joy:'),
     '<p>:test: ' + EMOJI_UTF8[eSmiley] + ' joy:</p>');
   CheckEqual(HtmlEscapeWiki(':innocent: smile'),
@@ -9197,7 +9198,7 @@ end;
 const
   XML1: RawUtf8 = '<?xml version="1.0" encoding="UTF-8"?>'#13#10 +
     '<root a="1" b=''two''>'#10 +
-    '  <item>some text</item>'#10 +
+    '  <item> some text </item>'#10 +
     '  <empty/>'#10 +
     '  <![CDATA[raw <>&'' " ]]>'#10 +
     '  <!-- a comment -->tail</root>';
@@ -9214,7 +9215,7 @@ begin
   Walk(p, xtAttribute, 'b', 'two');
   Walk(p, xtElementStart, 'item');
   CheckEqual(p.Depth, 2);
-  Walk(p, xtText, '', 'some text');
+  Walk(p, xtText, '', ' some text ');
   Walk(p, xtElementEnd, 'item');
   CheckEqual(p.Depth, 1);
   Walk(p, xtElementStart, 'empty');
@@ -9280,7 +9281,7 @@ begin
   Walk(p, xtAttribute, 'a', '1');
   Walk(p, xtAttribute, 'b', 'two');
   Walk(p, xtElementStart, 'item');
-  Walk(p, xtText, '', 'some text');
+  Walk(p, xtText, '', ' some text ');
   Walk(p, xtElementEnd, 'item');
   Walk(p, xtElementStart, 'empty');
   Walk(p, xtElementEnd, 'empty');
