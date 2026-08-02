@@ -9164,7 +9164,7 @@ procedure TTestCoreXml.Walk(var p: TXmlParser; kind: TXmlToken;
 var
   n, v: RawUtf8;
 begin
-  Check(p.Next, 'no more tokens');
+  Check(p.Next = kind, 'no more tokens');
   Check(p.Kind = kind, 'kind');
   p.NameToUtf8(n);
   p.ValueToUtf8(v);
@@ -9182,7 +9182,7 @@ begin
   ok := false;
   try
     p.Init(pointer(Xml), length(Xml), Options);
-    while p.Next do
+    while p.Next <> xtEof do
     begin
       p.NameToUtf8(n);
       p.ValueToUtf8(v);
@@ -9224,9 +9224,9 @@ begin
   Walk(p, xtText, '', 'tail');
   Walk(p, xtElementEnd, 'root');
   CheckEqual(p.Depth, 0);
-  Check(not p.Next, 'eof');
+  Check(p.Next = xtEof, 'eof');
   Check(p.Kind = xtEof);
-  Check(not p.Next, 'still eof');
+  Check(p.Next = xtEof, 'still eof');
 end;
 
 procedure TTestCoreXml.SaxEntities;
@@ -9245,7 +9245,7 @@ begin
   Walk(p, xtAttribute, 'q', '"''');
   Walk(p, xtText, '', '<&> ABc ' + chinese);
   Walk(p, xtElementEnd, 'r');
-  Check(not p.Next);
+  Check(p.Next = xtEof);
   // the shared NumCharToUcs4() decoder is also wired into HTML unescape
   CheckEqual(HtmlUnescape('x &#65;&#x42; &amp; y'), 'x AB & y');
 end;
@@ -9264,7 +9264,7 @@ begin
   Walk(p, xtElementStart, 'ns:b');
   Walk(p, xtElementEnd, 'ns:b');
   Walk(p, xtElementEnd, 'ns:a');
-  Check(not p.Next);
+  Check(p.Next = xtEof);
   // ... but can be stripped on request
   p.Init(pointer(NS), length(NS), [xpoStripNamespacePrefix]);
   Walk(p, xtElementStart, 'a');
@@ -9272,7 +9272,7 @@ begin
   Walk(p, xtElementStart, 'b');
   Walk(p, xtElementEnd, 'b');
   Walk(p, xtElementEnd, 'a');
-  Check(not p.Next);
+  Check(p.Next = xtEof);
   // comments and processing instructions on request
   p.Init(pointer(XML1), length(XML1), [xpoKeepComments, xpoKeepPI]);
   Walk(p, xtPI, 'xml', 'version="1.0" encoding="UTF-8"');
@@ -9288,7 +9288,7 @@ begin
   Walk(p, xtComment, '', ' a comment ');
   Walk(p, xtText, '', 'tail');
   Walk(p, xtElementEnd, 'root');
-  Check(not p.Next);
+  Check(p.Next = xtEof);
   // pure whitespace text nodes on request
   p.Init(pointer(WS), length(WS), [xpoKeepWhiteSpace]);
   Walk(p, xtElementStart, 'a');
@@ -9297,7 +9297,7 @@ begin
   Walk(p, xtElementEnd, 'b');
   Walk(p, xtText, '', '  ');
   Walk(p, xtElementEnd, 'a');
-  Check(not p.Next);
+  Check(p.Next = xtEof);
 end;
 
 procedure TTestCoreXml.SaxErrors;
