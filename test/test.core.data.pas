@@ -9765,14 +9765,14 @@ begin
   Check(I18n = nil);
   langs := TSynLanguages.Create;
   try
-    langs.Language[lngFrench].AddFromJson('{"Hello world":"Bonjour monde"}');
+    langs.Language[lngFrench].AddFromJson('{"Hello world":"Bonjour tout le monde"}');
     langs.Language[lngFrench].DateTimeFormat := 'yyyy/mm/dd hh:nn';
     langs.SetGlobal;
     Check(I18n = langs);
     TSynLanguages.SetThreadLanguage(lngFrench);
     // LoadResStringTranslate is consumed by the GetCaptionFrom* family
     GetCaptionFromPCharLen('HelloWorld', s);
-    Check(s = 'Bonjour monde', 'caption translation');
+    Check(s = 'Bonjour tout le monde', 'caption translation');
     // date/time hooks
     Check(Assigned(i18nDateTimeText));
     s := i18nDateTimeText(EncodeDate(2026, 7, 31) + EncodeTime(12, 30, 0, 0));
@@ -9804,7 +9804,7 @@ const
     'msgid "Hello "'#10 +
     '"World"'#10 +
     'msgstr "Bonjour "'#10 +
-    '"Monde"'#10 +
+    '"tout le monde"'#10 +
     #10 +
     '#: src/main.c:50'#10 +
     '#, fuzzy, c-format'#10 +
@@ -9856,7 +9856,7 @@ begin
     // multi-line msgid/msgstr continuation
     t := 'Hello World';
     Check(l.Translate(t), 'continuation lines');
-    CheckEqual(t, 'Bonjour Monde');
+    CheckEqual(t, 'Bonjour tout le monde');
     // \n \t \" \\ escape decoding, on both msgid and msgstr
     t := 'a'#10'b'#9'c "d" e\f';
     Check(l.Translate(t), 'escapes');
@@ -9943,6 +9943,13 @@ const
     '[de]'#10 +
     'Hello=Hallo'#10;
 
+var
+  // some WinAnsi chars to avoid any charset/IDE conflict during tests
+  _uC9, _uE7, _uE8, _uE9: RawUtf8;
+
+const
+  UTF8_ACCENTS: array[0..3] of byte = ($C9, $E7, $E8, $E9);
+
 procedure TTestCoreI18n.IniAndFiles;
 var
   l: TSynLanguage;
@@ -10021,15 +10028,15 @@ begin
     CheckEqual(t, 'Monde');
     CheckEqual(l.AddFromYaml('- one'#10'- two'#10), -1, 'yaml array is no table');
     // the relaxed JSON variants are supported by AddFromJson()
-    CheckEqual(l.AddFromJson('{ // a JSONC comment'#10' "Six": "Sixieme"'#10'}'),
+    CheckEqual(l.AddFromJson(RawUtf8('{ // a JSONC comment'#10' "Six": "Sixi') + _uE8 + 'me"'#10'}'),
       1, 'jsonc');
     t := 'Six';
     Check(l.Translate(t));
-    CheckEqual(t, 'Sixieme');
-    CheckEqual(l.AddFromJson('{ /* JSON5 */ Seven: "Septieme", }'), 1, 'json5');
+    CheckEqual(t, RawUtf8('Sixi') + _uE8 + 'me');
+    CheckEqual(l.AddFromJson(RawUtf8('{ /* JSON5 */ Seven: "Septi') + _uE8 + 'me", }'), 1, 'json5');
     t := 'Seven';
     Check(l.Translate(t));
-    CheckEqual(t, 'Septieme');
+    CheckEqual(t, RawUtf8('Septi') + _uE8 + 'me');
     CheckEqual(l.AddFromJson('invalid'), -1, 'invalid JSON');
     CheckEqual(l.AddFromJson(''), -1, 'void JSON');
     CheckEqual(l.AddFromJson('["Hello"]'), -1, 'JSON array is no table');
@@ -10080,20 +10087,37 @@ begin
   // TSynLanguages.LoadFromFolder() with several extensions
   folder := EnsureDirectoryExists([WorkDir, 'i18n']);
   Check(folder <> '', 'folder');
-  Check(FileFromString('msgid "Hello"'#10'msgstr "Bonjour"'#10, folder + 'fr.po'));
+  Check(FileFromString(RawUtf8('msgid "Hello"'#10'msgstr "Bonjour"'#10 +
+    'msgid "Resume"'#10'msgstr "R') + _uE9 + 'sum' + _uE9 + '"'#10 +
+    'msgid "Cafe"'#10'msgstr "Caf' + _uE9 + '"'#10, folder + 'fr.po'));
+  Check(FileFromString(RawUtf8('{"Facade":"Fa') + _uE7 + 'ade","Elephant":"' + _uC9 + 'l' + _uE9 + 'phant"}', folder + 'fr.json'));
   Check(FileFromString('Hello=' + cha + #10, folder + 'zh.ini'));
   Check(FileFromString('ignored', folder + 'en.txt'), 'unknown extension');
   Check(FileFromString('ignored', folder + 'nolang.json'), 'unknown iso');
   langs := TSynLanguages.Create;
   try
-    CheckEqual(langs.LoadFromFolder(folder), 2, 'fr.po + zh.ini');
+    CheckEqual(langs.LoadFromFolder(folder), 3, 'fr.po + fr.json + zh.ini');
     Check(langs.Find(lngEnglish) = nil, '.txt is not a translation file');
     Check(langs.Find(lngFrench) <> nil);
-    CheckEqual(langs.Find(lngFrench).Count, 1);
+    CheckEqual(langs.Find(lngFrench).Count, 5);
     t := 'Hello';
     TSynLanguages.SetThreadLanguage(lngFrench);
     Check(langs.Translate(t), 'from fr.po');
     CheckEqual(t, 'Bonjour');
+
+    t := 'Resume';
+    Check(langs.Translate(t));
+    CheckEqual(t, RawUtf8('R') + _uE9 + 'sum' + _uE9);
+    t := 'Cafe';
+    Check(langs.Translate(t));
+    CheckEqual(t, RawUtf8('Caf') + _uE9);
+    t := 'Facade';
+    Check(langs.Translate(t));
+    CheckEqual(t, RawUtf8('Fa') + _uE7 + 'ade');
+    t := 'Elephant';
+    Check(langs.Translate(t));
+    CheckEqual(t, _uC9 + 'l' + _uE9 + 'phant');
+
     Check(langs.Find(lngChinese) <> nil);
     CheckEqual(langs.Find(lngChinese).Count, 1);
     t := 'Hello';
@@ -11008,6 +11032,11 @@ end;
 
 
 initialization
+  _uC9 := WinAnsiToUtf8(@UTF8_ACCENTS[0], 1);
+  _uE7 := WinAnsiToUtf8(@UTF8_ACCENTS[1], 1);
+  _uE8 := WinAnsiToUtf8(@UTF8_ACCENTS[2], 1);
+  _uE9 := WinAnsiToUtf8(@UTF8_ACCENTS[3], 1);
+
   {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArray(TypeInfo(TSimpleExampleObjArray), TSimpleExample);
   {$endif HASDYNARRAYTYPE}
