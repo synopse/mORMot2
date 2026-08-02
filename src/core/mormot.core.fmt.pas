@@ -56,7 +56,7 @@ function NeedsHtmlEscape(text: PUtf8Char; fmt: TTextWriterHtmlFormat): boolean;
 /// low-level conversion of an &amp; HTML entity into 32-bit Unicode Code Point
 function EntityToUcs4(entity: PUtf8Char; len: byte): Ucs4CodePoint;
 
-/// low-level decoding of a '#nnn' or '#xhh' numeric character reference
+/// low-level decoding of a '#integer' or '#xhexa' numeric character reference
 // - entity should point at the '#' char, len being the reference length
 // (excluding any trailing ';')
 // - returns 0 on invalid input - as used by AddHtmlUnescape/AddXmlUnescape
@@ -1241,7 +1241,7 @@ end;
 
 function NumCharToUcs4(entity: PUtf8Char; len: PtrUInt): Ucs4CodePoint;
 var
-  c, v: cardinal;
+  c, v: Ucs4CodePoint;
 begin
   result := 0; // 0 = invalid
   inc(entity); // ignore leading '#'
@@ -1249,9 +1249,9 @@ begin
   if len = 0 then
     exit;
   c := 0;
-  if entity^ in ['x', 'X'] then
+  if entity^ in ['x', 'X'] then // '#xhexa'
   begin
-    inc(entity);
+    inc(entity); // skip x/X char
     dec(len);
     if len = 0 then
       exit;
@@ -1260,24 +1260,26 @@ begin
       if v > 15 then
         exit;
       c := c shl 4 + v;
+      if c > UNICODE_MAX then
+        exit;
       inc(entity);
       dec(len);
     until len = 0;
   end
   else
     repeat
-      v := ord(entity^) - ord('0');
+      v := ord(entity^) - ord('0'); // '#integer'
       if v > 9 then
         exit;
       c := c * 10 + v;
+      if c > UNICODE_MAX then
+        exit;
       inc(entity);
       dec(len);
     until len = 0;
-  if (c > UNICODE_MAX) or
-     ((c >= UTF16_HISURROGATE_MIN) and
-      (c <= UTF16_LOSURROGATE_MAX)) then
-    exit; // reject UTF-16 surrogates or out of range
-  result := c;
+  if (c < UTF16_HISURROGATE_MIN) or // reject UTF-16 surrogates or out of range
+     (c > UTF16_LOSURROGATE_MAX) then
+    result := c;
 end;
 
 function HtmlUnescape(const text: RawUtf8): RawUtf8;
