@@ -185,12 +185,14 @@ type
   // - xpoStripNamespacePrefix would remove any 'ns:' prefix from the reported
   // element and attribute names - the prefix is part of the name otherwise
   // (this "basic" parser does no URI namespace binding by design)
+  // - xpoDontCheckEndTagName won't call CompareMem() on </tag> against <tag>
   // - xpoKeepComments and xpoKeepPI would return xtComment / xtPI tokens,
   // which are silently skipped by default
   // - xpoKeepWhiteSpace would return xtText tokens made only of whitespace,
   // which are silently skipped by default
   TXmlParserOption = (
     xpoStripNamespacePrefix,
+    xpoDontCheckEndTagName,
     xpoKeepComments,
     xpoKeepPI,
     xpoKeepWhiteSpace);
@@ -208,6 +210,8 @@ type
   // with no memory allocation during the scan - see NameToUtf8/ValueToUtf8
   // - well-formedness of the tags nesting is verified, and any syntax or
   // nesting error would raise an EXmlException with the faulty line number
+  // - to reduce the memory footprint, this parser has some limitations: Depth
+  // is limited to 255 and any root element should not be > 32MB of UTF-8 text
   // - usage: call Init() then Next in a loop, e.g. as
   // ! x.Init(pointer(xml), length(xml));
   // ! while true do
@@ -227,6 +231,7 @@ type
     Kind: TXmlToken;
     /// how many elements are currently opened
     // - incremented after a xtElementStart, decremented after a xtElementEnd
+    // - by internal design, is limited to 255 as highest allowed value
     Depth: byte;
     /// options to refine TXmlParser process
     Options: TXmlParserOptions;
@@ -1803,8 +1808,9 @@ begin
               ParseError(Name.Text, 'unexpected end tag');
             dec(Depth);
             if ((fStack[Depth] and 127) <> cardinal(Name.Len)) or
-               not CompareMemSmall(fNameOrigin + (fStack[Depth] shr 7),
-                 Name.Text, Name.Len) then
+               ((not (xpoDontCheckEndTagName in Options)) and
+                (not CompareMemSmall(fNameOrigin + (fStack[Depth] shr 7),
+                   Name.Text, Name.Len))) then
               ParseError(Name.Text, 'mismatched end tag');
             Kind := xtElementEnd;
             break;
