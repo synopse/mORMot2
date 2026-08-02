@@ -1707,7 +1707,7 @@ end;
 
 function TXmlParser.Next: TXmlToken;
 var
-  s, p, e: PUtf8Char;
+  p, e: PUtf8Char;
 begin
   Name.Text := nil;
   Name.Len := 0;
@@ -1846,12 +1846,12 @@ begin
               inc(p, 7);
               Value.Text := p;
               dec(e, 3);
-              while (p < e) and
+              while (p <= e) and
                     ((p^ <> ']') or
                      (p[1] <> ']') or
                      (p[2] <> '>')) do
                 inc(p);
-              if p >= e  then
+              if p > e  then
                 ParseError(Value.Text, 'unfinished CDATA');
               inc(e, 3);
               Value.Len := p - Value.Text;
@@ -1873,7 +1873,7 @@ begin
                    (p[1] <> '>')) do
               inc(p);
             if p >= e then
-              ParseError(s, 'unfinished processing instruction');
+              ParseError(Name.Text, 'unfinished processing instruction');
             inc(e, 2);
             if xpoKeepPI in Options then
             begin
@@ -1922,8 +1922,10 @@ begin
         while (p < e) and
               (p^ <= ' ') do
           inc(p);
-        if p^ = '<' then
+        if (p < e) and
+           (p^ = '<') then
           continue; // ignore any pure-whitespace text
+        p := fToken;
       end;
       Value.Text := p;
       Value.Len := ByteScanIndex(pointer(p), e - p, ord('<'));
