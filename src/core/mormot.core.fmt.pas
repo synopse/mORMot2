@@ -280,7 +280,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   private
     fTab: PAnsiCharToByte;
-    fCur, fBegin, fAfter, fToken, fNameOrigin: PUtf8Char;
+    fCur, fBegin, fToken, fNameOrigin, fAfter: PUtf8Char;
     // opened element names, as packed 25-bit offsets from fNameOrigin and
     // 7-bit lengths - a static 1KB stack, favoring the common SAX use case:
     // up to 256 nesting levels and 127-byte names, with the offsets origin
@@ -1968,7 +1968,6 @@ begin
                 inc(p);
               if p > e  then
                 ParseError(Value.Text, 'unfinished CDATA');
-              inc(e, 3);
               Value.Len := p - Value.Text;
               inc(p, 3);
               Kind := xtCData;
@@ -1989,7 +1988,6 @@ begin
               inc(p);
             if p >= e then
               ParseError(Name.Text, 'unfinished processing instruction');
-            inc(e, 2);
             if xpoKeepPI in Options then
             begin
               Value.Text := fCur;
@@ -2002,6 +2000,7 @@ begin
               Kind := xtPI;
               break;
             end;
+            inc(e, 2);
             inc(p, 2);
             continue;
           end;
@@ -2107,7 +2106,6 @@ begin
   // fill from attributes and content, until the matching xtElementEnd
   // (nesting is bounded by the TXmlParser 256 levels static stack)
   obj.Init(opt, dvObject);
-  txt := '';
   while true do
     case x.Next of
       xtEof:
@@ -2161,7 +2159,6 @@ begin
   Doc.Init(Options, dvObject);
   x.Init(pointer(Xml), length(Xml),
     ParseOptions * [xpoStripNamespacePrefix]);
-  txt := '';
   while true do
     case x.Next of
       xtEof:
@@ -2180,10 +2177,7 @@ begin
         end;
     end;
   if txt <> '' then
-  begin
-    RawUtf8ToVariant(txt, v);
-    Doc.AddValue('#text', v);
-  end;
+    Doc.AddValueText('#text', txt);
 end;
 
 function TryXmlToVariant(const Xml: RawUtf8; out Doc: TDocVariantData;
