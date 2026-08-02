@@ -61,7 +61,6 @@ function EntityToUcs4(entity: PUtf8Char; len: byte): Ucs4CodePoint;
 // (excluding any trailing ';')
 // - returns 0 on invalid input - as used by AddHtmlUnescape/AddXmlUnescape
 function NumCharToUcs4(entity: PUtf8Char; len: PtrUInt): Ucs4CodePoint;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// escape some UTF-8 text into HTML
 // - just a wrapper around TTextWriter.AddHtmlEscape() process,
@@ -154,6 +153,9 @@ type
   /// exception raised by TXmlParser on invalid or unsupported XML input
   EXmlException = class(ESynException);
 
+  TXmlParserFlags = set of (
+    fInElement, fMayOverflow);
+
   /// the kind of tokens returned by TXmlParser.Next
   // - xtEof is set once the end of the input buffer has been reached
   // - xtElementStart is returned for each opening <name> or <name ...> tag,
@@ -208,8 +210,8 @@ type
   // nesting error would raise an EXmlException with the faulty line number
   // - usage: call Init() then Next in a loop, e.g. as
   // ! x.Init(pointer(xml), length(xml));
-  // ! while x.Next do
-  // !   case x.Kind of
+  // ! while true do
+  // !   case x.Next of
   // !     ...
   {$ifdef USERECORDWITHMETHODS}
   TXmlParser = record
@@ -217,24 +219,19 @@ type
   TXmlParser = object
   {$endif USERECORDWITHMETHODS}
   private
-    fCur, fBegin, fAfter, fToken, fNameOrigin: PUtf8Char;
-    fOptions: TXmlParserOptions;
-    fInElement: boolean; // scanning attributes, up to '>' or '/>'
-    // opened element names, as packed 25-bit offsets from fNameOrigin and
-    // 7-bit lengths - a static 1KB stack, favoring the common SAX use case:
-    // up to 256 nesting levels and 127-byte names, with the offsets origin
-    // reset each time the nesting level returns to 0 (so no 32MB limit for
-    // any consecutive documents/fragments, but only within a single root)
-    fStack: array[byte] of cardinal;
-    procedure ParseError(pos: PUtf8Char; const reason: RawUtf8);
-    function ParseName(var p: PUtf8Char): TValuePUtf8Char;
-    procedure SetName(const raw: TValuePUtf8Char);
+    procedure ParseError(pos, reason: PUtf8Char);
+    function ParseName(p, e: PUtf8Char): PUtf8Char;
+      {$ifdef HASINLINE} inline; {$endif}
   public
     /// the current token kind, as set by the last Next call
     Kind: TXmlToken;
     /// how many elements are currently opened
     // - incremented after a xtElementStart, decremented after a xtElementEnd
-    Depth: PtrInt;
+    Depth: byte;
+    /// options to refine TXmlParser process
+    Options: TXmlParserOptions;
+    /// flag set e.g. when scanning attributes, up to '>' or '/>'
+    Flags: TXmlParserFlags;
     /// the current token name, pointing within the input buffer
     // - set for xtElementStart, xtElementEnd, xtAttribute and xtPI tokens
     Name: TValuePUtf8Char;
@@ -246,21 +243,29 @@ type
     // - any UTF-8 BOM would be ignored
     // - the buffer is expected to remain available during the whole parsing
     procedure Init(Text: PUtf8Char; TextLen: PtrInt;
-      Options: TXmlParserOptions = []);
-    /// iterate to the next token of the input, returning false at xtEof
+      ParserOptions: TXmlParserOptions = []);
+    /// iterate to the next token of the input, returning xtEof when done
     // - raises an EXmlException on any malformed or unsupported input
-    function Next: boolean;
+    function Next: TXmlToken;
     /// returns the current Name as an allocated UTF-8 string
-    procedure NameToUtf8(out result: RawUtf8);
+    procedure NameToUtf8(var result: RawUtf8);
       {$ifdef HASINLINE}inline;{$endif}
     /// returns the current Value as an allocated UTF-8 string
     // - decoding any XML entity, unless the current token is a verbatim
     // xtCData/xtComment section
-    procedure ValueToUtf8(out result: RawUtf8);
+    procedure ValueToUtf8(var result: RawUtf8);
     /// the offset of the current token in the input buffer
     // - could be used to store a position, then resume a scan from it
     function Position: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
+  private
+    fCur, fBegin, fAfter, fToken, fNameOrigin: PUtf8Char;
+    // opened element names, as packed 25-bit offsets from fNameOrigin and
+    // 7-bit lengths - a static 1KB stack, favoring the common SAX use case:
+    // up to 256 nesting levels and 127-byte names, with the offsets origin
+    // reset each time the nesting level returns to 0 (so no 32MB limit for
+    // any consecutive documents/fragments, but only within a single root)
+    fStack: array[byte] of cardinal;
   end;
 
 /// unescape some XML text into a TTextWriter instance
@@ -1236,7 +1241,7 @@ end;
 
 function NumCharToUcs4(entity: PUtf8Char; len: PtrUInt): Ucs4CodePoint;
 var
-  c: cardinal;
+  c, v: cardinal;
 begin
   result := 0; // 0 = invalid
   inc(entity); // ignore leading '#'
@@ -1251,36 +1256,27 @@ begin
     if len = 0 then
       exit;
     repeat
-      case entity^ of
-        '0' .. '9':
-          c := c shl 4 + cardinal(ord(entity^) - ord('0'));
-        'a' .. 'f':
-          c := c shl 4 + cardinal(ord(entity^) - (ord('a') - 10));
-        'A' .. 'F':
-          c := c shl 4 + cardinal(ord(entity^) - (ord('A') - 10));
-      else
+      v := ConvertHexToBin[entity^];
+      if v > 15 then
         exit;
-      end;
-      if c > $10ffff then
-        exit;
+      c := c shl 4 + v;
       inc(entity);
       dec(len);
     until len = 0;
   end
   else
     repeat
-      if entity^ in ['0' .. '9'] then
-        c := c * 10 + cardinal(ord(entity^) - ord('0'))
-      else
+      v := ord(entity^) - ord('0');
+      if v > 9 then
         exit;
-      if c > $10ffff then
-        exit;
+      c := c * 10 + v;
       inc(entity);
       dec(len);
     until len = 0;
-  if (c >= $d800) and
-     (c <= $dfff) then
-    exit; // reject UTF-16 surrogates
+  if (c > UNICODE_MAX) or
+     ((c >= UTF16_HISURROGATE_MIN) and
+      (c <= UTF16_LOSURROGATE_MAX)) then
+    exit; // reject UTF-16 surrogates or out of range
   result := c;
 end;
 
@@ -1635,7 +1631,7 @@ end;
 
 { TXmlParser }
 
-procedure TXmlParser.ParseError(pos: PUtf8Char; const reason: RawUtf8);
+procedure TXmlParser.ParseError(pos, reason: PUtf8Char);
 var
   line: PtrInt;
   p: PUtf8Char;
@@ -1652,40 +1648,28 @@ begin
   EXmlException.RaiseUtf8('XML error at line %: %', [line, reason]);
 end;
 
-function TXmlParser.ParseName(var p: PUtf8Char): TValuePUtf8Char;
-var
-  s, e: PUtf8Char; // scan on locals (i.e. registers), not the var parameter
+function TXmlParser.ParseName(p, e: PUtf8Char): PUtf8Char;
 begin
-  s := p;
-  e := fAfter;
-  result.Text := s;
-  while (s < e) and
-        not (s^ in [#0..' ', '<', '>', '/', '=', '?', '"', '''']) do
-    inc(s);
-  result.Len := s - p;
-  p := s;
-  if result.Len = 0 then
-    ParseError(s, 'void or invalid name');
-end;
-
-procedure TXmlParser.SetName(const raw: TValuePUtf8Char);
-var
-  i: PtrInt;
-begin
-  Name := raw;
-  if xpoStripNamespacePrefix in fOptions then
+  Name.Text := p;
+  while (p < e) and
+        not (p^ in [#0..' ', '<', '>', '/', '=', '?', '"', '''']) do
   begin
-    i := ByteScanIndex(pointer(raw.Text), raw.Len, ord(':'));
-    if i >= 0 then
-    begin
-      inc(Name.Text, i + 1);
-      dec(Name.Len, i + 1);
-    end;
+    if (xpoStripNamespacePrefix in Options) and
+       (p^ = ':') then
+      Name.Text := p + 1;
+    inc(p);
   end;
+  Name.Len := p - Name.Text;
+  if Name.Len = 0 then
+    ParseError(p, 'void or invalid name');
+  while (p < e) and
+        (p^ <= ' ') do
+    inc(p);
+  result := p;
 end;
 
 procedure TXmlParser.Init(Text: PUtf8Char; TextLen: PtrInt;
-  Options: TXmlParserOptions);
+  ParserOptions: TXmlParserOptions);
 begin
   if (Text <> nil) and
      (TextLen >= 3) and
@@ -1699,8 +1683,10 @@ begin
   fToken := Text;
   fNameOrigin := Text;
   fAfter := Text + TextLen;
-  fOptions := Options;
-  fInElement := false;
+  Options := ParserOptions;
+  byte(Flags) := 0;
+  if TextLen shr 25 <> 0 then
+    include(Flags, fMayOverflow);
   Depth := 0;
   Kind := xtEof;
   Name.Text := nil;
@@ -1714,14 +1700,10 @@ begin
   result := fToken - fBegin;
 end;
 
-function TXmlParser.Next: boolean;
+function TXmlParser.Next: TXmlToken;
 var
-  p, e, s: PUtf8Char;
-  q: AnsiChar;
-  i: PtrInt;
-  n: TValuePUtf8Char;
+  s, p, e: PUtf8Char;
 begin
-  result := true;
   Name.Text := nil;
   Name.Len := 0;
   Value.Text := nil;
@@ -1729,7 +1711,7 @@ begin
   p := fCur;
   e := fAfter;
   repeat
-    if fInElement then
+    if fInElement in Flags then
     begin
       // within <name ... : expect attributes until '>' or '/>'
       while (p < e) and
@@ -1742,7 +1724,7 @@ begin
         '>':
           begin
             inc(p);
-            fInElement := false;
+            exclude(Flags, fInElement);
             continue; // parse the following content
           end;
         '/':
@@ -1752,40 +1734,36 @@ begin
                (p^ <> '>') then
               ParseError(p, 'invalid "/" within a tag');
             inc(p);
-            fInElement := false;
+            exclude(Flags, fInElement);
+            if Depth = 0 then
+              ParseError(p, 'unexpected tag ending');
             dec(Depth);
-            n.Text := fNameOrigin + (fStack[Depth] shr 7);
-            n.Len := fStack[Depth] and 127;
-            SetName(n);
+            Name.Len := fStack[Depth];
+            Name.Text := fNameOrigin + (Name.Len shr 7);
+            Name.Len := Name.Len and 127;
             Kind := xtElementEnd;
             break;
           end;
       else
         begin
           // name="value" attribute pair
-          n := ParseName(p);
-          while (p < e) and
-                (p^ <= ' ') do
-            inc(p);
+          p := ParseName(p, e);
           if (p = e) or
              (p^ <> '=') then
             ParseError(p, 'attribute expects "="');
-          inc(p);
-          while (p < e) and
-                (p^ <= ' ') do
+          repeat
             inc(p);
+          until (p = e) or
+                (p^ > ' ');
           if (p = e) or
              not (p^ in ['"', '''']) then
             ParseError(p, 'attribute value expects quotes');
-          q := p^;
           inc(p);
-          i := ByteScanIndex(pointer(p), e - p, ord(q));
-          if i < 0 then
-            ParseError(p, 'unfinished attribute value');
-          SetName(n);
           Value.Text := p;
-          Value.Len := i;
-          inc(p, i + 1);
+          Value.Len := ByteScanIndex(pointer(p), e - p, ord(p[-1]));
+          if Value.Len < 0 then
+            ParseError(p, 'unfinished attribute value');
+          inc(p, Value.Len + 1);
           Kind := xtAttribute;
           break;
         end;
@@ -1798,7 +1776,6 @@ begin
         ParseError(p, 'unexpected end of input: unclosed element');
       fToken := p;
       Kind := xtEof;
-      result := false;
       break;
     end
     else if p^ = '<' then
@@ -1812,22 +1789,18 @@ begin
           begin
             // </name> end tag
             inc(p);
-            n := ParseName(p);
-            while (p < e) and
-                  (p^ <= ' ') do
-              inc(p);
+            p := ParseName(p, e);
             if (p = e) or
                (p^ <> '>') then
               ParseError(p, 'end tag expects ">"');
             inc(p);
             if Depth = 0 then
-              ParseError(n.Text, 'unexpected end tag');
+              ParseError(Name.Text, 'unexpected end tag');
             dec(Depth);
-            if ((fStack[Depth] and 127) <> cardinal(n.Len)) or
+            if ((fStack[Depth] and 127) <> cardinal(Name.Len)) or
                not CompareMemSmall(fNameOrigin + (fStack[Depth] shr 7),
-                 n.Text, n.Len) then
-              ParseError(n.Text, 'mismatched end tag');
-            SetName(n);
+                 Name.Text, Name.Len) then
+              ParseError(Name.Text, 'mismatched end tag');
             Kind := xtElementEnd;
             break;
           end;
@@ -1839,18 +1812,18 @@ begin
             begin
               // <!-- comment -->
               inc(p, 2);
-              s := p;
+              fCur := p;
               while (e - p >= 3) and
                     ((p^ <> '-') or
                      (p[1] <> '-') or
                      (p[2] <> '>')) do
                 inc(p);
               if e - p < 3 then
-                ParseError(s, 'unfinished comment');
-              if xpoKeepComments in fOptions then
+                ParseError(fCur, 'unfinished comment');
+              if xpoKeepComments in Options then
               begin
-                Value.Text := s;
-                Value.Len := p - s;
+                Value.Text := fCur;
+                Value.Len := p - fCur;
                 inc(p, 3);
                 Kind := xtComment;
                 break;
@@ -1859,20 +1832,24 @@ begin
               continue;
             end;
             if (e - p >= 7) and
-               CompareMemSmall(p, PAnsiChar('[CDATA['), 7) then
+               (PCardinal(p)^ = ord('[') + ord('C') shl 8 +
+                                ord('D') shl 16 + ord('A') shl 24) and
+               (PCardinal(p + 3)^ = ord('A') + ord('T') shl 8 +
+                                    ord('A') shl 16 + ord('[') shl 24) then
             begin
               // <![CDATA[ ... ]]> verbatim section
               inc(p, 7);
-              s := p;
-              while (e - p >= 3) and
+              Value.Text := p;
+              dec(e, 3);
+              while (p < e) and
                     ((p^ <> ']') or
                      (p[1] <> ']') or
                      (p[2] <> '>')) do
                 inc(p);
-              if e - p < 3 then
-                ParseError(s, 'unfinished CDATA');
-              Value.Text := s;
-              Value.Len := p - s;
+              if p >= e  then
+                ParseError(Value.Text, 'unfinished CDATA');
+              inc(e, 3);
+              Value.Len := p - Value.Text;
               inc(p, 3);
               Kind := xtCData;
               break;
@@ -1883,25 +1860,24 @@ begin
           begin
             // <?name ...?> processing instruction
             inc(p);
-            n := ParseName(p);
+            p := ParseName(p, e);
+            fCur := p;
+            dec(e, 2);
             while (p < e) and
-                  (p^ <= ' ') do
-              inc(p);
-            s := p;
-            while (e - p >= 2) and
                   ((p^ <> '?') or
                    (p[1] <> '>')) do
               inc(p);
-            if e - p < 2 then
+            if p >= e then
               ParseError(s, 'unfinished processing instruction');
-            if xpoKeepPI in fOptions then
+            inc(e, 2);
+            if xpoKeepPI in Options then
             begin
-              SetName(n);
-              Value.Text := s;
-              Value.Len := p - s;
-              while (Value.Len > 0) and
-                    (Value.Text[Value.Len - 1] <= ' ') do
-                dec(Value.Len); // right trim
+              Value.Text := fCur;
+              while p[-1] <= ' ' do
+                dec(p);
+              Value.Len := p - Value.Text;
+              while p^ <= ' ' do
+                inc(p);
               inc(p, 2);
               Kind := xtPI;
               break;
@@ -1912,21 +1888,21 @@ begin
       else
         begin
           // <name> element start
-          n := ParseName(p);
+          p := ParseName(p, e);
+          if Name.Len > 127 then
+            ParseError(Name.Text, 'unexpectedly long name');
           if Depth = 0 then
             // no more opened element: reset the packed offsets origin
-            fNameOrigin := n.Text
-          else if Depth > high(fStack) then
-            ParseError(n.Text, 'too much nesting');
-          if n.Len > 127 then
-            ParseError(n.Text, 'unexpectedly long name');
-          if n.Text - fNameOrigin >= 1 shl 25 then
-            ParseError(n.Text, 'single root spanning over 32MB');
-          fStack[Depth] := cardinal(n.Text - fNameOrigin) shl 7 +
-                           cardinal(n.Len);
+            fNameOrigin := Name.Text
+          else if Depth = high(fStack) then
+            ParseError(Name.Text, 'too much nesting')
+          else if (fMayOverflow in Flags) and
+                  ((Name.Text - fNameOrigin) shr 25 <> 0) then
+            ParseError(Name.Text, 'single root spanning over 32MB');
+          fStack[Depth] := cardinal(Name.Text - fNameOrigin) shl 7 +
+                           cardinal(Name.Len);
           inc(Depth);
-          fInElement := true;
-          SetName(n);
+          include(Flags, fInElement);
           Kind := xtElementStart;
           break;
         end;
@@ -1936,36 +1912,33 @@ begin
     begin
       // text content until the next markup
       fToken := p;
-      s := p;
-      i := ByteScanIndex(pointer(p), e - p, ord('<'));
-      if i < 0 then
-        p := e
-      else
-        inc(p, i);
-      if not (xpoKeepWhiteSpace in fOptions) then
+      if not (xpoKeepWhiteSpace in Options) then
       begin
-        while (s < p) and
-              (s^ <= ' ') do
-          inc(s);
-        if s = p then
+        while (p < e) and
+              (p^ <= ' ') do
+          inc(p);
+        if p^ = '<' then
           continue; // ignore any pure-whitespace text
-        s := fToken;
       end;
-      Value.Text := s;
-      Value.Len := p - s;
+      Value.Text := p;
+      Value.Len := ByteScanIndex(pointer(p), e - p, ord('<'));
+      if Value.Len < 0 then
+        Value.Len := e - p;
+      inc(p, Value.Len);
       Kind := xtText;
       break;
     end;
   until false;
   fCur := p;
+  result := Kind;
 end;
 
-procedure TXmlParser.NameToUtf8(out result: RawUtf8);
+procedure TXmlParser.NameToUtf8(var result: RawUtf8);
 begin
   FastSetString(result, Name.Text, Name.Len);
 end;
 
-procedure TXmlParser.ValueToUtf8(out result: RawUtf8);
+procedure TXmlParser.ValueToUtf8(var result: RawUtf8);
 begin
   if Kind in [xtCData, xtComment] then
     FastSetString(result, Value.Text, Value.Len) // verbatim sections
@@ -2115,8 +2088,10 @@ begin
   // (nesting is bounded by the TXmlParser 256 levels static stack)
   obj.Init(opt, dvObject);
   txt := '';
-  while x.Next do
-    case x.Kind of
+  while true do
+    case x.Next of
+      xtEof:
+        break;
       xtAttribute:
         begin
           x.NameToUtf8(n);
@@ -2167,8 +2142,10 @@ begin
   x.Init(pointer(Xml), length(Xml),
     ParseOptions * [xpoStripNamespacePrefix]);
   txt := '';
-  while x.Next do
-    case x.Kind of
+  while true do
+    case x.Next of
+      xtEof:
+        break;
       xtElementStart:
         begin
           x.NameToUtf8(n);
