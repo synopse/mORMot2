@@ -279,6 +279,7 @@ type
     function Position: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
   private
+    fTab: PAnsiCharToByte;
     fCur, fBegin, fAfter, fToken, fNameOrigin: PUtf8Char;
     // opened element names, as packed 25-bit offsets from fNameOrigin and
     // 7-bit lengths - a static 1KB stack, favoring the common SAX use case:
@@ -1761,14 +1762,18 @@ end;
 function TXmlParser.ParseName(p, e: PUtf8Char): PUtf8Char;
 begin
   Name.Text := p;
-  while (p < e) and
-        not (p^ in [#0..' ', '<', '>', '/', '=', '?', '"', '''']) do
-  begin
-    if (xpoStripNamespacePrefix in Options) and
-       (p^ = ':') then
-      Name.Text := p + 1;
-    inc(p);
-  end;
+  if xpoStripNamespacePrefix in Options then
+    while (p < e) and
+          (fTab[p^] = 0) do
+    begin
+      if p^ = ':' then
+        Name.Text := p + 1;
+      inc(p);
+    end
+  else
+    while (p < e) and
+          (fTab[p^] = 0) do
+      inc(p);
   Name.Len := p - Name.Text;
   if Name.Len = 0 then
     ParseError(p, 'void or invalid name');
@@ -1777,6 +1782,9 @@ begin
     inc(p);
   result := p;
 end;
+
+var
+  XML_KIND: TAnsiCharToByte;
 
 procedure TXmlParser.Init(Text: PUtf8Char; TextLen: PtrInt;
   ParserOptions: TXmlParserOptions);
@@ -1803,6 +1811,7 @@ begin
   Name.Len := 0;
   Value.Text := nil;
   Value.Len := 0;
+  fTab := @XML_KIND;
 end;
 
 function TXmlParser.Position: PtrInt;
@@ -6432,6 +6441,15 @@ begin
   esc['&']  := 6;
   esc['"']  := 7;
   esc[''''] := 8;
+  FillCharFast(XML_KIND, 33, 1); // #0..' '
+  esc := @XML_KIND;
+  esc['"']  := 1;
+  esc['''']  := 1;
+  esc['/']  := 1;
+  esc['<']  := 1;
+  esc['>']  := 1;
+  esc['=']  := 1;
+  esc['?']  := 1;
 end; // EMOJI_*[] constants are delayed via explicit EmojiInit
 
 initialization
