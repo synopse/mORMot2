@@ -3806,6 +3806,46 @@ end;
 
 { ************* Markup (e.g. Markdown or Emoji) process }
 
+var
+  _EMOJISET: boolean;
+  _EMOJI_UTF8: array[TEmoji] of TStrRecConst;
+
+procedure EmojiInit;
+var
+  e: TEmoji;
+begin
+  if _EMOJISET then
+    exit;
+  GlobalLock;
+  if not _EMOJISET then
+  begin
+    // Emoji Efficient Parsing
+    Assert(ord(high(TEmoji)) = $4f + 1);
+    EMOJI_RTTI := GetEnumName(TypeInfo(TEmoji), 1); // ignore eNone=0
+    GetEnumTrimmedNames(TypeInfo(TEmoji), @EMOJI_TEXT, scLowerCase);
+    FastAssignNew(EMOJI_TEXT[eNone]);
+    for e := succ(low(e)) to high(e) do
+    begin
+      Join([':', EMOJI_TEXT[e], ':'], EMOJI_TAG[e]);
+      // order matches U+1F600 to U+1F64F codepoints
+      Ucs4ToUtf8(ord(e) + $1f5ff, FastSetConst(EMOJI_UTF8[e], _EMOJI_UTF8[e], nil, 4));
+    end;
+    EMOJI_AFTERDOTS[')'] := eSmiley;
+    EMOJI_AFTERDOTS['('] := eFrowning;
+    EMOJI_AFTERDOTS['|'] := eExpressionless;
+    EMOJI_AFTERDOTS['/'] := eConfused;
+    EMOJI_AFTERDOTS['D'] := eLaughing;
+    EMOJI_AFTERDOTS['o'] := eOpen_mouth;
+    EMOJI_AFTERDOTS['O'] := eOpen_mouth;
+    EMOJI_AFTERDOTS['p'] := eYum;
+    EMOJI_AFTERDOTS['P'] := eYum;
+    EMOJI_AFTERDOTS['s'] := eScream;
+    EMOJI_AFTERDOTS['S'] := eScream;
+    _EMOJISET := true;
+  end;
+  GlobalUnLock;
+end;
+
 { internal TTextWriterEscape class }
 
 type
@@ -3836,6 +3876,7 @@ type
     esc: TTextWriterHtmlEscape;
     lst: TTextWriterEscapeLineStyle;
     procedure Start(dest: TTextWriter; src: PUtf8Char; escape: TTextWriterHtmlEscape);
+      {$ifdef HASINLINE}inline;{$endif}
     function ProcessText(const stopchars: TSynByteSet): AnsiChar;
     procedure ProcessHRef;
     function ProcessLink: boolean;
@@ -3863,6 +3904,8 @@ begin
     fmt := hfNone;
   esc := escape;
   lst := twlNone;
+  if not _EMOJISET then
+    EmojiInit;
 end;
 
 function IsHttpOrHttps(P: PUtf8Char): boolean;
@@ -4241,12 +4284,13 @@ end;
 
 function HtmlEscapeWiki(const wiki: RawUtf8; esc: TTextWriterHtmlEscape): RawUtf8;
 var
-  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
   W: TTextWriter;
+  doesc: TTextWriterEscape;
+  temp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
   W := TTextWriter.CreateOwnedStream(temp);
   try
-    AddHtmlEscapeWiki(W, pointer(wiki), esc);
+    doesc.AddHtmlEscapeWiki(W, pointer(wiki), esc);
     W.SetText(result);
   finally
     W.Free;
@@ -4255,12 +4299,13 @@ end;
 
 function HtmlEscapeMarkdown(const md: RawUtf8; esc: TTextWriterHtmlEscape): RawUtf8;
 var
-  temp: TTextWriterStackBuffer;
   W: TTextWriter;
+  doesc: TTextWriterEscape;
+  temp: TTextWriterStackBuffer;
 begin
   W := TTextWriter.CreateOwnedStream(temp);
   try
-    AddHtmlEscapeMarkdown(W, pointer(md), esc);
+    doesc.AddHtmlEscapeMarkdown(W, pointer(md), esc);
     W.SetText(result);
   finally
     W.Free;
@@ -4279,46 +4324,6 @@ var
   doesc: TTextWriterEscape;
 begin
   doesc.AddHtmlEscapeMarkdown(W, P, esc);
-end;
-
-var
-  _EMOJISET: boolean;
-  _EMOJI_UTF8: array[TEmoji] of TStrRecConst;
-
-procedure EmojiInit;
-var
-  e: TEmoji;
-begin
-  if _EMOJISET then
-    exit;
-  GlobalLock;
-  if not _EMOJISET then
-  begin
-    // Emoji Efficient Parsing
-    Assert(ord(high(TEmoji)) = $4f + 1);
-    EMOJI_RTTI := GetEnumName(TypeInfo(TEmoji), 1); // ignore eNone=0
-    GetEnumTrimmedNames(TypeInfo(TEmoji), @EMOJI_TEXT, scLowerCase);
-    FastAssignNew(EMOJI_TEXT[eNone]);
-    for e := succ(low(e)) to high(e) do
-    begin
-      Join([':', EMOJI_TEXT[e], ':'], EMOJI_TAG[e]);
-      // order matches U+1F600 to U+1F64F codepoints
-      Ucs4ToUtf8(ord(e) + $1f5ff, FastSetConst(EMOJI_UTF8[e], _EMOJI_UTF8[e], nil, 4));
-    end;
-    EMOJI_AFTERDOTS[')'] := eSmiley;
-    EMOJI_AFTERDOTS['('] := eFrowning;
-    EMOJI_AFTERDOTS['|'] := eExpressionless;
-    EMOJI_AFTERDOTS['/'] := eConfused;
-    EMOJI_AFTERDOTS['D'] := eLaughing;
-    EMOJI_AFTERDOTS['o'] := eOpen_mouth;
-    EMOJI_AFTERDOTS['O'] := eOpen_mouth;
-    EMOJI_AFTERDOTS['p'] := eYum;
-    EMOJI_AFTERDOTS['P'] := eYum;
-    EMOJI_AFTERDOTS['s'] := eScream;
-    EMOJI_AFTERDOTS['S'] := eScream;
-    _EMOJISET := true;
-  end;
-  GlobalUnLock;
 end;
 
 function EmojiFromText(P: PUtf8Char; len: PtrInt): TEmoji;
@@ -4341,7 +4346,7 @@ begin
   if c[-2] <= ' ' then
   begin
     if (c[1] <= ' ') and
-       (c^ in ['('..'|']) then
+       (c^ in ['(' .. '|']) then
       result := EMOJI_AFTERDOTS[c^]; // e.g. :)
     if result = eNone then
     begin
