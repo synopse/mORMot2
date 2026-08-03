@@ -7899,13 +7899,21 @@ begin
   next();
 end;
 
+const
+  // = the deprecated System.vmtFreeInstance, which Delphi replaced by the
+  // asm-only VMTOFFSET operator - verified to match the RTL value on 32/64-bit
+  // - CPP_ABI_ADJUST was introduced with Delphi XE2, and the RTL constant is
+  // not deprecated on older compilers, so it is used as-is there and on FPC
+  VMT_FREEINSTANCE = {$ifdef ISDELPHIXE2} -2 * SizeOf(pointer) - CPP_ABI_ADJUST
+                     {$else} vmtFreeInstance {$endif ISDELPHIXE2};
+
 constructor TSetWeakZero.Create(aClass: TClass);
 var
   P: PPtrUInt;
 begin
   // key = instance TObject, value = dynarray field(s) to be zeroed
   inherited Create(TypeInfo(TPointerDynArray), TypeInfo(TPointerDynArrayDynArray));
-  P := pointer(PAnsiChar(aClass) + vmtFreeInstance);
+  P := pointer(PAnsiChar(aClass) + VMT_FREEINSTANCE);
   if PPointer(P)^ = @TSetWeakZero.HookedFreeInstance then
     // hook once - Create may be done twice in GetWeakZero() for SetPrivateSlot
     exit;
