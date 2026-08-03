@@ -2034,7 +2034,12 @@ type
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     procedure AddItems(const aValue: array of const);
     /// low-level adding of one value to this document, handled as array
-    function NewItem: PVariant;
+    // - returns a pointer to the new raw value to be filled
+    function NewItem: PVariant; overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// low-level adding of one value to this document, handled as object
+    // - returns a pointer to the new raw value to be filled
+    function NewItem(const aName: RawUtf8): PVariant; overload;
     /// add one object document to this document
     // - if the document is an array, keep aName=''
     // - if the document is an object, set the new object property as aName
@@ -7767,7 +7772,8 @@ end;
 
 function TDocVariantData.InternalAddValuePrepare(const aName: RawUtf8;
   DoUpdate: boolean; out v: PVariant; const Ctxt: ShortString; aIndex: integer): integer;
-begin // this function won't create any duplicated 
+begin // this function won't create any duplicated item
+  v := nil;
   result := -1;
   if aName = '' then
     exit;
@@ -8060,23 +8066,9 @@ begin
   result := @VValue[PtrUInt(result)]; // in two steps for FPC
 end;
 
-function TDocVariantData.AddObject(const aNameValuePairs: array of const;
-  const aName: RawUtf8; DontAddDefault: boolean): integer;
-var
-  obj: PDocVariantData;
+function TDocVariantData.NewItem(const aName: RawUtf8): PVariant;
 begin
-  if (aName <> '') and // aName='' for dvArray: can't use InternalAddValuePrepare
-     (Has(dvoCheckForDuplicatedNames)) and
-     (GetValueIndex(aName) >= 0) then
-      EDocVariant.RaiseUtf8('AddObject: Duplicated [%] name', [aName]);
-  result := InternalAdd(aName);
-  obj := @VValue[result];
-  if PInteger(obj)^ = 0 then // most common case is adding a new value
-    obj^.InitClone(self, dvoIsObject) // same options than owner document
-  else if (cardinal(obj^.VType) <> cardinal(VType)) or
-          not obj^.Has(dvoIsObject) then
-    EDocVariant.RaiseUtf8('AddObject: wrong existing [%]', [aName]);
-  obj^.AddNameValuesToObject(aNameValuePairs, DontAddDefault);
+  InternalAddValuePrepare(aName, {update=}false, result, 'NewItem');
 end;
 
 function TDocVariantData.GetObjectProp(const aName: RawUtf8;
