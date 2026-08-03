@@ -630,7 +630,7 @@ type
     /// the data will be appended to an existing RawUtf8 using the 8KB stack buffer
     // - fDest will be pointer(RawUtf8), not a true TRawByteStringStream
     constructor CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer;
-      const aAppendTo: RawUtf8); overload;
+      var aAppendTo: RawUtf8); overload;
     /// the data will be written to an external file
     // - you should call explicitly FlushFinal or FlushToStream to write
     // any pending data to the file
@@ -4311,10 +4311,11 @@ begin
 end;
 
 constructor TTextWriter.CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer;
-  const aAppendTo: RawUtf8);
+  var aAppendTo: RawUtf8);
 begin
   SetOwnedRawUtf8(aStackBuf);
-  RawUtf8(fDest) := aAppendTo;
+  pointer(fDest) := pointer(aAppendTo); // will now own this instance
+  pointer(aAppendTo) := nil;
 end;
 
 constructor TTextWriter.CreateOwnedFileStream(

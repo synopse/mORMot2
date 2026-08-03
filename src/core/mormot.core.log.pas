@@ -2449,7 +2449,7 @@ begin
   if not OpenExeFile(e, temp) then
   begin
     {$ifdef DWARFDEBUG}
-    DisplayError('OpenExeFile failed on  %s', [temp]);
+    ConsoleWrite(['OpenExeFile failed on ', temp]);
     {$endif DWARFDEBUG}
     exit;
   end;
@@ -2459,7 +2459,7 @@ begin
     if not OpenExeFile(e, temp) then
     begin
       {$ifdef DWARFDEBUG}
-      DisplayError('OpenExeFile failed on  %s', [temp]);
+      ConsoleWrite(['OpenExeFile failed on ', temp]);
       {$endif DWARFDEBUG}
       exit;
     end;
