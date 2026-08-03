@@ -13498,11 +13498,11 @@ const
 
 procedure InitializeUnit;
 var
-  vm: TVariantManager; // available since Delphi 7
   vt: cardinal;
   ins: boolean;
   i: PtrUInt;
   {$ifdef FPC}
+  vm: TVariantManager;
   test: variant;
   {$endif FPC}
 begin
@@ -13550,11 +13550,14 @@ begin
   _VARDATACMP[varUString, false] := 17;
   _VARDATACMP[varUString, true]  := 18;
   {$endif HASVARUSTRING}
+  {$ifdef FPC}
   // patch DispInvoke for performance and to circumvent RTL inconsistencies
+  // - FPC only: Delphi deprecated its variant manager and made it a no-op
+  // (System.GetVariantManager just zeroes the record and SetVariantManager has
+  // an empty body), so Delphi relies on TSynInvokeableVariantType.DispInvoke
   GetVariantManager(vm);
   vm.DispInvoke := NewDispInvoke;
   SetVariantManager(vm);
-  {$ifdef FPC}
   // circumvent FPC 3.2+ inverted parameters order - may be fixed in later FPC
   test := _ObjFast([]);
   try
