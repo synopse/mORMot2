@@ -275,6 +275,8 @@ type
     // - decoding any XML entity, unless the current token is a verbatim
     // xtCData/xtComment section
     procedure ValueToUtf8(var result: RawUtf8);
+    /// append the current Value as into a UTF-8 string
+    procedure ValueAppendToUtf8(var result: RawUtf8);
     /// the offset of the current token in the input buffer
     // - could be used to store a position, then resume a scan from it
     function Position: PtrInt;
@@ -2061,39 +2063,40 @@ begin
 end;
 
 procedure TXmlParser.ValueToUtf8(var result: RawUtf8);
+var
+  amp: PUtf8Char;
 begin
   if Kind in [xtCData, xtComment] then
+    amp := nil
+  else
+    amp := PosChar(Value.Text, Value.Len, '&');
+  if amp = nil then
     FastSetString(result, Value.Text, Value.Len) // verbatim sections
   else
-    XmlUnescape(Value.Text, Value.Len, result);
+    XmlUnescape(Value.Text, Value.Len, result, amp);
 end;
 
-
-procedure XmlDocAddOrAppend(var doc: TDocVariantData; const name: RawUtf8;
-  const v: variant; const opt: TDocVariantOptions);
+procedure TXmlParser.ValueAppendToUtf8(var result: RawUtf8);
 var
-  i: PtrInt;
-  arr: PDocVariantData;
-  a: TDocVariantData;
-  prev: variant;
+  amp: PUtf8Char;
+  W: TTextWriter;
+  tmp: TTextWriterStackBuffer;
 begin
-  // gather repeated sibling elements of the same name into an array
-  i := doc.GetValueIndex(name);
-  if i < 0 then
-    doc.AddValue(name, v)
+  if Kind in [xtCData, xtComment] then
+    amp := nil
   else
+    amp := PosChar(Value.Text, Value.Len, '&');
+  if amp = nil then
   begin
-    arr := _Safe(doc.Values[i]);
-    if arr^.IsArray then
-      arr^.AddItem(v)
-    else
-    begin
-      prev := doc.Values[i];
-      a.Init(opt, dvArray);
-      a.AddItem(prev);
-      a.AddItem(v);
-      doc.Value[name] := variant(a);
-    end;
+    Append(result, Value.Text, Value.Len); // verbatim sections
+    exit;
+  end;
+  W := TTextWriter.CreateOwnedStream(tmp, result); // append to result
+  try
+    AddXmlUnescape(W, Value.Text, amp, Value.Len);
+    W.SetText(result);
+  finally
+    W.Free;
   end;
 end;
 
