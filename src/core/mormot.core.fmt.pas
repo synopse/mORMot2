@@ -162,7 +162,8 @@ procedure AddXmlUnescape(W: TTextWriter; p, amp: PUtf8Char; plen: PtrUInt);
 // entity appears in the input text
 // - as used by TXmlParser.ValueToUtf8, or to be called directly
 // - raises EXmlException on any other (i.e. undefined) entity
-procedure XmlUnescape(Text: PUtf8Char; TextLen: PtrInt; var result: RawUtf8);
+procedure XmlUnescape(Text: PUtf8Char; TextLen: PtrInt; var result: RawUtf8;
+  amp: PUtf8Char = nil);
 
 type
   /// exception raised by TXmlParser on invalid or unsupported XML input
@@ -1716,14 +1717,14 @@ begin
   until plen = 0;
 end;
 
-procedure XmlUnescape(Text: PUtf8Char; TextLen: PtrInt; var result: RawUtf8);
+procedure XmlUnescape(Text: PUtf8Char; TextLen: PtrInt; var result: RawUtf8;
+  amp: PUtf8Char);
 var
-  amp: PUtf8Char;
   W: TTextWriter;
   tmp: TTextWriterStackBuffer;
 begin
-  amp := nil;
-  if TextLen > 0 then
+  if (amp = nil) and
+     (TextLen > 0) then
     amp := PosChar(Text, TextLen, '&');
   if amp = nil then
   begin
