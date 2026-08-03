@@ -2288,7 +2288,7 @@ begin
     DebugFilesSafe.WriteUnLock;
     if (s <> nil) and
        (result = nil) then
-      Make([' ', ExtractFileName(fn), ' ', symbol], s^);
+      Make([' ', GetFileNameWithoutExtOrPath(fn), ' ', symbol], s^);
   end;
 end;
 
