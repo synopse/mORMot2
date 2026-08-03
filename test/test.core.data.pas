@@ -211,6 +211,11 @@ type
     procedure SaxOptions;
     /// malformed input and the "basic profile" rejection set (e.g. DTD)
     procedure SaxErrors;
+    /// buffer/nesting/entity boundaries which no other test does cover
+    // - markup ending at the very last byte of the input, oversized numeric
+    // references, the 255 nesting levels limit, 127-bytes names, and input
+    // buffers with no #0 terminator nor any readable byte after their end
+    procedure SaxBoundaries;
     /// XmlToVariant/TryXmlToVariant/XmlToJson mapping conventions
     procedure ToVariant;
   end;
@@ -9327,6 +9332,329 @@ begin
   SetLength(big, 130);
   FillCharFast(pointer(big)^, 130, ord('n'));
   ExpectRaise('name too long', '<' + big + '/>');
+end;
+
+{$ifdef OSWINDOWS}
+const
+  _MEM_COMMIT     = $1000;
+  _MEM_RELEASE    = $8000;
+  _PAGE_READWRITE = 4;
+  _PAGE_NOACCESS  = 1;
+
+// raw page protection APIs, as used by TTestCoreXml.SaxBoundaries below to
+// turn any single-byte overread into a catchable access violation
+function VirtualAlloc(lpAddress: pointer; dwSize: PtrUInt;
+  flAllocationType, flProtect: cardinal): pointer; stdcall; external 'kernel32';
+function VirtualProtect(lpAddress: pointer; dwSize: PtrUInt;
+  flNewProtect: cardinal; lpflOldProtect: PCardinal): LongBool; stdcall;
+    external 'kernel32';
+function VirtualFree(lpAddress: pointer; dwSize: PtrUInt;
+  dwFreeType: cardinal): LongBool; stdcall; external 'kernel32';
+{$endif OSWINDOWS}
+
+procedure TTestCoreXml.SaxBoundaries;
+var
+  p: TXmlParser;
+  deep, u, v, s: RawUtf8;
+  i, n: PtrInt;
+  maxcp: RawUtf8;
+  buf: array[0..7] of AnsiChar;
+
+  procedure Scan(var x: TXmlParser; len: PtrInt; const Context: RawUtf8);
+  // consume all tokens of an already Init-ed parser, checking that no
+  // spurious empty xtText is reported at the very end of the buffer
+  var
+    tok: PtrInt;
+    err: RawUtf8;
+  begin
+    tok := 0;
+    err := '';
+    try
+      while x.Next <> xtEof do
+      begin
+        inc(tok);
+        // an empty text token would mean the end of buffer was mis-detected
+        Check((x.Kind <> xtText) or
+              (x.Value.Len > 0), Utf8ToString(Context));
+        if tok > 100 then
+          break; // paranoid: detect any infinite loop
+      end;
+      Check(x.Kind = xtEof, Utf8ToString(Context));
+      Check(x.Next = xtEof, Utf8ToString(Context)); // idempotent at eof
+      CheckEqual(x.Depth, 0, Context);
+    except
+      on E: EXmlException do
+        err := StringToUtf8(E.Message);
+    end;
+    CheckEqual(err, '', Context);
+    Check(tok <= 100, Utf8ToString(Context));
+  end;
+
+  procedure ExpectOk(const Context, Xml: RawUtf8;
+    Options: TXmlParserOptions = []);
+  // the mirror of ExpectRaise(): parse the whole input with no error at all,
+  // reported as a plain failed assertion rather than as an escaping exception
+  var
+    x: TXmlParser;
+    n, v, err: RawUtf8;
+  begin
+    err := '';
+    try
+      x.Init(pointer(Xml), length(Xml), Options);
+      while x.Next <> xtEof do
+      begin
+        x.NameToUtf8(n);
+        x.ValueToUtf8(v);
+      end;
+      CheckEqual(x.Position, length(Xml), Context);
+    except
+      on E: EXmlException do
+        err := StringToUtf8(E.Message);
+    end;
+    CheckEqual(err, '', Context);
+  end;
+
+  function DeepStarts(const Xml: RawUtf8; out Reason: RawUtf8): PtrInt;
+  // how many xtElementStart are accepted before an EXmlException is raised
+  var
+    x: TXmlParser;
+  begin
+    result := 0;
+    Reason := '';
+    try
+      x.Init(pointer(Xml), length(Xml));
+      while x.Next <> xtEof do
+        if x.Kind = xtElementStart then
+          inc(result);
+    except
+      on E: EXmlException do
+        Reason := StringToUtf8(E.Message);
+    end;
+  end;
+
+  procedure NoTerm(const Xml, Context: RawUtf8);
+  // parse a buffer holding exactly length(Xml) bytes with NO #0 terminator:
+  // the intent is to guard against any read of buffer[len], i.e. one single
+  // byte past the end of the input
+  // - on Windows the buffer is flushed against a PAGE_NOACCESS page, so such
+  // an overread does raise an access violation instead of going unnoticed
+  // - elsewhere a plain GetMem() block of the exact size is used: a regression
+  // would then show up as a wrong token, and any ASAN/valgrind run would
+  // still catch the overread itself
+  var
+    x: TXmlParser;
+    len: PtrInt;
+    raw: PUtf8Char;
+    {$ifdef OSWINDOWS}
+    res: pointer;
+    guard: PUtf8Char;
+    pagesize: PtrUInt;
+    old: cardinal;
+    {$endif OSWINDOWS}
+  begin
+    len := length(Xml);
+    {$ifdef OSWINDOWS}
+    pagesize := SystemInfo.dwPageSize;
+    if PtrUInt(len) < pagesize then
+    begin
+      // reserve two pages, then revoke any access to the second one
+      res := VirtualAlloc(nil, pagesize * 2, _MEM_COMMIT, _PAGE_READWRITE);
+      if not CheckFailed(res <> nil, Utf8ToString(Context)) then
+      try
+        guard := PUtf8Char(res) + pagesize;
+        Check(VirtualProtect(guard, pagesize, _PAGE_NOACCESS, @old),
+          Utf8ToString(Context));
+        // place the very last input byte just before the forbidden page
+        raw := guard - len;
+        MoveFast(pointer(Xml)^, raw^, len);
+        x.Init(raw, len);
+        Scan(x, len, Context);
+      finally
+        VirtualFree(res, 0, _MEM_RELEASE);
+      end;
+      exit;
+    end;
+    {$endif OSWINDOWS}
+    GetMem(raw, len); // exactly N bytes, with no room for any #0
+    try
+      MoveFast(pointer(Xml)^, raw^, len);
+      x.Init(raw, len);
+      Scan(x, len, Context);
+    finally
+      FreeMem(raw);
+    end;
+  end;
+
+begin
+  // 1. mixed content: non-blank text nodes keep their leading/trailing blanks
+  ExpectOk('mixed 1', '<a>  hello</a>');
+  ExpectOk('mixed 2', '<p><b>Hi</b> there</p>');
+  ExpectOk('mixed 3', '<a> both </a>');
+  ExpectOk('mixed 5', '<a>  <b/>  </a>');
+  ExpectOk('mixed 6', '<a>  <b/>  </a>', [xpoKeepWhiteSpace]);
+  p.Init('<a>  hello</a>', 14);
+  Walk(p, xtElementStart, 'a');
+  Walk(p, xtText, '', '  hello'); // two leading blanks are preserved
+  Walk(p, xtElementEnd, 'a');
+  Check(p.Next = xtEof);
+  p.Init('<p><b>Hi</b> there</p>', 22);
+  Walk(p, xtElementStart, 'p');
+  Walk(p, xtElementStart, 'b');
+  Walk(p, xtText, '', 'Hi');
+  Walk(p, xtElementEnd, 'b');
+  Walk(p, xtText, '', ' there'); // one leading blank is preserved
+  Walk(p, xtElementEnd, 'p');
+  Check(p.Next = xtEof);
+  // but a pure-blank text node is still ignored, unless asked for
+  p.Init('<a>  <b/>  </a>', 15);
+  Walk(p, xtElementStart, 'a');
+  Walk(p, xtElementStart, 'b');
+  Walk(p, xtElementEnd, 'b');
+  Walk(p, xtElementEnd, 'a');
+  Check(p.Next = xtEof);
+  CheckEqual(XmlToJson('<a> both </a>'), '{"a":" both "}');
+  CheckEqual(XmlToJson('<p>Hello <b>x</b> world</p>'),
+    '{"p":{"b":"x","#text":"Hello  world"}}');
+  // 2. markup whose last byte is the very last byte of the input buffer
+  ExpectOk('cdata at end', '<a></a><![CDATA[x]]>');
+  ExpectOk('lone cdata', '<![CDATA[x]]>');
+  ExpectOk('cdata then blank', '<a></a><![CDATA[x]]> ');
+  ExpectOk('empty cdata at end', '<a></a><![CDATA[]]>');
+  ExpectOk('pi at end', '<a/><?pi x?>', [xpoKeepPI]);
+  ExpectOk('pi at end skipped', '<a/><?pi x?>');
+  ExpectOk('pi then blank', '<a/><?pi x?> ', [xpoKeepPI]);
+  ExpectOk('void pi at end', '<a/><?pi?>', [xpoKeepPI]);
+  ExpectOk('blank pi at end', '<a/><?pi ?>', [xpoKeepPI]);
+  ExpectOk('comment at end', '<a/><!-- c -->', [xpoKeepComments]);
+  ExpectOk('comment at end skipped', '<a/><!-- c -->');
+  ExpectOk('element at end', '<a/>');
+  ExpectOk('text at end', '<a>x</a>');
+  // a PI body is trimmed, and never reported with a negative length
+  p.Init('<?pi   ?><a/>', 13, [xpoKeepPI]);
+  Walk(p, xtPI, 'pi', '');
+  CheckEqual(p.Value.Len, 0, 'blanks-only PI body');
+  Walk(p, xtElementStart, 'a');
+  Walk(p, xtElementEnd, 'a');
+  Check(p.Next = xtEof);
+  p.Init('<?pi  x  ?><a/>', 15, [xpoKeepPI]);
+  Walk(p, xtPI, 'pi', 'x');
+  Walk(p, xtElementStart, 'a');
+  Walk(p, xtElementEnd, 'a');
+  Check(p.Next = xtEof);
+  // truncated markup is still rejected, i.e. the fixes above did not open up
+  ExpectRaise('cdata cut', '<a/><![CDATA[x]]');
+  ExpectRaise('cdata cut 2', '<a/><![CDATA[x]');
+  ExpectRaise('cdata cut 3', '<a/><![CDATA[x');
+  ExpectRaise('pi cut', '<a/><?pi x?', [xpoKeepPI]);
+  ExpectRaise('pi cut 2', '<a/><?pi x', [xpoKeepPI]);
+  ExpectRaise('pi cut 3', '<a/><?pi', [xpoKeepPI]);
+  ExpectRaise('void pi', '<a/><?', [xpoKeepPI]);
+  ExpectRaise('comment cut', '<a/><!-- c --', [xpoKeepComments]);
+  ExpectRaise('comment cut 2', '<a/><!-- c -', [xpoKeepComments]);
+  ExpectRaise('comment cut 3', '<a/><!-- c ', [xpoKeepComments]);
+  ExpectRaise('element cut', '<a');
+  ExpectRaise('element cut 2', '<a/');
+  // 3. numeric character references at and above the Unicode range
+  maxcp := '';
+  SetString(maxcp, PAnsiChar(@buf), Ucs4ToUtf8($10ffff, @buf)); // no literal
+  p.Init('<a>&#x10FFFF;</a>', 17);
+  Walk(p, xtElementStart, 'a');
+  Check(p.Next = xtText);
+  p.ValueToUtf8(v);
+  CheckEqual(v, maxcp, 'highest code point');
+  Walk(p, xtElementEnd, 'a');
+  Check(p.Next = xtEof);
+  ExpectRaise('above range', '<a>&#x110000;</a>');
+  ExpectRaise('above range dec', '<a>&#1114112;</a>');
+  ExpectRaise('way above range', '<a>&#xFFFFFFF;</a>');
+  // a 32-bit wraparound must not smuggle any markup character back in
+  ExpectRaise('wrap to lt', '<a>&#x10000003C;</a>');
+  ExpectRaise('wrap to amp', '<a>&#x100000026;</a>');
+  ExpectRaise('wrap to lt dec', '<a>&#4294967356;</a>');
+  ExpectRaise('wrap many digits', '<a>&#x000000000000003C;</a>');
+  ExpectRaise('void ref', '<a>&#;</a>');
+  ExpectRaise('void hex ref', '<a>&#x;</a>');
+  // 4. the nesting limit is 255 opened elements, with a per-root offset origin
+  for n := 253 to 257 do
+  begin
+    // well-formed documents of exactly n nesting levels
+    deep := '';
+    u := '';
+    for i := 1 to n do
+      deep := deep + '<e' + UInt32ToUtf8(i) + '>'; // per-level distinct names
+    for i := n downto 1 do
+      deep := deep + '</e' + UInt32ToUtf8(i) + '>';
+    for i := 1 to n do
+      u := u + '<e>';                              // all levels sharing a name
+    for i := 1 to n do
+      u := u + '</e>';
+    s := Make(['nesting ', n]);
+    if n <= 255 then
+    begin
+      CheckEqual(DeepStarts(deep, v), n, s);
+      CheckEqual(v, '', s);
+      CheckEqual(DeepStarts(u, v), n, s);
+      CheckEqual(v, '', s);
+    end
+    else
+    begin
+      CheckEqual(DeepStarts(deep, v), 255, s);
+      Check(v <> '', Utf8ToString(s));
+      CheckEqual(DeepStarts(u, v), 255, s);
+      Check(v <> '', Utf8ToString(s));
+    end;
+  end;
+  ExpectRaise('nesting 257', deep); // deep is 257 levels here
+  deep := '';
+  for i := 1 to 300 do
+    deep := deep + '<a>';
+  CheckEqual(DeepStarts(deep, v), 255, 'nesting 300');
+  // the packed offsets origin is reset once the nesting returns to 0
+  ExpectOk('two roots', '<a><b/></a><c><d/></c>');
+  u := '';
+  for i := 1 to 255 do
+    u := u + '<e' + UInt32ToUtf8(i) + '>';
+  for i := 255 downto 1 do
+    u := u + '</e' + UInt32ToUtf8(i) + '>';
+  ExpectOk('255 deep', u);
+  ExpectOk('255 deep then sibling root', u + '<z/>');
+  CheckEqual(DeepStarts(u + '<z/>', v), 256, 'sibling root is a new origin');
+  CheckEqual(v, '', 'sibling root');
+  ExpectOk('255 deep twice', u + u);
+  // names are limited to 127 bytes, and the limit itself must be reachable
+  SetLength(v, 127);
+  FillCharFast(pointer(v)^, 127, ord('n'));
+  ExpectOk('127-bytes name', '<' + v + '/>');
+  ExpectOk('127-bytes name nested', '<a><' + v + '/></a>');
+  p.Init(pointer('<' + v + '/>'), 130);
+  Walk(p, xtElementStart, v);
+  CheckEqual(p.Name.Len, 127, '127-bytes name length');
+  Walk(p, xtElementEnd, v);
+  Check(p.Next = xtEof);
+  SetLength(u, 128);
+  FillCharFast(pointer(u)^, 128, ord('n'));
+  ExpectRaise('128-bytes name', '<' + u + '/>');
+  // 5. no byte at all may be read past the end of the input buffer, i.e. the
+  // parser must never rely on any #0 terminator - see NoTerm() comments above
+  NoTerm('<a/>', 'clean');
+  NoTerm('<a/>'#10, 'lf');
+  NoTerm('<a>x</a>', 'text');
+  NoTerm('<a>x</a> ', 'trailing blank');
+  NoTerm('<a> x </a>', 'inner blanks');
+  NoTerm('    ', 'blanks only');
+  NoTerm(' ', 'single blank');
+  // 3 bytes is the exact length at which Init() checks for a leading UTF-8
+  // BOM, and it must not read a 4th byte to do so
+  NoTerm('   ', '3 blanks');
+  NoTerm(#$ef#$bb#$bf, 'BOM only');
+  NoTerm(#$ef#$bb#$bf'<a/>', 'BOM then element');
+  NoTerm(#$ef#$bb, '2 bytes of a BOM');
+  NoTerm(#$ef, '1 byte of a BOM');
+  NoTerm('<a/>'#13#10, 'crlf');
+  NoTerm('<a></a><![CDATA[x]]>', 'cdata');
+  NoTerm('<a/><!-- c -->', 'comment');
+  NoTerm('<a b="c"/>', 'attribute');
+  NoTerm('<a>&amp;</a>', 'entity');
 end;
 
 procedure TTestCoreXml.ToVariant;

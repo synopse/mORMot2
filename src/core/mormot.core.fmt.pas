@@ -1800,7 +1800,8 @@ procedure TXmlParser.Init(Text: PUtf8Char; TextLen: PtrInt;
 begin
   if (Text <> nil) and
      (TextLen >= 3) and
-     (PCardinal(Text)^ and $00ffffff = $00bfbbef) then
+     (PWord(Text)^ = BOM_UTF8 and $ffff) and       // no PCardinal 4-bytes read
+     (PByteArray(Text)[2] = BOM_UTF8 shr 16) then  // on a 3-bytes-only buffer
   begin
     inc(Text, 3); // ignore any UTF-8 BOM
     dec(TextLen, 3);
@@ -1989,22 +1990,23 @@ begin
             // <?name ...?> processing instruction
             inc(p);
             p := ParseName(p, e, 'void or invalid PI name');
-            fCur := p;
+            fCur := p; // just after the name and its trailing blanks
             dec(e, 2);
-            while (p < e) and
+            while (p <= e) and
                   ((p^ <> '?') or
                    (p[1] <> '>')) do
               inc(p);
-            if p >= e then
+            if p > e then
               ParseError(Name.Text, 'unfinished processing instruction');
             if xpoKeepPI in Options then
             begin
               Value.Text := fCur;
-              while p[-1] <= ' ' do
-                dec(p);
+              while (p > fCur) and
+                    (p[-1] <= ' ') do
+                dec(p); // trim trailing blanks, but never before the value
               Value.Len := p - Value.Text;
               while p^ <= ' ' do
-                inc(p);
+                inc(p); // reach back the '?>' ending
               inc(p, 2);
               Kind := xtPI;
               break;
