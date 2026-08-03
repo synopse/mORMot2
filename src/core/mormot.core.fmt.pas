@@ -277,6 +277,12 @@ type
     procedure ValueToUtf8(var result: RawUtf8);
     /// append the current Value as into a UTF-8 string
     procedure ValueAppendToUtf8(var result: RawUtf8);
+    /// append the current Name/Value attribute into a TDocVariant object
+    procedure AttributeToDocVariant(Dest: PDocVariantData);
+    /// raw recursive conversion of the current level into a TDocVariant object
+    // - fill from attributes and content, until the matching xtElementEnd
+    // - the supplied Dest^ should have been just allocated or ZeroClear()
+    procedure ToDocVariant(Dest: PDocVariantData; DestVType: cardinal);
     /// the offset of the current token in the input buffer
     // - could be used to store a position, then resume a scan from it
     function Position: PtrInt;
@@ -308,13 +314,13 @@ const
 // - all values are stored as strings - XML is untyped text by nature
 // - only xpoStripNamespacePrefix is used from ParseOptions
 // - raises EXmlException on any malformed or unsupported input (e.g. DTD)
-procedure XmlToVariant(const Xml: RawUtf8; out Doc: TDocVariantData;
+procedure XmlToVariant(const Xml: RawUtf8; var Doc: variant;
   ParseOptions: TXmlParserOptions = [];
   Options: TDocVariantOptions = JSON_XML);
 
 /// convenient wrapper around XmlToVariant() with no EXmlException
 // - will catch internally any EXmlException and return false on failure
-function TryXmlToVariant(const Xml: RawUtf8; out Doc: TDocVariantData;
+function TryXmlToVariant(const Xml: RawUtf8; var Doc: variant;
   ParseOptions: TXmlParserOptions = [];
   Options: TDocVariantOptions = JSON_XML): boolean;
 
@@ -2100,91 +2106,59 @@ begin
   end;
 end;
 
-procedure XmlElementToVariant(var x: TXmlParser;
-  const opt: TDocVariantOptions; out result: variant);
+procedure TXmlParser.AttributeToDocVariant(Dest: PDocVariantData);
 var
-  obj: TDocVariantData;
-  n, txt, seg: RawUtf8;
-  v: variant;
+  n, v: PByteArray; // avoid hidden try..finally
 begin
-  // fill from attributes and content, until the matching xtElementEnd
-  // (nesting is bounded by the TXmlParser 256 levels static stack)
-  obj.Init(opt, dvObject);
-  while true do
-    case x.Next of
-      xtEof:
-        break;
-      xtAttribute:
-        begin
-          x.NameToUtf8(n);
-          x.ValueToUtf8(seg);
-          RawUtf8ToVariant(seg, v);
-          obj.AddValue('@' + n, v);
-        end;
-      xtElementStart:
-        begin
-          x.NameToUtf8(n);
-          XmlElementToVariant(x, opt, v);
-          XmlDocAddOrAppend(obj, n, v, opt);
-        end;
-      xtText,
-      xtCData:
-        begin
-          x.ValueToUtf8(seg);
-          txt := txt + seg;
-        end;
-      xtElementEnd:
-        break;
-    end;
-  if obj.Count = 0 then
-  begin
-    // no attribute nor child element: as a plain string value
-    RawUtf8ToVariant(txt, result);
-    obj.Clear;
-  end
-  else
-  begin
-    if txt <> '' then
-    begin
-      RawUtf8ToVariant(txt, v);
-      obj.AddValue('#text', v);
-    end;
-    result := variant(obj);
-  end;
+  n := FastNewString(Name.Len + 1, CP_UTF8);
+  n[0] := ord('@');
+  MoveFast(Name.Text^, n[1], Name.Len);
+  v := nil;
+  ValueToUtf8(RawUtf8(v));
+  Dest^.AddValueText(RawUtf8(n), RawUtf8(v));
+  FastAssignNew(n);
+  FastAssignNew(v);
 end;
 
-procedure XmlToVariant(const Xml: RawUtf8; out Doc: TDocVariantData;
+procedure TXmlParser.ToDocVariant(Dest: PDocVariantData; DestVType: cardinal);
+var
+  txt: RawUtf8; // we need a try..finally since Next may raise EXmlException
+begin
+  PSynVarData(Dest)^.VType := DestVType; // fast Init() - Dest should be zeroed
+  while true do
+    case Next of
+      xtEof,
+      xtElementEnd:
+        break;
+      xtAttribute:
+        AttributeToDocVariant(Dest);
+      xtElementStart:
+        ToDocVariant(pointer(Dest^.NewSibling(Name.Text, Name.Len)), DestVType);
+      xtText,
+      xtCData:
+        ValueAppendToUtf8(txt);
+    end;
+  if Dest^.Count <> 0 then
+    if txt = '' then
+      exit
+    else
+      Dest := pointer(Dest^.NewItem('#text'));
+  PSynVarData(Dest)^.VType := varString;
+  PSynVarData(Dest)^.VAny := pointer(txt);
+  pointer(txt) := nil;
+end;
+
+procedure XmlToVariant(const Xml: RawUtf8; var Doc: variant;
   ParseOptions: TXmlParserOptions; Options: TDocVariantOptions);
 var
   x: TXmlParser;
-  n, txt, seg: RawUtf8;
-  v: variant;
 begin
-  Doc.Init(Options, dvObject);
-  x.Init(pointer(Xml), length(Xml),
-    ParseOptions * [xpoStripNamespacePrefix]);
-  while true do
-    case x.Next of
-      xtEof:
-        break;
-      xtElementStart:
-        begin
-          x.NameToUtf8(n);
-          XmlElementToVariant(x, Options, v);
-          XmlDocAddOrAppend(Doc, n, v, Options);
-        end;
-      xtText,
-      xtCData:
-        begin
-          x.ValueToUtf8(seg);
-          txt := txt + seg;
-        end;
-    end;
-  if txt <> '' then
-    Doc.AddValueText('#text', txt);
+  x.Init(pointer(Xml), length(Xml), ParseOptions * [xpoStripNamespacePrefix]);
+  ZeroClear(@Doc); // as required by x.ToDocVariant
+  x.ToDocVariant(@Doc, _VType(Options, dvObject));
 end;
 
-function TryXmlToVariant(const Xml: RawUtf8; out Doc: TDocVariantData;
+function TryXmlToVariant(const Xml: RawUtf8; var Doc: variant;
   ParseOptions: TXmlParserOptions; Options: TDocVariantOptions): boolean;
 begin
   try
@@ -2202,10 +2176,10 @@ end;
 function XmlToJson(const Xml: RawUtf8;
   ParseOptions: TXmlParserOptions): RawUtf8;
 var
-  doc: TDocVariantData;
+  doc: variant;
 begin
   XmlToVariant(Xml, doc, ParseOptions);
-  result := doc.ToJson;
+  VariantSaveJson(doc, twJsonEscape, result);
 end;
 
 
