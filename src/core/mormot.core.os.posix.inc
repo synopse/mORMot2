@@ -5841,15 +5841,15 @@ begin
   SystemInfo.dwPageSize := fpsysctlhwint(HW_PAGESIZE);
   beg := fpsysctlhwstr(HW_MACHINE, temp1);
   {$ifdef OSDARWIN}
-  CpuThreads := fpsysctlbynameint('hw.logicalcpu');
-  CpuCores   := fpsysctlbynameint('hw.physicalcpu');
+  SystemInfo.dwNumberOfProcessors := fpsysctlbynameint('hw.logicalcpu');
+  CpuCores := fpsysctlbynameint('hw.physicalcpu');
   if PosChar(beg, ' ') = nil then // e.g. from a Parallels VM
     beg := fpsysctlhwstr(HW_MODEL, temp1);
   modname := fpsysctlbynamestr('machdep.cpu.brand_string', temp2);
   {$endif OSDARWIN}
   FastSetString(BiosInfoText, beg, StrLen(beg));
-  if CpuThreads = 0 then
-    CpuThreads := fpsysctlhwint(HW_NCPU);
+  if SystemInfo.dwNumberOfProcessors = 0 then
+    SystemInfo.dwNumberOfProcessors := fpsysctlhwint(HW_NCPU);
   if modname = nil then
     modname := fpsysctlhwstr(HW_MODEL, temp2);
   {$ifdef OSDARWIN}
