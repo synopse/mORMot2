@@ -3162,6 +3162,19 @@ begin
   // nothing to be done on Windows: PAGE_EXECUTE_READWRITE always work
 end;
 
+function _GetmemDualAccessPages: pointer;
+var
+  s: PtrUInt;
+  ignore: DWord;
+begin
+  s := SystemInfo.dwPageSize;
+  result := VirtualAlloc(nil, s * 2, MEM_COMMIT, PAGE_READWRITE);
+  if result = nil then
+    exit;
+  inc(PByte(result), s);
+  VirtualProtect(result, s, PAGE_NOACCESS, ignore);
+end;
+
 function _GetLargeMem(BigSize: PtrUInt): pointer;
 begin
   result := VirtualAlloc(nil, BigSize, MEM_COMMIT, PAGE_READWRITE);

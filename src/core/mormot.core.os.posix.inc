@@ -4460,6 +4460,10 @@ end;
   {$define USEPATCHRWX}
 {$endif OSLINUX}
 
+const
+  PROT_READWRITE = PROT_READ or PROT_WRITE;
+  MAP_DEFAULT = MAP_PRIVATE or MAP_ANONYMOUS;
+
 function mprotect(Addr: PtrUInt; Len: size_t; Prot: integer): integer;
   cdecl external clib name 'mprotect';
 
@@ -4484,7 +4488,7 @@ begin
     inc(siz, SystemInfo.dwPageSize);
   OSSafe.Lock;
   try
-    if mprotect(adr, siz, PROT_READ or PROT_WRITE) <> 0 then // RW
+    if mprotect(adr, siz, PROT_READWRITE) <> 0 then // RW
       exit;
     // no try..finally since could be part of the RTL
     MoveByOne(New, Old, Size);
@@ -4523,13 +4527,13 @@ begin
       if Size < 0 then // from PatchPointer(VMT)
       begin
         if not PtrUIntScanExists(pointer(PatchedVmt), PatchedVmtCount, adr) then
-          if mprotect(adr, siz, PROT_READ or PROT_WRITE) = 0 then
+          if mprotect(adr, siz, PROT_READWRITE) = 0 then
             AddPtrUInt(PatchedVmt, PatchedVmtCount, adr) // mark set to RW
           else
             PatchedHardened := true;
       end // Size > 0 from RedirectCode()
       else if not PtrUIntScanExists(pointer(PatchedCode), PatchedCodeCount, adr) then
-          if mprotect(adr, siz, PROT_READ or PROT_WRITE or PROT_EXEC) = 0 then
+          if mprotect(adr, siz, PROT_READWRITE or PROT_EXEC) = 0 then
             AddPtrUInt(PatchedCode, PatchedCodeCount, adr) // mark set to RWX
           else
             PatchedHardened := true;
@@ -4615,8 +4619,7 @@ begin
   begin
     // try whole -STUB_INTERV..+STUB_INTERV range
     inc(start, STUB_SIZE);
-    result := fpmmap(pointer(start), STUB_SIZE,
-      flProtect, MAP_PRIVATE or MAP_ANONYMOUS, -1, 0);
+    result := fpmmap(pointer(start), STUB_SIZE, flProtect, MAP_DEFAULT, -1, 0);
     if result <> MAP_FAILED then
     begin
       // close enough for a 24/32-bit relative jump?
@@ -4638,8 +4641,7 @@ end;
 // other platforms (Intel+Arm64) use plain Kernel call and PtrInt jump
 function StubCallAllocMem(const Size, flProtect: DWORD): pointer;
 begin
-  result := fpmmap(nil, STUB_SIZE,
-    flProtect, MAP_PRIVATE OR MAP_ANONYMOUS, -1, 0);
+  result := fpmmap(nil, STUB_SIZE, flProtect, MAP_DEFAULT, -1, 0);
 end;
 
 {$endif CPUARM}
@@ -4648,11 +4650,11 @@ function StubMemoryAlloc: pointer;
 begin
   result := MAP_FAILED;
   if not (fStubMemoryExecXorWrite in _F1) then // W and X are exclusive on some OS
-    result := StubCallAllocMem(STUB_SIZE, PROT_READ or PROT_WRITE or PROT_EXEC);
+    result := StubCallAllocMem(STUB_SIZE, PROT_READWRITE or PROT_EXEC);
   if result = MAP_FAILED then
   begin
     // i.e. on OpenBSD or OSX aarch64, we can not have W and X protection
-    result := StubCallAllocMem(STUB_SIZE, PROT_READ OR PROT_WRITE);
+    result := StubCallAllocMem(STUB_SIZE, PROT_READWRITE);
     if result <> MAP_FAILED then
       include(_F1, fStubMemoryExecXorWrite);
   end;
@@ -4679,11 +4681,22 @@ begin
   if Exec then
     flags := PROT_READ OR PROT_EXEC
   else
-    flags := PROT_READ or PROT_WRITE;
+    flags := PROT_READWRITE;
   if mprotect(aligned, pagesize shl 1, flags) < 0 then
      raise EOSException.Create('ReserveExecutableMemoryPageAccess: mprotect fail');
 end;
 
+function _GetmemDualAccessPages: pointer;
+var
+  s: PtrUInt;
+begin
+  s := SystemInfo.dwPageSize;
+  result := fpmmap(nil, s * 2, PROT_READWRITE, MAP_DEFAULT, -1, 0);
+  if result = nil then
+    exit;
+  inc(PByte(result), s);
+  mprotect(PtrUInt(result), s, PROT_NONE); // silently ignore any problem
+end;
 
 const
   // Transparent Huge Pages (THP) exist since Linux 2.6.38, Superpages provide
@@ -4719,14 +4732,14 @@ function _GetLargeMem(BigSize: PtrUInt): pointer;
 var
   flags: cardinal;
 begin
-  flags := MAP_PRIVATE or MAP_ANONYMOUS;
+  flags := MAP_DEFAULT;
   if BigSize >= PMD_SIZE * 2 then
     BigSize := (BigSize + PMD_MASK) and not PMD_MASK;
   if (MAP_HUGE_SIZE <> 0) and
      (BigSize >= PMD_SIZE * 8) then
   begin
     flags := flags or MAP_HUGETLB or MAP_HUGE_2MB;
-    result := fpmmap(nil, BigSize, PROT_READ or PROT_WRITE, flags, -1, 0);
+    result := fpmmap(nil, BigSize, PROT_READWRITE, flags, -1, 0);
     if result <> MAP_FAILED then
       exit;
     // on mmap() failure, /proc/sys/vm/nr_hugepages is likely to be 0
@@ -4734,9 +4747,9 @@ begin
     // - and try "echo 1000 > /proc/sys/vm/nr_hugepages" as root
     // - but we did not see any noticeable benefit for this process
     MAP_HUGE_SIZE := 0; // disable this feature from now on
-    flags := MAP_PRIVATE or MAP_ANONYMOUS;
+    flags := MAP_DEFAULT;
   end;
-  result := fpmmap(nil, BigSize, PROT_READ or PROT_WRITE, flags, -1, 0);
+  result := fpmmap(nil, BigSize, PROT_READWRITE, flags, -1, 0);
   if result = MAP_FAILED then
     result := nil; // as VirtualAlloc()
 end;
@@ -4745,8 +4758,7 @@ function _GetLargeMem(BigSize: PtrUInt): pointer;
 begin
   if BigSize >= PMD_SIZE * 2 then  // ensure 2MB aligned for Size >= 4MB
     BigSize := (BigSize + PMD_MASK) and not PMD_MASK;
-  result := fpmmap(nil, BigSize,
-    PROT_READ or PROT_WRITE, MAP_PRIVATE or MAP_ANONYMOUS, -1, 0);
+  result := fpmmap(nil, BigSize, PROT_READWRITE, MAP_DEFAULT, -1, 0);
   if result = MAP_FAILED then
     result := nil; // as VirtualAlloc()
 end;

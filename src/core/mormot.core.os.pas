@@ -3920,6 +3920,19 @@ function ReserveExecutableMemory(size: cardinal
 // - do nothing on Windows and Linux, but may be needed on OpenBSD / OSX
 procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
 
+/// allocate two pages of memory, the first R/W as usual, the second with GPF on access
+// - follow SystemInfo.dwPageSize value and VirtualProtect/mprotect raw API
+// - return a pointer to the access protected second page, for regression tests
+function GetmemDualAccessPagesLock: pointer; overload;
+
+/// make a copy of some text with GPF on any memory access just after it
+// - Content should be <= SystemInfo.dwPageSize - typically <= 4KB
+// - return a pointer to the copied Content bytes, for regression tests
+function GetmemDualAccessPagesLock(const Content: RawByteString): pointer; overload;
+
+/// to be called once GetmemDualAccessPagesLock() memory is not used any more
+procedure GetmemDualAccessPagesUnLock;
+
 /// check if the supplied pointer is actually pointing to some memory page
 // - will call slow but safe VirtualQuery API on Windows, or try a fpaccess()
 // syscall on POSIX systems (validated on Linux only)
@@ -9144,6 +9157,38 @@ begin
   end;
 end;
 
+var
+  __GetmemDualAccessPagesLock: TLightLock;
+  __GetmemDualAccessPages: pointer;
+
+function GetmemDualAccessPagesLock: pointer;
+begin
+  __GetmemDualAccessPagesLock.Lock;
+  if __GetmemDualAccessPages = nil then
+    __GetmemDualAccessPages := _GetmemDualAccessPages; // VirtualAlloc/mmap once
+  result := __GetmemDualAccessPages; // nil or pointer for GPF on read
+end;
+
+function GetmemDualAccessPagesLock(const Content: RawByteString): pointer;
+var
+  len: PtrUInt;
+begin
+  len := length(Content);
+  result := nil;
+  if len > SystemInfo.dwPageSize then
+    exit;
+  result := GetmemDualAccessPagesLock;
+  if result = nil then
+    exit;
+  dec(PByte(result), len);
+  MoveFast(pointer(Content)^, result^, len);
+end;
+
+procedure GetmemDualAccessPagesUnLock;
+begin
+  __GetmemDualAccessPagesLock.UnLock;
+end;
+
 const
   OS_ALIGNED = 128 shl 10; // call the OS for any block >= 128KB
 
@@ -12970,6 +13015,8 @@ begin
       FreeAndNilSafe(Instances[i]); // before GlobalCriticalSection deletion
   end;
   ObjArrayClear(CurrentFakeStubBuffers);
+  if __GetmemDualAccessPages <> nil then // need VirtualFree() or unmap()
+    _FreeLargeMem(__GetmemDualAccessPages, SystemInfo.dwPageSize * 2);
   Executable.Version.Free;
   Executable.Command.Free;
   FinalizeSpecificUnit; // in mormot.core.os.posix/windows.inc files
