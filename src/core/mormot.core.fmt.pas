@@ -1798,6 +1798,10 @@ var
 procedure TXmlParser.Init(Text: PUtf8Char; TextLen: PtrInt;
   ParserOptions: TXmlParserOptions);
 begin
+  fBegin := Text;
+  fCur := Text;
+  fToken := Text;
+  fNameOrigin := Text;
   if (Text <> nil) and
      (TextLen >= 3) and
      (PWord(Text)^ = BOM_UTF8 and $ffff) and       // no PCardinal 4-bytes read
@@ -1806,10 +1810,6 @@ begin
     inc(Text, 3); // ignore any UTF-8 BOM
     dec(TextLen, 3);
   end;
-  fBegin := Text;
-  fCur := Text;
-  fToken := Text;
-  fNameOrigin := Text;
   fAfter := Text + TextLen;
   Options := ParserOptions;
   byte(Flags) := 0;
