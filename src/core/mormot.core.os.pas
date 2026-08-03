@@ -79,9 +79,25 @@ const
   /// human-friendly alias to open a file for exclusive writing ($20)
   fmShareRead      = fmShareDenyWrite;
   /// human-friendly alias to open a file for exclusive reading ($30)
-  fmShareWrite     = {$ifdef DELPHIPOSIX} fmShareDenyNone {$else} fmShareDenyRead {$endif};
+  // - $0030 is the value of the RTL fmShareDenyRead, inlined here because that
+  // constant does not exist on POSIX - where write-only sharing is unsupported,
+  // so Delphi flags it as platform-specific
+  fmShareWrite     = {$ifdef DELPHIPOSIX} fmShareDenyNone {$else} $0030 {$endif};
   /// human-friendly alias to open a file with no read/write exclusion ($40)
   fmShareReadWrite = fmShareDenyNone;
+
+  /// hidden file attribute ($02) - i.e. the RTL faHidden value
+  // - the RTL constant is flagged as platform-specific because on POSIX it is
+  // just the initial '.' naming convention, but its value is fixed everywhere
+  faHiddenFile     = $00000002;
+  /// system file attribute ($04) - i.e. the RTL faSysFile value
+  // - the RTL constant is flagged as platform-specific because on POSIX system
+  // files are neither regular files nor directories
+  faSystemFile     = $00000004;
+  /// DOS volume label attribute ($08) - i.e. the RTL faVolumeID value
+  // - the RTL constant is deprecated since it is never returned by FindFirst()
+  // on Win32, but it is still excluded by SearchRecValidFile() for safety
+  faVolumeLabel    = $00000008;
 
   /// execute FileOpen/TFileStreamEx.Create for reading without exclusion
   fmOpenReadShared = fmOpenRead or fmShareReadWrite;
@@ -7779,22 +7795,22 @@ begin
 end;
 
 const
-  // faHidden is supported by the FPC RTL on POSIX, by checking an initial '.'
-  faInvalid = faDirectory + {$ifdef OSWINDOWS} faVolumeID{%H-} + {$endif} faSysFile{%H-};
+  // faHiddenFile is supported by the FPC RTL on POSIX, by checking an initial '.'
+  faInvalid = faDirectory + {$ifdef OSWINDOWS} faVolumeLabel + {$endif} faSystemFile;
 
 function SearchRecValidFile(const F: TSearchRec; IncludeHidden: boolean): boolean;
 begin
   result := (F.Name <> '') and
             (F.Attr and faInvalid = 0) and
             (IncludeHidden or
-             (F.Attr and faHidden{%H-} = 0));
+             (F.Attr and faHiddenFile = 0));
 end;
 
 function SearchRecValidFolder(const F: TSearchRec; IncludeHidden: boolean): boolean;
 begin
   result := (F.Attr and faDirectory <> 0) and
             (IncludeHidden or
-             (F.Attr and faHidden{%H-} = 0)) and
+             (F.Attr and faHiddenFile = 0)) and
             (F.Name <> '') and
             (F.Name <> '.') and
             (F.Name <> '..');
@@ -7805,7 +7821,7 @@ function FindFirstDirectory(const Path: TFileName; IncludeHidden: boolean;
 begin
   result := faDirectory;
   if IncludeHidden then
-    result := result or faHidden{%H-};
+    result := result or faHiddenFile;
   result := FindFirst(Path, result, F);
 end;
 
