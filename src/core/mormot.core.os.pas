@@ -13018,6 +13018,7 @@ end;
 procedure FinalizeUnit;
 var
   i: PtrInt;
+  p: PByte;
 begin
   with InternalGarbageCollection do
   begin
@@ -13026,10 +13027,11 @@ begin
       FreeAndNilSafe(Instances[i]); // before GlobalCriticalSection deletion
   end;
   ObjArrayClear(CurrentFakeStubBuffers);
-  if __GetmemDualAccessPages <> nil then // need VirtualFree() or unmap()
+  p := __GetmemDualAccessPages;
+  if p <> nil then // need VirtualFree() or unmap()
   begin
-    dec(PByte(__GetmemDualAccessPages), SystemInfo.dwPageSize); // was base + 1 page
-    _FreeLargeMem(__GetmemDualAccessPages, SystemInfo.dwPageSize * 2);
+    dec(p, SystemInfo.dwPageSize); // from GPF page to R/W start page
+    _FreeLargeMem(p, SystemInfo.dwPageSize * 2); // release both pages
   end;
   Executable.Version.Free;
   Executable.Command.Free;
