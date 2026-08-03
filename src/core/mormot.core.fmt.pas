@@ -264,7 +264,10 @@ type
     // - any UTF-8 BOM would be ignored
     // - the buffer is expected to remain available during the whole parsing
     procedure Init(Text: PUtf8Char; TextLen: PtrInt;
-      ParserOptions: TXmlParserOptions = []);
+      ParserOptions: TXmlParserOptions = []); overload;
+    /// prepare the parsing of a given XML UTF-8 string content
+    procedure Init(const Text: RawUtf8;
+      ParserOptions: TXmlParserOptions = []); overload;
     /// iterate to the next token of the input, returning xtEof when done
     // - raises an EXmlException on any malformed or unsupported input
     function Next: TXmlToken;
@@ -1822,6 +1825,11 @@ begin
   Value.Text := nil;
   Value.Len := 0;
   fTab := @XML_KIND;
+end;
+
+procedure TXmlParser.Init(const Text: RawUtf8; ParserOptions: TXmlParserOptions);
+begin
+  Init(pointer(Text), length(Text), ParserOptions);
 end;
 
 function TXmlParser.Position: PtrInt;
