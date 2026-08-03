@@ -884,7 +884,7 @@ begin
         end;
       // actually launch the http.sys server
       fHttpServer := THttpApiServer.Create(aQueueName, HttpThreadStart,
-        HttpThreadTerminate, fRestServerNames, hso, fLog);
+        HttpThreadTerminate, fRestServerNames, hso, fLog, aThreadPoolCount);
       if not THttpApiServer(fHttpServer).WaitStarted then
         EHttpApiServer.RaiseUtf8('%.WaitStarted timeout on %',
           [self, fRestServerNames]);
