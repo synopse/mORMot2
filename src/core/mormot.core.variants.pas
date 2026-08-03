@@ -102,6 +102,9 @@ function SetOleStr(Source: PSynVarData; Dest: PWideString): boolean;
 procedure ZeroFill(Value: PVarData);
   {$ifdef HASINLINE}inline;{$endif}
 
+/// same as VarClear(Value^) and FillChar(Value^,SizeOf(TVarData),0)
+procedure ZeroClear(Value: PVarData);
+
 /// fill all bytes of the value's memory buffer with zeros, i.e. 'toto' -> #0#0#0#0
 // - may be used to cleanup stack-allocated content
 procedure FillZero(var value: variant); overload;
@@ -2885,6 +2888,10 @@ procedure _ByRef(const DocVariant: variant; out Dest: variant;
 // strings in a settings property
 function _Csv(const DocVariantOrString: variant): RawUtf8;
 
+/// compute the raw 32-bit TSynVarData.VType value as TDocVariantData.Init()
+function _VType(const aOptions: TDocVariantOptions; aKind: TDocVariantKind): cardinal;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// will convert any TObject into a TDocVariant document instance
 // - fast processing function as used by _ObjFast(Value)
 // - note that the result variable should already be cleared: no VarClear()
@@ -4131,6 +4138,13 @@ begin
   {$ifdef CPU64}
   PInt64Array(Value)^[2] := 0;
   {$endif CPU64}
+end;
+
+procedure ZeroClear(Value: PVarData);
+begin
+  if PSynVarData(Value)^.VType <> 0 then
+    VarClearProc(Value^);
+  ZeroFill(Value);
 end;
 
 procedure FillZero(var value: variant);
@@ -6299,6 +6313,11 @@ begin
   VCount := 0;
   pointer(VName)  := nil; // to avoid GPF when mapped within a TVarData/variant
   pointer(VValue) := nil;
+end;
+
+function _VType(const aOptions: TDocVariantOptions; aKind: TDocVariantKind): cardinal;
+begin // dvUndefined=0 dvArray=1 dvObject=2 -> [dvoIsArray]=1 [dvoIsObject]=2
+  result := DocVariantVType + cardinal((word(aOptions) and not _DVO) + ord(aKind)) shl 16;
 end;
 
 procedure TDocVariantData.Init(const aOptions: TDocVariantOptions;
