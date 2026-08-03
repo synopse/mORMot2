@@ -13027,7 +13027,10 @@ begin
   end;
   ObjArrayClear(CurrentFakeStubBuffers);
   if __GetmemDualAccessPages <> nil then // need VirtualFree() or unmap()
+  begin
+    dec(PByte(__GetmemDualAccessPages), SystemInfo.dwPageSize); // was base + 1 page
     _FreeLargeMem(__GetmemDualAccessPages, SystemInfo.dwPageSize * 2);
+  end;
   Executable.Version.Free;
   Executable.Command.Free;
   FinalizeSpecificUnit; // in mormot.core.os.posix/windows.inc files
