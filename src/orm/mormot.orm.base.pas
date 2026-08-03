@@ -10526,8 +10526,7 @@ begin
     TOrmTableRowVariantData(Source).VTable.ToDocVariant(r, tmp);
     if AVarType = DocVariantVType then
     begin
-      VarClear(variant(Dest));
-      ZeroFill(@Dest); // avoid GPF
+      ZeroClear(@Dest); // avoid GPF
       TDocVariantData(Dest) := TDocVariantData(tmp);
     end
     else
