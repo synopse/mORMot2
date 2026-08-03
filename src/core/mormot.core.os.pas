@@ -4793,8 +4793,8 @@ type
   PLockedListOne = ^TLockedListOne;
   /// abstract parent of one data entry in TLockedList, storing two PLockedListOne
   // - TLockedList should store unmanaged records starting with those fields
-  // - sequence field contains an incremental random-seeded 30-bit integer > 65535,
-  // to avoid ABA problems when instances are recycled
+  // - sequence field contains an incremental random-seeded 30-bit integer >
+  // 65535, to avoid ABA problems when instances are recycled
   TLockedListOne = record
     next, prev: pointer;
     sequence: PtrUInt;
@@ -11780,14 +11780,16 @@ end;
 
 function TLockedList.Free(one: pointer): boolean;
 var
-  o: PLockedListOne absolute one;
+  o: PLockedListOne;
 begin
   result := false;
-  if (o = nil) or
-     (o^.sequence = 0) then
+  if one = nil then
     exit;
+  o := one;
   Safe.Lock;
   try
+    if o^.sequence = 0 then // already garbage collected (paranoid)
+      exit;
     // remove from main double-linked list
     if o = fHead then
       fHead := o.next;
