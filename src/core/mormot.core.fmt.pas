@@ -170,7 +170,7 @@ type
   EXmlException = class(ESynException);
 
   TXmlParserFlags = set of (
-    fInElement, fMayOverflow);
+    fInElement);
 
   /// the kind of tokens returned by TXmlParser.Next
   // - xtEof is set once the end of the input buffer has been reached
@@ -227,7 +227,8 @@ type
   // - well-formedness of the tags nesting is verified, and any syntax or
   // nesting error would raise an EXmlException with the faulty line number
   // - to reduce the memory footprint, this parser has some limitations: Depth
-  // is limited to 255 and any root element should not be > 32MB of UTF-8 text
+  // is limited to 255, Names are allowed up to 255 UTF-8 bytes, and any root
+  // element should not be > 4GB of UTF-8 text
   // - usage: call Init() then Next in a loop, e.g. as
   // ! x.Init(pointer(xml), length(xml));
   // ! while true do
@@ -268,6 +269,7 @@ type
     /// prepare the parsing of a given XML UTF-8 string content
     procedure Init(const Text: RawUtf8;
       ParserOptions: TXmlParserOptions = []); overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// iterate to the next token of the input, returning xtEof when done
     // - raises an EXmlException on any malformed or unsupported input
     function Next: TXmlToken;
@@ -292,13 +294,10 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   private
     fTab: PAnsiCharToByte;
-    fCur, fBegin, fToken, fNameOrigin, fAfter: PUtf8Char;
-    // opened element names, as packed 25-bit offsets from fNameOrigin and
-    // 7-bit lengths - a static 1KB stack, favoring the common SAX use case:
-    // up to 256 nesting levels and 127-byte names, with the offsets origin
-    // reset each time the nesting level returns to 0 (so no 32MB limit for
-    // any consecutive documents/fragments, but only within a single root)
-    fStack: array[byte] of cardinal;
+    fCur, fBegin, fToken, fAfter: PUtf8Char;
+    // up to 256 levels of 32-bit offsets from fNameOrigin and 255-byte names
+    fStackPos: array[byte] of cardinal;
+    fStackLen: array[byte] of byte;
   end;
 
 const
@@ -1715,8 +1714,8 @@ begin
       end;
     if c = 0 then
     begin
-      SetString(ent, p - 1, plen); // truncate to TShort15
-      EXmlException.RaiseUtf8('XmlUnescape: invalid entity in "%"', [ent]);
+      SetString(ent, p - 1, plen); // RTL will truncate to TShort15
+      EXmlException.RaiseUtf8('XmlUnescape: invalid entity in ''%''', [ent]);
     end;
     if c <= $7f then
       W.AddDirect(AnsiChar(c))
@@ -1801,10 +1800,13 @@ var
 procedure TXmlParser.Init(Text: PUtf8Char; TextLen: PtrInt;
   ParserOptions: TXmlParserOptions);
 begin
+  {$ifdef CPU64}
+  if TextLen shr 32 <> 0 then
+    EXmlException.RaiseUtf8('TXmlParser cannot parse % bytes', [TextLen]);
+  {$endif CPU64}
   fBegin := Text;
   fCur := Text;
   fToken := Text;
-  fNameOrigin := Text;
   if (Text <> nil) and
      (TextLen >= 3) and
      (PWord(Text)^ = BOM_UTF8 and $ffff) and       // no PCardinal 4-bytes read
@@ -1816,8 +1818,6 @@ begin
   fAfter := Text + TextLen;
   Options := ParserOptions;
   byte(Flags) := 0;
-  if TextLen shr 25 <> 0 then
-    include(Flags, fMayOverflow);
   Depth := 0;
   Kind := xtEof;
   Name.Text := nil;
@@ -1875,9 +1875,8 @@ begin
             if Depth = 0 then
               ParseError(p, 'unexpected tag ending');
             dec(Depth);
-            Name.Len := fStack[Depth];
-            Name.Text := fNameOrigin + (Name.Len shr 7);
-            Name.Len := Name.Len and 127;
+            Name.Text := fBegin + fStackPos[Depth];
+            Name.Len := fStackLen[Depth];
             Kind := xtElementEnd;
             break;
           end;
@@ -1934,9 +1933,9 @@ begin
             if Depth = 0 then
               ParseError(Name.Text, 'unexpected end tag');
             dec(Depth);
-            if ((fStack[Depth] and 127) <> cardinal(Name.Len)) or
+            if (fStackLen[Depth] <> Name.Len) or
                ((not (xpoDontCheckEndTagName in Options)) and
-                (not CompareMemSmall(fNameOrigin + (fStack[Depth] shr 7),
+                (not CompareMemSmall(fBegin + fStackPos[Depth],
                    Name.Text, Name.Len))) then
               ParseError(Name.Text, 'mismatched end tag');
             Kind := xtElementEnd;
@@ -2027,18 +2026,12 @@ begin
         begin
           // <name> element start
           p := ParseName(p, e, 'void or invalid name');
-          if Name.Len > 127 then
-            ParseError(Name.Text, 'unexpectedly long name (max 127)');
-          if Depth = 0 then
-            // no more opened element: reset the packed offsets origin
-            fNameOrigin := Name.Text
-          else if Depth = high(fStack) then
-            ParseError(Name.Text, 'too much nesting')
-          else if (fMayOverflow in Flags) and
-                  ((Name.Text - fNameOrigin) shr 25 <> 0) then
-            ParseError(Name.Text, 'single root spanning over 32MB');
-          fStack[Depth] := cardinal(Name.Text - fNameOrigin) shl 7 +
-                           cardinal(Name.Len);
+          if Name.Len shr 8 <> 0 then
+            ParseError(Name.Text, 'unexpectedly long name (max 255)');
+          if Depth = high(fStackPos) then
+            ParseError(Name.Text, 'too much nesting');
+          fStackPos[Depth] := Name.Text - fBegin;
+          fStackLen[Depth] := Name.Len;
           inc(Depth);
           include(Flags, fInElement);
           Kind := xtElementStart;

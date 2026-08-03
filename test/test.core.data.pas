@@ -9305,7 +9305,7 @@ end;
 
 procedure TTestCoreXml.SaxErrors;
 var
-  deep, big: RawUtf8;
+  deep: RawUtf8;
   i: integer;
 begin
   ExpectRaise('dtd', '<!DOCTYPE foo [<!ENTITY x "y">]><a>&x;</a>');
@@ -9322,13 +9322,10 @@ begin
   ExpectRaise('eof in cdata', '<a><![CDATA[x</a>');
   ExpectRaise('void name', '< a></a>');
   ExpectRaise('dangling amp', '<a>&</a>');
-  deep := '';
   for i := 1 to 300 do
-    deep := deep + '<a>';
+    Append(deep, '<a>');
   ExpectRaise('too much nesting', deep);
-  SetLength(big, 130);
-  FillCharFast(pointer(big)^, 130, ord('n'));
-  ExpectRaise('name too long', '<' + big + '/>');
+  ExpectRaise('name too long', '<' + RawUtf8OfChar('n', 300) + '/>');
 end;
 
 procedure TTestCoreXml.SaxBoundaries;
@@ -9575,17 +9572,17 @@ begin
   CheckEqual(DeepStarts(u + '<z/>', v), 256, 'sibling root is a new origin');
   CheckEqual(v, '', 'sibling root');
   ExpectOk('255 deep twice', u + u);
-  // names are limited to 127 bytes, and the limit itself must be reachable
-  u := RawUtf8OfChar('n', 127);
+  // names are limited to 255 bytes, and the limit itself must be reachable
+  u := RawUtf8OfChar('n', 255);
   Join(['<', u, '/>'], v);
-  ExpectOk('127-bytes name', v);
-  ExpectOk('127-bytes name nested', '<a>' + v + '</a>');
+  ExpectOk('255-bytes name', v);
+  ExpectOk('255-bytes name nested', '<a>' + v + '</a>');
   p.Init(v);
   Walk(p, xtElementStart, u);
-  CheckEqual(p.Name.Len, 127, '127-bytes name length');
+  CheckEqual(p.Name.Len, 255, '255-bytes name length');
   Walk(p, xtElementEnd, u);
   Check(p.Next = xtEof);
-  ExpectRaise('128-bytes name', Join(['<', RawUtf8OfChar('n', 128), '/>']));
+  ExpectRaise('256-bytes name', Join(['<', RawUtf8OfChar('n', 256), '/>']));
   // 5. no byte at all may be read past the end of the input buffer, i.e. the
   // parser must never rely on any #0 terminator - see NoTerm() comments above
   NoTerm('<a/>', 'clean');
