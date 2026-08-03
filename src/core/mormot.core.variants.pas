@@ -13382,6 +13382,7 @@ begin
   TDocDict.RegisterToRtti(TypeInfo(IDocDict));
 end;
 
+{$ifdef FPC} // GetVariantManager() is no-op on Delphi 7+
 var
   // naive but efficient type cache - e.g. for TBsonVariant or TQuickJsVariant
   LastDispInvoke: TSynInvokeableVariantType;
@@ -13472,6 +13473,7 @@ direct:         if Dest <> nil then
     end;
   end;
 end;
+{$endif FPC}
 
 procedure SetJsonVTypes(opt: PWordArray; vt: cardinal; dest: PCardinal);
 var
@@ -13551,10 +13553,7 @@ begin
   _VARDATACMP[varUString, true]  := 18;
   {$endif HASVARUSTRING}
   {$ifdef FPC}
-  // patch DispInvoke for performance and to circumvent RTL inconsistencies
-  // - FPC only: Delphi deprecated its variant manager and made it a no-op
-  // (System.GetVariantManager just zeroes the record and SetVariantManager has
-  // an empty body), so Delphi relies on TSynInvokeableVariantType.DispInvoke
+  // FPC patch DispInvoke for performance and to circumvent RTL inconsistencies
   GetVariantManager(vm);
   vm.DispInvoke := NewDispInvoke;
   SetVariantManager(vm);
