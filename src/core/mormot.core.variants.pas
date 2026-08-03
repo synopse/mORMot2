@@ -2040,6 +2040,10 @@ type
     /// low-level adding of one value to this document, handled as object
     // - returns a pointer to the new raw value to be filled
     function NewItem(const aName: RawUtf8): PVariant; overload;
+    /// low-level adding of one named value to this document, handled as object
+    // - will gather repeated sibling elements of the same name into an array
+    // - returns a pointer to the new raw value to be filled
+    function NewSibling(aName: PUtf8Char; aNameLen: PtrInt): PVariant;
     /// add one object document to this document
     // - if the document is an array, keep aName=''
     // - if the document is an object, set the new object property as aName
@@ -7605,9 +7609,9 @@ end;
 
 function TDocVariantData.InternalAddBuf(aName: PUtf8Char; aNameLen: PtrInt): PtrInt;
 var
-  tmp: pointer; // so that the caller won't need to reserve such a temp var
+  tmp: pointer; // caller should ensure aName<>nil and Kind<>dvArray
 begin
-  tmp := nil;
+  tmp := nil; // so that the caller won't need to reserve such a temp var
   FastSetString(RawUtf8(tmp), aName, aNameLen);
   result := InternalAdd(RawUtf8(tmp), -1);
   FastAssignNew(tmp);
@@ -7823,7 +7827,7 @@ begin
   result := -1;
   if Has(dvoIsArray) or
      (aNameLen <= 0) then
-    exit;
+    exit; // avoid EDocVariant in InternalAddBuf()
   result := InternalAddBuf(aName, aNameLen);
   GetVariantFromJsonField(aValue.Value, aValue.WasString, VValue[result],
     @VOptions, Has(dvoAllowDoubleValue), aValue.ValueLen);
@@ -8069,6 +8073,60 @@ end;
 function TDocVariantData.NewItem(const aName: RawUtf8): PVariant;
 begin
   InternalAddValuePrepare(aName, {update=}false, result, 'NewItem');
+end;
+
+function TDocVariantData.NewSibling(aName: PUtf8Char; aNameLen: PtrInt): PVariant;
+var
+  ndx: PtrInt;
+  exist: PVariant;
+  arr: PDocVariantData;
+  v: PVarData;
+  tmp: TVarData;
+begin
+  result := nil;
+  if Has(dvoIsArray) or
+     (aNameLen <= 0) then
+    exit; // avoid EDocVariant in InternalAddBuf()
+  ndx := GetValueIndex(aName, aNameLen, Has(dvoNameCaseSensitive));
+  if ndx >= 0 then
+  begin
+    exist := @VValue[ndx];
+    arr := _Safe(exist^);
+    if arr^.Has(dvoIsArray) then
+      result := arr^.NewItem // where to store the new item
+    else
+    begin // convert value to array
+      arr := @tmp;
+      arr^.Init(VOptions, dvArray);
+      arr^.VCount := 2;
+      v := DynArrayNew(@arr^.VValue, 2, SizeOf(exist^));
+      v^ := PVarData(exist)^;          // copy as first item
+      PVarData(exist)^ := tmp;         // replace with array
+      result := @PVariantArray(v)^[1]; // where to store the new item
+    end;
+    exit;
+  end;
+  ndx := InternalAddBuf(aName, aNameLen);
+  result := @VValue[ndx]; // where to store the new item
+end;
+
+function TDocVariantData.AddObject(const aNameValuePairs: array of const;
+  const aName: RawUtf8; DontAddDefault: boolean): integer;
+var
+  obj: PDocVariantData;
+begin
+  if (aName <> '') and // aName='' for dvArray: can't use InternalAddValuePrepare
+     (Has(dvoCheckForDuplicatedNames)) and
+     (GetValueIndex(aName) >= 0) then
+      EDocVariant.RaiseUtf8('AddObject: Duplicated [%] name', [aName]);
+  result := InternalAdd(aName);
+  obj := @VValue[result];
+  if PInteger(obj)^ = 0 then // most common case is adding a new value
+    obj^.InitClone(self, dvoIsObject) // same options than owner document
+  else if (cardinal(obj^.VType) <> cardinal(VType)) or
+          not obj^.Has(dvoIsObject) then
+    EDocVariant.RaiseUtf8('AddObject: wrong existing [%]', [aName]);
+  obj^.AddNameValuesToObject(aNameValuePairs, DontAddDefault);
 end;
 
 function TDocVariantData.GetObjectProp(const aName: RawUtf8;
