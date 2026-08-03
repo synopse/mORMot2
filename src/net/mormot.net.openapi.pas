@@ -2103,6 +2103,8 @@ begin
       end
     else
       case fBuiltInType of
+        obtBoolean:
+          func := 'mormot.core.os.BOOL_UTF8[%]'; // 'true'/'false' as in JSON
         obtDate:
           func := 'DateToIso8601(%, true)';
         obtDateTime:
@@ -3138,6 +3140,7 @@ begin
       '  classes,', LineEnd,
       '  sysutils,', LineEnd,
       '  mormot.core.base,', LineEnd,
+      '  mormot.core.os,', LineEnd,
       '  mormot.core.unicode,', LineEnd,
       '  mormot.core.text,', LineEnd,
       '  mormot.core.buffers,', LineEnd,
