@@ -9187,7 +9187,7 @@ var
 begin
   ok := false;
   try
-    p.Init(pointer(Xml), length(Xml), Options);
+    p.Init(Xml, Options);
     while p.Next <> xtEof do
     begin
       p.NameToUtf8(n);
@@ -9212,7 +9212,7 @@ procedure TTestCoreXml.SaxTokens;
 var
   p: TXmlParser;
 begin
-  p.Init(pointer(XML1), length(XML1));
+  p.Init(XML1);
   CheckEqual(p.Depth, 0);
   Walk(p, xtElementStart, 'root');
   CheckEqual(p.Depth, 1);
@@ -9238,18 +9238,16 @@ end;
 procedure TTestCoreXml.SaxEntities;
 var
   p: TXmlParser;
-  chinese: RawUtf8;
+  unicode: RawUtf8;
   buf: array[0..7] of AnsiChar;
-const
-  X: RawUtf8 = '<r q="&quot;&apos;">&lt;&amp;&gt; &#65;&#x42;c &#x4E2D;</r>';
 begin
   // compute the U+4E2D UTF-8 bytes at runtime: a #$e4#$b8#$ad literal would
   // be re-encoded from UTF-16 chars by the Delphi compiler
-  SetString(chinese, PAnsiChar(@buf), Ucs4ToUtf8($4E2D, @buf));
-  p.Init(pointer(X), length(X));
+  SetString(unicode, PAnsiChar(@buf), Ucs4ToUtf8($4E2D, @buf));
+  p.Init('<r q="&quot;&apos;">&lt;&amp;&gt; &#65;&#x42;c &#x4E2D;</r>');
   Walk(p, xtElementStart, 'r');
   Walk(p, xtAttribute, 'q', '"''');
-  Walk(p, xtText, '', '<&> ABc ' + chinese);
+  Walk(p, xtText, '', '<&> ABc ' + unicode);
   Walk(p, xtElementEnd, 'r');
   Check(p.Next = xtEof);
   // the shared NumCharToUcs4() decoder is also wired into HTML unescape
@@ -9259,12 +9257,11 @@ end;
 procedure TTestCoreXml.SaxOptions;
 var
   p: TXmlParser;
-const
-  NS: RawUtf8 = '<ns:a xsi:x="1"><ns:b/></ns:a>';
-  WS: RawUtf8 = '<a>  <b/>  </a>';
+  s: RawUtf8;
 begin
   // namespace prefixes are part of the names by default
-  p.Init(pointer(NS), length(NS));
+  s := '<ns:a xsi:x="1"><ns:b/></ns:a>';
+  p.Init(s);
   Walk(p, xtElementStart, 'ns:a');
   Walk(p, xtAttribute, 'xsi:x', '1');
   Walk(p, xtElementStart, 'ns:b');
@@ -9272,7 +9269,7 @@ begin
   Walk(p, xtElementEnd, 'ns:a');
   Check(p.Next = xtEof);
   // ... but can be stripped on request
-  p.Init(pointer(NS), length(NS), [xpoStripNamespacePrefix]);
+  p.Init(s, [xpoStripNamespacePrefix]);
   Walk(p, xtElementStart, 'a');
   Walk(p, xtAttribute, 'x', '1');
   Walk(p, xtElementStart, 'b');
@@ -9280,7 +9277,7 @@ begin
   Walk(p, xtElementEnd, 'a');
   Check(p.Next = xtEof);
   // comments and processing instructions on request
-  p.Init(pointer(XML1), length(XML1), [xpoKeepComments, xpoKeepPI]);
+  p.Init(XML1, [xpoKeepComments, xpoKeepPI]);
   Walk(p, xtPI, 'xml', 'version="1.0" encoding="UTF-8"');
   Walk(p, xtElementStart, 'root');
   Walk(p, xtAttribute, 'a', '1');
@@ -9296,7 +9293,7 @@ begin
   Walk(p, xtElementEnd, 'root');
   Check(p.Next = xtEof);
   // pure whitespace text nodes on request
-  p.Init(pointer(WS), length(WS), [xpoKeepWhiteSpace]);
+  p.Init('<a>  <b/>  </a>', [xpoKeepWhiteSpace]);
   Walk(p, xtElementStart, 'a');
   Walk(p, xtText, '', '  ');
   Walk(p, xtElementStart, 'b');
@@ -9334,24 +9331,6 @@ begin
   ExpectRaise('name too long', '<' + big + '/>');
 end;
 
-{$ifdef OSWINDOWS}
-const
-  _MEM_COMMIT     = $1000;
-  _MEM_RELEASE    = $8000;
-  _PAGE_READWRITE = 4;
-  _PAGE_NOACCESS  = 1;
-
-// raw page protection APIs, as used by TTestCoreXml.SaxBoundaries below to
-// turn any single-byte overread into a catchable access violation
-function VirtualAlloc(lpAddress: pointer; dwSize: PtrUInt;
-  flAllocationType, flProtect: cardinal): pointer; stdcall; external 'kernel32';
-function VirtualProtect(lpAddress: pointer; dwSize: PtrUInt;
-  flNewProtect: cardinal; lpflOldProtect: PCardinal): LongBool; stdcall;
-    external 'kernel32';
-function VirtualFree(lpAddress: pointer; dwSize: PtrUInt;
-  dwFreeType: cardinal): LongBool; stdcall; external 'kernel32';
-{$endif OSWINDOWS}
-
 procedure TTestCoreXml.SaxBoundaries;
 var
   p: TXmlParser;
@@ -9360,7 +9339,7 @@ var
   maxcp: RawUtf8;
   buf: array[0..7] of AnsiChar;
 
-  procedure Scan(var x: TXmlParser; len: PtrInt; const Context: RawUtf8);
+  procedure Scan(var x: TXmlParser; len: PtrInt; const Context: string);
   // consume all tokens of an already Init-ed parser, checking that no
   // spurious empty xtText is reported at the very end of the buffer
   var
@@ -9375,19 +9354,22 @@ var
         inc(tok);
         // an empty text token would mean the end of buffer was mis-detected
         Check((x.Kind <> xtText) or
-              (x.Value.Len > 0), Utf8ToString(Context));
+              (x.Value.Len > 0), Context);
         if tok > 100 then
           break; // paranoid: detect any infinite loop
       end;
-      Check(x.Kind = xtEof, Utf8ToString(Context));
-      Check(x.Next = xtEof, Utf8ToString(Context)); // idempotent at eof
-      CheckEqual(x.Depth, 0, Context);
+      CheckEqual(x.Position, len);
+      Check(x.Depth = 0, Context);
+      Check(x.Kind = xtEof, Context);
+      Check(x.Next = xtEof, Context); // idempotent at eof
+      Check(x.Depth = 0, Context);
+      CheckEqual(x.Position, len);
     except
       on E: EXmlException do
         err := StringToUtf8(E.Message);
     end;
-    CheckEqual(err, '', Context);
-    Check(tok <= 100, Utf8ToString(Context));
+    Check(err = '', Context);
+    Check(tok <= 100, Context);
   end;
 
   procedure ExpectOk(const Context, Xml: RawUtf8;
@@ -9400,7 +9382,7 @@ var
   begin
     err := '';
     try
-      x.Init(pointer(Xml), length(Xml), Options);
+      x.Init(Xml, Options);
       while x.Next <> xtEof do
       begin
         x.NameToUtf8(n);
@@ -9422,7 +9404,7 @@ var
     result := 0;
     Reason := '';
     try
-      x.Init(pointer(Xml), length(Xml));
+      x.Init(Xml);
       while x.Next <> xtEof do
         if x.Kind = xtElementStart then
           inc(result);
@@ -9432,7 +9414,7 @@ var
     end;
   end;
 
-  procedure NoTerm(const Xml, Context: RawUtf8);
+  procedure NoTerm(const Xml: RawUtf8; const Context: string);
   // parse a buffer holding exactly length(Xml) bytes with NO #0 terminator:
   // the intent is to guard against any read of buffer[len], i.e. one single
   // byte past the end of the input
@@ -9445,43 +9427,15 @@ var
     x: TXmlParser;
     len: PtrInt;
     raw: PUtf8Char;
-    {$ifdef OSWINDOWS}
-    res: pointer;
-    guard: PUtf8Char;
-    pagesize: PtrUInt;
-    old: cardinal;
-    {$endif OSWINDOWS}
   begin
     len := length(Xml);
-    {$ifdef OSWINDOWS}
-    pagesize := SystemInfo.dwPageSize;
-    if PtrUInt(len) < pagesize then
-    begin
-      // reserve two pages, then revoke any access to the second one
-      res := VirtualAlloc(nil, pagesize * 2, _MEM_COMMIT, _PAGE_READWRITE);
-      if not CheckFailed(res <> nil, Utf8ToString(Context)) then
-      try
-        guard := PUtf8Char(res) + pagesize;
-        Check(VirtualProtect(guard, pagesize, _PAGE_NOACCESS, @old),
-          Utf8ToString(Context));
-        // place the very last input byte just before the forbidden page
-        raw := guard - len;
-        MoveFast(pointer(Xml)^, raw^, len);
-        x.Init(raw, len);
-        Scan(x, len, Context);
-      finally
-        VirtualFree(res, 0, _MEM_RELEASE);
-      end;
-      exit;
-    end;
-    {$endif OSWINDOWS}
-    GetMem(raw, len); // exactly N bytes, with no room for any #0
+    raw := GetmemDualAccessPagesLock(Xml);
+    if Check(raw <> nil, 'GetmemDualAccessPagesLock') then
     try
-      MoveFast(pointer(Xml)^, raw^, len);
       x.Init(raw, len);
       Scan(x, len, Context);
     finally
-      FreeMem(raw);
+      GetmemDualAccessPagesUnLock;
     end;
   end;
 
@@ -9492,12 +9446,12 @@ begin
   ExpectOk('mixed 3', '<a> both </a>');
   ExpectOk('mixed 5', '<a>  <b/>  </a>');
   ExpectOk('mixed 6', '<a>  <b/>  </a>', [xpoKeepWhiteSpace]);
-  p.Init('<a>  hello</a>', 14);
+  p.Init('<a>  hello</a>');
   Walk(p, xtElementStart, 'a');
   Walk(p, xtText, '', '  hello'); // two leading blanks are preserved
   Walk(p, xtElementEnd, 'a');
   Check(p.Next = xtEof);
-  p.Init('<p><b>Hi</b> there</p>', 22);
+  p.Init('<p><b>Hi</b> there</p>');
   Walk(p, xtElementStart, 'p');
   Walk(p, xtElementStart, 'b');
   Walk(p, xtText, '', 'Hi');
@@ -9506,7 +9460,7 @@ begin
   Walk(p, xtElementEnd, 'p');
   Check(p.Next = xtEof);
   // but a pure-blank text node is still ignored, unless asked for
-  p.Init('<a>  <b/>  </a>', 15);
+  p.Init('<a>  <b/>  </a>');
   Walk(p, xtElementStart, 'a');
   Walk(p, xtElementStart, 'b');
   Walk(p, xtElementEnd, 'b');
@@ -9530,13 +9484,13 @@ begin
   ExpectOk('element at end', '<a/>');
   ExpectOk('text at end', '<a>x</a>');
   // a PI body is trimmed, and never reported with a negative length
-  p.Init('<?pi   ?><a/>', 13, [xpoKeepPI]);
+  p.Init('<?pi   ?><a/>', [xpoKeepPI]);
   Walk(p, xtPI, 'pi', '');
   CheckEqual(p.Value.Len, 0, 'blanks-only PI body');
   Walk(p, xtElementStart, 'a');
   Walk(p, xtElementEnd, 'a');
   Check(p.Next = xtEof);
-  p.Init('<?pi  x  ?><a/>', 15, [xpoKeepPI]);
+  p.Init('<?pi  x  ?><a/>', [xpoKeepPI]);
   Walk(p, xtPI, 'pi', 'x');
   Walk(p, xtElementStart, 'a');
   Walk(p, xtElementEnd, 'a');
@@ -9557,7 +9511,7 @@ begin
   // 3. numeric character references at and above the Unicode range
   maxcp := '';
   SetString(maxcp, PAnsiChar(@buf), Ucs4ToUtf8($10ffff, @buf)); // no literal
-  p.Init('<a>&#x10FFFF;</a>', 17);
+  p.Init('<a>&#x10FFFF;</a>');
   Walk(p, xtElementStart, 'a');
   Check(p.Next = xtText);
   p.ValueToUtf8(v);
@@ -9622,18 +9576,16 @@ begin
   CheckEqual(v, '', 'sibling root');
   ExpectOk('255 deep twice', u + u);
   // names are limited to 127 bytes, and the limit itself must be reachable
-  SetLength(v, 127);
-  FillCharFast(pointer(v)^, 127, ord('n'));
-  ExpectOk('127-bytes name', '<' + v + '/>');
-  ExpectOk('127-bytes name nested', '<a><' + v + '/></a>');
-  p.Init(pointer('<' + v + '/>'), 130);
-  Walk(p, xtElementStart, v);
+  u := RawUtf8OfChar('n', 127);
+  Join(['<', u, '/>'], v);
+  ExpectOk('127-bytes name', v);
+  ExpectOk('127-bytes name nested', '<a>' + v + '</a>');
+  p.Init(v);
+  Walk(p, xtElementStart, u);
   CheckEqual(p.Name.Len, 127, '127-bytes name length');
-  Walk(p, xtElementEnd, v);
+  Walk(p, xtElementEnd, u);
   Check(p.Next = xtEof);
-  SetLength(u, 128);
-  FillCharFast(pointer(u)^, 128, ord('n'));
-  ExpectRaise('128-bytes name', '<' + u + '/>');
+  ExpectRaise('128-bytes name', Join(['<', RawUtf8OfChar('n', 128), '/>']));
   // 5. no byte at all may be read past the end of the input buffer, i.e. the
   // parser must never rely on any #0 terminator - see NoTerm() comments above
   NoTerm('<a/>', 'clean');
@@ -9655,11 +9607,12 @@ begin
   NoTerm('<a/><!-- c -->', 'comment');
   NoTerm('<a b="c"/>', 'attribute');
   NoTerm('<a>&amp;</a>', 'entity');
+  NoTerm(XML1, 'xml1');
 end;
 
 procedure TTestCoreXml.ToVariant;
 var
-  doc: TDocVariantData;
+  doc: variant;
 begin
   // plain string value for text-only elements
   CheckEqual(XmlToJson('<a>hello</a>'), '{"a":"hello"}');
@@ -9677,8 +9630,8 @@ begin
   CheckEqual(XmlToJson('<a><b>1</b><b>2</b><b>3</b></a>'),
     '{"a":{"b":["1","2","3"]}}');
   // mixed content
-  CheckEqual(XmlToJson('<a>pre<b/>post</a>'),
-    '{"a":{"b":"","#text":"prepost"}}');
+  CheckEqual(XmlToJson('<a>pre <b/>post</a>'),
+    '{"a":{"b":"","#text":"pre post"}}');
   // entities and CDATA
   CheckEqual(XmlToJson('<a>x &amp; y</a>'), '{"a":"x & y"}');
   CheckEqual(XmlToJson('<a><![CDATA[<raw> & unescaped]]></a>'),
@@ -9694,9 +9647,9 @@ begin
     '{"e":{"@s":"u","b":"x"}}');
   // TryXmlToVariant
   Check(TryXmlToVariant('<a><b>1</b></a>', doc), 'try ok');
-  CheckEqual(doc.ToJson, '{"a":{"b":"1"}}');
+  CheckEqual(VariantSaveJson(doc), '{"a":{"b":"1"}}');
   Check(not TryXmlToVariant('<a><b></a>', doc), 'try mismatch');
-  CheckEqual(doc.Count, 0);
+  CheckEqual(_Safe(doc)^.Count, 0);
 end;
 
 
