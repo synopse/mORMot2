@@ -837,7 +837,7 @@ end;
 
 // some definitions missing on oldest Delphi
 const
-  FILE_ATTRIBUTE_REPARSE_POINT = $0000400; // = faSymLink
+  FILE_ATTRIBUTE_REPARSE_POINT = $0000400; // = faSymLink = faSymbolicLink
 
 function FindFirstFileExW(lpfilename: PWideChar; fInfoLevelId: FINDEX_INFO_LEVELS;
    lpFindFileData: pointer; fSearchOp: FINDEX_SEARCH_OPS;

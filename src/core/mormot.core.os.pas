@@ -79,25 +79,18 @@ const
   /// human-friendly alias to open a file for exclusive writing ($20)
   fmShareRead      = fmShareDenyWrite;
   /// human-friendly alias to open a file for exclusive reading ($30)
-  // - $0030 is the value of the RTL fmShareDenyRead, inlined here because that
-  // constant does not exist on POSIX - where write-only sharing is unsupported,
-  // so Delphi flags it as platform-specific
+  // - use raw FPC/Delphi RTL value fmShareDenyRead to avoid "platform" warnings
   fmShareWrite     = {$ifdef DELPHIPOSIX} fmShareDenyNone {$else} $0030 {$endif};
   /// human-friendly alias to open a file with no read/write exclusion ($40)
   fmShareReadWrite = fmShareDenyNone;
-
-  /// hidden file attribute ($02) - i.e. the RTL faHidden value
-  // - the RTL constant is flagged as platform-specific because on POSIX it is
-  // just the initial '.' naming convention, but its value is fixed everywhere
-  faHiddenFile     = $00000002;
-  /// system file attribute ($04) - i.e. the RTL faSysFile value
-  // - the RTL constant is flagged as platform-specific because on POSIX system
-  // files are neither regular files nor directories
-  faSystemFile     = $00000004;
-  /// DOS volume label attribute ($08) - i.e. the RTL faVolumeID value
-  // - the RTL constant is deprecated since it is never returned by FindFirst()
-  // on Win32, but it is still excluded by SearchRecValidFile() for safety
-  faVolumeLabel    = $00000008;
+  /// hidden file attribute ($02) - i.e. the Delphi/FPC RTL faHidden value
+  faHiddenFile     = $0002;
+  /// system file attribute ($04) - i.e. the Delphi/FPC RTL faSysFile value
+  faSystemFile     = $0004;
+  /// DOS volume label attribute ($08) - i.e. the Delphi/FPC RTL faVolumeID value
+  faVolumeLabel    = $0008;
+  /// WinAPI FILE_ATTRIBUTE_REPARSE_POINT - i.e. the Delphi/FPC RTL faSymLink value
+  faSymbolicLink   = $0400;
 
   /// execute FileOpen/TFileStreamEx.Create for reading without exclusion
   fmOpenReadShared = fmOpenRead or fmShareReadWrite;
@@ -10014,7 +10007,7 @@ begin
     else
       InstanceFileName := ProgramFileName;
     {$else}
-    dladdr(@InitializeProcessInfo, @PosixProgramInfo); // function in this .so
+    dladdr(@InitializeProcessInfo, @PosixProgramInfo);   // function in this .so
     crcblock(@SystemEntropy.Startup, @PosixProgramInfo); // won't hurt
     GetDlInfoName(PosixProgramInfo, InstanceFileName);
     if InstanceFileName <> '' then

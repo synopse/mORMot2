@@ -1702,9 +1702,9 @@ begin
      fpS_ISBLK(st.st_mode) or
      fpS_ISCHR(st.st_mode) or
      fpS_ISFIFO(st.st_mode) Then
-    result := result or faSysFile{%H-};
+    result := result or faSystemFile;
   if fpS_ISLNK(st.st_mode) then
-    result := result or faSymLink{%H-};
+    result := result or faSymbolicLink;
 end;
 
 function FileInfoByName(const FileName: TFileName; out FileSize: Int64;

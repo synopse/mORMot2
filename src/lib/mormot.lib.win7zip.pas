@@ -2505,10 +2505,10 @@ var
     end;
     for i := 0 to files.Count - 1 do
       if FindFirst(p + files[i],
-        faReadOnly or faHidden{%H-} or faSysFile{%H-} or faArchive, f) = 0 then
+        faReadOnly or faHiddenFile or faSystemFile or faArchive, f) = 0 then
       begin
         repeat
-          if (f.Attr and (faDirectory + faVolumeID{%H-})) = 0 then
+          if (f.Attr and (faDirectory + faVolumeLabel)) = 0 then
           begin
             fn := p + f.Name;
             if FileIsReadable(fn) then
