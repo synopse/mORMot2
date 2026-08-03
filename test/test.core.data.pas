@@ -227,6 +227,8 @@ type
     procedure GlobalHooks;
     /// GNU gettext .po parsing into a TSynLanguage table
     procedure PoFormat;
+    /// GNU gettext .mo binary parsing into a TSynLanguage table
+    procedure MoFormat;
     /// INI and YAML parsing, and the per-extension file loaders
     procedure IniAndFiles;
     /// the FPC resourcestring table rewriting channel
@@ -10248,6 +10250,221 @@ begin
   finally
     l.Free;
   end;
+end;
+
+// generate some GNU gettext .mo binary content, as msgfmt would
+// - Swapped will store the multi-byte numbers in the reverse endianness of this
+// CPU, to validate the byte swapping code path of TSynLanguage.AddFromMo()
+// - Revision and CountDelta allow to generate some deliberately invalid content
+function MakeMo(const Ids, Strs: array of RawUtf8; Swapped: boolean;
+  Revision: cardinal = 0; CountDelta: integer = 0): RawByteString;
+const
+  MO_HEAD = 28; // fixed size of the .mo header, in bytes
+var
+  n, i, p: PtrInt;
+  nul: AnsiChar;
+  txt: RawByteString;
+
+  procedure AddCard(V: cardinal);
+  begin
+    if Swapped then
+      V := bswap32(V);
+    Append(result, @V, 4);
+  end;
+
+begin
+  result := '';
+  txt := '';
+  nul := #0;
+  n := length(Ids);
+  AddCard($950412de);                // magic number
+  AddCard(Revision);                 // major shl 16 + minor file format
+  AddCard(n + CountDelta);           // number of strings
+  AddCard(MO_HEAD);                  // original strings table offset
+  AddCard(MO_HEAD + n * 8);          // translated strings table offset
+  AddCard(0);                        // hash table size
+  AddCard(0);                        // hash table offset
+  p := MO_HEAD + n * 16;             // where the #0 terminated strings begin
+  for i := 0 to n - 1 do             // original strings (length, offset) table
+  begin
+    AddCard(length(Ids[i]));
+    AddCard(p);
+    inc(p, length(Ids[i]) + 1);      // each string has its #0 terminator
+  end;
+  for i := 0 to n - 1 do             // translated strings (length, offset) table
+  begin
+    AddCard(length(Strs[i]));
+    AddCard(p);
+    inc(p, length(Strs[i]) + 1);
+  end;
+  for i := 0 to n - 1 do
+  begin
+    Append(txt, Ids[i]);
+    Append(txt, @nul, 1);
+  end;
+  for i := 0 to n - 1 do
+  begin
+    Append(txt, Strs[i]);
+    Append(txt, @nul, 1);
+  end;
+  Append(result, txt);
+end;
+
+procedure TTestCoreI18n.MoFormat;
+var
+  l, l2: TSynLanguage;
+  langs: TSynLanguages;
+  mo, bad: RawByteString;
+  t, cha: RawUtf8;
+  fn, folder: TFileName;
+  swapped: boolean;
+  i: PtrInt;
+  tmp: array[0 .. 15] of AnsiChar;
+begin
+  FastSetString(cha, @tmp, Ucs4ToUtf8($8336, @tmp)); // U+8336 = tea ideogram
+  // the same .mo content, in this CPU endianness and in the reverse one
+  for swapped := false to true do
+  begin
+    mo := MakeMo([
+      '',                                 // the void msgid header entry
+      'Hello',
+      'Hello World',
+      'Untranslated',
+      'One file'#0'%d files',             // msgid + #0 + msgid_plural
+      'menu'#4'Open',                     // msgctxt + #4 + msgid
+      'Tea'], [
+      'Project-Id-Version: demo'#10'Content-Type: text/plain; charset=UTF-8'#10,
+      'Bonjour',
+      'Bonjour tout le monde',
+      '',                                 // an untranslated entry
+      'Un fichier'#0'%d fichiers',        // msgstr[0] + #0 + msgstr[1]
+      'Ouvrir',
+      cha], swapped);
+    l := TSynLanguage.Create(lngFrench);
+    try
+      CheckEqual(l.AddFromMo(mo), 3, 'Hello + Hello World + Tea');
+      CheckEqual(l.Count, 3, 'no extra key stored');
+      t := 'Hello';
+      Check(l.Translate(t), 'plain pair');
+      CheckEqual(t, 'Bonjour');
+      t := 'Hello World';
+      Check(l.Translate(t), 'no escaping in the binary format');
+      CheckEqual(t, 'Bonjour tout le monde');
+      // the parser should be transparent to any UTF-8 multi-byte content
+      t := 'Tea';
+      Check(l.Translate(t));
+      CheckEqual(t, cha, 'utf-8 passthrough');
+      // the void msgid header entry should never pollute the table
+      t := 'Project-Id-Version: demo'#10 +
+           'Content-Type: text/plain; charset=UTF-8'#10;
+      Check(not l.Translate(t), 'header is skipped');
+      // a void msgstr is an untranslated entry, as with AddFromPo()
+      t := 'Untranslated';
+      Check(not l.Translate(t), 'void msgstr is skipped');
+      CheckEqual(t, 'Untranslated');
+      // msgid_plural / msgstr[] plural forms are not supported yet, as for .po
+      t := 'One file';
+      Check(not l.Translate(t), 'plural forms are skipped');
+      // msgctxt disambiguation is not supported yet, as for .po
+      t := 'Open';
+      Check(not l.Translate(t), 'msgctxt is skipped');
+      t := 'menu'#4'Open';
+      Check(not l.Translate(t), 'the raw msgctxt key is not stored either');
+    finally
+      l.Free;
+    end;
+  end;
+  // a .mo and the .po source it was compiled from should give the same table
+  l := TSynLanguage.Create(lngFrench);
+  l2 := TSynLanguage.Create(lngFrench);
+  try
+    CheckEqual(l.AddFromPo('msgid "Hello"'#10'msgstr "Bonjour"'#10 +
+      'msgid "Hello World"'#10'msgstr "Bonjour tout le monde"'#10), 2, '.po');
+    CheckEqual(l2.AddFromMo(MakeMo(['Hello', 'Hello World'],
+      ['Bonjour', 'Bonjour tout le monde'], false)), 2, '.mo');
+    CheckEqual(l.Count, l2.Count, 'same entry count as its .po source');
+    t := 'Hello';
+    Check(l2.Translate(t));
+    CheckEqual(t, 'Bonjour', 'same translation as its .po source');
+    t := 'Hello World';
+    Check(l2.Translate(t));
+    CheckEqual(t, 'Bonjour tout le monde');
+  finally
+    l2.Free;
+    l.Free;
+  end;
+  // invalid content should be rejected, and should never merge anything
+  l := TSynLanguage.Create(lngFrench);
+  l2 := TSynLanguage.Create(lngFrench);
+  try
+    CheckEqual(l.AddFromMo(''), -1, 'void input');
+    CheckEqual(l.AddFromMo('too short for a header'), -1, 'truncated header');
+    CheckEqual(l.Count, 0);
+    mo := MakeMo(['One'], ['Un'], false);
+    CheckEqual(l.AddFromMo(mo), 1, 'reference sample');
+    CheckEqual(l.Count, 1);
+    bad := mo;
+    bad[1] := 'X'; // whatever the endianness is, the magic is broken
+    CheckEqual(l.AddFromMo(bad), -1, 'invalid magic number');
+    CheckEqual(l.AddFromMo(MakeMo(['One'], ['Un'], false, 1 shl 16)), 1,
+      'revision 1.0 is supported');
+    CheckEqual(l.AddFromMo(MakeMo(['One'], ['Un'], false, 2 shl 16)), -1,
+      'unsupported major revision');
+    CheckEqual(l.AddFromMo(MakeMo(['One'], ['Un'], false, 0, 1)), -1,
+      'one more entry than actually supplied');
+    CheckEqual(l.AddFromMo(MakeMo(['One'], ['Un'], false, 0, 1 shl 20)), -1,
+      'way more entries than this content could store');
+    CheckEqual(l.Count, 1, 'no invalid content did pollute the table');
+    CheckEqual(l.AddFromMo(MakeMo([], [], false)), 0, 'valid but void .mo');
+    // any truncated content should be rejected, and merge nothing at all
+    for i := 1 to length(mo) - 1 do
+    begin
+      CheckEqual(l2.AddFromMo(copy(mo, 1, i)), -1, 'truncated');
+      CheckEqual(l2.Count, 0, 'nothing merged from a truncated input');
+    end;
+    // AddFromMoFile() should read the file as binary, and AddFromFile() should
+    // dispatch on the .mo extension
+    fn := WorkDir + 'i18ntest.mo';
+    Check(FileFromString(mo, fn), 'mo file');
+    CheckEqual(l2.AddFromMoFile(fn), 1, 'AddFromMoFile');
+    CheckEqual(l2.AddFromFile(fn), 1, '.mo dispatch');
+    CheckEqual(l2.Count, 1);
+    t := 'One';
+    Check(l2.Translate(t));
+    CheckEqual(t, 'Un');
+    Check(DeleteFile(fn));
+  finally
+    l2.Free;
+    l.Free;
+  end;
+  // TSynLanguages.LoadFromFolder() should load the files in a deterministic
+  // order, whatever the OS folder enumeration order is
+  folder := EnsureDirectoryExists([WorkDir, 'i18nmo']);
+  Check(folder <> '', 'folder');
+  Check(FileFromString('msgid "Hello"'#10'msgstr "FromPo"'#10 +
+    'msgid "OnlyPo"'#10'msgstr "SeulementPo"'#10, folder + 'fr.po'));
+  Check(FileFromString(MakeMo(['Hello', 'OnlyMo'],
+    ['FromMo', 'SeulementMo'], false), folder + 'fr.mo'));
+  langs := TSynLanguages.Create;
+  try
+    CheckEqual(langs.LoadFromFolder(folder), 2, 'fr.po + fr.mo');
+    Check(langs.Find(lngFrench) <> nil);
+    CheckEqual(langs.Find(lngFrench).Count, 3, 'Hello + OnlyPo + OnlyMo');
+    TSynLanguages.SetThreadLanguage(lngFrench);
+    t := 'Hello';
+    Check(langs.Translate(t));
+    CheckEqual(t, 'FromMo', 'the compiled .mo wins over its .po source');
+    t := 'OnlyPo';
+    Check(langs.Translate(t), 'both files are merged');
+    CheckEqual(t, 'SeulementPo');
+    t := 'OnlyMo';
+    Check(langs.Translate(t));
+    CheckEqual(t, 'SeulementMo');
+  finally
+    TSynLanguages.SetThreadLanguage(lngUndefined);
+    langs.Free;
+  end;
+  Check(DirectoryDelete(folder), 'cleanup');
 end;
 
 const

@@ -12,8 +12,9 @@ unit mormot.core.i18n;
     - global wiring of the framework translation hooks
 
    Translation tables map the original English text to its translation, and
-   are loaded from .po (GNU gettext) as the main format - .ini, .yaml and
-   .json, with its relaxed JSON5 / JSONC / HJson variants, are also supported.
+   are loaded from .po and its compiled .mo binary (GNU gettext) as the main
+   formats - .ini, .yaml and .json, with its relaxed JSON5 / JSONC / HJson
+   variants, are also supported.
 
    Once loaded, three wiring channels are available: the TSynMustache
    translate tag views channel, the LoadResStringTranslate slot consumed by
@@ -105,6 +106,27 @@ type
     function AddFromPo(const Po: RawUtf8): integer;
     /// merge translations from an UTF-8 GNU gettext .po file (BOM tolerated)
     function AddFromPoFile(const FileName: TFileName): integer;
+    /// merge translations from GNU gettext .mo binary content
+    // - .mo is the binary format compiled from a .po source by msgfmt: both
+    // hold the very same msgid/msgstr pairs, so this method is just the
+    // binary counterpart of AddFromPo()
+    // - .mo files generated on a reverse endianness machine are supported
+    // - the void msgid header entry and untranslated (void msgstr) entries
+    // are just ignored, as AddFromPo() does - and msgfmt does not include
+    // any fuzzy entry in its .mo output, unless --use-fuzzy is specified
+    // - non-goals, as for AddFromPo(): msgctxt disambiguation, and the
+    // msgid_plural / msgstr[] plural forms - such entries are just ignored
+    // - the strings are expected to be UTF-8 encoded, as declared by the
+    // header of any modern .mo file, and as AddFromPo() does for its source
+    // - the whole input is validated before any merge, so that an invalid
+    // .mo content is rejected as a whole, and never merges anything
+    // - returns the number of added or replaced translations, or -1 if the
+    // supplied content is no valid .mo binary
+    function AddFromMo(const Mo: RawByteString): integer;
+    /// merge translations from a GNU gettext .mo binary file
+    // - returns the number of added or replaced translations, or -1 if this
+    // file does not exist or is no valid .mo binary
+    function AddFromMoFile(const FileName: TFileName): integer;
     /// merge translations from INI-like content, e.g. as
     // ! Hello=Bonjour
     // ! World=Monde
@@ -122,8 +144,8 @@ type
     function AddFromIniFile(const FileName: TFileName;
       const Section: RawUtf8 = ''): integer;
     /// merge translations from a file, recognized by its extension
-    // - .po (gettext), .ini or .msg, .yaml or .yml, .json / .jsonc / .json5
-    // / .hjson (the relaxed JSON variants are read by our JSON parser)
+    // - .po or .mo (gettext), .ini or .msg, .yaml or .yml, .json / .jsonc /
+    // .json5 / .hjson (the relaxed JSON variants are read by our JSON parser)
     // - returns -1 if the file does not exist or its extension is unknown
     function AddFromFile(const FileName: TFileName): integer;
     /// translate the supplied text in-place
@@ -193,6 +215,11 @@ type
     /// load all <iso>.<ext> files from a folder, e.g. en.json or zh.po
     // - the file name (without its extension) is the ISO 639-1 language text,
     // and any extension supported by TSynLanguage.AddFromFile is recognized
+    // - several files of the same language are merged into its single table,
+    // in a deterministic order - by name, then by ascending format index as
+    // defined by the LANGUAGE_EXT[] order - so that if they do define the
+    // same key, the winner does not depend on the OS enumeration order: in
+    // particular, a compiled fr.mo wins over the fr.po source it came from
     // - returns the number of recognized language files
     function LoadFromFolder(const Folder: TFileName): integer;
     /// return the languages currently loaded in this registry
@@ -271,11 +298,15 @@ end;
 
 const
   /// the file extensions recognized by TSynLanguage.AddFromFile()
-  LANGUAGE_EXT: array[0 .. 8] of TFileName = (
-    'po',                                 // 0     = GNU gettext
+  // - this order is also the TSynLanguages.LoadFromFolder() loading order,
+  // i.e. the priority of each format: the last one does win, so that a
+  // compiled .mo takes precedence over the .po source it was generated from
+  LANGUAGE_EXT: array[0 .. 9] of TFileName = (
+    'po',                                 // 0     = GNU gettext source
     'ini', 'msg',                         // 1, 2  = INI-like
     'yaml', 'yml',                        // 3, 4  = YAML
-    'json', 'jsonc', 'json5', 'hjson');   // 5..8  = JSON and relaxed variants
+    'json', 'jsonc', 'json5', 'hjson',    // 5..8  = JSON and relaxed variants
+    'mo');                                // 9     = GNU gettext binary
 
 /// recognize the translation file format from its extension, -1 if unsupported
 function LanguageFileFormat(const FileName: TFileName): PtrInt;
@@ -334,6 +365,33 @@ begin
   Append(Text, tmp.buf, d - PUtf8Char(tmp.buf));
   tmp.Done;
 end;
+
+const
+  /// the magic number stored at the beginning of any GNU gettext .mo file
+  // - is stored in the endianness of the machine which did generate the file
+  MO_MAGIC = $950412de;
+
+type
+  /// map the fixed-size header of a GNU gettext .mo binary file
+  TMoHeader = packed record
+    Magic: cardinal;
+    Revision: cardinal;  // major shl 16 + minor
+    Count: cardinal;     // number of strings
+    OrigTab: cardinal;   // offset of the original strings table
+    TransTab: cardinal;  // offset of the translated strings table
+    HashSize: cardinal;  // the hash table is unused by TSynLanguage.AddFromMo
+    HashTab: cardinal;
+  end;
+  PMoHeader = ^TMoHeader;
+
+  /// map one (length, offset) pair of a GNU gettext .mo string table
+  // - the string itself is #0 terminated, and Len does not include it
+  TMoEntry = packed record
+    Len: cardinal;
+    Offset: cardinal;
+  end;
+  TMoEntryArray = array[0 .. (MaxInt div SizeOf(TMoEntry)) - 1] of TMoEntry;
+  PMoEntryArray = ^TMoEntryArray;
 
 
 { TSynLanguage }
@@ -499,6 +557,90 @@ begin
   result := AddFromPo(LoadUtf8File(FileName));
 end;
 
+function TSynLanguage.AddFromMo(const Mo: RawByteString): integer;
+var
+  h: PMoHeader;
+  o, t: PMoEntryArray;
+  len, n, ot, tt, rev, tab: PtrUInt;
+  i, cnt: PtrInt;
+  swap: boolean;
+  id, str: RawUtf8;
+
+  function Get(const e: TMoEntry; Text: PRawUtf8): boolean;
+  var
+    l, ofs: PtrUInt;
+  begin
+    l := e.Len;
+    ofs := e.Offset;
+    if swap then
+    begin
+      l := bswap32(l);
+      ofs := bswap32(ofs);
+    end;
+    result := (l < len) and      // the #0 terminator is part of the content
+              (ofs < len - l);   // unsigned arithmetic: no overflow possible
+    if result and
+       (Text <> nil) then
+      FastSetString(Text^, @PByteArray(Mo)[ofs], PtrInt(l));
+  end;
+
+begin
+  result := -1;
+  len := PtrUInt(length(Mo));
+  if len < SizeOf(TMoHeader) then
+    exit; // clearly not a .mo binary file
+  h := pointer(Mo);
+  swap := h^.Magic <> MO_MAGIC;
+  if swap and
+     (h^.Magic <> bswap32(MO_MAGIC)) then
+    exit; // invalid magic number
+  n := h^.Count;
+  ot := h^.OrigTab;
+  tt := h^.TransTab;
+  rev := h^.Revision;
+  if swap then // this .mo was generated on a reverse endianness machine
+  begin
+    n := bswap32(n);
+    ot := bswap32(ot);
+    tt := bswap32(tt);
+    rev := bswap32(rev);
+  end;
+  if rev shr 16 > 1 then
+    exit; // unsupported major .mo format revision
+  if n > len div SizeOf(TMoEntry) then
+    exit; // more entries than this content could ever store
+  tab := n * SizeOf(TMoEntry); // size of each strings table, in bytes
+  if (ot > len - tab) or
+     (tt > len - tab) then
+    exit; // any strings table is out of range
+  o := @PByteArray(Mo)[ot];
+  t := @PByteArray(Mo)[tt];
+  cnt := n; // n was cropped above, so it does fit in a PtrInt
+  for i := 0 to cnt - 1 do // validate first: an invalid .mo merges nothing
+    if not Get(o^[i], nil) or
+       not Get(t^[i], nil) then
+      exit;
+  result := 0;
+  for i := 0 to cnt - 1 do
+  begin
+    Get(o^[i], @id);
+    if (id = '') or                  // ignore the void msgid header entry
+       (PosExChar(#0, id) <> 0) or   // msgid + #0 + msgid_plural
+       (PosExChar(#4, id) <> 0) then // msgctxt + #4 + msgid
+      continue;
+    Get(t^[i], @str);
+    if str = '' then // ignore any untranslated entry
+      continue;
+    fTexts.AddOrUpdate(id, str);
+    inc(result);
+  end;
+end;
+
+function TSynLanguage.AddFromMoFile(const FileName: TFileName): integer;
+begin
+  result := AddFromMo(StringFromFile(FileName)); // binary: no LoadUtf8File()
+end;
+
 function TSynLanguage.AddFromIni(const Ini, Section: RawUtf8): integer;
 var
   P, L, V, E: PUtf8Char;
@@ -576,6 +718,8 @@ begin
       result := AddFromYaml(LoadUtf8File(FileName));
     5 .. 8: // .json .jsonc .json5 .hjson
       result := AddFromJson(LoadUtf8File(FileName));
+    9:      // .mo
+      result := AddFromMoFile(FileName);
   end;
 end;
 
@@ -760,27 +904,41 @@ function TSynLanguages.LoadFromFolder(const Folder: TFileName): integer;
 var
   sr: TSearchRec;
   lng: TLanguage;
-  dir, fn: TFileName;
+  dir: TFileName;
+  files: TFileNameDynArray;
+  da: TDynArray;
+  f, i, n: PtrInt;
 begin
   result := 0;
   dir := IncludeTrailingPathDelimiter(Folder);
+  // first retrieve all the translation file names available in this folder
+  n := 0;
+  da.Init(TypeInfo(TFileNameDynArray), files, @n);
   if FindFirst(dir + FILES_ALL, faAnyFile, sr) = 0 then
   begin
     repeat
       if SearchRecValidFile(sr) and
          (LanguageFileFormat(sr.Name) >= 0) then // e.g. ignore any .txt file
-      begin
-        fn := GetFileNameWithoutExt(sr.Name);
-        lng := IsoTextToLanguage(StringToUtf8(fn));
-        if lng <> lngUndefined then
-        begin
-          Language[lng].AddFromFile(dir + sr.Name);
-          inc(result);
-        end;
-      end;
+        da.Add(sr.Name);
     until FindNext(sr) <> 0;
     FindClose(sr);
   end;
+  if n = 0 then
+    exit;
+  // merge them by name, then by ascending LANGUAGE_EXT[] format index, so
+  // that the result does not depend on the OS folder enumeration order
+  da.Sort(SortDynArrayFileName);
+  for f := 0 to high(LANGUAGE_EXT) do
+    for i := 0 to n - 1 do
+      if LanguageFileFormat(files[i]) = f then
+      begin
+        lng := IsoTextToLanguage(StringToUtf8(GetFileNameWithoutExt(files[i])));
+        if lng <> lngUndefined then
+        begin
+          Language[lng].AddFromFile(dir + files[i]);
+          inc(result);
+        end;
+      end;
 end;
 
 function TSynLanguages.LoadedLanguages: TLanguageDynArray;
