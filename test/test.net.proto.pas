@@ -961,7 +961,8 @@ end;
 
 procedure CheckSynopseReverse(test: TNetworkProtocols; const ip: RawUtf8);
 begin
-  if ip = 'blog.synopse.info' then // occurs on some weird DNS servers
+  if (ip = 'blog.synopse.info') or
+     (ip = 'adic.hd.free.fr') then // occurs on some weird DNS servers
     test.Check(true)
   else // French marmots have fiber connection in their mountains
     test.CheckUtf8(PosEx('fbx.proxad.net', ip) <> 0, ip);
