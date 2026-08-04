@@ -7363,17 +7363,14 @@ end;
 procedure TDocVariantData.InitFromUrlArray(Url: PUtf8Char; aOptions: TDocVariantOptions);
 var
   n, v: RawUtf8;
-  val: variant;
-begin
+begin // _FromText() below will recognize booleans or numbers
   Init(aOptions, dvObject);
   if Url <> nil then
     repeat
       Url := UrlDecodeNextNameValue(Url, n, v);
       if Url = nil then
         break;
-      VarClear(val);
-      _FromText(aOptions, @val, v); // recognize booleans or numbers
-      AddValueArray(n, val);
+      _FromText(aOptions, NewSibling(pointer(n), length(n)), v);
     until Url^ = #0;
 end;
 
