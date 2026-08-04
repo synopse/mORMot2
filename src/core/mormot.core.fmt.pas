@@ -165,15 +165,20 @@ function AddXmlUnescape(W: TTextWriter; p, amp: PUtf8Char; plen: PtrUInt): boole
 function XmlUnescape(Text: PUtf8Char; TextLen: PtrInt; var Dest: RawUtf8;
   amp: PUtf8Char = nil): boolean;
 
+const
+  /// TDocVariant options used by default for XmlToVariant()
+  // - no number type inference is done: XML content is text by nature, so
+  // all values are stored as (lossless) strings
+  // - you may also set dvoInternNames for huge content, to reduce the memory usage
+  JSON_XML = JSON_FAST;
+
 type
   /// exception raised by TXmlParser on invalid or unsupported XML input
   EXmlException = class(ESynException);
 
-  TXmlParserFlags = set of (
-    fInElement);
-
   /// the kind of tokens returned by TXmlParser.Next
   // - xtEof is set once the end of the input buffer has been reached
+  // - xtError is returned on parsing error when xpoNoException option is set
   // - xtElementStart is returned for each opening <name> or <name ...> tag,
   // with the parser Name filled - any attribute following as xtAttribute
   // - xtElementEnd is returned for each </name> or self-closing '/>' mark,
@@ -189,9 +194,10 @@ type
   // xpoKeepPI option was defined at Init - silently skipped otherwise
   TXmlToken = (
     xtEof,
+    xtError,
     xtElementStart,
-    xtElementEnd,
     xtAttribute,
+    xtElementEnd,
     xtText,
     xtCData,
     xtComment,
@@ -225,6 +231,7 @@ type
     xpeXmlUnescapeFailed);
 
   /// option to refine TXmlParser process
+  // - xpoNoException would disable raising EXmlException and return xtError
   // - xpoStripNamespacePrefix would remove any 'ns:' prefix from the reported
   // element and attribute names - the prefix is part of the name otherwise
   // (this "basic" parser does no URI namespace binding by design)
@@ -234,6 +241,7 @@ type
   // - xpoKeepWhiteSpace would return xtText tokens made only of whitespace,
   // which are silently skipped by default
   TXmlParserOption = (
+    xpoNoException,
     xpoStripNamespacePrefix,
     xpoDontCheckEndTagName,
     xpoKeepComments,
@@ -267,8 +275,10 @@ type
   TXmlParser = object
   {$endif USERECORDWITHMETHODS}
   private
-    procedure ParseError(pos, reason: PUtf8Char);
-    function ParseName(p, e, reason: PUtf8Char): PUtf8Char;
+    procedure RaiseLastError;
+    procedure RaiseError(reason: TXmlParserError);
+      {$ifdef HASINLINE} inline; {$endif}
+    function ParseName(p, e: PUtf8Char): PUtf8Char;
       {$ifdef HASINLINE} inline; {$endif}
   public
     /// the current token kind, as set by the last Next call
@@ -308,9 +318,12 @@ type
     /// returns the current Value as an allocated UTF-8 string
     // - decoding any XML entity, unless the current token is a verbatim
     // xtCData/xtComment section
-    procedure ValueToUtf8(var result: RawUtf8);
+    // - on decoding error, raise EXmlException or returns false if xpoNoException
+    function ValueToUtf8(var Dest: RawUtf8): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append the current Value as into a UTF-8 string
-    procedure ValueAppendToUtf8(var result: RawUtf8);
+    // - on decoding error, raise EXmlException or returns false if xpoNoException
+    function ValueAppendToUtf8(var Dest: RawUtf8): boolean;
     /// append the current Name/Value attribute into a TDocVariant object
     procedure AttributeToDocVariant(Dest: PDocVariantData);
     /// raw recursive conversion of the current level into a TDocVariant object
@@ -1814,24 +1827,32 @@ begin
       [LastErrorLine, XML_ERROR[LastError]]);
 end;
 
-procedure TXmlParser.ParseError(pos, reason: PUtf8Char);
+procedure TXmlParser.RaiseLastError;
 var
-  line: integer;
   p: PUtf8Char;
-begin
-  line := 1;
+begin // caller should have set LastError
+  Kind := xtError;
+  LastErrorLine := 1;
   p := fBegin;
   if p <> nil then
-    while p < pos do
-    begin
-      if p^ = #10 then
-        inc(line);
+    repeat
+      p := PosChar(p, fToken - p, #10);
+      if p = nil then
+        break;
+      inc(LastErrorLine);
       inc(p);
-    end;
-  EXmlException.RaiseUtf8('XML error at line %: %', [line, reason]);
+    until false;
+  if not (xpoNoException in Options) then
+    RaiseException;
 end;
 
-function TXmlParser.ParseName(p, e, reason: PUtf8Char): PUtf8Char;
+procedure TXmlParser.RaiseError(reason: TXmlParserError);
+begin
+  LastError := reason;
+  RaiseLastError;
+end;
+
+function TXmlParser.ParseName(p, e: PUtf8Char): PUtf8Char;
 begin
   Name.Text := p;
   if xpoStripNamespacePrefix in Options then
@@ -1847,8 +1868,6 @@ begin
           (fTab[p^] = 0) do
       inc(p);
   Name.Len := p - Name.Text;
-  if Name.Len = 0 then
-    ParseError(p, reason);
   while (p < e) and
         (p^ <= ' ') do
     inc(p);
@@ -2133,21 +2152,13 @@ begin
   FastSetString(result, Name.Text, Name.Len);
 end;
 
-procedure TXmlParser.ValueToUtf8(var result: RawUtf8);
-var
-  amp: PUtf8Char;
+function TXmlParser.ValueToUtf8(var Dest: RawUtf8): boolean;
 begin
-  if Kind in [xtCData, xtComment] then
-    amp := nil
-  else
-    amp := PosChar(Value.Text, Value.Len, '&');
-  if amp = nil then
-    FastSetString(result, Value.Text, Value.Len) // verbatim sections
-  else
-    XmlUnescape(Value.Text, Value.Len, result, amp);
+  FastAssignNew(Dest);
+  result := ValueAppendToUtf8(Dest);
 end;
 
-procedure TXmlParser.ValueAppendToUtf8(var result: RawUtf8);
+function TXmlParser.ValueAppendToUtf8(var Dest: RawUtf8): boolean;
 var
   amp: PUtf8Char;
   W: TTextWriter;
@@ -2159,16 +2170,19 @@ begin
     amp := PosChar(Value.Text, Value.Len, '&');
   if amp = nil then
   begin
-    Append(result, Value.Text, Value.Len); // verbatim sections
+    Append(Dest, Value.Text, Value.Len); // verbatim sections
+    result := true;
     exit;
   end;
-  W := TTextWriter.CreateOwnedStream(tmp, result); // append to result
+  W := TTextWriter.CreateOwnedStream(tmp, Dest); // append to result
   try
-    AddXmlUnescape(W, Value.Text, amp, Value.Len);
-    W.SetText(result);
+    result := AddXmlUnescape(W, Value.Text, amp, Value.Len);
+    W.SetText(Dest);
   finally
     W.Free;
   end;
+  if not result then                  // decoding error
+    RaiseError(xpeXmlUnescapeFailed); // raise EXmlException or set Kind=xtError
 end;
 
 procedure TXmlParser.AttributeToDocVariant(Dest: PDocVariantData);
