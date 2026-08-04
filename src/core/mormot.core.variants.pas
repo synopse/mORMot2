@@ -2040,6 +2040,9 @@ type
     /// low-level adding of one value to this document, handled as object
     // - returns a pointer to the new raw value to be filled
     function NewItem(const aName: RawUtf8): PVariant; overload;
+    /// low-level adding of one value to this document, handled as object
+    // - returns a pointer to the new raw value to be filled
+    function NewItem(aName: PUtf8Char; aNameLen: PtrInt): PVariant; overload;
     /// low-level adding of one named value to this document, handled as object
     // - will gather repeated sibling elements of the same name into an array
     // - returns a pointer to the new raw value to be filled
@@ -8091,6 +8094,18 @@ end;
 function TDocVariantData.NewItem(const aName: RawUtf8): PVariant;
 begin
   InternalAddValuePrepare(aName, {update=}false, result, 'NewItem');
+end;
+
+function TDocVariantData.NewItem(aName: PUtf8Char; aNameLen: PtrInt): PVariant;
+var
+  ndx: PtrInt;
+begin
+  result := nil;
+  if Has(dvoIsArray) or
+     (aNameLen <= 0) then
+    exit; // avoid EDocVariant in InternalAddObj()
+  ndx := InternalAddObj(aName, aNameLen);
+  result := @VValue[ndx]; // where to store the new item
 end;
 
 function TDocVariantData.NewSibling(aName: PUtf8Char; aNameLen: PtrInt): PVariant;
