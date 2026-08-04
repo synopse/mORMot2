@@ -200,8 +200,8 @@ type
   protected
     procedure Walk(var p: TXmlParser; kind: TXmlToken;
       const name: RawUtf8 = ''; const value: RawUtf8 = '');
-    procedure ExpectRaise(const Context: string; const Xml: RawUtf8;
-      Options: TXmlParserOptions = []);
+    procedure ExpectRaise(Expected: TXmlParserError; const Context: string;
+      const Xml: RawUtf8; Options: TXmlParserOptions = []);
   published
     /// SAX-level tokens over elements, attributes, text and CData
     procedure SaxTokens;
@@ -9178,26 +9178,41 @@ begin
   CheckEqual(v, value, 'value');
 end;
 
-procedure TTestCoreXml.ExpectRaise(const Context: string;
-  const Xml: RawUtf8; Options: TXmlParserOptions);
+procedure TTestCoreXml.ExpectRaise(Expected: TXmlParserError;
+  const Context: string; const Xml: RawUtf8; Options: TXmlParserOptions);
 var
   p: TXmlParser;
   n, v: RawUtf8;
   ok: boolean;
 begin
+  // first try to catch the EXmlException (default behavior)
   ok := false;
   try
     p.Init(Xml, Options);
+    Check(p.LastError = xpeNone);
     while p.Next <> xtEof do
     begin
       p.NameToUtf8(n);
-      p.ValueToUtf8(v);
+      p.ValueToUtf8(v); // may set xpeXmlUnescapeFailed
     end;
   except
     on EXmlException do
       ok := true;
   end;
   Check(ok, Context);
+  CheckEqual(ord(p.LastError), ord(Expected), XML_ERROR[Expected]);
+  // check properly return xtError with xpoNoException option
+  p.Init(Xml, Options + [xpoNoException]);
+  Check(p.LastError = xpeNone);
+  while not (p.Next in [xtEof, xtError]) do
+  begin
+    Check(p.LastError = xpeNone);
+    p.ValueToUtf8(v); // may set xtError and xpeXmlUnescapeFailed
+  end;
+  Check(p.Kind = xtError, Context);
+  CheckEqual(ord(p.LastError), ord(Expected), XML_ERROR[Expected]);
+  Check(p.Kind = xtError, Context);
+  Check(p.LastError = Expected, Context);
 end;
 
 const
@@ -9213,6 +9228,7 @@ var
   p: TXmlParser;
 begin
   p.Init(XML1);
+  Check(p.LastError = xpeNone);
   CheckEqual(p.Depth, 0);
   Walk(p, xtElementStart, 'root');
   CheckEqual(p.Depth, 1);
@@ -9233,6 +9249,7 @@ begin
   Check(p.Next = xtEof, 'eof');
   Check(p.Kind = xtEof);
   Check(p.Next = xtEof, 'still eof');
+  Check(p.LastError = xpeNone);
 end;
 
 procedure TTestCoreXml.SaxEntities;
@@ -9308,24 +9325,39 @@ var
   deep: RawUtf8;
   i: integer;
 begin
-  ExpectRaise('dtd', '<!DOCTYPE foo [<!ENTITY x "y">]><a>&x;</a>');
-  ExpectRaise('mismatch', '<a><b></a>');
-  ExpectRaise('unclosed', '<a><b>text');
-  ExpectRaise('eof in tag', '<a');
-  ExpectRaise('eof in attr', '<a b="c');
-  ExpectRaise('unquoted attr', '<a b=c/>');
-  ExpectRaise('unknown entity', '<a>&nbsp;</a>');
-  ExpectRaise('bad numeric ref', '<a>&#xzz;</a>');
-  ExpectRaise('overflow ref', '<a>&#x110000;</a>');
-  ExpectRaise('lone end tag', '</a>');
-  ExpectRaise('eof in comment', '<a><!-- x</a>');
-  ExpectRaise('eof in cdata', '<a><![CDATA[x</a>');
-  ExpectRaise('void name', '< a></a>');
-  ExpectRaise('dangling amp', '<a>&</a>');
+  ExpectRaise(xpeUnsupportedMarkup, 'dtd',
+    '<!DOCTYPE foo [<!ENTITY x "y">]><a>&x;</a>');
+  ExpectRaise(xpeWrongEndTag, 'mismatch',
+    '<a><b></a>');
+  ExpectRaise(xpeEofElement, 'unclosed',
+    '<a><b>text');
+  ExpectRaise(xpeEofInTag, 'eof in tag',
+    '<a');
+  ExpectRaise(xpeEofInAttribute, 'eof in attr',
+    '<a b="c');
+  ExpectRaise(xpeMissingAttrQuote, 'unquoted attr',
+    '<a b=c/>');
+  ExpectRaise(xpeXmlUnescapeFailed, 'unknown entity',
+    '<a>&nbsp;</a>');
+  ExpectRaise(xpeXmlUnescapeFailed, 'bad numeric ref',
+    '<a>&#xzz;</a>');
+  ExpectRaise(xpeXmlUnescapeFailed, 'overflow ref',
+    '<a>&#x110000;</a>');
+  ExpectRaise(xpeUnexpectedEndTag, 'lone end tag',
+    '</a>');
+  ExpectRaise(xpeEofInComment, 'eof in comment',
+    '<a><!-- x</a>');
+  ExpectRaise(xpeEofInCdata, 'eof in cdata',
+    '<a><![CDATA[x</a>');
+  ExpectRaise(xpeVoidTagName, 'void name',
+   '< a></a>');
+  ExpectRaise(xpeXmlUnescapeFailed, 'dangling amp',
+    '<a>&</a>');
   for i := 1 to 300 do
     Append(deep, '<a>');
-  ExpectRaise('too much nesting', deep);
-  ExpectRaise('name too long', '<' + RawUtf8OfChar('n', 300) + '/>');
+  ExpectRaise(xpeTooMuchNesting, 'too much nesting', deep);
+  deep := '<' + RawUtf8OfChar('n', 300) + '/>';
+  ExpectRaise(xpeTagNameTooLong, 'name too long', deep);
 end;
 
 procedure TTestCoreXml.SaxBoundaries;
@@ -9493,18 +9525,18 @@ begin
   Walk(p, xtElementEnd, 'a');
   Check(p.Next = xtEof);
   // truncated markup is still rejected, i.e. the fixes above did not open up
-  ExpectRaise('cdata cut', '<a/><![CDATA[x]]');
-  ExpectRaise('cdata cut 2', '<a/><![CDATA[x]');
-  ExpectRaise('cdata cut 3', '<a/><![CDATA[x');
-  ExpectRaise('pi cut', '<a/><?pi x?', [xpoKeepPI]);
-  ExpectRaise('pi cut 2', '<a/><?pi x', [xpoKeepPI]);
-  ExpectRaise('pi cut 3', '<a/><?pi', [xpoKeepPI]);
-  ExpectRaise('void pi', '<a/><?', [xpoKeepPI]);
-  ExpectRaise('comment cut', '<a/><!-- c --', [xpoKeepComments]);
-  ExpectRaise('comment cut 2', '<a/><!-- c -', [xpoKeepComments]);
-  ExpectRaise('comment cut 3', '<a/><!-- c ', [xpoKeepComments]);
-  ExpectRaise('element cut', '<a');
-  ExpectRaise('element cut 2', '<a/');
+  ExpectRaise(xpeEofInCdata, 'cdata cut', '<a/><![CDATA[x]]');
+  ExpectRaise(xpeEofInCdata, 'cdata cut 2', '<a/><![CDATA[x]');
+  ExpectRaise(xpeEofInCdata, 'cdata cut 3', '<a/><![CDATA[x');
+  ExpectRaise(xpeEofInPi, 'pi cut', '<a/><?pi x?', [xpoKeepPI]);
+  ExpectRaise(xpeEofInPi, 'pi cut 2', '<a/><?pi x', [xpoKeepPI]);
+  ExpectRaise(xpeEofInPi, 'pi cut 3', '<a/><?pi', [xpoKeepPI]);
+  ExpectRaise(xpeVoidPiName, 'void pi', '<a/><?', [xpoKeepPI]);
+  ExpectRaise(xpeEofInComment, 'comment cut', '<a/><!-- c --', [xpoKeepComments]);
+  ExpectRaise(xpeEofInComment, 'comment cut 2', '<a/><!-- c -', [xpoKeepComments]);
+  ExpectRaise(xpeEofInComment, 'comment cut 3', '<a/><!-- c ', [xpoKeepComments]);
+  ExpectRaise(xpeEofInTag, 'element cut', '<a');
+  ExpectRaise(xpeSlashInTag, 'element cut 2', '<a/');
   // 3. numeric character references at and above the Unicode range
   maxcp := '';
   SetString(maxcp, PAnsiChar(@buf), Ucs4ToUtf8($10ffff, @buf)); // no literal
@@ -9515,16 +9547,16 @@ begin
   CheckEqual(v, maxcp, 'highest code point');
   Walk(p, xtElementEnd, 'a');
   Check(p.Next = xtEof);
-  ExpectRaise('above range', '<a>&#x110000;</a>');
-  ExpectRaise('above range dec', '<a>&#1114112;</a>');
-  ExpectRaise('way above range', '<a>&#xFFFFFFF;</a>');
+  ExpectRaise(xpeXmlUnescapeFailed, 'above range', '<a>&#x110000;</a>');
+  ExpectRaise(xpeXmlUnescapeFailed, 'above range dec', '<a>&#1114112;</a>');
+  ExpectRaise(xpeXmlUnescapeFailed, 'way above range', '<a>&#xFFFFFFF;</a>');
   // a 32-bit wraparound must not smuggle any markup character back in
-  ExpectRaise('wrap to lt', '<a>&#x10000003C;</a>');
-  ExpectRaise('wrap to amp', '<a>&#x100000026;</a>');
-  ExpectRaise('wrap to lt dec', '<a>&#4294967356;</a>');
-  ExpectRaise('wrap many digits', '<a>&#x000000000000003C;</a>');
-  ExpectRaise('void ref', '<a>&#;</a>');
-  ExpectRaise('void hex ref', '<a>&#x;</a>');
+  ExpectRaise(xpeXmlUnescapeFailed, 'wrap to lt', '<a>&#x10000003C;</a>');
+  ExpectRaise(xpeXmlUnescapeFailed, 'wrap to amp', '<a>&#x100000026;</a>');
+  ExpectRaise(xpeXmlUnescapeFailed, 'wrap to lt dec', '<a>&#4294967356;</a>');
+  ExpectRaise(xpeXmlUnescapeFailed, 'wrap many digits', '<a>&#x000000000000003C;</a>');
+  ExpectRaise(xpeXmlUnescapeFailed, 'void ref', '<a>&#;</a>');
+  ExpectRaise(xpeXmlUnescapeFailed, 'void hex ref', '<a>&#x;</a>');
   // 4. the nesting limit is 255 opened elements, with a per-root offset origin
   for n := 253 to 257 do
   begin
@@ -9555,7 +9587,7 @@ begin
       Check(v <> '', Utf8ToString(s));
     end;
   end;
-  ExpectRaise('nesting 257', deep); // deep is 257 levels here
+  ExpectRaise(xpeTooMuchNesting, 'nesting 257', deep); // deep is 257 levels here
   deep := '';
   for i := 1 to 300 do
     deep := deep + '<a>';
@@ -9582,7 +9614,8 @@ begin
   CheckEqual(p.Name.Len, 255, '255-bytes name length');
   Walk(p, xtElementEnd, u);
   Check(p.Next = xtEof);
-  ExpectRaise('256-bytes name', Join(['<', RawUtf8OfChar('n', 256), '/>']));
+  Join(['<', RawUtf8OfChar('n', 256), '/>'], u);
+  ExpectRaise(xpeTagNameTooLong, '256-bytes name', u);
   // 5. no byte at all may be read past the end of the input buffer, i.e. the
   // parser must never rely on any #0 terminator - see NoTerm() comments above
   NoTerm('<a/>', 'clean');
@@ -9643,9 +9676,9 @@ begin
     [xpoStripNamespacePrefix]),
     '{"e":{"@s":"u","b":"x"}}');
   // TryXmlToVariant
-  Check(TryXmlToVariant('<a><b>1</b></a>', doc), 'try ok');
+  Check(TryXmlToVariant('<a><b>1</b></a>', doc) = xpeNone, 'try ok');
   CheckEqual(VariantSaveJson(doc), '{"a":{"b":"1"}}');
-  Check(not TryXmlToVariant('<a><b></a>', doc), 'try mismatch');
+  Check(TryXmlToVariant('<a><b></a>', doc) = xpeWrongEndTag, 'try mismatch');
   CheckEqual(_Safe(doc)^.Count, 0);
 end;
 
