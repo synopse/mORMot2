@@ -197,6 +197,33 @@ type
     xtComment,
     xtPI);
 
+  /// parsing errors as recognized during TXmlParser process
+  // - see XML_ERROR[] constant to retrieve the corresponding text description
+  TXmlParserError = (
+    xpeNone,
+    xpeEofInTag,
+    xpeSlashInTag,
+    xpeUnexpectedTagEnd,
+    xpeInvalidAttrName,
+    xpeMissingAttrValue,
+    xpeMissingAttrQuote,
+    xpeEofInAttribute,
+    xpeEofElement,
+    xpeEofToken,
+    xpeVoidEndTag,
+    xpeEofEndTag,
+    xpeUnexpectedEndTag,
+    xpeWrongEndTag,
+    xpeEofInComment,
+    xpeEofInCdata,
+    xpeUnsupportedMarkup,
+    xpeVoidPiName,
+    xpeEofInPi,
+    xpeVoidTagName,
+    xpeTagNameTooLong,
+    xpeTooMuchNesting,
+    xpeXmlUnescapeFailed);
+
   /// option to refine TXmlParser process
   // - xpoStripNamespacePrefix would remove any 'ns:' prefix from the reported
   // element and attribute names - the prefix is part of the name otherwise
@@ -252,8 +279,10 @@ type
     Depth: byte;
     /// options to refine TXmlParser process
     Options: TXmlParserOptions;
-    /// flag set e.g. when scanning attributes, up to '>' or '/>'
-    Flags: TXmlParserFlags;
+    /// xpeNone if no error, or the xtError associated context - see XML_ERROR[]
+    LastError: TXmlParserError;
+    /// 0 if LastError=xpeNone, or xtError line number (starting at 1)
+    LastErrorLine: cardinal;
     /// the current token name, pointing within the input buffer
     // - set for xtElementStart, xtElementEnd, xtAttribute and xtPI tokens
     Name: TValuePUtf8Char;
@@ -292,19 +321,43 @@ type
     // - could be used to store a position, then resume a scan from it
     function Position: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
+    /// raise the EXmlException corresponding to LastError/LastErrorLine
+    // - do nothing if LastError = xpeNone
+    procedure RaiseException;
   private
     fTab: PAnsiCharToByte;
     fCur, fBegin, fToken, fAfter: PUtf8Char;
     // up to 256 levels of 32-bit offsets from fNameOrigin and 255-byte names
-    fStackPos: array[byte] of cardinal;
     fStackLen: array[byte] of byte;
+    fStackPos: array[byte] of cardinal;
   end;
 
 const
-  /// TDocVariant options used by default for XmlToVariant()
-  // - no number type inference is done: XML content is text by nature, so
-  // all values are stored as (lossless) strings
-  JSON_XML = JSON_FAST;
+  /// text description of all TXmlParser process errors
+  XML_ERROR: array[TXmlParserError] of RawUtf8 = (
+    '',
+    'unexpected end of input within a tag',      // xpeEofInTag
+    'invalid "/" within a tag',                  // xpeSlashInTag
+    'unexpected tag ending',                     // xpeUnexpectedTagEnd
+    'void or invalid attribute name',            // xpeInvalidAttrName
+    'attribute expects "="',                     // xpeMissingAttrValue
+    'attribute value expects quotes',            // xpeMissingAttrQuote
+    'unfinished attribute value',                // xpeEofInAttribute
+    'unexpected end of input: unclosed element', // xpeEofElement
+    'unexpected end of input after "<"',         // xpeEofToken
+    'void or invalid end tag name',              // xpeVoidEndTag
+    'end tag expects ">"',                       // xpeEofTagName
+    'unexpected end tag',                        // xpeUnexpectedEndTag
+    'mismatched end tag',                        // xpeWrongEndTag
+    'unfinished comment',                        // xpeEofInComment
+    'unfinished CDATA',                          // xpeEofInCdata
+    'DTD and <!..> markup are not supported',    // xpeUnsupportedMarkup
+    'void or invalid PI name',                   // xpeVoidPiName
+    'unfinished processing instruction',         // xpeEofInPi
+    'void or invalid name',                      // xpeVoidTagName
+    'unexpectedly long name (max 255)',          // xpeTagNameTooLong
+    'too much nesting',                          // xpeTooMuchNesting
+    'XmlUnescape decoding failed');              // xpeXmlUnescapeFailed
 
 /// parse XML UTF-8 content into a TDocVariant document
 // - a late-binding-friendly mapping, following common XML-to-JSON conventions:
@@ -1754,6 +1807,13 @@ end;
 
 { TXmlParser }
 
+procedure TXmlParser.RaiseException;
+begin
+  if LastError <> xpeNone then
+    EXmlException.RaiseUtf8('XML error at line %: %',
+      [LastErrorLine, XML_ERROR[LastError]]);
+end;
+
 procedure TXmlParser.ParseError(pos, reason: PUtf8Char);
 var
   line: integer;
@@ -1818,9 +1878,10 @@ begin
   end;
   fAfter := Text + TextLen;
   Options := ParserOptions;
-  byte(Flags) := 0;
-  Depth := 0;
   Kind := xtEof;
+  LastError := xpeNone;
+  Depth := 0;
+  LastErrorLine := 0;
   Name.Text := nil;
   Name.Len := 0;
   Value.Text := nil;
