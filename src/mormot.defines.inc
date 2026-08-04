@@ -14,8 +14,12 @@
 
 {.$define USEPACKAGES}
 // define this if you compile the unit within a Delphi package
-// - it will avoid error like "[DCC Error] E2201 Need imported data reference
-// ($G) to access 'VarCopyProc'"
+// - it will enable {$IMPORTEDDATA ON} ($G+) for all our units at once, as
+// older Delphi compilers required it to access data from another package, e.g.
+// "[DCC Error] E2201 Need imported data reference ($G) to access 'VarCopyProc'"
+// - note: $G+ is the compiler default, and on Delphi 13.1 (compiler 37.0) this
+// error is not affected by the switch any more, so defining this conditional
+// has no observable effect on such a recent compiler
 // - shall be set at the package options level, and left untouched by default
 // - note: you should probably also set "Generate DCUs only" in Project Options
 // -> Delphi Compiler -> Output C/C++ -> C/C++ output file generation
@@ -534,6 +538,10 @@
   // -- global code generation conditionals
 
   {$A+} // force normal alignment, as expected by our units
+
+  {$ifdef USEPACKAGES}
+    {$IMPORTEDDATA ON} // $G+ is needed when compiled within a Delphi package
+  {$endif USEPACKAGES}
 
   {$ifdef UNICODE}
     {$define HASVARUSTRING}
