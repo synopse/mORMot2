@@ -154,16 +154,16 @@ function AddJsonToXml(W: TTextWriter; Json: PUtf8Char; ArrayName: PUtf8Char = ni
 // i.e.   &lt; &gt; &amp; &apos; &quot;   and   &#nnn; &#xhh;   patterns
 // - as AddHtmlUnescape(), the first '&' position could be supplied in amp,
 // if the caller did already search for it
-// - raises EXmlException on any other (i.e. undefined) entity
-procedure AddXmlUnescape(W: TTextWriter; p, amp: PUtf8Char; plen: PtrUInt);
+// - returns false on any other (i.e. undefined) entity - true on success
+function AddXmlUnescape(W: TTextWriter; p, amp: PUtf8Char; plen: PtrUInt): boolean;
 
 /// decode the five XML predefined entities and numeric character references
 // - just a wrapper around AddXmlUnescape(), with no allocation if no '&'
 // entity appears in the input text
 // - as used by TXmlParser.ValueToUtf8, or to be called directly
-// - raises EXmlException on any other (i.e. undefined) entity
-procedure XmlUnescape(Text: PUtf8Char; TextLen: PtrInt; var result: RawUtf8;
-  amp: PUtf8Char = nil);
+// - returns false on any other (i.e. undefined) entity - true on success
+function XmlUnescape(Text: PUtf8Char; TextLen: PtrInt; var Dest: RawUtf8;
+  amp: PUtf8Char = nil): boolean;
 
 type
   /// exception raised by TXmlParser on invalid or unsupported XML input
@@ -1650,11 +1650,10 @@ begin
   end;
 end;
 
-procedure AddXmlUnescape(W: TTextWriter; p, amp: PUtf8Char; plen: PtrUInt);
+function AddXmlUnescape(W: TTextWriter; p, amp: PUtf8Char; plen: PtrUInt): boolean;
 var
   l: PtrUInt;
   c: Ucs4CodePoint;
-  ent: TShort15;
 begin
   repeat
     if amp = nil then
@@ -1663,7 +1662,7 @@ begin
       if amp = nil then
       begin
         W.AddNoJsonEscape(p, plen); // no more entity to decode
-        exit;
+        break;
       end;
     end;
     l := amp - p;
@@ -1714,8 +1713,8 @@ begin
       end;
     if c = 0 then
     begin
-      SetString(ent, p - 1, plen); // RTL will truncate to TShort15
-      EXmlException.RaiseUtf8('XmlUnescape: invalid entity in ''%''', [ent]);
+      result := false; // invalid entity
+      exit;
     end;
     if c <= $7f then
       W.AddDirect(AnsiChar(c))
@@ -1725,10 +1724,11 @@ begin
     inc(p, l);
     dec(plen, l);
   until plen = 0;
+  result := true;
 end;
 
-procedure XmlUnescape(Text: PUtf8Char; TextLen: PtrInt; var result: RawUtf8;
-  amp: PUtf8Char);
+function XmlUnescape(Text: PUtf8Char; TextLen: PtrInt; var Dest: RawUtf8;
+  amp: PUtf8Char): boolean;
 var
   W: TTextWriter;
   tmp: TTextWriterStackBuffer;
@@ -1738,13 +1738,14 @@ begin
     amp := PosChar(Text, TextLen, '&');
   if amp = nil then
   begin
-    FastSetString(result, Text, TextLen); // direct allocation if no entity
+    FastSetString(Dest, Text, TextLen); // direct allocation if no entity
+    result := true;
     exit;
   end;
   W := TTextWriter.CreateOwnedStream(tmp);
   try
-    AddXmlUnescape(W, Text, amp, TextLen);
-    W.SetText(result);
+    result := AddXmlUnescape(W, Text, amp, TextLen);
+    W.SetText(Dest);
   finally
     W.Free;
   end;

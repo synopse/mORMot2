@@ -8134,7 +8134,7 @@ begin
         arr := @tmp;
         arr^.Init(VOptions, dvArray);
         arr^.VCount := 2;
-        v := DynArrayNew(@arr^.VValue, 2, SizeOf(exist^));
+        v := DynArrayNew(@arr^.VValue, 3, SizeOf(exist^));
         v^ := PVarData(exist)^;          // copy as first item
         PVarData(exist)^ := tmp;         // replace with array
         result := @PVariantArray(v)^[1]; // where to store the new item
