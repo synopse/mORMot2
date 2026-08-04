@@ -4199,9 +4199,42 @@ begin
 end;
 {$else}
 function RetrieveMemoryManagerInfo: RawUtf8;
+{$if defined(OSWINDOWS) and defined(ISDELPHI2007ANDUP)}
+var
+  i: PtrInt;
+  small, alloc, reserved, blocks: QWord;
+  state: TMemoryManagerState;
+{$ifend}
 begin
+  result := '';
   {$ifdef OSWINDOWS}
-  // standard Delphi memory manager
+  {$ifdef ISDELPHI2007ANDUP}
+  // standard Delphi memory manager - note: don't use the older GetHeapStatus,
+  // which the RTL declares as deprecated and unsupported
+  GetMemoryManagerState(state);
+  small := 0;
+  blocks := QWord(state.AllocatedMediumBlockCount) +
+            QWord(state.AllocatedLargeBlockCount);
+  reserved := QWord(state.ReservedMediumBlockAddressSpace) +
+              QWord(state.ReservedLargeBlockAddressSpace);
+  for i := 0 to high(state.SmallBlockTypeStates) do
+    with state.SmallBlockTypeStates[i] do
+    begin
+      inc(small, QWord(AllocatedBlockCount) * UseableBlockSize);
+      inc(reserved, ReservedAddressSpace);
+      inc(blocks, AllocatedBlockCount);
+    end;
+  alloc := small + QWord(state.TotalAllocatedMediumBlockSize) +
+           QWord(state.TotalAllocatedLargeBlockSize);
+  if reserved <> 0 then
+    FormatUtf8(' - Heap: Allocated=% Reserved=% ' +
+       'Small=% Medium=% Large=% Blocks=% ',
+      [KBNoSpace(alloc), KBNoSpace(reserved), KBNoSpace(small),
+       KBNoSpace(state.TotalAllocatedMediumBlockSize),
+       KBNoSpace(state.TotalAllocatedLargeBlockSize), blocks], result);
+  {$else}
+  // TMemoryManagerState needs Delphi 2007+: older compilers keep GetHeapStatus,
+  // which is not flagged as deprecated on them anyway
   with GetHeapStatus do
     if TotalAddrSpace <> 0 then
       FormatUtf8(' - Heap: AddrSpace=% Uncommitted=% Committed=% Allocated=% '+
@@ -4210,10 +4243,9 @@ begin
          KBNoSpace(TotalCommitted), KBNoSpace(TotalAllocated),
          KBNoSpace(TotalFree),      KBNoSpace(FreeSmall),
          KBNoSpace(FreeBig),        KBNoSpace(Unused),
-         KBNoSpace(Overhead)], result)
-    else
+         KBNoSpace(Overhead)], result);
+  {$endif ISDELPHI2007ANDUP}
   {$endif OSWINDOWS}
-      result := '';
 end;
 {$endif FPC}
 
