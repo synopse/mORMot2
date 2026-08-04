@@ -1928,220 +1928,283 @@ begin
   Value.Len := 0;
   p := fCur;
   e := fAfter;
+  if Kind <> xtError then
   repeat
-    if fInElement in Flags then
+    if (Kind = xtElementStart) or
+       (Kind = xtAttribute) then
     begin
       // within <name ... : expect attributes until '>' or '/>'
       while (p < e) and
             (p^ <= ' ') do
         inc(p);
-      if p = e then
-        ParseError(p, 'unexpected end of input within a tag');
-      fToken := p;
-      case p^ of
-        '>':
+      if p < e then
+      begin
+        fToken := p;
+        case p^ of
+          '>':
+            begin
+              inc(p);
+              Kind := xtElementEnd;
+              continue; // parse the following content
+            end;
+          '/':
+            begin
+              inc(p);
+              if (p < e) and
+                 (p^ = '>') then
+                if Depth <> 0 then
+                begin
+                  inc(p);
+                  dec(Depth);
+                  Name.Text := fBegin + fStackPos[Depth];
+                  Name.Len := fStackLen[Depth];
+                  Kind := xtElementEnd;
+                  break;
+                end
+              else
+                LastError := xpeUnexpectedTagEnd
+              else
+                LastError := xpeSlashInTag;
+            end;
+        else
           begin
-            inc(p);
-            exclude(Flags, fInElement);
-            continue; // parse the following content
+            // name="value" attribute pair
+            p := ParseName(p, e);
+            if Name.Len <> 0 then
+              if (p < e) and
+                 (p^ = '=') then
+              begin
+                repeat
+                  inc(p);
+                until (p = e) or
+                      (p^ > ' ');
+                if (p <> e) and
+                   (p^ in ['"', '''']) then
+                begin
+                  inc(p);
+                  Value.Text := p;
+                  Value.Len := ByteScanIndex(pointer(p), e - p, ord(p[-1]));
+                  if Value.Len >= 0 then
+                  begin
+                    inc(p, Value.Len + 1);
+                    Kind := xtAttribute;
+                    break;
+                  end;
+                  LastError := xpeEofInAttribute;
+                end
+                else
+                  LastError := xpeMissingAttrQuote
+              end
+              else
+                LastError := xpeMissingAttrValue
+            else
+              LastError := xpeInvalidAttrName;
           end;
-        '/':
-          begin
-            inc(p);
-            if (p = e) or
-               (p^ <> '>') then
-              ParseError(p, 'invalid "/" within a tag');
-            inc(p);
-            exclude(Flags, fInElement);
-            if Depth = 0 then
-              ParseError(p, 'unexpected tag ending');
-            dec(Depth);
-            Name.Text := fBegin + fStackPos[Depth];
-            Name.Len := fStackLen[Depth];
-            Kind := xtElementEnd;
-            break;
-          end;
-      else
-        begin
-          // name="value" attribute pair
-          p := ParseName(p, e, 'void or invalid attribute name');
-          if (p = e) or
-             (p^ <> '=') then
-            ParseError(p, 'attribute expects "="');
-          repeat
-            inc(p);
-          until (p = e) or
-                (p^ > ' ');
-          if (p = e) or
-             not (p^ in ['"', '''']) then
-            ParseError(p, 'attribute value expects quotes');
-          inc(p);
-          Value.Text := p;
-          Value.Len := ByteScanIndex(pointer(p), e - p, ord(p[-1]));
-          if Value.Len < 0 then
-            ParseError(p, 'unfinished attribute value');
-          inc(p, Value.Len + 1);
-          Kind := xtAttribute;
-          break;
         end;
-      end;
-    end
-    else if p = e then
-    begin
-      // end of input
-      if Depth > 0 then
-        ParseError(p, 'unexpected end of input: unclosed element');
-      fToken := p;
-      Kind := xtEof;
+      end
+      else
+        LastError := xpeEofInTag;
+      RaiseLastError;
       break;
     end
-    else if p^ = '<' then
-    begin
-      fToken := p;
-      inc(p);
-      if p = e then
-        ParseError(p, 'unexpected end of input after "<"');
-      case p^ of
-        '/':
-          begin
-            // </name> end tag
-            inc(p);
-            p := ParseName(p, e, 'void or invalid end tag name');
-            if (p = e) or
-               (p^ <> '>') then
-              ParseError(p, 'end tag expects ">"');
-            inc(p);
-            if Depth = 0 then
-              ParseError(Name.Text, 'unexpected end tag');
-            dec(Depth);
-            if (fStackLen[Depth] <> Name.Len) or
-               ((not (xpoDontCheckEndTagName in Options)) and
-                (not CompareMemSmall(fBegin + fStackPos[Depth],
-                   Name.Text, Name.Len))) then
-              ParseError(Name.Text, 'mismatched end tag');
-            Kind := xtElementEnd;
-            break;
-          end;
-        '!':
-          begin
-            inc(p);
-            if (e - p >= 2) and
-               (PWord(p)^ = ord('-') + ord('-') shl 8) then
-            begin
-              // <!-- comment -->
-              inc(p, 2);
-              fCur := p;
-              while (e - p >= 3) and
-                    ((p^ <> '-') or
-                     (p[1] <> '-') or
-                     (p[2] <> '>')) do
-                inc(p);
-              if e - p < 3 then
-                ParseError(fCur, 'unfinished comment');
-              if xpoKeepComments in Options then
+    else if p < e then
+      if p^ = '<' then
+      begin
+        fToken := p;
+        inc(p);
+        if p < e then
+          case p^ of
+            '/':
               begin
-                Value.Text := fCur;
-                Value.Len := p - fCur;
-                inc(p, 3);
-                Kind := xtComment;
+                // </name> end tag
+                inc(p);
+                p := ParseName(p, e);
+                if Name.Len <> 0 then
+                  if (p < e) and
+                     (p^ = '>') then
+                    if Depth <> 0 then
+                    begin
+                      dec(Depth);
+                      inc(p);
+                      if (fStackLen[Depth] = Name.Len) and
+                         ((xpoDontCheckEndTagName in Options) or
+                          CompareMemSmall(fBegin + fStackPos[Depth],
+                            Name.Text, Name.Len)) then
+                      begin
+                        Kind := xtElementEnd;
+                        break;
+                      end;
+                      LastError := xpeWrongEndTag;
+                    end
+                    else
+                      LastError := xpeUnexpectedEndTag
+                  else
+                    LastError := xpeEofEndTag
+                else
+                  LastError := xpeVoidEndTag;
+                RaiseLastError;
                 break;
               end;
-              inc(p, 3);
-              continue;
-            end;
-            if (e - p >= 7) and
-               (PCardinal(p)^ = ord('[') + ord('C') shl 8 +
-                                ord('D') shl 16 + ord('A') shl 24) and
-               (PCardinal(p + 3)^ = ord('A') + ord('T') shl 8 +
-                                    ord('A') shl 16 + ord('[') shl 24) then
-            begin
-              // <![CDATA[ ... ]]> verbatim section
-              inc(p, 7);
-              Value.Text := p;
-              dec(e, 3);
-              while (p <= e) and
-                    ((p^ <> ']') or
-                     (p[1] <> ']') or
-                     (p[2] <> '>')) do
+            '!':
+              begin
                 inc(p);
-              if p > e  then
-                ParseError(Value.Text, 'unfinished CDATA');
-              Value.Len := p - Value.Text;
-              inc(p, 3);
-              Kind := xtCData;
-              break;
-            end;
-            ParseError(p, 'DTD and <!..> markup are not supported');
-          end;
-        '?':
-          begin
-            // <?name ...?> processing instruction
-            inc(p);
-            p := ParseName(p, e, 'void or invalid PI name');
-            fCur := p; // just after the name and its trailing blanks
-            dec(e, 2);
-            while (p <= e) and
-                  ((p^ <> '?') or
-                   (p[1] <> '>')) do
-              inc(p);
-            if p > e then
-              ParseError(Name.Text, 'unfinished processing instruction');
-            if xpoKeepPI in Options then
+                if (e - p >= 2) and
+                   (PWord(p)^ = ord('-') + ord('-') shl 8) then
+                begin
+                  // <!-- comment -->
+                  inc(p, 2);
+                  fCur := p;
+                  while (e - p >= 3) and
+                        ((p^ <> '-') or
+                         (p[1] <> '-') or
+                         (p[2] <> '>')) do
+                    inc(p);
+                  if e - p < 3 then
+                  begin
+                    RaiseError(xpeEofInComment);
+                    break;
+                  end;
+                  if xpoKeepComments in Options then
+                  begin
+                    Value.Text := fCur;
+                    Value.Len := p - fCur;
+                    inc(p, 3);
+                    Kind := xtComment;
+                    break;
+                  end;
+                  inc(p, 3);
+                  continue;
+                end;
+                if (e - p >= 7) and
+                   (PCardinal(p)^ = ord('[') + ord('C') shl 8 +
+                                    ord('D') shl 16 + ord('A') shl 24) and
+                   (PCardinal(p + 3)^ = ord('A') + ord('T') shl 8 +
+                                        ord('A') shl 16 + ord('[') shl 24) then
+                begin
+                  // <![CDATA[ ... ]]> verbatim section
+                  inc(p, 7);
+                  Value.Text := p;
+                  dec(e, 3);
+                  while (p <= e) and
+                        ((p^ <> ']') or
+                         (p[1] <> ']') or
+                         (p[2] <> '>')) do
+                    inc(p);
+                  if p <= e  then
+                  begin
+                    Value.Len := p - Value.Text;
+                    inc(p, 3);
+                    Kind := xtCData;
+                    break;
+                  end;
+                  LastError := xpeEofInCdata;
+                end
+                else
+                  LastError := xpeUnsupportedMarkup;
+                RaiseLastError;
+                break;
+              end;
+            '?':
+              begin
+                // <?name ...?> processing instruction
+                inc(p);
+                p := ParseName(p, e);
+                if Name.Len <> 0 then
+                begin
+                  fCur := p; // just after the name and its trailing blanks
+                  dec(e, 2);
+                  while (p <= e) and
+                        ((p^ <> '?') or
+                         (p[1] <> '>')) do
+                    inc(p);
+                  if p <= e then
+                  begin
+                    if not (xpoKeepPI in Options) then
+                    begin
+                      inc(e, 2);
+                      inc(p, 2);
+                      continue;
+                    end;
+                    Value.Text := fCur;
+                    while (p > fCur) and
+                          (p[-1] <= ' ') do
+                      dec(p); // trim trailing blanks, but never before the value
+                    Value.Len := p - Value.Text;
+                    while p^ <= ' ' do
+                      inc(p); // reach back the '?>' ending
+                    inc(p, 2);
+                    Kind := xtPI;
+                    break;
+                  end;
+                  LastError := xpeEofInPi;
+                end
+                else
+                  LastError := xpeVoidPiName;
+                RaiseLastError;
+                break;
+              end;
+          else // not </ <! <?
             begin
-              Value.Text := fCur;
-              while (p > fCur) and
-                    (p[-1] <= ' ') do
-                dec(p); // trim trailing blanks, but never before the value
-              Value.Len := p - Value.Text;
-              while p^ <= ' ' do
-                inc(p); // reach back the '?>' ending
-              inc(p, 2);
-              Kind := xtPI;
+              // <name> element start
+              p := ParseName(p, e);
+              if Name.Len <> 0 then
+                if Name.Len shr 8 = 0 then
+                  if Depth < high(fStackPos) then
+                  begin
+                    fStackPos[Depth] := Name.Text - fBegin;
+                    fStackLen[Depth] := Name.Len;
+                    inc(Depth);
+                    Kind := xtElementStart;
+                    break;
+                  end
+                  else
+                    LastError := xpeTooMuchNesting
+                else
+                  LastError := xpeTagNameTooLong
+              else
+                LastError := xpeVoidTagName;
+              RaiseLastError;
               break;
             end;
-            inc(e, 2);
-            inc(p, 2);
-            continue;
+          end
+          else
+          begin
+            RaiseError(xpeEofToken);
+            break;
           end;
-      else
+      end
+      else // p^ <> '<'
+      begin
+        // text content until the next markup
+        fToken := p;
+        if (p^ <= ' ') and
+           not (xpoKeepWhiteSpace in Options) then
         begin
-          // <name> element start
-          p := ParseName(p, e, 'void or invalid name');
-          if Name.Len shr 8 <> 0 then
-            ParseError(Name.Text, 'unexpectedly long name (max 255)');
-          if Depth = high(fStackPos) then
-            ParseError(Name.Text, 'too much nesting');
-          fStackPos[Depth] := Name.Text - fBegin;
-          fStackLen[Depth] := Name.Len;
-          inc(Depth);
-          include(Flags, fInElement);
-          Kind := xtElementStart;
-          break;
+          while (p < e) and
+                (p^ <= ' ') do
+            inc(p);
+          if (p < e) and
+             (p^ = '<') then
+            continue; // ignore any pure-whitespace text
+          p := fToken;
         end;
-      end;
-    end
+        Value.Text := p;
+        Value.Len := ByteScanIndex(pointer(p), e - p, ord('<'));
+        if Value.Len < 0 then
+          Value.Len := e - p;
+        inc(p, Value.Len);
+        Kind := xtText;
+        break;
+      end
     else
     begin
-      // text content until the next markup
+      // end of input
       fToken := p;
-      if not (xpoKeepWhiteSpace in Options) then
-      begin
-        while (p < e) and
-              (p^ <= ' ') do
-          inc(p);
-        if (p < e) and
-           (p^ = '<') then
-          continue; // ignore any pure-whitespace text
-        p := fToken;
-      end;
-      Value.Text := p;
-      Value.Len := ByteScanIndex(pointer(p), e - p, ord('<'));
-      if Value.Len < 0 then
-        Value.Len := e - p;
-      inc(p, Value.Len);
-      Kind := xtText;
+      Kind := xtEof;
+      if Depth > 0 then
+        RaiseError(xpeEofElement);
       break;
-    end;
+    end
   until false;
   fCur := p;
   result := Kind;
