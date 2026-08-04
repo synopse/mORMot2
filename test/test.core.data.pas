@@ -136,6 +136,10 @@ type
       const name: RawUtf8 = ''; const value: RawUtf8 = '');
     procedure XmlExpectRaise(Expected: TXmlParserError; const Context: string;
       const Xml: RawUtf8; Options: TXmlParserOptions = []);
+    procedure RunGolden(const Name, Yaml, ExpectedJson: RawUtf8);
+    procedure RunYaml(const Yaml: array of const);
+    procedure RunFile(const Yaml: array of const);
+    procedure YamlExpectRaise(const Name, Yaml: RawUtf8);
   public
     /// SAX-level tokens over elements, attributes, text and CData
     procedure XmlSaxTokens;
@@ -152,6 +156,20 @@ type
     procedure XmlSaxBoundaries;
     /// XmlToVariant/TryXmlToVariant/XmlToJson mapping conventions
     procedure XmlToVariant;
+    /// parse YAML happy paths and compare TDocVariantData.ToJson
+    procedure YamlParseGoldenReferences;
+    /// parse then serialize then parse, compare equivalence
+    procedure YamlRoundtrip;
+    /// unsupported constructs must raise EYamlException with line info
+    procedure YamlErrorCases;
+    /// YamlFileToVariant reads via OS file I/O
+    procedure YamlFileApi;
+    /// pathological deep nesting must raise EYamlException, not EStackOverflow
+    // - covers the Stripe 6 MB spec3 public stress-test failure mode
+    procedure YamlRecursionDepth;
+    /// an OpenAPI-shaped spec in YAML must yield the same TDocVariantData
+    // as its JSON counterpart - this is the invariant mopenapi relies on
+    procedure YamlOpenapiEquivalence;
   published
     /// some low-level RTTI access
     // - especially the field type retrieval from published properties
@@ -191,30 +209,8 @@ type
     procedure Folders;
     /// regression tests for the mormot.core.fmt XML parser
     procedure _XML;
-  end;
-
-  /// regression tests for mormot.core.fmt YAML parser
-  TTestCoreYaml = class(TSynTestCase)
-  protected
-    procedure RunGolden(const Name, Yaml, ExpectedJson: RawUtf8);
-    procedure RunYaml(const Yaml: array of const);
-    procedure RunFile(const Yaml: array of const);
-    procedure ExpectRaise(const Name, Yaml: RawUtf8);
-  published
-    /// parse YAML happy paths and compare TDocVariantData.ToJson
-    procedure ParseGoldenReferences;
-    /// parse then serialize then parse, compare equivalence
-    procedure Roundtrip;
-    /// unsupported constructs must raise EYamlException with line info
-    procedure ErrorCases;
-    /// YamlFileToVariant reads via OS file I/O
-    procedure FileApi;
-    /// pathological deep nesting must raise EYamlException, not EStackOverflow
-    // - covers the Stripe 6 MB spec3 public stress-test failure mode
-    procedure RecursionDepth;
-    /// an OpenAPI-shaped spec in YAML must yield the same TDocVariantData
-    // as its JSON counterpart - this is the invariant mopenapi relies on
-    procedure OpenapiEquivalence;
+    /// regression tests for the mormot.core.fmt YAML parser
+    procedure _YAML;
   end;
 
   /// this test case will test most functions, classes and types defined and
@@ -8769,7 +8765,15 @@ begin
 end;
 
 
-{ TTestCoreYaml }
+procedure TTestCoreProcess._YAML;
+begin
+  YamlParseGoldenReferences;
+  YamlRoundtrip;
+  YamlErrorCases;
+  YamlFileApi;
+  YamlRecursionDepth;
+  YamlOpenapiEquivalence;
+end;
 
 type
   TYamlGoldenCase = record
@@ -8957,7 +8961,7 @@ const
      ExpectedJson: '')
   );
 
-procedure TTestCoreYaml.RunGolden(const Name, Yaml, ExpectedJson: RawUtf8);
+procedure TTestCoreProcess.RunGolden(const Name, Yaml, ExpectedJson: RawUtf8);
 var
   doc: TDocVariantData;
   actual: RawUtf8;
@@ -8967,7 +8971,7 @@ begin
   CheckEqual(actual, ExpectedJson, FormatUtf8('golden "%"', [Name]));
 end;
 
-procedure TTestCoreYaml.RunYaml(const Yaml: array of const);
+procedure TTestCoreProcess.RunYaml(const Yaml: array of const);
 var
   doc: TDocVariantData;
   tmp: RawUtf8;
@@ -8976,7 +8980,7 @@ begin
   YamlToVariant(tmp, doc);
 end;
 
-procedure TTestCoreYaml.RunFile(const Yaml: array of const);
+procedure TTestCoreProcess.RunFile(const Yaml: array of const);
 var
   doc: TDocVariantData;
   tmp: RawUtf8;
@@ -8987,12 +8991,12 @@ begin
   Check(TryYamlFileToVariant(fn, doc));
 end;
 
-procedure TTestCoreYaml.ExpectRaise(const Name, Yaml: RawUtf8);
+procedure TTestCoreProcess.YamlExpectRaise(const Name, Yaml: RawUtf8);
 begin
   CheckRaised(RunYaml, [Yaml], EYamlException, Name);
 end;
 
-procedure TTestCoreYaml.ParseGoldenReferences;
+procedure TTestCoreProcess.YamlParseGoldenReferences;
 var
   i: PtrInt;
 begin
@@ -9000,7 +9004,7 @@ begin
     RunGolden(GOLDEN[i].Name, GOLDEN[i].Yaml, GOLDEN[i].ExpectedJson);
 end;
 
-procedure TTestCoreYaml.Roundtrip;
+procedure TTestCoreProcess.YamlRoundtrip;
 var
   i: PtrInt;
   doc1, doc2: TDocVariantData;
@@ -9026,15 +9030,15 @@ begin
   end;
 end;
 
-procedure TTestCoreYaml.ErrorCases;
+procedure TTestCoreProcess.YamlErrorCases;
 var
   i: PtrInt;
 begin
   for i := low(ERRORS) to high(ERRORS) do
-    ExpectRaise(Join([' for ', ERRORS[i].Name]), ERRORS[i].Yaml);
+    YamlExpectRaise(Join([' for ', ERRORS[i].Name]), ERRORS[i].Yaml);
 end;
 
-procedure TTestCoreYaml.FileApi;
+procedure TTestCoreProcess.YamlFileApi;
 var
   fn: TFileName;
   doc: TDocVariantData;
@@ -9064,7 +9068,7 @@ begin
   end;
 end;
 
-procedure TTestCoreYaml.RecursionDepth;
+procedure TTestCoreProcess.YamlRecursionDepth;
 var
   i: PtrInt;
   yaml, indent: RawUtf8;
@@ -9082,7 +9086,7 @@ begin
     Append(yaml, indent, 'a: 1'#10);
     // deep input beyond the cap must raise EYamlException (not EStackOverflow)
     YamlMaxDepth := 8;
-    ExpectRaise(' depth 20 must raise EYamlException when YamlMaxDepth=8', yaml);
+    YamlExpectRaise(' depth 20 must raise EYamlException when YamlMaxDepth=8', yaml);
     // same input parses cleanly when the cap is high enough
     YamlMaxDepth := 100;
     YamlToVariant(yaml, doc);
@@ -9092,7 +9096,7 @@ begin
   end;
 end;
 
-procedure TTestCoreYaml.OpenapiEquivalence;
+procedure TTestCoreProcess.YamlOpenapiEquivalence;
 const
   // a compact OpenAPI 3.0 slice exercising: nested maps, arrays, $ref,
   // numeric-looking keys (the "200" response code) and boolean properties
