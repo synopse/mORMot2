@@ -2008,8 +2008,6 @@ begin
       end
       else
         LastError := xpeEofInTag;
-      RaiseLastError;
-      break;
     end
     else if p < e then
       if p^ = '<' then
@@ -2046,8 +2044,6 @@ begin
                     LastError := xpeEofEndTag
                 else
                   LastError := xpeVoidEndTag;
-                RaiseLastError;
-                break;
               end;
             '!':
               begin
@@ -2105,8 +2101,6 @@ begin
                 end
                 else
                   LastError := xpeUnsupportedMarkup;
-                RaiseLastError;
-                break;
               end;
             '?':
               begin
@@ -2144,8 +2138,6 @@ begin
                 end
                 else
                   LastError := xpeVoidPiName;
-                RaiseLastError;
-                break;
               end;
           else // not </ <! <?
             begin
@@ -2167,15 +2159,10 @@ begin
                   LastError := xpeTagNameTooLong
               else
                 LastError := xpeVoidTagName;
-              RaiseLastError;
-              break;
             end;
           end
           else
-          begin
-            RaiseError(xpeEofToken);
-            break;
-          end;
+            LastError := xpeEofToken;
       end
       else // p^ <> '<'
       begin
@@ -2205,10 +2192,13 @@ begin
       // end of input
       fToken := p;
       Kind := xtEof;
-      if Depth > 0 then
-        RaiseError(xpeEofElement);
-      break;
-    end
+      if Depth = 0 then
+        break;
+      LastError := xpeEofElement;
+    end;
+    // if we reached here, LastError has been set to a particular item
+    RaiseLastError;
+    break;
   until false;
   fCur := p;
   result := Kind;
@@ -2261,7 +2251,7 @@ begin
   MoveFast(Name.Text^, n[1], Name.Len); // we know Name.Len <= 255
   v := pointer(Dest^.NewItem(@n, Name.Len + 1));
   v^.VType := varString;
-  ValueToUtf8(RawUtf8(v^.VAny));
+  ValueAppendToUtf8(RawUtf8(v^.VAny));
 end;
 
 procedure TXmlParser.ToDocVariant(Dest: PDocVariantData);
