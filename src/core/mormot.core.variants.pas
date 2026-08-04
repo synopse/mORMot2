@@ -8119,25 +8119,28 @@ begin
   result := nil;
   if Has(dvoIsArray) or
      (aNameLen <= 0) then
-    exit; // avoid EDocVariant in InternalAddBuf()
-  ndx := GetValueIndex(aName, aNameLen, Has(dvoNameCaseSensitive));
-  if ndx >= 0 then
+    exit; // avoid EDocVariant in InternalAddObj()
+  if VCount <> 0 then // inlined GetValueIndex()
   begin
-    exist := @VValue[ndx];
-    arr := _Safe(exist^);
-    if arr^.Has(dvoIsArray) then
-      result := arr^.NewItem // where to store the new item
-    else
-    begin // convert value to array
-      arr := @tmp;
-      arr^.Init(VOptions, dvArray);
-      arr^.VCount := 2;
-      v := DynArrayNew(@arr^.VValue, 2, SizeOf(exist^));
-      v^ := PVarData(exist)^;          // copy as first item
-      PVarData(exist)^ := tmp;         // replace with array
-      result := @PVariantArray(v)^[1]; // where to store the new item
+    ndx := FindNonVoid[Has(dvoNameCaseSensitive)](pointer(VName), aName, aNameLen, VCount);
+    if ndx >= 0 then
+    begin
+      exist := @VValue[ndx];
+      arr := _Safe(exist^);
+      if arr^.Has(dvoIsArray) then
+        result := arr^.NewItem // where to store the new item
+      else
+      begin // convert value to array
+        arr := @tmp;
+        arr^.Init(VOptions, dvArray);
+        arr^.VCount := 2;
+        v := DynArrayNew(@arr^.VValue, 2, SizeOf(exist^));
+        v^ := PVarData(exist)^;          // copy as first item
+        PVarData(exist)^ := tmp;         // replace with array
+        result := @PVariantArray(v)^[1]; // where to store the new item
+      end;
+      exit;
     end;
-    exit;
   end;
   ndx := InternalAddObj(aName, aNameLen);
   result := @VValue[ndx]; // where to store the new item
