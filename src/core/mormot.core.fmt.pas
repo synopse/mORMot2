@@ -240,13 +240,15 @@ type
   // which are silently skipped by default
   // - xpoKeepWhiteSpace would return xtText tokens made only of whitespace,
   // which are silently skipped by default
+  // - xpoVariantGuessType let XmlToVariant() recognize booleans and numbers
   TXmlParserOption = (
     xpoNoException,
     xpoStripNamespacePrefix,
     xpoDontCheckEndTagName,
     xpoKeepComments,
     xpoKeepPI,
-    xpoKeepWhiteSpace);
+    xpoKeepWhiteSpace,
+    xpoVariantGuessType);
 
   /// options to refine TXmlParser process
   TXmlParserOptions = set of TXmlParserOption;
@@ -2286,6 +2288,13 @@ begin
       exit
     else
       Dest := pointer(Dest^.NewItem('#text'));
+  if (xpoVariantGuessType in Options) and
+     GetVariantFromNotStringJson(txt, PVarData(Dest)^,
+       dvoAllowDoubleValue in Dest^.Options) then
+  begin
+    FastAssignNew(txt); // release any heap memory
+    exit;
+  end;
   PSynVarData(Dest)^.VType := varString;
   PSynVarData(Dest)^.VAny := txt;
 end;

@@ -9654,6 +9654,11 @@ var
 begin
   // plain string value for text-only elements
   CheckEqual(XmlToJson('<a>hello</a>'), '{"a":"hello"}');
+  CheckEqual(XmlToJson('<a>0</a>'), '{"a":"0"}');
+  CheckEqual(XmlToJson('<a>123</a>'), '{"a":"123"}');
+  CheckEqual(XmlToJson('<a>12.3</a>'), '{"a":"12.3"}');
+  CheckEqual(XmlToJson('<a>true</a>'), '{"a":"true"}');
+  CheckEqual(XmlToJson('<a>false</a>'), '{"a":"false"}');
   // void element as an empty string
   CheckEqual(XmlToJson('<a/>'), '{"a":""}');
   // attribute-only element
@@ -9667,6 +9672,8 @@ begin
     '{"a":{"b":["1","2"],"c":{"@d":"x","#text":"t"}}}');
   CheckEqual(XmlToJson('<a><b>1</b><b>2</b><b>3</b></a>'),
     '{"a":{"b":["1","2","3"]}}');
+  CheckEqual(XmlToJson('<a>false</a><a>7</a><a>hello</a>'),
+    '{"a":["false","7","hello"]}');
   // mixed content
   CheckEqual(XmlToJson('<a>pre <b/>post</a>'),
     '{"a":{"b":"","#text":"pre post"}}');
@@ -9683,6 +9690,15 @@ begin
   CheckEqual(XmlToJson('<s:e xmlns:s="u"><s:b>x</s:b></s:e>',
     [xpoStripNamespacePrefix]),
     '{"e":{"@s":"u","b":"x"}}');
+  // validate xpoVariantGuessType
+  CheckEqual(XmlToJson('<a>hello</a>', [xpoVariantGuessType]), '{"a":"hello"}');
+  CheckEqual(XmlToJson('<a>0</a>', [xpoVariantGuessType]), '{"a":0}');
+  CheckEqual(XmlToJson('<a>123</a>', [xpoVariantGuessType]), '{"a":123}');
+  CheckEqual(XmlToJson('<a>12.3</a>', [xpoVariantGuessType]), '{"a":12.3}');
+  CheckEqual(XmlToJson('<a>true</a>', [xpoVariantGuessType]), '{"a":true}');
+  CheckEqual(XmlToJson('<a>false</a>', [xpoVariantGuessType]), '{"a":false}');
+  CheckEqual(XmlToJson('<a>false</a><a>7</a><a>hello</a>',
+    [xpoVariantGuessType]), '{"a":[false,7,"hello"]}');
   // TryXmlToVariant
   Check(TryXmlToVariant('<a><b>1</b></a>', doc) = xpeNone, 'try ok');
   CheckEqual(VariantSaveJson(doc), '{"a":{"b":"1"}}');
