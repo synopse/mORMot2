@@ -2111,16 +2111,14 @@ end;
 
 procedure TXmlParser.AttributeToDocVariant(Dest: PDocVariantData);
 var
-  n, v: PByteArray; // avoid hidden try..finally
+  v: PSynVarData;
+  n: array[0.. 257] of AnsiChar; // local stack copy for Dest^ interning
 begin
-  n := FastNewString(Name.Len + 1, CP_UTF8);
-  n[0] := ord('@');
-  MoveFast(Name.Text^, n[1], Name.Len);
-  v := nil;
-  ValueToUtf8(RawUtf8(v));
-  Dest^.AddValueText(RawUtf8(n), RawUtf8(v));
-  FastAssignNew(n);
-  FastAssignNew(v);
+  n[0] := '@'; // note: Dest^ interning may append an ending #0 -> high>255
+  MoveFast(Name.Text^, n[1], Name.Len); // we know Name.Len <= 255
+  v := pointer(Dest^.NewItem(@n, Name.Len + 1));
+  v^.VType := varString;
+  ValueToUtf8(RawUtf8(v^.VAny));
 end;
 
 procedure TXmlParser.ToDocVariant(Dest: PDocVariantData; DestVType: cardinal);
