@@ -329,11 +329,16 @@ type
     /// raw recursive conversion of the current level into a TDocVariant object
     // - fill from attributes and content, until the matching xtElementEnd
     // - the supplied Dest^ should have been just allocated or ZeroClear()
-    procedure ToDocVariant(Dest: PDocVariantData; DestVType: cardinal);
+    procedure ToDocVariant(Dest: PDocVariantData);
     /// the offset of the current token in the input buffer
     // - could be used to store a position, then resume a scan from it
     function Position: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
+    /// calls Init(Xml) then ToDocVariant(Doc) to convert any XML input
+    // - will force xpoNoException in supplied ParseOptions
+    // - returns LastError = xpeNone on success
+    function ConvertToVariant(const Xml: RawUtf8; var Doc: variant;
+      ParseOptions: TXmlParserOptions = []; Options: TDocVariantOptions = JSON_XML): TXmlParserError;
     /// raise the EXmlException corresponding to LastError/LastErrorLine
     // - do nothing if LastError = xpeNone
     procedure RaiseException;
@@ -383,14 +388,13 @@ const
 // - only xpoStripNamespacePrefix is used from ParseOptions
 // - raises EXmlException on any malformed or unsupported input (e.g. DTD)
 procedure XmlToVariant(const Xml: RawUtf8; var Doc: variant;
-  ParseOptions: TXmlParserOptions = [];
-  Options: TDocVariantOptions = JSON_XML);
+  ParseOptions: TXmlParserOptions = []; Options: TDocVariantOptions = JSON_XML);
 
 /// convenient wrapper around XmlToVariant() with no EXmlException
-// - will catch internally any EXmlException and return false on failure
+// - return xpeNone on success, or the corresponding matching error
 function TryXmlToVariant(const Xml: RawUtf8; var Doc: variant;
   ParseOptions: TXmlParserOptions = [];
-  Options: TDocVariantOptions = JSON_XML): boolean;
+  Options: TDocVariantOptions = JSON_XML): TXmlParserError;
 
 /// convert XML UTF-8 content into a JSON object
 // - just a wrapper around XmlToVariant() + TDocVariantData.ToJson
@@ -2260,11 +2264,11 @@ begin
   ValueToUtf8(RawUtf8(v^.VAny));
 end;
 
-procedure TXmlParser.ToDocVariant(Dest: PDocVariantData; DestVType: cardinal);
+procedure TXmlParser.ToDocVariant(Dest: PDocVariantData);
 var
-  txt: RawUtf8; // we need a try..finally since Next may raise EXmlException
+  txt, v: pointer;
 begin
-  PSynVarData(Dest)^.VType := DestVType; // fast Init() - Dest should be zeroed
+  txt := nil; // = RawUtf8 pointer for no hidden try..finally
   while true do
     case Next of
       xtEof,
@@ -2273,19 +2277,37 @@ begin
       xtAttribute:
         AttributeToDocVariant(Dest);
       xtElementStart:
-        ToDocVariant(pointer(Dest^.NewSibling(Name.Text, Name.Len)), DestVType);
+        begin
+          v := Dest^.NewSibling(Name.Text, Name.Len);
+          PCardinal(v)^ := PCardinal(Dest)^; // same VType + VOptions
+          ToDocVariant(v);
+        end;
       xtText,
       xtCData:
-        ValueAppendToUtf8(txt);
+        ValueAppendToUtf8(RawUtf8(txt));
+      xtError:  // we forced xpoNoException mode for efficient txt process
+        begin
+          FastAssignNew(txt); // manual release of any pending txt
+          exit;
+        end;
     end;
   if Dest^.Count <> 0 then
-    if txt = '' then
+    if txt = nil then
       exit
     else
       Dest := pointer(Dest^.NewItem('#text'));
   PSynVarData(Dest)^.VType := varString;
-  PSynVarData(Dest)^.VAny := pointer(txt);
-  pointer(txt) := nil;
+  PSynVarData(Dest)^.VAny := txt;
+end;
+
+function TXmlParser.ConvertToVariant(const Xml: RawUtf8; var Doc: variant;
+  ParseOptions: TXmlParserOptions; Options: TDocVariantOptions): TXmlParserError;
+begin
+  Init(pointer(Xml), length(Xml), ParseOptions + [xpoNoException]);
+  ZeroClear(@Doc); // as required by ToDocVariant
+  PCardinal(@Doc)^ := _VType(Options, dvObject); // fast Init() of root
+  ToDocVariant(@Doc);
+  result := LastError;
 end;
 
 procedure XmlToVariant(const Xml: RawUtf8; var Doc: variant;
@@ -2293,24 +2315,18 @@ procedure XmlToVariant(const Xml: RawUtf8; var Doc: variant;
 var
   x: TXmlParser;
 begin
-  x.Init(pointer(Xml), length(Xml), ParseOptions * [xpoStripNamespacePrefix]);
-  ZeroClear(@Doc); // as required by x.ToDocVariant
-  x.ToDocVariant(@Doc, _VType(Options, dvObject));
+  if x.ConvertToVariant(Xml, Doc, ParseOptions, Options) <> xpeNone then
+    x.RaiseException;
 end;
 
 function TryXmlToVariant(const Xml: RawUtf8; var Doc: variant;
-  ParseOptions: TXmlParserOptions; Options: TDocVariantOptions): boolean;
+  ParseOptions: TXmlParserOptions; Options: TDocVariantOptions): TXmlParserError;
+var
+  x: TXmlParser;
 begin
-  try
-    XmlToVariant(Xml, Doc, ParseOptions, Options);
-    result := true;
-  except
-    on EXmlException do
-    begin
-      Doc.Clear;
-      result := false;
-    end;
-  end;
+  result := x.ConvertToVariant(Xml, Doc, ParseOptions, Options);
+  if result <> xpeNone then
+    TDocVariantData(Doc).Clear;
 end;
 
 function XmlToJson(const Xml: RawUtf8;
