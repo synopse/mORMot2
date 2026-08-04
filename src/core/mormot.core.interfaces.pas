@@ -7902,10 +7902,10 @@ end;
 const
   // = the deprecated System.vmtFreeInstance, which Delphi replaced by the
   // asm-only VMTOFFSET operator - verified to match the RTL value on 32/64-bit
-  // - CPP_ABI_ADJUST was introduced with Delphi XE2, and the RTL constant is
+  // - CPP_ABI_ADJUST was introduced with Delphi XE3, and the RTL constant is
   // not deprecated on older compilers, so it is used as-is there and on FPC
-  VMT_FREEINSTANCE = {$ifdef ISDELPHIXE2} -2 * SizeOf(pointer) - CPP_ABI_ADJUST
-                     {$else} vmtFreeInstance {$endif ISDELPHIXE2};
+  VMT_FREEINSTANCE = {$ifdef ISDELPHIXE3} -2 * SizeOf(pointer) - CPP_ABI_ADJUST
+                     {$else} vmtFreeInstance {$endif ISDELPHIXE3};
 
 constructor TSetWeakZero.Create(aClass: TClass);
 var

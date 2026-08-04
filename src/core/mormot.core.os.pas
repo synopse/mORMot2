@@ -9238,10 +9238,10 @@ end;
 const
   // = the deprecated System.vmtDestroy, which Delphi replaced by the asm-only
   // VMTOFFSET operator - verified to match the RTL value on 32-bit and 64-bit
-  // - CPP_ABI_ADJUST was introduced with Delphi XE2, and the RTL constant is
+  // - CPP_ABI_ADJUST was introduced with Delphi XE3, and the RTL constant is
   // not deprecated on older compilers, so it is used as-is there and on FPC
-  VMT_DESTROY = {$ifdef ISDELPHIXE2} -SizeOf(pointer) - CPP_ABI_ADJUST
-                {$else} vmtDestroy {$endif ISDELPHIXE2};
+  VMT_DESTROY = {$ifdef ISDELPHIXE3} -SizeOf(pointer) - CPP_ABI_ADJUST
+                {$else} vmtDestroy {$endif ISDELPHIXE3};
 
 function SeemsRealObject(p: pointer): boolean;
 var
