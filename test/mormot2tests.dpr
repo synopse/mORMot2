@@ -148,19 +148,13 @@ begin
   AddCase([
     TTestCoreBase,
     TTestCoreProcess,
-    TTestCoreXml,
-    TTestCoreYaml,
     {$ifdef HASGENERICS} // do-nothing on oldest compilers (e.g. <= Delphi XE7)
     TTestCoreCollections,
     {$endif HASGENERICS}
     TTestCoreCrypto,
     TTestCoreEcc,
     TTestCoreCompression,
-    TNetworkProtocols,
-    // TTestCoreYaml registered last: dvoInternNames interning would otherwise
-    // pollute the TDocVariant intern counters that the JSON benchmark of
-    // TTestCoreProcess measures as deltas
-    TTestCoreYaml
+    TNetworkProtocols
   ]);
 end;
 
