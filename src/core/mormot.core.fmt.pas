@@ -340,7 +340,7 @@ type
     // - will force xpoNoException in supplied ParseOptions
     // - returns LastError = xpeNone on success
     function ConvertToVariant(const Xml: RawUtf8; var Doc: variant;
-      ParseOptions: TXmlParserOptions = []; Options: TDocVariantOptions = JSON_XML): TXmlParserError;
+      ParseOptions: TXmlParserOptions = []; DocOptions: TDocVariantOptions = JSON_XML): TXmlParserError;
     /// raise the EXmlException corresponding to LastError/LastErrorLine
     // - do nothing if LastError = xpeNone
     procedure RaiseException;
@@ -2300,11 +2300,11 @@ begin
 end;
 
 function TXmlParser.ConvertToVariant(const Xml: RawUtf8; var Doc: variant;
-  ParseOptions: TXmlParserOptions; Options: TDocVariantOptions): TXmlParserError;
+  ParseOptions: TXmlParserOptions; DocOptions: TDocVariantOptions): TXmlParserError;
 begin
   Init(pointer(Xml), length(Xml), ParseOptions + [xpoNoException]);
   ZeroClear(@Doc); // as required by ToDocVariant
-  PCardinal(@Doc)^ := _VType(Options, dvObject); // fast Init() of root
+  PCardinal(@Doc)^ := _VType(DocOptions, dvObject); // fast Init() of root
   ToDocVariant(@Doc);
   result := LastError;
 end;
