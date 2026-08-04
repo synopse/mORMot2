@@ -149,6 +149,7 @@ begin
     TTestCoreBase,
     TTestCoreProcess,
     TTestCoreXml,
+    TTestCoreI18n,
     TTestCoreYaml,
     {$ifdef HASGENERICS} // do-nothing on oldest compilers (e.g. <= Delphi XE7)
     TTestCoreCollections,

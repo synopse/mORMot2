@@ -88,6 +88,7 @@ uses
   mormot.core.rtti,
   mormot.core.json,
   mormot.core.fmt,
+  mormot.core.i18n,
   mormot.core.variants,
   mormot.crypt.core,
   mormot.crypt.secure,
@@ -218,6 +219,25 @@ type
     procedure SaxBoundaries;
     /// XmlToVariant/TryXmlToVariant/XmlToJson mapping conventions
     procedure ToVariant;
+  end;
+
+  /// regression tests for the mormot.core.i18n unit
+  TTestCoreI18n = class(TSynTestCase)
+  published
+    /// TSynLanguage table load and translation with fallback
+    procedure LanguageTable;
+    /// TSynLanguages registry, thread language and Mustache wiring
+    procedure LanguagesRegistry;
+    /// global hooks: captions and date/time rendering
+    procedure GlobalHooks;
+    /// GNU gettext .po parsing into a TSynLanguage table
+    procedure PoFormat;
+    /// GNU gettext .mo binary parsing into a TSynLanguage table
+    procedure MoFormat;
+    /// INI and YAML parsing, and the per-extension file loaders
+    procedure IniAndFiles;
+    /// the FPC resourcestring table rewriting channel
+    procedure ResourceStrings;
   end;
 
   /// this test case will test most functions, classes and types defined and
@@ -9683,6 +9703,769 @@ begin
 end;
 
 
+{ TTestCoreI18n }
+
+procedure TTestCoreI18n.LanguageTable;
+var
+  l: TSynLanguage;
+  t: RawUtf8;
+  s: string;
+begin
+  l := TSynLanguage.Create(lngFrench);
+  try
+    CheckEqual(l.Iso, 'fr');
+    Check(l.Language = lngFrench);
+    CheckEqual(l.Count, 0);
+    CheckEqual(l.AddFromJson('{"Hello":"Bonjour","World":"Monde"}'), 2);
+    CheckEqual(l.Count, 2);
+    CheckEqual(l.AddFromJson('invalid'), -1);
+    t := 'Hello';
+    Check(l.Translate(t));
+    CheckEqual(t, 'Bonjour');
+    t := 'Missing';
+    Check(not l.Translate(t));
+    CheckEqual(t, 'Missing', 'fallback keeps input');
+    s := 'World';
+    l.TranslateString(s);
+    Check(s = 'Monde');
+    s := 'Missing';
+    l.TranslateString(s);
+    Check(s = 'Missing');
+  finally
+    l.Free;
+  end;
+end;
+
+procedure TTestCoreI18n.LanguagesRegistry;
+var
+  langs: TSynLanguages;
+  m: TSynMustache;
+  u: RawUtf8;
+  loaded: TLanguageDynArray;
+begin
+  langs := TSynLanguages.Create;
+  try
+    CheckEqual(length(langs.LoadedLanguages), 0, 'void registry');
+    CheckEqual(langs.Language[lngFrench].AddFromJson('{"Hello":"Bonjour"}'), 1);
+    CheckEqual(langs.Language[lngChinese].AddFromJson('{"Hello":"NiHao"}'), 1);
+    Check(langs.Find(lngFrench) <> nil);
+    Check(langs.Find(lngGerman) = nil);
+    Check(langs.FindIso('fr') = langs.Find(lngFrench));
+    Check(langs.FindIso('xx') = nil);
+    // LoadedLanguages returns the loaded tables, in TLanguage enumerate order
+    loaded := langs.LoadedLanguages;
+    CheckEqual(length(loaded), 2, 'LoadedLanguages count');
+    Check(loaded[0] = lngChinese, 'lngChinese comes first in TLanguage');
+    Check(loaded[1] = lngFrench);
+    // no thread language nor default: passthrough
+    Check(TSynLanguages.ThreadLanguage = lngUndefined);
+    Check(langs.Current = nil);
+    u := 'Hello';
+    Check(not langs.Translate(u));
+    CheckEqual(u, 'Hello');
+    // per-thread selection
+    TSynLanguages.SetThreadLanguage(lngFrench);
+    Check(TSynLanguages.ThreadLanguage = lngFrench);
+    Check(langs.Current = langs.Find(lngFrench));
+    u := 'Hello';
+    Check(langs.Translate(u));
+    CheckEqual(u, 'Bonjour');
+    // fallback to DefaultLanguage when no thread language is set
+    TSynLanguages.SetThreadLanguage(lngUndefined);
+    langs.DefaultLanguage := lngChinese;
+    Check(langs.Current = langs.Find(lngChinese));
+    u := 'Hello';
+    Check(langs.Translate(u));
+    CheckEqual(u, 'NiHao');
+    // Mustache {{"text}} channel end-to-end
+    TSynLanguages.SetThreadLanguage(lngFrench);
+    m := TSynMustache.Parse('{{"Hello}} {{name}}!');
+    CheckEqual(m.Render(_ObjFast(['name', 'world']), nil, nil,
+      langs.TranslateString), 'Bonjour world!');
+    TSynLanguages.SetThreadLanguage(lngUndefined);
+    langs.DefaultLanguage := lngUndefined;
+    CheckEqual(m.Render(_ObjFast(['name', 'world']), nil, nil,
+      langs.TranslateString), 'Hello world!', 'passthrough fallback');
+  finally
+    TSynLanguages.SetThreadLanguage(lngUndefined);
+    langs.Free;
+  end;
+end;
+
+procedure TTestCoreI18n.GlobalHooks;
+var
+  langs: TSynLanguages;
+  s: string;
+begin
+  Check(I18n = nil);
+  langs := TSynLanguages.Create;
+  try
+    langs.Language[lngFrench].AddFromJson('{"Hello world":"Bonjour tout le monde"}');
+    langs.Language[lngFrench].DateTimeFormat := 'yyyy/mm/dd hh:nn';
+    langs.SetGlobal;
+    Check(I18n = langs);
+    TSynLanguages.SetThreadLanguage(lngFrench);
+    // LoadResStringTranslate is consumed by the GetCaptionFrom* family
+    GetCaptionFromPCharLen('HelloWorld', s);
+    Check(s = 'Bonjour tout le monde', 'caption translation');
+    // date/time hooks
+    Check(Assigned(i18nDateTimeText));
+    s := i18nDateTimeText(EncodeDate(2026, 7, 31) + EncodeTime(12, 30, 0, 0));
+    Check(s = '2026/07/31 12:30', 'DateTimeFormat pattern');
+  finally
+    TSynLanguages.SetThreadLanguage(lngUndefined);
+    langs.Free; // also unhooks the global slots
+  end;
+  Check(I18n = nil, 'unhooked');
+  Check(not Assigned(LoadResStringTranslate));
+  Check(not Assigned(i18nDateTimeText));
+end;
+
+const
+  // a realistic GNU gettext .po sample, mixing CRLF and LF line endings
+  _PO: RawUtf8 =
+    '# French translation of the demo'#13#10 +
+    '# Copyright (C) 2026'#13#10 +
+    'msgid ""'#13#10 +
+    'msgstr "Project-Id-Version: demo\n"'#13#10 +
+    '"Content-Type: text/plain; charset=UTF-8\n"'#13#10 +
+    '"Plural-Forms: nplurals=2; plural=(n > 1);\n"'#13#10 +
+    #13#10 +
+    '#: src/main.c:42'#13#10 +
+    'msgid "Hello"'#13#10 +
+    'msgstr "Bonjour"'#13#10 +
+    #13#10 +
+    '#. a multi-line entry, using .po continuation lines'#10 +
+    'msgid "Hello "'#10 +
+    '"World"'#10 +
+    'msgstr "Bonjour "'#10 +
+    '"tout le monde"'#10 +
+    #10 +
+    '#: src/main.c:50'#10 +
+    '#, fuzzy, c-format'#10 +
+    'msgid "Fuzzy"'#10 +
+    'msgstr "Flou"'#10 +
+    #10 +
+    'msgid "Untranslated"'#10 +
+    'msgstr ""'#10 +
+    #10 +
+    'msgctxt "menu"'#10 +
+    'msgid "Open"'#10 +
+    'msgstr "Ouvrir"'#10 +
+    #10 +
+    'msgid "One file"'#10 +
+    'msgid_plural "%d files"'#10 +
+    'msgstr[0] "Un fichier"'#10 +
+    'msgstr[1] "%d fichiers"'#10 +
+    #10 +
+    'msgid "a\nb\tc \"d\" e\\f"'#10 +
+    'msgstr "A\nB\tC \"D\" E\\F"'#10 +
+    #10 +
+    'msgid "unknown \q and \u escapes"'#10 +
+    'msgstr "inconnu \q et \u"'#10 +
+    #10 +
+    '  msgid "Indented"'#10 +
+    '  msgstr "Indente"'#10;
+
+procedure TTestCoreI18n.PoFormat;
+var
+  l: TSynLanguage;
+  t, cha: RawUtf8;
+  fn: TFileName;
+  tmp: array[0 .. 15] of AnsiChar;
+begin
+  l := TSynLanguage.Create(lngFrench);
+  try
+    CheckEqual(l.AddFromPo(''), 0, 'void input');
+    CheckEqual(l.Count, 0);
+    CheckEqual(l.AddFromPo('# only'#10#10'#. comments'#10'#, fuzzy'#10#10), 0,
+      'comments and blank lines only');
+    CheckEqual(l.Count, 0);
+    // the whole reference sample: 5 entries out of 9 msgid blocks
+    CheckEqual(l.AddFromPo(_PO), 5, 'sample entries');
+    CheckEqual(l.Count, 5, 'no extra key stored');
+    // plain msgid/msgstr pair
+    t := 'Hello';
+    Check(l.Translate(t), 'plain pair');
+    CheckEqual(t, 'Bonjour');
+    // multi-line msgid/msgstr continuation
+    t := 'Hello World';
+    Check(l.Translate(t), 'continuation lines');
+    CheckEqual(t, 'Bonjour tout le monde');
+    // \n \t \" \\ escape decoding, on both msgid and msgstr
+    t := 'a'#10'b'#9'c "d" e\f';
+    Check(l.Translate(t), 'escapes');
+    CheckEqual(t, 'A'#10'B'#9'C "D" E\F');
+    // unknown escapes keep the escaped character itself
+    t := 'unknown q and u escapes';
+    Check(l.Translate(t), 'unknown escapes');
+    CheckEqual(t, 'inconnu q et u');
+    // leading blanks are tolerated
+    t := 'Indented';
+    Check(l.Translate(t), 'indented lines');
+    CheckEqual(t, 'Indente');
+    // fuzzy entries are pending human review: they should be ignored
+    t := 'Fuzzy';
+    Check(not l.Translate(t), 'fuzzy is skipped');
+    CheckEqual(t, 'Fuzzy');
+    // a void msgstr is an untranslated entry
+    t := 'Untranslated';
+    Check(not l.Translate(t), 'void msgstr is skipped');
+    CheckEqual(t, 'Untranslated');
+    // msgctxt disambiguation is not supported yet
+    t := 'Open';
+    Check(not l.Translate(t), 'msgctxt is skipped');
+    CheckEqual(t, 'Open');
+    // msgid_plural / msgstr[] plural forms are not supported yet
+    t := 'One file';
+    Check(not l.Translate(t), 'plural forms are skipped');
+    CheckEqual(t, 'One file');
+    // the void msgid header entry should never pollute the table
+    t := 'Project-Id-Version: demo'#10 +
+         'Content-Type: text/plain; charset=UTF-8'#10 +
+         'Plural-Forms: nplurals=2; plural=(n > 1);'#10;
+    Check(not l.Translate(t), 'header is skipped');
+    // a missing ending line feed should still store the last entry
+    CheckEqual(l.AddFromPo('msgid "EOF"'#10'msgstr "Fin"'), 1, 'no ending LF');
+    CheckEqual(l.Count, 6);
+    t := 'EOF';
+    Check(l.Translate(t));
+    CheckEqual(t, 'Fin');
+    // an existing key is replaced, not duplicated
+    CheckEqual(l.AddFromPo('msgid "Hello"'#10'msgstr "Salut"'#10), 1, 'replace');
+    CheckEqual(l.Count, 6, 'replaced, not added');
+    t := 'Hello';
+    Check(l.Translate(t));
+    CheckEqual(t, 'Salut');
+    // the parser should be transparent to any UTF-8 multi-byte content
+    FastSetString(cha, @tmp, Ucs4ToUtf8($8336, @tmp)); // U+8336 = tea ideogram
+    CheckEqual(length(cha), 3, 'utf-8 3 bytes');
+    CheckEqual(l.AddFromPo('msgid "Tea"'#10'msgstr "' + cha + '"'#10), 1);
+    t := 'Tea';
+    Check(l.Translate(t));
+    CheckEqual(t, cha, 'utf-8 passthrough');
+    // AddFromPoFile() should ignore any leading UTF-8 BOM
+    fn := WorkDir + 'test.po';
+    Check(FileFromString(BOM_UTF8_CHARS +
+      'msgid "File"'#10'msgstr "Fichier"'#10, fn), 'po file');
+    CheckEqual(l.AddFromPoFile(fn), 1, 'AddFromPoFile');
+    CheckEqual(l.Count, 8);
+    t := 'File';
+    Check(l.Translate(t), 'BOM skipped');
+    CheckEqual(t, 'Fichier');
+    Check(DeleteFile(fn));
+  finally
+    l.Free;
+  end;
+end;
+
+// generate some GNU gettext .mo binary content, as msgfmt would
+// - Swapped will store the multi-byte numbers in the reverse endianness of this
+// CPU, to validate the byte swapping code path of TSynLanguage.AddFromMo()
+// - Revision and CountDelta allow to generate some deliberately invalid content
+function MakeMo(const Ids, Strs: array of RawUtf8; Swapped: boolean;
+  Revision: cardinal = 0; CountDelta: integer = 0): RawByteString;
+const
+  MO_HEAD = 28; // fixed size of the .mo header, in bytes
+var
+  n, i, p: PtrInt;
+  nul: AnsiChar;
+  txt: RawByteString;
+
+  procedure AddCard(V: cardinal);
+  begin
+    if Swapped then
+      V := bswap32(V);
+    Append(result, @V, 4);
+  end;
+
+begin
+  result := '';
+  txt := '';
+  nul := #0;
+  n := length(Ids);
+  AddCard($950412de);                // magic number
+  AddCard(Revision);                 // major shl 16 + minor file format
+  AddCard(n + CountDelta);           // number of strings
+  AddCard(MO_HEAD);                  // original strings table offset
+  AddCard(MO_HEAD + n * 8);          // translated strings table offset
+  AddCard(0);                        // hash table size
+  AddCard(0);                        // hash table offset
+  p := MO_HEAD + n * 16;             // where the #0 terminated strings begin
+  for i := 0 to n - 1 do             // original strings (length, offset) table
+  begin
+    AddCard(length(Ids[i]));
+    AddCard(p);
+    inc(p, length(Ids[i]) + 1);      // each string has its #0 terminator
+  end;
+  for i := 0 to n - 1 do             // translated strings (length, offset) table
+  begin
+    AddCard(length(Strs[i]));
+    AddCard(p);
+    inc(p, length(Strs[i]) + 1);
+  end;
+  for i := 0 to n - 1 do
+  begin
+    Append(txt, Ids[i]);
+    Append(txt, @nul, 1);
+  end;
+  for i := 0 to n - 1 do
+  begin
+    Append(txt, Strs[i]);
+    Append(txt, @nul, 1);
+  end;
+  Append(result, txt);
+end;
+
+procedure TTestCoreI18n.MoFormat;
+var
+  l, l2: TSynLanguage;
+  langs: TSynLanguages;
+  mo, bad: RawByteString;
+  t, cha: RawUtf8;
+  fn, folder: TFileName;
+  swapped: boolean;
+  i: PtrInt;
+  tmp: array[0 .. 15] of AnsiChar;
+begin
+  FastSetString(cha, @tmp, Ucs4ToUtf8($8336, @tmp)); // U+8336 = tea ideogram
+  // the same .mo content, in this CPU endianness and in the reverse one
+  for swapped := false to true do
+  begin
+    mo := MakeMo([
+      '',                                 // the void msgid header entry
+      'Hello',
+      'Hello World',
+      'Untranslated',
+      'One file'#0'%d files',             // msgid + #0 + msgid_plural
+      'menu'#4'Open',                     // msgctxt + #4 + msgid
+      'Tea'], [
+      'Project-Id-Version: demo'#10'Content-Type: text/plain; charset=UTF-8'#10,
+      'Bonjour',
+      'Bonjour tout le monde',
+      '',                                 // an untranslated entry
+      'Un fichier'#0'%d fichiers',        // msgstr[0] + #0 + msgstr[1]
+      'Ouvrir',
+      cha], swapped);
+    l := TSynLanguage.Create(lngFrench);
+    try
+      CheckEqual(l.AddFromMo(mo), 3, 'Hello + Hello World + Tea');
+      CheckEqual(l.Count, 3, 'no extra key stored');
+      t := 'Hello';
+      Check(l.Translate(t), 'plain pair');
+      CheckEqual(t, 'Bonjour');
+      t := 'Hello World';
+      Check(l.Translate(t), 'no escaping in the binary format');
+      CheckEqual(t, 'Bonjour tout le monde');
+      // the parser should be transparent to any UTF-8 multi-byte content
+      t := 'Tea';
+      Check(l.Translate(t));
+      CheckEqual(t, cha, 'utf-8 passthrough');
+      // the void msgid header entry should never pollute the table
+      t := 'Project-Id-Version: demo'#10 +
+           'Content-Type: text/plain; charset=UTF-8'#10;
+      Check(not l.Translate(t), 'header is skipped');
+      // a void msgstr is an untranslated entry, as with AddFromPo()
+      t := 'Untranslated';
+      Check(not l.Translate(t), 'void msgstr is skipped');
+      CheckEqual(t, 'Untranslated');
+      // msgid_plural / msgstr[] plural forms are not supported yet, as for .po
+      t := 'One file';
+      Check(not l.Translate(t), 'plural forms are skipped');
+      // msgctxt disambiguation is not supported yet, as for .po
+      t := 'Open';
+      Check(not l.Translate(t), 'msgctxt is skipped');
+      t := 'menu'#4'Open';
+      Check(not l.Translate(t), 'the raw msgctxt key is not stored either');
+    finally
+      l.Free;
+    end;
+  end;
+  // a .mo and the .po source it was compiled from should give the same table
+  l := TSynLanguage.Create(lngFrench);
+  l2 := TSynLanguage.Create(lngFrench);
+  try
+    CheckEqual(l.AddFromPo('msgid "Hello"'#10'msgstr "Bonjour"'#10 +
+      'msgid "Hello World"'#10'msgstr "Bonjour tout le monde"'#10), 2, '.po');
+    CheckEqual(l2.AddFromMo(MakeMo(['Hello', 'Hello World'],
+      ['Bonjour', 'Bonjour tout le monde'], false)), 2, '.mo');
+    CheckEqual(l.Count, l2.Count, 'same entry count as its .po source');
+    t := 'Hello';
+    Check(l2.Translate(t));
+    CheckEqual(t, 'Bonjour', 'same translation as its .po source');
+    t := 'Hello World';
+    Check(l2.Translate(t));
+    CheckEqual(t, 'Bonjour tout le monde');
+  finally
+    l2.Free;
+    l.Free;
+  end;
+  // invalid content should be rejected, and should never merge anything
+  l := TSynLanguage.Create(lngFrench);
+  l2 := TSynLanguage.Create(lngFrench);
+  try
+    CheckEqual(l.AddFromMo(''), -1, 'void input');
+    CheckEqual(l.AddFromMo('too short for a header'), -1, 'truncated header');
+    CheckEqual(l.Count, 0);
+    mo := MakeMo(['One'], ['Un'], false);
+    CheckEqual(l.AddFromMo(mo), 1, 'reference sample');
+    CheckEqual(l.Count, 1);
+    bad := mo;
+    bad[1] := 'X'; // whatever the endianness is, the magic is broken
+    CheckEqual(l.AddFromMo(bad), -1, 'invalid magic number');
+    CheckEqual(l.AddFromMo(MakeMo(['One'], ['Un'], false, 1 shl 16)), 1,
+      'revision 1.0 is supported');
+    CheckEqual(l.AddFromMo(MakeMo(['One'], ['Un'], false, 2 shl 16)), -1,
+      'unsupported major revision');
+    CheckEqual(l.AddFromMo(MakeMo(['One'], ['Un'], false, 0, 1)), -1,
+      'one more entry than actually supplied');
+    CheckEqual(l.AddFromMo(MakeMo(['One'], ['Un'], false, 0, 1 shl 20)), -1,
+      'way more entries than this content could store');
+    CheckEqual(l.Count, 1, 'no invalid content did pollute the table');
+    CheckEqual(l.AddFromMo(MakeMo([], [], false)), 0, 'valid but void .mo');
+    // any truncated content should be rejected, and merge nothing at all
+    for i := 1 to length(mo) - 1 do
+    begin
+      CheckEqual(l2.AddFromMo(copy(mo, 1, i)), -1, 'truncated');
+      CheckEqual(l2.Count, 0, 'nothing merged from a truncated input');
+    end;
+    // AddFromMoFile() should read the file as binary, and AddFromFile() should
+    // dispatch on the .mo extension
+    fn := WorkDir + 'i18ntest.mo';
+    Check(FileFromString(mo, fn), 'mo file');
+    CheckEqual(l2.AddFromMoFile(fn), 1, 'AddFromMoFile');
+    CheckEqual(l2.AddFromFile(fn), 1, '.mo dispatch');
+    CheckEqual(l2.Count, 1);
+    t := 'One';
+    Check(l2.Translate(t));
+    CheckEqual(t, 'Un');
+    Check(DeleteFile(fn));
+  finally
+    l2.Free;
+    l.Free;
+  end;
+  // TSynLanguages.LoadFromFolder() should load the files in a deterministic
+  // order, whatever the OS folder enumeration order is
+  folder := EnsureDirectoryExists([WorkDir, 'i18nmo']);
+  Check(folder <> '', 'folder');
+  Check(FileFromString('msgid "Hello"'#10'msgstr "FromPo"'#10 +
+    'msgid "OnlyPo"'#10'msgstr "SeulementPo"'#10, folder + 'fr.po'));
+  Check(FileFromString(MakeMo(['Hello', 'OnlyMo'],
+    ['FromMo', 'SeulementMo'], false), folder + 'fr.mo'));
+  langs := TSynLanguages.Create;
+  try
+    CheckEqual(langs.LoadFromFolder(folder), 2, 'fr.po + fr.mo');
+    Check(langs.Find(lngFrench) <> nil);
+    CheckEqual(langs.Find(lngFrench).Count, 3, 'Hello + OnlyPo + OnlyMo');
+    TSynLanguages.SetThreadLanguage(lngFrench);
+    t := 'Hello';
+    Check(langs.Translate(t));
+    CheckEqual(t, 'FromMo', 'the compiled .mo wins over its .po source');
+    t := 'OnlyPo';
+    Check(langs.Translate(t), 'both files are merged');
+    CheckEqual(t, 'SeulementPo');
+    t := 'OnlyMo';
+    Check(langs.Translate(t));
+    CheckEqual(t, 'SeulementMo');
+  finally
+    TSynLanguages.SetThreadLanguage(lngUndefined);
+    langs.Free;
+  end;
+  Check(DirectoryDelete(folder), 'cleanup');
+end;
+
+const
+  // an INI sample mixing CRLF and LF line endings, comments and sections
+  _INI: RawUtf8 =
+    '; a leading comment'#13#10 +
+    '# another comment'#10 +
+    #13#10 +                        // a blank line
+    '   '#10 +                      // a blank-only line
+    'Hello=Bonjour'#13#10 +         // plain pair, CRLF ended
+    '  World  =  Monde  '#10 +      // indentation and blanks around '='
+    'Void='#10 +                    // a void value is ignored
+    '=NoKey'#10 +                   // a void key is ignored
+    'NoEqualSignHere'#10 +          // a line without '=' is ignored
+    '[fr]'#13#10 +
+    'Hello=Salut'#10 +
+    '; in-section comment'#10 +
+    'Bye=Au revoir'#10 +
+    '[de]'#10 +
+    'Hello=Hallo'#10;
+
+var
+  // some WinAnsi chars to avoid any charset/IDE conflict during tests
+  _uC9, _uE7, _uE8, _uE9: RawUtf8;
+
+const
+  UTF8_ACCENTS: array[0..3] of byte = ($C9, $E7, $E8, $E9);
+
+procedure TTestCoreI18n.IniAndFiles;
+var
+  l: TSynLanguage;
+  langs: TSynLanguages;
+  t, cha: RawUtf8;
+  folder: TFileName;
+  tmp: array[0 .. 15] of AnsiChar;
+
+  function Fn(const Ext: TFileName): TFileName;
+  begin
+    result := WorkDir + 'i18ntest.' + Ext;
+  end;
+
+begin
+  FastSetString(cha, @tmp, Ucs4ToUtf8($8336, @tmp)); // U+8336 = tea ideogram
+  l := TSynLanguage.Create(lngFrench);
+  try
+    // INI basics: no section, so any [section] header is just ignored
+    CheckEqual(l.AddFromIni(''), 0, 'void input');
+    CheckEqual(l.Count, 0);
+    CheckEqual(l.AddFromIni('; only'#10'# comments'#10#13#10), 0, 'comments only');
+    CheckEqual(l.Count, 0);
+    CheckEqual(l.AddFromIni(_INI), 5, 'all sections merged');
+    CheckEqual(l.Count, 3, 'Hello + World + Bye');
+    t := 'World';
+    Check(l.Translate(t), 'blanks around = are trimmed');
+    CheckEqual(t, 'Monde');
+    t := 'Hello';
+    Check(l.Translate(t));
+    CheckEqual(t, 'Hallo', 'last [de] value did overwrite the previous ones');
+    t := 'Bye';
+    Check(l.Translate(t));
+    CheckEqual(t, 'Au revoir');
+    t := 'Void';
+    Check(not l.Translate(t), 'void value is skipped');
+    t := 'NoKey';
+    Check(not l.Translate(t), 'void key is skipped');
+    t := 'NoEqualSignHere';
+    Check(not l.Translate(t), 'line without = is skipped');
+  finally
+    l.Free;
+  end;
+  l := TSynLanguage.Create(lngFrench);
+  try
+    // INI with an explicit [section] filter
+    CheckEqual(l.AddFromIni(_INI, 'fr'), 2, '[fr] section only');
+    CheckEqual(l.Count, 2);
+    t := 'Hello';
+    Check(l.Translate(t));
+    CheckEqual(t, 'Salut', '[fr] value, not the [de] one');
+    t := 'Bye';
+    Check(l.Translate(t));
+    CheckEqual(t, 'Au revoir');
+    t := 'World';
+    Check(not l.Translate(t), 'content before any section is out of [fr]');
+    CheckEqual(l.AddFromIni(_INI, 'DE'), 1, 'section name is case-insensitive');
+    CheckEqual(l.Count, 2, 'Hello was replaced, not added');
+    t := 'Hello';
+    Check(l.Translate(t));
+    CheckEqual(t, 'Hallo');
+    CheckEqual(l.AddFromIni(_INI, 'nosuchsection'), 0, 'unknown section');
+    CheckEqual(l.Count, 2);
+    // the INI parser should be transparent to any UTF-8 multi-byte content
+    CheckEqual(length(cha), 3, 'utf-8 3 bytes');
+    CheckEqual(l.AddFromIni('Tea = ' + cha + #13#10), 1, 'utf-8 value');
+    t := 'Tea';
+    Check(l.Translate(t));
+    CheckEqual(t, cha, 'utf-8 passthrough');
+    // YAML mapping
+    CheckEqual(l.AddFromYaml('Hello: Bonjour'#10'World: Monde'#10), 2, 'yaml');
+    t := 'Hello';
+    Check(l.Translate(t));
+    CheckEqual(t, 'Bonjour', 'yaml did overwrite the INI value');
+    t := 'World';
+    Check(l.Translate(t));
+    CheckEqual(t, 'Monde');
+    CheckEqual(l.AddFromYaml('- one'#10'- two'#10), -1, 'yaml array is no table');
+    // the relaxed JSON variants are supported by AddFromJson()
+    CheckEqual(l.AddFromJson(RawUtf8('{ // a JSONC comment'#10' "Six": "Sixi') + _uE8 + 'me"'#10'}'),
+      1, 'jsonc');
+    t := 'Six';
+    Check(l.Translate(t));
+    CheckEqual(t, RawUtf8('Sixi') + _uE8 + 'me');
+    CheckEqual(l.AddFromJson(RawUtf8('{ /* JSON5 */ Seven: "Septi') + _uE8 + 'me", }'), 1, 'json5');
+    t := 'Seven';
+    Check(l.Translate(t));
+    CheckEqual(t, RawUtf8('Septi') + _uE8 + 'me');
+    CheckEqual(l.AddFromJson('invalid'), -1, 'invalid JSON');
+    CheckEqual(l.AddFromJson(''), -1, 'void JSON');
+    CheckEqual(l.AddFromJson('["Hello"]'), -1, 'JSON array is no table');
+  finally
+    l.Free;
+  end;
+  l := TSynLanguage.Create(lngFrench);
+  try
+    // AddFromFile() dispatches on the file extension
+    CheckEqual(l.AddFromFile(WorkDir + 'i18nnotexisting.json'), -1, 'no file');
+    Check(FileFromString('this is no translation file', Fn('txt')));
+    CheckEqual(l.AddFromFile(Fn('txt')), -1, 'unknown extension');
+    Check(DeleteFile(Fn('txt')));
+    Check(FileFromString('msgid "One"'#10'msgstr "Un"'#10, Fn('po')));
+    CheckEqual(l.AddFromFile(Fn('po')), 1, '.po');
+    Check(DeleteFile(Fn('po')));
+    Check(FileFromString('[fr]'#13#10'Two=Deux'#13#10, Fn('ini')));
+    CheckEqual(l.AddFromFile(Fn('ini')), 1, '.ini');
+    Check(DeleteFile(Fn('ini')));
+    Check(FileFromString('Five=Cinq'#10, Fn('msg')));
+    CheckEqual(l.AddFromFile(Fn('msg')), 1, '.msg');
+    Check(DeleteFile(Fn('msg')));
+    Check(FileFromString(BOM_UTF8_CHARS + '{"Three":"Trois"}', Fn('json')));
+    CheckEqual(l.AddFromFile(Fn('json')), 1, '.json');
+    Check(DeleteFile(Fn('json')));
+    Check(FileFromString('Four: Quatre'#10, Fn('yaml')));
+    CheckEqual(l.AddFromFile(Fn('yaml')), 1, '.yaml');
+    Check(DeleteFile(Fn('yaml')));
+    CheckEqual(l.Count, 5, 'po + ini + msg + json + yaml');
+    t := 'One';
+    Check(l.Translate(t));
+    CheckEqual(t, 'Un');
+    t := 'Two';
+    Check(l.Translate(t));
+    CheckEqual(t, 'Deux');
+    t := 'Three';
+    Check(l.Translate(t));
+    CheckEqual(t, 'Trois');
+    t := 'Four';
+    Check(l.Translate(t));
+    CheckEqual(t, 'Quatre');
+    t := 'Five';
+    Check(l.Translate(t));
+    CheckEqual(t, 'Cinq');
+  finally
+    l.Free;
+  end;
+  // TSynLanguages.LoadFromFolder() with several extensions
+  folder := EnsureDirectoryExists([WorkDir, 'i18n']);
+  Check(folder <> '', 'folder');
+  Check(FileFromString(RawUtf8('msgid "Hello"'#10'msgstr "Bonjour"'#10 +
+    'msgid "Resume"'#10'msgstr "R') + _uE9 + 'sum' + _uE9 + '"'#10 +
+    'msgid "Cafe"'#10'msgstr "Caf' + _uE9 + '"'#10, folder + 'fr.po'));
+  Check(FileFromString(RawUtf8('{"Facade":"Fa') + _uE7 + 'ade","Elephant":"' + _uC9 + 'l' + _uE9 + 'phant"}', folder + 'fr.json'));
+  Check(FileFromString('Hello=' + cha + #10, folder + 'zh.ini'));
+  Check(FileFromString('ignored', folder + 'en.txt'), 'unknown extension');
+  Check(FileFromString('ignored', folder + 'nolang.json'), 'unknown iso');
+  langs := TSynLanguages.Create;
+  try
+    CheckEqual(langs.LoadFromFolder(folder), 3, 'fr.po + fr.json + zh.ini');
+    Check(langs.Find(lngEnglish) = nil, '.txt is not a translation file');
+    Check(langs.Find(lngFrench) <> nil);
+    CheckEqual(langs.Find(lngFrench).Count, 5);
+    t := 'Hello';
+    TSynLanguages.SetThreadLanguage(lngFrench);
+    Check(langs.Translate(t), 'from fr.po');
+    CheckEqual(t, 'Bonjour');
+
+    t := 'Resume';
+    Check(langs.Translate(t));
+    CheckEqual(t, RawUtf8('R') + _uE9 + 'sum' + _uE9);
+    t := 'Cafe';
+    Check(langs.Translate(t));
+    CheckEqual(t, RawUtf8('Caf') + _uE9);
+    t := 'Facade';
+    Check(langs.Translate(t));
+    CheckEqual(t, RawUtf8('Fa') + _uE7 + 'ade');
+    t := 'Elephant';
+    Check(langs.Translate(t));
+    CheckEqual(t, _uC9 + 'l' + _uE9 + 'phant');
+
+    Check(langs.Find(lngChinese) <> nil);
+    CheckEqual(langs.Find(lngChinese).Count, 1);
+    t := 'Hello';
+    TSynLanguages.SetThreadLanguage(lngChinese);
+    Check(langs.Translate(t), 'from zh.ini');
+    CheckEqual(t, cha);
+  finally
+    TSynLanguages.SetThreadLanguage(lngUndefined);
+    langs.Free;
+  end;
+  Check(DirectoryDelete(folder), 'cleanup');
+end;
+
+resourcestring
+  // the one and only resourcestring of this test executable we do translate
+  RS_I18N_TEST = 'i18n test string';
+
+{$ifdef FPC}
+var
+  // FPC does allow a global variable to be initialized from a resourcestring,
+  // and registers its reference into the RTL _FPC_ResStrInitTables so that
+  // SetResourceStrings() refreshes it - this is the FPC_HAS_RESSTRINITS
+  // feature, which has no Delphi equivalent since a Delphi resourcestring is
+  // no compile-time constant, so can't initialize a global variable
+  RS_I18N_VAR: string = RS_I18N_TEST;
+{$endif FPC}
+
+procedure TTestCoreI18n.ResourceStrings;
+var
+  langs: TSynLanguages;
+  cha, tr: RawUtf8;
+  tmp: array[0 .. 15] of AnsiChar;
+
+  function Rs: RawUtf8; // current RS_I18N_TEST value, as raw UTF-8 bytes
+  begin
+    {$ifdef FPC} // no conversion at all: check the exact stored bytes
+    FastSetString(result, pointer(RS_I18N_TEST), length(RS_I18N_TEST));
+    {$else}      // Delphi resourcestring are UnicodeString
+    StringToUtf8(RS_I18N_TEST, result);
+    {$endif FPC}
+  end;
+
+  {$ifdef FPC}
+  function RsVar: RawUtf8; // current RS_I18N_VAR value, as raw UTF-8 bytes
+  begin
+    FastSetString(result, pointer(RS_I18N_VAR), length(RS_I18N_VAR));
+  end;
+  {$endif FPC}
+
+begin
+  FastSetString(cha, @tmp, Ucs4ToUtf8($8336, @tmp)); // U+8336 = tea ideogram
+  tr := 'traduit ' + cha; // a translation with some non-ASCII UTF-8 content
+  CheckEqual(Rs, 'i18n test string', 'initial English text');
+  {$ifdef FPC}
+  CheckEqual(RsVar, 'i18n test string', 'initial variable text');
+  {$endif FPC}
+  langs := TSynLanguages.Create;
+  try
+    CheckEqual(langs.Language[lngFrench].AddFromJson(
+      '{"i18n test string":"' + tr + '"}'), 1);
+    TSynLanguages.SetThreadLanguage(lngFrench);
+    langs.TranslateResourceStrings;
+    {$ifdef FPC}
+    // FPC does maintain a writable per-unit resourcestring table
+    CheckEqual(Rs, tr, 'resourcestring translated');
+    // the FPC_HAS_RESSTRINITS references do follow the translation
+    CheckEqual(RsVar, tr, 'variable translated');
+    // a language with no table restores the original English text
+    TSynLanguages.SetThreadLanguage(lngGerman);
+    langs.TranslateResourceStrings;
+    CheckEqual(Rs, 'i18n test string', 'unknown language');
+    CheckEqual(RsVar, 'i18n test string', 'variable of unknown language');
+    // switching back and forth is safe, thanks to the ResetResourceTables call
+    TSynLanguages.SetThreadLanguage(lngFrench);
+    langs.TranslateResourceStrings;
+    CheckEqual(Rs, tr, 'translated again');
+    CheckEqual(RsVar, tr, 'variable translated again');
+    TSynLanguages.SetThreadLanguage(lngUndefined);
+    langs.TranslateResourceStrings;
+    CheckEqual(Rs, 'i18n test string', 'ResetResourceTables');
+    // no language should also revert the references, not just the table
+    CheckEqual(RsVar, 'i18n test string', 'variable of no language');
+    {$else}
+    // Delphi has no such writable table: the method is a no-op, but callable
+    CheckEqual(Rs, 'i18n test string', 'no-op on Delphi');
+    {$endif FPC}
+  finally
+    TSynLanguages.SetThreadLanguage(lngUndefined);
+    langs.TranslateResourceStrings; // no pollution of the following tests
+    langs.Free;
+  end;
+  CheckEqual(Rs, 'i18n test string', 'restored');
+  {$ifdef FPC}
+  CheckEqual(RsVar, 'i18n test string', 'variable restored');
+  {$endif FPC}
+end;
+
+
 { TTestCoreCompression }
 
 procedure MakeHardlyCompressible(p: PByteArray);
@@ -10499,6 +11282,11 @@ end;
 
 
 initialization
+  _uC9 := WinAnsiToUtf8(@UTF8_ACCENTS[0], 1);
+  _uE7 := WinAnsiToUtf8(@UTF8_ACCENTS[1], 1);
+  _uE8 := WinAnsiToUtf8(@UTF8_ACCENTS[2], 1);
+  _uE9 := WinAnsiToUtf8(@UTF8_ACCENTS[3], 1);
+
   {$ifndef HASDYNARRAYTYPE}
   Rtti.RegisterObjArray(TypeInfo(TSimpleExampleObjArray), TSimpleExample);
   {$endif HASDYNARRAYTYPE}
