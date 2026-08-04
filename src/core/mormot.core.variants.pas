@@ -1023,7 +1023,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     function GetObjectProp(const aName: RawUtf8; out aFound: PVariant;
       aPreviousIndex: PInteger): boolean;
-    function InternalAddBuf(aName: PUtf8Char; aNameLen: PtrInt): PtrInt;
+    function InternalAddObj(aName: PUtf8Char; aNameLen: PtrInt): PtrInt;
     function InternalSetValue(aIndex: PtrInt; const aValue: variant): PVariant;
       {$ifdef HASINLINE}inline;{$endif}
     procedure InternalAddVarRec(var aValue: PVarRec; aEnd: PtrUInt);
@@ -5407,9 +5407,9 @@ begin
   ndx := dv.GetValueIndex(pointer(Name), NameLen, dv.Has(dvoNameCaseSensitive));
   if ndx < 0 then
     if dv.Has(dvoIsArray) then
-      exit // avoid EDocVariant in dv.InternalAddBuf()
+      exit // avoid EDocVariant in dv.InternalAddObj()
     else
-      ndx := dv.InternalAddBuf(pointer(Name), NameLen);
+      ndx := dv.InternalAddObj(pointer(Name), NameLen);
   dv.InternalSetValue(ndx, variant(Value));
 end;
 
@@ -7607,14 +7607,32 @@ begin
   result := Compare(aName, PVariant(@t)^, aCaseInsensitive);
 end;
 
-function TDocVariantData.InternalAddBuf(aName: PUtf8Char; aNameLen: PtrInt): PtrInt;
+function TDocVariantData.InternalAddObj(aName: PUtf8Char; aNameLen: PtrInt): PtrInt;
 var
-  tmp: pointer; // caller should ensure aName<>nil and Kind<>dvArray
-begin
-  tmp := nil; // so that the caller won't need to reserve such a temp var
-  FastSetString(RawUtf8(tmp), aName, aNameLen);
-  result := InternalAdd(RawUtf8(tmp), -1);
-  FastAssignNew(tmp);
+  cap: PtrInt;
+begin // caller should ensure aName<>nil and Kind<>dvArray
+  if GetKind = dvUndefined then
+    EnsureDocVariantVType(@self, dvoIsObject);
+  cap := length(VValue);
+  if VCount >= cap then
+  begin
+    cap := NextGrow(cap);
+    SetLength(VName, cap);
+    SetLength(VValue, cap);
+  end
+  else
+  begin // fast EnsureUnique() as SetLength() does
+    if PDACnt(PAnsiChar(pointer(VName)) - _DACNT)^ > 1 then
+      DynArrayEnsureUnique(@VName, TypeInfo(TRawUtf8DynArray));
+    if PDACnt(PAnsiChar(pointer(VValue)) - _DACNT)^ > 1 then
+      DynArrayEnsureUnique(@VValue, TypeInfo(TVariantDynArray));
+  end;
+  result := VCount;
+  inc(VCount);
+  if Has(dvoInternNames) then
+    DocVariantType.InternNames.Unique(VName[result], aName, aNameLen)
+  else
+    FastSetString(VName[result], aName, aNameLen);
 end;
 
 function TDocVariantData.InternalAdd(const aName: RawUtf8; aIndex: integer): integer;
@@ -7827,8 +7845,8 @@ begin
   result := -1;
   if Has(dvoIsArray) or
      (aNameLen <= 0) then
-    exit; // avoid EDocVariant in InternalAddBuf()
-  result := InternalAddBuf(aName, aNameLen);
+    exit; // avoid EDocVariant in InternalAddObj()
+  result := InternalAddObj(aName, aNameLen);
   GetVariantFromJsonField(aValue.Value, aValue.WasString, VValue[result],
     @VOptions, Has(dvoAllowDoubleValue), aValue.ValueLen);
 end;
@@ -8106,7 +8124,7 @@ begin
     end;
     exit;
   end;
-  ndx := InternalAddBuf(aName, aNameLen);
+  ndx := InternalAddObj(aName, aNameLen);
   result := @VValue[ndx]; // where to store the new item
 end;
 
@@ -9970,9 +9988,9 @@ begin
       break; // reached the last item of the path, which is the value to set
     if ndx < 0 then
       if aCreateIfNotExisting and
-         not v^.Has(dvoIsArray) then // avoid EDocVariant in v^.InternalAddBuf()
+         not v^.Has(dvoIsArray) then // avoid EDocVariant in v^.InternalAddObj()
       begin
-        ndx := v^.InternalAddBuf(csv, len); // in two steps for FPC
+        ndx := v^.InternalAddObj(csv, len); // in two steps for FPC
         v := @v^.VValue[ndx];
         v^.InitClone(self); // same Options than root but with no Kind
       end
@@ -9984,9 +10002,9 @@ begin
   until false;
   if ndx < 0 then
     if v^.Has(dvoIsArray) then
-      exit // avoid EDocVariant in v^.InternalAddBuf()
+      exit // avoid EDocVariant in v^.InternalAddObj()
     else
-      ndx := v^.InternalAddBuf(csv, len);
+      ndx := v^.InternalAddObj(csv, len);
   if aMergeExisting and
      (ndx >= 0) then
   begin
