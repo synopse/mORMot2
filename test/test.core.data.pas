@@ -132,6 +132,26 @@ type
     procedure Setup; override;
     procedure MustacheTranslate(var English: string);
     procedure MustacheHelper(const Value: variant; out Result: variant);
+    procedure XmlWalk(var p: TXmlParser; kind: TXmlToken;
+      const name: RawUtf8 = ''; const value: RawUtf8 = '');
+    procedure XmlExpectRaise(Expected: TXmlParserError; const Context: string;
+      const Xml: RawUtf8; Options: TXmlParserOptions = []);
+  public
+    /// SAX-level tokens over elements, attributes, text and CData
+    procedure XmlSaxTokens;
+    /// the five predefined entities and numeric character references
+    procedure XmlSaxEntities;
+    /// xpoStripNamespacePrefix/xpoKeepComments/xpoKeepPI/xpoKeepWhiteSpace
+    procedure XmlSaxOptions;
+    /// malformed input and the "basic profile" rejection set (e.g. DTD)
+    procedure XmlSaxErrors;
+    /// buffer/nesting/entity boundaries which no other test does cover
+    // - markup ending at the very last byte of the input, oversized numeric
+    // references, the 255 nesting levels limit, 127-bytes names, and input
+    // buffers with no #0 terminator nor any readable byte after their end
+    procedure XmlSaxBoundaries;
+    /// XmlToVariant/TryXmlToVariant/XmlToJson mapping conventions
+    procedure XmlToVariant;
   published
     /// some low-level RTTI access
     // - especially the field type retrieval from published properties
@@ -169,9 +189,11 @@ type
     procedure _TSynMonitorUsage;
     /// validate some folder-level functions
     procedure Folders;
+    /// regression tests for the mormot.core.fmt XML parser
+    procedure _XML;
   end;
 
-  /// regression tests for mormot.core.yaml features
+  /// regression tests for mormot.core.fmt YAML parser
   TTestCoreYaml = class(TSynTestCase)
   protected
     procedure RunGolden(const Name, Yaml, ExpectedJson: RawUtf8);
@@ -193,31 +215,6 @@ type
     /// an OpenAPI-shaped spec in YAML must yield the same TDocVariantData
     // as its JSON counterpart - this is the invariant mopenapi relies on
     procedure OpenapiEquivalence;
-  end;
-
-  /// regression tests for the mormot.core.fmt XML parser
-  TTestCoreXml = class(TSynTestCase)
-  protected
-    procedure Walk(var p: TXmlParser; kind: TXmlToken;
-      const name: RawUtf8 = ''; const value: RawUtf8 = '');
-    procedure ExpectRaise(Expected: TXmlParserError; const Context: string;
-      const Xml: RawUtf8; Options: TXmlParserOptions = []);
-  published
-    /// SAX-level tokens over elements, attributes, text and CData
-    procedure SaxTokens;
-    /// the five predefined entities and numeric character references
-    procedure SaxEntities;
-    /// xpoStripNamespacePrefix/xpoKeepComments/xpoKeepPI/xpoKeepWhiteSpace
-    procedure SaxOptions;
-    /// malformed input and the "basic profile" rejection set (e.g. DTD)
-    procedure SaxErrors;
-    /// buffer/nesting/entity boundaries which no other test does cover
-    // - markup ending at the very last byte of the input, oversized numeric
-    // references, the 255 nesting levels limit, 127-bytes names, and input
-    // buffers with no #0 terminator nor any readable byte after their end
-    procedure SaxBoundaries;
-    /// XmlToVariant/TryXmlToVariant/XmlToJson mapping conventions
-    procedure ToVariant;
   end;
 
   /// this test case will test most functions, classes and types defined and
@@ -9162,10 +9159,17 @@ begin
     'OpenAPI-shaped YAML must match JSON equivalent');
 end;
 
+procedure TTestCoreProcess._XML;
+begin
+  XmlSaxTokens;
+  XmlSaxEntities;
+  XmlSaxOptions;
+  XmlSaxErrors;
+  XmlSaxBoundaries;
+  XmlToVariant;
+end;
 
-{ TTestCoreXml }
-
-procedure TTestCoreXml.Walk(var p: TXmlParser; kind: TXmlToken;
+procedure TTestCoreProcess.XmlWalk(var p: TXmlParser; kind: TXmlToken;
   const name, value: RawUtf8);
 var
   n, v: RawUtf8;
@@ -9178,7 +9182,7 @@ begin
   CheckEqual(v, value, 'value');
 end;
 
-procedure TTestCoreXml.ExpectRaise(Expected: TXmlParserError;
+procedure TTestCoreProcess.XmlExpectRaise(Expected: TXmlParserError;
   const Context: string; const Xml: RawUtf8; Options: TXmlParserOptions);
 var
   p: TXmlParser;
@@ -9223,28 +9227,28 @@ const
     '  <![CDATA[raw <>&'' " ]]>'#10 +
     '  <!-- a comment -->tail</root>';
 
-procedure TTestCoreXml.SaxTokens;
+procedure TTestCoreProcess.XmlSaxTokens;
 var
   p: TXmlParser;
 begin
   p.Init(XML1);
   Check(p.LastError = xpeNone);
   CheckEqual(p.Depth, 0);
-  Walk(p, xtElementStart, 'root');
+  XmlWalk(p, xtElementStart, 'root');
   CheckEqual(p.Depth, 1);
-  Walk(p, xtAttribute, 'a', '1');
-  Walk(p, xtAttribute, 'b', 'two');
-  Walk(p, xtElementStart, 'item');
+  XmlWalk(p, xtAttribute, 'a', '1');
+  XmlWalk(p, xtAttribute, 'b', 'two');
+  XmlWalk(p, xtElementStart, 'item');
   CheckEqual(p.Depth, 2);
-  Walk(p, xtText, '', ' some text ');
-  Walk(p, xtElementEnd, 'item');
+  XmlWalk(p, xtText, '', ' some text ');
+  XmlWalk(p, xtElementEnd, 'item');
   CheckEqual(p.Depth, 1);
-  Walk(p, xtElementStart, 'empty');
-  Walk(p, xtElementEnd, 'empty');
+  XmlWalk(p, xtElementStart, 'empty');
+  XmlWalk(p, xtElementEnd, 'empty');
   CheckEqual(p.Depth, 1);
-  Walk(p, xtCData, '', 'raw <>&'' " ');
-  Walk(p, xtText, '', 'tail');
-  Walk(p, xtElementEnd, 'root');
+  XmlWalk(p, xtCData, '', 'raw <>&'' " ');
+  XmlWalk(p, xtText, '', 'tail');
+  XmlWalk(p, xtElementEnd, 'root');
   CheckEqual(p.Depth, 0);
   Check(p.Next = xtEof, 'eof');
   Check(p.Kind = xtEof);
@@ -9252,7 +9256,7 @@ begin
   Check(p.LastError = xpeNone);
 end;
 
-procedure TTestCoreXml.SaxEntities;
+procedure TTestCoreProcess.XmlSaxEntities;
 var
   p: TXmlParser;
   unicode: RawUtf8;
@@ -9262,16 +9266,16 @@ begin
   // be re-encoded from UTF-16 chars by the Delphi compiler
   SetString(unicode, PAnsiChar(@buf), Ucs4ToUtf8($4E2D, @buf));
   p.Init('<r q="&quot;&apos;">&lt;&amp;&gt; &#65;&#x42;c &#x4E2D;</r>');
-  Walk(p, xtElementStart, 'r');
-  Walk(p, xtAttribute, 'q', '"''');
-  Walk(p, xtText, '', '<&> ABc ' + unicode);
-  Walk(p, xtElementEnd, 'r');
+  XmlWalk(p, xtElementStart, 'r');
+  XmlWalk(p, xtAttribute, 'q', '"''');
+  XmlWalk(p, xtText, '', '<&> ABc ' + unicode);
+  XmlWalk(p, xtElementEnd, 'r');
   Check(p.Next = xtEof);
   // the shared NumCharToUcs4() decoder is also wired into HTML unescape
   CheckEqual(HtmlUnescape('x &#65;&#x42; &amp; y'), 'x AB & y');
 end;
 
-procedure TTestCoreXml.SaxOptions;
+procedure TTestCoreProcess.XmlSaxOptions;
 var
   p: TXmlParser;
   s: RawUtf8;
@@ -9279,88 +9283,88 @@ begin
   // namespace prefixes are part of the names by default
   s := '<ns:a xsi:x="1"><ns:b/></ns:a>';
   p.Init(s);
-  Walk(p, xtElementStart, 'ns:a');
-  Walk(p, xtAttribute, 'xsi:x', '1');
-  Walk(p, xtElementStart, 'ns:b');
-  Walk(p, xtElementEnd, 'ns:b');
-  Walk(p, xtElementEnd, 'ns:a');
+  XmlWalk(p, xtElementStart, 'ns:a');
+  XmlWalk(p, xtAttribute, 'xsi:x', '1');
+  XmlWalk(p, xtElementStart, 'ns:b');
+  XmlWalk(p, xtElementEnd, 'ns:b');
+  XmlWalk(p, xtElementEnd, 'ns:a');
   Check(p.Next = xtEof);
   // ... but can be stripped on request
   p.Init(s, [xpoStripNamespacePrefix]);
-  Walk(p, xtElementStart, 'a');
-  Walk(p, xtAttribute, 'x', '1');
-  Walk(p, xtElementStart, 'b');
-  Walk(p, xtElementEnd, 'b');
-  Walk(p, xtElementEnd, 'a');
+  XmlWalk(p, xtElementStart, 'a');
+  XmlWalk(p, xtAttribute, 'x', '1');
+  XmlWalk(p, xtElementStart, 'b');
+  XmlWalk(p, xtElementEnd, 'b');
+  XmlWalk(p, xtElementEnd, 'a');
   Check(p.Next = xtEof);
   // comments and processing instructions on request
   p.Init(XML1, [xpoKeepComments, xpoKeepPI]);
-  Walk(p, xtPI, 'xml', 'version="1.0" encoding="UTF-8"');
-  Walk(p, xtElementStart, 'root');
-  Walk(p, xtAttribute, 'a', '1');
-  Walk(p, xtAttribute, 'b', 'two');
-  Walk(p, xtElementStart, 'item');
-  Walk(p, xtText, '', ' some text ');
-  Walk(p, xtElementEnd, 'item');
-  Walk(p, xtElementStart, 'empty');
-  Walk(p, xtElementEnd, 'empty');
-  Walk(p, xtCData, '', 'raw <>&'' " ');
-  Walk(p, xtComment, '', ' a comment ');
-  Walk(p, xtText, '', 'tail');
-  Walk(p, xtElementEnd, 'root');
+  XmlWalk(p, xtPI, 'xml', 'version="1.0" encoding="UTF-8"');
+  XmlWalk(p, xtElementStart, 'root');
+  XmlWalk(p, xtAttribute, 'a', '1');
+  XmlWalk(p, xtAttribute, 'b', 'two');
+  XmlWalk(p, xtElementStart, 'item');
+  XmlWalk(p, xtText, '', ' some text ');
+  XmlWalk(p, xtElementEnd, 'item');
+  XmlWalk(p, xtElementStart, 'empty');
+  XmlWalk(p, xtElementEnd, 'empty');
+  XmlWalk(p, xtCData, '', 'raw <>&'' " ');
+  XmlWalk(p, xtComment, '', ' a comment ');
+  XmlWalk(p, xtText, '', 'tail');
+  XmlWalk(p, xtElementEnd, 'root');
   Check(p.Next = xtEof);
   // pure whitespace text nodes on request
   p.Init('<a>  <b/>  </a>', [xpoKeepWhiteSpace]);
-  Walk(p, xtElementStart, 'a');
-  Walk(p, xtText, '', '  ');
-  Walk(p, xtElementStart, 'b');
-  Walk(p, xtElementEnd, 'b');
-  Walk(p, xtText, '', '  ');
-  Walk(p, xtElementEnd, 'a');
+  XmlWalk(p, xtElementStart, 'a');
+  XmlWalk(p, xtText, '', '  ');
+  XmlWalk(p, xtElementStart, 'b');
+  XmlWalk(p, xtElementEnd, 'b');
+  XmlWalk(p, xtText, '', '  ');
+  XmlWalk(p, xtElementEnd, 'a');
   Check(p.Next = xtEof);
 end;
 
-procedure TTestCoreXml.SaxErrors;
+procedure TTestCoreProcess.XmlSaxErrors;
 var
   deep: RawUtf8;
   i: integer;
 begin
-  ExpectRaise(xpeUnsupportedMarkup, 'dtd',
+  XmlExpectRaise(xpeUnsupportedMarkup, 'dtd',
     '<!DOCTYPE foo [<!ENTITY x "y">]><a>&x;</a>');
-  ExpectRaise(xpeWrongEndTag, 'mismatch',
+  XmlExpectRaise(xpeWrongEndTag, 'mismatch',
     '<a><b></a>');
-  ExpectRaise(xpeEofElement, 'unclosed',
+  XmlExpectRaise(xpeEofElement, 'unclosed',
     '<a><b>text');
-  ExpectRaise(xpeEofInTag, 'eof in tag',
+  XmlExpectRaise(xpeEofInTag, 'eof in tag',
     '<a');
-  ExpectRaise(xpeEofInAttribute, 'eof in attr',
+  XmlExpectRaise(xpeEofInAttribute, 'eof in attr',
     '<a b="c');
-  ExpectRaise(xpeMissingAttrQuote, 'unquoted attr',
+  XmlExpectRaise(xpeMissingAttrQuote, 'unquoted attr',
     '<a b=c/>');
-  ExpectRaise(xpeXmlUnescapeFailed, 'unknown entity',
+  XmlExpectRaise(xpeXmlUnescapeFailed, 'unknown entity',
     '<a>&nbsp;</a>');
-  ExpectRaise(xpeXmlUnescapeFailed, 'bad numeric ref',
+  XmlExpectRaise(xpeXmlUnescapeFailed, 'bad numeric ref',
     '<a>&#xzz;</a>');
-  ExpectRaise(xpeXmlUnescapeFailed, 'overflow ref',
+  XmlExpectRaise(xpeXmlUnescapeFailed, 'overflow ref',
     '<a>&#x110000;</a>');
-  ExpectRaise(xpeUnexpectedEndTag, 'lone end tag',
+  XmlExpectRaise(xpeUnexpectedEndTag, 'lone end tag',
     '</a>');
-  ExpectRaise(xpeEofInComment, 'eof in comment',
+  XmlExpectRaise(xpeEofInComment, 'eof in comment',
     '<a><!-- x</a>');
-  ExpectRaise(xpeEofInCdata, 'eof in cdata',
+  XmlExpectRaise(xpeEofInCdata, 'eof in cdata',
     '<a><![CDATA[x</a>');
-  ExpectRaise(xpeVoidTagName, 'void name',
+  XmlExpectRaise(xpeVoidTagName, 'void name',
    '< a></a>');
-  ExpectRaise(xpeXmlUnescapeFailed, 'dangling amp',
+  XmlExpectRaise(xpeXmlUnescapeFailed, 'dangling amp',
     '<a>&</a>');
   for i := 1 to 300 do
     Append(deep, '<a>');
-  ExpectRaise(xpeTooMuchNesting, 'too much nesting', deep);
+  XmlExpectRaise(xpeTooMuchNesting, 'too much nesting', deep);
   deep := '<' + RawUtf8OfChar('n', 300) + '/>';
-  ExpectRaise(xpeTagNameTooLong, 'name too long', deep);
+  XmlExpectRaise(xpeTagNameTooLong, 'name too long', deep);
 end;
 
-procedure TTestCoreXml.SaxBoundaries;
+procedure TTestCoreProcess.XmlSaxBoundaries;
 var
   p: TXmlParser;
   deep, u, v, s: RawUtf8;
@@ -9476,24 +9480,24 @@ begin
   ExpectOk('mixed 5', '<a>  <b/>  </a>');
   ExpectOk('mixed 6', '<a>  <b/>  </a>', [xpoKeepWhiteSpace]);
   p.Init('<a>  hello</a>');
-  Walk(p, xtElementStart, 'a');
-  Walk(p, xtText, '', '  hello'); // two leading blanks are preserved
-  Walk(p, xtElementEnd, 'a');
+  XmlWalk(p, xtElementStart, 'a');
+  XmlWalk(p, xtText, '', '  hello'); // two leading blanks are preserved
+  XmlWalk(p, xtElementEnd, 'a');
   Check(p.Next = xtEof);
   p.Init('<p><b>Hi</b> there</p>');
-  Walk(p, xtElementStart, 'p');
-  Walk(p, xtElementStart, 'b');
-  Walk(p, xtText, '', 'Hi');
-  Walk(p, xtElementEnd, 'b');
-  Walk(p, xtText, '', ' there'); // one leading blank is preserved
-  Walk(p, xtElementEnd, 'p');
+  XmlWalk(p, xtElementStart, 'p');
+  XmlWalk(p, xtElementStart, 'b');
+  XmlWalk(p, xtText, '', 'Hi');
+  XmlWalk(p, xtElementEnd, 'b');
+  XmlWalk(p, xtText, '', ' there'); // one leading blank is preserved
+  XmlWalk(p, xtElementEnd, 'p');
   Check(p.Next = xtEof);
   // but a pure-blank text node is still ignored, unless asked for
   p.Init('<a>  <b/>  </a>');
-  Walk(p, xtElementStart, 'a');
-  Walk(p, xtElementStart, 'b');
-  Walk(p, xtElementEnd, 'b');
-  Walk(p, xtElementEnd, 'a');
+  XmlWalk(p, xtElementStart, 'a');
+  XmlWalk(p, xtElementStart, 'b');
+  XmlWalk(p, xtElementEnd, 'b');
+  XmlWalk(p, xtElementEnd, 'a');
   Check(p.Next = xtEof);
   CheckEqual(XmlToJson('<a> both </a>'), '{"a":" both "}');
   CheckEqual(XmlToJson('<p>Hello <b>x</b> world</p>'),
@@ -9514,49 +9518,49 @@ begin
   ExpectOk('text at end', '<a>x</a>');
   // a PI body is trimmed, and never reported with a negative length
   p.Init('<?pi   ?><a/>', [xpoKeepPI]);
-  Walk(p, xtPI, 'pi', '');
+  XmlWalk(p, xtPI, 'pi', '');
   CheckEqual(p.Value.Len, 0, 'blanks-only PI body');
-  Walk(p, xtElementStart, 'a');
-  Walk(p, xtElementEnd, 'a');
+  XmlWalk(p, xtElementStart, 'a');
+  XmlWalk(p, xtElementEnd, 'a');
   Check(p.Next = xtEof);
   p.Init('<?pi  x  ?><a/>', [xpoKeepPI]);
-  Walk(p, xtPI, 'pi', 'x');
-  Walk(p, xtElementStart, 'a');
-  Walk(p, xtElementEnd, 'a');
+  XmlWalk(p, xtPI, 'pi', 'x');
+  XmlWalk(p, xtElementStart, 'a');
+  XmlWalk(p, xtElementEnd, 'a');
   Check(p.Next = xtEof);
   // truncated markup is still rejected, i.e. the fixes above did not open up
-  ExpectRaise(xpeEofInCdata, 'cdata cut', '<a/><![CDATA[x]]');
-  ExpectRaise(xpeEofInCdata, 'cdata cut 2', '<a/><![CDATA[x]');
-  ExpectRaise(xpeEofInCdata, 'cdata cut 3', '<a/><![CDATA[x');
-  ExpectRaise(xpeEofInPi, 'pi cut', '<a/><?pi x?', [xpoKeepPI]);
-  ExpectRaise(xpeEofInPi, 'pi cut 2', '<a/><?pi x', [xpoKeepPI]);
-  ExpectRaise(xpeEofInPi, 'pi cut 3', '<a/><?pi', [xpoKeepPI]);
-  ExpectRaise(xpeVoidPiName, 'void pi', '<a/><?', [xpoKeepPI]);
-  ExpectRaise(xpeEofInComment, 'comment cut', '<a/><!-- c --', [xpoKeepComments]);
-  ExpectRaise(xpeEofInComment, 'comment cut 2', '<a/><!-- c -', [xpoKeepComments]);
-  ExpectRaise(xpeEofInComment, 'comment cut 3', '<a/><!-- c ', [xpoKeepComments]);
-  ExpectRaise(xpeEofInTag, 'element cut', '<a');
-  ExpectRaise(xpeSlashInTag, 'element cut 2', '<a/');
+  XmlExpectRaise(xpeEofInCdata, 'cdata cut', '<a/><![CDATA[x]]');
+  XmlExpectRaise(xpeEofInCdata, 'cdata cut 2', '<a/><![CDATA[x]');
+  XmlExpectRaise(xpeEofInCdata, 'cdata cut 3', '<a/><![CDATA[x');
+  XmlExpectRaise(xpeEofInPi, 'pi cut', '<a/><?pi x?', [xpoKeepPI]);
+  XmlExpectRaise(xpeEofInPi, 'pi cut 2', '<a/><?pi x', [xpoKeepPI]);
+  XmlExpectRaise(xpeEofInPi, 'pi cut 3', '<a/><?pi', [xpoKeepPI]);
+  XmlExpectRaise(xpeVoidPiName, 'void pi', '<a/><?', [xpoKeepPI]);
+  XmlExpectRaise(xpeEofInComment, 'comment cut', '<a/><!-- c --', [xpoKeepComments]);
+  XmlExpectRaise(xpeEofInComment, 'comment cut 2', '<a/><!-- c -', [xpoKeepComments]);
+  XmlExpectRaise(xpeEofInComment, 'comment cut 3', '<a/><!-- c ', [xpoKeepComments]);
+  XmlExpectRaise(xpeEofInTag, 'element cut', '<a');
+  XmlExpectRaise(xpeSlashInTag, 'element cut 2', '<a/');
   // 3. numeric character references at and above the Unicode range
   maxcp := '';
   SetString(maxcp, PAnsiChar(@buf), Ucs4ToUtf8($10ffff, @buf)); // no literal
   p.Init('<a>&#x10FFFF;</a>');
-  Walk(p, xtElementStart, 'a');
+  XmlWalk(p, xtElementStart, 'a');
   Check(p.Next = xtText);
   p.ValueToUtf8(v);
   CheckEqual(v, maxcp, 'highest code point');
-  Walk(p, xtElementEnd, 'a');
+  XmlWalk(p, xtElementEnd, 'a');
   Check(p.Next = xtEof);
-  ExpectRaise(xpeXmlUnescapeFailed, 'above range', '<a>&#x110000;</a>');
-  ExpectRaise(xpeXmlUnescapeFailed, 'above range dec', '<a>&#1114112;</a>');
-  ExpectRaise(xpeXmlUnescapeFailed, 'way above range', '<a>&#xFFFFFFF;</a>');
+  XmlExpectRaise(xpeXmlUnescapeFailed, 'above range', '<a>&#x110000;</a>');
+  XmlExpectRaise(xpeXmlUnescapeFailed, 'above range dec', '<a>&#1114112;</a>');
+  XmlExpectRaise(xpeXmlUnescapeFailed, 'way above range', '<a>&#xFFFFFFF;</a>');
   // a 32-bit wraparound must not smuggle any markup character back in
-  ExpectRaise(xpeXmlUnescapeFailed, 'wrap to lt', '<a>&#x10000003C;</a>');
-  ExpectRaise(xpeXmlUnescapeFailed, 'wrap to amp', '<a>&#x100000026;</a>');
-  ExpectRaise(xpeXmlUnescapeFailed, 'wrap to lt dec', '<a>&#4294967356;</a>');
-  ExpectRaise(xpeXmlUnescapeFailed, 'wrap many digits', '<a>&#x000000000000003C;</a>');
-  ExpectRaise(xpeXmlUnescapeFailed, 'void ref', '<a>&#;</a>');
-  ExpectRaise(xpeXmlUnescapeFailed, 'void hex ref', '<a>&#x;</a>');
+  XmlExpectRaise(xpeXmlUnescapeFailed, 'wrap to lt', '<a>&#x10000003C;</a>');
+  XmlExpectRaise(xpeXmlUnescapeFailed, 'wrap to amp', '<a>&#x100000026;</a>');
+  XmlExpectRaise(xpeXmlUnescapeFailed, 'wrap to lt dec', '<a>&#4294967356;</a>');
+  XmlExpectRaise(xpeXmlUnescapeFailed, 'wrap many digits', '<a>&#x000000000000003C;</a>');
+  XmlExpectRaise(xpeXmlUnescapeFailed, 'void ref', '<a>&#;</a>');
+  XmlExpectRaise(xpeXmlUnescapeFailed, 'void hex ref', '<a>&#x;</a>');
   // 4. the nesting limit is 255 opened elements, with a per-root offset origin
   for n := 253 to 257 do
   begin
@@ -9587,7 +9591,7 @@ begin
       Check(v <> '', Utf8ToString(s));
     end;
   end;
-  ExpectRaise(xpeTooMuchNesting, 'nesting 257', deep); // deep is 257 levels here
+  XmlExpectRaise(xpeTooMuchNesting, 'nesting 257', deep); // deep is 257 levels here
   deep := '';
   for i := 1 to 300 do
     deep := deep + '<a>';
@@ -9610,12 +9614,12 @@ begin
   ExpectOk('255-bytes name', v);
   ExpectOk('255-bytes name nested', '<a>' + v + '</a>');
   p.Init(v);
-  Walk(p, xtElementStart, u);
+  XmlWalk(p, xtElementStart, u);
   CheckEqual(p.Name.Len, 255, '255-bytes name length');
-  Walk(p, xtElementEnd, u);
+  XmlWalk(p, xtElementEnd, u);
   Check(p.Next = xtEof);
   Join(['<', RawUtf8OfChar('n', 256), '/>'], u);
-  ExpectRaise(xpeTagNameTooLong, '256-bytes name', u);
+  XmlExpectRaise(xpeTagNameTooLong, '256-bytes name', u);
   // 5. no byte at all may be read past the end of the input buffer, i.e. the
   // parser must never rely on any #0 terminator - see NoTerm() comments above
   NoTerm('<a/>', 'clean');
@@ -9640,7 +9644,7 @@ begin
   NoTerm(XML1, 'xml1');
 end;
 
-procedure TTestCoreXml.ToVariant;
+procedure TTestCoreProcess.XmlToVariant;
 var
   doc: variant;
 begin
