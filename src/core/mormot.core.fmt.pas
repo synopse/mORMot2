@@ -257,6 +257,9 @@ type
   /// a pointer to TXmlParser instance, used mainly for the fluent interface
   PXmlParser = ^TXmlParser;
 
+  /// some transient storage for TXmlParser.Save/Restore methods
+  TXmlState = TQWordRec;
+
   /// zero-allocation SAX-like parser over an XML UTF-8 memory buffer
   // - a "basic" parser, from actual simple needs: no DTD support (which makes
   // it immune to entity expansion attacks by design), only the five XML
@@ -417,9 +420,9 @@ type
     // - do nothing if LastError = xpeNone
     procedure RaiseException;
     /// save the current state of the parser (Position and Depth)
-    procedure Save(var Backup: TQWordRec);
+    procedure Save(var Backup: TXmlState);
     /// save the current state of the parser (Position and Depth)
-    procedure Restore(const Backup: TQWordRec);
+    procedure Restore(const Backup: TXmlState);
   private
     {$ifndef FPCX86NOTPIC}
     fTab: PAnsiCharToByte; // = XML_KIND[] lookup table (inlined on FPC only)
@@ -2020,14 +2023,14 @@ begin
   result := fToken - fBegin;
 end;
 
-procedure TXmlParser.Save(var Backup: TQWordRec);
+procedure TXmlParser.Save(var Backup: TXmlState);
 begin
   Backup.H := fCur - fBegin;
   Backup.B[0] := Depth;
   Backup.B[1] := ord(Kind);
 end;
 
-procedure TXmlParser.Restore(const Backup: TQWordRec);
+procedure TXmlParser.Restore(const Backup: TXmlState);
 begin
   if fBegin + Backup.H > fCur then
     EXmlException.RaiseU('TXmlParser.Restore: no forward possible');

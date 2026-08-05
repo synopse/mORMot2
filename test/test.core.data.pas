@@ -9739,7 +9739,7 @@ var
   header, comment, book, doc, catalog: TDocVariantData;
   price: currency;
   n, id: integer;
-  bak: TQWordRec;
+  bak: TXmlState;
 begin
   // the natural way using the hybrix SAX/DOM
   n := 0;
