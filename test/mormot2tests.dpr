@@ -74,7 +74,8 @@ uses
   test.orm.threads         in '.\test.orm.threads.pas',
   test.orm.network         in '.\test.orm.network.pas',
   test.soa.core            in '.\test.soa.core.pas',
-  test.soa.network         in '.\test.soa.network.pas';
+  test.soa.network         in '.\test.soa.network.pas',
+  test.ui.pdf              in '.\test.ui.pdf.pas';
 
 
 { TIntegrationTests }
@@ -89,6 +90,7 @@ type
     procedure CoreUnits;
     procedure ORM;
     procedure SOA;
+    procedure UI;
   end;
 
 class procedure TIntegrationTests.DescribeCommandLine;
@@ -180,6 +182,14 @@ begin
   AddCase([
     TTestServiceOrientedArchitecture,
     TTestBidirectionalRemoteConnection
+  ]);
+end;
+
+procedure TIntegrationTests.UI;
+begin
+  //exit;
+  AddCase([
+    TTestUiPdf
   ]);
 end;
 
