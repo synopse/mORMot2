@@ -6,6 +6,7 @@ Details are available [on out GitHub repository](https://github.com/synopse/mORM
 ## [2.5.stable] - trunk
 ### Added 
 - new `mormot.core.fmt.pas` unit
+- XML pull/SAX Parser
 - YAML 1.2 Read and Write Support
 - Preliminary compatibility to Delphi for Linux and Delphi for MacOS
 - HTTP Proxy Cache

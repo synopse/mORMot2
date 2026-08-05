@@ -412,6 +412,7 @@
       {$ifndef FPC_PIC}        // MachOS/OpenBSD/Android require PIC on i386
         {$define ASMINTELNOTPIC}
         {$define CPUX86NOTPIC} // use "absolute" instead of local register
+        {$define FPCX86NOTPIC}
         {$define ASMX86NOTPIC} // supports asm with globals
         {$define ASMAESNI}
       {$endif FPC_PIC}
