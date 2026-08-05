@@ -3351,7 +3351,7 @@ begin
     medium.NextFreeBlock := medium;
   end;
   {$ifdef FPCMM_MEDIUMPREFETCH}
-  Info.Prefetch := OsAllocMedium(MediumBlockPoolSizeMem);
+  Info.Prefetch := nil;
   {$endif FPCMM_MEDIUMPREFETCH}
 end;
 
