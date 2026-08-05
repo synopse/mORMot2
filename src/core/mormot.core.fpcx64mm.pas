@@ -1449,7 +1449,7 @@ end;
 
 function ComputeLargeBlockSize(size: PtrUInt): PtrUInt; inline;
 begin
-  inc(size, LargeBlockHeaderSize - 1 + BlockHeaderSize);
+  inc(size, LargeBlockHeaderSize + BlockHeaderSize);
   // aligned_size := ((size + align - 1) AND (NOT (align - 1)))
   {$ifdef FPCMM_LARGEBIGALIGN}
   // on Linux, mremap() on PMD_SIZE=2MB aligned data make a huge speedup

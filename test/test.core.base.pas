@@ -218,6 +218,10 @@ type
     procedure _TSynNameValue;
     /// test TRawUtf8Interning process
     procedure _TRawUtf8Interning;
+    {$ifdef FPC_X64MM}
+    /// validate the FPC x86_64 memory manager allocation capacity
+    procedure FpcX64MemoryManager;
+    {$endif FPC_X64MM}
     /// test T*ObjArray types and the ObjArray*() wrappers
     procedure _TObjArray;
     /// validate our optimized MoveFast/FillCharFast functions
@@ -352,6 +356,33 @@ procedure TTestCoreBase.Setup;
 begin
   RandomLecuyer(rnd);
 end;
+
+{$ifdef FPC_X64MM}
+
+procedure TTestCoreBase.FpcX64MemoryManager;
+const
+  Sizes: array[0 .. 13] of PtrUInt = (
+    264744, 264745,
+    327640, 327641, 327642,
+    655320, 655321, 655322,
+    4194264, 4194265, 4194266,
+    6291416, 6291417, 6291418);
+var
+  i: PtrInt;
+  p: pointer;
+begin
+  for i := 0 to high(Sizes) do
+  begin
+    p := GetMem(Sizes[i]);
+    try
+      Check(MemSize(p) >= Sizes[i], 'MemSize');
+    finally
+      FreeMem(p);
+    end;
+  end;
+end;
+
+{$endif FPC_X64MM}
 
 procedure TTestCoreBase._CamelCase;
 var
