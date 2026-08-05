@@ -262,7 +262,9 @@ type
   // in memory during the whole parsing: Name and Value do point within it,
   // with no memory allocation during the scan - see NameToUtf8/ValueToUtf8
   // - well-formedness of the tags nesting is verified, and any syntax or
-  // nesting error would raise an EXmlException with the faulty line number
+  // nesting error would raise an EXmlException with the faulty line number,
+  // unless xpoNoException option was set and Next returns xtError and
+  // more information is available in LastError/LastErrorLine
   // - to reduce the memory footprint, this parser has some limitations: Depth
   // is limited to 255, Names are allowed up to 255 UTF-8 bytes, and any root
   // element should not be > 4GB of UTF-8 text
@@ -277,11 +279,17 @@ type
   TXmlParser = object
   {$endif USERECORDWITHMETHODS}
   private
-    procedure RaiseLastError;
-    procedure RaiseError(reason: TXmlParserError);
+    procedure SetOrRaiseLastError;
+    procedure SetOrRaiseError(reason: TXmlParserError);
       {$ifdef HASINLINE} inline; {$endif}
     function ParseName(p, e: PUtf8Char): PUtf8Char;
       {$ifdef HASINLINE} inline; {$endif}
+    /// append the current Name/Value attribute into a TDocVariant object
+    procedure AttributeToDocVariant(Dest: PDocVariantData);
+    /// raw recursive conversion of the current level into a TDocVariant object
+    // - fill from attributes and content, until the matching xtElementEnd
+    // - the supplied Dest^ should have been just allocated or ZeroClear()
+    procedure ToDocVariant(Dest: PDocVariantData);
   public
     /// the current token kind, as set by the last Next call
     Kind: TXmlToken;
@@ -295,7 +303,7 @@ type
     LastError: TXmlParserError;
     /// 0 if LastError=xpeNone, or xtError line number (starting at 1)
     LastErrorLine: cardinal;
-    /// the current token name, pointing within the input buffer
+    /// the current token UTF-8 name, pointing within the input buffer
     // - set for xtElementStart, xtElementEnd, xtAttribute and xtPI tokens
     Name: TValuePUtf8Char;
     /// the current token raw value, pointing within the input buffer
@@ -312,7 +320,7 @@ type
       ParserOptions: TXmlParserOptions = []); overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// iterate to the next token of the input, returning xtEof when done
-    // - raises an EXmlException on any malformed or unsupported input
+    // - may raise EXmlException or returns xtError if xpoNoException was set
     function Next: TXmlToken;
     /// returns the current Name as an allocated UTF-8 string
     procedure NameToUtf8(var result: RawUtf8);
@@ -1833,7 +1841,7 @@ begin
       [LastErrorLine, XML_ERROR[LastError]]);
 end;
 
-procedure TXmlParser.RaiseLastError;
+procedure TXmlParser.SetOrRaiseLastError;
 var
   p: PUtf8Char;
 begin // caller should have set LastError
@@ -1852,10 +1860,10 @@ begin // caller should have set LastError
     RaiseException;
 end;
 
-procedure TXmlParser.RaiseError(reason: TXmlParserError);
+procedure TXmlParser.SetOrRaiseError(reason: TXmlParserError);
 begin
   LastError := reason;
-  RaiseLastError;
+  SetOrRaiseLastError;
 end;
 
 function TXmlParser.ParseName(p, e: PUtf8Char): PUtf8Char;
@@ -2063,7 +2071,7 @@ begin
                     inc(p);
                   if e - p < 3 then
                   begin
-                    RaiseError(xpeEofInComment);
+                    SetOrRaiseError(xpeEofInComment);
                     break;
                   end;
                   if xpoKeepComments in Options then
@@ -2199,7 +2207,7 @@ begin
       LastError := xpeEofElement;
     end;
     // if we reached here, LastError has been set to a particular item
-    RaiseLastError;
+    SetOrRaiseLastError;
     break;
   until false;
   fCur := p;
@@ -2240,8 +2248,8 @@ begin
   finally
     W.Free;
   end;
-  if not result then                  // decoding error
-    RaiseError(xpeXmlUnescapeFailed); // raise EXmlException or set Kind=xtError
+  if not result then // decoding error: raise EXmlException or set Kind=xtError
+    SetOrRaiseError(xpeXmlUnescapeFailed);
 end;
 
 procedure TXmlParser.AttributeToDocVariant(Dest: PDocVariantData);
