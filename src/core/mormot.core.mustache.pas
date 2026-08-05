@@ -2445,7 +2445,8 @@ var
   i64: Int64;
 begin
   PCardinal(@Result)^ := varNull;
-  if not AnyVariantToInteger(Value, i64) then
+  if VarIsEmptyOrNull(Value) or
+     not AnyVariantToInteger(Value, i64) then
     exit; // Value=null or can't be converted/truncated to an integer
   KBU(i64, u);
   RawUtf8ToVariant(u, Result);

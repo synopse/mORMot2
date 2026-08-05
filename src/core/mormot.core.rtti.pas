@@ -3180,11 +3180,11 @@ var
 { ************************ TRttiMap Field Mapping (e.g. DTO/Domain Objects) }
 
 type
-  /// pointer to a TRttiMap reference, for fluid-interface initialization
+  /// pointer to a TRttiMap reference, for fluent-interface initialization
   PRttiMap = ^TRttiMap;
 
   /// customizable field mapping between classes and records
-  // - Init/Map overloaded methods return self to allow proper fluid-calling
+  // - Init/Map overloaded methods return self to allow proper fluent-calling
   // - records should have field-level extended RTTI (since Delphi 2010 / FPC
   // trunk), or have been properly defined with Rtti.RegisterFromText() on
   // oldest Delphi or FPC
@@ -3217,15 +3217,15 @@ type
     // !  map.Init(TypeInfo(TMyRecordA), TypeInfo(TMyRecordB));
     function Init(A, B: PRttiInfo): PRttiMap; overload;
     /// use RTTI field names to map the content
-    // - returns self to continue manual calls to Map() in a fluid interface,
+    // - returns self to continue manual calls to Map() in a fluent interface,
     // e.g. to tune the default mapping made by this method
     function AutoMap: PRttiMap;
     /// map two fields by name
     // - if any field A or B name is '', this field will be ignored
-    // - returns self to continue manual calls to Map() in a fluid interface
+    // - returns self to continue manual calls to Map() in a fluent interface
     function Map(const A, B: RawUtf8): PRttiMap; overload;
     /// map fields by A,B pairs of names
-    // - returns self to continue manual calls to Map() in a fluid interface
+    // - returns self to continue manual calls to Map() in a fluent interface
     function Map(const ABPairs: array of RawUtf8): PRttiMap; overload;
     /// thread-safe copy mapped B fields values into A
     // - A and B are either a TObject instance or a @record pointer, depending
