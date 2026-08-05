@@ -275,7 +275,7 @@ type
   // - usage: call Init() then Next in a loop, e.g. as
   // ! x.Init(pointer(xml), length(xml));
   // ! while true do
-  // !   case x.Next of
+  // !   case x.ParseNext of
   // !     ...
   {$ifdef USERECORDWITHMETHODS}
   TXmlParser = record
@@ -295,7 +295,7 @@ type
     // - the supplied Dest^ should have been just allocated or ZeroClear()
     procedure ToDocVariant(Dest: PDocVariantData);
   public
-    /// the current token kind, as set by the last Next call
+    /// the current token kind, as set by the last ParseNext call
     Kind: TXmlToken;
     /// how many elements are currently opened
     // - incremented after a xtElementStart, decremented after a xtElementEnd
@@ -326,7 +326,24 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// iterate to the next token of the input, returning xtEof when done
     // - may raise EXmlException or returns xtError if xpoNoException was set
-    function Next: TXmlToken;
+    // - so for the following XML:
+    // $ <book id="1">
+    // $   <title>mORMot</title>
+    // $   <price>42</price>
+    // $ </book>
+    // the raw decoded stream is
+    // $  ParseNext/Kind   Name    Value
+    // $  xtElementStart   book
+    // $  xtAttribute      id      1
+    // $  xtElementStart   title
+    // $  xtText                   mORMot
+    // $  xtElementEnd     title
+    // $  xtElementStart   price
+    // $  xtText                   42
+    // $  xtElementEnd     price
+    // $  xtElementEnd     book
+    // $  xtEof
+    function ParseNext: TXmlToken;
     /// returns the current Name as an allocated UTF-8 string
     procedure NameToUtf8(var result: RawUtf8);
       {$ifdef HASINLINE}inline;{$endif}
@@ -1940,7 +1957,7 @@ begin
   result := fToken - fBegin;
 end;
 
-function TXmlParser.Next: TXmlToken;
+function TXmlParser.ParseNext: TXmlToken;
 var
   p, e: PUtf8Char;
 begin
@@ -2278,10 +2295,15 @@ var
 begin
   txt := nil; // = RawUtf8 pointer for no hidden try..finally
   while true do
-    case Next of
+    case ParseNext of
       xtEof,
       xtElementEnd:
         break;
+      xtError:  // we forced xpoNoException mode for efficient txt process
+        begin
+          FastAssignNew(txt); // manual release of any pending txt
+          exit;
+        end;
       xtAttribute:
         AttributeToDocVariant(Dest);
       xtElementStart:
@@ -2293,11 +2315,6 @@ begin
       xtText,
       xtCData:
         ValueAppendToUtf8(RawUtf8(txt));
-      xtError:  // we forced xpoNoException mode for efficient txt process
-        begin
-          FastAssignNew(txt); // manual release of any pending txt
-          exit;
-        end;
     end;
   if Dest^.Count <> 0 then
     if txt = nil then
