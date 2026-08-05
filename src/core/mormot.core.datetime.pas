@@ -1277,6 +1277,8 @@ type
     /// will call IdemPropNameU() over the stored text Value
     function Idem(const Value: RawUtf8): boolean;
       {$ifdef HASSAFEINLINE}inline;{$endif}
+    /// case-sensitive comparison with the stored text Value
+    function Equal(const Value: RawUtf8): boolean;
   end;
   PValuePUtf8Char = ^TValuePUtf8Char;
   /// used e.g. by JsonDecode() overloaded function to returns values
@@ -4446,6 +4448,13 @@ begin
   SetInt64(Text, result{%H-});
 end;
 
+function TValuePUtf8Char.ToBoolean: boolean;
+begin
+  result := (Text <> nil) and
+            ((PWord(Text)^ = ord('1')) or
+             (GetTrue(Text) = 1));
+end;
+
 function TValuePUtf8Char.ToDouble: double;
 begin
   result := GetExtended(Text);
@@ -4463,11 +4472,11 @@ begin
              IdemPropNameUSameLenNotNull(pointer(Value), Text, Len));
 end;
 
-function TValuePUtf8Char.ToBoolean: boolean;
+function TValuePUtf8Char.Equal(const Value: RawUtf8): boolean;
 begin
-  result := (Text <> nil) and
-            ((PWord(Text)^ = ord('1')) or
-             (GetTrue(Text) = 1));
+  result := (length(Value) = Len) and
+            ((Len = 0) or
+             CompareMemSmall(pointer(Value), Text, Len)); // inlined
 end;
 
 
