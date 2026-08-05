@@ -2436,6 +2436,7 @@ type
     // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
     // - use GetAsInt/GetAsInt64 if you want to check the availability of the field
     // - I['prop'] := 123 would add a new property, or overwrite an existing
+    // - if Value[] is a string, will try to convert from an exact number
     property I[const aName: RawUtf8]: Int64
       read GetInt64ByName write SetInt64ByName;
     /// direct access to a dvObject boolean stored property value from its name
@@ -9542,7 +9543,7 @@ begin
   if found = nil then
     result := false
   else
-    result := VariantToInt64(PVariant(found)^, aValue)
+    result := AnyVariantToInteger(PVariant(found)^, aValue)
 end;
 
 function TDocVariantData.GetAsDouble(const aName: RawUtf8; out aValue: double;
@@ -9869,7 +9870,7 @@ end;
 function TDocVariantData.GetItemAsInt(aIndex: integer): Int64;
 begin
   if (cardinal(aIndex) >= cardinal(VCount)) or
-     not VariantToInt64(VValue[aIndex], result) then
+     not AnyVariantToInteger(VValue[aIndex], result) then
     result := PtrInt(InternalNotFound(aIndex));
 end;
 
@@ -10495,7 +10496,7 @@ end;
 
 function TDocVariantData.GetInt64ByName(const aName: RawUtf8): Int64;
 begin
-  if not VariantToInt64(GetPVariantByName(aName)^, result) then
+  if not AnyVariantToInteger(GetPVariantByName(aName)^, result) then
     result := 0;
 end;
 
@@ -12496,7 +12497,7 @@ var
   v: PVariant;
 begin
   v := ValueAt(position);
-  if not VariantToInt64(v^, result) then
+  if not AnyVariantToInteger(v^, result) then
     EDocList.GetRaise('I', position, v^);
 end;
 
@@ -13037,7 +13038,7 @@ var
   v: PVariant;
 begin
   v := GetExistingValueAt(key, 'I');
-  if not VariantToInt64(v^, result) then
+  if not AnyVariantToInteger(v^, result) then
     EDocDict.Error('I', key, v^);
 end;
 
@@ -13195,7 +13196,7 @@ var
   v: PVariant;
 begin
   result := GetValueAt(key, v) and
-            VariantToInt64(v^, value);
+            AnyVariantToInteger(v^, value);
 end;
 
 function TDocDict.Get(const key: RawUtf8; var value: double): boolean;
