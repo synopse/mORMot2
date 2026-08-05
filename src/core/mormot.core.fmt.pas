@@ -193,6 +193,7 @@ type
   // - xtPI is returned for each <?name ...?> processing instruction, if the
   // xpoKeepPI option was defined at Init - silently skipped otherwise
   TXmlToken = (
+    xtNotStarted,
     xtEof,
     xtError,
     xtElementStart,
@@ -252,6 +253,9 @@ type
 
   /// options to refine TXmlParser process
   TXmlParserOptions = set of TXmlParserOption;
+
+  /// a pointer to TXmlParser instance, used mainly for the fluent interface
+  PXmlParser = ^TXmlParser;
 
   /// zero-allocation SAX-like parser over an XML UTF-8 memory buffer
   // - a "basic" parser, from actual simple needs: no DTD support (which makes
@@ -316,8 +320,9 @@ type
     procedure Init(Text: PUtf8Char; TextLen: PtrInt;
       ParserOptions: TXmlParserOptions = []); overload;
     /// prepare the parsing of a given XML UTF-8 string content
-    procedure Init(const Text: RawUtf8;
-      ParserOptions: TXmlParserOptions = []); overload;
+    // - returns @self for a fluent interface
+    function Init(const Text: RawUtf8;
+      ParserOptions: TXmlParserOptions = []): PXmlParser; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// iterate to the next token of the input, returning xtEof when done
     // - may raise EXmlException or returns xtError if xpoNoException was set
@@ -1866,6 +1871,9 @@ begin
   SetOrRaiseLastError;
 end;
 
+var
+  XML_KIND: TAnsiCharToByte; // = 1 for #0..#32 " ' / < > = ?
+
 function TXmlParser.ParseName(p, e: PUtf8Char): PUtf8Char;
 begin
   Name.Text := p;
@@ -1888,9 +1896,6 @@ begin
   result := p;
 end;
 
-var
-  XML_KIND: TAnsiCharToByte;
-
 procedure TXmlParser.Init(Text: PUtf8Char; TextLen: PtrInt;
   ParserOptions: TXmlParserOptions);
 begin
@@ -1899,8 +1904,6 @@ begin
     EXmlException.RaiseUtf8('TXmlParser cannot parse % bytes', [TextLen]);
   {$endif CPU64}
   fBegin := Text;
-  fCur := Text;
-  fToken := Text;
   if (Text <> nil) and
      (TextLen >= 3) and
      (PWord(Text)^ = BOM_UTF8 and $ffff) and       // no PCardinal 4-bytes read
@@ -1909,9 +1912,11 @@ begin
     inc(Text, 3); // ignore any UTF-8 BOM
     dec(TextLen, 3);
   end;
+  fCur := Text;
+  fToken := Text;
   fAfter := Text + TextLen;
   Options := ParserOptions;
-  Kind := xtEof;
+  Kind := xtNotStarted;
   LastError := xpeNone;
   Depth := 0;
   LastErrorLine := 0;
@@ -1919,12 +1924,15 @@ begin
   Name.Len := 0;
   Value.Buffer := nil;
   Value.Len := 0;
+  {$ifndef FPCX86NOTPIC}
   fTab := @XML_KIND;
+  {$endif FPCX86NOTPIC}
 end;
 
-procedure TXmlParser.Init(const Text: RawUtf8; ParserOptions: TXmlParserOptions);
+function TXmlParser.Init(const Text: RawUtf8; ParserOptions: TXmlParserOptions): PXmlParser;
 begin
   Init(pointer(Text), length(Text), ParserOptions);
+  result := @self;
 end;
 
 function TXmlParser.Position: PtrInt;

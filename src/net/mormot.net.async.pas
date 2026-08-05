@@ -1245,7 +1245,7 @@ type
   public
     /// setup the default values of this URL
     constructor Create; override;
-    /// allow to customize the processing options in a fluid calling interface
+    /// allow to customize the processing options in a fluent calling interface
     function SetOptions(aOptions: THttpProxyUrlOptions): THttpProxyUrlSettings;
     /// optional event handler when a remote URI connection is instantiated
     property OnRemoteClient: TOnHttpProxyUrlClient

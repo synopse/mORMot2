@@ -1353,7 +1353,7 @@ type
     constructor Create(aOwner: TEngineIOAbstract;
       const aNamespace: RawUtf8 = '/'); reintroduce;
     /// register an event with an associated callback
-    // - returns self to be used as a fluid interface, e.g.
+    // - returns self to be used as a fluent interface, e.g.
     // from TSocketsIOClient.Local()
     function RegisterEvent(const aEventName: RawUtf8;
       const aCallback: TOnSocketIOEvent): TSocketIOLocalNamespace;
