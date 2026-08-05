@@ -352,6 +352,7 @@ type
     // - just a wrapper around Next(ElementName) + Consume(Doc)
     function Next(const ElementName: RawUtf8; var Doc: TDocVariantData;
       DocOptions: TDocVariantOptions = JSON_XML): boolean; overload;
+      {$ifdef HASINLINE} inline; {$endif}
     /// iterate to the next token of the input, returning xtEof when done
     // - may raise EXmlException or returns xtError if xpoNoException was set
     // - so for the following XML:
@@ -1904,10 +1905,14 @@ end;
 { TXmlParser }
 
 procedure TXmlParser.RaiseException;
+var
+  tmp: TShort23;
 begin
-  if LastError <> xpeNone then
-    EXmlException.RaiseUtf8('XML error at line %: %',
-      [LastErrorLine, XML_ERROR[LastError]]);
+  if LastError = xpeNone then
+    exit;
+  SetString(tmp, fToken, fAfter - fToken); // truncate to 23 chars
+  EXmlException.RaiseUtf8('XML error at line %: % [%]',
+    [LastErrorLine, XML_ERROR[LastError], tmp]);
 end;
 
 procedure TXmlParser.SetOrRaiseLastError;
