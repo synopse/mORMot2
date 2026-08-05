@@ -366,16 +366,13 @@ type
     // - could be used to store a position, then resume a scan from it
     function Position: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
-    /// calls Init(Xml) then ToDocVariant(Doc) to convert any XML input
-    // - will force xpoNoException in supplied ParseOptions
-    // - returns LastError = xpeNone on success
-    function ConvertToVariant(const Xml: RawUtf8; var Doc: variant;
-      ParseOptions: TXmlParserOptions = []; DocOptions: TDocVariantOptions = JSON_XML): TXmlParserError;
     /// raise the EXmlException corresponding to LastError/LastErrorLine
     // - do nothing if LastError = xpeNone
     procedure RaiseException;
   private
-    fTab: PAnsiCharToByte;
+    {$ifndef FPCX86NOTPIC}
+    fTab: PAnsiCharToByte; // = XML_KIND[] lookup table (inlined on FPC only)
+    {$endif FPCX86NOTPIC}
     fCur, fBegin, fToken, fAfter: PUtf8Char;
     // up to 256 levels of 32-bit offsets from fNameOrigin and 255-byte names
     fStackLen: array[byte] of byte;
@@ -2332,14 +2329,14 @@ begin
   PSynVarData(Dest)^.VAny := txt;
 end;
 
-function TXmlParser.ConvertToVariant(const Xml: RawUtf8; var Doc: variant;
+function ConvertToVariant(var x: TXmlParser; const Xml: RawUtf8; var Doc: variant;
   ParseOptions: TXmlParserOptions; DocOptions: TDocVariantOptions): TXmlParserError;
 begin
-  Init(pointer(Xml), length(Xml), ParseOptions + [xpoNoException]);
+  x.Init(pointer(Xml), length(Xml), ParseOptions + [xpoNoException]);
   ZeroClear(@Doc); // as required by ToDocVariant
   PCardinal(@Doc)^ := _VType(DocOptions, dvObject); // fast Init() of root
-  ToDocVariant(@Doc);
-  result := LastError;
+  x.ToDocVariant(@Doc);
+  result := x.LastError;
 end;
 
 procedure XmlToVariant(const Xml: RawUtf8; var Doc: variant;
@@ -2347,7 +2344,7 @@ procedure XmlToVariant(const Xml: RawUtf8; var Doc: variant;
 var
   x: TXmlParser;
 begin
-  if x.ConvertToVariant(Xml, Doc, ParseOptions, Options) <> xpeNone then
+  if ConvertToVariant(x, Xml, Doc, ParseOptions, Options) <> xpeNone then
     x.RaiseException;
 end;
 
@@ -2356,7 +2353,7 @@ function TryXmlToVariant(const Xml: RawUtf8; var Doc: variant;
 var
   x: TXmlParser;
 begin
-  result := x.ConvertToVariant(Xml, Doc, ParseOptions, Options);
+  result := ConvertToVariant(x, Xml, Doc, ParseOptions, Options);
   if result <> xpeNone then
     TDocVariantData(Doc).Clear;
 end;
