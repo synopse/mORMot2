@@ -334,12 +334,6 @@ type
     /// append the current Value as into a UTF-8 string
     // - on decoding error, raise EXmlException or returns false if xpoNoException
     function ValueAppendToUtf8(var Dest: RawUtf8): boolean;
-    /// append the current Name/Value attribute into a TDocVariant object
-    procedure AttributeToDocVariant(Dest: PDocVariantData);
-    /// raw recursive conversion of the current level into a TDocVariant object
-    // - fill from attributes and content, until the matching xtElementEnd
-    // - the supplied Dest^ should have been just allocated or ZeroClear()
-    procedure ToDocVariant(Dest: PDocVariantData);
     /// the offset of the current token in the input buffer
     // - could be used to store a position, then resume a scan from it
     function Position: PtrInt;
