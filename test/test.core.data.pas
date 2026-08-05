@@ -9181,7 +9181,7 @@ begin
   Check(p.Next = kind, 'no more tokens');
   Check(p.Kind = kind, 'kind');
   p.NameToUtf8(n);
-  p.ValueToUtf8(v);
+  Check(p.ValueToUtf8(v), 'valuetoutf8');
   CheckEqual(n, name, 'name');
   CheckEqual(v, value, 'value');
 end;
@@ -9423,7 +9423,7 @@ var
       while x.Next <> xtEof do
       begin
         x.NameToUtf8(n);
-        x.ValueToUtf8(v);
+        Check(x.ValueToUtf8(v), 'valuetoutf82');
       end;
       CheckEqual(x.Position, length(Xml), Context);
     except
@@ -9551,7 +9551,7 @@ begin
   p.Init('<a>&#x10FFFF;</a>');
   XmlWalk(p, xtElementStart, 'a');
   Check(p.Next = xtText);
-  p.ValueToUtf8(v);
+  Check(p.ValueToUtf8(v), 'valuetoutf83');
   CheckEqual(v, maxcp, 'highest code point');
   XmlWalk(p, xtElementEnd, 'a');
   Check(p.Next = xtEof);
@@ -9572,9 +9572,9 @@ begin
     deep := '';
     u := '';
     for i := 1 to n do
-      deep := deep + '<e' + UInt32ToUtf8(i) + '>'; // per-level distinct names
+      Append(deep, ['<e', i, '>']); // per-level distinct names
     for i := n downto 1 do
-      deep := deep + '</e' + UInt32ToUtf8(i) + '>';
+      Append(deep, ['</e', i, '>']);
     for i := 1 to n do
       u := u + '<e>';                              // all levels sharing a name
     for i := 1 to n do
@@ -9590,23 +9590,23 @@ begin
     else
     begin
       CheckEqual(DeepStarts(deep, v), 255, s);
-      Check(v <> '', Utf8ToString(s));
+      CheckNotEqual(v, '', s);
       CheckEqual(DeepStarts(u, v), 255, s);
-      Check(v <> '', Utf8ToString(s));
+      CheckNotEqual(v, '', s);
     end;
   end;
   XmlExpectRaise(xpeTooMuchNesting, 'nesting 257', deep); // deep is 257 levels here
   deep := '';
   for i := 1 to 300 do
-    deep := deep + '<a>';
+    Append(deep, '<a>');
   CheckEqual(DeepStarts(deep, v), 255, 'nesting 300');
   // the packed offsets origin is reset once the nesting returns to 0
   ExpectOk('two roots', '<a><b/></a><c><d/></c>');
   u := '';
   for i := 1 to 255 do
-    u := u + '<e' + UInt32ToUtf8(i) + '>';
+    Append(u, ['<e', i, '>']);
   for i := 255 downto 1 do
-    u := u + '</e' + UInt32ToUtf8(i) + '>';
+    Append(u, ['</e', i, '>']);
   ExpectOk('255 deep', u);
   ExpectOk('255 deep then sibling root', u + '<z/>');
   CheckEqual(DeepStarts(u + '<z/>', v), 256, 'sibling root is a new origin');
