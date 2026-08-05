@@ -758,8 +758,8 @@ begin
   Check(AnyVariantToDouble(v, d));
   Check(d = 123.0, '123a');
   CheckEqual(AnyVariantToIntegerDef(v), 123);
-  Check(not AnyVariantToInteger(Null, i64));
-  CheckEqual(i64, 123);
+  Check(AnyVariantToInteger(Null, i64));
+  CheckEqual(i64, 0);
   CheckEqual(AnyVariantToIntegerDef(Null), 0);
   CheckEqual(AnyVariantToIntegerDef(Null, 1), 1);
   Check(not AnyVariantToDouble(Null, d));
