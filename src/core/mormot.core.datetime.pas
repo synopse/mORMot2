@@ -1217,8 +1217,23 @@ function DecodeMicroSec(P: PByteArray): PtrInt;
 { ******************* TValuePUtf8Char text value wrapper record }
 
 type
-  /// points to one value of raw UTF-8 content, decoded from a JSON buffer
+  /// points to one value as raw memory buffer pointer and length
+  // - since the data is typeless, no method has been associated
+  {$ifdef USERECORDWITHMETHODS}
+  TValuePointer = record
+  {$else}
+  TValuePointer = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// a pointer to the actual UTF-8 or binary content
+    Buffer: pointer;
+    /// how many bytes are stored in Buffer
+    Len: PtrInt;
+  end;
+
+  /// points to one value of raw UTF-8 content, decoded from e.g. a JSON/XML buffer
   // - used e.g. by JsonDecode() overloaded function to returns names/values
+  // - supply some methods for direct high-level types conversion or comparison
   {$ifdef USERECORDWITHMETHODS}
   TValuePUtf8Char = record
   {$else}

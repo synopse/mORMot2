@@ -301,7 +301,7 @@ type
     /// the current token raw value, pointing within the input buffer
     // - set for xtAttribute, xtText, xtCData, xtComment and xtPI tokens
     // - may still contain XML entities: use ValueToUtf8 to decode them
-    Value: TValuePUtf8Char;
+    Value: TValuePointer;
     /// prepare the parsing of a given XML UTF-8 buffer
     // - any UTF-8 BOM would be ignored
     // - the buffer is expected to remain available during the whole parsing
@@ -1909,7 +1909,7 @@ begin
   LastErrorLine := 0;
   Name.Text := nil;
   Name.Len := 0;
-  Value.Text := nil;
+  Value.Buffer := nil;
   Value.Len := 0;
   fTab := @XML_KIND;
 end;
@@ -1930,7 +1930,7 @@ var
 begin
   Name.Text := nil;
   Name.Len := 0;
-  Value.Text := nil;
+  Value.Buffer := nil;
   Value.Len := 0;
   p := fCur;
   e := fAfter;
@@ -1988,7 +1988,7 @@ begin
                    (p^ in ['"', '''']) then
                 begin
                   inc(p);
-                  Value.Text := p;
+                  Value.Buffer := p;
                   Value.Len := ByteScanIndex(pointer(p), e - p, ord(p[-1]));
                   if Value.Len >= 0 then
                   begin
@@ -2068,7 +2068,7 @@ begin
                   end;
                   if xpoKeepComments in Options then
                   begin
-                    Value.Text := fCur;
+                    Value.Buffer := fCur;
                     Value.Len := p - fCur;
                     inc(p, 3);
                     Kind := xtComment;
@@ -2085,7 +2085,7 @@ begin
                 begin
                   // <![CDATA[ ... ]]> verbatim section
                   inc(p, 7);
-                  Value.Text := p;
+                  Value.Buffer := p;
                   dec(e, 3);
                   while (p <= e) and
                         ((p^ <> ']') or
@@ -2094,7 +2094,7 @@ begin
                     inc(p);
                   if p <= e  then
                   begin
-                    Value.Len := p - Value.Text;
+                    Value.Len := p - Value.Buffer;
                     inc(p, 3);
                     Kind := xtCData;
                     break;
@@ -2125,11 +2125,11 @@ begin
                       inc(p, 2);
                       continue;
                     end;
-                    Value.Text := fCur;
+                    Value.Buffer := fCur;
                     while (p > fCur) and
                           (p[-1] <= ' ') do
                       dec(p); // trim trailing blanks, but never before the value
-                    Value.Len := p - Value.Text;
+                    Value.Len := p - Value.Buffer;
                     while p^ <= ' ' do
                       inc(p); // reach back the '?>' ending
                     inc(p, 2);
@@ -2181,7 +2181,7 @@ begin
             continue; // ignore any pure-whitespace text
           p := fToken;
         end;
-        Value.Text := p;
+        Value.Buffer := p;
         Value.Len := ByteScanIndex(pointer(p), e - p, ord('<'));
         if Value.Len < 0 then
           Value.Len := e - p;
@@ -2226,16 +2226,16 @@ begin
   if Kind in [xtCData, xtComment] then
     amp := nil
   else
-    amp := PosChar(Value.Text, Value.Len, '&');
+    amp := PosChar(Value.Buffer, Value.Len, '&');
   if amp = nil then
   begin
-    Append(Dest, Value.Text, Value.Len); // verbatim sections
+    Append(Dest, Value.Buffer, Value.Len); // verbatim sections
     result := true;
     exit;
   end;
   W := TTextWriter.CreateOwnedStream(tmp, Dest); // append to result
   try
-    result := AddXmlUnescape(W, Value.Text, amp, Value.Len);
+    result := AddXmlUnescape(W, Value.Buffer, amp, Value.Len);
     W.SetText(Dest);
   finally
     W.Free;
