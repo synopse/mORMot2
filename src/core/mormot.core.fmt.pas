@@ -272,7 +272,20 @@ type
   // - to reduce the memory footprint, this parser has some limitations: Depth
   // is limited to 255, Names are allowed up to 255 UTF-8 bytes, and any root
   // element should not be > 4GB of UTF-8 text
-  // - usage: call Init() then Next in a loop, e.g. as
+  // - we recommend its high level SAX/DOM hybrid mode:
+  // ! var x: TXmlParser;
+  // !     header, doc: TDocVariantData;
+  // !     footer: RawUtf8;
+  // ! begin
+  // ! x.Init(xml);
+  // ! if x.Find('/root/header') then
+  // !   x.Consume(header);
+  // ! if x.Find('/root/catalog') then
+  // !   while x.Next('book', book) do
+  // !     ... use book.U['title'] or book.I['@id'] ...
+  // ! if x.Find('/root/footer') then
+  // !   x.ConsumeText(footer);
+  // - for raw SAX/pull usage, call Init() then ParseNext in a loop, e.g. as
   // ! x.Init(pointer(xml), length(xml));
   // ! while true do
   // !   case x.ParseNext of
@@ -324,6 +337,21 @@ type
     function Init(const Text: RawUtf8;
       ParserOptions: TXmlParserOptions = []): PXmlParser; overload;
       {$ifdef HASINLINE} inline; {$endif}
+    /// reset the current position to the beginning of the XML supplied to Init()
+    // - on real data, parsing is done at 2GB/s so Rewind is a common/fair task
+    function Rewind: PXmlParser;
+    /// iterate over a given path until an element location is reached
+    // - together with Next(name,TDocVariant) is the recommended API for TXmlParser
+    // - '/root/catalog' calls Rewind to search from the document root
+    // - 'catalog/book' search nested <catalog><book> from the current position
+    // - '//book' path will find <book> anywhere from the current position
+    // - no XPath //book/title, predicates, wildcards, attributes or namespaces
+    function Find(path: PUtf8Char; sep: AnsiChar = '/'): boolean;
+    /// iterate in document order and extract the next match as TDocVariant
+    // - together with Find(path) is the recommended API for TXmlParser
+    // - just a wrapper around Next(ElementName) + Consume(Doc)
+    function Next(const ElementName: RawUtf8; var Doc: TDocVariantData;
+      DocOptions: TDocVariantOptions = JSON_XML): boolean; overload;
     /// iterate to the next token of the input, returning xtEof when done
     // - may raise EXmlException or returns xtError if xpoNoException was set
     // - so for the following XML:
@@ -1967,6 +1995,17 @@ begin
   result := @self;
 end;
 
+function TXmlParser.Rewind: PXmlParser;
+begin
+  if fCur <> fBegin then
+  begin
+    if Kind = xtEof then
+      include(Options, xpoDontCheckEndTagName); // validate it once seems enough
+    Init(fBegin, fAfter - fBegin, Options);
+  end;
+  result := @self;
+end;
+
 function TXmlParser.Position: PtrInt;
 begin
   result := fToken - fBegin;
@@ -2431,6 +2470,42 @@ begin
           break;
     end;
   result := true;
+end;
+
+function TXmlParser.Find(path: PUtf8Char; sep: AnsiChar): boolean;
+var
+  l: PtrInt;
+begin
+  result := false;
+  if path = nil then
+    exit;
+  result := true;
+  if path^ = sep then
+    if path[1] = sep then
+    begin
+      inc(path, 2); // find <book> anywhere from '//book' input path
+      l := StrLen(path);
+      if PosChar(path, l, sep) = nil then // no '//book/title' support
+        if FindAny(path, l) then
+          exit;
+      result := false;
+      exit;
+    end
+    else
+    begin
+      Rewind; // '/root/catalog'
+      inc(path);
+    end;
+  repeat // search relative 'root/catalog'
+    l := PosChar0(path, sep) - path; // use fast SSE2 asm on x86_64
+    if not Next(path, l) then
+      break;
+    inc(path, l);
+    if path^ = #0 then
+      exit; // reached the end of suplied path
+    inc(path);
+  until false;
+  result := false;
 end;
 
 function TXmlParser.Consume(var Doc: TDocVariantData;
