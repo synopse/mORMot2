@@ -9724,10 +9724,12 @@ const
                         '<comment lng="en">Nice species</comment>' +
                         '<price>42</price>' +
                       '</book>' +
+                      '<ignore>nothing</ignore>'+
                       '<book id="2">' +
                         '<title>Delphi</title>' +
                         '<price>99</price>' +
                       '</book>' +
+                      '<pending />' +
                     '</catalog>' +
                     '<footer>done</footer>' +
                   '</root>';
@@ -9737,6 +9739,7 @@ var
   header, comment, book, doc, catalog: TDocVariantData;
   price: currency;
   n, id: integer;
+  bak: TQWordRec;
 begin
   // the natural way using the hybrix SAX/DOM
   n := 0;
@@ -9755,9 +9758,11 @@ begin
       else
         CheckEqual(comment.Count, 0, 'comment');
       inc(n);
+      CheckEqual(id, n);
     end;
-  CheckEqual(n, 2);
-  Check(x.Kind = xtEof, 'next(book) eof');
+  CheckEqual(n, 2, 'books');
+  Check(x.Kind = xtElementEnd, 'after next(book)');
+  Check(x.Name.Equal('catalog'), '</catalog>');
   Check(x.Find('/root/header'));
   Check(x.Kind = xtElementStart, 'find1');
   Check(x.Consume(header), 'consume(header)');
@@ -9789,9 +9794,10 @@ begin
   CheckEqual(footer, 'done');
   Check(x.Find('/root/catalog'));
   Check(x.Consume(book));
-  CheckEqual(book.ToJson, '{"book":[{"@id":"1","title":"mORMot",' +
-    '"comment":{"@lng":"en","#text":"Nice species"},"price":"42"},' +
-    '{"@id":"2","title":"Delphi","price":"99"}]}');
+  CheckEqual(book.ToJson,
+    '{"book":[{"@id":"1","title":"mORMot","comment":{"@lng":"en","#text":"Nice' +
+    ' species"},"price":"42"},{"@id":"2","title":"Delphi","price":"99"}],"igno' +
+    're":"nothing","pending":""}');
   catalog.InitFast;
   x.Rewind;
   while x.Find('//catalog') do
@@ -9801,9 +9807,19 @@ begin
   end;
   CheckEqual(catalog.ToJson,
     '["Trap for Next(''catalog'')",{"book":[{"@id":"1","title":"mORMot","comme' +
-    'nt":{"@lng":"en","#text":"Nice species"},"price":"42"},{"@id":"2","title"' +
-    ':"Delphi","price":"99"}]}]');
+     'nt":{"@lng":"en","#text":"Nice species"},"price":"42"},{"@id":"2","title"' +
+     ':"Delphi","price":"99"}],"ignore":"nothing","pending":""}]');
   Check(not x.Rewind.Find('//katalog'));
+  Check(x.Find('/root/catalog'));
+  n := 0;
+  while x.Next('book', book) do
+  begin
+    inc(n);
+    x.Save(bak);
+    Check(not x.Find('none'), 'none');
+    x.Restore(bak);
+  end;
+  CheckEqual(n, 2);
 end;
 
 
