@@ -356,12 +356,21 @@ type
     /// append the current Value as into a UTF-8 string
     // - on decoding error, raise EXmlException or returns false if xpoNoException
     function ValueAppendToUtf8(var Dest: RawUtf8): boolean;
-    /// append the current Name/Value attribute into a TDocVariant object
-    procedure AttributeToDocVariant(Dest: PDocVariantData);
-    /// raw recursive conversion of the current level into a TDocVariant object
-    // - fill from attributes and content, until the matching xtElementEnd
-    // - the supplied Dest^ should have been just allocated or ZeroClear()
-    procedure ToDocVariant(Dest: PDocVariantData);
+    /// iterate over the direct child elements matching a given name
+    // - expects the current position to define the parent element
+    // - returns true and leaves Kind=xtElementStart on success
+    // - returns false when no matching child is found in the current subtree
+    function Next(const ElementName: RawUtf8): boolean; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// iterate over the direct child elements matching a given name
+    function Next(ElementName: PUtf8Char; ElementLen: PtrInt): boolean; overload;
+    /// consume/skip the current element subtree
+    // - expects to be on xtElementStart, and goes to the matching xtElementEnd
+    function Skip: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// iterate until a given element name is reached anywhere in the content
+    // - used e.g. to implement Find('//book')
+    function FindAny(ElementName: PUtf8Char; ElementLen: PtrInt): boolean;
     /// the offset of the current token in the input buffer
     // - could be used to store a position, then resume a scan from it
     function Position: PtrInt;
@@ -2328,6 +2337,93 @@ begin
   PSynVarData(Dest)^.VType := varString;
   PSynVarData(Dest)^.VAny := txt;
 end;
+
+function TXmlParser.Skip: boolean;
+var
+  level: byte;
+begin
+  result := false;
+  if Kind <> xtElementStart then
+    exit;
+  level := Depth;
+  while true do
+    case ParseNext of
+      xtEof,
+      xtError:
+        exit;
+      xtElementEnd:
+        if Depth < level then
+          break;
+    end;
+  result := true;
+end;
+
+function TXmlParser.Next(const ElementName: RawUtf8): boolean;
+var
+  p: PUtf8Char;
+begin
+  p := pointer(ElementName);
+  result := (p <> nil) and
+            Next(p, PStrLen(p - _STRLEN)^);
+end;
+
+function TXmlParser.Next(ElementName: PUtf8Char; ElementLen: PtrInt): boolean;
+var
+  level: byte;
+begin
+  result := false;
+  if ElementLen <= 0 then
+    exit;
+  while true do
+    case ParseNext of
+      xtEof,
+      xtError:
+        exit;
+      xtElementStart:
+        begin
+          if (Name.Len = ElementLen) and
+             CompareMemSmall(ElementName, Name.Text, ElementLen) then // inlined
+            break;
+          level := Depth; // inlined Skip
+          while true do
+            case ParseNext of
+              xtEof,
+              xtError:
+                exit;
+              xtElementEnd:
+                if Depth < level then
+                  break;
+            end;
+        end;
+    end;
+  result := true;
+end;
+
+function TXmlParser.Next(const ElementName: RawUtf8; var Doc: TDocVariantData;
+   DocOptions: TDocVariantOptions): boolean;
+begin
+  result := Next(ElementName) and
+            Consume(Doc, DocOptions);
+end;
+
+function TXmlParser.FindAny(ElementName: PUtf8Char; ElementLen: PtrInt): boolean;
+begin
+  result := false;
+  if ElementLen <= 0 then
+    exit;
+  while true do
+    case ParseNext of
+      xtEof,
+      xtError:
+        exit;
+      xtElementStart:
+        if (Name.Len = ElementLen) and
+           CompareMemSmall(ElementName, Name.Text, ElementLen) then // inlined
+          break;
+    end;
+  result := true;
+end;
+
 
 function ConvertToVariant(var x: TXmlParser; const Xml: RawUtf8; var Doc: variant;
   ParseOptions: TXmlParserOptions; DocOptions: TDocVariantOptions): TXmlParserError;
