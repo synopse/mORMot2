@@ -415,6 +415,10 @@ type
     /// raise the EXmlException corresponding to LastError/LastErrorLine
     // - do nothing if LastError = xpeNone
     procedure RaiseException;
+    /// save the current state of the parser (Position and Depth)
+    procedure Save(var Backup: TQWordRec);
+    /// save the current state of the parser (Position and Depth)
+    procedure Restore(const Backup: TQWordRec);
   private
     {$ifndef FPCX86NOTPIC}
     fTab: PAnsiCharToByte; // = XML_KIND[] lookup table (inlined on FPC only)
@@ -2009,6 +2013,22 @@ end;
 function TXmlParser.Position: PtrInt;
 begin
   result := fToken - fBegin;
+end;
+
+procedure TXmlParser.Save(var Backup: TQWordRec);
+begin
+  Backup.H := fCur - fBegin;
+  Backup.B[0] := Depth;
+  Backup.B[1] := ord(Kind);
+end;
+
+procedure TXmlParser.Restore(const Backup: TQWordRec);
+begin
+  if fBegin + Backup.H > fCur then
+    EXmlException.RaiseU('TXmlParser.Restore: no forward possible');
+  fCur := fBegin + Backup.H;
+  Depth := Backup.B[0];
+  Kind := TXmlToken(Backup.B[1]);
 end;
 
 function TXmlParser.ParseNext: TXmlToken;
