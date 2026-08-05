@@ -2447,27 +2447,20 @@ begin
   result := false;
   if ElementLen <= 0 then
     exit;
+  level := Depth;
   while true do
     case ParseNext of
       xtEof,
       xtError:
-        exit;
+        exit;  // abort searching
       xtElementStart:
-        begin
-          if (Name.Len = ElementLen) and
-             CompareMemSmall(ElementName, Name.Text, ElementLen) then // inlined
-            break;
-          level := Depth; // inlined Skip
-          while true do
-            case ParseNext of
-              xtEof,
-              xtError:
-                exit;
-              xtElementEnd:
-                if Depth < level then
-                  break;
-            end;
-        end;
+        if (Name.Len = ElementLen) and
+           (Depth = level + 1) and
+           CompareMemSmall(ElementName, Name.Text, ElementLen) then // inlined
+          break; // found the right name
+      xtElementEnd:
+        if Depth < level then
+          exit;  // reached end of this level
     end;
   result := true;
 end;
