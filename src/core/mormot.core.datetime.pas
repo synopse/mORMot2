@@ -1278,7 +1278,15 @@ type
     function Idem(const Value: RawUtf8): boolean;
       {$ifdef HASSAFEINLINE}inline;{$endif}
     /// case-sensitive comparison with the stored text Value
-    function Equal(const Value: RawUtf8): boolean;
+    function Equal(const Value: RawUtf8): boolean; overload;
+      {$ifdef HASSAFEINLINE}inline;{$endif}
+    /// case-sensitive comparison with the stored text Value
+    function Equal(Value: PUtf8Char; ValueLen: PtrInt): boolean; overload;
+      {$ifdef HASSAFEINLINE}inline;{$endif}
+    /// CSV case-sensitive matching index with the stored text Value
+    // - returns -1 if Value/Len was not found, or the 0-based index in csv
+    // - e.g. Equal('two') means Match('one,two')=1
+    function Match(csv: PUtf8Char; sep: AnsiChar = ','): integer;
   end;
   PValuePUtf8Char = ^TValuePUtf8Char;
   /// used e.g. by JsonDecode() overloaded function to returns values
@@ -4477,6 +4485,34 @@ begin
   result := (length(Value) = Len) and
             ((Len = 0) or
              CompareMemSmall(pointer(Value), Text, Len)); // inlined
+end;
+
+function TValuePUtf8Char.Equal(Value: PUtf8Char; ValueLen: PtrInt): boolean;
+begin
+  result := (ValueLen = Len) and
+            ((Len = 0) or
+             CompareMemSmall(Value, Text, Len)); // inlined
+end;
+
+function TValuePUtf8Char.Match(csv: PUtf8Char; sep: AnsiChar): integer;
+var
+  l: PtrInt;
+begin
+  result := 0;
+  if csv <> nil then
+    repeat
+      l := PosChar0(csv, sep) - csv; // use fast SSE2 asm on x86_64
+      if (l = Len) and
+         ((l = 0) or
+          CompareMemSmall(csv, Text, l)) then
+        exit;
+      inc(csv, l);
+      if csv^ = #0 then
+        break;
+      inc(csv);
+      inc(result); // 0,1,2..
+    until false;
+  result := -1;
 end;
 
 
