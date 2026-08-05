@@ -371,6 +371,15 @@ type
     /// iterate until a given element name is reached anywhere in the content
     // - used e.g. to implement Find('//book')
     function FindAny(ElementName: PUtf8Char; ElementLen: PtrInt): boolean;
+    /// consume the current element subtree into a TDocVariant
+    // - expects to be on xtElementStart, and goes to the matching xtElementEnd
+    // - any attribute would be included as '@name' TDocVariant fields
+    function Consume(var Doc: TDocVariantData;
+      DocOptions: TDocVariantOptions = JSON_XML): boolean;
+    /// consume the current element subtree as text
+    // - expects to be on xtElementStart, and goes to the matching xtElementEnd
+    // - ignores any attributes and nested elements
+    function ConsumeText(var Dest: RawUtf8): boolean;
     /// the offset of the current token in the input buffer
     // - could be used to store a position, then resume a scan from it
     function Position: PtrInt;
@@ -2420,6 +2429,38 @@ begin
         if (Name.Len = ElementLen) and
            CompareMemSmall(ElementName, Name.Text, ElementLen) then // inlined
           break;
+    end;
+  result := true;
+end;
+
+function TXmlParser.Consume(var Doc: TDocVariantData;
+  DocOptions: TDocVariantOptions): boolean;
+begin
+  TSynVarData(Doc).VType := _VType(DocOptions, dvObject); // fast Init()
+  Doc.Void; // as required by ToDocVariant and to allow several Consume() calls
+  result := false;
+  if Kind <> xtElementStart then
+    exit;
+  ToDocVariant(@Doc);
+  result := Kind in [xtEof, xtElementEnd];
+end;
+
+function TXmlParser.ConsumeText(var Dest: RawUtf8): boolean;
+begin
+  FastAssignNew(Dest);
+  result := false;
+  while true do
+    case ParseNext of
+      xtEof,
+      xtError:
+        exit;
+      xtElementStart:
+        Skip;
+      xtElementEnd:
+        break;
+      xtText,
+      xtCData:
+        ValueAppendToUtf8(Dest);
     end;
   result := true;
 end;
