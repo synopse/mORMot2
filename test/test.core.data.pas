@@ -156,6 +156,8 @@ type
     procedure XmlSaxBoundaries;
     /// XmlToVariant/TryXmlToVariant/XmlToJson mapping conventions
     procedure XmlToVariant;
+    /// Find/Next/Consume* methods
+    procedure XmlParserConsume;
     /// parse YAML happy paths and compare TDocVariantData.ToJson
     procedure YamlParseGoldenReferences;
     /// parse then serialize then parse, compare equivalence
@@ -9171,6 +9173,7 @@ begin
   XmlSaxErrors;
   XmlSaxBoundaries;
   XmlToVariant;
+  XmlParserConsume;
 end;
 
 procedure TTestCoreProcess.XmlWalk(var p: TXmlParser; kind: TXmlToken;
@@ -9705,6 +9708,102 @@ begin
   CheckEqual(VariantSaveJson(doc), '{"a":{"b":"1"}}');
   Check(TryXmlToVariant('<a><b></a>', doc) = xpeWrongEndTag, 'try mismatch');
   CheckEqual(_Safe(doc)^.Count, 0);
+end;
+
+procedure TTestCoreProcess.XmlParserConsume;
+const
+  _XML: RawUtf8 = '<root>' +
+                    '<header>' +
+                      '<version>2.4</version>' +
+                      '<author>Some rodent</author>' +
+                      '<catalog>Trap for Next(''catalog'')</catalog>' +
+                    '</header>' +
+                    '<catalog>' +
+                      '<book id="1">' +
+                        '<title>mORMot</title>' +
+                        '<comment lng="en">Nice species</comment>' +
+                        '<price>42</price>' +
+                      '</book>' +
+                      '<book id="2">' +
+                        '<title>Delphi</title>' +
+                        '<price>99</price>' +
+                      '</book>' +
+                    '</catalog>' +
+                    '<footer>done</footer>' +
+                  '</root>';
+var
+  x: TXmlParser;
+  title, json, footer: RawUtf8;
+  header, comment, book, doc, catalog: TDocVariantData;
+  price: currency;
+  n, id: integer;
+begin
+  // the natural way using the hybrix SAX/DOM
+  n := 0;
+  if x.Init(_XML).Find('/root/catalog') then
+    while x.Next('book', book) do
+    begin
+      id      := book.I['@id'];
+      title   := book.U['title'];
+      price   := book['price'];
+      comment := book.O['comment']^;
+      Check((id = 1) or (id = 2), 'id');
+      Check((title = 'mORMot') or (title = 'Delphi'), 'title');
+      Check((price = 42) or (price = 99), 'price');
+      if id = 1 then
+        CheckEqual(comment.ToJson, '{"@lng":"en","#text":"Nice species"}')
+      else
+        CheckEqual(comment.Count, 0, 'comment');
+      inc(n);
+    end;
+  CheckEqual(n, 2);
+  Check(x.Kind = xtEof, 'next(book) eof');
+  Check(x.Find('/root/header'));
+  Check(x.Kind = xtElementStart, 'find1');
+  Check(x.Consume(header), 'consume(header)');
+  Check(x.Kind = xtElementEnd, 'after consume(header)');
+  json := header.ToJson;
+  CheckEqual(json, '{"version":"2.4","author":"Some rodent",' +
+    '"catalog":"Trap for Next(''catalog'')"}');
+  Check(x.Rewind.Find('root'));
+  Check(x.Find('header'));
+  Check(x.Consume(header));
+  CheckEqual(header.ToJson, json);
+  Check(x.Rewind.Find('root/header'));
+  Check(x.Consume(header));
+  CheckEqual(header.ToJson, json);
+  Check(not x.Find('root/header'));
+  Check(not x.Consume(header));
+  CheckNotEqual(header.ToJson, json);
+  Check(not x.Find('/root/hEader'));
+  Check(not x.Find('/roo/header'));
+  Check(x.Find('/root/footer'));
+  Check(x.Kind = xtElementStart, 'find2');
+  CheckNotEqual(footer, 'done');
+  Check(x.ConsumeText(footer));
+  CheckEqual(footer, 'done');
+  Check(x.Kind = xtElementEnd, 'after consumetext(title)');
+  footer := '';
+  Check(x.Find('/root/footer'));
+  Check(x.ConsumeText(footer));
+  CheckEqual(footer, 'done');
+  Check(x.Find('/root/catalog'));
+  Check(x.Consume(book));
+  CheckEqual(book.ToJson, '{"book":[{"@id":"1","title":"mORMot",' +
+    '"comment":{"@lng":"en","#text":"Nice species"},"price":"42"},' +
+    '{"@id":"2","title":"Delphi","price":"99"}]}');
+  catalog.InitFast;
+  x.Rewind;
+  while x.Find('//catalog') do
+  begin
+    Check(x.Consume(doc));
+    catalog.AddItem(doc);
+  end;
+  CheckEqual(catalog.ToJson,
+    '["Trap for Next(''catalog'')",{"book":[{"@id":"1","title":"mORMot","comme' +
+    'nt":{"@lng":"en","#text":"Nice species"},"price":"42"},{"@id":"2","title"' +
+    ':"Delphi","price":"99"}]}]');
+  Check(not x.Rewind.Find('//katalog'));
 end;
 
 
