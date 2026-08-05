@@ -4312,6 +4312,9 @@ var
 procedure VarClear(var v: variant); inline;
 {$endif HASINLINE}
 
+/// calls VarClear(v[]) on all supplied variant pointers
+procedure VarClearSeveral(const v: array of PVariant);
+
 /// overloaded function which can be properly inlined to clear a variant
 procedure VarClearAndSetType(var v: variant; vtype: integer);
   {$ifdef HASINLINE}inline;{$endif}
@@ -4880,6 +4883,22 @@ begin
     TSynVarData(v).VType := 0;
 end;
 {$endif HASINLINE}
+
+procedure VarClearSeveral(const v: array of PVariant);
+var
+  i: PtrInt;
+  p: ^PSynVarData;
+begin
+  p := @v[0];
+  for i := 0 to high(v) do
+  begin
+    if (p^.VType and VTYPE_STATIC) <> 0 then
+      VarClearProc(p^.Data)
+    else
+      p^.VType := 0;
+    inc(p);
+  end;
+end;
 
 {$ifdef CPUARM}
 function ToByte(value: cardinal): cardinal;
