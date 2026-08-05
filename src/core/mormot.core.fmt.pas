@@ -1896,7 +1896,7 @@ begin
   Name.Text := p;
   if xpoStripNamespacePrefix in Options then
     while (p < e) and
-          (fTab[p^] = 0) do
+          ({$ifdef FPCX86NOTPIC} XML_KIND {$else} fTab^ {$endif}[p^] = 0) do
     begin
       if p^ = ':' then
         Name.Text := p + 1;
@@ -1904,7 +1904,7 @@ begin
     end
   else
     while (p < e) and
-          (fTab[p^] = 0) do
+          ({$ifdef FPCX86NOTPIC} XML_KIND {$else} fTab^ {$endif}[p^] = 0) do
       inc(p);
   Name.Len := p - Name.Text;
   while (p < e) and
@@ -6601,10 +6601,10 @@ begin
   esc['&']  := 6;
   esc['"']  := 7;
   esc[''''] := 8;
-  FillCharFast(XML_KIND, 33, 1); // #0..' '
+  FillCharFast(XML_KIND, 33, 1); // #0..#32 " ' / < > = ?
   esc := @XML_KIND;
   esc['"']  := 1;
-  esc['''']  := 1;
+  esc[''''] := 1;
   esc['/']  := 1;
   esc['<']  := 1;
   esc['>']  := 1;
