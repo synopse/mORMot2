@@ -9178,7 +9178,7 @@ procedure TTestCoreProcess.XmlWalk(var p: TXmlParser; kind: TXmlToken;
 var
   n, v: RawUtf8;
 begin
-  Check(p.Next = kind, 'no more tokens');
+  Check(p.ParseNext = kind, 'no more tokens');
   Check(p.Kind = kind, 'kind');
   p.NameToUtf8(n);
   Check(p.ValueToUtf8(v), 'valuetoutf8');
@@ -9198,7 +9198,7 @@ begin
   try
     p.Init(Xml, Options);
     Check(p.LastError = xpeNone);
-    while p.Next <> xtEof do
+    while p.ParseNext <> xtEof do
     begin
       p.NameToUtf8(n);
       p.ValueToUtf8(v); // may set xpeXmlUnescapeFailed
@@ -9212,7 +9212,7 @@ begin
   // check properly return xtError with xpoNoException option
   p.Init(Xml, Options + [xpoNoException]);
   Check(p.LastError = xpeNone);
-  while not (p.Next in [xtEof, xtError]) do
+  while not (p.ParseNext in [xtEof, xtError]) do
   begin
     Check(p.LastError = xpeNone);
     p.ValueToUtf8(v); // may set xtError and xpeXmlUnescapeFailed
@@ -9236,6 +9236,7 @@ var
   p: TXmlParser;
 begin
   p.Init(XML1);
+  Check(p.Kind = xtNotStarted, 'not started');
   Check(p.LastError = xpeNone);
   CheckEqual(p.Depth, 0);
   XmlWalk(p, xtElementStart, 'root');
@@ -9254,9 +9255,9 @@ begin
   XmlWalk(p, xtText, '', 'tail');
   XmlWalk(p, xtElementEnd, 'root');
   CheckEqual(p.Depth, 0);
-  Check(p.Next = xtEof, 'eof');
+  Check(p.ParseNext = xtEof, 'eof');
   Check(p.Kind = xtEof);
-  Check(p.Next = xtEof, 'still eof');
+  Check(p.ParseNext = xtEof, 'still eof');
   Check(p.LastError = xpeNone);
 end;
 
@@ -9274,7 +9275,7 @@ begin
   XmlWalk(p, xtAttribute, 'q', '"''');
   XmlWalk(p, xtText, '', '<&> ABc ' + unicode);
   XmlWalk(p, xtElementEnd, 'r');
-  Check(p.Next = xtEof);
+  Check(p.ParseNext = xtEof);
   // the shared NumCharToUcs4() decoder is also wired into HTML unescape
   CheckEqual(HtmlUnescape('x &#65;&#x42; &amp; y'), 'x AB & y');
 end;
@@ -9292,7 +9293,7 @@ begin
   XmlWalk(p, xtElementStart, 'ns:b');
   XmlWalk(p, xtElementEnd, 'ns:b');
   XmlWalk(p, xtElementEnd, 'ns:a');
-  Check(p.Next = xtEof);
+  Check(p.ParseNext = xtEof);
   // ... but can be stripped on request
   p.Init(s, [xpoStripNamespacePrefix]);
   XmlWalk(p, xtElementStart, 'a');
@@ -9300,7 +9301,7 @@ begin
   XmlWalk(p, xtElementStart, 'b');
   XmlWalk(p, xtElementEnd, 'b');
   XmlWalk(p, xtElementEnd, 'a');
-  Check(p.Next = xtEof);
+  Check(p.ParseNext = xtEof);
   // comments and processing instructions on request
   p.Init(XML1, [xpoKeepComments, xpoKeepPI]);
   XmlWalk(p, xtPI, 'xml', 'version="1.0" encoding="UTF-8"');
@@ -9316,7 +9317,7 @@ begin
   XmlWalk(p, xtComment, '', ' a comment ');
   XmlWalk(p, xtText, '', 'tail');
   XmlWalk(p, xtElementEnd, 'root');
-  Check(p.Next = xtEof);
+  Check(p.ParseNext = xtEof);
   // pure whitespace text nodes on request
   p.Init('<a>  <b/>  </a>', [xpoKeepWhiteSpace]);
   XmlWalk(p, xtElementStart, 'a');
@@ -9325,7 +9326,7 @@ begin
   XmlWalk(p, xtElementEnd, 'b');
   XmlWalk(p, xtText, '', '  ');
   XmlWalk(p, xtElementEnd, 'a');
-  Check(p.Next = xtEof);
+  Check(p.ParseNext = xtEof);
 end;
 
 procedure TTestCoreProcess.XmlSaxErrors;
@@ -9386,7 +9387,7 @@ var
     tok := 0;
     err := '';
     try
-      while x.Next <> xtEof do
+      while x.ParseNext <> xtEof do
       begin
         inc(tok);
         // an empty text token would mean the end of buffer was mis-detected
@@ -9398,7 +9399,7 @@ var
       CheckEqual(x.Position, len);
       Check(x.Depth = 0, Context);
       Check(x.Kind = xtEof, Context);
-      Check(x.Next = xtEof, Context); // idempotent at eof
+      Check(x.ParseNext = xtEof, Context); // idempotent at eof
       Check(x.Depth = 0, Context);
       CheckEqual(x.Position, len);
     except
@@ -9420,7 +9421,7 @@ var
     err := '';
     try
       x.Init(Xml, Options);
-      while x.Next <> xtEof do
+      while x.ParseNext <> xtEof do
       begin
         x.NameToUtf8(n);
         Check(x.ValueToUtf8(v), 'valuetoutf82');
@@ -9442,7 +9443,7 @@ var
     Reason := '';
     try
       x.Init(Xml);
-      while x.Next <> xtEof do
+      while x.ParseNext <> xtEof do
         if x.Kind = xtElementStart then
           inc(result);
     except
@@ -9487,7 +9488,7 @@ begin
   XmlWalk(p, xtElementStart, 'a');
   XmlWalk(p, xtText, '', '  hello'); // two leading blanks are preserved
   XmlWalk(p, xtElementEnd, 'a');
-  Check(p.Next = xtEof);
+  Check(p.ParseNext = xtEof);
   p.Init('<p><b>Hi</b> there</p>');
   XmlWalk(p, xtElementStart, 'p');
   XmlWalk(p, xtElementStart, 'b');
@@ -9495,14 +9496,14 @@ begin
   XmlWalk(p, xtElementEnd, 'b');
   XmlWalk(p, xtText, '', ' there'); // one leading blank is preserved
   XmlWalk(p, xtElementEnd, 'p');
-  Check(p.Next = xtEof);
+  Check(p.ParseNext = xtEof);
   // but a pure-blank text node is still ignored, unless asked for
   p.Init('<a>  <b/>  </a>');
   XmlWalk(p, xtElementStart, 'a');
   XmlWalk(p, xtElementStart, 'b');
   XmlWalk(p, xtElementEnd, 'b');
   XmlWalk(p, xtElementEnd, 'a');
-  Check(p.Next = xtEof);
+  Check(p.ParseNext = xtEof);
   CheckEqual(XmlToJson('<a> both </a>'), '{"a":" both "}');
   CheckEqual(XmlToJson('<p>Hello <b>x</b> world</p>'),
     '{"p":{"b":"x","#text":"Hello  world"}}');
@@ -9526,12 +9527,12 @@ begin
   CheckEqual(p.Value.Len, 0, 'blanks-only PI body');
   XmlWalk(p, xtElementStart, 'a');
   XmlWalk(p, xtElementEnd, 'a');
-  Check(p.Next = xtEof);
+  Check(p.ParseNext = xtEof);
   p.Init('<?pi  x  ?><a/>', [xpoKeepPI]);
   XmlWalk(p, xtPI, 'pi', 'x');
   XmlWalk(p, xtElementStart, 'a');
   XmlWalk(p, xtElementEnd, 'a');
-  Check(p.Next = xtEof);
+  Check(p.ParseNext = xtEof);
   // truncated markup is still rejected, i.e. the fixes above did not open up
   XmlExpectRaise(xpeEofInCdata, 'cdata cut', '<a/><![CDATA[x]]');
   XmlExpectRaise(xpeEofInCdata, 'cdata cut 2', '<a/><![CDATA[x]');
@@ -9550,11 +9551,11 @@ begin
   SetString(maxcp, PAnsiChar(@buf), Ucs4ToUtf8($10ffff, @buf)); // no literal
   p.Init('<a>&#x10FFFF;</a>');
   XmlWalk(p, xtElementStart, 'a');
-  Check(p.Next = xtText);
+  Check(p.ParseNext = xtText);
   Check(p.ValueToUtf8(v), 'valuetoutf83');
   CheckEqual(v, maxcp, 'highest code point');
   XmlWalk(p, xtElementEnd, 'a');
-  Check(p.Next = xtEof);
+  Check(p.ParseNext = xtEof);
   XmlExpectRaise(xpeXmlUnescapeFailed, 'above range', '<a>&#x110000;</a>');
   XmlExpectRaise(xpeXmlUnescapeFailed, 'above range dec', '<a>&#1114112;</a>');
   XmlExpectRaise(xpeXmlUnescapeFailed, 'way above range', '<a>&#xFFFFFFF;</a>');
@@ -9621,7 +9622,7 @@ begin
   XmlWalk(p, xtElementStart, u);
   CheckEqual(p.Name.Len, 255, '255-bytes name length');
   XmlWalk(p, xtElementEnd, u);
-  Check(p.Next = xtEof);
+  Check(p.ParseNext = xtEof);
   Join(['<', RawUtf8OfChar('n', 256), '/>'], u);
   XmlExpectRaise(xpeTagNameTooLong, '256-bytes name', u);
   // 5. no byte at all may be read past the end of the input buffer, i.e. the
