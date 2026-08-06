@@ -344,16 +344,16 @@ type
     // - on real data, parsing is done at 2GB/s so Rewind is a common/fair task
     function Rewind: PXmlParser;
     /// iterate over a given path until an element location is reached
-    // - together with Next(name,TDocVariant) is the recommended API for TXmlParser
+    // - with Consume(name,TDocVariant) is the recommended API for TXmlParser
     // - '/root/catalog' calls Rewind to search from the document root
     // - 'catalog/book' search nested <catalog><book> from the current position
     // - '//book' path will find <book> anywhere from the current position
     // - no XPath //book/title, predicates, wildcards, attributes or namespaces
-    function Find(path: PUtf8Char; sep: AnsiChar = '/'): boolean;
+    function Find(Path: PUtf8Char; Sep: AnsiChar = '/'): boolean;
     /// iterate in document order and extract the next match as TDocVariant
     // - together with Find(path) is the recommended API for TXmlParser
     // - just a wrapper around Next(ElementName) + Consume(Doc)
-    function Next(const ElementName: RawUtf8; var Doc: TDocVariantData;
+    function Consume(const ElementName: RawUtf8; var Doc: TDocVariantData;
       DocOptions: TDocVariantOptions = JSON_XML): boolean; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// iterate to the next token of the input, returning xtEof when done
@@ -407,7 +407,7 @@ type
     // - expects to be on xtElementStart, and goes to the matching xtElementEnd
     // - any attribute would be included as '@name' TDocVariant fields
     function Consume(var Doc: TDocVariantData;
-      DocOptions: TDocVariantOptions = JSON_XML): boolean;
+      DocOptions: TDocVariantOptions = JSON_XML): boolean; overload;
     /// consume the current element subtree as text
     // - expects to be on xtElementStart, and goes to the matching xtElementEnd
     // - ignores any attributes and nested elements
@@ -2143,8 +2143,8 @@ begin
                      (p^ = '>') then
                     if Depth <> 0 then
                     begin
-                      dec(Depth);
                       inc(p);
+                      dec(Depth);
                       if (fStackLen[Depth] = Name.Len) and
                          ((xpoDontCheckEndTagName in Options) or
                           CompareMemSmall(fBegin + fStackPos[Depth],
@@ -2468,10 +2468,10 @@ begin
   result := true;
 end;
 
-function TXmlParser.Next(const ElementName: RawUtf8; var Doc: TDocVariantData;
+function TXmlParser.Consume(const ElementName: RawUtf8; var Doc: TDocVariantData;
    DocOptions: TDocVariantOptions): boolean;
 begin
-  result := Next(ElementName) and
+  result := Find(pointer(ElementName)) and
             Consume(Doc, DocOptions);
 end;
 
