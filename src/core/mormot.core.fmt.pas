@@ -371,6 +371,11 @@ type
     // !            x.ConsumeText(s) and
     // !            (s = 'arcsec') then
     // !           inc(n);
+    // - note: ForEach() preserves the outer parser position by internally
+    // using Save()/RestoreAndSkip(). When the loop body scans most of each
+    // subtree, this may require parsing that subtree twice. For maximum
+    // performance, prefer Consume() over the smallest possible subtree and
+    // access the data using TDocVariant methods.
     function ForEach(const ElementName: RawUtf8; LoopSlot: byte): boolean;
     /// iterate to the next token of the input, returning xtEof when done
     // - may raise EXmlException or returns xtError if xpoNoException was set

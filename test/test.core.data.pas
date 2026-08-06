@@ -6763,6 +6763,122 @@ var
     end;
     Check(v2.Count = 0);
   end;
+
+  procedure OneProduct(const Json, Expected, Context: RawUtf8);
+  var
+    doc: TDocVariantData;
+    e: PDocVariantData;
+    s: RawUtf8;
+  begin
+    doc.InitJson(Json, mFast);
+    Check(doc.Count <> 0);
+    Check(doc.IsObject, 'obj');
+    for e in doc.Product('a.b') do
+      Append(s, [e^.I['c'], ' ']);
+    CheckEqual(s, Expected, Context);
+  end;
+
+  procedure DoProduct;
+  var
+    doc, a: TDocVariantData;
+    e: PDocVariantData;
+    s: RawUtf8;
+    i, n: integer;
+    timer: TPrecisionTimer;
+  begin
+    doc.InitJson('{"a":{"b":{"c":{"id":123}}}}', mFast);
+    n := 0;
+    for e in doc.Product('a.b.c') do
+    begin
+      inc(n);
+      CheckEqual(e^.I['id'], 123);
+    end;
+    CheckEqual(n, 1, 'no array');
+    doc.Clear;
+    doc.InitJson(
+      '{"a":{"b":[' +
+        '{"c":{"id":1}},' +
+        '{"c":{"id":2}},' +
+        '{"c":{"id":3}}]}}', mFast);
+    n := 0;
+    for e in doc.Product('a.b.c') do
+    begin
+      inc(n);
+      CheckEqual(e^.I['id'], n);
+    end;
+    CheckEqual(n, 3, 'one array');
+    doc.Clear;
+    doc.InitJson(
+      '{"a":[' +
+        '{"b":[{"c":{"id":1}},{"c":{"id":2}}]},' +
+        '{"b":[{"c":{"id":3}},{"c":{"id":4}}]}' +
+      ']}', mFast);
+    n := 0;
+    for e in doc.Product('a,b,c', ',') do
+    begin
+      inc(n);
+      CheckEqual(e^.I['id'], n);
+    end;
+    CheckEqual(n, 4, 'two arrays');
+    OneProduct(
+      '{"a":[' +
+        '{"b":{"c":1,"x":0}},' +
+        '{"b":[{"x":0,"c":2},{"c":3},{"x":0,"c":4}]}' +
+      ']}', '1 2 3 4 ', 'object after array');
+    OneProduct(
+      '{"a":{"b":[' +
+        '{"c":1},{"c":2},{"c":3}]}}',
+      '1 2 3 ', 'array after object');
+    OneProduct('{"a":[{"b":[{"c":1}]},{"b":{"c":2}},{"b":[{"c":3}]}]}',
+       '1 2 3 ', 'object/array siblings');
+    OneProduct('{"a":[{"b":{"c":1}},{},{"b":{"c":2}}]}',
+      '1 2 ', 'missing prop 0');
+    OneProduct('{"a":[{"b":{"c":1}},{"d":{"c":0}},{"b":{"c":2}},{}]}',
+      '1 2 ', 'missing prop 3');
+ (*   OneProduct('{"a":[{},{"b":{"c":1}},{"b":{"c":2}}]}',
+      '1 2 ', 'missing prop 1');
+    OneProduct('{"a":[{},{"b":{"c":1}},{"b":{"c":2}},{}]}',
+      '1 2 ', 'missing prop 2');*)
+    doc.Clear;
+    doc.InitJson(
+      '{"tableHead":{"fields":{"field":[' +
+        '{"units":"deg"},' +
+        '{"units":"arcsec"},' +
+        '{"units":"arcsec"}]}}}', mFast);
+    n := 0;
+    for e in doc.Product('tableHead.fields.field') do
+      if e^.U['units'] = 'arcsec' then
+        inc(n);
+    CheckEqual(n, 2, 'xml-like');
+    doc.Clear;
+    doc.InitJson('{"a":{"b":1}}', mFast);
+    n := 0;
+    for e in doc.Product('a.c.d') do
+      inc(n);
+    CheckEqual(n, 0, 'missing path');
+    doc.Clear;
+    doc.InitJson('{"a":{"b":[]}}', mFast);
+    n := 0;
+    for e in doc.Product('a.b') do
+      inc(n);
+    CheckEqual(n, 0, 'empty array');
+    // stress test - 100000 Product(a.b) in 1.87ms i.e. 51M/s, aver. 18ns
+    n := 1000;
+    a.InitFast(n, dvArray);
+    for i := 1 to n do
+      a.AddItem(_ObjFast(['b', _ObjFast(['rnd', Random32(100), 'c', i])]));
+    doc.Clear;
+    doc.InitObject(['a', variant(a)]);
+    timer.Start;
+    i := 0;
+    for e in doc.Product('a.b') do
+    begin
+      inc(i);
+      CheckEqual(e^.I['c'], i);
+    end;
+    CheckEqual(i, n);
+    NotifyTestSpeed('Product(a.b)', n, 0, @timer, {onlylog=}true);
+  end;
   {$endif HASITERATORS}
 
 const
@@ -7360,6 +7476,7 @@ begin
   CheckEqual(s, '{"ID":1,"Notation":"ABC","Price":10.1,"CustomNotation":"XYZ"}');
   {$ifdef HASITERATORS}
   DoEnumerators;
+  DoProduct;
   {$endif HASITERATORS}
   Doc.Clear;
   s := '[{a:1,b:2,c:0},{a:2,b:1,c:2},{b:3,c:1,a:1}]';
