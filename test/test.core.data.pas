@@ -6833,12 +6833,12 @@ var
        '1 2 3 ', 'object/array siblings');
     OneProduct('{"a":[{"b":{"c":1}},{},{"b":{"c":2}}]}',
       '1 2 ', 'missing prop 0');
-    OneProduct('{"a":[{"b":{"c":1}},{"d":{"c":0}},{"b":{"c":2}},{}]}',
-      '1 2 ', 'missing prop 3');
- (*   OneProduct('{"a":[{},{"b":{"c":1}},{"b":{"c":2}}]}',
+    OneProduct('{"a":[{"b":{"c":1}},{"d":{"c":0}},{"b":{"b":7,"c":2}},{}]}',
       '1 2 ', 'missing prop 1');
+    OneProduct('{"a":[{},{"b":{"c":1}},{"b":{"c":2}}]}',
+      '1 2 ', 'missing prop 2');
     OneProduct('{"a":[{},{"b":{"c":1}},{"b":{"c":2}},{}]}',
-      '1 2 ', 'missing prop 2');*)
+      '1 2 ', 'missing prop 3');
     doc.Clear;
     doc.InitJson(
       '{"tableHead":{"fields":{"field":[' +
