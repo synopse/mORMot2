@@ -4548,8 +4548,9 @@ begin
   assert(SizeOf(GlobalTime) = 128);
   assert(TTextDateWriter.InstanceSize <= SizeOf(TLocalWriter) - 256);
   // some mormot.core.text wrappers are implemented by this unit
-  _VariantToUtf8DateTimeIso8601 := DateTimeToIso8601TextVar;
-  _Iso8601ToDateTime            := Iso8601ToDateTime;
+  _VariantToUtf8DateTimeIso8601     := DateTimeToIso8601TextVar;
+  _VariantToTempUtf8DateTimeIso8601 := DateTimeToIso8601TempUtf8;
+  _Iso8601ToDateTime                := Iso8601ToDateTime;
 end;
 
 

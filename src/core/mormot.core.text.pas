@@ -1918,6 +1918,11 @@ procedure TempUtf8Done(var Res: TTempUtf8);
 function VariantToTempUtf8(const V: variant; var Res: TTempUtf8;
   Flags: TVariantToTempUtf8Flags = []): boolean;
 
+
+var /// used by VariantToTempUtf8() for TDateTime conversion
+  _VariantToTempUtf8DateTimeIso8601: procedure(DT: TDateTime;
+    FirstChar: AnsiChar; var result: TTempUtf8; WithMS: boolean);
+
 /// append any Variant to a TSynTempAdder using TTempUtf8
 procedure VariantToAdder(var Adder: TSynTempAdder; const V: variant;
   Flags: TVariantToTempUtf8Flags = []);
@@ -9142,7 +9147,7 @@ var
   vd: PVarData;
   vt: cardinal;
 label
-  n;
+  n, dt;
 begin
   result := false;             // wasString=false by default (assume numbers)
   Res.TempRawUtf8 := nil;      // no allocation by default - and avoid GPF
@@ -9206,20 +9211,14 @@ n:    if vfNullAsVoid in Flags then
     varSingle:
       DoubleToTempUtf8(vd^.VSingle, Res);
     varDouble:
-      DoubleToTempUtf8(vd^.VDouble, Res);
+dt:   DoubleToTempUtf8(vd^.VDouble, Res);
     varCurrency:
       Curr64ToTempUtf8(vd^.VInt64, Res);
     varDate:
-      if Flags * [vfNoAlloc, vfDateAsFloat] <> [] then
-        DoubleToTempUtf8(vd^.VDate, Res)
+      if vfDateAsFloat in Flags then
+        goto dt
       else
-      begin
-        result := true;
-        _VariantToUtf8DateTimeIso8601(vd^.VDate, 'T',
-          RawUtf8(Res.TempRawUtf8), false);
-        Res.Text := pointer(Res.TempRawUtf8);
-        Res.Len := length(RawUtf8(Res.TempRawUtf8));
-      end;
+        _VariantToTempUtf8DateTimeIso8601(vd^.VDate, 'T', Res, {withMS=}false);
     varOleStr:
       result := BStrToTempUtf8(vd^.VAny, Res, vfNoAlloc in Flags);
   else
@@ -11904,6 +11903,7 @@ begin
   AppendShortUuid               := _AppendShortUuid;
   _AddHtmlEscape                := __AddHtmlEscape;
   _VariantToUtf8DateTimeIso8601 := __VariantToUtf8DateTimeIso8601;
+  _VariantToTempUtf8DateTimeIso8601 := @__VariantToUtf8DateTimeIso8601;
   _VariantSaveJson              := __VariantSaveJson;
 end;
 
