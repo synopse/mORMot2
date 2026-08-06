@@ -3661,15 +3661,19 @@ begin
   {$ifdef FPCMM_REPORTMEMORYLEAKS}
   leaks := 0;
   {$endif FPCMM_REPORTMEMORYLEAKS}
+  p := @SmallBlockInfo;
   for i := 0 to high(SmallBlockInfo.SmallLastFree) do
   begin
     list := SmallBlockInfo.SmallLastFree[i];
+    SmallBlockInfo.SmallLastFree[i] := nil;
+    p^.LastFreeCount := 0;
     while list <> nil do
     begin
       next := list^;
       _FreeMem(list); // not a leak, just an unexpected context
       list := next;
     end;
+    inc(p);
   end;
   p := @SmallBlockInfo;
   for i := 1 to NumSmallInfoBlock do
