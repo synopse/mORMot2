@@ -356,6 +356,19 @@ type
     function Consume(const ElementName: RawUtf8; var Doc: TDocVariantData;
       DocOptions: TDocVariantOptions = JSON_XML): boolean; overload;
       {$ifdef HASINLINE} inline; {$endif}
+    /// iterate over the direct child elements matching a given name
+    // - preserves the outer parser position so Find(), Consume() or nested
+    // ForEach() calls may safely be used inside the loop
+    // - each nested loop should use its own slot identifier in the 0..31 range:
+    // ! if x.Rewind.Find('datasets') then
+    // !   while x.ForEach('dataset', 0) do
+    // !     if x.Find('tableHead/fields') then
+    // !       while x.ForEach('field', 1) do
+    // !         if x.Find('units') and
+    // !            x.ConsumeText(s) and
+    // !            (s = 'arcsec') then
+    // !           inc(n);
+    function ForEach(const ElementName: RawUtf8; LoopSlot: byte): boolean;
     /// iterate to the next token of the input, returning xtEof when done
     // - may raise EXmlException or returns xtError if xpoNoException was set
     // - so for the following XML:
@@ -422,6 +435,13 @@ type
     procedure Restore;
     /// consume/skip the element subtree from a former Save position
     function RestoreAndSkip: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// the offset of the current token in the input buffer
+    function Position: PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// raise the EXmlException corresponding to LastError/LastErrorLine
+    // - do nothing if LastError = xpeNone
+    procedure RaiseException;
   private
     {$ifndef FPCX86NOTPIC}
     fTab: PAnsiCharToByte; // = XML_KIND[] lookup table (inlined on FPC only)
@@ -2065,6 +2085,23 @@ function TXmlParser.RestoreAndSkip: boolean;
 begin
   Restore;
   result := Skip;
+end;
+
+function TXmlParser.ForEach(const ElementName: RawUtf8; LoopSlot: byte): boolean;
+var
+  flags: PBits32;
+begin
+  flags := @fStackPos[high(fStackPos)]; // unused 32-bit slot
+  if LoopSlot in flags^ then
+    RestoreAndSkip;
+  result := Next(ElementName);
+  if result then
+  begin
+    include(flags^, LoopSlot);
+    Save;
+  end
+  else
+    exclude(flags^, LoopSlot);
 end;
 
 function TXmlParser.ParseNext: TXmlToken;
