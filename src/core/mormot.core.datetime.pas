@@ -2098,6 +2098,7 @@ function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
 var
   vd: TVarData;
   vt: cardinal;
+  tmp: TTempUtf8;
 begin
   vt := TVarData(V).VType;
   if vt = varVariantByRef then
@@ -2128,7 +2129,11 @@ begin
       if SetVariantUnRefSimpleValue(V, vd{%H-}) then
         result := VariantToDateTime(variant(vd), Value)
       else
-        result := VariantToDateTime2(V, Value);
+      begin
+        VariantToTempUtf8(V, tmp, [vfNoAlloc]);
+        Iso8601ToDateTimePUtf8CharVar(tmp.Text, tmp.Len, Value);
+        result := Value <> 0;
+      end;
     end;
   end;
 end;
