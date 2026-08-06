@@ -371,12 +371,7 @@ type
     // !            x.ConsumeText(s) and
     // !            (s = 'arcsec') then
     // !           inc(n);
-    // - note: ForEach() preserves the outer parser position by internally
-    // using Save()/RestoreAndSkip(). When the loop body scans most of each
-    // subtree, this may require parsing that subtree twice. For maximum
-    // performance, prefer Consume() over the smallest possible subtree and
-    // access the data using TDocVariant methods.
-    function ForEach(const ElementName: RawUtf8; LoopSlot: byte): boolean;
+    function ForEach(const ElementName: RawUtf8; LoopSlot: cardinal): boolean;
     /// iterate to the next token of the input, returning xtEof when done
     // - may raise EXmlException or returns xtError if xpoNoException was set
     // - so for the following XML:
@@ -441,9 +436,9 @@ type
     procedure Save;
     /// restore the previous state of the parser (Position, Kind and Depth)
     procedure Restore;
-    /// consume/skip the element subtree from a former Save position
+    /// consume/skip the element subtree from a former Saved position level
+    // - faster than Restore + Skip since won't trully rewind the position
     function RestoreAndSkip: boolean;
-      {$ifdef HASINLINE}inline;{$endif}
     /// the offset of the current token in the input buffer
     function Position: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
@@ -2027,8 +2022,8 @@ begin
   {$ifndef FPCX86NOTPIC}
   fTab := @XML_KIND;
   {$endif FPCX86NOTPIC}
-  fStackLen[high(fStackLen)] := 0; // Save/Restore count
-  fStackPos[high(fStackPos)] := 0; // ForEach() flags
+  fStackLen[high(fStackLen)] := 0; // 8-bit Save/Restore count
+  fStackPos[high(fStackPos)] := 0; // 32-bit ForEach() flags
 end;
 
 function TXmlParser.Init(const Text: RawUtf8; ParserOptions: TXmlParserOptions): PXmlParser;
@@ -2062,10 +2057,10 @@ begin
   if i = high(fSave) then
     EXmlException.RaiseU('Too many TXmlParser.Save');
   s := @fSave[i];
-  s^.B[0] := ord(Kind);
-  s^.B[1] := Depth;
+  inc(i);
+  fStackLen[high(fStackLen)] := i;
+  s^.L := PCardinal(@Kind)^;
   s^.H := fCur - fBegin;
-  inc(fStackLen[high(fStackLen)]);
 end;
 
 procedure TXmlParser.Restore;
@@ -2080,8 +2075,7 @@ begin
   dec(i);
   fStackLen[high(fStackLen)] := i;
   s := @fSave[i];
-  Kind := TXmlToken(s^.B[0]);
-  Depth := s^.B[1];
+  PWord(@Kind)^ := s^.L; // B[0]=Kind B[1]=Depth
   p := fBegin + s^.H;
   if p <= fCur then
     fCur := p
@@ -2090,23 +2084,43 @@ begin
 end;
 
 function TXmlParser.RestoreAndSkip: boolean;
+var
+  i: PtrInt;
+  level: byte;
 begin
-  Restore;
-  result := Skip;
+  result := false;
+  i := fStackLen[high(fStackLen)]; // fSave[] count
+  if i = 0 then
+    exit;
+  dec(i);
+  fStackLen[high(fStackLen)] := i;
+  level := fSave[i].B[1]; // Skip logic from current back to the Saved level
+  while true do
+    case ParseNext of
+      xtEof,
+      xtError:
+        exit;
+      xtElementEnd:
+        if Depth < level then
+          break;
+    end;
+  result := true;
 end;
 
-function TXmlParser.ForEach(const ElementName: RawUtf8; LoopSlot: byte): boolean;
+function TXmlParser.ForEach(const ElementName: RawUtf8; LoopSlot: cardinal): boolean;
 var
   flags: PBits32;
 begin
+  result := false;
   flags := @fStackPos[high(fStackPos)]; // unused 32-bit slot
   if LoopSlot in flags^ then
-    RestoreAndSkip;
-  result := Next(ElementName);
-  if result then
+    if not RestoreAndSkip then
+      exit;
+  if Next(ElementName) then
   begin
     include(flags^, LoopSlot);
     Save;
+    result := true;
   end
   else
     exclude(flags^, LoopSlot);
