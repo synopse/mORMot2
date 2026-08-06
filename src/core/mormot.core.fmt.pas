@@ -419,10 +419,13 @@ type
     /// raise the EXmlException corresponding to LastError/LastErrorLine
     // - do nothing if LastError = xpeNone
     procedure RaiseException;
-    /// save the current state of the parser (Position and Depth)
-    procedure Save(var Backup: TXmlState);
-    /// save the current state of the parser (Position and Depth)
-    procedure Restore(const Backup: TXmlState);
+    /// save the current state of the parser (Position, Kind and Depth)
+    // - up to 32 Save/Restore nested levels are allowed
+    procedure Save;
+    /// restore the previous state of the parser (Position, Kind and Depth)
+    procedure Restore;
+    /// consume/skip the element subtree from a former Save position
+    function RestoreAndSkip: boolean;
   private
     {$ifndef FPCX86NOTPIC}
     fTab: PAnsiCharToByte; // = XML_KIND[] lookup table (inlined on FPC only)
@@ -431,6 +434,7 @@ type
     // up to 256 levels of 32-bit offsets from fNameOrigin and 255-byte names
     fStackLen: array[byte] of byte;
     fStackPos: array[byte] of cardinal;
+    fSave: array[0..31] of TQwordRec; // Save/Restore stack (len=fStackLen[255])
   end;
 
 const
@@ -1999,6 +2003,8 @@ begin
   {$ifndef FPCX86NOTPIC}
   fTab := @XML_KIND;
   {$endif FPCX86NOTPIC}
+  fStackLen[high(fStackLen)] := 0; // Save/Restore count
+  fStackPos[high(fStackPos)] := 0; // ForEach() flags
 end;
 
 function TXmlParser.Init(const Text: RawUtf8; ParserOptions: TXmlParserOptions): PXmlParser;
@@ -2023,20 +2029,46 @@ begin
   result := fToken - fBegin;
 end;
 
-procedure TXmlParser.Save(var Backup: TXmlState);
+procedure TXmlParser.Save;
+var
+  i: PtrInt;
+  s: PQwordRec;
 begin
-  Backup.H := fCur - fBegin;
-  Backup.B[0] := Depth;
-  Backup.B[1] := ord(Kind);
+  i := fStackLen[high(fStackLen)]; // unused slot for fSave[] count
+  if i = high(fSave) then
+    EXmlException.RaiseU('Too many TXmlParser.Save');
+  s := @fSave[i];
+  s^.B[0] := ord(Kind);
+  s^.B[1] := Depth;
+  s^.H := fCur - fBegin;
+  inc(fStackLen[high(fStackLen)]);
 end;
 
-procedure TXmlParser.Restore(const Backup: TXmlState);
+procedure TXmlParser.Restore;
+var
+  p: PUtf8Char;
+  i: PtrInt;
+  s: PQwordRec;
 begin
-  if fBegin + Backup.H > fCur then
+  i := fStackLen[high(fStackLen)]; // fSave[] count
+  if i = 0 then
+    EXmlException.RaiseU('Missing TXmlParser.Save');
+  dec(i);
+  fStackLen[high(fStackLen)] := i;
+  s := @fSave[i];
+  Kind := TXmlToken(s^.B[0]);
+  Depth := s^.B[1];
+  p := fBegin + s^.H;
+  if p <= fCur then
+    fCur := p
+  else
     EXmlException.RaiseU('TXmlParser.Restore: no forward possible');
-  fCur := fBegin + Backup.H;
-  Depth := Backup.B[0];
-  Kind := TXmlToken(Backup.B[1]);
+end;
+
+function TXmlParser.RestoreAndSkip: boolean;
+begin
+  Restore;
+  result := Skip;
 end;
 
 function TXmlParser.ParseNext: TXmlToken;
