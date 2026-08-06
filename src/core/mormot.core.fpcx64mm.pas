@@ -3600,15 +3600,26 @@ var
   medium, nextmedium: PMediumBlockPoolHeader;
   bin: PMediumFreeBlock;
   i: PtrInt;
+  {$ifdef FPCMM_REPORTMEMORYLEAKS}
   list, next: PPointer;
+  {$endif FPCMM_REPORTMEMORYLEAKS}
 begin
+  {$ifdef FPCMM_REPORTMEMORYLEAKS}
   list := Info.LastFree;
+  {$endif FPCMM_REPORTMEMORYLEAKS}
+  Info.LastFree := nil;
+  // All blocks in this list belong to pools released just below. A pending
+  // small-block pool has the same flag value as a large block, so the generic
+  // dispatcher would wrongly send it to FreeLargeBlock.
+  {$ifdef FPCMM_REPORTMEMORYLEAKS}
   while list <> nil do
   begin
     next := list^;
-    _FreeMem(list); // not a leak, just an unexpected context
+    PPtrUInt(PByte(list) - BlockHeaderSize)^ :=
+      PPtrUInt(PByte(list) - BlockHeaderSize)^ or IsFreeBlockFlag;
     list := next;
   end;
+  {$endif FPCMM_REPORTMEMORYLEAKS}
   medium := Info.PoolsCircularList.NextMediumBlockPoolHeader;
   while medium <> @Info.PoolsCircularList do
   begin
