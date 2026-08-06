@@ -934,6 +934,29 @@ type
     property Current: PDocVariantData
       read Value;
   end;
+
+  TDocVariantProductEnumeratorStack = record
+    Value: PDocVariantData;
+    Name: PUtf8Char;
+    NameLen: integer;
+    Index: integer; // Value^.VValue[Index] for dvArray or -1 for dvObject
+  end;
+
+  /// low-level Enumerator as returned by TDocVariantData.Product
+  TDocVariantProductEnumerator = record
+  private
+    Value: PDocVariantData;
+    Root: PDocVariantData;
+    StackCount: PtrInt;
+    Stack: array[0..31] of TDocVariantProductEnumeratorStack;
+  public
+    function MoveNext: boolean; { too complex to be inlined }
+    function GetEnumerator: TDocVariantProductEnumerator; inline;
+    /// returns the current Value as pointer to each TDocVariantData object
+    property Current: PDocVariantData
+      read Value;
+  end;
+
   {$endif HASITERATORS}
 
   /// how duplicated values could be searched
@@ -1575,6 +1598,17 @@ type
     /// a "for .. dv.Objects() do" enumerator for an array of objects sub-property
     // - document should be an object, with aName property as array of objects
     function Objects(const aName: RawUtf8): TDocVariantObjectsEnumerator; overload;
+    /// enumerate all nested objects matching a given property path
+    // - each path segment identifies an object property name, separated by ','
+    // - if an intermediate property is an array, all its items are traversed
+    // - if an intermediate property is an object, it is traversed directly
+    // - missing properties or incompatible values are silently ignored
+    // - intended for convenient navigation of XmlToVariant() DOM e.g.
+    // ! for f in dataset.Product('tableHead.fields.field') do
+    // !   if f.U['units'] = 'arcsec' then
+    // !     inc(n);
+    // - returns an enumerator over PDocVariantData matching the supplied path
+    function Product(Path: PUtf8Char; Sep: AnsiChar = '.'): TDocVariantProductEnumerator;
     {$endif HASITERATORS}
 
     /// save a document as UTF-8 encoded JSON
@@ -6252,6 +6286,89 @@ begin
   result := self;
 end;
 
+{ TDocVariantProductEnumerator }
+
+function SetProductStack(var st: TDocVariantProductEnumeratorStack; dv: PDocVariantData): PDocVariantData;
+var
+  ndx: PtrInt;
+begin
+  result := nil;
+  ndx := dv^.GetValueIndex(st.Name, st.NameLen, dv^.Has(dvoNameCaseSensitive));
+  if ndx < 0 then
+    exit;
+  dv := _Safe(dv^.VValue[ndx]);
+  if dv^.Count = 0 then
+    exit; // each level should be a true array or object, not a plain value
+  st.Value := dv;
+  st.Index := 0;  // default Value.VValue[Index] for dvArray
+  if dv.Has(dvoIsObject) then
+    dec(st.Index) // -1 for dvObject
+  else
+    dv := @dv^.VValue[0]; // return dv^.VValue[0] for dvArray
+  result := dv;
+end;
+
+function TDocVariantProductEnumerator.MoveNext: boolean;
+var
+  n, i, j: PtrInt;
+  st: ^TDocVariantProductEnumeratorStack;
+  ok: boolean;
+  parent: PDocVariantData;
+begin
+  result := false;
+  n := StackCount;
+  if n = 0 then
+    exit;
+  // we known that we can return the current Stack[hi].Value
+  i := n - 1;
+  st := @Stack[i];
+  Value := st^.Value;
+  if st^.Index >= 0 then
+    Value := _Safe(Value^.VValue[st^.Index]);
+  result := true;      // Value is correct
+  // check which dvArray indexes should be increased
+  StackCount := 0;     // disable next MoveNext() by default
+  repeat
+    j := st^.Index;
+    if j >= 0 then     // try next dvArray index
+    begin
+      inc(j);
+      if j < st^.Value^.Count then
+      begin
+        st^.Index := j;
+        parent := _Safe(st^.Value^.VValue[j]);
+        // rebuild remaining dvArray items using SetProductStack()
+        ok := true;
+        inc(st);
+        inc(i);
+        while i < n do
+        begin
+          parent := SetProductStack(st^, parent);
+          if parent = nil then
+          begin
+            ok := false;
+            break;
+          end;
+          inc(st);
+          inc(i);
+        end;
+        if ok then
+          break;
+      end;
+    end;
+    if i = 0 then
+      exit; // we exhausted all arrays
+    dec(st);
+    dec(i);
+  until false;
+  StackCount := n; // current Stack[hi].Value is correct: enable MoveNext()
+end;
+
+function TDocVariantProductEnumerator.GetEnumerator: TDocVariantProductEnumerator;
+begin
+  result := self;
+end;
+
 {$endif HASITERATORS}
 
 
@@ -7782,6 +7899,38 @@ begin
     result{%H-}.State.Void
   else
     result.State.Init(pointer(Values), VCount);
+end;
+
+function TDocVariantData.Product(Path: PUtf8Char; Sep: AnsiChar): TDocVariantProductEnumerator;
+var
+  st: ^TDocVariantProductEnumeratorStack;
+  dv: PDocVariantData;
+  n: PtrInt;
+begin
+  result.Root := @self;
+  result.StackCount := 0; // MoveNext() = false by default
+  if (VCount = 0) or
+     (Path = nil) then
+    exit;
+  n := 0;
+  dv := @self;
+  st := @result.Stack; // fill Stack[] with the first value to return
+  repeat
+    if n > high(result.Stack) then
+      EDocVariant.RaiseU('TDocVariantData.Product: too complex path');
+    st^.Name := Path;
+    st^.NameLen := PosChar0(Path, Sep) - Path; // use fast SSE2 asm on x86_64
+    dv := SetProductStack(st^, dv);
+    if dv = nil then
+      exit; // each level should be a true array or object
+    inc(n);
+    inc(Path, st^.NameLen);
+    if Path^ = #0 then
+      break;   // whole Path processed
+    inc(Path); // skip Sep
+    inc(st);   // fill next result.Stack[]
+  until false;
+  result.StackCount := n; // enable MoveNext()
 end;
 
 {$endif HASITERATORS}
