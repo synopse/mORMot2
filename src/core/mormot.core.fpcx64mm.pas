@@ -1659,7 +1659,7 @@ asm
         sub     rbx, r8
         sub     rbx, rcx
         jz      @Sml    // from Small[rcx] to Tiny[0][rcx]
-        lea     rax, [rax + rbx - TSmallBlockInfo.Tiny] // Tiny[+1][rcx]
+        lea     rax, [rax * 2 + rbx - TSmallBlockInfo.Tiny] // Tiny[+1][rcx]
 @Sml:   {$else}
         // fair distribution among calls to reduce thread contention
         {$ifdef FPCMM_BOOST}
