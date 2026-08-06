@@ -4653,7 +4653,7 @@ begin
     result := VariantCompSimple(PVariant(A)^, PVariant(B)^) // ordinal/float
   else if (at < varFirstCustom) and
           (bt < varFirstCustom) then
-    result := VariantCompAsText(A, B, caseInsensitive) // RawUtf8 convert
+    result := VariantCompAsTempUtf8(A, B, caseInsensitive) // TTempUtf8 convert
   else
   begin
     ah := FindSynVariantType(at);
@@ -4663,7 +4663,7 @@ begin
     else if bh <> nil then
       result := - bh.IntCompare(B^, A^, caseInsensitive)
     else
-      result := VariantCompAsText(A, B, caseInsensitive); // RawUtf8 convert
+      result := VariantCompAsTempUtf8(A, B, caseInsensitive); // TTempUtf8 convert
   end;
 end;
 
