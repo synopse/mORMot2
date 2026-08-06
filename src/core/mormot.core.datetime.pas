@@ -321,6 +321,10 @@ procedure DateTimeToIso8601TextVar(DT: TDateTime; FirstChar: AnsiChar;
 procedure DateTimeToIso8601StringVar(DT: TDateTime; FirstChar: AnsiChar;
   var result: string; WithMS: boolean = false);
 
+/// write a TDateTime into strict ISO-8601 date and/or time text as TTempUtf8
+procedure DateTimeToIso8601TempUtf8(DT: TDateTime; FirstChar: AnsiChar;
+  var Dest: TTempUtf8; WithMS: boolean);
+
 /// Write a Time to P^ Ansi buffer
 // - if Expanded is false, 'Thhmmss' time format is used
 // - if Expanded is true, 'Thh:mm:ss' time format is used
@@ -2081,13 +2085,13 @@ begin
   result := Dest;
 end;
 
-function VariantToDateTime2(const V: Variant; var Value: TDateTime): boolean;
+procedure DateTimeToIso8601TempUtf8(DT: TDateTime; FirstChar: AnsiChar;
+  var Dest: TTempUtf8; WithMS: boolean);
 var
-  tmp: RawUtf8; // sub-procedure to void hidden try..finally
+  T: TSynSystemTime;
 begin
-  VariantToUtf8(V, tmp);
-  Iso8601ToDateTimePUtf8CharVar(pointer(tmp), length(tmp), Value);
-  result := Value <> 0;
+  T.FromDateTime(DT);
+  T.ToTempUtf8(Dest, {expanded=}true, FirstChar, WithMS);
 end;
 
 function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
