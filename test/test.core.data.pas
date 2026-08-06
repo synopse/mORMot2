@@ -9739,19 +9739,18 @@ var
   header, comment, book, doc, catalog: TDocVariantData;
   price: currency;
   n, id: integer;
-  bak: TXmlState;
 begin
-  // the natural way using the hybrix SAX/DOM
+  // the natural way using the hybrix SAX/DOM mode via Find/Consume
   n := 0;
   if x.Init(_XML).Find('/root/catalog') then
-    while x.Next('book', book) do
+    while x.Consume('book', book) do
     begin
       id      := book.I['@id'];
       title   := book.U['title'];
       price   := book['price'];
       comment := book.O['comment']^;
       Check((id = 1) or (id = 2), 'id');
-      Check((title = 'mORMot') or (title = 'Delphi'), 'title');
+      Check((title = 'mORMot') or (title = 'Delphi'), 'title1');
       Check((price = 42) or (price = 99), 'price');
       if id = 1 then
         CheckEqual(comment.ToJson, '{"@lng":"en","#text":"Nice species"}')
@@ -9761,7 +9760,7 @@ begin
       CheckEqual(id, n);
     end;
   CheckEqual(n, 2, 'books');
-  Check(x.Kind = xtElementEnd, 'after next(book)');
+  Check(x.Kind = xtElementEnd, 'after Consume(book)');
   Check(x.Name.Equal('catalog'), '</catalog>');
   Check(x.Find('/root/header'));
   Check(x.Kind = xtElementStart, 'find1');
@@ -9810,15 +9809,39 @@ begin
      'nt":{"@lng":"en","#text":"Nice species"},"price":"42"},{"@id":"2","title"' +
      ':"Delphi","price":"99"}],"ignore":"nothing","pending":""}]');
   Check(not x.Rewind.Find('//katalog'));
+  // Structured Streaming search with Find/ForEach
   Check(x.Find('/root/catalog'));
+  x.Save;
+  x.Save;
   n := 0;
-  while x.Next('book', book) do
+  while x.ForEach('book', 0) do
+    if x.Find('title') and
+       x.ConsumeText(title) then
+    begin
+      Check((title = 'mORMot') or (title = 'Delphi'), 'title2');
+      inc(n);
+    end;
+  CheckEqual(n, 2);
+  x.Restore; // back to x.Find('/root/catalog'))
+  n := 0;
+  while x.Next('book') do
   begin
-    inc(n);
-    x.Save(bak);
-    Check(not x.Find('none'), 'none');
-    x.Restore(bak);
+    if x.GetU('title', title) then
+    begin
+      Check((title = 'mORMot') or (title = 'Delphi'), 'title2');
+      inc(n);
+    end;
+    x.Skip;
   end;
+  CheckEqual(n, 2);
+  x.Restore; // back to x.Find('/root/catalog'))
+  n := 0;
+  while x.ForEach('book', 0) do
+    if x.GetU('title', title) then
+    begin
+      Check((title = 'mORMot') or (title = 'Delphi'), 'title2');
+      inc(n);
+    end;
   CheckEqual(n, 2);
 end;
 
