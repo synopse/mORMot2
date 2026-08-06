@@ -634,6 +634,9 @@ type
     procedure ToIsoDate(out text: RawUtf8);
     /// convert the stored time into its Iso-8601 text with no date part nor Milliseconds
     procedure ToIsoTime(out text: RawUtf8; FirstTimeChar: RawUtf8 = 'T');
+    /// convert the stored date and time into Iso-8601 text
+    procedure ToTempUtf8(var Dest: TTempUtf8; Expanded: boolean = true;
+      FirstTimeChar: AnsiChar = 'T'; WithMS: boolean = false);
     /// convert the stored time into a TDateTime
     function ToDateTime: TDateTime;
     /// convert the stored time into a TUnixTime in seconds since UNIX Epoch
@@ -3052,6 +3055,19 @@ begin
     UInt2DigitsToShortFast(Hour),
     UInt2DigitsToShortFast(Minute),
     UInt2DigitsToShortFast(Second)], text);
+end;
+
+procedure TSynSystemTime.ToTempUtf8(var Dest: TTempUtf8; Expanded: boolean;
+  FirstTimeChar: AnsiChar; WithMS: boolean);
+var
+  p: PUtf8Char;
+begin
+  Dest.TempRawUtf8 := nil;
+  Dest.Text := @Dest.Temp;
+  p := DateToIso8601PChar(@Dest.Temp, Expanded, Year, Month, Day);
+  p := TimeToIso8601PChar(p, Expanded, Hour, Minute, Second, MilliSecond, FirstTimeChar, WithMS);
+  p^ := #0; // make ASCIIZ - Expanded+WithMS+#0 is just enough for [0..23]
+  Dest.Len := p - Dest.Text;
 end;
 
 function TSynSystemTime.ToDateTime: TDateTime;
