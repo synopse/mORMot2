@@ -1747,8 +1747,13 @@ procedure VariantSaveJson(const Value: variant; Escape: TTextWriterKind;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// internal low-level function to compare two variants with RawUt8 conversion
-// - as used e.g. by FastVarDataComp() for complex or diverse VType
+// - as used e.g. by FastVarDataComp() for complex VTypes
 function VariantCompAsText(A, B: PVarData; caseInsensitive: boolean): integer;
+
+/// internal low-level function to compare two variants with TTempUtf8 conversion
+// - as used e.g. by FastVarDataComp() for diverse non-complex VType
+function VariantCompAsTempUtf8(A, B: PVarData; caseInsensitive: boolean;
+  flags: TVariantToTempUtf8Flags = []): integer;
 
 var
   /// serialize a variant value into a JSON content
@@ -8728,6 +8733,21 @@ begin
   result := SortDynArrayAnsiStringByCase[caseInsensitive](au, bu);
   FastAssignNew(au);
   FastAssignNew(bu);
+end;
+
+function VariantCompAsTempUtf8(A, B: PVarData; caseInsensitive: boolean;
+  flags: TVariantToTempUtf8Flags): integer;
+var
+  at, bt: TTempUtf8;
+begin
+  VariantToTempUtf8(PVariant(A)^, at, flags);
+  VariantToTempUtf8(PVariant(B)^, bt, flags);
+  if caseInsensitive then
+    result := StrIComp(at.Text, bt.Text)
+  else
+    result := StrComp(at.Text, bt.Text);
+  TempUtf8Done(at);
+  TempUtf8Done(bt);
 end;
 
 function AnyTextToDouble(const Text: RawUtf8; out V: double): boolean;
