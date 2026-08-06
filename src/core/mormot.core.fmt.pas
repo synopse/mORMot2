@@ -399,10 +399,6 @@ type
     /// consume/skip the current element subtree
     // - expects to be on xtElementStart, and goes to the matching xtElementEnd
     function Skip: boolean;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// iterate until a given element name is reached anywhere in the content
-    // - used e.g. to implement Find('//book')
-    function FindAny(ElementName: PUtf8Char; ElementLen: PtrInt): boolean;
     /// consume the current element subtree into a TDocVariant
     // - expects to be on xtElementStart, and goes to the matching xtElementEnd
     // - any attribute would be included as '@name' TDocVariant fields
@@ -412,13 +408,13 @@ type
     // - expects to be on xtElementStart, and goes to the matching xtElementEnd
     // - ignores any attributes and nested elements
     function ConsumeText(var Dest: RawUtf8): boolean;
-    /// the offset of the current token in the input buffer
-    // - could be used to store a position, then resume a scan from it
-    function Position: PtrInt;
-      {$ifdef HASINLINE}inline;{$endif}
-    /// raise the EXmlException corresponding to LastError/LastErrorLine
-    // - do nothing if LastError = xpeNone
-    procedure RaiseException;
+    /// iterate until a given element name is reached anywhere in the content
+    // - used e.g. to implement Find('//book')
+    function FindAny(ElementName: PUtf8Char; ElementLen: PtrInt): boolean;
+    /// retrieve a text sub-value via Save+Find+ConsumeText+Restore
+    function GetU(Path: PUtf8Char; var V: RawUtf8): boolean;
+    /// retrieve an integer sub-value via Save+Find+ConsumeText+Restore+ToInt64
+    function GetI(Path: PUtf8Char; var V: Int64): boolean;
     /// save the current state of the parser (Position, Kind and Depth)
     // - up to 32 Save/Restore nested levels are allowed
     procedure Save;
@@ -2593,6 +2589,21 @@ begin
   result := true;
 end;
 
+function TXmlParser.GetU(Path: PUtf8Char; var V: RawUtf8): boolean;
+begin
+  Save;
+  result := Find(Path) and
+            ConsumeText(V);
+  Restore;
+end;
+
+function TXmlParser.GetI(Path: PUtf8Char; var V: Int64): boolean;
+var
+  u: RawUtf8;
+begin
+  result := GetU(Path, u) and
+            ToInt64(u, V);
+end;
 
 function ConvertToVariant(var x: TXmlParser; const Xml: RawUtf8; var Doc: variant;
   ParseOptions: TXmlParserOptions; DocOptions: TDocVariantOptions): TXmlParserError;
