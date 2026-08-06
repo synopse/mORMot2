@@ -936,17 +936,16 @@ type
   end;
 
   TDocVariantProductEnumeratorStack = record
+    Index: integer; // Value^.VValue[Index] for dvArray or -1 for dvObject
+    NameLen: integer;
     Value: PDocVariantData;
     Name: PUtf8Char;
-    NameLen: integer;
-    Index: integer; // Value^.VValue[Index] for dvArray or -1 for dvObject
   end;
 
   /// low-level Enumerator as returned by TDocVariantData.Product
   TDocVariantProductEnumerator = record
   private
     Value: PDocVariantData;
-    Root: PDocVariantData;
     StackCount: PtrInt;
     Stack: array[0..31] of TDocVariantProductEnumeratorStack;
   public
@@ -1599,7 +1598,7 @@ type
     // - document should be an object, with aName property as array of objects
     function Objects(const aName: RawUtf8): TDocVariantObjectsEnumerator; overload;
     /// enumerate all nested objects matching a given property path
-    // - each path segment identifies an object property name, separated by ','
+    // - each path segment identifies an object property name, separated by '.'
     // - if an intermediate property is an array, all its items are traversed
     // - if an intermediate property is an object, it is traversed directly
     // - missing properties or incompatible values are silently ignored
@@ -6304,15 +6303,14 @@ begin
   if dv.Has(dvoIsObject) then
     dec(st.Index) // -1 for dvObject
   else
-    dv := @dv^.VValue[0]; // return dv^.VValue[0] for dvArray
+    dv := pointer(dv^.VValue); // return dv^.VValue[0] for dvArray
   result := dv;
 end;
 
 function TDocVariantProductEnumerator.MoveNext: boolean;
 var
-  n, i, j: PtrInt;
+  n, i: PtrInt;
   st: ^TDocVariantProductEnumeratorStack;
-  ok: boolean;
   parent: PDocVariantData;
 begin
   result := false;
@@ -6329,30 +6327,24 @@ begin
   // check which dvArray indexes should be increased
   StackCount := 0;     // disable next MoveNext() by default
   repeat
-    j := st^.Index;
-    if j >= 0 then     // try next dvArray index
+    if st^.Index >= 0 then     // try next dvArray index
     begin
-      inc(j);
-      if j < st^.Value^.Count then
+      inc(st^.Index);
+      if st^.Index < st^.Value^.Count then
       begin
-        st^.Index := j;
-        parent := _Safe(st^.Value^.VValue[j]);
+        parent := _Safe(st^.Value^.VValue[st^.Index]);
         // rebuild remaining dvArray items using SetProductStack()
-        ok := true;
         inc(st);
         inc(i);
         while i < n do
         begin
           parent := SetProductStack(st^, parent);
           if parent = nil then
-          begin
-            ok := false;
             break;
-          end;
           inc(st);
           inc(i);
         end;
-        if ok then
+        if parent <> nil then
           break;
       end;
     end;
