@@ -861,6 +861,7 @@ type
   TOnReducePerValue = function(const Value: variant): boolean of object;
 
   {$ifdef HASITERATORS}
+
   /// internal state engine used by TDocVariant enumerators records
   TDocVariantEnumeratorState = record
   private
@@ -3233,7 +3234,7 @@ type
     CompKeyPrev: integer; // not PtrInt
   public
     function MoveNext: boolean; { too complex to be inlined }
-    function GetEnumerator: TDocObjectEnumerator;
+    function GetEnumerator: TDocObjectEnumerator; inline;
     property Current: IDocDict
       read CurrDict;
   end;

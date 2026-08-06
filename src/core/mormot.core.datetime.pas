@@ -1293,7 +1293,7 @@ type
     /// CSV case-sensitive matching index with the stored text Value
     // - returns -1 if Value/Len was not found, or the 0-based index in csv
     // - e.g. Equal('two') means Match('one,two')=1
-    function Match(csv: PUtf8Char; sep: AnsiChar = ','): integer;
+    function Match(Csv: PUtf8Char; Sep: AnsiChar = ','): integer;
   end;
   PValuePUtf8Char = ^TValuePUtf8Char;
   /// used e.g. by JsonDecode() overloaded function to returns values
@@ -4519,22 +4519,22 @@ begin
              CompareMemSmall(Value, Text, Len)); // inlined
 end;
 
-function TValuePUtf8Char.Match(csv: PUtf8Char; sep: AnsiChar): integer;
+function TValuePUtf8Char.Match(Csv: PUtf8Char; Sep: AnsiChar): integer;
 var
   l: PtrInt;
 begin
   result := 0;
-  if csv <> nil then
+  if Csv <> nil then
     repeat
-      l := PosChar0(csv, sep) - csv; // use fast SSE2 asm on x86_64
+      l := PosChar0(Csv, Sep) - Csv; // use fast SSE2 asm on x86_64
       if (l = Len) and
          ((l = 0) or
-          CompareMemSmall(csv, Text, l)) then
+          CompareMemSmall(Csv, Text, l)) then
         exit;
-      inc(csv, l);
-      if csv^ = #0 then
+      inc(Csv, l);
+      if Csv^ = #0 then
         break;
-      inc(csv);
+      inc(Csv);    // skip Sep
       inc(result); // 0,1,2..
     until false;
   result := -1;

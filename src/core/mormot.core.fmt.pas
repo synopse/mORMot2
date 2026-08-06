@@ -257,42 +257,45 @@ type
   /// a pointer to TXmlParser instance, used mainly for the fluent interface
   PXmlParser = ^TXmlParser;
 
-  /// some transient storage for TXmlParser.Save/Restore methods
-  TXmlState = TQWordRec;
-
   /// zero-allocation SAX-like parser over an XML UTF-8 memory buffer
-  // - a "basic" parser, from actual simple needs: no DTD support (which makes
-  // it immune to entity expansion attacks by design), only the five XML
-  // predefined entities and numeric character references, prefixes kept as
-  // part of the names with no URI namespace binding
-  // - the input buffer is expected to be UTF-8 encoded and to remain available
-  // in memory during the whole parsing: Name and Value do point within it,
-  // with no memory allocation during the scan - see NameToUtf8/ValueToUtf8
-  // - well-formedness of the tags nesting is verified, and any syntax or
-  // nesting error would raise an EXmlException with the faulty line number,
-  // unless xpoNoException option was set and Next returns xtError and
-  // more information is available in LastError/LastErrorLine
-  // - to reduce the memory footprint, this parser has some limitations: Depth
-  // is limited to 255, Names are allowed up to 255 UTF-8 bytes, and any root
-  // element should not be > 4GB of UTF-8 text
-  // - we recommend its high level SAX/DOM hybrid mode:
+  // - first usage is as full DOM via the XmlToVariant() wrapper function
+  // - then we recommend TXmlParser use in high level SAX/DOM hybrid mode:
   // ! var x: TXmlParser;
   // !     header, doc: TDocVariantData;
   // !     footer: RawUtf8;
   // ! begin
   // ! x.Init(xml);
-  // ! if x.Find('/root/header') then
-  // !   x.Consume(header);
+  // ! if x.Find('/root/header') and
+  // !    x.Consume(header) then
+  // !      ... use header.U['version'] ...
   // ! if x.Find('/root/catalog') then
-  // !   while x.Next('book', book) do
+  // !   while x.Consume('book', book) do
   // !     ... use book.U['title'] or book.I['@id'] ...
-  // ! if x.Find('/root/footer') then
-  // !   x.ConsumeText(footer);
+  // ! if x.Find('/root/footer') and
+  // !    x.ConsumeText(footer) then
+  // !      ... footer = text in <footer>text</footer> ...
+  // - if you really want to Consume() only what is needed, consider ForEach():
+  // ! if x.Rewind.Find('root/catalog') then
+  // !   while x.ForEach('book', 0) do
+  // !     if x.Find('title') and
+  // !       x.ConsumeText(title) then
+  // !         ... title = text in each <book><title>text</title></book> ...
   // - for raw SAX/pull usage, call Init() then ParseNext in a loop, e.g. as
   // ! x.Init(pointer(xml), length(xml));
   // ! while true do
   // !   case x.ParseNext of
   // !     ...
+  // - this is a "basic" parser, from actual simple needs: no DTD support (which
+  // makes it immune to entity expansion attacks by design), no URI namespace
+  // binding, only the most useful XPath lookup syntax
+  // - well-formedness of the tags nesting is verified, and any syntax or
+  // nesting error would raise an EXmlException with the faulty line number,
+  // unless xpoNoException option was set and ParseNext returns xtError and
+  // more information is available in LastError/LastErrorLine
+  // - this static structure consumes less than 2KB on stack; to reduce the
+  // memory footprint, this parser has some limitations: Depth should be < 255,
+  // Names should be < 255 UTF-8 bytes, any root element should be < 4GB of
+  // UTF-8 text, and up to 32 Save/Restore levels are allowed
   {$ifdef USERECORDWITHMETHODS}
   TXmlParser = record
   {$else}
@@ -313,7 +316,7 @@ type
   public
     /// the current token kind, as set by the last ParseNext call
     Kind: TXmlToken;
-    /// how many elements are currently opened
+    /// how many elements are currently opened via ParseNext
     // - incremented after a xtElementStart, decremented after a xtElementEnd
     // - by internal design, is limited to 255 as highest allowed value
     Depth: byte;
@@ -343,7 +346,7 @@ type
     /// reset the current position to the beginning of the XML supplied to Init()
     // - on real data, parsing is done at 2GB/s so Rewind is a common/fair task
     function Rewind: PXmlParser;
-    /// iterate over a given path until an element location is reached
+    /// locate an element using a simplified XPath-like syntax
     // - with Consume(name,TDocVariant) is the recommended API for TXmlParser
     // - '/root/catalog' calls Rewind to search from the document root
     // - 'catalog/book' search nested <catalog><book> from the current position
@@ -392,13 +395,13 @@ type
     /// returns the current Name as an allocated UTF-8 string
     procedure NameToUtf8(var result: RawUtf8);
       {$ifdef HASINLINE}inline;{$endif}
-    /// returns the current Value as an allocated UTF-8 string
+    /// decode the current Value as an allocated UTF-8 string
     // - decoding any XML entity, unless the current token is a verbatim
     // xtCData/xtComment section
     // - on decoding error, raise EXmlException or returns false if xpoNoException
     function ValueToUtf8(var Dest: RawUtf8): boolean;
       {$ifdef HASINLINE}inline;{$endif}
-    /// append the current Value as into a UTF-8 string
+    /// decode and append the current Value to an existing UTF-8 string
     // - on decoding error, raise EXmlException or returns false if xpoNoException
     function ValueAppendToUtf8(var Dest: RawUtf8): boolean;
     /// iterate over the direct child elements matching a given name
@@ -2641,6 +2644,7 @@ begin
   result := GetU(Path, u) and
             ToInt64(u, V);
 end;
+
 
 function ConvertToVariant(var x: TXmlParser; const Xml: RawUtf8; var Doc: variant;
   ParseOptions: TXmlParserOptions; DocOptions: TDocVariantOptions): TXmlParserError;

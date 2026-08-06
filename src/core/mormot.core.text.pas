@@ -3010,7 +3010,7 @@ begin
   if S^ = #0 then
     P := nil
   else
-    P := S + 1;
+    P := S + 1; // skip Sep
 end;
 
 function GetNextItemBufferLen(var P: PUtf8Char; var PL: PtrInt; Sep: AnsiChar;
