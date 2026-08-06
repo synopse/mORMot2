@@ -2493,21 +2493,21 @@ begin
   result := true;
 end;
 
-function TXmlParser.Find(path: PUtf8Char; sep: AnsiChar): boolean;
+function TXmlParser.Find(Path: PUtf8Char; Sep: AnsiChar): boolean;
 var
   l: PtrInt;
 begin
   result := false;
-  if path = nil then
+  if Path = nil then
     exit;
   result := true;
-  if path^ = sep then
-    if path[1] = sep then
+  if Path^ = Sep then
+    if Path[1] = Sep then
     begin
-      inc(path, 2); // find <book> anywhere from '//book' input path
-      l := StrLen(path);
-      if PosChar(path, l, sep) = nil then // no '//book/title' support
-        if FindAny(path, l) then
+      inc(Path, 2); // find <book> anywhere from '//book' input Path
+      l := StrLen(Path);
+      if PosChar(Path, l, Sep) = nil then // no '//book/title' support
+        if FindAny(Path, l) then
           exit;
       result := false;
       exit;
@@ -2515,16 +2515,16 @@ begin
     else
     begin
       Rewind; // '/root/catalog'
-      inc(path);
+      inc(Path);
     end;
   repeat // search relative 'root/catalog'
-    l := PosChar0(path, sep) - path; // use fast SSE2 asm on x86_64
-    if not Next(path, l) then
+    l := PosChar0(Path, Sep) - Path; // use fast SSE2 asm on x86_64
+    if not Next(Path, l) then
       break;
-    inc(path, l);
-    if path^ = #0 then
-      exit; // reached the end of suplied path
-    inc(path);
+    inc(Path, l);
+    if Path^ = #0 then
+      exit; // reached the end of suplied Path
+    inc(Path);
   until false;
   result := false;
 end;
