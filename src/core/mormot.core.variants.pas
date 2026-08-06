@@ -7899,7 +7899,6 @@ var
   dv: PDocVariantData;
   n: PtrInt;
 begin
-  result.Root := @self;
   result.StackCount := 0; // MoveNext() = false by default
   if (VCount = 0) or
      (Path = nil) then
@@ -7912,9 +7911,21 @@ begin
       EDocVariant.RaiseU('TDocVariantData.Product: too complex path');
     st^.Name := Path;
     st^.NameLen := PosChar0(Path, Sep) - Path; // use fast SSE2 asm on x86_64
-    dv := SetProductStack(st^, dv);
-    if dv = nil then
-      exit; // each level should be a true array or object
+    repeat
+      dv := SetProductStack(st^, dv);
+      if dv <> nil then
+        break;  // we found a matching item
+      if n = 0 then
+        exit;   // we can't make dec(st)
+      dec(st);  // try next item on the parent dvArray
+      if st^.Index < 0 then
+        exit;   // the parent is a dvObject
+      inc(st^.Index);
+      if st^.Index >= st^.Value^.Count then
+        exit;
+      dv := _Safe(st^.Value^.VValue[st^.Index]);
+      inc(st);
+    until false;
     inc(n);
     inc(Path, st^.NameLen);
     if Path^ = #0 then
