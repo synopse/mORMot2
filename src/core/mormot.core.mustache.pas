@@ -2615,7 +2615,7 @@ var
 begin
   PCardinal(@Result)^ := varNull;
   if not VariantToTempUtf8(Value, u, [vfNoComplex, vfNullAsVoid]) then
-    exit;
+    exit; // should be a string
   v := GlobalInfoFind(u.Text, u.Len, l);
   if v <> nil then
     RawUtf8ToVariant(v, l, Result);

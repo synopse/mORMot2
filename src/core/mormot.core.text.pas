@@ -9215,10 +9215,12 @@ dt:   DoubleToTempUtf8(vd^.VDouble, Res);
     varCurrency:
       Curr64ToTempUtf8(vd^.VInt64, Res);
     varDate:
-      if vfDateAsFloat in Flags then
-        goto dt
-      else
+      begin
+        if vfDateAsFloat in Flags then
+          goto dt;
+        result := true;
         _VariantToTempUtf8DateTimeIso8601(vd^.VDate, 'T', Res, {withMS=}false);
+      end;
     varOleStr:
       result := BStrToTempUtf8(vd^.VAny, Res, vfNoAlloc in Flags);
   else
