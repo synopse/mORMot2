@@ -6,9 +6,9 @@ unit mormot.core.fmt;
 {
   *****************************************************************************
 
-   Binary, JSON and Text Advanced Formatting Functions
+   Binary, JSON, XML and Text Advanced Formatting Functions
     - HTML Text Conversions
-    - Basic XML Conversions
+    - XML Processing with Escape/Unescape and TXmlParser
     - YAML 1.2 core-schema to JSON or TDocVariant Support
     - Markup (e.g. Markdown or Emoji) Process
     - INI Files In-memory Access
@@ -98,7 +98,7 @@ function HtmlToText(const text: RawUtf8): RawUtf8;
 function HtmlTagNeedsCRLF(tag: PUtf8Char): boolean;
 
 
-{ ************* Basic XML Conversions }
+{ ************* XML Processing with Escape/Unescape and TXmlParser }
 
 const
   /// standard header for an UTF-8 encoded XML file
@@ -1600,7 +1600,7 @@ begin
 end;
 
 
-{ ************* Basic XML Conversions }
+{ ************* XML Processing with Escape/Unescape and TXmlParser }
 
 var
   XML_ESC: TAnsiCharToByte;
@@ -2623,7 +2623,7 @@ begin
   result := false;
   if Kind <> xtElementStart then
     exit;
-  ToDocVariant(@Doc);
+  ToDocVariant(@Doc); // recursively fill Doc with the nested content
   result := Kind in [xtEof, xtElementEnd];
 end;
 

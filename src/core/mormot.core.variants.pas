@@ -32,6 +32,7 @@ uses
   mormot.core.text,
   mormot.core.data, // already included in mormot.core.json anyway
   mormot.core.buffers,
+  mormot.core.datetime,
   mormot.core.rtti,
   mormot.core.json;
 
@@ -202,7 +203,7 @@ function VariantCompareI(const V1, V2: variant): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast comparison of a Variant and UTF-8 encoded String (or number)
-// - slightly faster than plain V=Str, which computes a temporary variant
+// - faster than plain V=Str, which computes a temporary variant
 // - here Str='' equals unassigned (varEmpty), null or false
 // - if CaseSensitive is false, will use PropNameEquals() for comparison
 function VariantEquals(const V: Variant; const Str: RawUtf8;
@@ -948,12 +949,41 @@ type
     Value: PDocVariantData;
     StackCount: PtrInt;
     Stack: array[0..31] of TDocVariantProductEnumeratorStack;
+    procedure Init(p: PUtf8Char; plen: PtrInt; sep: AnsiChar; dv: PDocVariantData);
   public
     function MoveNext: boolean; { too complex to be inlined }
     function GetEnumerator: TDocVariantProductEnumerator; inline;
     /// returns the current Value as pointer to each TDocVariantData object
     property Current: PDocVariantData
       read Value;
+  end;
+
+  /// low-level Enumerator as returned by TDocVariantData.ProductValue
+  TDocVariantProductValueEnumerator = record
+  private
+    LastName: TValuePUtf8Char;
+    ProductDocVariant: TDocVariantProductEnumerator;
+    function GetCurrent: PVariant; inline;
+    procedure Init(p: PUtf8Char; plen: PtrInt; sep: AnsiChar; dv: PDocVariantData);
+  public
+    function MoveNext: boolean; inline; // = ProductDocVariant.MoveNext
+    function GetEnumerator: TDocVariantProductValueEnumerator; inline;
+    /// returns a pointer to the current stored variant Value
+    property Current: PVariant
+      read GetCurrent;
+  end;
+
+  /// low-level Enumerator as returned by TDocVariantData.ProductU
+  TDocVariantProductUEnumerator = record
+  private
+    ProductValue: TDocVariantProductValueEnumerator;
+    function GetCurrent: RawUtf8; inline;
+  public
+    function MoveNext: boolean; inline; // = ProductDocVariant.MoveNext
+    function GetEnumerator: TDocVariantProductUEnumerator; inline;
+    /// returns the current RawUtf8 Value corresponding to the stored variant
+    property Current: RawUtf8
+      read GetCurrent;
   end;
 
   {$endif HASITERATORS}
@@ -1608,7 +1638,19 @@ type
     // !   if f.U['units'] = 'arcsec' then
     // !     inc(n);
     // - returns an enumerator over PDocVariantData matching the supplied path
-    function Product(Path: PUtf8Char; Sep: AnsiChar = '.'): TDocVariantProductEnumerator;
+    function Product(const Path: RawUtf8; Sep: AnsiChar = '.'): TDocVariantProductEnumerator;
+    /// enumerate all nested values matching a given property path as variant
+    // - in respect to Product() the Path should end with a single value
+    // ! for v in dataset.ProductValue('tableHead.fields.field.units') do
+    // !   if VariantEqual(v, 'arcsec') then // faster than plain v = arcsec
+    // !     inc(n);
+    function ProductValue(const Path: RawUtf8; Sep: AnsiChar = '.'): TDocVariantProductValueEnumerator;
+    /// enumerate all nested values matching a given property path as RawUtf8
+    // - in respect to Product() the Path should end with a single value
+    // ! for u in dataset.ProductU('tableHead.fields.field.units') do
+    // !   if u = 'arcsec' then
+    // !     inc(n);
+    function ProductU(const Path: RawUtf8; Sep: AnsiChar = '.'): TDocVariantProductUEnumerator;
     {$endif HASITERATORS}
 
     /// save a document as UTF-8 encoded JSON
@@ -6308,6 +6350,63 @@ begin
   result := dv;
 end;
 
+procedure TDocVariantProductEnumerator.Init(p: PUtf8Char; plen: PtrInt;
+  sep: AnsiChar; dv: PDocVariantData);
+var
+  st, stend: ^TDocVariantProductEnumeratorStack;
+  n, l: PtrInt;
+begin
+  StackCount := 0; // MoveNext() = false by default
+  if (dv^.VCount = 0) or
+     (plen <= 0) then
+    exit;
+  n := 0;
+  st := @Stack; // fill Stack[].Name/NameLen with the path segments
+  repeat
+    if n > high(Stack) then
+      EDocVariant.RaiseU('TDocVariantData.Product: too complex path');
+    inc(n);
+    st^.Name := p;
+    l := ByteScanIndex(pointer(p), plen, ord(sep)); // use SSE2
+    if l <= 0 then
+    begin
+      if l = 0 then
+        exit; // no void path segment
+      st^.NameLen := plen;
+      break;  // whole path processed
+    end;
+    st^.NameLen := l;
+    inc(l);   // skip sep char
+    inc(p, l);
+    dec(plen, l);
+    inc(st);
+  until false;
+  stend := st;
+  st := @Stack; // fill Stack[] with the first value to return
+  repeat
+    repeat
+      dv := SetProductStack(st^, dv); // fill result.Stack[].Value/Index
+      if dv <> nil then
+        break;      // we found a matching item
+      repeat
+        if st = @Stack then
+          exit;     // we can't make dec(st)
+        dec(st);    // try next item on the parent dvArray
+        if st^.Index < 0 then
+          continue; // the parent is a dvObject: keep going back
+        inc(st^.Index);
+        if st^.Index >= st^.Value^.Count then
+          continue; // this dvArray is exhausted: keep going back
+        dv := _Safe(st^.Value^.VValue[st^.Index]);
+        inc(st);    // retry this level
+        break;
+      until false;
+    until false;
+    inc(st);   // fill next result.Stack[].Value/Index
+  until PtrUInt(st) > PtrUInt(stend);
+  StackCount := n; // enable MoveNext()
+end;
+
 function TDocVariantProductEnumerator.MoveNext: boolean;
 var
   n, i: PtrInt;
@@ -6358,6 +6457,72 @@ begin
 end;
 
 function TDocVariantProductEnumerator.GetEnumerator: TDocVariantProductEnumerator;
+begin
+  result := self;
+end;
+
+{ TDocVariantProductValueEnumerator }
+
+procedure TDocVariantProductValueEnumerator.Init(p: PUtf8Char; plen: PtrInt;
+  sep: AnsiChar; dv: PDocVariantData);
+var
+  i: PtrInt;
+begin
+  ProductDocVariant.StackCount := 0; // MoveNext() = false by default
+  for i := plen - 1 downto 1 do
+    if p[i] = Sep then
+    begin
+      LastName.Text := p + i + 1; // extract Value
+      LastName.Len := plen - i - 1;
+      ProductDocVariant.Init(p, i, sep, dv);
+      exit;
+    end;
+end;
+
+function TDocVariantProductValueEnumerator.GetCurrent: PVariant;
+var
+  ndx: PtrInt;
+begin
+  ndx := ProductDocVariant.Value^.GetValueIndex(LastName.Text, LastName.Len,
+    ProductDocVariant.Value^.Has(dvoNameCaseSensitive));
+  if ndx >= 0 then
+    result := @ProductDocVariant.Value^.VValue[ndx]
+  else
+    result := @mormot.core.base.Null;
+end;
+
+function TDocVariantProductValueEnumerator.MoveNext: boolean;
+begin
+  result := ProductDocVariant.MoveNext;
+end;
+
+function TDocVariantProductValueEnumerator.GetEnumerator: TDocVariantProductValueEnumerator;
+begin
+  result := self;
+end;
+
+{ TDocVariantProductUEnumerator }
+
+function TDocVariantProductUEnumerator.GetCurrent: RawUtf8;
+var
+  ndx: PtrInt;
+  ws: boolean;
+begin
+  ndx := ProductValue.ProductDocVariant.Value^.GetValueIndex(
+    ProductValue.LastName.Text, ProductValue.LastName.Len,
+    ProductValue.ProductDocVariant.Value^.Has(dvoNameCaseSensitive));
+  if ndx >= 0 then
+    VariantToUtf8(ProductValue.ProductDocVariant.Value^.VValue[ndx], result, ws)
+  else
+    FastAssignNew(result);
+end;
+
+function TDocVariantProductUEnumerator.MoveNext: boolean;
+begin
+  result := ProductValue.ProductDocVariant.MoveNext;
+end;
+
+function TDocVariantProductUEnumerator.GetEnumerator: TDocVariantProductUEnumerator;
 begin
   result := self;
 end;
@@ -7894,57 +8059,23 @@ begin
     result.State.Init(pointer(Values), VCount);
 end;
 
-function TDocVariantData.Product(Path: PUtf8Char; Sep: AnsiChar): TDocVariantProductEnumerator;
-var
-  st, stend: ^TDocVariantProductEnumeratorStack;
-  dv: PDocVariantData;
-  n: PtrInt;
+function TDocVariantData.Product(const Path: RawUtf8;
+  Sep: AnsiChar): TDocVariantProductEnumerator;
 begin
-  result.StackCount := 0; // MoveNext() = false by default
-  if (VCount = 0) or
-     (Path = nil) then
-    exit;
-  n := 0;
-  st := @result.Stack; // fill Stack[].Name/NameLen with the path segments
-  repeat
-    if n > high(result.Stack) then
-      EDocVariant.RaiseU('TDocVariantData.Product: too complex path');
-    st^.Name := Path;
-    st^.NameLen := PosChar0(Path, Sep) - Path; // use fast SSE2 asm on x86_64
-    inc(n);
-    inc(Path, st^.NameLen);
-    inc(st);
-    if Path^ = #0 then
-      break;   // whole Path processed
-    inc(Path); // skip Sep
-  until false;
-  stend := st;
-  st := @result.Stack; // fill Stack[] with the first value to return
-  dv := @self;
-  repeat
-    repeat
-      dv := SetProductStack(st^, dv); // fill result.Stack[].Value/Index
-      if dv <> nil then
-        break;      // we found a matching item
-      repeat
-        if st = @result.Stack then
-          exit;     // we can't make dec(st)
-        dec(st);    // try next item on the parent dvArray
-        if st^.Index < 0 then
-          continue; // the parent is a dvObject: keep going back
-        inc(st^.Index);
-        if st^.Index >= st^.Value^.Count then
-          continue; // this dvArray is exhausted: keep going back
-        dv := _Safe(st^.Value^.VValue[st^.Index]);
-        inc(st);    // retry this level
-        break;
-      until false;
-    until false;
-    inc(st);   // fill next result.Stack[].Value/Index
-  until st = stend;
-  result.StackCount := n; // enable MoveNext()
+  result.Init(pointer(Path), length(Path), Sep, @self);
 end;
 
+function TDocVariantData.ProductValue(const Path: RawUtf8;
+  Sep: AnsiChar): TDocVariantProductValueEnumerator;
+begin
+  result.Init(pointer(Path), length(Path), Sep, @self);
+end;
+
+function TDocVariantData.ProductU(const Path: RawUtf8;
+  Sep: AnsiChar): TDocVariantProductUEnumerator;
+begin
+  result.ProductValue.Init(pointer(Path), length(Path), Sep, @self);
+end;
 {$endif HASITERATORS}
 
 procedure TDocVariantData.SetCapacity(aValue: integer);

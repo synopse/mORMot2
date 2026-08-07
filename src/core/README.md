@@ -179,9 +179,9 @@ Our JSON engine uses a very efficient SAX-like kernel and full RTTI support.
 
 ### mormot.core.fmt
 
-Binary, JSON and Text Advanced Formatting Functions
+Binary, JSON, XML and Text Advanced Formatting Functions
 - HTML Text Conversions
-- Basic XML Conversions
+- XML Processing with Escape/Unescape and `TXmlParser`
 - YAML 1.2 core-schema to JSON or `TDocVariant` Support
 - Markup (e.g. Markdown or Emoji) process
 - INI Files In-memory Access
