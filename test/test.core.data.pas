@@ -6663,7 +6663,7 @@ var
     end;
   end;
 
-  {$ifdef HASITERATORS}
+  {$ifdef HASSAFEITERATORS}
   procedure DoEnumerators;
   var
     vd, v2: TDocVariantData;
@@ -6867,7 +6867,7 @@ var
     CheckEqual(i, n);
     NotifyTestSpeed('Product(a.b)', n, 0, @timer, {onlylog=}true);
   end;
-  {$endif HASITERATORS}
+  {$endif HASSAFEITERATORS}
 
 const
   MAX = 20000;
@@ -7462,10 +7462,10 @@ begin
   CheckEqual(GetCodePage(s), CP_UTF8);
   {$endif HASCODEPAGE}
   CheckEqual(s, '{"ID":1,"Notation":"ABC","Price":10.1,"CustomNotation":"XYZ"}');
-  {$ifdef HASITERATORS}
+  {$ifdef HASSAFEITERATORS}
   DoEnumerators;
   DoProduct;
-  {$endif HASITERATORS}
+  {$endif HASSAFEITERATORS}
   Doc.Clear;
   s := '[{a:1,b:2,c:0},{a:2,b:1,c:2},{b:3,c:1,a:1}]';
   Doc.InitJson(s);
@@ -9852,7 +9852,7 @@ begin
     begin
       id      := book.I['@id'];
       title   := book.U['title'];
-      price   := book['price'];
+      price   := book.Value['price'];
       comment := book.O['comment']^;
       Check((id = 1) or (id = 2), 'id');
       Check((title = 'mORMot') or (title = 'Delphi'), 'title1');

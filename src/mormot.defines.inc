@@ -197,6 +197,7 @@
   {$define HASDYNARRAYTYPE}   // eltype2 field, used e.g. for T*ObjArray
   {$define HASQWORD}
   {$define HASITERATORS}
+  {$define HASSAFEITERATORS}
   {$define HASIMPLICITOPERATOR}
   {$define HASDBFTWIDE}
   {$define HASTTHREADSTART}
@@ -646,13 +647,14 @@
     {$endif}
     {$if CompilerVersion > 18}
       {$define ISDELPHI2007ANDUP} // = Delphi 2007 or newer
-      {$define HASITERATORS}
+      {$define HASITERATORS}      // minimal buggy implementation
       {$define HASDBFTWIDE}       // ftWideMemo,ftFixedWideChar
     {$ifend}
     {$if CompilerVersion = 20}    // = Delphi 2009
       {$define ISDELPHI2009}      // to circumvent some specific bugs
       {$define ISDELPHI20092010}
       {$define HASQWORD}          // properly handle and inline UInt64
+      {$define HASSAFEITERATORS}  // usable iterators
       {$define HASNOSTATICRTTI}   // has no TypeInfo(TGuid)
     {$ifend}
     {$if CompilerVersion = 21}    // = Delphi 2010
