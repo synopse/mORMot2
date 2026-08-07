@@ -9838,6 +9838,21 @@ begin
   CheckEqual(XmlToJson('<a/>', [xpoVariantGuessType]), '{"a":null}');
   CheckEqual(XmlToJson('<a>007</a>', [xpoVariantGuessType]), '{"a":"007"}');
   CheckEqual(XmlToJson('<a>H265</a>', [xpoVariantGuessType]), '{"a":"H265"}');
+  // dotted identifiers and IP addresses are no numbers
+  CheckEqual(XmlToJson('<a>1.2.3</a>', [xpoVariantGuessType]),
+    '{"a":"1.2.3"}');
+  CheckEqual(XmlToJson('<a>10.0.0.1</a>', [xpoVariantGuessType]),
+    '{"a":"10.0.0.1"}');
+  // integers out of Int64 range should remain lossless text
+  CheckEqual(XmlToJson('<a>1234567890123456789</a>', [xpoVariantGuessType]),
+    '{"a":1234567890123456789}');
+  CheckEqual(XmlToJson('<a>9223372036854775808</a>', [xpoVariantGuessType]),
+    '{"a":"9223372036854775808"}');
+  CheckEqual(XmlToJson('<a>-9223372036854775809</a>', [xpoVariantGuessType]),
+    '{"a":"-9223372036854775809"}');
+  CheckEqual(XmlToJson('<c><sipId>34020000001320000001</sipId>' +
+    '<port>5060</port></c>', [xpoVariantGuessType]),
+    '{"c":{"sipId":"34020000001320000001","port":5060}}');
   // TryXmlToVariant
   Check(TryXmlToVariant('<a><b>1</b></a>', doc) = xpeNone, 'try ok');
   CheckEqual(VariantSaveJson(doc), '{"a":{"b":"1"}}');
