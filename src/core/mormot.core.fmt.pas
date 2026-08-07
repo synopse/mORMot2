@@ -167,10 +167,12 @@ function XmlUnescape(Text: PUtf8Char; TextLen: PtrInt; var Dest: RawUtf8;
 
 const
   /// TDocVariant options used by default for XmlToVariant()
-  // - no number type inference is done: XML content is text by nature, so
-  // all values are stored as (lossless) strings
+  // - XML names are case-sensitive, and xpoVariantGuessType could be doubles
   // - you may also set dvoInternNames for huge content, to reduce the memory usage
-  JSON_XML = JSON_FAST;
+  JSON_XML = [dvoReturnNullForUnknownProperty,
+              dvoValueCopiedByReference,
+              dvoNameCaseSensitive,
+              dvoAllowDoubleValue];
 
 type
   /// exception raised by TXmlParser on invalid or unsupported XML input

@@ -1598,6 +1598,7 @@ type
     // - document should be an object, with aName property as array of objects
     function Objects(const aName: RawUtf8): TDocVariantObjectsEnumerator; overload;
     /// enumerate all nested objects matching a given property path
+    // - the current document is expected to be a dvObject
     // - each path segment identifies an object property name, separated by '.'
     // - if an intermediate property is an array, all its items are traversed
     // - if an intermediate property is an object, it is traversed directly
@@ -6338,7 +6339,7 @@ begin
         inc(i);
         while i < n do
         begin
-          parent := SetProductStack(st^, parent);
+          parent := SetProductStack(st^, parent); // set Stack[].Value/Index
           if parent = nil then
             break;
           inc(st);
@@ -7895,7 +7896,7 @@ end;
 
 function TDocVariantData.Product(Path: PUtf8Char; Sep: AnsiChar): TDocVariantProductEnumerator;
 var
-  st: ^TDocVariantProductEnumeratorStack;
+  st, stend: ^TDocVariantProductEnumeratorStack;
   dv: PDocVariantData;
   n: PtrInt;
 begin
@@ -7904,35 +7905,43 @@ begin
      (Path = nil) then
     exit;
   n := 0;
-  dv := @self;
-  st := @result.Stack; // fill Stack[] with the first value to return
+  st := @result.Stack; // fill Stack[].Name/NameLen with the path segments
   repeat
     if n > high(result.Stack) then
       EDocVariant.RaiseU('TDocVariantData.Product: too complex path');
     st^.Name := Path;
     st^.NameLen := PosChar0(Path, Sep) - Path; // use fast SSE2 asm on x86_64
-    repeat
-      dv := SetProductStack(st^, dv);
-      if dv <> nil then
-        break;  // we found a matching item
-      if n = 0 then
-        exit;   // we can't make dec(st)
-      dec(st);  // try next item on the parent dvArray
-      if st^.Index < 0 then
-        exit;   // the parent is a dvObject
-      inc(st^.Index);
-      if st^.Index >= st^.Value^.Count then
-        exit;
-      dv := _Safe(st^.Value^.VValue[st^.Index]);
-      inc(st);
-    until false;
     inc(n);
     inc(Path, st^.NameLen);
+    inc(st);
     if Path^ = #0 then
       break;   // whole Path processed
     inc(Path); // skip Sep
-    inc(st);   // fill next result.Stack[]
   until false;
+  stend := st;
+  st := @result.Stack; // fill Stack[] with the first value to return
+  dv := @self;
+  repeat
+    repeat
+      dv := SetProductStack(st^, dv); // fill result.Stack[].Value/Index
+      if dv <> nil then
+        break;      // we found a matching item
+      repeat
+        if st = @result.Stack then
+          exit;     // we can't make dec(st)
+        dec(st);    // try next item on the parent dvArray
+        if st^.Index < 0 then
+          continue; // the parent is a dvObject: keep going back
+        inc(st^.Index);
+        if st^.Index >= st^.Value^.Count then
+          continue; // this dvArray is exhausted: keep going back
+        dv := _Safe(st^.Value^.VValue[st^.Index]);
+        inc(st);    // retry this level
+        break;
+      until false;
+    until false;
+    inc(st);   // fill next result.Stack[].Value/Index
+  until st = stend;
   result.StackCount := n; // enable MoveNext()
 end;
 
