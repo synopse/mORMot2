@@ -188,12 +188,7 @@ interface
   {$define FPCMM_BOOST}
   {$define FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
   {$define FPCMM_TINYPERTHREAD}
-  {$ifdef MSWINDOWS}
-    {$define FPCMM_MEDIUMPERTHREAD}
-  {$endif MSWINDOWS}
-  {$ifdef LINUX}
-    {$define FPCMM_MEDIUMPERTHREAD}
-  {$endif LINUX}
+  {$define FPCMM_MEDIUMPERTHREAD}
 {$endif FPCMM_BOOSTER}
 {$ifdef FPCMM_BOOST}
   {$define FPCMM_SERVER}
@@ -386,7 +381,7 @@ const
         {$ifdef FPCMM_SERVER}        + 'SERVER '      {$endif}
       {$endif FPCMM_BOOST}
     {$endif FPCMM_BOOSTER}
-    {$ifdef FPCMM_ASSUMEMULTITHREAD} + ' assumulthrd' {$endif}
+    {$ifdef FPCMM_ASSUMEMULTITHREAD} + ' assumt'      {$endif}
     {$ifdef FPCMM_PAUSE}             + ' pause'       {$endif}
     {$ifdef FPCMM_SLEEPTSC}          + ' rdtsc'       {$endif}
     {$ifndef BSD}
@@ -394,8 +389,8 @@ const
     {$endif BSD}
     {$ifdef FPCMM_SMALLNOTWITHMEDIUM}+ ' smallpool'
       {$ifdef FPCMM_MULTIPLESMALLNOTWITHMEDIUM} + 's' {$endif} {$endif}
-    {$ifdef FPCMM_TINYPERTHREAD}     + ' perthrd'  {$endif}
-    {$ifdef FPCMM_MEDIUMPERTHREAD}   + ' medperthrd' {$endif}
+    {$ifdef FPCMM_TINYPERTHREAD}     + ' tinpt'       {$endif}
+    {$ifdef FPCMM_MEDIUMPERTHREAD}   + ' medpt'       {$endif}
     {$ifdef FPCMM_ERMS}              + ' erms'        {$endif}
     {$ifdef FPCMM_DEBUG}             + ' debug'       {$endif}
     {$ifdef FPCMM_REPORTMEMORYLEAKS} + ' repmemleak'  {$endif};
@@ -639,6 +634,7 @@ uses
 {$else}
   {$define OLDLINUXKERNEL}      // no Linuxism on BSD
   {$undef FPCMM_TINYPERTHREAD}  // no inlined pthread_self on BSD
+  {$undef FPCMM_MEDIUMPERTHREAD}
 {$endif LINUX}
 
 // on Linux, mremap() on PMD_SIZE=2MB aligned data can make a huge speedup
