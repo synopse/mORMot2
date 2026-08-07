@@ -6764,18 +6764,23 @@ var
     Check(v2.Count = 0);
   end;
 
-  procedure OneProduct(const Json, Expected, Context: RawUtf8);
+  procedure OneProduct(const Json, Context: RawUtf8; Expected: integer;
+    Path: PUtf8Char = 'a.b'; const Last: RawUtf8 = 'c');
   var
     doc: TDocVariantData;
     e: PDocVariantData;
-    s: RawUtf8;
+    n: integer;
   begin
-    doc.InitJson(Json, mFast);
-    Check(doc.Count <> 0);
+    doc.InitJson(Json, JSON_XML);
+    CheckNotEqual(doc.Count, 0, 'count');
     Check(doc.IsObject, 'obj');
-    for e in doc.Product('a.b') do
-      Append(s, [e^.I['c'], ' ']);
-    CheckEqual(s, Expected, Context);
+    n := 0;
+    for e in doc.Product(Path) do
+    begin
+      inc(n);
+      CheckEqual(e^.I[Last], n, Context);
+    end;
+    CheckEqual(n, Expected);
   end;
 
   procedure DoProduct;
@@ -6786,78 +6791,59 @@ var
     i, n: integer;
     timer: TPrecisionTimer;
   begin
-    doc.InitJson('{"a":{"b":{"c":{"id":123}}}}', mFast);
-    n := 0;
-    for e in doc.Product('a.b.c') do
-    begin
-      inc(n);
-      CheckEqual(e^.I['id'], 123);
-    end;
-    CheckEqual(n, 1, 'no array');
-    doc.Clear;
-    doc.InitJson(
+    OneProduct('{"a":{"b":{"c":{"id":1}}}}', 'no array', 1, 'a.b.c', 'id');
+    OneProduct(
       '{"a":{"b":[' +
         '{"c":{"id":1}},' +
         '{"c":{"id":2}},' +
-        '{"c":{"id":3}}]}}', mFast);
-    n := 0;
-    for e in doc.Product('a.b.c') do
-    begin
-      inc(n);
-      CheckEqual(e^.I['id'], n);
-    end;
-    CheckEqual(n, 3, 'one array');
-    doc.Clear;
-    doc.InitJson(
+        '{"c":{"id":3}}]}}', 'one array', 3, 'a.b.c', 'id');
+    OneProduct(
       '{"a":[' +
         '{"b":[{"c":{"id":1}},{"c":{"id":2}}]},' +
         '{"b":[{"c":{"id":3}},{"c":{"id":4}}]}' +
-      ']}', mFast);
-    n := 0;
-    for e in doc.Product('a,b,c', ',') do
-    begin
-      inc(n);
-      CheckEqual(e^.I['id'], n);
-    end;
-    CheckEqual(n, 4, 'two arrays');
+      ']}', 'two arrays', 4, 'a.b.c', 'id');
     OneProduct(
       '{"a":[' +
         '{"b":{"c":1,"x":0}},' +
         '{"b":[{"x":0,"c":2},{"c":3},{"x":0,"c":4}]}' +
-      ']}', '1 2 3 4 ', 'object after array');
+      ']}', 'object after array', 4);
     OneProduct(
       '{"a":{"b":[' +
         '{"c":1},{"c":2},{"c":3}]}}',
-      '1 2 3 ', 'array after object');
+      'array after object', 3);
     OneProduct('{"a":[{"b":[{"c":1}]},{"b":{"c":2}},{"b":[{"c":3}]}]}',
-       '1 2 3 ', 'object/array siblings');
+       'object/array siblings', 3);
     OneProduct('{"a":[{"b":{"c":1}},{},{"b":{"c":2}}]}',
-      '1 2 ', 'missing prop 0');
+      'missing prop 0', 2);
     OneProduct('{"a":[{"b":{"c":1}},{"d":{"c":0}},{"b":{"b":7,"c":2}},{}]}',
-      '1 2 ', 'missing prop 1');
+      'missing prop 1', 2);
     OneProduct('{"a":[{},{"b":{"c":1}},{"b":{"c":2}}]}',
-      '1 2 ', 'missing prop 2');
+      'missing prop 2', 2);
     OneProduct('{"a":[{},{"b":{"c":1}},{"b":{"c":2}},{}]}',
-      '1 2 ', 'missing prop 3');
-    doc.Clear;
+      'missing prop 3', 2);
+    OneProduct('{"a":[{"b":[{},{"d":0}]},{"b":[{"c":{"id":1}}]}]}',
+      'backward init', 1, 'a.b.c', 'id');
+    OneProduct(
+      '{"a":[{"b":[{},{}]},{"b":[{"c":{"id":1}},{"c":{"id":2}}]}]}',
+      'nested arrays with missing c', 2, 'a.b.c', 'id');
     doc.InitJson(
       '{"tableHead":{"fields":{"field":[' +
         '{"units":"deg"},' +
         '{"units":"arcsec"},' +
-        '{"units":"arcsec"}]}}}', mFast);
+        '{"units":"arcsec"}]}}}', JSON_XML);
     n := 0;
     for e in doc.Product('tableHead.fields.field') do
       if e^.U['units'] = 'arcsec' then
         inc(n);
     CheckEqual(n, 2, 'xml-like');
     doc.Clear;
-    doc.InitJson('{"a":{"b":1}}', mFast);
+    doc.InitJson('{"a":{"b":1}}', JSON_XML);
     n := 0;
     for e in doc.Product('a.c.d') do
       inc(n);
     CheckEqual(n, 0, 'missing path');
     doc.Clear;
-    doc.InitJson('{"a":{"b":[]}}', mFast);
+    doc.InitJson('{"a":{"b":[]}}', JSON_XML);
     n := 0;
     for e in doc.Product('a.b') do
       inc(n);
