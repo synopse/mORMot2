@@ -135,8 +135,10 @@ function JsonToXml(const Json: RawUtf8; const Header: RawUtf8 = XMLUTF8_HEADER;
   const NameSpace: RawUtf8 = ''): RawUtf8;
 
 /// append some chars, escaping all XML special chars as expected
-// - i.e.   < > & " '  as   &lt; &gt; &amp; &quote; &apos;
-// - and all control chars (i.e. #1..#31) as &#..;
+// - i.e.   < > & " '  as   &lt; &gt; &amp; &quot; &apos;
+// - TAB, LF and CR are escaped as &#x09; &#x0a; &#x0d;
+// - the other control chars are just ignored, since #1..#8 #11 #12 #14..#31
+// are not allowed in any XML 1.0 document
 // - see @http://www.w3.org/TR/xml/#syntax
 procedure AddXmlEscape(W: TTextWriter; Text: PUtf8Char);
 
@@ -6922,7 +6924,7 @@ begin
   esc['"'] := 4;
   _AddHtmlEscape := __AddHtmlEscape;
   // XML Efficient Parsing
-  FillCharFast(XML_ESC, 31, 9); // ignore invalid #1 .. #31 control char
+  FillCharFast(XML_ESC, 32, 9); // ignore the invalid #0 .. #31 control chars
   esc := @XML_ESC; // XML_ESCAPED[] = &#x09 &#x0a &#x0d &lt &gt &amp &quot &apos
   esc[#0]   := 1;   // go out of loop to abort
   esc[#9]   := 1;

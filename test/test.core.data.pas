@@ -8461,6 +8461,20 @@ begin
   CheckEqual(XmlEscape('& some'), '&amp; some');
   CheckEqual(XmlEscape('<&>'), '&lt;&amp;&gt;');
   CheckEqual(XmlEscape('a<b&c>d'), 'a&lt;b&amp;c&gt;d');
+  CheckEqual(XmlEscape('"'), '&quot;');
+  CheckEqual(XmlEscape(''''), '&apos;');
+  CheckEqual(XmlEscape('a"b''c'), 'a&quot;b&apos;c');
+  CheckEqual(XmlEscape(#9), '&#x09;');
+  CheckEqual(XmlEscape(#10), '&#x0a;');
+  CheckEqual(XmlEscape(#13), '&#x0d;');
+  CheckEqual(XmlEscape('a'#9'b'#10'c'#13'd'), 'a&#x09;b&#x0a;c&#x0d;d');
+  for i := 1 to 31 do
+    if not (i in [9, 10, 13]) then
+    begin
+      FastSetString(s, PAnsiChar('a b'), 3); // allocated, so writable below
+      PByteArray(s)[1] := i; // #1..#31 are not allowed in any XML 1.0 document
+      CheckEqual(XmlEscape(s), 'ab', 'ignored control char');
+    end;
 end;
 
 procedure TTestCoreProcess._TSelectStatement;
