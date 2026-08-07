@@ -1475,11 +1475,13 @@ asm
         xor     edx, edx
         mov     eax, $100
   lock  cmpxchg byte ptr [rcx].TMediumBlockInfo.PrefetchLocked, ah
-        jne     @ok
+        jne     @busy
         // just get the memory chunk - no need to call mmap/VirtualAlloc
         mov     rax, [rcx].TMediumBlockInfo.Prefetch
         mov     [rcx].TMediumBlockInfo.Prefetch, rdx
         mov     [rcx].TMediumBlockInfo.PrefetchLocked, dl
+        ret
+@busy:  xor     eax, eax
 @ok:
 end;
 
