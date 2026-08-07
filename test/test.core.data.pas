@@ -9833,6 +9833,11 @@ begin
   CheckEqual(XmlToJson('<a>false</a>', [xpoVariantGuessType]), '{"a":false}');
   CheckEqual(XmlToJson('<a>false</a><a>7</a><a>hello</a>',
     [xpoVariantGuessType]), '{"a":[false,7,"hello"]}');
+  CheckEqual(XmlToJson('<a>5060</a>', [xpoVariantGuessType]), '{"a":5060}');
+  CheckEqual(XmlToJson('<a>12.79</a>', [xpoVariantGuessType]), '{"a":12.79}');
+  CheckEqual(XmlToJson('<a/>', [xpoVariantGuessType]), '{"a":null}');
+  CheckEqual(XmlToJson('<a>007</a>', [xpoVariantGuessType]), '{"a":"007"}');
+  CheckEqual(XmlToJson('<a>H265</a>', [xpoVariantGuessType]), '{"a":"H265"}');
   // TryXmlToVariant
   Check(TryXmlToVariant('<a><b>1</b></a>', doc) = xpeNone, 'try ok');
   CheckEqual(VariantSaveJson(doc), '{"a":{"b":"1"}}');
