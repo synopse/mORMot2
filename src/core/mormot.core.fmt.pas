@@ -1940,7 +1940,8 @@ var
 begin
   if LastError = xpeNone then
     exit;
-  SetString(tmp, fToken, fAfter - fToken); // truncate to 23 chars
+  tmp[0] := AnsiChar(MaxPtrInt(0, MinPtrInt(high(tmp), fAfter - fToken)));
+  MoveFast(fToken^, tmp[1], ord(tmp[0])); // safe truncate to 23 chars
   EXmlException.RaiseUtf8('XML error at line %: % [%]',
     [LastErrorLine, XML_ERROR[LastError], tmp]);
 end;

@@ -6765,7 +6765,7 @@ var
   end;
 
   procedure OneProduct(const Json, Context: RawUtf8; Expected: integer;
-    Path: PUtf8Char = 'a.b'; const Last: RawUtf8 = 'c');
+    Path: PUtf8Char; const Last: RawUtf8);
   var
     doc: TDocVariantData;
     e: PDocVariantData;
@@ -6806,21 +6806,21 @@ var
       '{"a":[' +
         '{"b":{"c":1,"x":0}},' +
         '{"b":[{"x":0,"c":2},{"c":3},{"x":0,"c":4}]}' +
-      ']}', 'object after array', 4);
+      ']}', 'object after array', 4, 'a.b', 'c');
     OneProduct(
       '{"a":{"b":[' +
         '{"c":1},{"c":2},{"c":3}]}}',
-      'array after object', 3);
+      'array after object', 3, 'a.b', 'c');
     OneProduct('{"a":[{"b":[{"c":1}]},{"b":{"c":2}},{"b":[{"c":3}]}]}',
-       'object/array siblings', 3);
+       'object/array siblings', 3, 'a.b', 'c');
     OneProduct('{"a":[{"b":{"c":1}},{},{"b":{"c":2}}]}',
-      'missing prop 0', 2);
+      'missing prop 0', 2, 'a.b', 'c');
     OneProduct('{"a":[{"b":{"c":1}},{"d":{"c":0}},{"b":{"b":7,"c":2}},{}]}',
-      'missing prop 1', 2);
+      'missing prop 1', 2, 'a.b', 'c');
     OneProduct('{"a":[{},{"b":{"c":1}},{"b":{"c":2}}]}',
-      'missing prop 2', 2);
+      'missing prop 2', 2, 'a.b', 'c');
     OneProduct('{"a":[{},{"b":{"c":1}},{"b":{"c":2}},{}]}',
-      'missing prop 3', 2);
+      'missing prop 3', 2, 'a.b', 'c');
     OneProduct('{"a":[{"b":[{},{"d":0}]},{"b":[{"c":{"id":1}}]}]}',
       'backward init', 1, 'a.b.c', 'id');
     OneProduct(
@@ -6840,13 +6840,15 @@ var
     doc.InitJson('{"a":{"b":1}}', JSON_XML);
     n := 0;
     for e in doc.Product('a.c.d') do
-      inc(n);
+      if Check(e <> nil) then // to make the compiler happy
+        inc(n);
     CheckEqual(n, 0, 'missing path');
     doc.Clear;
     doc.InitJson('{"a":{"b":[]}}', JSON_XML);
     n := 0;
     for e in doc.Product('a.b') do
-      inc(n);
+      if Check(e <> nil) then // to make the compiler happy
+        inc(n);
     CheckEqual(n, 0, 'empty array');
     // stress test - 100000 Product(a.b) in 1.87ms i.e. 51M/s, aver. 18ns
     n := 1000;
