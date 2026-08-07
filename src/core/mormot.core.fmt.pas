@@ -438,8 +438,10 @@ type
     procedure Save;
     /// restore the previous state of the parser (Position, Kind and Depth)
     procedure Restore;
-    /// consume/skip the element subtree from a former Saved position level
-    // - faster than Restore + Skip since won't trully rewind the position
+    /// continue after the element from a previously saved level
+    // - skips its remaining subtree without rewinding the current position
+    // - faster than Restore + Skip when the subtree was already partly consumed
+    // - as used e.g. by the ForEach() method
     function RestoreAndSkip: boolean;
     /// the offset of the current token in the input buffer
     function Position: PtrInt;
@@ -2095,17 +2097,11 @@ begin
   if i = 0 then
     exit;
   dec(i);
-  fStackLen[high(fStackLen)] := i;
   level := fSave[i].B[1]; // Skip logic from current back to the Saved level
-  while true do
-    case ParseNext of
-      xtEof,
-      xtError:
-        exit;
-      xtElementEnd:
-        if Depth < level then
-          break;
-    end;
+  fStackLen[high(fStackLen)] := i;
+  while Depth >= level do
+    if ParseNext in [xtEof, xtError] then
+      exit;
   result := true;
 end;
 
