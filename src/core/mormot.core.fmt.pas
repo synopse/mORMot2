@@ -455,11 +455,10 @@ type
     {$ifndef FPCX86NOTPIC}
     fTab: PAnsiCharToByte; // = XML_KIND[] lookup table (inlined on FPC only)
     {$endif FPCX86NOTPIC}
-    fCur, fBegin, fToken, fAfter: PUtf8Char;
-    // up to 256 levels of 32-bit offsets from fNameOrigin and 255-byte names
-    fStackLen: array[byte] of byte;
-    fStackPos: array[byte] of cardinal;
-    fSave: array[0..31] of TQwordRec; // Save/Restore stack (len=fStackLen[255])
+    fBegin, fCur, fToken, fAfter: PUtf8Char;
+    fStackLen: array[byte] of byte;     // 255-byte names
+    fStackPos: array[byte] of cardinal; // 32-bit offsets from fBegin
+    fSave: array[0..31] of TQwordRec;   // for Save/Restore (len=fStackLen[255])
   end;
 
 const
@@ -2002,12 +2001,26 @@ procedure TXmlParser.Init(Text: PUtf8Char; TextLen: PtrInt;
   ParserOptions: TXmlParserOptions);
 begin
   {$ifdef CPU64}
-  if TextLen shr 32 <> 0 then
+  if TextLen shr 32 <> 0 then // we store 32-bit offsets in fStackPos[}
     EXmlException.RaiseUtf8('TXmlParser cannot parse % bytes', [TextLen]);
   {$endif CPU64}
+  if (Text = nil) or
+     (TextLen <= 0) then // normalize void input
+  begin
+    Text := nil;
+    TextLen := 0;
+  end;
+  Kind := xtNotStarted;
+  Depth := 0;
+  Options := ParserOptions;
+  LastError := xpeNone;
+  LastErrorLine := 0;
+  Name.Text := nil;
+  Name.Len := 0;
+  Value.Buffer := nil;
+  Value.Len := 0;
   fBegin := Text;
-  if (Text <> nil) and
-     (TextLen >= 3) and
+  if (TextLen >= 3) and
      (PWord(Text)^ = BOM_UTF8 and $ffff) and       // no PCardinal 4-bytes read
      (PByteArray(Text)[2] = BOM_UTF8 shr 16) then  // on a 3-bytes-only buffer
   begin
@@ -2017,15 +2030,6 @@ begin
   fCur := Text;
   fToken := Text;
   fAfter := Text + TextLen;
-  Options := ParserOptions;
-  Kind := xtNotStarted;
-  LastError := xpeNone;
-  Depth := 0;
-  LastErrorLine := 0;
-  Name.Text := nil;
-  Name.Len := 0;
-  Value.Buffer := nil;
-  Value.Len := 0;
   {$ifndef FPCX86NOTPIC}
   fTab := @XML_KIND;
   {$endif FPCX86NOTPIC}
