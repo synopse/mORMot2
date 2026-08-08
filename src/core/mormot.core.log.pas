@@ -103,6 +103,8 @@ type
     Addr: TDebugAddressDynArray;
   end;
   PDebugBlock = ^TDebugBlock;
+  TDebugBlocks = array[byte] of TDebugBlock;
+  PDebugBlocks = ^TDebugBlocks;
 
   /// a dynamic array of blocks, as decoded by TDebugFile from .map/.dbg/.mab
   // - stored in Start increasing order in memory for fast O(log(n)) lookup
@@ -135,6 +137,7 @@ type
     fExeAge: TUnixTime;
     fProducer: RawUtf8;
     fHasDebugInfo: boolean;
+    fLinesCount: integer;
     fSymbols, fBlocks: TDynArray;
     fSymbolsTemp, fBlocksTemp: RawByteString; // pre-allocate all names at once
     fLoadingMicroSec: Int64;
@@ -259,6 +262,9 @@ type
     /// how many code blocks with line info are currently stored in Blocks[]
     property BlocksCount: integer
       read fBlocksCount;
+    /// how many line info are currently stored in all Blocks[].Line[]
+    property LinesCount: integer
+      read fLinesCount;
     /// how many microseconds did it need to parse .map/.dbg or .mab input
     property LoadingMicroSec: Int64
       read fLoadingMicroSec;
@@ -2286,6 +2292,7 @@ begin
       DebugFileCurrent := result
     else
       DebugFileLast := result;
+    ConsoleObject(result);
     if not result.IsCode(a) then
       result := nil; // we loaded this exe/lib debug info but a is outside
   finally
@@ -3554,7 +3561,7 @@ var
   R: TFastReader;
   i: PtrInt;
   MS: TMemoryStream;
-  u: PDebugBlock;
+  b: PDebugBlock;
 begin
   result := false;
   try
@@ -3562,17 +3569,19 @@ begin
     MS := AlgoSynLZ.StreamUnCompress(aMabFile, MAGIC_MAB, {hash32=}true);
     if MS <> nil then
     try
+      fLinesCount := 0;
       R.Init(MS.Memory, MS.Size);
       ReadSymbol(PByte(R.P), fSymbols, fSymbolsTemp);
       ReadSymbol(PByte(R.P), fBlocks, fBlocksTemp);
       for i := 0 to fBlocksCount - 1 do
         R.VarUtf8(fBlock[i].FileName);
-      u := pointer(fBlock);
+      b := pointer(fBlock);
       for i := 1 to fBlocksCount do
       begin
-        R.ReadVarUInt32Array(u^.Line);
-        R.ReadVarUInt32Array(u^.Addr);
-        inc(u);
+        R.ReadVarUInt32Array(b^.Line);
+        R.ReadVarUInt32Array(b^.Addr);
+        inc(fLinesCount, length(b^.Line));
+        inc(b);
       end;
       if not R.EOF then
         R.VarUtf8(fProducer);
@@ -3589,6 +3598,7 @@ end;
 constructor TDebugFile.Create(const aExeName: TFileName; Scope: TDebugFileScope);
 var
   i: PtrInt;
+  b: PDebugBlocks;
   savemab: boolean;
   MabAge: TUnixTime;
   start: Int64;
@@ -3634,20 +3644,29 @@ begin
     GenerateFromMapOrDwarf(dfsIncludePathInFileName in Scope);
     if fBlocksCount + fSymbolsCount <> 0 then
     begin
+      fLinesCount := 0;
       fSymbols.Capacity := fSymbolsCount; // only consume the needed memory
       fBlocks.Capacity := fBlocksCount;
       if fBlocksCount <> 0 then // finalize fBlock[] missing fields
       begin
+        b := pointer(fBlock);
         for i := 0 to fBlocksCount - 2 do
-          if fBlock[i].Symbol.Stop = 0 then
-            fBlock[i].Symbol.Stop := fBlock[i + 1].Symbol.Start - 1;
-          with fBlock[fBlocksCount - 1] do
-            if Symbol.Stop = 0 then
-              if Addr <> nil then
-                // Blocks[] may overlap with .inc -> use Addr[]
-                Symbol.Stop := Addr[high(Addr)]
-              else
-                Symbol.Stop := Symbol.Start;
+        begin
+          inc(fLinesCount, length(b^[0].Line));
+          if b^[0].Symbol.Stop = 0 then
+            b^[0].Symbol.Stop := b^[0].Symbol.Start - 1;
+          b := @b^[1];
+        end;
+        with b^[0] do // fix fBlock[fBlocksCount - 1]
+        begin
+          inc(fLinesCount, length(Line));
+          if Symbol.Stop = 0 then
+            if Addr <> nil then
+              // Blocks[] may overlap with .inc -> use Addr[]
+              Symbol.Stop := Addr[high(Addr)]
+            else
+              Symbol.Stop := Symbol.Start;
+        end;
       end;
       savemab := true; // trigger SaveToFile(MabFile) below
     end;
