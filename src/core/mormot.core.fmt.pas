@@ -245,7 +245,10 @@ type
   // which are silently skipped by default
   // - xpoKeepWhiteSpace would return xtText tokens made only of whitespace,
   // which are silently skipped by default
-  // - xpoVariantGuessType let XmlToVariant() recognize booleans and numbers
+  // - xpoVariantGuessType let XmlToVariant() recognize booleans and numbers,
+  // matching only exact JSON literals: anything else is kept as text, e.g.
+  // '1.2.3' '192.168.0.1' '007' or integers out of Int64 range (a 20-digit
+  // decimal identifier should not become an approximate double)
   TXmlParserOption = (
     xpoNoException,
     xpoStripNamespacePrefix,
@@ -2463,6 +2466,21 @@ begin
   ValueAppendToUtf8(RawUtf8(v^.VAny));
 end;
 
+function CanGuessType(txt: PUtf8Char): boolean;
+var
+  len: PtrInt;
+  i64: Int64;
+begin // keep e.g. '1.2.3' '192.168.0.1' '007' or 20-digit identifiers as text
+  len := PStrLen(txt - _STRLEN)^;
+  if IsInt64(txt, len) then
+    // ToInt64() fails on Int64 overflow (as in GetI): out-of-range integers
+    // should remain lossless text, not become an approximate double
+    result := ToInt64(RawUtf8(pointer(txt)), i64)
+  else
+    result := IsConstantJson(txt, len) or // exact null/true/false
+              IsNumberJson(txt);          // strict JSON number lexing
+end;
+
 procedure TXmlParser.ToDocVariant(Dest: PDocVariantData);
 var
   txt, v: pointer;
@@ -2496,6 +2514,8 @@ begin
     else
       Dest := pointer(Dest^.NewItem('#text'));
   if (xpoVariantGuessType in Options) and
+     ((txt = nil) or // void element -> null
+      CanGuessType(txt)) and
      GetVariantFromNotStringJson(txt, PVarData(Dest)^,
        dvoAllowDoubleValue in Dest^.Options) then
   begin
