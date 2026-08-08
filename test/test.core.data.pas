@@ -6786,6 +6786,7 @@ var
   procedure DoProduct;
   var
     doc, a: TDocVariantData;
+    v: PVariant;
     e: PDocVariantData;
     s: RawUtf8;
     i, n: integer;
@@ -6835,7 +6836,17 @@ var
     for e in doc.Product('tableHead.fields.field') do
       if e^.U['units'] = 'arcsec' then
         inc(n);
-    CheckEqual(n, 2, 'xml-like');
+    CheckEqual(n, 2, 'xml-like-pdocvariant');
+    n := 0;
+    for v in doc.ProductValue('tableHead.fields.field.units') do
+      if v^ = 'arcsec' then
+        inc(n);
+    CheckEqual(n, 2, 'xml-like-variant 1');
+    n := 0;
+    for v in doc.ProductValue('tableHead.fields.field.units') do
+      if VariantEquals(v^, 'arcsec') then
+        inc(n);
+    CheckEqual(n, 2, 'xml-like-variant 2');
     doc.Clear;
     doc.InitJson('{"a":{"b":1}}', JSON_XML);
     n := 0;
