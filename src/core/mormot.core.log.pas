@@ -68,6 +68,7 @@ type
   TDebugAddressDynArray = TIntegerDynArray;
 
   /// a debugger symbol, as decoded by TDebugFile from a .map/.dbg/.mab file
+  // - may refer to a global variable, function or method name and address
   TDebugSymbol = packed record
     /// symbol identifier
     Name: RawUtf8;
@@ -86,7 +87,7 @@ type
   // - as decoded by TDebugFile from a .map/.dbg/.mab file
   // - may refer to the main .pas file, a nested .inc file, or source locations
   // generated for compiler features such as inlined routines or generics
-  TDebugLines = packed record
+  TDebugBlock = packed record
     /// identifier and address range of this source block
     // - Name is the main Pascal unit identifier, e.g. 'mormot.core.base'
     Symbol: TDebugSymbol;
@@ -101,11 +102,11 @@ type
     // - stored in increasing order in memory for fast O(log(n)) lookup
     Addr: TDebugAddressDynArray;
   end;
-  PDebugLines = ^TDebugLines;
+  PDebugBlock = ^TDebugBlock;
 
   /// a dynamic array of blocks, as decoded by TDebugFile from .map/.dbg/.mab
   // - stored in Start increasing order in memory for fast O(log(n)) lookup
-  TDebugLinesDynArray = array of TDebugLines;
+  TDebugBlockDynArray = array of TDebugBlock;
 
   /// allow to customize TDebugFile.Create and TDebugFile.SaveToFile process
   TDebugFileScope = set of (
@@ -126,16 +127,16 @@ type
   TDebugFile = class(TSynPersistent)
   protected
     fSymbol: TDebugSymbolDynArray;
-    fLine: TDebugLinesDynArray;
+    fBlock: TDebugBlockDynArray;
     fCodeOffset: PtrUInt;
-    fSymbolsCount, fLinesCount: integer;
+    fSymbolsCount, fBlocksCount: integer;
     fStart, fStop: PtrUInt; // efficient IsCode()
     fExeFile, fExePath, fMabFile: TFileName;
     fExeAge: TUnixTime;
     fProducer: RawUtf8;
     fHasDebugInfo: boolean;
-    fSymbols, fLines: TDynArray;
-    fSymbolsTemp, fLinesTemp: RawByteString; // pre-allocate all names at once
+    fSymbols, fBlocks: TDynArray;
+    fSymbolsTemp, fBlocksTemp: RawByteString; // pre-allocate all names at once
     fLoadingMicroSec: Int64;
     procedure GenerateFromMapOrDwarf(includedir: boolean); // from Create()
     function LoadMab(const aMabFile: TFileName): boolean;
@@ -145,10 +146,10 @@ type
     function AppendLog(W: TTextWriter; aPointer: PtrUInt; NoHex: boolean): boolean;
     // use fast O(log n) binary search to locate a symbol or line number
     function FindSymbol(rva: TDebugAddress): PDebugSymbol;
-    function FindLines(rva: TDebugAddress; out line: integer): PDebugLines; overload;
-    function FindLines(rva: TDebugAddress): PDebugLines; overload;
+    function FindBlock(rva: TDebugAddress; out line: integer): PDebugBlock; overload;
+    function FindBlock(rva: TDebugAddress): PDebugBlock; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    function FindLinesByName(const aUnitName: RawUtf8): PDebugLines;
+    function FindBlockByName(const aUnitName: RawUtf8): PDebugBlock;
   public
     /// get the available debugging information
     // - you should NEVER call this constructor, but TDebugFile.CurrentDebugFile
@@ -233,12 +234,15 @@ type
     /// low-level resolution of the main TDebugFile from the current exe/dll
     class function CurrentDebugFile: TDebugFile;
       {$ifdef HASINLINE} static; {$endif}
-    /// all symbols, mainly function and method names and addresses
+    /// all symbols decoded from the debug information
+    // - may refer to a global variable, function or method name and address
     property Symbols: TDebugSymbolDynArray
       read fSymbol;
-    /// all source blocks, including line numbers, associated to the executable
-    property Lines: TDebugLinesDynArray
-      read fLine;
+    /// all source line blocks decoded from the debug information
+    // - each block maps source lines to one contiguous executable address range
+    // - may refer to a Pascal unit, included file, or compiler-generated code
+    property Blocks: TDebugBlockDynArray
+      read fBlock;
   published
     /// the associated executable or library file 
     property FileName: TFileName
@@ -252,9 +256,9 @@ type
     /// how many identifiers are currently stored in Symbols[]
     property SymbolsCount: integer
       read fSymbolsCount;
-    /// how many code blocks with line info are currently stored in Lines[]
-    property LinesCount: integer
-      read fLinesCount;
+    /// how many code blocks with line info are currently stored in Blocks[]
+    property BlocksCount: integer
+      read fBlocksCount;
     /// how many microseconds did it need to parse .map/.dbg or .mab input
     property LoadingMicroSec: Int64
       read fLoadingMicroSec;
@@ -2395,7 +2399,7 @@ type
   public
     flags: set of (isstmt, basicblock, endsequence,
       prologueend, epiloguebegin, appendrow, invalidaddress);
-    line, address, fileid: cardinal; // PInt64(@state.line)^ stored in Lines[]
+    line, address, fileid: cardinal; // PInt64(@state.line)^ stored in Blocks[]
     procedure Init(aIs_Stmt: ByteBool);
   end;
 
@@ -2410,7 +2414,7 @@ type
     AbbrevOffset, AbbrevSize: integer; // debug_abbrev
     ImageBase: QWord; // e.g. 0100000000 on Win64 or 00400000 on Win32
     debug: TDebugFile;
-    Lines: TInt64DynArray; // TDebugLines.Addr[] in high 32-bit, Line[] in lower
+    Lines: TInt64DynArray; // TDebugBlock.Addr[] in high 32-bit, Line[] in lower
     dirs, files: TRawUtf8DynArray;
     filesdir: TIntegerDynArray;
     Map: TMemoryMap;
@@ -2734,7 +2738,7 @@ begin
   end;
 end;
 
-procedure FinalizeLines(u: PDebugLines; linesn: PtrInt; Lines: PInt64; unsorted: boolean);
+procedure FinalizeLines(u: PDebugBlock; linesn: PtrInt; Lines: PInt64; unsorted: boolean);
 var
   i: PtrInt;
 begin
@@ -2768,7 +2772,7 @@ var
   unsorted: boolean;
   header64: TDwarfLineInfoHeader64;
   header32: TDwarfLineInfoHeader32;
-  u: PDebugLines;
+  u: PDebugBlock;
   name: PAnsiChar;
   namelen: integer;
   numoptable: array[1..255] of byte;
@@ -2930,7 +2934,7 @@ begin
         prevline := state.line;
         if prevfile <> state.fileid then
         begin
-          // each nested .inc/.pas triggers a new Lines[] block
+          // each nested .inc/.pas triggers a new Blocks[] record
           FinalizeLines(u, linesn, pointer(Lines), unsorted);
           linesn := 0; // reuse the same 64-bit Lines[] buffer for Addr[]+Line[]
           prevaddr := 0;
@@ -2939,7 +2943,7 @@ begin
           {$ifdef DWARFDEBUG}
           ConsoleWrite(['-------------- ', files[ndx]]);
           {$endif DWARFDEBUG}
-          u := debug.fLines.NewPtr;
+          u := debug.fBlocks.NewPtr;
           u^.Symbol.Name := files[ndx]; // will eventually be replaced with CU
           if includesdir and
              (filesdir[ndx] > 0) then
@@ -2965,7 +2969,7 @@ begin
   FinalizeLines(u, linesn, pointer(Lines), unsorted);
 end;
 
-procedure FinalizeLinesSymbol(u: PDebugLines; n, low_pc, high_pc: PtrInt;
+procedure FinalizeLinesSymbol(u: PDebugBlock; n, low_pc, high_pc: PtrInt;
   id: PUtf8Char; idlen: PtrInt);
 var
   start, len, i: PtrInt;
@@ -2975,7 +2979,7 @@ begin // set Symbol.Name as main Pascal unit identifier as with Delphi .map
     repeat
       start := u^.Symbol.Start; // note: u^.Symbol.Stop = 0 at this point
       if start >= high_pc then
-        break // GenerateFromMapOrDwarf made fLines.Sort(SymbolSortByStartAddr)
+        break // GenerateFromMapOrDwarf made fBlocks.Sort(SymbolSortByStartAddr)
       else if start >= low_pc then
       begin
         if name = '' then
@@ -3111,7 +3115,7 @@ begin
           end
           else // Tag = DW_TAG_compile_unit
             // e.g. 'mormot.core.base.asmx86.inc' -> 'mormot.core.base.pas'
-            FinalizeLinesSymbol(pointer(debug.fLine), debug.fLinesCount,
+            FinalizeLinesSymbol(pointer(debug.fBlock), debug.fBlocksCount,
               low_pc, high_pc, name, namelen);
       end
       else if (level = 2) and
@@ -3173,7 +3177,7 @@ begin
     last := curr + dwarf.LineSize;
     while curr < last do
       curr := dwarf.ParseCompilationUnit(curr, last - curr);
-    fLines.Sort(SymbolSortByStartAddr);
+    fBlocks.Sort(SymbolSortByStartAddr);
     // retrieve function names into Symbols[]
     curr := dwarf.InfoOffset;
     last := curr + dwarf.InfoSize;
@@ -3239,7 +3243,7 @@ end;
 procedure TDebugFile.GenerateFromMapOrDwarf(includedir: boolean);
 var
   P, PEnd: PUtf8Char;
-  sections: TDebugLinesDynArray;
+  sections: TDebugBlockDynArray;
 
   procedure NextLine;
   begin
@@ -3281,7 +3285,7 @@ var
   procedure ReadSegments;
   var
     Beg: PAnsiChar;
-    U: TDebugLines;
+    U: TDebugBlock;
   begin
     NextLine;
     NextLine;
@@ -3292,7 +3296,7 @@ var
           (P^ >= ' ') do
     begin
       // we just need the unit names now for ReadSymbols to detect and trim them
-      // final Lines[] will be filled in ReadLines with potential nested files
+      // final Blocks[] will be filled in ReadLines with potential nested files
       if GetCode(U.Symbol.Start) and
          HexDisplayToCardinal(PAnsiChar(P), PCardinal(@U.Symbol.Stop)^) then
       begin
@@ -3310,7 +3314,7 @@ var
         if (U.Symbol.Name <> '') and
            ((U.Symbol.Start <> 0) or
             (U.Symbol.Stop <> 0)) then
-          fLines.FindAndAddIfNotExisting(U);
+          fBlocks.FindAndAddIfNotExisting(U);
       end;
       NextLine;
     end;
@@ -3350,8 +3354,8 @@ var
         begin
           // manual unit name search
           LastUnitUp := '';
-          for u := 0 to fLinesCount - 1 do
-            with fLine[u].Symbol do
+          for u := 0 to fBlocksCount - 1 do
+            with fBlock[u].Symbol do
             begin
               l := length(Name);
               if (Beg[l] = '.') and
@@ -3375,16 +3379,16 @@ var
       end;
       NextLine;
     end;
-    sections := fLine;
-    SetLength(sections, fLinesCount);
-    fLines.Clear; // ReadLines will repopulate Lines[] with code blocks :)
+    sections := fBlock;
+    SetLength(sections, fBlocksCount);
+    fBlocks.Clear; // ReadLines will repopulate Blocks[] with code blocks :)
   end;
 
   procedure ReadLines;
   var
     Beg, SymbolBeg, SymbolEnd: PAnsiChar;
     n, capa: PtrInt;
-    U: PDebugLines;
+    U: PDebugBlock;
   begin
     SymbolBeg := pointer(P);
     while P^ <> '(' do
@@ -3404,7 +3408,7 @@ var
         inc(P);
     if not IdemPChar(P, ') SEGMENT .TEXT') then
       exit;
-    U := fLines.NewPtr; // each nested .inc/.pas triggers a new Lines[] block
+    U := fBlocks.NewPtr; // each nested .inc/.pas triggers a new Blocks[] record
     FastSetString(U^.Symbol.Name, SymbolBeg, SymbolEnd); // unit name
     FastSetString(U^.FileName, Beg, P); // may be nested .inc
     NextLine;
@@ -3457,7 +3461,7 @@ begin
      (StrLen(P) <> l) then
     exit; // this is no .map file for sure
   PEnd := P + l;
-  // parse .map sections into Symbols[] and Lines[]
+  // parse .map sections into Symbols[] and Blocks[]
   fSymbols.Capacity := 8000;
   while P < PEnd do
     if MatchPattern(P, PEnd, 'DETAILED MAP OF SEGMENTS', P) then
@@ -3469,17 +3473,17 @@ begin
     else
       NextLine;
   // now we should have read all .map/.dbg content
-  for i := fLinesCount - 1 downto 0 do
-    with fLine[i] do
+  for i := fBlocksCount - 1 downto 0 do
+    with fBlock[i] do
       if (Symbol.Start = 0) and
          (Symbol.Stop = 0) then
-        fLines.Delete(i); // occurs with Delphi 2010 :(
-  for i := 0 to fLinesCount - 1 do
-    with fLine[i] do
+        fBlocks.Delete(i); // occurs with Delphi 2010 :(
+  for i := 0 to fBlocksCount - 1 do
+    with fBlock[i] do
       if Symbol.Stop = 0 then
       begin
-        if i < fLinesCount - 1 then
-          Symbol.Stop := fLine[i + 1].Symbol.Start - 1;
+        if i < fBlocksCount - 1 then
+          Symbol.Stop := fBlock[i + 1].Symbol.Start - 1;
         for j := 0 to length(sections) - 1 do
           if sections[j].Symbol.Name = Symbol.Name then
           begin
@@ -3513,7 +3517,7 @@ begin
   n := FromVarUInt32(P);
   if n = 0 then
     exit;
-  A.Count := n; // allocate TDebugSymbolDynArray/TDebugLinesDynArray
+  A.Count := n; // allocate TDebugSymbolDynArray/TDebugBlockDynArray
   S := A.Value^;
   prev := 0;
   for i := 1 to n do
@@ -3522,7 +3526,7 @@ begin
     S^.Start := prev;
     inc(prev, FromVarUInt32(P));
     S^.Stop := prev;
-    inc(PByte(S), A.Info.Cache.ItemSize); // may be TDebugSymbol or TDebugLines
+    inc(PByte(S), A.Info.Cache.ItemSize); // may be TDebugSymbol or TDebugBlock
   end;
   S := A.Value^;
   if PInteger(P)^ = -1 then // new encoding with namesize prefix
@@ -3550,7 +3554,7 @@ var
   R: TFastReader;
   i: PtrInt;
   MS: TMemoryStream;
-  u: PDebugLines;
+  u: PDebugBlock;
 begin
   result := false;
   try
@@ -3560,11 +3564,11 @@ begin
     try
       R.Init(MS.Memory, MS.Size);
       ReadSymbol(PByte(R.P), fSymbols, fSymbolsTemp);
-      ReadSymbol(PByte(R.P), fLines, fLinesTemp);
-      for i := 0 to fLinesCount - 1 do
-        R.VarUtf8(fLine[i].FileName);
-      u := pointer(fLine);
-      for i := 1 to fLinesCount do
+      ReadSymbol(PByte(R.P), fBlocks, fBlocksTemp);
+      for i := 0 to fBlocksCount - 1 do
+        R.VarUtf8(fBlock[i].FileName);
+      u := pointer(fBlock);
+      for i := 1 to fBlocksCount do
       begin
         R.ReadVarUInt32Array(u^.Line);
         R.ReadVarUInt32Array(u^.Addr);
@@ -3593,8 +3597,8 @@ begin
   inherited Create; // may have been overriden
   fSymbols.InitSpecific(TypeInfo(TDebugSymbolDynArray), fSymbol, ptRawUtf8,
     @fSymbolsCount, true);
-  fLines.InitSpecific(TypeInfo(TDebugLinesDynArray), fLine, ptRawUtf8,
-    @fLinesCount, true);
+  fBlocks.InitSpecific(TypeInfo(TDebugBlockDynArray), fBlock, ptRawUtf8,
+    @fBlocksCount, true);
   if SynLogFileFreeing then // avoid GPF
     exit;
   // check the supplied aExeName
@@ -3623,24 +3627,24 @@ begin
      (abs(fExeAge - MabAge) < 2) then // same exact age
     LoadMab(fMabFile);
   // recompute from .map/.dbg if no faster-to-load .mab available
-  if fLinesCount or fSymbolsCount = 0 then
+  if fBlocksCount or fSymbolsCount = 0 then
   try
     if MabAge <> 0 then
       DeleteFile(fMabFile);
     GenerateFromMapOrDwarf(dfsIncludePathInFileName in Scope);
-    if fLinesCount + fSymbolsCount <> 0 then
+    if fBlocksCount + fSymbolsCount <> 0 then
     begin
       fSymbols.Capacity := fSymbolsCount; // only consume the needed memory
-      fLines.Capacity := fLinesCount;
-      if fLinesCount <> 0 then // finalize fLine[] missing fields
+      fBlocks.Capacity := fBlocksCount;
+      if fBlocksCount <> 0 then // finalize fBlock[] missing fields
       begin
-        for i := 0 to fLinesCount - 2 do
-          if fLine[i].Symbol.Stop = 0 then
-            fLine[i].Symbol.Stop := fLine[i + 1].Symbol.Start - 1;
-          with fLine[fLinesCount - 1] do
+        for i := 0 to fBlocksCount - 2 do
+          if fBlock[i].Symbol.Stop = 0 then
+            fBlock[i].Symbol.Stop := fBlock[i + 1].Symbol.Start - 1;
+          with fBlock[fBlocksCount - 1] do
             if Symbol.Stop = 0 then
               if Addr <> nil then
-                // Lines[] blocks may overlap with .inc -> use Addr[]
+                // Blocks[] may overlap with .inc -> use Addr[]
                 Symbol.Stop := Addr[high(Addr)]
               else
                 Symbol.Stop := Symbol.Start;
@@ -3649,16 +3653,16 @@ begin
     end;
   except
     fSymbols.Clear;
-    fLines.Clear;
+    fBlocks.Clear;
   end;
   // search for an embedded compressed .mab file appended to the .exe/.dll
-  if fLinesCount or fSymbolsCount = 0 then
+  if fBlocksCount or fSymbolsCount = 0 then
     LoadMab(fExeFile);
   // finalize (and optionally persist as .mab) this instance
-  if fLinesCount <> 0 then
+  if fBlocksCount <> 0 then
   begin
-    fStart := fLine[0].Symbol.Start;
-    fStop := fLine[fLinesCount - 1].Symbol.Stop;
+    fStart := fBlock[0].Symbol.Start;
+    fStop := fBlock[fBlocksCount - 1].Symbol.Stop;
     fHasDebugInfo := true; // mark as success
   end;
   if fSymbolsCount <> 0 then
@@ -3680,8 +3684,8 @@ end;
 
 destructor TDebugFile.Destroy;
 begin
-  fSymbols.Clear; // ensure are released BEFORE fSymbolsTemp and fLinesTemp
-  fLines.Clear;
+  fSymbols.Clear; // ensure are released BEFORE fSymbolsTemp and fBlocksTemp
+  fBlocks.Clear;
   inherited Destroy;
 end;
 
@@ -3711,7 +3715,7 @@ begin
     P := ToVarUInt32(S^.Start - prev, P);
     P := ToVarUInt32(S^.Stop - S^.Start, P);
     prev := S^.Stop;
-    inc(PByte(S), A.Info.Cache.ItemSize); // may be TDebugSymbol or TDebugLines
+    inc(PByte(S), A.Info.Cache.ItemSize); // may be TDebugSymbol or TDebugBlock
   end;
   W.DirectWriteFlush(PtrUInt(P) - PtrUInt(Beg), tmp);
   W.Write4(-1); // marker for new format with namesize prefix
@@ -3729,7 +3733,7 @@ var
   W: TBufferWriter;
   i: integer;
   MS: TMemoryStream;
-  u: PDebugLines;
+  u: PDebugBlock;
 begin
   MS := TMemoryStream.Create;
   try
@@ -3743,15 +3747,15 @@ begin
         W.Write1(0)
       else
       begin
-        WriteSymbol(W, fLines);
-        u := pointer(fLine);
-        for i := 1 to fLinesCount do
+        WriteSymbol(W, fBlocks);
+        u := pointer(fBlock);
+        for i := 1 to fBlocksCount do
         begin
           W.Write(u^.FileName); // group for better compression
           inc(u);
         end;
-        u := pointer(fLine);
-        for i := 1 to fLinesCount do
+        u := pointer(fBlock);
+        for i := 1 to fBlocksCount do
         begin
           // Line values are not always increasing -> wkOffsetI
           W.WriteVarUInt32Array(u^.Line, length(u^.Line), wkOffsetI);
@@ -3774,18 +3778,18 @@ begin
 end;
 
 const
-  _TDebugSymbol = 'name:RawUtf8 start,stop:integer';
-  _TDebugLines = 'symbol:TDebugSymbol filename:RawUtf8 line,addr:TIntegerDynArray';
+  _TDebugSymbol: RawUtf8 = 'name:RawUtf8 start,stop:integer';
+  _TDebugBlock: RawUtf8 = 'symbol:TDebugSymbol filename:RawUtf8 line,addr:TIntegerDynArray';
 
 procedure TDebugFile.SaveToJson(W: TTextWriter);
 begin
   if Rtti.RegisterType(TypeInfo(TDebugSymbol)).Props.Count = 0 then
     Rtti.RegisterFromText([TypeInfo(TDebugSymbol), _TDebugSymbol,
-                           TypeInfo(TDebugLines),  _TDebugLines]);
+                           TypeInfo(TDebugBlock),  _TDebugBlock]);
   W.AddShort('{"symbols":');
   fSymbols.SaveToJson(W, []);
-  W.AddShort(',"lines":');
-  fLines.SaveToJson(W, []);
+  W.AddShort(',"blocks":');
+  fBlocks.SaveToJson(W, []);
   W.Add('}');
 end;
 
@@ -3876,17 +3880,17 @@ begin
   result := nil; // not found
 end;
 
-function TDebugFile.FindLines(rva: TDebugAddress): PDebugLines;
+function TDebugFile.FindBlock(rva: TDebugAddress): PDebugBlock;
 var
   i, L, R: PtrInt;
 begin
   L := 0;
-  R := fLinesCount - 1;
+  R := fBlocksCount - 1;
   if (R >= 0) and
      (rva > 0) then
     repeat // efficient O(log(n)) binary search
       i := (L + R) shr 1;
-      result := @fLine[i];
+      result := @fBlock[i];
       if rva < result^.Symbol.Start then
         R := i - 1
       else if rva > result^.Symbol.Stop then
@@ -3897,13 +3901,13 @@ begin
   result := nil; // not found
 end;
 
-function TDebugFile.FindLines(rva: TDebugAddress; out line: integer): PDebugLines;
+function TDebugFile.FindBlock(rva: TDebugAddress; out line: integer): PDebugBlock;
 var
   i, L, R, max: PtrInt;
   a: PIntegerArray;
 begin
   line := 0;
-  result := FindLines(rva);
+  result := FindBlock(rva);
   if result = nil then
     exit;
   // unit found -> search line number from within matching Addr[]
@@ -3934,7 +3938,7 @@ var
   rva: TDebugAddress;
   line: integer; // not PtrInt
   s: PDebugSymbol;
-  l: PDebugLines;
+  l: PDebugBlock;
 begin
   result := false;
   rva := AbsoluteToRelative(aPointer);
@@ -3955,7 +3959,7 @@ begin
     W.AddPointer(aPointer);
     W.AddDirect(' ');
   end;
-  l := FindLines(rva, line);
+  l := FindBlock(rva, line);
   if l <> nil then
   begin
     if line = 0 then
@@ -3992,7 +3996,7 @@ var
   line: integer; // not PtrInt
   rva: TDebugAddress;
   s: PDebugSymbol;
-  l: PDebugLines;
+  l: PDebugBlock;
   c: PUtf8Char;
 begin
   if (self = nil) or
@@ -4002,7 +4006,7 @@ begin
   if rva = 0 then
     exit;
   s := FindSymbol(rva);
-  l := FindLines(rva, line);
+  l := FindBlock(rva, line);
   if (s = nil) and
      (l = nil) then
      exit;
@@ -4072,15 +4076,15 @@ begin
   TDebugFile.FindLocationShort(aAddress, result);
 end;
 
-function TDebugFile.FindLinesByName(const aUnitName: RawUtf8): PDebugLines;
+function TDebugFile.FindBlockByName(const aUnitName: RawUtf8): PDebugBlock;
 var
   i: integer;
 begin
   if (self <> nil) and
      (aUnitName <> '') then
   begin
-    result := pointer(fLine);
-    for i := 1 to fLinesCount do
+    result := pointer(fBlock);
+    for i := 1 to fBlocksCount do
       if IdemPropNameU(result^.Symbol.Name, aUnitName) then // inlined
         exit // return the first occurence skipping any next nested inclusion
       else
@@ -4092,14 +4096,14 @@ end;
 class function TDebugFile.FindFileName(const unitname: RawUtf8): TFileName;
 var
   name: RawUtf8;
-  l: PDebugLines;
+  l: PDebugBlock;
 begin
   result := '';
   if unitname = '' then
     name := Executable.ProgramName
   else
     name := unitname;
-  l := TDebugFile.CurrentDebugFile.FindLinesByName(name);
+  l := TDebugFile.CurrentDebugFile.FindBlockByName(name);
   if l <> nil then
     Utf8ToFileName(l^.FileName, result);
 end;
