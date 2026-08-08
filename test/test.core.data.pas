@@ -9845,6 +9845,34 @@ begin
   CheckEqual(VariantSaveJson(doc), '{"a":{"b":"1"}}');
   Check(TryXmlToVariant('<a><b></a>', doc) = xpeWrongEndTag, 'try mismatch');
   CheckEqual(_Safe(doc)^.Count, 0);
+  // JsonToXml() reverse direction, following the very same conventions
+  CheckEqual(JsonToXml('{"a":"hello"}', ''), '<a>hello</a>');
+  CheckEqual(JsonToXml('{"a":{"b":"1"}}', ''), '<a><b>1</b></a>');
+  CheckEqual(JsonToXml('{"a":{"@d":"x"}}', ''), '<a d="x"></a>');
+  CheckEqual(JsonToXml('{"a":{"@d":"x","#text":"t"}}', ''), '<a d="x">t</a>');
+  CheckEqual(JsonToXml('{"a":{"@x":"1","@y":"2","b":"3"}}', ''),
+    '<a x="1" y="2"><b>3</b></a>');
+  CheckEqual(JsonToXml('{"a":{"@d":1}}', ''), '<a d="1"></a>');
+  CheckEqual(JsonToXml('{"e":{"@xmlns:s":"u","b":"x"}}', ''),
+    '<e xmlns:s="u"><b>x</b></e>');
+  // attribute values and text are XML-escaped as expected
+  CheckEqual(JsonToXml('{"a":{"@d":"a<b&c\"d"}}', ''),
+    '<a d="a&lt;b&amp;c&quot;d"></a>');
+  // '#text' may appear after the sub-elements, as XmlToVariant() generates it
+  CheckEqual(JsonToXml('{"a":{"b":"","#text":"pre post"}}', ''),
+    '<a><b></b>pre post</a>');
+  // array items may have their own attributes
+  CheckEqual(JsonToXml('{"item":[{"@id":"1"},{"@id":"2"}]}', ''),
+    '<item id="1"></item><item id="2"></item>');
+  // jxoNoAttribute/jxoNoText restore the previous (not well-formed) output
+  CheckEqual(JsonToXml('{"a":{"@d":"x","#text":"t"}}', '', '',
+    [jxoNoAttribute, jxoNoText]), '<a><@d>x</@d><#text>t</#text></a>');
+  // XmlToJson() then JsonToXml() should round-trip the original XML content
+  CheckEqual(JsonToXml(XmlToJson('<a d="x"/>'), ''), '<a d="x"></a>');
+  CheckEqual(JsonToXml(XmlToJson('<a><b>1</b><b>2</b><c d="x">t</c></a>'), ''),
+    '<a><b>1</b><b>2</b><c d="x">t</c></a>');
+  CheckEqual(JsonToXml(XmlToJson('<a><b i="1">x</b><b i="2">y</b></a>'), ''),
+    '<a><b i="1">x</b><b i="2">y</b></a>');
 end;
 
 procedure TTestCoreProcess.XmlParserConsume;
