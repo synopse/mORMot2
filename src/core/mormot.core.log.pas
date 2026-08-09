@@ -2292,7 +2292,6 @@ begin
       DebugFileCurrent := result
     else
       DebugFileLast := result;
-    ConsoleObject(result);
     if not result.IsCode(a) then
       result := nil; // we loaded this exe/lib debug info but a is outside
   finally
