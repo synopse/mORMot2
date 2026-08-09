@@ -2205,7 +2205,7 @@ type
     Values: TDynArrayHashed;
     /// alternative to Values.Hasher.HashOne() using PUtf8Char + Length
     FromBuffer: TUtf8Hasher;
-    /// alternative to Values.Compare() using PUtf8Char + Length
+    /// alternative to Values.Compare() using // = StrComp/StrIComp(PUtf8Char)
     CompFromBuffer: TDynArraySortCompare;
     /// initialize the RawUtf8 dynamic array and hasher
     procedure Init(CaseInsensitive: boolean);
@@ -3436,7 +3436,7 @@ const
   HASH_INTERN: array[{CaseInsensitive:}boolean] of TUtf8Hasher = (
     HashIntern, HashInternI);
   COMP_PUTF8CHAR: array[{CaseInsensitive:}boolean] of TDynArraySortCompare = (
-    SortDynArrayPUtf8Char, SortDynArrayPUtf8CharI);
+    SortDynArrayPUtf8Char, SortDynArrayPUtf8CharI); // = StrComp, StrIComp
 
 { TRawUtf8Hashed }
 
@@ -3489,40 +3489,46 @@ end;
 procedure TRawUtf8InterningSlot.UniqueFromBuffer(var aResult: RawUtf8;
   aText: PUtf8Char; aTextLen: PtrInt; aTextHash: cardinal);
 var
-  c: AnsiChar;
+  p: PUtf8Char;
   added: boolean;
   i: PtrInt;
   bak: TDynArraySortCompare;
+  temp: TBuffer1K;
 begin
-  if not fSafe.TryReadLock then
+  p := nil; // for direct allocation
+  if (aText <> nil) and
+     (aTextLen > 0) then
+    if aText[aTextLen] = #0 then // nothing to be done if already #0 ended
+      p := aText
+    else if aTextLen < SizeOf(temp) then
+    begin
+      MoveFast(aText^, temp, aTextLen); // make #0 terminated local copy
+      temp[aTextLen] := #0;
+      p := @temp;
+    end;
+  if (p = nil) or
+     not fSafe.TryReadLock then // no wait on (unlikely) WriteLock contention
   begin
-    FastSetString(aResult, aText, aTextLen); // avoid waiting on contention
+    FastSetString(aResult, aText, aTextLen); // direct allocation
     exit;
   end;
-  c := aText[aTextLen];
-  if c <> #0 then // write only if needed - avoid GPF from constant string
-    aText[aTextLen] := #0; // input buffer may not be #0 terminated
-  i := fHash.Values.Hasher.FindIndex(aTextHash, @aText, fHash.CompFromBuffer);
+  i := fHash.Values.Hasher.FindIndex(aTextHash, @p, fHash.CompFromBuffer);
   if i >= 0 then
   begin
     aResult := fHash.Value[i]; // return the interned value
     fSafe.ReadUnLock;
-    if c <> #0 then
-      aText[aTextLen] := c;
     exit;
   end;
   fSafe.ReadUnLock;
   fSafe.WriteLock; // need to be added in exclusive mode
   bak := fHash.Values.Hasher.Compare; // (RawUtf8,RawUtf8) -> (RawUtf8,PUtf8Char)
   PDynArrayHasher(@fHash.Values.Hasher)^.fCompare := fHash.CompFromBuffer;
-  i := fHash.Values.FindHashedForAdding(aText, added, aTextHash);
+  i := fHash.Values.FindHashedForAdding(p, added, aTextHash);
   PDynArrayHasher(@fHash.Values.Hasher)^.fCompare := bak;
   if added then
-    FastSetString(fHash.Value[i], aText, aTextLen); // new value to the pool
+    FastSetString(fHash.Value[i], p, aTextLen); // new value to the pool
   aResult := fHash.Value[i]; // return the interned value
   fSafe.WriteUnLock;
-  if c <> #0 then
-    aText[aTextLen] := c;
 end;
 
 procedure TRawUtf8InterningSlot.UniqueFromBuffer(var aResult: RawUtf8;
