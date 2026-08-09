@@ -3653,7 +3653,7 @@ begin
         begin
           inc(fLinesCount, length(b^[0].Line));
           if b^[0].Symbol.Stop = 0 then
-            b^[0].Symbol.Stop := b^[0].Symbol.Start - 1;
+            b^[0].Symbol.Stop := b^[1].Symbol.Start - 1;
           b := @b^[1];
         end;
         with b^[0] do // fix fBlock[fBlocksCount - 1]
