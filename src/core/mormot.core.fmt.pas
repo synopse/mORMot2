@@ -510,8 +510,8 @@ function TryXmlToVariant(const Xml: RawUtf8; var Doc: variant;
 /// convert XML UTF-8 content into a JSON object
 // - just a wrapper around XmlToVariant() + TDocVariantData.ToJson
 // - see JsonToXml() for the reverse process
-function XmlToJson(const Xml: RawUtf8;
-  ParseOptions: TXmlParserOptions = []): RawUtf8;
+function XmlToJson(const Xml: RawUtf8; ParseOptions: TXmlParserOptions = [];
+  Options: TDocVariantOptions = JSON_XML): RawUtf8;
 
 
 { ************* YAML 1.2 core-schema to JSON or TDocVariant Support }
@@ -2699,12 +2699,12 @@ begin
     TDocVariantData(Doc).Clear;
 end;
 
-function XmlToJson(const Xml: RawUtf8;
-  ParseOptions: TXmlParserOptions): RawUtf8;
+function XmlToJson(const Xml: RawUtf8; ParseOptions: TXmlParserOptions;
+  Options: TDocVariantOptions): RawUtf8;
 var
   doc: variant;
 begin
-  XmlToVariant(Xml, doc, ParseOptions);
+  XmlToVariant(Xml, doc, ParseOptions, Options);
   VariantSaveJson(doc, twJsonEscape, result);
 end;
 
