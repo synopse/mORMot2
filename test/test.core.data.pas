@@ -9833,6 +9833,9 @@ begin
   CheckEqual(XmlToJson('<a>false</a>', [xpoVariantGuessType]), '{"a":false}');
   CheckEqual(XmlToJson('<a>false</a><a>7</a><a>hello</a>',
     [xpoVariantGuessType]), '{"a":[false,7,"hello"]}');
+  // validate dvoInternNames
+  CheckEqual(XmlToJson('<a><a/></a>', [], JSON_XML + [dvoInternNames]),
+    '{"a":{"a":""}}');
   // TryXmlToVariant
   Check(TryXmlToVariant('<a><b>1</b></a>', doc) = xpeNone, 'try ok');
   CheckEqual(VariantSaveJson(doc), '{"a":{"b":"1"}}');
