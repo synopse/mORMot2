@@ -2458,7 +2458,9 @@ var
 begin
   n[0] := '@'; // note: Dest^ interning may append an ending #0 -> high>255
   MoveFast(Name.Text^, n[1], Name.Len); // we know Name.Len <= 255
-  v := pointer(Dest^.NewItem(@n, Name.Len + 1));
+  inc(Name.Len);
+  n[Name.Len] := #0; // no copy needed in TRawUtf8InterningSlot.UniqueFromBuffer
+  v := pointer(Dest^.NewItem(@n, Name.Len));
   v^.VType := varString;
   ValueAppendToUtf8(RawUtf8(v^.VAny));
 end;
