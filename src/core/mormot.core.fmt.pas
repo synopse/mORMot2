@@ -316,7 +316,7 @@ type
     /// raw recursive conversion of the current level into a TDocVariant object
     // - fill from attributes and content, until the matching xtElementEnd
     // - the supplied Dest^ should have been just allocated or ZeroClear()
-    procedure ToDocVariant(Dest: PDocVariantData);
+    procedure ToVariant(Dest: PDocVariantData);
   public
     /// the current token kind, as set by the last ParseNext call
     Kind: TXmlToken;
@@ -2465,7 +2465,7 @@ begin
   ValueAppendToUtf8(RawUtf8(v^.VAny));
 end;
 
-procedure TXmlParser.ToDocVariant(Dest: PDocVariantData);
+procedure TXmlParser.ToVariant(Dest: PDocVariantData);
 var
   txt, v: pointer;
 begin
@@ -2486,7 +2486,7 @@ begin
         begin
           v := Dest^.NewSibling(Name.Text, Name.Len);
           PCardinal(v)^ := PCardinal(Dest)^; // same VType + VOptions
-          ToDocVariant(v);
+          ToVariant(v);
         end;
       xtText,
       xtCData:
@@ -2678,7 +2678,7 @@ begin
   x.Init(pointer(Xml), length(Xml), ParseOptions + [xpoNoException]);
   ZeroClear(@Doc); // as required by ToDocVariant
   PCardinal(@Doc)^ := _VType(DocOptions, dvObject); // fast Init() of root
-  x.ToDocVariant(@Doc);
+  x.ToVariant(@Doc);
   result := x.LastError;
 end;
 
