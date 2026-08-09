@@ -9938,9 +9938,9 @@ begin
     catalog.AddItem(doc);
   end;
   CheckEqual(catalog.ToJson,
-    '["Trap for Next(''catalog'')",{"book":[{"@id":"1","title":"mORMot","comme' +
-     'nt":{"@lng":"en","#text":"Nice species"},"price":"42"},{"@id":"2","title"' +
-     ':"Delphi","price":"99"}],"ignore":"nothing","pending":""}]');
+   '[{"#text":"Trap for Next(''catalog'')"},{"book":[{"@id":"1","title":"mORM' +
+   'ot","comment":{"@lng":"en","#text":"Nice species"},"price":"42"},{"@id":"' +
+   '2","title":"Delphi","price":"99"}],"ignore":"nothing","pending":""}]');
   Check(not x.Rewind.Find('//katalog'));
   // Structured Streaming search with Find/ForEach
   Check(x.Find('/root/catalog'));
@@ -9976,6 +9976,13 @@ begin
       inc(n);
     end;
   CheckEqual(n, 2);
+  x.Init('<r><c>trap</c><c><i>1</i></c></r>');
+  while x.Find('//c') do
+  begin
+    x.Consume(doc);
+    dec(n);
+  end;
+  CheckEqual(n, 0);
 end;
 
 
