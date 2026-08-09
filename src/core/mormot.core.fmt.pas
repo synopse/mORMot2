@@ -2562,13 +2562,6 @@ begin
   result := true;
 end;
 
-function TXmlParser.Consume(const ElementName: RawUtf8; var Doc: TDocVariantData;
-   DocOptions: TDocVariantOptions): boolean;
-begin
-  result := Find(pointer(ElementName)) and
-            Consume(Doc, DocOptions);
-end;
-
 function TXmlParser.FindAny(ElementName: PUtf8Char; ElementLen: PtrInt): boolean;
 begin
   result := false;
@@ -2625,13 +2618,22 @@ end;
 
 function TXmlParser.Consume(var Doc: TDocVariantData;
   DocOptions: TDocVariantOptions): boolean;
+var
+  tmp: TSynVarData;
 begin
   TSynVarData(Doc).VType := _VType(DocOptions, dvObject); // fast Init()
   Doc.Void; // as required by ToDocVariant and to allow several Consume() calls
   result := false;
   if Kind <> xtElementStart then
     exit;
-  ToDocVariant(@Doc); // recursively fill Doc with the nested content
+  ToVariant(@Doc); // recursively fill Doc with the nested content
+  if Doc.VarType = varString then
+  begin
+    tmp := TSynVarData(Doc);
+    Doc.Init(DocOptions);
+    Doc.AddValue('#text', variant(tmp)); // return a true TDocVariant
+    FastAssignNew(tmp.VAny);
+  end;
   result := Kind in [xtEof, xtElementEnd];
 end;
 
@@ -2653,6 +2655,13 @@ begin
         ValueAppendToUtf8(Dest);
     end;
   result := true;
+end;
+
+function TXmlParser.Consume(const ElementName: RawUtf8; var Doc: TDocVariantData;
+   DocOptions: TDocVariantOptions): boolean;
+begin
+  result := Find(pointer(ElementName)) and
+            Consume(Doc, DocOptions);
 end;
 
 function TXmlParser.GetU(Path: PUtf8Char; var V: RawUtf8): boolean;
