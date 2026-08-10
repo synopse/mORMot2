@@ -6791,7 +6791,8 @@ var
     s: RawUtf8;
     i, n: integer;
     timer: TPrecisionTimer;
-  begin
+    vi: TSynVarData;
+begin
     OneProduct('{"a":{"b":{"c":{"id":1}}}}', 'no array', 1, 'a.b.c', 'id');
     OneProduct(
       '{"a":{"b":[' +
@@ -6847,6 +6848,11 @@ var
       if VariantEquals(v^, 'arcsec') then
         inc(n);
     CheckEqual(n, 2, 'xml-like-variant 2');
+    n := 0;
+    for s in doc.ProductU('tableHead.fields.field.units') do
+      if s = 'arcsec' then
+        inc(n);
+    CheckEqual(n, 2, 'xml-like-u');
     doc.Clear;
     doc.InitJson('{"a":{"b":1}}', JSON_XML);
     n := 0;
@@ -6877,6 +6883,25 @@ var
     end;
     CheckEqual(i, n);
     NotifyTestSpeed('Product(a.b)', n, 0, @timer, {onlylog=}true);
+    timer.Start;
+    i := 0;
+    for v in doc.ProductValue('a.b.c') do
+    begin
+      inc(i);
+      Check(v^ = i, 'varcomp rtl');
+    end;
+    CheckEqual(i, n);
+    NotifyTestSpeed('ProductValue(a.b.c) rtl', n, 0, @timer, {onlylog=}true);
+    timer.Start;
+    vi.VType := varInteger;
+    vi.VInteger := 0;
+    for v in doc.ProductValue('a.b.c') do
+    begin
+      inc(vi.VInteger);
+      CheckEqual(VariantCompare(v^, variant(vi)), 0);
+    end;
+    CheckEqual(i, n);
+    NotifyTestSpeed('ProductValue(a.b.c) mormot', n, 0, @timer, {onlylog=}true);
   end;
   {$endif HASSAFEITERATORS}
 
