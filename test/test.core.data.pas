@@ -154,7 +154,7 @@ type
     // references, the 255 nesting levels limit, 127-bytes names, and input
     // buffers with no #0 terminator nor any readable byte after their end
     procedure XmlSaxBoundaries;
-    /// XmlToVariant/TryXmlToVariant/XmlToJson mapping conventions
+    /// XmlToVariant/TryXmlToVariant/XmlToJson/JsonToXml/VariantToXml conversions
     procedure XmlToVariant;
     /// Find/Next/Consume* methods
     procedure XmlParserConsume;
@@ -9787,9 +9787,6 @@ begin
 end;
 
 procedure TTestCoreProcess.XmlToVariant;
-const
-  XMLOPT: TJsonToXmlOptions = [jxoAttribute, jxoText];
-  SELFOPT: TJsonToXmlOptions = [jxoAttribute, jxoText, jxoSelfClosed];
 var
   doc: variant;
 begin
@@ -9854,29 +9851,29 @@ begin
   CheckEqual(JsonToXml('{"a":{"@d":"x","#text":"t"}}', ''),
     '<a><@d>x</@d><#text>t</#text></a>');
   // jxoAttribute/jxoText follow the very same conventions as XmlToVariant()
-  CheckEqual(JsonToXml('{"a":{"@d":"x"}}', '', '', XMLOPT), '<a d="x"></a>');
-  CheckEqual(JsonToXml('{"a":{"@d":"x","#text":"t"}}', '', '', XMLOPT),
+  CheckEqual(JsonToXml('{"a":{"@d":"x"}}', '', '', JXO_ENABLED), '<a d="x"></a>');
+  CheckEqual(JsonToXml('{"a":{"@d":"x","#text":"t"}}', '', '', JXO_ENABLED),
     '<a d="x">t</a>');
-  CheckEqual(JsonToXml('{"a":{"@x":"1","@y":"2","b":"3"}}', '', '', XMLOPT),
+  CheckEqual(JsonToXml('{"a":{"@x":"1","@y":"2","b":"3"}}', '', '', JXO_ENABLED),
     '<a x="1" y="2"><b>3</b></a>');
-  CheckEqual(JsonToXml('{"a":{"@d":1}}', '', '', XMLOPT), '<a d="1"></a>');
-  CheckEqual(JsonToXml('{"e":{"@xmlns:s":"u","b":"x"}}', '', '', XMLOPT),
+  CheckEqual(JsonToXml('{"a":{"@d":1}}', '', '', JXO_ENABLED), '<a d="1"></a>');
+  CheckEqual(JsonToXml('{"e":{"@xmlns:s":"u","b":"x"}}', '', '', JXO_ENABLED),
     '<e xmlns:s="u"><b>x</b></e>');
   // attribute values and text are XML-escaped as expected
-  CheckEqual(JsonToXml('{"a":{"@d":"a<b&c\"d"}}', '', '', XMLOPT),
+  CheckEqual(JsonToXml('{"a":{"@d":"a<b&c\"d"}}', '', '', JXO_ENABLED),
     '<a d="a&lt;b&amp;c&quot;d"></a>');
   // '#text' may appear after the sub-elements, as XmlToVariant() generates it
-  CheckEqual(JsonToXml('{"a":{"b":"","#text":"pre post"}}', '', '', XMLOPT),
+  CheckEqual(JsonToXml('{"a":{"b":"","#text":"pre post"}}', '', '', JXO_ENABLED),
     '<a><b></b>pre post</a>');
   // array items may have their own attributes
-  CheckEqual(JsonToXml('{"item":[{"@id":"1"},{"@id":"2"}]}', '', '', XMLOPT),
+  CheckEqual(JsonToXml('{"item":[{"@id":"1"},{"@id":"2"}]}', '', '', JXO_ENABLED),
     '<item id="1"></item><item id="2"></item>');
   // XmlToJson() then JsonToXml() should round-trip the original XML content
-  CheckEqual(JsonToXml(XmlToJson('<a d="x"/>'), '', '', XMLOPT), '<a d="x"></a>');
+  CheckEqual(JsonToXml(XmlToJson('<a d="x"/>'), '', '', JXO_ENABLED), '<a d="x"></a>');
   CheckEqual(JsonToXml(XmlToJson('<a><b>1</b><b>2</b><c d="x">t</c></a>'),
-    '', '', XMLOPT), '<a><b>1</b><b>2</b><c d="x">t</c></a>');
+    '', '', JXO_ENABLED), '<a><b>1</b><b>2</b><c d="x">t</c></a>');
   CheckEqual(JsonToXml(XmlToJson('<a><b i="1">x</b><b i="2">y</b></a>'),
-    '', '', XMLOPT), '<a><b i="1">x</b><b i="2">y</b></a>');
+    '', '', JXO_ENABLED), '<a><b i="1">x</b><b i="2">y</b></a>');
   // VariantToXml() applies the same conventions, straight from the DOM
   CheckEqual(VariantToXml(_Json('{"a":{"b":"1"}}'), ''), '<a><b>1</b></a>');
   CheckEqual(VariantToXml(_Json('{"a":{"@d":"x"}}'), ''), '<a d="x"></a>');
@@ -9912,51 +9909,51 @@ begin
   CheckEqual(VariantToXml(_Json('{}'), ''), '');
   CheckEqual(JsonToXml('{"a":{"b":{}}}', '', '', JXO_ENABLED), '<a><b></b></a>');
   // jxoSelfClosed writes '<name/>' for elements with no text nor sub-element
-  CheckEqual(JsonToXml('{"a":""}', '', '', SELFOPT), '<a/>');
-  CheckEqual(JsonToXml('{"a":null}', '', '', SELFOPT), '<a/>');
-  CheckEqual(JsonToXml('{"a":{}}', '', '', SELFOPT), '<a/>');
-  CheckEqual(JsonToXml('{"a":{"@d":"x"}}', '', '', SELFOPT), '<a d="x"/>');
-  CheckEqual(JsonToXml('{"a":{"@d":"x","#text":""}}', '', '', SELFOPT),
+  CheckEqual(JsonToXml('{"a":""}', '', '', JXO_SHORT), '<a/>');
+  CheckEqual(JsonToXml('{"a":null}', '', '', JXO_SHORT), '<a/>');
+  CheckEqual(JsonToXml('{"a":{}}', '', '', JXO_SHORT), '<a/>');
+  CheckEqual(JsonToXml('{"a":{"@d":"x"}}', '', '', JXO_SHORT), '<a d="x"/>');
+  CheckEqual(JsonToXml('{"a":{"@d":"x","#text":""}}', '', '', JXO_SHORT),
     '<a d="x"/>');
-  CheckEqual(JsonToXml('{"a":{"b":"","c":"1"}}', '', '', SELFOPT),
+  CheckEqual(JsonToXml('{"a":{"b":"","c":"1"}}', '', '', JXO_SHORT),
     '<a><b/><c>1</c></a>');
-  CheckEqual(JsonToXml('{"item":[{"@id":"1"},{"@id":"2"}]}', '', '', SELFOPT),
+  CheckEqual(JsonToXml('{"item":[{"@id":"1"},{"@id":"2"}]}', '', '', JXO_SHORT),
     '<item id="1"/><item id="2"/>');
-  CheckEqual(JsonToXml('{"a":["",""]}', '', '', SELFOPT), '<a/><a/>');
-  CheckEqual(JsonToXml('["",""]', '', '', SELFOPT), '<0/><1/>');
+  CheckEqual(JsonToXml('{"a":["",""]}', '', '', JXO_SHORT), '<a/><a/>');
+  CheckEqual(JsonToXml('["",""]', '', '', JXO_SHORT), '<0/><1/>');
   // non-void elements are not affected by jxoSelfClosed
-  CheckEqual(JsonToXml('{"a":{"@d":"x","#text":"t"}}', '', '', SELFOPT),
+  CheckEqual(JsonToXml('{"a":{"@d":"x","#text":"t"}}', '', '', JXO_SHORT),
     '<a d="x">t</a>');
-  CheckEqual(JsonToXml('{"a":{"b":"","#text":"pre post"}}', '', '', SELFOPT),
+  CheckEqual(JsonToXml('{"a":{"b":"","#text":"pre post"}}', '', '', JXO_SHORT),
     '<a><b/>pre post</a>');
-  CheckEqual(JsonToXml('{"a":{"b":"1"}}', '', '', SELFOPT), '<a><b>1</b></a>');
+  CheckEqual(JsonToXml('{"a":{"b":"1"}}', '', '', JXO_SHORT), '<a><b>1</b></a>');
   CheckEqual(JsonToXml('{"a":{"@d":"x"}}', '', '', [jxoSelfClosed]),
     '<a><@d>x</@d></a>');
   // VariantToXml() supports jxoSelfClosed the very same way
-  CheckEqual(VariantToXml(_Json('{"a":""}'), '', '', SELFOPT), '<a/>');
-  CheckEqual(VariantToXml(_Json('{"a":null}'), '', '', SELFOPT), '<a/>');
-  CheckEqual(VariantToXml(_Json('{"a":{}}'), '', '', SELFOPT), '<a/>');
-  CheckEqual(VariantToXml(_Json('{"a":[]}'), '', '', SELFOPT), '');
-  CheckEqual(VariantToXml(_Json('{"a":{"@d":"x"}}'), '', '', SELFOPT),
+  CheckEqual(VariantToXml(_Json('{"a":""}'), '', '', JXO_SHORT), '<a/>');
+  CheckEqual(VariantToXml(_Json('{"a":null}'), '', '', JXO_SHORT), '<a/>');
+  CheckEqual(VariantToXml(_Json('{"a":{}}'), '', '', JXO_SHORT), '<a/>');
+  CheckEqual(VariantToXml(_Json('{"a":[]}'), '', '', JXO_SHORT), '');
+  CheckEqual(VariantToXml(_Json('{"a":{"@d":"x"}}'), '', '', JXO_SHORT),
     '<a d="x"/>');
-  CheckEqual(VariantToXml(_Json('{"a":{"@d":"x","#text":""}}'), '', '', SELFOPT),
+  CheckEqual(VariantToXml(_Json('{"a":{"@d":"x","#text":""}}'), '', '', JXO_SHORT),
     '<a d="x"/>');
-  CheckEqual(VariantToXml(_Json('{"a":{"b":"","c":"1"}}'), '', '', SELFOPT),
+  CheckEqual(VariantToXml(_Json('{"a":{"b":"","c":"1"}}'), '', '', JXO_SHORT),
     '<a><b/><c>1</c></a>');
-  CheckEqual(VariantToXml(_Json('{"a":{"b":"","@d":"x"}}'), '', '', SELFOPT),
+  CheckEqual(VariantToXml(_Json('{"a":{"b":"","@d":"x"}}'), '', '', JXO_SHORT),
     '<a d="x"><b/></a>');
   CheckEqual(VariantToXml(_Json('{"item":[{"@id":"1"},{"@id":"2"}]}'), '', '',
-    SELFOPT), '<item id="1"/><item id="2"/>');
-  CheckEqual(VariantToXml(_Json('{"a":{"@d":"x","#text":"t"}}'), '', '', SELFOPT),
+    JXO_SHORT), '<item id="1"/><item id="2"/>');
+  CheckEqual(VariantToXml(_Json('{"a":{"@d":"x","#text":"t"}}'), '', '', JXO_SHORT),
     '<a d="x">t</a>');
-  CheckEqual(VariantToXml(_Json('{"a":{"b":{"c":{"@d":"x"}}}}'), '', '', SELFOPT),
+  CheckEqual(VariantToXml(_Json('{"a":{"b":{"c":{"@d":"x"}}}}'), '', '', JXO_SHORT),
     '<a><b><c d="x"/></b></a>');
   // both forms are read back as the very same content
-  CheckEqual(XmlToJson(JsonToXml('{"a":{"@d":"x"}}', '', '', SELFOPT)),
+  CheckEqual(XmlToJson(JsonToXml('{"a":{"@d":"x"}}', '', '', JXO_SHORT)),
     '{"a":{"@d":"x"}}');
-  CheckEqual(XmlToJson(VariantToXml(_Json('{"a":{"@d":"x"}}'), '', '', SELFOPT)),
+  CheckEqual(XmlToJson(VariantToXml(_Json('{"a":{"@d":"x"}}'), '', '', JXO_SHORT)),
     '{"a":{"@d":"x"}}');
-  CheckEqual(JsonToXml(XmlToJson('<a d="x"/>'), '', '', SELFOPT), '<a d="x"/>');
+  CheckEqual(JsonToXml(XmlToJson('<a d="x"/>'), '', '', JXO_SHORT), '<a d="x"/>');
 end;
 
 procedure TTestCoreProcess.XmlParserConsume;

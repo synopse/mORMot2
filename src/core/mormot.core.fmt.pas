@@ -144,6 +144,8 @@ const
   // - i.e. write '@name' fields as XML attributes, and '#text' as text content
   // - jxoSelfClosed is not part of it, to generate the most explicit content
   JXO_ENABLED = [jxoAttribute, jxoText];
+  /// shorter alternative to JXO_ENABLED, including jxoSelfClosed
+  JXO_SHORT = [jxoAttribute, jxoText, jxoSelfClosed];
 
 /// convert a JSON array or document into a simple XML content
 // - just a wrapper around AddJsonToXml() function, with an optional
@@ -1695,19 +1697,17 @@ end;
 function AddJsonToXml(W: TTextWriter; Json, ArrayName, EndOfObject: PUtf8Char;
   Options: TJsonToXmlOptions; Pending: PBoolean): PUtf8Char;
 var
-  info: TGetJsonField;
   Name: PUtf8Char;
   n, c: cardinal;
   pend, sub: boolean; // pend is our own Pending^ state, sub the nested level
+  info: TGetJsonField;
 
-  procedure ClosePending;
+  procedure ClosePending; {$ifdef FPC} inline; {$endif}
   begin // our caller did write '<name' but not its ending '>' yet
-    if pend then
-    begin
-      W.AddDirect('>');
-      pend := false; // notify our caller that some content was written
-      Pending^ := false;
-    end;
+    if not pend then
+      exit;
+    W.AddDirect('>');
+    pend := false; // notify our caller that some content was written
   end;
 
 begin
@@ -1853,6 +1853,8 @@ begin
         ClosePending;
       if EndOfObject <> nil then
         EndOfObject^ := info.EndOfObject;
+      if Pending <> nil then
+        Pending^ := pend;
       result := info.Json;
       exit;
     end;
@@ -1865,6 +1867,8 @@ begin
     if Json^ <> #0 then
       Json := IgnoreAndGotoNextNotSpace(Json);
   end;
+  if Pending <> nil then
+    Pending^ := pend;
   result := Json;
 end;
 
@@ -1960,24 +1964,9 @@ begin
   end;
 end;
 
-function VariantToXmlText(const Value: variant; var Text: TTempUtf8): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
-begin // retrieve the text content - false if this value has none at all
-  VariantToTempUtf8(Value, Text, [vfNullAsVoid]);
-  result := Text.Len <> 0;
-end;
-
-procedure AddVariantToXmlText(W: TTextWriter; const Value: variant);
-  {$ifdef HASINLINE} inline; {$endif}
+procedure AddAttributesToXmlNode(W: TTextWriter; n: PRawUtf8; v: PVariant; c: integer);
 var
   tmp: TTempUtf8;
-begin
-  VariantToTempUtf8(Value, tmp, [vfNullAsVoid]);
-  AddXmlEscape(W, tmp.Text);
-  TempUtf8Done(tmp);
-end;
-
-procedure AddAttributesToXmlNode(W: TTextWriter; n: PRawUtf8; v: PVariant; c: integer);
 begin
   // first pass: the '@name' fields are attributes of this start tag - and
   // since we have the whole object at hand, they may appear anywhere in it
@@ -1991,13 +1980,32 @@ begin
       AddXmlEscape(W, PUtf8Char(pointer(n^)) + 1); // trim the '@' prefix
       W.AddDirect('=', '"');
       // AddXmlEscape() below escapes " as &quot; as expected
-      AddVariantToXmlText(W, v^);
+      VariantToTempUtf8(v^, tmp, [vfNullAsVoid]);
+      AddXmlEscape(W, tmp.Text);
+      TempUtf8Done(tmp);
       W.AddDirect('"');
     end;
     inc(n);
     inc(v);
     dec(c);
   end;
+end;
+
+function AddVariantToXmlText(W: TTextWriter; const Value: variant;
+  var Pending: boolean): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+var
+  tmp: TTempUtf8;
+begin // retrieve the text content - false if this value has none at all
+  VariantToTempUtf8(Value, tmp, [vfNullAsVoid]);
+  result := tmp.Len <> 0;
+  if not result then
+    exit;
+  if Pending then
+    W.AddDirect('>');
+  Pending := false;
+  AddXmlEscape(W, tmp.Text);
+  TempUtf8Done(tmp);
 end;
 
 procedure AddVariantToXmlNode(W: TTextWriter; n: PRawUtf8; v: PVariant;
@@ -2009,7 +2017,6 @@ var
   i: PtrInt;
   d: PDocVariantData;
   pend: boolean;
-  tmp: TTempUtf8;
 begin
   d := _Safe(Value);
   if d^.IsArray then
@@ -2036,22 +2043,12 @@ begin
       AddVariantToXmlNode(W, pointer(d^.Names), pointer(d^.Values), d^.Count,
         Options, pend);
   end
-  else if VariantToXmlText(Value, tmp) then
-  begin
-    W.AddDirect('>');
-    pend := false;
-    AddXmlEscape(W, tmp.Text);
-    TempUtf8Done(tmp);
-  end
-  else
-  begin
-    TempUtf8Done(tmp);
+  else if not AddVariantToXmlText(W, Value, pend) then
     if not (jxoSelfClosed in Options) then
     begin
       W.AddDirect('>');
       pend := false;
     end;
-  end;
   if pend then
   begin // no content at all: jxoSelfClosed short form
     W.AddDirect('/', '>');
@@ -2064,37 +2061,20 @@ end;
 
 procedure AddVariantToXmlNode(W: TTextWriter; n: PRawUtf8; v: PVariant;
   c: integer; o: TJsonToXmlOptions; var Pending: boolean);
-var
-  tmp: TTempUtf8;
-
-  procedure ClosePending;
-  begin // our caller did write '<name' but not its ending '>' yet
-    if Pending then
-    begin
-      W.AddDirect('>');
-      Pending := false; // notify our caller that some content was written
-    end;
-  end;
-
 begin
   // append non-attributes fields and the text content - caller checked c > 0
   repeat
-    if not (jxoAttribute in o) or // may have been written above
+    if not (jxoAttribute in o) or // ensure has not been written above
        (PPUtf8Char(n)^ = nil) or
        (PPUtf8Char(n)^^ <> '@') then // not representable as an attribute
       if (jxoText in o) and
-         (n^ = '#text') then
-      begin
-        if VariantToXmlText(v^, tmp) then
-        begin // a void '#text' leaves the start tag pending
-          ClosePending;
-          AddXmlEscape(W, tmp.Text);
-        end;
-        TempUtf8Done(tmp);
-      end
+         (n^ = '#text') then // a void '#text' leaves the start tag pending
+        AddVariantToXmlText(W, v^, Pending)
       else
       begin
-        ClosePending; // a sub-element is content: the start tag ends here
+        if Pending then  // a sub-element is content: the start tag ends here
+          W.AddDirect('>');
+        Pending := false; // notify our caller that some content was written
         AddVariantToXmlValue(W, n^, v^, o);
       end;
     inc(n);
