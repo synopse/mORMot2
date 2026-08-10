@@ -6353,7 +6353,7 @@ end;
 procedure TDocVariantProductEnumerator.Init(p: PUtf8Char; plen: PtrInt;
   sep: AnsiChar; dv: PDocVariantData);
 var
-  st, stend: ^TDocVariantProductEnumeratorStack;
+  st, last: ^TDocVariantProductEnumeratorStack;
   n, l: PtrInt;
 begin
   StackCount := 0; // MoveNext() = false by default
@@ -6381,7 +6381,7 @@ begin
     dec(plen, l);
     inc(st);
   until false;
-  stend := st;
+  last := st;
   st := @Stack; // fill Stack[] with the first value to return
   repeat
     repeat
@@ -6403,7 +6403,7 @@ begin
       until false;
     until false;
     inc(st);   // fill next result.Stack[].Value/Index
-  until PtrUInt(st) > PtrUInt(stend);
+  until PtrUInt(st) > PtrUInt(last);
   StackCount := n; // enable MoveNext()
 end;
 
@@ -6469,7 +6469,7 @@ var
   i: PtrInt;
 begin
   ProductDocVariant.StackCount := 0; // MoveNext() = false by default
-  for i := plen - 1 downto 1 do
+  for i := plen - 1 downto 2 do
     if p[i] = Sep then
     begin
       LastName.Text := p + i + 1; // extract Value
