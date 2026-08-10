@@ -2369,8 +2369,7 @@ begin
     exit;
   repeat
     inc(Json)
-  until (Json^ = #0) or
-        (Json^ > ' ');
+  until not (Json^ in [#1, ' ']);
   info.Json := Json;
   c := JsonObjectPropCount(Json); // fast GB/s parsing
   if c <= 0 then

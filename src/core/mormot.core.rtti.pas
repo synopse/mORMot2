@@ -9789,20 +9789,14 @@ begin
       // rec: { a,b: integer }
       pt := ptRecord;
       ee := eeCurly;
-      repeat
-        inc(P)
-      until (P^ > ' ') or
-            (P^ = #0);
+      P := IgnoreAndGotoNextNotSpace(P);
     end
     else if P^ = '[' then
     begin
       // arr: [ a,b:integer ]
       pt := ptDynArray;
       ee := eeSquare;
-      repeat
-        inc(P)
-      until (P^ > ' ') or
-            (P^ = #0);
+      P := IgnoreAndGotoNextNotSpace(P);
     end
     else
     begin

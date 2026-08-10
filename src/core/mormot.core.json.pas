@@ -2770,10 +2770,10 @@ begin
     exit;
   repeat
     {$ifdef WIN32DELPHI} // inlined GotoNextNotSpace()
-    if P^ in [#1..' '] then // Delphi i386 seems to prefer this kind of code
+    if P^ in [#1 .. ' '] then // Delphi i386 seems to prefer this kind of code
       repeat
         inc(P);
-      until not (P^ in [#1..' ']);
+      until not (P^ in [#1 .. ' ']);
     {$else}
     while P^ in [#1 .. ' '] do // seems to be the best pattern on FPC + Delphi64
       inc(P);
@@ -4306,8 +4306,7 @@ begin
   // check valid JSON delimiter
   repeat
     inc(P)
-  until (P^ > ' ') or
-        (P^ = #0);
+  until not (P^ in [#1 .. ' ']);
   if ExpectNameField then
   begin
     if P^ <> ':' then
@@ -4377,10 +4376,7 @@ begin
   if EndOfObject <> nil then
     EndOfObject^ := P^;
   if P^ <> #0 then //if P^=',' then
-    repeat
-      inc(P)
-    until (P^ > ' ') or
-          (P^ = #0);
+    P := IgnoreAndGotoNextNotSpace(P);
 end;
 
 function GetJsonItemAsRawUtf8(var P: PUtf8Char; var output: RawUtf8;
@@ -4733,8 +4729,7 @@ begin
     if P^ <> #0 then
       repeat
         inc(P); // ignore trailing , ] } and any successive spaces
-      until (P^ > ' ') or
-            (P^ = #0);
+      until not (P^ in [#1 .. ' ']);
   end;
   result := P;
 end;
@@ -4756,10 +4751,7 @@ begin
     inc(P);
   if P^ = '[' then
   begin // stored as JSON array
-    repeat
-      inc(P)
-    until (P^ > ' ') or
-          (P^ = #0);
+    P := IgnoreAndGotoNextNotSpace(P);
     if P^ = ']' then
       inc(P)
     else
@@ -8410,10 +8402,7 @@ begin
       inc(P);
     if P^ = '{' then
     begin
-      repeat
-        inc(P);
-      until (P^ > ' ') or
-            (P^ = #0);
+      P := IgnoreAndGotoNextNotSpace(P);
       if PInt64(P)^ and $00ffdfdfdfdfdfff = // case insensitive search
         ord('"') + Int64(_ROWI32) shl 8 + Int64(ord('D')) shl 40 + Int64(ord('"')) shl 48 then
       begin // "RowID" -> __{"ID"

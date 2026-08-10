@@ -220,7 +220,7 @@ type
     procedure _TRawUtf8Interning;
     {$ifdef FPC_X64MM}
     /// validate the FPC x86_64 memory manager allocation capacity
-    procedure FpcX64MemoryManager;
+    procedure _fpcx64mm;
     {$endif FPC_X64MM}
     /// test T*ObjArray types and the ObjArray*() wrappers
     procedure _TObjArray;
@@ -359,7 +359,7 @@ end;
 
 {$ifdef FPC_X64MM}
 
-procedure TTestCoreBase.FpcX64MemoryManager;
+procedure TTestCoreBase._fpcx64mm;
 const
   Sizes: array[0 .. 13] of PtrUInt = (
     264744, 264745,

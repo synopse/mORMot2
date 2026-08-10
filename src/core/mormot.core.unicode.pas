@@ -9290,10 +9290,10 @@ end; // P^='"' or P^=#0 at function return
 function GotoNextNotSpace(P: PUtf8Char): PUtf8Char;
 begin
   {$ifdef WIN32DELPHI}
-  if P^ in [#1..' '] then // Delphi i386 seems to prefer this kind of code
+  if P^ in [#1 .. ' '] then // Delphi i386 seems to prefer this kind of code
     repeat
       inc(P);
-    until not (P^ in [#1..' ']);
+    until not (P^ in [#1 .. ' ']);
   {$else}
   while P^ in [#1 .. ' '] do // seems to be the best pattern on FPC + Delphi64
     inc(P);

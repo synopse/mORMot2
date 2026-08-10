@@ -8980,7 +8980,7 @@ begin
   if (ContentType <> nil) and
      (ContentTypeLen > 4) then
     case PCardinalArray(ContentType)[0] or $20202020 of
-      ord('t') + ord('e') shl 8 + ord('x') shl 16 + ord('t') shl 24:
+      TEXT32:
         result := ContentType[4] = '/'; // text/*
       ord('i') + ord('m') shl 8 + ord('a') shl 16 + ord('g') shl 24:
         if ContentTypeLen > 8 then

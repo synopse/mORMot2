@@ -7474,8 +7474,7 @@ begin
   if Json^ <> #0 then
     repeat
       inc(Json)
-    until (Json^ = #0) or
-          (Json^ > ' ');
+    until not (Json^ in [#1 .. ' ']);
   result := Json; // indicates successfully parsed
 end;
 

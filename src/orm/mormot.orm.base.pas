@@ -11260,10 +11260,7 @@ begin
     inc(info.Json);
   if info.Json^ <> '[' then
     exit;
-  repeat
-    inc(info.Json)
-  until (info.Json^ > ' ') or
-        (info.Json^ = #0);
+  info.Json := IgnoreAndGotoNextNotSpace(info.Json);
   if ID = nil then
     decoded := 0
   else
@@ -11289,10 +11286,7 @@ begin
           exit;
         W.AddNoJsonEscape(Start, info.Json - Start);
         W.AddComma;
-        repeat
-          inc(info.Json)
-        until (info.Json^ > ' ') or
-              (info.Json^ = #0);
+        info.Json := IgnoreAndGotoNextNotSpace(info.Json);
       end;
     if sfoEndWithID in Format then
       decoded := info.GetJsonInt64;
@@ -11310,10 +11304,7 @@ begin
   if EndOfObject <> nil then
     EndOfObject^ := info.Json^;
   if info.Json^ <> #0 then
-    repeat
-      inc(info.Json)
-    until (info.Json^ > ' ') or
-          (info.Json^ = #0);
+    info.Json := IgnoreAndGotoNextNotSpace(info.Json);
   P := info.Json;
 end;
 

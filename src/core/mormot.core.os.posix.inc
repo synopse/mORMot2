@@ -3657,8 +3657,7 @@ begin
     exit;
   repeat
     inc(P);
-  until (P^ = #0) or
-        (P^ > ' ');
+  until not (P^ in [#1 .. ' ']);
   result := P;
   while not (ord(P^) in [0, 10, 13]) do
   begin
