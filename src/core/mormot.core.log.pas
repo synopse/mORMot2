@@ -3598,10 +3598,31 @@ begin
   end;
 end;
 
+function FinalizeSymbolStop(b: PDebugBlocks; n: integer): PtrInt;
+begin
+  result := 0;
+  while n > 1 do
+  begin
+    inc(result, length(b^[0].Line));
+    if b^[0].Symbol.Stop = 0 then
+      b^[0].Symbol.Stop := b^[1].Symbol.Start - 1;
+    b := @b^[1];
+    dec(n);
+  end;
+  with b^[0] do // fBlock[fBlocksCount - 1] fix
+  begin
+    inc(result, length(Line));
+    if Symbol.Stop = 0 then
+      if Addr <> nil then
+        // Blocks[] may overlap with .inc -> use Addr[]
+        Symbol.Stop := Addr[high(Addr)]
+      else
+        Symbol.Stop := Symbol.Start;
+  end;
+end;
+
 constructor TDebugFile.Create(const aExeName: TFileName; Scope: TDebugFileScope);
 var
-  i: PtrInt;
-  b: PDebugBlocks;
   savemab: boolean;
   mabage: TUnixTime;
   start: Int64;
@@ -3628,16 +3649,17 @@ begin
   begin
     if not IsDirectoryWritable(fExePath) then
     begin
-      // ([idwExcludeWinSys] not needed because if we are admin then fine)
       // read/only exe folder -> store .mab in local non roaming user folder
-      fMabFile := MakeString([GetSystemPath(spUserData),
-        crc32cStringToHexShort(fExePath), '-', // unique per-path
-        ExtractFileName(fMabfile)]);
+      // ([idwExcludeWinSys] not needed because admin could do it once for all)
+      fMabFile := MakeString([
+                    GetSystemPath(spUserData),
+                    crc32cStringToHexShort(fExePath), '-', // unique per-path
+                    ExtractFileName(fMabfile)]);
       mabage := FileAgeToUnixTimeUtc(fMabFile);
     end;
   end;
   if (mabage <> 0) and // SaveToFile() set FileSetDateFrom(fExeFile);
-     (abs(fExeAge - mabage) < 2) then // same exact age
+     (abs(fExeAge - mabage) < 2) then // same exact age (allow 1 second diff)
     LoadMab(fMabFile);
   // recompute from .map/.dbg if no faster-to-load .mab available
   if fBlocksCount or fSymbolsCount = 0 then
@@ -3651,26 +3673,7 @@ begin
       fSymbols.Capacity := fSymbolsCount; // only consume the needed memory
       fBlocks.Capacity := fBlocksCount;
       if fBlocksCount <> 0 then // finalize fBlock[].Symbol.Stop missing fields
-      begin
-        b := pointer(fBlock);
-        for i := 0 to fBlocksCount - 2 do
-        begin
-          inc(fLinesCount, length(b^[0].Line));
-          if b^[0].Symbol.Stop = 0 then
-            b^[0].Symbol.Stop := b^[1].Symbol.Start - 1;
-          b := @b^[1];
-        end;
-        with b^[0] do // fBlock[fBlocksCount - 1] fix
-        begin
-          inc(fLinesCount, length(Line));
-          if Symbol.Stop = 0 then
-            if Addr <> nil then
-              // Blocks[] may overlap with .inc -> use Addr[]
-              Symbol.Stop := Addr[high(Addr)]
-            else
-              Symbol.Stop := Symbol.Start;
-        end;
-      end;
+        fLinesCount := FinalizeSymbolStop(pointer(fBlock), fBlocksCount);
       savemab := true; // trigger SaveToFile(MabFile) below
     end;
   except
@@ -3690,7 +3693,7 @@ begin
   if fSymbolsCount <> 0 then
   begin
     fStart := MinPtrInt(fStart, fSymbol[0].Start);
-    fStop := MaxPtrInt(fStop, fSymbol[fSymbolsCount - 1].Stop);
+    fStop  := MaxPtrInt(fStop, fSymbol[fSymbolsCount - 1].Stop);
     if (fProducer = '') and
        (fExeFile = Executable.InstanceFileName) then
       fProducer := COMPILER_VERSION; // we know it for this compiled instance
