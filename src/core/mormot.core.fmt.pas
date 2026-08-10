@@ -126,9 +126,15 @@ type
   // i.e. JsonToXml(XmlToJson(x)) would return the original XML content
   // - note that '@name' fields should appear before any content field of their
   // object, which is how XmlToVariant() does generate them
+  // - jxoSelfClosed will write an element with no text and no sub-element using
+  // the self-closing short form, i.e. '<name/>' and '<name attr="v"/>' instead
+  // of '<name></name>' and '<name attr="v"></name>' - both forms are equivalent
+  // for any XML reader, and XmlToVariant() does generate the very same content
+  // from either of them, so this option is only about the emitted layout
   TJsonToXmlOption = (
     jxoAttribute,
-    jxoText);
+    jxoText,
+    jxoSelfClosed);
 
   /// set of options for AddJsonToXml() and its wrappers
   TJsonToXmlOptions = set of TJsonToXmlOption;
@@ -136,6 +142,7 @@ type
 const
   /// the TJsonToXmlOptions reversing the XmlToVariant() naming conventions
   // - i.e. write '@name' fields as XML attributes, and '#text' as text content
+  // - jxoSelfClosed is not part of it, to generate the most explicit content
   JXO_ENABLED = [jxoAttribute, jxoText];
 
 /// convert a JSON array or document into a simple XML content
@@ -177,12 +184,15 @@ procedure AddXmlEscape(W: TTextWriter; Text: PUtf8Char);
 // that '@name' fields should appear before any content field of their object,
 // which is how XmlToVariant() does generate them
 // - WARNING: the JSON buffer is decoded in-place, so will be changed
-// - Pending is an internal flag which should be usually ignored
+// - Pending is an internal flag which should be usually ignored: it tells that
+// the caller did write '<name' but not its ending '>' yet, and is set back to
+// false as soon as this level does write some content - so that a still set
+// Pending^ means that jxoSelfClosed may emit '/>' instead of '></name>'
 // - returns the end of the current JSON converted level, or nil if the
 // supplied content was not valid JSON
 function AddJsonToXml(W: TTextWriter; Json: PUtf8Char; ArrayName: PUtf8Char = nil;
   EndOfObject: PUtf8Char = nil; Options: TJsonToXmlOptions = [];
-  Pending: boolean = false): PUtf8Char;
+  Pending: PBoolean = nil): PUtf8Char;
 
 /// unescape some XML text into a TTextWriter instance
 // - decode the five XML predefined entities and numeric character references,
@@ -1683,24 +1693,36 @@ begin
 end;
 
 function AddJsonToXml(W: TTextWriter; Json, ArrayName, EndOfObject: PUtf8Char;
-  Options: TJsonToXmlOptions; Pending: boolean): PUtf8Char;
+  Options: TJsonToXmlOptions; Pending: PBoolean): PUtf8Char;
 var
   info: TGetJsonField;
   Name: PUtf8Char;
   n, c: cardinal;
+  pend, sub: boolean; // pend is our own Pending^ state, sub the nested level
+
+  procedure ClosePending;
+  begin // our caller did write '<name' but not its ending '>' yet
+    if pend then
+    begin
+      W.AddDirect('>');
+      pend := false; // notify our caller that some content was written
+      Pending^ := false;
+    end;
+  end;
+
 begin
   result := nil;
   if Json = nil then
     exit;
+  pend := (Pending <> nil) and
+          Pending^;
   Json := GotoNextNotSpace(Json);
   if Json^ = '/' then
     Json := GotoEndOfSlashComment(Json);
   case Json^ of
   '[':
     begin
-      if Pending then
-        // our caller did write '<name' but not its ending '>' yet
-        W.AddDirect('>');
+      ClosePending;
       Json := IgnoreAndGotoNextNotSpace(Json);
       if Json^ = ']' then
         Json := GotoNextNotSpace(Json + 1)
@@ -1714,15 +1736,21 @@ begin
           else
             AddXmlEscape(W, ArrayName);
           // no '>' here: the item may start with some '@name' attributes
-          Json := AddJsonToXml(W, Json, nil, @info.EndOfObject, Options, {pending=}true);
+          sub := true;
+          Json := AddJsonToXml(W, Json, nil, @info.EndOfObject, Options, @sub);
           if Json = nil then
             exit;
-          W.AddDirect('<', '/');
-          if ArrayName = nil then
-            W.AddU(n)
+          if sub then
+            W.AddDirect('/', '>') // no content at all: jxoSelfClosed short form
           else
-            AddXmlEscape(W, ArrayName);
-          W.AddDirect('>');
+          begin
+            W.AddDirect('<', '/');
+            if ArrayName = nil then
+              W.AddU(n)
+            else
+              AddXmlEscape(W, ArrayName);
+            W.AddDirect('>');
+          end;
           inc(n);
         until info.EndOfObject = ']';
       end;
@@ -1741,7 +1769,7 @@ begin
           if (Name^ = '@') and
              (jxoAttribute in Options) then
           begin
-            if Pending and
+            if pend and
                (Name[1] <> #0) and
                not (Json^ in ['{', '[']) then
             begin // '@name':value -> name="value" within the pending start tag
@@ -1762,22 +1790,22 @@ begin
                   (PCardinal(Name + 1)^ = TEXT32) and
                   (Name[5] = #0) then
           begin // '#text':value -> value as the element text content
-            if Pending then
-            begin // our caller did write '<name' but not its ending '>' yet
-              W.AddDirect('>');
-              Pending := false;
-            end;
-            Json := AddJsonToXml(W, Json, nil, @info.EndOfObject, Options);
+            if Json^ in ['{', '['] then
+              ClosePending; // not a scalar: no short form for this element
+            sub := pend;
+            Json := AddJsonToXml(W, Json, nil, @info.EndOfObject, Options, @sub);
             if Json = nil then
               exit;
+            if pend and
+               not sub then
+            begin // the nested level did write our pending '>' - a void
+              pend := false; // '#text' would have left the start tag pending
+              Pending^ := false;
+            end;
           end
           else
           begin
-            if Pending then
-            begin // our caller did write '<name' but not its ending '>' yet
-              W.AddDirect('>');
-              Pending := false;
-            end;
+            ClosePending;
             if Json^ = '[' then // arrays are written as list of items, without root
             begin
               Json := AddJsonToXml(W, Json, Name, @info.EndOfObject, Options);
@@ -1789,32 +1817,40 @@ begin
               W.Add('<');
               AddXmlEscape(W, Name);
               // no '>' here: the value may start with some '@name' attributes
-              Json := AddJsonToXml(W, Json, nil, @info.EndOfObject, Options, true);
+              sub := true;
+              Json := AddJsonToXml(W, Json, nil, @info.EndOfObject, Options, @sub);
               if Json = nil then
                 exit;
-              W.AddDirect('<', '/');
-              AddXmlEscape(W, Name);
-              W.AddDirect('>');
+              if sub then
+                W.AddDirect('/', '>') // no content: jxoSelfClosed short form
+              else
+              begin
+                W.AddDirect('<', '/');
+                AddXmlEscape(W, Name);
+                W.AddDirect('>');
+              end;
             end;
           end;
         until info.EndOfObject = '}';
-      if Pending then // e.g. '{}' or an object made of attributes only
-        W.AddDirect('>'); // our caller did write '<name' but not '>' yet
+      if not (jxoSelfClosed in Options) then
+        ClosePending; // e.g. '{}' or an object made of attributes only
     end;
   else
     begin // unescape the JSON content and write as UTF-8 escaped XML
-      if Pending then
-        W.AddDirect('>'); // our caller did write '<name' but not '>' yet
       info.Json := Json;
       info.GetJsonField;
-      if info.Value <> nil then // null or "" would store a void entry
+      if (info.Value <> nil) and    // null or "" would store a void entry
+         (info.Value^ <> #0) then
       begin
+        ClosePending;
         c := PCardinal(info.Value)^ and $ffffff;
         if (c = JSON_BASE64_MAGIC_C) or
            (c = JSON_SQLDATE_MAGIC_C) then
           inc(info.Value, 3); // ignore the Magic codepoint encoded as UTF-8
         AddXmlEscape(W, info.Value);
-      end;
+      end
+      else if not (jxoSelfClosed in Options) then
+        ClosePending;
       if EndOfObject <> nil then
         EndOfObject^ := info.EndOfObject;
       result := info.Json;
@@ -1924,6 +1960,13 @@ begin
   end;
 end;
 
+function VariantToXmlText(const Value: variant; var Text: TTempUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+begin // retrieve the text content - false if this value has none at all
+  VariantToTempUtf8(Value, Text, [vfNullAsVoid]);
+  result := Text.Len <> 0;
+end;
+
 procedure AddVariantToXmlText(W: TTextWriter; const Value: variant);
   {$ifdef HASINLINE} inline; {$endif}
 var
@@ -1958,13 +2001,15 @@ begin
 end;
 
 procedure AddVariantToXmlNode(W: TTextWriter; n: PRawUtf8; v: PVariant;
-  c: integer; o: TJsonToXmlOptions); forward;
+  c: integer; o: TJsonToXmlOptions; var Pending: boolean); forward;
 
 procedure AddVariantToXmlValue(W: TTextWriter; const Name: RawUtf8;
   const Value: variant; Options: TJsonToXmlOptions);
 var
   i: PtrInt;
   d: PDocVariantData;
+  pend: boolean;
+  tmp: TTempUtf8;
 begin
   d := _Safe(Value);
   if d^.IsArray then
@@ -1975,19 +2020,42 @@ begin
   end;
   W.Add('<');
   AddXmlEscape(W, pointer(Name));
+  // no '>' here: the element may have some attributes, or no content at all
+  pend := true;
   if d^.IsObject then
   begin // a document is never written as text, even if it is void
     if (d^.Count <> 0) and
        (jxoAttribute in Options) then
       AddAttributesToXmlNode(W, pointer(d^.Names), pointer(d^.Values), d^.Count);
-    W.AddDirect('>');
+    if not (jxoSelfClosed in Options) then
+    begin
+      W.AddDirect('>');
+      pend := false;
+    end;
     if d^.Count <> 0 then // AddVariantToXmlNode() expects some field
-      AddVariantToXmlNode(W, pointer(d^.Names), pointer(d^.Values), d^.Count, Options);
+      AddVariantToXmlNode(W, pointer(d^.Names), pointer(d^.Values), d^.Count,
+        Options, pend);
+  end
+  else if VariantToXmlText(Value, tmp) then
+  begin
+    W.AddDirect('>');
+    pend := false;
+    AddXmlEscape(W, tmp.Text);
+    TempUtf8Done(tmp);
   end
   else
   begin
-    W.AddDirect('>');
-    AddVariantToXmlText(W, Value);
+    TempUtf8Done(tmp);
+    if not (jxoSelfClosed in Options) then
+    begin
+      W.AddDirect('>');
+      pend := false;
+    end;
+  end;
+  if pend then
+  begin // no content at all: jxoSelfClosed short form
+    W.AddDirect('/', '>');
+    exit;
   end;
   W.AddDirect('<', '/');
   AddXmlEscape(W, pointer(Name));
@@ -1995,7 +2063,19 @@ begin
 end;
 
 procedure AddVariantToXmlNode(W: TTextWriter; n: PRawUtf8; v: PVariant;
-  c: integer; o: TJsonToXmlOptions);
+  c: integer; o: TJsonToXmlOptions; var Pending: boolean);
+var
+  tmp: TTempUtf8;
+
+  procedure ClosePending;
+  begin // our caller did write '<name' but not its ending '>' yet
+    if Pending then
+    begin
+      W.AddDirect('>');
+      Pending := false; // notify our caller that some content was written
+    end;
+  end;
+
 begin
   // append non-attributes fields and the text content - caller checked c > 0
   repeat
@@ -2004,9 +2084,19 @@ begin
        (PPUtf8Char(n)^^ <> '@') then // not representable as an attribute
       if (jxoText in o) and
          (n^ = '#text') then
-        AddVariantToXmlText(W, v^)
+      begin
+        if VariantToXmlText(v^, tmp) then
+        begin // a void '#text' leaves the start tag pending
+          ClosePending;
+          AddXmlEscape(W, tmp.Text);
+        end;
+        TempUtf8Done(tmp);
+      end
       else
+      begin
+        ClosePending; // a sub-element is content: the start tag ends here
         AddVariantToXmlValue(W, n^, v^, o);
+      end;
     inc(n);
     inc(v);
     dec(c);
@@ -2018,6 +2108,7 @@ procedure AddVariantToXml(W: TTextWriter; const Doc: variant;
 var
   i: PtrINt;
   d: PDocVariantData;
+  pend: boolean;
 begin
   d := _Safe(Doc);
   if d^.Count > 0 then
@@ -2025,7 +2116,11 @@ begin
       for i := 0 to d^.Count - 1 do // no name: use the index, as AddJsonToXml()
         AddVariantToXmlValue(W, UInt32ToUtf8(i), d^.Values[i], Options)
     else
-      AddVariantToXmlNode(W, pointer(d^.Names), pointer(d^.Values), d^.Count, Options);
+    begin
+      pend := false; // no pending start tag at this level
+      AddVariantToXmlNode(W, pointer(d^.Names), pointer(d^.Values), d^.Count,
+        Options, pend);
+    end;
 end;
 
 function VariantToXml(const Doc: variant; const Header, NameSpace: RawUtf8;
