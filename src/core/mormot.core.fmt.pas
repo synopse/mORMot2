@@ -136,7 +136,7 @@ type
 const
   /// the TJsonToXmlOptions reversing the XmlToVariant() naming conventions
   // - i.e. write '@name' fields as XML attributes, and '#text' as text content
-  JXO_XML = [jxoAttribute, jxoText];
+  JXO_ENABLED = [jxoAttribute, jxoText];
 
 /// convert a JSON array or document into a simple XML content
 // - just a wrapper around AddJsonToXml() function, with an optional
@@ -160,7 +160,7 @@ procedure JsonBufferToXml(P: PUtf8Char; const Header, NameSpace: RawUtf8;
 function JsonToXml(const Json: RawUtf8; const Header: RawUtf8 = XMLUTF8_HEADER;
   const NameSpace: RawUtf8 = ''; Options: TJsonToXmlOptions = []): RawUtf8;
 
-/// append some chars, escaping all XML special chars as expected
+/// append some #0 ended chars, escaping all XML special chars as expected
 // - i.e.   < > & " '  as   &lt; &gt; &amp; &quot; &apos;
 // - TAB, LF and CR are escaped as &#x09; &#x0a; &#x0d;
 // - the other control chars are just ignored, since #1..#8 #11 #12 #14..#31
@@ -177,10 +177,12 @@ procedure AddXmlEscape(W: TTextWriter; Text: PUtf8Char);
 // that '@name' fields should appear before any content field of their object,
 // which is how XmlToVariant() does generate them
 // - WARNING: the JSON buffer is decoded in-place, so will be changed
+// - Pending is an internal flag which should be usually ignored
 // - returns the end of the current JSON converted level, or nil if the
-// supplied content was not correct JSON
+// supplied content was not valid JSON
 function AddJsonToXml(W: TTextWriter; Json: PUtf8Char; ArrayName: PUtf8Char = nil;
-  EndOfObject: PUtf8Char = nil; Options: TJsonToXmlOptions = []): PUtf8Char;
+  EndOfObject: PUtf8Char = nil; Options: TJsonToXmlOptions = [];
+  Pending: boolean = false): PUtf8Char;
 
 /// unescape some XML text into a TTextWriter instance
 // - decode the five XML predefined entities and numeric character references,
@@ -552,7 +554,7 @@ function XmlToJson(const Xml: RawUtf8; ParseOptions: TXmlParserOptions = [];
 // '@name' fields don't need to appear before its content fields
 // - as called by the VariantToXml() wrapper
 procedure AddVariantToXml(W: TTextWriter; const Doc: variant;
-  Options: TJsonToXmlOptions = JXO_XML);
+  Options: TJsonToXmlOptions = JXO_ENABLED);
 
 /// convert a TDocVariant document into XML UTF-8 content
 // - just a wrapper around AddVariantToXml(), with an optional header (e.g.
@@ -560,7 +562,7 @@ procedure AddVariantToXml(W: TTextWriter; const Doc: variant;
 // as JsonToXml() does
 // - VariantToXml(XmlToVariant(x)) would return the original XML content
 function VariantToXml(const Doc: variant; const Header: RawUtf8 = XMLUTF8_HEADER;
-  const NameSpace: RawUtf8 = ''; Options: TJsonToXmlOptions = JXO_XML): RawUtf8;
+  const NameSpace: RawUtf8 = ''; Options: TJsonToXmlOptions = JXO_ENABLED): RawUtf8;
 
 
 { ************* YAML 1.2 core-schema to JSON or TDocVariant Support }
@@ -1680,67 +1682,28 @@ begin
   until Text^ = #0;
 end;
 
-type
-  /// internal context of the AddJsonToXmlNode() recursive process
-  // - gathers the parameters which are invariant during the whole process
-  // (destination writer and options) with the current JSON position, which is
-  // updated in-place at each nested level
-  TAddJsonToXmlNodeContext = record
-    /// the destination XML content
-    W: TTextWriter;
-    /// the current position in the JSON input buffer - nil on any error
-    Json: PUtf8Char;
-    /// how '@name' and '#text' JSON fields are converted
-    Options: TJsonToXmlOptions;
-  end;
-
-procedure AddJsonToXmlNode(var Context: TAddJsonToXmlNodeContext;
-  ArrayName, EndOfObject: PUtf8Char; Pending: boolean);
-const
-  TEXT4 = ord('t') + ord('e') shl 8 + ord('x') shl 16 + ord('t') shl 24;
+function AddJsonToXml(W: TTextWriter; Json, ArrayName, EndOfObject: PUtf8Char;
+  Options: TJsonToXmlOptions; Pending: boolean): PUtf8Char;
 var
   info: TGetJsonField;
-  Name, P: PUtf8Char;
-  W: TTextWriter;
-  n, c: integer;
-
-  procedure ClosePending;
-  begin // our caller did write '<name' but not its ending '>' yet
-    if Pending then
-    begin
-      W.AddDirect('>');
-      Pending := false;
-    end;
-  end;
-
-  function Nested(NestedName: PUtf8Char; NestedPending: boolean): boolean;
-  begin // recurse over the nested value, returning false on any error
-    Context.Json := P;
-    AddJsonToXmlNode(Context, NestedName, @info.EndOfObject, NestedPending);
-    P := Context.Json;
-    result := P <> nil;
-  end;
-
+  Name: PUtf8Char;
+  n, c: cardinal;
 begin
-  W := Context.W;
-  P := Context.Json;
-  if P = nil then
+  result := nil;
+  if Json = nil then
     exit;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
-  if P^ = '/' then
-    P := GotoEndOfSlashComment(P);
-  case P^ of
+  Json := GotoNextNotSpace(Json);
+  if Json^ = '/' then
+    Json := GotoEndOfSlashComment(Json);
+  case Json^ of
   '[':
     begin
-      ClosePending;
-      repeat
-        inc(P);
-      until (P^ = #0) or
-            (P^ > ' ');
-      if P^ = ']' then
-        P := GotoNextNotSpace(P + 1)
+      if Pending then
+        // our caller did write '<name' but not its ending '>' yet
+        W.AddDirect('>');
+      Json := IgnoreAndGotoNextNotSpace(Json);
+      if Json^ = ']' then
+        Json := GotoNextNotSpace(Json + 1)
       else
       begin
         n := 0;
@@ -1751,7 +1714,8 @@ begin
           else
             AddXmlEscape(W, ArrayName);
           // no '>' here: the item may start with some '@name' attributes
-          if not Nested(nil, {pending=}true) then
+          Json := AddJsonToXml(W, Json, nil, @info.EndOfObject, Options, {pending=}true);
+          if Json = nil then
             exit;
           W.AddDirect('<', '/');
           if ArrayName = nil then
@@ -1765,56 +1729,59 @@ begin
     end;
   '{':
     begin
-      repeat
-        inc(P);
-      until (P^ = #0) or
-            (P^ > ' ');
-      if P^ = '}' then
-        P := GotoNextNotSpace(P + 1)
+      Json := IgnoreAndGotoNextNotSpace(Json);
+      if Json^ = '}' then
+        Json := GotoNextNotSpace(Json + 1)
       else
         repeat
-          Name := GetJsonPropName(P);
-          if Name = nil then
-          begin
-            Context.Json := nil; // invalid JSON input
+          Name := GetJsonPropName(Json);
+          if Name = nil then // invalid JSON input
             exit;
-          end;
-          while (P^ <= ' ') and
-                (P^ <> #0) do
-            inc(P);
+          Json := GotoNextNotSpace(Json);
           if (Name^ = '@') and
-             (jxoAttribute in Context.Options) then
+             (jxoAttribute in Options) then
           begin
             if Pending and
                (Name[1] <> #0) and
-               not (P^ in ['{', '[']) then
+               not (Json^ in ['{', '[']) then
             begin // '@name':value -> name="value" within the pending start tag
               W.AddDirect(' ');
               AddXmlEscape(W, Name + 1); // trim the '@' prefix
               W.AddDirect('=', '"');
               // AddXmlEscape() below escapes " as &quot; as expected
-              if not Nested(nil, {pending=}false) then
+              Json := AddJsonToXml(W, Json, nil, @info.EndOfObject, Options);
+              if Json = nil then
                 exit;
               W.AddDirect('"');
             end
             else // after some content, or not a scalar: no valid attribute
-              P := GotoNextJsonItem(P, info.EndOfObject); // just ignore
+              Json := GotoNextJsonItem(Json, info.EndOfObject); // just ignore
           end
           else if (Name^ = '#') and
-                  (jxoText in Context.Options) and
-                  (PCardinal(Name + 1)^ = TEXT4) and
+                  (jxoText in Options) and
+                  (PCardinal(Name + 1)^ = TEXT32) and
                   (Name[5] = #0) then
           begin // '#text':value -> value as the element text content
-            ClosePending;
-            if not Nested(nil, {pending=}false) then
+            if Pending then
+            begin // our caller did write '<name' but not its ending '>' yet
+              W.AddDirect('>');
+              Pending := false;
+            end;
+            Json := AddJsonToXml(W, Json, nil, @info.EndOfObject, Options);
+            if Json = nil then
               exit;
           end
           else
           begin
-            ClosePending;
-            if P^ = '[' then // arrays are written as list of items, without root
+            if Pending then
+            begin // our caller did write '<name' but not its ending '>' yet
+              W.AddDirect('>');
+              Pending := false;
+            end;
+            if Json^ = '[' then // arrays are written as list of items, without root
             begin
-              if not Nested(Name, {pending=}false) then
+              Json := AddJsonToXml(W, Json, Name, @info.EndOfObject, Options);
+              if Json = nil then
                 exit;
             end
             else
@@ -1822,7 +1789,8 @@ begin
               W.Add('<');
               AddXmlEscape(W, Name);
               // no '>' here: the value may start with some '@name' attributes
-              if not Nested(Name, {pending=}true) then
+              Json := AddJsonToXml(W, Json, nil, @info.EndOfObject, Options, true);
+              if Json = nil then
                 exit;
               W.AddDirect('<', '/');
               AddXmlEscape(W, Name);
@@ -1830,16 +1798,18 @@ begin
             end;
           end;
         until info.EndOfObject = '}';
-      ClosePending; // e.g. '{}' or an object made of attributes only
+      if Pending then // e.g. '{}' or an object made of attributes only
+        W.AddDirect('>'); // our caller did write '<name' but not '>' yet
     end;
   else
     begin // unescape the JSON content and write as UTF-8 escaped XML
-      ClosePending;
-      info.Json := P;
+      if Pending then
+        W.AddDirect('>'); // our caller did write '<name' but not '>' yet
+      info.Json := Json;
       info.GetJsonField;
       if info.Value <> nil then // null or "" would store a void entry
       begin
-        c := PInteger(info.Value)^ and $ffffff;
+        c := PCardinal(info.Value)^ and $ffffff;
         if (c = JSON_BASE64_MAGIC_C) or
            (c = JSON_SQLDATE_MAGIC_C) then
           inc(info.Value, 3); // ignore the Magic codepoint encoded as UTF-8
@@ -1847,36 +1817,19 @@ begin
       end;
       if EndOfObject <> nil then
         EndOfObject^ := info.EndOfObject;
-      Context.Json := info.Json;
+      result := info.Json;
       exit;
     end;
   end;
-  if P <> nil then
+  if Json <> nil then
   begin
-    while (P^ <= ' ') and
-          (P^ <> #0) do
-      inc(P);
+    Json := GotoNextNotSpace(Json);
     if EndOfObject <> nil then
-      EndOfObject^ := P^;
-    if P^ <> #0 then
-      repeat
-        inc(P);
-      until (P^ = #0) or
-            (P^ > ' ');
+      EndOfObject^ := Json^;
+    if Json^ <> #0 then
+      Json := IgnoreAndGotoNextNotSpace(Json);
   end;
-  Context.Json := P;
-end;
-
-function AddJsonToXml(W: TTextWriter; Json: PUtf8Char;
-  ArrayName, EndOfObject: PUtf8Char; Options: TJsonToXmlOptions): PUtf8Char;
-var
-  ctxt: TAddJsonToXmlNodeContext;
-begin
-  ctxt.W := W;
-  ctxt.Json := Json;
-  ctxt.Options := Options;
-  AddJsonToXmlNode(ctxt, ArrayName, EndOfObject, {pending=}false);
-  result := ctxt.Json;
+  result := Json;
 end;
 
 function XmlEscape(const text: RawUtf8): RawUtf8;
@@ -1972,17 +1925,40 @@ begin
 end;
 
 procedure AddVariantToXmlText(W: TTextWriter; const Value: variant);
+  {$ifdef HASINLINE} inline; {$endif}
 var
-  tmp: RawUtf8;
+  tmp: TTempUtf8;
 begin
-  if VarIsEmptyOrNull(Value) then
-    exit; // null would store a void entry, as AddJsonToXml() does
-  tmp := VariantToUtf8(Value);
-  AddXmlEscape(W, pointer(tmp));
+  VariantToTempUtf8(Value, tmp, [vfNullAsVoid]);
+  AddXmlEscape(W, tmp.Text);
+  TempUtf8Done(tmp);
 end;
 
-procedure AddVariantToXmlNode(W: TTextWriter; Doc: PDocVariantData;
-  Options: TJsonToXmlOptions; Pending: boolean); forward;
+procedure AddAttributesToXmlNode(W: TTextWriter; n: PRawUtf8; v: PVariant; c: integer);
+begin
+  // first pass: the '@name' fields are attributes of this start tag - and
+  // since we have the whole object at hand, they may appear anywhere in it
+  while c > 0 do
+  begin
+    if (PPUtf8Char(n)^ <> nil) and
+       (PPUtf8Char(n)^^ = '@') and
+       (TVarData(v^).VType <> DocVariantVType) then
+    begin // attribute values are text only
+      W.AddDirect(' ');
+      AddXmlEscape(W, PUtf8Char(pointer(n^)) + 1); // trim the '@' prefix
+      W.AddDirect('=', '"');
+      // AddXmlEscape() below escapes " as &quot; as expected
+      AddVariantToXmlText(W, v^);
+      W.AddDirect('"');
+    end;
+    inc(n);
+    inc(v);
+    dec(c);
+  end;
+end;
+
+procedure AddVariantToXmlNode(W: TTextWriter; n: PRawUtf8; v: PVariant;
+  c: integer; o: TJsonToXmlOptions); forward;
 
 procedure AddVariantToXmlValue(W: TTextWriter; const Name: RawUtf8;
   const Value: variant; Options: TJsonToXmlOptions);
@@ -1990,9 +1966,9 @@ var
   i: PtrInt;
   d: PDocVariantData;
 begin
-  if TVarData(Value).VType = DocVariantVType then
+  d := _Safe(Value);
+  if d^.Count <> 0 then
   begin
-    d := _Safe(Value);
     if d^.IsArray then
     begin // arrays are written as a list of items, without any root
       for i := 0 to d^.Count - 1 do
@@ -2001,8 +1977,10 @@ begin
     end;
     W.Add('<');
     AddXmlEscape(W, pointer(Name));
-    // no '>' here: the object may hold some '@name' attributes
-    AddVariantToXmlNode(W, d, Options, {pending=}true);
+    if jxoAttribute in Options then
+      AddAttributesToXmlNode(W, pointer(d^.Names), pointer(d^.Values), d^.Count);
+    W.AddDirect('>');
+    AddVariantToXmlNode(W, pointer(d^.Names), pointer(d^.Values), d^.Count, Options);
   end
   else
   begin
@@ -2016,64 +1994,38 @@ begin
   W.AddDirect('>');
 end;
 
-procedure AddVariantToXmlNode(W: TTextWriter; Doc: PDocVariantData;
-  Options: TJsonToXmlOptions; Pending: boolean);
-var
-  i: PtrInt;
-  n: PRawUtf8;
-  attr: boolean;
+procedure AddVariantToXmlNode(W: TTextWriter; n: PRawUtf8; v: PVariant;
+  c: integer; o: TJsonToXmlOptions);
 begin
-  attr := jxoAttribute in Options;
-  if Pending then
-  begin
-    if attr then
-      // first pass: the '@name' fields are attributes of this start tag - and
-      // since we have the whole object at hand, they may appear anywhere in it
-      for i := 0 to Doc^.Count - 1 do
-      begin
-        n := @Doc^.Names[i];
-        if (length(n^) > 1) and
-           (PByteArray(n^)[0] = ord('@')) and
-           (TVarData(Doc^.Values[i]).VType <> DocVariantVType) then
-        begin // attribute values are text only
-          W.AddDirect(' ');
-          AddXmlEscape(W, PUtf8Char(pointer(n^)) + 1); // trim the '@' prefix
-          W.AddDirect('=', '"');
-          // AddXmlEscape() below escapes " as &quot; as expected
-          AddVariantToXmlText(W, Doc^.Values[i]);
-          W.AddDirect('"');
-        end;
-      end;
-    W.AddDirect('>');
-  end;
-  // second pass: the other fields are the sub-elements and the text content
-  for i := 0 to Doc^.Count - 1 do
-  begin
-    n := @Doc^.Names[i];
-    if attr and
-       (n^ <> '') and
-       (PByteArray(n^)[0] = ord('@')) then
-      continue; // written above, or not representable as an attribute
-    if (jxoText in Options) and
-       (n^ = '#text') then
-      AddVariantToXmlText(W, Doc^.Values[i])
-    else
-      AddVariantToXmlValue(W, n^, Doc^.Values[i], Options);
-  end;
+  // append non-attributes fields and the text content - caller checked c > 0
+  repeat
+    if not (jxoAttribute in o) or // may have been written above
+       (PPUtf8Char(n)^ = nil) or
+       (PPUtf8Char(n)^^ <> '@') then // not representable as an attribute
+      if (jxoText in o) and
+         (n^ = '#text') then
+        AddVariantToXmlText(W, v^)
+      else
+        AddVariantToXmlValue(W, n^, v^, o);
+    inc(n);
+    inc(v);
+    dec(c);
+  until c = 0;
 end;
 
 procedure AddVariantToXml(W: TTextWriter; const Doc: variant;
   Options: TJsonToXmlOptions);
 var
-  i: PtrInt;
+  i: PtrINt;
   d: PDocVariantData;
 begin
   d := _Safe(Doc);
-  if d^.IsArray then
-    for i := 0 to d^.Count - 1 do // no name: use the index, as AddJsonToXml()
-      AddVariantToXmlValue(W, UInt32ToUtf8(i), d^.Values[i], Options)
-  else
-    AddVariantToXmlNode(W, d, Options, {pending=}false);
+  if d^.Count > 0 then
+    if d^.IsArray then
+      for i := 0 to d^.Count - 1 do // no name: use the index, as AddJsonToXml()
+        AddVariantToXmlValue(W, UInt32ToUtf8(i), d^.Values[i], Options)
+    else
+      AddVariantToXmlNode(W, pointer(d^.Names), pointer(d^.Values), d^.Count, Options);
 end;
 
 function VariantToXml(const Doc: variant; const Header, NameSpace: RawUtf8;

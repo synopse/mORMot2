@@ -9074,8 +9074,7 @@ begin
             (ContentType <> '') and
             (IsContentTypeJson(pointer(ContentType),
                PStrLen(PAnsiChar(pointer(ContentType)) - _STRLEN)^) or
-             ((PCardinal(ContentType)^ or $20202020 =
-                 ord('t') + ord('e') shl 8 + ord('x') shl 16 + ord('t') shl 24) and
+             ((PCardinal(ContentType)^ or $20202020 = TEXT32) and
               (ContentType[5] = '/')));
 end;
 
