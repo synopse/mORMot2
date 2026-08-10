@@ -2630,9 +2630,9 @@ begin
   if Doc.VarType = varString then
   begin
     tmp := TSynVarData(Doc);
-    Doc.Init(DocOptions);
-    Doc.AddValue('#text', variant(tmp)); // return a true TDocVariant
-    FastAssignNew(tmp.VAny);
+    Doc.Init(DocOptions);                // this method should set a TDocVariant
+    Doc.AddValue('#text', variant(tmp)); // return {"#text":".."}
+    FastAssignNew(tmp.VAny);             // manual tmp memory management
   end;
   result := Kind in [xtEof, xtElementEnd];
 end;
