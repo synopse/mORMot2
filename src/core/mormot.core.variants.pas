@@ -7320,8 +7320,7 @@ begin
     intvalues := DocVariantType.InternValues
   else
     intvalues := nil;
-  while (Json^ <= ' ') and
-        (Json^ <> #0) do
+  while Json^ in [#1 .. ' '] do
     inc(Json);
   case Json^ of
     '[':
@@ -7468,8 +7467,7 @@ begin
   else
     exit;
   end;
-  while (Json^ <= ' ') and
-        (Json^ <> #0) do
+  while Json^ in [#1 .. ' '] do
     inc(Json);
   if aEndOfObject <> nil then
     aEndOfObject^ := Json^;
@@ -11214,8 +11212,7 @@ begin
     AllowDouble := true;
   wasParsedWithinString := false;
   J := Info.Json;
-  while (J^ <= ' ') and
-        (J^ <> #0) do
+  while J^ in [#1 .. ' '] do
     inc(J);
   case JSON_TOKENS[J^] of
     jtFirstDigit:  // '-', '0'..'9': numbers are directly processed
@@ -11245,8 +11242,7 @@ begin
         end;
         // we parsed a full number as variant
 endobj: Info.ValueLen := J - Info.Value;
-        while (J^ <= ' ') and
-              (J^ <> #0) do
+        while J^ in [#1 .. ' '] do
           inc(J);
         Info.EndOfObject := J^;
         if J^ <> #0 then
@@ -11374,36 +11370,29 @@ begin
   result := varString;
   c := Json[0];
   if (jcDigitFirstChar in JSON_CHARS[c]) and // ['-', '0'..'9']
-     (((c >= '1') and
-       (c <= '9')) or      // is first char numeric?
-     ((c = '0') and
-      ((Json[1] = '.') or
-       (Json[1] = #0))) or // '012' is not Json, but '0.xx' and '0' are
-     ((c = '-') and
-      (Json[1] >= '0') and
-      (Json[1] <= '9'))) then  // negative number
+     ((c in ['1'.. '9']) or      // is first char numeric?
+      ((c = '0') and
+       (Json[1] in [#0, '.'])) or // '012' is not Json, but '0.xx' and '0' are
+      ((c = '-') and
+       (Json[1] in ['0' .. '9']))) then  // negative number
   begin
     start := Json;
     repeat
       inc(Json)
-    until (Json^ < '0') or
-          (Json^ > '9'); // check digits
+    until not (Json^ in ['0' .. '9']); // check digits
     case Json^ of
       #0:
         if Json - start <= 19 then
           // no decimal, and matcthing signed Int64 precision
           result := varInt64;
       '.':
-        if (Json[1] >= '0') and
-           (Json[1] <= '9') and
+        if (Json[1] in ['0' .. '9']) and
            (Json[2] in [#0, '0'..'9']) then
           if (Json[2] = #0) or
              (Json[3] = #0) or
-             ((Json[3] >= '0') and
-              (Json[3] <= '9') and
+             ((Json[3] in ['0' .. '9']) and
               (Json[4] = #0) or
-             ((Json[4] >= '0') and
-              (Json[4] <= '9') and
+             ((Json[4] in ['0' .. '9']) and
               (Json[5] = #0))) then
             result := varCurrency; // currency ###.1234 number
     end;
@@ -11421,20 +11410,16 @@ begin
   result := varString;
   c := Json[0];
   if (jcDigitFirstChar in JSON_CHARS[c]) and // ['-', '0'..'9']
-     (((c >= '1') and
-       (c <= '9')) or      // is first char numeric?
-     ((c = '0') and
-      ((Json[1] = '.') or
-       (Json[1] = #0))) or // '012' is not Json, but '0.xx' and '0' are
-     ((c = '-') and
-      (Json[1] >= '0') and
-      (Json[1] <= '9'))) then  // negative number
+     ((c in ['1'.. '9']) or      // is first char numeric?
+      ((c = '0') and
+       (Json[1] in [#0, '.'])) or // '012' is not Json, but '0.xx' and '0' are
+      ((c = '-') and
+       (Json[1] in ['0' .. '9']))) then  // negative number
   begin
     start := Json;
     repeat
       inc(Json)
-    until (Json^ < '0') or
-          (Json^ > '9'); // check digits
+    until not (Json^ in ['0' .. '9']); // check digits
     case Json^ of
       #0:
         if Json - start <= 19 then // signed Int64 precision
@@ -11442,24 +11427,20 @@ begin
         else
           result := varDouble; // we may loose precision, but still a number
       '.':
-        if (Json[1] >= '0') and
-           (Json[1] <= '9') and
+        if (Json[1] in ['0' .. '9']) and
            (Json[2] in [#0, '0'..'9']) then
           if (Json[2] = #0) or
              (Json[3] = #0) or
-             ((Json[3] >= '0') and
-              (Json[3] <= '9') and
+             ((Json[3] in ['0' .. '9']) and
               (Json[4] = #0) or
-             ((Json[4] >= '0') and
-              (Json[4] <= '9') and
+             ((Json[4] in ['0' .. '9']) and
               (Json[5] = #0))) then
             result := varCurrency // currency ###.1234 number
           else
           begin
             repeat // more than 4 decimals
               inc(Json)
-            until (Json^ < '0') or
-                  (Json^ > '9');
+            until not (Json^ in ['0' .. '9']);
             case Json^ of
               #0:
                 result := varDouble;
@@ -11540,13 +11521,11 @@ begin
     include(flags, fNeg);
   end;
   if (c = '0') and
-     (Json[1] >= '0') and
-     (Json[1] <= '9') then // '012' is not Json, but '0.xx' and '0' are
+     (Json[1] in ['0' .. '9']) then // '012' is not Json, but '0.xx' and '0' are
     exit;
   remdigit := 19;    // max Int64 resolution
   repeat
-    if (c >= '0') and
-       (c <= '9') then
+    if c in ['0' .. '9'] then
     begin
       inc(Json);
       dec(remdigit); // over-required digits are just ignored
@@ -11597,8 +11576,7 @@ begin
     end;
     repeat
       c := Json^;
-      if (c < '0') or
-         (c > '9') then
+      if not (c in ['0' .. '9']) then
         break;
       inc(Json);
       dec(c, ord('0'));

@@ -898,8 +898,7 @@ begin
       inc(R); // jump first '['
       for i := 0 to ExpectedResultsCount - 1 do
       begin
-        while (R^ <= ' ') and
-              (R^ <> #0) do
+        while R^ in [#1 .. ' '] do
           inc(R);
         res := Int64(ord(R^)) - 48;
         if res <= 9 then
@@ -914,7 +913,7 @@ begin
           until false;
         end;
         Results[i] := res;
-        while R^ in [#1..' '] do
+        while R^ in [#1 .. ' '] do
           inc(R);
         case R^ of
           ',':

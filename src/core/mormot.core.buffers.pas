@@ -2804,6 +2804,10 @@ type
 
 implementation
 
+{$ifdef FPC} // already part of mormot.defines.inc but seems needed with -O2
+  {$WARN 5093 off} // function result variable of a managed uninitialized 1
+{$endif FPC}
+
 
 { ************ Variable Length Integer Encoding / Decoding }
 
@@ -7527,8 +7531,7 @@ begin
     result := false;
     exit;
   end;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
+  while P^ in [#1 .. ' '] do
     inc(P);
   if (P[0] in ['x', 'X']) and
      (P[1] = '''') then

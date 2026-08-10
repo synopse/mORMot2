@@ -9397,15 +9397,14 @@ procedure GetNext(var P: PUtf8Char; Sep1, Sep2: AnsiChar; var result: RawUtf8);
 var
   S, E: PUtf8Char;
 begin // see GetNextItemTrimed() from mormot.core.text
-  while (P^ <= ' ') and
-        (P^ <> #0) do
+  while P^ in [#1 .. ' '] do
     inc(P); // trim left
   S := P;
   while not (S^ in [#0, Sep1, Sep2]) do
     inc(S);
   E := S;
   while (E > P) and
-        (E[-1] in [#1..' ']) do
+        (E[-1] in [#1 .. ' ']) do
     dec(E); // trim right
   FastSetString(result, P, E);
   if S^ <> #0 then

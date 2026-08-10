@@ -3402,8 +3402,7 @@ end;
 procedure THttpRequestContext.GetTrimmed(P, P2: PUtf8Char; L: PtrInt;
   var result: RawUtf8; nointern: boolean);
 begin
-  while (P^ > #0) and
-        (P^ <= ' ') do
+  while P^ in [#1 .. ' '] do
     inc(P); // trim left
   dec(L, P - P2);
   repeat
@@ -3492,8 +3491,7 @@ begin
       begin
         // 'HOST:'
         inc(P, 5);
-        while (P^ > #0) and
-              (P^ <= ' ') do
+        while P^ in [#1 .. ' '] do
           inc(P); // trim left
         if (fLastHost <> '') and
            (StrComp(pointer(P), pointer(fLastHost)) = 0) then

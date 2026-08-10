@@ -3700,10 +3700,10 @@ begin
     exit;
   if R = nil then
     FakeCallRaiseError(ctxt, 'method returned value, but OutputJson=''''', []);
-  if R^ in [#1..' '] then
+  if R^ in [#1 .. ' '] then
     repeat
       inc(R)
-    until not (R^ in [#1..' ']);
+    until not (R^ in [#1 .. ' ']);
   asJsonObject := false; // [value,...] JSON array format
   if R^ <> '[' then
     if R^ = '{' then

@@ -3666,6 +3666,12 @@ begin
   end;
 end;
 
+function GL(a, b: PAnsiChar; const c: RawUtf8): boolean;
+begin
+  // avoid Delphi compiler complains about PUtf8Char/PAnsiChar types
+  result := GetLineContains(pointer(a), pointer(b), pointer(c));
+end;
+
 procedure TTestCoreBase._IsMatch;
 var
   i, j: integer;
@@ -3686,12 +3692,6 @@ var
     check(not match.Match('a1'));
     check(not match.Match('a1b2'));
     check(not match.Match('1a2'));
-  end;
-
-  function GL(a, b: PAnsiChar; const c: RawUtf8): boolean;
-  begin
-    // avoid Delphi compiler complains about PUtf8Char/PAnsiChar types
-    result := GetLineContains(pointer(a), pointer(b), pointer(c));
   end;
 
 begin

@@ -2657,17 +2657,14 @@ begin // caller ensure P^ is a valid first (json) digit
   result := P;
   repeat
     inc(result);
-  until (result^ < '0') or
-        (result^ > '9'); // check digits
+  until not (result^ in ['0' .. '9']); // check digits
   if result^ = '.' then
   begin
-    if (result[1] < '0') or
-       (result[1] > '9') then
+    if not (result[1] in ['0' .. '9']) then
       exit; // at least one digit after '.' or return '.' position
     repeat
       inc(result);
-    until (result^ < '0') or
-          (result^ > '9'); // check fractional digits
+    until not (result^ in ['0' .. '9']); // check fractional digits
   end;
   if (result^ <> 'e') and
      (result^ <> 'E') then
@@ -2676,12 +2673,10 @@ begin // caller ensure P^ is a valid first (json) digit
   if (P^ = '+') or
      (P^ = '-') then
     inc(P);
-  if (P^ < '0') or
-     (P^ > '9') then
+  if not (P^ in ['0' .. '9']) then
     exit; // at least one digit after E E+ E-
   result := P;
-  while (result^ >= '0') and
-        (result^ <= '9') do
+  while result^ in ['0' .. '9'] do
     inc(result);
 end;
 
@@ -2692,8 +2687,8 @@ begin
     exit;
   if result^ = '-' then
     inc(result);
-  if ((result^ >= '1') and (result^ <= '9')) or // is first char numeric?
-     ((result^ = '0') and ((result[1] < '0') or (result[1] > '9'))) then // no '012'
+  if (result^ in ['1' .. '9']) or // is first char numeric?
+     ((result^ = '0') and not(result[1] in ['0' .. '9'])) then // no '012'
     result := GotoEndRawNumber(result)
   else
     result := nil; // don't begin with a numerical value -> must be a string
@@ -2774,16 +2769,15 @@ begin
   if P = nil then
     exit;
   repeat
-    {$ifdef FPC}
-    while (P^ <= ' ') and
-          (P^ <> #0) do
-      inc(P);
-    {$else}
-    if P^ in [#1..' '] then
+    {$ifdef WIN32DELPHI} // inlined GotoNextNotSpace()
+    if P^ in [#1..' '] then // Delphi i386 seems to prefer this kind of code
       repeat
-        inc(P)
+        inc(P);
       until not (P^ in [#1..' ']);
-    {$endif FPC}
+    {$else}
+    while P^ in [#1 .. ' '] do // seems to be the best pattern on FPC + Delphi64
+      inc(P);
+    {$endif WIN32DELPHI}
     case JsonFirst[P^] of // FPC and Delphi will use a jump table :)
       jtNone:
         exit;  // unexpected character in JSON input
@@ -3000,8 +2994,7 @@ ident:    if ExpectStandard then
        (State <> stObjectName) then
       break;
   until false;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
+  while P^ in [#1 .. ' '] do
     inc(P);
   result := P; // points to the next meaningful char
 end;
@@ -3268,8 +3261,7 @@ begin
   JsonSet := @JSON_CHARS_RELAXED;
   {$endif CPUX86}
   repeat // reuse GotoEnd state machine for the purpose of reformatting
-    while (P^ <= ' ') and
-          (P^ <> #0) do
+    while P^ in [#1 .. ' '] do
       inc(P);
     case JsonFirst[P^] of
       jtDoubleQuote: // "string"
@@ -3552,8 +3544,7 @@ begin
   if (P^ = '+') or
      (P^ = '-') then
     inc(P);
-  if (P^ < '0') or
-     (P^ > '9') then
+  if not (P^ in ['0' .. '9']) then
     exit;
   P := GotoEndRawNumber(P);
   if (P <> nil) and
@@ -3606,8 +3597,8 @@ begin
   begin
     if P^ = '-' then
       inc(P);
-    if ((P^ >= '1') and (P^ <= '9')) or // is first char numeric?
-       ((P^ = '0') and ((P[1] < '0') or (P[1] > '9'))) then // no '012'
+    if (P^ in ['1' .. '9']) or // is first char numeric?
+       ((P^ = '0') and not(P[1] in ['0' .. '9'])) then // no '012'
       if GotoEndRawNumber(P)^ = #0 then
       begin
         result := true;
@@ -3653,8 +3644,8 @@ begin
   inc(len, PtrUInt(P)); // len = PtrUInt(PMax)
   if P^ = '-' then
     inc(P);
-  if ((P^ >= '1') and (P^ <= '9')) or // is first char numeric?
-     ((P^ = '0') and ((P[1] < '0') or (P[1] > '9'))) then // no '012'
+  if (P^ in ['1' .. '9']) or // is first char numeric?
+     ((P^ = '0') and not (P[1] in ['0' .. '9'])) then // no '012'
   begin
     P := GotoEndRawNumber(P); // inlined P := GotoEndJsonItemNumber(P);
     while true do
@@ -3712,14 +3703,11 @@ end;
 
 procedure IgnoreComma(var P: PUtf8Char);
 begin
-  if P <> nil then
-  begin
-    while (P^ <= ' ') and
-          (P^ <> #0) do
-      inc(P);
-    if P^ = ',' then
-      inc(P);
-  end;
+  if P = nil then
+    exit;
+  P := GotoNextNotSpace(P);
+  if P^ = ',' then
+    inc(P);
 end;
 
 function JsonPropNameValid(P: PUtf8Char): boolean;
@@ -3859,8 +3847,7 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt - with extensions
         // numerical value
         Value := P;
         if P^ = '0' then
-          if (P[1] >= '0') and
-             (P[1] <= '9') then
+          if P[1] in ['0' .. '9'] then
             exit; // 0123 value is excluded by JSON - we don't relax it here
         repeat
           inc(P);
@@ -3873,8 +3860,7 @@ begin // see http://www.ietf.org/rfc/rfc4627.txt - with extensions
         if ValueLen > 1 then
           goto ident2; // e.g. 192.168.0.0/24
         ValueLen := P - Value;
-        if (P^ <= ' ') and
-           (P^ <> #0) then
+        if P^ in [#1 .. ' '] then
         begin
           P^ := #0; // force numerical field with no trailing ' '
           inc(P);
@@ -4082,8 +4068,7 @@ begin
   ValueLen := 0;
   if P = nil then
     exit;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
+  while P^ in [#1 .. ' '] do
     inc(P);
   if P^ = '/' then
     P := GotoEndOfSlashComment(P);
@@ -4099,8 +4084,7 @@ begin
     else
     begin
       ValueLen := P - Value;
-      while (P^ <= ' ') and
-            (P^ <> #0) do
+      while P^ in [#1 .. ' '] do
         inc(P);
       EndOfObject := P^;
       if P^ <> #0 then
@@ -4158,7 +4142,7 @@ begin
           begin
             repeat
               inc(P);
-            until not (P^ in [#1..' ']);
+            until not (P^ in [#1 .. ' ']);
             result := P; // success
             exit;
           end
@@ -4307,8 +4291,7 @@ begin
   // retrieve string field
   if P = nil then
     exit;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
+  while P^ in [#1 .. ' '] do
     inc(P);
   if P^ <> '"' then
     exit;
@@ -4389,8 +4372,7 @@ begin
   if P = nil then
     exit;
   FastSetString(RawUtf8(result), B, P);
-  while (P^ <= ' ') and
-        (P^ <> #0) do
+  while P^ in [#1 .. ' '] do
     inc(P);
   if EndOfObject <> nil then
     EndOfObject^ := P^;
@@ -4472,8 +4454,7 @@ begin
     exit;
   if Len <> nil then
     Len^ := result - P;
-  while (result^ <= ' ') and
-        (result^ <> #0) do
+  while result^ in [#1 .. ' '] do
     inc(result);
   if EndOfObject <> nil then
     EndOfObject^ := result^;
@@ -4771,8 +4752,7 @@ begin
      (MinValue < 0) or
      (MaxValue < 0) then
     exit;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
+  while P^ in [#1 .. ' '] do
     inc(P);
   if P^ = '[' then
   begin // stored as JSON array
@@ -4962,8 +4942,7 @@ begin
   J := P;
   if J = nil then
     exit;
-  while (J^ <= ' ') and
-        (J^ <> #0) do
+  while J^ in [#1 .. ' '] do
     inc(J);
   if PPtrInt(J)^ = PPtrInt(Pattern)^ then // PatternLen is at least 8 bytes long
   begin
@@ -7820,7 +7799,7 @@ begin
   begin
     repeat
       inc(P);
-    until not (P^ in [#1..' ']); // ignore trailing [
+    until not (P^ in [#1 .. ' ']); // ignore trailing [
     if P^ = ']' then
     begin
       // void but valid array
@@ -7850,7 +7829,7 @@ begin
   begin
     repeat
       inc(P);
-    until not (P^ in [#1..' ']); // ignore trailing {
+    until not (P^ in [#1 .. ' ']); // ignore trailing {
     if P^ = '}' then
     begin
       // void but valid array
@@ -8300,7 +8279,7 @@ no:   Ctxt.Valid := false;
     end;
   repeat
     inc(j);
-  until not (j^ in [#1..' ']);
+  until not (j^ in [#1 .. ' ']);
   if j^ <> '}' then
   begin
     Ctxt.Json := j;
@@ -8427,8 +8406,7 @@ begin
   P := Ctxt.Json;
   if P <> nil then // in-place replace trailing RowID -> ID for unserialization
   begin
-    while (P^ <= ' ') and
-          (P^ <> #0) do
+    while P^ in [#1 .. ' '] do
       inc(P);
     if P^ = '{' then
     begin

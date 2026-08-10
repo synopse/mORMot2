@@ -2278,6 +2278,10 @@ function SendEmailSubject(const Text: string): RawUtf8;
 
 implementation
 
+{$ifdef FPC} // already part of mormot.defines.inc but seems needed with -O2
+  {$WARN 5093 off} // function result variable of a managed uninitialized 1
+{$endif FPC}
+
 
 { ******************** THttpMultiPartStream for multipart/formdata HTTP POST }
 
@@ -2519,7 +2523,7 @@ begin
   end
   else if fOwner.fState = mpdsError then
     // never mistake a truncated section for a complete one
-    raise EHttpMultiPart.CreateUtf8(
+    EHttpMultiPart.RaiseUtf8(
       '%.Read: malformed or truncated multipart content', [self]);
 end;
 
@@ -2536,11 +2540,11 @@ begin
      (length(aBoundary) > 256) then
     // RFC 2046 limits boundaries to 70 chars - be lenient, but bounded, so
     // that the minimal work buffer below always holds a full delimiter
-    raise EHttpMultiPart.CreateUtf8('%.Create: invalid boundary length = %',
+    EHttpMultiPart.RaiseUtf8('%.Create: invalid boundary length = %',
       [self, length(aBoundary)]);
   for i := 1 to length(aBoundary) do
     if aBoundary[i] < ' ' then // e.g. CR/LF would corrupt the delimiter
-      raise EHttpMultiPart.CreateUtf8(
+      EHttpMultiPart.RaiseUtf8(
         '%.Create: control char #% in boundary', [self, ord(aBoundary[i])]);
   fSource := aSource;
   Join([#13#10'--', aBoundary], fDelimiter);
@@ -2558,7 +2562,7 @@ var
   b: RawUtf8;
 begin
   if not MultiPartFormDataBoundary(aContentType, b) then
-    raise EHttpMultiPart.CreateUtf8(
+    EHttpMultiPart.RaiseUtf8(
       '%.CreateFromContentType: no boundary in [%]', [self, aContentType]);
   Create(aSource, b, aBufferSize);
 end;

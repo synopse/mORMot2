@@ -2583,7 +2583,7 @@ begin
   result := false;
   if Sql = nil then
     exit;
-  while Sql^ in [#1..' '] do
+  while Sql^ in [#1 .. ' '] do
     inc(Sql);
   c := IdemPCharSep(Sql, 'SELECT|INSERT|UPDATE|DELETE|'); // DML statements
   if (c < 0) or
@@ -2938,8 +2938,7 @@ begin
   result := nil; // indicates parsing error
   if P = nil then
     exit;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
+  while P^ in [#1 .. ' '] do
     inc(P);
   case P^ of
     '''',
@@ -3011,8 +3010,7 @@ begin
   else
     exit; // invalid content
   end;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
+  while P^ in [#1 .. ' '] do
     inc(P);
   if (P[0] <> ')') or
      (P[1] <> ':') then
@@ -3880,7 +3878,7 @@ begin
     FieldValue := NULL_STR_VAR;
     exit;
   end;
-  while P^ in [#1..' '] do
+  while P^ in [#1 .. ' '] do
     inc(P);
   if (PInteger(P)^ = NULL_LOW) and
      (P[4] in [#0, #9, #10, #13, ' ', ',', '}', ']']) then
@@ -3889,7 +3887,7 @@ begin
     FieldType := ftaNull;
     FieldValue := NULL_STR_VAR;
     inc(P, 4);
-    while P^ in [#1..' '] do
+    while P^ in [#1 .. ' '] do
       inc(P);
     if P^ = #0 then
       info.Json := nil
@@ -4370,8 +4368,7 @@ begin
   Beg := P;
   if Beg = nil then
     exit;
-  while (Beg^ <= ' ') and
-        (Beg^ <> #0) do
+  while Beg^ in [#1 .. ' '] do
     inc(Beg);
   if Beg^ <> '{' then
     exit;
