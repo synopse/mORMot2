@@ -924,8 +924,8 @@ type
       Status: integer; ErrorHandle: POCIError;
       InfoRaiseException: boolean = false; LogLevelNoRaise: TSynLogLevel = sllNone);
     /// log a warning for Status = OCI_SUCCESS_WITH_INFO
-    function CheckSuccessInfo(Stmt: TSqlDBStatement; Status: integer;
-      ErrorHandle: POCIError): boolean;
+    procedure CheckSuccessInfo(Stmt: TSqlDBStatement; Status: integer;
+      ErrorHandle: POCIError);
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve some BLOB content
     procedure BlobFromDescriptor(Stmt: TSqlDBStatement; svchp: POCISvcCtx;
@@ -1609,8 +1609,8 @@ begin
   end;
 end;
 
-function TSqlDBOracleLib.CheckSuccessInfo(Stmt: TSqlDBStatement; Status: integer;
-  ErrorHandle: POCIError): boolean;
+procedure TSqlDBOracleLib.CheckSuccessInfo(Stmt: TSqlDBStatement; Status: integer;
+  ErrorHandle: POCIError);
 begin
   if Status = OCI_SUCCESS_WITH_INFO then
     HandleError(nil, Stmt, Status, ErrorHandle, {raise=}false, sllWarning);
