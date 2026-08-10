@@ -3364,8 +3364,7 @@ var
 begin
   if P <> nil then
   begin
-    while (P^ <= ' ') and
-          (P^ <> #0) do
+    while P^ in [#1 .. ' '] do
       inc(P);
     if (PInteger(P)^ = NULL_LOW) and
        (P[4] = #0) then
@@ -11257,8 +11256,7 @@ begin
   info.Json := P;
   if info.Json = nil then
     exit;
-  while (info.Json^ <= ' ') and
-        (info.Json^ <> #0) do
+  while info.Json^ in [#1 .. ' '] do
     inc(info.Json);
   if info.Json^ <> '[' then
     exit;

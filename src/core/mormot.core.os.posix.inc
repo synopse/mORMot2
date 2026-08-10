@@ -3608,8 +3608,7 @@ begin
     if IdemPChar(p, @up[1]) then
     begin
       inc(p, ord(up[0]));
-      while (p^ <= ' ') and
-            (p^ <> #0) do
+      while p^ in [#1 .. ' '] do
         inc(p); // trim left
       L := 0;
       while p[L] > #13 do

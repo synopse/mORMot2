@@ -2979,8 +2979,7 @@ begin
   if (S = nil) or
      (Sep <= ' ') then
     exit;
-  while (S^ <= ' ') and
-        (S^ <> #0) do
+  while S^ in [#1 .. ' '] do
     inc(S); // trim left
   Item := S;
   S := PosChar0(S, Sep); // use fast SSE2 asm on x86_64
@@ -3116,9 +3115,7 @@ begin
     FastAssignNew(result)
   else
   begin
-    while (P^ <= ' ') and
-          (P^ <> #0) do
-      inc(P); // trim left
+    P := GotoNextNotSpace(P);  // trim left
     S := P;
     while (S^ <> #0) and
           ((S^ <> Sep) or
@@ -3127,7 +3124,7 @@ begin
       inc(S);
     E := S;
     while (E > P) and
-          (E[-1] in [#1..' ']) do
+          (E[-1] in [#1 .. ' ']) do
       dec(E); // trim right
     FastSetString(result, P, E);
     if S^ <> #0 then
@@ -3261,9 +3258,7 @@ begin
   FillCharFast(Bin^, BinBytes, 0);
   if P = nil then
     exit;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
+  P := GotoNextNotSpace(P);
   S := P;
   if Sep = #0 then
     while S^ > ' ' do
@@ -3271,7 +3266,7 @@ begin
   else
     S := PosChar0(S, Sep);
   len := S - P;
-  while (P[len - 1] in [#1..' ']) and
+  while (P[len - 1] in [#1 .. ' ']) and
         (len > 0) do
     dec(len); // trim right spaces
   if len <> BinBytes * 2 then
@@ -6947,8 +6942,7 @@ begin
   result := 0;
   if P = nil then
     exit;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
+  while P^ in [#1 .. ' '] do
     inc(P);
   if P^ = '-' then
   begin
@@ -8458,15 +8452,13 @@ begin
     inc(s);
     c := s^;
   end;
-  if (c >= '0') and
-     (c <= '9') then
+  if c in ['0' .. '9'] then
     repeat
       inc(s);
       d^ := c;
       inc(d);
       c := s^;
-      if ((c >= '0') and
-          (c <= '9')) or
+      if (c in ['0' .. '9']) or
          (c = '.') then
         continue;
       if (c <> 'e') and
@@ -8483,8 +8475,7 @@ begin
         inc(d);
         c := s^;
       end;
-      while (c >= '0') and
-            (c <= '9') do
+      while c in ['0' .. '9'] do
       begin
         inc(s);
         d^ := c;

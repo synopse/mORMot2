@@ -1641,8 +1641,7 @@ begin
   result := nil;
   if Json = nil then
     exit;
-  while (Json^ <= ' ') and
-        (Json^ <> #0) do
+  while Json^ in [#1 .. ' '] do
     inc(Json);
   if Json^ = '/' then
     Json := GotoEndOfSlashComment(Json);
@@ -1692,8 +1691,7 @@ begin
           Name := GetJsonPropName(Json);
           if Name = nil then
             exit;
-          while (Json^ <= ' ') and
-                (Json^ <> #0) do
+          while Json^ in [#1 .. ' '] do
             inc(Json);
           if Json^ = '[' then // arrays are written as list of items, without root
             Json := AddJsonToXml(W, Json, Name, @info.EndOfObject)
@@ -1730,8 +1728,7 @@ begin
   end;
   if Json <> nil then
   begin
-    while (Json^ <= ' ') and
-          (Json^ <> #0) do
+    while Json^ in [#1 .. ' '] do
       inc(Json);
     if EndOfObject <> nil then
       EndOfObject^ := Json^;

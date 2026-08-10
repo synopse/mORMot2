@@ -7527,8 +7527,7 @@ begin
     result := false;
     exit;
   end;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
+  while P^ in [#1 .. ' '] do
     inc(P);
   if (P[0] in ['x', 'X']) and
      (P[1] = '''') then

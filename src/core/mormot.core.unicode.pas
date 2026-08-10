@@ -2315,11 +2315,11 @@ function UnQuotedSqlSymbolName(const ExternalDBSymbol: RawUtf8): RawUtf8;
 function GotoEndOfQuotedString(P: PUtf8Char): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// get the next character not in [#1..' ']
+/// get the next character not in [#1 .. ' ']
 function GotoNextNotSpace(P: PUtf8Char): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// get the next character not in [#1..' ']
+/// get the next character not in [#1 .. ' ']
 function IgnoreAndGotoNextNotSpace(P: PUtf8Char): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -2331,7 +2331,7 @@ function GotoNextNotSpaceSameLine(P: PUtf8Char): PUtf8Char;
 function GotoNextSpace(P: PUtf8Char): PUtf8Char;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// check if the next character not in [#1..' '] matchs a given value
+/// check if the next character not in [#1 .. ' '] matchs a given value
 // - first ignore any non space character
 // - then returns TRUE if P^=ch, setting P to the character after ch
 // - or returns FALSE if P^<>ch, leaving P at the level of the unexpected char
@@ -8708,8 +8708,7 @@ begin
   p := UniqueRawUtf8(S);
   d := p; // in-place process
   repeat
-    while (p^ <= ' ') and
-          (p^ <> #0) do
+    while p^ in [#1 .. ' '] do
       inc(p);
     while not (p^ in [#0, #10, #13]) do
     begin
@@ -9290,16 +9289,15 @@ end; // P^='"' or P^=#0 at function return
 
 function GotoNextNotSpace(P: PUtf8Char): PUtf8Char;
 begin
-  {$ifdef FPC}
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
-  {$else}
-  if P^ in [#1..' '] then
+  {$ifdef WIN32DELPHI}
+  if P^ in [#1..' '] then // Delphi i386 seems to prefer this kind of code
     repeat
       inc(P);
     until not (P^ in [#1..' ']);
-  {$endif FPC}
+  {$else}
+  while P^ in [#1 .. ' '] do // seems to be the best pattern on FPC + Delphi64
+    inc(P);
+  {$endif WIN32DELPHI}
   result := P;
 end;
 
@@ -9307,7 +9305,7 @@ function IgnoreAndGotoNextNotSpace(P: PUtf8Char): PUtf8Char;
 begin
   repeat
     inc(P);
-  until not (P^ in [#1..' ']);
+  until not (P^ in [#1 .. ' ']);
   result := P;
 end;
 
@@ -9329,9 +9327,7 @@ end;
 
 function NextNotSpaceCharIs(var P: PUtf8Char; ch: AnsiChar): boolean;
 begin
-  while (P^ <= ' ') and
-        (P^ <> #0) do
-    inc(P);
+  P := GotoNextNotSpace(P);
   if P^ = ch then
   begin
     inc(P);

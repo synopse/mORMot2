@@ -1185,7 +1185,7 @@ begin
     exit;
   repeat
     inc(P)
-  until not (P^ in [#1..' ']);
+  until not (P^ in [#1 .. ' ']);
   info.Json := P;
   if P^ <> '}' then
   repeat

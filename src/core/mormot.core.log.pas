@@ -3213,10 +3213,9 @@ function MatchPattern(P, PEnd, Up: PUtf8Char; var Dest: PUtf8Char): boolean;
 begin
   result := false;
   repeat
-    if P^ in [#1..' '] then
-      repeat
-        inc(P)
-      until not (P^ in [#1..' ']);
+    while (P < PEnd) and
+          (P^ in [#1 .. ' ']) do
+      inc(P);
     while NormToUpperAnsi7[P^] = Up^ do
     begin
       inc(P);
@@ -3224,11 +3223,11 @@ begin
         exit;
       inc(Up);
       if (Up^ = ' ') and
-         (P^ in [#1..' ']) then
+         (P^ in [#1 .. ' ']) then
       begin
         // ignore multiple spaces in P^
         while (P < PEnd) and
-              (P^ in [#1..' ']) do
+              (P^ in [#1 .. ' ']) do
           inc(P);
         inc(Up);
       end;

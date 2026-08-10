@@ -10736,12 +10736,12 @@ begin
     f := Flags;
     if rtfParamInteger in f then // <int:name> or rtoIntegerParams
     begin
-      if (P^ < '0') or (P^ > '9') then
+      if not (P^ in ['0' .. '9']) then
         exit; // void <integer> is not allowed
       repeat
         inc(P);
-        a := P^;
-      until (a < '0') or (a > '9');
+      until not (P^ in ['0' .. '9']);
+      a := P^;
       if (a <> #0) and (a <> '?') and (a <> '/') then
         exit; // not an integer
     end
