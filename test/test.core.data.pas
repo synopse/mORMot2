@@ -9899,6 +9899,17 @@ begin
   CheckEqual(VariantToXml(doc, ''), '<a><b>1</b><b>2</b><c d="x">t</c></a>');
   mormot.core.fmt.XmlToVariant('<a><b i="1">x</b><b i="2">y</b></a>', doc);
   CheckEqual(VariantToXml(doc, ''), '<a><b i="1">x</b><b i="2">y</b></a>');
+  // a void document is an element with no content - and never JSON text
+  CheckEqual(VariantToXml(_Json('{"a":{}}'), ''), '<a></a>');
+  CheckEqual(VariantToXml(_Json('{"a":{"b":{}}}'), ''), '<a><b></b></a>');
+  CheckEqual(VariantToXml(_Json('{"a":{"@d":"x","b":{}}}'), ''),
+    '<a d="x"><b></b></a>');
+  CheckEqual(VariantToXml(_Json('{"a":{}}'), '', '', []), '<a></a>');
+  // a void array writes no element at all, as JsonToXml() does
+  CheckEqual(VariantToXml(_Json('{"a":[]}'), ''), '');
+  CheckEqual(JsonToXml('{"a":[]}', '', '', JXO_ENABLED), '');
+  CheckEqual(VariantToXml(_Json('{}'), ''), '');
+  CheckEqual(JsonToXml('{"a":{"b":{}}}', '', '', JXO_ENABLED), '<a><b></b></a>');
 end;
 
 procedure TTestCoreProcess.XmlParserConsume;
