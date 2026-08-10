@@ -9787,6 +9787,8 @@ begin
 end;
 
 procedure TTestCoreProcess.XmlToVariant;
+const
+  XMLOPT: TJsonToXmlOptions = [jxoAttribute, jxoText];
 var
   doc: variant;
 begin
@@ -9845,6 +9847,58 @@ begin
   CheckEqual(VariantSaveJson(doc), '{"a":{"b":"1"}}');
   Check(TryXmlToVariant('<a><b></a>', doc) = xpeWrongEndTag, 'try mismatch');
   CheckEqual(_Safe(doc)^.Count, 0);
+  // JsonToXml() reverse direction: no '@name'/'#text' mapping by default
+  CheckEqual(JsonToXml('{"a":"hello"}', ''), '<a>hello</a>');
+  CheckEqual(JsonToXml('{"a":{"b":"1"}}', ''), '<a><b>1</b></a>');
+  CheckEqual(JsonToXml('{"a":{"@d":"x","#text":"t"}}', ''),
+    '<a><@d>x</@d><#text>t</#text></a>');
+  // jxoAttribute/jxoText follow the very same conventions as XmlToVariant()
+  CheckEqual(JsonToXml('{"a":{"@d":"x"}}', '', '', XMLOPT), '<a d="x"></a>');
+  CheckEqual(JsonToXml('{"a":{"@d":"x","#text":"t"}}', '', '', XMLOPT),
+    '<a d="x">t</a>');
+  CheckEqual(JsonToXml('{"a":{"@x":"1","@y":"2","b":"3"}}', '', '', XMLOPT),
+    '<a x="1" y="2"><b>3</b></a>');
+  CheckEqual(JsonToXml('{"a":{"@d":1}}', '', '', XMLOPT), '<a d="1"></a>');
+  CheckEqual(JsonToXml('{"e":{"@xmlns:s":"u","b":"x"}}', '', '', XMLOPT),
+    '<e xmlns:s="u"><b>x</b></e>');
+  // attribute values and text are XML-escaped as expected
+  CheckEqual(JsonToXml('{"a":{"@d":"a<b&c\"d"}}', '', '', XMLOPT),
+    '<a d="a&lt;b&amp;c&quot;d"></a>');
+  // '#text' may appear after the sub-elements, as XmlToVariant() generates it
+  CheckEqual(JsonToXml('{"a":{"b":"","#text":"pre post"}}', '', '', XMLOPT),
+    '<a><b></b>pre post</a>');
+  // array items may have their own attributes
+  CheckEqual(JsonToXml('{"item":[{"@id":"1"},{"@id":"2"}]}', '', '', XMLOPT),
+    '<item id="1"></item><item id="2"></item>');
+  // XmlToJson() then JsonToXml() should round-trip the original XML content
+  CheckEqual(JsonToXml(XmlToJson('<a d="x"/>'), '', '', XMLOPT), '<a d="x"></a>');
+  CheckEqual(JsonToXml(XmlToJson('<a><b>1</b><b>2</b><c d="x">t</c></a>'),
+    '', '', XMLOPT), '<a><b>1</b><b>2</b><c d="x">t</c></a>');
+  CheckEqual(JsonToXml(XmlToJson('<a><b i="1">x</b><b i="2">y</b></a>'),
+    '', '', XMLOPT), '<a><b i="1">x</b><b i="2">y</b></a>');
+  // VariantToXml() applies the same conventions, straight from the DOM
+  CheckEqual(VariantToXml(_Json('{"a":{"b":"1"}}'), ''), '<a><b>1</b></a>');
+  CheckEqual(VariantToXml(_Json('{"a":{"@d":"x"}}'), ''), '<a d="x"></a>');
+  CheckEqual(VariantToXml(_Json('{"a":{"@d":"x","#text":"t"}}'), ''),
+    '<a d="x">t</a>');
+  CheckEqual(VariantToXml(_Json('{"a":{"@x":"1","@y":"2","b":"3"}}'), ''),
+    '<a x="1" y="2"><b>3</b></a>');
+  CheckEqual(VariantToXml(_Json('{"a":{"@d":"a<b&c\"d"}}'), ''),
+    '<a d="a&lt;b&amp;c&quot;d"></a>');
+  CheckEqual(VariantToXml(_Json('{"item":[{"@id":"1"},{"@id":"2"}]}'), ''),
+    '<item id="1"></item><item id="2"></item>');
+  // unlike JsonToXml(), the whole object is available: '@name' fields may
+  // appear after the content fields and are still written as attributes
+  CheckEqual(VariantToXml(_Json('{"a":{"b":"1","@d":"x"}}'), ''),
+    '<a d="x"><b>1</b></a>');
+  CheckEqual(VariantToXml(_Json('{"a":{"@d":"x","#text":"t"}}'), '', '', []),
+    '<a><@d>x</@d><#text>t</#text></a>');
+  CheckEqual(VariantToXml(_Json('{"a":"1"}'), '', '<c>'), '<c><a>1</a></c>');
+  // XmlToVariant() then VariantToXml() should round-trip the XML content
+  mormot.core.fmt.XmlToVariant('<a><b>1</b><b>2</b><c d="x">t</c></a>', doc);
+  CheckEqual(VariantToXml(doc, ''), '<a><b>1</b><b>2</b><c d="x">t</c></a>');
+  mormot.core.fmt.XmlToVariant('<a><b i="1">x</b><b i="2">y</b></a>', doc);
+  CheckEqual(VariantToXml(doc, ''), '<a><b i="1">x</b><b i="2">y</b></a>');
 end;
 
 procedure TTestCoreProcess.XmlParserConsume;
