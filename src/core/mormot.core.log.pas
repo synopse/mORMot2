@@ -3203,6 +3203,7 @@ end;
 class function TDebugFile.RegisterBacktraceStrFunc: boolean;
 begin
   BacktraceStrFunc := BacktraceStrFpc; // use our fast version from now on
+  result := true;
 end;
 
 {$else}

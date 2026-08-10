@@ -2278,6 +2278,10 @@ function SendEmailSubject(const Text: string): RawUtf8;
 
 implementation
 
+{$ifdef FPC} // already part of mormot.defines.inc but seems needed with -O2
+  {$WARN 5093 off} // function result variable of a managed uninitialized 1
+{$endif FPC}
+
 
 { ******************** THttpMultiPartStream for multipart/formdata HTTP POST }
 
