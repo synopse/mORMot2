@@ -1967,25 +1967,25 @@ var
   d: PDocVariantData;
 begin
   d := _Safe(Value);
-  if d^.Count <> 0 then
-  begin
-    if d^.IsArray then
-    begin // arrays are written as a list of items, without any root
-      for i := 0 to d^.Count - 1 do
-        AddVariantToXmlValue(W, Name, d^.Values[i], Options);
-      exit;
-    end;
-    W.Add('<');
-    AddXmlEscape(W, pointer(Name));
-    if jxoAttribute in Options then
+  if d^.IsArray then
+  begin // arrays are written as a list of items, without any root
+    for i := 0 to d^.Count - 1 do
+      AddVariantToXmlValue(W, Name, d^.Values[i], Options);
+    exit; // a void array writes no element at all, as AddJsonToXml() does
+  end;
+  W.Add('<');
+  AddXmlEscape(W, pointer(Name));
+  if d^.IsObject then
+  begin // a document is never written as text, even if it is void
+    if (d^.Count <> 0) and
+       (jxoAttribute in Options) then
       AddAttributesToXmlNode(W, pointer(d^.Names), pointer(d^.Values), d^.Count);
     W.AddDirect('>');
-    AddVariantToXmlNode(W, pointer(d^.Names), pointer(d^.Values), d^.Count, Options);
+    if d^.Count <> 0 then // AddVariantToXmlNode() expects some field
+      AddVariantToXmlNode(W, pointer(d^.Names), pointer(d^.Values), d^.Count, Options);
   end
   else
   begin
-    W.Add('<');
-    AddXmlEscape(W, pointer(Name));
     W.AddDirect('>');
     AddVariantToXmlText(W, Value);
   end;
