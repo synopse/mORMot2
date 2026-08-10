@@ -2769,16 +2769,15 @@ begin
   if P = nil then
     exit;
   repeat
-    {$ifdef FPC}
-    while (P^ <= ' ') and
-          (P^ <> #0) do
-      inc(P);
-    {$else}
-    if P^ in [#1..' '] then
+    {$ifdef WIN32DELPHI} // inlined GotoNextNotSpace()
+    if P^ in [#1..' '] then // Delphi i386 seems to prefer this kind of code
       repeat
-        inc(P)
+        inc(P);
       until not (P^ in [#1..' ']);
-    {$endif FPC}
+    {$else}
+    while P^ in [#1 .. ' '] do // seems to be the best pattern on FPC + Delphi64
+      inc(P);
+    {$endif WIN32DELPHI}
     case JsonFirst[P^] of // FPC and Delphi will use a jump table :)
       jtNone:
         exit;  // unexpected character in JSON input
