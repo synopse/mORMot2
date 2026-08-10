@@ -10553,6 +10553,7 @@ begin
     dec := THttpMultiPartDecoder.Create(src, 'xyz', 4096);
     try
       Check(dec.NextPart, 'trunc');
+      TSynLog.Family.ExceptionIgnoreCurrentThread := true;
       raised := false;
       try
         ReadAll(dec.Current.Content);
@@ -10560,6 +10561,7 @@ begin
         on EHttpMultiPart do
           raised := true;
       end;
+      TSynLog.Family.ExceptionIgnoreCurrentThread := false;
       Check(raised, 'trunc raised');
       Check(dec.State = mpdsError, 'trunc state');
       Check(not dec.Close, 'trunc Close');
@@ -10619,6 +10621,7 @@ begin
   // invalid boundaries are rejected in the constructors
   src := TRawByteStringStream.Create('X');
   try
+    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
     raised := false;
     try
       SetLength(bound, 500);
@@ -10650,6 +10653,7 @@ begin
     Check(raised, 'no boundary content type');
   finally
     src.Free;
+    TSynLog.Family.ExceptionIgnoreCurrentThread := false;
   end;
 end;
 

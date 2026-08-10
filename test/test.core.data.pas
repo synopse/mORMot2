@@ -9328,6 +9328,7 @@ var
 begin
   // first try to catch the EXmlException (default behavior)
   ok := false;
+  TSynLog.Family.ExceptionIgnoreCurrentThread := true;
   try
     p.Init(Xml, Options);
     Check(p.LastError = xpeNone);
@@ -9338,8 +9339,9 @@ begin
     end;
   except
     on EXmlException do
-      ok := true;
+      ok := Check(p.LastError = Expected, Context);
   end;
+  TSynLog.Family.ExceptionIgnoreCurrentThread := false;
   Check(ok, Context);
   CheckEqual(ord(p.LastError), ord(Expected), XML_ERROR[Expected]);
   // check properly return xtError with xpoNoException option
@@ -9562,7 +9564,7 @@ var
       CheckEqual(x.Position, length(Xml), Context);
     except
       on E: EXmlException do
-        err := StringToUtf8(E.Message);
+        StringToUtf8(E.Message, err);
     end;
     CheckEqual(err, '', Context);
   end;
@@ -9574,15 +9576,17 @@ var
   begin
     result := 0;
     Reason := '';
+    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
     try
       x.Init(Xml);
       while x.ParseNext <> xtEof do
         if x.Kind = xtElementStart then
           inc(result);
     except
-      on E: EXmlException do
-        Reason := StringToUtf8(E.Message);
+      on E: Exception do
+        StringToUtf8(E.Message, Reason);
     end;
+    TSynLog.Family.ExceptionIgnoreCurrentThread := false;
   end;
 
   procedure NoTerm(const Xml: RawUtf8; const Context: string);

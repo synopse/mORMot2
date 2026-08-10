@@ -2744,7 +2744,7 @@ begin
   end;
 end;
 
-procedure FinalizeLines(u: PDebugBlock; linesn: PtrInt; Lines: PInt64; unsorted: boolean);
+procedure FinalizeLines(b: PDebugBlock; n: PtrInt; p64: PInt64; dosort: boolean);
 var
   i: PtrInt;
 begin
