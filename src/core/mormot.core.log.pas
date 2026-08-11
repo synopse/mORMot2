@@ -110,6 +110,13 @@ type
   // - stored in Start increasing order in memory for fast O(log(n)) lookup
   TDebugBlockDynArray = array of TDebugBlock;
 
+  /// the known TDebugFile.DebugInfo property values
+  TDebugInfo = (
+    diNone,
+    diExternalMab,
+    diInternalMab,
+    {$ifdef FPC} diInternalDwarf, diExternalDwarf {$else} diExternalMap {$endif});
+
   /// allow to customize TDebugFile.Create and TDebugFile.SaveToFile process
   TDebugFileScope = set of (
     dfsIncludePathInFileName,
@@ -138,7 +145,7 @@ type
     fExeFile, fExePath, fMabFile: TFileName;
     fExeAge: TUnixTime;
     fProducer: RawUtf8;
-    fHasDebugInfo: boolean;
+    fDebugInfo: TDebugInfo;
     fLinesCount: integer;
     fSymbols, fBlocks: TDynArray;
     fSymbolsTemp, fBlocksTemp: RawByteString; // pre-allocate all names at once
@@ -155,6 +162,7 @@ type
     function FindBlock(rva: TDebugAddress): PDebugBlock; overload;
       {$ifdef HASINLINE}inline;{$endif}
     function FindBlockByName(const aUnitName: RawUtf8): PDebugBlock;
+    function GetExeDate: RawUtf8;
   public
     /// get the available debugging information
     // - you should NEVER call this constructor, but TDebugFile.CurrentDebugFile
@@ -252,6 +260,9 @@ type
     /// the associated executable or library file 
     property ExeFile: TFileName
       read fExeFile;
+    /// the local timestamp of the main ExeFile
+    property ExeDate: RawUtf8
+      read GetExeDate;
     /// the expected location of the associated .mab file (may be non existing)
     property MabFile: TFileName
       read fMabFile;
@@ -259,8 +270,8 @@ type
     property Producer: RawUtf8
       read fProducer;
     /// equals true if a .map/.dbg or .mab debugging information has been loaded
-    property HasDebugInfo: boolean
-      read fHasDebugInfo;
+    property DebugInfo: TDebugInfo
+      read fDebugInfo;
     /// how many identifiers are currently stored in Symbols[]
     property SymbolsCount: integer
       read fSymbolsCount;
@@ -2281,7 +2292,7 @@ begin
       FreeAndNil(result);
     end;
     if (result = nil) or
-       not result.HasDebugInfo then
+       (result.DebugInfo = diNone) then
     begin
       AddString(DebugFileNamesUnknown, fn);
       FreeAndNil(result);
@@ -2462,6 +2473,7 @@ begin
   result := false;
   // open exe filename or follow '.gnu_debuglink' redirection
   temp := Owner.fExeFile;
+  Owner.fDebugInfo := diInternalDwarf;
   if not OpenExeFile(e, temp) then
   begin
     {$ifdef DWARFDEBUG}
@@ -2479,6 +2491,7 @@ begin
       {$endif DWARFDEBUG}
       exit;
     end;
+    Owner.fDebugInfo := diExternalDwarf;
   end;
   // locate debug_* sections after successfull OpenExeFile()
   if FindExeSection(e, '.debug_line', LineOffset, LineSize) and
@@ -2499,6 +2512,7 @@ begin
   result := false;
   if not Map.Map(Owner.fExeFile, {forcemap=}true) then // main exe
     exit;
+  Owner.fDebugInfo := diInternalDwarf;
   if FindExeSection(Map, '.gnu_debuglink', off, siz) <> efUnknown then
   begin
     dbgname := pointer(Map.Buffer + off);
@@ -2518,6 +2532,7 @@ begin
         Map.UnMap; // the located debug file does not match the executable
         exit;
       end;
+    Owner.fDebugInfo := diExternalDwarf;
   end;
   if (FindExeSection(Map, '.debug_line', LineOffset, LineSize, @ImageBase) <> efUnknown) and
      (FindExeSection(Map, '.debug_info', InfoOffset, InfoSize) <> efUnknown) and
@@ -3207,6 +3222,8 @@ begin
   finally
     dwarf.Map.UnMap;
   end;
+  if fBlocksCount or fSymbolsCount = 0 then
+    fDebugInfo := diNone;
 end;
 
 function BacktraceStrFpc(Addr: CodePointer): ShortString;
@@ -3493,6 +3510,9 @@ begin
     else
       NextLine;
   // now we should have read all .map/.dbg content
+  if fBlocksCount or fSymbolsCount = 0 then
+    exit;
+  fDebugInfo := diExternalMap;
   for i := fBlocksCount - 1 downto 0 do
     with fBlock[i] do
       if (Symbol.Start = 0) and
@@ -3602,6 +3622,7 @@ begin
       end;
       if not R.EOF then
         R.VarUtf8(fProducer);
+      fDebugInfo := diExternalMab;
       result := true;
     finally
       MS.Free;
@@ -3684,7 +3705,7 @@ begin
   if fBlocksCount or fSymbolsCount = 0 then
   try
     GenerateFromMapOrDwarf(dfsIncludePathInFileName in Scope);
-    if fBlocksCount + fSymbolsCount <> 0 then
+    if fBlocksCount or fSymbolsCount <> 0 then
     begin
       fSymbols.Capacity := fSymbolsCount; // only consume the needed memory
       fBlocks.Capacity := fBlocksCount;
@@ -3698,13 +3719,13 @@ begin
   // search for an embedded compressed .mab file appended to the .exe/.dll
   if (fBlocksCount or fSymbolsCount = 0) and
      not (dfsNoMabInternalCheck in Scope) then
-    LoadMab(fExeFile);
+    if LoadMab(fExeFile) then
+      fDebugInfo := diInternalMab;
   // finalize (and optionally persist as .mab) this instance
   if fBlocksCount <> 0 then
   begin
     fStart := fBlock[0].Symbol.Start;
     fStop := fBlock[fBlocksCount - 1].Symbol.Stop;
-    fHasDebugInfo := true; // mark as success
   end;
   if fSymbolsCount <> 0 then
   begin
@@ -3713,10 +3734,8 @@ begin
     if (fProducer = '') and
        (fExeFile = Executable.InstanceFileName) then
       fProducer := COMPILER_VERSION; // we know it for this compiled instance
-    fHasDebugInfo := true; // mark as success
   end;
-  if fHasDebugInfo and
-     savemab and // just created from .map/.dbg -> create .mab file
+  if savemab and // just extracted from .map/.dbg
      not (dfsNoMabSaveAtCreate in Scope) then
     SaveToFile(fMabFile, Scope);
   QueryPerformanceMicroSeconds(fLoadingMicroSec);
@@ -3728,6 +3747,11 @@ begin
   fSymbols.Clear; // ensure are released BEFORE fSymbolsTemp and fBlocksTemp
   fBlocks.Clear;
   inherited Destroy;
+end;
+
+function TDebugFile.GetExeDate: RawUtf8;
+begin
+  DateTimeToIso8601TextVar(UnixTimeToLocal(fExeAge), ' ', result);
 end;
 
 procedure WriteSymbol(var W: TBufferWriter; const A: TDynArray);
@@ -4041,7 +4065,7 @@ var
   c: PUtf8Char;
 begin
   if (self = nil) or
-     not HasDebugInfo then
+     (fDebugInfo = diNone) then
     exit;
   rva := AbsoluteToRelative(aPointer);
   if rva = 0 then
