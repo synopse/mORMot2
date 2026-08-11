@@ -197,6 +197,9 @@ type
   // - as returned e.g. by TSynLanguages.LoadedLanguages
   TLanguageDynArray = array of TLanguage;
 
+  /// a O(1) storage of per-TLanguage TSynLanguage instances
+  TSynLanguagePerLang = array[TLanguage] of TSynLanguage;
+
   /// registry of TSynLanguage tables with per-thread language selection
   // - typical web usage: load the tables once at startup, then call
   // TSynLanguages.SetThreadLanguage() at each request start (e.g. from an
@@ -204,19 +207,18 @@ type
   // views engine (e.g. TMvcViewsMustache.OnTranslate)
   TSynLanguages = class(TSynPersistent)
   protected
-    fLang: array[TLanguage] of TSynLanguage; // owned instances
     fDefaultLanguage: TLanguage;
-    function GetLanguage(aLanguage: TLanguage): TSynLanguage;
+    fLoadedLanguages: TLanguageDynArray;
+    fLangCount: integer;
+    fLang: TSynLanguagePerLang;
   public
     /// finalize the registry and all its owned tables
     destructor Destroy; override;
-    /// get or create the translation table of a given language
-    property Language[aLanguage: TLanguage]: TSynLanguage
-      read GetLanguage;
-    /// return the table of a language, nil if none was loaded
-    function Find(aLanguage: TLanguage): TSynLanguage;
     /// return the table matching an ISO 639-1 text, e.g. 'fr' - nil if none
     function FindIso(const Iso: RawUtf8): TSynLanguage;
+    /// get or create the translation table of a given language
+    // - mostly for internal use, e.g. LoadFromFolder()
+    function FindOrNew(aLanguage: TLanguage): TSynLanguage;
     /// load all <iso>.<ext> files from a folder, e.g. en.json or zh.po
     // - the file name (without its extension) is the ISO 639-1 language text,
     // and any extension supported by TSynLanguage.AddFromFile is recognized
@@ -232,10 +234,6 @@ type
     // enumerate order - void if nothing was loaded yet
     // - e.g. to fill a language selection list in the User Interface
     function LoadedLanguages: TLanguageDynArray;
-    /// language used when no per-thread language was set
-    // - equals lngUndefined by default, i.e. no translation at all
-    property DefaultLanguage: TLanguage
-      read fDefaultLanguage write fDefaultLanguage;
     /// set the language of the current thread, e.g. at HTTP request start
     // - setting lngUndefined would fallback to DefaultLanguage
     class procedure SetThreadLanguage(aLanguage: TLanguage);
@@ -281,6 +279,17 @@ type
     // executable resources, with no such writable runtime table: use the
     // Mustache {{"text}} channel or the caption hook instead
     procedure TranslateResourceStrings;
+    /// get the current translation table of a given language
+    // - may return nil if none - use FindOrNew() or
+    property Language: TSynLanguagePerLang
+      read fLang;
+    /// language used when no per-thread language was set
+    // - equals lngUndefined by default, i.e. no translation at all
+    property DefaultLanguage: TLanguage
+      read fDefaultLanguage write fDefaultLanguage;
+    /// how many translation languages are stored in this instance
+    property Count: integer
+      read fLangCount;
   end;
 
 /// the main TSynLanguages instance, as set by TSynLanguages.SetGlobal
@@ -877,29 +886,27 @@ begin
   inherited Destroy;
 end;
 
-function TSynLanguages.GetLanguage(aLanguage: TLanguage): TSynLanguage;
+function TSynLanguages.FindOrNew(aLanguage: TLanguage): TSynLanguage;
 begin
-  if aLanguage = lngUndefined then
+  if (self = nil) or
+     (aLanguage = lngUndefined) then
     EI18nException.RaiseUtf8('%.Language[lngUndefined]', [self]);
   result := fLang[aLanguage];
-  if result = nil then
-  begin
-    result := TSynLanguage.Create(aLanguage);
-    fLang[aLanguage] := result;
-  end;
-end;
-
-function TSynLanguages.Find(aLanguage: TLanguage): TSynLanguage;
-begin
-  if self = nil then
-    result := nil
-  else
-    result := fLang[aLanguage];
+  if result <> nil then
+    exit;
+  // initialize the TSynLanguage instance for this TLanguage
+  result := TSynLanguage.Create(aLanguage);
+  fLang[aLanguage] := result;
+  fLoadedLanguages := nil; // re-computed when needed
+  inc(fLangCount);
 end;
 
 function TSynLanguages.FindIso(const Iso: RawUtf8): TSynLanguage;
 begin
-  result := Find(IsoTextToLanguage(Iso));
+  if self = nil then
+    result := nil
+  else
+    result := fLang[IsoTextToLanguage(Iso)];
 end;
 
 function TSynLanguages.LoadFromFolder(const Folder: TFileName): integer;
@@ -913,6 +920,8 @@ var
   n: integer; // not PtrInt
 begin
   result := 0;
+  if self = nil then
+    exit;
   dir := IncludeTrailingPathDelimiter(Folder);
   // first retrieve all the translation file names available in this folder
   n := 0;
@@ -928,19 +937,18 @@ begin
   end;
   if n = 0 then
     exit;
-  // merge them by name, then by ascending LANGUAGE_EXT[] format index, so
-  // that the result does not depend on the OS folder enumeration order
-  da.Sort(SortDynArrayFileName);
+  // merge them by ascending LANGUAGE_EXT[] format index then by name, so that
+  // the result does not depend on the OS folder enumeration order
+  da.Sort(SortDynArrayFileName); // grouped by file extension
   for f := 0 to high(LANGUAGE_EXT) do
     for i := 0 to n - 1 do
       if LanguageFileFormat(files[i]) = f then
       begin
         lng := IsoTextToLanguage(StringToUtf8(GetFileNameWithoutExt(files[i])));
-        if lng <> lngUndefined then
-        begin
-          Language[lng].AddFromFile(dir + files[i]);
-          inc(result);
-        end;
+        if lng = lngUndefined then
+          continue;
+        FindOrNew(lng).AddFromFile(dir + files[i]);
+        inc(result);
       end;
 end;
 
