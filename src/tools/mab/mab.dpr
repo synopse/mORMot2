@@ -30,20 +30,21 @@ uses
   {$I ..\..\mormot.uses.inc}
   classes,
   sysutils,
-  mormot.core.base         in '..\..\core\mormot.core.base.pas',
-  mormot.core.os           in '..\..\core\mormot.core.os.pas',
-  mormot.core.text         in '..\..\core\mormot.core.text.pas',
-  mormot.core.log          in '..\..\core\mormot.core.log.pas';
+  mormot.core.base,
+  mormot.core.os,
+  mormot.core.text,
+  mormot.core.log;
 
 procedure Process(const FileName: TFileName);
 var
+  deb: TDebugFile;
   SR: TSearchRec;
-  Path, Map, FN: TFileName;
+  Path, FN: TFileName;
   Ext, Count: integer;
   AllOk: boolean;
 begin
   AllOk := true;
-  Ext := GetFileNameExtIndex(FileName, 'map,dbg,exe,dll,ocx,bpl');
+  Ext := GetFileNameExtIndex(FileName, 'map,dbg,exe,dll,ocx,bpl,');
   if (Ext >= 0) and
      (FindFirst(FileName, faAnyFile, SR) = 0) then
   try
@@ -53,38 +54,32 @@ begin
       try
         // setup the debug source file name
         FN := Path + SR.Name;
-        {$ifdef ISDELPHI}
-        if Ext = 2 then // search a valid .map newer than the .exe
-        begin
-          Map := ChangeFileExt(FN, '.map');
-          if FileAgeToUnixTimeUtc(Map) < FileAgeToUnixTimeUtc(FN) then
-            Map := FN;
-        end
-        else
-        {$endif ISDELPHI}
-          Map := FN;
         // generate the mab content, maybe into the executable itself
-        with TDebugFile.Create(Map, {MabCreate=}true) do
+        Count := 0;
+        deb := TDebugFile.Create(FN,
+          [dfsNoMabExternalCheck, dfsNoMabInternalCheck]);
         try
-          Count := length(Symbols);
-          if not HasDebugInfo then
+          Count := length(deb.Symbols);
+          if deb.DebugInfo = diNone then
           begin
-            ConsoleWrite('Error: no Debug Info found on %', [FN]);
+            ConsoleWrite('Error: no original Debug Info found for %', [FN]);
             AllOk := false;
           end
           else if Ext > 1 then // has debug info and is not a map/dbg
-            SaveToExe(FN);     // embedd into the executable
+            if deb.ExeFile <> Executable.InstanceFileName then
+              deb.SaveToExe(FN); // embedd into the executable (if not self)
         finally
-          Free;
+          deb.Free;
         end;
-        // ensure the generated mab content is actually readable
-        with TDebugFile.Create(FN, {MabCreate=}false) do
+        // ensure the (embedded) mab content is actually readable
+        deb := TDebugFile.Create(FN, [dfsNoMabSaveAtCreate]);
         try
-          if Count <> length(Symbols) then
+          if (Count > 0) and
+             (Count <> length(deb.Symbols)) then
             ESynLogException.RaiseU('Invalid .mab content');
-          ConsoleWrite('Found % symbols in %', [Count, SR.Name]);
+          ConsoleObject(deb);
         finally
-          Free;
+          deb.Free;
         end;
       except
         on E: Exception do
