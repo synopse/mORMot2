@@ -240,6 +240,19 @@ Logging functions shared by all framework units
 - Efficient `.log` File Access via `TSynLogFile`
 - SysLog Messages Support as defined by RFC 5424
 
+### mormot.core.interfaces
+
+Implements SOLID Process via Interface types
+- `IInvokable` Interface Methods and Parameters RTTI Extraction
+- `TInterfaceFactory` Generating Runtime Implementation Class
+- `TInterfaceResolver` `TInjectableObject` for IoC / Dependency Injection
+- `TInterfaceStub` for Dependency Stubbing/Mocking
+- `TInterfacedObjectFake` with JITted Methods Execution
+- `TInterfaceMethodExecute` for Method Execution from JSON
+- `SetWeak` and `SetWeakZero` Weak Interface Reference Functions
+- Code/Documentation Generation Logic Extraction from RTTI
+- Documentation Extraction from Source Code Comments
+
 ### mormot.core.perf
 
 Performance Monitoring functions shared by all framework units
@@ -281,19 +294,6 @@ Logic-Less `{{Mustache}}` Templates Rendering
 
 The `TSynMustache` data context could be a `TDocVariant` document, or any kind of data using direct RTTI lookup.
 
-### mormot.core.interfaces
-
-Implements SOLID Process via Interface types
-- `IInvokable` Interface Methods and Parameters RTTI Extraction
-- `TInterfaceFactory` Generating Runtime Implementation Class
-- `TInterfaceResolver` `TInjectableObject` for IoC / Dependency Injection
-- `TInterfaceStub` for Dependency Stubbing/Mocking
-- `TInterfacedObjectFake` with JITted Methods Execution
-- `TInterfaceMethodExecute` for Method Execution from JSON
-- `SetWeak` and `SetWeakZero` Weak Interface Reference Functions
-- Code/Documentation Generation Logic Extraction from RTTI
-- Documentation Extraction from Source Code Comments
-
 ### mormot.core.mvc
 
 Model-View-Controller (MVC) pattern and Mustache
@@ -303,6 +303,16 @@ Model-View-Controller (MVC) pattern and Mustache
 - Application ViewModel/Controller using Interfaces
 
 Abstract MVC logic over *Mustache*, as used by `mormot.rest.mvc.pas` and `mormot.net.mvc.pas`.
+
+### mormot.core.i18n
+
+Basic Internationalization (i18n) Support
+- `TSynLanguage` per-language translation table
+- `TSynLanguages` registry with per-thread language selection
+- global wiring of the framework translation hooks
+
+Translation tables map the original English text to its translation, and are loaded from .po and its compiled .mo binary (GNU gettext) as the main formats - .ini, .yaml and .json, with its relaxed JSON5 / JSONC / HJson variants, are also supported.
+Once loaded, three wiring channels are available: the `TSynMustache` translate tag views channel, the `LoadResStringTranslate` slot consumed by the `GetCaptionFrom*` functions, and - on FPC only - the whole executable resourcestring table via `TSynLanguages.TranslateResourceStrings`.
 
 ### mormot.core.test
 

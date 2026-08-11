@@ -374,6 +374,7 @@ function CodePageToText(aCodePage: cardinal): RawUtf8;
 
 type
   /// a list of common human languages, in identifier alphabetic order
+  // - see mormot.core.i18n.pas for TSynLanguage internationalization support
   TLanguage = (lngUndefined,
     lngAfrikaans,  lngAlbanian, lngAlsatian,   lngArabic,     lngArmenian,
     lngAssamese,   lngAzeri,    lngBashkir,    lngBasque,     lngBelarusian,
@@ -2667,11 +2668,12 @@ procedure SnakeCase(P: PAnsiChar; len: PtrInt; var s: RawUtf8; sep: AnsiChar = '
 function SnakeCase(const text: RawUtf8; sep: AnsiChar = '_'): RawUtf8; overload;
 
 var
-  /// these procedure type must be defined if a default system.pas is used
+  /// runtime global callback for our GetCaptionFromPCharLen() procedure
   // - expect generic "string" type, i.e. UnicodeString for Delphi 2009+
+  // - properly implemented e.g. by TSynLanguages.SetGlobal in mormot.core.i18n
   LoadResStringTranslate: procedure(var Text: string) = nil;
 
-/// UnCamelCase and translate a char buffer
+/// UnCamelCase and translate an UTF-8 text buffer
 // - P is expected to be #0 ended, or we will use the supplied Len
 // - return "string" type, i.e. UnicodeString for Delphi 2009+
 procedure GetCaptionFromPCharLen(P: PUtf8Char; out result: string; Len: PtrUInt = 0);
@@ -5303,7 +5305,7 @@ begin
     exit;
   end;
   if cp = CP_ACP then
-    cp := Unicode_CodePage; // most likely on FPC
+    cp := Unicode_CodePage; // most likely CP_UTF8 on FPC/Lazarus
   if (cp >= CP_RAWBLOB) or
      (cp = CP_UTF8) then
       if sr^.refCnt >= 0 then
@@ -5321,7 +5323,7 @@ end;
 procedure AnyAnsiToUtf8Var(const s: RawByteString; var result: RawUtf8);
 begin
   if (s = '') or
-     IsValidUtf8Buffer(pointer(s), length(s)) then // slower but safe
+     IsValidUtf8Buffer(pointer(s), length(s)) then // brutal but safe
     result := s
   else
     CurrentAnsiConvert.AnsiBufferToRawUtf8(pointer(s), length(s), result);
