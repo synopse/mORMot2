@@ -292,6 +292,10 @@ type
   TSynMapFile = TDebugFile;
 {$endif PUREMORMOT2}
 
+const
+  /// the external debug information file extension of the current compiler
+  DEBUG_EXT = {$ifdef FPC} '.dbg' {$else} '.map' {$endif};
+
 
 { ************** Logging via TSynLogFamily, TSynLog, ISynLog }
 
@@ -3557,7 +3561,8 @@ begin
   n := FromVarUInt32(P);
   if n = 0 then
     exit;
-  A.Count := n; // allocate TDebugSymbolDynArray/TDebugBlockDynArray
+  A.Capacity := n; // allocate TDebugSymbolDynArray/TDebugBlockDynArray
+  A.Count := n;
   s := A.Value^;
   prev := 0;
   for i := 1 to n do
@@ -3721,7 +3726,7 @@ begin
      not (dfsNoMabInternalCheck in Scope) then
     if LoadMab(fExeFile) then
       fDebugInfo := diInternalMab;
-  // finalize (and optionally persist as .mab) this instance
+  // finalize this instance
   if fBlocksCount <> 0 then
   begin
     fStart := fBlock[0].Symbol.Start;
@@ -3735,11 +3740,12 @@ begin
        (fExeFile = Executable.InstanceFileName) then
       fProducer := COMPILER_VERSION; // we know it for this compiled instance
   end;
-  if savemab and // just extracted from .map/.dbg
-     not (dfsNoMabSaveAtCreate in Scope) then
-    SaveToFile(fMabFile, Scope);
   QueryPerformanceMicroSeconds(fLoadingMicroSec);
   dec(fLoadingMicroSec, start);
+  // optionally persist as .mab after GenerateFromMapOrDwarf()
+  if savemab and
+     not (dfsNoMabSaveAtCreate in Scope) then
+    SaveToFile(fMabFile, Scope);
 end;
 
 destructor TDebugFile.Destroy;
