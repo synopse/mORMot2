@@ -293,14 +293,6 @@ implementation
 
 { ************* TSynLanguage per-language Translation Table }
 
-function LoadUtf8File(const FileName: TFileName): RawUtf8;
-begin
-  result := RawUtf8(StringFromFile(FileName));
-  if (length(result) >= 3) and
-     (PCardinal(result)^ and $00ffffff = BOM_UTF8) then
-    delete(result, 1, 3); // ignore any UTF-8 BOM
-end;
-
 const
   /// the file extensions recognized by TSynLanguage.AddFromFile()
   // - this order is also the TSynLanguages.LoadFromFolder() loading order,
@@ -424,7 +416,8 @@ var
   v: RawUtf8;
 begin
   result := -1;
-  if not Doc.IsObject then
+  if (self = nil) or
+     not Doc.IsObject then
     exit;
   result := 0;
   for i := 0 to Doc.Count - 1 do
@@ -438,35 +431,26 @@ end;
 function TSynLanguage.AddFromJson(const Json: RawUtf8): integer;
 var
   doc: TDocVariantData;
-  normalized: RawUtf8;
+  normalized: RawUtf8; // local normalized copy is parsed in-place
 begin
   result := -1;
-  if Json = '' then
-    exit;
-  if doc.InitJson(Json, JSON_FAST) then
-    result := AddFromVariant(doc)
-  else
-  begin
-    doc.Clear; // release any partially parsed content before trying again
-    // JsonBufferReformat() recognizes the JSON5/JSONC/HJson relaxed variants,
-    // as JsonSettingsToObject() does for our settings classes
-    if JsonBufferReformat(pointer(Json), normalized,
-         jsonUnquotedPropNameCompact) and
-       doc.InitJson(normalized, JSON_FAST) then
-      result := AddFromVariant(doc);
-  end;
+  if (self <> nil) and
+     JsonBufferReformat(pointer(Json), normalized, jsonUnquotedPropNameCompact) and
+     (doc.InitJsonInPlace(pointer(normalized), JSON_FAST) <> nil) then
+    result := AddFromVariant(doc);
 end;
 
 function TSynLanguage.AddFromJsonFile(const FileName: TFileName): integer;
 begin
-  result := AddFromJson(LoadUtf8File(FileName));
+  result := AddFromJson(RawUtf8FromFile(FileName));
 end;
 
 function TSynLanguage.AddFromYaml(const Yaml: RawUtf8): integer;
 var
   doc: TDocVariantData;
 begin
-  if TryYamlToVariant(Yaml, doc, JSON_FAST) then
+  if (self <> nil) and
+     TryYamlToVariant(Yaml, doc, JSON_FAST) then
     result := AddFromVariant(doc)
   else
     result := -1;
@@ -499,7 +483,8 @@ begin
   slot := poNone;
   skip := false;
   P := pointer(Po);
-  if P = nil then
+  if (self = nil) or
+     (P = nil) then
     exit;
   repeat
     L := GotoNextNotSpaceSameLine(P); // tolerate any indentation
@@ -559,7 +544,7 @@ end;
 
 function TSynLanguage.AddFromPoFile(const FileName: TFileName): integer;
 begin
-  result := AddFromPo(LoadUtf8File(FileName));
+  result := AddFromPo(RawUtf8FromFile(FileName));
 end;
 
 function TSynLanguage.AddFromMo(const Mo: RawByteString): integer;
@@ -592,12 +577,13 @@ var
 begin
   result := -1;
   len := PtrUInt(length(Mo));
-  if len < SizeOf(TMoHeader) then
+  if (self = nil) or
+     (len < SizeOf(TMoHeader)) then
     exit; // clearly not a .mo binary file
   h := pointer(Mo);
   swap := h^.Magic <> MO_MAGIC;
   if swap and
-     (h^.Magic <> bswap32(MO_MAGIC)) then
+     (bswap32(h^.Magic) <> MO_MAGIC) then
     exit; // invalid magic number
   n := h^.Count;
   ot := h^.OrigTab;
@@ -654,7 +640,8 @@ var
 begin
   result := 0;
   P := pointer(Ini);
-  if P = nil then
+  if (self = nil) or
+     (P = nil) then
     exit;
   if Section <> '' then
   begin
@@ -706,26 +693,26 @@ end;
 function TSynLanguage.AddFromIniFile(const FileName: TFileName;
   const Section: RawUtf8): integer;
 begin
-  result := AddFromIni(LoadUtf8File(FileName), Section);
+  result := AddFromIni(RawUtf8FromFile(FileName), Section);
 end;
 
 function TSynLanguage.AddFromFile(const FileName: TFileName): integer;
 begin
   result := -1;
-  if not FileExists(FileName) then
-    exit;
-  case LanguageFileFormat(FileName) of
-    0:      // .po
-      result := AddFromPoFile(FileName);
-    1, 2:   // .ini .msg
-      result := AddFromIniFile(FileName);
-    3, 4:   // .yaml .yml
-      result := AddFromYaml(LoadUtf8File(FileName));
-    5 .. 8: // .json .jsonc .json5 .hjson
-      result := AddFromJson(LoadUtf8File(FileName));
-    9:      // .mo
-      result := AddFromMoFile(FileName);
-  end;
+  if (self <> nil) and
+     FileExists(FileName) then
+    case LanguageFileFormat(FileName) of
+      0:      // .po
+        result := AddFromPoFile(FileName);
+      1, 2:   // .ini .msg
+        result := AddFromIniFile(FileName);
+      3, 4:   // .yaml .yml
+        result := AddFromYaml(RawUtf8FromFile(FileName));
+      5 .. 8: // .json .jsonc .json5 .hjson
+        result := AddFromJson(RawUtf8FromFile(FileName));
+      9:      // .mo
+        result := AddFromMoFile(FileName);
+    end;
 end;
 
 function TSynLanguage.Translate(var Text: RawUtf8): boolean;
@@ -766,7 +753,7 @@ begin
     Translated := ''; // caller would fallback to the English text
 end;
 
-function TSynLanguage.Count: integer;
+function TSynLanguage.GetCount: integer;
 begin
   if self = nil then
     result := 0
