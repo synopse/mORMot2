@@ -907,7 +907,8 @@ var
   dir: TFileName;
   files: TFileNameDynArray;
   da: TDynArray;
-  f, i, n: PtrInt;
+  f, i: PtrInt;
+  n: integer; // not PtrInt
 begin
   result := 0;
   dir := IncludeTrailingPathDelimiter(Folder);
