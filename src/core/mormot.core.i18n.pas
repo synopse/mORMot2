@@ -154,6 +154,7 @@ type
     // - returns true if the key was found and Text was replaced
     // - returns false and leaves Text untouched (fallback to original text)
     function Translate(var Text: RawUtf8): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// TOnStringTranslate-compatible callback, e.g. to be assigned to
     // TMvcViewsMustache.OnTranslate or supplied to TSynMustache.Render()
     procedure TranslateString(var English: string);
@@ -853,20 +854,19 @@ end;
 // - arg may be nil, i.e. no language: every entry keeps its DefaultValue
 // - note that objpas is part of the units implicitly available in objfpc/delphi
 // modes, so needs no explicit uses clause entry
-function _TranslateResourceString(Name, Value: AnsiString; Hash: LongInt;
+function _TranslateResourceString(const Name, Value: AnsiString; Hash: LongInt;
   arg: pointer): AnsiString;
-var
-  u: RawUtf8;
 begin
   result := ''; // a void result keeps the current value untouched if no language
-  if (arg = nil) or
-     (PClass(arg)^ <> TSynLanguage) then
-    exit;
-  AnyAnsiToUtf8Var(Value, u); // most likely just assign u := Value
-  if TSynLanguage(arg).Translate(u) then
-    // return those UTF-8 bytes as such, with an explicit CP_UTF8 header: FPC
-    // RTL just stores this AnsiString into the table CurrentValue field, as-is
-    result := u;
+  if (arg <> nil) and
+     (PClass(arg)^ = TSynLanguage) then
+    if Unicode_CodePage = CP_UTF8 then // most common case with Lazarus
+      TSynLanguage(arg).fTexts.FindAndCopy(Value, result, {updatetimeout=}false)
+    else
+    begin
+      result := Value;
+      TSynLanguage(arg).DoTranslateString(result); // need conversion (unlikely)
+    end;
 end;
 
 {$endif FPC}
@@ -920,6 +920,7 @@ var
   lng: TLanguage;
   dir: TFileName;
   files: TFileNameDynArray;
+  formats: TByteDynArray;
   da: TDynArray;
   f, i: PtrInt;
   n: integer; // not PtrInt
@@ -942,12 +943,15 @@ begin
   end;
   if n = 0 then
     exit;
-  // merge them by ascending LANGUAGE_EXT[] format index then by name, so that
+  // merge them by ascending LANGUAGE_EXT[] format index, then by name, so that
   // the result does not depend on the OS folder enumeration order
-  da.Sort(SortDynArrayFileName); // grouped by file extension
+  da.Sort(SortDynArrayFileName); // sorted by file name, grouped by extension
+  SetLength(formats, n);
+  for i := 0 to n - 1 do
+    formats[i] := LanguageFileFormat(files[i]);
   for f := 0 to high(LANGUAGE_EXT) do
     for i := 0 to n - 1 do
-      if LanguageFileFormat(files[i]) = f then
+      if formats[i] = f then
       begin
         lng := IsoTextToLanguage(StringToUtf8(GetFileNameWithoutExt(files[i])));
         if lng = lngUndefined then
@@ -991,7 +995,6 @@ begin
      (fLangCount = 0) then
     exit;
   SetLength(result, fLangCount);
-  fLoadedLanguages := result;
   n := 0;
   for l := low(fLang) to high(fLang) do
     if fLang[l] <> nil then
@@ -1001,6 +1004,7 @@ begin
     end;
   if n <> fLangCount then
     EI18nException.RaiseU('LangCount?'); // paranoid
+  fLoadedLanguages := result;
 end;
 
 class procedure TSynLanguages.SetThreadLanguage(aLanguage: TLanguage);
@@ -1087,7 +1091,7 @@ initialization
   {$ifdef ISDELPHIXE}
   _I18nFormat := SysUtils.FormatSettings;  // new Delphi RTL global
   {$else}
-  GetLocaleFormatSettings(0, _I18nFormat); // old Delphi 7-2010 sysutils
+  GetLocaleFormatSettings(LANG_USER_DEFAULT, _I18nFormat); // old Delphi 7-2010
   {$endif ISDELPHIXE}
   {$endif FPC}
   // then make the '/' and ':' pattern characters render as themselves
