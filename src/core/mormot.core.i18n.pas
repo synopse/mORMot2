@@ -1037,9 +1037,13 @@ end;
 initialization
   // start from the RTL locale settings, to keep its month/day names and AM/PM
   {$ifdef FPC}
-  _I18nFormat := DefaultFormatSettings; // FPC RTL global
+  _I18nFormat := DefaultFormatSettings;    // FPC RTL global
   {$else}
-  _I18nFormat := SysUtils.FormatSettings; // Delphi RTL global
+  {$ifdef ISDELPHIXE}
+  _I18nFormat := SysUtils.FormatSettings;  // new Delphi RTL global
+  {$else}
+  GetLocaleFormatSettings(0, _I18nFormat); // old Delphi 7-2010 sysutils
+  {$endif ISDELPHIXE}
   {$endif FPC}
   // then make the '/' and ':' pattern characters render as themselves
   _I18nFormat.DateSeparator := '/';
