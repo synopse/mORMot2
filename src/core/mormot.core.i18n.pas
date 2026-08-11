@@ -852,20 +852,19 @@ function _TranslateResourceString(Name, Value: AnsiString; Hash: LongInt;
 var
   u: RawUtf8;
 begin
-  result := ''; // a void result keeps the current value untouched
-  if arg = nil then
-    exit; // no language: keep the English text restored by ResetResourceTables
-  // Value is the original English DefaultValue, as supplied by the RTL: get our
-  // RawUtf8 key via the framework unknown code page AnsiString conversion
-  AnyAnsiToUtf8Var(Value, u);
-  if not TSynLanguage(arg).Translate(u) then
-    exit; // unknown text: fallback to the English text
-  // return those UTF-8 bytes as such, with an explicit CP_UTF8 header: the RTL
-  // just stores this AnsiString into the table CurrentValue field, as-is
-  FastSetStringCP(result, pointer(u), length(u), CP_UTF8);
+  result := ''; // a void result keeps the current value untouched if no language
+  if (arg = nil) or
+     (PClass(arg)^ <> TSynLanguage) then
+    exit;
+  AnyAnsiToUtf8Var(Value, u); // most likely just assign u := Value
+  if TSynLanguage(arg).Translate(u) then
+    // return those UTF-8 bytes as such, with an explicit CP_UTF8 header: FPC
+    // RTL just stores this AnsiString into the table CurrentValue field, as-is
+    result := u;
 end;
 
 {$endif FPC}
+
 
 { TSynLanguages }
 
