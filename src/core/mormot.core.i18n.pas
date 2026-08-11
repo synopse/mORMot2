@@ -229,6 +229,12 @@ type
     // particular, a compiled fr.mo wins over the fr.po source it came from
     // - returns the number of recognized language files
     function LoadFromFolder(const Folder: TFileName): integer;
+    /// merge translations of a given language from a file, recognized by its extension
+    function AddFromFile(aLanguage: TLanguage; const FileName: TFileName): integer;
+    /// merge translations of a given language from a TDocVariantData object document
+    function AddFromVariant(aLanguage: TLanguage; const Doc: TDocVariantData): integer;
+    /// merge translations of a given language from a JSON object
+    function AddFromJson(aLanguage: TLanguage; const Json: RawUtf8): integer;
     /// return the languages currently loaded in this registry
     // - i.e. those for which a TSynLanguage table does exist, in TLanguage
     // enumerate order - void if nothing was loaded yet
@@ -949,6 +955,30 @@ begin
         FindOrNew(lng).AddFromFile(dir + files[i]);
         inc(result);
       end;
+end;
+
+function TSynLanguages.AddFromFile(aLanguage: TLanguage; const FileName: TFileName): integer;
+begin
+  if self = nil then
+    result := -1
+  else
+    result := FindOrNew(aLanguage).AddFromFile(FileName);
+end;
+
+function TSynLanguages.AddFromVariant(aLanguage: TLanguage; const Doc: TDocVariantData): integer;
+begin
+  if self = nil then
+    result := -1
+  else
+    result := FindOrNew(aLanguage).AddFromVariant(Doc);
+end;
+
+function TSynLanguages.AddFromJson(aLanguage: TLanguage; const Json: RawUtf8): integer;
+begin
+  if self = nil then
+    result := -1
+  else
+    result := FindOrNew(aLanguage).AddFromJson(Json);
 end;
 
 function TSynLanguages.LoadedLanguages: TLanguageDynArray;
