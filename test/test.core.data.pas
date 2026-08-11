@@ -141,6 +141,20 @@ type
     procedure RunYaml(const Yaml: array of const);
     procedure RunFile(const Yaml: array of const);
     procedure YamlExpectRaise(const Name, Yaml: RawUtf8);
+    /// TSynLanguage table load and translation with fallback
+    procedure I18nLanguageTable;
+    /// TSynLanguages registry, thread language and Mustache wiring
+    procedure I18nLanguagesRegistry;
+    /// global hooks: captions and date/time rendering
+    procedure I18nGlobalHooks;
+    /// GNU gettext .po parsing into a TSynLanguage table
+    procedure I18nPoFormat;
+    /// GNU gettext .mo binary parsing into a TSynLanguage table
+    procedure I18nMoFormat;
+    /// INI and YAML parsing, and the per-extension file loaders
+    procedure I18nIniAndFiles;
+    /// the FPC resourcestring table rewriting channel
+    procedure I18nResourceStrings;
   public
     /// SAX-level tokens over elements, attributes, text and CData
     procedure XmlSaxTokens;
@@ -214,25 +228,8 @@ type
     procedure _XML;
     /// regression tests for the mormot.core.fmt YAML parser
     procedure _YAML;
-  end;
-
-  /// regression tests for the mormot.core.i18n unit
-  TTestCoreI18n = class(TSynTestCase)
-  published
-    /// TSynLanguage table load and translation with fallback
-    procedure LanguageTable;
-    /// TSynLanguages registry, thread language and Mustache wiring
-    procedure LanguagesRegistry;
-    /// global hooks: captions and date/time rendering
-    procedure GlobalHooks;
-    /// GNU gettext .po parsing into a TSynLanguage table
-    procedure PoFormat;
-    /// GNU gettext .mo binary parsing into a TSynLanguage table
-    procedure MoFormat;
-    /// INI and YAML parsing, and the per-extension file loaders
-    procedure IniAndFiles;
-    /// the FPC resourcestring table rewriting channel
-    procedure ResourceStrings;
+    /// regression tests for the mormot.core.i18n unit
+    procedure _i18n;
   end;
 
   /// this test case will test most functions, classes and types defined and
@@ -10143,10 +10140,18 @@ begin
   CheckEqual(n, 0);
 end;
 
+procedure TTestCoreProcess._i18n;
+begin
+  I18nLanguageTable;
+  I18nLanguagesRegistry;
+  I18nGlobalHooks;
+  I18nPoFormat;
+  I18nMoFormat;
+  I18nIniAndFiles;
+  I18nResourceStrings;
+end;
 
-{ TTestCoreI18n }
-
-procedure TTestCoreI18n.LanguageTable;
+procedure TTestCoreProcess.I18nLanguageTable;
 var
   l: TSynLanguage;
   t: RawUtf8;
@@ -10177,7 +10182,7 @@ begin
   end;
 end;
 
-procedure TTestCoreI18n.LanguagesRegistry;
+procedure TTestCoreProcess.I18nLanguagesRegistry;
 var
   langs: TSynLanguages;
   m: TSynMustache;
@@ -10187,11 +10192,14 @@ begin
   langs := TSynLanguages.Create;
   try
     CheckEqual(length(langs.LoadedLanguages), 0, 'void registry');
-    CheckEqual(langs.Language[lngFrench].AddFromJson('{"Hello":"Bonjour"}'), 1);
-    CheckEqual(langs.Language[lngChinese].AddFromJson('{"Hello":"NiHao"}'), 1);
-    Check(langs.Find(lngFrench) <> nil);
-    Check(langs.Find(lngGerman) = nil);
-    Check(langs.FindIso('fr') = langs.Find(lngFrench));
+    Check(langs.Language[lngFrench] = nil);
+    Check(langs.Language[lngChinese] = nil);
+    CheckEqual(langs.AddFromJson(lngFrench, '{"Hello":"Bonjour"}'), 1);
+    CheckEqual(langs.AddFromJson(lngChinese, '{"Hello":"NiHao"}'), 1);
+    Check(langs.Language[lngFrench] <> nil);
+    Check(langs.Language[lngChinese] <> nil);
+    Check(langs.Language[lngGerman] = nil);
+    Check(langs.FindIso('fr') = langs.Language[lngFrench]);
     Check(langs.FindIso('xx') = nil);
     // LoadedLanguages returns the loaded tables, in TLanguage enumerate order
     loaded := langs.LoadedLanguages;
@@ -10207,14 +10215,14 @@ begin
     // per-thread selection
     TSynLanguages.SetThreadLanguage(lngFrench);
     Check(TSynLanguages.ThreadLanguage = lngFrench);
-    Check(langs.Current = langs.Find(lngFrench));
+    Check(langs.Current = langs.Language[lngFrench]);
     u := 'Hello';
     Check(langs.Translate(u));
     CheckEqual(u, 'Bonjour');
     // fallback to DefaultLanguage when no thread language is set
     TSynLanguages.SetThreadLanguage(lngUndefined);
     langs.DefaultLanguage := lngChinese;
-    Check(langs.Current = langs.Find(lngChinese));
+    Check(langs.Current = langs.Language[lngChinese]);
     u := 'Hello';
     Check(langs.Translate(u));
     CheckEqual(u, 'NiHao');
@@ -10233,7 +10241,7 @@ begin
   end;
 end;
 
-procedure TTestCoreI18n.GlobalHooks;
+procedure TTestCoreProcess.I18nGlobalHooks;
 var
   langs: TSynLanguages;
   s: string;
@@ -10241,8 +10249,10 @@ begin
   Check(I18n = nil);
   langs := TSynLanguages.Create;
   try
-    langs.Language[lngFrench].AddFromJson('{"Hello world":"Bonjour tout le monde"}');
-    langs.Language[lngFrench].DateTimeFormat := 'yyyy/mm/dd hh:nn';
+    Check(langs.Language[lngFrench] = nil);
+    langs.AddFromJson(lngFrench, '{"Hello world":"Bonjour tout le monde"}');
+    if Check(langs.Language[lngFrench] <> nil) then
+      langs.Language[lngFrench].DateTimeFormat := 'yyyy/mm/dd hh:nn';
     langs.SetGlobal;
     Check(I18n = langs);
     TSynLanguages.SetThreadLanguage(lngFrench);
@@ -10308,7 +10318,7 @@ const
     '  msgid "Indented"'#10 +
     '  msgstr "Indente"'#10;
 
-procedure TTestCoreI18n.PoFormat;
+procedure TTestCoreProcess.I18nPoFormat;
 var
   l: TSynLanguage;
   t, cha: RawUtf8;
@@ -10425,21 +10435,21 @@ begin
   txt := '';
   nul := #0;
   n := length(Ids);
-  AddCard($950412de);                // magic number
-  AddCard(Revision);                 // major shl 16 + minor file format
-  AddCard(n + CountDelta);           // number of strings
-  AddCard(MO_HEAD);                  // original strings table offset
-  AddCard(MO_HEAD + n * 8);          // translated strings table offset
-  AddCard(0);                        // hash table size
-  AddCard(0);                        // hash table offset
-  p := MO_HEAD + n * 16;             // where the #0 terminated strings begin
-  for i := 0 to n - 1 do             // original strings (length, offset) table
+  AddCard($950412de);            // magic number
+  AddCard(Revision);             // major shl 16 + minor file format
+  AddCard(n + CountDelta);       // number of strings
+  AddCard(MO_HEAD);              // original strings table offset
+  AddCard(MO_HEAD + n * 8);      // translated strings table offset
+  AddCard(0);                    // hash table size
+  AddCard(0);                    // hash table offset
+  p := MO_HEAD + n * 16;         // where the #0 terminated strings begin
+  for i := 0 to n - 1 do         // original strings (length, offset) table
   begin
     AddCard(length(Ids[i]));
     AddCard(p);
-    inc(p, length(Ids[i]) + 1);      // each string has its #0 terminator
+    inc(p, length(Ids[i]) + 1);  // each string has its #0 terminator
   end;
-  for i := 0 to n - 1 do             // translated strings (length, offset) table
+  for i := 0 to n - 1 do         // translated strings (length, offset) table
   begin
     AddCard(length(Strs[i]));
     AddCard(p);
@@ -10458,7 +10468,7 @@ begin
   Append(result, txt);
 end;
 
-procedure TTestCoreI18n.MoFormat;
+procedure TTestCoreProcess.I18nMoFormat;
 var
   l, l2: TSynLanguage;
   langs: TSynLanguages;
@@ -10596,8 +10606,8 @@ begin
   langs := TSynLanguages.Create;
   try
     CheckEqual(langs.LoadFromFolder(folder), 2, 'fr.po + fr.mo');
-    Check(langs.Find(lngFrench) <> nil);
-    CheckEqual(langs.Find(lngFrench).Count, 3, 'Hello + OnlyPo + OnlyMo');
+    Check(langs.Language[lngFrench] <> nil);
+    CheckEqual(langs.Language[lngFrench].Count, 3, 'Hello + OnlyPo + OnlyMo');
     TSynLanguages.SetThreadLanguage(lngFrench);
     t := 'Hello';
     Check(langs.Translate(t));
@@ -10641,7 +10651,7 @@ var
 const
   UTF8_ACCENTS: array[0..3] of byte = ($C9, $E7, $E8, $E9);
 
-procedure TTestCoreI18n.IniAndFiles;
+procedure TTestCoreProcess.I18nIniAndFiles;
 var
   l: TSynLanguage;
   langs: TSynLanguages;
@@ -10788,14 +10798,13 @@ begin
   langs := TSynLanguages.Create;
   try
     CheckEqual(langs.LoadFromFolder(folder), 3, 'fr.po + fr.json + zh.ini');
-    Check(langs.Find(lngEnglish) = nil, '.txt is not a translation file');
-    Check(langs.Find(lngFrench) <> nil);
-    CheckEqual(langs.Find(lngFrench).Count, 5);
+    Check(langs.Language[lngEnglish] = nil, '.txt is not a translation file');
+    Check(langs.Language[lngFrench] <> nil);
+    CheckEqual(langs.Language[lngFrench].Count, 5);
     t := 'Hello';
     TSynLanguages.SetThreadLanguage(lngFrench);
     Check(langs.Translate(t), 'from fr.po');
     CheckEqual(t, 'Bonjour');
-
     t := 'Resume';
     Check(langs.Translate(t));
     CheckEqual(t, RawUtf8('R') + _uE9 + 'sum' + _uE9);
@@ -10808,9 +10817,8 @@ begin
     t := 'Elephant';
     Check(langs.Translate(t));
     CheckEqual(t, _uC9 + 'l' + _uE9 + 'phant');
-
-    Check(langs.Find(lngChinese) <> nil);
-    CheckEqual(langs.Find(lngChinese).Count, 1);
+    Check(langs.Language[lngChinese] <> nil);
+    CheckEqual(langs.Language[lngChinese].Count, 1);
     t := 'Hello';
     TSynLanguages.SetThreadLanguage(lngChinese);
     Check(langs.Translate(t), 'from zh.ini');
@@ -10836,7 +10844,7 @@ var
   RS_I18N_VAR: string = RS_I18N_TEST;
 {$endif FPC}
 
-procedure TTestCoreI18n.ResourceStrings;
+procedure TTestCoreProcess.I18nResourceStrings;
 var
   langs: TSynLanguages;
   cha, tr: RawUtf8;
@@ -10867,8 +10875,10 @@ begin
   {$endif FPC}
   langs := TSynLanguages.Create;
   try
-    CheckEqual(langs.Language[lngFrench].AddFromJson(
+    Check(langs.Language[lngFrench] = nil);
+    CheckEqual(langs.AddFromJson(lngFrench,
       '{"i18n test string":"' + tr + '"}'), 1);
+    Check(langs.Language[lngFrench] <> nil);
     TSynLanguages.SetThreadLanguage(lngFrench);
     langs.TranslateResourceStrings;
     {$ifdef FPC}
