@@ -148,6 +148,7 @@ begin
   AddCase([
     TTestCoreBase,
     TTestCoreProcess,
+    TTestCoreI18n,
     {$ifdef HASGENERICS} // do-nothing on oldest compilers (e.g. <= Delphi XE7)
     TTestCoreCollections,
     {$endif HASGENERICS}
