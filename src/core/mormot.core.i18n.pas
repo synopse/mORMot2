@@ -986,7 +986,12 @@ var
   l: TLanguage;
   n: PtrInt;
 begin
-  SetLength(result, length(fLang)); // single allocation, then truncate below
+  result := fLoadedLanguages;
+  if (result <> nil) or
+     (fLangCount = 0) then
+    exit;
+  SetLength(result, fLangCount);
+  fLoadedLanguages := result;
   n := 0;
   for l := low(fLang) to high(fLang) do
     if fLang[l] <> nil then
@@ -994,7 +999,8 @@ begin
       result[n] := l;
       inc(n);
     end;
-  SetLength(result, n);
+  if n <> fLangCount then
+    EI18nException.RaiseU('LangCount?'); // paranoid
 end;
 
 class procedure TSynLanguages.SetThreadLanguage(aLanguage: TLanguage);
