@@ -75,6 +75,11 @@ type
     constructor Create(aLanguage: TLanguage); reintroduce;
     /// finalize this instance
     destructor Destroy; override;
+    /// merge translations from a file, recognized by its extension
+    // - .po or .mo (gettext), .ini or .msg, .yaml or .yml, .json / .jsonc /
+    // .json5 / .hjson (the relaxed JSON variants are read by our JSON parser)
+    // - returns -1 if the file does not exist or its extension is unknown
+    function AddFromFile(const FileName: TFileName): integer;
     /// merge translations from a TDocVariantData object document
     // - this is the shared implementation of AddFromJson and AddFromYaml: each
     // document field name is the English key, and its value the translation
@@ -145,11 +150,6 @@ type
     /// merge translations from an INI file (UTF-8, BOM tolerated)
     function AddFromIniFile(const FileName: TFileName;
       const Section: RawUtf8 = ''): integer;
-    /// merge translations from a file, recognized by its extension
-    // - .po or .mo (gettext), .ini or .msg, .yaml or .yml, .json / .jsonc /
-    // .json5 / .hjson (the relaxed JSON variants are read by our JSON parser)
-    // - returns -1 if the file does not exist or its extension is unknown
-    function AddFromFile(const FileName: TFileName): integer;
     /// translate the supplied text in-place
     // - returns true if the key was found and Text was replaced
     // - returns false and leaves Text untouched (fallback to original text)
@@ -162,6 +162,7 @@ type
     // - Translated is left '' if the key was not found (i.e. caller fallback)
     procedure TranslateUtf8(English: PUtf8Char; EnglishLen: integer;
       var Translated: RawUtf8);
+  published
     /// the associated language of this table
     property Language: TLanguage
       read fLanguage;
@@ -185,7 +186,8 @@ type
     property DateTimeFormat: string
       read fDateTimeFormat write fDateTimeFormat;
     /// how many translation pairs are stored in this table
-    function Count: integer;
+    property Count: integer
+      read GetCount;
   end;
 
 
