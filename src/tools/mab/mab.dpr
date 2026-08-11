@@ -7,14 +7,14 @@ program mab;
   *****************************************************************************
 
   Command-Line Tool to Generate .mab files from existing .map or .dbg files
-  - if some .map file name is specified (you can use wild chars), it will
+  - with Delphi, enable .map file by setting "Detailed" debug in Project Options
+  - with FPC, will use DWARF debugging information instead of the `.map` file -
+  a good idea is to generate -Xg external .dbg info to keep the executable small
+  - if some .map/.dbg file name is specified (you can use wild chars), it will
   process all those .map files, then create the corresponding .mab files
   - if some .exe/.dll file name is specified (you can use wild chars), will
-  process all matching .exe/.dll files with an associated .map file, and will
-  create the .mab files, then embedd the .mab content to the .exe/.dll
-  - if no file name is specified, will process *.map into *.mab from the
-  current directory
-  - with FPC, will use DWARF debugging information instead of the `.map` file
+  process all matching .exe/.dll files with associated debug information, and
+  will create the .mab files, then embedd the .mab content to the .exe/.dll
 
   *****************************************************************************
 }
@@ -35,7 +35,7 @@ uses
   mormot.core.text,
   mormot.core.log;
 
-procedure Process(const FileName: TFileName);
+procedure Process(const FileName: TFileName; Options: TDebugFileScope);
 var
   deb: TDebugFile;
   SR: TSearchRec;
@@ -54,29 +54,30 @@ begin
       try
         // setup the debug source file name
         FN := Path + SR.Name;
-        // generate the mab content, maybe into the executable itself
+        // force (re)generate the mab content, maybe into the executable itself
         Count := 0;
         deb := TDebugFile.Create(FN,
-          [dfsNoMabExternalCheck, dfsNoMabInternalCheck]);
+                 Options + [dfsNoMabExternalCheck, dfsNoMabInternalCheck]);
         try
-          Count := length(deb.Symbols);
+          Count := deb.LinesCount;
           if deb.DebugInfo = diNone then
           begin
-            ConsoleWrite('Error: no original Debug Info found for %', [FN]);
+            ConsoleWrite('Hint: No original Debug Info found for %', [FN]);
             AllOk := false;
           end
           else if Ext > 1 then // has debug info and is not a map/dbg
-            if deb.ExeFile <> Executable.InstanceFileName then
-              deb.SaveToExe(FN); // embedd into the executable (if not self)
+            if deb.ExeFile <> Executable.InstanceFileName then // self is busy
+              deb.SaveToExe(FN); // embedd into the executable
         finally
           deb.Free;
         end;
         // ensure the (embedded) mab content is actually readable
-        deb := TDebugFile.Create(FN, [dfsNoMabSaveAtCreate]);
+        deb := TDebugFile.Create(FN, Options + [dfsNoMabSaveAtCreate]);
         try
           if (Count > 0) and
-             (Count <> length(deb.Symbols)) then
-            ESynLogException.RaiseU('Invalid .mab content');
+             (Count <> deb.LinesCount) then // paranoid
+            ESynLogException.RaiseUtf8('Invalid % content (%<>%)',
+              [deb.MabFile, Count, deb.LinesCount]);
           ConsoleObject(deb);
         finally
           deb.Free;
@@ -99,13 +100,25 @@ begin
     ExitCode := 2;
   end;
   if not AllOk then
-    ExitCode := 1;
+    ExitCode := 3;
 end;
 
+var
+  c: TExecutableCommandLine;
+  fn: TFileName;
+  opt: TDebugFileScope;
 begin
-  if ParamCount > 0 then
-    Process(ParamStr(1))
+  c := Executable.Command;
+  fn := c.ArgFile(0, 'exe or ' + DEBUG_EXT + ' #source filename or mask', {optional=}false);
+  opt := [];
+  if c.Option('no&symbol', 'include only line info for production') then
+    include(opt, dfsNoSymbols);
+  if c.Option('no&mab', 'only embed to exe, no external .mab file') then
+    include(opt, dfsNoMabSaveAtCreate);
+  if c.ConsoleHelpFailed('mORMot ' + SYNOPSE_FRAMEWORK_VERSION +
+                         ' .mab file generator') then
+    ExitCode := 1
   else
-    Process('*.map');
+    Process(fn, opt);
 end.
 

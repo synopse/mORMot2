@@ -33,6 +33,7 @@ uses
   mormot.core.text,
   mormot.core.unicode,
   mormot.core.rtti,
+  mormot.net.client,
   mormot.net.openapi;
 
 type
