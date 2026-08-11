@@ -64,10 +64,12 @@ type
   // - thread-safe access via an internal TSynDictionary
   TSynLanguage = class(TSynPersistent)
   protected
-    fLanguage: TLanguage;
     fIso: RawUtf8;
     fTexts: TSynDictionary; // RawUtf8 (english/key) -> RawUtf8 (translated)
+    fLanguage: TLanguage;
     fDateFormat, fDateTimeFormat: string;
+    procedure DoTranslateString(var English: string);
+    function GetCount: integer;
   public
     /// initialize the table for a given language
     constructor Create(aLanguage: TLanguage); reintroduce;
@@ -155,6 +157,7 @@ type
     /// TOnStringTranslate-compatible callback, e.g. to be assigned to
     // TMvcViewsMustache.OnTranslate or supplied to TSynMustache.Render()
     procedure TranslateString(var English: string);
+      {$ifdef HASINLINE} inline; {$endif}
     /// TOnUtf8Translate-compatible callback
     // - Translated is left '' if the key was not found (i.e. caller fallback)
     procedure TranslateUtf8(English: PUtf8Char; EnglishLen: integer;
@@ -724,22 +727,30 @@ begin
 end;
 
 function TSynLanguage.Translate(var Text: RawUtf8): boolean;
-var
-  tr: RawUtf8;
 begin
-  result := (Text <> '') and
-            fTexts.FindAndCopy(Text, tr, {updatetimeout=}false);
-  if result then
-    Text := tr;
+  result := (self <> nil) and
+            (Text <> '') and
+            fTexts.FindAndCopy(Text, Text, {updatetimeout=}false);
 end;
 
 procedure TSynLanguage.TranslateString(var English: string);
+begin
+  if self <> nil then
+    {$ifdef FPC}
+    if Unicode_CodePage = CP_UTF8 then // most common case with Lazarus
+      fTexts.FindAndCopy(English, English, {updatetimeout=}false)
+    else
+    {$endif FPC}
+      DoTranslateString(English);
+end;
+
+procedure TSynLanguage.DoTranslateString(var English: string);
 var
-  u: RawUtf8;
+  u: RawUtf8; // needed mostly on Delphi
 begin
   StringToUtf8(English, u);
   if Translate(u) then
-    English := Utf8ToString(u);
+    Utf8ToStringVar(u, English);
 end;
 
 procedure TSynLanguage.TranslateUtf8(English: PUtf8Char; EnglishLen: integer;
@@ -748,7 +759,8 @@ var
   key: RawUtf8;
 begin
   FastSetString(key, English, EnglishLen);
-  if not fTexts.FindAndCopy(key, Translated, {updatetimeout=}false) then
+  if (self = nil) or
+     not fTexts.FindAndCopy(key, Translated, {updatetimeout=}false) then
     Translated := ''; // caller would fallback to the English text
 end;
 
