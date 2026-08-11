@@ -1375,7 +1375,7 @@ var
   schema, table: RawUtf8;
   stmt: TSqlDBOdbcStatement;
   F: TSqlDBColumnDefine;
-  i, n, datatype: integer;
+  i, n, datatype: integer; // not PtrInt
   status: SqlReturn;
   FA: TDynArray;
 begin
@@ -1607,7 +1607,7 @@ var
   schem, pack, proc: RawUtf8;
   P: TSqlDBProcColumnDefine;
   PA: TDynArray;
-  n, DataType: integer;
+  n, DataType: integer; // not PtrInt
   status: SqlReturn;
   stmt: TSqlDBOdbcStatement;
 begin

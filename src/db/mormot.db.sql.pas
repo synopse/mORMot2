@@ -2179,8 +2179,8 @@ type
   TSqlDBStatement = class(TInterfacedObject, ISqlDBRows, ISqlDBStatement)
   protected
     fConnection: TSqlDBConnection;
-    fParamCount: integer;
-    fColumnCount: integer;
+    fParamCount: integer;  // not PtrInt
+    fColumnCount: integer; // not PtrInt
     fTotalRowsRetrieved: integer;
     fCurrentRow: integer;
     fDbms: TSqlDBDefinition;
@@ -4130,7 +4130,7 @@ procedure TSqlDBConnectionProperties.GetFields(const aTableName: RawUtf8;
   out Fields: TSqlDBColumnDefineDynArray);
 var
   sql: RawUtf8;
-  n, i: integer;
+  n, i: integer; // not PtrInt
   f: TSqlDBColumnDefine;
   fa: TDynArray;
 begin
@@ -4203,7 +4203,7 @@ procedure TSqlDBConnectionProperties.GetIndexes(const aTableName: RawUtf8;
   out Indexes: TSqlDBIndexDefineDynArray);
 var
   sql: RawUtf8;
-  n: integer;
+  n: integer; // not PtrInt
   f: TSqlDBIndexDefine;
   fa: TDynArray;
 begin
@@ -4256,7 +4256,7 @@ procedure TSqlDBConnectionProperties.GetProcedureParameters(
   const aProcName: RawUtf8; out Parameters: TSqlDBProcColumnDefineDynArray);
 var
   sql: RawUtf8;
-  n: integer;
+  n: integer; // not PtrInt
   f: TSqlDBProcColumnDefine;
   fa: TDynArray;
 begin

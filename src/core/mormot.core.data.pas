@@ -2687,7 +2687,7 @@ type
   TBinDictionary = class(TSynPersistent)
   protected
     fValue: TRawByteStringDynArray;
-    fCount: integer;
+    fCount: integer; // not PtrInt
     fHash: TDynArrayHashed;
   public
     /// initialize the data structure

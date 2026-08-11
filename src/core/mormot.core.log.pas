@@ -1667,7 +1667,7 @@ type
   /// can manage a list of ISynLogCallback registrations
   TSynLogCallbacks = class(TObjectOSLock)
   protected
-    fCount: integer;
+    fCount: integer; // not PtrInt
     fCurrentlyEchoing: boolean;
   public
     /// direct access to the registration storage

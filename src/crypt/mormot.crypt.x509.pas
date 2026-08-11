@@ -979,7 +979,7 @@ type
   TX509CrlList = class(TObjectRWLightLock)
   protected
     fList: TX509CrlObjArray; // sorted by AKID for O(log(n)) search
-    fCount: integer;
+    fCount: integer; // not PtrInt
     fDA: TDynArray;
     function GetRevoked: integer;
   public

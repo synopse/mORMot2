@@ -295,7 +295,7 @@ procedure TSqlDBUniDACConnectionProperties.GetFields(const aTableName: RawUtf8;
   out Fields: TSqlDBColumnDefineDynArray);
 var
   meta: TDAMetaData;
-  n: integer;
+  n: integer; // not PtrInt
   F: TSqlDBColumnDefine;
   FA: TDynArray;
   hasSubType: boolean;
@@ -357,7 +357,7 @@ var
   meta, indexs: TDAMetaData;
   F: TSqlDBIndexDefine;
   FA: TDynArray;
-  n: integer;
+  n: integer; // not PtrInt
   ColName, Owner, Table: RawUtf8;
   ndxName: string;
 begin

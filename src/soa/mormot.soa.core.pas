@@ -951,7 +951,7 @@ type
     fDynArray: TDynArray;
     fDynArrayTimeoutTix: TDynArray;
     fTimeoutTix: TInt64DynArray;
-    fTimeoutTixCount: integer;
+    fTimeoutTixCount: integer; // not PtrInt
     fLastPublishedJson: cardinal;
     fTimeOut: integer;
   public
@@ -960,7 +960,7 @@ type
     // execution order: the latest registrations will appear last
     List: TServicesPublishedInterfacesDynArray;
     /// how many items are actually stored in List[]
-    Count: integer;
+    Count: integer;  { not PtrInt }
     /// initialize the storage
     // - an optional time out period, in milliseconds, may be defined - but the
     // clients should ensure that RegisterFromClientJson() is called in order

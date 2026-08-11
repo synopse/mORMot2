@@ -1513,7 +1513,7 @@ type
     fHasExpects: set of (eCount, eTrace);
     fLogs: TInterfaceStubLogDynArray;
     fLog: TDynArray;
-    fLogCount: integer;
+    fLogCount: integer; // not PtrInt
     fInterfaceExpectedTraceHash: cardinal;
     fLastInterfacedObjectFake: TInterfacedObject;
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;

@@ -2953,7 +2953,7 @@ end;
 procedure FindFilesRtl(const Directory, Mask, IgnoreFileName: TFileName;
   Options: TFindFilesOptions; out Files: TFindFilesDynArray);
 var
-  count: integer;
+  count: integer; // not PtrInt
   m: PChar;
   dir, onemask: TFileName;
   da: TDynArray;
