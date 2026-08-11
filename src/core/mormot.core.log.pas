@@ -114,6 +114,8 @@ type
   TDebugFileScope = set of (
     dfsIncludePathInFileName,
     dfsNoMabSaveAtCreate,
+    dfsNoMabExternalCheck,
+    dfsNoMabInternalCheck,
     dfsNoSymbols,
     dfsNoLines,
     dfsNoProducer);
@@ -248,8 +250,11 @@ type
       read fBlock;
   published
     /// the associated executable or library file 
-    property FileName: TFileName
+    property ExeFile: TFileName
       read fExeFile;
+    /// the expected location of the associated .mab file (may be non existing)
+    property MabFile: TFileName
+      read fMabFile;
     /// details about the compiler version - only available for FPC yet
     property Producer: RawUtf8
       read fProducer;
@@ -3650,8 +3655,8 @@ begin
   if fExeAge = 0 then
     exit;
   fExePath := ExtractFilePath(fExeFile);
-  fMabFile := ChangeFileExt(fExeFile, '.mab');
   savemab := false;
+  fMabFile := ChangeFileExt(fExeFile, '.mab');
   // search for a .mab file matching the running .exe/.dll name
   mabage := FileAgeToUnixTimeUtc(fMabFile);
   if mabage = 0 then
@@ -3668,13 +3673,16 @@ begin
     end;
   end;
   if (mabage <> 0) and // SaveToFile() set FileSetDateFrom(fExeFile);
-     (abs(fExeAge - mabage) < 2) then // same exact age (allow 1 second diff)
+     (abs(fExeAge - mabage) < 2) and // same exact age (allow 1 second diff)
+     not (dfsNoMabExternalCheck in Scope) then
+  begin
     LoadMab(fMabFile);
+    if fBlocksCount or fSymbolsCount = 0 then
+      DeleteFile(fMabFile);
+  end;
   // recompute from .map/.dbg if no faster-to-load .mab available
   if fBlocksCount or fSymbolsCount = 0 then
   try
-    if mabage <> 0 then
-      DeleteFile(fMabFile);
     GenerateFromMapOrDwarf(dfsIncludePathInFileName in Scope);
     if fBlocksCount + fSymbolsCount <> 0 then
     begin
@@ -3688,7 +3696,8 @@ begin
     fBlocks.Clear;
   end;
   // search for an embedded compressed .mab file appended to the .exe/.dll
-  if fBlocksCount or fSymbolsCount = 0 then
+  if (fBlocksCount or fSymbolsCount = 0) and
+     not (dfsNoMabInternalCheck in Scope) then
     LoadMab(fExeFile);
   // finalize (and optionally persist as .mab) this instance
   if fBlocksCount <> 0 then
