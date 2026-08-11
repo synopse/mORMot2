@@ -402,6 +402,7 @@ begin
   fIso := LANG_ISO[aLanguage];
   fTexts := TSynDictionary.Create(
     TypeInfo(TRawUtf8DynArray), TypeInfo(TRawUtf8DynArray));
+  fTexts.ThreadUse := uRWLock; // non-blocking thread-safe Translate()
 end;
 
 destructor TSynLanguage.Destroy;
