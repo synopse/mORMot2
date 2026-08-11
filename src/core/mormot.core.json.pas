@@ -5158,14 +5158,18 @@ end;
 function JsonBufferReformat(P: PUtf8Char; out Dest: RawUtf8;
   Format: TTextWriterJsonFormat; Preproc: TPreprocAbstract): boolean;
 var
-  S: TRawByteStringStream;
+  temp: TTextWriterStackBuffer; // 8KB buffer
+  W: TJsonWriter;
 begin
-  S := TRawByteStringStream.Create;
+  result := false;
+  if P = nil then
+    exit;
+  W := TJsonWriter.CreateOwnedStream(temp);
   try
-    result := JsonBufferReformatToStream(P, S, Format, Preproc);
-    Dest := S.DataString;
+    result := W.AddJsonReformat(P, Format, PreProc);
+    W.SetText(Dest);
   finally
-    S.Free;
+    W.Free;
   end;
 end;
 
