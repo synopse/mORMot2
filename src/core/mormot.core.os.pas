@@ -3825,7 +3825,7 @@ type
 /// quickly check if a resource do exist - just cross-platform wrapper to FindResource()
 function ResourceExists(ResourceName, ResType: PChar; Instance: TLibHandle = 0): boolean;
 
-/// try to load a resourcestring from the current executable
+/// try to load a resourcestring from the current executable - used on Delphi
 procedure OsLoadResString(ResStringRec: PResStringRec; var Res: string);
 
 /// retrieve raw information about one section from a memory-mapped ELF/PE file

@@ -1108,13 +1108,13 @@ end;
 {$ifdef ISDELPHI} // FPC pre-loads all its resources in memory
 procedure _OsLoadResString(Rec: PResStringRec; var Res: string);
 var
-  tmp: TWide4K;
+  tmp: array[0 .. 4095] of Char;
 begin
   Res := '';
   if Rec <> nil then
     if Rec^.Identifier < 64 shl 10 then
       SetString(Res, tmp, LoadString(FindResourceHInstance(Rec^.Module^),
-        Rec^.Identifier, tmp, SizeOf(tmp))) // proper WinAPI call
+        Rec^.Identifier, @tmp, SizeOf(tmp))) // proper WinAPI call
     else
       Res := PChar(Rec^.Identifier);
 end;
