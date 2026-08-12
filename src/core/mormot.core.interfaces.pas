@@ -7183,9 +7183,7 @@ asm
         mov     cl, [r12].TCallMethodArgs.resKind
         cmp     cl, imvDouble
         je      @d
-        cmp     cl, imvDateTime
-        je      @d
-        cmp     cl, imvCurrency
+        cmp     cl, imvDateTime // but imvCurrency is returned in rax
         jne     @e
 @d:     movlpd  qword ptr [r12].TCallMethodArgs.res64, xmm0
         // movlpd to ignore upper 64-bit of 128-bit xmm0 reg
