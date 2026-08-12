@@ -3689,6 +3689,11 @@ type
   /// define a buffer of 128KB of data
   TBuffer128K = array[0 .. pred(128 shl 10)] of AnsiChar;
 
+  /// define a buffer of 1024 WideChar
+  TWide1K = array[0 .. pred(1 shl 10)] of WideChar;
+  /// define a buffer of 4096 WideChar
+  TWide4K = array[0 .. pred(4 shl 10)] of WideChar;
+
   /// implements a 4KB stack-based storage of some (UTF-8 or binary) content
   // - could be used e.g. to make a temporary copy when JSON is parsed in-place
   // - call one of the Init() overloaded methods, then Done to release its memory

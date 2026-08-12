@@ -7232,7 +7232,7 @@ end;
 function _Utf8CompareOS(P1, P2: PUtf8Char; IgnoreCase: boolean): PtrInt;
 var // use temporary UTF-16 conversion on stack
   w1, w2: PtrInt;
-  t1, t2: array[0 .. 1023] of WideChar; // convert+compare up to 1023 widechars
+  t1, t2: TWide1K; // convert+compare up to 1023 widechars
 begin // here P1<>nil and P2<>nil
   w1 := Utf8ToWideChar(@t1, p1, high(t1), StrLen(P1)) shr 1;
   w2 := Utf8ToWideChar(@t2, p2, high(t2), StrLen(P2)) shr 1;

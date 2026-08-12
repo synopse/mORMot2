@@ -1457,7 +1457,7 @@ procedure WinCertName(var Name: CERT_NAME_BLOB; out Text: RawUtf8;
   StrType: cardinal);
 var
   len: PtrInt;
-  tmp: array[0..4095] of WideChar;
+  tmp: TWide4K;
 begin
   len := CertNameToStrW(X509_ASN_ENCODING, Name, StrType, @tmp, SizeOf(tmp));
   if len <> 0 then

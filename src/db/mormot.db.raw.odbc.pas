@@ -1086,7 +1086,7 @@ const
   FMT: PUtf8Char = '%[%] % (%)'#13#10;
 var
   Sqlstate: array[0..6] of WideChar;
-  MessageText: array[0..1023] of WideChar;
+  MessageText: TWide1K;
   RecNum, NativeError: SqlInteger;
   TextLength: SqlSmallint;
   msg: RawUtf8;

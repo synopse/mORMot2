@@ -2201,7 +2201,7 @@ function EnumProcessName(PID: cardinal): RawUtf8;
 var
   h: THandle;
   len: DWord;
-  name: array[0..4095] of WideChar;
+  name: TWide4K;
 begin
   FastAssignNew(result);
   if PID = 0 then
