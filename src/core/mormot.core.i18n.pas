@@ -1023,23 +1023,19 @@ begin
 end;
 
 function TSynLanguages.Current: TSynLanguage;
-var
-  lng: TLanguage;
 begin
-  lng := _ThreadLanguage;
-  if lng = lngUndefined then
-    lng := fDefaultLanguage;
-  if lng = lngUndefined then
-    result := nil
-  else
-    result := fLang[lng];
+  result := fLang[_ThreadLanguage];
+  if result = nil then
+    result := fLang[fDefaultLanguage];
 end;
 
 function TSynLanguages.Translate(var Text: RawUtf8): boolean;
 var
   lang: TSynLanguage;
 begin
-  lang := Current;
+  lang := fLang[_ThreadLanguage]; // inlined TSynLanguages.Current
+  if lang = nil then
+    lang := fLang[fDefaultLanguage];
   result := (lang <> nil) and
             lang.Translate(Text);
 end;
@@ -1048,7 +1044,9 @@ procedure TSynLanguages.TranslateString(var English: string);
 var
   lang: TSynLanguage;
 begin
-  lang := Current;
+  lang := fLang[_ThreadLanguage]; // inlined TSynLanguages.Current
+  if lang = nil then
+    lang := fLang[fDefaultLanguage];
   if lang <> nil then
     lang.TranslateString(English);
 end;
