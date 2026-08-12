@@ -750,6 +750,7 @@
     {$ifend}
     {$if CompilerVersion >= 34.0} // = Delphi 10.4
       {$define ISDELPHI104}
+      {$define HASCACHEDRESSTRING} // introducing LoadResStringFunc()
     {$ifend}
     {$if CompilerVersion >= 35.0} // = Delphi 11.x Alexandria
       {$define ISDELPHI11}
