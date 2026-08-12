@@ -188,9 +188,11 @@ type
     property Partials: TSynMustachePartials
       read fPartials write fPartials;
     /// access to the {{"English text}} translation string callback
+    // - match TLanguageFile.Translate signature in mormot.core.i18n.pas
     property OnStringTranslate: TOnStringTranslate
       read fOnStringTranslate write fOnStringTranslate;
     /// access to the {{"English text}} translation RawUtf8 callback
+    // - match TLanguageFile.TranslateUtf8 signature in mormot.core.i18n.pas
     property OnUtf8Translate: TOnUtf8Translate
       read fOnUtf8Translate write fOnUtf8Translate;
     /// read-only access to the associated text writer instance
@@ -687,26 +689,37 @@ end;
 
 procedure TSynMustacheContext.TranslateBlock(Text: PUtf8Char; TextLen: integer);
 var
-  s: string;
-  u: RawUtf8;
+  p: pointer; // manual RawUtf8/string handling
 begin
+  p := nil;
   if Assigned(OnUtf8Translate) then
   begin
-    OnUtf8Translate(Text, TextLen, u);
-    if u <> '' then
+    OnUtf8Translate(Text, TextLen, RawUtf8(p));
+    if p <> nil then
     begin
-      fWriter.AddString(u);
+      if fEscapeInvert then // HTML escape translation by default
+        fWriter.AddString(RawUtf8(p))
+      else
+        _AddHtmlEscape(fWriter, p, {len=}0, hfAnyWhere); // faster with len=0
+      FastAssignNew(p);
       exit;
     end;
   end
   else if Assigned(OnStringTranslate) then
   begin
-    Utf8DecodeToString(Text, TextLen, s);
-    OnStringTranslate(s);
-    fWriter.AddNoJsonEscapeString(s);
+    Utf8DecodeToString(Text, TextLen, string(p));
+    OnStringTranslate(string(p));
+    if fEscapeInvert then // HTML escape translation by default
+      fWriter.AddNoJsonEscapeString(string(p))
+    else
+      fWriter.AddHtmlEscapeString(string(p));
+    FastAssignNew(p);
     exit;
   end;
-  fWriter.AddNoJsonEscape(Text, TextLen);
+  if fEscapeInvert then
+    fWriter.AddNoJsonEscape(Text, TextLen)
+  else
+    _AddHtmlEscape(fWriter, Text, TextLen, hfAnyWhere);
 end;
 
 function TSynMustacheContext.GetVariantFromContext(
@@ -1894,7 +1907,7 @@ begin
         // ignore whole internal {{<partial}}
         TagStart := t^.SectionOppositeIndex;
       mtTranslate:
-        if t^.TextLen <> 0 then
+        if t^.TextLen <> 0 then // {{"English text}}
           Context.TranslateBlock(t^.TextStart, t^.TextLen);
     end;
     inc(TagStart);
