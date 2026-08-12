@@ -7,8 +7,8 @@ unit mormot.core.i18n;
   *****************************************************************************
 
    Basic Internationalization (i18n) Support
-    - TSynLanguage per-language translation table
-    - TSynLanguages registry with per-thread language selection
+    - TLanguageFile per-language translation table
+    - TLanguageFiles registry with per-thread language selection
     - global wiring of the framework translation hooks
 
    Translation tables map the original English text to its translation, and
@@ -19,14 +19,14 @@ unit mormot.core.i18n;
    Once loaded, three wiring channels are available: the TSynMustache
    translate tag views channel, the LoadResStringTranslate slot consumed by
    the GetCaptionFrom* captions, and - on FPC only - the whole executable
-   resourcestring table via TSynLanguages.TranslateResourceStrings.
+   resourcestring table via TLanguageFiles.TranslateResourceStrings.
 
    Connects the translation slots kept since mORMot 1 mORMoti18n.pas:
    TOnStringTranslate / TOnUtf8Translate callbacks, LoadResStringTranslate,
    i18nDateText / i18nDateTimeText, and the TSynMustache translate tag
    channel - see https://synopse.info/forum/viewtopic.php?id=7592
 
-   Note: the translate tag literal syntax appears in the TSynLanguage
+   Note: the translate tag literal syntax appears in the TLanguageFile
    documentation below, but never within this block comment - on Delphi, a
    curly brace would close the comment right there (no nested comments).
 
@@ -51,7 +51,7 @@ uses
   mormot.core.fmt;
 
 
-{ ************* TSynLanguage per-language Translation Table }
+{ ************* TLanguageFile per-language Translation Table }
 
 type
   /// exception raised on invalid i18n definition or process
@@ -62,7 +62,7 @@ type
   // mORMot 1 mORMoti18n.pas semantic and the Mustache {{"English text}}
   // convention - so a missing key just fallbacks to the original English
   // - thread-safe access via an internal TSynDictionary
-  TSynLanguage = class(TSynPersistent)
+  TLanguageFile = class(TSynPersistent)
   protected
     fIso: RawUtf8;
     fTexts: TSynDictionary; // RawUtf8 (english/key) -> RawUtf8 (translated)
@@ -192,37 +192,37 @@ type
   end;
 
 
-{ ************* TSynLanguages Registry with per-thread Language }
+{ ************* TLanguageFiles Registry with per-thread Language }
 
   /// a dynamic array of TLanguage values
-  // - as returned e.g. by TSynLanguages.LoadedLanguages
+  // - as returned e.g. by TLanguageFiles.LoadedLanguages
   TLanguageDynArray = array of TLanguage;
 
-  /// a O(1) storage of per-TLanguage TSynLanguage instances
-  TSynLanguagePerLang = array[TLanguage] of TSynLanguage;
+  /// a O(1) storage of per-TLanguage TLanguageFile instances
+  TLanguageFilePerLang = array[TLanguage] of TLanguageFile;
 
-  /// registry of TSynLanguage tables with per-thread language selection
+  /// registry of TLanguageFile tables with per-thread language selection
   // - typical web usage: load the tables once at startup, then call
-  // TSynLanguages.SetThreadLanguage() at each request start (e.g. from an
+  // TLanguageFiles.SetThreadLanguage() at each request start (e.g. from an
   // URI parameter or a cookie), and assign TranslateString to the Mustache
   // views engine (e.g. TMvcViewsMustache.OnTranslate)
-  TSynLanguages = class(TObjectLightLock)
+  TLanguageFiles = class(TObjectLightLock)
   protected
     fDefaultLanguage: TLanguage;
     fLangCount: integer;
     fLoadedLanguages: TLanguageDynArray;
-    fLang: TSynLanguagePerLang;
+    fLang: TLanguageFilePerLang;
   public
     /// finalize the registry and all its owned tables
     destructor Destroy; override;
     /// return the table matching an ISO 639-1 text, e.g. 'fr' - nil if none
-    function FindIso(const Iso: RawUtf8): TSynLanguage;
+    function FindIso(const Iso: RawUtf8): TLanguageFile;
     /// get or create the translation table of a given language
     // - mostly for internal use, e.g. AddFrom*() methods
-    function FindOrNew(aLanguage: TLanguage): TSynLanguage;
+    function FindOrNew(aLanguage: TLanguage): TLanguageFile;
     /// load all <iso>.<ext> files from a folder, e.g. en.json or zh.po
     // - the file name (without its extension) is the ISO 639-1 language text,
-    // and any extension supported by TSynLanguage.AddFromFile is recognized
+    // and any extension supported by TLanguageFile.AddFromFile is recognized
     // - several files of the same language are merged into its single table,
     // in a deterministic order - by name, then by ascending format index as
     // defined by the LANGUAGE_EXT[] order - so that if they do define the
@@ -237,7 +237,7 @@ type
     /// merge translations of a given language from a JSON object
     function AddFromJson(aLanguage: TLanguage; const Json: RawUtf8): integer;
     /// return the languages currently loaded in this registry
-    // - i.e. those for which a TSynLanguage table does exist, in TLanguage
+    // - i.e. those for which a TLanguageFile table does exist, in TLanguage
     // enumerate order - void if nothing was loaded yet
     // - e.g. to fill a language selection list in the User Interface
     function LoadedLanguages: TLanguageDynArray;
@@ -248,7 +248,7 @@ type
     class function ThreadLanguage: TLanguage;
     /// the table effective for the current thread
     // - i.e. the thread language table, or the DefaultLanguage table, or nil
-    function Current: TSynLanguage;
+    function Current: TLanguageFile;
     /// translate the supplied text using the current thread language
     function Translate(var Text: RawUtf8): boolean;
     /// TOnStringTranslate-compatible callback using the thread language
@@ -288,7 +288,7 @@ type
     procedure TranslateResourceStrings;
     /// get the current translation table of a given language
     // - may return nil if none - use FindOrNew() or AddFrom*() methods
-    property Language: TSynLanguagePerLang
+    property Language: TLanguageFilePerLang
       read fLang;
     /// language used when no per-thread language was set
     // - equals lngUndefined by default, i.e. no translation at all
@@ -299,19 +299,19 @@ type
       read fLangCount;
   end;
 
-/// the main TSynLanguages instance, as set by TSynLanguages.SetGlobal
+/// the main TLanguageFiles instance, as set by TLanguageFiles.SetGlobal
 // - nil if no SetGlobal call was made
-function I18n: TSynLanguages;
+function I18n: TLanguageFiles;
 
 
 implementation
 
 
-{ ************* TSynLanguage per-language Translation Table }
+{ ************* TLanguageFile per-language Translation Table }
 
 const
-  /// the file extensions recognized by TSynLanguage.AddFromFile()
-  // - this order is also the TSynLanguages.AddFromFolder() loading order,
+  /// the file extensions recognized by TLanguageFile.AddFromFile()
+  // - this order is also the TLanguageFiles.AddFromFolder() loading order,
   // i.e. the priority of each format: the last one does win, so that a
   // compiled .mo takes precedence over the .po source it was generated from
   LANGUAGE_EXT: array[0 .. 9] of TFileName = (
@@ -328,7 +328,7 @@ begin
 end;
 
 type
-  /// which .po text slot is currently filled by TSynLanguage.AddFromPo()
+  /// which .po text slot is currently filled by TLanguageFile.AddFromPo()
   TPoSlot = (
     poNone,
     poId,
@@ -392,7 +392,7 @@ type
     Count: cardinal;     // number of strings
     OrigTab: cardinal;   // offset of the original strings table
     TransTab: cardinal;  // offset of the translated strings table
-    HashSize: cardinal;  // the hash table is unused by TSynLanguage.AddFromMo
+    HashSize: cardinal;  // the hash table is unused by TLanguageFile.AddFromMo
     HashTab: cardinal;
   end;
   PMoHeader = ^TMoHeader;
@@ -407,9 +407,9 @@ type
   PMoEntryArray = ^TMoEntryArray;
 
 
-{ TSynLanguage }
+{ TLanguageFile }
 
-constructor TSynLanguage.Create(aLanguage: TLanguage);
+constructor TLanguageFile.Create(aLanguage: TLanguage);
 begin
   inherited Create;
   if aLanguage = lngUndefined then
@@ -421,13 +421,13 @@ begin
   fTexts.ThreadUse := uRWLock; // non-blocking thread-safe Translate()
 end;
 
-destructor TSynLanguage.Destroy;
+destructor TLanguageFile.Destroy;
 begin
   fTexts.Free;
   inherited Destroy;
 end;
 
-function TSynLanguage.AddFromVariant(const Doc: TDocVariantData): integer;
+function TLanguageFile.AddFromVariant(const Doc: TDocVariantData): integer;
 var
   i: PtrInt;
   v: RawUtf8;
@@ -445,7 +445,7 @@ begin
   end;
 end;
 
-function TSynLanguage.AddFromJson(const Json: RawUtf8): integer;
+function TLanguageFile.AddFromJson(const Json: RawUtf8): integer;
 var
   doc: TDocVariantData;
   normalized: RawUtf8; // local normalized copy is parsed in-place
@@ -457,12 +457,12 @@ begin
     result := AddFromVariant(doc);
 end;
 
-function TSynLanguage.AddFromJsonFile(const FileName: TFileName): integer;
+function TLanguageFile.AddFromJsonFile(const FileName: TFileName): integer;
 begin
   result := AddFromJson(RawUtf8FromFile(FileName));
 end;
 
-function TSynLanguage.AddFromYaml(const Yaml: RawUtf8): integer;
+function TLanguageFile.AddFromYaml(const Yaml: RawUtf8): integer;
 var
   doc: TDocVariantData;
 begin
@@ -473,7 +473,7 @@ begin
     result := -1;
 end;
 
-function TSynLanguage.AddFromPo(const Po: RawUtf8): integer;
+function TLanguageFile.AddFromPo(const Po: RawUtf8): integer;
 var
   P, L: PUtf8Char;
   id, str: RawUtf8;
@@ -559,12 +559,12 @@ begin
   Flush; // store the last pending entry
 end;
 
-function TSynLanguage.AddFromPoFile(const FileName: TFileName): integer;
+function TLanguageFile.AddFromPoFile(const FileName: TFileName): integer;
 begin
   result := AddFromPo(RawUtf8FromFile(FileName));
 end;
 
-function TSynLanguage.AddFromMo(const Mo: RawByteString): integer;
+function TLanguageFile.AddFromMo(const Mo: RawByteString): integer;
 var
   h: PMoHeader;
   o, t: PMoEntryArray;
@@ -644,12 +644,12 @@ begin
   end;
 end;
 
-function TSynLanguage.AddFromMoFile(const FileName: TFileName): integer;
+function TLanguageFile.AddFromMoFile(const FileName: TFileName): integer;
 begin
   result := AddFromMo(StringFromFile(FileName)); // binary: no LoadUtf8File()
 end;
 
-function TSynLanguage.AddFromIni(const Ini, Section: RawUtf8): integer;
+function TLanguageFile.AddFromIni(const Ini, Section: RawUtf8): integer;
 var
   P, L, V, E: PUtf8Char;
   key, value: RawUtf8;
@@ -707,13 +707,13 @@ begin
   until P = nil;
 end;
 
-function TSynLanguage.AddFromIniFile(const FileName: TFileName;
+function TLanguageFile.AddFromIniFile(const FileName: TFileName;
   const Section: RawUtf8): integer;
 begin
   result := AddFromIni(RawUtf8FromFile(FileName), Section);
 end;
 
-function TSynLanguage.AddFromFile(const FileName: TFileName): integer;
+function TLanguageFile.AddFromFile(const FileName: TFileName): integer;
 begin
   result := -1;
   if (self <> nil) and
@@ -732,14 +732,14 @@ begin
     end;
 end;
 
-function TSynLanguage.Translate(var Text: RawUtf8): boolean;
+function TLanguageFile.Translate(var Text: RawUtf8): boolean;
 begin
   result := (self <> nil) and
             (Text <> '') and
             fTexts.FindAndCopy(Text, Text, {updatetimeout=}false);
 end;
 
-procedure TSynLanguage.TranslateString(var English: string);
+procedure TLanguageFile.TranslateString(var English: string);
 begin
   if self <> nil then
     {$ifdef FPC}
@@ -750,7 +750,7 @@ begin
       DoTranslateString(English);
 end;
 
-procedure TSynLanguage.DoTranslateString(var English: string);
+procedure TLanguageFile.DoTranslateString(var English: string);
 var
   u: RawUtf8; // needed mostly on Delphi
 begin
@@ -759,7 +759,7 @@ begin
     Utf8ToStringVar(u, English);
 end;
 
-procedure TSynLanguage.TranslateUtf8(English: PUtf8Char; EnglishLen: integer;
+procedure TLanguageFile.TranslateUtf8(English: PUtf8Char; EnglishLen: integer;
   var Translated: RawUtf8);
 var
   key: RawUtf8;
@@ -770,7 +770,7 @@ begin
     Translated := ''; // caller would fallback to the English text
 end;
 
-function TSynLanguage.GetCount: integer;
+function TLanguageFile.GetCount: integer;
 begin
   if self = nil then
     result := 0
@@ -779,15 +779,15 @@ begin
 end;
 
 
-{ ************* TSynLanguages Registry with per-thread Language }
+{ ************* TLanguageFiles Registry with per-thread Language }
 
 threadvar
   _ThreadLanguage: TLanguage;
 
 var
-  _MainI18n: TSynLanguages;
+  _MainI18n: TLanguageFiles;
 
-function I18n: TSynLanguages;
+function I18n: TLanguageFiles;
 begin
   result := _MainI18n;
 end;
@@ -820,7 +820,7 @@ var
 
 function _I18nDateTimeText(const DateTime: TDateTime): string;
 var
-  lang: TSynLanguage;
+  lang: TLanguageFile;
 begin
   lang := nil;
   if _MainI18n <> nil then
@@ -834,7 +834,7 @@ end;
 
 function _I18nDateText(const Iso: TTimeLog): string;
 var
-  lang: TSynLanguage;
+  lang: TLanguageFile;
   dt: TDateTime;
 begin
   dt := PTimeLogBits(@Iso)^.ToDateTime;
@@ -850,7 +850,7 @@ end;
 
 {$ifdef FPC}
 
-// objpas.TResourceIterator callback, with arg = the TSynLanguage table to apply
+// objpas.TResourceIterator callback, with arg = the TLanguageFile table to apply
 // - arg may be nil, i.e. no language: every entry keeps its DefaultValue
 // - note that objpas is part of the units implicitly available in objfpc/delphi
 // modes, so needs no explicit uses clause entry
@@ -859,22 +859,22 @@ function _TranslateResourceString(const Name, Value: AnsiString; Hash: LongInt;
 begin
   result := ''; // a void result keeps the current value untouched if no language
   if (arg <> nil) and
-     (PClass(arg)^ = TSynLanguage) then
+     (PClass(arg)^ = TLanguageFile) then
     if Unicode_CodePage = CP_UTF8 then // most common case with Lazarus
-      TSynLanguage(arg).fTexts.FindAndCopy(Value, result, {updatetimeout=}false)
+      TLanguageFile(arg).fTexts.FindAndCopy(Value, result, {updatetimeout=}false)
     else
     begin
       result := Value;
-      TSynLanguage(arg).DoTranslateString(result); // need conversion (unlikely)
+      TLanguageFile(arg).DoTranslateString(result); // need conversion (unlikely)
     end;
 end;
 
 {$endif FPC}
 
 
-{ TSynLanguages }
+{ TLanguageFiles }
 
-destructor TSynLanguages.Destroy;
+destructor TLanguageFiles.Destroy;
 var
   l: TLanguage;
 begin
@@ -891,7 +891,7 @@ begin
   inherited Destroy;
 end;
 
-function TSynLanguages.FindOrNew(aLanguage: TLanguage): TSynLanguage;
+function TLanguageFiles.FindOrNew(aLanguage: TLanguage): TLanguageFile;
 begin
   if (self = nil) or
      (aLanguage = lngUndefined) then
@@ -901,8 +901,8 @@ begin
     result := fLang[aLanguage];
     if result <> nil then
       exit;
-    // initialize the TSynLanguage instance for this TLanguage
-    result := TSynLanguage.Create(aLanguage);
+    // initialize the TLanguageFile instance for this TLanguage
+    result := TLanguageFile.Create(aLanguage);
     fLang[aLanguage] := result;
     fLoadedLanguages := nil; // re-computed when needed
     inc(fLangCount);
@@ -911,7 +911,7 @@ begin
   end;
 end;
 
-function TSynLanguages.FindIso(const Iso: RawUtf8): TSynLanguage;
+function TLanguageFiles.FindIso(const Iso: RawUtf8): TLanguageFile;
 begin
   if self = nil then
     result := nil
@@ -919,7 +919,7 @@ begin
     result := fLang[IsoTextToLanguage(Iso)];
 end;
 
-function TSynLanguages.AddFromFolder(const Folder: TFileName): integer;
+function TLanguageFiles.AddFromFolder(const Folder: TFileName): integer;
 var
   sr: TSearchRec;
   lng: TLanguage;
@@ -966,7 +966,7 @@ begin
       end;
 end;
 
-function TSynLanguages.AddFromFile(aLanguage: TLanguage; const FileName: TFileName): integer;
+function TLanguageFiles.AddFromFile(aLanguage: TLanguage; const FileName: TFileName): integer;
 begin
   if self = nil then
     result := -1
@@ -974,7 +974,7 @@ begin
     result := FindOrNew(aLanguage).AddFromFile(FileName);
 end;
 
-function TSynLanguages.AddFromVariant(aLanguage: TLanguage; const Doc: TDocVariantData): integer;
+function TLanguageFiles.AddFromVariant(aLanguage: TLanguage; const Doc: TDocVariantData): integer;
 begin
   if self = nil then
     result := -1
@@ -982,7 +982,7 @@ begin
     result := FindOrNew(aLanguage).AddFromVariant(Doc);
 end;
 
-function TSynLanguages.AddFromJson(aLanguage: TLanguage; const Json: RawUtf8): integer;
+function TLanguageFiles.AddFromJson(aLanguage: TLanguage; const Json: RawUtf8): integer;
 begin
   if self = nil then
     result := -1
@@ -990,7 +990,7 @@ begin
     result := FindOrNew(aLanguage).AddFromJson(Json);
 end;
 
-function TSynLanguages.LoadedLanguages: TLanguageDynArray;
+function TLanguageFiles.LoadedLanguages: TLanguageDynArray;
 var
   l: TLanguage;
   n: PtrInt;
@@ -1012,49 +1012,49 @@ begin
   fLoadedLanguages := result; // set eventually (to be thread-safe)
 end;
 
-class procedure TSynLanguages.SetThreadLanguage(aLanguage: TLanguage);
+class procedure TLanguageFiles.SetThreadLanguage(aLanguage: TLanguage);
 begin
   _ThreadLanguage := aLanguage;
 end;
 
-class function TSynLanguages.ThreadLanguage: TLanguage;
+class function TLanguageFiles.ThreadLanguage: TLanguage;
 begin
   result := _ThreadLanguage;
 end;
 
-function TSynLanguages.Current: TSynLanguage;
+function TLanguageFiles.Current: TLanguageFile;
 begin
   result := fLang[_ThreadLanguage];
   if result = nil then
     result := fLang[fDefaultLanguage];
 end;
 
-function TSynLanguages.Translate(var Text: RawUtf8): boolean;
+function TLanguageFiles.Translate(var Text: RawUtf8): boolean;
 var
-  lang: TSynLanguage;
+  lang: TLanguageFile;
 begin
-  lang := fLang[_ThreadLanguage]; // inlined TSynLanguages.Current
+  lang := fLang[_ThreadLanguage]; // inlined TLanguageFiles.Current
   if lang = nil then
     lang := fLang[fDefaultLanguage];
   result := (lang <> nil) and
             lang.Translate(Text);
 end;
 
-procedure TSynLanguages.TranslateString(var English: string);
+procedure TLanguageFiles.TranslateString(var English: string);
 var
-  lang: TSynLanguage;
+  lang: TLanguageFile;
 begin
-  lang := fLang[_ThreadLanguage]; // inlined TSynLanguages.Current
+  lang := fLang[_ThreadLanguage]; // inlined TLanguageFiles.Current
   if lang = nil then
     lang := fLang[fDefaultLanguage];
   if lang <> nil then
     lang.TranslateString(English);
 end;
 
-procedure TSynLanguages.TranslateUtf8(English: PUtf8Char; EnglishLen: integer;
+procedure TLanguageFiles.TranslateUtf8(English: PUtf8Char; EnglishLen: integer;
   var Translated: RawUtf8);
 var
-  lang: TSynLanguage;
+  lang: TLanguageFile;
 begin
   lang := Current;
   if lang = nil then
@@ -1063,7 +1063,7 @@ begin
     lang.TranslateUtf8(English, EnglishLen, Translated);
 end;
 
-procedure TSynLanguages.SetGlobal;
+procedure TLanguageFiles.SetGlobal;
 begin
   _MainI18n := self;
   LoadResStringTranslate := _LoadResStringTranslate;
@@ -1071,7 +1071,7 @@ begin
   i18nDateTimeText := _I18nDateTimeText;
 end;
 
-procedure TSynLanguages.TranslateResourceStrings;
+procedure TLanguageFiles.TranslateResourceStrings;
 begin
   {$ifdef FPC}
   // restore the English DefaultValue of every entry first: any text which the

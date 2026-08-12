@@ -141,15 +141,15 @@ type
     procedure RunYaml(const Yaml: array of const);
     procedure RunFile(const Yaml: array of const);
     procedure YamlExpectRaise(const Name, Yaml: RawUtf8);
-    /// TSynLanguage table load and translation with fallback
+    /// TLanguageFile table load and translation with fallback
     procedure I18nLanguageTable;
-    /// TSynLanguages registry, thread language and Mustache wiring
+    /// TLanguageFiles registry, thread language and Mustache wiring
     procedure I18nLanguagesRegistry;
     /// global hooks: captions and date/time rendering
     procedure I18nGlobalHooks;
-    /// GNU gettext .po parsing into a TSynLanguage table
+    /// GNU gettext .po parsing into a TLanguageFile table
     procedure I18nPoFormat;
-    /// GNU gettext .mo binary parsing into a TSynLanguage table
+    /// GNU gettext .mo binary parsing into a TLanguageFile table
     procedure I18nMoFormat;
     /// INI and YAML parsing, and the per-extension file loaders
     procedure I18nIniAndFiles;
@@ -10153,11 +10153,11 @@ end;
 
 procedure TTestCoreProcess.I18nLanguageTable;
 var
-  l: TSynLanguage;
+  l: TLanguageFile;
   t: RawUtf8;
   s: string;
 begin
-  l := TSynLanguage.Create(lngFrench);
+  l := TLanguageFile.Create(lngFrench);
   try
     CheckEqual(l.Iso, 'fr');
     Check(l.Language = lngFrench);
@@ -10184,12 +10184,12 @@ end;
 
 procedure TTestCoreProcess.I18nLanguagesRegistry;
 var
-  langs: TSynLanguages;
+  langs: TLanguageFiles;
   m: TSynMustache;
   u: RawUtf8;
   loaded: TLanguageDynArray;
 begin
-  langs := TSynLanguages.Create;
+  langs := TLanguageFiles.Create;
   try
     CheckEqual(length(langs.LoadedLanguages), 0, 'void registry');
     Check(langs.Language[lngFrench] = nil);
@@ -10207,47 +10207,47 @@ begin
     Check(loaded[0] = lngChinese, 'lngChinese comes first in TLanguage');
     Check(loaded[1] = lngFrench);
     // no thread language nor default: passthrough
-    Check(TSynLanguages.ThreadLanguage = lngUndefined);
+    Check(TLanguageFiles.ThreadLanguage = lngUndefined);
     Check(langs.Current = nil);
     u := 'Hello';
     Check(not langs.Translate(u));
     CheckEqual(u, 'Hello');
     // per-thread selection
-    TSynLanguages.SetThreadLanguage(lngFrench);
-    Check(TSynLanguages.ThreadLanguage = lngFrench);
+    TLanguageFiles.SetThreadLanguage(lngFrench);
+    Check(TLanguageFiles.ThreadLanguage = lngFrench);
     Check(langs.Current = langs.Language[lngFrench]);
     u := 'Hello';
     Check(langs.Translate(u));
     CheckEqual(u, 'Bonjour');
     // fallback to DefaultLanguage when no thread language is set
-    TSynLanguages.SetThreadLanguage(lngUndefined);
+    TLanguageFiles.SetThreadLanguage(lngUndefined);
     langs.DefaultLanguage := lngChinese;
     Check(langs.Current = langs.Language[lngChinese]);
     u := 'Hello';
     Check(langs.Translate(u));
     CheckEqual(u, 'NiHao');
     // Mustache {{"text}} channel end-to-end
-    TSynLanguages.SetThreadLanguage(lngFrench);
+    TLanguageFiles.SetThreadLanguage(lngFrench);
     m := TSynMustache.Parse('{{"Hello}} {{name}}!');
     CheckEqual(m.Render(_ObjFast(['name', 'world']), nil, nil,
       langs.TranslateString), 'Bonjour world!');
-    TSynLanguages.SetThreadLanguage(lngUndefined);
+    TLanguageFiles.SetThreadLanguage(lngUndefined);
     langs.DefaultLanguage := lngUndefined;
     CheckEqual(m.Render(_ObjFast(['name', 'world']), nil, nil,
       langs.TranslateString), 'Hello world!', 'passthrough fallback');
   finally
-    TSynLanguages.SetThreadLanguage(lngUndefined);
+    TLanguageFiles.SetThreadLanguage(lngUndefined);
     langs.Free;
   end;
 end;
 
 procedure TTestCoreProcess.I18nGlobalHooks;
 var
-  langs: TSynLanguages;
+  langs: TLanguageFiles;
   s: string;
 begin
   Check(I18n = nil);
-  langs := TSynLanguages.Create;
+  langs := TLanguageFiles.Create;
   try
     Check(langs.Language[lngFrench] = nil);
     langs.AddFromJson(lngFrench, '{"Hello world":"Bonjour tout le monde"}');
@@ -10255,7 +10255,7 @@ begin
       langs.Language[lngFrench].DateTimeFormat := 'yyyy/mm/dd hh:nn';
     langs.SetGlobal;
     Check(I18n = langs);
-    TSynLanguages.SetThreadLanguage(lngFrench);
+    TLanguageFiles.SetThreadLanguage(lngFrench);
     // LoadResStringTranslate is consumed by the GetCaptionFrom* family
     GetCaptionFromPCharLen('HelloWorld', s);
     Check(s = 'Bonjour tout le monde', 'caption translation');
@@ -10264,7 +10264,7 @@ begin
     s := i18nDateTimeText(EncodeDate(2026, 7, 31) + EncodeTime(12, 30, 0, 0));
     Check(s = '2026/07/31 12:30', 'DateTimeFormat pattern');
   finally
-    TSynLanguages.SetThreadLanguage(lngUndefined);
+    TLanguageFiles.SetThreadLanguage(lngUndefined);
     langs.Free; // also unhooks the global slots
   end;
   Check(I18n = nil, 'unhooked');
@@ -10320,12 +10320,12 @@ const
 
 procedure TTestCoreProcess.I18nPoFormat;
 var
-  l: TSynLanguage;
+  l: TLanguageFile;
   t, cha: RawUtf8;
   fn: TFileName;
   tmp: array[0 .. 15] of AnsiChar;
 begin
-  l := TSynLanguage.Create(lngFrench);
+  l := TLanguageFile.Create(lngFrench);
   try
     CheckEqual(l.AddFromPo(''), 0, 'void input');
     CheckEqual(l.Count, 0);
@@ -10412,7 +10412,7 @@ end;
 
 // generate some GNU gettext .mo binary content, as msgfmt would
 // - Swapped will store the multi-byte numbers in the reverse endianness of this
-// CPU, to validate the byte swapping code path of TSynLanguage.AddFromMo()
+// CPU, to validate the byte swapping code path of TLanguageFile.AddFromMo()
 // - Revision and CountDelta allow to generate some deliberately invalid content
 function MakeMo(const Ids, Strs: array of RawUtf8; Swapped: boolean;
   Revision: cardinal = 0; CountDelta: integer = 0): RawByteString;
@@ -10470,8 +10470,8 @@ end;
 
 procedure TTestCoreProcess.I18nMoFormat;
 var
-  l, l2: TSynLanguage;
-  langs: TSynLanguages;
+  l, l2: TLanguageFile;
+  langs: TLanguageFiles;
   mo, bad: RawByteString;
   t, cha: RawUtf8;
   fn, folder: TFileName;
@@ -10498,7 +10498,7 @@ begin
       'Un fichier'#0'%d fichiers',        // msgstr[0] + #0 + msgstr[1]
       'Ouvrir',
       cha], swapped);
-    l := TSynLanguage.Create(lngFrench);
+    l := TLanguageFile.Create(lngFrench);
     try
       CheckEqual(l.AddFromMo(mo), 3, 'Hello + Hello World + Tea');
       CheckEqual(l.Count, 3, 'no extra key stored');
@@ -10533,8 +10533,8 @@ begin
     end;
   end;
   // a .mo and the .po source it was compiled from should give the same table
-  l := TSynLanguage.Create(lngFrench);
-  l2 := TSynLanguage.Create(lngFrench);
+  l := TLanguageFile.Create(lngFrench);
+  l2 := TLanguageFile.Create(lngFrench);
   try
     CheckEqual(l.AddFromPo('msgid "Hello"'#10'msgstr "Bonjour"'#10 +
       'msgid "Hello World"'#10'msgstr "Bonjour tout le monde"'#10), 2, '.po');
@@ -10552,8 +10552,8 @@ begin
     l.Free;
   end;
   // invalid content should be rejected, and should never merge anything
-  l := TSynLanguage.Create(lngFrench);
-  l2 := TSynLanguage.Create(lngFrench);
+  l := TLanguageFile.Create(lngFrench);
+  l2 := TLanguageFile.Create(lngFrench);
   try
     CheckEqual(l.AddFromMo(''), -1, 'void input');
     CheckEqual(l.AddFromMo('too short for a header'), -1, 'truncated header');
@@ -10595,7 +10595,7 @@ begin
     l2.Free;
     l.Free;
   end;
-  // TSynLanguages.LoadFromFolder() should load the files in a deterministic
+  // TLanguageFiles.LoadFromFolder() should load the files in a deterministic
   // order, whatever the OS folder enumeration order is
   folder := EnsureDirectoryExists([WorkDir, 'i18nmo']);
   Check(folder <> '', 'folder');
@@ -10603,12 +10603,12 @@ begin
     'msgid "OnlyPo"'#10'msgstr "SeulementPo"'#10, folder + 'fr.po'));
   Check(FileFromString(MakeMo(['Hello', 'OnlyMo'],
     ['FromMo', 'SeulementMo'], false), folder + 'fr.mo'));
-  langs := TSynLanguages.Create;
+  langs := TLanguageFiles.Create;
   try
     CheckEqual(langs.AddFromFolder(folder), 2, 'fr.po + fr.mo');
     Check(langs.Language[lngFrench] <> nil);
     CheckEqual(langs.Language[lngFrench].Count, 3, 'Hello + OnlyPo + OnlyMo');
-    TSynLanguages.SetThreadLanguage(lngFrench);
+    TLanguageFiles.SetThreadLanguage(lngFrench);
     t := 'Hello';
     Check(langs.Translate(t));
     CheckEqual(t, 'FromMo', 'the compiled .mo wins over its .po source');
@@ -10619,7 +10619,7 @@ begin
     Check(langs.Translate(t));
     CheckEqual(t, 'SeulementMo');
   finally
-    TSynLanguages.SetThreadLanguage(lngUndefined);
+    TLanguageFiles.SetThreadLanguage(lngUndefined);
     langs.Free;
   end;
   Check(DirectoryDelete(folder), 'cleanup');
@@ -10653,8 +10653,8 @@ const
 
 procedure TTestCoreProcess.I18nIniAndFiles;
 var
-  l: TSynLanguage;
-  langs: TSynLanguages;
+  l: TLanguageFile;
+  langs: TLanguageFiles;
   t, cha: RawUtf8;
   folder: TFileName;
   tmp: array[0 .. 15] of AnsiChar;
@@ -10666,7 +10666,7 @@ var
 
 begin
   FastSetString(cha, @tmp, Ucs4ToUtf8($8336, @tmp)); // U+8336 = tea ideogram
-  l := TSynLanguage.Create(lngFrench);
+  l := TLanguageFile.Create(lngFrench);
   try
     // INI basics: no section, so any [section] header is just ignored
     CheckEqual(l.AddFromIni(''), 0, 'void input');
@@ -10693,7 +10693,7 @@ begin
   finally
     l.Free;
   end;
-  l := TSynLanguage.Create(lngFrench);
+  l := TLanguageFile.Create(lngFrench);
   try
     // INI with an explicit [section] filter
     CheckEqual(l.AddFromIni(_INI, 'fr'), 2, '[fr] section only');
@@ -10744,7 +10744,7 @@ begin
   finally
     l.Free;
   end;
-  l := TSynLanguage.Create(lngFrench);
+  l := TLanguageFile.Create(lngFrench);
   try
     // AddFromFile() dispatches on the file extension
     CheckEqual(l.AddFromFile(WorkDir + 'i18nnotexisting.json'), -1, 'no file');
@@ -10785,7 +10785,7 @@ begin
   finally
     l.Free;
   end;
-  // TSynLanguages.LoadFromFolder() with several extensions
+  // TLanguageFiles.LoadFromFolder() with several extensions
   folder := EnsureDirectoryExists([WorkDir, 'i18n']);
   Check(folder <> '', 'folder');
   Check(FileFromString(RawUtf8('msgid "Hello"'#10'msgstr "Bonjour"'#10 +
@@ -10795,14 +10795,14 @@ begin
   Check(FileFromString('Hello=' + cha + #10, folder + 'zh.ini'));
   Check(FileFromString('ignored', folder + 'en.txt'), 'unknown extension');
   Check(FileFromString('ignored', folder + 'nolang.json'), 'unknown iso');
-  langs := TSynLanguages.Create;
+  langs := TLanguageFiles.Create;
   try
     CheckEqual(langs.AddFromFolder(folder), 3, 'fr.po + fr.json + zh.ini');
     Check(langs.Language[lngEnglish] = nil, '.txt is not a translation file');
     Check(langs.Language[lngFrench] <> nil);
     CheckEqual(langs.Language[lngFrench].Count, 5);
     t := 'Hello';
-    TSynLanguages.SetThreadLanguage(lngFrench);
+    TLanguageFiles.SetThreadLanguage(lngFrench);
     Check(langs.Translate(t), 'from fr.po');
     CheckEqual(t, 'Bonjour');
     t := 'Resume';
@@ -10820,11 +10820,11 @@ begin
     Check(langs.Language[lngChinese] <> nil);
     CheckEqual(langs.Language[lngChinese].Count, 1);
     t := 'Hello';
-    TSynLanguages.SetThreadLanguage(lngChinese);
+    TLanguageFiles.SetThreadLanguage(lngChinese);
     Check(langs.Translate(t), 'from zh.ini');
     CheckEqual(t, cha);
   finally
-    TSynLanguages.SetThreadLanguage(lngUndefined);
+    TLanguageFiles.SetThreadLanguage(lngUndefined);
     langs.Free;
   end;
   Check(DirectoryDelete(folder), 'cleanup');
@@ -10846,7 +10846,7 @@ var
 
 procedure TTestCoreProcess.I18nResourceStrings;
 var
-  langs: TSynLanguages;
+  langs: TLanguageFiles;
   cha, tr: RawUtf8;
   tmp: array[0 .. 15] of AnsiChar;
 
@@ -10873,13 +10873,13 @@ begin
   {$ifdef FPC}
   CheckEqual(RsVar, 'i18n test string', 'initial variable text');
   {$endif FPC}
-  langs := TSynLanguages.Create;
+  langs := TLanguageFiles.Create;
   try
     Check(langs.Language[lngFrench] = nil);
     CheckEqual(langs.AddFromJson(lngFrench,
       '{"i18n test string":"' + tr + '"}'), 1);
     Check(langs.Language[lngFrench] <> nil);
-    TSynLanguages.SetThreadLanguage(lngFrench);
+    TLanguageFiles.SetThreadLanguage(lngFrench);
     langs.TranslateResourceStrings;
     {$ifdef FPC}
     // FPC does maintain a writable per-unit resourcestring table
@@ -10887,16 +10887,16 @@ begin
     // the FPC_HAS_RESSTRINITS references do follow the translation
     CheckEqual(RsVar, tr, 'variable translated');
     // a language with no table restores the original English text
-    TSynLanguages.SetThreadLanguage(lngGerman);
+    TLanguageFiles.SetThreadLanguage(lngGerman);
     langs.TranslateResourceStrings;
     CheckEqual(Rs, 'i18n test string', 'unknown language');
     CheckEqual(RsVar, 'i18n test string', 'variable of unknown language');
     // switching back and forth is safe, thanks to the ResetResourceTables call
-    TSynLanguages.SetThreadLanguage(lngFrench);
+    TLanguageFiles.SetThreadLanguage(lngFrench);
     langs.TranslateResourceStrings;
     CheckEqual(Rs, tr, 'translated again');
     CheckEqual(RsVar, tr, 'variable translated again');
-    TSynLanguages.SetThreadLanguage(lngUndefined);
+    TLanguageFiles.SetThreadLanguage(lngUndefined);
     langs.TranslateResourceStrings;
     CheckEqual(Rs, 'i18n test string', 'ResetResourceTables');
     // no language should also revert the references, not just the table
@@ -10906,7 +10906,7 @@ begin
     CheckEqual(Rs, 'i18n test string', 'no-op on Delphi');
     {$endif FPC}
   finally
-    TSynLanguages.SetThreadLanguage(lngUndefined);
+    TLanguageFiles.SetThreadLanguage(lngUndefined);
     langs.TranslateResourceStrings; // no pollution of the following tests
     langs.Free;
   end;
