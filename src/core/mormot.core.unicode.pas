@@ -374,7 +374,7 @@ function CodePageToText(aCodePage: cardinal): RawUtf8;
 
 type
   /// a list of common human languages, in identifier alphabetic order
-  // - see mormot.core.i18n.pas for TSynLanguage internationalization support
+  // - see mormot.core.i18n.pas for TLanguageFile internationalization support
   TLanguage = (lngUndefined,
     lngAfrikaans,  lngAlbanian, lngAlsatian,   lngArabic,     lngArmenian,
     lngAssamese,   lngAzeri,    lngBashkir,    lngBasque,     lngBelarusian,
@@ -1067,7 +1067,8 @@ procedure Utf8ToRawUtf8(P: PUtf8Char; var result: RawUtf8);
 function Utf8ToWinPChar(dest: PAnsiChar; source: PUtf8Char; count: integer): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
-{$ifndef PUREMORMOT2}
+{$ifndef PUREMORMOT2} { RawUnicode is deprecated in mORMot 2 - prefer SynUnicode }
+
 /// direct conversion of a WinAnsi (CodePage 1252) string into a Unicode encoded String
 // - very fast, by using a fixed pre-calculated array for individual chars conversion
 function WinAnsiToRawUnicode(const S: WinAnsiString): RawUnicode;
@@ -1108,21 +1109,9 @@ function RawUnicodeToSynUnicode(const Unicode: RawUnicode): SynUnicode; overload
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any RTL string into a RawUnicode encoded String
-// - it's preferred to use TLanguageFile.StringToUtf8() method in mORMoti18n,
-// which will handle full i18n of your application
-// - it will work as is with Delphi 2009+ (direct unicode conversion)
-// - under older version of Delphi (no unicode), it will use the
-// current RTL codepage, as with WideString conversion (but without slow
-// WideString usage)
 function StringToRawUnicode(const S: string): RawUnicode; overload;
 
 /// convert any RTL string into a RawUnicode encoded String
-// - it's preferred to use TLanguageFile.StringToUtf8() method in mORMoti18n,
-// which will handle full i18n of your application
-// - it will work as is with Delphi 2009+ (direct unicode conversion)
-// - under older version of Delphi (no unicode), it will use the
-// current RTL codepage, as with WideString conversion (but without slow
-// WideString usage)
 function StringToRawUnicode(P: PChar; L: integer): RawUnicode; overload;
 
 /// convert any RawUnicode encoded string into a RTL string
@@ -1235,20 +1224,14 @@ function WinAnsiToSynUnicode(const WinAnsi: WinAnsiString): SynUnicode;
   {$ifdef HASINLINE}inline;{$endif} overload;
 
 /// convert any RTL string into an UTF-8 encoded String
-// - in the VCL context, it's preferred to use TLanguageFile.StringToUtf8()
-//  method from mORMoti18n, which will handle full i18n of your application
-// - it will work as is with Delphi 2009+ (direct unicode conversion)
-// - under older version of Delphi (no unicode), it will use the
-// current RTL codepage, as with WideString conversion (but without slow
-// WideString usage)
+// - Delphi 2009+ (UNICODE) will make direct UTF-16 to UTF-8 conversion
+// - follow Unicode_CodePage under FPC or older version of Delphi (no UNICODE)
 function StringToUtf8(const Text: string): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any RTL string buffer into an UTF-8 encoded String
-// - it will work as is with Delphi 2009+ (direct unicode conversion)
-// - under older version of Delphi (no unicode), it will use the
-// current RTL codepage, as with WideString conversion (but without slow
-// WideString usage)
+// - Delphi 2009+ (UNICODE) will make direct UTF-16 to UTF-8 conversion
+// - follow Unicode_CodePage under FPC or older version of Delphi (no UNICODE)
 procedure StringToUtf8(Text: PChar; TextLen: PtrInt; var result: RawUtf8); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -1280,27 +1263,17 @@ function ToUtf8(const Ansi7Text: ShortString): RawUtf8; overload;
 
 /// convert any RTL string buffer into an UTF-8 encoded buffer
 // - Dest must be able to receive at least SourceChars*3 bytes
-// - it will work as is with Delphi 2009+ (direct unicode conversion)
-// - under older version of Delphi (no unicode), it will use the
-// current RTL codepage, as with WideString conversion (but without slow
-// WideString usage)
+// - Delphi 2009+ (UNICODE) will make direct UTF-16 to UTF-8 conversion
+// - follow Unicode_CodePage under FPC or older version of Delphi (no UNICODE)
 function StringBufferToUtf8(Dest: PUtf8Char;
   Source: PChar; SourceChars: PtrInt): PUtf8Char; overload;
 
 /// convert any RTL string 0-terminated Text buffer into an UTF-8 string
-// - it will work as is with Delphi 2009+ (direct unicode conversion)
-// - under older version of Delphi (no unicode), it will use the
-// current RTL codepage, as with WideString conversion (but without slow
-// WideString usage)
+// - Delphi 2009+ (UNICODE) will make direct UTF-16 to UTF-8 conversion
+// - follow Unicode_CodePage under FPC or older version of Delphi (no UNICODE)
 procedure StringBufferToUtf8(Source: PChar; out result: RawUtf8); overload;
 
 /// convert any RTL string into a SynUnicode encoded String
-// - it's preferred to use TLanguageFile.StringToUtf8() method in mORMoti18n,
-// which will handle full i18n of your application
-// - it will work as is with Delphi 2009+ (direct unicode conversion)
-// - under older version of Delphi (no unicode), it will use the
-// current RTL codepage, as with WideString conversion (but without slow
-// WideString usage)
 function StringToSynUnicode(const S: string): SynUnicode; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -1320,12 +1293,8 @@ function SynUnicodeToString(const U: SynUnicode): string;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any UTF-8 encoded String into a RTL string
-// - it's preferred to use TLanguageFile.Utf8ToString() in mORMoti18n,
-// which will handle full i18n of your application
-// - it will work as is with Delphi 2009+ (direct unicode conversion)
-// - under older version of Delphi (no unicode), it will use the
-// current RTL codepage, as with WideString conversion (but without slow
-// WideString usage)
+// - Delphi 2009+ (UNICODE) will make direct UTF-8 to UTF-16 conversion
+// - follow Unicode_CodePage under FPC or older version of Delphi (no UNICODE)
 function Utf8ToString(const Text: RawUtf8): string;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -1336,12 +1305,8 @@ procedure Utf8ToStringVar(const Text: RawUtf8; var result: string);
 procedure Utf8ToFileName(const Text: RawUtf8; var result: TFileName);
 
 /// convert any UTF-8 encoded buffer into a RTL string
-// - it's preferred to use TLanguageFile.Utf8ToString() in mORMoti18n,
-// which will handle full i18n of your application
-// - it will work as is with Delphi 2009+ (direct unicode conversion)
-// - under older version of Delphi (no unicode), it will use the
-// current RTL codepage, as with WideString conversion (but without slow
-// WideString usage)
+// - Delphi 2009+ (UNICODE) will make direct UTF-8 to UTF-16 conversion
+// - follow Unicode_CodePage under FPC or older version of Delphi (no UNICODE)
 function Utf8DecodeToString(P: PUtf8Char; L: integer): string; overload;
   {$ifdef UNICODE}inline;{$endif}
 
@@ -2102,11 +2067,11 @@ type
   TSynByteSet = set of byte;
 
   /// a generic callback, which can be used to translate some text on the fly
-  // - maps procedure TLanguageFile.Translate(var English: string) signature
-  // as defined in mORMoti18n.pas
+  // - match TLanguageFile.Translate signature in mormot.core.i18n.pas
   // - can be used e.g. for TSynMustache's {{"English text}} callback
   TOnStringTranslate = procedure(var English: string) of object;
   /// a generic callback, which can be used to translate some text on the fly
+  // - match TLanguageFile.TranslateUtf8 signature in mormot.core.i18n.pas
   // - if UTF-8 is enough you don't need the whole "string" type
   // - would render to any assigned Translated value, or fallback to English if ''
   // - can be used e.g. for TSynMustache's {{"English text}} callback
@@ -2670,7 +2635,7 @@ function SnakeCase(const text: RawUtf8; sep: AnsiChar = '_'): RawUtf8; overload;
 var
   /// runtime global callback for our GetCaptionFromPCharLen() procedure
   // - expect generic "string" type, i.e. UnicodeString for Delphi 2009+
-  // - properly implemented e.g. by TSynLanguages.SetGlobal in mormot.core.i18n
+  // - properly implemented e.g. by TLanguageFiles.SetGlobal in mormot.core.i18n
   LoadResStringTranslate: procedure(var Text: string) = nil;
 
 /// UnCamelCase and translate an UTF-8 text buffer
