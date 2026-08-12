@@ -308,10 +308,11 @@ Abstract MVC logic over *Mustache*, as used by `mormot.rest.mvc.pas` and `mormot
 
 Basic Internationalization (i18n) Support
 - `TLanguageFile` per-language translation table
-- `TLanguageFiles` registry with per-thread language selection
+- `TLanguageFiles` `.m18n` multi-tables with per-thread language selection
 - global wiring of the framework translation hooks
 
 Translation tables map the original English text to its translation, and are loaded from .po and its compiled .mo binary (GNU gettext) as the main formats - .ini, .yaml and .json, with its relaxed JSON5 / JSONC / HJson variants, are also supported.
+All `TLanguageFiles` tables could be persisted (as compressed binary) into a `.m18n` file or as executable resource using regular `TObjectStore` methods.
 Once loaded, three wiring channels are available: the `TSynMustache` translate tag views channel, the `LoadResStringTranslate` slot consumed by the `GetCaptionFrom*` functions, and the whole executable resourcestring table via `TLanguageFiles.TranslateResourceStrings`.
 
 ### mormot.core.test

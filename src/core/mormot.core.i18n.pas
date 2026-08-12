@@ -8,27 +8,21 @@ unit mormot.core.i18n;
 
    Basic Internationalization (i18n) Support
     - TLanguageFile per-language translation table
-    - TLanguageFiles registry with per-thread language selection
-    - global wiring of the framework translation hooks
+    - TLanguageFiles .m18n multi-tables with per-thread language selection
+    - Global wiring of the framework translation hooks
 
    Translation tables map the original English text to its translation, and
    are loaded from .po and its compiled .mo binary (GNU gettext) as the main
    formats - .ini, .yaml and .json, with its relaxed JSON5 / JSONC / HJson
    variants, are also supported.
 
+   All TLanguageFiles tables could be persisted (as compressed binary) into
+   a .m18n file or as executable resource using TObjectStore methods.
+
    Once loaded, three wiring channels are available: the TSynMustache
    translate tag views channel, the LoadResStringTranslate slot consumed by
    the GetCaptionFrom* captions, and the whole executable resourcestring table
    via TLanguageFiles.TranslateResourceStrings.
-
-   Connects the translation slots kept since mORMot 1 mORMoti18n.pas:
-   TOnStringTranslate / TOnUtf8Translate callbacks, LoadResStringTranslate,
-   i18nDateText / i18nDateTimeText, and the TSynMustache translate tag
-   channel - see https://synopse.info/forum/viewtopic.php?id=7592
-
-   Note: the translate tag literal syntax appears in the TLanguageFile
-   documentation below, but never within this block comment - on Delphi, a
-   curly brace would close the comment right there (no nested comments).
 
   *****************************************************************************
 }
@@ -202,8 +196,9 @@ type
   end;
 
 
-{ ************* TLanguageFiles Registry with per-thread Language }
+{ ************* TLanguageFiles .m18n multi-tables with per-thread Language }
 
+type
   /// a dynamic array of TLanguage values
   // - as returned e.g. by TLanguageFiles.LoadedLanguages
   TLanguageDynArray = array of TLanguage;
@@ -211,19 +206,24 @@ type
   /// a O(1) storage of per-TLanguage TLanguageFile instances
   TLanguageFilePerLang = array[TLanguage] of TLanguageFile;
 
-  /// registry of TLanguageFile tables with per-thread language selection
+  /// "m18n" set of TLanguageFile tables with per-thread language selection
   // - typical web usage: load the tables once at startup, then call
   // TLanguageFiles.SetThreadLanguage() at each request start (e.g. from an
   // URI parameter or a cookie), and assign TranslateString to the Mustache
   // views engine (e.g. TMvcViewsMustache.OnTranslate)
-  TLanguageFiles = class(TObjectLightLock)
+  // - inherits from TObjectStore so could be persisted as file or executable
+  // resource - our canonical binary file extension is .m18n
+  TLanguageFiles = class(TObjectStore)
   protected
     fDefaultLanguage: TLanguage;
     fLangCount: integer;
     fLoadedLanguages: TLanguageDynArray;
     fLang: TLanguageFilePerLang;
+    /// low-level virtual methods implementing the persistence reading/writing
+    procedure LoadFromReader; override;
+    procedure SaveToWriter(aWriter: TBufferWriter); override;
   public
-    /// finalize the registry and all its owned tables
+    /// finalize the instance and all its owned tables
     destructor Destroy; override;
     /// return the table matching an ISO 639-1 text, e.g. 'fr' - nil if none
     function FindIso(const Iso: RawUtf8): TLanguageFile;
@@ -246,7 +246,7 @@ type
     function AddFromVariant(aLanguage: TLanguage; const Doc: TDocVariantData): integer;
     /// merge translations of a given language from a JSON object
     function AddFromJson(aLanguage: TLanguage; const Json: RawUtf8): integer;
-    /// return the languages currently loaded in this registry
+    /// return the languages currently loaded in this instance
     // - i.e. those for which a TLanguageFile table does exist, in TLanguage
     // enumerate order - void if nothing was loaded yet
     // - e.g. to fill a language selection list in the User Interface
@@ -290,6 +290,9 @@ type
     // - may return nil if none - use FindOrNew() or AddFrom*() methods
     property Language: TLanguageFilePerLang
       read fLang;
+  published
+    /// one optional text identifier, e.g. defining the program and version
+    property Name;
     /// language used when no per-thread language was set
     // - equals lngUndefined by default, i.e. no translation at all
     property DefaultLanguage: TLanguage
@@ -298,6 +301,9 @@ type
     property Count: integer
       read fLangCount;
   end;
+
+
+{ ************* Global wiring of the framework translation hooks }
 
 /// the main TLanguageFiles instance, as set by TLanguageFiles.SetGlobal
 // - nil if no SetGlobal call was made
@@ -847,7 +853,7 @@ begin
 end;
 
 
-{ ************* TLanguageFiles Registry with per-thread Language }
+{ ************* TLanguageFiles .m18n multi-tables  with per-thread Language }
 
 threadvar
   _ThreadLanguage: TLanguage;
@@ -920,7 +926,7 @@ begin
   if (self = nil) or
      (aLanguage = lngUndefined) then
     EI18nException.RaiseUtf8('%.FindOrNew(lngUndefined)', [self]);
-  fSafe.Lock; // fLang[] read is atomic but this method needs protection
+  fSafe.WriteLock; // fLang[] read is atomic but this method needs protection
   try
     result := fLang[aLanguage];
     if result <> nil then
@@ -931,7 +937,7 @@ begin
     fLoadedLanguages := nil; // re-computed when needed
     inc(fLangCount);
   finally
-    fSafe.UnLock;
+    fSafe.WriteUnLock;
   end;
 end;
 
@@ -1033,7 +1039,7 @@ begin
     end;
   if n <> fLangCount then
     EI18nException.RaiseU('LangCount?'); // paranoid
-  fLoadedLanguages := result; // set eventually (to be thread-safe)
+  fLoadedLanguages := result; // set eventually (as atomic pointer)
 end;
 
 class procedure TLanguageFiles.SetThreadLanguage(aLanguage: TLanguage);
@@ -1137,6 +1143,102 @@ begin
   {$endif FPC}
 end;
 
+const
+  M18N_MAGIC = $4E38316D; // 'm18n' in little endian
+
+procedure TLanguageFiles.LoadFromReader;
+
+  procedure ReadError(const msg: ShortString);
+  begin
+    fReader.ErrorData('%.LoadFromReader failed as %', [self, msg], EI18nException);
+  end;
+
+var
+  version, n: integer;
+  l: TLanguage;
+begin
+  fSafe.WriteLock;
+  try
+    if fLangCount <> 0 then
+      ReadError('existing data');
+    if fReader.Next4 <> M18N_MAGIC then
+      ReadError('missing m18n magic');
+    version := fReader.NextByte;
+    if version <> 0 then
+      ReadError('unsupported m18n version');
+    inherited LoadFromReader; // fName persistence
+    n := fReader.NextByte;
+    // first read all English original keys at once
+    repeat
+      l := TLanguage(fReader.NextByte);
+      if l = lngUndefined then
+        break;
+      if ord(l) > ord(high(l)) then
+        ReadError('invalid lang1');
+      if fLang[l] <> nil then
+        ReadError('duplicated lang');
+      FindOrNew(l).Texts.Keys.DynArray^.LoadFromReader(fReader);
+      fLang[l].Texts.Keys.ReHash;
+    until false;
+    if fLangCount <> n then
+      ReadError('LangCount mismatch');
+    // then read all translations
+    repeat
+      l := TLanguage(fReader.NextByte);
+      if l = lngUndefined then
+        break;
+      if ord(l) > ord(high(l)) then
+        ReadError('invalid lang2');
+      if fLang[l] = nil then
+        ReadError('missing lang');
+      fLang[l].Texts.Values.LoadFromReader(fReader);
+    until false;
+    if fReader.Next4 <> M18N_MAGIC then
+      ReadError('missing m18n trailer');
+  finally
+    fSafe.WriteUnlock;
+  end;
+end;
+
+procedure TLanguageFiles.SaveToWriter(aWriter: TBufferWriter);
+var
+  l: TLanguage;
+  lang: TLanguageFile;
+begin
+  fSafe.ReadOnlyLock;
+  try
+    aWriter.Write4(M18N_MAGIC);
+    aWriter.Write1(0);               // version 0 of the format
+    inherited SaveToWriter(aWriter); // fName persistence
+    aWriter.Write1(fLangCount);
+    // first append all English original text at once (for better compression)
+    for l := low(fLang) to high(fLang) do
+    begin
+      lang := fLang[l];
+      if lang = nil then
+        continue;
+      aWriter.Write1(ord(lang.Language));
+      lang.Texts.Keys.DynArray^.SaveTo(aWriter);
+    end;
+    aWriter.Write1(ord(lngUndefined)); // end loop
+    // then append all translations
+    for l := low(fLang) to high(fLang) do
+    begin
+      lang := fLang[l];
+      if lang = nil then
+        continue;
+      aWriter.Write1(ord(lang.Language));
+      lang.Texts.Values.SaveTo(aWriter);
+    end;
+    aWriter.Write1(ord(lngUndefined)); // end loop
+    aWriter.Write4(M18N_MAGIC);
+  finally
+    fSafe.ReadOnlyUnLock;
+  end;
+end;
+
+
+{ ************* Global wiring of the framework translation hooks }
 
 initialization
   // start from the RTL locale settings, to keep its month/day names and AM/PM
