@@ -7124,8 +7124,17 @@ procedure CallMethod(var Args: TCallMethodArgs); assembler;
 {$ifdef FPC} nostackframe;
 asm
         push    rbp
+        {$ifdef OSPOSIX}
         push    r12
         mov     rbp, rsp
+        {$else} // Win64 requires unwinding information
+        .seh_pushreg rbp
+        push    r12
+        .seh_pushreg r12
+        mov     rbp, rsp
+        .seh_setframe rbp,0
+        .seh_endprologue
+        {$endif OSPOSIX}
         // simulate .params 32
         lea     rsp, [rsp - MAX_EXECSTACK]
         // align stack to 16 bytes
@@ -7188,7 +7197,7 @@ asm
 @d:     movlpd  qword ptr [r12].TCallMethodArgs.res64, xmm0
         // movlpd to ignore upper 64-bit of 128-bit xmm0 reg
 @e:     {$ifdef FPC}
-        mov     rsp, rbp
+        lea     rsp, [rbp]
         pop     r12
         pop     rbp
         {$endif FPC}
