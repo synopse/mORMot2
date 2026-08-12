@@ -10207,17 +10207,17 @@ end;
 procedure TTestCoreProcess.I18nLanguagesRegistry;
 var
   langs: TLanguageFiles;
-  m: TSynMustache;
-  u: RawUtf8;
-  loaded: TLanguageDynArray;
-begin
-  langs := TLanguageFiles.Create;
-  try
-    CheckEqual(length(langs.LoadedLanguages), 0, 'void registry');
-    Check(langs.Language[lngFrench] = nil);
-    Check(langs.Language[lngChinese] = nil);
-    CheckEqual(langs.AddFromJson(lngFrench, '{"Hello":"Bonjour"}'), 1);
-    CheckEqual(langs.AddFromJson(lngChinese, '{"Hello":"NiHao"}'), 1);
+  bin: RawByteString;
+
+  procedure DoTest;
+  var
+    m: TSynMustache;
+    u: RawUtf8;
+    loaded: TLanguageDynArray;
+  begin
+    CheckEqual(langs.Count, 2);
+    Check(TLanguageFiles.ThreadLanguage = lngUndefined);
+    CheckEqual(langs.Name, 'ProjectV1');
     Check(langs.Language[lngFrench] <> nil);
     Check(langs.Language[lngChinese] <> nil);
     Check(langs.Language[lngGerman] = nil);
@@ -10257,6 +10257,25 @@ begin
     langs.DefaultLanguage := lngUndefined;
     CheckEqual(m.Render(_ObjFast(['name', 'world']), nil, nil,
       langs.TranslateString), 'Hello world!', 'passthrough fallback');
+  end;
+
+begin
+  langs := TLanguageFiles.Create('ProjectV1');
+  try
+    CheckEqual(length(langs.LoadedLanguages), 0, 'void registry');
+    Check(langs.Language[lngFrench] = nil);
+    Check(langs.Language[lngChinese] = nil);
+    CheckEqual(langs.AddFromJson(lngFrench, '{"Hello":"Bonjour"}'), 1);
+    CheckEqual(langs.AddFromJson(lngChinese, '{"Hello":"NiHao"}'), 1);
+    DoTest;
+    langs.SaveTo(bin);
+    DoTest;
+  finally
+    langs.Free;
+  end;
+  langs := TLanguageFiles.CreateFrom(bin);
+  try
+    DoTest;
   finally
     TLanguageFiles.SetThreadLanguage(lngUndefined);
     langs.Free;
