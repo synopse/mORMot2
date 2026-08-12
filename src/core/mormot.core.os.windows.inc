@@ -1105,6 +1105,21 @@ begin
   result := GetExecutableBase(aAddress) = PtrUInt(HInstance); // current exe/dll
 end;
 
+{$ifdef ISDELPHI} // FPC pre-loads all its resources in memory
+procedure _OsLoadResString(Rec: PResStringRec; var Res: string);
+var
+  tmp: TWide4K;
+begin
+  Res := '';
+  if Rec <> nil then
+    if Rec^.Identifier < 64 shl 10 then
+      SetString(Res, tmp, LoadString(FindResourceHInstance(Rec^.Module^),
+        Rec^.Identifier, tmp, SizeOf(tmp))) // proper WinAPI call
+    else
+      Res := PChar(Rec^.Identifier);
+end;
+{$endif ISDELPHI}
+
 function FileIsWritable(const FileName: TFileName): boolean;
 var
   fa: WIN32_FILE_ATTRIBUTE_DATA;

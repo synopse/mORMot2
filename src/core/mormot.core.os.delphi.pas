@@ -325,6 +325,8 @@ function sched_getaffinity(pid: integer;
 function fpstatfs(path: PWideChar; nfo: pointer): cint;
 function IsAtty(fd: cint): cint;
 
+procedure _OsLoadResString(Rec: PResStringRec; var Res: string);
+
 
 { ****************** Network POSIX Operating Systems API for Delphi }
 
@@ -863,6 +865,31 @@ var
 begin
   result := ord(tcgetattr(fd, t) = 0);
 end;
+
+type // main exe-only cut-down version of LLVM POSIX LoadResString() system.pas
+  TResStringResource = packed record
+    Len: word;
+    case integer of
+    0: ( ShortW: TWide4K );
+    1: ( LongLen: cardinal;
+         LongW: TWide4K );
+  end;
+
+procedure _OsLoadResString(Rec: PResStringRec; var Res: string);
+var
+  p: ^TResStringResource;
+begin
+  Res := '';
+  if Rec = nil then
+    exit;
+  p := Posix.Dlfcn.dlsym(FindResourceHInstance(HInstance), Rec^.Key); // main exe only
+  if p <> nil then
+    if p^.ShortLen = $ffff then
+      SetString(Res, p^.ShortW, p^.ShortLen)
+    else
+      SetString(Res, p^.LongW, p^.LongLen);
+end;
+
 
 {****************** Network POSIX Operating Systems API for Delphi }
 

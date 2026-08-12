@@ -3825,6 +3825,9 @@ type
 /// quickly check if a resource do exist - just cross-platform wrapper to FindResource()
 function ResourceExists(ResourceName, ResType: PChar; Instance: TLibHandle = 0): boolean;
 
+/// try to load a resourcestring from the current executable
+procedure OsLoadResString(ResStringRec: PResStringRec; var Res: string);
+
 /// retrieve raw information about one section from a memory-mapped ELF/PE file
 // - cross-plaform function able to parse Little-Endian ELF32/ELF64 or PE files
 // - can optionally return the ImageBase value from COFF extended header
@@ -8866,6 +8869,15 @@ begin
     Instance := HInstance; // always 0 on FPC POSIX for the current process
   {$endif DELPHIPOSIX}
   result := FindResource(Instance, ResourceName, ResType) <> 0;
+end;
+
+procedure OsLoadResString(ResStringRec: PResStringRec; var Res: string);
+begin
+  {$ifdef FPC}
+  res := ResStringRec^; // FPC pre-loads all its resources in memory
+  {$else}
+  _OsLoadResString(ResStringRec, Res); // DELPHI Windows/LLVM cut-down version
+  {$endif FPC}
 end;
 
 type
