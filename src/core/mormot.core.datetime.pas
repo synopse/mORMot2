@@ -413,18 +413,19 @@ function AppendToTextFile(const aLine: RawUtf8; const aFileName: TFileName;
 var
   /// custom TTimeLog date to ready to be displayed text function
   // - you can override this pointer in order to display the text according
-  // to your expected i18n settings
-  // - this callback will therefore be set by the mORMoti18n.pas unit
+  // to your expected i18n settings e.g. as set by the mORMoti18n.pas unit
   // - used e.g. by TTimeLogBits.i18nText and by TOrmTable.ExpandAsString()
   // methods, i.e. TOrmTableToGrid.DrawCell()
+  // - rendering-only: no time zone or local conversion of the supplied TTimeLog
   i18nDateText: function(const Iso: TTimeLog): string = nil;
 
   /// custom date to ready to be displayed text function
   // - you can override this pointer in order to display the text according
-  // to your expected i18n settings
+  // to your expected i18n settings e.g. as set by the mORMoti18n.pas unit
   // - this callback will therefore be set by the mORMoti18n.pas unit
   // - used e.g. by TOrmTable.ExpandAsString() method,
   // i.e. TOrmTableToGrid.DrawCell()
+  // - rendering-only: no time zone or local conversion of the supplied TDateTime
   i18nDateTimeText: function(const DateTime: TDateTime): string = nil;
 
 

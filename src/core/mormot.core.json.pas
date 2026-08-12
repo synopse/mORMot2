@@ -1242,8 +1242,7 @@ type
     // - returns TRUE if aKey was found, FALSE if no match exists
     // - will update the associated timeout value of the entry, unless
     // aUpdateTimeOut is set to false
-    function FindAndCopy(const aKey;
-      var aValue; aUpdateTimeOut: boolean = true): boolean;
+    function FindAndCopy(const aKey; var aValue; aUpdateTimeOut: boolean = true): boolean;
     /// search of a stored value by its primary key, then delete and return it
     // - returns TRUE if aKey was found, fill aValue with its content,
     // and delete the entry in the internal storage

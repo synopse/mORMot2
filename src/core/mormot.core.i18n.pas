@@ -68,6 +68,7 @@ type
     fTexts: TSynDictionary; // RawUtf8 (english/key) -> RawUtf8 (translated)
     fLanguage: TLanguage;
     fDateFormat, fDateTimeFormat: string;
+    fDateTimeSettings: TFormatSettings;
     procedure DoTranslateString(var English: string);
     function GetCount: integer;
   public
@@ -163,6 +164,13 @@ type
     // - Translated is left '' if the key was not found (i.e. caller fallback)
     procedure TranslateUtf8(English: PUtf8Char; EnglishLen: integer;
       var Translated: RawUtf8);
+    /// optional settings used with DateFormat/DateTimeFormat patterns
+    // - default value is independent from the process locale: '/' and ':' are
+    // rendered as such, and are not rewritten into the RTL DateSeparator /
+    // TimeSeparator locale globals - e.g. 'yyyy/mm/dd hh:nn' does render
+    // slashes and colons, whatever the system locale is
+    property DateTimeSettings: TFormatSettings
+      read fDateTimeSettings write fDateTimeSettings;
   published
     /// the associated language of this table
     property Language: TLanguage
@@ -172,18 +180,10 @@ type
       read fIso;
     /// optional FormatDateTime() pattern used by the i18nDateText hook
     // - default '' will use the plain RTL DateToStr() rendering
-    // - this pattern is independent from the process locale: '/' and ':' are
-    // rendered as such, and are not rewritten into the RTL DateSeparator /
-    // TimeSeparator locale globals - e.g. 'yyyy/mm/dd' does render slashes,
-    // even on a POSIX/C locale system where DateSeparator is '-'
     property DateFormat: string
       read fDateFormat write fDateFormat;
     /// optional FormatDateTime() pattern used by the i18nDateTimeText hook
     // - default '' will use the plain RTL DateTimeToStr() rendering
-    // - this pattern is independent from the process locale: '/' and ':' are
-    // rendered as such, and are not rewritten into the RTL DateSeparator /
-    // TimeSeparator locale globals - e.g. 'yyyy/mm/dd hh:nn' does render
-    // slashes and colons, whatever the system locale is
     property DateTimeFormat: string
       read fDateTimeFormat write fDateTimeFormat;
     /// how many translation pairs are stored in this table
@@ -406,6 +406,19 @@ type
   TMoEntryArray = array[0 .. (MaxInt div SizeOf(TMoEntry)) - 1] of TMoEntry;
   PMoEntryArray = ^TMoEntryArray;
 
+var
+  // the TFormatSettings used by the two hooks below, filled at initialization
+  // - the RTL FormatDateTime() does not render '/' and ':' as such: it rewrites
+  // them into the DateSeparator / TimeSeparator fields of the supplied settings,
+  // which default to process-wide locale globals - e.g. a POSIX/C locale gives
+  // DateSeparator = '-', so 'yyyy/mm/dd' would render as '2026-07-31'
+  // - we do promise a per-language date layout, so the pattern can't be silently
+  // rewritten by whatever locale the process happens to run with: mapping both
+  // separators to themselves makes '/' and ':' literal, as '-' or '.' already are
+  // - all other fields (month/day names, AM/PM, TwoDigitYearCenturyWindow...) are
+  // copied from the RTL defaults, so e.g. 'mmm' or 'ampm' still behave as usual
+  _I18nDefaultFormatSettings: TFormatSettings;
+
 
 { TLanguageFile }
 
@@ -419,6 +432,7 @@ begin
   fTexts := TSynDictionary.Create(
     TypeInfo(TRawUtf8DynArray), TypeInfo(TRawUtf8DynArray));
   fTexts.ThreadUse := uRWLock; // non-blocking thread-safe Translate()
+  fDateTimeSettings := _I18nDefaultFormatSettings;
 end;
 
 destructor TLanguageFile.Destroy;
@@ -801,33 +815,15 @@ end;
 // both hooks below are rendering-only slots: the supplied value is already the
 // wall clock the caller wants to be displayed - e.g. TTimeLogBits.i18nText
 // gives its own TTimeLog bits, just as its unhooked fallback would render them
-// - so no time zone math is done here, and the mormot.core.os UtcToLocal /
-// LocalToUtc functions are deliberately not called: converting an UTC value
-// into local time is the caller responsibility, not this unit business
-
-var
-  // the TFormatSettings used by the two hooks below, filled at initialization
-  // - the RTL FormatDateTime() does not render '/' and ':' as such: it rewrites
-  // them into the DateSeparator / TimeSeparator fields of the supplied settings,
-  // which default to process-wide locale globals - e.g. a POSIX/C locale gives
-  // DateSeparator = '-', so 'yyyy/mm/dd' would render as '2026-07-31'
-  // - we do promise a per-language date layout, so the pattern can't be silently
-  // rewritten by whatever locale the process happens to run with: mapping both
-  // separators to themselves makes '/' and ':' literal, as '-' or '.' already are
-  // - all other fields (month/day names, AM/PM, TwoDigitYearCenturyWindow...) are
-  // copied from the RTL defaults, so e.g. 'mmm' or 'ampm' still behave as usual
-  _I18nFormat: TFormatSettings;
 
 function _I18nDateTimeText(const DateTime: TDateTime): string;
 var
   lang: TLanguageFile;
 begin
-  lang := nil;
-  if _MainI18n <> nil then
-    lang := _MainI18n.Current;
+  lang := _MainI18n.Current;
   if (lang <> nil) and
      (lang.DateTimeFormat <> '') then
-    result := FormatDateTime(lang.DateTimeFormat, DateTime, _I18nFormat)
+    result := FormatDateTime(lang.fDateTimeFormat, DateTime, lang.fDateTimeSettings)
   else
     result := DateTimeToStr(DateTime);
 end;
@@ -838,12 +834,10 @@ var
   dt: TDateTime;
 begin
   dt := PTimeLogBits(@Iso)^.ToDateTime;
-  lang := nil;
-  if _MainI18n <> nil then
-    lang := _MainI18n.Current;
+  lang := _MainI18n.Current;
   if (lang <> nil) and
      (lang.DateFormat <> '') then
-    result := FormatDateTime(lang.DateFormat, dt, _I18nFormat)
+    result := FormatDateTime(lang.fDateFormat, dt, lang.fDateTimeSettings)
   else
     result := DateToStr(dt);
 end;
@@ -1089,16 +1083,16 @@ end;
 initialization
   // start from the RTL locale settings, to keep its month/day names and AM/PM
   {$ifdef FPC}
-  _I18nFormat := DefaultFormatSettings;    // FPC RTL global
+  _I18nDefaultFormatSettings := DefaultFormatSettings;   // FPC RTL global
   {$else}
   {$ifdef ISDELPHIXE}
-  _I18nFormat := SysUtils.FormatSettings;  // new Delphi RTL global
-  {$else}
-  GetLocaleFormatSettings(LANG_USER_DEFAULT, _I18nFormat); // old Delphi 7-2010
+  _I18nDefaultFormatSettings := SysUtils.FormatSettings; // new Delphi global
+  {$else} // old Delphi 7-2010
+  GetLocaleFormatSettings(LANG_USER_DEFAULT, _I18nDefaultFormatSettings);
   {$endif ISDELPHIXE}
   {$endif FPC}
   // then make the '/' and ':' pattern characters render as themselves
-  _I18nFormat.DateSeparator := '/';
-  _I18nFormat.TimeSeparator := ':';
+  _I18nDefaultFormatSettings.DateSeparator := '/';
+  _I18nDefaultFormatSettings.TimeSeparator := ':';
 
 end.
