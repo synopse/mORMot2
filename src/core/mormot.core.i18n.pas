@@ -18,8 +18,8 @@ unit mormot.core.i18n;
 
    Once loaded, three wiring channels are available: the TSynMustache
    translate tag views channel, the LoadResStringTranslate slot consumed by
-   the GetCaptionFrom* captions, and - on FPC only - the whole executable
-   resourcestring table via TLanguageFiles.TranslateResourceStrings.
+   the GetCaptionFrom* captions, and the whole executable resourcestring table
+   via TLanguageFiles.TranslateResourceStrings.
 
    Connects the translation slots kept since mORMot 1 mORMoti18n.pas:
    TOnStringTranslate / TOnUtf8Translate callbacks, LoadResStringTranslate,
@@ -45,6 +45,7 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.datetime,
+  mormot.core.buffers,
   mormot.core.data,
   mormot.core.variants,
   mormot.core.json,
@@ -164,6 +165,15 @@ type
     // - Translated is left '' if the key was not found (i.e. caller fallback)
     procedure TranslateUtf8(English: PUtf8Char; EnglishLen: integer;
       var Translated: RawUtf8);
+    /// persist all translations as a compressed binary blob
+    function SaveToBinary: RawByteString;
+    /// retrieve all translations from SaveToBinary() compressed binary blob
+    function LoadFromBinary(const Binary: RawByteString): boolean;
+    /// low-level access to the actual raw TSynDictionary storage
+    // - mapped as RawUtf8 English keys into RawUtf8 translated values
+    // - call e.g. Texts.DeleteAll to reset all translations
+    property Texts: TSynDictionary
+      read fTexts;
     /// optional settings used with DateFormat/DateTimeFormat patterns
     // - default value is independent from the process locale: '/' and ':' are
     // rendered as such, and are not rewritten into the RTL DateSeparator /
@@ -262,8 +272,9 @@ type
     // LoadResStringTranslate slot - which translates the GetCaptionFrom*
     // family of this framework, not the RTL resourcestring loading - and the
     // i18nDateText / i18nDateTimeText slots, using each language optional
-    // DateFormat / DateTimeFormat patterns
+    // DateFormat / DateTimeFormat / DateTimeSettings patterns
     // - warning: effect is process-wide and WILL USE ThreadLanguage value
+    // in each and every of those i18n shared functions
     procedure SetGlobal;
     /// translate all resourcestring of this executable to the given language
     // - expect original resourcestrings to be English text translation keys
@@ -404,7 +415,7 @@ type
 function _TranslateResourceString(const Name, Value: AnsiString; Hash: LongInt;
   arg: pointer): AnsiString;
 begin
-  result := ''; // a void result keeps the current value untouched if no language
+  result := ''; // a void result keeps the current value untouched (no language)
   if (arg <> nil) and
      (PClass(arg)^ = TLanguageFile) then
     if Unicode_CodePage = CP_UTF8 then // most common case with Lazarus
@@ -430,7 +441,7 @@ begin
   OsLoadResString(ResStringRec, result);
   _LoadResFile.TranslateString(result);
   if _LoadResCache <> nil then
-    _LoadResCache.AddOrUpdate(ResStringRec, result);
+    _LoadResCache.Add(ResStringRec, result);
 end;
 
 {$endif FPC}
@@ -825,6 +836,16 @@ begin
     result := fTexts.Count;
 end;
 
+function TLanguageFile.SaveToBinary: RawByteString;
+begin
+  result := fTexts.SaveToBinary; // TSynDictionary layout
+end;
+
+function TLanguageFile.LoadFromBinary(const Binary: RawByteString): boolean;
+begin
+  result := fTexts.LoadFromBinary(Binary);
+end;
+
 
 { ************* TLanguageFiles Registry with per-thread Language }
 
@@ -854,7 +875,7 @@ var
 begin
   lang := _MainI18n.Current;
   if (lang <> nil) and
-     (lang.DateTimeFormat <> '') then
+     (lang.fDateTimeFormat <> '') then
     result := FormatDateTime(lang.fDateTimeFormat, DateTime, lang.fDateTimeSettings)
   else
     result := DateTimeToStr(DateTime);
@@ -868,7 +889,7 @@ begin
   dt := PTimeLogBits(@Iso)^.ToDateTime;
   lang := _MainI18n.Current;
   if (lang <> nil) and
-     (lang.DateFormat <> '') then
+     (lang.fDateFormat <> '') then
     result := FormatDateTime(lang.fDateFormat, dt, lang.fDateTimeSettings)
   else
     result := DateToStr(dt);
@@ -1102,12 +1123,12 @@ begin
   if PByte(@System.LoadResString)^ <> $e9 then
     RedirectCode(@System.LoadResString, @_LoadResString);
   {$endif HASCACHEDRESSTRING}
-  // clear any previous cached resourcestring value
+  // initialize or clear resourcestring values cache
   if _LoadResCache = nil then
   begin
     _LoadResCache := TSynDictionary.Create(TypeInfo(TPointerDynArray),
       TypeInfo(TStringDynArray));
-    _LoadResCache.ThreadUse := uRWLock;
+    _LoadResCache.ThreadUse := uRWLock; // non-blocking _LoadResString()
   end
   else
      _LoadResCache.DeleteAll;

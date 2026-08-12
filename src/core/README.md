@@ -312,7 +312,7 @@ Basic Internationalization (i18n) Support
 - global wiring of the framework translation hooks
 
 Translation tables map the original English text to its translation, and are loaded from .po and its compiled .mo binary (GNU gettext) as the main formats - .ini, .yaml and .json, with its relaxed JSON5 / JSONC / HJson variants, are also supported.
-Once loaded, three wiring channels are available: the `TSynMustache` translate tag views channel, the `LoadResStringTranslate` slot consumed by the `GetCaptionFrom*` functions, and - on FPC only - the whole executable resourcestring table via `TLanguageFiles.TranslateResourceStrings`.
+Once loaded, three wiring channels are available: the `TSynMustache` translate tag views channel, the `LoadResStringTranslate` slot consumed by the `GetCaptionFrom*` functions, and the whole executable resourcestring table via `TLanguageFiles.TranslateResourceStrings`.
 
 ### mormot.core.test
 
