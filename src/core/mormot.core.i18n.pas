@@ -878,48 +878,18 @@ threadvar
 var
   _MainI18n: TLanguageFiles;
 
-function I18n: TLanguageFiles;
-begin
-  result := _MainI18n;
-end;
-
-procedure _LoadResStringTranslate(var Text: string);
-begin
-  _MainI18n.TranslateString(Text);
-end;
-
-// both hooks below are rendering-only slots: the supplied value is already the
-// wall clock the caller wants to be displayed - e.g. TTimeLogBits.i18nText
-// gives its own TTimeLog bits, just as its unhooked fallback would render them
-
-function _I18nDateTimeText(const DateTime: TDateTime): string;
-var
-  lang: TLanguageFile;
-begin
-  lang := _MainI18n.Current;
-  if (lang <> nil) and
-     (lang.fDateTimeFormat <> '') then
-    result := FormatDateTime(lang.fDateTimeFormat, DateTime, lang.fDateTimeSettings)
-  else
-    result := DateTimeToStr(DateTime);
-end;
-
-function _I18nDateText(const Iso: TTimeLog): string;
-var
-  lang: TLanguageFile;
-  dt: TDateTime;
-begin
-  dt := PTimeLogBits(@Iso)^.ToDateTime;
-  lang := _MainI18n.Current;
-  if (lang <> nil) and
-     (lang.fDateFormat <> '') then
-    result := FormatDateTime(lang.fDateFormat, dt, lang.fDateTimeSettings)
-  else
-    result := DateToStr(dt);
-end;
-
 
 { TLanguageFiles }
+
+class procedure TLanguageFiles.SetThreadLanguage(aLanguage: TLanguage);
+begin
+  _ThreadLanguage := aLanguage;
+end;
+
+class function TLanguageFiles.ThreadLanguage: TLanguage;
+begin
+  result := _ThreadLanguage;
+end;
 
 destructor TLanguageFiles.Destroy;
 var
@@ -1065,16 +1035,6 @@ begin
   fLoadedLanguages := result; // set eventually (as atomic pointer)
 end;
 
-class procedure TLanguageFiles.SetThreadLanguage(aLanguage: TLanguage);
-begin
-  _ThreadLanguage := aLanguage;
-end;
-
-class function TLanguageFiles.ThreadLanguage: TLanguage;
-begin
-  result := _ThreadLanguage;
-end;
-
 function TLanguageFiles.Current: TLanguageFile;
 begin
   result := pointer(self);
@@ -1121,14 +1081,6 @@ begin
     Translated := ''
   else
     lang.TranslateUtf8(English, EnglishLen, Translated);
-end;
-
-procedure TLanguageFiles.SetGlobal;
-begin
-  _MainI18n := self;
-  LoadResStringTranslate := _LoadResStringTranslate;
-  i18nDateText := _I18nDateText;
-  i18nDateTimeText := _I18nDateTimeText;
 end;
 
 procedure TLanguageFiles.TranslateResourceStrings(aLanguage: TLanguage);
@@ -1262,6 +1214,55 @@ end;
 
 
 { ************* Global wiring of the framework translation hooks }
+
+function I18n: TLanguageFiles;
+begin
+  result := _MainI18n;
+end;
+
+procedure _LoadResStringTranslate(var Text: string);
+begin
+  _MainI18n.TranslateString(Text);
+end;
+
+// both hooks below are rendering-only slots: the supplied value is already the
+// wall clock the caller wants to be displayed - e.g. TTimeLogBits.i18nText
+// gives its own TTimeLog bits, just as its unhooked fallback would render them
+
+function _I18nDateTimeText(const DateTime: TDateTime): string;
+var
+  lang: TLanguageFile;
+begin
+  lang := _MainI18n.Current;
+  if (lang <> nil) and
+     (lang.fDateTimeFormat <> '') then
+    result := FormatDateTime(lang.fDateTimeFormat, DateTime, lang.fDateTimeSettings)
+  else
+    result := DateTimeToStr(DateTime);
+end;
+
+function _I18nDateText(const Iso: TTimeLog): string;
+var
+  lang: TLanguageFile;
+  dt: TDateTime;
+begin
+  dt := PTimeLogBits(@Iso)^.ToDateTime;
+  lang := _MainI18n.Current;
+  if (lang <> nil) and
+     (lang.fDateFormat <> '') then
+    result := FormatDateTime(lang.fDateFormat, dt, lang.fDateTimeSettings)
+  else
+    result := DateToStr(dt);
+end;
+
+procedure TLanguageFiles.SetGlobal;
+begin
+  _MainI18n := self;
+  LoadResStringTranslate := _LoadResStringTranslate;
+  i18nDateText := _I18nDateText;
+  i18nDateTimeText := _I18nDateTimeText;
+end;
+
 
 initialization
   // start from the RTL locale settings, to keep its month/day names and AM/PM
