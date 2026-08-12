@@ -206,11 +206,11 @@ type
   // TSynLanguages.SetThreadLanguage() at each request start (e.g. from an
   // URI parameter or a cookie), and assign TranslateString to the Mustache
   // views engine (e.g. TMvcViewsMustache.OnTranslate)
-  TSynLanguages = class(TSynPersistent)
+  TSynLanguages = class(TObjectLightLock)
   protected
     fDefaultLanguage: TLanguage;
-    fLoadedLanguages: TLanguageDynArray;
     fLangCount: integer;
+    fLoadedLanguages: TLanguageDynArray;
     fLang: TSynLanguagePerLang;
   public
     /// finalize the registry and all its owned tables
@@ -895,15 +895,20 @@ function TSynLanguages.FindOrNew(aLanguage: TLanguage): TSynLanguage;
 begin
   if (self = nil) or
      (aLanguage = lngUndefined) then
-    EI18nException.RaiseUtf8('%.Language[lngUndefined]', [self]);
-  result := fLang[aLanguage];
-  if result <> nil then
-    exit;
-  // initialize the TSynLanguage instance for this TLanguage
-  result := TSynLanguage.Create(aLanguage);
-  fLang[aLanguage] := result;
-  fLoadedLanguages := nil; // re-computed when needed
-  inc(fLangCount);
+    EI18nException.RaiseUtf8('%.FindOrNew(lngUndefined)', [self]);
+  fSafe.Lock; // fLang[] read is atomic but this method needs protection
+  try
+    result := fLang[aLanguage];
+    if result <> nil then
+      exit;
+    // initialize the TSynLanguage instance for this TLanguage
+    result := TSynLanguage.Create(aLanguage);
+    fLang[aLanguage] := result;
+    fLoadedLanguages := nil; // re-computed when needed
+    inc(fLangCount);
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 function TSynLanguages.FindIso(const Iso: RawUtf8): TSynLanguage;
