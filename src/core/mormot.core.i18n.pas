@@ -218,7 +218,7 @@ type
     /// return the table matching an ISO 639-1 text, e.g. 'fr' - nil if none
     function FindIso(const Iso: RawUtf8): TSynLanguage;
     /// get or create the translation table of a given language
-    // - mostly for internal use, e.g. LoadFromFolder()
+    // - mostly for internal use, e.g. AddFrom*() methods
     function FindOrNew(aLanguage: TLanguage): TSynLanguage;
     /// load all <iso>.<ext> files from a folder, e.g. en.json or zh.po
     // - the file name (without its extension) is the ISO 639-1 language text,
@@ -229,7 +229,7 @@ type
     // same key, the winner does not depend on the OS enumeration order: in
     // particular, a compiled fr.mo wins over the fr.po source it came from
     // - returns the number of recognized language files
-    function LoadFromFolder(const Folder: TFileName): integer;
+    function AddFromFolder(const Folder: TFileName): integer;
     /// merge translations of a given language from a file, recognized by its extension
     function AddFromFile(aLanguage: TLanguage; const FileName: TFileName): integer;
     /// merge translations of a given language from a TDocVariantData object document
@@ -287,7 +287,7 @@ type
     // Mustache {{"text}} channel or the caption hook instead
     procedure TranslateResourceStrings;
     /// get the current translation table of a given language
-    // - may return nil if none - use FindOrNew() or
+    // - may return nil if none - use FindOrNew() or AddFrom*() methods
     property Language: TSynLanguagePerLang
       read fLang;
     /// language used when no per-thread language was set
@@ -311,7 +311,7 @@ implementation
 
 const
   /// the file extensions recognized by TSynLanguage.AddFromFile()
-  // - this order is also the TSynLanguages.LoadFromFolder() loading order,
+  // - this order is also the TSynLanguages.AddFromFolder() loading order,
   // i.e. the priority of each format: the last one does win, so that a
   // compiled .mo takes precedence over the .po source it was generated from
   LANGUAGE_EXT: array[0 .. 9] of TFileName = (
@@ -919,7 +919,7 @@ begin
     result := fLang[IsoTextToLanguage(Iso)];
 end;
 
-function TSynLanguages.LoadFromFolder(const Folder: TFileName): integer;
+function TSynLanguages.AddFromFolder(const Folder: TFileName): integer;
 var
   sr: TSearchRec;
   lng: TLanguage;
@@ -1009,7 +1009,7 @@ begin
     end;
   if n <> fLangCount then
     EI18nException.RaiseU('LangCount?'); // paranoid
-  fLoadedLanguages := result;
+  fLoadedLanguages := result; // set eventually (to be thread-safe)
 end;
 
 class procedure TSynLanguages.SetThreadLanguage(aLanguage: TLanguage);

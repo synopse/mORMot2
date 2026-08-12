@@ -10605,7 +10605,7 @@ begin
     ['FromMo', 'SeulementMo'], false), folder + 'fr.mo'));
   langs := TSynLanguages.Create;
   try
-    CheckEqual(langs.LoadFromFolder(folder), 2, 'fr.po + fr.mo');
+    CheckEqual(langs.AddFromFolder(folder), 2, 'fr.po + fr.mo');
     Check(langs.Language[lngFrench] <> nil);
     CheckEqual(langs.Language[lngFrench].Count, 3, 'Hello + OnlyPo + OnlyMo');
     TSynLanguages.SetThreadLanguage(lngFrench);
@@ -10797,7 +10797,7 @@ begin
   Check(FileFromString('ignored', folder + 'nolang.json'), 'unknown iso');
   langs := TSynLanguages.Create;
   try
-    CheckEqual(langs.LoadFromFolder(folder), 3, 'fr.po + fr.json + zh.ini');
+    CheckEqual(langs.AddFromFolder(folder), 3, 'fr.po + fr.json + zh.ini');
     Check(langs.Language[lngEnglish] = nil, '.txt is not a translation file');
     Check(langs.Language[lngFrench] <> nil);
     CheckEqual(langs.Language[lngFrench].Count, 5);
