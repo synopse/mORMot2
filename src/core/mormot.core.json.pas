@@ -9945,6 +9945,8 @@ begin
   FastAssignNew(result);
   if fSafe.Padding[DIC_KEYCOUNT].VInteger = 0 then
     exit;
+  if Algo = nil then
+    Algo := GetCompressAlgo;
   W := TBufferWriter.Create(tmp{%H-});
   try
     fSafe.ReadLock;
