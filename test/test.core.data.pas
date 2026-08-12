@@ -10919,8 +10919,7 @@ begin
   langs := TLanguageFiles.Create;
   try
     Check(langs.Language[lngFrench] = nil);
-    CheckEqual(langs.AddFromJson(lngFrench,
-      '{"i18n test string":"' + tr + '"}'), 1);
+    CheckEqual(langs.Add(lngFrench, ['i18n test string', tr]), 1);
     Check(langs.Language[lngFrench] <> nil);
     langs.TranslateResourceStrings(lngFrench);
     CheckEqual(Rs, tr, 'resourcestring translated');

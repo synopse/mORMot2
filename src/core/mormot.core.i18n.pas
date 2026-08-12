@@ -71,6 +71,8 @@ type
     constructor Create(aLanguage: TLanguage); reintroduce;
     /// finalize this instance
     destructor Destroy; override;
+    /// merge translations as UTF-8 text pairs
+    function Add(const EnglishTranslatedPairs: array of RawUtf8): integer;
     /// merge translations from a file, recognized by its extension
     // - .po or .mo (gettext), .ini or .msg, .yaml or .yml, .json / .jsonc /
     // .json5 / .hjson (the relaxed JSON variants are read by our JSON parser)
@@ -230,6 +232,9 @@ type
     /// get or create the translation table of a given language
     // - mostly for internal use, e.g. AddFrom*() methods
     function FindOrNew(aLanguage: TLanguage): TLanguageFile;
+    /// merge translations of a given language as UTF-8 text pairs
+    function Add(aLanguage: TLanguage;
+      const EnglishTranslatedPairs: array of RawUtf8): integer;
     /// load all <iso>.<ext> files from a folder, e.g. en.json or zh.po
     // - the file name (without its extension) is the ISO 639-1 language text,
     // and any extension supported by TLanguageFile.AddFromFile is recognized
@@ -489,6 +494,18 @@ begin
   {$endif ISDELPHI}
   fTexts.Free;
   inherited Destroy;
+end;
+
+function TLanguageFile.Add(const EnglishTranslatedPairs: array of RawUtf8): integer;
+var
+  i: PtrInt;
+begin
+  result := 0;
+  if self <> nil then
+    for i := 0 to high(EnglishTranslatedPairs) shr 1 do
+      if fTexts.AddOrUpdate(EnglishTranslatedPairs[i * 2],
+                            EnglishTranslatedPairs[i * 2 + 1]) >= 0 then
+        inc(result);
 end;
 
 function TLanguageFile.AddFromVariant(const Doc: TDocVariantData): integer;
@@ -947,6 +964,12 @@ begin
     result := nil
   else
     result := fLang[IsoTextToLanguage(Iso)];
+end;
+
+function TLanguageFiles.Add(aLanguage: TLanguage;
+  const EnglishTranslatedPairs: array of RawUtf8): integer;
+begin
+  result := FindOrNew(aLanguage).Add(EnglishTranslatedPairs);
 end;
 
 function TLanguageFiles.AddFromFolder(const Folder: TFileName): integer;
