@@ -343,7 +343,7 @@ type
   TObjectStore = class(TObjectRWLock)
   protected
     fName: RawUtf8;
-    fReader: TFastReader;
+    fReader: PFastReader;        // = nil outside of LoadFromReader
     fReaderTemp: PRawByteString; // could be pre-assigned to reuse a big buffer
     fLoadFromLastUncompressed, fSaveToLastUncompressed: integer;
     fLoadFromLastAlgo: TAlgoCompress;
@@ -3347,6 +3347,7 @@ var
   localtemp: RawByteString;
   p: pointer;
   temp: PRawByteString;
+  rdr: TFastReader;
 begin
   if (aBuffer = nil) or
      (aBufferLen <= 0) then
@@ -3363,8 +3364,13 @@ begin
   if p = nil then
     fReader.ErrorData('%.LoadFrom %.Decompress failed',
       [self, fLoadFromLastAlgo]);
-  fReader.Init(p, fLoadFromLastUncompressed);
-  LoadFromReader;
+  rdr.Init(p, fLoadFromLastUncompressed);
+  fReader := @rdr;
+  try
+    LoadFromReader;
+  finally
+    fReader := nil;
+  end;
 end;
 
 function TObjectStore.LoadFromFile(const aFileName: TFileName;

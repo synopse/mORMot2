@@ -842,6 +842,8 @@ type
     function RemainingLength: PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
   end;
+  /// pointer reference to a TFastReader record
+  PFastReader = ^TFastReader;
 
   /// exception raised during buffer processing
   EBufferException = class(ESynException);

@@ -1148,7 +1148,7 @@ const
 
 procedure TLanguageFiles.LoadFromReader;
 
-  procedure ReadError(const msg: ShortString);
+  procedure ReadError(msg: PUtf8Char);
   begin
     fReader.ErrorData('%.LoadFromReader failed as %', [self, msg], EI18nException);
   end;
@@ -1177,7 +1177,7 @@ begin
         ReadError('invalid lang1');
       if fLang[l] <> nil then
         ReadError('duplicated lang');
-      FindOrNew(l).Texts.Keys.DynArray^.LoadFromReader(fReader);
+      FindOrNew(l).Texts.Keys.DynArray^.LoadFromReader(fReader^);
       fLang[l].Texts.Keys.ReHash;
     until false;
     if fLangCount <> n then
@@ -1191,7 +1191,7 @@ begin
         ReadError('invalid lang2');
       if fLang[l] = nil then
         ReadError('missing lang');
-      fLang[l].Texts.Values.LoadFromReader(fReader);
+      fLang[l].Texts.Values.LoadFromReader(fReader^);
     until false;
     if fReader.Next4 <> M18N_MAGIC then
       ReadError('missing m18n trailer');

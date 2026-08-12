@@ -2532,7 +2532,7 @@ begin
     fLast := n - 1;
     fValues.Count := NextGrow(n); // allocate with some spare
     siz := fValues.Info.Cache.ItemSize * n;
-    BinaryLoadSeveral(fValues.Value^, fReader,
+    BinaryLoadSeveral(fValues.Value^, fReader^,
       fValues.Info.Cache.ItemInfoManaged, n, siz);
   finally
     fSafe.WriteUnLock;
