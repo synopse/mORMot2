@@ -10154,17 +10154,14 @@ end;
 procedure TTestCoreProcess.I18nLanguageTable;
 var
   l: TLanguageFile;
-  t: RawUtf8;
-  s: string;
-begin
-  l := TLanguageFile.Create(lngFrench);
-  try
-    CheckEqual(l.Iso, 'fr');
-    Check(l.Language = lngFrench);
-    CheckEqual(l.Count, 0);
-    CheckEqual(l.AddFromJson('{"Hello":"Bonjour","World":"Monde"}'), 2);
+  bin: RawByteString;
+
+  procedure DoTest;
+  var
+    t: RawUtf8;
+    s: string;
+  begin
     CheckEqual(l.Count, 2);
-    CheckEqual(l.AddFromJson('invalid'), -1);
     t := 'Hello';
     Check(l.Translate(t));
     CheckEqual(t, 'Bonjour');
@@ -10177,6 +10174,31 @@ begin
     s := 'Missing';
     l.TranslateString(s);
     Check(s = 'Missing');
+  end;
+
+begin
+  l := TLanguageFile.Create(lngFrench);
+  try
+    CheckEqual(l.Iso, 'fr');
+    Check(l.Language = lngFrench);
+    CheckEqual(l.Count, 0);
+    CheckEqual(l.AddFromJson('{"Hello":"Bonjour","World":"Monde"}'), 2);
+    CheckEqual(l.Count, 2);
+    CheckEqual(l.AddFromJson('invalid'), -1);
+    DoTest;
+    bin := l.SaveToBinary;
+  finally
+    l.Free;
+  end;
+  l := TLanguageFile.Create(lngFrench);
+  try
+    CheckEqual(l.Count, 0);
+    Check(l.LoadFromBinary(bin), 'LoadFromBinary');
+    DoTest;
+    l.Texts.DeleteAll;
+    CheckEqual(l.Count, 0);
+    Check(l.LoadFromBinary(bin), 'LoadFromBinary');
+    DoTest;
   finally
     l.Free;
   end;
@@ -10847,31 +10869,33 @@ var
 procedure TTestCoreProcess.I18nResourceStrings;
 var
   langs: TLanguageFiles;
-  cha, tr: RawUtf8;
-  tmp: array[0 .. 15] of AnsiChar;
+  tr: RawUtf8;
+  i: integer;
 
-  function Rs: RawUtf8; // current RS_I18N_TEST value, as raw UTF-8 bytes
-  begin
-    {$ifdef FPC} // no conversion at all: check the exact stored bytes
-    FastSetString(result, pointer(RS_I18N_TEST), length(RS_I18N_TEST));
-    {$else}      // Delphi resourcestring are UnicodeString
+  function Rs: RawUtf8;
+  begin // Delphi resourcestring are plain string and FPC are already CP_UTF8
     StringToUtf8(RS_I18N_TEST, result);
-    {$endif FPC}
   end;
 
   {$ifdef FPC}
-  function RsVar: RawUtf8; // current RS_I18N_VAR value, as raw UTF-8 bytes
+  function RsVar: RawUtf8;
   begin
     FastSetString(result, pointer(RS_I18N_VAR), length(RS_I18N_VAR));
   end;
   {$endif FPC}
 
 begin
-  FastSetString(cha, @tmp, Ucs4ToUtf8($8336, @tmp)); // U+8336 = tea ideogram
-  tr := 'traduit ' + cha; // a translation with some non-ASCII UTF-8 content
+  tr := 'traduit ';
   CheckEqual(Rs, 'i18n test string', 'initial English text');
   {$ifdef FPC}
   CheckEqual(RsVar, 'i18n test string', 'initial variable text');
+  AppendUcs4(tr, $8336); // U+8336 = tea ideogram into FPC UTF8 systemcodepage
+  {$else}
+  {$ifdef UNICODE}
+  AppendUcs4(tr, $8336); // U+8336 = tea ideogram into UTF-8/UTF-16 strings
+  {$else}
+  {$endif UNICODE}
+  Append(tr, 'ascii7'); // Delphi 7/2007 AnsiString won't drink any tea 
   {$endif FPC}
   langs := TLanguageFiles.Create;
   try
@@ -10879,35 +10903,33 @@ begin
     CheckEqual(langs.AddFromJson(lngFrench,
       '{"i18n test string":"' + tr + '"}'), 1);
     Check(langs.Language[lngFrench] <> nil);
-    TLanguageFiles.SetThreadLanguage(lngFrench);
-    langs.TranslateResourceStrings;
-    {$ifdef FPC}
-    // FPC does maintain a writable per-unit resourcestring table
+    langs.TranslateResourceStrings(lngFrench);
     CheckEqual(Rs, tr, 'resourcestring translated');
+    {$ifdef FPC}
     // the FPC_HAS_RESSTRINITS references do follow the translation
     CheckEqual(RsVar, tr, 'variable translated');
+    {$endif FPC}
     // a language with no table restores the original English text
-    TLanguageFiles.SetThreadLanguage(lngGerman);
-    langs.TranslateResourceStrings;
-    CheckEqual(Rs, 'i18n test string', 'unknown language');
+    langs.TranslateResourceStrings(lngGerman);
+    for i := 1 to 100 do // stress resource cache
+      CheckEqual(Rs, 'i18n test string', 'unknown language');
+    {$ifdef FPC}
     CheckEqual(RsVar, 'i18n test string', 'variable of unknown language');
+    {$endif FPC}
     // switching back and forth is safe, thanks to the ResetResourceTables call
-    TLanguageFiles.SetThreadLanguage(lngFrench);
-    langs.TranslateResourceStrings;
-    CheckEqual(Rs, tr, 'translated again');
+    langs.TranslateResourceStrings(lngFrench);
+    for i := 1 to 100 do // stress resource cache
+      CheckEqual(Rs, tr, 'translated again');
+    {$ifdef FPC}
     CheckEqual(RsVar, tr, 'variable translated again');
-    TLanguageFiles.SetThreadLanguage(lngUndefined);
-    langs.TranslateResourceStrings;
-    CheckEqual(Rs, 'i18n test string', 'ResetResourceTables');
-    // no language should also revert the references, not just the table
+    {$endif FPC}
+    langs.TranslateResourceStrings(lngUndefined);
+    for i := 1 to 100 do // stress resource cache
+      CheckEqual(Rs, 'i18n test string', 'ResetResourceTables');
+    {$ifdef FPC}
     CheckEqual(RsVar, 'i18n test string', 'variable of no language');
-    {$else}
-    // Delphi has no such writable table: the method is a no-op, but callable
-    CheckEqual(Rs, 'i18n test string', 'no-op on Delphi');
     {$endif FPC}
   finally
-    TLanguageFiles.SetThreadLanguage(lngUndefined);
-    langs.TranslateResourceStrings; // no pollution of the following tests
     langs.Free;
   end;
   CheckEqual(Rs, 'i18n test string', 'restored');
