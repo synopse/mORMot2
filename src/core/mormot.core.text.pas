@@ -2081,6 +2081,9 @@ procedure Append(var Text: RawUtf8; Added: pointer; AddedLen: PtrInt); overload;
 /// append one short string to a RawUtf8 variable with no code page conversion
 procedure AppendStr(var Text: RawUtf8; const Added: ShortString);
 
+/// append one full range UCS-4 CodePoint into Dest with proper UTF-8 encoding
+procedure AppendUcs4(var Text: RawUtf8; ucs4: Ucs4CodePoint);
+
 /// append some text items to a RawByteString variable
 procedure Append(var Text: RawByteString; const Args: array of const); overload;
 
@@ -4481,7 +4484,7 @@ begin
   begin
     VariantToTempUtf8(PVariant(Value)^, tmp);
     if tmp.Len <> 0 then
-      _AddHtmlEscape(self, tmp.Text, tmp.Len);
+      _AddHtmlEscape(self, tmp.Text, tmp.Len); // in mormot.core.fmt.pas
     TempUtf8Done(tmp);
   end
   else // avoid UTF-8 conversion for plain numbers or if no HTML escaping
@@ -6189,14 +6192,14 @@ end;
 
 procedure TTextWriter.AddHtmlEscape(Text: PUtf8Char; Fmt: TTextWriterHtmlFormat);
 begin
-  _AddHtmlEscape(self, Text, {TextLen=}0, Fmt);
+  _AddHtmlEscape(self, Text, {TextLen=}0, Fmt); // in mormot.core.fmt.pas
 end;
 
 procedure TTextWriter.AddHtmlEscape(Text: PUtf8Char; TextLen: PtrInt;
   Fmt: TTextWriterHtmlFormat);
 begin
   if TextLen > 0 then
-    _AddHtmlEscape(self, Text, TextLen, Fmt);
+    _AddHtmlEscape(self, Text, TextLen, Fmt); // in mormot.core.fmt.pas
 end;
 
 procedure TTextWriter.AddHtmlEscapeW(Text: PWideChar; Fmt: TTextWriterHtmlFormat);
@@ -6230,7 +6233,7 @@ var
 begin
   p := StringToUtf8Temp(Text, tmp);
   if tmp.Len <> 0 then
-    _AddHtmlEscape(self, p, tmp.len, Fmt);
+    _AddHtmlEscape(self, p, tmp.len, Fmt); // in mormot.core.fmt.pas
   tmp.Done;
 end;
 {$endif UNICODE}
@@ -9975,6 +9978,13 @@ procedure AppendStr(var Text: RawUtf8; const Added: ShortString);
 begin
   if Added[0] <> #0 then
     _App1(@Text, @Added[1], ord(Added[0]), CP_UTF8);
+end;
+
+procedure AppendUcs4(var Text: RawUtf8; ucs4: Ucs4CodePoint);
+var
+  tmp: array[0 .. 15] of AnsiChar;
+begin
+  _App1(@Text, @tmp, Ucs4ToUtf8(ucs4, @tmp), CP_UTF8);
 end;
 
 procedure Append(var Text: RawByteString; const Added: RawByteString);
