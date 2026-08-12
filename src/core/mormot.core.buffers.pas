@@ -691,11 +691,11 @@ type
   /// safe decoding of a TBufferWriter content from an in-memory buffer
   // - raise a EFastReader exception on decoding error (e.g. if a buffer
   // overflow may occur) or call OnErrorOverflow/OnErrorData event handlers
-  {$ifdef USERECORDWITHMETHODS}
+  {$ifdef USERECORDWITHMETHODSSAFE}
   TFastReader = record
   {$else}
   TFastReader = object
-  {$endif USERECORDWITHMETHODS}
+  {$endif USERECORDWITHMETHODSSAFE}
   public
     /// the current position in the memory
     P: PAnsiChar;

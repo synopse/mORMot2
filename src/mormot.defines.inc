@@ -204,7 +204,8 @@
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSHORT_USESTR} // FloatToText uses str() in FPC
   {$define DOUBLETOSHORT_USEGRISU} // fast DoubleToAscii()
-  {$define USERECORDWITHMETHODS}   // use "object" only for Delphi 7
+  {$define USERECORDWITHMETHODS}   // use "object" only for Delphi 7/2007
+  {$define USERECORDWITHMETHODSSAFE}
   {$define FPC_OR_UNICODE}
   {$define FPC_OR_DELPHIXE}        // to circumvent Delphi internal errors
   {$define FPC_OR_DELPHIXE4}
@@ -662,6 +663,7 @@
     {$ifend}
     {$if CompilerVersion >= 21.0}
       {$define ISDELPHI2010}
+      {$define USERECORDWITHMETHODSSAFE} // circumvent Delphi 2009 issue
       {$define HASSAFEINLINE}     // Delphi 2007-2009 have troubles inlining :(
       {$define HASSAFEFPCINLINE}  // FPC specific inlining troubles
       {$define HASDYNARRAYTYPE}   // eltype2 field, used e.g. for T*ObjArray
