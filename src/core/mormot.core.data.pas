@@ -347,7 +347,7 @@ type
     fReaderTemp: PRawByteString; // could be pre-assigned to reuse a big buffer
     fLoadFromLastUncompressed, fSaveToLastUncompressed: integer;
     fLoadFromLastAlgo: TAlgoCompress;
-    /// low-level virtual methods implementing the persistence reading
+    /// low-level virtual methods implementing the persistence reading/writing
     procedure LoadFromReader; virtual;
     procedure SaveToWriter(aWriter: TBufferWriter); virtual;
   public
@@ -365,6 +365,10 @@ type
     // - raise a EFastReader exception on decoding error
     constructor CreateFromFile(const aFileName: TFileName;
       aLoad: TAlgoCompressLoad = aclNormal);
+    /// initialize a storage from a SaveTo persisted resource in this executable
+    // - raise a EFastReader exception on decoding error
+    constructor CreateFromResource(aResourceName, aResType: PChar;
+      aInstance: TLibHandle = 0; aLoad: TAlgoCompressLoad = aclNormal);
     /// fill the storage from a SaveTo persisted buffer
     // - actually call the LoadFromReader() virtual method for persistence
     // - raise a EFastReader exception on decoding error
@@ -3303,6 +3307,21 @@ constructor TObjectStore.CreateFromFile(const aFileName: TFileName;
 begin
   inherited Create; // may have been overriden
   LoadFromFile(aFileName, aLoad);
+end;
+
+constructor TObjectStore.CreateFromResource(aResourceName, aResType: PChar;
+  aInstance: TLibHandle; aLoad: TAlgoCompressLoad);
+var
+  res: TExecutableResource; // cross-platform access to the resource
+begin
+  inherited Create; // may have been overriden
+  if not res.Open(aResourceName, aResType, aInstance) then
+    fReader.ErrorData('resource not found');
+  try
+    LoadFrom(res.Buffer, res.Size, aLoad);
+  finally
+    res.Close;
+  end;
 end;
 
 procedure TObjectStore.LoadFromReader;
