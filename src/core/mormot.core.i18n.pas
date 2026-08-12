@@ -244,27 +244,26 @@ type
     /// set the language of the current thread, e.g. at HTTP request start
     // - setting lngUndefined would fallback to DefaultLanguage
     class procedure SetThreadLanguage(aLanguage: TLanguage);
-    /// the language of the current thread, as set by SetThreadLanguage
+    /// the language of the current thread, as set by SetThreadLanguage()
     class function ThreadLanguage: TLanguage;
-    /// the table effective for the current thread
-    // - i.e. the thread language table, or the DefaultLanguage table, or nil
+    /// the translation table effective for the current thread
+    // - i.e. from the current SetThreadLanguage() or DefaultLanguage, or nil
     function Current: TLanguageFile;
-    /// translate the supplied text using the current thread language
+    /// translate the supplied text using SetThreadLanguage() or DefaultLanguage
     function Translate(var Text: RawUtf8): boolean;
-    /// TOnStringTranslate-compatible callback using the thread language
+    /// TOnStringTranslate callback using SetThreadLanguage() or DefaultLanguage
     // - to be assigned e.g. to TMvcViewsMustache.OnTranslate
     procedure TranslateString(var English: string);
-    /// TOnUtf8Translate-compatible callback using the thread language
+    /// TOnUtf8Translate  callback using SetThreadLanguage() or DefaultLanguage
     procedure TranslateUtf8(English: PUtf8Char; EnglishLen: integer;
       var Translated: RawUtf8);
     /// wire this instance to the global framework translation hooks
-    // - set self as the main I18n instance, and assign the global
+    // - set itself as the main I18n instance, and assign the global
     // LoadResStringTranslate slot - which translates the GetCaptionFrom*
     // family of this framework, not the RTL resourcestring loading - and the
     // i18nDateText / i18nDateTimeText slots, using each language optional
     // DateFormat / DateTimeFormat patterns
-    // - those two date/time slots are rendering-only: the supplied value is
-    // formatted as such, with no time zone conversion at all
+    // - warning: effect is process-wide and WILL USE ThreadLanguage value
     procedure SetGlobal;
     /// translate all resourcestring of this executable using the current
     // thread language
@@ -750,7 +749,7 @@ function TLanguageFile.Translate(var Text: RawUtf8): boolean;
 begin
   result := (self <> nil) and
             (Text <> '') and
-            fTexts.FindAndCopy(Text, Text, {updatetimeout=}false);
+            fTexts.FindAndCopy(Text, Text, {updtimeout=}false);
 end;
 
 procedure TLanguageFile.TranslateString(var English: string);
@@ -758,7 +757,7 @@ begin
   if self <> nil then
     {$ifdef FPC}
     if Unicode_CodePage = CP_UTF8 then // most common case with Lazarus
-      fTexts.FindAndCopy(English, English, {updatetimeout=}false)
+      fTexts.FindAndCopy(English, English, {updtimeout=}false)
     else
     {$endif FPC}
       DoTranslateString(English);
@@ -780,7 +779,7 @@ var
 begin
   FastSetString(key, English, EnglishLen);
   if (self = nil) or
-     not fTexts.FindAndCopy(key, Translated, {updatetimeout=}false) then
+     not fTexts.FindAndCopy(key, Translated, {updtimeout=}false) then
     Translated := ''; // caller would fallback to the English text
 end;
 
@@ -808,8 +807,7 @@ end;
 
 procedure _LoadResStringTranslate(var Text: string);
 begin
-  if _MainI18n <> nil then
-    _MainI18n.TranslateString(Text);
+  _MainI18n.TranslateString(Text);
 end;
 
 // both hooks below are rendering-only slots: the supplied value is already the
@@ -1018,6 +1016,9 @@ end;
 
 function TLanguageFiles.Current: TLanguageFile;
 begin
+  result := pointer(self);
+  if self = nil then
+    exit;
   result := fLang[_ThreadLanguage];
   if result = nil then
     result := fLang[fDefaultLanguage];
@@ -1038,6 +1039,8 @@ procedure TLanguageFiles.TranslateString(var English: string);
 var
   lang: TLanguageFile;
 begin
+  if self = nil then
+    exit;
   lang := fLang[_ThreadLanguage]; // inlined TLanguageFiles.Current
   if lang = nil then
     lang := fLang[fDefaultLanguage];
@@ -1050,7 +1053,9 @@ procedure TLanguageFiles.TranslateUtf8(English: PUtf8Char; EnglishLen: integer;
 var
   lang: TLanguageFile;
 begin
-  lang := Current;
+  lang := fLang[_ThreadLanguage]; // inlined TLanguageFiles.Current
+  if lang = nil then
+    lang := fLang[fDefaultLanguage];
   if lang = nil then
     Translated := ''
   else
