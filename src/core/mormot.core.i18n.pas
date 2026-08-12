@@ -265,26 +265,16 @@ type
     // DateFormat / DateTimeFormat patterns
     // - warning: effect is process-wide and WILL USE ThreadLanguage value
     procedure SetGlobal;
-    /// translate all resourcestring of this executable using the current
-    // thread language
+    /// translate all resourcestring of this executable to the given language
+    // - expect original resourcestrings to be English text translation keys
+    // - on Delphi, set global LoadResStringFunc or redirect raw LoadResString()
+    // maintaining its own efficient cache of translated strings
     // - on FPC, the resourcestring values are stored in a per-unit writable
     // table, which this method rewrites via the objpas.SetResourceStrings()
-    // official API, using the original English text as translation key
-    // - the previous values are restored first, so switching the language at
-    // runtime is safe - and calling it with no language set would just reset
-    // the executable to its original English text
-    // - warning: the effect is process-wide and this method is NOT thread-safe
-    // - only the language to apply is read from the calling thread: the tables
-    // it rewrites are global to the process, and are patched with no lock at
-    // all, so any concurrent thread reading a resourcestring could race - call
-    // it at startup, or when no other thread is using those texts
-    // - the translations are stored with an explicit CP_UTF8 header, so are
-    // consumed losslessly by Format() or any string concatenation, as long as
-    // mormot.core.os did set DefaultSystemCodePage := CP_UTF8 on FPC
-    // - do nothing on Delphi, which stores its resourcestring within the
-    // executable resources, with no such writable runtime table: use the
-    // Mustache {{"text}} channel or the caption hook instead
-    procedure TranslateResourceStrings;
+    // - switching the language at runtime is safe
+    // - setting unknown/undefined language would reset to original English
+    // - warning: effect is process-wide and WILL NOT USE ThreadLanguage value
+    procedure TranslateResourceStrings(aLanguage: TLanguage);
     /// get the current translation table of a given language
     // - may return nil if none - use FindOrNew() or AddFrom*() methods
     property Language: TLanguageFilePerLang
@@ -405,6 +395,46 @@ type
   TMoEntryArray = array[0 .. (MaxInt div SizeOf(TMoEntry)) - 1] of TMoEntry;
   PMoEntryArray = ^TMoEntryArray;
 
+{$ifdef FPC}
+
+// objpas.TResourceIterator callback, with arg = the TLanguageFile table to apply
+// - arg may be nil, i.e. no language: every entry keeps its DefaultValue
+// - note that objpas is part of the units implicitly available in objfpc/delphi
+// modes, so needs no explicit uses clause entry
+function _TranslateResourceString(const Name, Value: AnsiString; Hash: LongInt;
+  arg: pointer): AnsiString;
+begin
+  result := ''; // a void result keeps the current value untouched if no language
+  if (arg <> nil) and
+     (PClass(arg)^ = TLanguageFile) then
+    if Unicode_CodePage = CP_UTF8 then // most common case with Lazarus
+      TLanguageFile(arg).fTexts.FindAndCopy(Value, result, {updtimeout=}false)
+    else
+    begin
+      result := Value;
+      TLanguageFile(arg).DoTranslateString(result); // need conversion (unlikely)
+    end;
+end;
+
+{$else}
+
+var
+  _LoadResFile: TLanguageFile;   // not SetGlobal/_MainI18n.Current
+  _LoadResCache: TSynDictionary; // efficient thread-safe cache
+
+function _LoadResString(ResStringRec: PResStringRec): string;
+begin
+  if _LoadResCache <> nil then
+    if _LoadResCache.FindAndCopy(ResStringRec, result, false) then
+      exit;
+  OsLoadResString(ResStringRec, result);
+  _LoadResFile.TranslateString(result);
+  if _LoadResCache <> nil then
+    _LoadResCache.AddOrUpdate(ResStringRec, result);
+end;
+
+{$endif FPC}
+
 var
   // the TFormatSettings used by the two hooks below, filled at initialization
   // - the RTL FormatDateTime() does not render '/' and ':' as such: it rewrites
@@ -436,6 +466,10 @@ end;
 
 destructor TLanguageFile.Destroy;
 begin
+  {$ifdef ISDELPHI}
+  if _LoadResFile = self then
+    _LoadResFile := nil;
+  {$endif ISDELPHI}
   fTexts.Free;
   inherited Destroy;
 end;
@@ -840,29 +874,6 @@ begin
     result := DateToStr(dt);
 end;
 
-{$ifdef FPC}
-
-// objpas.TResourceIterator callback, with arg = the TLanguageFile table to apply
-// - arg may be nil, i.e. no language: every entry keeps its DefaultValue
-// - note that objpas is part of the units implicitly available in objfpc/delphi
-// modes, so needs no explicit uses clause entry
-function _TranslateResourceString(const Name, Value: AnsiString; Hash: LongInt;
-  arg: pointer): AnsiString;
-begin
-  result := ''; // a void result keeps the current value untouched if no language
-  if (arg <> nil) and
-     (PClass(arg)^ = TLanguageFile) then
-    if Unicode_CodePage = CP_UTF8 then // most common case with Lazarus
-      TLanguageFile(arg).fTexts.FindAndCopy(Value, result, {updatetimeout=}false)
-    else
-    begin
-      result := Value;
-      TLanguageFile(arg).DoTranslateString(result); // need conversion (unlikely)
-    end;
-end;
-
-{$endif FPC}
-
 
 { TLanguageFiles }
 
@@ -1070,7 +1081,7 @@ begin
   i18nDateTimeText := _I18nDateTimeText;
 end;
 
-procedure TLanguageFiles.TranslateResourceStrings;
+procedure TLanguageFiles.TranslateResourceStrings(aLanguage: TLanguage);
 begin
   {$ifdef FPC}
   // restore the English DefaultValue of every entry first: any text which the
@@ -1080,7 +1091,28 @@ begin
   // the callback maps to "keep the English text"), because it is the only RTL
   // entry point ending with UpdateResourceStringRefs: ResetResourceTables alone
   // would leave any "var s: string = SomeResourceString" global out of sync
-  SetResourceStrings(@_TranslateResourceString, Current); // thread language
+  SetResourceStrings(@_TranslateResourceString, fLang[aLanguage]);
+  {$else}
+  {$ifdef HASCACHEDRESSTRING}
+  // Delphi 10.4+ sysutils has cache + global LoadResStringFunc hook
+  ResStringCleanupCache;                // not mandatory but cleaner
+  LoadResStringFunc := @_LoadResString; // replace global helper callback
+  {$else}
+  // patch once at Intel CPU level to redirect to our function
+  if PByte(@System.LoadResString)^ <> $e9 then
+    RedirectCode(@System.LoadResString, @_LoadResString);
+  {$endif HASCACHEDRESSTRING}
+  // clear any previous cached resourcestring value
+  if _LoadResCache = nil then
+  begin
+    _LoadResCache := TSynDictionary.Create(TypeInfo(TPointerDynArray),
+      TypeInfo(TStringDynArray));
+    _LoadResCache.ThreadUse := uRWLock;
+  end
+  else
+     _LoadResCache.DeleteAll;
+  // use the supplied TLanguageFile instance
+  _LoadResFile := fLang[aLanguage];
   {$endif FPC}
 end;
 
@@ -1099,5 +1131,12 @@ initialization
   // then make the '/' and ':' pattern characters render as themselves
   _I18nDefaultFormatSettings.DateSeparator := '/';
   _I18nDefaultFormatSettings.TimeSeparator := ':';
+
+finalization
+  {$ifdef ISDELPHI}
+  // release and disable _LoadResString() cache and translation
+  _LoadResFile := nil;
+  FreeAndNil(_LoadResCache);
+  {$endif ISDELPHI}
 
 end.
