@@ -9434,16 +9434,9 @@ begin
 end;
 
 function TCryptCert.IsValidDate(date: TDateTime): boolean;
-var
-  na, nb: TDateTime;
 begin
-  if date = 0 then
-    date := NowUtc;
-  na := GetNotAfter;
-  nb := GetNotBefore;
-  result := (not IsVoid) and
-            ((na <= 0) or (na + CERT_DEPRECATION_THRESHOLD > date)) and
-            ((nb <= 0) or (nb < date + CERT_DEPRECATION_THRESHOLD));
+  result := (Handle <> nil) and
+            IsCertValidDate(date, GetNotAfter, GetNotBefore);
 end;
 
 function TCryptCert.IsVoid: boolean;

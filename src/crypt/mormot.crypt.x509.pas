@@ -2338,12 +2338,7 @@ end;
 
 function TXTbsCertificate.IsValidDate(timeutc: TDateTime): boolean;
 begin
-  if timeutc = 0 then
-    timeutc := NowUtc;
-  result := ((NotAfter = 0) or
-             (timeutc < NotAfter + CERT_DEPRECATION_THRESHOLD)) and
-            ((NotBefore = 0) or
-             (timeutc + CERT_DEPRECATION_THRESHOLD > NotBefore));
+  result := IsCertValidDate(timeutc, NotAfter, NotBefore);
 end;
 
 function TXTbsCertificate.CompareAuthority(const aki: RawByteString): boolean;
@@ -3231,9 +3226,7 @@ end;
 
 function TX509Crl.IsValidDate(TimeUtc: TDateTime): boolean;
 begin
-  result := (TimeUtc + CERT_DEPRECATION_THRESHOLD > Signed.ThisUpdate) and
-            ((Signed.NextUpdate = 0) or
-             (Signed.NextUpdate + CERT_DEPRECATION_THRESHOLD < TimeUtc));
+  result := IsCertValidDate(TimeUtc, Signed.NextUpdate, Signed.ThisUpdate);
 end;
 
 function TX509Crl.IsRevoked(const SerialNumber: RawUtf8): TCryptCertRevocationReason;

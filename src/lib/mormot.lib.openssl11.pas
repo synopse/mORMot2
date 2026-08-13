@@ -9806,17 +9806,8 @@ begin
 end;
 
 function X509.IsValidDate(TimeUtc: TDateTime): boolean;
-var
-  na, nb: TDateTime;
-begin
-  na := NotAfter; // 0 if ASN1_TIME_to_tm() not supported by old OpenSSL
-  nb := NotBefore;
-  if TimeUtc = 0 then
-    TimeUtc := NowUtc;
-  result := ((na = 0) or
-             (TimeUtc < na + CERT_DEPRECATION_THRESHOLD)) and
-            ((nb = 0) or
-             (TimeUtc + CERT_DEPRECATION_THRESHOLD > nb));
+begin // NotAfter/NotBefore=0 if ASN1_TIME_to_tm() not supported by old OpenSSL
+  result := IsCertValidDate(TimeUtc, NotAfter, NotBefore);
 end;
 
 function X509.FingerPrint(md: PEVP_MD): RawUtf8;
