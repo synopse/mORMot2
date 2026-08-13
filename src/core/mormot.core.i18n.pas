@@ -258,6 +258,17 @@ type
     // enumerate order - void if nothing was loaded yet
     // - e.g. to fill a language selection list in the User Interface
     function LoadedLanguages: TLanguageDynArray;
+
+    /// translate the supplied text using aLanguage enumerate
+    function Translate(aLanguage: TLanguage; var Text: RawUtf8): boolean; overload;
+    /// TOnStringTranslate callback using aLanguage enumerate
+    // - to be assigned e.g. to TMvcViewsMustache.OnTranslate
+    procedure TranslateString(aLanguage: TLanguage; var English: string); overload;
+    /// TOnUtf8Translate  callback using aLanguage enumerate
+    // - Translated is left '' if the key was not found (i.e. caller fallback)
+    procedure TranslateUtf8(aLanguage: TLanguage; English: PUtf8Char;
+      EnglishLen: integer; var Translated: RawUtf8); overload;
+
     /// set the language of the current thread, e.g. at HTTP request start
     // - setting lngUndefined would fallback to DefaultLanguage
     class procedure SetThreadLanguage(aLanguage: TLanguage);
@@ -296,7 +307,8 @@ type
     procedure TranslateResourceStrings(aLanguage: TLanguage);
 
     /// get the current translation table of a given language
-    // - may return nil if none - use FindOrNew() or AddFrom*() methods
+    // - may return nil if none - use FindOrNew() or AddFrom*() methods to
+    // setup translations on a new language
     property Language: TLanguageFilePerLang
       read fLang;
   published
@@ -304,6 +316,7 @@ type
     property Name;
     /// language used when no per-thread language was set
     // - equals lngUndefined by default, i.e. no translation at all
+    // - this property value is ignored for all Translate*(aLanguage) methods
     property DefaultLanguage: TLanguage
       read fDefaultLanguage write fDefaultLanguage;
     /// how many translation languages are stored in this instance
@@ -1095,6 +1108,31 @@ begin
     if lang = nil then
       lang := fLang[fDefaultLanguage];
   end;
+  lang.TranslateUtf8(English, EnglishLen, Translated);
+end;
+
+function TLanguageFiles.Translate(aLanguage: TLanguage; var Text: RawUtf8): boolean;
+begin
+  if self <> nil then
+    result := fLang[aLanguage].Translate(Text)
+  else
+    result := false;
+end;
+
+procedure TLanguageFiles.TranslateString(aLanguage: TLanguage; var English: string);
+begin
+  if self <> nil then
+    fLang[aLanguage].TranslateString(English);
+end;
+
+procedure TLanguageFiles.TranslateUtf8(aLanguage: TLanguage; English: PUtf8Char;
+  EnglishLen: integer; var Translated: RawUtf8);
+var
+  lang: TLanguageFile;
+begin
+  lang := nil;
+  if self <> nil then
+    lang := fLang[aLanguage];
   lang.TranslateUtf8(English, EnglishLen, Translated);
 end;
 
