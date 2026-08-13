@@ -355,13 +355,6 @@ begin
   result := SameExt(FileName, LANGUAGE_EXT, {withoutdot=}true);
 end;
 
-type
-  /// which .po text slot is currently filled by TLanguageFile.AddFromPo()
-  TPoSlot = (
-    poNone,
-    poId,
-    poStr);
-
 /// decode one .po "quoted text" and append its content to Text
 // - P is expected to point to the initial '"' - any other input is ignored
 // - reuse the JSON_UNESCAPE[] lookup table for the \n \t \r \b \f \\ \" C-like
@@ -446,12 +439,12 @@ begin
   result := ''; // a void result keeps the current value untouched (no language)
   if (arg <> nil) and
      (PClass(arg)^ = TLanguageFile) then
-    if Unicode_CodePage = CP_UTF8 then // most common case with Lazarus
+    if Unicode_CodePage = CP_UTF8 then // always the case with Lazarus
       TLanguageFile(arg).fTexts.FindAndCopy(Value, result, {updtimeout=}false)
     else
     begin
       result := Value;
-      TLanguageFile(arg).DoTranslateString(result); // need conversion (unlikely)
+      TLanguageFile(arg).DoTranslateString(result); // AnsiString <> RawUtf8
     end;
 end;
 
@@ -575,7 +568,7 @@ function TLanguageFile.AddFromPo(const Po: RawUtf8): integer;
 var
   P, L: PUtf8Char;
   id, str: RawUtf8;
-  slot: TPoSlot;
+  slot: (poNone, poId, poStr); // which .po text slot is currently filled
   skip: boolean;
 
   procedure Flush; // store any pending entry, then reset the parsing state

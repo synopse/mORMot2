@@ -7255,7 +7255,7 @@ begin
     table := @NormToUpperAnsi7;
     {$endif CPUX86NOTPIC}
     if pEnd = nil then
-      repeat
+      repeat // p end at #0
         if p^ <= #13 then // p^ into a temp var is slower
           goto lf1
         else if table[p^] = up^ then
@@ -7285,7 +7285,7 @@ ok:         result := true; // found
         inc(p);
       until false
     else
-      repeat
+      repeat // p..pEnd version
         if p >= pEnd then
           break;
         if p^ <= #13 then
