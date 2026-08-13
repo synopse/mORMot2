@@ -292,7 +292,7 @@ type
     fFramesInBytes: QWord;
     fFramesOutBytes: QWord;
     fOnBeforeIncomingFrame: TOnWebSocketProtocolIncomingFrame;
-    fRemoteLocalhost: boolean;
+    fRemoteLocalhost, fCustomDataOwned: boolean;
     fConnectionFlags: THttpServerRequestFlags;
     fConnectionOpaque: PHttpServerConnectionOpaque;
     fRemoteIP: RawUtf8;
@@ -302,6 +302,7 @@ type
     fUri: RawUtf8;
     fLastError: string;
     fEncryption: IProtocol;
+    fCustomData: TObject;
     procedure AfterUpgrade(aProcess: TWebSocketProcess); virtual;
     // focText/focBinary or focContinuation/focConnectionClose from ProcessStart/Stop
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
@@ -323,6 +324,8 @@ type
     // - if aUri is '', any URI would potentially upgrade to this protocol; you can
     // specify an URI to limit the protocol upgrade to a single resource
     constructor Create(const aName, aUri: RawUtf8); reintroduce;
+    /// finalize this protocol instance
+    destructor Destroy; override;
     /// compute a new instance of the WebSockets protocol, with same parameters
     // - by default, will return nil, as expected for Client-side only
     function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; virtual;
@@ -365,6 +368,9 @@ type
       out ExtOut: RawUtf8; ErrorMsg: PRawUtf8): boolean; virtual;
     /// called e.g. for authentication during the WebSockets handshake
     function ProcessHandshakeUri(const aClientUri: RawUtf8): boolean; virtual;
+    /// assign the CustomData property to this instance, with optional ownership
+    // - you could call SetCustomData(nil) to reset (and perhaps free) CustomData
+    procedure SetCustomData(Data: TObject; Owned: boolean = false);
     /// allow low-level interception before ProcessIncomingFrame is done
     property OnBeforeIncomingFrame: TOnWebSocketProtocolIncomingFrame
       read fOnBeforeIncomingFrame write fOnBeforeIncomingFrame;
@@ -383,6 +389,10 @@ type
     /// quickly check if the known remote IP maps the local host
     property RemoteLocalhost: boolean
       read fRemoteLocalhost write fRemoteLocalhost;
+    /// optional custom class instance which could be used to customize
+    // - use SetCustomData() to assign a TObject to this instance
+    property CustomData: TObject
+      read fCustomData;
   published
     /// the Sec-WebSocket-Protocol application name currently involved
     // - e.g. 'synopsejson', 'synopsebin' or 'synopsebinary'
@@ -1595,6 +1605,20 @@ begin
   fName := aName;
   fUri := aUri;
   fConnectionFlags := [hsrWebsockets];
+end;
+
+destructor TWebSocketProtocol.Destroy;
+begin
+  SetCustomData(nil); // free fCustomData if needed
+  inherited Destroy;
+end;
+
+procedure TWebSocketProtocol.SetCustomData(Data: TObject; Owned: boolean);
+begin
+  if fCustomDataOwned then
+    FreeAndNil(fCustomData);
+  fCustomData := Data;
+  fCustomDataOwned := Owned;
 end;
 
 procedure TWebSocketProtocol.Reset;
