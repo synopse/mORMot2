@@ -833,6 +833,7 @@ type
   TXTbsCertList = object
   {$endif USERECORDWITHMETHODS}
   private
+    fCachedDer: RawByteString;
   public
     /// describes the version of the encoded X.509 CRL
     // - equals usually 2, once extensions are used
@@ -2987,6 +2988,9 @@ var
   nextup, rev, ext: RawByteString;
   i: PtrInt;
 begin
+  result := fCachedDer;
+  if result <> '' then
+    exit;
   // optional nextUpdate time
   if NextUpdate <> 0 then
     nextup := AsnTime(NextUpdate);
@@ -3017,6 +3021,7 @@ begin
               AsnSeq(rev),
               ext
             ]);
+  fCachedDer := result;
 end;
 
 function TXTbsCertList.FromDer(const der: TCertDer): boolean;
@@ -3027,6 +3032,7 @@ var
   u: RawUtf8;
   xce: TXCrlExtension;
 begin
+  fCachedDer := der;
   result := false;
   // decode main CRL fields
   pos := 1;
