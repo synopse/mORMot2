@@ -219,19 +219,21 @@ type
   protected
     fDefaultLanguage: TLanguage;
     fLangCount: integer;
-    fLoadedLanguages: TLanguageDynArray;
-    fLang: TLanguageFilePerLang;
-    /// low-level virtual methods implementing the persistence reading/writing
+    fLoadedLanguages: TLanguageDynArray; // cache
+    fLang: TLanguageFilePerLang;         // main O(1) lookup array
+    /// low-level virtual methods implementing the .m18n binary persistence
     procedure LoadFromReader; override;
     procedure SaveToWriter(aWriter: TBufferWriter); override;
   public
     /// finalize the instance and all its owned tables
     destructor Destroy; override;
+
     /// return the table matching an ISO 639-1 text, e.g. 'fr' - nil if none
     function FindIso(const Iso: RawUtf8): TLanguageFile;
     /// get or create the translation table of a given language
     // - mostly for internal use, e.g. AddFrom*() methods
     function FindOrNew(aLanguage: TLanguage): TLanguageFile;
+
     /// merge translations of a given language as UTF-8 text pairs
     function Add(aLanguage: TLanguage;
       const EnglishTranslatedPairs: array of RawUtf8): integer;
@@ -265,13 +267,14 @@ type
     // - i.e. from the current SetThreadLanguage() or DefaultLanguage, or nil
     function Current: TLanguageFile;
     /// translate the supplied text using SetThreadLanguage() or DefaultLanguage
-    function Translate(var Text: RawUtf8): boolean;
+    function Translate(var Text: RawUtf8): boolean; overload;
     /// TOnStringTranslate callback using SetThreadLanguage() or DefaultLanguage
     // - to be assigned e.g. to TMvcViewsMustache.OnTranslate
-    procedure TranslateString(var English: string);
+    procedure TranslateString(var English: string); overload;
     /// TOnUtf8Translate  callback using SetThreadLanguage() or DefaultLanguage
     procedure TranslateUtf8(English: PUtf8Char; EnglishLen: integer;
-      var Translated: RawUtf8);
+      var Translated: RawUtf8); overload;
+
     /// wire this instance to the global framework translation hooks
     // - set itself as the main I18n instance, and assign the global
     // LoadResStringTranslate slot - which translates the GetCaptionFrom*
@@ -291,6 +294,7 @@ type
     // - setting unknown/undefined language would reset to original English
     // - warning: effect is process-wide and WILL NOT USE ThreadLanguage value
     procedure TranslateResourceStrings(aLanguage: TLanguage);
+
     /// get the current translation table of a given language
     // - may return nil if none - use FindOrNew() or AddFrom*() methods
     property Language: TLanguageFilePerLang
@@ -815,14 +819,17 @@ end;
 
 function TLanguageFile.Translate(var Text: RawUtf8): boolean;
 begin
-  result := (self <> nil) and
-            (Text <> '') and
-            fTexts.FindAndCopy(Text, Text, {updtimeout=}false);
+  if (self <> nil) and
+     (Text <> '') then
+    result := fTexts.FindAndCopy(Text, Text, {updtimeout=}false)
+  else
+    result := false;
 end;
 
 procedure TLanguageFile.TranslateString(var English: string);
 begin
-  if self <> nil then
+  if (self <> nil) and
+     (English <> '') then
     {$ifdef FPC}
     if Unicode_CodePage = CP_UTF8 then // most common case with Lazarus
       fTexts.FindAndCopy(English, English, {updtimeout=}false)
@@ -833,10 +840,10 @@ end;
 
 procedure TLanguageFile.DoTranslateString(var English: string);
 var
-  u: RawUtf8; // needed mostly on Delphi
+  u: RawUtf8; // needed mostly on Delphi with AnsiString/UnicodeString
 begin
   StringToUtf8(English, u);
-  if Translate(u) then
+  if fTexts.FindAndCopy(u, u, {updtimeout=}false) then
     Utf8ToStringVar(u, English);
 end;
 
@@ -845,10 +852,14 @@ procedure TLanguageFile.TranslateUtf8(English: PUtf8Char; EnglishLen: integer;
 var
   key: RawUtf8;
 begin
-  FastSetString(key, English, EnglishLen);
-  if (self = nil) or
-     not fTexts.FindAndCopy(key, Translated, {updtimeout=}false) then
-    Translated := ''; // caller would fallback to the English text
+  if (self <> nil) and
+     (EnglishLen > 0) then
+  begin
+    FastSetString(key, English, EnglishLen);
+    if fTexts.FindAndCopy(key, Translated, {updtimeout=}false) then
+      exit;
+  end;
+  Translated := ''; // caller would fallback to the English text
 end;
 
 function TLanguageFile.GetCount: integer;
@@ -1049,11 +1060,15 @@ function TLanguageFiles.Translate(var Text: RawUtf8): boolean;
 var
   lang: TLanguageFile;
 begin
-  lang := fLang[_ThreadLanguage]; // inlined TLanguageFiles.Current
-  if lang = nil then
-    lang := fLang[fDefaultLanguage];
-  result := (lang <> nil) and
-            lang.Translate(Text);
+  if self <> nil then
+  begin
+    lang := fLang[_ThreadLanguage]; // inlined TLanguageFiles.Current
+    if lang = nil then
+      lang := fLang[fDefaultLanguage];
+    result := lang.Translate(Text);
+  end
+  else
+    result := false;
 end;
 
 procedure TLanguageFiles.TranslateString(var English: string);
@@ -1065,8 +1080,7 @@ begin
   lang := fLang[_ThreadLanguage]; // inlined TLanguageFiles.Current
   if lang = nil then
     lang := fLang[fDefaultLanguage];
-  if lang <> nil then
-    lang.TranslateString(English);
+  lang.TranslateString(English);
 end;
 
 procedure TLanguageFiles.TranslateUtf8(English: PUtf8Char; EnglishLen: integer;
@@ -1074,13 +1088,14 @@ procedure TLanguageFiles.TranslateUtf8(English: PUtf8Char; EnglishLen: integer;
 var
   lang: TLanguageFile;
 begin
-  lang := fLang[_ThreadLanguage]; // inlined TLanguageFiles.Current
-  if lang = nil then
-    lang := fLang[fDefaultLanguage];
-  if lang = nil then
-    Translated := ''
-  else
-    lang.TranslateUtf8(English, EnglishLen, Translated);
+  lang := nil;
+  if self <> nil then
+  begin
+    lang := fLang[_ThreadLanguage]; // inlined TLanguageFiles.Current
+    if lang = nil then
+      lang := fLang[fDefaultLanguage];
+  end;
+  lang.TranslateUtf8(English, EnglishLen, Translated);
 end;
 
 procedure TLanguageFiles.TranslateResourceStrings(aLanguage: TLanguage);
