@@ -546,6 +546,8 @@ type
   // like &lt; &amp; and remove HTML <tags>, converting e.g. <p> into line feeds
   // - opoRelaxedSchema will try to fix Schema errors like /uri/{param} not
   // defined as "in":"path"
+  // - opoEnumPascalCase will generate PascalCase enumeration items from
+  // ALL_CAPS "enum" values, e.g. urUSERNOTFOUND into urUserNotFound
   // - see e.g. OPENAPI_CONCISE for a single unit, simple and undocumented output
   TOpenApiParserOption = (
     opoNoEnum,
@@ -565,7 +567,8 @@ type
     opoGenerateStringType,
     opoGenerateOldDelphiCompatible,
     opoDescriptionHtmlUnescape,
-    opoRelaxedSchema);
+    opoRelaxedSchema,
+    opoEnumPascalCase);
   TOpenApiParserOptions = set of TOpenApiParserOption;
 
   /// the main OpenAPI parser and pascal code generator class
@@ -1861,7 +1864,7 @@ end;
 
 procedure TPascalEnum.ToTypeDefinition(W: TTextWriter);
 var
-  line, item: RawUtf8;
+  line, item, choice: RawUtf8;
   items: TRawUtf8DynArray;
   itemscount, i: integer;
 begin
@@ -1878,7 +1881,10 @@ begin
     else
     begin
       Append(line, ', ');
-      CamelCase(ToUtf8(fChoices.Values[i]), item);
+      choice := ToUtf8(fChoices.Values[i]);
+      if (opoEnumPascalCase in fParser.Options) and IsUpper(choice) then
+        LowerCaseSelf(choice);
+      CamelCase(choice, item);
       if item <> '' then
         item[1] := NormToUpperAnsi7[item[1]]; // ensure PascalCase identifier
       if (item = '') or
