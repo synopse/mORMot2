@@ -10228,12 +10228,29 @@ var
     CheckEqual(length(loaded), 2, 'LoadedLanguages count');
     Check(loaded[0] = lngChinese, 'lngChinese comes first in TLanguage');
     Check(loaded[1] = lngFrench);
+    // direct language selection
+    u := 'Hello';
+    Check(not langs.Translate(lngUndefined, u));
+    CheckEqual(u, 'Hello');
+    u := 'Hello';
+    Check(not langs.Translate(lngGerman, u));
+    CheckEqual(u, 'Hello');
+    langs.TranslateUtf8(lngGerman, pointer(u), length(u), u);
+    CheckEqual(u, '');
+    u := 'Hello';
+    Check(langs.Translate(lngFrench, u));
+    CheckEqual(u, 'Bonjour');
+    u := 'Hello';
+    langs.TranslateUtf8(lngChinese, pointer(u), length(u), u);
+    CheckEqual(u, 'NiHao');
     // no thread language nor default: passthrough
     Check(TLanguageFiles.ThreadLanguage = lngUndefined);
     Check(langs.Current = nil);
     u := 'Hello';
     Check(not langs.Translate(u));
     CheckEqual(u, 'Hello');
+    langs.TranslateUtf8(pointer(u), length(u), u);
+    CheckEqual(u, '');
     // per-thread selection
     TLanguageFiles.SetThreadLanguage(lngFrench);
     Check(TLanguageFiles.ThreadLanguage = lngFrench);
@@ -10241,13 +10258,25 @@ var
     u := 'Hello';
     Check(langs.Translate(u));
     CheckEqual(u, 'Bonjour');
+    langs.TranslateUtf8(pointer(u), length(u), u);
+    CheckEqual(u, '');
+    u := 'Hello';
+    langs.TranslateUtf8(pointer(u), length(u), u);
+    CheckEqual(u, 'Bonjour');
     // fallback to DefaultLanguage when no thread language is set
     TLanguageFiles.SetThreadLanguage(lngUndefined);
     langs.DefaultLanguage := lngChinese;
+    Check(TLanguageFiles.ThreadLanguage = lngUndefined);
     Check(langs.Current = langs.Language[lngChinese]);
     u := 'Hello';
     Check(langs.Translate(u));
     CheckEqual(u, 'NiHao');
+    // DefaultLanguage should not affect Translate*(Language) methods
+    u := 'Hello';
+    Check(not langs.Translate(lngGerman, u));
+    CheckEqual(u, 'Hello');
+    langs.TranslateUtf8(lngGerman, pointer(u), length(u), u);
+    CheckEqual(u, '');
     // Mustache {{"text}} channel end-to-end
     TLanguageFiles.SetThreadLanguage(lngFrench);
     m := TSynMustache.Parse('{{"Hello}} {{name}}!');
@@ -10265,7 +10294,7 @@ begin
     CheckEqual(length(langs.LoadedLanguages), 0, 'void registry');
     Check(langs.Language[lngFrench] = nil);
     Check(langs.Language[lngChinese] = nil);
-    CheckEqual(langs.AddFromJson(lngFrench, '{"Hello":"Bonjour"}'), 1);
+    CheckEqual(langs.Add(lngFrench, ['Hello', 'Bonjour']), 1);
     CheckEqual(langs.AddFromJson(lngChinese, '{"Hello":"NiHao"}'), 1);
     DoTest;
     langs.SaveTo(bin);
