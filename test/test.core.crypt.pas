@@ -1949,6 +1949,10 @@ var
   clientsig: THash256;
   hasher: TSynHasher;
   timer: TPrecisionTimer;
+  {$ifdef USE_OPENSSL}
+  i: PtrInt;
+  e: TRawUtf8DynArray;
+  {$endif USE_OPENSSL}
 begin
   // validate THashAlgo and TSignAlgo recognition
   for h := low(h) to high(h) do
@@ -2418,6 +2422,23 @@ begin
     CheckEqual(BigNumHexFromDecimal('65535'), 'ffff');
     CheckEqual(BigNumHexFromDecimal('12345678901234567890'), 'ab54a98ceb1f0ad2');
   end;
+  CheckEqual(length(e), 0);
+  CsvToRawUtf8DynArray('OpenSSL-4.0-OpenSSLProject', e);
+  CheckEqual(length(e), 1);
+  n := 0;
+  CheckEqual(OpenSslWinLocateEntry(e, n), e[0]);
+  CheckEqual(n, 4);
+  CsvToRawUtf8DynArray('OpenSSL-3.1-OpenSSLProject', e);
+  CheckEqual(length(e), 2, 'append to e[]');
+  n := 0;
+  CheckEqual(OpenSslWinLocateEntry(e, n), e[0]);
+  CheckEqual(n, 4);
+  CsvToRawUtf8DynArray('OpenSSL-3.1-OpenSSLProject,Open-SSL-5.2-OpenSSLProject,' +
+    'OpenSSL-4.2-OpenSSLProject,OpenSSL-4.3-OpenSSLProjet', e);
+  CheckEqual(length(e), 6);
+  n := 0;
+  CheckEqual(OpenSslWinLocateEntry(e, n), 'OpenSSL-4.2-OpenSSLProject');
+  CheckEqual(n, 4);
   {$endif USE_OPENSSL}
 end;
 
