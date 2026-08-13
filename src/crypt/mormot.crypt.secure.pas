@@ -3833,7 +3833,7 @@ type
 
 const
   /// the supported trailer markers of a PEM text instance
-  // - only the first 10 chars after -----BEGIN will be used for recognition
+  // - use chars after '-----BEGIN' and before '----' for recognition
   PEM_BEGIN: array[TPemKind] of RawUtf8 = (
     '-----BEGIN PRIVACY-ENHANCED MESSAGE-----'#13#10,
     '-----BEGIN CERTIFICATE-----'#13#10,
@@ -10659,10 +10659,16 @@ begin
     -----BEGIN ENCRYPTED PRIVATE KEY-----  }
 end;
 
+var
+  PEM_LEN: array[TPemKind] of byte; // number of meaningful chars
+
 function PemHeader(lab: PUtf8Char): TPemKind;
 begin
+  if PEM_LEN[low(TPemKind)] = 0 then // compute once
+    for result := low(result) to high(result) do
+      PEM_LEN[result] := PosEx('--', PEM_BEGIN[result], 14) - 12;
   for result := succ(low(result)) to high(result) do
-    if IdemPropNameUSameLenNotNull(@PEM_BEGIN[result][12], lab, 10) then
+    if IdemPropNameUSameLenNotNull(@PEM_BEGIN[result][12], lab, PEM_LEN[result]) then
       exit;
   result := low(result);
 end;
