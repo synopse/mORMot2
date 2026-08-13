@@ -359,6 +359,16 @@ function OpenSslInitialize(
    const libsslname: TFileName = '';
    const libprefix: RawUtf8 = _PU): boolean;
 
+{$ifdef OSWINDOWS}
+/// try to locate https://github.com/openssl/installer/releases official setup
+// - returns the highest version of '{install_dir}\bin\libcrypto-{major}-x64.dll'
+function OpenSslWinLocate: TFileName;
+{$endif OSWINDOWS}
+
+// used by OpenSslWinLocate() - published only for testing purposes
+function OpenSslWinLocateEntry(const entries: TRawUtf8DynArray;
+  out majsel: integer): RawUtf8;
+
 
 { ******************** OpenSSL Library Constants }
 
@@ -6118,6 +6128,79 @@ begin
   result := openssl_initialized = lsAvailable;
 end;
 
+function OpenSslWinLocateEntry(const entries: TRawUtf8DynArray;
+  out majsel: integer): RawUtf8;
+var
+  p: PUtf8Char;
+  maj, min, minsel: integer;
+  i: PtrInt;
+begin // parse 'SOFTWARE\OpenSSL Corporation\OpenSSL-{maj}.{min}-OpenSSLProject'
+  result := '';
+  majsel := 0;
+  minsel := -1;
+  for i := 0 to high(entries) do
+  begin
+    p := pointer(entries[i]);
+    if not NetStartWith(p, 'OPENSSL-') then
+      continue;
+    inc(p, 8);
+    maj := GetCardinal(p);
+    if maj < majsel then
+      continue;
+    while p^ in ['0' .. '9'] do
+      inc(p);
+    if p^ <> '.' then
+      continue;
+    inc(p);
+    min := GetCardinal(p);
+    if (maj = majsel) and
+       (min < minsel) then
+      continue;
+    while p^ in ['0' .. '9'] do
+      inc(p);
+    if not NetStartWith(p, '-OPENSSLPROJECT') then
+      exit;
+    result := entries[i]; // found the highest version
+    majsel := maj;
+    minsel := min;
+  end;
+end;
+
+{$ifdef OSWINDOWS}
+{$ifdef CPU32}
+function OpenSslWinLocate: TFileName;
+begin
+  result := ''; // official releases seem to be Win64 only for now
+end;
+{$else}
+const
+  OPENSSL_REGKEY = 'SOFTWARE\OpenSSL Corporation\';
+
+function OpenSslWinLocate: TFileName;
+var
+  reg: TWinRegistry;
+  entry: RawUtf8;
+  major: integer;
+begin
+  result := '';
+  if not reg.ReadOpen(wrLocalMachine, OPENSSL_REGKEY) then
+    exit;
+  entry := OpenSslWinLocateEntry(reg.ReadEnumEntries, major);
+  if (entry = '') or
+     not reg.ReadReOpen(wrLocalMachine, [OPENSSL_REGKEY, entry]) then
+    exit;
+  result := reg.ReadFileName('EnvPath');
+  reg.Close;
+  if not DirectoryExists(result) then
+    exit;
+  result := format('%slibcrypto-%d-x64.dll',
+    [IncludeTrailingPathDelimiter(result), major]);
+  if not FileExists(result) then
+    result := '';
+end;
+{$endif CPU32}
+{$endif OSWINDOWS}
+
 function OpenSslInitialize(const libcryptoname, libsslname: TFileName;
   const libprefix: RawUtf8): boolean;
 var
@@ -6177,6 +6260,10 @@ begin
         libexe4,
         libexe3,
         libexe1,
+        {$ifdef OSWINDOWS}
+        // Win64 dll from https://github.com/openssl/installer/releases
+        OpenSslWinLocate,
+        {$endif OSWINDOWS}
         // try the library from OPENSSL_LIBPATH or somewhere in the system
         libsys4,
         libsys3,
