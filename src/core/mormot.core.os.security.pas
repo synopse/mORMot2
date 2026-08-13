@@ -2378,7 +2378,11 @@ var
 var
   /// allow half a day margin when checking a Certificate date validity
   // - this global setting is used as default for all our units
+  // - could be set to 0 for strict RFC-style validity, especially for servers
   CERT_DEPRECATION_THRESHOLD: TDateTime = 0.5;
+
+/// check a Certificate date validity using CERT_DEPRECATION_THRESHOLD
+function IsCertValidDate(TimeUtc, NotAfter, NotBefore: TDateTime): boolean;
 
 const
   MD5_LO  = ord('m') + ord('d') shl 8 + ord('5') shl 16;
@@ -7693,6 +7697,16 @@ begin
         if v <> '' then
           result := Join([result, v, #13#10]);
       end;
+end;
+
+function IsCertValidDate(TimeUtc, NotAfter, NotBefore: TDateTime): boolean;
+begin
+  if TimeUtc = 0 then
+    TimeUtc := NowUtc;
+  result := ((NotAfter <= 0) or
+             (TimeUtc <= NotAfter  + CERT_DEPRECATION_THRESHOLD)) and
+            ((NotBefore <= 0) or
+             (TimeUtc + CERT_DEPRECATION_THRESHOLD >= NotBefore));
 end;
 
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
