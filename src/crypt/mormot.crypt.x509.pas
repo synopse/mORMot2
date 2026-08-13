@@ -3228,6 +3228,7 @@ end;
 procedure TX509Crl.AfterModified;
 begin
   fCachedDer := '';
+  Signed.fCachedDer := '';
 end;
 
 function TX509Crl.IsValidDate(TimeUtc: TDateTime): boolean;
