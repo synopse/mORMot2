@@ -1735,6 +1735,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// returns position in array, or next void index in HashTable[] as -(index+1)
     function FindOrNew(aHashCode: cardinal; Item: pointer; aHashTableIndex: PPtrInt = nil): PtrInt;
+    /// returns pointer to matching value in array, or nil
+    function FindValue(aHashCode: PtrUInt; Item: pointer): pointer;
     /// returns position in array or -1 if not found, with an optional custom comparer
     // - will use Compare() or supplied Comp() or but won't support EventCompare()
     function FindIndex(aHashCode: cardinal; Item: pointer; Comp: TDynArraySortCompare = nil): PtrInt;
@@ -9148,6 +9150,37 @@ begin
     last := first;
   until false;
   result := RaiseFatalCollision('FindOrNew', aHashCode);
+end;
+
+function TDynArrayHasher.FindValue(aHashCode: PtrUInt; Item: pointer): pointer;
+var
+  first, last: PtrUInt;
+begin
+  aHashCode := HashTableIndex(aHashCode);
+  first := aHashCode;
+  last := fHashTableSize;
+  repeat
+    result := pointer(HashTableIndexToIndex(aHashCode)); // Index+1 was stored
+    if result = nil then
+      exit; // Index=0 -> result=nil if not found
+    with fDynArray^ do
+      result := PAnsiChar(Value^) + (PtrUInt(result) - 1) * PtrUInt(fInfo.Cache.ItemSize);
+    if not Assigned(fEventCompare) then
+    begin
+      if fCompare(result^, Item^) = 0 then
+        exit;
+    end
+    else if fEventCompare(result^, Item^) = 0 then
+      exit;
+    inc(aHashCode); // hash or slot collision -> search next item
+    if aHashCode <> last then
+      continue;
+    if aHashCode = first then
+      break;
+    aHashCode := 0;
+    last := first;
+  until false;
+  RaiseFatalCollision('FindValue', aHashCode);
 end;
 
 function TDynArrayHasher.FindIndex(aHashCode: cardinal; Item: pointer;
