@@ -2439,6 +2439,11 @@ begin
   n := 0;
   CheckEqual(OpenSslWinLocateEntry(e, n), 'OpenSSL-4.2-OpenSSLProject');
   CheckEqual(n, 4);
+  CsvToRawUtf8DynArray('OpenSSL-4.10-OpenSSLProject', e);
+  CheckEqual(length(e), 7);
+  n := 0;
+  CheckEqual(OpenSslWinLocateEntry(e, n), 'OpenSSL-4.10-OpenSSLProject');
+  CheckEqual(n, 4);
   {$endif USE_OPENSSL}
 end;
 

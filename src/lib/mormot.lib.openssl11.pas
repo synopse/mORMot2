@@ -6159,7 +6159,7 @@ begin // parse 'SOFTWARE\OpenSSL Corporation\OpenSSL-{maj}.{min}-OpenSSLProject'
     while p^ in ['0' .. '9'] do
       inc(p);
     if not NetStartWith(p, '-OPENSSLPROJECT') then
-      exit;
+      continue;
     result := entries[i]; // found the highest version
     majsel := maj;
     minsel := min;
