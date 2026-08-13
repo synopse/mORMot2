@@ -1228,8 +1228,8 @@ type
     // - if you want to access the value, you should use fSafe.Lock/Unlock:
     // consider using Exists or FindAndCopy thread-safe methods instead
     // - aUpdateTimeOut will update the associated timeout value of the entry
-    function FindValue(const aKey; aUpdateTimeOut: boolean = false;
-      aIndex: PPtrInt = nil): pointer;
+    function FindValue(aKey: pointer; aUpdateTimeOut: boolean = false;
+      const aIndex: PPtrInt = nil): pointer; {$ifdef HASINLINE} inline; {$endif}
     /// search of a primary key within the internal hashed dictionary
     // - returns a pointer to the matching or already existing value item
     // - if you want to access the value, you should use fSafe.Lock/Unlock:
@@ -9503,25 +9503,26 @@ begin
   if self <> nil then
   begin
     result := fKeys.Hasher.FindOrNew(fKeys.Hasher.HashOne(@aKey), @aKey);
-    if result < 0 then
-      result := -1
-    else if aUpdateTimeOut then
+    if result >= 0 then
     begin
-      tim := fSafe.Padding[DIC_TIMESEC].VInteger;
-      if tim <> 0 then // inlined fTimeout[result] := GetTimeout
-        fTimeout[result] := GetTickSec + tim;
+      if aUpdateTimeOut then
+      begin
+        tim := fSafe.Padding[DIC_TIMESEC].VInteger;
+        if tim <> 0 then // inlined fTimeout[result] := GetTimeout
+          fTimeout[result] := GetTickSec + tim;
+      end;
+      exit;
     end;
-  end
-  else
-    result := -1
+  end;
+  result := -1; // always normalize to -1
 end;
 
-function TSynDictionary.FindValue(const aKey; aUpdateTimeOut: boolean;
-  aIndex: PPtrInt): pointer;
+function TSynDictionary.FindValue(aKey: pointer; aUpdateTimeOut: boolean;
+  const aIndex: PPtrInt): pointer;
 var
   ndx: PtrInt;
 begin
-  ndx := Find(aKey, aUpdateTimeOut);
+  ndx := Find(aKey^, aUpdateTimeOut);
   if aIndex <> nil then
     aIndex^ := ndx;
   if ndx < 0 then
@@ -9555,10 +9556,9 @@ begin
   result := PAnsiChar(fValues.Value^) + ndx * fValues.Info.Cache.ItemSize;
 end;
 
-function TSynDictionary.FindAndCopy(const aKey;
-  var aValue; aUpdateTimeOut: boolean): boolean;
+function TSynDictionary.FindAndCopy(const aKey; var aValue; aUpdateTimeOut: boolean): boolean;
 var
-  ndx: PtrInt;
+  p: pointer;
 begin
   result := false;
   if (self = nil) or
@@ -9570,11 +9570,10 @@ begin
   {$else}
   begin
   {$endif HASFASTTRYFINALLY}
-    ndx := Find(aKey, aUpdateTimeOut);
-    if ndx >= 0 then
+    p := FindValue(@aKey, aUpdateTimeOut);
+    if p <> nil then
     begin
-      fValues.ItemCopy( // inlined ItemCopyAt(ndx, @aValue)
-        PAnsiChar(fValues.Value^) + ndx * fValues.Info.Cache.ItemSize, @aValue);
+      fValues.ItemCopy(p, @aValue);
       result := true;
     end;
   {$ifdef HASFASTTRYFINALLY}
