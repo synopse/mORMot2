@@ -8724,7 +8724,7 @@ function VariantCompAsText(A, B: PVarData; caseInsensitive: boolean): integer;
 var
   au, bu: pointer;
   wasString: boolean;
-begin
+begin // used e.g. by FastVarDataComp() for complex VTypes
   au := nil; // no try..finally for local RawUtf8 variables
   bu := nil;
   VariantToUtf8(PVariant(A)^, RawUtf8(au), wasString);
@@ -8738,7 +8738,7 @@ function VariantCompAsTempUtf8(A, B: PVarData; caseInsensitive: boolean;
   flags: TVariantToTempUtf8Flags): integer;
 var
   at, bt: TTempUtf8;
-begin
+begin // used e.g. by FastVarDataComp() for diverse non-complex VType
   VariantToTempUtf8(PVariant(A)^, at, flags);
   VariantToTempUtf8(PVariant(B)^, bt, flags);
   if caseInsensitive then

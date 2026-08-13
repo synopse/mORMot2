@@ -1881,8 +1881,9 @@ begin
     else
     begin
       Append(line, ', ');
-      choice := ToUtf8(fChoices.Values[i]);
-      if (opoEnumPascalCase in fParser.Options) and IsUpper(choice) then
+      VariantToUtf8(fChoices.Values[i], choice);
+      if (opoEnumPascalCase in fParser.Options) and 
+         IsUpper(choice) then
         LowerCaseSelf(choice);
       CamelCase(choice, item);
       if item <> '' then

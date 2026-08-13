@@ -4712,7 +4712,7 @@ begin
     begin
       ah := FindSynVariantType(at);
       if ah = nil then
-        // compare from custom types UTF-8 text representation/serialization
+        // compare from custom types UTF-8 text/json representation/serialization
         result := VariantCompAsText(A, B, caseInsensitive)
       else
         // use proper virtual comparison method
