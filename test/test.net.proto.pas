@@ -76,6 +76,7 @@ type
     bodyfile: TFileName;
     bodyhash, bodytype: RawUtf8;
     bodystreamed: integer;
+    bodyeventlen: Int64;
     // for _TTunnelLocal
     tunnelappsec: RawUtf8;
     tunneloptions: TTunnelOptions;
@@ -4328,6 +4329,7 @@ function TNetworkProtocols.DoBodyDownload(const aUrl, aMethod, aInHeaders,
   aInContentType, aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
 begin
   result := nil;
+  bodyeventlen := aContentLength;
   if aUrl = '/mem' then
     exit; // in-memory Content fallback
   inc(bodystreamed);
@@ -4456,6 +4458,7 @@ begin
         CheckEqual(status, HTTP_SUCCESS, 'big status');
         CheckEqual(clt.Content, 'ok ' + bodyhash, 'big resp');
         CheckEqual(bodystreamed, prev + 1, 'big streamed');
+        CheckEqual(bodyeventlen, length(body), 'big event len');
         WaitDeleted('big');
         // in-memory fallback when the event returns nil
         status := clt.Post('/mem', body, bodytype);
@@ -4498,6 +4501,7 @@ begin
         finally
           raw.Free;
         end;
+        CheckEqual(bodyeventlen, -1, 'chunked event len');
         WaitDeleted('chunked');
       finally
         clt.Free;
@@ -4554,6 +4558,30 @@ begin
             (GetTickCount64 < endtix) do
         SleepHiRes(5); // the event fires in a server thread
       CheckEqual(bodystreamed, prev + 1, 'enospc streamed');
+      // a chunked body over MaximumAllowedContentLength should get a 413
+      // on both families (its cumulated size is only known while receiving)
+      srv.MaximumAllowedContentLength := 100000;
+      raw := TCrtSocket.Open('127.0.0.1', port);
+      try
+        raw.SockSend(['POST /big HTTP/1.1']);
+        raw.SockSend(['Host: 127.0.0.1:', port]);
+        raw.SockSend(['Transfer-Encoding: chunked']);
+        raw.SockSend(['Content-Type: application/dummy']);
+        raw.SockSend([]); // void line: end of headers
+        for status := 1 to 6 do // 6 x 20000 = 120000 > 100000
+        begin
+          raw.SockSend(['4e20']);
+          raw.SockSend([mptext]);
+        end;
+        raw.SockSend(['0']);
+        raw.SockSend([]); // final void line
+        raw.SockSendFlush;
+        raw.SockRecvLn(line);
+        CheckUtf8(PosEx(' 413 ', line) > 0, 'chunked 413 %', [line]);
+      finally
+        raw.Free;
+        srv.MaximumAllowedContentLength := 0; // restore no limit
+      end;
       // the server must still serve further requests after the disk error
       clt := THttpClientSocket.Open('127.0.0.1', port);
       try

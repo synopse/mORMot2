@@ -612,6 +612,10 @@ type
   /// exception class raised during HTTP process
   EHttpSocket = class(ESynException);
 
+  /// exception raised when an incoming request body overflows a size limit
+  // - so that the server could return 413 "Payload Too Large" before closing
+  EHttpSocketOverflow = class(EHttpSocket);
+
   /// parent of THttpClientSocket and THttpServerSocket classes
   // - contain properties for implementing HTTP/1.1 using the Socket API
   // - handle chunking of body content
@@ -789,10 +793,13 @@ type
   // - should return a stream instance to receive the incoming request body,
   // e.g. a TFileStreamEx spooling into a local temporary file, or nil to
   // fallback to the default in-memory Content buffering
+  // - aContentLength is the incoming Content-Length: header value, or -1 for
+  // a chunked body, whose final size is not known in advance
   // - returning a stream disables the 1GB in-memory body size limit, so that
   // huge file uploads can be processed with a constant memory usage: only
   // THttpServerGeneric.MaximumAllowedContentLength applies (0 = no limit),
-  // which is also enforced on the cumulated size of a chunked body
+  // which is also enforced on the cumulated size of a chunked body,
+  // rejected as HTTP_PAYLOADTOOLARGE = 413 while it is received
   // - only a body with a Content-Length: header or chunked Transfer-Encoding
   // is streamed: the deprecated HTTP/1.0 close-delimited body is not
   // - the stream is owned by the server, and will be freed once the body has
@@ -4588,10 +4595,10 @@ begin
         break;      // reached the end of input stream
       end;
       if len > MaxHttpChunkSize then // allow up to 256 MB chunk
-        EHttpSocket.RaiseUtf8('%.GetBody: chunk size=% overflow', [self, len]);
+        EHttpSocketOverflow.RaiseUtf8('%.GetBody: chunk size=% overflow', [self, len]);
       if (Http.ContentMaxSize > 0) and
          (Http.ContentLength + len > Http.ContentMaxSize) then
-        EHttpSocket.RaiseUtf8('%.GetBody: chunked size overflow', [self]);
+        EHttpSocketOverflow.RaiseUtf8('%.GetBody: chunked size overflow', [self]);
       if DestStream <> nil then
       begin
         if length({%H-}chunk) < len then

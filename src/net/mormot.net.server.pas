@@ -5489,11 +5489,15 @@ function THttpServerSocket.DoBodyDownload: boolean;
 var
   strm: TStream;
   fn: TFileName; // managed local variables are on purpose in this sub-method
+  len: Int64;
 begin
   result := true;
   HeadersPrepare(fRemoteIP); // will include remote IP to Http.Headers
+  len := Http.ContentLength;
+  if hfTransferChunked in Http.HeaderFlags then
+    len := -1; // a chunked body size is not known in advance
   strm := fServer.fOnBodyDownload(Http.CommandUri, Http.CommandMethod,
-    Http.Headers, Http.ContentType, fRemoteIP, Http.ContentLength);
+    Http.Headers, Http.ContentType, fRemoteIP, len);
   if strm = nil then
     exit; // in-memory Content buffering
   if Http.ContentEncoding <> nil then
@@ -5542,6 +5546,14 @@ begin
       strm.Free; // any spooled file remains during the request processing
     end;
   except
+    on EHttpSocketOverflow do
+    begin
+      // e.g. a chunked body over ContentMaxSize: report 413 before closing
+      Http.ProcessDone; // delete any partially spooled file
+      fServer.ComputeRejectBody(Http.Content, 0, HTTP_PAYLOADTOOLARGE);
+      SockSendFlush(Http.Content);
+      raise; // the caller will close the connection
+    end;
     on EStreamError do
     begin
       // e.g. ENOSPC when spooling the body: report it before closing

@@ -4776,7 +4776,10 @@ begin
           begin
             fOwner.DoLog(sllWarning, 'OnRead: close connection after % (before=%)',
               [HTTP_STATE[fHttp.State], HTTP_STATE[previous]], self);
-            DoReject(HTTP_BADREQUEST);
+            if fHttp.State = hrsErrorPayloadTooLarge then
+              DoReject(HTTP_PAYLOADTOOLARGE) // e.g. chunked over ContentMaxSize
+            else
+              DoReject(HTTP_BADREQUEST);
             result := soClose;
           end;
         end;
@@ -4997,10 +5000,14 @@ function THttpAsyncServerConnection.DoBodyDownload: TPollAsyncSocketOnReadWrite;
 var
   strm: TStream;
   fn: TFileName; // managed local variables are on purpose in this sub-method
+  len: Int64;
 begin
   result := soContinue;
+  len := fHttp.ContentLength;
+  if hfTransferChunked in fHttp.HeaderFlags then
+    len := -1; // a chunked body size is not known in advance
   strm := fServer.fOnBodyDownload(fHttp.CommandUri, fHttp.CommandMethod,
-    fHttp.Headers, fHttp.ContentType, fRemoteIP, fHttp.ContentLength);
+    fHttp.Headers, fHttp.ContentType, fRemoteIP, len);
   if strm = nil then
     exit; // in-memory Content buffering
   if fHttp.ContentEncoding <> nil then
