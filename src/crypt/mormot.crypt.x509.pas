@@ -3049,25 +3049,30 @@ begin
      (pos > length(der)) or
      ((ord(der[pos]) in [ASN1_UTCTIME, ASN1_GENTIME]) and // optional
        not AsnNextTime(pos, der, NextUpdate)) or
-     (AsnNextRaw(pos, der, v) <> ASN1_SEQ) then
+     (pos > length(der)) then
     exit;
-  if v <> '' then
+  if ord(der[pos]) = ASN1_SEQ then // revokedCertificates SEQ is optional
   begin
-    // retrieve the revoked certificates list
-    SetLength(Revoked, 8);
-    nrev := 0;
-    posv := 1;
-    while (AsnNextRaw(posv, v, rev) = ASN1_SEQ) and
-          Revoked[nrev].FromDer(rev) do
+    if AsnNextRaw(pos, der, v) <> ASN1_SEQ then
+      exit;
+    if v <> '' then
     begin
-      inc(nrev);
-      if nrev = length(Revoked) then
-        SetLength(Revoked, NextGrow(nrev));
+      // retrieve the revoked certificates list
+      SetLength(Revoked, 8);
+      nrev := 0;
+      posv := 1;
+      while (AsnNextRaw(posv, v, rev) = ASN1_SEQ) and
+            Revoked[nrev].FromDer(rev) do
+      begin
+        inc(nrev);
+        if nrev = length(Revoked) then
+          SetLength(Revoked, NextGrow(nrev));
+      end;
+      if nrev = 0 then
+        Revoked := nil
+      else
+        DynArrayFakeLength(Revoked, nrev);
     end;
-    if nrev = 0 then
-      Revoked := nil
-    else
-      DynArrayFakeLength(Revoked, nrev);
   end;
   // parse X.509 CRL version 2 extensions
   if (Version >= 2) and
