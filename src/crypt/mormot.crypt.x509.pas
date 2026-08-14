@@ -2461,16 +2461,18 @@ end;
 function CanVerify(auth: TX509; usage: TCryptCertUsage; selfsigned: boolean;
   ignored: TCryptCertValidities; timeutc: TDateTime): TCryptCertValidity;
 begin
-  if auth = nil then
-    result := cvUnknownAuthority
-  else if (not (cvWrongUsage in ignored)) and
-          (not (selfsigned or (usage in auth.Signed.CertUsages))) then
-    result := cvWrongUsage
-  else if (cvDeprecatedAuthority in ignored) or
-     auth.Signed.IsValidDate(timeutc) then
-    result := cvValidSigned
+  if auth <> nil then
+    if (cvWrongUsage in ignored) or
+       (selfsigned or HasKeyUsage(auth.Signed.CertUsages, usage)) then
+      if (cvDeprecatedAuthority in ignored) or
+         auth.Signed.IsValidDate(timeutc) then
+        result := cvValidSigned
+      else
+        result := cvDeprecatedAuthority
+    else
+      result := cvWrongUsage
   else
-    result := cvDeprecatedAuthority;
+    result := cvUnknownAuthority;
 end;
 
 function TX509.Verify(Authority: TX509; IgnoreError: TCryptCertValidities;
@@ -4355,8 +4357,8 @@ begin
     u := cuKeyCertSign;
     if a = self then
       u := GetFirstUsage(GetUsage(nil)) // any usage to let Sign() pass below
-    else if not (cuKeyCertSign in a.GetUsage) then
-      RaiseError('Sign: % Authority has no cuKeyCertSign', [a]);
+    else if not HasKeyUsage(a.GetUsage, u) then
+      RaiseError('Sign: % Authority has no keyCertSign', [a]);
     // assign the Issuer information (from any TCryptCert kind of class)
     if not fX509.Signed.Issuer.FromAsn(a.GetSubject('DER')) then
       RaiseError('Sign: invalid % Authority DER', [a]);
@@ -4426,7 +4428,7 @@ begin
     if auth.fX509 = nil then
       EX509.RaiseUtf8('%.Sign: authority has no public key', [self]);
     // validate usage
-    if not (cuCrlSign in auth.fX509.Usages) then
+    if not HasKeyUsage(auth.fX509.Usages, cuCrlSign) then
       EX509.RaiseUtf8('%.Sign: authority has no cuCrlSign', [self]);
     // assign the Issuer information
     Signed.Issuer := auth.fX509.Signed.Subject;
