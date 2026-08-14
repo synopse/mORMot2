@@ -9769,6 +9769,9 @@ function TCryptStore.IsValidChain(const chain: ICryptCertChain;
 var
   i, n: PtrInt;
   c: ICryptCertChain;
+  u: array of TCryptCertUsages;
+  p: TIntegerDynArray;
+  plen: integer;
 begin
   // we need something to validate
   result := cvBadParameter;
@@ -9788,12 +9791,17 @@ begin
      ((n = 1) and
       not c[0].IsSelfSigned) then
     exit;
+  // cache some parameters of the chain
+  SetLength(u, n);
+  SetLength(p, n);
+  for i := 0 to n - 1 do
+    u[i] := c[i].GetUsage(@p[i]);
   // check the usages of all intermediate certificates
   result := cvWrongUsage;
   if not (result in ignore) then
-    for i := 1 to n - 1 do
-      if c[i].GetUsage * [cuKeyCertSign, cuCA] = [] then
-        exit;
+    for i := 1 to n - 2 do // skip u[0] leaf and u[n-1]trust anchor
+      if not IsCertAuthority(u[i]) then
+        exit; // check cA=TRUE and keyCertSign
   // ensure no certificate in the sequence has been explicitly revoked
   result := cvRevoked;
   if not (result in ignore) then
