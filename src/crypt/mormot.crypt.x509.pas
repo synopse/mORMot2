@@ -3048,10 +3048,10 @@ begin
      not AsnNextTime(pos, der, ThisUpdate) or
      (pos > length(der)) or
      ((ord(der[pos]) in [ASN1_UTCTIME, ASN1_GENTIME]) and // optional
-       not AsnNextTime(pos, der, NextUpdate)) or
-     (pos > length(der)) then
+       not AsnNextTime(pos, der, NextUpdate)) then
     exit;
-  if ord(der[pos]) = ASN1_SEQ then // revokedCertificates SEQ is optional
+  if ((pos <= length(der))) and
+     (ord(der[pos]) = ASN1_SEQ) then // revokedCertificates SEQ is optional
   begin
     if AsnNextRaw(pos, der, v) <> ASN1_SEQ then
       exit;
@@ -3074,7 +3074,7 @@ begin
         DynArrayFakeLength(Revoked, nrev);
     end;
   end;
-  // parse X.509 CRL version 2 extensions
+  // parse X.509 CRL version 2 extensions (also optional)
   if (Version >= 2) and
      (AsnNext(pos, der) = ASN1_CTC0) then
     if AsnNext(pos, der) <> ASN1_SEQ then
