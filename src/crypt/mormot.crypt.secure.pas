@@ -4197,6 +4197,9 @@ procedure AsnDecIp(p: PAnsiChar; len: integer; var text: RawUtf8);
 function AsnDecAia(const ext: TAsnObject; var ocsp, issuers: TRawUtf8DynArray;
   nofilter: boolean = false): boolean;
 
+/// decode Crl Distribution Points (2.5.29.31) extension content
+function AsnDecCdp(const ext: TAsnObject; nofilter: boolean = false): TRawUtf8DynArray;
+
 /// serialize a TSecurityDescriptor instance into JSON
 function SecurityDescriptorToJson(const SD: TSecurityDescriptor): RawUtf8;
 
@@ -11747,6 +11750,33 @@ begin // see xeAuthorityInformationAccess in TXTbsCertificate.AddNextExtensions
            IsHttp(v) or
            IsLdap(v) then
           AddRawUtf8(issuers, v);
+    end;
+end;
+
+function AsnDecCdp(const ext: TAsnObject; nofilter: boolean): TRawUtf8DynArray;
+var
+  point, fullname, c0: RawByteString;
+  one: RawUtf8;
+  pos, ppoint, p: integer;
+begin // see xeCrlDistributionPoints in TXTbsCertificate.AddNextExtensions
+  result := nil;
+  pos := 1;
+  if AsnNext(pos, ext) = ASN1_SEQ then
+    while AsnNextRaw(pos, ext, point) = ASN1_SEQ do // DistributionPoint SEQ
+    begin
+      ppoint := 1;
+      while ppoint <= Length(point) do
+        if AsnNextRaw(ppoint, point, fullname) = ASN1_CTC0 then
+        begin // distributionPoint [0] DistributionPointName OPTIONAL
+          p := 1;
+          if AsnNextRaw(p, fullname, c0) <> ASN1_CTC0 then
+            continue; // nameRelativeToCRLIssuer [1] is intentionally ignored
+          p:= 1;  // parse fullName [0] GeneralNames
+          while AsnNextGeneralName(p, c0, one) do
+            if nofilter or
+               IsHttp(one) then
+              AddRawUtf8(result, one);
+        end; // reasons [1] / cRLIssuer [2] are intentionally ignored
     end;
 end;
 
