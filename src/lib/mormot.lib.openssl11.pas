@@ -9735,8 +9735,8 @@ begin
   else if (u >= low(KU)) and
           (u <= high(KU)) then
   begin
-    f := X509_get_key_usage(@self); // -1 if not present
-    result := (f > 0) and ((f and KU[u]) <> 0);
+    f := X509_get_key_usage(@self); // -1 if not present -> OK by RFC 5280
+    result := (f < 0) or ((f and KU[u]) <> 0);
   end
   else if (u >= low(XU)) and
           (u <= high(XU)) then
