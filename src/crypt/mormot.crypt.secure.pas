@@ -4194,7 +4194,8 @@ function AsnNextGeneralName(var Pos: integer; const Buffer: TAsnObject;
 procedure AsnDecIp(p: PAnsiChar; len: integer; var text: RawUtf8);
 
 /// decode Authority Information Access (1.3.6.1.5.5.7.1.1) extension content
-function AsnDecAia(const ext: TAsnObject; var ocsp, issuers: TRawUtf8DynArray): boolean;
+function AsnDecAia(const ext: TAsnObject; var ocsp, issuers: TRawUtf8DynArray;
+  nofilter: boolean = false): boolean;
 
 /// serialize a TSecurityDescriptor instance into JSON
 function SecurityDescriptorToJson(const SD: TSecurityDescriptor): RawUtf8;
@@ -11719,10 +11720,11 @@ begin
   end;
 end;
 
-function AsnDecAia(const ext: TAsnObject; var ocsp, issuers: TRawUtf8DynArray): boolean;
+function AsnDecAia(const ext: TAsnObject; var ocsp, issuers: TRawUtf8DynArray;
+  nofilter: boolean): boolean;
 var
   pos: integer;
-  oid, v: RawByteString;
+  oid, v: RawUtf8;
 begin // see xeAuthorityInformationAccess in TXTbsCertificate.AddNextExtensions
   result := false;
   ocsp := nil;
@@ -11731,16 +11733,18 @@ begin // see xeAuthorityInformationAccess in TXTbsCertificate.AddNextExtensions
   if AsnNext(pos, ext) = ASN1_SEQ then
     while (AsnNext(pos, ext) = ASN1_SEQ) and
           (AsnNext(pos, ext, @oid) = ASN1_OBJID) and
-          (AsnNext(pos, ext, @v) = ASN1_CTX6) do
+          AsnNextGeneralName(pos, ext, v) do
     begin
       result := true;
       if oid{%H-} = ASN1_OID_AIA_OCSP then
       begin
-        if IsHttp(v{%H-}) then
+        if nofilter or
+           IsHttp(v{%H-}) then
           AddRawUtf8(ocsp, v);
       end
       else if oid = ASN1_OID_AIA_ISSUERS then
-        if IsHttp(v) or
+        if nofilter or
+           IsHttp(v) or
            IsLdap(v) then
           AddRawUtf8(issuers, v);
     end;
