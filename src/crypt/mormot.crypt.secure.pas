@@ -3509,6 +3509,12 @@ const
   /// such a Certificate could be used for a TLS client authentication
   CU_TLS_CLIENT = [cuTlsClient, cuKeyAgreement, cuKeyEncipherment];
 
+  /// KeyUsage bits mapped in TCryptCertUsages
+  CU_KEY_USAGE = [cuEncipherOnly .. cuDecipherOnly];
+
+  /// Extended KeyUsage bits mapped in TCryptCertUsages
+  CU_EXT_KEY_USAGE = [cuTlsServer .. cuTimestamp];
+
   /// TCryptCertValidity results indicating a valid digital signature
   CV_VALIDSIGN =
     [cvValidSigned, cvValidSelfSigned];
@@ -3562,6 +3568,15 @@ function ToText(v: TCryptCertValidity): PShortString; overload;
 
 /// return the first usage set, or cuKeyCertSign if [] was supplied
 function GetFirstUsage(u: TCryptCertUsages): TCryptCertUsage;
+
+/// check for one KeyUsage bit presence - if any is set (see RFC 5280 6.1.4)
+// - one is typically cuKeyCertSign, cuCrlSign or cuDigitalSignature
+function HasKeyUsage(usages: TCryptCertUsages; one: TCryptCertUsage): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// check both cA=TRUE and keyCertSign - RFC 5280 6.1.4 compliant
+function IsCertAuthority(usages: TCryptCertUsages): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// fast case-insensitive check of the 'CN' Relative Distinguished Name identifier
 function IsCN(const Rdn: RawUtf8): boolean;
@@ -10394,6 +10409,18 @@ begin
     if result in u then
       exit;
   result := cuKeyCertSign;
+end;
+
+function HasKeyUsage(usages: TCryptCertUsages; one: TCryptCertUsage): boolean;
+begin // RFC 5280 6.1.4: if KeyUsage is present, the bit must be set
+  result := (usages * CU_KEY_USAGE = []) or // no KeyUsage
+            (one in usages);                // check e.g. for cuKeyCertSign
+end;
+
+function IsCertAuthority(usages: TCryptCertUsages): boolean;
+begin
+  result := (cuCA in usages) and                // cA=TRUE should be present
+            HasKeyUsage(usages, cuKeyCertSign); // could emit signatures
 end;
 
 function IsCN(const Rdn: RawUtf8): boolean;
