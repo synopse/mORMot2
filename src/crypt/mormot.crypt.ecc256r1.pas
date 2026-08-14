@@ -323,7 +323,8 @@ type
     ecvDeprecatedAuthority,
     ecvInvalidSignature,
     ecvRevoked,
-    ecvWrongUsage);
+    ecvWrongUsage,
+    ecvExhaustedPathLen);
 
   /// the certification information of a TEccCertificate
   // - as stored in TEccCertificateContent.Head.Signed

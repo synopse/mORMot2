@@ -2467,7 +2467,8 @@ type
     cvDeprecatedAuthority,    // (8)
     cvInvalidSignature,       // (9)
     cvRevoked,                // (10)
-    cvWrongUsage);            // (11)
+    cvWrongUsage,             // (11)
+    cvExhaustedPathLen);      // (12)
 
   /// a set of Digital Signature results
   TCryptCertValidities = set of TCryptCertValidity;
@@ -9802,6 +9803,21 @@ begin
     for i := 1 to n - 2 do // skip u[0] leaf and u[n-1]trust anchor
       if not IsCertAuthority(u[i]) then
         exit; // check cA=TRUE and keyCertSign
+  // check pathLenConstraint according to RFC 5280
+  result := cvExhaustedPathLen;
+  plen := 0;
+  if not (result in ignore) then
+    // apply each CA's constraint (if any) against the path already seen
+    for i := 1 to n - 1 do            // skip u[0] leaf (but check trust anchor)
+      if cuCA in u[i] then            // only count cA certificates
+      begin
+        if (p[i] >= 0) and            // has pathLenConstraint
+           (plen > p[i]) then         // cvExhaustedPathLen
+          exit;
+        if (i < n - 1) and            // still an intermediate (no trust anchor)
+           not c[i].IsSelfSigned then // self-issued are exempt
+          inc(plen);
+      end;
   // ensure no certificate in the sequence has been explicitly revoked
   result := cvRevoked;
   if not (result in ignore) then
