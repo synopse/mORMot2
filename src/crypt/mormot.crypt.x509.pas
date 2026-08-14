@@ -622,6 +622,7 @@ type
     fCachedDer: RawByteString;
     fCachedHash: array[THashAlgo] of RawUtf8;
     fCachedPeerInfo: RawUtf8;
+    fCachedExtensions: TCryptCustomExts;
     fLastVerifyAuthPublicKey: RawByteString;
     fIsSelfSigned: boolean;
     fIsRevokedTag: integer; // <0 as reason if revoked, or = TCryptStoreX509 tag
@@ -629,6 +630,7 @@ type
     procedure ComputeCachedDer;
     procedure ComputeCachedPeerInfo;
     procedure ComputeCachedHash(algo: THashAlgo);
+    procedure ComputeCachedExtensions;
     function GetIssuerDN: RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
     function GetSubjectDN: RawUtf8;
@@ -711,6 +713,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// return the main information of this Certificate into
     procedure ToParsedInfo(out Info: TX509Parsed);
+    /// returns the raw X.509 extensions as binary OID and Value pairs
+    function GetExtensions: TCryptCustomExts;
     /// true if the Certificate Issuer is also its Subject
     property IsSelfSigned: boolean
       read fIsSelfSigned;
@@ -2183,7 +2187,7 @@ end;
 procedure TXTbsCertificate.AddNextExtensions(pos: integer; const der: TAsnObject);
 var
   buf, seq: TAsnBuffer;
-  ext, oid2, v: RawByteString;
+  ext, v: RawByteString;
   decoded: RawUtf8;
   vt, extpos, pl: integer;
   xe: TXExtension;
@@ -2449,6 +2453,7 @@ begin
   fCachedDer := '';
   Finalize(fCachedHash);
   fCachedPeerInfo := '';
+  fCachedExtensions := nil;
   fLastVerifyAuthPublicKey := '';
   fSignatureAlgorithm := xsaNone;
   fSignatureValue := '';
@@ -2649,6 +2654,7 @@ begin
     begin
       Finalize(fCachedHash);
       fCachedPeerInfo := '';
+      fCachedExtensions := nil;
       fCachedDer := Asn(ASN1_SEQ, [
                       Signed.ToDer,
                       XsaToSeq(SignatureAlgorithm),
@@ -2667,6 +2673,18 @@ var
 begin
   ToParsedInfo(info);
   fCachedPeerInfo := info.PeerInfo;
+end;
+
+procedure TX509.ComputeCachedExtensions;
+var
+  xe: TXExtension;
+begin
+  fCachedExtensions := Signed.ExtensionOther;
+  for xe := succ(xeNone) to high(xe) do
+    if (xe <> xeNetscapeComment) and
+       (Signed.ExtensionRaw[xe] <> '') then
+      AddCustomExts(fCachedExtensions, XE_OID_ASN[xe],
+        Signed.ExtensionRaw[xe], Signed.ExtensionCritical[xe]);
 end;
 
 procedure TX509.ComputeCachedHash(algo: THashAlgo);
@@ -2895,6 +2913,16 @@ begin
     result := HasCertUsage(usage, Signed.CertUsages)
   else
     result := false;
+end;
+
+function TX509.GetExtensions: TCryptCustomExts;
+begin
+  result := nil;
+  if self = nil then
+    exit;
+  if fCachedExtensions = nil then
+    ComputeCachedExtensions;
+  result := fCachedExtensions;
 end;
 
 procedure TX509.AfterModified;
@@ -3816,14 +3844,14 @@ end;
 
 function TCryptCertX509Abstract.GetFields(var fields: TCryptCertFields;
   withexts: boolean): boolean;
-var
-  xe: TXExtension;
 begin
   result := false;
   if fX509 = nil then
     exit;
   fX509.Signed.Subject.ToFields(fields);
   fields.Comment := fX509.Extension[xeNetscapeComment];
+  if withexts then
+    fields.CustomExts := fX509.GetExtensions;
   result := true;
   if not withexts then
     exit;
