@@ -2489,15 +2489,15 @@ type
     ccfBase64,
     ccfBase64Uri);
 
-  /// used to store one unknown/unsupported attribute or extension
-  // - in TCryptCertFields.CustomExts, TXTbsCertificate.ExtensionOther[]
-  // or TXname.Other[]
+  /// used to store any kind of X.509 attributes or extensions as OID and Value
+  // - e.g. in TCryptCertFields.CustomExts, TXTbsCertificate.ExtensionOther[],
+  // TXname.Other[] or ICryptCert.GetExtensions
   TCryptCustomExt = record
     /// the OID of this value, in raw binary form - e.g. from AsnEncOid('1.2.3')
     Oid: RawByteString;
     /// the value associated with this OID
-    // - as ASN1_OCTSTR raw content for TCryptCertFields.CustomExts or
-    // TXTbsCertificate.ExtensionOther[]
+    // - as ASN1_OCTSTR raw content for TCryptCertFields.CustomExts,
+    // TXTbsCertificate.ExtensionOther[] or ICryptCert.GetExtensions
     // - as RawUtf8 for TXname.Other[]
     Value: RawByteString;
     /// true if this extension is defined as critical
@@ -2505,9 +2505,9 @@ type
   end;
   PCryptCustomExt = ^TCryptCustomExt;
 
-  /// used to store some unknown attributes or extensions
-  // - in TCryptCertFields.CustomExts, TXTbsCertificate.ExtensionOther[]
-  // or TXname.Other[]
+  /// used to store any kind of X.509 attributes or extensions as OID and Value
+  // - e.g. in TCryptCertFields.CustomExts, TXTbsCertificate.ExtensionOther[],
+  // TXname.Other[] or ICryptCert.GetExtensions
   TCryptCustomExts = array of TCryptCustomExt;
 
   /// convenient wrapper of X.509 Certificate subject name X.501 fields
@@ -2865,6 +2865,8 @@ type
     // - for RSA, x is set to the Exponent (e), and y to the Modulus (n)
     // - return false if there is no compliant key information in the provider
     function GetKeyParams(out x, y: RawByteString): boolean;
+    /// returns the raw X.509 extensions as binary OID and Value pairs
+    function GetExtensions: TCryptCustomExts;
   end;
 
   /// a dynamic array of Certificate interface instances
@@ -2964,6 +2966,7 @@ type
     function Handle: pointer; virtual; abstract;
     function PrivateKeyHandle: pointer; virtual;
     function GetKeyParams(out x, y: RawByteString): boolean; virtual;
+    function GetExtensions: TCryptCustomExts; virtual;
   end;
 
   /// meta-class of the abstract parent to implement ICryptCert interface
@@ -9665,6 +9668,16 @@ end;
 function TCryptCert.GetKeyParams(out x, y: RawByteString): boolean;
 begin
   result := false; // unsupported
+end;
+
+function TCryptCert.GetExtensions: TCryptCustomExts;
+var
+  fields: TCryptCertFields; // fallback e.g. for OpenSSL
+begin
+  if GetFields(fields, {withexts=}true) then
+    result := fields.CustomExts
+  else
+    result := nil;
 end;
 
 

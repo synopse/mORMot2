@@ -1234,6 +1234,7 @@ type
     function GetSubjectKey: RawUtf8; override;
     function GetAuthorityKey: RawUtf8; override;
     function GetFields(var fields: TCryptCertFields; withexts: boolean): boolean; override;
+    function GetExtensions: TCryptCustomExts; override;
     function IsSelfSigned: boolean; override;
     function IsAuthorizedBy(const Authority: ICryptCert): boolean; override;
     function Compare(const Another: ICryptCert; Method: TCryptCertComparer): integer; override;
@@ -2932,6 +2933,7 @@ begin
     fCachedDer := '';
     Finalize(fCachedHash);
     fCachedPeerInfo := '';
+    fCachedExtensions := nil;
     fLastVerifyAuthPublicKey := '';
     fSignatureValue := '';
   finally
@@ -3853,14 +3855,11 @@ begin
   if withexts then
     fields.CustomExts := fX509.GetExtensions;
   result := true;
-  if not withexts then
-    exit;
-  fields.CustomExts := fX509.Signed.ExtensionOther;
-  for xe := succ(xeNone) to high(xe) do
-    if (xe <> xeNetscapeComment) and
-       (fX509.Signed.ExtensionRaw[xe] <> '') then
-      AddCustomExts(fields.CustomExts, XE_OID_ASN[xe],
-        fX509.Signed.ExtensionRaw[xe], fX509.Signed.ExtensionCritical[xe]);
+end;
+
+function TCryptCertX509Abstract.GetExtensions: TCryptCustomExts;
+begin
+  result := fX509.GetExtensions;
 end;
 
 function TCryptCertX509Abstract.IsSelfSigned: boolean;
