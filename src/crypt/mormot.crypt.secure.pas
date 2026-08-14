@@ -3572,7 +3572,7 @@ function GetFirstUsage(u: TCryptCertUsages): TCryptCertUsage;
 
 /// check for one KeyUsage bit presence - if any is set (see RFC 5280 6.1.4)
 // - one is typically cuKeyCertSign, cuCrlSign or cuDigitalSignature
-function HasCertUsage(one: TCryptCertUsage; usages: TCryptCertUsages): boolean;
+function HasCertUsage(const one: TCryptCertUsage; const usages: TCryptCertUsages): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// check both cA=TRUE and keyCertSign - RFC 5280 6.1.4 compliant
@@ -10434,11 +10434,15 @@ begin
   result := cuKeyCertSign;
 end;
 
-function HasCertUsage(one: TCryptCertUsage; usages: TCryptCertUsages): boolean;
+function HasCertUsage(const one: TCryptCertUsage; const usages: TCryptCertUsages): boolean;
 begin // RFC 5280 6.1.4: if KeyUsage is present, the bit must be set
-  result := (one in usages) or
-            ((one in CU_KEY_USAGE) and
-             (usages * CU_KEY_USAGE = [])); // no KeyUsage means OK
+  result := true;
+  if one in usages then
+    exit;
+  if (one in CU_KEY_USAGE) and
+     (usages * CU_KEY_USAGE = []) then // no KeyUsage means OK
+    exit;
+  result := false;
 end;
 
 function IsCertAuthority(usages: TCryptCertUsages): boolean;

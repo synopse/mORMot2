@@ -703,6 +703,9 @@ type
     // - in a layout similar to X509_print() OpenSSL usual formatting
     // - is cached internally for efficiency
     function PeerInfo: RawUtf8;
+    /// convenient wrapper to HasCertUsage(usage, Signed.CertUsages)
+    function HasUsage(const usage: TCryptCertUsage): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// return the main information of this Certificate into
     procedure ToParsedInfo(out Info: TX509Parsed);
     /// true if the Certificate Issuer is also its Subject
@@ -2892,6 +2895,14 @@ begin
   end;
 end;
 
+function TX509.HasUsage(const usage: TCryptCertUsage): boolean;
+begin
+  if self <> nil then
+    result := HasCertUsage(usage, Signed.CertUsages)
+  else
+    result := false;
+end;
+
 procedure TX509.AfterModified;
 begin
   fSafe.Lock;
@@ -3978,8 +3989,8 @@ end;
 function TCryptCertX509Abstract.Encrypt(const Message: RawByteString;
   const Cipher: RawUtf8): RawByteString;
 begin
-  if (fX509 <> nil) and
-     (fX509.Usages * [cuDataEncipherment, cuEncipherOnly] <> []) then
+  if fX509.HasUsage(cuDataEncipherment) or
+     fX509.HasUsage(cuEncipherOnly) then
     result := fX509.PublicKey.Seal(Message, Cipher)
   else
     FastAssignNew(result);
@@ -3988,9 +3999,9 @@ end;
 function TCryptCertX509Abstract.Decrypt(const Message: RawByteString;
   const Cipher: RawUtf8): RawByteString;
 begin
-  if (fX509 <> nil) and
-     (fPrivateKey <> nil) and
-     (fX509.Usages * [cuDataEncipherment, cuEncipherOnly] <> []) then
+  if (fPrivateKey <> nil) and
+     (fX509.HasUsage(cuDataEncipherment) or
+      fX509.HasUsage(cuDecipherOnly)) then
     result := fPrivateKey.Open(Message, Cipher)
   else
     FastAssignNew(result);
@@ -3998,13 +4009,11 @@ end;
 
 function TCryptCertX509Abstract.SharedSecret(const pub: ICryptCert): RawByteString;
 begin
-  if (fX509 <> nil) and
-     (fPrivateKey <> nil) and
-     (cuKeyAgreement in fX509.Usages) and
+  if (fPrivateKey <> nil) and
+     fX509.HasUsage(cuKeyAgreement) and
      Assigned(pub) and
      pub.Instance.InheritsFrom(TCryptCertX509Abstract) and
-     (pub.Handle <> nil) and
-     (cuKeyAgreement in TX509(pub.Handle).Usages) then
+     TX509(pub.Handle).HasUsage(cuKeyAgreement) then
     result := fPrivateKey.SharedSecret(TX509(pub.Handle).PublicKey)
   else
     FastAssignNew(result);
@@ -4336,8 +4345,7 @@ function TCryptCertX509.Sign(Data: pointer; Len: integer;
   Usage: TCryptCertUsage): RawByteString;
 begin
   if HasPrivateSecret and
-     (fX509 <> nil) and
-     (Usage in fX509.Usages) then
+     fX509.HasUsage(Usage) then
     result := fPrivateKey.Sign(XSA_TO_CAA[AlgoXsa], Data, Len)
   else
     FastAssignNew(result);
@@ -4428,8 +4436,8 @@ begin
     if auth.fX509 = nil then
       EX509.RaiseUtf8('%.Sign: authority has no public key', [self]);
     // validate usage
-    if not HasKeyUsage(auth.fX509.Usages, cuCrlSign) then
-      EX509.RaiseUtf8('%.Sign: authority has no cuCrlSign', [self]);
+    if not auth.fX509.HasUsage(cuCrlSign) then
+      EX509.RaiseUtf8('%.Sign: authority has no crlSign', [self]);
     // assign the Issuer information
     Signed.Issuer := auth.fX509.Signed.Subject;
     Signed.Extension[xceAuthorityKeyIdentifier] :=
