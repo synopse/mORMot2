@@ -8620,7 +8620,7 @@ begin
      (serial = nil) or
      (IsRevoked(serial) >= 0) or
      ((ca <> nil) and
-      (not ca.IsCA(nil))) then
+      (not ca.IsCA)) then
     exit;
   rev := X509_REVOKED_new();
   X509_REVOKED_set_serialNumber(rev, serial);

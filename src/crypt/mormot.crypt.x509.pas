@@ -571,6 +571,8 @@ type
     // - aggregate KeyUsages and ExtendedKeyUsages X.509 fields with
     // cuCA from Extension[xeBasicConstraints]
     CertUsages: TCryptCertUsages;
+    /// 32-bit limit that follows cuCA in Extension[xeBasicConstraints] (-1 if none)
+    PathLenConstraint: integer;
     /// CA Issuer URIs from declared X.509 v3 Authority Information Access extension
     // - only http:// https:// ldap:// ldaps:// URIs are decoded here
     CaIssuers: TRawUtf8DynArray;
@@ -588,6 +590,8 @@ type
     /// ensure AKI (if set) matches auth.SKI
     function CompareAuthority(const aki: RawByteString): boolean;
       {$ifdef HASINLINE} inline; {$endif}
+    /// init all non-zero fields
+    procedure Init;
     /// reset all internal context
     procedure Clear;
     /// serialize those fields into ASN.1 DER binary
@@ -628,6 +632,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function GetSubjectPublicKeyAlgorithm: RawUtf8;
   public
+    /// setup this instance
+    constructor Create; override;
     /// reset all internal context
     procedure Clear;
     /// verify the digital signature of this Certificate using a X.509 Authority
@@ -2167,7 +2173,7 @@ var
   buf, seq: TAsnBuffer;
   ext, oid2, v: RawByteString;
   decoded: RawUtf8;
-  vt, extpos: integer;
+  vt, extpos, pl: integer;
   xe: TXExtension;
   xku: TXExtendedKeyUsage;
   critical: boolean;
@@ -2222,8 +2228,13 @@ begin
           if (AsnNext(extpos, ext) = ASN1_SEQ) and
              (AsnNextBuffer(extpos, ext, buf) = ASN1_BOOL) and
              (buf.Len = 1) and
-             (PByte(buf.Data)^ = $ff) then
-            decoded := 'CA';         // as expected by cuCA usage flag
+             (PByte(buf.Data)^ = $ff) then // cA BOOLEAN DEFAULT FALSE
+          begin
+            decoded := 'CA'; // as expected by ComputeCertUsages below
+            if (AsnNextInt32(extpos, ext, pl) = ASN1_INT) and
+               (pl >= 0) then
+              PathLenConstraint := pl; // optional but requires cA=TRUE
+          end;
         xeKeyUsage:                  // RFC 5280 #4.2.1.3
           if (AsnNextBuffer(extpos, ext, buf) = ASN1_BITSTR) and
              (PtrUInt(buf.Len - 1) < 2) then
@@ -2396,10 +2407,16 @@ begin
   result := true;
 end;
 
+procedure TXTbsCertificate.Init;
+begin
+  PathLenConstraint := -1;
+end;
+
 procedure TXTbsCertificate.Clear;
 begin
   Finalize(self);
   FillCharFast(self, SizeOf(self), 0);
+  Init;
 end;
 
 procedure TXTbsCertificate.AfterModified;
@@ -2416,6 +2433,12 @@ end;
 
 
 { TX509 }
+
+constructor TX509.Create;
+begin
+  inherited Create;
+  Signed.Init; // set e.g. PathLenConstraint := -1
+end;
 
 procedure TX509.Clear;
 begin
