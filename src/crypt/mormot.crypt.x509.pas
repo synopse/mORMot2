@@ -2463,7 +2463,7 @@ function CanVerify(auth: TX509; usage: TCryptCertUsage; selfsigned: boolean;
 begin
   if auth <> nil then
     if (cvWrongUsage in ignored) or
-       (selfsigned or HasKeyUsage(auth.Signed.CertUsages, usage)) then
+       (selfsigned or HasCertUsage(usage, auth.Signed.CertUsages)) then
       if (cvDeprecatedAuthority in ignored) or
          auth.Signed.IsValidDate(timeutc) then
         result := cvValidSigned
@@ -4357,7 +4357,7 @@ begin
     u := cuKeyCertSign;
     if a = self then
       u := GetFirstUsage(GetUsage(nil)) // any usage to let Sign() pass below
-    else if not HasKeyUsage(a.GetUsage, u) then
+    else if not HasCertUsage(u, a.GetUsage) then
       RaiseError('Sign: % Authority has no keyCertSign', [a]);
     // assign the Issuer information (from any TCryptCert kind of class)
     if not fX509.Signed.Issuer.FromAsn(a.GetSubject('DER')) then
