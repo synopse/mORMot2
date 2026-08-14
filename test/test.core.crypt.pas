@@ -5823,7 +5823,7 @@ begin
     CheckEqual(x.Extension[xeAuthorityKeyIdentifier],
       '14:2e:b3:17:b7:58:56:cb:ae:50:09:40:e6:1f:af:9d:8b:14:c2:c6');
     CheckEqual(x.Extension[xeAuthorityInformationAccess],
-      'ocsp=http://r3.o.lencr.org,caIssuers=http://r3.i.lencr.org/');
+      'ocsp=(http://r3.o.lencr.org) caIssuers=(http://r3.i.lencr.org/)');
     if Check(x.Signed.CaIssuers <> nil) then
       CheckEqual(x.Signed.CaIssuers[0], 'http://r3.i.lencr.org/');
     if Check(x.Signed.Ocsp <> nil) then
@@ -5872,7 +5872,7 @@ begin
         cuCrlSign, cuTlsServer, cuTlsClient]);
       Check(a.Signed.ExtensionOther = nil);
       CheckEqual(a.Extension[xeAuthorityInformationAccess],
-        'caIssuers=http://x1.i.lencr.org/');
+        'caIssuers=(http://x1.i.lencr.org/)');
       CheckEqual(a.Extension[xeCertificatePolicies],
         '2.23.140.1.2.1,1.3.6.1.4.1.44947.1.1.1');
       for i := 1 to 1000 do // will use TX509.fLastVerifyAuthPublicKey cache

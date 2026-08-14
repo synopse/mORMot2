@@ -2265,30 +2265,15 @@ begin
                 include(ExtendedKeyUsages, xku);
             end;
         xeAuthorityInformationAccess: // RFC 5280 #4.2.2.1
-          // e.g. 'ocsp=http://r3.o.lencr.org,caIssuers=http://r3.i.lencr.org/'
-          if AsnNext(extpos, ext) = ASN1_SEQ then
-            while (AsnNext(extpos, ext) = ASN1_SEQ) and
-                  (AsnNext(extpos, ext, @oid2) = ASN1_OBJID) and // accessMethod
-                  (AsnNext(extpos, ext, @v) = ASN1_CTX6) do     // GeneralName
-            begin
-              if oid2 = ASN1_OID_AIA_OCSP then
-              begin
-                if IsHttp(v) then
-                  AddRawUtf8(Ocsp, v);
-                Prepend(v, 'ocsp=');
-              end
-              else if oid2 = ASN1_OID_AIA_ISSUERS then
-              begin
-                if IsHttp(v) or
-                   IsLdap(v) then
-                  AddRawUtf8(CaIssuers, v);
-                Prepend(v, 'caIssuers=');
-              end
-              else
-                Prepend(v, [oid2, '=']); // not part of RFC 5280
-              EnsureRawUtf8(v);
-              AddToCsv(v, decoded);
-            end;
+          // e.g. 'ocsp=(http://r3.o.lencr.org) caIssuers=(http://r3.i.lencr.org/)'
+          if (AsnNextRaw(extpos, ext, v, {includhead=}true) = ASN1_SEQ) and
+             AsnDecAia(v, Ocsp, CaIssuers) then
+          begin
+            if Ocsp <> nil then
+              Join(['ocsp=(', RawUtf8ArrayToCsv(Ocsp), ') '], decoded);
+            if CaIssuers <> nil then
+              Append(decoded, ['caIssuers=(', RawUtf8ArrayToCsv(CaIssuers), ')']);
+          end;
         xeCertificatePolicies:      // RFC 5280 #4.2.1.4
           if AsnNext(extpos, ext) = ASN1_SEQ then
             while AsnNextBuffer(extpos, ext, seq) = ASN1_SEQ do
