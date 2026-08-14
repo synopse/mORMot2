@@ -1709,7 +1709,7 @@ type
   /// convenient wrapper to a PX509_EXTENSION instance
   X509_EXTENSION = object
   public
-    function BasicConstraintIsCA: boolean;
+    function BasicConstraintIsCA(pathlen: PInteger): boolean;
     function IsDataEqual(x: PX509_EXTENSION): boolean;
     procedure ToUtf8(out result: RawUtf8; flags: cardinal = X509V3_EXT_DEFAULT);
     procedure Free;
@@ -1940,7 +1940,7 @@ type
     function GetExtensions: TX509_Extensions;
     /// if the Certificate X509v3 Basic Constraints contains 'CA:TRUE'
     // - match kuCA flag in GetUsage/HasUsage
-    function IsCA: boolean;
+    function IsCA(pathlen: PInteger = nil): boolean;
     /// if the Certificate issuer is itself
     function IsSelfSigned: boolean;
     /// if both Issuer = x.Subject and AKI (if set) = x.SKI
@@ -1955,7 +1955,7 @@ type
     // - returns e.g. 'SHA256'
     function GetSignatureHash: RawUtf8;
     /// the X509v3 Key and Extended Key Usage Flags of this Certificate
-    function GetUsage: TX509Usages;
+    function GetUsage(pathlen: PInteger = nil): TX509Usages;
     /// check a X509v3 Key and Extended Key Usage Flag of this Certificate
     // - fastest and easiest way of checking Certificate abilities from code
     // - OpenSSL caches the flags, so any SetUsage() won't be taken into account
@@ -8620,7 +8620,7 @@ begin
      (serial = nil) or
      (IsRevoked(serial) >= 0) or
      ((ca <> nil) and
-      (not ca.IsCA)) then
+      (not ca.IsCA(nil))) then
     exit;
   rev := X509_REVOKED_new();
   X509_REVOKED_set_serialNumber(rev, serial);
@@ -9367,7 +9367,7 @@ end;
 
 { X509_EXTENSION }
 
-function X509_EXTENSION.BasicConstraintIsCA: boolean;
+function X509_EXTENSION.BasicConstraintIsCA(pathlen: PInteger): boolean;
 var
   d: PASN1_OCTET_STRING;
   data: PByte;
@@ -9386,6 +9386,12 @@ begin
   if c = nil then
     exit;
   result := c^.ca <> 0;
+  if pathlen <> nil then
+    if (c^.pathlen = nil) or
+       not result then
+      pathlen^ := -1 // convention for absent or not CA
+    else
+      pathlen^ := c^.pathlen.ToInteger;
   BASIC_CONSTRAINTS_free(c);
 end;
 
@@ -9617,9 +9623,9 @@ begin
     Extension(nid).ToUtf8(result);
 end;
 
-function X509.IsCA: boolean;
+function X509.IsCA(pathlen: PInteger): boolean;
 begin
-  result := Extension(NID_basic_constraints).BasicConstraintIsCA;
+  result := Extension(NID_basic_constraints).BasicConstraintIsCA(pathlen);
 end;
 
 function X509.IsSelfSigned: boolean;
@@ -9693,15 +9699,17 @@ const
     XKU_OCSP_SIGN,
     XKU_TIMESTAMP);
 
-function X509.GetUsage: TX509Usages;
+function X509.GetUsage(pathlen: PInteger): TX509Usages;
 var
   f: integer;
   u: TX509Usage;
 begin
   result := [];
+  if pathlen <> nil then
+    pathlen^ := -1;
   if @self = nil then
     exit;
-  if IsCA then
+  if IsCA(pathlen) then
     include(result, kuCA);
   f := X509_get_key_usage(@self); // returns -1 if not present
   if f > 0 then
@@ -9723,7 +9731,7 @@ begin
     result := false
   else
   if u = kuCA then
-    result := IsCA
+    result := IsCA(nil)
   else if (u >= low(KU)) and
           (u <= high(KU)) then
   begin
