@@ -9247,8 +9247,12 @@ begin
 end;
 
 function ASN1_INTEGER.ToDecimal: RawUtf8;
+var
+  bn: PBIGNUM;
 begin
-  result := ToBigInt.ToDecimal;
+  bn := ToBigInt;
+  result := bn.ToDecimal;
+  bn.Free;
 end;
 
 procedure ASN1_INTEGER.Free;
