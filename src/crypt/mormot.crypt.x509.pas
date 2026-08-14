@@ -400,7 +400,7 @@ const
     '2.5.29.18',                 // xeIssuerAlternativeName
     '2.5.29.19',                 // xeBasicConstraints
     '2.5.29.30',                 // xeNameConstraints
-    '2.5.29.31',                 // xeCrlDistributionPoints
+    ASN1_OID_CDP,                 // xeCrlDistributionPoints
     '2.5.29.32',                 // xeCertificatePolicies
     '2.5.29.33',                 // xePolicyMappings
     '2.5.29.35',                 // xeAuthorityKeyIdentifier

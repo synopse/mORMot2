@@ -3360,6 +3360,9 @@ function FindCustomExtsAsn(o: PCryptCustomExt; n: integer; const b: TAsnObject):
 /// search and decode Authority Information Access (1.3.6.1.5.5.7.1.1) extension content
 function FindAia(const ext: TCryptCustomExts; var ocsp, issuers: TRawUtf8DynArray): boolean;
 
+/// search and decode Crl Distribution Points (2.5.29.31) extension content
+function FindCdp(const ext: TCryptCustomExts): TRawUtf8DynArray;
+
 type
   /// maintains a list of ICryptCert, easily reachable per TCryptCertUsage
   // - could be seen as a basic certificates store or "PKI of the poor" (tm)
@@ -3926,6 +3929,7 @@ const
   // - is stored as prefix to CKA_OID[ckaEcc256..ckaEcc256k] parameter
   ASN1_OID_X962_PUBLICKEY  = '1.2.840.10045.2.1';
 
+  ASN1_OID_CDP         = '2.5.29.31';
   ASN1_OID_AIA         = '1.3.6.1.5.5.7.1.1';
   ASN1_OID_AIA_OCSP    = '1.3.6.1.5.5.7.48.1';
   ASN1_OID_AIA_ISSUERS = '1.3.6.1.5.5.7.48.2';
@@ -10254,6 +10258,11 @@ begin
             AsnDecAia(aia, ocsp, issuers);
 end;
 
+function FindCdp(const ext: TCryptCustomExts): TRawUtf8DynArray;
+begin
+  result := AsnDecCdp(FindCustomExts(ext, ASN1_OID_CDP));
+end;
+
 
 { TCryptCertPerUsage }
 
@@ -11735,7 +11744,7 @@ begin // see xeAuthorityInformationAccess in TXTbsCertificate.AddNextExtensions
   pos := 1;
   if AsnNext(pos, ext) = ASN1_SEQ then
     while (AsnNext(pos, ext) = ASN1_SEQ) and
-          (AsnNext(pos, ext, @oid) = ASN1_OBJID) and
+          (AsnNext(pos, ext, @oid) = ASN1_OBJID) and // accessMethod
           AsnNextGeneralName(pos, ext, v) do
     begin
       result := true;
