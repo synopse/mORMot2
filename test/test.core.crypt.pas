@@ -5875,6 +5875,8 @@ begin
         'caIssuers=(http://x1.i.lencr.org/)');
       CheckEqual(a.Extension[xeCertificatePolicies],
         '2.23.140.1.2.1,1.3.6.1.4.1.44947.1.1.1');
+      CheckEqual(a.Extension[xeCrlDistributionPoints],
+        'http://x1.c.lencr.org/');
       for i := 1 to 1000 do // will use TX509.fLastVerifyAuthPublicKey cache
         Check(x.Verify(a, [], _synopse_date) = cvValidSigned, 'verify 1000');
       bin := x.Signed.ToDer;

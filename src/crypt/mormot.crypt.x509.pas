@@ -579,6 +579,9 @@ type
     /// CA OCSP URIs from declared X.509 v3 Authority Information Access extension
     // - only http:// https:// URIs are decoded here
     Ocsp: TRawUtf8DynArray;
+    /// CDP X.509 v3 CRL Distribution Points extension
+    // - only http:// https:// URIs are decoded here
+    CrlDistPoint: TRawUtf8DynArray;
     /// decimal text of a positive integer assigned by the CA to each certificate
     // - e.g. '330929475774275458452528262248458246563660'
     function SerialNumberText: RawUtf8;
@@ -2264,6 +2267,12 @@ begin
               if xku <> xkuNone then
                 include(ExtendedKeyUsages, xku);
             end;
+        xeCrlDistributionPoints:    // RFC 5280 #4.2.1.13
+          if AsnNextRaw(extpos, ext, v, {includhead=}true) = ASN1_SEQ then
+          begin
+            CrlDistPoint := AsnDecCdp(v);
+            decoded := RawUtf8ArrayToCsv(CrlDistPoint);
+          end;
         xeAuthorityInformationAccess: // RFC 5280 #4.2.2.1
           // e.g. 'ocsp=(http://r3.o.lencr.org) caIssuers=(http://r3.i.lencr.org/)'
           if (AsnNextRaw(extpos, ext, v, {includhead=}true) = ASN1_SEQ) and
