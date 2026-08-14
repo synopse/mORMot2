@@ -6002,8 +6002,8 @@ begin
     Check(c[cu].Verify(cint) = cvValidSigned);
   end;
   SetLength(chain, 3); // create an unordered chain - should be consolidated
-  chain[1] := ca.CertAlgo.Generate([cuKeyCertSign], 'cint1', cint);
-  chain[2] := ca.CertAlgo.Generate([cuKeyCertSign], 'cint2', chain[1]);
+  chain[1] := ca.CertAlgo.Generate([cuCA, cuKeyCertSign], 'cint1', cint); // cA mandatory
+  chain[2] := ca.CertAlgo.Generate([cuCA], 'cint2', chain[1]); // no KeyUsage = OK
   chain[0] := ca.CertAlgo.Generate([cuTlsClient], 'www.toto.com', chain[2]);
   // validate a X.509 CRL generation and signature with a temporay authority
   crl := TX509Crl.Create;
