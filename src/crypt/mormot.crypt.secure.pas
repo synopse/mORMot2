@@ -2681,7 +2681,8 @@ type
     /// returns true e.g. after TCryptCertAlgo.New but before Generate()
     function IsVoid: boolean;
     /// the Key Usages of this Certificate
-    function GetUsage: TCryptCertUsages;
+    // - could optionally return the pathLenConstraint limit as 32-bit integer
+    function GetUsage(PathLen: PInteger = nil): TCryptCertUsages;
     /// verbose Certificate information, returned as huge text/JSON blob
     function GetPeerInfo: RawUtf8;
     /// the signature algorithm as engine-specific plain text
@@ -2912,7 +2913,7 @@ type
     function GetNotAfter: TDateTime; virtual; abstract;
     function IsValidDate(date: TDateTime): boolean; virtual;
     function IsVoid: boolean; virtual;
-    function GetUsage: TCryptCertUsages; virtual; abstract;
+    function GetUsage(PathLen: PInteger = nil): TCryptCertUsages; virtual; abstract;
     function GetPeerInfo: RawUtf8; virtual; abstract;
     function GetSignatureInfo: RawUtf8; virtual; abstract;
     function GetDigest(Algo: THashAlgo): RawUtf8; virtual;

@@ -1230,7 +1230,7 @@ type
     function GetNotBefore: TDateTime; override;
     function GetNotAfter: TDateTime; override;
     function IsValidDate(date: TDateTime): boolean; override;
-    function GetUsage: TCryptCertUsages; override;
+    function GetUsage(PathLen: PInteger): TCryptCertUsages; override;
     function GetPeerInfo: RawUtf8; override;
     function GetSignatureInfo: RawUtf8; override;
     function GetDigest(Algo: THashAlgo): RawUtf8; override;
@@ -3884,12 +3884,20 @@ begin
             fX509.Signed.IsValidDate(date);
 end;
 
-function TCryptCertX509Abstract.GetUsage: TCryptCertUsages;
+function TCryptCertX509Abstract.GetUsage(PathLen: PInteger): TCryptCertUsages;
 begin
   if fX509 = nil then
-    result := []
+  begin
+    result := [];
+    if PathLen <> nil then
+      PathLen^ := -1;
+  end
   else
+  begin
     result := fX509.Signed.CertUsages;
+    if PathLen <> nil then
+      PathLen^ := fX509.Signed.PathLenConstraint;
+  end;
 end;
 
 function TCryptCertX509Abstract.GetPeerInfo: RawUtf8;
@@ -4346,7 +4354,7 @@ begin
     a := Authority.Instance; // may be self
     u := cuKeyCertSign;
     if a = self then
-      u := GetFirstUsage(GetUsage) // any usage to let Sign() pass below
+      u := GetFirstUsage(GetUsage(nil)) // any usage to let Sign() pass below
     else if not (cuKeyCertSign in a.GetUsage) then
       RaiseError('Sign: % Authority has no cuKeyCertSign', [a]);
     // assign the Issuer information (from any TCryptCert kind of class)

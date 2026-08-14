@@ -5786,7 +5786,7 @@ type
     function GetNotAfter: TDateTime; override;
     function IsValidDate(date: TDateTime): boolean; override;
     function IsVoid: boolean; override;
-    function GetUsage: TCryptCertUsages; override;
+    function GetUsage(PathLen: PInteger): TCryptCertUsages; override;
     function GetPeerInfo: RawUtf8; override;
     function GetSignatureInfo: RawUtf8; override;
     function Load(const Saved: RawByteString; Content: TCryptCertContent;
@@ -6034,12 +6034,14 @@ begin
   result := not fEcc.CheckCRC;
 end;
 
-function TCryptCertInternal.GetUsage: TCryptCertUsages;
+function TCryptCertInternal.GetUsage(PathLen: PInteger): TCryptCertUsages;
 begin
   if fEcc <> nil then
     result := fEcc.GetUsage
   else
     result := [];
+  if PathLen <> nil then
+    PathLen^ := -1; // not supported
 end;
 
 function TCryptCertInternal.GetPeerInfo: RawUtf8;
