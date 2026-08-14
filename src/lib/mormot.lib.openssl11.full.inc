@@ -2191,7 +2191,6 @@ const
   NID_name_constraints = 666;
   SN_crl_distribution_points = 'crlDistributionPoints';
   LN_crl_distribution_points = 'X509v3 CRL Distribution Points';
-  NID_crl_distribution_points = 103;
   SN_certificate_policies = 'certificatePolicies';
   LN_certificate_policies = 'X509v3 Certificate Policies';
   NID_certificate_policies = 89;

@@ -856,6 +856,7 @@ const
   NID_issuer_alt_name = 86;
   NID_basic_constraints = 87;
   NID_authority_key_identifier = 90;
+  NID_crl_distribution_points = 103;
   NID_ext_key_usage = 126;
   NID_info_access = 177;
 
@@ -11424,11 +11425,19 @@ begin
             begin
               writeln(OBJ_nid2sn(nid),'=',OBJ_nid2ln(nid),'=', nid,'=',
                 AsnDecOidText(BinaryOid));
-              if nid <> NID_info_access then
-                continue;
-              AsnDecAia(value^.ToBinary, ocsp, isssuers);
-              writeln('ocsp=', RawUtf8ArrayToCsv(ocsp));
-              writeln('issuers=', RawUtf8ArrayToCsv(isssuers));
+              case nid of
+                NID_info_access:
+                  begin
+                    AsnDecAia(value^.ToBinary, ocsp, isssuers);
+                    writeln('  ocsp=', RawUtf8ArrayToCsv(ocsp));
+                    writeln('  issuers=', RawUtf8ArrayToCsv(isssuers));
+                  end;
+                NID_crl_distribution_points:
+                  begin
+                    isssuers := AsnDecCdp(value^.ToBinary);
+                    writeln('  crl=', RawUtf8ArrayToCsv(isssuers));
+                  end;
+              end;
             end;
           writeln('NotBefore= ',DateTimeToStr(fPeer.NotBefore));
           writeln('NotAfter= ',DateTimeToStr(fPeer.NotAfter));
