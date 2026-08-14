@@ -4812,7 +4812,7 @@ type
   TLockedList = object
   {$endif USERECORDWITHMETHODS}
   public
-    /// thread-safe access to the list
+    /// thread-safe access to the list - single pointer size field
     Safe: TLightLock;
     /// how many TLockedListOne instances are currently stored in this list
     // - excluding the instances in the recycle bin
@@ -5179,7 +5179,7 @@ type
   // - publishes our lightweight exclusive non-reentrant lock
   TObjectLightLock = class(TSynPersistent)
   protected
-    fSafe: TLightLock;
+    fSafe: TLightLock; // single pointer size field
   public
     /// access to the associated lightweight exclusive non-reentrant lock instance
     property Safe: TLightLock
@@ -5274,7 +5274,7 @@ type
   TCachedValue = object
   {$endif USERECORDWITHMETHODS}
   public
-    Safe: TLightLock;
+    Safe: TLightLock; // single pointer size field
     Tix32: cardinal;
     Value: RawByteString;
     procedure Reset;
@@ -9179,7 +9179,7 @@ begin
 end;
 
 var
-  __GetmemDualAccessPagesLock: TLightLock;
+  __GetmemDualAccessPagesLock: TLightLock; // single pointer field
   __GetmemDualAccessPages: pointer;
 
 function GetmemDualAccessPagesLock: pointer;
@@ -11274,7 +11274,7 @@ end;
 
 procedure TLightLock.Init;
 begin
-  Flags := 0;
+  Flags := 0; // single pointer size field
 end;
 
 procedure TLightLock.Done;
