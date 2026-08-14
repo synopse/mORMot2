@@ -3121,7 +3121,7 @@ type
     // intermediates (not part of the store), then eventually validating the
     // last items of the chain with the store trusted certificates
     function IsValidChain(const chain: ICryptCertChain;
-      date: TDateTime = 0): TCryptCertValidity;
+      date: TDateTime = 0; ignore: TCryptCertValidities = []): TCryptCertValidity;
     /// verify the digital signature of a given memory buffer
     // - this signature should have come from a previous ICryptCert.Sign() call
     // - will check internal properties of the certificate (e.g. validity dates),
@@ -3181,7 +3181,7 @@ type
     function IsValid(const cert: ICryptCert;
       date: TDateTime): TCryptCertValidity; virtual; abstract;
     function IsValidChain(const chain: ICryptCertChain;
-      date: TDateTime): TCryptCertValidity; virtual;
+      date: TDateTime; ignore: TCryptCertValidities): TCryptCertValidity; virtual;
     function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
       IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
         overload; virtual; abstract;
@@ -9750,7 +9750,7 @@ begin
 end;
 
 function TCryptStore.IsValidChain(const chain: ICryptCertChain;
-  date: TDateTime): TCryptCertValidity;
+  date: TDateTime; ignore: TCryptCertValidities): TCryptCertValidity;
 var
   i, n: PtrInt;
   c: ICryptCertChain;
@@ -9762,7 +9762,8 @@ begin
     exit;
   // ensure main certificate is not deprecated
   result := cvInvalidDate;
-  if not chain[0].IsValidDate(date) then
+  if not (result in ignore) and
+     not chain[0].IsValidDate(date) then
     exit;
   // compute the exact authority sequence (if not supplied in proper order)
   result := cvUnknownAuthority;
@@ -9774,19 +9775,22 @@ begin
     exit;
   // check the usages of all intermediate certificates
   result := cvWrongUsage;
-  for i := 1 to n - 1 do
-    if c[i].GetUsage * [cuKeyCertSign, cuCA] = [] then
-      exit;
+  if not (result in ignore) then
+    for i := 1 to n - 1 do
+      if c[i].GetUsage * [cuKeyCertSign, cuCA] = [] then
+        exit;
   // ensure no certificate in the sequence has been explicitly revoked
   result := cvRevoked;
-  for i := 0 to n - 1 do
-    if IsRevoked(c[i]) <> crrNotRevoked then
-      exit;
+  if not (result in ignore) then
+    for i := 0 to n - 1 do
+      if IsRevoked(c[i]) <> crrNotRevoked then
+        exit;
   // check the cascaded dates (before any digital signature verification)
   result := cvDeprecatedAuthority;
-  for i := 1 to n - 1 do
-    if not c[i].IsValidDate(c[i - 1].GetNotBefore) then
-      exit;
+  if not (result in ignore) then
+    for i := 1 to n - 1 do
+      if not c[i].IsValidDate(c[i - 1].GetNotBefore) then
+        exit;
   // check the cascaded digital signatures
   for i := 0 to n - 2 do
   begin
