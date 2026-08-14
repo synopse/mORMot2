@@ -2074,9 +2074,11 @@ const
     xkuTimeStamping);
 
 function CertInfoCompute(usages: TCryptCertUsages; const ext: TXExtensions;
-  out xku: TXKeyUsages; out xeku: TXExtendedKeyUsages; Fields: PCryptCertFields): TAsnObject;
+  pathlen: integer; out xku: TXKeyUsages; out xeku: TXExtendedKeyUsages;
+  Fields: PCryptCertFields): TAsnObject;
 var
   r: TCryptCertUsage;
+  p: TAsnObject;
 begin
   FastAssignNew(result);
   // high-level usages values are converted into usages and xku
@@ -2089,8 +2091,11 @@ begin
     if r in usages then
       include(xeku, XU[r]);
   // RFC 5280 #4.2.1.9
+  if (cuCA in usages) and
+     (pathlen >= 0) then
+    p := Asn(pathlen);
   AddExt(result, xeBasicConstraints,
-    Asn(ASN1_SEQ, ASN1_BOOLEAN_NONE[cuCA in usages]), {critical=}true);
+    Asn(ASN1_SEQ, [ASN1_BOOLEAN_NONE[cuCA in usages], p]), {critical=}true);
   // RFC 5280 #4.2.1.3
   if xku <> [] then
     AddExt(result, xeKeyUsage,
@@ -2132,7 +2137,8 @@ end;
 
 function TXTbsCertificate.ComputeExtensions: TAsnObject;
 begin
-  result := CertInfoCompute(CertUsages, Extension, KeyUsages, ExtendedKeyUsages, nil);
+  result := CertInfoCompute(CertUsages, Extension, PathLenConstraint,
+    KeyUsages, ExtendedKeyUsages, nil);
 end;
 
 procedure TXTbsCertificate.ComputeCachedDer;
@@ -3602,7 +3608,7 @@ begin
   // setup the CSR fields
   FillCharFast(sub, SizeOf(sub), 0);
   CertInfoPrepare(sub, ext, Subjects, Fields);
-  extreq := CertInfoCompute(Usages, ext, xu, xku, Fields);
+  extreq := CertInfoCompute(Usages, ext, {pathlen=}-1, xu, xku, Fields);
   if extreq <> '' then
     // extensionRequest (PKCS #9 via CRMF)
     extreq := Asn(ASN1_CTC0, [
