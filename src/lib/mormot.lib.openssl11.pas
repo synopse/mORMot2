@@ -1416,6 +1416,7 @@ type
     function Size: integer;
     procedure ToBin(bin: PByte); overload;
     procedure ToBin(out bin: RawByteString); overload;
+    function ToInteger: Int64;
     procedure Free;
   end;
 
@@ -1490,6 +1491,7 @@ type
   public
     function ToBigInt: PBIGNUM;
     function ToDecimal: RawUtf8;
+    function ToInteger: Int64;
     procedure Free;
   end;
   PASN1_INTEGER = ^ASN1_INTEGER;
@@ -9229,6 +9231,18 @@ begin
   ToBin(pointer(bin));
 end;
 
+function BIGNUM.ToInteger: Int64;
+var
+  tmp: PUtf8Char;
+begin
+  result := 0;
+  if @self = nil then
+    exit;
+  tmp := BN_bn2dec(@self);
+  SetInt64(tmp, result);
+  OpenSSL_Free(tmp);
+end;
+
 procedure BIGNUM.Free;
 begin
   if @self <> nil then
@@ -9252,6 +9266,18 @@ var
 begin
   bn := ToBigInt;
   result := bn.ToDecimal;
+  bn.Free;
+end;
+
+function ASN1_INTEGER.ToInteger: Int64;
+var
+  bn: PBIGNUM;
+begin
+  bn := ToBigInt;
+  if bn.Size > 8 then
+    result := -1
+  else
+    result := bn.ToInteger;
   bn.Free;
 end;
 
