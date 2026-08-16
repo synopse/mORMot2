@@ -571,7 +571,8 @@ type
     // - aggregate KeyUsages and ExtendedKeyUsages X.509 fields with
     // cuCA from Extension[xeBasicConstraints]
     CertUsages: TCryptCertUsages;
-    /// 32-bit limit that follows cuCA in Extension[xeBasicConstraints] (-1 if none)
+    /// 32-bit limit that followed cA=TRUE in Extension[xeBasicConstraints]
+    // - equals -1 if none was specified
     PathLenConstraint: integer;
     /// CA Issuer URIs from declared X.509 v3 Authority Information Access extension
     // - only http:// https:// ldap:// ldaps:// URIs are decoded here
@@ -579,7 +580,7 @@ type
     /// CA OCSP URIs from declared X.509 v3 Authority Information Access extension
     // - only http:// https:// URIs are decoded here
     Ocsp: TRawUtf8DynArray;
-    /// CDP X.509 v3 CRL Distribution Points extension
+    /// X.509 v3 CRL Distribution Points from Extension[xeCrlDistributionPoints]
     // - only http:// https:// URIs are decoded here
     CrlDistPoint: TRawUtf8DynArray;
     /// decimal text of a positive integer assigned by the CA to each certificate

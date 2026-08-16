@@ -2578,6 +2578,170 @@ type
     ccmSha256,
     ccmIssuedBy);
 
+const
+  /// our units generate RSA keypairs with 2048-bit by default
+  // - anything lower than 2048-bit is unsafe and should not be used
+  // - 2048-bit is today's norm, creating 112-bit of security
+  // - 3072-bit is supposed to be supported up to 2030, with 128-bit of security
+  // - 4096-bit has no security advantage, just slower process
+  // - 7680-bit or 8192-bit are highly impractical (e.g. generation can be more
+  // than 30 secs) and offers only 192-bit of security
+  // - see also OpenSslDefaultRsaBits() and RSA_INTERNAL_DEFAULT_GENERATION_BITS
+  RSA_DEFAULT_GENERATION_BITS = 2048;
+
+  /// the JWT algorithm names according to our known asymmetric algorithms
+  // - as implemented e.g. by mormot.crypt.jwt
+  CAA_JWT: array[TCryptAsymAlgo] of RawUtf8 = (
+    'ES256',      // caaES256
+    'ES384',      // caaES384
+    'ES512',      // caaES512
+    'ES256K',     // caaES256K
+    'RS256',      // caaRS256
+    'RS384',      // caaRS384
+    'RS512',      // caaRS512
+    'PS256',      // caaPS256
+    'PS384',      // caaPS384
+    'PS512',      // caaPS512
+    'EdDSA');     // caaEdDSA
+
+  /// the JWS ECC curve names according to our known asymmetric algorithms
+  // - see https://www.iana.org/assignments/jose/jose.xhtml#web-key-elliptic-curve
+  CAA_CRV: array[TCryptAsymAlgo] of RawUtf8 = (
+    'P-256',     // caaES256
+    'P-384',     // caaES384
+    'P-521',     // caaES512, note that P-521 is not a typo ;)
+    'secp256k1', // caaES256K
+    '',          // caaRS256
+    '',          // caaRS384
+    '',          // caaRS512
+    '',          // caaPS256
+    '',          // caaPS384
+    '',          // caaPS512
+    'Ed25519');  // caaEdDSA
+
+  /// the THashAlgo according to our known asymmetric algorithms
+  CAA_HF: array[TCryptAsymAlgo] of THashAlgo = (
+    hfSHA256,     // caaES256
+    hfSHA384,     // caaES384
+    hfSHA512,     // caaES512
+    hfSHA256,     // caaES256K
+    hfSHA256,     // caaRS256
+    hfSHA384,     // caaRS384
+    hfSHA512,     // caaRS512
+    hfSHA256,     // caaPS256
+    hfSHA384,     // caaPS384
+    hfSHA512,     // caaPS512
+    hfSHA512);    // caaEdDSA - SHA-512 is included in the algorithm
+
+  /// the TCryptKeyAlgo according to our known asymmetric algorithms
+  CAA_CKA: array[TCryptAsymAlgo] of TCryptKeyAlgo = (
+    ckaEcc256,    // caaES256
+    ckaEcc384,    // caaES384
+    ckaEcc512,    // caaES512
+    ckaEcc256K,   // caaES256K
+    ckaRsa,       // caaRS256
+    ckaRsa,       // caaRS384
+    ckaRsa,       // caaRS512
+    ckaRsaPss,    // caaPS256
+    ckaRsaPss,    // caaPS384
+    ckaRsaPss,    // caaPS512
+    ckaEdDSA);    // caaEdDSA
+
+  /// the known asymmetric algorithms which implement ECC cryptography
+  CAA_ECC = [caaES256, caaES384, caaES512, caaES256K, caaEdDSA];
+
+  /// the known asymmetric algorithms which implement RSA cryptography
+  CAA_RSA = [caaRS256, caaRS384, caaRS512, caaPS256, caaPS384, caaPS512];
+
+  /// the known asymmetric algorithms which expects no ASN1_SEQ in JWT/JWS
+  CAA_RAWSIGNATURE = CAA_RSA + [caaEdDSA];
+
+  /// the known key algorithms which implement ECC cryptography
+  CKA_ECC = [ckaEcc256, ckaEcc384, ckaEcc512, ckaEcc256k, ckaEdDSA];
+
+  /// the known key algorithms which implement RSA cryptography
+  CKA_RSA = [ckaRsa, ckaRsaPss];
+
+  /// such a Certificate could be used for anything
+  CU_ALL = [low(TCryptCertUsage) .. high(TCryptCertUsage)];
+
+  /// such a Certificate could be used for a TLS server authentication
+  CU_TLS_SERVER = [cuTlsServer, cuKeyAgreement, cuKeyEncipherment];
+
+  /// such a Certificate could be used for a TLS client authentication
+  CU_TLS_CLIENT = [cuTlsClient, cuKeyAgreement, cuKeyEncipherment];
+
+  /// KeyUsage bits mapped in TCryptCertUsages
+  CU_KEY_USAGE = [cuEncipherOnly .. cuDecipherOnly];
+
+  /// Extended KeyUsage bits mapped in TCryptCertUsages
+  CU_EXT_KEY_USAGE = [cuTlsServer .. cuTimestamp];
+
+  /// TCryptCertValidity results indicating a valid digital signature
+  CV_VALIDSIGN = [cvValidSigned, cvValidSelfSigned];
+
+  /// default ignored TCryptCertValidity results
+  CV_IGNORE_DEFAULT = [cvCrlFailed, cvCrlDownloadFailed];
+
+  /// a two-char identifier of Certificate usage
+  // - as used by ToText(u: TCryptCertUsages, from_cu_text=true)
+  CU_TEXT: array[TCryptCertUsage, 0..1] of AnsiChar = (
+    'ca',  //  cuCA
+    'eo',  //  cuEncipherOnly
+    'rs',  //  cuCrlSign
+    'ks',  //  cuKeyCertSign
+    'ka',  //  cuKeyAgreement
+    'de',  //  cuDataEncipherment
+    'ke',  //  cuKeyEncipherment
+    'nr',  //  cuNonRepudiation
+    'ds',  //  cuDigitalSignature
+    'do',  //  cuDecipherOnly
+    'ts',  //  cuTlsServer
+    'tc',  //  cuTlsClient
+    'em',  //  cuEmail
+    'cs',  //  cuCodeSign
+    'os',  //  cuOcspSign
+    'tm'); //  cuTimestamp
+
+  /// standard long identifier of Certificate usage
+  // - i.e. match OpenSSL PX509.ExtendedKeyUsage/KeyUsage text
+  CU_FULLTEXT: array[TCryptCertUsage] of RawUtf8 = (
+    'CA',                            // cuCA
+    'Encipher Only',                 // cuEncipherOnly
+    'CRL Sign',                      // cuCrlSign
+    'Certificate Sign',              // cuKeyCertSign
+    'Key Agreement',                 // cuKeyAgreement
+    'Data Encipherment',             // cuDataEncipherment
+    'Key Encipherment',              // cuKeyEncipherment
+    'Non Repudiation',               // cuNonRepudiation
+    'Digital Signature',             // cuDigitalSignature
+    'Decipher Only',                 // cuDecipherOnly
+    'TLS Web Server Authentication', // cuTlsServer
+    'TLS Web Client Authentication', // cuTlsClient
+    'E-mail Protection',             // cuEmail
+    'Code Signing',                  // cuCodeSign
+    'OCSP Signing',                  // cuOcspSign
+    'Time Stamping');                // cuTimestamp
+
+function ToText(a: TCryptAsymAlgo): PShortString; overload;
+function ToText(a: TCryptKeyAlgo): PShortString; overload;
+function ToText(r: TCryptCertRevocationReason): PShortString; overload;
+function ToText(u: TCryptCertUsage): PShortString; overload;
+function ToText(u: TCryptCertUsages; from_cu_text: boolean = false): ShortString; overload;
+function ToText(v: TCryptCertValidity): PShortString; overload;
+
+/// return the first usage set, or cuKeyCertSign if [] was supplied
+function GetFirstUsage(u: TCryptCertUsages): TCryptCertUsage;
+
+/// check for one KeyUsage bit presence - if any is set (see RFC 5280 6.1.4)
+// - one is typically cuKeyCertSign, cuCrlSign or cuDigitalSignature
+function HasCertUsage(const one: TCryptCertUsage; const usages: TCryptCertUsages): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// check both cA=TRUE and keyCertSign - RFC 5280 6.1.4 compliant
+function IsCertAuthority(usages: TCryptCertUsages): boolean;
+
+type
   TCryptCert = class;
   TCryptCertAlgo = class;
 
@@ -3184,8 +3348,8 @@ type
        RevocationDate: TDateTime): boolean; virtual; abstract;
     function IsValid(const cert: ICryptCert;
       date: TDateTime): TCryptCertValidity; virtual; abstract;
-    function IsValidChain(const chain: ICryptCertChain;
-      date: TDateTime; ignore: TCryptCertValidities): TCryptCertValidity; virtual;
+    function IsValidChain(const chain: ICryptCertChain; date: TDateTime;
+      ignore: TCryptCertValidities): TCryptCertValidity; virtual;
     function Verify(const Signature: RawByteString; Data: pointer; Len: integer;
       IgnoreError: TCryptCertValidities; TimeUtc: TDateTime): TCryptCertValidity;
         overload; virtual; abstract;
@@ -3422,167 +3586,6 @@ type
     function FromBinary(algo: TCryptCertAlgo; const bin: RawByteString): TCryptCertUsages;
   end;
 
-
-const
-  /// our units generate RSA keypairs with 2048-bit by default
-  // - anything lower than 2048-bit is unsafe and should not be used
-  // - 2048-bit is today's norm, creating 112-bit of security
-  // - 3072-bit is supposed to be supported up to 2030, with 128-bit of security
-  // - 4096-bit has no security advantage, just slower process
-  // - 7680-bit or 8192-bit are highly impractical (e.g. generation can be more
-  // than 30 secs) and offers only 192-bit of security
-  // - see also OpenSslDefaultRsaBits() and RSA_INTERNAL_DEFAULT_GENERATION_BITS
-  RSA_DEFAULT_GENERATION_BITS = 2048;
-
-  /// the JWT algorithm names according to our known asymmetric algorithms
-  // - as implemented e.g. by mormot.crypt.jwt
-  CAA_JWT: array[TCryptAsymAlgo] of RawUtf8 = (
-    'ES256',      // caaES256
-    'ES384',      // caaES384
-    'ES512',      // caaES512
-    'ES256K',     // caaES256K
-    'RS256',      // caaRS256
-    'RS384',      // caaRS384
-    'RS512',      // caaRS512
-    'PS256',      // caaPS256
-    'PS384',      // caaPS384
-    'PS512',      // caaPS512
-    'EdDSA');     // caaEdDSA
-
-  /// the JWS ECC curve names according to our known asymmetric algorithms
-  // - see https://www.iana.org/assignments/jose/jose.xhtml#web-key-elliptic-curve
-  CAA_CRV: array[TCryptAsymAlgo] of RawUtf8 = (
-    'P-256',     // caaES256
-    'P-384',     // caaES384
-    'P-521',     // caaES512, note that P-521 is not a typo ;)
-    'secp256k1', // caaES256K
-    '',          // caaRS256
-    '',          // caaRS384
-    '',          // caaRS512
-    '',          // caaPS256
-    '',          // caaPS384
-    '',          // caaPS512
-    'Ed25519');  // caaEdDSA
-
-  /// the THashAlgo according to our known asymmetric algorithms
-  CAA_HF: array[TCryptAsymAlgo] of THashAlgo = (
-    hfSHA256,     // caaES256
-    hfSHA384,     // caaES384
-    hfSHA512,     // caaES512
-    hfSHA256,     // caaES256K
-    hfSHA256,     // caaRS256
-    hfSHA384,     // caaRS384
-    hfSHA512,     // caaRS512
-    hfSHA256,     // caaPS256
-    hfSHA384,     // caaPS384
-    hfSHA512,     // caaPS512
-    hfSHA512);    // caaEdDSA - SHA-512 is included in the algorithm
-
-  /// the TCryptKeyAlgo according to our known asymmetric algorithms
-  CAA_CKA: array[TCryptAsymAlgo] of TCryptKeyAlgo = (
-    ckaEcc256,    // caaES256
-    ckaEcc384,    // caaES384
-    ckaEcc512,    // caaES512
-    ckaEcc256K,   // caaES256K
-    ckaRsa,       // caaRS256
-    ckaRsa,       // caaRS384
-    ckaRsa,       // caaRS512
-    ckaRsaPss,    // caaPS256
-    ckaRsaPss,    // caaPS384
-    ckaRsaPss,    // caaPS512
-    ckaEdDSA);    // caaEdDSA
-
-  /// the known asymmetric algorithms which implement ECC cryptography
-  CAA_ECC = [caaES256, caaES384, caaES512, caaES256K, caaEdDSA];
-
-  /// the known asymmetric algorithms which implement RSA cryptography
-  CAA_RSA = [caaRS256, caaRS384, caaRS512, caaPS256, caaPS384, caaPS512];
-
-  /// the known asymmetric algorithms which expects no ASN1_SEQ in JWT/JWS
-  CAA_RAWSIGNATURE = CAA_RSA + [caaEdDSA];
-
-  /// the known key algorithms which implement ECC cryptography
-  CKA_ECC = [ckaEcc256, ckaEcc384, ckaEcc512, ckaEcc256k, ckaEdDSA];
-
-  /// the known key algorithms which implement RSA cryptography
-  CKA_RSA = [ckaRsa, ckaRsaPss];
-
-  /// such a Certificate could be used for anything
-  CU_ALL = [low(TCryptCertUsage) .. high(TCryptCertUsage)];
-
-  /// such a Certificate could be used for a TLS server authentication
-  CU_TLS_SERVER = [cuTlsServer, cuKeyAgreement, cuKeyEncipherment];
-
-  /// such a Certificate could be used for a TLS client authentication
-  CU_TLS_CLIENT = [cuTlsClient, cuKeyAgreement, cuKeyEncipherment];
-
-  /// KeyUsage bits mapped in TCryptCertUsages
-  CU_KEY_USAGE = [cuEncipherOnly .. cuDecipherOnly];
-
-  /// Extended KeyUsage bits mapped in TCryptCertUsages
-  CU_EXT_KEY_USAGE = [cuTlsServer .. cuTimestamp];
-
-  /// TCryptCertValidity results indicating a valid digital signature
-  CV_VALIDSIGN =
-    [cvValidSigned, cvValidSelfSigned];
-
-  /// a two-char identifier of Certificate usage
-  // - as used by ToText(u: TCryptCertUsages, from_cu_text=true)
-  CU_TEXT: array[TCryptCertUsage, 0..1] of AnsiChar = (
-    'ca',  //  cuCA
-    'eo',  //  cuEncipherOnly
-    'rs',  //  cuCrlSign
-    'ks',  //  cuKeyCertSign
-    'ka',  //  cuKeyAgreement
-    'de',  //  cuDataEncipherment
-    'ke',  //  cuKeyEncipherment
-    'nr',  //  cuNonRepudiation
-    'ds',  //  cuDigitalSignature
-    'do',  //  cuDecipherOnly
-    'ts',  //  cuTlsServer
-    'tc',  //  cuTlsClient
-    'em',  //  cuEmail
-    'cs',  //  cuCodeSign
-    'os',  //  cuOcspSign
-    'tm'); //  cuTimestamp
-
-  /// standard long identifier of Certificate usage
-  // - i.e. match OpenSSL PX509.ExtendedKeyUsage/KeyUsage text
-  CU_FULLTEXT: array[TCryptCertUsage] of RawUtf8 = (
-    'CA',                            // cuCA
-    'Encipher Only',                 // cuEncipherOnly
-    'CRL Sign',                      // cuCrlSign
-    'Certificate Sign',              // cuKeyCertSign
-    'Key Agreement',                 // cuKeyAgreement
-    'Data Encipherment',             // cuDataEncipherment
-    'Key Encipherment',              // cuKeyEncipherment
-    'Non Repudiation',               // cuNonRepudiation
-    'Digital Signature',             // cuDigitalSignature
-    'Decipher Only',                 // cuDecipherOnly
-    'TLS Web Server Authentication', // cuTlsServer
-    'TLS Web Client Authentication', // cuTlsClient
-    'E-mail Protection',             // cuEmail
-    'Code Signing',                  // cuCodeSign
-    'OCSP Signing',                  // cuOcspSign
-    'Time Stamping');                // cuTimestamp
-
-function ToText(a: TCryptAsymAlgo): PShortString; overload;
-function ToText(a: TCryptKeyAlgo): PShortString; overload;
-function ToText(r: TCryptCertRevocationReason): PShortString; overload;
-function ToText(u: TCryptCertUsage): PShortString; overload;
-function ToText(u: TCryptCertUsages; from_cu_text: boolean = false): ShortString; overload;
-function ToText(v: TCryptCertValidity): PShortString; overload;
-
-/// return the first usage set, or cuKeyCertSign if [] was supplied
-function GetFirstUsage(u: TCryptCertUsages): TCryptCertUsage;
-
-/// check for one KeyUsage bit presence - if any is set (see RFC 5280 6.1.4)
-// - one is typically cuKeyCertSign, cuCrlSign or cuDigitalSignature
-function HasCertUsage(const one: TCryptCertUsage; const usages: TCryptCertUsages): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
-
-/// check both cA=TRUE and keyCertSign - RFC 5280 6.1.4 compliant
-function IsCertAuthority(usages: TCryptCertUsages): boolean;
 
 /// fast case-insensitive check of the 'CN' Relative Distinguished Name identifier
 function IsCN(const Rdn: RawUtf8): boolean;
@@ -9785,8 +9788,8 @@ begin
   end;
 end;
 
-function TCryptStore.IsValidChain(const chain: ICryptCertChain;
-  date: TDateTime; ignore: TCryptCertValidities): TCryptCertValidity;
+function TCryptStore.IsValidChain(const chain: ICryptCertChain; date: TDateTime;
+  ignore: TCryptCertValidities): TCryptCertValidity;
 var
   i, n: PtrInt;
   c: ICryptCertChain;
