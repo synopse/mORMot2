@@ -945,7 +945,6 @@ const
   {$endif FPCMM_BOOSTER}
 
   NumSmallBlockTypes       = 46;
-  NumSmallBlockTypesUnique = NumSmallBlockTypes - 2; // last 2 are redundant
   MaximumSmallBlockSize    = 2608;
   NumTinyBlockTypes        =
      1 shl NumTinyBlockTypesPO2; // 8 (128B) or 16 (256B)
@@ -960,6 +959,9 @@ const
     MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize);
 
   SmallBlockGranularity        = 16;
+  NumSmallBlockGranularitySlots =
+    (MaximumSmallBlockSize + SmallBlockGranularity - 1) div
+      SmallBlockGranularity;
   TargetSmallBlocksPerPool     = 48;
   MinimumSmallBlocksPerPool    = 12;
   SmallBlockDownsizeCheckAdder = 64;
@@ -1057,14 +1059,15 @@ type
   TSmallBlockInfo = record
     Small: TSmallBlockTypes;
     Tiny: array[0..NumTinyBlockArenas - 1] of TTinyBlockTypes;
-    GetmemLookup: array[0..
-      (MaximumSmallBlockSize - 1) div SmallBlockGranularity] of byte;
+    GetmemLookup: array[0..NumSmallBlockGranularitySlots - 1] of byte;
     // safe access to IsMultiThread global variable - accessed via GOT sub-call
     IsMultiThreadPtr: PBoolean;
     {$ifndef FPCMM_TINYPERTHREAD}
     TinyCurrentArena: integer;
     {$endif FPCMM_TINYPERTHREAD}
-    GetmemSleepCount: array[0..NumSmallBlockTypesUnique - 1] of cardinal;
+    // assembly indexes by BlockSize div SmallBlockGranularity,
+    // not by the irregular class ordinal
+    GetmemSleepCount: array[0..NumSmallBlockGranularitySlots - 1] of cardinal;
     // some fiedls here because there was no room in TSmallBlockType
     {$ifdef FPCMM_MULTIPLESMALLNOTWITHMEDIUM} // PMediumBlockInfo lookup
     SmallMediumBlockInfo: array[0..NumSmallInfoBlock - 1] of pointer;
@@ -3571,6 +3574,8 @@ begin
   SmallBlockInfo.IsMultiThreadPtr := @IsMultiThread; // call GOT if needed
   small := @SmallBlockInfo;
   assert(SizeOf(small^) = 1 shl SmallBlockTypePO2);  // exactly 64 bytes
+  assert(length(SmallBlockInfo.GetmemSleepCount) =
+    length(SmallBlockInfo.GetmemLookup));
   for a := 0 to NumTinyBlockArenas do
     for i := 0 to NumSmallBlockTypes - 1 do
     begin
