@@ -88,6 +88,8 @@ type
       ProcessName: RawUtf8; TimeoutMS: integer); reintroduce;
     /// finalize the processing thread
     destructor Destroy; override;
+    /// notify the UDP main thread that it is finished
+    procedure TerminateAndWaitFinished(TimeOutMs: integer = 5000); override;
     /// low-level access to the bound UDP socket (for debugging purposes)
     property Sock: TNetSocket
       read fSock;
@@ -2655,33 +2657,10 @@ end;
 
 destructor TUdpServerThread.Destroy;
 var
-  sock: TNetSocket;
   ilog: ISynLog;
 begin
   fLogClass.EnterLocal(ilog, 'Destroy: ending % - processing=%',
     [fProcessName, fProcessing], self);
-  // notify thread termination (if not already done)
-  Terminate;
-  // try to release fSock.WaitFor(1000) in DoExecute
-  if fProcessing and
-     (fSock <> nil) then
-  {$ifdef OSPOSIX} // a broadcast address won't reach DoExecute
-  if (fSockAddr.IP4 and $ff000000) = $ff000000 then // check x.x.x.255
-    fSock.ShutdownAndClose({rdwr=}true) // will release acept() ASAP
-  else
-  {$endif OSPOSIX}
-  begin
-    sock := fSockAddr.NewSocket(nlUdp);
-    if sock <> nil then
-    begin
-      fLogClass.Add.Log(sllTrace, 'Destroy: send final packet', self);
-      sock.SetSendTimeout(10);
-      sock.SendTo(pointer(UDP_SHUTDOWN), length(UDP_SHUTDOWN), fSockAddr);
-      sock.ShutdownAndClose(false);
-    end
-    else
-      fLogClass.Add.Log(sllTrace, 'Destroy: error creating final socket', self);
-  end;
   // finalize this thread process
   TerminateAndWaitFinished;
   fLogClass.Add.Log(sllDebug, 'Destroy: TerminateAndWaitFinished Processing=% [%]',
@@ -2691,6 +2670,37 @@ begin
     fSock.ShutdownAndClose({rdwr=}true);
   if fFrameOwned then
     FreeMem(fFrame);
+end;
+
+procedure TUdpServerThread.TerminateAndWaitFinished(TimeOutMs: integer);
+var
+  sock: TNetSocket;
+begin
+  // notify thread termination (if not already done)
+  Terminate;
+  // try to release fSock.WaitFor(1000) in DoExecute
+  if (fSock = nil) or
+     not fProcessing then
+    exit;
+  {$ifdef OSPOSIX} // a broadcast address won't reach DoExecute
+  if (fSockAddr.IP4 and $ff000000) = $ff000000 then // check x.x.x.255
+  begin
+    fSock.ShutdownAndClose({rdwr=}true); // will release acept() ASAP
+    exit;
+  end;
+  {$endif OSPOSIX}
+  sock := fSockAddr.NewSocket(nlUdp);
+  if sock = nil then
+    fLogClass.Add.Log(sllTrace,
+      'TerminateAndWaitFinished: error creating final socket', self)
+  else
+  begin
+    fLogClass.Add.Log(sllTrace,
+      'TerminateAndWaitFinished: send final packet', self);
+    sock.SetSendTimeout(10);
+    sock.SendTo(pointer(UDP_SHUTDOWN), length(UDP_SHUTDOWN), fSockAddr);
+    sock.ShutdownAndClose(false);
+  end;
 end;
 
 function TUdpServerThread.GetIPWithPort: RawUtf8;
