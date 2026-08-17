@@ -1002,7 +1002,10 @@ type
     // handle ifProcessing flag
     procedure OnClose; override;
     // quickly reject incorrect requests (payload/timeout/OnBeforeBody)
-    function DoReject(status: integer): TPollAsyncSocketOnReadWrite;
+    function DoReject(status: integer;
+      const ExtraHeader: RawUtf8 = ''): TPollAsyncSocketOnReadWrite;
+    // implement fServer.OnBodyDownload event - may reject as 415
+    function DoBodyDownload: TPollAsyncSocketOnReadWrite; virtual;
     function DecodeHeaders: integer; virtual; // e.g. hfConnectionUpgrade override
     function DoHeaders: TPollAsyncSocketOnReadWrite;
     function DoRequest: TPollAsyncSocketOnReadWrite;
@@ -4772,7 +4775,17 @@ begin
         begin
           fOwner.DoLog(sllWarning, 'OnRead: close connection after % (before=%)',
             [HTTP_STATE[fHttp.State], HTTP_STATE[previous]], self);
-          DoReject(HTTP_BADREQUEST);
+          case fHttp.State of
+            hrsErrorPayloadTooLarge:
+              begin
+                fServer.IncStat(grOversizedPayload); // e.g. over ContentMaxSize
+                DoReject(HTTP_PAYLOADTOOLARGE);
+              end;
+            hrsErrorContentStreamWrite:
+              DoReject(HTTP_INSUFFICIENTSTORAGE); // e.g. ENOSPC on spool file
+          else
+            DoReject(HTTP_BADREQUEST);
+          end;
           result := soClose;
         end;
       end;
@@ -4934,8 +4947,8 @@ begin
       fRemoteIP, fHttp.BearerToken, fHttp.ContentLength, fRequestFlags);
 end;
 
-function THttpAsyncServerConnection.DoReject(
-  status: integer): TPollAsyncSocketOnReadWrite;
+function THttpAsyncServerConnection.DoReject(status: integer;
+  const ExtraHeader: RawUtf8): TPollAsyncSocketOnReadWrite;
 var
   len: integer; // should not be PtrInt
 begin
@@ -4947,7 +4960,8 @@ begin
   end
   else
   begin
-    if fServer.ComputeRejectBody(fHttp.Content, fConnectionID, status) then
+    if fServer.ComputeRejectBody(
+         fHttp.Content, fConnectionID, status, ExtraHeader) then
       result := soContinue; // for grWwwAuthenticate
     len := length(fHttp.Content);
     Send(pointer(fHttp.Content), len); // no polling nor ProcessWrite
@@ -4969,6 +4983,44 @@ begin
       fOwner.DoLog(sllTrace, 'DoReject(%): BanIP(%) %',
         [status, fRemoteIP, fServer.Async.Banned], self);
     fServer.IncStat(grBanned);
+  end;
+end;
+
+function THttpAsyncServerConnection.DoBodyDownload: TPollAsyncSocketOnReadWrite;
+var
+  strm: TStream;
+  fn: TFileName; // managed local variables are on purpose in this sub-method
+  len: Int64;
+begin
+  result := soContinue;
+  len := fHttp.ContentLength;
+  if hfTransferChunked in fHttp.HeaderFlags then
+    len := -1; // a chunked body size is not known in advance
+  strm := fServer.fOnBodyDownload(fHttp.CommandUri, fHttp.CommandMethod,
+    fHttp.Headers, fHttp.ContentType, fRemoteIP, len);
+  if strm = nil then
+    exit; // in-memory Content buffering
+  if fHttp.ContentEncoding <> nil then
+  begin
+    // a streamed body does not support Content-Encoding: compression
+    fn := '';
+    if strm.InheritsFrom(TFileStreamEx) then
+      fn := TFileStreamEx(strm).FileName;
+    strm.Free;
+    if fn <> '' then
+      DeleteFile(fn); // remove the (void) spool file
+    result := DoReject(HTTP_UNSUPPORTEDMEDIATYPE,
+      'Accept-Encoding: identity'#13#10);
+  end
+  else
+  begin
+    // ProcessRead will download the body into this stream
+    fHttp.ContentStream := strm; // freed by ProcessDone/Reset on abort
+    include(fHttp.ResponseFlags, rfContentStreamNeedFree);
+    if strm.InheritsFrom(TFileStreamEx) then
+      fHttp.ContentInputName := TFileStreamEx(strm).FileName;
+    // needed to track and limit the cumulated chunked body size
+    fHttp.ContentMaxSize := fServer.MaximumAllowedContentLength;
   end;
 end;
 
@@ -5006,7 +5058,15 @@ begin
     result := DoRequest;
   end
   else
+  begin
+    // allow OnBodyDownload callback to supply a stream for the body
     result := soContinue;
+    if (fHttp.State in
+         [hrsGetBodyChunkedHexFirst, hrsGetBodyContentLengthFirst]) and
+       not (hfConnectionUpgrade in fHttp.HeaderFlags) and
+       Assigned(fServer.fOnBodyDownload) then
+      result := DoBodyDownload;
+  end;
 end;
 
 function THttpAsyncServerConnection.DoRequest: TPollAsyncSocketOnReadWrite;
@@ -5022,6 +5082,15 @@ begin
          (fHttp.State in [hrsGetCommand, hrsUpgraded]) then
         exit; // rejected or upgraded to WebSockets
     end;
+  // close any body stream supplied by OnBodyDownload before the response
+  // process could reuse the ContentStream field - a spooled file remains
+  // available (as InContent file name) during the request processing
+  if (fHttp.ContentStream <> nil) and
+     (rfContentStreamNeedFree in fHttp.ResponseFlags) then
+  begin
+    FreeAndNilSafe(fHttp.ContentStream);
+    exclude(fHttp.ResponseFlags, rfContentStreamNeedFree);
+  end;
   // optionaly uncompress content
   if fHttp.ContentEncoding <> nil then
     fHttp.UncompressData;
