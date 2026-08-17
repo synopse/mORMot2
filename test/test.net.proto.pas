@@ -4352,6 +4352,14 @@ begin
       // this stream removes its own file: no rfContentFileNameNeedDelete
       result := TFileStreamEventuallyDelete.Create(bodyfile,
         fmCreate or fmShareRead)
+    else if aUrl = '/keep' then
+    begin
+      // this callback takes ownership of the spool file: neither the stream
+      // nor the server should delete it
+      result := TFileStreamEventuallyDelete.Create(bodyfile,
+        fmCreate or fmShareRead);
+      TFileStreamEventuallyDelete(result).DeleteFileOnDestroy := false;
+    end
     else
       result := TFileStreamEx.Create(bodyfile, fmCreate or fmShareRead);
   end;
@@ -4458,6 +4466,7 @@ var
   fam, status, prev, n, endsec: cardinal;
   body8mb: RawByteString;
   mp, ok, hosthead, mpct, mptext, mptrunc, cmd: RawUtf8;
+  keepfile: TFileName;
   mpa: TMultiPartDynArray;
 begin
   TSynLog.Family.ExceptionIgnore.AddSeveral([
@@ -4508,7 +4517,15 @@ begin
           CheckEqual(status, HTTP_SUCCESS, 'del status');
           CheckEqual(clt.Content, ok, 'del resp');
           CheckEqual(bodystreamed, prev + 1, 'del streamed');
-          WaitDeleted('del');
+          WaitDeleted(bodyfile, 'del');
+          // with DeleteFileOnDestroy=false, the spool file should survive the
+          // request - neither the stream nor the server should remove it
+          prev := bodystreamed;
+          status := clt.Post('/keep', body8mb, bodytype);
+          CheckEqual(status, HTTP_SUCCESS, 'keep status');
+          CheckEqual(clt.Content, ok, 'keep resp');
+          CheckEqual(bodystreamed, prev + 1, 'keep streamed');
+          keepfile := bodyfile; // checked after srv.Free below
           // a stream which is not a file has no InContent name at all: it is
           // only reachable from the request as InContentStream
           prev := bodystreamed;
@@ -4770,6 +4787,9 @@ begin
       // the server shutdown should have deleted the truncated spool file
       // (maybe with a delay on THttpAsyncServer due to its connections GC)
       WaitDeleted(bodyfile, 'abort');
+      // by now, the /keep spool file should still be there, untouched
+      Check(FileExists(keepfile), 'keep kept');
+      Check(DeleteFile(keepfile), 'keep deleted');
     end;
   finally
     TSynLog.Family.ExceptionIgnore.RemoveSeveral([

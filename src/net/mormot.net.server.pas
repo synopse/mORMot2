@@ -3328,6 +3328,7 @@ begin
   FastAssignNew(fAuthBearer);
   FastAssignNew(fUserAgent);
   fRespStatus := 0;
+  fInContentStream := nil; // paranoid: Prepare() would set it anyway
   fOutContent := '';
   FastAssignNew(fOutContentType);
   FastAssignNew(fOutCustomHeaders);

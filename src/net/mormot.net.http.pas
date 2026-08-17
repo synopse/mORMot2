@@ -830,18 +830,27 @@ type
   // - if the stream is a TFileStreamEx, the request is also supplied with
   // InContentType set to STATICFILE_CONTENT_TYPE and InContent set to the local
   // file name (mirroring the response process), and the file is deleted once
-  // the request has been processed - a handler can rename/move the file to take
-  // data ownership; note that the stream is still open at that time, so on
-  // Windows the file needs a sharing mode to be read back by its name, e.g.
-  // TFileStreamEx.Create(fn, fmCreate or fmShareRead)
-  // - use TFileStreamEventuallyDelete for the file to be deleted by the stream
-  // itself: this is the simplest way of binding the spool file lifetime to the
-  // request, and the server won't track that file name by itself
-  // - any other TStream class (e.g. a TPipeStream to a consumer thread, or a
-  // compression stream) has no InContent file name, but is still supplied as
-  // InContentStream - beware that a TPipeStream Write() blocks until its
-  // consumer drains the pipe, which on THttpAsyncServer holds one of the few
-  // event loop threads for the whole upload duration
+  // the request has been processed - note that the stream is still open while
+  // the handler runs, so on Windows the file needs a sharing mode to be read
+  // back by its name, e.g. TFileStreamEx.Create(fn, fmCreate or fmShareRead),
+  // and can not be renamed/moved from the handler itself, since our FileShare()
+  // never includes FILE_SHARE_DELETE
+  // - to keep the spool file, i.e. as nginx "client_body_in_file_only on" does,
+  // return a TFileStreamEventuallyDelete: this class owns its own file, so the
+  // server won't delete it, and the handler can set its DeleteFileOnDestroy to
+  // false (from InContentStream) to take data ownership and process the file
+  // once the request is done - with a plain TFileStreamEx, the same is achieved
+  // by excluding rfContentFileNameNeedDelete from ConnectionHttp^.ResponseFlags
+  // - any other TStream class (e.g. a TPipeStream to a consumer thread) has no
+  // InContent file name, but is still supplied as InContentStream - beware that
+  // a TPipeStream Write() blocks until its consumer drains the pipe, which on
+  // THttpAsyncServer holds one of the few event loop threads for the whole
+  // upload duration
+  // - a transformation stream which only finalizes its output when released -
+  // e.g. TSynZipCompressor, which flushes and writes its .gz trailer in its
+  // destructor - will complete its own destination only AFTER the request has
+  // been processed, since the stream is released at that point: such a
+  // callback should not expect its destination to be readable from OnRequest
   // - aInHeaders is the raw headers text, which also includes the 'RemoteIP:'
   // header on THttpServer, but not (yet) on THttpAsyncServer: use aRemoteIP
   // - the original Content-Type header is still available from InHeaders
@@ -3466,9 +3475,11 @@ end;
 procedure THttpRequestContext.SetContentInputName(aStream: TFileStreamEx);
 begin
   ContentInputName := aStream.FileName;
-  if not aStream.InheritsFrom(TFileStreamEventuallyDelete) or
-     not TFileStreamEventuallyDelete(aStream).DeleteFileOnDestroy then
-    // this stream won't remove its own file: the server is responsible for it
+  if not aStream.InheritsFrom(TFileStreamEventuallyDelete) then
+    // this stream has no deletion policy of its own: the server owns the file
+    // - note: a TFileStreamEventuallyDelete is left alone even if its
+    // DeleteFileOnDestroy is false, which is how a callback can ask for the
+    // spool file to be kept, as nginx "client_body_in_file_only on" does
     include(ResponseFlags, rfContentFileNameNeedDelete);
 end;
 
@@ -3483,7 +3494,12 @@ begin
      not ContentInputStream.InheritsFrom(TStreamWithNoSeek) then
     // rewind for InContentStream reading - but not e.g. on a TPipeStream,
     // which is the TStreamWithNoSeek class marking a non-seekable stream
-    ContentInputStream.Position := 0;
+    try
+      ContentInputStream.Position := 0;
+    except
+      // paranoid: a custom non-seekable TStream is supplied as it is, and
+      // should not abort the request from this TStream-focused method
+    end;
 end;
 
 procedure THttpRequestContext.ProcessDone;
