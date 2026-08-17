@@ -386,6 +386,7 @@ type
     function ProcessParseLine(var st: TProcessParseLine): boolean;
       {$ifdef HASINLINE} inline; {$endif}
     function DoProcessParseLine(var st: TProcessParseLine; Len: PtrInt): boolean;
+    function DoProcessReadBody(var st: TProcessParseLine): boolean;
     function ParseHttp(P: PUtf8Char): boolean;
       {$ifdef HASINLINE} inline; {$endif}
     procedure GetTrimmed(P, P2: PUtf8Char; L: PtrInt; var result: RawUtf8;
@@ -823,10 +824,7 @@ type
   // - if writing to the stream fails (e.g. on a full disk), the request is
   // aborted as HTTP_INSUFFICIENTSTORAGE = 507 - notified as best effort,
   // since the client may still be sending - and the connection is closed
-  // - on a broken connection, the stream is released and any spool file
-  // deleted, but maybe deferred until the connection instance is actually
-  // released (e.g. after the THttpAsyncServer connections GC)
-??
+  // - on a broken connection, the stream is released and any spool file deleted
   TOnHttpServerBodyDownload = function(const aUrl, aMethod, aInHeaders,
     aInContentType, aRemoteIP: RawUtf8; aContentLength: Int64): TStream of object;
 
@@ -3423,19 +3421,27 @@ end;
 
 { THttpRequestContext }
 
+procedure THttpRequestContext.ProcessDone;
+begin
+  if rfContentStreamNeedFree in ResponseFlags then
+  begin // ensure no leak on (reused) broken connection
+    FreeAndNilSafe(ContentStream);
+    exclude(ResponseFlags, rfContentStreamNeedFree);
+  end;
+  if ContentInputName <> '' then
+  begin
+    DeleteFile(ContentInputName); // remove any pending spooled body file
+    ContentInputName := '';
+  end;
+end;
+
 procedure THttpRequestContext.Reset;
 begin
   Head.Reset;  // set Len to 0, but keep existing fBuffer
   Process.Reset;
   State := hrsNoStateMachine;
   HeaderFlags := [];
-  if rfContentStreamNeedFree in ResponseFlags then sub func?
-    ContentStream.Free; // ensure no leak on (reused) broken connection
-  if ContentInputName <> '' then
-  begin
-    DeleteFile(ContentInputName); // remove any pending spooled body file
-    ContentInputName := '';
-  end;
+  ProcessDone; // ContentStream.Free + DeleteFile(ContentInputName)
   ResponseFlags := [];
   Options := [];
   HeadCustom := [];
@@ -3973,6 +3979,44 @@ begin
             DoProcessParseLine(st, Len);         // enough input: sub-function
 end;
 
+function THttpRequestContext.DoProcessReadBody(var st: TProcessParseLine): boolean;
+begin
+  if st.Len < fContentLeft then
+    st.LineLen := st.Len
+  else
+    st.LineLen := fContentLeft;
+  if ContentStream = nil then
+  begin
+    if Content = '' then // we need to allocate the result memory buffer
+    begin
+      if ContentLength > MaxHttpInMemSize then // 1GB in memory max
+      begin
+        State := hrsErrorPayloadTooLarge; // avoid memory overflow
+        result := false;
+        exit;
+      end;
+      fContentPos := FastSetString(RawUtf8(Content), ContentLength);
+    end;
+    MoveFast(st.P^, fContentPos^, st.LineLen);
+    inc(fContentPos, st.LineLen);
+  end
+  else
+    try // sub funct?
+      ContentStream.WriteBuffer(st.P^, st.LineLen);
+    except
+      on EStreamError do
+      begin
+        State := hrsErrorContentStreamWrite; // e.g. ENOSPC -> 507
+        result := false;
+        exit;
+      end;
+    end;
+  inc(st.P, st.LineLen); // consume the body bytes (e.g. for pipelining)
+  dec(st.Len, st.LineLen);
+  dec(fContentLeft, st.LineLen);
+  result := true;
+end;
+
 function THttpRequestContext.ProcessRead(
   var st: TProcessParseLine; returnOnStateChange: boolean): boolean;
 var
@@ -4057,28 +4101,8 @@ begin
           exit; // not enough input or hrsErrorRejected
       hrsGetBodyChunkedData:
         begin
-          if st.Len < fContentLeft then
-            st.LineLen := st.Len
-          else
-            st.LineLen := fContentLeft;
-          if ContentStream <> nil then sub func?
-            try
-              ContentStream.WriteBuffer(st.P^, st.LineLen);
-            except
-              on EStreamError do
-              begin
-                State := hrsErrorContentStreamWrite; // e.g. ENOSPC -> 507
-                break;
-              end;
-            end
-          else
-          begin
-            MoveFast(st.P^, fContentPos^, st.LineLen);
-            inc(fContentPos, st.LineLen);
-          end;
-          inc(st.P, st.LineLen); // consume the chunk data bytes
-          dec(st.Len, st.LineLen);
-          dec(fContentLeft, st.LineLen);
+          if not DoProcessReadBody(st) then
+            break; // hrsErrorPayloadTooLarge or hrsErrorContentStreamWrite
           if fContentLeft = 0 then
             State := hrsGetBodyChunkedDataVoidLine
           else
@@ -4099,38 +4123,9 @@ begin
         begin
           if fContentLeft = 0 then
             fContentLeft := ContentLength;
-          if st.Len < fContentLeft then
-            st.LineLen := st.Len
-          else
-            st.LineLen := fContentLeft;
-          if ContentStream = nil then
-          begin
-            if Content = '' then // we need to allocate the result memory buffer
-            begin
-              if ContentLength > MaxHttpInMemSize then // 1GB in memory max
-              begin
-                State := hrsErrorPayloadTooLarge; // avoid memory overflow
-                break;
-              end;
-              fContentPos := FastSetString(RawUtf8(Content), ContentLength);
-            end;
-            MoveFast(st.P^, fContentPos^, st.LineLen);
-            inc(fContentPos, st.LineLen);
-          end
-          else
-            try // sub funct?
-              ContentStream.WriteBuffer(st.P^, st.LineLen);
-            except
-              on EStreamError do
-              begin
-                State := hrsErrorContentStreamWrite; // e.g. ENOSPC -> 507
-                break;
-              end;
-            end;
+          if not DoProcessReadBody(st) then
+            break; // hrsErrorPayloadTooLarge or hrsErrorContentStreamWrite
           State := hrsGetBodyContentLengthNext;
-          inc(st.P, st.LineLen); // consume the body bytes (e.g. for pipelining)
-          dec(st.Len, st.LineLen);
-          dec(fContentLeft, st.LineLen);
           if fContentLeft = 0 then     // reached end of Content-Length body
             State := hrsWaitProcessing // notice: st.Len<>0 if pipelining
           else
@@ -4389,20 +4384,6 @@ begin
   Dest.Append(Process.Buffer, MaxSize);
   dec(ContentLength, MaxSize);
   result := hrpSend;
-end;
-
-procedure THttpRequestContext.ProcessDone;
-begin
-  if rfContentStreamNeedFree in ResponseFlags then
-  begin
-    FreeAndNilSafe(ContentStream);
-    exclude(ResponseFlags, rfContentStreamNeedFree);
-  end;
-  if ContentInputName <> '' then
-  begin
-    DeleteFile(ContentInputName); // this request spooled body file is done
-    ContentInputName := '';
-  end;
 end;
 
 function THttpRequestContext.ContentFromFile(const FileName: TFileName;
@@ -4772,7 +4753,7 @@ begin
     FastAssign(fAuthBearer, aHttp.BearerToken);
   fUserAgent := aHttp.UserAgent;
   fInContent := aHttp.Content;
-  if aHttp.ContentInputName <> '' then review
+  if aHttp.ContentInputName <> '' then
   begin
     // the body was spooled into a local file by TOnHttpServerBodyDownload:
     // supply its name in InContent, mirroring the STATICFILE response trick

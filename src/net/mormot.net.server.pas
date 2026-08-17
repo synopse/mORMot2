@@ -922,10 +922,10 @@ type
     procedure TaskProcess(aCaller: TSynThreadPoolWorkThread); virtual;
     function TaskProcessBody(aCaller: TSynThreadPoolWorkThread;
       aHeaderResult: THttpServerSocketGetRequestResult): boolean;
-    // GetBody into Http.Content, or the OnBodyDownload event stream
-    procedure DownloadBody;
+    procedure DownloadBody; {$ifdef HASINLINE} inline; {$endif}
+    procedure GetBodyStream;
     // implement fServer.OnBodyDownload in GetRequest - false if rejected as 415
-    function DoBodyDownload: boolean; virtual;
+    function DoOnBodyDownload: boolean; virtual;
   public
     /// create the socket according to a server
     // - will register the THttpSocketCompress functions from the server
@@ -5169,6 +5169,14 @@ begin
              fServer.Terminated);   // abort e.g. any background SockRecvLn()
 end;
 
+procedure THttpServerSocket.DownloadBody; // properly inlined
+begin
+  if Http.ContentStream = nil then
+    GetBody // default in-memory download into Http.Content
+  else
+    GetBodyStream; // use Http.ContentStream from OnBodyDownload event
+end;
+
 procedure THttpServerSocket.TaskProcess(aCaller: TSynThreadPoolWorkThread);
 var
   freeme: boolean;
@@ -5453,12 +5461,12 @@ begin
         end;
       end;
       // allow OnBodyDownload callback to supply a stream for the body
-      if Assigned(fServer.fOnBodyDownload) and
+      if Assigned(fServer.OnBodyDownload) and
          not (hfConnectionUpgrade in Http.HeaderFlags) and
          not HttpMethodWithNoBody(Http.CommandMethod) and
          ((Http.ContentLength > 0) or
           (hfTransferChunked in Http.HeaderFlags)) then
-        if not DoBodyDownload then
+        if not DoOnBodyDownload then
         begin
           result := grRejected;
           exit;
@@ -5487,12 +5495,12 @@ begin
   end;
 end;
 
-function THttpServerSocket.DoBodyDownload: boolean;
+function THttpServerSocket.DoOnBodyDownload: boolean;
 var
+  fn: TFileName; // managed local variables are fine in this slow sub-method
   strm: TStream;
-  fn: TFileName; // managed local variables are on purpose in this sub-method
   len: Int64;
-begin
+begin // called from GetRequest() to process OnBodyDownload event
   result := true;
   HeadersPrepare(fRemoteIP); // will include remote IP to Http.Headers
   len := Http.ContentLength;
@@ -5501,7 +5509,7 @@ begin
   strm := fServer.fOnBodyDownload(Http.CommandUri, Http.CommandMethod,
     Http.Headers, Http.ContentType, fRemoteIP, len);
   if strm = nil then
-    exit; // in-memory Content buffering
+    exit; // fallback to regular in-memory Content buffering
   if Http.ContentEncoding <> nil then
   begin
     // a streamed body does not support Content-Encoding: compression
@@ -5528,24 +5536,22 @@ begin
   end;
 end;
 
-procedure THttpServerSocket.DownloadBody;
+procedure THttpServerSocket.GetBodyStream;
 var
   strm: TStream;
+  strmfree: boolean;
 begin
-  strm := Http.ContentStream;
-  if strm = nil then
-  begin
-    GetBody; // default in-memory download into Http.Content
-    exit;
-  end;
   // download into the stream supplied by the OnBodyDownload event
+  strm := Http.ContentStream;
+  strmfree := rfContentStreamNeedFree in Http.ResponseFlags; // likely = true
   Http.ContentStream := nil; // input only: don't interfere with the response
   exclude(Http.ResponseFlags, rfContentStreamNeedFree);
   try
     try
       GetBody(strm);
     finally
-      strm.Free; // any spooled file remains during the request processing
+      if strmfree then
+        strm.Free; // any spooled file remains during the request processing
     end;
   except
     on EHttpSocketOverflow do
