@@ -4089,7 +4089,8 @@ begin
                   break;
                 end;
                 SetLength(Content, bytes); // realloc to append new chunk
-                fContentPos := @PByteArray(Content)[length(Content)];
+                // append at the previous end, not after the reallocated buffer
+                fContentPos := @PByteArray(Content)[bytes - fContentLeft];
               end;
               inc(ContentLength, fContentLeft);
               State := hrsGetBodyChunkedData;

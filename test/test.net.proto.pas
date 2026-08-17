@@ -4415,7 +4415,7 @@ var
   srv: THttpServerSocketGeneric;
   clt: THttpClientSocket;
   raw: TCrtSocket;
-  fam, status, prev: cardinal;
+  fam, status, prev, n: cardinal;
   port, mp, ok: RawUtf8;
   body8mb: RawByteString;
   mpct, mptext, mptrunc, line: RawUtf8;
@@ -4520,6 +4520,34 @@ begin
           end;
           CheckEqual(bodyeventlen, -1, 'chunked event len');
           WaitDeleted('chunked');
+          // an in-memory chunked body, sent as several chunks: the Content
+          // buffer is reallocated then appended for each chunk
+          prev := bodystreamed;
+          bodyhash := Sha256(mptext);
+          raw := TCrtSocket.Open('127.0.0.1', port);
+          try
+            raw.CreateSockIn; // needed for proper SockRecvLn() below
+            raw.SockSend('POST /mem HTTP/1.1');
+            raw.SockSend(['Host: 127.0.0.1:', port]);
+            raw.SockSend('Transfer-Encoding: chunked');
+            raw.SockSend('Content-Type: application/dummy');
+            raw.SockSend('Connection: close');
+            raw.SockSendCRLF; // void line: end of headers
+            n := 1;
+            repeat // send mptext as 4 chunks of 5000 = $1388 bytes each
+              raw.SockSend('1388');
+              raw.SockSend(copy(mptext, n, 5000));
+              inc(n, 5000);
+            until n > length(mptext);
+            raw.SockSend('0');
+            raw.SockSendCRLF; // final void line
+            raw.SockSendFlush;
+            raw.SockRecvLn(line);
+            CheckUtf8(PosEx(' 200 ', line) > 0, 'chunked mem %', [line]);
+          finally
+            raw.Free;
+          end;
+          CheckEqual(bodystreamed, prev, 'chunked mem not streamed');
         finally
           clt.Free;
         end;
