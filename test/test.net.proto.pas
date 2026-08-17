@@ -112,6 +112,12 @@ type
     procedure DoRtspOverHttp(options: TAsyncConnectionsOptions);
     // helper invoked from OpenAPI to verify YAML dispatch
     procedure OpenApiYamlDispatch;
+    {$ifdef OSPOSIX}
+    /// validate mormot.net.tftp.server using libcurl (so only POSIX by now)
+    procedure DoTFTPServer(Sender: TObject);
+    /// validate Unix domain socket server bind and stale .socket file cleanup
+    procedure DoUnixDomainSocket(Sender: TObject);
+    {$endif OSPOSIX}
   published
     /// Engine.IO and Socket.IO regression tests
     procedure _SocketIO;
@@ -123,24 +129,18 @@ type
     procedure _THttpPeerCache;
     /// some HTTP shared/low-level process
     procedure HTTP;
-    /// validate THttpServerGeneric.OnBodyDownload streamed body upload
-    procedure BodyDownload;
     /// validate THttpProxyCache process
     procedure _THttpProxyCache;
     /// validate TUriTree high-level structure
     procedure _TUriTree;
+    /// validate THttpServerGeneric.OnBodyDownload streamed body upload
+    procedure BodyDownload;
+    /// validate mormot.net.tunnel
+    procedure Tunnel;
     /// RTSP over HTTP, as implemented in mormot.net.rtsphttp unit
     procedure RTSPOverHTTP;
     /// RTSP over HTTP, with always temporary buffering
     procedure RTSPOverHTTPBufferedWrite;
-    /// validate mormot.net.tunnel
-    procedure Tunnel;
-    {$ifdef OSPOSIX}
-    /// validate mormot.net.tftp.server using libcurl (so only POSIX by now)
-    procedure TFTPServer;
-    /// validate Unix domain socket server bind and stale .socket file cleanup
-    procedure UnixDomainSocket;
-    {$endif OSPOSIX}
     /// validate IP processing functions
     procedure IPAddresses;
     /// validate mormot.net.openapi unit
@@ -157,6 +157,11 @@ var
   d: TDocVariantData;
   ws: TSha1Digest;
 begin
+  // start some slow tests in background if /multithread is enabled
+  {$ifdef OSPOSIX}
+  Run(DoUnixDomainSocket, self, 'UnixDomainSocket', true, false);
+  Run(DoTFTPServer, self, 'TFTPServer', true, false);
+  {$endif OSPOSIX}
   // from https://datatracker.ietf.org/doc/html/rfc6455#section-1.3
   ComputeChallenge('dGhlIHNhbXBsZSBub25jZQ==', ws);
   CheckEqual(Sha1DigestToString(ws), 'b37a4f2cc0624f1690f64606cf385945b2bec4ea');
@@ -669,6 +674,7 @@ const
 
 procedure TNetworkProtocols.RTSPOverHTTP;
 begin
+  RunWait;
   DoRtspOverHttp(ASYNC_OPTION);
 end;
 

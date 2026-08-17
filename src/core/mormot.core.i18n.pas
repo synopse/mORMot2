@@ -1199,7 +1199,7 @@ begin
       if fLang[l] <> nil then
         ReadError('duplicated lang');
       FindOrNew(l).Texts.Keys.DynArray^.LoadFromReader(fReader^);
-      fLang[l].Texts.Keys.ReHash;
+      fLang[l].Texts.Keys.ForceReHash;
     until false;
     if fLangCount <> n then
       ReadError('LangCount mismatch');
