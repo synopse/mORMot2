@@ -809,8 +809,12 @@ type
   // STATICFILE_CONTENT_TYPE and InContent set to the local file name (mirroring
   // the response process), and the file is deleted once the request has been
   // processed - a handler can rename/move the file to take data ownership
-  // - for any other TStream class, the callback should keep its own reference
-  // to the instance to access the received data (InContent remains void)
+  // - any other TStream class is freed once the body has been received, i.e.
+  // before OnRequest is called: such a stream should therefore write into
+  // some independently owned storage (e.g. a database or a memory mapped
+  // file), and the instance itself should not be accessed after the download
+  // - aInHeaders is the raw headers text, which also includes the 'RemoteIP:'
+  // header on THttpServer, but not (yet) on THttpAsyncServer: use aRemoteIP
   // - the original Content-Type header is still available from InHeaders
   // - a compressed body - i.e. with a Content-Encoding: header matching a
   // registered compression algorithm - can not be streamed, and is rejected
@@ -3459,6 +3463,8 @@ begin
   ProgressiveID := 0;
   ProgressiveTix := 0;
   fProgressivePosition := 0;
+  fContentLeft := 0; // paranoid: a rejected body may have left it <> 0
+  fContentPos := nil;
 end;
 
 procedure THttpRequestContext.GetTrimmed(P, P2: PUtf8Char; L: PtrInt;
@@ -3912,6 +3918,8 @@ procedure THttpRequestContext.ProcessInit;
 begin // all other fields are expected to be filled with 0/nil/''
   RangeLength := -1;
   ContentLength := -1; // not yet parsed
+  fContentLeft := 0;   // e.g. if a previous body was rejected in the middle
+  fContentPos := nil;
   State := hrsGetCommand;
 end;
 
@@ -3997,8 +4005,11 @@ begin
           else
             // void line: we reached end of headers
             if hfTransferChunked in HeaderFlags then
+            begin
               // process chunked body
-              State := hrsGetBodyChunkedHexFirst
+              ContentLength := 0; // any Content-Length: is ignored when chunked
+              State := hrsGetBodyChunkedHexFirst;
+            end
             else if ContentLength > 0 then // -1 = no Content-Length: header
               // regular process with explicit content-length
               State := hrsGetBodyContentLengthFirst
@@ -4772,7 +4783,12 @@ begin
       // keep the original type: only 'application/json' is not in the headers
       AppendLine(fInHeaders, ['Content-Type: ', fInContentType]);
     fInContentType := STATICFILE_CONTENT_TYPE;
-  end;
+  end
+  else if PropNameEquals(fInContentType, STATICFILE_CONTENT_TYPE) then
+    // paranoid: '!' is a valid token char, so a client could have sent this
+    // content type by itself - never let InContent be seen as a local file
+    // name by a callback expecting a TOnHttpServerBodyDownload spooled body
+    FastAssignNew(fInContentType);
 end;
 
 procedure THttpServerRequestAbstract.PrepareDirect(

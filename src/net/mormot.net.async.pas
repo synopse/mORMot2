@@ -4777,7 +4777,10 @@ begin
             [HTTP_STATE[fHttp.State], HTTP_STATE[previous]], self);
           case fHttp.State of
             hrsErrorPayloadTooLarge:
-              DoReject(HTTP_PAYLOADTOOLARGE); // e.g. chunked over ContentMaxSize
+              begin
+                fServer.IncStat(grOversizedPayload); // e.g. over ContentMaxSize
+                DoReject(HTTP_PAYLOADTOOLARGE);
+              end;
             hrsErrorContentStreamWrite:
               DoReject(HTTP_INSUFFICIENTSTORAGE); // e.g. ENOSPC on spool file
           else
@@ -5060,6 +5063,7 @@ begin
     result := soContinue;
     if (fHttp.State in
          [hrsGetBodyChunkedHexFirst, hrsGetBodyContentLengthFirst]) and
+       not (hfConnectionUpgrade in fHttp.HeaderFlags) and
        Assigned(fServer.fOnBodyDownload) then
       result := DoBodyDownload;
   end;

@@ -5480,6 +5480,8 @@ begin
     else
       result := grHeaderReceived;
   except
+    on EHttpSocketOverflow do
+      result := grOversizedPayload; // e.g. chunked body over ContentMaxSize
     on E: Exception do
       result := grException;
   end;
