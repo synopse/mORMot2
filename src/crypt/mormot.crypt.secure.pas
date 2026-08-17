@@ -2680,9 +2680,6 @@ const
   /// TCryptCertValidity results indicating a valid digital signature
   CV_VALIDSIGN = [cvValidSigned, cvValidSelfSigned];
 
-  /// default ignored TCryptCertValidity results
-  CV_IGNORE_DEFAULT = [cvCrlFailed, cvCrlDownloadFailed];
-
   /// a two-char identifier of Certificate usage
   // - as used by ToText(u: TCryptCertUsages, from_cu_text=true)
   CU_TEXT: array[TCryptCertUsage, 0..1] of AnsiChar = (
