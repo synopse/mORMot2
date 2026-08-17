@@ -7316,7 +7316,8 @@ var
               PartialID := 0;
         end
         else
-          Params.SetStep(wgsAlternateFailedRename, [Partial, ' as ', ToRename]);
+          Params.SetStep(wgsAlternateFailedRename,
+            [Partial, ' as ', ToRename, ' ', OsErrorShort]);
       end;
       if localok then
         fPartials.DoneLocked(Partial, local)
@@ -7393,7 +7394,8 @@ begin
         end;
       end
       else
-        Params.SetStep(wgsAlternateFailedCopyInCache, [Partial, ' into ', local]);
+        Params.SetStep(wgsAlternateFailedCopyInCache,
+          [Partial, ' into ', local, ' ', OsErrorShort]);
     finally
       fFilesSafe.UnLock;
     end;
