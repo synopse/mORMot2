@@ -3451,6 +3451,31 @@ type
     function Write(const Buffer; Count: Longint): Longint; override;
   end;
 
+  /// file stream which deletes its own file once the instance is released
+  // - the temporary file lifetime is therefore bound to this instance, with no
+  // additional tracking needed by the caller
+  // - used e.g. as TOnHttpServerBodyDownload spool file: the request body is
+  // written into it, is available during the request process, then vanishes
+  // with the stream - this is the equivalent of nginx
+  // "client_body_in_file_only clean" (whereas "on" would keep the file)
+  // - set DeleteFileOnDestroy := false e.g. once the file has been renamed or
+  // moved by the process, so should not be deleted any more
+  TFileStreamEventuallyDelete = class(TFileStreamEx)
+  protected
+    fDeleteFileOnDestroy: boolean;
+  public
+    /// open or create the file, which will be deleted by Destroy
+    // - Mode is typically fmCreate, but a spooled file meant to be read back
+    // by its name while this instance is still open needs a sharing mode, e.g.
+    // fmCreate or fmShareRead (which is mandatory on Windows)
+    constructor Create(const aFileName: TFileName; Mode: cardinal); reintroduce;
+    /// close the handle, then delete the file unless DeleteFileOnDestroy=false
+    destructor Destroy; override;
+    /// set to false to keep the file after this instance is released
+    property DeleteFileOnDestroy: boolean
+      read fDeleteFileOnDestroy write fDeleteFileOnDestroy;
+  end;
+
 /// a wrapper around FileRead() to ensure a whole memory buffer is retrieved
 // - expects Size to be up to 2GB (seems like a big enough memory buffer)
 // - on Windows, will read by 16MB chunks max to avoid ERROR_NO_SYSTEM_RESOURCES
@@ -7881,6 +7906,24 @@ end;
 function TFileStreamEx.GetSize: Int64;
 begin
   result := FileSize(Handle); // faster than 3 FileSeek() calls - and threadsafe
+end;
+
+
+{ TFileStreamEventuallyDelete }
+
+constructor TFileStreamEventuallyDelete.Create(
+  const aFileName: TFileName; Mode: cardinal);
+begin
+  inherited Create(aFileName, Mode); // raise EOSException on invalid handle
+  fDeleteFileOnDestroy := true;
+end;
+
+destructor TFileStreamEventuallyDelete.Destroy;
+begin
+  inherited Destroy; // close the handle first, as required on Windows
+  if fDeleteFileOnDestroy and
+     (fFileName <> '') then
+    DeleteFile(fFileName);
 end;
 
 

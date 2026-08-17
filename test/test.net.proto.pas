@@ -4339,12 +4339,21 @@ begin
   bodyeventlen := aContentLength;
   if aUrl = '/mem' then
     exit; // in-memory Content fallback
-  if aUrl = '/fail' then
+  if aUrl = '/ram' then
+    result := TRawByteStringStream.Create // not a file: no InContent name
+  else if aUrl = '/fail' then
     result := TFailingStream.Create
   else
   begin
     bodyfile := TemporaryFileName;
-    result := TFileStreamEx.Create(bodyfile, fmCreate);
+    // fmShareRead is needed because the stream is still open (as
+    // InContentStream) when the request reads the spool file by its name
+    if aUrl = '/del' then
+      // this stream removes its own file: no rfContentFileNameNeedDelete
+      result := TFileStreamEventuallyDelete.Create(bodyfile,
+        fmCreate or fmShareRead)
+    else
+      result := TFileStreamEx.Create(bodyfile, fmCreate or fmShareRead);
   end;
   inc(bodystreamed); // increment last: the tests poll on this counter
 end;
@@ -4363,8 +4372,28 @@ begin
   begin
     // default in-memory process, since DoBodyDownload returned nil
     CheckEqual(Ctxt.InContentType, bodytype, 'mem typ');
+    Check(Ctxt.InContentStream = nil, 'mem no stream');
     h := crc32cHash(Ctxt.InContent);
     CheckEqual(h, bodyhash, 'mem hash');
+  end
+  else if Ctxt.Url = '/ram' then
+  begin
+    // the event returned a stream which is not a file: no InContent name, but
+    // the stream itself is available to this request as InContentStream
+    CheckEqual(Ctxt.InContentType, bodytype, 'ram typ');
+    CheckEqual(Ctxt.InContent, '', 'ram no content');
+    Check(Ctxt.InContentStream <> nil, 'ram stream');
+    Check(Ctxt.InContentStream.InheritsFrom(TRawByteStringStream), 'ram class');
+    // a seekable stream is rewinded, so can be read back from here
+    CheckEqual(Ctxt.InContentStream.Position, 0, 'ram rewind');
+    ms := TRawByteStringStream.Create;
+    try
+      StreamCopyUntilEnd(Ctxt.InContentStream, ms);
+      h := crc32cHash(ms.DataString);
+    finally
+      ms.Free;
+    end;
+    CheckEqual(h, bodyhash, 'ram hash');
   end
   else
   begin
@@ -4404,6 +4433,17 @@ begin
     begin
       h := crc32cHash(StringFromFile(fn));
       CheckEqual(h, bodyhash, 'spool hash');
+      // the spool stream is still open, rewinded, and readable from here
+      Check(Ctxt.InContentStream <> nil, 'spool stream');
+      Check(Ctxt.InContentStream.InheritsFrom(TFileStreamEx), 'spool class');
+      CheckEqual(Ctxt.InContentStream.Position, 0, 'spool rewind');
+      ms := TRawByteStringStream.Create;
+      try
+        StreamCopyUntilEnd(Ctxt.InContentStream, ms);
+        CheckEqual(crc32cHash(ms.DataString), bodyhash, 'spool stream hash');
+      finally
+        ms.Free;
+      end;
     end;
   end;
   Ctxt.OutContent := Make(['ok ', CardinalToHexShort(h)]);
@@ -4461,6 +4501,21 @@ begin
           CheckEqual(status, HTTP_SUCCESS, 'mem status');
           CheckEqual(clt.Content, ok, 'mem resp');
           CheckEqual(bodystreamed, prev + 1, 'mem not streamed');
+          // a TFileStreamEventuallyDelete spool removes its own file, so the
+          // server does not set rfContentFileNameNeedDelete for it
+          prev := bodystreamed;
+          status := clt.Post('/del', body8mb, bodytype);
+          CheckEqual(status, HTTP_SUCCESS, 'del status');
+          CheckEqual(clt.Content, ok, 'del resp');
+          CheckEqual(bodystreamed, prev + 1, 'del streamed');
+          WaitDeleted('del');
+          // a stream which is not a file has no InContent name at all: it is
+          // only reachable from the request as InContentStream
+          prev := bodystreamed;
+          status := clt.Post('/ram', body8mb, bodytype);
+          CheckEqual(status, HTTP_SUCCESS, 'ram status');
+          CheckEqual(clt.Content, ok, 'ram resp');
+          CheckEqual(bodystreamed, prev + 1, 'ram streamed');
           // a spooled JSON body should keep its Content-Type: in InHeaders
           // (this is the single content type not stored as header text)
           bodytype := JSON_CONTENT_TYPE;

@@ -346,6 +346,7 @@ type
     rfRange,
     rfHttp10,
     rfContentStreamNeedFree,
+    rfContentFileNameNeedDelete,
     rfAsynchronous,
     rfProgressiveStatic);
 
@@ -461,9 +462,20 @@ type
     /// stream-oriented alternative to the Content in-memory buffer
     // - is typically a TFileStreamEx
     ContentStream: TStream;
+    /// the request body stream supplied by TOnHttpServerBodyDownload
+    // - kept aside from ContentStream (which is reused for the response) once
+    // the body has been received, and released by ProcessDone or Reset, i.e.
+    // once the request has been processed - so is available to the handler as
+    // THttpServerRequestAbstract.InContentStream, rewinded if seekable
+    ContentInputStream: TStream;
     /// local file name of a request body spooled by TOnHttpServerBodyDownload
-    // - this file is deleted by ProcessDone or Reset, i.e. once the request
-    // has been processed, unless the handler did rename/move it meanwhile
+    // - is set from ContentInputStream if it is a TFileStreamEx, and supplied
+    // to the handler as InContent, mirroring the STATICFILE response trick
+    // - if rfContentFileNameNeedDelete is set in ResponseFlags, this file is
+    // deleted by ProcessDone or Reset, i.e. once the request has been
+    // processed, unless the handler did rename/move it meanwhile
+    // - a TFileStreamEventuallyDelete does delete the file by itself, so the
+    // rfContentFileNameNeedDelete flag is not set for such a stream
     ContentInputName: TFileName;
     /// maximum cumulated size of a chunked body written into ContentStream
     // - as set e.g. from THttpServerGeneric.MaximumAllowedContentLength when
@@ -561,6 +573,13 @@ type
     // Content/ContentStream/ContentLength/ContentEncoding are manually set
     // - used by THttpClientSocket.Request on custom protocol (e.g. 'file://')
     function ContentToOutput(aStatus: integer; aOutStream: TStream): integer;
+    /// set ContentInputName from a TOnHttpServerBodyDownload spool stream
+    // - and rfContentFileNameNeedDelete, unless the stream deletes it by itself
+    procedure SetContentInputName(aStream: TFileStreamEx);
+    /// move a received TOnHttpServerBodyDownload body into ContentInputStream
+    // - to be called once the body has been fully received, because the
+    // response process will reuse the ContentStream field for its own output
+    procedure ContentInputDone;
     /// should be done when the HTTP Server state machine is done
     // - will check and process hfContentStreamNeedFree flag
     procedure ProcessDone;
@@ -804,16 +823,25 @@ type
   // rejected as HTTP_PAYLOADTOOLARGE = 413 while it is received
   // - only a body with a Content-Length: header or chunked Transfer-Encoding
   // is streamed: the deprecated HTTP/1.0 close-delimited body is not
-  // - the stream is owned by the server, and will be freed once the body has
-  // been fully received; if the stream is a TFileStreamEx, the request is
-  // then supplied to the OnRequest callback with InContentType set to
-  // STATICFILE_CONTENT_TYPE and InContent set to the local file name (mirroring
-  // the response process), and the file is deleted once the request has been
-  // processed - a handler can rename/move the file to take data ownership
-  // - any other TStream class is freed once the body has been received, i.e.
-  // before OnRequest is called: such a stream should therefore write into
-  // some independently owned storage (e.g. a database or a memory mapped
-  // file), and the instance itself should not be accessed after the download
+  // - the stream is owned by the server, and stays available to the OnRequest
+  // callback as THttpServerRequestAbstract.InContentStream - rewinded to its
+  // beginning if seekable - then is freed once the request has been processed:
+  // a handler should not free it, nor keep any reference past the request
+  // - if the stream is a TFileStreamEx, the request is also supplied with
+  // InContentType set to STATICFILE_CONTENT_TYPE and InContent set to the local
+  // file name (mirroring the response process), and the file is deleted once
+  // the request has been processed - a handler can rename/move the file to take
+  // data ownership; note that the stream is still open at that time, so on
+  // Windows the file needs a sharing mode to be read back by its name, e.g.
+  // TFileStreamEx.Create(fn, fmCreate or fmShareRead)
+  // - use TFileStreamEventuallyDelete for the file to be deleted by the stream
+  // itself: this is the simplest way of binding the spool file lifetime to the
+  // request, and the server won't track that file name by itself
+  // - any other TStream class (e.g. a TPipeStream to a consumer thread, or a
+  // compression stream) has no InContent file name, but is still supplied as
+  // InContentStream - beware that a TPipeStream Write() blocks until its
+  // consumer drains the pipe, which on THttpAsyncServer holds one of the few
+  // event loop threads for the whole upload duration
   // - aInHeaders is the raw headers text, which also includes the 'RemoteIP:'
   // header on THttpServer, but not (yet) on THttpAsyncServer: use aRemoteIP
   // - the original Content-Type header is still available from InHeaders
@@ -857,6 +885,7 @@ type
     fOutContentType: RawUtf8;
     fOutCustomHeaders: RawUtf8;
     fInContent: RawByteString;
+    fInContentStream: TStream;
     fOutContent: RawByteString;
     fConnectionID: THttpServerConnectionID;                  // 64-bit
     fConnectionFlags: THttpServerRequestFlags;               // 8-bit
@@ -898,6 +927,19 @@ type
     // - e.g. some GET/POST/PUT JSON data can be specified here
     property InContent: RawByteString
       read fInContent write fInContent;
+    /// the body stream supplied by the TOnHttpServerBodyDownload event
+    // - nil unless this server has an OnBodyDownload event which returned a
+    // TStream for this request: then the body was written into this stream
+    // instead of the InContent memory buffer, and is available here without
+    // any RAM copy - rewinded to its beginning if the stream is seekable
+    // - is owned by the server, and released once the request is processed:
+    // don't free it, and don't keep any reference past this request
+    // - if the stream was a TFileStreamEx, InContent does also contain its
+    // file name and InContentType is STATICFILE_CONTENT_TYPE - note that on
+    // Windows, reading that file by its name requires the stream to have been
+    // created with a sharing mode, e.g. fmCreate or fmShareRead
+    property InContentStream: TStream
+      read fInContentStream;
     /// output parameter to be set to the response message body
     property OutContent: RawByteString
       read fOutContent write fOutContent;
@@ -3421,6 +3463,29 @@ end;
 
 { THttpRequestContext }
 
+procedure THttpRequestContext.SetContentInputName(aStream: TFileStreamEx);
+begin
+  ContentInputName := aStream.FileName;
+  if not aStream.InheritsFrom(TFileStreamEventuallyDelete) or
+     not TFileStreamEventuallyDelete(aStream).DeleteFileOnDestroy then
+    // this stream won't remove its own file: the server is responsible for it
+    include(ResponseFlags, rfContentFileNameNeedDelete);
+end;
+
+procedure THttpRequestContext.ContentInputDone;
+begin
+  if not (rfContentStreamNeedFree in ResponseFlags) then
+    exit; // not a server-owned TOnHttpServerBodyDownload input stream
+  ContentInputStream := ContentStream; // released by ProcessDone
+  exclude(ResponseFlags, rfContentStreamNeedFree);
+  ContentStream := nil; // input only: don't interfere with the response
+  if (ContentInputStream <> nil) and
+     not ContentInputStream.InheritsFrom(TStreamWithNoSeek) then
+    // rewind for InContentStream reading - but not e.g. on a TPipeStream,
+    // which is the TStreamWithNoSeek class marking a non-seekable stream
+    ContentInputStream.Position := 0;
+end;
+
 procedure THttpRequestContext.ProcessDone;
 begin
   if rfContentStreamNeedFree in ResponseFlags then
@@ -3428,9 +3493,16 @@ begin
     FreeAndNilSafe(ContentStream);
     exclude(ResponseFlags, rfContentStreamNeedFree);
   end;
+  if ContentInputStream <> nil then
+    // a TFileStreamEventuallyDelete does remove its spool file in Destroy
+    FreeAndNilSafe(ContentInputStream);
   if ContentInputName <> '' then
   begin
-    DeleteFile(ContentInputName); // remove any pending spooled body file
+    if rfContentFileNameNeedDelete in ResponseFlags then
+    begin
+      DeleteFile(ContentInputName); // remove any pending spooled body file
+      exclude(ResponseFlags, rfContentFileNameNeedDelete);
+    end;
     ContentInputName := '';
   end;
 end;
@@ -4754,6 +4826,7 @@ begin
     FastAssign(fAuthBearer, aHttp.BearerToken);
   fUserAgent := aHttp.UserAgent;
   fInContent := aHttp.Content;
+  fInContentStream := aHttp.ContentInputStream; // nil if no OnBodyDownload
   if aHttp.ContentInputName <> '' then
   begin
     // the body was spooled into a local file by TOnHttpServerBodyDownload:
@@ -4784,6 +4857,7 @@ begin
   fInHeaders := aInHeaders;
   fInContentType := aInContentType;
   fInContent := aInContent;
+  fInContentStream := nil; // no OnBodyDownload on this non-HTTP code path
 end;
 
 procedure THttpServerRequestAbstract.AddInHeader(AppendedHeader: RawUtf8);
