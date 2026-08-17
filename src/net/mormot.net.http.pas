@@ -3463,8 +3463,8 @@ begin
   ProgressiveID := 0;
   ProgressiveTix := 0;
   fProgressivePosition := 0;
-  fContentLeft := 0; // paranoid: a rejected body may have left it <> 0
-  fContentPos := nil;
+  fContentLeft := 0; // a body rejected in the middle may have left it <> 0
+  fContentPos := nil; // ProcessInit expects those fields to be 0/nil
 end;
 
 procedure THttpRequestContext.GetTrimmed(P, P2: PUtf8Char; L: PtrInt;
@@ -3918,8 +3918,6 @@ procedure THttpRequestContext.ProcessInit;
 begin // all other fields are expected to be filled with 0/nil/''
   RangeLength := -1;
   ContentLength := -1; // not yet parsed
-  fContentLeft := 0;   // e.g. if a previous body was rejected in the middle
-  fContentPos := nil;
   State := hrsGetCommand;
 end;
 
