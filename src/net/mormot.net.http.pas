@@ -306,6 +306,7 @@ type
     hrsConnect,
     hrsSendHeaders,
     hrsErrorPayloadTooLarge,
+    hrsErrorContentStreamWrite,
     hrsErrorRejected,
     hrsErrorMisuse,
     hrsErrorUnsupportedRange,
@@ -4051,7 +4052,15 @@ begin
           else
             st.LineLen := fContentLeft;
           if ContentStream <> nil then
-            ContentStream.WriteBuffer(st.P^, st.LineLen)
+            try
+              ContentStream.WriteBuffer(st.P^, st.LineLen);
+            except
+              on EStreamError do
+              begin
+                State := hrsErrorContentStreamWrite; // e.g. ENOSPC -> 507
+                break;
+              end;
+            end
           else
           begin
             MoveFast(st.P^, fContentPos^, st.LineLen);
@@ -4099,7 +4108,15 @@ begin
             inc(fContentPos, st.LineLen);
           end
           else
-            ContentStream.WriteBuffer(st.P^, st.LineLen);
+            try
+              ContentStream.WriteBuffer(st.P^, st.LineLen);
+            except
+              on EStreamError do
+              begin
+                State := hrsErrorContentStreamWrite; // e.g. ENOSPC -> 507
+                break;
+              end;
+            end;
           State := hrsGetBodyContentLengthNext;
           inc(st.P, st.LineLen); // consume the body bytes (e.g. for pipelining)
           dec(st.Len, st.LineLen);

@@ -4748,71 +4748,58 @@ begin
     st.P := fRd.Buffer;
     st.Len := fRd.Len;
     // process one request (or several in case of pipelined input/output)
-    try
-      while fHttp.ProcessRead(st, {returnOnStateChange=}false) do
-      begin
-        // handle main steps change
-        case fHttp.State of
-          hrsGetBodyChunkedHexFirst,
-          hrsGetBodyContentLengthFirst:
-            // received command + all headers
-            if not (nfHeadersParsed in fHttp.HeaderFlags) then
-              result := DoHeaders;
-          hrsWaitProcessing:
-            // received command + all headers + body (if any)
-            begin
-              // detect pipelined GET input
-              if st.Len <> 0 then // there are still data in the input read buffer
-                if (fPipelineState = [pEnabled]) and // no pWrite yet
-                   (fKeepAliveMaxSec > 0) and
-                   not (hfConnectionClose in fHttp.HeaderFlags) then
-                  // DoRequest should gather output in fWr
-                  include(fPipelineState, pWrite);
-                  // note: if hsoEnablePipelining is not set, will continue
-              // = DoHeader (if needed) + call fServer.DoRequest() callback
-              result := DoRequest;
-            end
-        else
+    while fHttp.ProcessRead(st, {returnOnStateChange=}false) do
+    begin
+      // handle main steps change
+      case fHttp.State of
+        hrsGetBodyChunkedHexFirst,
+        hrsGetBodyContentLengthFirst:
+          // received command + all headers
+          if not (nfHeadersParsed in fHttp.HeaderFlags) then
+            result := DoHeaders;
+        hrsWaitProcessing:
+          // received command + all headers + body (if any)
           begin
-            fOwner.DoLog(sllWarning, 'OnRead: close connection after % (before=%)',
-              [HTTP_STATE[fHttp.State], HTTP_STATE[previous]], self);
-            if fHttp.State = hrsErrorPayloadTooLarge then
-              DoReject(HTTP_PAYLOADTOOLARGE) // e.g. chunked over ContentMaxSize
-            else
-              DoReject(HTTP_BADREQUEST);
-            result := soClose;
+            // detect pipelined GET input
+            if st.Len <> 0 then // there are still data in the input read buffer
+              if (fPipelineState = [pEnabled]) and // no pWrite yet
+                 (fKeepAliveMaxSec > 0) and
+                 not (hfConnectionClose in fHttp.HeaderFlags) then
+                // DoRequest should gather output in fWr
+                include(fPipelineState, pWrite);
+                // note: if hsoEnablePipelining is not set, will continue
+            // = DoHeader (if needed) + call fServer.DoRequest() callback
+            result := DoRequest;
+          end
+      else
+        begin
+          fOwner.DoLog(sllWarning, 'OnRead: close connection after % (before=%)',
+            [HTTP_STATE[fHttp.State], HTTP_STATE[previous]], self);
+          case fHttp.State of
+            hrsErrorPayloadTooLarge:
+              DoReject(HTTP_PAYLOADTOOLARGE); // e.g. chunked over ContentMaxSize
+            hrsErrorContentStreamWrite:
+              DoReject(HTTP_INSUFFICIENTSTORAGE); // e.g. ENOSPC on spool file
+          else
+            DoReject(HTTP_BADREQUEST);
           end;
-        end;
-        if pWrite in fPipelineState then
-        begin
-          if fWr.Len > 128 shl 10 then
-            // flush when got more than 128KB of pending output
-            if FlushPipelinedWrite <> soContinue then
-              result := soClose;
-          if (result <> soContinue) or
-             (fHttp.State in [hrsWaitAsyncProcessing, hrsUpgraded]) then
-            break; // rejected, async or upgraded
-        end
-        else if (result <> soContinue) or
-                (fHttp.State in [hrsGetCommand, hrsWaitAsyncProcessing, hrsUpgraded]) then
-          break; // rejected, authenticated, async or upgraded
-        previous := fHttp.State;
-      end;
-    except
-      on E: EStreamError do
-        if (fHttp.State in HTTP_REQUEST_READ) and
-           (fHttp.ContentStream <> nil) and
-           (rfContentStreamNeedFree in fHttp.ResponseFlags) then
-        begin
-          // e.g. ENOSPC when spooling into a TOnHttpServerBodyDownload stream:
-          // notify the client - as best effort - before closing the connection
-          fOwner.DoLog(sllWarning, 'OnRead: % when downloading the body',
-            [PClass(E)^], self);
-          DoReject(HTTP_INSUFFICIENTSTORAGE);
           result := soClose;
-        end
-        else
-          raise; // e.g. from the response process: close the connection
+        end;
+      end;
+      if pWrite in fPipelineState then
+      begin
+        if fWr.Len > 128 shl 10 then
+          // flush when got more than 128KB of pending output
+          if FlushPipelinedWrite <> soContinue then
+            result := soClose;
+        if (result <> soContinue) or
+           (fHttp.State in [hrsWaitAsyncProcessing, hrsUpgraded]) then
+          break; // rejected, async or upgraded
+      end
+      else if (result <> soContinue) or
+              (fHttp.State in [hrsGetCommand, hrsWaitAsyncProcessing, hrsUpgraded]) then
+        break; // rejected, authenticated, async or upgraded
+      previous := fHttp.State;
     end;
     // no more available input
     if pWrite in fPipelineState then // time to flush the pipelined responses
