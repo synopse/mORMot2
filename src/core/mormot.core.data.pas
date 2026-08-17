@@ -154,6 +154,10 @@ type
     function Exists(item: pointer): boolean; virtual;
     /// fast delete one item in the list
     function Remove(item: pointer): PtrInt; virtual;
+    /// add one or several items to the list
+    procedure AddSeveral(const item: array of pointer);
+    /// fast delete one or several items in the list
+    procedure RemoveSeveral(const item: array of pointer);
     {$ifdef HASITERATORS}
     /// an enumerator able to compile "for .. in list do" statements
     function GetEnumerator: TPointerEnumerator;
@@ -3044,6 +3048,23 @@ begin
   if result >= 0 then
     Delete(result);
 end;
+
+procedure TSynList.AddSeveral(const item: array of pointer);
+var
+  i: PtrInt;
+begin
+  for i := 0 to high(item) do
+    Add(item[i]);
+end;
+
+procedure TSynList.RemoveSeveral(const item: array of pointer);
+var
+  i: PtrInt;
+begin
+  for i := 0 to high(item) do
+    Remove(item[i]);
+end;
+
 
 {$ifdef HASITERATORS}
 

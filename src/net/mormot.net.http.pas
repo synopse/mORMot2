@@ -826,6 +826,7 @@ type
   // - on a broken connection, the stream is released and any spool file
   // deleted, but maybe deferred until the connection instance is actually
   // released (e.g. after the THttpAsyncServer connections GC)
+??
   TOnHttpServerBodyDownload = function(const aUrl, aMethod, aInHeaders,
     aInContentType, aRemoteIP: RawUtf8; aContentLength: Int64): TStream of object;
 
@@ -3428,7 +3429,7 @@ begin
   Process.Reset;
   State := hrsNoStateMachine;
   HeaderFlags := [];
-  if rfContentStreamNeedFree in ResponseFlags then
+  if rfContentStreamNeedFree in ResponseFlags then sub func?
     ContentStream.Free; // ensure no leak on (reused) broken connection
   if ContentInputName <> '' then
   begin
@@ -4060,7 +4061,7 @@ begin
             st.LineLen := st.Len
           else
             st.LineLen := fContentLeft;
-          if ContentStream <> nil then
+          if ContentStream <> nil then sub func?
             try
               ContentStream.WriteBuffer(st.P^, st.LineLen);
             except
@@ -4117,7 +4118,7 @@ begin
             inc(fContentPos, st.LineLen);
           end
           else
-            try
+            try // sub funct?
               ContentStream.WriteBuffer(st.P^, st.LineLen);
             except
               on EStreamError do
@@ -4771,7 +4772,7 @@ begin
     FastAssign(fAuthBearer, aHttp.BearerToken);
   fUserAgent := aHttp.UserAgent;
   fInContent := aHttp.Content;
-  if aHttp.ContentInputName <> '' then
+  if aHttp.ContentInputName <> '' then review
   begin
     // the body was spooled into a local file by TOnHttpServerBodyDownload:
     // supply its name in InContent, mirroring the STATICFILE response trick
