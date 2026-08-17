@@ -1085,7 +1085,7 @@ begin
   if hasinternet then
   begin
     utc1 := GetSntpTime(ntp);
-    if utc1 <> 0 then
+    if utc1 <> 0 then // may be 0 if server is asked several times from same IP
     begin
       utc2 := NowUtc;
       AddConsole('% : % = %', [ntp, DateTimeMSToString(utc1), DateTimeMSToString(utc2)]);
@@ -4523,7 +4523,6 @@ begin
           // an in-memory chunked body, sent as several chunks: the Content
           // buffer is reallocated then appended for each chunk
           prev := bodystreamed;
-          bodyhash := Sha256(mptext);
           raw := TCrtSocket.Open('127.0.0.1', port);
           try
             raw.CreateSockIn; // needed for proper SockRecvLn() below
