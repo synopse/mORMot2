@@ -4535,6 +4535,7 @@ begin
             n := 1;
             repeat // send mptext as 4 chunks of 5000 = $1388 bytes each
               raw.SockSend('1388');
+              raw.SockSendFlush; // force sockets sending
               raw.SockSend(copy(mptext, n, 5000));
               inc(n, 5000);
             until n > length(mptext);
