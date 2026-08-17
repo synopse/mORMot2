@@ -596,11 +596,11 @@ type
     wgsProgressive,
     wgsProgressiveFailed,
     wgsGet,
-    wgsSetDate,
     wgsLastMod,
     wgsAlternateRename,
     wgsAlternateFailedRename,
-    wgsAlternateFailedCopyInCache);
+    wgsAlternateFailedCopyInCache,
+    wgsLastModFailed);
   /// which steps have been performed during THttpClientSocket.WGet() process
   TWGetSteps = set of TWGetStep;
 
@@ -4377,10 +4377,11 @@ var
     parthash := stream.GetHash; // hash updated on each stream.Write()
     FreeAndNil(stream);
     if Http.ContentLastModified > 0 then
-    begin
-      FileSetDateFromUnixUtc(part, Http.ContentLastModified);
-      params.SetStep(wgsLastMod, [Http.ContentLastModified]);
-    end;
+      if FileSetDateFromUnixUtc(part, Http.ContentLastModified) then
+        params.SetStep(wgsLastMod, [Http.ContentLastModified])
+      else
+        params.SetStep(wgsLastModFailed,
+          [Http.ContentLastModified, ' ', OsErrorShort]);
   end;
 
   procedure AbortAlternateDownloading;
