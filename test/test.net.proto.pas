@@ -74,8 +74,8 @@ type
     reqfour: Int64;
     // for BodyDownload
     bodyfile: TFileName;
-    bodyhash, bodytype: RawUtf8;
-    bodystreamed: integer;
+    bodytype: RawUtf8;
+    bodystreamed, bodyhash: cardinal;
     bodyeventlen: Int64;
     // for _TTunnelLocal
     tunnelappsec: RawUtf8;
@@ -4351,18 +4351,19 @@ end;
 
 function TNetworkProtocols.DoBodyRequest(Ctxt: THttpServerRequestAbstract): cardinal;
 var
-  ct, h: RawUtf8;
+  ct: RawUtf8;
   fn: TFileName;
   fs: TFileStreamEx;
   dec: THttpMultiPartDecoder;
   ms: TRawByteStringStream;
+  h: cardinal;
 begin
   result := HTTP_SUCCESS;
   if Ctxt.Url = '/mem' then
   begin
     // default in-memory process, since DoBodyDownload returned nil
     CheckEqual(Ctxt.InContentType, bodytype, 'mem typ');
-    h := Sha256(Ctxt.InContent);
+    h := crc32cHash(Ctxt.InContent);
     CheckEqual(h, bodyhash, 'mem hash');
   end
   else
@@ -4386,7 +4387,7 @@ begin
           ms := TRawByteStringStream.Create;
           try
             StreamCopyUntilEnd(dec.Content, ms);
-            h := Sha256(ms.DataString);
+            h := crc32cHash(ms.DataString);
             CheckEqual(h, bodyhash, 'mp hash');
           finally
             ms.Free;
@@ -4401,11 +4402,11 @@ begin
     end
     else
     begin
-      h := HashFileSha256(fn);
+      h := crc32cHash(StringFromFile(fn));
       CheckEqual(h, bodyhash, 'spool hash');
     end;
   end;
-  Ctxt.OutContent := 'ok ' + h;
+  Ctxt.OutContent := Make(['ok ', CardinalToHexShort(h)]);
   Ctxt.OutContentType := TEXT_CONTENT_TYPE;
 end;
 
@@ -4414,8 +4415,8 @@ var
   srv: THttpServerSocketGeneric;
   clt: THttpClientSocket;
   raw: TCrtSocket;
-  fam, status, prev: integer;
-  port, mp: RawUtf8;
+  fam, status, prev: cardinal;
+  port, mp, ok: RawUtf8;
   body8mb: RawByteString;
   mpct, mptext, mptrunc, line: RawUtf8;
   mpa: TMultiPartDynArray;
@@ -4435,7 +4436,7 @@ begin
   TSynLog.Family.ExceptionIgnore.AddSeveral([
     EWriteError, EHttpSocketOverflow, ENetSock]);
   try
-    body8mb := RandomWinAnsi(8 shl 20); // 8MB of 8-bit, way above any socket buffer
+    body8mb := RandomWinAnsi(8 shl 20); // 8MB of data, way above any socket buf
     // some pure ASCII-7 text of exactly $4e20 bytes for the chunked request
     // (SockSend() of a non-ASCII AnsiString may involve codepage conversion)
     mptext := RandomIdentifier(20000);
@@ -4462,39 +4463,42 @@ begin
         srv.WaitStarted(10);
         clt := THttpClientSocket.Open('127.0.0.1', port);
         try
-          // spool a huge body8mb into a temporary file
+          // spool a huge 8MB body into a temporary file
           prev := bodystreamed;
           bodytype := 'application/dummy';
-          bodyhash := Sha256(body8mb);
+          bodyhash := crc32cHash(body8mb);
+          Make(['ok ', CardinalToHexShort(bodyhash)], ok);
           status := clt.Post('/big', body8mb, bodytype);
           CheckEqual(status, HTTP_SUCCESS, 'big status');
-          CheckEqual(clt.Content, 'ok ' + bodyhash, 'big resp');
+          CheckEqual(clt.Content, ok, 'big resp');
           CheckEqual(bodystreamed, prev + 1, 'big streamed');
           CheckEqual(bodyeventlen, length(body8mb), 'big event len');
           WaitDeleted('big');
           // in-memory fallback when the event returns nil
           status := clt.Post('/mem', body8mb, bodytype);
           CheckEqual(status, HTTP_SUCCESS, 'mem status');
-          CheckEqual(clt.Content, 'ok ' + bodyhash, 'mem resp');
+          CheckEqual(clt.Content, ok, 'mem resp');
           CheckEqual(bodystreamed, prev + 1, 'mem not streamed');
           // a spooled JSON body should keep its Content-Type: in InHeaders
           // (this is the single content type not stored as header text)
           bodytype := JSON_CONTENT_TYPE;
-          bodyhash := Sha256(mptext);
+          bodyhash := crc32cHash(mptext);
           status := clt.Post('/big', mptext, bodytype);
           CheckEqual(status, HTTP_SUCCESS, 'json status');
-          CheckEqual(clt.Content, 'ok ' + bodyhash, 'json resp');
+          CheckEqual(clt.Content,
+            Make(['ok ', CardinalToHexShort(bodyhash)]), 'json resp');
           WaitDeleted('json');
           // decode a multipart body directly from the spooled file
           bodytype := mpct;
-          bodyhash := Sha256(mptext);
+          bodyhash := crc32cHash(mptext);
           status := clt.Post('/mp', mp, mpct);
           CheckEqual(status, HTTP_SUCCESS, 'mp status');
-          CheckEqual(clt.Content, 'ok ' + bodyhash, 'mp resp');
+          CheckEqual(clt.Content,
+            Make(['ok ', CardinalToHexShort(bodyhash)]), 'mp resp');
           WaitDeleted('mp');
           // spool a chunked body, i.e. with no Content-Length
           bodytype := 'application/dummy';
-          bodyhash := Sha256(mptext);
+          bodyhash := crc32cHash(mptext);
           raw := TCrtSocket.Open('127.0.0.1', port);
           try
             raw.CreateSockIn; // needed for proper SockRecvLn() below
@@ -4582,7 +4586,8 @@ begin
         // on both families (its cumulated size is only known while receiving)
         // - first check the exact boundary: 2 x 20000 bytes = 40000, so a
         // 39999 limit should reject it, and a 40000 limit should accept it
-        bodyhash := Sha256(mptext + mptext); // the two chunks below
+        bodyhash := crc32cHash(mptext, crc32cHash(mptext)); // the two chunks
+        Make(['ok ', CardinalToHexShort(bodyhash)], ok);
         for status := 0 to 1 do
         begin
           srv.MaximumAllowedContentLength := 39999 + status;
@@ -4661,10 +4666,11 @@ begin
           clt := THttpClientSocket.Open('127.0.0.1', port);
           try
             mptrunc := copy(mptext, 1, status * 5000);
-            bodyhash := Sha256(mptrunc);
+            bodyhash := crc32cHash(mptrunc);
             CheckEqual(clt.Post('/big', mptrunc, bodytype),
               HTTP_SUCCESS, 'alive after reject');
-            CheckEqual(clt.Content, 'ok ' + bodyhash, 'resp after reject');
+            CheckEqual(clt.Content, Make(['ok ', CardinalToHexShort(bodyhash)]),
+              'resp after reject');
             WaitDeleted('after reject');
           finally
             clt.Free;
