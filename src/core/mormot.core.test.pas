@@ -297,6 +297,8 @@ type
     // - with proper retry if the server denies it, due to a rate limit
     function DownloadFile(const uri: RawUtf8; localfile: TFileName = '';
       retry: integer = 3): RawByteString;
+    /// wait up to 5 seconds that a given file is deleted
+    function WaitDeleted(const fn: TFileName; const msg: ShortString): boolean;
     /// execute a method possibly in a dedicated TLoggedWorkThread
     // - OnTask() should take some time running, to be worth a thread execution
     // - won't create more background threads than currently available CPU cores,
@@ -1216,6 +1218,17 @@ begin
   until false;
 end;
 
+function TSynTestCase.WaitDeleted(const fn: TFileName; const msg: ShortString): boolean;
+var
+  endtix: cardinal;
+begin
+  endtix := GetTickSec + 5; // never wait forever
+  while FileExists(fn) and
+        (GetTickSec < endtix) do
+    SleepHiRes(5);
+  result := CheckUtf8(not FileExists(fn), 'WaitDeleted(%) for %', [fn, msg]);
+end;
+
 threadvar
   _CurrentMethodInfo: PSynTestMethodInfo;
 
@@ -1558,7 +1571,7 @@ begin
   result := true;
   if Executable.Command.Option('multithread')
      {$ifdef OSWINDOWS} and not (wsFavorFewThreads in WindowsSpecs) {$endif} then
-    fMultiThread := CpuThreads > 2; // enabled with 3 cores
+    fMultiThread := SystemInfo.dwNumberOfProcessors > 2; // enabled with 3 cores
   if Executable.Command.Option('&methods') then
   begin
     for m := 0 to Count - 1 do
