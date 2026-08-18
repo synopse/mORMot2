@@ -771,14 +771,17 @@ var
 // - CpuThreads = SystemInfo.dwNumberOfProcessors is the logical CPU count
 // - as used e.g. by SetThreadAffinity()
 {$ifdef OSLINUXANDROID} function {$endif} CpuSockets: cardinal;
+
 /// how many hardware CPU cores are defined on this system
 // - i.e. the number of physical CPU cores
-// - CpuThreads = SystemInfo.dwNumberOfProcessors is the logical CPU count
+// - CpuThreads = SystemInfo.dwNumberOfProcessors is the logical CPU count,
+// which is the value you are likely to need e.g. for a thread pool dimension
 {$ifdef OSLINUXANDROID} function {$endif} CpuCores: cardinal;
 
 /// the number of available logical CPUs threads
 // - just an alias to SystemInfo.dwNumberOfProcessors compatibility value
 // - on Linux will make fast sched_getaffinity syscall for the current state
+// - this is the main information to scale any thread pool or background process
 {$ifdef OSLINUXANDROID} function {$endif} CpuThreads: cardinal;
 
 {$ifdef OSLINUXANDROID}
@@ -1640,7 +1643,7 @@ var
   WindowsUbr: integer;
   /// the current System information, as retrieved for the current process
   // - under a WOW64 process, it will use the GetNativeSystemInfo() new API
-  // to retrieve the real top-most system information
+  // to retrieve the real top-most host system information
   // - note that the lpMinimumApplicationAddress field is replaced by a
   // more optimistic/realistic value ($100000 instead of default $10000)
   // - under BSD/Linux, only contain dwPageSize and dwNumberOfProcessors fields
@@ -1674,7 +1677,8 @@ var
     /// OS allocation page size retrieved from libc's getpagesize() or AT_PAGESZ
     dwPageSize: cardinal;
     /// the number of available logical CPUs threads
-    // - from HW_NCPU (BSD), hw.logicalcpu (macOS) or /proc/cpuinfo (Linux)
+    // - from HW_NCPU (BSD), hw.logicalcpu (macOS), /proc/cpuinfo or a fast
+    // sched_getaffinity syscall (Linux)
     // - prefer the CpuThreads global variable/function instead of this Windowism
     // - see CpuSockets/CpuCores for the number of physical CPU sockets/cores
     dwNumberOfProcessors: cardinal;

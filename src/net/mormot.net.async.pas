@@ -5999,7 +5999,7 @@ end;
 constructor THttpProxyServerMainSettings.Create;
 begin
   inherited Create;
-  fThreadCount := CpuThreads + 1;
+  fThreadCount := SystemInfo.dwNumberOfProcessors + 1;
   fPort := '8098';
 end;
 

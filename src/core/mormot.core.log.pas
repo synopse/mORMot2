@@ -6151,7 +6151,8 @@ begin
       w.AddU(CpuThreads)
     else
       for i := 1 to length(CpuInfoText) do
-        if not (ord(CpuInfoText[i]) in [1..32, ord(':')]) then
+        if (CpuInfoText[i] > ' ') and
+           (CpuInfoText[i] <> ':') then
           w.AddDirect(CpuInfoText[i]);
     {$ifdef OSWINDOWS}
     w.AddDirect('*');

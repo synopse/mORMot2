@@ -4221,7 +4221,7 @@ procedure TNotifiedThread.SetServerThreadsAffinityPerCpu(
 var
   rnd, i: PtrInt;
 begin
-  rnd := CpuThreads;
+  rnd := CpuThreads; // fast sched_getaffinity syscall on Linux
   if (threads = nil) or
      (rnd <= 1) then
     exit;

@@ -4102,10 +4102,10 @@ end;
 
 procedure _GlobalInfoCpu(Sender: TBinDictionary);
 begin
-  Sender.UpdateText( 'cpu:name',         CpuInfoText);
-  Sender.UpdateText(['cpu:threads'],    [CpuThreads]);
-  Sender.UpdateText(['cpu:cores'],      [CpuCores]);
-  Sender.UpdateText(['cpu:sockets'],    [CpuSockets]);
+  Sender.UpdateText( 'cpu:name',      CpuInfoText);
+  Sender.UpdateText(['cpu:threads'], [CpuThreads]); // sched_getaffinity syscall
+  Sender.UpdateText(['cpu:cores'],   [CpuCores]);
+  Sender.UpdateText(['cpu:sockets'], [CpuSockets]);
   if HasHWAes then
     Sender.UpdateText('cpu:aes',  'true');
   {$ifdef ASMINTEL}
