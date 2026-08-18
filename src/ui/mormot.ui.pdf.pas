@@ -10990,13 +10990,13 @@ begin
               PT_BEZIERTO:
                 begin
                   E.Canvas.CurveToCI(
+                    PEMRPolyDraw(R)^.aptl[i].X,
+                    PEMRPolyDraw(R)^.aptl[i].Y,
                     PEMRPolyDraw(R)^.aptl[i + 1].X,
                     PEMRPolyDraw(R)^.aptl[i + 1].Y,
                     PEMRPolyDraw(R)^.aptl[i + 2].X,
-                    PEMRPolyDraw(R)^.aptl[i + 2].Y,
-                    PEMRPolyDraw(R)^.aptl[i + 3].X,
-                    PEMRPolyDraw(R)^.aptl[i + 3].Y);
-                  inc(i, 3);
+                    PEMRPolyDraw(R)^.aptl[i + 2].Y);
+                  inc(i, 2); // eventual inc(i) below
                   if polytypes^[i] and PT_CLOSEFIGURE <> 0 then
                   begin
                     E.Canvas.LineToI(position.X, position.Y);
@@ -11049,13 +11049,13 @@ begin
               PT_BEZIERTO:
                 begin
                   E.Canvas.CurveToCI(
+                    PEMRPolyDraw16(R)^.apts[i].X,
+                    PEMRPolyDraw16(R)^.apts[i].Y,
                     PEMRPolyDraw16(R)^.apts[i + 1].X,
                     PEMRPolyDraw16(R)^.apts[i + 1].Y,
                     PEMRPolyDraw16(R)^.apts[i + 2].X,
-                    PEMRPolyDraw16(R)^.apts[i + 2].Y,
-                    PEMRPolyDraw16(R)^.apts[i + 3].X,
-                    PEMRPolyDraw16(R)^.apts[i + 3].Y);
-                  inc(i, 3);
+                    PEMRPolyDraw16(R)^.apts[i + 2].Y);
+                  inc(i, 2); // eventual inc(i) below
                   if polytypes^[i] and PT_CLOSEFIGURE <> 0 then
                   begin
                     E.Canvas.LineToI(position.X, position.Y);
