@@ -2191,7 +2191,7 @@ begin
     if not (s[1] in ['0'..'9']) or
        not (s[2] in ['0'..'9']) then
       exit;
-    z := integer(ord(s[1]) * 10 + ord(s[2]) - (48 + 480)) * 60;
+    z := PtrInt(ord(s[1]) * 10 + ord(s[2]) - (48 + 480)) * 60;
     if s[3] in ['0'..'9', ':'] then
     begin
       if s[3] = ':' then

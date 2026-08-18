@@ -8723,7 +8723,7 @@ begin
               FreeAndNil(tmp)
             else
             begin
-              PRttiProp(v.VAny).SetOrdProp(Data, PtrInt(tmp));
+              PRttiProp(v.VAny).SetOrdProp(Data, PtrUInt(tmp));
               if jpoSetterExpectsToFreeTempInstance in Options then
                 FreeAndNil(tmp);
             end;

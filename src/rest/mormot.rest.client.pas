@@ -2518,7 +2518,7 @@ var
       execmsg.fInstance := callback.Instance;
       execmsg.fPar := par;
       with fServiceNotificationMethodViaMessages do
-        ok := PostMessage(Wnd, Msg, Wnd, PtrInt(execmsg));
+        ok := PostMessage(Wnd, Msg, Wnd, PtrUInt(execmsg));
       if ok then
         // TRestClientUri.ServiceNotificationMethodExecute will Free it
         exit;

@@ -1584,7 +1584,7 @@ begin
   DefaultPrinter := FormatString('%,%,%', [Device, Driver, Port]);
   WriteProfileString('windows', 'device', pointer(DefaultPrinter));
   Device := 'windows';
-  SendMessage(HWND_BROADCAST, WM_WININICHANGE, 0, PtrInt(@Device));
+  SendMessage(HWND_BROADCAST, WM_WININICHANGE, 0, PtrUInt(@Device));
 end;
 
 function CurrentPrinterName: string;
@@ -5424,7 +5424,7 @@ begin
       TextLenEx.flags := GTL_DEFAULT;
       TextLenEx.codepage := CP_ACP;
       MaxLen := SendMessage(
-        RichEditHandle, EM_GETTEXTLENGTHEX, PtrInt(@TextLenEx), 0);
+        RichEditHandle, EM_GETTEXTLENGTHEX, PtrUInt(@TextLenEx), 0);
       chrg.cpMax := -1;
       OldMap := SetMapMode(hdc, MM_TEXT);
       try
@@ -5434,7 +5434,7 @@ begin
           hdc := fCanvas.Handle;
           hdcTarget := hdc;
           LastChar := SendMessage(
-            RichEditHandle, EM_FORMATRANGE, 1, PtrInt(@Range));
+            RichEditHandle, EM_FORMATRANGE, 1, PtrUInt(@Range));
           if EndOfPagePositions <> nil then
             AddInteger(EndOfPagePositions^, LastChar);
           if cardinal(LastChar) >= cardinal(MaxLen) then

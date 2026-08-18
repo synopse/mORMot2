@@ -3426,10 +3426,10 @@ begin
   begin
     Write1(ord(elemtype));
     {$ifdef HASINLINE}
-    Write(pointer(name), length(name) + 1); // +1 for #0
+    Write(pointer(name), length(name) + 1);
     {$else}
-    Write(pointer(name), PInteger(PtrInt(name) - SizeOf(integer))^ + 1); // +1 for #0
-    {$endif HASINLINE}
+    Write(pointer(name), PInteger(PtrUInt(name) - SizeOf(integer))^ + 1);
+    {$endif HASINLINE} // +1 for #0
   end;
 end;
 

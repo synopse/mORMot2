@@ -5451,7 +5451,7 @@ begin
       repeat
         for f := 0 to maxf do
           inc(sqllen, length(FieldValues[f, r]));
-        if sqllen + PtrInt(W.TextLength) > 30000 then
+        if Int64(sqllen) + W.TextLength > 30000 then
           break;
         EncodeInsertPrefix(W, BatchOptions, dFirebird);
         W.AddString(TableName);
@@ -5860,7 +5860,7 @@ var
         if p^.VPointer = nil then
           BindNull(arg, IO)
         else
-          Bind(arg, PtrInt(p^.VPointer), IO);
+          Bind(arg, Int64(PtrUInt(p^.VPointer)), IO);
       vtVariant:
         BindVariant(arg, p^.VVariant^, VariantIsBlob(p^.VVariant^), IO);
       {$ifdef UNICODE}

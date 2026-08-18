@@ -7922,7 +7922,7 @@ begin
         if p^.VPointer = nil then
           BindNull(arg)
         else
-          Bind(arg, PtrInt(p^.VPointer));
+          Bind(arg, Int64(PtrUInt(p^.VPointer)));
     else
       begin
         VarRecToUtf8(p, tmp);

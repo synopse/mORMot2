@@ -3152,7 +3152,7 @@ begin
   DecodeDate(ADate, D[2], D[3], D[4]);
   DecodeTime(ADate, D[5], D[6], D[7], D[8]);
   SetLength(result{%H-}, 17);
-  YearToPChar(D[2], pointer(PtrInt(result) + 2));
+  YearToPChar(D[2], pointer(PtrUInt(result) + 2));
   PWord(result)^ := ord('D') + ord(':') shl 8;
   for i := 3 to 7 do
     PWordArray(pointer(result))^[i] := TwoDigitLookupW[D[i]];
@@ -4966,7 +4966,7 @@ begin
         L := high(fTmp) shr 1;
     end;
     mormot.core.text.BinToHex(PW, B, L);
-    inc(PtrInt(PW), L);
+    inc(PByte(PW), L);
     inc(B, L * 2);
     dec(len, L);
   until len = 0;
@@ -5164,7 +5164,7 @@ begin
           L := high(fTmp) shr 2; // max WideCharCount allowed in Tmp[]
       end;
       BinToHex4(pointer(PW), B, L);
-      inc(PtrInt(PW), L * 2);
+      inc(PByte(PW), L * 2);
       inc(B, L * 4);
       dec(WideCharCount, L);
     until WideCharCount = 0;
@@ -5930,7 +5930,7 @@ begin
   if P = nil then
     exit;
   Header := P;
-  inc(PtrInt(P), SizeOf(TCmapHeader));
+  inc(PByte(P), SizeOf(TCmapHeader));
   off := 0;
   for i := 0 to Header^.numberSubtables - 1 do
     with SubTable^[i] do
@@ -6879,7 +6879,7 @@ begin
   // retrieve true type fonts available for all charsets
   FillCharFast(LFont, SizeOf(LFont), 0);
   LFont.lfCharset := DEFAULT_CHARSET; // enumerate ALL fonts
-  EnumFontFamiliesExW(fDC, LFont, @EnumFontsProcW, PtrInt(@fTrueTypeFonts), 0);
+  EnumFontFamiliesExW(fDC, LFont, @EnumFontsProcW, PtrUInt(@fTrueTypeFonts), 0);
   QuickSortRawUtf8(fTrueTypeFonts, length(fTrueTypeFonts), nil, @StrIComp);
   fCompressionMethod := cmFlateDecode; // deflate by default
   fBookMarks := TRawUtf8List.CreateEx([fCaseSensitive, fNoDuplicate]);

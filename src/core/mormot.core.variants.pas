@@ -4491,7 +4491,7 @@ begin
       else
       begin // raw pointer <> nil will be serialized as PtrInt
         r.VType := varPtrInt;
-        r.VInt64 := PtrInt(V^.VPointer);
+        r.VInt64 := PtrInt(PtrUInt(V^.VPointer));
       end;
     vtInterface: // support IDocDict and IDocList instances
       TDocVariantData(result).InitFromIDocAny(IInterface(V^.VInterface));
