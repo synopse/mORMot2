@@ -6979,7 +6979,7 @@ begin
   sock := SocketOpen(Server, Port, {tls=}Tls = stlsImplicit, TlsCtx, nil);
   if sock <> nil then
   try
-    sock.CreateSockIn; // we use SockIn for buffered SockRecvLn() in Exec()
+    sock.CreateSockIn; // we need SockIn for buffered SockRecvLn() in Exec()
     Exec('', '220');
     // EHLO is always sent first: needed for STARTTLS and AUTH capabilities
     caps := Exec(Join(['EHLO ', Server]), '250');

@@ -2271,7 +2271,10 @@ type
     function TrySockRecv(Buffer: pointer; var Length: integer;
       StopBeforeLength: boolean = false; NetResult: PNetResult = nil;
       RawError: PNetErrorInt = nil): boolean;
-    /// faster readln(SockIn^,Line) or simulate it with direct use of Recv(Sock, ..)
+    /// faster readln(SockIn^,Line) after CreateSockIn
+    // - if not CreateSockIn has been done, tries to simulate it with direct use
+    // of Recv(Sock, bychar, 1) which could fail on Windows when the server closes
+    // the socket and the client is broken before all bytes are read
     // - just wrap SockInReadLn() with a 16KB buffer (which is enough e.g. with HTTP)
     // - use TimeOut milliseconds wait for incoming data
     // - raise ENetSock exception on socket error
@@ -6733,7 +6736,7 @@ begin
         SockSendLine(['Proxy-Authorization: Basic ', Tunnel.UserPasswordBase64]);
       SockSendFlush(#13#10);
       repeat
-        SockRecvLn(s);
+        SockRecvLn(s); // without CreateSockIn may be slow especially on Windows
         if NetStartWith(pointer(s), 'HTTP/') and
            (length(s) > 11) and
            (s[10] = '2') then // 'HTTP/1.1 2xx xxxx' success
