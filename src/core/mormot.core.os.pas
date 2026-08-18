@@ -699,9 +699,9 @@ const
     {$endif CPUARM}
     {$endif CPUAARCH64}
     {$ifdef CPU32}
-      'cpu32'
+      '32'
     {$else}
-      'cpu64'
+      '64'
     {$endif CPU32}
     {$endif CPUX64}
     {$endif CPUX86};

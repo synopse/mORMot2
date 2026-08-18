@@ -5131,7 +5131,6 @@ var
   process, machine: word;
   P: pointer;
   Vers: TWindowsVersion;
-  cpu: RawUtf8;
   reg: TWinRegistry;
   rnd: PHash128;
   proc: array of TSystemLogicalProcessorInformation;
