@@ -4520,7 +4520,7 @@ begin
               raw.SockSendFlush; // force sockets sending
               raw.SockSend(copy(mptext, n, 5000));
               inc(n, 5000);
-            until n > length(mptext);
+            until PtrInt(n) > length(mptext);
             raw.SockSend('0');
             raw.SockSendCRLF; // final void line
             raw.SockSendFlush;
