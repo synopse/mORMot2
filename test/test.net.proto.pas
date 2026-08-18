@@ -4415,31 +4415,17 @@ var
   srv: THttpServerSocketGeneric;
   clt: THttpClientSocket;
   raw: TCrtSocket;
-  fam, status, prev, n: cardinal;
-  port, mp, ok: RawUtf8;
+  fam, status, prev, n, endsec: cardinal;
   body8mb: RawByteString;
-  mpct, mptext, mptrunc, line: RawUtf8;
+  mp, ok, hosthead, mpct, mptext, mptrunc, cmd: RawUtf8;
   mpa: TMultiPartDynArray;
-  endtix: Int64;
-
-  procedure WaitDeleted(const ctxt: RawUtf8);
-  begin
-    // the spool file should be deleted just after the request processing
-    endtix := GetTickCount64 + 5000; // never wait forever
-    while FileExists(bodyfile) and
-          (GetTickCount64 < endtix) do
-      SleepHiRes(5);
-    CheckUtf8(not FileExists(bodyfile), 'no spool left %', [ctxt]);
-  end;
-
 begin
   TSynLog.Family.ExceptionIgnore.AddSeveral([
     EWriteError, EHttpSocketOverflow, ENetSock]);
   try
     body8mb := RandomWinAnsi(8 shl 20); // 8MB of data, way above any socket buf
-    // some pure ASCII-7 text of exactly $4e20 bytes for the chunked request
-    // (SockSend() of a non-ASCII AnsiString may involve codepage conversion)
-    mptext := RandomIdentifier(20000);
+    CheckEqual(length(body8mb), 8 shl 20);
+    mptext := RandomIdentifier(20000);  // 20000 bytes of content
     CheckEqual(length(mptext), 20000);
     Check(MultiPartFormDataAddField('field', mptext, mpa), 'mp add');
     Check(MultiPartFormDataEncode(mpa, mpct, RawUtf8(mp)), 'mp encode');
@@ -4447,21 +4433,16 @@ begin
     begin
       // validate both socket server families with the very same steps
       if fam = 0 then
-      begin
-        port := '8891';
-        srv := THttpServer.Create(port, nil, nil, 'bodydl', 2);
-      end
+        srv := THttpServer.Create('8891', nil, nil, 'bodydl', 2)
       else
-      begin
-        port := '8892';
-        srv := THttpAsyncServer.Create(port, nil, nil, 'bodydl', 2, 30000, [], nil);
-      end;
+        srv := THttpAsyncServer.Create('8892', nil, nil, 'bodydl', 2);
       try
+        Join(['Host: 127.0.0.1:', srv.SockPort], hosthead);
         srv.OnBodyDownload := DoBodyDownload;
         srv.OnRequest := DoBodyRequest;
         srv.RegisterCompress(CompressGZip); // detect Content-Encoding: gzip
         srv.WaitStarted(10);
-        clt := THttpClientSocket.Open('127.0.0.1', port);
+        clt := THttpClientSocket.Open('127.0.0.1', srv.SockPort);
         try
           // spool a huge 8MB body into a temporary file
           prev := bodystreamed;
@@ -4473,7 +4454,8 @@ begin
           CheckEqual(clt.Content, ok, 'big resp');
           CheckEqual(bodystreamed, prev + 1, 'big streamed');
           CheckEqual(bodyeventlen, length(body8mb), 'big event len');
-          WaitDeleted('big');
+          // the spool file should be deleted just after the request processing
+          WaitDeleted(bodyfile, 'big file deletion');
           // in-memory fallback when the event returns nil
           status := clt.Post('/mem', body8mb, bodytype);
           CheckEqual(status, HTTP_SUCCESS, 'mem status');
@@ -4487,7 +4469,7 @@ begin
           CheckEqual(status, HTTP_SUCCESS, 'json status');
           CheckEqual(clt.Content,
             Make(['ok ', CardinalToHexShort(bodyhash)]), 'json resp');
-          WaitDeleted('json');
+          WaitDeleted(bodyfile, 'json');
           // decode a multipart body directly from the spooled file
           bodytype := mpct;
           bodyhash := crc32cHash(mptext);
@@ -4495,15 +4477,15 @@ begin
           CheckEqual(status, HTTP_SUCCESS, 'mp status');
           CheckEqual(clt.Content,
             Make(['ok ', CardinalToHexShort(bodyhash)]), 'mp resp');
-          WaitDeleted('mp');
+          WaitDeleted(bodyfile, 'mp');
           // spool a chunked body, i.e. with no Content-Length
           bodytype := 'application/dummy';
           bodyhash := crc32cHash(mptext);
-          raw := TCrtSocket.Open('127.0.0.1', port);
+          raw := TCrtSocket.Open('127.0.0.1', srv.SockPort);
           try
             raw.CreateSockIn; // needed for proper SockRecvLn() below
             raw.SockSend('POST /big HTTP/1.1');
-            raw.SockSend(['Host: 127.0.0.1:', port]);
+            raw.SockSend(hosthead);
             raw.SockSend('Transfer-Encoding: chunked');
             raw.SockSend('Content-Type: application/dummy');
             raw.SockSend('Connection: close');
@@ -4513,21 +4495,21 @@ begin
             raw.SockSend('0');
             raw.SockSendCRLF; // final void line
             raw.SockSendFlush;
-            raw.SockRecvLn(line);
-            CheckUtf8(PosEx(' 200 ', line) > 0, 'chunked %', [line]);
+            raw.SockRecvLn(cmd);
+            CheckUtf8(PosEx(' 200 ', cmd) > 0, 'chunked %', [cmd]);
           finally
             raw.Free;
           end;
           CheckEqual(bodyeventlen, -1, 'chunked event len');
-          WaitDeleted('chunked');
+          WaitDeleted(bodyfile, 'chunked');
           // an in-memory chunked body, sent as several chunks: the Content
           // buffer is reallocated then appended for each chunk
           prev := bodystreamed;
-          raw := TCrtSocket.Open('127.0.0.1', port);
+          raw := TCrtSocket.Open('127.0.0.1', srv.SockPort);
           try
             raw.CreateSockIn; // needed for proper SockRecvLn() below
             raw.SockSend('POST /mem HTTP/1.1');
-            raw.SockSend(['Host: 127.0.0.1:', port]);
+            raw.SockSend(hosthead);
             raw.SockSend('Transfer-Encoding: chunked');
             raw.SockSend('Content-Type: application/dummy');
             raw.SockSend('Connection: close');
@@ -4542,8 +4524,9 @@ begin
             raw.SockSend('0');
             raw.SockSendCRLF; // final void line
             raw.SockSendFlush;
-            raw.SockRecvLn(line);
-            CheckUtf8(PosEx(' 200 ', line) > 0, 'chunked mem %', [line]);
+            cmd := '';
+            raw.SockRecvLn(cmd);
+            CheckUtf8(PosEx(' 200 ', cmd) > 0, 'chunked mem %', [cmd]);
           finally
             raw.Free;
           end;
@@ -4553,40 +4536,42 @@ begin
         end;
         // a compressed body can not be streamed -> rejected as 415 (before any
         // body byte is sent, so use a raw socket and no actual body here)
-        raw := TCrtSocket.Open('127.0.0.1', port);
+        raw := TCrtSocket.Open('127.0.0.1', srv.SockPort);
         try
           raw.CreateSockIn; // needed for proper SockRecvLn() below
           raw.SockSend('POST /big HTTP/1.1');
-          raw.SockSend(['Host: 127.0.0.1:', port]);
+          raw.SockSend(hosthead);
           raw.SockSend('Content-Length: 100000');
           raw.SockSend('Content-Type: application/dummy');
           raw.SockSend('Content-Encoding: gzip');
           raw.SockSendCRLF; // void line: end of headers
           raw.SockSendFlush;
-          raw.SockRecvLn(line);
-          CheckUtf8(PosEx(' 415 ', line) > 0, '415 %', [line]);
+          cmd := '';
+          raw.SockRecvLn(cmd);
+          CheckUtf8(PosEx(' 415 ', cmd) > 0, '415 %', [cmd]);
           status := 0;
           repeat
-            raw.SockRecvLn(line);
-            if line = 'Accept-Encoding: identity' then
+            cmd := '';
+            raw.SockRecvLn(cmd);
+            if cmd = 'Accept-Encoding: identity' then
               inc(status);
-          until line = '';
+          until cmd = ''; // end of input headers
           CheckEqual(status, 1, '415 identity');
         finally
           raw.Free;
         end;
         // simulate a full disk while spooling: EStreamError -> 507 + close
         prev := bodystreamed;
-        raw := TCrtSocket.Open('127.0.0.1', port);
+        raw := TCrtSocket.Open('127.0.0.1', srv.SockPort);
         try
           raw.CreateSockIn; // needed for proper SockRecvLn() below
           raw.SockSend('POST /fail HTTP/1.1');
-          raw.SockSend(['Host: 127.0.0.1:', port]);
+          raw.SockSend(hosthead);
           raw.SockSend('Content-Length: 200000');
           raw.SockSend('Content-Type: application/dummy');
           raw.SockSendCRLF; // void line: end of headers
           raw.SockSendFlush; // SndLow() will bypass the buffer and send all
-          line := '';
+          cmd := '';
           try
             for status := 1 to 10 do
               raw.SndLow(mptext); // direct send announced all 200000 bytes
@@ -4595,19 +4580,19 @@ begin
             if fam = 0 then
               // the blocking server reads the whole body before the failing
               // write, so it usually could send back its 507 response
-              raw.SockRecvLn(line);
+              raw.SockRecvLn(cmd);
           except
             on ENetSock do
-              line := ''; // the reset did win the race: nothing to check
+              cmd := ''; // the reset did win the race: nothing to check
           end;
-          if line <> '' then
-            CheckUtf8(PosEx(' 507 ', line) > 0, 'enospc %', [line]);
+          if cmd <> '' then
+            CheckUtf8(PosEx(' 507 ', cmd) > 0, 'enospc %', [cmd]);
         finally
           raw.Free;
         end;
-        endtix := GetTickCount64 + 5000;
+        endsec := GetTickSec + 5;
         while (bodystreamed = prev) and
-              (GetTickCount64 < endtix) do
+              (GetTickSec < endsec) do
           SleepHiRes(5); // the event fires in a server thread
         CheckEqual(bodystreamed, prev + 1, 'enospc streamed');
         // a chunked body over MaximumAllowedContentLength should get a 413
@@ -4615,52 +4600,53 @@ begin
         // - first check the exact boundary: 2 x 20000 bytes = 40000, so a
         // 39999 limit should reject it, and a 40000 limit should accept it
         bodyhash := crc32cHash(mptext, crc32cHash(mptext)); // the two chunks
-        Make(['ok ', CardinalToHexShort(bodyhash)], ok);
         for status := 0 to 1 do
         begin
           srv.MaximumAllowedContentLength := 39999 + status;
-          raw := TCrtSocket.Open('127.0.0.1', port);
+          raw := TCrtSocket.Open('127.0.0.1', srv.SockPort);
           try
             raw.CreateSockIn; // needed for proper SockRecvLn() below
-            raw.SockSend('POST /big HTTP/1.1');
-            raw.SockSend(['Host: 127.0.0.1:', port]);
+            raw.SndLow('POST /bi'); // validate partial command cmd
+            SleepHiRes(5);          // ensure server state machine is triggered
+            raw.SockSend('g HTTP/1.1');
+            raw.SockSend(hosthead);
             raw.SockSendFlush; // validate partial headers server handling
             raw.SockSend('Transfer-Encoding: chunked');
             raw.SockSend('Content-Type: application/dummy'#13#10); // last header
             raw.SockSend('4e20');
-            raw.SockSendFlush; // validate
+            raw.SockSendFlush; // validate server state machine
             raw.SockSend(mptext);
             raw.SockSend('4e20');
             raw.SockSend(mptext);
             raw.SockSend('0');
             raw.SockSendCRLF; // final void line
-            line := '';
+            cmd := '';
             try
               raw.SockSendFlush;
-              raw.SockRecvLn(line);
+              raw.SockRecvLn(cmd);
             except
               on ENetSock do
-                line := ''; // rejected and closed before we did send it all
+                cmd := ''; // rejected and closed before we did send it all
             end;
             if status = 0 then
             begin
-              if line <> '' then
-                CheckUtf8(PosEx(' 413 ', line) > 0, 'chunked limit %', [line]);
+              if cmd <> '' then
+                CheckUtf8(PosEx(' 413 ', cmd) > 0, 'chunked limit %', [cmd]);
             end
             else
-              CheckUtf8(PosEx(' 200 ', line) > 0, 'chunked in limit %', [line]);
+              CheckUtf8(PosEx(' 200 ', cmd) > 0, 'chunked in limit %', [cmd]);
           finally
             raw.Free;
           end;
           if status <> 0 then
-            WaitDeleted('chunked limit');
+            WaitDeleted(bodyfile, 'chunked limit');
         end;
         srv.MaximumAllowedContentLength := 100000;
-        raw := TCrtSocket.Open('127.0.0.1', port);
+        raw := TCrtSocket.Open('127.0.0.1', srv.SockPort);
         try
           raw.CreateSockIn; // needed for proper SockRecvLn() below
           raw.SockSend('POST /big HTTP/1.1');
-          raw.SockSend(['Host: 127.0.0.1:', port]);
+          raw.SockSend(hosthead);
           raw.SockSend('Transfer-Encoding: chunked');
           raw.SockSend('Content-Type: application/dummy');
           raw.SockSendCRLF; // void line: end of headers
@@ -4671,16 +4657,16 @@ begin
           end;
           raw.SockSend(['0']);
           raw.SockSendCRLF; // final void line
-          line := '';
+          cmd := '';
           try
             raw.SockSendFlush; // as above: the server may reject and close
-            raw.SockRecvLn(line);
+            raw.SockRecvLn(cmd);
           except
             on ENetSock do
-              line := '';
+              cmd := '';
           end;
-          if line <> '' then
-            CheckUtf8(PosEx(' 413 ', line) > 0, 'chunked 413 %', [line]);
+          if cmd <> '' then
+            CheckUtf8(PosEx(' 413 ', cmd) > 0, 'chunked 413 %', [cmd]);
         finally
           raw.Free;
           srv.MaximumAllowedContentLength := 0; // restore no limit
@@ -4691,7 +4677,7 @@ begin
         bodytype := 'application/dummy';
         for status := 1 to 3 do
         begin
-          clt := THttpClientSocket.Open('127.0.0.1', port);
+          clt := THttpClientSocket.Open('127.0.0.1', srv.SockPort);
           try
             mptrunc := copy(mptext, 1, status * 5000);
             bodyhash := crc32cHash(mptrunc);
@@ -4699,25 +4685,25 @@ begin
               HTTP_SUCCESS, 'alive after reject');
             CheckEqual(clt.Content, Make(['ok ', CardinalToHexShort(bodyhash)]),
               'resp after reject');
-            WaitDeleted('after reject');
+            WaitDeleted(bodyfile, 'after reject');
           finally
             clt.Free;
           end;
         end;
         // on abort, the server should delete the truncated spool file
         prev := bodystreamed;
-        raw := TCrtSocket.Open('127.0.0.1', port);
+        raw := TCrtSocket.Open('127.0.0.1', srv.SockPort);
         try
           raw.SockSend('POST /big HTTP/1.1');
-          raw.SockSend(['Host: 127.0.0.1:', port]);
+          raw.SockSend(hosthead);
           raw.SockSend('Content-Length: 100000');
           raw.SockSend('Content-Type: application/dummy');
           raw.SockSendCRLF; // void line: end of headers
           raw.SockSendFlush;
           raw.SndLow('truncated body in its own packet');
-          endtix := GetTickCount64 + 5000;
+          endsec := GetTickSec + 5;
           while (bodystreamed = prev) and
-                (GetTickCount64 < endtix) do
+                (GetTickSec < endsec) do
             SleepHiRes(5); // wait until OnBodyDownload created the spool file
           CheckEqual(bodystreamed, prev + 1, 'abort streamed');
         finally
@@ -4728,7 +4714,7 @@ begin
       end;
       // the server shutdown should have deleted the truncated spool file
       // (maybe with a delay on THttpAsyncServer due to its connections GC)
-      WaitDeleted('abort');
+      WaitDeleted(bodyfile, 'abort');
     end;
   finally
     TSynLog.Family.ExceptionIgnore.RemoveSeveral([
