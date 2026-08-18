@@ -5337,18 +5337,20 @@ begin
   if OSVersionInfoEx <> '' then
     OSVersionText := Join([OSVersionText, ' - ', OSVersionInfoEx]);
   {$ifdef ASMINTEL}  // from CPUID
-  cpu := IntelBrand;
-  if cpu = '' then
+  CpuInfoText := IntelBrand;
+  if CpuInfoText = '' then
   {$endif ASMINTEL}
     if reg.ReadOpen(wrLocalMachine,
       'Hardware\Description\System\CentralProcessor\0', {close=}true) then
     begin
-      cpu := reg.ReadString('ProcessorNameString');
-      if cpu = '' then
-        cpu := reg.ReadString('Identifier');
+      {$ifdef CPUINTEL} // too vague on WinArm - e.g. 'virt-10.0'
+      CpuInfoText := reg.ReadString('ProcessorNameString');
+      if CpuInfoText = '' then
+      {$endif CPUINTEL}
+        CpuInfoText := reg.ReadString('Identifier');
     end;
-  if {%H-}cpu = '' then
-    cpu := GetSystemEnv('PROCESSOR_IDENTIFIER');
+  if {%H-}CpuInfoText = '' then
+    CpuInfoText := GetSystemEnv('PROCESSOR_IDENTIFIER');
   if reg.ReadOpen(wrLocalMachine, 'Hardware\Description\System\BIOS', true) then
   begin
     _Smbios[sbiManufacturer]      := reg.ReadString('SystemManufacturer');
