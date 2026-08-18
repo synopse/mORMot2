@@ -479,12 +479,16 @@
   {$ifend}
 
   // note: you may remove all unexpected hints by setting in your project options
-  // -vm11047,3187,3123,3124,4055,4079,4081,5023,5024,5027,5028,5036,5037,5058,5059,5060,5066,5089,5090,5091,5092,5093,5094,6018,6058
+  // -vm11047,3187,3123,3124,4055,4079,4081,5023,5024,5027,5028,5036,5037,5057,5058,5059,5060,5066,5089,5090,5091,5092,5093,5094,6018,6058
 
   // disable some no-brainer warnings - let FPC align with Delphi in that matter
+  {$WARN 4055 off} // conversion between ordinals and pointers
+  {$WARN 5023 off} // unit not used
+  {$WARN 5026 off} // parameter assigned never used
   {$WARN 5027 off} // local assigned variable never used
   {$WARN 5036 off} // uninitialized local variable 1
   {$WARN 5037 off} // uninitialized local variable 2
+  {$WARN 5057 off} // uninitialized local variable 3
   {$WARN 5059 off} // function result variable does not seem to be initialized
   {$WARN 5066 off} // symbol is deprecated
   {$WARN 5089 off} // uninitialized managed variables 1

@@ -9983,12 +9983,12 @@ begin
   for i := high(CpuCache) downto low(CpuCache) do
   begin
     CpuCacheSize := CpuCache[i].Size;
-    if CpuCacheSize < 1024 then // =64 on WinArm GetLogicalProcessorInformation
-      continue;                 // append the highest/first level Cache size
+    if CpuCacheSize < 1024 then // may = 64 on WinArm/KVM
+      continue;
     AppendShortTwoChars(32 + ord('[') shl 8, @tmp);
     AppendKb(CpuCacheSize, tmp);
     AppendShortChar(']', @tmp);
-    break;
+    break; // stop at first/highest proper level Cache size
   end;
   AppendShort(' (' + CPU_ARCH_TEXT + ')', tmp);
   ShortStringToAnsi7String(tmp, CpuInfoText);

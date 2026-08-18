@@ -2841,6 +2841,7 @@ type
   // - Intel introduced a Level 4 cache (eDRAM) with some Haswell/Iris CPUs
   // - only Unified or Data caches are included (not Instruction or Trace)
   // - note: some CPU - like the Apple M1 - have 128 bytes of LineSize
+  // - warning: WinArm may put wrong values into Size - typically 64
   TCpuCaches = array[1 .. 4] of record
     Count, Size, LineSize: cardinal;
   end;
