@@ -255,13 +255,13 @@ type
       CaseSentitive: boolean = true; ExpectedResult: boolean = true; const msg: string = ''): boolean;
     /// used by the published methods to run a test assertion, with an UTF-8 error message
     // - condition must equals TRUE to pass the test
-    procedure CheckUtf8(condition: boolean; const msg: RawUtf8); overload;
+    function CheckUtf8(condition: boolean; const msg: RawUtf8): boolean; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run a test assertion, with a error
     // message computed via FormatUtf8()
     // - condition must equals TRUE to pass the test
-    procedure CheckUtf8(condition: boolean; const msg: RawUtf8;
-      const args: array of const); overload;
+    function CheckUtf8(condition: boolean; const msg: RawUtf8;
+      const args: array of const): boolean; overload;
     /// used by the published methods to execute a Method with the given
     // parameters, and ensure a (optionally specific) exception is raised
     function CheckRaised(const Method: TOnTestCheck; const Params: array of const;
@@ -911,21 +911,23 @@ begin
   TestFailed(EQUAL_MSG, [a, b, msg], {notify=}false);
 end;
 
-procedure TSynTestCase.CheckUtf8(condition: boolean; const msg: RawUtf8;
-  const args: array of const);
+function TSynTestCase.CheckUtf8(condition: boolean; const msg: RawUtf8;
+  const args: array of const): boolean;
 begin
   inc(fAssertions);
   if not condition or
      (tcoLogEachCheck in fOptions) then
     DoCheckUtf8(condition, msg, args);
+  result := condition;
 end;
 
-procedure TSynTestCase.CheckUtf8(condition: boolean; const msg: RawUtf8);
+function TSynTestCase.CheckUtf8(condition: boolean; const msg: RawUtf8): boolean;
 begin
   inc(fAssertions);
   if not condition or
      (tcoLogEachCheck in fOptions) then
     DoCheckUtf8(condition, '%', [msg]);
+  result := condition;
 end;
 
 function TSynTestCase.CheckEqual(a, b: Int64; const msg: RawUtf8): boolean;
