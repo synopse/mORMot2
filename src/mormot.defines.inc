@@ -885,7 +885,8 @@
         {$define ABISYSVA64}
       {$endif OSPOSIX}
       {$ifdef OSWINDOWS}
-        {$define ABIWINA64}
+        {$define ABIWINA64}    // win64-aarch64 target
+        {$define NOLIBCSTATIC} // ease linking until stabilized
       {$endif OSWINDOWS}
     {$endif CPUAARCH64}
   {$endif CPUARM3264}
