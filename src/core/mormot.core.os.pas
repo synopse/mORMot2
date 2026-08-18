@@ -9983,8 +9983,8 @@ begin
   for i := high(CpuCache) downto low(CpuCache) do
   begin
     CpuCacheSize := CpuCache[i].Size;
-    if CpuCacheSize = 0 then // append the highest level Cache size
-      continue;
+    if CpuCacheSize < 1024 then // =64 on WinArm GetLogicalProcessorInformation
+      continue;                 // append the highest/first level Cache size
     AppendShortTwoChars(32 + ord('[') shl 8, @tmp);
     AppendKb(CpuCacheSize, tmp);
     AppendShortChar(']', @tmp);
