@@ -5483,7 +5483,12 @@ begin
   if dv.Has(dvoIsArray) and
      (PWord(Name)^ = ord('_')) then
   begin
-    dv.AddItem(variant(Value));
+    {$ifdef DISPINVOKE_NO_OLESTR}
+    if Value.VType = varOleStr then
+      result := false // FPC trunk fails to compile V._ := 'a5' on WinArm
+    else
+    {$endif DISPINVOKE_NO_OLESTR}
+      dv.AddItem(variant(Value));
     exit;
   end;
   ndx := dv.GetValueIndex(pointer(Name), NameLen, dv.Has(dvoNameCaseSensitive));
