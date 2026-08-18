@@ -867,7 +867,11 @@ begin
   CheckEqual(mustache.SectionMaxCount, 0);
   {$ifdef POSIXDELPHI} exit; {$endif} // variant late binding seems unstable
   TDocVariant.NewFast(doc);
+  {$ifdef DISPINVOKE_NO_OLESTR}
+  _Safe(doc)^.AddValue('name', 'Chris');
+  {$else}
   doc.name := 'Chris';
+  {$endif DISPINVOKE_NO_OLESTR}
   doc.value := 10000;
   html := mustache.Render(doc);
   CheckEqual(html, 'Hello Chris'#13#10'You have just won 10000 dollars!');
@@ -4176,7 +4180,7 @@ begin
   Parser := TRttiJson.RegisterFromText(TypeInfo(TTestCustomDiscogs),
     __TTestCustomDiscogs, [jpoIgnoreUnknownProperty], []);
   FillCharFast(Disco, SizeOf(Disco), 0);
-  Check(PtrUInt(@Disco.releases) - PtrUInt(@Disco) = 3 * SizeOf(integer));
+  CheckEqual(PtrUInt(@Disco.releases) - PtrUInt(@Disco), 3 * SizeOf(integer));
   Check(SizeOf(Disco.releases[0]) = 5 * SizeOf(Pointer) + 2 * SizeOf(integer));
   Check(SizeOf(Disco) = SizeOf(Pointer) + 3 * SizeOf(integer));
   U := RecordSaveJson(Disco, TypeInfo(TTestCustomDiscogs));
@@ -6263,10 +6267,12 @@ begin
   CheckSame(double(o.bson._(1)), 5.05);
   Check(o.bson._(2) = 1986);
   Check(o.dummy = null);
-  Check(o.Exists('bson'));
+  {$ifndef DISPINVOKE_NO_OLESTR} // 'bson' 'dummy' invalid OleStr constants
+  Check(o.Exists('bson'), 'exists');
   Check(not o.Exists('dummy'));
-  Check(o.NameIndex('bson') = 0);
+  Check(o.NameIndex('bson') = 0, 'nameindex');
   Check(o.NameIndex('dummy') < 0);
+  {$endif DISPINVOKE_NO_OLESTR}
   DocVariantData(o.bson).ToRawUtf8DynArray(arr);
   Check(length(arr) = 3);
   Check(RawUtf8ArrayToCsv(arr) = 'awesome,5.05,1986');
@@ -6675,8 +6681,13 @@ var
     for i := 0 to oSeasons._Count - 1 do
     begin
       oSeason := oSeasons._(i);
+      {$ifdef DISPINVOKE_NO_OLESTR}
+      _Safe(oSeason)^['Name'] := 'CHANGED !';
+      _Safe(oSeason)^['Extra'] := 'blabla';
+      {$else}
       oSeason.Name := 'CHANGED !';
       oSeason.Extra := 'blabla';
+      {$endif DISPINVOKE_NO_OLESTR}
     end;
   end;
 
@@ -7196,13 +7207,17 @@ begin
   for i := 0 to 2 do
     Check(V._(i) = Doc.Values[i]);
   Check(V._(3) = 4);
+  {$ifdef DISPINVOKE_NO_OLESTR}
+  _Safe(V)^.AddItemText('a5');
+  {$else}
   V._ := 'a5';
-  Check(V._count = 5);
+  {$endif DISPINVOKE_NO_OLESTR}
+  Check(V._count = 5, 'v_a5');
   for i := 0 to 2 do
     Check(V._(i) = Doc.Values[i]);
-  Check(V._(3) = 4);
-  Check(V._(4) = 'a5');
-  Check(V._Json = '["one",2,3,4,"a5"]');
+  Check(V._(3) = 4, '(3)=4');
+  Check(V._(4) = 'a5', '(4)=a5');
+  Check(V._Json = '["one",2,3,4,"a5"]', 'json_a5');
   uu := nil;
   CheckEqual(length(uu), 0);
   _Safe(V)^.ToRawUtf8DynArray(uu);
@@ -7219,29 +7234,45 @@ begin
   CheckNestedDoc([dvoJsonObjectParseWithinString]);
   CheckNestedDoc([dvoJsonObjectParseWithinString, dvoValueCopiedByReference]);
   V1 := _Obj(['name', 'John', 'year', 1972], [dvoValueCopiedByReference]);
+  Check(V1.name = 'John', 'V1.name0');
+  CheckEqual(integer(V1.year), 1972, 'V1.year0');
   V2 := V1;             // creates a reference to the V1 instance
+  Check(V2.name = 'John', 'V2.name0');
+  CheckEqual(integer(V2.year), 1972, 'V1.year0');
+  {$ifdef DISPINVOKE_NO_OLESTR}
+  _Safe(V2)^['name'] := 'James'; // modifies V2.name, but also V1.name
+  {$else}
   V2.name := 'James';   // modifies V2.name, but also V1.name
-  Check(V1.name = 'James');
-  Check(V2.name = 'James');
+  {$endif DISPINVOKE_NO_OLESTR}
+  Check(VariantEquals(V1.Name, 'James'), 'V1.name1e');
+  Check(VariantEquals(V2.Name, 'James'), 'V2.name1e');
+  Check(V1.name = 'James', 'V1.name1');
+  Check(V2.name = 'James', 'V2.name1');
   {$ifdef FPC}
-  Check(V1._Json = '{"name":"James","year":1972}');
+  Check(V1._Json = '{"name":"James","year":1972}', 'V1._Json');
   {$else}
   Check(V1 = '{"name":"James","year":1972}');
   {$endif FPC}
   _Unique(V1);          // change options of V1 to be by-value
   V2 := V1;             // creates a full copy of the V1 instance
+  {$ifdef DISPINVOKE_NO_OLESTR}
+  _Safe(V2)^['name'] := 'John'; // modifies V2.name, but not V1.name
+  {$else}
   V2.name := 'John';    // modifies V2.name, but not V1.name
-  Check(V1.name = 'James');
-  Check(V2.name = 'John');
+  {$endif DISPINVOKE_NO_OLESTR}
+  Check(VariantEquals(V1.Name, 'James'), 'V1.name2');
+  Check(VariantEquals(V2.Name, 'John'), 'V2.name2');
+  Check(V1.name = 'James', 'V1.name2');
+  Check(V2.name = 'John', 'V2.name2');
   V1 := _Arr(['root', V2]); // created as by-value by default, as V2 was
-  Check(V1._Count = 2);
+  Check(V1._Count = 2, 'count');
   _UniqueFast(V1);      // change options of V1 to be by-reference
   V2 := V1;
-  Check(V1._(1)._Json = '{"name":"John","year":1972}');
+  Check(V1._(1)._Json = '{"name":"John","year":1972}', 'json_');
   {$ifdef FPC}
-  TDocVariantData(V1).Values[1].name := 'Jim';
-  Check(V1._Json = '["root",{"name":"Jim","year":1972}]');
-  Check(V2._Json = '["root",{"name":"Jim","year":1972}]');
+  _Safe(TDocVariantData(V1).Values[1])^['name'] := 'Jim';
+  Check(V1._Json = '["root",{"name":"Jim","year":1972}]', 'V1._Json');
+  Check(V2._Json = '["root",{"name":"Jim","year":1972}]', 'V2._Json');
   {$else}
   V1._(1).name := 'Jim';
   Check(V1 = '["root",{"name":"Jim","year":1972}]');
@@ -7305,7 +7336,11 @@ begin
   {$endif FPC}
   V1 := _ObjFast(['n1', 'v1']);
   Check(V1._JSON = '{"n1":"v1"}');
-  V1.Add('n2', 'v2');
+  {$ifdef DISPINVOKE_NO_OLESTR}
+  _Safe(V1)^.AddValue('n2', 'v2');
+  {$else}
+  V1.Add('n2', 'v2')
+  {$endif DISPINVOKE_NO_OLESTR};
   Check(V1._JSON = '{"n1":"v1","n2":"v2"}', 'FPC 3.2+ inverted order');
   s := '{"Url":"argentina","Seasons":[{"Name":"2011/2012","Url":"2011-2012",' +
     '"Competitions":[{"Name":"Ligue1","Url":"ligue-1"},{"Name":"Ligue2","Url":"ligue-2"}]},' +
@@ -7316,46 +7351,48 @@ begin
   V2 := V1.seasons;
   DoChange(V2);
   j := VariantSaveJson(V1);
-  Check(j <> s);
+  CheckNotEqual(j, s);
   CheckHash(j, $6998B225, 'changed');
   CheckHash(VariantSaveJson(V2), $92FEB37B);
   V1 := _Json(s);
   V2 := V1.seasons;
   _Unique(V2);
   DoChange(V2);
-  Check(VariantSaveJson(V1) = s);
+  CheckEqual(VariantSaveJson(V1), s);
   CheckHash(VariantSaveJson(V2), $92FEB37B);
   V2 := TDocVariant.NewUnique(V1.Seasons);
   DoChange(V2);
-  Check(VariantSaveJson(V1) = s);
+  CheckEqual(VariantSaveJson(V1), s);
   CheckHash(VariantSaveJson(V2), $92FEB37B);
   V2 := _copy(V1.Seasons);
   DoChange(V2);
-  Check(VariantSaveJson(V1) = s);
+  CheckEqual(VariantSaveJson(V1), s);
   CheckHash(VariantSaveJson(V2), $92FEB37B);
   s := _Safe(V1.Seasons)^.ToNonExpandedJson;
-  Check(s =
+  CheckEqual(s,
     '{"fieldCount":3,"rowCount":2,"values":["Name","Url","Competitions",' + '"2011/2012","2011-2012",[{"Name":"Ligue1","Url":"ligue-1"},{"Name":"Ligue2"' +
     ',"Url":"ligue-2"}],"2010/2011","2010-2011",[{"Name":"Ligue1","Url":"ligue-1"}' +
     ',{"Name":"Ligue2","Url":"ligue-2"}]]}');
   V := _Json('{result:{data:{"1000":"D1", "1001":"D2"}}}');
-  Check(V.result._Json = '{"data":{"1000":"D1","1001":"D2"}}');
-  Check(V.result.data.Exists('1000'));
-  Check(V.result.data.Exists('1001'));
-  Check(not V.result.data.Exists('1002'));
+  Check(V.result._Json = '{"data":{"1000":"D1","1001":"D2"}}', 'D1D2');
+  {$ifndef DISPINVOKE_NO_OLESTR} // '100x' constants are generated wrong
+  Check(V.result.data.Exists('1000'), '1000');
+  Check(V.result.data.Exists('1001'), '1001');
+  Check(not V.result.data.Exists('1002'), '1002');
+  Check(V.result.data.Value('1000') = 'D1', 'ValueD1');
+  Check(V.result.data.Value('1001') = 'D2', 'ValueD2');
+  {$endif DISPINVOKE_NO_OLESTR}
   Check(DocVariantData(V.result.data).Value['1000'] = 'D1');
-  Check(V.result.data.Value(0) = 'D1');
-  Check(V.result.data.Value('1000') = 'D1');
-  Check(V.result.data.Value('1001') = 'D2');
+  Check(V.result.data.Value(0) = 'D1', 'Value0');
   V := _Obj(['Z', 10, 'name', 'John', 'year', 1972, 'a', 1], []);
   j := VariantSaveJson(V);
-  Check(j = '{"Z":10,"name":"John","year":1972,"a":1}');
+  CheckEqual(j, '{"Z":10,"name":"John","year":1972,"a":1}');
   TDocVariantData(V).SortByName;
   j := VariantSaveJson(V);
-  Check(j = '{"a":1,"name":"John","year":1972,"Z":10}');
+  CheckEqual(j, '{"a":1,"name":"John","year":1972,"Z":10}');
   TDocVariantData(V).SortByName(@StrComp);
   j := VariantSaveJson(V);
-  Check(j = '{"Z":10,"a":1,"name":"John","year":1972}');
+  CheckEqual(j, '{"Z":10,"a":1,"name":"John","year":1972}');
   V := _JsonFast('{"Database":"\u201d\u00c9\u00c3\u00b6\u00b1\u00a2\u00a7\u00ad\u00a5\u00a4"}');
   j := VariantToUtf8(V.Database);
   Check((j <> '') and
@@ -7407,7 +7444,7 @@ begin
   checkEqual(dv^.ToJson, '{"name":"toto"}');
   pv := Doc.GetPVariantByPath('people2.NAME');
   check(pv <> nil);
-  check(pv^ = 'toto');
+  check(pv^ = 'toto', 'toto');
   Check(Doc.DeleteByPath('people2.Name'));
   checkEqual(Doc.ToJson, '{"people":{"age":31},"people2":{}}');
   Check(not Doc.DeleteByPath('people22'));
@@ -7498,8 +7535,13 @@ begin
   V1 := _Copy(V._(0)); // expect a true instance for v1.Val1 := ... below
   check(V1.val1 = 'blabla');
   V2 := _Obj([]); // or TDocVariant.New(v2);
+  {$ifdef DISPINVOKE_NO_OLESTR}
+  _Safe(V2)^['Val1'] := 'blublu';
+  _Safe(V2)^['Val2'] := 'blybly';
+  {$else}
   V2.Val1 := 'blublu';
   V2.Val2 := 'blybly';
+  {$endif DISPINVOKE_NO_OLESTR}
   V1.Val1 := V2.Val1;
   V1.Val2 := V2.Val2;
   CheckEqual(VariantSaveJson(V1), VariantSaveJson(V2));
@@ -11094,11 +11136,11 @@ begin
   Check(ReferenceCrc32(0, @c32t, 1024) = $6FCF9E13);
   Check(crc32(0, @c32t, 1024 - 5) = $70965738, 'crc32');
   Check(ReferenceCrc32(0, @c32t, 1024 - 5) = $70965738);
-  Check(crc32(0, pointer(PtrInt(@c32t) + 1), 2) = $41D912FF, 'crc32');
-  Check(ReferenceCrc32(0, pointer(PtrInt(@c32t) + 1), 2) = $41D912FF);
-  Check(crc32(0, pointer(PtrInt(@c32t) + 3), 1024 - 5) = $E5FAEC6C, 'crc32');
+  Check(crc32(0, pointer(PtrUInt(@c32t) + 1), 2) = $41D912FF, 'crc32');
+  Check(ReferenceCrc32(0, pointer(PtrUInt(@c32t) + 1), 2) = $41D912FF);
+  Check(crc32(0, pointer(PtrUInt(@c32t) + 3), 1024 - 5) = $E5FAEC6C, 'crc32');
   Check(CompareMem(@c32t, crc32tab, SizeOf(c32t)), 'crc32tab');
-  Check(ReferenceCrc32(0, pointer(PtrInt(@c32t) + 3), 1024 - 5) = $E5FAEC6C, 'crc32');
+  Check(ReferenceCrc32(0, pointer(PtrUInt(@c32t) + 3), 1024 - 5) = $E5FAEC6C, 'crc32');
   M := TMemoryStream.Create;
   Z := TSynZipCompressor.Create(M, 6, szcfGZ);
   L := length(Data);

@@ -9,7 +9,6 @@ interface
 
 uses
   sysutils,
-  contnrs,
   classes,
   mormot.core.base,
   mormot.core.os,
