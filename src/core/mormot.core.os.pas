@@ -12378,6 +12378,9 @@ begin
     result := WaitFor(TimeoutMS);
     exit;
   end;
+  result := WaitFor(1);
+  if result then
+    exit; // quick path
   endtix := 0;
   if TimeoutMS <> INFINITE then
     endtix := GetTickCount64 + TimeoutMS;
