@@ -77,6 +77,7 @@ type
     bodytype: RawUtf8;
     bodystreamed, bodyhash: cardinal;
     bodyeventlen: Int64;
+    bodyconsumer: TThread; // is a TPipeConsumerThread (declared below)
     // for _TTunnelLocal
     tunnelappsec: RawUtf8;
     tunneloptions: TTunnelOptions;
@@ -4314,6 +4315,19 @@ type
     function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
   end;
 
+  // consume a TPipeStream body while the server is still receiving it
+  TPipeConsumerThread = class(TThread)
+  protected
+    fPipe: TPipeStream;
+    fExpected: Int64;
+    fReceived: RawByteString;
+    procedure Execute; override;
+  public
+    constructor Create(aPipe: TPipeStream; aExpected: Int64); reintroduce;
+    property Received: RawByteString
+      read fReceived;
+  end;
+
 function TFailingStream.Read(var Buffer; Count: Longint): Longint;
 begin
   result := 0; // never read from, but avoid an abstract method
@@ -4332,6 +4346,36 @@ begin
   result := 0;
 end;
 
+constructor TPipeConsumerThread.Create(aPipe: TPipeStream; aExpected: Int64);
+begin
+  fPipe := aPipe;
+  fExpected := aExpected;
+  inherited Create({suspended=}false);
+end;
+
+procedure TPipeConsumerThread.Execute;
+var
+  ms: TRawByteStringStream;
+  tmp: TBuffer64K;
+  n: integer;
+begin
+  // the server Write() blocks on a full pipe, so this thread is what makes
+  // the whole upload advance - it stops once the announced size is reached
+  ms := TRawByteStringStream.Create;
+  try
+    while ms.Size < fExpected do
+    begin
+      n := fPipe.Read(tmp, SizeOf(tmp));
+      if n <= 0 then
+        break; // timeout, or Abort from TPipeStream.Destroy
+      ms.WriteBuffer(tmp, n);
+    end;
+    fReceived := ms.DataString;
+  finally
+    ms.Free;
+  end;
+end;
+
 function TNetworkProtocols.DoBodyDownload(const aUrl, aMethod, aInHeaders,
   aInContentType, aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
 begin
@@ -4341,6 +4385,16 @@ begin
     exit; // in-memory Content fallback
   if aUrl = '/ram' then
     result := TRawByteStringStream.Create // not a file: no InContent name
+  else if aUrl = '/pipe' then
+  begin
+    // pipe the body to a background consumer, with no buffering at all
+    result := TPipeStream.Create; // 64KB buffer, i.e. much less than the body
+    // both timeouts default to INFINITE: bound them, so that a regression of
+    // the #543 race would fail this test instead of hanging the whole suite
+    TPipeStream(result).WriteTimeout := 30000;
+    TPipeStream(result).ReadTimeout := 30000;
+    bodyconsumer := TPipeConsumerThread.Create(TPipeStream(result), aContentLength);
+  end
   else if aUrl = '/fail' then
     result := TFailingStream.Create
   else
@@ -4383,6 +4437,18 @@ begin
     Check(Ctxt.InContentStream = nil, 'mem no stream');
     h := crc32cHash(Ctxt.InContent);
     CheckEqual(h, bodyhash, 'mem hash');
+  end
+  else if Ctxt.Url = '/pipe' then
+  begin
+    // the body was piped to bodyconsumer while the server was receiving it
+    CheckEqual(Ctxt.InContent, '', 'pipe no content');
+    Check(Ctxt.InContentStream <> nil, 'pipe stream');
+    // the consumer has read the whole body by now: join it before the server
+    // releases the TPipeStream, which would Abort any pending Read
+    bodyconsumer.WaitFor;
+    h := crc32cHash(TPipeConsumerThread(bodyconsumer).Received);
+    CheckEqual(h, bodyhash, 'pipe hash');
+    FreeAndNil(bodyconsumer);
   end
   else if Ctxt.Url = '/ram' then
   begin
@@ -4533,6 +4599,15 @@ begin
           CheckEqual(status, HTTP_SUCCESS, 'ram status');
           CheckEqual(clt.Content, ok, 'ram resp');
           CheckEqual(bodystreamed, prev + 1, 'ram streamed');
+          // a TPipeStream body: 8MB through a 64KB pipe, i.e. the server does
+          // block on Write() until the consumer thread drains it (this needs
+          // the TSynEvent.WaitFor fix of #543 to be reliable)
+          prev := bodystreamed;
+          status := clt.Post('/pipe', body8mb, bodytype);
+          CheckEqual(status, HTTP_SUCCESS, 'pipe status');
+          CheckEqual(clt.Content, ok, 'pipe resp');
+          CheckEqual(bodystreamed, prev + 1, 'pipe streamed');
+          Check(bodyconsumer = nil, 'pipe consumer joined');
           // a spooled JSON body should keep its Content-Type: in InHeaders
           // (this is the single content type not stored as header text)
           bodytype := JSON_CONTENT_TYPE;
