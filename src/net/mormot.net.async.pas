@@ -2667,11 +2667,10 @@ end;
 
 procedure TAsyncConnectionsThread.ReleaseEvent;
 begin
-  if fWaitForReadPending then
-  begin
-    fWaitForReadPending := false; // set event once
-    fEvent.SetEvent;
-  end;
+  if not fWaitForReadPending then
+    exit;
+  fWaitForReadPending := false; // set event once
+  fEvent.SetEvent;
 end;
 
 function TAsyncConnectionsThread.GetNextRead(

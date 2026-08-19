@@ -10953,7 +10953,7 @@ begin
     begin
       Value[i].Value.Free;
       new.Value := CopyObject(aOrm);
-      Value[i] := new // replace existing or registered ID
+      Value[i] := new; // replace existing or registered ID
     end
     else if CacheAll and
             (i >= 0) then
