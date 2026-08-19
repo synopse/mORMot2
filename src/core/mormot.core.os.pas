@@ -5139,8 +5139,8 @@ type
   protected
     fHandle: pointer; // Windows THandle, FPC PRTLEvent or Delphi-POSIX TEvent
     fNotified, fWaiting: boolean; // no state, just flags
-    procedure OsReset; {$ifdef FPC} inline; {$endif}
-    procedure OsWake;  {$ifdef FPC} inline; {$endif}
+    procedure OsReset;                             {$ifdef FPC} inline; {$endif}
+    procedure OsWake;                              {$ifdef FPC} inline; {$endif}
     function OsWait(TimeoutMS: cardinal): boolean; {$ifdef FPC} inline; {$endif}
   public
     /// initialize an instance of cross-platform event

@@ -1608,7 +1608,7 @@ var
   ending, remain: Int64;
   zero: pointer; // same type as fHandle and LockedExc(PtrUInt)
 begin
-  if not Assigned(WaitOnAddress) then // WinXP/Vista/7
+  if not Assigned(WaitOnAddress) then // WinXP/Vista/7 fallback
   begin
     result := WaitForSingleObject(THandle(fHandle), TimeoutMS) = WAIT_OBJECT_0;
     exit;
@@ -1627,15 +1627,13 @@ begin
     exit;
   end;
   ending := GetTickCount64 + TimeoutMS;
-  WaitOnAddress(@fHandle, @zero, SizeOf(fHandle), TimeoutMS);
+  remain := TimeoutMS;
   repeat
+    WaitOnAddress(@fHandle, @zero, SizeOf(fHandle), remain);
     if LockedExc(PPtrUInt(@fHandle)^, 0, 1) then
       exit;
     remain := ending - GetTickCount64;
-    if remain <= 0 then
-      break;
-    WaitOnAddress(@fHandle, @zero, SizeOf(fHandle), remain);
-  until false;
+  until remain <= 0;
   result := false; // timeout
 end;
 
