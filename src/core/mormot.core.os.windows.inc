@@ -1556,7 +1556,8 @@ end;
 
 
 {$ifdef USEWINCORESYNC}
-// try WaitOnAddress from API-MS-Win-Core-Synch-l1-2-0.dll - not measureable
+// try Win8+ WaitOnAddress - no measureable gain in practical benchmarks/servers
+// see also warnings at https://devblogs.microsoft.com/oldnewthing/20160826-00
 var
   WaitOnAddressChecked: boolean;
   WaitOnAddress: function(Address, CompareAddress: pointer;
@@ -1569,12 +1570,14 @@ var
 begin
   if not WaitOnAddressChecked then // check it once
   begin
-    h := LoadLibrary('API-MS-Win-Core-Synch-l1-2-0.dll'); // Win8+
-    WakeByAddressSingle := LibraryResolve(h, 'WakeByAddressSingle');
-    if Assigned(WakeByAddressSingle) then
-      WaitOnAddress := LibraryResolve(h, 'WaitOnAddress'); // resolve last
+    if OSVersion >= wEight then
+    begin
+      h := LoadLibrary('API-MS-Win-Core-Synch-l1-2-0.dll'); // Win8+
+      WakeByAddressSingle := LibraryResolve(h, 'WakeByAddressSingle');
+      if Assigned(WakeByAddressSingle) then
+        WaitOnAddress := LibraryResolve(h, 'WaitOnAddress'); // resolve last
+    end;
     WaitOnAddressChecked := true;
-    if Assigned(WaitOnAddress) then ConsoleWrite('WaitOnAddress API available');
   end;
   if not Assigned(WaitOnAddress) then
     fHandle := pointer(CreateEvent(nil, false, false, nil)); // WinXP/Vista/7
@@ -1631,7 +1634,7 @@ begin
   repeat
     WaitOnAddress(@fHandle, @zero, SizeOf(fHandle), remain);
     if LockedExc(PPtrUInt(@fHandle)^, 0, 1) then
-      exit;
+      exit; // was a true notification, not a spurious wake
     remain := ending - GetTickCount64;
   until remain <= 0;
   result := false; // timeout
