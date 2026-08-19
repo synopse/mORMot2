@@ -11576,11 +11576,30 @@ type
   end;
   TNotifyTaskDynArray = array of TNotifyTask;
 
-  TSynEventTest = class(TSynEvent); // to access SimulateSetResetRace;
+  TSynEventTest = class(TSynEvent)
+  public
+    procedure SimulateSetResetRace(OnlyOs: boolean);
+  end;
+
+procedure TSynEventTest.SimulateSetResetRace(OnlyOs: boolean);
+begin
+  fNotified := true;
+  if OnlyOS then
+  begin
+    OsResetEvent;
+    OsSetEvent;
+  end
+  else
+  begin
+    ResetEvent;
+    SetEvent;
+  end;
+end;
 
 procedure TTestCoreBase._TSynQueue;
 var
   o, i, j, k, n: integer; // not PtrInt
+  onlyos: boolean;
   f: TSynQueue;
   u, v: RawUtf8;
   r1, r2: TNotifyTask;
@@ -11588,6 +11607,27 @@ var
   savedu: TRawUtf8DynArray;
   ev: TSynEventTest;
 begin
+  // validate TSynEvent process
+  ev := TSynEventTest.Create;
+  try
+    for onlyos := false to true do
+      for i := 1 to 10 do
+      begin
+        // emulate a ResetEvent between the two SetEvent state updates
+        ev.SimulateSetResetRace(onlyos);
+        Check(ev.WaitFor(1000), 'WaitFor signal');
+        ev.SimulateSetResetRace(onlyos);
+        Check(ev.WaitFor(INFINITE), 'WaitFor(INFINITE) signal');
+        // validate the main-thread CheckSynchronize() wrapper as well
+        ev.SimulateSetResetRace(onlyos);
+        Check(ev.WaitForSafe(1000), 'WaitForSafe signal');
+        ev.SimulateSetResetRace(onlyos);
+        Check(ev.WaitForSafe(INFINITE), 'WaitForSafe(INFINITE) signal');
+      end;
+  finally
+    ev.Free;
+  end;
+  exit;
   f := TSynQueue.Create(TypeInfo(TIntegerDynArray));
   try
     for o := 1 to 1000 do
