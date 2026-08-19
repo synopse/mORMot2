@@ -12365,10 +12365,10 @@ begin
     endtix := GetTickCount64 + TimeoutMS;
   repeat
     CheckSynchronize(1); // make UI responsive enough
-  until WaitFor(10) or
+    result := WaitFor(10);
+  until result or
         ((endtix <> 0) and
          (GetTickCount64 > endtix));
-  result := fNotified;
 end;
 
 
