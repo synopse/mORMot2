@@ -5009,7 +5009,7 @@ begin
     fHttp.ContentStream := strm; // freed by ProcessDone/Reset on abort
     include(fHttp.ResponseFlags, rfContentStreamNeedFree);
     if strm.InheritsFrom(TFileStreamEx) then
-      fHttp.ContentInputName := TFileStreamEx(strm).FileName;
+      fHttp.SetContentInputName(TFileStreamEx(strm));
     // needed to track and limit the cumulated chunked body size
     fHttp.ContentMaxSize := fServer.MaximumAllowedContentLength;
   end;
@@ -5073,15 +5073,11 @@ begin
          (fHttp.State in [hrsGetCommand, hrsUpgraded]) then
         exit; // rejected or upgraded to WebSockets
     end;
-  // close any body stream supplied by OnBodyDownload before the response
-  // process could reuse the ContentStream field - a spooled file remains
-  // available (as InContent file name) during the request processing
-  if (fHttp.ContentStream <> nil) and
-     (rfContentStreamNeedFree in fHttp.ResponseFlags) then
-  begin
-    FreeAndNilSafe(fHttp.ContentStream);
-    exclude(fHttp.ResponseFlags, rfContentStreamNeedFree);
-  end;
+  // move any body stream supplied by OnBodyDownload aside, before the response
+  // process could reuse the ContentStream field - it remains available to the
+  // request as InContentStream, and is released by ProcessDone afterwards
+  if fHttp.ContentStream <> nil then
+    fHttp.ContentInputDone;
   // optionaly uncompress content
   if fHttp.ContentEncoding <> nil then
     fHttp.UncompressData;

@@ -3328,6 +3328,7 @@ begin
   FastAssignNew(fAuthBearer);
   FastAssignNew(fUserAgent);
   fRespStatus := 0;
+  fInContentStream := nil; // paranoid: Prepare() would set it anyway
   fOutContent := '';
   FastAssignNew(fOutContentType);
   FastAssignNew(fOutCustomHeaders);
@@ -5540,34 +5541,25 @@ begin // called from GetRequest() to process OnBodyDownload event
     Http.ContentStream := strm; // freed by Reset on broken connection
     include(Http.ResponseFlags, rfContentStreamNeedFree);
     if strm.InheritsFrom(TFileStreamEx) then
-      Http.ContentInputName := TFileStreamEx(strm).FileName;
+      Http.SetContentInputName(TFileStreamEx(strm));
     // needed to track and limit the cumulated chunked body size
     Http.ContentMaxSize := fServer.MaximumAllowedContentLength;
   end;
 end;
 
 procedure THttpServerSocket.GetBodyStream;
-var
-  strm: TStream;
-  strmfree: boolean;
 begin
   // download into the stream supplied by the OnBodyDownload event
-  strm := Http.ContentStream;
-  strmfree := rfContentStreamNeedFree in Http.ResponseFlags; // likely = true
-  Http.ContentStream := nil; // input only: don't interfere with the response
-  exclude(Http.ResponseFlags, rfContentStreamNeedFree);
   try
-    try
-      GetBody(strm);
-    finally
-      if strmfree then
-        strm.Free; // any spooled file remains during the request processing
-    end;
+    GetBody(Http.ContentStream);
+    // the stream (and any spool file) remains during the request processing,
+    // as InContentStream - and is released by ProcessDone afterwards
+    Http.ContentInputDone;
   except
     on EHttpSocketOverflow do
     begin
       // e.g. a chunked body over ContentMaxSize: report 413 before closing
-      Http.ProcessDone; // delete any partially spooled file
+      Http.ProcessDone; // release the stream + delete any partial spool file
       fServer.ComputeRejectBody(Http.Content, 0, HTTP_PAYLOADTOOLARGE);
       SockSendFlush(Http.Content);
       raise; // the caller will close the connection
@@ -5575,14 +5567,14 @@ begin
     on EStreamError do
     begin
       // e.g. ENOSPC when spooling the body: report it before closing
-      Http.ProcessDone; // delete any partially spooled file
+      Http.ProcessDone; // release the stream + delete any partial spool file
       fServer.ComputeRejectBody(Http.Content, 0, HTTP_INSUFFICIENTSTORAGE);
       SockSendFlush(Http.Content);
       raise; // the caller will close the connection
     end;
     on Exception do
     begin
-      Http.ProcessDone; // delete any partially spooled file
+      Http.ProcessDone; // release the stream + delete any partial spool file
       raise;
     end;
   end;

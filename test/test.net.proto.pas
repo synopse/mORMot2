@@ -77,6 +77,7 @@ type
     bodytype: RawUtf8;
     bodystreamed, bodyhash: cardinal;
     bodyeventlen: Int64;
+    bodyconsumer: TThread; // is a TPipeConsumerThread (declared below)
     // for _TTunnelLocal
     tunnelappsec: RawUtf8;
     tunneloptions: TTunnelOptions;
@@ -4314,6 +4315,19 @@ type
     function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
   end;
 
+  // consume a TPipeStream body while the server is still receiving it
+  TPipeConsumerThread = class(TThread)
+  protected
+    fPipe: TPipeStream;
+    fExpected: Int64;
+    fReceived: RawByteString;
+    procedure Execute; override;
+  public
+    constructor Create(aPipe: TPipeStream; aExpected: Int64); reintroduce;
+    property Received: RawByteString
+      read fReceived;
+  end;
+
 function TFailingStream.Read(var Buffer; Count: Longint): Longint;
 begin
   result := 0; // never read from, but avoid an abstract method
@@ -4332,6 +4346,36 @@ begin
   result := 0;
 end;
 
+constructor TPipeConsumerThread.Create(aPipe: TPipeStream; aExpected: Int64);
+begin
+  fPipe := aPipe;
+  fExpected := aExpected;
+  inherited Create({suspended=}false);
+end;
+
+procedure TPipeConsumerThread.Execute;
+var
+  ms: TRawByteStringStream;
+  tmp: TBuffer64K;
+  n: integer;
+begin
+  // the server Write() blocks on a full pipe, so this thread is what makes
+  // the whole upload advance - it stops once the announced size is reached
+  ms := TRawByteStringStream.Create;
+  try
+    while ms.Size < fExpected do
+    begin
+      n := fPipe.Read(tmp, SizeOf(tmp));
+      if n <= 0 then
+        break; // timeout, or Abort from TPipeStream.Destroy
+      ms.WriteBuffer(tmp, n);
+    end;
+    fReceived := ms.DataString;
+  finally
+    ms.Free;
+  end;
+end;
+
 function TNetworkProtocols.DoBodyDownload(const aUrl, aMethod, aInHeaders,
   aInContentType, aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
 begin
@@ -4339,12 +4383,39 @@ begin
   bodyeventlen := aContentLength;
   if aUrl = '/mem' then
     exit; // in-memory Content fallback
-  if aUrl = '/fail' then
+  if aUrl = '/ram' then
+    result := TRawByteStringStream.Create // not a file: no InContent name
+  else if aUrl = '/pipe' then
+  begin
+    // pipe the body to a background consumer, with no buffering at all
+    result := TPipeStream.Create; // 64KB buffer, i.e. much less than the body
+    // both timeouts default to INFINITE: bound them, so that a regression of
+    // the #543 race would fail this test instead of hanging the whole suite
+    TPipeStream(result).WriteTimeout := 30000;
+    TPipeStream(result).ReadTimeout := 30000;
+    bodyconsumer := TPipeConsumerThread.Create(TPipeStream(result), aContentLength);
+  end
+  else if aUrl = '/fail' then
     result := TFailingStream.Create
   else
   begin
     bodyfile := TemporaryFileName;
-    result := TFileStreamEx.Create(bodyfile, fmCreate);
+    // fmShareRead is needed because the stream is still open (as
+    // InContentStream) when the request reads the spool file by its name
+    if aUrl = '/del' then
+      // this stream removes its own file: no rfContentFileNameNeedDelete
+      result := TFileStreamEventuallyDelete.Create(bodyfile,
+        fmCreate or fmShareRead)
+    else if aUrl = '/keep' then
+    begin
+      // this callback takes ownership of the spool file: neither the stream
+      // nor the server should delete it
+      result := TFileStreamEventuallyDelete.Create(bodyfile,
+        fmCreate or fmShareRead);
+      TFileStreamEventuallyDelete(result).DeleteFileOnDestroy := false;
+    end
+    else
+      result := TFileStreamEx.Create(bodyfile, fmCreate or fmShareRead);
   end;
   inc(bodystreamed); // increment last: the tests poll on this counter
 end;
@@ -4363,8 +4434,40 @@ begin
   begin
     // default in-memory process, since DoBodyDownload returned nil
     CheckEqual(Ctxt.InContentType, bodytype, 'mem typ');
+    Check(Ctxt.InContentStream = nil, 'mem no stream');
     h := crc32cHash(Ctxt.InContent);
     CheckEqual(h, bodyhash, 'mem hash');
+  end
+  else if Ctxt.Url = '/pipe' then
+  begin
+    // the body was piped to bodyconsumer while the server was receiving it
+    CheckEqual(Ctxt.InContent, '', 'pipe no content');
+    Check(Ctxt.InContentStream <> nil, 'pipe stream');
+    // the consumer has read the whole body by now: join it before the server
+    // releases the TPipeStream, which would Abort any pending Read
+    bodyconsumer.WaitFor;
+    h := crc32cHash(TPipeConsumerThread(bodyconsumer).Received);
+    CheckEqual(h, bodyhash, 'pipe hash');
+    FreeAndNil(bodyconsumer);
+  end
+  else if Ctxt.Url = '/ram' then
+  begin
+    // the event returned a stream which is not a file: no InContent name, but
+    // the stream itself is available to this request as InContentStream
+    CheckEqual(Ctxt.InContentType, bodytype, 'ram typ');
+    CheckEqual(Ctxt.InContent, '', 'ram no content');
+    Check(Ctxt.InContentStream <> nil, 'ram stream');
+    Check(Ctxt.InContentStream.InheritsFrom(TRawByteStringStream), 'ram class');
+    // a seekable stream is rewinded, so can be read back from here
+    CheckEqual(Ctxt.InContentStream.Position, 0, 'ram rewind');
+    ms := TRawByteStringStream.Create;
+    try
+      StreamCopyUntilEnd(Ctxt.InContentStream, ms);
+      h := crc32cHash(ms.DataString);
+    finally
+      ms.Free;
+    end;
+    CheckEqual(h, bodyhash, 'ram hash');
   end
   else
   begin
@@ -4404,6 +4507,17 @@ begin
     begin
       h := crc32cHash(StringFromFile(fn));
       CheckEqual(h, bodyhash, 'spool hash');
+      // the spool stream is still open, rewinded, and readable from here
+      Check(Ctxt.InContentStream <> nil, 'spool stream');
+      Check(Ctxt.InContentStream.InheritsFrom(TFileStreamEx), 'spool class');
+      CheckEqual(Ctxt.InContentStream.Position, 0, 'spool rewind');
+      ms := TRawByteStringStream.Create;
+      try
+        StreamCopyUntilEnd(Ctxt.InContentStream, ms);
+        CheckEqual(crc32cHash(ms.DataString), bodyhash, 'spool stream hash');
+      finally
+        ms.Free;
+      end;
     end;
   end;
   Ctxt.OutContent := Make(['ok ', CardinalToHexShort(h)]);
@@ -4418,6 +4532,7 @@ var
   fam, status, prev, n, endsec: cardinal;
   body8mb: RawByteString;
   mp, ok, hosthead, mpct, mptext, mptrunc, cmd: RawUtf8;
+  keepfile: TFileName;
   mpa: TMultiPartDynArray;
 begin
   TSynLog.Family.ExceptionIgnore.AddSeveral([
@@ -4461,6 +4576,38 @@ begin
           CheckEqual(status, HTTP_SUCCESS, 'mem status');
           CheckEqual(clt.Content, ok, 'mem resp');
           CheckEqual(bodystreamed, prev + 1, 'mem not streamed');
+          // a TFileStreamEventuallyDelete spool removes its own file, so the
+          // server does not set rfContentFileNameNeedDelete for it
+          prev := bodystreamed;
+          status := clt.Post('/del', body8mb, bodytype);
+          CheckEqual(status, HTTP_SUCCESS, 'del status');
+          CheckEqual(clt.Content, ok, 'del resp');
+          CheckEqual(bodystreamed, prev + 1, 'del streamed');
+          WaitDeleted(bodyfile, 'del');
+          // with DeleteFileOnDestroy=false, the spool file should survive the
+          // request - neither the stream nor the server should remove it
+          prev := bodystreamed;
+          status := clt.Post('/keep', body8mb, bodytype);
+          CheckEqual(status, HTTP_SUCCESS, 'keep status');
+          CheckEqual(clt.Content, ok, 'keep resp');
+          CheckEqual(bodystreamed, prev + 1, 'keep streamed');
+          keepfile := bodyfile; // checked after srv.Free below
+          // a stream which is not a file has no InContent name at all: it is
+          // only reachable from the request as InContentStream
+          prev := bodystreamed;
+          status := clt.Post('/ram', body8mb, bodytype);
+          CheckEqual(status, HTTP_SUCCESS, 'ram status');
+          CheckEqual(clt.Content, ok, 'ram resp');
+          CheckEqual(bodystreamed, prev + 1, 'ram streamed');
+          // a TPipeStream body: 8MB through a 64KB pipe, i.e. the server does
+          // block on Write() until the consumer thread drains it (this needs
+          // the TSynEvent.WaitFor fix of #543 to be reliable)
+          prev := bodystreamed;
+          status := clt.Post('/pipe', body8mb, bodytype);
+          CheckEqual(status, HTTP_SUCCESS, 'pipe status');
+          CheckEqual(clt.Content, ok, 'pipe resp');
+          CheckEqual(bodystreamed, prev + 1, 'pipe streamed');
+          Check(bodyconsumer = nil, 'pipe consumer joined');
           // a spooled JSON body should keep its Content-Type: in InHeaders
           // (this is the single content type not stored as header text)
           bodytype := JSON_CONTENT_TYPE;
@@ -4715,6 +4862,9 @@ begin
       // the server shutdown should have deleted the truncated spool file
       // (maybe with a delay on THttpAsyncServer due to its connections GC)
       WaitDeleted(bodyfile, 'abort');
+      // by now, the /keep spool file should still be there, untouched
+      Check(FileExists(keepfile), 'keep kept');
+      Check(DeleteFile(keepfile), 'keep deleted');
     end;
   finally
     TSynLog.Family.ExceptionIgnore.RemoveSeveral([
