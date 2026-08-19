@@ -3411,7 +3411,7 @@ type
   TFileStreamEx = class(THandleStream)
   protected
     fFileName : TFileName;
-    fDontReleaseHandle: boolean;
+    fDontReleaseHandle, fDeleteFileOnDestroy: boolean;
     function GetSize: Int64; override;
   public
     /// open or create the file from its name, depending on the supplied Mode
@@ -3430,6 +3430,9 @@ type
     /// Destroy calls FileClose(Handle) unless this property is true
     property DontReleaseHandle: boolean
       read fDontReleaseHandle write fDontReleaseHandle;
+    /// Destroy calls DeleteFile(FileName) if this property is true
+    property DeleteFileOnDestroy: boolean
+      read fDeleteFileOnDestroy write fDeleteFileOnDestroy;
     /// the file name assigned to this class constructor
     property FileName : TFileName
       read fFilename;
@@ -3454,26 +3457,16 @@ type
   /// file stream which deletes its own file once the instance is released
   // - the temporary file lifetime is therefore bound to this instance, with no
   // additional tracking needed by the caller
-  // - used e.g. as TOnHttpServerBodyDownload spool file: the request body is
-  // written into it, is available during the request process, then vanishes
-  // with the stream - this is the equivalent of nginx
-  // "client_body_in_file_only clean" (whereas "on" would keep the file)
+  // - used e.g. as TOnHttpServerBodyDownload spool file
   // - set DeleteFileOnDestroy := false e.g. once the file has been renamed or
   // moved by the process, so should not be deleted any more
   TFileStreamEventuallyDelete = class(TFileStreamEx)
-  protected
-    fDeleteFileOnDestroy: boolean;
   public
     /// open or create the file, which will be deleted by Destroy
     // - Mode is typically fmCreate, but a spooled file meant to be read back
     // by its name while this instance is still open needs a sharing mode, e.g.
     // fmCreate or fmShareRead (which is mandatory on Windows)
     constructor Create(const aFileName: TFileName; Mode: cardinal); reintroduce;
-    /// close the handle, then delete the file unless DeleteFileOnDestroy=false
-    destructor Destroy; override;
-    /// set to false to keep the file after this instance is released
-    property DeleteFileOnDestroy: boolean
-      read fDeleteFileOnDestroy write fDeleteFileOnDestroy;
   end;
 
 /// a wrapper around FileRead() to ensure a whole memory buffer is retrieved
@@ -7859,6 +7852,7 @@ constructor TFileStreamEx.Create(const aFileName: TFileName; Mode: cardinal);
 var
   h: THandle;
 begin
+  SetLastError(0);
   if Mode and fmCreate = fmCreate then
     h := FileCreate(aFileName, Mode and $00ff) // fmCreate=$ffff on oldest Delphi
   else
@@ -7898,6 +7892,9 @@ destructor TFileStreamEx.Destroy;
 begin
   if not fDontReleaseHandle then
     FileClose(Handle); // otherwise file remains opened (FPC RTL inconsistency)
+  if fDeleteFileOnDestroy and
+     (fFileName <> '') then
+    DeleteFile(fFileName);
 end;
 
 function TFileStreamEx.GetSize: Int64;
@@ -7912,15 +7909,7 @@ constructor TFileStreamEventuallyDelete.Create(
   const aFileName: TFileName; Mode: cardinal);
 begin
   inherited Create(aFileName, Mode); // raise EOSException on invalid handle
-  fDeleteFileOnDestroy := true;
-end;
-
-destructor TFileStreamEventuallyDelete.Destroy;
-begin
-  inherited Destroy; // close the handle first, as required on Windows
-  if fDeleteFileOnDestroy and
-     (fFileName <> '') then
-    DeleteFile(fFileName);
+  fDeleteFileOnDestroy := true;      // delete if no EOSException did happen
 end;
 
 
@@ -12424,7 +12413,7 @@ begin
   end;
   result := WaitFor(1);
   if result then
-    exit; // quick path
+    exit; // quick path if the event was notified
   endtix := 0;
   if TimeoutMS <> INFINITE then
     endtix := GetTickCount64 + TimeoutMS;

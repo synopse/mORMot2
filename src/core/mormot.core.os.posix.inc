@@ -2173,7 +2173,7 @@ begin
     QueryPerformanceMicroSeconds(start);
     RTLEventWaitFor(fHandle, TimeoutMS); // procedure: has no signal
     if TimeoutMS = 0 then
-      result := fNotified // internal flag is the most reliable here
+      result := fNotified // internal flag is all what we got here
     else
     begin
       QueryPerformanceMicroSeconds(stop);  // heuristic if Timeout or signaled
