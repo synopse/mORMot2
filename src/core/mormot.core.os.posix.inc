@@ -2140,66 +2140,29 @@ end;
 
 constructor TSynEvent.Create;
 begin
-  {$ifdef HASEVENTFD}
-  fFD := LinuxEventFD({nonblocking=}false, {semaphore=}false);
-  if fFD = 0 then // fallback to PRTLEvent on oldest kernel
-  {$endif HASEVENTFD}
-    fHandle := RTLEventCreate;
+  fHandle := RTLEventCreate; // pthreads remains in userspace if possible
 end;
 
 destructor TSynEvent.Destroy;
 begin
-  {$ifdef HASEVENTFD}
-  if fFD <> 0 then
-  begin
-    LinuxEventFDWrite(fFD, 1); // release the lock or do nothing
-    FileClose(fFD);
-  end
-  else
-  {$endif HASEVENTFD}
-    RTLEventDestroy(fHandle);
+  RTLEventDestroy(fHandle);
   inherited Destroy;
 end;
 
-procedure TSynEvent.OsResetEvent;
+procedure TSynEvent.OsReset;
 begin
-  {$ifdef HASEVENTFD}
-  if fFD <> 0 then
-  begin
-    // always drain if something is pending (mirrors Windows.ResetEvent
-    // on an auto-reset event) - do NOT gate the drain on fNotified
-    if WaitReadPending(fFD, 0) then
-      LinuxEventFDRead(fFD); // eventfd non-semaphore: call once for reset
-  end
-  else
-  {$endif HASEVENTFD}
-    RTLEventResetEvent(fHandle);
+  RTLEventResetEvent(fHandle);
 end;
 
-procedure TSynEvent.OsSetEvent;
+procedure TSynEvent.OsWake;
 begin
-  {$ifdef HASEVENTFD}
-  if fFD <> 0 then
-    LinuxEventFDWrite(fFD, 1)
-  else
-  {$endif HASEVENTFD}
-    RTLEventSetEvent(fHandle);
+  RTLEventSetEvent(fHandle);
 end;
 
-function TSynEvent.OsWaitFor(TimeoutMS: cardinal): boolean;
+function TSynEvent.OsWait(TimeoutMS: cardinal): boolean;
 var
   start, stop, max: Int64;
 begin
-  {$ifdef HASEVENTFD}
-  if fFD <> 0 then
-  begin
-    result := (TimeoutMS = INFINITE) or
-              WaitReadPending(fFD, TimeoutMS); // = LinuxEventFDWait()
-    if result then
-      LinuxEventFDRead(fFD); // consume the signal
-  end
-  else
-  {$endif HASEVENTFD}
   if TimeoutMS = INFINITE then
   begin
     RTLEventWaitFor(fHandle);
@@ -2227,14 +2190,6 @@ begin
   end;
 end;
 
-function TSynEvent.IsEventFD: boolean;
-begin
-  {$ifdef HASEVENTFD}
-  result := fFD <> 0;
-  {$else}
-  result := false;
-  {$endif HASEVENTFD}
-end;
 
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
 begin
@@ -2559,7 +2514,7 @@ end;
 
 function LinuxEventFDWait(fd: integer; ms: integer): boolean;
 begin
-  result := WaitReadPending(fd, ms);
+  result := WaitReadPending(fd, ms); // call FpPoll()
 end;
 {$else}
 function LinuxEventFD(nonblocking, semaphore: boolean): integer;

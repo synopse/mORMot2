@@ -5113,19 +5113,16 @@ type
 
   /// our lightweight cross-platform TEvent-like component
   // - on Windows, calls directly the CreateEvent/ResetEvent/SetEvent API
-  // - on Linux, will use eventfd() in blocking and non-semaphore mode
-  // - on other POSIX, will use PRTLEvent which is lighter than TEvent BasicEvent
+  // - on POSIX, will use PRTLEvent which is lighter than TEvent BasicEvent
+  // and not slower than Linux eventfd() in wrk HTTP async benchmarks
   // - WARNING: you should wait from a single thread at once
   TSynEvent = class(TSynPersistent)
   protected
     fHandle: pointer; // Windows THandle, FPC PRTLEvent or Delphi-POSIX TEvent
-    {$ifdef OSLINUX}
-    fFD: integer;     // for eventfd()
-    {$endif OSLINUX}
-    fNotified, fWaiting: boolean;
-    procedure OsResetEvent;
-    procedure OsSetEvent;
-    function OsWaitFor(TimeoutMS: cardinal): boolean;
+    fNotified, fWaiting: boolean; // no state, just flags
+    procedure OsReset; {$ifdef FPC} inline; {$endif}
+    procedure OsWake;  {$ifdef FPC} inline; {$endif}
+    function OsWait(TimeoutMS: cardinal): boolean; {$ifdef FPC} inline; {$endif}
   public
     /// initialize an instance of cross-platform event
     constructor Create; override;
@@ -5148,9 +5145,6 @@ type
     function WaitForSafe(TimeoutMS: cardinal; DisableSafe: boolean = false): boolean;
     /// calls SleepHiRes() in steps while checking terminated flag and this event
     function SleepStep(var start: Int64; terminated: PBoolean): Int64;
-    /// could be used to tune your algorithm if the eventfd() API is used
-    function IsEventFD: boolean;
-      {$ifdef HASINLINE} inline; {$endif}
     /// low-level read-only access to the internal SetEvent flag
     // - only indicative, and not truly thread-safe by design
     property Notified: boolean
@@ -12330,19 +12324,19 @@ end;
 procedure TSynEvent.ResetEvent;
 begin
   fNotified := false;
-  OsResetEvent;
+  OsReset;
 end;
 
 procedure TSynEvent.SetEvent;
 begin
   fNotified := true; // should be set before notification
-  OsSetEvent;
+  OsWake;
 end;
 
 function TSynEvent.WaitFor(TimeoutMS: cardinal): boolean;
 begin
   fWaiting := true;
-  result := OsWaitFor(TimeoutMS);
+  result := OsWait(TimeoutMS);
   if result then
     fNotified := false; // we consumed the signal
   fWaiting := false;

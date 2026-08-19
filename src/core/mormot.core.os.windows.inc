@@ -1565,25 +1565,21 @@ begin
   inherited Destroy;
 end;
 
-procedure TSynEvent.OsResetEvent;
+procedure TSynEvent.OsReset;
 begin
   Windows.ResetEvent(THandle(fHandle));
 end;
 
-procedure TSynEvent.OsSetEvent;
+procedure TSynEvent.OsWake;
 begin
   Windows.SetEvent(THandle(fHandle));
 end;
 
-function TSynEvent.OsWaitFor(TimeoutMS: cardinal): boolean;
+function TSynEvent.OsWait(TimeoutMS: cardinal): boolean;
 begin
   result := WaitForSingleObject(THandle(fHandle), TimeoutMS) = WAIT_OBJECT_0;
 end;
 
-function TSynEvent.IsEventFD: boolean;
-begin
-  result := false;
-end;
 
 // thread naming and "int 3" debug opcode only validated on Delphi Wintel
 {$ifndef WINTELDELPHI}

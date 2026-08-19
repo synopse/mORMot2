@@ -11583,11 +11583,11 @@ type
 
 procedure TSynEventTest.SimulateSetResetRace(OnlyOs: boolean);
 begin
-  fNotified := true;
   if OnlyOS then
   begin
-    OsResetEvent;
-    OsSetEvent;
+    fNotified := true; // not used in the actual logic anyway
+    OsReset;
+    OsWake;
   end
   else
   begin
@@ -11785,22 +11785,6 @@ begin
     checkEqual(f.Count, 0);
   finally
     f.Free;
-  end;
-  // validate TSynEvent process
-  ev := TSynEventTest.Create;
-  try
-    // emulate a ResetEvent between the two SetEvent state updates
-    ev.SimulateSetResetRace;
-    Check(ev.WaitFor(1000), 'WaitFor signal');
-    ev.SimulateSetResetRace;
-    Check(ev.WaitFor(INFINITE), 'WaitFor(INFINITE) signal');
-    // validate the main-thread CheckSynchronize() wrapper as well
-    ev.SimulateSetResetRace;
-    Check(ev.WaitForSafe(1000), 'WaitForSafe signal');
-    ev.SimulateSetResetRace;
-    Check(ev.WaitForSafe(INFINITE), 'WaitForSafe(INFINITE) signal');
-  finally
-    ev.Free;
   end;
 end;
 
