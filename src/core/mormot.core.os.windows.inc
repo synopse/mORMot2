@@ -1565,37 +1565,24 @@ begin
   inherited Destroy;
 end;
 
-procedure TSynEvent.ResetEvent;
+procedure TSynEvent.OsResetEvent;
 begin
-  fNotified := false;
   Windows.ResetEvent(THandle(fHandle));
 end;
 
-procedure TSynEvent.SetEvent;
+procedure TSynEvent.OsSetEvent;
 begin
-  fNotified := true; // should be set before notification
   Windows.SetEvent(THandle(fHandle));
 end;
 
-function TSynEvent.WaitFor(TimeoutMS: cardinal): boolean;
+function TSynEvent.OsWaitFor(TimeoutMS: cardinal): boolean;
 begin
-  fWaiting := true;
   result := WaitForSingleObject(THandle(fHandle), TimeoutMS) = WAIT_OBJECT_0;
-  if result then
-    fNotified := false; // we consumed the signal
-  fWaiting := false;
 end;
 
 function TSynEvent.IsEventFD: boolean;
 begin
   result := false;
-end;
-
-procedure TSynEvent.SimulateSetResetRace;
-begin
-  fNotified := true;
-  Windows.ResetEvent(THandle(fHandle));
-  Windows.SetEvent(THandle(fHandle));
 end;
 
 // thread naming and "int 3" debug opcode only validated on Delphi Wintel

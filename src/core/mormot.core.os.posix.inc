@@ -2161,9 +2161,8 @@ begin
   inherited Destroy;
 end;
 
-procedure TSynEvent.ResetEvent;
+procedure TSynEvent.OsResetEvent;
 begin
-  fNotified := false; // same order as Windows
   {$ifdef HASEVENTFD}
   if fFD <> 0 then
   begin
@@ -2177,9 +2176,8 @@ begin
     RTLEventResetEvent(fHandle);
 end;
 
-procedure TSynEvent.SetEvent;
+procedure TSynEvent.OsSetEvent;
 begin
-  fNotified := true; // should be set before notification (same as Windows)
   {$ifdef HASEVENTFD}
   if fFD <> 0 then
     LinuxEventFDWrite(fFD, 1)
@@ -2188,21 +2186,17 @@ begin
     RTLEventSetEvent(fHandle);
 end;
 
-function TSynEvent.WaitFor(TimeoutMS: cardinal): boolean;
+function TSynEvent.OsWaitFor(TimeoutMS: cardinal): boolean;
 var
-  start, stop, slack: Int64;
+  start, stop, max: Int64;
 begin
-  fWaiting := true;
   {$ifdef HASEVENTFD}
   if fFD <> 0 then
   begin
     result := (TimeoutMS = INFINITE) or
               WaitReadPending(fFD, TimeoutMS); // = LinuxEventFDWait()
     if result then
-    begin
       LinuxEventFDRead(fFD); // consume the signal
-      fNotified := false;
-    end;
   end
   else
   {$endif HASEVENTFD}
@@ -2210,7 +2204,6 @@ begin
   begin
     RTLEventWaitFor(fHandle);
     result := true; // INFINITE only returns on signal
-    fNotified := false;
   end
   else
   begin
@@ -2221,18 +2214,17 @@ begin
     else
     begin
       QueryPerformanceMicroSeconds(stop);  // heuristic if Timeout or signaled
-      slack := 500;
+      max := Int64(TimeoutMS) * MicroSecsPerMilliSec;
       if TimeoutMS <= 10 then
         if TimeoutMS <= 2 then
-          slack := 100
+          dec(max, 100)
         else
-          slack := 200;
-      result := (stop - start) < (Int64(TimeoutMS) * MicroSecsPerMilliSec - slack);
+          dec(max, 200)
+      else
+        dec(max, 500);
+      result := (stop - start) < max;
     end;
-    if result then
-      fNotified := false;
   end;
-  fWaiting := false;
 end;
 
 function TSynEvent.IsEventFD: boolean;
@@ -2243,19 +2235,6 @@ begin
   result := false;
   {$endif HASEVENTFD}
 end;
-
-procedure TSynEvent.SimulateSetResetRace;
-begin
-  fNotified := true;
-  ResetEvent;
-  {$ifdef HASEVENTFD}
-  if fFD <> 0 then
-    LinuxEventFDWrite(fFD, 1)
-  else
-  {$endif HASEVENTFD}
-    RTLEventSetEvent(fHandle);
-end;
-
 
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
 begin

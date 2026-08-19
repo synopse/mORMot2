@@ -5123,7 +5123,9 @@ type
     fFD: integer;     // for eventfd()
     {$endif OSLINUX}
     fNotified, fWaiting: boolean;
-    procedure SimulateSetResetRace; // used by TTestCoreBase
+    procedure OsResetEvent;
+    procedure OsSetEvent;
+    function OsWaitFor(TimeoutMS: cardinal): boolean;
   public
     /// initialize an instance of cross-platform event
     constructor Create; override;
@@ -12324,6 +12326,27 @@ end;
 
 
 { TSynEvent }
+
+procedure TSynEvent.ResetEvent;
+begin
+  fNotified := false;
+  OsResetEvent;
+end;
+
+procedure TSynEvent.SetEvent;
+begin
+  fNotified := true; // should be set before notification
+  OsSetEvent;
+end;
+
+function TSynEvent.WaitFor(TimeoutMS: cardinal): boolean;
+begin
+  fWaiting := true;
+  result := OsWaitFor(TimeoutMS);
+  if result then
+    fNotified := false; // we consumed the signal
+  fWaiting := false;
+end;
 
 function TSynEvent.SleepStep(var start: Int64; terminated: PBoolean): Int64;
 var
