@@ -5149,9 +5149,11 @@ type
     function IsEventFD: boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// low-level read-only access to the internal SetEvent flag
+    // - only indicative, and not truly thread-safe by design
     property Notified: boolean
       read fNotified;
     /// low-level flag if WaitFor/WaitForEver/WaitForSafe are blocking
+    // - only indicative, and not truly thread-safe by design
     property Waiting: boolean
       read fWaiting;
   end;

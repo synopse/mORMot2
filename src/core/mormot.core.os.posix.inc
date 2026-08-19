@@ -2163,22 +2163,23 @@ end;
 
 procedure TSynEvent.ResetEvent;
 begin
+  fNotified := false; // same order as Windows
   {$ifdef HASEVENTFD}
   if fFD <> 0 then
   begin
-    if fNotified and
-       WaitReadPending(fFD, 0) then
+    // always drain if something is pending (mirrors Windows.ResetEvent
+    // on an auto-reset event) - do NOT gate the drain on fNotified
+    if WaitReadPending(fFD, 0) then
       LinuxEventFDRead(fFD); // eventfd non-semaphore: call once for reset
   end
   else
   {$endif HASEVENTFD}
     RTLEventResetEvent(fHandle);
-  fNotified := false;
 end;
 
 procedure TSynEvent.SetEvent;
 begin
-  fNotified := true; // should be set before notification
+  fNotified := true; // should be set before notification (same as Windows)
   {$ifdef HASEVENTFD}
   if fFD <> 0 then
     LinuxEventFDWrite(fFD, 1)
@@ -2188,23 +2189,50 @@ begin
 end;
 
 function TSynEvent.WaitFor(TimeoutMS: cardinal): boolean;
+var
+  start, stop, slack: Int64;
 begin
   fWaiting := true;
   {$ifdef HASEVENTFD}
   if fFD <> 0 then
   begin
-    if (TimeoutMS = INFINITE) or
-       WaitReadPending(fFD, TimeoutMS) then // = LinuxEventFDWait()
-      LinuxEventFDRead(fFD);
+    result := (TimeoutMS = INFINITE) or
+              WaitReadPending(fFD, TimeoutMS); // = LinuxEventFDWait()
+    if result then
+    begin
+      LinuxEventFDRead(fFD); // consume the signal
+      fNotified := false;
+    end;
   end
   else
   {$endif HASEVENTFD}
-    if TimeoutMS = INFINITE then
-      RTLEventWaitFor(fHandle)
+  if TimeoutMS = INFINITE then
+  begin
+    RTLEventWaitFor(fHandle);
+    result := true; // INFINITE only returns on signal
+    fNotified := false;
+  end
+  else
+  begin
+    QueryPerformanceMicroSeconds(start);
+    RTLEventWaitFor(fHandle, TimeoutMS); // procedure: has no signal
+    if TimeoutMS = 0 then
+      result := fNotified // internal flag is the most reliable here
     else
-      RTLEventWaitFor(fHandle, TimeoutMS);
+    begin
+      QueryPerformanceMicroSeconds(stop);  // heuristic if Timeout or signaled
+      slack := 500;
+      if TimeoutMS <= 10 then
+        if TimeoutMS <= 2 then
+          slack := 100
+        else
+          slack := 200;
+      result := (stop - start) < (Int64(TimeoutMS) * MicroSecsPerMilliSec - slack);
+    end;
+    if result then
+      fNotified := false;
+  end;
   fWaiting := false;
-  result := fNotified;
 end;
 
 function TSynEvent.IsEventFD: boolean;

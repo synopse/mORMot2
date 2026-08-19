@@ -1580,9 +1580,10 @@ end;
 function TSynEvent.WaitFor(TimeoutMS: cardinal): boolean;
 begin
   fWaiting := true;
-  WaitForSingleObject(THandle(fHandle), TimeoutMS);
+  result := WaitForSingleObject(THandle(fHandle), TimeoutMS) = WAIT_OBJECT_0;
+  if result then
+    fNotified := false; // we consumed the signal
   fWaiting := false;
-  result := fNotified;
 end;
 
 function TSynEvent.IsEventFD: boolean;
