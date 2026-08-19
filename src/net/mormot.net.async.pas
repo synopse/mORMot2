@@ -2778,23 +2778,15 @@ begin
             // wait for the sub-threads to wake up this one
             if Terminated then
               break;
-            if (fEvent.IsEventFD and
-                (fOwner.fThreadPollingAwakeCount > 2)) or
-               ((fOwner.fSockets.fRead.fPending.Count = 0) and
-                (fOwner.fSockets.fRead.Count = 0)) then
-              // 1) avoid poll(eventfd) syscall on heavy loaded server
-              // 2) there is no connection any more: wait for next accept
-            begin
-              fWaitForReadPending := true; // better safe than sorry
-              fEvent.WaitForEver;
-            end
+            fWaitForReadPending := true; // better safe than sorry
+            if (fOwner.fSockets.fRead.fPending.Count = 0) and
+               (fOwner.fSockets.fRead.Count = 0) then
+              // there is no connection any more: wait for next accept
+              fEvent.WaitForEver
             else
-            begin
               // always release current thread to avoid CPU burning
               // (any condition makes stability and performance worse)
-              fWaitForReadPending := true;
               fEvent.WaitFor(1);
-            end;
           end;
         atpReadPending:
           // secondary threads wait, then read and process pending events
@@ -3223,7 +3215,7 @@ end;
 // - ThreadPollingWakeupLoad property defines how many fast processing events a
 // thread is supposed to handle in its loop - default value is computed as
 // (ThreadPoolCount / CpuCount) * 8 so should scale depending on the actual HW
-// - on Linux, waking up threads is done via efficient blocking eventfd()
+// - on POSIX waking up threads is done via our efficient TSynEvent.SetEvent
 // - on Windows, TWinIocp will directly handle atpReadPending thread wakening
 
 {$ifndef USE_WINIOCP}
@@ -3295,7 +3287,7 @@ begin
   end;
   // notify threads outside fThreadPollingWakeupSafe
   for i := 0 to result - 1 do
-    fThreads[ndx[i]].fEvent.SetEvent; // on Linux, uses eventfd()
+    fThreads[ndx[i]].fEvent.SetEvent;
 end;
 {$endif USE_WINIOCP}
 
