@@ -2244,6 +2244,18 @@ begin
   {$endif HASEVENTFD}
 end;
 
+procedure TSynEvent.SimulateSetResetRace;
+begin
+  fNotified := true;
+  ResetEvent;
+  {$ifdef HASEVENTFD}
+  if fFD <> 0 then
+    LinuxEventFDWrite(fFD, 1)
+  else
+  {$endif HASEVENTFD}
+    RTLEventSetEvent(fHandle);
+end;
+
 
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
 begin

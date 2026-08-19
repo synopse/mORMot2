@@ -11576,6 +11576,8 @@ type
   end;
   TNotifyTaskDynArray = array of TNotifyTask;
 
+  TSynEventTest = class(TSynEvent); // to access SimulateSetResetRace;
+
 procedure TTestCoreBase._TSynQueue;
 var
   o, i, j, k, n: integer; // not PtrInt
@@ -11584,6 +11586,7 @@ var
   r1, r2: TNotifyTask;
   savedint: TIntegerDynArray;
   savedu: TRawUtf8DynArray;
+  ev: TSynEventTest;
 begin
   f := TSynQueue.Create(TypeInfo(TIntegerDynArray));
   try
@@ -11742,6 +11745,22 @@ begin
     checkEqual(f.Count, 0);
   finally
     f.Free;
+  end;
+  // validate TSynEvent process
+  ev := TSynEventTest.Create;
+  try
+    // emulate a ResetEvent between the two SetEvent state updates
+    ev.SimulateSetResetRace;
+    Check(ev.WaitFor(1000), 'WaitFor signal');
+    ev.SimulateSetResetRace;
+    Check(ev.WaitFor(INFINITE), 'WaitFor(INFINITE) signal');
+    // validate the main-thread CheckSynchronize() wrapper as well
+    ev.SimulateSetResetRace;
+    Check(ev.WaitForSafe(1000), 'WaitForSafe signal');
+    ev.SimulateSetResetRace;
+    Check(ev.WaitForSafe(INFINITE), 'WaitForSafe(INFINITE) signal');
+  finally
+    ev.Free;
   end;
 end;
 

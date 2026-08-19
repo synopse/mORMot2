@@ -5123,6 +5123,7 @@ type
     fFD: integer;     // for eventfd()
     {$endif OSLINUX}
     fNotified, fWaiting: boolean;
+    procedure SimulateSetResetRace; // used by TTestCoreBase
   public
     /// initialize an instance of cross-platform event
     constructor Create; override;

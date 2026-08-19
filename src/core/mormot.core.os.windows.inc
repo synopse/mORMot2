@@ -1591,6 +1591,13 @@ begin
   result := false;
 end;
 
+procedure TSynEvent.SimulateSetResetRace;
+begin
+  fNotified := true;
+  Windows.ResetEvent(THandle(fHandle));
+  Windows.SetEvent(THandle(fHandle));
+end;
+
 // thread naming and "int 3" debug opcode only validated on Delphi Wintel
 {$ifndef WINTELDELPHI}
   {$define NOSETTHREADNAME}
