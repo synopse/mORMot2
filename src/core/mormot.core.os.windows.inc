@@ -1554,6 +1554,93 @@ end;
 
 { TSynEvent }
 
+
+{$ifdef USEWINCORESYNC}
+// try WaitOnAddress from API-MS-Win-Core-Synch-l1-2-0.dll - not measureable
+var
+  WaitOnAddressChecked: boolean;
+  WaitOnAddress: function(Address, CompareAddress: pointer;
+    AddressSize, dwMilliseconds: PtrUInt): BOOL; stdcall;
+  WakeByAddressSingle: procedure(Address: pointer); stdcall;
+
+constructor TSynEvent.Create;
+var
+  h: THandle;
+begin
+  if not WaitOnAddressChecked then // check it once
+  begin
+    h := LoadLibrary('API-MS-Win-Core-Synch-l1-2-0.dll'); // Win8+
+    WakeByAddressSingle := LibraryResolve(h, 'WakeByAddressSingle');
+    if Assigned(WakeByAddressSingle) then
+      WaitOnAddress := LibraryResolve(h, 'WaitOnAddress'); // resolve last
+    WaitOnAddressChecked := true;
+    if Assigned(WaitOnAddress) then ConsoleWrite('WaitOnAddress API available');
+  end;
+  if not Assigned(WaitOnAddress) then
+    fHandle := pointer(CreateEvent(nil, false, false, nil)); // WinXP/Vista/7
+end; // on Win8+ fHandle is 0/1 CAS flag for WaitOnAddress()
+
+destructor TSynEvent.Destroy;
+begin
+  if not Assigned(WaitOnAddress) then
+    CloseHandle(THandle(fHandle)); // WinXP/Vista/7
+  inherited Destroy;
+end;
+
+procedure TSynEvent.OsReset;
+begin
+  if Assigned(WaitOnAddress) then
+    LockedExc(PPtrUInt(@fHandle)^, 0, 1) // pure CAS on Win8+
+  else
+    Windows.ResetEvent(THandle(fHandle)); // WinXP/Vista/7
+end;
+
+procedure TSynEvent.OsWake;
+begin
+  if not Assigned(WaitOnAddress) then
+    Windows.SetEvent(THandle(fHandle)) // WinXP/Vista/7
+  else if LockedExc(PPtrUInt(@fHandle)^, 1, 0) then
+    WakeByAddressSingle(@fHandle);     // Win8+
+end;
+
+function TSynEvent.OsWait(TimeoutMS: cardinal): boolean;
+var
+  ending, remain: Int64;
+  zero: pointer; // same type as fHandle and LockedExc(PtrUInt)
+begin
+  if not Assigned(WaitOnAddress) then // WinXP/Vista/7
+  begin
+    result := WaitForSingleObject(THandle(fHandle), TimeoutMS) = WAIT_OBJECT_0;
+    exit;
+  end;
+  result := LockedExc(PPtrUInt(@fHandle)^, 0, 1);
+  if result or
+     (TimeoutMS = 0) then
+    exit; // fast CAS path on Win8+
+  result := true;
+  zero := nil;
+  if TimeoutMS = INFINITE then
+  begin
+    repeat
+      WaitOnAddress(@fHandle, @zero, SizeOf(fHandle), INFINITE);
+    until LockedExc(PPtrUInt(@fHandle)^, 0, 1);
+    exit;
+  end;
+  ending := GetTickCount64 + TimeoutMS;
+  WaitOnAddress(@fHandle, @zero, SizeOf(fHandle), TimeoutMS);
+  repeat
+    if LockedExc(PPtrUInt(@fHandle)^, 0, 1) then
+      exit;
+    remain := ending - GetTickCount64;
+    if remain <= 0 then
+      break;
+    WaitOnAddress(@fHandle, @zero, SizeOf(fHandle), remain);
+  until false;
+  result := false; // timeout
+end;
+
+{$else}
+
 constructor TSynEvent.Create;
 begin
   fHandle := pointer(CreateEvent(nil, false, false, nil));
@@ -1580,6 +1667,7 @@ begin
   result := WaitForSingleObject(THandle(fHandle), TimeoutMS) = WAIT_OBJECT_0;
 end;
 
+{$endif USEWINCORESYNC}
 
 // thread naming and "int 3" debug opcode only validated on Delphi Wintel
 {$ifndef WINTELDELPHI}

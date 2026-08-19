@@ -5112,7 +5112,8 @@ type
   end;
 
   /// our lightweight cross-platform TEvent-like component
-  // - on Windows, calls directly the CreateEvent/ResetEvent/SetEvent API
+  // - on Windows, calls directly the CreateEvent/ResetEvent/SetEvent API - you
+  // may try API-MS-Win-Core-Synch-l1-2-0.dll with USEWINCORESYNC conditional
   // - on POSIX, will use PRTLEvent which is lighter than TEvent BasicEvent
   // and not slower than Linux eventfd() in wrk HTTP async benchmarks
   // - WARNING: you should wait from a single thread at once
