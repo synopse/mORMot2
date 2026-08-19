@@ -662,6 +662,8 @@ var
   Client: TRestClientDB;
   i, n, ID, LastID: integer;
 begin
+  if wsWine in WindowsSpecs then
+    exit; // JET is not available/stable enough with Wine - nor useful
   Model := TOrmModel.Create([TOrmPeople]);
   try
     R := TOrmPeople.Create;

@@ -1554,7 +1554,6 @@ end;
 
 { TSynEvent }
 
-
 {$ifdef USEWINCORESYNC}
 // try Win8+ WaitOnAddress - no measureable gain in practical benchmarks/servers
 // see also warnings at https://devblogs.microsoft.com/oldnewthing/20160826-00
