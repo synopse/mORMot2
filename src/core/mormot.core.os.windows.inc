@@ -2830,7 +2830,7 @@ begin
   ConsoleHandleCtrlCPressed := true;
 end;
 
-function WinWaitFor(ms: cardinal; h: THandle; checkSubThreadQuit: boolean): TWinWaitFor;
+function WinWaitFor(ms: cardinal; h: THandle; checkSubThreadQuit, checkSync: boolean): TWinWaitFor;
 var
   mainthread: boolean;
   msg: TMsg;
@@ -2852,17 +2852,17 @@ begin
       if msg.Message = WM_QUIT then
         exit;
   // proper Sleep/WaitForSingleObject call
-  mainthread := mainthread and IsMultiThread;
+  checkSync := checkSync and mainthread and IsMultiThread;
   if h = 0 then
   begin
-    if mainthread then
+    if checkSync then
       CheckSynchronize(ms) // call any Synchronize() event at full speed
     else
       Windows.Sleep(ms);
     result := wwfTimeout;
     exit;
   end;
-  if mainthread then
+  if checkSync then
     CheckSynchronize(0);
   case WaitForSingleObject(h, ms) of
     WAIT_TIMEOUT:
@@ -2872,7 +2872,7 @@ begin
   else
     result := wwfFailed;
   end;
-  if mainthread then
+  if checkSync then
     CheckSynchronize(0);
 end;
 

@@ -4207,11 +4207,11 @@ type
 // - supposed to be called in a loop, so expects ms value in [50..200] range
 // - can optionally call WaitForSingleObject(h) instead of plain Sleep()
 // - can intercept messages and return wwfQuit on WM_QUIT on a sub-thread
-// - running on the main thread, would properly call CheckSynchronize(ms) then
-// Application.ProcessMessages, as expected by a regular GUI application
+// - running on the main thread, calls Application.ProcessMessages, as expected
+// by a regular GUI application, and CheckSynchronize(ms) if checkSync is true
 // - outside the main thread, behave like a single Sleep/WaitForSingleObject
 function WinWaitFor(ms: cardinal; h: THandle = 0;
-  checkSubThreadQuit: boolean = false): TWinWaitFor;
+  checkSubThreadQuit: boolean = false; checkSync: boolean = false): TWinWaitFor;
 
 /// local RTL wrapper function which redirects to Unicode_ToUtf8()
 procedure Win32PWideCharToUtf8(P: PWideChar; Len: PtrInt; out res: RawUtf8);
