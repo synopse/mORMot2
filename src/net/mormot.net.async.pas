@@ -498,17 +498,15 @@ type
   protected
     fOwner: TAsyncConnections;
     fProcess: TAsyncConnectionsThreadProcess;
-    fWaitForReadPending: boolean;
-    fWakeUpFromSlowProcess: boolean;
     fExecuteState: THttpServerExecuteState;
+    fWakeUp: set of (wuPossible, wuFromSlowProcess); // for atpReadPending
     fIndex: integer;
     fCustomObject: TObject;
     {$ifndef USE_WINIOCP}
     fEvent: TSynEvent;
     fThreadPollingLastWakeUpTix: integer;
-    fThreadPollingLastWakeUpCount: integer;
+    fThreadPollingLastWakeUpEvents: integer;
     function GetNextRead(out notif: TPollSocketResult): boolean;
-    procedure ReleaseEvent; {$ifdef HASINLINE} inline; {$endif}
     {$endif USE_WINIOCP}
     procedure DoExecute; override;
   public
@@ -2665,14 +2663,6 @@ end;
 
 {$ifndef USE_WINIOCP}
 
-procedure TAsyncConnectionsThread.ReleaseEvent;
-begin
-  if not fWaitForReadPending then
-    exit;
-  fWaitForReadPending := false; // set event once
-  fEvent.SetEvent;
-end;
-
 function TAsyncConnectionsThread.GetNextRead(
   out notif: TPollSocketResult): boolean;
 begin
@@ -2681,13 +2671,13 @@ begin
   if result then
     if (acoThreadSmooting in fOwner.Options) and
        (fThreadPollingLastWakeUpTix <> fOwner.fThreadPollingLastWakeUpTix) and
-       not fWakeUpFromSlowProcess then
+       not (wuFromSlowProcess in fWakeUp) then
     begin
       // ProcessRead() did take some time: wake up another thread
       // - slow down a little bit the wrk RPS
       // - but seems to reduce the wrk max latency
-      fWakeUpFromSlowProcess := true; // do it once per Execute loop
-      fOwner.ThreadPollingWakeup(1); // one thread is enough
+      include(fWakeUp, wuFromSlowProcess); // do it once per Execute loop
+      fOwner.ThreadPollingWakeup(1);       // one thread is enough
     end;
 end;
 
@@ -2764,7 +2754,6 @@ begin
           // main thread will just fill pending events from socket polls
           // (no process because a faulty service would delay all reading)
           begin
-            fWaitForReadPending := false;
             new := fOwner.fSockets.fRead.PollForPendingEvents(ms);
             if Terminated then
               break;
@@ -2772,13 +2761,11 @@ begin
                (fOwner.fSockets.fRead.fPending.Count <> 0) then
               new := 1; // wake up one thread if some reads are still pending
             fEvent.ResetEvent;
-            fWaitForReadPending := true; // to be set before wakeup
             if new <> 0 then
               fOwner.ThreadPollingWakeup(new);
             // wait for the sub-threads to wake up this one
             if Terminated then
               break;
-            fWaitForReadPending := true; // better safe than sorry
             if (fOwner.fSockets.fRead.fPending.Count = 0) and
                (fOwner.fSockets.fRead.Count = 0) then
               // there is no connection any more: wait for next accept
@@ -2791,18 +2778,17 @@ begin
         atpReadPending:
           // secondary threads wait, then read and process pending events
           begin
-            fEvent.ResetEvent;
-            fWaitForReadPending := true; // to be set just before WaitForEver
-            fEvent.WaitForEver;
+            include(fWakeUp, wuPossible); // to be set before WaitForEver
+            fEvent.ResetAndWaitForEver;
             if Terminated then
               break;
             LockedInc32(@fOwner.fThreadPollingAwakeCount);
-            fWakeUpFromSlowProcess := false;
+            exclude(fWakeUp, wuFromSlowProcess);
             while GetNextRead(notif) do
               fOwner.fSockets.ProcessRead(self, notif);
             fThreadPollingLastWakeUpTix := 0; // will now need to wakeup
             LockedDec32(@fOwner.fThreadPollingAwakeCount);
-            fOwner.fThreadReadPoll.ReleaseEvent; // atpReadPoll lock above
+            fOwner.fThreadReadPoll.fEvent.SetEvent; // atpReadPoll lock above
           end;
       else
         EAsyncConnections.RaiseUtf8('%.Execute: unexpected fProcess=%',
@@ -2846,7 +2832,7 @@ begin
   {$ifndef USE_WINIOCP}
   fThreadPollingWakeupLoad := (cardinal(aThreadPoolCount) div CpuThreads) * 8;
   if fThreadPollingWakeupLoad < 4 then
-    fThreadPollingWakeupLoad := 4; // below 4, the whole algorithm seems pointless
+    fThreadPollingWakeupLoad := 4; // below 4, this algorithm seems pointless
   {$endif USE_WINIOCP}
   // setup internal variables
   fLastOperationReleaseMemorySeconds := 60;
