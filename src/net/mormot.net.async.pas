@@ -3208,9 +3208,8 @@ end;
 function TAsyncConnections.ThreadPollingWakeup(Events: integer): PtrInt;
 var
   i: PtrInt;
-  th: PAsyncConnectionsThread;
   t: TAsyncConnectionsThread;
-  c, tix: integer; // 32-bit is enough to check for
+  c, tix: integer;  // 32-bit is enough to check for
   ndx: TByteToByte; // wake up to 256 threads at once
 begin
   if Events > high(ndx) then
@@ -3226,47 +3225,56 @@ begin
   end;
   fThreadPollingWakeupSafe.Lock;
   try
-    th := @fThreads[1]; // [0]=fThreadReadPoll and should not be set from here
-    for i := 1 to length(fThreads) - 1 do
-    begin
-      t := th^;
-      if tix = 0 then
+    if tix = 0 then
+      // exactly wake up one thread per needed event
+      for i := 1 to length(fThreads) - 1 do
       begin
-        // exactly wake up one thread per needed event
-        if t.fWaitForReadPending then
-        begin
-          // this thread is currently idle and can be activated
-          t.fThreadPollingLastWakeUpCount := 0;
-          t.fThreadPollingLastWakeUpTix := 0;
-          t.fWaitForReadPending := false; // acquire this thread
-          ndx[result] := i; // notify outside of fThreadPollingWakeupSafe lock
-          inc(result);
-          dec(Events);
-        end;
-      end
-      // fast working threads handle up to fThreadPollingLastWakeUpCount events
-      else if not t.fWaitForReadPending and
-              (t.fThreadPollingLastWakeUpCount > 0) and
-              (t.fThreadPollingLastWakeUpTix = tix) then
-      begin
-        // this thread is likely to be available very soon: consider it done
-        c := t.fThreadPollingLastWakeUpCount;
-        dec(t.fThreadPollingLastWakeUpCount, Events);
-        dec(Events, c);
-      end
-      else if t.fWaitForReadPending then
-      begin
-        // we need to wake up a thread, since some slow work is going on
-        t.fThreadPollingLastWakeUpTix := tix;
-        t.fThreadPollingLastWakeUpCount := fThreadPollingWakeupLoad - Events;
-        t.fWaitForReadPending := false; // acquire this thread
-        ndx[result] := i;
+        t := fThreads[i];
+        if not (wuPossible in t.fWakeUp) then
+         continue;
+        // this thread is currently idle and can be activated
+        t.fThreadPollingLastWakeUpEvents := 0;
+        t.fThreadPollingLastWakeUpTix := 0;
+        exclude(t.fWakeUp, wuPossible); // acquire this thread
+        ndx[result] := i; // notify outside of fThreadPollingWakeupSafe lock
         inc(result);
-        dec(Events, fThreadPollingWakeupLoad);
+        dec(Events);
+        if Events <= 0 then
+          break;
+      end
+    else // acoThreadSmooting up to ThreadPollingWakeupLoad events per thread
+    begin
+      // first pass to identify any spare events in running threads
+      for i := 1 to length(fThreads) - 1 do
+      begin
+        t := fThreads[i];
+        if (wuPossible in t.fWakeUp) or                 // not running
+           (t.fThreadPollingLastWakeUpEvents = 0) or    // no spare event
+           (t.fThreadPollingLastWakeUpTix <> tix) then  // slow process
+          continue;
+        // this thread is likely to be available very soon: consider it done
+        c := t.fThreadPollingLastWakeUpEvents;
+        dec(t.fThreadPollingLastWakeUpEvents, Events);
+        dec(Events, c);
+        if Events <= 0 then
+          break;
       end;
-      if Events <= 0 then
-        break;
-      inc(th);
+      if Events > 0 then
+        // we need to wake up some thread(s), since some slow work is going on
+        for i := 1 to length(fThreads) - 1 do
+        begin
+          t := fThreads[i];
+          if not (wuPossible in t.fWakeUp) then
+           continue;
+          t.fThreadPollingLastWakeUpTix := tix;
+          t.fThreadPollingLastWakeUpEvents := fThreadPollingWakeupLoad - Events;
+          exclude(t.fWakeUp, wuPossible);
+          ndx[result] := i;
+          inc(result);
+          dec(Events, fThreadPollingWakeupLoad);
+          if Events <= 0 then
+            break;
+        end;
     end;
   finally
     fThreadPollingWakeupSafe.UnLock;
