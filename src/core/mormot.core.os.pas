@@ -5289,6 +5289,15 @@ type
 // - as used e.g. by TSynLocked/TSynLockedWithRttiMethods to reduce class instance size
 function NewSynLocker: PSynLocker;
 
+/// raw cross-platform futex-like to wait while Value^ = Expected
+// - use futex on Linux, WaitOnAddress() on Win8+, or nil otherwise
+// - caller should ensure Value <> nil and use LockedExc32() for proper CAS
+var OsWaitOnValue: procedure(Value: PCardinal; Expected, TimeoutMS: cardinal);
+
+/// raw cross-platform futex-like unlock of the next waiting OsWakeOnValue()
+// - use futex on Linux, WakeByAddresssingle() on Win8+, nil otherwise
+var OsWakeOnValue: procedure(Value: PCardinal); {$ifdef OSWINDOWS} stdcall; {$endif}
+
 type
   TCachedValueCall = function(Param: pointer): RawByteString;
   /// raw thread-safe cache of a RawByteString content

@@ -1552,41 +1552,17 @@ begin
 end;
 
 
-{ TSynEvent }
-
-{$ifdef USEWINCORESYNC}
-// try Win8+ WaitOnAddress - no measureable gain in practical benchmarks/servers
+// Win8+ WaitOnAddress/WakeByAddressSingle futex-like efficient API
 // see also warnings at https://devblogs.microsoft.com/oldnewthing/20160826-00
 var
-  WaitOnAddressChecked: boolean;
+  // function returns when Address^ differs from the value at CompareAddress^
   WaitOnAddress: function(Address, CompareAddress: pointer;
     AddressSize, dwMilliseconds: PtrUInt): BOOL; stdcall;
   WakeByAddressSingle: procedure(Address: pointer); stdcall;
 
-constructor TSynEvent.Create;
-var
-  h: THandle;
+procedure _OsWaitOnValue(Value: PCardinal; Expected, TimeoutMS: cardinal);
 begin
-  if not WaitOnAddressChecked then // check it once
-  begin
-    if OSVersion >= wEight then
-    begin
-      h := LoadLibrary('API-MS-Win-Core-Synch-l1-2-0.dll'); // Win8+
-      WakeByAddressSingle := LibraryResolve(h, 'WakeByAddressSingle');
-      if Assigned(WakeByAddressSingle) then
-        WaitOnAddress := LibraryResolve(h, 'WaitOnAddress'); // resolve last
-    end;
-    WaitOnAddressChecked := true;
-  end;
-  if not Assigned(WaitOnAddress) then
-    fHandle := pointer(CreateEvent(nil, false, false, nil)); // WinXP/Vista/7
-end; // on Win8+ fHandle is 0/1 CAS flag for WaitOnAddress()
-
-destructor TSynEvent.Destroy;
-begin
-  if not Assigned(WaitOnAddress) then
-    CloseHandle(THandle(fHandle)); // WinXP/Vista/7
-  inherited Destroy;
+  WaitOnAddress(Value, @Expected, SizeOf(Expected), TimeOutMS); // Win8+
 end;
 
 procedure TSynEvent.OsReset;
@@ -5289,6 +5265,18 @@ begin
     InitializeSRWLock       := @InitializeSRWLockForXP;
     AcquireSRWLockExclusive := @AcquireSRWLockExclusiveForXP;
     ReleaseSRWLockExclusive := @ReleaseSRWLockExclusiveForXP;
+  end;
+  if OSVersion >= wEight then
+  begin
+    h := Windows.LoadLibrary('API-MS-Win-Core-Synch-l1-2-0.dll'); // Win8+
+    WaitOnAddress := LibraryResolve(h, 'WaitOnAddress');
+    WakeByAddressSingle := LibraryResolve(h, 'WakeByAddressSingle');
+    if Assigned(WaitOnAddress) and
+       Assigned(WakeByAddressSingle) then
+    begin
+      OsWaitOnValue := @_OsWaitOnValue;
+      OsWakeOnValue := @WakeByAddressSingle; // defined as stdcall
+    end;
   end;
   // 3. retrieve system information
   TimeZoneLocalBias := -GetLocalTimeOffset;

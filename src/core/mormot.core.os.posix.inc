@@ -2117,6 +2117,44 @@ begin
   // no retry loop on ESysEINTR (as with regular RTL's Sleep)
 end;
 
+{$ifdef FPCLINUX} // Linux futex(2) has no dedicated libc wrapper
+const
+  // missing definitions from uapî\linux\futex.h
+  FUTEX_WAIT         = 0;
+  FUTEX_WAKE         = 1;
+  FUTEX_PRIVATE_FLAG = 128; // since Linux 2.6.22
+  FUTEX_WAIT_PRIVATE = FUTEX_WAIT or FUTEX_PRIVATE_FLAG;
+  FUTEX_WAKE_PRIVATE = FUTEX_WAKE or FUTEX_PRIVATE_FLAG;
+
+{$ifdef FPC} // no syscall API possible on Delphi
+procedure _futex(Value: pointer; op, val: cardinal; ts: PTimeSpec); inline;
+begin
+  Do_SysCall(syscall_nr_futex, PtrUInt(Value), op, val, PtrUInt(ts), 0, 0);
+end;
+{$endif FPC}
+
+procedure _OsWakeOnValue(Value: PCardinal);
+begin
+  _futex(Value, FUTEX_WAKE_PRIVATE, 1, nil);
+end;
+
+procedure _OsWaitOnValue(Value: PCardinal; Expected, TimeoutMS: cardinal);
+var
+  s: cardinal;
+  ts: TTimeSpec;
+begin
+  if TimeoutMS = INFINITE then
+  begin
+    _futex(Value, FUTEX_WAIT_PRIVATE, Expected, nil);
+    exit;
+  end;
+  s := TimeoutMS div MilliSecsPerSec;
+  ts.tv_sec := s;
+  ts.tv_nsec := (TimeoutMS - s * MilliSecsPerSec) * NanoSecsPerMilliSec;
+  _futex(Value, FUTEX_WAIT_PRIVATE, Expected, @ts);
+end;
+{$endif FPCLINUX}
+
 {$undef HASEVENTFD}
 {$undef HASGETRANDOM}
 // eventfd + getrandom syscalls validated on FPC Linux i386, x86_64 and aarch64
@@ -5983,6 +6021,13 @@ begin
   TimeZoneLocalBias := -GetLocalTimeOffset; // = Tzseconds div 60
   _Fill256FromOs    := @__Fill256FromOs;
   {$ifdef OSLINUX}
+  {$ifdef FPC} // futex() has no libc api -> no Delphi for POSIX compatibility
+  if KernelRevision >= $020616 then // FUTEX_PRIVATE_FLAG since Linux 2.6.22
+  begin
+    OsWaitOnValue := @_OsWaitOnValue;
+    OsWakeOnValue := @_OsWakeOnValue;
+  end;
+  {$endif FPC}
   {$ifdef OSLINUXHUGEPAGES}
   if KernelRevision >= $030800 then // since Kernel 3.8
     MAP_HUGE_SIZE := PMD_SIZE; // explicit huge pages for _GetLargeMem()
