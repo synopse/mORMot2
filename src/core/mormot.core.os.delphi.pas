@@ -868,7 +868,7 @@ end;
 
 type // main exe-only cut-down version of LLVM POSIX LoadResString() system.pas
   TResStringResource = packed record
-    Len: word;
+    ShortLen: word;
     case integer of
     0: ( ShortW: TWide4K );
     1: ( LongLen: cardinal;

@@ -1143,7 +1143,9 @@ begin
   {$else}
   {$ifdef HASCACHEDRESSTRING}
   // Delphi 10.4+ sysutils has cache + global LoadResStringFunc hook
+  {$ifdef OSWINDOWS}
   ResStringCleanupCache;                // not mandatory but cleaner
+  {$endif OSWINDOWS}
   LoadResStringFunc := @_LoadResString; // replace global helper callback
   {$else}
   // patch once at Intel CPU level to redirect to our function
