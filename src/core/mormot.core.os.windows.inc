@@ -1565,6 +1565,34 @@ begin
   WaitOnAddress(Value, @Expected, SizeOf(Expected), TimeOutMS); // Win8+
 end;
 
+// used only on XP/Vista/7 as fallback - follow FPC RTL PRTLEvent syntax
+type
+  PRTLEvent = pointer;
+
+function RTLEventCreate: PRTLEvent;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := pointer(Windows.CreateEvent(nil, false, false, nil));
+end;
+
+procedure RTLEventDestroy(state: PRTLEvent);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  Windows.CloseHandle(THandle(state));
+end;
+
+procedure RTLEventSetEvent(state: PRTLEvent);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  Windows.SetEvent(THandle(state));
+end;
+
+procedure RTLEventResetEvent(state: PRTLEvent);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  Windows.ResetEvent(THandle(state));
+end;
+
 procedure TSynEvent.OsReset;
 begin
   if Assigned(WaitOnAddress) then
