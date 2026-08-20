@@ -11569,65 +11569,50 @@ finally
 end;
 
 type
-  TNotifyTask = record
+  TNotifyTask = record // a typical event for TSynQueue record validation
     Name: string;
     Payload: RawJson;
     Active: boolean;
   end;
   TNotifyTaskDynArray = array of TNotifyTask;
 
-  TSynEventTest = class(TSynEvent)
-  public
-    procedure SimulateSetResetRace(OnlyOs: boolean);
-  end;
-
-procedure TSynEventTest.SimulateSetResetRace(OnlyOs: boolean);
-begin
-  if OnlyOS then
-  begin
-    fNotified := true; // not used in the actual logic anyway
-    OsReset;
-    OsWake;
-  end
-  else
-  begin
-    ResetEvent;
-    SetEvent;
-  end;
-end;
-
 procedure TTestCoreBase._TSynQueue;
 var
   o, i, j, k, n: integer; // not PtrInt
-  onlyos: boolean;
   f: TSynQueue;
   u, v: RawUtf8;
   r1, r2: TNotifyTask;
   savedint: TIntegerDynArray;
   savedu: TRawUtf8DynArray;
-  ev: TSynEventTest;
+  ev: TSynEvent;
 begin
   // validate TSynEvent process
-  ev := TSynEventTest.Create;
+  ev := TSynEvent.Create;
   try
-    for onlyos := false to true do
-      for i := 1 to 10 do
-      begin
-        // emulate a ResetEvent between the two SetEvent state updates
-        ev.SimulateSetResetRace(onlyos);
-        Check(ev.WaitFor(1000), 'WaitFor signal');
-        ev.SimulateSetResetRace(onlyos);
-        Check(ev.WaitFor(INFINITE), 'WaitFor(INFINITE) signal');
-        // validate the main-thread CheckSynchronize() wrapper as well
-        ev.SimulateSetResetRace(onlyos);
-        Check(ev.WaitForSafe(1000), 'WaitForSafe signal');
-        ev.SimulateSetResetRace(onlyos);
-        Check(ev.WaitForSafe(INFINITE), 'WaitForSafe(INFINITE) signal');
-      end;
+    CheckEqual(PtrUInt(GetCurrentThreadID), PtrUInt(MainThreadID), 'mainthread');
+    for i := 1 to 10 do
+    begin
+      // emulate a ResetEvent between the two SetEvent state updates
+      ev.ResetEvent;
+      ev.SetEvent;
+      Check(ev.WaitFor(1000), 'WaitFor signal');
+      ev.SetEvent;
+      ev.ResetEvent;
+      ev.SetEvent;
+      Check(ev.WaitFor(INFINITE), 'WaitFor(INFINITE) signal');
+      // validate the main-thread CheckSynchronize() wrapper as well
+      ev.ResetEvent;
+      ev.SetEvent;
+      Check(ev.WaitForSafe(1000), 'WaitForSafe signal');
+      ev.SetEvent;
+      ev.ResetEvent;
+      ev.SetEvent;
+      Check(ev.WaitForSafe(INFINITE), 'WaitForSafe(INFINITE) signal');
+    end;
   finally
     ev.Free;
   end;
-  exit;
+  // validate TSynQueue with integer values
   f := TSynQueue.Create(TypeInfo(TIntegerDynArray));
   try
     for o := 1 to 1000 do
@@ -11705,6 +11690,7 @@ begin
   finally
     f.Free;
   end;
+  // validate TSynQueue with string values
   f := TSynQueue.Create(TypeInfo(TRawUtf8DynArray));
   try
     for o := 1 to 1000 do
@@ -11755,6 +11741,7 @@ begin
   finally
     f.Free;
   end;
+  // validate TSynQueue with complex record type
   f := TSynQueue.Create(TypeInfo(TNotifyTaskDynArray));
   try
     checkEqual(f.Count, 0);
