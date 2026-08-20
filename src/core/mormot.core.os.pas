@@ -5130,18 +5130,15 @@ type
   end;
 
   /// our lightweight cross-platform TEvent-like component
-  // - on Windows, calls directly the CreateEvent/ResetEvent/SetEvent API - you
-  // may try API-MS-Win-Core-Synch-l1-2-0.dll with USEWINCORESYNC conditional
-  // - on POSIX, will use PRTLEvent which is lighter than TEvent BasicEvent
-  // and not slower than Linux eventfd() in wrk HTTP async benchmarks
+  // - on Linux, use directly an atomic CAS and private futex syscall if needed
+  // - on Windows 8+, use an atomic CAS and WaitOnAddress() API
+  // - on BSD or WinXP-7, fallback to FPC PRTLEvent or CreateEvent() Win32 API
   // - WARNING: you should wait from a single thread at once
   TSynEvent = class(TSynPersistent)
   protected
-    fHandle: pointer; // Windows THandle, FPC PRTLEvent or Delphi-POSIX TEvent
+    fRtlEvent: pointer; // Windows THandle, FPC PRTLEvent or Delphi-POSIX TEvent
+    fState: cardinal;   // 32-bit CAS (1=signaled) for OsWaitOnValue() futex API
     fNotified, fWaiting: boolean; // no state, just flags
-    procedure OsReset;                             {$ifdef FPC} inline; {$endif}
-    procedure OsWake;                              {$ifdef FPC} inline; {$endif}
-    function OsWait(TimeoutMS: cardinal): boolean; {$ifdef FPC} inline; {$endif}
   public
     /// initialize an instance of cross-platform event
     constructor Create; override;
@@ -11308,9 +11305,9 @@ begin
   end;
   {$endif SPINADAPT}
   dec(spin);
-  if spin = 0 then // eventually call the OS for long wait
+  if spin = 0 then      // eventually call the OS for long wait
   begin
-    SwitchToThread; // homonymous Win API call or proper POSIX call
+    SwitchToThread;     // proper OS yield API
     spin := SPIN_COUNT; // try again
   end;
   result := spin;
@@ -12363,22 +12360,73 @@ end;
 
 { TSynEvent }
 
+constructor TSynEvent.Create;
+begin
+  if not Assigned(OsWaitOnValue) then // futex API only on Linux or Win8+
+    fRtlEvent := RTLEventCreate;      // fallback to PRTLEvent
+  // for the futex API, fState CAS is 0 = non-signaled, 1 = signaled
+end;
+
+destructor TSynEvent.Destroy;
+begin
+  if Assigned(fRtlEvent) then
+    RTLEventDestroy(fRtlEvent); // release PRTLEvent handle
+  inherited Destroy;
+end;
+
 procedure TSynEvent.ResetEvent;
 begin
   fNotified := false;
-  OsReset;
+  if Assigned(fRtlEvent) then
+    RTLEventResetEvent(fRtlEvent) // use PRTLEvent fallback
+  else
+    LockedExc32(fState, 0, 1);    // pure CAS on Linux or Win8+
 end;
 
 procedure TSynEvent.SetEvent;
 begin
   fNotified := true; // should be set before notification
-  OsWake;
+  if Assigned(fRtlEvent) then
+    RTLEventSetEvent(fRtlEvent)
+  else if LockedExc32(fState, 1, 0) then
+    OsWakeOnValue(@fState);
 end;
 
 function TSynEvent.WaitFor(TimeoutMS: cardinal): boolean;
+var
+  ending, remain: Int64;
 begin
   fWaiting := true;
-  result := OsWait(TimeoutMS);
+  if Assigned(fRtlEvent) then
+    result := OsWaitFor(fRtlEvent, TimeoutMS, fNotified) // PRTLEvent fallback
+  else
+  begin
+    result := LockedExc32(fState, 0, 1); // fast CAS path
+    if (not result) and
+       (TimeoutMS <> 0) then // use fast futex API to wait for the signal
+    begin
+      result := true;
+      if TimeoutMS = INFINITE then
+        repeat
+          OsWaitOnValue(@fState, 0, INFINITE);
+        until LockedExc32(fState, 0, 1)
+      else
+      begin
+        ending := GetTickCount64 + TimeoutMS;
+        remain := TimeoutMS;
+        repeat
+          OsWaitOnValue(@fState, 0, remain);
+          if LockedExc32(fState, 0, 1) then
+            break; // was a true notification, not a spurious wake
+          remain := ending - GetTickCount64;
+          if remain > 0 then
+            continue;
+          result := false; // timeout
+          break;
+        until false;
+      end;
+    end;
+  end;
   if result then
     fNotified := false; // we consumed the signal
   fWaiting := false;

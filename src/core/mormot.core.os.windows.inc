@@ -1593,85 +1593,11 @@ begin
   Windows.ResetEvent(THandle(state));
 end;
 
-procedure TSynEvent.OsReset;
-begin
-  if Assigned(WaitOnAddress) then
-    LockedExc(PPtrUInt(@fHandle)^, 0, 1) // pure CAS on Win8+
-  else
-    Windows.ResetEvent(THandle(fHandle)); // WinXP/Vista/7
+function OsWaitFor(state: PRTLEvent; timeout: cardinal; notif: boolean): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+begin // Windows API returns true if it was signaled
+  result := WaitForSingleObject(THandle(state), timeout) = WAIT_OBJECT_0;
 end;
-
-procedure TSynEvent.OsWake;
-begin
-  if not Assigned(WaitOnAddress) then
-    Windows.SetEvent(THandle(fHandle)) // WinXP/Vista/7
-  else if LockedExc(PPtrUInt(@fHandle)^, 1, 0) then
-    WakeByAddressSingle(@fHandle);     // Win8+
-end;
-
-function TSynEvent.OsWait(TimeoutMS: cardinal): boolean;
-var
-  ending, remain: Int64;
-  zero: pointer; // same type as fHandle and LockedExc(PtrUInt)
-begin
-  if not Assigned(WaitOnAddress) then // WinXP/Vista/7 fallback
-  begin
-    result := WaitForSingleObject(THandle(fHandle), TimeoutMS) = WAIT_OBJECT_0;
-    exit;
-  end;
-  result := LockedExc(PPtrUInt(@fHandle)^, 0, 1);
-  if result or
-     (TimeoutMS = 0) then
-    exit; // fast CAS path on Win8+
-  result := true;
-  zero := nil;
-  if TimeoutMS = INFINITE then
-  begin
-    repeat
-      WaitOnAddress(@fHandle, @zero, SizeOf(fHandle), INFINITE);
-    until LockedExc(PPtrUInt(@fHandle)^, 0, 1);
-    exit;
-  end;
-  ending := GetTickCount64 + TimeoutMS;
-  remain := TimeoutMS;
-  repeat
-    WaitOnAddress(@fHandle, @zero, SizeOf(fHandle), remain);
-    if LockedExc(PPtrUInt(@fHandle)^, 0, 1) then
-      exit; // was a true notification, not a spurious wake
-    remain := ending - GetTickCount64;
-  until remain <= 0;
-  result := false; // timeout
-end;
-
-{$else}
-
-constructor TSynEvent.Create;
-begin
-  fHandle := pointer(CreateEvent(nil, false, false, nil));
-end;
-
-destructor TSynEvent.Destroy;
-begin
-  CloseHandle(THandle(fHandle));
-  inherited Destroy;
-end;
-
-procedure TSynEvent.OsReset;
-begin
-  Windows.ResetEvent(THandle(fHandle));
-end;
-
-procedure TSynEvent.OsWake;
-begin
-  Windows.SetEvent(THandle(fHandle));
-end;
-
-function TSynEvent.OsWait(TimeoutMS: cardinal): boolean;
-begin
-  result := WaitForSingleObject(THandle(fHandle), TimeoutMS) = WAIT_OBJECT_0;
-end;
-
-{$endif USEWINCORESYNC}
 
 // thread naming and "int 3" debug opcode only validated on Delphi Wintel
 {$ifndef WINTELDELPHI}

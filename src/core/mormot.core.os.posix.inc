@@ -2155,6 +2155,31 @@ begin
 end;
 {$endif FPCLINUX}
 
+function OsWaitFor(state: pointer; timeout: cardinal; notified: boolean): boolean;
+var
+  start, stop, microsecs: Int64; // rough heuristic if timed out or signaled
+begin
+  if timeout = INFINITE then
+  begin
+    RTLEventWaitFor(state);
+    exit(true); // INFINITE only returns on signal
+  end;
+  QueryPerformanceMicroSeconds(start);
+  RTLEventWaitFor(state, timeout); // FPC RTL procedure has no signal
+  if timeout = 0 then
+    exit(notified); // internal flag is all what we got here
+  QueryPerformanceMicroSeconds(stop);
+  microsecs := Int64(timeout) * MicroSecsPerMilliSec;
+  if timeout <= 10 then
+    if timeout <= 2 then
+      dec(microsecs, 100)
+    else
+      dec(microsecs, 200)
+  else
+    dec(microsecs, 500);
+  result := (stop - start) < microsecs;
+end;
+
 {$undef HASEVENTFD}
 {$undef HASGETRANDOM}
 // eventfd + getrandom syscalls validated on FPC Linux i386, x86_64 and aarch64
@@ -2172,62 +2197,6 @@ end;
     {$define HASGETRANDOM}
   {$endif CPUAARCH64}
 {$endif FPCLINUX}
-
-
-{ TSynEvent }
-
-constructor TSynEvent.Create;
-begin
-  fHandle := RTLEventCreate; // pthreads remains in userspace if possible
-end;
-
-destructor TSynEvent.Destroy;
-begin
-  RTLEventDestroy(fHandle);
-  inherited Destroy;
-end;
-
-procedure TSynEvent.OsReset;
-begin
-  RTLEventResetEvent(fHandle);
-end;
-
-procedure TSynEvent.OsWake;
-begin
-  RTLEventSetEvent(fHandle);
-end;
-
-function TSynEvent.OsWait(TimeoutMS: cardinal): boolean;
-var
-  start, stop, max: Int64;
-begin
-  if TimeoutMS = INFINITE then
-  begin
-    RTLEventWaitFor(fHandle);
-    result := true; // INFINITE only returns on signal
-  end
-  else
-  begin
-    QueryPerformanceMicroSeconds(start);
-    RTLEventWaitFor(fHandle, TimeoutMS); // procedure: has no signal
-    if TimeoutMS = 0 then
-      result := fNotified // internal flag is all what we got here
-    else
-    begin
-      QueryPerformanceMicroSeconds(stop);  // heuristic if Timeout or signaled
-      max := Int64(TimeoutMS) * MicroSecsPerMilliSec;
-      if TimeoutMS <= 10 then
-        if TimeoutMS <= 2 then
-          dec(max, 100)
-        else
-          dec(max, 200)
-      else
-        dec(max, 500);
-      result := (stop - start) < max;
-    end;
-  end;
-end;
-
 
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
 begin
