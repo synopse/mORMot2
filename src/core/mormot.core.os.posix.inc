@@ -2638,43 +2638,33 @@ begin
   tmp.Store.Done;
 end;
 
-function UnixKeyPending: boolean;
-begin
-  result := WaitReadPending(StdInputHandle, 0);
-end;
-
-{$I-}
-procedure ConsoleWaitForEnterKey;
+procedure ConsoleWaitForEnterKey(doCheckSynchronize: boolean);
 var
   c: AnsiChar;
 begin
   if GetCurrentThreadID = MainThreadID then
-  begin
-    SynDaemonIntercept; // intercept ^C and SIGQUIT - do nothing if already set
-    repeat
-      if IsMultiThread then
-        CheckSynchronize(100)
-      else
-        SleepHiRes(100);
-      if SynDaemonTerminated <> 0 then
-        break;
-      if UnixKeyPending then
-        repeat
-          c := #0;
-          if FpRead(StdInputHandle, @c, 1) <> 1 then
-            break;
-          if c in [#10, #13] then
-            exit;
-        until false;
-    until false;
-  end
+    SynDaemonIntercept // intercept ^C and SIGQUIT - do nothing if already set
   else
+    doCheckSynchronize := false;
+  while SynDaemonTerminated = 0 do
   begin
-    ReadLn;
-    ioresult;
+    if doCheckSynchronize then
+    begin
+      CheckSynchronize(1000);
+      if not WaitReadPending(StdInputHandle, 0) then
+        continue;
+    end
+    else if not WaitReadPending(StdInputHandle, 10000) then
+      continue;
+    repeat
+      c := #0;
+      if FpRead(StdInputHandle, @c, 1) <> 1 then
+        break;
+      if c in [#10, #13] then
+        exit;
+    until false;
   end;
 end;
-{$I+}
 
 function ConsoleStdInputLen: integer;
 var

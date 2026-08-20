@@ -4177,13 +4177,13 @@ procedure ConsoleWriteRaw(const Text: RawUtf8; NoLineFeed: boolean = false); ove
 procedure ConsoleWriteLn;
 
 /// will wait for the ENTER key to be pressed, with all needed waiting process
-// - on the main thread, will call Synchronize() for proper work e.g. with
-// interface-based service implemented as optExecInMainThread
+// - on the main thread, doCheckSynchronize=true calls Synchronize() for proper
+// work e.g. with interface-based service implemented as optExecInMainThread
 // - on Windows, from a non-main Thread, respond to PostThreadMessage(WM_QUIT)
 // - on Windows, also properly respond to Ctrl-C or closing console events
 // - on POSIX, will call SynDaemonIntercept first, so that Ctrl-C or SIG_QUIT
 // will also be intercepted and let this procedure return
-procedure ConsoleWaitForEnterKey;
+procedure ConsoleWaitForEnterKey(doCheckSynchronize: boolean = false);
 
 /// read all available content from stdin
 // - could be used to retrieve some file piped to the command line

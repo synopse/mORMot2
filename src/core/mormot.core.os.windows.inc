@@ -2876,12 +2876,13 @@ begin
     CheckSynchronize(0);
 end;
 
-procedure ConsoleWaitForEnterKey;
+procedure ConsoleWaitForEnterKey(doCheckSynchronize: boolean);
 begin
   ConsoleHandleCtrlCPressed := false;
   HandleCtrlC(TConsoleHandleCtrlC.HandleCtrlC);
   try
-    while (WinWaitFor({ms=}100, {handle=}0, {wm_quit=}true) = wwfTimeout) and
+    while (WinWaitFor({ms=}500, {handle=}0, {wm_quit=}true,
+             doCheckSynchronize) = wwfTimeout) and
           not ConsoleKeyPressed(VK_RETURN) and
           not ConsoleHandleCtrlCPressed do ;
   finally
