@@ -1593,7 +1593,7 @@ begin
   Windows.ResetEvent(THandle(state));
 end;
 
-function OsWaitFor(state: PRTLEvent; timeout: cardinal; notif: boolean): boolean;
+function RtlWaitFor(state: PRTLEvent; timeout: cardinal; notif: boolean): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 begin // Windows API returns true if it was signaled
   result := WaitForSingleObject(THandle(state), timeout) = WAIT_OBJECT_0;

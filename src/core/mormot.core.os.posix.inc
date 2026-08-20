@@ -2155,7 +2155,7 @@ begin
 end;
 {$endif FPCLINUX}
 
-function OsWaitFor(state: pointer; timeout: cardinal; notified: boolean): boolean;
+function RtlWaitFor(state: pointer; timeout: cardinal; notified: boolean): boolean;
 var
   start, stop, microsecs: Int64; // rough heuristic if timed out or signaled
 begin
