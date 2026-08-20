@@ -5289,12 +5289,12 @@ type
 function NewSynLocker: PSynLocker;
 
 /// raw cross-platform futex-like to wait while Value^ = Expected
-// - use futex on Linux, WaitOnAddress() on Win8+, or nil otherwise
-// - caller should ensure Value <> nil and use LockedExc32() for proper CAS
+// - use futex on Linux, WaitOnAddress() on Win8+, or equal nil otherwise
+// - caller should ensure Value <> nil and eventually make LockedExc32() CAS
 var OsWaitOnValue: procedure(Value: PCardinal; Expected, TimeoutMS: cardinal);
 
 /// raw cross-platform futex-like unlock of the next waiting OsWakeOnValue()
-// - use futex on Linux, WakeByAddresssingle() on Win8+, nil otherwise
+// - use futex on Linux, WakeByAddresssingle() on Win8+, equal nil otherwise
 var OsWakeOnValue: procedure(Value: PCardinal); {$ifdef OSWINDOWS} stdcall; {$endif}
 
 type

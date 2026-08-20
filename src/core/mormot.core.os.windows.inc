@@ -1562,7 +1562,7 @@ var
 
 procedure _OsWaitOnValue(Value: PCardinal; Expected, TimeoutMS: cardinal);
 begin
-  WaitOnAddress(Value, @Expected, SizeOf(Expected), TimeOutMS); // Win8+
+  WaitOnAddress(Value, @Expected, SizeOf(Expected), TimeOutMS); // Win8+ API
 end;
 
 // used only on XP/Vista/7 as fallback - follow FPC RTL PRTLEvent syntax
