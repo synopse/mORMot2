@@ -4824,7 +4824,7 @@ var
   begin
     repeat
       // note: WaitForMultipleObjects() with rd burns 100% of one core :(
-      case WinWaitFor({ms=}50, processinfo.hProcess) of
+      case WinWaitFor({ms=}500, processinfo.hProcess, roWinCheckSynchronize in options) of
         wwfSignaled:
           break;
         wwfFailed, wwfQuit:

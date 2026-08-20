@@ -6313,12 +6313,14 @@ type
   // roWinNoProcessDetach is defined - e.g. as RUN_CMD for RunCommand/RunRedirect
   // - roWinNewConsole won't inherit the parent console, but have its own console
   // - roWinKeepProcessOnTimeout won't make Ctrl+C / WM_QUIT or TerminateProcess
+  // - roWinCheckSynchronize will call CheckSynchronize() from the main thread
   TRunOptions = set of (
     roEnvAddExisting,
     roWinJobCloseChildren,
     roWinNoProcessDetach,
     roWinNewConsole,
-    roWinKeepProcessOnTimeout);
+    roWinKeepProcessOnTimeout,
+    roWinCheckSynchronize);
 
 const
   /// the default options for RunCommand() and RunRedirect() transient execution
