@@ -1698,7 +1698,8 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
                             SetLength(wasStringHacked, fParamCount shr 3 + 1);
                           SetBitPtr(pointer(wasStringHacked), i); // for unpatching below
                           {$endif FPC_64}
-                          oData := pointer(PtrUInt(pointer(VData)) - SizeOf(integer));
+                          oData := pointer(VData);
+                          dec(oDataStr, SizeOf(integer));
                           Inc(oLength, SizeOf(integer));
                         end;
                       end;
