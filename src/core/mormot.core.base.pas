@@ -3071,6 +3071,13 @@ procedure LockedInc64(int64: PInt64); inline;
 function LockedExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
   {$ifndef ASMINTEL} inline; {$endif}
 
+/// fast atomic compare-and-swap operation on a 32-bit integer value
+// - via Intel/AMD custom asm or FPC RTL InterlockedCompareExchange(pointer)
+// - true if Target was equal to Comparand, and Target set to NewValue
+// - Target should be aligned, which is the case when defined as a class field
+function LockedExc32(var Target: cardinal; NewValue, Comperand: cardinal): boolean;
+  {$ifndef ASMINTEL} inline; {$endif}
+
 /// fast atomic addition operation on a pointer-sized integer value
 // - via Intel/AMD custom asm or FPC RTL InterlockedExchangeAdd(pointer)
 // - Target should be aligned, which is the case when defined as a class field
@@ -11317,6 +11324,12 @@ function LockedExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
 begin
   result := {$ifdef ISDELPHI}AtomicCmpExchange{$else}InterlockedCompareExchange{$endif}(
     pointer(Target), pointer(NewValue), pointer(Comperand)) = pointer(Comperand);
+end;
+
+function LockedExc32(var Target: cardinal; NewValue, Comperand: cardinal): boolean;
+begin
+  result := {$ifdef ISDELPHI}AtomicCmpExchange{$else}InterlockedCompareExchange{$endif}(
+    Target, NewValue, Comperand) = Comperand;
 end;
 
 procedure LockedAdd32(var Target: cardinal; Increment: cardinal);

@@ -3063,6 +3063,13 @@ function LockedExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
         setz    al
 end;
 
+function LockedExc32(var Target: cardinal; NewValue, Comperand: cardinal): boolean;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     eax, Comperand
+   lock cmpxchg dword ptr [Target], NewValue
+        setz    al
+end;
+
 procedure LockedAdd(var Target: PtrUInt; Increment: PtrUInt);
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
    lock add     qword ptr [Target], Increment

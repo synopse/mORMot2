@@ -2551,6 +2551,14 @@ asm
         setz    al
 end;
 
+function LockedExc32(var Target: cardinal; NewValue, Comperand: cardinal): boolean;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        xchg    eax, ecx
+   lock cmpxchg dword ptr [ecx], edx
+        setz    al
+end;
+
 procedure LockedAdd(var Target: PtrUInt; Increment: PtrUInt);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
