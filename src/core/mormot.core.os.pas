@@ -12392,7 +12392,8 @@ begin
   fNotified := true; // should be set before notification
   if Assigned(fRtlEvent) then
     RTLEventSetEvent(fRtlEvent)
-  else if LockedExc32(fState, 1, 0) then
+  else if LockedExc32(fState, 1, 0) and
+          fWaiting then
     OsWakeOnValue(@fState);
 end;
 
