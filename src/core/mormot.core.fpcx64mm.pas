@@ -59,7 +59,7 @@ unit mormot.core.fpcx64mm;
 }
 
 // target a multi-threaded service on a modern CPU
-// - define FPCMM_DEBUG, FPCMM_ASSUMEMULTITHREAD, FPCMM_ERMS
+// - define FPCMM_DEBUG, FPCMM_ASSUMEMULTITHREAD, FPCMM_ERMS, FPCMM_TINYPERTHREAD
 // - currently mormot2tests run with no contention when FPCMM_SERVER is set :)
 {.$define FPCMM_SERVER}
 
@@ -71,7 +71,6 @@ unit mormot.core.fpcx64mm;
 // target high-end CPU/process when FPCMM_SERVER/FPCMM_BOOST are not enough
 // - will use 128 arenas for <= 256B blocks to scale on high number of cores;
 // - enable FPCMM_MULTIPLESMALLNOTWITHMEDIUM to reduce small pools locks;
-// - enable FPCMM_TINYPERTHREAD to assign threads to the 128 arenas;
 // - enable FPCMM_MEDIUMPERTHREAD for 4 user-medium arenas on Linux/Win64.
 {.$define FPCMM_BOOSTER}
 
@@ -129,8 +128,8 @@ unit mormot.core.fpcx64mm;
 // - defined for FPCMM_BOOSTER
 {.$define FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
 
-// use the current thread id to identify the arena for a Tiny block GetMem()
-// - defined for FPCMM_BOOSTER (requires enough tiny arenas)
+// use the current thread id to identify a prefered arena for Tiny block GetMem
+// - defined for FPCMM_SERVER since thread affinity matters even with 8 arenas
 // - warning: EXPERIMENTAL Linux and Win64 ONLY, due to very low-level asm trick
 {.$define FPCMM_TINYPERTHREAD}
 
@@ -187,7 +186,6 @@ interface
 {$ifdef FPCMM_BOOSTER}
   {$define FPCMM_BOOST}
   {$define FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
-  {$define FPCMM_TINYPERTHREAD}
   {$define FPCMM_MEDIUMPERTHREAD}
 {$endif FPCMM_BOOSTER}
 {$ifdef FPCMM_BOOST}
@@ -199,6 +197,7 @@ interface
   {$define FPCMM_DEBUG}
   {$define FPCMM_ASSUMEMULTITHREAD}
   {$define FPCMM_ERMS}
+  {$define FPCMM_TINYPERTHREAD} // thread affinity matters with a few threads
 {$endif FPCMM_SERVER}
 {$ifdef FPCMM_BOOSTER}
   {$undef FPCMM_DEBUG} // when performance matters more than stats
@@ -409,12 +408,12 @@ implementation
 
   The allocator handles the following families of memory blocks:
   - TINY <= 128 B (<= 256 B for FPCMM_BOOST)
-    Round-robin distribution into several arenas, fed from one or several pool(s)
-    (fair scaling from multi-threaded calls, with no threadvar nor GC involved)
+    Per-Thread or Round-robin distribution into 8-128 arenas, fed from one or
+    several pool(s) (fair scaling from with no threadvar nor GC involved)
   - SMALL <= 2600 B
     One arena per block size, fed from one or several pool(s)
   - MEDIUM <= 256 KB
-    Separated pool of bitmap-marked chunks, fed from 1MB of OS mmap/virtualalloc
+    Separated pool(s) of bitmap-marked chunks, fed from 1MB of OS mmap/virtualalloc
   - LARGE  > 256 KB
     Directly fed from OS mmap/virtualalloc with mremap when growing
 
@@ -424,8 +423,8 @@ implementation
   - Detailed per-block statistics with little performance penalty;
   - x86_64 code was refactored and tuned in respect to 2020's hardware;
   - Inlined SSE2 movaps loop or ERMS are more efficient that subfunction(s);
-  - New round-robin thread-friendly arenas of tiny blocks;
-  - Those arenas can be configured by size, and assigned by thread ID;
+  - New thread-friendly arenas of tiny (8 or 128) or medium blocks (4);
+  - Tiny/medium arenas are assigned by locked round-robin or by thread ID;
   - Tiny and small blocks can fed from their own pool(s), not the medium pool;
   - Lock-less free lists to reduce tiny/small/medium FreeMem thread contention;
   - Large blocks logic has been rewritten, especially realloc;
@@ -438,8 +437,8 @@ implementation
   - Tiny and Small blocks have per-pool lock when feeding;
   - Lock-less free lists reduce tiny/small GetMem/FreeMem thread contention;
   - Lock-less free lists reduce medium FreeMem thread contention;
-  - Medium and Large blocks have one giant lock over their own pool;
-  - Medium blocks have an unlocked prefetched memory chunk to reduce contention;
+  - Medium arenas and Large blocks have one giant lock over their own pool;
+  - Medium arenas have an unlocked prefetched memory chunk to reduce contention;
   - Large blocks don't lock during mmap/virtualalloc system calls;
   - SwitchToThread/nanosleep OS call is done after initial spinning;
   - FPCMM_DEBUG / WriteHeapStatus helps identifying the lock contention(s).
@@ -789,7 +788,7 @@ end;
 {$endif FPCMM_NOMREMAP}
 
 {$ifdef FPCMM_TINYPERTHREAD}
-function pthread_self: PtrUInt; external;
+function pthread_self: PtrUInt; external; // ensure is linked
 {$endif FPCMM_TINYPERTHREAD}
 
 // experimental detection of object class - use at your own risk
