@@ -2778,8 +2778,9 @@ begin
         atpReadPending:
           // secondary threads wait, then read and process pending events
           begin
+            fEvent.ResetEvent;
             include(fWakeUp, wuPossible); // to be set before WaitForEver
-            fEvent.ResetAndWaitForEver;
+            fEvent.WaitForEver;
             if Terminated then
               break;
             LockedInc32(@fOwner.fThreadPollingAwakeCount);

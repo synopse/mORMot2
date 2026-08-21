@@ -5156,8 +5156,6 @@ type
     // - returns true if was signaled by SetEvent, or false if aborted/destroyed
     function WaitForEver: boolean;
       {$ifdef HASINLINE} inline; {$endif}
-    /// slightly faster alternative to Reset + WaitForEver in the same thread
-    procedure ResetAndWaitForEver;
     /// wait until SetEvent is called, calling CheckSynchronize() on main thread
     // - returns true if was signaled by SetEvent, or false on timeout
     function WaitForSafe(TimeoutMS: cardinal; DisableSafe: boolean = false): boolean;
@@ -12434,25 +12432,6 @@ begin
   end;
   if result then
     fNotified := false; // we consumed the signal
-  fWaiting := false;
-end;
-
-procedure TSynEvent.ResetAndWaitForEver;
-begin
-  fNotified := false;
-  fWaiting := true;
-  if Assigned(fRtlEvent) then
-  begin
-    RTLEventResetEvent(fRtlEvent); // use PRTLEvent fallback
-    RtlWaitFor(fRtlEvent, INFINITE, false);
-  end
-  else
-  begin
-    fState := 0;
-    repeat
-      OsWaitOnValue(@fState, 0, INFINITE);
-    until LockedExc32(fState, 0, 1);
-  end;
   fWaiting := false;
 end;
 
