@@ -850,11 +850,17 @@ end;
 var
   HeapStatus: TMMStatus;
 
-{$ifdef FPCMM_DEBUG}
-
-procedure ReleaseCore;
-  {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
+procedure ReleaseCoreSafe;
+var
+  _c, _s, _d, _8, _9, _10, _11: pointer;
 asm
+        mov     _c,  rcx  // always preserve volatile registers
+        mov     _s,  rsi
+        mov     _d,  rdi
+        mov     _8,  r8
+        mov     _9,  r9
+        mov     _10, r10
+        mov     _11, r11
         {$ifdef FPCMM_SLEEPTSC}
         rdtsc // returns the TSC in EDX:EAX
         shl     rdx, 32
@@ -873,17 +879,14 @@ asm
         lea     rdx, [rip + HeapStatus]
         {$endif FPCMM_SLEEPTSC}
    lock inc     qword ptr [rdx + TMMStatus.SleepCount]
+        mov     rcx, _c
+        mov     rsi, _s
+        mov     rdi, _d
+        mov     r8,  _8
+        mov     r9,  _9
+        mov     r10, _10
+        mov     r11, _11
 end;
-
-{$else}
-
-procedure ReleaseCore;
-begin
-  SwitchToThread;
-  inc(HeapStatus.SleepCount); // indicative counter
-end;
-
-{$endif FPCMM_DEBUG}
 
 procedure NotifyArenaAlloc(var Arena: TMMStatusArena; Size: PtrUInt);
   nostackframe; assembler;
@@ -1263,15 +1266,7 @@ asm
   lock  cmpxchg byte ptr [rcx].TMediumBlockInfo.Locked, ah
         je      @ok
         jmp     @sp
-@rc:    push    rsi // preserve POSIX and Win64 ABI registers
-        push    rdi
-        push    r10
-        push    r11
-        call    ReleaseCore // Windows SwitchToThread or POSIX nanosleep(1us)
-        pop     r11
-        pop     r10
-        pop     rdi
-        pop     rsi
+@rc:    call    ReleaseCoreSafe // Windows SwitchToThread or POSIX nanosleep(1us)
         lea     rax, [rip + HeapStatus]
         {$ifdef FPCMM_DEBUG} lock {$endif}
         inc     qword ptr [rax].TMMStatus.Medium.SleepCount
@@ -1434,7 +1429,7 @@ asm
   lock  cmpxchg byte ptr [rcx], ah
         je      @ok
         jmp     @sp
-@rc:    call    ReleaseCore
+@rc:    call    ReleaseCoreSafe
         lea     rax, [rip + HeapStatus]
         {$ifdef FPCMM_DEBUG} lock {$endif}
         inc     qword ptr [rax].TMMStatus.Large.SleepCount
@@ -1824,11 +1819,7 @@ asm
         movzx   rax, [rbx].TSmallBlockType.BlockSize
         shr     rax, 2 // div by SmallBlockGranularity then * SizeOf(cardinal)
    lock inc     dword ptr [r8 + rax - 4].TSmallBlockInfo.GetmemSleepCount
-        push    r8
-        push    rcx
-        call    ReleaseCore
-        pop     rcx
-        pop     r8
+        call    ReleaseCoreSafe
         jmp     @LockTinyBlockTypeLoop
         // ---------- SMALL (size<2600) block lock ----------
 @NotTinyBlockType:
@@ -1926,7 +1917,7 @@ asm
         movzx   rax, [rbx].TSmallBlockType.BlockSize
         shr     rax, 2 // div by SmallBlockGranularity then * SizeOf(cardinal)
    lock inc     dword ptr [rcx + rax - 4].TSmallBlockInfo.GetmemSleepCount
-        call    ReleaseCore
+        call    ReleaseCoreSafe
         jmp     @LockBlockTypeLoopRetry
         // ---------- TINY/SMALL block registration ----------
         {$ifndef FPCMM_ASSUMEMULTITHREAD}
