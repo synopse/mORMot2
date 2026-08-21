@@ -4131,6 +4131,7 @@ procedure TTestCoreBase._TRawUtf8Interning;
 var
   int: TRawUtf8Interning;
   i, v: integer;
+  sr: PStrRecConst; // refers to UINT_999[]
   tmp: RawUtf8;
   vs: TRawUtf8DynArray;
   timer: TPrecisionTimer;
@@ -4224,8 +4225,8 @@ begin
     timer.Start;
     for i := 0 to MAX do
     begin
-      v := i and 511;
-      int.Unique(vs[i], pointer(SmallUInt32Utf8[v]), length(SmallUInt32Utf8[v]));
+      sr := @UINT_999[i and 511];
+      int.Unique(vs[i], @sr^.TextLo, sr^.Header.length);
     end;
     NotifyTestSpeed('interning %', [KB(INTSIZE)], MAX, DIRSIZE, @timer);
     for i := 0 to MAX do
@@ -4235,7 +4236,9 @@ begin
     check(int.Count = 512);
     for i := 0 to MAX do
       check(Utf8ToInteger(vs[i]) = i and 511);
+    timer.Start;
     vs := nil; // fair test
+    NotifyTestSpeed('intern clear %', [KB(INTSIZE)], MAX, DIRSIZE, @timer);
     check(int.Count = 512);
     check(int.Clean = 512);
     check(int.Count = 0);
@@ -4246,12 +4249,15 @@ begin
   timer.Start;
   for i := 0 to MAX do
   begin
-    v := i and 511;
-    FastSetString(vs[i], pointer(SmallUInt32Utf8[v]), length(SmallUInt32Utf8[v]));
+    sr := @UINT_999[i and 511];
+    FastSetString(vs[i], @sr^.TextLo, sr^.Header.length);
   end;
   NotifyTestSpeed('direct %', [KB(DIRSIZE)], MAX, DIRSIZE, @timer);
   for i := 0 to MAX do
     check(Utf8ToInteger(vs[i]) = i and 511);
+  timer.Start;
+  vs := nil; // fair test
+  NotifyTestSpeed('direct clear %', [KB(DIRSIZE)], MAX, DIRSIZE, @timer);
 end;
 
 function kr32reference(buf: PAnsiChar; len: cardinal): cardinal;
