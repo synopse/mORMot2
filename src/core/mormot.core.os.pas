@@ -12362,11 +12362,14 @@ end;
 
 { TSynEvent }
 
+const // fState CAS bits for the TSynEvent futex API
+  EV_SIGNAL = 1;
+  EV_WAIT   = 2;
+
 constructor TSynEvent.Create;
 begin
   if not Assigned(OsWaitOnValue) then // futex API only on Linux or Win8+
     fRtlEvent := RTLEventCreate;      // fallback to PRTLEvent
-  // for the futex API, fState CAS is 0 = non-signaled, 1 = signaled
 end;
 
 destructor TSynEvent.Destroy;
@@ -12382,57 +12385,76 @@ begin
   if Assigned(fRtlEvent) then
     RTLEventResetEvent(fRtlEvent) // use PRTLEvent fallback
   else
-    LockedExc32(fState, 0, 1);    // pure CAS on Linux or Win8+
+    repeat
+      state := fState;
+    until ((state and EV_SIGNAL) = 0) or // not yet signaled
+          LockedExc32(fState, state and not EV_SIGNAL, state);
 end;
 
 procedure TSynEvent.SetEvent;
+var
+  state: cardinal;
 begin
   fNotified := true; // should be set before notification
   if Assigned(fRtlEvent) then
     RTLEventSetEvent(fRtlEvent)
-  else if LockedExc32(fState, 1, 0) and
-          fWaiting then
-    OsWakeOnValue(@fState);
+  else
+    repeat
+      state := fState;
+      if (state and EV_SIGNAL) <> 0 then
+        exit; // already signaled
+      if LockedExc32(fState, state or EV_SIGNAL, state) then
+      begin
+        if (state and EV_WAIT) <> 0 then
+          OsWakeOnValue(@fState); // release pending WaitFor()
+        exit;
+      end;
+    until false;
 end;
 
 function TSynEvent.WaitFor(TimeoutMS: cardinal): boolean;
 var
   ending, remain: Int64;
 begin
-  fWaiting := true;
-  if Assigned(fRtlEvent) then
-    result := RtlWaitFor(fRtlEvent, TimeoutMS, fNotified) // PRTLEvent fallback
-  else
+  if Assigned(fRtlEvent) then // PRTLEvent fallback
   begin
-    result := LockedExc32(fState, 0, 1); // fast CAS path
-    if (not result) and
-       (TimeoutMS <> 0) then // use fast futex API to wait for the signal
-    begin
-      result := true;
-      if TimeoutMS = INFINITE then
-        repeat
-          OsWaitOnValue(@fState, 0, INFINITE);
-        until LockedExc32(fState, 0, 1)
-      else
-      begin
-        ending := GetTickCount64 + TimeoutMS;
-        remain := TimeoutMS;
-        repeat
-          OsWaitOnValue(@fState, 0, remain);
-          if LockedExc32(fState, 0, 1) then
-            break; // was a true notification, not a spurious wake
-          remain := ending - GetTickCount64;
-          if remain > 0 then
-            continue;
-          result := false; // timeout
-          break;
-        until false;
-      end;
-    end;
+    fState := fState or EV_WAIT;
+    result := RtlWaitFor(fRtlEvent, TimeoutMS, (fState and EV_SIGNAL) <> 0);
+    if result then
+      fState := fState and not EV_SIGNAL; // we consumed the signal
+    fState := fState and not EV_WAIT;
+    exit;
   end;
-  if result then
-    fNotified := false; // we consumed the signal
-  fWaiting := false;
+  result := LockedExc32(fState, 0, EV_SIGNAL); // fast CAS path
+  if result or
+     (TimeoutMS = 0) then
+    exit;
+  result := true;
+  if LockedExc32(fState, EV_WAIT, 0) then // we acquired fState = EV_WAIT
+    if TimeoutMS = INFINITE then
+      repeat
+        OsWaitOnValue(@fState, EV_WAIT, INFINITE); // may be spurious wake
+      until LockedExc32(fState, 0, EV_WAIT or EV_SIGNAL)
+    else
+    begin
+      ending := GetTickCount64 + TimeoutMS;
+      remain := TimeoutMS;
+      repeat
+        OsWaitOnValue(@fState, EV_WAIT, remain);
+        if LockedExc32(fState, 0, EV_WAIT or EV_SIGNAL) then
+          break; // was a true notification, not a spurious wake
+        remain := ending - GetTickCount64;
+        if remain > 0 then
+          continue;
+        result := false; // timeout
+        break;
+      until false;
+    end
+  else // there should be a single waiter: check again if was signaled
+    result := LockedExc32(fState, 0, EV_SIGNAL);
+  if not result then
+    if not LockedExc32(fState, 0, EV_WAIT) then
+      result := LockedExc32(fState, 0, EV_WAIT or EV_SIGNAL); // last chance
 end;
 
 function TSynEvent.SleepStep(var start: Int64; terminated: PBoolean): Int64;
