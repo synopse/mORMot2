@@ -138,7 +138,7 @@ type
     coMaxConnects            = CURLOPTTYPE_LONG + 71,
     coObsolete72             = CURLOPTTYPE_LONG + 72,
     coFreshConnect           = CURLOPTTYPE_LONG + 74,
-    coForbidResue            = CURLOPTTYPE_LONG + 75,
+    coForbidReuse            = CURLOPTTYPE_LONG + 75,
     coRandomFile             = CURLOPTTYPE_STRINGPOINT + 76, // deprecated
     coEGDSocket              = CURLOPTTYPE_STRINGPOINT + 77, // deprecated
     coConnectTimeout         = CURLOPTTYPE_LONG + 78,

@@ -12451,7 +12451,7 @@ begin
     fState := 0;
     repeat
       OsWaitOnValue(@fState, 0, INFINITE);
-    until LockedExc32(fState, 0, 1)
+    until LockedExc32(fState, 0, 1);
   end;
   fWaiting := false;
 end;
