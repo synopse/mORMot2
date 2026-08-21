@@ -1142,6 +1142,8 @@ const
   {$endif FPCMM_LARGEBIGALIGN}
 
 // all T*BlockInfo variables are local to this unit, so are FPC_PIC compatible
+
+{$CODEALIGN VARMIN=64} // align all those var to 64 bytes = CPU cache line size
 var
   SmallBlockInfo: TSmallBlockInfo;
   MediumBlockInfo: TMediumBlockInfo;
