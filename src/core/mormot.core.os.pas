@@ -5133,12 +5133,11 @@ type
   // - on Linux, use directly an atomic CAS and private futex syscall if needed
   // - on Windows 8+, use an atomic CAS and WaitOnAddress() API
   // - on BSD or WinXP-7, fallback to FPC PRTLEvent or CreateEvent() Win32 API
-  // - WARNING: you should wait from a single thread at once
+  // - WARNING: by design, this class accept a single WaitFor() thread
   TSynEvent = class(TSynPersistent)
   protected
     fRtlEvent: pointer; // Windows THandle, FPC PRTLEvent or Delphi-POSIX TEvent
-    fState: cardinal;   // 32-bit CAS (1=signaled) for OsWaitOnValue() futex API
-    fNotified, fWaiting: boolean; // no state, just flags
+    fState: cardinal;   // 32-bit CAS futex (bit 1=signaled, bit 2=waiting)
   public
     /// initialize an instance of cross-platform event
     constructor Create; override;
@@ -5163,12 +5162,10 @@ type
     function SleepStep(var start: Int64; terminated: PBoolean): Int64;
     /// low-level read-only access to the internal SetEvent flag
     // - only indicative, and not truly thread-safe by design
-    property Notified: boolean
-      read fNotified;
+    function Notified: boolean;
     /// low-level flag if WaitFor/WaitForEver/WaitForSafe are blocking
     // - only indicative, and not truly thread-safe by design
-    property Waiting: boolean
-      read fWaiting;
+    function Waiting: boolean;
   end;
 
   /// a thread-safe class with a virtual constructor and properties persistence
@@ -12379,11 +12376,25 @@ begin
   inherited Destroy;
 end;
 
-procedure TSynEvent.ResetEvent;
+function TSynEvent.Notified: boolean;
 begin
-  fNotified := false;
+  result := (fState and EV_SIGNAL) <> 0; // only informative
+end;
+
+function TSynEvent.Waiting: boolean;
+begin
+  result := (fState and EV_WAIT) <> 0;   // only informative
+end;
+
+procedure TSynEvent.ResetEvent;
+var
+  state: cardinal;
+begin
   if Assigned(fRtlEvent) then
-    RTLEventResetEvent(fRtlEvent) // use PRTLEvent fallback
+  begin
+    fState := fState and not EV_SIGNAL;
+    RTLEventResetEvent(fRtlEvent); // use PRTLEvent fallback
+  end
   else
     repeat
       state := fState;
@@ -12395,9 +12406,11 @@ procedure TSynEvent.SetEvent;
 var
   state: cardinal;
 begin
-  fNotified := true; // should be set before notification
   if Assigned(fRtlEvent) then
-    RTLEventSetEvent(fRtlEvent)
+  begin
+    fState := fState or EV_SIGNAL;
+    RTLEventSetEvent(fRtlEvent);
+  end
   else
     repeat
       state := fState;
