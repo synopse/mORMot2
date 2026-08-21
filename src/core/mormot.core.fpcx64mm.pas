@@ -1175,15 +1175,15 @@ var
 
 procedure GetSmallLastFreeBlock; nostackframe; assembler;
 asm
-        // input: rbx=TSmallBlockType
-        mov     rax, rbx
+        // input: rsi = TSmallBlockType
+        mov     rax, rsi
         lea     r10, [rip + SmallBlockInfo]
         sub     rax, r10
         shr     eax, SmallBlockTypePO2 - 3 // 1 shl 3 = SizeOf(SmallLastFree[])
         lea     r10, [r10 + rax].TSmallBlockInfo.SmallLastFree
-        // r10 = @SmallLastFree[] of this rbx
+        // r10 = @SmallLastFree[] of this rsi = TSmallBlockType
         mov     eax, $100
-  lock  cmpxchg byte ptr [rbx].TSmallBlockType.LastFreeLocked, ah
+  lock  cmpxchg byte ptr [rsi].TSmallBlockType.LastFreeLocked, ah
         je      @ok
         xor     rax, rax // just try once to acquire the lock
         ret
@@ -1192,9 +1192,9 @@ asm
         jz      @done
         mov     r11, [rax] // very simple (and quick) linked list pattern
         mov     [r10], r11
-        dec     dword ptr [rbx].TSmallBlockType.LastFreeCount
+        dec     dword ptr [rsi].TSmallBlockType.LastFreeCount
         test    rax, rax   // dec above did change the z flag
-@done:  mov     byte ptr [rbx].TSmallBlockType.LastFreeLocked, false
+@done:  mov     byte ptr [rsi].TSmallBlockType.LastFreeLocked, false
         // nz = rax=to be freed or z = nothing found - modifies r10+r11
 end;
 
@@ -1696,16 +1696,13 @@ end;
 
 function _GetMem(size: PtrUInt): pointer;
   {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
-asm
+asm     // size = rcx on Windows, = rdi on SystemV; use rsi = TSmallBlockType
         {$ifdef MSWINDOWS}
         push    rsi
         push    rdi
-        {$else}
-        mov     rcx, size
         {$endif MSWINDOWS}
-        push    rbx
         // Since most allocations are for small blocks, determine small block type
-        lea     rbx, [rip + SmallBlockInfo]
+        lea     rsi, [rip + SmallBlockInfo]
 @VoidSizeToSomething:
         lea     rdx, [size + BlockHeaderSize - 1]
         shr     rdx, 4 // div SmallBlockGranularity
@@ -1715,11 +1712,11 @@ asm
         test    size, size
         jz      @VoidSize
         {$ifndef FPCMM_ASSUMEMULTITHREAD}
-        mov     rax, qword ptr [rbx].TSmallBlockInfo.IsMultiThreadPtr
+        mov     rax, qword ptr [rsi].TSmallBlockInfo.IsMultiThreadPtr
         {$endif FPCMM_ASSUMEMULTITHREAD}
         // Get the tiny/small TSmallBlockType[] offset in rcx
-        movzx   ecx, byte ptr [rbx + rdx].TSmallBlockInfo.GetmemLookup
-        mov     r8, rbx
+        movzx   ecx, byte ptr [rsi + rdx].TSmallBlockInfo.GetmemLookup
+        mov     r8, rsi
         shl     ecx, SmallBlockTypePO2
         // ---------- Acquire block type lock ----------
         {$ifndef FPCMM_ASSUMEMULTITHREAD}
@@ -1732,7 +1729,7 @@ asm
         // ---------- TINY (size<=128/256) block lock ----------
 @LockTinyBlockTypeLoop:
         {$ifdef FPCMM_TINYPERTHREAD}
-        lea     rbx, [r8 + rcx]
+        lea     rsi, [r8 + rcx]
         mov     edx, $9E3779B1   // KNUTH_HASH32_MUL magic number
         {$ifdef LINUX}
         mov     rax, qword ptr [r8].TSmallBlockInfo.IsMultiThreadPtr
@@ -1749,11 +1746,11 @@ asm
         unsupported
         {$endif WINDOWS}
         {$endif LINUX}
-        mul     edx     // 1 cycle on modern CPUs
+        mul     edx     // very fast on modern CPUs
         shr     eax, 32 - NumTinyBlockArenasPO2 // high bits hash truncate
         jz      @Aren0  // Arena 0 = TSmallBlockInfo.Small[]
         shl     eax, NumTinyBlockTypesPO2 + SmallBlockTypePO2 // TTinyBlockTypes
-        lea	rbx, [rax + rbx + TSmallBlockInfo.Tiny - SizeOf(TTinyBlockTypes)]
+        lea	rsi, [rax + rsi + TSmallBlockInfo.Tiny - SizeOf(TTinyBlockTypes)]
 @Aren0: mov     edx, NumTinyBlockArenas + 1 // 8/128 Small + Tiny[] arenas
         jmp     @TinySmall
         {$else}
@@ -1764,10 +1761,10 @@ asm
         mov     eax, SizeOf(TTinyBlockTypes)
         {$ifdef FPCMM_TINYPERTHREAD}
         // try next arenas following the per-thread one
-        sub     rbx, r8
-        sub     rbx, rcx
+        sub     rsi, r8
+        sub     rsi, rcx
         jz      @Sml    // from Small[rcx] to Tiny[0][rcx]
-        lea     rax, [rax * 2 + rbx - TSmallBlockInfo.Tiny] // Tiny[+1][rcx]
+        lea     rax, [rax * 2 + rsi - TSmallBlockInfo.Tiny] // Tiny[+1][rcx]
 @Sml:   {$else}
         // fair distribution among calls to reduce thread contention
         {$ifdef FPCMM_BOOST}
@@ -1776,47 +1773,46 @@ asm
         {$endif FPCMM_BOOST}
         xadd    dword ptr [r8 + TSmallBlockInfo.TinyCurrentArena], eax
         {$endif FPCMM_TINYPERTHREAD}
-        lea     rbx, [r8 + rcx]
+        lea     rsi, [r8 + rcx]
         and     eax, ((NumTinyBlockArenas + 1) * SizeOf(TTinyBlockTypes)) - 1
         jz      @TinySmall // Arena 0 = TSmallBlockInfo.Small[]
-	lea	rbx, [rax + rbx + TSmallBlockInfo.Tiny - SizeOf(TTinyBlockTypes)]
+	lea	rsi, [rax + rsi + TSmallBlockInfo.Tiny - SizeOf(TTinyBlockTypes)]
 @TinySmall:
         // Can we get a Tiny block from its LastFree list?
-        cmp     dword ptr [rbx].TSmallBlockType.LastFreeCount, 0
+        cmp     dword ptr [rsi].TSmallBlockType.LastFreeCount, 0
         je      @NoLastFree
-        cmp     byte ptr [rbx].TSmallBlockType.LastFreeLocked, false
+        cmp     byte ptr [rsi].TSmallBlockType.LastFreeLocked, false
         jne     @NoLastFree
         call    GetSmallLastFreeBlock
-        jz      @NoLastFree
         {$ifdef NOSFRAME}
-        pop     rbx
+        jz      @NoLastFree
         ret
         {$else}
-        jmp     @Done // on Win64, a stack frame is required
+        jnz     @Quit // on Win64, a stack frame is required
         {$endif NOSFRAME}
 @NoLastFree:
         // Try to lock this Tiny block
         mov     eax, $100
         {$ifdef FPCMM_CMPBEFORELOCK}
-        cmp     byte ptr [rbx].TSmallBlockType.Locked, false // no lock in loop
+        cmp     byte ptr [rsi].TSmallBlockType.Locked, false // no lock in loop
         jnz     @NextTinyBlockArena1
         {$endif FPCMM_CMPBEFORELOCK}
-  lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
+  lock  cmpxchg byte ptr [rsi].TSmallBlockType.Locked, ah
         je      @GotLockOnSmallBlockType
 @NextTinyBlockArena1:
         dec     edx
         jnz     @TinyBlockArenaLoop
         // Fallback to SmallBlockInfo.Small[] next 2 small sizes - never occurs
-        lea     rbx, [r8 + rcx + TSmallBlockInfo.Small + SizeOf(TSmallBlockType)]
+        lea     rsi, [r8 + rcx + TSmallBlockInfo.Small + SizeOf(TSmallBlockType)]
         mov     eax, $100
-  lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
+  lock  cmpxchg byte ptr [rsi].TSmallBlockType.Locked, ah
         je      @GotLockOnSmallBlockType
-        add     rbx, SizeOf(TSmallBlockType) // next two small sizes
+        add     rsi, SizeOf(TSmallBlockType) // next two small sizes
         mov     eax, $100
-  lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
+  lock  cmpxchg byte ptr [rsi].TSmallBlockType.Locked, ah
         je      @GotLockOnSmallBlockType
         // Thread Contention (_Freemem is more likely)
-        movzx   rax, [rbx].TSmallBlockType.BlockSize
+        movzx   rax, [rsi].TSmallBlockType.BlockSize
         shr     rax, 2 // div by SmallBlockGranularity then * SizeOf(cardinal)
    lock inc     dword ptr [r8 + rax - 4].TSmallBlockInfo.GetmemSleepCount
         call    ReleaseCoreSafe
@@ -1824,38 +1820,37 @@ asm
         // ---------- SMALL (size<2600) block lock ----------
 @NotTinyBlockType:
         // Try to get a Small block from its SmallLastFree[] list or the next two
-        lea     rbx, [r8 + rcx].TSmallBlockInfo.Small
-        cmp     dword ptr [rbx].TSmallBlockType.LastFreeCount, 0
+        lea     rsi, [r8 + rcx].TSmallBlockInfo.Small
+        cmp     dword ptr [rsi].TSmallBlockType.LastFreeCount, 0
         je      @SLL0
-        cmp     byte ptr [rbx].TSmallBlockType.LastFreeLocked, false
+        cmp     byte ptr [rsi].TSmallBlockType.LastFreeLocked, false
         je      @SmallLockLess0
-@SLL0:  cmp     dword ptr [rbx + SmallBlockTypeSize].TSmallBlockType.LastFreeCount, 0
+@SLL0:  cmp     dword ptr [rsi + SmallBlockTypeSize].TSmallBlockType.LastFreeCount, 0
         je      @SLL1
-        cmp     byte ptr [rbx + SmallBlockTypeSize].TSmallBlockType.LastFreeLocked, false
+        cmp     byte ptr [rsi + SmallBlockTypeSize].TSmallBlockType.LastFreeLocked, false
         je      @SmallLockLess1
-@SLL1:  cmp     dword ptr [rbx + SmallBlockTypeSize * 2].TSmallBlockType.LastFreeCount, 0
+@SLL1:  cmp     dword ptr [rsi + SmallBlockTypeSize * 2].TSmallBlockType.LastFreeCount, 0
         je      @LockBlockTypeLoopRetry
-        cmp     byte ptr [rbx + SmallBlockTypeSize * 2].TSmallBlockType.LastFreeLocked, false
+        cmp     byte ptr [rsi + SmallBlockTypeSize * 2].TSmallBlockType.LastFreeLocked, false
         je      @LockBlockTypeLoopRetry
-        add     rbx, SizeOf(TSmallBlockType) * 2
+        add     rsi, SizeOf(TSmallBlockType) * 2
         call    GetSmallLastFreeBlock
-        jnz     {$ifdef NOSFRAME} @SLL {$else} @Done {$endif}
-        sub     rbx, SizeOf(TSmallBlockType) * 2
+        jnz     {$ifdef NOSFRAME} @SLL {$else} @Quit {$endif}
+        sub     rsi, SizeOf(TSmallBlockType) * 2
         jmp     @LockBlockTypeLoopRetry
 @SmallLockLess0:
         call    GetSmallLastFreeBlock
         jz      @SLL0
 @SLL:   {$ifdef NOSFRAME}
-        pop     rbx
         ret
         {$else}
-        jmp     @Done // on Win64, a stack frame is required
+        jmp     @Quit// on Win64, a stack frame is required
         {$endif NOSFRAME}
 @SmallLockLess1:
-        add     rbx, SizeOf(TSmallBlockType)
+        add     rsi, SizeOf(TSmallBlockType)
         call    GetSmallLastFreeBlock
-        jnz     {$ifdef NOSFRAME} @SLL {$else} @Done {$endif}
-        sub     rbx, SizeOf(TSmallBlockType)
+        jnz     {$ifdef NOSFRAME} @SLL {$else} @Quit {$endif}
+        sub     rsi, SizeOf(TSmallBlockType)
         jmp     @SLL1
         // Try to lock this Small block or the next two
 @LockBlockTypeLoopRetry:
@@ -1872,33 +1867,33 @@ asm
         // Grab the default block type
         mov     eax, $100
         {$ifdef FPCMM_CMPBEFORELOCK}
-        cmp     byte ptr [rbx].TSmallBlockType.Locked, false
+        cmp     byte ptr [rsi].TSmallBlockType.Locked, false
         jnz     @NextLockBlockType1
         {$endif FPCMM_CMPBEFORELOCK}
-  lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
+  lock  cmpxchg byte ptr [rsi].TSmallBlockType.Locked, ah
         je      @GotLockOnSmallBlockType
         // Try up to two next sizes
         mov     eax, $100
 @NextLockBlockType1:
-        add     rbx, SizeOf(TSmallBlockType)
+        add     rsi, SizeOf(TSmallBlockType)
         {$ifdef FPCMM_CMPBEFORELOCK}
-        cmp     byte ptr [rbx].TSmallBlockType.Locked, al
+        cmp     byte ptr [rsi].TSmallBlockType.Locked, al
         jnz     @NextLockBlockType2
         {$endif FPCMM_CMPBEFORELOCK}
-  lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
+  lock  cmpxchg byte ptr [rsi].TSmallBlockType.Locked, ah
         je      @GotLockOnSmallBlockType
         mov     eax, $100
 @NextLockBlockType2:
-        add     rbx, SizeOf(TSmallBlockType)
+        add     rsi, SizeOf(TSmallBlockType)
         pause
         {$ifdef FPCMM_CMPBEFORELOCK}
-        cmp     byte ptr [rbx].TSmallBlockType.Locked, al
+        cmp     byte ptr [rsi].TSmallBlockType.Locked, al
         jnz     @NextLockBlockType3
         {$endif FPCMM_CMPBEFORELOCK}
-  lock  cmpxchg byte ptr [rbx].TSmallBlockType.Locked, ah
+  lock  cmpxchg byte ptr [rsi].TSmallBlockType.Locked, ah
         je      @GotLockOnSmallBlockType
 @NextLockBlockType3:
-        sub     rbx, 2 * SizeOf(TSmallBlockType)
+        sub     rsi, 2 * SizeOf(TSmallBlockType)
         {$ifdef FPCMM_PAUSE}
         pause
         {$ifdef FPCMM_SLEEPTSC}
@@ -1914,7 +1909,7 @@ asm
         {$endif FPCMM_PAUSE}
         // Block type and two sizes larger are all locked - give up and sleep
         lea     rcx, [rip + SmallBlockInfo]
-        movzx   rax, [rbx].TSmallBlockType.BlockSize
+        movzx   rax, [rsi].TSmallBlockType.BlockSize
         shr     rax, 2 // div by SmallBlockGranularity then * SizeOf(cardinal)
    lock inc     dword ptr [rcx + rax - 4].TSmallBlockInfo.GetmemSleepCount
         call    ReleaseCoreSafe
@@ -1922,16 +1917,16 @@ asm
         // ---------- TINY/SMALL block registration ----------
         {$ifndef FPCMM_ASSUMEMULTITHREAD}
 @GotLockOnSmallBlock:
-        add     rbx, rcx
+        add     rsi, rcx
         {$endif FPCMM_ASSUMEMULTITHREAD}
 @GotLockOnSmallBlockType:
         // set rdx=NextPartiallyFreePool rax=FirstFreeBlock rcx=DropSmallFlagsMask
-        mov     rdx, [rbx].TSmallBlockType.NextPartiallyFreePool
-        add     [rbx].TSmallBlockType.GetmemCount, 1
+        mov     rdx, [rsi].TSmallBlockType.NextPartiallyFreePool
+        add     [rsi].TSmallBlockType.GetmemCount, 1
         mov     rax, [rdx].TSmallBlockPoolHeader.FirstFreeBlock
         mov     rcx, DropSmallFlagsMask
         // Is there a pool with free blocks?
-        cmp     rdx, rbx
+        cmp     rdx, rsi
         je      @TrySmallSequentialFeed
         add     [rdx].TSmallBlockPoolHeader.BlocksInUse, 1
         // Set the new first free block and the block header
@@ -1941,53 +1936,50 @@ asm
         // Is the chunk now full?
         jz      @RemoveSmallPool
         // Unlock the block type and leave
-        mov     byte ptr [rbx].TSmallBlockType.Locked, false
+        mov     byte ptr [rsi].TSmallBlockType.Locked, false
         {$ifdef NOSFRAME}
-        pop     rbx
         ret
         {$else}
-        jmp     @Done // on Win64, a stack frame is required
+        jmp     @Quit // on Win64, a stack frame is required
         {$endif NOSFRAME}
 @VoidSize:
         inc     size // "we always need to allocate something" (see RTL heap.inc)
         jmp     @VoidSizeToSomething
 @TrySmallSequentialFeed:
         // Feed a small block sequentially
-        movzx   ecx, [rbx].TSmallBlockType.BlockSize
-        mov     rdx, [rbx].TSmallBlockType.CurrentSequentialFeedPool
+        movzx   ecx, [rsi].TSmallBlockType.BlockSize
+        mov     rdx, [rsi].TSmallBlockType.CurrentSequentialFeedPool
         add     rcx, rax
         // Can another block fit?
-        cmp     rax, [rbx].TSmallBlockType.MaxSequentialFeedBlockAddress
+        cmp     rax, [rsi].TSmallBlockType.MaxSequentialFeedBlockAddress
         ja      @AllocateSmallBlockPool
         // Adjust number of used blocks and sequential feed pool
-        mov     [rbx].TSmallBlockType.NextSequentialFeedBlockAddress, rcx
+        mov     [rsi].TSmallBlockType.NextSequentialFeedBlockAddress, rcx
         add     [rdx].TSmallBlockPoolHeader.BlocksInUse, 1
         // Unlock the block type, set the block header and leave
-        mov     byte ptr [rbx].TSmallBlockType.Locked, false
+        mov     byte ptr [rsi].TSmallBlockType.Locked, false
         mov     [rax - BlockHeaderSize], rdx
         {$ifdef NOSFRAME}
-        pop     rbx
         ret
         {$else}
-        jmp     @Done // on Win64, a stack frame is required
+        jmp     @Quit // on Win64, a stack frame is required
         {$endif NOSFRAME}
 @RemoveSmallPool:
         // Pool is full - remove it from the partially free list
         mov     rcx, [rdx].TSmallBlockPoolHeader.NextPartiallyFreePool
-        mov     [rcx].TSmallBlockPoolHeader.PreviousPartiallyFreePool, rbx
-        mov     [rbx].TSmallBlockType.NextPartiallyFreePool, rcx
+        mov     [rcx].TSmallBlockPoolHeader.PreviousPartiallyFreePool, rsi
+        mov     [rsi].TSmallBlockType.NextPartiallyFreePool, rcx
         // Unlock the block type and leave
-        mov     byte ptr [rbx].TSmallBlockType.Locked, false
+        mov     byte ptr [rsi].TSmallBlockType.Locked, false
         {$ifdef NOSFRAME}
-        pop     rbx
         ret
         {$else}
-        jmp     @Done // on Win64, a stack frame is required
+        jmp     @Quit // on Win64, a stack frame is required
         {$endif NOSFRAME}
 @AllocateSmallBlockPool:
         // Access shared information about Medium blocks storage
         {$ifdef FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
-        mov     rax, rbx
+        mov     rax, rsi
         lea     rdx, [rip + SmallBlockInfo]
         sub     rax, rdx
         shr     eax, SmallBlockTypePO2 - 3 // 1 shl 3 = SizeOf(pointer)
@@ -2006,6 +1998,9 @@ asm
         je      @MediumLocked1
         call    LockMediumBlocks
 @MediumLocked1:
+        // From now own rbx=TSmallBlockType, so we need to preserve it
+        push    rbx
+        mov     rbx, rsi
         // Are there any available blocks of a suitable size?
         movsx   esi, [rbx].TSmallBlockType.AllowedGroupsForBlockPoolBitmap
         and     esi, [r10 + TMediumBlockInfo.BinGroupBitmap]
@@ -2113,7 +2108,7 @@ asm
         // Mark this block as used in the block following it
         and     byte ptr [rsi + rdi - BlockHeaderSize],  NOT PreviousMediumBlockIsFreeFlag
 @GotMediumBlock:
-        // rsi = free block, rbx = block type, edi = block size
+        // rsi = free block, rbx = small block type, edi = block size
         // Set the size and flags for this block
         lea     rcx, [rdi + IsMediumBlockFlag + IsSmallBlockPoolInUseFlag]
         mov     [rsi - BlockHeaderSize], rcx
@@ -2143,16 +2138,18 @@ asm
         {$endif NOSFRAME}
         // ---------- MEDIUM block allocation ----------
 @NotTinySmallBlock:
+        // from now on, we may use the rbx register
+        push    rbx
         // Do we need a Large block?
         {$ifndef FPCMM_MEDIUMPERTHREAD}
         lea     r10, [rip + MediumBlockInfo]
         {$endif FPCMM_MEDIUMPERTHREAD}
-        cmp     rcx, MaximumMediumBlockSize - BlockHeaderSize
+        cmp     size, MaximumMediumBlockSize - BlockHeaderSize
         ja      @IsALargeBlockRequest
         {$ifdef FPCMM_MEDIUMPERTHREAD}
         lea     r10, [rip + MediumBlockInfo]
         xor     r9d, r9d
-        mov     rax, qword ptr [rbx].TSmallBlockInfo.IsMultiThreadPtr
+        mov     rax, qword ptr [rsi].TSmallBlockInfo.IsMultiThreadPtr
         cmp     byte ptr [rax], false
         je      @MediumArenaSelected
         mov     edx, $9E3779B1 // same per-thread hash as tiny arenas
@@ -2176,7 +2173,7 @@ asm
 @MediumArenaSelected:
         {$endif FPCMM_MEDIUMPERTHREAD}
         // Get the bin size for this block size (rounded up to the next bin size)
-        lea     rbx, [rcx + MediumBlockGranularity - 1 + BlockHeaderSize - MediumBlockSizeOffset]
+        lea     rbx, [size + MediumBlockGranularity - 1 + BlockHeaderSize - MediumBlockSizeOffset]
         mov     rcx, r10
         and     ebx,  - MediumBlockGranularity
         add     ebx, MediumBlockSizeOffset
@@ -2349,7 +2346,7 @@ asm
         call    AllocateLargeBlock
 @Done:  // restore registers and the stack frame before ret
         pop     rbx
-        {$ifdef MSWINDOWS}
+@Quit:  {$ifdef MSWINDOWS}
         pop     rdi
         pop     rsi
         {$endif MSWINDOWS}
@@ -2602,7 +2599,9 @@ asm
         // Release the next SmallLastFree list block while we own the lock
         cmp     byte ptr [rbx].TSmallBlockType.LastFreeLocked, false
         jne     @NoBin
+        xchg    rsi, rbx // _GetMem() register usage
         call    GetSmallLastFreeBlock
+        xchg    rbx, rsi
         jz      @NoBin
         mov     rcx, rax
         mov     rdx, [rax - BlockHeaderSize]
