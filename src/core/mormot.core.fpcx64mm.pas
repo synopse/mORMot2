@@ -2498,7 +2498,7 @@ asm     // P = rcx on Windows, P = rdi on SystemV; use rsi = TSmallBlockType
         {$ifdef FPCMM_REPORTMEMORYLEAKS}
         mov     eax, REPORTMEMORYLEAK_FREEDHEXSPEAK // 00000000 BLODLESS marker
         {$endif FPCMM_REPORTMEMORYLEAKS}
-        test    rcx, rcx
+        test    P, P
         jz      @Void
         {$ifdef FPCMM_REPORTMEMORYLEAKS}
         mov     [rcx], rax // overwrite TObject VMT or string/dynarray header
