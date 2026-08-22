@@ -359,6 +359,22 @@ end;
 
 {$ifdef FPC_X64MM}
 
+{$ifdef LINUX}
+
+type
+  TFpcX64GetMem = function(Size: PtrUInt): pointer;
+
+function FpcX64GetMemWithNegativeRcx(GetMemProc: TFpcX64GetMem;
+  Size: PtrUInt): pointer; nostackframe; assembler;
+asm
+        mov     rax, rdi
+        mov     rdi, rsi
+        mov     rcx, -1
+        jmp     rax
+end;
+
+{$endif LINUX}
+
 procedure TTestCoreBase._fpcx64mm;
 const
   Sizes: array[0 .. 13] of PtrUInt = (
@@ -370,7 +386,17 @@ const
 var
   i: PtrInt;
   p: pointer;
+  {$ifdef LINUX}
+  manager: TMemoryManager;
+  {$endif LINUX}
 begin
+  {$ifdef LINUX}
+  GetMemoryManager(manager);
+  p := FpcX64GetMemWithNegativeRcx(manager.GetMem, 1024 * 1024);
+  Check(p <> nil, 'GetMem Linux large');
+  if p <> nil then
+    FreeMem(p);
+  {$endif LINUX}
   for i := 0 to high(Sizes) do
   begin
     p := GetMem(Sizes[i]);

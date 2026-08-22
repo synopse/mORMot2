@@ -2340,7 +2340,7 @@ asm     // size = rcx on Windows, = rdi on SystemV; use rsi = TSmallBlockType
         // ---------- LARGE block allocation ----------
 @IsALargeBlockRequest:
         xor     rax, rax
-        test    rcx, rcx
+        test    size, size
         js      @Done
         // Note: size is still in the rcx/rdi first param register
         call    AllocateLargeBlock
