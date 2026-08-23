@@ -11,7 +11,7 @@ unit mormot.core.fpcx64mm;
     - only for FPC on the x86_64 target - use the RTL MM on Delphi or ARM
     - based on proven FastMM4 by Pierre le Riche - with tuning and enhancements
     - can report detailed statistics (with threads contention and memory leaks)
-    - three app modes: default GUI app, FPCMM_SERVER or FPCMM_BOOSTER
+    - three main app modes: default FPCMM_SERVER, FPCMM_GUI, or FPCMM_BOOSTER
 
     Usage: include this unit as the very first in your FPC project uses clause
 
@@ -52,16 +52,21 @@ unit mormot.core.fpcx64mm;
 
 {
   TL;DR:
-    1. default settings target GUI/console almost-mono-threaded apps;
-    2. define FPCMM_SERVER for a multi-threaded service/daemon;
-    3. try FPCMM_BOOSTER on high-end hardware;
+    1. default FPCMM_SERVER is perfect for a multi-threaded app/service/daemon;
+    2. set FPCMM_GUI for GUI/console almost-mono-threaded apps;
+    3. try FPCMM_BOOST or FPCMM_BOOSTER on high-end hardware;
     4. try mormot.core.fpclibcmm as POSIX alternative.
 }
 
-// target a multi-threaded service on a modern CPU
+// target a multi-threaded service on a modern CPU (default)
 // - define FPCMM_DEBUG, FPCMM_ASSUMEMULTITHREAD, FPCMM_ERMS, FPCMM_TINYPERTHREAD
 // - currently mormot2tests run with no contention when FPCMM_SERVER is set :)
-{.$define FPCMM_SERVER}
+{$define FPCMM_SERVER}
+
+// target a GUI/console mono-threaded app
+// - disable all FPCMM_SERVER/FPCMM_BOOST/FPCMM_BOOSTER optimizations
+// - may consume a little less memory from the OS
+{.$define FPCMM_GUI}
 
 // increase settings for more aggressive multi-threaded process
 // - tiny blocks will up to 256 bytes (instead of 128 bytes);
@@ -130,7 +135,7 @@ unit mormot.core.fpcx64mm;
 
 // use the current thread id to identify a prefered arena for Tiny block GetMem
 // - defined for FPCMM_SERVER since thread affinity matters even with 8 arenas
-// - warning: EXPERIMENTAL Linux and Win64 ONLY, due to very low-level asm trick
+// - warning: Linux and Win64 ONLY, due to very low-level asm trick
 {.$define FPCMM_TINYPERTHREAD}
 
 // use the current thread id to identify one of 4 user-medium arenas
@@ -183,25 +188,31 @@ interface
   {$define FPCMM_NOMREMAP}
 {$endif OLDLINUXKERNEL}
 
-{$ifdef FPCMM_BOOSTER}
-  {$define FPCMM_BOOST}
-  {$define FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
-  {$define FPCMM_MEDIUMPERTHREAD}
-{$endif FPCMM_BOOSTER}
-{$ifdef FPCMM_BOOST}
-  {$define FPCMM_SERVER}
-  {$define FPCMM_SMALLNOTWITHMEDIUM}
-  {$define FPCMM_LARGEBIGALIGN} // bigger blocks implies less reallocation
-{$endif FPCMM_BOOST}
-{$ifdef FPCMM_SERVER}
-  {$define FPCMM_DEBUG}
-  {$define FPCMM_ASSUMEMULTITHREAD}
-  {$define FPCMM_ERMS}
-  {$define FPCMM_TINYPERTHREAD} // thread affinity matters with a few threads
-{$endif FPCMM_SERVER}
-{$ifdef FPCMM_BOOSTER}
-  {$undef FPCMM_DEBUG} // when performance matters more than stats
-{$endif FPCMM_BOOSTER}
+{$ifdef FPCMM_GUI}
+  {$undef FPCMM_SERVER}
+  {$undef FPCMM_BOOST}
+  {$undef FPCMM_BOOSTER}
+{$else}
+  {$ifdef FPCMM_BOOSTER}
+    {$define FPCMM_BOOST}
+    {$define FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
+    {$define FPCMM_MEDIUMPERTHREAD}
+  {$endif FPCMM_BOOSTER}
+  {$ifdef FPCMM_BOOST}
+    {$define FPCMM_SERVER}
+    {$define FPCMM_SMALLNOTWITHMEDIUM}
+    {$define FPCMM_LARGEBIGALIGN} // bigger blocks implies less reallocation
+  {$endif FPCMM_BOOST}
+  {$ifdef FPCMM_SERVER}
+    {$define FPCMM_DEBUG}
+    {$define FPCMM_ASSUMEMULTITHREAD}
+    {$define FPCMM_ERMS}
+    {$define FPCMM_TINYPERTHREAD} // thread affinity matters with a few threads
+  {$endif FPCMM_SERVER}
+  {$ifdef FPCMM_BOOSTER}
+    {$undef FPCMM_DEBUG} // when performance matters more than stats
+  {$endif FPCMM_BOOSTER}
+{$endif FPCMM_GUI}
 
 type
   /// Arena (middle/large) heap information as returned by CurrentHeapStatus
@@ -940,7 +951,7 @@ const
     NumTinyBlockTypesPO2  = 4; // tiny are <= 256 bytes
     NumTinyBlockArenasPO2 = 3; // 8 arenas
     {$else}
-    // default (or FPCMM_SERVER) settings
+    // default FPCMM_SERVER settings
     NumTinyBlockTypesPO2  = 3; // multiple arenas for tiny blocks <= 128 bytes
     NumTinyBlockArenasPO2 = 3; // 8 round-robin arenas (including Small[])
     {$endif FPCMM_BOOST}
@@ -1746,7 +1757,7 @@ asm     // size = rcx on Windows, = rdi on SystemV; use rsi = TSmallBlockType
         unsupported
         {$endif WINDOWS}
         {$endif LINUX}
-        mul     edx     // very fast on modern CPUs
+        imul    eax, edx // very fast on modern CPUs
         shr     eax, 32 - NumTinyBlockArenasPO2 // high bits hash truncate
         jz      @Aren0  // Arena 0 = TSmallBlockInfo.Small[]
         shl     eax, NumTinyBlockTypesPO2 + SmallBlockTypePO2 // TTinyBlockTypes
@@ -1802,7 +1813,7 @@ asm     // size = rcx on Windows, = rdi on SystemV; use rsi = TSmallBlockType
 @NextTinyBlockArena1:
         dec     edx
         jnz     @TinyBlockArenaLoop
-        // Fallback to SmallBlockInfo.Small[] next 2 small sizes - never occurs
+        // Fallback to SmallBlockInfo.Small[] next 2 small sizes - rarely needed
         lea     rsi, [r8 + rcx + TSmallBlockInfo.Small + SizeOf(TSmallBlockType)]
         mov     eax, $100
   lock  cmpxchg byte ptr [rsi].TSmallBlockType.Locked, ah
@@ -2165,7 +2176,7 @@ asm     // size = rcx on Windows, = rdi on SystemV; use rsi = TSmallBlockType
         unsupported
         {$endif WINDOWS}
         {$endif LINUX}
-        mul     edx
+        imul    eax, edx
         shr     eax, 32 - NumMediumBlockArenasPO2
         mov     r9d, eax
         lea     r10, [rip + MediumBlockInfoLookup]
@@ -2323,7 +2334,7 @@ asm     // size = rcx on Windows, = rdi on SystemV; use rsi = TSmallBlockType
         jmp     @GotMediumBlockForMedium
 @UseWholeBlockForMedium:
         // Mark this block as used in the block following it
-        and     byte ptr [rsi + rdi - BlockHeaderSize],  NOT PreviousMediumBlockIsFreeFlag
+        and     byte ptr [rsi + rdi - BlockHeaderSize], NOT PreviousMediumBlockIsFreeFlag
 @GotMediumBlockForMedium:
         // Set the size and flags for this block
         lea     rcx, [rbx + IsMediumBlockFlag]

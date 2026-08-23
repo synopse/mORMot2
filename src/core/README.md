@@ -329,7 +329,7 @@ An (optional) Multi-thread Friendly Memory Manager for FPC written in x86_64 ass
 - only for FPC on the x86_64 target - use the RTL MM on Delphi or ARM
 - can report detailed statistics (with threads contention and memory leaks)
 - based on proven FastMM4 by Pierre le Riche, reduced and optimized
-- three app modes: default mono-thread friendly, `FPCMM_SERVER` or `FPCMM_BOOST`
+- three main app modes: default `FPCMM_SERVER`, `FPCMM_GUI` or `FPCMM_BOOST`
 
 ### mormot.core.fpclibcmm
 
