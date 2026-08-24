@@ -21,7 +21,6 @@ uses
   sysutils,
   classes,
   variants,
-  contnrs,
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -861,11 +860,11 @@ begin
   if aSecurity in SEC_TLS then
     include(hso, hsoEnableTls);
   //include(hso, hsoHeadersInterning);
-  if aThreadPoolCount < integer(CpuThreads) * 5 then
+  if aThreadPoolCount < integer(SystemInfo.dwNumberOfProcessors) * 5 then
     include(hso, hsoThreadSmooting); // regular HW tends to like it
   {$ifdef USEHTTPSYS}
   if aUse in HTTP_API_MODES then // Windows system's http.sys
-    if PosEx('Wine', OSVersionInfoEx) > 0 then
+    if wsWine in WindowsSpecs then
     begin
       fLog.Add.Log(sllWarning, '%: httpapi probably not well supported on % -> ' +
           'fallback to useHttpAsync', [ToText(aUse)^, OSVersionInfoEx], self);
@@ -885,7 +884,7 @@ begin
         end;
       // actually launch the http.sys server
       fHttpServer := THttpApiServer.Create(aQueueName, HttpThreadStart,
-        HttpThreadTerminate, fRestServerNames, hso, fLog);
+        HttpThreadTerminate, fRestServerNames, hso, fLog, aThreadPoolCount);
       if not THttpApiServer(fHttpServer).WaitStarted then
         EHttpApiServer.RaiseUtf8('%.WaitStarted timeout on %',
           [self, fRestServerNames]);

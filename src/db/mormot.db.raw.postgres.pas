@@ -226,7 +226,7 @@ type
   public
     /// try to dynamically load the libpq library
     // - raise an ESqlDBPostgres if the expected library is not found
-    constructor Create;
+    constructor Create; override;
     /// just a wrapper around FastSetString + GetValue/GetLength
     procedure GetRawUtf8(res: PPGresult; tup_num, field_num: integer;
       var result: RawUtf8);
@@ -401,6 +401,7 @@ var
   raiseonfailure: ExceptionClass;
   i: PtrInt;
 begin
+  inherited Create;
   try
     TryFromExecutableFolder := true;
     TryLoadLibrary([
@@ -426,7 +427,7 @@ procedure TSqlDBPostgresLib.GetRawUtf8(res: PPGresult;
   tup_num, field_num: integer; var result: RawUtf8);
 begin
   FastSetString(result, GetValue(res, tup_num, field_num),
-    GetLength(res, tup_num, field_num));
+                        GetLength(res, tup_num, field_num));
 end;
 
 procedure TSqlDBPostgresLib.RaiseError(conn: PPGconn; const ctxt: ShortString;

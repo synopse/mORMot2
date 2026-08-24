@@ -10,8 +10,6 @@
 
 {$Z4} // enumerates should be DWORD / 32-bit - see jediapilib.inc
 
-function PosExtString(Str: PChar): PChar; forward;
-
 function _utf16toascii(s: PWordArray; d: PByteArray; l: PtrInt): pointer; forward;
 procedure _utf16fromascii(s: PByteArray; d: PWordArray; l: PtrInt); forward;
 
@@ -139,16 +137,15 @@ begin
   result := @Temp;
 end;
 
+procedure Win32SynUnicodeConvert(P: PWideChar; l: PtrInt; var s: string);
+var
+  u: SynUnicode; // transient UTF-16 variable
+begin
+  SetString(u, P, l);
+  s := string(u); // let the RTL do the conversion
+end;
+
 procedure Win32PWideCharToString(P: PWideChar; l: PtrInt; var s: string);
-
-  procedure DoSynUnicodeConv;
-  var
-    u: SynUnicode; // transient UTF-16 variable
-  begin
-    SetString(u, P, l);
-    s := string(u); // let the RTL do the conversion
-  end;
-
 begin
   if IsAnsiCompatibleW(P, l) then // most common case
   begin
@@ -161,7 +158,7 @@ begin
     Unicode_ToUtf8(P, l, RawUtf8(s)) // use RTL or mormot.core.unicode
   {$endif FPC}
   else
-    DoSynUnicodeConv;
+    Win32SynUnicodeConvert(P, l, s);
 end;
 
 procedure SetStringFromAnsi7Buffer(var d: string; s: PAnsiChar; l: PtrInt);
@@ -196,7 +193,7 @@ var
   flags: cardinal;
 begin
   flags := 0;
-  if CodePage < 50220 then // wild guess - FPC RTL would always use 0 anyway
+  if CodePage < 50220 then // MBCS wild guess - FPC RTL would always use 0 anyway
     if CodePage = 951 then // 951 is a "fake" code page
       CodePage := 950
     else if (CodePage <> 932) and (CodePage <> 949) then
@@ -209,7 +206,7 @@ var
   defchar: PAnsiChar;
 begin
   defchar := nil;
-  if CodePage < 50220 then // wild guess - FPC RTL would always use 0 anyway
+  if CodePage < 50220 then // MBCS wild guess - FPC RTL would always use 0 anyway
     if CodePage = 951 then // 951 is a "fake" code page
       CodePage := 950
     else if (CodePage <> 932) and (CodePage <> 949) then
@@ -364,27 +361,80 @@ begin
   FT^.dwHighDateTime := Q64^.H;
 end;
 
-// To account for daylight saving time when converting a file time to a local
-// time, use the following function in place of using FileTimeToLocalFileTime:
+// To account for daylight saving time when converting a file time to a local time,
+// use the following functions in place of using Win32 FileTimeToLocalFileTime API:
 // https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-filetimetolocalfiletime
+
+function SystemTimeToTzSpecificLocalTime(lpTimeZoneInformation: pointer;
+  var lpUniversalTime, lpLocalTime: TSystemTime): BOOL;
+  stdcall; external kernel32;
+function TzSpecificLocalTimeToSystemTime(lpTimeZoneInformation: pointer;
+  var lpLocalTime, lpUniversalTime: TSystemTime): BOOL;
+  stdcall; external kernel32; // missing in FPC and oldest Delphi
 
 function FileTimeToLocalSystemTime(const ft: FILETIME; out lt: TSystemTime): boolean;
 var
   st: TSystemTime;
 begin
-  FillCharFast(lt, SizeOf(lt), 0);
-  result := FileTimeToSystemTime(ft, st);
-  if result then
-    if not SystemTimeToTzSpecificLocalTime(nil, st, lt) then
-      lt := st;
+  result := FileTimeToSystemTime(ft, st) and
+            SystemTimeToTzSpecificLocalTime(nil, st, lt);
 end;
 
-procedure UnixTimeToLocalTime(I64: TUnixTime; out Local: TSystemTime);
+procedure UnixTimeToLocal(I64: TUnixTime; out Local: TSystemTime);
 var
-  lft: TFileTime;
+  ft: TFileTime;
 begin
-  UnixTimeToFileTime(I64, lft);
-  FileTimeToLocalSystemTime(lft, Local); // no FileTimeToLocalFileTime
+  UnixTimeToFileTime(I64, ft);
+  if not FileTimeToLocalSystemTime(ft, Local) then
+    FillCharFast(Local, SizeOf(Local), 0);
+end;
+
+function LocalToUnixTime(local: TDateTime): TUnixTime;
+var
+  ft: TFileTime;
+  st: TSystemTime;
+begin
+  DateTimeToSystemTime(local, st);
+  if TzSpecificLocalTimeToSystemTime(nil, st, st) and
+     SystemTimeToFileTime(st, ft)  then
+    result := FileTimeToUnixTime(ft)
+  else
+    result := 0;
+end;
+
+function UnixTimeToLocal(I64: TUnixTime): TDateTime;
+var
+  ft: TFileTime;
+  st: TSystemTime;
+begin
+  UnixTimeToFileTime(I64, ft);
+  if FileTimeToLocalSystemTime(ft, st) then
+    result := SystemTimeToDateTime(st)
+  else
+    result := 0;
+end;
+
+function UtcToLocal(utc: TDateTime): TDateTime;
+var
+  ft: TFileTime;
+  st: TSystemTime;
+begin
+  DateTimeToFileTime(utc, ft);
+  if FileTimeToLocalSystemTime(ft, st) then
+    result := SystemTimeToDateTime(st)
+  else
+    result := 0;
+end;
+
+function LocalToUtc(local: TDateTime): TDateTime;
+var
+  st: TSystemTime;
+begin
+  DateTimeToSystemTime(local, st);
+  if TzSpecificLocalTimeToSystemTime(nil, st, st) then
+    result := SystemTimeToDateTime(st)
+  else
+    result := 0;
 end;
 
 function UnixTimeUtc: TUnixTime;
@@ -662,9 +712,9 @@ begin
     WinError(error, 0, @dest, nil); // fallback to FormatMessageW
 end;
 
-procedure OsErrorShort(Code: cardinal; Dest: PShortString; NoInt: boolean);
+procedure OsErrorShortVar(Code: cardinal; var Dest: ShortString; NoInt: boolean);
 begin
-  WinErrorShort(Code, Dest, NoInt);
+  WinErrorShortVar(Code, Dest, NoInt);
 end;
 
 procedure RaiseLastModuleError(const Context: ShortString; Lib: HMODULE;
@@ -787,7 +837,7 @@ end;
 
 // some definitions missing on oldest Delphi
 const
-  FILE_ATTRIBUTE_REPARSE_POINT = $0000400; // = faSymLink
+  FILE_ATTRIBUTE_REPARSE_POINT = $0000400; // = faSymLink = faSymbolicLink
 
 function FindFirstFileExW(lpfilename: PWideChar; fInfoLevelId: FINDEX_INFO_LEVELS;
    lpFindFileData: pointer; fSearchOp: FINDEX_SEARCH_OPS;
@@ -1011,37 +1061,64 @@ begin
             (header = $5A4D); // DOS Magic Number
 end;
 
-function GetModuleHandleExA(dwFlags: cardinal; lpModuleName: pointer;
- var phModule: HMODULE): BOOL; stdcall; external kernel32;
+function GetModuleHandleExW(dwFlags: cardinal; lpModuleName: pointer;
+ var phModule: PtrUInt): BOOL; stdcall; external kernel32;
 
 const
   GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT = $00000002;
   GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS       = $00000004;
 
-function GetExecutableName(aAddress: pointer): TFileName;
+function GetExecutableBase(aAddress: pointer): PtrUInt;
 var
-  tmp: TByteToWideChar;
-  hm: HMODULE;
+  hm: PtrUInt;
 begin
-  result := '';
-  hm := 0;
-  if not GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT or
-           GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, aAddress, hm) then
-    exit;
-  FillcharFast(tmp, SizeOf(tmp), 0);
-  GetModuleFileNameW(hm, tmp, SizeOf(tmp));
-  Win32PWideCharToFileName(tmp, result);
+  if aAddress = nil then
+    result := PtrUInt(HInstance) // current exe/dll
+  else if GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS or
+            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, aAddress, hm) then
+    result := hm
+  else
+    result := 0;
 end;
 
-function IsMainExecutable(aAddress: pointer): boolean;
+function GetExecutableName(aAddress: pointer; aBase: PPtrUInt;
+  aSymbol: PPUtf8Char): TFileName;
 var
-  hm: HMODULE;
+  tmp: TW32Temp;
+  base, len: PtrUInt;
 begin
-  hm := 0;
-  result := GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT or
-              GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, aAddress, hm) and
-            (hm = HINSTANCE);
+  result := '';
+  base := GetExecutableBase(aAddress);
+  if base = 0 then
+    exit; // not found
+  if aBase <> nil then
+    aBase^ := base;
+  if aSymbol <> nil then
+    aSymbol^ := nil; // no simple API on Windows to retrieve the symbol name
+  len := GetModuleFileNameW(HMODULE(base), @tmp, SizeOf(tmp));
+  if len <> 0 then
+    Win32PWideCharToString(@tmp, len, string(result));
 end;
+
+function IsCurrentExecutable(aAddress: pointer): boolean;
+begin
+  result := GetExecutableBase(aAddress) = PtrUInt(HInstance); // current exe/dll
+end;
+
+{$ifdef ISDELPHI} // FPC pre-loads all its resources in memory
+procedure _OsLoadResString(Rec: PResStringRec; var Res: string);
+var
+  tmp: array[0 .. 4095] of Char;
+begin
+  Res := '';
+  if Rec <> nil then
+    if Rec^.Identifier < 64 shl 10 then
+      SetString(Res, tmp, LoadString(FindResourceHInstance(Rec^.Module^),
+        Rec^.Identifier, @tmp, SizeOf(tmp))) // proper WinAPI call
+    else
+      Res := PChar(Rec^.Identifier);
+end;
+{$endif ISDELPHI}
 
 function FileIsWritable(const FileName: TFileName): boolean;
 var
@@ -1420,7 +1497,7 @@ end; // warning: FPC's GetTickCount64 doesn't handle 49.7 days wrap on XP :(
 
 procedure InitializeSRWLockForXP(var P: TOSLightMutex); stdcall;
 begin
-  TLightLock(P).Init; // TLightLock is good enough on XP
+  TLightLock(P).Init; // our TLightLock is good enough on XP
 end;
 
 procedure AcquireSRWLockExclusiveForXP(var P: TOSLightMutex); stdcall;
@@ -1475,42 +1552,51 @@ begin
 end;
 
 
-{ TSynEvent }
+// Win8+ WaitOnAddress/WakeByAddressSingle futex-like efficient API
+// see also warnings at https://devblogs.microsoft.com/oldnewthing/20160826-00
+var
+  // function returns when Address^ differs from the value at CompareAddress^
+  WaitOnAddress: function(Address, CompareAddress: pointer;
+    AddressSize, dwMilliseconds: PtrUInt): BOOL; stdcall;
+  WakeByAddressSingle: procedure(Address: pointer); stdcall;
 
-constructor TSynEvent.Create;
+procedure _OsWaitOnValue(Value: PCardinal; Expected, TimeoutMS: cardinal);
 begin
-  fHandle := pointer(CreateEvent(nil, false, false, nil));
+  WaitOnAddress(Value, @Expected, SizeOf(Expected), TimeOutMS); // Win8+ API
 end;
 
-destructor TSynEvent.Destroy;
+// used only on XP/Vista/7 as fallback - follow FPC RTL PRTLEvent syntax
+type
+  PRTLEvent = pointer;
+
+function RTLEventCreate: PRTLEvent;
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  CloseHandle(THandle(fHandle));
-  inherited Destroy;
+  result := pointer(Windows.CreateEvent(nil, false, false, nil));
 end;
 
-procedure TSynEvent.ResetEvent;
+procedure RTLEventDestroy(state: PRTLEvent);
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  fNotified := false;
-  Windows.ResetEvent(THandle(fHandle));
+  Windows.CloseHandle(THandle(state));
 end;
 
-procedure TSynEvent.SetEvent;
+procedure RTLEventSetEvent(state: PRTLEvent);
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  fNotified := true; // should be set before notification
-  Windows.SetEvent(THandle(fHandle));
+  Windows.SetEvent(THandle(state));
 end;
 
-function TSynEvent.WaitFor(TimeoutMS: cardinal): boolean;
+procedure RTLEventResetEvent(state: PRTLEvent);
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  fWaiting := true;
-  WaitForSingleObject(THandle(fHandle), TimeoutMS);
-  fWaiting := false;
-  result := fNotified;
+  Windows.ResetEvent(THandle(state));
 end;
 
-function TSynEvent.IsEventFD: boolean;
-begin
-  result := false;
+function RtlWaitFor(state: PRTLEvent; timeout: cardinal; notif: boolean): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+begin // Windows API returns true if it was signaled
+  result := WaitForSingleObject(THandle(state), timeout) = WAIT_OBJECT_0;
 end;
 
 // thread naming and "int 3" debug opcode only validated on Delphi Wintel
@@ -1831,10 +1917,10 @@ begin
       result := true;
     end;
   if result then
-    AppendShortChar(']', @dest)
+    AppendShortCharSafe(']', dest)
 end;
 
-function TSynLogExceptionContext.AdditionalInfo(var dest: shortstring): boolean;
+function TSynLogExceptionContext.AdditionalInfo(var dest: ShortString): boolean;
 begin
   result := ClassInheritsFromName(EClass, 'EOleSysError') and
             Win32DotNetExceptions(EOleSysError(EInstance).ErrorCode, dest);
@@ -2139,7 +2225,7 @@ function EnumProcessName(PID: cardinal): RawUtf8;
 var
   h: THandle;
   len: DWord;
-  name: array[0..4095] of WideChar;
+  name: TWide4K;
 begin
   FastAssignNew(result);
   if PID = 0 then
@@ -2445,8 +2531,47 @@ begin
   end;
 end;
 
+
+var
+  BCryptPrimitives, BCryptApi: THandle;
+  ProcessPrng: function(dest: pointer; len: PtrUInt): BOOL; stdcall; // Win8+
+  RtlGenRandom: function(dest: pointer; len: cardinal): boolean; stdcall;
+  BCryptGenRandom: function(hAlgorithm, pBuffer: pointer;
+    cbBuffer, dwFlags: ULONG): cardinal; stdcall; // Vista+
+const
+  SYSTEM_PREFERRED_RNG = $00000002;
+
+function FillSystemRandom(Buffer: PByteArray; Len: integer; AllowBlocking: boolean): boolean;
+begin
+  result := false;
+  if (Buffer = nil) or
+     (Len <= 0) then
+    exit;
+  // try the newest per-processor ProcessPrng() AES-CTR-DRBG first
+  if (OSVersion >= wEight) and
+     DelayedProc(ProcessPrng, BCryptPrimitives, 'BCryptPrimitives.dll', 'ProcessPrng') then
+    result := ProcessPrng(Buffer, Len);
+  if not result then
+  begin
+    // fallback to RtlGenRandom() or BCryptGenRandom() on older systems
+    if not Assigned(RtlGenRandom) then // always available on XP/Vista/Seven
+      RtlGenRandom := LibraryResolve(GetModuleHandle(advapi32), 'SystemFunction036');
+    if Assigned(RtlGenRandom) then
+      result := RtlGenRandom(Buffer, Len);
+    if (not result) and // never called in practice
+       (OSVersion >= wVista) and
+       DelayedProc(BCryptGenRandom, BCryptApi, 'bcrypt.dll', 'BCryptGenRandom') then
+     result := BCryptGenRandom(nil, Buffer, Len, SYSTEM_PREFERRED_RNG) = NOERROR;
+  end;
+  if not result then
+    // OS API call failed -> fallback to our TLecuyer gsl_rng_taus2 generator
+    SharedRandom.Fill(pointer(Buffer), Len)
+  else if Len >= SizeOf(SystemEntropy.LiveFeed) then
+    crcblock(@SystemEntropy.LiveFeed, pointer(Buffer)); // shuffle live state
+end;
+
 type
-  // emulate sysinfo() Linux syscall on Windows
+  // emulate sysinfo() Linux syscall on Windows for RetrieveSysInfoText()
   TSysInfo = packed record
     uptime: cardinal;                    // Seconds since boot
     loads: array[0 .. 1] of cardinal;    // User and Kernel current percent
@@ -2457,7 +2582,7 @@ type
     mem_unit: cardinal;                  // Memory unit size in bytes
   end;
 
-function RetrieveSysInfo(var si: TSysInfo): boolean;
+function _RetrieveSysInfo(var si: TSysInfo): boolean;
 var
   global: TMemoryStatusEx;
   I, K, U, S: Int64;
@@ -2705,7 +2830,7 @@ begin
   ConsoleHandleCtrlCPressed := true;
 end;
 
-function WinWaitFor(ms: cardinal; h: THandle; checkSubThreadQuit: boolean): TWinWaitFor;
+function WinWaitFor(ms: cardinal; h: THandle; checkSubThreadQuit, checkSync: boolean): TWinWaitFor;
 var
   mainthread: boolean;
   msg: TMsg;
@@ -2727,17 +2852,17 @@ begin
       if msg.Message = WM_QUIT then
         exit;
   // proper Sleep/WaitForSingleObject call
-  mainthread := mainthread and IsMultiThread;
+  checkSync := checkSync and mainthread and IsMultiThread;
   if h = 0 then
   begin
-    if mainthread then
+    if checkSync then
       CheckSynchronize(ms) // call any Synchronize() event at full speed
     else
       Windows.Sleep(ms);
     result := wwfTimeout;
     exit;
   end;
-  if mainthread then
+  if checkSync then
     CheckSynchronize(0);
   case WaitForSingleObject(h, ms) of
     WAIT_TIMEOUT:
@@ -2747,16 +2872,17 @@ begin
   else
     result := wwfFailed;
   end;
-  if mainthread then
+  if checkSync then
     CheckSynchronize(0);
 end;
 
-procedure ConsoleWaitForEnterKey;
+procedure ConsoleWaitForEnterKey(doCheckSynchronize: boolean);
 begin
   ConsoleHandleCtrlCPressed := false;
   HandleCtrlC(TConsoleHandleCtrlC.HandleCtrlC);
   try
-    while (WinWaitFor({ms=}100, {handle=}0, {wm_quit=}true) = wwfTimeout) and
+    while (WinWaitFor({ms=}500, {handle=}0, {wm_quit=}true,
+             doCheckSynchronize) = wwfTimeout) and
           not ConsoleKeyPressed(VK_RETURN) and
           not ConsoleHandleCtrlCPressed do ;
   finally
@@ -2779,24 +2905,25 @@ end;
 function TFileVersion.RetrieveInformationFromFileName: boolean;
 var
   siz, siz2: DWord;
-  pt: pointer;
   trans: PWordArray;
   lngnfo: RawUtf8;
+  pt: RawByteString;
   nfo: ^TVSFixedFileInfo;
-  ft: TFILETIME;
-  st: TSYSTEMTIME;
   tmp: TW32Temp;
 
-  procedure ReadResourceByName(const From: RawUtf8; out Res: RawUtf8);
+  procedure ReadResourceByName(const From: RawUtf8; var Res: RawUtf8);
   var
     str: pointer;
     sz: DWord;
     u: TSynTempBuffer;
   begin
     sz := 0;
-    if VerQueryValueW(pt, Utf8ToWin32PWideChar(Join([lngnfo, From]), u), str, sz) and
+    if VerQueryValueW(pointer(pt),
+         Utf8ToWin32PWideChar(Join([lngnfo, From]), u), str, sz) and
        (sz > 0) then
-      Win32PWideCharToUtf8(str, Res);
+      Win32PWideCharToUtf8(str, Res)
+    else
+      FastAssignNew(Res);
     u.Done;
   end;
 
@@ -2807,49 +2934,29 @@ begin
   // GetFileVersionInfo() modifies the filename parameter data while parsing
   // -> copy the FileName into local tmp buffer to create a writable copy
   siz := GetFileVersionInfoSizeW(W32(fFileName, tmp, {copy=}true), siz2);
-  if siz > 0 then
-  begin
-    GetMem(pt, siz);
-    try
-      if GetFileVersionInfoW(W32(fFileName, tmp, {copy=}true), 0, siz, pt) then
-      begin
-        if VerQueryValueW(pt, '\', pointer(nfo), siz2) then
-          with nfo^ do
-          begin
-            SetVersion({major=}   dwFileVersionMS shr 16,
-                       {minor=}   dwFileVersionMS and 65535,
-                       {release=} dwFileVersionLS shr 16,
-                       {build=}   dwFileVersionLS and 65535);
-            if (dwFileDateLS <> 0) and
-               (dwFileDateMS <> 0) then
-            begin
-              ft.dwLowDateTime  := dwFileDateLS; // built date from version nfo
-              ft.dwHighDateTime := dwFileDateMS;
-              FileTimeToSystemTime(ft, st);
-              fBuildDateTime := EncodeDate(st.wYear, st.wMonth, st.wDay);
-              fBuildDateTimeString := '';
-            end;
-          end;
-        if VerQueryValueW(pt, '\VarFileInfo\Translation', pointer(trans), siz2) and
-           (siz2 >= 4) then
-        begin
-          _fmt('\StringFileInfo\%4.4x%4.4x\', [trans^[0], trans^[1]], lngnfo);
-          ReadResourceByName('CompanyName',      CompanyName);
-          ReadResourceByName('FileDescription',  FileDescription);
-          ReadResourceByName('FileVersion',      FileVersion);
-          ReadResourceByName('InternalName',     InternalName);
-          ReadResourceByName('LegalCopyright',   LegalCopyright);
-          ReadResourceByName('OriginalFilename', OriginalFilename);
-          ReadResourceByName('ProductName',      ProductName);
-          ReadResourceByName('ProductVersion',   ProductVersion);
-          ReadResourceByName('Comments',         Comments);
-        end;
-        result := true;
-      end;
-    finally
-      FreeMem(pt);
-    end;
-  end;
+  if siz <= 0 then
+    exit;
+  FastNewRawByteString(pt, siz);
+  if not GetFileVersionInfoW(W32(fFileName, tmp, {copy=}true), 0, siz, pointer(pt)) then
+    exit;
+  result := true;
+  if VerQueryValueW(pointer(pt), '\', pointer(nfo), siz2) and
+     (siz2 >= SizeOf(nfo^))  then
+    SetVersionRaw(nfo^.dwFileVersionMS, nfo^.dwFileVersionLS,
+                  nfo^.dwFileDateMS,    nfo^.dwFileDateLS);
+  if not VerQueryValueW(pointer(pt), '\VarFileInfo\Translation', pointer(trans), siz2) or
+     (siz2 < 4) then
+    exit;
+  _fmt('\StringFileInfo\%4.4x%4.4x\', [trans^[0], trans^[1]], lngnfo);
+  ReadResourceByName('CompanyName',      CompanyName);
+  ReadResourceByName('FileDescription',  FileDescription);
+  ReadResourceByName('FileVersion',      FileVersion);
+  ReadResourceByName('InternalName',     InternalName);
+  ReadResourceByName('LegalCopyright',   LegalCopyright);
+  ReadResourceByName('OriginalFilename', OriginalFilename);
+  ReadResourceByName('ProductName',      ProductName);
+  ReadResourceByName('ProductVersion',   ProductVersion);
+  ReadResourceByName('Comments',         Comments);
 end;
 
 procedure GetUserHost(out User, Host: RawUtf8);
@@ -2866,28 +2973,29 @@ begin
 end;
 
 var
-  SHFolderDll: THandle;
+  Shell32Dll: THandle;
   // avoid unneeded reference to ShlObj.pas
   // - late binding is mandatory to be used on WinPE which does NOT have this dll
   // - late binding also ensure that we load libraries only when needed
   SHGetFolderPathW: function(hwnd: hwnd; csidl: integer; hToken: THandle;
-    dwFlags: DWord; pszPath: PChar): HRESULT; stdcall;
+    dwFlags: DWord; pszPath: PWideChar): HRESULT; stdcall;
+  SHGetKnownFolderPath: function(const rfid: TGuid; dwFlags:DWORD; hToken: THandle;
+    out ppszPath: PWideChar): HRESULT; stdcall;
+
+procedure CoTaskMemFree(_para1: pointer); stdcall; external ole32;
 
 const
   CSIDL_PERSONAL         = $0005;
   CSIDL_LOCAL_APPDATA    = $001C; // local non roaming user folder
   CSIDL_COMMON_APPDATA   = $0023;
   CSIDL_COMMON_DOCUMENTS = $002E;
-
+  FOLDERID_Downloads: TGUID = '{374DE290-123F-4565-9164-39C4925E467B}'; // Vista+
   CSIDL: array[TSystemPath] of integer = (
-    CSIDL_COMMON_APPDATA,   // spCommonData
-                            // C:\ProgramData
-    CSIDL_LOCAL_APPDATA,    // spUserData
-                            // C:\Users\<user>\AppData\Local
-    CSIDL_COMMON_DOCUMENTS, // spCommonDocuments
-                            // C:\Users\Public\Documents
-    CSIDL_PERSONAL,         // spUserDocuments
-                            // C:\Users\<user>\Documents
+    CSIDL_COMMON_APPDATA,   // spCommonData      C:\ProgramData
+    CSIDL_LOCAL_APPDATA,    // spUserData        C:\Users\<user>\AppData\Local
+    CSIDL_COMMON_DOCUMENTS, // spCommonDocuments C:\Users\Public\Documents
+    CSIDL_PERSONAL,         // spUserDocuments   C:\Users\<user>\Documents
+    0,                      // spUserDownloads
     0,                      // spTemp
     0);                     // spLog
   // note: for SYSTEM user, got C:\Windows\System32\config\systemprofile\AppData
@@ -2900,10 +3008,12 @@ const
     'LOCALAPPDATA',    // spUserData
     '',                // spCommonDocuments
     '',                // spUserDocuments
+    '',                // spUserDownloads
     'TEMP',            // spTemp
     '');               // spLog
 var
   tmp: array[0..MAX_PATH] of WideChar;
+  pw: PWideChar;
 begin
   result := '';
   case kind of
@@ -2930,13 +3040,24 @@ begin
         if result = '' then
           result := GetSystemEnvString(_ENV[spTemp]); // fallback
       end;
+    spUserDownloads:
+      if DelayedProc(SHGetKnownFolderPath, Shell32Dll, shell32,
+           'SHGetKnownFolderPath') and
+         (SHGetKnownFolderPath(FOLDERID_Downloads, 0, 0, pw) = S_OK) then
+      begin
+        // retrieved from Vista+ GUID
+        Win32PWideCharToFileName(pw, result);
+        CoTaskMemFree(pw);
+      end
+      else
+        result := GetSystemPath(spUserDocuments); // fallback on XP
   else
     if (CSIDL[kind] <> 0) and
-       DelayedProc(SHGetFolderPathW, SHFolderDll, 'SHFolder.dll',
+       DelayedProc(SHGetFolderPathW, Shell32Dll, shell32,
          'SHGetFolderPathW') and
        (SHGetFolderPathW(0, CSIDL[kind], 0, 0, @tmp) = S_OK) then
       // retrieved from official CSIDL
-      Win32PWideCharToFileName(tmp, result)
+      Win32PWideCharToFileName(@tmp, result)
     else
     begin
       // fallback to environment variables (very unlikely)
@@ -2969,7 +3090,7 @@ var
 procedure _GetSystemEnv;
 var
   p, e, env: PWideChar;
-  i, n: PtrInt;
+  n: PtrInt;
 begin
   env := GetEnvironmentStringsW;
   p := env;
@@ -2982,31 +3103,33 @@ begin
       inc(n);
     inc(p, StrLenW(p) + 1);
   end;
-  if n = 0 then
-    exit; // should never happen
-  FastSynUnicode(_SystemEnvUnicode, env, (PtrUInt(p) - PtrUInt(env)) shr 1);
-  SetLength(_SystemEnvNames, n);
-  SetLength(_SystemEnvValues, n);
-  p := env;
-  i := 0;
-  repeat
-    if p^ = '=' then
-      inc(p, StrLenW(p)) // no void string in _SystemEnvNames[]
-    else
-    begin
-      e := p;
-      repeat
-        inc(p);
-      until p^ = '=';
-      Unicode_ToUtf8(e, p - e, _SystemEnvNames[i]);
-      inc(p);
-      e := p;
-      inc(p, StrLenW(p));
-      Unicode_ToUtf8(e, p - e, _SystemEnvValues[i]);
-      inc(i);
-    end;
-    inc(p);
-  until p^ = #0;
+  FastSynUnicode(_SystemEnvUnicode, env, p - env);
+  if n <> 0 then // empty environment block (#0#0)
+  begin
+    SetLength(_SystemEnvNames, n);
+    SetLength(_SystemEnvValues, n);
+    n := 0;
+    p := env;
+    repeat
+      if p^ = '=' then
+        inc(p, StrLenW(p)) // no void string in _SystemEnvNames[]
+      else
+      begin
+        e := p;
+        repeat
+          inc(p);
+        until (p^ = #0) or (p^ = '=');
+        Unicode_ToUtf8(e, p - e, _SystemEnvNames[n]);
+        if p^ <> #0 then
+          inc(p); // ignore '='
+        e := p;
+        inc(p, StrLenW(p));
+        Unicode_ToUtf8(e, p - e, _SystemEnvValues[n]);
+        inc(n);
+      end;
+      inc(p); // ignore #0 for this entry
+    until p^ = #0;
+  end;
   FreeEnvironmentStringsW(env);
 end;
 
@@ -3020,28 +3143,33 @@ begin
   v.Done;
 end;
 
-procedure PatchCode(Old, New: pointer; Size: PtrInt; Backup: pointer;
-  LeaveUnprotected: boolean);
+function PatchProcess(Old, New: pointer; Size: PtrInt; Backup: pointer): boolean;
 var
   restore, ignore: DWord;
 begin
-  if Size <= 0 then
+  result := false;
+  Size := abs(Size); // here restore would now the kind of segment
+  if Size = 0 then
     exit;
-  if VirtualProtect(Old, Size, PAGE_EXECUTE_READWRITE, restore) then
-  begin
-    if Backup <> nil then
-      MoveByOne(Old, Backup, Size); // do not use Move() here
-    MoveByOne(New, Old, Size);
-    if not LeaveUnprotected then
-      VirtualProtect(Old, Size, restore, ignore);
-    FlushInstructionCache(GetCurrentProcess, Old, Size);
-    if not CompareMemFixed(Old, New, Size) then
-      raise Exception.Create('PatchCode?');
+  if Backup <> nil then
+    MoveByOne(Old, Backup, Size); // do not use Move() here
+  OSSafe.Lock;
+  try
+    if VirtualProtect(Old, Size, PAGE_EXECUTE_READWRITE, restore) then // RW
+    try
+      MoveByOne(New, Old, Size);
+    finally
+      VirtualProtect(Old, Size, restore, ignore);          // back to RX or R
+      FlushInstructionCache(GetCurrentProcess, Old, Size); // for ARM64
+    end;
+  finally
+    OSSafe.UnLock;
   end;
+  result := CompareMem(Old, New, Size);
 end;
 
 procedure PatchCodeProtectBack;
-begin // nothing to do on Windows - LeaveUnprotected=false by default
+begin // nothing to do on Windows
 end;
 
 function StubMemoryAlloc: pointer;
@@ -3057,6 +3185,19 @@ end;
 procedure ReserveExecutableMemoryPageAccess(Reserved: pointer; Exec: boolean);
 begin
   // nothing to be done on Windows: PAGE_EXECUTE_READWRITE always work
+end;
+
+function _GetmemDualAccessPages: pointer;
+var
+  s: PtrUInt;
+  ignore: DWord;
+begin
+  s := SystemInfo.dwPageSize;
+  result := VirtualAlloc(nil, s * 2, MEM_COMMIT, PAGE_READWRITE);
+  if result = nil then
+    exit;
+  inc(PByte(result), s);
+  VirtualProtect(result, s, PAGE_NOACCESS, ignore);
 end;
 
 function _GetLargeMem(BigSize: PtrUInt): pointer;
@@ -3089,67 +3230,183 @@ begin
   if closefirst then
     Close;
   key := 0;
-  result := RegOpenKeyExW(
-    _HKEY[root], Utf8ToWin32PWideChar(keyname, tmp), 0, KEY_READ, key) = NO_ERROR;
+  result := RegOpenKeyExW(_HKEY[root], Utf8ToWin32PWideChar(keyname, tmp), 0,
+              KEY_READ, key) = NO_ERROR;
   tmp.Done;
+end;
+
+function TWinRegistry.ReadOpenValue(root: TWinRegistryRoot; keyname: PWideChar): boolean;
+begin
+  key := 0;
+  result := RegOpenKeyExW(_HKEY[root], keyname, 0, KEY_QUERY_VALUE, key) = NO_ERROR;
+end;
+
+function TWinRegistry.ReadReOpen(root: TWinRegistryRoot;
+  const keynames: array of RawByteString; closefirst: boolean): boolean;
+var
+  name: RawUtf8;
+begin
+  Join(keynames, name);
+  result := ReadOpen(root, name, closefirst);
 end;
 
 procedure TWinRegistry.Close;
 begin
-  if key <> 0 then
-    RegCloseKey(key);
+  if key = 0 then
+    exit;
+  RegCloseKey(key);
+  key := 0;
 end;
 
-function TWinRegistry.ReadString(const entry: SynUnicode; andtrim: boolean): RawUtf8;
+procedure SetWinRegistryKind(const kind: PWinRegistryKind; rtype: DWord);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  if kind = nil then
+    exit;
+  if rtype > byte(high(TWinRegistryKind)) then
+    rtype := REG_NONE; // return wrkNone
+  PByte(kind)^ := rtype;
+end;
+
+function TWinRegistry.ReadTempBuffer(entry: PWideChar; var data: TSynTempBuffer;
+  allowed: TWinRegistryKinds; kind: PWinRegistryKind): boolean;
 var
-  rtype, rsize, res: DWord;
+  rsize, res, rtype: DWord;
+  k: TWinRegistryKind;
+begin
+  result := false;
+  if key = 0 then
+    exit;
+  rsize := {%H-}data.Init; // most of the time, a single call is enough
+  rtype := 0;
+  res := RegQueryValueExW(key, entry, nil, @rtype, data.buf, @rsize);
+  SetWinRegistryKind(@k, rtype);
+  if (allowed <> []) and
+     not (k in allowed) then
+    exit;
+  if res <> NO_ERROR then
+    if res = ERROR_MORE_DATA then // need more than 4KB of data (unlikely)
+      res := RegQueryValueExW(key, entry, nil, nil, data.Init(rsize), @rsize)
+    else
+      exit; // most probably ERROR_FILE_NOT_FOUND for unknown entry name
+  if res = NO_ERROR then
+  begin
+    PCardinal(data.BufEnd)^ := 0; // ensure is #0#0 terminated: the string might
+    // NOT have been stored with the proper terminating null characters
+    // https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regqueryvalueexw
+    if kind <> nil then
+      kind^ := k;
+    result := true;
+  end
+  else
+    data.Done;
+end;
+
+function TWinRegistry.ReadString(entry: PWideChar; andtrim: boolean): RawUtf8;
+var
+  k: TWinRegistryKind;
   tmp: TSynTempBuffer;
 begin
   FastAssignNew(result);
-  rsize := {%H-}tmp.Init; // most of the time, a single call is enough
-  res := RegQueryValueExW(key, pointer(entry), nil, @rtype, tmp.buf, @rsize);
-  if res <> NO_ERROR then
-    if res = ERROR_MORE_DATA then // more than 4KB of data (unlikely)
-      res := RegQueryValueExW(key, pointer(entry), nil, nil, tmp.Init(rsize), @rsize)
-    else
-      exit;
-  if res = NO_ERROR then
+  if not ReadTempBuffer(entry, tmp, wrkStrings, @k) or
+     (tmp.Len = 0) then
+    exit;
+  Win32PWideCharToUtf8(tmp.buf, result); // use StrLenW() to get first string
+  if andtrim then
+    TrimSelf(result);
+  tmp.Done;
+end;
+
+function TWinRegistry.ReadStrings(entry: PWideChar; andtrim: boolean): TRawUtf8DynArray;
+var
+  n, l: PtrUInt;
+  p: PWideChar;
+  d: PRawUtf8;
+  k: TWinRegistryKind;
+  tmp: TSynTempBuffer;
+begin
+  Finalize(result);
+  if not ReadTempBuffer(entry, tmp, wrkStrings, @k) or
+     (tmp.Len = 0) then
+    exit;
+  p := tmp.buf;
+  n := 0;
+  case k of
+    wrkString,
+    wrkExpandString:
+      n := 1;
+    wrkMultiString:
+      while p^ <> #0 do
+      begin
+        inc(p, StrLenW(p) + 1); // first pass to compute length(result)
+        inc(n);
+      end;
+  end;
+  if n <> 0 then
   begin
-    case rtype of
-      REG_SZ,
-      REG_EXPAND_SZ,
-      REG_MULTI_SZ: // StrLen() will return the first value of REG_MULTI_SZ
-        Win32PWideCharToUtf8(tmp.buf, result);
-    end;
-    if andtrim then
-      TrimSelf(result);
+    p := tmp.buf;
+    SetLength(result, n);
+    d := pointer(result);
+    repeat
+      l := StrLenW(p);
+      Win32PWideCharToUtf8(p, l, d^);
+      if andtrim then
+        TrimSelf(d^);
+      inc(d);
+      inc(p, l + 1);
+      dec(n);
+    until n = 0;
   end;
   tmp.Done;
 end;
 
-function TWinRegistry.ReadData(const entry: SynUnicode): RawByteString;
+function TWinRegistry.ReadStringU(const entry: RawUtf8; andtrim: boolean): RawUtf8;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := ReadString(Utf8ToWin32PWideChar(entry, tmp), andtrim);
+  tmp.Done;
+end;
+
+function TWinRegistry.ReadFileName(entry: PWideChar): TFileName;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := '';
+  if not ReadTempBuffer(entry, tmp, wrkStrings) then
+    exit;
+  Win32PWideCharToFileName(tmp.buf, result); // use StrLenW()
+  tmp.Done;
+end;
+
+function TWinRegistry.ReadData(entry: PWideChar): RawByteString;
 var
   rsize: DWord;
 begin
   FastAssignNew(result);
-  if RegQueryValueExW(key, pointer(entry), nil, nil, nil, @rsize) <> NO_ERROR then
+  rsize := 0;
+  if (RegQueryValueExW(key, entry, nil, nil, nil, @rsize) <> NO_ERROR) and
+     (rsize <> 0) then
     exit;
-  SetLength(result, rsize);
-  if RegQueryValueExW(key, pointer(entry), nil, nil, pointer(result), @rsize) <> NO_ERROR then
+  if RegQueryValueExW(key, entry, nil, nil,
+       FastNewRawByteString(result, rsize), @rsize) <> NO_ERROR then
     FastAssignNew(result);
 end;
 
-function TWinRegistry.ReadDword(const entry: SynUnicode): cardinal;
+function TWinRegistry.ReadDword(entry: PWideChar): cardinal;
 var
-  n: cardinal; // safer with an explicit local variable
+  n, t: DWord; // safer with an explicit n local variable
 begin
-  if ReadBuffer(entry, @n, SizeOf(n)) then
-    result := n
+  if ReadBuffer(entry, @n, SizeOf(n), @t) then
+    if t = REG_DWORD_BIG_ENDIAN then
+      result := bswap32(n)
+    else
+      result := n
   else
     result := 0;
 end;
 
-function TWinRegistry.ReadQword(const entry: SynUnicode): QWord;
+function TWinRegistry.ReadQword(entry: PWideChar): QWord;
 var
   q: QWord; // safer with an explicit local variable
 begin
@@ -3159,14 +3416,27 @@ begin
     result := 0;
 end;
 
-function TWinRegistry.ReadBuffer(const entry: SynUnicode;
-  data: pointer; datalen: DWord): boolean;
+function TWinRegistry.ReadBuffer(entry: PWideChar; data: pointer; datalen: DWord;
+  kind: PWinRegistryKind): boolean;
+var
+  rtype: DWord;
 begin
-  result := RegQueryValueExW(key, pointer(entry), nil, nil, data, @datalen) = NO_ERROR;
+  rtype := 0;
+  result := (key <> 0) and
+            (RegQueryValueExW(key, entry, nil, @rtype, data, @datalen) = NO_ERROR);
+  if result then
+    SetWinRegistryKind(kind, rtype);
 end;
 
-function TWinRegistry.ReadMax(const entry: SynUnicode;
-  Data: pointer; MaxDataLen: DWord): DWord;
+function TWinRegistry.ReadBufferU(const entry: RawUtf8; data: pointer; datalen: DWord): boolean;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := ReadBuffer(Utf8ToWin32PWideChar(entry, tmp), data, datalen);
+  tmp.Done;
+end;
+
+function TWinRegistry.ReadMax(entry: PWideChar; Data: pointer; MaxDataLen: DWord): DWord;
 var
   tmp: RawByteString;
 begin
@@ -3179,12 +3449,17 @@ begin
   MoveFast(pointer(tmp)^, Data^, result);
 end;
 
-function TWinRegistry.ReadSize(const entry: SynUnicode): integer;
+function TWinRegistry.ReadSize(entry: PWideChar; kind: PWinRegistryKind): integer;
 var
-  n: cardinal; // safer with an explicit local variable
+  n, rtype: cardinal; // safer with an explicit local variable
 begin
-  if RegQueryValueExW(key, pointer(entry), nil, nil, nil, @n) = NO_ERROR then
-    result := n
+  n := 0;
+  rtype := 0;
+  if RegQueryValueExW(key, entry, nil, @rtype, nil, @n) = NO_ERROR then
+  begin
+    SetWinRegistryKind(kind, rtype);
+    result := n;
+  end
   else
     result := -1;
 end;
@@ -3364,20 +3639,22 @@ begin
   end;
 end;
 
-function ReadRegString(Key: THandle; const Path, Value: string): string;
+function ReadRegString(Root: TWinRegistryRoot; Path, Value: PWideChar): string;
 var
-  siz, typ: DWord;
-  tmp: array[byte] of char;
-  k: HKey;
+  reg: TWinRegistry;
 begin
-  result := '';
-  if RegOpenKeyEx(Key, pointer(Path), 0, KEY_QUERY_VALUE, k) <> ERROR_SUCCESS then
-    exit;
-  siz := 250;
-  typ := REG_SZ;
-  if RegQueryValueEx(k, pointer(Value), nil, @typ, @tmp, @siz) = ERROR_SUCCESS then
-    result := tmp;
-  RegCloseKey(k);
+  reg.ReadOpenValue(Root, Path);
+  result := reg.ReadFileName(Value); // return '' if not found
+  reg.Close;
+end;
+
+function ReadRegDWord(Root: TWinRegistryRoot; Path, Value: PWideChar): cardinal;
+var
+  reg: TWinRegistry;
+begin
+  reg.ReadOpenValue(Root, Path);
+  result := reg.ReadDword(Value); // return 0 if not found
+  reg.Close;
 end;
 
 function SearchSmbios(const mem: RawByteString; var info: TRawSmbiosInfo): PtrUInt;
@@ -3452,9 +3729,9 @@ end;
 procedure CoUninit;
 begin
   if CoInitCounter <= 0 then
-    raise EOleSysError.Create('You should call TOleDBConnection.Free from the same ' +
-      'thread which called its Create: i.e. call MyProps.EndCurrentThread from an ' +
-      'THttpServerGeneric.OnHttpThreadTerminate event - see ticket 213544b2f5');
+    raise EOleSysError.Create('Should call TOleDBConnection.Free/CoUninit from ' +
+      'the same thread which called Create: i.e. call MyProps.EndCurrentThread ' +
+      'from an THttpServerGeneric.OnHttpThreadTerminate event');
   dec(CoInitCounter);
   if CoInitCounter = 0 then
     CoUninitialize;
@@ -4547,7 +4824,7 @@ var
   begin
     repeat
       // note: WaitForMultipleObjects() with rd burns 100% of one core :(
-      case WinWaitFor({ms=}50, processinfo.hProcess) of
+      case WinWaitFor({ms=}500, processinfo.hProcess, roWinCheckSynchronize in options) of
         wwfSignaled:
           break;
         wwfFailed, wwfQuit:
@@ -4864,12 +5141,11 @@ var
   process, machine: word;
   P: pointer;
   Vers: TWindowsVersion;
-  cpu, manuf, prod, prodver: RawUtf8;
   reg: TWinRegistry;
   rnd: PHash128;
   proc: array of TSystemLogicalProcessorInformation;
   pi: ^TSystemLogicalProcessorInformation;
-  i, n: PtrInt;
+  n: PtrInt;
   siz: DWord;
 begin
   // 1. minimal fallback to support of very old 32-bit CPU without SSE2
@@ -4907,8 +5183,11 @@ begin
              IsWow64Process(GetCurrentProcess, res) and
              res;
   if IsWow64 then
+  begin
     // see http://msdn.microsoft.com/en-us/library/ms724381(v=VS.85).aspx
-    GetNativeSystemInfo := LibraryResolve(h, 'GetNativeSystemInfo')
+    GetNativeSystemInfo := LibraryResolve(h, 'GetNativeSystemInfo');
+    include(WindowsSpecs, wsWow64);
+  end
   else
     @GetNativeSystemInfo := nil;
   // see https://learn.microsoft.com/en-us/windows/arm/apps-on-arm-x86-emulation
@@ -4921,6 +5200,9 @@ begin
     {$ifdef CPUINTEL} not {$endif} // detecting PRISM is enough by now
     ((machine = IMAGE_FILE_MACHINE_I386) or
      (machine = IMAGE_FILE_MACHINE_AMD64));
+  if IsWow64Emulation then
+    WindowsSpecs := WindowsSpecs + // adapt to PRISM limitations at runtime
+      [wsWow64Emulation, wsPrism, wsFavorFewThreads, wsWeakDpAPI, wsWeakHttpApi];
   // Vista+ kernel32.dll APIs
   GetTickCount64 := LibraryResolve(h, 'GetTickCount64'); // Vista+
   if not Assigned(GetTickCount64) then
@@ -4938,6 +5220,18 @@ begin
     InitializeSRWLock       := @InitializeSRWLockForXP;
     AcquireSRWLockExclusive := @AcquireSRWLockExclusiveForXP;
     ReleaseSRWLockExclusive := @ReleaseSRWLockExclusiveForXP;
+  end;
+  if OSVersion >= wEight then
+  begin
+    h := Windows.LoadLibrary('API-MS-Win-Core-Synch-l1-2-0.dll'); // Win8+
+    WaitOnAddress := LibraryResolve(h, 'WaitOnAddress');
+    WakeByAddressSingle := LibraryResolve(h, 'WakeByAddressSingle');
+    if Assigned(WaitOnAddress) and
+       Assigned(WakeByAddressSingle) then
+    begin
+      OsWaitOnValue := @_OsWaitOnValue;
+      OsWakeOnValue := @WakeByAddressSingle; // defined as stdcall
+    end;
   end;
   // 3. retrieve system information
   TimeZoneLocalBias := -GetLocalTimeOffset;
@@ -5033,18 +5327,20 @@ begin
     if Assigned(wine_get_version) then
     begin
       OSVersionInfoEx := wine_get_version;
-      OSVersionInfoEx := TrimU('Wine ' + TrimU(OSVersionInfoEx));
+      OSVersionInfoEx := TrimU(Join(['Wine ', TrimU(OSVersionInfoEx)]));
+      WindowsSpecs := WindowsSpecs + [wsWine, wsWeakDpAPI, wsWeakHttpApi];
     end
     {$ifdef CPUINTEL}
     else if IsWow64Emulation then
-       OSVersionInfoEx := 'Prism'
+      OSVersionInfoEx := 'Prism'
     {$endif CPUINTEL};
+    RtlIpv6StringToAddress := LibraryResolve(h, 'RtlIpv6StringToAddressA');
   end;
   // 4. retrieve Software/Hardware information from Registry
   if reg.ReadOpen(wrLocalMachine, 'Software\Microsoft\Windows NT\CurrentVersion') then
   begin
-    WindowsUbr := reg.ReadDword('UBR');
-    WindowsProductName := reg.ReadString('ProductName');
+    WindowsUbr            := reg.ReadDword('UBR');
+    WindowsProductName    := reg.ReadString('ProductName');
     WindowsDisplayVersion := reg.ReadString('DisplayVersion');
   end;
   with OSVersionInfo do
@@ -5058,44 +5354,50 @@ begin
   if WindowsUbr <> 0 then
     insert(_fmt('.%d', [WindowsUbr]), OSVersionText, length(OSVersionText));
   if WindowsDisplayVersion <> '' then // append e.g. '25H2'
-    insert(WindowsDisplayVersion + ' ', OSVersionText,
+    insert(Join([WindowsDisplayVersion, ' ']), OSVersionText,
       PosExChar('(', OSVersionText));
   if OSVersionInfoEx <> '' then
-    OSVersionText := OSVersionText + ' - ' + OSVersionInfoEx;
-  if reg.ReadOpen(wrLocalMachine,
-       'Hardware\Description\System\CentralProcessor\0', {closefirst=}true) then
-  begin
-    cpu := reg.ReadString('ProcessorNameString');
-    if cpu = '' then
-      cpu := reg.ReadString('Identifier');
-  end;
+    OSVersionText := Join([OSVersionText, ' - ', OSVersionInfoEx]);
+  {$ifdef ASMINTEL}  // from CPUID
+  CpuInfoText := IntelBrand;
+  if CpuInfoText = '' then
+  {$endif ASMINTEL}
+    if reg.ReadOpen(wrLocalMachine,
+      'Hardware\Description\System\CentralProcessor\0', {close=}true) then
+    begin
+      {$ifdef CPUINTEL} // too vague on WinArm - e.g. 'virt-10.0'
+      CpuInfoText := reg.ReadString('ProcessorNameString');
+      if CpuInfoText = '' then
+      {$endif CPUINTEL}
+        CpuInfoText := reg.ReadString('Identifier');
+    end;
+  if {%H-}CpuInfoText = '' then
+    CpuInfoText := GetSystemEnv('PROCESSOR_IDENTIFIER');
   if reg.ReadOpen(wrLocalMachine, 'Hardware\Description\System\BIOS', true) then
   begin
-    manuf := reg.ReadString('SystemManufacturer');
-    if manuf <> '' then
-      manuf := manuf + ' ';
-    prod := reg.ReadString('SystemProductName');
-    prodver := reg.ReadString('SystemVersion');
-    if prodver = '' then
-      prodver := reg.ReadString('BIOSVersion');
+    _Smbios[sbiManufacturer]      := reg.ReadString('SystemManufacturer');
+    _Smbios[sbiProductName]       := reg.ReadString('SystemProductName');
+    _Smbios[sbiVersion]           := reg.ReadString('SystemVersion');
+    _Smbios[sbiBiosVersion]       := reg.ReadString('BIOSVersion');
+    _Smbios[sbiBiosVendor]        := reg.ReadString('BIOSVendor');
+    _Smbios[sbiBiosDate]          := reg.ReadString('BIOSReleaseDate');
+    _Smbios[sbiSku]               := reg.ReadString('SystemSKU');
+    _Smbios[sbiBoardManufacturer] := reg.ReadString('BaseBoardManufacturer');
+    _Smbios[sbiBoardProductName]  := reg.ReadString('BaseBoardProduct');
+    _Smbios[sbiBoardVersion]      := reg.ReadString('BaseBoardVersion');
   end;
-  if ({%H-}prod = '') or
-     ({%H-}prodver = '') then
-  begin
+  if (_Smbios[sbiProductName] = '') or
+     (_Smbios[sbiBiosVersion] = '') then // e.g. XP has no System\BIOS entry
     if reg.ReadOpen(wrLocalMachine, 'Hardware\Description\System', true) then
     begin
-      if prod = '' then
-        prod := reg.ReadString('SystemBiosVersion');
-      if prodver = '' then
-        prodver := reg.ReadString('VideoBiosVersion');
+      if _Smbios[sbiProductName] = '' then
+        _Smbios[sbiProductName] := reg.ReadString('SystemBiosVersion');
+      if _Smbios[sbiBiosVersion] = '' then
+        _Smbios[sbiBiosVersion] := reg.ReadString('VideoBiosVersion');
     end;
-  end;
   reg.Close;
-  BiosInfoText := manuf{%H-} + prod;
-  if prodver <> '' then
-    BiosInfoText := BiosInfoText + ' ' + prodver;
-  if {%H-}cpu = '' then
-   cpu := GetSystemEnv('PROCESSOR_IDENTIFIER');
+  Join([_Smbios[sbiManufacturer], ' ', _Smbios[sbiProductName], ' ',
+        _Smbios[sbiBiosVersion]], BiosInfoText);
   siz := 0;
   if Assigned(GetLogicalProcessorInformation) and
      not GetLogicalProcessorInformation(nil, siz) and
@@ -5132,33 +5434,9 @@ begin
           inc(pi);
           dec(n);
         until n = 0;
-        for i := high(CpuCache) downto low(CpuCache) do
-        begin
-          CpuCacheSize := CpuCache[i].Size;
-          if CpuCacheSize = 0 then // append the highest level Cache size
-            continue;
-          cpu := _fmt('%s [%s]', [cpu, KBNoSpace(CpuCacheSize)]);
-          break;
-        end;
-        for i := low(CpuCache) to high(CpuCache) do
-          with CpuCache[i] do
-            if Count <> 0 then
-              if Count = 1 then
-                CpuCacheText := _fmt('%s L%d=%s ',
-                  [CpuCacheText, i, KBNoSpace(Size)])
-              else
-                CpuCacheText := _fmt('%s L%d=%d*%s ',
-                  [CpuCacheText, i, Count, KBNoSpace(Size)]);
-        TrimSelf(CpuCacheText);
       end;
     end;
   end;
-  CpuThreads := SystemInfo.dwNumberOfProcessors;
-  if CpuSockets = 0 then
-    CpuSockets := 1; // e.g. on XP prior to SP3
-  if CpuCores = 0 then
-    CpuCores := CpuThreads;
-  _fmt('%d x %s (' + CPU_ARCH_TEXT + ')', [CpuThreads, cpu], CpuInfoText);
   // 5. compute some minimal entropy using the just retrieved info
   rnd := @SystemEntropy.Startup;
   CoCreateGuid(rnd^); // very fast and unique (but not strong)

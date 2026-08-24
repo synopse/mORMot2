@@ -1,0 +1,42 @@
+
+# Compiled binaries
+bin/task_manager
+*.exe
+*.dll
+*.so
+*.dylib
+bin/*
+
+# Compiled units
+bin/units/*.o
+bin/units/*.ppu
+*.o
+*.ppu
+
+# Database files
+data/*.db3
+data/*.db3-journal
+data/*.db3-wal
+data/*.db3-shm
+
+# Temporary files
+*.tmp
+*.bak
+*~
+.DS_Store
+
+# IDE files
+*.lps
+*.lpi.bak
+*.~*
+
+# Logs
+*.log
+
+# Keep directory structure
+!bin/.gitkeep
+!data/.gitkeep
+!logs/.gitkeep
+
+# Compiler resource files
+*.res

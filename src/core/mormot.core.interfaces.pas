@@ -128,6 +128,17 @@ type
     vIsOnStack,
     vIsHFA);
 
+  /// define how TInterfaceMethodExecuteRaw.RawExecute should handle a parameter
+  TInterfaceMethodRawExecute = (
+    reValReg,
+    reValRegs,
+    reValStack,
+    reRefReg,
+    reRefStack,
+    reValFpReg,
+    reValFpRegs,
+    reNone);
+
   /// a pointer to an interface-based service provider method description
   // - since TInterfaceFactory instances are shared in a global list, we
   // can safely use such pointers in our code to refer to a particular method
@@ -178,8 +189,7 @@ type
     // - may be -1 if pure register parameter with no backup on stack (x86)
     InStackOffset: SmallInt;
     /// how TInterfaceMethodExecuteRaw.RawExecute should handle this value
-    RawExecute: (reValReg, reValRegs, reValStack, reRefReg, reRefStack,
-                 reValFpReg, reValFpRegs, reNone);
+    RawExecute: TInterfaceMethodRawExecute;
     /// 64-bit aligned position in TInterfaceMethod.ArgsSizeAsValue memory
     OffsetAsValue: cardinal;
     /// true if is a const/var input argument
@@ -1503,7 +1513,7 @@ type
     fHasExpects: set of (eCount, eTrace);
     fLogs: TInterfaceStubLogDynArray;
     fLog: TDynArray;
-    fLogCount: integer;
+    fLogCount: integer; // not PtrInt
     fInterfaceExpectedTraceHash: cardinal;
     fLastInterfacedObjectFake: TInterfacedObject;
     function TryResolve(aInterface: PRttiInfo; out Obj): boolean; override;
@@ -3690,10 +3700,10 @@ begin
     exit;
   if R = nil then
     FakeCallRaiseError(ctxt, 'method returned value, but OutputJson=''''', []);
-  if R^ in [#1..' '] then
+  if R^ in [#1 .. ' '] then
     repeat
       inc(R)
-    until not (R^ in [#1..' ']);
+    until not (R^ in [#1 .. ' ']);
   asJsonObject := false; // [value,...] JSON array format
   if R^ <> '[' then
     if R^ = '{' then
@@ -4320,7 +4330,7 @@ begin
         imvDouble,
         imvDateTime:
           if not (vPassedByReference in a^.ValueKindAsm) then
-            SizeInFPR := 1; // stored in one double
+            SizeInFPR := 1; // stored in one FP register
         {$endif HAS_FPREG}
         imvDynArray:
           if (a^.ArgRtti.ArrayRtti <> nil) and
@@ -4343,13 +4353,13 @@ begin
                 'should be at least % bytes (i.e. bigger than a pointer) to be on stack',
                 [self, a^.ArgTypeName^, fInterfaceName, m^.URI,
                  a^.ParamName^, POINTERBYTES + 1]);
-              // to be fair, both ABIWINX64 and ABISYSVX64 could handle those and
-              // transmit them within a register
+              // to be fair, both ABIWINX64 and ABISYSVX64 could handle those
+              // and transmit them within a register
             if RecordIsHfa(a^.ArgRtti.Props) then
             begin
               include(a^.ValueKindAsm, vIsHFA); // e.g. record x, y: double end;
               {$ifdef HAS_FPREG}
-              SizeInFPR := a^.ArgRtti.Size shr 3;
+              SizeInFPR := a^.ArgRtti.Size shr 3; // how many FP registers
               {$endif HAS_FPREG}
             end;
          end;
@@ -4492,15 +4502,16 @@ begin
       if vPassedByReference in a^.ValueKindAsm then
         if vIsOnStack in a^.ValueKindAsm then
           if a^.SizeInStack <> POINTERBYTES then
-            EInterfaceFactory.RaiseUtf8('Unexpected I% % ref with no pointer',
-              [m^.InterfaceDotMethodName, a^.ParamName^])
+            EInterfaceFactory.RaiseUtf8('Unexpected I% %:% with size=% <> % ' +
+              '- missing var or const?', [m^.InterfaceDotMethodName,
+              a^.ParamName^, a^.ArgTypeName^, a^.SizeInStack, POINTERBYTES])
           else
             a^.RawExecute := reRefStack
         else if a^.RegisterIdent > 0 then
           a^.RawExecute := reRefReg
         else
-          EInterfaceFactory.RaiseUtf8('Unexpected I% % reference with no slot',
-            [m^.InterfaceDotMethodName, a^.ParamName^])
+          EInterfaceFactory.RaiseUtf8('Unexpected I% %:% reference with no slot',
+            [m^.InterfaceDotMethodName, a^.ParamName^, a^.ArgTypeName^])
       else // pass by value
         if vIsOnStack in a^.ValueKindAsm then
           a^.RawExecute := reValStack
@@ -7113,8 +7124,17 @@ procedure CallMethod(var Args: TCallMethodArgs); assembler;
 {$ifdef FPC} nostackframe;
 asm
         push    rbp
+        {$ifdef OSPOSIX}
         push    r12
         mov     rbp, rsp
+        {$else} // Win64 requires unwinding information
+        .seh_pushreg rbp
+        push    r12
+        .seh_pushreg r12
+        mov     rbp, rsp
+        .seh_setframe rbp,0
+        .seh_endprologue
+        {$endif OSPOSIX}
         // simulate .params 32
         lea     rsp, [rsp - MAX_EXECSTACK]
         // align stack to 16 bytes
@@ -7172,14 +7192,12 @@ asm
         mov     cl, [r12].TCallMethodArgs.resKind
         cmp     cl, imvDouble
         je      @d
-        cmp     cl, imvDateTime
-        je      @d
-        cmp     cl, imvCurrency
+        cmp     cl, imvDateTime // but imvCurrency is returned in rax
         jne     @e
 @d:     movlpd  qword ptr [r12].TCallMethodArgs.res64, xmm0
         // movlpd to ignore upper 64-bit of 128-bit xmm0 reg
 @e:     {$ifdef FPC}
-        mov     rsp, rbp
+        lea     rsp, [rbp]
         pop     r12
         pop     rbp
         {$endif FPC}
@@ -7373,7 +7391,7 @@ begin
   begin
     inc(arg);
     inc(pv);
-    case arg^.RawExecute of
+    case arg^.RawExecute of // use pre-computed parameter access modes
       reValReg:
         call.ParamRegs[arg^.RegisterIdent] := PPtrInt(pv^)^;
       reValRegs:
@@ -7888,18 +7906,26 @@ begin
   next();
 end;
 
+const
+  // = the deprecated System.vmtFreeInstance, which Delphi replaced by the
+  // asm-only VMTOFFSET operator - verified to match the RTL value on 32/64-bit
+  // - CPP_ABI_ADJUST was introduced with Delphi XE3, and the RTL constant is
+  // not deprecated on older compilers, so it is used as-is there and on FPC
+  VMT_FREEINSTANCE = {$ifdef ISDELPHIXE3} -2 * SizeOf(pointer) - CPP_ABI_ADJUST
+                     {$else} vmtFreeInstance {$endif ISDELPHIXE3};
+
 constructor TSetWeakZero.Create(aClass: TClass);
 var
   P: PPtrUInt;
 begin
   // key = instance TObject, value = dynarray field(s) to be zeroed
   inherited Create(TypeInfo(TPointerDynArray), TypeInfo(TPointerDynArrayDynArray));
-  P := pointer(PAnsiChar(aClass) + vmtFreeInstance);
+  P := pointer(PAnsiChar(aClass) + VMT_FREEINSTANCE);
   if PPointer(P)^ = @TSetWeakZero.HookedFreeInstance then
     // hook once - Create may be done twice in GetWeakZero() for SetPrivateSlot
     exit;
   fHookedFreeInstance := P^;
-  PatchCodePtrUInt(P, PtrUInt(@TSetWeakZero.HookedFreeInstance), {leaveunprot=}false);
+  PatchPointer(P, PtrUInt(@TSetWeakZero.HookedFreeInstance));
 end;
 
 function GetWeakZero(aClass: TClass; CreateIfNonExisting: boolean): TSetWeakZero;

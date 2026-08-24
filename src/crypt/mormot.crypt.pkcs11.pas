@@ -256,6 +256,11 @@ type
 
 implementation
 
+{$ifdef FPC} // already part of mormot.defines.inc but seems needed with -O2
+  {$WARN 5093 off} // function result variable of a managed uninitialized 1
+{$endif FPC}
+
+
 { ***************** High-Level PKCS#11 Integration with the Framework Types }
 
 const
@@ -352,7 +357,7 @@ begin
   if posDecrypt in pos then
     include(result, cuDecipherOnly);
   if [posSign, posVerify] * pos <> [] then
-    result := result + [cuCrlSign, cuKeyCertSign, cuDigitalSignature,
+    result := result + [cuCA, cuCrlSign, cuKeyCertSign, cuDigitalSignature,
                         cuNonRepudiation];
   // cuCodeSign, cuTlsServer and cuTlsClient are not included because they
   // require a full X.509 certificate with its issuer/authority fields for
@@ -379,7 +384,7 @@ begin
   if (cuDecipherOnly in cu) and
      not forpubkey then
     include(result, posDecrypt);
-  if cu * [cuCrlSign, cuKeyCertSign, cuDigitalSignature, cuNonRepudiation,
+  if cu * [cuCA, cuCrlSign, cuKeyCertSign, cuDigitalSignature, cuNonRepudiation,
            cuCodeSign, cuTlsServer, cuTlsClient] <> [] then
     if forpubkey then
       include(result, posVerify)

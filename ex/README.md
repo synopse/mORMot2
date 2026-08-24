@@ -53,6 +53,14 @@ It is a good example of what could be done to achieve the best performance with 
 
 ## Integrated and Advanced Samples
 
+### http-server-upload
+
+[This sample](./http-server-upload) is a stand-alone HTTP server receiving `multipart/form-data` file uploads without ever buffering the request body in memory.
+
+It combines `THttpServerGeneric.OnBodyDownload`, which spools the incoming body into a temporary file, with `THttpMultiPartDecoder`, which walks that spool file section by section - see [issue #292](https://github.com/synopse/mORMot2/issues/292).
+
+A 400 MB upload peaks at 89 MB of resident memory, against 406 MB via the default in-memory path.
+
 ### mvc-blog
 
 [MVC sample web application](./mvc-blog), publishing a simple BLOG.
@@ -66,6 +74,12 @@ It is a fully featured sample, with a MVC Web MicroService, hosting its own SQLi
 The source code was made and first shown during a WorkShop at [EKON 29](https://entwickler-konferenz.de/en/). It features a stand-alone REST service, but illustrating some good practice patterns, like TDD, Clean Architecture, KDD/DDD.
 
 You may follow the initial commits history to find out a proposed way of implementing such pattern.
+
+### recommended-patterns
+
+[A DDD + CQRS task manager](./recommended-patterns), following the *mORMot2 SAD* [*Recommended Patterns*](https://github.com/synopse/mORMot2/blob/master/docs/mORMot2-SAD-Recommended-Patterns.md) guide.
+
+It is a fully featured sample built with FPC, hosting its own *SQLite3* database with *FTS5* full-text search, and exposing interface-based **CQRS** services (separate Query/Command per feature) over an SOA layer. The code is organized as DDD feature modules across the canonical `dom/ infra/ app/` layers, with a transport-agnostic client port backed by two interchangeable in-process and HTTP backends (location transparency). It ships a CLI client and two HTML web clients, and the `§`/`A.x`/`B.x` references throughout its docs point back to the SAD guide.
 
 ### rest-websockets
 

@@ -29,6 +29,7 @@ uses
   variants,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.os.security, // for SymmetricEncrypt()
   mormot.core.buffers,
   mormot.core.data,
   mormot.core.unicode,
@@ -728,6 +729,11 @@ type
 
 
 implementation
+
+
+{$ifdef FPC} // already part of mormot.defines.inc but seems needed with -O2
+  {$WARN 5093 off} // function result variable of a managed uninitialized 1
+{$endif FPC}
 
 
 { ************ Shared Proxy Information }

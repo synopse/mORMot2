@@ -2086,7 +2086,7 @@ procedure TSqlDBOleDBConnectionProperties.GetFields(const aTableName: RawUtf8;
 var
   Owner, Table, Column: RawUtf8;
   Rows: IRowset;
-  n, i: integer;
+  n, i: integer; // not PtrInt
   F: TSqlDBColumnDefine;
   FA: TDynArray;
 begin

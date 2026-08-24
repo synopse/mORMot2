@@ -179,9 +179,9 @@ Our JSON engine uses a very efficient SAX-like kernel and full RTTI support.
 
 ### mormot.core.fmt
 
-Binary, JSON and Text Advanced Formatting Functions
+Binary, JSON, XML and Text Advanced Formatting Functions
 - HTML Text Conversions
-- Basic XML Conversions
+- XML Processing with Escape/Unescape and `TXmlParser`
 - YAML 1.2 core-schema to JSON or `TDocVariant` Support
 - Markup (e.g. Markdown or Emoji) process
 - INI Files In-memory Access
@@ -240,6 +240,19 @@ Logging functions shared by all framework units
 - Efficient `.log` File Access via `TSynLogFile`
 - SysLog Messages Support as defined by RFC 5424
 
+### mormot.core.interfaces
+
+Implements SOLID Process via Interface types
+- `IInvokable` Interface Methods and Parameters RTTI Extraction
+- `TInterfaceFactory` Generating Runtime Implementation Class
+- `TInterfaceResolver` `TInjectableObject` for IoC / Dependency Injection
+- `TInterfaceStub` for Dependency Stubbing/Mocking
+- `TInterfacedObjectFake` with JITted Methods Execution
+- `TInterfaceMethodExecute` for Method Execution from JSON
+- `SetWeak` and `SetWeakZero` Weak Interface Reference Functions
+- Code/Documentation Generation Logic Extraction from RTTI
+- Documentation Extraction from Source Code Comments
+
 ### mormot.core.perf
 
 Performance Monitoring functions shared by all framework units
@@ -277,21 +290,9 @@ With proper Unicode and ZIP64 support, and faster libdeflate usage if available.
 Logic-Less `{{Mustache}}` Templates Rendering
 - *Mustache* Execution Data Context Types
 - `TSynMustache` Template Processing
+- `TSynMustache` Standard Expression Helpers
 
 The `TSynMustache` data context could be a `TDocVariant` document, or any kind of data using direct RTTI lookup.
-
-### mormot.core.interfaces
-
-Implements SOLID Process via Interface types
-- `IInvokable` Interface Methods and Parameters RTTI Extraction
-- `TInterfaceFactory` Generating Runtime Implementation Class
-- `TInterfaceResolver` `TInjectableObject` for IoC / Dependency Injection
-- `TInterfaceStub` for Dependency Stubbing/Mocking
-- `TInterfacedObjectFake` with JITted Methods Execution
-- `TInterfaceMethodExecute` for Method Execution from JSON
-- `SetWeak` and `SetWeakZero` Weak Interface Reference Functions
-- Code/Documentation Generation Logic Extraction from RTTI
-- Documentation Extraction from Source Code Comments
 
 ### mormot.core.mvc
 
@@ -302,6 +303,17 @@ Model-View-Controller (MVC) pattern and Mustache
 - Application ViewModel/Controller using Interfaces
 
 Abstract MVC logic over *Mustache*, as used by `mormot.rest.mvc.pas` and `mormot.net.mvc.pas`.
+
+### mormot.core.i18n
+
+Basic Internationalization (i18n) Support
+- `TLanguageFile` per-language translation table
+- `TLanguageFiles` `.m18n` multi-tables with per-thread language selection
+- global wiring of the framework translation hooks
+
+Translation tables map the original English text to its translation, and are loaded from .po and its compiled .mo binary (GNU gettext) as the main formats - .ini, .yaml and .json, with its relaxed JSON5 / JSONC / HJson variants, are also supported.
+All `TLanguageFiles` tables could be persisted (as compressed binary) into a `.m18n` file or as executable resource using regular `TObjectStore` methods.
+Once loaded, three wiring channels are available: the `TSynMustache` translate tag views channel, the `LoadResStringTranslate` slot consumed by the `GetCaptionFrom*` functions, and the whole executable resourcestring table via `TLanguageFiles.TranslateResourceStrings`.
 
 ### mormot.core.test
 
@@ -317,7 +329,7 @@ An (optional) Multi-thread Friendly Memory Manager for FPC written in x86_64 ass
 - only for FPC on the x86_64 target - use the RTL MM on Delphi or ARM
 - can report detailed statistics (with threads contention and memory leaks)
 - based on proven FastMM4 by Pierre le Riche, reduced and optimized
-- three app modes: default mono-thread friendly, `FPCMM_SERVER` or `FPCMM_BOOST`
+- three main app modes: default `FPCMM_SERVER`, `FPCMM_GUI` or `FPCMM_BOOST`
 
 ### mormot.core.fpclibcmm
 

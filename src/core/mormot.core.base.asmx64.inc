@@ -826,7 +826,7 @@ end;
 
 {
   Some numbers, with CITIES_MAX=200000, deleting 1/128 entries
-  first column (3..23) is the max number of indexes[] chunk to rehash
+  first column (3..23) is the max number of indexes[] chunk to re-hash
   #abc is the number of slots in the hash table
   adjust=.. match DynArrayHashTableAdjust() time fixing the indexes
   hash=ms is the time needed to hash input (not impacted by adjusting algorithm)
@@ -848,7 +848,7 @@ end;
     23 #195075  adjust=161.73ms 14.1GB/s hash=2.57ms
 }
 
-// brute force O(n) indexes fix after deletion (much faster than full ReHash)
+// brute force O(n) indexes fix after deletion (much faster than full re-hash)
 procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
 {$ifdef ABIWINX64}
 var
@@ -1006,9 +1006,9 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         jmp     @2
         // trailing indexes (never appearing within DYNARRAYHASH_PO2 range)
 @1:     sub     r8, 1
-        cmp     word ptr [rcx + r8 * 4], dx
+        cmp     word ptr [rcx + r8 * 2], dx
         setg    al
-        sub     word ptr [rcx + r8 * 4], ax
+        sub     word ptr [rcx + r8 * 2], ax
 @2:     test    r8, r8
         jnz     @1
 {$ifdef ABIWINX64}
@@ -1697,11 +1697,11 @@ function SortDynArrayAnsiString(const A, B): integer;
         mov     rax, qword ptr [A]
         mov     rdx, qword ptr [B]
         cmp     rax, rdx
-        je      @z
+        je      @z                    // A=B at pointer level
         test    rax, rdx
         jz      @maynil
-@f:     movzx   ecx, byte ptr [rax]    // first char comparison
-        movzx   r8d, byte ptr [rdx]    // 32-bit to avoid overflow
+@f:     movzx   ecx, byte ptr [rax]   // first char comparison
+        movzx   r8d, byte ptr [rdx]   // 32-bit to avoid overflow
         sub     ecx, r8d
         je      @s
         mov     eax, ecx              // branchless execution on Quicksort
@@ -1710,7 +1710,7 @@ function SortDynArrayAnsiString(const A, B): integer;
         ret
 @z:     xor     eax, eax
         ret
-@maynil:test    rdx, rdx       // A or B may be ''
+@maynil:test    rdx, rdx              // A or B may be ''
         jz      @1
         test    rax, rax
         jnz     @f
@@ -1729,7 +1729,7 @@ function SortDynArrayAnsiString(const A, B): integer;
         {$endif FPC}
         adc     rcx, -1
         and     rcx, r9
-        sub     rcx, r8                  // rcx = -min(length(A),length(B))
+        sub     rcx, r8               // rcx = -min(length(A),length(B))
         sub     rax, rcx
         sub     rdx, rcx
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
@@ -2646,7 +2646,7 @@ function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
         not     eax
         mov     ecx, len
         shr     len, 3
-        jnz     @by8 // no read alignment care here - but in crypto.core
+        jnz     @by8   // no read alignment care needed
 @0:     test    cl, 4
         jz      @4
         crc32   eax, dword ptr [buf]
@@ -2661,7 +2661,7 @@ function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 @1:     not     eax
 @z:     ret
         {$ifdef FPC}
-        align 16
+        align 16                     // loop within 15 bytes of aligned code
 @by8:   crc32   rax, qword ptr [buf] // hash 8 bytes per loop
         {$else}
         .align 16
@@ -2672,6 +2672,52 @@ function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
         jnz     @by8
         jmp     @0
 end;
+
+// used for DefaultHasher/InterningHasher before Delphi XE7 with len<256 bytes
+function hashsse42(seed: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     eax, seed // seed, not crc
+        mov     ecx, len
+        test    len, len
+        jz      @z
+        test    buf, buf
+        jz      @z
+        shr     len, 3
+        jnz     @by8     // no read alignment care needed
+@0:     test    cl, 4
+        jz      @4
+        crc32   eax, dword ptr [buf]
+        add     buf, 4
+@4:     test    cl, 2
+        jz      @2
+        crc32   eax, word ptr [buf]
+        add     buf, 2
+@2:     test    cl, 1
+        jz      @1
+        crc32   eax, byte ptr [buf]
+@1:     // Murmur-inspired finalizer for power-of-two hash tables - Bijective
+        // over 32-bit values: preserves CRC32C collision but the result is no
+        // standard CRC32C value anymore and we can't cascade hashsse42() calls
+        mov     ecx, eax
+        shr     ecx, 16
+        xor     eax, ecx
+        imul    eax, eax, $85ebca6b
+        mov     ecx, eax
+        shr     ecx, 16
+        xor     eax, ecx
+@z:     ret
+        {$ifdef FPC}
+        align 16                     // loop within 15 bytes of aligned code
+@by8:   crc32   rax, qword ptr [buf] // hash 8 bytes per loop
+        {$else}
+        .align 16
+@by8:   db $F2,$48,$0F,$38,$F1,$02 // circumvent Delphi inline asm compiler bug
+        {$endif FPC}
+        add     buf, 8
+        sub     len, 1
+        jnz     @by8
+        jmp     @0
+end; // the i386 asm returns the very same value - no further optimization needed
 
 function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var
@@ -3017,6 +3063,13 @@ function LockedExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
         setz    al
 end;
 
+function LockedExc32(var Target: cardinal; NewValue, Comperand: cardinal): boolean;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        mov     eax, Comperand
+   lock cmpxchg dword ptr [Target], NewValue
+        setz    al
+end;
+
 procedure LockedAdd(var Target: PtrUInt; Increment: PtrUInt);
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
    lock add     qword ptr [Target], Increment
@@ -3083,7 +3136,7 @@ function IsXmmYmmOSEnabled: boolean;
         sete    al        // true if OS enabled both XMM and YMM
 end;
 
-procedure GetCpuid(cpueax, cpuecx: cardinal; var regs: TIntelRegisters);
+procedure _GetCpuid(cpueax, cpuecx: cardinal; var regs: TIntelRegisters);
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     eax, cpueax
         mov     ecx, cpuecx

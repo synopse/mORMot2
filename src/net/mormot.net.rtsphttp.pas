@@ -313,7 +313,7 @@ begin
                 'Cache-Control: no-store'#13#10 +
                 'Pragma: no-cache'#13#10 +
                 'Content-Type: ' + RTSP_MIME + #13#10#13#10,
-                [Executable.ProgramName, Executable.Version.DetailedOrVoid]));
+                [Executable.ProgramName, Executable.Version.Main]));
               sock.fExpires := now + 60 * 15; // deprecated after 15 minutes
               sock.CloseSockIn; // we won't use it any more
               fPendingGet.AddObject(cookie, sock);
@@ -356,8 +356,7 @@ begin
     end;
     if get = nil then
       exit;
-    res := NewSocket(
-      fRtspServer, fRtspPort, nlTcp, {bind=}false, 1000, 1000, 1000, 0, rtsp);
+    res := NewTcpClientSocket(fRtspServer, fRtspPort, 1000, rtsp);
     if res <> nrOK then
       ERtspOverHttp.RaiseUtf8('No RTSP server on %:% (%)',
         [fRtspServer, fRtspPort, _NR[res]]);

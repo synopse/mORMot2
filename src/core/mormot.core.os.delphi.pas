@@ -112,14 +112,28 @@ const
   ESysEINTR         = Posix.Errno.EINTR;
   ESysEFAULT        = Posix.Errno.EFAULT;
   ESysEPERM         = Posix.Errno.EPERM;
+  ESysEBUSY         = Posix.Errno.EBUSY;
+  ESysENOENT        = Posix.Errno.ENOENT;
+  ESysEIO           = Posix.Errno.EIO;
+  ESysENXIO         = Posix.Errno.ENXIO;
+  ESysENODEV        = Posix.Errno.ENODEV;
+  ESysEBADF         = Posix.Errno.EBADF;
+  ESysENOTEMPTY     = Posix.Errno.ENOTEMPTY;
+  ESysENAMETOOLONG  = Posix.Errno.ENAMETOOLONG;
+  ESysENOTDIR       = Posix.Errno.ENOTDIR;
+  ESysEISDIR        = Posix.Errno.EISDIR;
+  ESysENOSPC        = Posix.Errno.ENOSPC;
   ESysESRCH         = Posix.Errno.ESRCH;
   ESysE2BIG         = Posix.Errno.E2BIG;
   ESysEAGAIN        = Posix.ErrNo.EAGAIN;
+  ESysENOMEM        = Posix.ErrNo.ENOMEM;
+  ESysEEXIST        = Posix.ErrNo.EEXIST;
   ESysEADDRNOTAVAIL = Posix.ErrNo.EADDRNOTAVAIL;
   ESysECONNABORTED  = Posix.ErrNo.ECONNABORTED;
   ESysECONNRESET    = Posix.ErrNo.ECONNRESET;
   ESysETIMEDOUT     = Posix.ErrNo.ETIMEDOUT;
   ESysEINVAL        = Posix.ErrNo.EINVAL;
+  ESysENFILE        = Posix.ErrNo.ENFILE;
   ESysEMFILE        = Posix.ErrNo.EMFILE;
   ESysECONNREFUSED  = Posix.ErrNo.ECONNREFUSED;
   ESysEINPROGRESS   = Posix.ErrNo.EINPROGRESS;
@@ -133,6 +147,7 @@ const
   StdOutputHandle   = 1;
   StdErrorHandle    = 2;
   RTLD_LAZY         = Posix.Dlfcn.RTLD_LAZY;
+  RTLD_NOW          = Posix.Dlfcn.RTLD_NOW;
   O_RDONLY          = O_RDONLY;
   O_NONBLOCK        = O_NONBLOCK;
   SEEK_CUR          = SEEK_CUR;
@@ -178,6 +193,9 @@ function fpsettimeofday(tp: ptimeval; tzp: pointer): cint;
 function fpnanosleep(t, rem: ptimespec): cint;
 function GetLocalTimeOffset: integer;
 function TZSeconds: integer;
+function ToLocalTime(const utc: TDateTime): TDateTime;
+function ToUtcTime(const local: TDateTime): TDateTime;
+function EpochToLocal(I64: TUnixTime): TUnixTime;
 function fpuname(var uts: UtsName): cint;
 
 function fpstat(path: PWideChar; var buf: _stat): cint;
@@ -212,6 +230,7 @@ function FpS_ISLNK(m: cint): boolean;
 
 function fpkill(pid, sig: cint): cint; cdecl;
   external clib name 'kill';
+
 function fpfork: TPid; cdecl;
   external clib name 'fork';
 
@@ -234,6 +253,7 @@ const
 function fpsysctl(name: pcint; namelen: cuint; oldp: pointer;
     oldlenp: psize_t; newp: pointer; newlen: size_t): cint; cdecl;
   external clib name 'sysctl';
+
 function fpsysctlbyname(name: PAnsiChar; oldp: pointer; oldlenp: psize_t;
     newp: pointer; newlen: size_t): cint; cdecl;
   external clib name 'sysctlbyname';
@@ -263,6 +283,7 @@ function fpreaddir(var dirp: Dir): pDirent;
 function fpclosedir(var dirp: Dir): cint;
 
 {$ifdef OSLINUX}
+
 type
   TStatfs = record
     fstype, bsize: clong;
@@ -272,32 +293,39 @@ type
   end;
 
   TSysInfo = record
-    uptime: clong;                     //* Seconds since boot */
-    loads: array[0..2] of culong;      //* 1, 5, and 15 minute load averages */
-    totalram: culong;                  //* Total usable main memory size */
-    freeram: culong;                   //* Available memory size */
-    sharedram: culong;                 //* Amount of shared memory */
-    bufferram: culong;                 //* Memory used by buffers */
-    totalswap: culong;                 //* Total swap space size */
-    freeswap: culong;                  //* swap space still available */
-    procs: cushort;                    //* Number of current processes */
-    pad: cushort;                      //* explicit padding for m68k */
-    totalhigh: culong;                 //* Total high memory size */
-    freehigh: culong;                  //* Available high memory size */
-    mem_unit: cuint;                   //* Memory unit size in bytes */
+    uptime: clong;                     // Seconds since boot
+    loads: array[0..2] of culong;      // 1, 5, and 15 minute load averages
+    totalram: culong;                  // Total usable main memory size
+    freeram: culong;                   // Available memory size
+    sharedram: culong;                 // Amount of shared memory
+    bufferram: culong;                 // Memory used by buffers
+    totalswap: culong;                 // Total swap space size
+    freeswap: culong;                  // swap space still available
+    procs: cushort;                    // Number of current processes
+    pad: cushort;                      // explicit padding for m68k
+    totalhigh: culong;                 // Total high memory size
+    freehigh: culong;                  // Available high memory size
+    mem_unit: cuint;                   // Memory unit size in bytes
 {$ifndef cpu64}
     { the upper bound of the array below is negative for 64 bit cpus }
-    _f: array[0..19-2*sizeof(clong)-sizeof(cint)] of cChar;  //* Padding: libc5 uses this.. */
+    _f: array[0..19-2*sizeof(clong)-sizeof(cint)] of cChar;  // Padding as libc5
 {$endif cpu64}
   end;
   PSysInfo = ^TSysInfo;
 
 function SysInfo(Info: PSysinfo): cInt; cdecl;
   external clib name 'sysinfo';
+
+function sched_getaffinity(pid: integer;
+    cpusetsize: PtrUInt; cpuset: pointer): integer; cdecl
+  external clib name 'sched_getaffinity';
+
 {$endif OSLINUX}
 
 function fpstatfs(path: PWideChar; nfo: pointer): cint;
 function IsAtty(fd: cint): cint;
+
+procedure _OsLoadResString(Rec: PResStringRec; var Res: string);
 
 
 { ****************** Network POSIX Operating Systems API for Delphi }
@@ -393,8 +421,10 @@ type
 
 function epoll_create(size: cint): cint; cdecl;
   external clib name 'epoll_create';
+
 function epoll_ctl(epfd, op, fd: cint; event: PEPoll_Event): cint; cdecl;
   external clib name 'epoll_ctl';
+
 function epoll_wait(epfd: cint; events: PEPoll_Event;
     maxevents, timeout: cint): cint; cdecl;
   external clib name 'epoll_wait';
@@ -527,12 +557,27 @@ begin
   // return the offset in MINUTES, positive west of UTC (e.g. +240 for EDT) -
   // i.e. the FPC RTL convention, as expected by TZSeconds and TimeZoneLocalBias
   // (TTimeZone.UtcOffset is local-minus-UTC, so negative west of UTC: negate it)
-  result := -Round(TTimeZone.Local.UtcOffset.TotalMinutes);
+  result := -round(TTimeZone.Local.UtcOffset.TotalMinutes);
 end;
 
 function TZSeconds: integer;
 begin
   result := -GetLocalTimeOffset * 60; // GetLocalTimeOffset = -TZseconds div 60
+end;
+
+function ToLocalTime(const utc: TDateTime): TDateTime;
+begin
+  result := TTimeZone.Local.ToLocalTime(utc);
+end;
+
+function ToUtcTime(const local: TDateTime): TDateTime;
+begin
+  result := TTimeZone.Local.ToUniversalTime(local);
+end;
+
+function EpochToLocal(I64: TUnixTime): TUnixTime;
+begin
+  result := DateTimeToUnix(TTimeZone.Local.ToLocalTime(UnixToDateTime(I64)));
 end;
 
 function fpuname(var uts: UtsName): cint;
@@ -820,6 +865,31 @@ var
 begin
   result := ord(tcgetattr(fd, t) = 0);
 end;
+
+type // main exe-only cut-down version of LLVM POSIX LoadResString() system.pas
+  TResStringResource = packed record
+    ShortLen: word;
+    case integer of
+    0: ( ShortW: TWide4K );
+    1: ( LongLen: cardinal;
+         LongW: TWide4K );
+  end;
+
+procedure _OsLoadResString(Rec: PResStringRec; var Res: string);
+var
+  p: ^TResStringResource;
+begin
+  Res := '';
+  if Rec = nil then
+    exit;
+  p := Posix.Dlfcn.dlsym(FindResourceHInstance(HInstance), Rec^.Key); // main exe only
+  if p <> nil then
+    if p^.ShortLen = $ffff then
+      SetString(Res, p^.ShortW, p^.ShortLen)
+    else
+      SetString(Res, p^.LongW, p^.LongLen);
+end;
+
 
 {****************** Network POSIX Operating Systems API for Delphi }
 

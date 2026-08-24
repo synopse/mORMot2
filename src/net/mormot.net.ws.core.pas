@@ -106,12 +106,12 @@ type
 
 const
   FRAME_OPCODE_FIN = 128;
+
+  FRAME_LEN_2BYTES = 126;
+  FRAME_LEN_8BYTES = 127;
   // https://tools.ietf.org/html/rfc6455#section-10.3
   // client-to-server masking is mandatory (but not from server to client)
   FRAME_LEN_MASK = 128;
-  FRAME_LEN_2BYTES = 126;
-  FRAME_LEN_8BYTES = 127;
-
 
 /// used to return the text corresponding to a specified WebSockets frame type
 function ToText(opcode: TWebSocketFrameOpCode): PShortString; overload;
@@ -292,7 +292,7 @@ type
     fFramesInBytes: QWord;
     fFramesOutBytes: QWord;
     fOnBeforeIncomingFrame: TOnWebSocketProtocolIncomingFrame;
-    fRemoteLocalhost: boolean;
+    fRemoteLocalhost, fCustomDataOwned: boolean;
     fConnectionFlags: THttpServerRequestFlags;
     fConnectionOpaque: PHttpServerConnectionOpaque;
     fRemoteIP: RawUtf8;
@@ -302,6 +302,7 @@ type
     fUri: RawUtf8;
     fLastError: string;
     fEncryption: IProtocol;
+    fCustomData: TObject;
     procedure AfterUpgrade(aProcess: TWebSocketProcess); virtual;
     // focText/focBinary or focContinuation/focConnectionClose from ProcessStart/Stop
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
@@ -323,6 +324,8 @@ type
     // - if aUri is '', any URI would potentially upgrade to this protocol; you can
     // specify an URI to limit the protocol upgrade to a single resource
     constructor Create(const aName, aUri: RawUtf8); reintroduce;
+    /// finalize this protocol instance
+    destructor Destroy; override;
     /// compute a new instance of the WebSockets protocol, with same parameters
     // - by default, will return nil, as expected for Client-side only
     function Clone(const aClientUri: RawUtf8): TWebSocketProtocol; virtual;
@@ -365,6 +368,9 @@ type
       out ExtOut: RawUtf8; ErrorMsg: PRawUtf8): boolean; virtual;
     /// called e.g. for authentication during the WebSockets handshake
     function ProcessHandshakeUri(const aClientUri: RawUtf8): boolean; virtual;
+    /// assign the CustomData property to this instance, with optional ownership
+    // - you could call SetCustomData(nil) to reset (and perhaps free) CustomData
+    procedure SetCustomData(Data: TObject; Owned: boolean = false);
     /// allow low-level interception before ProcessIncomingFrame is done
     property OnBeforeIncomingFrame: TOnWebSocketProtocolIncomingFrame
       read fOnBeforeIncomingFrame write fOnBeforeIncomingFrame;
@@ -383,6 +389,10 @@ type
     /// quickly check if the known remote IP maps the local host
     property RemoteLocalhost: boolean
       read fRemoteLocalhost write fRemoteLocalhost;
+    /// optional custom class instance which could be used to customize
+    // - use SetCustomData() to assign a TObject to this instance
+    property CustomData: TObject
+      read fCustomData;
   published
     /// the Sec-WebSocket-Protocol application name currently involved
     // - e.g. 'synopsejson', 'synopsebin' or 'synopsebinary'
@@ -752,7 +762,7 @@ type
     fOutgoing: TWebSocketFrameList;
     fOwnerThread: TSynThread;
     fState: TWebSocketProcessState;
-    fMaskSentFrames: byte;
+    fMaskSentFrames: byte; // 0 (from server) or 128 (from client)
     fProcessEnded: boolean;
     fConnectionCloseWasSent: boolean;
     fNoLastSocketTicks: boolean;
@@ -921,11 +931,13 @@ function ToText(st: TWebSocketProcessState): PShortString; overload;
 type
   /// define our work memory buffer for low-level WebSockets frame headers
   TFrameHeader = packed record
-    first: byte;
-    len8: byte;
-    len32: cardinal;
-    len64: cardinal;
-    mask: cardinal; // mask=0 indicates no payload masking
+    first: byte;          // opcode + FIN high bit
+    two: byte;            // payloadlen = two if < 126 + high bit if mask32 <> 0
+    len64: Int64;         // payloadlen = 16-bit if two=126, 64-bit if two=127
+    mask32: cardinal;     // 0 means no payload masking - should be after len64
+    lensize: byte;        // number of bytes in first+two+len64 (2/4/10)
+    masksize: byte;       // number of bytes of ending mask32 (0/4)
+    payloadlen: cardinal; // before encoding or after decoding
   end;
 
   /// states of the WebSockets parsing asynchronous machine
@@ -944,34 +956,29 @@ type
   TWebProcessInFrame = object
   {$endif USERECORDWITHMETHODS}
   public
-    hdr: TFrameHeader;
+    header: TFrameHeader;
+    pos: integer;
     opcode: TWebSocketFrameOpCode;
-    masked: boolean;
     state: TWebProcessInFrameState;
     process: TWebSocketProcess;
     outputframe: PWebSocketFrame;
-    len: integer;
     data: RawByteString; // will eventually be appended to outputframe.payload
     procedure Init(Owner: TWebSocketProcess; output: PWebSocketFrame);
     function HasBytes(P: PAnsiChar; count: integer): boolean;
       {$ifdef HASINLINE} inline; {$endif}
+    function HasHeader: boolean;
     function GetHeader: boolean;
     function GetData: boolean;
     function Step(ErrorWithoutException: PInteger): TWebProcessInFrameState;
   end;
 
-  /// reusable encoder for WebSockets outgoing frames
-  {$ifdef USERECORDWITHMETHODS}
-  TWebSocketFrameEncoder = record
-  {$else}
-  TWebSocketFrameEncoder = object
-  {$endif USERECORDWITHMETHODS}
-  public
-    hdr: TFrameHeader;
-    hdrlen, len: cardinal;
-    function Prepare(const Frame: TWebSocketFrame; MaskSentFrames: cardinal): integer;
-    function Encode(const Frame: TWebSocketFrame; Dest: PAnsiChar): integer;
-  end;
+/// reusable first encoder step for WebSockets outgoing frames
+function HeaderPrepare(var Header: TFrameHeader; const Frame: TWebSocketFrame;
+  MaskSentFrames: cardinal): integer;
+
+/// reusable second encoder step for WebSockets outgoing frames
+function HeaderEncode(var Header: TFrameHeader; const Frame: TWebSocketFrame;
+  Dest: PAnsiChar): integer;
 
 
 { ******************** TWebSocketProtocolChat Simple Protocol }
@@ -1031,7 +1038,7 @@ var
   WebSocketsBinarySynLzThreshold: integer = 450;
 
   /// the allowed maximum size, in MB, of a WebSockets frame
-  WebSocketsMaxFrameMB: cardinal = 256;
+  WebSocketsMaxFrameMB: PtrUInt = 256;
 
 
 { ****************** Socket.IO / Engine.IO Raw Protocols }
@@ -1107,7 +1114,7 @@ type
     function NameSpaceIs(const Name: RawUtf8): boolean;
     /// retrieve the NameSpace value as a new RawUtf8
     procedure NameSpaceGet(out Dest: RawUtf8);
-    /// retrieve the NameSpace value as a shortstring (used e.g. for RaiseESockIO)
+    /// retrieve the NameSpace value as a ShortString (e.g. for RaiseESockIO)
     function NameSpaceShort: ShortString;
       {$ifdef HASINLINE} inline; {$endif}
     /// parse the Data content JSON payload into a TDocVariant
@@ -1356,7 +1363,7 @@ type
     constructor Create(aOwner: TEngineIOAbstract;
       const aNamespace: RawUtf8 = '/'); reintroduce;
     /// register an event with an associated callback
-    // - returns self to be used as a fluid interface, e.g.
+    // - returns self to be used as a fluent interface, e.g.
     // from TSocketsIOClient.Local()
     function RegisterEvent(const aEventName: RawUtf8;
       const aCallback: TOnSocketIOEvent): TSocketIOLocalNamespace;
@@ -1501,7 +1508,7 @@ begin
   end;
   for i := 0 to (len and 3) - 1 do
   begin
-    PByteArray(data)^[i] := PByteArray(data)^[i] xor mask;
+    PByteArray(data)^[i] := PByteArray(data)^[i] xor byte(mask);
     mask := mask shr 8;
   end;
 end;
@@ -1522,64 +1529,68 @@ begin
     frame.content := [];
 end;
 
-{ TWebSocketFrameEncoder }
-
-function TWebSocketFrameEncoder.Prepare(const Frame: TWebSocketFrame;
+function HeaderPrepare(var Header: TFrameHeader; const Frame: TWebSocketFrame;
   MaskSentFrames: cardinal): integer;
 begin
-  len := Length(Frame.payload);
-  hdr.first := byte(Frame.opcode) or FRAME_OPCODE_FIN; // single frame
-  if len < FRAME_LEN_2BYTES then
+  // MaskSentFrames = 0 (from server) or 128 (from client)
+  Header.payloadlen := Length(Frame.payload);
+  Header.first := byte(Frame.opcode) or FRAME_OPCODE_FIN; // single frame
+  if Header.payloadlen < FRAME_LEN_2BYTES then
   begin
-    hdr.len8 := len or MaskSentFrames;
-    hdrlen := 2; // opcode+len8
+    Header.two := Header.payloadlen or MaskSentFrames;
+    Header.lensize:= 2; // opcode+two
   end
-  else if len < 65536 then
+  else if Header.payloadlen < 65536 then
   begin
-    hdr.len8 := FRAME_LEN_2BYTES or MaskSentFrames;
-    hdr.len32 := bswap16(len);
-    hdrlen := 4; // opcode+len8+len32.low
+    Header.two := FRAME_LEN_2BYTES or MaskSentFrames;
+    PWord(@Header.len64)^ := bswap16(Header.payloadlen);
+    Header.lensize := 4; // opcode+126+len.W[0]
   end
   else
   begin
-    hdr.len8 := FRAME_LEN_8BYTES or MaskSentFrames;
-    hdr.len64 := bswap32(len);
-    hdr.len32 := 0;
-    hdrlen := 10; // opcode+len8+len32+len64.low
+    Header.two := FRAME_LEN_8BYTES or MaskSentFrames;
+    Header.len64 := bswap64(Header.payloadlen);
+    Header.lensize := 10; // opcode+127+len.V
   end;
-  if MaskSentFrames <> 0 then
+  if MaskSentFrames <> 0 then // two and 128 <> 0
   begin
     // https://tools.ietf.org/html/rfc6455#section-10.3
     // client-to-server masking is mandatory (but not from server to client)
-    hdr.mask := Random32Not0;
-    inc(hdrlen, 4);
+    Header.mask32 := Random32Not0;
+    Header.masksize := 4;
   end
   else
-    hdr.mask := 0;
-  result := hdrlen + len;
+  begin
+    Header.mask32 := 0;
+    Header.masksize := 0;
+  end;
+  result := Header.payloadlen + Header.lensize + Header.masksize;
 end;
 
-function TWebSocketFrameEncoder.Encode(
-  const Frame: TWebSocketFrame; Dest: PAnsiChar): integer;
+function HeaderEncode(var Header: TFrameHeader; const Frame: TWebSocketFrame;
+  Dest: PAnsiChar): integer;
 begin
-  MoveByOne(@hdr, Dest, hdrlen);  // 2/4 bytes for small/common frames
-  inc(Dest, hdrlen);
-  if hdr.mask <> 0 then
-    // hdr.mask is not at the right position: append to actual end of header
-    PInteger(Dest - 4)^ := hdr.mask;
-  MoveFast(pointer(Frame.payload)^, Dest^, len);
-  if hdr.mask <> 0 then
-    ProcessMask(pointer(Dest), hdr.mask, len); // only on client side
-  result := hdrlen + len;
+  MoveByOne(@Header, Dest, Header.lensize); // 2/4/10 bytes
+  inc(Dest, Header.lensize);
+  if Header.masksize <> 0 then
+  begin
+    // Header.mask32 is not at the right position: append to actual end of header
+    PCardinal(Dest)^ := Header.mask32;
+    inc(PCardinal(Dest));
+  end;
+  MoveFast(pointer(Frame.payload)^, Dest^, Header.payloadlen);
+  if Header.masksize <> 0 then
+    ProcessMask(pointer(Dest), Header.mask32, Header.payloadlen);
+  result := Header.lensize + Header.masksize + Header.payloadlen;
 end;
 
 procedure FrameSendEncode(const Frame: TWebSocketFrame;
   MaskSentFrames: cardinal; var ToSend: TSynTempBuffer);
 var
-  encoder: TWebSocketFrameEncoder;
+  hdr: TFrameHeader;
 begin
-  ToSend.Init(encoder.Prepare(Frame, MaskSentFrames));
-  encoder.Encode(Frame, ToSend.buf);
+  ToSend.Init(HeaderPrepare(hdr, Frame, MaskSentFrames));
+  HeaderEncode(hdr, Frame, ToSend.buf);
 end;
 
 
@@ -1594,6 +1605,20 @@ begin
   fName := aName;
   fUri := aUri;
   fConnectionFlags := [hsrWebsockets];
+end;
+
+destructor TWebSocketProtocol.Destroy;
+begin
+  SetCustomData(nil); // free fCustomData if needed
+  inherited Destroy;
+end;
+
+procedure TWebSocketProtocol.SetCustomData(Data: TObject; Owned: boolean);
+begin
+  if fCustomDataOwned then
+    FreeAndNil(fCustomData);
+  fCustomData := Data;
+  fCustomDataOwned := Owned;
 end;
 
 procedure TWebSocketProtocol.Reset;
@@ -2152,7 +2177,7 @@ begin
   begin
     result := P + 1;
     if HeadFound <> nil then
-      FastSetString(HeadFound^, txt, P - txt);
+      FastSetString(HeadFound^, txt, P);
   end;
 end;
 
@@ -2209,7 +2234,7 @@ function TWebSocketProtocolJson.SendFrames(Owner: TWebSocketProcess;
   var Frames: TWebSocketFrameDynArray;
   var FramesCount: integer): boolean;
 var
-  enc: array of TWebSocketFrameEncoder;
+  enc: array of TFrameHeader;
   i, len: PtrInt;
   P: PAnsiChar;
   tmp: TSynTempBuffer; // to avoid most memory allocations
@@ -2233,11 +2258,11 @@ begin
       EWebSockets.RaiseUtf8('%.SendFrames: unexpected %',
         [self, ToText(Frames[i].opcode)])
     else
-      inc(len, enc[i].Prepare(Frames[i], Owner.fMaskSentFrames));
+      inc(len, HeaderPrepare(enc[i], Frames[i], Owner.fMaskSentFrames));
   P := tmp.Init(len);
   try
     for i := 0 to FramesCount - 1 do
-      inc(P, enc[i].Encode(Frames[i], P));
+      inc(P, HeaderEncode(enc[i], Frames[i], P));
     result := Owner.SendBytes(tmp.buf, len); // directly send at once
     if (WebSocketLog <> nil) and
        (logTextFrameContent in Owner.Settings.LogDetails) then
@@ -2343,7 +2368,7 @@ begin
   if PMax <> nil then
     PMax^ := pointer(P + PStrLen(P - _STRLEN)^);
   if HeadFound <> nil then
-    FastSetString(HeadFound^, P, PAnsiChar(result) - P);
+    FastSetString(HeadFound^, P, result);
   inc(PByte(result));
 end;
 
@@ -3574,78 +3599,99 @@ begin
   process := owner;
   outputframe := output;
   state := pfsHeader1;
-  len := 0;
+  pos := 0;
 end;
 
 function TWebProcessInFrame.HasBytes(P: PAnsiChar; count: integer): boolean;
+var
+  needed: PtrInt;
 begin
-  if len > count then
-    // we already got that much input data
-    result := true
-  else
+  needed := count - pos;
+  if needed > 0 then
   begin
     // TWebCrtSocketProcess SockInRead() would raise a ENetSock error on failure
-    inc(len, process.ReceiveBytes(P + len, count - len));
-    result := len = count;
-  end;
+    // TWebSocketAsyncProcess would just return the bytes available from its buffers
+    inc(pos, process.ReceiveBytes(P + pos, needed));
+    result := pos = count;
+  end
+  else
+    // we already got that much input data
+    result := true;
+end;
+
+function TWebProcessInFrame.HasHeader: boolean;
+begin
+  result := HasBytes(@header, PtrInt(header.lensize) + header.masksize);
 end;
 
 function TWebProcessInFrame.GetHeader: boolean;
+var
+  // use local variables to ease decoding and keep the header content untouched
+  b: byte;
+  len64: Int64;
 begin
   result := false;
-  if len = 0 then
+  if pos = 0 then
   begin
-    data := '';
-    FillCharFast(hdr, SizeOf(hdr), 0);
+    // reset for every decoded frame
+    FastAssignNew(data);
+    FillCharFast(header, SizeOf(header), 0);
   end;
-  if not HasBytes(@hdr, 2) then // first+len8
-    exit;
-  opcode := TWebSocketFrameOpCode(hdr.first and 15);
-  masked := hdr.len8 and FRAME_LEN_MASK <> 0;
-  if masked then
-    hdr.len8 := hdr.len8 and (FRAME_LEN_MASK - 1);
-  if hdr.len8 < FRAME_LEN_2BYTES then
-    hdr.len32 := hdr.len8
-  else if hdr.len8 = FRAME_LEN_2BYTES then
+  header.lensize := 2; // first=opcode + two=len
+  if not HasHeader then
+    exit; // not enough input
+  opcode := TWebSocketFrameOpCode(header.first and 15);
+  // note: FRAME_OPCODE_FIN is implemented below in TWebProcessInFrame.Step
+  b := header.two;
+  if b and FRAME_LEN_MASK <> 0 then
   begin
-    if not HasBytes(@hdr, 4) then // first+len8+len32.low
-      exit;
-    hdr.len32 := bswap16(hdr.len32);
+    // client-to-server masking is mandatory (but not from server to client)
+    b := b and pred(FRAME_LEN_MASK);
+    header.masksize := SizeOf(header.mask32); // = 4 for masked input
+  end;
+  if b < FRAME_LEN_2BYTES then
+    header.payloadlen := b
+  else if b = FRAME_LEN_2BYTES then
+  begin
+    header.lensize := 4; // opcode + b=126 + 16-bit len
+    if not HasHeader then
+      exit; // not enough input
+    header.payloadlen := bswap16(PWord(@header.len64)^);
   end
-  else if hdr.len8 = FRAME_LEN_8BYTES then
+  else if b = FRAME_LEN_8BYTES then
   begin
-    if not HasBytes(@hdr, 10) then // first+len8+len32+len64.low
-      exit;
-    if hdr.len32 <> 0 then // size is more than 32 bits (4GB) -> reject
-      hdr.len32 := maxInt
-    else
-      hdr.len32 := bswap32(hdr.len64);
-    if hdr.len32 > WebSocketsMaxFrameMB shl 20 then
+    header.lensize := 10; // opcode + b=127 + 64-bit len
+    if not HasHeader then
+      exit; // not enough input
+    len64 := bswap64(header.len64);
+    if len64 > WebSocketsMaxFrameMB shl 20 then
       EWebSockets.RaiseUtf8('%.GetFrame: length = % should be < % MB',
-        [process, KB(hdr.len32), WebSocketsMaxFrameMB]);
+        [process, KB(len64), WebSocketsMaxFrameMB]);
+    header.payloadlen := len64;
   end;
-  if masked then
+  if header.masksize <> 0 then // = 4 for masked input
   begin
-    len := 0; // not appended to hdr
-    if not HasBytes(@hdr.mask, 4) then
-      EWebSockets.RaiseUtf8('%.GetFrame: truncated mask', [process]);
+    if not HasHeader then
+      exit; // not enough input
+    header.mask32 := PCardinal(PAnsiChar(@header) + header.lensize)^; // at ending
+    if header.mask32 = 0 then
+      EWebSockets.RaiseUtf8('%.GetFrame: unexpected mask=0', [process]);
   end;
-  len := 0; // prepare upcoming GetData
+  pos := 0; // prepare upcoming GetData
   result := true;
 end;
 
 function TWebProcessInFrame.GetData: boolean;
 begin
-  if length(data) <> integer(hdr.len32) then
-    FastNewRawByteString(data, hdr.len32);
-  result := HasBytes(pointer(data), hdr.len32);
-  if result then
-  begin
-    if hdr.mask <> 0 then
-      // client-to-server masking is mandatory (but not from server to client)
-      ProcessMask(pointer(data), hdr.mask, hdr.len32);
-    len := 0; // prepare next upcoming GetHeader
-  end;
+  result := false;
+  if length(data) <> PtrInt(header.payloadlen) then
+    FastNewRawByteString(data, header.payloadlen);
+  if not HasBytes(pointer(data), header.payloadlen) then
+    exit; // not enough input
+  if header.mask32 <> 0 then
+    ProcessMask(pointer(data), header.mask32, header.payloadlen);
+  pos := 0; // prepare next upcoming GetHeader
+  result := true;
 end;
 
 function TWebProcessInFrame.Step(ErrorWithoutException: PInteger): TWebProcessInFrameState;
@@ -3665,7 +3711,7 @@ begin
         if GetData then
         begin
           outputframe.payload := data;
-          if hdr.first and FRAME_OPCODE_FIN = 0 then
+          if header.first and FRAME_OPCODE_FIN = 0 then
             state := pfsHeaderN
           else
             state := pfsDone;
@@ -3697,8 +3743,8 @@ begin
       pfsDataN:
         if GetData then
         begin
-          outputframe.payload := outputframe.payload + data;
-          if hdr.first and FRAME_OPCODE_FIN = 0 then
+          Append(outputframe.payload, data);
+          if header.first and FRAME_OPCODE_FIN = 0 then
             state := pfsHeaderN
           else
             state := pfsDone;
@@ -4387,10 +4433,8 @@ begin
   else
   begin
     // normalize root
-    if r[1] <> '/' then
-      insert('/', r, 1);
-    if r[length(r)] <> '/' then
-      Append(r, '/');
+    PrependIfNone(r, '/');
+    AppendIfNone(r, '/');
   end;
   // EIO        4          Mandatory, the version of the protocol
   // transport  websocket  Mandatory, the name of the transport

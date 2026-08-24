@@ -19,6 +19,7 @@ uses
   mormot.core.variants,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.threads,
   mormot.crypt.core,
   mormot.orm.core,
   mormot.orm.base,

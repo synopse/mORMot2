@@ -8,6 +8,7 @@ unit mormot.net.client;
 
    HTTP Client Classes
    - THttpMultiPartStream for multipart/formdata HTTP POST
+   - THttpMultiPartDecoder Processing multipart/formdata Input
    - THttpClientSocket Implementing HTTP client over plain sockets
    - Additional Client Protocols Support
    - THttpRequest Abstract HTTP client class
@@ -126,6 +127,182 @@ type
   end;
 
 
+{ ******************** THttpMultiPartDecoder Processing multipart/formdata Input }
+
+type
+  /// exception class raised by THttpMultiPartDecoder
+  EHttpMultiPart = class(ESynException);
+
+  THttpMultiPartDecoder = class;
+
+  /// TStream to retrieve the current THttpMultiPartDecoder section content
+  // - as returned by THttpMultiPartDecoder.Current.Content
+  // - Read() will return 0 at the end of the current section: the data is
+  // decoded incrementally from the input stream, so Seek() is not supported,
+  // and the section size is not known in advance - Size does not return the
+  // section length, but the number of bytes read so far
+  // - warning: as a consequence, don't use Delphi's TStream.CopyFrom(src, 0)
+  // which would read Size (i.e. 0) and silently copy nothing: consume this
+  // stream with StreamCopyUntilEnd() or an explicit Read() loop instead
+  // - Read() will raise EHttpMultiPart on malformed or truncated input, so
+  // that a partially received file section is never mistaken for a complete
+  // one - see also THttpMultiPartDecoder.Close for final validation
+  // - this instance is owned and reused by its THttpMultiPartDecoder: it is
+  // valid only until the next NextPart call, and should not outlive it
+  THttpMultiPartDecoderStream = class(TStreamWithNoSeek)
+  protected
+    fOwner: THttpMultiPartDecoder;
+    procedure Rewind; // reset Position/Size before a new section
+      {$ifdef HASINLINE}inline;{$endif}
+  public
+    /// read up to Count bytes of the current section content
+    // - returns 0 once the section has been fully consumed
+    // - raise EHttpMultiPart on malformed or truncated multipart input
+    function Read(var Buffer; Count: Longint): Longint; override;
+  end;
+
+  /// decoded information about one multipart/formdata section, as made
+  // available by THttpMultiPartDecoder.NextPart in Current
+  // - maps the TMultiPart fields from mormot.core.buffers, but with a
+  // Content stream to be consumed incrementally, not an in-memory buffer
+  THttpMultiPartDecoderSection = record
+    /// the "name" parameter of this section
+    Name: RawUtf8;
+    /// the "filename" parameter of this section, '' for a plain form field
+    // - warning: this value comes straight from untrusted client input -
+    // never use it directly to build a local file name without strict
+    // sanitization (e.g. reject path delimiters, reserved names and '..')
+    FileName: RawUtf8;
+    /// the Content-Type header of this section
+    ContentType: RawUtf8;
+    /// the Content-Transfer-Encoding header of this section
+    // - is only reported, and never applied: Content below always returns the
+    // raw section bytes, so it is up to the caller to e.g. call Base64ToBin()
+    // on a 'base64' encoded section - as MultiPartFormDataAddFile() generates
+    Encoding: RawUtf8;
+    /// incremental access to this section content
+    // - read it until Read() returns 0, before the next NextPart call - any
+    // unread content will be drained and discarded by the next NextPart
+    // - use StreamCopyUntilEnd() or a Read() loop, not TStream.CopyFrom(x, 0)
+    Content: TStream;
+  end;
+
+  /// the internal processing state of THttpMultiPartDecoder
+  THttpMultiPartDecoderState = (
+    mpdsPreamble,
+    mpdsHeaders,
+    mpdsContent,
+    mpdsFinished,
+    mpdsError);
+
+  /// server-side incremental decoder of multipart/formdata content
+  // - decoding counterpart of the client-side THttpMultiPartStream encoder,
+  // e.g. to implement server-side handling of huge file uploads - see
+  // https://github.com/synopse/mORMot2/issues/292
+  // - input is any TStream, e.g. a spooled temporary file, or a TPipeStream
+  // filled from the incoming HTTP request body: the source Read() should
+  // block until some data is available, and return 0 only once the whole
+  // body has been supplied, since a first Read()=0 is taken as a definitive
+  // end of input - so don't supply a TPipeStream with a read timeout or the
+  // psoReadNonBlocking option, which both may return 0 while still active
+  // - this class is not thread-safe: a single consumer should drive NextPart
+  // and the Current.Content stream, e.g. from one request processing thread
+  // - mimics the pull API of the Go mime/multipart.Reader type: repeatedly
+  // call NextPart, consume the Current.Content stream (e.g. into one target
+  // file per section), then eventually call Close to check the final boundary
+  // - a single small work buffer is used, so content of any size can be
+  // processed (e.g. much bigger than 2GB), with no memory allocation while
+  // decoding the section content itself
+  THttpMultiPartDecoder = class
+  protected
+    fSource: TStream;
+    fState: THttpMultiPartDecoderState;
+    fSourceEof: boolean;
+    fCurrent: THttpMultiPartDecoderSection;
+    fDelimiter: RawUtf8;    // #13#10'--' + boundary
+    fBuffer: RawByteString; // sliding window over fSource content
+    fBufPos, fBufLen: PtrInt;
+    fScanned: PtrInt;        // ReadLine watermark to avoid re-scanning
+    fContentPending: PtrInt; // known section content bytes not yet consumed
+    function Refill: boolean;
+    function EnsureBytes(Count: PtrInt): boolean;
+    function FindDelimiter(MaxLen: PtrInt; out SafeLen: PtrInt): PtrInt;
+    function CheckTail(Offset: PtrInt; out Consumed: PtrInt;
+      out Final: boolean): integer;
+    function SkipPreamble: boolean;
+    function ReadLine(out Line: RawUtf8): boolean;
+    function ParseHeaders: boolean;
+    function PartRead(var Dest; Count: PtrInt): PtrInt;
+    procedure DrainPart;
+  public
+    /// initialize the decoder over a given input stream and boundary
+    // - aBoundary is the raw boundary value, as extracted from the
+    // 'multipart/form-data; boundary=xxx' header - see also
+    // CreateFromContentType and MultiPartFormDataBoundary()
+    // - raise EHttpMultiPart if aBoundary is void or unreasonably long
+    // (RFC 2046 limits boundaries to 70 characters)
+    // - aSource ownership stays with the caller: it is not freed by Destroy,
+    // and should remain available during the whole decoding loop
+    constructor Create(aSource: TStream; const aBoundary: RawUtf8;
+      aBufferSize: PtrInt = 65536); reintroduce;
+    /// initialize the decoder from a full Content-Type header value
+    // - raise EHttpMultiPart if aContentType has no valid boundary parameter
+    constructor CreateFromContentType(aSource: TStream;
+      const aContentType: RawUtf8; aBufferSize: PtrInt = 65536);
+    /// finalize this decoder instance
+    destructor Destroy; override;
+    /// move to the next section of the multipart content
+    // - returns true if a new section is available in Current - then caller
+    // should consume Current.Content until Read() returns 0
+    // - any unread content of the previous section is drained and discarded
+    // - returns false at the end of the multipart content, or on malformed
+    // input (check State = mpdsFinished for graceful termination)
+    function NextPart: boolean;
+    /// can be called after the NextPart loop to validate the input
+    // - drain any pending section, then returns true if the multipart
+    // content did properly end with a final --boundary-- delimiter
+    // - a caller should trust the received sections only after this method
+    // returned true, e.g. before moving uploaded files to their final place
+    // - any epilogue after the final delimiter is not read from the source:
+    // with a piped input, the caller should drain or close it afterwards
+    function Close: boolean;
+    /// the current section information, as decoded by NextPart
+    // - note: reading this property copies the whole record - the Name /
+    // FileName / ContentType / Encoding / Content properties below give
+    // direct access to the individual fields with no copy
+    property Current: THttpMultiPartDecoderSection
+      read fCurrent;
+    /// the "name" parameter of the current section, as decoded by NextPart
+    property Name: RawUtf8
+      read fCurrent.Name;
+    /// the "filename" parameter of the current section - '' for plain fields
+    // - this value comes straight from the client, so should be considered
+    // untrusted user input, exactly as Current.FileName
+    property FileName: RawUtf8
+      read fCurrent.FileName;
+    /// the Content-Type header value of the current section
+    property ContentType: RawUtf8
+      read fCurrent.ContentType;
+    /// the Content-Transfer-Encoding header value of the current section
+    // - only reported, never applied - see Current.Encoding for details
+    property Encoding: RawUtf8
+      read fCurrent.Encoding;
+    /// the raw content of the current section, to be read until 0 is returned
+    property Content: TStream
+      read fCurrent.Content;
+    /// the internal decoding state machine position
+    property State: THttpMultiPartDecoderState
+      read fState;
+  end;
+
+/// extract the boundary=xxx parameter of a multipart/formdata content type
+// - parameter name matching is case-insensitive and anchored, as RFC 2045;
+// quoted values are unquoted, rejecting an unbalanced trailing quote
+// - returns false if MimeType has no valid boundary= parameter
+function MultiPartFormDataBoundary(const MimeType: RawUtf8;
+  out Boundary: RawUtf8): boolean;
+
+
 { ************** THttpClientSocket Implementing HTTP client over plain sockets }
 
 { high-level definitions, shared with both THttpRequest and THttpClientSocket }
@@ -133,16 +310,34 @@ type
 type
   /// the supported authentication schemes which may be used by HTTP clients
   // - not supported by all classes (e.g. TWinINet won't support all schemes)
+  // - by design, wraNegotiatePasswordKeytab* modes only exist on POSIX/GSSAPI
+  // - serialized as its ordinal/integer value: do not change the order below
   THttpRequestAuthentication = (
     wraNone,
     wraBasic,
     wraDigest,
     wraNegotiate,
     wraNegotiateChannelBinding,
-    wraBearer);
+    wraBearer,
+    wraNegotiatePasswordKeytab,
+    wraNegotiatePasswordKeytabChannelBinding);
 
   /// pointer to some extended options for HTTP clients
   PHttpRequestExtendedOptions = ^THttpRequestExtendedOptions;
+
+  /// define THttpRequestExtendedOptions.Auth fields for HTTP clients
+  THttpRequestAuthOptions = record
+    /// the used authentication scheme
+    Scheme: THttpRequestAuthentication;
+    /// the credential user logon
+    UserName: RawUtf8;
+    /// the credential password
+    // - may be '' to use the current logged user for wraNegotiate
+    // - may be a local keytab/ccache file name for wraNegotiatePasswordKeytab*
+    Password: SpiUtf8;
+    /// the private header token value for wraBearer
+    Token: SpiUtf8;
+  end;
 
   /// a record to set some extended options for HTTP clients
   // - allow easy propagation e.g. from a TRestHttpClient* wrapper class to
@@ -168,12 +363,7 @@ type
     /// the timeout to be used for the whole connection, as supplied to Create()
     CreateTimeoutMS: integer;
     /// allow HTTP/HTTPS authentication to take place at server request
-    Auth: record
-      Scheme: THttpRequestAuthentication;
-      UserName: RawUtf8;
-      Password: SpiUtf8;
-      Token: SpiUtf8;
-    end;
+    Auth: THttpRequestAuthOptions;
     /// how many times THttpClientSocket/TWinHttp should redirect 30x responses
     // - TCurlHttp would only check for RedirectMax > 0 with no exact count
     // - TWinINet won't support this parameter
@@ -185,6 +375,8 @@ type
     UserAgent: RawUtf8;
     /// may be used to initialize this record on stack with zeroed values
     procedure Init;
+    /// may be used to initialize this record on stack with HTTP client values
+    procedure InitDefault;
     /// reset this record, calling FillZero() on Password/Token SpiUtf8 values
     procedure Clear;
     /// setup web authentication using the Basic access algorithm
@@ -194,7 +386,11 @@ type
     /// setup web authentication using Kerberos via SSPI/GSSAPI and credentials
     // - if you want to authenticate with the current logged user, just set
     // ! Auth.Scheme := wraNegotiate;
-    procedure AuthorizeSspiUser(const UserName: RawUtf8; const Password: SpiUtf8);
+    // - wraNegotiate*ChannelBinding modes enable channel binding at TLS level
+    // - wraNegotiatePasswordKeytab* modes would expect Password to be
+    // StringToUtf8() of a local keytab/ccache full file name for authentication
+    procedure AuthorizeSspiUser(const UserName: RawUtf8; const Password: SpiUtf8;
+      NegotiateMode: THttpRequestAuthentication = wraNegotiate);
     /// setup web authentication using a given Bearer in the request headers
     procedure AuthorizeBearer(const Value: SpiUtf8);
     /// compare the Auth fields, depending on their scheme
@@ -217,6 +413,14 @@ type
     function InitFromUrl(const UrlParams: RawUtf8;
       const Secret: RawByteString = ''): boolean;
   end;
+
+const
+  /// all NEGOTIATE / Kerberos authentication modes
+  wraNegotiates =
+    [wraNegotiate,
+     wraNegotiateChannelBinding,
+     wraNegotiatePasswordKeytab,
+     wraNegotiatePasswordKeytabChannelBinding];
 
 function ToText(wra: THttpRequestAuthentication): PShortString; overload;
 
@@ -263,6 +467,8 @@ type
   THttpPartial = record
     /// genuine 31-bit positive number, 0 if empty/recyclable after ReleaseSlot
     ID: THttpPartialID;
+    /// the internal state of this partial download
+    Flags: set of (pFinished, pHash);
     /// the expected full size of this download
     FullSize: Int64;
     /// the timestamp to be affected to the file, when it is fully downloaded
@@ -271,8 +477,6 @@ type
     PartFile: TFileName;
     /// background HTTP requests which are waiting for data on this download
     HttpContext: array of PHttpRequestContext;
-    /// the internal state of this partial download
-    Flags: set of (pFinished, pHash);
     /// up to 512-bit of raw binary hash, prefixed by THashAlgo identifier
     // - actual file hash for THttpPeerCache, but URI hash for THttpProxyServer
     Digest: THashDigest;
@@ -392,11 +596,11 @@ type
     wgsProgressive,
     wgsProgressiveFailed,
     wgsGet,
-    wgsSetDate,
     wgsLastMod,
     wgsAlternateRename,
     wgsAlternateFailedRename,
-    wgsAlternateFailedCopyInCache);
+    wgsAlternateFailedCopyInCache,
+    wgsLastModFailed);
   /// which steps have been performed during THttpClientSocket.WGet() process
   TWGetSteps = set of TWGetStep;
 
@@ -435,7 +639,7 @@ type
     Alternate: IWGetAlternate;
     /// how Alternate should operate this file
     AlternateOptions: TWGetAlternateOptions;
-    /// how much time this connection should be kept alive
+    /// how much milliseconds time this connection should be kept alive
     // - as redirected to the internal Request() parameter
     KeepAlive: cardinal;
     /// allow to continue an existing .part file download
@@ -639,6 +843,10 @@ type
     procedure OpenBind(const aServer, aPort: RawUtf8; doBind: boolean;
       aTLS: boolean = false; aLayer: TNetLayer = nlTcp;
       aSock: TNetSocket = NO_SOCKET; aReusePort: boolean = false); override;
+    /// after Create(), open a client by cloning existing TCrtSocket parameters
+    // - here aClient is expected to be a THttpClientSocket instance, so that
+    // OpenOptions() could be called with all THttpRequestExtendedOptions
+    constructor OpenFrom(aClient: TCrtSocket); override;
     /// compare TUri and its options with the actual connection
     // - returns true if no new instance - i.e. Free + OpenOptions() - is needed
     // - only supports HTTP/HTTPS, not any custom RegisterNetClientProtocol()
@@ -720,8 +928,9 @@ type
     /// setup web authentication using Kerberos via SSPI/GSSAPI for this instance
     // - will store the user/paswword credentials, and set OnAuthorizeSspi callback
     // - if Password is '', will search for an existing Kerberos token on UserName
-    // - set UserName='' and Password='FILE:/path/to/my.keytab' to use a keytab
-    // - an in-memory token will be used to authenticate the connection
+    // - wraNegotiate*ChannelBinding modes enable channel binding at TLS level
+    // - wraNegotiatePasswordKeytab* modes would expect Password to be
+    // StringToUtf8() of a local keytab/ccache full file name for authentication
     // - KerberosSpn could be only a 'MYDOMAIN.TLD' domain name - this method
     // will compute the full 'HTTP/server@MYDOMAIN.TLD' SPN
     // - if KerberosSpn is not set, 'HTTP/server@MYDOMAIN.TLD' will be used,
@@ -730,7 +939,8 @@ type
     // session-wide token (like kinit), not a transient token in memory - you
     // may prefer to load a proper libgssapi_krb5.dylib instead
     procedure AuthorizeSspiUser(const UserName: RawUtf8; const Password: SpiUtf8;
-      const KerberosSpn: RawUtf8 = '');
+      const KerberosSpn: RawUtf8 = '';
+      NegotiateMode: THttpRequestAuthentication = wraNegotiate);
     /// web authentication callback of the current logged user using Kerberos
     // - calling the Security Support Provider Interface (SSPI) API on Windows,
     // or GSSAPI on Linux (only Kerboros)
@@ -1500,6 +1710,8 @@ type
     /// returns an additional error message after the last Request() call
     // - is '' on success, or is typically an exception text with its message
     function LastError: string;
+    /// returns the last server URI from Connected() or Request()
+    function LastServer: TUri;
     /// returns the HTTP headers as returned by a previous call to Request()
     function Headers: RawUtf8;
     /// retrieve a HTTP header text value after the last Request() call
@@ -1518,6 +1730,7 @@ type
     fBody: RawByteString;
     fLastError: string;
     fStatus: integer;
+    fLastServer: TUri;
   public
     /// finalize the connection
     destructor Destroy; override;
@@ -1539,6 +1752,7 @@ type
     function Status: integer;
     function Headers: RawUtf8;
     function LastError: string;
+    function LastServer: TUri;
     function Header(const Name: RawUtf8; out Value: RawUtf8): boolean; overload;
     function Header(const Name: RawUtf8; out Value: Int64): boolean; overload;
   end;
@@ -1869,6 +2083,16 @@ type
       read fBaseUri write fBaseUri;
   end;
 
+var
+  /// default options for mormot.net.openapi client class constructors
+  OPENAPI_OPTIONS: TJsonClientOptions =
+    [jcoParseTolerant, jcoHttpErrorRaise];
+  /// default encoding for mormot.net.openapi client class constructors
+  OPENAPI_URLENCODER: TUrlEncoder =
+    [ueEncodeNames, ueSkipVoidString, ueSkipVoidValue,
+     ueStarNameIsCsv, ueEqualNameIsDirect];
+
+
 /// a simple wrapper to FindRawUtf8() which converts -1 into 0
 // - so could be used for the enums as generated by mormot.net.openapi,
 // which have the first item always being ##None as '', e.g. defined as
@@ -1876,6 +2100,9 @@ type
 // ! const ENUM1_TXT: array[TEnum1] of RawUtf8 = ('', 'one', 'and 2');
 function FindCustomEnum(const CustomText: array of RawUtf8;
   const Value: RawUtf8): integer;
+
+/// convert a record using RTTI into URI-encoded mormot.net.openapi "deepObject"
+function DeepObjectEncode(Value: pointer; Info: PRttiInfo; const Prefix: RawUtf8): RawUtf8;
 
 
 { ************** Cached HTTP Connection to a Remote Server }
@@ -1998,6 +2225,16 @@ type
   /// exception class raised by SendEmail() on raw SMTP process
   ESendEmail = class(ESynException);
 
+  /// how TLS should be applied when sending an email via SendEmail()
+  // - stlsNone: plain text connection (typically port 25)
+  // - stlsImplicit: TLS from the first byte of the connection (typically port 465)
+  // - stlsStartTls: plain connection upgraded to TLS via the STARTTLS command
+  // after EHLO (typically the submission port 587, as expected by most providers)
+  TSmtpTls = (
+    stlsNone,
+    stlsImplicit,
+    stlsStartTls);
+
 /// send an email using the SMTP protocol
 // - retry true on success
 // - the Subject is expected to be in plain 7-bit ASCII, so you could use
@@ -2006,11 +2243,15 @@ type
 // - you can optionally set another encoding charset or force TextCharSet='' to
 // expect the 'Content-Type:' to be set in Headers and Text to be the raw body
 // (e.g. a multi-part encoded message)
+// - set Tls to stlsImplicit for TLS-from-start (port 465) or stlsStartTls to
+// upgrade a plain connection via the STARTTLS command (port 587)
+// - optional TlsCtx could supply a TNetTlsContext to customize the TLS handshake
+// (e.g. TlsCtx^.IgnoreCertificateErrors), used for stlsImplicit and stlsStartTls
 function SendEmail(const Server, From, CsvDest, Subject: RawUtf8;
   const Text: RawByteString; const Headers: RawUtf8 = ''; const User: RawUtf8 = '';
   const Pass: RawUtf8 = ''; const Port: RawUtf8 = '25';
-  const TextCharSet: RawUtf8  =  'ISO-8859-1'; TLS: boolean = false;
-  TLSIgnoreCertError: boolean = false): boolean; overload;
+  const TextCharSet: RawUtf8  =  'ISO-8859-1'; Tls: TSmtpTls = stlsNone;
+  TlsCtx: PNetTlsContext = nil): boolean; overload;
 
 /// send an email using the SMTP protocol via a TSmtpConnection definition
 // - retry true on success
@@ -2020,11 +2261,12 @@ function SendEmail(const Server, From, CsvDest, Subject: RawUtf8;
 // - you can optionally set another encoding charset or force TextCharSet='' to
 // expect the 'Content-Type:' to be set in Headers and Text to be the raw body
 // (e.g. a multi-part encoded message)
-// - TLS will be forced if the port is either 465 or 587
+// - if Tls is left to stlsNone, it will be guessed from the port number:
+// stlsImplicit for port 465, or stlsStartTls for port 587
 function SendEmail(const Server: TSmtpConnection;
   const From, CsvDest, Subject: RawUtf8; const Text: RawByteString;
   const Headers: RawUtf8 = ''; const TextCharSet: RawUtf8  = 'ISO-8859-1';
-  TLS: boolean = false; TLSIgnoreCertError: boolean = false): boolean; overload;
+  Tls: TSmtpTls = stlsNone; TlsCtx: PNetTlsContext = nil): boolean; overload;
 
 /// convert a supplied subject text into an Unicode encoding
 // - will convert the text into UTF-8 and append '=?UTF-8?B?'
@@ -2035,6 +2277,10 @@ function SendEmailSubject(const Text: string): RawUtf8;
 
 
 implementation
+
+{$ifdef FPC} // already part of mormot.defines.inc but seems needed with -O2
+  {$WARN 5093 off} // function result variable of a managed uninitialized 1
+{$endif FPC}
 
 
 { ******************** THttpMultiPartStream for multipart/formdata HTTP POST }
@@ -2157,6 +2403,626 @@ begin
     mormot.core.text.Append(s, ['--', fBounds[i], '--'#13#10]);
   Append(s);
   inherited Flush; // compute fSize
+end;
+
+
+{ ******************** THttpMultiPartDecoder Processing multipart/formdata Input }
+
+function GetQuotedParamValue(var P: PUtf8Char; out Value: RawUtf8): boolean;
+var
+  b, d: PUtf8Char;
+  needescape: boolean;
+  tmp: TSynTempBuffer;
+begin
+  // decode a "quoted-string" parameter value, unescaping any \x quoted-pair
+  result := false;
+  b := P;
+  needescape := false;
+  while not (P^ in ['"', #0]) do
+  begin
+    if P^ = '\' then
+      if P[1] <> #0 then
+      begin
+        inc(P); // an escaped char is part of the value
+        needescape := true;
+      end;
+    inc(P);
+  end;
+  if P^ <> '"' then
+    exit; // unbalanced quote: caller will stop parsing this line
+  if needescape then
+  begin
+    d := tmp.Init(P - b); // unescape into a transient buffer
+    while b < P do
+    begin
+      if (b^ = '\') and
+         (b + 1 < P) then
+        inc(b);
+      d^ := b^;
+      inc(d);
+      inc(b);
+    end;
+    tmp.Done(d, Value);
+  end
+  else
+    FastSetString(Value, b, P - b); // no quoted-pair: just copy the value
+  inc(P); // ignore the ending quote
+  result := true;
+end;
+
+function MultiPartFormDataBoundary(const MimeType: RawUtf8;
+  out Boundary: RawUtf8): boolean;
+var
+  p, b: PUtf8Char;
+begin
+  result := false;
+  p := pointer(MimeType);
+  if p = nil then
+    exit;
+  // search for an anchored, case-insensitive boundary= parameter
+  repeat
+    while not (p^ in [';', '"', #0]) do
+      inc(p);
+    if p^ = '"' then
+    begin
+      // skip a quoted parameter value, which may contain ';' - and handle
+      // \" quoted-pair escapes as of RFC 9110
+      inc(p);
+      while not (p^ in ['"', #0]) do
+        if (p^ = '\') and
+           (p[1] <> #0) then
+          inc(p, 2)
+        else
+          inc(p);
+      if p^ = #0 then
+        exit; // unbalanced quotes
+      inc(p);
+      continue;
+    end;
+    if p^ = #0 then
+      exit; // no boundary= parameter
+    inc(p); // p^ = ';'
+    while p^ in [' ', #9] do
+      inc(p);
+    if IdemPChar(p, 'BOUNDARY=') then
+      break;
+  until false;
+  inc(p, 9);
+  if p^ = '"' then
+  begin
+    inc(p);
+    if not GetQuotedParamValue(p, Boundary) then
+      exit; // unbalanced trailing quote
+  end
+  else
+  begin
+    b := p;
+    while not (p^ in [';', ' ', #9, #0]) do
+      inc(p);
+    FastSetString(Boundary, b, p - b);
+  end;
+  result := Boundary <> '';
+end;
+
+
+{ THttpMultiPartDecoderStream }
+
+procedure THttpMultiPartDecoderStream.Rewind;
+begin
+  fPosition := 0;
+  fSize := 0;
+end;
+
+function THttpMultiPartDecoderStream.Read(var Buffer; Count: Longint): Longint;
+begin
+  result := fOwner.PartRead(Buffer, Count);
+  if result > 0 then
+  begin
+    inc(fPosition, result);
+    inc(fSize, result); // Size = content length seen so far
+  end
+  else if fOwner.fState = mpdsError then
+    // never mistake a truncated section for a complete one
+    EHttpMultiPart.RaiseUtf8(
+      '%.Read: malformed or truncated multipart content', [self]);
+end;
+
+
+{ THttpMultiPartDecoder }
+
+constructor THttpMultiPartDecoder.Create(aSource: TStream;
+  const aBoundary: RawUtf8; aBufferSize: PtrInt);
+var
+  i: PtrInt;
+begin
+  inherited Create;
+  if (aBoundary = '') or
+     (length(aBoundary) > 256) then
+    // RFC 2046 limits boundaries to 70 chars - be lenient, but bounded, so
+    // that the minimal work buffer below always holds a full delimiter
+    EHttpMultiPart.RaiseUtf8('%.Create: invalid boundary length = %',
+      [self, length(aBoundary)]);
+  for i := 1 to length(aBoundary) do
+    if aBoundary[i] < ' ' then // e.g. CR/LF would corrupt the delimiter
+      EHttpMultiPart.RaiseUtf8(
+        '%.Create: control char #% in boundary', [self, ord(aBoundary[i])]);
+  fSource := aSource;
+  Join([#13#10'--', aBoundary], fDelimiter);
+  if aBufferSize < 4096 then
+    aBufferSize := 4096; // enough for any delimiter (checked above)
+  SetLength(fBuffer, aBufferSize);
+  fCurrent.Content := THttpMultiPartDecoderStream.Create;
+  THttpMultiPartDecoderStream(fCurrent.Content).fOwner := self;
+  fState := mpdsPreamble;
+end;
+
+constructor THttpMultiPartDecoder.CreateFromContentType(aSource: TStream;
+  const aContentType: RawUtf8; aBufferSize: PtrInt);
+var
+  b: RawUtf8;
+begin
+  if not MultiPartFormDataBoundary(aContentType, b) then
+    EHttpMultiPart.RaiseUtf8(
+      '%.CreateFromContentType: no boundary in [%]', [self, aContentType]);
+  Create(aSource, b, aBufferSize);
+end;
+
+destructor THttpMultiPartDecoder.Destroy;
+begin
+  fCurrent.Content.Free;
+  inherited Destroy;
+end;
+
+function THttpMultiPartDecoder.Refill: boolean;
+var
+  n: PtrInt;
+begin
+  result := false;
+  if fBufPos = fBufLen then
+  begin
+    fBufPos := 0; // void window: just reset, no need to move anything
+    fBufLen := 0;
+  end
+  else if (fBufPos > 0) and
+          (fBufLen = length(fBuffer)) then
+  begin
+    // compact the buffer only once its tail space is exhausted
+    n := fBufLen - fBufPos;
+    MoveFast(PByteArray(fBuffer)[fBufPos], pointer(fBuffer)^, n);
+    fBufLen := n;
+    fBufPos := 0;
+  end;
+  n := length(fBuffer) - fBufLen;
+  if (n = 0) or
+     fSourceEof then
+    exit;
+  n := fSource.Read(PByteArray(fBuffer)[fBufLen], n); // may block (pipe)
+  if n <= 0 then
+    // end of spooled file or closed TPipeStream: the source is expected to
+    // block until data is available, and return 0 only at the body end
+    fSourceEof := true
+  else
+  begin
+    inc(fBufLen, n);
+    result := true;
+  end;
+end;
+
+function THttpMultiPartDecoder.EnsureBytes(Count: PtrInt): boolean;
+begin
+  result := true;
+  while fBufLen - fBufPos < Count do
+    if not Refill then
+    begin
+      result := false;
+      exit;
+    end;
+end;
+
+const
+  MPD_MAXPADDING = 64;      // cap RFC 2046 transport padding after a boundary
+  MPD_MAXHEADERLINES = 100; // paranoid limit of header lines per section
+
+function THttpMultiPartDecoder.FindDelimiter(MaxLen: PtrInt;
+  out SafeLen: PtrInt): PtrInt;
+var
+  p: PAnsiChar;
+  win, dlen, i, j: PtrInt;
+begin
+  // search the window for #13#10--boundary, returning its 0-based offset
+  // - scan at most MaxLen bytes, so that a small Read() request does not
+  // pay for scanning the whole window again and again
+  // - if not found, returns -1 and SafeLen = leading bytes which can not
+  // be part of a delimiter (i.e. safe to consume as section content)
+  result := -1;
+  p := PAnsiChar(pointer(fBuffer)) + fBufPos;
+  win := fBufLen - fBufPos;
+  if win > MaxLen then
+    win := MaxLen;
+  dlen := length(fDelimiter);
+  i := 0;
+  while i + dlen <= win do
+  begin
+    j := ByteScanIndex(pointer(p + i), win - i, 13); // fast SSE2 asm on Intel
+    if j < 0 then
+    begin
+      i := win; // no CR at all -> whole window is content
+      break;
+    end;
+    inc(i, j);
+    if i + dlen > win then
+      break; // this CR may start a delimiter -> keep in buffer
+    if CompareMem(p + i, pointer(fDelimiter), dlen) then
+    begin
+      SafeLen := i;
+      result := i;
+      exit;
+    end;
+    inc(i); // not a delimiter: skip this CR
+  end;
+  SafeLen := i;
+end;
+
+function THttpMultiPartDecoder.CheckTail(Offset: PtrInt;
+  out Consumed: PtrInt; out Final: boolean): integer;
+var
+  p: PAnsiChar;
+  avail, i: PtrInt;
+begin
+  // classify the bytes right after a '--boundary' match at window Offset
+  // - returns 1 = genuine boundary, with Consumed tail bytes and Final set
+  // for the '--' closing delimiter, 0 = false positive (i.e. the matched
+  // bytes are plain section content), -1 = more input needed to decide
+  // - a genuine delimiter ends with '--', or LWSP padding and CRLF
+  Consumed := 0;
+  Final := false;
+  result := -1;
+  p := PAnsiChar(pointer(fBuffer)) + fBufPos + Offset;
+  avail := fBufLen - fBufPos - Offset;
+  if avail = 0 then
+    exit; // need more input
+  if p[0] = '-' then
+  begin
+    if avail = 1 then
+      exit; // need more input
+    if p[1] = '-' then
+    begin
+      Consumed := 2; // final --boundary-- reached: ignore any epilogue
+      Final := true;
+      result := 1;
+    end
+    else
+      result := 0; // single '-' is content, not a closing delimiter
+    exit;
+  end;
+  i := 0;
+  repeat
+    if i >= avail then
+      exit; // need more input
+    case p[i] of
+      #13:
+        begin
+          if i + 1 >= avail then
+            exit; // need more input
+          if p[i + 1] = #10 then
+          begin
+            Consumed := i + 2; // padding + CRLF: a new section follows
+            result := 1;
+          end
+          else
+            result := 0; // CR not followed by LF is content
+          exit;
+        end;
+      ' ', #9:
+        begin
+          inc(i); // skip optional transport padding (RFC 2046)
+          if i > MPD_MAXPADDING then
+          begin
+            result := 0; // unreasonable padding is handled as content
+            exit;
+          end;
+        end;
+    else
+      begin
+        result := 0; // unexpected char: not a delimiter, but content
+        exit;
+      end;
+    end;
+  until false;
+end;
+
+function THttpMultiPartDecoder.SkipPreamble: boolean;
+var
+  d, dlen, safe, tail: PtrInt;
+  final: boolean;
+begin
+  result := false;
+  dlen := length(fDelimiter);
+  // the first delimiter may appear at the very start with no leading CRLF
+  repeat
+    if not EnsureBytes(dlen) then
+      exit;
+    if not CompareMem(PAnsiChar(pointer(fBuffer)) + fBufPos,
+             PAnsiChar(pointer(fDelimiter)) + 2, dlen - 2) then
+      break;
+    case CheckTail(dlen - 2, tail, final) of
+      1:
+        begin
+          inc(fBufPos, dlen - 2 + tail);
+          if final then
+            fState := mpdsFinished // void multipart content
+          else
+            fState := mpdsHeaders;
+          result := true;
+          exit;
+        end;
+      0:
+        break; // fake first delimiter: handle as preamble below
+    else
+      if not Refill then
+        exit; // truncated right after the first delimiter
+    end;
+  until false;
+  // there is some preamble: discard it up to the first genuine delimiter
+  repeat
+    d := FindDelimiter(MaxInt, safe); // no scan limit in the preamble
+    if d >= 0 then
+      case CheckTail(d + dlen, tail, final) of
+        1:
+          begin
+            inc(fBufPos, d + dlen + tail);
+            if final then
+              fState := mpdsFinished
+            else
+              fState := mpdsHeaders;
+            result := true;
+            exit;
+          end;
+        0:
+          begin
+            inc(fBufPos, d + 1); // false positive: skip this CR and rescan
+            continue;
+          end;
+      else
+        begin
+          inc(fBufPos, d); // discard preamble, but keep the pending delimiter
+          if not Refill then
+            exit; // truncated within a delimiter
+          continue;
+        end;
+      end;
+    inc(fBufPos, safe);
+    if not Refill then
+      exit; // no genuine delimiter in the whole input
+  until false;
+end;
+
+function THttpMultiPartDecoder.ReadLine(out Line: RawUtf8): boolean;
+var
+  p: PAnsiChar;
+  win, i, j: PtrInt;
+begin
+  result := false;
+  repeat
+    p := PAnsiChar(pointer(fBuffer)) + fBufPos;
+    win := fBufLen - fBufPos;
+    i := fScanned; // don't re-scan bytes already checked before a Refill
+    repeat
+      j := ByteScanIndex(pointer(p + i), win - i, 13);
+      if (j < 0) or
+         (i + j + 2 > win) then
+      begin
+        if j < 0 then
+          fScanned := win // no CR in the whole window
+        else
+          fScanned := i + j; // resume at this pending CR
+        break; // no CRLF in the current window
+      end;
+      inc(i, j);
+      if p[i + 1] = #10 then
+      begin
+        FastSetString(Line, p, i);
+        inc(fBufPos, i + 2);
+        fScanned := 0;
+        result := true;
+        exit;
+      end;
+      inc(i);
+    until false;
+    if not Refill then
+    begin
+      fScanned := 0;
+      exit; // premature end, or header line bigger than the work buffer
+    end;
+  until false;
+end;
+
+function THttpMultiPartDecoder.ParseHeaders: boolean;
+var
+  line: RawUtf8;
+  P, s: PUtf8Char;
+  v: PRawUtf8;
+  n: PtrInt;
+begin
+  result := false;
+  fCurrent.Name := '';
+  fCurrent.FileName := '';
+  fCurrent.ContentType := '';
+  fCurrent.Encoding := '';
+  n := 0;
+  repeat
+    if not ReadLine(line) then
+      exit; // malformed input
+    if line = '' then
+      break; // void line = end of this section headers
+    inc(n);
+    if n > MPD_MAXHEADERLINES then
+      exit; // paranoid: don't let a hostile input spin here forever
+    // note: matching tolerates any spacing after ':' - more lenient than
+    // MultiPartFormDataDecode from mormot.core.buffers, as needed for a
+    // server-side decoder receiving requests from any client stack
+    P := pointer(line);
+    if IdemPChar(P, 'CONTENT-DISPOSITION:') then
+    begin
+      inc(P, 20);
+      // parse name=.. and filename=.. in any order, quoted or as plain token
+      repeat
+        while P^ in [' ', #9, ';'] do
+          inc(P);
+        if P^ = #0 then
+          break;
+        v := nil;
+        if IdemPChar(P, 'FILENAME=') then
+        begin
+          inc(P, 9);
+          v := @fCurrent.FileName;
+        end
+        else if IdemPChar(P, 'NAME=') then
+        begin
+          inc(P, 5);
+          v := @fCurrent.Name;
+        end;
+        if v = nil then
+        begin
+          while not (P^ in [';', #0]) do
+            inc(P); // e.g. skip the form-data token itself
+          continue;
+        end;
+        if P^ = '"' then
+        begin
+          inc(P);
+          if not GetQuotedParamValue(P, v^) then
+            break; // unbalanced quote: don't parse this line any further
+        end
+        else
+        begin
+          s := P;
+          while not (P^ in [';', ' ', #9, #0]) do
+            inc(P);
+          FastSetString(v^, s, P - s);
+        end;
+      until false;
+    end
+    else if IdemPChar(P, 'CONTENT-TYPE:') then
+    begin
+      inc(P, 13);
+      while P^ in [' ', #9] do
+        inc(P);
+      FastSetString(fCurrent.ContentType, P, StrLen(P));
+    end
+    else if IdemPChar(P, 'CONTENT-TRANSFER-ENCODING:') then
+    begin
+      inc(P, 26);
+      while P^ in [' ', #9] do
+        inc(P);
+      FastSetString(fCurrent.Encoding, P, StrLen(P));
+    end;
+  until false;
+  THttpMultiPartDecoderStream(fCurrent.Content).Rewind;
+  fState := mpdsContent;
+  result := true;
+end;
+
+function THttpMultiPartDecoder.PartRead(var Dest; Count: PtrInt): PtrInt;
+var
+  dlen, d, safe, tail: PtrInt;
+  final: boolean;
+begin
+  result := 0;
+  if (fState <> mpdsContent) or
+     (Count <= 0) then
+    exit;
+  if Count > length(fBuffer) then
+    Count := length(fBuffer); // keeps all computations below overflow-free
+  dlen := length(fDelimiter);
+  while fContentPending = 0 do
+  begin
+    // scan for the next delimiter, tracking known content in fContentPending
+    // so that consecutive small Read() calls don't re-scan the same bytes
+    d := FindDelimiter(Count + dlen + MPD_MAXPADDING + 2, safe);
+    if d >= 0 then
+      case CheckTail(d + dlen, tail, final) of
+        1:
+          if d = 0 then
+          begin
+            // we reached this section ending delimiter
+            inc(fBufPos, dlen + tail);
+            if final then
+              fState := mpdsFinished
+            else
+              fState := mpdsHeaders;
+            exit; // returns 0 = end of this section content
+          end
+          else
+            safe := d; // all bytes up to the delimiter are section content
+        0:
+          safe := d + 1; // false positive: the CR is plain section content
+      else
+        if fSourceEof then
+        begin
+          fState := mpdsError; // truncated within a delimiter tail
+          exit;
+        end
+        else
+          safe := d; // emit the content before the pending delimiter
+      end;
+    if safe > 0 then
+    begin
+      fContentPending := safe;
+      break;
+    end;
+    // not enough content in the window yet
+    if not Refill then
+    begin
+      fState := mpdsError; // premature end: final boundary is missing
+      exit;
+    end;
+  end;
+  result := fContentPending;
+  if Count < result then
+    result := Count;
+  MoveFast(PByteArray(fBuffer)[fBufPos], Dest, result);
+  inc(fBufPos, result);
+  dec(fContentPending, result);
+end;
+
+procedure THttpMultiPartDecoder.DrainPart;
+var
+  tmp: TBuffer64K; // transient stack buffer, as e.g. StreamCopyUntilEnd()
+begin
+  while PartRead(tmp, SizeOf(tmp)) > 0 do
+    ;
+end;
+
+function THttpMultiPartDecoder.NextPart: boolean;
+begin
+  result := false;
+  case fState of
+    mpdsPreamble:
+      if not SkipPreamble then
+      begin
+        fState := mpdsError;
+        exit;
+      end;
+    mpdsContent:
+      DrainPart; // discard any unread content of the previous section
+    mpdsHeaders:
+      ; // previous section was fully consumed: ready for the next one
+  else
+    exit; // mpdsFinished, mpdsError
+  end;
+  if fState <> mpdsHeaders then
+    exit;
+  result := ParseHeaders;
+  if not result then
+    fState := mpdsError;
+end;
+
+function THttpMultiPartDecoder.Close: boolean;
+begin
+  while NextPart do
+    ; // drain any remaining section
+  result := fState = mpdsFinished;
 end;
 
 
@@ -2348,7 +3214,7 @@ begin // optimized O(n) loop with aggressively inlined HashDigestEqual()
   if result = nil then
     exit;
   n := PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF;
-  l := HASH_SIZE[PHashAlgo(h)^] - (SizeOf(PtrInt) - 1);
+  l := HASH_SIZE[PHashAlgo(h)^] - (SizeOf(PtrInt) - SizeOf(THashAlgo));
   repeat
     if (result^.ID <> 0) and // not a recycled slot
        (pHash in result^.Flags) then
@@ -2857,20 +3723,18 @@ begin
   Create(fExtendedOptions.CreateTimeoutMS);
   if Assigned(aOnLog) then
     OnLog := aOnLog; // allow to debug ASAP
-  case fExtendedOptions.Auth.Scheme of
-    wraDigest:
-      begin
-        fOnAuthorize := OnAuthorizeDigest; // as AuthorizeDigest()
-        fAuthDigestAlgo := daMD5_Sess;
-      end;
-    wraNegotiate,
-    wraNegotiateChannelBinding:
-      {$ifdef DOMAINRESTAUTH}
-      fOnAuthorize := OnAuthorizeSspi;     // as AuthorizeSspiUser()
-      {$else}
-      EHttpSocket.RaiseUtf8('%.Open: unsupported wraNegotiate', [self]);
-      {$endif DOMAINRESTAUTH}
-  end;
+  if fExtendedOptions.Auth.Scheme = wraDigest then
+  begin
+    fOnAuthorize := OnAuthorizeDigest; // as AuthorizeDigest()
+    fAuthDigestAlgo := daMD5_Sess;
+  end
+  else if fExtendedOptions.Auth.Scheme in wraNegotiates then
+    {$ifdef DOMAINRESTAUTH}
+    fOnAuthorize := OnAuthorizeSspi;     // as AuthorizeSspiUser()
+    {$else}
+    EHttpSocket.RaiseUtf8('%.Open: unsupported AuthScheme=%',
+      [self, ToText(fExtendedOptions.Auth.Scheme)^]);
+    {$endif DOMAINRESTAUTH}
   TLS := fExtendedOptions.TLS;
   pu := GetSystemProxyUri(aUri.URI, fExtendedOptions.Proxy, temp);
   if pu <> nil then
@@ -2878,6 +3742,35 @@ begin
   // actually connect to the server (inlined TCrtSock.Open)
   OpenBind(aUri.Server, aUri.Port, {bind=}false, aUri.Https, aUri.Layer);
   aOptions.TLS := TLS; // copy back Peer information after connection
+end;
+
+constructor THttpClientSocket.OpenFrom(aClient: TCrtSocket);
+var
+  u: TUri;
+  o: THttpRequestExtendedOptions; // options are copied back with new Peer info
+begin
+  o := (aClient as THttpClientSocket).fExtendedOptions;
+  u.Clear;
+  u.Server := aClient.Server;
+  u.Port:= aClient.Port;
+  u.Https := aClient.ServerTls;
+  OpenOptions(u, o, aClient.OnLog);
+end;
+
+function THttpClientSocket.SameOpenOptions(const aUri: TUri;
+  const aOptions: THttpRequestExtendedOptions): boolean;
+var
+  tun: TUri;
+begin
+  result := (aUri.UriScheme in HTTP_SCHEME) and
+            aUri.Same(Server, Port, ServerTls) and
+            SameNetTlsContext(TLS, aOptions.TLS) and
+            fExtendedOptions.SameAuth(@aOptions.Auth);
+  if result then
+    if tun.From(aOptions.Proxy) then
+      result := tun.Same(Tunnel.Server, Tunnel.Port, Tunnel.Https)
+    else
+      result := (Tunnel.Server = '');
 end;
 
 procedure THttpClientSocket.OpenBind(const aServer, aPort: RawUtf8; doBind,
@@ -2915,22 +3808,6 @@ begin
   else
     // regular socket creation if no proxy or toward https://
     inherited OpenBind(aServer, aPort, {doBind=}false, aTLS, aLayer);
-end;
-
-function THttpClientSocket.SameOpenOptions(const aUri: TUri;
-  const aOptions: THttpRequestExtendedOptions): boolean;
-var
-  tun: TUri;
-begin
-  result := (aUri.UriScheme in HTTP_SCHEME) and
-            aUri.Same(Server, Port, ServerTls) and
-            SameNetTlsContext(TLS, aOptions.TLS) and
-            fExtendedOptions.SameAuth(@aOptions.Auth);
-  if result then
-    if tun.From(aOptions.Proxy) then
-      result := tun.Same(Tunnel.Server, Tunnel.Port, Tunnel.Https)
-    else
-      result := (Tunnel.Server = '');
 end;
 
 function THttpClientSocket.RegisterCompress(aFunction: THttpSocketCompress;
@@ -3500,10 +4377,11 @@ var
     parthash := stream.GetHash; // hash updated on each stream.Write()
     FreeAndNil(stream);
     if Http.ContentLastModified > 0 then
-    begin
-      FileSetDateFromUnixUtc(part, Http.ContentLastModified);
-      params.SetStep(wgsLastMod, [Http.ContentLastModified]);
-    end;
+      if FileSetDateFromUnixUtc(part, Http.ContentLastModified) then
+        params.SetStep(wgsLastMod, [Http.ContentLastModified])
+      else
+        params.SetStep(wgsLastModFailed,
+          [Http.ContentLastModified, ' ', OsErrorShort]);
   end;
 
   procedure AbortAlternateDownloading;
@@ -3559,7 +4437,7 @@ begin
     parthash := params.Hasher.GetHashFileExt;
     if parthash <> '' then
     begin
-      parthash := url + parthash; // e.g. 'files/somefile.zip.md5'
+      parthash := Join([url, parthash]); // e.g. 'files/somefile.zip.md5'
       if Get(parthash, 5000) = 200 then
         // handle 'c7d8e61e82a14404169af3fa5a72be85 *file.name' format
         params.Hash := Split(TrimU(Http.Content), ' ');
@@ -3825,7 +4703,8 @@ var
   sc: TSecContext;
   bak: RawUtf8;
   unauthstatus: integer;
-  datain, dataout: RawByteString;
+  a: ^THttpRequestAuthOptions;
+  bin, bout: RawByteString;
   channelbindingtemp: THash512Rec;
 begin
   if (Sender = nil) or
@@ -3837,20 +4716,31 @@ begin
   try
     // Kerberos + TLS may require tls-server-end-point channel binding
     if Assigned(Sender.Secure) and
-       (Sender.AuthScheme = wraNegotiateChannelBinding) then
+       (Sender.AuthScheme in [wraNegotiateChannelBinding,
+                              wraNegotiatePasswordKeytabChannelBinding]) then
       KerberosChannelBinding(Sender.Secure, sc, channelbindingtemp);
     // main Kerberos loop
     repeat
-      FindNameValue(Sender.Http.Headers, pointer(InHeaderUp), RawUtf8(datain));
-      datain := Base64ToBin(TrimU(datain));
-      if Sender.fExtendedOptions.Auth.Password <> '' then // from AuthorizeSspiUser()
-        ClientSspiAuthWithPassword(sc, datain, Sender.fExtendedOptions.Auth.UserName,
-          Sender.fExtendedOptions.Auth.Password, Sender.AuthorizeSspiSpn, dataout)
-      else                               // use current logged user
-        ClientSspiAuth(sc, datain, Sender.AuthorizeSspiSpn, dataout);
-      if dataout = '' then
+      FindNameValue(Sender.Http.Headers, pointer(InHeaderUp), RawUtf8(bin));
+      bin := Base64ToBin(TrimU(bin));
+      a := @Sender.fExtendedOptions.Auth;
+      if a^.Password <> '' then
+        // from AuthorizeSspiUser()
+        {$ifdef OSPOSIX}
+        if Sender.AuthScheme in [wraNegotiatePasswordKeytab,
+                                 wraNegotiatePasswordKeytabChannelBinding] then
+          ClientSspiAuthWithPassword(sc, bin, a^.UserName, '',
+            Sender.AuthorizeSspiSpn, bout, nil, {local=}Utf8ToString(a^.Password))
+        else
+        {$endif OSPOSIX}
+          ClientSspiAuthWithPassword(sc, bin, a^.UserName, a^.Password,
+            Sender.AuthorizeSspiSpn, bout)
+      else
+        // no password supplied: try current logged user
+        ClientSspiAuth(sc, bin, Sender.AuthorizeSspiSpn, bout);
+      if bout = '' then
         break;
-      Context.header := OutHeader + BinToBase64(dataout);
+      Context.header := OutHeader + BinToBase64(bout);
       if bak <> '' then
         Append(Context.header, #13#10, bak);
       Sender.RequestInternal(Context);
@@ -3876,13 +4766,14 @@ begin
 end;
 
 procedure THttpClientSocket.AuthorizeSspiUser(const UserName: RawUtf8;
-  const Password: SpiUtf8; const KerberosSpn: RawUtf8);
+  const Password: SpiUtf8; const KerberosSpn: RawUtf8;
+  NegotiateMode: THttpRequestAuthentication);
 begin
   if not InitializeDomainAuth then
     EHttpSocket.RaiseUtf8('%.AuthorizeSspiUser: no % available on this system',
       [self, SECPKGNAMEAPI]);
   fOnAuthorize := nil;
-  fExtendedOptions.AuthorizeSspiUser(UserName, Password);
+  fExtendedOptions.AuthorizeSspiUser(UserName, Password, NegotiateMode);
   fOnAuthorize := OnAuthorizeSspi;
   // prepare a Service Principal Name (SPN) - maybe partial
   if KerberosSpn <> '' then
@@ -3986,6 +4877,13 @@ begin
   RecordZero(@self, TypeInfo(THttpRequestExtendedOptions));
 end;
 
+procedure THttpRequestExtendedOptions.InitDefault;
+begin
+  Init;
+  RedirectMax := 4; // seems fair enough
+  RecreateConnectionAfterSecs := 30; // 30 secs idle -> reopen
+end;
+
 procedure THttpRequestExtendedOptions.Clear;
 begin
   FillZero(Auth.Password);
@@ -4000,7 +4898,7 @@ begin
   Auth.Password := Password;
   Auth.Token := '';
   if (UserName = '') and
-     not (Scheme in [wraNegotiate, wraNegotiateChannelBinding]) then
+     not (Scheme in wraNegotiates) then
     Scheme := wraNone;
   Auth.Scheme := Scheme;
 end;
@@ -4018,9 +4916,10 @@ begin
 end;
 
 procedure THttpRequestExtendedOptions.AuthorizeSspiUser(
-  const UserName: RawUtf8; const Password: SpiUtf8);
+  const UserName: RawUtf8; const Password: SpiUtf8; NegotiateMode: THttpRequestAuthentication);
 begin
-  AuthorizeUserPassword(UserName, Password, wraNegotiate);
+  if NegotiateMode in wraNegotiates then
+    AuthorizeUserPassword(UserName, Password, NegotiateMode);
 end;
 
 procedure THttpRequestExtendedOptions.AuthorizeBearer(const Value: SpiUtf8);
@@ -4041,14 +4940,13 @@ begin
             (Auth.Scheme = Another^.Auth.Scheme);
   if result then
     case Auth.Scheme of
-      wraBasic,
-      wraDigest,
-      wraNegotiate,
-      wraNegotiateChannelBinding:
-        result := (Auth.UserName = Another^.Auth.UserName) and
-                  (Auth.Password = Another^.Auth.Password);
+      wraNone:
+        ;
       wraBearer:
         result := (Auth.Token = Another^.Auth.Token);
+    else
+      result := (Auth.UserName = Another^.Auth.UserName) and
+                (Auth.Password = Another^.Auth.Password);
     end;
 end;
 
@@ -4256,17 +5154,17 @@ function THttpRequest.Request(const url, method: RawUtf8; KeepAlive: cardinal;
   out OutHeader: RawUtf8; out OutData: RawByteString): integer;
 var
   data: RawByteString;
-  acceptEnc, contentEnc, aUrl: RawUtf8;
+  acceptEnc, contentEnc, u: RawUtf8;
   comp: PHttpSocketCompressRec;
   upload: boolean;
 begin
   if (url = '') or
      (url[1] <> '/') then
-    aUrl := '/' + url
+    u := Join(['/', url])
   else // need valid url according to the HTTP/1.1 RFC
-    aUrl := url;
+    u := url;
   fKeepAlive := KeepAlive;
-  InternalCreateRequest(method, aUrl); // should raise an exception on error
+  InternalCreateRequest(method, u); // should raise an exception on error
   try
     // common headers
     InternalAddHeader(InHeader);
@@ -5015,7 +5913,7 @@ procedure TCurlHttp.InternalCreateRequest(const aMethod, aUrl: RawUtf8);
 const
   CERT_PEM: RawUtf8 = 'PEM';
 begin
-  fIn.URL := fRootURL + aUrl;
+  fIn.URL := Join([fRootURL, aUrl]);
   if fExtendedOptions.RedirectMax > 0 then // url redirection (as TWinHttp)
     curl.easy_setopt(fHandle, coFollowLocation, 1);
   //curl.easy_setopt(fHandle,coTCPNoDelay,0); // disable Nagle
@@ -5087,6 +5985,8 @@ const
     [cauDigest],    // wraDigest
     [cauNegotiate], // wraNegotiate
     [cauNegotiate], // wraNegotiateChannelBinding
+    [cauNegotiate], // wraNegotiatePasswordKeytab
+    [cauNegotiate], // wraNegotiatePasswordKeytabChannelBinding
     [cauBearer]);   // wraBearer
 
 procedure TCurlHttp.InternalSendRequest(const aMethod: RawUtf8;
@@ -5235,6 +6135,11 @@ begin
   result := fLastError;
 end;
 
+function THttpClientAbstract.LastServer: TUri;
+begin
+  result := fLastServer;
+end;
+
 function THttpClientAbstract.Headers: RawUtf8;
 begin
   result := fHeaders;
@@ -5290,8 +6195,7 @@ end;
 
 constructor TSimpleHttpClient.Create(aOnlyUseClientSocket: boolean);
 begin
-  fConnectOptions.RedirectMax := 4; // seems fair enough
-  fConnectOptions.RecreateConnectionAfterSecs := 30; // 30 secs idle -> reopen
+  fConnectOptions.InitDefault;
   {$ifdef USEHTTPREQUEST}
   fOnlyUseClientSocket := aOnlyUseClientSocket or
                           not MainHttpClass.IsAvailable;
@@ -5307,6 +6211,7 @@ end;
 
 procedure TSimpleHttpClient.RawConnect(const Server: TUri);
 begin
+  fLastServer := Server;
   {$ifdef USEHTTPREQUEST}
   if (Server.Https or
       (fConnectOptions.Proxy <> '')) and
@@ -5414,6 +6319,18 @@ begin
     result := FindRawUtf8(@CustomText[1], Value, high(CustomText), {casesens=}true) + 1
   else
     result := 0;
+end;
+
+function DeepObjectEncode(Value: pointer; Info: PRttiInfo; const Prefix: RawUtf8): RawUtf8;
+var
+  json: RawUtf8;
+begin
+  FastAssignNew(result);
+  if IsRecordDefaultOrVoid(Value, Info) then
+    exit;
+  SaveJson(Value^, Info, [twoForceJsonExtended, twoIgnoreDefaultInRecord], json);
+  result := UrlEncodeJsonObjectBuffer('', pointer(json), [], {include?=}false,
+    {deepObjectName=}Prefix);
 end;
 
 
@@ -5800,7 +6717,7 @@ begin
   Response.Method := Method;
   fSafe.Lock; // blocking thread-safe HTTP request
   try
-    fServerUri.Address := fBaseUri + a;
+    fServerUri.Address := Join([fBaseUri, a]);
     Response.Url := fServerUri.Root; // excluding ?parameters=...
     fHttp.Request(fServerUri, Method, h, b, t, fKeepAlive);
     Response.Status := fHttp.Status;
@@ -6007,29 +6924,43 @@ end;
 
 function SendEmail(const Server: TSmtpConnection;
   const From, CsvDest, Subject: RawUtf8; const Text: RawByteString;
-  const Headers, TextCharSet: RawUtf8; TLS, TLSIgnoreCertError: boolean): boolean;
+  const Headers, TextCharSet: RawUtf8; Tls: TSmtpTls; TlsCtx: PNetTlsContext): boolean;
 begin
+  if Tls = stlsNone then // guess the TLS mode from the well-known port numbers
+    if Server.Port = '465' then
+      Tls := stlsImplicit
+    else if Server.Port = '587' then
+      Tls := stlsStartTls;
   result := SendEmail(
     Server.Host, From, CsvDest, Subject, Text, Headers,
-    Server.User, Server.Pass, Server.Port, TextCharSet,
-    TLS or (Server.Port = '465') or (Server.Port = '587'), TLSIgnoreCertError);
+    Server.User, Server.Pass, Server.Port, TextCharSet, Tls, TlsCtx);
 end;
 
 function SendEmail(const Server, From, CsvDest, Subject: RawUtf8;
   const Text: RawByteString; const Headers, User, Pass, Port, TextCharSet: RawUtf8;
-  TLS, TLSIgnoreCertError: boolean): boolean;
+  Tls: TSmtpTls; TlsCtx: PNetTlsContext): boolean;
 var
   sock: TCrtSocket;
 
-  procedure Expect(const answer: RawUtf8);
+  // send the optional Command, read the whole (multi-line) answer, check the
+  // reply code, raise ESendEmail on mismatch, and return the full answer text
+  // - Command = '' is used to read the initial greeting or a previous send
+  function Exec(const Command, Answer: RawUtf8): RawUtf8;
   var
     res: RawUtf8;
   begin
+    if Command <> '' then
+    begin
+      sock.SockSend(Command);
+      sock.SockSendFlush;
+    end;
+    result := '';
     repeat
       sock.SockRecvLn(res);
+      Append(result, res, #13#10);
     until (Length(res) < 4) or
-          (res[4] <> '-'); // - indicates there are other headers following
-    if IdemPChar(pointer(res), pointer(answer)) then
+          (res[4] <> '-'); // '-' indicates there are other lines following
+    if IdemPChar(pointer(res), pointer(Answer)) then
       exit;
     if res = '' then
       res := 'Undefined Error';
@@ -6037,69 +6968,88 @@ var
       [User, Server, Port, res]);
   end;
 
-  procedure Exec(const Command, answer: RawUtf8);
-  begin
-    sock.SockSend(Command);
-    sock.SockSendFlush;
-    Expect(answer)
-  end;
-
 var
   P: PUtf8Char;
-  rec, ToList, head: RawUtf8;
+  rec, ToList, head, caps, subj, frm: RawUtf8;
 begin
   result := false;
   P := pointer(CsvDest);
   if P = nil then
     exit;
-  sock := SocketOpen(Server, Port, TLS, nil, nil, TLSIgnoreCertError);
+  sock := SocketOpen(Server, Port, {tls=}Tls = stlsImplicit, TlsCtx, nil);
   if sock <> nil then
   try
-    sock.CreateSockIn; // we use SockIn for buffered SockRecvLn() in Expect()
-    Expect('220');
+    sock.CreateSockIn; // we need SockIn for buffered SockRecvLn() in Exec()
+    Exec('', '220');
+    // EHLO is always sent first: needed for STARTTLS and AUTH capabilities
+    caps := Exec(Join(['EHLO ', Server]), '250');
+    if Tls = stlsStartTls then
+    begin
+      // upgrade the plain connection to TLS via the STARTTLS command
+      Exec('STARTTLS', '220');
+      if TlsCtx <> nil then
+        sock.TLS := TlsCtx^; // apply the caller TLS options before the handshake
+      sock.DoTlsAfter(cstaConnect); // perform the TLS handshake on this socket
+      caps := Exec(Join(['EHLO ',  Server]), '250'); // re-issue EHLO over TLS
+    end;
     if (User <> '') and
        (Pass <> '') then
-    begin
-      Exec('EHLO ' + Server, '25');
-      Exec('AUTH LOGIN', '334');
-      Exec(BinToBase64(User), '334');
-      Exec(BinToBase64(Pass), '235');
-    end
-    else
-      Exec('HELO ' + Server, '25');
+      if PosI('LOGIN', caps) <> 0 then
+      begin
+        Exec('AUTH LOGIN', '334');
+        Exec(BinToBase64(User), '334');
+        Exec(BinToBase64(Pass), '235');
+      end
+      else // AUTH PLAIN fallback: base64(#0 user #0 pass)
+        Exec(Join(['AUTH PLAIN ', BinToBase64(Join([#0, User, #0, Pass]))]), '235');
     sock.SockSendLine(['MAIL FROM:<', From, '>']);
     sock.SockSendFlush;
-    Expect('250');
+    Exec('', '250');
     repeat
       GetNextItem(P, ',', rec);
       TrimSelf(rec);
       if rec = '' then
         continue;
       if PosExChar('<', rec) = 0 then
-        rec := '<' + rec + '>';
-      Exec('RCPT TO:' + rec, '25');
+        rec := Join(['<', rec, '>']);
+      Exec(Join(['RCPT TO:', rec]), '25');
       if {%H-}ToList = '' then
         Join([#13#10'To: ', rec], ToList)
       else
         Append(ToList, ', ', rec);
     until P = nil;
     Exec('DATA', '354');
-    sock.SockSendLine([
-      'Subject: ', Subject, #13#10 +
-      'From: ', From, ToList]);
+    // merge the From/Subject parameters with any matching lines in Headers:
+    // a non-empty parameter wins (its header duplicate is removed), an empty
+    // parameter is filled from the corresponding header value
     head := trimU(Headers);
+    subj := Subject;
+    frm := From;
+    if subj = '' then
+      GetHeader(head, 'Subject', subj);
+    if frm = '' then
+      GetHeader(head, 'From', frm);
+    head := DeleteHeader(head, 'Subject');
+    head := DeleteHeader(head, 'From');
+    sock.SockSendLine(['Subject: ', subj, (#13#10 +
+                       'From: '), frm, ToList]);
     if (TextCharSet <> '') or
        (head = '') then
       sock.SockSend([
-        'Content-Type: text/plain;charset=', TextCharSet, #13#10 +
-        'Content-Transfer-Encoding: 8bit']);
+        'Content-Type: text/plain;charset=', TextCharSet, (#13#10 +
+        'Content-Transfer-Encoding: 8bit')]);
     if head <> '' then
       sock.SockSendHeaders(head); // normalizing CRLF
     sock.SockSendCRLF;            // end of headers
     sock.SockSend(Text);
     Exec('.', '25');
-    Exec('QUIT', '22');
-    result := true;
+    result := true; // the message is accepted once the final '.' returns 250
+    try
+      Exec('QUIT', '221'); // polite session close (best effort)
+    except
+      on Exception do
+        ; // some servers close right after '.', so ignore any QUIT error
+    end;
   finally
     sock.Free;
   end;
@@ -6185,12 +7135,33 @@ begin
 end;
 
 
+var
+  __RemoteResource: function(const Uri: RawUtf8; var Res: RawByteString): boolean;
+
+function _CryptRemoteResource(const Uri: RawUtf8; var Res: RawByteString): boolean;
+var
+  status: integer;
+begin
+  if IsHttp(Uri) then
+  begin
+    Res := HttpGet(Uri, {inhead=}'', {outhead=}nil, {notsock=}false,
+      @status, {timeout=}0, {forcesocket=}false, {ignorecerterror=}true);
+    result := StatusCodeIsSuccess(status);
+  end
+  else
+    result := Assigned(__RemoteResource) and
+              __RemoteResource(Uri, Res); // try next protocol
+end;
+
+
 procedure InitializeUnit;
 begin
   NewSocketAddressCache := TNewSocketAddressCache.Create(600); // 10 min timeout
   NetClientProtocols := TSynDictionary.Create(TypeInfo(TRawUtf8DynArray),
     TypeInfo(TMethodDynArray), {caseinsensitive=}true);
   RegisterNetClientProtocol('file', TNetClientProtocolFile.Create.OnRequest);
+  __RemoteResource := CryptRemoteResource; // cascaded calls
+  CryptRemoteResource := _CryptRemoteResource;
 end;
 
 procedure FinalizeUnit;

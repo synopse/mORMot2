@@ -206,7 +206,7 @@ function ToText(Field: TSqlDBFieldType): PShortString; overload;
 
 /// retrieve the ready-to-be displayed text of a given Database field
 // type enumeration
-function TSqlDBFieldTypeToString(aType: TSqlDBFieldType): TShort16;
+function TSqlDBFieldTypeToString(aType: TSqlDBFieldType): TShort15;
 
 
 /// returns TRUE if no bit inside this TFieldBits is set
@@ -335,6 +335,10 @@ function IsSqliteReserved(const Text: RawUtf8): boolean;
 /// returns the stored size of a TSqlVar database value
 // - only returns VBlobLen / StrLen(VText) size, 0 otherwise
 function SqlVarLength(const Value: TSqlVar): integer;
+
+/// convert a TSqlVar database value into 64-bit integer
+// - returns false for unsupported ftUnknown/ftBlob
+function SqlVarToInt64(const Value: TSqlVar; var Int: Int64): boolean;
 
 /// convert any Variant into a database value
 // - ftBlob kind won't be handled by this function
@@ -905,12 +909,12 @@ function IsCacheableDML(Sql: PUtf8Char): boolean;
 function SqlFromWhere(const Where: RawUtf8): RawUtf8;
 
 /// compute a SQL SELECT statement from its parameters
-function SqlFromSelect(const TableName, Select, Where, SimpleFields: RawUtf8): RawUtf8;
+procedure SqlFromSelect(const TableName, Select, Where, SimpleFields: RawUtf8;
+  var Sql: RawUtf8);
 
 /// find out if the supplied WHERE clause starts with one of the
 // ORDER/GROUP/LIMIT/OFFSET/JOIN keywords
 function SqlWhereIsEndClause(const Where: RawUtf8): boolean;
-  {$ifdef FPC} inline; {$endif}
 
 /// get the order table name from a SQL statement
 // - return the word following any 'ORDER BY' statement
@@ -1518,7 +1522,7 @@ begin
   result := GetEnumName(TypeInfo(TSqlDBFieldType), ord(Field));
 end;
 
-function TSqlDBFieldTypeToString(aType: TSqlDBFieldType): TShort16;
+function TSqlDBFieldTypeToString(aType: TSqlDBFieldType): TShort15;
 begin
   if aType <= high(aType) then
     TrimLeftLowerCaseToShort(ToText(aType), result)
@@ -1795,6 +1799,26 @@ begin
       result := StrLen(Value.VText); // fast enough for our purpose
   else
     result := 0; // simple/ordinal values, or ftNull
+  end;
+end;
+
+function SqlVarToInt64(const Value: TSqlVar; var Int: Int64): boolean;
+begin
+  result := true;
+  case Value.VType of
+    ftNull:
+      Int := 0;
+    ftInt64:
+      Int := Value.VInt64;
+    ftDouble,
+    ftDate:
+      Int := trunc(Value.VDouble);
+    ftCurrency:
+      Int := trunc(Value.VCurrency);
+    ftUtf8:
+      Int:= GetInt64(Value.VText);
+  else
+    result := false; // ftUnknown/ftBlob not supported
   end;
 end;
 
@@ -2559,7 +2583,7 @@ begin
   result := false;
   if Sql = nil then
     exit;
-  while Sql^ in [#1..' '] do
+  while Sql^ in [#1 .. ' '] do
     inc(Sql);
   c := IdemPCharSep(Sql, 'SELECT|INSERT|UPDATE|DELETE|'); // DML statements
   if (c < 0) or
@@ -2639,33 +2663,51 @@ begin
     Append(Where, ' and ', Condition);
 end;
 
+const
+  ENDCLAUSE = // https://synopse.info/forum/viewtopic.php?pid=38842#p38842
+   'ORDER BY |GROUP BY |LIMIT |OFFSET |LEFT |RIGHT |INNER |OUTER |JOIN |WHERE |';
 
 function SqlWhereIsEndClause(const Where: RawUtf8): boolean;
 begin
   result := (Where <> '') and
-            (IdemPCharSep(GotoNextNotSpace(pointer(Where)),
-    'ORDER BY |GROUP BY |LIMIT |OFFSET |LEFT |RIGHT |INNER |OUTER |JOIN |WHERE |'
-             ) >= 0); // https://synopse.info/forum/viewtopic.php?pid=38842#p38842
+            (IdemPCharSep(GotoNextNotSpace(pointer(Where)), ENDCLAUSE) >= 0);
 end;
 
 function SqlFromWhere(const Where: RawUtf8): RawUtf8;
 begin
   if Where = '' then
     FastAssignNew(result)
-  else if SqlWhereIsEndClause(Where) then
+  else if IdemPCharSep(GotoNextNotSpace(pointer(Where)), ENDCLAUSE) >= 0 then
     Join([' ', Where], result)
   else
     Join([' WHERE ', Where], result);
 end;
 
-function SqlFromSelect(const TableName, Select, Where, SimpleFields: RawUtf8): RawUtf8;
+procedure SqlFromSelect(const TableName, Select, Where, SimpleFields: RawUtf8;
+  var Sql: RawUtf8);
+var
+  p: PUtf8Char;
+  tmp: TSynTempAdder;
 begin
+  tmp.Init;
+  tmp.AddShort('SELECT ');
   if Select = '*' then
     // don't send BLOB values to query: retrieve simple = all non-blob fields
-    result := SimpleFields
+    tmp.Add(SimpleFields)
   else
-    result := Select;
-  result := Join(['SELECT ', result, ' FROM ', TableName, SqlFromWhere(Where)]);
+    tmp.Add(Select);
+  tmp.AddShort(' FROM ');
+  tmp.Add(TableName);
+  p := pointer(Where);
+  if p <> nil then // inlined SqlFromWhere() logic
+  begin
+    if IdemPCharSep(GotoNextNotSpace(p), ENDCLAUSE) >= 0 then
+      tmp.AddDirect(' ')
+    else
+      tmp.AddShort(' WHERE ');
+    tmp.Add(Where);
+  end;
+  tmp.Done(Sql);
 end;
 
 function SqlGetOrder(const Sql: RawUtf8): RawUtf8;
@@ -2797,7 +2839,7 @@ begin
   if EnsureUniqueTableInFrom then
     if GotoNextNotSpace(p)^ = ',' then
       exit; // there is another table name
-  FastSetString(result, beg, p - beg);
+  FastSetString(result, beg, p);
 end;
 
 function GetTableNamesFromSqlSelect(const Sql: RawUtf8): TRawUtf8DynArray;
@@ -2896,8 +2938,7 @@ begin
   result := nil; // indicates parsing error
   if P = nil then
     exit;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
+  while P^ in [#1 .. ' '] do
     inc(P);
   case P^ of
     '''',
@@ -2957,7 +2998,7 @@ begin
           while P^ in ['0'..'9'] do
             inc(P);
         end;
-        FastSetString(Values[Count], beg, P - beg);
+        FastSetString(Values[Count], beg, P);
       end;
     'n':
       begin
@@ -2969,8 +3010,7 @@ begin
   else
     exit; // invalid content
   end;
-  while (P^ <= ' ') and
-        (P^ <> #0) do
+  while P^ in [#1 .. ' '] do
     inc(P);
   if (P[0] <> ')') or
      (P[1] <> ':') then
@@ -3266,7 +3306,7 @@ var
       repeat
         inc(P);
       until not (jcJsonIdentifier in JSON_CHARS[P^]); // _-.[]$0..9a..zA..Z
-      FastSetString(select.SubField, B, P - B);
+      FastSetString(select.SubField, B, P);
       fHasSelectSubFields := true;
     end;
     if P^ in ['+', '-'] then
@@ -3320,7 +3360,7 @@ var
       repeat
         inc(P);
       until P^ in [#0..' ', ';', ')', ','];
-      FastSetString(Where.Value, B, P - B);
+      FastSetString(Where.Value, B, P);
       VariantLoadJson(Where.ValueVariant, Where.Value);
       Where.ValueInteger := GetInteger(pointer(Where.Value), err);
     end;
@@ -3337,7 +3377,7 @@ var
       until not (P^ in [#1..' ', ')']);
       while P[-1] = ' ' do
         dec(P); // trim right space
-      FastSetString(Where.ParenthesisAfter, B, P - B);
+      FastSetString(Where.ParenthesisAfter, B, P);
       P := GotoNextNotSpace(P);
     end;
     result := true;
@@ -3398,7 +3438,7 @@ var
       repeat
         inc(P);
       until not (jcJsonIdentifier in JSON_CHARS[P^]); // _-.[]$0..9a..zA..Z
-      FastSetString(Where.SubField, B, P - B); // '.subfield1.subfield2'
+      FastSetString(Where.SubField, B, P); // '.subfield1.subfield2'
       fWhereHasSubFields := true;
       P := GotoNextNotSpace(P);
     end;
@@ -3483,7 +3523,7 @@ var
                 else
                   inc(P);
               inc(P);
-              FastSetString(Where.Value, B, P - B);
+              FastSetString(Where.Value, B, P);
               Where.ValueSql := B;
               Where.ValueSqlLen := P - B;
               result := GetWhereValues(Where);
@@ -3567,7 +3607,7 @@ begin
         until not (P^ in [#1..' ', '(']);
         while P[-1] = ' ' do
           dec(P); // trim right space
-        FastSetString(whereBefore, B, P - B);
+        FastSetString(whereBefore, B, P);
         B := P;
       end;
       ndx := GetPropIndex;
@@ -3803,7 +3843,7 @@ begin
   if EndOfObject <> nil then
     EndOfObject^ := P^;
   PDest := P + 1;
-  FastSetString(result, Beg, P - Beg);
+  FastSetString(result, Beg, P);
 end;
 
 procedure GetJsonArrayOrObjectAsQuotedStr(P: PUtf8Char; out PDest: PUtf8Char;
@@ -3838,7 +3878,7 @@ begin
     FieldValue := NULL_STR_VAR;
     exit;
   end;
-  while P^ in [#1..' '] do
+  while P^ in [#1 .. ' '] do
     inc(P);
   if (PInteger(P)^ = NULL_LOW) and
      (P[4] in [#0, #9, #10, #13, ' ', ',', '}', ']']) then
@@ -3847,7 +3887,7 @@ begin
     FieldType := ftaNull;
     FieldValue := NULL_STR_VAR;
     inc(P, 4);
-    while P^ in [#1..' '] do
+    while P^ in [#1 .. ' '] do
       inc(P);
     if P^ = #0 then
       info.Json := nil
@@ -4328,8 +4368,7 @@ begin
   Beg := P;
   if Beg = nil then
     exit;
-  while (Beg^ <= ' ') and
-        (Beg^ <> #0) do
+  while Beg^ in [#1 .. ' '] do
     inc(Beg);
   if Beg^ <> '{' then
     exit;

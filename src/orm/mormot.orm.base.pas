@@ -3364,8 +3364,7 @@ var
 begin
   if P <> nil then
   begin
-    while (P^ <= ' ') and
-          (P^ <> #0) do
+    while P^ in [#1 .. ' '] do
       inc(P);
     if (PInteger(P)^ = NULL_LOW) and
        (P[4] = #0) then
@@ -4412,8 +4411,8 @@ var
     res.fNameUnflattened := result.Name;
     max := high(aFlattenedProps);
     for i := max downto 0 do
-      res.fNameUnflattened :=
-        ToUtf8(aFlattenedProps[i]^.Name^) + '.' + result.NameUnflattened;
+      res.fNameUnflattened := Make([
+        aFlattenedProps[i]^.Name^, '.', result.fNameUnflattened]);
     if (max >= 0) and
        (aFlattenedProps[max]^.TypeInfo^.ClassFieldCount(
          {withoutgetter=}pilIgnoreIfGetter in aOptions) = 1) then
@@ -4425,7 +4424,7 @@ var
     end;
     for i := max downto 0 do
     begin
-      res.fName := ToUtf8(aFlattenedProps[i]^.Name^) + '_' + result.Name;
+      res.fName := Make([aFlattenedProps[i]^.Name^, '_', result.fName]);
       res.fJsonName := res.fName;
     end;
   end;
@@ -10526,8 +10525,7 @@ begin
     TOrmTableRowVariantData(Source).VTable.ToDocVariant(r, tmp);
     if AVarType = DocVariantVType then
     begin
-      VarClear(variant(Dest));
-      ZeroFill(@Dest); // avoid GPF
+      ZeroClear(@Dest); // avoid GPF
       TDocVariantData(Dest) := TDocVariantData(tmp);
     end
     else
@@ -10955,7 +10953,7 @@ begin
     begin
       Value[i].Value.Free;
       new.Value := CopyObject(aOrm);
-      Value[i] := new // replace existing or registered ID
+      Value[i] := new; // replace existing or registered ID
     end
     else if CacheAll and
             (i >= 0) then
@@ -11126,9 +11124,9 @@ begin
     begin
       Attributes := Attributes - [aBinaryCollation, aUnicodeNoCaseCollation];
       if PropNameEquals(aCollationName, 'BINARY') then
-        Attributes := Attributes + [aBinaryCollation]
+        Include(fAttributes, aBinaryCollation)
       else if PropNameEquals(aCollationName, 'UNICODENOCASE') then
-        Attributes := Attributes + [aUnicodeNoCaseCollation];
+        Include(fAttributes, aUnicodeNoCaseCollation);
     end;
   end;
 end;
@@ -11258,15 +11256,11 @@ begin
   info.Json := P;
   if info.Json = nil then
     exit;
-  while (info.Json^ <= ' ') and
-        (info.Json^ <> #0) do
+  while info.Json^ in [#1 .. ' '] do
     inc(info.Json);
   if info.Json^ <> '[' then
     exit;
-  repeat
-    inc(info.Json)
-  until (info.Json^ > ' ') or
-        (info.Json^ = #0);
+  info.Json := IgnoreAndGotoNextNotSpace(info.Json);
   if ID = nil then
     decoded := 0
   else
@@ -11292,10 +11286,7 @@ begin
           exit;
         W.AddNoJsonEscape(Start, info.Json - Start);
         W.AddComma;
-        repeat
-          inc(info.Json)
-        until (info.Json^ > ' ') or
-              (info.Json^ = #0);
+        info.Json := IgnoreAndGotoNextNotSpace(info.Json);
       end;
     if sfoEndWithID in Format then
       decoded := info.GetJsonInt64;
@@ -11313,10 +11304,7 @@ begin
   if EndOfObject <> nil then
     EndOfObject^ := info.Json^;
   if info.Json^ <> #0 then
-    repeat
-      inc(info.Json)
-    until (info.Json^ > ' ') or
-          (info.Json^ = #0);
+    info.Json := IgnoreAndGotoNextNotSpace(info.Json);
   P := info.Json;
 end;
 
@@ -11373,9 +11361,9 @@ end;
 
 function TOrmPropertiesAbstract.IsFieldNameOrFunction(const PropName: RawUtf8): boolean;
 var
-  L: integer;
+  L: PtrInt;
   P, P2: PUtf8Char;
-  tmp: ShortString; // no heap allocation
+  tmp: TByteToAnsiChar; // no heap allocation
 begin
   result := false;
   L := length(PropName);
@@ -11386,12 +11374,12 @@ begin
   if P[L - 1] = ')' then
   begin
     case IdemPCharSep(P, FUNCS) of
-      0..3:
+      0 .. 3: // MAX MIN AVG SUM
         begin
           inc(P, 4);
           P2 := PosChar(P, ')');
         end;
-      4..5:
+      4 .. 5: // JSONGET JSONHAS
         begin
           inc(P, 8);
           P2 := PosChar(P, ',');
@@ -11399,15 +11387,16 @@ begin
     else
       exit; // unknown function name
     end;
-    if P2 <> nil then
-    begin
-      SetString(tmp, PAnsiChar(P), P2 - P); // extract NAME from func(NAME)
-      tmp[ord(tmp[0]) + 1] := #0;
-      result := IsFieldName(@tmp[1]);
-    end;
-  end
-  else
-    result := IsFieldName(P);
+    if P2 = nil then
+      exit;
+    L := P2 - P;
+    if L > high(tmp) then
+      exit;
+    MoveFast(P^, tmp, L); // extract NAME from func(NAME)
+    tmp[L] := #0;
+    P := @tmp;
+  end;
+  result := IsFieldName(P);
 end;
 
 function TOrmPropertiesAbstract.FieldBitsFromBlobField(aBlobField: PRttiProp;

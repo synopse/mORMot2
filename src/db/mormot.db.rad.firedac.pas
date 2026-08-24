@@ -324,7 +324,7 @@ procedure TSqlDBFireDacConnectionProperties.GetFields(const aTableName: RawUtf8;
   out Fields: TSqlDBColumnDefineDynArray);
 var
   meta: TADMetaInfoQuery;
-  n: integer;
+  n: integer; // not PtrInt
   F: TSqlDBColumnDefine;
   FA: TDynArray;
   t: RawUtf8;
@@ -369,7 +369,7 @@ var
   ColName: RawUtf8;
   F: TSqlDBIndexDefine;
   FA: TDynArray;
-  n: integer;
+  n: integer; // not PtrInt
 const
   MASTER: array[boolean] of TADPhysMetaInfoKind = (mkPrimaryKey, mkIndexes);
   CHILD: array[boolean] of TADPhysMetaInfoKind = (mkPrimaryKeyFields, mkIndexFields);

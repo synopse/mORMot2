@@ -412,7 +412,7 @@ constructor TWebSocketProcessClient.Create(aSender: THttpClientWebSockets;
 begin
   // https://tools.ietf.org/html/rfc6455#section-10.3
   // client-to-server masking is mandatory (but not from server to client)
-  fMaskSentFrames := FRAME_LEN_MASK;
+  fMaskSentFrames := FRAME_LEN_MASK; // = 128 from client
   fConnectionID := aConnectionID;
   inherited Create(aSender, aProtocol, nil, @aSender.fSettings, aProcessName);
   // initialize the thread after everything is set (Execute may be instant)
@@ -589,7 +589,7 @@ var
   uri: TUri;
 begin
   if (aProtocol = nil) or
-     not uri.From(aUri) then
+     not uri.From(aUri) then // detect http[s]:// and ws[s]:// schemes
     EWebSockets.RaiseUtf8('%.WebSocketsConnect(nil)', [self]);
   result := WebSocketsConnect(uri.Server, uri.Port, aProtocol,
     aLog, aLogContext, uri.Address, aCustomHeaders, uri.Https, aTLSContext);
@@ -846,7 +846,7 @@ class function TSocketsIOClient.Open(const aUri: RawUtf8; aLog: TSynLogClass;
 var
   uri: TUri;
 begin
-  if uri.From(aUri) then // detect both https:// and wss:// schemes
+  if uri.From(aUri) then // detect http[s]:// and ws[s]:// schemes
     result := Open(uri.Server, uri.Port, aLog, aOptions,
       uri.Address, aCustomHeaders, uri.Https, aTLSContext)
   else

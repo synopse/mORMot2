@@ -991,7 +991,7 @@ end;
 function IsJetFile(const FileName: TFileName): boolean;
 var
   F: THandle;
-  Header: array[0..31] of AnsiChar;
+  Header: TTemp32;
 begin
   F := FileOpenSequentialRead(FileName);
   if not ValidHandle(F) then

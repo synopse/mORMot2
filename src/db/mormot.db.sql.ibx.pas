@@ -791,7 +791,20 @@ begin
           ftCurrency:
             farrParams[i].SetAsCurrency(PCurrency(@VInt64)^);
           ftUtf8:
-            farrParams[i].SetAsString(VData);
+            begin
+              case farrParams[i].SQLType of
+               SQL_TIMESTAMP,
+               SQL_TIMESTAMP_TZ_EX,
+               SQL_TIME_TZ_EX,
+               SQL_TIMESTAMP_TZ,
+               SQL_TIME_TZ,
+               SQL_TYPE_TIME,
+               SQL_TYPE_DATE:
+                 farrParams[i].SetAsDateTime(Iso8601ToDateTime(VData))
+              else
+                farrParams[i].SetAsString(VData);
+              end;
+            end;
           ftBlob:
             farrParams[i].SetAsString(VData);
         else
@@ -808,7 +821,6 @@ begin
       else
         fResultSet := fStatement.OpenCursor(con.fTransaction);
       fResults := fResultSet;
-      fResultSet.SetRetainInterfaces(true);
       if not fResultSet.IsEof then
         fCurrentRow:=0;
       if fResultSet = nil then
@@ -1038,7 +1050,7 @@ begin
         end;
       SQL_BLOB:
         begin
-          if ForceBlobAsNull then
+          if dsfForceBlobAsNull in fFlags then
             W.AddNull
           else
           begin
@@ -1401,6 +1413,7 @@ begin
     ThreadingMode := tmMainConnection;
   UseCache := true;
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
+  fDateTimeFirstChar := ' ';
 end;
 
 destructor TSqlDBIbxConnectionProperties.Destroy;

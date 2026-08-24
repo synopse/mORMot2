@@ -2344,10 +2344,10 @@ begin
   VarClear(result);
   if json = nil then
     exit;
-  if json^ in [#1..' '] then
+  if json^ in [#1 .. ' '] then
     repeat
       inc(json)
-    until not (json^ in [#1..' ']);
+    until not (json^ in [#1 .. ' ']);
   if json^ in ['{', '['] then
     with TBsonVariantData(result) do
     begin
@@ -2591,12 +2591,12 @@ begin
         // strict MongoDB objects e.g. {"$undefined":true} or {"$oid":".."}
         repeat
           inc(P)
-        until not (P^ in [#1..' ']);
+        until not (P^ in [#1 .. ' ']);
         if P^ <> '"' then
           exit;
         repeat
           inc(P)
-        until not (P^ in [#1..' ']);
+        until not (P^ in [#1 .. ' ']);
         if P[0] = '$' then
           case P[1] of
             'u':
@@ -3426,10 +3426,10 @@ begin
   begin
     Write1(ord(elemtype));
     {$ifdef HASINLINE}
-    Write(pointer(name), length(name) + 1); // +1 for #0
+    Write(pointer(name), length(name) + 1);
     {$else}
-    Write(pointer(name), PInteger(PtrInt(name) - SizeOf(integer))^ + 1); // +1 for #0
-    {$endif HASINLINE}
+    Write(pointer(name), PInteger(PtrUInt(name) - SizeOf(integer))^ + 1);
+    {$endif HASINLINE} // +1 for #0
   end;
 end;
 
@@ -4023,10 +4023,10 @@ var
   Kind: TBsonElementType;
   info: TGetJsonField;
 begin
-  if Json^ in [#1..' '] then
+  if Json^ in [#1 .. ' '] then
     repeat
       inc(Json)
-    until not (Json^ in [#1..' ']);
+    until not (Json^ in [#1 .. ' ']);
   if not DoNotTryExtendedMongoSyntax and
      BsonVariantType.TryJsonToVariant(Json, tmp, EndOfObject) then
     // was betDateTime, betObjectID or betRegEx, from strict or extended Json
@@ -4089,10 +4089,10 @@ begin
   result := nil; // parsing error
   if Json = nil then
     exit;
-  if Json^ in [#1..' '] then
+  if Json^ in [#1 .. ' '] then
     repeat
       inc(Json)
-    until not (Json^ in [#1..' ']);
+    until not (Json^ in [#1 .. ' ']);
   case Json^ of
     '[':
       begin
@@ -4100,7 +4100,7 @@ begin
         BsonDocumentBegin;
         repeat
           inc(Json)
-        until not (Json^ in [#1..' ']);
+        until not (Json^ in [#1 .. ' ']);
         ndx := 0;
         if Json^ = ']' then
           inc(Json)
@@ -4119,7 +4119,7 @@ begin
         BsonDocumentBegin;
         repeat
           inc(Json)
-        until not (Json^ in [#1..' ']);
+        until not (Json^ in [#1 .. ' ']);
         if Json^ = '}' then
           inc(Json)
         else
@@ -4146,16 +4146,16 @@ begin
     exit;
   end;
   BsonDocumentEnd;
-  if Json^ in [#1..' '] then
+  if Json^ in [#1 .. ' '] then
     repeat
       inc(Json)
-    until not (Json^ in [#1..' ']);
+    until not (Json^ in [#1 .. ' ']);
   if aEndOfObject <> nil then
     aEndOfObject^ := Json^;
   if Json^ <> #0 then
     repeat
       inc(Json)
-    until not (Json^ in [#1..' ']);
+    until not (Json^ in [#1 .. ' ']);
   result := Json; // indicates successfully parsed
 end;
 

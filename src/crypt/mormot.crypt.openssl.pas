@@ -739,7 +739,7 @@ function ToText(u: TX509Usages): ShortString; overload;
 function OpenSslX509Parse(const Cert: RawByteString; out Info: TX509Parsed): boolean;
 
 /// globally override default RSA_DEFAULT_GENERATION_BITS = 2048 for OpenSSL
-// - works at runtime after RegisterOpenSsl - expects bits = 2048/3072/4096/7680
+// - set at runtime after RegisterOpenSsl - expects bits = 2048/3072/4096/7680/8192
 // - updates global CAA_BITSORCURVE[] and existing CryptAsymOpenSsl[] classes
 procedure OpenSslDefaultRsaBits(bits: integer);
 
@@ -953,7 +953,8 @@ end;
 
 destructor TAesAbstractOsl.Destroy;
 begin
-  fAes.Done;
+  if HasOpenSsl then // avoid GPF at shutdown if some dangling instances
+    fAes.Done;
   inherited Destroy;
 end;
 
@@ -1189,7 +1190,8 @@ end;
 
 destructor TOpenSslHash.Destroy;
 begin
-   if fCtx <> nil then
+   if (fCtx <> nil) and
+      HasOpenSsl then // paranoid at shutdown
      EVP_MD_CTX_free(fCtx);
   inherited Destroy;
 end;
@@ -1305,7 +1307,8 @@ end;
 
 destructor TOpenSslHmac.Destroy;
 begin
-  if fCtx <> nil then
+  if (fCtx <> nil) and
+     HasOpenSsl then // paranoid at shutdown
     HMAC_CTX_free(fCtx);
   inherited Destroy;
 end;
@@ -1335,19 +1338,21 @@ var
 
 const
   HF_MD: array[THashAlgo] of PUtf8Char = (
-    'md5',        // hfMD5
-    'sha1',       // hfSHA1
-    'sha256',     // hfSHA256
-    'sha384',     // hfSHA384
-    'sha512',     // hfSHA512
-    'sha512-256', // hfSHA512_256
-    'sha3-256',   // hfSHA3_256
-    'sha3-512',   // hfSHA3_512
-    'sha224',     // hfSHA224
-    'sha3-224',   // hfSHA3_224
-    'sha3-384',   // hfSHA3_384
-    'shake128',   // hfShake128
-    'shake256');  // hfShake256
+    'md5',         // hfMD5
+    'sha1',        // hfSHA1
+    'sha256',      // hfSHA256
+    'sha384',      // hfSHA384
+    'sha512',      // hfSHA512
+    'sha512-256',  // hfSHA512_256
+    'sha3-256',    // hfSHA3_256
+    'sha3-512',    // hfSHA3_512
+    'sha224',      // hfSHA224
+    'sha3-224',    // hfSHA3_224
+    'sha3-384',    // hfSHA3_384
+    'shake128',    // hfShake128
+    'shake256',    // hfShake256
+    '',            // SHA-256 truncated to 128-bit is not known by OpenSSL
+    '');           // SHA-256 truncated to 160-bit is not known by OpenSSL
 
   CAA_MD: array[TCryptAsymAlgo] of RawUtf8 = (
     'SHA256', // caaES256
@@ -1719,7 +1724,7 @@ end;
 }
 
 var
-  prime256v1grp: PEC_GROUP;
+  prime256v1grp: PEC_GROUP; // shared instance for NewPrime256v1Key()
 
 const
   PEC_GROUP_PRIME256V1_NOTAVAILABLE = pointer(1);
@@ -1931,8 +1936,11 @@ end;
 
 destructor TEcc256r1VerifyOsl.Destroy;
 begin
-  EC_POINT_free(fPoint);
-  EC_KEY_free(fKey);
+  if HasOpenSsl then // avoid GPF at shudown on dangling instance
+  begin
+    EC_POINT_free(fPoint);
+    EC_KEY_free(fKey);
+  end;
   inherited Destroy;
 end;
 
@@ -1980,8 +1988,11 @@ begin
   FillZero(fPrivateKeyPassword);
   FillZero(fPublicKey);
   FillZero(fPublicKeyPassword);
-  fPrivKey.Free;
-  fPubKey.Free;
+  if HasOpenSsl then // avoid GPF at shudown on dangling instance
+  begin
+    fPrivKey.Free;
+    fPubKey.Free;
+  end;
   inherited Destroy;
 end;
 
@@ -2215,7 +2226,8 @@ end;
 destructor TCryptPublicKeyOpenSsl.Destroy;
 begin
   inherited Destroy;
-  fPubKey.Free;
+  if HasOpenSsl then // avoid GPF at shudown on dangling instance
+    fPubKey.Free;
 end;
 
 function TCryptPublicKeyOpenSsl.Load(Algorithm: TCryptKeyAlgo;
@@ -2276,7 +2288,8 @@ end;
 destructor TCryptPrivateKeyOpenSsl.Destroy;
 begin
   inherited Destroy;
-  fPrivKey.Free;
+  if HasOpenSsl then // avoid GPF at shudown on dangling instance
+    fPrivKey.Free;
 end;
 
 function TCryptPrivateKeyOpenSsl.Load(Algorithm: TCryptKeyAlgo;
@@ -2457,10 +2470,12 @@ type
     function GetIssuers: TRawUtf8DynArray; override;
     function GetSubjectKey: RawUtf8; override;
     function GetAuthorityKey: RawUtf8; override;
+    function GetFields(var fields: TCryptCertFields; withexts: boolean): boolean; override;
     function IsSelfSigned: boolean; override;
+    function IsAuthorizedBy(const Authority: ICryptCert): boolean; override;
     function GetNotBefore: TDateTime; override;
     function GetNotAfter: TDateTime; override;
-    function GetUsage: TCryptCertUsages; override;
+    function GetUsage(PathLen: PInteger): TCryptCertUsages; override;
     function GetPeerInfo: RawUtf8; override;
     function GetSignatureInfo: RawUtf8; override;
     function Load(const Saved: RawByteString; Content: TCryptCertContent;
@@ -2596,6 +2611,7 @@ var
   dns: TRawUtf8DynArray;
   req: PX509_REQ;
   key: PEVP_PKEY;
+  i: PtrInt;
 begin
   if Subjects = '' then
     RaiseError('no Subjects');
@@ -2617,12 +2633,19 @@ begin
       X509_REQ_get_subject_name(req), Usages, Fields, dns);
     if not req^.SetUsageAndAltNames(TX509Usages(Usages), altnames) then
       RaiseError('SetUsage');
-    if (Fields <> nil) and
-       (Fields^.Comment <> '') then
-       req^.AddExtension(NID_netscape_comment, Fields^.Comment);
+    // setup the CSR extensions
+    if Fields <> nil then
+    begin
+      if Fields^.Comment <> '' then
+        req^.AddExtension(NID_netscape_comment, Fields^.Comment);
+      if Fields^.CustomExts <> nil then
+        for i := 0 to high(Fields^.CustomExts) do
+          with Fields^.CustomExts[i] do
+            req^.AddExtension(Oid, Value, Critical);
+    end;
     // self-sign the CSR and return it as PEM
     EOpenSslCert.Check(X509_REQ_set_pubkey(req, key)); // include public key
-    if req.Sign(key, fHash) = 0 then // returns signature size in bytes
+    if req^.Sign(key, fHash) = 0 then // returns signature size in bytes
       RaiseError('SelfSign');
     result := req^.ToPem;
     // save the generated private key (if was not previously loaded)
@@ -2631,9 +2654,9 @@ begin
       PrivateKeyPem := key.PrivateToPem(PrivateKeyPassword);
   finally
     if Assigned(req) then
-      req.Free;
+      req^.Free;
     if Assigned(Key) then
-      key.Free;
+      key^.Free;
   end;
 end;
 
@@ -2648,6 +2671,8 @@ end;
 
 procedure TCryptCertOpenSsl.Clear;
 begin
+  if not HasOpenSsl then
+    exit; // avoid GPF at shutdown when some dangling instances were kept
   fX509.Free;
   fPrivKey.Free;
   fX509 := nil;
@@ -2834,9 +2859,46 @@ begin
   result := fX509.AuthorityKeyIdentifier;
 end;
 
+function TCryptCertOpenSsl.GetFields(var fields: TCryptCertFields; withexts: boolean): boolean;
+var
+  x: TX509_Extensions;
+  i: PtrInt;
+begin
+  result := false;
+  if fX509 = nil then
+    exit;
+  with fields do
+    fX509.GetIssuerName^.GetEntries(Country, State, Locality, Organization,
+      OrgUnit, CommonName, EmailAddress, SurName, GivenName, SerialNumber);
+  result := true;
+  if not withexts then
+    exit;
+  x := fX509.GetExtensions;
+  for i := 0 to high(x) do
+    with x[i] do
+      if nid = NID_netscape_comment then
+        fields.Comment := value^.ToBinary
+      else
+        AddCustomExts(fields.CustomExts, BinaryOid, value^.ToBinary, critical);
+end;
+
 function TCryptCertOpenSsl.IsSelfSigned: boolean;
 begin
   result := fX509.IsSelfSigned;
+end;
+
+function TCryptCertOpenSsl.IsAuthorizedBy(const Authority: ICryptCert): boolean;
+var
+  a: TCryptCertOpenSsl;
+begin
+  if Assigned(Authority) then
+  begin
+    a := pointer(Authority.Instance);
+    result := a.InheritsFrom(TCryptCertOpenSsl) and
+      fX509.IsAuthorizedBy(a.fX509); // use X509_NAME_cmp() canonalization
+  end
+  else
+    result := inherited IsAuthorizedBy(Authority);
 end;
 
 function TCryptCertOpenSsl.GetNotBefore: TDateTime;
@@ -2851,9 +2913,9 @@ begin
   // may return 0 if ASN1_TIME_to_tm() is not supported by an oldest OpenSSL
 end;
 
-function TCryptCertOpenSsl.GetUsage: TCryptCertUsages;
+function TCryptCertOpenSsl.GetUsage(PathLen: PInteger): TCryptCertUsages;
 begin
-  result := TCryptCertUsages(word(fX509.GetUsage));
+  result := TCryptCertUsages(word(fX509.GetUsage(PathLen)));
 end;
 
 function TCryptCertOpenSsl.GetPeerInfo: RawUtf8;
@@ -3242,7 +3304,8 @@ end;
 destructor TCryptStoreOpenSsl.Destroy;
 begin
   inherited Destroy;
-  fStore.Free;
+  if HasOpenSsl then // avoid GPF at shudown on dangling instance
+    fStore.Free;
 end;
 
 function TCryptStoreOpenSsl.Save: RawByteString;
@@ -3667,7 +3730,7 @@ begin
       Info.PubAlg := x.GetPublicKey.AlgoName;
       Info.PubKey := x.GetPublicKey.PublicToDer;
       Info.PeerInfo := x.PeerInfo; // call X509_print()
-      TX509Usages(Info.Usage) := x.GetUsage; // match TX509Usages 16-bit
+      TX509Usages(Info.Usage) := x.GetUsage(nil); // match TX509Usages 16-bit
       Info.NotBefore := x.NotBefore;
       Info.NotAfter := x.NotAfter;
       Info.SubjectAltNames :=
@@ -3685,7 +3748,8 @@ begin
   if (bits = 2048) or
      (bits = 3072) or
      (bits = 4096) or
-     (bits = 7680) then // reject weak/unrealistic RSA key size
+     (bits = 7680) or
+     (bits = 8192) then // reject weak/unrealistic RSA key size
     for caa := caaRS256 to caaPS512 do
     begin
       // global variable for any new instances
@@ -3760,7 +3824,7 @@ begin
   CryptStoreOpenSsl := TCryptStoreAlgoOpenSsl.Implements(['x509-store']);
   // OpenSSL is slower than our SSE2 mormot.crypt.other.pas RawSCrypt() :)
   {$ifndef ASMSSE2}
-  if OpenSslVersion >= OPENSSL3_VERNUM then // OpenSSL 1.1 has only macros
+  if OpenSslVersion >= OPENSSL3_VERNUM then // OpenSSL 1.1 use macros for SCrypt
     SCrypt := @OpenSslSCrypt;
   {$endif ASMSSE2}
   // we can use OpenSSL for StuffExeCertificate() stuffed certificate generation
@@ -3771,6 +3835,13 @@ end;
 
 procedure FinalizeUnit;
 begin
+  // release any transient reference to our OpenSSL library wrapper
+  Finalize(CryptCertOpenSslSelfSigned);
+  FillCharFast(CryptAsymOpenSsl, SizeOf(CryptAsymOpenSsl), 0);
+  FillCharFast(CryptCertOpenSsl, SizeOf(CryptCertOpenSsl), 0);
+  CryptStoreOpenSsl := nil;
+  HasOpenSsl := false;
+  // released NewPrime256v1Key() shared instance
   if (prime256v1grp <> nil) and
      (prime256v1grp <> PEC_GROUP_PRIME256V1_NOTAVAILABLE) then
     EC_GROUP_free(prime256v1grp);

@@ -930,7 +930,7 @@ var
   v: pointer;
   p: PSqlDBColumnProperty;
   indicator: integer;
-  tmp: array[0..31] of AnsiChar;
+  tmp: TTemp32;
   U: RawUtf8;
 begin
   // dedicated version to avoid as much memory allocation than possible
@@ -1493,7 +1493,7 @@ begin
                       PInteger(oDataSTR)^ := length(VArray[j]);
                       MoveFast(pointer(VArray[j])^, oDataSTR[4], length(VArray[j]));
                       {$else} // Delphi has 32-bit length, just as OCI expects
-                      MoveFast(pointer(PtrInt(VArray[j]) - 4)^, oDataSTR^,
+                      MoveFast(pointer(PtrUInt(VArray[j]) - 4)^, oDataSTR^,
                         length(VArray[j]) + 4);
                       {$endif FPC}
                       inc(oDataSTR, oLength);
@@ -1693,12 +1693,13 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
                               'blob length exceeds max size for parameter #%',
                               [self, KB(oLength), i + 1]);
                           UniqueString(VData); // for thread-safety
-                          PInteger(PtrInt(VData) - SizeOf(integer))^ := oLength;
+                          PInteger(PtrUInt(pointer(VData)) - SizeOf(integer))^ := oLength;
                           if {%H-}wasStringHacked = nil then
                             SetLength(wasStringHacked, fParamCount shr 3 + 1);
                           SetBitPtr(pointer(wasStringHacked), i); // for unpatching below
                           {$endif FPC_64}
-                          oData := pointer(PtrInt(VData) - SizeOf(integer));
+                          oData := pointer(VData);
+                          dec(oDataStr, SizeOf(integer));
                           Inc(oLength, SizeOf(integer));
                         end;
                       end;
@@ -1741,7 +1742,7 @@ txt:                    VDBType := SQLT_STR; // use STR external data type (SQLT
       if wasStringHacked <> nil then // restore patched strings length ASAP
         for i := 0 to fParamCount - 1 do
           if GetBitPtr(pointer(wasStringHacked), i) then
-            PInteger(PtrInt(fParams[i].VData) - SizeOf(integer))^ := 0;
+            PInteger(PtrUInt(pointer(fParams[i].VData)) - SizeOf(integer))^ := 0;
       {$endif FPC_64}
       for i := 0 to ociArraysCount - 1 do
         OCI.Check(nil, self,

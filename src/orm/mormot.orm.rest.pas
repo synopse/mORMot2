@@ -102,8 +102,8 @@ type
     fTransactionTable: TOrmClass;
     fTempJsonWriter: TJsonWriter; // shared with a 64KB internal buffer
     /// compute SELECT ... FROM TABLE WHERE ...
-    function SqlComputeForSelect(TableModelIndex: integer; Table: TOrmClass;
-      const FieldNames, WhereClause: RawUtf8): RawUtf8;
+    procedure SqlComputeForSelect(TableModelIndex: integer; Table: TOrmClass;
+      const FieldNames, WhereClause: RawUtf8; var Sql: RawUtf8);
     /// used by all overloaded Add/Delete methods
     procedure GetJsonValuesForAdd(TableIndex: integer; Value: TOrm;
       ForceID, DoNotAutoComputeFields, WithBlobs: boolean;
@@ -633,28 +633,26 @@ begin
   fTempJsonWriter.Free;
 end;
 
-function TRestOrm.SqlComputeForSelect(TableModelIndex: integer; Table: TOrmClass;
-  const FieldNames, WhereClause: RawUtf8): RawUtf8;
+procedure TRestOrm.SqlComputeForSelect(TableModelIndex: integer; Table: TOrmClass;
+  const FieldNames, WhereClause: RawUtf8; var Sql: RawUtf8);
 begin
-  FastAssignNew(result);
+  FastAssignNew(Sql);
   if (self = nil) or
      (Table = nil) then
     exit;
   if FieldNames = '' then
-    result := fModel.TableProps[TableModelIndex].
-      SqlFromSelectWhere('*', WhereClause)
+    fModel.TableProps[TableModelIndex].SqlFromSelectWhere('*', WhereClause, Sql)
   else
     with Table.OrmProps do
       if FieldNames = '*' then
-        result := SqlFromSelect(
-          SqlTableName, SqlTableRetrieveAllFields, WhereClause, '')
+        SqlFromSelect(SqlTableName, SqlTableRetrieveAllFields, WhereClause, '', Sql)
       else if (PosExChar(',', FieldNames) = 0) and
               (PosExChar('(', FieldNames) = 0) and
               not IsFieldName(pointer(FieldNames)) then
         // prevent SQL error
-        FastAssignNew(result)
+        FastAssignNew(Sql)
       else
-        result := SqlFromSelect(SqlTableName, FieldNames, WhereClause, '');
+        SqlFromSelect(SqlTableName, FieldNames, WhereClause, '', Sql);
 end;
 
 function TRestOrm.AcquireJsonWriter(var tmp: TTextWriterStackBuffer): TJsonWriter;
@@ -879,8 +877,8 @@ begin
      (Table = nil) then
     T := nil
   else
-    T := ExecuteList([Table], 'SELECT RowID FROM ' +
-      Table.OrmProps.SqlTableName + ' LIMIT 1');
+    T := ExecuteList([Table], Join(['SELECT RowID FROM ',
+      Table.OrmProps.SqlTableName, ' LIMIT 1']));
   if T <> nil then
   try
     result := T.RowCount > 0;
@@ -945,28 +943,32 @@ end;
 
 function TRestOrm.OneFieldValue(Table: TOrmClass; const FieldName: RawUtf8;
   const FormatSqlWhere: RawUtf8; const BoundsSqlWhere: array of const): RawUtf8;
+var
+  where: RawUtf8;
 begin
-  result := OneFieldValue(Table, FieldName,
-    FormatSql(FormatSqlWhere, [], BoundsSqlWhere));
+  FormatSqlVar(FormatSqlWhere, [], BoundsSqlWhere, where);
+  result := OneFieldValue(Table, FieldName, where);
 end;
 
 function TRestOrm.OneFieldValue(Table: TOrmClass; const FieldName: RawUtf8;
   const WhereClauseFmt: RawUtf8; const Args, Bounds: array of const): RawUtf8;
+var
+  where: RawUtf8;
 begin
-  result := OneFieldValue(Table, FieldName,
-    FormatSql(WhereClauseFmt, Args, Bounds));
+  FormatSqlVar(WhereClauseFmt, Args, Bounds, where);
+  result := OneFieldValue(Table, FieldName, where);
 end;
 
 function TRestOrm.OneFieldValue(Table: TOrmClass; const FieldName: RawUtf8;
   const WhereClauseFmt: RawUtf8; const Args, Bounds: array of const;
   out Data: Int64): boolean;
 var
-  res: array[0..0] of RawUtf8;
   err: integer;
   where: RawUtf8;
+  res: array[0..0] of RawUtf8;
 begin
   result := false;
-  where := FormatSql(WhereClauseFmt, Args, Bounds);
+  FormatSqlVar(WhereClauseFmt, Args, Bounds, where);
   if MultiFieldValue(Table, [FieldName], res, where) then
     if res[0] <> '' then
     begin
@@ -983,7 +985,7 @@ var
 begin
   if (WhereID > 0) and
      MultiFieldValue(Table, [FieldName], res,
-       'RowID=:(' + Int64ToUtf8(WhereID) + '):') then
+                     Make(['RowID=:(', WhereID, '):'])) then
     result := res[0]
   else
     FastAssignNew(result);
@@ -1003,10 +1005,10 @@ begin
      (high(FieldName) = high(FieldValue)) then
     with Table.OrmProps do
     begin
-      where := SqlTableName + SqlFromWhere(WhereClause);
+      Join([SqlTableName, SqlFromWhere(WhereClause)], where);
       if (high(FieldName) = 0) and
          IdemPChar(pointer(FieldName[0]), 'COUNT(*)') then
-        sql := 'SELECT COUNT(*) FROM ' + where
+        Join(['SELECT COUNT(*) FROM ', where], sql)
       else
       begin
         for f := 0 to high(FieldName) do
@@ -1014,10 +1016,10 @@ begin
             // prevent sql error or security breach
             exit
           else if sql = '' then
-            sql := 'SELECT ' + FieldName[f]
+            Join(['SELECT ', FieldName[f]], sql)
           else
-            sql := sql + ',' + FieldName[f];
-        sql := sql + ' FROM ' + where + ' LIMIT 1';
+            Append(sql, ',' + FieldName[f]);
+        Append(sql, [' FROM ', where, ' LIMIT 1']);
       end;
       T := ExecuteList([Table], sql);
       if T <> nil then
@@ -1055,7 +1057,7 @@ function TRestOrm.MultiFieldValue(Table: TOrmClass;
   WhereID: TID): boolean;
 begin
   result := MultiFieldValue(Table, FieldName, FieldValue,
-    'RowID=:(' + Int64ToUtf8(WhereID) + '):');
+              Make(['RowID=:(', WhereID, '):']));
 end;
 
 function TRestOrm.OneFieldValues(Table: TOrmClass;
@@ -1194,6 +1196,7 @@ function TRestOrm.OneFieldValues(Table: TOrmClass;
   const FieldName, WhereClause: RawUtf8; Strings: TStrings;
   IDToIndex: PID): boolean;
 var
+  sql: RawUtf8;
   Row: integer;
   aID: TID;
   T: TOrmTable;
@@ -1205,8 +1208,8 @@ begin
   try
     Strings.BeginUpdate;
     Strings.Clear;
-    T := ExecuteList([Table], SqlFromSelect(Table.SqlTableName,
-      'RowID,' + FieldName, WhereClause, ''));
+    SqlFromSelect(Table.SqlTableName, 'RowID,' + FieldName, WhereClause, '', sql);
+    T := ExecuteList([Table], sql);
     if T <> nil then
     try
       if (T.FieldCount = 2) and
@@ -1243,7 +1246,7 @@ var
   t: PtrInt;
 begin
   t := Model.GetTableIndexExisting(Table);
-  sql := SqlComputeForSelect(t, Table, FieldNames, WhereClause);
+  SqlComputeForSelect(t, Table, FieldNames, WhereClause, sql);
   result := nil;
   if sql = '' then
     exit;
@@ -1259,7 +1262,7 @@ function TRestOrm.MultiFieldValues(Table: TOrmClass;
 var
   where: RawUtf8;
 begin
-  where := FormatSql(WhereClauseFormat, [], BoundsSqlWhere);
+  FormatSqlVar(WhereClauseFormat, [], BoundsSqlWhere, where);
   result := MultiFieldValues(Table, FieldNames, where);
 end;
 
@@ -1269,7 +1272,7 @@ function TRestOrm.MultiFieldValues(Table: TOrmClass;
 var
   where: RawUtf8;
 begin
-  where := FormatSql(WhereClauseFormat, Args, Bounds);
+  FormatSqlVar(WhereClauseFormat, Args, Bounds, where);
   result := MultiFieldValues(Table, FieldNames, where);
 end;
 
@@ -1284,7 +1287,7 @@ function TRestOrm.FtsMatch(Table: TOrmFts3Class; const MatchClause: RawUtf8;
   var DocID: TIDDynArray; const PerFieldWeight: array of double;
   limit: integer; offset: integer): boolean;
 var
-  WhereClause: RawUtf8;
+  where: RawUtf8;
   i: PtrInt;
 begin
   result := false;
@@ -1292,14 +1295,14 @@ begin
     if length(PerFieldWeight) <> length(SimpleFields) then
       exit
     else
-      WhereClause := FormatSql('% MATCH ? ORDER BY rank(matchinfo(%)',
-        [SqlTableName, SqlTableName], [MatchClause]);
+      FormatSqlVar('% MATCH ? ORDER BY rank(matchinfo(%)',
+        [SqlTableName, SqlTableName], [MatchClause], where);
   for i := 0 to high(PerFieldWeight) do
-    WhereClause := FormatSql('%,?', [WhereClause], [PerFieldWeight[i]]);
-  WhereClause := WhereClause + ') DESC';
+    where := FormatSql('%,?', [where], [PerFieldWeight[i]]);
+  Append(where, ') DESC');
   if limit > 0 then
-    WhereClause := FormatUtf8('% LIMIT % OFFSET %', [WhereClause, limit, offset]);
-  result := FtsMatch(Table, WhereClause, DocID);
+    where := FormatUtf8('% LIMIT % OFFSET %', [where, limit, offset]);
+  result := FtsMatch(Table, where, DocID);
 end;
 
 function TRestOrm.MainFieldValue(Table: TOrmClass; ID: TID;
@@ -1329,8 +1332,8 @@ begin
     begin
       main := MainField[false];
       if main >= 0 then
-        SetID(OneFieldValue(Table, 'RowID', fields.List[main].Name +
-          '=:(' + QuotedStr(Value, '''') + '):'), result);
+        SetID(OneFieldValue(Table, 'RowID', Join([fields.List[main].Name,
+          '=:(', QuotedStr(Value, ''''), '):'])), result);
     end;
 end;
 
@@ -1398,7 +1401,7 @@ function TRestOrm.Retrieve(const WhereClauseFmt: RawUtf8;
 var
   where: RawUtf8;
 begin
-  where := FormatSql(WhereClauseFmt, Args, Bounds);
+  FormatSqlVar(WhereClauseFmt, Args, Bounds, where);
   result := Retrieve(where, Value, FieldsCsv);
 end;
 
@@ -1493,7 +1496,7 @@ function TRestOrm.RetrieveListJson(Table: TOrmClass;
 var
   where: RawUtf8;
 begin
-  where := FormatSql(FormatSqlWhere, [], BoundsSqlWhere);
+  FormatSqlVar(FormatSqlWhere, [], BoundsSqlWhere, where);
   result := RetrieveListJson(Table, where, FieldsCsv, aForceAjax)
 end;
 
@@ -1501,11 +1504,11 @@ function TRestOrm.RetrieveListJson(Table: TOrmClass;
   const SqlWhere: RawUtf8; const FieldsCsv: RawUtf8;
   aForceAjax: boolean): RawJson;
 var
-  sql: RawUtf8;
   t: PtrInt;
+  sql: RawUtf8;
 begin
   t := Model.GetTableIndexExisting(Table);
-  sql := SqlComputeForSelect(t, Table, FieldsCsv, SqlWhere);
+  SqlComputeForSelect(t, Table, FieldsCsv, SqlWhere, sql);
   if sql = '' then
     FastAssignNew(result)
   else
@@ -1676,7 +1679,7 @@ var
   async: TRestOrmEngineRetrieveAsync;
 begin
   async := NewEngineRetrieveAsync(Context, Table);
-  async.Sql := SqlComputeForSelect(async.TableIndex, Table, FieldsCsv, SqlWhere);
+  SqlComputeForSelect(async.TableIndex, Table, FieldsCsv, SqlWhere, async.Sql);
   async.ResultOne := OnResult;
   async.Execute;
 end;
@@ -1687,7 +1690,7 @@ procedure TRestOrm.RetrieveAsync(Context: TObject; Table: TOrmClass;
 var
   where: RawUtf8;
 begin
-  where := FormatSql(WhereClauseFmt, Args, Bounds);
+  FormatSqlVar(WhereClauseFmt, Args, Bounds, where);
   RetrieveAsync(Context, Table, where, OnResult, FieldsCsv);
 end;
 
@@ -1709,7 +1712,7 @@ var
   async: TRestOrmEngineRetrieveAsync;
 begin
   async := NewEngineRetrieveAsync(Context, Table);
-  async.Sql := SqlComputeForSelect(async.TableIndex, Table, FieldsCsv, SqlWhere);
+  SqlComputeForSelect(async.TableIndex, Table, FieldsCsv, SqlWhere, async.Sql);
   async.ResultJson := OnResult;
   async.Execute;
 end;
@@ -1719,10 +1722,11 @@ procedure TRestOrm.RetrieveAsyncListObjArray(Context: TObject; Table: TOrmClass;
   const OnResult: TOnRestOrmRetrieveArray; const FieldsCsv: RawUtf8);
 var
   async: TRestOrmEngineRetrieveAsync;
+  where: RawUtf8;
 begin
   async := NewEngineRetrieveAsync(Context, Table);
-  async.Sql := SqlComputeForSelect(async.TableIndex, Table, FieldsCsv,
-    FormatSql(FormatSqlWhere, [], BoundsSqlWhere));
+  FormatSqlVar(FormatSqlWhere, [], BoundsSqlWhere, where);
+  SqlComputeForSelect(async.TableIndex, Table, FieldsCsv, where, async.Sql);
   async.ResultArray := OnResult;
   async.Execute;
 end;
@@ -1835,10 +1839,10 @@ end;
 function TRestOrm.ExecuteFmt(const SqlFormat: RawUtf8;
   const Args, Bounds: array of const): boolean;
 var
-  SQL: RawUtf8;
+  sql: RawUtf8;
 begin
-  SQL := FormatSql(SqlFormat, Args, Bounds);
-  result := EngineExecute(SQL);
+  FormatSqlVar(SqlFormat, Args, Bounds, sql);
+  result := EngineExecute(sql);
 end;
 
 function TRestOrm.UnLock(Rec: TOrm): boolean;
@@ -2243,7 +2247,7 @@ function TRestOrm.Delete(Table: TOrmClass; const FormatSqlWhere: RawUtf8;
 var
   where: RawUtf8;
 begin
-  where := FormatSql(FormatSqlWhere, [], BoundsSqlWhere);
+  FormatSqlVar(FormatSqlWhere, [], BoundsSqlWhere, where);
   result := Delete(Table, where);
 end;
 

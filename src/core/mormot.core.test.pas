@@ -191,7 +191,7 @@ type
     destructor Destroy; override;
     /// used by the published methods to run a test assertion
     // - condition must equals TRUE to pass the test
-    procedure Check(condition: boolean; const msg: string = '');
+    function Check(condition: boolean; const msg: string = ''): boolean;
       {$ifdef HASSAFEINLINE}inline;{$endif} // Delphi 2007 has trouble inlining this
     /// used by the published methods to run a test assertion
     // - condition must equals TRUE to pass the test
@@ -218,7 +218,7 @@ type
     /// used by the published methods to run test assertion against UTF-8/Ansi strings
     // - will ignore the a+b string codepages, and call SortDynArrayRawByteString()
     // - if a<>b, will fail and include '#<>#' text before the supplied msg
-    function CheckEqualShort(const a, b: shortstring; const msg: RawUtf8 = ''): boolean;
+    function CheckEqualShort(const a, b: ShortString; const msg: RawUtf8 = ''): boolean;
     /// used by the published methods to run test assertion against
     // - if BinToHexLower(a)<>b, will fail and include '#<>#' hexa before the supplied msg
     function CheckEqualHex(const a: RawByteString; const b: RawUtf8;
@@ -255,13 +255,13 @@ type
       CaseSentitive: boolean = true; ExpectedResult: boolean = true; const msg: string = ''): boolean;
     /// used by the published methods to run a test assertion, with an UTF-8 error message
     // - condition must equals TRUE to pass the test
-    procedure CheckUtf8(condition: boolean; const msg: RawUtf8); overload;
+    function CheckUtf8(condition: boolean; const msg: RawUtf8): boolean; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// used by the published methods to run a test assertion, with a error
     // message computed via FormatUtf8()
     // - condition must equals TRUE to pass the test
-    procedure CheckUtf8(condition: boolean; const msg: RawUtf8;
-      const args: array of const); overload;
+    function CheckUtf8(condition: boolean; const msg: RawUtf8;
+      const args: array of const): boolean; overload;
     /// used by the published methods to execute a Method with the given
     // parameters, and ensure a (optionally specific) exception is raised
     function CheckRaised(const Method: TOnTestCheck; const Params: array of const;
@@ -297,6 +297,8 @@ type
     // - with proper retry if the server denies it, due to a rate limit
     function DownloadFile(const uri: RawUtf8; localfile: TFileName = '';
       retry: integer = 3): RawByteString;
+    /// wait up to 5 seconds that a given file is deleted
+    function WaitDeleted(const fn: TFileName; const msg: ShortString): boolean;
     /// execute a method possibly in a dedicated TLoggedWorkThread
     // - OnTask() should take some time running, to be worth a thread execution
     // - won't create more background threads than currently available CPU cores,
@@ -700,7 +702,7 @@ var
   id: RawUtf8;
   s: string;
   methods: TPublishedMethodInfoDynArray;
-  i: integer;
+  i: PtrInt;
 begin
   inherited Create; // may have been overriden
   if Ident <> '' then
@@ -839,41 +841,27 @@ begin
   fOwner.DoLog(LEV[condition], '%', [msg], {notify=}not condition);
 end;
 
-procedure TSynTestCase.Check(condition: boolean; const msg: string);
+function TSynTestCase.Check(condition: boolean; const msg: string): boolean;
 begin
+  result := condition;
   if self = nil then
     exit;
   inc(fAssertions);
   if (msg <> '') and
      (tcoLogEachCheck in fOptions) then
-    AddLog(condition, msg);
-  if not condition then
+    AddLog(result, msg);
+  if not result then
     TestFailed(msg);
 end;
 
 function TSynTestCase.CheckFailed(condition: boolean; const msg: string): boolean;
 begin
-  if self = nil then
-  begin
-    result := false;
-    exit;
-  end;
-  inc(fAssertions);
-  if (msg <> '') and
-     (tcoLogEachCheck in fOptions) then
-    AddLog(condition, msg);
-  if condition then
-    result := false
-  else
-  begin
-    TestFailed(msg);
-    result := true;
-  end;
+  result := not Check(condition, msg);
 end;
 
 function TSynTestCase.CheckNot(condition: boolean; const msg: string): boolean;
 begin
-  result := CheckFailed(not condition, msg);
+  result := not Check(not condition, msg);
 end;
 
 procedure TSynTestCase.DoCheckUtf8(condition: boolean; const msg: RawUtf8;
@@ -925,21 +913,23 @@ begin
   TestFailed(EQUAL_MSG, [a, b, msg], {notify=}false);
 end;
 
-procedure TSynTestCase.CheckUtf8(condition: boolean; const msg: RawUtf8;
-  const args: array of const);
+function TSynTestCase.CheckUtf8(condition: boolean; const msg: RawUtf8;
+  const args: array of const): boolean;
 begin
   inc(fAssertions);
   if not condition or
      (tcoLogEachCheck in fOptions) then
     DoCheckUtf8(condition, msg, args);
+  result := condition;
 end;
 
-procedure TSynTestCase.CheckUtf8(condition: boolean; const msg: RawUtf8);
+function TSynTestCase.CheckUtf8(condition: boolean; const msg: RawUtf8): boolean;
 begin
   inc(fAssertions);
   if not condition or
      (tcoLogEachCheck in fOptions) then
     DoCheckUtf8(condition, '%', [msg]);
+  result := condition;
 end;
 
 function TSynTestCase.CheckEqual(a, b: Int64; const msg: RawUtf8): boolean;
@@ -961,7 +951,7 @@ begin
     DoCheckUtf8(result, EQUAL_MSG, [a, b, msg]);
 end;
 
-function TSynTestCase.CheckEqualShort(const a, b: shortstring; const msg: RawUtf8): boolean;
+function TSynTestCase.CheckEqualShort(const a, b: ShortString; const msg: RawUtf8): boolean;
 begin
   inc(fAssertions);
   result := (a = b);
@@ -1035,7 +1025,7 @@ end;
 function TSynTestCase.CheckSameTime(const Value1, Value2: TDateTime;
   const msg: string): boolean;
 begin
-  result := CheckSame(Value1, Value2, SecsPerDate);
+  result := CheckSame(Value1, Value2, SecsPerDate * 2, msg);
 end;
 
 function TSynTestCase.CheckMatchAny(const Value: RawUtf8; const Values: array of RawUtf8;
@@ -1226,6 +1216,17 @@ begin
       exit;
     SleepHiRes(10);
   until false;
+end;
+
+function TSynTestCase.WaitDeleted(const fn: TFileName; const msg: ShortString): boolean;
+var
+  endtix: cardinal;
+begin
+  endtix := GetTickSec + 5; // never wait forever
+  while FileExists(fn) and
+        (GetTickSec < endtix) do
+    SleepHiRes(5);
+  result := CheckUtf8(not FileExists(fn), 'WaitDeleted(%) for %', [fn, msg]);
 end;
 
 threadvar
@@ -1569,8 +1570,8 @@ var
 begin
   result := true;
   if Executable.Command.Option('multithread')
-     {$ifdef OSWINDOWS} and not IsWow64Emulation {$endif} then
-    fMultiThread := CpuThreads > 2; // enabled with 3 cores
+     {$ifdef OSWINDOWS} and not (wsFavorFewThreads in WindowsSpecs) {$endif} then
+    fMultiThread := SystemInfo.dwNumberOfProcessors > 2; // enabled with 3 cores
   if Executable.Command.Option('&methods') then
   begin
     for m := 0 to Count - 1 do

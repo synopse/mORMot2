@@ -109,11 +109,7 @@ the global `RgServices` client which resolves interfaces either locally
 The About dialog (`rgAbout.pas`) uses `mdLayout` for fully responsive positioning
 and retrieves all information at runtime — nothing is hardcoded. Version number
 and build date come from the executable's embedded version resources via
-mORMot2's `Executable.Version` (`TFileVersion`). On Windows, `GetExecutableVersion`
-reads PE resources natively. On POSIX (Linux, macOS), `rgConst.pas` reads
-version resources directly using FPC's standard `fileinfo` + `elfreader` /
-`machoreader` units and feeds the result into `SetExecutableVersion`, avoiding
-any dependency on the `FPCUSEVERSIONINFO` conditional in mORMot2's shared source.
+mORMot2's `Executable.Version` (`TFileVersion`) set on Windows and POSIX.
 System information (OS, CPU, BIOS, memory) comes from mORMot2's
 `OSVersionText`, `CpuInfoText`, `BiosInfoText`, and `GetMemoryInfoText` helpers.
 The layout places the application image on the left, info labels on the right

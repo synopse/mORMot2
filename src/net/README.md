@@ -171,4 +171,5 @@ OpenAPI Language-agnostic Interface to HTTP APIs
 - OpenAPI Document Wrappers
 - FPC/Delphi Pascal Client Code Generation
 
+The most complete OpenAPI client generator in object pascal.
 See https://blog.synopse.info/?post/2024/09/06/Swagger/OpenAPI-Client-Generator-for-Delphi-and-FPC

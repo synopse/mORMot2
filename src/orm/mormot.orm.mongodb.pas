@@ -21,7 +21,6 @@ uses
   sysutils,
   classes,
   variants,
-  contnrs,
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -970,7 +969,7 @@ function TRestStorageMongoDB.EngineRetrieve(TableModelIndex: integer;
 var
   doc: variant;
 begin
-  FastAssignNew(result);
+  FastAssignNew(result{%H-});
   if (fCollection = nil) or
      (ID <= 0) then
     exit;

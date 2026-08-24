@@ -1,6 +1,6 @@
 # Synopse *mORMot 2* Framework
 
-*An Open Source Client-Server ToolBox aka ORM/SOA/MVC framework in modern Object Pascal*
+*The Ultimate Open Source RTL/ToolBox in modern Object Pascal, up to a Client-Server ORM/SOA/MVC Framework*
 
 ![Happy mORMot](doc/happymormot.png)
 
@@ -15,7 +15,7 @@ Thanks to all [Contributors](CONTRIBUTORS.md)!
 ## Resources
 
 You can find more about *mORMot 2* in:
-- its [Official Documentation](https://synopse.info/files/doc/mORMot2.html) (work in progress) and [AI Generated Documentation](docs);
+- its [Official Documentation](https://synopse.info/files/doc/mORMot2.html) (work in progress) and [AI Generated Documentation](docs/README.md);
 - the [Samples Folder](ex);
 - the [Thomas Tutorials](ex/ThirdPartyDemos/tbo);
 - the [Synopse Forum](https://synopse.info/forum/viewforum.php?id=24);
@@ -42,8 +42,8 @@ Synopse *mORMot 2* is the ultimate Open Source ToolBox for modern Object Pascal.
 The main features of *mORMot* are therefore:
 
  - An optimized cross-compiler and cross-platform JSON/UTF-8 and RTTI kernel;
- - Complete and efficient Cryptography primitives (hashes, encryption, asymetric keys, X.509, OpenSSL);
- - A fully features Client/Server network layer (e.g. HTTP/S, WebSockets, OpenAPI/Swagger, async servers, LDAP, DNS, ACME);
+ - Complete and efficient Cryptography primitives (hashes, encryption, asymetric keys, X.509, PKI, OpenSSL);
+ - A fully features Client/Server network layer (e.g. HTTP/S, WebSockets, OpenAPI/Swagger, async servers, LDAP, DNS, ACME, TFTP, DHCP, cached proxies);
  - Direct SQL and NoSQL database access (e.g. SQLite3, PostgreSQL, Oracle, MSSQL, OleDB, ODBC, MongoDB);
  - ORM/ODM: objects persistence on almost any database (SQL or NoSQL);
  - SOA: organize your business logic into REST services defined as `interface`;
@@ -89,11 +89,12 @@ See [the full licensing terms](LICENCE.md).
 
 The framework source code:
 - Tries to stay compatible with FPC stable and Delphi 7 and up;
-- Is currently validated against FPC 3.2.3 (fixes-3_2) and Lazarus 2.2.5 (fixes_2_2), Delphi 7, 2007, 2009, 2010, XE4, XE7, XE8, 10.4, 11.1 and 12.2.
+- Is currently validated against FPC 3.2.3 (fixes-3_2) and Lazarus 2.2.5 (fixes_2_2), Delphi 7, 2007, 2009, 2010, XE4, XE7, XE8, 10.4, 11.1, 12.2, 12.3 and 13.1;
+- Regression tests are built and run nightly from FPC fixes-3_2 to most versions of Windows 7-11, and several Linux and MacOS distributions on i386/x86_64/arm32/aarch64.
 
-Note that [FPC 3.2.2 has a regression with variant late binding](https://gitlab.com/freepascal.org/fpc/source/-/issues/39438) - use FPC 3.2.2 fixes branch instead.
+Note that [FPC 3.2.2 has a regression with variant late binding](https://gitlab.com/freepascal.org/fpc/source/-/issues/39438) - ensure you use FPC fixes-3_2 branch.
 
-On Delphi, only the Windows target is available for *mORMot* general units, but you can use the cross-platform clients units on all Delphi targets. FPC is a much better and consistent cross-platform compiler, we gladly support.
+On Delphi, only the Windows target is available for *mORMot* general units, but you can use the cross-platform clients units on all Delphi targets. Since *mORMot* 2.5, there is preliminary support of Delphi x86_64 for Linux and Mac. FPC is a much better and consistent cross-platform compiler, we gladly support.
 
 Please submit pull requests for non-validated versions.
 

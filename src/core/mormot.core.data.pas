@@ -25,7 +25,6 @@ interface
 
 uses
   classes,
-  contnrs,
   types,
   sysutils,
   {$ifdef ISDELPHI}
@@ -34,10 +33,10 @@ uses
   mormot.core.base,
   mormot.core.os,
   mormot.core.os.security,
-  mormot.core.rtti,
-  mormot.core.datetime,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.datetime,
+  mormot.core.rtti,
   mormot.core.buffers;
 
 
@@ -155,6 +154,10 @@ type
     function Exists(item: pointer): boolean; virtual;
     /// fast delete one item in the list
     function Remove(item: pointer): PtrInt; virtual;
+    /// add one or several items to the list
+    procedure AddSeveral(const item: array of pointer);
+    /// fast delete one or several items in the list
+    procedure RemoveSeveral(const item: array of pointer);
     {$ifdef HASITERATORS}
     /// an enumerator able to compile "for .. in list do" statements
     function GetEnumerator: TPointerEnumerator;
@@ -344,11 +347,11 @@ type
   TObjectStore = class(TObjectRWLock)
   protected
     fName: RawUtf8;
-    fReader: TFastReader;
+    fReader: PFastReader;        // = nil outside of LoadFromReader
     fReaderTemp: PRawByteString; // could be pre-assigned to reuse a big buffer
     fLoadFromLastUncompressed, fSaveToLastUncompressed: integer;
     fLoadFromLastAlgo: TAlgoCompress;
-    /// low-level virtual methods implementing the persistence reading
+    /// low-level virtual methods implementing the persistence reading/writing
     procedure LoadFromReader; virtual;
     procedure SaveToWriter(aWriter: TBufferWriter); virtual;
   public
@@ -366,6 +369,10 @@ type
     // - raise a EFastReader exception on decoding error
     constructor CreateFromFile(const aFileName: TFileName;
       aLoad: TAlgoCompressLoad = aclNormal);
+    /// initialize a storage from a SaveTo persisted resource in this executable
+    // - raise a EFastReader exception on decoding error
+    constructor CreateFromResource(aResourceName, aResType: PChar;
+      aInstance: TLibHandle = 0; aLoad: TAlgoCompressLoad = aclNormal);
     /// fill the storage from a SaveTo persisted buffer
     // - actually call the LoadFromReader() virtual method for persistence
     // - raise a EFastReader exception on decoding error
@@ -928,7 +935,7 @@ const
 {$endif PUREMORMOT2}
 
 type
-  /// the kind of exceptions raised during TDynArray/TDynArrayHashed process
+  /// the kind of exceptions raised during TDynArray process
   EDynArray = class(ESynException);
 
   /// a pointer to a TDynArray Wrapper instance
@@ -1273,7 +1280,7 @@ type
     // - warning: Index out parameter should be integer, not PtrInt
     function FastLocateSorted(const Item; out Index: integer): boolean;
     /// insert a sorted element value at the proper place
-    // - the index should have been computed by FastLocateSorted(): false
+    // - the index should have been computed by FastLocateSorted() = false
     // - you may consider using FastLocateOrAddSorted() instead
     procedure FastAddSorted(Index: PtrInt; const Item);
     /// search and add an element value inside a sorted dynamic array
@@ -1654,6 +1661,9 @@ const
 {$endif DYNARRAYHASH_PO2}
 
 type
+  /// the kind of exceptions raised during TDynArrayHasher/TDynArrayHashed process
+  EDynArrayHash = class(ESynException);
+
   /// function prototype to be used for hashing of a dynamic array element
   // - this function must use the supplied hasher on the Item data
   TDynArrayHashOne = function(const Item; Hasher: THasher): cardinal;
@@ -1679,24 +1689,27 @@ type
   TDynArrayHasher = object
   {$endif USERECORDWITHMETHODS}
   private
-    fDynArray: PDynArray;
-    fHashItem: TDynArrayHashOne;       // function
-    fEventHash: TOnDynArrayHashOne;    // function of object
-    fHashTableStore: TIntegerDynArray; // store 0 for void entry, or Index+1
-    fHashTableSize: integer;
-    fState: TDynArrayHasherState;
+    fDynArray: PDynArray;                  // may exist with no TDynArrayHashed
+    fHashItem: TDynArrayHashOne;           // function
+    fEventHash: TOnDynArrayHashOne;        // function of object
+    fHashTableStore: TIntegerDynArray;     // store 0 for void entry, or Index+1
+    fHashTableSize: integer;               // 32-bit
+    fState: TDynArrayHasherState;          // 8-bit
     fCompare: TDynArraySortCompare;        // function
     fEventCompare: TOnDynArraySortCompare; // function of object
     fHasher: THasher;                      // function
-    function HashTableIndex(aHashCode: PtrUInt): PtrUInt;
+    function HashTableIndex(const aHashCode: PtrUInt): PtrUInt;
+      {$ifdef HASINLINE}inline;{$endif}
+    function HashTableIndexSafe(const aHashCode: PtrUInt): PtrUInt;
       {$ifdef HASINLINE}inline;{$endif}
     function HashTableIndexToIndex(aHashTableIndex: PtrInt): PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
+    procedure RaiseNoHasher;
     procedure HashAdd(aHashCode: cardinal; var result: PtrInt);
     procedure HashDelete(aArrayIndex, aHashTableIndex: PtrInt; aHashCode: cardinal);
-    function RaiseFatalCollision(const caller: ShortString; aHashCode: cardinal): integer;
-    procedure RaiseNoHasher;
+    function RaiseFatalCollision(const caller: ShortString; aHashCode: cardinal): PtrInt;
     procedure HashTableInit(aHasher: THasher);
+    function FindAfterGrow(const aHashCode: cardinal): PtrInt;
     procedure SetEventCompare(const Value: TOnDynArraySortCompare);
     procedure SetEventHash(const Value: TOnDynArrayHashOne);
   public
@@ -1724,13 +1737,15 @@ type
     /// search for a hashed element value inside the dynamic array with hashing
     function Find(Item: pointer; aHashCode: cardinal): PtrInt; overload;
       {$ifdef HASINLINE}inline;{$endif}
-    /// search for a hash position inside the dynamic array with hashing
-    function Find(aHashCode: cardinal; aForAdd: boolean): PtrInt; overload;
     /// returns position in array, or next void index in HashTable[] as -(index+1)
-    function FindOrNew(aHashCode: cardinal; Item: pointer; aHashTableIndex: PPtrInt): PtrInt;
-    /// returns position in array, or -1 if not found with an optional custom comparer
+    function FindOrNew(aHashCode: cardinal; Item: pointer; aHashTableIndex: PPtrInt = nil): PtrInt;
+    /// returns pointer to matching value in array, or nil
+    function FindValue(aHashCode: PtrUInt; Item: pointer): pointer;
+    /// returns position in array or -1 if not found, with an optional custom comparer
+    // - will use Compare() or supplied Comp() or but won't support EventCompare()
     function FindIndex(aHashCode: cardinal; Item: pointer; Comp: TDynArraySortCompare = nil): PtrInt;
     /// returns pointer in array, or nil if not found
+    // - will use Compare() but won't support EventCompare()
     function FindHash(aHashCode: cardinal; Item: pointer): pointer;
     /// search an hashed element value for adding, updating the internal hash table
     // - trigger hashing if Count reaches CountTrigger
@@ -1742,7 +1757,8 @@ type
     function FindBeforeDelete(Item: pointer): PtrInt;
     /// full computation of the internal hash table
     // - to be called after items have been manually updated - e.g. after Clear
-    // - can return the number of duplicated values found (likely to be 0)
+    // - by default, will re-hash the values without comparing them - but you
+    // can set duplicates <> nil for such slower detection e.g. after loading
     procedure ForceReHash(duplicates: PInteger = nil);
     {$ifndef PUREMORMOT2}
     function ReHash(forced: boolean = false): integer;
@@ -1755,7 +1771,7 @@ type
     // - using either EventCompare() or Compare() functions
     function Equals(Item: pointer; ndx: PtrInt): boolean;
        {$ifdef FPC_OR_DELPHIXE4}inline;{$endif}
-    /// retrieve the low-level hash of a given item
+    /// retrieve the low-level hash of a given item by calling HashOne()
     function GetHashFromIndex(aIndex: PtrInt): cardinal;
     /// low-level access to the associated TDynArrayinstance holding the data
     property DynArray: PDynArray
@@ -1847,8 +1863,7 @@ type
     // strings or binary types, and the first field for records (strings included)
     // - if no aCompare is supplied, it will use default Equals() method
     // - if no THasher function is supplied, it will use the one supplied in
-    // DefaultHasher global variable, set to crc32c() by default - using
-    // SSE4.2 instruction if available
+    // DefaultHasher global variable (typically AesNiHash32/hashsse42/xxhash32)
     // - if CaseInsensitive is set to TRUE, it will ignore difference in 7-bit
     // alphabetic characters (e.g. compare 'a' and 'A' as equal)
     procedure Init(aTypeInfo: PRttiInfo; var aValue; aHashItem: TDynArrayHashOne = nil;
@@ -1908,7 +1923,7 @@ type
     // - returns either the index in the dynamic array if found (and set wasAdded
     // to false), either the newly created index in the dynamic array (and set
     // wasAdded to true)
-    // - for faster process (avoid rehash), please set the Capacity property
+    // - for faster process (avoid growing re-hash), please set Capacity first
     // - warning: in contrast to the Add() method, if an entry is added to the
     // array (wasAdded=true), the entry is left VOID: you must set the field
     // content to expecting value - in short, Item is used only for searching,
@@ -1951,11 +1966,10 @@ type
     // this case, you should first call FindHashedAndDelete(OldItem) then
     // FindHashedForAdding(NewItem) to properly handle the internal hash table
     // - if AddIfNotExisting is FALSE, returns the index found (0..Count-1),
-    // or -1 if Item was not found - Update will force slow rehash all content
+    // or -1 if Item was not found - Update will force slow re-hash all content
     // - if AddIfNotExisting is TRUE, returns the index found (0..Count-1),
-    // or the index newly created/added is the Item value was not matching -
-    // add won't rehash all content - for even faster process (avoid rehash),
-    // please set the Capacity property
+    // or the index newly created/added if the Item value was not matching - for
+    // even faster process please set Capacity first
     // - Item should be of the type expected by the dynamic array, since its
     // content will be copied into the dynamic array, and by design it must
     // refer to a variable: e.g. you can't write FindHashedAndUpdate(i+10)
@@ -1977,7 +1991,7 @@ type
     // e.g. you can't write Scan(i+10)
     // - returns -1 if not found, or the index in the dynamic array if found
     function Scan(const Item): PtrInt;
-    /// retrieve the hash value of a given item, from its index
+    /// retrieve the low-level hash of a given item by calling Hasher.HashOne()
     property Hash[aIndex: PtrInt]: cardinal
       read GetHashFromIndex;
     /// alternative event-oriented Compare function to be used for Sort and Find
@@ -2201,7 +2215,7 @@ type
     Values: TDynArrayHashed;
     /// alternative to Values.Hasher.HashOne() using PUtf8Char + Length
     FromBuffer: TUtf8Hasher;
-    /// alternative to Values.Compare() using PUtf8Char + Length
+    /// alternative to Values.Compare() using // = StrComp/StrIComp(PUtf8Char)
     CompFromBuffer: TDynArraySortCompare;
     /// initialize the RawUtf8 dynamic array and hasher
     procedure Init(CaseInsensitive: boolean);
@@ -2335,6 +2349,9 @@ type
     function Count: integer;
   end;
 
+  /// exception class raised by TRawUtf8List
+  ERawUtf8List = class(ESynException);
+
   /// possible values used by TRawUtf8List.Flags
   TRawUtf8ListFlags = set of (
     fObjectsOwned,
@@ -2346,8 +2363,8 @@ type
   /// thread-safe TStringList-class optimized for our native UTF-8 string type
   // - can optionally store associated some TObject instances
   // - high-level methods of this class are thread-safe
-  // - if fNoDuplicate flag is defined, an internal hash table will be
-  // maintained to perform IndexOf() lookups in O(1) linear way
+  // - if fNoDuplicate flag is defined, Add/AddObject will maintain an internal
+  // hash table to perform IndexOf() lookups in O(1) linear way
   // - not thread-safe by default, unless fThreadSafe is set to use the TRWLock
   TRawUtf8List = class(TObjectRWLock)
   protected
@@ -2386,6 +2403,8 @@ type
     function GetCaseSensitive: boolean;
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetCaseSensitive(Value: boolean); virtual;
+    procedure RehashChanged;
+      {$ifdef HASINLINE}inline;{$endif}
     procedure Changed; virtual;
     procedure InternalDelete(Index: PtrInt);
     procedure OnChangeHidden(Sender: TObject);
@@ -2398,8 +2417,8 @@ type
     /// initialize the RawUtf8/Objects storage with extended flags
     // - by default, any associated Objects[] are just weak references;
     // you may supply fOwnObjects flag to force object instance management
-    // - if you want the stored text items to be unique, set fNoDuplicate
-    // and then an internal hash table will be maintained for fast IndexOf()
+    // - if you want the stored text items to be unique, set fNoDuplicate and
+    // Add/AddObject will maintain an internal hash table for fast IndexOf()
     // - you can set fCaseSensitive to let the UTF-8 lookup be case-sensitive
     // - not thread-safe by default, unless fThreadSafe is set to use a R/W lock
     // - is defined as CreateEx instead of overload Create to avoid weird Delphi
@@ -2509,6 +2528,9 @@ type
     // - and corresponding objects (if aOwnObjects was true at constructor)
     // - thread-safe method, also clearing the internal Hash Table
     procedure Clear; virtual;
+    /// sort in-place all RawUtf8 items, following fCaseSensitive flag
+    // - any associated Objects[] would also be moved in synch
+    procedure Sort;
     /// find a RawUtf8 item in the stored Strings[] list
     // - this search is case sensitive if fCaseSensitive flag was set (which
     // is the default)
@@ -2535,7 +2557,7 @@ type
     function Contains(const aText: RawUtf8; aFirstIndex: PtrInt = 0): PtrInt;
     /// retrieve the all lines, separated by the supplied delimiter
     // - this method is thread-safe
-    function GetText(const Delimiter: RawUtf8 = EOL): RawUtf8;
+    function GetText(const Delimiter: RawUtf8 = EOL; Reverse: boolean = false): RawUtf8;
     /// the OnChange event will be raised only when EndUpdate will be called
     // - this method will also call Safe.Lock for thread-safety
     procedure BeginUpdate;
@@ -2587,12 +2609,14 @@ type
     // - returns '' and raise no exception in case of out of range supplied index
     // - if you want to use it with the UI, use Utf8ToString() function
     // - reading this property is not thread-safe, since content may change
+    // - writing this property is not allowed if fNoDuplicate is set in Flags
     property Strings[Index: PtrInt]: RawUtf8
       read Get write Put; default;
     /// get or set an item as RTL string, ready to be used with the UI
     // - returns '' and raise no exception in case of out of range supplied index
     // - wrap Strings[] with Utf8ToString/StringToUtf8 functions
     // - reading this property is not thread-safe, since content may change
+    // - writing this property is not allowed if fNoDuplicate is set in Flags
     property Str[Index: PtrInt]: string
       read GetS write PutS;
     /// get or set a Object item
@@ -2673,7 +2697,7 @@ type
   TBinDictionary = class(TSynPersistent)
   protected
     fValue: TRawByteStringDynArray;
-    fCount: integer;
+    fCount: integer; // not PtrInt
     fHash: TDynArrayHashed;
   public
     /// initialize the data structure
@@ -3025,6 +3049,23 @@ begin
     Delete(result);
 end;
 
+procedure TSynList.AddSeveral(const item: array of pointer);
+var
+  i: PtrInt;
+begin
+  for i := 0 to high(item) do
+    Add(item[i]);
+end;
+
+procedure TSynList.RemoveSeveral(const item: array of pointer);
+var
+  i: PtrInt;
+begin
+  for i := 0 to high(item) do
+    Remove(item[i]);
+end;
+
+
 {$ifdef HASITERATORS}
 
 function TSynList.GetEnumerator: TPointerEnumerator;
@@ -3291,6 +3332,21 @@ begin
   LoadFromFile(aFileName, aLoad);
 end;
 
+constructor TObjectStore.CreateFromResource(aResourceName, aResType: PChar;
+  aInstance: TLibHandle; aLoad: TAlgoCompressLoad);
+var
+  res: TExecutableResource; // cross-platform access to the resource
+begin
+  inherited Create; // may have been overriden
+  if not res.Open(aResourceName, aResType, aInstance) then
+    fReader.ErrorData('resource not found');
+  try
+    LoadFrom(res.Buffer, res.Size, aLoad);
+  finally
+    res.Close;
+  end;
+end;
+
 procedure TObjectStore.LoadFromReader;
 begin
   fReader.VarUtf8(fName);
@@ -3314,6 +3370,7 @@ var
   localtemp: RawByteString;
   p: pointer;
   temp: PRawByteString;
+  rdr: TFastReader;
 begin
   if (aBuffer = nil) or
      (aBufferLen <= 0) then
@@ -3330,8 +3387,13 @@ begin
   if p = nil then
     fReader.ErrorData('%.LoadFrom %.Decompress failed',
       [self, fLoadFromLastAlgo]);
-  fReader.Init(p, fLoadFromLastUncompressed);
-  LoadFromReader;
+  rdr.Init(p, fLoadFromLastUncompressed);
+  fReader := @rdr;
+  try
+    LoadFromReader;
+  finally
+    fReader := nil;
+  end;
 end;
 
 function TObjectStore.LoadFromFile(const aFileName: TFileName;
@@ -3392,7 +3454,7 @@ var // filled at startup with a 32-bit random value to avoid hash flooding
 { HashAnsiString/HashAnsiStringI alternatives from PUtf8Char + length }
 
 function HashIntern(P: PUtf8Char; L: PtrUInt): cardinal;
-begin
+begin // should match exactly HashAnsiString() logic
   if P <> nil then
   begin
     if L > 256 then // no need to hash too big a content
@@ -3409,7 +3471,7 @@ end;
 function HashInternI(P: PUtf8Char; L: PtrUInt): cardinal;
 var
   up: TByteToAnsiChar; // avoid slow heap allocation
-begin
+begin // should match exactly HashAnsiStringI() logic
   if (P <> nil) and
      (L <> 0) then
     result := InterningHasher(HashSeed, @up,
@@ -3422,7 +3484,7 @@ const
   HASH_INTERN: array[{CaseInsensitive:}boolean] of TUtf8Hasher = (
     HashIntern, HashInternI);
   COMP_PUTF8CHAR: array[{CaseInsensitive:}boolean] of TDynArraySortCompare = (
-    SortDynArrayPUtf8Char, SortDynArrayPUtf8CharI);
+    SortDynArrayPUtf8Char, SortDynArrayPUtf8CharI); // = StrComp, StrIComp
 
 { TRawUtf8Hashed }
 
@@ -3475,40 +3537,46 @@ end;
 procedure TRawUtf8InterningSlot.UniqueFromBuffer(var aResult: RawUtf8;
   aText: PUtf8Char; aTextLen: PtrInt; aTextHash: cardinal);
 var
-  c: AnsiChar;
+  p: PUtf8Char;
   added: boolean;
   i: PtrInt;
   bak: TDynArraySortCompare;
+  temp: TBuffer1K;
 begin
-  if not fSafe.TryReadLock then
+  p := nil; // for direct allocation
+  if (aText <> nil) and
+     (aTextLen > 0) then
+    if aText[aTextLen] = #0 then // nothing to be done if already #0 ended
+      p := aText
+    else if aTextLen < SizeOf(temp) then
+    begin
+      MoveFast(aText^, temp, aTextLen); // make #0 terminated local copy
+      temp[aTextLen] := #0;
+      p := @temp;
+    end;
+  if (p = nil) or
+     not fSafe.TryReadLock then // no wait on (unlikely) WriteLock contention
   begin
-    FastSetString(aResult, aText, aTextLen); // avoid waiting on contention
+    FastSetString(aResult, aText, aTextLen); // direct allocation
     exit;
   end;
-  c := aText[aTextLen];
-  if c <> #0 then // write only if needed - avoid GPF from constant string
-    aText[aTextLen] := #0; // input buffer may not be #0 terminated
-  i := fHash.Values.Hasher.FindIndex(aTextHash, @aText, fHash.CompFromBuffer);
+  i := fHash.Values.Hasher.FindIndex(aTextHash, @p, fHash.CompFromBuffer);
   if i >= 0 then
   begin
     aResult := fHash.Value[i]; // return the interned value
     fSafe.ReadUnLock;
-    if c <> #0 then
-      aText[aTextLen] := c;
     exit;
   end;
   fSafe.ReadUnLock;
   fSafe.WriteLock; // need to be added in exclusive mode
   bak := fHash.Values.Hasher.Compare; // (RawUtf8,RawUtf8) -> (RawUtf8,PUtf8Char)
   PDynArrayHasher(@fHash.Values.Hasher)^.fCompare := fHash.CompFromBuffer;
-  i := fHash.Values.FindHashedForAdding(aText, added, aTextHash);
+  i := fHash.Values.FindHashedForAdding(p, added, aTextHash);
   PDynArrayHasher(@fHash.Values.Hasher)^.fCompare := bak;
   if added then
-    FastSetString(fHash.Value[i], aText, aTextLen); // new value to the pool
+    FastSetString(fHash.Value[i], p, aTextLen); // new value to the pool
   aResult := fHash.Value[i]; // return the interned value
   fSafe.WriteUnLock;
-  if c <> #0 then
-    aText[aTextLen] := c;
 end;
 
 procedure TRawUtf8InterningSlot.UniqueFromBuffer(var aResult: RawUtf8;
@@ -3561,7 +3629,7 @@ procedure TRawUtf8InterningSlot.Clear;
 begin
   fSafe.WriteLock;
   try
-    fHash.Values.SetCount(0); // Values.Clear
+    fHash.Values.Clear;
     fHash.Values.Hasher.ForceReHash;
   finally
     fSafe.WriteUnLock;
@@ -3930,7 +3998,7 @@ begin
   for i := 0 to fCount - 1 do
     Make([PShortString(fValue[i])^, Sep, PUtf8Char(Values(i))], u[i]);
   QuickSortRawUtf8(u, fCount);
-  PRawUtf8ToCsv(pointer(u), fCount, Feed, false, result);
+  PRawUtf8ToCsv(pointer(u), fCount, Feed, {rev=}false, result);
 end;
 
 var // late resolution e.g. of ldap: macros by GlobalInfoRegister()
@@ -3951,6 +4019,10 @@ function GlobalInfoFind(Key: pointer; KeyLen: PtrInt; var ValueLen: PtrInt): poi
 var
   i: PtrInt;
 begin
+  result := nil;
+  ValueLen := 0;
+  if ByteScanIndex(Key, KeyLen, ord(':')) < 0 then
+    exit; // expects 'namespace:value' key format
   _GlobalInfoSafe.Lock;
   if _GlobalInfo = nil then
     _GlobalInfo := RegisterGlobalShutdownRelease(TBinDictionary.Create);
@@ -3963,8 +4035,7 @@ begin
       _GlobalInfoAdd[i](_GlobalInfo); // may take some time
       PtrArrayDelete(_GlobalInfoPre, i);
       PtrArrayDelete(_GlobalInfoAdd, i);
-      if result = nil then
-        result := _GlobalInfo.Find(Key, KeyLen, @ValueLen); // may appear now
+      result := _GlobalInfo.Find(Key, KeyLen, @ValueLen); // may appear now
     until false;
   _GlobalInfoSafe.UnLock;
 end;
@@ -3972,10 +4043,10 @@ end;
 function GlobalInfoFind(const Key: RawUtf8): RawUtf8;
 var
   v: pointer;
-  l: PtrInt;
+  l: PtrInt; // not integer
 begin
   v := GlobalInfoFind(pointer(Key), length(Key), l);
-  FastSetString(result, v, l);
+  FastSetString(result, v, l); // allocate a new RawUtf8 string
 end;
 
 function GlobalInfoRegisterAll: TBinDictionary;
@@ -3998,7 +4069,8 @@ begin
   Sender.UpdateText( 'os:name',           OSVersionShort);
   Sender.UpdateText( 'os:family',         LowerCaseU(OS_TEXT));
   Sender.UpdateText( 'os:version',        OSVersionText);
-  Sender.UpdateText(['os:ram'],          [SystemMemorySize]);
+  Sender.UpdateText(['os:ram'],          [Int64(SystemMemorySize)]);
+  Sender.UpdateText(['os:mem'],          [KBNoSpace(SystemMemorySize)]);
   Sender.UpdateText( 'os:hostname',       Executable.Host);
   Sender.UpdateText(['os:temp'],         [GetSystemPath(spTemp)]);
   Sender.UpdateText(['os:cwd'],          [GetCurrentDir]);
@@ -4011,28 +4083,36 @@ begin
   if OS_DISTRI > ldUndefined then
     Sender.UpdateText(['os:dist'],       [DISTRI_NAME[OS_DISTRI]]);
   Sender.UpdateTextNotVoid('os:build',    SystemInfo.uts.release);
+  {$ifdef OSLINUXANDROID}
   Sender.UpdateTextNotVoid('os:release',  SystemInfo.release);
+  {$endif OSLINUXANDROID}
   {$else}
   Sender.UpdateTextNotVoid('os:product',  WindowsProductName);
   if WindowsUbr <> 0 then
     Sender.UpdateText(['os:build'], [WindowsUbr]);
   Sender.UpdateTextNotVoid('os:winver',   WindowsDisplayVersion);
+  if wsWow64 in WindowsSpecs then
+    Sender.UpdateText('os:wow64', 'true');
+  if wsPrism in WindowsSpecs then
+    Sender.UpdateText('os:prism', 'true');
+  if wsWine in WindowsSpecs then
+    Sender.UpdateText('os:wine',  'true');
   {$endif OSPOSIX}
 end;
 
 procedure _GlobalInfoCpu(Sender: TBinDictionary);
 begin
-  Sender.UpdateText( 'cpu:name',         CpuInfoText);
-  Sender.UpdateText(['cpu:threads'],    [CpuThreads]);
-  Sender.UpdateText(['cpu:cores'],      [CpuCores]);
-  Sender.UpdateText(['cpu:sockets'],    [CpuSockets]);
+  Sender.UpdateText( 'cpu:name',      CpuInfoText);
+  Sender.UpdateText(['cpu:threads'], [CpuThreads]); // sched_getaffinity syscall
+  Sender.UpdateText(['cpu:cores'],   [CpuCores]);
+  Sender.UpdateText(['cpu:sockets'], [CpuSockets]);
   if HasHWAes then
-    Sender.UpdateText('cpu:aes',        'true');
+    Sender.UpdateText('cpu:aes',  'true');
   {$ifdef ASMINTEL}
   if cfAVX in CpuFeatures then
-    Sender.UpdateText('cpu:avx',        'true');
+    Sender.UpdateText('cpu:avx',  'true');
   if cfAVX2 in CpuFeatures then
-    Sender.UpdateText('cpu:avx2',       'true');
+    Sender.UpdateText('cpu:avx2', 'true');
   if IntelAvx10 > 0 then
     Sender.UpdateText(['cpu:avx10'],     [IntelAvx10]);
   Sender.UpdateText(  ['cpu:family'],    [CpuFamily]);
@@ -4123,36 +4203,43 @@ end;
 
 procedure _GlobalInfoExe(Sender: TBinDictionary);
 begin
-  Sender.UpdateText( 'exe:arch',   CPU_ARCH_TEXT);
-  Sender.UpdateText( 'exe:name',   Executable.ProgramName);
-  Sender.UpdateText(['exe:cmd'],  [Executable.ProgramFileName]);
-  Sender.UpdateText(['exe:path'], [Executable.ProgramFilePath]);
-  Sender.UpdateText( 'exe:agent',  Executable.Version.UserAgent);
-  Sender.UpdateText(['exe:log'],  [GetSystemPath(spLog)]);
-  Sender.UpdateText(['exe:pid'],  [GetCurrentProcessId]);
-  Sender.UpdateText(['exe:ppid'], [GetParentProcess]);
-  if Assigned(Executable.Version) and
-     (Executable.Version.Major <> 0) then
+  Sender.UpdateText( 'exe:arch',    CPU_ARCH_TEXT);
+  Sender.UpdateText( 'exe:name',    Executable.ProgramName);
+  Sender.UpdateText(['exe:cmd'],   [Executable.ProgramFileName]);
+  Sender.UpdateText(['exe:path'],  [Executable.ProgramFilePath]);
+  Sender.UpdateText(['exe:log'],   [GetSystemPath(spLog)]);
+  Sender.UpdateText(['exe:pid'],   [GetCurrentProcessId]);
+  Sender.UpdateText(['exe:ppid'],  [GetParentProcess]);
+  if not Assigned(Executable.Version) then
+    exit;
+  Sender.UpdateText('exe:info',  Executable.Version.VersionInfo);
+  Sender.UpdateText('exe:agent', Executable.Version.UserAgent);
+  if Executable.Version.BuildYear <> 0 then
   begin
+    Sender.UpdateText( 'exe:build', Executable.Version.BuildDateTimeString);
+    Sender.UpdateText(['exe:buildyear'], [Executable.Version.BuildYear]);
+  end;
+  if Executable.Version.Major <> 0 then
+  begin
+    Sender.UpdateText(['exe:main'],    [Executable.Version.Main]);
     Sender.UpdateText(['exe:major'],   [Executable.Version.Major]);
     Sender.UpdateText(['exe:minor'],   [Executable.Version.Minor]);
+    Sender.UpdateText(['exe:release'], [Executable.Version.Release]);
+    Sender.UpdateText(['exe:build'],   [Executable.Version.Build]);
     Sender.UpdateText(['exe:version'], [Executable.Version.Detailed]);
   end;
-  {$ifdef OSWINDOWS}
-  if IsWow64 then
-    Sender.UpdateText('exe:wow64', 'true');
-  if IsWow64Emulation then
-    Sender.UpdateText('exe:prism', 'true');
-  {$endif OSWINDOWS}
 end;
 
 procedure _GlobalInfoEnv(Sender: TBinDictionary);
 var
   i: PtrInt;
 begin
+  if _SystemEnvNames = nil then
+    GetSystemEnv('none', 4); // populate the in-memory cache once
   for i := 0 to length(_SystemEnvNames) - 1 do
     Sender.UpdateText(['env:', _SystemEnvNames[i]], [_SystemEnvValues[i]]);
 end;
+
 
 { TRawUtf8List }
 
@@ -4212,6 +4299,13 @@ begin
   inherited Destroy;
 end;
 
+procedure TRawUtf8List.RehashChanged;
+begin
+  if fNoDuplicate in fFlags then
+    fValues.ForceReHash;
+  Changed;
+end;
+
 procedure TRawUtf8List.SetCaseSensitive(Value: boolean);
 begin
   if (self = nil) or
@@ -4225,7 +4319,7 @@ begin
     else
       exclude(fFlags, fCaseSensitive);
     fValues.Hasher.InitSpecific(@fValues, ptRawUtf8, not Value, nil);
-    Changed;
+    RehashChanged;
   finally
     if fThreadSafe in fFlags then
       fSafe.WriteUnLock;
@@ -4249,9 +4343,7 @@ begin
           fObjects := nil;
         end;
         fValues.Clear;
-        if fNoDuplicate in fFlags then
-          fValues.ForceReHash;
-        Changed;
+        RehashChanged;
       end
       else
       begin
@@ -4266,9 +4358,7 @@ begin
             SetLength(fObjects, capa);
           end;
           fValues.Count := capa;
-          if fNoDuplicate in fFlags then
-            fValues.ForceReHash;
-          Changed;
+          RehashChanged;
         end;
         if capa > length(fValue) then
         begin
@@ -4318,11 +4408,11 @@ begin
           aFreeAndReturnExistingObject^ := obj;
         end;
         if aRaiseExceptionIfExisting then
-          ESynException.RaiseUtf8('%.Add duplicate [%]', [self, aText]);
+          ERawUtf8List.RaiseUtf8('%.Add duplicate [%]', [self, aText]);
         if aReplaceExistingObject then
         begin
           if obj = nil then
-            ESynException.RaiseUtf8(
+            ERawUtf8List.RaiseUtf8(
               '%.AddOrReplaceObject with no object at [%]', [self, aText]);
           if fObjectsOwned in fFlags then
             FreeAndNil(fObjects[result]);
@@ -4421,6 +4511,36 @@ end;
 procedure TRawUtf8List.Clear;
 begin
   SetCapacity(0); // will also call Changed
+end;
+
+procedure TRawUtf8List.Sort;
+var
+  obj: TIntegerDynArray;
+  tmp: TObjectDynArray;
+  i: PtrInt;
+begin
+  if fThreadSafe in fFlags then
+    fSafe.WriteLock;
+  try
+    if fCount <= 1 then
+      exit; // nothing to sort
+    if fObjects <> nil then
+    begin
+      SetLength(obj, fCount);
+      FillIncreasing(pointer(obj), 0, fCount); // synchronize fObjects[obj[i]]
+    end;
+    QuickSortRawUtf8(fValue, fCount, @obj, StrCompByCase[not (fCaseSensitive in fFlags)]);
+    RehashChanged;
+    if obj = nil then
+      exit; // no fObjects[] to synchronize
+    SetLength(tmp, length(fObjects));
+    for i := 0 to fCount - 1 do
+      tmp[i] := fObjects[obj[i]];
+    fObjects := tmp;
+  finally
+    if fThreadSafe in fFlags then
+      fSafe.WriteUnLock;
+  end;
 end;
 
 procedure TRawUtf8List.InternalDelete(Index: PtrInt);
@@ -4613,7 +4733,7 @@ begin
   end;
 end;
 
-function TRawUtf8List.GetText(const Delimiter: RawUtf8): RawUtf8;
+function TRawUtf8List.GetText(const Delimiter: RawUtf8; Reverse: boolean): RawUtf8;
 begin
   FastAssignNew(result);
   if (self = nil) or
@@ -4621,7 +4741,7 @@ begin
     exit;
   if fThreadSafe in fFlags then
     fSafe.ReadOnlyLock;
-  PRawUtf8ToCsv(pointer(fValue), fCount, Delimiter, {rev=}false, result);
+  PRawUtf8ToCsv(pointer(fValue), fCount, Delimiter, Reverse, result);
   if fThreadSafe in fFlags then
     fSafe.ReadOnlyUnLock;
 end;
@@ -4768,6 +4888,9 @@ begin
   if (self <> nil) and
      (PtrUInt(Index) < PtrUInt(fCount)) then
   begin
+    if fNoDuplicate in fFlags then
+      ERawUtf8List.RaiseUtf8('%[%] := ... is forbidden with ' +
+        'fNoDuplicate: use Delete + Add instead', [self, Index]);
     fValue[Index] := Value;
     if Assigned(fOnChange) then
       Changed;
@@ -4810,7 +4933,7 @@ var
   Line: RawUtf8;
 begin
   DelimLen := length(Delimiter);
-  BeginUpdate; // also makes fSafe.Lock
+  BeginUpdate; // also makes fSafe.WriteLock
   try
     Clear;
     if (P <> nil) and
@@ -4828,7 +4951,7 @@ begin
             break;
           inc(P);
         end;
-        FastSetString(Line, PBeg, P - PBeg);
+        FastSetString(Line, PBeg, P);
         AddObject(Line, nil);
         if P >= PEnd then
           break;
@@ -4850,7 +4973,7 @@ procedure TRawUtf8List.SetFrom(const aText: TRawUtf8DynArray;
 var
   n: integer;
 begin
-  BeginUpdate; // also makes fSafe.Lock
+  BeginUpdate; // also makes fSafe.WriteLock
   try
     Clear;
     n := length(aText);
@@ -4860,8 +4983,7 @@ begin
     fCount := n;
     fValue := aText;
     fObjects := aObject;
-    if fNoDuplicate in fFlags then
-      fValues.ForceReHash;
+    RehashChanged;
   finally
     EndUpdate;
   end;
@@ -4882,9 +5004,7 @@ begin
     else if fValue[i] <> txt then
     begin
       fValue[i] := txt;
-      if fNoDuplicate in fFlags then
-        fValues.Hasher.ForceReHash; // invalidate internal hash table
-      Changed;
+      RehashChanged;
     end;
   finally
     if fThreadSafe in fFlags then
@@ -5013,9 +5133,7 @@ begin
     Dest.fValue := copy(Source.fValue); // copy by reference, increase refcnt
     Dest.fObjects := copy(Source.fObjects);
     exclude(Dest.fFlags, fObjectsOwned);
-    if fNoDuplicate in Dest.fFlags then
-      Dest.fValues.ForceReHash; // assume Source has no duplicate either
-    Dest.Changed;
+    Dest.RehashChanged; // assume Source has no duplicate either
   finally
     if fThreadSafe in Source.fFlags then
       Source.fSafe.ReadOnlyUnLock;
@@ -5112,7 +5230,7 @@ end;
 function _BL_WString(Data: PWideString; var Source: TFastReader; Info: PRttiInfo): PtrInt;
 begin
   with Source.VarBlob do
-    SetString(Data^, PWideChar(Ptr), Len shr 1); // length in bytes was stored
+    FastSetWideString(Data^, Ptr, Len shr 1); // length in bytes was stored
   result := SizeOf(pointer);
 end;
 
@@ -5692,7 +5810,7 @@ begin
     if vt <> 0 then
       if vt = 255 then
         with Source.VarBlob do // varOleStr (=8)
-          SetString(WideString(Data^.vAny), PWideChar(Ptr), Len shr 1)
+          FastSetWideString(WideString(Data^.vAny), Ptr, Len shr 1)
       else
         Source.Copy(@Data^.VInt64, vt); // simple types
   end
@@ -6142,40 +6260,42 @@ end;
 
 procedure BinaryLoadSeveral(Data: PAnsiChar; var Source: TFastReader;
   Info: PRttiInfo; n, datasize: PtrInt);
-label
-  raw;
 var
   load: TRttiBinaryLoad;
 begin // caller ensured Data<>nil and n>0
-  if Info = nil then
-    goto raw;
-  load := RTTI_BINARYLOAD[Info^.Kind];
-  if Assigned(load) then
-    repeat
-      inc(Data, load(Data, Source, Info));
-      dec(n);
-    until n = 0
-  else
-raw:Source.Copy(Data, datasize)
+  if Info <> nil then
+  begin
+    load := RTTI_BINARYLOAD[Info^.Kind];
+    if Assigned(load) then
+    begin
+      repeat
+        inc(Data, load(Data, Source, Info));
+        dec(n);
+      until n = 0;
+      exit;
+    end;
+  end;
+  Source.Copy(Data, datasize)
 end;
 
 procedure BinarySaveSeveral(Data: PAnsiChar; Dest: TBufferWriter;
   Info: PRttiInfo; n, datasize: PtrInt);
 var
   sav: TRttiBinarySave;
-label
-  raw;
 begin
-  if Info = nil then
-    goto raw;
-  sav := RTTI_BINARYSAVE[Info^.Kind];
-  if Assigned(sav) then // paranoid check
-    repeat
-      inc(Data, sav(Data, Dest, Info));
-      dec(n);
-    until n = 0
-  else
-raw:Dest.Write(Data, datasize);
+  if Info <> nil then
+  begin
+    sav := RTTI_BINARYSAVE[Info^.Kind];
+    if Assigned(sav) then
+    begin
+      repeat
+        inc(Data, sav(Data, Dest, Info));
+        dec(n);
+      until n = 0;
+      exit;
+    end;
+  end;
+  Dest.Write(Data, datasize);
 end;
 
 
@@ -6502,21 +6622,22 @@ end;
 function TDynArray.ItemCompare(A, B: pointer; CaseInSensitive: boolean): integer;
 var
   comp: TRttiCompare;
-label
-  raw;
 begin
   if Assigned(fCompare) then
   begin
-    result := fCompare(A^, B^);
+    result := fCompare(A^, B^); // custom comparison
     exit;
   end;
-  if not(rcfArrayItemManaged in fInfo.Flags) then
-    goto raw; // fast binary comparison with length
-  comp := RTTI_COMPARE[CaseInsensitive, fInfo.Cache.ItemInfoRaw.Kind];
-  if Assigned(comp) then
-    comp(A, B, fInfo.Cache.ItemInfoRaw, result)
-  else
-raw:result := MemCmp(A, B, fInfo.Cache.ItemSize)
+  if rcfArrayItemManaged in fInfo.Flags then
+  begin
+    comp := RTTI_COMPARE[CaseInsensitive, fInfo.Cache.ItemInfoRaw.Kind];
+    if Assigned(comp) then
+    begin
+      comp(A, B, fInfo.Cache.ItemInfoRaw, result); // RTTI comparison
+      exit;
+    end;
+  end;
+  result := MemCmp(A, B, fInfo.Cache.ItemSize); // fallback to binary comparison
 end;
 
 function TDynArray.Add(const Item): PtrInt;
@@ -6610,13 +6731,14 @@ end;
 
 procedure TDynArray.Clear;
 begin
-  SetCount(0);
+  if fValue^ <> nil then
+    SetCount(0);
 end;
 
 function TDynArray.ClearSafe: boolean;
 begin
   try
-    SetCount(0);
+    Clear;
     result := true;
   except // weak code, but may be a good idea in a destructor
     result := false;
@@ -7045,7 +7167,7 @@ function TDynArray.LoadFromJson(P: PUtf8Char; EndOfObject: PUtf8Char;
   CustomVariantOptions: PDocVariantOptions; Tolerant: boolean;
   Interning: TRawUtf8InterningAbstract): PUtf8Char;
 begin
-  SetCount(0); // faster to use our own routine now
+  Clear; // faster to use our own routine now
   GetDataFromJson(fValue, P,
     EndOfObject, Info, CustomVariantOptions, Tolerant, Interning);
   if fCountP <> nil then
@@ -8031,25 +8153,26 @@ var
   rtti: PRttiInfo;
   cmp: TRttiCompare;
   n: PtrInt;
-label
-  bin;
 begin
   n := GetCount;
   if (n <> 0) and
      (@Item <> nil) then
-    if not(rcfArrayItemManaged in fInfo.Flags) then
-bin:  result := AnyScanIndex(fValue^, @Item, n, fInfo.Cache.ItemSize)
-    else
+  begin
+    if rcfArrayItemManaged in fInfo.Flags then
     begin
       rtti := fInfo.Cache.ItemInfoManaged;
-      if rtti = nil then
-        goto bin; // unmanaged items
-      cmp := RTTI_COMPARE[CaseInSensitive, rtti.Kind];
-      if Assigned(cmp) then
-        result := IndexFind(fValue^, @Item, cmp, rtti, n)
-      else
-        goto bin;
-    end
+      if rtti <> nil then
+      begin
+        cmp := RTTI_COMPARE[CaseInSensitive, rtti.Kind];
+        if Assigned(cmp) then
+        begin
+          result := IndexFind(fValue^, @Item, cmp, rtti, n); // RTTI search
+          exit;
+        end;
+      end;
+    end;
+    result := AnyScanIndex(fValue^, @Item, n, fInfo.Cache.ItemSize); // binary
+  end
   else
     result := -1;
 end;
@@ -8436,7 +8559,7 @@ end;
 function HashAnsiString(Item: PAnsiChar; Hasher: THasher): cardinal;
 var
   l: PtrInt;
-begin
+begin // should match exactly HashIntern() logic
   Item := PPointer(Item)^; // passed as non-nil PAnsiString reference
   if Item <> nil then
   begin
@@ -8455,7 +8578,7 @@ end;
 function HashAnsiStringI(Item: PUtf8Char; Hasher: THasher): cardinal;
 var
   up: TByteToAnsiChar; // avoid any slow heap allocation
-begin
+begin // should match exactly HashInternI() logic
   Item := PPointer(Item)^; // passed as non-nil PAnsiString reference
   if Item <> nil then
     result := Hasher(HashSeed, @up,
@@ -8611,7 +8734,7 @@ var
   tmp: TByteToAnsiChar; // 256 bytes on-stack buffer, to avoid heap allocation
 begin
   if not Assigned(Hasher) then
-    Hasher := DefaultHasher;
+    Hasher := DefaultHasher; // maybe AesNiHash32/hashsse42/crc32carm64/xxhash32
   utf8 := false;
   P := @tmp;
   len := 8; // most common case is normalized to Int64 or double
@@ -8822,19 +8945,49 @@ begin
     aKind := fDynArray^.Info.ArrayFirstFieldSort; // use RTTI if not enough
   fEventHash := nil;
   fHashItem := PT_HASH[aCaseInsensitive, aKind];
-  if not Assigned(fHashItem) then // fallback
+  if not Assigned(fHashItem) then // fallback to binary hash of ItemSize
     fEventHash := fDynArray^.Info.ValueFullHash;
   fEventCompare := nil;
   fCompare := PT_SORT[aCaseInsensitive, aKind];
-  if not Assigned(fCompare) then // fallback
+  if not Assigned(fCompare) then // fallback to binary MemCmp()
     fEventCompare := fDynArray^.Info.ValueFullCompare;
   HashTableInit(aHasher);
+end;
+
+const
+  // reduces memory consumption and enhances distribution at hash table growing
+  _PRIMES: array[0..38 {$ifndef DYNARRAYHASH_PO2} + 11 {$endif}] of integer = (
+    {$ifndef DYNARRAYHASH_PO2}
+    251, 499, 1259, 3203, 5087, 8089, 12853, 20399, 81649, 129607, 205759,
+    {$endif DYNARRAYHASH_PO2}
+    // start after HASH_PO2=2^18=262,144 for DYNARRAYHASH_PO2 (poor 64-bit mul)
+    326617, 411527, 518509, 653267, 823117, 1037059, 1306601, 1646237,
+    2074129, 2613229, 3292489, 4148279, 5226491, 6584983, 8296553, 10453007,
+    13169977, 16593127, 20906033, 26339969, 33186281, 41812097, 52679969,
+    66372617, 83624237, 105359939, 132745199, 167248483, 210719881, 265490441,
+    334496971, 421439783, 530980861, 668993977, 842879579, 1061961721,
+    1337987929, 1685759167, 2123923447);
+  _PRIMESLOW = {$ifdef DYNARRAYHASH_PO2} 256 {$else} 251 {$endif};
+
+// as used internally by TDynArrayHasher.ForceReHash()
+function NextPrime(v: integer): integer; {$ifdef HASINLINE}inline;{$endif}
+var
+  i: PtrInt;
+  P: PIntegerArray;
+begin
+  P := @_PRIMES;
+  for i := 0 to high(_PRIMES) do
+  begin
+    result := P^[i];
+    if result > v then // no need of O(log(n)) binary search algorithm
+      exit;
+  end;
 end;
 
 procedure TDynArrayHasher.HashTableInit(aHasher: THasher);
 begin
   if not Assigned(aHasher) then
-    aHasher := DefaultHasher;
+    aHasher := DefaultHasher; // e.g. AesNiHash32/hashsse42/crc32carm64/xxhash32
   fHasher := aHasher;
   fHashTableStore := nil;
   if (Assigned(fHashItem) or
@@ -8842,13 +8995,13 @@ begin
      (Assigned(fCompare) or
       Assigned(fEventCompare)) then
   begin
-    // same logic than ReHash(true) with no data - default to 256 buckets
-    fHashTableSize := 256;
+    // same logic than ForceReHash() with no data
+    fHashTableSize := _PRIMESLOW;    // default to 256/251 buckets
     {$ifdef DYNARRAYHASH_16BIT}
-    SetLength(fHashTableStore, 129);
+    SetLength(fHashTableStore, 129); // 512 bytes
     fState := [hasHasher, hash16bit];
     {$else}
-    SetLength(fHashTableStore, 257);
+    SetLength(fHashTableStore, 257); // 1KB
     byte(State) := 1 shl ord(hasHasher)
     {$endif DYNARRAYHASH_16BIT}
   end
@@ -8863,7 +9016,7 @@ end;
 procedure TDynArrayHasher.SetEventCompare(const Value: TOnDynArraySortCompare);
 begin
   if fDynArray^.GetCount <> 0 then
-    EDynArray.RaiseU('TDynArrayHasher: late SetEventCompare');
+    EDynArrayHash.RaiseU('Unexpected SetEventCompare');
   fEventCompare := Value;
   HashTableInit(fHasher);
 end;
@@ -8871,7 +9024,7 @@ end;
 procedure TDynArrayHasher.SetEventHash(const Value: TOnDynArrayHashOne);
 begin
   if fDynArray^.GetCount <> 0 then
-    EDynArray.RaiseU('TDynArrayHasher: late SetEventHash');
+    EDynArrayHash.RaiseU('Unexpected SetEventHash');
   fEventHash := Value;
   HashTableInit(fHasher);
 end;
@@ -8896,38 +9049,9 @@ begin
     result := fCompare(pointer(ndx)^, Item^) = 0;
 end;
 
-const
-  // reduces memory consumption and enhances distribution at hash table growing
-  _PRIMES: array[0..38 {$ifndef DYNARRAYHASH_PO2} + 13 {$endif}] of integer = (
-    {$ifndef DYNARRAYHASH_PO2}
-    251, 499, 797, 1259, 2011, 3203, 5087, 8089, 12853, 20399, 81649, 129607, 205759,
-    {$endif DYNARRAYHASH_PO2}
-    // start after HASH_PO2=2^18=262,144 for DYNARRAYHASH_PO2 (poor 64-bit mul)
-    326617, 411527, 518509, 653267, 823117, 1037059, 1306601, 1646237,
-    2074129, 2613229, 3292489, 4148279, 5226491, 6584983, 8296553, 10453007,
-    13169977, 16593127, 20906033, 26339969, 33186281, 41812097, 52679969,
-    66372617, 83624237, 105359939, 132745199, 167248483, 210719881, 265490441,
-    334496971, 421439783, 530980861, 668993977, 842879579, 1061961721,
-    1337987929, 1685759167, 2123923447);
-
-// as used internally by TDynArrayHasher.ForceReHash()
-function NextPrime(v: integer): integer; {$ifdef HASINLINE}inline;{$endif}
-var
-  i: PtrInt;
-  P: PIntegerArray;
-begin
-  P := @_PRIMES;
-  for i := 0 to high(_PRIMES) do
-  begin
-    result := P^[i];
-    if result > v then // no need of O(log(n)) binary search algorithm
-      exit;
-  end;
-end;
-
 // see TTestCoreBase._TSynDictionary for some numbers, and why
 //  DYNARRAYHASH_LEMIRE + DYNARRAYHASH_PO2 are defined by default
-function TDynArrayHasher.HashTableIndex(aHashCode: PtrUInt): PtrUInt;
+function TDynArrayHasher.HashTableIndex(const aHashCode: PtrUInt): PtrUInt;
 begin
   result := fHashTableSize;
   {$ifdef DYNARRAYHASH_PO2}
@@ -8947,6 +9071,18 @@ begin
   {$endif DYNARRAYHASH_LEMIRE}
 end;
 
+procedure TDynArrayHasher.RaiseNoHasher;
+begin
+  EDynArrayHash.RaiseUtf8('% has no RTTI - use InitSpecific()', [fDynArray^.Info.Name]);
+end;
+
+function TDynArrayHasher.HashTableIndexSafe(const aHashCode: PtrUInt): PtrUInt;
+begin
+  if not (hasHasher in fState) then
+    RaiseNoHasher;
+  result := HashTableIndex(aHashCode);
+end;
+
 function TDynArrayHasher.HashTableIndexToIndex(aHashTableIndex: PtrInt): PtrInt;
 begin
   result := PtrUInt(fHashTableStore);
@@ -8958,82 +9094,56 @@ begin
     result := PIntegerArray(result)[aHashTableIndex];
 end;
 
-procedure TDynArrayHasher.RaiseNoHasher;
-begin
-  EDynArray.RaiseUtf8('TDynArrayHasher: % has no RTTI - use InitSpecific()',
-    [fDynArray^.Info.Name]);
-end;
-
-function TDynArrayHasher.Find(aHashCode: cardinal; aForAdd: boolean): PtrInt;
+function TDynArrayHasher.FindAfterGrow(const aHashCode: cardinal): PtrInt;
 var
-  first, last, ndx, siz: PtrInt;
-  P: PAnsiChar;
+  first, last: PtrInt;
 begin
-  if not (hasHasher in fState) then
-    RaiseNoHasher;
-  result := HashTableIndex(aHashCode);
+  ForceRehash; // will grow the internal hash table
+  result := HashTableIndexSafe(aHashCode);
   first := result;
   last := fHashTableSize;
-  P := fDynArray^.Value^;
-  siz := fDynArray^.Info.Cache.ItemSize;
   repeat
-    ndx := HashTableIndexToIndex(result) - 1; // index+1 was stored
-    if ndx < 0 then
-    begin
-      // found void entry
-      result := -(result + 1);
-      exit;
-    end
-    else if not aForAdd and
-            (HashOne(P + ndx * siz) = aHashCode) then
-    begin
-      result := ndx;
-      exit;
-    end;
+    if HashTableIndexToIndex(result) = 0 then
+      exit; // found void entry
     inc(result); // try next entry on hash collision
-    if result = last then
-      // reached the end -> search once from HashTable[0] to HashTable[first-1]
-      if result = first then
-        break
-      else
-      begin
-        result := 0;
-        last := first;
-      end;
+    if result <> last then
+      continue;
+    if result = first then
+      break;
+    result := 0;
+    last := first;
   until false;
-  result := RaiseFatalCollision('Find', aHashCode);
+  RaiseFatalCollision('FindForAdd', aHashCode);
 end;
 
 function TDynArrayHasher.FindOrNew(aHashCode: cardinal; Item: pointer;
   aHashTableIndex: PPtrInt): PtrInt;
 var
-  first, last, ndx: PtrInt;
+  first, last, hashndx, ndx: PtrInt;
+  P: PAnsiChar;
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
   collisions: integer;
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
-  P: PAnsiChar;
 begin
-  if not (hasHasher in fState) then
-    RaiseNoHasher;
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
   collisions := 0;
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
-  result := HashTableIndex(aHashCode);
-  first := result;
+  hashndx := HashTableIndexSafe(aHashCode);
+  first := hashndx;
   last := fHashTableSize;
   repeat
-    ndx := HashTableIndexToIndex(result) - 1; // index+1 was stored
+    ndx := HashTableIndexToIndex(hashndx) - 1; // index+1 was stored
     if ndx < 0 then
     begin
       // not found: returns void index in HashTable[] as negative value
-      result := - (result + 1);
+      result := - (hashndx + 1);
       {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
       inc(CountCollisions, collisions);
       inc(CountCollisionsCurrent, collisions);
       {$endif DYNARRAYHASHCOLLISIONCOUNT}
       exit;
     end;
-    // comparison with item is faster than hash e.g. for huge strings
+    // direct inlined Equals() is faster than hash+Equals() e.g. for huge strings
     with fDynArray^ do
       P := PAnsiChar(Value^) + ndx * fInfo.Cache.ItemSize;
     if ((not Assigned(fEventCompare)) and
@@ -9043,7 +9153,7 @@ begin
     begin
       // found: returns the matching index
       if aHashTableIndex <> nil then
-        aHashTableIndex^ := result;
+        aHashTableIndex^ := hashndx;
       result := ndx;
       exit;
     end;
@@ -9051,18 +9161,47 @@ begin
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     inc(collisions);
     {$endif DYNARRAYHASHCOLLISIONCOUNT}
-    inc(result);
-    if result = last then
-      // reached the end -> search once from HashTable[0] to HashTable[first-1]
-      if result = first then
-        break
-      else
-      begin
-        result := 0;
-        last := first;
-      end;
+    inc(hashndx);
+    if hashndx <> last then
+      continue;
+    // reached the end -> search once from HashTable[0] to HashTable[first-1]
+    if hashndx = first then
+      break;
+    hashndx := 0;
+    last := first;
   until false;
   result := RaiseFatalCollision('FindOrNew', aHashCode);
+end;
+
+function TDynArrayHasher.FindValue(aHashCode: PtrUInt; Item: pointer): pointer;
+var
+  first, last: PtrUInt;
+begin
+  aHashCode := HashTableIndex(aHashCode);
+  first := aHashCode;
+  last := fHashTableSize;
+  repeat
+    result := pointer(HashTableIndexToIndex(aHashCode)); // Index+1 was stored
+    if result = nil then
+      exit; // Index=0 -> result=nil if not found
+    with fDynArray^ do
+      result := PAnsiChar(Value^) + (PtrUInt(result) - 1) * PtrUInt(fInfo.Cache.ItemSize);
+    if not Assigned(fEventCompare) then
+    begin
+      if fCompare(result^, Item^) = 0 then
+        exit;
+    end
+    else if fEventCompare(result^, Item^) = 0 then
+      exit;
+    inc(aHashCode); // hash or slot collision -> search next item
+    if aHashCode <> last then
+      continue;
+    if aHashCode = first then
+      break;
+    aHashCode := 0;
+    last := first;
+  until false;
+  RaiseFatalCollision('FindValue', aHashCode);
 end;
 
 function TDynArrayHasher.FindIndex(aHashCode: cardinal; Item: pointer;
@@ -9070,11 +9209,9 @@ function TDynArrayHasher.FindIndex(aHashCode: cardinal; Item: pointer;
 var
   first, last, ndx: PtrInt;
 begin // cut-down version of FindOrNew()
-  if not (hasHasher in fState) then
-    RaiseNoHasher;
   if not Assigned(Comp) then
     Comp := fCompare;
-  ndx := HashTableIndex(aHashCode);
+  ndx := HashTableIndexSafe(aHashCode);
   first := ndx;
   last := fHashTableSize;
   repeat
@@ -9084,22 +9221,20 @@ begin // cut-down version of FindOrNew()
          result * fDynArray^.fInfo.Cache.ItemSize)^, Item^) = 0) then
       exit;
     inc(ndx); // hash or slot collision -> search next item
-    if ndx = last then
-      if ndx = first then
-        break
-      else
-      begin
-        ndx := 0;
-        last := first;
-      end;
+    if ndx <> last then
+      continue;
+    if ndx = first then
+      break;
+    ndx := 0;
+    last := first;
   until false;
-  result := RaiseFatalCollision('FindIndex', aHashCode);
+  RaiseFatalCollision('FindIndex', aHashCode);
 end;
 
 function TDynArrayHasher.FindHash(aHashCode: cardinal; Item: pointer): pointer;
 var
   first, last, ndx, pos: PtrInt;
-begin // cut-down version of FindIndex()
+begin // cut-down version of FindIndex() to return a pointer
   ndx := HashTableIndex(aHashCode);
   first := ndx;
   last := fHashTableSize;
@@ -9108,42 +9243,39 @@ begin // cut-down version of FindIndex()
     pos := HashTableIndexToIndex(ndx); // Index+1 was stored
     if pos = 0 then // void slot = not found, or return matching index
       exit;
-    result := PAnsiChar(fDynArray^.Value^) +
-              (pos - 1) * fDynArray^.fInfo.Cache.ItemSize;
+    with fDynArray^ do
+      result := PAnsiChar(Value^) + (pos - 1) * fInfo.Cache.ItemSize;
     if fCompare(result^, Item^) = 0 then
       exit;
     inc(ndx); // hash or slot collision -> search next item
-    if ndx = last then
-      if ndx = first then
-        RaiseFatalCollision('FindHash', aHashCode)
-      else
-      begin
-        ndx := 0;
-        last := first;
-      end;
+    if ndx <> last then
+      continue;
+    if ndx = first then
+      break;
+    ndx := 0;
+    last := first;
   until false;
+  RaiseFatalCollision('FindHash', aHashCode)
 end;
 
 procedure TDynArrayHasher.HashAdd(aHashCode: cardinal; var result: PtrInt);
 var
-  n, ndx: PtrInt;
+  n, ndx, s: PtrInt;
 begin
-  // on input: HashTable[result] slot is already computed
   n := fDynArray^.Count;
-  ndx := result;
-  result := n;
-  if fHashTableSize < n then
-    RaiseFatalCollision('HashAdd HashTableSize', aHashCode);
-  if fHashTableSize - n < n shr 2 then
-  begin
+  ndx := result; // on input: result is FindOrNew() HashTable[-(result+1)] slot
+  result := n;   // on output: result is the new appended index in fDynArray
+  s := fHashTableSize - n;
+  if s < n shr 2 then
     // grow hash table when 25% void (192/256,384/512,768/1024,1536/2048...)
-    ForceReHash;
-    ndx := Find(aHashCode, {foradd=}true); // recompute position
-    if ndx >= 0 then
-      RaiseFatalCollision('HashAdd', aHashCode);
-  end;
-  ndx := -ndx - 1; // store Index+1 (0 means void slot)
-  inc(n);
+    // _PRIMES[] values ensure it would always trigger a new hash table size
+    if s < 0 then
+      RaiseFatalCollision('HashAdd HashTableSize', aHashCode)
+    else
+      ndx := FindAfterGrow(aHashCode) // grow hash table and recompute position
+  else
+    ndx := -(ndx + 1); // retrieve the new slot position
+  inc(n); // store Index+1 (0 means void slot)
   {$ifdef DYNARRAYHASH_16BIT}
   if hash16bit in fState then
     PWordArray(fHashTableStore)[ndx] := n
@@ -9173,13 +9305,12 @@ begin
       fHashTableStore[next] := 0; // Clear slots
     inc(next);
     if next = last then
+    begin
       if next = first then
-        RaiseFatalCollision('HashDelete down', aHashCode)
-      else
-      begin
-        next := 0;
-        last := first;
-      end;
+        RaiseFatalCollision('HashDelete down', aHashCode);
+      next := 0;
+      last := first;
+    end;
     ndx := HashTableIndexToIndex(next) - 1; // index+1 was stored
     if ndx < 0 then
       break; // stop at void entry
@@ -9188,23 +9319,22 @@ begin
     indexes[n] := ndx;
     inc(n);
   until false;
-  // ReHash collided entries - note: item is not yet deleted in Value^[]
+  // re-hash collided entries - note: item is not yet deleted in Value^[]
   s := fDynArray^.Info.Cache.ItemSize;
   for i := 0 to n - 1 do
   begin
     P := PAnsiChar(fDynArray^.Value^) + {%H-}indexes[i] * s;
-    ndx := FindOrNew(HashOne(P), P, nil);
-    if ndx < 0 then // ignore ndx>=0 dups (like ReHash)
-    begin
-      ndx := -ndx - 1;     // compute the new slot position
-      n := indexes[i] + 1; // store index+1
-      {$ifdef DYNARRAYHASH_16BIT}
-      if hash16bit in fState then
-        PWordArray(fHashTableStore)[ndx] := n
-      else
-      {$endif DYNARRAYHASH_16BIT}
-        fHashTableStore[ndx] := n;
-    end;
+    ndx := FindOrNew(HashOne(P), P);
+    if ndx >= 0 then
+      continue;          // ignore duplicates (like ForceReHash)
+    ndx := -(ndx + 1);   // compute the new slot position
+    n := indexes[i] + 1; // store index+1
+    {$ifdef DYNARRAYHASH_16BIT}
+    if hash16bit in fState then
+      PWordArray(fHashTableStore)[ndx] := n
+    else
+    {$endif DYNARRAYHASH_16BIT}
+      fHashTableStore[ndx] := n;
   end;
   // adjust all stored indexes (using SSE2/AVX2 on x86_64)
   if fDynArray^.GetCount > 1 then // Count not yet decremented
@@ -9219,13 +9349,10 @@ end;
 function TDynArrayHasher.FindBeforeAdd(Item: pointer; out wasAdded: boolean;
   aHashCode: cardinal): PtrInt;
 begin
-  if not (hasHasher in fState) then
-    RaiseNoHasher;
   wasAdded := false;
-  result := FindOrNew(aHashCode, Item, nil);
+  result := FindOrNew(aHashCode, Item);
   if result >= 0 then
-    exit;
-  // found no matching item
+    exit; // found an existing matching item
   wasAdded := true;
   HashAdd(aHashCode, result);
 end;
@@ -9233,7 +9360,7 @@ end;
 function TDynArrayHasher.FindBeforeDelete(Item: pointer): PtrInt;
 var
   h: cardinal;
-  ndx: PtrInt;
+  ndx: PtrInt; // not integer
 begin
   if hasHasher in fState then
   begin
@@ -9249,10 +9376,10 @@ begin
 end;
 
 function TDynArrayHasher.RaiseFatalCollision(const caller: ShortString;
-  aHashCode: cardinal): integer;
+  aHashCode: cardinal): PtrInt;
 begin   // a dedicated sub-procedure reduces code size
   result := 0; // make compiler happy
-  EDynArray.RaiseUtf8('TDynArrayHasher.% fatal collision: ' +
+  EDynArrayHash.RaiseUtf8('% fatal collision: ' +
     'aHashCode=% HashTableSize=% Count=% Capacity=% Array=% Parser=%',
     [caller, CardinalToHexShort(aHashCode), fHashTableSize, fDynArray^.Count,
      fDynArray^.Capacity, fDynArray^.Info.Name, ToText(fDynArray^.Info.Parser)^]);
@@ -9272,37 +9399,29 @@ end;
 function TDynArrayHasher.Scan(Item: pointer): PtrInt;
 var
   P: PAnsiChar;
-  i, max, siz: PtrInt;
+  max, siz: PtrInt;
 begin
-  result := -1;
   max := fDynArray^.Count - 1;
   P := fDynArray^.Value^;
   siz := fDynArray^.Info.Cache.ItemSize;
-  if Assigned(fEventCompare) then // custom comparison
-    for i := 0 to max do
+  if Assigned(fEventCompare) then // custom callback for comparison
+    for result := 0 to max do
       if fEventCompare(P^, Item^) = 0 then
-      begin
-        result := i;
-        break;
-      end
+        exit
       else
         inc(P, siz)
-  else if Assigned(fCompare) then
-    for i := 0 to max do
+  else if Assigned(fCompare) then // custom function for comparison
+    for result := 0 to max do
       if fCompare(P^, Item^) = 0 then
-      begin
-        result := i;
-        break;
-      end
+        exit
       else
-        inc(P, siz)
-  else
-    exit;
+        inc(P, siz);
+  result := -1;
 end;
 
 function TDynArrayHasher.Find(Item: pointer; aHashCode: cardinal): PtrInt;
 begin
-  result := FindOrNew(aHashCode, Item, nil); // fallback to Scan() if needed
+  result := FindOrNew(aHashCode, Item); // no fallback to Scan()
   if result < 0 then
     result := -1; // for coherency with most search methods
 end;
@@ -9319,34 +9438,36 @@ type // dedicated TFastReHash engine for better register allocation
   TFastReHash = object
   {$endif USERECORDWITHMETHODS}
   public
-    hc: cardinal;
-    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-    collisions: integer;
-    {$endif DYNARRAYHASHCOLLISIONCOUNT}
-    ht: integer;
+    count, ht: integer;
     values, first, last, siz: PtrInt;
     duplicates: PInteger;
     P: PAnsiChar;
-    // fill fHashTableStore[] from all stored items
-    procedure Process(Hasher: PDynArrayHasher; count: PtrInt);
+    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+    collisions: integer;
+    {$endif DYNARRAYHASHCOLLISIONCOUNT}
+    procedure Fill(Hasher: PDynArrayHasher);
   end;
 
-procedure TFastReHash.Process(Hasher: PDynArrayHasher; count: PtrInt);
+procedure TFastReHash.Fill(Hasher: PDynArrayHasher);
 var
+  hc: cardinal;
   fnd, ndx: PtrInt;
-label
-  s;
 begin
-  // should match FindOrNew() logic
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
   collisions := 0;
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
   P := Hasher^.fDynArray^.Value^;
   values := PtrUInt(P);
   siz := Hasher^.fDynArray^.Info.Cache.ItemSize;
-  ht := 1; // store index + 1
+  dec(P, siz);
+  ht := 0;                               // store index + 1
   repeat
-s:  if Assigned(Hasher^.fEventHash) then // inlined HashOne()
+    if count = 0 then
+      exit;
+    inc(P, siz);                         // next item
+    inc(ht);
+    dec(count);
+    if Assigned(Hasher^.fEventHash) then // inlined HashOne()
       hc := Hasher^.fEventHash(P^)
     else
       hc := Hasher^.fHashItem(P^, Hasher^.fHasher);
@@ -9354,32 +9475,22 @@ s:  if Assigned(Hasher^.fEventHash) then // inlined HashOne()
     first := ndx;
     last := Hasher^.fHashTableSize;
     repeat
-      {$ifdef DYNARRAYHASH_16BIT} // inlined HashTableIndexToIndex()
+      {$ifdef DYNARRAYHASH_16BIT}        // inlined HashTableIndexToIndex()
       if hash16bit in Hasher^.fState then
       begin
-        if PWordArray(Hasher^.fHashTableStore)[ndx] = 0 then // store index + 1
+        if PWordArray(Hasher^.fHashTableStore)[ndx] = 0 then // void entry
         begin
           // we can use this void entry (most common case)
-          PWordArray(Hasher^.fHashTableStore)[ndx] := ht;
-          inc(P, siz); // next item
-          inc(ht);
-          dec(count);
-          if count <> 0 then
-            goto s;
-          exit;
+          PWordArray(Hasher^.fHashTableStore)[ndx] := ht;    // store index + 1
+          break;                                             // go to main loop
         end;
       end
       else
       {$endif DYNARRAYHASH_16BIT}
-      if Hasher^.fHashTableStore[ndx] = 0 then // void entry
+      if Hasher^.fHashTableStore[ndx] = 0 then               // void entry
       begin
-        Hasher^.fHashTableStore[ndx] := ht;
-        inc(P, siz); // next item
-        inc(ht);
-        dec(count);
-        if count <> 0 then
-          goto s;
-        exit;
+        Hasher^.fHashTableStore[ndx] := ht;                  // store index + 1
+        break;                                               // go to main loop
       end;
       {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
       inc(collisions);
@@ -9391,14 +9502,14 @@ s:  if Assigned(Hasher^.fEventHash) then // inlined HashOne()
           fnd := PWordArray(Hasher^.fHashTableStore)[ndx]
         else
           fnd := Hasher^.fHashTableStore[ndx];
-        fnd := values + (fnd - 1) * siz; // stored index + 1
+        fnd := values + (fnd - 1) * siz; // we know from above that fnd <> 0
         if ((not Assigned(Hasher^.fEventCompare)) and
             (Hasher^.fCompare(pointer(fnd)^, P^) = 0)) or
            (Assigned(Hasher^.fEventCompare) and
             (Hasher^.fEventCompare(pointer(fnd)^, P^) = 0)) then
         begin
           inc(duplicates^); // report but ignore duplicates
-          break;
+          break;            // go to main loop
         end;
       end;
       inc(ndx);
@@ -9406,19 +9517,16 @@ s:  if Assigned(Hasher^.fEventHash) then // inlined HashOne()
         continue;
       // reached the end -> search from HashTable[0] to HashTable[first-1]
       if ndx = first then
-        Hasher.RaiseFatalCollision('ReHash', hc);
+        Hasher.RaiseFatalCollision('TFastReHash', hc); // paranoid
       ndx := 0;
       last := first;
     until false;
-    inc(P, siz); // next item
-    inc(ht);
-    dec(count);
-  until count = 0;
+  until false;
 end;
 
 procedure TDynArrayHasher.ForceReHash(duplicates: PInteger);
 var
-  n, cap, siz: PtrInt;
+  cap, siz: PtrInt;
   fastrehash: TFastReHash;
 begin
   if duplicates <> nil then
@@ -9428,41 +9536,40 @@ begin
   // Capacity better than Count or HashTableSize, * 2 to reserve some void slots
   cap := fDynArray^.Capacity * 2;
   {$ifdef DYNARRAYHASH_PO2}
-  if cap <= 256 then
-    siz := 256
+  if cap <= _PRIMESLOW then
+    siz := _PRIMESLOW           // minimal capacity is 256 slots
   else if cap <= HASH_PO2 then
-    siz := NextPowerOfTwo(cap) // for fast bitwise division
+    siz := NextPowerOfTwo(cap)  // for fast bitwise division
   else
   {$endif DYNARRAYHASH_PO2}
-    siz := NextPrime(cap);
-//QueryPerformanceMicroSeconds(t1); write('rehash count=',n,' old=',HashTableSize,
-//' new=', siz, ' oldcol=',CountCollisionsCurrent);
-  fHashTableStore := nil;
+    siz := NextPrime(cap);      // minimal capacity is 251 slots
+//QueryPerformanceMicroSeconds(t1); write('rehash count=', n, ' old=',
+//HashTableSize, ' new=', siz, ' oldcol=', CountCollisionsCurrent);
   fHashTableSize := siz;
+  fHashTableStore := nil;       // SetLength() will re-allocate + fill with zero
   {$ifdef DYNARRAYHASH_16BIT}
   if siz <= 1 shl 16 then
   begin
     include(fState, hash16bit); // we can store indexes as 16-bit word values
-    siz := siz shr 1; // 32-bit count
+    siz := siz shr 1;           // 32-bit count for SetLength()
   end
   else
     exclude(fState, hash16bit);
   {$endif DYNARRAYHASH_16BIT}
   SetLength(fHashTableStore, siz + 1); // fill with 0 (void slot)
   {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-  CountCollisionsCurrent := 0; // count collision for this HashTable[] only
+  CountCollisionsCurrent := 0;  // count collision for this HashTable[] only
   {$endif DYNARRAYHASHCOLLISIONCOUNT}
   // fill fHashTableStore[]=index+1 from all existing items
-  n := fDynArray^.Count;
-  if n <> 0 then
-  begin
-    fastrehash.duplicates := duplicates;
-    fastrehash.Process(@self, n);
-    {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
-    inc(CountCollisions, fastrehash.collisions);
-    inc(CountCollisionsCurrent, fastrehash.collisions);
-    {$endif DYNARRAYHASHCOLLISIONCOUNT}
-  end;
+  fastrehash.Count := fDynArray^.Count;
+  if fastrehash.Count = 0 then
+    exit;
+  fastrehash.duplicates := duplicates; // slower with values comparison
+  fastrehash.Fill(@self);
+  {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
+  inc(CountCollisions, fastrehash.collisions);
+  inc(CountCollisionsCurrent, fastrehash.collisions);
+  {$endif DYNARRAYHASHCOLLISIONCOUNT}
 //QueryPerformanceMicroSeconds(t2); writeln(' newcol=',CountCollisionsCurrent,' ',
 //(CountCollisionsCurrent * 100) div cardinal(n), '%  ',MicroSecToString(t2-t1));
 end;
@@ -9546,7 +9653,7 @@ end;
 
 procedure TDynArrayHashed.Clear;
 begin
-  InternalDynArray.SetCount(0);
+  InternalDynArray.Clear;
 end;
 
 function TDynArrayHashed.Add(const Item): PtrInt;
@@ -9650,15 +9757,14 @@ end;
 
 function TDynArrayHashed.FindHashed(const Item): PtrInt;
 begin
-  result := fHash.FindOrNew(fHash.HashOne(@Item), @Item, nil);
+  result := fHash.FindOrNew(fHash.HashOne(@Item), @Item);
   if result < 0 then
     result := -1; // for coherency with most methods
 end;
 
 function TDynArrayHashed.FindFromHash(const Item; aHashCode: cardinal): PtrInt;
-begin
-  // overload FindHashed() trigger F2084 Internal Error: C2130 on Delphi XE3
-  result := fHash.FindOrNew(aHashCode, @Item, nil); // fallback to Scan() if needed
+begin // overload FindHashed() trigger F2084 Internal Error: C2130 on Delphi XE3
+  result := fHash.FindOrNew(aHashCode, @Item); // no fallback to Scan()
   if result < 0 then
     result := -1; // for coherency with most methods
 end;
@@ -9693,8 +9799,7 @@ begin
     if added then
       break;
     if j = 9999 then // never loop forever
-      EDynArray.RaiseUtf8(
-        'TDynArrayHashed.AddAndMakeUniqueName(%) overflow', [aName]);
+      EDynArrayHash.RaiseUtf8('AddAndMakeUniqueName(%) overflow', [aName]);
     inc(j);
     Make([aName, '_', j], n); // try 'name_1', 'name_2', ... until genuine
   until false;
@@ -9717,9 +9822,9 @@ begin
   ndx := FindHashedForAdding(aName, added);
   if not added then
     if ExceptionMsg = '' then
-      EDynArray.RaiseUtf8('TDynArrayHashed: Duplicated [%] name', [aName])
+      EDynArrayHash.RaiseUtf8('Duplicated [%] name', [aName])
     else
-      EDynArray.RaiseUtf8(ExceptionMsg, ExceptionArgs);
+      EDynArrayHash.RaiseUtf8(ExceptionMsg, ExceptionArgs);
   if aNewIndex <> nil then
     aNewIndex^ := ndx;
   result := PAnsiChar(Value^) + ndx * Info.Cache.ItemSize;
@@ -9728,7 +9833,7 @@ end;
 
 function TDynArrayHashed.FindHashedAndFill(var ItemToFill): PtrInt;
 begin
-  result := fHash.FindOrNew(fHash.HashOne(@ItemToFill), @ItemToFill, nil);
+  result := fHash.FindOrNew(fHash.HashOne(@ItemToFill), @ItemToFill);
   if result < 0 then
     result := -1
   else
@@ -9743,11 +9848,11 @@ begin
   if hasHasher in fHash.fState then
   begin
     hc := fHash.HashOne(@Item);
-    result := fHash.FindOrNew(hc, @Item, nil);
+    result := fHash.FindOrNew(hc, @Item);
     if result < 0 then
       if AddIfNotExisting then
       begin
-        fHash.HashAdd(hc, result); // ReHash only if necessary + set result
+        fHash.HashAdd(hc, result); // ForceReHash only if necessary + set result
         SetCount(result + 1);      // add new item at the end
       end
       else
@@ -10710,12 +10815,12 @@ begin
     f := Flags;
     if rtfParamInteger in f then // <int:name> or rtoIntegerParams
     begin
-      if (P^ < '0') or (P^ > '9') then
+      if not (P^ in ['0' .. '9']) then
         exit; // void <integer> is not allowed
       repeat
         inc(P);
-        a := P^;
-      until (a < '0') or (a > '9');
+      until not (P^ in ['0' .. '9']);
+      a := P^;
       if (a <> #0) and (a <> '?') and (a <> '/') then
         exit; // not an integer
     end

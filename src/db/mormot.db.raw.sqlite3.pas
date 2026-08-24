@@ -5587,7 +5587,7 @@ implementation
 function SqlVarToSQlite3Context(const Res: TSqlVar;
   Context: TSqlite3FunctionContext): boolean;
 var
-  tmp: array[0 .. 31] of AnsiChar;
+  tmp: TTemp32;
 begin
   case Res.VType of
     ftNull:
@@ -6685,7 +6685,7 @@ begin
     json := sqlite3.value_text(argv[0]);
     doc.InitJsonInPlace(tmp.Init(json), JSON_FAST_FLOAT);
     tmp.Done;
-    v := doc.GetPVariantByPath(sqlite3.value_text(argv[1]));
+    v := doc.GetPVariantByPathP(sqlite3.value_text(argv[1]));
     if v <> nil then
     begin
       // update the field, then return whole JSON
@@ -7922,7 +7922,7 @@ begin
         if p^.VPointer = nil then
           BindNull(arg)
         else
-          Bind(arg, PtrInt(p^.VPointer));
+          Bind(arg, Int64(PtrUInt(p^.VPointer)));
     else
       begin
         VarRecToUtf8(p, tmp);
@@ -8612,7 +8612,7 @@ begin
   if cardinal(Col) >= cardinal(FieldCount) then
     sqlite3_failed(RequestDB, SQLITE_RANGE, 'FieldW');
   P := sqlite3.column_text16(Request, Col);
-  SetString(result, PUtf8Char(pointer(P)), StrLenW(P) * 2 + 1);
+  FastSetRawUnicode(result, P, StrLenW(P) * 2);
 end;
 {$endif PUREMORMOT2}
 

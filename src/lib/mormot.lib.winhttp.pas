@@ -1899,10 +1899,8 @@ begin
   end;
   if aRoot <> '' then
   begin
-    if aRoot[1] <> '/' then
-      insert('/', aRoot, 1);
-    if aRoot[length(aRoot)] <> '/' then
-      aRoot := aRoot + '/';
+    PrependIfNone(aRoot, '/');
+    AppendIfNone(aRoot, '/');
   end
   else
     aRoot := '/'; // allow for instance 'http://*:2869/'

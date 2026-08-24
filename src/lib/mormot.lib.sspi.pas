@@ -777,10 +777,6 @@ function ClientSspiAuthWithPassword(var aSecContext: TSecContext;
   const aPassword: SpiUtf8;  const aSecKerberosSpn: RawUtf8;
   out aOutData: RawByteString): boolean;
 
-/// check if the password is a local keytab/ccache file with a FILE: prefix
-// - always return false with SSPI which does not support those keytabs
-function ClientSspiPasswordIsFile(const aPassword: SpiUtf8): boolean;
-
 /// check if a binary request packet from a client is using NTLM
 function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
 
@@ -852,6 +848,8 @@ const
   /// HTTP header pattern received for authentication
   SECPKGNAMEHTTPAUTHORIZATION = 'AUTHORIZATION: NEGOTIATE ';
 
+  /// by default, no GSSAPI is to be loaded with the Windows SSPI
+  GssApi_LastLoadError = '';
 
 
 { ****************** Lan Manager Access Functions }
@@ -1459,7 +1457,7 @@ procedure WinCertName(var Name: CERT_NAME_BLOB; out Text: RawUtf8;
   StrType: cardinal);
 var
   len: PtrInt;
-  tmp: array[0..4095] of WideChar;
+  tmp: TWide4K;
 begin
   len := CertNameToStrW(X509_ASN_ENCODING, Name, StrType, @tmp, SizeOf(tmp));
   if len <> 0 then
@@ -1690,8 +1688,8 @@ begin
     '  Signature Algorithm: ', c.AlgorithmName, #13#10 +
     '  Issuer: ', c.IssuerName, #13#10 +
     '  Validity:'#13#10 +
-    '    Not Before: ', DoDateTimeToText(c.NotBefore), #13#10 +
-    '    Not After : ', DoDateTimeToText(c.NotAfter), #13#10 +
+    '    Not Before: ', OsDateTimeToText(c.NotBefore), #13#10 +
+    '    Not After : ', OsDateTimeToText(c.NotAfter), #13#10 +
     '  Subject: ', c.SubjectName, #13#10 +
     '  Subject Public Key Info:'#13#10 +
     '    Public Key Algorithm: ', c.PublicKeyAlgorithmName, #13#10 +
@@ -1853,15 +1851,10 @@ begin
   //FillCharFast(pointer(password)^, length(password) * 2, 0); // anti-forensic
 end;
 
-function ClientSspiPasswordIsFile(const aPassword: SpiUtf8): boolean;
-begin
-  result := false;
-end;
-
 function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
 begin
   result := (aInData <> '') and
-            (PCardinal(aInData)^ or $20202020 = NTLM_LOW);
+            (PCardinal(aInData)^ or $20202020 = NTLM_LO);
 end;
 
 function ServerSspiAuth(var aSecContext: TSecContext;

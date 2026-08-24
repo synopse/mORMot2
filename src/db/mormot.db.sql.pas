@@ -633,8 +633,9 @@ function TrimLeftSchema(const TableName: RawUtf8): RawUtf8;
 // - won't generate any SQL keyword parameters (e.g. :AS :OF :BY), to be
 // compliant with Oracle OCI expectations - allow up to 656 parameters
 // - any ending ';' character is deleted, unless aStripSemicolon is unset
+// - but any ';' inside aSql is allowed unless aAllowSemicolon is set to false
 function ReplaceParamsByNames(const aSql: RawUtf8; var aNewSql: RawUtf8;
-  aStripSemicolon: boolean = true): integer;
+  aStripSemicolon: boolean = true; aAllowSemicolon: boolean = true): integer;
 
 /// replace all '?' in the SQL statement with indexed parameters like $1 $2 ...
 // - returns the number of ? parameters found within aSql
@@ -2024,7 +2025,7 @@ type
     function GetThreadOwned(aClass: TClass): pointer;
       {$ifdef HASINLINE} inline; {$endif}
     /// register one object owned by a thread-safe connection instance
-    // - returns the supplied aObject instance as a fluid-interface mechanism
+    // - returns the supplied aObject instance as a fluent-interface mechanism
     // - raise an ESqlDBException if not a TSqlDBConnectionPropertiesThreadSafe
     function SetThreadOwned(aObject: TObject): pointer;
 
@@ -2178,8 +2179,8 @@ type
   TSqlDBStatement = class(TInterfacedObject, ISqlDBRows, ISqlDBStatement)
   protected
     fConnection: TSqlDBConnection;
-    fParamCount: integer;
-    fColumnCount: integer;
+    fParamCount: integer;  // not PtrInt
+    fColumnCount: integer; // not PtrInt
     fTotalRowsRetrieved: integer;
     fCurrentRow: integer;
     fDbms: TSqlDBDefinition;
@@ -3127,7 +3128,7 @@ type
   TReplaceSql = record
     Flags: set of (fAllowSemicolon, fByNumber);
     IndexChar: AnsiChar;
-    Name: array[0..1] of AnsiChar;
+    Name: TTemp2;
     Number: Integer;
     Dest: PRawUtf8;
     Temp: TSynTempAdder; // 4KB temp output on stack is almost always enough
@@ -3200,13 +3201,12 @@ begin
   w.Dest := nil; // mark success
 end;
 
-
 function ReplaceParamsByNames(const aSql: RawUtf8; var aNewSql: RawUtf8;
-  aStripSemicolon: boolean): integer;
+  aStripSemicolon, aAllowSemicolon: boolean): integer;
 var
   L: PtrInt;
   w: TReplaceSql;
-begin // only called by mormot.db.rad.pas with a TDataSet: less optimized
+begin // only called by mormot.db.rad.pas with a TDataSet
   result := 0;
   L := Length(aSql);
   if aStripSemicolon then
@@ -3226,6 +3226,8 @@ begin // only called by mormot.db.rad.pas with a TDataSet: less optimized
      (ByteScanIndex(pointer(aNewSql), L, ord('?')) < 0) then // may use SSE2
     exit;
   w.Flags := [];
+  if aAllowSemicolon then
+    w.Flags := [fAllowSemicolon];
   w.IndexChar := ':';
   w.Name[0] := 'A';
   w.Name[1] := 'A';
@@ -3249,10 +3251,9 @@ begin
   if (L = 0) or
      (ByteScanIndex(pointer(aSql), L, ord('?')) < 0) then // may use SSE2
     exit;
+  w.Flags := [fByNumber];
   if AllowSemicolon then
-    w.Flags := [fByNumber, fAllowSemicolon]
-  else
-    w.Flags := [fByNumber];
+    w.Flags := [fByNumber, fAllowSemicolon];
   w.IndexChar := IndexChar;
   w.Dest := @aNewSql;
   w.Temp.Init(L + L shr 2);
@@ -4129,7 +4130,7 @@ procedure TSqlDBConnectionProperties.GetFields(const aTableName: RawUtf8;
   out Fields: TSqlDBColumnDefineDynArray);
 var
   sql: RawUtf8;
-  n, i: integer;
+  n, i: integer; // not PtrInt
   f: TSqlDBColumnDefine;
   fa: TDynArray;
 begin
@@ -4202,7 +4203,7 @@ procedure TSqlDBConnectionProperties.GetIndexes(const aTableName: RawUtf8;
   out Indexes: TSqlDBIndexDefineDynArray);
 var
   sql: RawUtf8;
-  n: integer;
+  n: integer; // not PtrInt
   f: TSqlDBIndexDefine;
   fa: TDynArray;
 begin
@@ -4255,7 +4256,7 @@ procedure TSqlDBConnectionProperties.GetProcedureParameters(
   const aProcName: RawUtf8; out Parameters: TSqlDBProcColumnDefineDynArray);
 var
   sql: RawUtf8;
-  n: integer;
+  n: integer; // not PtrInt
   f: TSqlDBProcColumnDefine;
   fa: TDynArray;
 begin
@@ -5450,7 +5451,7 @@ begin
       repeat
         for f := 0 to maxf do
           inc(sqllen, length(FieldValues[f, r]));
-        if sqllen + PtrInt(W.TextLength) > 30000 then
+        if Int64(sqllen) + W.TextLength > 30000 then
           break;
         EncodeInsertPrefix(W, BatchOptions, dFirebird);
         W.AddString(TableName);
@@ -5632,7 +5633,7 @@ begin
   Definition.ServerName := ServerName;
   Definition.DatabaseName := DatabaseName;
   Definition.User := UserID;
-  Definition.PassWordPlain := PassWord;
+  Definition.PasswordPlain := PassWord;
 end;
 
 function TSqlDBConnectionProperties.DefinitionToJson(Key: cardinal): RawUtf8;
@@ -5859,7 +5860,7 @@ var
         if p^.VPointer = nil then
           BindNull(arg, IO)
         else
-          Bind(arg, PtrInt(p^.VPointer), IO);
+          Bind(arg, Int64(PtrUInt(p^.VPointer)), IO);
       vtVariant:
         BindVariant(arg, p^.VVariant^, VariantIsBlob(p^.VVariant^), IO);
       {$ifdef UNICODE}
@@ -6894,7 +6895,7 @@ begin
       end;
       Msg := @tmp;
     end;
-    MicroSecToString(fSqlLogTimer.StopInMicroSec, elapsed);
+    MicroSecToStringVar(fSqlLogTimer.StopInMicroSec, elapsed);
     if fSqlLogLevel = sllSQL then
       fSqlLogLog.Log(sllSQL, 'Execute t=%% q=%',
         [elapsed, Msg^, fSqlWithInlinedParams], self)

@@ -62,7 +62,6 @@ uses
 
 
 
-
 { ************ TOrm TOrmModel TOrmTable IRestOrm Core Definitions }
 
 // most types are defined as a single "type" statement due to classes coupling
@@ -3065,7 +3064,7 @@ type
     fPrivateCopy: RawUtf8;
     /// contains the pointers/offset of start of every field value
     fJsonData: TOrmTableJsonDataArray;
-    /// contain the hash value of the last JSON data sent to ContentChanged()
+    /// contain DefaultHasher() of the last JSON data sent to ContentChanged()
     // - used to don't repeat parsing if data has not been changed
     fPrivateCopyHash: cardinal;
     /// void the whole content
@@ -3082,7 +3081,7 @@ type
     function ParseAndConvert(Buffer: PUtf8Char; BufferLen: PtrInt): boolean;
     /// will check then set (if needed) internal fPrivateCopy[Hash] values
     // - returns TRUE if fPrivateCopy content changed (then fPrivateCopyHash
-    // will be updated using crc32c hash if aUpdateHash is set)
+    // will be updated using DefaultHasher() if aUpdateHash is set)
     function PrivateCopyChanged(aJson: PUtf8Char; aLen: integer;
       aUpdateHash: boolean): boolean;
   public
@@ -3984,7 +3983,8 @@ type
     // - by default, will return the SELECT statement to be used for internal
     // virtual SQLite3 table - but if ExternalTable is TRUE, then it will
     // compute a SELECT matching ExternalDB settings
-    function SqlFromSelectWhere(const SelectFields, Where: RawUtf8): RawUtf8;
+    procedure SqlFromSelectWhere(const SelectFields, Where: RawUtf8; var Res: RawUtf8);
+      {$ifdef HASINLINE} inline; {$endif}
     /// define if a FTS4/FTS5 virtual table will not store its content, but will
     // be defined as an "external content" FTS4/FTS5 table
     // - see https://www.sqlite.org/fts3.html#section_6_2_2
@@ -4174,8 +4174,8 @@ type
     /// compute the SQL statement to be executed for a specific SELECT on Tables
     // - you can set multiple Table class in Tables: the statement will contain the
     // table name ('SELECT T1.F1,T1.F2,T1.F3,T2.F1,T2.F2 FROM T1,T2 WHERE ..' e.g.)
-    function SqlFromSelectWhere(const Tables: array of TOrmClass;
-      const SqlSelect, SqlWhere: RawUtf8): RawUtf8;
+    procedure SqlFromSelectWhere(const Tables: array of TOrmClass;
+      const SqlSelect, SqlWhere: RawUtf8; var Sql: RawUtf8);
     /// set a custom SQLite3 text column collation for all fields of a given
     // type for all TOrm of this model
     // - can be used e.g. to override ALL default COLLATE SYSTEMNOCASE of RawUtf8,
@@ -5152,7 +5152,7 @@ begin
       SQL := Props.OrmFieldTypeToSql(i);
       if SQL <> '' then
         // = '' for field with no matching DB column
-        result := result + Name + SQL;
+        Append(result, Name, SQL);
     end;
   if result = '' then
     result := ');'
@@ -6531,12 +6531,9 @@ begin
     result := rc.PrivateSlot; // Private is TOrmProperties
     if Assigned(result) then
       if result.InheritsFrom(TOrmProperties) then
-        // registered by a background thread
-        exit
-      else
-        // paranoid
-        EModelException.RaiseUtf8('%.OrmProps: vmtAutoTable=%',
-          [self, result]);
+        exit // registered by a background thread
+      else   // paranoid
+        EModelException.RaiseUtf8('%.OrmProps: vmtAutoTable=%', [self, result]);
     // create the properties information from RTTI
     result := TOrmProperties.Create(self);
     rc.PrivateSlot := result; // will be owned by this TRttiCustom
@@ -7010,20 +7007,20 @@ end;
 function TOrm.FillPrepare(const aClient: IRestOrm; const FormatSqlWhere: RawUtf8;
   const BoundsSqlWhere: array of const; const FieldsCsv: RawUtf8): boolean;
 var
-  sqlwhere: RawUtf8;
+  where: RawUtf8;
 begin
-  sqlwhere := FormatSql(FormatSqlWhere, [], BoundsSqlWhere);
-  result := FillPrepare(aClient, sqlwhere, FieldsCsv);
+  FormatSqlVar(FormatSqlWhere, [], BoundsSqlWhere, where);
+  result := FillPrepare(aClient, where, FieldsCsv);
 end;
 
 function TOrm.FillPrepare(const aClient: IRestOrm; const FormatSqlWhere: RawUtf8;
   const ParamsSqlWhere, BoundsSqlWhere: array of const;
   const FieldsCsv: RawUtf8): boolean;
 var
-  sqlwhere: RawUtf8;
+  where: RawUtf8;
 begin
-  sqlwhere := FormatSql(FormatSqlWhere, ParamsSqlWhere, BoundsSqlWhere);
-  result := FillPrepare(aClient, sqlwhere, FieldsCsv);
+  FormatSqlVar(FormatSqlWhere, ParamsSqlWhere, BoundsSqlWhere, where);
+  result := FillPrepare(aClient, where, FieldsCsv);
 end;
 
 function TOrm.FillPrepare(const aClient: IRestOrm;
@@ -7425,10 +7422,6 @@ begin
   end;
 end;
 
-{$ifdef ISDELPHI20062007} // circumvent a Delphi 2007 compiler paranoid warning
-  {$warnings off}
-{$endif ISDELPHI20062007}
-
 class function TOrm.GetSqlCreate(aModel: TOrmModel): RawUtf8;
 // not implemented in TOrmProperties since has been made virtual
 var
@@ -7445,18 +7438,18 @@ begin
   if Props.Kind <>  ovkSQLite3 then
   begin
     // create a FTS3/FTS4/RTREE virtual table
-    result := 'CREATE VIRTUAL TABLE ' + SqlTableName + ' USING ';
+    Join(['CREATE VIRTUAL TABLE ', SqlTableName, ' USING '], result);
     case Props.Kind of
       ovkFts3:
-        result := result + 'fts3(';
+        Append(result, 'fts3(');
       ovkFts4:
-        result := result + 'fts4(';
+        Append(result, 'fts4(');
       ovkFts5:
-        result := result + 'fts5(';
+        Append(result, 'fts5(');
       ovkRTree:
-        result := result + 'rtree(RowID,';
+        Append(result, 'rtree(RowID,');
       ovkRTreeInteger:
-        result := result + 'rtree_i32(RowID,';
+        Append(result, 'rtree_i32(RowID,');
       ovkCustomForcedID,
       ovkCustomAutoID:
         begin
@@ -7468,7 +7461,7 @@ begin
           if Props.Props.Fields.Count = 0 then
             EModelException.RaiseUtf8(
               'Virtual % % should have published properties', [mname, self]);
-          result := result + mname + '(';
+          Append(result, mname, '(');
         end;
     else
       EModelException.RaiseUtf8('%.GetSqlCreate(%)?', [self, ToText(Props.Kind)^]);
@@ -7488,7 +7481,7 @@ begin
               result := FormatUtf8('%content_rowid="ID",', [result]);
           end;
           for i := 0 to fields.Count - 1 do
-            result := result + fields.List[i].Name + ',';
+            Append(result, fields.List[i].Name, ',');
           if Props.Kind = ovkFts5 then
             tokenizer := 'ascii'   // FTS5 knows ascii/porter/unicode61
           else
@@ -7525,39 +7518,34 @@ begin
                 result := FormatUtf8('%+% %', [result, Name,
                   Props.Props.OrmFieldTypeToSql(i)])
               else
-                result := result + Name + ',';
+                Append(result, Name, ',');
           result[length(result)] := ')';
         end;
       ovkCustomForcedID,
       ovkCustomAutoID:
-        result := result + GetVirtualTableSqlCreate(Props.Props);
+        Append(result, GetVirtualTableSqlCreate(Props.Props));
     end;
   end
   else
   begin
     // inherits from TOrm: create a "normal" SQLite3 table
-    result := 'CREATE TABLE ' + SqlTableName + '(ID INTEGER PRIMARY KEY AUTOINCREMENT, ';
+    Join(['CREATE TABLE ', SqlTableName, '(ID INTEGER PRIMARY KEY AUTOINCREMENT, '], result);
     // we always add an ID field which is an INTEGER PRIMARY KEY
     // column, as it is always created (as hidden RowID) by the SQLite3 engine
     with Props.Props do
       for i := 0 to fields.Count - 1 do
         with fields.List[i] do
         begin
-          SQL := OrmFieldTypeToSql(i); // = '' for field with no matching DB column
-          if SQL <> '' then
-          begin
-            result := result + Name + SQL;
-            if FieldBitGet(IsUniqueFieldsBits, i) then
-              insert(' UNIQUE', result, length(result) - 1);
-          end;
+          SQL := OrmFieldTypeToSql(i);
+          if SQL = '' then
+            continue; // field with no matching DB column
+          Append(result, Name, SQL);
+          if FieldBitGet(IsUniqueFieldsBits, i) then
+            insert(' UNIQUE', result, length(result) - 1);
         end;
     PWord(@result[length(result) - 1])^ := ord(')') + ord(';') shl 8;
   end;
 end;
-
-{$ifdef ISDELPHI20062007} // circumvent a Delphi 2007 compiler paranoid warning
-  {$warnings on}
-{$endif ISDELPHI20062007}
 
 function TOrm.GetSqlSet: RawUtf8;
 var
@@ -7576,7 +7564,7 @@ begin
         GetValueVar(self, true, V, @wasString);
         if wasString then
           V := QuotedStr(V);
-        result := result + Name + '=' + V + ', ';
+        Append(result, [Name, '=', V, ', ']);
       end;
   if result <> '' then
     SetLength(result, length(result) - 2);
@@ -7598,14 +7586,14 @@ begin
         if HasNotSimpleFields then
           // get 'COL1,COL2': no 'ID,' for INSERT (false below)
           result := SqlTableSimpleFieldsNoRowID; // always <> '*'
-        result := result + ' VALUES (';
+        Append(result, ' VALUES (');
         for i := 0 to length(SimpleFields) - 1 do
           with SimpleFields[i] do
           begin
             GetValueVar(self, true, V, @wasString);
             if wasString then
               V := QuotedStr(V);
-            result := result + V + ',';
+            Append(result, V, ',');
           end;
         result[length(result)] := ')';
       end;
@@ -7807,7 +7795,7 @@ constructor TOrm.CreateAndFillPrepare(const aClient: IRestOrm;
 var
   where: RawUtf8;
 begin
-  where := FormatSql(FormatSqlWhere, [], BoundsSqlWhere);
+  FormatSqlVar(FormatSqlWhere, [], BoundsSqlWhere, where);
   CreateAndFillPrepare(aClient, where, FieldsCsv);
 end;
 
@@ -7817,7 +7805,7 @@ constructor TOrm.CreateAndFillPrepare(const aClient: IRestOrm;
 var
   where: RawUtf8;
 begin
-  where := FormatSql(FormatSqlWhere, ParamsSqlWhere, BoundsSqlWhere);
+  FormatSqlVar(FormatSqlWhere, ParamsSqlWhere, BoundsSqlWhere, where);
   CreateAndFillPrepare(aClient, where, FieldsCsv);
 end;
 
@@ -7864,7 +7852,7 @@ begin
     EModelException.RaiseUtf8('No nested TOrm to JOIN in %', [self]);
   sql := props.Sql.SelectAllJoined;
   if aFormatSQLJoin <> '' then
-    sql := sql + FormatSql(SqlFromWhere(aFormatSQLJoin), aParamsSQLJoin, aBoundsSQLJoin);
+    Append(sql, FormatSql(SqlFromWhere(aFormatSQLJoin), aParamsSQLJoin, aBoundsSQLJoin));
   T := aClient.ExecuteList(props.props.JoinedFieldsTable, sql);
   if T = nil then
     exit;
@@ -7904,10 +7892,6 @@ begin
     EModelException.RaiseUtf8(
       '%.CreateAndFillPrepareMany(): FillPrepareMany() failure', [self]);
 end;
-
-{$ifdef ISDELPHI20062007}
-  {$warnings off} // avoid paranoid Delphi 2007 warning
-{$endif ISDELPHI20062007}
 
 procedure TOrm.EnginePrepareMany(const aClient: IRestOrm;
   const aFormatSQLJoin: RawUtf8; const aParamsSQLJoin, aBoundsSQLJoin: array of const;
@@ -7974,7 +7958,7 @@ var
     B := P;
     while tcIdentifier in TEXT_CHARS[P^] do
       inc(P); // go to end of field name
-    FastSetString(result, B, P - B);
+    FastSetString(result, B, P);
     if (result = '') or
        PropNameEquals(result, 'AND') or
        PropNameEquals(result, 'OR')  or
@@ -8079,7 +8063,7 @@ begin
       if Props.fSqlFillPrepareMany = '' then
       begin
         if {%H-}aSqlFields <> '' then
-          aSqlFields := aSqlFields + ',';
+          Append(aSqlFields, ',');
         aSqlFields := FormatUtf8('%%.RowID %', [aSqlFields, aField[1], aField]);
       end;
       for i := 0 to length(SimpleFields) - 1 do
@@ -8099,8 +8083,8 @@ begin
       if Props.fSqlFillPrepareMany = '' then
       begin
         if {%H-}aSqlFrom <> '' then
-          aSqlFrom := aSqlFrom + ',';
-        aSqlFrom := aSqlFrom + SqlTableName + ' ' + ToUtf8(aField[1]);
+          Append(aSqlFrom, ',');
+        Append(aSqlFrom, [SqlTableName, ' ', aField[1]]);
       end;
       inc(aField[1]);
     end;
@@ -8137,15 +8121,15 @@ begin
       end;
       if J <> JBeg then
       begin // append ' ',')'..
-        FastSetString(aSqlFrom, JBeg, J - JBeg);
-        aSqlWhere := aSqlWhere + aSqlFrom;
+        FastSetString(aSqlFrom, JBeg, J);
+        Append(aSqlWhere, aSqlFrom);
         JBeg := J;
       end;
       if J^ = #0 then
         break;
-      aSqlWhere := aSqlWhere + ProcessField(JBeg);
+      Append(aSqlWhere, ProcessField(JBeg));
     until JBeg^ = #0;
-    SQL := SQL + ' and (' + FormatSql(aSqlWhere, [], aBoundsSQLJoin) + ')';
+    Append(SQL, [' and (', FormatSql(aSqlWhere, [], aBoundsSQLJoin), ')']);
   end;
   // execute SQL statement and retrieve the matching data
   Json := aClient.ExecuteJson([], SQL);
@@ -8154,10 +8138,6 @@ begin
       with SqlFields[i] do
         fFill.AddMap(Instance, prop, i);
 end;
-
-{$ifdef ISDELPHI20062007}
-  {$warnings on} // avoid paranoid Delphi 2007 warning
-{$endif ISDELPHI20062007}
 
 function TOrm.FillPrepareMany(const aClient: IRestOrm;
   const aFormatSQLJoin: RawUtf8;
@@ -8956,9 +8936,9 @@ var
   begin
     for i := 0 to high(Classes) do
     begin
-      select := select + Classes[i].sql.TableSimpleFields[true, true];
+      Append(select, Classes[i].sql.TableSimpleFields[true, true]);
       if i < high(Classes) then
-        select := select + ',';
+        Append(select, ',');
     end;
   end;
 
@@ -8981,20 +8961,19 @@ begin
   end;
   case JoinKind of
     jkDestID:
-      select := dst.Props.SqlTableName + '.RowID';
+      Join([dst.Props.SqlTableName, '.RowID'], select);
     jkPivotID:
-      select := slf.Props.SqlTableName + '.RowID';
+      Join([slf.Props.SqlTableName, '.RowID'], select);
     jkDestFields:
       if FieldsCsv = '' then
         SelectFields([dst])
       else
-        select := AddPrefixToCsv(pointer(FieldsCsv), dst.Props.SqlTableName + '.');
+        select := AddPrefixToCsv(pointer(FieldsCsv), Join([dst.Props.SqlTableName, '.']));
     jkPivotFields:
       if FieldsCsv = '' then
         SelectFields([slf])
       else
-        select := AddPrefixToCsv(pointer(FieldsCsv),
-          slf.Props.SqlTableName + '.');
+        select := AddPrefixToCsv(pointer(FieldsCsv), Join([slf.Props.SqlTableName, '.']));
     jkPivotAndDestFields:
       if FieldsCsv = '' then
         SelectFields([slf, dst])
@@ -9246,7 +9225,7 @@ end;
 
 class function TOrmRTreeAbstract.RTreeSQLFunctionName: RawUtf8;
 begin
-  result := OrmProps.SqlTableName + '_in';
+  Join([OrmProps.SqlTableName, '_in'], result);
 end;
 
 { TOrmRTree }
@@ -9359,7 +9338,7 @@ begin
   if IsSqlReserved(fSqlTableName) then
     EModelException.RaiseUtf8('% derivated table name ''%'' conflicts ' +
       'with a SQL keyword: please rename the class', [Table, fSqlTableName]);
-  fSqlTableNameUpperWithDot := UpperCase(fSqlTableName) + '.';
+  Join([UpperCase(fSqlTableName), '.'], fSqlTableNameUpperWithDot);
   isTOrmMany := aTable.InheritsFrom(TOrmMany);
   // add properties to internal Fields list
   nProps := ClassFieldCountWithParents(aTable);
@@ -9423,9 +9402,9 @@ begin
         begin
           BlobFields[nBlob] := F as TOrmPropInfoRttiRawBlob;
           inc(nBlob);
-          fSqlTableUpdateBlobFields := fSqlTableUpdateBlobFields + F.Name + '=?,';
-          fSqlTableRetrieveBlobFields := fSqlTableRetrieveBlobFields + F.Name + ',';
-          fSqlTableRetrieveAllFields := fSqlTableRetrieveAllFields + ',' + F.Name;
+          Append(fSqlTableUpdateBlobFields,   F.Name, '=?,');
+          Append(fSqlTableRetrieveBlobFields, F.Name, ',');
+          Append(fSqlTableRetrieveAllFields,  ',',     F.Name);
           goto Copiabl; // NOT_SIMPLE_FIELDS are not included by default
         end;
       oftID: // = TOrm(aID)
@@ -9483,7 +9462,7 @@ begin
             EModelException.RaiseUtf8('%: only a single TRecordVersion ' +
               'field is allowed per class', [Table]);
           fRecordVersionField := F as TOrmPropInfoRttiRecordVersion;
-          fSqlTableRetrieveAllFields := fSqlTableRetrieveAllFields + ',' + F.Name;
+          Append(fSqlTableRetrieveAllFields, ',', F.Name);
           goto Copiabl; // NOT_SIMPLE_FIELDS are not included by default
         end;
       oftVariant: // oftNullable are included in SmallfieldsBits
@@ -9496,8 +9475,8 @@ Simple: SimpleFields[nSimple] := F;
         inc(nSimple);
         SimpleFieldSelect[nSimple].Field := i + 1; // [0]=ID
         FieldBitSet(SimpleFieldsBits[ooSelect], i);
-        fSqlTableSimpleFieldsNoRowID := fSqlTableSimpleFieldsNoRowID + F.Name + ',';
-        fSqlTableRetrieveAllFields := fSqlTableRetrieveAllFields + ',' + F.Name;
+        Append(fSqlTableSimpleFieldsNoRowID, F.Name, ',');
+        Append(fSqlTableRetrieveAllFields, ',', F.Name);
 Copiabl:FieldBitSet(CopiableFieldsBits, i);
         CopiableFields[nCopiableFields] := F;
         inc(nCopiableFields);
@@ -9695,7 +9674,7 @@ begin
   fSortedTablesNameIndex[aIndex] := aIndex;
   fields := Props.Props.Fields;
   for f := 0 to fields.Count - 1 do
-    case fields.List[f].OrmFieldType of
+    {%H-}case fields.List[f].OrmFieldType of
       oftRecord:
         RegisterTableForRecordReference(fields.List[f], Table); // Table not used
       oftID:
@@ -10081,28 +10060,28 @@ begin
   FastAssignNew(result);
   if self = nil then
     exit;
-  if aTable <> nil then
-    result := aTable.OrmProps.SqlTableName
-  else
+  if aTable = nil then
   begin
     result := Root;
     exit;
   end;
-  if Root <> '' then
-    result := Root + '/' + result;
+  if Root = '' then
+    result := aTable.OrmProps.SqlTableName // paranoid
+  else
+    Join([Root, '/', aTable.OrmProps.SqlTableName], result);
 end;
 
 function TOrmModel.GetUriID(aTable: TOrmClass; aID: TID): RawUtf8;
 begin
   result := GetUri(aTable);
   if aID > 0 then
-    result := FormatUtf8('%/%', [result, aID]);
+    Append(result, ['/', aID]);
 end;
 
 function TOrmModel.GetUriCallBack(const aMethodName: RawUtf8;
   aTable: TOrmClass; aID: TID): RawUtf8;
 begin
-  result := GetUriID(aTable, aID) + '/' + aMethodName;
+  Join([GetUriID(aTable, aID), '/', aMethodName], result);
 end;
 
 function DoUriMatch(u, r: PUtf8Char; rlen: PtrInt; checkcase: boolean): TRestModelMatch;
@@ -10126,44 +10105,45 @@ begin // better code generation by using the DoUriMatch() internal function
   result := DoUriMatch(pointer(Uri), pointer(fRoot), fRootLen, CheckCase);
 end;
 
-function TOrmModel.SqlFromSelectWhere(const Tables: array of TOrmClass;
-  const SqlSelect, SqlWhere: RawUtf8): RawUtf8;
-var
-  i: PtrInt;
-  p: array[0..31] of TOrmModelProperties;
+procedure TOrmModel.SqlFromSelectWhere(const Tables: array of TOrmClass;
+  const SqlSelect, SqlWhere: RawUtf8; var Sql: RawUtf8);
+
+  procedure MultiTables;
+  var
+    i: PtrInt;
+    p: array[0..31] of TOrmModelProperties;
+  begin
+    // 'SELECT T1.F1,T1.F2,T1.F3,T2.F1,T2.F2 FROM T1,T2 WHERE ..' e.g.
+    if cardinal(high(Tables)) > high(p) then
+      EModelException.RaiseUtf8('%.SqlFromSelectWhere(%) up to % Tables[]',
+        [self, SqlSelect, Length(p)]);
+    for i := 0 to high(Tables) do
+      p[i] := Props[Tables[i]]; // raise EModelException if not found
+    if SqlSelect = '*' then
+       // don't send BLOB values to query: retrieve all other fields
+      if high(Tables) = 0 then
+        Join(['SELECT ', {%H-}p[0].Sql.TableSimpleFields[true, false]], Sql)
+      else
+      begin
+        Join(['SELECT ', p[0].Sql.TableSimpleFields[true, true]], Sql);
+        for i := 1 to high(Tables) do
+          Append(Sql, ',', p[i].Sql.TableSimpleFields[true, true]);
+      end
+    else
+      Join(['SELECT ', SqlSelect]);
+    Append(Sql, ' FROM ', p[0].Props.SqlTableName);
+    for i := 1 to high(Tables) do
+      Append(Sql, ',', p[i].Props.SqlTableName);
+    Append(Sql, SqlFromWhere(SqlWhere));
+  end;
+
 begin
   if self = nil then
-    EOrmException.RaiseUtf8(
-      'SqlFromSelectWhere(%): no Model', [SqlSelect]);
-  if high(Tables) = 0 then
-  begin
-    // fastest common call with one TOrmClass
-    result := Props[Tables[0]].SqlFromSelectWhere(SqlSelect, SqlWhere);
-    exit;
-  end;
-  // 'SELECT T1.F1,T1.F2,T1.F3,T2.F1,T2.F2 FROM T1,T2 WHERE ..' e.g.
-  if cardinal(high(Tables)) > high(p) then
-    EModelException.RaiseUtf8(
-      '%.SqlFromSelectWhere(%) up to % Tables[]',
-      [self, SqlSelect, Length(p)]);
-  for i := 0 to high(Tables) do
-    p[i] := Props[Tables[i]]; // raise EModelException if not found
-  if SqlSelect = '*' then
-     // don't send BLOB values to query: retrieve all other fields
-    if high(Tables) = 0 then
-      result := 'SELECT ' + {%H-}p[0].Sql.TableSimpleFields[true, false]
-    else
-    begin
-      result := 'SELECT ' + p[0].Sql.TableSimpleFields[true, true];
-      for i := 1 to high(Tables) do
-        result := result + ',' + p[i].Sql.TableSimpleFields[true, true];
-    end
+    EOrmException.RaiseUtf8('SqlFromSelectWhere(%): no Model', [SqlSelect]);
+  if high(Tables) = 0 then // fastest common call with one TOrmClass
+    Props[Tables[0]].SqlFromSelectWhere(SqlSelect, SqlWhere, Sql)
   else
-    result := 'SELECT ' + SqlSelect;
-  result := result + ' FROM ' + p[0].Props.SqlTableName;
-  for i := 1 to high(Tables) do
-    result := result + ',' + p[i].Props.SqlTableName;
-  result := result + SqlFromWhere(SqlWhere);
+    MultiTables;
 end;
 
 procedure TOrmModel.SetCustomCollationForAll(aFieldType: TOrmFieldType;
@@ -10512,6 +10492,13 @@ begin
   Props.InternalRegisterModel(fModel, fModel.GetTableIndexExisting(fProps.Table), self);
 end;
 
+procedure TOrmModelProperties.SqlFromSelectWhere(
+  const SelectFields, Where: RawUtf8; var Res: RawUtf8);
+begin
+  SqlFromSelect(Props.SqlTableName, SelectFields, Where,
+    Sql.TableSimpleFields[true, false], Res);
+end;
+
 procedure TOrmModelProperties.SetKind(Value: TOrmVirtualKind);
 
   function ComputeSimpleFields(withID, withTableName: boolean): RawUtf8;
@@ -10546,7 +10533,7 @@ var
   f: PtrInt;
   expected: TOrmFieldType;
 begin
-  case Value of // validates virtual table fields expectations
+  {%H-}case Value of // validates virtual table fields expectations
     ovkFts3,
     ovkFts4,
     ovkFts5:
@@ -10593,19 +10580,12 @@ begin
   Sql.TableSimpleFields[true, true]   := ComputeSimpleFields(true, true);
   if Props.SqlTableSimpleFieldsNoRowID <> Sql.TableSimpleFields[false, false] then
     EModelException.RaiseUtf8('SetKind(%)', [Props.Table]);
-  Sql.SelectAllWithRowID := SqlFromSelectWhere('*', '');
+  SqlFromSelectWhere('*', '', Sql.SelectAllWithRowID);
   Sql.SelectAllWithID := Sql.SelectAllWithRowID;
   if IdemPChar(PUtf8Char(pointer(Sql.SelectAllWithID)) + 7, 'ROWID') then
     delete(Sql.SelectAllWithID, 8, 3); // 'SELECT RowID,..' -> 'SELECT ID,'
   Sql.SelectOneWithID := FormatUtf8('SELECT % FROM % WHERE RowID=?',
     [Sql.TableSimpleFields[true, false], Props.SqlTableName]);
-end;
-
-function TOrmModelProperties.SqlFromSelectWhere(
-  const SelectFields, Where: RawUtf8): RawUtf8;
-begin
-  result := SqlFromSelect(Props.SqlTableName, SelectFields, Where,
-    Sql.TableSimpleFields[true, false]);
 end;
 
 procedure TOrmModelProperties.Fts4WithoutContent(ContentTable: TOrmClass);
@@ -10781,8 +10761,8 @@ begin
     SetSql(W, true, false, fSql.TableSimpleFields[true, false]);
     SetSql(W, true, true, fSql.TableSimpleFields[true, true]);
     // Sql.SelectAll: array[withRowID: boolean]
-    fSql.SelectAllWithRowID := SqlFromSelect(
-      TableName, '*', '', fSql.TableSimpleFields[true, false]);
+    SqlFromSelect(TableName, '*', '',
+      fSql.TableSimpleFields[true, false], fSql.SelectAllWithRowID);
     fSql.SelectAllWithID := fSql.SelectAllWithRowID;
     SetSql(W, false, false, fSql.UpdateSetSimple, cUpdateSimple);
     SetSql(W, false, false, fSql.UpdateSetAll, cUpdateSetAll);
@@ -11539,7 +11519,7 @@ begin
   Encode(POrmClass(Value)^, encoding, @fields);
   if SendData then
   begin
-    case encoding of
+    {%H-}case encoding of
       encPost:
         begin
           SetExpandedJsonWriter(props, not fPreviousTableMatch, ForceID, fields);

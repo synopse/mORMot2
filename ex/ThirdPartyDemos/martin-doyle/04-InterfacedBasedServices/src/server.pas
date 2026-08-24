@@ -8,8 +8,10 @@ uses
   Contnrs,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.log,
   mormot.core.data,
   mormot.core.unicode,
+  mormot.orm.base,
   mormot.orm.core,
   mormot.orm.rest,
   mormot.rest.server,
@@ -34,7 +36,31 @@ type
         reintroduce;  
   end;
 
+
+function CreateSampleModel: TOrmModel;
+
+
 implementation
+
+type
+  TOrmSample = class(TOrm)
+  private
+    FName: RawUTF8;
+    FQuestion: RawUTF8;
+    FTime: TModTime;
+  published
+    property Name: RawUTF8 read FName write FName;
+    property Question: RawUTF8 read FQuestion write FQuestion;
+    property Time: TModTime read FTime write FTime;
+  end;
+  TOrmSampleObjArray = array of TOrmSample;
+
+function CreateSampleModel: TOrmModel;
+begin
+  result := TOrmModel.Create([TOrmSample]);
+end;
+
+
 
 {
 ******************************* TExampleService ********************************
@@ -49,12 +75,12 @@ begin
     OrmSample.Question := ASample.Question;
     if Self.Server.Orm.Add(OrmSample, true) > 0 then
     begin
-      Writeln('Record created OK');
+      TSynLog.Add.Log(sllTrace, 'Add: Record created OK', self);
       Result := 0;
     end
     else
     begin
-      Writeln('Error creating Record');
+      TSynLog.Add.Log(sllWarning, 'Add: Error creating Record', self);
       Result := -1;
     end;
   finally
@@ -68,14 +94,14 @@ var
 begin
   OrmSample := TOrmSample.Create(Self.Server.Orm,'Name=?',[ASample.Name]);
   try
-    if OrmSample.ID=0 then
+    if OrmSample.ID = 0 then
     begin
-      Writeln('Error reading Record');
+      TSynLog.Add.Log(sllWarning, 'Find: Error reading Record', self);
       Result := -1;
     end
     else
     begin
-      Writeln('Record read OK');
+      TSynLog.Add.Log(sllTrace, 'Find: Record found OK', self);
       ASample.Name := OrmSample.Name;
       ASample.Question := OrmSample.Question;
       Result := 0;
@@ -87,40 +113,36 @@ end;
 
 function TExampleService.List(out ASamples: TSampleInfoDynArray): Integer;
 var
-  OrmSamples: TObjectList;
+  OrmSamples: TOrmSampleObjArray;
   i: Integer;
 begin
-  OrmSamples := Self.Server.Orm.RetrieveList(TOrmSample, '', []);
-  if OrmSamples = nil then
-  begin
-    SetLength(ASamples, 0);
-    Result := 0;
-    Exit;
-  end;
+  if Self.Server.Orm.RetrieveListObjArray(OrmSamples, TOrmSample, '', []) then
   try
-    SetLength(ASamples, OrmSamples.Count);
-    for i := 0 to OrmSamples.Count - 1 do
+    Result := length(OrmSamples);
+    SetLength(ASamples, Result);
+    for i := 0 to result - 1 do
     begin
       ASamples[i].ID := TOrmSample(OrmSamples[i]).ID;
       ASamples[i].Name := TOrmSample(OrmSamples[i]).Name;
     end;
-    Result := OrmSamples.Count;
-    Writeln('List returned ', Result, ' records');
   finally
-    OrmSamples.Free;
-  end;
+    ObjArrayClear(OrmSamples);
+  end
+  else
+    Result := 0;
+  TSynLog.Add.Log(sllTrace, 'List: returned % records', [Result], self);
 end;
 
 function TExampleService.Delete(AID: TID): Integer;
 begin
   if Self.Server.Orm.Delete(TOrmSample, AID) then
   begin
-    Writeln('Record deleted OK');
+    TSynLog.Add.Log(sllTrace, 'Delete(%) OK', [AID], self);
     Result := 0;
   end
   else
   begin
-    Writeln('Error deleting Record');
+    TSynLog.Add.Log(sllWarning, 'Delete: error deleting Record', self);
     Result := -1;
   end;
 end;

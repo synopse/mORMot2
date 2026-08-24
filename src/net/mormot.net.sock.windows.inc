@@ -85,7 +85,7 @@ type
       0: (sin_family: word;
           sin_port:   word;
           sin_addr:   TNetIP4;
-          sin_zero:   array[0..7] of AnsiChar);
+          sin_zero:   Int64);
       1: (sa_family:  word;
           sa_data:    array[0..13] of AnsiChar)
   end;
@@ -524,12 +524,12 @@ var
 { TNetAddr }
 
 function SetWinAddr(const host, port: RawUtf8; family: cardinal; layer: TNetLayer;
-  out addr): boolean;
+  var addr): boolean;
 var
   h: TAddrInfo;
   res: PAddrInfo;
 begin
-  // use regular OS resolution for known addresses or host names
+  // use regular WinAPI resolution for known addresses or host names
   FillCharFast(h, SizeOf(h), 0);
   h.ai_family := family;
   h.ai_socktype := _ST[layer];
@@ -537,47 +537,31 @@ begin
   res := nil;
   result := getaddrinfo(pointer(host), pointer(port), @h, res) = NO_ERROR;
   if result then
-    MoveFast(res^.ai_addr^, addr, res^.ai_addrlen); // return the first result
+    // return the first result - fill the whole TSockAddr structure
+    MoveFast(res^.ai_addr^, addr, res^.ai_addrlen);
   if res <> nil then
     freeaddrinfo(res);
 end;
 
-procedure TNetAddr.Clear;
-begin
-  FillCharFast(Addr, SizeOf(Addr), 0);
-end; // some obscure Windows docs seem to state that zeroing is expected
-
-procedure TNetAddr.SetFamily(fam: cardinal);
-begin
-  PSockAddr(@Addr)^.sin_family := fam;
-end;
-
 function TNetAddr.SetFrom(const address, addrport: RawUtf8; layer: TNetLayer): TNetResult;
-var
-  p: TNetPort;
 begin
   Clear;
-  result := nrNotImplemented;
   if layer = nlUnix then
-    exit;
-  result := nrNotFound;
-  if address = '' then
-    exit;
-  // check and decode supplied IP port
-  p := GetCardinal(pointer(addrport));
-  if (p = 0) and
-     (addrport <> '0') then // explicit '0' to get ephemeral port
-    exit;
-  // first check most simple IPv4 resolution (maybe using mormot.net.dns)
-  if SetFromIP4(address, false) or
-     SetFromIP6(address) or // InetPton() OS API is faster than getaddrinfo
-     // fallback to OS getaddrinfo() resolution, first try as IPv4, then IPv6
-     SetWinAddr(address, addrport, AF_INET, layer, Addr) or
-     SetWinAddr(address, addrport, AF_INET6, layer, Addr) then
-  begin
-    PSockAddr(@Addr)^.sin_port := bswap16(p); // eventually set port
-    result := nrOk;
-  end;
+    result := nrNotImplemented
+  else if address = '' then
+    result := nrNotFound
+  else if not ParsePort(addrport) then
+    result := nrInvalidParameter
+  else
+    // first check most simple IPv4/IPv6 resolution (maybe using mormot.net.dns)
+    if SetFromIP4(address, false) or
+       SetFromIP6(address) or // Inet6Pton() OS API is faster than getaddrinfo
+       // fallback to OS getaddrinfo() resolution, first try as IPv4, then IPv6
+       SetWinAddr(address, addrport, AF_INET,  layer, Addr) or
+       SetWinAddr(address, addrport, AF_INET6, layer, Addr) then
+    result := nrOk
+  else
+    result := nrNotFound;
 end;
 
 
@@ -837,16 +821,13 @@ begin
     SetLength(result, n);
 end;
 
-// documented since Windows Vista, but actually available on Windows XP SP3 :)
-function RtlIpv6StringToAddress(s: PUtf8Char; var term: PUtf8Char; in6: PByte): integer;
-  stdcall; external ntdll name 'RtlIpv6StringToAddressA';
-
-function InetPton(text: PUtf8Char; value: PByte): boolean;
+function Inet6Pton(text: PUtf8Char; value: PByte): boolean;
 var
   term: PUtf8Char;
 begin
   term := nil;
-  result := (RtlIpv6StringToAddress(text, term, value) = NO_ERROR) and
+  result := Assigned(RtlIpv6StringToAddress) and // resolved in mormot.core.os
+            (RtlIpv6StringToAddress(text, term, value) = NO_ERROR) and
             (term <> nil) and
             (term^ = #0); // requires full string match just like inet_pton()
 end;
@@ -969,7 +950,7 @@ type
     // DHCP v6 Info following (not used by our code)
   end;
 
-  IP_ADDRESS_STRING = array[0..15] of AnsiChar;
+  IP_ADDRESS_STRING = TTemp16;
   IP_ADDR_IP4 = TNetIP4;
 
   IP_ADDR_STRING = packed record
@@ -1001,7 +982,7 @@ type
 var
   // some other iphlpapi.dll late-binded API via DelayedProc()
   GetAdaptersAddresses: function(Family: ULONG; Flags: DWord; Reserved: pointer;
-      pAdapterAddresses: PIP_ADAPTER_ADDRESSES; pOutBufLen: PULONG): DWord; stdcall;
+    pAdapterAddresses: PIP_ADAPTER_ADDRESSES; pOutBufLen: PULONG): DWord; stdcall;
   SendARP: function(DestIp: DWord; srcIP: DWord; pMacAddr: pointer;
     PhyAddrLen: pointer): DWord; stdcall;
   GetNetworkParams: function(pFixedInfo: PFIXED_INFO;
@@ -1014,6 +995,7 @@ var
   n, l: PtrInt;
   siz: ULONG;
   p: PIP_ADDR_STRING_LINKED_LIST;
+  dom: RawUtf8;
   tmp: RawByteString;
 begin
   result := nil;
@@ -1028,9 +1010,13 @@ begin
   begin
     l := StrLen(@PFIXED_INFO(tmp)^.DomainName);
     if l <> 0 then
+      FastSetString(dom, @PFIXED_INFO(tmp)^.DomainName, l)
+    else
+      GetSystemEnv('USERDNSDOMAIN', dom);
+    if dom <> '' then
     begin
       SetLength(result, 1);
-      FastSetString(result[0], @PFIXED_INFO(tmp)^.DomainName, l);
+      result[0] := dom;
     end;
     exit;
   end;
@@ -1535,7 +1521,7 @@ end;
 constructor TWinIocp.Create(processing: integer; options: TWinIocpOptions);
 begin
   if processing = 0 then
-    processing := CpuThreads;
+    processing := SystemInfo.dwNumberOfProcessors; // = CpuThreads
   fIocp := IocpCreate(INVALID_HANDLE_VALUE, 0, nil, processing);
   if fIocp <= 0 then
     RaiseLastError('TWinIocp: CreateIoCompletionPort', EWinIocp);

@@ -13,6 +13,9 @@ The SAD is a comprehensive guide covering all aspects of mORMot 2, from architec
 2. [**Index**](mORMot2-SAD-Index.md) - Complete table of contents with topic navigation
 3. [**Chapter 1: Overview**](mORMot2-SAD-Chapter-01.md) - Framework introduction
 
+**Looking for sane defaults?**
+- [**Recommended Patterns & Default Toolbox**](mORMot2-SAD-Recommended-Patterns.md) - "What types, classes and configuration should I use by default?" A universal default toolbox plus one opinionated application blueprint.
+
 ## Document Structure
 
 ### Core Chapters (1-26)

@@ -1764,13 +1764,13 @@ asm
         je      @0
         test    eax, edx
         jz      @maynil
-@f:     mov     cl, byte ptr [eax] // first char comparison (quicksort speedup)
+@f:     mov     cl, byte ptr [eax] // first char comparison (QuickSort speedup)
         mov     ch, byte ptr [edx]
         cmp     cl, ch
         je      @s
         movzx   eax, cl
         movzx   edx, ch
-        sub     eax, edx            // branchless execution on Quicksort/ReHash
+        sub     eax, edx            // branchless execution on QuickSort
         ret
 @0:     xor     eax, eax
         ret
@@ -2045,21 +2045,18 @@ asm
         jz      @0
         test    edx, edx
         jz      @0
-        jmp     @align
-@a:     {$ifdef ASMAESNI}
-        crc32   eax, byte ptr [edx]
-        {$else} // oldest Delphi don't support these opcodes
-        db      $F2, $0F, $38, $F0, $02
+@1:     sub     ecx, 8
+        jb      @rem
+@by8:   {$ifdef ASMAESNI}
+        crc32   eax, dword ptr [edx]
+        crc32   eax, dword ptr [edx + 4]
+        {$else}
+        db      $F2, $0F, $38, $F1, $02
+        db      $F2, $0F, $38, $F1, $42, $04
         {$endif ASMAESNI}
-        inc     edx
-        dec     ecx
-        jz      @0
-@align: test    dl, 3
-        jnz     @a
-        push    ecx
-        shr     ecx, 3
-        jnz     @by8
-@rem:   pop     ecx
+        add     edx, 8
+        jmp     @1
+@rem:   add     ecx, 8
         test    cl, 4
         jz      @4
         {$ifdef ASMAESNI}
@@ -2084,19 +2081,61 @@ asm
         db      $F2, $0F, $38, $F0, $02
         {$endif ASMAESNI}
 @0:     not     eax
-        ret
-        {$ifdef ASMAESNI}
-@by8:   crc32   eax, dword ptr [edx]
+end;
+
+// used for DefaultHasher/InterningHasher before Delphi XE4 with len<256 bytes
+function hashsse42(seed: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        // eax=seed, edx=buf, ecx=len - no "not eax" needed for hashing
+        test    edx, edx
+        jz      @0
+@1:     sub     ecx, 8
+        jb      @rem
+@by8:   {$ifdef ASMAESNI}
+        crc32   eax, dword ptr [edx]
         crc32   eax, dword ptr [edx + 4]
         {$else}
-@by8:   db      $F2, $0F, $38, $F1, $02
+        db      $F2, $0F, $38, $F1, $02
         db      $F2, $0F, $38, $F1, $42, $04
         {$endif ASMAESNI}
         add     edx, 8
-        dec     ecx
-        jnz     @by8
-        jmp     @rem
-end;
+        jmp     @1
+@rem:   add     ecx, 8
+        test    cl, 4
+        jz      @4
+        {$ifdef ASMAESNI}
+        crc32   eax, dword ptr [edx]
+        {$else}
+        db      $F2, $0F, $38, $F1, $02
+        {$endif ASMAESNI}
+        add     edx, 4
+@4:     test    cl, 2
+        jz      @2
+        {$ifdef ASMAESNI}
+        crc32   eax, word ptr [edx]
+        {$else}
+        db      $66, $F2, $0F, $38, $F1, $02
+        {$endif ASMAESNI}
+        add     edx, 2
+@2:     test    cl, 1
+        jz      @0
+        {$ifdef ASMAESNI}
+        crc32   eax, byte ptr [edx]
+        {$else}
+        db      $F2, $0F, $38, $F0, $02
+        {$endif ASMAESNI}
+@0:     // Murmur-inspired finalizer for power-of-two hash tables - Bijective
+        // over 32-bit values: preserves CRC32C collision but the result is no
+        // standard CRC32C value anymore and we can't cascade hashsse42() calls
+        mov     ecx, eax
+        shr     ecx, 16
+        xor     eax, ecx
+        imul    eax, eax, $85ebca6b
+        mov     ecx, eax
+        shr     ecx, 16
+        xor     eax, ecx
+end; // the x64 asm returns the very same value - no further optimization needed
 
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
@@ -2512,6 +2551,14 @@ asm
         setz    al
 end;
 
+function LockedExc32(var Target: cardinal; NewValue, Comperand: cardinal): boolean;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        xchg    eax, ecx
+   lock cmpxchg dword ptr [ecx], edx
+        setz    al
+end;
+
 procedure LockedAdd(var Target: PtrUInt; Increment: PtrUInt);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
@@ -2540,7 +2587,7 @@ asm // see https://software.intel.com/en-us/blogs/2011/04/14/is-avx-enabled
         sete    al
 end;
 
-procedure GetCpuid(cpueax, cpuecx: cardinal; var Registers: TIntelRegisters);
+procedure _GetCpuid(cpueax, cpuecx: cardinal; var Registers: TIntelRegisters);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    esi
@@ -2582,8 +2629,8 @@ end;
 function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
 const
   _Ten:  double = 10.0;
-  _NaN:  double = Nan;
-  _Inf:  double = Infinity;
+  _NaN:  double = 0.0 / 0.0;
+  _Inf:  double = 1.0 / 0.0;
 asm
         // in: eax=text, edx=@err  out: st(0)=result
         push    ebx                 // save used registers

@@ -355,12 +355,12 @@ function localtime64_s(var t: Int64; var atm: time_t): integer;
 var
   S: TSystemTime;
 begin
-  UnixTimeToLocalTime(t, S);
-  atm.tm_sec := S.wSecond;
-  atm.tm_min := S.wMinute;
+  UnixTimeToLocal(t, S);
+  atm.tm_sec  := S.wSecond;
+  atm.tm_min  := S.wMinute;
   atm.tm_hour := S.wHour;
   atm.tm_mday := S.wDay;
-  atm.tm_mon := S.wMonth - 1;
+  atm.tm_mon  := S.wMonth - 1;
   atm.tm_year := S.wYear - 1900;
   atm.tm_wday := S.wDay;
   result := 0; // on Windows, should return 0; on POSIX, nil or @atm :(

@@ -1087,7 +1087,7 @@ begin
     else
       ip := fServerConnected.RemoteIP;
     fStatCache := JsonReformat(JsonEncode([
-      'version',     Executable.Version.Detailed,
+      'version',     Executable.Version.Main,
       'started',     Started,
       'memory',      TSynMonitorMemory.ToVariant,
       'diskfree',    GetDiskPartitionsVariant,

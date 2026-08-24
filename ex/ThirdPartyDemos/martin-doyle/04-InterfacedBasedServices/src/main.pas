@@ -141,7 +141,7 @@ end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
 begin
-  Model := CreateSampleModel;
+  Model := TSqlModel.Create([]);
   HttpClient := TRestHttpClient.Create('localhost', HttpPort, Model);
   HttpClient.ServiceDefine([IExample], sicShared);
   HttpClient.Services['Example'].Get(ExampleService);

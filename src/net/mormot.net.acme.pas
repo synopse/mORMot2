@@ -309,9 +309,8 @@ type
   // - with automated generation and renewal
   // - information is located in a single aKeyStoreFolder directory, as
   // associated ##.json, ##.acme.pem, ##.crt.me, and ##.key.pem files
-  TAcmeLetsEncrypt = class(TSynPersistent)
+  TAcmeLetsEncrypt = class(TObjectRWLightLock)
   protected
-    fSafe: TRWLightLock;
     fClient: TAcmeLetsEncryptClientObjArray;
     fKeyStoreFolder: TFileName;
     fPrivateKeyPassword: SpiUtf8;
@@ -631,7 +630,7 @@ begin
   c := pointer(fChallenges);
   if aUriLen > 0 then
     for i := 1 to length(fChallenges) do
-      if CompareBuf(c^.Token, aUri, aUriLen) = 0 then
+      if EqualBuf(c^.Token, aUri, aUriLen) then
       begin
         if Assigned(fLog) then
           fLog.Add.Log(sllTrace, 'GetChallenge %', [c^.SubjectValue], self);

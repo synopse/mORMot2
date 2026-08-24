@@ -754,9 +754,8 @@ type
   // - all access will be protected by a mutex (critical section): it is thread
   // safe but you may use one TMongoClient per thread or a connection pool, for
   // better performance
-  TMongoConnection = class(TSynPersistent)
+  TMongoConnection = class(TObjectOSLock)
   protected
-    fSafe: TOSLock;
     fLocked: cardinal;
     fClient: TMongoClient;
     fSocket: TCrtSocket;
@@ -2782,7 +2781,7 @@ begin
   if fServerAddress = '' then
     fServerAddress := '127.0.0.1';
   fServerPort := aServerPort;
-  fSafe.Init;
+  inherited Create; // fSafe.Init;
 end;
 
 destructor TMongoConnection.Destroy;
@@ -2794,8 +2793,7 @@ begin
       ; // continue on socket error
     end;
   finally
-    fSafe.Done;
-    inherited Destroy;
+    inherited Destroy; // fSafe.Done;
   end;
 end;
 

@@ -84,14 +84,14 @@ type
     /// UTF-8 ID of the Cryptoki library manufacturer
     // - MUST be padded with the blank character (' ')
     // - Should not be null-terminated.
-    manufacturerID: array[0..31] of AnsiChar;
+    manufacturerID: TTemp32;
     /// bit flags reserved for future versions
     // - MUST be zero for this version
     flags: CK_ULONG;
     /// UTF-8 description of the library
     // - MUST be padded with the blank character (' ')
     // - Should not be null-terminated.
-    libraryDescription: array[0..31] of AnsiChar;
+    libraryDescription: TTemp32;
     /// Version number of the library software itself
     libraryVersion: CK_VERSION;
   end;
@@ -124,11 +124,11 @@ type
     /// UTF-8 description of the slot
     // - MUST be padded with the blank character (' ')
     // - Should not be null-terminated.
-    slotDescription: array[0..63] of AnsiChar;
+    slotDescription: TTemp64;
     /// UTF-8 ID of the slot manufacturer
     // - MUST be padded with the blank character (' ')
     // - Should not be null-terminated.
-    manufacturerID: array[0..31] of AnsiChar;
+    manufacturerID: TTemp32;
     /// Slot Information Flags
     // - to be mapped to a CKSL_FLAGS set
     flags: CKSL_FLAGS_ULONG;
@@ -176,19 +176,19 @@ type
     /// UTF-8 application-defined label, assigned during token initialization
     // - MUST be padded with the blank character (' ')
     // - Should not be null-terminated.
-    _label: array[0..31] of AnsiChar;
+    _label: TTemp32;
     /// UTF-8 ID of the token manufacturer
     // - MUST be padded with the blank character (' ')
     // - Should not be null-terminated.
-    manufacturerID: array[0..31] of AnsiChar;
+    manufacturerID: TTemp32;
     /// UTF-8 model of the token
     // - MUST be padded with the blank character (' ')
     // - Should not be null-terminated.
-    model: array[0..15] of AnsiChar;
+    model: TTemp16;
     /// ASCII serial number of the slot
     // - MUST be padded with the blank character (' ')
     // - Should not be null-terminated.
-    serialNumber: array[0..15] of AnsiChar;
+    serialNumber: TTemp16;
     /// Token Information Flags
     // - to be mapped to a CKT_FLAGS set
     flags: CKT_FLAGS_ULONG;
@@ -235,7 +235,7 @@ type
     // second; and 2 additional reserved '0' characters).
     // - The value of this field only makes sense for tokens equipped with a
     // clock, as indicated in the token information flags
-    utcTime: array[0..15] of AnsiChar;
+    utcTime: TTemp16;
   end;
 
 const
@@ -662,11 +662,11 @@ type
   // - this 8 bytes text match DateToIso8601() layout
   CK_DATE = record
     /// the year ("1900" - "9999")
-    year: array[0..3] of AnsiChar;
+    year: TTemp4;
     /// the month ("01" - "12")
-    month: array[0..1] of AnsiChar;
+    month: TTemp2;
     /// the day ("01" - "31")
-    day: array[0..1] of AnsiChar;
+    day: TTemp2;
   end;
 
 

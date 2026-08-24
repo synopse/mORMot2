@@ -40,12 +40,14 @@ Authentication and Security types shared by all framework units.
 - `TSyn*Password` and `TSynConnectionDefinition` Classes
 - Reusable Authentication Classes
 - High-Level `TSynSigner`/`TSynHasher` Multi-Algorithm Wrappers
+- HMAC/PBKDF2 MCF SCRAM SCRAM-MCF TOTP High-Level Protocols
 - Client and Server Digest Access Authentication
 - 64-bit `TSynUniqueIdentifier` and its efficient Generator
 - `IProtocol` Safe Communication with Unilateral or Mutual Authentication
 - `TBinaryCookieGenerator` Simple Cookie Generator
 - `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym`/`Cert`/`Store` High-Level Algorithms Factories
 - Minimal `PEM`/`DER` Encoding/Decoding
+- `TSynMustache` Cryptographic Expression Helpers
 
 ### mormot.crypt.ecc256r1
 
@@ -90,7 +92,7 @@ JSON Web Tokens (JWT) Implementation - see RFC 7797
 
 ### mormot.crypt.openssl
 
-High-Performance Cryptographic Features using *OpenSSL* 1.1 / 3.x
+High-Performance Cryptographic Features using *OpenSSL* 1.1 / 3.x / 4.x
 - *OpenSSL* Cryptographic Pseudorandom Number Generator (CSPRNG)
 - AES Cypher/Uncypher in various Modes
 - Hashers and Signers OpenSSL Wrappers

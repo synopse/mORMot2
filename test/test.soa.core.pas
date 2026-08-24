@@ -9,7 +9,6 @@ interface
 
 uses
   sysutils,
-  contnrs,
   classes,
   mormot.core.base,
   mormot.core.os,
@@ -276,6 +275,13 @@ type
     ClientSide: TClientSide;
   end;
 
+  /// a simple ViewModel/Controller service, used by
+  // TTestServiceOrientedArchitecture.MvcViewsMustache
+  IMvcViewsService = interface(IInvokable)
+    ['{A0D9C7E5-7A3B-4E64-9D28-61C1B0F4C8A2}']
+    procedure Welcome(const name: RawUtf8);
+  end;
+
   /// a test case which will test the interface-based SOA implementation of
   // the mORMot framework
   TTestServiceOrientedArchitecture = class(TSynTestCase)
@@ -292,6 +298,7 @@ type
     procedure IntSubtractJson(Ctxt: TOnInterfaceStubExecuteParamsJson);
     procedure IntSubtractVariant(Ctxt: TOnInterfaceStubExecuteParamsVariant);
     procedure IntSubtractVariantVoid(Ctxt: TOnInterfaceStubExecuteParamsVariant);
+    procedure MustacheViewsTranslate(var English: string);
   public
     { all threaded callbacks for validating all client side modes }
     /// test the client-side in RESTful mode with values transmitted as Json objects
@@ -327,6 +334,8 @@ type
     procedure ClientSide;
     /// test interface stubbing / mocking
     procedure MocksAndStubs;
+    /// test TMvcViewsMustache rendering, including the OnTranslate property
+    procedure MvcViewsMustache;
   end;
 
 
@@ -1452,8 +1461,8 @@ begin
         Item.Name := Int32ToUtf8(Item.Color);
         Inst.CC.Collections(Item, List, Copy);
       end;
-      if not CheckFailed(List.Count = Item.Color) or
-         not CheckFailed(Copy.Count = List.Count) then
+      if Check(List.Count = Item.Color) or
+         Check(Copy.Count = List.Count) then
         for j := 0 to List.Count - 1 do
         begin
           with TCollTest(List.Items[j]) do
@@ -1774,7 +1783,7 @@ begin
   GroupID := fMain.Server.Orm.MainFieldID(TAuthGroup, 'User');
   Check(GroupID <> 0);
   Check(fMain.Server.Orm.MainFieldIDs(TAuthGroup, ['User', 'Admin'], g));
-  if not CheckFailed(length(g) = 2) then
+  if Check(length(g) = 2) then
     Check((g[0] = GroupID) or (g[1] = GroupID));
   S := fMain.Server.Services['Calculator'] as TServiceFactoryServer;
   Test([1, 2, 3, 4, 5], 'by default, all methods are allowed');
@@ -1824,19 +1833,19 @@ end;
 
 procedure TTestServiceOrientedArchitecture.ClientSide;
 var
-  native: boolean;
+  threaded: boolean;
 
   procedure One(const Event: TNotifyEvent; cs: TClientSide);
   begin
     Run(Event, NewClient(cs), SmallUInt32Utf8[ord(cs)],
-      {native=}native, {notify=}false, {forcedThreaded=}native);
+      threaded, {notify=}false, {forcedThreaded=}threaded);
   end;
 
 begin
-  native := {$ifdef OSWINDOWS}not IsWow64Emulation{$else}true{$endif};
+  threaded := {$ifdef OSWINDOWS}not (wsFavorFewThreads in WindowsSpecs){$else}true{$endif};
   // most client test cases would be run in their own thread (if possible)
   {$ifndef OSANDROID} // no "main" thread on Android?
-  One(ClientSideRESTThread,           csMainThread); // should be native
+  One(ClientSideRESTThread,           csMainThread); // should be threaded
   {$endif OSANDROID}
   One(ClientSideRESTThread,           csBackground); // (slowest first)
   One(ClientSideRESTAsJsonObject,     csJsonObject);
@@ -1844,7 +1853,7 @@ begin
   One(ClientSideRESTThread,           csLocked);
   One(ClientSideRESTSign,             csCrc32);
   One(ClientSideRESTSign,             csCrc32c);
-  if native then // PRISM does not seem to properly handle so much at once
+  if threaded then // PRISM does not seem to properly handle so much at once
   begin
     One(ClientSideRESTSign,           csXxhash);
     One(ClientSideRESTSign,           csMd5);
@@ -2571,6 +2580,47 @@ begin
   begin
     Delete(IndexOf(EInterfaceFactory));
     Delete(IndexOf(ESynException));
+  end;
+end;
+
+type
+  TMvcViewsMustacheHack = class(TMvcViewsMustache); // to call protected Render
+
+procedure TTestServiceOrientedArchitecture.MustacheViewsTranslate(
+  var English: string);
+begin
+  if English = 'Hello' then
+    English := 'Bonjour';
+end;
+
+procedure TTestServiceOrientedArchitecture.MvcViewsMustache;
+var
+  folder: TFileName;
+  params: TMvcViewsMustacheParameters;
+  views: TMvcViewsMustache;
+  ndx: integer;
+  answer: TServiceCustomAnswer;
+begin
+  folder := WorkDir + 'mvcviews';
+  ForceDirectories(folder);
+  FileFromString('{{"Hello}} {{name}}!', MakePath([folder, 'Welcome.html']));
+  FillCharFast(params, SizeOf(params), 0);
+  params.Folder := folder;
+  views := TMvcViewsMustache.Create(TypeInfo(IMvcViewsService), params);
+  try
+    ndx := views.Factory.FindMethodIndex('Welcome');
+    Check(ndx >= 0);
+    TMvcViewsMustacheHack(views).Render(ndx, _ObjFast(['name', 'world']), answer);
+    CheckEqual(answer.Content, 'Hello world!');
+    Check(IdemPChar(pointer(answer.Header), 'CONTENT-TYPE: TEXT/HTML'));
+    // wire the translation callback of the {{"text}} tags
+    views.OnTranslate := MustacheViewsTranslate;
+    answer.Content := '';
+    TMvcViewsMustacheHack(views).Render(ndx, _ObjFast(['name', 'world']), answer);
+    CheckEqual(answer.Content, 'Bonjour world!');
+  finally
+    views.Free;
+    DirectoryDelete(folder);
   end;
 end;
 

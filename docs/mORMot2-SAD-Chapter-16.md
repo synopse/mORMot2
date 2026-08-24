@@ -4,6 +4,8 @@
 
 In Chapter 14, we covered method-based services — a direct approach with full HTTP control. This chapter introduces **interface-based services**, mORMot's powerful SOA implementation that provides automatic client stub generation, contract validation, multiple instance lifetimes, and bidirectional communication via WebSockets.
 
+> **✅ Recommended default:** for which types belong on a service signature, how to pick an instance mode (default `sicShared`), and the composition-root/DI pattern, see the [Recommended Patterns & Default Toolbox](mORMot2-SAD-Recommended-Patterns.md) guide.
+
 ---
 
 ## 16.1. Why Interface-Based Services?

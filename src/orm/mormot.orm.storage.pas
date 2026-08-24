@@ -27,7 +27,6 @@ uses
   sysutils,
   classes,
   variants,
-  contnrs,
   mormot.core.base,
   mormot.core.os,
   mormot.core.buffers,
@@ -38,10 +37,6 @@ uses
   mormot.core.data,
   mormot.core.rtti,
   mormot.core.json,
-  mormot.core.threads,
-  mormot.crypt.core,
-  mormot.crypt.jwt,
-  mormot.crypt.secure,
   mormot.core.log,
   mormot.core.interfaces,
   mormot.orm.base,
@@ -494,10 +489,9 @@ type
 
   /// REST class with direct access to an external database engine
   // - you can set an alternate per-table database engine by using this class
-  // - this abstract class is to be overridden with a proper implementation
-  // (e.g. TRestStorageInMemory in this unit, or TRestStorageExternal
-  // from mormot.orm.sql unit, or TRestStorageMongoDB from
-  // mormot.orm.mongodb.pas unit)
+  // - this abstract class is to be overridden with a proper implementation,
+  // e.g. TRestStorageInMemory in this unit, or TRestStorageExternal from
+  // mormot.orm.sql.pas unit, or TRestStorageMongoDB from mormot.orm.mongodb.pas
   TRestStorage = class(TRestOrm)
   protected
     fStoredClass: TOrmClass;
@@ -709,7 +703,7 @@ type
       read fHasher;
   end;
 
-  /// REST storage with direct access to a TObjectList memory-stored table
+  /// REST storage with direct access to a TOrmObjArray memory-stored table
   // - store the associated TOrm values in memory
   // - handle one TOrm per TRestStorageInMemory instance
   // - must be registered individualy in a TRestOrmServer to access data from a
@@ -728,13 +722,14 @@ type
   // the TRestStorageInMemory instance
   // - our TRestStorageInMemory database engine is very optimized and is a lot
   // faster than SQLite3 for such queries - but its values remain in RAM,
-  // therefore it is not meant to deal with more than 100,000 rows or if
-  // ACID commit on disk is required
+  // therefore it is not meant to deal with more than 100,000 rows or if ACID
+  // commit on disk is required
+  // - another benefit is that you can access the TOrm array directly in memory
+  // so you can apply very fast search or process on Value[] in native code
   TRestStorageInMemory = class(TRestStorageTOrm)
   protected
     fValue: TOrmObjArray;
     fCount: integer;
-    fCommitShouldNotUpdateFile: boolean;
     fBinaryFile: boolean;
     fExpandedJson: boolean;
     fUnSortedID: boolean;
@@ -744,11 +739,12 @@ type
     fBasicUpperSqlSelect: array[boolean] of RawUtf8;
     fUnique, fUniquePerField: array of TRestStorageInMemoryUnique;
     fMaxID: TID;
-    fValues: TDynArrayHashed; // hashed by ID
+    fValues: TDynArrayHashed; // fValue[] hashed by ID
     fTrackChangesFieldBitsOffset: PtrUInt;
     fTrackChangesPersistence: IRestOrm;
     fTrackChangesDeleted: TInt64DynArray; // TIDDynArray
     fTrackChangesDeletedCount: integer;
+    fCommitShouldNotUpdateFile: boolean;
     function UniqueFieldsUpdateOK(aRec: TOrm; aUpdateIndex: integer;
       aFields: PFieldBits): boolean;
     procedure RaiseGetItemOutOfRange(Index: integer);
@@ -1093,7 +1089,7 @@ type
   // - used e.g. by TRestOrmServerFullMemory
   TRestStorageInMemoryDynArray = array of TRestStorageInMemory;
 
-  /// class-reference type (metaclass) of our TObjectList memory-stored table storage
+  /// class-reference type (metaclass) of our TOrmObjArray memory-stored table storage
   // - may be TRestStorageInMemory or TRestStorageInMemoryExternal
   TRestStorageInMemoryClass = class of TRestStorageInMemory;
 
@@ -2079,7 +2075,7 @@ begin
     end;
   finally
     if result <= 0 then
-      rec.Free; // on success, rec is owned by fValue: TObjectList
+      rec.Free; // on success, rec is owned by fValue: TOrmObjArray
   end;
 end;
 
@@ -2148,7 +2144,7 @@ begin
   finally
     if (Encoding = encPutHexID) or
        (result <= 0) then
-      rec.Free; // on AddOne success, rec is owned by fValue: TObjectList
+      rec.Free; // on AddOne success, rec is owned by fValue: TOrmObjArray
   end;
 end;
 
@@ -3434,22 +3430,23 @@ const
 var
   f: PtrInt;
   dup: integer; // should be an integer and not a PtrInt for ForceRehash(@dup)
-  dupfield: RawUtf8;
+  dupfield: PUtf8Char;
   start: Int64;
 begin
   // now fValue[] contains the just loaded data
   QueryPerformanceMicroSeconds(start);
   fCount := length(fValue);
   fValues.Hasher.ForceReHash(@dup);
+  dupfield := nil;
   if dup > 0 then
-    dupfield := ID_TXT
+    dupfield := pointer(ID_TXT)
   else
     for f := 0 to length(fUnique) - 1 do
     begin
       fUnique[f].Hasher.ForceReHash(@dup);
       if dup > 0 then
       begin
-        dupfield := fUnique[f].PropInfo.Name;
+        dupfield := pointer(fUnique[f].PropInfo.Name);
         break;
       end;
     end;

@@ -50,7 +50,7 @@ type
   io_object_t = mach_port_t;
   io_registry_entry_t = io_object_t;
   io_service_t = io_object_t;
-  io_string_t = array[0..511] of AnsiChar;
+  io_string_t = TTemp512;
   IOOptionBits = UInt32;
  
 var

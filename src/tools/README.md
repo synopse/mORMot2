@@ -30,14 +30,20 @@ Each Tool will have its own dedicated sub-folder.
 ### mab
 
 [The `mab` command-line Tool](./mab) can generate `.mab` files from existing `.map` or `.dbg` files
-- If some `.map` file name is specified (you can use wild chars), it will
-process all those `.map` files, then create the corresponding `.mab` files;
-- If some `.exe`/`.dll` file name is specified (you can use wild chars), will
-process all matching `.exe`/`.dll` files with an associated `.map` file, and will
-create the `.mab` files, then embedd the `.mab` content to the `.exe`/`.dll`;
-- If no file name is specified, will process `*.map` into `*.mab` from the
-current directory;
-- With FPC, will use DWARF debugging information instead of the `.map` file.
+- With Delphi, enable `.map` file by setting "Detailed" debug information in Project Options;
+- With FPC, will use DWARF debugging information instead of the `.map` file; a good idea is to generate `-Xg` external `.dbg` info to keep the executable small;
+- If some `.map`/`.dbg` file name is specified (you can use wild chars), it will process all those files, then create the corresponding `.mab` files;
+- If some `.exe`/`.dll` file name is specified (you can use wild chars), will process all matching `.exe`/`.dll` files with associated debug info, and will create the `.mab` files, then embedd the `.mab` content to the `.exe`/`.dll`;
+
+```
+Usage: mab  <source> [options]
+
+   <source>           exe or .dbg source filename or mask
+
+Options:
+  -s, --nosymbol      include only line info for production (smaller and safer)
+  -m, --nomab         only embed to exe, no external .mab file
+```
 
 ### mORMot GET (mget)
 

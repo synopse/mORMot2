@@ -54,17 +54,18 @@ type
 
   /// known X.501 Type Names, as stored in X.509 Certificates attributes
   // - as defined in RFC 5280 appendix A, and available via TXName.Names[]
-  // - corresponding Relative Distinguished Name (RDN) text is extracted via
-  // RTTI, e.g. 'CN' for xaCN or 'OU' for xaOU - as in TextToXa()
+  // - corresponding Relative Distinguished Name (RDN) text follows most
+  // identifiers, e.g. xaCN for 'CN' - see also TextToXa() and XA_TEXT[]
   TXAttr = (
     xaNone,
-    xaDC,   // domainComponent
-    xeUID,  // userID
+    xaDC,   // domainComponent (0.9.2342.19200300.100.1.25)
+    xaUID,  // userID (0.9.2342.19200300.100.1.1)
     xaCN,   // commonName (2.5.4.3)
     xaSER,  // serialNumber (2.5.4.5)
     xaC,    // countryName (2.5.4.6)
     xaL,    // localityName (2.5.4.7)
     xaST,   // stateOrProvinceName (2.5.4.8)
+    xaSA,   // streetAddress (2.5.4.9)
     xaO,    // organizationName (2.5.4.10)
     xaOU,   // organizationalUnitName (2.5.4.11)
     xaT,    // title (2.5.4.12)
@@ -76,7 +77,7 @@ type
     xaGQ,   // generationQualifier (2.5.4.44)
     xaQ,    // distinguishedNameQualifier (2.5.4.46)
     xaP,    // pseudonym (2.5.4.65)
-    xaE);   // email
+    xaE);   // emailAddress (1.2.840.113549.1.9.1)
 
   /// known X.509 v3 Certificate extensions
   // - standard extensions as defined in RFC 5280 4.2.1
@@ -95,7 +96,7 @@ type
     xeAuthorityKeyIdentifier,           // 2.5.29.35
     xePolicyConstraints,                // 2.5.29.36
     xeExtendedKeyUsage,                 // 2.5.29.37
-    xeAuthorityInformationAccess,       // 1.3.6.1.5.5.7.1.1
+    xeAuthorityInformationAccess,       // 1.3.6.1.5.5.7.1.1 = ASN1_OID_AIA
     xeGoogleSignedCertificateTimestamp, // 1.3.6.1.4.1.11129.2.4.2
     xeNetscapeComment);                 // 2.16.840.1.113730.1.13
 
@@ -156,22 +157,6 @@ type
     xkaEcc512,
     xkaEdDSA);
 
-  /// used to store one unknown/unsupported attribute or extension
-  // - in TXname.Other or TXTbsCertificate.ExtensionOther
-  TXOther = record
-    /// the OID of this value, in raw binary form
-    Oid: RawByteString;
-    /// the associated value
-    // - as RawUtf8 for TXname.Other[]
-    // - as ASN1_OCTSTR raw content for TXTbsCertificate.ExtensionOther[]
-    Value: RawByteString;
-  end;
-  PXOther = ^TXOther;
-
-  /// used to store the unknown attributes or extensions
-  // - in TXname.Other or TXTbsCertificate.ExtensionOther
-  TXOthers = array of TXOther;
-
   /// store the CSV of the values of each kind of known attributes
   // - as used in TXName.Name and TX509.Issuer
   TXAttrNames = array[TXAttr] of RawUtf8;
@@ -188,38 +173,57 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     fSafe: TLightLock;
-    fCachedAsn: RawByteString;
+    fCachedAsn, fCachedCanonical: RawByteString;
     fCachedText: RawUtf8;
     procedure ComputeAsn;
     procedure ComputeText;
+    procedure ComputeCanonical;
   public
     /// CSV of the values of each kind of known attributes
+    // - each CSV part will emit its own SETOF: multi-valued RDNs (using + in
+    // RFC 4514 notation) are not supported nor generated
+    // - only a naive CSV is used, and it is encoded in a fixed conventional
+    // order - use FromDNText() if you want to specify any kind of RFC 4514 DN
     Name: TXAttrNames;
     /// values which are not part of the known attributes
-    Other: TXOthers;
+    Other: TCryptCustomExts;
     /// convert Name[a] from CSV to an array of RawUtf8
     function NameArray(a: TXAttr): TRawUtf8DynArray;
     /// the raw ASN1_SEQ encoded value of this name
     // - is cached internally for efficiency
     function ToBinary: RawByteString;
-    /// return the values as a single line Distinguished Name text
-    // - e.g. 'CN=R3, C=US, O=Let''s Encrypt'
+    /// return the values as a single line RFC 4514 Distinguished Name (DN) text
+    // - e.g. 'C=US,O=Let''s Encrypt,CN=R3' - following XA_TEXT[] attribute names
     // - is cached internally for efficiency
     function AsDNText: RawUtf8;
-    /// fill the whole record with zeros
+    /// could be used when TXName was not initialized as part of a class
+    procedure Init;
+    /// fill the whole record with zeros - but keep internal fSafe counter
     procedure Clear;
     /// unserialize the X.501 Type Name from raw ASN1_SEQ binary
     function FromAsn(const seq: TAsnObject): boolean;
     /// unserialize the X.501 Type Name from the next raw ASN1_SEQ binary
     function FromAsnNext(var pos: integer; const der: TAsnObject): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// fill the whole record from RFC 4514 Distinguished Name (DN) text
+    // - e.g. 'CN=John Doe+UID=123,O=Example\, Inc.,C=US' supporting multiple RDN
+    // - is encoded directly into internal ASN.1 binary in the same exact order
+    // - returns false on incorrect input, e.g. invalid RFC 4514 escaped UTF-8
+    // - is the reverse to AsDNText method - following XA_TEXT[] attribute names
+    function FromDNText(const text: RawUtf8): boolean;
     /// fill Name[] attributes with TCryptCertFields information
     procedure FromFields(const fields: TCryptCertFields);
+    /// fill TCryptCertFields information with Name[] attributes
+    procedure ToFields(var fields: TCryptCertFields);
     /// return Name[] by RDN, or ToDigest() by hash name, or by FindOid()
     function Get(const Rdn: RawUtf8): RawUtf8;
     /// return the hash of the normalized Binary of this field
     function ToDigest(algo: THashAlgo = hfSha1): RawUtf8;
-    /// compare the ToBinary content of two X.501 names
-    function Compare(var Another: TXName): integer;
+    /// compare the ToBinary DER content of two X.501 names
+    function CompareBinary(var Another: TXName): integer;
+    /// compare the content of two X.501 names more relaxed than CompareBinary()
+    // - use an internal normalization encoding similar to X509_NAME_cmp()
+    function CompareCanonical(var Another: TXName): integer;
     /// return the UTF-8 text value of a given text OID
     // - search in Other[] then Name[]
     function FindOid(const oid: RawUtf8): RawUtf8;
@@ -230,16 +234,13 @@ type
 /// convert a X.501 name ASN.1 binary as a single line Distinguished Name text
 function XNameAsDN(const Der: TAsnObject): RawUtf8;
 
-/// append a new entry to a dynamic array of TXOther
-procedure AddOther(var others: TXOthers; const o, v: RawByteString);
+/// normalize a X.501 name text into lowercase, removing unneeded spaces
+// - d is in fact of PShortString format, with d[0]=length and result=length+1
+function XNameNormalize(s, send, d: PUtf8Char): PtrInt;
 
-/// efficient search of a TXOther.Value from a 'x.x.x.x.x' text OID
-function FindOther(const Other: TXOthers; const OidText: RawUtf8): RawByteString;
+/// append an escaped X.501 name text according to RFC 4514 rules
+procedure XNameRfc4514(var tmp: TSynTempAdder; p, pend: PUtf8Char);
 
-/// low-level search of a TXOther.Value from a binary OID
-function FindOtherAsn(o: PXOther; n: integer; const OidBinary: TAsnObject): RawByteString;
-
-function ToText(a: TXAttr): PShortString; overload;
 function ToText(e: TXExtension): PShortString; overload;
 function ToText(u: TXKeyUsage): PShortString; overload;
 function ToText(x: TXExtendedKeyUsage): PShortString; overload;
@@ -247,7 +248,7 @@ function ToText(a: TXSignatureAlgorithm): PShortString; overload;
 function ToText(a: TXPublicKeyAlgorithm): PShortString; overload;
 
 /// identifies the known RDN text e.g. 'CN' as xaCN or 'OU' as xaOU
-function TextToXa(const Rdn: RawUtf8; out Xa: TXAttr): boolean;
+function TextToXa(const Rdn: RawUtf8): TXAttr;
 
 const
   /// internal lookup table from X.509 Signature to Public Key Algorithms
@@ -368,12 +369,13 @@ const
   XA_OID: array[TXAttr] of PUtf8Char = (
     '',                           // xaNone
     '0.9.2342.19200300.100.1.25', // xaDC  domainComponent
-    '0.9.2342.19200300.100.1.1',  // xeUID userID
+    '0.9.2342.19200300.100.1.1',  // xaUID userID
     '2.5.4.3',                    // xaCN  commonName
     '2.5.4.5',                    // xaSER serialNumber
     '2.5.4.6',                    // xaC   countryName
     '2.5.4.7',                    // xaL   localityName
     '2.5.4.8',                    // xaST  stateOrProvinceName
+    '2.5.4.9',                    // xaSA  streetAddress
     '2.5.4.10',                   // xaO   organizationName
     '2.5.4.11',                   // xaOU  organizationalUnitName
     '2.5.4.12',                   // xaT   title
@@ -385,7 +387,7 @@ const
     '2.5.4.44',                   // xaGQ  generationQualifier
     '2.5.4.46',                   // xaQ   distinguishedNameQualifier
     '2.5.4.65',                   // xaP   pseudonym
-    '1.2.840.113549.1.9.1');      // xaE   email
+    '1.2.840.113549.1.9.1');      // xaE   emailAddress
 
   /// the OID of all known X.509 v3 Certificate extensions, as in RFC 5280 4.2.1
   // - with some additional common values
@@ -398,13 +400,13 @@ const
     '2.5.29.18',                 // xeIssuerAlternativeName
     '2.5.29.19',                 // xeBasicConstraints
     '2.5.29.30',                 // xeNameConstraints
-    '2.5.29.31',                 // xeCrlDistributionPoints
+    ASN1_OID_CDP,                 // xeCrlDistributionPoints
     '2.5.29.32',                 // xeCertificatePolicies
     '2.5.29.33',                 // xePolicyMappings
     '2.5.29.35',                 // xeAuthorityKeyIdentifier
     '2.5.29.36',                 // xePolicyConstraints
     '2.5.29.37',                 // xeExtendedKeyUsage
-    '1.3.6.1.5.5.7.1.1',         // xeAuthorityInformationAccess
+    ASN1_OID_AIA,                // xeAuthorityInformationAccess
     '1.3.6.1.4.1.11129.2.4.2',   // xeGoogleSignedCertificateTimestamp
     '2.16.840.1.113730.1.13');   // xeNetscapeComment
 
@@ -441,13 +443,62 @@ const
   ASN1_OID_X509_CRL_INVDATE = '2.5.29.24';
   ASN1_OID_X509_CRL_ISSUER  = '2.5.29.29';
 
+  /// the standard text of each known X.501 Type Name, e.g. 'DC', 'OU' or 'O'
+  // - follow RFC 4514 recommended string representation and common LDAP
+  // descriptors as per RFC 4519 - use numerical OID for any other attributes
+  XA_TEXT: array[TXAttr] of RawUtf8 = (
+     '',
+     'DC',                  // domainComponent (0.9.2342.19200300.100.1.25)
+     'UID',                 // userID (0.9.2342.19200300.100.1.1)
+     'CN',                  // commonName (2.5.4.3)
+     'serialNumber',        // serialNumber (2.5.4.5)
+     'C',                   // countryName (2.5.4.6)
+     'L',                   // localityName (2.5.4.7)
+     'ST',                  // stateOrProvinceName (2.5.4.8)
+     'street',              // streetAddress (2.5.4.9)
+     'O',                   // organizationName (2.5.4.10)
+     'OU',                  // organizationalUnitName (2.5.4.11)
+     'title',               // title (2.5.4.12)
+     'telephoneNumber',     // telephoneNumber (2.5.4.20)
+     'name',                // name (2.5.4.41)
+     'SN',                  // surname (2.5.4.4)
+     'GN',                  // givenName (2.5.4.42)
+     'initials',            // initials (2.5.4.43)
+     'generationQualifier', // generationQualifier (2.5.4.44)
+     'dnQualifier',         // distinguishedNameQualifier (2.5.4.46)
+     'pseudonym',           // pseudonym (2.5.4.65)
+     'emailAddress');       // emailAddress (1.2.840.113549.1.9.1) - from PKCS#9
+
 function XsaToSeq(xsa: TXSignatureAlgorithm): TAsnObject;
 function OidToXsa(const oid: RawUtf8; out xsa: TXSignatureAlgorithm): boolean;
 function OidToXka(const oid, oid2: RawUtf8; out xka: TXPublicKeyAlgorithm): boolean;
-function OidToXa(const oid: RawByteString): TXAttr;
-function OidToXe(const oid: RawByteString): TXExtension;
-function OidToXku(const oid: RawByteString): TXExtendedKeyUsage;
+function OidToXa(bin: pointer; len: PtrInt): TXAttr;
+function OidToXe(bin: pointer; len: PtrInt): TXExtension;
+function OidToXku(bin: pointer; len: PtrInt): TXExtendedKeyUsage;
 function XkuToOids(usages: TXExtendedKeyUsages): RawByteString;
+
+/// append one X.509 v3 Certificate extension raw value per known TXExtension
+procedure AddExt(var result: TAsnObject; xe: TXExtension;
+  const value: RawByteString; critical: boolean = false); overload;
+
+/// append one X.509 extension raw value per raw OID
+procedure AddExt(var result: TAsnObject; const oid, value: RawByteString;
+  critical: boolean = false); overload;
+
+/// append one X.509 v3 Certificate extension CSV value per known TXExtension
+procedure AddExtCsv(var result: TAsnObject; xe: TXExtension;
+  const csv: RawUtf8; critical: boolean = false); overload;
+
+/// append one X.509 extension CSV value per raw OID
+procedure AddExtCsv(var result: TAsnObject; const oid: RawByteString;
+  csv: PUtf8Char; critical: boolean = false); overload;
+
+/// append one X.509 v3 Certificate extension array values per known TXExtension
+procedure AddExtArray(var result: TAsnObject; xe: TXExtension;
+  const values: array of RawUtf8; critical: boolean = false);
+
+/// append X.509 v3 Certificate extensions from all Exts[] entries
+procedure AddExts(var result: TAsnObject; const exts: TCryptCustomExts);
 
 
 { **************** X.509 Certificates and Certificate Signing Request (CSR) }
@@ -464,6 +515,7 @@ type
   private
     fSafe: TLightLock;
     fCachedDer: RawByteString; // for ToDer
+    fRawSubjectKeyIdentifier, fRawAuthorityKeyIdentifier: RawByteString;
     procedure ComputeCachedDer;
     procedure ComputeCertUsages;
     procedure AddNextExtensions(pos: integer; const der: TAsnObject);
@@ -510,7 +562,7 @@ type
     /// raw ASN1_OCTSTR of decoded Extension[] after FromDer()
     ExtensionRaw: array[TXExtension] of RawByteString;
     /// unsupported extensions as defined for X.509 v3 certificates
-    ExtensionOther: TXOthers;
+    ExtensionOther: TCryptCustomExts;
     /// declared X.509 v3 certificate Key Usages from extensions
     KeyUsages: TXKeyUsages;
     /// declared X.509 v3 certificate Extended Key Usages from extensions
@@ -519,9 +571,18 @@ type
     // - aggregate KeyUsages and ExtendedKeyUsages X.509 fields with
     // cuCA from Extension[xeBasicConstraints]
     CertUsages: TCryptCertUsages;
-    /// CA URIs from declared X.509 v3 Authority Information Access extension
-    // - only http://... or https://... URIs are decoded here
+    /// 32-bit limit that followed cA=TRUE in Extension[xeBasicConstraints]
+    // - equals -1 if none was specified
+    PathLenConstraint: integer;
+    /// CA Issuer URIs from declared X.509 v3 Authority Information Access extension
+    // - only http:// https:// ldap:// ldaps:// URIs are decoded here
     CaIssuers: TRawUtf8DynArray;
+    /// CA OCSP URIs from declared X.509 v3 Authority Information Access extension
+    // - only http:// https:// URIs are decoded here
+    Ocsp: TRawUtf8DynArray;
+    /// X.509 v3 CRL Distribution Points from Extension[xeCrlDistributionPoints]
+    // - only http:// https:// URIs are decoded here
+    CrlDistPoint: TRawUtf8DynArray;
     /// decimal text of a positive integer assigned by the CA to each certificate
     // - e.g. '330929475774275458452528262248458246563660'
     function SerialNumberText: RawUtf8;
@@ -530,6 +591,11 @@ type
     /// check a date/time coherency with NotBefore/NotAfter
     // - a grace period of CERT_DEPRECATION_THRESHOLD (half a day) is applied
     function IsValidDate(timeutc: TDateTime = 0): boolean;
+    /// ensure AKI (if set) matches auth.SKI
+    function CompareAuthority(const aki: RawByteString): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// init all non-zero fields
+    procedure Init;
     /// reset all internal context
     procedure Clear;
     /// serialize those fields into ASN.1 DER binary
@@ -546,33 +612,34 @@ type
   PXTbsCertificate = ^TXTbsCertificate;
 
   /// a X.509 signed Certificate, as defined in RFC 5280
-  TX509 = class(TSynPersistent)
+  TX509 = class(TObjectLightLock)
   public
     /// actual to-be-signed Certificate content
     Signed: TXTbsCertificate;
   protected
-    fSafe: TLightLock;
     fSignatureValue: RawByteString;
     fSignatureAlgorithm: TXSignatureAlgorithm;
     fPublicKey: ICryptPublicKey;
     fCachedDer: RawByteString;
     fCachedHash: array[THashAlgo] of RawUtf8;
     fCachedPeerInfo: RawUtf8;
+    fCachedExtensions: TCryptCustomExts;
     fLastVerifyAuthPublicKey: RawByteString;
-    fRawSubjectKeyIdentifier: RawByteString;
-    fRawAuthorityKeyIdentifier: TRawByteStringDynArray;
     fIsSelfSigned: boolean;
-    fIsRevokedTag: integer; // <0 if revoked, or should = TCryptStoreX509 tag
+    fIsRevokedTag: integer; // <0 as reason if revoked, or = TCryptStoreX509 tag
     procedure AfterLoaded;
     procedure ComputeCachedDer;
     procedure ComputeCachedPeerInfo;
     procedure ComputeCachedHash(algo: THashAlgo);
+    procedure ComputeCachedExtensions;
     function GetIssuerDN: RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
     function GetSubjectDN: RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
     function GetSubjectPublicKeyAlgorithm: RawUtf8;
   public
+    /// setup this instance
+    constructor Create; override;
     /// reset all internal context
     procedure Clear;
     /// verify the digital signature of this Certificate using a X.509 Authority
@@ -620,9 +687,9 @@ type
       Algo: THashAlgo = hfSha1): integer; overload;
       {$ifdef HASINLINE} inline; {$endif}
     /// check if this certificate has been issued by the specified certificate
-    // - ensure Authority xeSubjectKeyIdentifier is in xeAuthorityKeyIdentifier
+    // - i.e. Authority SubjectDN + SKI match this certificate IssuerDN + AKI
+    // - check the names but won't verify the actual digital signature
     function IsAuthorizedBy(Authority: TX509): boolean;
-      {$ifdef HASINLINE} inline; {$endif}
     /// compare two certificates
     function Compare(Another: TX509; Method: TCryptCertComparer = ccmBinary): integer;
     /// return the associated Public Key instance
@@ -642,8 +709,13 @@ type
     // - in a layout similar to X509_print() OpenSSL usual formatting
     // - is cached internally for efficiency
     function PeerInfo: RawUtf8;
+    /// convenient wrapper to HasCertUsage(usage, Signed.CertUsages)
+    function HasUsage(const usage: TCryptCertUsage): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// return the main information of this Certificate into
     procedure ToParsedInfo(out Info: TX509Parsed);
+    /// returns the raw X.509 extensions as binary OID and Value pairs
+    function GetExtensions: TCryptCustomExts;
     /// true if the Certificate Issuer is also its Subject
     property IsSelfSigned: boolean
       read fIsSelfSigned;
@@ -778,6 +850,7 @@ type
   TXTbsCertList = object
   {$endif USERECORDWITHMETHODS}
   private
+    fCachedDer: RawByteString;
   public
     /// describes the version of the encoded X.509 CRL
     // - equals usually 2, once extensions are used
@@ -801,6 +874,8 @@ type
     Extension: TXCrlExtensions;
     /// raw ASN1_OCTSTR of decoded Extension[] after FromDer()
     ExtensionRaw: array[TXCrlExtension] of RawByteString;
+    /// raw binary Extension[xceAuthorityKeyIdentifier] value after FromDer()
+    RawAuthorityKeyIdentifier: RawByteString;
     /// reset all internal context
     procedure Clear;
     /// return the entry in Revoked[] from the supplied binary Serial Number
@@ -820,14 +895,13 @@ type
     fSignatureValue: RawByteString;
     fSignatureAlgorithm: TXSignatureAlgorithm;
     fCrlNumber: QWord;
-    fRawAuthorityKeyIdentifier: RawByteString; // for TX509CrlList search
     function GetIssuerDN: RawUtf8;
       {$ifdef HASINLINE} inline; {$endif}
     function GetCrlNumber: QWord;
       {$ifdef HASINLINE} inline; {$endif}
     procedure SetCrlNumber(Value: QWord);
   public
-    /// actual to-be-signed revoked Certificate List content
+    /// actual to-be-signed revoked Certificate List content for this AKI
     Signed: TXTbsCertList;
     /// raw binary digital signature computed upon Signed.ToDer
     property SignatureValue: RawByteString
@@ -920,11 +994,10 @@ type
   TX509CrlObjArray = array of TX509Crl;
 
   /// store several TX509Crl instances
-  TX509CrlList = class(TSynPersistent)
+  TX509CrlList = class(TObjectRWLightLock)
   protected
-    fSafe: TRWLightLock;
-    fList: TX509CrlObjArray;
-    fCount: integer;
+    fList: TX509CrlObjArray; // sorted by AKID for O(log(n)) search
+    fCount: integer; // not PtrInt
     fDA: TDynArray;
     function GetRevoked: integer;
   public
@@ -953,16 +1026,13 @@ type
     function FindByAlternativeName(const DnsName: RawUtf8;
       TimeUtc: TDateTime = 0): TX509CrlObjArray;
     /// quickly check if a given certificate was part of one known CRL
-    // - the proper CRL(s) will be first checked with AuthorityKeyIdentifiers,
-    // then the method will search if the Serial Number is part of it
     // - returns crrNotRevoked is the serial is not known as part of the CRL
     // - returns the reason why this certificate has been revoked otherwise
-    function IsRevoked(const AuthorityKeyIdentifiers,
+    function IsRevoked(const AuthorityKeyIdentifier,
       SerialNumber: RawUtf8): TCryptCertRevocationReason;
     /// quickly check if a given certificate was part of one known CRL
     // - internal method directly working on binary buffers
-    function IsRevokedRaw(akid: PRawByteString; n: integer;
-      const sn: RawByteString): TCryptCertRevocationReason;
+    function IsRevokedRaw(const akid, sn: RawByteString): TCryptCertRevocationReason;
     /// return a copy of the internal list items
     // - the list is sorted by AuthorityKeyIdentifier and CrlNumber
     // - caller should NOT free the returned items
@@ -982,14 +1052,14 @@ type
 const
   /// the OID of all known X.509 CRL v2 extensions, as in RFC 5280 5.2
   XCE_OID: array[TXCrlExtension] of PUtf8Char = (
-    '',                     // xceNone
-    '2.5.29.35',            // xceAuthorityKeyIdentifier
-    '2.5.29.18',            // xceIssuerAlternativeName
-    '2.5.29.20',            // xceCrlNumber
-    '2.5.29.27',            // xceDeltaCrlIndicator
-    '2.5.29.28',            // xceIssuingDistributionPoints
-    '2.5.29.46',            // xceDeltaCrlDistributionPoints
-    '1.3.6.1.5.5.7.1.1');   // xceAuthorityInformationAccess
+    '',             // xceNone
+    '2.5.29.35',    // xceAuthorityKeyIdentifier
+    '2.5.29.18',    // xceIssuerAlternativeName
+    '2.5.29.20',    // xceCrlNumber
+    '2.5.29.27',    // xceDeltaCrlIndicator
+    '2.5.29.28',    // xceIssuingDistributionPoints
+    '2.5.29.46',    // xceDeltaCrlDistributionPoints
+    ASN1_OID_AIA);  // xceAuthorityInformationAccess
 
 function OidToXce(const oid: RawByteString): TXCrlExtension;
 
@@ -1012,7 +1082,7 @@ type
   // - published here to make it expandable if needed (by inheritance)
   TCryptStoreX509 = class(TCryptStore)
   protected
-    fTrust: TCryptCertList;
+    fTrust: TCryptCertList;     // certificates
     fCA: TCryptCertList;
     fSignedCrl: TX509CrlList;   // from a CA
     fUnsignedCrl: TX509CrlList; // from manual Revoke()
@@ -1164,13 +1234,15 @@ type
     function GetIssuers: TRawUtf8DynArray; override;
     function GetSubjectKey: RawUtf8; override;
     function GetAuthorityKey: RawUtf8; override;
+    function GetFields(var fields: TCryptCertFields; withexts: boolean): boolean; override;
+    function GetExtensions: TCryptCustomExts; override;
     function IsSelfSigned: boolean; override;
     function IsAuthorizedBy(const Authority: ICryptCert): boolean; override;
     function Compare(const Another: ICryptCert; Method: TCryptCertComparer): integer; override;
     function GetNotBefore: TDateTime; override;
     function GetNotAfter: TDateTime; override;
     function IsValidDate(date: TDateTime): boolean; override;
-    function GetUsage: TCryptCertUsages; override;
+    function GetUsage(PathLen: PInteger): TCryptCertUsages; override;
     function GetPeerInfo: RawUtf8; override;
     function GetSignatureInfo: RawUtf8; override;
     function GetDigest(Algo: THashAlgo): RawUtf8; override;
@@ -1210,46 +1282,6 @@ begin
     FastAssignNew(result);
 end;
 
-procedure AddOther(var others: TXOthers; const o, v: RawByteString);
-var
-  n: PtrInt;
-begin
-  n := length(others);
-  SetLength(others, n + 1);
-  with others[n] do
-  begin
-    Oid := o;
-    Value := v;
-  end;
-end;
-
-function FindOther(const Other: TXOthers; const OidText: RawUtf8): RawByteString;
-begin
-  result := FindOtherAsn(pointer(Other), length(Other), AsnEncOid(pointer(OidText)));
-end;
-
-function FindOtherAsn(o: PXOther; n: integer; const OidBinary: TAsnObject): RawByteString;
-begin
-  FastAssignNew(result);
-  if (o <> nil) and
-     (n > 0) and
-     (OidBinary <> '') then
-    repeat
-      if SortDynArrayRawByteString(o^.Oid, OidBinary) = 0 then // O(n) search
-      begin
-        result := o^.Value;
-        exit;
-      end;
-      inc(o);
-      dec(n);
-    until n = 0;
-end;
-
-function ToText(a: TXAttr): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TXAttr), ord(a));
-end;
-
 function ToText(e: TXExtension): PShortString;
 begin
   result := GetEnumName(TypeInfo(TXExtension), ord(e));
@@ -1275,20 +1307,10 @@ begin
   result := GetEnumName(TypeInfo(TXPublicKeyAlgorithm), ord(a));
 end;
 
-function TextToXa(const Rdn: RawUtf8; out Xa: TXAttr): boolean;
-var
-  i: integer;
+function TextToXa(const Rdn: RawUtf8): TXAttr;
 begin
-  i := GetEnumNameValueTrimmed(TypeInfo(TXAttr), pointer(Rdn), length(Rdn));
-  if i <= 0 then
-    result := false
-  else
-  begin
-    Xa := TXAttr(i);
-    result := true;
-  end;
+  result := TXAttr(FindPropName(@XA_TEXT[succ(low(result))], Rdn, ord(high(result))) + 1);
 end;
-
 
 function XsaToSeq(xsa: TXSignatureAlgorithm): TAsnObject;
 begin
@@ -1331,23 +1353,24 @@ begin
 end;
 
 function AsnNextAlgoOid(var pos: integer; const der: TAsnObject;
-  out oid, oid2: RawByteString): boolean;
+  var oid, oid2: RawByteString): boolean;
 var
+  posseq: integer;
   seq: RawByteString;
-  p: integer;
 begin
-  p := 1;
+  FastAssignNew(oid2); // note: oid/oid2 are returned as '1.2.xx' text
+  posseq := 1;
   result := (AsnNextRaw(pos, der, seq) = ASN1_SEQ) and
-            (AsnNext(p, seq, @oid) = ASN1_OBJID); // decode OID as text
+            (AsnNext(posseq, seq, @oid) = ASN1_OBJID); // decode OID as text
   if result then
-    case AsnNext(p, seq, @oid2) of
+    case AsnNext(posseq, seq, @oid2) of
       ASN1_OBJID:
         ; // e.g. xkaEcc256 or xsaSha256Ecc256 will check oid2 = ECDSA_P256
       ASN1_SEQ:
         // e.g. for xsaSha256RsaPss
-        if (AsnNext(p, seq) <> ASN1_CTC0) or
-           (AsnNext(p, seq) <> ASN1_SEQ) or
-           (AsnNext(p, seq, @oid2) <> ASN1_OBJID) then
+        if (AsnNext(posseq, seq) <> ASN1_CTC0) or
+           (AsnNext(posseq, seq) <> ASN1_SEQ) or
+           (AsnNext(posseq, seq, @oid2) <> ASN1_OBJID) then
           oid2 := ''
         else
           // ASN1_OID_SIGNATURE[xsa] is the hash algorithm for RSA-PSS
@@ -1382,40 +1405,62 @@ end;
 
 var
   // fast OID binary comparison search - initialized at unit startup
-  XA_OID_ASN: array[TXAttr] of TAsnObject;
-  XE_OID_ASN: array[TXExtension] of TAsnObject;
+  XA_OID_ASN:  array[TXAttr] of TAsnObject;
+  XE_OID_ASN:  array[TXExtension] of TAsnObject;
   XCE_OID_ASN: array[TXCrlExtension] of TAsnObject;
   XKU_OID_ASN: array[TXExtendedKeyUsage] of TAsnObject;
 
-function OidToXa(const oid: RawByteString): TXAttr;
+function OidToXa(bin: pointer; len: PtrInt): TXAttr;
+var
+  p: PPUtf8Char;
 begin
-  for result := succ(low(result)) to high(result) do
-    if SortDynArrayRawByteString(oid, XA_OID_ASN[result]) = 0 then
-      exit;
+  p := @XA_OID_ASN[succ(low(result))];
+  if len > 0 then
+    for result := succ(low(result)) to high(result) do
+      if (PStrLen(p^ - _STRLEN)^ = len) and
+         CompareMemSmall(p^, bin, len) then
+        exit
+      else
+        inc(p);
   result := xaNone;
 end;
 
-function OidToXe(const oid: RawByteString): TXExtension;
+function OidToXe(bin: pointer; len: PtrInt): TXExtension;
+var
+  p: PPUtf8Char;
 begin
-  for result := succ(low(result)) to high(result) do
-    if SortDynArrayRawByteString(oid, XE_OID_ASN[result]) = 0 then
-      exit;
+  p := @XE_OID_ASN[succ(low(result))];
+  if len > 0 then
+    for result := succ(low(result)) to high(result) do
+      if (PStrLen(p^ - _STRLEN)^ = len) and
+         CompareMemSmall(p^, bin, len) then
+        exit
+      else
+        inc(p);
   result := xeNone;
 end;
 
 function OidToXce(const oid: RawByteString): TXCrlExtension;
 begin
-  for result := succ(low(result)) to high(result) do
-    if SortDynArrayRawByteString(oid, XCE_OID_ASN[result]) = 0 then
-      exit;
+  if oid <> '' then
+    for result := succ(low(result)) to high(result) do
+      if SortDynArrayRawByteString(oid, XCE_OID_ASN[result]) = 0 then
+        exit;
   result := xceNone;
 end;
 
-function OidToXku(const oid: RawByteString): TXExtendedKeyUsage;
+function OidToXku(bin: pointer; len: PtrInt): TXExtendedKeyUsage;
+var
+  p: PPUtf8Char;
 begin
-  for result := succ(low(result)) to high(result) do
-    if SortDynArrayRawByteString(oid, XKU_OID_ASN[result]) = 0 then
-      exit;
+  p := @XKU_OID_ASN[succ(low(result))];
+  if len > 0 then
+    for result := succ(low(result)) to high(result) do
+      if (PStrLen(p^ - _STRLEN)^ = len) and
+         CompareMemSmall(p^, bin, len) then
+        exit
+      else
+        inc(p);
   result := xkuNone;
 end;
 
@@ -1442,44 +1487,80 @@ end;
 
 { TX509Name }
 
+const
+  // preferred presentation order for ASN.1 generation of RDNs from Name[] fields
+  // - this is NOT the DER/RFC canonical order but a common reference used
+  // to produce deterministic output for new certificates
+  XSORT: array[0 .. ord(pred(high(TXAttr)))] of TXAttr = (
+    xaCN,  // Common Name - identity first
+    xaUID, // User ID
+    xaSN,  // Surname
+    xaGN,  // Given Name
+    xaI,   // Initials
+    xaGQ,  // Generation Qualifier
+    xaP,   // Pseudonym
+    xaSER, // Serial Number
+    xaO,   // Organization - organization second
+    xaOU,  // Organizational Unit
+    xaSA,  // streetAddress - address third
+    xaL,   // Locality
+    xaST,  // State/Province
+    xaC,   // Country
+    xaDC,  // Domain Component - domain information
+    xaE,   // EmailAddress
+    xaTN,  // Telephone Number - contact information
+    xaT,   // Title - rarely-used
+    xaQ,   // DN Qualifier
+    xaN    // Name
+  );
+
+function AsnRdn(const oid, v: TAsnObject): TAsnObject;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := Asn(ASN1_SEQ, [Asn(ASN1_OBJID, oid), AsnText(v)])
+end;
+
+procedure AsnAddRdn(var data: TAsnObject; const rdn: TAsnObject); overload;
+begin
+  if rdn <> '' then
+    Append(data, AsnTyped(rdn, ASN1_SETOF));
+end;
+
+procedure AsnAddRdn(var data: TAsnObject; const oid, v: TAsnObject); overload;
+begin
+  AsnAddRdn(data, AsnRdn(oid, v));
+end;
+
 procedure TXName.ComputeAsn;
 var
-  a: TXAttr;
   p: PUtf8Char;
   o: PtrInt;
+  a: TXAttr;
   v: RawUtf8;
   tmp, one: RawByteString;
 begin
+  // note: multi-valued RDNs (using + in RFC 4514 notation) are not supported
+  // from Name[] and Other[] fields, but via the canonical FromDNText() method
   fSafe.Lock;
   try
-    if fCachedAsn = '' then
+    if fCachedAsn <> '' then
+      exit;
+    for o := 0 to high(XSORT) do
     begin
-      for a := succ(low(a)) to high(a) do
-      begin
-        p := pointer(Name[a]);
-        if p <> nil then
-        begin
-          one := '';
-          repeat
-            GetNextItemTrimed(p, ',', v);
-            Append(one, Asn(ASN1_SEQ, [
-                          Asn(ASN1_OBJID, [XA_OID_ASN[a]]),
-                          AsnText(v)
-                        ]));
-          until p = nil;
-          Append(tmp, AsnSetOf(one));
-        end;
-      end;
-      for o := 0 to high(Other) do
-        with Other[o] do
-          Append(tmp, Asn(ASN1_SETOF, [
-                        Asn(ASN1_SEQ, [
-                          Asn(ASN1_OBJID, [Oid]),
-                          AsnText(Value)
-                        ])
-                      ]));
-      fCachedAsn := AsnSeq(tmp);
+      a := XSORT[o];
+      p := pointer(Name[a]);
+      if p = nil then
+        continue;
+      one := '';
+      repeat
+        GetNextItemTrimed(p, ',', v);
+        AsnAddRdn(tmp, XA_OID_ASN[a], v);
+      until p = nil;
     end;
+    for o := 0 to high(Other) do
+      with Other[o] do
+        AsnAddRdn(tmp, Oid, Value);
+    fCachedAsn := AsnSeq(tmp);
   finally
     fSafe.UnLock;
   end;
@@ -1492,57 +1573,122 @@ begin
   result := fCachedAsn;
 end;
 
+const
+  RFC4514_ESC = [',', '+', '"', '\', '<', '>', ';'];
+
+procedure XNameRfc4514(var tmp: TSynTempAdder; p, pend: PUtf8Char);
+var
+  trailingspaces: integer;
+begin
+  trailingspaces := 0;
+  while (p < pend) and
+        (pend[-1] = ' ') do
+  begin
+    dec(pend);
+    inc(trailingspaces);   // escaped eventually below
+  end;
+  if (p < pend) and
+     (p^ = '#') then
+    tmp.AddDirect('\')     // escape one leading #
+  else
+    while (p < pend) and
+          (p^ = ' ') do
+    begin
+      tmp.AddDirect('\', ' ');
+      inc(p);              // escape leading spaces
+      if p = pend then
+        break;
+    end;
+  while p < pend do
+  begin
+    if p^ < ' ' then
+    begin
+      tmp.AddDirect('\');   // \xx control char
+      tmp.AddByteHex(ord(p^));
+    end
+    else
+    begin
+      if p^ in RFC4514_ESC then
+        tmp.AddDirect('\'); // escape , + " \ < > ;
+      tmp.Add(p^);          // assume UTF-8
+    end;
+    inc(p);
+  end;
+  while trailingspaces > 0 do
+  begin
+    tmp.AddShort('\ ');    // escape trailing spaces
+    dec(trailingspaces);
+  end;
+end;
+
 procedure TXName.ComputeText;
 var
-  a: TXAttr;
-  first: boolean;
-  csv, np, vp: PUtf8Char;
-  ps: PShortString;
-  nl, vl: PtrInt;
-  tmp: TSynTempAdder; // 4KB work buffer on stack
+  pos: integer;
+  xa: TXAttr;
+  first, multivaluerdn: boolean;
+  one, oid, v: TAsnBuffer; // no transient memory allocation
+  utf: ShortString;        // for ASN1_BMPSTRING conversion from UTF-16 BE
+  tmp: TSynTempAdder;      // 4KB work buffer on stack for the output text
 begin
+  if fCachedAsn = '' then
+    ComputeAsn; // we need some reference (before main fSafe.Lock)
   fSafe.Lock;
   try
     if fCachedText <> '' then
       exit;
     tmp.Init;
     first := true;
-    GetEnumType(TypeInfo(TXAttr), ps);
-    for a := succ(low(a)) to high(a) do
-    begin
-      ps := @ps^[ord(ps^[0]) + 1];
-      csv := pointer(Name[a]);
-      if csv = nil then
-        continue;
-      nl := TrimLeftLowerCaseP(ps, PAnsiChar(np));
-      repeat
-        vl := GetNextItemTrimedBuffer(csv, ',', vp);
-        if vl <> 0 then
+    pos := 1;
+    if AsnNext(pos, fCachedAsn) = ASN1_SEQ then
+      while AsnNextBuffer(pos, fCachedAsn, one) = ASN1_SETOF do
+      begin
+        multivaluerdn := false;
+        while AsnNextBuffer(one) = ASN1_SEQ do
         begin
-          if first then
-            first := false
-          else
-            tmp.AddDirect(',', ' ');
-          tmp.Add(np, nl);
+          if (AsnNextBuffer(one, oid) <> ASN1_OBJID) or
+             (oid.Len = 0) or
+             not (AsnNextBufferUtf8(one, v, utf) in ASN1_TEXT) then
+            continue;
+          if multivaluerdn then
+            tmp.AddDirect('+')
+          else if not first then
+            tmp.AddDirect(',');
+          xa := OidToXa(oid.Data, oid.Len);
+          if xa <> xaNone then   // known attribute e.g. CN=Toto
+            tmp.Add(XA_TEXT[xa])
+          else                   // as OID text e.g. 1.2.3.4=Something
+            AsnDecOidAdd(oid.Data, oid.Len, tmp);
           tmp.AddDirect('=');
-          tmp.Add(vp, vl);
+          XNameRfc4514(tmp, v.Data, PUtf8Char(v.Data) + v.Len);
+          multivaluerdn := true;
+          first := false;
         end;
-      until csv = nil;
-    end;
+      end;
     tmp.Done(fCachedText);
   finally
     fSafe.UnLock;
   end;
 end;
 
-function TXName.Compare(var Another: TXName): integer;
+function TXName.CompareBinary(var Another: TXName): integer;
 begin
-  // update cache manually to avoid temporary strings with ToBinary calls
+  // update cache manually to avoid temporary strings with ToBinary method
   if fCachedAsn = '' then
     ComputeAsn;
   if Another.fCachedAsn = '' then
     Another.ComputeAsn;
   result := SortDynArrayRawByteString(fCachedAsn, Another.fCachedAsn);
+end;
+
+function TXName.CompareCanonical(var Another: TXName): integer;
+begin
+  if fCachedCanonical = '' then
+    ComputeCanonical;
+  if Another.fCachedCanonical = '' then
+    Another.ComputeCanonical;
+  result := SortDynArrayRawByteString(fCachedCanonical, Another.fCachedCanonical);
+  if result = 0 then
+    fCachedCanonical := Another.fCachedCanonical; // for fast pointer comparison
 end;
 
 function TXName.NameArray(a: TXAttr): TRawUtf8DynArray;
@@ -1558,67 +1704,228 @@ begin
   result := fCachedText;
 end;
 
+procedure TXName.Init;
+begin
+  fSafe.Init;
+  Finalize(self);
+end;
+
 procedure TXName.Clear;
 begin
-  Finalize(self);
-  FillCharFast(self, SizeOf(self), 0);
+  Finalize(self); // but keep fSafe
 end;
 
 function TXName.FromAsn(const seq: TAsnObject): boolean;
 var
-  posseq, posone: integer;
+  posseq: integer;
   xa: TXAttr;
-  one, oid, v: RawByteString;
+  one, oid: TAsnBuffer;
+  v: RawByteString;
 begin
   result := false;
-  fCachedAsn := seq; // store exact binary since used for comparison
-  fCachedText := '';
+  Clear;
+  fCachedAsn := seq; // store exact binary to reuse for saving or comparison
   posseq := 1;
   if AsnNext(posseq, seq) <> ASN1_SEQ then
     exit;
-  while AsnNextRaw(posseq, seq, one) = ASN1_SETOF do
-  begin
-    posone := 1;
-    while AsnNext(posone, one) = ASN1_SEQ do
-      if (AsnNextRaw(posone, one, oid) <> ASN1_OBJID) or
-         (oid = '') or
-         not (AsnNext(posone, one, @v) in ASN1_TEXT) or
-         not IsValidUtf8Small(v) then
-        exit
-      else
+  while AsnNextBuffer(posseq, seq, one) = ASN1_SETOF do
+    while AsnNextBuffer(one) = ASN1_SEQ do
       begin
-        xa := OidToXa(oid);
-        if xa = xaNone then
-          // unsupported OID
-          AddOther(Other, oid, v)
+        if (AsnNextBuffer(one, oid) <> ASN1_OBJID) or
+           (oid.Len = 0) or
+           not (AsnNextBuffer(one, @v) in ASN1_TEXT) then
+          exit;
+        xa := OidToXa(oid.Data, oid.Len);
+        if (xa = xaNone) or
+           not IsValidUtf8Small(v) then
+          // unsupported OID or not true UTF-8 content
+          AddCustomExts(Other, oid, v)
         else
           // known attribute
           AddToCsv(v, Name[xa]);
       end;
-  end;
   result := true;
+end;
+
+function TXName.FromDNText(const text: RawUtf8): boolean;
+var
+  p: PUTf8Char;
+  n, v: RawUtf8;
+  xa: TXAttr;
+  c, lastsep: AnsiChar;
+  tmp, oid, rdn: TAsnObject;
+  s: ShortString;
+begin
+  result := false;
+  if (text = '') or
+     not IsValidUtf8(text) then
+    exit;
+  Clear;
+  lastsep := #0;
+  p := pointer(text);
+  repeat
+    // find the attribute type
+    GetNextItem(p, '=', n);
+    if (p = nil) or
+       (n = '') then
+      exit;
+    xa := TextToXa(n);
+    if xa = xaNone then
+      AsnEncOidVar(pointer(n), oid) // 1.2.3.4=value
+    else
+      oid := XA_OID_ASN[xa];        // DC=value
+    if oid = '' then
+      exit;
+    // parse the attribute value
+    s[0] := #0;
+    while not (p^ in [#0, ',', '+']) do
+    begin
+      if s[0] = #255 then
+        exit;          // should usually be < 64 bytes
+      if p^ = '\' then // unescape as expected by RFC 4514
+        if p[1] in RFC4514_ESC + [' ', '#', '=', ''''] then // more tolerant
+          inc(p)
+        else
+        begin
+          if not HexToChar(@p[1], @c) then
+            exit;      // \z or \X are not valid
+          inc(p, 3);   // \## hexadecimal
+          AppendShortChar(c, @s);
+          continue;
+        end;
+      AppendShortChar(p^, @s);
+      inc(p);
+    end;
+    FastSetString(v, @s[1], ord(s[0]));
+    if not IsValidUtf8Small(v) then
+      exit;
+    // update internal high-level fields just like FromAsn()
+    if xa <> xaNone then
+      AddToCsv(v, Name[xa])
+    else
+      AddCustomExts(Other, oid, v);
+    // append the corresponding ASN.1 with proper multi-values RDN '+' support
+    if lastsep = ',' then
+    begin
+      AsnAddRdn(tmp, rdn);
+      rdn := '';
+    end;
+    Append(rdn, AsnRdn(oid, v));
+    if p^ = #0 then
+      break;
+    lastsep := p^;
+    inc(p);
+  until false;
+  AsnAddRdn(tmp, rdn); // trailing RDN
+  fCachedAsn := AsnSeq(tmp);
+  result := true;
+end;
+
+function XNameNormalize(s, send, d: PUtf8Char): PtrInt;
+begin
+  result := 0;
+  if s <> nil then
+  begin
+    while (s < send) and
+          (s^ = ' ') do
+      inc(s); // trim left
+    repeat
+      while (s < send) and
+            (PWord(s)^ = $2020) do
+        inc(s); // trim dual spaces
+      if s >= send then
+        break;
+      inc(result);
+      d[result] := NormToLowerAnsi7[s^]; // normalize case
+      inc(s);
+    until result = 255;
+    while (result > 0) and
+          (d[result] = ' ') do
+      dec(result); // trim right
+  end;
+  d[0] := AnsiChar(result);
+  inc(result); // return the total length including the initial length byte
+end;
+
+procedure TXName.ComputeCanonical;
+var
+  pos: integer;
+  xa: TXAttr;
+  one, oid, v: TAsnBuffer; // no transient memory allocation
+  utf: ShortString;        // for ASN1_BMPSTRING conversion from UTF-16 BE
+  tmp: TSynTempAdder;      // 4KB work buffer on stack
+begin
+  if fCachedAsn = '' then
+    ComputeAsn; // we need some reference (before main fSafe.Lock)
+  fSafe.Lock;
+  try
+    if fCachedCanonical <> '' then
+      exit;
+    tmp.Init;
+    pos := 1;
+    if AsnNext(pos, fCachedAsn) = ASN1_SEQ then
+      while AsnNextBuffer(pos, fCachedAsn, one) = ASN1_SETOF do
+      begin
+        tmp.AddDirect(#255); // RDN marker
+        while AsnNextBuffer(one) = ASN1_SEQ do
+        begin
+          if (AsnNextBuffer(one, oid) <> ASN1_OBJID) or
+             (oid.Len = 0) or
+             not (AsnNextBufferUtf8(one, v, utf) in ASN1_TEXT) then
+            continue;
+          xa := OidToXa(oid.Data, oid.Len); // known attribute stored as #0..#19
+          tmp.AddDirect(AnsiChar(xa));
+          if xa = xaNone then  // xaNone would store #0 + the binary OID
+            tmp.Add(oid.Data, oid.Len);
+          inc(tmp.Store.Added,
+            XNameNormalize(v.Data, PUtf8Char(v.Data) + v.Len, tmp.Prepare(256)));
+        end;
+      end;
+    tmp.Done(fCachedCanonical, CP_RAWBYTESTRING);
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 function TXName.FromAsnNext(var pos: integer; const der: TAsnObject): boolean;
 var
-  seq: RawByteString;
+  seq: RawByteString; // will be stored in fCachedAsn anyway
 begin
   result := (AsnNextRaw(pos, der, seq, {includeheader=}true) = ASN1_SEQ) and
             FromAsn(seq);
 end;
 
 procedure TXName.FromFields(const fields: TCryptCertFields);
+begin // do not use TrimU() because e.g. CN=' ' is accepted e.g. by OpenSSL
+  if fields.DistinguishedName <> '' then
+  begin
+    FromDNText(fields.DistinguishedName);
+    exit; // exclusive to other single fields
+  end;
+  Name[xaC]   := fields.Country;
+  Name[xaST]  := fields.State;
+  Name[xaL]   := fields.Locality;
+  Name[xaO]   := fields.Organization;
+  Name[xaOU]  := fields.OrgUnit;
+  Name[xaCN]  := fields.CommonName;
+  Name[xaE]   := fields.EmailAddress;
+  Name[xaSN]  := fields.SurName;
+  Name[xaGN]  := fields.GivenName;
+  Name[xaSER] := fields.SerialNumber;
+end;
+
+procedure TXName.ToFields(var fields: TCryptCertFields);
 begin
-  Name[xaC]   := TrimU(fields.Country);
-  Name[xaST]  := TrimU(fields.State);
-  Name[xaL]   := TrimU(fields.Locality);
-  Name[xaO]   := TrimU(fields.Organization);
-  Name[xaOU]  := TrimU(fields.OrgUnit);
-  Name[xaCN]  := TrimU(fields.CommonName);
-  Name[xaE]   := TrimU(fields.EmailAddress);
-  Name[xaSN]  := TrimU(fields.SurName);
-  Name[xaGN]  := TrimU(fields.GivenName);
-  Name[xaSER] := TrimU(fields.SerialNumber);
+  fields.Country      := Name[xaC];
+  fields.State        := Name[xaST];
+  fields.Locality     := Name[xaL];
+  fields.Organization := Name[xaO];
+  fields.OrgUnit      := Name[xaOU];
+  fields.CommonName   := Name[xaCN];
+  fields.EmailAddress := Name[xaE];
+  fields.SurName      := Name[xaSN];
+  fields.GivenName    := Name[xaGN];
+  fields.SerialNumber := Name[xaSER];
 end;
 
 function TXName.Get(const Rdn: RawUtf8): RawUtf8;
@@ -1626,9 +1933,11 @@ var
   xa: TXAttr;
   h: THashAlgo;
 begin
+  FastAssignNew(result);
   if Rdn = '' then
-    FastAssignNew(result)
-  else if TextToXa(Rdn, xa) then
+    exit;
+  xa := TextToXa(Rdn);
+  if xa <> xaNone then
     result := Name[xa]
   else if IsDer(Rdn) then
     result := ToBinary
@@ -1644,6 +1953,7 @@ begin
   try
     fCachedAsn := '';
     fCachedText := '';
+    fCachedCanonical := '';
   finally
     fSafe.UnLock;
   end;
@@ -1660,13 +1970,13 @@ var
   xa: TXAttr;
 begin
   FastAssignNew(result);
-  o := AsnEncOid(pointer(Oid));
+  AsnEncOidVar(pointer(Oid), o);
   if o = '' then
     exit;
-  result := FindOtherAsn(pointer(Other), length(Other), o);
+  result := FindCustomExtsAsn(pointer(Other), length(Other), o);
   if result <> '' then
     exit;
-  xa := OidToXa(o);
+  xa := OidToXa(pointer(o), length(o));
   if xa <> xaNone then
     result := Name[xa];
 end;
@@ -1704,21 +2014,55 @@ begin
   ToHumanHex(result, @rnd, SizeOf(rnd.sha1)); // 20 bytes is the usual size
 end;
 
-function CsvToDns(p: PUtf8Char): RawByteString;
-begin
-  FastAssignNew(result);
-  while p <> nil do
-    Append(result, AsnTyped(TrimU(GetNextItem(p)), ASN1_CTX2));
-end;
-
-procedure AddExt(var result: TAsnObject; xe: TXExtension;
-  const value: RawByteString; critical: boolean = false);
+procedure AddExt(var result: TAsnObject; const oid, value: RawByteString;
+  critical: boolean);
 begin
   Append(result, Asn(ASN1_SEQ, [
-                   Asn(ASN1_OBJID, [XE_OID_ASN[xe]]),
+                   Asn(ASN1_OBJID, [oid]),
                    ASN1_BOOLEAN_NONE[critical],
                    Asn(ASN1_OCTSTR, [value])
                  ]));
+end;
+
+procedure AddExt(var result: TAsnObject; xe: TXExtension;
+  const value: RawByteString; critical: boolean);
+begin
+  AddExt(result, XE_OID_ASN[xe], value, critical);
+end;
+
+procedure AddExtCsv(var result: TAsnObject; const oid: RawByteString;
+  csv: PUtf8Char; critical: boolean);
+var
+  seq: TAsnObject;
+begin
+  while csv <> nil do
+    AsnAdd(seq, TrimU(GetNextItem(csv)), ASN1_CTX2);
+  AddExt(result, oid, AsnSeq(seq), critical);
+end;
+
+procedure AddExtCsv(var result: TAsnObject; xe: TXExtension;
+  const csv: RawUtf8; critical: boolean);
+begin
+  AddExtCsv(result, XE_OID_ASN[xe], pointer(csv), critical);
+end;
+
+procedure AddExtArray(var result: TAsnObject; xe: TXExtension;
+  const values: array of RawUtf8; critical: boolean);
+var
+  i: PtrInt;
+  seq: TAsnObject;
+begin
+  for i := 0 to high(values) do
+    AsnAdd(seq, values[i], ASN1_CTX2);
+  AddExt(result, XE_OID_ASN[xe], AsnSeq(seq), critical);
+end;
+
+procedure AddExts(var result: TAsnObject; const exts: TCryptCustomExts);
+var
+  i: PtrInt;
+begin
+  for i := 0 to length(exts) - 1 do
+    AddExt(result, exts[i].Oid, exts[i].Value, exts[i].Critical);
 end;
 
 const
@@ -1742,9 +2086,11 @@ const
     xkuTimeStamping);
 
 function CertInfoCompute(usages: TCryptCertUsages; const ext: TXExtensions;
-  out xku: TXKeyUsages; out xeku: TXExtendedKeyUsages): TAsnObject;
+  pathlen: integer; out xku: TXKeyUsages; out xeku: TXExtendedKeyUsages;
+  Fields: PCryptCertFields): TAsnObject;
 var
   r: TCryptCertUsage;
+  p: TAsnObject;
 begin
   FastAssignNew(result);
   // high-level usages values are converted into usages and xku
@@ -1757,8 +2103,11 @@ begin
     if r in usages then
       include(xeku, XU[r]);
   // RFC 5280 #4.2.1.9
+  if (cuCA in usages) and
+     (pathlen >= 0) then
+    p := Asn(pathlen);
   AddExt(result, xeBasicConstraints,
-    Asn(ASN1_SEQ, ASN1_BOOLEAN_NONE[cuCA in usages]), {critical=}true);
+    Asn(ASN1_SEQ, [ASN1_BOOLEAN_NONE[cuCA in usages], p]), {critical=}true);
   // RFC 5280 #4.2.1.3
   if xku <> [] then
     AddExt(result, xeKeyUsage,
@@ -1767,8 +2116,12 @@ begin
   if xeku <> [] then
     AddExt(result, xeExtendedKeyUsage,
       AsnSeq(XkuToOids(xeku)));
+  // custom binary extension(s) could be supplied in Fields^.CustomExts
+  // - currently ExtensionOther[] and ExtensionRaw[] values are ignored
+  if (Fields <> nil) and
+     (Fields^.CustomExts <> nil) then
+    AddExts(result, Fields^.CustomExts);
   // ext[] RawUtf8 are used as source
-  // - ExtensionOther[] and ExtensionRaw[] are ignored
   // RFC 5280 #4.2.1.2
   if ext[xeSubjectKeyIdentifier] <> '' then
     AddExt(result, xeSubjectKeyIdentifier,
@@ -1779,16 +2132,13 @@ begin
       AsnSeq(AsnTyped(HumanHexToBin(ext[xeAuthorityKeyIdentifier]), ASN1_CTX0)));
   // RFC 5280 #4.2.1.6
   if ext[xeSubjectAlternativeName] <> '' then
-    AddExt(result, xeSubjectAlternativeName,
-      AsnSeq(CsvToDns(pointer(ext[xeSubjectAlternativeName]))));
+    AddExtCsv(result, xeSubjectAlternativeName, ext[xeSubjectAlternativeName]);
   // RFC 5280 #4.2.1.7
   if ext[xeIssuerAlternativeName] <> '' then
-    AddExt(result, xeIssuerAlternativeName,
-      AsnSeq(CsvToDns(pointer(ext[xeIssuerAlternativeName]))));
+    AddExtCsv(result, xeIssuerAlternativeName, ext[xeIssuerAlternativeName]);
   // non-standard ext - but defined as TCryptCertFields.Comment
   if ext[xeNetscapeComment] <> '' then
-    AddExt(result, xeNetscapeComment,
-      AsnTyped(ext[xeNetscapeComment], ASN1_IA5STRING));
+    AddExt(result, xeNetscapeComment, AsnIA5(ext[xeNetscapeComment]));
   // xeAuthorityInformationAccess and xeCertificatePolicies not yet persisted
 end;
 
@@ -1799,7 +2149,8 @@ end;
 
 function TXTbsCertificate.ComputeExtensions: TAsnObject;
 begin
-  result := CertInfoCompute(CertUsages, Extension, KeyUsages, ExtendedKeyUsages);
+  result := CertInfoCompute(CertUsages, Extension, PathLenConstraint,
+    KeyUsages, ExtendedKeyUsages, nil);
 end;
 
 procedure TXTbsCertificate.ComputeCachedDer;
@@ -1837,16 +2188,17 @@ end;
 
 procedure TXTbsCertificate.AddNextExtensions(pos: integer; const der: TAsnObject);
 var
-  ext, oid, seq, v: RawByteString;
+  buf, seq: TAsnBuffer;
+  ext, v: RawByteString;
   decoded: RawUtf8;
-  vt, extpos, seqpos: integer;
+  vt, extpos, pl: integer;
   xe: TXExtension;
   xku: TXExtendedKeyUsage;
   critical: boolean;
   w: word;
 begin
   while (AsnNext(pos, der) = ASN1_SEQ) and
-        (AsnNextRaw(pos, der, oid) = ASN1_OBJID) do
+        (AsnNextBuffer(pos, der, buf) = ASN1_OBJID) do
   begin
     // loop for each X.509 v3 extension
     critical := false;
@@ -1858,97 +2210,93 @@ begin
     end;
     if vt <> ASN1_OCTSTR then // extnValue
       exit;
-    xe := OidToXe(oid);
+    xe := OidToXe(buf.Data, buf.Len);
     if xe = xeNone then
-      // unsupported OID are stored as raw binary values
-      AddOther(ExtensionOther, oid, ext)
+      // unsupported buf are stored as raw binary values
+      AddCustomExts(ExtensionOther, buf, ext, critical)
     else
     begin
-      // decode most common extensions as RawUtf8
+      // decode most common extensions as RawUtf8 in Extension[xe]
       ExtensionCritical[xe] := critical;
       ExtensionRaw[xe] := ext;
-      decoded := '';
+      FastAssignNew(decoded);
       extpos := 1;
       case xe of
         xeAuthorityKeyIdentifier:    // RFC 5280 #4.2.1.1
           if (AsnNext(extpos, ext) = ASN1_SEQ) and
-             (AsnNextRaw(extpos, ext, v) <> ASN1_NULL) then
-            ToHumanHex(decoded, pointer(v), length(v));
+             (AsnNextRaw(extpos, ext, v) = ASN1_CTX0) then
+             begin
+               fRawAuthorityKeyIdentifier := v; // for fast AKI=SKI comparison
+               ToHumanHex(decoded, pointer(v), length(v));
+             end;
+             // ASN1_CTX1:GeneralNames ASN1_CTX2:SerialNumber in ExtensionRaw[]
         xeSubjectKeyIdentifier:       // RFC 5280 #4.2.1.2
           if AsnNextRaw(extpos, ext, v) = ASN1_OCTSTR then
+          begin
+            fRawSubjectKeyIdentifier := v;     // for fast AKI=SKI comparison
             ToHumanHex(decoded, pointer(v), length(v));
+          end;
         xeSubjectAlternativeName,    // RFC 5280 #4.2.1.6
         xeIssuerAlternativeName:     // RFC 5280 #4.2.1.7
           if AsnNext(extpos, ext) = ASN1_SEQ then
-            repeat
-              case AsnNextRaw(extpos, ext, v) of
-                ASN1_NULL: // no more items
-                  break;
-                ASN1_CTX1, // rfc8722Name
-                ASN1_CTX2, // dnsName
-                ASN1_CTX6: // uri
-                  EnsureRawUtf8(v); // was stored as IA5String
-                ASN1_CTX7: // ip
-                  v := AsnDecIp(pointer(v), length(v));
-                ASN1_CTX8: // registeredID
-                  AsnDecOid(1, 1 + length(v), v, RawUtf8(v));
-              else
-                continue;  // unsupported value type
-              end;
+            while AsnNextGeneralName(extpos, ext, RawUtf8(v)) do
               if v <> '' then
                 AddToCsv(v, decoded);
-            until false;
         xeBasicConstraints:          // RFC 5280 #4.2.1.9
           if (AsnNext(extpos, ext) = ASN1_SEQ) and
-             (AsnNextRaw(extpos, ext, v) = ASN1_BOOL) and
-             (v = #$ff) then
-            decoded := 'CA'; // as expected by cuCA usage flag
-        xeKeyUsage:                  // RFC 5280 #4.2.1.3
-          if (AsnNextRaw(extpos, ext, v) = ASN1_BITSTR) and
-             (v <> '') and
-             (length(v) <= 2) then
+             (AsnNextBuffer(extpos, ext, buf) = ASN1_BOOL) and
+             (buf.Len = 1) and
+             (PByte(buf.Data)^ = $ff) then // cA BOOLEAN DEFAULT FALSE
           begin
-            w := PWord(v)^; // length=1 ends with a #0
+            decoded := 'CA'; // as expected by ComputeCertUsages below
+            if (AsnNextInt32(extpos, ext, pl) = ASN1_INT) and
+               (pl >= 0) then
+              PathLenConstraint := pl; // optional but requires cA=TRUE
+          end;
+        xeKeyUsage:                  // RFC 5280 #4.2.1.3
+          if (AsnNextBuffer(extpos, ext, buf) = ASN1_BITSTR) and
+             (PtrUInt(buf.Len - 1) < 2) then
+          begin
+            if buf.Len = 1 then
+              w := PByte(buf.Data)^
+            else
+              w := PWord(buf.Data)^;
             KeyUsages := TXKeyUsages(w and $ff);
             if w and $8000 <> 0 then
               include(KeyUsages, xuDecipherOnly);
           end;
         xeExtendedKeyUsage:          // RFC 5280 #4.2.1.12
           if AsnNext(extpos, ext) = ASN1_SEQ then
-            while AsnNextRaw(extpos, ext, oid) = ASN1_OBJID do
+            while AsnNextBuffer(extpos, ext, buf) = ASN1_OBJID do
             begin
-              xku := OidToXku(oid);
+              xku := OidToXku(buf.Data, buf.Len);
               if xku <> xkuNone then
                 include(ExtendedKeyUsages, xku);
             end;
+        xeCrlDistributionPoints:    // RFC 5280 #4.2.1.13
+          if AsnNextRaw(extpos, ext, v, {includhead=}true) = ASN1_SEQ then
+          begin
+            CrlDistPoint := AsnDecCdp(v);
+            decoded := RawUtf8ArrayToCsv(CrlDistPoint);
+          end;
         xeAuthorityInformationAccess: // RFC 5280 #4.2.2.1
-          // e.g. 'ocsp=http://r3.o.lencr.org,caIssuers=http://r3.i.lencr.org/'
-          if AsnNext(extpos, ext) = ASN1_SEQ then
-            while (AsnNext(extpos, ext) = ASN1_SEQ) and
-                  (AsnNext(extpos, ext, @oid) = ASN1_OBJID) and
-                  (AsnNext(extpos, ext, @v) = ASN1_CTX6) do
-            begin
-              if oid = '1.3.6.1.5.5.7.48.1' then
-                Prepend(v, 'ocsp=')
-              else if oid = '1.3.6.1.5.5.7.48.2' then
-              begin
-                if IsHttp(v) then
-                  AddRawUtf8(CaIssuers, v);
-                Prepend(v, 'caIssuers=');
-              end
-              else
-                Prepend(v, [oid, '=']); // not part of RFC 5280
-              EnsureRawUtf8(v);
-              AddToCsv(v, decoded);
-            end;
+          // e.g. 'ocsp=(http://r3.o.lencr.org) caIssuers=(http://r3.i.lencr.org/)'
+          if (AsnNextRaw(extpos, ext, v, {includhead=}true) = ASN1_SEQ) and
+             AsnDecAia(v, Ocsp, CaIssuers) then
+          begin
+            if Ocsp <> nil then
+              Join(['ocsp=(', RawUtf8ArrayToCsv(Ocsp), ') '], decoded);
+            if CaIssuers <> nil then
+              Append(decoded, ['caIssuers=(', RawUtf8ArrayToCsv(CaIssuers), ')']);
+          end;
         xeCertificatePolicies:      // RFC 5280 #4.2.1.4
           if AsnNext(extpos, ext) = ASN1_SEQ then
-            while AsnNextRaw(extpos, ext, seq) = ASN1_SEQ do
-            begin
-              seqpos := 1;
-              if AsnNext(seqpos, seq, @oid) = ASN1_OBJID then
-                AddToCsv(oid, decoded);
-            end;
+            while AsnNextBuffer(extpos, ext, seq) = ASN1_SEQ do
+              if AsnNextBuffer(seq, buf) = ASN1_OBJID then
+              begin
+                AsnDecOidBuffer(buf.Data, buf.Len, RawUtf8(v));
+                AddToCsv(v, decoded);
+              end;
         xeNetscapeComment:
           if AsnNext(extpos, ext, @v) in ASN1_TEXT then // typically IA5String
             decoded := v;
@@ -2011,12 +2359,17 @@ end;
 
 function TXTbsCertificate.IsValidDate(timeutc: TDateTime): boolean;
 begin
-  if timeutc = 0 then
-    timeutc := NowUtc;
-  result := ((NotAfter = 0) or
-             (timeutc < NotAfter + CERT_DEPRECATION_THRESHOLD)) and
-            ((NotBefore = 0) or
-             (timeutc + CERT_DEPRECATION_THRESHOLD > NotBefore));
+  result := IsCertValidDate(timeutc, NotAfter, NotBefore);
+end;
+
+function TXTbsCertificate.CompareAuthority(const aki: RawByteString): boolean;
+begin
+  result := true;
+  if fRawAuthorityKeyIdentifier <> '' then
+    if SortDynArrayRawByteString(fRawAuthorityKeyIdentifier, aki) <> 0 then
+      result := false
+    else
+      fRawAuthorityKeyIdentifier := aki; // faster per-pointer comparison
 end;
 
 function TXTbsCertificate.ToDer: TAsnObject;
@@ -2063,10 +2416,16 @@ begin
   result := true;
 end;
 
+procedure TXTbsCertificate.Init;
+begin
+  PathLenConstraint := -1;
+end;
+
 procedure TXTbsCertificate.Clear;
 begin
   Finalize(self);
   FillCharFast(self, SizeOf(self), 0);
+  Init;
 end;
 
 procedure TXTbsCertificate.AfterModified;
@@ -2084,15 +2443,20 @@ end;
 
 { TX509 }
 
+constructor TX509.Create;
+begin
+  inherited Create;
+  Signed.Init; // set e.g. PathLenConstraint := -1
+end;
+
 procedure TX509.Clear;
 begin
   Signed.Clear;
   fCachedDer := '';
   Finalize(fCachedHash);
   fCachedPeerInfo := '';
+  fCachedExtensions := nil;
   fLastVerifyAuthPublicKey := '';
-  fRawSubjectKeyIdentifier := '';
-  fRawAuthorityKeyIdentifier := nil;
   fSignatureAlgorithm := xsaNone;
   fSignatureValue := '';
   fPublicKey := nil;
@@ -2101,16 +2465,18 @@ end;
 function CanVerify(auth: TX509; usage: TCryptCertUsage; selfsigned: boolean;
   ignored: TCryptCertValidities; timeutc: TDateTime): TCryptCertValidity;
 begin
-  if auth = nil then
-    result := cvUnknownAuthority
-  else if (not (cvWrongUsage in ignored)) and
-          (not (selfsigned or (usage in auth.Signed.CertUsages))) then
-    result := cvWrongUsage
-  else if (cvDeprecatedAuthority in ignored) or
-     auth.Signed.IsValidDate(timeutc) then
-    result := cvValidSigned
+  if auth <> nil then
+    if (cvWrongUsage in ignored) or
+       (selfsigned or HasCertUsage(usage, auth.Signed.CertUsages)) then
+      if (cvDeprecatedAuthority in ignored) or
+         auth.Signed.IsValidDate(timeutc) then
+        result := cvValidSigned
+      else
+        result := cvDeprecatedAuthority
+    else
+      result := cvWrongUsage
   else
-    result := cvDeprecatedAuthority;
+    result := cvUnknownAuthority;
 end;
 
 function TX509.Verify(Authority: TX509; IgnoreError: TCryptCertValidities;
@@ -2132,7 +2498,7 @@ begin
        exit;
      result := cvUnknownAuthority;
      if not IsAuthorizedBy(Authority) then
-       exit; // Auth xeSubjectKeyIdentifier is not in xeAuthorityKeyIdentifier
+       exit; // Auth xeSubjectKeyIdentifier <> xeAuthorityKeyIdentifier
    end;
    // check the verification context (e.g. date, usage)
    result := CanVerify(
@@ -2213,20 +2579,20 @@ end;
 
 procedure TX509.ToParsedInfo(out Info: TX509Parsed);
 begin
-  Info.Serial := SerialNumber;
-  Info.SubjectDN := SubjectDN;
-  Info.IssuerDN := IssuerDN;
-  Info.SubjectID := Extension[xeSubjectKeyIdentifier];
-  Info.IssuerID := Extension[xeAuthorityKeyIdentifier];
+  Info.Serial          := SerialNumber;
+  Info.SubjectDN       := SubjectDN;
+  Info.IssuerDN        := IssuerDN;
+  Info.SubjectID       := Extension[xeSubjectKeyIdentifier];
+  Info.IssuerID        := Extension[xeAuthorityKeyIdentifier];
   Info.SubjectAltNames := StringReplaceAll(
     Extension[xeSubjectAlternativeName], ',', ', '); // more human friendly
-  Info.SigAlg := XSA_TXT[SignatureAlgorithm];
-  Info.PubAlg := GetSubjectPublicKeyAlgorithm;
-  Info.Usage := Usages;
-  Info.NotBefore := NotBefore;
-  Info.NotAfter := NotAfter;
-  Info.PubKey := Signed.SubjectPublicKey;
-  Info.PeerInfo := ParsedToText(Info); // should be the last
+  Info.SigAlg          := XSA_TXT[SignatureAlgorithm];
+  Info.PubAlg          := GetSubjectPublicKeyAlgorithm;
+  Info.Usage           := Usages;
+  Info.NotBefore       := NotBefore;
+  Info.NotAfter        := NotAfter;
+  Info.PubKey          := Signed.SubjectPublicKey;
+  Info.PeerInfo        := ParsedToText(Info); // should be the last
 end;
 
 function TX509.SaveToDer: TCertDer;
@@ -2264,25 +2630,17 @@ begin
 end;
 
 procedure TX509.AfterLoaded;
-var
-  akid: TRawUtf8DynArray;
-  i: PtrInt;
 begin
   ToHumanHex(Signed.SerialNumberHex, pointer(Signed.SerialNumber), length(Signed.SerialNumber));
   Signed.SubjectPublicKeyBits := X509PubKeyBits(Signed.SubjectPublicKey);
   if (fCachedDer = '') and
      (SignatureValue <> '') then // not possible yet (e.g. after LoadFromCsr)
     ComputeCachedDer;
-  if Signed.Issuer.fCachedAsn = '' then
-    Signed.Issuer.ComputeAsn;
-  if Signed.Subject.fCachedAsn = '' then
-    Signed.Subject.ComputeAsn;
-  fIsSelfSigned := Signed.Issuer.fCachedAsn = Signed.Subject.fCachedAsn;
-  HumanHexToBin(Signed.Extension[xeSubjectKeyIdentifier], fRawSubjectKeyIdentifier);
-  CsvToRawUtf8DynArray(pointer(Signed.Extension[xeAuthorityKeyIdentifier]), akid);
-  SetLength(fRawAuthorityKeyIdentifier, length(akid));
-  for i := 0 to length(akid) - 1 do
-    HumanHexToBin(akid[i], fRawAuthorityKeyIdentifier[i]);
+  if Signed.fRawSubjectKeyIdentifier = '' then // e.g. after Generate + ComputeCacheDer
+    HumanHexToBin(Signed.Extension[xeSubjectKeyIdentifier], Signed.fRawSubjectKeyIdentifier);
+  if Signed.fRawAuthorityKeyIdentifier = '' then
+    HumanHexToBin(Signed.Extension[xeAuthorityKeyIdentifier], Signed.fRawAuthorityKeyIdentifier);
+  fIsSelfSigned := Signed.Issuer.CompareCanonical(Signed.Subject) = 0; // not AKI=SKI
   fIsRevokedTag := 0;
   fLastVerifyAuthPublicKey := '';
 end;
@@ -2298,6 +2656,7 @@ begin
     begin
       Finalize(fCachedHash);
       fCachedPeerInfo := '';
+      fCachedExtensions := nil;
       fCachedDer := Asn(ASN1_SEQ, [
                       Signed.ToDer,
                       XsaToSeq(SignatureAlgorithm),
@@ -2316,6 +2675,18 @@ var
 begin
   ToParsedInfo(info);
   fCachedPeerInfo := info.PeerInfo;
+end;
+
+procedure TX509.ComputeCachedExtensions;
+var
+  xe: TXExtension;
+begin
+  fCachedExtensions := Signed.ExtensionOther;
+  for xe := succ(xeNone) to high(xe) do
+    if (xe <> xeNetscapeComment) and
+       (Signed.ExtensionRaw[xe] <> '') then
+      AddCustomExts(fCachedExtensions, XE_OID_ASN[xe],
+        Signed.ExtensionRaw[xe], Signed.ExtensionCritical[xe]);
 end;
 
 procedure TX509.ComputeCachedHash(algo: THashAlgo);
@@ -2431,36 +2802,15 @@ begin
 end;
 
 function TX509.IsAuthorizedBy(Authority: TX509): boolean;
-var
-  n: integer;
-  s, a: PRawByteString;
 begin
-  if (self <> nil) and
-     (Authority <> nil) and
-     (Authority.Signed.SubjectPublicKey <> '') then
-  begin
-    // fast search with no memory allocation
-    result := true;
-    s := @Authority.fRawSubjectKeyIdentifier;
-    a := pointer(fRawAuthorityKeyIdentifier);
-    if a <> nil then
-    begin
-      n := PDALen(PAnsiChar(pointer(a)) - _DALEN)^ + _DAOFF;
-      repeat
-        if SortDynArrayRawByteString(a^, s^) = 0 then
-        begin
-          if PPointer(a)^ <> PPointer(s)^ then
-            a^ := s^; // for a faster pointer comparison next time
-          exit;
-        end;
-        dec(n);
-        if n = 0 then
-          break;
-        inc(a);
-      until false;
-    end;
-  end;
-  result := false;
+  result := // ensure both certificates are not void
+            (self <> nil) and
+            (Authority <> nil) and
+            (Authority.Signed.SubjectPublicKey <> '') and
+            // ensure AKI (if set) is Authority SKI - first since faster
+            Signed.CompareAuthority(Authority.Signed.fRawSubjectKeyIdentifier) and
+            // ensure IssuerDN matches Authority.SubjectDN after normalization
+            (Signed.Issuer.CompareCanonical(Authority.Signed.Subject) = 0);
 end;
 
 function TX509.Compare(Another: TX509; Method: TCryptCertComparer): integer;
@@ -2473,9 +2823,9 @@ begin
           result := SortDynArrayRawByteString(
                       Signed.SerialNumber, Another.Signed.SerialNumber);
         ccmSubjectName:
-          result := Signed.Subject.Compare(Another.Signed.Subject);
+          result := Signed.Subject.CompareCanonical(Another.Signed.Subject);
         ccmIssuerName:
-          result := Signed.Issuer.Compare(Another.Signed.Issuer);
+          result := Signed.Issuer.CompareCanonical(Another.Signed.Issuer);
         ccmSubjectCN:
           result := SortDynArrayAnsiString(
                       Signed.Subject.Name[xaCN], Another.Signed.Subject.Name[xaCN]);
@@ -2492,12 +2842,12 @@ begin
                       Another.Signed.ExtensionRaw[xeAuthorityKeyIdentifier]);
         ccmSubjectAltName:
           result := SortDynArrayAnsiString(
-            Signed.Extension[xeSubjectAlternativeName],
-            Another.Signed.Extension[xeSubjectAlternativeName]);
+                      Signed.Extension[xeSubjectAlternativeName],
+                      Another.Signed.Extension[xeSubjectAlternativeName]);
         ccmIssuerAltName:
           result := SortDynArrayAnsiString(
-            Signed.Extension[xeIssuerAlternativeName],
-            Another.Signed.Extension[xeIssuerAlternativeName]);
+                      Signed.Extension[xeIssuerAlternativeName],
+                      Another.Signed.Extension[xeIssuerAlternativeName]);
         ccmUsage:
           result := word(Signed.CertUsages) - word(Another.Signed.CertUsages);
         ccmBinary: // fCachedDer should have been set by AfterLoaded
@@ -2506,6 +2856,10 @@ begin
           result := FingerPrintCompare(Another, hfSHA1);
         ccmSha256:
           result := FingerPrintCompare(Another, hfSHA256);
+        ccmIssuedBy:
+          result := SortDynArrayAnsiString(
+                      Signed.fRawAuthorityKeyIdentifier,
+                      Another.Signed.fRawSubjectKeyIdentifier);
       else
         result := ComparePointer(self, Another); // e.g. ccmInstance
       end
@@ -2555,6 +2909,24 @@ begin
   end;
 end;
 
+function TX509.HasUsage(const usage: TCryptCertUsage): boolean;
+begin
+  if self <> nil then
+    result := HasCertUsage(usage, Signed.CertUsages)
+  else
+    result := false;
+end;
+
+function TX509.GetExtensions: TCryptCustomExts;
+begin
+  result := nil;
+  if self = nil then
+    exit;
+  if fCachedExtensions = nil then
+    ComputeCachedExtensions;
+  result := fCachedExtensions;
+end;
+
 procedure TX509.AfterModified;
 begin
   fSafe.Lock;
@@ -2562,6 +2934,7 @@ begin
     fCachedDer := '';
     Finalize(fCachedHash);
     fCachedPeerInfo := '';
+    fCachedExtensions := nil;
     fLastVerifyAuthPublicKey := '';
     fSignatureValue := '';
   finally
@@ -2674,10 +3047,7 @@ end;
 procedure AddCrlExt(var result: TAsnObject; xce: TXCrlExtension;
   const value: RawByteString);
 begin
-  Append(result, Asn(ASN1_SEQ, [
-                   AsnObjId(XCE_OID_ASN[xce]),
-                   AsnOctStr(value)
-                 ]));
+  AddExt(result, XCE_OID_ASN[xce], value, {critical=}false);
 end;
 
 function TXTbsCertList.ToDer: TAsnObject;
@@ -2685,6 +3055,9 @@ var
   nextup, rev, ext: RawByteString;
   i: PtrInt;
 begin
+  result := fCachedDer;
+  if result <> '' then
+    exit;
   // optional nextUpdate time
   if NextUpdate <> 0 then
     nextup := AsnTime(NextUpdate);
@@ -2698,9 +3071,8 @@ begin
         AsnTyped(HumanHexToBin(Extension[xceAuthorityKeyIdentifier]), ASN1_CTX0)
         ));
   if Extension[xceIssuerAlternativeName] <> '' then
-    AddCrlExt(ext, xceIssuerAlternativeName,
-      AsnSeq(
-        CsvToDns(pointer(Extension[xceIssuerAlternativeName]))));
+    AddExtCsv(ext, XCE_OID_ASN[xceIssuerAlternativeName],
+      pointer(Extension[xceIssuerAlternativeName]));
   if Extension[xceCrlNumber] <> '' then
     AddCrlExt(ext, xceCrlNumber,
       Asn(GetInt64(pointer(Extension[xceCrlNumber])))); // 63-bit resolution
@@ -2716,6 +3088,7 @@ begin
               AsnSeq(rev),
               ext
             ]);
+  fCachedDer := result;
 end;
 
 function TXTbsCertList.FromDer(const der: TCertDer): boolean;
@@ -2723,8 +3096,10 @@ var
   pos, posv, vt, nrev: integer;
   v64: QWord;
   oid, oid2, v, rev, ext: RawByteString;
+  u: RawUtf8;
   xce: TXCrlExtension;
 begin
+  fCachedDer := der;
   result := false;
   // decode main CRL fields
   pos := 1;
@@ -2740,28 +3115,33 @@ begin
      not AsnNextTime(pos, der, ThisUpdate) or
      (pos > length(der)) or
      ((ord(der[pos]) in [ASN1_UTCTIME, ASN1_GENTIME]) and // optional
-       not AsnNextTime(pos, der, NextUpdate)) or
-     (AsnNextRaw(pos, der, v) <> ASN1_SEQ) then
+       not AsnNextTime(pos, der, NextUpdate)) then
     exit;
-  if v <> '' then
+  if ((pos <= length(der))) and
+     (ord(der[pos]) = ASN1_SEQ) then // revokedCertificates SEQ is optional
   begin
-    // retrieve the revoked certificates list
-    SetLength(Revoked, 8);
-    nrev := 0;
-    posv := 1;
-    while (AsnNextRaw(posv, v, rev) = ASN1_SEQ) and
-          Revoked[nrev].FromDer(rev) do
+    if AsnNextRaw(pos, der, v) <> ASN1_SEQ then
+      exit;
+    if v <> '' then
     begin
-      inc(nrev);
-      if nrev = length(Revoked) then
-        SetLength(Revoked, NextGrow(nrev));
+      // retrieve the revoked certificates list
+      SetLength(Revoked, 8);
+      nrev := 0;
+      posv := 1;
+      while (AsnNextRaw(posv, v, rev) = ASN1_SEQ) and
+            Revoked[nrev].FromDer(rev) do
+      begin
+        inc(nrev);
+        if nrev = length(Revoked) then
+          SetLength(Revoked, NextGrow(nrev));
+      end;
+      if nrev = 0 then
+        Revoked := nil
+      else
+        DynArrayFakeLength(Revoked, nrev);
     end;
-    if nrev = 0 then
-      Revoked := nil
-    else
-      DynArrayFakeLength(Revoked, nrev);
   end;
-  // parse X.509 CRL version 2 extensions
+  // parse X.509 CRL version 2 extensions (also optional)
   if (Version >= 2) and
      (AsnNext(pos, der) = ASN1_CTC0) then
     if AsnNext(pos, der) <> ASN1_SEQ then
@@ -2779,23 +3159,17 @@ begin
         case xce of
           xceAuthorityKeyIdentifier:
             if (AsnNext(posv, v) = ASN1_SEQ) and
-               (AsnNextRaw(posv, v, ext) <> ASN1_NULL) then
+               (AsnNextRaw(posv, v, ext) = ASN1_CTX0) then
+            begin
+              RawAuthorityKeyIdentifier := ext;
               ToHumanHex(Extension[xceAuthorityKeyIdentifier],
                 pointer(ext), length(ext));
+            end; // ASN1_CTX1:GeneralNames ASN1_CTX2:Serial in ExtensionRaw[]
           xceIssuerAlternativeName:
             if AsnNext(posv, v) = ASN1_SEQ then
-              repeat
-                case AsnNextRaw(posv, v, ext) of
-                  ASN1_NULL:
-                    break;
-                  ASN1_CTX1, // rfc8722Name
-                  ASN1_CTX2, // dnsName
-                  ASN1_CTX6: // uri
-                    EnsureRawUtf8(v); // was stored as IA5String
-                end;
-                if v <> '' then
-                  AddToCsv(v, Extension[xceIssuerAlternativeName]);
-              until false;
+              while AsnNextGeneralName(posv, v, u) do
+                if u <> '' then
+                  AddToCsv(u, Extension[xceIssuerAlternativeName]);
           xceCrlNumber:
             begin
               v64 := AsnNextInteger(posv, v, vt);
@@ -2926,13 +3300,12 @@ end;
 procedure TX509Crl.AfterModified;
 begin
   fCachedDer := '';
+  Signed.fCachedDer := '';
 end;
 
 function TX509Crl.IsValidDate(TimeUtc: TDateTime): boolean;
 begin
-  result := (TimeUtc + CERT_DEPRECATION_THRESHOLD > Signed.ThisUpdate) and
-            ((Signed.NextUpdate = 0) or
-             (Signed.NextUpdate + CERT_DEPRECATION_THRESHOLD < TimeUtc));
+  result := IsCertValidDate(TimeUtc, Signed.NextUpdate, Signed.ThisUpdate);
 end;
 
 function TX509Crl.IsRevoked(const SerialNumber: RawUtf8): TCryptCertRevocationReason;
@@ -2979,7 +3352,7 @@ begin
      exit;
    result := cvUnknownAuthority;
    if (Authority.Signed.Extension[xeSubjectKeyIdentifier] <>
-        Signed.Extension[xceAuthorityKeyIdentifier]) or // no CsvContains() need
+                 Signed.Extension[xceAuthorityKeyIdentifier]) or
       (Authority.Signed.SubjectPublicKey = '') then
      exit;
    result := CanVerify(
@@ -2995,8 +3368,8 @@ end;
 
 function TX509CrlCompareWithAkid(const A, B): integer;
 begin
-  // FastLocateSorted() calls fCompare(Item, P[n * fInfo.Cache.ItemSize])
-  result := SortDynArrayAnsiString(A, TX509Crl(B).fRawAuthorityKeyIdentifier);
+  // FastLocateSorted() calls fCompare(RawAKI, P[n * fInfo.Cache.ItemSize])
+  result := SortDynArrayAnsiString(A, TX509Crl(B).Signed.RawAuthorityKeyIdentifier);
 end;
 
 constructor TX509CrlList.Create;
@@ -3014,20 +3387,18 @@ end;
 
 procedure TX509CrlList.Add(Crl: TX509Crl);
 var
-  i: integer;
-  akid: RawByteString;
+  i: integer; // not PtrInt
 begin
   if (Crl = nil) or
-     not HumanHexToBin(Crl.Signed.Extension[xceAuthorityKeyIdentifier], akid) then
+     (Crl.Signed.RawAuthorityKeyIdentifier = '') then
   begin
     Crl.Free; // avoid memory leak
     exit;
   end;
-  Crl.fRawAuthorityKeyIdentifier := akid; // as expected by FastLocateSorted()
   fSafe.WriteLock;
   try
     // use fast O(log(n)) binary search of this AKID
-    if fDA.FastLocateSorted(akid, i) then
+    if fDA.FastLocateSorted(Crl.Signed.RawAuthorityKeyIdentifier, i) then
       // there is already a CRL with this AKID
       if fList[i].CrlNumber < Crl.CrlNumber then
       begin
@@ -3037,7 +3408,7 @@ begin
       else
         Crl.Free // this supplied CRL is older than the existing -> ignore
     else if i >= 0 then
-      // add this CRL with its unknown SKID at the expected sorted position
+      // add this CRL with its unknown AKID at the expected sorted position
       fDA.FastAddSorted(i, Crl)
     else
       EX509.RaiseUtf8('Inconsistent %.Add order', [self]); // paranoid
@@ -3086,7 +3457,7 @@ begin
       crl := TX509Crl.Create;
       crl.Signed.Issuer.Name[xaCN] := Executable.Host;
       crl.Signed.Extension[xceAuthorityKeyIdentifier] := AuthorityKeyIdentifier;
-      crl.fRawAuthorityKeyIdentifier := akid; // for internal search
+      crl.Signed.RawAuthorityKeyIdentifier := akid; // for internal search
       fDA.FastAddSorted(i, crl);
     end
     else
@@ -3101,7 +3472,7 @@ end;
 
 function TX509CrlList.GetRevoked: integer;
 var
-  i: integer;
+  i: PtrInt;
 begin
   result := 0;
   if (self = nil) or
@@ -3137,7 +3508,7 @@ begin
     exit;
   fSafe.ReadLock;
   try
-    // efficient O(log(n)) binary search
+    // efficient O(log(n)) binary search of this AKI binary
     if fDA.FastLocateSorted(AuthorityKeyIdentifier, i) then
       result := fList[i]; // Add() should have made this unique per AKID
   finally
@@ -3175,47 +3546,21 @@ begin
   end;
 end;
 
-function TX509CrlList.IsRevoked(const AuthorityKeyIdentifiers,
+function TX509CrlList.IsRevoked(const AuthorityKeyIdentifier,
   SerialNumber: RawUtf8): TCryptCertRevocationReason;
 var
-  akid: RawUtf8;
-  sn: RawByteString;
-  p: PUtf8Char;
-  crl: TX509Crl;
-  res: PXCrlRevokedCert;
+  akid, sn: RawByteString;
 begin
-  result := crrNotRevoked;
-  if (self = nil) or
-     (fCount = 0) or
-     (AuthorityKeyIdentifiers = '') or
-     (SerialNumber = '') then
-    exit;
-  p := nil;
-  akid := AuthorityKeyIdentifiers;
-  if PosExChar(',', akid) <> 0 then
-    p := pointer(akid); // needs specific CSV process
-  fSafe.ReadLock; // reentrant multi-read lock
-  try
-    repeat
-      if p <> nil then
-        GetNextItem(p, ',', akid);
-      crl := FindByKeyIssuer(akid); // O(log(n)) binary search
-      if (crl = nil) or
-         not HumanHexToBin(SerialNumber, sn)  then
-        continue;
-      res := crl.Signed.FindRevoked(sn); // few items O(n) search
-      if res = nil then
-        continue;
-      result := res^.ReasonCode;
-      break;
-    until p = nil;
-  finally
-    fSafe.ReadUnLock;
-  end;
+  if (self <> nil) and
+     (fCount <> 0) and
+     HumanHexToBin(AuthorityKeyIdentifier, akid) and
+     HumanHexToBin(SerialNumber, sn) then
+    result := IsRevokedRaw(akid, sn)
+  else
+    result := crrNotRevoked;
 end;
 
-function TX509CrlList.IsRevokedRaw(akid: PRawByteString; n: integer;
-  const sn: RawByteString): TCryptCertRevocationReason;
+function TX509CrlList.IsRevokedRaw(const akid, sn: RawByteString): TCryptCertRevocationReason;
 var
   i: integer;
   res: PXCrlRevokedCert;
@@ -3223,28 +3568,16 @@ begin
   result := crrNotRevoked;
   if (self = nil) or
      (fCount = 0) or
-     (akid = nil) or
-     (n = 0) or
+     (akid = '') or
      (sn = '') then
     exit;
   fSafe.ReadLock; // reentrant multi-read lock
   try
-    repeat
-      if fDA.FastLocateSorted(akid^, i) then // inlined FindByKeyIssuerRaw()
-        with fList[i].Signed do
-        begin
-          res := FindRevoked(sn); // few items O(n) search
-          if res <> nil then
-          begin
-            result := res^.ReasonCode;
-            exit;
-          end;
-        end;
-      dec(n);
-      if n = 0 then
-        break;
-      inc(akid);
-    until false;
+    if not fDA.FastLocateSorted(akid, i) then // inlined FindByKeyIssuerRaw()
+      exit;
+    res := fList[i].Signed.FindRevoked(sn); // few items O(n) search
+    if res <> nil then
+      result := res^.ReasonCode;
   finally
     fSafe.ReadUnLock;
   end;
@@ -3273,7 +3606,7 @@ begin
       c := fList[i];
       if WithExplanatoryText then
         // see https://datatracker.ietf.org/doc/html/rfc7468#section-5.2
-        W.Add('Issuer: %'#13#10'Validity: from % to %'#13#10'Signature: %'#13#10,
+        W.Add('Issuer: %'#13#10'Validity: from %Z to %Z'#13#10'Signature: %'#13#10,
          [c.IssuerDN, DateTimeToIso8601Short(c.ThisUpdate),
           DateTimeToIso8601Short(c.NextUpdate), XSA_TXT[c.SignatureAlgorithm]]);
       W.AddString(c.SaveToPem);
@@ -3313,7 +3646,7 @@ begin
   // setup the CSR fields
   FillCharFast(sub, SizeOf(sub), 0);
   CertInfoPrepare(sub, ext, Subjects, Fields);
-  extreq := CertInfoCompute(Usages, ext, xu, xku);
+  extreq := CertInfoCompute(Usages, ext, {pathlen=}-1, xu, xku, Fields);
   if extreq <> '' then
     // extensionRequest (PKCS #9 via CRMF)
     extreq := Asn(ASN1_CTC0, [
@@ -3323,7 +3656,10 @@ begin
                     AsnSeq(extreq)
                   ])
                 ])
-              ]);
+              ])
+  else
+    // empty [0] set seems mandatory - OpenSSL and most libraries include it
+    extreq := AsnTyped('', ASN1_CTC0);
   // compute the main CSR body
   der := Asn(ASN1_SEQ, [
            Asn(0), // version
@@ -3359,22 +3695,25 @@ class procedure TCryptCertX509Abstract.InternalFind(Cert: PICryptCert;
   Count, MaxCount: integer; out Chain: ICryptCerts);
 var
   found: boolean;
-  res: integer;
+  n: integer;
   bin: RawByteString;
 begin
+  if Count = 0 then
+    exit;
   // prepare the search
   case Method of
     ccmSerialNumber,
-    ccmSubjectKey:
+    ccmSubjectKey,
+    ccmAuthorityKey,
+    ccmIssuedBy:
       if not HumanHexToBin(Value, bin) then
         bin := Value; // allow Value to be in hexadecimal or raw binary
   end;
   if MaxCount <= 0 then
     MaxCount := MaxInt;
   // O(n) efficient search loop with no temporary memory allocation
-  res := 0;
-  while Count <> 0 do
-  begin
+  n := 0;
+  repeat
     with TX509(Cert^.Handle) do // retrieve the TX509 in a single method call
       case Method of
         ccmSerialNumber:
@@ -3394,14 +3733,16 @@ begin
             found := SortDynArrayAnsiString(fCachedText, Value) = 0;
           end;
         ccmSubjectCN:
-          found := IdemPropNameU(Signed.Subject.Name[xaCN], Value);
+          found := PropNameEquals(Signed.Subject.Name[xaCN], Value);
         ccmIssuerCN:
-          found := IdemPropNameU(Signed.Issuer.Name[xaCN], Value);
+          found := PropNameEquals(Signed.Issuer.Name[xaCN], Value);
         ccmSubjectKey:
           found := SortDynArrayRawByteString(
-               Signed.ExtensionRaw[xeSubjectKeyIdentifier], bin) = 0;
-        ccmAuthorityKey:
-          found := CsvContains(Signed.Extension[xeAuthorityKeyIdentifier], Value);
+                     Signed.fRawSubjectKeyIdentifier, bin) = 0;
+        ccmAuthorityKey,
+        ccmIssuedBy:
+          found := SortDynArrayRawByteString(
+                     Signed.fRawAuthorityKeyIdentifier, bin) = 0;
         ccmSubjectAltName:
           found := CsvContains(Signed.Extension[xeSubjectAlternativeName],
                      Value, ',', {casesensitive=}false);
@@ -3419,16 +3760,23 @@ begin
       end;
     if found then
     begin
-      InterfaceArrayAddCount(Chain, res, Cert^);
+      if (Chain = nil) and
+         (MaxCount = 1) then
+      begin
+        SetLength(Chain, 1); // most common case
+        Chain[0] := Cert^;
+        exit;
+      end;
+      InterfaceArrayAddCount(Chain, n, Cert^);
       dec(MaxCount);
       if MaxCount = 0 then
         break;
     end;
     inc(Cert);
     dec(Count);
-  end;
-  if res <> length({%H-}Chain) then
-    DynArrayFakeLength(Chain, res);
+  until Count = 0;
+  if n <> length({%H-}Chain) then
+    DynArrayFakeLength(Chain, n);
 end;
 
 function TCryptCertX509Abstract.GetSerial: RawUtf8;
@@ -3497,6 +3845,24 @@ begin
     result := fX509.Signed.Extension[xeAuthorityKeyIdentifier];
 end;
 
+function TCryptCertX509Abstract.GetFields(var fields: TCryptCertFields;
+  withexts: boolean): boolean;
+begin
+  result := false;
+  if fX509 = nil then
+    exit;
+  fX509.Signed.Subject.ToFields(fields);
+  fields.Comment := fX509.Extension[xeNetscapeComment];
+  if withexts then
+    fields.CustomExts := fX509.GetExtensions;
+  result := true;
+end;
+
+function TCryptCertX509Abstract.GetExtensions: TCryptCustomExts;
+begin
+  result := fX509.GetExtensions;
+end;
+
 function TCryptCertX509Abstract.IsSelfSigned: boolean;
 begin
   result := (fX509 <> nil) and
@@ -3504,16 +3870,12 @@ begin
 end;
 
 function TCryptCertX509Abstract.IsAuthorizedBy(const Authority: ICryptCert): boolean;
-var
-  a: TCryptCertX509Abstract;
 begin
   if Assigned(Authority) then
-  begin
-    a := pointer(Authority.Instance);
-    result := a.InheritsFrom(TCryptCertX509Abstract) and
-      // ensure Authority xeSubjectKeyIdentifier is in xeAuthorityKeyIdentifier
-      fX509.IsAuthorizedBy(a.fX509);
-  end
+    if Authority.Instance.InheritsFrom(TCryptCertX509Abstract) then
+      result := fX509.IsAuthorizedBy(Authority.Instance.Handle)
+    else
+      result := inherited IsAuthorizedBy(Authority) // support other classes
   else
     result := false;
 end;
@@ -3557,12 +3919,20 @@ begin
             fX509.Signed.IsValidDate(date);
 end;
 
-function TCryptCertX509Abstract.GetUsage: TCryptCertUsages;
+function TCryptCertX509Abstract.GetUsage(PathLen: PInteger): TCryptCertUsages;
 begin
   if fX509 = nil then
-    result := []
+  begin
+    result := [];
+    if PathLen <> nil then
+      PathLen^ := -1;
+  end
   else
+  begin
     result := fX509.Signed.CertUsages;
+    if PathLen <> nil then
+      PathLen^ := fX509.Signed.PathLenConstraint;
+  end;
 end;
 
 function TCryptCertX509Abstract.GetPeerInfo: RawUtf8;
@@ -3641,8 +4011,8 @@ end;
 function TCryptCertX509Abstract.Encrypt(const Message: RawByteString;
   const Cipher: RawUtf8): RawByteString;
 begin
-  if (fX509 <> nil) and
-     (fX509.Usages * [cuDataEncipherment, cuEncipherOnly] <> []) then
+  if fX509.HasUsage(cuDataEncipherment) or
+     fX509.HasUsage(cuEncipherOnly) then
     result := fX509.PublicKey.Seal(Message, Cipher)
   else
     FastAssignNew(result);
@@ -3651,9 +4021,9 @@ end;
 function TCryptCertX509Abstract.Decrypt(const Message: RawByteString;
   const Cipher: RawUtf8): RawByteString;
 begin
-  if (fX509 <> nil) and
-     (fPrivateKey <> nil) and
-     (fX509.Usages * [cuDataEncipherment, cuEncipherOnly] <> []) then
+  if (fPrivateKey <> nil) and
+     (fX509.HasUsage(cuDataEncipherment) or
+      fX509.HasUsage(cuDecipherOnly)) then
     result := fPrivateKey.Open(Message, Cipher)
   else
     FastAssignNew(result);
@@ -3661,13 +4031,11 @@ end;
 
 function TCryptCertX509Abstract.SharedSecret(const pub: ICryptCert): RawByteString;
 begin
-  if (fX509 <> nil) and
-     (fPrivateKey <> nil) and
-     (cuKeyAgreement in fX509.Usages) and
+  if (fPrivateKey <> nil) and
+     fX509.HasUsage(cuKeyAgreement) and
      Assigned(pub) and
      pub.Instance.InheritsFrom(TCryptCertX509Abstract) and
-     (pub.Handle <> nil) and
-     (cuKeyAgreement in TX509(pub.Handle).Usages) then
+     TX509(pub.Handle).HasUsage(cuKeyAgreement) then
     result := fPrivateKey.SharedSecret(TX509(pub.Handle).PublicKey)
   else
     FastAssignNew(result);
@@ -3999,8 +4367,7 @@ function TCryptCertX509.Sign(Data: pointer; Len: integer;
   Usage: TCryptCertUsage): RawByteString;
 begin
   if HasPrivateSecret and
-     (fX509 <> nil) and
-     (Usage in fX509.Usages) then
+     fX509.HasUsage(Usage) then
     result := fPrivateKey.Sign(XSA_TO_CAA[AlgoXsa], Data, Len)
   else
     FastAssignNew(result);
@@ -4019,9 +4386,9 @@ begin
     a := Authority.Instance; // may be self
     u := cuKeyCertSign;
     if a = self then
-      u := GetFirstUsage(GetUsage) // any usage to let Sign() pass below
-    else if not (cuKeyCertSign in a.GetUsage) then
-      RaiseError('Sign: % Authority has no cuKeyCertSign', [a]);
+      u := GetFirstUsage(GetUsage(nil)) // any usage to let Sign() pass below
+    else if not HasCertUsage(u, a.GetUsage) then
+      RaiseError('Sign: % Authority has no keyCertSign', [a]);
     // assign the Issuer information (from any TCryptCert kind of class)
     if not fX509.Signed.Issuer.FromAsn(a.GetSubject('DER')) then
       RaiseError('Sign: invalid % Authority DER', [a]);
@@ -4091,12 +4458,13 @@ begin
     if auth.fX509 = nil then
       EX509.RaiseUtf8('%.Sign: authority has no public key', [self]);
     // validate usage
-    if not (cuCrlSign in auth.fX509.Usages) then
-      EX509.RaiseUtf8('%.Sign: authority has no cuCrlSign', [self]);
+    if not auth.fX509.HasUsage(cuCrlSign) then
+      EX509.RaiseUtf8('%.Sign: authority has no crlSign', [self]);
     // assign the Issuer information
     Signed.Issuer := auth.fX509.Signed.Subject;
     Signed.Extension[xceAuthorityKeyIdentifier] :=
-      auth.fX509.Signed.Extension[xeSubjectKeyIdentifier];
+                     auth.fX509.Signed.Extension[xeSubjectKeyIdentifier];
+    Signed.RawAuthorityKeyIdentifier := auth.fX509.Signed.fRawSubjectKeyIdentifier;
     if AuthorityCrlNumber = 0 then
       // we need some increasing value for conformity
       AuthorityCrlNumber := UnixTimeMinimalUtc; // increase every second
@@ -4214,7 +4582,6 @@ begin
     fTrust.SaveToPem(W, {WithExplanatoryText=}true);
     w.AddCR;
     fSignedCrl.SaveToPem(W, {WithExplanatoryText=}true);
-    w.AddCR;
     fUnsignedCrl.SaveToPem(W, {WithExplanatoryText=}true);
     w.SetText(RawUtf8(result));
   finally
@@ -4241,26 +4608,21 @@ end;
 function TCryptStoreX509.ComputeIsRevoked(cert: TX509): TCryptCertRevocationReason;
 var
   id: PRawByteString;
-  idcount, ownertag: integer;
+  tag: integer;
 begin
   // multi-thread safety: get tag sequence number before searches
-  ownertag := fIsRevokedTag;
+  tag := fIsRevokedTag;
   // retrieve the AKID of this certificate (maybe SKID if self-signed)
-  id := pointer(cert.fRawAuthorityKeyIdentifier);
-  if id = nil then
-  begin
-    id := @cert.fRawSubjectKeyIdentifier; // self-signed
-    idcount := 1;
-  end
-  else
-    idcount := PDALen(PAnsiChar(pointer(id)) - _DALEN)^ + _DAOFF;
+  id := @cert.Signed.fRawAuthorityKeyIdentifier;
+  if id^ = '' then
+    id := @cert.Signed.fRawSubjectKeyIdentifier; // happens when self-signed
   // ask the fSignedCrl and fUnsignedCrl lists
-  result := fSignedCrl.IsRevokedRaw(id, idcount, cert.Signed.SerialNumber);
+  result := fSignedCrl.IsRevokedRaw(id^, cert.Signed.SerialNumber);
   if result = crrNotRevoked then
-    result := fUnsignedCrl.IsRevokedRaw(id, idcount, cert.Signed.SerialNumber);
+    result := fUnsignedCrl.IsRevokedRaw(id^, cert.Signed.SerialNumber);
   // cache the result into cert.fIsRevokedTag
   if result = crrNotRevoked then
-    cert.fIsRevokedTag := ownertag // no need to test until next revocation
+    cert.fIsRevokedTag := tag // no need to test until next revocation
   else
     cert.fIsRevokedTag := -(integer(result) + 1); // -1..-11 to mark as revoked
     // as a nice side effect: once revoked, always revoked
@@ -4268,16 +4630,16 @@ end;
 
 function TCryptStoreX509.IsRevokedX509(cert: TX509): TCryptCertRevocationReason;
 var
-  flags: integer;
+  tag: integer;
 begin
   // very quick resolution using the per-TX509 instance cache tag
   result := crrNotRevoked; // most common case is "known as not revoked"
   if cert = nil then
     exit;
-  flags := cert.fIsRevokedTag;
-  if flags <> fIsRevokedTag then // are we in sync with the store?
-    if flags < 0 then
-      result := TCryptCertRevocationReason(-(flags + 1)) // revoked
+  tag := cert.fIsRevokedTag;
+  if tag <> fIsRevokedTag then // are we in sync with the store?
+    if tag < 0 then
+      result := TCryptCertRevocationReason(-(tag + 1)) // revoked
     else
       result := ComputeIsRevoked(cert); // ask once both TX509CrlList
 end;
@@ -4406,9 +4768,9 @@ begin
     exit;
   // search within our database of known certificates
   result := cvCorrupted;
-  skid := @x.fRawSubjectKeyIdentifier;
+  skid := @x.Signed.fRawSubjectKeyIdentifier;
   if skid^ = '' then
-    exit;
+    exit; // we need a SKI
   f := fTrust.FindBySubjectKeyRaw(skid^);
   if (f <> nil) and
      (x.Compare(f.Handle, ccmBinary) <> 0) then
@@ -4427,12 +4789,12 @@ begin
   for level := 0 to ValidDepth do
   begin
     result := cvCorrupted;
-    akid := pointer(x.fRawAuthorityKeyIdentifier); // check only first auth
-    if akid = nil then
+    akid := @x.Signed.fRawAuthorityKeyIdentifier;
+    if akid^ = '' then
       if x.IsSelfSigned then
-        akid := skid // typical on X.509
+        akid := skid // self-signed X.509 may have no AKI but IssuerDN=SubjectDN
       else
-        exit; // missing field
+        exit; // missing AKI field
     result := cvUnknownAuthority;
     a := fTrust.FindBySubjectKeyRaw(akid^);
     if a = nil then
@@ -4546,13 +4908,13 @@ var
   caa: TCryptAsymAlgo;
 begin
   for a := succ(low(a)) to high(a) do
-    XA_OID_ASN[a] := AsnEncOid(XA_OID[a]);
+    AsnEncOidVar(XA_OID[a], XA_OID_ASN[a]);
   for o := succ(low(o)) to high(o) do
-    XE_OID_ASN[o] := AsnEncOid(XE_OID[o]);
+    AsnEncOidVar(XE_OID[o], XE_OID_ASN[o]);
   for c := succ(low(c)) to high(c) do
-    XCE_OID_ASN[c] := AsnEncOid(XCE_OID[c]);
+    AsnEncOidVar(XCE_OID[c], XCE_OID_ASN[c]);
   for k := succ(low(k)) to high(k) do
-    XKU_OID_ASN[k] := AsnEncOid(XKU_OID[k]);
+    AsnEncOidVar(XKU_OID[k], XKU_OID_ASN[k]);
   // register this unit to our high-level cryptographic catalog
   // 'x509-rs256-int' 'x509-ps256-int' and 'x509-es256-int' match this unit
   // ('x509-rs/ps384/512-int' methods seem superfluous so are not defined)
