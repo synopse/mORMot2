@@ -2556,11 +2556,7 @@ begin
   {$endif FPC}
     exit; // avoid exceptions in IDE
   {$WARN SYMBOL_PLATFORM ON}
-  with TSynLog.Family.ExceptionIgnore do
-  begin
-    Add(EInterfaceFactory);
-    Add(ESynException);
-  end;
+  TSynLog.Family.ExceptionIgnore.Add(EInterfaceFactory);
   try
     I.Add(0, 0);
     Check(false, 'dead code EInterfaceFactory');
@@ -2569,6 +2565,8 @@ begin
       Check(Pos('TInterfaceStub returned error: expected exception',
         E.Message) > 0, E.Message);
   end;
+  Check(TSynLog.Family.ExceptionIgnore.Remove(EInterfaceFactory) >= 0);
+  TSynLog.Family.ExceptionIgnore.Add(ESynException);
   try
     I.Add(1, 2);
     Check(false, 'dead code ESynException');
@@ -2576,11 +2574,7 @@ begin
     on E: ESynException do
       Check(E.Message = 'expected exception', E.Message);
   end;
-  with TSynLog.Family.ExceptionIgnore do
-  begin
-    Delete(IndexOf(EInterfaceFactory));
-    Delete(IndexOf(ESynException));
-  end;
+  Check(TSynLog.Family.ExceptionIgnore.Remove(ESynException) >= 0);
 end;
 
 type

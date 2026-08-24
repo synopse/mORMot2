@@ -650,7 +650,7 @@ begin
     Check(Refused([boUpsert, boInsertOrReplace], dMySQL, 'id', @FIELDS, 3),
       'boUpsert is exclusive with boInsertOrReplace');
   finally
-    TSynLog.Family.ExceptionIgnore.Remove(EJsonObjectDecoder);
+    Check(TSynLog.Family.ExceptionIgnore.Remove(EJsonObjectDecoder) >= 0);
   end;
 end;
 
