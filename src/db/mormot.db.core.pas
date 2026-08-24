@@ -1504,9 +1504,18 @@ function JsonGetID(P: PUtf8Char; out ID: TID): boolean;
 // - depending on boInsertOrIgnore/boInsertOrReplace presence in BatchOptions
 // - SQLite3 and MySQL should understand "REPLACE INTO"
 // - Firebird has its "UPDATE OR INSERT INTO" own syntax
-// - other databases are not supported, because they require a much more complex
-// SQL statement to produce the same effect - a prefix is not enough
+// - PostgreSQL has no such prefix: it needs an ON CONFLICT clause appended
+// AFTER the VALUES, so EncodeInsertSuffix() below has to be called as well
 procedure EncodeInsertPrefix(W: TTextWriter; BatchOptions: TRestBatchOptions;
+  DB: TSqlDBDefinition);
+
+/// append any trailing clause the DB engine needs for the given BatchOptions
+// - call it right after the closing parenthesis of the INSERT values
+// - is a no-op for every engine which encodes it all as a prefix, i.e. this
+// only emits the PostgreSQL "ON CONFLICT" equivalent of INSERT OR IGNORE
+// - note that no conflict target is supplied on purpose: it matches the
+// "insert ignore" semantics, i.e. skip the row whichever constraint it violates
+procedure EncodeInsertSuffix(W: TTextWriter; BatchOptions: TRestBatchOptions;
   DB: TSqlDBDefinition);
 
 
@@ -4149,6 +4158,8 @@ begin
       for f := 0 to FieldCount - 1 do
         AddValue;
       W.ReplaceLastComma(')');
+      if Prefix1Batch <> nil then
+        EncodeInsertSuffix(W, Prefix1Batch^, DB);
     end;
     W.SetText(result);
   finally
@@ -4406,7 +4417,10 @@ begin
     case DB of
       dMySQL,
       dMariaDB:
-        W.AddShort('insert ignore into ')
+        W.AddShort('insert ignore into ');
+      dPostgreSQL:
+        // no prefix: EncodeInsertSuffix() appends ' on conflict do nothing'
+        W.AddShort('insert into ');
     else
       W.AddShort('insert or ignore into '); // SQLite3
     end
@@ -4414,13 +4428,29 @@ begin
     case DB of
       dFirebird:
         W.AddShort('update or insert into ');
+      dPostgreSQL:
+        // PostgreSQL has no REPLACE INTO. It could be emulated with
+        // ON CONFLICT (key) DO UPDATE, but that needs the conflict target and
+        // the field list, which a prefix-only callback does not receive - and
+        // it is a MERGE, not the DELETE+INSERT that REPLACE INTO performs.
+        // Falling through to 'replace into ' used to emit invalid SQL and let
+        // the server reject the whole batch with an obscure syntax error.
+        EJsonObjectDecoder.RaiseU('boInsertOrReplace is not supported on ' +
+          'PostgreSQL: use boInsertOrIgnore, or an explicit DELETE + INSERT');
     else
       W.AddShort('replace into '); // SQLite3 and MySQL+MariaDB
     end
   else
     W.AddShort('insert into ');
-  // PostgreSQL has no UPSERT but could be emulated with ON CONFLICT syntax
-  // https://www.postgresqltutorial.com/postgresql-tutorial/postgresql-upsert
+end;
+
+procedure EncodeInsertSuffix(W: TTextWriter; BatchOptions: TRestBatchOptions;
+  DB: TSqlDBDefinition);
+begin
+  if (DB = dPostgreSQL) and
+     (boInsertOrIgnore in BatchOptions) then
+    // https://www.postgresql.org/docs/current/sql-insert.html#SQL-ON-CONFLICT
+    W.AddShort(' on conflict do nothing');
 end;
 
 
