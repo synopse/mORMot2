@@ -2716,6 +2716,7 @@ begin
   enum.Init(path.Text, path.Len, '.', v);
   while enum.MoveNext do
     PDocVariantData(@Result)^.AddItemWeak(pointer(enum.Current));
+  TempUtf8Done(path);
 end;
 
 class procedure TSynMustacheStandardHelpers.ProductValue(const Value: variant;
@@ -2736,6 +2737,7 @@ begin
   enum.Init(path.Text, path.Len, '.', v);
   while enum.MoveNext do
     PDocVariantData(@Result)^.AddItemWeak(enum.Current);
+  TempUtf8Done(path);
 end;
 
 {$endif HASITERATORS}
