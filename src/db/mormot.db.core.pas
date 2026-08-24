@@ -4488,7 +4488,7 @@ procedure EncodeInsertSuffix(W: TTextWriter; BatchOptions: TRestBatchOptions;
   DB: TSqlDBDefinition; const KeyFieldName: RawUtf8;
   FieldNames: PPUtf8CharArray; FieldCount: integer);
 var
-  f, n: PtrInt;
+  f, n, l: PtrInt;
   assignable: TFieldBits;
 begin
   if not (boUpsert in BatchOptions) then
@@ -4537,9 +4537,10 @@ begin
         for f := 0 to FieldCount - 1 do
           if FieldBitGet(assignable, f) then
           begin
-            W.AddNoJsonEscape(FieldNames^[f]);
+            l := StrLen(FieldNames^[f]);
+            W.AddNoJsonEscape(FieldNames^[f], l);
             W.AddShort('=excluded.');
-            W.AddNoJsonEscape(FieldNames^[f]);
+            W.AddNoJsonEscape(FieldNames^[f], l);
             W.AddComma;
           end;
         W.CancelLastComma;
@@ -4560,9 +4561,10 @@ begin
         for f := 0 to FieldCount - 1 do
           if FieldBitGet(assignable, f) then
           begin
-            W.AddNoJsonEscape(FieldNames^[f]);
-            W.AddShort('=values(');
-            W.AddNoJsonEscape(FieldNames^[f]);
+            l := StrLen(FieldNames^[f]);
+            W.AddNoJsonEscape(FieldNames^[f], l);
+            W.AddShorter('=values(');
+            W.AddNoJsonEscape(FieldNames^[f], l);
             W.AddDirect(')', ',');
           end;
         W.CancelLastComma;
