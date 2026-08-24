@@ -2041,18 +2041,20 @@ type
     {$ifdef ABIX86}
     EDX, ECX, MethodIndex, EBP, Ret: cardinal;
     {$else}
-    {$ifdef OSPOSIX}
+    // the x64 Windows stub stores the integer registers after the frame,
+    // every other ABI (including aarch64 on Windows) stores them first
+    {$ifndef ABIWINX64}
     ParamRegs: packed array[PARAMREG_FIRST .. PARAMREG_LAST] of pointer;
-    {$endif OSPOSIX}
+    {$endif ABIWINX64}
     {$ifdef HAS_FPREG}
     FPRegs: packed array[FPREG_FIRST..FPREG_LAST] of double;
     {$endif HAS_FPREG}
     MethodIndex: PtrUInt;
     Frame: pointer;
     Ret: pointer;
-    {$ifndef OSPOSIX}
+    {$ifdef ABIWINX64}
     ParamRegs: packed array[PARAMREG_FIRST .. PARAMREG_LAST] of pointer;
-    {$endif OSPOSIX}
+    {$endif ABIWINX64}
     {$endif ABIX86}
     {$ifdef ABIA32}
     // alf: on ARM, there is more on the stack than you will expect
