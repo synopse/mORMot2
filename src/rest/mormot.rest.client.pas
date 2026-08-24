@@ -1446,8 +1446,11 @@ begin
       User.SetPassword(User.PasswordHashHexa, ''); // fallback to old hash
   end
   else
+  begin
     // regular authentication with User.PasswordHashHexa = hashed value
     servernonce := Sender.CallBackGetResult('auth', ['username', User.LogonName]);
+    FillCharFast(values, SizeOf(values), 0); // values[1] is used below
+  end;
   if servernonce = '' then
     exit;
   // compute and return a proof, challenged against client and server nonces
