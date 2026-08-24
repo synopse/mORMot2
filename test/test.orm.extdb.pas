@@ -509,6 +509,11 @@ begin
 end;
 
 procedure TTestExternalDatabase.BatchInsertOptions;
+const
+  // as the ORM would supply them: the key first, then the assignable columns
+  FIELDS: array[0..2] of PUtf8Char = ('id', 'a', 'b');
+  // a table whose only column is its own key: nothing left to assign
+  KEYONLY: array[0..0] of PUtf8Char = ('mid');
 var
   db: TSqlDBDefinition;
   raised: boolean;
@@ -530,11 +535,48 @@ var
     end;
   end;
 
+  // same, through the overload that knows the key and the column list
+  function EncodeKey(const opt: TRestBatchOptions; d: TSqlDBDefinition;
+    const key: RawUtf8; names: PPUtf8CharArray; count: integer): RawUtf8;
+  var
+    W: TTextWriter;
+    tmp: TTextWriterStackBuffer;
+  begin
+    W := TTextWriter.CreateOwnedStream(tmp);
+    try
+      EncodeInsertPrefix(W, opt, d);
+      W.AddShort('t (id,a,b) values (?,?,?)');
+      EncodeInsertSuffix(W, opt, d, key, names, count);
+      W.SetText(result);
+    finally
+      W.Free;
+    end;
+  end;
+
   procedure Test(const opt: TRestBatchOptions; d: TSqlDBDefinition;
     const expected: RawUtf8);
   begin
     CheckEqual(Encode(opt, d), expected, GetEnumName(TypeInfo(TSqlDBDefinition),
       ord(d))^);
+  end;
+
+  procedure TestKey(d: TSqlDBDefinition; const expected: RawUtf8);
+  begin
+    CheckEqual(EncodeKey([boUpsert], d, 'id', @FIELDS, 3), expected,
+      GetEnumName(TypeInfo(TSqlDBDefinition), ord(d))^);
+  end;
+
+  // ensure the encoding refuses to emit anything rather than emit bad SQL
+  function Refused(const opt: TRestBatchOptions; d: TSqlDBDefinition;
+    const key: RawUtf8; names: PPUtf8CharArray; count: integer): boolean;
+  begin
+    result := false;
+    try
+      EncodeKey(opt, d, key, names, count);
+    except
+      on EJsonObjectDecoder do
+        result := true;
+    end;
   end;
 
 begin
@@ -569,6 +611,45 @@ begin
       CheckUtf8(PosEx('conflict', Encode([boInsertOrIgnore], db)) = 0,
         'no conflict clause on %',
         [GetEnumName(TypeInfo(TSqlDBDefinition), ord(db))^]);
+  // boUpsert: MERGE semantics, i.e. only the supplied columns are assigned -
+  // the key itself never is, since it is what identifies the conflict
+  TestKey(dPostgreSQL, 'insert into t (id,a,b) values (?,?,?) ' +
+    'on conflict (id) do update set a=excluded.a,b=excluded.b');
+  TestKey(dSQLite,     'insert into t (id,a,b) values (?,?,?) ' +
+    'on conflict (id) do update set a=excluded.a,b=excluded.b');
+  TestKey(dMySQL,      'insert into t (id,a,b) values (?,?,?) ' +
+    'on duplicate key update a=values(a),b=values(b)');
+  TestKey(dMariaDB,    'insert into t (id,a,b) values (?,?,?) ' +
+    'on duplicate key update a=values(a),b=values(b)');
+  // Firebird is the only engine whose upsert is a prefix + a MATCHING clause
+  TestKey(dFirebird,   'update or insert into t (id,a,b) values (?,?,?) ' +
+    'matching (id)');
+  // a non-ID key name is honoured, and excluded from the assignment list
+  CheckEqual(EncodeKey([boUpsert], dPostgreSQL, 'a', @FIELDS, 3),
+    'insert into t (id,a,b) values (?,?,?) on conflict (a) do update set ' +
+    'b=excluded.b', 'custom key');
+  // nothing left to assign: an empty SET would be a syntax error
+  CheckEqual(EncodeKey([boUpsert], dPostgreSQL, 'mid', @KEYONLY, 1),
+    'insert into t (id,a,b) values (?,?,?) on conflict (mid) do nothing',
+    'key-only PostgreSQL');
+  CheckEqual(EncodeKey([boUpsert], dMySQL, 'mid', @KEYONLY, 1),
+    'insert into t (id,a,b) values (?,?,?) on duplicate key update mid=mid',
+    'key-only MySQL');
+  // without boUpsert the overload must behave like the parameterless one
+  CheckEqual(EncodeKey([boInsertOrIgnore], dPostgreSQL, 'id', @FIELDS, 3),
+    'insert into t (id,a,b) values (?,?,?) on conflict do nothing',
+    'overload falls back');
+  // refusals, rather than SQL the server would reject
+  Check(Refused([boUpsert], dOracle, 'id', @FIELDS, 3),
+    'boUpsert unsupported on Oracle');
+  Check(Refused([boUpsert], dPostgreSQL, '', @FIELDS, 3),
+    'boUpsert needs a conflict target');
+  Check(Refused([boUpsert], dFirebird, '', @FIELDS, 3),
+    'MATCHING needs a key too');
+  Check(Refused([boUpsert, boInsertOrIgnore], dPostgreSQL, 'id', @FIELDS, 3),
+    'boUpsert is exclusive with boInsertOrIgnore');
+  Check(Refused([boUpsert, boInsertOrReplace], dMySQL, 'id', @FIELDS, 3),
+    'boUpsert is exclusive with boInsertOrReplace');
 end;
 
 procedure TTestExternalDatabase.CleanUp;

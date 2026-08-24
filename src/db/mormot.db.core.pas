@@ -1298,8 +1298,16 @@ type
   /// the available options for TRest.BatchStart() process
   // - boInsertOrIgnore will create 'INSERT OR IGNORE' statements instead of
   // plain 'INSERT' - supported only by SQLite3 and MySQL
-  // - boInsertOrUpdate will create 'REPLACE' statements instead of
+  // - boInsertOrReplace will create 'REPLACE' statements instead of
   // plain 'INSERT' - supported only by SQLite3, Firebird and MySQL
+  // - boUpsert will insert the row, or UPDATE the supplied columns of the
+  // existing one. Unlike boInsertOrReplace - a DELETE+INSERT, which resets
+  // every column absent from the batch, notably the BLOB fields, which are
+  // never part of an ORM batch - it leaves untouched columns alone. Encoded
+  // as ON CONFLICT (key) DO UPDATE on PostgreSQL/SQLite3, ON DUPLICATE KEY
+  // UPDATE on MySQL/MariaDB, UPDATE OR INSERT .. MATCHING on Firebird. It
+  // needs the primary key name, so it is only available where the caller
+  // knows it - i.e. the ORM external path (EncodeAsSqlPrepared)
   // - boExtendedJson will force the JSON to unquote the column names,
   // e.g. writing col1:...,col2:... instead of "col1":...,"col2"...
   // - boPostNoSimpleFields (client-side only) will avoid to send a
@@ -1327,7 +1335,8 @@ type
     boRollbackOnError,
     boNoModelEncoding,
     boOnlyObjects,
-    boMayHaveBlob);
+    boMayHaveBlob,
+    boUpsert);
 
   /// a set of options for TRest.BatchStart() process
   // - TJsonObjectDecoder will use it to compute the corresponding SQL
@@ -1516,9 +1525,17 @@ procedure EncodeInsertPrefix(W: TTextWriter; BatchOptions: TRestBatchOptions;
 // - note that no conflict target is supplied on purpose: it matches the
 // "insert ignore" semantics, i.e. skip the row whichever constraint it violates
 procedure EncodeInsertSuffix(W: TTextWriter; BatchOptions: TRestBatchOptions;
-  DB: TSqlDBDefinition);
+  DB: TSqlDBDefinition); overload;
 
-
+/// append the trailing clause boUpsert needs for this engine
+// - unlike the parameterless overload, an UPSERT needs both the conflict
+// target (the primary key column) and the list of columns to assign, so it can
+// only be emitted where the caller knows them
+// - KeyFieldName is excluded from the assignment list, as are ID/RowID
+// - falls back to the parameterless overload when boUpsert is not set
+procedure EncodeInsertSuffix(W: TTextWriter; BatchOptions: TRestBatchOptions;
+  DB: TSqlDBDefinition; const KeyFieldName: RawUtf8;
+  FieldNames: PPUtf8CharArray; FieldCount: integer); overload;
 
 
 implementation
@@ -4424,6 +4441,16 @@ begin
     else
       W.AddShort('insert or ignore into '); // SQLite3
     end
+  else if boUpsert in BatchOptions then
+    case DB of
+      dFirebird:
+        // the only engine whose upsert is a prefix; EncodeInsertSuffix()
+        // appends its mandatory MATCHING (key) clause
+        W.AddShort('update or insert into ');
+    else
+      // every other engine appends its clause after the VALUES
+      W.AddShort('insert into ');
+    end
   else if boInsertOrReplace in BatchOptions then
     case DB of
       dFirebird:
@@ -4451,6 +4478,99 @@ begin
      (boInsertOrIgnore in BatchOptions) then
     // https://www.postgresql.org/docs/current/sql-insert.html#SQL-ON-CONFLICT
     W.AddShort(' on conflict do nothing');
+end;
+
+procedure EncodeInsertSuffix(W: TTextWriter; BatchOptions: TRestBatchOptions;
+  DB: TSqlDBDefinition; const KeyFieldName: RawUtf8;
+  FieldNames: PPUtf8CharArray; FieldCount: integer);
+var
+  f: PtrInt;
+  n: integer;
+
+  // the key itself is never assigned: it is what identifies the conflict
+  function assignable(i: PtrInt): boolean;
+  begin
+    result := not IsRowID(FieldNames^[i]) and
+              not PropNameEquals(KeyFieldName,
+                    pointer(FieldNames^[i]), StrLen(FieldNames^[i]));
+  end;
+
+begin
+  if not (boUpsert in BatchOptions) then
+  begin
+    EncodeInsertSuffix(W, BatchOptions, DB); // boInsertOrIgnore path
+    exit;
+  end;
+  if (boInsertOrIgnore in BatchOptions) or
+     (boInsertOrReplace in BatchOptions) then
+    EJsonObjectDecoder.RaiseU(
+      'boUpsert is exclusive with boInsertOrIgnore/boInsertOrReplace');
+  if KeyFieldName = '' then
+    EJsonObjectDecoder.RaiseUtf8('boUpsert needs a key on %',
+      [GetEnumName(TypeInfo(TSqlDBDefinition), ord(DB))^]);
+  if DB = dFirebird then
+  begin
+    // UPDATE OR INSERT INTO t (..) VALUES (..) MATCHING (key)
+    W.AddShort(' matching (');
+    W.AddString(KeyFieldName);
+    W.AddDirect(')');
+    exit;
+  end;
+  n := 0;
+  for f := 0 to FieldCount - 1 do
+    if assignable(f) then
+      inc(n);
+  case DB of
+    dPostgreSQL,
+    dSQLite:
+      begin
+        // DO UPDATE, unlike DO NOTHING, cannot be left unqualified
+        W.AddShort(' on conflict (');
+        W.AddString(KeyFieldName);
+        if n = 0 then
+        begin
+          // an empty SET list would be a syntax error
+          W.AddShort(') do nothing');
+          exit;
+        end;
+        W.AddShort(') do update set ');
+        for f := 0 to FieldCount - 1 do
+          if assignable(f) then
+          begin
+            W.AddNoJsonEscape(FieldNames^[f]);
+            W.AddShort('=excluded.');
+            W.AddNoJsonEscape(FieldNames^[f]);
+            W.AddComma;
+          end;
+        W.CancelLastComma;
+      end;
+    dMySQL,
+    dMariaDB:
+      begin
+        // fires on any duplicate key, so no conflict target is needed
+        W.AddShort(' on duplicate key update ');
+        if n = 0 then
+        begin
+          // assigning the key to itself is the documented MySQL no-op upsert
+          W.AddString(KeyFieldName);
+          W.AddDirect('=');
+          W.AddString(KeyFieldName);
+          exit;
+        end;
+        for f := 0 to FieldCount - 1 do
+          if assignable(f) then
+          begin
+            W.AddNoJsonEscape(FieldNames^[f]);
+            W.AddShort('=values(');
+            W.AddNoJsonEscape(FieldNames^[f]);
+            W.AddDirect(')', ',');
+          end;
+        W.CancelLastComma;
+      end;
+  else
+    EJsonObjectDecoder.RaiseUtf8('boUpsert is not supported on %',
+      [GetEnumName(TypeInfo(TSqlDBDefinition), ord(DB))^]);
+  end;
 end;
 
 
