@@ -8876,13 +8876,36 @@ end;
 
 function TExecutableResource.Open(ResourceName, ResType: PChar;
   Instance: TLibHandle): boolean;
+{$ifdef FPCUNICODEPOSIX}
+var
+  name8, type8: RawUtf8;
+  nameA, typeA: PAnsiChar;
+{$endif FPCUNICODEPOSIX}
 begin
   result := false;
   {$ifdef DELPHIPOSIX}
   if Instance = 0 then
     Instance := HInstance; // always 0 on FPC POSIX for the current process
   {$endif DELPHIPOSIX}
+  {$ifdef FPCUNICODEPOSIX}
+  if PtrUInt(ResourceName) <= High(Word) then
+    nameA := pointer(ResourceName)
+  else
+  begin
+    Unicode_ToUtf8(ResourceName, StrLenW(ResourceName), name8);
+    nameA := pointer(name8);
+  end;
+  if PtrUInt(ResType) <= High(Word) then
+    typeA := pointer(ResType)
+  else
+  begin
+    Unicode_ToUtf8(ResType, StrLenW(ResType), type8);
+    typeA := pointer(type8);
+  end;
+  HResInfo := FindResource(Instance, nameA, typeA);
+  {$else}
   HResInfo := FindResource(Instance, ResourceName, ResType);
+  {$endif FPCUNICODEPOSIX}
   if HResInfo = 0 then
     exit;
   HGlobal := LoadResource(Instance, HResInfo);

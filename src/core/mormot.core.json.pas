@@ -8007,7 +8007,9 @@ begin
       Ctxt.Info.Cache.Engine.Utf8BufferToAnsi(Ctxt.Value, Ctxt.ValueLen, Data^);
 end;
 
-procedure _JL_String(Data: PString; var Ctxt: TJsonParserContext);
+procedure _JL_String(
+  Data: {$ifdef UNICODE}PUnicodeString{$else}PAnsiString{$endif};
+  var Ctxt: TJsonParserContext);
 begin
   if Ctxt.ParseNext then
     Utf8DecodeToString(Ctxt.Value, Ctxt.ValueLen, Data^);

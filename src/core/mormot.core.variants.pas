@@ -816,9 +816,11 @@ type
     // - mainly the _(Index: integer): variant method to retrieve an item
     // if the document is an array
     function DoFunction(var Dest: TVarData; const V: TVarData;
-      const Name: string; const Arguments: TVarDataArray): boolean; override;
+      const Name: {$ifdef FPC}AnsiString{$else}string{$endif};
+      const Arguments: TVarDataArray): boolean; override;
     /// low-level callback to access internal pseudo-methods
-    function DoProcedure(const V: TVarData; const Name: string;
+    function DoProcedure(const V: TVarData;
+      const Name: {$ifdef FPC}AnsiString{$else}string{$endif};
       const Arguments: TVarDataArray): boolean; override;
     /// low-level callback to clear the content
     procedure Clear(var V: TVarData); override;
@@ -5547,7 +5549,8 @@ begin
   result := TDocVariantData(V).Count = 0;
 end;
 
-function TDocVariant.DoProcedure(const V: TVarData; const Name: string;
+function TDocVariant.DoProcedure(const V: TVarData;
+  const Name: {$ifdef FPC}AnsiString{$else}string{$endif};
   const Arguments: TVarDataArray): boolean;
 var
   Data: PDocVariantData;
@@ -5582,7 +5585,8 @@ begin
 end;
 
 function TDocVariant.DoFunction(var Dest: TVarData; const V: TVarData;
-  const Name: string; const Arguments: TVarDataArray): boolean;
+  const Name: {$ifdef FPC}AnsiString{$else}string{$endif};
+  const Arguments: TVarDataArray): boolean;
 var
   ndx: integer;
   Data: PDocVariantData;

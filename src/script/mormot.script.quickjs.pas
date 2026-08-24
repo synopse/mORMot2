@@ -209,7 +209,8 @@ type
     /// call a JavaScript function via late-binding
     // - handles obj.method(args) syntax
     function DoFunction(var Dest: TVarData; const V: TVarData;
-      const Name: string; const Arguments: TVarDataArray): boolean; override;
+      const Name: {$ifdef FPC}AnsiString{$else}string{$endif};
+      const Arguments: TVarDataArray): boolean; override;
   public
     /// properly release the JavaScript object reference
     procedure Clear(var V: TVarData); override;
@@ -590,7 +591,8 @@ begin
 end;
 
 function TQuickJSVariant.DoFunction(var Dest: TVarData; const V: TVarData;
-  const Name: string; const Arguments: TVarDataArray): boolean;
+  const Name: {$ifdef FPC}AnsiString{$else}string{$endif};
+  const Arguments: TVarDataArray): boolean;
 var
   data: TQuickJSVariantData absolute V;
   funcName: RawUtf8;

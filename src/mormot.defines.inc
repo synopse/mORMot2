@@ -180,6 +180,15 @@
     {$MODE DELPHI} // e.g. for asm syntax - disabled for FPC 2.6 compatibility
   {$endif FPC_DELPHI}
 
+  {$ifdef UNICODERTL}
+    // an FPC Unicode RTL build (-dUNICODERTL) expects UnicodeString=string
+    // units, exactly as every unit of that RTL declares for itself
+    {$MODESWITCH UNICODESTRINGS}
+  {$endif UNICODERTL}
+  {$ifdef UNICODE}
+    {$define FPCUNICODE} // FPC with UnicodeString as default string type
+  {$endif UNICODE}
+
   {$INLINE ON}
   {$MINENUMSIZE 1}
   {$PACKRECORDS DEFAULT} // force normal alignment
@@ -1118,6 +1127,12 @@
   {$define ONLYUSEHTTPSOCKET} // efficient cross-platform Socket + OpenSSL API
   {$undef USE_WINIOCP}        // disable any Windows-specific code
   {$undef USE_THREADWINIOCP}
+
+  {$ifdef FPCUNICODE}
+    // application-facing string/TFileName stay Unicode; the UTF-16 to
+    // UTF-8 transcoding happens at the raw POSIX API boundaries only
+    {$define FPCUNICODEPOSIX}
+  {$endif FPCUNICODE}
 
   {$ifdef OSANDROID}
 

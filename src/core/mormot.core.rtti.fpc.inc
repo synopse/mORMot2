@@ -457,9 +457,12 @@ function TRttiInfo.RecordAllFields(out RecSize: PtrInt): TRttiRecordAllFields;
 var
   tab: PExtendedFieldTable;
   ent: PExtendedFieldEntry;
+  info,
+  item: PRttiInfo;
   i: integer;
 begin
   result := nil; // reset any previous list
+  RecSize := RecordSize;
   tab := PRecordData(GetTypeData(@self))^.ExtendedFields;
   if (tab = nil) or
      (tab^.FieldCount = 0) then
@@ -470,7 +473,23 @@ begin
     ent := tab^.Field[i];
     with result[i] do
     begin
-      TypeInfo := DeRef(ent^.FieldType);
+      info := DeRef(ent^.FieldType);
+      if info = nil then
+      begin
+        result := nil;
+        exit;
+      end;
+      if info^.Kind = rkSet then
+      begin
+        item := DeRef(PTypeData(GetTypeData(info))^.CompTypeRef);
+        if (item = nil) or
+           (item^.Kind <> rkEnumeration) then
+        begin
+          result := nil;
+          exit;
+        end;
+      end;
+      TypeInfo := info;
       Offset := ent^.FieldOffset;
       Name := ent^.Name;
       if Name = nil then
