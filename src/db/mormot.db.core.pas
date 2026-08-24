@@ -4484,17 +4484,8 @@ procedure EncodeInsertSuffix(W: TTextWriter; BatchOptions: TRestBatchOptions;
   DB: TSqlDBDefinition; const KeyFieldName: RawUtf8;
   FieldNames: PPUtf8CharArray; FieldCount: integer);
 var
-  f: PtrInt;
-  n: integer;
-
-  // the key itself is never assigned: it is what identifies the conflict
-  function assignable(i: PtrInt): boolean;
-  begin
-    result := not IsRowID(FieldNames^[i]) and
-              not PropNameEquals(KeyFieldName,
-                    pointer(FieldNames^[i]), StrLen(FieldNames^[i]));
-  end;
-
+  f, n: PtrInt;
+  assignable: TFieldBits;
 begin
   if not (boUpsert in BatchOptions) then
   begin
@@ -4516,10 +4507,16 @@ begin
     W.AddDirect(')');
     exit;
   end;
+  FillZero(assignable); // checked once
   n := 0;
   for f := 0 to FieldCount - 1 do
-    if assignable(f) then
+    if not IsRowID(FieldNames^[f]) and
+       (StrIComp(pointer(KeyFieldName), FieldNames^[f]) <> 0) then
+    begin
+      // the key itself is never assigned: it is what identifies the conflict
+      FieldBitSet(assignable, f);
       inc(n);
+    end;
   case DB of
     dPostgreSQL,
     dSQLite:
@@ -4535,7 +4532,7 @@ begin
         end;
         W.AddShort(') do update set ');
         for f := 0 to FieldCount - 1 do
-          if assignable(f) then
+          if FieldBitGet(assignable, f) then
           begin
             W.AddNoJsonEscape(FieldNames^[f]);
             W.AddShort('=excluded.');
@@ -4558,7 +4555,7 @@ begin
           exit;
         end;
         for f := 0 to FieldCount - 1 do
-          if assignable(f) then
+          if FieldBitGet(assignable, f) then
           begin
             W.AddNoJsonEscape(FieldNames^[f]);
             W.AddShort('=values(');
