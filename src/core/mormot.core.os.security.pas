@@ -2566,9 +2566,9 @@ type
   UNICODE_STRING = packed record
     Length: word;
     MaximumLength: word;
-    {$ifdef CPUX64}
+    {$ifdef CPU64}
     _align: array[0..3] of byte;
-    {$endif CPUX64}
+    {$endif CPU64}
     Buffer: PWideChar;
   end;
 {$A+}
@@ -8294,9 +8294,9 @@ type
     Reserved1: array[0..1] of byte;
     BeingDebugged: byte;
     Reserved2: array[0..0] of byte;
-    {$ifdef CPUX64}
+    {$ifdef CPU64}
     _align1: array[0..3] of byte;
-    {$endif CPUX64}
+    {$endif CPU64}
     Reserved3: array[0..1] of pointer;
     Ldr: PMS_PEB_LDR_DATA;
     ProcessParameters: PMS_RTL_USER_PROCESS_PARAMETERS;
@@ -8304,28 +8304,28 @@ type
     Reserved5: array[0..51] of pointer;
     PostProcessInitRoutine: _PPS_POST_PROCESS_INIT_ROUTINE;
     Reserved6: array[0..127] of byte;
-    {$ifdef CPUX64}
+    {$ifdef CPU64}
     _align2: array[0..3] of byte;
-    {$endif CPUX64}
+    {$endif CPU64}
     Reserved7: array[0..0] of pointer;
     SessionId: ULONG;
-    {$ifdef CPUX64}
+    {$ifdef CPU64}
     _align3: array[0..3] of byte;
-    {$endif CPUX64}
+    {$endif CPU64}
   end;
 
   PMS_PROCESS_BASIC_INFORMATION = ^MS_PROCESS_BASIC_INFORMATION;
   MS_PROCESS_BASIC_INFORMATION = packed record
     ExitStatus: integer;
-    {$ifdef CPUX64}
+    {$ifdef CPU64}
     _align1: array[0..3] of byte;
-    {$endif CPUX64}
+    {$endif CPU64}
     PebBaseAddress: PMS_PEB;
     AffinityMask: PtrUInt;
     BasePriority: integer;
-    {$ifdef CPUX64}
+    {$ifdef CPU64}
     _align2: array[0..3] of byte;
-    {$endif CPUX64}
+    {$endif CPU64}
     UniqueProcessId: PtrUInt;
     InheritedFromUniqueProcessId: PtrUInt;
   end;
