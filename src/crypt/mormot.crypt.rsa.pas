@@ -339,13 +339,15 @@ const
   RSA_DEFAULT_GENERATION_ITERATIONS = 0;
 
   /// generates RSA keypairs in a time-coherent fashion
-  {$ifdef CPUARM}
+  {$ifdef CPUARM3264}
   // - we have seen some weak Raspberry PI timeout so 30 seconds seems fair
+  // - CPUARM3264 and not CPUARM, which FPC only defines on 32-bit ARM: aarch64
+  // needs the same margin, e.g. when several keys are generated in parallel
   RSA_DEFAULT_GENERATION_TIMEOUTMS = 30000;
   {$else}
   // - allow 10 seconds: typical time is around (or less) 1 second on Intel/AMD
   RSA_DEFAULT_GENERATION_TIMEOUTMS = 10000;
-  {$endif CPUARM}
+  {$endif CPUARM3264}
 
   /// runtime-computed 4KB table of all known 2, 3, 5, 7, ... 17989 prime numbers
   // - as used by TBigInt.MatchKnownPrime

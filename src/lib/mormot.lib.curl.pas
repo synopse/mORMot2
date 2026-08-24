@@ -852,7 +852,7 @@ type
   TCurlCertInfo = packed record
     /// count of items in certinfo[]
     num_of_certs: integer;
-    {$ifdef CPUX64} _align: array[0..3] of byte; {$endif}
+    {$ifdef CPU64} _align: array[0..3] of byte; {$endif}
     /// actual list of certificates
     certinfo: PPCurlSListArray;
   end;
@@ -899,7 +899,7 @@ type
   /// low-level message information for libcurl library API
   TCurlMsgRec = packed record
     msg: TCurlMsg;
-    {$ifdef CPUX64} _align: array[0..3] of byte; {$endif}
+    {$ifdef CPU64} _align: array[0..3] of byte; {$endif}
     easy_handle: TCurl;
     data: packed record case byte of
       0: (whatever: pointer);
@@ -910,10 +910,19 @@ type
 
   /// low-level file description event handler for libcurl library API
   TCurlWaitFD = packed record
+    /// the socket to watch
+    // - curl_socket_t is a pointer-sized SOCKET on Windows, but a plain int
+    // on POSIX, so this field is not TCurlSocket on all platforms
+    {$ifdef OSWINDOWS}
     fd: TCurlSocket;
+    {$else}
+    fd: integer;
+    {$endif OSWINDOWS}
     events: SmallInt;
     revents: SmallInt;
-    {$ifdef CPUX64} _align: array[0..3] of byte; {$endif}
+    {$ifdef OSWINDOWS}
+    {$ifdef CPU64} _align: array[0..3] of byte; {$endif}
+    {$endif OSWINDOWS}
   end;
   PCurlWaitFD = ^TCurlWaitFD;
 
