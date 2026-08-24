@@ -580,76 +580,81 @@ var
   end;
 
 begin
-  // no option: a plain INSERT on every engine
-  for db := low(db) to high(db) do
-    Test([], db, 'insert into t (a,b) values (?,?)');
-  // boInsertOrIgnore
-  Test([boInsertOrIgnore], dMySQL,   'insert ignore into t (a,b) values (?,?)');
-  Test([boInsertOrIgnore], dMariaDB, 'insert ignore into t (a,b) values (?,?)');
-  Test([boInsertOrIgnore], dSQLite,  'insert or ignore into t (a,b) values (?,?)');
-  // PostgreSQL has no prefix form: it is an ON CONFLICT clause after the VALUES
-  Test([boInsertOrIgnore], dPostgreSQL,
-    'insert into t (a,b) values (?,?) on conflict do nothing');
-  // boInsertOrReplace
-  Test([boInsertOrReplace], dMySQL,    'replace into t (a,b) values (?,?)');
-  Test([boInsertOrReplace], dSQLite,   'replace into t (a,b) values (?,?)');
-  Test([boInsertOrReplace], dFirebird,
-    'update or insert into t (a,b) values (?,?)');
-  // ... but it has no REPLACE INTO equivalent, so it should say so loudly
-  // instead of emitting SQL the server will reject
-  raised := false;
+  TSynLog.Family.ExceptionIgnore.Add(EJsonObjectDecoder); // no log needed
   try
-    Encode([boInsertOrReplace], dPostgreSQL);
-  except
-    on EJsonObjectDecoder do
-      raised := true;
+    // no option: a plain INSERT on every engine
+    for db := low(db) to high(db) do
+      Test([], db, 'insert into t (a,b) values (?,?)');
+    // boInsertOrIgnore
+    Test([boInsertOrIgnore], dMySQL,   'insert ignore into t (a,b) values (?,?)');
+    Test([boInsertOrIgnore], dMariaDB, 'insert ignore into t (a,b) values (?,?)');
+    Test([boInsertOrIgnore], dSQLite,  'insert or ignore into t (a,b) values (?,?)');
+    // PostgreSQL has no prefix form: it is an ON CONFLICT clause after the VALUES
+    Test([boInsertOrIgnore], dPostgreSQL,
+      'insert into t (a,b) values (?,?) on conflict do nothing');
+    // boInsertOrReplace
+    Test([boInsertOrReplace], dMySQL,    'replace into t (a,b) values (?,?)');
+    Test([boInsertOrReplace], dSQLite,   'replace into t (a,b) values (?,?)');
+    Test([boInsertOrReplace], dFirebird,
+      'update or insert into t (a,b) values (?,?)');
+    // ... but it has no REPLACE INTO equivalent, so it should say so loudly
+    // instead of emitting SQL the server will reject
+    raised := false;
+    try
+      Encode([boInsertOrReplace], dPostgreSQL);
+    except
+      on EJsonObjectDecoder do
+        raised := true;
+    end;
+    Check(raised, 'boInsertOrReplace should raise on PostgreSQL');
+    // the suffix must never leak into an engine which encodes it as a prefix
+    for db := low(db) to high(db) do
+      if db <> dPostgreSQL then
+        CheckUtf8(PosEx('conflict', Encode([boInsertOrIgnore], db)) = 0,
+          'no conflict clause on %',
+          [GetEnumName(TypeInfo(TSqlDBDefinition), ord(db))^]);
+    // boUpsert: MERGE semantics, i.e. only the supplied columns are assigned -
+    // the key itself never is, since it is what identifies the conflict
+    TestKey(dPostgreSQL, 'insert into t (id,a,b) values (?,?,?) ' +
+      'on conflict (id) do update set a=excluded.a,b=excluded.b');
+    TestKey(dSQLite,     'insert into t (id,a,b) values (?,?,?) ' +
+      'on conflict (id) do update set a=excluded.a,b=excluded.b');
+    TestKey(dMySQL,      'insert into t (id,a,b) values (?,?,?) ' +
+      'on duplicate key update a=values(a),b=values(b)');
+    TestKey(dMariaDB,    'insert into t (id,a,b) values (?,?,?) ' +
+      'on duplicate key update a=values(a),b=values(b)');
+    // Firebird is the only engine whose upsert is a prefix + a MATCHING clause
+    TestKey(dFirebird,   'update or insert into t (id,a,b) values (?,?,?) ' +
+      'matching (id)');
+    // a non-ID key name is honoured, and excluded from the assignment list
+    CheckEqual(EncodeKey([boUpsert], dPostgreSQL, 'a', @FIELDS, 3),
+      'insert into t (id,a,b) values (?,?,?) on conflict (a) do update set ' +
+      'b=excluded.b', 'custom key');
+    // nothing left to assign: an empty SET would be a syntax error
+    CheckEqual(EncodeKey([boUpsert], dPostgreSQL, 'mid', @KEYONLY, 1),
+      'insert into t (id,a,b) values (?,?,?) on conflict (mid) do nothing',
+      'key-only PostgreSQL');
+    CheckEqual(EncodeKey([boUpsert], dMySQL, 'mid', @KEYONLY, 1),
+      'insert into t (id,a,b) values (?,?,?) on duplicate key update mid=mid',
+      'key-only MySQL');
+    // without boUpsert the overload must behave like the parameterless one
+    CheckEqual(EncodeKey([boInsertOrIgnore], dPostgreSQL, 'id', @FIELDS, 3),
+      'insert into t (id,a,b) values (?,?,?) on conflict do nothing',
+      'overload falls back');
+    // refusals, rather than SQL the server would reject
+    Check(Refused([boUpsert], dOracle, 'id', @FIELDS, 3),
+      'boUpsert unsupported on Oracle');
+    Check(Refused([boUpsert], dPostgreSQL, '', @FIELDS, 3),
+      'boUpsert needs a conflict target');
+    Check(Refused([boUpsert], dFirebird, '', @FIELDS, 3),
+      'MATCHING needs a key too');
+    Check(Refused([boUpsert, boInsertOrIgnore], dPostgreSQL, 'id', @FIELDS, 3),
+      'boUpsert is exclusive with boInsertOrIgnore');
+    Check(Refused([boUpsert, boInsertOrReplace], dMySQL, 'id', @FIELDS, 3),
+      'boUpsert is exclusive with boInsertOrReplace');
+  finally
+    TSynLog.Family.ExceptionIgnore.Remove(EJsonObjectDecoder);
   end;
-  Check(raised, 'boInsertOrReplace should raise on PostgreSQL');
-  // the suffix must never leak into an engine which encodes it as a prefix
-  for db := low(db) to high(db) do
-    if db <> dPostgreSQL then
-      CheckUtf8(PosEx('conflict', Encode([boInsertOrIgnore], db)) = 0,
-        'no conflict clause on %',
-        [GetEnumName(TypeInfo(TSqlDBDefinition), ord(db))^]);
-  // boUpsert: MERGE semantics, i.e. only the supplied columns are assigned -
-  // the key itself never is, since it is what identifies the conflict
-  TestKey(dPostgreSQL, 'insert into t (id,a,b) values (?,?,?) ' +
-    'on conflict (id) do update set a=excluded.a,b=excluded.b');
-  TestKey(dSQLite,     'insert into t (id,a,b) values (?,?,?) ' +
-    'on conflict (id) do update set a=excluded.a,b=excluded.b');
-  TestKey(dMySQL,      'insert into t (id,a,b) values (?,?,?) ' +
-    'on duplicate key update a=values(a),b=values(b)');
-  TestKey(dMariaDB,    'insert into t (id,a,b) values (?,?,?) ' +
-    'on duplicate key update a=values(a),b=values(b)');
-  // Firebird is the only engine whose upsert is a prefix + a MATCHING clause
-  TestKey(dFirebird,   'update or insert into t (id,a,b) values (?,?,?) ' +
-    'matching (id)');
-  // a non-ID key name is honoured, and excluded from the assignment list
-  CheckEqual(EncodeKey([boUpsert], dPostgreSQL, 'a', @FIELDS, 3),
-    'insert into t (id,a,b) values (?,?,?) on conflict (a) do update set ' +
-    'b=excluded.b', 'custom key');
-  // nothing left to assign: an empty SET would be a syntax error
-  CheckEqual(EncodeKey([boUpsert], dPostgreSQL, 'mid', @KEYONLY, 1),
-    'insert into t (id,a,b) values (?,?,?) on conflict (mid) do nothing',
-    'key-only PostgreSQL');
-  CheckEqual(EncodeKey([boUpsert], dMySQL, 'mid', @KEYONLY, 1),
-    'insert into t (id,a,b) values (?,?,?) on duplicate key update mid=mid',
-    'key-only MySQL');
-  // without boUpsert the overload must behave like the parameterless one
-  CheckEqual(EncodeKey([boInsertOrIgnore], dPostgreSQL, 'id', @FIELDS, 3),
-    'insert into t (id,a,b) values (?,?,?) on conflict do nothing',
-    'overload falls back');
-  // refusals, rather than SQL the server would reject
-  Check(Refused([boUpsert], dOracle, 'id', @FIELDS, 3),
-    'boUpsert unsupported on Oracle');
-  Check(Refused([boUpsert], dPostgreSQL, '', @FIELDS, 3),
-    'boUpsert needs a conflict target');
-  Check(Refused([boUpsert], dFirebird, '', @FIELDS, 3),
-    'MATCHING needs a key too');
-  Check(Refused([boUpsert, boInsertOrIgnore], dPostgreSQL, 'id', @FIELDS, 3),
-    'boUpsert is exclusive with boInsertOrIgnore');
-  Check(Refused([boUpsert, boInsertOrReplace], dMySQL, 'id', @FIELDS, 3),
-    'boUpsert is exclusive with boInsertOrReplace');
 end;
 
 procedure TTestExternalDatabase.CleanUp;
