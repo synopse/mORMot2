@@ -556,14 +556,12 @@ var
   procedure Test(const opt: TRestBatchOptions; d: TSqlDBDefinition;
     const expected: RawUtf8);
   begin
-    CheckEqual(Encode(opt, d), expected, GetEnumName(TypeInfo(TSqlDBDefinition),
-      ord(d))^);
+    CheckEqual(Encode(opt, d), expected, DBDEF_TXT[d]);
   end;
 
   procedure TestKey(d: TSqlDBDefinition; const expected: RawUtf8);
   begin
-    CheckEqual(EncodeKey([boUpsert], d, 'id', @FIELDS, 3), expected,
-      GetEnumName(TypeInfo(TSqlDBDefinition), ord(d))^);
+    CheckEqual(EncodeKey([boUpsert], d, 'id', @FIELDS, 3), expected, DBDEF_TXT[d]);
   end;
 
   // ensure the encoding refuses to emit anything rather than emit bad SQL
@@ -611,8 +609,7 @@ begin
     for db := low(db) to high(db) do
       if db <> dPostgreSQL then
         CheckUtf8(PosEx('conflict', Encode([boInsertOrIgnore], db)) = 0,
-          'no conflict clause on %',
-          [GetEnumName(TypeInfo(TSqlDBDefinition), ord(db))^]);
+          'no conflict clause on %', [DBDEF_TXT[db]]);
     // boUpsert: MERGE semantics, i.e. only the supplied columns are assigned -
     // the key itself never is, since it is what identifies the conflict
     TestKey(dPostgreSQL, 'insert into t (id,a,b) values (?,?,?) ' +

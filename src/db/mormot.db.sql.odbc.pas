@@ -422,7 +422,7 @@ begin
     end;
     if Log <> nil then
       Log.Log(sllDebug, 'Connected to % using % % recognized as %',
-        [DbmsName, DriverName, DbmsVersion, ToText(fDbms)^]);
+        [DbmsName, DriverName, DbmsVersion, DBDEF_TXT[fDbms]]);
     // notify any re-connection
     inherited Connect;
   except

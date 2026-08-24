@@ -612,11 +612,6 @@ const
     ' like ');      // opLike
 
 
-/// retrieve the text of a given Database SQL dialect enumeration
-// - see also TSqlDBConnectionProperties.GetDbmsName() method
-function ToText(Dbms: TSqlDBDefinition): PShortString; overload;
-
-
 { ************ General SQL Processing Functions }
 
 /// function helper logging some column truncation information text
@@ -3411,12 +3406,6 @@ end;
 
 { ************ Define Database Engine Specific Behavior }
 
-function ToText(Dbms: TSqlDBDefinition): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TSqlDBDefinition), ord(Dbms));
-end;
-
-
 { ************ Abstract SQL DB Classes and Interfaces }
 
 { ESqlDBException }
@@ -5594,11 +5583,8 @@ begin
 end;
 
 function TSqlDBConnectionProperties.GetDbmsName: RawUtf8;
-var
-  ps: PShortString;
 begin
-  ps := ToText(GetDbms);
-  FastSetString(result, @ps^[2], ord(ps^[0]) - 1);
+  result := DBDEF_TXT[GetDbms];
 end;
 
 function TSqlDBConnectionProperties.SanitizeFromPassword(const S: RawUtf8): RawUtf8;

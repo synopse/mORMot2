@@ -1454,6 +1454,10 @@ type
   end;
 
 
+var
+  /// the human text of supported SQL database dialects
+  DBDEF_TXT: array[TSqlDBDefinition] of RawUtf8;
+
 /// decode JSON fields object into an UTF-8 encoded SQL-ready statement
 // - this function decodes in the P^ buffer memory itself (no memory allocation
 // or copy), for faster process - so take care that it is an unique string
@@ -4497,8 +4501,7 @@ begin
     EJsonObjectDecoder.RaiseU(
       'boUpsert is exclusive with boInsertOrIgnore/boInsertOrReplace');
   if KeyFieldName = '' then
-    EJsonObjectDecoder.RaiseUtf8('boUpsert needs a key on %',
-      [GetEnumName(TypeInfo(TSqlDBDefinition), ord(DB))^]);
+    EJsonObjectDecoder.RaiseUtf8('boUpsert needs a key on %', [DBDEF_TXT[DB]]);
   if DB = dFirebird then
   begin
     // UPDATE OR INSERT INTO t (..) VALUES (..) MATCHING (key)
@@ -4565,8 +4568,7 @@ begin
         W.CancelLastComma;
       end;
   else
-    EJsonObjectDecoder.RaiseUtf8('boUpsert is not supported on %',
-      [GetEnumName(TypeInfo(TSqlDBDefinition), ord(DB))^]);
+    EJsonObjectDecoder.RaiseUtf8('boUpsert is not supported on %', [DBDEF_TXT[DB]]);
   end;
 end;
 
@@ -4581,8 +4583,9 @@ begin
   begin
     SetLength(MAX_SQLFIELDS_INDEX[j], j);
     for i := 0 to j - 1 do
-      MAX_SQLFIELDS_INDEX[j, i] := i; // set array of ShortInt or SmallInt
+      MAX_SQLFIELDS_INDEX[j, i] := i; // fill array of ShortInt or SmallInt
   end;
+  GetEnumTrimmedNames(TypeInfo(TSqlDBDefinition), @DBDEF_TXT);
 end;
 
 initialization
