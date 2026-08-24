@@ -282,8 +282,8 @@ type
   // - see TMvcSessionWithCookies to implement cookie-based sessions
   // - this kind of ViewModel will implement client side storage of sessions,
   // storing any (simple) record content on the browser client side
-  // - at login, a record containing session-related information (session ID,
-  // display and login name, preferences, rights...) can be computed only once
+  // - at login, a record containing session-related information (32-bit session
+  // ID, display and login name, preferences, rights...) can be computed only once
   // on the server side from the Model, then stored on the client side (typically
   // in a cookie): later on, session information can be retrieved by the server
   // logic (via CheckAndRetrieve - note that any security attribute should be
@@ -300,7 +300,7 @@ type
     /// create an instance of this ViewModel implementation class
     constructor Create(Owner: TMvcApplication); virtual;
     /// will create a new session
-    // - setting an optional record data, and returning the internal session ID
+    // - setting an optional record data, and returning the 32-bit session ID
     // - you can supply a time period, after which the session will expire -
     // default is 1 hour - note that overriden methods may not implement it
     function Initialize(PRecordData: pointer = nil;
@@ -308,7 +308,7 @@ type
       SessionTimeOutMinutes: cardinal = 60): integer; virtual; abstract;
     /// fast check if there is a session associated to the current context
     function Exists: boolean; virtual; abstract;
-    /// retrieve the current session ID
+    /// retrieve the current 32-bit session ID
     // - can optionally retrieve the associated record Data parameter
     // - Invalidate=true would force this cookie to be rejected in the future,
     // and avoid cookies replay attacks e.g. from Finalize()
@@ -317,7 +317,7 @@ type
       Invalidate: boolean = false): integer; virtual; abstract;
     /// retrieve the session information as a JSON object
     // - returned as a TDocVariant, including any associated record Data and
-    // optionally its session ID
+    // optionally its 32-bit session ID
     // - will call CheckAndRetrieve() then RecordSaveJson() and _JsonFast()
     // - to be called in overriden TMvcApplication.GetViewInfo method
     // - warning: PSessionID^ should be a 32-bit "integer" variable, not a PtrInt
@@ -371,10 +371,10 @@ type
     function Initialize(PRecordData: pointer = nil;
       PRecordTypeInfo: PRttiInfo = nil;
       SessionTimeOutMinutes: cardinal = 60): integer; override;
-    /// retrieve the session ID from the current cookie
+    /// retrieve the 32-bit session ID from the current cookie
     // - can optionally retrieve the record Data parameter stored in the cookie
     // - Invalidate=true would force this cookie to be rejected in the future
-    // - will return the 32-bit internal session ID, or 0 if the cookie is invalid
+    // - will return the decoded session ID, or 0 if the cookie is invalid
     function CheckAndRetrieve(PRecordData: pointer = nil;
       PRecordTypeInfo: PRttiInfo = nil; PExpires: PUnixTime = nil;
       Invalidate: boolean = false): integer; override;
@@ -1336,8 +1336,7 @@ function TMvcSessionAbstract.CheckAndRetrieveInfo(PRecordDataTypeInfo: PRttiInfo
   PSessionID: PInteger; Invalidate: boolean): variant;
 var
   rec: TByteToWord; // 512 bytes to store locally any kind of record
-  recsize: integer;
-  sessionID: integer;
+  recsize, sessionID: integer; // not PtrInt
 begin
   SetVariantNull(result);
   if PRecordDataTypeInfo = nil then
@@ -1527,9 +1526,9 @@ var
   info, renderContext: variant;
 begin
   fApplication.GetViewInfo(fMethodIndex, info);
-  renderContext := _ObjFast([
-    'main',      info,
-    ErrorName, ErrorValue]);
+  TDocVariantData(renderContext).InitObject([
+    'main',    info,
+    ErrorName, ErrorValue], JSON_FAST);
   AddErrorContext(renderContext, ErrorCode);
   Renders(renderContext, ErrorCode, true);
 end;
@@ -1681,9 +1680,9 @@ procedure TMvcRendererFromViews.Renders(var outContext: variant;
       on E: Exception do
       begin
         _ObjAddProps([
-        'exceptionName',    ClassNameShort(E)^,
-        'exceptionMessage', E.Message,
-        'className',        ClassNameShort(self)^], outContext);
+          'exceptionName',    ClassNameShort(E)^,
+          'exceptionMessage', E.Message,
+          'className',        ClassNameShort(self)^], outContext);
         fOutput.Content := TSynMustache.Parse(MUSTACHE_DEFAULTERROR).
                            Render(outContext);
         fOutput.Header := HTML_CONTENT_TYPE_HEADER;
@@ -2357,9 +2356,10 @@ end;
 
 procedure TMvcApplication.GetMvcInfo(out info: variant);
 begin
-  info := _ObjFast(['name',    fFactory.InterfaceRtti.Name,
-                    'mORMot',  RawUtf8(SYNOPSE_FRAMEWORK_VERSION),
-                    'methods', ContextFromMethods(fFactory)]);
+  TDocVariantData(info).InitObject([
+    'name',    fFactory.InterfaceRtti.Name,
+    'mORMot',  RawUtf8(SYNOPSE_FRAMEWORK_VERSION),
+    'methods', ContextFromMethods(fFactory)], JSON_FAST);
 end;
 
 procedure TMvcApplication.FlushAnyCache;
