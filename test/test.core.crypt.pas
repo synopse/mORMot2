@@ -4449,7 +4449,8 @@ begin
     check(not c2.IsSelfSigned, 'csr self2');
     CheckEqual(c2.GetAuthorityKey, c1.GetSubjectKey, 'csr auth2');
   end;
-  NotifyTestSpeed('% %', [c2.Instance, crt.AlgoName], 1, 0, @timer, {onlylog=}true);
+  if c2 <> nil then // may be nil if the key generation failed above
+    NotifyTestSpeed('% %', [c2.Instance, crt.AlgoName], 1, 0, @timer, {onlylog=}true);
 end;
 
 procedure TTestCoreCrypto.CatalogRunStore(Context: TObject);
