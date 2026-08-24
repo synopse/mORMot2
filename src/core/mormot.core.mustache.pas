@@ -652,6 +652,10 @@ type
     class procedure Keys(const Value: variant; out Result: variant);
     class procedure Count(const Value: variant; out Result: variant);
     class procedure Get(const Value: variant; out Result: variant);
+    {$ifdef HASITERATORS}
+    class procedure Product(const Value: variant; out Result: variant);
+    class procedure ProductValue(const Value: variant; out Result: variant);
+    {$endif HASITERATORS}
   public
     /// define a helper to GlobalInfoFind() e.g. {{info os:name}}
     // - not defined with standard helpers for safety
@@ -2691,6 +2695,50 @@ class procedure TSynMustacheStandardHelpers.TitleCase(const Value: variant;
 begin
   DoCase(Value, Result, scTitleCase);
 end;
+
+{$ifdef HASITERATORS}
+
+class procedure TSynMustacheStandardHelpers.Product(const Value: variant;
+  out Result: variant);
+var
+  v, dv: PDocVariantData;
+  path: TTempUtf8;
+  enum: TDocVariantProductEnumerator;
+begin
+  // {{Product dataset,"tableHead.fields.field"}}
+  PCardinal(@Result)^ := varNull;
+  if not _SafeArray(Value, 2, dv) or
+     not _Safe(dv^.Values[0], v) or
+     not VariantToTempUtf8(dv^.Values[1], path, [vfNoComplex, vfNullAsVoid]) or
+     (path.Len = 0) then // path should be a non-void string
+    exit;
+  PDocVariantData(@Result)^.InitFast(dvArray);
+  enum.Init(path.Text, path.Len, '.', v);
+  while enum.MoveNext do
+    PDocVariantData(@Result)^.AddItemWeak(pointer(enum.Current));
+end;
+
+class procedure TSynMustacheStandardHelpers.ProductValue(const Value: variant;
+  out Result: variant);
+var
+  v, dv: PDocVariantData;
+  path: TTempUtf8;
+  enum: TDocVariantProductValueEnumerator;
+begin
+  // {{ProductValue dataset,"tableHead.fields.field.units"}}
+  PCardinal(@Result)^ := varNull;
+  if not _SafeArray(Value, 2, dv) or
+     not _Safe(dv^.Values[0], v) or
+     not VariantToTempUtf8(dv^.Values[1], path, [vfNoComplex, vfNullAsVoid]) or
+     (path.Len = 0) then
+    exit;
+  PDocVariantData(@Result)^.InitFast(dvArray);
+  enum.Init(path.Text, path.Len, '.', v);
+  while enum.MoveNext do
+    PDocVariantData(@Result)^.AddItemWeak(enum.Current);
+end;
+
+{$endif HASITERATORS}
 
 
 end.

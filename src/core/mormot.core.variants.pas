@@ -949,8 +949,8 @@ type
     Value: PDocVariantData;
     StackCount: PtrInt;
     Stack: array[0..31] of TDocVariantProductEnumeratorStack;
-    procedure Init(p: PUtf8Char; plen: PtrInt; sep: AnsiChar; dv: PDocVariantData);
   public
+    procedure Init(p: PUtf8Char; plen: PtrInt; sep: AnsiChar; dv: PDocVariantData);
     function MoveNext: boolean; { too complex to be inlined }
     function GetEnumerator: TDocVariantProductEnumerator; inline;
     /// returns the current Value as pointer to each TDocVariantData object
@@ -964,8 +964,8 @@ type
     LastName: TValuePUtf8Char;
     ProductDocVariant: TDocVariantProductEnumerator;
     function GetCurrent: PVariant; inline;
-    procedure Init(p: PUtf8Char; plen: PtrInt; sep: AnsiChar; dv: PDocVariantData);
   public
+    procedure Init(p: PUtf8Char; plen: PtrInt; sep: AnsiChar; dv: PDocVariantData);
     function MoveNext: boolean; inline; // = ProductDocVariant.MoveNext
     function GetEnumerator: TDocVariantProductValueEnumerator; inline;
     /// returns a pointer to the current stored variant Value
@@ -2091,6 +2091,8 @@ type
     function AddItem(const aValue: variant; aIndex: integer = -1): integer; overload;
     /// add a TDocVariant value to this document, handled as array
     function AddItem(const aValue: TDocVariantData; aIndex: integer = -1): integer; overload;
+    /// add a variant as varVariantByRef to this document, handled as array
+    function AddItemWeak(aValue: PVariant; aIndex: integer = -1): integer;
     /// add a value to this document, handled as array, from its text representation
     // - this function expects a UTF-8 text for the value, which would be
     // converted to a variant number, if possible (as varInt/varInt64/varCurrency
@@ -8314,6 +8316,18 @@ function TDocVariantData.AddItem(const aValue: TDocVariantData; aIndex: integer)
 begin
   result := InternalAdd('', aIndex);
   InternalSetValue(result, variant(aValue));
+end;
+
+function TDocVariantData.AddItemWeak(aValue: PVariant; aIndex: integer): integer;
+var
+  v: PSynVarData;
+begin
+  result := InternalAdd('', aIndex);
+  if aValue = nil then
+    exit;
+  v := @VValue[result];
+  v^.VType := varVariantByRef;
+  v^.VAny := aValue;
 end;
 
 function TDocVariantData.AddItemFromText(const aValue: RawUtf8; aIndex: integer): integer;
