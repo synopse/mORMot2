@@ -3527,6 +3527,10 @@ begin
             end;
             W.ReplaceLastComma(')');
           end;
+          // the ORM path is the only one that knows the primary key column,
+          // so it is the only one that can emit a boUpsert clause
+          EncodeInsertSuffix(W, BatchOptions, DB, UpdateIDFieldName,
+            Decoder.DecodedFieldNames, Decoder.FieldCount);
         end;
     else
       EJsonObjectDecoder.RaiseUtf8('EncodeAsSqlPrepared(%)', [ToText(Occasion)^]);
