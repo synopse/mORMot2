@@ -4074,11 +4074,11 @@ var
   {$ifdef ABIX86}
   offs: integer;
   {$else}
-  {$ifdef OSPOSIX} // not used for Win64
+  {$ifndef ABIWINX64} // not used for the x64 Windows ABI
   {$ifdef HAS_FPREG}
   fpreg: integer;
   {$endif HAS_FPREG}
-  {$endif OSPOSIX}
+  {$endif ABIWINX64}
   {$endif ABIX86}
 begin
   // validate supplied TypeInfo() RTTI input
@@ -4289,9 +4289,9 @@ begin
     // prepare stack and register layout
     reg := PARAMREG_FIRST;
     {$ifdef HAS_FPREG}
-    {$ifdef OSPOSIX}
+    {$ifndef ABIWINX64} // only the x64 Windows ABI overlaps int and FP indexes
     fpreg := FPREG_FIRST;
-    {$endif OSPOSIX}
+    {$endif ABIWINX64}
     {$endif HAS_FPREG}
     a := pointer(m^.Args);
     for na := 0 to high(m^.Args) do
@@ -4395,12 +4395,12 @@ begin
         (a^.SizeInStack <> POINTERBYTES) or
         {$endif ABIA32}
         {$ifdef HAS_FPREG}
-        {$ifdef OSPOSIX}  // Linux x64, armhf, aarch64
+        {$ifdef ABIWINX64}
+        (reg > PARAMREG_LAST) // Win64 x64: XMMs overlap regular registers
+        {$else}  // Linux x64, armhf, aarch64 - and aarch64 on Windows
         ((SizeInFPR = 1) and (fpreg > FPREG_LAST)) or // too many FP registers
         ((SizeInFPR = 0) and (reg > PARAMREG_LAST))  // too many int registers
-        {$else}
-        (reg > PARAMREG_LAST) // Win64: XMMs overlap regular registers
-        {$endif OSPOSIX}
+        {$endif ABIWINX64}
         {$else}
         (reg > PARAMREG_LAST) // Win32, Linux x86, armel
         {$endif HAS_FPREG}
@@ -4442,13 +4442,15 @@ begin
         if SizeInFPR = 1 then
         begin
           // put in next floating-point register
-          {$ifdef OSPOSIX}
-          a^.FPRegisterIdent := fpreg; // ABISYSVX64 has its own FP registers index
-          inc(fpreg);
-          {$else}
-          a^.FPRegisterIdent := reg; // Win64 ABI: reg and fpreg do overlap
+          {$ifdef ABIWINX64}
+          a^.FPRegisterIdent := reg; // Win64 x64 ABI: reg and fpreg do overlap
           inc(reg);
-          {$endif OSPOSIX}
+          {$else}
+          // SysV x64, armhf and aarch64 (POSIX or Windows) have a separate
+          // floating-point register bank with its own index
+          a^.FPRegisterIdent := fpreg;
+          inc(fpreg);
+          {$endif ABIWINX64}
         end
         else
         {$endif HAS_FPREG}
