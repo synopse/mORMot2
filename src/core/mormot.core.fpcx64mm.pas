@@ -24,12 +24,12 @@ unit mormot.core.fpcx64mm;
       they were reported to scale better on heavy load with cpu core count > 16
       even if GetMem() is almost twice faster on single thread with fpcx64mm
     - Pascal alternatives (FastMM4,ScaleMM2,BrainMM) are Windows+Delphi specific
-    - Our lockess round-robin of tiny blocks and FreeMem bin list are unique
+    - ThreadID hash with round-robin of arenas and FreeMem binlist are unique
       algorithms among Memory Managers, and match modern CPUs and workloads
     - It was so fun diving into SSE2 x86_64 assembly and Pierre's insight
     - Resulting code is still easy to understand and maintain
 
-    DISCLAMER: seems stable on Linux and Win64 but feedback is welcome!
+    DISCLAIMER: seems stable on Linux and Win64 but feedback is welcome!
 
   *****************************************************************************
 }
@@ -44,7 +44,7 @@ unit mormot.core.fpcx64mm;
     ...
 
   Then define either FPC_X64MM or FPC_LIBCMM conditional.
-  If both are set, FPC_64MM will be used on x86_64, and FPC_LIBCMM otherwise.
+  If both are set, FPC_X64MM will be used on x86_64, and FPC_LIBCMM otherwise.
 *)
 
 
@@ -53,7 +53,7 @@ unit mormot.core.fpcx64mm;
 {
   TL;DR:
     1. default FPCMM_SERVER is perfect for a multi-threaded app/service/daemon;
-    2. set FPCMM_GUI for GUI/console almost-mono-threaded apps;
+    2. set FPCMM_GUI for GUI/console almost-mono-threaded apps (FastMM4 mode);
     3. try FPCMM_BOOST or FPCMM_BOOSTER on high-end hardware;
     4. try mormot.core.fpclibcmm as POSIX alternative.
 }
@@ -63,12 +63,7 @@ unit mormot.core.fpcx64mm;
 // - currently mormot2tests run with no contention when FPCMM_SERVER is set :)
 {$define FPCMM_SERVER}
 
-// target a GUI/console mono-threaded app
-// - disable all FPCMM_SERVER/FPCMM_BOOST/FPCMM_BOOSTER optimizations
-// - may consume a little less memory from the OS
-{.$define FPCMM_GUI}
-
-// increase settings for more aggressive multi-threaded process
+// increase FPCMM_SERVER settings for more aggressive multi-threaded process
 // - tiny blocks will up to 256 bytes (instead of 128 bytes);
 // - will enable FPCMM_SMALLNOTWITHMEDIUM to reduce medium sleeps.
 {.$define FPCMM_BOOST}
@@ -78,6 +73,11 @@ unit mormot.core.fpcx64mm;
 // - enable FPCMM_MULTIPLESMALLNOTWITHMEDIUM to reduce small pools locks;
 // - enable FPCMM_MEDIUMPERTHREAD for 4 user-medium arenas on Linux/Win64.
 {.$define FPCMM_BOOSTER}
+
+// target a GUI/console mono-threaded app
+// - disable all FPCMM_SERVER/FPCMM_BOOST/FPCMM_BOOSTER optimizations
+// - consume less RSS memory from the OS and behave like stock FastMM4
+{.$define FPCMM_GUI}
 
 
 { ---- Fine Grained Memory Manager Tuning }
@@ -935,7 +935,7 @@ end;
 { ********* Constants and Data Structures Definitions }
 
 // during spinning, there is clearly thread contention: in this case, plain
-// "cmp" before "lock cmpxchg" is mandatory to leverage the CPU cores
+// "cmp" before "lock cmpxchg" seems preferable, especially on older CPUs
 {$define FPCMM_CMPBEFORELOCK_SPIN}
 
 // prepare a Medium arena chunk in TMediumInfo.Prefetch outside of the lock
