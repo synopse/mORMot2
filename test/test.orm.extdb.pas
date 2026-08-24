@@ -79,6 +79,8 @@ type
     procedure ExternalRecords;
     /// check the SQL auto-adaptation features
     procedure AutoAdaptSQL;
+    /// check the INSERT prefix/suffix generated from TRestBatchOptions
+    procedure BatchInsertOptions;
     /// check the per-db encryption
     // - the testpass.db3-wal file is not encrypted, but the main
     // testpass.db3 file will
@@ -504,6 +506,69 @@ begin
   finally
     Server.Free;
   end;
+end;
+
+procedure TTestExternalDatabase.BatchInsertOptions;
+var
+  db: TSqlDBDefinition;
+  raised: boolean;
+
+  // build the whole INSERT the way EncodeAsSql/EncodeAsSqlPrepared do
+  function Encode(const opt: TRestBatchOptions; d: TSqlDBDefinition): RawUtf8;
+  var
+    W: TTextWriter;
+    tmp: TTextWriterStackBuffer;
+  begin
+    W := TTextWriter.CreateOwnedStream(tmp);
+    try
+      EncodeInsertPrefix(W, opt, d);
+      W.AddShort('t (a,b) values (?,?)');
+      EncodeInsertSuffix(W, opt, d);
+      W.SetText(result);
+    finally
+      W.Free;
+    end;
+  end;
+
+  procedure Test(const opt: TRestBatchOptions; d: TSqlDBDefinition;
+    const expected: RawUtf8);
+  begin
+    CheckEqual(Encode(opt, d), expected, GetEnumName(TypeInfo(TSqlDBDefinition),
+      ord(d))^);
+  end;
+
+begin
+  // no option: a plain INSERT on every engine
+  for db := low(db) to high(db) do
+    Test([], db, 'insert into t (a,b) values (?,?)');
+  // boInsertOrIgnore
+  Test([boInsertOrIgnore], dMySQL,   'insert ignore into t (a,b) values (?,?)');
+  Test([boInsertOrIgnore], dMariaDB, 'insert ignore into t (a,b) values (?,?)');
+  Test([boInsertOrIgnore], dSQLite,  'insert or ignore into t (a,b) values (?,?)');
+  // PostgreSQL has no prefix form: it is an ON CONFLICT clause after the VALUES
+  Test([boInsertOrIgnore], dPostgreSQL,
+    'insert into t (a,b) values (?,?) on conflict do nothing');
+  // boInsertOrReplace
+  Test([boInsertOrReplace], dMySQL,    'replace into t (a,b) values (?,?)');
+  Test([boInsertOrReplace], dSQLite,   'replace into t (a,b) values (?,?)');
+  Test([boInsertOrReplace], dFirebird,
+    'update or insert into t (a,b) values (?,?)');
+  // ... but it has no REPLACE INTO equivalent, so it should say so loudly
+  // instead of emitting SQL the server will reject
+  raised := false;
+  try
+    Encode([boInsertOrReplace], dPostgreSQL);
+  except
+    on EJsonObjectDecoder do
+      raised := true;
+  end;
+  Check(raised, 'boInsertOrReplace should raise on PostgreSQL');
+  // the suffix must never leak into an engine which encodes it as a prefix
+  for db := low(db) to high(db) do
+    if db <> dPostgreSQL then
+      CheckUtf8(PosEx('conflict', Encode([boInsertOrIgnore], db)) = 0,
+        'no conflict clause on %',
+        [GetEnumName(TypeInfo(TSqlDBDefinition), ord(db))^]);
 end;
 
 procedure TTestExternalDatabase.CleanUp;

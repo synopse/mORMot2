@@ -3527,6 +3527,7 @@ begin
             end;
             W.ReplaceLastComma(')');
           end;
+          EncodeInsertSuffix(W, BatchOptions, DB);
         end;
     else
       EJsonObjectDecoder.RaiseUtf8('EncodeAsSqlPrepared(%)', [ToText(Occasion)^]);

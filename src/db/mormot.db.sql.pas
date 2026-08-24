@@ -5316,6 +5316,7 @@ var
             W.AddDirect(')', ',');
           end;
           W.CancelLastComma;
+          EncodeInsertSuffix(W, BatchOptions, Props.fDbms);
           sqlcached := true;
         end;
       end;
