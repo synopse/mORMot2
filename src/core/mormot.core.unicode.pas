@@ -3322,6 +3322,9 @@ begin // slightly slower overload with explicit destlen
     {$endif ASMX86}
   end;
   inc(sourceBytes, PtrUInt(source)); // PUtf8Char(sourceBytes)  = endSource
+  // MaxDestChars is a WideChar count, but the loop below compares it against
+  // the dest pointer, which advances by SizeOf(WideChar) per character
+  inc(MaxDestChars, MaxDestChars);   // WideChar count -> byte count
   inc(MaxDestChars, PtrUInt(dest));  // PUtf8Char(MaxDestChars) = endDest
   {$ifndef CPUX86NOTPIC}
   utf8 := @UTF8_TABLE;
