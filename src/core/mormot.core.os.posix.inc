@@ -35,15 +35,6 @@ uses
   dl,
   initc; // we statically link the libc for some raw calls
 
-{$ifdef UNICODE}
-  'mORMot assumes no UNICODE on POSIX FPC, i.e. as TFileName = PChar = PUtf8Char'
-{$endif UNICODE}
-
-function FpOpenA(path: PAnsiChar; mode: cint): cint; inline;
-begin
-  result := FpOpen(path, mode);
-end;
-
 {$else}
 
 uses
@@ -51,11 +42,200 @@ uses
    Posix.SysMman,
    mormot.core.os.delphi;
 
-{$ifndef UNICODE}
-  'mORMot assumes UNICODE on POSIX Delphi, i.e. as TFileName = PChar = PWideChar'
-{$endif UNICODE}
-
 {$endif FPC}
+
+// support TFileName=UnicodeString for Delphi and FPC trunk in -dUNICODERTL mode
+
+{$ifdef UNICODE}
+function _utf16toascii(s: PWordArray; d: PByteArray; l: PtrInt): pointer; forward;
+
+type
+  TFNTemp = TBuffer4K; // convert up to 4KB (=MAX_PATH) of UTF-8 bytes
+
+function PosixFN(const fn: TFileName; var tmp: TFNTemp): PAnsiChar;
+var
+  l: PtrInt;
+begin
+  l := length(fn);
+  if (l = 0) or
+     (l > high(tmp)) then
+    exit(nil);
+  if IsAnsiCompatibleW(pointer(fn), l) then // most common case
+    _utf16toascii(pointer(fn), @tmp, l)
+  else
+    UnicodeToUtf8(@tmp, SizeOf(tmp), pointer(fn), l); // FPC RTL is just fine
+  result := @tmp;
+end;
+
+function PosixOpen(const FileName: TFileName; Flags: cint): cint;
+var
+  tmp: TFNTemp;
+begin
+  result := FpOpen(PosixFN(FileName, tmp), Flags);
+end;
+
+function PosixDlopen(const FileName: TFileName): TLibHandle;
+var
+  tmp: TFNTemp;
+begin
+  result := TLibHandle(dlopen(PosixFN(FileName, tmp), RTLD_NOW));
+end;
+
+function PosixStat(const FileName: TFileName; var st: TStat;
+  FollowLink: boolean = true): cint;
+var
+  tmp: TFNTemp;
+  p: PAnsiChar;
+begin
+  p := PosixFN(FileName, tmp);
+  if FollowLink then
+    result := FpStat(p, st)
+  else
+    result := FpLStat(p, st);
+end;
+
+function PosixUtime(const FileName: TFileName; Times: PUtimBuf): cint;
+var
+  tmp: TFNTemp;
+begin
+  result := FpUtime(PosixFN(FileName, tmp), Times);
+end;
+
+function PosixAccess(const FileName: TFileName; Mode: cint): cint;
+var
+  tmp: TFNTemp;
+begin
+  result := FpAccess(PosixFN(FileName, tmp), Mode);
+end;
+
+function PosixUnlink(const FileName: TFileName): cint;
+var
+  tmp: TFNTemp;
+begin
+  result := FpUnlink(PosixFN(FileName, tmp));
+end;
+
+function PosixRename(const OldName, NewName: TFileName): cint;
+var
+  o, n: TFNTemp;
+begin
+  result := FpRename(PosixFN(OldName, o), PosixFN(NewName, n));
+end;
+
+function PosixRmdir(const DirName: TFileName): cint;
+var
+  tmp: TFNTemp;
+begin
+  result := FpRmdir(PosixFN(DirName, tmp));
+end;
+
+function PosixChmod(const FileName: TFileName; Mode: mode_t): cint;
+var
+  tmp: TFNTemp;
+begin
+  result := FpChmod(PosixFN(FileName, tmp), Mode);
+end;
+
+function PosixChdir(const DirName: TFileName): cint;
+var
+  tmp: TFNTemp;
+begin
+  result := FpChdir(PosixFN(DirName, tmp));
+end;
+
+function PosixSymlink(const Target, SymLink: TFileName): cint;
+var
+  t, l: TFNTemp;
+begin
+  result := FpSymlink(PosixFN(Target, t), PosixFN(SymLink, l));
+end;
+
+function PosixOpenDir(const DirName: TFileName): pDir;
+var
+  tmp: TFNTemp;
+begin
+  result := FpOpendir(PosixFN(DirName, tmp));
+end;
+
+function PosixStatFS(const Path: TFileName; Info: PStatfs): cint;
+var
+  tmp: TFNTemp;
+begin
+  result := fpStatFS(PosixFN(Path, tmp), Info);
+end;
+
+{$else}
+
+function PosixOpen(const FileName: TFileName; Flags: cint): cint; inline;
+begin
+  result := FpOpen(pointer(FileName), Flags);
+end;
+
+function PosixDlopen(const FileName: TFileName): TLibHandle; inline;
+begin
+  result := TLibHandle(dlopen(pointer(FileName), RTLD_NOW));
+end;
+
+function PosixStat(const FileName: TFileName; var st: TStat;
+  FollowLink: boolean = true): cint; inline;
+begin
+  if FollowLink then
+    result := FpStat(pointer(FileName), st)
+  else
+    result := FpLStat(pointer(FileName), st);
+end;
+
+function PosixUtime(const FileName: TFileName; Times: PUtimBuf): cint; inline;
+begin
+  result := FpUtime(pointer(FileName), Times);
+end;
+
+function PosixAccess(const FileName: TFileName; Mode: cint): cint; inline;
+begin
+  result := FpAccess(pointer(FileName), Mode);
+end;
+
+function PosixUnlink(const FileName: TFileName): cint; inline;
+begin
+  result := FpUnlink(pointer(FileName));
+end;
+
+function PosixRename(const OldName, NewName: TFileName): cint; inline;
+begin
+  result := FpRename(pointer(OldName), pointer(NewName));
+end;
+
+function PosixRmdir(const DirName: TFileName): cint; inline;
+begin
+  result := FpRmdir(pointer(DirName));
+end;
+
+function PosixChmod(const FileName: TFileName; Mode: mode_t): cint; inline;
+begin
+  result := FpChmod(pointer(FileName), Mode);
+end;
+
+function PosixChdir(const DirName: TFileName): cint; inline;
+begin
+  result := FpChdir(pointer(DirName));
+end;
+
+function PosixSymlink(const Target, SymLink: TFileName): cint; inline;
+begin
+  result := FpSymlink(pointer(Target), pointer(SymLink));
+end;
+
+function PosixOpenDir(const DirName: TFileName): pDir; inline;
+begin
+  result := FpOpendir(pointer(DirName));
+end;
+
+function PosixStatFS(const Path: TFileName; Info: PStatfs): cint; inline;
+begin
+  result := FpStatFS(pointer(Path), Info);
+end;
+
+{$endif UNICODE}
 
 // define some raw text functions, to avoid linking mormot.core.text
 
@@ -164,12 +344,12 @@ begin
   begin
     // try to load as absolute file name so that dladdr() returns full path
     exp := ExpandFileName(LibraryName);
-    result := TLibHandle(dlopen(pointer(exp), RTLD_NOW));
+    result := PosixDlopen(exp);
     if result <> 0 then
       exit;
   end;
   // absolute '/path/to/lib.so' or system-resolved plain 'lib.so'
-  result := TLibHandle(dlopen(pointer(LibraryName), RTLD_NOW));
+  result := PosixDlopen(LibraryName);
 end;
 
 procedure LibraryClose(Lib: TLibHandle);
@@ -1497,7 +1677,7 @@ var
 begin
   result := 0;
   if (FileName <> '') and
-     (fpStat(pointer(FileName), st) = 0) and
+     (PosixStat(FileName, st) = 0) and
      (AllowDir or
       (not FpS_ISDIR(st.st_mode))) then
     result := st.st_mtime; // as TUnixTime seconds, with no local conversion
@@ -1532,7 +1712,7 @@ begin
     exit;
   t.actime := Time;
   t.modtime := Time;
-  result := FpUtime(pointer(Dest), @t) = 0; // direct syscall
+  result := PosixUtime(Dest, @t) = 0; // direct syscall
 end;
 
 function FileSetDateFrom(const Dest: TFileName; SourceHandle: THandle): boolean;
@@ -1579,7 +1759,7 @@ end;
 function FileIsWritable(const FileName: TFileName): boolean;
 begin
   result := (FileName <> '') and
-            (fpaccess(pointer(FileName), W_OK) = 0);
+            (PosixAccess(FileName, W_OK) = 0);
   { access() does not answer the "can I read/write/execute this file?" question.
     It answers a slightly different question: "(assuming I'm a setuid binary)
     can the user who invoked me read/write/execute this file?" (man access) }
@@ -1588,34 +1768,38 @@ end;
 function DeleteFile(const aFileName: TFileName): boolean;
 begin
   result := (aFileName <> '') and
-            (FpUnlink(pointer(aFileName)) >= 0);
+            (PosixUnlink(aFileName) >= 0);
 end;
 
 function RenameFile(const aOld, aNew: TFileName): boolean;
 begin
   result := (aOld <> '') and
             (aNew <> '') and
-            (FpRename(pointer(aOld), pointer(aNew)) >= 0);
+            (PosixRename(aOld, aNew) >= 0);
 end;
 
 function RemoveDir(const aDirName: TFileName): boolean;
 begin
   result := (aDirName <> '') and
-            (FpRmdir(pointer(aDirName)) >= 0);
+            (PosixRmdir(aDirName) >= 0);
 end;
 
 procedure FileSetHidden(const FileName: TFileName; ReadOnly: boolean);
+var
+  mode: cint;
 begin
-  if FileName <> '' then
-    if ReadOnly then
-      fpchmod(pointer(FileName), S_IRUSR)
-    else
-      fpchmod(pointer(FileName), S_IRUSR or S_IWUSR);
+  if FileName = '' then
+    exit;
+  if ReadOnly then
+    mode := S_IRUSR
+  else
+    mode := S_IRUSR or S_IWUSR;
+  PosixChmod(FileName, mode);
 end;
 
 procedure FileSetSticky(const FileName: TFileName);
 begin
-  fpchmod(pointer(FileName), S_IRUSR or S_IWUSR or S_IRGRP or S_IROTH or S_ISVTX);
+  PosixChmod(FileName, S_IRUSR or S_IWUSR or S_IRGRP or S_IROTH or S_ISVTX);
 end;
 
 function FileSize(const FileName: TFileName): Int64;
@@ -1623,7 +1807,7 @@ var
   st: TStat;
 begin
   if (FileName = '') or
-     (fpStat(pointer(FileName), st) <> 0) or
+     (PosixStat(FileName, st) <> 0) or
      FpS_ISDIR(st.st_mode) then
     result := 0
   else
@@ -1634,23 +1818,15 @@ function FileExists(const FileName: TFileName; FollowLink, CheckAsDir: boolean):
 var
   st: TStat;
 begin
-  result := false;
-  if FileName = '' then
-    exit;
-  if FollowLink then
-  begin
-    if fpStat(pointer(FileName), st) <> 0 then
-      exit;
-  end
-  else if fpLStat(pointer(FileName), st) <> 0 then
-    exit;
-  result := (FpS_ISDIR(st.st_mode) = CheckAsDir);
+  result := (FileName <> '') and
+            (PosixStat(FileName, st, FollowLink) = 0) and
+            (FpS_ISDIR(st.st_mode) = CheckAsDir);
 end;
 
 function SetCurrentDir(const NewDir: TFileName): boolean;
 begin
   result := (NewDir <> '') and
-            (fpChdir(pointer(NewDir)) = 0);
+            (PosixChdir(NewDir) = 0);
 end;
 
 function FileCreate(const aFileName: TFileName; aMode, aRights: integer): THandle;
@@ -1713,7 +1889,7 @@ var
   st: TStat;
 begin
   result := (FileName <> '') and
-            (fpStat(pointer(FileName), st) = 0);
+            (PosixStat(FileName, st) = 0);
   if not result then
     exit;
   if FpS_ISDIR(st.st_mode) then
@@ -1790,7 +1966,7 @@ var
   st: TStat;
 begin
   result := (FileName <> '') and
-            (fpStat(pointer(FileName), st) = 0) and
+            (PosixStat(FileName, st) = 0) and
             (st.st_mode and (S_IXUSR or S_IXGRP or S_IXOTH) <> 0) and
             not FpS_ISDIR(st.st_mode);
 end;
@@ -1800,7 +1976,7 @@ var
   st: TStat;
 begin
   result := (FileName <> '') and
-            (fpStat(pointer(FileName), st) = 0) and
+            (PosixStat(FileName, st) = 0) and
             fpS_ISLNK(st.st_mode) and
             not FpS_ISDIR(st.st_mode);
 end;
@@ -1897,7 +2073,7 @@ function FileSymLink(const SymLink, Target: TFileName): boolean;
 begin
   result := (SymLink <> '') and
             FileExists(Target) and
-            (fpsymlink(pointer(Target), pointer(SymLink)) = 0);
+            (PosixSymlink(Target, SymLink) = 0);
 end;
 
 function WaitReadPending(fd, timeout: integer): boolean;
@@ -1920,7 +2096,7 @@ function FileOpenSequentialRead(const FileName: TFileName): integer;
 begin
   // SysUtils.FileOpen = fpOpen + fpFlock
   repeat
-    result := fpOpen(pointer(FileName), O_RDONLY);  // no fpFlock() call
+    result := PosixOpen(FileName, O_RDONLY);        // no fpFlock() call
   until (result >= 0) or (fpgeterrno <> ESysEINTR); // see FPC FileOpen()
 end;
 
@@ -3051,7 +3227,7 @@ var
         Unicode_ToUtf8(pointer(path), tmp, length(path));
         plen := tmp.len;
         fn := FastNewString(plen + entlen, CP_UTF8);
-        MoveFast(tmp.buf^, fn^, plen);
+        MoveFast(tmp.buf^, fn^, plen); // fn := path
         tmp.Done;
         {$else}
         plen := length(path);
@@ -3071,7 +3247,7 @@ var
     // read all the file or directory names of this folder
     subcount := 0;
     addedpath := root + subpath;
-    dir := FpOpendir(pointer(addedpath)); // faster than FindFirst()
+    dir := PosixOpendir(addedpath); // faster than FindFirst()
     if dir = nil then
       exit;
     if ExcludesDir then
@@ -3686,7 +3862,7 @@ var
 begin
   result := 0;
   repeat
-    h := FpOpenA(fn, O_RDONLY); // no fpFlock() call
+    h := FpOpen(fn, O_RDONLY); // direct PAnsiChar syscall with no fpFlock()
   until (PtrInt(h) >= 0) or (fpgeterrno <> ESysEINTR); // as FileOpen()
   if PtrInt(h) <= 0 then
     exit;
@@ -3769,7 +3945,7 @@ var
   pid: cardinal;
 begin
   result := nil;
-  d := FpOpendir(PChar('/proc')); // faster alternative to FindFirst()
+  d := fpOpendir(PAnsiChar('/proc')); // faster alternative to FindFirst()
   if d = nil then
     exit;
   n := 0;
@@ -3821,7 +3997,7 @@ begin
   AppendShort('/cmdline'#0, fn);
   LoadProcFile(@fn[1], tmp);
   // set of strings separated by null bytes -> exe is the first argument
-  FastSetString(result, pointer(@tmp), StrLen(pointer(@tmp)));
+  FastSetString(result, pointer(@tmp), mormot.core.base.StrLen(@tmp));
   if result <> '' then
     include(_F1, fNoTryProcExe); // no need to try again next time
 end;
@@ -4227,7 +4403,7 @@ begin
       begin
         if rd > 16 then
           rd := 16; // better to get only 128-bit from raw blocking /dev/random
-        dev := fpOpen('/dev/random', O_RDONLY);
+        dev := FpOpen('/dev/random', O_RDONLY); // direct PAnsiChar syscall
         if dev <= 0 then
           include(_F0, fNoRandom); // not worth trying any more
       end;
@@ -4263,7 +4439,7 @@ begin
   if aDriveFolderOrFile = '' then
     aDriveFolderOrFile := '.';
   FillCharFast(fs, SizeOf(fs), 0);
-  result := fpStatFS(pointer(aDriveFolderOrFile), @fs) = 0;
+  result := PosixStatFS(aDriveFolderOrFile, @fs) = 0;
   //writeln('fpStatFS(',aDriveFolderOrFile,')=',result);
   //writeln('avail=',fs.bavail,' blocksize=',fs.bsize, 'total=',fs.blocks);
   aAvailableBytes := QWord(fs.bavail) * QWord(fs.bsize);
@@ -4903,10 +5079,10 @@ begin
   result := true;
 end;
 
-function ChangeRoot(const FolderName: RawUtf8): boolean;
+function ChangeRoot(const FolderName: TFileName): boolean;
 begin
   result := (FolderName <> '') and
-            (FpChdir(pointer(FolderName)) = 0) and
+            (PosixChdir(FolderName) = 0) and
             (chroot('.') = 0);
 end;
 

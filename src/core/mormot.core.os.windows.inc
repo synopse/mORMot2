@@ -4581,7 +4581,7 @@ begin
   result := false;
 end;
 
-function ChangeRoot(const FolderName: RawUtf8): boolean;
+function ChangeRoot(const FolderName: TFileName): boolean;
 begin
   result := false;
 end;

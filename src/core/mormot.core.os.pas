@@ -6216,7 +6216,7 @@ function DropPriviledges(const UserName: RawUtf8 = 'nobody'): boolean;
 
 /// changes the root directory of the calling process
 // - only implemented on POSIX by now
-function ChangeRoot(const FolderName: RawUtf8): boolean;
+function ChangeRoot(const FolderName: TFileName): boolean;
 
 type
   /// command line patterns recognized by ParseCommandArgs()
