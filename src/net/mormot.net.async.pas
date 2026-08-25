@@ -1236,7 +1236,7 @@ type
     fOptions: THttpProxyUrlOptions;
     fMethods: TUriRouterMethods;
     fCacheControlMaxAgeSec: integer;
-    fHttpKeepAlive, fHttpHeadCacheSec, fHttpDirectGetKB: integer;
+    fHttpKeepAlive, fHttpHeadCacheSec, fHttpDirectGetKB, fHttpLimitPerSecond: integer;
     fMemCache: THttpProxyMem; // owned as TSynAutoCreateFields
     fDiskCache: THttpProxyDisk;
     fRejectCsv: RawUtf8;
@@ -1281,6 +1281,10 @@ type
     // 'debian-security' prefixes, to compute a source remote URI
     property Source: RawUtf8
       read fSource write fSource;
+    /// optional bandwidth limitation of Source http:// remote URIs download
+    // - would trigger a TStreamRedirect.LimitPerSecond additional process
+    property HttpLimitPerSecond: integer
+      read fHttpLimitPerSecond write fHttpLimitPerSecond;
     /// how many seconds HEAD requests could be cached in memory
     // - 0 would disable head caching
     // - default is 60, i.e. cache HEAD response for 1 minute
@@ -5783,7 +5787,8 @@ type
   public
     // some additional internal parameters and methods for proper threading
     uri: RawUtf8;
-    stream: TFileStreamEx;
+    filestream: TFileStreamEx;
+    writestream: TStream;
   end;
 
 function TStartProxyRequest.MakeHeadAndComputeFilename: cardinal;
@@ -5883,7 +5888,15 @@ begin // this method is protected by proxy.fOsSafe.Lock
   try
     opt := proxy.fRemoteClient.Options^; // local copy for this instance
     background := TStartProxyRequestClient.OpenOptions(remote, opt);
-    background.stream := stream;
+    background.filestream := stream;
+    if proxy.fSettings.HttpLimitPerSecond > 0 then
+    begin
+      background.writestream := TStreamRedirect.Create(stream);
+      (background.writestream as TStreamRedirect).LimitPerSecond :=
+        proxy.fSettings.HttpLimitPerSecond;
+    end
+    else
+      background.writestream := stream;
     background.uri := remote.Address;
     Make(['get-', id], head.PurgedHeaders); // already set to OutCustomHeaders
     TLoggedWorkThread.Create(log, head.PurgedHeaders,
@@ -5904,21 +5917,22 @@ var
   msg: RawUtf8;
   fn: TFileName; // local copy
 begin
+  status := 0;
   try
-    status := back.Request(back.uri, 'GET',
-      fSettings.HttpKeepAlive * MilliSecsPerSec, '', '', '', {AsRetry=}false,
-      nil, back.stream);
-    fn := back.stream.FileName;
-    FreeAndNil(back.stream);
+    status := back.Request(back.uri, 'GET', fSettings.HttpKeepAlive * MilliSecsPerSec,
+      '', '', '', {AsRetry=}false, nil, back.writestream);
+    fn := back.filestream.FileName;
     if StatusCodeIsSuccess(status) then // 2xx..3xx range
       msg := 'ok'
     else
       msg := 'GET error';
+  finally
+    if back.writestream <> back.filestream then
+      FreeAndNil(back.writestream);
+    FreeAndNil(back.filestream);
+    back.Free;
     fOwner.fLog.Add.Log(sllInfo, 'BackgroundGet=%: % [%] size=%',
       [status, fn, msg, FileSize(fn)], self);
-  finally
-    back.stream.Free;
-    back.Free;
   end;
 end;
 

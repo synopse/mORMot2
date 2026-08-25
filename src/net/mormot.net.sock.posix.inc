@@ -238,14 +238,10 @@ type
 
 {.$define SOCKDIRECTSYSCALL} // no noticeable performance or stability change
 
-const // circumvent FPC internal error 2015092701
-  LIBC_GETHOSTBYNAME = 'gethostbyname' + LIBC_SUFFIX;
-  LIBC_GETNAMEINFO = 'getnameinfo' + LIBC_SUFFIX;
-
 {$ifdef SOCKDIRECTSYSCALL}
 
 function gethostbyname(name: PAnsiChar): PHostEnt; cdecl;
-  external clib name LIBC_GETHOSTBYNAME;
+  external clib name 'gethostbyname' + LIBC_SUFFIX;
   // no syscall available from FPC -> use libc wrapper anyway
 
 function socket(af, struct, protocol: integer): integer; inline;
@@ -282,7 +278,7 @@ end;
 
 function getnameinfo(addr: PSockAddr; namelen: TSockLen; host: PAnsiChar;
    hostlen: TSockLen; serv: PAnsiChar; servlen: TSockLen; flags: integer): integer; cdecl;
-  external clib name LIBC_GETNAMEINFO;
+  external clib name 'getnameinfo' + LIBC_SUFFIX;
   // no syscall available from FPC
 
 function bind(s: integer; addr: PSockAddr; namelen: TSockLen): integer; inline;
@@ -356,7 +352,7 @@ end;
 // like gethostbyname() or accept4() are not available as fp* syscalls
 
 function gethostbyname(name: PAnsiChar): PHostEnt; cdecl;
-  external clib name LIBC_GETHOSTBYNAME;
+  external clib name 'gethostbyname' + LIBC_SUFFIX;
 
 function socket(af, struct, protocol: integer): integer; cdecl;
   external clib name 'socket' + LIBC_SUFFIX;
@@ -380,7 +376,7 @@ function closesocket(s: integer): integer; cdecl;
 
 function getnameinfo(addr: PSockAddr; namelen: TSockLen; host: PAnsiChar;
    hostlen: TSockLen; serv: PAnsiChar; servlen: TSockLen; flags: integer): integer; cdecl;
-  external clib name LIBC_GETNAMEINFO;
+  external clib name 'getnameinfo' + LIBC_SUFFIX;
 
 function bind(s: integer; addr: PSockAddr; namelen: TSockLen): integer; cdecl;
   external clib name 'bind' + LIBC_SUFFIX;
