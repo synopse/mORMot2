@@ -75,6 +75,9 @@ type
     reqfour: Int64;
     // for FileRange
     rangefile: TFileName;
+    // for OutStream
+    outdata: RawByteString;
+    outkept: TRawByteStringStream; // supplied with aOwned=false
     // for BodyDownload
     bodyfile: TFileName;
     bodytype: RawUtf8;
@@ -101,6 +104,8 @@ type
     function OnPeerCacheRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     // event used by FileRange
     function DoRangeRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+    // event used by OutStream
+    function DoOutStreamRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     // both events used by BodyDownload
     function DoBodyDownload(const aUrl, aMethod, aInHeaders, aInContentType,
       aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
@@ -128,6 +133,8 @@ type
     procedure DoHttpBodyDownload(Sender: TObject);
     /// validate 'Range:' file responses, especially against invalid offsets
     procedure DoHttpFileRange(Sender: TObject);
+    /// validate THttpServerRequestAbstract.SetOutStream streamed body download
+    procedure DoHttpOutStream(Sender: TObject);
   published
     /// Engine.IO and Socket.IO regression tests
     procedure _SocketIO;
@@ -259,6 +266,7 @@ begin
   // start some slow tests in background if /multithread is enabled
   Run(DoHttpBodyDownload, self, 'HttpBodyDownload', true, false);
   Run(DoHttpFileRange, self, 'HttpFileRange', true, false);
+  Run(DoHttpOutStream, self, 'HttpOutStream', true, false);
   Run(DoTFTPServer, self, 'TFTPServer', true, false);
   {$ifdef OSPOSIX}
   Run(DoUnixDomainSocket, self, 'UnixDomainSocket', true, false);
@@ -4106,6 +4114,7 @@ var
   ctx: THttpRequestContext;
   dest: TRawByteStringBuffer;
   ms: TRawByteStringStream;
+  req: THttpServerRequest;
 
   procedure Check4;
   begin
@@ -4458,6 +4467,25 @@ begin
   Check(ctx.ValidateRange, 'huge end offset'); // RangeOffset + RangeLength would
   CheckEqual(ctx.ContentLength, 900, 'huge end tosend'); // overflow to negative
   CheckEqual(ctx.RangeLength, 1000, 'huge end total');
+  // validate OutContentStreamToBuffer() for the non-streaming servers
+  req := THttpServerRequest.Create(nil, 0, nil, 0, [], nil);
+  try
+    req.SetOutStream(TRawByteStringStream.Create('1234567890'), [hosOwned]);
+    Check(req.OutContentStreamToBuffer, 'buffer ok');
+    CheckEqual(req.OutContent, '1234567890', 'buffer content');
+    Check(req.OutContentStreamToBuffer, 'buffer twice');
+    // a body bigger than what we would keep in memory for a file is refused -
+    // note that this stream is fully readable, so only the size limit rejects
+    // it: a short stream would fail in StreamReadAll() for another reason
+    ms := TRawByteStringStream.Create;
+    ms.Size := HttpContentFromFileSizeInMemory + 1;
+    req.SetOutStream(ms, [hosOwned]);
+    Check(not req.OutContentStreamToBuffer, 'buffer too big');
+    CheckEqual(req.OutContent, '', 'buffer too big void');
+    CheckEqual(req.RespStatus, HTTP_SERVERERROR, 'buffer too big status');
+  finally
+    req.Free;
+  end;
   // validate ProcessBody() abort on a stream shorter than ContentLength
   ctx.Reset;
   ctx.CommandMethod := 'GET';
@@ -4477,7 +4505,55 @@ begin
   end;
 end;
 
+var
+  // how many TCountedStringStream have been released, to validate that
+  // SetOutStream(aOwned=true) does free the stream - and aOwned=false does not
+  outstreamfreed: integer;
+
 type
+  // a stream which does count its own destruction, from the server threads
+  TCountedStringStream = class(TRawByteStringStream)
+  public
+    destructor Destroy; override;
+  end;
+
+  // a readable stream which raises on Position/Seek, and does NOT descend
+  // from TStreamWithNoSeek: SetOutStream() should detect it the hard way -
+  // note that GetPosition is overriden for FPC only, because Delphi has no
+  // such virtual method and does call Seek(0, soCurrent) instead
+  TRaiseSeekStream = class(TRawByteStringStream)
+  protected
+    {$ifdef FPC}
+    function GetPosition: Int64; override;
+    {$endif FPC}
+  public
+    function Write(const Buffer; Count: Longint): Longint; override;
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+  end;
+
+  // a readable stream which does answer its position, but can not jump to
+  // any other one: only ContentFromStream() will notice, on the actual Seek()
+  TNoJumpStream = class(TRawByteStringStream)
+  public
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+  end;
+
+  // a stream which does raise in Read(), e.g. a broken database connection
+  TRaiseReadStream = class(TRawByteStringStream)
+  public
+    function Read(var Buffer; Count: Longint): Longint; override;
+  end;
+
+  // a readable stream which does not support any Seek(), e.g. like a pipe:
+  // used to validate the SetOutStream() 'Accept-Ranges: none' fallback
+  TNoSeekReadStream = class(TStreamWithNoSeek)
+  protected
+    fData: RawByteString;
+  public
+    constructor Create(const aData: RawByteString); reintroduce;
+    function Read(var Buffer; Count: Longint): Longint; override;
+  end;
+
   // simulate e.g. a full disk: raise EWriteError after 64KB
   TFailingStream = class(TStream)
   protected
@@ -4500,6 +4576,71 @@ type
     property Received: RawByteString
       read fReceived;
   end;
+
+destructor TCountedStringStream.Destroy;
+begin
+  LockedInc32(@outstreamfreed); // released from the server thread
+  inherited Destroy;
+end;
+
+function TRaiseSeekStream.Write(const Buffer; Count: Longint): Longint;
+begin
+  result := 0;
+  raise EStreamError.Create('TRaiseSeekStream is read only');
+end;
+
+function TRaiseSeekStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin // also called by the Position property on Delphi
+  result := 0;
+  raise EStreamError.Create('TRaiseSeekStream can not seek');
+end;
+
+{$ifdef FPC}
+function TRaiseSeekStream.GetPosition: Int64;
+begin // on FPC, the Position property does not call Seek()
+  result := 0;
+  raise EStreamError.Create('TRaiseSeekStream has no position');
+end;
+{$endif FPC}
+
+function TRaiseReadStream.Read(var Buffer; Count: Longint): Longint;
+begin
+  result := 0;
+  raise EStreamError.Create('TRaiseReadStream can not read');
+end;
+
+function TNoJumpStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  if (Offset = 0) and
+     (Origin = soCurrent) then
+    result := inherited Seek(Offset, Origin) // just reading the position
+  else
+  begin
+    result := 0;
+    raise EStreamError.Create('TNoJumpStream can not jump');
+  end;
+end;
+
+constructor TNoSeekReadStream.Create(const aData: RawByteString);
+begin
+  inherited Create;
+  fData := aData;
+  fSize := length(aData);
+end;
+
+function TNoSeekReadStream.Read(var Buffer; Count: Longint): Longint;
+begin
+  result := fSize - fPosition;
+  if result > Count then
+    result := Count;
+  if result <= 0 then
+  begin
+    result := 0;
+    exit;
+  end;
+  MoveFast(PByteArray(fData)[fPosition], Buffer, result);
+  inc(fPosition, result);
+end;
 
 function TFailingStream.Read(var Buffer; Count: Longint): Longint;
 begin
@@ -4805,6 +4946,360 @@ begin
     end;
   finally
     Check(DeleteFile(rangefile), 'range file deleted');
+  end;
+end;
+
+function TNetworkProtocols.DoOutStreamRequest(
+  Ctxt: THttpServerRequestAbstract): cardinal;
+var
+  ms: TNoSeekReadStream;
+  tmp: RawByteString;
+begin
+  result := HTTP_SUCCESS;
+  if Ctxt.Url = '/ram' then
+    // the regular case: a stream owned by the server, released once sent
+    Ctxt.SetOutStream(TCountedStringStream.Create(outdata), [hosOwned],
+      BINARY_CONTENT_TYPE)
+  else if Ctxt.Url = '/keep' then
+  begin
+    // this stream belongs to the test, and should survive the response
+    outkept.Position := 0;
+    Ctxt.SetOutStream(outkept, [], BINARY_CONTENT_TYPE);
+  end
+  else if Ctxt.Url = '/noseek' then
+    // a stream which can not Seek(): no Range: support, but still served
+    Ctxt.SetOutStream(TNoSeekReadStream.Create(outdata), [hosOwned],
+      BINARY_CONTENT_TYPE)
+  else if Ctxt.Url = '/half' then
+    // an explicit length, shorter than what the stream could supply
+    Ctxt.SetOutStream(TCountedStringStream.Create(outdata), [hosOwned],
+      BINARY_CONTENT_TYPE, length(outdata) shr 1)
+  else if Ctxt.Url = '/replaced' then
+  begin
+    // a second SetOutStream() call should release the first stream at once
+    Ctxt.SetOutStream(TCountedStringStream.Create('discarded'), [hosOwned]);
+    Ctxt.SetOutStream(TCountedStringStream.Create(outdata), [hosOwned],
+      BINARY_CONTENT_TYPE);
+  end
+  else if Ctxt.Url = '/raise' then
+  begin
+    // a handler which fails after SetOutStream(): the error response should
+    // never send that body, and the stream should not leak
+    Ctxt.SetOutStream(TCountedStringStream.Create(outdata), [hosOwned],
+      BINARY_CONTENT_TYPE);
+    raise EHttpServer.Create('SetOutStream regression test');
+  end
+  else if (Ctxt.Url = '/notfound') or
+          (Ctxt.Url = '/routed') then
+  begin
+    // a handler answering a non-200 status from its own stream body: the
+    // range must be ignored, and the body left untouched - /routed reaches
+    // this very code through the TUriRouter, which has its own void body check
+    Ctxt.SetOutStream(TCountedStringStream.Create(outdata), [hosOwned],
+      BINARY_CONTENT_TYPE);
+    result := HTTP_NOTFOUND;
+  end
+  else if Ctxt.Url = '/noseekpos' then
+  begin
+    // a TStreamWithNoSeek partially consumed before SetOutStream(): it does
+    // allow reading its position, so only the remainder is the body
+    ms := TNoSeekReadStream.Create(outdata);
+    SetLength(tmp, 1000);
+    ms.Read(pointer(tmp)^, 1000); // consume the first 1000 bytes
+    Ctxt.SetOutStream(ms, [hosOwned], BINARY_CONTENT_TYPE);
+  end
+  else if Ctxt.Url = '/norange' then
+    // the same stream, but explicitly flagged as not serving any range
+    Ctxt.SetOutStream(TRaiseSeekStream.Create(outdata), [hosOwned, hosNoRange],
+      BINARY_CONTENT_TYPE, length(outdata))
+  else if Ctxt.Url = '/failseek' then
+    // a stream whose Position/Seek both raise, and which is not a
+    // TStreamWithNoSeek: it needs an explicit length, and no Range: support
+    Ctxt.SetOutStream(TRaiseSeekStream.Create(outdata), [hosOwned],
+      BINARY_CONTENT_TYPE, length(outdata))
+  else if Ctxt.Url = '/failrange' then
+    // a stream which does answer Position/Size, so its length and its
+    // Range: support are detected, but whose actual Seek() does raise
+    Ctxt.SetOutStream(TNoJumpStream.Create(outdata), [hosOwned],
+      BINARY_CONTENT_TYPE)
+  else if Ctxt.Url = '/offset' then
+  begin
+    // a stream supplied already positioned: only the remainder is the body
+    outkept.Position := 1000;
+    Ctxt.SetOutStream(outkept, [], BINARY_CONTENT_TYPE);
+  end
+  else
+    result := HTTP_NOTFOUND;
+end;
+
+procedure TNetworkProtocols.DoHttpOutStream(Sender: TObject);
+var
+  srv: THttpServerSocketGeneric;
+  clt: THttpClientSocket;
+  fam: integer;
+  hosthead, ctr: RawUtf8;
+
+  function RawGet(const url, range: RawUtf8; out headers: RawUtf8;
+    body: PRawByteString = nil): RawUtf8;
+  var
+    raw: TCrtSocket;
+    cmd, len: RawUtf8;
+  begin
+    // a raw socket with a timeout, so that a regression of the send loop shows
+    // up as a failed assertion here instead of hanging the whole test suite
+    raw := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+    try
+      raw.CreateSockIn; // needed for proper SockRecvLn() below
+      raw.SockSend(['GET ', url, ' HTTP/1.1']);
+      raw.SockSend(hosthead);
+      if range <> '' then
+        raw.SockSend(['Range: bytes=', range]);
+      raw.SockSend('Connection: close');
+      raw.SockSendCRLF; // void line: end of headers
+      raw.SockSendFlush;
+      result := '';
+      raw.SockRecvLn(result); // the status line
+      headers := '';
+      repeat
+        cmd := '';
+        raw.SockRecvLn(cmd);
+        if cmd <> '' then
+          AppendLine(headers, [cmd]);
+      until cmd = ''; // end of response headers
+      if body = nil then
+        exit;
+      // actually read the body, so that a truncated one is detected here -
+      // SockInRead() and not SockRecv(), since the headers above were read
+      // through SockIn, whose buffer does already hold some body bytes
+      len := '';
+      FindNameValue(headers, 'CONTENT-LENGTH:', len);
+      body^ := raw.SockInRead(GetInteger(pointer(len)));
+    finally
+      raw.Free;
+    end;
+  end;
+
+  function HeaderValue(const headers, name: RawUtf8): RawUtf8;
+  begin
+    result := ''; // needed before being supplied as a var parameter below
+    FindNameValue(headers, pointer(name), result); // '' if not found
+  end;
+
+  procedure WaitFreed(expected: integer; const context: RawUtf8);
+  var
+    endsec: cardinal;
+  begin
+    // the stream is released by the server thread, just after the last byte
+    // has been sent: the client may notice the end of the body slightly before
+    endsec := GetTickSec + 5;
+    while (outstreamfreed < expected) and
+          (GetTickSec < endsec) do
+      SleepHiRes(1);
+    CheckEqual(outstreamfreed, expected, context);
+  end;
+
+var
+  status, headers: RawUtf8;
+  body: RawByteString;
+  req: THttpServerRequest;
+  ctx: THttpRequestContext;
+  kept: TRawByteStringStream;
+begin
+  TSynLog.Family.ExceptionIgnore.Add(EHttpServer); // the '/raise' test below
+  outdata := RandomWinAnsi(3 shl 20); // 3MB, way above any socket buffer
+  CheckEqual(length(outdata), 3 shl 20, 'outdata');
+  // two SetOutStream() guards which need no server at all
+  req := THttpServerRequest.Create(nil, 0, nil, 0, [], nil);
+  try
+    // a stream raising in Read() should be reported, not let escape: the
+    // non-streaming servers have already started their response by then
+    req.RespStatus := HTTP_SUCCESS;
+    req.SetOutStream(TRaiseReadStream.Create('1234567890'), [hosOwned]);
+    Check(not req.OutContentStreamToBuffer, 'buffer raise');
+    CheckEqual(req.OutContent, '', 'buffer raise void');
+    CheckEqual(req.RespStatus, HTTP_SERVERERROR, 'buffer raise status');
+    Check(req.OutContentStream = nil, 'buffer raise freed');
+    // a stream with no measurable size and no supplied length is refused,
+    // since the send loop always emits a Content-Length: header
+    CheckEqual(req.SetOutStream(TRaiseSeekStream.Create('123'), [hosOwned]),
+      HTTP_SERVERERROR, 'no length refused');
+    Check(req.OutContentStream = nil, 'no length freed');
+  finally
+    req.Free;
+  end;
+  // a body already set as a ContentStream - e.g. by ContentFromFile() after
+  // SetOutFile() - must not be leaked, nor make us free a stream we do not own
+  FillCharFast(ctx, SizeOf(ctx), 0);
+  ctx.Reset;
+  ctx.CommandMethod := 'GET';
+  outstreamfreed := 0;
+  ctx.ContentStream := TCountedStringStream.Create('12345');
+  include(ctx.ResponseFlags, rfContentStreamNeedFree); // as ContentFromFile()
+  kept := TRawByteStringStream.Create('67890');
+  try
+    CheckEqual(ctx.ContentFromStream(kept, 0, 5, []), HTTP_SUCCESS, 'from stream');
+    CheckEqual(outstreamfreed, 1, 'previous owned stream released');
+    Check(not (rfContentStreamNeedFree in ctx.ResponseFlags), 'not ours to free');
+    Check(ctx.ContentStream = kept, 'stream did replace the file one');
+  finally
+    ctx.ContentStream := nil;
+    kept.Free;
+  end;
+  outkept := TRawByteStringStream.Create(outdata);
+  try
+    for fam := 0 to 1 do
+    begin
+      // validate both socket server families with the very same steps
+      if fam = 0 then
+        srv := THttpServer.Create('8895', nil, nil, 'outstream', 2)
+      else
+        srv := THttpAsyncServer.Create('8896', nil, nil, 'outstream', 2);
+      try
+        Join(['Host: 127.0.0.1:', srv.SockPort], hosthead);
+        srv.OnRequest := DoOutStreamRequest;
+        srv.Route.Get('/routed', DoOutStreamRequest); // cover the router path too
+        srv.WaitStarted(10);
+        clt := THttpClientSocket.Open('127.0.0.1', srv.SockPort);
+        try
+          // a whole body sent from a server-owned stream
+          outstreamfreed := 0;
+          CheckEqual(clt.Get('/ram'), HTTP_SUCCESS, 'ram status');
+          CheckEqual(length(clt.Content), length(outdata), 'ram length');
+          CheckEqual(crc32cHash(clt.Content), crc32cHash(outdata), 'ram content');
+          CheckEqual(clt.ContentType, BINARY_CONTENT_TYPE, 'ram type');
+          WaitFreed(1, 'ram freed'); // aOwned=true: released once sent
+          // a Range: request should be served like a static file does
+          clt.RangeStart := 100;
+          clt.RangeEnd := 199;
+          CheckEqual(clt.Get('/ram'), HTTP_PARTIALCONTENT, 'range status');
+          CheckEqual(length(clt.Content), 100, 'range length');
+          CheckEqual(clt.Content, copy(outdata, 101, 100), 'range content');
+          // an unsatisfiable Range: should be rejected as 416
+          clt.RangeStart := 4 shl 20; // above the 3MB content
+          clt.RangeEnd := (4 shl 20) + 10;
+          CheckEqual(clt.Get('/ram'), HTTP_RANGENOTSATISFIABLE, 'range 416');
+          clt.RangeStart := 0; // Range: is only auto-reset on a 2xx status
+          clt.RangeEnd := 0;
+          WaitFreed(3, 'range 416 freed'); // 3 requests, 3 owned streams so far
+          // an explicit length shorter than the stream content
+          CheckEqual(clt.Get('/half'), HTTP_SUCCESS, 'half status');
+          CheckEqual(length(clt.Content), length(outdata) shr 1, 'half length');
+          CheckEqual(clt.Content, copy(outdata, 1, length(outdata) shr 1),
+            'half content');
+          WaitFreed(4, 'half freed'); // the 416 stream was freed by then too
+          // a second SetOutStream() call replaces (and frees) the first stream
+          CheckEqual(clt.Get('/replaced'), HTTP_SUCCESS, 'replaced status');
+          CheckEqual(crc32cHash(clt.Content), crc32cHash(outdata),
+            'replaced content');
+          WaitFreed(6, 'replaced freed'); // both the discarded and the sent one
+          // a stream we do own ourselves should survive the response
+          CheckEqual(clt.Get('/keep'), HTTP_SUCCESS, 'keep status');
+          CheckEqual(crc32cHash(clt.Content), crc32cHash(outdata),
+            'keep content');
+          CheckEqual(outkept.Size, length(outdata), 'keep alive'); // not freed
+          CheckEqual(outstreamfreed, 6, 'keep not freed'); // aOwned=false
+          // a handler raising after SetOutStream() must not send that body:
+          // the stream is in place when the 500 error response is generated
+          CheckEqual(clt.Get('/raise'), HTTP_SERVERERROR, 'raise status');
+          CheckNotEqual(length(clt.Content), length(outdata), 'raise no body');
+          Check(PosEx('SetOutStream regression test', clt.Content) > 0,
+            'raise message');
+          WaitFreed(7, 'raise freed'); // and the stream is still released
+          // a stream supplied already positioned: only the remainder is sent
+          CheckEqual(clt.Get('/offset'), HTTP_SUCCESS, 'offset status');
+          CheckEqual(length(clt.Content), length(outdata) - 1000, 'offset length');
+          CheckEqual(clt.Content, copy(outdata, 1001, maxInt), 'offset content');
+          CheckEqual(outstreamfreed, 7, 'offset not freed'); // aOwned=false
+        finally
+          clt.Free;
+        end;
+        // a non-seekable stream: served sequentially, but no Range: support
+        status := RawGet('/noseek', '', headers, @body);
+        CheckUtf8(PosEx(' 200 ', status) > 0, 'noseek status %', [status]);
+        CheckEqual(HeaderValue(headers, 'ACCEPT-RANGES:'), 'none', 'noseek none');
+        ctr := HeaderValue(headers, 'CONTENT-LENGTH:');
+        CheckEqual(GetInt64(pointer(ctr)), length(outdata), 'noseek length');
+        CheckEqual(crc32cHash(body), crc32cHash(outdata), 'noseek body');
+        // a Range: on that stream is ignored, and the whole body is sent
+        status := RawGet('/noseek', '100-199', headers, @body);
+        CheckUtf8(PosEx(' 200 ', status) > 0, 'noseek range status %', [status]);
+        ctr := HeaderValue(headers, 'CONTENT-LENGTH:');
+        CheckEqual(GetInt64(pointer(ctr)), length(outdata), 'noseek range length');
+        CheckEqual(crc32cHash(body), crc32cHash(outdata), 'noseek range body');
+        // a seekable stream does advertise its Range: support, and a ranged
+        // response does include the expected Content-Range: header
+        status := RawGet('/ram', '', headers, @body);
+        CheckUtf8(PosEx(' 200 ', status) > 0, 'ram raw status %', [status]);
+        CheckEqual(HeaderValue(headers, 'ACCEPT-RANGES:'), 'bytes', 'ram bytes');
+        CheckEqual(crc32cHash(body), crc32cHash(outdata), 'ram raw body');
+        status := RawGet('/ram', '100-199', headers, @body);
+        CheckUtf8(PosEx(' 206 ', status) > 0, 'ram 206 %', [status]);
+        CheckEqual(HeaderValue(headers, 'CONTENT-RANGE:'),
+          Make(['bytes 100-199/', length(outdata)]), 'ram content-range');
+        CheckEqual(body, copy(outdata, 101, 100), 'ram 206 body');
+        // a non-200 response from a stream: the range is ignored, so the
+        // handler's own body is sent whole, with its own status
+        status := RawGet('/notfound', '100-199', headers, @body);
+        CheckUtf8(PosEx(' 404 ', status) > 0, 'notfound status %', [status]);
+        CheckEqual(HeaderValue(headers, 'CONTENT-RANGE:'), '', 'notfound no range');
+        // and should not advertise a Range: support which was just disabled
+        CheckEqual(HeaderValue(headers, 'ACCEPT-RANGES:'), 'none', 'notfound none');
+        CheckEqual(crc32cHash(body), crc32cHash(outdata), 'notfound body');
+        // the very same answer, but routed by TUriRouter: its own 'no body'
+        // check must see the pending stream, or it replaces it by an error page
+        status := RawGet('/routed', '', headers, @body);
+        CheckUtf8(PosEx(' 404 ', status) > 0, 'routed status %', [status]);
+        CheckEqual(crc32cHash(body), crc32cHash(outdata), 'routed body');
+        // a TStreamWithNoSeek already partially read: its position is readable,
+        // so only the remaining bytes are announced and sent
+        status := RawGet('/noseekpos', '', headers, @body);
+        CheckUtf8(PosEx(' 200 ', status) > 0, 'noseekpos status %', [status]);
+        ctr := HeaderValue(headers, 'CONTENT-LENGTH:');
+        CheckEqual(GetInt64(pointer(ctr)), length(outdata) - 1000, 'noseekpos len');
+        CheckEqual(body, copy(outdata, 1001, maxInt), 'noseekpos body');
+        // a stream whose very Position raises: SetOutStream() detects it as
+        // not seekable at all, so it is served whole with no Range: support,
+        // the point being that the exception never escapes SetupResponse
+        status := RawGet('/failseek', '', headers, @body);
+        CheckUtf8(PosEx(' 200 ', status) > 0, 'failseek status %', [status]);
+        CheckEqual(HeaderValue(headers, 'ACCEPT-RANGES:'), 'none', 'failseek none');
+        CheckEqual(crc32cHash(body), crc32cHash(outdata), 'failseek body');
+        status := RawGet('/failseek', '100-199', headers, @body);
+        CheckUtf8(PosEx(' 200 ', status) > 0, 'failseek range %', [status]);
+        CheckEqual(crc32cHash(body), crc32cHash(outdata), 'failseek range body');
+        // a stream which does answer Position/Size, so its Range: support is
+        // advertised, but whose actual Seek() raises: 416, and no exception
+        status := RawGet('/failrange', '', headers, @body);
+        CheckUtf8(PosEx(' 200 ', status) > 0, 'failrange status %', [status]);
+        CheckEqual(HeaderValue(headers, 'ACCEPT-RANGES:'), 'bytes', 'failrange bytes');
+        CheckEqual(crc32cHash(body), crc32cHash(outdata), 'failrange body');
+        status := RawGet('/failrange', '100-199', headers, @body);
+        CheckUtf8(PosEx(' 416 ', status) > 0, 'failrange range %', [status]);
+        // the same stream with the hosNoRange option: no range is even tried,
+        // so it is served sequentially with an 'Accept-Ranges: none' header
+        status := RawGet('/norange', '', headers, @body);
+        CheckUtf8(PosEx(' 200 ', status) > 0, 'norange status %', [status]);
+        CheckEqual(HeaderValue(headers, 'ACCEPT-RANGES:'), 'none', 'norange none');
+        CheckEqual(crc32cHash(body), crc32cHash(outdata), 'norange body');
+        status := RawGet('/norange', '100-199', headers, @body);
+        CheckUtf8(PosEx(' 200 ', status) > 0, 'norange range %', [status]);
+        CheckEqual(crc32cHash(body), crc32cHash(outdata), 'norange range body');
+        // a Range: on a stream supplied already positioned is relative to that
+        // initial position, not to the start of the stream
+        status := RawGet('/offset', '0-99', headers, @body);
+        CheckUtf8(PosEx(' 206 ', status) > 0, 'offset 206 %', [status]);
+        CheckEqual(HeaderValue(headers, 'CONTENT-RANGE:'),
+          Make(['bytes 0-99/', length(outdata) - 1000]), 'offset content-range');
+        CheckEqual(body, copy(outdata, 1001, 100), 'offset 206 body');
+        WaitFreed(11, 'raw freed'); // 2 x /ram + /notfound + /routed owned one
+      finally
+        srv.Free;
+      end;
+    end;
+  finally
+    FreeAndNil(outkept);
+    outdata := '';
+    TSynLog.Family.ExceptionIgnore.Remove(EHttpServer);
   end;
 end;
 

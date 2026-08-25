@@ -397,6 +397,7 @@ type
     procedure DoPurgeHeaders;
     procedure ProcessErrorMessage;
     procedure ProcessStaticFile(var Context: THttpRequestContext; CompressGz: integer);
+    procedure ProcessOutStream(var Context: THttpRequestContext);
   public
     /// initialize the context, associated to a HTTP server instance
     constructor Create(aServer: THttpServerGeneric;
@@ -3330,6 +3331,7 @@ begin
   fRespStatus := 0;
   fInContentStream := nil; // paranoid: Prepare() would set it anyway
   fOutContent := '';
+  OutContentStreamDiscard; // paranoid: SetupResponse() did hand it over
   FastAssignNew(fOutContentType);
   FastAssignNew(fOutCustomHeaders);
   fAuthenticationStatus := hraNone;
@@ -3345,7 +3347,7 @@ end;
 destructor THttpServerRequest.Destroy;
 begin
   fTempWriter.Free;
-  // inherited Destroy; is void
+  inherited Destroy; // release any pending SetOutStream() owned stream
 end;
 
 procedure THttpServerRequest.DoPurgeHeaders;
@@ -3374,6 +3376,33 @@ begin
     [fServer.ServerName, fRespStatus, fRespStatus, txt^, fOutContentType,
      XPOWEREDVALUE, OS_TEXT], RawUtf8(fOutContent));
   fOutContentType := HTML_CONTENT_TYPE; // body = human friendly HTML message
+end;
+
+procedure THttpServerRequest.ProcessOutStream(var Context: THttpRequestContext);
+begin
+  // hand a SetOutStream() body to the context, as ProcessStaticFile() does
+  if not StatusCodeIsSuccess(fRespStatus) then
+  begin
+    // a handler answering e.g. 404 or its own 416 from a stream should not
+    // have that body range-processed, nor replaced by our own error page
+    exclude(Context.ResponseFlags, rfWantRange);
+    // and should not advertise a Range: support we just disabled
+    include(fOutContentStreamOpt, hosNoRange);
+  end;
+  if Context.ContentFromStream(fOutContentStream, fOutContentStreamPos,
+       fOutContentStreamLength, fOutContentStreamOpt) = HTTP_SUCCESS then
+  begin
+    fOutContentStream := nil; // handed over: no double free by Recycle/Destroy
+    fOutContentStreamOpt := [];
+    fOutContentStreamLength := 0;
+    fOutContentStreamPos := 0;
+  end
+  else
+  begin
+    OutContentStreamDiscard; // release it: there is no body to send
+    fRespStatus := HTTP_RANGENOTSATISFIABLE;
+    fErrorMessage := 'Out of range'; // detected by ProcessErrorMessage
+  end;
 end;
 
 procedure THttpServerRequest.ProcessStaticFile(var Context: THttpRequestContext;
@@ -3447,6 +3476,13 @@ begin
     else if (fOutContent <> '') and
             (fOutContentType = STATICFILE_CONTENT_TYPE) then
       ProcessStaticFile(Context, CompressGz);
+  if fOutContentStream <> nil then
+    if fErrorMessage = '' then
+      ProcessOutStream(Context) // SetOutStream() response body
+    else
+      // the handler did raise after SetOutStream(): never send that body as
+      // the error response, which ContentStream <> nil would silently do
+      OutContentStreamDiscard;
   if fErrorMessage <> '' then
     ProcessErrorMessage;
   // append Command
@@ -4273,6 +4309,7 @@ begin
       if cod <> 0 then
       begin
         if (Ctxt.OutContent = '') and
+           (Ctxt.OutContentStream = nil) and // SetOutStream() is a body too
            (cod <> HTTP_ASYNCRESPONSE) and
            not StatusCodeIsSuccess(cod) then
         begin
@@ -4290,7 +4327,8 @@ begin
     if cod <> 0 then
     begin
       Ctxt.RespStatus := cod;
-      if Ctxt.OutContent = '' then
+      if (Ctxt.OutContent = '') and
+         (Ctxt.OutContentStream = nil) then // SetOutStream() is a body too
         Ctxt.fErrorMessage := 'Rejected request';
       IncStat(grRejected);
     end
@@ -8401,6 +8439,11 @@ var // lots of local variable so that this method is thread-safe
     if not result then
       exit;
     respsent := true;
+    // http.sys does send from the kernel: it can not stream a TStream, so any
+    // SetOutStream() body is read into OutContent - done here and not at the
+    // call sites, since OnBeforeRequest may respond before the main process
+    if not ctxt.OutContentStreamToBuffer then
+      outstatcode := HTTP_SERVERERROR; // failed to read that stream
     resp^.SetStatus(outstatcode, outstat);
     if Terminated then
       exit;
@@ -8683,10 +8726,13 @@ begin
                 if afterstatcode > 0 then
                   outstatcode := afterstatcode;
               end;
-              // send response
-              if not respsent then
-                if not SendResponse then
-                  continue;
+              // send response - SendResponse does buffer any SetOutStream()
+              if respsent then
+                // e.g. DoBeforeRequest did already send a 202: there is no
+                // response left to put a new body into
+                ctxt.OutContentStreamDiscard
+              else if not SendResponse then
+                continue;
               QueryPerformanceMicroSeconds(elapsed);
               dec(elapsed, started);
               ctxt.Host := host; // may have been reset during Request()
@@ -8694,11 +8740,16 @@ begin
                 ctxt, referer, outstatcode, elapsed, incontlen, bytessent);
             except
               on E: Exception do
+              begin
+                // a handler which did raise after SetOutStream() would
+                // otherwise keep its stream until this thread is reused
+                ctxt.OutContentStreamDiscard;
                 // handle any exception raised during process: show must go on!
                 if not respsent then
                   if not E.InheritsFrom(EHttpApiServer) or // ensure still connected
                      (EHttpApiServer(E).LastApiError <> HTTPAPI_ERROR_NONEXISTENTCONNECTION) then
                     SendError(HTTP_SERVERERROR, StringToUtf8(E.Message), E);
+              end;
             end;
           finally
             LockedDec32(@fCurrentProcess);
