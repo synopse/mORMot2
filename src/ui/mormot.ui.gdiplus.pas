@@ -621,7 +621,7 @@ procedure TSynPicture.LoadFromResourceName(
 var
   s: TCustomMemoryStream;
 begin
-  if FindResource(Instance, PChar(ResName), RT_RCDATA) <> 0 then
+  if Windows.FindResource(Instance, PChar(ResName), RT_RCDATA) <> 0 then
   begin
     s := TResourceStream.Create(Instance, ResName, RT_RCDATA);
     try
