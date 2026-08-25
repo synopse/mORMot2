@@ -458,9 +458,16 @@
     {$define FPC_OLDRTTI}
   {$endif}
 
+  {$ifdef UNICODERTL}
+    // an FPC Unicode RTL build (-dUNICODERTL) expects UnicodeString=string
+    // units, exactly as every unit of that RTL declares for itself
+    // see https://wiki.freepascal.org/Unicode_Support_in_Lazarus
+    {$MODESWITCH UNICODESTRINGS}
+  {$endif UNICODERTL}
+
   {$ifdef FPC_HAS_CPSTRING}
     // see http://wiki.freepascal.org/FPC_Unicode_support
-    {$define HASCODEPAGE} // UNICODE means {$mode delphiunicode}
+    {$define HASCODEPAGE} // UNICODE means {$MODESWITCH UNICODESTRINGS}
   {$endif FPC_HAS_CPSTRING}
 
   {$ifdef ISFPC27}
