@@ -7755,9 +7755,9 @@ begin
     rkUString:
       result := ptUnicodeString;
   {$endif HASVARUSTRING}
-  {$ifdef ISDELPHI}
+  {$ifdef ISDELPHIUNICODE}
     rkProcedure,
-  {$endif ISDELPHI}
+  {$endif ISDELPHIUNICODE}
   {$ifdef FPC_OR_UNICODE}
     rkClassRef,
     rkPointer:
