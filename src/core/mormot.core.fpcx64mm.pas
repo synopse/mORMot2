@@ -713,7 +713,6 @@ var
   AllocMediumflags = MAP_MEDIUM;
 {$endif FPCMM_MEDIUM32BIT}
 
-{$ifdef FPCMM_MEDIUMPERTHREAD}
 function OsAllocMediumRaw(Size: PtrInt): pointer;
 begin
   result := fpmmap(nil, Size, PROT_READ or PROT_WRITE, AllocMediumflags, -1, 0);
@@ -729,6 +728,7 @@ begin
   {$endif FPCMM_MEDIUM32BIT}
 end;
 
+{$ifdef FPCMM_MEDIUMPERTHREAD}
 function OsAllocMedium(Size: PtrInt): pointer;
 var
   raw: pointer;
@@ -753,17 +753,7 @@ end;
 {$else}
 function OsAllocMedium(Size: PtrInt): pointer;
 begin
-  result := fpmmap(nil, Size, PROT_READ or PROT_WRITE, AllocMediumflags, -1, 0);
-  if result = MAP_FAILED then
-    result := nil; // as VirtualAlloc()
-  {$ifdef FPCMM_MEDIUM32BIT}
-  if (result <> nil) or
-     ((AllocMediumflags and MAP_32BIT) = 0) then
-    exit;
-  // try with no 2GB limit from now on
-  AllocMediumflags := AllocMediumflags and not MAP_32BIT;
-  result := OsAllocMedium(Size);
-  {$endif FPCMM_MEDIUM32BIT}
+  result := OsAllocMediumRaw(Size);
 end;
 {$endif FPCMM_MEDIUMPERTHREAD}
 
@@ -997,7 +987,6 @@ const
   SmallBlockUpsizeAdder        = 32;
   SmallBlockTypePO2            = 6;  // SizeOf(TSmallBlockType)=64
 
-  MediumBlockPoolSizeMem       = 20 * 64 * 1024;
   MediumBlockPoolSize          = MediumBlockPoolSizeMem - 16;
   {$ifdef FPCMM_MEDIUMPERTHREAD}
   {$if MediumBlockPoolSizeMem > MediumBlockAlignment}
@@ -1118,7 +1107,7 @@ type
   TMediumBlockPoolHeader = record
     PreviousMediumBlockPoolHeader: PMediumBlockPoolHeader;
     NextMediumBlockPoolHeader: PMediumBlockPoolHeader;
-    Reserved1: PtrUInt;
+    MediumPerThreadBase: pointer; // used by FPCMM_MEDIUMPERTHREAD
     FirstMediumBlockSizeAndFlags: PtrUInt;
   end;
 
@@ -1164,7 +1153,6 @@ const
   SmallBlockTypeSize         = SizeOf(TSmallBlockType);
   MediumBlockPoolHeaderSize  = SizeOf(TMediumBlockPoolHeader);
   LargeBlockHeaderSize       = SizeOf(TLargeBlockHeader);
-  LargeBlockGranularityAnd   = (1 shl 16) - 1; // 64KB minimum for large blocks
   {$ifdef FPCMM_LARGEBIGALIGN}
   LargeBlockGranularity2And  = (1 shl 21) - 1; // PMD_SIZE=2MB granularity
   LargeBlockGranularity2Size = 2 shl 21;  // for size >= 4MB
@@ -1538,8 +1526,8 @@ begin
   if new <> nil then
   begin
     {$ifdef FPCMM_MEDIUMPERTHREAD}
-    // Written once before the pool becomes reachable from any shared list.
-    PMediumBlockPoolHeader(new).Reserved1 := PtrUInt(@Info);
+    // written once before the pool becomes reachable from any shared list
+    PMediumBlockPoolHeader(new).MediumPerThreadBase := @Info;
     {$endif FPCMM_MEDIUMPERTHREAD}
     old := Info.PoolsCircularList.NextMediumBlockPoolHeader;
     PMediumBlockPoolHeader(new).PreviousMediumBlockPoolHeader := @Info.PoolsCircularList;
@@ -2647,7 +2635,7 @@ asm     // P = rcx on Windows, P = rdi on SystemV; use rsi = TSmallBlockType
         jnz     @MediumOrLargeIsLarge
         mov     r10, rcx
         and     r10, not MediumBlockAlignmentMask
-        mov     r10, [r10 + TMediumBlockPoolHeader.Reserved1]
+        mov     r10, [r10 + TMediumBlockPoolHeader.MediumPerThreadBase]
         {$ifdef NOSFRAME}
         jmp     FreeMediumBlock
 @MediumOrLargeIsLarge:
@@ -2813,7 +2801,7 @@ asm
         {$ifdef FPCMM_MEDIUMPERTHREAD}
         mov     r10, r14
         and     r10, not MediumBlockAlignmentMask
-        mov     r10, [r10 + TMediumBlockPoolHeader.Reserved1]
+        mov     r10, [r10 + TMediumBlockPoolHeader.MediumPerThreadBase]
         {$else}
         lea     r10, [rip + MediumBlockInfo]
         {$endif FPCMM_MEDIUMPERTHREAD}
@@ -3583,6 +3571,10 @@ var
   small: PSmallBlockType;
   a, i, min, poolsize, num, perpool, size, start, next: PtrInt;
 begin
+  {$ifdef MSWINDOWS}
+  // check once if we could use VirtualAlloc2()
+  VirtualAlloc2 := GetProcAddress(GetModuleHandleW('KernelBase'), 'VirtualAlloc2');
+  {$endif MSWINDOWS}
   {$ifdef FPCMM_MEDIUMPERTHREAD}
   MediumBlockInfoLookup[0] := @MediumBlockInfo;
   for i := 1 to high(MediumBlockInfoLookup) do
@@ -3982,7 +3974,6 @@ const
 
 var
   OldMM: TMemoryManager;
-
 
 initialization
   InitializeMemoryManager;
