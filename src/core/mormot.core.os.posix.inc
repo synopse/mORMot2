@@ -1281,6 +1281,8 @@ const
   CLOCK_MONOTONIC_COARSE = 6;
   CLOCK_BOOTTIME         = 7; // includes asleep time (2.6.39+)
 
+  LIBC_GETTIMEOFDAY = 'gettimeofday' + LIBC_SUFFIX; // FPC internal error 2015092701
+
 // libc's clock_gettime function uses vDSO (avoid syscall) while FPC by default
 // is compiled without FPC_USE_LIBC defined and do a syscall each time
 //   GetTickCount64 fpc    2 494 563 op/sec
@@ -1289,8 +1291,7 @@ function clock_gettime(clk_id: clockid_t; tp: ptimespec): cint;
   cdecl external clib name 'clock_gettime'; // LIBC_SUFFIX fails on CentOS 7
 
 function gettimeofday(tp: ptimeval; tzp: ptimezone): cint;
-  cdecl external clib name 'gettimeofday'
-    {$ifndef UNICODE} + LIBC_SUFFIX {$endif}; // FPC internal error 2015092701
+  cdecl external clib name LIBC_GETTIMEOFDAY;
 
 {$endif OSBSD}
 
