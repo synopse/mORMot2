@@ -268,7 +268,6 @@ type
   end;
   PMMStatus = ^TMMStatus;
 
-
 /// allocate a new memory buffer
 // - as FPC default heap, _Getmem(0) returns _Getmem(1)
 function _GetMem(size: PtrUInt): pointer;
@@ -301,7 +300,6 @@ function _MemSize(P: pointer): PtrUInt; inline;
 // - note that FPC GetHeapStatus and GetFPCHeapStatus is only about the
 // current thread (irrelevant for sure) whereas CurrentHeapStatus is global
 function CurrentHeapStatus: TMMStatus;
-
 
 {$ifdef FPCMM_STANDALONE}
 
@@ -381,8 +379,15 @@ procedure WriteHeapStatus(const context: ShortString = '';
 function GetHeapStatus(const context: ShortString; smallblockstatuscount,
   smallblockcontentioncount: integer; compilationflags, onsameline: boolean): PAnsiChar;
 
-
 const
+  // some pre-defined internal constants
+  LargeBlockGranularityAnd  = (1 shl 16) - 1; // 64KB minimum for large blocks
+  MediumBlockPoolSizeMem    = 20 shl 16;      // medium blocks are 1.25MB
+  {$ifdef FPCMM_MEDIUMPERTHREAD}
+  MediumBlockAlignment     = 1 shl 21; // resolve pool header from any block
+  MediumBlockAlignmentMask = MediumBlockAlignment - 1;
+  {$endif FPCMM_MEDIUMPERTHREAD}
+
   /// human readable information about how our MM was built
   // - similar to WriteHeapStatus(compilationflags=true) output
   FPCMM_FLAGS = ' '
@@ -424,7 +429,7 @@ implementation
   - SMALL <= 2600 B
     One arena per block size, fed from one or several pool(s)
   - MEDIUM <= 256 KB
-    Separated pool(s) of bitmap-marked chunks, fed from 1MB of OS mmap/virtualalloc
+    Separated pool(s) of bitmap-marked chunks, fed from 1.25MB of OS chunks
   - LARGE  > 256 KB
     Directly fed from OS mmap/virtualalloc with mremap when growing
 
@@ -485,16 +490,12 @@ implementation
 const
   kernel32 = 'kernel32.dll';
 
-  {$ifdef FPCMM_MEDIUMPERTHREAD}
-  MediumBlockAlignment     = 1 shl 21; // resolve pool header from any block
-  MediumBlockAlignmentMask = MediumBlockAlignment - 1;
-  {$endif FPCMM_MEDIUMPERTHREAD}
-
-  MEM_COMMIT   = $1000;
-  MEM_RESERVE  = $2000;
-  MEM_RELEASE  = $8000;
-  MEM_FREE     = $10000;
-  MEM_TOP_DOWN = $100000;
+  MEM_COMMIT    = $1000;
+  MEM_RESERVE   = $2000;
+  MEM_RELEASE   = $8000;
+  MEM_FREE      = $10000;
+  MEM_TOP_DOWN  = $100000;
+  MEM_64K_PAGES = $20400000; // VirtualAlloc2() hint parameter
 
   PAGE_READWRITE = 4;
   PAGE_GUARD = $0100;
@@ -525,41 +526,61 @@ function VirtualQuery(lpAddress, lpMemInfo: pointer; dwLength: PtrUInt): PtrUInt
 procedure SwitchToThread;
   stdcall; external kernel32 name 'SwitchToThread';
 
-function OsAllocMedium(Size: PtrInt): pointer; inline;
-{$ifdef FPCMM_MEDIUMPERTHREAD}
-var
-  raw: pointer;
-{$endif FPCMM_MEDIUMPERTHREAD}
-begin
-  {$ifdef FPCMM_MEDIUMPERTHREAD}
-  raw := VirtualAlloc(nil, Size + MediumBlockAlignment,
-    MEM_RESERVE, PAGE_READWRITE);
-  if raw = nil then
-  begin
-    result := nil;
-    exit;
-  end;
-  result := pointer((PtrUInt(raw) + MediumBlockAlignmentMask) and
-    not MediumBlockAlignmentMask);
-  if VirtualAlloc(result, Size, MEM_COMMIT, PAGE_READWRITE) = nil then
-  begin
-    VirtualFree(raw, 0, MEM_RELEASE);
-    result := nil;
-  end;
-  {$else}
-  // bottom-up allocation to reduce fragmentation
-  result := VirtualAlloc(nil, Size, MEM_COMMIT, PAGE_READWRITE);
-  {$endif FPCMM_MEDIUMPERTHREAD}
-end;
+function GetCurrentProcess: THandle;
+  stdcall; external kernel32 name 'GetCurrentProcess';
 
-function OsAllocLarge(Size: PtrInt): pointer; inline;
+function GetModuleHandleW(lpModuleName: PWideChar): THandle;
+  stdcall; external kernel32 name 'GetModuleHandleW';
+
+function GetProcAddress(Lib: THandle; ProcName: PAnsiChar): pointer;
+  stdcall; external kernel32 name 'GetProcAddress'; // Ansi-only API
+
+var
+  VirtualAlloc2: function(Process: THandle; BaseAddress: pointer; Size: PtrUInt;
+    AllocationType, PageProtection: cardinal;
+    ExtendedParameters: pointer; ParameterCount: cardinal): pointer; stdcall;
+
+function OsAllocLarge(Size: PtrInt; AllocType: cardinal = MEM_COMMIT;
+  BaseAddress: pointer = nil): pointer;
 begin
+  if ((Size and LargeBlockGranularityAnd) = 0) and // ensure is 64K aligned
+     Assigned(VirtualAlloc2) then
+  begin
+    result := VirtualAlloc2(GetCurrentProcess, BaseAddress, Size,
+      AllocType or MEM_64K_PAGES, PAGE_READWRITE, nil, 0); // reduce page-faults
+    if result <> nil then
+      exit;
+    if Size = MediumBlockPoolSizeMem then // this should always be accepted
+      VirtualAlloc2 := nil; // happens e.g. when running on Wine
+  end;
+  result := VirtualAlloc(BaseAddress, Size, AllocType, PAGE_READWRITE);
   // FastMM4 uses top-down allocation (MEM_TOP_DOWN) of large blocks to "reduce
   // fragmentation", but on a 64-bit system I am not sure of this statement, and
   // VirtualAlloc() was reported to have a huge slowdown due to this option
   // https://randomascii.wordpress.com/2011/08/05/making-virtualalloc-arbitrarily-slower
-  result := VirtualAlloc(nil, Size, MEM_COMMIT, PAGE_READWRITE);
 end;
+
+{$ifdef FPCMM_MEDIUMPERTHREAD}
+function OsAllocMedium(Size: PtrInt): pointer;
+var
+  raw: pointer;
+begin
+  raw := VirtualAlloc(nil, Size + MediumBlockAlignment, MEM_RESERVE, PAGE_READWRITE);
+  if raw = nil then
+    exit(nil);
+  result := pointer((PtrUInt(raw) + MediumBlockAlignmentMask) and
+                    not MediumBlockAlignmentMask);
+  if VirtualAlloc(result, Size, MEM_COMMIT, PAGE_READWRITE) <> nil then
+    exit;
+  VirtualFree(raw, 0, MEM_RELEASE);
+  result := nil;
+end;
+{$else}
+function OsAllocMedium(Size: PtrInt): pointer; inline;
+begin
+  result := OsAllocLarge(Size);
+end;
+{$endif FPCMM_MEDIUMPERTHREAD}
 
 procedure OsFreeMedium(ptr: pointer; Size: PtrInt); inline;
 {$ifdef FPCMM_MEDIUMPERTHREAD}
@@ -658,11 +679,6 @@ uses
 // we directly call the OS Kernel, so this unit doesn't require any libc
 
 const
-  {$ifdef FPCMM_MEDIUMPERTHREAD}
-  MediumBlockAlignment     = 1 shl 21; // resolve pool header from any block
-  MediumBlockAlignmentMask = MediumBlockAlignment - 1;
-  {$endif FPCMM_MEDIUMPERTHREAD}
-
   {$ifdef OLDLINUXKERNEL}
     {$undef FPCMM_MEDIUM32BIT}
     MAP_POPULATE = 0;
