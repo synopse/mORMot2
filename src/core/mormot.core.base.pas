@@ -13456,7 +13456,7 @@ var
   tmp: string;
 begin // sub-proc to avoid hidden temp variable in VariantToRawByteString
   tmp := Value; // let the RTL do the conversion
-  Dest := tmp;
+  Dest := RawUtf8(tmp);
 end;
 
 procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);

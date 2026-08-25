@@ -7734,7 +7734,7 @@ begin
   {$endif FPC}
     rkLString: // PT_INFO[ptRawUtf8/ptRawJson] have been found above
       begin
-        cp := Info^.AnsiStringCodePage;
+        cp := Info^.AnsiStringCodePage; // use TypeInfo() on Delphi 7/2007
         if cp = CP_UTF8 then
           result := ptRawUtf8
         else if cp = CP_WINANSI then
@@ -7755,10 +7755,10 @@ begin
     rkUString:
       result := ptUnicodeString;
   {$endif HASVARUSTRING}
-  {$ifdef FPC_OR_UNICODE}
-    {$ifdef UNICODE}
+  {$ifdef ISDELPHI}
     rkProcedure,
-    {$endif UNICODE}
+  {$endif ISDELPHI}
+  {$ifdef FPC_OR_UNICODE}
     rkClassRef,
     rkPointer:
       result := ptPtrInt;
