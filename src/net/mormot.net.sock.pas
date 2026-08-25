@@ -6639,7 +6639,7 @@ begin
     if s = 'unix' then
     begin
       // aAddress='unix:/path/to/myapp.socket'
-      fpunlinka(pointer(p)); // a previous bind may have left the .socket file
+      fpunlink(pointer(p)); // a previous bind may have left the .socket file
       OpenBind(p, '', {dobind=}true, {tls=}false, nlUnix, {%H-}aSock);
       exit;
     end;
@@ -7094,7 +7094,7 @@ begin
   // (see e.g. THttpClientSocket.Request)
   {$ifdef OSPOSIX}
   if fSocketLayer = nlUnix then
-    fpunlinka(pointer(fServer)); // 'unix:/path/to/myapp.socket' -> delete file
+    fpunlink(pointer(fServer)); // 'unix:/path/to/myapp.socket' -> delete file
   {$endif OSPOSIX}
 end;
 

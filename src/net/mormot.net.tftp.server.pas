@@ -455,7 +455,7 @@ begin
   end;
   if ttoChangeRoot in fOptions then
   begin
-    ok := ChangeRoot(StringToUtf8(ExcludeTrailingPathDelimiter(fFileFolder)));
+    ok := ChangeRoot(ExcludeTrailingPathDelimiter(fFileFolder));
     if ok then
       fFileFolder := '/'
     else
