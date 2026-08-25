@@ -3130,7 +3130,7 @@ end;
 function _GetHeapStatus: THeapStatus;
 begin
   // use this deprecated 32-bit structure to return hidden information
-  FillChar(result, sizeof(result), 0);
+  FillChar(result{%H-}, sizeof(result), 0);
   PShortString(@result.TotalAddrSpace)^ := 'fpcx64mm'; // magic
   PPointer(@result.Unused)^ := @_GetHeapInfo;
 end;
