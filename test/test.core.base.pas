@@ -6026,6 +6026,7 @@ var
   WS: WideString;
   SU, SU2: SynUnicode;
   WU: array[0..3] of WideChar;
+  WU2: array[0..15] of WideChar;
   str: string;
   ss: ShortString;
   fn: TFileName;
@@ -7081,8 +7082,17 @@ begin
   Check(Utf8ToUnicodeLength(Pointer(U)) = 2);
   Check(Utf8FirstLineToUtf16Length(Pointer(U)) = 2);
   PCardinal(@WU)^ := 0;
-  if CheckEqual(Utf8ToWideChar(WU, pointer(U), SizeOf(WU), length(U), false), 4) then
+  if CheckEqual(Utf8ToWideChar(WU, pointer(U), length(WU), length(U), false), 4) then
     Check(PCardinal(@WU)^ = $DCD2D863);
+  // ensure MaxDestChars is a WideChar count - not a byte count
+  U := 'abcdefgh';
+  FillCharFast(WU2, SizeOf(WU2), 0);
+  CheckEqual(Utf8ToWideChar(@WU2, pointer(U), length(WU2), length(U), false), 16);
+  CheckEqual(StrLenW(@WU2), 8);
+  FillCharFast(WU2, SizeOf(WU2), 0);
+  CheckEqual(Utf8ToWideChar(@WU2, pointer(U), 5, length(U), false), 10);
+  CheckEqual(StrLenW(@WU2), 5);
+  Check(CompareMemSmall(@WU2, PWideChar('abcde'), 10), 'truncate at MaxDestChars');
   U := SynUnicodeToUtf8(SU);
   if Check(length(U) = 4) then
     Check(PCardinal(U)^ = $92b3a8f0);
