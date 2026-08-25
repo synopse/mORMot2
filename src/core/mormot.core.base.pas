@@ -13451,9 +13451,12 @@ begin
     RawByteString(TVarData(Value).VAny) := Data;
 end;
 
-procedure VariantToUtf8(const Value: variant; var Dest: RawByteString);
+procedure RtlVariantToUtf8(const Value: variant; var Dest: RawByteString);
+var
+  tmp: string;
 begin // sub-proc to avoid hidden temp variable in VariantToRawByteString
-  Dest := {$ifdef UNICODE}RawByteString{$else}string{$endif}(Value);
+  tmp := Value; // let the RTL do the conversion
+  Dest := tmp;
 end;
 
 procedure VariantToRawByteString(const Value: variant; var Dest: RawByteString);
@@ -13469,7 +13472,7 @@ begin
     varVariantByRef:
       VariantToRawByteString(PVariant(TVarData(Value).VPointer)^, Dest);
     else // not from RawByteStringToVariant() -> conversion to string
-      VariantToUtf8(Value, Dest);
+      RtlVariantToUtf8(Value, Dest);
   end;
 end;
 

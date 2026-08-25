@@ -164,6 +164,18 @@ begin
   result := fpStatFS(PosixFN(Path, tmp), Info);
 end;
 
+{$ifdef FPC}
+function FindResource(Instance: TLibHandle; ResourceName, ResType: PChar): TLibHandle;
+var
+  tmp: TBuffer4K; // use RTL UTF-16 to UTF-8 conversion
+begin // FPC resourcemanager.FindResourceFunc() expects PAnsiChar parameters
+  if PtrUInt(ResourceName) <= high(word) then
+    exit(system.FindResource(Instance, ResourceName, ResType));
+  UnicodeToUtf8(@tmp, SizeOf(tmp), ResourceName, StrLenW(ResourceName));
+  result := system.FindResource(Instance, @tmp, ResType);
+end;
+{$endif FPC}
+
 {$else}
 
 function PosixOpen(const FileName: TFileName; Flags: cint): cint; inline;
@@ -1277,7 +1289,8 @@ function clock_gettime(clk_id: clockid_t; tp: ptimespec): cint;
   cdecl external clib name 'clock_gettime'; // LIBC_SUFFIX fails on CentOS 7
 
 function gettimeofday(tp: ptimeval; tzp: ptimezone): cint;
-  cdecl external clib name 'gettimeofday' + LIBC_SUFFIX;
+  cdecl external clib name 'gettimeofday'
+    {$ifndef UNICODE} + LIBC_SUFFIX {$endif}; // FPC internal error 2015092701
 
 {$endif OSBSD}
 
