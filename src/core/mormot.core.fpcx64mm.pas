@@ -622,8 +622,8 @@ begin
        (nfo.BaseAddress <= PtrUInt(next)) and // enough space?
        (nfo.BaseAddress + nfo.RegionSize >= PtrUInt(next) + nextsize) and
        // set the address space in two reserve + commit steps for thread safety
-       (VirtualAlloc(next, nextsize, MEM_RESERVE, PAGE_READWRITE) <> nil) and
-       (VirtualAlloc(next, nextsize, MEM_COMMIT, PAGE_READWRITE) <> nil) then
+       (OsAllocLarge(nextsize, MEM_RESERVE, next) <> nil) and
+       (OsAllocLarge(nextsize, MEM_COMMIT, next) <> nil) then
       begin
         new_len := new_len or LargeBlockIsSegmented; // several VirtualFree()
         result := addr; // in-place realloc: no need to move memory :)
@@ -714,6 +714,7 @@ var
 {$endif FPCMM_MEDIUM32BIT}
 
 function OsAllocMediumRaw(Size: PtrInt): pointer;
+  {$ifndef FPCMM_MEDIUM32BIT} inline; {$endif}
 begin
   result := fpmmap(nil, Size, PROT_READ or PROT_WRITE, AllocMediumflags, -1, 0);
   if result = MAP_FAILED then
@@ -751,7 +752,7 @@ begin
     fpmunmap(PByte(result) + Size, suffix);
 end;
 {$else}
-function OsAllocMedium(Size: PtrInt): pointer;
+function OsAllocMedium(Size: PtrInt): pointer; inline;
 begin
   result := OsAllocMediumRaw(Size);
 end;
