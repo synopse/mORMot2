@@ -430,6 +430,9 @@ type
 
 {$ifdef FPC}
 
+var
+  _TranslatedResourceStrings: boolean;
+
 // objpas.TResourceIterator callback, with arg = the TLanguageFile table to apply
 // - arg may be nil, i.e. no language: every entry keeps its DefaultValue
 // - note that objpas is part of the units implicitly available in objfpc/delphi
@@ -895,9 +898,6 @@ threadvar
 
 var
   _MainI18n: TLanguageFiles;
-  {$ifdef FPC}
-  _TranslatedResourceStrings: boolean;
-  {$endif FPC}
 
 
 { TLanguageFiles }
@@ -1134,7 +1134,12 @@ begin
 end;
 
 procedure TLanguageFiles.TranslateResourceStrings(aLanguage: TLanguage);
+var
+  lang: TLanguageFile;
 begin
+  lang := nil;
+  if self <> nil then
+    lang := fLang[aLanguage];
   {$ifdef FPC}
   // ensure ResetResourceTables is called in finalization section below
   _TranslatedResourceStrings := true;
@@ -1145,7 +1150,7 @@ begin
   // the callback maps to "keep the English text"), because it is the only RTL
   // entry point ending with UpdateResourceStringRefs: ResetResourceTables alone
   // would leave any "var s: string = SomeResourceString" global out of sync
-  SetResourceStrings(@_TranslateResourceString, fLang[aLanguage]);
+  SetResourceStrings(@_TranslateResourceString, lang);
   {$else}
   {$ifdef HASCACHEDRESSTRING}
   // Delphi 10.4+ sysutils has cache + global LoadResStringFunc hook
@@ -1168,7 +1173,7 @@ begin
   else
      _LoadResCache.DeleteAll;
   // use the supplied TLanguageFile instance
-  _LoadResFile := fLang[aLanguage];
+  _LoadResFile := lang;
   {$endif FPC}
 end;
 
@@ -1339,8 +1344,8 @@ finalization
   FreeAndNil(_LoadResCache);
   {$else}
   // avoid potential GPF at shutdown in ObjPas.FinalizeResourceTables
-  if _TranslatedResourceStrings then
-    ResetResourceTables;
+    if _TranslatedResourceStrings then
+      TLanguageFiles(nil).TranslateResourceStrings(lngUndefined);
   {$endif ISDELPHI}
 
 end.
