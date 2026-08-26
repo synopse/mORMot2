@@ -5557,7 +5557,7 @@ constructor TPdfWrite.Create(Destination: TPdfDocument; DestStream: TStream);
 begin
   fDoc := Destination;
   fDestStream := DestStream;
-  fDestStreamPosition := fDestStream.Seek(0, soCurrent);
+  fDestStreamPosition := fDestStream.Position;
   B := @fTmp;
   BEnd := B + high(fTmp);
   BEnd4 := BEnd - 4;
@@ -9815,7 +9815,7 @@ begin
       {$endif USE_SYNGDIPLUS}
         SaveToStream(fWriter.fDestStream); // with CompressionQuality recompress
     end;
-    fWriter.fDestStreamPosition := fWriter.fDestStream.Seek(0, soCurrent);
+    fWriter.fDestStreamPosition := fWriter.fDestStream.Position;
   end
   else
   begin
@@ -9906,7 +9906,7 @@ begin
   fFilter := 'DCTDecode';
   fWriter.Save; // flush to allow direct access to fDestStream
   fWriter.Add(aJpegFile.Memory, len);
-  fWriter.fDestStreamPosition := fWriter.fDestStream.Seek(0, soCurrent);
+  fWriter.fDestStreamPosition := fWriter.fDestStream.Position;
   fAttributes.AddItem('Width', fPixelWidth);
   fAttributes.AddItem('Height', fPixelHeight);
   case bits of

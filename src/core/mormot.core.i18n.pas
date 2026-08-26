@@ -1344,8 +1344,8 @@ finalization
   FreeAndNil(_LoadResCache);
   {$else}
   // avoid potential GPF at shutdown in ObjPas.FinalizeResourceTables
-    if _TranslatedResourceStrings then
-      TLanguageFiles(nil).TranslateResourceStrings(lngUndefined);
+  if _TranslatedResourceStrings then
+    TLanguageFiles(nil).TranslateResourceStrings(lngUndefined);
   {$endif ISDELPHI}
 
 end.
