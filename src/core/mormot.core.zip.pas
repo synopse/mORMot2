@@ -2426,8 +2426,7 @@ begin
   PLastHeader(P)^ := lh;
   inc(PLastHeader(P));
   fDest.WriteBuffer(pointer(tmp)^, P - pointer(tmp)); // write at once to fDest
-  if fDest.InheritsFrom(THandleStream) then
-    SetEndOfFile(THandleStream(fDest).Handle); // may need to be truncated
+  fDest.Size := fDest.Position; // files need to be truncated
 end;
 
 const

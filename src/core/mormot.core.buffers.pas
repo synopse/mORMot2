@@ -379,13 +379,13 @@ type
     // - returns true on success, and false on decoding error - but some chunks
     // may have been decompressed in Dest even if false is returned
     function StreamUnCompress(Source, Dest: TStream; Magic: cardinal;
-      ForceHash32: boolean = false): boolean; overload;
+      ForceHash32: boolean = false; NoSeek0: boolean = false): boolean; overload;
     /// uncompress a Stream previously compressed via StreamCompress()
     // - return nil on decompression error, or a new TMemoryStream instance
     // - follow the StreamUnSynLZ() deprecated function format, if ForceHash32=true
     // so that Hash32() is used instead of the AlgoHash() of this instance
     function StreamUnCompress(Source: TStream; Magic: cardinal;
-      ForceHash32: boolean = false): TMemoryStream; overload;
+      ForceHash32: boolean = false; NoSeek0: boolean = false): TMemoryStream; overload;
     /// uncompress a File previously compressed via StreamCompress() as TStream
     // - you should specify a Magic number to be used to identify the compressed
     // Stream format
@@ -4268,7 +4268,8 @@ end;
 { TBufferWriter }
 
 constructor TBufferWriter.Create(aFile: THandle; BufLen: integer);
-begin // raise EOSException on invalid aFile handle
+begin
+  SetLastError(0); // raise EOSException on invalid aFile handle
   Create(TFileStreamEx.CreateFromHandle(aFile, ''), BufLen);
   fInternalStream := true;
 end;
@@ -4383,7 +4384,7 @@ begin
   if fIsRawByteStream then
     TRawByteStringStream(fStream).Size := 0
   else
-    fStream.Seek(0, soBeginning);
+    fStream.Seek(0, soBeginning); // rewind
 end;
 
 procedure TBufferWriter.Write(Data: pointer; DataLen: PtrInt);
@@ -5548,15 +5549,15 @@ begin
 end;
 
 function TAlgoCompress.StreamUnCompress(Source: TStream; Magic: cardinal;
-  ForceHash32: boolean): TMemoryStream;
+  ForceHash32, NoSeek0: boolean): TMemoryStream;
 begin
   result := TMemoryStream.Create;
-  if not StreamUncompress(Source, result, Magic, ForceHash32) then
+  if not StreamUncompress(Source, result, Magic, ForceHash32, NoSeek0) then
     FreeAndNil(result);
 end;
 
 function TAlgoCompress.StreamUnCompress(Source, Dest: TStream; Magic: cardinal;
-  ForceHash32: boolean): boolean;
+  ForceHash32, NoSeek0: boolean): boolean;
 var
   S, D: PAnsiChar;
   sourcePosition, resultSize, sourceSize: Int64;
@@ -5610,7 +5611,10 @@ begin
     exit;
   EnsureAlgoHasNoForcedFormat('StreamUnCompress');
   sourceSize := Source.Size;
-  sourcePosition := Source.Position;
+  if NoSeek0 then
+    sourcePosition := 0
+  else
+    sourcePosition := Source.Position;
   if Source.Read(head, SizeOf(head)) <> SizeOf(head) then
     exit;
   if (head.Magic <> Magic) and
@@ -5702,7 +5706,7 @@ begin
   if S <> nil then
     try
       try
-        result := StreamUnCompress(S, Magic, ForceHash32);
+        result := StreamUnCompress(S, Magic, ForceHash32, {noseek0=}true);
       finally
         S.Free;
       end;
@@ -5784,7 +5788,7 @@ begin
       DeleteFile(Dest);
       D := TFileStreamEx.Create(Dest, fmCreate);
       try
-        if not StreamUnCompress(S, D, Magic, ForceHash32) then
+        if not StreamUnCompress(S, D, Magic, ForceHash32, {noseek0=}true) then
           exit;
       finally
         D.Free;
@@ -10143,7 +10147,7 @@ begin
   for i := 0 to n - 1 do
     with fNested[i] do
     begin
-      Stream.Seek(0, soBeginning);
+      Stream.Seek(0, soBeginning); // rewind
       Start := fSize;
       inc(fSize, Stream.Size); // to allow proper Seek() + Read()
       Stop := fSize;
@@ -10210,7 +10214,7 @@ constructor TBufferedStreamReader.Create(aSource: TStream; aBufSize: integer;
 begin
   fSource := aSource;
   fSize := fSource.Size; // get it once
-  fSource.Seek(0, soBeginning);
+  fSource.Seek(0, soBeginning); // rewind
   pointer(fBuffer) := FastNewString(aBufSize);
   if aOwnSource then
     fOwnStream := fSource;
