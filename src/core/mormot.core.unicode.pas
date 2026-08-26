@@ -3303,7 +3303,7 @@ var
   {$endif CPUX86NOTPIC}
 label
   quit, nosource, by2;
-begin // slightly slower overload with explicit destlen
+begin // slightly slower overload with explicit dest length as MaxDestChars
   result := 0;
   if dest = nil then
     exit;
@@ -5158,7 +5158,7 @@ function AnyTextFileToRawUtf8(const FileName: TFileName; AssumeUtf8IfNoBom: bool
 var
   tmp: RawByteString;
   buf: pointer;
-  chars: PtrInt;
+  chars: PtrInt; // not integer
 begin
   case StringFromBomFile(FileName, tmp, buf, chars) of
     bomNone: // most common case, especially on POSIX
@@ -5189,7 +5189,7 @@ function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUtf8: boolean):
 var
   tmp: RawByteString;
   buf: pointer;
-  chars: PtrInt;
+  chars: PtrInt; // not integer
 begin
   case StringFromBomFile(FileName, tmp, buf, chars) of
     bomNone: // most common case, especially on POSIX
@@ -5221,7 +5221,7 @@ function AnyTextFileToString(const FileName: TFileName; ForceUtf8: boolean): str
 var
   tmp: RawByteString;
   buf: pointer;
-  chars: PtrInt;
+  chars: PtrInt; // not integer
 begin
   case StringFromBomFile(FileName, tmp, buf, chars) of
     bomNone: // most common case, especially on POSIX

@@ -212,7 +212,7 @@ type
     /// append some data to the outStream, after encryption
     function Write(const Buffer; Count: Longint): Longint; override;
     /// read some data is not allowed -> this method will raise an exception on call
-    function Seek(Offset: Longint; Origin: Word): Longint; override;
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
     /// write pending data
     // - should always be called before closing the outStream (some data may
     // still be in the internal buffers)
@@ -1178,21 +1178,21 @@ begin
   if (fBufCount >= SizeOf(TAesBlock)) or
      fNoCrypt or
      not fAes.Initialized then
-    ESynCrypto.RaiseUtf8('Unexpected %.Finish', [self]);
+   RaiseStreamError(self, 'Finish');
   XorOffset(@fBuf, DestSize, fBufCount);
   fDest.WriteBuffer(fBuf, fBufCount);
   fBufCount := 0;
 end;
 
-function TAesWriteStream.{%H-}Read(var Buffer; Count: Longint): Longint;
+function TAesWriteStream.Read(var Buffer; Count: Longint): Longint;
 begin
-  ESynCrypto.RaiseUtf8('Unexpected %.Read', [self]);
+  RaiseStreamError(self, 'Read');
   result := 0; // make compiler happy
 end;
 
-function TAesWriteStream.{%H-}Seek(Offset: Longint; Origin: Word): Longint;
+function TAesWriteStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
 begin
-  ESynCrypto.RaiseUtf8('Unexpected %.Seek', [self]);
+  RaiseStreamError(self, 'Seek');
   result := 0; // make compiler happy
 end;
 

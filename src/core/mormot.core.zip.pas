@@ -957,7 +957,7 @@ end;
 
 function TSynZipStream.Seek(Offset: Longint; Origin: Word): Longint;
 begin
-  result := Seek(Offset, TSeekOrigin(Origin));
+  result := Seek(Offset, TSeekOrigin(Origin)); // redirect to the 64-bit method
 end;
 
 function TSynZipStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
@@ -966,17 +966,17 @@ begin
   if fInitialized then
     if (Offset = 0) and
        (Origin in [soCurrent, soEnd]) then
-    // for TStream.Position/GetSize on Delphi
-    result := fSizeIn
-  else if (Offset <> 0) or
-          (Origin <> soBeginning) or
-          (fSizeIn <> 0) then
-    ESynZip.RaiseUtf8('Unexpected %.Seek', [self]);
+      // for TStream.Position/GetSize on Delphi
+      result := fSizeIn
+    else if (Offset <> 0) or
+            (Origin <> soBeginning) or
+            (fSizeIn <> 0) then
+      RaiseStreamError(self, 'Seek');
 end;
 
 function TSynZipStream.{%H-}Read(var Buffer; Count: Longint): Longint;
 begin
-  ESynZip.RaiseUtf8('%.Read is not supported', [self]);
+  RaiseStreamError(self, 'Read');
   result := 0; // make compiler happy
 end;
 
@@ -1078,7 +1078,7 @@ constructor TSynZipDecompressor.Create(outStream: TStream;
   Format: TSynZipCompressorFormat);
 begin
   if fFormat = szcfGZ then
-    ESynZip.RaiseUtf8('%.Create: unsupported szcfGZ', [self]);
+    RaiseStreamError(self, 'Create: unsupported szcfGZ');
   fDestStream := outStream;
   fFormat := Format;
   Z.Init(nil, 0, outStream, @fCrc, nil, 0, 256 shl 10); // use 256KB buffers
