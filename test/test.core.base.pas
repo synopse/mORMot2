@@ -7092,7 +7092,8 @@ begin
   FillCharFast(WU2, SizeOf(WU2), 0);
   CheckEqual(Utf8ToWideChar(@WU2, pointer(U), 5, length(U), false), 10);
   CheckEqual(StrLenW(@WU2), 5);
-  Check(CompareMemSmall(@WU2, PWideChar('abcde'), 10), 'truncate at MaxDestChars');
+  SU2 := 'abcde';
+  Check(CompareMem(@WU2, pointer(SU2), 10), 'truncate at MaxDestChars');
   U := SynUnicodeToUtf8(SU);
   if Check(length(U) = 4) then
     Check(PCardinal(U)^ = $92b3a8f0);
