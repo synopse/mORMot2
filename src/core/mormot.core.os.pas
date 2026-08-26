@@ -1301,6 +1301,7 @@ type
     // - will set the supplied version numbers, and set BuildDateTime
     // - if no version number is supplied, calls RetrieveInformationFromFileName
     // so on POSIX, FPCUSEVERSIONINFO conditional should be set for the project
+    // if aFileName is not the current executable
     // - for the main executable/process, use Executable.Version global variable
     constructor Create(const aFileName: TFileName; aMajor: integer = 0;
       aMinor: integer = 0; aRelease: integer = 0; aBuild: integer = 0;
@@ -1310,7 +1311,8 @@ type
     /// open and extract file information from the executable FileName
     // - as called by the Create(aFileName) constructor
     // - on Windows, will use the corresponding file version information API
-    // - on POSIX, FPCUSEVERSIONINFO conditional should be set in the project
+    // - on POSIX, if FPCUSEVERSIONINFO conditional if not set in the project,
+    // will call RetrieveNumbersFromResource
     // - returns true if the version numbers did change
     // - for the main executable/process, use Executable.Version global variable
     function RetrieveInformationFromFileName: boolean;
