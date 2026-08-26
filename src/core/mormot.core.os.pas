@@ -3409,10 +3409,10 @@ function FindFirstDirectory(const Path: TFileName; IncludeHidden: boolean;
 
 type
   /// a TFileStream replacement which supports FileName longer than MAX_PATH,
-  // and a proper Create(aHandle) constructor in FPC
+  // and offers a proper CreateFromHandle() constructor
   TFileStreamEx = class(THandleStream)
   protected
-    fFileName : TFileName;
+    fFileName: TFileName;
     fDontReleaseHandle, fDeleteFileOnDestroy: boolean;
     function GetSize: Int64; override;
   public
@@ -3429,6 +3429,10 @@ type
     constructor CreateWrite(const aFileName: TFileName);
     /// explictely close the handle if needed
     destructor Destroy; override;
+    /// overriden to use our FileSeek64() function
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+    /// generic override calling the 64-bit Seek() overload
+    function Seek(Offset: Longint; Origin: Word): Longint; override;
     /// Destroy calls FileClose(Handle) unless this property is true
     property DontReleaseHandle: boolean
       read fDontReleaseHandle write fDontReleaseHandle;
@@ -3492,11 +3496,9 @@ function FileWriteAll(F: THandle; Buffer: pointer; Size: PtrInt): boolean;
 function FileOpenSequentialRead(const FileName: TFileName): integer;
 
 /// returns a TFileStreamFromHandle optimized for one pass file reading
-// - wrap TFileStreamEx.CreateRead() to use FileOpenSequentialRead(),
-// i.e. FILE_FLAG_SEQUENTIAL_SCAN on Windows
+// - wrap TFileStreamEx.CreateRead() but return nil on error with no exception
 // - on POSIX, calls fpOpen(pointer(FileName),O_RDONLY) with no fpFlock() call
 // - is used e.g. by TRestOrmServerFullMemory and TAlgoCompress
-// - returns nil if FileName does not exist, without any exception
 function FileStreamSequentialRead(const FileName: TFileName): THandleStream;
 
 /// try to open the file from its name, as fmOpenReadShared
@@ -7904,11 +7906,20 @@ begin
     DeleteFile(fFileName);
 end;
 
+function TFileStreamEx.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  result := FileSeek64(Handle, Offset, ord(Origin));
+end;
+
+function TFileStreamEx.Seek(Offset: Longint; Origin: Word): Longint;
+begin
+  result := Seek(Offset, TSeekOrigin(Origin)); // redirect to the 64-bit method
+end;
+
 function TFileStreamEx.GetSize: Int64;
 begin
   result := FileSize(Handle); // faster than 3 FileSeek() calls - and threadsafe
 end;
-
 
 { TFileStreamEventuallyDelete }
 
@@ -7938,17 +7949,13 @@ var
       err := GetLastSystemError;
   end;
 
-begin
-  // logic similar to TSynLog.CreateLogWriter
+begin // used e.g. by TSynLog.CreateLogWriter
   h := INVALID_HANDLE_VALUE;
   err := seSuccess;
   if not CanOpenWrite then
-    if not FileExists(aFileName) then
-      // immediately raise EOSException if this new file could not be created
-      h := FileCreate(aFileName, fmShareRead)
-    else
+    if FileExists(aFileName) then
     begin
-      fn := aFileName;
+      fn := aFileName; // keep original file name for locked ChangeFileExt()
       ext := ExtractExt(aFileName);
       for retry := 1 to aAliases do
       begin
@@ -7964,7 +7971,9 @@ begin
         if CanOpenWrite then
           break;
       end;
-    end;
+    end
+    else
+      h := FileCreate(aFileName, fmShareRead); // likely to raise EOSException
   CreateFromHandle(h, aFileName); // raise EOSException on invalid h
 end;
 
@@ -7978,10 +7987,11 @@ function FileStreamSequentialRead(const FileName: TFileName): THandleStream;
 var
   h: THandle;
 begin
-  result := nil;
   h := FileOpenSequentialRead(FileName);
-  if ValidHandle(h) then // would raise EOSException on invalid h
-    result := TFileStreamEx.CreateFromHandle(h, FileName);
+  if ValidHandle(h) then
+    result := TFileStreamEx.CreateFromHandle(h, FileName)
+  else
+    result := nil; // no EOSException
 end;
 
 function StreamCopyUntilEnd(Source, Dest: TStream): Int64;

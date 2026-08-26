@@ -3391,7 +3391,7 @@ begin
              EventArchiveZipCompressLevel);
           try
             // re-compression is done for each TAlgoCompress chunk
-            LogCompressAlgo.StreamUnCompress(s, z, LOG_MAGIC, {hash32=}true);
+            LogCompressAlgo.StreamUnCompress(s, z, LOG_MAGIC, {hash32=}true, true);
           finally
             z.Free; // finalize the .zip entry
           end;
