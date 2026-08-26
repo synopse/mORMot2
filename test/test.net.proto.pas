@@ -4277,6 +4277,41 @@ begin
   check(U.From('https://ictuswin.com/toto/titi'));
   h := HttpRequestLength('Content-Lengths: 100'#13#10, @l);
   check(h = nil);
+  FillCharFast(dig, SizeOf(dig), 0);
+  CheckEqual(ord(dig.Algo), 0);
+  l := HttpRequestHash(hfSHA256, U, 'etag: "1234"'#13#10, dig);
+  CheckEqual(l, SizeOf(THash256));
+  Check(dig.Algo = hfSHA256);
+  CheckEqual(Sha256DigestToString(dig.Bin.Lo),
+    '19b9f18055bc3307c80f58159938f4e6bd0eb583f672fe7793e1b0df50e60bb2');
+  FillCharFast(dig, SizeOf(dig), 0);
+  CheckEqual(ord(dig.Algo), 0);
+  l := HttpRequestHash(hfSHA256, U, 'etag: "1234"'#13#10, dig, {upper=}true);
+  CheckEqual(l, SizeOf(THash256));
+  Check(dig.Algo = hfSHA256);
+  CheckEqual(Sha256DigestToString(dig.Bin.Lo),
+    '5b355c973ac5542e7348831eaf439fb0fc0e61fa7f86f45b541c6d2d206ade42');
+  FillCharFast(dig, SizeOf(dig), 0);
+  l := HttpRequestHash(hfSHA256, U,
+    'Content-Length: 100'#13#10'Last-Modified: 2025', dig);
+  CheckEqual(l, SizeOf(THash256));
+  Check(dig.Algo = hfSHA256);
+  CheckEqual(Sha256DigestToString(dig.Bin.Lo),
+    'dd36778462987d817a662b4a602accde058d26f4247aa55ca70bf476a9a442e7');
+  Check(HttpRequestHashBase32(U, @s32,
+    'Content-Length: 100'#13#10'Last-Modified: 2025'));
+  CheckEqualShort(s32, '3u3hpbdctb6yc6tgfnfgakwm3ycy2jxu');
+  Check(HttpRequestHashBase32(U, @s32,
+    'Content-Length: 101'#13#10'Last-Modified: 2025'));
+  CheckEqualShort(s32, 'utip3vleydamax5oayo7tjfyaoub6y5w');
+  Check(HttpRequestHashBase32(U, @s32, nil));
+  CheckEqualShort(s32, 'na3q2n4gw6cly5fvf5da4frmek667zk2');
+  s32[0] := #0;
+  checkEqual(U.Address, 'toto/titi');
+  U.Address := U.Address + '#ignore=10';
+  checkEqual(U.Address, 'toto/titi#ignore=10');
+  Check(HttpRequestHashBase32(U, @s32, nil));
+  CheckEqualShort(s32, 'na3q2n4gw6cly5fvf5da4frmek667zk2');
   // validate GetNextRange() overflow clamping
   s := '0-1';
   v := pointer(s);
@@ -4305,6 +4340,7 @@ begin
   v := pointer(s);
   Check(GetNextRange(v) = Qword(High(Int64)), 'range clamped huge');
   // validate ValidateRange() against such an out-of-range offset
+  FillCharFast(ctx, SizeOf(ctx), 0);
   ctx.Reset;
   ctx.ContentLength := 1000;
   ctx.RangeOffset := High(Int64);
@@ -4343,41 +4379,6 @@ begin
     ctx.ContentStream := nil;
     ms.Free;
   end;
-  FillCharFast(dig, SizeOf(dig), 0);
-  CheckEqual(ord(dig.Algo), 0);
-  l := HttpRequestHash(hfSHA256, U, 'etag: "1234"'#13#10, dig);
-  CheckEqual(l, SizeOf(THash256));
-  Check(dig.Algo = hfSHA256);
-  CheckEqual(Sha256DigestToString(dig.Bin.Lo),
-    '19b9f18055bc3307c80f58159938f4e6bd0eb583f672fe7793e1b0df50e60bb2');
-  FillCharFast(dig, SizeOf(dig), 0);
-  CheckEqual(ord(dig.Algo), 0);
-  l := HttpRequestHash(hfSHA256, U, 'etag: "1234"'#13#10, dig, {upper=}true);
-  CheckEqual(l, SizeOf(THash256));
-  Check(dig.Algo = hfSHA256);
-  CheckEqual(Sha256DigestToString(dig.Bin.Lo),
-    '5b355c973ac5542e7348831eaf439fb0fc0e61fa7f86f45b541c6d2d206ade42');
-  FillCharFast(dig, SizeOf(dig), 0);
-  l := HttpRequestHash(hfSHA256, U,
-    'Content-Length: 100'#13#10'Last-Modified: 2025', dig);
-  CheckEqual(l, SizeOf(THash256));
-  Check(dig.Algo = hfSHA256);
-  CheckEqual(Sha256DigestToString(dig.Bin.Lo),
-    'dd36778462987d817a662b4a602accde058d26f4247aa55ca70bf476a9a442e7');
-  Check(HttpRequestHashBase32(U, @s32,
-    'Content-Length: 100'#13#10'Last-Modified: 2025'));
-  CheckEqualShort(s32, '3u3hpbdctb6yc6tgfnfgakwm3ycy2jxu');
-  Check(HttpRequestHashBase32(U, @s32,
-    'Content-Length: 101'#13#10'Last-Modified: 2025'));
-  CheckEqualShort(s32, 'utip3vleydamax5oayo7tjfyaoub6y5w');
-  Check(HttpRequestHashBase32(U, @s32, nil));
-  CheckEqualShort(s32, 'na3q2n4gw6cly5fvf5da4frmek667zk2');
-  s32[0] := #0;
-  checkEqual(U.Address, 'toto/titi');
-  U.Address := U.Address + '#ignore=10';
-  checkEqual(U.Address, 'toto/titi#ignore=10');
-  Check(HttpRequestHashBase32(U, @s32, nil));
-  CheckEqualShort(s32, 'na3q2n4gw6cly5fvf5da4frmek667zk2');
 end;
 
 type
@@ -4613,6 +4614,7 @@ var
   clt: THttpClientSocket;
   fam: integer;
   data: RawByteString; // not RawUtf8: RandomWinAnsi() is no UTF-8 content
+  datahash: cardinal;
   hosthead: RawUtf8;
 
   procedure RawRange(const range, expected, context: RawUtf8;
@@ -4659,6 +4661,7 @@ begin
   // range used to announce more bytes than the file actually holds
   data := RandomWinAnsi(3 shl 20); // 3MB
   CheckEqual(length(data), 3 shl 20, 'range data');
+  datahash := crc32cHash(data);
   // use a temporary file, not WorkDir: other background tests do scan that
   // folder (e.g. the TFTP server root), and would see this one appear
   rangefile := TemporaryFileName;
@@ -4696,7 +4699,7 @@ begin
           CheckEqual(clt.Content, copy(data, 101, 100), 'range content');
           CheckEqual(clt.Get('/file'), HTTP_SUCCESS, 'full status');
           CheckEqual(length(clt.Content), length(data), 'full length');
-          CheckEqual(crc32cHash(clt.Content), crc32cHash(data), 'full content');
+          CheckEqual(crc32cHash(clt.Content), datahash, 'full content');
         finally
           clt.Free;
         end;
