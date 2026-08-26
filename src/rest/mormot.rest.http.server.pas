@@ -1584,7 +1584,7 @@ begin
         inc(one);
       end;
   finally
-    fSafe.ReadLock;
+    fSafe.ReadUnLock;
   end;
 end;
 

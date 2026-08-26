@@ -6625,7 +6625,7 @@ begin
       EnsureBound(ds, mac);
     end;
   finally
-    fScopeSafe.WriteLock;
+    fScopeSafe.WriteUnLock;
   end;
 end;
 
