@@ -37,7 +37,8 @@
 // serialization) - left undefined by default to ensure minimal impact
 
 {.$define FPCUSEVERSIONINFO}
-// link POSIX fileinfo/machoreader/elfreader units to retrieve more information
+// link POSIX fileinfo/machoreader/elfreader units to call TFileVersion.Create()
+// on any TFileName and not only the local executable resource
 
 {.$define NOSETTHREADNAME}
 // Delphi Wintel only: if defined, SetThreadName() would not raise the "thread

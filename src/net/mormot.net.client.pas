@@ -3284,7 +3284,7 @@ begin
     id := p^.ID;
     n := RawAssociate(Http, p);
   finally
-    Safe.ReadUnLock; // keep ReadLock if a file name was found
+    Safe.ReadUnLock; // won't keep ReadLock even if a file name was found
   end;
   if (n <> 0) and
      Assigned(OnLog) then
@@ -3922,7 +3922,7 @@ begin
       if ctxt.InStream <> nil then
       begin
         // InStream may be a THttpMultiPartStream -> Seek(0) calls Flush
-        ctxt.InStream.Seek(0, soBeginning);
+        ctxt.InStream.Seek(0, soBeginning); // rewind
         res := SockSendStream(ctxt.InStream, 1 shl 20,
              {noraise=}false, {checkrecv=}true);
         AppendLine(fRequestContext, [ctxt.InStream, ' = ', _NR[res]]);

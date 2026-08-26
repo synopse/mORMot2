@@ -7294,6 +7294,7 @@ var
 
   procedure HandleCleanup; // sub-function for FPC Win64-aarch64 compilation
   begin
+    fPartials.Safe.WriteLock; // safely move file without background access
     try
       if ToRename <> '' then
       begin
@@ -7396,7 +7397,6 @@ begin
       'OnDownloaded: % copied % into % in %', [KBNoSpace(sourcesize),
       Partial, local, MicroSecToString(stop - start)], self);
   finally
-    fPartials.Safe.WriteLock; // safely move file without background access
     HandleCleanup;
     if (PartialID <> 0) and
        (sourcesize = 0) then

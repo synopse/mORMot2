@@ -980,14 +980,14 @@ var
     if outStream <> nil then
     begin
       if outStream.InheritsFrom(TMemoryStream) then
-        begin
-          P := TMemoryStream(outStream).Seek(0, soCurrent);
-          TMemoryStream(outStream).Size := P + Len; // auto-reserve space
-          TMemoryStream(outStream).Seek(P + Len, soBeginning);
-          bOut := PAnsiChar(TMemoryStream(outStream).Memory) + P;
-          po := bOut;
-          outStream := nil; //  OutStream is slower and use no thread
-        end;
+      begin
+        P := outStream.Position;
+        outStream.Size := P + Len; // auto-reserve space
+        outStream.Seek(P + Len, soBeginning);
+        bOut := PAnsiChar(TMemoryStream(outStream).Memory) + P;
+        po := bOut;
+        outStream := nil; //  OutStream is slower and use no thread
+      end;
     end
     else if bOut = nil then
     begin

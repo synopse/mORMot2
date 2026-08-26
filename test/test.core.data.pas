@@ -11432,7 +11432,7 @@ begin
     with TZipWrite.CreateFromIgnore(
       FN2, TFileNameDynArray(deleted), 1 shl 20, onprog) do
     try
-      Check(Count = length(json) - length(deleted));
+      CheckEqual(Count, length(json) - length(deleted));
     finally
       Free;
     end;
