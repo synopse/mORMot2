@@ -159,6 +159,9 @@ unit mormot.core.fpcx64mm;
 // - may be defined e.g. when compiled as Design-Time Lazarus package
 {.$define FPCMM_DISABLE}
 
+// by default, munmap/VirtualFree are not called at unit finalization
+{.$define FPCMM_FULLCLEANUP}
+
 interface
 
 {$undef FPCX64MM_AVAILABLE}  // global conditional to enable this unit
@@ -457,7 +460,7 @@ implementation
   - Medium arenas have an unlocked prefetched memory chunk to reduce contention;
   - Large blocks don't lock during mmap/virtualalloc system calls;
   - SwitchToThread/nanosleep OS call is done after initial spinning;
-  - FPCMM_DEBUG / WriteHeapStatus helps identifying the lock contention(s).
+  - FPCMM_DEBUG helps identifying the lock contention(s) in WriteHeapStatus.
 
 }
 
@@ -3668,6 +3671,8 @@ end;
 
 {$ifdef FPCMM_REPORTMEMORYLEAKS}
 
+{$define FPCMM_FULLCLEANUP} // leaks are tracked in FreeAllMemory
+
 var
   MemoryLeakReported: boolean;
 
@@ -3982,8 +3987,10 @@ initialization
   SetMemoryManager(NewMM);
 
 finalization
+  {$ifdef FPCMM_FULLCLEANUP}
   SetMemoryManager(OldMM);
   FreeAllMemory;
+  {$endif FPCMM_FULLCLEANUP}
 
 {$endif FPCMM_STANDALONE}
 
