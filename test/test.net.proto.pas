@@ -72,6 +72,8 @@ type
     request: integer;
     reqthree: boolean;
     reqfour: Int64;
+    // for FileRange
+    rangefile: TFileName;
     // for BodyDownload
     bodyfile: TFileName;
     bodytype: RawUtf8;
@@ -98,6 +100,8 @@ type
     function OnPeerCacheDirect(var aUri: TUri; var aHeader: RawUtf8;
       var aOptions: THttpRequestExtendedOptions): integer;
     function OnPeerCacheRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+    // event used by FileRange
+    function DoRangeRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     // both events used by BodyDownload
     function DoBodyDownload(const aUrl, aMethod, aInHeaders, aInContentType,
       aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
@@ -121,6 +125,8 @@ type
     {$endif OSPOSIX}
     /// validate THttpServerGeneric.OnBodyDownload streamed body upload
     procedure DoHttpBodyDownload(Sender: TObject);
+    /// validate 'Range:' file responses, especially against invalid offsets
+    procedure DoHttpFileRange(Sender: TObject);
   published
     /// Engine.IO and Socket.IO regression tests
     procedure _SocketIO;
@@ -160,6 +166,7 @@ var
 begin
   // start some slow tests in background if /multithread is enabled
   Run(DoHttpBodyDownload, self, 'HttpBodyDownload', true, false);
+  Run(DoHttpFileRange, self, 'HttpFileRange', true, false);
   {$ifdef OSPOSIX}
   Run(DoUnixDomainSocket, self, 'UnixDomainSocket', true, false);
   Run(DoTFTPServer, self, 'TFTPServer', true, false);
@@ -4000,6 +4007,9 @@ var
   l: PtrInt;
   dig: THashDigest;
   s32: TShort32;
+  ctx: THttpRequestContext;
+  dest: TRawByteStringBuffer;
+  ms: TRawByteStringStream;
 
   procedure Check4;
   begin
@@ -4267,6 +4277,72 @@ begin
   check(U.From('https://ictuswin.com/toto/titi'));
   h := HttpRequestLength('Content-Lengths: 100'#13#10, @l);
   check(h = nil);
+  // validate GetNextRange() overflow clamping
+  s := '0-1';
+  v := pointer(s);
+  Check(GetNextRange(v) = 0, 'range 0');
+  s := '1024-2047';
+  v := pointer(s);
+  Check(GetNextRange(v) = 1024, 'range 1024');
+  Check(v^ = '-', 'range stops on non digit');
+  s := '9223372036854775800-'; // last digits below High(Int64) are not clamped
+  v := pointer(s);
+  Check(GetNextRange(v) = 9223372036854775800, 'range below maxint64');
+  s := '9223372036854775806-';
+  v := pointer(s);
+  Check(GetNextRange(v) = 9223372036854775806, 'range maxint64 - 1');
+  s := '9223372036854775807-'; // = High(Int64)
+  v := pointer(s);
+  Check(GetNextRange(v) = Qword(High(Int64)), 'range maxint64');
+  s := '9223372036854775808-'; // = High(Int64) + 1 -> clamped
+  v := pointer(s);
+  Check(GetNextRange(v) = Qword(High(Int64)), 'range above maxint64');
+  s := '18446744073709551615-'; // = High(Qword): would wrap to -1 as Int64
+  v := pointer(s);
+  Check(GetNextRange(v) = Qword(High(Int64)), 'range clamped');
+  Check(v^ = '-', 'range clamped stops on non digit');
+  s := '99999999999999999999999999-'; // way above High(Qword)
+  v := pointer(s);
+  Check(GetNextRange(v) = Qword(High(Int64)), 'range clamped huge');
+  // validate ValidateRange() against such an out-of-range offset
+  ctx.Reset;
+  ctx.ContentLength := 1000;
+  ctx.RangeOffset := High(Int64);
+  ctx.RangeLength := -1;
+  Check(not ctx.ValidateRange, 'offset above size');
+  ctx.ContentLength := 1000;
+  ctx.RangeOffset := -1; // paranoid: never from GetNextRange() any more
+  ctx.RangeLength := -1;
+  Check(not ctx.ValidateRange, 'negative offset');
+  ctx.ContentLength := 1000;
+  ctx.RangeOffset := 100;
+  ctx.RangeLength := -1;
+  Check(ctx.ValidateRange, 'valid offset');
+  CheckEqual(ctx.ContentLength, 900, 'range tosend');
+  CheckEqual(ctx.RangeLength, 1000, 'range total');
+  ctx.ContentLength := 1000;
+  ctx.RangeOffset := 100;
+  ctx.RangeLength := High(Int64) - 99; // 'Range: bytes=100-18446744073709551615'
+  Check(ctx.ValidateRange, 'huge end offset'); // RangeOffset + RangeLength would
+  CheckEqual(ctx.ContentLength, 900, 'huge end tosend'); // overflow to negative
+  CheckEqual(ctx.RangeLength, 1000, 'huge end total');
+  // validate ProcessBody() abort on a stream shorter than ContentLength
+  ctx.Reset;
+  ctx.CommandMethod := 'GET';
+  ms := TRawByteStringStream.Create('12345'); // 5 bytes only
+  try
+    ctx.ContentStream := ms;
+    ctx.ContentLength := 8; // claim 3 bytes more than the stream can supply
+    dest.Reset;
+    Check(ctx.ProcessBody(dest, 100) = hrpSend, 'body avail');
+    CheckEqual(dest.Len, 5, 'body avail len');
+    dest.Reset;
+    Check(ctx.ProcessBody(dest, 100) = hrpAbort, 'body eof aborts');
+    CheckEqual(dest.Len, 0, 'body eof len');
+  finally
+    ctx.ContentStream := nil;
+    ms.Free;
+  end;
   FillCharFast(dig, SizeOf(dig), 0);
   CheckEqual(ord(dig.Algo), 0);
   l := HttpRequestHash(hfSHA256, U, 'etag: "1234"'#13#10, dig);
@@ -4522,6 +4598,115 @@ begin
   end;
   Ctxt.OutContent := Make(['ok ', CardinalToHexShort(h)]);
   Ctxt.OutContentType := TEXT_CONTENT_TYPE;
+end;
+
+function TNetworkProtocols.DoRangeRequest(
+  Ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  result := Ctxt.SetOutFile(rangefile, {Handle304NotModified=}false,
+    BINARY_CONTENT_TYPE);
+end;
+
+procedure TNetworkProtocols.DoHttpFileRange(Sender: TObject);
+var
+  srv: THttpServerSocketGeneric;
+  clt: THttpClientSocket;
+  fam: integer;
+  data: RawByteString; // not RawUtf8: RandomWinAnsi() is no UTF-8 content
+  hosthead: RawUtf8;
+
+  procedure RawRange(const range, expected, context: RawUtf8;
+    expectedlength: Int64 = -1);
+  var
+    raw: TCrtSocket;
+    cmd, len: RawUtf8;
+  begin
+    // THttpClientSocket.RangeStart is an Int64, so such an offset needs to be
+    // sent from a raw socket - with a timeout, so that a regression of the
+    // send loop shows up as a failure here instead of hanging the whole suite
+    raw := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+    try
+      raw.CreateSockIn; // needed for proper SockRecvLn() below
+      raw.SockSend('GET /file HTTP/1.1');
+      raw.SockSend(hosthead);
+      raw.SockSend(['Range: bytes=', range]);
+      raw.SockSend('Connection: close');
+      raw.SockSendCRLF; // void line: end of headers
+      raw.SockSendFlush;
+      cmd := '';
+      raw.SockRecvLn(cmd);
+      CheckUtf8(PosEx(expected, cmd) > 0, '% [%] got %', [context, range, cmd]);
+      if expectedlength < 0 then
+        exit;
+      // the announced body size should never exceed the actual file content
+      len := '';
+      repeat
+        cmd := '';
+        raw.SockRecvLn(cmd);
+        if IdemPChar(pointer(cmd), 'CONTENT-LENGTH: ') then
+          len := copy(cmd, 17, 30);
+      until cmd = ''; // end of response headers
+      CheckUtf8(GetInt64(pointer(len)) = expectedlength,
+        '% [%] length=% expected=%', [context, range, len, expectedlength]);
+    finally
+      raw.Free;
+    end;
+  end;
+
+begin
+  // this file is bigger than HttpContentFromFileSizeInMemory, so that it is
+  // served from a ContentStream by the send loop - which is where an invalid
+  // range used to announce more bytes than the file actually holds
+  data := RandomWinAnsi(3 shl 20); // 3MB
+  CheckEqual(length(data), 3 shl 20, 'range data');
+  // use a temporary file, not WorkDir: other background tests do scan that
+  // folder (e.g. the TFTP server root), and would see this one appear
+  rangefile := TemporaryFileName;
+  Check(FileFromString(data, rangefile), 'range file');
+  try
+    for fam := 0 to 1 do
+    begin
+      // validate both socket server families with the very same steps
+      if fam = 0 then
+        srv := THttpServer.Create('8893', nil, nil, 'filerange', 2)
+      else
+        srv := THttpAsyncServer.Create('8894', nil, nil, 'filerange', 2);
+      try
+        Join(['Host: 127.0.0.1:', srv.SockPort], hosthead);
+        srv.OnRequest := DoRangeRequest;
+        srv.WaitStarted(10);
+        // an offset which does not fit in an Int64 should be rejected as 416,
+        // not wrap into a negative offset and pass the ValidateRange() check
+        RawRange('18446744073709551615-', ' 416 ', 'high qword');
+        RawRange('99999999999999999999999999-', ' 416 ', 'above qword');
+        // a plain out-of-range offset was already rejected, and still is
+        RawRange('4194304-', ' 416 ', 'above size');
+        // a huge END offset is valid: it should be truncated to the actual
+        // file size, and not overflow the RangeOffset + RangeLength check
+        RawRange('100-18446744073709551615', ' 206 ', 'huge end',
+          (3 shl 20) - 100);
+        RawRange('0-18446744073709551615', ' 206 ', 'huge end from 0', 3 shl 20);
+        // the server must still serve regular requests after those rejections
+        clt := THttpClientSocket.Open('127.0.0.1', srv.SockPort);
+        try
+          clt.RangeStart := 100;
+          clt.RangeEnd := 199;
+          CheckEqual(clt.Get('/file'), HTTP_PARTIALCONTENT, 'range status');
+          CheckEqual(length(clt.Content), 100, 'range length');
+          CheckEqual(clt.Content, copy(data, 101, 100), 'range content');
+          CheckEqual(clt.Get('/file'), HTTP_SUCCESS, 'full status');
+          CheckEqual(length(clt.Content), length(data), 'full length');
+          CheckEqual(crc32cHash(clt.Content), crc32cHash(data), 'full content');
+        finally
+          clt.Free;
+        end;
+      finally
+        srv.Free;
+      end;
+    end;
+  finally
+    Check(DeleteFile(rangefile), 'range file deleted');
+  end;
 end;
 
 procedure TNetworkProtocols.DoHttpBodyDownload(Sender: TObject);
