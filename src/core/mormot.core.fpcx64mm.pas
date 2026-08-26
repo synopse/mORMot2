@@ -151,6 +151,16 @@ unit mormot.core.fpcx64mm;
 // try "cmp" before "lock cmpxchg" for old processors with huge lock penalty
 {.$define FPCMM_CMPBEFORELOCK}
 
+// restore the previous MM and release all its memory at unit finalization
+// - this was the historical behavior, but it is unsafe: units initialized
+// before this one finalize AFTER it (e.g. objpas, pulled in by this very
+// unit's mode), so their late managed-value finalizers would access an
+// already released heap through a foreign manager - e.g. SetResourceStrings
+// + normal exit did trigger an AV in ObjPas.FinalizeResourceTables
+// - the OS reclaims all process memory at exit anyway, so the manager now
+// stays installed; define this conditional for allocator debugging only
+{.$define FPCMM_UNINSTALL_AT_EXIT}
+
 // will export libc-like functions, and not replace the FPC MM
 // - e.g. to use this unit as a stand-alone C memory allocator
 {.$define FPCMM_STANDALONE}
@@ -3982,8 +3992,10 @@ initialization
   SetMemoryManager(NewMM);
 
 finalization
+  {$ifdef FPCMM_UNINSTALL_AT_EXIT}
   SetMemoryManager(OldMM);
   FreeAllMemory;
+  {$endif FPCMM_UNINSTALL_AT_EXIT}
 
 {$endif FPCMM_STANDALONE}
 
