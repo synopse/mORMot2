@@ -3689,6 +3689,7 @@ end;
 {$ifdef FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
 var
   ObjectLeaksCount, ObjectLeaksRaiseCount: integer;
+
 {$ifdef MSWINDOWS}
   LastMemInfo: TMemInfo; // simple cache
 
@@ -3727,6 +3728,23 @@ end;
 {$endif MSWINDOWS}
 
 {$endif FPCMM_REPORTMEMORYLEAKS_EXPERIMENTAL}
+
+function SeemsClassName(P: PAnsiChar): boolean;
+var
+  l: PtrInt;
+begin
+  result := false;
+  l := ord(P[0]);
+  if (l = 0) or
+     not (P[1] in ['A' .. 'z']) then
+    exit;
+  repeat
+    if P[l] <= ' ' then
+      exit;
+    dec(l);
+  until l = 0;
+  result := true;
+end;
 
 procedure MediumMemoryLeakReport(
   var Info: TMediumBlockInfo; p: PMediumBlockPoolHeader);
@@ -3777,6 +3795,7 @@ begin
             begin
               vmt := PPointer(first)^; // _FreeMem() ensured vmt=nil/$b10dle55
               if (vmt <> nil) and
+                 ((PtrUInt(vmt) and (SizeOf(Pointer) - 1)) = 0) and
                  {$ifdef FPCMM_REPORTMEMORYLEAKS}
                  (PtrUInt(vmt) <> REPORTMEMORYLEAK_FREEDHEXSPEAK) and
                  // FreeMem marked freed blocks with BLOODLESS hexspeak magic
@@ -3790,8 +3809,7 @@ begin
                 begin
                   classname := PPointer(vmt + vmtClassName)^;
                   if SeemsRealPointer(classname) and
-                     (classname^[0] <> #0) and
-                     (classname^[1] in ['A' .. 'z']) then
+                     SeemsClassName(pointer(classname)) then
                   begin
                      StartReport;
                      writeln(' probable ', classname^, ' leak (', instancesize,
