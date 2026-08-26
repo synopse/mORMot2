@@ -543,7 +543,7 @@ var
 function OsAllocLarge(Size: PtrInt; AllocType: cardinal = MEM_COMMIT;
   BaseAddress: pointer = nil): pointer;
 begin
-  if ((Size and LargeBlockGranularityAnd) = 0) and // ensure is 64K aligned
+  if ((Size and LargeBlockGranularityAnd) = 0) and // paranoid: always 64K aligned
      Assigned(VirtualAlloc2) then
   begin
     result := VirtualAlloc2(GetCurrentProcess, BaseAddress, Size,

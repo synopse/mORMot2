@@ -3302,8 +3302,7 @@ begin
                (c > Qword(High(Int64)) mod 10)) then
         // clamp to High(Int64): RangeOffset/RangeLength are signed Int64, and
         // a wrapped result would be negative, so would bypass ValidateRange()
-        // - such an offset is out of range for any file anyway
-        result := Qword(High(Int64))
+        result := Qword(High(Int64)) // no file would be so big anyway
       else
         result := result * 10 + Qword(c);
       inc(P);
