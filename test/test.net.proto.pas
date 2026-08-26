@@ -31,8 +31,9 @@ uses
   mormot.core.zip,
   mormot.crypt.core,
   mormot.crypt.secure,
-  {$ifdef OSPOSIX}
+  mormot.net.tftp.client,
   mormot.net.tftp.server,
+  {$ifdef OSPOSIX}
   mormot.lib.curl, // client code for TFTP server validation
   {$endif OSPOSIX}
   mormot.net.sock,
@@ -128,6 +129,8 @@ type
     /// validate 'Range:' file responses, especially against invalid offsets
     procedure DoHttpFileRange(Sender: TObject);
   published
+    /// validate that a TFTP server owns all connection threads until shutdown
+    procedure TFTPShutdown;
     /// Engine.IO and Socket.IO regression tests
     procedure _SocketIO;
     /// validate DNS and LDAP clients (and NTP/SNTP)
@@ -156,6 +159,97 @@ type
 
 
 implementation
+
+var
+  TftpConnectionStarted: integer;
+  TftpConnectionDestroyed: integer;
+  TftpOwnerAccessed: integer;
+
+type
+  TSlowTftpConnection = class(TTftpConnectionThread)
+  protected
+    procedure DoExecute; override;
+  public
+    destructor Destroy; override;
+  end;
+
+  TTestTftpServer = class(TTftpServerThread)
+  public
+    procedure AddTestConnection(Connection: TTftpConnectionThread);
+    procedure TerminateAndWaitFinished(TimeOutMs: integer = 5000); override;
+  end;
+
+procedure TSlowTftpConnection.DoExecute;
+begin
+  InterlockedIncrement(TftpConnectionStarted);
+  while not Terminated do
+    SleepHiRes(1);
+  // remain alive past the deliberately short server timeout, then access owner
+  SleepHiRes(100);
+  if fOwner.MaxRetry >= 0 then
+    InterlockedIncrement(TftpOwnerAccessed);
+end;
+
+destructor TSlowTftpConnection.Destroy;
+begin
+  inherited Destroy;
+  InterlockedIncrement(TftpConnectionDestroyed);
+end;
+
+procedure TTestTftpServer.AddTestConnection(
+  Connection: TTftpConnectionThread);
+begin
+  fConnection.Add(Connection);
+  if Connection.Suspended then
+    Connection.Start;
+end;
+
+procedure TTestTftpServer.TerminateAndWaitFinished(TimeOutMs: integer);
+begin
+  inherited TerminateAndWaitFinished(1);
+end;
+
+procedure TNetworkProtocols.TFTPShutdown;
+var
+  context: TTftpContext;
+  connection: TSlowTftpConnection;
+  server: TTestTftpServer;
+  started: Int64;
+  destroyed: integer;
+begin
+  TftpConnectionStarted := 0;
+  TftpConnectionDestroyed := 0;
+  TftpOwnerAccessed := 0;
+  FillCharFast(context, SizeOf(context), 0);
+  context.BlockSize := 512;
+  context.FrameLen := 2;
+  GetMem(context.Frame, context.FrameLen);
+  FillCharFast(context.Frame^, context.FrameLen, 0);
+  server := nil;
+  try
+    context.FileStream := TMemoryStream.Create;
+    server := TTestTftpServer.Create('', [], nil, '127.0.0.1', '0',
+      'tftp-lifetime', {CacheTimeoutSecs=}0);
+    connection := TSlowTftpConnection.Create(context, server);
+    context.FileStream := nil; // ownership moved into connection.fContext
+    server.AddTestConnection(connection);
+    started := GetTickCount64;
+    while (TftpConnectionStarted = 0) and
+          (GetTickCount64 - started < 5000) do
+      SleepHiRes(1);
+    CheckEqual(TftpConnectionStarted, 1, 'connection started');
+  finally
+    server.Free;
+    FreeMem(context.Frame);
+    context.FileStream.Free;
+  end;
+  destroyed := TftpConnectionDestroyed;
+  if destroyed <> 1 then
+    // let a broken pre-fix worker finish before the test process continues
+    SleepHiRes(250);
+  CheckEqual(destroyed, 1, 'connection outlived its owner');
+  CheckEqual(TftpOwnerAccessed, 1, 'owner access after terminate');
+end;
 
 procedure TNetworkProtocols._SocketIO;
 var
