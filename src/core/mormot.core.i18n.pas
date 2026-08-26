@@ -221,6 +221,7 @@ type
     fLangCount: integer;
     fLoadedLanguages: TLanguageDynArray; // cache
     fLang: TLanguageFilePerLang;         // main O(1) lookup array
+    procedure ReadError(msg: PUtf8Char);
     /// low-level virtual methods implementing the .m18n binary persistence
     procedure LoadFromReader; override;
     procedure SaveToWriter(aWriter: TBufferWriter); override;
@@ -894,6 +895,9 @@ threadvar
 
 var
   _MainI18n: TLanguageFiles;
+  {$ifdef FPC}
+  _TranslatedResourceStrings: boolean;
+  {$endif FPC}
 
 
 { TLanguageFiles }
@@ -1132,6 +1136,8 @@ end;
 procedure TLanguageFiles.TranslateResourceStrings(aLanguage: TLanguage);
 begin
   {$ifdef FPC}
+  // ensure ResetResourceTables is called in finalization section below
+  _TranslatedResourceStrings := true;
   // restore the English DefaultValue of every entry first: any text which the
   // new language does not translate would otherwise keep its previous value
   ResetResourceTables;
@@ -1166,16 +1172,15 @@ begin
   {$endif FPC}
 end;
 
+procedure TLanguageFiles.ReadError(msg: PUtf8Char);
+begin
+  EI18nException.RaiseUtf8('%.LoadFromReader: %', [self, msg]);
+end;
+
 const
   M18N_MAGIC = $4E38316D; // 'm18n' in little endian
 
 procedure TLanguageFiles.LoadFromReader;
-
-  procedure ReadError(msg: PUtf8Char);
-  begin
-    fReader.ErrorData('%.LoadFromReader failed as %', [self, msg], EI18nException);
-  end;
-
 var
   version, n: integer;
   l: TLanguage;
@@ -1332,6 +1337,10 @@ finalization
   // release and disable _LoadResString() cache and translation
   _LoadResFile := nil;
   FreeAndNil(_LoadResCache);
+  {$else}
+  // avoid potential GPF at shutdown in ObjPas.FinalizeResourceTables
+  if _TranslatedResourceStrings then
+    ResetResourceTables;
   {$endif ISDELPHI}
 
 end.
