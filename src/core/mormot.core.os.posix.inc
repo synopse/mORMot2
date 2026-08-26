@@ -5853,8 +5853,10 @@ begin
               GetSystemProperty('ro.product.name'), ' ',
               GetSystemProperty('ro.product.device')]), txt);
   {$endif OSLINUX}
+  {$ifndef CPUINTEL} // Hardware: field appears e.g. on ARM but not on Intel/AMD
   if _CpuSockets = 0 then
-    ReadCpuInfo; // populate _BiosInfoHardwareFromCpuInfo
+    ReadCpuInfo;     // populate _BiosInfoHardwareFromCpuInfo
+  {$endif CPUINTEL}
   if _BiosInfoHardwareFromCpuInfo <> '' then // e.g. 'Hardware : BCM2709' on RPi3
     if txt = '' then
       txt := _BiosInfoHardwareFromCpuInfo
