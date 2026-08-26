@@ -9868,25 +9868,25 @@ class function TStreamRedirect.HashFile(const FileName: TFileName;
   const OnProgress: TOnStreamProgress): RawUtf8;
 var
   hasher: TStreamRedirect;
-  f: THandle;
+  f: THandleStream;
 begin
   FastAssignNew(result);
   if GetHashFileExt = '' then
     exit; // no hash function defined
-  f := FileOpenSequentialRead(FileName);
-  if not ValidHandle(f) then // would raise EOSException on invalid f
+  f := FileStreamSequentialRead(FileName);
+  if f = nil then // no EOSException on invalid FileName
     exit;
-  hasher := Create(TFileStreamEx.CreateFromHandle(f, FileName));
+  hasher := Create(f);
   try
     if Assigned(OnProgress) then
     begin
-      hasher.fInfo.ExpectedSize := FileSize(f);
+      hasher.fInfo.ExpectedSize := f.Size;
       hasher.OnProgress := OnProgress;
     end;
     hasher.Append;
     result := hasher.GetHash;
   finally
-    hasher.Free; // includes FileClose(f)
+    hasher.Free; // includes f.Free
   end;
 end;
 
