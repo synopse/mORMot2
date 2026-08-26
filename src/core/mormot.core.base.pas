@@ -4693,6 +4693,10 @@ type
     function Write(const Buffer; Count: Longint): Longint; override;
   end;
 
+/// wrapper used e.g. by TStreamWithPosition.Seek()
+function StreamSeek(S: TStream; const Offset: Int64; Origin: TSeekOrigin;
+  var Position: Int64): Int64; {$ifdef HASINLINE} inline; {$endif}
+
 /// raise a EStreamError exception - e.g. from TSynMemoryStream.Write
 function RaiseStreamError(Caller: TObject; const Context: ShortString): PtrInt;
 
@@ -14125,42 +14129,41 @@ end;
 
 { TStreamWithPosition }
 
-{$ifdef FPC}
-function TStreamWithPosition.GetPosition: Int64;
-begin
-  result := fPosition;
-end;
-{$endif FPC}
-
-function TStreamWithPosition.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+function StreamSeek(S: TStream; const Offset: Int64; Origin: TSeekOrigin;
+  var Position: Int64): Int64;
 var
   size: Int64;
 begin
   if (Offset <> 0) or
      (Origin <> soCurrent) then
   begin
-    size := GetSize;
+    size := S.Size; // call GetSize method
     case Origin of
       soBeginning:
         result := Offset;
       soEnd:
         result := size - Offset;
     else
-      result := fPosition + Offset; // soCurrent
+      result := Position + Offset; // soCurrent
     end;
     if result > size then
       result := size
     else if result < 0 then
       result := 0;
-    fPosition := result;
+    Position := result;
   end
   else // optimized for Delphi with no GetPosition method but Seek(0,soCurrent)
-    result := fPosition;
+    result := Position;
+end;
+
+function TStreamWithPosition.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  result := StreamSeek(self, Offset, Origin, fPosition);
 end;
 
 function TStreamWithPosition.Seek(Offset: Longint; Origin: Word): Longint;
 begin
-  result := Seek(Offset, TSeekOrigin(Origin)); // call the 64-bit version above
+  result := Seek(Offset, TSeekOrigin(Origin)); // redirect to the 64-bit method
 end;
 
 function TStreamWithPosition.Read(var Buffer; Count: Longint): Longint;
@@ -14172,6 +14175,13 @@ function TStreamWithPosition.Write(const Buffer; Count: Longint): Longint;
 begin
   result := RaiseStreamError(self, 'Write');
 end;
+
+{$ifdef FPC}
+function TStreamWithPosition.GetPosition: Int64;
+begin
+  result := fPosition;
+end;
+{$endif FPC}
 
 
 { TStreamWithPositionAndSize }
