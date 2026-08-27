@@ -2958,34 +2958,33 @@ begin
 end;
 {$endif FPCUSEVERSIONINFO}
 
-procedure _GetSystemEnv;
+function _GetSystemEnv: PPUtf8Char;
 var
-  e: PPUtf8Char;
   b, p: PUtf8Char;
   n: PtrInt;
 begin
-  e := pointer(envp);
-  if e = nil then
+  result := pointer(envp);
+  if result = nil then
     exit;
   n := 0; // pre-compute the number of entries
-  while e^ <> nil do
+  while result^ <> nil do
   begin
-    if e^^ <> '=' then
+    if result^^ <> '=' then
       inc(n);
-    inc(e);
+    inc(result);
   end;
   if n = 0 then
-    exit; // should never happen
+    exit;
   SetLength(_SystemEnvNames, n);
   SetLength(_SystemEnvValues, n);
-  e := pointer(envp);
+  result := pointer(envp);
   n := 0;
   repeat
-    p := e^;
+    p := result^;
     if p^ <> '=' then
     begin
       p := PosChar0(p, '=');
-      FastSetString(_SystemEnvNames[n], e^, p);
+      FastSetString(_SystemEnvNames[n], result^, p);
       if p^ <> #0 then
         inc(p); // ignore '='
       b := p;
@@ -2993,8 +2992,8 @@ begin
       FastSetString(_SystemEnvValues[n], b, p);
       inc(n);
     end;
-    inc(e);
-  until e^ = nil;
+    inc(result);
+  until result^ = nil;
 end;
 
 function setenv(name, value: PUtf8Char; replace: integer): integer;
@@ -6085,11 +6084,9 @@ begin
   // OSLINUXANDROID branch
   SystemInfo.release := release;
   OS_DISTRI := LinuxDistribution(OS_KIND);
-  auxv := pointer(envp); // read auxiliary vectors
+  auxv := pointer(_GetSystemEnv); // auxiliary vectors are just after regular env
   if auxv <> nil then
   begin
-    while auxv[0] <> 0 do
-      auxv := @auxv[1];
     auxv := @auxv[1]; // set by kernel's ELF binary loader after all env PPAnsiChar
     P := pointer(auxv);
     while auxv[0] <> 0 do
