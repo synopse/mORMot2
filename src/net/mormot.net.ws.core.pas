@@ -671,7 +671,7 @@ type
     // specified WebSockets protocl
     // - this method is thread-safe
     function Pop(protocol: TWebSocketProtocol; const head: RawUtf8;
-      out frame: TWebSocketFrame; currentSec: cardinal): boolean;
+      var frame: TWebSocketFrame; currentSec: cardinal): boolean;
     /// how many 'answer' frames are to be ignored
     // - incdec should be either 0, -1 or +1
     // - this method is thread-safe
@@ -1836,7 +1836,7 @@ begin
 end;
 
 function TWebSocketFrameList.Pop(protocol: TWebSocketProtocol;
-  const head: RawUtf8; out frame: TWebSocketFrame; currentSec: cardinal): boolean;
+  const head: RawUtf8; var frame: TWebSocketFrame; currentSec: cardinal): boolean;
 var
   i: PtrInt;
   item: PWebSocketFrame;
