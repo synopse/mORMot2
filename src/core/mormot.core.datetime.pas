@@ -2350,7 +2350,7 @@ var
     safe: TRWLightLock;
     clock: cardinal;  // avoid slower API call with 16ms loss of precision
     time: TSystemTime;
-    _pad: array[1 .. 64 - SizeOf(TLightLock) - SizeOf(TSystemTime) - 4] of byte;
+    _pad: array[1 .. 64 - SizeOf(TRWLightLock) - SizeOf(TSystemTime) - 4] of byte;
   end;
 
 procedure FromGlobalTime(out NewTime: TSynSystemTime; LocalTime: boolean;

@@ -576,8 +576,8 @@ type
     fWrittenBytes: Int64;
     fInitialStreamPosition: Int64;
     fCustomOptions: TTextWriterOptions; // 16-bit
-    fFlags: TTextWriterFlags;           // 8-bit
-    fShortStringMax: byte; // = high(Dest) for twfDestIsShortString
+    fFlags: TTextWriterFlags;     // 8-bit
+    fShortStringMax: byte;        // 8-bit = high(Dest) for twfDestIsShortString
     function GetTextLength: Int64;
     function GetStream: TStream;
       {$ifdef HASINLINE} inline; {$endif}
