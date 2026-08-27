@@ -1497,17 +1497,17 @@ end; // warning: FPC's GetTickCount64 doesn't handle 49.7 days wrap on XP :(
 
 procedure InitializeSRWLockForXP(var P: TOSLightMutex); stdcall;
 begin
-  TLightLock(P).Init; // our TLightLock is good enough on XP
+  PLightLock(@P)^.Init; // our TLightLock is good enough on XP
 end;
 
 procedure AcquireSRWLockExclusiveForXP(var P: TOSLightMutex); stdcall;
 begin
-  TLightLock(P).Lock;
+  PLightLock(@P)^.Lock;
 end;
 
 procedure ReleaseSRWLockExclusiveForXP(var P: TOSLightMutex); stdcall;
 begin
-  TLightLock(P).UnLock;
+  PLightLock(@P)^.UnLock;
 end;
 
 function GetTickSec: cardinal;

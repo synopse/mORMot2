@@ -4501,14 +4501,14 @@ type
   // - our light locks are expected to be kept a very small amount of time (a
   // few CPU cycles): use TOSLightLock if the lock may block too long
   // - TryLock/UnLock can be used to thread-safely acquire a shared resource
-  // - only consume 4 bytes on CPU32, 8 bytes on CPU64
+  // - only consume 4 bytes (32-bit) on all platforms
   {$ifdef USERECORDWITHMETHODS}
   TLightLock = record
   {$else}
   TLightLock = object
   {$endif USERECORDWITHMETHODS}
   private
-    Flags: PtrUInt;     // 0=unlocked, 1=locked
+    Flags: cardinal;    // 0=unlocked, 1=locked
     procedure LockSpin; // called by the Lock method when inlined
   public
     /// to be called if the instance has not been filled with 0
@@ -11316,7 +11316,7 @@ end;
 procedure TLightLock.Lock;
 begin
   // we tried a dedicated asm but it was slower: inlining is preferred
-  if not LockedExc(Flags, {to=}1, {from=}0) then
+  if not LockedExc32(Flags, {to=}1, {from=}0) then
     LockSpin;
 end;
 
@@ -11325,7 +11325,7 @@ begin
   {$ifdef CPUINTEL}
   Flags := 0; // non reentrant locks need no additional thread safety
   {$else}
-  LockedExc(Flags, {to=}0, {from=}1); // ARM can be weak-ordered
+  LockedExc32(Flags, {to=}0, {from=}1); // ARM can be weak-ordered
   // https://preshing.com/20121019/this-is-why-they-call-it-a-weakly-ordered-cpu
   {$endif CPUINTEL}
 end;
@@ -11333,7 +11333,7 @@ end;
 function TLightLock.TryLock: boolean;
 begin
   result := (Flags = 0) and // first check without any (slow) atomic opcode
-            LockedExc(Flags, {to=}1, {from=}0);
+            LockedExc32(Flags, {to=}1, {from=}0);
 end;
 
 function TLightLock.IsLocked: boolean;
