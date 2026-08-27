@@ -1834,9 +1834,9 @@ type
     fServer: IRestOrmServer;
     fRouter: TRestRouter;
     fRouterSafe: TRWLightLock;
+    fServiceReleaseTimeoutMicrosec: integer;
     fOnNotifyCallback: TOnRestServerClientCallback;
     fAuthenticationBearerHeader: PAesSignature;
-    fServiceReleaseTimeoutMicrosec: integer;
     procedure SetNoAjaxJson(const Value: boolean);
     function GetNoAjaxJson: boolean;
       {$ifdef HASINLINE}inline;{$endif}

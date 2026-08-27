@@ -1148,24 +1148,16 @@ begin
   begin
     // non-blocking regular retrieval of any existing TInterfacedObject
     fInstances.Safe.ReadLock;
-    {$ifdef HASFASTTRYFINALLY}
-    try
-    {$else}
+    if fInstances.DynArray.FastLocateSorted(Inst.InstanceID, ndx) then
     begin
-    {$endif HASFASTTRYFINALLY}
-      if fInstances.DynArray.FastLocateSorted(Inst.InstanceID, ndx) then
-      begin
-        P := @fInstance[ndx];
-        P^.LastAccessTix10 := Inst.LastAccessTix10;
-        Inst.Instance := P^.Instance;
-        result := aMethodIndex; // notify caller
-        exit;
-      end;
-    {$ifdef HASFASTTRYFINALLY}
-    finally
-    {$endif HASFASTTRYFINALLY}
+      P := @fInstance[ndx];
+      P^.LastAccessTix10 := Inst.LastAccessTix10;
+      Inst.Instance := P^.Instance;
       fInstances.Safe.ReadUnLock;
+      result := aMethodIndex; // notify caller
+      exit;
     end;
+    fInstances.Safe.ReadUnLock;
   end;
   // new TInterfacedObject corresponding to this session/user/group/thread
   if (InstanceCreation <> sicClientDriven) and
