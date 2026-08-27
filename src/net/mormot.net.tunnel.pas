@@ -346,9 +346,9 @@ type
   TTunnelList = class(TObjectRWLightLock)
   protected
     fInfoCacheSafe: TLightLock;
+    fCount: integer;
     fItem: array of ITunnelTransmit;
     fSession: TIntegerDynArray; // store TTunnelSession (=cardinal) values
-    fCount: integer;
     fInfoCacheTix32: cardinal;
     fInfoCache: TVariantDynArray;
     function LockedExists(aSession: TTunnelSession): boolean;

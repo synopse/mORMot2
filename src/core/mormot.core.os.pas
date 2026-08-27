@@ -9211,7 +9211,7 @@ begin
 end;
 
 var
-  __GetmemDualAccessPagesLock: TLightLock; // single pointer field
+  __GetmemDualAccessPagesLock: TLightLock; // single 32-bit field
   __GetmemDualAccessPages: pointer;
 
 function GetmemDualAccessPagesLock: pointer;

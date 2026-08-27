@@ -809,9 +809,9 @@ type
   TSynBackgroundThreadMethodAbstract = class(TSynBackgroundThreadAbstract)
   protected
     fPendingProcessLock: TLightLock; // atomic access to fPendingProcessFlag
+    fCallerThreadID: TThreadID;
     fCallerEvent: TSynEvent;
     fParam: pointer;
-    fCallerThreadID: TThreadID;
     fBackgroundException: Exception;
     fOnIdle: TOnIdleSynBackgroundThread;
     fOnBeforeProcess: TOnNotifyThread;

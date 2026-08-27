@@ -389,8 +389,6 @@ type
     fAverageTime: TSynMonitorOneTime;
     fMaximalTime: TSynMonitorOneTime;
     fInternalErrors: TSynMonitorCount;
-    fProcessing: boolean;
-    fTaskStatus: (taskNotStarted,taskStarted);
     fLastInternalError: variant;
     function GetPerSec: QWord;
     function GetAverageTime: TSynMonitorOneTime;

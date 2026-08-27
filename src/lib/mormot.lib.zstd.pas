@@ -313,11 +313,11 @@ type
   // TAlgoCompress file layout and only support raw buffer and file methods
   TAlgoZstd = class(TAlgoCompress)
   protected
+    fCompressionContextSafe: TLightLock;
+    fDecompressionContextSafe: TLightLock;
     fCompressionLevel: integer;
     fCompressionContext: TZSTD_CCtx;
-    fCompressionContextSafe: TLightLock;
     fDecompressionContext: TZSTD_DCtx;
-    fDecompressionContextSafe: TLightLock;
   public
     /// set AlgoID = 11 as genuine byte identifier for zstd (even if not used)
     constructor Create; override;

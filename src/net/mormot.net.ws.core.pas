@@ -1286,8 +1286,8 @@ type
   protected
     fSid, fHandshakeData: RawUtf8;
     fCallbackSafe: TLightLock;
-    fCallbacks: array of TSocketIOCallback;
     fAckIdCursor: TSocketIOAckID;
+    fCallbacks: array of TSocketIOCallback;
     /// Generate a new event acknowledgment ID, incrementing the internal cursor
     function GenerateAckId(const aOnAck: TOnSocketIOAck): TSocketIOAckID;
   public

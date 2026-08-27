@@ -2606,9 +2606,9 @@ type
     fName: RawUtf8;
     fProps: TRttiCustomProps;
     fPrivateSlotsSafe: TLightLock; // topmost position to force aarch64 alignment
+    fArrayFirstField, fArrayFirstFieldSort: TRttiParserType;
     fSetRandom: TRttiCustomRandom;
     // used by mormot.core.json.pas
-    fArrayFirstField, fArrayFirstFieldSort: TRttiParserType;
     fJsonLoad: pointer; // contains a TRttiJsonLoad - used if fJsonReader=nil
     fJsonSave: pointer; // contains a TRttiJsonSave - used if fJsonWriter=nil
     fJsonReader, fJsonWriter: TMethod; // TOnRttiJsonRead/TOnRttiJsonWrite
@@ -3461,6 +3461,8 @@ type
   TSynMonitorAbstract = class(TObjectWithRttiMethods)
   protected
     fSafe: TLightLock; // our fast non-reentrant lock
+    fProcessing: boolean;
+    fTaskStatus: (taskNotStarted,taskStarted);
     fName: RawUtf8;
   public
     /// initialize the instance nested class properties

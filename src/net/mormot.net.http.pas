@@ -1885,9 +1885,9 @@ type
   {$endif USERECORDWITHMETHODS}
   public
     Rotating: TLightLock;
+    Files: integer;
     FileName: TFileName;
     Trigger: THttpRotaterTrigger;
-    Files: integer;
     NextTix32: cardinal;  // = GetTickSec
     TriggerDate: integer; // = next Trunc(NowUtc)
     OnRotate: procedure(Event: THttpRotaterEvent) of object; // owner access
@@ -2000,6 +2000,7 @@ type
   protected
     fWriterSingle: TTextDateWriter; // from CreateWithWriter/CreateWithFile
     fWriterHostSafe: TLightLock;
+    fTimeTix32: cardinal; // = GetTickSec
     fWriterHost: THttpLoggerWriterDynArray; // from Create + DefineHost
     fSettings: THttpLoggerSettings;
     fWriterHostLast, fWriterHostMain, fWriterHostError: TTextDateWriter;
@@ -2007,7 +2008,6 @@ type
     fUnknownPosLen: TIntegerDynArray; // matching hlvUnknown occurrence
     fFlags: set of (ffHadDefineHost, ffOwnWriterSingle);
     fVariables: THttpLogVariables;
-    fTimeTix32: cardinal; // = GetTickSec
     fTimeText: array[hlvTime_Iso8601 .. hlvTime_Http] of THttpDateNowUtc;
     procedure SetTimeText(Tix32: cardinal; Tix64: Int64);
     procedure SetSettings(aSettings: THttpLoggerSettings);

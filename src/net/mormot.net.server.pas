@@ -2503,10 +2503,10 @@ type
   THttpApiWebSocketServer = class(THttpApiServer)
   protected
     fOwnedProtocolsSafe: TLightLock;
+    fPingTimeout: integer;
     fThreadPoolServer: TSynThreadPoolHttpApiWebSocketServer;
     fGuard: TSynWebSocketGuard;
     fLastConnection: PHttpApiWebSocketConnection;
-    fPingTimeout: integer;
     fOnWSThreadStart: TOnNotifyThread;
     fOnWSThreadTerminate: TOnNotifyThread;
     fSendOverlaped: TOverlapped;

@@ -861,11 +861,11 @@ type
   public
     /// simple but not-rentrant lock to protect Entry[0..Count-1] values
     Safe: TLightLock;
+    /// the broadcast IP of this scope for doBroadcastAddress option 28
+    Broadcast: TNetIP4;
     /// define the subnet of this scope
     // - Subnet.mask is the doSubnetMask option 1 of this scope
     Subnet: TIp4SubNet;
-    /// the broadcast IP of this scope for doBroadcastAddress option 28
-    Broadcast: TNetIP4;
     /// the gateway IP of this scope for doRouter option 3
     Gateway: TNetIP4;
     /// the server IP of this scope for doServerIdentifier option 54

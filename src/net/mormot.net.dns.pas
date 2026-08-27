@@ -590,8 +590,8 @@ end;
 
 var
   NoTcpSafe: TLightLock;
-  NoTcpServers: TRawUtf8DynArray;
   NoTcpTix16: cardinal; // cache flushed after 64 seconds
+  NoTcpServers: TRawUtf8DynArray;
 
 function DnsSendQuestion(const Address, Port: RawUtf8;
   const Request: RawByteString; out Answer: RawByteString;
