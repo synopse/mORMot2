@@ -1261,7 +1261,7 @@ asm
         cmp     rax, r9
         ja      @rc // timeout
         {$else}
-        // same algorithm than function DoSpin() in mormot.core.os.pas
+        // same algorithm than function SpinAndWait() in mormot.core.os.pas
 @s:     mov     edx, SpinMediumLockCount // = pred(6 shl 5)
 @sp:    mov     ecx, SpinMediumLockCount
         sub     ecx, edx

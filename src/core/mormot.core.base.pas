@@ -2596,6 +2596,10 @@ function Hash128Index(P: PHash128Rec; Count: PtrInt; h: PHash128Rec): PtrInt;
 function AddHash128(var Arr: THash128DynArray;
   {$ifdef FPC}constref{$else}const{$endif} V: THash128; var Count: integer): PtrInt;
 
+/// mark a 128-bit random binary into a UUid value according to RFC 4122
+procedure MakeRandomGuid(u: PHash128);
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// returns TRUE if all 20 bytes of this 160-bit buffer equal zero
 // - e.g. a SHA-1 digest
 function IsZero(const dig: THash160): boolean; overload;
@@ -5117,6 +5121,13 @@ begin
   result := length(guids);
   SetLength(guids, result + 1);
   guids[result] := guid;
+end;
+
+procedure MakeRandomGuid(u: PHash128);
+begin // see https://datatracker.ietf.org/doc/html/rfc4122#section-4.4
+  PCardinal(@u[6])^ := (PCardinal(@u[6])^ and $ff3f0fff) or $00804000;
+  // u[7] := PtrUInt(u[7] and $0f) or $40; // version bits 12-15 = 4 (random)
+  // u[8] := PtrUInt(u[8] and $3f) or $80; // reserved bits 6-7 = 1
 end;
 
 procedure FillZero(var result: TGuid);

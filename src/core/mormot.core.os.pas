@@ -5417,22 +5417,6 @@ procedure RandomShort31(var dest: TShort31);
 procedure FillRandom(Dest: PCardinal; CardinalCount: integer);
 {$endif PUREMORMOT2}
 
-/// compute a random UUid value from the RandomBytes() generator and RFC 4122
-// - to derivate a Uuid from a name see IdentifierGuid()/DotNetIdentifierGuid()
-procedure RandomGuid(out result: TGuid); overload;
-
-/// compute a random UUid value from the RandomBytes() generator and RFC 4122
-// - to derivate a Uuid from a name see IdentifierGuid()/DotNetIdentifierGuid()
-function RandomGuid: TGuid; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// mark a 128-bit random binary into a UUid value according to RFC 4122
-procedure MakeRandomGuid(u: PHash128);
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// check if the supplied UUid value was randomly-generated according to RFC 4122
-function IsRandomGuid(u: PHash128): boolean;
-
 /// re-seed the global gsl_rng_taus2 Random32/RandomBytes generator
 // - use XorEntropy() and optional entropy/entropylen as derivation source
 procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
@@ -11248,12 +11232,9 @@ const
 // as reference, take a look at Linus insight (TL&WR: better use futex)
 // from https://www.realworldtech.com/forum/?threadid=189711&curpostid=189755
 
-// our light locks do not use the resource of an associated futex, so are easier
-// if there is almost no contention - and really seldom call fpnanosleep(10us)
-
-{$undef SPINADAPT}
+{$undef HASPAUSEOPCODE}
 {$ifdef ASMINTEL}
-{$define SPINADAPT}
+{$define HASPAUSEOPCODE}
 var
   SpinFactor: PtrUInt = 1; // default value on Intel - set to 10 on AMD Zen3+
 
@@ -11271,7 +11252,7 @@ end;
 {$endif ASMINTEL}
 {$ifdef FPC_CPUARM}
 {$ifndef OSANDROID}
-{$define SPINADAPT}
+{$define HASPAUSEOPCODE}
 const
   SpinFactor = 2; // ARM yield has smaller latency than Intel's pause
 
@@ -11284,19 +11265,12 @@ end;
 {$endif OSANDROID}
 {$endif FPC_CPUARM}
 
-function DoSpin(spin: PtrUInt): PtrUInt;
+function NextSpin(spin: PtrUInt): PtrUInt;
 begin
-  {$ifdef SPINADAPT} // adaptive spinning to reduce cache coherence traffic
+  {$ifdef HASPAUSEOPCODE} // adaptive spinning to reduce cache coherence traffic
   result := (SPIN_COUNT - spin) shr 5; // 0..5 range, each 32 times
-  if result <> 0 then // no pause up to 32 times (low latency acquisition)
-  {$ifdef OSLINUX_SCHEDYIELDONCE}      // yield once during the process
-  {$ifndef OSLINUX_SCHEDYIELD}         // if not already = SwitchToThread
-  if spin = SPIN_COUNT shr 2 then
-    Do_SysCall(syscall_nr_sched_yield) // properly defined in syscall.pp
-  else
-  {$endif OSLINUX_SCHEDYIELD}
-  {$endif OSLINUX_SCHEDYIELDONCE}
-  begin // exponential backoff: 1,2,4,8,16 x DoPause
+  if result <> 0 then     // no pause up to 32 times (low latency acquisition)
+  begin                   // exponential backoff: 1,2,4,8,16 x DoPause
     result := SpinFactor shl pred(result);
     // "pause" called 992 times until SwithToThread = up to 50us on modern CPU
     {$ifdef WIN64DELPHI}
@@ -11314,16 +11288,26 @@ begin
     until result = 0;
     {$endif WIN64DELPHI}
   end;
-  {$endif SPINADAPT}
+  {$endif HASPAUSEOPCODE}
   dec(spin);
-  if spin = 0 then      // eventually call the OS for long wait
-  begin
-    SwitchToThread;     // proper OS yield API
-    spin := SPIN_COUNT; // try again
-  end;
   result := spin;
 end;
 
+// our light locks do not use the resource of an associated futex, so are easier
+// if there is almost no contention - and really seldom call fpnanosleep(10us)
+
+function SpinAndWait(spin: PtrUInt): PtrUInt; {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := NextSpin(spin);
+  if result <> 0 then
+    exit;
+  SwitchToThread;        // proper OS yield API - fpnanosleep on POSIX
+  result := SPIN_COUNT;  // try again
+end;
+
+const // CAS bits for the TSynEvent futex API
+  EV_SIGNAL = 1;
+  EV_WAIT   = 2;
 
 { TLightLock }
 
@@ -11370,7 +11354,7 @@ var
 begin
   spin := SPIN_COUNT;
   repeat
-    spin := DoSpin(spin);
+    spin := SpinAndWait(spin);
   until TryLock;
 end;
 
@@ -11472,7 +11456,7 @@ var
 begin
   spin := SPIN_COUNT;
   repeat
-    spin := DoSpin(spin);
+    spin := SpinAndWait(spin);
   until TryLock;
 end;
 
@@ -11514,7 +11498,7 @@ var
 begin
   spin := SPIN_COUNT;
   repeat
-    spin := DoSpin(spin);
+    spin := SpinAndWait(spin);
   until TryReadLock;
 end;
 
@@ -11544,7 +11528,7 @@ var
 begin
   spin := SPIN_COUNT;
   repeat
-    spin := DoSpin(spin);
+    spin := SpinAndWait(spin);
   until TryWriteLock;
 end;
 
@@ -11615,7 +11599,7 @@ var
 begin
   spin := SPIN_COUNT;
   repeat
-    spin := DoSpin(spin);
+    spin := SpinAndWait(spin);
     f := Flags and not 1; // retry ReadOnlyLock
   until (Flags = f) and
         LockedExc(Flags, {to=}f + 4, {from=}f);
@@ -11647,7 +11631,7 @@ begin
     if (Flags = f) and
        LockedExc(Flags, {to=}f + 2, {from=}f) then
       break;
-    spin := DoSpin(spin);
+    spin := SpinAndWait(spin);
   until false;
   LastReadWriteLockThread := tid;
   LastReadWriteLockCount := 0;
@@ -11689,13 +11673,13 @@ begin
       else
         // we exclusively acquired the WR lock
         break;
-    spin := DoSpin(spin);
+    spin := SpinAndWait(spin);
   until false;
   LastWriteLockThread := tid;
   LastWriteLockCount := 0;
   // wait for all readers to have finished their job
   while Flags > 3 do
-    spin := DoSpin(spin);
+    spin := SpinAndWait(spin);
 end;
 
 procedure TRWLock.WriteUnlock;
@@ -12371,10 +12355,6 @@ end;
 
 { TSynEvent }
 
-const // fState CAS bits for the TSynEvent futex API
-  EV_SIGNAL = 1;
-  EV_WAIT   = 2;
-
 constructor TSynEvent.Create;
 begin
   if not Assigned(OsWaitOnValue) then // futex API only on Linux or Win8+
@@ -12633,29 +12613,6 @@ begin
   SharedRandom.FillShort31(dest);
 end;
 
-function RandomGuid: TGuid;
-begin
-  RandomGuid(result);
-end;
-
-procedure MakeRandomGuid(u: PHash128);
-begin // see https://datatracker.ietf.org/doc/html/rfc4122#section-4.4
-  PCardinal(@u[6])^ := (PCardinal(@u[6])^ and $ff3f0fff) or $00804000;
-  // u[7] := PtrUInt(u[7] and $0f) or $40; // version bits 12-15 = 4 (random)
-  // u[8] := PtrUInt(u[8] and $3f) or $80; // reserved bits 6-7 = 1
-end;
-
-function IsRandomGuid(u: PHash128): boolean;
-begin
-  result := (u[7] and $f0 = $40) and (u[8] and $c0 = $80);
-end;
-
-procedure RandomGuid(out result: TGuid);
-begin
-  SharedRandom.Fill(@result, SizeOf(TGuid));
-  MakeRandomGuid(@result);
-end;
-
 {$ifndef PUREMORMOT2}
 procedure FillRandom(Dest: PCardinal; CardinalCount: integer);
 begin
@@ -12776,7 +12733,7 @@ begin
   spin := SPIN_COUNT;
   while (Target <> Comperand) or
         not LockedExc(Target, {to=}NewValue, {from=}Comperand) do
-    spin := DoSpin(spin);
+    spin := SpinAndWait(spin);
 end;
 
 function ObjArrayAdd(var aObjArray; aItem: TObject;

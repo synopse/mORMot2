@@ -1744,7 +1744,7 @@ type
     // - this method is thread-safe, and its AES process is non blocking
     function FillRandomHex(Len: integer): RawUtf8;
     /// compute a pseudorandom UUid value according to the RFC 4122
-    // - this method is stronger than RandomGuid() from mormot.core.os
+    // - RandomGuid() from this unit uses Random128() so is likely strong
     // - to derivate a Uuid from a name see IdentifierGuid()/DotNetIdentifierGuid()
     procedure FillGuid(out Guid: TGuid);
     /// xor a binary buffer with some pseudorandom data
@@ -2529,6 +2529,18 @@ function Md5Buf(const Buffer; Len: cardinal): TMd5Digest;
 /// compute the HTDigest for a user and a realm, according to a supplied password
 // - apache-compatible: 'agent007:download area:8364d0044ef57b3defcfa141e8f77b65'
 function HTDigest(const user, realm, pass: RawByteString): RawUtf8;
+
+/// compute a random UUid value from the RandomBytes() generator and RFC 4122
+// - to derivate a Uuid from a name see IdentifierGuid()/DotNetIdentifierGuid()
+procedure RandomGuid(out result: TGuid); overload;
+
+/// compute a random UUid value from the RandomBytes() generator and RFC 4122
+// - to derivate a Uuid from a name see IdentifierGuid()/DotNetIdentifierGuid()
+function RandomGuid: TGuid; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// check if the supplied UUid value was randomly-generated according to RFC 4122
+function IsRandomGuid(u: PHash128): boolean;
 
 const
   /// RFC 4122 standard UUID v5 namespace for domain names e.g. 'example.com'
@@ -9950,6 +9962,22 @@ begin
   result := tmp;
   Append(tmp, pass);
   Append(result, Md5(tmp));
+end;
+
+function IsRandomGuid(u: PHash128): boolean;
+begin
+  result := ((u[7] and $f0) = $40) and ((u[8] and $c0) = $80);
+end;
+
+procedure RandomGuid(out result: TGuid);
+begin
+  Random128(@result); // 122-bit seed from our CSPRNG
+  MakeRandomGuid(@result);
+end;
+
+function RandomGuid: TGuid;
+begin
+  RandomGuid(result);
 end;
 
 procedure IdentifierGuid(const name: RawUtf8; out guid: TGuid;
