@@ -3513,6 +3513,7 @@ type
 /// return the gsl_rng_taus2 Pierre L'Ecuyer generator of the current thread
 // - was an alternative to SharedRandom/Random32 functions from mormot.core.os
 // - you should better define your own local threadvar for any specific purpose
+// or use ThreadRandom function from mormot.crypt.core.pas
 function Lecuyer: PLecuyer;
 {$endif PUREMORMOT2}
 

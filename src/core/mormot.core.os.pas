@@ -5322,6 +5322,7 @@ type
   // - just wrap a TLecuyer generator with a TLighLock in a 20-24 bytes structure
   // - as used by SharedRandom to implement Random32/RandomBytes/... functions
   // - see RandomLecuyer() from mormot.crypt.core.pas to setup a local instance
+  // or ThreadRandom from the same unit to return a per-thread instance
   {$ifdef USERECORDWITHMETHODS}
   TLecuyerThreadSafe = record
   {$else}
@@ -5349,7 +5350,8 @@ type
 var
   /// a global thread-safe Pierre L'Ecuyer gsl_rng_taus2 software random generator
   // - called e.g. by Random32/Random31/Random64/RandomDouble/RandomBytes functions
-  // - you can always seed and use your own TLecuyer (threadvar) instance, if needed
+  // - you can always seed and use your own TLecuyer (threadvar) instance, or
+  // use ThreadRandom per-thread instances from mormot.crypt.core.pas
   SharedRandom: TLecuyerThreadSafe;
 
 /// fast compute of some 32-bit random value, using the gsl_rng_taus2 generator
@@ -5417,6 +5419,7 @@ procedure FillRandom(Dest: PCardinal; CardinalCount: integer);
 
 /// re-seed the global gsl_rng_taus2 Random32/RandomBytes generator
 // - use XorEntropy() and optional entropy/entropylen as derivation source
+// - but it is safer to use your own TLecuyer instance if needed
 procedure Random32Seed(entropy: pointer = nil; entropylen: PtrInt = 0);
 
 {$ifdef OSPOSIX}

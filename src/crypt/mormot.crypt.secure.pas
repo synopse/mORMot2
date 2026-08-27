@@ -8350,12 +8350,12 @@ type
 
 procedure TCryptRandomLecuyerPrng.Get(dst: pointer; dstlen: PtrInt);
 begin
-  SharedRandom.Fill(dst, dstlen); // global TLecuyer gsl_rng_taus2 generator
+  ThreadRandom.Fill(dst, dstlen); // per-thread TLecuyer gsl_rng_taus2 generator
 end;
 
 function TCryptRandomLecuyerPrng.Get32: cardinal;
 begin
-  result := SharedRandom.Next;
+  result := ThreadRandom.Next;
 end;
 
 { TCryptRandom32 }

@@ -1610,7 +1610,6 @@ function TBigInt.IsPrime(Extend: TBigIntSimplePrime; Iterations: integer;
 var
   r, a, w: PBigInt;
   s, n, bak: integer;
-  rnd: TLecuyer;
 begin
   // first check if not a factor of a well-known small prime
   result := (Size = (32 div HALF_BITS)) and
@@ -1621,8 +1620,8 @@ begin
      MatchKnownPrime(Extend) then // detect most of the composite integers
     exit;
   // validate is a prime number using Miller-Rabin iterative tests (HAC 4.24)
-  if Lecuyer = nil then    // 88-bit CSPRNG seed - if not supplied by caller
-    Lecuyer := RandomLecuyer(rnd); // new gsl_rng_taus2 uniform distribution
+  if Lecuyer = nil then      // gsl_rng_taus2 CSPRNG 88-bit uniform distribution
+    Lecuyer := ThreadRandom; // if not supplied by caller
   bak := RefCnt;
   RefCnt := -1; // make permanent for use as modulo below
   w := Clone.IntSub(1); // w = value - 1
@@ -1709,7 +1708,7 @@ var
   min, bytes: integer;
   last32: PCardinal;
   rnd: RawByteString;
-  lecuyer: TLecuyer; // convenient local thread-safe randomness for Miller-Rabin
+  lecuyer: PLecuyer;
 begin
   // ensure it is worth searching (paranoid)
   if Size <= 2 then
@@ -1736,15 +1735,13 @@ begin
   // xor Value original trusted sources with our CSPRNG until we get enough bits
   last32 := @Value[Size - 1 {$ifdef CPU32} - 1 {$endif}];
   XorStrongRandom(last32);
-  // setup a 88-bit gsl_rng_taus2 uniform distribution from these rnd bytes
-  DefaultHasher128(@lecuyer, pointer(rnd), bytes); // may be AesNiHash128
-  lecuyer.SeedGenerator;
   FillZero(rnd); // anti-forensic counter measure
   // brute force search for the next prime starting at this point
+  lecuyer := ThreadRandom; // retrieve once
   result := false; // timeout
   min := 0;
   repeat
-    if IsPrime(Extend, Iterations, @lecuyer) then // small primes + Miller-Rabin
+    if IsPrime(Extend, Iterations, lecuyer) then // small primes + Miller-Rabin
     begin
       result := true; // we got lucky
       exit;
