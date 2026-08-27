@@ -186,7 +186,7 @@ type
     a: TOrmPeopleObjArray;
     fAdd, fDel: RawUtf8;
     fQuickSelectValues: TIntegerDynArray;
-    rnd: TLecuyer;
+    rnd: PLecuyer;
     procedure Setup; override;
     function QuickSelectGT(IndexA, IndexB: PtrInt): boolean;
     procedure intadd(const Sender; Value: integer);
@@ -354,7 +354,7 @@ end;
 
 procedure TTestCoreBase.Setup;
 begin
-  RandomLecuyer(rnd);
+  rnd := ThreadRandom; // reference to the main thread generator
 end;
 
 {$ifdef FPC_X64MM}
@@ -4085,8 +4085,9 @@ var
   timer: TPrecisionTimer;
   gen: TLecuyer;
 begin
+  RandomLecuyer(gen); // local instance to avoid any thread influence
   for i := 0 to high(c) do
-    c[i] := Random32;
+    c[i] := gen.Next;
   QuickSortInteger(@c, 0, high(c));
   n := 0;
   for i := 0 to high(c) - 1 do
@@ -4094,17 +4095,17 @@ begin
       inc(n);
   Check(n < 2, 'unique Random32'); // n=1 have been seen once
   timer.Start;
-  Check(Random32(0) = 0);
-  Check(Random32(1) = 0);
+  Check(gen.Next(0) = 0);
+  Check(gen.Next(1) = 0);
   for i := 1 to 100000 do
-    Check(Random32(i) < cardinal(i));
+    Check(gen.Next(i) < cardinal(i));
   for i := 0 to 100000 do
-    Check(Random32(maxInt - i) < cardinal(maxInt - i));
+    Check(gen.Next(maxInt - i) < cardinal(maxInt - i));
   qp := 0;
   n := 0;
   for i := 1 to 20000 do
   begin
-    q := Random64;
+    q := gen.NextQWord;
     Check((q = 0) or (q <> qp));
     if q and $ffffffff00000000 <> 0 then
       inc(n);
@@ -4115,7 +4116,7 @@ begin
   NotifyTestSpeed('Random32', n, n * 4, @timer);
   timer.Start;
   for i := 1 to 100 do
-    RandomBytes(@c, SizeOf(c));
+    gen.Fill(@c, SizeOf(c));
   NotifyTestSpeed('RandomBytes', 0, SizeOf(c) * 100, @timer);
   for i := 0 to high(REF_LECUYER_GENERATOR) do
   begin
@@ -11243,7 +11244,7 @@ const
   MAX = 10000;
 var
   dict: TSynDictionary;
-  rnd: TLecuyer; // local per-thread instance
+  rnd: PLecuyer; // local per-thread instance
 
   procedure TestSpeed(Count: integer; SetCapacity, DoText: boolean;
     Hasher: THasher; const Msg: RawUtf8);
@@ -11340,7 +11341,7 @@ var
   b: byte;
   sdk: TSDKey;
 begin
-  RandomLecuyer(rnd); // local per-thread generator
+  rnd := ThreadRandom; // use the TLecuyer of this thread
   SetDict;
   try
     CheckEqual(dict.Count, 0);

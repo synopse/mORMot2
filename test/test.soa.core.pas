@@ -1169,7 +1169,7 @@ end;
 procedure TTestServiceOrientedArchitecture.Test(
   const Inst: TTestServiceInstances; Iterations: cardinal);
 var
-  rnd: TLecuyer; // local thread-safe non blocking random generator
+  rnd: PLecuyer; // local thread-safe non blocking random generator
 
   procedure TestCalculator(const I: ICalculator);
   var
@@ -1324,7 +1324,7 @@ var
   Nav, Nav2: TConsultaNav;
   {$endif HASNOSTATICRTTI}
 begin
-  RandomLecuyer(rnd);
+  rnd := ThreadRandom; // use the TLecuyer instance of this thread
   CheckEqual(Inst.I.Add(1, 2), 3);
   Check(Inst.I.Multiply($1111333, $222266667) = $24693E8DB170B85, 'I.Mul');
   CheckEqual(Inst.I.StackIntMultiply(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 3628800, 'sm1');

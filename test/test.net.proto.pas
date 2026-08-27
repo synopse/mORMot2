@@ -89,12 +89,10 @@ type
      const r: ITunnelTransmit; const sc, vc: ICryptCert): TLoggedWorkThread;
     procedure CheckBlocks(const log: ISynLog; const sent, recv: RawByteString;
       num: integer);
-    procedure TunnelTest(var rnd: TLecuyer;
-      const clientcert, servercert: ICryptCert; packets: integer = 100);
-    procedure TunnelSocket(const log: ISynLog; var rnd: TLecuyer;
-      clientinstance, serverinstance: TTunnelLocal; packets: integer);
+    procedure TunnelTest(const clientcert, servercert: ICryptCert; packets: integer = 100);
+    procedure TunnelSocket(const log: ISynLog; clientinstance, serverinstance: TTunnelLocal; packets: integer);
     procedure TunnelRelay(relay: TTunnelRelay; const agent: array of ITunnelAgent;
-      const console: array of ITunnelConsole; var rnd: TLecuyer; packets: integer);
+      const console: array of ITunnelConsole; packets: integer);
     procedure RunLdapClient(Sender: TObject);
     procedure RunPeerCacheDirect(Sender: TObject);
     function OnPeerCacheDirect(var aUri: TUri; var aHeader: RawUtf8;
@@ -1767,7 +1765,7 @@ var
   timer: TPrecisionTimer;
   f: PAnsiChar;
   hostname, option: TShort15;
-  rnd: TLecuyer;
+  rnd: PLecuyer;
   nfo: TMacIP;
   m1, m2: TDhcpMetrics;
   rv: TRuleValue;
@@ -1869,6 +1867,7 @@ var
   end;
 
 begin
+  rnd := ThreadRandom; // use the TLecuyer of this thread
   // validate some DHCP protocol definitions
   CheckEqual(ord(dmtTls), 18, 'dmt');
   CheckEqual(SizeOf(TDhcpPacket), 1468, 'TDhcpPacket');
@@ -1881,7 +1880,6 @@ begin
   CheckEqual(DHCP_OPTION[doRouters], 'routers');
   CheckEqual(DHCP_OPTION[doTftpServerName], 'tftp-server-name');
   CheckEqual(DHCP_OPTION[doRelayAgentInformation], 'relay-agent-information');
-  RandomLecuyer(rnd);
   for dmt := low(dmt) to high(dmt) do
   begin
     dmt2 := pred(dmt);
@@ -2897,7 +2895,7 @@ begin
   end;
 end;
 
-procedure TNetworkProtocols.TunnelSocket(const log: ISynLog; var rnd: TLecuyer;
+procedure TNetworkProtocols.TunnelSocket(const log: ISynLog;
   clientinstance, serverinstance: TTunnelLocal; packets: integer);
 var
   i: integer;
@@ -2908,7 +2906,9 @@ var
   sent, sent2: RawUtf8;
   received, received2: RawByteString;
   nfo: variant;
+  rnd: PLecuyer;
 begin
+  rnd := ThreadRandom; // use the TLecuyer of this thread
   local := clientinstance.Port;
   remote := serverinstance.Port;
   Check(local <> 0, 'no local');
@@ -2988,8 +2988,8 @@ begin
   SleepHiRes(1000, closed^);
 end;
 
-procedure TNetworkProtocols.TunnelTest(var rnd: TLecuyer;
-  const clientcert, servercert: ICryptCert; packets: integer);
+procedure TNetworkProtocols.TunnelTest(const clientcert, servercert: ICryptCert;
+  packets: integer);
 var
   log: ISynLog;
   sess: TTunnelSession;
@@ -2997,7 +2997,9 @@ var
   clienttunnel, servertunnel: ITunnelLocal;
   local, remote: TNetPort;
   worker: TLoggedWorkThread;
+  rnd: PLecuyer;
 begin
+  rnd := ThreadRandom; // use the TLecuyer of this thread
   // setup the two instances with the specified options and certificates
   TSynLogTestLog.EnterLocal(log, 'TunnelTest [%]', [ToText(tunneloptions)], self);
   clientinstance := TTunnelLocalClient.Create(TSynLog);
@@ -3027,7 +3029,7 @@ begin
   Check(clienttunnel.Encrypted = (toEncrypted * tunneloptions <> []), 'cEncrypted');
   Check(servertunnel.Encrypted = (toEncrypted * tunneloptions <> []), 'sEncrypted');
   // create two local sockets and let them play with the tunnel
-  TunnelSocket(log, rnd, clientinstance, serverinstance, packets);
+  TunnelSocket(log, clientinstance, serverinstance, packets);
   // avoid circular references memory leak (not needed over SOA websockets)
   clientinstance.RawTransmit := nil;
 end;
@@ -3038,7 +3040,7 @@ const
 
 procedure TNetworkProtocols.TunnelRelay(relay: TTunnelRelay;
   const agent: array of ITunnelAgent; const console: array of ITunnelConsole;
-  var rnd: TLecuyer; packets: integer);
+  packets: integer);
 var
   log: ISynLog;
   a: ITunnelAgent;
@@ -3049,7 +3051,9 @@ var
   sess: TTunnelSession;
   i, j, c: PtrInt;
   local: TNetPort;
+  rnd: PLecuyer;
 begin
+  rnd := ThreadRandom; // use the TLecuyer of this thread
   TSynLogTestLog.EnterLocal(log, self, 'TTunnelRelay');
   if CheckFailed(length(console) <> 0) then
     exit; // avoid division per zero in "i mod length(console)" below
@@ -3144,7 +3148,7 @@ begin
     if Assigned(log) then
       log.Log(sllInfo, 'Tunnel: actual sockets relay on loopback', self);
     for i := 0 to AGENT_COUNT - 1 do
-      TunnelSocket(log, rnd, agentlocal[i], consolelocal[i], packets);
+      TunnelSocket(log, agentlocal[i], consolelocal[i], packets);
   finally
     for i := 0 to AGENT_COUNT - 1 do
       worker[i].Free;
@@ -3165,7 +3169,6 @@ var
   clientcert, servercert: ICryptCert;
   bak: TSynLogLevels;
   relay: TTunnelRelay;
-  rnd: TLecuyer;
   i: PtrInt;
   agent: array of ITunnelAgent;     // single instance (sicShared mode)
   console: array of ITunnelConsole; // one per console (sicPerSession)
@@ -3173,29 +3176,28 @@ var
   httpserver: TRestHttpServer;
   agentclient, consoleclient: array of TRestHttpClientWebsockets;
 begin
+  // 1. validate TTunnelLocal and all its handshaking options
   bak := TSynLog.Family.Level;
   //TSynLog.Family.Level := LOG_VERBOSE; // for convenient LUTI debugging
-  // 1. validate TTunnelLocal and all its handshaking options
-  RandomLecuyer(rnd);
   // plain tunnelling
-  TunnelTest(rnd, nil, nil);
+  TunnelTest(nil, nil);
   // symmetric secret encrypted tunnelling
   tunneloptions := [toEncrypt];
-  TunnelTest(rnd, nil, nil);
+  TunnelTest(nil, nil);
   // ECDHE encrypted tunnelling
   tunneloptions := [toEcdhe];
-  TunnelTest(rnd, nil, nil);
+  TunnelTest(nil, nil);
   // tunnelling with mutual authentication
   tunneloptions := [];
   clientcert := Cert('syn-es256').Generate([cuDigitalSignature]);
   servercert := Cert('syn-es256').Generate([cuDigitalSignature]);
-  TunnelTest(rnd, clientcert, servercert);
+  TunnelTest(clientcert, servercert);
   // symmetric secret encrypted tunnelling with mutual authentication
   tunneloptions := [toEncrypt];
-  TunnelTest(rnd, clientcert, servercert);
+  TunnelTest(clientcert, servercert);
   // ECDHE encrypted tunnelling with mutual authentication
   tunneloptions := [toEcdhe];
-  TunnelTest(rnd, clientcert, servercert);
+  TunnelTest(clientcert, servercert);
   // options (e.g. encryption/ecdhe) are now considered validated
   tunneloptions := [];
   // 2. validate TTunnelRelay and its associated TTunnelAgent/TTunnelConsole
@@ -3210,7 +3212,7 @@ begin
     CheckEqual(relay.ConsoleCount, 0);
     for i := 0 to high(console) do
       Check(relay.Resolve(ITunnelConsole, console[i]), 'sicPerSession');
-    TunnelRelay(relay, agent, console, rnd, {packets=}10);
+    TunnelRelay(relay, agent, console, {packets=}10);
     agent := nil;
     console := nil;
     // 2.2. setup a SOA WebSockets server as actual relay over WebSockets
@@ -3263,7 +3265,7 @@ begin
           consoleclient[i].Resolve(ITunnelConsole, console[i]);
         end;
         TSynLog.Add.Log(sllInfo, 'Tunnel: call TunnelRelay', self);
-        TunnelRelay(relay, agent, console, rnd, {packets=}5);
+        TunnelRelay(relay, agent, console, {packets=}5);
       finally
         agent := nil; // keep refcount clean
         console := nil;
