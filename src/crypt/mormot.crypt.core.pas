@@ -2830,6 +2830,51 @@ function ThreadRandom: PLecuyer;
 function RandomByteString(Count: integer; var Dest;
   CodePage: cardinal = CP_RAWBYTESTRING): pointer;
 
+/// create a temporary string random content, WinAnsi (code page 1252) content
+// - use the same ThreadRandom generator than RandomUtf8() or RandomIdentifier()
+function RandomWinAnsi(CharCount: integer): WinAnsiString;
+
+/// create a temporary UTF-8 random string, from RandomWinAnsi() content
+// - CharCount is the number of random WinAnsi chars, so it is very likely that
+// length(result) > CharCount once encoded into UTF-8
+// - use the same ThreadRandom generator than RandomAnsi7() or RandomIdentifier()
+function RandomUtf8(CharCount: integer): RawUtf8;
+
+/// create a temporary UTF-16 random string, from RandomWinAnsi() content
+// - use the same ThreadRandom generator than RandomUtf8() or RandomIdentifier()
+function RandomUnicode(CharCount: integer): SynUnicode;
+
+/// create a temporary string random content, using only ASCII 7-bit chars
+// - e.g. RandomAnsi7(10) = '1d2I(\?U; ' (from #$20 space to #$7e tilde)
+// - use the same ThreadRandom generator than RandomUtf8() or RandomIdentifier()
+function RandomAnsi7(CharCount: integer; CodePage: integer = CP_UTF8): RawByteString;
+
+/// create a temporary string random content, using A..Z,_,0..9 chars only
+// - for a strong password, use safer TAesPrng.Main.RandomPassword method
+// - use the same ThreadRandom generator than RandomUtf8() or RandomIdentifier()
+function RandomIdentifier(CharCount: integer): RawUtf8;
+
+/// create a temporary string random content, using uri-compatible chars only
+// - RandomIdentifier() only has uppercase chars whereas this one has lower too
+// - use the same ThreadRandom generator than RandomUtf8() or RandomIdentifier()
+function RandomUri(CharCount: integer): RawUtf8;
+
+/// create a temporary string, containing some fake text, with paragraphs
+// - use the same ThreadRandom generator than RandomUtf8() or RandomIdentifier()
+function RandomTextParagraph(WordCount: integer; LastPunctuation: AnsiChar = '.';
+  const RandomInclude: RawUtf8 = ''): RawUtf8;
+
+/// add some "bla bli blo blu" text, with paragraphs, to a TextWriter instance
+// - use the same ThreadRandom generator than RandomUtf8() or RandomIdentifier()
+procedure AddRandomTextParagraph(WR: TTextWriter; WordCount: integer;
+  LastPunctuation: AnsiChar = '.'; const RandomInclude: RawUtf8 = '';
+  NoLineFeed: boolean = false);
+
+{$ifndef PUREMORMOT2}
+function RandomString(CharCount: integer): WinAnsiString;
+  {$ifdef HASINLINE}inline;{$endif}
+{$endif PUREMORMOT2}
+
 
 implementation
 
@@ -10596,6 +10641,188 @@ begin
   ThreadRandom.Fill(pointer(Dest), Count);
   result := pointer(Dest);
 end;
+
+procedure _Random2WinAnsi(p: PByte; n: integer);
+var
+  c: byte;
+begin
+  if n <> 0 then
+    repeat
+      c := p^;         // in two steps for FPC
+      c := c and 127;  // in range 00..7f +$20 = 20..9f
+      case c of        // note: 81, 8d, 8f, 90, 9d are unused in CP1252
+        $5f .. $6f:
+          inc(c, $60); // 80..$8f -> c0..cf uppercase accents (7f=DEL)
+        $70 .. $7f:
+          inc(c, $70); // 90..9f -> e0..ef lowercase accents
+      else
+        inc(c, $20);   // -> 20..7e chars (' '..'~' range)
+      end;
+      p^ := c;
+      inc(p);
+      dec(n);
+    until n = 0;
+end;
+
+function RandomWinAnsi(CharCount: integer): WinAnsiString;
+begin
+  _Random2WinAnsi(RandomByteString(CharCount, result, CP_WINANSI), CharCount);
+end;
+
+function RandomAnsi7(CharCount, CodePage: integer): RawByteString;
+var
+  i: PtrInt;
+  R: PByteArray;
+begin
+  R := RandomByteString(CharCount, result, CodePage);
+  for i := 0 to CharCount - 1 do
+    R[i] := (R[i] mod 95) + 32; // [' ' .. #$7e] (#126=tilde) range
+end;
+
+procedure InitRandom64(chars64: PAnsiChar; count: integer; var result: RawUtf8);
+var
+  i: PtrInt;
+  R: PAnsiChar;
+begin
+  R := RandomByteString(count, result, CP_UTF8);
+  for i := 0 to count - 1 do
+    R[i] := chars64[PtrUInt(R[i]) and 63];
+end;
+
+const
+  IDENT_CHARS: TChar64 =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_';
+  URL_CHARS: TChar64 =
+    'abcdefghijklmnopqrstuvwxyz0123456789-ABCDEFGH.JKLMNOP-RSTUVWXYZ.';
+
+function RandomIdentifier(CharCount: integer): RawUtf8;
+begin
+  InitRandom64(@IDENT_CHARS, CharCount, result);
+end;
+
+function RandomUri(CharCount: integer): RawUtf8;
+begin
+  InitRandom64(@URL_CHARS, CharCount, result);
+end;
+
+function RandomUtf8(CharCount: integer): RawUtf8;
+var
+  win: TSynTempBuffer;
+begin
+  _Random2WinAnsi(win.Init(CharCount), CharCount); // include accentuated chars
+  WinAnsiConvert.AnsiBufferToRawUtf8(win.buf, CharCount, result);
+  win.Done;
+end;
+
+function RandomUnicode(CharCount: integer): SynUnicode;
+begin
+  result := WinAnsiConvert.AnsiToUnicodeString(RandomWinAnsi(CharCount));
+end;
+
+function RandomTextParagraph(WordCount: integer;
+  LastPunctuation: AnsiChar; const RandomInclude: RawUtf8): RawUtf8;
+var
+  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
+  WR: TTextWriter;
+begin
+  WR := TTextWriter.CreateOwnedStream(tmp);
+  try
+    AddRandomTextParagraph(WR, WordCount, LastPunctuation, RandomInclude);
+    WR.SetText(result);
+  finally
+    WR.Free;
+  end;
+end;
+
+procedure AddRandomTextParagraph(WR: TTextWriter; WordCount: integer;
+  LastPunctuation: AnsiChar; const RandomInclude: RawUtf8; NoLineFeed: boolean);
+type
+  TKind = (
+    space, comma, dot, question, paragraph);
+const
+  bla: array[0 .. 15] of TShort3 = (
+    'bla', 'ble', 'bli', 'blo', 'blu', 'bla', 'bli', 'blo',
+    'cha', 'che', 'chi', 'cho', 'chu', 'cha', 'chi', 'cho');
+  endKind = [dot, paragraph, question];
+var
+  n: integer;
+  s: TShort7;
+  last: TKind;
+  rnd: cardinal;
+  lec: PLecuyer;
+begin
+  lec := ThreadRandom; // retrieve once the random seed for this thread
+  last := paragraph;
+  while WordCount > 0 do
+  begin
+    rnd := lec^.Next;      // 32-bit of randomness for up to 5 words per loop
+    n := (rnd and 3) + 2;  // n = 2..5
+    rnd := rnd shr 2;      // consume 2 bits
+    repeat
+      PCardinal(@s)^ := PCardinal(@bla[rnd and 15])^;
+      rnd := rnd shr 4;    // consume up to 5*4 = 20 bits from rnd
+      s[0] := #4;
+      s[4] := ' ';
+      if last in endKind then
+      begin
+        last := space;
+        s[1] := 'P';
+      end;
+      WR.AddShorter(s);
+      dec(WordCount);
+      if WordCount = 0 then
+        break;
+      dec(n);
+    until n = 0;
+    WR.CancelLastChar(' ');
+    case rnd and 127 of // consume 7 bits from rnd (total up to 29 bits)
+      0 .. 4:
+        begin
+          if RandomInclude <> '' then
+          begin
+            WR.AddDirect(' ');
+            WR.AddString(RandomInclude); // 5/128 = 4% chance of text inclusion
+          end;
+          last := space;
+        end;
+      5 .. 50:
+        last := space;
+      51 .. 90:
+        last := comma;
+      91 .. 105:
+        last := dot;
+      106 .. 115:
+        last := question;
+      116 .. 127:
+        if NoLineFeed then
+          last := dot
+        else
+          last := paragraph;
+    end;
+    case last of
+      space:
+        WR.AddDirect(' ');
+      comma:
+        WR.AddDirect(',', ' ');
+      dot:
+        WR.AddDirect('.', ' ');
+      question:
+        WR.AddDirect('?', ' ');
+      paragraph:
+        WR.AddDirect('.', #13, #10);
+    end;
+  end;
+  if (LastPunctuation <> ' ') and
+     not (last in endKind) then
+    WR.AddDirect('b', 'l', 'a', LastPunctuation);
+end;
+
+{$ifndef PUREMORMOT2}
+function RandomString(CharCount: integer): WinAnsiString;
+begin
+  result := RandomWinAnsi(CharCount);
+end;
+{$endif PUREMORMOT2}
 
 
 

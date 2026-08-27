@@ -2210,28 +2210,6 @@ procedure ConsoleWriteRaw(const Args: array of const; NoLineFeed: boolean = fals
 // !end.
 procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean = true);
 
-/// create a temporary string random content, WinAnsi (code page 1252) content
-function RandomWinAnsi(CharCount: integer): WinAnsiString;
-
-/// create a temporary UTF-8 random string, from RandomWinAnsi() content
-// - CharCount is the number of random WinAnsi chars, so it is very likely that
-// length(result) > CharCount once encoded into UTF-8
-function RandomUtf8(CharCount: integer): RawUtf8;
-
-/// create a temporary UTF-16 random string, from RandomWinAnsi() content
-function RandomUnicode(CharCount: integer): SynUnicode;
-
-/// create a temporary string random content, using only ASCII 7-bit chars
-// - e.g. RandomAnsi7(10) = '1d2I(\?U; ' (from #$20 space to #$7e tilde)
-function RandomAnsi7(CharCount: integer; CodePage: integer = CP_UTF8): RawByteString;
-
-/// create a temporary string random content, using A..Z,_,0..9 chars only
-// - for a strong password, use safer TAesPrng.Main.RandomPassword method
-function RandomIdentifier(CharCount: integer): RawUtf8;
-
-/// create a temporary string random content, using uri-compatible chars only
-function RandomUri(CharCount: integer): RawUtf8;
-
 
 { ************ ESynException class }
 
@@ -10300,83 +10278,6 @@ begin
   ConsoleWriteRaw('Press [Enter] to quit');
   ConsoleWaitForEnterKey;
   {$endif OSPOSIX}
-end;
-
-procedure _Random2WinAnsi(p: PByte; n: integer);
-var
-  c: byte;
-begin
-  if n <> 0 then
-    repeat
-      c := p^;         // in two steps for FPC
-      c := c and 127;  // in range 00..7f +$20 = 20..9f
-      case c of        // note: 81, 8d, 8f, 90, 9d are unused in CP1252
-        $5f .. $6f:
-          inc(c, $60); // 80..$8f -> c0..cf uppercase accents (7f=DEL)
-        $70 .. $7f:
-          inc(c, $70); // 90..9f -> e0..ef lowercase accents
-      else
-        inc(c, $20);   // -> 20..7e chars (' '..'~' range)
-      end;
-      p^ := c;
-      inc(p);
-      dec(n);
-    until n = 0;
-end;
-
-function RandomWinAnsi(CharCount: integer): WinAnsiString;
-begin
-  _Random2WinAnsi(RandomByteString(CharCount, result, CP_WINANSI), CharCount);
-end;
-
-function RandomAnsi7(CharCount, CodePage: integer): RawByteString;
-var
-  i: PtrInt;
-  R: PByteArray;
-begin
-  R := RandomByteString(CharCount, result, CodePage);
-  for i := 0 to CharCount - 1 do
-    R[i] := (R[i] mod 95) + 32; // [' ' .. #$7e] (#126=tilde) range
-end;
-
-procedure InitRandom64(chars64: PAnsiChar; count: integer; var result: RawUtf8);
-var
-  i: PtrInt;
-  R: PAnsiChar;
-begin
-  R := RandomByteString(count, result, CP_UTF8);
-  for i := 0 to count - 1 do
-    R[i] := chars64[PtrUInt(R[i]) and 63];
-end;
-
-const
-  IDENT_CHARS: TChar64 =
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_';
-  URL_CHARS: TChar64 =
-    'abcdefghijklmnopqrstuvwxyz0123456789-ABCDEFGH.JKLMNOP-RSTUVWXYZ.';
-
-function RandomIdentifier(CharCount: integer): RawUtf8;
-begin
-  InitRandom64(@IDENT_CHARS, CharCount, result);
-end;
-
-function RandomUri(CharCount: integer): RawUtf8;
-begin
-  InitRandom64(@URL_CHARS, CharCount, result);
-end;
-
-function RandomUtf8(CharCount: integer): RawUtf8;
-var
-  win: TSynTempBuffer;
-begin
-  _Random2WinAnsi(win.Init(CharCount), CharCount); // include accentuated chars
-  WinAnsiConvert.AnsiBufferToRawUtf8(win.buf, CharCount, result);
-  win.Done;
-end;
-
-function RandomUnicode(CharCount: integer): SynUnicode;
-begin
-  result := WinAnsiConvert.AnsiToUnicodeString(RandomWinAnsi(CharCount));
 end;
 
 
