@@ -686,6 +686,9 @@ type
 procedure FromGlobalTime(out NewTime: TSynSystemTime; LocalTime: boolean;
   tix64: Int64 = 0);
 
+/// low-level retrieve the current decoded date/time from OS with no cache
+procedure RawGlobalTime(out Time: TSynSystemTime; LocalTime: boolean);
+
 /// our own faster version of the corresponding RTL function
 function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): boolean;
 
@@ -2321,6 +2324,25 @@ end;
 
 
 { ************ TSynDate / TSynDateTime / TSynSystemTime High-Level objects }
+
+procedure RawGlobalTime(out Time: TSynSystemTime; LocalTime: boolean);
+var
+  {$ifdef OSPOSIX}
+  tmp: cardinal;
+  {$endif OSPOSIX}
+  sys: TSystemTime absolute Time;
+begin
+  if LocalTime then
+    GetLocalTime(sys)
+  else
+    GetSystemTime(sys);
+  {$ifdef OSPOSIX}
+  // two TSystemTime fields are inverted in FPC datih.inc :(
+  tmp := sys.DayOfWeek;
+  Time.Day := sys.Day;
+  Time.DayOfWeek := tmp;
+  {$endif OSPOSIX}
+end;
 
 var
   // GlobalTime[LocalTime] thread-safe cache, each one taking one L1 cache line
