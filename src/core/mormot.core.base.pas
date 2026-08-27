@@ -2690,26 +2690,6 @@ procedure FillZero(out dig: THash512); overload;
 // as faster alternatives for general-purpose code
 function IsEqual(const A, B; count: PtrInt): boolean; overload;
 
-/// thread-safe move of a 32-bit value using a simple Read-Copy-Update pattern
-procedure Rcu32(var src, dst);
-
-/// thread-safe move of a 64-bit value using a simple Read-Copy-Update pattern
-procedure Rcu64(var src, dst);
-
-/// thread-safe move of a 128-bit value using a simple Read-Copy-Update pattern
-procedure Rcu128(var src, dst);
-
-/// thread-safe move of a pointer value using a simple Read-Copy-Update pattern
-procedure RcuPtr(var src, dst);
-
-/// thread-safe move of a memory buffer using a simple Read-Copy-Update pattern
-procedure Rcu(var src, dst; len: integer);
-
-{$ifdef ISDELPHI}
-/// this function is an intrinsic in FPC
-procedure ReadBarrier; {$ifndef ASMINTEL} inline; {$endif}
-{$endif ISDELPHI}
-
 /// fast computation of two 64-bit unsigned integers into a 128-bit value
 {$ifdef ASMINTEL}
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
@@ -9449,70 +9429,6 @@ begin
     perbyte := PByteArray(@A)[count] = PByteArray(@B)[count];
     result := result and perbyte;
   end;
-end;
-
-{$ifdef ISDELPHI} // intrinsic in FPC
-{$ifdef ASMINTEL}
-procedure ReadBarrier;
-asm
-        {$ifdef CPUX86}
-        lock add dword ptr [esp], 0
-        {$else}
-        .noframe
-        lfence // lfence requires an SSE CPU, which is OK on x86-64
-        {$endif CPUX86}
-end;
-{$else}
-procedure ReadBarrier;
-begin
-  MemoryBarrier; // modern Delphi intrinsic
-end;
-{$endif ASMINTEL}
-{$endif ISDELPHI}
-
-procedure Rcu32(var src, dst);
-begin
-  repeat
-    integer(dst) := integer(src);
-    ReadBarrier;
-  until integer(dst) = integer(src);
-end;
-
-procedure Rcu64(var src, dst);
-begin
-  repeat
-    Int64(dst) := Int64(src);
-    ReadBarrier;
-  until Int64(dst) = Int64(src);
-end;
-
-procedure RcuPtr(var src, dst);
-begin
-  repeat
-    PtrInt(dst) := PtrInt(src);
-    ReadBarrier;
-  until PtrInt(dst) = PtrInt(src);
-end;
-
-procedure Rcu128(var src, dst);
-var
-  s: THash128Rec absolute src;
-  d: THash128Rec absolute dst;
-begin
-  repeat
-    d := s;
-    ReadBarrier;
-  until (d.L = s.L) and
-        (d.H = s.H);
-end;
-
-procedure Rcu(var src, dst; len: integer);
-begin
-  if len > 0 then
-    repeat
-      MoveByOne(@src, @dst, len); // per-byte inlined copy
-      ReadBarrier;
-    until CompareMemSmall(@src, @dst, len);
 end;
 
 procedure AddInt64Array(d, s: PInt64Array; n: PtrInt);
