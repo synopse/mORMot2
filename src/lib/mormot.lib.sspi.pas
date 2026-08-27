@@ -1362,7 +1362,7 @@ begin
   enclen := Length(aEncrypted);
   buf := PByte(aEncrypted);
   if enclen < SizeOf(cardinal) then
-    raise ESynSspi.CreateFmt('SecDecrypt enclen=%', [enclen]);
+    raise ESynSspi.CreateFmt('SecDecrypt enclen=%d', [enclen]);
   // Hack for compatibility with previous versions.
   // Should be removed in future.
   // Old version buffer format - first 4 bytes is Trailer length, skip it.
