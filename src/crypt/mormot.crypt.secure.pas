@@ -11845,7 +11845,7 @@ end;
 class procedure TSynMustacheCryptoHelpers.PasswordGenerate(const Value: variant;
   out Result: variant);
 begin // {{ passwordgenerate len }}
-  RawUtf8ToVariant(TAesPrng.Main.RandomPassword(AnyVariantToIntegerDef(Value)));
+  RawUtf8ToVariant(TAesPrng.Main.RandomPassword(AnyVariantToIntegerDef(Value, 24)));
 end;
 
 // some callbacks for custom JSON serialization of security related types
