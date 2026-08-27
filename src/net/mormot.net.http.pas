@@ -6290,7 +6290,7 @@ begin
           fSafe.Lock;
           try
             fUniqueIPDepth := value;
-            fUniqueIPSeed := Random32Not0; // avoid hash flooding
+            fUniqueIPSeed := NetRandom32; // just to avoid hash flooding
             Finalize(fUniqueIP);  // release up to 128KB with max value=65536
             value := value shr 3; // from bits to bytes
             if value <> 0 then

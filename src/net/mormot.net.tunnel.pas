@@ -65,7 +65,7 @@ type
   PTunnelOptions = ^TTunnelOptions;
 
   /// a session identifier which should match on both sides of the tunnel
-  // - typically a Random32 or a TBinaryCookieGeneratorSessionID value
+  // - typically a NetRandom32 or a TBinaryCookieGeneratorSessionID value
   TTunnelSession = cardinal;
   PTunnelSession = ^TTunnelSession;
 
@@ -1509,7 +1509,7 @@ begin
       for n := 1 to 50 do // never loop forever
       begin
         repeat
-          result := Random32 shr 4; // a random session seems the best option
+          result := NetRandom32 shr 4; // a random session seems the best option
         until result <> 0;
         if not fAgent.fList.LockedExists(result) then // not in agents list
           if LockedFindConsole(result) = nil then     // not in consoles list

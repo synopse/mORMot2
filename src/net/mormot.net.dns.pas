@@ -570,7 +570,7 @@ begin
   FillCharFast(h^, SizeOf(h^), 0);
   repeat
     h^.Xid := NetRandom32;
-  until h^.XId <> 0; // truncated to 16-bit
+  until h^.XId <> 0; // truncated to 16-bit - should just be unpredictable
   h^.RecursionDesired := true;
   h^.QuestionCount := 1 shl 8;
   n := pointer(QName);

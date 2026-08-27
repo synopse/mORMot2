@@ -1986,7 +1986,7 @@ function NetBinToBase64(const s: RawByteString): RawUtf8;
 // - search for '-----BEGIN' text, so may hardly give some false positives
 function NetIsPem(p: PUtf8Char): boolean;
 
-/// return 32-bit obfuscated random number <> 0 to be used as network XID
+/// return 32-bit obfuscated random number <> 0 to be used e.g. as network XID
 function NetRandom32: cardinal;
 
 
@@ -5952,7 +5952,7 @@ var
 function NetRandom32: cardinal;
 begin
   repeat
-    result := xxHash32Mixup(InterlockedIncrement(NetRandomSeq));
+    result := crc32cby4(0, InterlockedIncrement(NetRandomSeq)); // may use HW
   until result <> 0;
 end;
 
