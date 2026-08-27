@@ -2568,6 +2568,9 @@ procedure IdentifierGuid(const name: RawUtf8; out guid: TGuid;
 // - e.g. 'MyCompany.MyComponent' into {ce5fa4ea-ab00-5402-8b76-9f76ac858fb5}
 procedure DotNetIdentifierGuid(const name: RawUtf8; out guid: TGuid);
 
+/// check if the supplied UUid value was identifier-derivated according to RFC 4122
+function IsIdentifierGuid(u: PHash128): boolean;
+
 
 { ****************** HMAC Authentication over SHA-256 }
 
@@ -10031,6 +10034,11 @@ begin
   tmp.Done; // unlikely
   dig[7] := (dig[7] and $0f) or $50; // mark as version 5 = name-based GUID
   guid := PGuid(@dig)^;
+end;
+
+function IsIdentifierGuid(u: PHash128): boolean;
+begin
+  result := (u[7] and $f0) = $50; // version 5 = name-based GUID
 end;
 
 
