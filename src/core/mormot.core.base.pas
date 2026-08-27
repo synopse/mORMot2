@@ -178,8 +178,6 @@ type
   PMethod = ^TMethod;
 
 {$ifndef ISDELPHIXE2}
-  /// used to store the handle of a system Thread
-  TThreadID = cardinal;
   /// compatibility definition with FPC and newer Delphi
   PUInt64 = ^UInt64;
 

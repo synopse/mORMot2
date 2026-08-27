@@ -5346,8 +5346,6 @@ type
     procedure Seed(entropy: pointer; entropylen: PtrInt);
   end;
 
-  TThreadIDDynArray = array of TThreadID;
-
 var
   /// a global thread-safe Pierre L'Ecuyer gsl_rng_taus2 software random generator
   // - called e.g. by Random32/Random31/Random64/RandomDouble/RandomBytes functions

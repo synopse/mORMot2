@@ -2308,7 +2308,7 @@ end;
 
 {$ifdef FPCLINUX} // Linux futex(2) has no dedicated libc wrapper
 const
-  // missing definitions from uapî\linux\futex.h
+  // missing definitions from uapi\linux\futex.h
   FUTEX_WAIT         = 0;
   FUTEX_WAKE         = 1;
   FUTEX_PRIVATE_FLAG = 128; // since Linux 2.6.22
