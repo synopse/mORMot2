@@ -5401,12 +5401,6 @@ function RandomDouble: double;
 // - thread-safe function calling SharedRandom - whereas the RTL Random() is not
 procedure RandomBytes(Dest: pointer; Count: integer);
 
-/// fill a RawByteString with random bytes from the gsl_rng_taus2 generator
-// - content is really binary, i.e. would contain the whole #0..#255 byte range
-// - see also e.g. RandomAnsi7() or RandomIdentifier() in mormot.core.text.pas
-function RandomByteString(Count: integer; var Dest;
-  CodePage: cardinal = CP_RAWBYTESTRING): pointer;
-
 /// fill some string[31] with 7-bit ASCII random text
 // - thread-safe function calling SharedRandom - whereas the RTL Random() is not
 procedure RandomShort31(var dest: TShort31);
@@ -12600,13 +12594,6 @@ procedure RandomBytes(Dest: pointer; Count: integer);
 begin
   if Count > 0 then
     SharedRandom.Fill(Dest, Count);
-end;
-
-function RandomByteString(Count: integer; var Dest; CodePage: cardinal): pointer;
-begin
-  FastSetStringCP(Dest, nil, Count, CodePage);
-  SharedRandom.Fill(pointer(Dest), Count);
-  result := pointer(Dest);
 end;
 
 procedure RandomShort31(var dest: TShort31);

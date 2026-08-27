@@ -2824,6 +2824,12 @@ function IsIdentifierGuid(u: PHash128): boolean;
 function ThreadRandom: PLecuyer;
   {$ifdef PUREMORMOT2} {$ifdef HASINLINE} inline; {$endif} {$endif}
 
+/// fill a RawByteString with random bytes from per-thread gsl_rng_taus2 generator
+// - content is really binary, i.e. would contain the whole #0..#255 byte range
+// - use the same ThreadRandom generator than RandomAnsi7() or RandomIdentifier()
+function RandomByteString(Count: integer; var Dest;
+  CodePage: cardinal = CP_RAWBYTESTRING): pointer;
+
 
 implementation
 
@@ -10582,6 +10588,13 @@ begin
   {$endif PUREMORMOT2}
   if PPtrUInt(result)^ = 0 then
     RandomLecuyer(result^); // 88-bit seed from our CSPRNG once per thread
+end;
+
+function RandomByteString(Count: integer; var Dest; CodePage: cardinal): pointer;
+begin
+  FastSetStringCP(Dest, nil, Count, CodePage);
+  ThreadRandom.Fill(pointer(Dest), Count);
+  result := pointer(Dest);
 end;
 
 
