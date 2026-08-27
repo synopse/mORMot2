@@ -1981,7 +1981,10 @@ procedure AFDiffusion(buf, rnd: pointer; size: cardinal);
 // resistance to cryptographic attacks with an efficient thread-safe process
 // - TLecuyer is predictable so is considered unsafe to generate IV or MAC
 // - can optionally return additional 128-bit of output
-procedure Random128(iv: PAesBlock; iv2: PAesBlock = nil);
+procedure Random128(iv: PAesBlock; iv2: PAesBlock = nil); overload;
+
+/// get 128-bit of unpredictable random as 16-byte RawByteString
+procedure Random128(var Value: RawByteString); overload;
 
 /// initialize a Pierre L'Ecuyer gsl_rng_taus2 Tausworthe/LFSR generator
 // - used e.g. as a local thread-safe source of uniformly distributed randomness
@@ -3737,6 +3740,11 @@ begin
   aes^.DoBlock(aes^, iv^, iv^);     // thread-safe non-blocking process
   if iv2 <> nil then
     aes^.DoBlock(aes^, iv2^, iv2^); // optional 256-bit output
+end;
+
+procedure Random128(var Value: RawByteString);
+begin
+  Random128(FastNewRawByteString(Value, SizeOf(TAesBlock)));
 end;
 
 function RandomLecuyer(var rnd: TLecuyer): PLecuyer;

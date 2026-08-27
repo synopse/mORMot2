@@ -2951,7 +2951,7 @@ const
   PRIVKEY_MAGIC: TTemp16 =
     'SynEccPrivatKey'#26;
   // 128-bit is enough, since it is transmitted as clear
-  PRIVKEY_SALTSIZE = 16;
+  PRIVKEY_SALTSIZE = SizeOf(TTemp16);
 
 function TEccCertificateSecret.SaveToSecureBinary(const PassWord: RawUtf8;
   AFStripes, Pbkdf2Round: integer; Aes: TAesAbstractClass;
@@ -2975,7 +2975,7 @@ begin
     plain := SaveToBinary;
     if plain <> '' then
       try
-        RandomByteString(PRIVKEY_SALTSIZE, salt); // public: TLecuyer is enough
+        Random128(FastNewRawByteString(salt, PRIVKEY_SALTSIZE));
         Pbkdf2HmacSha256(PassWord, salt, Pbkdf2Round, aeskey);
         a := Aes.Create(aeskey);
         try

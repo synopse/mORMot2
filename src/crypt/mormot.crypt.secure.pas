@@ -8316,7 +8316,7 @@ type
 constructor TCryptRandomEntropy.Create(const name: RawUtf8);
 begin
   fSource := TAesPrngGetEntropySource(InternalResolve(name, RndAlgosText));
-  RandomByteString(16, fNonce); // good enough for per-instance naming
+  Random128(fNonce);
   inherited Create(name);       // should be done after InternalResolve()
 end;
 
