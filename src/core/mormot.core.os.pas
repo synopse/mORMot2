@@ -4592,14 +4592,14 @@ type
   // few CPU cycles): use TSynLocker or TOSLock if the lock may block too long
   // - several lightlocks, each protecting a few variables (e.g. a list), may
   // be more efficient than a more global TOSLock/TRWLock
-  // - only consume 4 bytes on CPU32, 8 bytes on CPU64
+  // - only consume 4 bytes (32-bit) on all platforms
   {$ifdef USERECORDWITHMETHODS}
   TRWLightLock = record
   {$else}
   TRWLightLock = object
   {$endif USERECORDWITHMETHODS}
   private
-    Flags: PtrUInt; // bit 0 = WriteLock, bits 1..31/63 = ReadLock
+    Flags: cardinal; // bit 0 = WriteLock, bits 1..31/63 = ReadLock
     // low-level functions called by the Lock methods when inlined
     procedure ReadLockSpin;
     procedure WriteLockSpin;
@@ -4616,21 +4616,19 @@ type
     /// try to enter a non-upgradable multiple reads lock
     // - if returned true, caller should eventually call ReadUnLock
     // - read locks maintain a thread-safe counter, so are reentrant and non blocking
-    // - warning: nested WriteLock call after a ReadLock would deadlock
+    // - warning: WriteLock deadlocks within another ReadLock or WriteLock
     function TryReadLock: boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// leave a non-upgradable multiple reads lock
     procedure ReadUnLock;
       {$ifdef HASINLINE} inline; {$endif}
     /// enter a non-reentrant non-upgradable exclusive write lock
-    // - warning: nested WriteLock call after a ReadLock or another WriteLock
-    // would deadlock
+    // - warning: WriteLock deadlocks within another ReadLock or WriteLock
     procedure WriteLock;
       {$ifdef HASINLINE} inline; {$endif}
     /// try to enter a non-reentrant non-upgradable exclusive write lock
     // - if returned true, caller should eventually call WriteUnLock
-    // - warning: nested TryWriteLock call after a ReadLock or another WriteLock
-    // would deadlock
+    // - warning: WriteLock deadlocks within another ReadLock or WriteLock
     function TryWriteLock: boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// leave a non-reentrant non-upgradable exclusive write lock
@@ -11465,26 +11463,26 @@ end;
 
 procedure TRWLightLock.ReadLock;
 var
-  f: PtrUInt;
+  f: cardinal;
 begin
   // if not writing, atomically increase the RD counter in the upper flag bits
   f := Flags and not 1; // bit 0=WriteLock, >0=ReadLock counter
-  if not LockedExc(Flags, {to=}f + 2, {from=}f) then
+  if not LockedExc32(Flags, {to=}f + 2, {from=}f) then
     ReadLockSpin;
 end;
 
 function TRWLightLock.TryReadLock: boolean;
 var
-  f: PtrUInt;
+  f: cardinal;
 begin
   // if not writing, atomically increase the RD counter in the upper flag bits
   f := Flags and not 1; // bit 0=WriteLock, >0=ReadLock counter
-  result := LockedExc(Flags, {to=}f + 2, {from=}f);
+  result := LockedExc32(Flags, {to=}f + 2, {from=}f);
 end;
 
 procedure TRWLightLock.ReadUnLock;
 begin
-  LockedDec(Flags, 2);
+  LockedAdd32(Flags, cardinal(-2)); // = atomic Flags := Flags - 2
 end;
 
 procedure TRWLightLock.ReadLockSpin;
@@ -11497,34 +11495,39 @@ begin
   until TryReadLock;
 end;
 
-function TRWLightLock.TryWriteLock: boolean;
-var
-  f: PtrUInt;
-begin
-  f := Flags and not 1; // bit 0=WriteLock, >0=ReadLock
-  result := (Flags = f) and
-            LockedExc(Flags, {to=}f + 1, {from=}f);
+procedure TRWLightLock.WriteLock;
+begin // inline the most optimistic method: no reader/writer yet
+  if not LockedExc32(Flags, {to=}1, {from=}0) then
+    WriteLockSpin; // need to spin and wait to be a single writer
 end;
 
-procedure TRWLightLock.WriteLock;
+function TRWLightLock.TryWriteLock: boolean;
 begin
-  if not TryWriteLock then
-    WriteLockSpin;
+  result := LockedExc32(Flags, {to=}1, {from=}0); // optimistic trial
 end;
 
 procedure TRWLightLock.WriteUnLock;
 begin
-  LockedDec(Flags, 1);
+  {$ifdef CPUINTEL}
+  Flags := 0; // non reentrant locks need no additional thread safety
+  {$else}
+  LockedExc32(Flags, {to=}0, {from=}1); // ARM can be weak-ordered
+  {$endif CPUINTEL}
 end;
 
 procedure TRWLightLock.WriteLockSpin;
 var
+  f: cardinal;
   spin: PtrUInt;
 begin
   spin := SPIN_COUNT;
-  repeat
+  repeat // first loop to acquire the WriteLock bit
     spin := SpinAndWait(spin);
-  until TryWriteLock;
+    f := Flags and not 1; // bit 0=WriteLock, >0=ReadLock
+  until (Flags = f) and
+        LockedExc32(Flags, {to=}f + 1, {from=}f);
+  while Flags <> 1 do // second loop to wait for all readers
+    spin := SpinAndWait(spin);
 end;
 
 function TRWLightLock.IsLocked: boolean;
