@@ -35,6 +35,7 @@ uses
   mormot.core.log,
   mormot.core.threads,
   mormot.core.interfaces,
+  mormot.crypt.core,
   mormot.net.client;
 
 
@@ -282,17 +283,6 @@ type
     /// used by the published methods to run test assertion against a Hash32() constant
     procedure CheckHash(const data: RawByteString; expectedhash32: cardinal;
       const msg: RawUtf8 = '');
-    {$ifndef PUREMORMOT2}
-    class function RandomString(CharCount: integer): WinAnsiString;
-      {$ifdef HASINLINE}inline;{$endif}
-    {$endif PUREMORMOT2}
-    /// create a temporary string, containing some fake text, with paragraphs
-    class function RandomTextParagraph(WordCount: integer; LastPunctuation: AnsiChar = '.';
-      const RandomInclude: RawUtf8 = ''): RawUtf8;
-    /// add containing some "bla bli blo blu" fake text, with paragraphs
-    class procedure AddRandomTextParagraph(WR: TTextWriter; WordCount: integer;
-      LastPunctuation: AnsiChar = '.'; const RandomInclude: RawUtf8 = '';
-      NoLineFeed: boolean = false);
     /// safely download some reference material (e.g. from api.github.com)
     // - with proper retry if the server denies it, due to a rate limit
     function DownloadFile(const uri: RawUtf8; localfile: TFileName = '';
@@ -692,7 +682,6 @@ function ToText(c: TInterfaceMockSpyCheck): PShortString; overload;
 
 implementation
 
-
 { ************ Unit-Testing classes and functions }
 
 { TSynTest }
@@ -1087,110 +1076,6 @@ begin
   //if crc <> expectedhash32 then ConsoleWrite(data);
   CheckUtf8(crc = expectedhash32, 'Hash32()=$% expected=$% %',
     [CardinalToHexShort(crc), CardinalToHexShort(expectedhash32), msg]);
-end;
-
-{$ifndef PUREMORMOT2}
-class function TSynTestCase.RandomString(CharCount: integer): WinAnsiString;
-begin
-  result := RandomWinAnsi(CharCount);
-end;
-{$endif PUREMORMOT2}
-
-class function TSynTestCase.RandomTextParagraph(WordCount: integer;
-  LastPunctuation: AnsiChar; const RandomInclude: RawUtf8): RawUtf8;
-var
-  tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
-  WR: TTextWriter;
-begin
-  WR := TTextWriter.CreateOwnedStream(tmp);
-  try
-    AddRandomTextParagraph(WR, WordCount, LastPunctuation, RandomInclude);
-    WR.SetText(result);
-  finally
-    WR.Free;
-  end;
-end;
-
-class procedure TSynTestCase.AddRandomTextParagraph(WR: TTextWriter;
-  WordCount: integer; LastPunctuation: AnsiChar; const RandomInclude: RawUtf8;
-  NoLineFeed: boolean);
-type
-  TKind = (
-    space, comma, dot, question, paragraph);
-const
-  bla: array[0 .. 15] of TShort3 = (
-    'bla', 'ble', 'bli', 'blo', 'blu', 'bla', 'bli', 'blo',
-    'cha', 'che', 'chi', 'cho', 'chu', 'cha', 'chi', 'cho');
-  endKind = [dot, paragraph, question];
-var
-  n: integer;
-  s: TShort7;
-  last: TKind;
-  rnd: cardinal;
-begin
-  last := paragraph;
-  while WordCount > 0 do
-  begin
-    rnd := Random32;  // get 32 bits of randomness for up to 5 words per loop
-    n := (rnd and 3) + 2;  // n = 2..5
-    rnd := rnd shr 2;      // consume 2 bits
-    repeat
-      PCardinal(@s)^ := PCardinal(@bla[rnd and 15])^;
-      rnd := rnd shr 4;    // consume up to 5*4 = 20 bits from rnd
-      s[0] := #4;
-      s[4] := ' ';
-      if last in endKind then
-      begin
-        last := space;
-        s[1] := 'P';
-      end;
-      WR.AddShorter(s);
-      dec(WordCount);
-      if WordCount = 0 then
-        break;
-      dec(n);
-    until n = 0;
-    WR.CancelLastChar(' ');
-    case rnd and 127 of // consume 7 bits from rnd (total up to 29 bits)
-      0 .. 4:
-        begin
-          if RandomInclude <> '' then
-          begin
-            WR.AddDirect(' ');
-            WR.AddString(RandomInclude); // 5/128 = 4% chance of text inclusion
-          end;
-          last := space;
-        end;
-      5 .. 50:
-        last := space;
-      51 .. 90:
-        last := comma;
-      91 .. 105:
-        last := dot;
-      106 .. 115:
-        last := question;
-      116 .. 127:
-        if NoLineFeed then
-          last := dot
-        else
-          last := paragraph;
-    end;
-    case last of
-      space:
-        WR.AddDirect(' ');
-      comma:
-        WR.AddDirect(',', ' ');
-      dot:
-        WR.AddDirect('.', ' ');
-      question:
-        WR.AddDirect('?', ' ');
-      paragraph:
-        WR.AddDirect('.', #13, #10);
-    end;
-  end;
-  if (LastPunctuation <> ' ') and
-     not (last in endKind) then
-    WR.AddDirect('b', 'l', 'a', LastPunctuation);
 end;
 
 function TSynTestCase.DownloadFile(const uri: RawUtf8;
