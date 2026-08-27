@@ -1556,7 +1556,7 @@ begin
   begin
     // https://tools.ietf.org/html/rfc6455#section-10.3
     // client-to-server masking is mandatory (but not from server to client)
-    Header.mask32 := Random32Not0;
+    Header.mask32 := NetRandom32;
     Header.masksize := 4;
   end
   else
@@ -4441,7 +4441,7 @@ begin
   // sid        <sid>      None here - direct websockets, not from HTTP polling
   // t          <random>   Ensure that the request is not cached by the browser
   FormatUtf8('%?EIO=4&transport=websocket&t=%',
-    [r, CardinalToHexShort(Random32Not0)], result);
+    [r, CardinalToHexShort(NetRandom32)], result);
   if PollingUpgradeSid <> '' then
     Append(result, '&sid=', PollingUpgradeSid);
 end;

@@ -1876,9 +1876,6 @@ const
 
   ARPHRD_ETHER = 1; // from linux/if_arp.h
 
-var
-  DhcpClientId: integer; // thread-safe global random-initialized sequence
-
 function DhcpNew(var dhcp: TDhcpPacket; dmt: TDhcpMessageType; xid: cardinal;
   const addr: TNetMac; serverid: TNetIP4 = 0): PAnsiChar;
 begin
@@ -1887,11 +1884,7 @@ begin
   dhcp.htype := ARPHRD_ETHER;
   dhcp.hlen := SizeOf(addr);
   if xid = 0 then
-  begin
-    if DhcpClientId = 0 then
-      DhcpClientId := Random32Not0;
-    xid := InterlockedIncrement(DhcpClientId);
-  end;
+    xid := NetRandom32;
   dhcp.xid := xid;
   dhcp.flags := DHCP_BROADCAST_FLAG; // not unicast in this userland UDP socket API unit
   PNetMac(@dhcp.chaddr)^ := addr;

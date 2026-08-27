@@ -1986,6 +1986,9 @@ function NetBinToBase64(const s: RawByteString): RawUtf8;
 // - search for '-----BEGIN' text, so may hardly give some false positives
 function NetIsPem(p: PUtf8Char): boolean;
 
+/// return 32-bit obfuscated random number <> 0 to be used as network XID
+function NetRandom32: cardinal;
+
 
 { ********* TCrtSocket Buffered Socket Read/Write Class }
 
@@ -5943,6 +5946,16 @@ begin
   result := false;
 end;
 
+var
+  NetRandomSeq: integer; // thread-safe sequence source filled from OS entropy
+
+function NetRandom32: cardinal;
+begin
+  repeat
+    result := xxHash32Mixup(InterlockedIncrement(NetRandomSeq));
+  until result <> 0;
+end;
+
 
 { TIp4SubNet }
 
@@ -8148,13 +8161,14 @@ end;
 
 
 initialization
-  IP4local := cLocalhost; // use var string with refcount=1 to avoid allocation
   assert(SizeOf(TNetIP4) = 4);
   assert(SizeOf(TNetIP6) = 16);
   assert(SizeOf(TSockAddrIn) = 16);
   assert(SizeOf(TNetAddr) = SOCKADDR_SIZE);
   assert(SizeOf(TNetAddr) >= {$ifdef OSWINDOWS} SizeOf(TSockAddrIn6)
                                         {$else} SizeOf(TSockAddrUnix) {$endif});
+  IP4local := cLocalhost; // use var string with refcount=1 to avoid allocation
+  NetRandomSeq := SystemEntropy.LiveFeed.c0; // initialize NetRandom32
   DefaultListenBacklog := SOMAXCONN;
   GetSystemMacAddress := @_GetSystemMacAddress;
   InitializeUnit; // in mormot.net.sock.windows/posix.inc
