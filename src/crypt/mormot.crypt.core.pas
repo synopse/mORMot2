@@ -16,6 +16,7 @@ unit mormot.crypt.core;
     - PBKDF2 Key Derivation over SHA-256 and SHA-3
     - Digest/Hash to Hexadecimal Text Conversion
     - Deprecated MD5 SHA-1 Algorithms
+    - Non Cryptographic Random Generators for Testing or IV Filling
 
    Validated against OpenSSL. Faster than OpenSSL on x86_64 (but AES-GCM).
 
@@ -1975,21 +1976,6 @@ function MakeStrongPassWord(var Rnd: SpiUtf8): boolean;
 // - as used by TAesPrng.AFSplit and TAesPrng.AFUnSplit
 procedure AFDiffusion(buf, rnd: pointer; size: cardinal);
 
-/// get 128-bit of unpredictable random, suitable for Initialization Vectors
-// - will use its own AES-CTR instance, feeded once from TAesPrng.Main
-// - ensure uniqueness, unpredictability, high entropy, large period and
-// resistance to cryptographic attacks with an efficient thread-safe process
-// - TLecuyer is predictable so is considered unsafe to generate IV or MAC
-// - can optionally return additional 128-bit of output
-procedure Random128(iv: PAesBlock; iv2: PAesBlock = nil); overload;
-
-/// get 128-bit of unpredictable random as 16-byte RawByteString
-procedure Random128(var Value: RawByteString); overload;
-
-/// initialize a Pierre L'Ecuyer gsl_rng_taus2 Tausworthe/LFSR generator
-// - used e.g. as a local thread-safe source of uniformly distributed randomness
-function RandomLecuyer(var rnd: TLecuyer): PLecuyer;
-
 var
   /// salt for CryptDataForCurrentUser() per-user local file name computation
   // - is filled with some random bytes by default, but you may override
@@ -2533,44 +2519,6 @@ function Md5Buf(const Buffer; Len: cardinal): TMd5Digest;
 // - apache-compatible: 'agent007:download area:8364d0044ef57b3defcfa141e8f77b65'
 function HTDigest(const user, realm, pass: RawByteString): RawUtf8;
 
-/// compute a random UUid value from the RandomBytes() generator and RFC 4122
-// - to derivate a Uuid from a name see IdentifierGuid()/DotNetIdentifierGuid()
-procedure RandomGuid(out result: TGuid); overload;
-
-/// compute a random UUid value from the RandomBytes() generator and RFC 4122
-// - to derivate a Uuid from a name see IdentifierGuid()/DotNetIdentifierGuid()
-function RandomGuid: TGuid; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// check if the supplied UUid value was randomly-generated according to RFC 4122
-function IsRandomGuid(u: PHash128): boolean;
-
-const
-  /// RFC 4122 standard UUID v5 namespace for domain names e.g. 'example.com'
-  UUID_DNS:  TGuid = '{6ba7b810-9dad-11d1-80b4-00c04fd430c8}';
-  /// RFC 4122 standard UUID v5 namespace for URL, e.g. 'https://example.com/page'
-  UUID_URL:  TGuid = '{6ba7b811-9dad-11d1-80b4-00c04fd430c8}';
-  /// RFC 4122 standard UUID v5 namespace for ISO Object Identifiers
-  UUID_OID:  TGuid = '{6ba7b812-9dad-11d1-80b4-00c04fd430c8}';
-  /// RFC 4122 standard UUID v5 namespace for X.500 Distinguished Names (DN)
-  UUID_X500: TGuid = '{6ba7b814-9dad-11d1-80b4-00c04fd430c8}';
-
-/// compute a GUID from an identifier, following RFC 4122 standard UUID v5
-// - use standard UUID_DNS/UUID_URL/UUID_OID/UUID_X500 or your own namespace
-// - the name is case-sensitive during this generation
-// - e.g. 'www.opentofu.org' DNS into {df1e675d-b743-5f6c-9952-6311d0f141df}
-procedure IdentifierGuid(const name: RawUtf8; out guid: TGuid;
-  const namespace: TGuid);
-
-/// compute a GUID from an identifier, as does DotNet using SHA-1 hashing
-// - the name is case-insensitive during this generation
-// - compatible with Windows ETW name-based Provider ID / Control GUID
-// - e.g. 'MyCompany.MyComponent' into {ce5fa4ea-ab00-5402-8b76-9f76ac858fb5}
-procedure DotNetIdentifierGuid(const name: RawUtf8; out guid: TGuid);
-
-/// check if the supplied UUid value was identifier-derivated according to RFC 4122
-function IsIdentifierGuid(u: PHash128): boolean;
-
 
 { ****************** HMAC Authentication over SHA-256 }
 
@@ -2814,6 +2762,67 @@ function Sha3(Algo: TSha3Algo; Buffer: pointer; Len: integer;
 // - use TSynSigner or Pbkdf2HmacSha256() for safer password derivation
 procedure Sha256Weak(const s: RawByteString; out Digest: TSha256Digest);
 
+
+{ ************ Non Cryptographic Random Generators for Testing or IV Filling }
+
+/// get 128-bit of unpredictable random, suitable for Initialization Vectors
+// - will use its own AES-CTR instance, feeded once from TAesPrng.Main
+// - ensure uniqueness, unpredictability, high entropy, large period and
+// resistance to cryptographic attacks with an efficient thread-safe process
+// - TLecuyer is predictable so is considered unsafe to generate IV or MAC
+// - can optionally return additional 128-bit of output
+procedure Random128(iv: PAesBlock; iv2: PAesBlock = nil); overload;
+
+/// get 128-bit of unpredictable random as 16-byte RawByteString
+procedure Random128(var Value: RawByteString); overload;
+
+/// initialize a Pierre L'Ecuyer gsl_rng_taus2 Tausworthe/LFSR generator
+// - used e.g. as a local thread-safe source of uniformly distributed randomness
+function RandomLecuyer(var rnd: TLecuyer): PLecuyer;
+
+/// compute a random UUid value from the Random128() generator and RFC 4122
+// - to derivate a Uuid from a name see IdentifierGuid()/DotNetIdentifierGuid()
+procedure RandomGuid(out result: TGuid); overload;
+
+/// compute a random UUid value from the Random128() generator and RFC 4122
+// - to derivate a Uuid from a name see IdentifierGuid()/DotNetIdentifierGuid()
+function RandomGuid: TGuid; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// check if the supplied UUid value was randomly-generated according to RFC 4122
+function IsRandomGuid(u: PHash128): boolean;
+
+const
+  /// RFC 4122 standard UUID v5 namespace for domain names e.g. 'example.com'
+  UUID_DNS:  TGuid = '{6ba7b810-9dad-11d1-80b4-00c04fd430c8}';
+  /// RFC 4122 standard UUID v5 namespace for URL, e.g. 'https://example.com/page'
+  UUID_URL:  TGuid = '{6ba7b811-9dad-11d1-80b4-00c04fd430c8}';
+  /// RFC 4122 standard UUID v5 namespace for ISO Object Identifiers
+  UUID_OID:  TGuid = '{6ba7b812-9dad-11d1-80b4-00c04fd430c8}';
+  /// RFC 4122 standard UUID v5 namespace for X.500 Distinguished Names (DN)
+  UUID_X500: TGuid = '{6ba7b814-9dad-11d1-80b4-00c04fd430c8}';
+
+/// compute a GUID from an identifier, following RFC 4122 standard UUID v5
+// - use standard UUID_DNS/UUID_URL/UUID_OID/UUID_X500 or your own namespace
+// - the name is case-sensitive during this generation
+// - e.g. 'www.opentofu.org' DNS into {df1e675d-b743-5f6c-9952-6311d0f141df}
+procedure IdentifierGuid(const name: RawUtf8; out guid: TGuid;
+  const namespace: TGuid);
+
+/// compute a GUID from an identifier, as does DotNet using SHA-1 hashing
+// - the name is case-insensitive during this generation
+// - compatible with Windows ETW name-based Provider ID / Control GUID
+// - e.g. 'MyCompany.MyComponent' into {ce5fa4ea-ab00-5402-8b76-9f76ac858fb5}
+procedure DotNetIdentifierGuid(const name: RawUtf8; out guid: TGuid);
+
+/// check if the supplied UUid value was identifier-derivated according to RFC 4122
+function IsIdentifierGuid(u: PHash128): boolean;
+
+/// this unit maintains per-thread TLecuyer generators initalized by RandomLecuyer()
+// - e.g. so that tests won't interfere with SharedRandom actual framework process
+// - as used e.g. by RandomByteString(), RandomUtf8() or RandomIdentifier()
+function ThreadRandom: PLecuyer;
+  {$ifdef PUREMORMOT2} {$ifdef HASINLINE} inline; {$endif} {$endif}
 
 
 implementation
@@ -3719,43 +3728,6 @@ end;
 
 
 { ********************* AES Encoding/Decoding }
-
-var
-  rnd128safe: TLightLock; // explicit local variable for aarch64 alignment
-  rnd128gen: TAes;        // dedicated thread-safe AES-CTR with 64-bit counter
-
-procedure Random128(iv, iv2: PAesBlock);
-var
-  aes: PAesContext;
-begin
-  rnd128safe.Lock;                  // thread safe with minimal contention
-  aes := @rnd128gen;
-  if PPtrUInt(aes)^ = 0 then
-    PAes(aes)^.EncryptInitRandom;   // initialize AES-128 (or AES-256 if HW AES)
-  iv^ := aes^.iv.b;                 // AES-CTR with little endian 64-bit counter
-  inc(aes^.iv.Lo);                  // overflow after 268,435,456 TB of output
-  if iv2 <> nil then
-  begin
-    iv2^ := aes^.iv.b;              // additional 128-bit
-    inc(aes^.iv.Lo);
-  end;
-  rnd128safe.UnLock;
-  aes^.DoBlock(aes^, iv^, iv^);     // thread-safe non-blocking process
-  if iv2 <> nil then
-    aes^.DoBlock(aes^, iv2^, iv2^); // optional 256-bit output
-end;
-
-procedure Random128(var Value: RawByteString);
-begin
-  Random128(FastNewRawByteString(Value, SizeOf(TAesBlock)));
-end;
-
-function RandomLecuyer(var rnd: TLecuyer): PLecuyer;
-begin
-  Random128(@rnd);   // 88-bit seed from our CSPRNG
-  rnd.SeedGenerator; // inlined TLecuyer.Seed
-  result := @rnd;
-end;
 
 procedure ComputeAesStaticTables;
 var
@@ -9975,72 +9947,6 @@ begin
   Append(result, Md5(tmp));
 end;
 
-function IsRandomGuid(u: PHash128): boolean;
-begin
-  result := ((u[7] and $f0) = $40) and ((u[8] and $c0) = $80);
-end;
-
-procedure RandomGuid(out result: TGuid);
-begin
-  Random128(@result); // 122-bit seed from our CSPRNG
-  MakeRandomGuid(@result);
-end;
-
-function RandomGuid: TGuid;
-begin
-  RandomGuid(result);
-end;
-
-procedure IdentifierGuid(const name: RawUtf8; out guid: TGuid;
-  const namespace: TGuid);
-var
-  sha1: TSha1;
-  dig: TSha1Digest;
-  be: TGuid absolute dig; // hash over big endian values
-begin
-  be := namespace;
-  SwapGuid(be);
-  sha1.Init;
-  sha1.Update(@be, SizeOf(be));
-  sha1.Update(name);
-  sha1.Final(dig, {noinit=}true);
-  SwapGuid(PGuid(@dig)^);
-  dig[7] := (dig[7] and $0f) or $50; // mark as version 5 = name-based GUID
-  dig[8] := (dig[8] and $3f) or $80; // set variant as per RFC 4122
-  guid := PGuid(@dig)^;
-end;
-
-const
-  DOTNET_NAMESPACE: TGuid = '{b22d2c48-90c3-c847-87f8-1a15bfc130fb}';
-
-procedure DotNetIdentifierGuid(const name: RawUtf8; out guid: TGuid);
-var
-  sha1: TSha1;
-  dig: TSha1Digest;
-  up: RawUtf8;
-  n: PtrInt;
-  tmp: TSynTempBuffer;
-begin
-  FillZero(guid);
-  UpperCaseCopy(name, up);           // normalize identifier to uppercase
-  n := Utf8DecodeToUnicode(up, tmp); // UTF-16 little endian
-  if n = 0 then
-    exit;
-  bswap16array(tmp.buf, n);  // UTF-16 big endian conversion
-  sha1.Init;
-  sha1.Update(@DOTNET_NAMESPACE, SizeOf(DOTNET_NAMESPACE));
-  sha1.Update(tmp.buf, n * 2);
-  sha1.Final(dig, {noinit=}true);
-  tmp.Done; // unlikely
-  dig[7] := (dig[7] and $0f) or $50; // mark as version 5 = name-based GUID
-  guid := PGuid(@dig)^;
-end;
-
-function IsIdentifierGuid(u: PHash128): boolean;
-begin
-  result := (u[7] and $f0) = $50; // version 5 = name-based GUID
-end;
-
 
 { TSha1 }
 
@@ -10555,6 +10461,129 @@ begin
   else
     sha.Full(P, l, Digest);
 end;
+
+
+{ ************ Non Cryptographic Random Generators for Testing or IV Filling }
+
+var
+  rnd128safe: TLightLock; // explicit local variable for aarch64 alignment
+  rnd128gen: TAes;        // dedicated thread-safe AES-CTR with 64-bit counter
+
+procedure Random128(iv, iv2: PAesBlock);
+var
+  aes: PAesContext;
+begin
+  rnd128safe.Lock;                  // thread safe with minimal contention
+  aes := @rnd128gen;
+  if PPtrUInt(aes)^ = 0 then
+    PAes(aes)^.EncryptInitRandom;   // initialize AES-128 (or AES-256 if HW AES)
+  iv^ := aes^.iv.b;                 // AES-CTR with little endian 64-bit counter
+  inc(aes^.iv.Lo);                  // overflow after 268,435,456 TB of output
+  if iv2 <> nil then
+  begin
+    iv2^ := aes^.iv.b;              // additional 128-bit
+    inc(aes^.iv.Lo);
+  end;
+  rnd128safe.UnLock;
+  aes^.DoBlock(aes^, iv^, iv^);     // thread-safe non-blocking process
+  if iv2 <> nil then
+    aes^.DoBlock(aes^, iv2^, iv2^); // optional 256-bit output
+end;
+
+procedure Random128(var Value: RawByteString);
+begin
+  Random128(FastNewRawByteString(Value, SizeOf(TAesBlock)));
+end;
+
+function RandomLecuyer(var rnd: TLecuyer): PLecuyer;
+begin
+  Random128(@rnd);   // 88-bit seed from our CSPRNG
+  rnd.SeedGenerator; // inlined TLecuyer.Seed
+  result := @rnd;
+end;
+
+function IsRandomGuid(u: PHash128): boolean;
+begin
+  result := ((u[7] and $f0) = $40) and ((u[8] and $c0) = $80);
+end;
+
+procedure RandomGuid(out result: TGuid);
+begin
+  Random128(@result); // 122-bit seed from our CSPRNG
+  MakeRandomGuid(@result);
+end;
+
+function RandomGuid: TGuid;
+begin
+  RandomGuid(result);
+end;
+
+procedure IdentifierGuid(const name: RawUtf8; out guid: TGuid;
+  const namespace: TGuid);
+var
+  sha1: TSha1;
+  dig: TSha1Digest;
+  be: TGuid absolute dig; // hash over big endian values
+begin
+  be := namespace;
+  SwapGuid(be);
+  sha1.Init;
+  sha1.Update(@be, SizeOf(be));
+  sha1.Update(name);
+  sha1.Final(dig, {noinit=}true);
+  SwapGuid(PGuid(@dig)^);
+  dig[7] := (dig[7] and $0f) or $50; // mark as version 5 = name-based GUID
+  dig[8] := (dig[8] and $3f) or $80; // set variant as per RFC 4122
+  guid := PGuid(@dig)^;
+end;
+
+const
+  DOTNET_NAMESPACE: TGuid = '{b22d2c48-90c3-c847-87f8-1a15bfc130fb}';
+
+procedure DotNetIdentifierGuid(const name: RawUtf8; out guid: TGuid);
+var
+  sha1: TSha1;
+  dig: TSha1Digest;
+  up: RawUtf8;
+  n: PtrInt;
+  tmp: TSynTempBuffer;
+begin
+  FillZero(guid);
+  UpperCaseCopy(name, up);           // normalize identifier to uppercase
+  n := Utf8DecodeToUnicode(up, tmp); // UTF-16 little endian
+  if n = 0 then
+    exit;
+  bswap16array(tmp.buf, n);  // UTF-16 big endian conversion
+  sha1.Init;
+  sha1.Update(@DOTNET_NAMESPACE, SizeOf(DOTNET_NAMESPACE));
+  sha1.Update(tmp.buf, n * 2);
+  sha1.Final(dig, {noinit=}true);
+  tmp.Done; // unlikely
+  dig[7] := (dig[7] and $0f) or $50; // mark as version 5 = name-based GUID
+  guid := PGuid(@dig)^;
+end;
+
+function IsIdentifierGuid(u: PHash128): boolean;
+begin
+  result := (u[7] and $f0) = $50; // version 5 = name-based GUID
+end;
+
+{$ifdef PUREMORMOT2}
+threadvar
+  _RandomTests: TLecuyer; // 16 bytes per thread for each TLecuyer generator
+{$endif PUREMORMOT2}
+
+function ThreadRandom: PLecuyer;
+begin
+  {$ifdef PUREMORMOT2}
+  result := @_RandomTests;
+  {$else}
+  result := mormot.core.base.Lecuyer; // use existing mORMot 1 threadvar
+  {$endif PUREMORMOT2}
+  if PPtrUInt(result)^ = 0 then
+    RandomLecuyer(result^); // 88-bit seed from our CSPRNG once per thread
+end;
+
 
 
 procedure InitializeUnit;

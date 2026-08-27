@@ -29,10 +29,11 @@ High-Performance Cryptographic features shared by all framework units
 - PBKDF2 Safe Key Derivation over SHA-2 and SHA-3
 - Digest/Hash to Hexadecimal Text Conversion
 - Deprecated MD5 SHA-1 Algorithms
+- Non Cryptographic Random Generators for Testing or IV Filling
 
 This unit is validated against OpenSSL for correctness.
 Optimized assembly is located in separated `mormot.crypt.core.asmx64.inc` and `mormot.crypt.core.asmx86.inc` files.
-It is fully stand-alone, and faster than OpenSSL on x86_64 (but AES-GCM).
+It is fully stand-alone, and faster than OpenSSL on x86_64 for most operations, except RSA.
 
 ### mormot.crypt.secure
 
