@@ -581,7 +581,7 @@ type
   /// exception class raised during SSPI process
   ESynSspi = class(ExceptionWithProps)
   public
-    class procedure RaiseLastOSError(const aContext: TSecContext);
+    class procedure RaiseLastOSError(const Ctx: ShortString; Res: cardinal);
   end;
 
 
@@ -1242,9 +1242,19 @@ end;
 
 { ESynSspi }
 
-class procedure ESynSspi.RaiseLastOSError(const aContext: TSecContext);
+procedure Check(const Ctx: ShortString; Res: cardinal);
 begin
-  raise Create(WinLastError('SSPI API'));
+  if Res <> SEC_E_OK then
+    ESynSspi.RaiseLastOSError(Ctx, Res);
+end;
+
+class procedure ESynSspi.RaiseLastOSError(const Ctx: ShortString; Res: cardinal);
+var
+  sys: integer;
+begin
+  sys := GetLastError;
+  raise Create(format('%s returned %s, System Error %d [%s]',
+          [Ctx, OsErrorShort(res), sys, GetErrorShort(sys)]));
 end;
 
 
@@ -1300,9 +1310,8 @@ var
 begin
   FastAssignNew(result);
   // sizes.cbSecurityTrailer is size of the trailer (signature + padding) block
-  if QueryContextAttributesW(
-       @aSecContext.CtxHandle, SECPKG_ATTR_SIZES, @sizes) <> 0 then
-    ESynSspi.RaiseLastOSError(aSecContext);
+  Check('SecEncrypt QueryContextAttributesW',
+    QueryContextAttributesW(@aSecContext.CtxHandle, SECPKG_ATTR_SIZES, @sizes));
   if (sizes.cbSecurityTrailer > SizeOf(token)) or
      (sizes.cbBlockSize > SizeOf(padding)) then
     raise ESynSspi.Create('SecEncrypt: unexpected ATTR_SIZES');
@@ -1330,7 +1339,7 @@ begin
   inDesc.Add(SECBUFFER_PADDING, @padding, sizes.cbBlockSize);
   status := EncryptMessage(@aSecContext.CtxHandle, 0, @inDesc, 0);
   if status < 0 then
-    ESynSspi.RaiseLastOSError(aSecContext);
+    Check('EncryptMessage', status);
   len := inDesc.Data[0].cbBuffer + inDesc.Data[1].cbBuffer + inDesc.Data[2].cbBuffer;
   SetLength(result, len);
   res := pointer(result);
@@ -1353,10 +1362,7 @@ begin
   enclen := Length(aEncrypted);
   buf := PByte(aEncrypted);
   if enclen < SizeOf(cardinal) then
-  begin
-    SetLastError(ERROR_INVALID_PARAMETER);
-    ESynSspi.RaiseLastOSError(aSecContext);
-  end;
+    raise ESynSspi.CreateFmt('SecDecrypt enclen=%', [enclen]);
   // Hack for compatibility with previous versions.
   // Should be removed in future.
   // Old version buffer format - first 4 bytes is Trailer length, skip it.
@@ -1373,7 +1379,7 @@ begin
   inDesc.Add(SECBUFFER_DATA);
   status := DecryptMessage(@aSecContext.CtxHandle, @inDesc, 0, qop);
   if status < 0 then
-    ESynSspi.RaiseLastOSError(aSecContext);
+    Check('DecryptMessage', status);
   FastSetRawByteString(result, inDesc.Data[1].pvBuffer, inDesc.Data[1].cbBuffer);
 end;
 
@@ -1757,9 +1763,9 @@ begin
   if (aSecContext.CredHandle.dwLower = -1) and
      (aSecContext.CredHandle.dwUpper = -1) then
   begin
-    if AcquireCredentialsHandleW(nil, pointer(NegotiateName), SECPKG_CRED_OUTBOUND,
-        nil, pAuthData, nil, nil, @aSecContext.CredHandle, nil) <> 0 then
-      ESynSspi.RaiseLastOSError(aSecContext);
+    Check('Client AcquireCredentialsHandleW',
+      AcquireCredentialsHandleW(nil, pointer(NegotiateName), SECPKG_CRED_OUTBOUND,
+      nil, pAuthData, nil, nil, @aSecContext.CredHandle, nil));
     ctx := nil;
   end
   else
@@ -1782,9 +1788,13 @@ begin
             (status = SEC_I_COMPLETE_AND_CONTINUE);
   if (status = SEC_I_COMPLETE_NEEDED) or
      (status = SEC_I_COMPLETE_AND_CONTINUE) then
+  begin
     status := CompleteAuthToken(@aSecContext.CtxHandle, @outDesc);
-  if status < 0 then
-    ESynSspi.RaiseLastOSError(aSecContext);
+    if status < 0 then
+      Check('Client CompleteAuthToken', status);
+  end
+  else if status < 0 then
+    Check('Client InitializeSecurityContextW', status);
   FastSetRawByteString(aOutData, outDesc.Data[0].pvBuffer, outDesc.Data[0].cbBuffer);
   FreeContextBuffer(outDesc.Data[0].pvBuffer);
 end;
@@ -1877,9 +1887,9 @@ begin
       pkg := pointer(NtlmName) // backward compatible but unsafe/legacy
     else
       pkg := pointer(NegotiateName);
-    if AcquireCredentialsHandleW(nil, pkg, SECPKG_CRED_INBOUND,
-        nil, nil, nil, nil, @aSecContext.CredHandle, nil) <> 0 then
-      ESynSspi.RaiseLastOSError(aSecContext);
+    Check('Server AcquireCredentialsHandleW',
+      AcquireCredentialsHandleW(nil, pkg, SECPKG_CRED_INBOUND,
+        nil, nil, nil, nil, @aSecContext.CredHandle, nil));
     ctx := nil;
   end
   else
@@ -1894,9 +1904,13 @@ begin
             (status = SEC_I_COMPLETE_AND_CONTINUE); // need more client input
   if (status = SEC_I_COMPLETE_NEEDED) or
      (status = SEC_I_COMPLETE_AND_CONTINUE) then
+  begin
     status := CompleteAuthToken(@aSecContext.CtxHandle, @outDesc);
-  if status < 0 then
-      ESynSspi.RaiseLastOSError(aSecContext);
+    if status < 0 then
+      Check('Server CompleteAuthToken', status);
+  end
+  else if status < 0 then
+    Check('Server AcceptSecurityContext', status);
   FastSetRawByteString(aOutData, outDesc.Data[0].pvBuffer, outDesc.Data[0].cbBuffer);
   FreeContextBuffer(outDesc.Data[0].pvBuffer);
 end;
@@ -1906,9 +1920,8 @@ procedure ServerSspiAuthUser(var aSecContext: TSecContext;
 var
   Names: SecPkgContext_NamesW;
 begin
-  if QueryContextAttributesW(@aSecContext.CtxHandle,
-       SECPKG_ATTR_NAMES, @Names) <> 0 then
-    ESynSspi.RaiseLastOSError(aSecContext);
+  Check('ServerSspiAuthUser QueryContextAttributesW',
+    QueryContextAttributesW(@aSecContext.CtxHandle, SECPKG_ATTR_NAMES, @Names));
   Win32PWideCharToUtf8(Names.sUserName, aUserName);
   FreeContextBuffer(Names.sUserName);
 end;
@@ -1935,9 +1948,9 @@ function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 var
   NegotiationInfo: TSecPkgContext_NegotiationInfo;
 begin
-  if QueryContextAttributesW(@aSecContext.CtxHandle,
-       SECPKG_ATTR_NEGOTIATION_INFO, @NegotiationInfo) <> 0 then
-    ESynSspi.RaiseLastOSError(aSecContext);
+  Check('SecPackageName',
+    QueryContextAttributesW(@aSecContext.CtxHandle,
+      SECPKG_ATTR_NEGOTIATION_INFO, @NegotiationInfo));
   Win32PWideCharToUtf8(NegotiationInfo.PackageInfo^.Name, result);
   FreeContextBuffer(NegotiationInfo.PackageInfo);
 end;
