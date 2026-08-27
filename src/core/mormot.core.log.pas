@@ -6287,7 +6287,7 @@ begin // set timestamp [+ threadnumber] - usually run outside SynLogGlobalLock
   begin
     FromGlobalTime(st, fFamily.LocalTimestamp); // with 16ms cache
     p[0] := #17;
-    st.ToLogTime(@p[1]); // '20110325 19241502' 17 chars
+    st.ToLogTime(@p[1]); // '20110325 19241502' 17 chars - not worth caching
     if fFamily.ZonedTimestamp then
       AppendShortChar('Z', PAnsiChar(p));
   end;
