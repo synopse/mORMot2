@@ -3624,7 +3624,7 @@ var
 begin
   if Value = nil then
   begin
-    TSynVarData(result).VType := varNull;
+    VarClearAndSetType(variant(result), varNull);
     exit;
   end;
   VarClearAndSetType(variant(result), SQL_ELEMENTTYPES[fieldType]);
