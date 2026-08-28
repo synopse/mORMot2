@@ -93,7 +93,6 @@ type
     fLastSent: pointer;
     fLastSentLen: integer;
     procedure DoExecute; override;
-    function HasFinished: boolean;
   public
     /// initialize this connection
     constructor Create(const Source: TTftpContext; Owner: TTftpServerThread); reintroduce;
@@ -287,11 +286,6 @@ begin
   fContext.Shutdown;
   FreeMem(fLastSent);
   FreeMem(fContext.Frame);
-end;
-
-function TTftpConnectionThread.HasFinished: boolean;
-begin
-  result := Finished;
 end;
 
 procedure TTftpConnectionThread.DoExecute;
@@ -507,7 +501,7 @@ begin
   fConnection.Safe.WriteLock;
   try
     for i := fConnection.Count - 1 downto 0 do
-      if TTftpConnectionThread(fConnection.List[i]).HasFinished then
+      if TTftpConnectionThread(fConnection.List[i]).ExecuteDone then
         fConnection.Delete(i); // OwnObjects=true: release the finished thread
   finally
     fConnection.Safe.WriteUnLock;
@@ -980,7 +974,7 @@ var
   range, retry: integer;
   nr: TNetResult;
   local: TNetAddr;
-  connection: TTftpConnectionThread;
+  new: TTftpConnectionThread;
 begin
   // is called from TTftpServerThread.DoExecute context (so fLog is set)
   // with a RRQ/WRQ incoming UDP frame on port 69
@@ -1067,17 +1061,17 @@ begin
   if nr = nrOk then
   begin
     // register before Start so that the owner never misses a short-lived worker
-    connection := TTftpConnectionThread.Create(c, self);
+    new := TTftpConnectionThread.Create(c, self); // suspended
     try
-      fConnection.Add(connection);
+      fConnection.Add(new);
     except
-      connection.Free;
+      new.Free;
       raise;
     end;
     try
-      connection.Start;
+      new.Start;
     except
-      fConnection.Remove(connection); // OwnObjects=true: also frees it
+      fConnection.Remove(new); // paranoid (OwnObjects=true: also frees it)
       raise;
     end;
   end
