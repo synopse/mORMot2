@@ -2971,6 +2971,9 @@ var
   // - e.g. '13th Gen Intel(R) Core(TM) i5-13500'
   IntelBrand: RawUtf8;
 
+  /// as used by NextSpin() - default is 1 for Intel - set to 10 on AMD Zen3+
+  SPIN_FACTOR: PtrUInt = 1;
+
 /// twelve-character ASCII hypervisor string returned by Intel/AMD cpuid
 // - returns '' if cfHYP is not part of CpuFeatures
 // - typical values are 'Microsoft Hv', 'VMwareVMware' or 'VBoxVBoxVBox'
@@ -3026,6 +3029,9 @@ function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 function hashsse42(seed: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 {$else}
+
+const
+  SPIN_FACTOR = 2; // ARM yield has smaller latency than Intel's pause
 
 {$ifdef ISDELPHI}
 /// redirect to Delphi AtomicIncrement() on non Intel CPU
@@ -3124,6 +3130,18 @@ procedure Base64DecodeAvx2(var b64: PAnsiChar; var b64len: PtrInt; var b: PAnsiC
 {$endif ASMX64AVX1}
 
 {$endif ASMX64NOTPIC}
+
+const
+  // default adaptive spin count: up to 992 "pause"/"yield" instructions
+  // - on Intel, this is typically a few microseconds on older CPUs, but newer
+  // CPUs may have longer pause latency (tens of cycles)
+  // - AMD Zen 3+ has shorter pause latency, detected via CPUID at startup
+  // to adjust SPIN_FACTOR variable and keep a similar waiting duration
+  // - this 5-50us range matches the eventual nanosleep(10us) fallback
+  SPIN_COUNT = pred(6 shl 5); // = 191
+
+/// adaptative spinning depending on the actual CPU architecture involved
+function NextSpin(spin: PtrUInt): PtrUInt;
 
 
 { ************ Faster Alternative to RTL Standard Functions }
@@ -10682,6 +10700,8 @@ end;
 
 { ************ Low-level CPU Detection and Intrinsics }
 
+{$undef HASPAUSEOPCODE}
+
 type
   // 16KB/32KB hash table used by SynLZ - as used by the asm .inc files below
   TOffsets = array[0..4095] of PAnsiChar;
@@ -10950,7 +10970,24 @@ begin
   end;
   {$endif HASNOSSE2}
   {$endif ASMX86NOTPIC}
+  if (CpuManufacturer = icmAmd) and
+     (CpuFamily = $19) and
+     (CpuModel >= $30) then // Zen 3 or later
+    SPIN_FACTOR := 10;       // "pause" opcode is only 1-2 cycles
 end;
+
+{$define HASPAUSEOPCODE}
+// on Intel/AMD, the pause CPU instruction would relax the core
+// - "pause" is expected to be inlined within the spinning loop itself
+// - sadly, Delphi does not support inlined asm on Win64 so we use a function
+{$ifdef WIN64DELPHI}
+procedure DelphiPause(n: PtrUInt);
+asm
+@s:   pause          // = "rep nop" opcode
+      dec     rcx
+      jnz     @s     // within its own 1..16x loop (better than nothing)
+end;
+{$endif WIN64DELPHI}
 
 {$else not ASMINTEL}
 
@@ -11490,6 +11527,18 @@ end;
 
 {$ifdef CPUARM3264} // ARM-specific code
 
+{$ifdef FPC_CPUARM}
+{$ifndef OSANDROID}
+{$define HASPAUSEOPCODE}
+// "yield" is available since ARMv6K architecture, including ARMv7-A and ARMv8-A
+// - but our FPC arm32 asm seems not knowledgable of this
+procedure DoPause; assembler; nostackframe;
+asm
+     yield // a few cycles, but helps modern CPU adjust their power requirements
+end;
+{$endif OSANDROID}
+{$endif FPC_CPUARM}
+
 {$ifdef OSLINUXANDROID} // read CpuFeatures + auxv from Linux envp
 
 {$ifdef FPC}
@@ -11599,6 +11648,34 @@ begin
   repeat
     result := Target^;
   until LockedExc32(PCardinal(Target)^, 0, result);
+end;
+
+function NextSpin(spin: PtrUInt): PtrUInt;
+begin
+  {$ifdef HASPAUSEOPCODE} // adaptive spinning to reduce cache coherence traffic
+  result := (SPIN_COUNT - spin) shr 5; // 0..5 range, each 32 times
+  if result <> 0 then     // no pause up to 32 times (low latency acquisition)
+  begin                   // exponential backoff: 1,2,4,8,16 x DoPause
+    result := SPIN_FACTOR shl pred(result);
+    // "pause" called 992 times until SwithToThread = up to 50us on modern CPU
+    {$ifdef WIN64DELPHI}
+    DelphiPause(result);
+    {$else}
+    repeat
+      {$ifdef ASMINTEL}
+      asm
+        pause // if possible, opcode should be inlined within the spinning loop
+      end;
+      {$else}
+      DoPause; // FPC_CPUARM "yield" arm/aarch64 instruction
+      {$endif ASMINTEL}
+      dec(result);
+    until result = 0;
+    {$endif WIN64DELPHI}
+  end;
+  {$endif HASPAUSEOPCODE}
+  dec(spin);
+  result := spin;
 end;
 
 {$ifndef ASMINTELNOTPIC}

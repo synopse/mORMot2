@@ -5466,6 +5466,9 @@ function SleepStepTime(var start, tix: Int64; endtix: PInt64 = nil): PtrInt;
 procedure SwitchToThread;
   {$ifdef OSWINDOWS} stdcall; {$endif}
 
+/// calls NextSpin() and eventually SwitchToThread when reached 0
+function SpinAndWait(spin: PtrUInt): PtrUInt; {$ifdef HASINLINE} inline; {$endif}
+
 /// try LockedExc() in a loop, calling SwitchToThread after some spinning
 procedure SpinExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt);
 
@@ -6537,6 +6540,14 @@ procedure _AppendShortUuid(const u: TGuid; var s: ShortString);
 begin
   AppendShortAnsi7String(AnsiString(LowerCase(copy(GUIDToString(u), 2, 36))), s);
 end;
+
+function _DoWideCharToUtf8Temp(w: PWideChar; wc: PtrInt; var u: TSynTempBuffer): PUtf8Char;
+begin
+  u.len := UnicodeToUtf8(u.Init(wc * 3), wc * 3 + 16, w, wc); // RTL as default
+  if u.len <> 0 then
+    dec(u.len); // RTL UnicodeToUtf8() result includes the null terminator
+  result := u.buf;
+end; // warning: Delphi 7/2007 UnicodeToUtf8() RTL don't handle surrogates
 
 function OsDateTimeToText(dt: TDateTime): RawUtf8;
 var
@@ -11213,83 +11224,13 @@ end;
 
 { **************** TSynLocker Threading Features }
 
-const
-  // default adaptive spin count: up to 992 "pause"/"yield" instructions
-  // - on Intel, this is typically a few microseconds on older CPUs, but newer
-  // CPUs may have longer pause latency (tens of cycles)
-  // - AMD Zen 3+ has shorter pause latency, detected via CPUID at startup
-  // to adjust SpinFactor variable and keep a similar waiting duration
-  // - this 5-50us range matches the eventual nanosleep(10us) fallback
-  SPIN_COUNT = pred(6 shl 5); // = 191
-
 // as reference, take a look at Linus insight (TL&WR: better use futex)
 // from https://www.realworldtech.com/forum/?threadid=189711&curpostid=189755
-
-{$undef HASPAUSEOPCODE}
-{$ifdef ASMINTEL}
-{$define HASPAUSEOPCODE}
-var
-  SpinFactor: PtrUInt = 1; // default value on Intel - set to 10 on AMD Zen3+
-
-// on Intel/AMD, the pause CPU instruction would relax the core
-// - "pause" is expected to be inlined within the spinning loop itself
-// - sadly, Delphi does not support inlined asm on Win64 so we use a function
-{$ifdef WIN64DELPHI}
-procedure DoPause(n: PtrUInt);
-asm
-@s:   pause          // = "rep nop" opcode
-      dec     rcx
-      jnz     @s     // within its own 1..16x loop (better than nothing)
-end;
-{$endif WIN64DELPHI}
-{$endif ASMINTEL}
-{$ifdef FPC_CPUARM}
-{$ifndef OSANDROID}
-{$define HASPAUSEOPCODE}
-const
-  SpinFactor = 2; // ARM yield has smaller latency than Intel's pause
-
-// "yield" is available since ARMv6K architecture, including ARMv7-A and ARMv8-A
-// - but our FPC arm32 asm seems not knowledgable of this
-procedure DoPause; assembler; nostackframe;
-asm
-     yield // a few cycles, but helps modern CPU adjust their power requirements
-end;
-{$endif OSANDROID}
-{$endif FPC_CPUARM}
-
-function NextSpin(spin: PtrUInt): PtrUInt;
-begin
-  {$ifdef HASPAUSEOPCODE} // adaptive spinning to reduce cache coherence traffic
-  result := (SPIN_COUNT - spin) shr 5; // 0..5 range, each 32 times
-  if result <> 0 then     // no pause up to 32 times (low latency acquisition)
-  begin                   // exponential backoff: 1,2,4,8,16 x DoPause
-    result := SpinFactor shl pred(result);
-    // "pause" called 992 times until SwithToThread = up to 50us on modern CPU
-    {$ifdef WIN64DELPHI}
-    DoPause(result);
-    {$else}
-    repeat
-      {$ifdef ASMINTEL}
-      asm
-        pause // "rep nop" opcode should be inlined within the spinning loop
-      end;
-      {$else}
-      DoPause; // FPC_CPUARM "yield" arm/aarch64 opcode
-      {$endif ASMINTEL}
-      dec(result);
-    until result = 0;
-    {$endif WIN64DELPHI}
-  end;
-  {$endif HASPAUSEOPCODE}
-  dec(spin);
-  result := spin;
-end;
 
 // our light locks do not use the resource of an associated futex, so are easier
 // if there is almost no contention - and really seldom call fpnanosleep(10us)
 
-function SpinAndWait(spin: PtrUInt): PtrUInt; {$ifdef HASINLINE} inline; {$endif}
+function SpinAndWait(spin: PtrUInt): PtrUInt;
 begin
   result := NextSpin(spin);
   if result <> 0 then
@@ -13107,24 +13048,12 @@ begin
 end;
 
 
-function _DoWideCharToUtf8Temp(w: PWideChar; wc: PtrInt; var u: TSynTempBuffer): PUtf8Char;
-begin
-  u.len := UnicodeToUtf8(u.Init(wc * 3), wc * 3 + 16, w, wc); // RTL as default
-  if u.len <> 0 then
-    dec(u.len); // RTL UnicodeToUtf8() result includes the null terminator
-  result := u.buf;
-end; // warning: Delphi 7/2007 UnicodeToUtf8() RTL don't handle surrogates
-
 procedure InitializeUnit;
 begin
   // early initialization needed for those functions
   DoWideCharToUtf8Temp  := _DoWideCharToUtf8Temp;  // mormot.core.unicode
   {$ifdef ASMINTEL}
   TrimDualSpaces(IntelBrand);
-  if (CpuManufacturer = icmAmd) and
-     (CpuFamily = $19) and
-     (CpuModel >= $30) then // Zen 3 or later
-    SpinFactor := 10;       // "pause" opcode is only 1-2 cycles
   {$endif ASMINTEL}
   {$ifdef ISFPC27}
   // we force UTF-8 everywhere on FPC for consistency with Lazarus
