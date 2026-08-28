@@ -678,7 +678,7 @@ begin
       inc(fSharedCount); // should be set last
     end;
   finally
-    TLightLock(fSharedLock[i]).UnLock;
+    TLightLock(fSharedMainLock).UnLock;
   end;
 end;
 
