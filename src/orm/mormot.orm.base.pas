@@ -2296,7 +2296,7 @@ type
     /// retrieve a field value as a variant
     // - returns null if the row/field is incorrect
     // - expand* methods will allow to return human-friendly representations
-    procedure GetAsVariant(row, field: PtrInt; out value: variant;
+    procedure GetAsVariant(row, field: PtrInt; var value: variant;
       expandTimeLogAsText, expandEnumsAsText, expandHugeIDAsUniqueIdentifier: boolean;
       options: TDocVariantOptions = JSON_FAST);
 
@@ -2307,7 +2307,7 @@ type
     // - expand* methods will allow to return human-friendly representations
     // - if your purpose is to create a TDocVariant array from ORM/SQL JSON,
     // consider using faster TDocVariantData.InitArrayFromResults() method
-    procedure ToDocVariant(Row: PtrInt; out doc: variant;
+    procedure ToDocVariant(Row: PtrInt; var doc: variant;
       options: TDocVariantOptions = JSON_FAST;
       expandTimeLogAsText: boolean = false; expandEnumsAsText: boolean = false;
       expandHugeIDAsUniqueIdentifier: boolean = false); overload;
@@ -8307,19 +8307,42 @@ begin
     QuickSortIndexedPUtf8Char(pointer(fFieldNames), fFieldCount, fFieldNameOrder);
 end;
 
-procedure TOrmTableAbstract.GetAsVariant(row, field: PtrInt; out value: variant;
+procedure ValueVarTimeAsText(oft: TOrmFieldType; V: PUtf8Char; value: PVariant);
+var
+  t: TTimeLogBits;
+  time: RawUtf8;
+begin
+  SetInt64(V, {%H-}t.Value);
+  if t.Value = 0 then
+    value^ := 0
+  else
+  begin
+    if oft = oftUnixTime then
+      t.FromUnixTime(t.Value);
+    if oft <> oftUnixMSTime then
+      time := t.Text(true)
+    else
+      // no TTimeLog use for milliseconds resolution
+      time := UnixMSTimeToString(t.Value);
+    PDocVariantData(value)^.InitObject([
+      'Time',  time,
+      'Value', t.Value], JSON_FAST);
+  end;
+end;
+
+procedure TOrmTableAbstract.GetAsVariant(row, field: PtrInt; var value: variant;
   expandTimeLogAsText, expandEnumsAsText, expandHugeIDAsUniqueIdentifier: boolean;
   options: TDocVariantOptions);
 const
   JAN2015_UNIX = 1420070400;
 var
-  t: TTimeLogBits;
   id: TSynUniqueIdentifierBits;
   V: PUtf8Char;
+  vd: TSynVarData absolute value;
   ft: POrmTableFieldType;
   enum, err: integer;
-  time: RawUtf8;
 begin
+  VarClearAndSetType(value, varNull);
   if (self = nil) or
      (row < 1) or
      (row > fRowCount) or
@@ -8331,69 +8354,56 @@ begin
   row := row * fFieldCount + field;
   V := GetResults(row);
   if V = nil then
-    TSynVarData(value).VType := varNull
-  else
-    if expandHugeIDAsUniqueIdentifier and
-       (field = fFieldIndexID) then
-    begin
-      SetInt64(V, PInt64(@id)^);
-      if id.CreateTimeUnix > JAN2015_UNIX then
-        id.ToVariant(value)
-      else
-        value := id.Value;
-    end
+    exit;
+  vd.VType := varInt64;
+  if expandHugeIDAsUniqueIdentifier and
+     (field = fFieldIndexID) then
+  begin
+    SetInt64(V, PInt64(@id)^);
+    if id.CreateTimeUnix > JAN2015_UNIX then
+      id.ToVariant(value)
     else
+      vd.VInt64 := id.Value;
+  end
+  else
+  begin
+    if expandEnumsAsText and
+       (ft^.ContentType = oftEnumerate) then
     begin
-      if expandEnumsAsText and
-         (ft^.ContentType = oftEnumerate) then
+      enum := GetInteger(V, err);
+      if (err = 0) and
+         (ft^.ContentTypeInfo <> nil) then
       begin
-        enum := GetInteger(V, err);
-        if (err = 0) and
-           (ft^.ContentTypeInfo <> nil) then
-        begin
-          value := PRttiEnumType(ft^.ContentTypeInfo)^.GetEnumNameOrd(enum)^;
-          exit;
-        end;
-      end
-      else if expandTimeLogAsText then
-        case ft^.ContentType of
-          oftTimeLog,
-          oftModTime,
-          oftCreateTime,
-          oftUnixTime,
-          oftUnixMSTime:
-            begin
-              SetInt64(V, {%H-}t.Value);
-              if t.Value = 0 then
-                value := 0
-              else
-              begin
-                if ft^.ContentType = oftUnixTime then
-                  t.FromUnixTime(t.Value);
-                if ft^.ContentType <> oftUnixMSTime then
-                  time := t.Text(true)
-                else
-                  // no TTimeLog use for milliseconds resolution
-                  time := UnixMSTimeToString(t.Value);
-                TDocVariantData(value).InitObject([
-                  'Time',  time,
-                  'Value', t.Value], JSON_FAST);
-              end;
-              exit;
-            end;
-        end;
-      ValueVarToVariant(V, GetResultsLen(row, V), ft^.ContentType, TVarData(value),
-        {createTempCopy=}true, ft^.ContentTypeInfo, options);
-    end;
+        ShortStringToVariant(PRttiEnumType(ft^.ContentTypeInfo)^.
+          GetEnumNameOrd(enum)^, value);
+        exit;
+      end;
+    end
+    else if expandTimeLogAsText then
+      case ft^.ContentType of
+        oftTimeLog,
+        oftModTime,
+        oftCreateTime,
+        oftUnixTime,
+        oftUnixMSTime:
+          begin
+            ValueVarTimeAsText(ft^.ContentType, V, @value);
+            exit;
+          end;
+      end;
+    ValueVarToVariant(V, GetResultsLen(row, V), ft^.ContentType, vd.Data,
+      {createTempCopy=}true, ft^.ContentTypeInfo, options);
+  end;
 end;
 
-procedure TOrmTableAbstract.ToDocVariant(Row: PtrInt; out doc: variant;
+procedure TOrmTableAbstract.ToDocVariant(Row: PtrInt; var doc: variant;
   options: TDocVariantOptions; expandTimeLogAsText, expandEnumsAsText,
   expandHugeIDAsUniqueIdentifier: boolean);
 var
   f: PtrInt;
   v: TVariantDynArray;
 begin
+  VarClearAndSetType(doc, varNull);
   if (self = nil) or
      (Row < 1) or
      (Row > fRowCount) then
