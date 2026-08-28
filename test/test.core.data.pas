@@ -533,7 +533,7 @@ begin
   TextToVariant('1e308', true, v);
   Check(VarIsStr(v));
   Check(VarIsString(v));
-  s := FormatUtf8('value-%', [123]); // ensure a regular ref-counted string
+  FormatUtf8('value-%', [123], s); // ensure a regular ref-counted string
   TextToVariant(s, true, v);
   VariantToRawByteString(v, r);
   rc := GetRefCount(r);

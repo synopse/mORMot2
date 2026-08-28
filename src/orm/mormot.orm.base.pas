@@ -6638,7 +6638,7 @@ procedure TOrmPropInfoRttiVariant.CopySameClassProp(Source: TObject;
 var
   off: PtrUInt;
   v: PVariant;
-  value: TVarData;
+  value: TSynVarData;
 begin
   off := TOrmPropInfoRttiVariant(DestInfo).fSetterIsFieldPropOffset;
   if off <> 0 then // avoid any temporary variable
@@ -6649,10 +6649,10 @@ begin
   end
   else
   begin
-    PCardinal(@value)^ := varEmpty; // real temp variant for a setter
+    value.VType := varEmpty; // temp variant for a setter
     fPropInfo.GetVariantProp(Source, variant(value), {byref=}false);
     TOrmPropInfoRttiVariant(DestInfo).fPropInfo.SetVariantProp(Dest, variant(value));
-    VarClearProc(value);
+    VarClear(variant(value));
   end;
 end;
 
@@ -6719,7 +6719,7 @@ end;
 
 function TOrmPropInfoRttiVariant.IsValueVoid(Instance: TObject): boolean;
 var
-  value: TVarData;
+  value: TSynVarData;
   off: PtrUInt;
 begin
   off := fGetterIsFieldPropOffset;
@@ -6727,17 +6727,17 @@ begin
     result := VarIsEmptyOrNull(PVariant(PtrUInt(Instance) + off)^)
   else
   begin
-    PCardinal(@value)^ := varEmpty;
+    value.VType := varEmpty; // temp variant for a setter
     fPropInfo.GetVariantProp(Instance, variant(value), {byref=}true);
     result := VarIsEmptyOrNull(variant(value));
-    VarClearProc(value);
+    VarClear(variant(value));
   end;
 end;
 
 function TOrmPropInfoRttiVariant.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): integer;
 var
-  V1, V2: TVarData;
+  V1, V2: TSynVarData;
   off: PtrUInt;
 begin
   if Item1 = Item2 then
@@ -6754,13 +6754,13 @@ begin
                                 PVarData(PtrUInt(Item2) + off), CaseInsensitive)
     else
     begin
-      PCardinal(@V1)^ := varEmpty;
-      PCardinal(@V2)^ := varEmpty;
+      V1.VType := varEmpty;
+      V2.VType := varEmpty;
       fPropInfo.GetVariantProp(Item1, variant(V1), {byref=}true);
       fPropInfo.GetVariantProp(Item2, variant(V2), {byref=}true);
       result := FastVarDataComp(@V1, @V2, CaseInsensitive);
-      VarClearProc(V1);
-      VarClearProc(V2);
+      VarClear(variant(V1));
+      VarClear(variant(V2));
     end;
   end;
 end;
