@@ -2643,7 +2643,8 @@ type
   /// system-specific type returned by FileAge(): UTC 64-bit Epoch on POSIX
   TFileAge = TUnixTime;
   /// system-specific structure holding a non-recursive mutex
-  TOSLightMutex = TRTLCriticalSection;
+  // - is a futex 32-bit flag on Linux or a pthread_mutex on BSD
+  TOSLightMutex = {$ifdef FPCLINUX} cardinal {$else} TRTLCriticalSection {$endif};
 
 {$endif OSWINDOWS}
 
@@ -4776,10 +4777,9 @@ type
   POSLock = ^TOSLock;
 
   /// the fastest non-reentrant lock supplied by the Operating System
-  // - calls Slim Reader/Writer (SRW) Win32 API in exclusive mode or directly
-  // the pthread_mutex_*() library calls in non-recursive/fast mode on Linux
-  // - on XP, where SRW are not available, fallback to a TLightLock
-  // - on non-Linux POSIX, fallback to regular cthreads/TRTLCriticalSection
+  // - on Windows, calls Slim Reader/Writer (SRW) Win32 API in exclusive mode
+  // - on Linux, uses 32-bit futex syscall; on BSD, calls pthread_mutex_*()
+  // - other systems fallback to TRTLCriticalSection
   // - don't forget to call Init and Done to properly initialize the structure
   // - to protect a very small code section of a few CPU cycles with no Init/Done
   // needed, and a lower footprint, you may consider our TLightLock
@@ -4795,6 +4795,9 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     fMutex: TOSLightMutex;
+    {$ifdef FPCLINUX}
+    procedure LockSpin; // for Linux futex support
+    {$endif FPCLINUX}
   public
     /// to be called to setup the instance
     // - mandatory in all cases, even if TOSLock is part of a class
@@ -4810,7 +4813,7 @@ type
     /// access to raw pthread_mutex_trylock() method
     // - TryAcquireSRWLockExclusive() seems not stable on all Windows revisions
     function TryLock: boolean;
-     {$ifdef HASINLINE} inline; {$endif}
+      {$ifndef FPCLINUX} {$ifdef HASINLINE} inline; {$endif} {$endif}
     {$endif OSPOSIX}
     /// leave an OS lock
     procedure UnLock;
@@ -4838,7 +4841,7 @@ type
   TLockedList = object
   {$endif USERECORDWITHMETHODS}
   public
-    /// thread-safe access to the list - single pointer size field
+    /// thread-safe access to the list - single 32-bit field
     Safe: TLightLock;
     /// how many TLockedListOne instances are currently stored in this list
     // - excluding the instances in the recycle bin
@@ -5199,7 +5202,7 @@ type
   // - publishes our lightweight exclusive non-reentrant lock
   TObjectLightLock = class(TSynPersistent)
   protected
-    fSafe: TLightLock; // single pointer size field
+    fSafe: TLightLock; // single 32-bit field
   public
     /// access to the associated lightweight exclusive non-reentrant lock instance
     property Safe: TLightLock
@@ -5239,7 +5242,7 @@ type
   // - publishes the fastest available non-reentrant Operating System lock
   TObjectOSLightLock = class(TSynPersistent)
   protected
-    fSafe: TOSLightLock; // = TOSLightMutex = SRW lock or direct pthread mutex
+    fSafe: TOSLightLock; // = TOSLightMutex = SRW on Windows or futex on Linux
   public
     /// initialize the instance, and its associated OS lock
     constructor Create; override;
@@ -5303,7 +5306,7 @@ type
   TCachedValue = object
   {$endif USERECORDWITHMETHODS}
   public
-    Safe: TLightLock; // single pointer size field
+    Safe: TLightLock; // single 32-bit field
     Tix32: cardinal;
     Value: RawByteString;
     procedure Reset;
@@ -11239,15 +11242,12 @@ begin
   result := SPIN_COUNT;  // try again
 end;
 
-const // CAS bits for the TSynEvent futex API
-  EV_SIGNAL = 1;
-  EV_WAIT   = 2;
 
 { TLightLock }
 
 procedure TLightLock.Init;
 begin
-  Flags := 0; // single pointer size field
+  Flags := 0; // single 32-bit field
 end;
 
 procedure TLightLock.Done;
@@ -12293,6 +12293,10 @@ end;
 
 
 { TSynEvent }
+
+const // CAS bits for the TSynEvent futex API
+  EV_SIGNAL = 1;
+  EV_WAIT   = 2;
 
 constructor TSynEvent.Create;
 begin

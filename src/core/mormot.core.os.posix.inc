@@ -1454,6 +1454,7 @@ function pthread_mutex_unlock(mutex: pointer): integer;      cdecl; external;
 {$endif OSPTHREADSSTATIC}
 
 {$ifdef FPCLINUX}
+
 procedure _SetShell(var a, b: RawUtf8);
 var
   pw: PPasswd; // from the pwd.pp unit
@@ -1470,7 +1471,86 @@ function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
 begin
   result := cs.__m_kind <> 0;
 end;
+
+{ TOSLightLock }
+
+// on FPC Linux, TOSLightLock uses a futex syscall or fallback to SpinAndWait()
+
+const
+  EV_NONE   = 0;
+  EV_LOCKED = 1;
+  EV_WAITER = 2;
+
+  SPIN_FUTEX = {$ifdef CPUINTEL} 24 {$else} 127 {$endif};
+
+procedure TOSLightLock.Init;
+begin
+  fMutex := EV_NONE; // single 32-bit field
+end;
+
+procedure TOSLightLock.Done;
+begin // just for compatibility with TOSLock
+end;
+
+procedure TOSLightLock.Lock;
+begin
+  if not LockedExc32(fMutex, {to=}EV_LOCKED, {from=}EV_NONE) then
+    LockSpin;
+end;
+
+procedure TOSLightLock.UnLock;
+begin
+  {$ifdef CPUINTEL}
+  if fMutex = EV_LOCKED then
+  begin
+    fMutex := EV_NONE; // fast path is allowed on Intel (and noticeably faster)
+    exit;
+  end;
+  {$else}
+  if LockedExc32(fMutex, {to=}EV_NONE, {from=}EV_LOCKED) then
+    exit; // uncontended CAS path is needed on non-ordered ARM
+  {$endif CPUINTEL}
+  fMutex := EV_NONE;
+  if Assigned(OsWakeOnValue) then
+    OsWakeOnValue(@fMutex);
+end;
+
+function TOSLightLock.TryLock: boolean;
+begin
+  result := (fMutex = EV_NONE) and
+            LockedExc32(fMutex, {to=}EV_LOCKED, {from=}EV_NONE);
+end;
+
+procedure TOSLightLock.LockSpin;
+var
+  spin: PtrUInt;
+begin
+  if Assigned(OsWaitOnValue) then // use pattern with Linux futex syscall
+  begin
+    spin := SPIN_FUTEX;
+    repeat
+      DoPause;
+      dec(spin);
+      if spin = 0 then
+      begin
+        if fMutex <> EV_NONE then
+        begin
+          if fMutex = EV_LOCKED then
+            LockedExc32(fMutex, EV_WAITER, EV_LOCKED); // mark contention
+          OsWaitOnValue(@fMutex, EV_WAITER, INFINITE); // wait until UnLock
+        end;
+        spin := SPIN_FUTEX;
+      end;
+    until LockedExc32(fMutex, EV_WAITER, EV_NONE);
+  end
+  else
+    repeat // TLightLock-like fallback on very old Linux kernel
+      spin := SpinAndWait(spin); // regular SwitchToThread spin
+    until TryLock;
+end;
+
 {$else}
+
 procedure _SetShell(var a, b: RawUtf8);
 begin
   if not GetSystemEnv('SHELL', a) then
@@ -1482,11 +1562,12 @@ function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
 begin
   result := not IsZero(@cs, SizeOf(cs));
 end;
-{$endif FPCLINUX}
+
+{ TOSLightLock }
 
 {$ifdef HAS_OSPTHREADS}
 
-{ TOSLightLock }
+// on Mac/BSD TOSLightLock uses pthreads_mutex - FPCLINUX is handled just above
 
 procedure TOSLightLock.Init;
 begin
@@ -1522,9 +1603,7 @@ begin
   pthread_mutex_unlock(@fMutex);
 end;
 
-{$else} // fallback to plain recursive TRTLCriticalSection
-
-{ TOSLightLock }
+{$else} // fallback to plain recursive TRTLCriticalSection on Android or Delphi
 
 procedure TOSLightLock.Init;
 begin
@@ -1553,6 +1632,7 @@ end;
 
 {$endif HAS_OSPTHREADS}
 
+{$endif FPCLINUX}
 
 procedure PosixSetThreadName(ThreadID: TThreadID; const Name: RawByteString);
 var
@@ -2253,7 +2333,6 @@ end;
 // seems a better solution, and also prevents pathological spinning if the
 // scheduler policy actually is not adapted to this usage
 { $define OSLINUX_SCHEDYIELD}     // force sched_yield syscall on Linux
-{ $define OSLINUX_SCHEDYIELDONCE} // yield once during DoSpin() - no benefit
 
 {$ifdef OSLINUX_SCHEDYIELD}
 procedure SwitchToThread;
@@ -2289,7 +2368,7 @@ begin
       // reported as unreliable by Alan on most POSIX, and despitable by Linus
       // - from our testing, it gives worse performance than fpnanosleep()
       // when waiting for some event (but may be sometimes used for spinning)
-      ThreadSwitch; // FPC RTL redirects to pthread_yield()
+      ThreadSwitch; // FPC/Delphi RTL redirects to pthread_yield()
       exit;
     end
     else
