@@ -5198,18 +5198,6 @@ begin
     AcquireSRWLockExclusive := @AcquireSRWLockExclusiveForXP;
     ReleaseSRWLockExclusive := @ReleaseSRWLockExclusiveForXP;
   end;
-  if OSVersion >= wEight then
-  begin
-    h := Windows.LoadLibrary('API-MS-Win-Core-Synch-l1-2-0.dll'); // Win8+
-    WaitOnAddress := LibraryResolve(h, 'WaitOnAddress');
-    WakeByAddressSingle := LibraryResolve(h, 'WakeByAddressSingle');
-    if Assigned(WaitOnAddress) and
-       Assigned(WakeByAddressSingle) then
-    begin
-      OsWaitOnValue := @_OsWaitOnValue;
-      OsWakeOnValue := @WakeByAddressSingle; // defined as stdcall
-    end;
-  end;
   // 3. retrieve system information
   TimeZoneLocalBias := -GetLocalTimeOffset;
   FillcharFast(SystemInfo, SizeOf(SystemInfo), 0);
@@ -5297,6 +5285,18 @@ begin
   OSVersion32.os := osWindows;
   OSVersion32.win := Vers;
   OSVersion32.winbuild := OSVersionInfo.dwBuildNumber;
+  if OSVersion >= wEight then
+  begin
+    h := Windows.LoadLibrary('API-MS-Win-Core-Synch-l1-2-0.dll'); // Win8+
+    WaitOnAddress := LibraryResolve(h, 'WaitOnAddress');
+    WakeByAddressSingle := LibraryResolve(h, 'WakeByAddressSingle');
+    if Assigned(WaitOnAddress) and
+       Assigned(WakeByAddressSingle) then
+    begin
+      OsWaitOnValue := @_OsWaitOnValue;
+      OsWakeOnValue := @WakeByAddressSingle; // defined as stdcall
+    end;
+  end;
   h := GetModuleHandle(ntdll); // late binding over unstable / altered API
   if h > 0 then
   begin
