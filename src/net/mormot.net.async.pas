@@ -3846,7 +3846,7 @@ begin
         begin
           t := fThreads[i];
           if (wuPossible in t.fWakeUp) or                 // not running
-             (t.fThreadPollingLastWakeUpEvents = 0) or    // no spare event
+             (t.fThreadPollingLastWakeUpEvents <= 0) or   // no spare process
              (t.fThreadPollingLastWakeUpTix <> tix) then  // slow process
             continue;
           // this thread is likely to be available very soon: consider it done
