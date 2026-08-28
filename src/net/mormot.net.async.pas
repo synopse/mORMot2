@@ -641,8 +641,8 @@ type
     function ProcessClientStart(Sender: TPollAsyncConnection): boolean;
     procedure IdleEverySecond; virtual;
     {$ifndef USE_WINIOCP}
-    procedure ThreadPollingWakeupOne; inline;
-    procedure ThreadPollingWakeupEvents(Events: integer); inline;
+    procedure ThreadPollingWakeupOne; {$ifdef HASINLINE} inline; {$endif}
+    procedure ThreadPollingWakeupEvents(Events: integer);
     procedure ThreadPollingWakeupLocked;
     {$endif USE_WINIOCP}
   public
@@ -2672,7 +2672,7 @@ end;
 
 procedure TAsyncConnections.ThreadPollingWakeupOne; // here for inlining
 begin
-  // after accept() or on idle server, we always wake up one thread
+  // wake up one thread after accept() on idle server or on slow REST process
   if acoThreadSmooting in fOptions then
     fThreadPollingLastWakeUpTix := mormot.core.os.GetTickCount64; // 16ms / 4ms
   if LockedExc32(fWakeupOne, 1, 0) then // if not already notified
