@@ -656,12 +656,12 @@ begin
   begin
     ndx := i; // for eventual SharedUcnvUnLock()
     fSharedLast := i; // optimistic usage
-    if PLightLock(@fSharedLock[i])^.TryLock then
+    if TLightLock(fSharedLock[i]).TryLock then
       result := fSharedCnv[i]; // this thread acquired this converter
     exit;
   end;
   // first time we see this codepage: try to add in our internal cache
-  PLightLock(@fSharedMainLock)^.Lock; // main write lock
+  TLightLock(fSharedMainLock).Lock; // main write lock
   try
     n := fSharedCount;
     if (n <> length(fSharedCP)) and // cache up to 32 instances
@@ -678,14 +678,14 @@ begin
       inc(fSharedCount); // should be set last
     end;
   finally
-    PLightLock(@fSharedMainLock)^.UnLock;
+    TLightLock(fSharedLock[i]).UnLock;
   end;
 end;
 
 procedure TIcuLibrary.SharedUcnvUnLock(ndx: PtrInt);
 begin
   ucnv_reset(fSharedCnv[ndx]); // clean-up from this thread (before unlock)
-  PLightLock(@fSharedLock[ndx])^.UnLock;
+  TLightLock(fSharedLock[ndx]).UnLock;
 end;
 
 procedure syslog(priv: integer; fmt: PAnsiChar; arg: array of const);

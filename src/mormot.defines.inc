@@ -154,7 +154,7 @@
     OSWINDOWS OSWINTEL OSWINARM
     OSPOSIX OSBSD OSDARWIN OSBSDDARWIN OSOPENBSD OSFREEBSD
     OSLINUX OSANDROID OSLINUXINTEL OSLINUXX64 OSLINUXX86
-    OSLINUXANDROID OSANDROIDARM64 OSELF
+    OSLINUXANDROID OSANDROIDARM64 OSELF OSFUTEX
     PUREMORMOT2
 
   FPC only:
@@ -944,13 +944,17 @@
     {$define OSWINARM}
   {$endif ABIARM}
   {$define THREADID32}    // TThreadID always 32-bit DWORD on all Windows archs
+  {$define OSFUTEX}       // WaitForValue() futex-like API appeared with Win8
 {$else}
   {$ifdef CPU32}
-    {$define THREADID32}    // TThreadID 32-bit on 32-bit systems
+    {$define THREADID32}  // TThreadID is 32-bit on 32-bit POSIX systems
   {$endif CPU32}
   {$ifdef OSLINUX}
     {$define OSLINUXANDROID}
     {$define OSELF}
+    {$ifdef FPC}
+      {$define OSFUTEX}   // direct futex syscall on FPC Linux
+    {$endif FPC}
     {$ifdef ABIX86}
       {$define OSLINUXINTEL}
       {$define OSLINUXX86}
@@ -969,6 +973,7 @@
   {$ifdef OSANDROID}
     {$define OSLINUXANDROID}
     {$define OSELF}
+    {.$define OSFUTEX}        // untested
     {$ifdef ABIA64}
       {$define OSANDROIDARM64}
     {$endif ABIA64}
