@@ -3509,14 +3509,6 @@ type
   end;
   PLecuyer = ^TLecuyer;
 
-{$ifndef PUREMORMOT2}
-/// return the gsl_rng_taus2 Pierre L'Ecuyer generator of the current thread
-// - was an alternative to SharedRandom/Random32 functions from mormot.core.os
-// - you should better define your own local threadvar for any specific purpose
-// or use ThreadRandom function from mormot.crypt.core.pas
-function Lecuyer: PLecuyer;
-{$endif PUREMORMOT2}
-
 /// internal function used e.g. by TLecuyer.FillShort/FillShort31
 procedure AdjustShortStringFromRandom(dest: PByteArray; size: PtrUInt);
 
@@ -10594,16 +10586,6 @@ begin
   gen.SeedGenerator;
   gen.Fill(dest, destsize); // XOR dest
 end;
-
-{$ifndef PUREMORMOT2}
-threadvar // do not publish for compilation within Delphi packages
-  _Lecuyer: TLecuyer; // uses only 16 bytes per thread
-
-function Lecuyer: PLecuyer;
-begin
-  result := @_Lecuyer;
-end;
-{$endif PUREMORMOT2}
 
 
 { MultiEvent* functions }

@@ -2822,7 +2822,10 @@ function IsIdentifierGuid(u: PHash128): boolean;
 // - e.g. so that tests won't interfere with SharedRandom actual framework process
 // - as used e.g. by RandomByteString(), RandomUtf8() or RandomIdentifier()
 function ThreadRandom: PLecuyer;
-  {$ifdef PUREMORMOT2} {$ifdef HASINLINE} inline; {$endif} {$endif}
+
+{$ifndef PUREMORMOT2}
+function Lecuyer: PLecuyer; {$ifdef HASINLINE} inline; {$endif}
+{$endif PUREMORMOT2}
 
 /// fill a RawByteString with random bytes from per-thread gsl_rng_taus2 generator
 // - content is really binary, i.e. would contain the whole #0..#255 byte range
@@ -10619,21 +10622,22 @@ begin
   result := (u[7] and $f0) = $50; // version 5 = name-based GUID
 end;
 
-{$ifdef PUREMORMOT2}
-threadvar
+threadvar // do not make public for compilation within Delphi packages
   _RandomTests: TLecuyer; // 16 bytes per thread for each TLecuyer generator
-{$endif PUREMORMOT2}
 
 function ThreadRandom: PLecuyer;
 begin
-  {$ifdef PUREMORMOT2}
   result := @_RandomTests;
-  {$else}
-  result := mormot.core.base.Lecuyer; // use existing mORMot 1 threadvar
-  {$endif PUREMORMOT2}
   if PPtrUInt(result)^ = 0 then
     RandomLecuyer(result^); // 88-bit seed from our CSPRNG once per thread
 end;
+
+{$ifndef PUREMORMOT2}
+function Lecuyer: PLecuyer;
+begin
+  result := ThreadRandom;
+end;
+{$endif PUREMORMOT2}
 
 function RandomByteString(Count: integer; var Dest; CodePage: cardinal): pointer;
 begin
