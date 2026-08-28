@@ -1446,7 +1446,7 @@ type
     fLogClass: TSynLogClass;
     fLog: TSynLog; // the logging instance within the DoExecute thread context
     fExecuteMessage: RawUtf8;
-    fProcessing: boolean;
+    fProcessing, fExecuteDone: boolean;
     procedure Execute; override;
     procedure DoExecute; virtual; abstract; // overriden for background process
     procedure DoTerminate; override; // overriden for fLog.NotifyThreadEnded
@@ -1466,6 +1466,9 @@ type
     /// internal flag set by Execute, and used e.g. by TerminateAndWaitFinished
     property Processing: boolean
       read fProcessing;
+    /// mimics Finished property of newer Delphi/FPC RTL
+    property ExecuteDone: boolean
+      read fExecuteDone;
   published
     /// the name of this thread, as supplied to SetCurrentThreadName()
     property ProcessName: RawUtf8
@@ -4302,6 +4305,7 @@ begin
       end;
   end;
   fProcessing := false;
+  fExecuteDone := true;
 end; // don't reset fLog := nil here - done in DoTerminate
 
 procedure TLoggedThread.DoTerminate;
