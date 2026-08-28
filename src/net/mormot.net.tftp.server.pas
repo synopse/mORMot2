@@ -93,6 +93,7 @@ type
     fLastSent: pointer;
     fLastSentLen: integer;
     procedure DoExecute; override;
+    function HasFinished: boolean;
   public
     /// initialize this connection
     constructor Create(const Source: TTftpContext; Owner: TTftpServerThread); reintroduce;
@@ -167,6 +168,7 @@ type
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
     procedure OnIdle(tix64: Int64); override; // called every second
     procedure OnShutdown; override; // from Destroy
+    procedure CleanupFinishedConnections;
     procedure NotifyShutdown;
   public
     /// initialize and bind the server instance, in non-suspended state
@@ -271,22 +273,25 @@ begin
   GetMem(fLastSent, fFrameMaxSize);
   MoveFast(Source.Frame^, fLastSent^, Source.FrameLen);
   fLastSentLen := Source.FrameLen;
-  FreeOnTerminate := true;
   FormatUtf8('%#% % %', [TFTP_OPCODE[Source.OpCode],
     InterlockedIncrement(TTftpConnectionThreadCounter), fContext.FileName,
     KB(fFileSize)], name);
-  inherited Create({suspended=}false, nil, nil, fOwner.LogClass, name);
+  inherited Create({suspended=}true, nil, nil, fOwner.LogClass, name);
+  FreeOnTerminate := false; // fOwner.fConnection owns and joins this thread
 end;
 
 destructor TTftpConnectionThread.Destroy;
 begin
   Terminate;
+  inherited Destroy; // join before releasing the context used by DoExecute
   fContext.Shutdown;
-  if Assigned(fOwner.fConnection) then // may be nil from fOwner.Destroy
-    fOwner.fConnection.Remove(self); // ownobject=false: just decrease Count
-  inherited Destroy;
   FreeMem(fLastSent);
   FreeMem(fContext.Frame);
+end;
+
+function TTftpConnectionThread.HasFinished: boolean;
+begin
+  result := Finished;
 end;
 
 procedure TTftpConnectionThread.DoExecute;
@@ -432,7 +437,7 @@ var
   ok: boolean;
 {$endif OSPOSIX}
 begin
-  fConnection := TSynObjectListLocked.Create({ownobject=}false);
+  fConnection := TSynObjectListLocked.Create({ownobject=}true);
   SetFileFolder(SourceFolder);
   fMaxConnections := 100; // = 100 threads, good enough for regular TFTP server
   fMaxRetry := 2;
@@ -476,8 +481,8 @@ end;
 destructor TTftpServerThread.Destroy;
 begin
   inherited Destroy;
+  FreeAndNil(fConnection); // normally emptied and joined by OnShutdown
   fFileCache.Free;
-  FreeAndNil(fConnection); // paranoid (usually done in OnShutdown)
   {$ifdef OSPOSIX}
   FreeAndNil(fPosixFileNames);
   {$endif OSPOSIX}
@@ -490,7 +495,23 @@ begin
   if fConnection = nil then
     exit;
   NotifyShutdown;
-  fConnection.Clear;
+  fConnection.Clear; // owns objects: join workers before owner teardown
+end;
+
+procedure TTftpServerThread.CleanupFinishedConnections;
+var
+  i: integer;
+begin
+  if fConnection = nil then
+    exit;
+  fConnection.Safe.WriteLock;
+  try
+    for i := fConnection.Count - 1 downto 0 do
+      if TTftpConnectionThread(fConnection.List[i]).HasFinished then
+        fConnection.Delete(i); // OwnObjects=true: release the finished thread
+  finally
+    fConnection.Safe.WriteUnLock;
+  end;
 end;
 
 procedure TTftpServerThread.NotifyShutdown;
@@ -505,11 +526,13 @@ begin
   try
     t := pointer(fConnection.List);
     for i := 1 to fConnection.Count do
-    try
-      t^.Terminate;
+    begin
+      try
+        t^.Terminate;
+      except
+        // ignore any exception here and notify the remaining workers
+      end;
       inc(t);
-    except
-      // ignore any exception here
     end;
   finally
     fConnection.Safe.WriteUnLock;
@@ -957,6 +980,7 @@ var
   range, retry: integer;
   nr: TNetResult;
   local: TNetAddr;
+  connection: TTftpConnectionThread;
 begin
   // is called from TTftpServerThread.DoExecute context (so fLog is set)
   // with a RRQ/WRQ incoming UDP frame on port 69
@@ -970,6 +994,7 @@ begin
   if (fConnection = nil) or
      not (op in [toRrq, toWrq]) then
     exit; // just ignore to avoid DoS on fuzzing
+  CleanupFinishedConnections;
   if fConnection.Count >= fMaxConnections then
   begin
     // this request will be ignored with no ERR sent -> client will retry later
@@ -1040,8 +1065,22 @@ begin
       [ToText(c.Frame^, c.FrameLen)], self);
   nr := c.SendFrame;
   if nr = nrOk then
-    // actual RRQ/WRQ transmission will take place on a dedicated thread
-    fConnection.Add(TTftpConnectionThread.Create(c, self))
+  begin
+    // register before Start so that the owner never misses a short-lived worker
+    connection := TTftpConnectionThread.Create(c, self);
+    try
+      fConnection.Add(connection);
+    except
+      connection.Free;
+      raise;
+    end;
+    try
+      connection.Start;
+    except
+      fConnection.Remove(connection); // OwnObjects=true: also frees it
+      raise;
+    end;
+  end
   else
   begin
     c.Shutdown;
@@ -1052,6 +1091,7 @@ end;
 
 procedure TTftpServerThread.OnIdle(tix64: Int64);
 begin
+  CleanupFinishedConnections;
   fFileCache.DeleteDeprecated(tix64);
   {$ifdef OSPOSIX}
   if fPosixFileNames <> nil then
