@@ -3131,6 +3131,9 @@ procedure Base64DecodeAvx2(var b64: PAnsiChar; var b64len: PtrInt; var b: PAnsiC
 
 {$endif ASMX64NOTPIC}
 
+/// calls the pause asm opcode on Intel/AMD, or yield on ARM, or do nothing
+procedure DoPause;
+
 const
   // default adaptive spin count: up to 992 "pause"/"yield" instructions
   // - on Intel, this is typically a few microseconds on older CPUs, but newer
@@ -10989,6 +10992,12 @@ asm
 end;
 {$endif WIN64DELPHI}
 
+procedure DoPause; {$ifdef FPC}assembler; nostackframe;{$endif}
+asm
+     pause
+     pause
+end;
+
 {$else not ASMINTEL}
 
 // fallback to pure pascal (or FPC RTL) for non-Intel CPUs
@@ -11640,6 +11649,12 @@ begin
 end;
 
 {$endif CPUARM3264}
+
+{$ifndef HASPAUSEOPCODE}
+procedure DoPause;
+begin
+end;
+{$endif HASPAUSEOPCODE}
 
 {$endif ASMINTEL}
 
