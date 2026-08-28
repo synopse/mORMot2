@@ -1428,7 +1428,7 @@ type
   protected
     fMergeSubscribeEventsLock: TLightLock; // topmost to ensure aarch64 alignment
     fSubscriptionSafe: TLightLock; // dedicated not to block Accept()
-    fPendingSafe: TOSLightLock; // more likely benefit from futex/SRW
+    fPendingSafe: TOSLightLock; // more likely benefit from light futex
     fGettingOne: integer;
     fPoll: array of TPollSocketAbstract; // each track up to fPoll[].MaxSockets
     fPending: TPollSocketResults;

@@ -1486,11 +1486,15 @@ begin
   result := not IsZero(@cs, SizeOf(cs));
 end;
 
-{ TOSLightLock }
+{$endif FPCLINUX}
 
 {$ifdef HAS_OSPTHREADS}
+{$ifndef OSFUTEX}
 
 // on Mac/BSD TOSLightLock uses pthreads_mutex - FPCLINUX is handled just above
+{$define HAS_TOSLIGHTLOCK}
+
+{ TOSLightLock }
 
 procedure TOSLightLock.Init;
 begin
@@ -1526,36 +1530,8 @@ begin
   pthread_mutex_unlock(@fMutex);
 end;
 
-{$else} // fallback to plain recursive TRTLCriticalSection on Android or Delphi
-
-procedure TOSLightLock.Init;
-begin
-  InitCriticalSection(fMutex);
-end;
-
-procedure TOSLightLock.Done;
-begin
-  DeleteCriticalSectionIfNeeded(fMutex);
-end;
-
-procedure TOSLightLock.Lock;
-begin
-  EnterCriticalSection(fMutex);
-end;
-
-function TOSLightLock.TryLock: boolean;
-begin
-  result := TryEnterCriticalSection(fMutex) <> 0;
-end;
-
-procedure TOSLightLock.UnLock;
-begin
-  LeaveCriticalSection(fMutex);
-end;
-
+{$endif OSFUTEX}
 {$endif HAS_OSPTHREADS}
-
-{$endif FPCLINUX}
 
 procedure PosixSetThreadName(ThreadID: TThreadID; const Name: RawByteString);
 var

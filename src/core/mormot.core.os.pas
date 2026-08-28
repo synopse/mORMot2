@@ -4776,7 +4776,7 @@ type
   POSLock = ^TOSLock;
 
   /// the fastest non-reentrant lock supplied by the Operating System
-  // - on Windows, calls Slim Reader/Writer (SRW) Win32 API in exclusive mode
+  // - on Windows, calls WaitOnAddress/WakeByAddresssingle Win8+ API
   // - on Linux, uses 32-bit futex syscall; on BSD, calls pthread_mutex_*()
   // - other systems fallback to TRTLCriticalSection
   // - don't forget to call Init and Done to properly initialize the structure
@@ -4784,9 +4784,6 @@ type
   // needed, and a lower footprint, you may consider our TLightLock
   // - same signature as TOSLock/TLightLock, usable as compile time alternatives
   // - warning: non-reentrant, i.e. nested Lock calls would block, as TLightLock
-  // - no TryLock is defined on Windows, because TryAcquireSRWLockExclusive()
-  // raised some unexpected EExternalException C000026 NT_STATUS_RESOURCE_NOT_OWNED
-  // ("Attempt to release mutex not owned by caller") during testing
   {$ifdef USERECORDWITHMETHODS}
   TOSLightLock = record
   {$else}
@@ -4799,7 +4796,7 @@ type
     {$endif OSFUTEX}
   public
     /// to be called to setup the instance
-    // - mandatory in all cases, even if TOSLock is part of a class
+    // - mandatory in all cases, even if TOSLightLock is part of a class
     procedure Init;
     /// to be called to finalize the instance
     procedure Done;
@@ -11695,7 +11692,7 @@ begin
   mormot.core.os.LeaveCriticalSection(CS);
 end;
 
-
+{$ifndef HAS_TOSLIGHTLOCK}
 {$ifdef OSFUTEX}
 
 { TOSLightLock }
@@ -11772,13 +11769,41 @@ begin
   else
   begin
     spin := SPIN_COUNT;
-    repeat // TLightLock-like fallback on very old Linux kernel
+    repeat // TLightLock-like fallback on very old Linux/Windows kernel
       spin := SpinAndWait(spin); // regular SwitchToThread spin
     until TryLock;
   end;
 end;
 
+{$else} // fallback to plain TRTLCriticalSection on Android or Delphi POSIX
+
+procedure TOSLightLock.Init;
+begin
+  InitCriticalSection(fMutex);
+end;
+
+procedure TOSLightLock.Done;
+begin
+  DeleteCriticalSectionIfNeeded(fMutex);
+end;
+
+procedure TOSLightLock.Lock;
+begin
+  EnterCriticalSection(fMutex);
+end;
+
+function TOSLightLock.TryLock: boolean;
+begin
+  result := TryEnterCriticalSection(fMutex) <> 0;
+end;
+
+procedure TOSLightLock.UnLock;
+begin
+  LeaveCriticalSection(fMutex);
+end;
+
 {$endif OSFUTEX}
+{$endif HAS_TOSLIGHTLOCK}
 
 { TLockedList }
 
