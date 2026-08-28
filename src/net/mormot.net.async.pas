@@ -585,12 +585,13 @@ type
     fConnection: TAsyncConnectionDynArray; // sorted by TAsyncConnection.Handle
     fSockets: TAsyncConnectionsSockets;
     fThreads: TAsyncConnectionsThreads;
-    fConnectionLock: TRWLock; // write lock/block only on connection add/remove
+    fConnectionLock: TRWLock;  // write lock/block only on connection add/remove
     fConnectionCount: integer; // only subscribed - not just after accept()
     fConnectionHigh: integer;
+    fWakeupSafe: TLightLock;   // protect ThreadPollingWakeupLocked
+    fWakeupOne, fWakeupEvents: cardinal; // CAS counters to wakeup threads
     fThreadPoolCount: integer;
     fLastConnectionFind: integer;
-    fThreadPollingWakeupSafe: TLightLock; // topmost to ensure aarch64 alignment
     fLastHandle: integer;
     fOptions: TAsyncConnectionsOptions;
     fLastOperationSec: TAsyncConnectionSec;
@@ -640,7 +641,9 @@ type
     function ProcessClientStart(Sender: TPollAsyncConnection): boolean;
     procedure IdleEverySecond; virtual;
     {$ifndef USE_WINIOCP}
-    function ThreadPollingWakeup(Events: integer): PtrInt;
+    procedure ThreadPollingWakeupOne; inline;
+    procedure ThreadPollingWakeupEvents(Events: integer); inline;
+    procedure ThreadPollingWakeupLocked;
     {$endif USE_WINIOCP}
   public
     /// initialize the multiple connections
@@ -2667,6 +2670,30 @@ end;
 
 {$ifndef USE_WINIOCP}
 
+procedure TAsyncConnections.ThreadPollingWakeupOne; // here for inlining
+begin
+  // after accept() or on idle server, we always wake up one thread
+  if acoThreadSmooting in fOptions then
+    fThreadPollingLastWakeUpTix := mormot.core.os.GetTickCount64; // 16ms / 4ms
+  if LockedExc32(fWakeupOne, 1, 0) then // if not already notified
+    if fWakeupSafe.TryLock then
+      ThreadPollingWakeupLocked; // only a single thread does the wakeup
+end;
+
+procedure TAsyncConnections.ThreadPollingWakeupEvents(Events: integer);
+begin
+  // after poll/epoll pending events
+  if acoThreadSmooting in fOptions then
+  begin
+    fThreadPollingLastWakeUpTix := mormot.core.os.GetTickCount64; // 16ms / 4ms
+    LockedAdd32(fWakeupEvents, Events); // up to ThreadPollingWakeupLoad events
+  end
+  else
+    LockedAdd32(fWakeupOne, Events); // default/legacy is one thread per event
+  if fWakeupSafe.TryLock then
+    ThreadPollingWakeupLocked;
+end;
+
 function TAsyncConnectionsThread.GetNextRead(
   out notif: TPollSocketResult): boolean;
 begin
@@ -2681,7 +2708,7 @@ begin
       // - slow down a little bit the wrk RPS
       // - but seems to reduce the wrk max latency
       include(fWakeUp, wuFromSlowProcess); // do it once per Execute loop
-      fOwner.ThreadPollingWakeup(1);       // one thread is enough
+      fOwner.ThreadPollingWakeupOne;       // one thread is enough
     end;
 end;
 
@@ -2761,12 +2788,11 @@ begin
             new := fOwner.fSockets.fRead.PollForPendingEvents(ms);
             if Terminated then
               break;
-            if (new = 0) and
-               (fOwner.fSockets.fRead.fPending.Count <> 0) then
-              new := 1; // wake up one thread if some reads are still pending
             fEvent.ResetEvent;
             if new <> 0 then
-              fOwner.ThreadPollingWakeup(new);
+              fOwner.ThreadPollingWakeupEvents(new) // distribute those events
+            else if fOwner.fSockets.fRead.fPending.Count <> 0 then
+              fOwner.ThreadPollingWakeupOne; // scale up by waking a new thread
             // wait for the sub-threads to wake up this one
             if Terminated then
               break;
@@ -3184,111 +3210,6 @@ begin
   else if not fSockets.Start(result) then
     FreeAndNil(result);
 end;
-
-// NOTICE on the acoThreadSmooting scheduling algorithm (genuine AFAICT)
-// - in TAsyncConnectionsThread.Execute, the R0/atpReadPoll main thread calls
-// PollForPendingEvents (e.g. the epoll API on Linux) then ThreadPollingWakeup()
-// to process the socket reads in the R1..Rn/atpReadPending threads of the pool
-// - the naive/standard/well-used algorithm of waking up the threads on need
-// does not perform well, especially with a high number of threads: the
-// global CPU usage remains idle, because most of the time is spent between
-// the threads, and not processing actual data
-// - acoThreadSmooting wake up the sub-threads only if it did not become idle
-// within GetTickCount64 resolution (i.e. 16ms on Windows, 4ms on Linux)
-// - on small load or quick response, only the R1 thread is involved
-// - on slow process (e.g. DB access) or in case of high traffic, R1 is
-// identified as blocking, and R2..Rmax threads are awaken in order
-// - it seems to leverage the CPU performance especially when the number of
-// threads is higher than the number of cores
-// - this algorithm seems efficient, and simple enough to implement and debug,
-// in respect to what I have seen in high-performance thread pools (e.g. in
-// MariaDB), which have much bigger complexity (like a dynamic thread pool)
-// - ThreadPollingWakeupLoad property defines how many fast processing events a
-// thread is supposed to handle in its loop - default value is computed as
-// (ThreadPoolCount / CpuCount) * 8 so should scale depending on the actual HW
-// - on POSIX waking up threads is done via our efficient TSynEvent.SetEvent
-// - on Windows, TWinIocp will directly handle atpReadPending thread wakening
-
-{$ifndef USE_WINIOCP}
-function TAsyncConnections.ThreadPollingWakeup(Events: integer): PtrInt;
-var
-  i: PtrInt;
-  t: TAsyncConnectionsThread;
-  c, tix: integer;  // 32-bit is enough to check for
-  ndx: TByteToByte; // wake up to 256 threads at once
-begin
-  if Events > high(ndx) then
-    Events := high(ndx); // avoid ndx[] buffer overflow (parnoid)
-  result := 0;
-  tix := 0; // default is one thread per event (legacy algorithm)
-  if acoThreadSmooting in fOptions then
-  begin
-    fThreadPollingLastWakeUpTix := mormot.core.os.GetTickCount64; // 16ms / 4ms
-    if Events > 1 then
-      // after accept() or on idle server, we always wake up one thread
-      tix := fThreadPollingLastWakeUpTix;
-  end;
-  fThreadPollingWakeupSafe.Lock;
-  try
-    if tix = 0 then
-      // exactly wake up one thread per needed event
-      for i := 1 to length(fThreads) - 1 do
-      begin
-        t := fThreads[i];
-        if not (wuPossible in t.fWakeUp) then
-         continue;
-        // this thread is currently idle and can be activated
-        t.fThreadPollingLastWakeUpEvents := 0;
-        t.fThreadPollingLastWakeUpTix := 0;
-        exclude(t.fWakeUp, wuPossible); // acquire this thread
-        ndx[result] := i; // notify outside of fThreadPollingWakeupSafe lock
-        inc(result);
-        dec(Events);
-        if Events <= 0 then
-          break;
-      end
-    else // acoThreadSmooting up to ThreadPollingWakeupLoad events per thread
-    begin
-      // first pass to identify any spare events in running threads
-      for i := 1 to length(fThreads) - 1 do
-      begin
-        t := fThreads[i];
-        if (wuPossible in t.fWakeUp) or                 // not running
-           (t.fThreadPollingLastWakeUpEvents = 0) or    // no spare event
-           (t.fThreadPollingLastWakeUpTix <> tix) then  // slow process
-          continue;
-        // this thread is likely to be available very soon: consider it done
-        c := t.fThreadPollingLastWakeUpEvents;
-        dec(t.fThreadPollingLastWakeUpEvents, Events);
-        dec(Events, c);
-        if Events <= 0 then
-          break;
-      end;
-      if Events > 0 then
-        // we need to wake up some thread(s), since some slow work is going on
-        for i := 1 to length(fThreads) - 1 do
-        begin
-          t := fThreads[i];
-          if not (wuPossible in t.fWakeUp) then
-           continue;
-          t.fThreadPollingLastWakeUpTix := tix;
-          t.fThreadPollingLastWakeUpEvents := fThreadPollingWakeupLoad - Events;
-          exclude(t.fWakeUp, wuPossible);
-          ndx[result] := i;
-          inc(result);
-          dec(Events, fThreadPollingWakeupLoad);
-          if Events <= 0 then
-            break;
-        end;
-    end;
-  finally
-    fThreadPollingWakeupSafe.UnLock;
-  end;
-  // notify threads outside fThreadPollingWakeupSafe
-  for i := 0 to result - 1 do
-    fThreads[ndx[i]].fEvent.SetEvent;
-end;
-{$endif USE_WINIOCP}
 
 procedure TAsyncConnections.DoLog(Level: TSynLogLevel; TextFmt: PUtf8Char;
   const TextArgs: array of const; Instance: TObject);
@@ -3852,11 +3773,114 @@ begin
     // with no initial fRead.SubScribe() to speed up e.g. HTTP/1.0
     fSockets.fRead.AddOnePending(TPollSocketTag(Sender), [pseRead],
       {aSearchExisting=} false{ifFromGC in Sender.fInternalFlags});
-    ThreadPollingWakeup(1);
+    ThreadPollingWakeupOne;
     result := true; // no Subscribe() -> delayed in atpReadPending if needed
   end
   else
     result := false; // Subscribe() is done by TPollAsyncSockets.Start caller
+end;
+
+// NOTICE on the acoThreadSmooting scheduling algorithm (genuine AFAICT)
+// - in TAsyncConnectionsThread.Execute, the R0/atpReadPoll main thread calls
+// PollForPendingEvents (e.g. the epoll API on Linux) then ThreadPollingWakeup()
+// to process the socket reads in the R1..Rn/atpReadPending threads of the pool
+// - the naive/standard/well-used algorithm of waking up the threads on need
+// does not perform well, especially with a high number of threads: the
+// global CPU usage remains idle, because most of the time is spent between
+// the threads, and not processing actual data
+// - acoThreadSmooting wake up the sub-threads only if it did not become idle
+// within GetTickCount64 resolution (i.e. 16ms on Windows, 4ms on Linux)
+// - on small load or quick response, only the R1 thread is involved
+// - on slow process (e.g. DB access) or in case of high traffic, R1 is
+// identified as blocking, and R2..Rmax threads are awaken in order
+// - it seems to leverage the CPU performance especially when the number of
+// threads is higher than the number of cores
+// - this algorithm seems efficient, and simple enough to implement and debug,
+// in respect to what I have seen in high-performance thread pools (e.g. in
+// MariaDB), which have much bigger complexity (like a dynamic thread pool)
+// - ThreadPollingWakeupLoad property defines how many fast processing events a
+// thread is supposed to handle in its loop - default value is computed as
+// (ThreadPoolCount / CpuCount) * 8 so should scale depending on the actual HW
+// - on POSIX waking up threads is done via our efficient TSynEvent.SetEvent
+// - on Windows, TWinIocp will directly handle atpReadPending thread wakening
+
+procedure TAsyncConnections.ThreadPollingWakeupLocked;
+var
+  e, i, n, prev: PtrInt;
+  t: TAsyncConnectionsThread;
+  c, tix: integer;  // 32-bit is enough to check for
+  ndx: TByteToByte; // wake up to 256 threads at once
+begin
+  try // caller made a successful fWakeupSafe.TryLock
+    tix := 0; // default is one thread per event (legacy algorithm)
+    if acoThreadSmooting in fOptions then
+      tix := fThreadPollingLastWakeUpTix;
+    n := 0;
+    repeat
+      prev := n;
+      // wake up one thread per event after accept/idle or on legacy mode
+      e := LockedGet32(@fWakeupOne);
+      if e > 0 then
+        for i := 1 to length(fThreads) - 1 do
+        begin
+          t := fThreads[i];
+          if not (wuPossible in t.fWakeUp) then
+            continue;
+          // this thread is currently idle and can be activated
+          t.fThreadPollingLastWakeUpEvents := 0;
+          t.fThreadPollingLastWakeUpTix := 0;
+          exclude(t.fWakeUp, wuPossible); // acquire this thread
+          ndx[n] := i; // notify outside of fWakeupSafe lock
+          inc(n);
+          dec(e);
+          if (e = 0) or
+             (n > high(ndx)) then
+            break;
+        end;
+      // acoThreadSmooting up to ThreadPollingWakeupLoad events per thread
+      e := LockedGet32(@fWakeupEvents);
+      if e > 0 then
+      begin
+        // first pass to identify any spare events in running threads
+        for i := 1 to length(fThreads) - 1 do
+        begin
+          t := fThreads[i];
+          if (wuPossible in t.fWakeUp) or                 // not running
+             (t.fThreadPollingLastWakeUpEvents = 0) or    // no spare event
+             (t.fThreadPollingLastWakeUpTix <> tix) then  // slow process
+            continue;
+          // this thread is likely to be available very soon: consider it done
+          c := t.fThreadPollingLastWakeUpEvents;
+          dec(t.fThreadPollingLastWakeUpEvents, e);
+          dec(e, c);
+          if e <= 0 then
+            break;
+        end;
+        if e > 0 then
+          // we need to wake up some thread(s), since some slow work is going on
+          for i := 1 to length(fThreads) - 1 do
+          begin
+            t := fThreads[i];
+            if not (wuPossible in t.fWakeUp) then
+             continue;
+            t.fThreadPollingLastWakeUpTix := tix;
+            t.fThreadPollingLastWakeUpEvents := fThreadPollingWakeupLoad - e;
+            exclude(t.fWakeUp, wuPossible);
+            ndx[n] := i;
+            inc(n);
+            dec(e, fThreadPollingWakeupLoad);
+            if (e <= 0) or
+               (n > high(ndx)) then
+              break;
+          end;
+      end;
+    until n = prev; // no more threads need to be woken
+  finally
+    fWakeupSafe.UnLock;
+  end;
+  // notify threads outside fWakeupSafe
+  for i := 0 to n - 1 do
+    fThreads[ndx[i]].fEvent.SetEvent;
 end;
 
 {$endif USE_WINIOCP}

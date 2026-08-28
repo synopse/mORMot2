@@ -3078,6 +3078,9 @@ procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
 procedure LockedAdd32(var Target: cardinal; Increment: cardinal);
   {$ifndef ASMINTEL} inline; {$endif}
 
+/// fast atomic "result := Target^; Target^ := 0;" on a 32-bit integer value
+function LockedGet32(Target: PInteger): integer;
+
 {$ifdef ISDELPHI}
 
 /// return the position of the leftmost set bit in a 32-bit value
@@ -11590,6 +11593,13 @@ end;
 {$endif CPUARM3264}
 
 {$endif ASMINTEL}
+
+function LockedGet32(Target: PInteger): integer;
+begin
+  repeat
+    result := Target^;
+  until LockedExc32(PCardinal(Target)^, 0, result);
+end;
 
 {$ifndef ASMINTELNOTPIC}
 
