@@ -4410,6 +4410,10 @@ procedure RawUtf8ToVariant(const Txt: RawUtf8; var Value: variant); overload;
 function RawUtf8ToVariant(const Txt: RawUtf8): variant; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// convert an UTF-8 encoded ShortString into a variant RawUtf8 varString
+procedure ShortStringToVariant(const Txt: ShortString; var Value: variant);
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// convert a Variant varString value into RawUtf8 encoded String
 // - works as the exact reverse of RawUtf8ToVariant() function
 // - non varString variants (e.g. UnicodeString, WideString, numbers, empty and
@@ -13728,6 +13732,11 @@ end;
 function RawUtf8ToVariant(const Txt: RawUtf8): variant;
 begin
   RawUtf8ToVariant(Txt, result{%H-});
+end;
+
+procedure ShortStringToVariant(const Txt: ShortString; var Value: variant);
+begin
+  RawUtf8ToVariant(@Txt[1], length(Txt), Value);
 end;
 
 procedure VariantStringToUtf8(const V: Variant; var result: RawUtf8);
