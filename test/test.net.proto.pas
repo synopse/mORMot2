@@ -116,9 +116,11 @@ type
     procedure DoRtspOverHttp(options: TAsyncConnectionsOptions);
     // helper invoked from OpenAPI to verify YAML dispatch
     procedure OpenApiYamlDispatch;
-    {$ifdef OSPOSIX}
     /// validate mormot.net.tftp.server using libcurl (so only POSIX by now)
     procedure DoTFTPServer(Sender: TObject);
+    /// validate that a TFTP server owns all connection threads until shutdown
+    procedure DoTFTPShutdown;
+    {$ifdef OSPOSIX}
     /// validate Unix domain socket server bind and stale .socket file cleanup
     procedure DoUnixDomainSocket(Sender: TObject);
     {$endif OSPOSIX}
@@ -127,8 +129,6 @@ type
     /// validate 'Range:' file responses, especially against invalid offsets
     procedure DoHttpFileRange(Sender: TObject);
   published
-    /// validate that a TFTP server owns all connection threads until shutdown
-    procedure TFTPShutdown;
     /// Engine.IO and Socket.IO regression tests
     procedure _SocketIO;
     /// validate DNS and LDAP clients (and NTP/SNTP)
@@ -207,7 +207,7 @@ begin
   inherited TerminateAndWaitFinished(1);
 end;
 
-procedure TNetworkProtocols.TFTPShutdown;
+procedure TNetworkProtocols.DoTFTPShutdown;
 var
   context: TTftpContext;
   connection: TSlowTftpConnection;
@@ -259,9 +259,9 @@ begin
   // start some slow tests in background if /multithread is enabled
   Run(DoHttpBodyDownload, self, 'HttpBodyDownload', true, false);
   Run(DoHttpFileRange, self, 'HttpFileRange', true, false);
+  Run(DoTFTPServer, self, 'TFTPServer', true, false);
   {$ifdef OSPOSIX}
   Run(DoUnixDomainSocket, self, 'UnixDomainSocket', true, false);
-  Run(DoTFTPServer, self, 'TFTPServer', true, false);
   {$endif OSPOSIX}
   // from https://datatracker.ietf.org/doc/html/rfc6455#section-1.3
   ComputeChallenge('dGhlIHNhbXBsZSBub25jZQ==', ws);
@@ -5261,6 +5261,7 @@ var
   timer: TPrecisionTimer;
   orig, rd: RawByteString;
 begin
+  DoTFTPShutdown; // this test needs no TFTP client
   {$ifdef OSDARWINARM}
   if true then // mac M1 libcurl seems not tftp compatible
   {$else}
@@ -5355,6 +5356,11 @@ begin
     Check(DeleteFile(fn), 'delete tmp');
     http.Free;
   end;
+end;
+{$else}
+procedure TNetworkProtocols.DoTFTPServer(Sender: TObject);
+begin
+  DoTFTPShutdown; // no real TFTP client is needed
 end;
 {$endif OSPOSIX}
 
