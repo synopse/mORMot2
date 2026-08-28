@@ -1495,17 +1495,17 @@ begin
   result := p^.V;
 end; // warning: FPC's GetTickCount64 doesn't handle 49.7 days wrap on XP :(
 
-procedure InitializeSRWLockForXP(var P: TOSLightMutex); stdcall;
+procedure InitializeSRWLockForXP(var P: pointer); stdcall;
 begin
   PLightLock(@P)^.Init; // our TLightLock is good enough on XP
 end;
 
-procedure AcquireSRWLockExclusiveForXP(var P: TOSLightMutex); stdcall;
+procedure AcquireSRWLockExclusiveForXP(var P: pointer); stdcall;
 begin
   PLightLock(@P)^.Lock;
 end;
 
-procedure ReleaseSRWLockExclusiveForXP(var P: TOSLightMutex); stdcall;
+procedure ReleaseSRWLockExclusiveForXP(var P: pointer); stdcall;
 begin
   PLightLock(@P)^.UnLock;
 end;
@@ -1526,29 +1526,6 @@ begin
     Windows.Sleep(ms) // follow the HW timer: typically up to 16ms on Windows
   else
     SwitchToThread;
-end;
-
-
-{ TOSLightLock }
-
-procedure TOSLightLock.Init;
-begin
-  fMutex := nil;
-  InitializeSRWLock(fMutex); // fallback to TLightLock on XP
-end;
-
-procedure TOSLightLock.Done;
-begin // nothing needed
-end;
-
-procedure TOSLightLock.Lock;
-begin
-  AcquireSRWLockExclusive(fMutex);
-end;
-
-procedure TOSLightLock.UnLock;
-begin
-  ReleaseSRWLockExclusive(fMutex);
 end;
 
 

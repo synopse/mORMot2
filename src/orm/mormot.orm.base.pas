@@ -2926,7 +2926,7 @@ type
     fBlobFields: TOrmPropInfoRttiRawBlobDynArray;
     fSqlTableName: RawUtf8;
     fLastFieldsSafe: TLightLock; // topmost to ensure proper aarch64 alignment
-    fSafe: TOSLightLock; // = TOSLightMutex = SRW on Windows or futex on Linux
+    fSafe: TOSLightLock;         // = TOSLightMutex = futex on Linux and Win8+
     fHasNotSimpleFields: boolean;
     fDynArrayFieldsHasObjArray: boolean;
     fHasTypeFields: TOrmFieldTypes;

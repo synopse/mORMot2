@@ -2564,9 +2564,6 @@ type
 
 {$endif ISDELPHI}
 
-  /// handle for Slim Reader/Writer (SRW) locks in exclusive mode
-  TOSLightMutex = pointer;
-
 /// detect if a file name starts with the long path '\\?\' prefix
 // - https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation
 function IsExtendedPathName(const Name: TFileName): boolean;
@@ -2575,7 +2572,7 @@ var
   // Slim Reader/Writer (SRW) API exclusive mode - fallback to TLightLock on XP
   InitializeSRWLock,
   AcquireSRWLockExclusive,
-  ReleaseSRWLockExclusive: procedure(var P: TOSLightMutex); stdcall;
+  ReleaseSRWLockExclusive: procedure(var P: pointer); stdcall;
   // documented since Windows Vista, but actually available on Windows XP SP3 :)
   RtlIpv6StringToAddress: function(s: PUtf8Char; var term: PUtf8Char;
     in6: PByte): integer; stdcall;
@@ -2642,11 +2639,13 @@ type
 type
   /// system-specific type returned by FileAge(): UTC 64-bit Epoch on POSIX
   TFileAge = TUnixTime;
-  /// system-specific structure holding a non-recursive mutex
-  // - is a futex 32-bit flag on Linux or a pthread_mutex on BSD
-  TOSLightMutex = {$ifdef FPCLINUX} cardinal {$else} TRTLCriticalSection {$endif};
 
 {$endif OSWINDOWS}
+
+type
+  /// system-specific structure holding a non-recursive mutex e.g. for TOSLightLock
+  // - is a futex 32-bit flag on Linux/Windows or a pthread_mutex on BSD
+  TOSLightMutex = {$ifdef OSFUTEX} cardinal {$else} TRTLCriticalSection {$endif};
 
 /// raw cross-platform library loading function
 // - alternative to LoadLibrary() and SafeLoadLibrary() Windows API and RTL
@@ -4794,10 +4793,10 @@ type
   TOSLightLock = object
   {$endif USERECORDWITHMETHODS}
   private
-    fMutex: TOSLightMutex;
-    {$ifdef FPCLINUX}
-    procedure LockSpin; // for Linux futex support
-    {$endif FPCLINUX}
+    fMutex: TOSLightMutex; // futex on Linux and Win8+ or TRtlCriticalSection
+    {$ifdef OSFUTEX}
+    procedure LockSpin;    // for futex support
+    {$endif OSFUTEX}
   public
     /// to be called to setup the instance
     // - mandatory in all cases, even if TOSLock is part of a class
@@ -4809,15 +4808,13 @@ type
     // would deadlock
     procedure Lock;
       {$ifdef HASINLINE} inline; {$endif}
-    {$ifdef OSPOSIX}
     /// access to raw pthread_mutex_trylock() method
     // - TryAcquireSRWLockExclusive() seems not stable on all Windows revisions
     function TryLock: boolean;
-      {$ifndef FPCLINUX} {$ifdef HASINLINE} inline; {$endif} {$endif}
-    {$endif OSPOSIX}
+      {$ifdef HASINLINE} inline; {$endif}
     /// leave an OS lock
     procedure UnLock;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef FPC_OR_DELPHIXE} inline; {$endif} // fail on Delphi 2006-2010
   end;
   POSLightLock = ^TOSLightLock;
 
@@ -5242,7 +5239,7 @@ type
   // - publishes the fastest available non-reentrant Operating System lock
   TObjectOSLightLock = class(TSynPersistent)
   protected
-    fSafe: TOSLightLock; // = TOSLightMutex = SRW on Windows or futex on Linux
+    fSafe: TOSLightLock; // = TOSLightMutex = futex on Linux and Win8+
   public
     /// initialize the instance, and its associated OS lock
     constructor Create; override;
@@ -5291,6 +5288,7 @@ function NewSynLocker: PSynLocker;
 /// raw cross-platform futex-like to wait while Value^ = Expected
 // - use futex on Linux, WaitOnAddress() on Win8+, or equal nil otherwise
 // - caller should ensure Value <> nil and eventually make LockedExc32() CAS
+// - see also OSFUTEX conditional defined only on Linux and Windows
 var OsWaitOnValue: procedure(Value: PCardinal; Expected, TimeoutMS: cardinal);
 
 /// raw cross-platform futex-like unlock of the next waiting OsWakeOnValue()
@@ -11697,6 +11695,90 @@ begin
   mormot.core.os.LeaveCriticalSection(CS);
 end;
 
+
+{$ifdef OSFUTEX}
+
+{ TOSLightLock }
+
+// on FPC Linux and Windows, uses a 32-bit futex or fallback to SpinAndWait()
+
+const
+  EV_NONE   = 0;
+  EV_LOCKED = 1;
+  EV_WAITER = 2;
+
+  SPIN_FUTEX = {$ifdef CPUINTEL} 24 {$else} 127 {$endif};
+
+procedure TOSLightLock.Init;
+begin
+  fMutex := EV_NONE; // single 32-bit field
+end;
+
+procedure TOSLightLock.Done;
+begin // just for compatibility with TOSLock
+end;
+
+procedure TOSLightLock.Lock;
+begin
+  if not LockedExc32(fMutex, {to=}EV_LOCKED, {from=}EV_NONE) then
+    LockSpin;
+end;
+
+procedure TOSLightLock.UnLock;
+begin
+  {$ifdef CPUINTEL}
+  if fMutex = EV_LOCKED then
+  begin
+    fMutex := EV_NONE; // fast path is allowed on Intel (and noticeably faster)
+    exit;
+  end;
+  {$else}
+  if LockedExc32(fMutex, {to=}EV_NONE, {from=}EV_LOCKED) then
+    exit; // uncontended CAS path is needed on non-ordered ARM
+  {$endif CPUINTEL}
+  fMutex := EV_NONE;
+  if Assigned(OsWakeOnValue) then
+    OsWakeOnValue(@fMutex);
+end;
+
+function TOSLightLock.TryLock: boolean;
+begin
+  result := (fMutex = EV_NONE) and
+            LockedExc32(fMutex, {to=}EV_LOCKED, {from=}EV_NONE);
+end;
+
+procedure TOSLightLock.LockSpin;
+var
+  spin: PtrUInt;
+begin
+  if Assigned(OsWaitOnValue) then // use pattern with Linux futex syscall
+  begin
+    spin := SPIN_FUTEX;
+    repeat
+      DoPause;
+      dec(spin);
+      if spin = 0 then
+      begin
+        if fMutex <> EV_NONE then
+        begin
+          if fMutex = EV_LOCKED then
+            LockedExc32(fMutex, EV_WAITER, EV_LOCKED); // mark contention
+          OsWaitOnValue(@fMutex, EV_WAITER, INFINITE); // wait until UnLock
+        end;
+        spin := SPIN_FUTEX;
+      end;
+    until LockedExc32(fMutex, EV_WAITER, EV_NONE);
+  end
+  else
+  begin
+    spin := SPIN_COUNT;
+    repeat // TLightLock-like fallback on very old Linux kernel
+      spin := SpinAndWait(spin); // regular SwitchToThread spin
+    until TryLock;
+  end;
+end;
+
+{$endif OSFUTEX}
 
 { TLockedList }
 
