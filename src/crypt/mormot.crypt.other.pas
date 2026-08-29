@@ -1961,6 +1961,11 @@ procedure SBlockMix(dst, src, bxor: pointer; R: PtrUInt);
         mov     rsi, rdx
         mov     rdx, r8
         mov     rcx, r9
+        sub     rsp, 72 // XMM6-XMM15 should also be preserved - 72 for movaps
+        movaps  [rsp], xmm8
+        movaps  [rsp + 10H], xmm9
+        movaps  [rsp + 20H], xmm10
+        movaps  [rsp + 30H], xmm11
         {$endif ABIWINX64}
         shl     rcx, 7
         lea     rax, [rsi + rcx - 40H]
@@ -2075,6 +2080,11 @@ procedure SBlockMix(dst, src, bxor: pointer; R: PtrUInt);
         movaps  [rax + 30H], xmm3
         jne     @loop
         {$ifdef ABIWINX64}
+        movaps  xmm8, [rsp]
+        movaps  xmm9, [rsp + 10H]
+        movaps  xmm10, [rsp + 20H]
+        movaps  xmm11, [rsp + 30H]
+        add     rsp, 72
         pop     rdi
         pop     rsi
         {$endif ABIWINX64}
