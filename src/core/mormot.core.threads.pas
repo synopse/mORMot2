@@ -1565,6 +1565,7 @@ type
     fRunning: integer;
     fMaxRunning: integer;
     fPending: array of TLoggedWork; // pending Run() if ForcedThreaded
+    fIdle: TSynEvent; // notify WaitFor() when fRunning reaches 0
     fSynLog: TSynLogClass;
     fTerminated: boolean;
     fOnBeforeEachTask, fOnAfterEachTask: TNotifyEvent;
@@ -1592,6 +1593,7 @@ type
       ForcedThread: boolean = false); overload;
     /// wait for background thread started by Run() to finish
     // - returns true on success, false on timeout
+    // - only one thread should call RunWait() at a time
     // - can optionally call CheckSynchronize() if needed
     function RunWait(TimeoutSec: integer = 60; CallSynchronize: boolean = false): boolean;
     /// check if Running > 0
@@ -4453,11 +4455,13 @@ begin
   if aMaxThread = 0 then
     aMaxThread := CpuThreads; // = SystemInfo.dwNumberOfProcessors logical count
   fMaxRunning := aMaxThread;
+  fIdle := TSynEvent.Create;
 end;
 
 destructor TLoggedWorker.Destroy;
 begin
   Terminate({andwait=}true);
+  fIdle.Free;
   inherited Destroy;
 end;
 
@@ -4483,8 +4487,18 @@ begin
     if fRunning < fMaxRunning then
     begin
       // enough CPU cores to run a new thread now
+      if fRunning = 0 then
+        fIdle.ResetEvent;
       inc(fRunning);
-      TLoggedWorkThread.CreateOwned(self, Work, RunDone);
+      try
+        TLoggedWorkThread.CreateOwned(self, Work, RunDone);
+      except
+        // keep fRunning/fIdle consistent if thread creation failed
+        dec(fRunning);
+        if fRunning = 0 then
+          fIdle.SetEvent;
+        raise;
+      end;
       exit;
     end
     else if ForcedThread then
@@ -4539,7 +4553,9 @@ begin
       if (fPending = nil) or
          fTerminated then
       begin
-        dec(fRunning); // no pending task: atomic decrease global counter
+        dec(fRunning); // no pending task: decrease global counter under fSafe
+        if fRunning = 0 then
+          fIdle.SetEvent;
         exit;
       end;
       // pop last pending task
@@ -4566,26 +4582,21 @@ end;
 
 function TLoggedWorker.RunWait(TimeoutSec: integer; CallSynchronize: boolean): boolean;
 var
-  endtix: cardinal;
+  ms: cardinal;
 begin
-  result := (self = nil) or
-            (fRunning = 0);
-  if result then
+  result := true;
+  if (self = nil) or
+     (fRunning = 0) then
     exit;
-  endtix := TimeoutSec;
-  if endtix <> 0 then
-    inc(endtix, GetTickSec); // never wait forever
+  if TimeoutSec = 0 then // TimeoutSec=0 has always meant to wait forever
+    ms := INFINITE
+  else if cardinal(TimeoutSec) >= INFINITE div MilliSecsPerSec then
+    ms := INFINITE - 1
+  else
+    ms := cardinal(TimeoutSec) * MilliSecsPerSec;
   CallSynchronize := CallSynchronize and
                      (GetCurrentThreadID = MainThreadID);
-  while fRunning <> 0 do
-    if (endtix <> 0) and
-       (GetTickSec > endtix) then
-      exit // result = false on timeout
-    else if CallSynchronize then
-      CheckSynchronize(1)
-    else
-      SleepHiRes(10);
-  result := true; // success
+  result := fIdle.WaitForSafe(ms, {DisableSafe=}not CallSynchronize);
 end;
 
 function TLoggedWorker.Waiting: boolean;
