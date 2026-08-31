@@ -1770,8 +1770,8 @@ type
     procedure Clear;
     /// fill the members from a supplied URI
     // - recognize e.g. 'http://server:port/address', 'https://server/address',
-    // 'server/address' (as http), 'http://unix:/server:/address' (as nlUnix),
-    // 'https://user:password@server:port/address' (authenticated),
+    // 'server/address' or 'server' (as http), 'http://unix:/server:/address' (as
+    // nlUnix), 'https://user:password@server:port/address' (authenticated),
     // 'wss://Server/Address' (as https) or 'file://server/folder/data.xml'
     // - supports RFC 3986 IPv6 litterals like 'https://[::1]:123/tata'
     // - returns TRUE if the Server has been extracted and is not ''
