@@ -2012,6 +2012,9 @@ type
   TAsnObject = RawByteString;
   PAsnObject = ^TAsnObject;
 
+  /// could be used to store several binary objects, e.g. LDAP modifiers
+  TAsnObjects = array of TAsnObject;
+
 const
   /// constructed class type bitmask
   ASN1_CL_CTR   = $20;
@@ -2312,6 +2315,9 @@ procedure AsnNextInit(var Pos: TIntegerDynArray; Count: PtrInt);
 /// human-readable display of a ASN.1 value binary
 // - used e.g. by the ASNDEBUG conditional
 function AsnDump(const Value: TAsnObject): RawUtf8;
+
+/// append one TAsnObject to a dynamic array e.g. for LDAP modifiers
+function AsnAddItem(var Arr: TAsnObjects; const Value: TAsnObject): PtrInt;
 
 
 { ****************** Operating System Certificates Operation }
@@ -7406,6 +7412,13 @@ begin
   SetLength(Pos, Count);
   for i := 0 to Count - 1 do
     Pos[i] := 1;
+end;
+
+function AsnAddItem(var Arr: TAsnObjects; const Value: TAsnObject): PtrInt;
+begin
+  result := length(Arr);
+  SetLength(Arr, result + 1);
+  Arr[result] := Value;
 end;
 
 function IsBinaryString(var Value: RawByteString): boolean;
