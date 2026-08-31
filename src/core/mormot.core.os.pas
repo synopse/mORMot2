@@ -5521,8 +5521,8 @@ function SleepDelay(elapsed: PtrInt): PtrInt;
 function SleepStepTime(var start, tix: Int64; endtix: PInt64 = nil): PtrInt;
 
 /// similar to Windows SwitchToThread API call, to be truly cross-platform
-// - call the homonymous API on Windows
-// - call direclty the sched_yield Linux syscall or the FPC RTL on BSD
+// - call direclty the sched_yield or fpnanosleep Linux syscall
+// - call the homonymous API on Windows, or the FPC RTL on BSD
 // - you should not call this function in your own code, especially since
 // sched_yield is reported to be unfair and misleading by Linux kernel devs
 procedure SwitchToThread;
@@ -11791,16 +11791,8 @@ end;
 
 procedure TOSLightLock.UnLock;
 begin
-  {$ifdef CPUINTEL}
-  if fMutex = EV_LOCKED then
-  begin
-    fMutex := EV_NONE; // fast path is allowed on Intel (and noticeably faster)
-    exit;
-  end;
-  {$else}
   if LockedExc32(fMutex, {to=}EV_NONE, {from=}EV_LOCKED) then
-    exit; // uncontended CAS path is needed on non-ordered ARM
-  {$endif CPUINTEL}
+    exit; // CAS is mandatory to avoid any race and forget to wake the waiter
   fMutex := EV_NONE;
   if Assigned(OsWakeOnValue) then
     OsWakeOnValue(@fMutex);
@@ -11894,10 +11886,8 @@ var
   f: cardinal;
 begin
   f := Flags;
-  { A reader can't enter while a writer owns the lock.
-    Also prevent the reader count from overflowing into RW_WRITE. }
   if ((f and RW_WRITE) <> 0) or // reader can't enter while a writer owns it
-     (f = RW_READ_MAX) then     // avoid overflow
+     (f = RW_READ_MAX) then     // avoid 31-bit counter overflow
     result := false
   else
     result := LockedExc32(Flags, f + 1, f); // fast CAS acquisition
