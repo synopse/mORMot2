@@ -3145,9 +3145,7 @@ var
   sess: TTunnelSession;
   i, j, c: PtrInt;
   local: TNetPort;
-  rnd: PLecuyer;
 begin
-  rnd := ThreadRandom; // use the TLecuyer of this thread
   TSynLogTestLog.EnterLocal(log, self, 'TTunnelRelay');
   if CheckFailed(length(console) <> 0) then
     exit; // avoid division per zero in "i mod length(console)" below
