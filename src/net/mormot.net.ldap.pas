@@ -240,15 +240,27 @@ function DnsLdapControllersSorted(UdpFirstDelayMS, MinimalUdpCount: integer;
 
 { **************** LDAP Protocol Definitions }
 
+type
+  /// define only one part of a Distinguished Name content e.g. for DNToCN()
+  TNormalizeDN = set of (dnCN, dnOU, dnDC);
+const
+  /// define all parts of a Distinguished Name content
+  DN_ALL = [low(TNormalizeDN) .. high(TNormalizeDN)];
+
 /// convert a Distinguished Name to a Canonical Name
 // - raise ELdap if the supplied DN is invalid - unless NoRaise was set to true
 // - e.g. DNToCN('CN=User1,OU=Users,OU=London,DC=xyz,DC=local') =
 // 'xyz.local/London/Users/User1'
-function DNToCN(const DN: RawUtf8; NoRaise: boolean = false): RawUtf8;
+function DNToCN(const DN: RawUtf8; NoRaise: boolean = false;
+  extend: TNormalizeDN = DN_ALL): RawUtf8;
+
+/// internal function used by DNToDN()
+function DNsToCN(const dc, ou, cn: TRawUtf8DynArray;
+  extend: TNormalizeDN = DN_ALL): RawUtf8;
 
 /// normalize a Distinguished Name into its standard layout
 // - trim spaces, and use CN= OU= DC= specifiers
-function NormalizeDN(const DN: RawUtf8): RawUtf8;
+function NormalizeDN(const DN: RawUtf8; extend: TNormalizeDN = DN_ALL): RawUtf8;
 
 /// low-level parse a Distinguished Name text into its DC= OU= CN= parts
 // - on parsing error, raise ELdap or return false if NoRaise was set to true
@@ -3242,24 +3254,37 @@ begin
   result := true;
 end;
 
-function DNsToCN(const dc, ou, cn: TRawUtf8DynArray): RawUtf8;
+function DNsToCN(const dc, ou, cn: TRawUtf8DynArray; extend: TNormalizeDN): RawUtf8;
 var
   w: TTextWriter;
   tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
 begin
+  if dc = nil then
+    exclude(extend, dnDC);
+  if ou = nil then
+    exclude(extend, dnOU);
+  if cn = nil then
+    exclude(extend, dnCN);
+  if extend = [] then
+  begin
+    FastAssignNew(result);
+    exit;
+  end;
   w := TTextWriter.CreateOwnedStream(tmp);
   try
-    w.AddCsvStrings(dc, '.', -1, {reverse=}false);
-    if (ou <> nil) or
-       (cn <> nil) then
-      w.AddDirect('/');
-    if ou <> nil then
-      w.AddCsvStrings(ou, '/', -1, {reverse=}true);
-    if cn <> nil then
+    if dnDC in extend then
+      w.AddCsvStrings(dc, '.', -1, {reverse=}false);
+    if extend <> [dnDC] then
     begin
-      if ou <> nil then
-        w.AddDirect('/');
-      w.AddCsvStrings(cn, '/', -1, {reverse=}true);
+      w.AddDirect('/');
+      if dnOU in extend then
+        w.AddCsvStrings(ou, '/', -1, {reverse=}true);
+      if dnCN in extend then
+      begin
+        if dnOU in extend then
+          w.AddDirect('/');
+        w.AddCsvStrings(cn, '/', -1, {reverse=}true);
+      end;
     end;
     w.SetText(result);
   finally
@@ -3267,17 +3292,17 @@ begin
   end;
 end;
 
-function DNToCN(const DN: RawUtf8; NoRaise: boolean): RawUtf8;
+function DNToCN(const DN: RawUtf8; NoRaise: boolean; extend: TNormalizeDN): RawUtf8;
 var
   dc, ou, cn: TRawUtf8DynArray;
 begin
   FastAssignNew(result);
   if (DN <> '') and
      ParseDN(DN, dc, ou, cn, {valueEscapeCN=}true, NoRaise) then
-    result := DNsToCN(dc, ou, cn);
+    result := DNsToCN(dc, ou, cn, extend);
 end;
 
-function NormalizeDN(const DN: RawUtf8): RawUtf8;
+function NormalizeDN(const DN: RawUtf8; extend: TNormalizeDN): RawUtf8;
 var
   dc, ou, cn: TRawUtf8DynArray;
   i: PtrInt;
@@ -3286,12 +3311,15 @@ begin
   if (DN = '') or
      not ParseDN(DN, dc, ou, cn, {valueEscapeCN=}true, {noraise=}true) then
     exit;
-  for i := 0 to length(cn) - 1 do
-    Append(result, ',CN=', cn[i]);
-  for i := 0 to length(ou) - 1 do
-    Append(result, ',OU=', ou[i]);
-  for i := 0 to length(dc) - 1 do
-    Append(result, ',DC=', dc[i]);
+  if dnCN in extend then
+    for i := 0 to length(cn) - 1 do
+      Append(result, ',CN=', cn[i]);
+  if dnOU in extend then
+    for i := 0 to length(ou) - 1 do
+      Append(result, ',OU=', ou[i]);
+  if dnDC in extend then
+    for i := 0 to length(dc) - 1 do
+      Append(result, ',DC=', dc[i]);
   delete(result, 1, 1); // trim leading ','
 end;
 
