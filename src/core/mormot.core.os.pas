@@ -4584,7 +4584,8 @@ type
 
   /// a lightweight multiple Reads / exclusive Write non-upgradable lock
   // - calls SwitchToThread after some spinning, but don't use any R/W OS API
-  // - writer-preference: new ReadLock will wait until WriteUnLock is done
+  // - writer-preference: new ReadLock will wait until WriteUnLock is done;
+  // note that TOSRWLightLock has reader-preference so could be an alternative
   // - warning: ReadLocks are reentrant and allow concurrent acccess, but calling
   // WriteLock within a ReadLock, or within another WriteLock, would deadlock
   // - consider TRWLock if you need an upgradable lock - but for mostly reads,
@@ -4782,7 +4783,7 @@ type
   POSLock = ^TOSLock;
 
   /// the fastest non-reentrant lock supplied by the Operating System
-  // - on Windows, calls WaitOnAddress/WakeByAddresssingle Win8+ API
+  // - on Windows, calls WaitOnAddress/WakeByAddressSingle Win8+ API
   // - on Linux, uses 32-bit futex syscall; on BSD, calls pthread_mutex_*()
   // - other systems fallback to TRTLCriticalSection
   // - don't forget to call Init and Done to properly initialize the structure
@@ -4802,11 +4803,12 @@ type
     {$endif OSFUTEX}
   public
     /// to be called to setup the instance
-    // - mandatory in all cases, even if TOSLightLock is part of a class
+    // - mandatory for the TRTLCriticalSection fallback compatibility
     procedure Init;
     /// to be called to finalize the instance
+    // - mandatory for the TRTLCriticalSection fallback compatibility
     procedure Done;
-    /// enter an OS lock
+      /// enter an OS lock
     // - warning: this method is NOT reentrant/recursive, so any nested call
     // would deadlock
     procedure Lock;
@@ -4820,6 +4822,59 @@ type
       {$ifdef FPC_OR_DELPHIXE} inline; {$endif} // fail on Delphi 2006-2010
   end;
   POSLightLock = ^TOSLightLock;
+
+  /// the fastest non-reentrant Read/Write lock with waiters waken by the OS
+  // - reader-preference: readers are allowed to enter while a writer waits;
+  // note that TRWLightLock has writer-preference so could be an alternative
+  // - on Windows, calls WaitOnAddress/WakeByAddressSingle Win8+ API
+  // - on Linux, uses 32-bit futex syscall
+  // - other systems (BSD or old Windows/Linux) fallback to regular SpinAndWait()
+  // - warning: ReadLock calls are reentrant by design but WriteLock is not
+  {$ifdef USERECORDWITHMETHODS}
+  TOSRWLightLock = record
+  {$else}
+  TOSRWLightLock = object
+  {$endif USERECORDWITHMETHODS}
+  private
+    Flags: cardinal; // 32-bit futex on Linux and Win8+; simple CAS fallback
+    procedure ReadLockSpin;
+    procedure WriteLockSpin;
+  public
+    /// to be called if the instance has not been filled with 0
+    // - e.g. not needed if TOSRWLightLock is defined as a class field
+    procedure Init;
+    /// not mandatory do-nothing method to finalize the instance
+    procedure Done;
+    /// enter a multiple-reads reentrant lock
+    // - readers may enter while a writer is waiting
+    // - warning: WriteLock within a ReadLock deadlocks
+    procedure ReadLock;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// try to enter a multiple-reads reentrant lock
+    // - if returned true, caller should eventually call ReadUnLock
+    function TryReadLock: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// leave a multiple-reads lock
+    procedure ReadUnLock;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// enter an exclusive non-reentrant write lock
+    // - readers have preference over a waiting writer
+    // - warning: WriteLock within another WriteLock deadlocks
+    procedure WriteLock;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// try to enter an exclusive non-reentrant write lock
+    // - if returned true, caller should eventually call WriteUnLock
+    function TryWriteLock: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// leave an exclusive write lock
+    procedure WriteUnLock;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// check if the lock has been acquired as read or write
+    // - informational only: result may change immediately on another thread
+    function IsLocked: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+  end;
+  POSRWLightLock = ^TOSRWLightLock;
 
   /// points to one data entry in TLockedList
   PLockedListOne = ^TLockedListOne;
@@ -11726,7 +11781,7 @@ begin
 end;
 
 procedure TOSLightLock.Done;
-begin // just for compatibility with TOSLock
+begin // just for compatibility with the TRTLCriticalSection fallback path
 end;
 
 procedure TOSLightLock.Lock;
@@ -11818,6 +11873,140 @@ end;
 
 {$endif OSFUTEX}
 {$endif HAS_TOSLIGHTLOCK}
+
+
+{ TOSRWLightLock }
+
+const
+  RW_WRITE    = cardinal($80000000); // bit 31 is the WriteLock flag
+  RW_READ_MAX = pred(RW_WRITE);      // bit 0..30 are the ReadLock counter
+
+procedure TOSRWLightLock.Init;
+begin
+  Flags := 0;
+end;
+
+procedure TOSRWLightLock.Done;
+begin
+end;
+
+function TOSRWLightLock.TryReadLock: boolean;
+var
+  f: cardinal;
+begin
+  f := Flags;
+  { A reader can't enter while a writer owns the lock.
+    Also prevent the reader count from overflowing into RW_WRITE. }
+  if ((f and RW_WRITE) <> 0) or // reader can't enter while a writer owns it
+     (f = RW_READ_MAX) then     // avoid overflow
+    result := false
+  else
+    result := LockedExc32(Flags, f + 1, f); // fast CAS acquisition
+end;
+
+procedure TOSRWLightLock.ReadLock;
+begin
+  if not TryReadLock then
+    ReadLockSpin;
+end;
+
+procedure TOSRWLightLock.ReadLockSpin;
+var
+  spin: PtrUInt;
+  f: cardinal;
+begin
+  if Assigned(OsWaitOnValue) then
+  begin
+    spin := SPIN_FUTEX;
+    repeat
+      dec(spin);
+      if spin = 0 then
+      begin
+        spin := SPIN_FUTEX;
+        f := Flags;
+        if (f and RW_WRITE) <> 0 then // wait for the writer release
+          OsWaitOnValue(@Flags, f, INFINITE);
+      end
+      else
+        DoPause;
+    until TryReadLock;
+  end
+  else
+  begin
+    spin := SPIN_COUNT;
+    repeat
+      spin := SpinAndWait(spin); // naive fallback on BSD or old Windows/Linux
+    until TryReadLock;
+  end;
+end;
+
+procedure TOSRWLightLock.ReadUnLock;
+begin // by design, RW_WRITE is never possible here
+  if InterlockedDecrement(PInteger(@Flags)^) = 0 then // last reader reached
+    if Assigned(OsWakeOnValue) then
+      OsWakeOnValue(@Flags); // wakeup any WriteLock waiter
+end;
+
+function TOSRWLightLock.TryWriteLock: boolean;
+begin
+  result := (Flags = 0) and // optimisitc test
+            LockedExc32(Flags, RW_WRITE, 0);
+end;
+
+procedure TOSRWLightLock.WriteLock;
+begin
+  if not TryWriteLock then
+    WriteLockSpin;
+end;
+
+procedure TOSRWLightLock.WriteLockSpin;
+var
+  spin: PtrUInt;
+  f: cardinal;
+begin
+  if Assigned(OsWaitOnValue) then
+  begin
+    spin := SPIN_FUTEX;
+    repeat
+      dec(spin);
+      if spin = 0 then
+      begin
+        spin := SPIN_FUTEX;
+        f := Flags;
+        if f <> 0 then // no need to wait on zero
+         OsWaitOnValue(@Flags, f, INFINITE);
+      end
+      else
+        DoPause;
+    until TryWriteLock;
+  end
+  else
+  begin
+    spin := SPIN_COUNT;
+    repeat
+      spin := SpinAndWait(spin); // naive fallback on BSD or old Windows/Linux
+    until TryWriteLock;
+  end;
+end;
+
+procedure TOSRWLightLock.WriteUnLock;
+begin
+  {$ifdef CPUINTEL}
+  Flags := 0; // non reentrant locks need no additional thread safety
+  {$else}
+  LockedExc32(Flags, 0, RW_WRITE); // ARM can be weak-ordered
+  {$endif CPUINTEL}
+  if Assigned(OsWakeAllOnValue) then
+    OsWakeAllOnValue(@Flags)
+  else if Assigned(OsWakeOnValue) then
+    OsWakeOnValue(@Flags);
+end;
+
+function TOSRWLightLock.IsLocked: boolean;
+begin
+  result := Flags <> 0;
+end;
+
 
 { TLockedList }
 
