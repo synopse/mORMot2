@@ -11815,6 +11815,7 @@ end;
 
 
 initialization
+  Assert(SizeOf(TFormatUtf8) <= SizeOf(TTextWriterStackBuffer)); // 4KB<=8KB
   InitializeUnit;
 
 end.
