@@ -4826,7 +4826,8 @@ type
   /// the fastest non-reentrant Read/Write lock with waiters waken by the OS
   // - reader-preference: readers are allowed to enter while a writer waits;
   // note that TRWLightLock has writer-preference so could be an alternative
-  // - on Windows, calls WaitOnAddress/WakeByAddressSingle Win8+ API
+  // - on Windows, calls WaitOnAddress/WakeByAddressSingle Win8+ API - the
+  // official SRW API has another locking pattern, and readers are not reentrant
   // - on Linux, uses 32-bit futex syscall
   // - other systems (BSD or old Windows/Linux) fallback to regular SpinAndWait()
   // - warning: ReadLock calls are reentrant by design but WriteLock is not

@@ -1428,7 +1428,7 @@ type
   protected
     fMergeSubscribeEventsLock: TLightLock; // topmost to ensure aarch64 alignment
     fSubscriptionSafe: TLightLock; // dedicated not to block Accept()
-    fPendingSafe: TOSLightLock; // more likely benefit from light futex
+    fPendingSafe: TOSLightLock; // CAS + light futex is better than any RW lock
     fGettingOne: integer;
     fPoll: array of TPollSocketAbstract; // each track up to fPoll[].MaxSockets
     fPending: TPollSocketResults;
@@ -5138,20 +5138,23 @@ begin
 end;
 
 function TPollSockets.EnsurePending(tag: TPollSocketTag): boolean;
+var
+  i: PtrInt;
 begin
-  // manual O(n) brute force search
-  result := FindPendingFromTag(
-    @fPending.Events[fPendingIndex], fPending.Count - fPendingIndex, tag) <> nil;
+  // manual O(i) brute force search into remaining events list
+  // overriden in TPollReadSockets to use TPollAsyncConnection fReadPending flag
+  i := fPendingIndex; // typically 0 in MergePendingEvents()
+  result := FindPendingFromTag(@fPending.Events[i], fPending.Count - i, tag) <> nil;
 end;
 
 procedure TPollSockets.SetPending(tag: TPollSocketTag);
 begin
-  // overriden method may set a per-connection flag for O(1) lookup
+  // overriden in TPollReadSockets to set TPollAsyncConnection fReadPending flag
 end;
 
 function TPollSockets.UnsetPending(tag: TPollSocketTag): boolean;
 begin
-  result := true; // overriden e.g. in TPollAsyncReadSockets
+  result := true; // overriden e.g. in TPollAsyncReadSockets to use fReadPending
 end;
 
 function TPollSockets.GetSubscribeCount: integer;
