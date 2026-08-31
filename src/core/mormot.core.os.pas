@@ -4814,7 +4814,6 @@ type
     procedure Lock;
       {$ifdef HASINLINE} inline; {$endif}
     /// access to raw pthread_mutex_trylock() method
-    // - TryAcquireSRWLockExclusive() seems not stable on all Windows revisions
     function TryLock: boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// leave an OS lock

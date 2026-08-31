@@ -5343,7 +5343,6 @@ begin
   try
     // thread-safe get the pending (un)subscriptions
     new.Count := 0;
-    {$ifdef OSPOSIX} // TOSLight.TryLock is not available on Windows
     if (fPending.Count = 0) and
        fPendingSafe.TryLock then
     begin
@@ -5355,7 +5354,6 @@ begin
       end;
       fPendingSafe.UnLock;
     end;
-    {$endif OSPOSIX}
     {$ifdef POLLSOCKETEPOLL}
     // TPollSocketEpoll is thread-safe and let epoll_wait() work in the background
     {if Assigned(OnLog) then
