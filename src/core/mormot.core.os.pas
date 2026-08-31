@@ -5216,7 +5216,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// wait until SetEvent is called, calling CheckSynchronize() on main thread
     // - returns true if was signaled by SetEvent, or false on timeout
-    function WaitForSafe(TimeoutMS: cardinal; DisableSafe: boolean): boolean;
+    function WaitForSafe(TimeoutMS: cardinal; DisableSafe: boolean = false): boolean;
     /// calls SleepHiRes() in steps while checking terminated flag and this event
     function SleepStep(var start: Int64; terminated: PBoolean): Int64;
     /// low-level read-only access to the internal SetEvent flag
@@ -11760,6 +11760,9 @@ begin
   mormot.core.os.LeaveCriticalSection(CS);
 end;
 
+const
+  SPIN_FUTEX = {$ifdef CPUINTEL} 24 {$else} 127 {$endif};
+
 {$ifndef HAS_TOSLIGHTLOCK}
 {$ifdef OSFUTEX}
 
@@ -11771,8 +11774,6 @@ const
   EV_NONE   = 0;
   EV_LOCKED = 1;
   EV_WAITER = 2;
-
-  SPIN_FUTEX = {$ifdef CPUINTEL} 24 {$else} 127 {$endif};
 
 procedure TOSLightLock.Init;
 begin
