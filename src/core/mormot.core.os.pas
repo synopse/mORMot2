@@ -4584,6 +4584,7 @@ type
 
   /// a lightweight multiple Reads / exclusive Write non-upgradable lock
   // - calls SwitchToThread after some spinning, but don't use any R/W OS API
+  // - writer-preference: new ReadLock will wait until WriteUnLock is done
   // - warning: ReadLocks are reentrant and allow concurrent acccess, but calling
   // WriteLock within a ReadLock, or within another WriteLock, would deadlock
   // - consider TRWLock if you need an upgradable lock - but for mostly reads,
@@ -4608,6 +4609,9 @@ type
     // - e.g. not needed if TRWLightLock is defined as a class field
     procedure Init;
       {$ifdef HASINLINE} inline; {$endif}
+    /// could be called to finalize the instance as a TRWLightLock
+    // - does nothing - just for compatibility with TOSLock
+    procedure Done;
     /// enter a non-upgradable multiple reads lock
     // - read locks maintain a thread-safe counter, so are reentrant and non blocking
     // - warning: nested WriteLock call after a ReadLock would deadlock
@@ -4623,6 +4627,8 @@ type
     procedure ReadUnLock;
       {$ifdef HASINLINE} inline; {$endif}
     /// enter a non-reentrant non-upgradable exclusive write lock
+    // - WriteLock has precedence, and will wait until pending ReadLock are
+    // consumed, but any new ReadLock would wait for the eventual WriteUnLock
     // - warning: WriteLock deadlocks within another ReadLock or WriteLock
     procedure WriteLock;
       {$ifdef HASINLINE} inline; {$endif}
@@ -11395,6 +11401,10 @@ end;
 procedure TRWLightLock.Init;
 begin
   Flags := 0; // bit 0=WriteLock, >0=ReadLock counter
+end;
+
+procedure TRWLightLock.Done;
+begin
 end;
 
 procedure TRWLightLock.ReadLock;
