@@ -1292,6 +1292,10 @@ type
     /// search or allocate a new TLdapAttribute object and its value to the list
     function Add(const AttributeName: RawUtf8; const AttributeValue: RawByteString;
       Option: TLdapAddOption = aoAlways): TLdapAttribute; overload;
+    /// search or allocate a new TLdapAttribute object and its value to the list
+    function AddFmt(const AttributeName, AttributeValueFmt: RawUtf8;
+      const AttributeValueArgs: array of const;
+      Option: TLdapAddOption = aoAlways): TLdapAttribute;
     /// search or allocate TLdapAttribute object(s) from name/value pairs to the list
     procedure AddPairs(const NameValuePairs: array of RawUtf8;
       Option: TLdapAddOption = aoAlways); 
@@ -2376,7 +2380,8 @@ type
     /// create a new entry in the directory
     function Add(const Obj: RawUtf8; Value: TLdapAttributeList): boolean;
     /// make one or more changes to an entry
-    // - the Modifications are one or several Modifier() operations
+    // - the Modifications are one or several Modifier() operations, directly as
+    // [Modifier(), Modifier()] inlined argument or via AsnAddItem(TAsnObjects)
     // - is the main modification method, called by other Modify() overloads
     function Modify(const Obj: RawUtf8;
       const Modifications: array of TAsnObject): boolean; overload;
@@ -4936,6 +4941,15 @@ function TLdapAttributeList.Add(const AttributeName: RawUtf8;
 begin
   result := Add(AttributeName);
   result.Add(AttributeValue, Option);
+end;
+
+function TLdapAttributeList.AddFmt(const AttributeName, AttributeValueFmt: RawUtf8;
+  const AttributeValueArgs: array of const; Option: TLdapAddOption): TLdapAttribute;
+var
+  v: RawUtf8;
+begin
+  FormatUtf8(AttributeValueFmt, AttributeValueArgs, v);
+  result := Add(AttributeName, v, Option);
 end;
 
 procedure TLdapAttributeList.AddPairs(const NameValuePairs: array of RawUtf8;
