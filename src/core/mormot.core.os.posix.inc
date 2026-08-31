@@ -5252,20 +5252,83 @@ begin
   end;
 end;
 
+type
+  // stack-allocated storage for RunBuildEnv() child environment pointers
+  TRunEnv = array[0..511] of PUtf8Char; // max 512 environment variables
+
+// compute the child environment pointers from Windows-layout env pairs
+// - to be called before fork(), since it may not be fork-safe
+// - returns false on too many environment variables
+// - returns true and envpp=nil to reuse the current process environment,
+// or envpp<>nil pointing to e[] entries (values from env and current envp)
+function RunBuildEnv(const env: TRunArg; options: TRunOptions;
+  var e: TRunEnv; out envpp: PPUtf8Char): boolean;
+var
+  cur: PPUtf8Char;
+  P: PUtf8Char;
+  n: PtrInt;
+begin
+  envpp := pointer(envp); // Delphi POSIX uses wrongly a PWideChar here
+  if env <> '' then
+  begin
+    result := false; // -ESysE2BIG on too many variables
+    n := 0;
+    if (roEnvAddExisting in options) and
+       (envpp <> nil) then
+    begin
+      cur := envpp;
+      while cur^ <> nil do
+      begin
+        if PosChar(cur^, #10) = nil then
+        begin
+          // filter to add only single-line variables
+          if n = high(e) - 1 then
+            exit;
+          e[n] := cur^;
+          inc(n);
+        end;
+        inc(cur);
+      end;
+    end;
+    P := pointer(env); // env follows Windows layout 'n1=v1'#0'n2=v2'#0#0
+    while P^ <> #0 do
+    begin
+      if n = high(e) - 1 then
+        exit;
+      e[n] := P; // makes POSIX compatible
+      inc(n);
+      inc(P, StrLen(P) + 1);
+    end;
+    e[n] := nil; // end with null
+    envpp := @e;
+  end;
+  result := true;
+end;
+
+function RunFork: TPID; {$ifdef HASINLINE} inline; {$endif}
+begin
+  // vfork is required with libc on BSD/SunOS - as FPC RTL POpen_internal()
+  {$if (defined(BSD) or defined(SUNOS)) and defined(FPC_USE_LIBC)}
+  result := FpvFork;
+  {$else}
+  result := FpFork;
+  {$ifend}
+end;
+
 function RunInternal(args: PPAnsiChar; waitfor: boolean; const env: TRunArg;
   options: TRunOptions): integer;
 var
   pid: TPID;
-  e: array[0..511] of PUtf8Char; // max 512 environment variables
+  e: TRunEnv;
   envpp: PPUtf8Char;
-  P: PUtf8Char;
-  n: PtrInt;
 begin
-  {$if (defined(BSD) or defined(SUNOS)) and defined(FPC_USE_LIBC)}
-  pid := FpvFork;
-  {$else}
-  pid := FpFork;
-  {$ifend}
+  // prepare the child environment before fork() for fork-safety
+  if not RunBuildEnv(env, options, e, envpp) then
+  begin
+    result := -ESysE2BIG;
+    exit;
+  end;
+  pid := RunFork;
   if pid < 0 then
   begin
     // fork failed
@@ -5278,39 +5341,6 @@ begin
     if not waitfor then
       // don't share the same console
       CleanAfterFork;
-    envpp := pointer(envp); // Delphi POSIX uses wrongly a PWideChar here
-    if env <> '' then
-    begin
-      n := 0;
-      result := -ESysE2BIG;
-      if (roEnvAddExisting in options) and
-         (envpp <> nil) then
-      begin
-        while envpp^ <> nil do
-        begin
-          if PosChar(envpp^, #10) = nil then
-          begin
-            // filter to add only single-line variables
-            if n = high(e) - 1 then
-              exit;
-            e[n] := envpp^;
-            inc(n);
-          end;
-          inc(envpp);
-        end;
-      end;
-      P := pointer(env); // env follows Windows layout 'n1=v1'#0'n2=v2'#0#0
-      while P^ <> #0 do
-      begin
-        if n = high(e) - 1 then
-          exit;
-        e[n] := P; // makes POSIX compatible
-        inc(n);
-        inc(P, StrLen(P) + 1);
-      end;
-      e[n] := nil; // end with null
-      envpp := @e;
-    end;
     FpExecve(args^, args, envpp);
     FpExit(127);
   end;
@@ -5369,18 +5399,78 @@ begin
 end;
 
 {$ifdef FPC}
+
+// retrieve the PATH= value from the environment to be passed to execve()
+// - i.e. from the RunBuildEnv() output, or the current environment
+function RunEnvPath(envpp: PPUtf8Char): RawUtf8;
+var
+  p: PPUtf8Char;
+begin
+  FastAssignNew(result);
+  p := envpp;
+  if p = nil then
+    p := pointer(envp);
+  if p <> nil then
+    while p^ <> nil do
+    begin
+      // keep the last PATH=, so explicit env values override inherited ones
+      if IdemPChar(p^, 'PATH=') then
+        FastSetString(result, p^ + 5, StrLen(p^ + 5));
+      inc(p);
+    end;
+end;
+
+// search the supplied PATH for a command name, as a shell would
+// - a name which already contains a / is returned as-is (absolute/relative)
+// - returns '' if name was not found in the pathenv folders
+function RunSearchPath(name: PAnsiChar; const pathenv: RawUtf8): RawUtf8;
+var
+  p, s: PUtf8Char;
+begin
+  if name <> nil then
+    if PosChar(name, '/') <> nil then
+    begin
+      // a supplied path is used as-is, with no $PATH lookup - as a shell would
+      FastSetString(result, name, StrLen(name));
+      exit;
+    end;
+  p := pointer(pathenv);
+  if (p <> nil) and
+     (name <> nil) then
+    repeat
+      s := p;
+      while not (s^ in [#0, ':']) do
+        inc(s);
+      if s <> p then
+      begin
+        FastSetString(result, p, s - p);
+        result := result + '/' + RawUtf8(name);
+        if fpaccess(pointer(result), X_OK) = 0 then
+          exit; // found an executable file with this name
+      end;
+      if s^ = #0 then
+        break;
+      p := s + 1;
+    until false;
+  FastAssignNew(result); // not found: caller would fallback to the shell
+end;
+
 function RunRedirect(const cmd: TRunArg; exitcode: PInteger;
   const onoutput: TOnRedirect; waitfordelayms: cardinal; setresult: boolean;
   const env: TRunArg; const wrkdir: TFileName; options: TRunOptions): RawByteString;
 var
-  // notes: - FPC popen() allows access to the pid whereas clib popen() won't
-  //        - env and options params are not supported by popen() so are ignored
-  f: file;
+  fds: TFilDes;
   fd: THandle;
   pid, res, wr: cint;
   n: ssize_t;
   wait: cardinal;
   endtix: Int64;
+  aborted, reaped: boolean;
+  err: TParseCommands;
+  a: TParseCommandsArgs;
+  temp, path, wdir: RawUtf8;
+  e: TRunEnv;
+  envpp: PPUtf8Char;
   tmp: TBuffer64K;
 
   function RedirectOutput(killing: boolean; var redir: RawByteString): boolean;
@@ -5391,10 +5481,9 @@ var
     if WaitReadPending(fd, wait) then
     begin
       n := fpread(fd, @tmp, SizeOf(tmp));
-      if n < 0 then
-        exit; // pipe closed or EINTR = execution finished
-      if setresult and
-         (n <> 0) then
+      if n <= 0 then
+        exit; // n=0 on EOF (execution finished), n<0 on error or EINTR
+      if setresult then
         AppendBufferToUtf8(@tmp, n, RawUtf8(redir)); // assume CP_UTF8
       if Assigned(onoutput) then
       begin
@@ -5411,14 +5500,80 @@ var
     result := true;
   end;
 
+  procedure KillGroup(sig: integer);
+  begin
+    // the child did setsid: signal its whole process group so that even
+    // grand-children (e.g. spawned by a shell) won't leak as orphans
+    if fpkill(-pid, sig) <> 0 then
+      fpkill(pid, sig); // paranoid fallback (e.g. race before setsid)
+  end;
+
 begin
   FastAssignNew(result);
-  if wrkdir <> '' then
-    ChDir(wrkdir);
-  if popen(f, cmd, 'r') <> 0 then // fork and launch cmd - env is ignored by now
+  if exitcode <> nil then
+    exitcode^ := -1; // if not executed or aborted
+  // prepare the whole execution context before fork(): heap allocations
+  // are not fork-safe in a multi-threaded process
+  if not RunBuildEnv(env, options, e, envpp) then
+    exit; // too many environment variables
+  a[0] := nil;
+  err := ParseCommandArgs(cmd, @a, nil, @temp);
+  if err = [] then
+  begin
+    // no need to spawn the shell for simple commands - but resolve the
+    // executable as a shell would, from the PATH= actually supplied to
+    // execve(), and fallback to the shell if not found (e.g. for a
+    // shell built-in like "exit")
+    path := RunSearchPath(a[0], RunEnvPath(envpp));
+    if path <> '' then
+      a[0] := pointer(path)
+    else
+      err := [pcHasShellVariable]; // let the shell handle it below
+  end
+  else if err * PARSECOMMAND_ERROR <> [] then
+    exit; // no system call for clearly invalid command line
+  if err <> [] then
+  begin
+    // execute complex commands via the shell
+    path := GetSystemShell;
+    a[0] := pointer(path);
+    a[1] := '-c';
+    a[2] := pointer(cmd);
+    a[3] := nil;
+  end;
+  wdir := RawUtf8(wrkdir);
+  if fppipe(fds) <> 0 then
     exit;
-  fd := TFileRec(f).Handle;
-  pid := pcint(@TFileRec(f).userdata[2])^; // see popen() from Unix.pp
+  pid := RunFork;
+  if pid < 0 then
+  begin
+    fpclose(fds[0]);
+    fpclose(fds[1]);
+    exit; // fork failed
+  end;
+  if pid = 0 then
+  begin
+    // we are in the child process: only low-level fork/vfork-safe syscalls
+    // until execve(), checking the failures which would break redirection
+    if fpsetsid < 0 then // new session/group, so the group can be signaled
+      FpExit(127);
+    if fpdup2(fds[1], 1) < 0 then // stdout to the pipe (stderr not touched)
+      FpExit(127);
+    fpclose(fds[0]);
+    if fds[1] <> 1 then
+      fpclose(fds[1]);
+    if (wdir <> '') and
+       (FpChdir(pointer(wdir)) <> 0) then
+      FpExit(127); // paranoid
+    FpExecve(a[0], @a, envpp);
+    FpExit(127); // command not found or not executable
+  end;
+  // parent process: redirect the pipe output until EOF
+  fpclose(fds[1]);
+  fd := fds[0];
+  aborted := false;
+  reaped := false;
+  wr := 0;
   if Assigned(onoutput) then
     onoutput('', pid);
   wait := 200;
@@ -5436,37 +5591,36 @@ begin
        (GetTickCount64 > endtix) then
     begin
       // abort process execution after timeout or onoutput()=true
-      if RunAbortTimeoutSecs > 0 then
+      aborted := true;
+      if (RunAbortTimeoutSecs > 0) and
+         (ramSigTerm in RunAbortMethods) then
       begin
         // try gracefull death
-        if (ramSigTerm in RunAbortMethods) and
-           (fpkill(pid, SIGTERM) = 0) then
-        begin
-          endtix := GetTickCount64 + RunAbortTimeoutSecs * 1000;
-          repeat
-            wr := FpWaitPid(pid, @res, WNOHANG);    // 0 = no state change
-            RedirectOutput({killing=}true, result); // continue redirection
-            if (wr <> 0) or
-               (GetTickCount64 > endtix) then
-              break;
-            SleepHiRes(5);
-          until false;
-          if wr = pid then // <0 for error
-            break; // gracefully ended
-        end;
+        KillGroup(SIGTERM);
+        endtix := GetTickCount64 + RunAbortTimeoutSecs * 1000;
+        repeat
+          wr := FpWaitPid(pid, @res, WNOHANG);    // 0 = no state change
+          RedirectOutput({killing=}true, result); // continue redirection
+          if (wr <> 0) or
+             (GetTickCount64 > endtix) then
+            break;
+          SleepHiRes(5);
+        until false;
+        reaped := (wr = pid); // gracefully ended and reaped
       end;
-      // force process termination alla Roberspierre
-      fpkill(pid, SIGKILL);
-      pid := 0;
+      // force process group termination alla Robespierre
+      KillGroup(SIGKILL);
       break;
     end;
   until false;
-  res := pclose(f);
-  if exitcode <> nil then
-    if pid = 0 then
-      exitcode^ := -1
-    else
+  fpclose(fd);
+  if not reaped then
+  begin
+    res := WaitProcess(pid); // reap the zombie (immediate after SIGKILL)
+    if (exitcode <> nil) and
+       not aborted then
       exitcode^ := res;
+  end;
 end;
 {$else}
 function RunRedirect(const cmd: TRunArg; exitcode: PInteger;
