@@ -5294,9 +5294,13 @@ function NewSynLocker: PSynLocker;
 // - see also OSFUTEX conditional defined only on Linux and Windows
 var OsWaitOnValue: procedure(Value: PCardinal; Expected, TimeoutMS: cardinal);
 
-/// raw cross-platform futex-like unlock of the next waiting OsWakeOnValue()
-// - use futex on Linux, WakeByAddresssingle() on Win8+, equal nil otherwise
+/// raw cross-platform futex-like unlock of the next waiting OsWaitOnValue()
+// - use futex on Linux, WakeByAddressSingle() on Win8+, equal nil otherwise
 var OsWakeOnValue: procedure(Value: PCardinal); {$ifdef OSWINDOWS} stdcall; {$endif}
+
+/// raw cross-platform futex-like unlock all waiting OsWaitOnValue()
+// - use futex on Linux, WakeByAddressAll() on Win8+, equal nil otherwise
+var OsWakeAllOnValue: procedure(Value: PCardinal); {$ifdef OSWINDOWS} stdcall; {$endif}
 
 type
   TCachedValueCall = function(Param: pointer): RawByteString;
@@ -11463,8 +11467,8 @@ end;
 
 procedure TRWLightLock.WriteLockSpin;
 var
-  f: cardinal;
   spin: PtrUInt;
+  f: cardinal;
 begin
   spin := SPIN_COUNT;
   repeat // first loop to acquire the WriteLock bit

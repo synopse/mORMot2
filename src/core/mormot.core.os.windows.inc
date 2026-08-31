@@ -1535,7 +1535,7 @@ var
   // function returns when Address^ differs from the value at CompareAddress^
   WaitOnAddress: function(Address, CompareAddress: pointer;
     AddressSize, dwMilliseconds: PtrUInt): BOOL; stdcall;
-  WakeByAddressSingle: procedure(Address: pointer); stdcall;
+  WakeByAddressSingle, WakeByAddressAll: procedure(Address: pointer); stdcall;
 
 procedure _OsWaitOnValue(Value: PCardinal; Expected, TimeoutMS: cardinal);
 begin
@@ -5288,13 +5288,16 @@ begin
   if OSVersion >= wEight then
   begin
     h := Windows.LoadLibrary('API-MS-Win-Core-Synch-l1-2-0.dll'); // Win8+
-    WaitOnAddress := LibraryResolve(h, 'WaitOnAddress');
+    WaitOnAddress       := LibraryResolve(h, 'WaitOnAddress');
     WakeByAddressSingle := LibraryResolve(h, 'WakeByAddressSingle');
+    WakeByAddressAll    := LibraryResolve(h, 'WakeByAddressAll');
     if Assigned(WaitOnAddress) and
-       Assigned(WakeByAddressSingle) then
+       Assigned(WakeByAddressSingle) and
+       Assigned(WakeByAddressAll) then
     begin
-      OsWaitOnValue := @_OsWaitOnValue;
-      OsWakeOnValue := @WakeByAddressSingle; // defined as stdcall
+      OsWaitOnValue    := @_OsWaitOnValue;
+      OsWakeOnValue    := @WakeByAddressSingle; // defined as stdcall
+      OsWakeAllOnValue := @WakeByAddressAll;    // defined as stdcall
     end;
   end;
   h := GetModuleHandle(ntdll); // late binding over unstable / altered API

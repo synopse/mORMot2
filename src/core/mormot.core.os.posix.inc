@@ -2305,6 +2305,11 @@ begin
   _futex(Value, FUTEX_WAKE_PRIVATE, 1, nil);
 end;
 
+procedure _OsWakeAllOnValue(Value: PCardinal);
+begin
+  _futex(Value, FUTEX_WAKE_PRIVATE, MaxInt, nil);
+end;
+
 procedure _OsWaitOnValue(Value: PCardinal; Expected, TimeoutMS: cardinal);
 var
   s: cardinal;
@@ -6149,8 +6154,9 @@ begin
   {$ifdef FPC} // futex() has no libc api -> no Delphi for POSIX compatibility
   if KernelRevision >= $020616 then // FUTEX_PRIVATE_FLAG since Linux 2.6.22
   begin
-    OsWaitOnValue := @_OsWaitOnValue;
-    OsWakeOnValue := @_OsWakeOnValue;
+    OsWaitOnValue    := @_OsWaitOnValue;
+    OsWakeOnValue    := @_OsWakeOnValue;
+    OsWakeAllOnValue := @_OsWakeAllOnValue;
   end;
   {$endif FPC}
   {$ifdef OSLINUXHUGEPAGES}
