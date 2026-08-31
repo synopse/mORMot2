@@ -117,6 +117,15 @@ type
     diInternalMab,
     {$ifdef FPC} diInternalDwarf, diExternalDwarf {$else} diExternalMap {$endif});
 
+  /// how stack trace shall be computed during logging
+  // - stOnlyAPI is the first (and default) value, since manual stack makes
+  // unexpected detections, and was reported as very slow on Windows 11
+  // - on FPC, these values are ignored, because RTL CaptureBacktrace() is used
+  TSynLogStackTraceUse = (
+    stOnlyAPI,
+    stManualAndAPI,
+    stOnlyManual);
+
   /// allow to customize TDebugFile.Create and TDebugFile.SaveToFile process
   TDebugFileScope = set of (
     dfsIncludePathInFileName,
@@ -239,6 +248,27 @@ type
     /// add some debugging information about the supplied absolute memory address
     class function AddLog(W: TTextWriter; aPointer: PtrUInt;
       NoHex: boolean = false): boolean; {$ifdef HASINLINE} static; {$endif}
+    /// return the current thread stack trace as convenient plain text
+    // - filename, symbol name and line number (if any) of each frame, e.g.
+    // $ 57f480 mormot.core.log.pas TSynLog.LogEscape (5782) 4a0a40 ...
+    // - skip is the number of caller frames to ignore (0 = start at caller)
+    // - depth is the maximum number of located frames (0 = 30 as TSynLog)
+    // - could be used e.g. for diagnostic endpoints or error reporting, with
+    // no exception involved - returns '' if no stack trace is available
+    class function StackTrace(skip: integer = 0; depth: integer = 0;
+      use: TSynLogStackTraceUse = stManualAndAPI): RawUtf8; overload; static;
+    /// append the current thread stack trace to an existing TTextWriter
+    // - the current thread stack is captured via the RTL CaptureBacktrace()
+    // on FPC, or the RtlCaptureStackBackTrace() API on Delphi + Windows,
+    // with a manual stack walk fallback on Delphi Win32 (where this API is
+    // limited) - not implemented on Delphi POSIX yet (nothing is appended)
+    // - use follows TSynLogFamily.StackTraceUse semantics: ignored on FPC,
+    // and stOnlyManual is implemented on Delphi Win32 only, as TSynLog
+    // - skip does not apply to the heuristic manual stack walk
+    // - a trailing space is left after each located frame, as TDebugFile.AddLog
+    class procedure StackTrace(W: TTextWriter; skip: integer = 0;
+      depth: integer = 0;
+      use: TSynLogStackTraceUse = stManualAndAPI); overload; static;
     /// low-level resolution of a TDebugFile instance from a code address
     // - this is the main internal thread-safe factory method for this process
     // - returns nil if this code address has no known debug information
@@ -725,15 +755,6 @@ type
     ptOneFilePerThread,
     ptIdentifiedInOneFile,
     ptNoThreadProcess);
-
-  /// how stack trace shall be computed during logging
-  // - stOnlyAPI is the first (and default) value, since manual stack makes
-  // unexpected detections, and was reported as very slow on Windows 11
-  // - on FPC, these values are ignored, because RTL CaptureBacktrace() is used 
-  TSynLogStackTraceUse = (
-    stOnlyAPI,
-    stManualAndAPI,
-    stOnlyManual);
 
   /// how file existing shall be handled during logging
   TSynLogExistsAction = (
@@ -4510,6 +4531,172 @@ end;
 threadvar // do not publish for compilation within Delphi packages
   PerThreadInfo: TSynLogThreadInfo;
 
+type
+  // on Win64, RtlCaptureStackBackTrace() API is limited to < 62 frames
+  TRawStackFrames = array[0..61] of PtrUInt;
+
+{$STACKFRAMES ON} // we need a stack frame for the backtrace API calls below
+
+{$ifndef FPC}
+{$ifdef OSWINDOWS}
+{$ifndef CPU64}
+
+function CheckAsmX86(xret: PtrUInt): boolean; // naive x86 caller detection
+var
+  i: PtrUInt;
+begin
+  result := true;
+  try
+    if PByte(xret - 5)^ = $E8 then
+      exit;
+    for i := 2 to 7 do
+      if PWord(xret - i)^ and $38FF = $10FF then
+        exit;
+  except
+    // ignore any GPF
+  end;
+  result := false;
+end;
+
+// heuristic ebp-chain walk into frames[], returning the frames count
+// - on Delphi Win32, RtlCaptureStackBackTrace() requires stack frames and
+// is likely to return nothing, so the manual scan of TSynLog stOnlyManual
+// mode is needed - note: skip levels do not apply to such a heuristic scan
+function ManualStackTrace(var frames: TRawStackFrames): PtrInt;
+var
+  st, max_stack, min_stack, buf0, buf1: PtrUInt;
+  stack: PPtrUInt;
+begin
+  result := 0;
+  asm
+      mov     min_stack, ebp
+      mov     eax, fs:[4]
+      mov     max_stack, eax
+  end;
+  buf0 := PtrUInt(@frames); // frames[] is likely on stack in this range:
+  buf1 := buf0 + SizeOf(frames); // never scan our own output buffer
+  stack := pointer(min_stack);
+  try
+    while (PtrUInt(stack) < max_stack) and
+          (result < length(frames)) do
+    begin
+      if (PtrUInt(stack) >= buf0) and
+         (PtrUInt(stack) < buf1) then
+      begin
+        stack := pointer(buf1); // jump over frames[] we are filling
+        continue;
+      end;
+      st := stack^;
+      inc(stack);
+      if (st >= min_stack) and
+         (st <= max_stack) then
+        continue; // on-stack pointer is no code
+      if SeemsRealPointer(pointer(st - 8)) and
+         CheckAsmX86(st) then
+      begin
+        frames[result] := st;
+        inc(result);
+      end;
+    end;
+  except
+    // just ignore any access violation here
+  end;
+end;
+
+{$endif CPU64}
+{$endif OSWINDOWS}
+{$endif FPC}
+
+// capture the current thread stack into frames[], returning the frames count
+// - first frame is the caller of this function, plus optional skip levels
+// - use follows TSynLogFamily.StackTraceUse semantics (ignored on FPC)
+function RawStackTrace(skip: PtrInt; use: TSynLogStackTraceUse;
+  var frames: TRawStackFrames): PtrInt;
+begin
+  {$ifdef FPC}
+  result := CaptureBacktrace(skip + 1, length(frames), pointer(@frames));
+  {$else}
+  result := 0;
+  {$ifdef OSWINDOWS}
+  if use <> stOnlyManual then
+    result := RtlCaptureStackBackTrace(skip + 1, length(frames), @frames, nil);
+  {$ifndef CPU64}
+  if (result < 2) and
+     (use <> stOnlyAPI) then
+    // support stOnlyManual/stManualAndAPI on Delphi Win32, where the API
+    // needs stack frames and is likely to return (almost) nothing
+    result := ManualStackTrace(frames);
+  {$endif CPU64}
+  {$endif OSWINDOWS}
+  {$endif FPC}
+end;
+
+class function TDebugFile.StackTrace(skip, depth: integer;
+  use: TSynLogStackTraceUse): RawUtf8;
+var
+  temp: TTextWriterStackBuffer;
+  w: TTextWriter;
+begin
+  FastAssignNew(result);
+  w := TTextWriter.CreateOwnedStream(temp);
+  try
+    StackTrace(w, skip + 1, depth, use); // + 1 to ignore this very method
+    w.CancelLastChar(' ');
+    w.SetText(result);
+  finally
+    w.Free;
+  end;
+end;
+
+class procedure TDebugFile.StackTrace(W: TTextWriter; skip, depth: integer;
+  use: TSynLogStackTraceUse);
+var
+  frames: TRawStackFrames;
+  i, n: PtrInt;
+  {$ifndef FPC}
+  {$ifndef NOEXCEPTIONINTERCEPT}
+  bak: TSynLogThreadInfoFlags; // paranoid precaution, as TSynLog.AddStackTrace
+  threadflags: ^TSynLogThreadInfoFlags;
+  {$endif NOEXCEPTIONINTERCEPT}
+  {$endif FPC}
+begin
+  if W = nil then
+    exit;
+  if depth <= 0 then
+    depth := 30; // as default TSynLogFamily.StackTraceLevel
+  if skip < 0 then
+    skip := 0;
+  {$ifndef FPC}
+  {$ifndef NOEXCEPTIONINTERCEPT}
+  // the manual stack walk makes speculative reads: intercepted exceptions
+  // should not reach the logs during the process
+  threadflags := @PerThreadInfo.Flags;
+  bak := threadflags^;
+  include(threadflags^, tiExceptionIgnore);
+  {$endif NOEXCEPTIONINTERCEPT}
+  {$endif FPC}
+  try
+    n := RawStackTrace(skip + 1, use, frames); // + 1 to ignore this very method
+    for i := 0 to n - 1 do
+      if (i = 0) or
+         (frames[i] <> frames[i - 1]) then
+        if AddLog(W, frames[i]) then
+        begin
+          dec(depth);
+          if depth = 0 then
+            break;
+        end;
+  except // don't let any unexpected GPF break the caller
+  end;
+  {$ifndef FPC}
+  {$ifndef NOEXCEPTIONINTERCEPT}
+  threadflags^ := bak;
+  {$endif NOEXCEPTIONINTERCEPT}
+  {$endif FPC}
+end;
+
+{$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
+
 {$ifndef NOEXCEPTIONINTERCEPT}
 // this is the main entry point for all intercepted exceptions
 procedure SynLogException(const Ctxt: TSynLogExceptionContext); forward;
@@ -6664,26 +6851,17 @@ end;
 {$ifdef FPC}
 
 procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
-var
-  frames: array[0..61] of PtrUInt; // on Win64, RtlCaptureStackBackTrace < 62
-  i, depth: PtrInt;
 begin
-  depth := fFamily.StackTraceLevel;
-  if depth <> 0 then
-    try
-      fWriter.AddDirect(' ');
-      for i := 0 to CaptureBacktrace(2, length(frames), @frames[0]) - 1 do
-        if (i = 0) or
-           (frames[i] <> frames[i - 1]) then
-          if TDebugFile.AddLog(fWriter, frames[i]) then
-          begin
-            dec(depth);
-            if depth = 0 then
-              break;
-          end;
-      fWriter.CancelLastChar(' ');
-    except // don't let any unexpected GPF break the logging process
-    end;
+  if fFamily.StackTraceLevel = 0 then
+    exit;
+  try
+    fWriter.AddDirect(' ');
+    // skip=2 to start at the caller of our caller, as this method did before
+    TDebugFile.StackTrace(fWriter, {skip=}2, fFamily.StackTraceLevel,
+      fFamily.StackTraceUse); // use is actually ignored on FPC
+    fWriter.CancelLastChar(' ');
+  except // don't let any unexpected GPF break the logging process
+  end;
 end;
 
 {$else not FPC}
@@ -6699,25 +6877,8 @@ procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
 
 {$else}
 
-  procedure AddStackManual(Stack: PPtrUInt); 
-
-    function CheckAsmX86(xret: PtrUInt): boolean; // naive detection
-    var
-      i: PtrUInt;
-    begin
-      result := true;
-      try
-        if PByte(xret - 5)^ = $E8 then
-          exit;
-        for i := 2 to 7 do
-          if PWord(xret - i)^ and $38FF = $10FF then
-            exit;
-      except
-        // ignore any GPF
-      end;
-      result := false;
-    end;
-
+  procedure AddStackManual(Stack: PPtrUInt);
+  // note: reuses CheckAsmX86() shared with the ManualStackTrace() function
   var
     st, max_stack, min_stack, depth: PtrUInt;
   begin
