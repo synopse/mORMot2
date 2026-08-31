@@ -5216,7 +5216,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// wait until SetEvent is called, calling CheckSynchronize() on main thread
     // - returns true if was signaled by SetEvent, or false on timeout
-    function WaitForSafe(TimeoutMS: cardinal; DisableSafe: boolean = false): boolean;
+    function WaitForSafe(TimeoutMS: cardinal; DisableSafe: boolean): boolean;
     /// calls SleepHiRes() in steps while checking terminated flag and this event
     function SleepStep(var start: Int64; terminated: PBoolean): Int64;
     /// low-level read-only access to the internal SetEvent flag
@@ -12735,6 +12735,7 @@ var
   endtix: Int64;
 begin
   if DisableSafe or  // DisableSafe=true to skip main Thread recognition
+     (TimeoutMS = 0) or
      (GetCurrentThreadID <> MainThreadID) then
   begin
     result := WaitFor(TimeoutMS);
@@ -12747,8 +12748,8 @@ begin
   if TimeoutMS <> INFINITE then
     endtix := GetTickCount64 + TimeoutMS;
   repeat
-    CheckSynchronize(1); // make UI responsive enough
-    result := WaitFor(10);
+    CheckSynchronize(10); // make UI responsive and Main Thread execution fast
+    result := WaitFor(0);
   until result or
         ((endtix <> 0) and
          (GetTickCount64 > endtix));
