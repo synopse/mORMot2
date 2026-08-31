@@ -562,14 +562,13 @@ begin
   end;
 end;
 
-function ODBCColumnToFieldType(DataType, ColumnPrecision, ColumnScale: integer):
-  TSqlDBFieldType;
+function ODBCColumnToFieldType(
+  DataType, ColumnPrecision, ColumnScale: integer): TSqlDBFieldType;
 begin
   // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUtf8, ftBlob
   case DataType of
     SQL_DECIMAL,
-    SQL_NUMERIC,
-    SQL_FLOAT:
+    SQL_NUMERIC:
       begin
         result := ftDouble;
         if ColumnPrecision = 10 then
@@ -580,6 +579,7 @@ begin
               result := ftCurrency;
           end;
       end;
+    SQL_FLOAT,
     SQL_REAL,
     SQL_DOUBLE:
       result := ftDouble;
@@ -645,11 +645,11 @@ begin
       p := AddColumn(RawUnicodeToUtf8(Name, NameLength));
       p^.ColumnValueInlined := true;
       p^.ColumnValueDBType := DataType;
+      p^.ColumnType := ODBCColumnToFieldType(DataType, ColumnSize, DecimalDigits);
       if ColumnSize > 65535 then
         ColumnSize := 0; // avoid out of memory error for BLOBs
       p^.ColumnValueDBSize := ColumnSize;
       p^.ColumnNonNullable := (Nullable = SQL_NO_NULLS);
-      p^.ColumnType := ODBCColumnToFieldType(DataType, 10, DecimalDigits);
       if p^.ColumnType = ftUtf8 then
         if ColumnSize = 0 then
           siz := 256
