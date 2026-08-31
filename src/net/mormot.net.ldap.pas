@@ -242,7 +242,8 @@ function DnsLdapControllersSorted(UdpFirstDelayMS, MinimalUdpCount: integer;
 
 type
   /// define only one part of a Distinguished Name content e.g. for DNToCN()
-  TNormalizeDN = set of (dnCN, dnOU, dnDC);
+  TNormalizeDN = (dnCN, dnOU, dnDC);
+  TNormalizeDNs = set of TNormalizeDN;
 const
   /// define all parts of a Distinguished Name content
   DN_ALL = [low(TNormalizeDN) .. high(TNormalizeDN)];
@@ -252,15 +253,15 @@ const
 // - e.g. DNToCN('CN=User1,OU=Users,OU=London,DC=xyz,DC=local') =
 // 'xyz.local/London/Users/User1'
 function DNToCN(const DN: RawUtf8; NoRaise: boolean = false;
-  extend: TNormalizeDN = DN_ALL): RawUtf8;
+  extend: TNormalizeDNs = DN_ALL): RawUtf8;
 
 /// internal function used by DNToDN()
 function DNsToCN(const dc, ou, cn: TRawUtf8DynArray;
-  extend: TNormalizeDN = DN_ALL): RawUtf8;
+  extend: TNormalizeDNs = DN_ALL): RawUtf8;
 
 /// normalize a Distinguished Name into its standard layout
 // - trim spaces, and use CN= OU= DC= specifiers
-function NormalizeDN(const DN: RawUtf8; extend: TNormalizeDN = DN_ALL): RawUtf8;
+function NormalizeDN(const DN: RawUtf8; extend: TNormalizeDNs = DN_ALL): RawUtf8;
 
 /// low-level parse a Distinguished Name text into its DC= OU= CN= parts
 // - on parsing error, raise ELdap or return false if NoRaise was set to true
@@ -3259,7 +3260,7 @@ begin
   result := true;
 end;
 
-function DNsToCN(const dc, ou, cn: TRawUtf8DynArray; extend: TNormalizeDN): RawUtf8;
+function DNsToCN(const dc, ou, cn: TRawUtf8DynArray; extend: TNormalizeDNs): RawUtf8;
 var
   w: TTextWriter;
   tmp: TTextWriterStackBuffer; // 8KB work buffer on stack
@@ -3297,7 +3298,7 @@ begin
   end;
 end;
 
-function DNToCN(const DN: RawUtf8; NoRaise: boolean; extend: TNormalizeDN): RawUtf8;
+function DNToCN(const DN: RawUtf8; NoRaise: boolean; extend: TNormalizeDNs): RawUtf8;
 var
   dc, ou, cn: TRawUtf8DynArray;
 begin
@@ -3307,7 +3308,7 @@ begin
     result := DNsToCN(dc, ou, cn, extend);
 end;
 
-function NormalizeDN(const DN: RawUtf8; extend: TNormalizeDN): RawUtf8;
+function NormalizeDN(const DN: RawUtf8; extend: TNormalizeDNs): RawUtf8;
 var
   dc, ou, cn: TRawUtf8DynArray;
   i: PtrInt;

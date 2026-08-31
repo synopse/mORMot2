@@ -4854,7 +4854,7 @@ type
     /// try to enter a multiple-reads reentrant lock
     // - if returned true, caller should eventually call ReadUnLock
     function TryReadLock: boolean;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef FPC} inline; {$endif}
     /// leave a multiple-reads lock
     procedure ReadUnLock;
       {$ifdef HASINLINE} inline; {$endif}
@@ -4866,10 +4866,9 @@ type
     /// try to enter an exclusive non-reentrant write lock
     // - if returned true, caller should eventually call WriteUnLock
     function TryWriteLock: boolean;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef FPC} inline; {$endif}
     /// leave an exclusive write lock
     procedure WriteUnLock;
-      {$ifdef HASINLINE} inline; {$endif}
     /// check if the lock has been acquired as read or write
     // - informational only: result may change immediately on another thread
     function IsLocked: boolean;
