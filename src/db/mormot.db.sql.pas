@@ -5608,7 +5608,7 @@ var
 
 class procedure TSqlDBConnectionProperties.RegisterClassNameForDefinition;
 begin
-  ObjArrayAddOnce(GlobalDefinitions, TObject(self)); // TClass stored as TObject
+  PtrArrayAddOnce(GlobalDefinitions, pointer(self)); // store TClass
 end;
 
 procedure TSqlDBConnectionProperties.DefinitionTo(

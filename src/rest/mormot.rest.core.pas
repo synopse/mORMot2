@@ -2308,7 +2308,7 @@ var
 
 class procedure TRest.RegisterClassNameForDefinition;
 begin
-  ObjArrayAddOnce(GlobalDefinitions, TObject(self)); // TClass stored as TObject
+  PtrArrayAddOnce(GlobalDefinitions, pointer(self)); // store this TClass
 end;
 
 procedure TRest.OnBeginCurrentThread(Sender: TThread);

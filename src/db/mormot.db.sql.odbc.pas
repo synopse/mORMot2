@@ -562,7 +562,7 @@ begin
   end;
 end;
 
-function ODBCColumnToFieldType(
+function OdbcColumnToFieldType(
   DataType, ColumnPrecision, ColumnScale: integer): TSqlDBFieldType;
 begin
   // ftUnknown, ftNull, ftInt64, ftDouble, ftCurrency, ftDate, ftUtf8, ftBlob
@@ -642,10 +642,10 @@ begin
         DescribeColW(fStatement, c, Name{%H-}, 256, NameLength, DataType,
           ColumnSize, DecimalDigits, Nullable),
         SQL_HANDLE_STMT, fStatement);
-      p := AddColumn(RawUnicodeToUtf8(Name, NameLength));
+      p := AddColumn(RawUnicodeToUtf8(@Name, NameLength));
       p^.ColumnValueInlined := true;
       p^.ColumnValueDBType := DataType;
-      p^.ColumnType := ODBCColumnToFieldType(DataType, ColumnSize, DecimalDigits);
+      p^.ColumnType := OdbcColumnToFieldType(DataType, ColumnSize, DecimalDigits);
       if ColumnSize > 65535 then
         ColumnSize := 0; // avoid out of memory error for BLOBs
       p^.ColumnValueDBSize := ColumnSize;
@@ -1424,7 +1424,7 @@ begin
           F.ColumnLength := stmt.ColumnInt(6);
           F.ColumnScale := stmt.ColumnInt(8);
           F.ColumnPrecision := stmt.ColumnInt(9);
-          F.ColumnType := ODBCColumnToFieldType(
+          F.ColumnType := OdbcColumnToFieldType(
             datatype, F.ColumnPrecision, F.ColumnScale);
           F.ColumnIndexed := (fDbms in [dFirebird, dDB2]) and
                              IsRowID(pointer(F.ColumnName));
@@ -1658,11 +1658,11 @@ begin
           end;
           DataType := stmt.ColumnInt(5);
           P.ColumnTypeNative := TrimU(stmt.ColumnUtf8(6));
-          P.ColumnLength := stmt.ColumnInt(7);
-          P.ColumnScale := stmt.ColumnInt(8);
-          P.ColumnPrecision := stmt.ColumnInt(9);
-          P.ColumnType := ODBCColumnToFieldType(
-            DataType, P.ColumnPrecision, P.ColumnScale);
+          P.ColumnLength     := stmt.ColumnInt(7);
+          P.ColumnScale      := stmt.ColumnInt(8);
+          P.ColumnPrecision  := stmt.ColumnInt(9);
+          P.ColumnType       := OdbcColumnToFieldType(
+                                  DataType, P.ColumnPrecision, P.ColumnScale);
           PA.Add(P);
         until not stmt.Step;
       SetLength(Parameters, n);
