@@ -4601,7 +4601,7 @@ type
   TRWLightLock = object
   {$endif USERECORDWITHMETHODS}
   private
-    Flags: cardinal; // bit 0 = WriteLock, bits 1..31/63 = ReadLock
+    Flags: cardinal; // bit 0 = WriteLock, bits 1..31 = ReadLock
     // low-level functions called by the Lock methods when inlined
     procedure ReadLockSpin;
     procedure WriteLockSpin;

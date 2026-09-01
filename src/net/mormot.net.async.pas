@@ -4015,7 +4015,8 @@ begin
   begin
     fGC1.Safe.Lock; // load certificates once from first connected thread
     try
-      fServer.DoTlsAfter(cstaBind);  // validate certificates now
+      if not fServer.TLS.Enabled then
+        fServer.DoTlsAfter(cstaBind);  // validate certificates now
     finally
       fGC1.Safe.UnLock;
     end;

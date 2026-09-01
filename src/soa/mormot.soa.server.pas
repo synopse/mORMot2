@@ -1153,11 +1153,11 @@ begin
       P := @fInstance[ndx];
       P^.LastAccessTix10 := Inst.LastAccessTix10;
       Inst.Instance := P^.Instance;
-      fInstances.Safe.ReadUnLock;
       result := aMethodIndex; // notify caller
-      exit;
     end;
     fInstances.Safe.ReadUnLock;
+    if result >= 0 then
+      exit;
   end;
   // new TInterfacedObject corresponding to this session/user/group/thread
   if (InstanceCreation <> sicClientDriven) and
