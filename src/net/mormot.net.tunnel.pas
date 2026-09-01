@@ -349,8 +349,8 @@ type
     fCount: integer;
     fItem: array of ITunnelTransmit;
     fSession: TIntegerDynArray; // store TTunnelSession (=cardinal) values
-    fInfoCacheTix32: cardinal;
     fInfoCache: TVariantDynArray;
+    fInfoCacheTix32: cardinal;
     function LockedExists(aSession: TTunnelSession): boolean;
   public
     /// append one ITunnelTransmit callback to the list
@@ -363,6 +363,9 @@ type
     function DeleteFrom(aList: TTunnelList): integer;
     /// search if one ITunnelTransmit matches a session ID
     function Exists(aSession: TTunnelSession): boolean;
+    /// retrieve one ITunnelTransmit instance from its session ID
+    // - make a local thread-safe copy
+    function Get(aSession: TTunnelSession; var aTunnel: ITunnelTransmit): boolean;
     /// ask the TunnelInfo of a given session ID as TDocVariant object
     procedure GetInfo(aSession: TTunnelSession; out aInfo: variant);
     /// ask all TunnelInfo of all opended sessions as TDocVariant array
@@ -585,7 +588,7 @@ function FrameSession(const Frame: RawByteString): TTunnelSession;
 var
   l: PtrInt;
 begin
-  l := length(Frame) - SizeOf(TTunnelSession); // - TRAIL_SIZE
+  l := length(Frame) - TRAIL_SIZE; // - SizeOf(TTunnelSession)
   if l >= 0 then
     result := PTunnelSession(@PByteArray(Frame)[l])^
   else
@@ -1316,6 +1319,7 @@ begin
   result := 0;
   if (fCount = 0) or
      (aList = nil) or
+     (aList = self) or
      (aList.fCount = 0) then
     exit;
   aList.fSafe.ReadLock;
@@ -1328,30 +1332,40 @@ begin
   end;
 end;
 
-function TTunnelList.TunnelSend(const Frame: RawByteString;
-  aSession: TTunnelSession): boolean;
+function TTunnelList.Get(aSession: TTunnelSession;
+  var aTunnel: ITunnelTransmit): boolean;
 var
   ndx: PtrInt;
 begin
   result := false;
-  if fCount = 0 then
+  if (aSession = 0) or
+     (fCount = 0) then
     exit;
-  if aSession = 0 then
-  begin
-    aSession := FrameSession(Frame); // if was not pre-computed
-    if aSession = 0 then
-      exit;
-  end;
   fSafe.ReadLock; // non-blocking Read lock
   try
     ndx := IntegerScanIndex(pointer(fSession), fCount, aSession); // SSE2 asm
     if ndx < 0 then
       exit; // just skip the frame if the session does not exist (anti-fuzzing)
-    fItem[ndx].TunnelSend(frame); // call ITunnelTransmit method within ReadLock
     result := true;
+    aTunnel := fItem[ndx]; // found this session instance
   finally
     fSafe.ReadUnLock;
   end;
+end;
+
+function TTunnelList.TunnelSend(const Frame: RawByteString;
+  aSession: TTunnelSession): boolean;
+var
+  tunnel: ITunnelTransmit; // local copy to be called outside of the lock
+begin
+  result := false;
+  if fCount = 0 then
+    exit;
+  if aSession = 0 then
+    aSession := FrameSession(Frame); // if was not pre-computed
+  if not Get(aSession, tunnel) then
+    exit;
+  tunnel.TunnelSend(frame); // call ITunnelTransmit method outside ReadLock
   // handle end of process notification from the other side
   if length(Frame) = TRAIL_SIZE then
     Delete(aSession); // remove this instance
@@ -1359,26 +1373,18 @@ end;
 
 procedure TTunnelList.GetInfo(aSession: TTunnelSession; out aInfo: variant);
 var
-  ndx: PtrInt;
+  tunnel: ITunnelTransmit; // local copy to be called outside of ReadLock
 begin
-  if (aSession = 0) or
-     (fCount = 0) then
-    exit;
-  fSafe.ReadLock;
-  try
-    ndx := IntegerScanIndex(pointer(fSession), fCount, aSession);
-    if ndx >= 0 then
-      aInfo := fItem[ndx].TunnelInfo; // ask the remote endpoint
-  finally
-    fSafe.ReadUnLock;
-  end;
+  if Get(aSession, tunnel) then
+    aInfo := tunnel.TunnelInfo; // ask the remote endpoint
 end;
 
 function TTunnelList.GetAllInfo: TVariantDynArray;
 var
   n, i: PtrInt;
   tix32: cardinal;
-  invalid: TIntegerDynArray;
+  tunnels: array of ITunnelTransmit; // local copy called outside of ReadLock
+  sessions: TIntegerDynArray;
 begin
   result := nil;
   if fCount = 0  then
@@ -1392,22 +1398,21 @@ begin
   fInfoCacheSafe.UnLock;
   if result <> nil then // from cache
     exit;
-  fSafe.ReadLock; // non-blocking Read lock
+  fSafe.ReadLock; // non-blocking Read lock to copy current state
   try
-    n := length(fItem);
-    SetLength(result, n);
-    for i := 0 to n - 1 do
-      try
-        result[i] := fItem[i].TunnelInfo; // call all remote endpoints
-      except
-        AddInteger(invalid, fSession[i]);
-      end;
+    tunnels := copy(fItem);
+    sessions := copy(fSession);
   finally
     fSafe.ReadUnLock;
   end;
-  if invalid <> nil then
-    for i := 0 to high(invalid) do
-      Delete(invalid[i]); // eventually delete unstable links
+  n := length(tunnels);
+  SetLength(result, n);
+  for i := 0 to n - 1 do
+    try
+      result[i] := tunnels[i].TunnelInfo; // call all remote endpoints
+    except
+      Delete(sessions[i]); // delete unstable links
+    end;
   fInfoCacheSafe.Lock;
   fInfoCache := result;
   fInfoCacheSafe.UnLock;
