@@ -1651,19 +1651,19 @@ type
   TSynThreadPool = class
   protected
     {$ifndef USE_THREADWINIOCP}
-    fSafe: TOSLightLock; // TLightLock is likely to be less stable
+    fSafe: TLightLock; // single 32-bit field is enough
     {$endif USE_THREADWINIOCP}
-    fWorkThread: TSynThreadPoolWorkThreads;
     fWorkThreadCount: integer;
     fRunningThreads: integer;
     fExceptionsCount: integer;
-    fContentionAbortDelay: integer;
+    fWorkThread: TSynThreadPoolWorkThreads;
     fOnThreadTerminate: TOnNotifyThread;
     fOnThreadStart: TOnNotifyThread;
     fContentionTime: Int64;
     fContentionAbortCount: cardinal;
     fContentionCount: cardinal;
     fName, fPoolName: RawUtf8;
+    fContentionAbortDelay: integer;
     fPendingContextCount: integer;
     fTerminated: boolean;
     {$ifdef USE_THREADWINIOCP}
@@ -4638,7 +4638,6 @@ begin
   if fRequestQueue = 0 then
     exit;
   {$else}
-  fSafe.Init; // mandatory for TOSLightLock
   fQueuePendingContext := aQueuePendingContext;
   {$endif USE_THREADWINIOCP}
   // now create the worker threads
@@ -4684,8 +4683,6 @@ begin
   finally
     {$ifdef USE_THREADWINIOCP}
     CloseHandle(fRequestQueue);
-    {$else}
-    fSafe.Done; // mandatory for TOSLightLock
     {$endif USE_THREADWINIOCP}
   end;
   inherited Destroy;
