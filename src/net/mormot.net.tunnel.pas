@@ -107,7 +107,7 @@ type
   /// background thread bound or connected to a local port process
   TTunnelLocalThread = class(TLoggedThread)
   protected
-    fSafe: TLightLock; // protect especially fClientSock at startup/closure
+    fSafe: TOSLightLock; // protect especially fClientSock at startup/closure
     fState: (stCreated, stAccepting, stProcessing, stTerminated);
     fStarted: boolean;
     fOwner: TTunnelLocal;
@@ -664,7 +664,7 @@ begin
   if not fSafe.TryLock then
   begin
     fLogClass.Add.Log(sllDebug, 'OnReceived: wait for accept', self);
-    fSafe.Lock;
+    fSafe.Lock; // use futex on Linux and Win8+
     fLogClass.Add.Log(sllDebug, 'OnReceived: accepted', self);
   end;
   try
