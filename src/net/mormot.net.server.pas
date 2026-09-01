@@ -6148,6 +6148,7 @@ var
   key: THash256Rec;
 begin
   // setup internal processing status
+  fClientSafe.Init; // mandatory for TOSLightLock
   fFrameSeqLow := Random31Not0; // 31-bit random start value set at startup
   fFrameSeq := fFrameSeqLow;
   // setup internal cryptography
@@ -6180,6 +6181,7 @@ begin
   fSharedMagic := 0;
   inherited Destroy;
   FillZero(fDirectSecret);
+  fClientSafe.Done; // mandatory for TOSLightLock
 end;
 
 function THttpPeerCrypt.NetworkInterfaceChanged: boolean;

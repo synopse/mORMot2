@@ -365,7 +365,7 @@ type
     function Exists(aSession: TTunnelSession): boolean;
     /// retrieve one ITunnelTransmit instance from its session ID
     // - make a local thread-safe copy
-    function Get(aSession: TTunnelSession; var aTunnel: ITunnelTransmit): boolean;
+    function Get(aSession: TTunnelSession; out aTunnel: ITunnelTransmit): boolean;
     /// ask the TunnelInfo of a given session ID as TDocVariant object
     procedure GetInfo(aSession: TTunnelSession; out aInfo: variant);
     /// ask all TunnelInfo of all opended sessions as TDocVariant array
@@ -1317,6 +1317,7 @@ end;
 function TTunnelList.DeleteFrom(aList: TTunnelList): integer;
 var
   i: PtrInt;
+  sessions: TIntegerDynArray; // local copy to delete outside of ReadLock
 begin
   result := 0;
   if (fCount = 0) or
@@ -1326,16 +1327,17 @@ begin
     exit;
   aList.fSafe.ReadLock;
   try
-    for i := 0 to aList.fCount - 1 do
-      if Delete(aList.fSession[i]) then // fast enough
-        inc(result);
+    sessions := copy(aList.fSession, 0, aList.fCount);
   finally
     aList.fSafe.ReadUnLock;
   end;
+  for i := 0 to high(sessions) do
+    if Delete(sessions[i]) then // fast enough
+      inc(result);
 end;
 
 function TTunnelList.Get(aSession: TTunnelSession;
-  var aTunnel: ITunnelTransmit): boolean;
+  out aTunnel: ITunnelTransmit): boolean;
 var
   ndx: PtrInt;
 begin
@@ -1358,7 +1360,7 @@ end;
 function TTunnelList.TunnelSend(const Frame: RawByteString;
   aSession: TTunnelSession): boolean;
 var
-  tunnel: ITunnelTransmit; // local copy to be called outside of the lock
+  tunnel: ITunnelTransmit; // local copy to be called outside of ReadLock
 begin
   result := false;
   if fCount = 0 then

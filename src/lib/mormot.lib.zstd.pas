@@ -168,7 +168,7 @@ var
   Zstd: TSynZstd;
 
 
-  { ****************** TAlgoZstd High-Level Algorithms }
+{ ****************** TAlgoZstd High-Level Algorithms }
 
 var
   /// implement Zstandard compression in level 3 (ZSTD_CLEVEL_DEFAULT)
@@ -340,8 +340,6 @@ begin
   fAlgoFileExt := '.zst';
   inherited Create;
   fCompressionLevel := ZSTD_CLEVEL_DEFAULT;
-  fCompressionContext := Zstd.createCCtx; // pre-alloced two shared contexts
-  fDecompressionContext := Zstd.createDCtx;
 end;
 
 destructor TAlgoZstd.Destroy;
@@ -361,7 +359,11 @@ begin
   if Zstd = nil then
     exit;
   if fCompressionContextSafe.TryLock then // acquired shared context
-    ctx := fCompressionContext
+  begin
+    if fCompressionContext = nil then
+      fCompressionContext := Zstd.createCCtx;
+    ctx := fCompressionContext;
+  end
   else
     ctx := Zstd.createCCtx; // transient context for this thread on contention
   try
@@ -384,7 +386,11 @@ begin
   if Zstd = nil then
     exit;
   if fDecompressionContextSafe.TryLock then // acquired shared context
-    ctx := fDecompressionContext
+  begin
+    if fDecompressionContext = nil then
+      fDecompressionContext := Zstd.createDCtx;
+    ctx := fDecompressionContext;
+  end
   else
     ctx := Zstd.createDCtx; // transient context for this thread on contention
   try
