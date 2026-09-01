@@ -4392,7 +4392,7 @@ var
 begin
   st := TRawByteStringStream.Create;
   try
-    fSafe.ReadLock;
+    fSafe.WriteLock; // ReadLock not enough because of fStoreOnlyPublicKey flag
     try
       // genuine magic header
       n := CHAIN_MAGIC;
@@ -4419,7 +4419,7 @@ begin
       for i := 0 to n - 1 do
         fCrl[i].SaveToStream(st);
     finally
-      fSafe.ReadUnLock;
+      fSafe.WriteUnLock;
     end;
     result := st.DataString;
   finally
