@@ -11062,7 +11062,7 @@ end;
 
 constructor TOrmPropertiesAbstract.Create;
 begin
-  fSafe.Init;
+  fSafe.Init; // mandatory for TOSLightLock
   fSqlTableRetrieveAllFields := 'RowID'; // to work with virtual tables
   SetLength(fManyFields, MAX_SQLFIELDS);
   SetLength(fSimpleFields, MAX_SQLFIELDS);
@@ -11078,7 +11078,7 @@ end;
 destructor TOrmPropertiesAbstract.Destroy;
 begin
   inherited Destroy;
-  fSafe.Done;
+  fSafe.Done; // mandatory for TOSLightLock
 end;
 
 function TOrmPropertiesAbstract.BlobFieldPropFromRawUtf8(const PropName: RawUtf8): PRttiProp;

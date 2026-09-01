@@ -602,6 +602,7 @@ constructor TTunnelLocalThread.Create(owner: TTunnelLocal;
   const transmit: ITunnelTransmit; const key, iv: THash128; sock: TNetSocket;
   acceptSecs: cardinal);
 begin
+  fSafe.Init; // mandatory for TOSLightLock
   fOwner := owner;
   fPort := owner.Port;
   fSession := owner.Session;
@@ -637,6 +638,7 @@ begin
   inherited Destroy;
   FreeAndNil(fAes[true]);
   FreeAndNil(fAes[false]);
+  fSafe.Done; // mandatory for TOSLightLock
 end;
 
 function TTunnelLocalThread.Processing: boolean;
