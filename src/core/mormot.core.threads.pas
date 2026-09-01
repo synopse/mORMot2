@@ -1650,12 +1650,18 @@ type
   // Event-driven approach under Linux/POSIX
   TSynThreadPool = class
   protected
-    {$ifndef USE_THREADWINIOCP}
+    fPendingContextCount: integer;
+    {$ifdef USE_THREADWINIOCP}
+    fRequestQueue: THandle; // IOCP has its own internal queue
+    {$else}
     fSafe: TLightLock; // single 32-bit field is enough
+    fPendingFirst, fPendingLast: integer; // O(1) FIFO in fPendingContext[]
+    fPendingContext: TPointerDynArray;
     {$endif USE_THREADWINIOCP}
     fWorkThreadCount: integer;
     fRunningThreads: integer;
     fExceptionsCount: integer;
+    fContentionAbortDelay: integer;
     fWorkThread: TSynThreadPoolWorkThreads;
     fOnThreadTerminate: TOnNotifyThread;
     fOnThreadStart: TOnNotifyThread;
@@ -1663,17 +1669,12 @@ type
     fContentionAbortCount: cardinal;
     fContentionCount: cardinal;
     fName, fPoolName: RawUtf8;
-    fContentionAbortDelay: integer;
-    fPendingContextCount: integer;
     fTerminated: boolean;
-    {$ifdef USE_THREADWINIOCP}
-    fRequestQueue: THandle; // IOCP has its own internal queue
-    {$else}
+    {$ifndef USE_THREADWINIOCP}
     fQueuePendingContext: boolean;
-    fPendingContext: TPointerDynArray;
     function GetPendingContextCount: integer;
     function PopPendingContext: pointer;
-    function QueueLength: integer; virtual;
+    function QueueLength: integer; virtual; // called once when needed
     {$endif USE_THREADWINIOCP}
     /// end thread on IO error
     function NeedStopOnIOError: boolean; virtual;
@@ -1756,11 +1757,8 @@ type
       read fContentionCount;
     /// how many input tasks are currently waiting to be affected to threads
     property PendingContextCount: integer
-      {$ifdef USE_THREADWINIOCP}
-      read fPendingContextCount;
-      {$else}
-      read GetPendingContextCount;
-      {$endif USE_THREADWINIOCP}
+      {$ifdef USE_THREADWINIOCP} read fPendingContextCount;
+      {$else} read GetPendingContextCount; {$endif}
   end;
 
   {$M-}
@@ -4664,8 +4662,15 @@ begin
     for i := 0 to fWorkThreadCount - 1 do
       fWorkThread[i].fEvent.SetEvent;
     // cleanup now any pending task (e.g. THttpServerSocket instance)
-    for i := 0 to fPendingContextCount - 1 do
+    i := fPendingFirst;
+    while fPendingContextCount > 0 do
+    begin
       TaskAbort(fPendingContext[i]);
+      inc(i);
+      if i = length(fPendingContext) then
+        i := 0;
+      dec(fPendingContextCount);
+    end;
     {$endif USE_THREADWINIOCP}
     // wait for threads to finish, with 30 seconds TimeOut
     endtix := GetTickSec + 30;
@@ -4704,14 +4709,14 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
 
   function Enqueue: boolean;
   var
-    i, n: integer;
+    n: integer;
     found: TSynThreadPoolWorkThread;
     thread: ^TSynThreadPoolWorkThread;
   begin
     result := false; // queue is full
     fSafe.Lock;
     thread := pointer(fWorkThread);
-    for i := 1 to fWorkThreadCount do
+    for n := 1 to fWorkThreadCount do
       if thread^.fProcessingContext = nil then
       begin
         found := thread^;
@@ -4723,15 +4728,19 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
       end
       else
         inc(thread);
-    if fQueuePendingContext then
+    if fQueuePendingContext and
+       (fPendingContextCount + fWorkThreadCount <= QueueLength) then
     begin
-      n := fPendingContextCount;
-      if n + fWorkThreadCount <= QueueLength then
+      // not too many connection limit reached (see QueueIsFull)
+      if fPendingContext = nil then
+        SetLength(fPendingContext, QueueLength); // allocate once when needed
+      n := length(fPendingContext);
+      if fPendingLast < n then // paranoid: QueueLength is stable once started
       begin
-        // not too many connection limit reached (see QueueIsFull)
-        if n = length(fPendingContext) then
-          SetLength(fPendingContext, NextGrow(n));
-        fPendingContext[n] := aContext;
+        fPendingContext[fPendingLast] := aContext;
+        inc(fPendingLast);
+        if fPendingLast = n then
+          fPendingLast := 0;
         inc(fPendingContextCount);
         result := true; // added in pending queue
       end;
@@ -4814,12 +4823,16 @@ begin
   {$endif HASFASTTRYFINALLY}
     if fPendingContextCount > 0 then
     begin
-      result := fPendingContext[0]; // FIFO queue
+      result := fPendingContext[fPendingFirst]; // FIFO queue
+      inc(fPendingFirst);
+      if fPendingFirst = length(fPendingContext) then
+        fPendingFirst := 0;
       dec(fPendingContextCount);
-      MoveFast(fPendingContext[1], fPendingContext[0],
-        fPendingContextCount * SizeOf(pointer));
-      if fPendingContextCount = 128 then
-        SetLength(fPendingContext, 128); // reduce when congestion is resolved
+      if fPendingContextCount = 0 then
+      begin
+        fPendingFirst := 0;
+        fPendingLast := 0;
+      end;
     end;
   {$ifdef HASFASTTRYFINALLY}
   finally
