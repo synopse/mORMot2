@@ -1774,7 +1774,7 @@ type
   THttpPeerCrypt = class(TInterfacedPersistent)
   protected
     fAesSafe: TLightLock; // topmost to ensure proper aarch64 alignment
-    fClientSafe: TLightLock; // if try to download with background direct mode
+    fClientSafe: TOSLightLock; // if try to download with background direct mode
     fSettings: THttpPeerCacheSettings;
     fSharedMagic, fFrameSeqLow: cardinal;
     fFrameSeq: integer;
