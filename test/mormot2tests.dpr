@@ -60,6 +60,7 @@ uses
   mormot.crypt.openssl,
   mormot.tools.ecc         in '..\src\tools\ecc\mormot.tools.ecc.pas',
   test.core.base           in '.\test.core.base.pas',
+  test.core.threads        in '.\test.core.threads.pas',
   test.core.data           in '.\test.core.data.pas',
   test.core.crypt          in '.\test.core.crypt.pas',
   test.core.ecc            in '.\test.core.ecc.pas',
@@ -105,6 +106,7 @@ begin
     Param('ldapusr', 'the LDAP #user for --dns, e.g. name@ad.company.com');
     Param('ldappwd', 'the LDAP #password for --dns');
     Option('ldaps',  'force LDAPS connection + plain auth instead of Kerberos');
+    Option('fullthreads', 'force extensive test.core.threads coverage');
     Param('ntp',     'a NTP/SNTP #server name/IP instead of time.google.com');
     Option('nontp',  'disable the NTP/SNTP server tests');
     {$ifdef USE_OPENSSL}
@@ -147,6 +149,7 @@ procedure TIntegrationTests.CoreUnits;
 begin
   AddCase([
     TTestCoreBase,
+    TTestCoreThreads,
     TTestCoreProcess,
     {$ifdef HASGENERICS} // do-nothing on oldest compilers (e.g. <= Delphi XE7)
     TTestCoreCollections,
