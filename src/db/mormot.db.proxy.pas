@@ -160,7 +160,7 @@ type
     fTransactionRetryTimeout: Int64;
     fTransactionActiveTimeout: Int64;
     fTransactionActiveAutoReleaseTicks: Int64;
-    fSafe: TOSLock;
+    fSafe: TOSLightLock; // = TOSLightMutex = futex on Linux and Win8+
     function GetAuthenticate: TSynAuthenticationAbstract;
     /// default Handle*() will just return the incoming value
     function HandleInput(const input: RawByteString): RawByteString; virtual;
