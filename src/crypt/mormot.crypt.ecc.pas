@@ -950,6 +950,7 @@ type
     // - returns nil if all items were valid
     // - returns the list of any invalid instances
     // - do not free the returned items, since they are reference to Items[]
+    // - this method is not thread-safe so should be run e.g. just after loading
     function ValidateItems: TEccCertificateObjArray;
     /// check if the digital signature is recognized by the stored certificates
     // - ensure that sign.AuthoritySerial is part of Items[] list but not the CRL
@@ -4519,14 +4520,10 @@ begin
   result := nil;
   if self = nil then
     exit;
-  fSafe.ReadLock;
-  try
-    for i := 0 to high(fItems) do
-      if not (IsValid(fItems[i]) in ECC_VALIDSIGN) then
-        PtrArrayAdd(result, fItems[i]);
-  finally
-    fSafe.ReadUnLock;
-  end;
+  // note: fSafe.ReadLock here would deadlock within nested IsValid()
+  for i := 0 to high(fItems) do
+    if not (IsValid(fItems[i]) in ECC_VALIDSIGN) then
+      PtrArrayAdd(result, fItems[i]);
 end;
 
 constructor TEccCertificateChain.CreateFromFile(const jsonfile: TFileName);
