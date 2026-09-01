@@ -1303,8 +1303,12 @@ begin
       Run(RunLdapClient, self, 'ldap', true, false); // fails in the background
   end;
   // validate LDAP distinguished name conversion (no client)
-  CheckEqual(DNToCN('CN=User1,OU=Users,OU=London,DC=xyz,DC=local'),
-    'xyz.local/London/Users/User1');
+  u := 'CN=User1,OU=Users,OU=London,DC=xyz,DC=local';
+  CheckEqual(DNToCN(u), 'xyz.local/London/Users/User1');
+  CheckEqual(DNToCN(u, false, [dnDC]), 'xyz.local');
+  CheckEqual(DNToCN(u, false, [dnDC, dnOU]), 'xyz.local/London/Users');
+  CheckEqual(DNToCN(u, false, [dnOU]), '/London/Users');
+  CheckEqual(DNToCN(u, false, [dnCN]), '/User1');
   CheckEqual(DNToCN(
     'cn=JDoe,ou=Widgets,ou=Manufacturing,dc=USRegion,dc=OrgName,dc=com'),
     'USRegion.OrgName.com/Manufacturing/Widgets/JDoe');
