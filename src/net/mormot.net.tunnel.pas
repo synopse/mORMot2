@@ -87,6 +87,7 @@ type
     function TunnelInfo: variant;
   end;
   PITunnelTransmit = ^ITunnelTransmit;
+  ITunnelTransmits = array of ITunnelTransmit;
 
   /// abstract tunneling service implementation
   ITunnelLocal = interface(ITunnelTransmit)
@@ -347,7 +348,7 @@ type
   protected
     fInfoCacheSafe: TLightLock;
     fCount: integer;
-    fItem: array of ITunnelTransmit;
+    fItem: ITunnelTransmits;
     fSession: TIntegerDynArray; // store TTunnelSession (=cardinal) values
     fInfoCache: TVariantDynArray;
     fInfoCacheTix32: cardinal;
@@ -588,7 +589,7 @@ function FrameSession(const Frame: RawByteString): TTunnelSession;
 var
   l: PtrInt;
 begin
-  l := length(Frame) - TRAIL_SIZE; // - SizeOf(TTunnelSession)
+  l := length(Frame) - SizeOf(TTunnelSession); // TRAIL_SIZE can't be inlined
   if l >= 0 then
     result := PTunnelSession(@PByteArray(Frame)[l])^
   else
@@ -1387,7 +1388,7 @@ function TTunnelList.GetAllInfo: TVariantDynArray;
 var
   n, i: PtrInt;
   tix32: cardinal;
-  tunnels: array of ITunnelTransmit; // local copy called outside of ReadLock
+  tunnels: ITunnelTransmits; // local copy called outside of ReadLock
   sessions: TIntegerDynArray;
 begin
   result := nil;
