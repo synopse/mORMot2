@@ -1654,7 +1654,7 @@ type
     {$ifdef USE_THREADWINIOCP}
     fRequestQueue: THandle; // IOCP has its own internal queue
     {$else}
-    fSafe: TLightLock; // single 32-bit field is enough
+    fPendingSafe: TLightLock; // single 32-bit field is enough
     fPendingFirst, fPendingLast: integer; // O(1) FIFO in fPendingContext[]
     fPendingContext: TPointerDynArray;
     {$endif USE_THREADWINIOCP}
@@ -1674,7 +1674,7 @@ type
     fQueuePendingContext: boolean;
     function GetPendingContextCount: integer;
     function PopPendingContext: pointer;
-    function QueueLength: integer; virtual; // called once when needed
+    function QueueLength: integer; virtual; // assumed stable while running
     {$endif USE_THREADWINIOCP}
     /// end thread on IO error
     function NeedStopOnIOError: boolean; virtual;
@@ -1683,6 +1683,7 @@ type
       aContext: pointer); virtual; abstract;
     /// finalize a queue item on Terminate - e.g. call Free/Dispose on aContext
     procedure TaskAbort(aContext: pointer); virtual;
+    procedure DoTaskAbort(aContext: pointer);
   public
     /// initialize a thread pool with the supplied number of threads
     // - abstract Task() virtual method will be called by one of the threads
@@ -4019,7 +4020,7 @@ constructor TSynParallelProcess.Create(ThreadPoolCount: integer;
 var
   i: PtrInt;
 begin
-  fSafe.Init;
+  fSafe.Init; // mandatory for TOSLightLock on BSD
   if ThreadPoolCount < 0 then
     ESynThread.RaiseUtf8('%.Create(%,%)',
       [Self, ThreadPoolCount, ThreadName]);
@@ -4650,14 +4651,17 @@ var
   i: PtrInt;
   endtix: cardinal;
 begin
-  fTerminated := true; // fWorkThread[].Execute will check this flag
   try
     {$ifdef USE_THREADWINIOCP}
+    fTerminated := true; // fWorkThread[].Execute will check this flag
     // notify the threads we are shutting down
     for i := 0 to fWorkThreadCount * 2 do // *2 = better safe than sorry
       IocpPostQueuedStatus(fRequestQueue, 0, nil, {ctxt=}nil);
       // TaskAbort() is done in Execute when fTerminated = true
     {$else}
+    fPendingSafe.Lock;   // ensure Terminated is notified cleanly
+    fTerminated := true; // fWorkThread[].Execute will check this flag
+    fPendingSafe.UnLock;
     // notify the threads we are shutting down using the event
     for i := 0 to fWorkThreadCount - 1 do
       fWorkThread[i].fEvent.SetEvent;
@@ -4665,7 +4669,7 @@ begin
     i := fPendingFirst;
     while fPendingContextCount > 0 do
     begin
-      TaskAbort(fPendingContext[i]);
+      DoTaskAbort(fPendingContext[i]); // with try..except
       inc(i);
       if i = length(fPendingContext) then
         i := 0;
@@ -4714,16 +4718,21 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
     thread: ^TSynThreadPoolWorkThread;
   begin
     result := false; // queue is full
-    fSafe.Lock;
+    fPendingSafe.Lock;
+    if fTerminated then
+    begin
+      fPendingSafe.UnLock; // avoid any race at shutdown
+      exit;
+    end;
     thread := pointer(fWorkThread);
     for n := 1 to fWorkThreadCount do
       if thread^.fProcessingContext = nil then
       begin
         found := thread^;
         found.fProcessingContext := aContext;
-        fSafe.UnLock;
+        fPendingSafe.UnLock;
         found.fEvent.SetEvent; // notify outside of the fSafe lock
-        result := true; // found one available thread
+        result := true;        // found one available thread
         exit;
       end
       else
@@ -4734,18 +4743,14 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
       // not too many connection limit reached (see QueueIsFull)
       if fPendingContext = nil then
         SetLength(fPendingContext, QueueLength); // allocate once when needed
-      n := length(fPendingContext);
-      if fPendingLast < n then // paranoid: QueueLength is stable once started
-      begin
-        fPendingContext[fPendingLast] := aContext;
-        inc(fPendingLast);
-        if fPendingLast = n then
-          fPendingLast := 0;
-        inc(fPendingContextCount);
-        result := true; // added in pending queue
-      end;
+      fPendingContext[fPendingLast] := aContext;
+      inc(fPendingLast);
+      if fPendingLast = length(fPendingContext) then
+        fPendingLast := 0;
+      inc(fPendingContextCount);
+      result := true; // added in pending queue
     end;
-    fSafe.UnLock;
+    fPendingSafe.UnLock;
   end;
 
 {$endif USE_THREADWINIOCP}
@@ -4815,7 +4820,7 @@ begin
      (fPendingContext = nil) or
      (fPendingContextCount = 0) then
     exit;
-  fSafe.Lock;
+  fPendingSafe.Lock;
   {$ifdef HASFASTTRYFINALLY}
   try
   {$else}
@@ -4837,7 +4842,7 @@ begin
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
-    fSafe.UnLock;
+    fPendingSafe.UnLock;
   end;
 end;
 
@@ -4857,6 +4862,15 @@ procedure TSynThreadPool.TaskAbort(aContext: pointer);
 begin
 end;
 
+procedure TSynThreadPool.DoTaskAbort(aContext: pointer);
+begin
+  if (self <> nil) and
+     (aContext <> nil) then
+    try
+      TaskAbort(aContext);
+    except
+    end;
+end;
 
 { TSynThreadPoolWorkThread }
 
@@ -4894,6 +4908,8 @@ var
   {$ifdef USE_THREADWINIOCP}
   dum1: cardinal; // those variables are not used by our queue
   dum2: pointer;
+  {$else}
+  stop: boolean;
   {$endif USE_THREADWINIOCP}
 begin
   if fOwner <> nil then
@@ -4938,13 +4954,10 @@ begin
     repeat
       if ctxt = nil then
         break; // reached the TSynThreadPool.Destroy "nil" events in the queue
-      try
-        {$ifdef THREADPOOL_DEBUGLOG}
-        TSynLog.Add.Log(sllTrace, 'Task Abort in thread #%', [fThreadNumber]);
-        {$endif THREADPOOL_DEBUGLOG}
-        fOwner.TaskAbort(ctxt); // e.g. free the THttpServerSocket instance
-      except
-      end;
+      {$ifdef THREADPOOL_DEBUGLOG}
+      TSynLog.Add.Log(sllTrace, 'Task Abort in thread #%', [fThreadNumber]);
+      {$endif THREADPOOL_DEBUGLOG}
+      fOwner.DoTaskAbort(ctxt); // e.g. free the THttpServerSocket instances
       InterlockedDecrement(fOwner.fPendingContextCount); // always dec
     until not IocpGetQueuedStatus(fOwner.fRequestQueue, dum1, dum2, pointer(ctxt), {ms=}1);
     {$ifdef THREADPOOL_DEBUGLOG}
@@ -4954,21 +4967,24 @@ begin
     // main loop, waiting for the next task(s) notified from this thread event
     repeat
       fEvent.WaitForEver;
-      if fOwner.fTerminated then
-        break;
-      fOwner.fSafe.Lock;
+      fOwner.fPendingSafe.Lock;
       ctxt := fProcessingContext;
-      fOwner.fSafe.UnLock;
-      if ctxt <> nil then
-      begin
-        repeat
-          DoTask(ctxt);
-          ctxt := fOwner.PopPendingContext; // unqueue any pending context
-        until ctxt = nil;
-        fOwner.fSafe.Lock;
-        fProcessingContext := nil; // indicates this thread event is available
-        fOwner.fSafe.UnLock;
-      end;
+      stop := fOwner.fTerminated or
+              Terminated;
+      fOwner.fPendingSafe.UnLock;
+      if stop then
+        fOwner.DoTaskAbort(ctxt)
+      else
+        if ctxt <> nil then
+        begin
+          repeat
+            DoTask(ctxt);
+            ctxt := fOwner.PopPendingContext; // unqueue any pending context
+          until ctxt = nil;
+          fOwner.fPendingSafe.Lock;
+          fProcessingContext := nil; // eventually mark this thread as available
+          fOwner.fPendingSafe.UnLock;
+        end;
     until fOwner.fTerminated or
           Terminated;
     // TaskAbort(fPendingContext[]) is done in fOwner's TSynThreadPool.Destroy
