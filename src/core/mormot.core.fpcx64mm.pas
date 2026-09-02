@@ -55,7 +55,8 @@ unit mormot.core.fpcx64mm;
     1. default FPCMM_SERVER is perfect for a multi-threaded app/service/daemon;
     2. set FPCMM_GUI for GUI/console almost-mono-threaded apps (FastMM4 mode);
     3. try FPCMM_BOOST or FPCMM_BOOSTER on high-end hardware;
-    4. try mormot.core.fpclibcmm as POSIX alternative.
+    4. add FPCMM_MOONSHARD when small blocks > 256B are highly contended;
+    5. try mormot.core.fpclibcmm as POSIX alternative.
 }
 
 // target a multi-threaded service on a modern CPU (default)
@@ -74,6 +75,11 @@ unit mormot.core.fpcx64mm;
 // - enable FPCMM_MULTIPLESMALLNOTWITHMEDIUM to reduce small pools locks;
 // - enable FPCMM_MEDIUMPERTHREAD for 4 user-medium arenas on Linux/Win64.
 {.$define FPCMM_BOOSTER}
+
+// shard all 44 small block classes (<=2608B) across 32 per-thread arenas
+// - keeps the regular size classes and medium allocator unchanged;
+// - may be combined with FPCMM_BOOSTER for the most aggressive server profile.
+{.$define FPCMM_MOONSHARD}
 
 // target a GUI/console mono-threaded app
 // - disable all FPCMM_SERVER/FPCMM_BOOST/FPCMM_BOOSTER optimizations
@@ -223,6 +229,9 @@ interface
     {$undef FPCMM_DEBUG} // when performance matters more than stats
   {$endif FPCMM_BOOSTER}
 {$endif FPCMM_GUI}
+{$ifdef FPCMM_MOONSHARD}
+  {$define FPCMM_TINYPERTHREAD}
+{$endif FPCMM_MOONSHARD}
 
 type
   /// Arena (middle/large) heap information as returned by CurrentHeapStatus
@@ -401,6 +410,7 @@ const
   /// human readable information about how our MM was built
   // - similar to WriteHeapStatus(compilationflags=true) output
   FPCMM_FLAGS = ' '
+    {$ifdef FPCMM_MOONSHARD}         + 'MOONSHARD '   {$endif}
     {$ifdef FPCMM_BOOSTER}           + 'BOOSTER '     {$else}
       {$ifdef FPCMM_BOOST}           + 'BOOST '       {$else}
         {$ifdef FPCMM_SERVER}        + 'SERVER '      {$endif}
@@ -438,7 +448,7 @@ implementation
     Per-Thread or Round-robin distribution into 8-128 arenas, fed from one or
     several pool(s) (fair scaling from with no threadvar nor GC involved)
   - SMALL <= 2600 B
-    One arena per block size, fed from one or several pool(s)
+    One arena per block size, or 32 with FPCMM_MOONSHARD, fed from pool(s)
   - MEDIUM <= 256 KB
     Separated pool(s) of bitmap-marked chunks, fed from 1.25MB of OS chunks
   - LARGE  > 256 KB
@@ -962,6 +972,10 @@ end;
 
 const
   // define maximum size of tiny blocks, and the number of arenas
+  {$ifdef FPCMM_MOONSHARD}
+  NumTinyBlockTypesPO2  = 6; // 44 classes in a 64-slot arena row
+  NumTinyBlockArenasPO2 = 5; // 32 arenas
+  {$else}
   {$ifdef FPCMM_BOOSTER}
   NumTinyBlockTypesPO2  = 4; // tiny are <= 256 bytes
   NumTinyBlockArenasPO2 = 7; // 128 arenas
@@ -975,8 +989,15 @@ const
     NumTinyBlockArenasPO2 = 3; // 8 round-robin arenas (including Small[])
     {$endif FPCMM_BOOST}
   {$endif FPCMM_BOOSTER}
+  {$endif FPCMM_MOONSHARD}
 
-  NumSmallBlockTypes       = 46;
+  {$ifdef FPCMM_MOONSHARD}
+  NumSmallBlockLookupTypes = 44; // exclude the physical padding below
+  NumSmallBlockTypes       = 64; // fixed 4096-byte arena stride
+  {$else}
+  NumSmallBlockTypes       = 46; // includes two same-size fallbacks
+  NumSmallBlockLookupTypes = NumSmallBlockTypes;
+  {$endif FPCMM_MOONSHARD}
   MaximumSmallBlockSize    = 2608;
   NumTinyBlockTypes        =
      1 shl NumTinyBlockTypesPO2; // 8 (128B) or 16 (256B)
@@ -988,7 +1009,21 @@ const
     16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256,
     272, 288, 304, 320, 352, 384, 416, 448, 480, 528, 576, 624, 672, 736, 800,
     880, 960, 1056, 1152, 1264, 1376, 1504, 1648, 1808, 1984, 2176, 2384,
-    MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize);
+    MaximumSmallBlockSize
+    {$ifdef FPCMM_MOONSHARD}
+    // Physical padding: only the first two entries may be used as the cold
+    // same-size fallback after every arena was contended.
+    , MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize,
+    MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize,
+    MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize,
+    MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize,
+    MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize,
+    MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize,
+    MaximumSmallBlockSize, MaximumSmallBlockSize
+    {$else}
+    , MaximumSmallBlockSize, MaximumSmallBlockSize
+    {$endif FPCMM_MOONSHARD}
+    );
 
   SmallBlockGranularity         = 16;
   MaximumTinyBlockSize          = NumTinyBlockTypes * SmallBlockGranularity;
@@ -3693,6 +3728,10 @@ begin
   SmallBlockInfo.IsMultiThreadPtr := @IsMultiThread; // call GOT if needed
   small := @SmallBlockInfo;
   assert(SizeOf(small^) = 1 shl SmallBlockTypePO2);  // exactly 64 bytes
+  {$ifdef FPCMM_MOONSHARD}
+  assert(NumSmallBlockTypes = NumTinyBlockTypes); // fixed 4096-byte row
+  assert(NumSmallBlockLookupTypes = 44);
+  {$endif FPCMM_MOONSHARD}
   assert(length(SmallBlockInfo.GetmemSleepCount) =
     length(SmallBlockInfo.GetmemLookup));
   for a := 0 to NumTinyBlockArenas do
@@ -3737,7 +3776,7 @@ begin
   assert(small = @SmallBlockInfo.GetmemLookup);
   start := 0;
   with SmallBlockInfo do
-    for i := 0 to NumSmallBlockTypes - 1 do
+    for i := 0 to NumSmallBlockLookupTypes - 1 do
     begin
       next := PtrUInt(SmallBlockSizes[i]) div SmallBlockGranularity;
       while start < next do
