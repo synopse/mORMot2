@@ -69,15 +69,10 @@ The *mORMOt 2* repository content is organized into the following sub-folders:
 - [`test`](test) defines the regression tests of all framework features;
 - [`res`](res) to compile some resources used within `src` - e.g. the `static` third-party binaries;
 - [`doc`](doc) holds the documentation of the framework;
+- [`docs`](docs) holds the AI-generated documentation of the framework;
 - [`ex`](ex) contains various samples.
 
 Feel free to explore the source, and the inlined documentation.
-
-Some sub-folders are tailored for AI-driven work with *mORMot*:
-
-- [`docs`](docs) holds the AI-generated documentation of the framework;
-- [`boot`](boot) bootstraps a *Free Pascal* + *mORMot 2* toolchain for ephemeral Linux runtimes.
-
 
 ### MPL/GPL/LGPL Three-License
 
