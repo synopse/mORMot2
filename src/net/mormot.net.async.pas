@@ -2841,8 +2841,8 @@ begin
         EAsyncConnections.RaiseUtf8('%.Execute: unexpected fProcess=%',
           [self, ord(fProcess)]);
       end;
-    {$endif USE_WINIOCP}
     end;
+    {$endif USE_WINIOCP}
     fOwner.DoLog(sllInfo, 'Execute: done %', [fProcessName], self);
   except
     on E: Exception do
