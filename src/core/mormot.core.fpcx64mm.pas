@@ -990,6 +990,7 @@ const
   SmallBlockDownsizeCheckAdder = 64;
   SmallBlockUpsizeAdder        = 32;
   SmallBlockTypePO2            = 6;  // SizeOf(TSmallBlockType)=64
+  SmallBlockPoolRetentionThreshold = 8;
 
   MediumBlockPoolSize          = MediumBlockPoolSizeMem - 16;
   {$ifdef FPCMM_MEDIUMPERTHREAD}
@@ -1071,7 +1072,8 @@ type
     GetmemCount: cardinal;
     FreememCount: cardinal;
     LastFreeLocked: boolean;
-    Padding: array[1 .. 3] of byte;
+    EmptyPoolReuseCount: byte;
+    Padding: array[1 .. 2] of byte;
     LastFreeCount: cardinal;
   end;
   PSmallBlockType = ^TSmallBlockType;
@@ -2548,6 +2550,7 @@ asm     // P = rcx on Windows, P = rdi on SystemV; use rsi = TSmallBlockType
         mov     rax, [rdx].TSmallBlockPoolHeader.FirstFreeBlock
         sub     [rdx].TSmallBlockPoolHeader.BlocksInUse, 1
         jz      @PoolIsNowEmpty
+@StoreFreeBlock:
         // Store this as the new first free block
         mov     [rdx].TSmallBlockPoolHeader.FirstFreeBlock, rcx
         // Store the previous first free block as the block header
@@ -2584,7 +2587,11 @@ asm     // P = rcx on Windows, P = rdi on SystemV; use rsi = TSmallBlockType
 @PoolIsNowEmpty:
         // FirstFreeBlock=nil means it is the sequential feed pool with a single block
         test    rax, rax
+        {$ifdef FPCMM_SERVER}
+        jz      @EmptySequentialFeedPool
+        {$else}
         jz      @IsSequentialFeedPool
+        {$endif FPCMM_SERVER}
         // Pool is now empty: Remove it from the linked list and free it
         mov     rax, [rdx].TSmallBlockPoolHeader.PreviousPartiallyFreePool
         mov     rcx, [rdx].TSmallBlockPoolHeader.NextPartiallyFreePool
@@ -2622,6 +2629,18 @@ asm     // P = rcx on Windows, P = rdi on SystemV; use rsi = TSmallBlockType
         {$else}
         jmp     @Done // on Win64, a stack frame is required
         {$endif NOSFRAME}
+        {$ifdef FPCMM_SERVER}
+@EmptySequentialFeedPool:
+        // Larger small classes share one block type process-wide. Keep one pool
+        // only after repeated single-block churn; all classes together retain
+        // at most about 1.2 MiB with the current pool table.
+        cmp     word ptr [rsi].TSmallBlockType.BlockSize, 256
+        jbe     @IsSequentialFeedPool
+        cmp     byte ptr [rsi].TSmallBlockType.EmptyPoolReuseCount, SmallBlockPoolRetentionThreshold
+        jae     @StoreFreeBlock
+        inc     byte ptr [rsi].TSmallBlockType.EmptyPoolReuseCount
+        jmp     @IsSequentialFeedPool
+        {$endif FPCMM_SERVER}
 @ProcessPendingBin:
         // Release the next SmallLastFree list block while we own the lock
         cmp     byte ptr [rsi].TSmallBlockType.LastFreeLocked, false
