@@ -4820,6 +4820,8 @@ var
   mp, ok, hosthead, mpct, mptext, mptrunc, cmd: RawUtf8;
   keepfile: TFileName;
   mpa: TMultiPartDynArray;
+  mps: THttpMultiPartStream;
+  mpssize: Int64;
 begin
   TSynLog.Family.ExceptionIgnore.AddSeveral([
     EWriteError, EHttpSocketOverflow, ENetSock]);
@@ -4911,6 +4913,51 @@ begin
           CheckEqual(clt.Content,
             Make(['ok ', CardinalToHexShort(bodyhash)]), 'mp resp');
           WaitDeleted(bodyfile, 'mp');
+          // two THttpMultiPartStream POST over the same keep-alive connection:
+          // the client should send exactly Content-Length bytes, so that no
+          // duplicated closing boundary is left on the socket, to be parsed
+          // by the server as an invalid next request line - see #565
+          mps := THttpMultiPartStream.Create;
+          try
+            mps.AddContent('field', mptext);
+            mps.Flush; // explicit call before Post(), as documented
+            mpssize := mps.Size;
+            Check(mpssize > length(mptext), 'mps flushed');
+            bodytype := mps.MultipartContentType;
+            for n := 1 to 2 do
+            begin
+              status := clt.Post('/mp', mps, bodytype, {keepalive=}30000);
+              CheckEqual(status, HTTP_SUCCESS, 'mps status');
+              CheckEqual(clt.Content,
+                Make(['ok ', CardinalToHexShort(bodyhash)]), 'mps resp');
+              CheckEqual(mps.Size, mpssize, 'mps size unchanged');
+              CheckEqual(mps.Position, mpssize, 'mps sent whole body');
+              if n = 2 then // the first POST reopens the previously closed socket
+                CheckUtf8(PosEx('DoRetry', clt.RequestContext) = 0,
+                  'mps keep-alive %', [clt.RequestContext]);
+              WaitDeleted(bodyfile, 'mps');
+            end;
+          finally
+            mps.Free;
+          end;
+          // a stream which was never explicitly flushed should work as well,
+          // since the client rewinds (and therefore flushes) it before the
+          // Content-Length: header is computed from its Size
+          mps := THttpMultiPartStream.Create;
+          try
+            mps.AddContent('field', mptext);
+            CheckEqual(mps.Size, 0, 'mps2 not flushed yet');
+            bodytype := mps.MultipartContentType;
+            status := clt.Post('/mp', mps, bodytype, {keepalive=}30000);
+            CheckEqual(status, HTTP_SUCCESS, 'mps2 status');
+            CheckEqual(clt.Content,
+              Make(['ok ', CardinalToHexShort(bodyhash)]), 'mps2 resp');
+            CheckEqual(mps.Size, mpssize, 'mps2 flushed once');
+            CheckEqual(mps.Position, mpssize, 'mps2 sent whole body');
+            WaitDeleted(bodyfile, 'mps2');
+          finally
+            mps.Free;
+          end;
           // spool a chunked body, i.e. with no Content-Length
           bodytype := 'application/dummy';
           bodyhash := crc32cHash(mptext);
