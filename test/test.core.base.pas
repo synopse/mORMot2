@@ -10424,23 +10424,28 @@ begin
     st.Seek(0, soBeginning);
     CheckEqual(st.Size, sz, 'st rewind');
     CheckEqual(StreamToRawByteString(st), mpc, 'st read twice');
-    raised := false;
+    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
     try
-      st.AddContent('late', 'not allowed after Flush');
-    except
-      on EHttpSocket do
-        raised := true;
+      raised := false;
+      try
+        st.AddContent('late', 'not allowed after Flush');
+      except
+        on EHttpSocket do
+          raised := true;
+      end;
+      Check(raised, 'st add after flush');
+      raised := false;
+      try
+        st.AddFile('late', fn[0]); // should not even open the file
+      except
+        on EHttpSocket do
+          raised := true;
+      end;
+      Check(raised, 'st addfile after flush');
+      CheckEqual(st.Size, sz, 'st size after failed add');
+    finally
+      TSynLog.Family.ExceptionIgnoreCurrentThread := false;
     end;
-    Check(raised, 'st add after flush');
-    raised := false;
-    try
-      st.AddFile('late', fn[0]); // should not even open the file
-    except
-      on EHttpSocket do
-        raised := true;
-    end;
-    Check(raised, 'st addfile after flush');
-    CheckEqual(st.Size, sz, 'st size after failed add');
     st.Free;
     for i := 0 to high(fn) do
       check(DeleteFile(fn[i]));

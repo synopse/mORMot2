@@ -2416,7 +2416,7 @@ begin
     // an explicit Flush, or on retry - the duplicated boundaries exceeded the
     // Content-Length: header and broke the keep-alive connection - see #565
     for i := length(fBounds) - 1 downto 0 do
-      mormot.core.text.Append(s, ['--', fBounds[i], '--'#13#10]);
+      s := Join([s, '--', fBounds[i], '--'#13#10]);
     Append(s);
     fFlushed := true;
   end;

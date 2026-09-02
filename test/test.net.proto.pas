@@ -3164,7 +3164,7 @@ begin
     log.Log(sllInfo, 'Tunnel: create % TTunnelLocal callbacks', [AGENT_COUNT], self);
   for i := 0 to AGENT_COUNT - 1 do
   begin
-    agentlocal[i]   := TTunnelLocalClient.Create(TSynLog);;
+    agentlocal[i]   := TTunnelLocalClient.Create(TSynLog);
     consolelocal[i] := TTunnelLocalServer.Create(TSynLog);
     agentcallback[i]   := agentlocal[i];
     consolecallback[i] := consolelocal[i];
@@ -3252,7 +3252,7 @@ begin
   // release internal references
   if Assigned(log) then
     log.Log(sllInfo, 'Tunnel: finalize agent/console references', self);
-  // retrieve SOA agents + consoles endpoints (emulated on stack)
+  // release SOA agents + consoles endpoints (emulated on stack)
   agentcallback := nil;
   consolecallback := nil;
 end;

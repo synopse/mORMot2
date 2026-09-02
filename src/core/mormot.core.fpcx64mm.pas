@@ -466,6 +466,7 @@ implementation
   - Lock-less free lists reduce medium FreeMem thread contention;
   - Medium arenas and Large blocks have one giant lock over their own pool;
   - Medium arenas have an unlocked prefetched memory chunk to reduce contention;
+  - Medium blocks > 48KB fallback to the Large allocator on contention;
   - Large blocks don't lock during mmap/virtualalloc system calls;
   - SwitchToThread/nanosleep OS call is done after initial spinning;
   - FPCMM_DEBUG helps identifying the lock contention(s) in WriteHeapStatus.
