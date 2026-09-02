@@ -2,14 +2,14 @@
 # Bootstrap a Free Pascal + mORMot 2 toolchain for ephemeral Linux runtimes.
 #
 # Intended location in your repository:
-#   tools/bootstrap-fpc.sh
+#   boot/bootstrap-fpc.sh
 #
 # What it does:
 #   1. Installs the Debian/Ubuntu build prerequisites (including a bootstrap FPC).
 #   2. Builds FPC fixes_3_2 (currently reports 3.2.3) into an isolated prefix.
 #   3. Finds an existing mORMot 2 checkout, or clones one into the user cache.
 #   4. Downloads mORMot's POSIX static archive and verifies its SHA-256 checksum.
-#   5. Generates tools/fpc, a wrapper with the right FPC config, mORMot unit paths,
+#   5. Generates boot/fpc, a wrapper with the right FPC config, mORMot unit paths,
 #      and target-specific static-library path.
 #   6. Smoke-compiles a tiny mORMot program.
 #
@@ -36,7 +36,7 @@ warn() { printf '\n[bootstrap-fpc] WARNING: %s\n' "$*" >&2; }
 die()  { printf '\n[bootstrap-fpc] ERROR: %s\n' "$*" >&2; exit 1; }
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-if [[ "$(basename "$SCRIPT_DIR")" == "tools" ]]; then
+if [[ "$(basename "$SCRIPT_DIR")" == "boot" ]]; then
   REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 else
   REPO_ROOT="$(pwd)"
@@ -190,7 +190,7 @@ build_fpc() {
   if [[ -x "$samplecfg" ]]; then
     "$samplecfg" "$libdir" "$cfgdir" >/dev/null
   else
-    warn "samplecfg was not found; tools/fpc will still force the private compiler paths."
+    warn "samplecfg was not found; boot/fpc will still force the private compiler paths."
   fi
 
   local revision
@@ -396,7 +396,7 @@ begin
 end.
 PAS
 
-  log "Smoke-compiling mORMot with tools/fpc"
+  log "Smoke-compiling mORMot with boot/fpc"
   "$wrapper" -FU"$tmp/units" -FE"$tmp/bin" "$tmp/bootstrap_smoke.pas"
   "$tmp/bin/bootstrap_smoke" >/dev/null
   rm -rf "$tmp"
@@ -444,8 +444,8 @@ Use:
   $SCRIPT_DIR/fpc path/to/project.lpr
 
 For ChatGPT project instructions, use:
-  Before working on Pascal/mORMot 2 code, run tools/bootstrap-fpc.sh. Compile
-  relevant changes with tools/fpc and do not rely only on static analysis.
+  Before working on Pascal/mORMot 2 code, run boot/bootstrap-fpc.sh. Compile
+  relevant changes with boot/fpc and do not rely only on static analysis.
 EOF
 }
 
