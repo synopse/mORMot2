@@ -3149,6 +3149,76 @@ var
   sess: TTunnelSession;
   i, j, c: PtrInt;
   local: TNetPort;
+
+  procedure CheckRelayInfo;
+  var
+    i, j, k, expected, sid, count: integer;
+    ai, ci: TVariantDynArray;
+    list: variant;
+    d, a: PDocVariantData;
+    seen: array[0 .. AGENT_COUNT - 1] of boolean;
+  begin
+    // validate agent-side TTunnelList.GetAllInfo()
+    ai := relay.AgentsInfo;
+    CheckEqual(length(ai), AGENT_COUNT, 'AgentsInfo count');
+    FillCharFast(seen, SizeOf(seen), 0);
+    for i := 0 to high(ai) do
+    begin
+      d := _Safe(ai[i]);
+      if not Check(d^.IsObject, 'AgentsInfo object') then
+        continue;
+      sid := 0;
+      if not Check(d^.GetAsInteger('session', sid), 'AgentsInfo session') then
+        continue;
+      j := IntegerScanIndex(pointer(session), length(session), sid);
+      if not CheckUtf8(j >= 0, 'AgentsInfo unknown session=% info=%',
+          [sid, ai[i]]) then
+        continue;
+      Check(not seen[j], 'AgentsInfo duplicate session');
+      seen[j] := true;
+    end;
+    for i := 0 to high(seen) do
+      Check(seen[i], 'AgentsInfo missing session');
+    // validate console-side TTunnelList.GetAllInfo()
+    ci := relay.ConsolesInfo;
+    CheckEqual(length(ci), length(console), 'ConsolesInfo count');
+    for i := 0 to high(ci) do
+    begin
+      // sessions are distributed round-robin over console[]
+      expected := 0;
+      for j := 0 to high(session) do
+        if j mod length(console) = i then
+          inc(expected);
+      d := _Safe(ci[i]);
+      if not Check(d^.IsObject, 'ConsolesInfo object') then
+        continue;
+      count := -1;
+      if Check(d^.GetAsInteger('count', count), 'ConsolesInfo count field') then
+        CheckEqual(count, expected, 'console session count');
+      VarClear(list);
+      if not Check(d^.GetValueByPath('list', list), 'ConsolesInfo list') then
+        continue;
+     a := _Safe(list);
+       if not Check(a^.IsArray, 'ConsolesInfo list array') then
+        continue;
+      CheckEqual(a^.Count, expected, 'ConsolesInfo list count');
+      // validate that each listed session belongs to this console
+      for k := 0 to a^.Count - 1 do
+      begin
+        sid := 0;
+        if not Check(
+            _Safe(a^.Values[k])^.GetAsInteger('session', sid),
+            'console session') then
+          continue;
+        j := IntegerScanIndex(pointer(session), length(session), sid);
+        if not CheckUtf8(j >= 0, 'console unknown session=% info=%',
+            [sid, a^.Values[k]]) then
+          continue;
+        CheckEqual(j mod length(console), i, 'wrong console');
+      end;
+    end;
+  end;
+
 begin
   TSynLogTestLog.EnterLocal(log, self, 'TTunnelRelay');
   if CheckFailed(length(console) <> 0) then
@@ -3240,6 +3310,9 @@ begin
       c := i mod length(console); // round-robin of agents over consoles
       Check(console[c].TunnelCommit(session[i]));
     end;
+    // validate GetAllInfo() twice to validate caching path
+    CheckRelayInfo;
+    CheckRelayInfo;
     // create two local sockets and let them play with each tunnel
     if Assigned(log) then
       log.Log(sllInfo, 'Tunnel: actual sockets relay on loopback', self);
