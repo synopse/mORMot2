@@ -2675,9 +2675,13 @@ begin
   // wake up one thread after accept() on idle server or on slow REST process
   if acoThreadSmooting in fOptions then
     fThreadPollingLastWakeUpTix := mormot.core.os.GetTickCount64; // 16ms / 4ms
-  if LockedExc32(fWakeupOne, 1, 0) then // if not already notified
-    if fWakeupSafe.TryLock then
-      ThreadPollingWakeupLocked; // only a single thread does the wakeup
+  LockedExc32(fWakeupOne, 1, 0); // notify (idempotent if already notified)
+  // always try to do the wakeup ourselves, even if fWakeupOne was already
+  // set: a previous notification may have been left pending by a caller
+  // which failed its TryLock, and a TryLock is cheap - otherwise a stuck
+  // fWakeupOne=1 would silently disable any further accept() wakeup
+  if fWakeupSafe.TryLock then
+    ThreadPollingWakeupLocked; // only a single thread does the wakeup
 end;
 
 procedure TAsyncConnections.ThreadPollingWakeupEvents(Events: integer);
@@ -3881,6 +3885,16 @@ begin
   // notify threads outside fWakeupSafe
   for i := 0 to n - 1 do
     fThreads[ndx[i]].fEvent.SetEvent;
+  // a concurrent ThreadPollingWakeupOne/Events may have incremented a counter
+  // just after our LockedGet32() above, then failed its TryLock because we
+  // were still holding fWakeupSafe: its request would be lost (e.g. fWakeupOne
+  // stuck to 1 with no thread notified) until the next epoll event - which
+  // never comes on an idle server with R0 in WaitForEver, so the server would
+  // accept() new connections but never process them
+  if ((fWakeupOne <> 0) or
+      (fWakeupEvents <> 0)) and
+     fWakeupSafe.TryLock then
+    ThreadPollingWakeupLocked; // process the request(s) we may have missed
 end;
 
 {$endif USE_WINIOCP}
