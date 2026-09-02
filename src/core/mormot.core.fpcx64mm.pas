@@ -1124,25 +1124,29 @@ type
   end;
 
   PMediumBlockInfo = ^TMediumBlockInfo;
-  TMediumBlockInfo = record
+  TMediumBlockInfo = packed record
+    // first cache line contains the main context
     Locked: boolean;
-    {$ifdef FPCMM_MEDIUMPREFETCH}
-    PrefetchLocked: boolean;
-    {$endif FPCMM_MEDIUMPREFETCH}
-    LastFreeLocked: boolean;
+    MainPad: array[1 .. 64 - (SizeOf(boolean) + SizeOf(TMediumBlockPoolHeader) +
+      SizeOf(pointer) * 2 + SizeOf(cardinal) * 2)] of byte;
     PoolsCircularList: TMediumBlockPoolHeader;
     LastSequentiallyFed: pointer;
+    IsMultiThreadPtr: PBoolean; // safe access to IsMultiThread global variable
     SequentialFeedBytesLeft: cardinal;
     BinGroupBitmap: cardinal;
+    // second cache line holds the LastFree linked list
+    LastFreeLocked: boolean;
+    LastFreePad: array[1 .. 64 - (SizeOf(boolean) + SizeOf(pointer))] of byte;
+    LastFree: pointer;
     {$ifdef FPCMM_MEDIUMPREFETCH}
+    // optional cache line to contain the medium prefetch information
+    PrefetchLocked: boolean;
+    PrefetchPad: array[1 .. 64 - (SizeOf(boolean) + SizeOf(pointer))] of byte;
     Prefetch: pointer;
     {$endif FPCMM_MEDIUMPREFETCH}
-    {$ifndef FPCMM_ASSUMEMULTITHREAD}
-    IsMultiThreadPtr: PBoolean; // safe access to IsMultiThread global variable
-    {$endif FPCMM_ASSUMEMULTITHREAD}
-    LastFree: pointer;
-    BinBitmaps: array[0..MediumBlockBinGroupCount - 1] of cardinal;
-    Bins: array[0..MediumBlockBinCount - 1] of TMediumFreeBlock;
+    // then all medium bins follow
+    BinBitmaps: array[0 .. MediumBlockBinGroupCount - 1] of cardinal;
+    Bins: array[0 .. MediumBlockBinCount - 1] of TMediumFreeBlock;
   end;
 
   PLargeBlockHeader = ^TLargeBlockHeader;
@@ -1192,7 +1196,7 @@ var
 
 { ********* Shared Routines }
 
-// small/tiny blocks maintain a separated locked list of last freed items
+// small/tiny blocks maintain a separated locked free list on lock contention
 
 procedure GetSmallLastFreeBlock; nostackframe; assembler;
 asm
