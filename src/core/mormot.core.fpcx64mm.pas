@@ -981,40 +981,39 @@ const
     880, 960, 1056, 1152, 1264, 1376, 1504, 1648, 1808, 1984, 2176, 2384,
     MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize);
 
-  SmallBlockGranularity        = 16;
-  NumSmallBlockGranularitySlots =
-    (MaximumSmallBlockSize + SmallBlockGranularity - 1) div
-      SmallBlockGranularity;
-  TargetSmallBlocksPerPool     = 48;
-  MinimumSmallBlocksPerPool    = 12;
-  SmallBlockDownsizeCheckAdder = 64;
-  SmallBlockUpsizeAdder        = 32;
-  SmallBlockTypePO2            = 6;  // SizeOf(TSmallBlockType)=64
+  SmallBlockGranularity            = 16;
+  NumSmallBlockGranularitySlots    =
+    (MaximumSmallBlockSize + SmallBlockGranularity - 1) div SmallBlockGranularity;
+  TargetSmallBlocksPerPool         = 48;
+  MinimumSmallBlocksPerPool        = 12;
+  SmallBlockDownsizeCheckAdder     = 64;
+  SmallBlockUpsizeAdder            = 32;
+  SmallBlockTypePO2                = 6;  // SizeOf(TSmallBlockType)=64
   SmallBlockPoolRetentionThreshold = 8;
 
-  MediumBlockPoolSize          = MediumBlockPoolSizeMem - 16;
+  MediumBlockPoolSize              = MediumBlockPoolSizeMem - 16;
   {$ifdef FPCMM_MEDIUMPERTHREAD}
   {$if MediumBlockPoolSizeMem > MediumBlockAlignment}
     {$error MediumBlockAlignment must cover a complete medium pool}
   {$ifend}
-  NumMediumBlockArenasPO2      = 2;
-  NumMediumBlockArenas         = 1 shl NumMediumBlockArenasPO2;
+  NumMediumBlockArenasPO2          = 2;
+  NumMediumBlockArenas             = 1 shl NumMediumBlockArenasPO2;
   {$endif FPCMM_MEDIUMPERTHREAD}
-  MediumBlockSizeOffset        = 48;
-  MinimumMediumBlockSize       = 11 * 256 + MediumBlockSizeOffset;
-  MediumBlockBinsPerGroup      = 32;
-  MediumBlockBinGroupCount     = 32;
+  MediumBlockSizeOffset            = 48;
+  MinimumMediumBlockSize           = 11 * 256 + MediumBlockSizeOffset;
+  MediumBlockBinsPerGroup          = 32;
+  MediumBlockBinGroupCount         = 32;
   MediumBlockBinCount = MediumBlockBinGroupCount * MediumBlockBinsPerGroup;
-  MediumBlockGranularity       = 256;
-  MaximumMediumBlockSize       =
+  MediumBlockGranularity           = 256;
+  MaximumMediumBlockSize           =
     MinimumMediumBlockSize + (MediumBlockBinCount - 1) * MediumBlockGranularity;
   OptimalSmallBlockPoolSizeLowerLimit =
     29 * 1024 - MediumBlockGranularity + MediumBlockSizeOffset;
   OptimalSmallBlockPoolSizeUpperLimit =
     64 * 1024 - MediumBlockGranularity + MediumBlockSizeOffset;
-  MaximumSmallBlockPoolSize   =
+  MaximumSmallBlockPoolSize       =
     OptimalSmallBlockPoolSizeUpperLimit + MinimumMediumBlockSize;
-  MediumInPlaceDownsizeLimit  = MinimumMediumBlockSize div 4;
+  MediumInPlaceDownsizeLimit      = MinimumMediumBlockSize div 4;
 
   {$ifdef FPCMM_SLEEPTSC}
   // pause using rdtsc (30 cycles latency on hardware but emulated on VM)
@@ -1976,6 +1975,10 @@ asm     // size = rcx on Windows, = rdi on SystemV; use rsi = TSmallBlockType
         // Adjust number of used blocks and sequential feed pool
         mov     [rsi].TSmallBlockType.NextSequentialFeedBlockAddress, rcx
         add     [rdx].TSmallBlockPoolHeader.BlocksInUse, 1
+        {$ifdef FPCMM_SERVER}
+        // More than one block fits: no longer consecutive single-block churn
+        mov     byte ptr [rsi].TSmallBlockType.EmptyPoolReuseCount, 0
+        {$endif FPCMM_SERVER}
         // Unlock the block type, set the block header and leave
         mov     byte ptr [rsi].TSmallBlockType.Locked, false
         mov     [rax - BlockHeaderSize], rdx
@@ -2629,14 +2632,14 @@ asm     // P = rcx on Windows, P = rdi on SystemV; use rsi = TSmallBlockType
         {$endif NOSFRAME}
         {$ifdef FPCMM_SERVER}
 @EmptySequentialFeedPool:
-        // Larger small classes share one block type process-wide. Keep one pool
-        // only after repeated single-block churn; all classes together retain
-        // at most about 1.2 MiB with the current pool table.
+        // Larger small classes share one block type process-wide
         cmp     word ptr [rsi].TSmallBlockType.BlockSize, 256
         jbe     @IsSequentialFeedPool
+        // Retain one poll only after repeated single-block churn
         cmp     byte ptr [rsi].TSmallBlockType.EmptyPoolReuseCount, SmallBlockPoolRetentionThreshold
         jae     @StoreFreeBlock
         inc     byte ptr [rsi].TSmallBlockType.EmptyPoolReuseCount
+        // Counter is reset once the sequential pool serves more than one block
         jmp     @IsSequentialFeedPool
         {$endif FPCMM_SERVER}
 @ProcessPendingBin:
