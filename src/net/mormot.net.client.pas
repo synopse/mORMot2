@@ -80,6 +80,8 @@ type
   // proper multipart formatting as defined by RFC 2488 / RFC 1341
   // - AddFile() won't load the file content into memory so it is more
   // efficient than MultiPartFormDataEncode() from mormot.core.buffers
+  // - THttpClientSocket.Post() will call Flush and rewind the stream itself,
+  // so the very same instance can be sent several times, e.g. on retry
   THttpMultiPartStream = class(TNestedStreamReader)
   protected
     fSections: THttpMultiPartStreamSections;
@@ -88,6 +90,7 @@ type
     fMultipartContentType: RawUtf8;
     fFilesCount: integer;
     fRfc2388NestedFiles: boolean;
+    fFlushed: boolean;
     function Add(const name, content, contenttype,
       filename, encoding: RawUtf8): PHttpMultiPartStreamSection;
   public
@@ -108,6 +111,9 @@ type
       const contenttype: RawUtf8 = '');
     /// call this method before any Read() call to sent data to HTTP server
     // - it is called also when Seek(0, soBeginning) is called
+    // - the closing boundaries are appended once, so it is safe to call this
+    // method several times, e.g. on every THttpClientSocket.Post() retry
+    // - no Add*() method should be called after Flush
     procedure Flush; override;
     /// the content-type header value for this multipart content
     // - equals '' if no section has been added
@@ -2293,6 +2299,8 @@ var
   ns: PtrInt;
   s: RawUtf8;
 begin
+  if fFlushed then
+    EHttpSocket.RaiseUtf8('%.Add(%) after Flush', [self, name]);
   // same logic than MultiPartFormDataEncode() from mormot.core.buffers
   ns := length(fSections);
   SetLength(fSections, ns + 1);
@@ -2384,6 +2392,8 @@ var
   fs: TStream;
   fn: RawUtf8;
 begin
+  if fFlushed then // check before opening the file, as Add() would do
+    EHttpSocket.RaiseUtf8('%.AddFile(%) after Flush', [self, filename]);
   fs := TFileStreamEx.Create(filename, fmOpenReadShared);
   // an exception is raised in above line if filename is incorrect
   StringToUtf8(ExtractFileName(filename), fn);
@@ -2399,10 +2409,18 @@ var
 begin
   if fBounds = nil then
     exit;
-  for i := length(fBounds) - 1 downto 0 do
-    mormot.core.text.Append(s, ['--', fBounds[i], '--'#13#10]);
-  Append(s);
-  inherited Flush; // compute fSize
+  if not fFlushed then
+  begin
+    // append the closing boundaries only once: Flush is called again by any
+    // Seek(0, soBeginning), e.g. from THttpClientSocket.RequestInternal after
+    // an explicit Flush, or on retry - the duplicated boundaries exceeded the
+    // Content-Length: header and broke the keep-alive connection - see #565
+    for i := length(fBounds) - 1 downto 0 do
+      mormot.core.text.Append(s, ['--', fBounds[i], '--'#13#10]);
+    Append(s);
+    fFlushed := true;
+  end;
+  inherited Flush; // rewind nested streams and compute fSize
 end;
 
 
@@ -3906,6 +3924,10 @@ begin
       else
         SockSend('Connection: Close');
       dat := ctxt.Data; // local var copy for Data to be compressed in-place
+      if ctxt.InStream <> nil then
+        // InStream may be a THttpMultiPartStream -> Seek(0) calls Flush, so
+        // that its Size is known when Content-Length: is computed below
+        ctxt.InStream.Seek(0, soBeginning); // rewind
       if (dat <> '') or
          (not IsGet(ctxt.Method) and // no message body len/type for GET/HEAD
           not IsHead(ctxt.Method)) then
@@ -3921,8 +3943,6 @@ begin
         FillCharFast(pointer(fSndBuf)^, buflen, 0); // hide SPI bearer
       if ctxt.InStream <> nil then
       begin
-        // InStream may be a THttpMultiPartStream -> Seek(0) calls Flush
-        ctxt.InStream.Seek(0, soBeginning); // rewind
         res := SockSendStream(ctxt.InStream, 1 shl 20,
              {noraise=}false, {checkrecv=}true);
         AppendLine(fRequestContext, [ctxt.InStream, ' = ', _NR[res]]);

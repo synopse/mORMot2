@@ -10204,7 +10204,7 @@ var
   i, j, n: integer;
   fa: TFileAge;
   fdt: TDateTime;
-  fs: Int64;
+  fs, sz: Int64;
   fu: TUnixMSTime;
   fn: array[0..10] of TFileName;
   mp, mp2: TMultiPartDynArray;
@@ -10413,6 +10413,34 @@ begin
     DecodeAndTest;
     DecodeStreamAndTest(4096);
     DecodeStreamAndTest(65536);
+    // Flush should be idempotent: THttpClientSocket calls Seek(0, soBeginning)
+    // before sending the body, which triggers Flush again - the closing
+    // boundary was appended once more and the sent body exceeded the
+    // Content-Length: computed from Size - see #565
+    sz := st.Size;
+    CheckEqual(sz, length(mpc), 'st size');
+    st.Flush;
+    CheckEqual(st.Size, sz, 'st flush twice');
+    st.Seek(0, soBeginning);
+    CheckEqual(st.Size, sz, 'st rewind');
+    CheckEqual(StreamToRawByteString(st), mpc, 'st read twice');
+    raised := false;
+    try
+      st.AddContent('late', 'not allowed after Flush');
+    except
+      on EHttpSocket do
+        raised := true;
+    end;
+    Check(raised, 'st add after flush');
+    raised := false;
+    try
+      st.AddFile('late', fn[0]); // should not even open the file
+    except
+      on EHttpSocket do
+        raised := true;
+    end;
+    Check(raised, 'st addfile after flush');
+    CheckEqual(st.Size, sz, 'st size after failed add');
     st.Free;
     for i := 0 to high(fn) do
       check(DeleteFile(fn[i]));
