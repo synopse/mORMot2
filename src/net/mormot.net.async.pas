@@ -2726,6 +2726,7 @@ var
   bytes: cardinal;
   {$else}
   new, ms: integer;
+  read: TPollReadSockets; // cleaner code
   {$endif USE_WINIOCP}
   notif: TPollSocketResult;
 begin
@@ -2777,31 +2778,34 @@ begin
     end;
     // main TAsyncConnections read/write process
     while not Terminated and
-          (fOwner.fSockets <> nil) and
-          (fOwner.fSockets.fRead <> nil) do
+          (fOwner.fSockets <> nil) do
+    begin
+      read := fOwner.fSockets.fRead;
+      if read = nil then
+        break;
       case fProcess of
         atpReadSingle:
           // a single thread to rule them all: polling, reading and processing
-          if fOwner.fSockets.fRead.GetOne(ms, fProcessName, notif) then
+          if read.GetOne(ms, fProcessName, notif) then
             if not Terminated then
               fOwner.fSockets.ProcessRead(self, notif);
         atpReadPoll:
           // main thread will just fill pending events from socket polls
           // (no process because a faulty service would delay all reading)
           begin
-            new := fOwner.fSockets.fRead.PollForPendingEvents(ms);
+            new := read.PollForPendingEvents(ms);
             if Terminated then
               break;
             fEvent.ResetEvent;
             if new <> 0 then
               fOwner.ThreadPollingWakeupEvents(new) // distribute those events
-            else if fOwner.fSockets.fRead.fPending.Count <> 0 then
+            else if read.fPending.Count <> 0 then
               fOwner.ThreadPollingWakeupOne; // scale up by waking a new thread
             // wait for the sub-threads to wake up this one
             if Terminated then
               break;
-            if (fOwner.fSockets.fRead.fPending.Count = 0) and
-               (fOwner.fSockets.fRead.Count = 0) then
+            if (read.fPending.Count = 0) and
+               (read.Count = 0) then
               // there is no connection any more: wait for next accept
               fEvent.WaitForEver
             else
@@ -2812,9 +2816,17 @@ begin
         atpReadPending:
           // secondary threads wait, then read and process pending events
           begin
+            // atomically switch from queue consumer to idle worker
             fEvent.ResetEvent;
-            include(fWakeUp, wuPossible); // to be set before WaitForEver
-            fEvent.WaitForEver;
+            if read.fPendingSafe.TryLock then
+              if read.fPending.Count = 0 then
+              begin
+                include(fWakeUp, wuPossible); // set before WaitForEver
+                read.fPendingSafe.UnLock;
+                fEvent.WaitForEver;
+              end
+              else
+                read.fPendingSafe.UnLock;
             if Terminated then
               break;
             LockedInc32(@fOwner.fThreadPollingAwakeCount);
@@ -2830,6 +2842,7 @@ begin
           [self, ord(fProcess)]);
       end;
     {$endif USE_WINIOCP}
+    end;
     fOwner.DoLog(sllInfo, 'Execute: done %', [fProcessName], self);
   except
     on E: Exception do
