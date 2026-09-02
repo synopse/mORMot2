@@ -98,7 +98,8 @@ The bootstrap script can be customized with environment variables:
 | `FPC_REFRESH=1` | Refresh/rebuild cached FPC sources and installation. |
 | `FPC_JOBS` | Number of parallel jobs used while building FPC. |
 | `MORMOT2_DIR` | Path to an existing mORMot 2 checkout. |
-| `MORMOT2_REF` | mORMot branch/tag to use if the bootstrap must clone it. |
+| `MORMOT2_REF` | mORMot branch/tag for the cached checkout. Changing it switches the cached clone to that ref. |
+| `MORMOT2_REFRESH=1` | Refresh the cached mORMot checkout even when `MORMOT2_REF` is unchanged. |
 | `MORMOT2_STATIC_URL` | URL of the matching `mormot2static.tgz` archive. |
 | `MORMOT2_SKIP_STATIC=1` | Skip downloading mORMot static object files. |
 | `MORMOT2_SKIP_SMOKE_TEST=1` | Skip the final bootstrap compilation test. |
@@ -135,7 +136,7 @@ If those capabilities are unavailable, the AI should report that limitation rath
 Unless overridden, cached sources and downloads are stored below:
 
 ```text
-~/.cache/chatgpt-fpc-mormot2/
+~/.cache/mormot2-fpc/
 ```
 
 When running as root, the custom FPC installation defaults to:
