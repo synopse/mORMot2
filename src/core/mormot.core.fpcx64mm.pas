@@ -2016,10 +2016,6 @@ asm     // size = rcx on Windows, = rdi on SystemV; use rsi = TSmallBlockType
         // Adjust number of used blocks and sequential feed pool
         mov     [rsi].TSmallBlockType.NextSequentialFeedBlockAddress, rcx
         add     [rdx].TSmallBlockPoolHeader.BlocksInUse, 1
-        {$ifdef FPCMM_SERVER}
-        // More than one block fits: no longer consecutive single-block churn
-        mov     byte ptr [rsi].TSmallBlockType.EmptyPoolReuse, 0
-        {$endif FPCMM_SERVER}
         // Unlock the block type, set the block header and leave
         mov     byte ptr [rsi].TSmallBlockType.Locked, false
         mov     [rax - BlockHeaderSize], rdx
@@ -2677,6 +2673,11 @@ asm     // P = rcx on Windows, P = rdi on SystemV; use rsi = TSmallBlockType
         xor     eax, eax
         cmp     [rsi].TSmallBlockType.CurrentSequentialFeedPool, rdx
         jne     @NotSequentialFeedPool
+        {$ifdef FPCMM_SERVER}
+        // A drained multi-block sequential pool ends single-block churn.
+        // Reset on this cold release path, not on every sequential GetMem.
+        mov     byte ptr [rsi].TSmallBlockType.EmptyPoolReuse, 0
+        {$endif FPCMM_SERVER}
 @IsSequentialFeedPool:
         mov     [rsi].TSmallBlockType.MaxSequentialFeedBlockAddress, rax
 @NotSequentialFeedPool:
