@@ -1920,7 +1920,6 @@ begin
     [BOOL_STR[result], asagent, asconsole], self);
 end;
 
-
 function TTunnelRelay.AgentsInfo: TVariantDynArray;
 begin
   result := nil;

@@ -452,7 +452,7 @@ implementation
     Per-Thread or Round-robin distribution into 8-128 arenas, fed from one or
     several pool(s) (fair scaling from with no threadvar nor GC involved)
   - SMALL <= 2600 B
-    One arena per block size, or 32 with FPCMM_MOONSHARD, fed from pool(s)
+    One or several arenas per block size, fed from one or several pool(s)
   - MEDIUM <= 256 KB
     Separated pool(s) of bitmap-marked chunks, fed from 1.25MB of OS chunks
   - LARGE  > 256 KB
@@ -1013,19 +1013,19 @@ const
     16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256,
     272, 288, 304, 320, 352, 384, 416, 448, 480, 528, 576, 624, 672, 736, 800,
     880, 960, 1056, 1152, 1264, 1376, 1504, 1648, 1808, 1984, 2176, 2384,
-    MaximumSmallBlockSize
+    MaximumSmallBlockSize,
     {$ifdef FPCMM_MOONSHARD}
     // Physical padding: only the first two entries may be used as the cold
     // same-size fallback after every arena was contended.
-    , MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize,
     MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize,
     MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize,
     MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize,
     MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize,
     MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize,
-    MaximumSmallBlockSize, MaximumSmallBlockSize
+    MaximumSmallBlockSize, MaximumSmallBlockSize, MaximumSmallBlockSize,
+    MaximumSmallBlockSize, MaximumSmallBlockSize,
     {$else}
-    , MaximumSmallBlockSize, MaximumSmallBlockSize
+    MaximumSmallBlockSize, MaximumSmallBlockSize
     {$endif FPCMM_MOONSHARD}
     );
 
