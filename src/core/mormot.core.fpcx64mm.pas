@@ -1760,9 +1760,8 @@ asm     // size = rcx on Windows, = rdi on SystemV; use rsi = TSmallBlockType
         db $64, $48, $8B, $04, $25, $10, $00, $00, $00
         {$else}
         {$ifdef WINDOWS}
-        // inlined GetThreadID from Win64 kernel.dll (tested on Windows 7-11)
-        db $65, $48, $8B, $04, $25, $30, $00, $00, $00 // mov rax, gs:[$0030]
-        mov     eax, [rax + $48]
+        // TEB.ClientId.UniqueThread (tested on Windows 7-11)
+        db $65, $8B, $04, $25, $48, $00, $00, $00 // mov eax, gs:[$0048]
         {$else}
         unsupported
         {$endif WINDOWS}
@@ -2179,9 +2178,8 @@ asm     // size = rcx on Windows, = rdi on SystemV; use rsi = TSmallBlockType
         db $64, $48, $8B, $04, $25, $10, $00, $00, $00
         {$else}
         {$ifdef WINDOWS}
-        // inlined GetThreadID from Win64 kernel.dll (tested on Windows 7-11)
-        db $65, $48, $8B, $04, $25, $30, $00, $00, $00
-        mov     eax, [rax + $48]
+        // TEB.ClientId.UniqueThread (tested on Windows 7-11)
+        db $65, $8B, $04, $25, $48, $00, $00, $00 // mov eax, gs:[$0048]
         {$else}
         unsupported
         {$endif WINDOWS}
