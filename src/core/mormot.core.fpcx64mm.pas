@@ -60,7 +60,7 @@ unit mormot.core.fpcx64mm;
 
 // target a multi-threaded service on a modern CPU (default)
 // - define FPCMM_DEBUG, FPCMM_ASSUMEMULTITHREAD, FPCMM_ERMS, FPCMM_TINYPERTHREAD
-// and FPCMM_MEDIUMTOLARGE
+// and FPCMM_MEDIUMTOLARGE unless FPCMM_MEDIUMPERTHREAD is active
 // - currently mormot2tests run with no contention when FPCMM_SERVER is set :)
 {$define FPCMM_SERVER}
 
@@ -72,7 +72,8 @@ unit mormot.core.fpcx64mm;
 // target high-end CPU/process when FPCMM_SERVER/FPCMM_BOOST are not enough
 // - will use 128 arenas for <= 256B blocks to scale on high number of cores;
 // - enable FPCMM_MULTIPLESMALLNOTWITHMEDIUM to reduce small pools locks;
-// - enable FPCMM_MEDIUMPERTHREAD for 4 user-medium arenas on Linux/Win64.
+// - enable FPCMM_MEDIUMPERTHREAD for 4 user-medium arenas on Linux/Win64,
+//   so FPCMM_MEDIUMTOLARGE is no longer enabled automatically.
 {.$define FPCMM_BOOSTER}
 
 // target a GUI/console mono-threaded app
@@ -140,7 +141,8 @@ unit mormot.core.fpcx64mm;
 {.$define FPCMM_TINYPERTHREAD}
 
 // allocate any medium block > 48KB using the large allocator on contention
-// - defined for FPCMM_SERVER since mmap/VirtualAlloc is cheaper than waiting
+// - defined for FPCMM_SERVER unless FPCMM_MEDIUMPERTHREAD already spreads
+//   contention across 4 arenas
 // - would slightly increase OS memory but usually seldom happens
 {.$define FPCMM_MEDIUMTOLARGE}
 
@@ -217,7 +219,9 @@ interface
     {$define FPCMM_ASSUMEMULTITHREAD}
     {$define FPCMM_ERMS}
     {$define FPCMM_TINYPERTHREAD} // thread affinity matters with a few threads
-    {$define FPCMM_MEDIUMTOLARGE} // mmap is better than sleeping
+    {$ifndef FPCMM_MEDIUMPERTHREAD}
+      {$define FPCMM_MEDIUMTOLARGE} // mmap is better than sleeping
+    {$endif FPCMM_MEDIUMPERTHREAD}
   {$endif FPCMM_SERVER}
   {$ifdef FPCMM_BOOSTER}
     {$undef FPCMM_DEBUG} // when performance matters more than stats
