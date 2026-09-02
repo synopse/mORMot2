@@ -1223,25 +1223,22 @@ asm
         // nz = rax=to be freed or z = nothing found - modifies r10+r11
 end;
 
-procedure LockMediumBlocks(dummy: cardinal);
-  {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
+{$ifdef FPCMM_MEDIUMPREFETCH}
+procedure PrefetchMediumBlock(dummy: cardinal);
+{$ifdef NOSFRAME} nostackframe; {$endif} assembler;
 // on input/output: r10=TMediumBlockInfo
 asm
-        {$ifdef FPCMM_MEDIUMPREFETCH}
-        // since we are waiting for the lock, prefetch one medium memory chunk
         mov     rcx, r10
         xor     edx, edx
-        cmp     qword ptr [rcx].TMediumBlockInfo.Prefetch, rdx
-        jnz     @s // there is already a prefetched memory chunk available
         {$ifdef FPCMM_CMPBEFORELOCK_SPIN}
         cmp     byte ptr [rcx].TMediumBlockInfo.PrefetchLocked, dl
-        jnz     @s
+        jnz     @done
         {$endif FPCMM_CMPBEFORELOCK_SPIN}
         mov     eax, $100
-  lock  cmpxchg byte ptr [rcx].TMediumBlockInfo.PrefetchLocked, ah
-        jne     @s
+        lock  cmpxchg byte ptr [rcx].TMediumBlockInfo.PrefetchLocked, ah
+        jne     @done
         cmp     qword ptr [rcx].TMediumBlockInfo.Prefetch, rdx
-        jnz     @s2
+        jnz     @none
         push    rsi
         push    rdi
         push    r10
@@ -1253,7 +1250,20 @@ asm
         pop     rdi
         pop     rsi
         mov     qword ptr [r10].TMediumBlockInfo.Prefetch, rax
-@s2:    mov     byte ptr [r10].TMediumBlockInfo.PrefetchLocked, false
+@none:  mov     byte ptr [r10].TMediumBlockInfo.PrefetchLocked, false
+@done:
+end;
+{$endif FPCMM_MEDIUMPREFETCH}
+
+procedure LockMediumBlocks;
+  {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
+// on input/output: r10=TMediumBlockInfo
+asm
+        {$ifdef FPCMM_MEDIUMPREFETCH}
+        // since we are waiting for the lock, prefetch one medium memory chunk
+        cmp     qword ptr [rcx].TMediumBlockInfo.Prefetch, 0
+        jnz     @s // there is already a prefetched memory chunk available
+        call    PrefetchMediumBlock
         {$endif FPCMM_MEDIUMPREFETCH}
         // spin and acquire the medium arena lock
         {$ifdef FPCMM_SLEEPTSC}
@@ -2158,6 +2168,15 @@ asm     // size = rcx on Windows, = rdi on SystemV; use rsi = TSmallBlockType
         // Unlock the small block type, set header and leave
         mov     byte ptr [rbx].TSmallBlockType.Locked, false
         mov     [rax - BlockHeaderSize], rsi
+        {$ifdef FPCMM_MEDIUMPREFETCH}
+        // optional mmap() prefetch once we are outside the lock
+        cmp     qword ptr [r10].TMediumBlockInfo.Prefetch, 0
+        jnz     @SmallMediumPrefetchDone
+        mov     rsi, rax // preserve result
+        call    PrefetchMediumBlock
+        mov     rax, rsi
+@SmallMediumPrefetchDone:
+        {$endif FPCMM_MEDIUMPREFETCH}
         {$ifdef NOSFRAME}
         pop     rbx
         ret
@@ -2298,11 +2317,24 @@ asm     // size = rcx on Windows, = rdi on SystemV; use rsi = TSmallBlockType
         {$endif FPCMM_MEDIUMPERTHREAD}
         // on input: ecx/edi=BlockSize, rdx/rsi=Info
         call    AllocNewSequentialFeedMediumPool
+        // restore r10=actual medium arena and unlock it
         {$ifdef FPCMM_MEDIUMPERTHREAD}
-        mov     byte ptr [rbx + TMediumBlockInfo.Locked], false
+        mov     r10, rbx
         {$else}
-        mov     byte ptr [rip + MediumBlockInfo.Locked], false
+        lea     r10, [rip + MediumBlockInfo]
         {$endif FPCMM_MEDIUMPERTHREAD}
+        mov     byte ptr [r10].TMediumBlockInfo.Locked, false
+        {$ifdef FPCMM_MEDIUMPREFETCH}
+        // optional mmap() prefetch once we are outside the lock
+        test    rax, rax
+        jz      @MediumPrefetchDone // allocation failed
+        cmp     qword ptr [r10].TMediumBlockInfo.Prefetch, 0
+        jnz     @MediumPrefetchDone
+        mov     rsi, rax // preserve result
+        call    PrefetchMediumBlock
+        mov     rax, rsi
+@MediumPrefetchDone:
+        {$endif FPCMM_MEDIUMPREFETCH}
         {$ifdef NOSFRAME}
         pop     rbx
         ret
