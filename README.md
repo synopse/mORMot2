@@ -35,7 +35,7 @@ If you find it worth using, please consider [sponsoring mORMot 2 dev](https://gi
 
 ### mORMot What?
 
-Synopse *mORMot 2* is the ultimate Open Source ToolBox for modern Object Pascal. It is a fully featured Client-Server ORM SOA MVC framework for Delphi 7 up to Delphi 12.3 Florence and FPC 3.2/trunk, targeting Windows/Linux/BSD/MacOS for servers, and any platform for clients (including mobile or AJAX).
+Synopse *mORMot 2* is the ultimate Open Source ToolBox for modern Object Pascal. It is a fully featured optimized RTL, with Client-Server ORM SOA MVC framework for Delphi 7 up to Delphi 12.3 Florence and FPC 3.2/trunk, targeting Windows/Linux/BSD/MacOS for servers, and any platform for clients (including mobile or AJAX).
 
 ![mORMot map](doc/IamLost.png)
 
@@ -72,6 +72,12 @@ The *mORMOt 2* repository content is organized into the following sub-folders:
 - [`ex`](ex) contains various samples.
 
 Feel free to explore the source, and the inlined documentation.
+
+Some sub-folders are tailored for AI-driven work with *mORMot*:
+
+- [`docs`](docs) holds the AI-generated documentation of the framework;
+- [`boot`](boot) bootstraps a *Free Pascal* + *mORMot 2* toolchain for ephemeral Linux runtimes.
+
 
 ### MPL/GPL/LGPL Three-License
 
