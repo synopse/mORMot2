@@ -60,6 +60,7 @@ unit mormot.core.fpcx64mm;
 
 // target a multi-threaded service on a modern CPU (default)
 // - define FPCMM_DEBUG, FPCMM_ASSUMEMULTITHREAD, FPCMM_ERMS, FPCMM_TINYPERTHREAD
+// and FPCMM_MEDIUMTOLARGE
 // - currently mormot2tests run with no contention when FPCMM_SERVER is set :)
 {$define FPCMM_SERVER}
 
@@ -138,6 +139,11 @@ unit mormot.core.fpcx64mm;
 // - warning: Linux and Win64 ONLY, due to very low-level asm trick
 {.$define FPCMM_TINYPERTHREAD}
 
+// allocate any medium block > 48KB using the large allocator on contention
+// - defined for FPCMM_SERVER since mmap/VirtualAlloc is cheaper than waiting
+// - would slightly increase OS memory but usually seldom happens
+{.$define FPCMM_MEDIUMTOLARGE}
+
 // use the current thread id to identify one of 4 user-medium arenas
 // - warning: EXPERIMENTAL Linux and Win64 ONLY, due to aligned OS allocations
 // and very low-level asm tricks
@@ -211,6 +217,7 @@ interface
     {$define FPCMM_ASSUMEMULTITHREAD}
     {$define FPCMM_ERMS}
     {$define FPCMM_TINYPERTHREAD} // thread affinity matters with a few threads
+    {$define FPCMM_MEDIUMTOLARGE} // mmap is better than sleeping
   {$endif FPCMM_SERVER}
   {$ifdef FPCMM_BOOSTER}
     {$undef FPCMM_DEBUG} // when performance matters more than stats
@@ -409,6 +416,7 @@ const
       {$ifdef FPCMM_MULTIPLESMALLNOTWITHMEDIUM} + 's' {$endif} {$endif}
     {$ifdef FPCMM_TINYPERTHREAD}     + ' tinpt'       {$endif}
     {$ifdef FPCMM_MEDIUMPERTHREAD}   + ' medpt'       {$endif}
+    {$ifdef FPCMM_MEDIUMTOLARGE}     + ' medlrg'      {$endif}
     {$ifdef FPCMM_ERMS}              + ' erms'        {$endif}
     {$ifdef FPCMM_DEBUG}             + ' debug'       {$endif}
     {$ifdef FPCMM_REPORTMEMORYLEAKS} + ' repmemleak'  {$endif};
@@ -1000,6 +1008,9 @@ const
   NumMediumBlockArenasPO2     = 2;
   NumMediumBlockArenas        = 1 shl NumMediumBlockArenasPO2;
   {$endif FPCMM_MEDIUMPERTHREAD}
+  {$ifdef FPCMM_MEDIUMTOLARGE}
+  MediumBlockToLargeMinSize   = 48 shl 10; // promoted to Large if > 48KB
+  {$endif FPCMM_MEDIUMTOLARGE}
   MediumBlockSizeOffset       = 48;
   MinimumMediumBlockSize      = 11 * 256 + MediumBlockSizeOffset;
   MediumBlockBinsPerGroup     = 32;
@@ -1176,7 +1187,7 @@ var
   SmallBlockInfo: TSmallBlockInfo;
   MediumBlockInfo: TMediumBlockInfo;
   {$ifdef FPCMM_MEDIUMPERTHREAD}
-  MediumBlockInfoExtra: array[1..NumMediumBlockArenas - 1] of TMediumBlockInfo;
+  MediumBlockInfoExtra:  array[1..NumMediumBlockArenas - 1] of TMediumBlockInfo;
   MediumBlockInfoLookup: array[0..NumMediumBlockArenas - 1] of PMediumBlockInfo;
   {$endif FPCMM_MEDIUMPERTHREAD}
   {$ifdef FPCMM_SMALLNOTWITHMEDIUM}
@@ -1255,16 +1266,10 @@ asm
 end;
 {$endif FPCMM_MEDIUMPREFETCH}
 
-procedure LockMediumBlocks;
+procedure SpinLockMediumBlocks;
   {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
-// on input/output: r10=TMediumBlockInfo
+// on input/output: r10=TMediumBlockInfo; on output: ZF=1 if Locked
 asm
-        {$ifdef FPCMM_MEDIUMPREFETCH}
-        // since we are waiting for the lock, prefetch one medium memory chunk
-        cmp     qword ptr [rcx].TMediumBlockInfo.Prefetch, 0
-        jnz     @s // there is already a prefetched memory chunk available
-        call    PrefetchMediumBlock
-        {$endif FPCMM_MEDIUMPREFETCH}
         // spin and acquire the medium arena lock
         {$ifdef FPCMM_SLEEPTSC}
 @s:     rdtsc   // tsc in edx:eax
@@ -1275,14 +1280,14 @@ asm
         shl     rdx, 32
         or      rax, rdx
         cmp     rax, r9
-        ja      @rc // timeout
+        ja      @none // timeout
         {$else}
         // same algorithm than function SpinAndWait() in mormot.core.os.pas
 @s:     mov     edx, SpinMediumLockCount // = pred(6 shl 5)
 @sp:    mov     ecx, SpinMediumLockCount
         sub     ecx, edx
         dec     edx
-        jz      @rc     // timeout
+        jz      @none   // timeout
         shr     ecx, 5  // 0..6 range, each 32 times
         jz      @try
         dec     ecx
@@ -1299,13 +1304,34 @@ asm
         je      @sp
         {$endif FPCMM_CMPBEFORELOCK_SPIN}
   lock  cmpxchg byte ptr [rcx].TMediumBlockInfo.Locked, ah
-        je      @ok
-        jmp     @sp
-@rc:    call    ReleaseCoreSafe // Windows SwitchToThread or POSIX nanosleep(1us)
+        jne     @sp
+        {$ifdef NOSFRAME} // return with ZF=1 if locked
+        ret
+        {$else}
+        jmp     @done
+        {$endif NOSFRAME}
+@none:  test    r10, r10 // return with ZF=0 if not locked
+@done:
+end;
+
+procedure LockMediumBlocks;
+  {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
+// on input/output: r10=TMediumBlockInfo
+asm
+        {$ifdef FPCMM_MEDIUMPREFETCH}
+        // since we are waiting for the lock, prefetch one medium memory chunk
+        cmp     qword ptr [r10].TMediumBlockInfo.Prefetch, 0
+        jnz     @spin // there is already a prefetched memory chunk available
+        call    PrefetchMediumBlock
+        {$endif FPCMM_MEDIUMPREFETCH}
+        // spin and acquire the medium arena lock
+@spin:  call    SpinLockMediumBlocks
+        jz      @ok
+        call    ReleaseCoreSafe // Windows SwitchToThread or POSIX nanosleep(1us)
         lea     rax, [rip + HeapStatus]
         {$ifdef FPCMM_DEBUG} lock {$endif}
         inc     qword ptr [rax].TMMStatus.Medium.SleepCount
-        jmp     @s
+        jmp     @spin
 @ok:
 end;
 
@@ -2246,6 +2272,18 @@ asm     // size = rcx on Windows, = rdi on SystemV; use rsi = TSmallBlockType
         dec     r8d
         jnz     @TryNextMediumArena
         {$endif FPCMM_MEDIUMPERTHREAD}
+        {$ifdef FPCMM_MEDIUMTOLARGE}
+        // On contention, allocate medium blocks > 48KB as large blocks
+        cmp     ebx, MediumBlockToLargeMinSize
+        jb      @WaitForMedium // < 48KB won't be allocated as a large block
+        // Spin a little then fallback to large block allocation path
+        call    SpinLockMediumBlocks
+        jz      @MediumLocked2
+        // AllocateLargeBlock() would round it up by 64KB anyway
+        mov     size, rbx // reset first parameter
+        jmp     @IsALargeBlockRequest
+@WaitForMedium:
+        {$endif FPCMM_MEDIUMTOLARGE}
         call    LockMediumBlocks
 @MediumLocked2:
         // Compute ecx = bin number in ecx and edx = group number
