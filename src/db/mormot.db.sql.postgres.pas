@@ -1560,7 +1560,6 @@ begin
   end;
   fProcessing := false;
   log := nil;
-  SynDBLog.NotifyThreadEnded;
 end;
 
 
