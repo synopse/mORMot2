@@ -4361,7 +4361,7 @@ type
   end;
 
   // cross-platform / cross-compiler TThread-based flush disk or console
-  TAutoFlushThread = class(TThread)
+  TAutoFlushThread = class(TThread) { no TThreadAbstract dependency }
   protected
     fToConsoleSafe: TLightLock; // topmost to ensure aarch64 alignment
     fEvent: TSynEvent;
@@ -4522,6 +4522,7 @@ begin
   except
     ; // ignore any exception at shutdown
   end;
+  TSynLog.NotifyThreadEnded; // as in mormot.core.thread TThreadAbstract
 end;
 
 threadvar // do not publish for compilation within Delphi packages

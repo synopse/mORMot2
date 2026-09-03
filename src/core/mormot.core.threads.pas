@@ -700,8 +700,9 @@ type
     fFinished: boolean; // Delphi 7/2007 missing flag set by DoTerminate
     {$endif HASTTHREADFINISHED}
     // this virtual method is called in the main ThreadProc() after Terminate
-    // but just before Finished is set - override it with a Destroy pattern,
-    // i.e. with "inherited DoTerminate" always at its very end
+    // but just before Finished is set - descendants should execute
+    // "inherited DoTerminate" last, preferably from a "finally" block
+    // - this override will eventually call TSynLog.NotifyThreadEnded
     procedure DoTerminate; override;
   public
     {$ifndef HASTTHREADSTART}
@@ -755,7 +756,7 @@ type
     ElapsedMS: integer) of object;
 
   /// event prototype used e.g. by TSynBackgroundThreadAbstract and TSynThread callbacks
-  TOnNotifyThread = procedure(Sender: TThread) of object;
+  TOnNotifyThread = procedure(Sender: TThreadAbstract) of object;
 
   /// state machine status of the TSynBackgroundThreadAbstract process
   TSynBackgroundThreadProcessStep = (
@@ -1147,7 +1148,7 @@ type
     // made by TRestBackgroundTimer.Create
     constructor Create(const aThreadName: RawUtf8;
       const aOnBeforeExecute: TOnNotifyThread = nil;
-      aOnAfterExecute: TOnNotifyThread = nil;
+      const aOnAfterExecute: TOnNotifyThread = nil;
       aStats: TSynMonitorClass = nil;
       aLogClass: TSynLogClass = nil); reintroduce; virtual;
     /// finalize and wait for the thread ending
@@ -1468,7 +1469,6 @@ type
     fProcessing: boolean;
     procedure Execute; override;
     procedure DoExecute; virtual; abstract; // overriden for background process
-    procedure DoTerminate; override; // overriden to reset fLog := nil
   public
     /// initialize the server instance, in non suspended state
     // - this class won't set FreeAndTerminate := nil at this method level
@@ -2964,11 +2964,16 @@ end;
 procedure TThreadAbstract.DoTerminate;
 begin
   try
-    inherited DoTerminate; // Synchronize() over OnTerminate property
-  finally
-    {$ifndef HASTTHREADFINISHED}
-    fFinished := true; // set Delphi 7/2007 missing flag
-    {$endif HASTTHREADFINISHED}
+    try
+      inherited DoTerminate; // Synchronize() over OnTerminate property
+    finally
+      {$ifndef HASTTHREADFINISHED}
+      fFinished := true; // set Delphi 7/2007 missing flag
+      {$endif HASTTHREADFINISHED}
+      TSynLog.NotifyThreadEnded; // eventual call at the very end of the thread
+    end;
+  except
+    // never propagate any exception to the main ThreadProc()
   end;
 end;
 
@@ -3402,14 +3407,14 @@ begin
       ESynThread.RaiseUtf8('%.Create with aThreadCount=% and aOwner=%',
         [self, aThreadCount, aOwner]);
     ThreadCountAdjust(aThreadCount); // e.g. WinARM PRISM
-    inherited Create(Join(['1', aThreadName]), nil, TSynLogFamily.OnThreadEnded);
+    inherited Create(Join(['1', aThreadName]));
     SetLength(fSubThreads, aThreadCount - 1);
     for i := 0 to aThreadCount - 2 do
       fSubThreads[i] := TSynBackgroundQueue.Create(Make([i + 2, aThreadName]),
         aArrayTypeInfo, aOnProcessMS, aOnProcess, 1, {owner=}self);
   end
   else
-    inherited Create(aThreadName, nil, TSynLogFamily.OnThreadEnded);
+    inherited Create(aThreadName);
 end;
 
 destructor TSynBackgroundQueue.Destroy;
@@ -3549,13 +3554,10 @@ end;
 { TSynBackgroundTimer }
 
 constructor TSynBackgroundTimer.Create(const aThreadName: RawUtf8;
-  const aOnBeforeExecute: TOnNotifyThread; aOnAfterExecute: TOnNotifyThread;
+  const aOnBeforeExecute, aOnAfterExecute: TOnNotifyThread;
   aStats: TSynMonitorClass; aLogClass: TSynLogClass);
 begin
   fTasks.Init(TypeInfo(TSynBackgroundTimerTasks), fTask, @fTaskCount);
-  if not Assigned(aOnAfterExecute) and
-     Assigned(aLogClass) then // minimal TSynLog support
-    aOnAfterExecute := aLogClass.Family.OnThreadEnded;
   inherited Create(
     aThreadName, EverySecond, 1000, aOnBeforeExecute, aOnAfterExecute, aStats);
 end;
@@ -4201,17 +4203,15 @@ end;
 
 procedure TSynThread.DoTerminate;
 begin
+  if Assigned(fStartNotified) and
+     Assigned(fOnThreadTerminate) then
   try
-    if Assigned(fStartNotified) and
-       Assigned(fOnThreadTerminate) then
-    begin
-      fStartNotified := nil;
-      fOnThreadTerminate(self);
-    end;
-    inherited DoTerminate; // call OnTerminate via Synchronize() in main thread
+    fStartNotified := nil;
+    fOnThreadTerminate(self);
   except
-    // hardened: a closing thread should not jeopardize the whole executable! 
+    // hardened: a closing thread should not jeopardize the whole executable
   end;
+  inherited DoTerminate; // Synchronize(OnTerminate) + TSynLog.NotifyThreadEnded
 end;
 
 
@@ -4335,13 +4335,7 @@ begin
       end;
   end;
   fProcessing := false;
-end; // don't reset fLog := nil here - done in DoTerminate
-
-procedure TLoggedThread.DoTerminate;
-begin
-  inherited DoTerminate; // may call an user callback which makes TSynLog.Add()
-  fLog := nil;
-  TSynLog.NotifyThreadEnded; // eventual call at the very end of the thread process
+  fLog := nil; // won't be usable outside of this TThread.Execute
 end;
 
 function TLoggedThread.WaitFinished(TimeOutMs: integer): boolean;

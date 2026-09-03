@@ -5619,7 +5619,7 @@ var
   // resulting length - which is convenient e.g. with POSIX truncation to 16 chars
   // - you can retrieve the name later on using CurrentThreadNameShort
   // - this method will register TSynLog.LogThreadName(), so threads calling it
-  // should also call TSynLogFamily.OnThreadEnded/TSynLog.NotifyThreadEnded
+  // should also call TSynLog.NotifyThreadEnded or inherit from TThreadAbstract
   SetThreadName: procedure(ThreadID: TThreadID; const Format: RawUtf8;
     const Args: array of const);
   /// retrieve the thread name, as set by SetThreadName()
