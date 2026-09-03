@@ -501,7 +501,7 @@ begin
   fConnection.Safe.WriteLock;
   try
     for i := fConnection.Count - 1 downto 0 do
-      if TTftpConnectionThread(fConnection.List[i]).ExecuteDone then
+      if TTftpConnectionThread(fConnection.List[i]).Finished then
         fConnection.Delete(i); // OwnObjects=true: release the finished thread
   finally
     fConnection.Safe.WriteUnLock;

@@ -693,8 +693,16 @@ type
 
   /// abstract parent of all TThread inherited classes
   // - to leverage cross-compiler and cross-version RTL differences
-  // - to have expected Start and TerminateSet methods, and Terminated property
+  // - have Start and TerminateSet methods, and Terminated/Finished properties
   TThreadAbstract = class(TThread)
+  protected
+    {$ifndef HASTTHREADFINISHED}
+    fFinished: boolean; // Delphi 7/2007 missing flag set by DoTerminate
+    {$endif HASTTHREADFINISHED}
+    // this virtual method is called in the main ThreadProc() after Terminate
+    // but just before Finished is set - override it with a Destroy pattern,
+    // i.e. with "inherited DoTerminate" always at its very end
+    procedure DoTerminate; override;
   public
     {$ifndef HASTTHREADSTART}
     /// method to be called to start the thread
@@ -716,6 +724,12 @@ type
     {$endif HASINLINE}
     /// defined as public since may be used to terminate the processing methods
     property Terminated;
+    {$ifndef HASTTHREADFINISHED}
+    /// set after DoTerminate to notify the owner it can Free this instance
+    // - defined as public on FPC and since Delphi 2009
+    property Finished: boolean
+      read fFinished;
+    {$endif HASTTHREADFINISHED}
   end;
   {$M-}
 
@@ -1446,10 +1460,10 @@ type
     fLogClass: TSynLogClass;
     fLog: TSynLog; // the logging instance within the DoExecute thread context
     fExecuteMessage: RawUtf8;
-    fProcessing, fExecuteDone: boolean;
+    fProcessing: boolean;
     procedure Execute; override;
     procedure DoExecute; virtual; abstract; // overriden for background process
-    procedure DoTerminate; override; // overriden for fLog.NotifyThreadEnded
+    procedure DoTerminate; override; // overriden to reset fLog := nil
   public
     /// initialize the server instance, in non suspended state
     // - this class won't set FreeAndTerminate := nil at this method level
@@ -1466,9 +1480,6 @@ type
     /// internal flag set by Execute, and used e.g. by TerminateAndWaitFinished
     property Processing: boolean
       read fProcessing;
-    /// mimics Finished property of newer Delphi/FPC RTL
-    property ExecuteDone: boolean
-      read fExecuteDone;
   published
     /// the name of this thread, as supplied to SetCurrentThreadName()
     property ProcessName: RawUtf8
@@ -2934,13 +2945,22 @@ end;
 {$endif HASTTHREADTERMINATESET}
 
 {$ifdef HASINLINE}
-
 class function TThreadAbstract.GetTickCount64: Int64;
 begin
   result := mormot.core.os.GetTickCount64;
 end;
-
 {$endif HASINLINE}
+
+procedure TThreadAbstract.DoTerminate;
+begin
+  try
+    inherited DoTerminate; // Synchronize() over OnTerminate property
+  finally
+    {$ifndef HASTTHREADFINISHED}
+    fFinished := true; // set Delphi 7/2007 missing flag
+    {$endif HASTTHREADFINISHED}
+  end;
+end;
 
 
 { TSynBackgroundThreadAbstract }
@@ -4185,7 +4205,6 @@ begin
 end;
 
 
-
 { TNotifiedThread }
 
 constructor TNotifiedThread.Create(CreateSuspended: boolean;
@@ -4306,7 +4325,6 @@ begin
       end;
   end;
   fProcessing := false;
-  fExecuteDone := true;
 end; // don't reset fLog := nil here - done in DoTerminate
 
 procedure TLoggedThread.DoTerminate;
