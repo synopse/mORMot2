@@ -2803,7 +2803,7 @@ type
   protected
     fConnectionPool: array of TSqlDBConnectionThreadSafe;
     fConnectionPoolMin, fConnectionPoolMax, fConnectionPoolCount: integer;
-    fConnectionPoolDeprecatedTix32: integer;
+    fConnectionPoolDeprecatedTix32: cardinal;
     fThreadingMode: TSqlDBConnectionPropertiesThreadSafeThreadingMode;
     procedure DeleteDeprecated(secs: integer);
     procedure RemoveFromPool(conn: TSqlDBConnectionThreadSafe);
@@ -7791,7 +7791,7 @@ begin
     finally
       fConnectionPoolSafe.UnLock;
     end;
-    fConnectionPoolDeprecatedTix32 := 0; // trigger DeleteDeprecated()
+    LockedGet32(@fConnectionPoolDeprecatedTix32); // trigger DeleteDeprecated()
   end
   else
   begin
@@ -7874,22 +7874,25 @@ end;
 function TSqlDBConnectionPropertiesThreadSafe.ThreadSafeConnection: TSqlDBConnection;
 var
   secs: integer;
+  c32, s32: cardinal;
   ndx: PtrInt;
 begin
   case fThreadingMode of
     tmThreadPool:
       begin
-        // first delete any deprecated connection(s) - check every 32 seconds
+        // first delete any deprecated connection(s)
         secs := 0;
         if fConnectionTimeOutSecs <> 0 then
         begin
           secs := GetTickSec;
           if ConnectionTimeOutBackground and // disabled by default
-             (not (cpfDeleteConnectionInOwnThread in fFlags)) and
-             (fConnectionPoolDeprecatedTix32 <> secs shr 5) then
+             (not (cpfDeleteConnectionInOwnThread in fFlags)) then
           begin
-            fConnectionPoolDeprecatedTix32 := secs shr 5;
-            DeleteDeprecated(secs);
+            c32 := fConnectionPoolDeprecatedTix32;
+            s32 := secs shr 5; // check every 32 seconds
+            if (c32 <> s32) and
+               LockedExc32(fConnectionPoolDeprecatedTix32, s32, c32) then
+              DeleteDeprecated(secs);
           end;
         end;
         // search for an existing connection
