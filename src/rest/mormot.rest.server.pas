@@ -7899,7 +7899,7 @@ var
   ctxt: TRestServerUriContext;
   node: TRestTreeNode;
   i: PtrInt;
-  idletix32: cardinal;
+  idletix32, c32: cardinal;
   m: TUriMethod;
 begin
   // 1. reject ASAP if not worth processing
@@ -8083,12 +8083,12 @@ begin
     ctxt.Free;
   end;
   // 12. trigger post-request periodic process
-  if (idletix32 <> 0) and
-     (fOnIdleLastTix <> idletix32) then
-  begin
-    fOnIdleLastTix := idletix32;
+  if idletix32 = 0 then
+    exit;
+  c32 := fOnIdleLastTix;
+  if (c32 <> idletix32) and
+     LockedExc32(fOnIdleLastTix, idletix32, c32) then
     OnIdle(self);
-  end;
 end;
 
 procedure TRestServer.Stat(Ctxt: TRestServerUriContext);
