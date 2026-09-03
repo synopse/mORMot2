@@ -2049,6 +2049,9 @@ var
   OutContentType: pointer; // weak RawUtf8
 begin
   OutContentType := nil;
+  // a WebSockets frame is sent at once: read any SetOutStream() body in memory
+  if not Ctxt.OutContentStreamToBuffer then
+    Status := HTTP_SERVERERROR; // failed to read that stream: no body to send
   if (Ctxt.OutContent <> '') and
      not IsContentTypeJsonU(Ctxt.OutContentType) then
     OutContentType := pointer(Ctxt.OutContentType);
