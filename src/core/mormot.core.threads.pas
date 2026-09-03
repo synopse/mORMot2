@@ -722,6 +722,11 @@ type
     /// method which redirects to mormot.core.os instead of sysutils on FPC
     class function GetTickCount64: Int64; reintroduce; static; inline;
     {$endif HASINLINE}
+    /// callback to notify the current logger that its thread is finished
+    // - method follows TOnNotifyThread signature, which can be assigned to
+    // TSynBackgroundThreadAbstract.OnAfterExecute
+    // - just a wrapper around TSynLog.NotifyThreadEnded
+    class procedure OnThreadEnded(Sender: TThreadAbstract);
     /// defined as public since may be used to terminate the processing methods
     property Terminated;
     {$ifndef HASTTHREADFINISHED}
@@ -2950,6 +2955,11 @@ begin
   result := mormot.core.os.GetTickCount64;
 end;
 {$endif HASINLINE}
+
+class procedure TThreadAbstract.OnThreadEnded(Sender: TThreadAbstract);
+begin
+  TSynLog.NotifyThreadEnded;
+end;
 
 procedure TThreadAbstract.DoTerminate;
 begin

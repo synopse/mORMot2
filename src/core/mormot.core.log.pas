@@ -891,12 +891,6 @@ type
     // - will retrieve the log content for the current file, truncating the
     // text up to the specified number of KB (an up to 128 MB at most)
     function GetExistingLog(MaximumKB: cardinal): RawUtf8;
-    /// callback to notify the current logger that its thread is finished
-    // - method follows TOnNotifyThread signature, which can be assigned to
-    // TSynBackgroundThreadAbstract.OnAfterExecute
-    // - is called e.g. by TRest.EndCurrentThread
-    // - just a wrapper around TSynLog.NotifyThreadEnded
-    class procedure OnThreadEnded(Sender: TThread);
     /// clean up *.log file by running OnArchive() on deprecated files
     // - will find and archive DestinationPath\*.log (or sourcePath\*.log)
     // files older than ArchiveAfterDays (or archiveDays), into the ArchivePath
@@ -5187,11 +5181,6 @@ begin
   finally
     SynLogGlobalLock.UnLock;
   end;
-end;
-
-class procedure TSynLogFamily.OnThreadEnded(Sender: TThread);
-begin
-  TSynLog.NotifyThreadEnded;
 end;
 
 
