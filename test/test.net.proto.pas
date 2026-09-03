@@ -312,8 +312,9 @@ var
   end;
 
 begin
-  if OSVersion < wEight then
-    exit; // websocket.dll is only available since Windows 8
+  if (OSVersion < wEight) or // websocket.dll is only available since Windows 8
+     (wsWine in WindowsSpecs) then // Wine only implements some minimal stubs
+    exit;
   mode := GetSystemEnv(CHILD_ENV);
   if (mode <> CHILD_CONSTRUCTOR) and
      (mode <> CHILD_PARALLEL) then
