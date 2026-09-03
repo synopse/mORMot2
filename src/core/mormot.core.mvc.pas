@@ -1883,7 +1883,6 @@ var
   i: integer;
   c: ^TMvcRunCacheMethod;
 begin // called at most once per second
-  fOnIdlePurgeCacheTix32 := tix32;
   c := pointer(fMethodCache);
   for i := 1 to length(fMethodCache) do
   begin
@@ -2010,7 +2009,7 @@ var
   end;
 
 var
-  sessionID, exp32: cardinal;
+  sessionID, c32, exp32: cardinal;
   c: ^TMvcRunCacheMethod;
   dv: PDocVariantData;
 label
@@ -2039,7 +2038,9 @@ begin
     if fTix32 = 0 then
       fTix32 := GetTickSec;
     // first purge from any deprecated cached content (at most once per second)
-    if fRun.fOnIdlePurgeCacheTix32 <> fTix32 then
+    c32 := fRun.fOnIdlePurgeCacheTix32;
+    if (c32 <> fTix32) and
+       LockedExc32(fRun.fOnIdlePurgeCacheTix32, fTix32, c32) then
       fRun.PurgeMethodCache(fTix32);
     // retrieve the caching context for this method (if enabled)
     c := @fRun.fMethodCache[fMethodIndex];
