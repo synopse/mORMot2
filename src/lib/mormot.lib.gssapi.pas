@@ -1630,13 +1630,20 @@ end;
 function TServerSspiKeyTab.TryRefresh(Tix32: cardinal): boolean;
 begin
   result := false;
-  Tix32 := Tix32 shr 1;
+  Tix32 := (Tix32 shr 1) + 1;    // try at most every two seconds
   if (self = nil) or
-     (fKeyTab = '') or
-     (Tix32 = fLastRefresh) then // try at most every two seconds
+     (fKeyTab = '') or           // no file to refresh
+     (Tix32 = fLastRefresh) then // quick path
     exit;
-  fLastRefresh := Tix32;
-  result := SetKeyTab(fKeyTab);
+  fSafe.Lock;
+  if Tix32 <> fLastRefresh then  // thread-safe path
+  begin
+    result := true;
+    fLastRefresh := Tix32;
+  end;
+  fSafe.UnLock;
+  if result then
+    result := SetKeyTab(fKeyTab);
 end;
 
 function TServerSspiKeyTab.ComputeServerHeader(const InputHeaders: RawUtf8;
