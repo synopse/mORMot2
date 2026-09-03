@@ -32,14 +32,16 @@
 -dFPCMM_REPORTMEMORYLEAKS
 -dFPCMM_DEBUG
 -dNOSYNDBIBX
--dFPCMM_SERVER"/>
-        <OtherDefines Count="6">
+-dFPCMM_SERVER
+-dHASUIPDF"/>
+        <OtherDefines Count="7">
           <Define0 Value="NOSYNDBZEOS"/>
           <Define1 Value="FPCMM_REPORTMEMORYLEAKS"/>
           <Define2 Value="FPCMM_DEBUG"/>
           <Define3 Value="FPCMM_ASSUMEMULTITHREAD"/>
           <Define4 Value="NOSYNDBIBX"/>
           <Define5 Value="FPCMM_SERVER"/>
+          <Define6 Value="HASUIPDF"/>
         </OtherDefines>
       </Other>
     </CompilerOptions>

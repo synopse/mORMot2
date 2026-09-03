@@ -151,7 +151,7 @@
     ASMX86 ASMX86NOTPIC ASMX64 ASMX64NOTPIC ASMX64AVX0 ASMX64AVX1
     ABIX86 ABIX64 ABIWINX64 ABISYSVX64 ABIA32 ABIA64 ABIWINA64 ABISYSVA64
     TSYNEXTENDED80 EXTENDEDTOSHORT_USESTR DOUBLETOSHORT_USEGRISU
-    OSWINDOWS OSWINTEL OSWINARM
+    OSWINDOWS OSWINTEL OSWINARM HASUIPDF
     OSPOSIX OSBSD OSDARWIN OSBSDDARWIN OSOPENBSD OSFREEBSD
     OSLINUX OSANDROID OSLINUXINTEL OSLINUXX64 OSLINUXX86
     OSLINUXANDROID OSANDROIDARM64 OSELF OSFUTEX
@@ -843,6 +843,19 @@
   {$define MORMOT23}  // defined since mORMot 2.3 stable
   {$define MORMOT24}  // defined since mORMot 2.4 stable
   {.$define MORMOT25} // defined since mORMot 2.5 stable
+
+// mormot.ui.pdf is available with the Delphi VCL or FPC/Lazarus LCL on Windows
+{$ifdef OSWINDOWS}
+  {$ifdef FPC}
+    {$ifdef LCL}
+      {$define HASUIPDF}
+    {$endif LCL}
+  {$else}
+    {$define HASUIPDF}
+  {$endif FPC}
+{$else}
+  {$undef HASUIPDF}
+{$endif OSWINDOWS}
 
 // -----------
 // -- about pascal code expectations

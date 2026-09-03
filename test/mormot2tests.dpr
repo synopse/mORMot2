@@ -10,27 +10,17 @@ program mormot2tests;
 {$I ..\src\mormot.defines.inc}
 
 {$ifdef OSWINDOWS}
-  {$ifdef FPC}
-    {$ifdef LCL}
-      {$define TESTUIPDF}
-    {$endif LCL}
-  {$else}
-    {$define TESTUIPDF}
-  {$endif FPC}
-{$endif OSWINDOWS}
-
-{$ifdef OSWINDOWS}
   {$apptype console}
   {$R ..\src\mormot.win.default.manifest.res}
 {$endif OSWINDOWS}
 
 uses
   {$I ..\src\mormot.uses.inc} // follow FPC_X64MM or FPC_LIBCMM conditionals
-  {$ifdef TESTUIPDF}
+  {$ifdef HASUIPDF}
     {$ifdef FPC}
   Interfaces, // initialize the LCL widgetset used by test.ui.pdf
     {$endif FPC}
-  {$endif TESTUIPDF}
+  {$endif HASUIPDF}
   {$ifdef UNIX}
   cwstring, // needed as fallback if ICU is not available
   {$endif UNIX}
@@ -91,9 +81,9 @@ uses
   test.orm.network         in '.\test.orm.network.pas',
   test.soa.core            in '.\test.soa.core.pas',
   test.soa.network         in '.\test.soa.network.pas'
-  {$ifdef TESTUIPDF}
+  {$ifdef HASUIPDF}
   , test.ui.pdf            in '.\test.ui.pdf.pas'
-  {$endif TESTUIPDF}
+  {$endif HASUIPDF}
   ;
 
 
@@ -109,9 +99,9 @@ type
     procedure CoreUnits;
     procedure ORM;
     procedure SOA;
-    {$ifdef TESTUIPDF}
+    {$ifdef HASUIPDF}
     procedure UI;
-    {$endif TESTUIPDF}
+    {$endif HASUIPDF}
   end;
 
 class procedure TIntegrationTests.DescribeCommandLine;
@@ -208,12 +198,12 @@ begin
   ]);
 end;
 
-{$ifdef TESTUIPDF}
+{$ifdef HASUIPDF}
 procedure TIntegrationTests.UI;
 begin
   AddCase(TTestUiPdf);
 end;
-{$endif TESTUIPDF}
+{$endif HASUIPDF}
 
 
 begin

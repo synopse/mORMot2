@@ -7,7 +7,7 @@ interface
 
 {$I ..\src\mormot.defines.inc}
 
-{$ifdef OSWINDOWS}
+{$ifdef HASUIPDF}
 
 uses
   classes,
@@ -34,11 +34,11 @@ type
     procedure TestPDFMetadata;
   end;
 
-{$endif OSWINDOWS}
+{$endif HASUIPDF}
 
 implementation
 
-{$ifdef OSWINDOWS}
+{$ifdef HASUIPDF}
 
 uses
 {$ifdef FPC}
@@ -496,6 +496,6 @@ begin
   end;
 end;
 
-{$endif OSWINDOWS}
+{$endif HASUIPDF}
 
 end.
