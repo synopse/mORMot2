@@ -256,7 +256,8 @@ type
     // - could be used e.g. for diagnostic endpoints or error reporting, with
     // no exception involved - returns '' if no stack trace is available
     class function StackTrace(skip: integer = 0; depth: integer = 0;
-      use: TSynLogStackTraceUse = stManualAndAPI): RawUtf8; overload; static;
+      use: TSynLogStackTraceUse = stManualAndAPI): RawUtf8; overload;
+      {$ifdef HASINLINE} static; {$endif}
     /// append the current thread stack trace to an existing TTextWriter
     // - the current thread stack is captured via the RTL CaptureBacktrace()
     // on FPC, or the RtlCaptureStackBackTrace() API on Delphi + Windows,
@@ -268,7 +269,8 @@ type
     // - a trailing space is left after each located frame, as TDebugFile.AddLog
     class procedure StackTrace(W: TTextWriter; skip: integer = 0;
       depth: integer = 0;
-      use: TSynLogStackTraceUse = stManualAndAPI); overload; static;
+      use: TSynLogStackTraceUse = stManualAndAPI); overload;
+      {$ifdef HASINLINE} static; {$endif}
     /// low-level resolution of a TDebugFile instance from a code address
     // - this is the main internal thread-safe factory method for this process
     // - returns nil if this code address has no known debug information
