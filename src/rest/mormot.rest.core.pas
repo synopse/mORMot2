@@ -2186,7 +2186,7 @@ begin
   begin
     tmp.From(NowUtc + fServerTimestampOffset);
     fServerTimestampCacheSafe.Lock;
-    fServerTimestampCacheValue.Value := tmp.Value;
+    fServerTimestampCacheValue.Value := tmp.Value; // fast 64-bit copy
   end
   else
     fServerTimestampCacheSafe.Lock;

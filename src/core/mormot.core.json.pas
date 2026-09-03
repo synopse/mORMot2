@@ -9240,7 +9240,7 @@ begin
     tix32 := GetTickSec
   else
     tix32 := tix64 div MilliSecsPerSec;
-  c32 := fSafe.Padding[DIC_TIMETIX].VInteger;
+  c32 := fSafe.Padding[DIC_TIMETIX].VCardinal;
   if (c32 = tix32) or
      not LockedExc32(fSafe.Padding[DIC_TIMETIX].VCardinal, tix32, c32) then
     exit; // no need to search more often than every second

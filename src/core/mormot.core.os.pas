@@ -11377,9 +11377,10 @@ begin
   end;
   Tix32 := TixShr; // set inside the lock
   Safe.UnLock;
-  RawByteString(Dest) := Call(CallParam);
+  RawByteString(Dest) := Call(CallParam); // slow method outside of the lock
   Safe.Lock;
-  Value := RawByteString(Dest);
+  if TixShr = Tix32 then
+    Value := RawByteString(Dest);
   Safe.UnLock;
 end;
 

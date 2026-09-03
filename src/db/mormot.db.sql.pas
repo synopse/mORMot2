@@ -7791,7 +7791,7 @@ begin
     finally
       fConnectionPoolSafe.UnLock;
     end;
-    LockedGet32(@fConnectionPoolDeprecatedTix32); // trigger DeleteDeprecated()
+    LockedReset32(@fConnectionPoolDeprecatedTix32, 0); // for DeleteDeprecated()
   end
   else
   begin

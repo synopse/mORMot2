@@ -7392,17 +7392,16 @@ begin
     for i := fSessions.Count - 1 downto 0 do // backward for deletion
     begin
       dec(a);
-      if tix32 > a^.fTimeOutTix then // remove this session
+      if tix32 <= a^.fTimeOutTix then
+        continue; // keep this session
+      if result = 0 then // first deprecated session identified
       begin
-        if result = 0 then // first deprecated session identified
-        begin
-          fLogClass.EnterLocal(log, self, 'SessionDeleteDeprecated');
-          fSessions.Safe.WriteLock; // upgrade the lock (only if needed)
-        end;
-        WriteLockedSessionDelete(i, a^, nil); // with full clean-up
-        a := @fSessions.List[i]; // List[] may have moved in memory
-        inc(result);
+        fLogClass.EnterLocal(log, self, 'SessionDeleteDeprecated');
+        fSessions.Safe.WriteLock; // upgrade the lock (only if needed)
       end;
+      WriteLockedSessionDelete(i, a^, nil); // with full clean-up
+      a := @fSessions.List[i]; // List[] may have moved in memory
+      inc(result);
     end;
   finally
     if result <> 0 then
