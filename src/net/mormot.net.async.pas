@@ -3836,7 +3836,7 @@ begin
     repeat
       prev := n;
       // wake up one thread per event after accept/idle or on legacy mode
-      e := LockedGet32(@fWakeupOne);
+      e := LockedReset32(@fWakeupOne);
       if e > 0 then
         for i := 1 to length(fThreads) - 1 do
         begin
@@ -3855,7 +3855,7 @@ begin
             break;
         end;
       // acoThreadSmooting up to ThreadPollingWakeupLoad events per thread
-      e := LockedGet32(@fWakeupEvents);
+      e := LockedReset32(@fWakeupEvents);
       if e > 0 then
       begin
         // first pass to identify any spare events in running threads
@@ -3899,7 +3899,7 @@ begin
   for i := 0 to n - 1 do
     fThreads[ndx[i]].fEvent.SetEvent;
   // a concurrent ThreadPollingWakeupOne/Events may have incremented a counter
-  // just after our LockedGet32() above, then failed its TryLock because we
+  // just after our LockedReset32() above, then failed its TryLock because we
   // were still holding fWakeupSafe: its request would be lost (e.g. fWakeupOne
   // stuck to 1 with no thread notified) until the next epoll event - which
   // never comes on an idle server with R0 in WaitForEver, so the server would

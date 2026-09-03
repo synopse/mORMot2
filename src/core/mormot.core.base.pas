@@ -3084,8 +3084,8 @@ procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
 procedure LockedAdd32(var Target: cardinal; Increment: cardinal);
   {$ifndef ASMINTEL} inline; {$endif}
 
-/// fast atomic "result := Target^; Target^ := 0;" on a 32-bit integer value
-function LockedGet32(Target: PInteger): integer;
+/// fast atomic "result := Target^; Target^ := New;" on a 32-bit integer value
+function LockedReset32(Target: PInteger; New: integer = 0): integer;
 
 {$ifdef ISDELPHI}
 
@@ -11659,11 +11659,11 @@ end;
 
 {$endif ASMINTEL}
 
-function LockedGet32(Target: PInteger): integer;
+function LockedReset32(Target: PInteger; New: integer): integer;
 begin
   repeat
     result := Target^;
-  until LockedExc32(PCardinal(Target)^, 0, result);
+  until LockedExc32(PCardinal(Target)^, New, result);
 end;
 
 function NextSpin(spin: PtrUInt): PtrUInt;
