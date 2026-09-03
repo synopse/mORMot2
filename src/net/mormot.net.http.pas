@@ -6175,7 +6175,6 @@ procedure THttpLogger.SetTimeText(Tix32: cardinal; Tix64: Int64);
 var
   now: TSynSystemTime;
 begin
-  fTimeTix32 := Tix32; // acquire it asap
   // dates are all in UTC/GMT as it should on any serious server design
   FromGlobalTime(now, {local=}false, Tix64); // call OS outside of the lock
   fSafe.Lock; // update all cached text in an atomic way
@@ -6189,7 +6188,7 @@ end;
 procedure THttpLogger.Append(var Context: TOnHttpServerAfterResponseContext);
 var
   n, urllen: PtrInt;
-  tix32, crc, reqcrc, uricrc: cardinal;
+  tix32, c32, crc, reqcrc, uricrc: cardinal;
   v: ^THttpLogVariable;
   poslen: PWordArray; // pos1,len1, pos2,len2, ... 16-bit pairs
   wr: TTextDateWriter;
@@ -6213,7 +6212,9 @@ begin
   urllen := 0;
   if (fVariables * [hlvDocument_Uri, hlvUri, hlvUri_Hash] <> []) then
     urllen := UriTruncLen(RawUtf8(Context.Url)); // excludes ?params and #anchor
-  if fTimeTix32 <> tix32 then
+  c32 := fTimeTix32;
+  if (c32 <> tix32) and
+     LockedExc32(fTimeTix32, tix32, c32) then // CAS update
     SetTimeText(tix32, Context.Tix64); // update cached time texts every second
   reqcrc := 0;
   uricrc := 0;
