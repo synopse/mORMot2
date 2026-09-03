@@ -165,7 +165,7 @@
 
   Delphi only:
     ISDELPHI ISDELPHIUNICODE ISDELPHIxxx
-    WIN32DELPHI WIN64DELPHI WINTELDELPHI WINARMDELPHI DELPHIPOSIX
+    WINDELPHI WIN32DELPHI WIN64DELPHI WINTELDELPHI WINARMDELPHI DELPHIPOSIX
 
 ********************** Conditionals **********************)
 
@@ -202,6 +202,7 @@
   {$define HASIMPLICITOPERATOR}
   {$define HASDBFTWIDE}
   {$define HASTTHREADSTART}
+  {$define HASTTHREADFINISHED}
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSHORT_USESTR} // FloatToText uses str() in FPC
   {$define DOUBLETOSHORT_USEGRISU} // fast DoubleToAscii()
@@ -570,6 +571,7 @@
       since TDynArrayHashed = object(TDynArray) fails to initialize
       http://blog.synopse.info/post/2011/01/29/record-and-object-issue-in-Delphi-2010 }
     {$define UNDIRECTDYNARRAY}
+    {$define HASTTHREADFINISHED}    // Delphi 2009 introduced TThread.Finished
   {$else}
     {$define HASNOSTATICRTTI}        // Delphi 7/2007 has no TypeInfo(TGuid)
   {$endif UNICODE}
@@ -789,6 +791,7 @@
   // -- compiler-specific code generation conditionals
 
   {$ifdef OSWINDOWS}
+    {$define WINDELPHI}           // Delphi on Windows + Intel/AMD or ARM64
     {$ifdef CPUX86}
       {$define WIN32DELPHI}       // Delphi with Win32 inlined asm
       {$define ASMINTELNOTPIC}
