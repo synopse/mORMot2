@@ -38,6 +38,9 @@ uses
   {$endif OSPOSIX}
   mormot.net.sock,
   mormot.net.http,
+  {$ifdef USEWININET}
+  mormot.lib.winhttp,
+  {$endif USEWININET}
   mormot.net.client,
   mormot.net.server,
   mormot.net.async,
@@ -136,6 +139,10 @@ type
     /// validate THttpServerRequestAbstract.SetOutStream streamed body download
     procedure DoHttpOutStream(Sender: TObject);
   published
+    {$ifdef USEWININET}
+    /// validate lazy initialization of the http.sys WebSocket API
+    procedure _HttpApiWebSocketServer;
+    {$endif USEWININET}
     /// Engine.IO and Socket.IO regression tests
     procedure _SocketIO;
     /// validate DNS and LDAP clients (and NTP/SNTP)
@@ -184,6 +191,20 @@ type
     procedure TerminateAndWaitFinished(TimeOutMs: integer = 5000); override;
   end;
 
+  {$ifdef USEWININET}
+  TWebSocketApiInitializeThread = class(TThreadAbstract)
+  protected
+    fReady: PCardinal;
+    fStart: PCardinal;
+    fError: RawUtf8;
+    procedure Execute; override;
+  public
+    constructor Create(Ready, Start: PCardinal); reintroduce;
+    property Error: RawUtf8
+      read fError;
+  end;
+  {$endif USEWININET}
+
 procedure TSlowTftpConnection.DoExecute;
 begin
   InterlockedIncrement(TftpConnectionStarted);
@@ -213,6 +234,170 @@ procedure TTestTftpServer.TerminateAndWaitFinished(TimeOutMs: integer);
 begin
   inherited TerminateAndWaitFinished(1);
 end;
+
+{$ifdef USEWININET}
+constructor TWebSocketApiInitializeThread.Create(Ready, Start: PCardinal);
+begin
+  fReady := Ready;
+  fStart := Start;
+  inherited Create({CreateSuspended=}true);
+end;
+
+procedure TWebSocketApiInitializeThread.Execute;
+var
+  err: HRESULT;
+  handle: WEB_SOCKET_HANDLE;
+begin
+  LockedInc32(PInteger(fReady));
+  while LockedExc32(fStart^, 0, 0) do
+    SleepHiRes(0);
+  handle := nil;
+  try
+    try
+      WebSocketApiInitialize;
+      if not WebSocketApi.WebSocketEnabled then
+        fError := 'WebSocket API not enabled'
+      else
+      begin
+        err := WebSocketApi.CreateServerHandle(nil, 0, handle);
+        if err <> 0 then
+          fError := FormatUtf8('WebSocketCreateServerHandle failed: %', [err])
+        else if handle = nil then
+          fError := 'WebSocketCreateServerHandle returned no handle';
+      end;
+    finally
+      if handle <> nil then
+        WebSocketApi.DeleteHandle(handle);
+    end;
+  except
+    on E: Exception do
+      fError := StringToUtf8(E.ClassName + ': ' + E.Message);
+  end;
+end;
+
+procedure TNetworkProtocols._HttpApiWebSocketServer;
+const
+  CHILD_ENV = 'MORMOT2_TEST_ISSUE418_HTTPAPIWEBSOCKET_CHILD';
+  CHILD_CONSTRUCTOR = 'constructor-first-v1';
+  CHILD_PARALLEL = 'parallel-init-v1';
+  THREAD_COUNT = 16;
+var
+  i: integer;
+  exitcode: integer;
+  ready, start: cardinal;
+  server: THttpApiWebSocketServer;
+  handle: WEB_SOCKET_HANDLE;
+  threads: array[0 .. THREAD_COUNT - 1] of TWebSocketApiInitializeThread;
+  cmd: TFileName;
+  mode: RawUtf8;
+  output: RawByteString;
+
+  procedure RunChild(const ChildMode: RawUtf8);
+  begin
+    exitcode := -1;
+    if not SetSystemEnv(CHILD_ENV, ChildMode) then
+    begin
+      Check(false, 'set child environment');
+      exit;
+    end;
+    try
+      output := RunRedirect(TRunArg(cmd), @exitcode, nil,
+        30 * MilliSecsPerSec, true, '', Executable.ProgramFilePath, RUN_CMD);
+    finally
+      ResetSystemEnv(CHILD_ENV);
+    end;
+    CheckEqual(exitcode, 0, RawUtf8(output));
+    Check(PosEx('All tests passed successfully', RawUtf8(output)) <> 0,
+      Utf8ToString(ChildMode + ' WebSocket API test did not complete'));
+  end;
+
+begin
+  if OSVersion < wEight then
+    exit; // websocket.dll is only available since Windows 8
+  mode := GetSystemEnv(CHILD_ENV);
+  if (mode <> CHILD_CONSTRUCTOR) and
+     (mode <> CHILD_PARALLEL) then
+  begin
+    // Each path needs a fresh process because the API state is process-global.
+    cmd := QuoteFileName(Executable.ProgramFileName) +
+      ' /test TNetworkProtocols._HttpApiWebSocketServer /noenter';
+    RunChild(CHILD_CONSTRUCTOR);
+    RunChild(CHILD_PARALLEL);
+    exit;
+  end;
+  Check(not WebSocketApi.WebSocketEnabled,
+    'websocket.dll should initially be loaded lazily');
+  Check(WebSocketApi.LibraryHandle = 0,
+    'websocket.dll should initially be loaded lazily');
+  if mode = CHILD_CONSTRUCTOR then
+  begin
+    // Regression for #418: server creation itself is the very first API use.
+    server := THttpApiWebSocketServer.Create;
+    try
+      Check(WebSocketApi.WebSocketEnabled,
+        'THttpApiWebSocketServer.Create should initialize websocket.dll');
+      Check(WebSocketApi.LibraryHandle <> 0,
+        'THttpApiWebSocketServer.Create should load websocket.dll');
+      handle := nil;
+      try
+        CheckEqual(WebSocketApi.CreateServerHandle(nil, 0, handle), 0,
+          'WebSocketCreateServerHandle');
+        Check(handle <> nil, 'WebSocketCreateServerHandle returned no handle');
+      finally
+        if handle <> nil then
+          WebSocketApi.DeleteHandle(handle);
+      end;
+    finally
+      server.Free;
+    end;
+    WinHttpApiInitialize;
+    Check(WinHttpApi.WebSocketEnabled,
+      'WinHTTP WebSockets should remain available after server initialization');
+    Check(WebSocketApi.WebSocketEnabled,
+      'WinHTTP initialization should preserve the server WebSocket API');
+    exit;
+  end;
+  // Exercise concurrent first use: no thread may observe a partially bound API.
+  ready := 0;
+  start := 0;
+  FillCharFast(threads, SizeOf(threads), 0);
+  try
+    for i := 0 to high(threads) do
+    begin
+      threads[i] := TWebSocketApiInitializeThread.Create(@ready, @start);
+      threads[i].Start;
+    end;
+    for i := 1 to 10000 do
+    begin
+      if LockedExc32(ready, THREAD_COUNT, THREAD_COUNT) then
+        break;
+      SleepHiRes(1);
+    end;
+    CheckEqual(ready, THREAD_COUNT, 'WebSocket API threads ready');
+    LockedExc32(start, 1, 0);
+  finally
+    LockedExc32(start, 1, 0);
+    for i := 0 to high(threads) do
+      if threads[i] <> nil then
+      begin
+        threads[i].WaitFor;
+        CheckUtf8(threads[i].Error = '', threads[i].Error);
+        threads[i].Free;
+      end;
+  end;
+  Check(WebSocketApi.WebSocketEnabled,
+    'parallel initialization should enable websocket.dll');
+  Check(WebSocketApi.LibraryHandle <> 0,
+    'parallel initialization should load websocket.dll');
+  server := THttpApiWebSocketServer.Create;
+  server.Free;
+  WinHttpApiInitialize;
+  Check(WinHttpApi.WebSocketEnabled,
+    'WinHTTP WebSockets should remain available after parallel initialization');
+  Check(WebSocketApi.WebSocketEnabled,
+    'WinHTTP initialization should preserve the parallel WebSocket API');
+end;
+{$endif USEWININET}
 
 procedure TNetworkProtocols.DoTFTPShutdown;
 var
