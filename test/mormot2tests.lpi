@@ -827,12 +827,18 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <RequiredPackages Count="1">
+    <RequiredPackages Count="3">
       <Item1>
         <PackageName Value="mormot2"/>
       </Item1>
+      <Item2>
+        <PackageName Value="mormot2ui"/>
+      </Item2>
+      <Item3>
+        <PackageName Value="LCL"/>
+      </Item3>
     </RequiredPackages>
-    <Units Count="100">
+    <Units Count="99">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -1229,10 +1235,6 @@
         <Filename Value="..\src\script\mormot.script.quickjs.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit98>
-      <Unit99>
-        <Filename Value="test.ui.pdf.pas"/>
-        <IsPartOfProject Value="True"/>
-      </Unit99>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

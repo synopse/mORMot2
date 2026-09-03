@@ -7,6 +7,8 @@ interface
 
 {$I ..\src\mormot.defines.inc}
 
+{$ifdef OSWINDOWS}
+
 uses
   classes,
   sysutils,
@@ -15,22 +17,12 @@ uses
   mormot.core.os,
   mormot.core.test,
   mormot.core.text,
-  mormot.core.zip
-{$ifdef MSWINDOWS}
-{$ifndef FPC}
-{$ifndef LVCL}
-  , mormot.ui.pdf
-{$endif LVCL}
-{$endif FPC}
-{$endif MSWINDOWS}
-  ;
+  mormot.core.zip,
+  mormot.ui.pdf;
 
 type
   /// regression tests for mormot.ui.pdf
   TTestUiPdf = class(TSynTestCase)
-  {$ifdef MSWINDOWS}
-  {$ifndef FPC}
-  {$ifndef LVCL}
   private
     function CountOccurrences(const SubStr, Text: RawByteString): integer;
   published
@@ -40,25 +32,28 @@ type
     procedure TestTextInsertion;
     procedure TestMultiplePages;
     procedure TestPDFMetadata;
-  {$endif LVCL}
-  {$endif FPC}
-  {$endif MSWINDOWS}
   end;
+
+{$endif OSWINDOWS}
 
 implementation
 
-{$ifdef MSWINDOWS}
-{$ifndef FPC}
-{$ifndef LVCL}
+{$ifdef OSWINDOWS}
 
 uses
-{$ifdef NEEDVCLPREFIX}
+{$ifdef FPC}
+  Windows,
+  Graphics,
+  mormot.ui.core
+{$else}
+  {$ifdef NEEDVCLPREFIX}
   WinApi.Windows,
   VCL.Graphics
-{$else}
+  {$else}
   Windows,
   Graphics
-{$endif}
+  {$endif NEEDVCLPREFIX}
+{$endif FPC}
   ;
 
 function TTestUiPdf.CountOccurrences(const SubStr, Text: RawByteString): integer;
@@ -501,8 +496,6 @@ begin
   end;
 end;
 
-{$endif LVCL}
-{$endif FPC}
-{$endif MSWINDOWS}
+{$endif OSWINDOWS}
 
 end.
