@@ -116,7 +116,7 @@ type
     /// the thread which launched the request
     // - is set by TRestServer.BeginCurrentThread from multi-thread server
     // handlers - e.g. TRestHttpServer
-    RunningThread: TThread;
+    RunningThread: TThreadAbstract;
   end;
 
   /// kind of (static) database server implementation available
@@ -1845,8 +1845,8 @@ type
     function StatusCodeToText(Code: cardinal): PRawUtf8; virtual;
     procedure HandleUriError(Ctxt: TRestServerUriContext; E: Exception);
     /// ensure the thread will be taken into account during process
-    procedure OnBeginCurrentThread(Sender: TThread); override;
-    procedure OnEndCurrentThread(Sender: TThread); override;
+    procedure OnBeginCurrentThread(Sender: TThreadAbstract); override;
+    procedure OnEndCurrentThread(Sender: TThreadAbstract); override;
     // called by Stat() and Info() method-based services
     procedure InternalStat(Ctxt: TRestServerUriContext; W: TJsonWriter); virtual;
     procedure AddStat(Flags: TRestServerAddStats; W: TJsonWriter);
@@ -7813,7 +7813,7 @@ begin
     DeleteFile(aFileName);
 end;
 
-procedure TRestServer.OnBeginCurrentThread(Sender: TThread);
+procedure TRestServer.OnBeginCurrentThread(Sender: TThreadAbstract);
 var
   tc: integer;
   id: TThreadID;
@@ -7841,7 +7841,7 @@ begin
   inherited OnBeginCurrentThread(Sender);
 end;
 
-procedure TRestServer.OnEndCurrentThread(Sender: TThread);
+procedure TRestServer.OnEndCurrentThread(Sender: TThreadAbstract);
 var
   tc: integer;
   i: PtrInt;
@@ -8450,7 +8450,7 @@ end;
 initialization
   // should match TPerThreadRunningContext definition in mormot.core.interfaces
   assert(SizeOf(TServiceRunningContext) =
-    SizeOf(TObject) + SizeOf(TObject) + SizeOf(TThread));
+    SizeOf(TObject) + SizeOf(TObject) + SizeOf(TThreadAbstract));
   GetEnumTrimmedNames(TypeInfo(TOnAuthenticationFailedReason), @OAFR_TXT, scUnCamelCase);
 
 end.

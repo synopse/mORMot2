@@ -341,11 +341,11 @@ type
     /// you can call this method in TThread.Execute to ensure that
     // the thread will be taken into account during process
     // - this method will redirect TRestServer.OnBeginCurrentThread
-    procedure BeginCurrentThread(Sender: TThread);
+    procedure BeginCurrentThread(Sender: TThreadAbstract);
     /// you can call this method just before a thread is finished to ensure
     // e.g. that the associated external DB connection will be released
     // - this method will redirect TRestServer.OnEndCurrentThread
-    procedure EndCurrentThread(Sender: TThread);
+    procedure EndCurrentThread(Sender: TThreadAbstract);
     /// define asynchronous execution of interface methods in a background thread
     // - this class allows to implements any interface via a fake class, which will
     // redirect all methods calls into calls of another interface, but as a FIFO
@@ -464,8 +464,8 @@ type
     class procedure RegisterClassNameForDefinition;
     /// ensure the thread will be taken into account during process
     // - will redirect to fOrmInstance: TRestOrmParent corresponding methods
-    procedure OnBeginCurrentThread(Sender: TThread); virtual;
-    procedure OnEndCurrentThread(Sender: TThread); virtual;
+    procedure OnBeginCurrentThread(Sender: TThreadAbstract); virtual;
+    procedure OnEndCurrentThread(Sender: TThreadAbstract); virtual;
     procedure OnRestBackgroundTimerCreate; virtual;
   public
     /// initialize the class, and associate it to a specified database Model
@@ -859,8 +859,8 @@ type
     function TimerDisable(const aOnProcess: TOnSynBackgroundTimerProcess): boolean;
     function SystemUseTrack(periodSec: integer = 10): TSystemUse;
     function EnsureBackgroundTimerExists: TRestBackgroundTimer;
-    procedure BeginCurrentThread(Sender: TThread); virtual;
-    procedure EndCurrentThread(Sender: TThread); virtual;
+    procedure BeginCurrentThread(Sender: TThreadAbstract); virtual;
+    procedure EndCurrentThread(Sender: TThreadAbstract); virtual;
     procedure AsyncRedirect(const aGuid: TGuid;
       const aDestinationInterface: IInvokable; out aCallbackInterface;
       const aOnResult: TOnAsyncRedirectResult = nil); overload;
@@ -2311,17 +2311,14 @@ begin
   PtrArrayAddOnce(GlobalDefinitions, pointer(self)); // store this TClass
 end;
 
-procedure TRest.OnBeginCurrentThread(Sender: TThread);
+procedure TRest.OnBeginCurrentThread(Sender: TThreadAbstract);
 begin
   fOrmInstance.BeginCurrentThread(Sender);
 end;
 
-procedure TRest.OnEndCurrentThread(Sender: TThread);
+procedure TRest.OnEndCurrentThread(Sender: TThreadAbstract);
 begin
   fOrmInstance.EndCurrentThread(Sender);
-  // most will be done e.g. in TRestRunThreadsServer.EndCurrentThread
-  if fLogFamily <> nil then
-    fLogFamily.OnThreadEnded(Sender);
 end;
 
 procedure TRest.OnRestBackgroundTimerCreate;
@@ -3043,13 +3040,13 @@ begin
     result := fRun.SystemUseTrack(periodSec);
 end;
 
-procedure TRest.BeginCurrentThread(Sender: TThread);
+procedure TRest.BeginCurrentThread(Sender: TThreadAbstract);
 begin
   if self <> nil then
     fRun.BeginCurrentThread(Sender);
 end;
 
-procedure TRest.EndCurrentThread(Sender: TThread);
+procedure TRest.EndCurrentThread(Sender: TThreadAbstract);
 begin
   if self <> nil then
     fRun.EndCurrentThread(Sender);
@@ -4577,13 +4574,13 @@ begin
   end;
 end;
 
-procedure TRestRunThreads.BeginCurrentThread(Sender: TThread);
+procedure TRestRunThreads.BeginCurrentThread(Sender: TThreadAbstract);
 begin
   if self <> nil then
     fOwner.OnBeginCurrentThread(sender);
 end;
 
-procedure TRestRunThreads.EndCurrentThread(Sender: TThread);
+procedure TRestRunThreads.EndCurrentThread(Sender: TThreadAbstract);
 begin
   if self <> nil then
     fOwner.OnEndCurrentThread(sender);

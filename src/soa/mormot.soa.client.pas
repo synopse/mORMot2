@@ -104,7 +104,7 @@ type
     fResultAsJsonObject: boolean;
     fDelayedInstance: boolean;
     fNonBlockWithoutAnswer: boolean;
-    fSendNotificationsThread: TThread;
+    fSendNotificationsThread: TThreadAbstract;
     fSendNotificationsRest: TRest;
     fSendNotificationsLogClass: TOrmServiceNotificationsClass;
     function CreateFakeInstance: TInterfacedObject;

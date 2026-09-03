@@ -252,8 +252,8 @@ type
     // implement the server response - must be thread-safe
     function Request(Ctxt: THttpServerRequestAbstract): cardinal; virtual;
     // assigned to fHttpServer.OnHttpThreadStart/Terminate e.g. to handle connections
-    procedure HttpThreadStart(Sender: TThread); virtual;
-    procedure HttpThreadTerminate(Sender: TThread); virtual;
+    procedure HttpThreadStart(Sender: TThreadAbstract); virtual;
+    procedure HttpThreadTerminate(Sender: TThreadAbstract); virtual;
     function GetRestServerCount: integer;
       {$ifdef HASINLINE}inline;{$endif}
     function GetRestServer(Index: integer): TRestServer;
@@ -1326,7 +1326,7 @@ begin
     ComputeAccessControlHeader(Ctxt, {ReplicateAllowHeaders=}false);
 end;
 
-procedure TRestHttpServer.HttpThreadTerminate(Sender: TThread);
+procedure TRestHttpServer.HttpThreadTerminate(Sender: TThreadAbstract);
 var
   i: PtrInt;
 begin
@@ -1341,7 +1341,7 @@ begin
   end;
 end;
 
-procedure TRestHttpServer.HttpThreadStart(Sender: TThread);
+procedure TRestHttpServer.HttpThreadStart(Sender: TThreadAbstract);
 var
   i: PtrInt;
 begin
