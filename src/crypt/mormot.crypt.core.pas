@@ -2756,10 +2756,11 @@ function Sha3(Algo: TSha3Algo; const s: RawByteString;
 function Sha3(Algo: TSha3Algo; Buffer: pointer; Len: integer;
   DigestBits: integer = 0): RawUtf8; overload;
 
-/// SHA-256 hash calculation with length padding if shorter than 255 bytes
+/// SHA-256 hash calculation with length padding if shorter than 256 bytes
 // - WARNING: this algorithm is DEPRECATED, and supplied only for backward
-// compatibility of existing code (CryptDataForCurrentUser or TProtocolAes)
-// - use TSynSigner or Pbkdf2HmacSha256() for safer password derivation
+// compatibility with mORMot 1 code (CryptDataForCurrentUser or TProtocolAes)
+// - DO NOT use for new code or newly generated data
+// - see TSynSigner.Pbkdf2 or "Modular Crypt" for safer password derivation
 procedure Sha256Weak(const s: RawByteString; out Digest: TSha256Digest);
 
 
@@ -10505,7 +10506,7 @@ var
 begin
   l := length(s);
   P := pointer(s);
-  if l < SizeOf(tmp) then // add some salt to unweak password < 256 bytes
+  if l < SizeOf(tmp) then // add some padding up to 256 bytes
   begin
     FillcharFast(tmp, SizeOf(tmp), l);
     if l > 0 then
