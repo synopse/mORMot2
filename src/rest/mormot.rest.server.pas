@@ -2984,7 +2984,7 @@ function TRestServerUriContext.Authenticate: boolean;
 var
   s: TAuthSession;
   a: ^TRestServerAuthentication;
-  tix32, bearerid: cardinal;
+  tix32, c32, bearerid: cardinal;
   n: PtrInt;
 begin
   result := true;
@@ -3029,7 +3029,9 @@ begin
     end;
     // first check for deprecated sessions (every second is enough)
     tix32 := TickCount64 shr 10;
-    if Server.fSessionsDeprecatedTix <> tix32 then
+    c32 := Server.fSessionsDeprecatedTix;
+    if (c32 <> tix32) and
+       LockedExc32(Server.fSessionsDeprecatedTix, tix32, c32) then
       Server.SessionDeleteDeprecated(tix32);
     // TAuthSession instance may have been stored at connection level
     if (rsoSessionInConnectionOpaque in Server.Options) and
@@ -7379,7 +7381,6 @@ var
   a: PAuthSession;
 begin
   // TRestServer.Uri() runs this method at most every second
-  fSessionsDeprecatedTix := tix32; // = TickCount64 shr 10
   result := 0;
   if (self = nil) or
      (fSessions = nil) or
