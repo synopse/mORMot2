@@ -4640,7 +4640,7 @@ type
   end;
 
   // consume a TPipeStream body while the server is still receiving it
-  TPipeConsumerThread = class(TThread)
+  TPipeConsumerThread = class(TThreadAbstract)
   protected
     fPipe: TPipeStream;
     fExpected: Int64;
