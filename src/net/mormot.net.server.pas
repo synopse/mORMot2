@@ -9597,9 +9597,10 @@ constructor THttpApiWebSocketServer.Create(
   const aOnWSThreadStart, aOnWSThreadTerminate: TOnNotifyThread;
   ProcessOptions: THttpServerOptions);
 begin
-  inherited Create(QueueName, nil, nil, '', ProcessOptions);
+  WebSocketApiInitialize;
   if not (WebSocketApi.WebSocketEnabled) then
     raise EWebSocketApi.Create('WebSocket API not supported');
+  inherited Create(QueueName, nil, nil, '', ProcessOptions);
   fPingTimeout := aPingTimeout;
   if fPingTimeout > 0 then
     fGuard := TSynWebSocketGuard.Create(Self);
