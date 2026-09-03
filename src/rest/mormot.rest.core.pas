@@ -440,8 +440,9 @@ type
     fRun: TRestRunThreads;
     fLogClass: TSynLogClass;
     fLogFamily: TSynLogFamily;
-    fLogLevel: TSynLogLevels;
+    fServerTimestampCacheSafe: TLightLock;
     fServerTimestampCacheTix: cardinal;
+    fLogLevel: TSynLogLevels; // 32-bit
     fLogResponseMaxBytes: integer;
     fAcquireExecution: TRestAcquireExecutions;
     fPrivateGarbageCollector: TSynObjectListLocked;
@@ -2173,19 +2174,24 @@ end;
 
 function TRest.GetServerTimestamp(tix64: Int64): TTimeLog;
 var
-  tix: cardinal;
+  tix32, c32: cardinal;
+  tmp: TTimeLogBits;
 begin
   if tix64 = 0 then
     tix64 := GetTickCount64;
-  tix := tix64 shr 9; // resolution change from 1 ms to 512 ms
-  if fServerTimestampCacheTix = tix then
-    result := fServerTimestampCacheValue.Value
-  else
+  tix32 := tix64 shr 9; // resolution change from 1 ms to 512 ms
+  c32 := fServerTimestampCacheTix;
+  if (c32 <> tix32) and
+     LockedExc32(fServerTimestampCacheTix, tix32, c32) then
   begin
-    fServerTimestampCacheTix := tix;
-    fServerTimestampCacheValue.From(NowUtc + fServerTimestampOffset);
-    result := fServerTimestampCacheValue.Value;
-  end;
+    tmp.From(NowUtc + fServerTimestampOffset);
+    fServerTimestampCacheSafe.Lock;
+    fServerTimestampCacheValue.Value := tmp.Value;
+  end
+  else
+    fServerTimestampCacheSafe.Lock;
+  result := fServerTimestampCacheValue.Value;
+  fServerTimestampCacheSafe.UnLock;
 end;
 
 procedure TRest.SetServerTimestamp(const Value: TTimeLog);
