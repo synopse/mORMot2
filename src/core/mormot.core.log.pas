@@ -1191,7 +1191,7 @@ type
     // - see SynLogThreads.Ident[ThreadNumber - 1] for ptIdentifiedInOneFile
     // - raw value can be retrieved from TSynLog.ThreadIndex class method
     ThreadNumber: word;
-    /// pre-computed "1 shl ((ThreadNumber - 1) and 31)" value
+    /// pre-computed "1 shl ((ThreadNumber - 1) and 31)" value as 32-bit mask
     // - equals 0 if InitThreadNumber() needs to be called
     ThreadBitLo: cardinal;
     /// pre-computed "(ThreadNumber - 1) shr 5" value
@@ -1236,7 +1236,7 @@ type
     fThreadInfo: PSynLogThreadInfo;
     fFlags: set of (logFileHeaderWritten, logInitDone, logAddThreadName);
     fPendingFlags: set of (pendingDisableRemoteLogLeave, pendingRotate);
-    fThreadInfoBackup: TSynLogThreadInfoFlags;
+    fThreadInfoBackup: TSynLogThreadInfoFlags; // 8-bit
     fISynLogOffset: integer;
     fStartTimestamp: Int64;
     fWriterEcho: TEchoWriter;
@@ -4763,10 +4763,13 @@ begin
   finally
     thd^.Safe.UnLock;
   end;
+  // reset TSynLogThreadInfo flags
+  nfo^.RecursionCount := 0;
+  byte(nfo^.Flags) := 0;
   nfo^.ThreadNumber := num;
   // pre-compute GetBitPtr() constants for SetThreadInfoAndThreadName()
   dec(num);
-  nfo^.ThreadBitLo := 1 shl (num and 31); // 32-bit fThreadNameLogged[] value
+  nfo^.ThreadBitLo := 1 shl (num and 31); // 32-bit fThreadNameLogged[] mask
   nfo^.ThreadBitHi := num shr 5;          // index in fThreadNameLogged[]
 end;
 
@@ -5382,13 +5385,14 @@ var
   num, i: PtrInt;
 begin
   s := CurrentThreadNameShort;
-  if s^[0] <> #0 then // avoid GPF if returned @NULCHAR
-    s^[0] := #0; // reset TShort31 threadvar for consistency
+  if s^[0] <> #0 then    // avoid GPF if returned @NULCHAR
+    s^[0] := #0;         // reset TShort31 threadvar for consistency
   nfo := @PerThreadInfo; // no automatic InitThreadNumber()
   num := nfo^.ThreadNumber;
-  if num = 0 then // not touched yet by TSynLog, or called twice
+  if num = 0 then        // not touched yet by TSynLog, or called twice
     exit;
-  nfo^.ThreadBitLo := 0; // force InitThreadNumber on next thread access
+  nfo^.ThreadNumber := 0; // mark once as recycled
+  nfo^.ThreadBitLo := 0;  // force InitThreadNumber on next thread access
   // reset global thread information
   if SynLogFileFreeing then
     exit; // inconsistent call at shutdown
