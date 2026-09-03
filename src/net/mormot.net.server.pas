@@ -2572,8 +2572,8 @@ type
   TSynThreadPoolHttpApiWebSocketServer = class(TSynThreadPool)
   protected
     fServer: THttpApiWebSocketServer;
-    procedure OnThreadStart(Sender: TThread);
-    procedure OnThreadTerminate(Sender: TThread);
+    procedure OnThreadStart(Sender: TThreadAbstract);
+    procedure OnThreadTerminate(Sender: TThreadAbstract);
     function NeedStopOnIOError: boolean; override;
     // aContext is a PHttpApiWebSocketConnection, or fServer.fServiceOverlaped
     // (SendServiceMessage) or fServer.fSendOverlaped (WriteData)
@@ -2587,7 +2587,7 @@ type
 
   /// Thread for closing deprecated WebSocket connections
   // - i.e. which have not responsed after PingTimeout interval
-  TSynWebSocketGuard = class(TThread)
+  TSynWebSocketGuard = class(TThreadAbstract)
   protected
     fServer: THttpApiWebSocketServer;
     procedure Execute; override;
@@ -5774,7 +5774,6 @@ begin
     on Exception do
       ; // just ignore unexpected exceptions here, especially during clean-up
   end;
-  TSynLog.NotifyThreadEnded; // manual TSynThread notification
 end;
 
 
@@ -9779,13 +9778,13 @@ begin
   result := false;
 end;
 
-procedure TSynThreadPoolHttpApiWebSocketServer.OnThreadStart(Sender: TThread);
+procedure TSynThreadPoolHttpApiWebSocketServer.OnThreadStart(Sender: TThreadAbstract);
 begin
   if Assigned(fServer.OnWSThreadStart) then
     fServer.OnWSThreadStart(Sender);
 end;
 
-procedure TSynThreadPoolHttpApiWebSocketServer.OnThreadTerminate(Sender: TThread);
+procedure TSynThreadPoolHttpApiWebSocketServer.OnThreadTerminate(Sender: TThreadAbstract);
 begin
   if Assigned(fServer.OnWSThreadTerminate) then
     fServer.OnWSThreadTerminate(Sender);
