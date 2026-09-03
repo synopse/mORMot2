@@ -350,8 +350,9 @@ type
     // called to set the global PKI
     // - use aKey='a=mutual;e=aesctc128;p=34a2;pw=password;ca=..' full
     // TEcdheProtocol.FromKey(aKey) format
-    // - or aKey will be derivated using aSettings to call
-    // SetEncryptKeyAes - default as 1024 PBKDF2-SHA-3 rounds into aes-128-ctr
+    // - or aKey will be derivated using aSettings to call SetEncryptKeyAes -
+    // default as 1024 PBKDF2-SHA-3 rounds into aes-128-ctr
+    // - if aSettings=nil, aKey could be a file or mORMot 1.18 Sha256Weak(aKey)
     // - you can disable encryption by setting aKey=''
     procedure SetEncryptKey(aServer: boolean; const aKey: RawUtf8;
       aSettings: PWebSocketProcessSettings);
@@ -1646,14 +1647,16 @@ begin
   // always first disable any previous encryption
   fEncryption := nil;
   fConnectionFlags := [hsrWebsockets];
-  if (aKey = '') or
-     (aSettings = nil) then
+  if aKey = '' then
     exit;
   // 1. try asymmetric ES-256 ephemeral secret key and mutual authentication
   // check human-friendly format 'password#*.private' key file name
-  with aSettings^ do
-    fEncryption := TEcdheProtocol.FromPasswordSecureFile(
-      aKey, aServer, EcdheAuth, EcdheCipher, EcdheRounds);
+  if aSettings = nil then
+    fEncryption := TEcdheProtocol.FromPasswordSecureFile(aKey, aServer)
+  else
+    with aSettings^ do
+      fEncryption := TEcdheProtocol.FromPasswordSecureFile(
+        aKey, aServer, EcdheAuth, EcdheCipher, EcdheRounds);
   if fEncryption = nil then
     // check 'a=mutual;e=aesctc128;p=34a2;pw=password;ca=..' full format
     fEncryption := TEcdheProtocol.FromKey(aKey, aServer);
@@ -1662,14 +1665,18 @@ begin
   else
   begin
     // 2. aKey no 'a=...'/'pw#xx.private' layout -> use symmetric TProtocolAes
-    if aSettings^.AesRounds = 0 then
+    if (aSettings = nil) or
+       (aSettings^.AesRounds = 0) then
       // mORMot 1.18 deprecated password derivation
       Sha256Weak(aKey, key.b)
     else
       // new safer password derivation algorithm (rounds=1000 -> 1ms)
       Pbkdf2Sha3(SHA3_256, aKey, aSettings^.AesSalt, aSettings^.AesRounds,
         @key, SizeOf(key));
-    SetEncryptKeyAes(aSettings^.AesCipher, key, aSettings^.AesBits);
+    if aSettings = nil then
+      SetEncryptKeyAes(nil, key, 128) // default to AES-CTR-128
+    else
+      SetEncryptKeyAes(aSettings^.AesCipher, key, aSettings^.AesBits);
   end;
 end;
 
