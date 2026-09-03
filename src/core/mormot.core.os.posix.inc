@@ -2289,7 +2289,7 @@ const
   // missing definitions from uapi\linux\futex.h
   FUTEX_WAIT         = 0;
   FUTEX_WAKE         = 1;
-  FUTEX_PRIVATE_FLAG = 128; // since Linux 2.6.22
+  FUTEX_PRIVATE_FLAG = 128; // since Linux 2.6.22 (Jul 2007)
   FUTEX_WAIT_PRIVATE = FUTEX_WAIT or FUTEX_PRIVATE_FLAG;
   FUTEX_WAKE_PRIVATE = FUTEX_WAKE or FUTEX_PRIVATE_FLAG;
 

@@ -3480,9 +3480,7 @@ begin
     if fErrorMessage = '' then
       ProcessOutStream(Context) // SetOutStream() response body
     else
-      // the handler did raise after SetOutStream(): never send that body as
-      // the error response, which ContentStream <> nil would silently do
-      OutContentStreamDiscard;
+      OutContentStreamDiscard; // return error not SetOutStream()
   if fErrorMessage <> '' then
     ProcessErrorMessage;
   // append Command
@@ -8441,10 +8439,7 @@ var // lots of local variable so that this method is thread-safe
     if not result then
       exit;
     respsent := true;
-    // http.sys does send from the kernel: it can not stream a TStream, so any
-    // SetOutStream() body is read into OutContent - done here and not at the
-    // call sites, since OnBeforeRequest may respond before the main process
-    if not ctxt.OutContentStreamToBuffer then
+    if not ctxt.OutContentStreamToBuffer then // kernel http.sys needs buffer
       outstatcode := HTTP_SERVERERROR; // failed to read that stream
     resp^.SetStatus(outstatcode, outstat);
     if Terminated then
@@ -8729,10 +8724,8 @@ begin
                   outstatcode := afterstatcode;
               end;
               // send response - SendResponse does buffer any SetOutStream()
-              if respsent then
-                // e.g. DoBeforeRequest did already send a 202: there is no
-                // response left to put a new body into
-                ctxt.OutContentStreamDiscard
+              if respsent then // e.g. 202 already sent 
+                ctxt.OutContentStreamDiscard //about SetOUtStream()
               else if not SendResponse then
                 continue;
               QueryPerformanceMicroSeconds(elapsed);
@@ -8743,9 +8736,7 @@ begin
             except
               on E: Exception do
               begin
-                // a handler which did raise after SetOutStream() would
-                // otherwise keep its stream until this thread is reused
-                ctxt.OutContentStreamDiscard;
+                ctxt.OutContentStreamDiscard; // release SetOutStream() ASAP
                 // handle any exception raised during process: show must go on!
                 if not respsent then
                   if not E.InheritsFrom(EHttpApiServer) or // ensure still connected

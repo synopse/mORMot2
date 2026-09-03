@@ -2524,7 +2524,7 @@ begin
   if (Buffer = nil) or
      (Len <= 0) then
     exit;
-  // try the newest per-processor ProcessPrng() AES-CTR-DRBG first
+  // try the Win8+ per-processor ProcessPrng() AES-CTR-DRBG first
   if (OSVersion >= wEight) and
      DelayedProc(ProcessPrng, BCryptPrimitives, 'BCryptPrimitives.dll', 'ProcessPrng') then
     result := ProcessPrng(Buffer, Len);

@@ -4213,7 +4213,7 @@ begin // note: we can't use Random128() here to avoid endless recursion
   if MainAesPrng <> nil then
     MainAesPrng.FillRandom(rnd)         // favor our CSPRNG if available
   else
-    FillSystemRandom(@rnd, Bits shr 3, false); // seed from OS
+    FillSystemRandom(@rnd, Bits shr 3, false); // seed from OS as fallback
   EncryptInit(rnd, Bits);               // transient AES-128/256 secret
   FillZero(TAesContext(Context).iv.b);  // as per NIST SP 800-90A
   FillZero(rnd);                        // anti-forensic
