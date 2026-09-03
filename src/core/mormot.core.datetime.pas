@@ -2327,11 +2327,12 @@ end;
 
 procedure RawGlobalTime(out Time: TSynSystemTime; LocalTime: boolean);
 var
+  sys: TSystemTime absolute Time;
   {$ifdef OSPOSIX}
   tmp: cardinal;
   {$endif OSPOSIX}
-  sys: TSystemTime absolute Time;
 begin
+  // cross-platform OS API call
   if LocalTime then
     GetLocalTime(sys)
   else
@@ -2345,19 +2346,19 @@ begin
 end;
 
 var
-  // GlobalTime[LocalTime] thread-safe cache, each one taking one L1 cache line
+  // GlobalTime[LocalTime] thread-safe cache of decoded TSynSystemTime
   GlobalTime: array[boolean] of packed record
     safe: TRWLightLock;
-    clock: cardinal;  // avoid slower API call with 16ms loss of precision
-    time: TSystemTime;
-    _pad: array[1 .. 64 - SizeOf(TRWLightLock) - SizeOf(TSystemTime) - 4] of byte;
+    clock: cardinal;      // avoid slower API call with 16ms loss of precision
+    time: TSynSystemTime;
+    _pad: array[1 .. 64 - // to fill exactly one L1 cache line
+      (SizeOf(TRWLightLock) + SizeOf(cardinal) + SizeOf(TSynSystemTime))] of byte;
   end;
 
 procedure FromGlobalTime(out NewTime: TSynSystemTime; LocalTime: boolean;
   tix64: Int64);
 var
   tix: cardinal;
-  newtimesys: TSystemTime absolute NewTime;
 begin
   if tix64 = 0 then
     tix64 := GetTickCount64;
@@ -2368,13 +2369,13 @@ begin
     begin
       RawGlobalTime(NewTime, LocalTime);
       safe.WriteLock;
-      time := newtimesys; // thread-safe persist in cache
+      time := NewTime; // thread-safe persist in cache
       safe.WriteUnLock;
     end
     else
     begin
-      safe.ReadLock;      // allow concurrent access
-      newtimesys := time; // fast copy last decoded value from cache
+      safe.ReadLock;   // allow concurrent access
+      NewTime := time; // fast copy last decoded value from cache
       safe.ReadUnLock;
     end;
 end;
