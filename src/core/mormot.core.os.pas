@@ -11375,10 +11375,10 @@ begin
     Safe.UnLock;
     exit;
   end;
+  Tix32 := TixShr; // set inside the lock
   Safe.UnLock;
   RawByteString(Dest) := Call(CallParam);
   Safe.Lock;
-  Tix32 := TixShr;
   Value := RawByteString(Dest);
   Safe.UnLock;
 end;
