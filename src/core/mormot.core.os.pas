@@ -471,7 +471,8 @@ type
    wsWine,
    wsFavorFewThreads,
    wsWeakDpApi,
-   wsWeakHttpApi);
+   wsWeakHttpApi,
+   wsWeakHttpSys);
 
   /// notable Linux distributions, organized by their package management system
   TLinuxDistribution = (

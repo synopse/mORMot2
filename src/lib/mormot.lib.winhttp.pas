@@ -2490,14 +2490,13 @@ var
   api: TWebSocketApis;
   P: PPointer;
 begin
-  if WebSocketAPI.Tested or
-     (wsWine in WindowsSpecs) then // Wine only implements some minimal stubs
+  if wsWine in WindowsSpecs then // Wine only implements some minimal stubs
     exit;
   // Keep the handle and all function pointers private until fully initialized.
   // This lock is reentrant because WinHttpApiInitialize already owns it.
   mormot.core.os.GlobalLock;
   try
-    if (WebSocketApi.LibraryHandle <> 0) or
+    if (WebSocketApi.LibraryHandle <> 0) or // inside the lock for safety
        WebSocketAPI.Tested then
       exit; // already loaded or at least tested
     WebSocketAPI.Tested := true;

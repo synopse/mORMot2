@@ -32,6 +32,7 @@ uses
   mormot.core.rtti,
   mormot.core.json,
   mormot.core.datetime,
+  mormot.core.fmt,
   mormot.core.search,
   mormot.core.threads,
   mormot.core.log,
