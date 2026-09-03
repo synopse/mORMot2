@@ -9229,7 +9229,7 @@ end;
 function TSynDictionary.DeleteDeprecated(tix64: Int64): integer;
 var
   i, tomove: PtrInt;
-  tix32, timeout32: cardinal;
+  tix32, c32, timeout32: cardinal;
 begin
   result := 0;
   if (self = nil) or
@@ -9240,11 +9240,12 @@ begin
     tix32 := GetTickSec
   else
     tix32 := tix64 div MilliSecsPerSec;
-  if fSafe.Padding[DIC_TIMETIX].VInteger = integer(tix32) then
+  c32 := fSafe.Padding[DIC_TIMETIX].VInteger;
+  if (c32 = tix32) or
+     not LockedExc32(fSafe.Padding[DIC_TIMETIX].VCardinal, tix32, c32) then
     exit; // no need to search more often than every second
   fSafe.ReadWriteLock; // would upgrade to cWrite only if needed
   try
-    fSafe.Padding[DIC_TIMETIX].VInteger := tix32;
     for i := fSafe.Padding[DIC_KEYCOUNT].VInteger - 1 downto 0 do
     begin
       timeout32 := fTimeOut[i];
@@ -9377,7 +9378,7 @@ end;
 
 function TSynDictionary.DeleteAt(aIndex: PtrInt): boolean;
 begin
-  if cardinal(aIndex) < cardinal(fSafe.Padding[DIC_KEYCOUNT].VInteger) then
+  if cardinal(aIndex) < fSafe.Padding[DIC_KEYCOUNT].VCardinal then
     // use Delete(aKey) to have efficient hash table update
     result := Delete(fKeys.ItemPtr(aIndex)^) = aIndex
   else
@@ -9793,7 +9794,7 @@ procedure TSynDictionary.SetTimeoutAtIndex(aIndex: PtrInt);
 var
   tim: cardinal;
 begin
-  if cardinal(aIndex) >= cardinal(fSafe.Padding[DIC_KEYCOUNT].VInteger) then
+  if cardinal(aIndex) >= fSafe.Padding[DIC_KEYCOUNT].VCardinal then
     exit;
   tim := fSafe.Padding[DIC_TIMESEC].VInteger;
   if tim > 0 then

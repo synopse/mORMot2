@@ -4223,32 +4223,6 @@ procedure DynArrayHashTableAdjust16(P: PWordArray; deleted: cardinal; count: Ptr
 
 { ************ Efficient Variant Values Conversion }
 
-type
-  PVarType = ^TVarType;
-
-  /// a variant/TVarData overlapped structure with a 32-bit VType field
-  // - 32-bit VType is faster for initialization than 16-bit TVarData.VType
-  // - it is safe to transtype this as plain variant or TVarData
-  TSynVarData = packed record
-    case integer of
-      0: (
-        VType: cardinal;
-        case padding: cardinal of // access the most used TVarData value members
-          varInteger:  (VInteger:  integer);
-          varDouble:   (VDouble:   double);
-          varCurrency: (VCurrency: currency);
-          varDate:     (VDate:     TDateTime);
-          varInt64:    (VInt64:    Int64);
-          varString:   (VString:   pointer);
-          varAny:      (VAny:      pointer);
-          );
-      1: (
-        Data: TVarData); // access to all standard value members
-  end;
-  PSynVarData = ^TSynVarData;
-  TSynVarDataArray = array[0 .. MaxInt div SizeOf(TSynVarData) - 1] of TSynVarData;
-  PSynVarDataArray = ^TSynVarDataArray;
-
 const
   /// variant type holding a PtrInt value
   varPtrInt = {$ifdef CPU32} varInteger {$else} varInt64 {$endif};
@@ -4311,6 +4285,33 @@ const
   NullVarData:  TVarData = (VType: varNull{%H-});
   FalseVarData: TVarData = (VType: varBoolean{%H-});
   TrueVarData:  TVarData = (VType: varBoolean; VInteger: {%H-}-1);
+
+type
+  PVarType = ^TVarType;
+
+  /// a variant/TVarData overlapped structure with a 32-bit VType field
+  // - 32-bit VType is faster for initialization than 16-bit TVarData.VType
+  // - it is safe to transtype this as plain variant or TVarData
+  TSynVarData = packed record
+    case integer of
+      0: (
+        VType: cardinal;
+        case padding: cardinal of // access the most used TVarData value members
+          varInteger:  (VInteger:  integer);
+          varOleUInt:  (VCardinal: cardinal);
+          varDouble:   (VDouble:   double);
+          varCurrency: (VCurrency: currency);
+          varDate:     (VDate:     TDateTime);
+          varInt64:    (VInt64:    Int64);
+          varString:   (VString:   pointer);
+          varAny:      (VAny:      pointer);
+          );
+      1: (
+        Data: TVarData); // access to all standard value members
+  end;
+  PSynVarData = ^TSynVarData;
+  TSynVarDataArray = array[0 .. MaxInt div SizeOf(TSynVarData) - 1] of TSynVarData;
+  PSynVarDataArray = ^TSynVarDataArray;
 
 var
   /// a slightly faster alternative to Variants.Null function
