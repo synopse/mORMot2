@@ -4312,10 +4312,8 @@ end; // don't reset fLog := nil here - done in DoTerminate
 procedure TLoggedThread.DoTerminate;
 begin
   inherited DoTerminate; // may call an user callback which makes TSynLog.Add()
-  if fLog = nil then
-    exit;
-  fLog.NotifyThreadEnded; // eventual call at the very end of the thread process
   fLog := nil;
+  TSynLog.NotifyThreadEnded; // eventual call at the very end of the thread process
 end;
 
 function TLoggedThread.WaitFinished(TimeOutMs: integer): boolean;
