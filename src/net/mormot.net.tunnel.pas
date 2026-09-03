@@ -778,8 +778,11 @@ begin
       end;
     end
     else
+    begin
       // newsocket() with connect() was done in the main thread
+      res := nrOk;
       fState := stProcessing;
+    end;
     if fState = stProcessing then
       while not Terminated do
       begin
