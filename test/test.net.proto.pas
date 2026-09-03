@@ -4660,28 +4660,24 @@ end;
 
 function TRaiseSeekStream.Write(const Buffer; Count: Longint): Longint;
 begin
-  result := 0;
-  raise EStreamError.Create('TRaiseSeekStream is read only');
+  result := RaiseStreamError(self, 'Write (read-only)');
 end;
 
 function TRaiseSeekStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
 begin // also called by the Position property on Delphi
-  result := 0;
-  raise EStreamError.Create('TRaiseSeekStream can not seek');
+  result := RaiseStreamError(self, 'Seek');
 end;
 
 {$ifdef FPC}
 function TRaiseSeekStream.GetPosition: Int64;
 begin // on FPC, the Position property does not call Seek()
-  result := 0;
-  raise EStreamError.Create('TRaiseSeekStream has no position');
+  result := RaiseStreamError(self, 'GetPosition');
 end;
 {$endif FPC}
 
 function TRaiseReadStream.Read(var Buffer; Count: Longint): Longint;
 begin
-  result := 0;
-  raise EStreamError.Create('TRaiseReadStream can not read');
+  result := RaiseStreamError(self, 'Read');
 end;
 
 function TNoJumpStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
@@ -4690,10 +4686,7 @@ begin
      (Origin = soCurrent) then
     result := inherited Seek(Offset, Origin) // just reading the position
   else
-  begin
-    result := 0;
-    raise EStreamError.Create('TNoJumpStream can not jump');
-  end;
+    result := RaiseStreamError(self, 'Seek with jump');
 end;
 
 constructor TNoSeekReadStream.Create(const aData: RawByteString);
@@ -5180,7 +5173,8 @@ var
   ctx: THttpRequestContext;
   kept: TRawByteStringStream;
 begin
-  TSynLog.Family.ExceptionIgnore.Add(EHttpServer); // the '/raise' test below
+  // no logging e.g. of the expected '/raise' tests below
+  TSynLog.Family.ExceptionIgnore.AddSeveral([EHttpServer, EStreamError]);
   outdata := RandomWinAnsi(3 shl 20); // 3MB, way above any socket buffer
   CheckEqual(length(outdata), 3 shl 20, 'outdata');
   // two SetOutStream() guards which need no server at all
@@ -5374,7 +5368,7 @@ begin
   finally
     FreeAndNil(outkept);
     outdata := '';
-    TSynLog.Family.ExceptionIgnore.Remove(EHttpServer);
+    TSynLog.Family.ExceptionIgnore.RemoveSeveral([EHttpServer, EStreamError]);
   end;
 end;
 

@@ -5406,8 +5406,7 @@ begin
     end;
     // finalize and send the response back to the client
     c.fRequest.RespStatus := Status;
-    c.fRequest.OutContentStreamDiscard; // this delayed Content does replace
-                                        // any pending SetOutStream() body
+    c.fRequest.OutContentStreamDiscard; // delayed Content replace any OutStream
     c.fRequest.OutContent := Content;
     c.fRequest.OutContentType := ContentType;
     if hfConnectionClose in c.fHttp.HeaderFlags then

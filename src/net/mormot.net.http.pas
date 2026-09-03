@@ -924,11 +924,11 @@ type
     fOutContentStream: TStream; // from SetOutStream()
     fOutContentStreamLength: Int64;
     fOutContentStreamPos: Int64; // stream position when SetOutStream() was set
-    fOutContentStreamOpt: THttpOutStreamOptions;             // 8-bit
     fConnectionID: THttpServerConnectionID;                  // 64-bit
     fConnectionFlags: THttpServerRequestFlags;               // 8-bit
     fAuthenticationStatus: THttpServerRequestAuthentication; // 8-bit
     fInternalFlags: set of (ifUrlParamPosSet);               // 8-bit
+    fOutContentStreamOpt: THttpOutStreamOptions;             // 8-bit
     fRespStatus: integer;
     fConnectionThread: TThread;
     fConnectionOpaque: PHttpServerConnectionOpaque;
@@ -5330,7 +5330,7 @@ begin
   begin
     // a stream with no Size and no supplied length: the send loop always
     // emits a Content-Length:, so fail here instead of a silent empty body
-    OutContentStreamDiscard; // release it if we do own it
+    OutContentStreamDiscard; // release it if we own it
     result := HTTP_SERVERERROR;
     exit;
   end;
@@ -5342,13 +5342,14 @@ end;
 
 procedure THttpServerRequestAbstract.OutContentStreamDiscard;
 begin
-  if hosOwned in fOutContentStreamOpt then
-    FreeAndNilSafe(fOutContentStream)
-  else
-    fOutContentStream := nil;
-  fOutContentStreamOpt := [];
+  if fOutContentStream <> nil then
+    if hosOwned in fOutContentStreamOpt then
+      FreeAndNilSafe(fOutContentStream)
+    else
+      fOutContentStream := nil;
   fOutContentStreamLength := 0;
   fOutContentStreamPos := 0;
+  fOutContentStreamOpt := [];
 end;
 
 function THttpServerRequestAbstract.OutContentStreamToBuffer: boolean;
@@ -5375,7 +5376,7 @@ begin
     FastAssignNew(fOutContent); // no body to send
     fRespStatus := HTTP_SERVERERROR;
   end;
-  OutContentStreamDiscard;
+  OutContentStreamDiscard; // release the TStream once consummed
 end;
 
 procedure THttpServerRequestAbstract.SetOutCustomHeader(const Args: array of const);
