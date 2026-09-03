@@ -2358,14 +2358,16 @@ var
 procedure FromGlobalTime(out NewTime: TSynSystemTime; LocalTime: boolean;
   tix64: Int64);
 var
-  tix: cardinal;
+  tix, c: cardinal;
 begin
   if tix64 = 0 then
     tix64 := GetTickCount64;
   tix := tix64 shr 4;
   with GlobalTime[LocalTime] do
-    if (clock <> tix) and
-       LockedExc32(clock, tix, clock) then // recompute once every 16 ms
+  begin
+    c := clock; // atomic CAS
+    if (c <> tix) and
+       LockedExc32(clock, tix, c) then // recompute once every 16 ms
     begin
       RawGlobalTime(NewTime, LocalTime);
       safe.WriteLock;
@@ -2378,6 +2380,7 @@ begin
       NewTime := time; // fast copy last decoded value from cache
       safe.ReadUnLock;
     end;
+  end;
 end;
 
 function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): boolean;
