@@ -6023,19 +6023,18 @@ var
   thd: PSynLogThreads;
 begin
   FastAssignNew(result);
-  if not SynLogFileFreeing then
+  if SynLogFileFreeing then
+    exit;
+  ndx := PerThreadInfo.ThreadNumber - 1; // no InitThreadNumber() call
+  if ndx >= 0 then
   begin
-    ndx := PerThreadInfo.ThreadNumber - 1; // no InitThreadNumber() call
-    if ndx >= 0 then
-    begin
-      thd := @SynLogThreads;
-      thd^.Safe.Lock;
-      if ndx < length(thd^.Name) then
-        result := thd^.Name[ndx]; // full thread name
-      thd^.Safe.UnLock;
-    end;
+    thd := @SynLogThreads;
+    thd^.Safe.Lock;
+    if ndx < length(thd^.Name) then
+      result := thd^.Name[ndx]; // full thread name
+    thd^.Safe.UnLock;
   end;
-  if result = '' then // fallback to mormot.core.os default TShort21 behavior
+  if result = '' then // fallback to mormot.core.os default TShort31 value
     ShortStringToAnsi7String(CurrentThreadNameShort^, result);
 end;
 
@@ -7091,8 +7090,18 @@ begin
       if DefaultSynLogExceptionToStr(log.fWriter, Ctxt, {addinfo=}true) then
         goto fin;
 adr:  // regular exception context log with its stack trace
-      log.fWriter.AddDirect(' ', '['); // fThreadContext^.ThreadName may be ''
-      log.fWriter.AddShort(thrdnam^);
+      log.fWriter.AddDirect(' ', '['); // [#1 Main]
+      n := nfo^.ThreadNumber;
+      if n <> 0 then
+      begin
+        log.fWriter.AddDirect('#');
+        log.fWriter.AddU(n);
+      end;
+      if thrdnam^[0] <> #0 then
+      begin
+        log.fWriter.AddDirect(' ');
+        log.fWriter.AddShort(thrdnam^); // fThreadContext^.ThreadName may be ''
+      end;
       log.fWriter.AddShorter('] at ');
       try
         log.fWriter.AddPointer(Ctxt.EAddr);
