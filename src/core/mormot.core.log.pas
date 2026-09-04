@@ -5388,26 +5388,31 @@ begin
   // reset global thread information
   if SynLogFileFreeing then
     exit; // inconsistent call at shutdown
-  thd := @SynLogThreads;
-  thd^.Safe.Lock;
+  SynLogGlobalLock.Lock;
   try
-    // reset this thread name for ptIdentifiedInOneFile
-    if num <= length(thd^.Name) then
-      FastAssignNew(thd^.Name[num - 1]);
-    // mark thread number to be recycled by InitThreadNumber
-    AddWord(thd^.IndexReleased, thd^.IndexReleasedCount, num);
+    thd := @SynLogThreads;
+    thd^.Safe.Lock;
+    try
+      // reset this thread name for ptIdentifiedInOneFile
+      if num <= length(thd^.Name) then
+        FastAssignNew(thd^.Name[num - 1]);
+      // mark thread number to be recycled by InitThreadNumber
+      AddWord(thd^.IndexReleased, thd^.IndexReleasedCount, num);
+    finally
+      thd^.Safe.UnLock;
+    end;
+    // reset this thread naming flag in each TSynLog
+    dec(num);
+    for i := 0 to length(SynLogFamily) - 1 do
+      with SynLogFamily[i] do
+        if (sllInfo in Level) and
+           (PerThreadLog = ptIdentifiedInOneFile) and
+           (fGlobalLog <> nil) and
+           (num < (length(fGlobalLog.fThreadNameLogged) shl 5)) then
+          UnSetBitPtr(fGlobalLog.fThreadNameLogged, num);
   finally
-    thd^.Safe.UnLock;
+    SynLogGlobalLock.UnLock;
   end;
-  // reset this thread naming flag in each TSynLog
-  dec(num);
-  for i := 0 to length(SynLogFamily) - 1 do
-    with SynLogFamily[i] do
-      if (sllInfo in Level) and
-         (PerThreadLog = ptIdentifiedInOneFile) and
-         (fGlobalLog <> nil) and
-         (num < (length(fGlobalLog.fThreadNameLogged) shl 5)) then
-        UnSetBitPtr(fGlobalLog.fThreadNameLogged, num);
 end;
 
 function TSynLog.GetThreadCount: integer;
