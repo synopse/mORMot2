@@ -20,7 +20,7 @@ interface
 
 {$I ..\mormot.defines.inc}
 
-{$ifndef HASUIPDF}
+{$ifndef HAS_UI_PDF}
 
 // do-nothing unit without Delphi VCL or FPC/Lazarus LCL on Windows
 
@@ -12494,7 +12494,7 @@ end;
 {$endif USE_METAFILE}
 
 
-{$endif HASUIPDF}
+{$endif HAS_UI_PDF}
 
 end.
 

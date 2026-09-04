@@ -1176,6 +1176,7 @@
 {$ifndef NO_UI}
   {$define HAS_UI}
   {$ifdef FPC}
+    {$define HAS_UI_LCL}
     {$define HAS_UI_VCL_LCL}
   {$else}
     {$ifndef NO_UI_VCL}

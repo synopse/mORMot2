@@ -16,11 +16,6 @@ program mormot2tests;
 
 uses
   {$I ..\src\mormot.uses.inc} // follow FPC_X64MM or FPC_LIBCMM conditionals
-  {$ifdef HASUIPDF}
-    {$ifdef FPC}
-  Interfaces, // initialize the LCL widgetset used by test.ui.pdf
-    {$endif FPC}
-  {$endif HASUIPDF}
   {$ifdef UNIX}
   cwstring, // needed as fallback if ICU is not available
   {$endif UNIX}
@@ -43,7 +38,6 @@ uses
   mormot.core.log,
   mormot.core.test,
   mormot.db.raw.sqlite3, // for the SQLite3 version below
-
   {$ifdef USEZEOS}
   mormot.db.sql.zeos,
   {$endif USEZEOS}
@@ -74,6 +68,12 @@ uses
   {$ifdef LIBQUICKJSSTATIC}
   test.core.script         in '.\test.core.script.pas',
   {$endif LIBQUICKJSSTATIC}
+  {$ifdef HAS_UI_PDF}
+  {$ifdef FPC}
+  Interfaces, // initialize the LCL widgetset used by test.ui.pdf
+  {$endif FPC}
+  test.ui.pdf            in '.\test.ui.pdf.pas',
+  {$endif HAS_UI_PDF}
   test.net.proto           in '.\test.net.proto.pas',
   test.orm.core            in '.\test.orm.core.pas',
   test.orm.sqlite3         in '.\test.orm.sqlite3.pas',
@@ -81,11 +81,7 @@ uses
   test.orm.threads         in '.\test.orm.threads.pas',
   test.orm.network         in '.\test.orm.network.pas',
   test.soa.core            in '.\test.soa.core.pas',
-  test.soa.network         in '.\test.soa.network.pas'
-  {$ifdef HASUIPDF}
-  , test.ui.pdf            in '.\test.ui.pdf.pas'
-  {$endif HASUIPDF}
-  ;
+  test.soa.network         in '.\test.soa.network.pas';
 
 
 { TIntegrationTests }
@@ -100,9 +96,9 @@ type
     procedure CoreUnits;
     procedure ORM;
     procedure SOA;
-    {$ifdef HASUIPDF}
+    {$ifdef HAS_UI_PDF}
     procedure UI;
-    {$endif HASUIPDF}
+    {$endif HAS_UI_PDF}
   end;
 
 class procedure TIntegrationTests.DescribeCommandLine;
@@ -199,12 +195,12 @@ begin
   ]);
 end;
 
-{$ifdef HASUIPDF}
+{$ifdef HAS_UI_PDF}
 procedure TIntegrationTests.UI;
 begin
   AddCase(TTestUiPdf);
 end;
-{$endif HASUIPDF}
+{$endif HAS_UI_PDF}
 
 
 begin

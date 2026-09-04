@@ -1952,7 +1952,6 @@ var
   hasher: TSynHasher;
   timer: TPrecisionTimer;
   {$ifdef USE_OPENSSL}
-  i: PtrInt;
   e: TRawUtf8DynArray;
   {$endif USE_OPENSSL}
 begin
