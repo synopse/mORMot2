@@ -1955,12 +1955,14 @@ end;
 function TWinIocp.Unsubscribe(var one: PWinIocpSubscription): boolean;
 var
   res: TNetResult;
-  o: PIocpSubscription absolute one;
+  o: PIocpSubscription;
 begin
   result := false;
+  o := pointer(one); // local copy
   if (self = nil) or
-     (one = nil) or
-     fTerminated then
+     fTerminated or
+     (o = nil) or
+     not LockedExc(PPtrUInt(@one)^, 0, PtrUInt(o)) then // CAS one := nil
     exit;
   res := nrOK;
   if Assigned(fOnLog) then
@@ -1977,18 +1979,16 @@ begin
     // - follow documented pattern: shutdown(SD_SEND) + recv()=0 + closesocket
     shutdown(o^.socket, SHUT_WR); // = SD_SEND
     o^.recvclosing := true; // flag for GetNext() to call closesocket()
-    if PrepareNext('unsub', one, wieRecv) then
+    if PrepareNext('unsub', pointer(o), wieRecv) then
     begin
       // started async WSARecv() until the function completes with success
       result := true;
-      one := nil;
       exit;
     end
     else // if failed, graceful disconnect is not possible (already closed)
       closesocket(o^.socket);
   end;
-  result := fOne.Free(one); // one^.sequence will avoid ABA problem in GetNext()
-  one := nil;
+  result := fOne.Free(o); // one^.sequence will avoid ABA problem in GetNext()
 end;
 
 
