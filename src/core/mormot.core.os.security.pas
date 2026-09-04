@@ -7668,7 +7668,7 @@ function GetOneSystemStoreAsPem(CertStore: TSystemCertificateStore;
   FlushCache: boolean): RawUtf8;
 begin
   _OneSystemStoreAsPem[CertStore].Cache(@_GetSystemStoreAsPem,
-    pointer(CertStore), 8, result, FlushCache); // every 256s = 4 min
+    pointer(CertStore), 8, result, FlushCache); // every 2^8=256 sec = 4 min
 end;
 
 function _GetPemLocalFile(dummy: pointer): RawUtf8;

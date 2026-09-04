@@ -5370,8 +5370,8 @@ type
     Tix32: cardinal;
     Value: RawByteString;
     procedure Reset;
-    procedure Cache(Call: TCachedValueCall; CallParam: pointer; TixShr: cardinal;
-      var Dest; Flush: boolean = false);
+    procedure Cache(Call: TCachedValueCall; CallParam: pointer;
+      TixShr: cardinal; var Dest; Flush: boolean = false);
   end;
 
 /// thread-safe cache of a File content with default 1 shl 6 = 64 secs timeout
@@ -11379,8 +11379,7 @@ begin
   Safe.UnLock;
   RawByteString(Dest) := Call(CallParam); // slow method outside of the lock
   Safe.Lock;
-  if TixShr = Tix32 then
-    Value := RawByteString(Dest);
+  Value := RawByteString(Dest);
   Safe.UnLock;
 end;
 
