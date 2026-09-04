@@ -1842,7 +1842,8 @@ begin
   fOptions := aOptions;
   inherited Create;
   {$ifdef USE_WINIOCP}
-  fIocpRecvSend := TWinIocp.Create(aThreadCount, [wioUnsubscribeShutdownSocket]);
+  fIocpRecvSend := TWinIocp.Create(aThreadCount,
+    [wioUnsubscribeShutdownSocket {, wioLockEvent} ]);
   {$else}
   fRead := TPollReadSockets.Create;
   fRead.UnsubscribeShouldShutdownSocket := true;
@@ -3729,6 +3730,7 @@ begin
        (fSockets.fWaitingWrite.Count <> 0) and
        (fLastOperationMS shr 5 <> ms32) then
     begin
+      fLastOperationMS := NowTix;
       fSockets.ProcessWaitingWrite;
       if Terminated then
         exit;
@@ -5606,7 +5608,7 @@ begin
             fAsync.fSockets.ProcessWrite(notif, 0);
           if mscallbacks <> 0 then
           begin
-            tix := GetTickSec shr 6;
+            tix := mormot.core.os.GetTickCount64 shr 16; // see above
             lasttix := tix;
           end;
         {$endif USE_WINIOCP}
