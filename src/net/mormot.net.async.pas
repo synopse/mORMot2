@@ -1028,6 +1028,7 @@ type
     procedure IdleEverySecond; override;
     procedure SetExecuteState(State: THttpServerExecuteState); override;
     procedure DoExecute; override;
+    procedure WakeupServerMainThread;
   published
     /// used for hsoBan40xIP has been defined or via Banned.BlackList
     // - indicates e.g. how many accept() have been rejected from their IP
@@ -5276,6 +5277,12 @@ procedure THttpAsyncConnections.DoExecute;
 begin
   fExecuteAcceptOnly := true; // THttpAsyncServer.Execute will do POSIX writes
   inherited DoExecute;
+end;
+
+procedure THttpAsyncConnections.WakeupServerMainThread;
+begin // e.g. from TWebSocketAsyncConnections.NotifyOutgoing with SendDelay = 0
+  if fAsyncServer <> nil then
+    fAsyncServer.fExecuteEvent.SetEvent;
 end;
 
 procedure THttpAsyncConnections.IdleEverySecond;
