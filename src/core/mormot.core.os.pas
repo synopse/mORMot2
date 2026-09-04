@@ -5561,7 +5561,7 @@ function RawKillThread(Thread: TThread): boolean;
 type
   /// store a bitmask of logical CPU cores, as used by SetThreadMaskAffinity
   // - has 32/64-bit pointer-size on Windows, or 1024 bits on POSIX
-  TCpuSet = {$ifdef OSWINDOWS} PtrUInt {$else} array[0..127] of byte {$endif};
+  TCpuSet = {$ifdef OSWINDOWS} PtrUInt {$else} THash1024 {$endif};
   TCpuSets = array of TCpuSet;
 
 /// low-level bitmasks of logical CPU cores hosted on each hardware CPU socket

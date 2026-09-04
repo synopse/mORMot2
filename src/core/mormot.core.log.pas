@@ -2462,7 +2462,7 @@ type
     FilesDir: TIntegerDynArray;
     Map: TMemoryMap;
     temp: ShortString;
-    numoptable: array[1..255] of byte;
+    numoptable: array[1..255] of byte; // start at index 1 -> no THash2048
     function LoadSections: boolean;
     procedure ReadInit(aBase, aLimit: Int64);
     function ReadLeb128: Int64;

@@ -107,11 +107,11 @@ type
     /// gateway IP address
     giaddr: TNetIP4;
     /// client MAC address - only chaddr[0..5] for htype=1 and hlen=6
-    chaddr: array[0..15] of byte;
+    chaddr: THash128;
     /// server-hostname
-    sname:  array[0..63] of byte;
+    sname:  THash512;
     /// boot-file-name
-    bootfile:  array[0..127] of byte;
+    bootfile: TTemp128;
     /// magic cookie for DHCP encapsulated in BOOTP message
     cookie: cardinal;
     /// the raw DHCP options, as type/len/value triplets, ending with $ff

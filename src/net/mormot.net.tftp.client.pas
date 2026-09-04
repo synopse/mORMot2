@@ -147,7 +147,7 @@ type
             /// the TTftpError value, netword-ordered - at Sequence offset
             ErrorCode: word;
             /// the #0 terminated Error message
-            ErrorMsg: array[0 .. 511] of byte;
+            ErrorMsg: TTemp512;
           );
   end;
   {$A+}

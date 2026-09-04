@@ -2151,7 +2151,7 @@ type
     Index: PtrUInt;
     MLen: QWord;
     Hash: TSha512Hash;
-    Data: array[0..127] of byte;
+    Data: THash1024;
     procedure Init(InitHashes: pointer);
       {$ifdef HASINLINE} inline; {$endif}
     /// perform the final step into Hash private field

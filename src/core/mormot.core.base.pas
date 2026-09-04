@@ -2411,42 +2411,48 @@ type
   THash128 = array[0..15] of byte;
   /// pointer to a 128-bit hash value
   PHash128 = ^THash128;
-
   /// store a 160-bit hash value in 20 bytes of memory
   // - e.g. a SHA-1 digest, or array[0..4] of cardinal
   THash160 = array[0..19] of byte;
   /// pointer to a 160-bit hash value
   PHash160 = ^THash160;
-
   /// store a 192-bit hash value
   // - consumes 24 bytes of memory, or array[0..5] of cardinal
   THash192 = array[0..23] of byte;
   /// pointer to a 192-bit hash value
   PHash192 = ^THash192;
-
   /// store a 224-bit hash value in 28 bytes of memory
   // - e.g. a SHA-224 digest, or array[0..6] of cardinal
   THash224 = array[0..27] of byte;
   /// pointer to a 224-bit hash value
   PHash224 = ^THash224;
-
   /// store a 256-bit hash value in 32 bytes of memory
   // - e.g. a SHA-256 digest, a TEccSignature result, or TBlock256
   THash256 = array[0..31] of byte;
   /// pointer to a 256-bit hash value
   PHash256 = ^THash256;
-
   /// store a 384-bit hash value in 48 bytes of memory
   // - e.g. a SHA-384 digest
   THash384 = array[0..47] of byte;
   /// pointer to a 384-bit hash value
   PHash384 = ^THash384;
-
   /// store a 512-bit hash value in 64 bytes of memory
   // - e.g. a SHA-512 digest, a TEccSignature result, or TBlock512
   THash512 = array[0..63] of byte;
   /// pointer to a 512-bit hash value
   PHash512 = ^THash512;
+  /// store a 1024-bit hash value in 128 bytes of memory
+  THash1024 = array[0..127] of byte;
+  /// pointer to a 1024-bit hash value
+  PHash1024 = ^THash1024;
+  /// store a 2048-bit hash value in 256 bytes of memory
+  THash2048 = array[0..255] of byte;
+  /// pointer to a 2048-bit hash value
+  PHash2048 = ^THash2048;
+  /// store a 4096-bit hash value in 512 bytes of memory
+  THash4096 = array[0..511] of byte;
+  /// pointer to a 4096-bit hash value
+  PHash4096 = ^THash4096;
 
   /// store a 128-bit buffer of 16 bytes, indexed as 32-bit items
   // - e.g. one AES block
@@ -3679,6 +3685,8 @@ type
   TTemp24  = array[0..23] of AnsiChar;
   TTemp32  = array[0..31] of AnsiChar;
   TTemp64  = array[0..63] of AnsiChar;
+  TTemp128 = array[0..127] of AnsiChar;
+  TTemp256 = array[0..255] of AnsiChar;
   TTemp512 = array[0..511] of AnsiChar;
 
   /// define a buffer of 1KB of data
