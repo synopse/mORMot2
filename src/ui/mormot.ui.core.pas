@@ -234,7 +234,6 @@ type
     cySrc: integer;
   end;
 
-  // missing from the FPC Windows unit
   PEMRAlphaBlend = ^TEMRAlphaBlend;
   TEMRAlphaBlend = packed record
     emr: TEMR;

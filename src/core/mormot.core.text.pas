@@ -6706,7 +6706,7 @@ begin
   prepend := StrUInt32(@tmp[23], Value) - p;
   if prepend > 0 then
     FillCharFast(p^, prepend, ord('0'));
-  FastSetString(result, p, digits);
+  FastSetString(result, p, Digits);
 end;
 
 function UInt32ToUtf8(Value: PtrUInt): RawUtf8;

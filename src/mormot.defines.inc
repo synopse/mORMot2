@@ -144,6 +144,7 @@
     HASITERATORS HASIMPLICITOPERATOR HASDBFTWIDE HASDBFNEW
     HASTTHREADSTART HASTTHREADTERMINATESET HASINTERFACEASTOBJECT
     HASEXTRECORDRTTI HASSLOWMUL64
+    HAS_UI HAS_UI_VCL_LCL HAS_UI_PDF
     CPU32 CPU64
     CPUINTEL CPUX86 CPUX64 CPUARM3264 CPUARM CPUAARCH64 CPUX86NOTPIC
     NOASMBLOCK
@@ -151,7 +152,7 @@
     ASMX86 ASMX86NOTPIC ASMX64 ASMX64NOTPIC ASMX64AVX0 ASMX64AVX1
     ABIX86 ABIX64 ABIWINX64 ABISYSVX64 ABIA32 ABIA64 ABIWINA64 ABISYSVA64
     TSYNEXTENDED80 EXTENDEDTOSHORT_USESTR DOUBLETOSHORT_USEGRISU
-    OSWINDOWS OSWINTEL OSWINARM HASUIPDF
+    OSWINDOWS OSWINTEL OSWINARM
     OSPOSIX OSBSD OSDARWIN OSBSDDARWIN OSOPENBSD OSFREEBSD
     OSLINUX OSANDROID OSLINUXINTEL OSLINUXX64 OSLINUXX86
     OSLINUXANDROID OSANDROIDARM64 OSELF OSFUTEX
@@ -844,19 +845,6 @@
   {$define MORMOT24}  // defined since mORMot 2.4 stable
   {.$define MORMOT25} // defined since mORMot 2.5 stable
 
-// mormot.ui.pdf is available with the Delphi VCL or FPC/Lazarus LCL on Windows
-{$ifdef OSWINDOWS}
-  {$ifdef FPC}
-    {$ifdef LCL}
-      {$define HASUIPDF}
-    {$endif LCL}
-  {$else}
-    {$define HASUIPDF}
-  {$endif FPC}
-{$else}
-  {$undef HASUIPDF}
-{$endif OSWINDOWS}
-
 // -----------
 // -- about pascal code expectations
 // DO NOT CHANGE ANYTHING BELOW: our code REQUIRES those values to work properly
@@ -1173,4 +1161,38 @@
 {$if defined(USEWININET) or defined(USELIBCURL)}
   {$define USEHTTPREQUEST}
 {$ifend}
+
+
+// -----------
+// -- Per-platform UI abilities
+
+// you can define the following at project/package level
+{.$define NO_UI}     // disable whole UI path e.g. in mormot2tests
+{.$define NO_UI_VCL} // disable VCL usage on Delphi e.g. for pure FMX
+{.$define NO_UI_PDF} // disable mormot.ui.pdf unit
+
+{$undef HAS_UI}
+{$undef HAS_UI_VCL_LCL}
+{$ifndef NO_UI}
+  {$define HAS_UI}
+  {$ifdef FPC}
+    {$define HAS_UI_VCL_LCL}
+  {$else}
+    {$ifndef NO_UI_VCL}
+      {$define HAS_UI_VCL_LCL}
+    {$endif NO_UI_VCL}
+  {$endif FPC}
+{$endif NO_UI}
+
+// mormot.ui.pdf is available with the Delphi VCL or FPC/Lazarus LCL on Windows
+{$undef HAS_UI_PDF}
+{$ifdef OSWINDOWS}
+  {$ifdef HAS_UI_VCL_LCL}
+    {$define HAS_UI_PDF}
+  {$endif HAS_UI_VCL_LCL}
+{$endif OSWINDOWS}
+{$ifdef NO_UI_PDF}
+  {$undef HAS_UI_PDF}
+{$endif NO_UI_PDF}
+
 

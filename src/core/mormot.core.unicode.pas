@@ -1802,6 +1802,9 @@ function ContainsUtf8(p, up: PUtf8Char): boolean;
 function GetLineContains(p, pEnd, up: PUtf8Char): boolean;
   {$ifdef FPC}inline;{$endif} // Delphi does not like inlining goto+label
 
+/// run PosEx(SubStr, Text) over a given Text buffer until the end
+function CountOccurrences(const SubStr, Text: RawUtf8): integer;
+
 /// copy source into a 256 chars dest^ buffer with 7-bit upper case conversion
 // - used internally for short keys match or case-insensitive hash
 // - returns final dest pointer
@@ -7337,6 +7340,23 @@ begin
     until p = nil;
   end;
   result := false;
+end;
+
+function CountOccurrences(const SubStr, Text: RawUtf8): integer;
+var
+  offset: PtrInt;
+begin
+  result := 0;
+  if SubStr = '' then
+    exit;
+  offset := 1;
+  repeat
+    offset := PosEx(SubStr, Text, offset);
+    if offset = 0 then
+      break;
+    inc(offset, length(SubStr));
+    inc(result);
+  until false;
 end;
 
 function GetNextUtf8Upper(var U: PUtf8Char): Ucs4CodePoint;
