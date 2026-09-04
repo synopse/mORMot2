@@ -193,7 +193,7 @@ type
     fSendSafe: TMultiLightLock; // protect fHandshake+fThread
     fPort, fRemotePort: TNetPort;
     fOptions: TTunnelOptions;
-    fFlags: set of (fSocketCreated, fClosePortNotified);
+    fFlags: set of (fSocketBound, fClosePortNotified);
     fClosed, fVerboseLog: boolean;
     fThread: TTunnelLocalThread;
     fHandshake: TSynQueue;
@@ -746,7 +746,7 @@ begin
   fStarted := true;
   try
     if (fOwner <> nil) and
-       (fSocketCreated in fOwner.fFlags) then
+       (fSocketBound in fOwner.fFlags) then
     begin
       // newsocket() was done in the main thread: blocking accept() now
       fState := stAccepting;
@@ -1054,6 +1054,7 @@ begin
     // bind on port='0' = ephemeral port
     ENetSock.Check(NewSocket(uri.Server, uri.Port, nlTcp, {bind=}true,
       500, 500, 500, {retry=}0, sock, @addr), 'Open');
+    include(fFlags, fSocketBound);
     result := addr.Port;
     if Assigned(log) then
       log.Log(sllTrace, 'Open: bound to %', [addr.IPShort(true)], self);
@@ -1066,7 +1067,6 @@ begin
     if Assigned(log) then
       log.Log(sllTrace, 'Open: connected to %:%', [uri.Server, uri.Port], self);
   end;
-  include(fFlags, fSocketCreated);
   // initial single round trip handshake
   infoaes := nil;
   try
