@@ -827,10 +827,16 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <RequiredPackages Count="1">
+    <RequiredPackages Count="3">
       <Item1>
         <PackageName Value="mormot2"/>
       </Item1>
+      <Item2>
+        <PackageName Value="mormot2ui"/>
+      </Item2>
+      <Item3>
+        <PackageName Value="LCL"/>
+      </Item3>
     </RequiredPackages>
     <Units Count="99">
       <Unit0>

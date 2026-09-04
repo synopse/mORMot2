@@ -4,7 +4,7 @@
 program mormot2tests;
 
 // ---------------------------------------------------------------------
-//  NOTE: on FPC, please first install src/packages/lazarus/mormot2.lpk
+//  NOTE: on FPC/Lazarus, please first install packages/lazarus/mormot2*.lpk
 // ---------------------------------------------------------------------
 
 {$I ..\src\mormot.defines.inc}
@@ -16,6 +16,11 @@ program mormot2tests;
 
 uses
   {$I ..\src\mormot.uses.inc} // follow FPC_X64MM or FPC_LIBCMM conditionals
+  {$ifdef HASUIPDF}
+    {$ifdef FPC}
+  Interfaces, // initialize the LCL widgetset used by test.ui.pdf
+    {$endif FPC}
+  {$endif HASUIPDF}
   {$ifdef UNIX}
   cwstring, // needed as fallback if ICU is not available
   {$endif UNIX}
@@ -76,7 +81,11 @@ uses
   test.orm.threads         in '.\test.orm.threads.pas',
   test.orm.network         in '.\test.orm.network.pas',
   test.soa.core            in '.\test.soa.core.pas',
-  test.soa.network         in '.\test.soa.network.pas';
+  test.soa.network         in '.\test.soa.network.pas'
+  {$ifdef HASUIPDF}
+  , test.ui.pdf            in '.\test.ui.pdf.pas'
+  {$endif HASUIPDF}
+  ;
 
 
 { TIntegrationTests }
@@ -91,6 +100,9 @@ type
     procedure CoreUnits;
     procedure ORM;
     procedure SOA;
+    {$ifdef HASUIPDF}
+    procedure UI;
+    {$endif HASUIPDF}
   end;
 
 class procedure TIntegrationTests.DescribeCommandLine;
@@ -186,6 +198,13 @@ begin
     TTestBidirectionalRemoteConnection
   ]);
 end;
+
+{$ifdef HASUIPDF}
+procedure TIntegrationTests.UI;
+begin
+  AddCase(TTestUiPdf);
+end;
+{$endif HASUIPDF}
 
 
 begin

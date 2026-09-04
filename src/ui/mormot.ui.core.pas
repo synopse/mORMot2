@@ -206,6 +206,7 @@ const
   EMR_EXTCREATEPEN = 95;
   EMR_SETICMMODE = 98;
   EMR_SMALLTEXTOUT = 108;
+  EMR_ALPHABLEND = 114;
   EMR_ALPHADIBBLEND = 115;
   EMR_TRANSPARENTBLT = 116;
   EMR_GRADIENTFILL = 118;
@@ -229,6 +230,29 @@ type
     cbBmiSrc: DWORD;         { Size of the source TBitmapInfo structure}
     offBitsSrc: DWORD;       { Offset to the source bitmap bits}
     cbBitsSrc: DWORD;        { Size of the source bitmap bits}
+    cxSrc: integer;
+    cySrc: integer;
+  end;
+
+  // missing from the FPC Windows unit
+  PEMRAlphaBlend = ^TEMRAlphaBlend;
+  TEMRAlphaBlend = packed record
+    emr: TEMR;
+    rclBounds: TRect;
+    xDest: integer;
+    yDest: integer;
+    cxDest: integer;
+    cyDest: integer;
+    dwRop: DWORD;
+    xSrc: integer;
+    ySrc: integer;
+    xformSrc: XFORM;
+    crBkColorSrc: COLORREF;
+    iUsageSrc: DWORD;
+    offBmiSrc: DWORD;
+    cbBmiSrc: DWORD;
+    offBitsSrc: DWORD;
+    cbBitsSrc: DWORD;
     cxSrc: integer;
     cySrc: integer;
   end;
