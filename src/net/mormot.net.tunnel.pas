@@ -1414,7 +1414,7 @@ begin
   try
     ndx := IntegerScanIndex(pointer(fSession), fCount, aSession);
     if ndx >= 0 then
-      result := LockedExtract(ndx, aTunnel);
+      result := LockedExtract(ndx, aTunnel); // = delete in list + local copy
   finally
     fSafe.WriteUnLock;
   end;
@@ -1494,20 +1494,20 @@ begin
     begin
       ndx := IntegerScanIndex(pointer(fSession), fCount, aSession);
       if ndx >= 0 then
-        result := LockedExtract(ndx, tunnel);
+        result := LockedExtract(ndx, tunnel); // = delete in list + local copy
     end;
   finally
     fSafe.WriteUnLock;
   end;
   if tunnel = nil then
     exit;
-  fInfoCacheTix32 := 0; // flush cache info
-  InterfaceNilSafe(tunnel); // final release outside fSafe
+  fInfoCacheTix32 := 0;     // flush cache info
+  InterfaceNilSafe(tunnel); // eventually release outside fSafe
 end;
 
 function TTunnelList.PurgeTransient(aTimeOutSecs: cardinal): integer;
 var
-  tix32, tix4: cardinal;
+  tix32, tix4, c4: cardinal;
   i, n, ndx: PtrInt;
   session: TTunnelSession;
   tunnel: ITunnelTransmit;
@@ -1518,22 +1518,21 @@ begin
     exit;
   tix32 := GetTickSec;
   tix4 := tix32 shr 4; // searching only every 16 seconds is enough
-  if fDeprecatedTix4 = tix4 then
+  c4 := fDeprecatedTix4;
+  if (c4 = tix4) or
+     not LockedExc32(fDeprecatedTix4, tix4, c4) then
     exit;
   fSafe.WriteLock;
   try
-    if fDeprecatedTix4 = tix4 then
-      exit;
-    fDeprecatedTix4 := tix4;
     i := fPendingCount - 1;
     while i >= 0 do
     begin
-      if cardinal(fPendingTix[i]) + aTimeOutSecs < tix32 then
+      if tix32 - cardinal(fPendingTix[i]) > aTimeOutSecs then
       begin
         session := fPendingSession[i];
         ndx := IntegerScanIndex(pointer(fSession), fCount, session);
         if (ndx >= 0) and
-           LockedExtract(ndx, tunnel) then
+           LockedExtract(ndx, tunnel) then // = delete in list + local copy
         begin
           // keep a strong local copy so final _Release happens only after unlock
           n := length(garbage);
@@ -1550,7 +1549,8 @@ begin
   finally
     fSafe.WriteUnLock;
   end;
-  fInfoCacheTix32 := 0; // flush cache info
+  if result <> 0 then
+    fInfoCacheTix32 := 0; // flush cache info
   garbage := nil; // final interface releases outside fSafe
 end;
 
