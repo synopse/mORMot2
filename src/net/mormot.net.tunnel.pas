@@ -999,6 +999,16 @@ begin
     inc(fFramesIn);
     if fHandshake <> nil then
     begin
+      // handle special rendez-vous initial phase
+      if l = 0 then
+      begin
+        // received frame with only session (and no payload) to notify as closed
+        include(fFlags, fClosePortNotified);
+        if fHandshakeEvent <> nil then
+          fHandshakeEvent.SetEvent;
+        fClosed := true;
+        exit;
+      end;
       fLogClass.Add.Log(sllTrace, 'TunnelSend: into Handshake queue', self);
       fHandshake.Push(aFrame); // during handshake phase - maybe before Open
       if fHandshakeEvent <> nil then
