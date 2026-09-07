@@ -65,7 +65,7 @@ type
   PTunnelOptions = ^TTunnelOptions;
 
   /// a session identifier which should match on both sides of the tunnel
-  // - typically a NetRandom32 or a TBinaryCookieGeneratorSessionID value
+  // - typically a 31-bit PRNG item or a TBinaryCookieGeneratorSessionID value
   TTunnelSession = cardinal;
   PTunnelSession = ^TTunnelSession;
 
@@ -1950,6 +1950,7 @@ function TTunnelRelay.PrepareNewSession(const aEndPoint: ITunnelOpenState;
   const callback: ITunnelTransmit): TTunnelSession;
 var
   n: integer;
+  rnd: THash128Rec;
 begin
   result := 0;
   if (self = nil) or
@@ -1962,9 +1963,15 @@ begin
   try
     for n := 1 to 50 do
     begin
-      repeat
-        result := NetRandom32 shr 4;
-      until result <> 0;
+      FillZero(rnd.b);
+      Random128(@rnd); // should be unpredictable
+      result := rnd.c0 mod 1000000000; // 9 digits from 32-bit
+      if result = 0 then
+        result := rnd.c1 mod 1000000000;
+      if result = 0 then
+        result := rnd.c2 mod 1000000000;
+      if result = 0 then
+        exit; // Random128() is clearly broken
       if not fAgent.fState.Exists(result) and
          (LockedFindConsole(result) = nil) then
         break;
