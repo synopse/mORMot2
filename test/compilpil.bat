@@ -13,7 +13,7 @@ if "%bin%"==""    set bin=c:\temp\tempbuild
 if "%target%"=="" set target=win32
 
 set units=%lib2%\src\core;%lib2%\src\net;%lib2%\src\lib;%lib2%\src\db;%lib2%\src\rest;%lib2%\src\soa;%lib2%\src\crypt;%lib2%\src\script;%lib2%\src\orm;%lib2%\src\app;%lib2%\src\ui;%lib2%\src\misc
-set sw=-B -Q -GD -R%lib2%\src -I%lib2%\src;%lib2%\src\core -U%units% -E%bin%\exe -N%bin%\dcu -NSSystem;Xml;Data;Datasnap;Web;Soap;Winapi;Vcl;System.Win
+set sw=-B -O+ -Q -GD -R%lib2%\src -I%lib2%\src;%lib2%\src\core -U%units% -E%bin%\exe -N%bin%\dcu -NSSystem;Xml;Data;Datasnap;Web;Soap;Winapi;Vcl;System.Win
 rem set sw=%sw% -DUSE_OPENSSL -DFORCE_OPENSSL
 
 if "%DelphiVersion%"=="" (
@@ -21,6 +21,9 @@ if "%DelphiVersion%"=="" (
 	set DCC=c:\progs\delphi7\bin\dcc32.exe
 	set DelphiVersion=Delphi 7
 	set sw=%sw% -U%lib2%\..\lib\rtl7 -I%lib2%\..\lib\rtl7
+) else (
+  rem ** most our local compilers have no VCL units
+  set sw=%sw% -DNO_UI
 )
 
 if not exist %DCC% goto NoDCCCompiler
