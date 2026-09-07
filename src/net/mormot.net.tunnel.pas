@@ -216,6 +216,12 @@ type
     // can be overriden to customize this class process
     procedure AfterHandshake; virtual;
     procedure OnTunnelInfo(var Info: TDocVariantData); virtual;
+    function OpenInternal(Sess: TTunnelSession;
+      const Transmit: ITunnelTransmit; TransmitOptions: TTunnelOptions;
+      TimeOutMS: integer; const AppSecret: RawUtf8; Sock: TNetSocket;
+      LocalPort: TNetPort; SocketBound: boolean;
+      const InfoNameValue: array of const;
+      const SignCert, VerifyCert: ICryptCert): TNetPort;
   public
     /// initialize the instance for process
     // - if no Context value is supplied, will compute an ephemeral key pair
@@ -223,6 +229,33 @@ type
     // tunnelling thread
     constructor Create(Logger: TSynLogClass = nil;
       SpecificKey: PEccKeyPair = nil); reintroduce;
+    /// wait until the peer has actually started its tunnel handshake
+    // - this is an event-driven synchronization helper for demand-driven
+    // forwarding, and does not consume nor reorder the first handshake frame
+    // - Sess should be the identifier returned by ITunnelOpen.TunnelPrepare()
+    // or supplied to ITunnelOpen.TunnelAccept()
+    // - returns immediately if a handshake frame was already queued, otherwise
+    // waits up to TimeOutMS for ITunnelTransmit.TunnelSend() to receive one
+    // - returns false on timeout, ClosePort(), or if Open()/OpenSocket() already
+    // started; raises ETunnel if the queued frame belongs to another session
+    // - there should be a single waiter per TTunnelLocal instance; never have
+    // both tunnel ends only call WaitForHandshake(), since one end must initiate
+    // the handshake by calling Open() or OpenSocket()
+    function WaitForHandshake(Sess: TTunnelSession; TimeOutMS: integer): boolean;
+    /// start tunnelling over an already-connected TCP socket
+    // - intended for demand-driven port forwarding: the application may bind
+    // and accept/connect its TCP socket itself, then let TTunnelLocal handle the
+    // end-to-end handshake, optional encryption, and byte forwarding
+    // - on a valid call, Socket ownership is transferred before the handshake
+    // and Socket is set to nil; invalid arguments leave Socket untouched
+    // - TTunnelLocal closes the transferred socket on failure or tunnel end
+    // - LocalPort is only metadata exchanged by the handshake and should be the
+    // local listening/target TCP port associated with Socket (1..65535)
+    function OpenSocket(Sess: TTunnelSession; const Transmit: ITunnelTransmit;
+      TransmitOptions: TTunnelOptions; TimeOutMS: integer;
+      const AppSecret: RawUtf8; var Socket: TNetSocket; LocalPort: TNetPort;
+      const InfoNameValue: array of const; const SignCert: ICryptCert = nil;
+      const VerifyCert: ICryptCert = nil): TNetPort;
     /// main method to initialize tunnelling process
     // - Sess genuine integer identifier should match on both sides
     // - Transmit.TunnelSend will be used for sending raw data to the other end
@@ -419,29 +452,54 @@ type
   // - with shared methods to validate or cancel a two-phase startup
   // - here "agent" is a simple TTunnelLocal application opening a localhost
   // port, for transmitting some information (e.g. a VNC server) to a remote
-  // "console" with its own TTunnelLocal redirected port (e.g. a VNC viewer)
-  // - the steps of a TTunnelRelay session are therefore:
-  // 1) TTunnelLocalClient/TTunnelLocalServer.Create as ITunnelTransmit callbacks
-  // 2) ITunnelConsole/ITunnelAgent.TunnelPrepare() to retrieve a session ID;
-  // 3) ITunnelAgent/ITunnelConsole.TunnelAccept() with this session ID;
-  // 4) TTunnelLocal.Open() on the console and agent sides to start tunnelling
-  // on a localhost TCP port (as server or client);
-  // 5a) ITunnelOpen.TunnelCommit or TunnelRollback against Open() result or
-  // 5b) after a timeout, the relay would delete any TunnelPrepare missing
-  // proper TunnelAccept or TunnelCommit/TunnelRollback from its internal list
+  // "console" with its own local TCP endpoint (e.g. a VNC viewer)
+  // - one TTunnelSession always represents one TCP byte stream; several local
+  // clients should therefore use distinct sessions even if they all connect to
+  // the same backend server, just like several SSH forwarding channels
+  // - the existing eager/static startup remains:
+  // 1) create TTunnelLocalClient/TTunnelLocalServer callbacks;
+  // 2) call TunnelPrepare() on either endpoint to retrieve a session ID;
+  // 3) call TunnelAccept() on the other endpoint with this session ID;
+  // 4) call TTunnelLocal.Open() on both endpoints (one call usually executes in
+  // another thread because the two handshakes are reciprocal);
+  // 5) after both Open() calls succeed, call TunnelCommit() on both endpoints,
+  // or TunnelRollback() on startup failure
+  // - an SSH -R-like demand-driven startup, which does not connect the backend
+  // until a real local client has arrived, should instead be:
+  // 1) create the two TTunnelLocal callbacks and run TunnelPrepare/TunnelAccept;
+  // no backend TCP connection is needed at this stage;
+  // 2) on the side exposing the forwarded port, bind/accept the application TCP
+  // connection outside TTunnelLocal (e.g. accept the VNC viewer);
+  // 3) call TTunnelLocal.OpenSocket() with this accepted socket; it emits the
+  // first end-to-end handshake frame and waits for its peer;
+  // 4) on the backend side, WaitForHandshake() wakes from that actual frame,
+  // then connect the backend and call Open(Address:port), or call OpenSocket()
+  // if the backend socket was established by the application;
+  // 5) after both Open/OpenSocket calls succeed, call TunnelCommit() on both
+  // endpoints; rollback only this TTunnelSession if the backend connection fails
+  // - this workflow needs no Sleep(), ReadLn(), timer polling, nor frame counter:
+  // TCP accept/connect and the handshake event are the synchronization points
+  // - a pending session is already routable because the handshake itself has to
+  // cross the relay before TunnelCommit(); a protocol such as VNC may therefore
+  // emit its initial server banner immediately once Open() starts its data thread
+  // - after a timeout, the relay deletes any TunnelPrepare missing a matching
+  // TunnelAccept or TunnelCommit/TunnelRollback from its internal list
   ITunnelOpen = interface(ITunnelTransmit)
     /// initiate a new relay process as a two-phase commit from this end
-    // - caller should call this method, then TTunnelLocal.Open() on its side,
-    // and once the handshake is OK or KO, call TunnelCommit or TunnelRollback
+    // - caller may immediately call TTunnelLocal.Open/OpenSocket on its side;
+    // for demand-driven forwarding it may instead call WaitForHandshake() and
+    // defer its backend TCP connection until the peer has a real local client
+    // - once the handshake is OK or KO, call TunnelCommit or TunnelRollback
     function TunnelPrepare(const callback: ITunnelTransmit): TTunnelSession;
     /// accept a new relay process as a two-phase commit from this end
     // - the relay was initiated by TunnelPrepare on the other end, and the
     // returned  session should be specified to this method
-    // - caller should call this method, then TTunnelLocal.Open() on its side,
-    // and once the handshake is OK or KO, call TunnelCommit or TunnelRollback
+    // - caller may call Open/OpenSocket immediately, or use WaitForHandshake()
+    // to defer a backend connection as described in the ITunnelOpen workflow
+    // - once the handshake is OK or KO, call TunnelCommit or TunnelRollback
     function TunnelAccept(aSession: TTunnelSession;
       const callback: ITunnelTransmit): boolean;
-    /// finalize a relay process startup after Open() success
+    /// finalize a relay process startup after Open()/OpenSocket() success
     // - now ITunnelTransmit.TunnelSend will redirect frames from both sides
     function TunnelCommit(aSession: TTunnelSession): boolean;
     /// abort a relay after Open() failed
@@ -1070,6 +1128,87 @@ var
   uri: TUri;
   sock: TNetSocket;
   addr: TNetAddr;
+  port: TNetPort;
+  bound: boolean;
+begin
+  // preserve the public Open(Address) contract, but keep all cryptographic
+  // handshake/thread setup in OpenInternal() so OpenSocket() can share it
+  if (fPort <> 0) or
+     (not Assigned(Transmit)) then
+    ETunnel.RaiseUtf8('%.Open invalid call', [self]);
+  if (fThread <> nil) or
+     (fHandshake = nil) then
+    ETunnel.RaiseUtf8('%.Open called twice', [self]);
+  if not uri.From(Address, '0') then
+    ETunnel.RaiseUtf8('%.Open invalid %', [self, Address]);
+  sock := nil;
+  port := uri.PortInt;
+  bound := port = 0;
+  if bound then
+  begin
+    // bind on port='0' = ephemeral port
+    ENetSock.Check(NewSocket(uri.Server, uri.Port, nlTcp, {bind=}true,
+      500, 500, 500, {retry=}0, sock, @addr), 'Open');
+    port := addr.Port;
+    if fLogClass <> nil then
+      fLogClass.Add.Log(sllTrace, 'Open: bound to %',
+        [addr.IPShort(true)], self);
+  end
+  else
+  begin
+    // connect to a local socket on address:port
+    ENetSock.Check(
+      NewTcpClientSocket(uri.Server, uri.Port, TimeOutMS, sock, @addr), 'Open');
+    if fLogClass <> nil then
+      fLogClass.Add.Log(sllTrace, 'Open: connected to %:%',
+        [uri.Server, uri.Port], self);
+  end;
+  try
+    result := OpenInternal(Sess, Transmit, TransmitOptions, TimeOutMS, AppSecret,
+      sock, port, bound, InfoNameValue, SignCert, VerifyCert);
+  except
+    sock.ShutdownAndClose(true); // only needed for failures before OpenInternal
+    raise;
+  end;
+end;
+
+function TTunnelLocal.OpenSocket(Sess: TTunnelSession;
+  const Transmit: ITunnelTransmit; TransmitOptions: TTunnelOptions;
+  TimeOutMS: integer; const AppSecret: RawUtf8; var Socket: TNetSocket;
+  LocalPort: TNetPort; const InfoNameValue: array of const;
+  const SignCert, VerifyCert: ICryptCert): TNetPort;
+var
+  sock: TNetSocket;
+begin
+  if (fPort <> 0) or
+     (not Assigned(Transmit)) or
+     (Socket = nil) or
+     (LocalPort = 0) or
+     (LocalPort > 65535) then
+    ETunnel.RaiseUtf8('%.OpenSocket invalid call', [self]);
+  if (fThread <> nil) or
+     (fHandshake = nil) then
+    ETunnel.RaiseUtf8('%.OpenSocket called twice', [self]);
+  // ownership is transferred before the handshake: on any later failure the
+  // socket is closed by OpenInternal(), and the caller can never double-close
+  sock := Socket;
+  Socket := nil;
+  try
+    result := OpenInternal(Sess, Transmit, TransmitOptions, TimeOutMS, AppSecret,
+      sock, LocalPort, {SocketBound=}false, InfoNameValue, SignCert, VerifyCert);
+  except
+    sock.ShutdownAndClose(true); // caller no longer owns Socket
+    raise;
+  end;
+end;
+
+function TTunnelLocal.OpenInternal(Sess: TTunnelSession;
+  const Transmit: ITunnelTransmit; TransmitOptions: TTunnelOptions;
+  TimeOutMS: integer; const AppSecret: RawUtf8; Sock: TNetSocket;
+  LocalPort: TNetPort; SocketBound: boolean;
+  const InfoNameValue: array of const;
+  const SignCert, VerifyCert: ICryptCert): TNetPort;
+var
   l, li: PtrInt;
   frame, remote, info: RawByteString;
   infoaes: TAesCtr;
@@ -1094,37 +1233,12 @@ begin
   IncludeOptionsFromCert; // adjust from fSignCert/fVerifyCert
   if fLogClass <> nil then
     fLogClass.EnterLocal(log, 'Open(%,[%])', [Int64(Sess), ToText(fOptions)], self);
-  if (fPort <> 0) or
-     (not Assigned(Transmit)) then
-    ETunnel.RaiseUtf8('%.Open invalid call', [self]);
-  if not uri.From(Address, '0') then
-    ETunnel.RaiseUtf8('%.Open invalid %', [self, Address]);
   fTransmit := Transmit;
-  // bind to a local (ephemeral) port
-  if (fThread <> nil) or
-     (fHandshake = nil) then
-    ETunnel.RaiseUtf8('%.Open called twice', [self]);
   fPort := 0;
   fFlags := [];
-  result := uri.PortInt;
-  if result = 0 then
-  begin
-    // bind on port='0' = ephemeral port
-    ENetSock.Check(NewSocket(uri.Server, uri.Port, nlTcp, {bind=}true,
-      500, 500, 500, {retry=}0, sock, @addr), 'Open');
+  if SocketBound then
     include(fFlags, fSocketBound);
-    result := addr.Port;
-    if Assigned(log) then
-      log.Log(sllTrace, 'Open: bound to %', [addr.IPShort(true)], self);
-  end
-  else
-  begin
-    // connect to a local socket on address:port
-    ENetSock.Check(
-      NewTcpClientSocket(uri.Server, uri.Port, TimeOutMS, sock, @addr), 'Open');
-    if Assigned(log) then
-      log.Log(sllTrace, 'Open: connected to %:%', [uri.Server, uri.Port], self);
-  end;
+  result := LocalPort;
   // initial single round trip handshake
   infoaes := nil;
   try
