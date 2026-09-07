@@ -260,6 +260,8 @@ type
     procedure PortText(var result: RawUtf8);
     /// set the network port (0..65535) of this address
     function SetPort(p: TNetPort): TNetResult;
+    /// quickly check if holds 127.x.x.x. IPv4 loopback or ::1 IPv6 loopback
+    function IsLoopback: boolean;
     /// compute the number of bytes actually used in this address buffer
     function Size: integer;
       {$ifdef FPC}inline;{$endif}
@@ -3083,6 +3085,22 @@ begin
   end
   else
     result := nrNotFound;
+end;
+
+function TNetAddr.IsLoopback: boolean;
+var
+  ad4: TSockAddr absolute Addr;
+  ad6: TSockAddrIn6 absolute Addr;
+begin
+  case ad4.sa_family of
+    AF_INET:
+      result := PByte(@ad4.sin_addr)^ = 127; // any 127.x.x.x e.g. cLocalhost32
+    AF_INET6:
+       with ad6.sin6_addr do // check ::1
+         result := (c0 = 0) and (c1 = 0) and (c2 = 0) and (c3 = $01000000);
+  else
+    result := false;
+  end;
 end;
 
 function TNetAddr.SetIP4Port(ipv4: TNetIP4; netport: TNetPort): TNetResult;
