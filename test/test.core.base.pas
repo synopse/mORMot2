@@ -186,7 +186,7 @@ type
     a: TOrmPeopleObjArray;
     fAdd, fDel: RawUtf8;
     fQuickSelectValues: TIntegerDynArray;
-    rnd: TLecuyer;
+    rnd: PLecuyer;
     procedure Setup; override;
     function QuickSelectGT(IndexA, IndexB: PtrInt): boolean;
     procedure intadd(const Sender; Value: integer);
@@ -354,7 +354,7 @@ end;
 
 procedure TTestCoreBase.Setup;
 begin
-  RandomLecuyer(rnd);
+  rnd := ThreadRandom; // reference to the main thread generator
 end;
 
 {$ifdef FPC_X64MM}
@@ -2124,7 +2124,7 @@ begin
   U := '3000';
   Check(AUP.IndexOf(U) < 0);
   Test := AUP.SaveTo;
-  CheckEqual(Hash32(@Test[2], length(Test) - 1), $1EC51463, 'hash32e');
+  CheckHash(@Test[2], length(Test) - 1, $1EC51463, 'hash32e');
   // trimed Test[1]=ElemSize
   for i := 0 to 1000 do
   begin
@@ -4085,8 +4085,9 @@ var
   timer: TPrecisionTimer;
   gen: TLecuyer;
 begin
+  RandomLecuyer(gen); // local instance to avoid any thread influence
   for i := 0 to high(c) do
-    c[i] := Random32;
+    c[i] := gen.Next;
   QuickSortInteger(@c, 0, high(c));
   n := 0;
   for i := 0 to high(c) - 1 do
@@ -4094,17 +4095,17 @@ begin
       inc(n);
   Check(n < 2, 'unique Random32'); // n=1 have been seen once
   timer.Start;
-  Check(Random32(0) = 0);
-  Check(Random32(1) = 0);
+  Check(gen.Next(0) = 0);
+  Check(gen.Next(1) = 0);
   for i := 1 to 100000 do
-    Check(Random32(i) < cardinal(i));
+    Check(gen.Next(i) < cardinal(i));
   for i := 0 to 100000 do
-    Check(Random32(maxInt - i) < cardinal(maxInt - i));
+    Check(gen.Next(maxInt - i) < cardinal(maxInt - i));
   qp := 0;
   n := 0;
   for i := 1 to 20000 do
   begin
-    q := Random64;
+    q := gen.NextQWord;
     Check((q = 0) or (q <> qp));
     if q and $ffffffff00000000 <> 0 then
       inc(n);
@@ -4115,14 +4116,14 @@ begin
   NotifyTestSpeed('Random32', n, n * 4, @timer);
   timer.Start;
   for i := 1 to 100 do
-    RandomBytes(@c, SizeOf(c));
+    gen.Fill(@c, SizeOf(c));
   NotifyTestSpeed('RandomBytes', 0, SizeOf(c) * 100, @timer);
   for i := 0 to high(REF_LECUYER_GENERATOR) do
   begin
     gen.SeedGenerator(i);
     FillCharFast(c, SizeOf(c), 0); // gen.Fill() will XOR the buffer
     gen.Fill(@c, SizeOf(c));
-    CheckEqual(Hash32(@c, SizeOf(c)), REF_LECUYER_GENERATOR[i], 'lecgen');
+    CheckHash(@c, SizeOf(c), REF_LECUYER_GENERATOR[i], 'lecgen');
     CheckEqual(gen.Next, REF_LECUYER_GENERATOR_TRAIL[i], 'lecgentrail');
   end;
 end;
@@ -5033,7 +5034,7 @@ begin
   for i := 11 to 120 do
     AppendShortCardinal(i, a);
   CheckEqual(length(a), 253);
-  CheckEqual(Hash32(@a[1], ord(a[0])), $1CDCEE09, 'AppendShortCardinal');
+  CheckHash(@a[1], ord(a[0]), $1CDCEE09, 'AppendShortCardinal');
   a := '';
   AppendShortByte(0, @a);
   check(a = '0');
@@ -5043,7 +5044,7 @@ begin
   for i := 11 to 120 do
     AppendShortByte(i, @a);
   CheckEqual(length(a), 253);
-  CheckEqual(Hash32(@a[1], ord(a[0])), $1CDCEE09, 'AppendShortByte');
+  CheckHash(@a[1], ord(a[0]), $1CDCEE09, 'AppendShortByte');
   CheckEqualShort(TwoDigits(0), '0');
   CheckEqualShort(TwoDigits(1), '1');
   CheckEqualShort(TwoDigits(10), '10');
@@ -6026,6 +6027,7 @@ var
   WS: WideString;
   SU, SU2: SynUnicode;
   WU: array[0..3] of WideChar;
+  WU2: array[0..15] of WideChar;
   str: string;
   ss: ShortString;
   fn: TFileName;
@@ -7081,8 +7083,18 @@ begin
   Check(Utf8ToUnicodeLength(Pointer(U)) = 2);
   Check(Utf8FirstLineToUtf16Length(Pointer(U)) = 2);
   PCardinal(@WU)^ := 0;
-  if CheckEqual(Utf8ToWideChar(WU, pointer(U), SizeOf(WU), length(U), false), 4) then
+  if CheckEqual(Utf8ToWideChar(WU, pointer(U), length(WU), length(U), false), 4) then
     Check(PCardinal(@WU)^ = $DCD2D863);
+  // ensure MaxDestChars is a WideChar count - not a byte count
+  U := 'abcdefgh';
+  FillCharFast(WU2, SizeOf(WU2), 0);
+  CheckEqual(Utf8ToWideChar(@WU2, pointer(U), length(WU2), length(U), false), 16);
+  CheckEqual(StrLenW(@WU2), 8);
+  FillCharFast(WU2, SizeOf(WU2), 0);
+  CheckEqual(Utf8ToWideChar(@WU2, pointer(U), 5, length(U), false), 10);
+  CheckEqual(StrLenW(@WU2), 5);
+  SU2 := 'abcde';
+  Check(CompareMem(@WU2, pointer(SU2), 10), 'truncate at MaxDestChars');
   U := SynUnicodeToUtf8(SU);
   if Check(length(U) = 4) then
     Check(PCardinal(U)^ = $92b3a8f0);
@@ -10192,7 +10204,7 @@ var
   i, j, n: integer;
   fa: TFileAge;
   fdt: TDateTime;
-  fs: Int64;
+  fs, sz: Int64;
   fu: TUnixMSTime;
   fn: array[0..10] of TFileName;
   mp, mp2: TMultiPartDynArray;
@@ -10401,6 +10413,39 @@ begin
     DecodeAndTest;
     DecodeStreamAndTest(4096);
     DecodeStreamAndTest(65536);
+    // Flush should be idempotent: THttpClientSocket calls Seek(0, soBeginning)
+    // before sending the body, which triggers Flush again - the closing
+    // boundary was appended once more and the sent body exceeded the
+    // Content-Length: computed from Size - see #565
+    sz := st.Size;
+    CheckEqual(sz, length(mpc), 'st size');
+    st.Flush;
+    CheckEqual(st.Size, sz, 'st flush twice');
+    st.Seek(0, soBeginning);
+    CheckEqual(st.Size, sz, 'st rewind');
+    CheckEqual(StreamToRawByteString(st), mpc, 'st read twice');
+    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+    try
+      raised := false;
+      try
+        st.AddContent('late', 'not allowed after Flush');
+      except
+        on EHttpSocket do
+          raised := true;
+      end;
+      Check(raised, 'st add after flush');
+      raised := false;
+      try
+        st.AddFile('late', fn[0]); // should not even open the file
+      except
+        on EHttpSocket do
+          raised := true;
+      end;
+      Check(raised, 'st addfile after flush');
+      CheckEqual(st.Size, sz, 'st size after failed add');
+    finally
+      TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+    end;
     st.Free;
     for i := 0 to high(fn) do
       check(DeleteFile(fn[i]));
@@ -11232,7 +11277,7 @@ const
   MAX = 10000;
 var
   dict: TSynDictionary;
-  rnd: TLecuyer; // local per-thread instance
+  rnd: PLecuyer; // local per-thread instance
 
   procedure TestSpeed(Count: integer; SetCapacity, DoText: boolean;
     Hasher: THasher; const Msg: RawUtf8);
@@ -11329,7 +11374,7 @@ var
   b: byte;
   sdk: TSDKey;
 begin
-  RandomLecuyer(rnd); // local per-thread generator
+  rnd := ThreadRandom; // use the TLecuyer of this thread
   SetDict;
   try
     CheckEqual(dict.Count, 0);

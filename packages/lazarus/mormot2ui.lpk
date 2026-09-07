@@ -32,21 +32,23 @@
 -dFPCMM_REPORTMEMORYLEAKS
 -dFPCMM_DEBUG
 -dNOSYNDBIBX
--dFPCMM_SERVER"/>
-        <OtherDefines Count="6">
+-dFPCMM_SERVER
+-dHASUIPDF"/>
+        <OtherDefines Count="7">
           <Define0 Value="NOSYNDBZEOS"/>
           <Define1 Value="FPCMM_REPORTMEMORYLEAKS"/>
           <Define2 Value="FPCMM_DEBUG"/>
           <Define3 Value="FPCMM_ASSUMEMULTITHREAD"/>
           <Define4 Value="NOSYNDBIBX"/>
           <Define5 Value="FPCMM_SERVER"/>
+          <Define6 Value="HASUIPDF"/>
         </OtherDefines>
       </Other>
     </CompilerOptions>
     <Description Value="mORMot 2 framework LCL Components "/>
     <License Value="MPL, GPL or LGPL"/>
     <Version Major="2" Minor="4"/>
-    <Files Count="4">
+    <Files Count="5">
       <Item1>
         <Filename Value="../../src/ui/mormot.ui.grid.orm.pas"/>
         <UnitName Value="mormot.ui.grid.orm"/>
@@ -63,6 +65,10 @@
         <Filename Value="../../src/ui/mormot.ui.core.pas"/>
         <UnitName Value="mormot.ui.core"/>
       </Item4>
+      <Item5>
+        <Filename Value="../../src/ui/mormot.ui.pdf.pas"/>
+        <UnitName Value="mormot.ui.pdf"/>
+      </Item5>
     </Files>
     <CompatibilityMode Value="True"/>
     <RequiredPkgs Count="2">

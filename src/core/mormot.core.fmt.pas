@@ -5255,20 +5255,19 @@ end;
 
 function IdemPChar2(table: PNormTable; p: PUtf8Char; up: PAnsiChar): boolean;
   {$ifdef HASINLINE}inline;{$endif}
-var
-  u: AnsiChar;
 begin
-  // here p and up are expected to be <> nil
-  result := false;
+  // in this local IdemPChar() version, p and up are expected to be <> nil
   dec(PtrUInt(p), PtrUInt(up));
-  repeat
-    u := up^;
-    if u = #0 then
-      break;
-    if table^[up[PtrUInt(p)]] <> u then
+  while true do
+    if up^ = #0 then
+      break
+    else if table[up[PtrUInt(p)]] = up^ then
+      inc(up)
+    else
+    begin
+      result := false;
       exit;
-    inc(up);
-  until false;
+    end;
   result := true;
 end;
 

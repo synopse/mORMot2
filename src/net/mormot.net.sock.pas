@@ -1428,12 +1428,12 @@ type
   protected
     fMergeSubscribeEventsLock: TLightLock; // topmost to ensure aarch64 alignment
     fSubscriptionSafe: TLightLock; // dedicated not to block Accept()
-    fPendingSafe: TOSLightLock; // TLightLock seems less stable on high-end HW
+    fPendingSafe: TLightLock;      // RW or OS lock are slower (low contention)
+    fGettingOne: integer;
     fPoll: array of TPollSocketAbstract; // each track up to fPoll[].MaxSockets
     fPending: TPollSocketResults;
     fPendingIndex: PtrInt;
     fPollIndex: integer;
-    fGettingOne: integer;
     fTerminated: boolean;
     fUnsubscribeShutdownSocket: boolean;
     fPollClass: TPollSocketClass;
@@ -1770,8 +1770,8 @@ type
     procedure Clear;
     /// fill the members from a supplied URI
     // - recognize e.g. 'http://server:port/address', 'https://server/address',
-    // 'server/address' (as http), 'http://unix:/server:/address' (as nlUnix),
-    // 'https://user:password@server:port/address' (authenticated),
+    // 'server/address' or 'server' (as http), 'http://unix:/server:/address' (as
+    // nlUnix), 'https://user:password@server:port/address' (authenticated),
     // 'wss://Server/Address' (as https) or 'file://server/folder/data.xml'
     // - supports RFC 3986 IPv6 litterals like 'https://[::1]:123/tata'
     // - returns TRUE if the Server has been extracted and is not ''
@@ -1985,6 +1985,9 @@ function NetBinToBase64(const s: RawByteString): RawUtf8;
 /// IsPem() like function, to avoid linking mormot.crypt.secure
 // - search for '-----BEGIN' text, so may hardly give some false positives
 function NetIsPem(p: PUtf8Char): boolean;
+
+/// return 32-bit obfuscated random number <> 0 to be used e.g. as network XID
+function NetRandom32: cardinal;
 
 
 { ********* TCrtSocket Buffered Socket Read/Write Class }
@@ -5135,20 +5138,23 @@ begin
 end;
 
 function TPollSockets.EnsurePending(tag: TPollSocketTag): boolean;
+var
+  i: PtrInt;
 begin
-  // manual O(n) brute force search
-  result := FindPendingFromTag(
-    @fPending.Events[fPendingIndex], fPending.Count - fPendingIndex, tag) <> nil;
+  // manual O(i) brute force search into remaining events list
+  // overriden in TPollReadSockets to use TPollAsyncConnection fReadPending flag
+  i := fPendingIndex; // typically 0 in MergePendingEvents()
+  result := FindPendingFromTag(@fPending.Events[i], fPending.Count - i, tag) <> nil;
 end;
 
 procedure TPollSockets.SetPending(tag: TPollSocketTag);
 begin
-  // overriden method may set a per-connection flag for O(1) lookup
+  // overriden in TPollReadSockets to set TPollAsyncConnection fReadPending flag
 end;
 
 function TPollSockets.UnsetPending(tag: TPollSocketTag): boolean;
 begin
-  result := true; // overriden e.g. in TPollAsyncReadSockets
+  result := true; // overriden e.g. in TPollAsyncReadSockets to use fReadPending
 end;
 
 function TPollSockets.GetSubscribeCount: integer;
@@ -5337,7 +5343,6 @@ begin
   try
     // thread-safe get the pending (un)subscriptions
     new.Count := 0;
-    {$ifdef OSPOSIX} // TOSLight.TryLock is not available on Windows
     if (fPending.Count = 0) and
        fPendingSafe.TryLock then
     begin
@@ -5349,7 +5354,6 @@ begin
       end;
       fPendingSafe.UnLock;
     end;
-    {$endif OSPOSIX}
     {$ifdef POLLSOCKETEPOLL}
     // TPollSocketEpoll is thread-safe and let epoll_wait() work in the background
     {if Assigned(OnLog) then
@@ -5941,6 +5945,16 @@ begin
       exit;
     end;
   result := false;
+end;
+
+var
+  NetRandomSeq: integer; // thread-safe sequence source filled from OS entropy
+
+function NetRandom32: cardinal;
+begin
+  repeat
+    result := crc32cby4(0, InterlockedIncrement(NetRandomSeq)); // may use HW
+  until result <> 0;
 end;
 
 
@@ -6639,7 +6653,7 @@ begin
     if s = 'unix' then
     begin
       // aAddress='unix:/path/to/myapp.socket'
-      fpunlinka(pointer(p)); // a previous bind may have left the .socket file
+      fpunlink(pointer(p)); // a previous bind may have left the .socket file
       OpenBind(p, '', {dobind=}true, {tls=}false, nlUnix, {%H-}aSock);
       exit;
     end;
@@ -7094,7 +7108,7 @@ begin
   // (see e.g. THttpClientSocket.Request)
   {$ifdef OSPOSIX}
   if fSocketLayer = nlUnix then
-    fpunlinka(pointer(fServer)); // 'unix:/path/to/myapp.socket' -> delete file
+    fpunlink(pointer(fServer)); // 'unix:/path/to/myapp.socket' -> delete file
   {$endif OSPOSIX}
 end;
 
@@ -8148,13 +8162,14 @@ end;
 
 
 initialization
-  IP4local := cLocalhost; // use var string with refcount=1 to avoid allocation
   assert(SizeOf(TNetIP4) = 4);
   assert(SizeOf(TNetIP6) = 16);
   assert(SizeOf(TSockAddrIn) = 16);
   assert(SizeOf(TNetAddr) = SOCKADDR_SIZE);
   assert(SizeOf(TNetAddr) >= {$ifdef OSWINDOWS} SizeOf(TSockAddrIn6)
                                         {$else} SizeOf(TSockAddrUnix) {$endif});
+  IP4local := cLocalhost; // use var string with refcount=1 to avoid allocation
+  NetRandomSeq := SystemEntropy.LiveFeed.c0; // initialize NetRandom32
   DefaultListenBacklog := SOMAXCONN;
   GetSystemMacAddress := @_GetSystemMacAddress;
   InitializeUnit; // in mormot.net.sock.windows/posix.inc

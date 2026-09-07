@@ -723,7 +723,6 @@ begin
   end;
   if fService <> nil then
     fService.fRunner := nil; // notify ended
-  TSynLog.NotifyThreadEnded; // as needed by TSynLog
 end;
 
 procedure TSynAngelizeRunner.PerformRotation;
@@ -1989,8 +1988,8 @@ begin
       DeleteFile(fSas.CommandFile);
       log.Log(sllTrace, 'StartWatching: CommandFile=%', [fSas.CommandFile], self);
     end;
-    fWatchThread := TSynBackgroundThreadProcess.Create('watchdog',
-      WatchEverySecond, MilliSecsPerSec, nil, log.Family.OnThreadEnded);
+    fWatchThread := TSynBackgroundThreadProcess.Create(
+      'watchdog', WatchEverySecond, MilliSecsPerSec);
   end
   else
     log.Log(sllTrace, 'StartWatching: no need to watch', self);

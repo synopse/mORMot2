@@ -173,7 +173,7 @@ type
     // implements mormot.net.ws.core's TWebSocketProtocolRest variants
     // to behave like a regular mORMot server from the client point of view
     function GetSubprotocols: RawUtf8; override;
-    function SetSubprotocol(const aProtocolName: RawUtf8): boolean; override;
+    function IsSubprotocol(const aProtocolName: RawUtf8): boolean; override;
   public
     /// initialize the protocol to be processed on a given TPublicRelay
     constructor Create(aOwner: TPublicRelay); reintroduce;
@@ -550,7 +550,7 @@ begin
   result := 'synopsejson, synopsebin, synopsebinary';
 end;
 
-function TSynopseServerProtocol.SetSubprotocol(
+function TSynopseServerProtocol.IsSubprotocol(
   const aProtocolName: RawUtf8): boolean;
 begin
   result := FindPropName(

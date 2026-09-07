@@ -537,7 +537,12 @@ begin
   s := Demo.ExecuteNoExceptionUtf8('SELECT datetime(current_timestamp);');
   check(s <> '', 'datetime');
   s := Demo.ExecuteNoExceptionUtf8('SELECT datetime(current_timestamp,''localtime'');');
-  check(s <> '', 'localtime');
+  // 'localtime' returns NULL with a SQLITE_OMIT_LOCALTIME library, e.g. any
+  // .dll built with FOR_WIN10=1 as the official win-arm64 binaries are
+  check((s <> '') or
+        (Demo.ExecuteNoExceptionUtf8(
+          'SELECT sqlite_compileoption_used(''OMIT_LOCALTIME'');') = '1'),
+        'localtime');
 end;
 
 procedure TTestSQLite3Engine.VirtualTableDirectAccess;

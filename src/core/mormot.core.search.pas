@@ -1912,11 +1912,12 @@ type
   TSynTimeZone = class(TObjectRWLightLock)
   protected
     fZone: TTimeZoneDataDynArray;
-    fZoneCount: integer;
     fZones: TDynArrayHashed;
     fLastZone: TTimeZoneID;
     fLastIndex: integer;
+    fLastZoneSafe: TLightLock; // protect fLastZone/fLastIndex
     fCurrentIndex, fUtcIndex: integer;
+    fZoneCount: integer;
     fIds: TStringList;
     fDisplays: TStringList;
     procedure SetIDs;
@@ -7738,16 +7739,20 @@ end;
 
 function TSynTimeZone.LockedSearch(const TzId: TTimeZoneID): PtrInt;
 begin
+  result := -1;
   if TzId = '' then
-    result := -1
-  else if TzId = fLastZone then
-    result := fLastIndex
-  else
-  begin
-    result := fZones.FindHashed(TzId);
-    fLastZone := TzId;
-    flastIndex := result;
-  end;
+    exit;
+  fLastZoneSafe.Lock; // protect fLastZone/fLastIndex within concurrent ReadLock
+  if TzId = fLastZone then
+    result := fLastIndex;
+  fLastZoneSafe.UnLock;
+  if result >= 0 then
+    exit;
+  result := fZones.FindHashed(TzId);
+  fLastZoneSafe.Lock;
+  fLastZone := TzId;
+  flastIndex := result;
+  fLastZoneSafe.UnLock;
 end;
 
 procedure TSynTimeZone.LockedAfterLoad;

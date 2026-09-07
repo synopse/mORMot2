@@ -1169,7 +1169,7 @@ end;
 procedure TTestServiceOrientedArchitecture.Test(
   const Inst: TTestServiceInstances; Iterations: cardinal);
 var
-  rnd: TLecuyer; // local thread-safe non blocking random generator
+  rnd: PLecuyer; // local thread-safe non blocking random generator
 
   procedure TestCalculator(const I: ICalculator);
   var
@@ -1324,7 +1324,7 @@ var
   Nav, Nav2: TConsultaNav;
   {$endif HASNOSTATICRTTI}
 begin
-  RandomLecuyer(rnd);
+  rnd := ThreadRandom; // use the TLecuyer instance of this thread
   CheckEqual(Inst.I.Add(1, 2), 3);
   Check(Inst.I.Multiply($1111333, $222266667) = $24693E8DB170B85, 'I.Mul');
   CheckEqual(Inst.I.StackIntMultiply(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 3628800, 'sm1');
@@ -1357,9 +1357,9 @@ begin
   TestCalculator(Inst.CC); // test the fact that CC inherits from ICalculator
   n := 1000;
   s := Inst.CC.TestRawJson(n, 49, _TESTRAWJSON);
-  Check(length(s) = n + 2);
-  CheckEqual(Hash32(s), 4223609852); // n = 1000
-  //CheckEqual(Hash32(s), 2508875362); // n = 100000000
+  CheckEqual(length(s), n + 2, 'len TestRawJson');
+  CheckHash(s, 4223609852, 'TestRawJson'); // n = 1000
+  //CheckHash(s, 2508875362, 'TestRawJson'); // n = 100000000
   C3 := TComplexNumber.Create(0, 0);
   C1 := TComplexNumber.Create(2, 3);
   C2 := TComplexNumber.Create(20, 30);
@@ -2556,11 +2556,7 @@ begin
   {$endif FPC}
     exit; // avoid exceptions in IDE
   {$WARN SYMBOL_PLATFORM ON}
-  with TSynLog.Family.ExceptionIgnore do
-  begin
-    Add(EInterfaceFactory);
-    Add(ESynException);
-  end;
+  TSynLog.Family.ExceptionIgnore.Add(EInterfaceFactory);
   try
     I.Add(0, 0);
     Check(false, 'dead code EInterfaceFactory');
@@ -2569,6 +2565,8 @@ begin
       Check(Pos('TInterfaceStub returned error: expected exception',
         E.Message) > 0, E.Message);
   end;
+  Check(TSynLog.Family.ExceptionIgnore.Remove(EInterfaceFactory) >= 0);
+  TSynLog.Family.ExceptionIgnore.Add(ESynException);
   try
     I.Add(1, 2);
     Check(false, 'dead code ESynException');
@@ -2576,11 +2574,7 @@ begin
     on E: ESynException do
       Check(E.Message = 'expected exception', E.Message);
   end;
-  with TSynLog.Family.ExceptionIgnore do
-  begin
-    Delete(IndexOf(EInterfaceFactory));
-    Delete(IndexOf(ESynException));
-  end;
+  Check(TSynLog.Family.ExceptionIgnore.Remove(ESynException) >= 0);
 end;
 
 type

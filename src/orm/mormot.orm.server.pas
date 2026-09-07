@@ -182,11 +182,11 @@ type
     /// ensure the current thread will be taken into account during process
     // - this default implementation will call the BeginCurrentThread methods
     // of all its internal TRestStorage instances
-    procedure BeginCurrentThread(Sender: TThread); override;
+    procedure BeginCurrentThread(Sender: TThreadAbstract); override;
     /// called when thread is finished to ensure
     // - this default implementation will call the EndCurrentThread methods
     // of all its internal TRestStorage instances
-    procedure EndCurrentThread(Sender: TThread); override;
+    procedure EndCurrentThread(Sender: TThreadAbstract); override;
     /// missing tables are created if they don't exist yet for every TOrm
     // class of the Database Model
     // - you must call explicitly this before having called OrmMapInMemory()
@@ -613,7 +613,7 @@ begin
   inherited Destroy; // fCache.Free
 end;
 
-procedure TRestOrmServer.BeginCurrentThread(Sender: TThread);
+procedure TRestOrmServer.BeginCurrentThread(Sender: TThreadAbstract);
 var
   i: PtrInt;
 begin
@@ -622,7 +622,7 @@ begin
       fStaticVirtualTable[i].BeginCurrentThread(Sender);
 end;
 
-procedure TRestOrmServer.EndCurrentThread(Sender: TThread);
+procedure TRestOrmServer.EndCurrentThread(Sender: TThreadAbstract);
 var
   i: PtrInt;
 begin

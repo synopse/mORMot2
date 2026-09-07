@@ -397,6 +397,7 @@ type
     procedure DoPurgeHeaders;
     procedure ProcessErrorMessage;
     procedure ProcessStaticFile(var Context: THttpRequestContext; CompressGz: integer);
+    procedure ProcessOutStream(var Context: THttpRequestContext);
   public
     /// initialize the context, associated to a HTTP server instance
     constructor Create(aServer: THttpServerGeneric;
@@ -1774,7 +1775,7 @@ type
   THttpPeerCrypt = class(TInterfacedPersistent)
   protected
     fAesSafe: TLightLock; // topmost to ensure proper aarch64 alignment
-    fClientSafe: TLightLock; // if try to download with background direct mode
+    fClientSafe: TOSLightLock; // if try to download with background direct mode
     fSettings: THttpPeerCacheSettings;
     fSharedMagic, fFrameSeqLow: cardinal;
     fFrameSeq: integer;
@@ -2503,10 +2504,10 @@ type
   THttpApiWebSocketServer = class(THttpApiServer)
   protected
     fOwnedProtocolsSafe: TLightLock;
+    fPingTimeout: integer;
     fThreadPoolServer: TSynThreadPoolHttpApiWebSocketServer;
     fGuard: TSynWebSocketGuard;
     fLastConnection: PHttpApiWebSocketConnection;
-    fPingTimeout: integer;
     fOnWSThreadStart: TOnNotifyThread;
     fOnWSThreadTerminate: TOnNotifyThread;
     fSendOverlaped: TOverlapped;
@@ -2571,8 +2572,8 @@ type
   TSynThreadPoolHttpApiWebSocketServer = class(TSynThreadPool)
   protected
     fServer: THttpApiWebSocketServer;
-    procedure OnThreadStart(Sender: TThread);
-    procedure OnThreadTerminate(Sender: TThread);
+    procedure OnThreadStart(Sender: TThreadAbstract);
+    procedure OnThreadTerminate(Sender: TThreadAbstract);
     function NeedStopOnIOError: boolean; override;
     // aContext is a PHttpApiWebSocketConnection, or fServer.fServiceOverlaped
     // (SendServiceMessage) or fServer.fSendOverlaped (WriteData)
@@ -2586,7 +2587,7 @@ type
 
   /// Thread for closing deprecated WebSocket connections
   // - i.e. which have not responsed after PingTimeout interval
-  TSynWebSocketGuard = class(TThread)
+  TSynWebSocketGuard = class(TThreadAbstract)
   protected
     fServer: THttpApiWebSocketServer;
     procedure Execute; override;
@@ -3330,6 +3331,7 @@ begin
   fRespStatus := 0;
   fInContentStream := nil; // paranoid: Prepare() would set it anyway
   fOutContent := '';
+  OutContentStreamDiscard; // paranoid: SetupResponse() did hand it over
   FastAssignNew(fOutContentType);
   FastAssignNew(fOutCustomHeaders);
   fAuthenticationStatus := hraNone;
@@ -3345,7 +3347,7 @@ end;
 destructor THttpServerRequest.Destroy;
 begin
   fTempWriter.Free;
-  // inherited Destroy; is void
+  inherited Destroy; // release any pending SetOutStream() owned stream
 end;
 
 procedure THttpServerRequest.DoPurgeHeaders;
@@ -3374,6 +3376,33 @@ begin
     [fServer.ServerName, fRespStatus, fRespStatus, txt^, fOutContentType,
      XPOWEREDVALUE, OS_TEXT], RawUtf8(fOutContent));
   fOutContentType := HTML_CONTENT_TYPE; // body = human friendly HTML message
+end;
+
+procedure THttpServerRequest.ProcessOutStream(var Context: THttpRequestContext);
+begin
+  // hand a SetOutStream() body to the context, as ProcessStaticFile() does
+  if not StatusCodeIsSuccess(fRespStatus) then
+  begin
+    // a handler answering e.g. 404 or its own 416 from a stream should not
+    // have that body range-processed, nor replaced by our own error page
+    exclude(Context.ResponseFlags, rfWantRange);
+    // and should not advertise a Range: support we just disabled
+    include(fOutContentStreamOpt, hosNoRange);
+  end;
+  if Context.ContentFromStream(fOutContentStream, fOutContentStreamPos,
+       fOutContentStreamLength, fOutContentStreamOpt) = HTTP_SUCCESS then
+  begin
+    fOutContentStream := nil; // handed over: no double free by Recycle/Destroy
+    fOutContentStreamOpt := [];
+    fOutContentStreamLength := 0;
+    fOutContentStreamPos := 0;
+  end
+  else
+  begin
+    OutContentStreamDiscard; // release it: there is no body to send
+    fRespStatus := HTTP_RANGENOTSATISFIABLE;
+    fErrorMessage := 'Out of range'; // detected by ProcessErrorMessage
+  end;
 end;
 
 procedure THttpServerRequest.ProcessStaticFile(var Context: THttpRequestContext;
@@ -3447,6 +3476,11 @@ begin
     else if (fOutContent <> '') and
             (fOutContentType = STATICFILE_CONTENT_TYPE) then
       ProcessStaticFile(Context, CompressGz);
+  if fOutContentStream <> nil then
+    if fErrorMessage = '' then
+      ProcessOutStream(Context) // SetOutStream() response body
+    else
+      OutContentStreamDiscard; // return error not SetOutStream()
   if fErrorMessage <> '' then
     ProcessErrorMessage;
   // append Command
@@ -4273,6 +4307,7 @@ begin
       if cod <> 0 then
       begin
         if (Ctxt.OutContent = '') and
+           (Ctxt.OutContentStream = nil) and // SetOutStream() is a body too
            (cod <> HTTP_ASYNCRESPONSE) and
            not StatusCodeIsSuccess(cod) then
         begin
@@ -4290,7 +4325,8 @@ begin
     if cod <> 0 then
     begin
       Ctxt.RespStatus := cod;
-      if Ctxt.OutContent = '' then
+      if (Ctxt.OutContent = '') and
+         (Ctxt.OutContentStream = nil) then // SetOutStream() is a body too
         Ctxt.fErrorMessage := 'Rejected request';
       IncStat(grRejected);
     end
@@ -5738,7 +5774,6 @@ begin
     on Exception do
       ; // just ignore unexpected exceptions here, especially during clean-up
   end;
-  TSynLog.NotifyThreadEnded; // manual TSynThread notification
 end;
 
 
@@ -6148,6 +6183,7 @@ var
   key: THash256Rec;
 begin
   // setup internal processing status
+  fClientSafe.Init; // mandatory for TOSLightLock
   fFrameSeqLow := Random31Not0; // 31-bit random start value set at startup
   fFrameSeq := fFrameSeqLow;
   // setup internal cryptography
@@ -6180,6 +6216,7 @@ begin
   fSharedMagic := 0;
   inherited Destroy;
   FillZero(fDirectSecret);
+  fClientSafe.Done; // mandatory for TOSLightLock
 end;
 
 function THttpPeerCrypt.NetworkInterfaceChanged: boolean;
@@ -7294,6 +7331,7 @@ var
 
   procedure HandleCleanup; // sub-function for FPC Win64-aarch64 compilation
   begin
+    fPartials.Safe.WriteLock; // safely move file without background access
     try
       if ToRename <> '' then
       begin
@@ -7396,7 +7434,6 @@ begin
       'OnDownloaded: % copied % into % in %', [KBNoSpace(sourcesize),
       Partial, local, MicroSecToString(stop - start)], self);
   finally
-    fPartials.Safe.WriteLock; // safely move file without background access
     HandleCleanup;
     if (PartialID <> 0) and
        (sourcesize = 0) then
@@ -8401,6 +8438,8 @@ var // lots of local variable so that this method is thread-safe
     if not result then
       exit;
     respsent := true;
+    if not ctxt.OutContentStreamToBuffer then // kernel http.sys needs buffer
+      outstatcode := HTTP_SERVERERROR; // failed to read that stream
     resp^.SetStatus(outstatcode, outstat);
     if Terminated then
       exit;
@@ -8683,10 +8722,11 @@ begin
                 if afterstatcode > 0 then
                   outstatcode := afterstatcode;
               end;
-              // send response
-              if not respsent then
-                if not SendResponse then
-                  continue;
+              // send response - SendResponse does buffer any SetOutStream()
+              if respsent then // e.g. 202 already sent 
+                ctxt.OutContentStreamDiscard //about SetOUtStream()
+              else if not SendResponse then
+                continue;
               QueryPerformanceMicroSeconds(elapsed);
               dec(elapsed, started);
               ctxt.Host := host; // may have been reset during Request()
@@ -8694,11 +8734,14 @@ begin
                 ctxt, referer, outstatcode, elapsed, incontlen, bytessent);
             except
               on E: Exception do
+              begin
+                ctxt.OutContentStreamDiscard; // release SetOutStream() ASAP
                 // handle any exception raised during process: show must go on!
                 if not respsent then
                   if not E.InheritsFrom(EHttpApiServer) or // ensure still connected
                      (EHttpApiServer(E).LastApiError <> HTTPAPI_ERROR_NONEXISTENTCONNECTION) then
                     SendError(HTTP_SERVERERROR, StringToUtf8(E.Message), E);
+              end;
             end;
           finally
             LockedDec32(@fCurrentProcess);
@@ -9553,9 +9596,10 @@ constructor THttpApiWebSocketServer.Create(
   const aOnWSThreadStart, aOnWSThreadTerminate: TOnNotifyThread;
   ProcessOptions: THttpServerOptions);
 begin
-  inherited Create(QueueName, nil, nil, '', ProcessOptions);
+  WebSocketApiInitialize;
   if not (WebSocketApi.WebSocketEnabled) then
     raise EWebSocketApi.Create('WebSocket API not supported');
+  inherited Create(QueueName, nil, nil, '', ProcessOptions);
   fPingTimeout := aPingTimeout;
   if fPingTimeout > 0 then
     fGuard := TSynWebSocketGuard.Create(Self);
@@ -9735,13 +9779,13 @@ begin
   result := false;
 end;
 
-procedure TSynThreadPoolHttpApiWebSocketServer.OnThreadStart(Sender: TThread);
+procedure TSynThreadPoolHttpApiWebSocketServer.OnThreadStart(Sender: TThreadAbstract);
 begin
   if Assigned(fServer.OnWSThreadStart) then
     fServer.OnWSThreadStart(Sender);
 end;
 
-procedure TSynThreadPoolHttpApiWebSocketServer.OnThreadTerminate(Sender: TThread);
+procedure TSynThreadPoolHttpApiWebSocketServer.OnThreadTerminate(Sender: TThreadAbstract);
 begin
   if Assigned(fServer.OnWSThreadTerminate) then
     fServer.OnWSThreadTerminate(Sender);

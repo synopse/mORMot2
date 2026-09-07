@@ -758,8 +758,8 @@ begin
       result := 'Invalid HTTP Upgrade Sub-Protocol';
       supportedprot := HeaderGetValue('SEC-WEBSOCKET-PROTOCOL');
       if supportedprot <> '' then // this header may be omitted
-        if aProtocol.SetSubprotocol(supportedprot) then
-          aProtocol.Name := supportedprot
+        if aProtocol.IsSubprotocol(supportedprot) then
+          aProtocol.Name := supportedprot // call SetName() virtual method
         else
           exit // unsupported sub-protocol
       else if PosExChar(',', expectedprot) <> 0 then

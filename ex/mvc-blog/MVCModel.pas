@@ -156,7 +156,7 @@ type
   published
     property PublishedMonth: Integer
       read fPublishedMonth write fPublishedMonth;
-    property abstract: RawUtf8
+    property Abstract: RawUtf8
       read fAbstract write fAbstract;
     // "index 1" below to allow writing e.g. aArticle.DynArray(1).Delete(aIndex)
     property Tags: TIntegerDynArray

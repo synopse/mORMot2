@@ -686,6 +686,9 @@ type
 procedure FromGlobalTime(out NewTime: TSynSystemTime; LocalTime: boolean;
   tix64: Int64 = 0);
 
+/// low-level retrieve the current decoded date/time from OS with no cache
+procedure RawGlobalTime(out Time: TSynSystemTime; LocalTime: boolean);
+
 /// our own faster version of the corresponding RTL function
 function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): boolean;
 
@@ -2322,49 +2325,62 @@ end;
 
 { ************ TSynDate / TSynDateTime / TSynSystemTime High-Level objects }
 
+procedure RawGlobalTime(out Time: TSynSystemTime; LocalTime: boolean);
 var
-  // GlobalTime[LocalTime] thread-safe cache, each one taking one L1 cache line
+  sys: TSystemTime absolute Time;
+  {$ifdef OSPOSIX}
+  tmp: cardinal;
+  {$endif OSPOSIX}
+begin
+  // cross-platform OS API call
+  if LocalTime then
+    GetLocalTime(sys)
+  else
+    GetSystemTime(sys);
+  {$ifdef OSPOSIX}
+  // two TSystemTime fields are inverted in FPC datih.inc :(
+  tmp := sys.DayOfWeek;
+  Time.Day := sys.Day;
+  Time.DayOfWeek := tmp;
+  {$endif OSPOSIX}
+end;
+
+var
+  // GlobalTime[LocalTime] thread-safe cache of decoded TSynSystemTime
   GlobalTime: array[boolean] of packed record
-    safe: TLightLock; // better than RCU
-    time: TSystemTime;
-    clock: cardinal;  // avoid slower API call with 16ms loss of precision
-    _pad: array[1 .. 64 - SizeOf(TLightLock) - SizeOf(TSystemTime) - 4] of byte;
+    safe: TRWLightLock;
+    clock: cardinal;      // avoid slower API call with 16ms loss of precision
+    time: TSynSystemTime;
+    _pad: array[1 .. 64 - // to fill exactly one L1 cache line
+      (SizeOf(TRWLightLock) + SizeOf(cardinal) + SizeOf(TSynSystemTime))] of byte;
   end;
 
 procedure FromGlobalTime(out NewTime: TSynSystemTime; LocalTime: boolean;
   tix64: Int64);
 var
-  tix: cardinal;
-  newtimesys: TSystemTime absolute NewTime;
+  tix, c: cardinal;
 begin
   if tix64 = 0 then
     tix64 := GetTickCount64;
   tix := tix64 shr 4;
   with GlobalTime[LocalTime] do
-    if clock <> tix then // recompute every 16 ms
+  begin
+    c := clock; // atomic CAS
+    if (c <> tix) and
+       LockedExc32(clock, tix, c) then // recompute once every 16 ms
     begin
-      clock := tix; // can be set first thanks to safe.Lock below
-      NewTime.Clear;
-      if LocalTime then
-        GetLocalTime(newtimesys)
-      else
-        GetSystemTime(newtimesys);
-      {$ifdef OSPOSIX}
-      // two TSystemTime fields are inverted in FPC datih.inc :(
-      tix := newtimesys.DayOfWeek;
-      NewTime.Day := newtimesys.Day;
-      NewTime.DayOfWeek := tix;
-      {$endif OSPOSIX}
-      safe.Lock;
-      time := newtimesys;
-      safe.UnLock;
+      RawGlobalTime(NewTime, LocalTime);
+      safe.WriteLock;
+      time := NewTime; // thread-safe persist in cache
+      safe.WriteUnLock;
     end
     else
     begin
-      safe.Lock;
-      newtimesys := time; // fast copy last decoded value from cache
-      safe.UnLock;
+      safe.ReadLock;   // allow concurrent access
+      NewTime := time; // fast copy last decoded value from cache
+      safe.ReadUnLock;
     end;
+  end;
 end;
 
 function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): boolean;

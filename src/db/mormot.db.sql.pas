@@ -612,11 +612,6 @@ const
     ' like ');      // opLike
 
 
-/// retrieve the text of a given Database SQL dialect enumeration
-// - see also TSqlDBConnectionProperties.GetDbmsName() method
-function ToText(Dbms: TSqlDBDefinition): PShortString; overload;
-
-
 { ************ General SQL Processing Functions }
 
 /// function helper logging some column truncation information text
@@ -2808,7 +2803,7 @@ type
   protected
     fConnectionPool: array of TSqlDBConnectionThreadSafe;
     fConnectionPoolMin, fConnectionPoolMax, fConnectionPoolCount: integer;
-    fConnectionPoolDeprecatedTix32: integer;
+    fConnectionPoolDeprecatedTix32: cardinal;
     fThreadingMode: TSqlDBConnectionPropertiesThreadSafeThreadingMode;
     procedure DeleteDeprecated(secs: integer);
     procedure RemoveFromPool(conn: TSqlDBConnectionThreadSafe);
@@ -3410,12 +3405,6 @@ end;
 
 
 { ************ Define Database Engine Specific Behavior }
-
-function ToText(Dbms: TSqlDBDefinition): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TSqlDBDefinition), ord(Dbms));
-end;
-
 
 { ************ Abstract SQL DB Classes and Interfaces }
 
@@ -5316,6 +5305,7 @@ var
             W.AddDirect(')', ',');
           end;
           W.CancelLastComma;
+          EncodeInsertSuffix(W, BatchOptions, Props.fDbms);
           sqlcached := true;
         end;
       end;
@@ -5593,11 +5583,8 @@ begin
 end;
 
 function TSqlDBConnectionProperties.GetDbmsName: RawUtf8;
-var
-  ps: PShortString;
 begin
-  ps := ToText(GetDbms);
-  FastSetString(result, @ps^[2], ord(ps^[0]) - 1);
+  result := DBDEF_TXT[GetDbms];
 end;
 
 function TSqlDBConnectionProperties.SanitizeFromPassword(const S: RawUtf8): RawUtf8;
@@ -5621,7 +5608,7 @@ var
 
 class procedure TSqlDBConnectionProperties.RegisterClassNameForDefinition;
 begin
-  ObjArrayAddOnce(GlobalDefinitions, TObject(self)); // TClass stored as TObject
+  PtrArrayAddOnce(GlobalDefinitions, pointer(self)); // store TClass
 end;
 
 procedure TSqlDBConnectionProperties.DefinitionTo(
@@ -7804,7 +7791,7 @@ begin
     finally
       fConnectionPoolSafe.UnLock;
     end;
-    fConnectionPoolDeprecatedTix32 := 0; // trigger DeleteDeprecated()
+    LockedReset32(@fConnectionPoolDeprecatedTix32, 0); // for DeleteDeprecated()
   end
   else
   begin
@@ -7887,22 +7874,25 @@ end;
 function TSqlDBConnectionPropertiesThreadSafe.ThreadSafeConnection: TSqlDBConnection;
 var
   secs: integer;
+  c32, s32: cardinal;
   ndx: PtrInt;
 begin
   case fThreadingMode of
     tmThreadPool:
       begin
-        // first delete any deprecated connection(s) - check every 32 seconds
+        // first delete any deprecated connection(s)
         secs := 0;
         if fConnectionTimeOutSecs <> 0 then
         begin
           secs := GetTickSec;
           if ConnectionTimeOutBackground and // disabled by default
-             (not (cpfDeleteConnectionInOwnThread in fFlags)) and
-             (fConnectionPoolDeprecatedTix32 <> secs shr 5) then
+             (not (cpfDeleteConnectionInOwnThread in fFlags)) then
           begin
-            fConnectionPoolDeprecatedTix32 := secs shr 5;
-            DeleteDeprecated(secs);
+            c32 := fConnectionPoolDeprecatedTix32;
+            s32 := secs shr 5; // check every 32 seconds
+            if (c32 <> s32) and
+               LockedExc32(fConnectionPoolDeprecatedTix32, s32, c32) then
+              DeleteDeprecated(secs);
           end;
         end;
         // search for an existing connection

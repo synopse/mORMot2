@@ -16,7 +16,7 @@ uses
 
 type
   /// Simple thread for logging demo
-  TLoggerThread = class(TThread)
+  TLoggerThread = class(TThreadAbstract)
   private
     fThreadNum: integer;
   protected

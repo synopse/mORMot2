@@ -4,7 +4,7 @@
 program mormot2tests;
 
 // ---------------------------------------------------------------------
-//  NOTE: on FPC, please first install src/packages/lazarus/mormot2.lpk
+//  NOTE: on FPC/Lazarus, please first install packages/lazarus/mormot2*.lpk
 // ---------------------------------------------------------------------
 
 {$I ..\src\mormot.defines.inc}
@@ -32,12 +32,12 @@ uses
   mormot.core.rtti,
   mormot.core.json,
   mormot.core.datetime,
+  mormot.core.fmt,
   mormot.core.search,
   mormot.core.threads,
   mormot.core.log,
   mormot.core.test,
   mormot.db.raw.sqlite3, // for the SQLite3 version below
-
   {$ifdef USEZEOS}
   mormot.db.sql.zeos,
   {$endif USEZEOS}
@@ -60,6 +60,7 @@ uses
   mormot.crypt.openssl,
   mormot.tools.ecc         in '..\src\tools\ecc\mormot.tools.ecc.pas',
   test.core.base           in '.\test.core.base.pas',
+  test.core.threads        in '.\test.core.threads.pas',
   test.core.data           in '.\test.core.data.pas',
   test.core.crypt          in '.\test.core.crypt.pas',
   test.core.ecc            in '.\test.core.ecc.pas',
@@ -67,6 +68,12 @@ uses
   {$ifdef LIBQUICKJSSTATIC}
   test.core.script         in '.\test.core.script.pas',
   {$endif LIBQUICKJSSTATIC}
+  {$ifdef HAS_UI_PDF}
+  {$ifdef FPC}
+  Interfaces, // initialize the LCL widgetset used by test.ui.pdf
+  {$endif FPC}
+  test.ui.pdf            in '.\test.ui.pdf.pas',
+  {$endif HAS_UI_PDF}
   test.net.proto           in '.\test.net.proto.pas',
   test.orm.core            in '.\test.orm.core.pas',
   test.orm.sqlite3         in '.\test.orm.sqlite3.pas',
@@ -89,6 +96,9 @@ type
     procedure CoreUnits;
     procedure ORM;
     procedure SOA;
+    {$ifdef HAS_UI_PDF}
+    procedure UI;
+    {$endif HAS_UI_PDF}
   end;
 
 class procedure TIntegrationTests.DescribeCommandLine;
@@ -105,6 +115,7 @@ begin
     Param('ldapusr', 'the LDAP #user for --dns, e.g. name@ad.company.com');
     Param('ldappwd', 'the LDAP #password for --dns');
     Option('ldaps',  'force LDAPS connection + plain auth instead of Kerberos');
+    Option('fullthreads', 'force extensive test.core.threads coverage');
     Param('ntp',     'a NTP/SNTP #server name/IP instead of time.google.com');
     Option('nontp',  'disable the NTP/SNTP server tests');
     {$ifdef USE_OPENSSL}
@@ -147,6 +158,7 @@ procedure TIntegrationTests.CoreUnits;
 begin
   AddCase([
     TTestCoreBase,
+    TTestCoreThreads,
     TTestCoreProcess,
     {$ifdef HASGENERICS} // do-nothing on oldest compilers (e.g. <= Delphi XE7)
     TTestCoreCollections,
@@ -182,6 +194,13 @@ begin
     TTestBidirectionalRemoteConnection
   ]);
 end;
+
+{$ifdef HAS_UI_PDF}
+procedure TIntegrationTests.UI;
+begin
+  AddCase(TTestUiPdf);
+end;
+{$endif HAS_UI_PDF}
 
 
 begin

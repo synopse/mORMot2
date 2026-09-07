@@ -2012,6 +2012,9 @@ type
   TAsnObject = RawByteString;
   PAsnObject = ^TAsnObject;
 
+  /// could be used to store several binary objects, e.g. LDAP modifiers
+  TAsnObjects = array of TAsnObject;
+
 const
   /// constructed class type bitmask
   ASN1_CL_CTR   = $20;
@@ -2313,6 +2316,9 @@ procedure AsnNextInit(var Pos: TIntegerDynArray; Count: PtrInt);
 // - used e.g. by the ASNDEBUG conditional
 function AsnDump(const Value: TAsnObject): RawUtf8;
 
+/// append one TAsnObject to a dynamic array e.g. for LDAP modifiers
+function AsnAddItem(var Arr: TAsnObjects; const Value: TAsnObject): PtrInt;
+
 
 { ****************** Operating System Certificates Operation }
 
@@ -2566,9 +2572,9 @@ type
   UNICODE_STRING = packed record
     Length: word;
     MaximumLength: word;
-    {$ifdef CPUX64}
+    {$ifdef CPU64}
     _align: array[0..3] of byte;
-    {$endif CPUX64}
+    {$endif CPU64}
     Buffer: PWideChar;
   end;
 {$A+}
@@ -7408,6 +7414,13 @@ begin
     Pos[i] := 1;
 end;
 
+function AsnAddItem(var Arr: TAsnObjects; const Value: TAsnObject): PtrInt;
+begin
+  result := length(Arr);
+  SetLength(Arr, result + 1);
+  Arr[result] := Value;
+end;
+
 function IsBinaryString(var Value: RawByteString): boolean;
 var
   n: PtrInt;
@@ -7655,7 +7668,7 @@ function GetOneSystemStoreAsPem(CertStore: TSystemCertificateStore;
   FlushCache: boolean): RawUtf8;
 begin
   _OneSystemStoreAsPem[CertStore].Cache(@_GetSystemStoreAsPem,
-    pointer(CertStore), 8, result, FlushCache); // every 256s = 4 min
+    pointer(CertStore), 8, result, FlushCache); // every 2^8=256 sec = 4 min
 end;
 
 function _GetPemLocalFile(dummy: pointer): RawUtf8;
@@ -8294,9 +8307,9 @@ type
     Reserved1: array[0..1] of byte;
     BeingDebugged: byte;
     Reserved2: array[0..0] of byte;
-    {$ifdef CPUX64}
+    {$ifdef CPU64}
     _align1: array[0..3] of byte;
-    {$endif CPUX64}
+    {$endif CPU64}
     Reserved3: array[0..1] of pointer;
     Ldr: PMS_PEB_LDR_DATA;
     ProcessParameters: PMS_RTL_USER_PROCESS_PARAMETERS;
@@ -8304,28 +8317,28 @@ type
     Reserved5: array[0..51] of pointer;
     PostProcessInitRoutine: _PPS_POST_PROCESS_INIT_ROUTINE;
     Reserved6: array[0..127] of byte;
-    {$ifdef CPUX64}
+    {$ifdef CPU64}
     _align2: array[0..3] of byte;
-    {$endif CPUX64}
+    {$endif CPU64}
     Reserved7: array[0..0] of pointer;
     SessionId: ULONG;
-    {$ifdef CPUX64}
+    {$ifdef CPU64}
     _align3: array[0..3] of byte;
-    {$endif CPUX64}
+    {$endif CPU64}
   end;
 
   PMS_PROCESS_BASIC_INFORMATION = ^MS_PROCESS_BASIC_INFORMATION;
   MS_PROCESS_BASIC_INFORMATION = packed record
     ExitStatus: integer;
-    {$ifdef CPUX64}
+    {$ifdef CPU64}
     _align1: array[0..3] of byte;
-    {$endif CPUX64}
+    {$endif CPU64}
     PebBaseAddress: PMS_PEB;
     AffinityMask: PtrUInt;
     BasePriority: integer;
-    {$ifdef CPUX64}
+    {$ifdef CPU64}
     _align2: array[0..3] of byte;
-    {$endif CPUX64}
+    {$endif CPU64}
     UniqueProcessId: PtrUInt;
     InheritedFromUniqueProcessId: PtrUInt;
   end;

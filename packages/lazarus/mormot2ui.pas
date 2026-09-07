@@ -9,7 +9,7 @@ interface
 
 uses
   mormot.ui.grid.orm, mormot.ui.controls, mormot.ui.gdiplus, mormot.ui.core, 
-  LazarusPackageIntf;
+  mormot.ui.pdf, LazarusPackageIntf;
 
 implementation
 

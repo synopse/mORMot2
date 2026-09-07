@@ -863,6 +863,7 @@ var
   timer: TPrecisionTimer;
   i: integer;
   big: RawByteString;
+  gen: PLecuyer;
 begin
   SetLength(big, 100000);
   // validate TAesPrgn (+ TAesPrngOsl) generators
@@ -873,18 +874,19 @@ begin
   Prng(TAesPrngOsl, 'OpenSSL', big);
   {$endif USE_OPENSSL}
   // include Lecuyer for comparison, with same benchmarks as in Prng()
+  gen := ThreadRandom;
   timer.Start;
-  CheckEqual(Random32(0), 0);
-  CheckEqual(Random32(1), 0);
+  CheckEqual(gen.Next(0), 0);
+  CheckEqual(gen.Next(1), 0);
   for i := 1 to 50000 do
-    Check(Random32(i) < cardinal(i));
+    Check(gen.Next(i) < cardinal(i));
   for i := 0 to 50000 do
-    Check(Random32(maxInt - i) < cardinal(maxInt - i));
+    Check(gen.Next(maxInt - i) < cardinal(maxInt - i));
   NotifyTestSpeed('Lecuyer Random32', [], 100003, 100003 * 4, @timer);
   timer.Start;
   for i := 1 to 100 do
-    RandomBytes(pointer(big), length(big));
-  NotifyTestSpeed('       Lecuyer RandomBytes', [], 1, length(big) * 10, @timer);
+    gen.Fill(pointer(big), length(big));
+  NotifyTestSpeed('       Lecuyer RandomBytes', [], 1, length(big) * 100, @timer);
 end;
 
 procedure TTestCoreCrypto.Prng(meta: TAesPrngClass; const name, big: RawUtf8);
@@ -1950,7 +1952,6 @@ var
   hasher: TSynHasher;
   timer: TPrecisionTimer;
   {$ifdef USE_OPENSSL}
-  i: PtrInt;
   e: TRawUtf8DynArray;
   {$endif USE_OPENSSL}
 begin
@@ -4449,7 +4450,8 @@ begin
     check(not c2.IsSelfSigned, 'csr self2');
     CheckEqual(c2.GetAuthorityKey, c1.GetSubjectKey, 'csr auth2');
   end;
-  NotifyTestSpeed('% %', [c2.Instance, crt.AlgoName], 1, 0, @timer, {onlylog=}true);
+  if c2 <> nil then // may be nil if the key generation failed above
+    NotifyTestSpeed('% %', [c2.Instance, crt.AlgoName], 1, 0, @timer, {onlylog=}true);
 end;
 
 procedure TTestCoreCrypto.CatalogRunStore(Context: TObject);

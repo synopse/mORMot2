@@ -440,14 +440,6 @@ function poll(fds: PPollFD; nfds, timeout: integer): integer; cdecl;
 function inet_pton(af: integer; src, dst: pointer): integer; cdecl;
   external clib name 'inet_pton' + LIBC_SUFFIX;
 
-{$ifdef FPC}
-function fpunlinka(path: PAnsiChar): integer; inline; // internal call
-begin
-  if path <> nil then
-    result := fpunlink(path);
-end;
-{$endif FPC}
-
 function RawSocketErrNo: integer;
 begin
   result := cerrno; // thread-locale variable from libc

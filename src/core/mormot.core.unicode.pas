@@ -1802,6 +1802,9 @@ function ContainsUtf8(p, up: PUtf8Char): boolean;
 function GetLineContains(p, pEnd, up: PUtf8Char): boolean;
   {$ifdef FPC}inline;{$endif} // Delphi does not like inlining goto+label
 
+/// run PosEx(SubStr, Text) over a given Text buffer until the end
+function CountOccurrences(const SubStr, Text: RawUtf8): integer;
+
 /// copy source into a 256 chars dest^ buffer with 7-bit upper case conversion
 // - used internally for short keys match or case-insensitive hash
 // - returns final dest pointer
@@ -3303,7 +3306,7 @@ var
   {$endif CPUX86NOTPIC}
 label
   quit, nosource, by2;
-begin // slightly slower overload with explicit destlen
+begin // slightly slower overload with explicit dest length as MaxDestChars
   result := 0;
   if dest = nil then
     exit;
@@ -3321,8 +3324,9 @@ begin // slightly slower overload with explicit destlen
     until source[sourcebytes] = #0;
     {$endif ASMX86}
   end;
-  inc(sourceBytes, PtrUInt(source)); // PUtf8Char(sourceBytes)  = endSource
-  inc(MaxDestChars, PtrUInt(dest));  // PUtf8Char(MaxDestChars) = endDest
+  inc(sourceBytes, PtrUInt(source)); // PUtf8Char(sourceBytes) = endSource
+  // MaxDestChars is a WideChar count: compute PUtf8Char(MaxDestChars) = endDest
+  MaxDestChars := PtrUInt(@dest[MaxDestChars]);
   {$ifndef CPUX86NOTPIC}
   utf8 := @UTF8_TABLE;
   {$endif CPUX86NOTPIC}
@@ -5157,7 +5161,7 @@ function AnyTextFileToRawUtf8(const FileName: TFileName; AssumeUtf8IfNoBom: bool
 var
   tmp: RawByteString;
   buf: pointer;
-  chars: PtrInt;
+  chars: PtrInt; // not integer
 begin
   case StringFromBomFile(FileName, tmp, buf, chars) of
     bomNone: // most common case, especially on POSIX
@@ -5188,7 +5192,7 @@ function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUtf8: boolean):
 var
   tmp: RawByteString;
   buf: pointer;
-  chars: PtrInt;
+  chars: PtrInt; // not integer
 begin
   case StringFromBomFile(FileName, tmp, buf, chars) of
     bomNone: // most common case, especially on POSIX
@@ -5220,7 +5224,7 @@ function AnyTextFileToString(const FileName: TFileName; ForceUtf8: boolean): str
 var
   tmp: RawByteString;
   buf: pointer;
-  chars: PtrInt;
+  chars: PtrInt; // not integer
 begin
   case StringFromBomFile(FileName, tmp, buf, chars) of
     bomNone: // most common case, especially on POSIX
@@ -7336,6 +7340,23 @@ begin
     until p = nil;
   end;
   result := false;
+end;
+
+function CountOccurrences(const SubStr, Text: RawUtf8): integer;
+var
+  offset: PtrInt;
+begin
+  result := 0;
+  if SubStr = '' then
+    exit;
+  offset := 1;
+  repeat
+    offset := PosEx(SubStr, Text, offset);
+    if offset = 0 then
+      break;
+    inc(offset, length(SubStr));
+    inc(result);
+  until false;
 end;
 
 function GetNextUtf8Upper(var U: PUtf8Char): Ucs4CodePoint;
@@ -10502,7 +10523,7 @@ begin
     for result := 0 to ValuesCount do
       if (PtrUInt(Values^) <> 0) and
          ({%H-}PStrLen(PtrUInt(Values^) - _STRLEN)^ = len) and
-         CompareMemFixed(pointer(PtrInt(Values^)), pointer(Value), len) then
+         CompareMemFixed(pointer(PtrUInt(Values^)), pointer(Value), len) then
         exit
       else
         inc(Values)

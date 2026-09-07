@@ -212,7 +212,7 @@ type
     /// append some data to the outStream, after encryption
     function Write(const Buffer; Count: Longint): Longint; override;
     /// read some data is not allowed -> this method will raise an exception on call
-    function Seek(Offset: Longint; Origin: Word): Longint; override;
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
     /// write pending data
     // - should always be called before closing the outStream (some data may
     // still be in the internal buffers)
@@ -980,14 +980,14 @@ var
     if outStream <> nil then
     begin
       if outStream.InheritsFrom(TMemoryStream) then
-        begin
-          P := TMemoryStream(outStream).Seek(0, soCurrent);
-          TMemoryStream(outStream).Size := P + Len; // auto-reserve space
-          TMemoryStream(outStream).Seek(P + Len, soBeginning);
-          bOut := PAnsiChar(TMemoryStream(outStream).Memory) + P;
-          po := bOut;
-          outStream := nil; //  OutStream is slower and use no thread
-        end;
+      begin
+        P := outStream.Position;
+        outStream.Size := P + Len; // auto-reserve space
+        outStream.Seek(P + Len, soBeginning);
+        bOut := PAnsiChar(TMemoryStream(outStream).Memory) + P;
+        po := bOut;
+        outStream := nil; //  OutStream is slower and use no thread
+      end;
     end
     else if bOut = nil then
     begin
@@ -1178,21 +1178,21 @@ begin
   if (fBufCount >= SizeOf(TAesBlock)) or
      fNoCrypt or
      not fAes.Initialized then
-    ESynCrypto.RaiseUtf8('Unexpected %.Finish', [self]);
+   RaiseStreamError(self, 'Finish');
   XorOffset(@fBuf, DestSize, fBufCount);
   fDest.WriteBuffer(fBuf, fBufCount);
   fBufCount := 0;
 end;
 
-function TAesWriteStream.{%H-}Read(var Buffer; Count: Longint): Longint;
+function TAesWriteStream.Read(var Buffer; Count: Longint): Longint;
 begin
-  ESynCrypto.RaiseUtf8('Unexpected %.Read', [self]);
+  RaiseStreamError(self, 'Read');
   result := 0; // make compiler happy
 end;
 
-function TAesWriteStream.{%H-}Seek(Offset: Longint; Origin: Word): Longint;
+function TAesWriteStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
 begin
-  ESynCrypto.RaiseUtf8('Unexpected %.Seek', [self]);
+  RaiseStreamError(self, 'Seek');
   result := 0; // make compiler happy
 end;
 
@@ -1961,6 +1961,11 @@ procedure SBlockMix(dst, src, bxor: pointer; R: PtrUInt);
         mov     rsi, rdx
         mov     rdx, r8
         mov     rcx, r9
+        sub     rsp, 72 // XMM6-XMM15 should also be preserved - 72 for movaps
+        movaps  [rsp], xmm8
+        movaps  [rsp + 10H], xmm9
+        movaps  [rsp + 20H], xmm10
+        movaps  [rsp + 30H], xmm11
         {$endif ABIWINX64}
         shl     rcx, 7
         lea     rax, [rsi + rcx - 40H]
@@ -2075,6 +2080,11 @@ procedure SBlockMix(dst, src, bxor: pointer; R: PtrUInt);
         movaps  [rax + 30H], xmm3
         jne     @loop
         {$ifdef ABIWINX64}
+        movaps  xmm8, [rsp]
+        movaps  xmm9, [rsp + 10H]
+        movaps  xmm10, [rsp + 20H]
+        movaps  xmm11, [rsp + 30H]
+        add     rsp, 72
         pop     rdi
         pop     rsi
         {$endif ABIWINX64}

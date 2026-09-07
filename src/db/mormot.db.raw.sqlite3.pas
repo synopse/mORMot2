@@ -5472,7 +5472,7 @@ type
     backupStepSynLz);
 
   /// background thread used for TSqlDatabase.BackupBackground() process
-  TSqlDatabaseBackupThread = class(TThread)
+  TSqlDatabaseBackupThread = class(TThread) { no TThreadAbstract dependency }
   protected
     fBackupDestFile: TFileName;
     fSourceDB: TSqlDatabase;
@@ -9160,7 +9160,7 @@ begin
     end;
   except
   end;
-  SQLite3Log.NotifyThreadEnded;
+  SQLite3Log.NotifyThreadEnded; // as in mormot.core.thread TThreadAbstract
 end;
 
 function IsSQLite3File(const FileName: TFileName; PageSize: PInteger): boolean;

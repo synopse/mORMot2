@@ -195,7 +195,7 @@ type
     VolumeEffectiveDateAndTime: TAscDateTime;
     FileStructureVersion: byte;
     ReservedForFutureStandardization: byte;
-    ApplicationUse: array[0..511] of byte;
+    ApplicationUse: TTemp512;
     ReservedForFutureStandardization2: array[0..652] of byte;
   end;
   PPrimaryVolumeDescriptor = ^TPrimaryVolumeDescriptor;
@@ -424,7 +424,7 @@ type
     LVInfo2: TIdentifier36;
     LVInfo3: TIdentifier36;
     ImplementationID: TEntityID;
-    ImplementationUse: array[0..127] of byte;
+    ImplementationUse: TTemp128;
   end;
 
   TImplementationUse = packed record
@@ -506,7 +506,7 @@ type
     MapTableLength: cardinal;
     NumberofPartitionMaps: cardinal;
     ImplementationIdentifier: TEntityID;
-    ImplementationUse: array[0..127] of byte;
+    ImplementationUse: TTemp128;
     IntegritySequenceExtent: TExtentAd;
     PartitionMaps: TPartitionMap;
   end;
@@ -566,7 +566,7 @@ type
     PartitionStartingLocation: cardinal;
     PartitionLength: cardinal;
     ImplementationIdentifier: TEntityID;
-    ImplementationUse: array[0..127] of byte;
+    ImplementationUse: TTemp128;
     Reserved: array[0..155] of byte;
   end;
   PPartitionDescriptor = ^TPartitionDescriptor;

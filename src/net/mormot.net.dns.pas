@@ -569,8 +569,8 @@ begin
   h := tmp.Add(SizeOf(h^));
   FillCharFast(h^, SizeOf(h^), 0);
   repeat
-    h^.Xid := Random32; // truncated to 16-bit
-  until h^.XId <> 0;
+    h^.Xid := NetRandom32;
+  until h^.XId <> 0; // truncated to 16-bit - should just be unpredictable
   h^.RecursionDesired := true;
   h^.QuestionCount := 1 shl 8;
   n := pointer(QName);
@@ -590,8 +590,8 @@ end;
 
 var
   NoTcpSafe: TLightLock;
-  NoTcpServers: TRawUtf8DynArray;
   NoTcpTix16: cardinal; // cache flushed after 64 seconds
+  NoTcpServers: TRawUtf8DynArray;
 
 function DnsSendQuestion(const Address, Port: RawUtf8;
   const Request: RawByteString; out Answer: RawByteString;

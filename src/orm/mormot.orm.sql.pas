@@ -813,7 +813,7 @@ begin
       if limit.Position = posNone then
       begin
         fRest.InternalLog('AdaptSqlForEngineList: unknown % LIMIT syntax for [%]',
-          [ToText(fProperties.Dbms)^, SQL], sllWarning);
+          [DBDEF_TXT[fProperties.Dbms], SQL], sllWarning);
         exit;
       end;
       if limit.Position = posOuter then

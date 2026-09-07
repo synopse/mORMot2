@@ -950,6 +950,7 @@ type
     // - returns nil if all items were valid
     // - returns the list of any invalid instances
     // - do not free the returned items, since they are reference to Items[]
+    // - this method is not thread-safe so should be run e.g. just after loading
     function ValidateItems: TEccCertificateObjArray;
     /// check if the digital signature is recognized by the stored certificates
     // - ensure that sign.AuthoritySerial is part of Items[] list but not the CRL
@@ -2951,7 +2952,7 @@ const
   PRIVKEY_MAGIC: TTemp16 =
     'SynEccPrivatKey'#26;
   // 128-bit is enough, since it is transmitted as clear
-  PRIVKEY_SALTSIZE = 16;
+  PRIVKEY_SALTSIZE = SizeOf(TTemp16);
 
 function TEccCertificateSecret.SaveToSecureBinary(const PassWord: RawUtf8;
   AFStripes, Pbkdf2Round: integer; Aes: TAesAbstractClass;
@@ -2975,7 +2976,7 @@ begin
     plain := SaveToBinary;
     if plain <> '' then
       try
-        RandomByteString(PRIVKEY_SALTSIZE, salt); // public: TLecuyer is enough
+        Random128(FastNewRawByteString(salt, PRIVKEY_SALTSIZE));
         Pbkdf2HmacSha256(PassWord, salt, Pbkdf2Round, aeskey);
         a := Aes.Create(aeskey);
         try
@@ -4392,7 +4393,7 @@ var
 begin
   st := TRawByteStringStream.Create;
   try
-    fSafe.ReadLock;
+    fSafe.WriteLock; // ReadLock not enough because of fStoreOnlyPublicKey flag
     try
       // genuine magic header
       n := CHAIN_MAGIC;
@@ -4419,7 +4420,7 @@ begin
       for i := 0 to n - 1 do
         fCrl[i].SaveToStream(st);
     finally
-      fSafe.ReadUnLock;
+      fSafe.WriteUnLock;
     end;
     result := st.DataString;
   finally
@@ -4519,14 +4520,10 @@ begin
   result := nil;
   if self = nil then
     exit;
-  fSafe.ReadLock;
-  try
-    for i := 0 to high(fItems) do
-      if not (IsValid(fItems[i]) in ECC_VALIDSIGN) then
-        PtrArrayAdd(result, fItems[i]);
-  finally
-    fSafe.ReadUnLock;
-  end;
+  // note: fSafe.ReadLock here would deadlock within nested IsValid()
+  for i := 0 to high(fItems) do
+    if not (IsValid(fItems[i]) in ECC_VALIDSIGN) then
+      PtrArrayAdd(result, fItems[i]);
 end;
 
 constructor TEccCertificateChain.CreateFromFile(const jsonfile: TFileName);

@@ -252,8 +252,8 @@ type
     // implement the server response - must be thread-safe
     function Request(Ctxt: THttpServerRequestAbstract): cardinal; virtual;
     // assigned to fHttpServer.OnHttpThreadStart/Terminate e.g. to handle connections
-    procedure HttpThreadStart(Sender: TThread); virtual;
-    procedure HttpThreadTerminate(Sender: TThread); virtual;
+    procedure HttpThreadStart(Sender: TThreadAbstract); virtual;
+    procedure HttpThreadTerminate(Sender: TThreadAbstract); virtual;
     function GetRestServerCount: integer;
       {$ifdef HASINLINE}inline;{$endif}
     function GetRestServer(Index: integer): TRestServer;
@@ -864,7 +864,7 @@ begin
     include(hso, hsoThreadSmooting); // regular HW tends to like it
   {$ifdef USEHTTPSYS}
   if aUse in HTTP_API_MODES then // Windows system's http.sys
-    if wsWine in WindowsSpecs then
+    if wsWeakHttpSys in WindowsSpecs then
     begin
       fLog.Add.Log(sllWarning, '%: httpapi probably not well supported on % -> ' +
           'fallback to useHttpAsync', [ToText(aUse)^, OSVersionInfoEx], self);
@@ -1237,7 +1237,7 @@ begin
     match := rmNoMatch;
     matchcase := rsoRedirectServerRootUriForExactCase in fOptions;
     // thread-safe TLS + URI match from fRestServers[].Server.Model array
-    fSafe.ReadLock;
+    fSafe.ReadLock; // protect fRestServers[]
     {$ifdef HASFASTTRYFINALLY}
     try
     {$else}
@@ -1326,7 +1326,7 @@ begin
     ComputeAccessControlHeader(Ctxt, {ReplicateAllowHeaders=}false);
 end;
 
-procedure TRestHttpServer.HttpThreadTerminate(Sender: TThread);
+procedure TRestHttpServer.HttpThreadTerminate(Sender: TThreadAbstract);
 var
   i: PtrInt;
 begin
@@ -1341,7 +1341,7 @@ begin
   end;
 end;
 
-procedure TRestHttpServer.HttpThreadStart(Sender: TThread);
+procedure TRestHttpServer.HttpThreadStart(Sender: TThreadAbstract);
 var
   i: PtrInt;
 begin
@@ -1584,7 +1584,7 @@ begin
         inc(one);
       end;
   finally
-    fSafe.ReadLock;
+    fSafe.ReadUnLock;
   end;
 end;
 

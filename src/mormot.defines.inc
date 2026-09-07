@@ -37,7 +37,8 @@
 // serialization) - left undefined by default to ensure minimal impact
 
 {.$define FPCUSEVERSIONINFO}
-// link POSIX fileinfo/machoreader/elfreader units to retrieve more information
+// link POSIX fileinfo/machoreader/elfreader units to call TFileVersion.Create()
+// on any TFileName and not only the local executable resource
 
 {.$define NOSETTHREADNAME}
 // Delphi Wintel only: if defined, SetThreadName() would not raise the "thread
@@ -143,6 +144,7 @@
     HASITERATORS HASIMPLICITOPERATOR HASDBFTWIDE HASDBFNEW
     HASTTHREADSTART HASTTHREADTERMINATESET HASINTERFACEASTOBJECT
     HASEXTRECORDRTTI HASSLOWMUL64
+    HAS_UI HAS_UI_VCL_LCL HAS_UI_PDF
     CPU32 CPU64
     CPUINTEL CPUX86 CPUX64 CPUARM3264 CPUARM CPUAARCH64 CPUX86NOTPIC
     NOASMBLOCK
@@ -153,7 +155,7 @@
     OSWINDOWS OSWINTEL OSWINARM
     OSPOSIX OSBSD OSDARWIN OSBSDDARWIN OSOPENBSD OSFREEBSD
     OSLINUX OSANDROID OSLINUXINTEL OSLINUXX64 OSLINUXX86
-    OSLINUXANDROID OSANDROIDARM64 OSELF
+    OSLINUXANDROID OSANDROIDARM64 OSELF OSFUTEX
     PUREMORMOT2
 
   FPC only:
@@ -164,7 +166,7 @@
 
   Delphi only:
     ISDELPHI ISDELPHIUNICODE ISDELPHIxxx
-    WIN32DELPHI WIN64DELPHI WINTELDELPHI WINARMDELPHI DELPHIPOSIX
+    WINDELPHI WIN32DELPHI WIN64DELPHI WINTELDELPHI WINARMDELPHI DELPHIPOSIX
 
 ********************** Conditionals **********************)
 
@@ -201,6 +203,7 @@
   {$define HASIMPLICITOPERATOR}
   {$define HASDBFTWIDE}
   {$define HASTTHREADSTART}
+  {$define HASTTHREADFINISHED}
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSHORT_USESTR} // FloatToText uses str() in FPC
   {$define DOUBLETOSHORT_USEGRISU} // fast DoubleToAscii()
@@ -458,9 +461,16 @@
     {$define FPC_OLDRTTI}
   {$endif}
 
+  {$ifdef UNICODERTL}
+    // an FPC Unicode RTL build (-dUNICODERTL) expects UnicodeString=string
+    // units, exactly as every unit of that RTL declares for itself
+    // see https://wiki.freepascal.org/Unicode_Support_in_Lazarus
+    {$MODESWITCH UNICODESTRINGS}
+  {$endif UNICODERTL}
+
   {$ifdef FPC_HAS_CPSTRING}
     // see http://wiki.freepascal.org/FPC_Unicode_support
-    {$define HASCODEPAGE} // UNICODE means {$mode delphiunicode}
+    {$define HASCODEPAGE} // UNICODE means {$MODESWITCH UNICODESTRINGS}
   {$endif FPC_HAS_CPSTRING}
 
   {$ifdef ISFPC27}
@@ -562,6 +572,7 @@
       since TDynArrayHashed = object(TDynArray) fails to initialize
       http://blog.synopse.info/post/2011/01/29/record-and-object-issue-in-Delphi-2010 }
     {$define UNDIRECTDYNARRAY}
+    {$define HASTTHREADFINISHED}    // Delphi 2009 introduced TThread.Finished
   {$else}
     {$define HASNOSTATICRTTI}        // Delphi 7/2007 has no TypeInfo(TGuid)
   {$endif UNICODE}
@@ -737,12 +748,15 @@
     {$ifend}
     {$if CompilerVersion >= 30.0} // = Delphi 10
       {$define ISDELPHI10}
+      {$define ISDELPHI10_103}    // Delphi 10..10.3 inlinining issues
     {$ifend}
     {$if CompilerVersion >= 31.0} // = Delphi 10.1
       {$define ISDELPHI101}
+      {$define ISDELPHI10_103}    // Delphi 10..10.3 inlinining issues
     {$ifend}
     {$if CompilerVersion >= 32.0} // = Delphi 10.2
       {$define ISDELPHI102}
+      {$define ISDELPHI10_103}    // Delphi 10..10.3 inlinining issues
       {$ifdef CPUX64}
       {$ifdef VER320withoutAprilUpdate}
         // circumvent early Delphi 10.2 Tokyo Win64 compiler bug
@@ -752,6 +766,7 @@
     {$ifend}
     {$if CompilerVersion >= 33.0} // = Delphi 10.3
       {$define ISDELPHI103}
+      {$define ISDELPHI10_103}    // Delphi 10..10.3 inlinining issues
     {$ifend}
     {$if CompilerVersion >= 34.0} // = Delphi 10.4
       {$define ISDELPHI104}
@@ -781,6 +796,7 @@
   // -- compiler-specific code generation conditionals
 
   {$ifdef OSWINDOWS}
+    {$define WINDELPHI}           // Delphi on Windows + Intel/AMD or ARM64
     {$ifdef CPUX86}
       {$define WIN32DELPHI}       // Delphi with Win32 inlined asm
       {$define ASMINTELNOTPIC}
@@ -936,13 +952,17 @@
     {$define OSWINARM}
   {$endif ABIARM}
   {$define THREADID32}    // TThreadID always 32-bit DWORD on all Windows archs
+  {$define OSFUTEX}       // WaitForValue() futex-like API appeared with Win8
 {$else}
   {$ifdef CPU32}
-    {$define THREADID32}    // TThreadID 32-bit on 32-bit systems
+    {$define THREADID32}  // TThreadID is 32-bit on 32-bit POSIX systems
   {$endif CPU32}
   {$ifdef OSLINUX}
     {$define OSLINUXANDROID}
     {$define OSELF}
+    {$ifdef FPC}
+      {$define OSFUTEX}   // direct futex syscall on FPC Linux
+    {$endif FPC}
     {$ifdef ABIX86}
       {$define OSLINUXINTEL}
       {$define OSLINUXX86}
@@ -961,6 +981,7 @@
   {$ifdef OSANDROID}
     {$define OSLINUXANDROID}
     {$define OSELF}
+    {.$define OSFUTEX}        // untested
     {$ifdef ABIA64}
       {$define OSANDROIDARM64}
     {$endif ABIA64}
@@ -1144,4 +1165,39 @@
 {$if defined(USEWININET) or defined(USELIBCURL)}
   {$define USEHTTPREQUEST}
 {$ifend}
+
+
+// -----------
+// -- Per-platform UI abilities
+
+// you can define the following at project/package level
+{.$define NO_UI}     // disable whole UI path e.g. in mormot2tests
+{.$define NO_UI_VCL} // disable VCL usage on Delphi e.g. for pure FMX
+{.$define NO_UI_PDF} // disable mormot.ui.pdf unit
+
+{$undef HAS_UI}
+{$undef HAS_UI_VCL_LCL}
+{$ifndef NO_UI}
+  {$define HAS_UI}
+  {$ifdef FPC}
+    {$define HAS_UI_LCL}
+    {$define HAS_UI_VCL_LCL}
+  {$else}
+    {$ifndef NO_UI_VCL}
+      {$define HAS_UI_VCL_LCL}
+    {$endif NO_UI_VCL}
+  {$endif FPC}
+{$endif NO_UI}
+
+// mormot.ui.pdf is available with the Delphi VCL or FPC/Lazarus LCL on Windows
+{$undef HAS_UI_PDF}
+{$ifdef OSWINDOWS}
+  {$ifdef HAS_UI_VCL_LCL}
+    {$define HAS_UI_PDF}
+  {$endif HAS_UI_VCL_LCL}
+{$endif OSWINDOWS}
+{$ifdef NO_UI_PDF}
+  {$undef HAS_UI_PDF}
+{$endif NO_UI_PDF}
+
 

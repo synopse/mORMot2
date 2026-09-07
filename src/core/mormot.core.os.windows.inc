@@ -1495,19 +1495,19 @@ begin
   result := p^.V;
 end; // warning: FPC's GetTickCount64 doesn't handle 49.7 days wrap on XP :(
 
-procedure InitializeSRWLockForXP(var P: TOSLightMutex); stdcall;
+procedure InitializeSRWLockForXP(var P: pointer); stdcall;
 begin
-  TLightLock(P).Init; // our TLightLock is good enough on XP
+  PLightLock(@P)^.Init; // our TLightLock is good enough on XP
 end;
 
-procedure AcquireSRWLockExclusiveForXP(var P: TOSLightMutex); stdcall;
+procedure AcquireSRWLockExclusiveForXP(var P: pointer); stdcall;
 begin
-  TLightLock(P).Lock;
+  PLightLock(@P)^.Lock;
 end;
 
-procedure ReleaseSRWLockExclusiveForXP(var P: TOSLightMutex); stdcall;
+procedure ReleaseSRWLockExclusiveForXP(var P: pointer); stdcall;
 begin
-  TLightLock(P).UnLock;
+  PLightLock(@P)^.UnLock;
 end;
 
 function GetTickSec: cardinal;
@@ -1529,36 +1529,13 @@ begin
 end;
 
 
-{ TOSLightLock }
-
-procedure TOSLightLock.Init;
-begin
-  fMutex := nil;
-  InitializeSRWLock(fMutex); // fallback to TLightLock on XP
-end;
-
-procedure TOSLightLock.Done;
-begin // nothing needed
-end;
-
-procedure TOSLightLock.Lock;
-begin
-  AcquireSRWLockExclusive(fMutex);
-end;
-
-procedure TOSLightLock.UnLock;
-begin
-  ReleaseSRWLockExclusive(fMutex);
-end;
-
-
 // Win8+ WaitOnAddress/WakeByAddressSingle futex-like efficient API
 // see also warnings at https://devblogs.microsoft.com/oldnewthing/20160826-00
 var
   // function returns when Address^ differs from the value at CompareAddress^
   WaitOnAddress: function(Address, CompareAddress: pointer;
     AddressSize, dwMilliseconds: PtrUInt): BOOL; stdcall;
-  WakeByAddressSingle: procedure(Address: pointer); stdcall;
+  WakeByAddressSingle, WakeByAddressAll: procedure(Address: pointer); stdcall;
 
 procedure _OsWaitOnValue(Value: PCardinal; Expected, TimeoutMS: cardinal);
 begin
@@ -2547,7 +2524,7 @@ begin
   if (Buffer = nil) or
      (Len <= 0) then
     exit;
-  // try the newest per-processor ProcessPrng() AES-CTR-DRBG first
+  // try the Win8+ per-processor ProcessPrng() AES-CTR-DRBG first
   if (OSVersion >= wEight) and
      DelayedProc(ProcessPrng, BCryptPrimitives, 'BCryptPrimitives.dll', 'ProcessPrng') then
     result := ProcessPrng(Buffer, Len);
@@ -3561,9 +3538,9 @@ type
   UNICODE_STRING = packed record
     Length: word;
     MaximumLength: word;
-    {$ifdef CPUX64}
+    {$ifdef CPU64}
     _align: array[0..3] of byte;
-    {$endif CPUX64}
+    {$endif CPU64}
     Buffer: PWideChar;
   end;
 
@@ -4581,7 +4558,7 @@ begin
   result := false;
 end;
 
-function ChangeRoot(const FolderName: RawUtf8): boolean;
+function ChangeRoot(const FolderName: TFileName): boolean;
 begin
   result := false;
 end;
@@ -5221,18 +5198,6 @@ begin
     AcquireSRWLockExclusive := @AcquireSRWLockExclusiveForXP;
     ReleaseSRWLockExclusive := @ReleaseSRWLockExclusiveForXP;
   end;
-  if OSVersion >= wEight then
-  begin
-    h := Windows.LoadLibrary('API-MS-Win-Core-Synch-l1-2-0.dll'); // Win8+
-    WaitOnAddress := LibraryResolve(h, 'WaitOnAddress');
-    WakeByAddressSingle := LibraryResolve(h, 'WakeByAddressSingle');
-    if Assigned(WaitOnAddress) and
-       Assigned(WakeByAddressSingle) then
-    begin
-      OsWaitOnValue := @_OsWaitOnValue;
-      OsWakeOnValue := @WakeByAddressSingle; // defined as stdcall
-    end;
-  end;
   // 3. retrieve system information
   TimeZoneLocalBias := -GetLocalTimeOffset;
   FillcharFast(SystemInfo, SizeOf(SystemInfo), 0);
@@ -5320,6 +5285,21 @@ begin
   OSVersion32.os := osWindows;
   OSVersion32.win := Vers;
   OSVersion32.winbuild := OSVersionInfo.dwBuildNumber;
+  if OSVersion >= wEight then
+  begin
+    h := Windows.LoadLibrary('API-MS-Win-Core-Synch-l1-2-0.dll'); // Win8+
+    WaitOnAddress       := LibraryResolve(h, 'WaitOnAddress');
+    WakeByAddressSingle := LibraryResolve(h, 'WakeByAddressSingle');
+    WakeByAddressAll    := LibraryResolve(h, 'WakeByAddressAll');
+    if Assigned(WaitOnAddress) and
+       Assigned(WakeByAddressSingle) and
+       Assigned(WakeByAddressAll) then
+    begin
+      OsWaitOnValue    := @_OsWaitOnValue;
+      OsWakeOnValue    := @WakeByAddressSingle; // defined as stdcall
+      OsWakeAllOnValue := @WakeByAddressAll;    // defined as stdcall
+    end;
+  end;
   h := GetModuleHandle(ntdll); // late binding over unstable / altered API
   if h > 0 then
   begin
@@ -5328,7 +5308,8 @@ begin
     begin
       OSVersionInfoEx := wine_get_version;
       OSVersionInfoEx := TrimU(Join(['Wine ', TrimU(OSVersionInfoEx)]));
-      WindowsSpecs := WindowsSpecs + [wsWine, wsWeakDpAPI, wsWeakHttpApi];
+      WindowsSpecs := WindowsSpecs +
+        [wsWine, wsWeakDpAPI, wsWeakHttpApi, wsWeakHttpSys];
     end
     {$ifdef CPUINTEL}
     else if IsWow64Emulation then

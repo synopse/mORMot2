@@ -860,7 +860,26 @@ begin
 end;
 
 function TZLib.Uncompress(Flush: integer): integer;
+{$ifdef ZLIBPAS}
+var
+  dummy: byte;
+{$endif ZLIBPAS}
 begin
+  {$ifdef ZLIBPAS}
+  // paszlib's inflate() rejects next_in=nil even when avail_in=0, whereas
+  // zlib only rejects it when avail_in<>0 - as paszlib's deflate() does too
+  if (Stream.next_in = nil) and
+     (Stream.avail_in = 0) then
+  begin
+    Stream.next_in := @dummy; // not read, since there is no input to read
+    try
+      result := inflate(Stream, Flush);
+    finally
+      Stream.next_in := nil; // leave no pointer to our stack behind
+    end;
+    exit;
+  end;
+  {$endif ZLIBPAS}
   result := inflate(Stream, Flush);
 end;
 

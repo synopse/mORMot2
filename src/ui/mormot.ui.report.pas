@@ -1593,7 +1593,7 @@ var
   hDeviceMode: THandle;
 begin
   Printer.GetPrinter(Device, Driver, Port, hDeviceMode);
-  result := trim(Device);
+  result := sysutils.trim(Device);
 end;
 
 function CurrentPrinterPaperSize: string;
@@ -4606,7 +4606,7 @@ procedure TGdiPages.DrawTextAcrossCols(
         Lines^[high(Lines^)] := copy(s, 1, sp - 1);
       end;
       inc(result); // update lines count
-      s := trim(copy(s, sp, maxInt)); // trim ' ',#13,#10 for next line
+      s := sysutils.trim(copy(s, sp, maxInt)); // trim ' ',#13,#10 for next line
     until s = '';
   end;
 
@@ -5226,9 +5226,9 @@ begin
       begin
         Title := SysUtils.Trim(Caption);
         if ExportPdfApplication = '' then
-          Creator := trim(Application.Title)
+          Creator := sysutils.trim(Application.Title)
         else
-          Creator := trim(ExportPdfApplication);
+          Creator := sysutils.trim(ExportPdfApplication);
         Author := ExportPdfAuthor;
         Subject := ExportPdfSubject;
         Keywords := ExportPdfKeywords;
@@ -5289,7 +5289,7 @@ begin
         (ord(result[i]) in [ord(' '), ord('-')]) do
     dec(i);
   SetLength(result, i);
-  result := trim(result);
+  result := sysutils.trim(result);
 end;
 
 function TGdiPages.ExportPdf(const aPdfFileName: TFileName; ShowErrorOnScreen,

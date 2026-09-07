@@ -2606,9 +2606,9 @@ type
     fName: RawUtf8;
     fProps: TRttiCustomProps;
     fPrivateSlotsSafe: TLightLock; // topmost position to force aarch64 alignment
+    fArrayFirstField, fArrayFirstFieldSort: TRttiParserType;
     fSetRandom: TRttiCustomRandom;
     // used by mormot.core.json.pas
-    fArrayFirstField, fArrayFirstFieldSort: TRttiParserType;
     fJsonLoad: pointer; // contains a TRttiJsonLoad - used if fJsonReader=nil
     fJsonSave: pointer; // contains a TRttiJsonSave - used if fJsonWriter=nil
     fJsonReader, fJsonWriter: TMethod; // TOnRttiJsonRead/TOnRttiJsonWrite
@@ -3461,6 +3461,8 @@ type
   TSynMonitorAbstract = class(TObjectWithRttiMethods)
   protected
     fSafe: TLightLock; // our fast non-reentrant lock
+    fProcessing: boolean;
+    fTaskStatus: (taskNotStarted,taskStarted);
     fName: RawUtf8;
   public
     /// initialize the instance nested class properties
@@ -7734,7 +7736,7 @@ begin
   {$endif FPC}
     rkLString: // PT_INFO[ptRawUtf8/ptRawJson] have been found above
       begin
-        cp := Info^.AnsiStringCodePage;
+        cp := Info^.AnsiStringCodePage; // use TypeInfo() on Delphi 7/2007
         if cp = CP_UTF8 then
           result := ptRawUtf8
         else if cp = CP_WINANSI then
@@ -7755,10 +7757,10 @@ begin
     rkUString:
       result := ptUnicodeString;
   {$endif HASVARUSTRING}
-  {$ifdef FPC_OR_UNICODE}
-    {$ifdef UNICODE}
+  {$ifdef ISDELPHIUNICODE}
     rkProcedure,
-    {$endif UNICODE}
+  {$endif ISDELPHIUNICODE}
+  {$ifdef FPC_OR_UNICODE}
     rkClassRef,
     rkPointer:
       result := ptPtrInt;
