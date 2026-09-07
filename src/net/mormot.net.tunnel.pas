@@ -616,6 +616,7 @@ type
     Info: TDocVariantData;
   end;
   TTunnelRelayConsoles = array of TTunnelRelayConsole;
+  PTunnelRelayConsole = ^TTunnelRelayConsole;
 
   /// implement Relay server process
   // - maintain one TTunnelAgent and several TTunnelConsole
@@ -1825,21 +1826,13 @@ begin
         end;
     end;
     fInfoCacheSafe.Lock;
-    try
-      fInfoCache := result;
-    finally
-      fInfoCacheSafe.UnLock;
-    end;
-  end
-  else
-  begin
-    fInfoCacheSafe.Lock;
-    try
-      result := fInfoCache;
-    finally
-      fInfoCacheSafe.UnLock;
-    end;
+    fInfoCache := result;
+    fInfoCacheSafe.UnLock;
+    exit;
   end;
+  fInfoCacheSafe.Lock;
+  result := fInfoCache;
+  fInfoCacheSafe.UnLock;
 end;
 
 
@@ -1915,6 +1908,7 @@ end;
 function TTunnelRelay.HasConsolePrepared(aSession: TTunnelSession): boolean;
 var
   i: PtrInt;
+  c: PTunnelRelayConsole;
 begin
   result := false;
   if (self = nil) or
@@ -1922,12 +1916,15 @@ begin
     exit;
   fConsoleSafe.ReadLock;
   try
-    for i := 0 to fConsoleCount - 1 do
-      if fConsole[i].State.HasTransient(aSession) then
+    c := pointer(fConsole);
+    for i := 1 to fConsoleCount do
+      if c^.State.HasTransient(aSession) then
       begin
         result := true;
         exit;
-      end;
+      end
+      else
+        inc(c);
   finally
     fConsoleSafe.ReadUnLock;
   end;
@@ -2052,7 +2049,7 @@ begin
       fConsoleSafe.WriteUnLock;
     end;
     ITunnelConsole(Obj) := console;
-    fLogClass.Add.Log(sllTrace, 'TryResolve: new %', [c], self);
+    fLogClass.Add.Log(sllTrace, 'TryResolve: new % (count=%)', [c, n], self);
     result := true;
   end
   else if (aInterface = TypeInfo(ITunnelAgent)) and
@@ -2117,8 +2114,9 @@ end;
 
 function TTunnelRelay.ConsolesInfo: TVariantDynArray;
 var
-  i, n, count: PtrInt;
+  n, count: PtrInt;
   consoles: TTunnelRelayConsoles;
+  c: PTunnelRelayConsole;
   list: variant;
   dv: PDocVariantData;
 begin
@@ -2135,20 +2133,22 @@ begin
     fConsoleSafe.ReadUnLock;
   end;
   SetLength(result, n);
+  c := pointer(consoles);
   dv := pointer(result);
-  for i := 0 to n - 1 do
-  begin
-    dv^.InitFast(consoles[i].Info.Count + 2, dvObject);
-    dv^.AddFrom(consoles[i].Info);
-    count := consoles[i].State.Count;
+  repeat
+    dv^.InitFast(c^.Info.Count + 2, dvObject);
+    dv^.AddFrom(c^.Info);
+    count := c^.State.Count;
     dv^.AddValue('count', count);
     VarClear(list);
     if count <> 0 then
       TDocVariantData(list).InitArrayFromVariants(
-        consoles[i].State.GetAllInfo, JSON_FAST);
+        c^.State.GetAllInfo, JSON_FAST); // use per-second cache
     dv^.AddValue('list', list);
     inc(dv);
-  end;
+    inc(c);
+    dec(n);
+  until n = 0;
 end;
 
 
