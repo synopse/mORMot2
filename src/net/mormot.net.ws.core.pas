@@ -3475,7 +3475,8 @@ procedure TWebSocketProcess.Log(const frame: TWebSocketFrame;
     tmp: TLogEscape; // 512 bytes of temp buffer
     len: integer;
   begin
-    log.DisableRemoteLog(DisableRemoteLog);
+    if DisableRemoteLog then
+      log.DisableRemoteLog(true);
     try
       if (frame.opcode = focText) and
          (logTextFrameContent in fSettings^.LogDetails) then
@@ -3492,7 +3493,8 @@ procedure TWebSocketProcess.Log(const frame: TWebSocketFrame;
             logBinaryFrameContent in fSettings^.LogDetails)], self);
       end;
     finally
-      log.DisableRemoteLog(false);
+      if DisableRemoteLog then
+        log.DisableRemoteLog(false);
     end;
   end;
 
@@ -3532,7 +3534,7 @@ var
 begin
   fSafeOut.Lock;
   try
-    Log(Frame, 'SendFrame', sllTrace, true);
+    Log(Frame, 'SendFrame', sllTrace, {disableRemote=}true);
     try
       if Frame.opcode = focConnectionClose then
         fConnectionCloseWasSent := true; // to be done once on each end
