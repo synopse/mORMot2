@@ -106,7 +106,7 @@ function FromVarUInt32High(var Source: PByte): cardinal;
 
 /// get a 32-bit integer from zigzag encoded buffer 0=0,1=1,2=-1,3=2,4=-2,...
 function FromVarInt32(var Source: PByte): PtrInt;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifndef ISDELPHI10_103}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// convert a UInt64 into a 64-bit variable-length integer buffer
 function ToVarUInt64(Value: QWord; Dest: PByte): PByte;

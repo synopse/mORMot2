@@ -5810,12 +5810,12 @@ begin
   l := @tmp[31] - p;
   if (l > 5) and
      (p[l - 5] = '.') then
-    if PCardinal(@p[l - 4])^ = $30303030 then
+    if PCardinal(p + l - 4)^ = $30303030 then // not PCardinal(@p[]) for Delphi 10.x
       dec(l, 5)  // x.0000 -> x
     else
       case fixeddecimals of
         0:
-          if PWord(@p[l - 2])^ = $3030 then
+          if PWord(p + l - 2)^ = $3030 then
             dec(l, 2); // x.xx00 -> x.xx
         1:
           if p[l - 4] = '0' then
@@ -13295,7 +13295,7 @@ begin
   else
   begin
     result := StrUInt64(P - 1, c);
-    d := PCardinal(P - 5)^; // in two explit steps for CPUARM (alf)
+    d := PCardinal(P - 5)^; // in two explicit steps for CPUARM (alf)
     PCardinal(P - 4)^ := d;
     P[-5] := '.'; // insert '.' just before last 4 decimals
   end;

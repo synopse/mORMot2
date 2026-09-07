@@ -748,12 +748,15 @@
     {$ifend}
     {$if CompilerVersion >= 30.0} // = Delphi 10
       {$define ISDELPHI10}
+      {$define ISDELPHI10_103}    // Delphi 10..10.3 inlinining issues
     {$ifend}
     {$if CompilerVersion >= 31.0} // = Delphi 10.1
       {$define ISDELPHI101}
+      {$define ISDELPHI10_103}    // Delphi 10..10.3 inlinining issues
     {$ifend}
     {$if CompilerVersion >= 32.0} // = Delphi 10.2
       {$define ISDELPHI102}
+      {$define ISDELPHI10_103}    // Delphi 10..10.3 inlinining issues
       {$ifdef CPUX64}
       {$ifdef VER320withoutAprilUpdate}
         // circumvent early Delphi 10.2 Tokyo Win64 compiler bug
@@ -763,6 +766,7 @@
     {$ifend}
     {$if CompilerVersion >= 33.0} // = Delphi 10.3
       {$define ISDELPHI103}
+      {$define ISDELPHI10_103}    // Delphi 10..10.3 inlinining issues
     {$ifend}
     {$if CompilerVersion >= 34.0} // = Delphi 10.4
       {$define ISDELPHI104}
