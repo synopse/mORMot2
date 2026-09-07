@@ -2908,7 +2908,7 @@ begin
   result := false;
   ad4.sin_family := 0; // reset family to mark as invalid, but keep sin_port
   ad4.sin_addr := 0;   // reset
-  if (address = cLocalhost) or  // '127.0.0.1'
+  if (address = IP4local) or  // '127.0.0.1'
      PropNameEquals(address, 'localhost') then
     ad4.sin_addr := cLocalhost32 // 127.0.0.1
   else if address = cBroadcast then
@@ -3224,7 +3224,7 @@ begin
           ({%H-}p > 65535) then
     result := nrNotFound // port should be valid
   else if (address = '') or
-          (address = cLocalhost) or
+          (address = IP4local) or
           PropNameEquals(address, 'localhost') or
           (address = cAnyHost) then // for client: '0.0.0.0' -> '127.0.0.1'
     result := addr.SetIP4Port(cLocalhost32, p)

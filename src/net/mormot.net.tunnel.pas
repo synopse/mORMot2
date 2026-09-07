@@ -763,7 +763,7 @@ begin
             fLog.Log(sllTrace,
               'DoExecute: accepted %', [fClientAddr.IPShort({port=}true)], self);
             if (toAcceptNonLocal in fOwner.Options) or
-               (fClientAddr.IP4 = cLocalhost32) then
+               fClientAddr.IsLoopback then
              fState := stProcessing // start background process
             else
               fLog.Log(sllWarning, 'DoExecute: rejected non local client', self);
