@@ -1471,6 +1471,7 @@ type
     fLog: TSynLog; // the logging instance within the DoExecute thread context
     fExecuteMessage: RawUtf8;
     fProcessing: boolean;
+    fFlag1, fFlag2, fFlag3: byte; // some inherited flags up to 32-bit
     procedure Execute; override;
     procedure DoExecute; virtual; abstract; // overriden for background process
   public

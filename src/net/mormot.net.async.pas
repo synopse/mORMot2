@@ -3121,6 +3121,9 @@ var
   i, n: PtrInt;
   endtix: Int64;
 begin
+  if fFlag1 <> 0 then // fFlag2 used by TAsyncServer.Shutdown
+    exit;             // use this counter to avoid duplicated calls
+  inc(fFlag1);
   {$ifdef USE_WINIOCP}
   fIocpAccept.Unsubscribe(fIocpAcceptSub);
   fIocpAccept.Terminate;
@@ -3961,6 +3964,9 @@ end;
 {$ifdef USE_WINIOCP}
 procedure TAsyncServer.Shutdown;
 begin
+  if fFlag2 <> 0 then
+    exit; // use this counter to avoid duplicated calls
+  inc(fFlag2);
   inherited Shutdown;
   if fServer <> nil then
     fServer.Close; // shutdown the socket to unlock Accept() in Execute
@@ -3975,6 +3981,9 @@ var
   touchandgo: TNetSocket; // paranoid ensure Accept() is released
   host, port: RawUtf8;
 begin
+  if fFlag2 <> 0 then // fFlag1 used by TAsyncConnections.Shutdown
+    exit;             // use this counter to avoid duplicated calls
+  inc(fFlag2);
   Terminate;
   for i := 0 to high(fThreads) do
     with fThreads[i] do
@@ -5380,7 +5389,7 @@ begin
     fClientSockets.Shutdown;
   // terminate the Execute thread
   if fExecuteEvent <> nil then
-    fExecuteEvent.SetEvent;
+    fExecuteEvent.SetEvent; // release DoExecute
   inherited Destroy;
   // finalize all thread-pooled connections
   FreeAndNilSafe(fAsync);
@@ -5565,8 +5574,9 @@ begin
         if mscallbacks <> 0 then
           ms := mscallbacks; // for WebSockets frame gathering
       {$endif USE_WINIOCP}
-      while not Terminated and
-            not fAsync.Terminated do
+      while not (fShutdownInProgress or
+                 Terminated or
+                 fAsync.Terminated) do
         {$ifndef USE_WINIOCP}
         if fAsync.fSockets.fWrite.SubscribeCount +
            fAsync.fSockets.fWrite.Count = 0  then
