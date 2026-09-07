@@ -1617,7 +1617,7 @@ end;
 function TTunnelList.GetAllInfo: TVariantDynArray;
 var
   n, i: PtrInt;
-  tix32: cardinal;
+  tix32, c32: cardinal;
   sessions: TIntegerDynArray;
   tunnels: ITunnelTransmits;
 begin
@@ -1625,36 +1625,37 @@ begin
   if fCount = 0 then
     exit;
   tix32 := GetTickSec;
-  if tix32 = fInfoCacheTix32 then // fast path to the cached last value
+  c32 := fInfoCacheTix32;
+  if (c32 <> tix32) and
+     LockedExc32(fInfoCacheTix32, tix32, c32) then
   begin
+    n := SnapshotSessions(sessions, @tunnels);
+    if n <> 0 then
+    begin
+      SetLength(result, n);
+      for i := 0 to n - 1 do
+        try
+          result[i] := tunnels[i].TunnelInfo; // all callbacks outside fSafe
+        except
+          Delete(sessions[i]); // catastrophic cleanup of unstable links
+          // it is fine to keep result[i] = nil on failure
+        end;
+    end;
     fInfoCacheSafe.Lock;
     try
-      if (fInfoCache <> nil) and
-         (tix32 = fInfoCacheTix32) then
-      begin
-        result := fInfoCache;
-        exit;
-      end;
+      fInfoCache := result;
     finally
       fInfoCacheSafe.UnLock;
     end;
-  end;
-  n := SnapshotSessions(sessions, @tunnels);
-  if n = 0 then
-    exit;
-  SetLength(result, n);
-  for i := 0 to n - 1 do
+  end
+  else
+  begin
+    fInfoCacheSafe.Lock;
     try
-      result[i] := tunnels[i].TunnelInfo; // all callbacks outside fSafe
-    except
-      Delete(sessions[i]); // catastrophic cleanup of unstable links
+      result := fInfoCache;
+    finally
+      fInfoCacheSafe.UnLock;
     end;
-  fInfoCacheSafe.Lock;
-  try
-    fInfoCache := result;
-    fInfoCacheTix32 := tix32; // set last
-  finally
-    fInfoCacheSafe.UnLock;
   end;
 end;
 
