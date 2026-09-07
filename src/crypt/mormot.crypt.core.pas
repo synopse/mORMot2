@@ -2781,6 +2781,10 @@ procedure Random128(var Value: RawByteString); overload;
 // - used e.g. as a local thread-safe source of uniformly distributed randomness
 function RandomLecuyer(var rnd: TLecuyer): PLecuyer;
 
+/// get a random 100000000..999999999, i.e. exactly 9 digits with no leading zero
+// - returns 0 if our Random128() unpredictable generator is clearly broken
+function Random9Digits: cardinal;
+
 /// compute a random UUid value from the Random128() generator and RFC 4122
 // - to derivate a Uuid from a name see IdentifierGuid()/DotNetIdentifierGuid()
 procedure RandomGuid(out result: TGuid); overload;
@@ -10555,6 +10559,21 @@ begin
   Random128(@rnd);   // 88-bit seed from our CSPRNG
   rnd.SeedGenerator; // inlined TLecuyer.Seed
   result := @rnd;
+end;
+
+function Random9Digits: cardinal;
+var
+  rnd: THash128Rec;
+begin
+  Random128(@rnd); // unpredictable
+  result := rnd.c0 mod 900000000;
+  if result = 0 then
+    result := rnd.c1 mod 900000000;
+  if result = 0 then
+    result := rnd.c2 mod 900000000;
+  FillZero(rnd.b); // anti forensic
+  if result <> 0 then // only 1 in 7 x 10^26 probability
+    inc(result, 100000000);
 end;
 
 function IsRandomGuid(u: PHash128): boolean;
