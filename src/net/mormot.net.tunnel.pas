@@ -1330,7 +1330,8 @@ begin
         if Assigned(log) then
           log.Log(sllTrace, 'Open: compute ECDHE shared secret', self);
         if not Ecc256r1SharedSecret(rem^.Ecdh.pub, fEcdhe.priv, key.b) then
-          exit;
+          ETunnel.RaiseUtf8('%.Open: ECDHE shared secret failed on port %',
+            [self, result]);
         hmac.Update(key.b); // prime256v1 shared secret
       end;
       hmac2 := hmac;     // two labeled hmacs - see NIST SP 800-108
