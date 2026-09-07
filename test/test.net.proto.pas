@@ -92,6 +92,11 @@ type
     tunneloptions: TTunnelOptions;
     tunnelsequence: integer;
     procedure TunnelExecute(Sender: TObject);
+    procedure TunnelDeferredExecute(Sender: TObject);
+    function TunnelBackgroundDeferred(l: TTunnelLocal; s: TTunnelSession;
+      const r: ITunnelTransmit; const address: RawUtf8): TLoggedWorkThread;
+    procedure TunnelDeferred(const agent: ITunnelAgent;
+      const console: ITunnelConsole);
     function TunnelBackgroundOpen(l: TTunnelLocal; s: TTunnelSession;
      const r: ITunnelTransmit; const sc, vc: ICryptCert): TLoggedWorkThread;
     procedure CheckBlocks(const log: ISynLog; const sent, recv: RawByteString;
@@ -3135,6 +3140,14 @@ type
      signcert, verifcert: ICryptCert;
    end;
 
+   TTunnelDeferredExecute = class
+   public
+     local: TTunnelLocal;
+     session: TTunnelSession;
+     remote: ITunnelTransmit;
+     address: RawUtf8;
+   end;
+
 function TNetworkProtocols.TunnelBackgroundOpen(l: TTunnelLocal; s: TTunnelSession;
   const r: ITunnelTransmit; const sc, vc: ICryptCert): TLoggedWorkThread;
 var
@@ -3173,6 +3186,48 @@ begin
     check(exec.local.RemotePort <> 0);
   finally
     exec.Free; // always free transient call parameters
+  end;
+end;
+
+function TNetworkProtocols.TunnelBackgroundDeferred(l: TTunnelLocal;
+  s: TTunnelSession; const r: ITunnelTransmit;
+  const address: RawUtf8): TLoggedWorkThread;
+var
+  context: TTunnelDeferredExecute;
+  name: RawUtf8;
+begin
+  context := TTunnelDeferredExecute.Create;
+  context.local := l;
+  context.session := s;
+  context.remote := r;
+  context.address := address;
+  inc(tunnelsequence);
+  Make(['deferred', tunnelsequence], name);
+  result := TLoggedWorkThread.Create(TSynLog, name, context,
+    TunnelDeferredExecute, {suspended=}false, {ManualWaitForAndFree=}true);
+end;
+
+procedure TNetworkProtocols.TunnelDeferredExecute(Sender: TObject);
+var
+  exec: TTunnelDeferredExecute;
+  port: TNetPort;
+begin
+  exec := Sender as TTunnelDeferredExecute;
+  if Check(exec <> nil) then
+  try
+    Check(exec.local <> nil, 'deferred local');
+    Check(exec.session <> 0, 'deferred session');
+    // This is the exact synchronization point replacing Sleep/ReadLn/polling:
+    // no backend TCP connect is attempted until the peer emits its handshake.
+    if Check(exec.local.WaitForHandshake(exec.session, 5000),
+        'deferred WaitForHandshake') then
+    begin
+      port := exec.local.Open(exec.session, exec.remote, [toEcdhe], 1000,
+        tunnelappsec, exec.address, ['side', 'backend']);
+      Check(port <> 0, 'deferred backend Open');
+    end;
+  finally
+    exec.Free;
   end;
 end;
 
@@ -3324,6 +3379,129 @@ begin
   TunnelSocket(log, clientinstance, serverinstance, packets);
   // avoid circular references memory leak (not needed over SOA websockets)
   clientinstance.RawTransmit := nil;
+end;
+
+procedure TNetworkProtocols.TunnelDeferred(const agent: ITunnelAgent;
+  const console: ITunnelConsole);
+var
+  log: ISynLog;
+  session: TTunnelSession;
+  agentlocal, consolelocal: TTunnelLocal;
+  agentcallback, consolecallback: ITunnelTransmit;
+  worker: TLoggedWorkThread;
+  backendlisten, viewerlisten: TNetSocket;
+  backendsock, viewerclient, viewersock: TNetSocket;
+  backendaddr, vieweraddr: TNetAddr;
+  backendport, viewerport, port: TNetPort;
+  address: RawUtf8;
+  nr: TNetResult;
+  serverbanner, clienthello, received: RawByteString;
+begin
+  TSynLogTestLog.EnterLocal(log, self, 'TTunnel demand-driven');
+  backendlisten := nil;
+  viewerlisten := nil;
+  backendsock := nil;
+  viewerclient := nil;
+  viewersock := nil;
+  worker := nil;
+  agentlocal := TTunnelLocalClient.Create(TSynLog);
+  consolelocal := TTunnelLocalServer.Create(TSynLog);
+  agentcallback := agentlocal;
+  consolecallback := consolelocal;
+  try
+    // Fake the VNC server listener and the console-side forwarded listener.
+    nr := NewSocket(cLocalHost, '0', nlTcp, {bind=}true,
+      500, 500, 500, {retry=}0, backendlisten, @backendaddr);
+    CheckUtf8(nr = nrOk, 'backend listen=%', [_NR[nr]]);
+    backendport := backendaddr.Port;
+    Check(backendport <> 0, 'backend port');
+    nr := NewSocket(cLocalHost, '0', nlTcp, {bind=}true,
+      500, 500, 500, {retry=}0, viewerlisten, @vieweraddr);
+    CheckUtf8(nr = nrOk, 'viewer listen=%', [_NR[nr]]);
+    viewerport := vieweraddr.Port;
+    Check(viewerport <> 0, 'viewer port');
+    Make([cLocalHost, ':', backendport], address);
+
+    // Register routing only.  In particular there is no TCP connection to the
+    // fake VNC backend at this point, matching ssh -R setup semantics.
+    session := agent.TunnelPrepare(agentcallback);
+    Check(session <> 0, 'deferred prepare');
+    Check(console.TunnelAccept(session, consolecallback), 'deferred accept');
+    Check(not agentlocal.WaitForHandshake(session, 0),
+      'no handshake before viewer');
+
+    // Agent blocks on the handshake event.  It will connect backendport only
+    // after console OpenSocket() below has accepted a real viewer and emitted
+    // the first handshake frame.
+    worker := TunnelBackgroundDeferred(agentlocal, session, agent, address);
+
+    nr := NewTcpClientSocket(cLocalHost, UInt32ToUtf8(viewerport),
+      1000, viewerclient);
+    CheckUtf8(nr = nrOk, 'viewer client=%', [_NR[nr]]);
+    nr := viewerlisten.Accept(viewersock, vieweraddr, {async=}false);
+    CheckUtf8(nr = nrOk, 'viewer accept=%', [_NR[nr]]);
+    Check(viewersock <> nil, 'viewer accepted socket');
+
+    // The accepted application socket is handed to TTunnelLocal.  This call
+    // emits the first handshake and wakes TunnelDeferredExecute() above.
+    port := consolelocal.OpenSocket(session, console, [toEcdhe], 1000,
+      tunnelappsec, viewersock, viewerport, ['side', 'viewer']);
+    CheckEqual(port, viewerport, 'OpenSocket port');
+    Check(viewersock = nil, 'OpenSocket ownership');
+    worker.WaitFinished(5000);
+    CheckEqual(agentlocal.Port, backendport, 'backend local port');
+    CheckEqual(agentlocal.RemotePort, viewerport, 'backend remote port');
+    CheckEqual(consolelocal.Port, viewerport, 'viewer local port');
+    CheckEqual(consolelocal.RemotePort, backendport, 'viewer remote port');
+    Check(agentlocal.Encrypted, 'backend encrypted');
+    Check(consolelocal.Encrypted, 'viewer encrypted');
+
+    // The agent Open(host:port) has now connected to our fake VNC listener.
+    // Accept it and reproduce the RFB behavior where the VNC server speaks
+    // first.  Do this BEFORE TunnelCommit(): pending sessions must already route
+    // handshake and early data, otherwise real VNC can deadlock here.
+    nr := backendlisten.Accept(backendsock, backendaddr, {async=}false);
+    CheckUtf8(nr = nrOk, 'backend accept=%', [_NR[nr]]);
+    serverbanner := 'RFB 003.008'#10;
+    nr := backendsock.SendAll(pointer(serverbanner), length(serverbanner));
+    CheckUtf8(nr = nrOk, 'backend banner send=%', [_NR[nr]]);
+    nr := viewerclient.RecvWait(1000, received);
+    CheckUtf8(nr = nrOk, 'viewer banner recv=%', [_NR[nr]]);
+    CheckBlocks(log, serverbanner, received, 10);
+
+    Check(agent.TunnelCommit(session), 'deferred agent commit');
+    Check(console.TunnelCommit(session), 'deferred console commit');
+
+    // Then validate the opposite direction like the viewer's RFB reply.
+    clienthello := 'RFB 003.008'#10;
+    nr := viewerclient.SendAll(pointer(clienthello), length(clienthello));
+    CheckUtf8(nr = nrOk, 'viewer hello send=%', [_NR[nr]]);
+    nr := backendsock.RecvWait(1000, received);
+    CheckUtf8(nr = nrOk, 'backend hello recv=%', [_NR[nr]]);
+    CheckBlocks(log, clienthello, received, 11);
+    Check(agentlocal.Thread.Processing, 'backend processing');
+    Check(consolelocal.Thread.Processing, 'viewer processing');
+    Check(agentlocal.BytesIn <> 0, 'backend bytes in');
+    Check(agentlocal.BytesOut <> 0, 'backend bytes out');
+    CheckEqual(agentlocal.BytesIn, consolelocal.BytesOut, 'deferred bytes1');
+    CheckEqual(agentlocal.BytesOut, consolelocal.BytesIn, 'deferred bytes2');
+  finally
+    if viewerclient <> nil then
+      viewerclient.ShutdownAndClose(true);
+    if backendsock <> nil then
+      backendsock.ShutdownAndClose(true);
+    if viewersock <> nil then
+      viewersock.ShutdownAndClose(true);
+    agentlocal.ClosePort;
+    consolelocal.ClosePort;
+    if viewerlisten <> nil then
+      viewerlisten.ShutdownAndClose(true);
+    if backendlisten <> nil then
+      backendlisten.ShutdownAndClose(true);
+    worker.Free;
+    agentcallback := nil;
+    consolecallback := nil;
+  end;
 end;
 
 const
@@ -3576,6 +3754,9 @@ begin
     for i := 0 to high(console) do
       Check(relay.Resolve(ITunnelConsole, console[i]), 'sicPerSession');
     TunnelRelay(relay, agent, console, {packets=}10);
+    // same TCP topology as ssh -R / TISHelp: listener first, backend on demand
+    tunnelappsec := 'mORMot demand-driven regression';
+    TunnelDeferred(agent[0], console[0]);
     agent := nil;
     console := nil;
     // 2.2. setup a SOA WebSockets server as actual relay over WebSockets
@@ -3629,6 +3810,9 @@ begin
         end;
         TSynLog.Add.Log(sllInfo, 'Tunnel: call TunnelRelay', self);
         TunnelRelay(relay, agent, console, {packets=}5);
+        // repeat through actual SOA callbacks over WebSockets, where the
+        // handshake event is raised from the WebSocket callback thread
+        TunnelDeferred(agent[0], console[0]);
       finally
         agent := nil; // keep refcount clean
         console := nil;
