@@ -4602,10 +4602,10 @@ begin
   NotifyTestSpeed('TDocVariant FromResults not exp', c, lennexp * ITER, @timer, ONLYLOG);
   // TDocVariant FromResults not exp in 242.29ms i.e. 6.4M/s, 355.9 MB/s
   Check(dv.InitArrayFromResults(people));
-  CheckEqual(peoplehash, Hash32(dv.ToJson));
+  CheckHash(dv.ToJson, peoplehash, 'dv.ToJson1');
   dv.Clear; // to reuse dv
   Check(dv.InitArrayFromResults(notexpanded));
-  CheckEqual(peoplehash, Hash32(dv.ToJson));
+  CheckHash(dv.ToJson, peoplehash, 'dv.ToJson2');
   dv.Clear; // to reuse dv
   timer.Start;
   for i := 1 to ITER do

@@ -2124,7 +2124,7 @@ begin
   U := '3000';
   Check(AUP.IndexOf(U) < 0);
   Test := AUP.SaveTo;
-  CheckEqual(Hash32(@Test[2], length(Test) - 1), $1EC51463, 'hash32e');
+  CheckHash(@Test[2], length(Test) - 1, $1EC51463, 'hash32e');
   // trimed Test[1]=ElemSize
   for i := 0 to 1000 do
   begin
@@ -4123,7 +4123,7 @@ begin
     gen.SeedGenerator(i);
     FillCharFast(c, SizeOf(c), 0); // gen.Fill() will XOR the buffer
     gen.Fill(@c, SizeOf(c));
-    CheckEqual(Hash32(@c, SizeOf(c)), REF_LECUYER_GENERATOR[i], 'lecgen');
+    CheckHash(@c, SizeOf(c), REF_LECUYER_GENERATOR[i], 'lecgen');
     CheckEqual(gen.Next, REF_LECUYER_GENERATOR_TRAIL[i], 'lecgentrail');
   end;
 end;
@@ -5034,7 +5034,7 @@ begin
   for i := 11 to 120 do
     AppendShortCardinal(i, a);
   CheckEqual(length(a), 253);
-  CheckEqual(Hash32(@a[1], ord(a[0])), $1CDCEE09, 'AppendShortCardinal');
+  CheckHash(@a[1], ord(a[0]), $1CDCEE09, 'AppendShortCardinal');
   a := '';
   AppendShortByte(0, @a);
   check(a = '0');
@@ -5044,7 +5044,7 @@ begin
   for i := 11 to 120 do
     AppendShortByte(i, @a);
   CheckEqual(length(a), 253);
-  CheckEqual(Hash32(@a[1], ord(a[0])), $1CDCEE09, 'AppendShortByte');
+  CheckHash(@a[1], ord(a[0]), $1CDCEE09, 'AppendShortByte');
   CheckEqualShort(TwoDigits(0), '0');
   CheckEqualShort(TwoDigits(1), '1');
   CheckEqualShort(TwoDigits(10), '10');

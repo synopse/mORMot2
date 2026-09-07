@@ -62,8 +62,8 @@ var
   expected: cardinal;
   WS: SynUnicode;
 const
-  Hash:   array[boolean] of cardinal  = (2336277040, 1967009088);
-  Hash10: array[boolean] of cardinal  = (2379006506, 1967009088);
+  Hash:   array[boolean] of cardinal  = ($8B40C230, $753E2D40);
+  Hash10: array[boolean] of cardinal  = ($8DCCC22A, $753E2D40);
   Name:   array[boolean] of PDFString = ('Arial', 'Helvetica');
 begin
   MS := TMemoryStream.Create;
@@ -92,7 +92,7 @@ begin
         expected := Hash[embed]
       else
         expected := Hash10[embed];
-      Check(Hash32(MS.Memory, integer(MS.Position)) = expected);
+      CheckHash(MS.Memory, PtrInt(MS.Position), expected, Name[embed]);
       if not embed then
       begin
         if CharSet <> ANSI_CHARSET then

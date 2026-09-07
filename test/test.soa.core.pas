@@ -1357,9 +1357,9 @@ begin
   TestCalculator(Inst.CC); // test the fact that CC inherits from ICalculator
   n := 1000;
   s := Inst.CC.TestRawJson(n, 49, _TESTRAWJSON);
-  Check(length(s) = n + 2);
-  CheckEqual(Hash32(s), 4223609852); // n = 1000
-  //CheckEqual(Hash32(s), 2508875362); // n = 100000000
+  CheckEqual(length(s), n + 2, 'len TestRawJson');
+  CheckHash(s, 4223609852, 'TestRawJson'); // n = 1000
+  //CheckHash(s, 2508875362, 'TestRawJson'); // n = 100000000
   C3 := TComplexNumber.Create(0, 0);
   C1 := TComplexNumber.Create(2, 3);
   C2 := TComplexNumber.Create(20, 30);
