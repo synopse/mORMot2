@@ -197,12 +197,13 @@ type
     fClosed, fVerboseLog: boolean;
     fThread: TTunnelLocalThread;
     fHandshake: TSynQueue;
+    fHandshakeEvent: TSynEvent;
     fEcdhe: TEccKeyPair;
     fTransmit: ITunnelTransmit;
     fSignCert, fVerifyCert: ICryptCert;
     fBytesIn, fBytesOut, fFramesIn, fFramesOut: Int64;
     fLogClass: TSynLogClass;
-    fStartTicks: cardinal;
+    fStartTicks: cardinal; // GetUptimeSec value
     fInfo: TDocVariantData;
     // methods to be overriden according to the client/server side
     procedure IncludeOptionsFromCert; virtual; abstract;
@@ -858,12 +859,14 @@ begin
   if SpecificKey <> nil then
     fEcdhe := SpecificKey^;
   fHandshake := TSynQueue.Create(TypeInfo(TRawByteStringDynArray));
+  fHandshakeEvent := TSynEvent.Create;
 end;
 
 destructor TTunnelLocal.Destroy;
 begin
   if fThread <> nil then
     ClosePort; // calls Terminate
+  fHandshakeEvent.Free;
   inherited Destroy;
   FillCharFast(fEcdhe, SizeOf(fEcdhe), 0);
   FreeAndNil(fHandshake); // if Open() was not called
@@ -878,6 +881,8 @@ var
 begin
   if self = nil then
     exit;
+  if fHandshakeEvent <> nil then
+    fHandshakeEvent.SetEvent; // release a possible WaitForHandshake()
   fLogClass.EnterLocal(log, 'ClosePort %', [fPort], self);
   fSendSafe.Lock; // protect fHandshake+fThread
   try
@@ -904,7 +909,7 @@ begin
         begin
           if Assigned(log) then
             log.Log(sllDebug, 'ClosePort: release accept', self);
-          if NewTcpClientSocket(cLocalhost, UInt32ToUtf8(fPort), 10, callback) = nrOK then
+          if NewTcpClientSocket(IP4local, UInt32ToUtf8(fPort), 10, callback) = nrOK then
             // Windows socket may not release Accept() until connected
             callback.ShutdownAndClose({rdwr=}false);
         end;
@@ -937,7 +942,9 @@ begin
     if fHandshake <> nil then
     begin
       fLogClass.Add.Log(sllTrace, 'TunnelSend: into Handshake queue', self);
-      fHandshake.Push(aFrame); // during the handshake phase - maybe before Open
+      fHandshake.Push(aFrame); // during handshake phase - maybe before Open
+      if fHandshakeEvent <> nil then
+        fHandshakeEvent.SetEvent;
       exit;
     end;
     p := pointer(aFrame);
@@ -953,6 +960,57 @@ begin
       fThread.OnReceived(p, l) // regular tunelling process
     else
       fLogClass.Add.Log(sllWarning, 'TunnelSend: Thread=nil', self); // unlikely
+  finally
+    fSendSafe.UnLock;
+  end;
+end;
+
+function TTunnelLocal.WaitForHandshake(
+  Sess: TTunnelSession; TimeOutMS: integer): boolean;
+var
+  frame: RawByteString;
+begin
+  result := false;
+  if (self = nil) or
+     (Sess = 0) then
+    exit;
+  // first inspect the queue while protected by the same lock as TunnelSend():
+  // supports a handshake which arrived before WaitForHandshake() was called
+  fSendSafe.Lock;
+  try
+    if fClosed or
+       (fThread <> nil) or
+       (fHandshake = nil) then
+      exit;
+    if (fSession <> 0) and
+       (fSession <> Sess) then
+      ETunnel.RaiseUtf8('%.WaitForHandshake: session mismatch', [self]);
+    fSession := Sess;
+    if fHandshake.Peek(frame) then
+    begin
+      if FrameSession(frame) <> Sess then
+        ETunnel.RaiseUtf8('%.WaitForHandshake: wrong session trailer', [self]);
+      result := true;
+      exit;
+    end;
+  finally
+    fSendSafe.UnLock;
+  end;
+  // TSynEvent preserves an early SetEvent(), so there is no lost wakeup between
+  // the queue check above and this wait - no frame is consumed here
+  if (fHandshakeEvent = nil) or
+     not fHandshakeEvent.WaitFor(TimeOutMS) then
+    exit;
+  fSendSafe.Lock;
+  try
+    if fClosed or
+       (fThread <> nil) or
+       (fHandshake = nil) or
+       not fHandshake.Peek(frame) then
+      exit;
+    if FrameSession(frame) <> Sess then
+      ETunnel.RaiseUtf8('%.WaitForHandshake: wrong session trailer', [self]);
+    result := true;
   finally
     fSendSafe.UnLock;
   end;
