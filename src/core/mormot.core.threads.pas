@@ -705,6 +705,10 @@ type
     // - this override will eventually call TSynLog.NotifyThreadEnded
     procedure DoTerminate; override;
   public
+    {$ifdef FPCPOSIX}
+    /// finalize and wait for the thread ending with no 100ms FPC RTL delay
+    destructor Destroy; override;
+    {$endif FPCPOSIX}
     {$ifndef HASTTHREADSTART}
     /// method to be called to start the thread
     // - Resume is deprecated in the newest RTL, since some OS - e.g. Linux -
@@ -2976,6 +2980,28 @@ begin
     // never propagate any exception to the main ThreadProc()
   end;
 end;
+
+{$ifdef FPCPOSIX}
+destructor TThreadAbstract.Destroy;
+var
+  endtix: Int64;
+begin
+  // avoid the 100 ms WaitFor in TThread.SysDestroy of FPC unix RTL
+  if not Suspended and
+     not Finished and
+     (GetCurrentThreadId = MainThreadID) then
+  begin
+    Terminate;
+    endtix := mormot.core.os.GetTickCount64 + 100; // never wait forever
+    repeat
+      CheckSynchronize(0);
+      SleepHiRes(0); // fpnanosleep 10us
+    until Finished or
+          (mormot.core.os.GetTickCount64 > endtix);
+  end;
+  inherited Destroy;
+end;
+{$endif FPCPOSIX}
 
 
 { TSynBackgroundThreadAbstract }
