@@ -44,6 +44,7 @@ rem  -Ci        - IO checking
 rem  -O2        - optimization level (no -O3/x64MM as on x86_64)
 rem  -g -gl -gw2 -Xg - debug information, line info, DWARFv2, in a separate file
 rem  -CX -XX    - smart linking
+rem  -dNO_UI    - no LCL widgetset here, so no HAS_UI_PDF and no test.ui.pdf
 rem  -veiq -v-n-h- - verbose(errors, info, message numbers) no warnings/notes/hints
 rem  -B         - build all
 rem  -Se10      - halt after 10 errors
@@ -56,7 +57,7 @@ rem  a local mormot2tests.cfg would override our command line switches
 if exist "%LIB2%\test\mormot2tests.cfg" ren "%LIB2%\test\mormot2tests.cfg" mormot2tests.cfg.bak
 
 echo Compiling for aarch64-win64 into %BIN%
-"%FPC%" -MDelphi -Sci -Ci -O2 -g -gl -gw2 -Xg -CX -XX ^
+"%FPC%" -MDelphi -Sci -Ci -O2 -g -gl -gw2 -Xg -CX -XX -dNO_UI ^
   -Twin64 -Paarch64 ^
   -veiq -v-n-h- %SUPRESS_WARN% ^
   -Fi"%INCLUDES%" ^
