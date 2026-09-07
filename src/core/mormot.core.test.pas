@@ -282,7 +282,10 @@ type
       const args: array of const; level: TSynLogLevel = sllTrace);
     /// used by the published methods to run test assertion against a Hash32() constant
     procedure CheckHash(const data: RawByteString; expectedhash32: cardinal;
-      const msg: RawUtf8 = '');
+      const msg: RawUtf8 = ''); overload;
+    /// used by the published methods to run test assertion against a Hash32() constant
+    procedure CheckHash(data: pointer; len: PtrInt; expectedhash32: cardinal;
+      const msg: RawUtf8 = ''); overload;
     /// safely download some reference material (e.g. from api.github.com)
     // - with proper retry if the server denies it, due to a rate limit
     function DownloadFile(const uri: RawUtf8; localfile: TFileName = '';
@@ -1069,10 +1072,16 @@ end;
 
 procedure TSynTestCase.CheckHash(const data: RawByteString;
   expectedhash32: cardinal; const msg: RawUtf8);
+begin
+  CheckHash(pointer(data), length(data), expectedhash32, msg);
+end;
+
+procedure TSynTestCase.CheckHash(data: pointer; len: PtrInt;
+  expectedhash32: cardinal; const msg: RawUtf8);
 var
   crc: cardinal;
 begin
-  crc := Hash32(data);
+  crc := Hash32(data, len);
   //if crc <> expectedhash32 then ConsoleWrite(data);
   CheckUtf8(crc = expectedhash32, 'Hash32()=$% expected=$% %',
     [CardinalToHexShort(crc), CardinalToHexShort(expectedhash32), msg]);
