@@ -639,17 +639,20 @@ begin
       sock.Close;
     end;
     hdr := @tmp;
-    if (len <= length(Request)) or
+    if (len < SizeOf(hdr^)) or
        not addr.IPEqual(resp) or
        (hdr^.Xid <> PDnsHeader(Request)^.Xid) or
        not hdr^.IsResponse or
-       (hdr^.ResponseCode <> DNS_RESP_SUCCESS) or
-       (hdr^.AnswerCount = 0) then
-       // hdr^.NameServerCount or hdr^.AdditionalCount wouldn't be enough
-      exit;
-    tcponly := hdr^.Truncation;
+       (hdr^.ResponseCode <> DNS_RESP_SUCCESS) then
+      exit; // clearlu invalid response
+    tcponly := hdr^.Truncation; // TC=1 requires TCP as per RFC 2181
     if not tcponly then
-      FastSetRawByteString(answer, @tmp, len);
+      if (len <= length(Request)) or
+         (hdr^.AnswerCount = 0) then
+         // hdr^.NameServerCount or hdr^.AdditionalCount wouldn't be enough
+        exit
+      else
+        FastSetRawByteString(answer, @tmp, len);
   end;
   if tcponly then
   begin
