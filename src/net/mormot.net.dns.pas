@@ -419,7 +419,7 @@ end;
 
 function TDnsHeader.GetZ: byte;
 begin
-  result := (Flags and QF_Z) shr 4;
+  result := (Flags2 and QF_Z) shr 4;
 end;
 
 procedure TDnsHeader.SetOpCode(const AValue: byte);
@@ -642,12 +642,12 @@ begin
     if (len < SizeOf(hdr^)) or
        not addr.IPEqual(resp) or
        (hdr^.Xid <> PDnsHeader(Request)^.Xid) or
-       not hdr^.IsResponse or
-       (hdr^.ResponseCode <> DNS_RESP_SUCCESS) then
+       not hdr^.IsResponse then
       exit; // clearlu invalid response
     tcponly := hdr^.Truncation; // TC=1 requires TCP as per RFC 2181
     if not tcponly then
-      if (len <= length(Request)) or
+      if (hdr^.ResponseCode <> DNS_RESP_SUCCESS) or
+         (len <= length(Request)) or
          (hdr^.AnswerCount = 0) then
          // hdr^.NameServerCount or hdr^.AdditionalCount wouldn't be enough
         exit
@@ -677,7 +677,7 @@ begin
       len := length(Request);
       if len > SizeOf(tmp) - 2 then
         exit; // paranoid
-      PWordArray(@tmp)[0] := bswap16(len); // not found in RFCs, but mandatory
+      PWordArray(@tmp)[0] := bswap16(len); // see RFC 1035 section 4.2.2
       MoveFast(pointer(Request)^, PWordArray(@tmp)[1], len);
       if sock.SendAll(@tmp, len + 2) <> nrOk then
         exit;
@@ -698,7 +698,6 @@ begin
          (hdr^.Xid <> PDnsHeader(Request)^.Xid) or
          not hdr^.IsResponse or
          hdr^.Truncation or
-         not hdr^.RecursionAvailable or
          (hdr^.ResponseCode <> DNS_RESP_SUCCESS) or
          (hdr^.AnswerCount = 0) then
         exit;
