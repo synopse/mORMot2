@@ -502,6 +502,25 @@ begin
     result := nextpos;
 end;
 
+function DnsParseCharString(const Answer: RawByteString;
+  var Pos: PtrInt; EndPos: PtrInt; var Text: RawUtf8): boolean;
+var
+  len: PtrInt;
+begin
+  result := false;
+  if (Pos < 0) or
+     (Pos >= EndPos) or
+     (EndPos > length(Answer)) then
+    exit;
+  len := PByteArray(Answer)[Pos];
+  inc(Pos);
+  if Pos + len > EndPos then
+    exit;
+  FastSetString(Text, @PByteArray(Answer)[Pos], len);
+  inc(Pos, len);
+  result := true;
+end;
+
 function DnsParseWord(p: PByteArray; var pos: PtrInt): cardinal;
 begin
   result := bswap16(PWord(@p[pos])^);
@@ -519,6 +538,7 @@ procedure DnsParseData(RR: TDnsResourceRecord;
 var
   p: PByteArray;
   s2: RawUtf8;
+  endpos: PtrInt;
 begin
   p := @PByteArray(Answer)[Pos];
   case RR of // see https://www.rfc-editor.org/rfc/rfc1035#section-3.3
@@ -534,16 +554,40 @@ begin
     drrMB,
     drrMD,
     drrMG,
-    drrTXT,
     drrNS,
     drrPTR:
       // single text Value
       DnsParseString(Answer, Pos, Text);
+    drrTXT:
+      begin
+        FastAssignNew(Text);
+        endpos := Pos + Len;
+        while Pos < endpos do
+        begin
+          if not DnsParseCharString(Answer, Pos, endpos, s2) then
+          begin
+            FastAssignNew(Text);
+            exit;
+          end;
+          Append(Text, s2);
+        end;
+      end;
     drrMX:
       // Priority:W / Value
       if Len > 2 then
         DnsParseString(Answer, Pos + 2, Text);
-    drrHINFO,
+    drrHINFO:
+      begin
+        endpos := Pos + Len;
+        if not DnsParseCharString(Answer, Pos, endpos, Text) or
+           not DnsParseCharString(Answer, Pos, endpos, s2) or
+           (Pos <> endpos) then
+        begin
+          FastAssignNew(Text);
+          exit;
+        end;
+        Append(Text, ' ', s2);
+      end;
     drrSOA:
       // several values, first two as TEXT
       begin

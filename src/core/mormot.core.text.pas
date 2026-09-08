@@ -2514,7 +2514,7 @@ function HexToChar(Hex: PAnsiChar; Bin: PUtf8Char; HexToBin: PByteArray): boolea
 /// fast conversion from two hexa bytes into a 16-bit UTF-16 WideChar
 // - as used e.g. for \u#### JSON content unescape
 // - similar to HexDisplayToBin(Hex,@wordvar,2)
-// - returns 0 on malformated input
+// - returns 0 on malformed input
 function HexToWideChar(Hex: PUtf8Char): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -11428,7 +11428,7 @@ _nxt:   Bin^ := c;
         goto _nxt;
       dec(c, ord('0'));
       if c > 3 then
-        // stop at malformated input (includes #0)
+        // stop at malformed input (includes #0)
         break;
       c := c shl 6;
       v := c;

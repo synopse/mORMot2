@@ -6562,7 +6562,7 @@ begin
   fResponseDN := '';
   if AsnNext(Pos, Asn1Response) <> ASN1_SEQ then
   begin
-    SetUnknownError('Malformated response: missing ASN.1 SEQ');
+    SetUnknownError('Malformed response: missing ASN.1 SEQ');
     exit;
   end;
   seqend := AsnNextInteger(Pos, Asn1Response, asntype);
