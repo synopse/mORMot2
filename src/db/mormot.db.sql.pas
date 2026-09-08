@@ -1316,9 +1316,6 @@ type
     fOnTableCreate: TOnTableCreate;
     fOnTableAddColumn: TOnTableAddColumn;
     fOnTableCreateMultiIndex: TOnTableCreateMultiIndex;
-    /// remove a fSharedTransactions entry registered by SharedTransaction()
-    // - called when the actual StartTransaction failed right after the entry
-    // was registered, so that it does not stay behind for ever
     procedure UnRegisterSharedTransaction(SessionID: cardinal);
     procedure SetFlag(const flag: TSqlDBConnectionPropertiesFlag; const value: boolean);
       {$ifdef HASINLINE}inline;{$endif}

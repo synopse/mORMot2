@@ -1796,11 +1796,15 @@ end;
 { ********* Main Memory Manager Functions }
 
 function _GetMem(size: PtrUInt): pointer;
-  {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
+{$ifdef NOSFRAME} nostackframe; {$endif} assembler;
+{$ifdef MSWINDOWS} // explicit local variables to maintain Win64 ABI convention
+var
+  save_rsi, save_rdi, save_rbx: PtrUInt;
+{$endif MSWINDOWS}
 asm     // size = rcx on Windows, = rdi on SystemV; use rsi = TSmallBlockType
         {$ifdef MSWINDOWS}
-        push    rsi
-        push    rdi
+        mov     save_rsi, rsi
+        mov     save_rdi, rdi
         {$endif MSWINDOWS}
         // Since most allocations are for small blocks, determine small block type
         lea     rsi, [rip + SmallBlockInfo]
@@ -2099,7 +2103,11 @@ asm     // size = rcx on Windows, = rdi on SystemV; use rsi = TSmallBlockType
         call    LockMediumBlocks
 @MediumLocked1:
         // From now own rbx=TSmallBlockType, so we need to preserve it
+        {$ifdef MSWINDOWS}
+        mov     save_rbx, rbx
+        {$else}
         push    rbx
+        {$endif MSWINDOWS}
         mov     rbx, rsi
         // Are there any available blocks of a suitable size?
         movsx   esi, [rbx].TSmallBlockType.AllowedGroupsForBlockPoolBitmap
@@ -2181,17 +2189,19 @@ asm     // size = rcx on Windows, = rdi on SystemV; use rsi = TSmallBlockType
         {$ifdef MSWINDOWS}
         movzx   ecx, word ptr [rbx].TSmallBlockType.OptimalBlockPoolSize
         mov     rdx, rsi
-        push    rcx
-        push    rdx
+        // on input: ecx=BlockSize, rdx=Info - rbx/rsi/rdi are non-volatile
+        call    AllocNewSequentialFeedMediumPool
+        mov     r10, rsi
+        movzx   edi, word ptr [rbx].TSmallBlockType.OptimalBlockPoolSize
         {$else}
         movzx   edi, word ptr [rbx].TSmallBlockType.OptimalBlockPoolSize
         push    rdi
         push    rsi
-        {$endif MSWINDOWS}
-        // on input: ecx/edi=BlockSize, rdx/rsi=Info
+        // on input: edi=BlockSize, rsi=Info
         call    AllocNewSequentialFeedMediumPool
         pop     r10
         pop     rdi  // restore edi=blocksize and r10=TMediumBlockInfo
+        {$endif MSWINDOWS}
         mov     rsi, rax
         test    rax, rax
         jnz     @GotMediumBlock // rsi=freeblock rbx=blocktype edi=blocksize
@@ -2248,7 +2258,11 @@ asm     // size = rcx on Windows, = rdi on SystemV; use rsi = TSmallBlockType
         // ---------- MEDIUM block allocation ----------
 @NotTinySmallBlock:
         // from now on, we may use the rbx register
+        {$ifdef MSWINDOWS}
+        mov     save_rbx, rbx
+        {$else}
         push    rbx
+        {$endif MSWINDOWS}
         // Do we need a Large block?
         {$ifndef FPCMM_MEDIUMPERTHREAD}
         lea     r10, [rip + MediumBlockInfo]
@@ -2478,11 +2492,13 @@ asm     // size = rcx on Windows, = rdi on SystemV; use rsi = TSmallBlockType
         // Note: size is still in the rcx/rdi first param register
         call    AllocateLargeBlock
 @Done:  // restore registers and the stack frame before ret
+        {$ifdef MSWINDOWS}
+        mov     rbx, save_rbx
+@Quit:  mov     rdi, save_rdi
+        mov     rsi, save_rsi
+        {$else}
         pop     rbx
-@Quit:  {$ifdef MSWINDOWS}
-        pop     rdi
-        pop     rsi
-        {$endif MSWINDOWS}
+@Quit:  {$endif MSWINDOWS}
 end;
 
 function FreeMediumBlock(arg1, arg2: pointer): PtrUInt;
@@ -2830,17 +2846,26 @@ end;
 
 // warning: FPC signature is not the same than Delphi: requires "var P"
 function _ReallocMem(var P: pointer; Size: PtrUInt): pointer;
-  {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
+{$ifdef NOSFRAME} nostackframe; {$endif} assembler;
+{$ifdef MSWINDOWS} // explicit local variables to maintain Win64 ABI convention
+var
+  save_p, save_rbx, save_r14, save_rsi, save_rdi: pointer;
+  save_rax, save_rcx, save_rdx: PtrUInt;
+{$endif MSWINDOWS}
 asm
         {$ifdef MSWINDOWS}
-        push    rdi
-        push    rsi
+        // don't modify rsp on Win64: let FPC manage alignment and shadow space
+        mov     save_p, P
+        mov     save_rbx, rbx
+        mov     save_r14, r14
+        mov     save_rsi, rsi
+        mov     save_rdi, rdi
         {$else}
         mov     rdx, Size
-        {$endif MSWINDOWS}
         push    rbx
         push    r14
         push    P // for assignement in @Done
+        {$endif MSWINDOWS}
         mov     r14, qword ptr [P]
         test    rdx, rdx
         jz      @VoidSize  // ReallocMem(P,0)=FreeMem(P)
@@ -2863,7 +2888,9 @@ asm
 @NoResize:
         // branchless execution if current block is good enough for this size
         mov     rax, r14 // keep original pointer
+        {$ifndef MSWINDOWS}
         pop     rcx
+        {$endif MSWINDOWS}
         {$ifdef NOSFRAME}
         pop     r14
         pop     rbx
@@ -2872,7 +2899,11 @@ asm
         jmp     @Quit // on Win64, a stack frame is required
         {$endif NOSFRAME}
 @VoidSize:
-        push    rdx    // to set P=nil
+        {$ifdef MSWINDOWS}
+        mov     save_rax, rdx // rdx=0 -> result=nil after _FreeMem
+        {$else}
+        push    rdx           // to set P=nil
+        {$endif MSWINDOWS}
         jmp     @DoFree // ReallocMem(P,0)=FreeMem(P)
 @SmallUpsize:
         // State: r14=pointer, rdx=NewSize, rcx=CurrentBlockSize, rbx=CurrentBlockType
@@ -2885,9 +2916,15 @@ asm
         // New allocated size is max(requestedsize, minimumupsize)
         cmp     rdx, P
         cmova   P, rdx
+        {$ifdef MSWINDOWS}
+        mov     save_rdx, rdx
+        call    _GetMem
+        mov     rdx, save_rdx
+        {$else}
         push    rdx
         call    _GetMem
         pop     rdx
+        {$endif MSWINDOWS}
         test    rax, rax
         jz      @Done
         jmp     @MoveFreeMem // rax=New r14=P rbx=size-8
@@ -2903,7 +2940,11 @@ asm
         sub     rbx, 8
 @MoveFreeMem:
         // copy and free: rax=New r14=P rbx=size-8
+        {$ifdef MSWINDOWS}
+        mov     save_rax, rax
+        {$else}
         push    rax
+        {$endif MSWINDOWS}
         {$ifdef FPCMM_ERMS}
         cmp     rbx, ErmsMinSize // startup cost of 0..255 bytes
         jae     @erms
@@ -2921,7 +2962,11 @@ asm
         mov     qword ptr [rdx + rbx], rax
 @DoFree:mov     P, r14
         call    _FreeMem
+        {$ifdef MSWINDOWS}
+        mov     rax, save_rax
+        {$else}
         pop     rax
+        {$endif MSWINDOWS}
         jmp     @Done
         {$ifdef FPCMM_ERMS}
 @erms:  cld
@@ -3072,12 +3117,21 @@ asm
         // Bin next free block (if worth it)
         cmp     eax, MinimumMediumBlockSize
         jb      @MediumInPlaceNoNextRemove
+        {$ifdef MSWINDOWS}
+        mov     save_rcx, rcx
+        mov     save_rdx, rdx
+        mov     rcx, rdi
+        call    RemoveMediumFreeBlock // rcx=APMediumFreeBlock
+        mov     rdx, save_rdx
+        mov     rcx, save_rcx
+        {$else}
         push    rcx
         push    rdx
         mov     rcx, rdi
         call    RemoveMediumFreeBlock // rcx=APMediumFreeBlock
         pop     rdx
         pop     rcx
+        {$endif MSWINDOWS}
 @MediumInPlaceNoNextRemove:
         // Medium blocks grow a minimum of 25% in in-place upsizes
         mov     eax, ecx
@@ -3141,21 +3195,38 @@ asm
         call    ReallocateLargeBlock // with restored proper registers
         jmp     @Done
 @Error: xor     eax, eax
-@Done:  // restore registers and the stack frame before ret
+@Done:  // store rax new pointer value, and restore non-volatile registers
+        {$ifdef MSWINDOWS}
+        mov     rcx, save_p
+        mov     qword ptr [rcx], rax // store new pointer in var P
+@Quit:  mov     r14, save_r14
+        mov     rbx, save_rbx
+        mov     rsi, save_rsi
+        mov     rdi, save_rdi
+        {$else}
         pop     rcx
         mov     qword ptr [rcx], rax // store new pointer in var P
 @Quit:  pop     r14
         pop     rbx
-        {$ifdef MSWINDOWS}
-        pop     rsi
-        pop     rdi
         {$endif MSWINDOWS}
 end;
 
 function _AllocMem(Size: PtrUInt): pointer;
-  {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
+{$ifdef NOSFRAME} nostackframe; {$endif} assembler;
+{$ifdef MSWINDOWS} // explicit local variables to maintain Win64 ABI convention
+var
+  save_rbx: PtrUInt;
+  {$ifdef FPCMM_ERMS}
+  save_rdi: PtrUInt;
+  save_rax: PtrUInt;
+  {$endif FPCMM_ERMS}
+{$endif MSWINDOWS}
 asm
+        {$ifdef MSWINDOWS}
+        mov     save_rbx, rbx
+        {$else}
         push    rbx
+        {$endif MSWINDOWS}
         // Compute rbx = size rounded down to the last pointer
         lea     rbx, [Size - 1]
         and     rbx,  - 8
@@ -3195,9 +3266,11 @@ asm
         {$endif NOSFRAME}
         // ERMS has a startup cost, but "rep stosd" is fast enough on all CPUs
 @erms:  mov     rcx, rbx
-        push    rax
         {$ifdef MSWINDOWS}
-        push    rdi
+        mov     save_rax, rax
+        mov     save_rdi, rdi
+        {$else}
+        push    rax
         {$endif MSWINDOWS}
         cld
         mov     rdi, rdx
@@ -3207,12 +3280,18 @@ asm
         mov     qword ptr [rdx], rax
         rep stosd
         {$ifdef MSWINDOWS}
-        pop     rdi
-        {$endif MSWINDOWS}
+        mov     rdi, save_rdi
+        mov     rax, save_rax
+        {$else}
         pop     rax
+        {$endif MSWINDOWS}
         {$endif FPCMM_ERMS}
 @Done:  // restore rbx register and the stack frame before ret
+        {$ifdef MSWINDOWS}
+        mov     rbx, save_rbx
+        {$else}
         pop     rbx
+        {$endif MSWINDOWS}
 end;
 
 function _MemSize(P: pointer): PtrUInt;

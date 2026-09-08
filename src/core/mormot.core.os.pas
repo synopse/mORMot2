@@ -4669,9 +4669,7 @@ type
     Flags: PtrUInt; // bit 0 = WriteLock, 1 = ReadWriteLock, >1 = ReadOnlyLock
     LastReadWriteLockThread, LastWriteLockThread: TThreadID; // to be reentrant
     LastReadWriteLockCount,  LastWriteLockCount: cardinal;
-    {$ifndef ASMX64NOTPIC}
     procedure ReadOnlyLockSpin;
-    {$endif ASMX64NOTPIC}
   public
     /// initialize the R/W lock
     // - not needed if TRWLock is part of a class - i.e. if was filled with 0
@@ -4691,7 +4689,7 @@ type
     // !   rwlock.ReadOnlyUnLock;
     // ! end;
     procedure ReadOnlyLock;
-      {$ifdef HASINLINE} {$ifndef ASMX64NOTPIC} inline; {$endif} {$endif}
+      {$ifdef HASINLINE} inline; {$endif}
     /// release a previous ReadOnlyLock call
     procedure ReadOnlyUnLock;
       {$ifdef HASINLINE} inline; {$endif}
@@ -11557,35 +11555,6 @@ begin
     {$ifdef FPC} at get_caller_addr(get_frame), get_caller_frame(get_frame) {$endif}
 end;
 
-// dedicated asm for this most simple (and used) method
-{$ifdef ASMX64NOTPIC}
-
-procedure TRWLock.ReadOnlyLock;
-// stack frame is required (at least on Windows) since it may call SwitchToThread
-var
-  backup: pointer; // better than push/pop since we have a stack frame
-asm
-        {$ifdef ABISYSVX64}
-        mov     rcx, rdi      // rcx = self
-        {$endif ABISYSVX64}
-@retry: mov     r8d, SPIN_COUNT
-@spin:  mov     rax, qword ptr [rcx + TRWLock.Flags]
-        and     rax, not 1
-        lea     rdx, [rax + 4]
-   lock cmpxchg qword ptr [rcx + TRWLock.Flags], rdx
-        jz      @done
-        pause
-        dec     r8d
-        jnz     @spin
-        mov     qword ptr [backup], rcx
-        call    SwitchToThread
-        mov     rcx, qword ptr [backup] // restore for the wait loop
-        jmp     @retry
-@done:  // restore the stack frame
-end;
-
-{$else}
-
 procedure TRWLock.ReadOnlyLock;
 var
   f: PtrUInt;
@@ -11599,16 +11568,14 @@ end;
 procedure TRWLock.ReadOnlyLockSpin;
 var
   spin, f: PtrUInt;
-begin
+begin // we removed the initial X86_64 asm which seemed to GPF on WinArm PRISM
   spin := SPIN_COUNT;
   repeat
-    spin := SpinAndWait(spin);
+    spin := SpinAndWait(spin); // adaptative spinning
     f := Flags and not 1; // retry ReadOnlyLock
   until (Flags = f) and
         LockedExc(Flags, {to=}f + 4, {from=}f);
 end;
-
-{$endif ASMX64NOTPIC}
 
 procedure TRWLock.ReadOnlyUnLock;
 begin
