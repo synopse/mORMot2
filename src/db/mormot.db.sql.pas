@@ -1316,6 +1316,10 @@ type
     fOnTableCreate: TOnTableCreate;
     fOnTableAddColumn: TOnTableAddColumn;
     fOnTableCreateMultiIndex: TOnTableCreateMultiIndex;
+    /// remove a fSharedTransactions entry registered by SharedTransaction()
+    // - called when the actual StartTransaction failed right after the entry
+    // was registered, so that it does not stay behind for ever
+    procedure UnRegisterSharedTransaction(SessionID: cardinal);
     procedure SetFlag(const flag: TSqlDBConnectionPropertiesFlag; const value: boolean);
       {$ifdef HASINLINE}inline;{$endif}
     function GetFlag(const flag: TSqlDBConnectionPropertiesFlag): boolean;
@@ -3725,9 +3729,10 @@ function TSqlDBConnectionProperties.SharedTransaction(SessionID: cardinal;
   action: TSqlDBSharedTransactionAction): TSqlDBConnection;
 var
   i, n: PtrInt;
-  found: boolean;
+  found, added: boolean;
   t: ^TSqlDBConnectionTransaction;
 begin
+  added := false;
   try
     result := ThreadSafeConnection;
     // thread-safe found transactions support
@@ -3782,6 +3787,7 @@ begin
           t^.SessionID := SessionID;
           t^.RefCount := 1;
           t^.Connection := result;
+          added := true; // registered, but StartTransaction not attempted yet
         end
         else
           ESqlDBException.RaiseUtf8('Unexpected %.SharedTransaction(%,%)',
@@ -3806,10 +3812,46 @@ begin
   except
     on Exception do
     begin
+      if added then
+        // the entry was registered above, BEFORE StartTransaction was even
+        // attempted (it runs outside the lock): since that attempt failed -
+        // e.g. the connection died - the registration must be undone.
+        // Otherwise it stays forever with RefCount=1 for a transaction which
+        // was never started, and the next transBegin for this SessionID takes
+        // the "found" branch and just inc(RefCount), letting the caller write
+        // OUTSIDE any transaction, silently
+        UnRegisterSharedTransaction(SessionID);
       result := nil; // result.StartTransaction/Commit/Rollback failed
       if action = transCommitWithException then
         raise;
     end;
+  end;
+end;
+
+procedure TSqlDBConnectionProperties.UnRegisterSharedTransaction(
+  SessionID: cardinal);
+var
+  i, n: PtrInt;
+  t: ^TSqlDBConnectionTransaction;
+begin
+  fSharedTransactionsSafe.Lock;
+  try
+    n := Length(fSharedTransactions);
+    t := pointer(fSharedTransactions);
+    for i := 0 to n - 1 do
+      if t^.SessionID = SessionID then
+      begin
+        dec(n);
+        if n = 0 then
+          fSharedTransactions := nil
+        else
+          DynArrayFakeDelete(fSharedTransactions, i, n, SizeOf(t^));
+        exit;
+      end
+      else
+        inc(t);
+  finally
+    fSharedTransactionsSafe.UnLock;
   end;
 end;
 
