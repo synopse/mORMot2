@@ -198,7 +198,7 @@ type
   end;
   PDnsHeader = ^TDnsHeader;
 
-/// parse a DNS string entry
+/// parse a DNS domain name string entry following RFC 1035
 // - return 0 on error, or the next 0-based position in Answer
 // - will actually decompress the input from its repeated patterns
 function DnsParseString(const Answer: RawByteString; Pos: PtrInt;
@@ -451,7 +451,7 @@ function DnsParseString(const Answer: RawByteString; Pos: PtrInt;
   var Text: RawUtf8): PtrInt;
 var
   p: PByteArray;
-  nextpos, max: PtrInt;
+  nextpos, max, offset: PtrInt;
   len: byte;
   tmp: ShortString;
 begin
@@ -462,7 +462,7 @@ begin
   tmp[0] := #0;
   repeat
     if Pos >= max then
-      exit; // avoid any buffer overflow on malformated/malinuous input
+      exit; // avoid any buffer overflow on malformed/malicious input
     len := p[Pos];
     inc(Pos);
     if len = 0 then
@@ -470,16 +470,21 @@ begin
     while (len and DNS_RELATIVE) = DNS_RELATIVE do
     begin
       // see https://www.rfc-editor.org/rfc/rfc1035.html#section-4.1.4
+      if Pos >= max then
+        exit;
+      len := len and not DNS_RELATIVE;
+      offset := (PtrInt(len) shl 8) + p[Pos];
+      if (offset >= Pos - 1) or
+         (offset >= max) then
+        exit; // reject forward/self pointers and malformed offsets
       if nextpos = 0 then
-        nextpos := Pos + 1; // if compressed, return end of offset
-      if Pos >= max then
-        exit;
-      Pos := PtrInt(len and (not DNS_RELATIVE)) shl 8 + p[Pos]; // 14-bit offset
-      if Pos >= max then
-        exit;
+        nextpos := Pos + 1; // return position just after the first pointer
+      Pos := offset;
       len := p[Pos]; // 8-bit length from offset
       inc(Pos);
     end;
+    if (len and DNS_RELATIVE) <> 0 then
+      exit; // %01xxxxxx and %10xxxxxx are reserved
     if len = 0 then
       break;
     if Pos + len > max then
