@@ -1277,6 +1277,10 @@ end;
 {$ifdef FPCMM_MEDIUMPREFETCH}
 procedure PrefetchMediumBlock(dummy: cardinal);
 {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
+{$ifdef MSWINDOWS} // explicit local variables to maintain Win64 ABI convention
+var
+  save_rsi, save_rdi, save_r10, save_r11: PtrUInt;
+{$endif MSWINDOWS}
 // on input/output: r10=TMediumBlockInfo
 asm
         mov     rcx, r10
@@ -1290,16 +1294,30 @@ asm
         jne     @done
         cmp     qword ptr [rcx].TMediumBlockInfo.Prefetch, rdx
         jnz     @none
+        {$ifdef MSWINDOWS}
+        mov     save_rsi, rsi
+        mov     save_rdi, rdi
+        mov     save_r10, r10
+        mov     save_r11, r11
+        {$else}
         push    rsi
         push    rdi
         push    r10
         push    r11
+        {$endif MSWINDOWS}
         mov     dummy, MediumBlockPoolSizeMem
         call    OsAllocMedium // mmap() is usually very fast
+        {$ifdef MSWINDOWS}
+        mov     r11, save_r11
+        mov     r10, save_r10
+        mov     rdi, save_rdi
+        mov     rsi, save_rsi
+        {$else}
         pop     r11
         pop     r10
         pop     rdi
         pop     rsi
+        {$endif MSWINDOWS}
         mov     qword ptr [r10].TMediumBlockInfo.Prefetch, rax
 @none:  mov     byte ptr [r10].TMediumBlockInfo.PrefetchLocked, false
 @done:
@@ -2502,14 +2520,23 @@ asm     // size = rcx on Windows, = rdi on SystemV; use rsi = TSmallBlockType
 end;
 
 function FreeMediumBlock(arg1, arg2: pointer): PtrUInt;
-  {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
+{$ifdef NOSFRAME} nostackframe; {$endif} assembler;
+{$ifdef MSWINDOWS} // explicit local variables to maintain Win64 ABI convention
+var
+  save_rbx, save_blocksize: PtrUInt;
+{$endif MSWINDOWS}
 // rcx=P rdx=[P-BlockHeaderSize] r10=TMediumBlockInfo
 // (arg1/arg2 are used only for proper call of pascal functions below on all ABI)
 asm
         // Drop the flags, and set r11=P rbx=blocksize
         and     rdx, DropMediumAndLargeFlagsMask
+        {$ifdef MSWINDOWS}
+        mov     save_rbx, rbx
+        mov     save_blocksize, rdx
+        {$else}
         push    rbx
         push    rdx // save blocksize
+        {$endif MSWINDOWS}
         mov     rbx, rdx
         mov     r11, rcx
         // Lock the Medium blocks
@@ -2628,8 +2655,13 @@ asm
         mov     [r10 + TMediumBlockInfo.LastSequentiallyFed], rbx
         mov     byte ptr [r10 + TMediumBlockInfo.Locked], false
 @Quit:  // restore registers and the stack frame
+        {$ifdef MSWINDOWS}
+        mov     rax, save_blocksize
+        mov     rbx, save_rbx
+        {$else}
         pop     rax // medium block size
         pop     rbx
+        {$endif MSWINDOWS}
 end;
 
 {$ifdef FPCMM_REPORTMEMORYLEAKS}
@@ -2639,7 +2671,11 @@ const
 {$endif FPCMM_REPORTMEMORYLEAKS}
 
 function _FreeMem(P: pointer): PtrUInt;
-  {$ifdef NOSFRAME} nostackframe; {$endif} assembler;
+{$ifdef NOSFRAME} nostackframe; {$endif} assembler;
+{$ifdef MSWINDOWS} // explicit local variables to maintain Win64 ABI convention
+var
+  save_rsi, save_rax: PtrUInt;
+{$endif MSWINDOWS}
 asm     // P = rcx on Windows, P = rdi on SystemV; use rsi = TSmallBlockType
         {$ifndef MSWINDOWS}
         mov     rcx, P
@@ -2661,7 +2697,7 @@ asm     // P = rcx on Windows, P = rdi on SystemV; use rsi = TSmallBlockType
         jnz     @NotSmallBlockInUse
         // Get the small block type in rsi and try to grab it
         {$ifdef MSWINDOWS}
-        push    rsi
+        mov     save_rsi, rsi
         {$endif MSWINDOWS}
         mov     rsi, [rdx].TSmallBlockPoolHeader.BlockType
         {$ifndef FPCMM_ASSUMEMULTITHREAD}
@@ -2701,9 +2737,6 @@ asm     // P = rcx on Windows, P = rdi on SystemV; use rsi = TSmallBlockType
 @NoBin: mov     byte ptr [rsi].TSmallBlockType.Locked, false
         movzx   eax, word ptr [rsi].TSmallBlockType.BlockSize
         {$ifdef NOSFRAME}
-        {$ifdef MSWINDOWS}
-        pop     rsi
-        {$endif MSWINDOWS}
         ret
 @Void:  xor     eax, eax
         ret
@@ -2751,13 +2784,16 @@ asm     // P = rcx on Windows, P = rdi on SystemV; use rsi = TSmallBlockType
         lea     r10, [rip + SmallMediumBlockInfo]
         {$endif FPCMM_MULTIPLESMALLNOTWITHMEDIUM}
         movzx   eax, word ptr [rsi].TSmallBlockType.BlockSize
+        {$ifdef MSWINDOWS}
+        mov     save_rax, rax
+        call    FreeMediumBlock // no call nor BinLocked to avoid race condition
+        mov     rax, save_rax
+        {$else}
         push    rax
         call    FreeMediumBlock // no call nor BinLocked to avoid race condition
         pop     rax
-        {$ifdef NOSFRAME}
-        {$ifdef MSWINDOWS}
-        pop     rsi
         {$endif MSWINDOWS}
+        {$ifdef NOSFRAME}
         ret
         {$else}
         jmp     @Done // on Win64, a stack frame is required
@@ -2839,7 +2875,7 @@ asm     // P = rcx on Windows, P = rdi on SystemV; use rsi = TSmallBlockType
         movzx   eax, word ptr [rsi].TSmallBlockType.BlockSize
 @Done:  // restore rsi and the stack frame before ret
         {$ifdef MSWINDOWS}
-        pop     rsi
+        mov     rsi, save_rsi
         {$endif MSWINDOWS}
 @Quit:
 end;
