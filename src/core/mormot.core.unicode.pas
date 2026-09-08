@@ -2809,6 +2809,23 @@ function SumRawUtf8Length(Values: PRawUtf8; n: integer): TStrLen;
 procedure DeduplicateRawUtf8(var Values: TRawUtf8DynArray);
 
 type
+  /// raw thread-safe cache of a RawUtf8 content, stored as sorted dynamic array
+  {$ifdef USERECORDWITHMETHODS}
+  TCachedValues = record
+  {$else}
+  TCachedValues = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    Safe: TLightLock; // single 32-bit field
+    Tix32: cardinal;
+    Values: TRawUtf8DynArray; // sorted array of RawUtf8
+    ValuesCount: integer;
+    CustomCompare: TUtf8Compare;
+    procedure Reset;
+    function Exists(const Value: RawUtf8; TixShr: cardinal): boolean;
+    function Add(const Value: RawUtf8; TixShr: cardinal): boolean;
+  end;
+
   /// a read-only virtual TStrings using internal TRawUtf8DynArray storage
   // - is meant to be used in the UI layer from existing RawUtf8 content
   TVirtualStringList = class(TStrings)
@@ -11081,6 +11098,51 @@ begin
     result := n;
   Values[result] := Value;
   inc(ValuesCount);
+end;
+
+{ TCachedValues }
+
+procedure TCachedValues.Reset;
+begin
+  Safe.Lock;
+  Tix32 := 0;
+  Values := nil;
+  ValuesCount := 0;
+  Safe.UnLock;
+end;
+
+function TCachedValues.Exists(const Value: RawUtf8; TixShr: cardinal): boolean;
+begin
+  TixShr := (GetTickSec shr TixShr) + 1; // big shr may get 0 just after boot
+  Safe.Lock;
+  result := false;
+  if ValuesCount <> 0 then
+    if TixShr = Tix32 then
+      if Assigned(CustomCompare) then
+        result := FastFindPUtf8CharSorted(pointer(Values), ValuesCount - 1,
+          pointer(Value)) >= 0
+      else
+        result := FastFindPUtf8CharSorted(pointer(Values), ValuesCount - 1,
+          pointer(Value), CustomCompare) >= 0
+    else
+    begin
+      Tix32 := TixShr;
+      ValuesCount := 0;
+    end;
+  Safe.UnLock;
+end;
+
+function TCachedValues.Add(const Value: RawUtf8; TixShr: cardinal): boolean;
+begin
+  TixShr := (GetTickSec shr TixShr) + 1; // big shr may get 0 just after boot
+  Safe.Lock;
+  if TixShr <> Tix32 then
+  begin
+    Tix32 := TixShr;
+    ValuesCount := 0;
+  end;
+  result := AddSortedRawUtf8(Values, ValuesCount, Value, nil, -1, CustomCompare) >= 0;
+  Safe.UnLock;
 end;
 
 type
