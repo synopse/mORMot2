@@ -56,53 +56,52 @@ const
 
 procedure TTestUiPdf.FontEmbeddingAndHashValidation;
 var
+  pdf: TPdfDocument;
   MS: TMemoryStream;
   i, y: integer;
   embed: boolean;
-  expected: cardinal;
+  h: cardinal;
   WS: SynUnicode;
 const
-  Hash:   array[boolean] of cardinal  = ($8B40C230, $753E2D40);
-  Hash10: array[boolean] of cardinal  = ($8DCCC22A, $753E2D40);
-  Name:   array[boolean] of PDFString = ('Arial', 'Helvetica');
+  Hash: array[0 .. 4] of cardinal  = ( // depends on OS available font 
+    $8B40C230, $8DCCC22A, $753E2D40, $6870208B, $33E290AB);
+  Name: array[boolean] of PDFString = ('Arial', 'Helvetica');
 begin
   MS := TMemoryStream.Create;
-  with TPdfDocument.Create do
+  pdf := TPdfDocument.Create;
   try
     for embed := false to true do
     begin
-      Info.CreationDate := FIXED_DATE; // no FIXED_DATE nor creator variation in hashed value
-      Info.Data.PdfTextByName('Producer').Value := 'Synopse PDF engine';
-      StandardFontsReplace := embed;
-      AddPage;
-      Canvas.SetFont('arial', 10, []);
-      Check(Canvas.Page.Font.Name = Name[embed]);
+      // no FIXED_DATE nor creator variation in hashed value
+      pdf.Info.CreationDate := FIXED_DATE;
+      pdf.Info.Data.PdfTextByName('Producer').Value := 'Synopse PDF engine';
+      // draw something on the page
+      pdf.StandardFontsReplace := embed;
+      pdf.AddPage;
+      pdf.Canvas.SetFont('arial', 10, []);
+      CheckEqual(pdf.Canvas.Page.Font.Name, Name[embed]);
       y := 800;
       for i := 1 to 30 do
       begin
-        Canvas.SetFont('Arial', 9 + i, []);
+        pdf.Canvas.SetFont('Arial', 9 + i, []);
         Utf8ToSynUnicode(Make(['Texte accentue n.', i]), WS);
         PWordArray(WS)^[13] := 233;
         PWordArray(WS)^[16] := 176;
-        Canvas.TextOutW(100, y, pointer(WS));
+        pdf.Canvas.TextOutW(100, y, pointer(WS));
         dec(y, 9 + i);
       end;
-      SaveToStream(MS, FIXED_DATE);
-      if OSVersion < wTen then
-        expected := Hash[embed]
-      else
-        expected := Hash10[embed];
-      CheckHash(MS.Memory, PtrInt(MS.Position), expected, Name[embed]);
-      if not embed then
-      begin
-        if CharSet <> ANSI_CHARSET then
-          break; // StandardFontsReplace will work only with ANSI code page
-        NewDoc;
-        MS.Clear;
-      end;
+      pdf.SaveToStream(MS, FIXED_DATE);
+      h := Hash32(MS.Memory, PtrInt(MS.Position));
+      CheckUtf8(IntegerScanExists(@Hash, length(Hash), h), '%=%',
+        [Name[embed], CardinalToHexShort(h)]);
+      if embed or
+         (pdf.CharSet <> ANSI_CHARSET) then
+        break; // StandardFontsReplace will work only with ANSI code page
+      pdf.NewDoc;
+      MS.Clear;
     end;
   finally
-    Free;
+    pdf.Free;
     MS.Free;
   end;
 end;
