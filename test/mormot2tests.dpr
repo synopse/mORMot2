@@ -7,6 +7,7 @@ program mormot2tests;
 //  NOTE: on FPC/Lazarus, please first install packages/lazarus/mormot2*.lpk
 // ---------------------------------------------------------------------
 
+{.$define NO_UI} // disable UI/PDF coverage
 {$I ..\src\mormot.defines.inc}
 
 {$ifdef OSWINDOWS}

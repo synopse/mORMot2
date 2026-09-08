@@ -65,6 +65,7 @@ type
   /// this test case will validate several low-level protocols
   TNetworkProtocols = class(TSynTestCase)
   protected
+    TempDir: TFileName;
     // for DNSAndLDAP
     synopsednsip: RawUtf8;
     hasinternet: boolean;
@@ -85,12 +86,14 @@ type
     bodyfile: TFileName;
     bodytype: RawUtf8;
     bodystreamed, bodyhash: cardinal;
+    bodyseq: integer;
     bodyeventlen: Int64;
     bodyconsumer: TThread; // is a TPipeConsumerThread (declared below)
     // for _TTunnelLocal
     tunnelappsec: RawUtf8;
     tunneloptions: TTunnelOptions;
     tunnelsequence: integer;
+    procedure Setup; override;
     procedure TunnelExecute(Sender: TObject);
     procedure TunnelDeferredExecute(Sender: TObject);
     function TunnelBackgroundDeferred(l: TTunnelLocal; s: TTunnelSession;
@@ -404,6 +407,13 @@ begin
     'WinHTTP initialization should preserve the parallel WebSocket API');
 end;
 {$endif USEWININET}
+
+procedure TNetworkProtocols.Setup;
+begin
+  // use a temporary file, not WorkDir: some other background tests do scan that
+  // folder (e.g. the TFTP server root), and would see this one appear
+  TempDir := EnsureDirectoryExists(MakeString([Executable.ProgramFilePath, 'temp']));
+end;
 
 procedure TNetworkProtocols.DoTFTPShutdown;
 var
@@ -735,7 +745,8 @@ begin
     Check(clientY <> '', 'yaml client');
     Check(clientJ <> '', 'json client');
     // ParseFile with .yaml extension must dispatch to the YAML path
-    fn := WorkDir + 'test.openapi.dispatch.yaml';
+    check(DirectoryExists(TempDir), 'tempdir1');
+    fn := TempDir + 'test.openapi.dispatch.yaml';
     FileFromString(YAML_SPEC, fn);
     try
       oaF.Name := 'DispatchTest'; // match oaY so outputs are comparable
@@ -2007,26 +2018,30 @@ begin
         begin
           Check(keytab <> '', 'keytab?');
           Check(BufferIsKeyTab(keytab), 'keytab!');
-          keytabfile := TemporaryFileName;
-          FileFromString(keytab, keytabfile);
-          ku := FileIsKeyTabMachineAccountPrincipal(keytabfile, true);
-          CheckUtf8(IdemPropNameU(ku, usr), '%=%', [ku, usr]);
-          {$ifdef OSPOSIX}
-          one := TLdapClient.Create;
+          check(DirectoryExists(TempDir), 'tempdir2');
+          keytabfile := TempDir + 'keytab';
           try
-            one.Settings.TargetUri := clients[j];
-            //one.Settings.UserName := usr;        // user from keytab
-            //one.Settings.KerberosDN := dns[i];   // DN from keytab
-            one.Settings.KerberosLocal := keytabfile;
-            ku := '';
-            Check(one.BindSaslKerberos('', @ku), 'Bind keytab');
-            AddConsole('connected via keytab to % with specific user % = %',
-              [one.Settings.TargetUri, usr, ku]);
+            FileFromString(keytab, keytabfile);
+            ku := FileIsKeyTabMachineAccountPrincipal(keytabfile, true);
+            CheckUtf8(IdemPropNameU(ku, usr), '%=%', [ku, usr]);
+            {$ifdef OSPOSIX}
+            one := TLdapClient.Create;
+            try
+              one.Settings.TargetUri := clients[j];
+              //one.Settings.UserName := usr;        // user from keytab
+              //one.Settings.KerberosDN := dns[i];   // DN from keytab
+              one.Settings.KerberosLocal := keytabfile;
+              ku := '';
+              Check(one.BindSaslKerberos('', @ku), 'Bind keytab');
+              AddConsole('connected via keytab to % with specific user % = %',
+                [one.Settings.TargetUri, usr, ku]);
+            finally
+              one.Free;
+            end;
+            {$endif OSPOSIX}
           finally
-            one.Free;
+            DeleteFile(keytabfile);
           end;
-          {$endif OSPOSIX}
-          DeleteFile(keytabfile);
         end;
       end;
     end;
@@ -2447,7 +2462,8 @@ begin
     // setup the DHCP server logic
     server.Log := TSynLog;
     Check(server.FileName = '');
-    fn := WorkDir + 'dnsmasq.leases';
+    check(DirectoryExists(TempDir), 'tempdir3');
+    fn := TempDir + 'dnsmasq.leases';
     if FileExists(fn) then
       Check(DeleteFile(fn), 'deletefile');
     server.FileName := fn;
@@ -5151,7 +5167,10 @@ begin
     result := TFailingStream.Create
   else
   begin
-    bodyfile := TemporaryFileName;
+    check(DirectoryExists(TempDir), 'tempdir4');
+    bodyfile := MakeString([TempDir, 'body', InterlockedIncrement(bodyseq)]);
+    if FileExists(bodyfile) then
+      Check(DeleteFile(bodyfile), 'delete old body');
     // fmShareRead is needed because the stream is still open (as
     // InContentStream) when the request reads the spool file by its name
     if aUrl = '/del' then
@@ -5339,7 +5358,8 @@ begin
   datahash := crc32cHash(data);
   // use a temporary file, not WorkDir: other background tests do scan that
   // folder (e.g. the TFTP server root), and would see this one appear
-  rangefile := TemporaryFileName;
+  check(DirectoryExists(TempDir), 'tempdir5');
+  rangefile := TempDir + 'range';
   Check(FileFromString(data, rangefile), 'range file');
   try
     for fam := 0 to 1 do
@@ -5448,6 +5468,7 @@ begin
   end
   else if Ctxt.Url = '/norange' then
     // the same stream, but explicitly flagged as not serving any range
+    // from a stream whose Position/Seek methods both raise
     Ctxt.SetOutStream(TRaiseSeekStream.Create(outdata), [hosOwned, hosNoRange],
       BINARY_CONTENT_TYPE, length(outdata))
   else if Ctxt.Url = '/failseek' then
@@ -6206,7 +6227,8 @@ begin
   // was a UTF-16 shim fed an UTF-8 RawUtf8, so it silently did nothing: stale
   // socket files were left behind, and any server re-bind failed with
   // EADDRINUSE - see UnixSocketFileDelete() in mormot.net.sock
-  fn := WorkDir + 'test-unixdomain.socket';
+  check(DirectoryExists(TempDir), 'tempdir6');
+  fn := TempDir + 'test-unixdomain.socket';
   DeleteFile(fn);
   Check(not FileExists(fn), 'no leftover .socket file');
   FormatUtf8('unix:%', [fn], un);
@@ -6234,6 +6256,7 @@ end;
 
 procedure TNetworkProtocols.DoTFTPServer(Sender: TObject);
 var
+  i: integer;
   srv: TTftpServerThread;
   http: THttpServer;
   res: TCurlResult;
@@ -6254,7 +6277,13 @@ begin
   end;
   // create a 256KB temporary file to serve via TFTP
   orig := RandomAnsi7(256 shl 10 + Random32(100));
-  fn := TemporaryFileName; // e.g. '/tmp/mormot2tests_28F3D8C5.tmp'
+  for i := 1 to 50 do
+  begin
+    fn := MakeString([WorkDir, 'tftp-', NowToFileShort, '.tmp']); // not TempDir
+    if not FileExists(fn) then
+      break;
+    Sleep(200);
+  end;
   if CheckFailed(FileFromString(orig, fn), 'fn file') then
     exit;
   // start an ephemeral HTTP server to validate HTTP over TFTP proxy
@@ -6269,7 +6298,7 @@ begin
     try
       // request the temporary file using the libcurl client
       timer.Start;
-      StringToUtf8(ExtractFileName(fn), uri); // 'mormot2tests_28F3D8C5.tmp'
+      StringToUtf8(ExtractFileName(fn), uri); // 'tftp-260908064151.tmp'
       rd := '';
       res := CurlPerform('tftp://127.0.0.1:6969/' + uri, rd);
       CheckUtf8(res = crOK, 'tftp exact case %', [ToText(res)^]);
@@ -6277,7 +6306,7 @@ begin
         exit;
       CheckEqual(length(rd), length(orig), 'tftp1a');
       CheckEqual(rd, orig, 'tftp1b');
-      // validate case-insensitive URI as e.g. 'MORMOT2TESTS_28F3D8C5.tmp'
+      // validate case-insensitive URI as e.g. 'TFTP-260908064151.TMP'
       UpperCaseSelf(uri);
       rd := '';
       res := CurlPerform('tftp://127.0.0.1:6969/' + uri, rd, 5000, nil,
