@@ -2819,7 +2819,7 @@ type
   public
     Safe: TLightLock; // single 32-bit field
     Tix32: cardinal;
-    Values: TRawUtf8DynArray; // sorted array of RawUtf8
+    Values: TRawUtf8DynArray; // sorted array for O(log(n)) binary search
     ValuesCount: integer;
     CustomCompare: TUtf8Compare;
     procedure Reset;

@@ -220,7 +220,7 @@ procedure DnsParseData(RR: TDnsResourceRecord;
 
 /// raw computation of a DNS query message
 function DnsBuildQuestion(const QName: RawUtf8; RR: TDnsResourceRecord;
-  QClass: cardinal = QC_INET): RawByteString;
+  QClass: cardinal = QC_INET; EdnsUdpSize: cardinal = 0): RawByteString;
 
 /// raw sending and receiving of DNS query message over UDP
 // - Address is expected to be an IPv4 address, maybe prefixed as 'tcp@1.2.3.4'
@@ -607,7 +607,7 @@ begin
 end;
 
 function DnsBuildQuestion(const QName: RawUtf8; RR: TDnsResourceRecord;
-  QClass: cardinal): RawByteString;
+  QClass, EdnsUdpSize: cardinal): RawByteString;
 var
   h: PDnsHeader;
   n, v: PUtf8Char;
@@ -622,6 +622,8 @@ begin
   until h^.XId <> 0; // truncated to 16-bit - should just be unpredictable
   h^.RecursionDesired := true;
   h^.QuestionCount := 1 shl 8;
+  if EdnsUdpSize <> 0 then
+    h^.AdditionalCount := 1 shl 8; // one OPT pseudo-RR
   n := pointer(QName);
   while n <> nil do
   begin
@@ -634,6 +636,17 @@ begin
   tmp.AddDirect(#0); // final #0
   tmp.Add16BigEndian(ord(RR));
   tmp.Add16BigEndian(QClass);
+  // optional EDNS(0) OPT pseudo-RR - RFC 6891 section 6.1.2
+  if EdnsUdpSize <> 0 then
+  begin
+    // refine advertised size according to RFC 6891 section 6.2.3
+    EdnsUdpSize := MinPtrUInt(SizeOf(TBuffer4K), MaxPtrUInt(512, EdnsUdpSize));
+    tmp.AddDirect(#0);                 // NAME = root
+    tmp.Add16BigEndian(ord(drrOPT));   // TYPE = OPT (41)
+    tmp.Add16BigEndian(EdnsUdpSize);   // CLASS = UDP payload size
+    tmp.Add32BigEndian(0);             // ext RCODE=0, version=0, flags=0
+    tmp.Add16BigEndian(0);             // RDLEN = no options
+  end;
   tmp.Done(result, CP_RAWBYTESTRING);
 end;
 
