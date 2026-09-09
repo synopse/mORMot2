@@ -556,7 +556,7 @@ begin
     drrMG,
     drrNS,
     drrPTR:
-      // single text Value
+      // single domain-compressed text Value
       DnsParseString(Answer, Pos, Text);
     drrTXT:
       begin
@@ -653,15 +653,15 @@ end;
 var
   NoTcpList: TCachedValues; // cache flushed after 64 seconds (TixShr = 6)
 
-function DnsSendQuestion(const Address, Port: RawUtf8;
-  const Request: RawByteString; out Answer: RawByteString;
+function DnsSendQuestionRaw(const Address, Port: RawUtf8;
+  const Request: RawByteString; var Answer: RawByteString;
   out TimeElapsed: cardinal; TimeOutMS: integer): boolean;
 var
   server: RawUtf8;
   tcponly: boolean;
   addr, resp: TNetAddr;
   sock: TNetSocket;
-  len, notcp: PtrInt;
+  len: PtrInt;
   start, stop: Int64;
   lenw: word;
   hdr: PDnsHeader;
@@ -702,24 +702,17 @@ begin
        not addr.IPEqual(resp) or
        (hdr^.Xid <> PDnsHeader(Request)^.Xid) or
        not hdr^.IsResponse then
-      exit; // clearlu invalid response
+      exit; // clearly invalid response
     tcponly := hdr^.Truncation; // TC=1 requires TCP as per RFC 2181
     if not tcponly then
-      if (hdr^.ResponseCode <> DNS_RESP_SUCCESS) or
-         (len <= length(Request)) or
-         (hdr^.AnswerCount = 0) then
-         // hdr^.NameServerCount or hdr^.AdditionalCount wouldn't be enough
-        exit
-      else
-        FastSetRawByteString(answer, @tmp, len);
+      FastSetRawByteString(answer, @tmp, len);
   end;
   if tcponly then
   begin
-    // UDP frame was too small: try with a TCP connection
     // ensure was not marked in NoTcpServers (avoid unneeded timeout)
     if NoTcpList.Exists(server, {tixshr=}6) then
       exit;
-    // setup the connection
+    // UDP frame was too small: try with a TCP connection
     sock := addr.NewSocket(nlTcp);
     try
       if addr.SocketConnect(sock, TimeOutMS) <> nrOk then
@@ -737,7 +730,7 @@ begin
       lenw := 0;
       if sock.RecvAll(TimeOutMS, @lenw, 2) <> nrOk then // first 2 bytes are len
       begin
-        NoTcpList.Add(server); // won't try again in the next minute
+        NoTcpList.Add(server, {tixshr=}6); // won't try again in the next minute
         exit;
       end;
       len := bswap16(lenw);
@@ -747,9 +740,7 @@ begin
       if (sock.RecvAll(TimeOutMS, pointer(answer), len) <> nrOk) or
          (hdr^.Xid <> PDnsHeader(Request)^.Xid) or
          not hdr^.IsResponse or
-         hdr^.Truncation or
-         (hdr^.ResponseCode <> DNS_RESP_SUCCESS) or
-         (hdr^.AnswerCount = 0) then
+         hdr^.Truncation then
         exit;
     finally
       sock.Close;
@@ -759,6 +750,20 @@ begin
   QueryPerformanceMicroSeconds(stop);
   TimeElapsed := stop - start;
   result := true;
+end;
+
+function DnsSendQuestion(const Address, Port: RawUtf8;
+  const Request: RawByteString; out Answer: RawByteString;
+  out TimeElapsed: cardinal; TimeOutMS: integer): boolean;
+begin
+  result := false;
+  if not DnsSendQuestionRaw(Address, Port, Request, Answer, TimeElapsed, TimeOutMS) then
+    exit;
+  with PDnsHeader(Answer)^ do
+    result := (ResponseCode = DNS_RESP_SUCCESS) and
+              (AnswerCount <> 0);
+  if not result then
+    FastAssignNew(Answer);
 end;
 
 
