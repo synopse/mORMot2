@@ -1165,7 +1165,7 @@ asm
         jnz     @fnd2
         cmp     edx, ecx
         ja      @by16
-@no:    mov     eax, -1
+@no:    or      eax, -1
         pop     ebx
         ret
 @fnd:   bsf     eax, eax
@@ -1219,7 +1219,7 @@ asm
         jnz     @fnd
 @nxt:   cmp     edx, ecx
         ja      @by16
-@no:    mov     eax, -1
+@no:    or      eax, -1
         pop     ebx
         ret
         // 16bit-unaligned loop (hardly called)
@@ -1278,7 +1278,7 @@ asm
         jnz     @fnd
 @nxt:   cmp     edx, ecx
         ja      @by16
-@no:    mov     eax, -1
+@no:    or      eax, -1
         pop     ebx
         ret
         // 32bit-unaligned loop (hardly called)
@@ -1728,7 +1728,7 @@ asm
         cmp     ecx, [edx]
         jz      @0
         jnb     @p
-@n:     mov     eax, -1
+@n:     or      eax, -1
         ret
 @0:     xor     eax, eax
         ret
@@ -1747,7 +1747,7 @@ asm
         cmp     ecx, [edx]
         jz      @0
 @nz:    jnb     @p
-        mov     eax, -1
+        or      eax, -1
         ret
 @0:     xor     eax, eax
         ret
@@ -1821,7 +1821,7 @@ asm
         sahf
         jz      @0
 @nz:    jnb     @p
-        mov     eax, -1
+        or      eax, -1
         ret
 @0:     xor     eax, eax
         ret
@@ -1837,7 +1837,7 @@ asm
         sahf
         jz      @0
 @nz:    jnb     @p
-        mov     eax, -1
+        or      eax, -1
         ret
 @0:     xor     eax, eax
         ret

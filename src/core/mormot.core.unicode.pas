@@ -10899,62 +10899,64 @@ end;
 
 {$ifdef ASMX64}
 
-function FastFindPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt; Value: PUtf8Char): PtrInt;
+function FastFindPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt;
+  Value: PUtf8Char): PtrInt;
 {$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
-        {$ifdef win64}  // P=rcx/rdi R=rdx/rsi Value=r8/rdx
+        // P=rcx/rdi R=rdx/rsi Value=r8/rdx
+        {$ifdef win64}
         push    rdi
-        mov     rdi, P  // P=rdi
+        mov     rdi, P
         {$endif win64}
-        push    r12
-        push    r13
-        xor     r9, r9  // L=r9
         test    R, R
         jl      @err
         test    Value, Value
         jz      @void
-        mov     cl, byte ptr [Value]  // to check first char (likely diverse)
+        xor     r9, r9                  // r9 = L = 0
+        movzx   ecx, byte ptr [Value]   // cl = cached Value[0]
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @s:     lea     rax, qword ptr [r9 + R]
-        shr     rax, 1
-        lea     r12, qword ptr [rax - 1]  // branchless main loop
-        lea     r13, qword ptr [rax + 1]
+        shr     rax, 1                  // rax = result = (L + R) shr 1
         mov     r10, qword ptr [rdi + rax * 8]
         test    r10, r10
         jz      @lt
-        cmp     cl, byte ptr [r10]
+        cmp     cl, byte ptr [r10]      // Value[0] vs pivot[0]
         je      @eq
-        cmovc   R, r12
-        cmovnc  r9, r13
+@diff:  lea     r11, qword ptr [rax - 1]
+        lea     r10, qword ptr [rax + 1]
+        cmovc   R, r11                  // CF = Value[0] < pivot[0]
+        cmovnc  r9, r10
 @nxt:   cmp     r9, R
-        jle     @s
-@err:   mov     rax, -1
-@found: pop     r13
-        pop     r12
+        jle     @s                      // branchless main loop
+@err:   or      rax, -1                 // first char differ: no branch
         {$ifdef win64}
         pop     rdi
         {$endif win64}
         ret
-@void:  mov     rax, -1
-        cmp     qword ptr [P], 0
-        cmove   rax, Value
-        jmp     @found
-@lt:    mov     r9, r13 // very unlikely P[rax]=nil
+@lt:    lea     r9, qword ptr [rax + 1]
         jmp     @nxt
-@eq:    mov     r11, Value // first char equal -> check others
-@sub:   mov     cl, byte ptr [r10]
-        add     r10, 1
-        add     r11, 1
+@void:  or      rax, -1                 // Value = nil
+        cmp     qword ptr [rdi], Value  // if P^[0] = nil then result := 0
+        cmove   rax, Value
+        {$ifdef win64}
+        pop     rdi
+        {$endif win64}
+        ret
+@subd:  movzx   ecx, byte ptr [Value]   // restore Value[0]
+        jmp     @diff
+@eq:    test    cl, cl
+        jz      @found                  // if c = 0 then exit in pascal code
+        mov     r11, Value
+        sub     r11, r10
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@sub:   add     r10, 1
+        movzx   ecx, byte ptr [r11 + r10] // Value byte
+        cmp     cl, byte ptr [r10]        // Value vs pivot
+        jne     @subd
         test    cl, cl
-        jz      @found
-        mov     cl, byte ptr [r11]
-        cmp     cl, byte ptr [r10]
-        je      @sub
-        mov     cl, byte ptr [Value]  // reset first char
-        cmovc   R, r12
-        cmovnc  r9, r13
-        cmp     r9, R
-        jle     @s
-        jmp     @err
+        jnz     @sub                     // continue till end of Value
+@found: {$ifdef win64}
+        pop     rdi
+        {$endif win64}
 end;
 
 {$else}

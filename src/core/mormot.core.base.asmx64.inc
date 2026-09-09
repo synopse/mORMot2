@@ -2280,7 +2280,7 @@ function ByteScanIndex(P: PByteArray; Count: PtrInt; Value: byte): PtrInt;
         jnz     @fnd
         cmp     rdx, rcx
         ja      @by16
-@no:    mov     rax, -1
+@no:    or      rax, -1
         ret
 @fnd:   bsf     eax, eax
         lea     rax, qword ptr [rcx + rax - 16]
@@ -2331,7 +2331,7 @@ function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): PtrInt;
         jnz     @fnd
         cmp     rdx, rcx
         ja      @by16
-@no:    mov     rax, -1
+@no:    or      rax, -1
         ret
         bsf     eax, eax
 @fnd:   shr     eax, 1
@@ -2397,7 +2397,7 @@ function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): Pt
         jnz     @fnd
         cmp     rdx, rcx
         ja      @by16
-@no:    mov     rax, -1
+@no:    or      rax, -1
         ret
         bsf     eax, eax
 @fnd:   shr     eax, 2
@@ -2521,7 +2521,7 @@ function FastFindWordSorted(P: PWordArray; R: PtrInt; Value: Word): PtrInt;
         cmovl   r9, r11
         cmp     r9, R
         jle     @s
-@ko:    mov     rax, -1
+@ko:    or      rax, -1
 @ok:    {$ifdef ABIWINX64}
         pop     rdi
         {$endif ABIWINX64}
@@ -2544,7 +2544,7 @@ function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): Ptr
         lea     rax, [r9 + R]
         cmp     r9, R
         jle     @s
-@ko:    mov     rax, -1
+@ko:    or      rax, -1
 @ok:
 end;
 
@@ -2565,7 +2565,7 @@ function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): Ptr
         lea     rax, [r9 + R]
         cmp     r9, R
         jle     @s
-@ko:    mov     rax, -1
+@ko:    or      rax, -1
 @ok:
 end;
 
@@ -3031,7 +3031,7 @@ end;
 
 function InterlockedDecrement(var I: integer): integer;
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
-        mov     eax, -1
+        or      eax, -1
    lock xadd    dword ptr [I], eax // atomic eax=[I] + [I]:=[I]+eax
         sub     eax, 1
 end;
