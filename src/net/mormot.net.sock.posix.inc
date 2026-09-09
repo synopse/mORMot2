@@ -802,6 +802,8 @@ const
 
   ETH_P_IP  = $0800;
   ETH_P_ARP = $0806;
+  ETH_P_IP_LE  = $0008;
+  ETH_P_ARP_LE = $0608;
 
   ARPOP_REQUEST   = 1;  // ARP request
   ARPOP_REPLY     = 2;  // ARP reply
@@ -1131,7 +1133,7 @@ end;
 
 type
   // a low-level ARP frame binary content, with its SOCK_RAW ethernet header
-  TRawARP = packed record
+  TRawArp = packed record
     Dest: TNetMac;
     Src: TNetMac;
     EType: word;
@@ -1145,7 +1147,7 @@ type
     THA: TNetMac;
     TPA: TNetIP4;
   end;
-  PRawARP = ^TRawARP;
+  PRawArp = ^TRawArp;
 
 const
   MAC_BROADCAST: TNetMac = ($ff, $ff, $ff, $ff, $ff, $ff);
@@ -1160,7 +1162,7 @@ var
   s: TSocket;
   ns: TNetSocket absolute s;
   local: TMacAddress;
-  arp: TRawARP;
+  arp: TRawArp;
   addr: SockAddr_ll;
   resp: RawByteString;
   retry: integer;
@@ -1179,17 +1181,17 @@ begin
     exit;
   end;
   arp.Dest  := MAC_BROADCAST;
-  arp.EType := bswap16(ETH_P_ARP);
-  arp.HType := bswap16(ARPHRD_ETHER);
-  arp.PType := bswap16(ETH_P_IP);
+  arp.EType := ETH_P_ARP_LE;
+  arp.HType := ARPHRD_ETHER shl 8;
+  arp.PType := ETH_P_IP_LE;
   arp.HLen  := SizeOf(TNetMac);
   arp.PLen  := SizeOf(TNetIP4);
-  arp.Op    := bswap16(ARPOP_REQUEST);
+  arp.Op    := ARPOP_REQUEST shl 8;
   arp.SHA   := arp.Src;
   arp.THA   := MAC_ZERO;
   FillCharFast(addr, SizeOf(addr), 0);
   addr.sll_family   := AF_PACKET;
-  addr.sll_protocol := bswap16(ETH_P_ARP);
+  addr.sll_protocol := ETH_P_ARP_LE;
   addr.sll_ifindex  := local.IfIndex;
   addr.sll_halen    := SizeOf(MAC_BROADCAST);
   PNetMac(@addr.sll_addr)^ := MAC_BROADCAST;
@@ -1197,7 +1199,7 @@ begin
   if SharedArpLock.TryLock then
   begin
     if SharedArpSock = 0 then
-      SharedArpSock := socket(AF_PACKET, SOCK_RAW, bswap16(ETH_P_ARP));
+      SharedArpSock := socket(AF_PACKET, SOCK_RAW, ETH_P_ARP_LE);
     s := SharedArpSock;
     if s <= 0 then // typically not root or CAP_NET_RAW
     begin
@@ -1207,7 +1209,7 @@ begin
   end
   else
   begin
-    s := socket(AF_PACKET, SOCK_RAW, bswap16(ETH_P_ARP)); // transient socket
+    s := socket(AF_PACKET, SOCK_RAW, ETH_P_ARP_LE); // transient socket
     if s <= 0 then
       exit; // paranoid (e.g. fd exhaustion)
   end;
@@ -1222,9 +1224,9 @@ begin
       if ns.RecvWait(100 + retry * 50, resp) = nrOK then
         repeat
           if length(resp) >= SizeOf(TRawArp) then
-            with PRawARP(resp)^ do
-              if (Op = bswap16(ARPOP_REPLY)) and // reply
-                 (TPA = arp.SPA) and             // from expected IPs
+            with PRawArp(resp)^ do
+              if (Op = ARPOP_REPLY shl 8) and // reply
+                 (TPA = arp.SPA) and          // from expected IPs
                  (SPA = arp.TPA) then
               begin
                 result := MacToText(@SHA);
