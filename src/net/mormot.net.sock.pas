@@ -4630,7 +4630,7 @@ var
   tix32: cardinal;
   i: PtrInt;
 begin
-  tix32 := mormot.core.os.GetTickSec shr 6 + 1; // 64 seconds period
+  tix32 := mormot.core.os.GetTickSec shr 6 + 1; // flushed every 64 seconds
   DnsCacheSafe.Lock;
   try
     if tix32 <> DnsCacheTix then

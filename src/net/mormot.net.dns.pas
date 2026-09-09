@@ -238,6 +238,11 @@ var
   // for which DnsSendQuestion() did previously block
   DnsSendOverTcp: boolean;
 
+  /// global EDNS(0) advertised UDP payload size as defined by RFC 6891
+  // - 0 would disable EDNS(0)
+  // - actual value used by DnsQuery() won't exceed its 4KB UDP buffer
+  DnsEdnsUdpSize: cardinal = 1232;
+
 
 { **************** High-Level DNS Query }
 
@@ -295,7 +300,7 @@ const
 // be IPv4 address(es) CSV, maybe prefixed as 'tcp@1.2.3.4' to force TCP
 // - the TDnsResult output gives access to all returned DNS records
 // - use DnsLookup/DnsReverseLookup/DnsServices() for most simple requests
-function DnsQuery(const QName: RawUtf8; out Res: TDnsResult;
+function DnsQuery(const QName: RawUtf8; var Res: TDnsResult;
   RR: TDnsResourceRecord = drrA; const NameServers: RawUtf8 = '';
   TimeOutMS: integer = DNSQUERY_TIMEOUT; QClass: cardinal = QC_INET): boolean;
 
@@ -376,6 +381,7 @@ const
   QF_RCODE  = $0F;
 
   DNS_RESP_SUCCESS = $00;
+  DNS_RESP_FORMERR = $01;
 
   DNS_RELATIVE = $c0; // two high bits set = offset within the response message
 
@@ -651,25 +657,21 @@ begin
 end;
 
 var
-  NoTcpList: TCachedValues; // cache flushed after 64 seconds (TixShr = 6)
+  NoTcpList, NoEdnsList: TCachedValues; // flushed every 64 seconds (TixShr = 6)
 
 function DnsSendQuestionRaw(const Address, Port: RawUtf8;
-  const Request: RawByteString; var Answer: RawByteString;
-  out TimeElapsed: cardinal; TimeOutMS: integer): boolean;
+  const Request: RawByteString; var Answer: RawByteString; TimeOutMS: integer): boolean;
 var
   server: RawUtf8;
   tcponly: boolean;
   addr, resp: TNetAddr;
   sock: TNetSocket;
   len: PtrInt;
-  start, stop: Int64;
   lenw: word;
   hdr: PDnsHeader;
   tmp: TBuffer4K;
 begin
   result := false;
-  TimeElapsed := 0;
-  QueryPerformanceMicroSeconds(start);
   // validate input parameters
   server := Address;
   tcponly := IdemPChar(pointer(server), 'TCP@');
@@ -679,7 +681,7 @@ begin
     tcponly := DnsSendOverTcp; // global setting
   FillCharFast(addr, SizeOf(addr), 0);
   if not addr.SetFromIP4(server, {nolookup=}true) or
-     (addr.SetPort(GetCardinalDef(pointer(Port), 389)) <> nrOk) then
+     (addr.SetPort(GetCardinalDef(pointer(Port), 53)) <> nrOk) then
     exit;
   if not tcponly then
   begin
@@ -747,23 +749,27 @@ begin
     end;
   end;
   // we got a valid answer
-  QueryPerformanceMicroSeconds(stop);
-  TimeElapsed := stop - start;
   result := true;
 end;
 
 function DnsSendQuestion(const Address, Port: RawUtf8;
   const Request: RawByteString; out Answer: RawByteString;
   out TimeElapsed: cardinal; TimeOutMS: integer): boolean;
+var
+  start, stop: Int64;
 begin
+  TimeElapsed := 0;
+  QueryPerformanceMicroSeconds(start);
   result := false;
-  if not DnsSendQuestionRaw(Address, Port, Request, Answer, TimeElapsed, TimeOutMS) then
+  if not DnsSendQuestionRaw(Address, Port, Request, Answer, TimeOutMS) then
     exit;
   with PDnsHeader(Answer)^ do
     result := (ResponseCode = DNS_RESP_SUCCESS) and
               (AnswerCount <> 0);
   if not result then
     FastAssignNew(Answer);
+  QueryPerformanceMicroSeconds(stop);
+  TimeElapsed := stop - start;
 end;
 
 
@@ -798,19 +804,22 @@ begin
   result := true;
 end;
 
-function DnsQuery(const QName: RawUtf8; out Res: TDnsResult;
+function DnsQuery(const QName: RawUtf8; var Res: TDnsResult;
   RR: TDnsResourceRecord; const NameServers: RawUtf8;
   TimeOutMS: integer; QClass: cardinal): boolean;
 var
-  i, pos: PtrInt;
+  i, n, pos, code: PtrInt;
   servers: TRawUtf8DynArray;
-  request: RawByteString;
+  request, requestEdns: RawByteString;
+  start, stop: Int64;
+  hdr: PDnsHeader;
 begin
+  // validate input/output parameters
   result := false;
   if (QName = '') or
      not IsAnsiCompatible(QName) then // more relaxed than IsDnsName()
     exit;
-  // send the DNS request to the DNS server(s)
+  QueryPerformanceMicroSeconds(start);
   Finalize(Res);
   FillCharFast(Res, SizeOf(Res), 0);
   request := DnsBuildQuestion(QName, RR, QClass);
@@ -820,41 +829,75 @@ begin
   else
     // the DNS server IP(s) have been specified
     CsvToRawUtf8DynArray(pointer(NameServers), servers);
-  for i := 0 to high(servers) do
-    if DnsSendQuestion(servers[i], DnsPort,
-         request, Res.RawAnswer, Res.ElapsedMicroSec, TimeOutMS) then
-      break; // we got one non-void response
-  if Res.RawAnswer = '' then
-    exit;
-  // we received a valid response from a DNS
-  Res.Header := PDnsHeader(Res.RawAnswer)^;
-  Res.Header.QuestionCount := bswap16(Res.Header.QuestionCount);
-  Res.Header.AnswerCount := bswap16(Res.Header.AnswerCount);
-  Res.Header.NameServerCount := bswap16(Res.Header.NameServerCount);
-  Res.Header.AdditionalCount := bswap16(Res.Header.AdditionalCount);
-  pos := length(request); // jump Header + Question = point to records
-  if Res.Header.AnswerCount <> 0 then
+  // send the DNS request to the DNS server(s)
+  hdr := nil;
+  for i := 0 to length(servers) - 1 do
   begin
-    SetLength(Res.Answer, Res.Header.AnswerCount);
-    for i := 0 to high(Res.Answer) do
+    // assume EDNS works until this server returned FORMERR
+    if (DnsEdnsUdpSize <> 0) and
+       not NoEdnsList.Exists(servers[i], {tixshr=}6) then
+    begin
+      if requestEdns = '' then // compute EDNS(0) OPT pseudo-RR request
+        requestEdns := DnsBuildQuestion(QName, RR, QClass, DnsEdnsUdpSize);
+      if not DnsSendQuestionRaw(servers[i], DnsPort, requestEdns, Res.RawAnswer, TimeOutMS) then
+        continue; // try next server
+      hdr := pointer(Res.RawAnswer);
+      code := hdr^.ResponseCode;
+      if (code = DNS_RESP_SUCCESS) and
+         (hdr^.AnswerCount <> 0) then
+        break;    // success with EDNS(0)
+      hdr := nil;
+      if code <> DNS_RESP_FORMERR then
+      begin
+        NoEdnsList.Add(servers[i], {tixshr=}6); // remember RFC 6891 fallback
+        continue;
+      end;
+    end;
+    // fallback to regular request with no OPT
+    if not DnsSendQuestionRaw(servers[i], DnsPort, request, Res.RawAnswer, TimeOutMS) then
+      continue; // next server
+    hdr := pointer(Res.RawAnswer);
+    if (hdr^.ResponseCode = DNS_RESP_SUCCESS) and
+       (hdr^.AnswerCount <> 0) then
+      break;    // success with regular request
+    hdr := nil;
+  end;
+  if hdr = nil then
+    exit;
+  // parse the valid response received from a DNS
+  hdr^.QuestionCount   := bswap16(hdr^.QuestionCount);
+  hdr^.AnswerCount     := bswap16(hdr^.AnswerCount);
+  hdr^.NameServerCount := bswap16(hdr^.NameServerCount);
+  hdr^.AdditionalCount := bswap16(hdr^.AdditionalCount);
+  pos := length(request); // jump Header + Question = point to records
+  n := hdr^.AnswerCount;
+  if n <> 0 then
+  begin
+    SetLength(Res.Answer, n);
+    for i := 0 to n - 1 do
       if not DnsParseRecord(Res.RawAnswer, pos, Res.Answer[i], QClass) then
         exit;
   end;
-  if Res.Header.NameServerCount <> 0 then
+  n := hdr^.NameServerCount;
+  if n <> 0 then
   begin
-    SetLength(Res.Authority, Res.Header.NameServerCount);
-    for i := 0 to high(Res.Authority) do
+    SetLength(Res.Authority, n);
+    for i := 0 to n - 1 do
       if not DnsParseRecord(Res.RawAnswer, pos, Res.Authority[i], QClass) then
         exit;
   end;
-  if Res.Header.AdditionalCount <> 0 then
+  n := hdr^.AdditionalCount;
+  if n <> 0 then
   begin
-    SetLength(Res.Additional, Res.Header.AdditionalCount);
-    for i := 0 to high(Res.Additional) do
+    SetLength(Res.Additional, n);
+    for i := 0 to n - 1 do
       if not DnsParseRecord(Res.RawAnswer, pos, Res.Additional[i], QClass) then
         exit;
   end;
+  Res.Header := hdr^;
   result := true;
+  QueryPerformanceMicroSeconds(stop);
+  Res.ElapsedMicroSec := stop - start;
 end;
 
 function DnsLookupKnown(const HostName: RawUtf8; out Ip: RawUtf8): boolean;
