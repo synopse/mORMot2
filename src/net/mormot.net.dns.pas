@@ -638,9 +638,7 @@ begin
 end;
 
 var
-  NoTcpSafe: TLightLock;
-  NoTcpTix16: cardinal; // cache flushed after 64 seconds
-  NoTcpServers: TRawUtf8DynArray;
+  NoTcpList: TCachedValues; // cache flushed after 64 seconds (TixShr = 6)
 
 function DnsSendQuestion(const Address, Port: RawUtf8;
   const Request: RawByteString; out Answer: RawByteString;
@@ -652,7 +650,6 @@ var
   sock: TNetSocket;
   len, notcp: PtrInt;
   start, stop: Int64;
-  tix16: cardinal;
   lenw: word;
   hdr: PDnsHeader;
   tmp: TBuffer4K;
@@ -707,14 +704,7 @@ begin
   begin
     // UDP frame was too small: try with a TCP connection
     // ensure was not marked in NoTcpServers (avoid unneeded timeout)
-    tix16 := GetTickSec shr 6;
-    NoTcpSafe.Lock;
-    if NoTcpTix16 <> tix16 then
-      NoTcpServers := nil; // flush after 1 minute
-    NoTcpTix16 := tix16;
-    notcp := FindPropName(pointer(NoTcpServers), server, length(NoTcpServers));
-    NoTcpSafe.UnLock;
-    if notcp >= 0 then
+    if NoTcpList.Exists(server, {tixshr=}6) then
       exit;
     // setup the connection
     sock := addr.NewSocket(nlTcp);
@@ -734,9 +724,7 @@ begin
       lenw := 0;
       if sock.RecvAll(TimeOutMS, @lenw, 2) <> nrOk then // first 2 bytes are len
       begin
-        NoTcpSafe.Lock;
-        AddRawUtf8(NoTcpServers, server); // won't try again in the next minute
-        NoTcpSafe.UnLock;
+        NoTcpList.Add(server); // won't try again in the next minute
         exit;
       end;
       len := bswap16(lenw);

@@ -2810,6 +2810,7 @@ procedure DeduplicateRawUtf8(var Values: TRawUtf8DynArray);
 
 type
   /// raw thread-safe cache of a RawUtf8 content, stored as sorted dynamic array
+  // - should be filled with 0 before usage, e.g. as class field or global var
   {$ifdef USERECORDWITHMETHODS}
   TCachedValues = record
   {$else}
@@ -10927,7 +10928,7 @@ function FastFindPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt;
         cmovnc  r9, r10
 @nxt:   cmp     r9, R
         jle     @s                      // branchless main loop
-@err:   or      rax, -1                 // first char differ: no branch
+@err:   or      rax, -1
         {$ifdef win64}
         pop     rdi
         {$endif win64}
@@ -11115,10 +11116,12 @@ end;
 
 function TCachedValues.Exists(const Value: RawUtf8; TixShr: cardinal): boolean;
 begin
+  result := false;
+  if ValuesCount = 0 then
+    exit;
   if TixShr <> 0 then
     TixShr := (GetTickSec shr TixShr) + 1; // big shr may get 0 just after boot
   Safe.Lock;
-  result := false;
   if ValuesCount <> 0 then
     if TixShr = Tix32 then
       if Assigned(CustomCompare) then // O(log(n)) binary search

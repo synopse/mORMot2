@@ -5358,6 +5358,7 @@ var OsWakeAllOnValue: procedure(Value: PCardinal); {$ifdef OSWINDOWS} stdcall; {
 type
   TCachedValueCall = function(Param: pointer): RawByteString;
   /// raw thread-safe cache of a RawByteString content
+  // - should be filled with 0 before usage, e.g. as class field or global var
   {$ifdef USERECORDWITHMETHODS}
   TCachedValue = record
   {$else}
@@ -11364,7 +11365,8 @@ end;
 procedure TCachedValue.Cache(Call: TCachedValueCall; CallParam: pointer;
   TixShr: cardinal; var Dest; Flush: boolean);
 begin
-  TixShr := (GetTickSec shr TixShr) + 1; // big shr may get 0 just after boot
+  if TixShr <> 0 then
+    TixShr := (GetTickSec shr TixShr) + 1; // big shr may get 0 just after boot
   Safe.Lock;
   if (TixShr = Tix32) and
      not Flush then
