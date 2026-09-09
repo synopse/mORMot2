@@ -3141,6 +3141,34 @@ begin
       '",message-type:"OFFER",server-identifier:"192.168.0.1",' +
       '201:"toto",subnet-mask:"255.252.0.0",' +
       'lease-time:120,renewal-time:60,rebinding-time:105}');
+    // validate scope "domain-name" option 15 sent with the regular options
+    settings.Scope[0].DomainName := 'lan.local';
+    server.Setup(settings); // Setup() can be called again on a live server
+    mac := MacToText(@macs[9]);
+    f := d.ClientNew(dmtDiscover, macs[9]);
+    d.ClientFlush(f);
+    CheckNotEqual(server.ComputeResponse(d), 0, 'domain');
+    ip := IP4ToText(@d.Send.yiaddr);
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",message-type:"OFFER",server-identifier:"192.168.0.1",' +
+      'subnet-mask:"255.252.0.0",domain-name:"lan.local",' +
+      'lease-time:120,renewal-time:60,rebinding-time:105}');
+    // "rule" domain-name has precedence over the scope domain-name
+    pool := @server.Scope[0].Main; // Setup() did rebuild the scope
+    mac := MacToText(@macs[12]);
+    pool.AddRule([
+      '{mac:"', mac, '",requested:{domain-name:"mydomain"}}']);
+    f := d.ClientNew(dmtDiscover, macs[12]);
+    d.ClientFlush(f);
+    CheckNotEqual(server.ComputeResponse(d), 0, 'domain rule');
+    ip := IP4ToText(@d.Send.yiaddr);
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",yiaddr:"' + ip + '",siaddr:"192.168.0.1",chaddr:"' + mac +
+      '",message-type:"OFFER",server-identifier:"192.168.0.1",' +
+      'domain-name:"mydomain",' +
+      'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
+      '60,rebinding-time:105}');
   finally
     server.Free;
     settings.Free;

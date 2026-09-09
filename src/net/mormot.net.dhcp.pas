@@ -4321,6 +4321,7 @@ begin
   AddOptionOnce32(doBroadcastAddress,   Scope^.Broadcast);
   AddOptionOnce32(doRouters,            Scope^.Gateway);
   AddOptionOnceA32(doDomainNameServers, pointer(Scope^.DnsServers));
+  AddOptionOnceU(doDomainName,          pointer(Scope^.DomainName));
   AddOptionOnceA32(doNtpServers,        pointer(Scope^.NtpServers));
   // optional 51,58,59 lease timing options
   if (RecvType <> dmtInform) and
