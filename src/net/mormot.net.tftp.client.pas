@@ -535,7 +535,7 @@ begin
       //       +-------+---~~---+---+---~~---+---+---~~---+---+---~~---+---+
       // OACK |   6   |  opt1  | 0 | value1 | 0 |  optN  | 0 | valueN | 0 |
       //      +-------+---~~---+---+---~~---+---+---~~---+---+---~~---+---+
-      Frame^.Opcode := bswap16(TFTP_OACK);
+      Frame^.Opcode := TFTP_OACK shl 8;
   end
   else
     // RFC 1350 regular response
@@ -647,7 +647,7 @@ begin
   //        ------------------
   //  ACK  | 04    |  seq    |
   //       ------------------
-  Frame^.Opcode := bswap16(TFTP_ACK);
+  Frame^.Opcode := TFTP_ACK shl 8;
   Frame^.Sequence := bswap16(LastReceivedSequence);
   FrameLen := SizeOf(Frame^.Opcode) + SizeOf(Frame^.Sequence);
 end;
@@ -661,7 +661,7 @@ begin
   inc(LastReceivedSequence);
   if LastReceivedSequence = 0 then
     inc(LastReceivedSequenceHi, 1 shl 16); // handle 16-bit sequence overflow
-  Frame^.Opcode := bswap16(TFTP_DAT);
+  Frame^.Opcode := TFTP_DAT shl 8;
   Frame^.Sequence := bswap16(LastReceivedSequence);
   if CurrentSize <> FileStream.Position then
     FileStream.Seek(Int64(CurrentSize), soBeginning); // may break on TPipeStream
@@ -709,7 +709,7 @@ begin
   //        -----------------------------------------
   // ERROR | 05    |  ErrorCode |   ErrMsg   |   0  |
   //       -----------------------------------------
-  Frame^.Opcode := bswap16(TFTP_ERR);
+  Frame^.Opcode := TFTP_ERR shl 8;
   if err > teLast then
     Frame^.ErrorCode := 0
   else
