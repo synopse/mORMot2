@@ -662,28 +662,33 @@ end;
 var
   NoTcpList, NoEdnsList: TCachedValues; // flushed every 64 seconds (TixShr = 6)
 
-function DnsSendQuestionRaw(const Address, Port: RawUtf8;
-  const Request: RawByteString; var Answer: RawByteString; TimeOutMS: integer): boolean;
+function DnsSendQuestionRaw(Address, Port: RawUtf8; const Request: RawByteString;
+  var Answer: RawByteString; TimeOutMS: integer): boolean;
 var
-  server: RawUtf8;
   tcponly: boolean;
   addr, resp: TNetAddr;
   sock: TNetSocket;
-  len: PtrInt;
+  i, len: PtrInt;
   lenw: word;
   hdr: PDnsHeader;
   tmp: TBuffer4K;
 begin
   result := false;
   // validate input parameters
-  server := Address;
-  tcponly := IdemPChar(pointer(server), 'TCP@');
+  tcponly := IdemPChar(pointer(Address), 'TCP@');
   if tcponly then
-    delete(server, 1, 4)
+    delete(Address, 1, 4)
   else
     tcponly := DnsSendOverTcp; // global setting
+  i := PosExChar(':', Address);
+  if (i <> 0) and
+     (PosEx(':', Address, i + 1) = 0) then
+  begin
+    Port := copy(Address, i + 1, 100);
+    SetLength(Address, i - 1);
+  end;
   FillCharFast(addr, SizeOf(addr), 0);
-  if not addr.SetFromIP4(server, {nolookup=}true) or
+  if not addr.SetFromIP4(Address, {nolookup=}true) or
      (addr.SetPort(GetCardinalDef(pointer(Port), 53)) <> nrOk) then
     exit;
   if not tcponly then
@@ -715,7 +720,7 @@ begin
   if tcponly then
   begin
     // ensure was not marked in NoTcpServers (avoid unneeded timeout)
-    if NoTcpList.Exists(server, {tixshr=}6) then
+    if NoTcpList.Exists(Address, {tixshr=}6) then
       exit;
     // UDP frame was too small: try with a TCP connection
     sock := addr.NewSocket(nlTcp);
@@ -735,7 +740,7 @@ begin
       lenw := 0;
       if sock.RecvAll(TimeOutMS, @lenw, 2) <> nrOk then // first 2 bytes are len
       begin
-        NoTcpList.Add(server, {tixshr=}6); // won't try again in the next minute
+        NoTcpList.Add(Address, {tixshr=}6); // won't try again in the next minute
         exit;
       end;
       len := bswap16(lenw);
