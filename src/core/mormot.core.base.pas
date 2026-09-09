@@ -3574,7 +3574,7 @@ var
   _Fill256FromOs: procedure(out e: THash256Rec);
 
 /// convert the endianness of a given unsigned 16-bit integer
-function bswap16(const a: cardinal): cardinal;
+function bswap16(a: cardinal): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// internal function to swap 16-bit LE/BE endianess of a buffer
@@ -10344,9 +10344,10 @@ begin
   Dest.Hi := Dest.Hi xor Source.Hi;
 end;
 
-function bswap16(const a: cardinal): cardinal; // inlining is good enough
+function bswap16(a: cardinal): cardinal; // inlining is good enough
 begin
-  result := ((a and 255) shl 8) or (a shr 8);
+  result := ToByte(a); // better in two steps, especially on FPC
+  result := (result shl 8) or (a shr 8);
 end;
 
 procedure bswap16array(buf: PWord; len: PtrInt);
