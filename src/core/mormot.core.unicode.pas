@@ -2822,8 +2822,8 @@ type
     ValuesCount: integer;
     CustomCompare: TUtf8Compare;
     procedure Reset;
-    function Exists(const Value: RawUtf8; TixShr: cardinal): boolean;
-    function Add(const Value: RawUtf8; TixShr: cardinal): boolean;
+    function Exists(const Value: RawUtf8; TixShr: cardinal = 0): boolean;
+    function Add(const Value: RawUtf8; TixShr: cardinal = 0): boolean;
   end;
 
   /// a read-only virtual TStrings using internal TRawUtf8DynArray storage
@@ -11115,33 +11115,35 @@ end;
 
 function TCachedValues.Exists(const Value: RawUtf8; TixShr: cardinal): boolean;
 begin
-  TixShr := (GetTickSec shr TixShr) + 1; // big shr may get 0 just after boot
+  if TixShr <> 0 then
+    TixShr := (GetTickSec shr TixShr) + 1; // big shr may get 0 just after boot
   Safe.Lock;
   result := false;
   if ValuesCount <> 0 then
     if TixShr = Tix32 then
-      if Assigned(CustomCompare) then
-        result := FastFindPUtf8CharSorted(pointer(Values), ValuesCount - 1,
-          pointer(Value)) >= 0
-      else
+      if Assigned(CustomCompare) then // O(log(n)) binary search
         result := FastFindPUtf8CharSorted(pointer(Values), ValuesCount - 1,
           pointer(Value), CustomCompare) >= 0
+      else
+        result := FastFindPUtf8CharSorted(pointer(Values), ValuesCount - 1,
+          pointer(Value)) >= 0
     else
     begin
       Tix32 := TixShr;
-      ValuesCount := 0;
+      ValuesCount := 0; // flush cache
     end;
   Safe.UnLock;
 end;
 
 function TCachedValues.Add(const Value: RawUtf8; TixShr: cardinal): boolean;
 begin
-  TixShr := (GetTickSec shr TixShr) + 1; // big shr may get 0 just after boot
+  if TixShr <> 0 then
+    TixShr := (GetTickSec shr TixShr) + 1; // big shr may get 0 just after boot
   Safe.Lock;
   if TixShr <> Tix32 then
   begin
     Tix32 := TixShr;
-    ValuesCount := 0;
+    ValuesCount := 0; // flush cache
   end;
   result := AddSortedRawUtf8(Values, ValuesCount, Value, nil, -1, CustomCompare) >= 0;
   Safe.UnLock;
