@@ -739,6 +739,7 @@ type
     atsIntegerMsdsSupportedEncryptionTypes,
     atsFileTime,
     atsTextTime,
+    atsTimeSpan,
     atsSid,
     atsGuid,
     atsSecurityDescriptor,
@@ -3943,10 +3944,22 @@ begin
     AttrName := RawUtf8(existing); // replace with existing interned name
 end;
 
+function TimeSpanToText(TimeSpan: Int64): RawUtf8;
+var
+  s, m, h, d: Int64;
+begin
+  s := Abs(TimeSpan) div 10000000;
+  m := s div 60;
+  h := m div 60;
+  d := h div 24;
+  result := FormatUtf8('%.%:%:%', [d, h mod 24, m mod 60, s mod 60]);
+end;
+
 function AttributeValueMakeReadable(var s: RawUtf8; ats: TLdapAttributeTypeStorage;
   dom: PSid; uuid: TAppendShortUuid): boolean;
 var
   ft: QWord; // TFileTime
+  v: Int64;
   guid: TGuid;
   err: integer absolute guid;
   ts: TTimeLogBits absolute guid;
@@ -4002,6 +4015,11 @@ begin
           ts.SetText(s, {expanded=}true); // normalize as pure ISO-8601
           exit;
         end;
+      end;
+    atsTimeSpan:
+      begin
+        if TryStrToInt64(s, v) then
+          s := TimeSpanToText(v);
       end;
     atsUnicodePwd:
       begin
