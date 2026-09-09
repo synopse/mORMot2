@@ -1135,6 +1135,7 @@ var
   v64: Int64;
   sl: TStrings;
   timer: TPrecisionTimer;
+  cv: TCachedValues;
 
   procedure TestSort;
   begin
@@ -1180,6 +1181,7 @@ begin
   SetLength(v, MAX + 1); // allocate once the strings
   for i := 0 to MAX do
     UInt32ToUtf8(i, v[i]);
+  // validate TRawUtf8List
   L := TRawUtf8List.CreateEx([fObjectsOwned]);
   try // no hash table involved
     timer.Start;
@@ -1272,6 +1274,7 @@ begin
   finally
     L.Free;
   end;
+  // validate TBinDictionary
   B := TBinDictionary.Create;
   try // with hash table
     timer.Start;
@@ -1314,9 +1317,25 @@ begin
     len := 1;
     Check(PInteger(B.Find(nil, 0, @len))^ = 0);
     Check(len = 0);
-finally
+  finally
     B.Free;
   end;
+  // validate TCachedValues
+  cv.Safe.Init;
+  cv.CustomCompare := nil;
+  cv.Reset;
+  for i := 0 to MAX do
+    check(not cv.Exists(v[i]));
+  for i := 0 to MAX do
+    check(cv.Add(v[i]));
+  for i := 0 to MAX do
+    check(not cv.Add(v[i]));
+  for i := 0 to MAX do
+    check(cv.Exists(v[i]));
+  check(not cv.Exists('toto'));
+  cv.Reset;
+  for i := 0 to MAX do
+    check(not cv.Exists(v[i]));
 end;
 
 type

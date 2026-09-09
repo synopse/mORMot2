@@ -63,8 +63,8 @@ var
   h: cardinal;
   WS: SynUnicode;
 const
-  Hash: array[0 .. 4] of cardinal  = ( // depends on OS available font 
-    $8B40C230, $8DCCC22A, $753E2D40, $6870208B, $33E290AB);
+  Hash: array[0 .. 5] of cardinal  = ( // depends on OS available font
+    $8B40C230, $8DCCC22A, $753E2D40, $6870208B, $33E290AB, $17842091);
   Name: array[boolean] of PDFString = ('Arial', 'Helvetica');
 begin
   MS := TMemoryStream.Create;
