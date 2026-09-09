@@ -220,7 +220,8 @@ procedure DnsParseData(RR: TDnsResourceRecord;
 
 /// raw computation of a DNS query message
 function DnsBuildQuestion(const QName: RawUtf8; RR: TDnsResourceRecord;
-  QClass: cardinal = QC_INET; EdnsUdpSize: cardinal = 0): RawByteString;
+  QClass: cardinal = QC_INET; EdnsUdpSize: cardinal = 0;
+  BodySize: PPtrInt = nil): RawByteString;
 
 /// raw sending and receiving of DNS query message over UDP
 // - Address is expected to be an IPv4 address, maybe prefixed as 'tcp@1.2.3.4'
@@ -613,7 +614,7 @@ begin
 end;
 
 function DnsBuildQuestion(const QName: RawUtf8; RR: TDnsResourceRecord;
-  QClass, EdnsUdpSize: cardinal): RawByteString;
+  QClass, EdnsUdpSize: cardinal; BodySize: PPtrInt): RawByteString;
 var
   h: PDnsHeader;
   n, v: PUtf8Char;
@@ -642,6 +643,8 @@ begin
   tmp.AddDirect(#0); // final #0
   tmp.Add16BigEndian(ord(RR));
   tmp.Add16BigEndian(QClass);
+  if BodySize <> nil then
+    BodySize^ := tmp.Size;
   // optional EDNS(0) OPT pseudo-RR - RFC 6891 section 6.1.2
   if EdnsUdpSize <> 0 then
   begin
@@ -736,7 +739,7 @@ begin
         exit;
       end;
       len := bswap16(lenw);
-      if len <= length(Request) then
+      if len <= SizeOf(hdr^) then
         exit;
       hdr := FastNewRawByteString(answer, len);
       if (sock.RecvAll(TimeOutMS, pointer(answer), len) <> nrOk) or
@@ -804,13 +807,50 @@ begin
   result := true;
 end;
 
+function ParseDnsResult(var Res: TDnsResult; pos: PtrInt; QClass: cardinal): boolean;
+var
+  i, n: PtrInt;
+begin
+  result := false;
+  Res.Header := PDnsHeader(Res.RawAnswer)^;
+  Res.Header.QuestionCount   := bswap16(Res.Header.QuestionCount);
+  Res.Header.AnswerCount     := bswap16(Res.Header.AnswerCount);
+  Res.Header.NameServerCount := bswap16(Res.Header.NameServerCount);
+  Res.Header.AdditionalCount := bswap16(Res.Header.AdditionalCount);
+  n := Res.Header.AnswerCount;
+  if n <> 0 then
+  begin
+    SetLength(Res.Answer, n);
+    for i := 0 to n - 1 do
+      if not DnsParseRecord(Res.RawAnswer, pos, Res.Answer[i], QClass) then
+        exit;
+  end;
+  n := Res.Header.NameServerCount;
+  if n <> 0 then
+  begin
+    SetLength(Res.Authority, n);
+    for i := 0 to n - 1 do
+      if not DnsParseRecord(Res.RawAnswer, pos, Res.Authority[i], QClass) then
+        exit;
+  end;
+  n := Res.Header.AdditionalCount;
+  if n <> 0 then
+  begin
+    SetLength(Res.Additional, n);
+    for i := 0 to n - 1 do
+      if not DnsParseRecord(Res.RawAnswer, pos, Res.Additional[i], QClass) then
+        exit;
+  end;
+  result := true;
+end;
+
 function DnsQuery(const QName: RawUtf8; var Res: TDnsResult;
   RR: TDnsResourceRecord; const NameServers: RawUtf8;
   TimeOutMS: integer; QClass: cardinal): boolean;
 var
-  i, n, pos, code: PtrInt;
+  i, code, bodysize: PtrInt;
   servers: TRawUtf8DynArray;
-  request, requestEdns: RawByteString;
+  plain, edns: RawByteString;
   start, stop: Int64;
   hdr: PDnsHeader;
 begin
@@ -822,24 +862,24 @@ begin
   QueryPerformanceMicroSeconds(start);
   Finalize(Res);
   FillCharFast(Res, SizeOf(Res), 0);
-  request := DnsBuildQuestion(QName, RR, QClass);
   if NameServers = '' then
     // if no NameServer is specified, will ask all OS DNS in order
     servers := GetDnsAddresses
   else
     // the DNS server IP(s) have been specified
     CsvToRawUtf8DynArray(pointer(NameServers), servers);
-  // send the DNS request to the DNS server(s)
+  // send the DNS plain to the DNS server(s)
+  bodysize := 0;
   hdr := nil;
   for i := 0 to length(servers) - 1 do
   begin
-    // assume EDNS works until this server returned FORMERR
+    // assume RFC 6891 EDNS support until this server proves otherwise
     if (DnsEdnsUdpSize <> 0) and
-       not NoEdnsList.Exists(servers[i], {tixshr=}6) then
+       not NoEdnsList.Exists(servers[i], {tixshr=}8) then
     begin
-      if requestEdns = '' then // compute EDNS(0) OPT pseudo-RR request
-        requestEdns := DnsBuildQuestion(QName, RR, QClass, DnsEdnsUdpSize);
-      if not DnsSendQuestionRaw(servers[i], DnsPort, requestEdns, Res.RawAnswer, TimeOutMS) then
+      if edns = '' then // compute EDNS(0) OPT pseudo-RR plain
+        edns := DnsBuildQuestion(QName, RR, QClass, DnsEdnsUdpSize, @bodysize);
+      if not DnsSendQuestionRaw(servers[i], DnsPort, edns, Res.RawAnswer, TimeOutMS) then
         continue; // try next server
       hdr := pointer(Res.RawAnswer);
       code := hdr^.ResponseCode;
@@ -848,54 +888,24 @@ begin
         break;    // success with EDNS(0)
       hdr := nil;
       if code <> DNS_RESP_FORMERR then
-      begin
-        NoEdnsList.Add(servers[i], {tixshr=}6); // remember RFC 6891 fallback
-        continue;
-      end;
+        continue; // another DNS error: try next server
+      NoEdnsList.Add(servers[i], {tixshr=}8) // remember to fallback up to 4 min
     end;
-    // fallback to regular request with no OPT
-    if not DnsSendQuestionRaw(servers[i], DnsPort, request, Res.RawAnswer, TimeOutMS) then
+    // fallback to regular plain with no OPT
+    if plain = '' then
+      plain := DnsBuildQuestion(QName, RR, QClass, 0, @bodysize);
+    if not DnsSendQuestionRaw(servers[i], DnsPort, plain, Res.RawAnswer, TimeOutMS) then
       continue; // next server
     hdr := pointer(Res.RawAnswer);
     if (hdr^.ResponseCode = DNS_RESP_SUCCESS) and
        (hdr^.AnswerCount <> 0) then
-      break;    // success with regular request
+      break;    // success with regular plain
     hdr := nil;
   end;
   if hdr = nil then
     exit;
   // parse the valid response received from a DNS
-  hdr^.QuestionCount   := bswap16(hdr^.QuestionCount);
-  hdr^.AnswerCount     := bswap16(hdr^.AnswerCount);
-  hdr^.NameServerCount := bswap16(hdr^.NameServerCount);
-  hdr^.AdditionalCount := bswap16(hdr^.AdditionalCount);
-  pos := length(request); // jump Header + Question = point to records
-  n := hdr^.AnswerCount;
-  if n <> 0 then
-  begin
-    SetLength(Res.Answer, n);
-    for i := 0 to n - 1 do
-      if not DnsParseRecord(Res.RawAnswer, pos, Res.Answer[i], QClass) then
-        exit;
-  end;
-  n := hdr^.NameServerCount;
-  if n <> 0 then
-  begin
-    SetLength(Res.Authority, n);
-    for i := 0 to n - 1 do
-      if not DnsParseRecord(Res.RawAnswer, pos, Res.Authority[i], QClass) then
-        exit;
-  end;
-  n := hdr^.AdditionalCount;
-  if n <> 0 then
-  begin
-    SetLength(Res.Additional, n);
-    for i := 0 to n - 1 do
-      if not DnsParseRecord(Res.RawAnswer, pos, Res.Additional[i], QClass) then
-        exit;
-  end;
-  Res.Header := hdr^;
-  result := true;
+  result := ParseDnsResult(Res, bodysize, QClass);
   QueryPerformanceMicroSeconds(stop);
   Res.ElapsedMicroSec := stop - start;
 end;
@@ -1016,6 +1026,7 @@ initialization
   assert(ord(drrEUI64) = 109);
   assert(ord(drrTKEY) = 249);
   assert(ord(drrAMTRELAY) = 260);
+  NoEdnsList.CustomCompare := @StrIComp;
   NewSocketIP4Lookup := _NewSocketIP4Lookup;
 
 end.
