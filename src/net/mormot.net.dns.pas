@@ -453,71 +453,80 @@ begin
 end;
 
 
-function DnsDecompress(const Answer: RawByteString; Pos: PtrInt;
-  Text: PRawUtf8): PtrInt;
+function DnsDecompress(p: PByteArray; max, pos: PtrInt;
+  Dest: PRawUtf8 = nil; tmp: PAnsiChar = nil): PtrInt;
 var
-  p: PByteArray;
-  nextpos, max, offset: PtrInt;
-  len: byte;
-  tmp: ShortString;
+  d: PAnsiChar;
+  len, nextpos, lastoffset: PtrInt;
+  l: byte;
 begin
   result := 0; // indicates error
+  if pos < 0 then
+    exit;
   nextpos := 0;
-  p := pointer(Answer);
-  max := length(Answer);
-  tmp[0] := #0;
+  lastoffset := max;
+  d := tmp;
   repeat
-    if Pos >= max then
+    if pos >= max then
       exit; // avoid any buffer overflow on malformed/malicious input
-    len := p[Pos];
-    inc(Pos);
+    len := p[pos];
+    inc(pos);
     if len = 0 then
       break;
-    while (len and DNS_RELATIVE) = DNS_RELATIVE do
-    begin
-      // see https://www.rfc-editor.org/rfc/rfc1035.html#section-4.1.4
-      if Pos >= max then
+    repeat
+      // see RFC 1035 section 4.1.4 and RFC 9267 section 2
+      l := byte(len) and DNS_RELATIVE;
+      if l = 0 then
+        break;
+      if (l <> DNS_RELATIVE) or // reserved combination
+         (pos >= max) then
         exit;
-      len := len and not DNS_RELATIVE;
-      offset := (PtrInt(len) shl 8) + p[Pos];
-      if (offset >= Pos - 1) or
-         (offset >= max) then
-        exit; // reject forward/self pointers and malformed offsets
+      len := ((len and $3f) shl 8) + p[pos]; // here len is the offset
+      if (len >= pos - 1) or                 // forward/self pointer
+         (len >= lastoffset) or              // recursive/cyclic pointer
+         (len >= max) then
+        exit;
+      lastoffset := len;
       if nextpos = 0 then
-        nextpos := Pos + 1; // return position just after the first pointer
-      Pos := offset;
-      len := p[Pos]; // 8-bit length from offset
-      inc(Pos);
-    end;
-    if (len and DNS_RELATIVE) <> 0 then
-      exit; // %01xxxxxx and %10xxxxxx are reserved
+        nextpos := pos + 1; // return position just after the first pointer
+      pos := len;
+      len := p[pos]; // 8-bit length from offset
+      inc(pos);
+    until false;
     if len = 0 then
       break;
-    if Pos + len > max then
+    if pos + len > max then
       exit;
-    if Text <> nil then
+    if Dest <> nil then
     begin
-      AppendShortBuffer(pointer(@p[Pos]), len, high(tmp), @tmp);
-      AppendShortCharSafe('.', tmp);
+      if PtrInt(d - tmp) + len >= 254 then
+        exit; // max 255 chars per RFC 1035
+      MoveFast(p[pos], d^, len);
+      inc(d, len);
+      d^ := '.';
+      inc(d);
     end;
-    inc(Pos, len);
+    inc(pos, len);
   until false;
-  if Text <> nil then
+  if Dest <> nil then
   begin
-    if tmp[ord(tmp[0])] = '.' then
-      dec(tmp[0]);
-    FastSetString(Text^, @tmp[1], ord(tmp[0]));
+    if (d > tmp) and
+       (d[-1] = '.') then
+      dec(d);
+    FastSetString(Dest^, tmp, d);
   end;
   if nextpos = 0 then
-    result := Pos
+    result := pos
   else
     result := nextpos;
 end;
 
 function DnsParseString(const Answer: RawByteString; Pos: PtrInt;
   var Text: RawUtf8): PtrInt;
+var
+  tmp: TByteToAnsiChar;
 begin
-  result := DnsDecompress(Answer, Pos, @Text);
+  result := DnsDecompress(pointer(Answer), length(Answer), Pos, @Text, @tmp);
 end;
 
 function DnsParseCharString(const Answer: RawByteString;
@@ -832,8 +841,8 @@ begin
   Res.Header.AnswerCount     := bswap16(Res.Header.AnswerCount);
   Res.Header.NameServerCount := bswap16(Res.Header.NameServerCount);
   Res.Header.AdditionalCount := bswap16(Res.Header.AdditionalCount);
-  // derivate actual response position from the QName in returned packet
-  pos := DnsDecompress(Res.RawAnswer, SizeOf(Res.Header), nil);
+  // derive actual response position from the QName in returned packet
+  pos := DnsDecompress(pointer(Res.RawAnswer), length(Res.RawAnswer), SizeOf(Res.Header));
   if (pos = 0) or
      (pos + 4 > length(Res.RawAnswer)) then
     exit;

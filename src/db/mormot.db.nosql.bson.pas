@@ -249,7 +249,7 @@ type
     // - ComputeNew will use a hash of Executable.Host and Executable.User
     MachineID: TBson24;
     /// 16-bit process id
-    // - ComputeNew will derivate it from MainThreadID
+    // - ComputeNew will derive it from MainThreadID
     ProcessID: word;
     /// 24-bit counter, starting with a random value
     // - used to avoid collision
