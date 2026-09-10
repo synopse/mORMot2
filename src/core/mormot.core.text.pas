@@ -6726,6 +6726,10 @@ end;
 {$ifndef WIN32DELPHI} // Delphi has its own x86/x87 asm version
 
 function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
+const
+  Scale: double = 1.3407807929942597e154; // 2^512
+  InvScale: double = 7.458340731200207e-155; // 2^-512
+  MaxScaled: double = 1.3407807929942596e154; // MaxDouble * 2^-512
 var
   remdigit: integer;
   frac, exp: PtrInt;
@@ -6774,7 +6778,8 @@ begin
     if byte(ord(P^) - ord('0')) <= 9 then
     begin
       if (remdigit <> 0) or // avoid 64-bit overflow, but allow 19 digits
-         (v64 > 922337203685477580) then
+         (v64 > 922337203685477580) or
+         ((v64 = 922337203685477580) and (P^ > '7')) then
         dec(remdigit);
       if remdigit >= 0 then // over-required digits are just ignored
       begin
@@ -6792,13 +6797,15 @@ begin
     if P^ <> '.' then
       break;
     inc(P);
-    if frac > 0 then
+    if frac <> 0 then
       goto e; // will return partial value but err=1
     dec(frac);
   until false;
   inc(frac, ord(frac < 0)); // adjust digits after '.'
   if ord(P^) or $20 = ord('e') then
   begin
+    if not (fValid in flags) then
+      goto e;
     exp := 0;
     exclude(flags, fValid);
     inc(P);
@@ -6812,19 +6819,25 @@ begin
     repeat
       if byte(ord(P^) - ord('0')) > 9 then
         break;
+      if exp >= High(PtrInt) div 10 then
+        if (exp > High(PtrInt) div 10) or
+           (ord(P^) - ord('0') > High(PtrInt) mod 10) then
+          goto e;
       exp := (exp * 10) + ord(P^) - ord('0');
       include(flags, fValid);
       inc(P);
     until false;
     if fNegExp in flags then
-      dec(frac, exp)
-    else
-      inc(frac, exp);
-    if (frac <= -324) or
-       (frac >= 308) then
     begin
-      frac := 0;
-      goto e; // limit to 5.0 x 10^-324 .. 1.7 x 10^308 double range
+      if frac < Low(PtrInt) + exp then
+        goto e;
+      dec(frac, exp);
+    end
+    else
+    begin
+      if frac > High(PtrInt) - exp then
+        goto e;
+      inc(frac, exp);
     end;
   end;
   if (fValid in flags) and
@@ -6832,7 +6845,28 @@ begin
     err := 0
   else
 e:  err := 1; // return the (partial) value even if not ended with #0
+  if (frac <= -324) or
+     (frac >= 308) then
+  begin
+    frac := 0;
+    err := 1; // also bound the scale of numbers without an exponent
+  end;
   d64 := v64;
+  if frac >= 290 then // avoid overflowing the final product, even with unmasked FPU
+  begin
+    result := (POW10[(frac and not 31) shr 5 + 34] *
+               POW10[frac and 31] * InvScale) * d64;
+    if result > MaxScaled then
+    begin
+      result := d64;
+      err := 1;
+    end
+    else
+      result := result * Scale;
+    if fNeg in flags then
+      result := -result;
+    exit;
+  end;
   if frac >= -31 then
     if frac <= 31 then // -31 .. + 31
       result := POW10[frac]

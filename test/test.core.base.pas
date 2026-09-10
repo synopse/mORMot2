@@ -5023,6 +5023,56 @@ procedure TTestCoreBase.NumericalConversions;
     CheckSame(d, v);
   end;
 
+  {$ifdef CPU64}
+  procedure CheckIntegerValue(const text: RawUtf8; expected: Int64);
+  var
+    err: integer;
+    value: Int64;
+  begin
+    value := GetInt64(pointer(text), err);
+    CheckEqual(err, 0, text);
+    CheckEqual(value, expected, text);
+  end;
+
+  {$endif CPU64}
+
+  procedure CheckJsonValue(const text: RawUtf8; kind: integer; expected: double);
+  var
+    v: variant;
+    p: PUtf8Char;
+  begin
+    p := GetNumericVariantFromJson(pointer(text), TVarData(v), true);
+    Check(p = PUtf8Char(pointer(text)) + length(text), text);
+    CheckEqual(TVarData(v).VType, kind, text);
+    CheckSame(double(v), expected, 0, text);
+  end;
+
+  procedure CheckJsonExact(const text: RawUtf8; kind: integer; expected: Int64);
+  var
+    v: variant;
+  begin
+    Check(GetNumericVariantFromJson(pointer(text), TVarData(v), false) <> nil, text);
+    CheckEqual(TVarData(v).VType, kind, text);
+    CheckEqual(TVarData(v).VInt64, expected, text);
+  end;
+
+  procedure CheckInvalidNumber(const text: RawUtf8; extendedToo: boolean = true);
+  var
+    v: variant;
+    d: double;
+    err: integer;
+  begin
+    Check(GetNumericVariantFromJson(pointer(text), TVarData(v), true) = nil, text);
+    {$ifndef WIN32DELPHI}
+    if extendedToo then
+    begin
+      d := GetExtended(pointer(text), err);
+      Check(err <> 0, text);
+      Check(not IsInfinite(d) and not IsNan(d), text);
+    end;
+    {$endif WIN32DELPHI}
+  end;
+
 var
   i, j, b, err: integer;
   juint: cardinal absolute j;
@@ -5503,6 +5553,65 @@ begin
   CheckDoubleToShortSame(184467440737095514);
   CheckDoubleToShortSame(1844674407370955148);
   {$endif FPC}
+  // signed numeric boundaries and JSON grammar
+  {$ifdef CPU64}
+  CheckIntegerValue('9223372036854775807', High(Int64));
+  CheckIntegerValue('-9223372036854775808', Low(Int64));
+  CheckIntegerValue('  -  00000000000000000000000000000000123', -123);
+  CheckIntegerValue('+0000', 0);
+  for i := 0 to 3 do
+  begin
+    s := GetCsvItemString('9223372036854775808,-9223372036854775809,' +
+      '18446744073709551616,99999999999999999999', i);
+    GetInt64(pointer(s), err);
+    Check(err <> 0, s);
+  end;
+  {$endif CPU64}
+  CheckJsonExact('0', varInteger, 0);
+  CheckJsonExact('-123', varInteger, -123);
+  CheckJsonExact('9223372036854775807', varInt64, High(Int64));
+  CheckJsonExact('-9223372036854775808', varInt64, Low(Int64));
+  CheckJsonExact('922337203685477.5807', varCurrency, High(Int64));
+  CheckJsonExact('-922337203685477.5808', varCurrency, Low(Int64));
+  CheckJsonExact('922337203685477.58', varCurrency, High(Int64) - 7);
+  CheckJsonExact('-922337203685477.58', varCurrency, Low(Int64) + 8);
+  CheckJsonValue('9223372036854775808', varDouble, 9223372036854775808.0);
+  CheckJsonValue('-9223372036854775809', varDouble, -9223372036854775809.0);
+  CheckJsonValue('9999999999999999999', varDouble, 9999999999999999999.0);
+  CheckJsonValue('922337203685477.5808', varDouble, 922337203685477.5808);
+  CheckJsonValue('-922337203685477.5809', varDouble, -922337203685477.5809);
+  CheckJsonValue('9223372036854775.8', varDouble, 9223372036854775.8);
+  s := '9223372036854775808';
+  Check(GetNumericVariantFromJson(pointer(s), TVarData(vj), false) = nil);
+  s := '9223372036854775.8';
+  Check(GetNumericVariantFromJson(pointer(s), TVarData(vj), false) = nil);
+  CheckInvalidNumber('1.2.3');
+  CheckInvalidNumber('0..1');
+  CheckInvalidNumber('e1');
+  CheckInvalidNumber('-.e2');
+  CheckInvalidNumber('1e');
+  CheckInvalidNumber('1e+');
+  CheckInvalidNumber('.5', false); // GetExtended intentionally also accepts Pascal syntax
+  CheckInvalidNumber('1.', false);
+  CheckInvalidNumber('1.e2', false);
+  CheckInvalidNumber('01', false);
+  CheckInvalidNumber('+1', false);
+  CheckInvalidNumber('1e400');
+  CheckInvalidNumber('1e-400');
+  {$ifndef WIN32DELPHI}
+  s := '9223372036854775808';
+  d := GetExtended(pointer(s), err);
+  CheckEqual(err, 0);
+  CheckSame(d, 9223372036854775808.0, 0);
+  s := '1.7976931348623157e308';
+  d := GetExtended(pointer(s), err);
+  CheckEqual(err, 0);
+  Check(not IsInfinite(d) and (d > 1.79e308));
+  s := '99e307';
+  d := GetExtended(pointer(s), err);
+  Check(err <> 0);
+  Check(not IsInfinite(d));
+  {$endif WIN32DELPHI}
   // validate ScanUtf8()
   Check(ScanUtf8('1 2 3', '  %', [@i, @j, @d]) = 0);
   Check(ScanUtf8('', '%d%d%f', [@i, @j, @d]) = 0);
