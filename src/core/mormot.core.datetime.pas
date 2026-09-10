@@ -725,6 +725,7 @@ function EncodeDateTime(Year, Month, Day, Hour, Min, Sec, MSec: cardinal): TDate
 
 /// our own faster version of the corresponding RTL function
 function IsLeapYear(Year: cardinal): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// compute how many days there are in a given month
 function DaysInMonth(Year, Month: cardinal): cardinal; overload;
@@ -1542,6 +1543,29 @@ const
    (0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, 0, 0, 0));
   DaysFromMarch: array[0 .. 11] of word = ( // pre-computed (Month * D2 + 2) div 5
     0, 31, 61, 92, 122, 153, 184, 214, 245, 275, 306, 337);
+
+function IsLeapYear(Year: cardinal): boolean;
+begin
+  if Year and 3 <> 0 then
+    result := false
+  else if Year and 15 <> 0 then // need to check (Year mod 25) <> 0
+    result := cardinal(Year * $c28f5c29) > $0a3d70a3 // 25*$C28F5C29 = 1(mod2^32)
+  else
+    result := true;
+end;
+
+function DaysInMonth(Year, Month: cardinal): cardinal;
+begin
+  result := DaysPerMonth[mormot.core.datetime.IsLeapYear(Year)][Month];
+end;
+
+function DaysInMonth(Date: TDateTime): cardinal;
+var
+  dt: TSynSystemTime;
+begin
+  dt.FromDate(Date); // faster than RTL DecodeDate()
+  result := dt.DaysInMonth;
+end;
 
 function Iso8601ToDateTimePUtf8Char(P: PUtf8Char; L: PtrInt): TDateTime;
 var
@@ -2610,34 +2634,6 @@ begin
     FastAssignNew(result)
   else
     result := DateToIso8601(Year, Month, Day, Expanded);
-end;
-
-
-function IsLeapYear(Year: cardinal): boolean;
-var
-  d100: TDiv100Rec;
-begin
-  if Year and 3 = 0 then
-  begin
-    Div100(Year, d100{%H-});
-    result := ((d100.M <> 0) or // (Year mod 100 > 0)
-               (Year - ((d100.D shr 2) * 400) = 0)); // (Year mod 400 = 0))
-  end
-  else
-    result := false;
-end;
-
-function DaysInMonth(Year, Month: cardinal): cardinal;
-begin
-  result := DaysPerMonth[mormot.core.datetime.IsLeapYear(Year)][Month];
-end;
-
-function DaysInMonth(Date: TDateTime): cardinal;
-var
-  dt: TSynSystemTime;
-begin
-  dt.FromDate(Date); // faster than RTL DecodeDate()
-  result := dt.DaysInMonth;
 end;
 
 
