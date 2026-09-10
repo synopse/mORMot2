@@ -577,6 +577,8 @@ type
     procedure FromUnixTime(ut: TUnixTime);
     /// fill fields from the given value - but not DayOfWeek
     procedure FromUnixMsTime(ut: TUnixMsTime);
+    /// fill Year/Month/Day fields from the given Julian Day Number
+    procedure FromJulianDay(t: cardinal);
     /// fill Hour/Minute/Second/Millisecond fields from the given number of milliseconds
     // - faster than the RTL DecodeTime() function
     procedure FromMS(ms: PtrUInt);
@@ -835,6 +837,16 @@ function NowToFileMonthShort(localtime: boolean = false): TShort7;
 function TimeToString: RawUtf8;
 
 const
+  // Date Translation constants - see http://en.wikipedia.org/wiki/Julian_day
+  D0    = 1461;
+  D1    = 146097;
+  D2    = 153;
+  CGREG = 1721119; // algorithm's Gregorian base
+  C1899 = 2415019; // JDN of 1899-12-30 = TDateTime 0
+  C1970 = 2440588; // JDN of 1900-01-01 = Unix Epoch
+  D1899 = C1899 - CGREG; // = 693900
+  D1970 = C1970 - CGREG; // = 719469
+
   /// used e.g. by DateTimeMSToString and TJsonWriter.AddDateTimeMS
   DTMS_FMT: array[boolean] of RawUtf8 = (
     '%%%%%%%%%',
@@ -1523,10 +1535,13 @@ end;
 
 { ************ ISO-8601 Compatible Date/Time Text Encoding }
 
-const // sysutils' MonthDays[] stores Word values - and better alignment here
+const
+  // tables for Gregorian date translation algorithms (faster than SysUtils)
   DaysPerMonth: array[{leapYear=}boolean, 0 .. 15] of byte = (
    (0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, 0, 0, 0),
    (0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, 0, 0, 0));
+  DaysFromMarch: array[0 .. 11] of word = ( // pre-computed (Month * D2 + 2) div 5
+    0, 31, 61, 92, 122, 153, 184, 214, 245, 275, 306, 337);
 
 function Iso8601ToDateTimePUtf8Char(P: PUtf8Char; L: PtrInt): TDateTime;
 var
@@ -1660,10 +1675,10 @@ begin
     if y > 9999 then
       exit; // avoid integer overflow e.g. if '0000' is an invalid date
     Div100(y, d100{%H-});
-    unaligned(result) := cardinal(cardinal(146097 * d100.d) shr 2) +
-                         cardinal(cardinal(1461 * d100.m) shr 2) +
-                         cardinal(cardinal(153 * m + 2) div 5) + d;
-    unaligned(result) := unaligned(result) - 693900; // avoid sign issue
+    unaligned(result) := cardinal(cardinal(D1 * d100.d) shr 2) +
+                         cardinal(cardinal(D0 * d100.m) shr 2) +
+                         cardinal(cardinal(D2 * m + 2) div 5) + d;
+    unaligned(result) := unaligned(result) - D1899; // avoid sign issue
     if L < 15 then
       exit; // not enough space to retrieve the time
   end;
@@ -2731,30 +2746,40 @@ begin
   FromDateTime(ut * MilliSecsPerDate + UnixDateDelta); // via a temp TDateTime
 end;
 
-procedure TSynSystemTime.FromDate(const dt: TDateTime);
+procedure TSynSystemTime.FromJulianDay(t: cardinal);
 var
-  t, t2, t3: PtrUInt;
+  t2, t3: cardinal;
 begin
+  t2 := CGREG;
   PInt64(@Year)^ := 0; // quickly reset all Date fields
-  t := Trunc(dt);
-  t := (t + 693900) * 4 - 1;
-  if PtrInt(t) < 0 then
+  if t <= t2 then
     exit;
-  t3 := t div 146097;
-  t2 := (t - t3 * 146097) and not 3;
-  t := PtrUInt(t2 + 3) div 1461; // PtrUInt() needed for FPC i386
+  dec(t, t2);
+  t := t * 4 - 1;
+  t3 := t div D1;
+  t2 := (t - t3 * D1) and not 3;
+  t := (t2 + 3) div D0;
   Year := t3 * 100 + t;
-  t2 := ((t2 + 7 - t * 1461) shr 2) * 5;
-  t3 := PtrUInt(t2 - 3) div 153;
-  Day := PtrUInt(t2 + 2 - t3 * 153) div 5;
+  t3 := t * D0;
+  inc(t2, 7);
+  dec(t2, t3);
+  t2 := t2 shr 2;
+  t3 := t2 * 535;
+  dec(t3, 202);
+  t3 := t3 shr 14;  // exact (t2 * 5 - 3) div D2 for t2 in 1..366
+  Day := t2 - DaysFromMarch[t3]; // pre-computed (Month * D2 + 2) div 5
   if t3 < 10 then
-    inc(t3, 3)
+    Month := t3 + 3
   else
   begin
-    dec(t3, 9);
+    Month := t3 - 9;
     inc(Year);
   end;
-  Month := t3;
+end;
+
+procedure TSynSystemTime.FromDate(const dt: TDateTime);
+begin
+  FromJulianDay(Trunc(dt) + C1899);
 end;
 
 procedure TSynSystemTime.FromTime(const dt: TDateTime);
