@@ -995,34 +995,39 @@ end;
 
 
 const
-  // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
-  D0 = 1461;
-  D1 = 146097;
-  D2 = 1721119;
+  // very fast Gregorian date translation - see TSynSystemTime.FromJulianDay
+  D0    = 1461;
+  D1    = 146097;
+  D2    = 153;
+  CGREG = 1721119;
   C1970 = 2440588;
+  DaysFromMarch: array[0 .. 11] of word = (
+    0, 31, 61, 92, 122, 153, 184, 214, 245, 275, 306, 337);
 
-procedure JulianToGregorian(JulianDN: PtrUInt; out result: TSystemTime);
-  {$ifdef HASINLINE}inline;{$endif}
+procedure DaysToGregorian(t: cardinal; var result: TSystemTime);
 var
-  YYear, XYear, Temp, TempMonth: PtrUInt;
+  t2, t3: cardinal;
 begin
-  Temp := ((JulianDN - D2) * 4) - 1;
-  JulianDN := Temp div D1;
-  XYear := (Temp - (JulianDN * D1)) or 3;
-  YYear := XYear div D0;
-  Temp := (((XYear - (YYear * D0) + 4) shr 2) * 5) - 3;
-  TempMonth := Temp div 153;
-  result.Day := PtrUInt((Temp - (TempMonth * 153)) + 5) div 5;
-  if TempMonth >= 10 then
-  begin
-    inc(YYear);
-    dec(TempMonth, 12 - 3);
-  end
+  t := t * 4 - 1;
+  t3 := t div D1;
+  t2 := (t - t3 * D1) and not 3;
+  t := (t2 + 3) div D0;
+  result.Year := t3 * 100 + t;
+  t3 := t * D0;
+  inc(t2, 7);
+  dec(t2, t3);
+  t2 := t2 shr 2;
+  t3 := t2 * 535;
+  dec(t3, 202);
+  t3 := t3 shr 14;
+  result.Day := t2 - DaysFromMarch[t3]; // pre-computed (Month * D2 + 2) div 5
+  if t3 < 10 then
+    result.Month := t3 + 3
   else
-    inc(TempMonth, 3);
-  result.Month := TempMonth;
-  result.Year := YYear + (JulianDN * 100);
-  // initialize fake dayOfWeek - as used by FromGlobalTime()
+  begin
+    result.Month := t3 - 9;
+    inc(result.Year);
+  end;
   result.DayOfWeek := 0;
 end;
 
@@ -1031,7 +1036,7 @@ var
   t: PtrUInt;
 begin
   t := epoch div SecsPerDay;
-  JulianToGregorian(t + C1970, result);
+  DaysToGregorian(t + (C1970 - CGREG), result);
   dec(epoch, t * SecsPerDay);
   t := epoch div SecsPerHour;
   result.Hour := t;
