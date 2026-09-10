@@ -589,6 +589,8 @@ type
     /// fill Year/Month/Day and Hour/Minute/Second fields from the given ISO-8601 text
     // - returns true on success
     function FromText(const iso: RawUtf8): boolean;
+    /// fill Hour/Minute/Second/MilliSecond fields from the given ISO-8601 text
+    function FromTimeBuffer(P: PUtf8Char; L: PtrInt): boolean;
     /// fill Year/Month/Day and Hour/Minute/Second fields from HTTP-date format
     // - defined e.g. by https://datatracker.ietf.org/doc/html/rfc7231#section-7.1.1
     // $ Sun, 06 Nov 1994 08:49:37 GMT    ; IMF-fixdate
@@ -2804,14 +2806,29 @@ begin
   end;
 end;
 
-function TSynSystemTime.FromHttpDateBuffer(
-  P: PUtf8Char; tolocaltime: boolean): boolean;
+function TSynSystemTime.FromTimeBuffer(P: PUtf8Char; L: PtrInt): boolean;
+var
+  h, mi, ss, ms: cardinal;
+begin
+  if Iso8601ToTimePUtf8Char(P, L, h, mi, ss, ms) then
+  begin
+    Hour := h;
+    Minute := mi;
+    Second := ss;
+    MilliSecond := ms;
+    result := true;
+  end
+  else
+    result := false;
+end;
+
+function TSynSystemTime.FromHttpDateBuffer(P: PUtf8Char; tolocaltime: boolean): boolean;
 var
   pnt: byte;
   hasday: boolean;
   beg: PUtf8Char;
   zone: integer;
-  v, h, mi, ss, ms: cardinal;
+  v: cardinal;
   dt, t: TDateTime;
 begin
   // Sun, 06 Nov 1994 08:49:37 GMT    ; RFC 822, updated by RFC 1123
@@ -2882,12 +2899,8 @@ begin
               end;
             2:
               // e.g. '08:49:37 GMT'
-              if Iso8601ToTimePUtf8Char(beg, P - beg, h, mi, ss, ms) then
+              if FromTimeBuffer(beg, P - beg) then
               begin
-                Hour := h;
-                Minute := mi;
-                Second := ss;
-                MilliSecond := ms;
                 zone := 0; // GMT by default
                 ParseTimeZone(P, zone);
               end;
