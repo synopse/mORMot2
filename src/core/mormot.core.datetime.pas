@@ -110,6 +110,17 @@ procedure AppendShortBy100(value: cardinal; const valueunit: ShortString;
 // three digits to the left of the decimal separator e.g. '100' '1,000' '10,000'
 function IntToThousandString(Value: PtrInt; const Sep: ShortString = ','): TShort31;
 
+/// convert a Windows TimeSpan value (i.e. ticks) into millisecond-resolution text
+// - e.g. TimeSpanToText(36611234567) = '01:01:01.123'
+procedure TimeSpanAppendShort(value: Int64; var result: ShortString);
+
+/// convert a Windows TimeSpan value (i.e. ticks) into millisecond-resolution text
+procedure TimeSpanToTextVar(value: Int64; var result: RawUtf8);
+
+/// convert a Windows TimeSpan value (i.e. ticks) into millisecond-resolution text
+function TimeSpanToText(value: Int64): RawUtf8;
+  {$ifdef HASINLINE}inline;{$endif}
+
 
 { ************ ISO-8601 Compatible Date/Time Text Encoding }
 
@@ -587,6 +598,9 @@ type
       tolocaltime: boolean = false): boolean;
     /// fill Year/Month/Day and Hour/Minute/Second fields from HTTP-date PUtf8Char
     function FromHttpDateBuffer(P: PUtf8Char; tolocaltime: boolean): boolean;
+    /// fill Hour/Minute/Second/MilliSecond fields from Microsoft TimeSpan 100 ns ticks
+    // - and returns the number of days
+    function FromTimeSpan(ticks: Int64): PtrUInt;
     /// encode the stored date/time as ISO-8601 text with Milliseconds
     function ToText(Expanded: boolean = true; FirstTimeChar: AnsiChar = 'T';
       const TZD: RawUtf8 = ''): RawUtf8;
@@ -1479,6 +1493,29 @@ begin
       {$ifdef CPU32} PCardinal(@Nano)^ {$else} Nano {$endif} div 10, 'us', result)
   else
     MicroSecToStringVar(Nano div NanoSecsPerMicroSec, result);
+end;
+
+procedure TimeSpanAppendShort(value: Int64; var result: ShortString);
+var
+  st: TSynSystemTime;
+begin
+  if value < 0 then
+    AppendShortCharSafe('-', result);
+  st.AppendInterval(st.FromTimeSpan(value), result);
+end;
+
+procedure TimeSpanToTextVar(value: Int64; var result: RawUtf8);
+var
+  tmp: TShort31;
+begin
+  tmp[0] := #0;
+  TimeSpanAppendShort(value, tmp);
+  ShortStringToAnsi7String(tmp, result);
+end;
+
+function TimeSpanToText(value: Int64): RawUtf8;
+begin
+  TimeSpanToTextVar(value, result);
 end;
 
 
@@ -2900,6 +2937,15 @@ function TSynSystemTime.FromHttpDate(const httpdate: RawUtf8;
 begin
   result := (length(httpdate) >= 12) and
             FromHttpDateBuffer(pointer(httpdate), tolocaltime);
+end;
+
+function TSynSystemTime.FromTimeSpan(ticks: Int64): PtrUInt;
+var
+  ms: QWord;
+begin
+  ms := QWord(abs(ticks)) div TicksPerMillisecond;
+  result := ms div MilliSecsPerDay; // returns the days count
+  FromMS(ms - (QWord(result) * MilliSecsPerDay));
 end;
 
 function TSynSystemTime.ToText(Expanded: boolean; FirstTimeChar: AnsiChar;
