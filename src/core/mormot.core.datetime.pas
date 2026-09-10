@@ -669,6 +669,9 @@ type
     function ToDateTime: TDateTime;
     /// convert the stored time into a TUnixTime in seconds since UNIX Epoch
     function ToUnixTime: TUnixTime;
+    /// convert the stored time into a TUnixMSTime in milliseconds since UNIX Epoch
+    function ToUnixMsTime: TUnixMsTime;
+      {$ifdef HASINLINE}inline;{$endif}
     /// copy Year/Month/DayOfWeek/Day fields to a TSynDate
     procedure ToSynDate(out date: TSynDate);
       {$ifdef HASINLINE}inline;{$endif}
@@ -3234,13 +3237,18 @@ end;
 
 function TSynSystemTime.ToUnixTime: TUnixTime;
 var
-  dt: TDateTime;
+  g: cardinal;
 begin
-  dt := ToDateTime;
-  if dt = 0 then
-    result := 0
+  if EncodeGregorian(Year, Month, Day, g) then
+    result := ((Int64(g) - D1970) * SecsPerDay) +
+              Second + (Minute * SecsPerMin) + (Hour * SecsPerHour)
   else
-    result := DateTimeToUnixTime(dt);
+    result := 0;
+end;
+
+function TSynSystemTime.ToUnixMsTime: TUnixMsTime;
+begin
+  result := ToUnixTime * MilliSecsPerSec + MilliSecond;
 end;
 
 procedure TSynSystemTime.ToSynDate(out date: TSynDate);
