@@ -738,6 +738,7 @@ type
     atsIntegerAccountType,
     atsIntegerMsdsSupportedEncryptionTypes,
     atsFileTime,
+    atsTimeSpan,
     atsTextTime,
     atsSid,
     atsGuid,
@@ -4002,6 +4003,12 @@ begin
           ts.SetText(s, {expanded=}true); // normalize as pure ISO-8601
           exit;
         end;
+      end;
+    atsTimeSpan:
+      if ToInt64(s, ts.Value) then      // as 100 ns ticks
+      begin
+        TimeSpanToTextVar(ts.Value, s); // display as 'dd.hh:mm:ss.xxx'
+        exit;
       end;
     atsUnicodePwd:
       begin
