@@ -598,10 +598,9 @@ type
     // $ Sun, 06 Nov 1994 08:49:37 GMT    ; IMF-fixdate
     // $ Sunday, 06-Nov-94 08:49:37 GMT   ; obsolete RFC 850 format
     // $ Sun Nov  6 08:49:37 1994         ; ANSI C's asctime() format
-    function FromHttpDate(const httpdate: RawUtf8;
-      tolocaltime: boolean = false): boolean;
+    function FromHttpDate(const httpdate: RawUtf8; tolocaltime: boolean = false): boolean;
     /// fill Year/Month/Day and Hour/Minute/Second fields from HTTP-date PUtf8Char
-    function FromHttpDateBuffer(P: PUtf8Char; tolocaltime: boolean): boolean;
+    function FromHttpDateBuffer(P: PUtf8Char; tolocaltime: boolean = false): boolean;
     /// fill Hour/Minute/Second/MilliSecond fields from Microsoft TimeSpan 100 ns ticks
     // - and returns the number of days
     function FromTimeSpan(ticks: Int64): PtrUInt;
@@ -814,6 +813,7 @@ function HttpDateToUnixTime(const httpdate: RawUtf8): TUnixTime;
 
 /// convert some "HTTP-date" format as defined by RFC 7231 into UTC date/time
 function HttpDateToUnixTimeBuffer(httpdate: PUtf8Char): TUnixTime;
+  {$ifdef HASINLINE} inline; {$endif}
 
 type
   // HttpDateNowUtc consumes 37 chars, aligned to 40 bytes
@@ -3544,21 +3544,19 @@ begin
 end;
 
 function HttpDateToUnixTime(const httpdate: RawUtf8): TUnixTime;
-var
-  dt: TDateTime;
 begin
-  result := 0;
-  if HttpDateToDateTime(httpdate, dt, {tolocaltime=}false) then
-    result := DateTimeToUnixTime(dt);
+  result := HttpDateToUnixTimeBuffer(pointer(httpdate));
 end;
 
 function HttpDateToUnixTimeBuffer(httpdate: PUtf8Char): TUnixTime;
 var
-  dt: TDateTime;
+  T: TSynSystemTime;
 begin
-  result := 0;
-  if HttpDateToDateTimeBuffer(httpdate, dt, {tolocaltime=}false) then
-    result := DateTimeToUnixTime(dt);
+  if (httpdate <> nil) and
+     T.FromHttpDateBuffer(httpdate) then
+    result := T.ToUnixTime
+  else
+    result := 0;
 end;
 
 var
