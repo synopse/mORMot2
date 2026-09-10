@@ -3946,7 +3946,7 @@ end;
 
 function TimeSpanToText(TimeSpan: Int64): RawUtf8;
 var
-  s, m, h, d: Int64;
+  s, m, h, d: Cardinal;
 begin
   s := Abs(TimeSpan) div 10000000;
   m := s div 60;
@@ -4018,8 +4018,7 @@ begin
       end;
     atsTimeSpan:
       begin
-        if TryStrToInt64(s, v) then
-          s := TimeSpanToText(v);
+        s := TimeSpanToText(GetInt64(@s));
       end;
     atsUnicodePwd:
       begin
