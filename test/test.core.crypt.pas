@@ -730,6 +730,33 @@ end;
 
 procedure TTestCoreCrypto._SHA3;
 
+  procedure Keccak(const data, expected: RawByteString);
+  var
+    instance: TSha3;
+    dig: THash256;
+    split, i: PtrInt;
+  begin
+    CheckEqual(Keccak256(data), expected);
+    Keccak256Full(pointer(data), length(data), dig);
+    CheckEqual(Sha256DigestToString(dig), expected);
+    CheckEqual(instance.FullStr(KECCAK_256, pointer(data), length(data)), UpperCase(expected));
+    for split := 0 to length(data) do
+    begin
+      instance.Init(KECCAK_256);
+      Check(instance.Algorithm = KECCAK_256);
+      instance.Update(pointer(data), split);
+      instance.Update(nil, 0);
+      instance.Update(PAnsiChar(pointer(data)) + split, length(data) - split);
+      instance.Final(dig);
+      CheckEqual(Sha256DigestToString(dig), expected);
+    end;
+    instance.Init(KECCAK_256);
+    for i := 1 to length(data) do
+      instance.Update(@data[i], 1);
+    instance.Final(dig);
+    CheckEqual(Sha256DigestToString(dig), expected);
+  end;
+
   procedure DoTest;
   const
     HASH1 = '79f38adec5c20307a98ef76e8324afbfd46cfd81b22e3973c65fa1bd9de31787';
@@ -743,6 +770,18 @@ procedure TTestCoreCrypto._SHA3;
     s, i: PtrInt;
     sign: TSynSigner;
   begin
+    // Original Keccak-256 vectors, independently checked with PyCryptodome.
+    Keccak('', 'c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470');
+    Keccak('abc', '4e03657aea45a94fc7d47ba826c8d667c0d1e6e33a64a036ec44f58fa12d6c45');
+    SetLength(data, 1024);
+    for i := 1 to length(data) do
+      data[i] := AnsiChar((i - 1) and 255);
+    // One less than, exactly, and one more than the 136-byte absorption rate.
+    Keccak(copy(data, 1, 135), 'cbdfd9dee5faad3818d6b06f95a219fd290b0e1706f6a82e5a595b9ce9faca62');
+    Keccak(copy(data, 1, 136), '7ce759f1ab7f9ce437719970c26b0a66ff11fe3e38e17df89cf5d29c7d7f807e');
+    Keccak(copy(data, 1, 137), 'ac73d4fae68b8453f764007c1a20ce95994187861f0c3227a3a8e99a73a3b1db');
+    Keccak(copy(data, 1, 272), 'fdf2ec49e749960d3c8521a0219af8d03e30e2b3bf19bd16150ee0eaf133d66e');
+    Keccak(data, '5902e53903be0d0f9656bdbd5b9f0d8c2d815f865645d629eef77f5185f6cd7f');
     // validate against official NIST vectors
     // taken from http://csrc.nist.gov/groups/ST/toolkit/examples.html#aHashing
     // see also https://www.di-mgt.com.au/sha_testvectors.html

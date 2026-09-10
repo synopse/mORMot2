@@ -2278,16 +2278,18 @@ type
   PSha512 = ^TSha512;
 
 type
-  /// SHA-3 instances, as defined by NIST Standard for Keccak sponge construction
+  /// SHA-3, SHAKE and original Keccak instances
   // - SHA3_224..SHA3_512 output 224, 256, 384 and 512 bits of cryptographic hash
   // - SHAKE_128 and SHAKE_256 implements a XOF/cipher generator
+  // - KECCAK_256 uses the original padding, as required e.g. by Ethereum
   TSha3Algo = (
     SHA3_224,
     SHA3_256,
     SHA3_384,
     SHA3_512,
     SHAKE_128,
-    SHAKE_256);
+    SHAKE_256,
+    KECCAK_256);
 
   /// implements SHA-3 (Keccak) hashing
   // - Keccak was the winner of the NIST hashing competition for a new hashing
@@ -2755,6 +2757,12 @@ function Sha3(Algo: TSha3Algo; const s: RawByteString;
 // output memory buffer, according to the specified TSha3Algo
 function Sha3(Algo: TSha3Algo; Buffer: pointer; Len: integer;
   DigestBits: integer = 0): RawUtf8; overload;
+
+/// compute an original Keccak-256 binary digest (distinct from SHA3-256)
+procedure Keccak256Full(Buffer: pointer; Len: integer; out Digest: THash256);
+
+/// compute an original Keccak-256 lowercase hexadecimal digest
+function Keccak256(const s: RawByteString): RawUtf8;
 
 /// SHA-256 hash calculation with length padding if shorter than 256 bytes
 // - WARNING: this algorithm is DEPRECATED, and supplied only for backward
@@ -8969,7 +8977,7 @@ type
 
 const
   SHA3_DEF_LEN: array[TSha3Algo] of integer = (
-    224, 256, 384, 512, 256, 512);
+    224, 256, 384, 512, 256, 512, 256);
 
 procedure TSha3Context.Init(aAlgo: TSha3Algo);
 var
@@ -8977,7 +8985,8 @@ var
 begin
   FillCharFast(self, SizeOf(self), 0);
   bits := SHA3_DEF_LEN[aAlgo];
-  if aAlgo < SHAKE_128 then
+  if (aAlgo < SHAKE_128) or
+     (aAlgo = KECCAK_256) then
     bits := bits shl 1;
   Rate := cKeccakPermutationBits - bits;
   Capacity := bits;
@@ -9124,7 +9133,9 @@ begin
   else
     lw := bits and Pred(cardinal(1) shl bitlen);
   // append the domain separation bits
-  if Algo >= SHAKE_128 then
+  if Algo = KECCAK_256 then
+    ll := bitlen // original Keccak: pad10*1 without SHA-3 domain bits
+  else if Algo >= SHAKE_128 then
   begin
     // SHAKE: append four MSB bits 1111
     lw := lw or (cardinal($0f) shl bitlen);
@@ -10498,6 +10509,21 @@ var
   sha: TSha3;
 begin
   result := sha.FullStr(Algo, Buffer, Len, DigestBits);
+end;
+
+procedure Keccak256Full(Buffer: pointer; Len: integer; out Digest: THash256);
+var
+  sha: TSha3;
+begin
+  sha.Full(KECCAK_256, Buffer, Len, @Digest, 256);
+end;
+
+function Keccak256(const s: RawByteString): RawUtf8;
+var
+  dig: THash256;
+begin
+  Keccak256Full(pointer(s), length(s), dig);
+  BinToHexLower(@dig, SizeOf(dig), result);
 end;
 
 // required by read_h -> deprecated even if available with PUREMORMOT2
