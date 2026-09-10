@@ -2780,16 +2780,6 @@ begin
   FromTime(dt);
 end;
 
-procedure TSynSystemTime.FromUnixTime(ut: TUnixTime);
-begin
-  FromDateTime(ut * SecsPerDate + UnixDateDelta); // via a temp TDateTime
-end;
-
-procedure TSynSystemTime.FromUnixMsTime(ut: TUnixMsTime);
-begin
-  FromDateTime(ut * MilliSecsPerDate + UnixDateDelta); // via a temp TDateTime
-end;
-
 procedure TSynSystemTime.FromJulianDay(t: cardinal);
 var
   t2, t3: cardinal;
@@ -2829,6 +2819,36 @@ end;
 procedure TSynSystemTime.FromTime(const dt: TDateTime);
 begin
   FromMS(QWord(round(abs(dt) * MilliSecsPerDay)) mod MilliSecsPerDay);
+end;
+
+procedure TSynSystemTime.FromUnixTime(ut: TUnixTime);
+var
+  d, s: PtrInt; // no transient TDateTime needed
+begin
+  d := ut div SecsPerDay;
+  s := ut - Int64(d) * SecsPerDay;
+  if s < 0 then
+  begin
+    dec(d);
+    inc(s, SecsPerDay);
+  end;
+  FromJulianDay(d + C1970);
+  FromSec(s);
+end;
+
+procedure TSynSystemTime.FromUnixMsTime(ut: TUnixMsTime);
+var
+  d, ms: PtrInt; // no transient TDateTime needed
+begin
+  d := ut div MilliSecsPerDay;
+  ms := ut - Int64(d) * MilliSecsPerDay;
+  if ms < 0 then
+  begin
+    dec(d);
+    inc(ms, MilliSecsPerDay);
+  end;
+  FromJulianDay(d + C1970);
+  FromMS(ms);
 end;
 
 procedure TSynSystemTime.FromMS(ms: PtrUInt);
