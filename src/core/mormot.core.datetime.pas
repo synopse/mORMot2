@@ -712,11 +712,15 @@ procedure FromGlobalTime(out NewTime: TSynSystemTime; LocalTime: boolean;
 /// low-level retrieve the current decoded date/time from OS with no cache
 procedure RawGlobalTime(out Time: TSynSystemTime; LocalTime: boolean);
 
-/// our own faster version of the corresponding RTL function
-function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): boolean;
+/// low-level fast Julian/Gregorian calendar calculation
+function EncodeGregorian(Year, Month, Day: cardinal; var Greg: cardinal): boolean;
 
 /// our own faster version of the corresponding RTL function
-function TryEncodeTime(Hour, Min, Sec, MSec: cardinal; out Time: TDateTime): boolean;
+function TryEncodeDate(Year, Month, Day: cardinal; var Date: TDateTime): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+/// our own faster version of the corresponding RTL function
+function TryEncodeTime(Hour, Min, Sec, MSec: cardinal; var Time: TDateTime): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// our own faster version of the corresponding RTL function
@@ -1543,6 +1547,81 @@ const
    (0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31, 0, 0, 0));
   DaysFromMarch: array[0 .. 11] of word = ( // pre-computed (Month * D2 + 2) div 5
     0, 31, 61, 92, 122, 153, 184, 214, 245, 275, 306, 337);
+
+function EncodeGregorian(Year, Month, Day: cardinal; var Greg: cardinal): boolean;
+var
+  m, d: cardinal; // code will use fast reciprocal: no TDiv100Rec()
+begin
+  result := false;
+  if (cardinal(Month - 1) >= 12) or     // 1..12
+     (Day = 0) or             // 1..xx
+     (cardinal(Year - 1) >= 9999) then  // 1..9999 as FPC RTL itself
+    exit;
+  {$ifdef WIN64DELPHI}
+  d := (QWord(Year) * DIV100_INV) shr 37; // we can avoid div on Delphi Win64
+  {$else}
+  d := Year div 100; // use fast reciprocal on FPC, plain div on Delphi Win32
+  {$endif WIN64DELPHI}
+  m := Year - (d * 100);
+  if Day > DaysPerMonth[(Year and 3 = 0) and // inlined IsLeapYear()
+            ((m <> 0) or ((d and 3) = 0))][Month] then
+    exit;
+  if Month > 2 then
+    dec(Month, 3)
+  else
+  begin
+    inc(Month, 9);
+    if m = 0 then // Div100(Year - 1, y100)
+    begin
+      dec(d);
+      m := 99;
+    end
+    else
+      dec(m);
+  end;
+  d := d * D1; // in specific steps for better FPC codegen
+  m := m * D0;
+  d := d shr 2;
+  inc(d, m shr 2);
+  inc(d, DaysFromMarch[Month]);
+  inc(d, Day);
+  Greg := d;
+  // Greg := (d * D1) shr 2 + (m * D0) shr 2 + (Month * D2 + 2) div 5 + Day;
+  result := true;
+end;
+
+function TryEncodeDate(Year, Month, Day: cardinal; var Date: TDateTime): boolean;
+var
+  g: cardinal;
+begin
+  if EncodeGregorian(Year, Month, Day, g) then
+  begin
+    unaligned(Date) := g - D1899; // separated to avoid sign issue
+    result := true;
+  end
+  else
+    result := false;
+end;
+
+function TryEncodeTime(Hour, Min, Sec, MSec: cardinal; var Time: TDateTime): boolean;
+var
+  d: cardinal;
+begin
+  result := false;
+  if (Hour > 23) or
+     (Min > 59) or
+     (Sec > 59) or
+     (MSec > 999) then
+    exit;
+  d := Hour * MilliSecsPerHour + Min * MilliSecsPerMin + Sec * MilliSecsPerSec + MSec;
+  unaligned(Time) := d * MilliSecsPerDate;
+  result := true;
+end;
+
+function EncodeDateTime(Year, Month, Day, Hour, Min, Sec, MSec: cardinal): TDateTime;
+begin
+  result := EncodeDateOrZero(Year, Month, Day) + EncodeTimeOrZero(Hour, Min, Sec, MSec);
+end;
 
 function IsLeapYear(Year: cardinal): boolean;
 begin
@@ -2464,67 +2543,6 @@ begin
       safe.ReadUnLock;
     end;
   end;
-end;
-
-function TryEncodeDate(Year, Month, Day: cardinal; out Date: TDateTime): boolean;
-var
-  y100: TDiv100Rec;
-  d: cardinal;
-begin
-  result := false;
-  if (Month - 1 >= 12) or
-     (Day = 0) or
-     (Year = 0) or
-     (Year > 10000) then
-    exit;
-  Div100(Year, y100{%H-});
-  if Day > DaysPerMonth[(Year and 3 = 0) and // inlined IsLeapYear()
-            ((y100.M <> 0) or (Year - ((y100.D shr 2) * 400) = 0))][Month] then
-    exit;
-  if Month > 2 then
-    dec(Month, 3)
-  else if Month > 0 then
-  begin
-    inc(Month, 9);
-    if y100.M = 0 then // Div100(Year - 1, y100)
-    begin
-      dec(y100.D);
-      y100.M := 99;
-    end
-    else
-      dec(y100.M);
-  end;
-  d := (146097 * y100.D) shr 2 + (1461 * y100.M) shr 2 +
-       (153 * Month + 2) div 5 + Day;
-  unaligned(Date) := d - 693900; // separated to avoid sign issue
-  result := true;
-end;
-
-function TryEncodeTime(Hour, Min, Sec, MSec: cardinal; out Time: TDateTime): boolean;
-var
-  d: cardinal;
-begin
-  result := false;
-  if (Hour > 23) or
-     (Min > 59) or
-     (Sec > 59) or
-     (MSec > 999) then
-    exit;
-  d := Hour * MilliSecsPerHour + Min * MilliSecsPerMin + Sec * MilliSecsPerSec + MSec;
-  unaligned(Time) := d / MSecsPerDay;
-  result := true;
-end;
-
-function EncodeDateTime(Year, Month, Day, Hour, Min, Sec, MSec: cardinal): TDateTime;
-var
-  date, time: TDateTime;
-begin
-  result := 0;
-  if mormot.core.datetime.TryEncodeDate(Year, Month, Day, date) then
-    if mormot.core.datetime.TryEncodeTime(Hour, Min, Sec, MSec, time) then
-      result := date + time
-    else
-      result := date;
 end;
 
 
