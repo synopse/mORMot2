@@ -5013,9 +5013,9 @@ begin
       aSettings.Scope[i].PrepareScope(self, new[i]); // compute Subnet
       s := GetScope(new[i].Subnet.ip);
       if s = nil then
-        continue; // brand new subnet
-      aSettings.Scope[i].PrepareScope(self, s^); // may adjust existing leases
-      new[i] := s^;
+        continue;   // brand new subnet was just prepared
+      new[i] := s^; // reuse/update existing
+      aSettings.Scope[i].PrepareScope(self, new[i]); // adjust existing leases
     end;
     fScope := new; // replace
     // support FileName/MetricsFolder background persistence
