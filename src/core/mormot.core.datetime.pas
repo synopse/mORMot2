@@ -1867,9 +1867,10 @@ procedure Iso8601ToDatePUtf8CharVar(P: PUtf8Char; L: PtrInt;
 var
   y, m, d: cardinal;
 begin
-  if (P = nil) or
-     not Iso8601ToDatePUtf8Char(P, L, y, m, d) or
-     not mormot.core.datetime.TryEncodeDate(y, m, d, PDateTime(@result)^) then
+  if (P <> nil) and
+     Iso8601ToDatePUtf8Char(P, L, y, m, d) then
+    result := EncodeDateOrZero(y, m, d)
+  else
     PInt64(@result)^ := 0;
 end;
 
@@ -2673,13 +2674,8 @@ begin
 end;
 
 function TSynDate.ToDate: TDate;
-var
-  tmp: TDateTime; // for FPC
 begin
-  if mormot.core.datetime.TryEncodeDate(Year, Month, Day, tmp) then
-    result := tmp
-  else
-    result := 0;
+  result := EncodeDateOrZero(Year, Month, Day);
 end;
 
 function TSynDate.ToText(Expanded: boolean): RawUtf8;
@@ -2717,7 +2713,6 @@ end;
 function TSynSystemTime.EncodeForTimeChange(const aYear: word): TDateTime;
 var
   dow, d: word;
-  t: TDateTime;
 begin
   if DayOfWeek = 0 then
     dow := 7 // Delphi/FPC Sunday = 7
@@ -2737,8 +2732,7 @@ begin
     dec(d);
   end;
   // finally add the time when change is due
-  if TryEncodeTime(Hour, Minute, Second, MilliSecond, t) then
-    result := result + t;
+  result := result + EncodeTimeOrZero(Hour, Minute, Second, MilliSecond);
 end;
 
 procedure TSynSystemTime.Clear;
@@ -3258,14 +3252,9 @@ begin
 end;
 
 function TSynSystemTime.ToDateTime: TDateTime;
-var
-  time: TDateTime;
 begin
-  if mormot.core.datetime.TryEncodeDate(Year, Month, Day, result) and
-     mormot.core.datetime.TryEncodeTime(Hour, Minute, Second, MilliSecond, time) then
-    result := result + time
-  else
-    result := 0;
+  result := EncodeDateOrZero(Year, Month, Day) +
+            EncodeTimeOrZero(Hour, Minute, Second, MilliSecond);
 end;
 
 function TSynSystemTime.ToUnixTime: TUnixTime;
@@ -3945,17 +3934,15 @@ end;
 function TTimeLogBits.ToTime: TTime;
 var
   lo: PtrUInt;
-  tmp: TDateTime; // for FPC
 begin
   {$ifdef CPU64}
   lo := Value;
   {$else}
   lo := PCardinal(@Value)^;
   {$endif CPU64}
-  if (lo and (1 shl SHR_DD - 1) <> 0) and
-     mormot.core.datetime.TryEncodeTime((lo shr SHR_H) and AND_H,
-        (lo shr SHR_M) and AND_M, lo and AND_S, 0, tmp) then
-    result := tmp
+  if (lo and (1 shl SHR_DD - 1)) <> 0 then
+    result := EncodeTimeOrZero((lo shr SHR_H) and AND_H,
+      (lo shr SHR_M) and AND_M, lo and AND_S, 0)
   else
     result := 0;
 end;
@@ -3971,18 +3958,13 @@ begin
   y := Value shr SHR_YY;
   lo := PCardinal(@Value)^;
   {$endif CPU64}
-  if (y = 0) or
-     not mormot.core.datetime.TryEncodeDate(y,
-                       1 + (lo shr SHR_MM) and AND_MM,
-                       1 + (lo shr SHR_DD) and AND_DD,
-                       TDateTime(result)) then
-    result := 0;
+  result := EncodeDateOrZero(y, 1 + (lo shr SHR_MM) and AND_MM,
+    1 + (lo shr SHR_DD) and AND_DD);
 end;
 
 function TTimeLogBits.ToDateTime: TDateTime;
 var
   y, lo: PtrUInt;
-  time: TDateTime;
 begin
   {$ifdef CPU64}
   lo := Value;
@@ -3991,19 +3973,11 @@ begin
   y := Value shr SHR_YY;
   lo := PCardinal(@Value)^;
   {$endif CPU64}
-  if (y = 0) or
-      not mormot.core.datetime.TryEncodeDate(y,
-                        1 + (lo shr SHR_MM) and AND_MM,
-                        1 + (lo shr SHR_DD) and AND_DD,
-                        result) then
-    result := 0;
-  if (lo and (1 shl SHR_DD - 1) <> 0) and
-     mormot.core.datetime.TryEncodeTime((lo shr SHR_H) and AND_H,
-                   (lo shr SHR_M) and AND_M,
-                   lo and AND_S,
-                   0,
-                   time) then
-    result := result + time;
+  result := EncodeDateOrZero(y, 1 + (lo shr SHR_MM) and AND_MM,
+    1 + (lo shr SHR_DD) and AND_DD);
+  if lo and (1 shl SHR_DD - 1) <> 0 then
+    result := result + EncodeTimeOrZero((lo shr SHR_H) and AND_H,
+      (lo shr SHR_M) and AND_M, lo and AND_S, 0);
 end;
 
 function TTimeLogBits.Year: integer;
