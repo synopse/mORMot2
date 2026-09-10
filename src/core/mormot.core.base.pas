@@ -13229,7 +13229,7 @@ var
 begin
   tab := @TwoDigitLookupW;
   d100 := Y div 100; // FPC will use fast reciprocal
-  PWordArray(P)[0] := tab[d100];
+  PCardinal(P)^ := tab[d100];
   PWordArray(P)[1] := tab[Y - (d100 * 100)];
 end;
 

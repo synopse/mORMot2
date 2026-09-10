@@ -612,13 +612,18 @@ type
     /// append the stored date and time, in HTTP-like format, to a TJsonWriter
     // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
     procedure AddHttpDate(WR: TTextWriter; const TZD: RawUtf8 = 'GMT');
+    /// append the stored time, in '06:18:55.123' format, into a ShortString
+    procedure AppendTime(var result: ShortString; WithMS: boolean = false);
+    /// append the stored time, in '123.06:18:55:999' format, into a ShortString
+    // - with the supplied days count and Hour/Minute/Second/MilliSecond values
+    procedure AppendInterval(days: PtrUInt; var result: ShortString);
     /// append the stored date and time, in apache-like format, to a memory buffer
     // - e.g. "Tue, 15 Nov 1994 12:45:26 GMT" to be used as a value of
     // - e.g. append '19/Feb/2019:06:18:55 ' - including a trailing space
     // - returns the number of chars added to P, i.e. always 21
     function ToNcsaText(P: PUtf8Char): PtrInt;
     /// convert the stored date and time to its text in apache-like format
-    procedure ToNcsaShort(var text: ShortString; const tz: RawUtf8 = 'GMT');
+    procedure ToNcsaShort(var text: TShort23; const tz: RawUtf8 = 'GMT');
     /// convert the stored date and time to its text in HTTP-like format
     // - i.e. "Tue, 15 Nov 1994 12:45:26 GMT" to be used as a value of
     // "Date", "Expires" or "Last-Modified" HTTP header
@@ -2977,6 +2982,28 @@ begin
   WR.AddShort(tmp);
 end;
 
+procedure TSynSystemTime.AppendTime(var result: ShortString; WithMS: boolean);
+var
+  p: PAnsiChar;
+begin
+  p := @result;
+  if ord(p^) + 12 <= high(result) then // append all or nothing
+    result[0] := AnsiChar(TimeToIso8601PChar(@p[ord(p[0]) + 1],
+      {exp=}true, Hour, Minute, Second, MilliSecond, #0, WithMS) - (p + 1));
+end;
+
+procedure TSynSystemTime.AppendInterval(days: PtrUInt; var result: ShortString);
+begin
+  if days <> 0 then
+  begin
+    AppendShortCardinal(days, result);
+    if PInt64(@Hour)^ = 0 then // Hour=Minute=Second=MilliSecond=0
+      exit;
+    AppendShortCharSafe('.', result);
+  end;
+  AppendTime(result, MilliSecond <> 0); // 'dd.hh:mm:ss' or 'dd.hh:mm:ss.xxx'
+end;
+
 function TSynSystemTime.ToNcsaText(P: PUtf8Char): PtrInt;
 var
   y, d100: PtrUInt;
@@ -3007,7 +3034,7 @@ begin
   result := 21;
 end;
 
-procedure TSynSystemTime.ToNcsaShort(var text: ShortString; const tz: RawUtf8);
+procedure TSynSystemTime.ToNcsaShort(var text: TShort23; const tz: RawUtf8);
 begin
   text[0] := AnsiChar(ToNcsaText(@text[1]));
   AppendShortAnsi7String(tz, text);
