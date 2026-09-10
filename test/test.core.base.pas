@@ -8139,7 +8139,8 @@ procedure TTestCoreBase.Iso8601DateAndTime;
 
 var
   i: integer;
-  D: TDateTime;
+  D, D2: TDateTime;
+  u: Int64; // TUnixTime/TUnixMSTime
   tmp: RawUtf8;
   b: TTimeLogBits;
   st, start: TSynSystemTime;
@@ -8204,7 +8205,7 @@ begin
   st.Month := 13;
   st.Normalize;
   CheckEqual(st.ToText, '1984-01-01T00:00:00.000', 'nextyear 2');
-  for i := 1700 to 2500 do
+  for i := 1500 to 2500 do
     Check(mormot.core.datetime.IsLeapYear(i) = SysUtils.IsLeapYear(i), 'IsLeapYear');
   // this will test typically from year 1905 to 2065
   D := Now / 20 + rnd.NextDouble * 20; // some starting random date/time
@@ -8212,6 +8213,16 @@ begin
   begin
     Test(D, true);
     Test(D, false);
+    u := DateTimeToUnixTime(D);
+    st.FromUnixTime(u);
+    CheckEqual(st.ToUnixTime, u);
+    D2 := st.ToDateTime;
+    Check(Abs(D2 - D) < (1 / SecsPerDay)); // we allow 999 ms error
+    u := DateTimeToUnixMSTime(D);
+    st.FromUnixMsTime(u);
+    CheckEqual(st.ToUnixMsTime, u);
+    D2 := st.ToDateTime;
+    Check(Abs(D2 - D) < (1 / MilliSecsPerDay)); // we allow 1 ms error
     D := D + rnd.NextDouble * 57; // go further a little bit: change date/time
   end;
   b.Value := Iso8601ToTimeLog('20150504');
@@ -8379,7 +8390,7 @@ begin
   CheckEqual(DateTimeToIso8601Text(dt), '1994-11-06T08:49:37');
   CheckEqual(DateTimeToHttpDate(dt), 'Sun, 06 Nov 1994 08:49:37 GMT');
   UnixMSTimeUtcToHttpDate(DateTimeToUnixMSTime(dt), s31);
-  Check(s31 = 'Sun, 06 Nov 1994 08:49:37 GMT', 'UnixMSTimeUtcToHttpDate');
+  CheckEqualShort(s31, 'Sun, 06 Nov 1994 08:49:37 GMT', 'UnixMSTimeUtcToHttpDate');
   CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
     'Sunday, 06-DEC-94 08:49:37 UTC')), '1994-12-06T08:49:37');
   CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
