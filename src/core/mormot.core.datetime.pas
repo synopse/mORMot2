@@ -865,7 +865,7 @@ const
   // valid until year 2152 as cardinal (whereas POSIX Epoch up to 2106)
   UNIXTIME_MINIMAL = 1481187020;
   /// a contemporary, but elapsed, TUnixTimeMS millisecond-based value
-  UNIXTIMEMS_MINIMAL = QWord(UNIXTIME_MINIMAL) * MSecsPerSec;
+  UNIXTIMEMS_MINIMAL = QWord(UNIXTIME_MINIMAL) * MilliSecsPerSec;
 
 /// returns UnixTimeUtc - UNIXTIME_MINIMAL so has no "Year 2038" overflow issue
 function UnixTimeMinimalUtc: TUnixTimeMinimal;
@@ -2780,12 +2780,12 @@ procedure TSynSystemTime.FromSec(s: PtrUInt);
 var
   t: PtrUInt;
 begin
-  t := s div 3600;
+  t := s div SecsPerHour;
   Hour := t;
-  dec(s, t * 3600);
-  t := s div 60;
+  dec(s, t * SecsPerHour);
+  t := s div SecsPerMin;
   Minute := t;
-  dec(s, t * 60);
+  dec(s, t * SecsPerMin);
   Second := s;
   MilliSecond := 0;
 end;

@@ -1032,7 +1032,7 @@ type
     fOnProcess: TOnSynBackgroundQueueProcess;
     fOnProcessMS, fLastIdleTix32: cardinal;
     fOnIdle: TOnSynBackgroundQueueIdle;
-    fExecuteLoopValue: TBytes;
+    fExecuteLoopValue: TBytes; // ExecuteLoop temp variable for fQueue.Pop()
     fOwner: TSynBackgroundQueue;
     fSubThreads: TSynBackgroundQueues;
     procedure ExecuteLoop; override;
@@ -1049,7 +1049,7 @@ type
     destructor Destroy; override;
     /// properly terminate the thread and its associated sub-threads
     procedure TerminatedSet; override;
-    /// add an event message to the internal processing queue
+    /// add an event message by copying it to the internal processing queue
     // - event parameter should point to one aArrayTypeInfo item
     procedure EnQueue(Event: pointer; ExecuteNow: boolean = false);
     /// adjust OnProcessMS using NextGrow() up to MaxDelay

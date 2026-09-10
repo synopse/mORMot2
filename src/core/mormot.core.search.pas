@@ -3086,7 +3086,7 @@ begin
     {$endif UNICODE}
     if FileInfoByName(dir + d^.Name, d^.Size, ts, @d^.Attr) then // = fpStat()
     begin
-      d^.Timestamp := UnixTimeToLocal(ts div MSecsPerSec);
+      d^.Timestamp := UnixTimeToLocal(ts div MilliSecsPerSec);
       inc(d); // will leave d^.Attr = 0
       inc(r);
     end;

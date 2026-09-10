@@ -1519,14 +1519,14 @@ type
   TDhcpProcess = class(TSynPersistent)
   protected
     fScopeSafe: TRWLightLock; // multi-read reentrant lock to protect Scope[]
+    fOptions: TDhcpServerOptions;
+    fState: (sNone, sSetup, sSetupFailed, sShutdown);
     fScope: TDhcpScopes;
     fFileFlushSeconds, fMetricsCsvSeconds, fDnsScriptThreads: cardinal;
     fIdleTix, fFileFlushTix, fMetricsCsvTix, fModifSequence, fModifSaved: cardinal;
     fLog: TSynLogClass;
     fFileName, fMetricsFolder, fMetricsJson: TFileName;
     fOnComputeResponse: TOnComputeResponse;
-    fOptions: TDhcpServerOptions;
-    fState: (sNone, sSetup, sSetupFailed, sShutdown);
     fMetricsDroppedPackets, fMetricsInvalidRequest: QWord; // no scope counters
     fLogPrefix: RawUtf8;
     fBackgroundExecute: TSynBackgroundQueue;
