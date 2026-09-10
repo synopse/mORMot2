@@ -332,6 +332,7 @@ const // some time conversion constants with Milli/Micro/NanoSec resolution
   SecsPerMonth = 2629746; // rough approximation of SecsPerDay * 365.2425 / 12
   SecsPerYear  = 12 * SecsPerMonth;
 
+  TicksPerMillisecond  = 10000; // 100 ns e.g. for Windows TimeSpan or FileTime
   MilliSecsPerSec      = 1000;
   MilliSecsPerMin      = MilliSecsPerSec  * SecsPerMin;
   MilliSecsPerHour     = MilliSecsPerMin  * MinsPerHour;
@@ -7560,7 +7561,7 @@ begin
 end;
 
 const
-  MilliSecsPerFileTime = 10000; // a tick is 100ns
+  MilliSecsPerFileTime = TicksPerMillisecond; // a tick is 100ns
   SecsPerFileTime      = 10000000;
 
 procedure UnixTimeToFileTime(I64: TUnixTime; out FT: TFileTime);

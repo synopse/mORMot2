@@ -8498,6 +8498,29 @@ begin
     tz.Free;
   end;
   CheckSameTime(dtl, UtcToLocal(dt, 'Romance Standard Time'));
+  // validate TimeSpan conversion
+  CheckEqual(TimeSpanToText(0),             '00:00:00');
+  CheckEqual(TimeSpanToText(1),             '00:00:00');
+  CheckEqual(TimeSpanToText(9999),          '00:00:00');
+  CheckEqual(TimeSpanToText(10000),         '00:00:00.001');
+  CheckEqual(TimeSpanToText(9999999),       '00:00:00.999');
+  CheckEqual(TimeSpanToText(10000000),      '00:00:01');
+  CheckEqual(TimeSpanToText(600000000),     '00:01:00');
+  CheckEqual(TimeSpanToText(36000000000),   '01:00:00');
+  CheckEqual(TimeSpanToText(36610000000),   '01:01:01');
+  CheckEqual(TimeSpanToText(36611230000),   '01:01:01.123');
+  CheckEqual(TimeSpanToText(36611234567),   '01:01:01.123');
+  CheckEqual(TimeSpanToText(864000000000),  '1');
+  CheckEqual(TimeSpanToText(864000010000),  '1.00:00:00.001');
+  CheckEqual(TimeSpanToText(865000000000),  '1.00:01:40');
+  CheckEqual(TimeSpanToText(900610000000),  '1.01:01:01');
+  CheckEqual(TimeSpanToText(-10000),        '-00:00:00.001');
+  CheckEqual(TimeSpanToText(-10000000),     '-00:00:01');
+  CheckEqual(TimeSpanToText(-36611230000),  '-01:01:01.123');
+  CheckEqual(TimeSpanToText(-864000000000), '-1');
+  CheckEqual(TimeSpanToText(-864000010000), '-1.00:00:00.001');
+  CheckEqual(TimeSpanToText(High(Int64)),    '10675199.02:48:05.477');
+  CheckEqual(TimeSpanToText(-High(Int64)),   '-10675199.02:48:05.477');
 end;
 
 const
