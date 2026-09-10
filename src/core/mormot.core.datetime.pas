@@ -3914,25 +3914,26 @@ begin
   end;
 end;
 
-procedure TTimeLogBits.FromUnixTime(const UnixTime: TUnixTime);
-begin
-  From(UnixTimeToDateTime(UnixTime));
-end;
-
-procedure TTimeLogBits.FromUnixMSTime(const UnixMSTime: TUnixMSTime);
-begin
-  From(UnixMSTimeToDateTime(UnixMSTime));
-end;
-
 procedure TTimeLogBits.From(Time: PSynSystemTime);
 var
   v: PtrInt;
 begin
-  v := Time^.Hour + Time^.Day shl 5 + Time^.Month shl 10 +
-       Time^.Year shl 14 - (1 shl 5 + 1 shl 10);
-  Value := v; // circumvent C1093 error on Delphi 5
-  v := Time^.Second + Time^.Minute shl SHR_M;
-  Value := (Value shl BTS_YY) + v;
+  v := PtrInt(Time^.Hour) + PtrInt(Time^.Day) shl 5 + PtrInt(Time^.Month) shl 10 +
+       PtrInt(Time^.Year) shl 14 - (1 shl 5 + 1 shl 10);
+  Value := (Int64(v) shl BTS_YY) + (PtrInt(Time^.Second) + PtrInt(Time^.Minute) shl SHR_M);
+end;
+
+procedure TTimeLogBits.FromUnixTime(const UnixTime: TUnixTime);
+var
+  T: TSynSystemTime;
+begin
+  T.FromUnixTime(UnixTime);
+  From(@T);
+end;
+
+procedure TTimeLogBits.FromUnixMSTime(const UnixMSTime: TUnixMSTime);
+begin
+  FromUnixTime(UnixMSTime div MilliSecsPerSec); // trim milliseconds
 end;
 
 procedure TTimeLogBits.FromUtcTime;
@@ -4032,13 +4033,13 @@ end;
 
 function TTimeLogBits.ToUnixTime: TUnixTime;
 var
-  dt: TDateTime;
+  g: cardinal;
 begin
-  dt := ToDateTime;
-  if dt = 0 then
-    result := 0
+  if EncodeGregorian(Year, Month, Day, g) then
+    result := ((Int64(g) - D1970) * SecsPerDay) +
+              Second + (Minute * SecsPerMin) + (Hour * SecsPerHour)
   else
-    result := DateTimeToUnixTime(dt);
+    result := 0;
 end;
 
 function TTimeLogBits.ToUnixMSTime: TUnixMSTime;
