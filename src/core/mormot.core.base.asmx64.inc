@@ -3116,7 +3116,7 @@ asm
         mov     r8, res
         mov     edx, Y
         mov     dword ptr [r8].TDiv100Rec.M,edx
-        mov     eax, 1374389535
+        mov     eax, DIV100_INV
         mul     edx
         shr     edx, 5
         mov     dword ptr [r8].TDiv100Rec.D, edx
