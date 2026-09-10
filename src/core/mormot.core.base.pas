@@ -1445,7 +1445,7 @@ function GetIntegerDef(P: PUtf8Char; Default: PtrInt): PtrInt;
 
 /// get the signed 32-bit integer value stored in P^
 // - this version return 0 in err if no error occurred, and 1 if an invalid
-// character was found, not its exact index as for the val() function
+// character or a PtrInt overflow was found, not its exact index as for val()
 function GetInteger(P: PUtf8Char; var err: integer): PtrInt; overload;
 
 /// get the unsigned 32-bit integer value stored in P^
@@ -6335,6 +6335,9 @@ function GetInteger(P: PUtf8Char; var err: integer): PtrInt;
 var
   c: byte;
   minus: boolean;
+  {$ifdef CPU64}
+  digits: PUtf8Char;
+  {$endif CPU64}
 begin
   result := 0;
   err := 1; // don't return the exact index, just 1 as error flag
@@ -6366,23 +6369,46 @@ begin
         c := byte(P^);
       until c <> ord(' ');
   end;
+  while (c = ord('0')) and
+        (P[1] in ['0' .. '9']) do
+  begin
+    inc(P);
+    c := byte(P^);
+  end;
   dec(c, 48);
   if c > 9 then
     exit;
   result := c;
+  {$ifdef CPU64}
+  digits := P;
+  {$endif CPU64}
   repeat
     inc(P);
     c := byte(P^);
     dec(c, 48);
     if c <= 9 then
-      result := result * 10 + PtrInt(c)
+    begin
+      {$ifdef CPU64}
+      if P - digits >= 19 then
+        exit; // at most 19 significant digits: magnitude fits UInt64
+      {$else}
+      if PtrUInt(result) >= PtrUInt(High(PtrInt)) div 10 then
+        if (PtrUInt(result) > PtrUInt(High(PtrInt)) div 10) or
+           (c > High(PtrInt) mod 10 + ord(minus)) then
+          exit;
+      {$endif CPU64}
+      result := PtrInt(PtrUInt(result) * 10 + c);
+    end
     else if c <> 256 - 48 then
       exit
     else
       break;
   until false;
+  if PtrUInt(result) > PtrUInt(High(PtrInt)) + PtrUInt(ord(minus)) then
+    exit;
   err := 0; // success
-  if minus then
+  if minus and
+     (result <> Low(PtrInt)) then
     result := -result;
 end;
 

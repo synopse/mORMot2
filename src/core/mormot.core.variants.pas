@@ -11515,16 +11515,18 @@ end;
 
 const
   CURRENCY_FACTOR: array[-4 .. -1] of integer = (1, 10, 100, 1000);
+  CURRENCY_MAX: array[-4 .. -1] of UInt64 = (
+    High(Int64), High(Int64) div 10, High(Int64) div 100, High(Int64) div 1000);
 
 function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
   AllowVarDouble: boolean): PUtf8Char;
 var
-  // logic below is extracted from mormot.core.base.pas' GetExtended()
+  // logic below is extracted from mormot.core.text.pas' GetExtended()
   remdigit: integer;
   frac, exp {$ifdef CPUX86NOTPIC}, f {$endif}: PtrInt;
   c: AnsiChar;
   flags: set of (fNeg, fNegExp, fValid);
-  v64: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
+  v64: UInt64; // up to 19 digits, including the magnitude of Low(Int64)
   d: double;
 begin
   // 1. parse input text as number into v64, frac, digit, exp
@@ -11541,6 +11543,8 @@ begin
     inc(Json);
     include(flags, fNeg);
   end;
+  if not (c in ['0' .. '9']) then
+    exit;
   if (c = '0') and
      (Json[1] in ['0' .. '9']) then // '012' is not Json, but '0.xx' and '0' are
     exit;
@@ -11573,8 +11577,8 @@ begin
     if c <> '.' then
       break;
     c := Json[1];
-    if (frac > 0) or
-       (c = #0) then // avoid ##.
+    if (frac <> 0) or
+       not (c in ['0' .. '9']) then // require a single dot followed by a digit
       exit;
     inc(json);
     dec(frac);
@@ -11601,33 +11605,54 @@ begin
         break;
       inc(Json);
       dec(c, ord('0'));
+      if exp >= High(PtrInt) div 10 then
+        if (exp > High(PtrInt) div 10) or
+           (byte(c) > High(PtrInt) mod 10) then
+          exit;
       exp := (exp * 10) + byte(c);
       include(flags, fValid);
     until false;
     if fNegExp in flags then
-      dec(frac, exp)
+    begin
+      if frac < Low(PtrInt) + exp then
+        exit;
+      dec(frac, exp);
+    end
     else
+    begin
+      if frac > High(PtrInt) - exp then
+        exit;
       inc(frac, exp);
+    end;
   end;
   if not (fValid in flags) then
     exit;
-  if fNeg in flags then
-    v64 := -v64;
   // 2. now v64, frac, digit, exp contain number parsed from Json
   if (frac = 0) and
-     (remdigit >= 0) then // return an integer or Int64 value
+     (remdigit >= 0) and
+     ((v64 <= UInt64(High(Int64))) or
+      ((v64 = UInt64(High(Int64)) + 1) and (fNeg in flags))) then
   begin
-    Value.VInt64 := v64;
+    Value.VInt64 := Int64(v64);
+    if (fNeg in flags) and
+       (v64 <= UInt64(High(Int64))) then
+      Value.VInt64 := -Value.VInt64;
     if remdigit <= 9 then
       TSynVarData(Value).VType := varInt64
     else
       TSynVarData(Value).VType := varInteger;
   end
   else if (frac < 0) and
-          (frac >= -4) then // currency as ###.0123
+          (frac >= -4) and
+          ((v64 <= CURRENCY_MAX[frac]) or
+           ((frac = -4) and (v64 = UInt64(High(Int64)) + 1) and
+            (fNeg in flags))) then // currency as ###.0123
   begin
     TSynVarData(Value).VType := varCurrency;
-    Value.VInt64 := v64 * CURRENCY_FACTOR[frac]; // as round(CurrValue*10000)
+    Value.VInt64 := Int64(v64 * UInt64(CURRENCY_FACTOR[frac]));
+    if (fNeg in flags) and
+       (Value.VInt64 <> Low(Int64)) then
+      Value.VInt64 := -Value.VInt64; // as round(CurrValue*10000)
   end
   else if AllowVarDouble and
           (frac > -324) then // 5.0 x 10^-324 .. 1.7 x 10^308
@@ -11637,7 +11662,7 @@ begin
     if f >= -31 then
       if f <= 31 then
         d := POW10[f] // -31 .. + 31
-      else if (18 - remdigit) + integer(f) >= 308 then
+      else if f >= remdigit + 290 then
         exit          // +308 ..
       else
         d := POW10[(f and not 31) shr 5 + 34] * POW10[f and 31] // +32 .. +307
@@ -11651,7 +11676,7 @@ begin
     if frac >= -31 then
       if frac <= 31 then
         d := PPow10(exp)[frac] // -31 .. + 31 is the most common case
-      else if (18 - remdigit) + integer(frac) >= 308 then
+      else if frac >= remdigit + 290 then
         exit                   // +308 ..
       else                     // +32 .. +307
         d := PPow10(exp)[(frac and not 31) shr 5 + 34] * PPow10(exp)[frac and 31]
@@ -11662,6 +11687,9 @@ begin
     end;
     {$endif CPUX86NOTPIC}
     Value.VDouble := d * v64;
+    if (fNeg in flags) and
+       (v64 <> 0) then
+      Value.VDouble := -Value.VDouble;
     TSynVarData(Value).VType := varDouble;
   end
   else
