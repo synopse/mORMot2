@@ -722,8 +722,16 @@ function EncodeGregorian(Year, Month, Day: cardinal; var Greg: cardinal): boolea
 function TryEncodeDate(Year, Month, Day: cardinal; var Date: TDateTime): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
+/// our own faster version of "if not TryEncodeDate(Y, M, D, V) then V := 0"
+function EncodeDateOrZero(Year, Month, Day: PtrUInt): TDate;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// our own faster version of the corresponding RTL function
 function TryEncodeTime(Hour, Min, Sec, MSec: cardinal; var Time: TDateTime): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
+  /// our own faster version of "if not TryEncodeTime(H, M, S, MS, V) then V := 0"
+function EncodeTimeOrZero(Hour, Min, Sec, MSec: PtrUInt): TTime;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// our own faster version of the corresponding RTL function
@@ -1606,6 +1614,15 @@ begin
     result := false;
 end;
 
+function EncodeDateOrZero(Year, Month, Day: PtrUInt): TDate;
+var
+  g: cardinal;
+begin
+  if not EncodeGregorian(Year, Month, Day, g) then
+    g := D1899;
+  result := g - D1899; // separated to avoid sign issue
+end;
+
 function TryEncodeTime(Hour, Min, Sec, MSec: cardinal; var Time: TDateTime): boolean;
 var
   d: cardinal;
@@ -1619,6 +1636,22 @@ begin
   d := Hour * MilliSecsPerHour + Min * MilliSecsPerMin + Sec * MilliSecsPerSec + MSec;
   unaligned(Time) := d * MilliSecsPerDate;
   result := true;
+end;
+
+function EncodeTimeOrZero(Hour, Min, Sec, MSec: PtrUInt): TTime;
+var
+  d: cardinal;
+begin
+  if (Hour > 23) or
+     (Min > 59) or
+     (Sec > 59) or
+     (MSec > 999) then
+  begin
+    result := 0;
+    exit;
+  end;
+  d := Hour * MilliSecsPerHour + Min * MilliSecsPerMin + Sec * MilliSecsPerSec + MSec;
+  result := d * MilliSecsPerDate;
 end;
 
 function EncodeDateTime(Year, Month, Day, Hour, Min, Sec, MSec: cardinal): TDateTime;
