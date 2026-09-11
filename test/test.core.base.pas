@@ -8433,11 +8433,30 @@ var
   i, bias: integer;
   m: word;
   hdl, reload: boolean;
-  endtix: Int64;
+  endtix, ts: Int64;
   buf: RawByteString;
   dt, dtl: TDateTime;
   ut: TUnixTime;
   s31: TShort31;
+
+  procedure CheckTimeSpan(Value: Int64; const Expected: RawUtf8);
+  var
+    parsed: Int64;
+    p: PUtf8Char;
+  begin
+    CheckEqual(TimeSpanToText(Value), Expected);
+    p := TextToTimeSpanBuffer(pointer(Expected), parsed);
+    if CheckUtf8(p <> nil, Expected) then
+      CheckUtf8(p^ = #0, Expected);
+    CheckEqual(parsed, Value - Value mod TicksPerMillisecond);
+  end;
+
+  procedure CheckInvalidTimeSpan(const Text: RawUtf8);
+  var
+    ts: Int64;
+  begin
+    CheckUtf8(not TextToTimeSpan(Text, ts), Text);
+  end;
 
   procedure testBias(year, expected: integer);
   begin
@@ -8642,28 +8661,73 @@ begin
   end;
   CheckSameTime(dtl, UtcToLocal(dt, 'Romance Standard Time'));
   // validate TimeSpan conversion
-  CheckEqual(TimeSpanToText(0),             '00:00:00');
-  CheckEqual(TimeSpanToText(1),             '00:00:00');
-  CheckEqual(TimeSpanToText(9999),          '00:00:00');
-  CheckEqual(TimeSpanToText(10000),         '00:00:00.001');
-  CheckEqual(TimeSpanToText(9999999),       '00:00:00.999');
-  CheckEqual(TimeSpanToText(10000000),      '00:00:01');
-  CheckEqual(TimeSpanToText(600000000),     '00:01:00');
-  CheckEqual(TimeSpanToText(36000000000),   '01:00:00');
-  CheckEqual(TimeSpanToText(36610000000),   '01:01:01');
-  CheckEqual(TimeSpanToText(36611230000),   '01:01:01.123');
-  CheckEqual(TimeSpanToText(36611234567),   '01:01:01.123');
-  CheckEqual(TimeSpanToText(864000000000),  '1');
-  CheckEqual(TimeSpanToText(864000010000),  '1.00:00:00.001');
-  CheckEqual(TimeSpanToText(865000000000),  '1.00:01:40');
-  CheckEqual(TimeSpanToText(900610000000),  '1.01:01:01');
-  CheckEqual(TimeSpanToText(-10000),        '-00:00:00.001');
-  CheckEqual(TimeSpanToText(-10000000),     '-00:00:01');
-  CheckEqual(TimeSpanToText(-36611230000),  '-01:01:01.123');
-  CheckEqual(TimeSpanToText(-864000000000), '-1');
-  CheckEqual(TimeSpanToText(-864000010000), '-1.00:00:00.001');
-  CheckEqual(TimeSpanToText(High(Int64)),    '10675199.02:48:05.477');
-  CheckEqual(TimeSpanToText(-High(Int64)),   '-10675199.02:48:05.477');
+  CheckTimeSpan(0,              '00:00:00');
+  CheckTimeSpan(1,              '00:00:00');
+  CheckTimeSpan(9999,           '00:00:00');
+  CheckTimeSpan(10000,          '00:00:00.001');
+  CheckTimeSpan(599990000,      '00:00:59.999');
+  CheckTimeSpan(600000000,      '00:01:00');
+  CheckTimeSpan(35999990000,    '00:59:59.999');
+  CheckTimeSpan(36000000000,    '01:00:00');
+  CheckTimeSpan(863999990000,   '23:59:59.999');
+  CheckTimeSpan(864000000000,   '1');
+  CheckTimeSpan(1728000000000,  '2');
+  CheckTimeSpan(1838450060000,  '2.03:04:05.006');
+  CheckTimeSpan(9092967890000,  '10.12:34:56.789');
+  CheckTimeSpan(-599990000,     '-00:00:59.999');
+  CheckTimeSpan(-35999990000,   '-00:59:59.999');
+  CheckTimeSpan(-863999990000,  '-23:59:59.999');
+  CheckTimeSpan(-1838450060000, '-2.03:04:05.006');
+  CheckTimeSpan(-9092967890000, '-10.12:34:56.789');
+  CheckTimeSpan(9999999,        '00:00:00.999');
+  CheckTimeSpan(10000000,       '00:00:01');
+  CheckTimeSpan(600000000,      '00:01:00');
+  CheckTimeSpan(36000000000,    '01:00:00');
+  CheckTimeSpan(36610000000,    '01:01:01');
+  CheckTimeSpan(36611230000,    '01:01:01.123');
+  CheckTimeSpan(36611234567,    '01:01:01.123');
+  CheckTimeSpan(864000000000,   '1');
+  CheckTimeSpan(864000010000,   '1.00:00:00.001');
+  CheckTimeSpan(865000000000,   '1.00:01:40');
+  CheckTimeSpan(900610000000,   '1.01:01:01');
+  CheckTimeSpan(-10000,         '-00:00:00.001');
+  CheckTimeSpan(-10000000,      '-00:00:01');
+  CheckTimeSpan(-36611230000,   '-01:01:01.123');
+  CheckTimeSpan(-864000000000,  '-1');
+  CheckTimeSpan(-864000010000,  '-1.00:00:00.001');
+  CheckTimeSpan(High(Int64),    '10675199.02:48:05.477');
+  CheckTimeSpan(-High(Int64),   '-10675199.02:48:05.477');
+  Check(TextToTimeSpan('0.06:18:55', ts));
+  CheckEqual(ts, 227350000000);
+  Check(TextToTimeSpan(' 0.00:00:00.001', ts));
+  CheckEqual(ts, 10000);
+  Check(TextToTimeSpan('000.23:59:59.99999999', ts));
+  CheckEqual(ts, 863999990000);
+  CheckInvalidTimeSpan('');
+  CheckInvalidTimeSpan('-');
+  CheckInvalidTimeSpan('.');
+  CheckInvalidTimeSpan(':');
+  CheckInvalidTimeSpan('abc');
+  CheckInvalidTimeSpan('00:00');
+  CheckInvalidTimeSpan('00:00:');
+  CheckInvalidTimeSpan('00::00');
+  CheckInvalidTimeSpan('1.');
+  CheckInvalidTimeSpan('1.00');
+  CheckInvalidTimeSpan('1.00:00');
+  CheckInvalidTimeSpan('24:00:00');
+  CheckInvalidTimeSpan('00:60:00');
+  CheckInvalidTimeSpan('00:00:60');
+  CheckInvalidTimeSpan('1.24:00:00');
+  CheckInvalidTimeSpan('1.00:60:00');
+  CheckInvalidTimeSpan('1.00:00:60');
+  CheckInvalidTimeSpan('00:00:00.');
+  CheckInvalidTimeSpan('00:00:00.1');
+  CheckInvalidTimeSpan('00:00:00.12');
+  CheckInvalidTimeSpan('00:00:00.12x');
+  CheckInvalidTimeSpan('00:00:00.123x');
+  CheckInvalidTimeSpan('+00:00:00');
+  CheckInvalidTimeSpan('--00:00:00');
+  CheckInvalidTimeSpan('-+00:00:00');
 end;
 
 const
