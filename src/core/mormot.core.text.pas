@@ -6731,19 +6731,19 @@ const
   InvScale: double = 7.458340731200207e-155; // 2^-512
   MaxScaled: double = 1.3407807929942596e154; // MaxDouble * 2^-512
 var
-  remdigit: integer;
-  frac, exp: PtrInt;
+  remdigit, frac, exp: PtrInt;
   flags: set of (fNeg, fNegExp, fValid);
   v64: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
   d64: TSynExtended;
 label
-  e;
+  z, e;
 begin
   byte(flags) := 0;
   v64 := 0;
   frac := 0;
   if P = nil then
-    goto e; // will return 0 but err=1
+    goto z; // will return 0 but err=1
+  err := frac; // =0 for success
   if P^ = ' ' then
     repeat
       inc(P);
@@ -6756,36 +6756,34 @@ begin
     include(flags, fNeg);
   end;
   if P^ > '9' then
+  begin
     case PCardinal(P)^ and $00dfdfdf of
       ord('N') + ord('A') shl 8 + ord('N') shl 16:
-        begin
-          err := frac; // =0 for success
-          result := NaN;
-          exit;
-        end;
+        result := NaN;
       ord('I') + ord('N') shl 8 + ord('F') shl 16:
-      begin
-        err := frac;
         if fNeg in flags then
           result := NegInfinity
         else
           result := Infinity;
-        exit;
+    else
+      begin
+z:      err := 1;
+        result := 0;
       end;
     end;
+    exit;
+  end;
   remdigit := 18; // v64=-9,223,372,036,854,775,808..+9,223,372,036,854,775,807
   repeat
     exp := ord(P^) - ord('0');
     if PtrUInt(exp) <= 9 then
     begin
-      if (remdigit <> 0) or // avoid 64-bit overflow, but allow 19 digits
-         (v64 > 922337203685477580) or
-         ((v64 = 922337203685477580) and (P^ > '7')) then
+      if (remdigit <> 0) or  // avoid 64-bit overflow, but allow 19 digits
+         (v64 > 922337203685477580 - ord(exp > 7)) then // only for 19th digit
         dec(remdigit);
       if remdigit >= 0 then // over-required digits are just ignored
       begin
-        v64 := v64 * 10; // FPC generates fast imul + mul on i386
-        inc(v64, PtrUInt(exp));
+        v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64 {$else} * 10 {$endif} + exp;
         include(flags, fValid);
         dec(frac, ord(frac <> 0)); // digits after '.' (branchless)
         inc(P);
@@ -6803,7 +6801,7 @@ begin
     dec(frac);
   until false;
   inc(frac, ord(frac < 0)); // adjust digits after '.'
-  if ord(P^) or $20 = ord('e') then
+  if P^ in ['E', 'e'] then
   begin
     if not (fValid in flags) then
       goto e;
@@ -6818,33 +6816,22 @@ begin
       include(flags, fNegExp);
     end;
     repeat
-      if byte(ord(P^) - ord('0')) > 9 then
+      remdigit := PtrInt(P^) - ord('0');
+      if PtrUInt(remdigit) > 9 then
         break;
-      if exp >= High(PtrInt) div 10 then
-        if (exp > High(PtrInt) div 10) or
-           (ord(P^) - ord('0') > High(PtrInt) mod 10) then
-          goto e;
-      exp := (exp * 10) + ord(P^) - ord('0');
+      exp := (exp * 10) + remdigit;
       include(flags, fValid);
       inc(P);
+      if exp >= $fff000 then // huge constant, but still aarch64 friendly
+        goto e;
     until false;
     if fNegExp in flags then
-    begin
-      if frac < Low(PtrInt) + exp then
-        goto e;
-      dec(frac, exp);
-    end
+      dec(frac, exp)
     else
-    begin
-      if frac > High(PtrInt) - exp then
-        goto e;
       inc(frac, exp);
-    end;
   end;
-  if (fValid in flags) and
-     (P^ = #0) then
-    err := 0
-  else
+  if (P^ <> #0) or
+     not (fValid in flags) then
 e:  err := 1; // return the (partial) value even if not ended with #0
   if (frac <= -324) or
      (frac >= 308) then
