@@ -6718,7 +6718,7 @@ begin
       c := byte(P^) - 48;
       if c > 9 then
         break;
-      result := result shl 3 + result + result; // fast result := result*10
+      result := result {$ifdef HASSLOWMUL64} shl 3 + result + result {$else} * 10 {$endif};
       inc(result, c);
       inc(P);
     until false;
@@ -6761,7 +6761,7 @@ begin
       c := byte(P^) - 48;
       if c > 9 then
         break;
-      result := result shl 3 + result + result; // fast result := result*10
+      result := result {$ifdef HASSLOWMUL64} shl 3 + result + result {$else} * 10 {$endif};
       inc(result, c);
       inc(P);
     until false;
@@ -6810,7 +6810,7 @@ begin
         c := byte(P^) - 48;
         if c > 9 then
           break;
-        result := result shl 3 + result + result; // fast result := result*10
+        result := result {$ifdef HASSLOWMUL64} shl 3 + result + result {$else} * 10 {$endif};
         inc(result, c);
         inc(P);
       until false;
@@ -6879,11 +6879,7 @@ begin
         inc(err);
         if c > 9 then
           exit;
-        {$ifdef HASSLOWMUL64}
-        result := result shl 3 + result + result;
-        {$else}
-        result := result * 10; // FPC generates fast imul + mul
-        {$endif HASSLOWMUL64}
+        result := result {$ifdef HASSLOWMUL64} shl 3 + result + result {$else} * 10 {$endif};
         inc(result, c);
         if result < 0 then
           exit; // overflow (>$7FFFFFFFFFFFFFFF)
@@ -6937,11 +6933,7 @@ begin
         inc(err);
         if c > 9 then
           exit;
-        {$ifdef HASSLOWMUL64}
-        result := result shl 3 + result + result;
-        {$else}
-        result := result * 10; // FPC generates fast imul + mul
-        {$endif HASSLOWMUL64}
+        result := result {$ifdef HASSLOWMUL64} shl 3 + result + result {$else} * 10 {$endif};
         inc(result, c);
       until false;
     end;

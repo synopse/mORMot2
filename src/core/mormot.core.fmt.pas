@@ -3163,7 +3163,8 @@ begin
         else
           exit;
       prev := u;
-      u := u * 10 + QWord(ord(p^) - ord('0'));
+      u := u {$ifdef HASSLOWMUL64} shl 3 + u + u {$else} * 10 {$endif};
+      inc(u, QWord(ord(p^) - ord('0')));
       if Int64(u) < Int64(prev) then
         exit; // 63-bit overflow
       inc(p);

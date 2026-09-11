@@ -6994,11 +6994,7 @@ begin
       c := byte(P^) - 48;
       if c > 9 then
         break;
-      {$ifdef HASSLOWMUL64}
-      result := result shl 3 + result + result;
-      {$else}
-      result := result * 10;
-      {$endif HASSLOWMUL64}
+      result := result {$ifdef HASSLOWMUL64} shl 3 + result + result {$else} * 10 {$endif};
       inc(result, c);
       inc(P);
       if decim <> 0 then

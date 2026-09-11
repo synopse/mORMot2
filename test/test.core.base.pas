@@ -5033,7 +5033,6 @@ procedure TTestCoreBase.NumericalConversions;
     CheckEqual(err, 0, text);
     CheckEqual(value, expected, text);
   end;
-
   {$endif CPU64}
 
   procedure CheckJsonValue(const text: RawUtf8; kind: integer; expected: double);
@@ -5349,12 +5348,12 @@ begin
   Int64ToUtf8(-9223372036854775807, s);
   Check(s = '-9223372036854775807');
   {$ifdef HASINLINE} // bug with MinInt64 with older versions of Delphi
-  Check(Int64ToUtf8(-9223372036854775808) = '-9223372036854775808');
+  CheckEqual(Int64ToUtf8(-9223372036854775808), '-9223372036854775808');
   Int64ToUtf8(-9223372036854775808, s);
-  Check(s = '-9223372036854775808');
+  CheckEqual(s, '-9223372036854775808');
   {$endif HASINLINE}
-  Check(Int64ToUtf8(2119852951849248647) = '2119852951849248647');
-  Check(FormatUtf8(' % ', [2119852951849248647]) = ' 2119852951849248647 ');
+  CheckEqual(Int64ToUtf8(2119852951849248647), '2119852951849248647');
+  CheckEqual(FormatUtf8(' % ', [2119852951849248647]), ' 2119852951849248647 ');
   s := '1234';
   d := GetExtended(pointer(s));
   CheckSame(d, 1234);

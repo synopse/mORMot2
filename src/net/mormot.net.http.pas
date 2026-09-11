@@ -3394,7 +3394,8 @@ begin
         // a wrapped result would be negative, so would bypass ValidateRange()
         result := Qword(High(Int64)) // no file would be so big anyway
       else
-        result := result * 10 + Qword(c);
+        result := result {$ifdef HASSLOWMUL64} shl 3 + result + result
+                         {$else} * 10 {$endif} + Qword(c);
       inc(P);
     until false;
 end;
