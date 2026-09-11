@@ -3387,12 +3387,10 @@ begin
       c := byte(P^) - 48;
       if c > 9 then
         break
-      else if (result > Qword(High(Int64)) div 10) or
-              ((result = Qword(High(Int64)) div 10) and
-               (c > Qword(High(Int64)) mod 10)) then
+      else if result > MAX_INT64_DIV10 - ord(c > 7) then
         // clamp to High(Int64): RangeOffset/RangeLength are signed Int64, and
         // a wrapped result would be negative, so would bypass ValidateRange()
-        result := Qword(High(Int64)) // no file would be so big anyway
+        result := MAX_INT64 // no file would be so big anyway
       else
         result := result {$ifdef HASSLOWMUL64} shl 3 + result + result
                          {$else} * 10 {$endif} + Qword(c);
@@ -3867,7 +3865,7 @@ begin
           begin
             // "Range: bytes=0-499" -> start=0, len=500
             RangeLength := Int64(GetNextRange(P1));
-            if RangeLength >= High(Int64) - RangeOffset then
+            if RangeLength >= MAX_INT64 - RangeOffset then
               // last-byte-pos above any possible size: up to end of file, as
               // RFC 9110 does expect - and no RangeLength + 1 overflow
               RangeLength := -1

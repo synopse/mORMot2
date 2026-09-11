@@ -5459,7 +5459,7 @@ begin
   fDatabaseIDBits := aDatabaseIDBits;
   inc(aDatabaseIDBits); // 1..63 -> pred(1 shl 2..64)
   if aDatabaseIDBits = 64 then
-    fDatabaseIDMax := high(Int64) // avoid Int64 overflow on (1 shl 64)
+    fDatabaseIDMax := MAX_INT64 // avoid Int64 overflow on (1 shl 64)
   else
     fDatabaseIDMax := pred(Int64(1) shl aDatabaseIDBits);
   fCache := TSynDictionary.Create(TypeInfo(TIDDynArray),

@@ -6778,8 +6778,8 @@ z:      err := 1;
     exp := ord(P^) - ord('0');
     if PtrUInt(exp) <= 9 then
     begin
-      if (remdigit <> 0) or  // avoid 64-bit overflow, but allow 19 digits
-         (v64 > 922337203685477580 - ord(exp > 7)) then // only for 19th digit
+      if (remdigit <> 0) or  // validate the 19th significant digit
+         (v64 > MAX_INT64_DIV10 - ord(exp > 7)) then
         dec(remdigit);
       if remdigit >= 0 then // over-required digits are just ignored
       begin

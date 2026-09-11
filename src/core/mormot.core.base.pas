@@ -4875,6 +4875,10 @@ type
   TUnixMSTimeDynArray = array of TUnixMSTime;
 
 const
+  /// equals 9223372036854775807
+  MAX_INT64 = high(Int64);
+  /// equals 922337203685477580
+  MAX_INT64_DIV10 = MAX_INT64 div 10;
   /// maximum number stored in a JavaScript-compatible Int53 value
   MAX_SAFE_JS_INTEGER  = (Int64(1) shl 53) - 1;
 
