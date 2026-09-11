@@ -6736,7 +6736,7 @@ var
   v64: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
   d64: TSynExtended;
 label
-  z, e;
+  z, e, x, o;
 begin
   byte(flags) := 0;
   v64 := 0;
@@ -6767,7 +6767,7 @@ begin
           result := Infinity;
     else
       begin
-z:      err := 1;
+z:      err := 1; // fast error path for non-number input
         result := 0;
       end;
     end;
@@ -6797,7 +6797,7 @@ z:      err := 1;
       break;
     inc(P);
     if frac <> 0 then
-      goto e; // will return partial value but err=1
+      goto e; // only one dot allowed
     dec(frac);
     if v64 = 0 then // properly handle 0.00000000000000000123
       while P^ = '0' do
@@ -6839,41 +6839,38 @@ z:      err := 1;
   if (P^ <> #0) or
      not (fValid in flags) then
 e:  err := 1; // return the (partial) value even if not ended with #0
-  if (frac <= -324) or
-     (frac >= 308) then
-  begin
-    frac := 0;
-    err := 1; // also bound the scale of numbers without an exponent
-  end;
   d64 := v64;
-  if frac >= 290 then // avoid overflowing the final product, even with unmasked FPU
+  if PtrUInt(frac) + 31 <= 62 then // -31 .. +31: overwhelmingly common
+    result := POW10[frac]
+  else if frac < -31 then
   begin
-    result := (POW10[(frac and not 31) shr 5 + 34] *
-               POW10[frac and 31] * InvScale) * d64;
-    if result > MaxScaled then
-    begin
-      result := d64;
-      err := 1;
-    end
-    else
-      result := result * Scale;
-    if fNeg in flags then
-      result := -result;
-    exit;
-  end;
-  if frac >= -31 then
-    if frac <= 31 then // -31 .. + 31
-      result := POW10[frac]
-    else // +32 ..
-      result := POW10[(frac and not 31) shr 5 + 34] * POW10[frac and 31]
-  else  // .. -32
-  begin
+    if frac <= -324 then
+      goto o;
     frac := -frac;
     result := POW10[(frac and not 31) shr 5 + 45] / POW10[frac and 31];
+  end
+  else
+  begin // frac >= 32
+    if frac >= 308 then
+    begin
+o:    result := d64;
+      err := 1;
+      goto x;
+    end;
+    if frac >= 290 then // avoid overflow, even with unmasked FPU
+    begin
+      result := (POW10[(frac and not 31) shr 5 + 34] *
+                 POW10[frac and 31] * InvScale) * d64;
+      if result > MaxScaled then
+        goto o;
+      result := result * Scale;
+      goto x;
+    end;
+    result := POW10[(frac and not 31) shr 5 + 34] * POW10[frac and 31];
   end;
-  if fNeg in flags then
-    result := - result;
   result := result * d64;
+x:if fNeg in flags then
+    result := -result;
 end;
 
 {$endif WIN32DELPHI}
