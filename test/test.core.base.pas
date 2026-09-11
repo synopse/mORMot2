@@ -5035,22 +5035,28 @@ procedure TTestCoreBase.NumericalConversions;
   end;
   {$endif CPU64}
 
-  procedure CheckJsonValue(const text: RawUtf8; kind: integer; expected: double);
+  procedure CheckJsonValue(const text: RawUtf8; kind: integer; expected: double;
+     expectedText: RawUtf8 = '');
   var
     v: variant;
     p: PUtf8Char;
   begin
     p := GetNumericVariantFromJson(pointer(text), TVarData(v), true);
-    Check(p = PUtf8Char(pointer(text)) + length(text), text);
+    CheckUtf8(p = PUtf8Char(pointer(text)) + length(text), text);
     CheckEqual(TVarData(v).VType, kind, text);
-    CheckSame(double(v), expected, 0, text);
+    CheckSame(double(v), expected, 0, 'CheckJsonValue');
+    if expectedText = '' then
+      expectedText := Text
+    else if SizeOf(TSynExtended) <> SizeOf(double) then
+      exit; // extended=FP80 on Delphi Win32
+    CheckEqual(DoubleToStr(double(v)), expectedText);
   end;
 
   procedure CheckJsonExact(const text: RawUtf8; kind: integer; expected: Int64);
   var
     v: variant;
   begin
-    Check(GetNumericVariantFromJson(pointer(text), TVarData(v), false) <> nil, text);
+    CheckUtf8(GetNumericVariantFromJson(pointer(text), TVarData(v), false) <> nil, text);
     CheckEqual(TVarData(v).VType, kind, text);
     CheckEqual(TVarData(v).VInt64, expected, text);
   end;
@@ -5058,18 +5064,19 @@ procedure TTestCoreBase.NumericalConversions;
   procedure CheckInvalidNumber(const text: RawUtf8; extendedToo: boolean = true);
   var
     v: variant;
+    {$ifndef TSYNEXTENDED80}
     d: double;
     err: integer;
+    {$endif TSYNEXTENDED80}
   begin
-    Check(GetNumericVariantFromJson(pointer(text), TVarData(v), true) = nil, text);
-    {$ifndef WIN32DELPHI}
-    if extendedToo then
-    begin
-      d := GetExtended(pointer(text), err);
-      Check(err <> 0, text);
-      Check(not IsInfinite(d) and not IsNan(d), text);
-    end;
-    {$endif WIN32DELPHI}
+    CheckUtf8(GetNumericVariantFromJson(pointer(text), TVarData(v), true) = nil, text);
+    {$ifndef TSYNEXTENDED80} // FP80
+    if not extendedToo then
+      exit;
+    d := GetExtended(pointer(text), err);
+    CheckNotEqual(err, 0, text);
+    CheckUtf8(not IsInfinite(d) and not IsNan(d), text);
+    {$endif TSYNEXTENDED80}
   end;
 
 var
@@ -5338,14 +5345,14 @@ begin
   Check(KB(4294963200) = '4 GB');
   Check(Int64ToUtf8(-maxInt) = '-2147483647');
   Check(Int64ToUtf8(-1) = '-1');
-  Check(Int64ToUtf8(-9223372036854775807) = '-9223372036854775807');
+  Check(Int64ToUtf8(-MAX_INT64) = '-9223372036854775807');
   Int64ToUtf8(-maxInt, s);
   Check(s = '-2147483647');
   Int64ToUtf8(-1, s);
   Check(s = '-1');
   Int64ToUtf8(100, s);
   Check(s = '100');
-  Int64ToUtf8(-9223372036854775807, s);
+  Int64ToUtf8(-MAX_INT64, s);
   Check(s = '-9223372036854775807');
   {$ifdef HASINLINE} // bug with MinInt64 with older versions of Delphi
   CheckEqual(Int64ToUtf8(-9223372036854775808), '-9223372036854775808');
@@ -5428,6 +5435,8 @@ begin
   CheckDoubleToShort(0.01, '0.01');
   CheckDoubleToShort(0.001, '0.001');
   CheckDoubleToShort(0.0001, '0.0001');
+  CheckDoubleToShort(0.0000000000000000001,
+    {$ifdef TSYNEXTENDED80} '1E-19' {$else} '9.9999999999999998E-20' {$endif});
   CheckDoubleToShort(-0.1, '-0.1');
   CheckDoubleToShort(-0.01, '-0.01');
   CheckDoubleToShort(-0.001, '-0.001');
@@ -5556,36 +5565,47 @@ begin
   {$ifdef CPU64}
   CheckIntegerValue('9223372036854775807', High(Int64));
   CheckIntegerValue('-9223372036854775808', Low(Int64));
-  CheckIntegerValue('  -  00000000000000000000000000000000123', -123);
+  CheckIntegerValue('  -  000000000000000000000000000000000000000000123', -123);
   CheckIntegerValue('+0000', 0);
   for i := 0 to 3 do
   begin
-    s := GetCsvItemString('9223372036854775808,-9223372036854775809,' +
+    s := GetCsvItem('9223372036854775808,-9223372036854775809,' +
       '18446744073709551616,99999999999999999999', i);
     GetInt64(pointer(s), err);
-    Check(err <> 0, s);
+    CheckNotEqual(err, 0, s);
   end;
   {$endif CPU64}
   CheckJsonExact('0', varInteger, 0);
   CheckJsonExact('-123', varInteger, -123);
-  CheckJsonExact('9223372036854775807', varInt64, High(Int64));
-  CheckJsonExact('-9223372036854775808', varInt64, Low(Int64));
-  CheckJsonExact('922337203685477.5807', varCurrency, High(Int64));
+  CheckJsonExact('9223372036854775807',   varInt64,    High(Int64));
+  CheckJsonExact('-9223372036854775808',  varInt64,    Low(Int64));
+  CheckJsonExact('922337203685477.5807',  varCurrency, High(Int64));
   CheckJsonExact('-922337203685477.5808', varCurrency, Low(Int64));
-  CheckJsonExact('922337203685477.58', varCurrency, High(Int64) - 7);
-  CheckJsonExact('-922337203685477.58', varCurrency, Low(Int64) + 8);
-  CheckJsonValue('9223372036854775808', varDouble, 9223372036854775808.0);
-  CheckJsonValue('-9223372036854775809', varDouble, -9223372036854775809.0);
-  CheckJsonValue('9999999999999999999', varDouble, 9999999999999999999.0);
-  CheckJsonValue('922337203685477.5808', varDouble, 922337203685477.5808);
-  CheckJsonValue('-922337203685477.5809', varDouble, -922337203685477.5809);
-  CheckJsonValue('9223372036854775.8', varDouble, 9223372036854775.8);
+  CheckJsonExact('922337203685477.58',    varCurrency, High(Int64) - 7);
+  CheckJsonExact('-922337203685477.58',   varCurrency, Low(Int64) + 8);
+  CheckJsonValue('9223372036854775808',   varDouble, 9223372036854775808.0,
+    '9.2233720368547758E18');
+  CheckJsonValue('-9223372036854775809',  varDouble, -9223372036854775809.0,
+    '-9.2233720368547758E18');
+  CheckJsonValue('9999999999999999999',   varDouble, 9999999999999999999.0,
+    '1E19');
+  CheckJsonValue('-9999999999999999999',  varDouble, -9999999999999999999.0,
+    '-1E19');
+  CheckJsonValue('922337203685477.5808',  varDouble, 922337203685477.5808,
+    '9.2233720368547762E14');
+  CheckJsonValue('-922337203685477.5809', varDouble, -922337203685477.5809,
+    '-9.2233720368547762E14');
+  CheckJsonValue('9223372036854775.8',    varDouble, 9223372036854775.8,
+    '9.223372036854776E15');
+  CheckJsonValue('0.0000000000000000001', varDouble, 1E-19,
+    '9.9999999999999998E-20');
   s := '9223372036854775808';
   Check(GetNumericVariantFromJson(pointer(s), TVarData(vj), false) = nil);
   s := '9223372036854775.8';
   Check(GetNumericVariantFromJson(pointer(s), TVarData(vj), false) = nil);
   CheckInvalidNumber('1.2.3');
   CheckInvalidNumber('0..1');
+  CheckInvalidNumber('toto');
   CheckInvalidNumber('e1');
   CheckInvalidNumber('-.e2');
   CheckInvalidNumber('1e');
@@ -5597,7 +5617,10 @@ begin
   CheckInvalidNumber('+1', false);
   CheckInvalidNumber('1e400');
   CheckInvalidNumber('1e-400');
-  {$ifndef WIN32DELPHI}
+  s := '0.0000000000000000001';
+  d := GetExtended(pointer(s), err);
+  CheckEqual(err, 0);
+  CheckSame(d, 1E-19, 0);
   s := '9223372036854775808';
   d := GetExtended(pointer(s), err);
   CheckEqual(err, 0);
@@ -5606,6 +5629,7 @@ begin
   d := GetExtended(pointer(s), err);
   CheckEqual(err, 0);
   Check(not IsInfinite(d) and (d > 1.79e308));
+  {$ifndef WIN32DELPHI} // Delphi trigger an EOverflow exception
   s := '99e307';
   d := GetExtended(pointer(s), err);
   Check(err <> 0);
