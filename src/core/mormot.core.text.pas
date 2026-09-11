@@ -6775,7 +6775,8 @@ begin
     end;
   remdigit := 18; // v64=-9,223,372,036,854,775,808..+9,223,372,036,854,775,807
   repeat
-    if byte(ord(P^) - ord('0')) <= 9 then
+    exp := ord(P^) - ord('0');
+    if PtrUInt(exp) <= 9 then
     begin
       if (remdigit <> 0) or // avoid 64-bit overflow, but allow 19 digits
          (v64 > 922337203685477580) or
@@ -6784,7 +6785,7 @@ begin
       if remdigit >= 0 then // over-required digits are just ignored
       begin
         v64 := v64 * 10; // FPC generates fast imul + mul on i386
-        inc(v64, Int64(P^) - ord('0'));
+        inc(v64, PtrUInt(exp));
         include(flags, fValid);
         dec(frac, ord(frac <> 0)); // digits after '.' (branchless)
         inc(P);
@@ -6878,7 +6879,7 @@ e:  err := 1; // return the (partial) value even if not ended with #0
     result := POW10[(frac and not 31) shr 5 + 45] / POW10[frac and 31];
   end;
   if fNeg in flags then
-    result := result * POW10[33]; // * -1
+    result := - result;
   result := result * d64;
 end;
 
