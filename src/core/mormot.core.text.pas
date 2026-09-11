@@ -6799,6 +6799,12 @@ z:      err := 1;
     if frac <> 0 then
       goto e; // will return partial value but err=1
     dec(frac);
+    if v64 = 0 then // properly handle 0.00000000000000000123
+      while P^ = '0' do
+      begin
+        dec(frac);
+        inc(P);
+      end;
   until false;
   inc(frac, ord(frac < 0)); // adjust digits after '.'
   if P^ in ['E', 'e'] then
