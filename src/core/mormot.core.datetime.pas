@@ -125,6 +125,14 @@ procedure TimeSpanToTextVar(value: Int64; var result: RawUtf8);
 function TimeSpanToText(value: Int64): RawUtf8;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// convert a Windows TimeSpan text (e.g. '123.01:01:01.123') as its 64-bit value
+// - returns the position just after the value on success, or nil on parsing error
+function TextToTimeSpanBuffer(Text: PUtf8Char; var TimeSpan: Int64): PUtf8Char;
+
+/// convert a Windows TimeSpan text (e.g. '123.01:01:01.123') as its 64-bit value
+// - by design, our parser will return a value in milliseconds resolution
+function TextToTimeSpan(const Text: RawUtf8; var TimeSpan: Int64): boolean;
+
 
 { ************ ISO-8601 Compatible Date/Time Text Encoding }
 
@@ -1553,6 +1561,25 @@ end;
 function TimeSpanToText(value: Int64): RawUtf8;
 begin
   TimeSpanToTextVar(value, result);
+end;
+
+function TextToTimeSpanBuffer(Text: PUtf8Char; var TimeSpan: Int64): PUtf8Char;
+var
+  st: TSynSystemTime;
+  neg, days: PtrInt;
+begin
+  result := st.FromTimeSpan(Text, days, neg);
+  if result <> nil then // parsing error or reached 64-bit overflow
+    TimeSpan := (Int64(days) * MilliSecsPerDay +
+                 st.Hour     * MilliSecsPerHour +
+                 st.Minute   * MilliSecsPerMin +
+                 st.Second   * MilliSecsPerSec +
+                 st.MilliSecond) * TicksPerMillisecond * neg;
+end;
+
+function TextToTimeSpan(const Text: RawUtf8; var TimeSpan: Int64): boolean;
+begin
+  result := TextToTimeSpanBuffer(pointer(Text), TimeSpan) <> nil;
 end;
 
 
