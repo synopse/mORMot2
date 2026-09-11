@@ -11576,12 +11576,16 @@ begin
     end;
     if c <> '.' then
       break;
-    c := Json[1];
-    if (frac <> 0) or
-       not (c in ['0' .. '9']) then // require a single dot followed by a digit
-      exit;
-    inc(json);
-    dec(frac);
+    if frac <> 0 then
+      exit; // only one dot allowed
+    repeat
+      inc(Json);
+      c := PtrUInt(Json^) - ord('0');
+      if c > 9 then // require a single dot followed by a digit
+        exit;
+      dec(frac);
+    until (c <> 0) or
+          (v64 <> 0);
   until false;
   if frac < 0 then
     inc(frac);       // adjust digits after '.'
