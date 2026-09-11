@@ -6335,13 +6335,10 @@ end;
 
 function GetInteger(P: PUtf8Char; var err: integer): PtrInt;
 var
-  c: byte;
-  minus: boolean;
-  {$ifdef CPU64}
-  digits: PUtf8Char;
-  {$endif CPU64}
+  {$ifdef CPU64} digits, {$endif} c, minus: PtrUInt;
 begin
   result := 0;
+  minus := 0;
   err := 1; // don't return the exact index, just 1 as error flag
   if P = nil then
     exit;
@@ -6356,21 +6353,17 @@ begin
   until false;
   if c = ord('-') then
   begin
-    minus := true;
+    inc(minus);
+    repeat
+      inc(P);
+      c := byte(P^);
+    until c <> ord(' ')
+  end
+  else if c = ord('+') then
     repeat
       inc(P);
       c := byte(P^);
     until c <> ord(' ');
-  end
-  else
-  begin
-    minus := false;
-    if c = ord('+') then
-      repeat
-        inc(P);
-        c := byte(P^);
-      until c <> ord(' ');
-  end;
   while (c = ord('0')) and
         (P[1] in ['0' .. '9']) do
   begin
@@ -6382,7 +6375,7 @@ begin
     exit;
   result := c;
   {$ifdef CPU64}
-  digits := P;
+  digits := 19;
   {$endif CPU64}
   repeat
     inc(P);
@@ -6391,26 +6384,30 @@ begin
     if c <= 9 then
     begin
       {$ifdef CPU64}
-      if P - digits >= 19 then
-        exit; // at most 19 significant digits: magnitude fits UInt64
+      dec(digits);
+      if digits = 0 then
+        exit; // clearly out of range
       {$else}
-      if PtrUInt(result) >= PtrUInt(High(PtrInt)) div 10 then
-        if (PtrUInt(result) > PtrUInt(High(PtrInt)) div 10) or
-           (c > High(PtrInt) mod 10 + ord(minus)) then
-          exit;
+      if (PtrUInt(result) >= PtrUInt(High(PtrInt)) div 10) and
+         ((PtrUInt(result) > PtrUInt(High(PtrInt)) div 10) or
+          (c > High(PtrInt) mod 10 + minus)) then
+        exit; // on 32-bit we need explicit compare due to the overflow
       {$endif CPU64}
       result := PtrInt(PtrUInt(result) * 10 + c);
     end
-    else if c <> 256 - 48 then
+    else if c <> PtrUInt(-48) then
       exit
     else
       break;
   until false;
-  if PtrUInt(result) > PtrUInt(High(PtrInt)) + PtrUInt(ord(minus)) then
-    exit;
+  {$ifdef CPU64}
+  if (digits = 1) and
+     (PtrUInt(result) > PtrUInt(High(PtrInt)) + minus) then
+       exit;
+  {$endif CPU64}
   err := 0; // success
-  if minus and
-     (result <> Low(PtrInt)) then
+  if (minus <> 0) and
+     (result <> Low(PtrInt)) then // $8000000000000000 is already the good value
     result := -result;
 end;
 
