@@ -110,6 +110,10 @@ procedure AppendShortBy100(value: cardinal; const valueunit: ShortString;
 // three digits to the left of the decimal separator e.g. '100' '1,000' '10,000'
 function IntToThousandString(Value: PtrInt; const Sep: ShortString = ','): TShort31;
 
+const
+  /// the maxium number of days a Windows TimeSpan could hold in its 64-bit value
+  MAX_TIMESPAN = 10675199;
+
 /// convert a Windows TimeSpan value (i.e. ticks) into millisecond-resolution text
 // - e.g. TimeSpanToText(36611234567) = '01:01:01.123'
 procedure TimeSpanAppendShort(value: Int64; var result: ShortString);
@@ -603,7 +607,10 @@ type
     function FromHttpDateBuffer(P: PUtf8Char; tolocaltime: boolean = false): boolean;
     /// fill Hour/Minute/Second/MilliSecond fields from Microsoft TimeSpan 100 ns ticks
     // - and returns the number of days
-    function FromTimeSpan(ticks: Int64): PtrUInt;
+    function FromTimeSpan(ticks: Int64): PtrUInt; overload;
+    /// fill Hour/Minute/Second/MilliSecond fields from '123.06:18:55.999' format
+    // - and returns the (signed) number of days or nil on decoding error
+    function FromTimeSpan(p: PUtf8Char; var days, neg: PtrInt): PUtf8Char; overload;
     /// encode the stored date/time as ISO-8601 text with Milliseconds
     function ToText(Expanded: boolean = true; FirstTimeChar: AnsiChar = 'T';
       const TZD: RawUtf8 = ''): RawUtf8;
@@ -631,7 +638,7 @@ type
     procedure AddHttpDate(WR: TTextWriter; const TZD: RawUtf8 = 'GMT');
     /// append the stored time, in '06:18:55.123' format, into a ShortString
     procedure AppendTime(var result: ShortString; WithMS: boolean = false);
-    /// append the stored time, in '123.06:18:55:999' format, into a ShortString
+    /// append the stored time, in '123.06:18:55.999' format, into a ShortString
     // - with the supplied days count and Hour/Minute/Second/MilliSecond values
     procedure AppendInterval(days: PtrUInt; var result: ShortString);
     /// append the stored date and time, in apache-like format, to a memory buffer
@@ -3048,6 +3055,102 @@ begin
   ms := QWord(abs(ticks)) div TicksPerMillisecond;
   result := ms div MilliSecsPerDay; // returns the days count
   FromMS(ms - (QWord(result) * MilliSecsPerDay));
+end;
+
+function NextValue(p: PUtf8Char; var v: PtrUInt): PUtf8Char;
+var
+  c: PtrUInt;
+begin
+  result := nil;
+  c := PtrUInt(p^) - ord('0');
+  if c > 9 then
+    exit;
+  v := c;
+  repeat
+    inc(p);
+    c := PtrUInt(p^) - ord('0');
+    if c > 9 then
+      break;
+    v := v * 10 + c;
+  until false;
+  result := p;
+end;
+
+function TSynSystemTime.FromTimeSpan(p: PUtf8Char; var days, neg: PtrInt): PUtf8Char;
+var
+  v: PtrUInt;
+begin // parse '123.06:18:55.999' '123' '123.06:18:55' '06:18:55' '06:18:55.999'
+  Clear;
+  days := 0;
+  neg := 1;
+  result := nil; // error
+  if p = nil then
+    exit;
+  p := GotoNextNotSpace(p);
+  if p^ = '-' then
+  begin
+    neg := -neg;
+    inc(p);
+  end;
+  p := NextValue(p, v);
+  if p = nil then
+    exit;
+  case p^ of
+    #0:
+      begin
+        if v <= MAX_TIMESPAN then // '123'
+        begin
+          days := v;
+          result := p; // success
+        end;
+        exit;
+      end;
+    ':':
+      Hour := v;
+    '.':
+      begin
+        if v > MAX_TIMESPAN then
+          exit;
+        days := v;
+        p := NextValue(p + 1, v);
+        if (p = nil) or
+           (p^ <> ':') then
+          exit;
+        Hour := v;
+      end;
+  else
+    exit;
+  end;
+  if v > 23 then
+    exit;
+  p := NextValue(p + 1, v);
+  if (p = nil) or
+     (p^ <> ':') or
+     (v > 59) then
+    exit;
+  Minute := v;
+  p := NextValue(p + 1, v);
+  if (p = nil) or
+     (v > 59) then
+    exit;
+  Second := v;
+  case p^ of
+    #0:
+      result := p;
+    '.':
+      if (p[1] in ['0' .. '9']) and
+         (p[2] in ['0' .. '9']) and
+         (p[3] in ['0' .. '9']) and
+         (p[4] in [#0, '0' .. '9']) then
+      begin
+        v := ord(p[1]) * 100 + ord(p[2]) * 10 + ord(p[3]) - (48 + 480 + 4800);
+        MilliSecond := v;
+        inc(p, 4);
+        while p^ in ['0' ..'9'] do
+          inc(p); // skip any trailing ticks digits
+        result := p;
+      end;
+  end;
 end;
 
 function TSynSystemTime.ToText(Expanded: boolean; FirstTimeChar: AnsiChar;
