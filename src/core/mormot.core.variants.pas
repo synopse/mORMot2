@@ -11514,20 +11514,21 @@ exponent:         inc(Json); // inlined custom GetInteger()
 end;
 
 const
-  CURRENCY_FACTOR: array[-4 .. -1] of integer = (1, 10, 100, 1000);
-  CURRENCY_MAX: array[-4 .. -1] of UInt64 = (
-    High(Int64), High(Int64) div 10, High(Int64) div 100, High(Int64) div 1000);
+  CURRENCY_FACTOR: array[-4 .. -1] of integer = (-1, -10, -100, -1000);
+  CURRENCY_MAX_NEG: array[-4 .. -1] of Int64 = (
+    -MAX_INT64, -MAX_INT64_DIV10, -MAX_INT64 div 100, -MAX_INT64 div 1000);
 
 function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
   AllowVarDouble: boolean): PUtf8Char;
 var
-  // logic below is extracted from mormot.core.text.pas' GetExtended()
+  // logic below is similar to mormot.core.text.pas GetExtended()
+  c: PtrUInt;
   remdigit: integer;
-  frac, exp {$ifdef CPUX86NOTPIC}, f {$endif}: PtrInt;
-  c: AnsiChar;
+  frac, exp: PtrInt;
   flags: set of (fNeg, fNegExp, fValid);
-  v64: UInt64; // up to 19 digits, including the magnitude of Low(Int64)
+  v64: Int64; // accumulated as negative (faster, and no UInt64 on Delphi 7)
   d: double;
+  vd: TSynVarData absolute Value;
 begin
   // 1. parse input text as number into v64, frac, digit, exp
   result := nil; // return nil to indicate parsing error
@@ -11536,45 +11537,42 @@ begin
   frac := 0;
   if Json = nil then
     exit;
-  c := Json^;
-  if c = '-' then // note: '+xxx' is not valid Json so is not handled here
+  if Json^ = '-' then // note: '+xxx' is not valid Json so is not handled here
   begin
-    c := Json[1];
     inc(Json);
     include(flags, fNeg);
   end;
-  if not (c in ['0' .. '9']) then
+  c := PtrUInt(Json^) - ord('0');
+  if c > 9 then
     exit;
-  if (c = '0') and
-     (Json[1] in ['0' .. '9']) then // '012' is not Json, but '0.xx' and '0' are
+  if (c = 0) and
+     (Json[1] in ['0' .. '9']) then // '012' is not Json, but '0.x' and '0' are
     exit;
   remdigit := 19;    // max Int64 resolution
   repeat
-    if c in ['0' .. '9'] then
+    if c <= 9 then
     begin
       inc(Json);
       dec(remdigit); // over-required digits are just ignored
+      if (remdigit = 0) and // validate the 19th significant digit
+         (v64 < -MAX_INT64_DIV10 + ord(c > 8)) then
+        dec(remdigit);
       if remdigit >= 0 then
       begin
-        dec(c, ord('0'));
-        {$ifdef CPU64}
-        v64 := v64 * 10;
-        {$else}
-        v64 := v64 shl 3 + v64 + v64;
-        {$endif CPU64}
-        inc(v64, byte(c));
-        c := Json^;
+        v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64
+                   {$else} * 10 {$endif} - PtrInt(c); // accumulate as negative
+        c := PtrUInt(Json^) - ord('0');
         include(flags, fValid);
-        if frac <> 0 then
-          dec(frac); // frac<0 for digits after '.'
+        dec(frac, ord(frac <> 0)); // digits after '.' (branchless)
         continue;
       end;
-      c := Json^;
+      c := PtrUInt(Json^) - ord('0');
       if frac >= 0 then
         inc(frac);   // frac>0 to handle #############00000
       continue;
     end;
-    if c <> '.' then
+    inc(c, ord('0'));
+    if c <> ord('.') then
       break;
     if frac <> 0 then
       exit; // only one dot allowed
@@ -11589,116 +11587,96 @@ begin
   until false;
   if frac < 0 then
     inc(frac);       // adjust digits after '.'
-  if (c = 'E') or
-     (c = 'e') then
+  if (c = ord('E')) or
+     (c = ord('e')) then
   begin
-    c := Json[1];
     inc(Json);
     exp := 0;
     exclude(flags, fValid);
-    if c = '+' then
+    if Json^ = '+' then
       inc(Json)
-    else if c = '-' then
+    else if Json^ = '-' then
     begin
       inc(Json);
       include(flags, fNegExp);
     end;
     repeat
-      c := Json^;
-      if not (c in ['0' .. '9']) then
+      c := PtrUInt(Json^) - ord('0');
+      if c > 9 then
         break;
+      exp := (exp * 10) + PtrInt(c);
       inc(Json);
-      dec(c, ord('0'));
-      if exp >= High(PtrInt) div 10 then
-        if (exp > High(PtrInt) div 10) or
-           (byte(c) > High(PtrInt) mod 10) then
-          exit;
-      exp := (exp * 10) + byte(c);
       include(flags, fValid);
+      if exp >= $fff000 then // huge constant, but still aarch64 friendly
+        exit;
     until false;
     if fNegExp in flags then
-    begin
-      if frac < Low(PtrInt) + exp then
-        exit;
-      dec(frac, exp);
-    end
+      dec(frac, exp)
     else
-    begin
-      if frac > High(PtrInt) - exp then
-        exit;
       inc(frac, exp);
-    end;
   end;
   if not (fValid in flags) then
     exit;
-  // 2. now v64, frac, digit, exp contain number parsed from Json
-  if (frac = 0) and
-     (remdigit >= 0) and
-     ((v64 <= UInt64(High(Int64))) or
-      ((v64 = UInt64(High(Int64)) + 1) and (fNeg in flags))) then
+  // 2. now v64, frac, digit, exp contain a number parsed from Json
+  if remdigit >= 0 then
   begin
-    Value.VInt64 := Int64(v64);
-    if (fNeg in flags) and
-       (v64 <= UInt64(High(Int64))) then
-      Value.VInt64 := -Value.VInt64;
-    if remdigit <= 9 then
-      TSynVarData(Value).VType := varInt64
-    else
-      TSynVarData(Value).VType := varInteger;
-  end
-  else if (frac < 0) and
-          (frac >= -4) and
-          ((v64 <= CURRENCY_MAX[frac]) or
-           ((frac = -4) and (v64 = UInt64(High(Int64)) + 1) and
-            (fNeg in flags))) then // currency as ###.0123
-  begin
-    TSynVarData(Value).VType := varCurrency;
-    Value.VInt64 := Int64(v64 * UInt64(CURRENCY_FACTOR[frac]));
-    if (fNeg in flags) and
-       (Value.VInt64 <> Low(Int64)) then
-      Value.VInt64 := -Value.VInt64; // as round(CurrValue*10000)
-  end
-  else if AllowVarDouble and
-          (frac > -324) then // 5.0 x 10^-324 .. 1.7 x 10^308
-  begin // convert into a double value
-    {$ifdef CPUX86NOTPIC}
-    f := frac;
-    if f >= -31 then
-      if f <= 31 then
-        d := POW10[f] // -31 .. + 31
-      else if f >= remdigit + 290 then
-        exit          // +308 ..
+    if v64 = 0 then // in JSON we normalize all 0E100 as plain 0 value
+    begin
+      vd.VType := varInteger;
+      vd.VInteger := v64;
+      result := Json; // returns the first char after the parsed number
+      exit;
+    end;
+    if (frac = 0) and
+       ((v64 <> Low(Int64)) or (fNeg in flags)) then
+    begin
+      if not (fNeg in flags) then
+        v64 := -v64;
+      if remdigit <= 9 then
+        remdigit := varInt64
       else
-        d := POW10[(f and not 31) shr 5 + 34] * POW10[f and 31] // +32 .. +307
-    else
-    begin
-      f := -f; // .. -32
-      d := POW10[(f and not 31) shr 5 + 45] / POW10[f and 31];
+        remdigit := varInteger;
+      vd.VType := remdigit;
+      vd.VInt64 := v64;
+      result := Json;
+      exit;
     end;
-    {$else}
-    exp := PtrUInt(@POW10);
-    if frac >= -31 then
-      if frac <= 31 then
-        d := PPow10(exp)[frac] // -31 .. + 31 is the most common case
-      else if frac >= remdigit + 290 then
-        exit                   // +308 ..
-      else                     // +32 .. +307
-        d := PPow10(exp)[(frac and not 31) shr 5 + 34] * PPow10(exp)[frac and 31]
-    else
-    begin
-      frac := -frac; // .. -32
-      d := PPow10(exp)[(frac and not 31) shr 5 + 45] / PPow10(exp)[frac and 31];
+    if (frac < 0) and
+       (frac >= -4) and
+       ((v64 >= CURRENCY_MAX_NEG[frac]) or
+        ((frac = -4) and (v64 = Low(Int64)) and (fNeg in flags))) then
+    begin // currency as ###.0123
+      if fNeg in flags then
+        v64 := -v64; // as round(CurrValue*10000)
+      v64 := v64 * CURRENCY_FACTOR[frac];
+      vd.VType := varCurrency;
+      vd.VInt64 := v64;
+      result := Json;
+      exit;
     end;
-    {$endif CPUX86NOTPIC}
-    Value.VDouble := d * v64;
-    if (fNeg in flags) and
-       (v64 <> 0) then
-      Value.VDouble := -Value.VDouble;
-    TSynVarData(Value).VType := varDouble;
-  end
+  end;
+  if not AllowVarDouble or
+     (frac <= -324) then // 5.0 x 10^-324 .. 1.7 x 10^308
+    exit; // we can't convert into a double
+  exp := PtrUInt(@POW10);
+  if frac >= -31 then
+    if frac <= 31 then
+      d := PPow10(exp)[frac] // -31 .. + 31 is the most common case
+    else if frac >= remdigit + 290 then
+      exit                   // +308 ..
+    else                     // +32 .. +307
+      d := PPow10(exp)[(frac and not 31) shr 5 + 34] * PPow10(exp)[frac and 31]
   else
-    exit;
-  result := Json; // returns the first char after the parsed number
+  begin
+    frac := -frac; // .. -32
+    d := PPow10(exp)[(frac and not 31) shr 5 + 45] / PPow10(exp)[frac and 31];
+  end;
+  d := d * v64;
+  if not (fNeg in flags) then
+    d := -d;
+  vd.VType := varDouble;
+  vd.VDouble := d;
+  result := Json;
 end;
 
 procedure UniqueVariant(Interning: TRawUtf8Interning; var aResult: variant;
