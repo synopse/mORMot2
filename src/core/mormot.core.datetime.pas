@@ -617,7 +617,8 @@ type
     // - and returns the number of days
     function FromTimeSpan(ticks: Int64): PtrUInt; overload;
     /// fill Hour/Minute/Second/MilliSecond fields from '123.06:18:55.999' format
-    // - and returns the (signed) number of days or nil on decoding error
+    // - and set the (signed) number of days as output variables
+    // - return the ending #0 space , ; ' " valid delimiter, or nil on decoding error
     function FromTimeSpan(p: PUtf8Char; var days, neg: PtrInt): PUtf8Char; overload;
     /// encode the stored date/time as ISO-8601 text with Milliseconds
     function ToText(Expanded: boolean = true; FirstTimeChar: AnsiChar = 'T';
@@ -3123,7 +3124,7 @@ begin // parse '123.06:18:55.999' '123' '123.06:18:55' '06:18:55' '06:18:55.999'
   if p = nil then
     exit;
   case p^ of
-    #0:
+    #0 .. ' ', ',', ';', '''', '"': // #0 space , ; ' " are valid delimiters
       begin
         if v <= MAX_TIMESPAN then // '123'
         begin
@@ -3162,13 +3163,13 @@ begin // parse '123.06:18:55.999' '123' '123.06:18:55' '06:18:55' '06:18:55.999'
     exit;
   Second := v;
   case p^ of
-    #0:
+    #0 .. ' ', ',', ';', '''', '"':
       result := p;
     '.':
       if (p[1] in ['0' .. '9']) and
          (p[2] in ['0' .. '9']) and
          (p[3] in ['0' .. '9']) and
-         (p[4] in [#0, '0' .. '9']) then
+         (p[4] in [#0 .. ' ', ',', ';', '''', '"', '0' .. '9']) then
       begin
         v := ord(p[1]) * 100 + ord(p[2]) * 10 + ord(p[3]) - (48 + 480 + 4800);
         MilliSecond := v;
