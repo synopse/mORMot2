@@ -6725,7 +6725,11 @@ end;
 
 {$ifndef WIN32DELPHI} // Delphi has its own x86/x87 asm version
 
+{$if defined(WIN64DELPHI) and defined(ASMX64)}
+function GetExtendedPascal(P: PUtf8Char; out err: integer): TSynExtended;
+{$else}
 function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
+{$ifend}
 const
   Scale: double = 1.3407807929942597e154; // 2^512
   InvScale: double = 7.458340731200207e-155; // 2^-512
@@ -6757,6 +6761,9 @@ begin
   end;
   if P^ > '9' then
   begin
+    if (P[1] = #0) or
+       (P[2] = #0) then
+      goto z; // the special value check below reads four bytes
     case PCardinal(P)^ and $00dfdfdf of
       ord('N') + ord('A') shl 8 + ord('N') shl 16:
         result := NaN;
@@ -6885,6 +6892,10 @@ o:    result := d64;
 x:if fNeg in flags then
     result := -result;
 end;
+
+{$if defined(WIN64DELPHI) and defined(ASMX64)}
+{$I mormot.core.text.asmx64.inc}
+{$ifend}
 
 {$endif WIN32DELPHI}
 

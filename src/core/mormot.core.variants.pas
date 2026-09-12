@@ -11518,8 +11518,13 @@ const
   CURRENCY_MAX_NEG: array[-4 .. -1] of Int64 = (
     -MAX_INT64, -MAX_INT64_DIV10, -MAX_INT64 div 100, -MAX_INT64 div 1000);
 
+{$if defined(WIN64DELPHI) and defined(ASMX64)}
+function GetNumericVariantFromJsonPascal(Json: PUtf8Char; var Value: TVarData;
+  AllowVarDouble: boolean): PUtf8Char;
+{$else}
 function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
   AllowVarDouble: boolean): PUtf8Char;
+{$ifend}
 var
   // logic below is similar to mormot.core.text.pas GetExtended()
   c: PtrUInt;
@@ -11681,6 +11686,10 @@ begin
   vd.VDouble := d;
   result := Json;
 end;
+
+{$if defined(WIN64DELPHI) and defined(ASMX64)}
+{$I mormot.core.variants.asmx64.inc}
+{$ifend}
 
 procedure UniqueVariant(Interning: TRawUtf8Interning; var aResult: variant;
   aText: PUtf8Char; aTextLen: PtrInt; aAllowVarDouble: boolean);
