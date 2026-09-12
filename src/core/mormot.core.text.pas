@@ -6845,13 +6845,23 @@ e:  err := 1; // return the (partial) value even if not ended with #0
   else if frac < -31 then
   begin
     if frac <= -324 then
-      goto o;
+    begin
+      if frac < -342 then
+        goto o;
+      // avoid creating a subnormal 10^frac before applying d64
+      result := d64 * POW10[50]; // 1E-160
+      inc(frac, 160);
+      frac := -frac;
+      result := result *
+        (POW10[(frac and not 31) shr 5 + 45] / POW10[frac and 31]);
+      goto x;
+    end;
     frac := -frac;
     result := POW10[(frac and not 31) shr 5 + 45] / POW10[frac and 31];
   end
   else
   begin // frac >= 32
-    if frac >= 308 then
+    if frac > 308 then
     begin
 o:    result := d64;
       err := 1;
