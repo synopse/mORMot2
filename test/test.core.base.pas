@@ -5548,6 +5548,15 @@ begin
   CheckDoubleToShortSame(123.45678901234);
   CheckDoubleToShortSame(1234.5678901234);
   {$ifndef WIN32DELPHI} // fails when converted to FP80 in x87 asm
+  d := GetExtended('0e400', err);
+  CheckEqual(err, 0);
+  Check(d = 0);
+  d := GetExtended('0e-400', err);
+  CheckEqual(err, 0);
+  Check(d = 0);
+  d := GetExtended('-0e400', err);
+  CheckEqual(err, 0);
+  Check(PQWord(@d)^ = QWord($8000000000000000));
   CheckGetExtendedBits('4.9406564584124654E-324', $0000000000000001);
   CheckGetExtendedBits('2.2250738585072009E-308', $000FFFFFFFFFFFFF);
   CheckGetExtendedBits('2.2250738585072014E-308', $0010000000000000);

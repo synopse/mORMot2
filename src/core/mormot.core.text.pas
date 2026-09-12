@@ -6839,6 +6839,11 @@ z:      err := 1; // fast error path for non-number input
   if (P^ <> #0) or
      not (fValid in flags) then
 e:  err := 1; // return the (partial) value even if not ended with #0
+  if v64 = 0 then
+  begin
+    result := 0; // fast path for e.g. '0' or '0E400'
+    goto x;
+  end;
   d64 := v64;
   if PtrUInt(frac) + 31 <= 62 then // -31 .. +31: overwhelmingly common
     result := POW10[frac]
@@ -6849,11 +6854,9 @@ e:  err := 1; // return the (partial) value even if not ended with #0
       if frac < -342 then
         goto o;
       // avoid creating a subnormal 10^frac before applying d64
-      result := d64 * POW10[50]; // 1E-160
-      inc(frac, 160);
-      frac := -frac;
-      result := result *
-        (POW10[(frac and not 31) shr 5 + 45] / POW10[frac and 31]);
+      frac := -(frac + 160);
+      result := d64 * POW10[50] * // 1E-160
+                (POW10[(frac and not 31) shr 5 + 45] / POW10[frac and 31]);
       goto x;
     end;
     frac := -frac;
