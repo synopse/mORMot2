@@ -11580,7 +11580,10 @@ begin
       inc(Json);
       c := PtrUInt(Json^) - ord('0');
       if c > 9 then // require a single dot followed by a digit
-        exit;
+        if frac = 0 then
+          exit // needs at least one digit after the dot
+        else
+          break;
       dec(frac);
     until (c <> 0) or
           (v64 <> 0);

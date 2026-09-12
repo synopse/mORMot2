@@ -5633,6 +5633,8 @@ begin
   end;
   {$endif CPU64}
   CheckJsonExact('0', varInteger, 0);
+  CheckJsonExact('0.0', varInteger, 0);
+  CheckJsonExact('0.000000000', varInteger, 0);
   CheckJsonExact('-123', varInteger, -123);
   CheckJsonExact('9223372036854775807',   varInt64,    High(Int64));
   CheckJsonExact('-9223372036854775808',  varInt64,    Low(Int64));
