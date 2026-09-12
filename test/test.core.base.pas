@@ -4990,16 +4990,22 @@ end;
 
 procedure TTestCoreBase.NumericalConversions;
 
-  procedure CheckDoubleToShort(v: double; const expected: RawUtf8);
+  procedure CheckDoubleToShort(v: double; const expected: ShortString);
   var
     a: ShortString;
     d: double;
     err: integer;
   begin
     ExtendedToShort(@a, v, DOUBLE_PRECISION);
-    CheckEqual(ShortStringToUtf8(a), expected, 'ExtendedToShort');
+    if expected = '1E-19' then // may return '9.9999999999999998E-20' as double
+      Check(a <> '0', '1E-19') // just validate that it is not trimmed to '0'
+    else
+      CheckEqualShort(a, expected, 'ExtendedToShort');
     DoubleToShort(@a, v);
-    CheckEqual(ShortStringToUtf8(a), expected, 'DoubleToShort');
+    if expected = '1E-19' then
+      Check(a <> '0', '1E-19')
+    else
+      CheckEqualShort(a, expected, 'DoubleToShort');
     a[ord(a[0]) + 1] := #0;
     d := GetExtended(@a[1], err);
     CheckEqual(err, 0);
@@ -5435,8 +5441,19 @@ begin
   CheckDoubleToShort(0.01, '0.01');
   CheckDoubleToShort(0.001, '0.001');
   CheckDoubleToShort(0.0001, '0.0001');
-  CheckDoubleToShort(0.0000000000000000001,
-    {$ifdef TSYNEXTENDED80} '1E-19' {$else} '9.9999999999999998E-20' {$endif});
+  CheckDoubleToShort(0.0000000000000000001, '1E-19'); // double <> extended
+  CheckDoubleToShort(0.0000000000000000002, '2E-19'); // would exactly convert
+  CheckDoubleToShort(-0.0000000000000000002, '-2E-19');
+  CheckDoubleToShort(0.00000000000000000015, '1.5E-19');
+  CheckDoubleToShort(-0.00000000000000000015, '-1.5E-19');
+  CheckDoubleToShort(0.0000000000000002, '2E-16');
+  CheckDoubleToShort(-0.0000000000000002, '-2E-16');
+  CheckDoubleToShort(0.000000000002, '2E-12');
+  CheckDoubleToShort(-0.000000000002, '-2E-12');
+  CheckDoubleToShort(2e19, '2E19');
+  CheckDoubleToShort(-2e19, '-2E19');
+  CheckDoubleToShort(1.5e19, '1.5E19');
+  CheckDoubleToShort(-1.5e19, '-1.5E19');
   CheckDoubleToShort(-0.1, '-0.1');
   CheckDoubleToShort(-0.01, '-0.01');
   CheckDoubleToShort(-0.001, '-0.001');
@@ -8699,7 +8716,7 @@ begin
   CheckTimeSpan(-High(Int64),   '-10675199.02:48:05.477');
   Check(TextToTimeSpan('0.06:18:55', ts));
   CheckEqual(ts, 227350000000);
-  Check(TextToTimeSpan(' 0.00:00:00.001', ts));
+  Check(TextToTimeSpan(' 0.00:00:00.001 ', ts));
   CheckEqual(ts, 10000);
   Check(TextToTimeSpan('000.23:59:59.99999999', ts));
   CheckEqual(ts, 863999990000);
