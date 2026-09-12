@@ -4990,13 +4990,23 @@ end;
 
 procedure TTestCoreBase.NumericalConversions;
 
+  procedure CheckGetExtendedBits(const text: RawUtf8; expected: QWord);
+  var
+    d: double;
+    err: integer;
+  begin
+    d := GetExtended(pointer(text), err);
+    CheckEqual(err, 0, text);
+    CheckUtf8(PQWord(@d)^ = expected, text);
+  end;
+
   procedure CheckDoubleToShort(v: double; const expected: ShortString);
   var
     a: ShortString;
     d: double;
     err: integer;
   begin
-    ExtendedToShort(@a, v, DOUBLE_PRECISION);
+    ExtendedToShort(@a, v, DOUBLE_PRECISION); // = 15
     if expected = '1E-19' then // may return '9.9999999999999998E-20' as double
       Check(a <> '0', '1E-19') // just validate that it is not trimmed to '0'
     else
@@ -5010,6 +5020,14 @@ procedure TTestCoreBase.NumericalConversions;
     d := GetExtended(@a[1], err);
     CheckEqual(err, 0);
     CheckSame(v, d);
+  end;
+
+  procedure CheckDoubleToShortBits(bits: QWord; const expected: ShortString);
+  var
+    d: double;
+  begin
+    PUInt64(@d)^ := bits;
+    CheckDoubleToShort(d, expected);
   end;
 
   procedure CheckDoubleToShortSame(v: double);
@@ -5529,6 +5547,19 @@ begin
   CheckDoubleToShortSame(12.345678901234);
   CheckDoubleToShortSame(123.45678901234);
   CheckDoubleToShortSame(1234.5678901234);
+  {$ifndef WIN32DELPHI} // fails when converted to FP80 in x87 asm
+  CheckGetExtendedBits('4.9406564584124654E-324', $0000000000000001);
+  CheckGetExtendedBits('2.2250738585072009E-308', $000FFFFFFFFFFFFF);
+  CheckGetExtendedBits('2.2250738585072014E-308', $0010000000000000);
+  CheckGetExtendedBits('1.7976931348623157E308', $7FEFFFFFFFFFFFFF);
+  CheckGetExtendedBits('1E308', $7FE1CCF385EBC8A0);
+  CheckDoubleToShortBits($4D6E62C4E38FF876, '1.0000000000000005E65');
+  CheckDoubleToShortBits(QWord($CD6E62C4E38FF876), '-1.0000000000000005E65');
+  CheckDoubleToShortBits($0000000000000001, '4.9406564584124654E-324');
+  CheckDoubleToShortBits($000FFFFFFFFFFFFF, '2.2250738585072009E-308');
+  CheckDoubleToShortBits($0010000000000000, '2.2250738585072014E-308');
+  CheckDoubleToShortBits($7FEFFFFFFFFFFFFF, '1.7976931348623157E308');
+  {$endif WIN32DELPHI}
   CheckEqual(TextToVariantNumberType('1'), varInt64);
   CheckEqual(TextToVariantNumberType('10'), varInt64);
   CheckEqual(TextToVariantNumberType('01'), varString);
