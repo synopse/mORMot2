@@ -5665,6 +5665,9 @@ begin
   CheckInvalidNumber('1.2.3');
   CheckInvalidNumber('0..1');
   CheckInvalidNumber('toto');
+  CheckInvalidNumber('N');
+  CheckInvalidNumber('Na');
+  CheckInvalidNumber('I');
   CheckInvalidNumber('e1');
   CheckInvalidNumber('-.e2');
   CheckInvalidNumber('1e');
