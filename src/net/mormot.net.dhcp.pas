@@ -1073,6 +1073,7 @@ type
     function NotifyDnsScript(opt81: PAnsiChar; len: PtrInt; plain: boolean): boolean;
     procedure AddOption81;
     procedure ParseRecvLensRai;
+    function RequestConflictsWith(ip4: TNetIP4): boolean;
     function FakeLease(found: TNetIP4): PDhcpLease;
       {$ifdef HASINLINE} inline; {$endif}
     function ClientUuid(opt: TDhcpOption): PDhcpLease;
@@ -1936,7 +1937,7 @@ end;
 
 function DhcpIP4(dhcp: PDhcpPacket; len: PtrUInt): TNetIP4;
 begin
-  result := len;
+  result := 0; // an option with an unexpected length is no IPv4 address
   if len = 0 then
     exit;
   len := PtrUInt(@dhcp.options[len]);
@@ -4378,6 +4379,25 @@ begin
   until len = 0;
 end;
 
+function TDhcpState.RequestConflictsWith(ip4: TNetIP4): boolean;
+var
+  req: TNetIP4;
+  len: PtrUInt;
+begin
+  result := false;
+  // RFC 2131 3.1: a REQUEST selecting another server is none of our business
+  len := RecvLens[doServerIdentifier];
+  if (len <> 0) and
+     (DhcpIP4(@Recv, len) <> Scope^.ServerIdentifier) then
+    exit;
+  // option 50 on SELECTING/INIT-REBOOT, or ciaddr on RENEWING/REBINDING
+  req := DhcpIP4(@Recv, RecvLens[doRequestedAddress]);
+  if req = 0 then
+    req := Recv.ciaddr;
+  result := (req <> 0) and
+            (req <> ip4);
+end;
+
 function TDhcpState.FakeLease(found: TNetIP4): PDhcpLease;
 begin
   result := @Temp; // fake transient PDhcpLease for this StaticUuid[]
@@ -6237,9 +6257,19 @@ begin
              (State.Scope^.LeaseTimeLE < SecsPerHour) and // grace period
              (State.BootTix32 - p^.Expired <
                 State.Scope^.LeaseTimeLE * State.Scope^.GraceFactor))) then
+        begin
           // RFC 2131: lease is Reserved after OFFER = SELECTING
           //           lease is Ack/Static/Outdated = RENEWING/REBINDING
-          inc(State.Scope^.Metrics.Current[dsmLeaseRenewed])
+          if (p^.State = lsStatic) and
+             State.RequestConflictsWith(p^.IP4) then
+          begin
+            // RFC 2131 4.3.2: the requested address is not the one reserved
+            // for this client, so NAK for it to DISCOVER the current one
+            result := DoError(State, dsmNak);
+            exit;
+          end;
+          inc(State.Scope^.Metrics.Current[dsmLeaseRenewed]);
+        end
         else if RetrieveFrameIP(State, p) then // IP from option 50
         begin
           // no lease, but Option 50 = INIT-REBOOT

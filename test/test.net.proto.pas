@@ -3169,6 +3169,76 @@ begin
       'domain-name:"mydomain",' +
       'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
       '60,rebinding-time:105}');
+    // validate DHCPNAK on a REQUEST conflicting with a static reservation
+    mac := MacToText(@macs[1510]);
+    Check(server.AddStatic(Join([mac, '=192.168.0.120'])), 'static120');
+    ip4 := ToIP4('192.168.0.120');
+    // a client asking for the reserved IP is acknowledged as usual
+    f := d.ClientNew(dmtRequest, macs[1510]);
+    DhcpAddOption32(f, doRequestedAddress, ip4);
+    d.ClientFlush(f);
+    Check(server.ComputeResponse(d) > 0, 'static ack');
+    Check(d.SendType = dmtAck, 'static ack type');
+    CheckEqual(d.Send.yiaddr, ip4, 'static ack ip');
+    // a client asking for no IP at all (e.g. PXE) is acknowledged as usual
+    d.ClientFlush(d.ClientNew(dmtRequest, macs[1510]));
+    Check(server.ComputeResponse(d) > 0, 'static noip');
+    Check(d.SendType = dmtAck, 'static noip type');
+    CheckEqual(d.Send.yiaddr, ip4, 'static noip ip');
+    // once the reservation points to another IP, the previous one is NAKed
+    Check(server.RemoveStatic('192.168.0.120'), 'del120');
+    Check(server.AddStatic(Join([mac, '=192.168.0.121'])), 'static121');
+    f := d.ClientNew(dmtRequest, macs[1510]);
+    DhcpAddOption32(f, doRequestedAddress, ip4); // INIT-REBOOT with option 50
+    DhcpAddOption32(f, doServerIdentifier, ToIP4('192.168.0.1')); // this server
+    d.ClientFlush(f);
+    Check(server.ComputeResponse(d) > 0, 'nak opt50');
+    Check(d.SendType = dmtNak, 'nak opt50 type');
+    // ... and on RENEWING, i.e. from ciaddr with no option 50
+    d.ClientFlush(d.ClientNew(dmtRequest, macs[1510]));
+    d.Recv.ciaddr := ip4;
+    Check(server.ComputeResponse(d) > 0, 'nak ciaddr');
+    Check(d.SendType = dmtNak, 'nak ciaddr type');
+    // the DISCOVER following a NAK returns the current reservation
+    d.ClientFlush(d.ClientNew(dmtDiscover, macs[1510]));
+    Check(server.ComputeResponse(d) > 0, 'discover after nak');
+    Check(d.SendType = dmtOffer, 'offer type');
+    CheckEqual(d.Send.yiaddr, ToIP4('192.168.0.121'), 'offer new ip');
+    // a ciaddr matching the reservation is of course acknowledged
+    d.ClientFlush(d.ClientNew(dmtRequest, macs[1510]));
+    d.Recv.ciaddr := ToIP4('192.168.0.121');
+    Check(server.ComputeResponse(d) > 0, 'ciaddr ok');
+    Check(d.SendType = dmtAck, 'ciaddr ok type');
+    // a REQUEST which did select another server is left alone
+    f := d.ClientNew(dmtRequest, macs[1510]);
+    DhcpAddOption32(f, doRequestedAddress, ip4);
+    DhcpAddOption32(f, doServerIdentifier, ToIP4('192.168.0.2'));
+    d.ClientFlush(f);
+    Check(server.ComputeResponse(d) > 0, 'other server');
+    Check(d.SendType = dmtAck, 'other server type');
+    // ... and so are unparsable option 54 or option 50 values
+    option := 'bad'; // length is 3, not SizeOf(TNetIP4)
+    f := d.ClientNew(dmtRequest, macs[1510]);
+    DhcpAddOption32(f, doRequestedAddress, ip4);
+    DhcpAddOptionShort(f, doServerIdentifier, option);
+    d.ClientFlush(f);
+    Check(server.ComputeResponse(d) > 0, 'bad opt54');
+    Check(d.SendType = dmtAck, 'bad opt54 type');
+    f := d.ClientNew(dmtRequest, macs[1510]);
+    DhcpAddOptionShort(f, doRequestedAddress, option);
+    d.ClientFlush(f);
+    Check(server.ComputeResponse(d) > 0, 'bad opt50');
+    Check(d.SendType = dmtAck, 'bad opt50 type');
+    // a dynamic lease is still acknowledged whatever the client did ask for
+    d.ClientFlush(d.ClientNew(dmtDiscover, macs[1511]));
+    Check(server.ComputeResponse(d) > 0, 'dyn discover');
+    ip4 := d.Send.yiaddr;
+    f := d.ClientNew(dmtRequest, macs[1511]);
+    DhcpAddOption32(f, doRequestedAddress, ToIP4('192.168.0.121'));
+    d.ClientFlush(f);
+    Check(server.ComputeResponse(d) > 0, 'dyn ack');
+    Check(d.SendType = dmtAck, 'dyn ack type');
+    CheckEqual(d.Send.yiaddr, ip4, 'dyn ack ip');
   finally
     server.Free;
     settings.Free;
