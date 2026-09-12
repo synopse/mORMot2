@@ -8098,12 +8098,8 @@ begin
     n_digits_have := n_digits_req;
   if n_digits_have > 0 then
   begin
-    // Dot
-    if n_digits_req > 1 then
-    begin
-      p^ := '.';
-      inc(p);
-    end;
+    p^ := '.';
+    inc(p);
     repeat
       inc(digits);
       p^ := AnsiChar(digits^ + ord('0'));
@@ -8157,23 +8153,18 @@ end;
 
 // Calculates the exp10 of a factor required to bring the binary exponent
 // of the original number into selected [ alpha .. gamma ] range:
-// result := ceiling[ ( alpha - e ) * log10(2) ]
-function d2a_k_comp(e, alpha{, gamma}: integer): integer;
+// result := ceiling[ ( alpha - e ) * log10(2) ] with fixed-point integer arithmetic
+function d2a_k_comp(e, alpha: integer): integer; {$ifdef HASINLINE}inline;{$endif}
 var
-  dexp: double;
-const
-  D_LOG10_2: double = 0.301029995663981195213738894724493027; // log10(2)
-var
-  x, n: integer;
+  x: integer;
 begin
   x := alpha - e;
-  dexp := x * D_LOG10_2;
-  // ceil( dexp )
-  n := trunc(dexp);
   if x > 0 then
-    if dexp <> n then
-      inc(n); // round-up
-  result := n;
+    result := ((x * 78913) shr 18) + 1
+  else if x < 0 then
+    result := -(((-x) * 78913) shr 18)
+  else
+    result := 0;
 end;
 
 procedure DoubleToAscii(min_width, frac_digits: integer; const v: double;
@@ -8345,16 +8336,14 @@ begin
       end;
       {$endif CPU32}
     until true;
-  {$ifdef CPU32}
   // Append "sticky" digit if any
-  if (f <> 0) and
+  if ({$ifdef CPU32} f {$else} fl {$endif} <> 0) and
      (n_digits_have >= n_digits_need + 1) then
   begin
     // single "<>0" digit is enough
     n_digits_have := n_digits_need + 2;
     buf[n_digits_need + 1] := 1;
   end;
-  {$endif CPU32}
   // Round to n_digits_need using "roundTiesToEven"
   if n_digits_have > n_digits_need then
     inc(dot_pos, d2a_round_digits(buf, n_digits_have, n_digits_need));
