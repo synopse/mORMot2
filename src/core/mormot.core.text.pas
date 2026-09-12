@@ -6845,6 +6845,16 @@ e:  err := 1; // return the (partial) value even if not ended with #0
     goto x;
   end;
   d64 := v64;
+  if (frac < 0) and
+     (frac >= -22) and
+     (v64 <= MAX_SAFE_JS_INTEGER) then
+  begin
+    // Clinger's fast path: d64 and 10^-frac are both exact doubles, so a single
+    // IEEE division is correctly rounded - whereas POW10[frac] * d64 is not,
+    // since 1E-1..1E-22 are inexact (e.g. '1.2' returned 1.2000000000000002)
+    result := d64 / POW10[-frac];
+    goto x;
+  end;
   if PtrUInt(frac) + 31 <= 62 then // -31 .. +31: overwhelmingly common
     result := POW10[frac]
   else if frac < -31 then

@@ -5085,6 +5085,60 @@ procedure TTestCoreBase.NumericalConversions;
     CheckEqual(TVarData(v).VInt64, expected, text);
   end;
 
+  procedure CheckJsonDoubleBits(const text: RawUtf8; expected: QWord);
+  var
+    v: variant;
+  begin
+    CheckUtf8(GetNumericVariantFromJson(pointer(text), TVarData(v), true) <> nil, text);
+    CheckEqual(TVarData(v).VType, varDouble, text);
+    CheckUtf8(PQWord(@TVarData(v).VDouble)^ = expected, text);
+  end;
+
+  procedure CheckDecimalRounding;
+  var
+    i, err, bad: integer;
+    s: RawUtf8;
+    d, d0: double;
+  begin
+    // decimal text should be parsed as the nearest IEEE double: digits*POW10[-n]
+    // was not, since 1E-1..1E-22 are inexact - e.g. '1.2' = 1.2000000000000002
+    CheckGetExtendedBits('1.2', $3FF3333333333333);
+    CheckGetExtendedBits('-1.2', QWord($BFF3333333333333));
+    CheckGetExtendedBits('12e-1', $3FF3333333333333);
+    CheckGetExtendedBits('0.1', $3FB999999999999A);
+    CheckGetExtendedBits('0.3', $3FD3333333333333);
+    CheckGetExtendedBits('0.7', $3FE6666666666666);
+    CheckGetExtendedBits('1.15', $3FF2666666666666);
+    CheckGetExtendedBits('39.9', $4043F33333333333);
+    CheckGetExtendedBits('100.1', $4059066666666666);
+    CheckGetExtendedBits('0.35', $3FD6666666666666);
+    CheckGetExtendedBits('4.52', $4012147AE147AE14);
+    CheckGetExtendedBits('452E-2', $4012147AE147AE14);
+    CheckGetExtendedBits('2.675', $4005666666666666);
+    CheckGetExtendedBits('0.009', $3F826E978D4FDF3B);
+    CheckGetExtendedBits('10000.05', $40C3880666666666);
+    CheckGetExtendedBits('0.0003', $3F33A92A30553261);
+    CheckGetExtendedBits('0.00003', $3EFF75104D551D69);
+    // 'x.y' and 'x.y0' are the same number, so should return the same double
+    bad := 0;
+    for i := 1 to 20000 do
+    begin
+      s := FormatUtf8('%.%', [i div 10, i mod 10]);
+      d := GetExtended(pointer(s), err);
+      s := s + '0';
+      d0 := GetExtended(pointer(s), err);
+      if PQWord(@d)^ <> PQWord(@d0)^ then
+        inc(bad);
+    end;
+    CheckEqual(bad, 0, 'x.y = x.y0');
+    // GetNumericVariantFromJson() had the same issue for varDouble values
+    // (with both SSE2 and x87 FPU, since its local d variable is a double)
+    CheckJsonDoubleBits('0.00003', $3EFF75104D551D69);
+    CheckJsonDoubleBits('0.00006', $3F0F75104D551D69);
+    CheckJsonDoubleBits('-0.00007', QWord($BF12599ED7C6FBD2));
+    CheckJsonDoubleBits('0.00012', $3F1F75104D551D69);
+  end;
+
   procedure CheckInvalidNumber(const text: RawUtf8; extendedToo: boolean = true);
   var
     v: variant;
@@ -5547,6 +5601,7 @@ begin
   CheckDoubleToShortSame(12.345678901234);
   CheckDoubleToShortSame(123.45678901234);
   CheckDoubleToShortSame(1234.5678901234);
+  CheckDecimalRounding;
   {$ifndef WIN32DELPHI} // fails when converted to FP80 in x87 asm
   d := GetExtended('0e400', err);
   CheckEqual(err, 0);

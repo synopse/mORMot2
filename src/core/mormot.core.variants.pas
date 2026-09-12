@@ -11662,19 +11662,31 @@ begin
      (frac <= -324) then // 5.0 x 10^-324 .. 1.7 x 10^308
     exit; // we can't convert into a double
   exp := PtrUInt(@POW10);
-  if frac >= -31 then
-    if frac <= 31 then
-      d := PPow10(exp)[frac] // -31 .. + 31 is the most common case
-    else if frac >= remdigit + 290 then
-      exit                   // +308 ..
-    else                     // +32 .. +307
-      d := PPow10(exp)[(frac and not 31) shr 5 + 34] * PPow10(exp)[frac and 31]
+  if (frac < 0) and
+     (frac >= -22) and
+     (v64 >= -MAX_SAFE_JS_INTEGER) then // v64 is negative here
+  begin
+    // Clinger's fast path: v64 and 10^-frac are both exact doubles, so a single
+    // IEEE division is correctly rounded - see GetExtended() in mormot.core.text
+    d := v64;
+    d := d / PPow10(exp)[-frac];
+  end
   else
   begin
-    frac := -frac; // .. -32
-    d := PPow10(exp)[(frac and not 31) shr 5 + 45] / PPow10(exp)[frac and 31];
+    if frac >= -31 then
+      if frac <= 31 then
+        d := PPow10(exp)[frac] // -31 .. + 31 is the most common case
+      else if frac >= remdigit + 290 then
+        exit                   // +308 ..
+      else                     // +32 .. +307
+        d := PPow10(exp)[(frac and not 31) shr 5 + 34] * PPow10(exp)[frac and 31]
+    else
+    begin
+      frac := -frac; // .. -32
+      d := PPow10(exp)[(frac and not 31) shr 5 + 45] / PPow10(exp)[frac and 31];
+    end;
+    d := d * v64;
   end;
-  d := d * v64;
   if not (fNeg in flags) then
     d := -d;
   vd.VType := varDouble;
