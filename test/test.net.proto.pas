@@ -3169,6 +3169,46 @@ begin
       'domain-name:"mydomain",' +
       'subnet-mask:"255.252.0.0",lease-time:120,renewal-time:' +
       '60,rebinding-time:105}');
+    // validate the DHCPNAK frame content as expected by RFC 2131 Table 3
+    mac := MacToText(@macs[1500]);
+    f := d.ClientNew(dmtRequest, macs[1500]);
+    DhcpAddOption32(f, doRequestedAddress, ToIP4('8.8.8.8')); // wrong network
+    d.ClientFlush(f);
+    Check(server.ComputeResponse(d) > 0, 'nak');
+    CheckEqual(d.SendToJson(true), // no yiaddr/siaddr, no lease time, no network
+      '{op:"reply",chaddr:"' + mac + '",message-type:"NAK",' +
+      'server-identifier:"192.168.0.1"}', 'nak frame');
+    // a DHCPNAK should not be polluted by the options of a matching "rule"
+    pool.AddRule(['{always:{202:"titi"}}']); // no all/any = default rule
+    mac := MacToText(@macs[1501]);
+    f := d.ClientNew(dmtRequest, macs[1501]);
+    DhcpAddOption32(f, doRequestedAddress, ToIP4('8.8.8.8'));
+    d.ClientFlush(f);
+    Check(server.ComputeResponse(d) > 0, 'nak with rule');
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",chaddr:"' + mac + '",message-type:"NAK",' +
+      'server-identifier:"192.168.0.1"}', 'nak rule option');
+    // RFC 2131 Table 3: DHCPNAK 'chaddr' is the client hardware address, which
+    // may not be the MAC supplied within its option 61 client identifier - and
+    // the options 61/82 are still echoed back as RFC 6842/3046 expect
+    f := d.ClientNew(dmtRequest, macs[1502]);
+    DhcpAddOption32(f, doRequestedAddress, ToIP4('8.8.8.8'));
+    option[0] := #7;
+    option[1] := #1; // hardware type = Ethernet
+    PNetMac(@option[2])^ := macs[1503];
+    DhcpAddOptionShort(f, doClientIdentifier, option);
+    option[0] := #6;
+    option[1] := #1;                     // T = circuit-id
+    option[2] := #4;                     // L = 4
+    PCardinal(@option[3])^ := $41424344; // V = DCBA
+    DhcpAddOptionShort(f, doRelayAgentInformation, option);
+    d.ClientFlush(f);
+    Check(server.ComputeResponse(d) > 0, 'nak with options 61/82');
+    CheckEqual(d.SendToJson(true),
+      '{op:"reply",chaddr:"' + MacToText(@macs[1502]) + '",message-type:"NAK",' +
+      'server-identifier:"192.168.0.1",client-identifier:"' +
+      MacToText(@macs[1503]) + '",relay-agent-information:{circuit-id:"DCBA"}}',
+      'nak 61/82');
   finally
     server.Free;
     settings.Free;
