@@ -5562,6 +5562,14 @@ begin
   CheckGetExtendedBits('2.2250738585072014E-308', $0010000000000000);
   CheckGetExtendedBits('1.7976931348623157E308', $7FEFFFFFFFFFFFFF);
   CheckGetExtendedBits('1E308', $7FE1CCF385EBC8A0);
+  {$if defined(WIN64DELPHI) and defined(ASMX64)}
+  // The assembly path must preserve the portable mantissa cutoff and rounding.
+  CheckGetExtendedBits('95.02906953800000000000', $4057C1DC467AC145);
+  CheckGetExtendedBits('0.000000000000000000001234567890123456789', $3B97520105BBFFFB);
+  CheckGetExtendedBits('9999999999999999999', $43E158E460913D00);
+  CheckGetExtendedBits('123456789012345678901e-10', $4206FEE0E1A9E065);
+  CheckGetExtendedBits('46116860414.00000000', $4225798EE3FC0001);
+  {$ifend}
   CheckDoubleToShortBits($4D6E62C4E38FF876, '1.0000000000000005E65');
   CheckDoubleToShortBits(QWord($CD6E62C4E38FF876), '-1.0000000000000005E65');
   CheckDoubleToShortBits($0000000000000001, '4.9406564584124654E-324');
@@ -5635,9 +5643,20 @@ begin
   CheckJsonExact('0', varInteger, 0);
   CheckJsonExact('0.0', varInteger, 0);
   CheckJsonExact('0.000000000', varInteger, 0);
+  CheckJsonExact('-0.0000', varInteger, 0);
+  CheckJsonExact('0.0e400', varInteger, 0);
+  CheckJsonExact('0.000e-400', varInteger, 0);
+  s := '{"x":0.0,"a":[-0.0000,0.0e5]}';
+  Check(_Json(s, vj));
+  CheckEqual(VariantToUtf8(vj), '{"x":0,"a":[0,0]}');
   CheckJsonExact('-123', varInteger, -123);
+  CheckJsonExact('1.0e1', varInteger, 10);
+  CheckJsonExact('0.00000000012345678e17', varInteger, 12345678);
+  CheckJsonExact('0.000000000123456789e18', varInt64, 123456789);
   CheckJsonExact('9223372036854775807',   varInt64,    High(Int64));
   CheckJsonExact('-9223372036854775808',  varInt64,    Low(Int64));
+  CheckJsonExact('-922337203685477580.8e1', varInt64, Low(Int64));
+  CheckJsonExact('-922337203685477580.8e-3', varCurrency, Low(Int64));
   CheckJsonExact('922337203685477.5807',  varCurrency, High(Int64));
   CheckJsonExact('-922337203685477.5808', varCurrency, Low(Int64));
   CheckJsonExact('922337203685477.58',    varCurrency, High(Int64) - 7);
@@ -5664,6 +5683,8 @@ begin
   Check(GetNumericVariantFromJson(pointer(s), TVarData(vj), false) = nil);
   CheckInvalidNumber('1.2.3');
   CheckInvalidNumber('0..1');
+  CheckInvalidNumber('0.0.1');
+  CheckInvalidNumber('0.0e');
   CheckInvalidNumber('toto');
   CheckInvalidNumber('N');
   CheckInvalidNumber('Na');
