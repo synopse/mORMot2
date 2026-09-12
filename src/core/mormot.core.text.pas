@@ -8083,17 +8083,17 @@ begin
   else
     p^ := '0';
   inc(p);
-  // Dot
-  if n_digits_req > 1 then
-  begin
-    p^ := '.';
-    inc(p);
-  end;
   // Fraction significant digits
   if n_digits_req < n_digits_have then
     n_digits_have := n_digits_req;
   if n_digits_have > 0 then
   begin
+    // Dot
+    if n_digits_req > 1 then
+    begin
+      p^ := '.';
+      inc(p);
+    end;
     repeat
       inc(digits);
       p^ := AnsiChar(digits^ + ord('0'));
