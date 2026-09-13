@@ -6757,6 +6757,9 @@ begin
   end;
   if P^ > '9' then
   begin
+    if (P[1] = #0) or
+       (P[2] = #0) then
+      goto z;
     case PCardinal(P)^ and $00dfdfdf of
       ord('N') + ord('A') shl 8 + ord('N') shl 16:
         result := NaN;
