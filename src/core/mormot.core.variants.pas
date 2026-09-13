@@ -11528,7 +11528,6 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
 var
   // logic below is similar to mormot.core.text.pas GetExtended()
   c: PtrUInt;
-  start: PUtf8Char;
   bits: UInt64;
   remdigit: integer;
   frac, exp: PtrInt;
@@ -11538,7 +11537,6 @@ var
   vd: TSynVarData absolute Value;
 begin
   // 1. parse input text as number into v64, frac, digit, exp
-  start := Json;
   result := nil; // return nil to indicate parsing error
   byte(flags) := 0;
   v64 := 0;
@@ -11684,13 +11682,10 @@ begin
     exit; // we can't convert into a double
   if (frac > 31) and (frac >= remdigit + 290) then
     exit;
-  if remdigit < 0 then
-    bits := DecimalToDoubleExactBits(start, Json)
-  else
-    bits := DecimalToDoubleValueBits(UInt64(-v64), frac, fNeg in flags);
+  d := DecimalToDouble(UInt64(-v64), frac, fNeg in flags);
+  bits := PUInt64(@d)^;
   if bits and $7ff0000000000000 = $7ff0000000000000 then
     exit;
-  d := PDouble(@bits)^;
   vd.VType := varDouble;
   vd.VDouble := d;
   result := Json;
@@ -11700,63 +11695,16 @@ end;
 function FinishJsonNumber(Json: PUtf8Char; var Value: TVarData;
   Mantissa: UInt64; ScaleAndSign: PtrInt): PUtf8Char;
 var
-  bits: UInt64;
+  d: double;
+  bits: UInt64 absolute d;
 begin
   result := nil;
-  bits := DecimalToDoubleValueBits(Mantissa, (ScaleAndSign and not 1) div 2, ScaleAndSign and 1 <> 0);
+  d := DecimalToDouble(Mantissa, (ScaleAndSign and not 1) div 2, ScaleAndSign and 1 <> 0);
   if bits and $7fffffffffffffff = $7ff0000000000000 then
     exit;
-  Value.VDouble := PDouble(@bits)^;
+  Value.VDouble := d;
   TSynVarData(Value).VType := varDouble;
   result := Json;
-end;
-
-function FinishJsonTail(Start, Last: PUtf8Char; var Value: TVarData;
-  Mantissa: UInt64; Exponent: PtrInt): PUtf8Char;
-var
-  bits: UInt64;
-begin
-  result := nil;
-  bits := DecimalToDoubleTailBits(Start, Last, Mantissa, Exponent);
-  if bits and $7fffffffffffffff = $7ff0000000000000 then
-    exit;
-  Value.VDouble := PDouble(@bits)^;
-  TSynVarData(Value).VType := varDouble;
-  result := Last;
-end;
-
-// Cold bridge from the leaf scanner: RCX=end, RDX=value, R9=mantissa,
-// R10=exponent, XMM2=start. Its frame describes the outgoing fifth argument.
-procedure FinishJsonTailBridge;
-{$ifdef FPC} nostackframe; assembler;
-asm
-        {$ifdef ABISYSVX64}
-        movq    rdi, xmm2
-        mov     rsi, rcx
-        mov     rcx, r9
-        mov     r8, r10
-        jmp     FinishJsonTail
-        {$else}
-        sub     rsp, 40
-        .seh_stackalloc 40
-        .seh_endprologue
-        mov     qword ptr [rsp + 32], r10
-        {$endif ABISYSVX64}
-{$else}
-asm
-        .params 5
-        mov     qword ptr @params[32], r10
-{$endif FPC}
-        {$ifndef ABISYSVX64}
-        mov     r8, rdx
-        mov     rdx, rcx
-        movq    rcx, xmm2
-        call    FinishJsonTail
-        {$ifdef FPC}
-        add     rsp, 40
-        ret
-        {$endif FPC}
-        {$endif ABISYSVX64}
 end;
 
 { x86_64 JSON number conversion (Delphi/FPC, Windows/System V). Preserve the portable Integer/Int64/
@@ -11864,6 +11812,11 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         cmp     eax, 9
         jbe     @fraction
 @fractionEnd:
+        {$ifdef ABISYSVX64}
+        stmxcsr dword ptr [rsp - 4]
+        {$else}
+        stmxcsr dword ptr [rsp + 8]
+        {$endif ABISYSVX64}
         sub     r10, rcx
 @finish:
         cmp     eax, -2
@@ -11880,7 +11833,7 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         test    r9, r9
         jle     @nonPositive
         test    r8b, 32 // discarded digits exclude exact integer/currency results
-        jnz     @tail
+        jnz     @double
         test    r10, r10
         jnz     @currency
         test    r8b, 1
@@ -11905,7 +11858,7 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         jz      @zero
         // The only negative magnitude is abs(Low(Int64)).
         test    r8b, 32
-        jnz     @tail
+        jnz     @double
         test    r8b, 1
         jz      @double
         mov     eax, varInt64
@@ -11946,6 +11899,20 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         lea     r11, [rip + POW10]
         pxor    xmm0, xmm0
         cvtsi2sd xmm0, r9
+        cmp     byte ptr [rip + DecimalUseFma], 0
+        je      @divideFallback
+        {$ifdef ABISYSVX64}
+        test    dword ptr [rsp - 4], $6000
+        {$else}
+        test    dword ptr [rsp + 8], $6000
+        {$endif ABISYSVX64}
+        jnz     @divideFallback // directed rounding retains IEEE division
+        lea     rax, [rip + DecimalReciprocalLow]
+        movapd  xmm1, xmm0
+        mulsd   xmm1, qword ptr [rax + r10 * 8 + 22 * 8]
+        vfmadd132sd xmm0, xmm1, qword ptr [r11 + r10 * 8 + 31 * 8]
+        jmp     @storeDouble
+@divideFallback:
         neg     r10
         divsd   xmm0, qword ptr [r11 + r10 * 8 + 31 * 8]
 @storeDouble:
@@ -11954,6 +11921,11 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         mov     rax, rcx
         ret
 @exponent:
+        {$ifdef ABISYSVX64}
+        stmxcsr dword ptr [rsp - 4]
+        {$else}
+        stmxcsr dword ptr [rsp + 8]
+        {$endif ABISYSVX64}
         movq    xmm4, r11 // retain the digit count for the large-scale bound
         inc     rcx
         movzx   eax, byte ptr [rcx]
@@ -12072,18 +12044,6 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         mov     rcx, r9
         {$endif ABISYSVX64}
         jmp     FinishJsonNumber
-@tail:
-        test    r8b, 8
-        jz      @invalid
-        cmp     r10, -324
-        jle     @invalid
-        cmp     r10, 31
-        jle     @tailReady
-        lea     rax, [r11 + 291]
-        cmp     r10, rax
-        jge     @invalid
-@tailReady:
-        jmp     FinishJsonTailBridge
 @invalid:
         xor     eax, eax
         ret

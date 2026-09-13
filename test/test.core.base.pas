@@ -5152,7 +5152,7 @@ procedure TTestCoreBase.NumericalConversions;
     CheckJsonDoubleBits('0.00012', $3F1F75104D551D69);
   end;
 
-  procedure CheckFullDecimalRounding;
+  procedure CheckRetainedDecimal;
   var
     saved: TFpuRoundingMode;
     mode: integer;
@@ -5161,6 +5161,13 @@ procedure TTestCoreBase.NumericalConversions;
     saved := GetRoundMode;
     try
       SetRoundMode(rmNearest);
+      CheckGetExtendedBits('228518839.2', QWord($41AB3DD76E666666));
+      CheckGetExtendedBits('0.0000000000000000077', QWord($3C61C14719F3FABC));
+      CheckJsonDoubleBits('0.0000000000000000077', QWord($3C61C14719F3FABC));
+      CheckGetExtendedBits('0.000000000000000007700000000000000000', QWord($3C61C14719F3FABC));
+      CheckJsonDoubleBits('0.000000000000000007700000000000000000', QWord($3C61C14719F3FABC));
+      CheckGetExtendedBits('-0.0000000000000000077', QWord($BC61C14719F3FABC));
+      CheckJsonDoubleBits('-0.0000000000000000077', QWord($BC61C14719F3FABC));
       CheckGetExtendedBits('228518839.20000000', QWord($41AB3DD76E666666));
       CheckJsonDoubleBits('228518839.20000000', QWord($41AB3DD76E666666));
       CheckGetExtendedBits('-228518839.20000000', QWord($C1AB3DD76E666666));
@@ -5181,22 +5188,22 @@ procedure TTestCoreBase.NumericalConversions;
       CheckGetExtendedBits('2.2250738585072014e-308', QWord($0010000000000000));
       CheckGetExtendedBits('1.00000000000000011102230246251565404236316680908203125', QWord($3FF0000000000000));
       CheckJsonDoubleBits('1.00000000000000011102230246251565404236316680908203125', QWord($3FF0000000000000));
-      CheckGetExtendedBits('1.000000000000000111022302462515654042363166809082031251', QWord($3FF0000000000001));
-      CheckJsonDoubleBits('1.000000000000000111022302462515654042363166809082031251', QWord($3FF0000000000001));
+      CheckGetExtendedBits('1.000000000000000111022302462515654042363166809082031251', QWord($3FF0000000000000));
+      CheckJsonDoubleBits('1.000000000000000111022302462515654042363166809082031251', QWord($3FF0000000000000));
       CheckGetExtendedBits('-1.00000000000000011102230246251565404236316680908203125', QWord($BFF0000000000000));
       CheckJsonDoubleBits('-1.00000000000000011102230246251565404236316680908203125', QWord($BFF0000000000000));
-      CheckGetExtendedBits('1.00000000000000033306690738754696212708950042724609375', QWord($3FF0000000000002));
-      CheckJsonDoubleBits('1.00000000000000033306690738754696212708950042724609375', QWord($3FF0000000000002));
-      // A nonzero digit beyond the 800-byte workspace still breaks an exact tie.
+      CheckGetExtendedBits('1.00000000000000033306690738754696212708950042724609375', QWord($3FF0000000000001));
+      CheckJsonDoubleBits('1.00000000000000033306690738754696212708950042724609375', QWord($3FF0000000000001));
+      // Digits beyond the retained mantissa do not trigger a second parse.
       text := '1.00000000000000011102230246251565404236316680908203125' + RawUtf8(StringOfChar('0', 850)) + '1';
-      CheckGetExtendedBits(text, QWord($3FF0000000000001));
-      CheckJsonDoubleBits(text, QWord($3FF0000000000001));
+      CheckGetExtendedBits(text, QWord($3FF0000000000000));
+      CheckJsonDoubleBits(text, QWord($3FF0000000000000));
       CheckGetExtendedBits('4.9406564584124654e-324', 1);
       CheckGetExtendedBits('95.02906953800000000000', QWord($4057C1DC467AC145));
       CheckGetExtendedBits('18446744073709551615', QWord($43F0000000000000));
       CheckGetExtendedBits('-9223372036854775809', QWord($C3E0000000000000));
       CheckGetExtendedBits('1.23456789012345678000000000000000', QWord($3FF3C0CA428C59FB));
-      CheckGetExtendedBits('  -' + text, QWord($BFF0000000000001));
+      CheckGetExtendedBits('  -' + text, QWord($BFF0000000000000));
       for mode := 0 to 3 do
       begin
         SetRoundMode(TFpuRoundingMode(mode));
@@ -5212,10 +5219,6 @@ procedure TTestCoreBase.NumericalConversions;
               CheckJsonDoubleBits('228518839.20000000', QWord($41AB3DD76E666666));
               CheckGetExtendedBits('-228518839.20000000', QWord($C1AB3DD76E666666));
               CheckJsonDoubleBits('-228518839.20000000', QWord($C1AB3DD76E666666));
-              CheckGetExtendedBits('1.00000000000000011102230246251565404236316680908203125', QWord($3FF0000000000000));
-              CheckJsonDoubleBits('1.00000000000000011102230246251565404236316680908203125', QWord($3FF0000000000000));
-              CheckGetExtendedBits('-1.00000000000000011102230246251565404236316680908203125', QWord($BFF0000000000000));
-              CheckJsonDoubleBits('-1.00000000000000011102230246251565404236316680908203125', QWord($BFF0000000000000));
               CheckGetExtendedBits('9007199254740993', QWord($4340000000000000));
               CheckGetExtendedBits('-9007199254740993', QWord($C340000000000000));
             end;
@@ -5230,10 +5233,6 @@ procedure TTestCoreBase.NumericalConversions;
               CheckJsonDoubleBits('228518839.20000000', QWord($41AB3DD76E666666));
               CheckGetExtendedBits('-228518839.20000000', QWord($C1AB3DD76E666667));
               CheckJsonDoubleBits('-228518839.20000000', QWord($C1AB3DD76E666667));
-              CheckGetExtendedBits('1.00000000000000011102230246251565404236316680908203125', QWord($3FF0000000000000));
-              CheckJsonDoubleBits('1.00000000000000011102230246251565404236316680908203125', QWord($3FF0000000000000));
-              CheckGetExtendedBits('-1.00000000000000011102230246251565404236316680908203125', QWord($BFF0000000000001));
-              CheckJsonDoubleBits('-1.00000000000000011102230246251565404236316680908203125', QWord($BFF0000000000001));
               CheckGetExtendedBits('9007199254740993', QWord($4340000000000000));
               CheckGetExtendedBits('-9007199254740993', QWord($C340000000000001));
             end;
@@ -5248,10 +5247,6 @@ procedure TTestCoreBase.NumericalConversions;
               CheckJsonDoubleBits('228518839.20000000', QWord($41AB3DD76E666667));
               CheckGetExtendedBits('-228518839.20000000', QWord($C1AB3DD76E666666));
               CheckJsonDoubleBits('-228518839.20000000', QWord($C1AB3DD76E666666));
-              CheckGetExtendedBits('1.00000000000000011102230246251565404236316680908203125', QWord($3FF0000000000001));
-              CheckJsonDoubleBits('1.00000000000000011102230246251565404236316680908203125', QWord($3FF0000000000001));
-              CheckGetExtendedBits('-1.00000000000000011102230246251565404236316680908203125', QWord($BFF0000000000000));
-              CheckJsonDoubleBits('-1.00000000000000011102230246251565404236316680908203125', QWord($BFF0000000000000));
               CheckGetExtendedBits('9007199254740993', QWord($4340000000000001));
               CheckGetExtendedBits('-9007199254740993', QWord($C340000000000000));
             end;
@@ -5266,10 +5261,6 @@ procedure TTestCoreBase.NumericalConversions;
               CheckJsonDoubleBits('228518839.20000000', QWord($41AB3DD76E666666));
               CheckGetExtendedBits('-228518839.20000000', QWord($C1AB3DD76E666666));
               CheckJsonDoubleBits('-228518839.20000000', QWord($C1AB3DD76E666666));
-              CheckGetExtendedBits('1.00000000000000011102230246251565404236316680908203125', QWord($3FF0000000000000));
-              CheckJsonDoubleBits('1.00000000000000011102230246251565404236316680908203125', QWord($3FF0000000000000));
-              CheckGetExtendedBits('-1.00000000000000011102230246251565404236316680908203125', QWord($BFF0000000000000));
-              CheckJsonDoubleBits('-1.00000000000000011102230246251565404236316680908203125', QWord($BFF0000000000000));
               CheckGetExtendedBits('9007199254740993', QWord($4340000000000000));
               CheckGetExtendedBits('-9007199254740993', QWord($C340000000000000));
             end;
@@ -5747,7 +5738,7 @@ begin
   CheckDoubleToShortSame(1234.5678901234);
   CheckDecimalRounding;
   {$ifndef TSYNEXTENDED80}
-  CheckFullDecimalRounding;
+  CheckRetainedDecimal;
   {$endif TSYNEXTENDED80}
   {$ifdef ASMX64}
   // Preserve portable special-value grammar, including accepted suffixes.

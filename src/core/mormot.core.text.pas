@@ -1430,19 +1430,40 @@ procedure UInt32DigitsToUtf8(Value, Digits: PtrUInt; var result: RawUtf8);
 procedure UInt64ToUtf8(Value: QWord; var result: RawUtf8);
 
 {$ifndef WIN32DELPHI} // Delphi has its own x86/x87 asm version
-/// internal correctly rounded binary64 conversion shared by numeric scanners
-// - unsigned mantissa times 10^exponent, rounded to nearest with ties to even
-function DecimalToDoubleBits(Mantissa: UInt64; Exponent: Integer): UInt64;
+/// internal conversion of the retained integer mantissa times 10^exponent
+// - honors the current rounding mode; nearest uses fixed-width integer arithmetic
+// - scanners own the grammar and the significant-digit capacity
+function DecimalToDouble(Mantissa: UInt64; Exponent: PtrInt; Negative: boolean): double;
 
-/// internal conversion of an already validated decimal interval [P, Last)
-// - retains the sign and all significant digits, honoring the current rounding mode
-function DecimalToDoubleExactBits(P, Last: PUtf8Char): UInt64;
-
-// Internal signed mantissa conversion honoring the current rounding mode.
-function DecimalToDoubleValueBits(Mantissa: UInt64; Exponent: Integer; Negative: boolean): UInt64;
-
-// Validated span plus its retained prefix M * 10^E; no heap allocation.
-function DecimalToDoubleTailBits(Start, Last: PUtf8Char; Mantissa: UInt64; Exponent: Integer): UInt64;
+{$ifdef CPUX64}
+var
+  DecimalUseFma: boolean; // initialized once from CPU and OS capabilities
+const
+  // RN(10^e - RN(10^e)); paired with the existing POW10[e] high part.
+  DecimalReciprocalLow: array[-22..-1] of UInt64 = (
+    UInt64($B7FA7566D9CBA769), // 10^-22
+    UInt64($383F769FB7E0B75E), // 10^-21
+    UInt64($38675447A5D8E536), // 10^-20
+    UInt64($388A52B31E9E3D07), // 10^-19
+    UInt64($B8D7C628066E8CEE), // 10^-18
+    UInt64($B90DB7B2080A3029), // 10^-17
+    UInt64($3925B4C2EBE68799), // 10^-16
+    UInt64($B97937831647F5A0), // 10^-15
+    UInt64($394EA70909833DE7), // 10^-14
+    UInt64($B9CECD79A5A0DF95), // 10^-13
+    UInt64($39F97F27F0F6E886), // 10^-12
+    UInt64($3A47F7BC7B4D28AA), // 10^-11
+    UInt64($BA720A5465DF8D2C), // 10^-10
+    UInt64($BAB34674BFABB83B), // 10^-9
+    UInt64($BAD03023DF2D4C94), // 10^-8
+    UInt64($3B15E1E99483B023), // 10^-7
+    UInt64($3B4B5A63F9A49C2C), // 10^-6
+    UInt64($BB8EE78183F91E64), // 10^-5
+    UInt64($BBB6A161E4F765FE), // 10^-4
+    UInt64($BBD89374BC6A7EFA), // 10^-3
+    UInt64($BC0EB851EB851EB8), // 10^-2
+    UInt64($BC5999999999999A)); // 10^-1
+{$endif CPUX64}
 
 /// get the extended floating point value stored in P^
 // - set the err content to the index of any faulty character, 0 if conversion
@@ -6731,10 +6752,98 @@ begin
   UInt32ToUtf8(Value, result);
 end;
 
-{ Correctly rounded binary64 conversion.
-  Integer scaling follows fast_float (decimal_to_binary.h); long ambiguous
-  inputs use the fixed-size decimal arithmetic from Go 1.23 strconv.
-  The arithmetic allocates no heap memory. Scanners retain their own grammar.
+// Only the retained integer mantissa is converted: no tail rescan or big integers.
+function DecimalToDoubleDirected(Mantissa: UInt64; Exponent: PtrInt; Negative: boolean): double;
+const
+  Scale: double = 1.3407807929942597e154; // 2^512
+  InvScale: double = 7.458340731200207e-155;
+  MaxScaled: double = 1.3407807929942596e154;
+var
+  d: double;
+  q: UInt64;
+begin
+  if Mantissa = 0 then
+  begin
+    result := 0;
+    if Negative then
+      result := -result;
+    exit;
+  end;
+  // Recover the short path for equivalent inputs such as 228518839.20000000.
+  while (Mantissa > 9007199254740991) or (Exponent < -22) do
+  begin
+    q := Mantissa div 10;
+    if q * 10 <> Mantissa then
+      break;
+    Mantissa := q;
+    inc(Exponent);
+  end;
+  // Apply the sign before rounding the integer conversion.
+  if Mantissa <= UInt64(High(Int64)) then
+    if Negative then
+      d := -Int64(Mantissa)
+    else
+      d := Int64(Mantissa)
+  else
+  begin
+    // Both 32-bit halves and the power-of-two scaling are exact doubles.
+    d := Int64(Mantissa shr 32) * 4294967296.0;
+    if Negative then
+      d := -d - cardinal(Mantissa)
+    else
+      d := d + cardinal(Mantissa);
+  end;
+  if Exponent = 0 then
+    result := d
+  else if (Exponent >= -22) and (Exponent < 0) then
+    // Exact mantissa / exact power: the short-number rule from #583.
+    result := d / POW10[-Exponent]
+  else if (Exponent >= -31) and (Exponent <= 31) then
+    result := d * POW10[Exponent]
+  else if Exponent < -342 then
+    result := d * 0.0
+  else if Exponent < -307 then
+  begin
+    // Delay underflow until after the significant digits have been applied.
+    inc(Exponent, 308);
+    if Exponent < -31 then
+      d := d * (POW10[(-Exponent and not 31) shr 5 + 45] / POW10[-Exponent and 31])
+    else
+      d := d * POW10[Exponent];
+    result := d * 1E-308;
+  end
+  else if Exponent < 0 then
+  begin
+    Exponent := -Exponent;
+    result := d * (POW10[(Exponent and not 31) shr 5 + 45] / POW10[Exponent and 31]);
+  end
+  else if Exponent > 308 then
+  begin
+    q := $7ff0000000000000;
+    if Negative then
+      q := q or $8000000000000000;
+    result := PDouble(@q)^;
+  end
+  else if Exponent >= 290 then
+  begin
+    d := d * (POW10[(Exponent and not 31) shr 5 + 34] * POW10[Exponent and 31] * InvScale);
+    if abs(d) > MaxScaled then
+    begin
+      q := $7ff0000000000000;
+      if Negative then
+        q := q or $8000000000000000;
+      result := PDouble(@q)^;
+    end
+    else
+      result := d * Scale;
+  end
+  else
+    result := d * (POW10[(Exponent and not 31) shr 5 + 34] * POW10[Exponent and 31]);
+end;
+
+{ Fixed-width conversion of an integer mantissa and decimal exponent.
+  Integer scaling follows fast_float (decimal_to_binary.h).
+  No input string, discarded-tail analysis, or variable-precision arithmetic.
 
   https://github.com/fastfloat/fast_float
 MIT License
@@ -6765,35 +6874,8 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
-  https://github.com/golang/go/tree/go1.23.0/src/strconv
-Copyright (c) 2009 The Go Authors. All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are
-met:
-
-   * Redistributions of source code must retain the above copyright
-notice, this list of conditions and the following disclaimer.
-   * Redistributions in binary form must reproduce the above
-copyright notice, this list of conditions and the following disclaimer
-in the documentation and/or other materials provided with the
-distribution.
-   * Neither the name of Google Inc. nor the names of its
-contributors may be used to endorse or promote products derived from
-this software without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 }
+
 const
   DecimalPowers: array[-342..308, 0..1] of UInt64 = (
     (UInt64($EEF453D6923BD65A), UInt64($113FAA2906A13B3F)),
@@ -7450,40 +7532,6 @@ const
   );
 
 
-const
-  DecimalShiftDigits: array[0..27] of Byte = (0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 9);
-  DecimalShiftCutoff: array[0..27] of string[19] = (
-    '',
-    '5',
-    '25',
-    '125',
-    '625',
-    '3125',
-    '15625',
-    '78125',
-    '390625',
-    '1953125',
-    '9765625',
-    '48828125',
-    '244140625',
-    '1220703125',
-    '6103515625',
-    '30517578125',
-    '152587890625',
-    '762939453125',
-    '3814697265625',
-    '19073486328125',
-    '95367431640625',
-    '476837158203125',
-    '2384185791015625',
-    '11920928955078125',
-    '59604644775390625',
-    '298023223876953125',
-    '1490116119384765625',
-    '7450580596923828125'
-  );
-
-
 function DecimalMul128(A, B: UInt64; out Hi: UInt64): UInt64;
 {$ifdef ASMX64}
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
@@ -7531,7 +7579,7 @@ end;
 {$endif ASMX64}
 
 
-function DecimalToDoubleBitsPortable(Mantissa: UInt64; Exponent: Integer): UInt64;
+function DecimalToDoubleBitsPortable(Mantissa: UInt64; Exponent: PtrInt): UInt64;
 var
   Hi, Lo, Extra, W, M: UInt64;
   Leading, Upper, Shift, Power: Integer;
@@ -7590,16 +7638,26 @@ begin
 end;
 
 {$ifdef ASMX64}
-function DecimalToDoubleBits(Mantissa: UInt64; Exponent: Integer): UInt64;
+function DecimalToDouble(Mantissa: UInt64; Exponent: PtrInt; Negative: boolean): double;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         {$ifdef ABISYSVX64}
+        movzx   r8d, dl
         mov     rcx, rdi
-        mov     edx, esi
+        mov     rdx, rsi
+        stmxcsr dword ptr [rsp - 4]
+        test    dword ptr [rsp - 4], $6000
+        {$else}
+        stmxcsr dword ptr [rsp + 8]
+        test    dword ptr [rsp + 8], $6000
         {$endif}
+        jnz     @directed
+        movzx   eax, r8b
+        shl     rax, 63
+        movq    xmm5, rax
         test    rcx, rcx
         jz      @zero
-        lea     eax, [rdx + 342]
-        cmp     eax, 650
+        lea     rax, [rdx + 342]
+        cmp     rax, 650
         ja      @range
         lea     r8, [rip + DecimalPowers]
         shl     eax, 4
@@ -7656,7 +7714,7 @@ function DecimalToDoubleBits(Mantissa: UInt64; Exponent: Integer): UInt64;
         btr     rax, 52
         shl     r11, 52
         or      rax, r11
-        ret
+        jmp     @packedResult
 @carry:
         shr     rax, 1
         inc     r11d
@@ -7681,590 +7739,42 @@ function DecimalToDoubleBits(Mantissa: UInt64; Exponent: Integer): UInt64;
         and     eax, 1
         add     rax, rdx
         shr     rax, 1
-        ret
+        jmp     @packedResult
 @range:
-        test    edx, edx
+        test    rdx, rdx
         jns     @infinity
 @zero:
         xor     eax, eax
-        ret
+        jmp     @packedResult
 @infinity:
         mov     rax, $7ff0000000000000
-end;
-
-{$else ASMX64}
-function DecimalToDoubleBits(Mantissa: UInt64; Exponent: Integer): UInt64;
-begin
-  result := DecimalToDoubleBitsPortable(Mantissa, Exponent);
-end;
-{$endif ASMX64}
-
-// In high-product units, the omitted table limb and integer rounding are
-// enclosed by [Hi - 3, Hi + 2^Leading + 2] for the entire [M, M+1] interval.
-// Equal rounded bounds prove that every discarded suffix has the same result;
-// otherwise the complete decimal is used. Subnormal intervals also fall back.
-{$ifdef ASMX64}
-function DecimalToDoubleIntervalBits(Mantissa: UInt64; Exponent: Integer): UInt64;
-{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        {$ifdef ABISYSVX64}
-        mov     rcx, rdi
-        mov     edx, esi
-        {$endif}
-        test    rcx, rcx
-        jz      @ambiguous
-        lea     eax, [rdx + 342]
-        cmp     eax, 650
-        ja      @ambiguous
-        lea     r8, [rip + DecimalPowers]
-        shl     eax, 4
-        add     r8, rax
-        bsr     r9, rcx
-        xor     r9d, 63
-        mov     r10d, edx
-        imul    r10d, r10d, 217706
-        sar     r10d, 16
-        add     r10d, 1086
-        sub     r10d, r9d
-        mov     rax, rcx
-        mov     ecx, r9d
-        shl     rax, cl
-        mul     qword ptr [r8]
-        mov     rax, rdx
-        shr     rdx, 63
-        add     r10d, edx
-        add     edx, 10
-        mov     r11d, edx
-        lea     ecx, [r10 - 1]
-        cmp     ecx, 2045
-        ja      @ambiguous
-        mov     ecx, r9d
-        mov     r8d, 1
-        shl     r8, cl
-        mov     ecx, r11d
-        dec     ecx
-        mov     r9d, 1
-        shl     r9, cl
-        add     r8, r9
-        add     r8, 2
-        add     r8, rax
-        jc      @ambiguous
-        add     rax, r9
-        jc      @ambiguous
-        sub     rax, 3
-        mov     ecx, r11d
-        shr     rax, cl
-        shr     r8, cl
-        cmp     rax, r8
-        jne     @ambiguous
-        bt      rax, 53
-        jnc     @pack
-        shr     rax, 1
-        inc     r10d
-@pack:
-        cmp     r10d, 2047
-        je      @ambiguous
-        btr     rax, 52
-        shl     r10, 52
-        or      rax, r10
+@packedResult:
+        movq    xmm0, rax
+        xorpd   xmm0, xmm5
         ret
-@ambiguous:
-        mov     rax, -1
+@directed:
+        {$ifdef ABISYSVX64}
+        mov     edx, r8d
+        {$endif}
+        jmp     DecimalToDoubleDirected
 end;
 
 {$else ASMX64}
-function DecimalToDoubleIntervalBits(Mantissa: UInt64; Exponent: Integer): UInt64;
+function DecimalToDouble(Mantissa: UInt64; Exponent: PtrInt; Negative: boolean): double;
 var
-  Hi, Upper, Lower, Half, M: UInt64;
-  Leading, Shift, Power: Integer;
+  bits: UInt64;
 begin
-  result := High(UInt64);
-  if (Mantissa = 0) or (Exponent < -342) or (Exponent > 308) then
-    exit;
-  Leading := DecimalLeadingZeros(Mantissa);
-  DecimalMul128(Mantissa shl Leading, DecimalPowers[Exponent, 0], Hi);
-  Shift := (Hi shr 63) + 10;
-  Power := 217706 * Exponent;
-  if Power < 0 then
-    dec(Power, 65535);
-  Power := Power div 65536 + 63 + Integer(Hi shr 63) - Leading + 1023;
-  if (Power <= 0) or (Power >= 2047) then
-    exit;
-  Half := UInt64(1) shl (Shift - 1);
-  Upper := Hi + (UInt64(1) shl Leading) + Half + 2;
-  if Upper < Hi then
-    exit;
-  Lower := Hi + Half - 3;
-  if Lower < Hi then
-    exit;
-  M := Lower shr Shift;
-  if M <> Upper shr Shift then
-    exit;
-  if M >= UInt64(1) shl 53 then
-  begin
-    M := M shr 1;
-    inc(Power);
-  end;
-  if Power < 2047 then
-    result := (UInt64(Power) shl 52) or (M and $000fffffffffffff);
-end;
-
-{$endif ASMX64}
-
-type
-  // 800 significant digits cover every binary64 rounding boundary (at most 752);
-  // Truncated records retain whether any discarded digit was nonzero.
-  TDecimalConversion = record
-    Digits: array[0..799] of Byte;
-    Count, Point: Integer;
-    Truncated: Boolean;
-  end;
-
-procedure DecimalTrim(var D: TDecimalConversion);
-begin
-  while (D.Count <> 0) and (D.Digits[D.Count - 1] = 0) do
-    dec(D.Count);
-  if D.Count = 0 then
-    D.Point := 0;
-end;
-
-procedure DecimalShiftRight(var D: TDecimalConversion; Bits: Integer);
-var
-  R, W: Integer;
-  N, Mask, Digit, C: UInt64;
-begin
-  R := 0;
-  W := 0;
-  N := 0;
-  while N shr Bits = 0 do
-  begin
-    if R >= D.Count then
-    begin
-      if N = 0 then
-      begin
-        D.Count := 0;
-        exit;
-      end;
-      while N shr Bits = 0 do
-      begin
-        N := N * 10;
-        inc(R);
-      end;
-      break;
-    end;
-    N := N * 10 + D.Digits[R];
-    inc(R);
-  end;
-  dec(D.Point, R - 1);
-  Mask := (UInt64(1) shl Bits) - 1;
-  while R < D.Count do
-  begin
-    C := D.Digits[R];
-    Digit := N shr Bits;
-    N := N and Mask;
-    D.Digits[W] := Digit;
-    inc(W);
-    N := N * 10 + C;
-    inc(R);
-  end;
-  while N <> 0 do
-  begin
-    Digit := N shr Bits;
-    N := N and Mask;
-    if W < Length(D.Digits) then
-    begin
-      D.Digits[W] := Digit;
-      inc(W);
-    end
-    else if Digit <> 0 then
-      D.Truncated := true;
-    N := N * 10;
-  end;
-  D.Count := W;
-  DecimalTrim(D);
-end;
-
-procedure DecimalShiftLeft(var D: TDecimalConversion; Bits: Integer);
-var
-  I, Delta, R, W: Integer;
-  N, Q, Digit: UInt64;
-begin
-  Delta := DecimalShiftDigits[Bits];
-  I := 0;
-  while (I < D.Count) and (I < Length(DecimalShiftCutoff[Bits])) and
-        (D.Digits[I] = ord(DecimalShiftCutoff[Bits][I + 1]) - 48) do
-    inc(I);
-  if (I < Length(DecimalShiftCutoff[Bits])) and
-     ((I >= D.Count) or (D.Digits[I] < ord(DecimalShiftCutoff[Bits][I + 1]) - 48)) then
-    dec(Delta);
-  R := D.Count;
-  W := R + Delta;
-  N := 0;
-  while R <> 0 do
-  begin
-    dec(R);
-    inc(N, UInt64(D.Digits[R]) shl Bits);
-    Q := N div 10;
-    Digit := N - Q * 10;
-    dec(W);
-    if W < Length(D.Digits) then
-      D.Digits[W] := Digit
-    else if Digit <> 0 then
-      D.Truncated := true;
-    N := Q;
-  end;
-  while N <> 0 do
-  begin
-    Q := N div 10;
-    Digit := N - Q * 10;
-    dec(W);
-    if W < Length(D.Digits) then
-      D.Digits[W] := Digit
-    else if Digit <> 0 then
-      D.Truncated := true;
-    N := Q;
-  end;
-  inc(D.Count, Delta);
-  if D.Count > Length(D.Digits) then
-    D.Count := Length(D.Digits);
-  inc(D.Point, Delta);
-  DecimalTrim(D);
-end;
-
-function DecimalRoundingMode: integer;
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  {$ifdef CPUX64}
-  result := (GetMXCSR shr 13) and 3;
-  {$else}
-  result := ord(GetRoundMode);
-  {$endif CPUX64}
-end;
-
-function DecimalToDoubleRecordBits(var D: TDecimalConversion; Negative: Boolean; Rounding: Integer): UInt64;
-const
-  ShiftForPoint: array[0..8] of Byte = (1, 3, 6, 9, 13, 16, 19, 23, 26);
-var
-  Exp2, I, Shift: Integer;
-  M: UInt64;
-  Up: Boolean;
-begin
-  DecimalTrim(D);
-  Up := ((Rounding = 1) and Negative) or ((Rounding = 2) and not Negative);
-  result := 0;
-  if (D.Count <> 0) and (D.Point < -330) and Up then
-    result := 1;
-  if (D.Count <> 0) and (D.Point >= -330) then
-  begin
-    if D.Point > 310 then
-    begin
-      if (Rounding = 0) or Up then
-        result := $7ff0000000000000
-      else
-        result := $7fefffffffffffff;
-    end
-    else
-    begin
-      Exp2 := 0;
-      while D.Point > 0 do
-      begin
-        if D.Point >= Length(ShiftForPoint) then
-          Shift := 27
-        else
-          Shift := ShiftForPoint[D.Point];
-        DecimalShiftRight(D, Shift);
-        inc(Exp2, Shift);
-      end;
-      while (D.Point < 0) or ((D.Point = 0) and (D.Digits[0] < 5)) do
-      begin
-        if -D.Point >= Length(ShiftForPoint) then
-          Shift := 27
-        else
-          Shift := ShiftForPoint[-D.Point];
-        DecimalShiftLeft(D, Shift);
-        dec(Exp2, Shift);
-      end;
-      dec(Exp2);
-      while Exp2 < -1022 do
-      begin
-        Shift := -1022 - Exp2;
-        if Shift > 27 then
-          Shift := 27;
-        DecimalShiftRight(D, Shift);
-        inc(Exp2, Shift);
-      end;
-      DecimalShiftLeft(D, 27);
-      DecimalShiftLeft(D, 26);
-      M := 0;
-      I := 0;
-      while I < D.Point do
-      begin
-        M := M * 10;
-        if I < D.Count then
-          inc(M, D.Digits[I]);
-        inc(I);
-      end;
-      if Rounding = 0 then
-      begin
-        if (D.Point >= 0) and (D.Point < D.Count) then
-          if (D.Digits[D.Point] > 5) or
-             ((D.Digits[D.Point] = 5) and
-              ((D.Count > D.Point + 1) or D.Truncated or (M and 1 <> 0))) then
-            inc(M);
-      end
-      else if Up and ((D.Count > D.Point) or D.Truncated) then
-        inc(M);
-      if M = UInt64(1) shl 53 then
-      begin
-        M := M shr 1;
-        inc(Exp2);
-      end;
-      if M and (UInt64(1) shl 52) = 0 then
-        Exp2 := -1023;
-      if Exp2 >= 1024 then
-      begin
-        if (Rounding = 0) or Up then
-          result := $7ff0000000000000
-        else
-          result := $7fefffffffffffff;
-      end
-      else
-        result := (UInt64(Exp2 + 1023) shl 52) or (M and $000fffffffffffff);
-    end;
-  end;
-  if Negative then
-    result := result or $8000000000000000;
-end;
-
-function DecimalToDoubleSlowBits(P, Last: PUtf8Char; Rounding: Integer): UInt64;
-var
-  D: TDecimalConversion;
-  Exp10, Digits: Integer;
-  Dot, ExpNeg, Negative: Boolean;
-begin
-  D.Count := 0;
-  D.Point := 0;
-  D.Truncated := false;
-  Dot := false;
-  while (P < Last) and (P^ = ' ') do
-    inc(P);
-  Negative := (P < Last) and (P^ = '-');
-  if (P < Last) and ((P^ = '+') or (P^ = '-')) then
-    inc(P);
-  Digits := 0;
-  while P < Last do
-  begin
-    if P^ = '.' then
-    begin
-      Dot := true;
-      D.Point := Digits;
-    end
-    else if (P^ >= '0') and (P^ <= '9') then
-    begin
-      if (Digits = 0) and (P^ = '0') then
-        dec(D.Point)
-      else
-      begin
-        if D.Count < Length(D.Digits) then
-        begin
-          D.Digits[D.Count] := ord(P^) - 48;
-          inc(D.Count);
-        end
-        else if P^ <> '0' then
-          D.Truncated := true;
-        inc(Digits);
-      end;
-    end
-    else
-      break;
-    inc(P);
-  end;
-  if not Dot then
-    D.Point := Digits;
-  if (P < Last) and ((P^ = 'e') or (P^ = 'E')) then
-  begin
-    inc(P);
-    ExpNeg := (P < Last) and (P^ = '-');
-    if (P < Last) and ((P^ = '+') or (P^ = '-')) then
-      inc(P);
-    Exp10 := 0;
-    while (P < Last) and (P^ >= '0') and (P^ <= '9') do
-    begin
-      if Exp10 < 100000000 then
-        Exp10 := Exp10 * 10 + ord(P^) - 48;
-      inc(P);
-    end;
-    if ExpNeg then
-      dec(D.Point, Exp10)
-    else
-      inc(D.Point, Exp10);
-  end;
-  result := DecimalToDoubleRecordBits(D, Negative, Rounding);
-end;
-
-function DecimalToDoubleScaledBits(Mantissa: UInt64; Exponent: Integer; Negative: Boolean; Rounding: Integer): UInt64;
-var
-  D: TDecimalConversion;
-  Reversed: array[0..19] of Byte;
-  I: Integer;
-  Q: UInt64;
-begin
-  D.Count := 0;
-  D.Truncated := false;
-  while Mantissa <> 0 do
-  begin
-    Q := Mantissa div 10;
-    Reversed[D.Count] := Mantissa - Q * 10;
-    Mantissa := Q;
-    inc(D.Count);
-  end;
-  for I := 0 to D.Count - 1 do
-    D.Digits[I] := Reversed[D.Count - I - 1];
-  D.Point := D.Count + Exponent;
-  result := DecimalToDoubleRecordBits(D, Negative, Rounding);
-end;
-
-function DecimalToDoubleExactBits(P, Last: PUtf8Char): UInt64;
-var
-  Start: PUtf8Char;
-  M, Upper: UInt64;
-  Count, Point, Exp10, Digits, Rounding: Integer;
-  Dot, Negative, ExpNeg, Truncated: Boolean;
-begin
-  Rounding := DecimalRoundingMode;
-  if Rounding <> 0 then
-  begin
-    result := DecimalToDoubleSlowBits(P, Last, Rounding);
-    exit;
-  end;
-  Start := P;
-  while (P < Last) and (P^ = ' ') do
-    inc(P);
-  Negative := (P < Last) and (P^ = '-');
-  if (P < Last) and ((P^ = '+') or (P^ = '-')) then
-    inc(P);
-  M := 0;
-  Count := 0;
-  Point := 0;
-  Digits := 0;
-  Dot := false;
-  Truncated := false;
-  while P < Last do
-  begin
-    if P^ = '.' then
-    begin
-      Dot := true;
-      Point := Digits;
-    end
-    else if (P^ >= '0') and (P^ <= '9') then
-    begin
-      if (Digits = 0) and (P^ = '0') then
-        dec(Point)
-      else
-      begin
-        if Count < 19 then
-        begin
-          M := M * 10 + ord(P^) - 48;
-          inc(Count);
-        end
-        else if P^ <> '0' then
-          Truncated := true;
-        inc(Digits);
-      end;
-    end
-    else
-      break;
-    inc(P);
-  end;
-  if not Dot then
-    Point := Digits;
-  Exp10 := 0;
-  if (P < Last) and ((P^ = 'e') or (P^ = 'E')) then
-  begin
-    inc(P);
-    ExpNeg := (P < Last) and (P^ = '-');
-    if (P < Last) and ((P^ = '+') or (P^ = '-')) then
-      inc(P);
-    while (P < Last) and (P^ >= '0') and (P^ <= '9') do
-    begin
-      if Exp10 < 100000000 then
-        Exp10 := Exp10 * 10 + ord(P^) - 48;
-      inc(P);
-    end;
-    if ExpNeg then
-      Exp10 := -Exp10;
-  end;
-  inc(Exp10, Point - Count);
-  result := DecimalToDoubleBits(M, Exp10);
-  if Truncated then
-  begin
-    Upper := DecimalToDoubleBits(M + 1, Exp10);
-    if Upper <> result then
-    begin
-      result := DecimalToDoubleSlowBits(Start, Last, 0);
-      exit;
-    end;
-  end;
-  if Negative then
-    result := result or $8000000000000000;
-end;
-{$ifdef ASMX64}
-function DecimalToDoubleValueBitsFallback(Mantissa: UInt64; Exponent: Integer; Negative: boolean): UInt64;
-{$else}
-function DecimalToDoubleValueBits(Mantissa: UInt64; Exponent: Integer; Negative: boolean): UInt64;
-{$endif}
-var
-  rounding: integer;
-begin
-  rounding := DecimalRoundingMode;
-  if rounding <> 0 then
-    result := DecimalToDoubleScaledBits(Mantissa, Exponent, Negative, rounding)
+  if GetRoundMode <> rmNearest then
+    result := DecimalToDoubleDirected(Mantissa, Exponent, Negative)
   else
   begin
-    result := DecimalToDoubleBits(Mantissa, Exponent);
+    bits := DecimalToDoubleBitsPortable(Mantissa, Exponent);
     if Negative then
-      result := result or $8000000000000000;
+      bits := bits or $8000000000000000;
+    result := PDouble(@bits)^;
   end;
-end;
-
-
-// Positive nearest-even conversion can tail-call the integer arithmetic directly.
-{$ifdef ASMX64}
-function DecimalToDoubleValueBits(Mantissa: UInt64; Exponent: Integer; Negative: boolean): UInt64;
-{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
-        {$ifdef ABISYSVX64}
-        test    dl, dl
-        {$else}
-        test    r8b, r8b
-        {$endif}
-        jnz     @fallback
-        {$ifdef ABISYSVX64}
-        stmxcsr dword ptr [rsp - 4] // System V leaf red zone
-        test    dword ptr [rsp - 4], $6000
-        {$else}
-        stmxcsr dword ptr [rsp + 8] // caller-provided Win64 shadow space
-        test    dword ptr [rsp + 8], $6000
-        {$endif}
-        jnz     @fallback
-        jmp     DecimalToDoubleBits
-@fallback:
-        jmp     DecimalToDoubleValueBitsFallback
 end;
 {$endif ASMX64}
-
-function DecimalToDoubleTailBits(Start, Last: PUtf8Char; Mantissa: UInt64; Exponent: Integer): UInt64;
-begin
-  if DecimalRoundingMode = 0 then
-  begin
-    result := DecimalToDoubleIntervalBits(Mantissa, Exponent);
-    if result <> High(UInt64) then
-    begin
-      if Start^ = '-' then
-        result := result or $8000000000000000;
-      exit;
-    end;
-  end;
-  result := DecimalToDoubleExactBits(Start, Last);
-end;
 
 function GetExtended(P: PUtf8Char): TSynExtended;
 var
@@ -8288,7 +7798,6 @@ const
   MaxScaled: double = 1.3407807929942596e154; // MaxDouble * 2^-512
 var
   remdigit, frac, exp: PtrInt;
-  start: PUtf8Char;
   bits: UInt64;
   flags: set of (fNeg, fNegExp, fValid, fDot);
   v64: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
@@ -8296,7 +7805,6 @@ var
 label
   z, e, x, o;
 begin
-  start := P;
   byte(flags) := 0;
   v64 := 0;
   frac := 0;
@@ -8411,15 +7919,11 @@ e:  err := 1; // return the (partial) value even if not ended with #0
   {$ifndef TSYNEXTENDED80}
   if (err = 0) and ((v64 = 0) or ((frac >= -342) and (frac <= 308))) then
   begin
-    bits := DecimalToDoubleValueBits(v64, frac, fNeg in flags);
-    if (remdigit < 0) and ((DecimalRoundingMode <> 0) or
-       (bits and $7fffffffffffffff <> DecimalToDoubleBits(UInt64(v64) + 1, frac))) then
-      bits := DecimalToDoubleExactBits(start, P);
-    if bits and $7ff0000000000000 <> $7ff0000000000000 then
-    begin
-      result := PDouble(@bits)^;
+    result := DecimalToDouble(v64, frac, fNeg in flags);
+    bits := PUInt64(@result)^;
+    if (bits and $7fffffffffffffff <> $7ff0000000000000) then
       exit;
-    end;
+    err := 1;
   end;
   {$endif TSYNEXTENDED80}
   if v64 = 0 then
@@ -8487,7 +7991,8 @@ var
   bits: UInt64;
 begin
   err := 0;
-  bits := DecimalToDoubleValueBits(Mantissa, Exponent, Negative and 1 <> 0);
+  result := DecimalToDouble(Mantissa, Exponent, Negative and 1 <> 0);
+  bits := PUInt64(@result)^;
   if (Mantissa <> 0) and ((Exponent < -342) or (Exponent > 308) or
      (bits and $7fffffffffffffff = $7ff0000000000000)) then
   begin
@@ -8495,47 +8000,10 @@ begin
     result := Mantissa;
     if Negative and 1 <> 0 then
       result := -result;
-  end
-  else
-    result := PDouble(@bits)^;
+  end;
 end;
 
-// A discarded suffix denotes an interval [M, M+1) * 10^E. Only an
-// interval straddling a rounding boundary needs its complete decimal digits.
-function FinishExtendedTail(Start: PUtf8Char; Mantissa: UInt64;
-  Exponent: PtrInt; out err: integer): TSynExtended;
-var
-  bits: UInt64;
-begin
-  if DecimalRoundingMode <> 0 then
-  begin
-    result := GetExtendedPascal(Start, err);
-    exit;
-  end;
-  bits := DecimalToDoubleIntervalBits(Mantissa, Exponent);
-  if bits = High(UInt64) then
-  begin
-    bits := DecimalToDoubleBits(Mantissa, Exponent);
-    if ((Mantissa <> 0) and ((Exponent < -342) or (Exponent > 308))) or
-       (bits = $7ff0000000000000) then
-    begin
-      result := GetExtendedPascal(Start, err);
-      exit;
-    end;
-    if bits <> DecimalToDoubleBits(Mantissa + 1, Exponent) then
-      bits := DecimalToDoubleExactBits(Start, Start + StrLen(Start));
-  end;
-  if Start^ = '-' then
-    bits := bits or $8000000000000000;
-  err := 0;
-  result := PDouble(@bits)^;
-end;
-
-{ x86_64 decimal conversion (Delphi/FPC, Windows/System V). Byte loads and volatile registers only.
-  Eighteen digits fit without overflow checks; further digits are accumulated
-  up to 19 unsigned digits; a discarded suffix is rounded as an interval.
-  Special syntax, partial error results and out-of-range scales use the portable
-  implementation. Only an exact conversion can precede a scaling fallback. }
+// Scanners retain a bounded integer mantissa and skip the remaining digits.
 const
   NumberSignMask: UInt64 = $8000000000000000;
   NumberNaN: double = NaN;
@@ -8698,7 +8166,7 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         ret
 @unsignedInteger:
         xor     r10d, r10d
-        jmp     @exact
+        jmp     @convertFull
 @integerExponent:
         xor     r10d, r10d
         jmp     @exponent
@@ -8715,7 +8183,6 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         inc     r8
         jmp     @integerOne
 @discardInteger:
-        or      r11d, 4
         xor     r10d, r10d
 @discardIntegerLoop:
         inc     r10
@@ -8734,7 +8201,7 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         jbe     @discardIntegerFraction
 @discardIntegerEnd:
         cmp     eax, -48
-        je      @tail
+        je      @value
         jmp     @exponent
 @moreFraction:
         movq    xmm4, rax
@@ -8747,19 +8214,6 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         jmp     @fractionOne
 @discardFraction:
         sub     r10, rcx
-@discardFractionZero:
-        test    eax, eax
-        jnz     @discardFractionNonzero
-        inc     rcx
-        movzx   eax, byte ptr [rcx]
-        sub     eax, 48
-        cmp     eax, 9
-        jbe     @discardFractionZero
-        cmp     eax, -48
-        je      @value
-        jmp     @exponent
-@discardFractionNonzero:
-        or      r11d, 4
 @discardFractionLoop:
         inc     rcx
         movzx   eax, byte ptr [rcx]
@@ -8767,7 +8221,7 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         cmp     eax, 9
         jbe     @discardFractionLoop
         cmp     eax, -48
-        je      @tail
+        je      @value
         jmp     @exponent
 @exponent:
         or      eax, 32
@@ -8809,33 +8263,15 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
 @exponentPositive:
         add     r10, r8
 @checkScale:
-        test    r11b, 4
-        jnz     @tail
         jmp     @value
 @nonFraction:
         test    r9, r9
         jz      @store
         cmp     r10, 22
-        ja      @exact
+        ja      @convertFull
         mulsd   xmm0, qword ptr [r8 + r10 * 8 + 31 * 8]
         jmp     @store
-@tail:
-        mov     rax, rdx
-        movq    rcx, xmm2
-        mov     rdx, r9
-        mov     r8, r10
-        mov     r9, rax
-        {$ifdef ABISYSVX64}
-        mov     rdi, rcx
-        mov     rsi, rdx
-        mov     rdx, r8
-        mov     rcx, r9
-        {$endif ABISYSVX64}
-        jmp     FinishExtendedTail
 @largeMantissa:
-        lea     rax, [r10 + 22]
-        cmp     rax, 21
-        ja      @exact
         // Remove only exact trailing decimal zeroes; this can recover the Clinger path.
         mov     r8, $cccccccccccccccd
         mov     rcx, $1999999999999999
@@ -8844,13 +8280,15 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         imul    rax, r8
         ror     rax, 1
         cmp     rax, rcx // quotient fits iff the original mantissa is divisible by ten
-        ja      @exact
+        ja      @convertFull
         mov     r9, rax
         inc     r10
         shr     rax, 53
         jnz     @trimMantissa
         jmp     @value
-@exact:
+@convertFull:
+        cmp     r10, -323 // retain the portable underflow/error contract
+        jl      @slow
         mov     rax, rdx
         mov     rcx, r9
         mov     rdx, r10
@@ -13821,6 +13259,9 @@ var
   pc: PCardinalArray;
   tmp: TTemp16;
 begin
+  {$ifdef CPUX64}
+  DecimalUseFma := CpuFeatures * [cfAVX, cfFMA] = [cfAVX, cfFMA];
+  {$endif CPUX64}
   // initialize internal lookup tables for various text conversions
   HexLookup(@TwoDigitsHex,      '0123456789ABCDEF');
   HexLookup(@TwoDigitsHexLower, '0123456789abcdef');
