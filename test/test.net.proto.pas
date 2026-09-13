@@ -3277,6 +3277,19 @@ begin
     Check(server.ComputeResponse(d) > 0, 'dynamic this server');
     Check(d.SendType = dmtAck, 'dynamic this server type');
     CheckEqual(d.Send.yiaddr, ip4, 'dynamic this server ip');  finally
+    // malformed option 50 should not cause a static-conflict NAK
+    option := 'bad';
+    f := d.ClientNew(dmtRequest, macs[1510]);
+    DhcpAddOptionShort(f, doRequestedAddress, option);
+    d.ClientFlush(f);
+    Check(server.ComputeResponse(d) > 0, 'bad opt50');
+    Check(d.SendType = dmtAck, 'bad opt50 type');
+    // malformed option 54 should not be interpreted as another server
+    f := d.ClientNew(dmtRequest, macs[1510]);
+    DhcpAddOptionShort(f, doServerIdentifier, option);
+    d.ClientFlush(f);
+    Check(server.ComputeResponse(d) > 0, 'bad opt54');
+    Check(d.SendType = dmtAck, 'bad opt54 type');
     server.Free;
     settings.Free;
   end;

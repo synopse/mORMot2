@@ -1939,7 +1939,7 @@ end;
 
 function DhcpIP4(dhcp: PDhcpPacket; len: PtrUInt): TNetIP4;
 begin
-  result := len;
+  result := 0;
   if len = 0 then
     exit;
   len := PtrUInt(@dhcp.options[len]);
