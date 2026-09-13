@@ -522,6 +522,7 @@ type
   // - dsmDroppedNoSubnet: packet has no matching subnet for its giaddr or option 82/118
   // - dsmDroppedNoAvailableIP: the IPv4 range of a subnet is exhausted
   // - dsmDroppedInvalidIP: packet requests an IP that is already in use or invalid
+  // - dsmDroppedOtherServer: packet targets another server
   // - dsmDroppedCallback: the OnComputeResponse callback aborted this request
   // - dsmDroppedPxeBoot: there was no proper configuration for this PXE/iPXE
   // - dsmDroppedTooManyOptions: avoid a buffer overflow with too many options
@@ -559,6 +560,7 @@ type
     dsmDroppedNoSubnet,
     dsmDroppedNoAvailableIP,
     dsmDroppedInvalidIP,
+    dsmDroppedOtherServer,
     dsmDroppedCallback,
     dsmDroppedPxeBoot,
     dsmDroppedTooManyOptions);
@@ -5822,6 +5824,8 @@ begin
       DoLog(sllDebug, 'overload', State);
     dsmDroppedInvalidIP:
       DoLog(sllTrace, 'unexpected', State);
+    dsmDroppedOtherServer:
+      DoLog(sllTrace, 'another server', State);
     dsmLeaseReleased:
       begin
         IP4Short(@Lease^.IP4, State.Ip);
@@ -6150,6 +6154,7 @@ function TDhcpProcess.LockedResponse(var State: TDhcpState): PtrInt;
 var
   r: PDhcpRule;
   p: PDhcpLease;
+  ip: TNetIP4;
 begin
   // find any existing dynamic lease - or StaticMac[] StaticUuid[] fake lease
   p := FindLease(State);
@@ -6236,6 +6241,14 @@ begin
     dmtRequest:
       begin
         inc(State.Scope^.Metrics.Current[dsmRequest]);
+        ip := DhcpIP4(@State.Recv, State.RecvLens[doServerIdentifier]);
+        if (ip <> 0) and
+           (ip <> State.Scope^.ServerIdentifier) then
+        begin
+          // RFC 2131 3.1: ignore any REQUEST selecting another server
+          result := DoError(State, dsmDroppedOtherServer);
+          exit;
+        end;
         if (p <> nil) and
            (p^.IP4 <> 0) and
            ((p^.State in [lsReserved, lsAck, lsAckDdns, lsStatic]) or
