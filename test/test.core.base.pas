@@ -5763,6 +5763,9 @@ begin
   d := GetExtended('-0e400', err);
   CheckEqual(err, 0);
   Check(PQWord(@d)^ = QWord($8000000000000000));
+  // The signed portable mantissa cutoff permits underflow to zero here.
+  CheckGetExtendedBits('9223372036854775808e-343', $0000000000000000);
+  CheckGetExtendedBits('-9223372036854775808e-343', QWord($8000000000000000));
   CheckGetExtendedBits('4.9406564584124654E-324', $0000000000000001);
   CheckGetExtendedBits('2.2250738585072009E-308', $000FFFFFFFFFFFFF);
   CheckGetExtendedBits('2.2250738585072014E-308', $0010000000000000);

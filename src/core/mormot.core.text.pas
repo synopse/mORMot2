@@ -1435,36 +1435,6 @@ procedure UInt64ToUtf8(Value: QWord; var result: RawUtf8);
 // - scanners own the grammar and the significant-digit capacity
 function DecimalToDouble(Mantissa: UInt64; Exponent: PtrInt; Negative: boolean): double;
 
-{$ifdef CPUX64}
-var
-  DecimalUseFma: boolean; // initialized once from CPU and OS capabilities
-const
-  // RN(10^e - RN(10^e)); paired with the existing POW10[e] high part.
-  DecimalReciprocalLow: array[-22..-1] of UInt64 = (
-    UInt64($B7FA7566D9CBA769), // 10^-22
-    UInt64($383F769FB7E0B75E), // 10^-21
-    UInt64($38675447A5D8E536), // 10^-20
-    UInt64($388A52B31E9E3D07), // 10^-19
-    UInt64($B8D7C628066E8CEE), // 10^-18
-    UInt64($B90DB7B2080A3029), // 10^-17
-    UInt64($3925B4C2EBE68799), // 10^-16
-    UInt64($B97937831647F5A0), // 10^-15
-    UInt64($394EA70909833DE7), // 10^-14
-    UInt64($B9CECD79A5A0DF95), // 10^-13
-    UInt64($39F97F27F0F6E886), // 10^-12
-    UInt64($3A47F7BC7B4D28AA), // 10^-11
-    UInt64($BA720A5465DF8D2C), // 10^-10
-    UInt64($BAB34674BFABB83B), // 10^-9
-    UInt64($BAD03023DF2D4C94), // 10^-8
-    UInt64($3B15E1E99483B023), // 10^-7
-    UInt64($3B4B5A63F9A49C2C), // 10^-6
-    UInt64($BB8EE78183F91E64), // 10^-5
-    UInt64($BBB6A161E4F765FE), // 10^-4
-    UInt64($BBD89374BC6A7EFA), // 10^-3
-    UInt64($BC0EB851EB851EB8), // 10^-2
-    UInt64($BC5999999999999A)); // 10^-1
-{$endif CPUX64}
-
 /// get the extended floating point value stored in P^
 // - set the err content to the index of any faulty character, 0 if conversion
 // was successful (same as the standard val function)
@@ -13259,9 +13229,6 @@ var
   pc: PCardinalArray;
   tmp: TTemp16;
 begin
-  {$ifdef CPUX64}
-  DecimalUseFma := CpuFeatures * [cfAVX, cfFMA] = [cfAVX, cfFMA];
-  {$endif CPUX64}
   // initialize internal lookup tables for various text conversions
   HexLookup(@TwoDigitsHex,      '0123456789ABCDEF');
   HexLookup(@TwoDigitsHexLower, '0123456789abcdef');

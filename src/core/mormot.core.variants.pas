@@ -11764,7 +11764,32 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         jbe     @integer
 @integerEnd:
         cmp     eax, -2
-        jne     @finish
+        je      @dot
+        sub     r11, rcx
+        cmp     r11, 8
+        jg      @integerSuffix
+        or      r8d, 16
+@integerSuffix:
+        or      eax, 32
+        cmp     eax, 53
+        je      @exponent
+        test    r9, r9
+        js      @minInt64
+@integerSign:
+        test    r8b, 1
+        jz      @integerType
+        neg     r9
+@integerType:
+        mov     eax, varInteger
+        test    r8b, 16
+        jz      @store
+        mov     eax, varInt64
+@store:
+        mov     word ptr [rdx], ax
+        mov     qword ptr [rdx + 8], r9
+        mov     rax, rcx
+        ret
+@dot:
         inc     rcx
         inc     r11 // the dot does not consume a digit
         mov     r10, rcx
@@ -11812,11 +11837,6 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         cmp     eax, 9
         jbe     @fraction
 @fractionEnd:
-        {$ifdef ABISYSVX64}
-        stmxcsr dword ptr [rsp - 4]
-        {$else}
-        stmxcsr dword ptr [rsp + 8]
-        {$endif ABISYSVX64}
         sub     r10, rcx
 @finish:
         cmp     eax, -2
@@ -11836,26 +11856,16 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         jnz     @double
         test    r10, r10
         jnz     @currency
-        test    r8b, 1
-        jz      @integerType
-        neg     r9
-@integerType:
-        mov     eax, varInteger
-        test    r8b, 16
-        jz      @store
-        mov     eax, varInt64
-@store:
-        mov     word ptr [rdx], ax
-        mov     qword ptr [rdx + 8], r9
-        mov     rax, rcx
-        ret
+        jmp     @integerSign
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif FPC}
+@nonPositive:
+        jnz     @minInt64
 @zero:
         mov     word ptr [rdx], varInteger
         mov     qword ptr [rdx + 8], r9
         mov     rax, rcx
         ret
-@nonPositive:
-        jz      @zero
+@minInt64:
         // The only negative magnitude is abs(Low(Int64)).
         test    r8b, 32
         jnz     @double
@@ -11880,9 +11890,10 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         jnz     @currencyValue
         neg     rax
 @currencyValue:
-        mov     r9, rax
-        mov     eax, varCurrency
-        jmp     @store
+        mov     word ptr [rdx], varCurrency
+        mov     qword ptr [rdx + 8], rax
+        mov     rax, rcx
+        ret
 @double:
         test    r8b, 8
         jz      @invalid
@@ -11899,20 +11910,6 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         lea     r11, [rip + POW10]
         pxor    xmm0, xmm0
         cvtsi2sd xmm0, r9
-        cmp     byte ptr [rip + DecimalUseFma], 0
-        je      @divideFallback
-        {$ifdef ABISYSVX64}
-        test    dword ptr [rsp - 4], $6000
-        {$else}
-        test    dword ptr [rsp + 8], $6000
-        {$endif ABISYSVX64}
-        jnz     @divideFallback // directed rounding retains IEEE division
-        lea     rax, [rip + DecimalReciprocalLow]
-        movapd  xmm1, xmm0
-        mulsd   xmm1, qword ptr [rax + r10 * 8 + 22 * 8]
-        vfmadd132sd xmm0, xmm1, qword ptr [r11 + r10 * 8 + 31 * 8]
-        jmp     @storeDouble
-@divideFallback:
         neg     r10
         divsd   xmm0, qword ptr [r11 + r10 * 8 + 31 * 8]
 @storeDouble:
@@ -11921,11 +11918,6 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         mov     rax, rcx
         ret
 @exponent:
-        {$ifdef ABISYSVX64}
-        stmxcsr dword ptr [rsp - 4]
-        {$else}
-        stmxcsr dword ptr [rsp + 8]
-        {$endif ABISYSVX64}
         movq    xmm4, r11 // retain the digit count for the large-scale bound
         inc     rcx
         movzx   eax, byte ptr [rcx]
