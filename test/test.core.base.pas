@@ -5461,6 +5461,9 @@ begin
   d := GetExtended(pointer(s), err);
   Check(err = 0);
   CheckSame(d, 1234);
+  s := '0.0';
+  d := GetExtended(pointer(s));
+  CheckSame(d, 0);
   u := DoubleToString(40640.5028819444);
   Check(u = '40640.5028819444', u);
   s := '40640.5028a819444';

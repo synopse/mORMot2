@@ -3209,7 +3209,74 @@ begin
       'server-identifier:"192.168.0.1",client-identifier:"' +
       MacToText(@macs[1503]) + '",relay-agent-information:{circuit-id:"DCBA"}}',
       'nak 61/82');
-  finally
+    // validate REQUEST handling with static reservations
+    mac := MacToText(@macs[1510]);
+    Check(server.AddStatic(Join([mac, '=192.168.0.120'])), 'static120');
+    ip4 := ToIP4('192.168.0.120');
+    // matching option 50 is acknowledged
+    f := d.ClientNew(dmtRequest, macs[1510]);
+    DhcpAddOption32(f, doRequestedAddress, ip4);
+    d.ClientFlush(f);
+    Check(server.ComputeResponse(d) > 0, 'static ack');
+    Check(d.SendType = dmtAck, 'static ack type');
+    CheckEqual(d.Send.yiaddr, ip4, 'static ack ip');
+    // no explicit requested address keeps existing/PXE-friendly behavior
+    d.ClientFlush(d.ClientNew(dmtRequest, macs[1510]));
+    Check(server.ComputeResponse(d) > 0, 'static noip');
+    Check(d.SendType = dmtAck, 'static noip type');
+    CheckEqual(d.Send.yiaddr, ip4, 'static noip ip');
+    // move the reservation, simulating an administrative change
+    Check(server.RemoveStatic('192.168.0.120'), 'del120');
+    Check(server.AddStatic(Join([mac, '=192.168.0.121'])), 'static121');
+    sip4 := ToIP4('192.168.0.121');
+    // INIT-REBOOT: option 50, no server identifier -> conflicting IP is NAKed
+    f := d.ClientNew(dmtRequest, macs[1510]);
+    DhcpAddOption32(f, doRequestedAddress, ip4);
+    d.ClientFlush(f);
+    Check(server.ComputeResponse(d) > 0, 'static init-reboot nak');
+    Check(d.SendType = dmtNak, 'static init-reboot nak type');
+    // SELECTING this server: option 50 + our option 54 -> conflicting IP is NAKed
+    f := d.ClientNew(dmtRequest, macs[1510]);
+    DhcpAddOption32(f, doRequestedAddress, ip4);
+    DhcpAddOption32(f, doServerIdentifier, ToIP4('192.168.0.1'));
+    d.ClientFlush(f);
+    Check(server.ComputeResponse(d) > 0, 'static selecting nak');
+    Check(d.SendType = dmtNak, 'static selecting nak type');
+    // RENEWING through ciaddr is deliberately left with the existing behavior:
+    // only an explicit option 50 conflict triggers the static-reservation NAK
+    d.ClientFlush(d.ClientNew(dmtRequest, macs[1510]));
+    d.Recv.ciaddr := ip4;
+    Check(server.ComputeResponse(d) > 0, 'static renewing');
+    Check(d.SendType = dmtAck, 'static renewing type');
+    CheckEqual(d.Send.yiaddr, sip4, 'static renewing reserved ip');
+    // after a NAK, DISCOVER offers the configured reservation
+    d.ClientFlush(d.ClientNew(dmtDiscover, macs[1510]));
+    Check(server.ComputeResponse(d) > 0, 'discover after nak');
+    Check(d.SendType = dmtOffer, 'offer after nak type');
+    CheckEqual(d.Send.yiaddr, sip4, 'offer reserved ip');
+    // RFC 2131 3.1: a SELECTING request naming another server gets no reply
+    f := d.ClientNew(dmtRequest, macs[1510]);
+    DhcpAddOption32(f, doRequestedAddress, ip4);
+    DhcpAddOption32(f, doServerIdentifier, ToIP4('192.168.0.2'));
+    d.ClientFlush(f);
+    CheckEqual(server.ComputeResponse(d), 0, 'static other server');
+    // ensure the other-server check applies to all REQUESTs, not only static ones
+    d.ClientFlush(d.ClientNew(dmtDiscover, macs[1511]));
+    Check(server.ComputeResponse(d) > 0, 'dynamic discover');
+    ip4 := d.Send.yiaddr;
+    f := d.ClientNew(dmtRequest, macs[1511]);
+    DhcpAddOption32(f, doRequestedAddress, ip4);
+    DhcpAddOption32(f, doServerIdentifier, ToIP4('192.168.0.2'));
+    d.ClientFlush(f);
+    CheckEqual(server.ComputeResponse(d), 0, 'dynamic other server');
+    // selecting this server still follows normal dynamic REQUEST processing
+    f := d.ClientNew(dmtRequest, macs[1511]);
+    DhcpAddOption32(f, doRequestedAddress, ip4);
+    DhcpAddOption32(f, doServerIdentifier, ToIP4('192.168.0.1'));
+    d.ClientFlush(f);
+    Check(server.ComputeResponse(d) > 0, 'dynamic this server');
+    Check(d.SendType = dmtAck, 'dynamic this server type');
+    CheckEqual(d.Send.yiaddr, ip4, 'dynamic this server ip');  finally
     server.Free;
     settings.Free;
   end;
