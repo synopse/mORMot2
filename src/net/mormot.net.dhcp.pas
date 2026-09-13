@@ -6257,9 +6257,23 @@ begin
              (State.Scope^.LeaseTimeLE < SecsPerHour) and // grace period
              (State.BootTix32 - p^.Expired <
                 State.Scope^.LeaseTimeLE * State.Scope^.GraceFactor))) then
+        begin
           // RFC 2131: lease is Reserved after OFFER = SELECTING
           //           lease is Ack/Static/Outdated = RENEWING/REBINDING
-          inc(State.Scope^.Metrics.Current[dsmLeaseRenewed])
+          if p^.State = lsStatic then
+          begin
+            // check option 50 requested IP on SELECTING or INIT-REBOOT
+            State.Ip4 := DhcpIP4(@State.Recv, State.RecvLens[doRequestedAddress]);
+            if (State.Ip4 <> 0) and
+               (State.Ip4 <> p^.IP4) then
+            begin
+              // RFC 2131 4.3.2: the requested address is not the one reserved
+              result := DoError(State, dsmNak);
+              exit;
+            end;
+          end;
+          inc(State.Scope^.Metrics.Current[dsmLeaseRenewed]);
+        end
         else if RetrieveFrameIP(State, p) then // IP from option 50
         begin
           // no lease, but Option 50 = INIT-REBOOT
