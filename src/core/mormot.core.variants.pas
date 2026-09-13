@@ -11518,7 +11518,7 @@ const
   CURRENCY_MAX_NEG: array[-4 .. -1] of Int64 = (
     -MAX_INT64, -MAX_INT64_DIV10, -MAX_INT64 div 100, -MAX_INT64 div 1000);
 
-{$if defined(WIN64DELPHI) and defined(ASMX64)}
+{$ifdef ASMX64}
 function GetNumericVariantFromJsonPascal(Json: PUtf8Char; var Value: TVarData;
   AllowVarDouble: boolean): PUtf8Char;
 {$else}
@@ -11528,14 +11528,17 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
 var
   // logic below is similar to mormot.core.text.pas GetExtended()
   c: PtrUInt;
+  start: PUtf8Char;
+  bits: UInt64;
   remdigit: integer;
   frac, exp: PtrInt;
-  flags: set of (fNeg, fNegExp, fValid);
+  flags: set of (fNeg, fNegExp, fValid, fDot);
   v64: Int64; // accumulated as negative (faster, and no UInt64 on Delphi 7)
   d: double;
   vd: TSynVarData absolute Value;
 begin
   // 1. parse input text as number into v64, frac, digit, exp
+  start := Json;
   result := nil; // return nil to indicate parsing error
   byte(flags) := 0;
   v64 := 0;
@@ -11579,8 +11582,21 @@ begin
     inc(c, ord('0'));
     if c <> ord('.') then
       break;
-    if frac <> 0 then
+    if fDot in flags then
       exit; // only one dot allowed
+    include(flags, fDot);
+    if frac > 0 then
+    begin
+      inc(Json);
+      c := PtrUInt(Json^) - ord('0');
+      if c > 9 then
+        exit;
+      repeat
+        inc(Json);
+        c := PtrUInt(Json^) - ord('0');
+      until c > 9;
+      continue;
+    end;
     repeat
       inc(Json);
       c := PtrUInt(Json^) - ord('0');
@@ -11666,41 +11682,422 @@ begin
   if not AllowVarDouble or
      (frac <= -324) then // 5.0 x 10^-324 .. 1.7 x 10^308
     exit; // we can't convert into a double
-  exp := PtrUInt(@POW10);
-  if (frac < 0) and
-     (frac >= -22) and
-     (v64 >= -MAX_SAFE_JS_INTEGER) then // v64 is negative here
-  begin
-    // Clinger's fast path: v64 and 10^-frac are both exact doubles, so a single
-    // IEEE division is correctly rounded - see GetExtended() in mormot.core.text
-    d := v64;
-    d := d / PPow10(exp)[-frac];
-  end
+  if (frac > 31) and (frac >= remdigit + 290) then
+    exit;
+  if remdigit < 0 then
+    bits := DecimalToDoubleExactBits(start, Json)
   else
-  begin
-    if frac >= -31 then
-      if frac <= 31 then
-        d := PPow10(exp)[frac] // -31 .. + 31 is the most common case
-      else if frac >= remdigit + 290 then
-        exit                   // +308 ..
-      else                     // +32 .. +307
-        d := PPow10(exp)[(frac and not 31) shr 5 + 34] * PPow10(exp)[frac and 31]
-    else
-    begin
-      frac := -frac; // .. -32
-      d := PPow10(exp)[(frac and not 31) shr 5 + 45] / PPow10(exp)[frac and 31];
-    end;
-    d := d * v64;
-  end;
-  if not (fNeg in flags) then
-    d := -d;
+    bits := DecimalToDoubleValueBits(UInt64(-v64), frac, fNeg in flags);
+  if bits and $7ff0000000000000 = $7ff0000000000000 then
+    exit;
+  d := PDouble(@bits)^;
   vd.VType := varDouble;
   vd.VDouble := d;
   result := Json;
 end;
 
-{$if defined(WIN64DELPHI) and defined(ASMX64)}
-{$I mormot.core.variants.asmx64.inc}
+{$ifdef ASMX64}
+function FinishJsonNumber(Json: PUtf8Char; var Value: TVarData;
+  Mantissa: UInt64; ScaleAndSign: PtrInt): PUtf8Char;
+var
+  bits: UInt64;
+begin
+  result := nil;
+  bits := DecimalToDoubleValueBits(Mantissa, (ScaleAndSign and not 1) div 2, ScaleAndSign and 1 <> 0);
+  if bits and $7fffffffffffffff = $7ff0000000000000 then
+    exit;
+  Value.VDouble := PDouble(@bits)^;
+  TSynVarData(Value).VType := varDouble;
+  result := Json;
+end;
+
+function FinishJsonTail(Start, Last: PUtf8Char; var Value: TVarData;
+  Mantissa: UInt64; Exponent: PtrInt): PUtf8Char;
+var
+  bits: UInt64;
+begin
+  result := nil;
+  bits := DecimalToDoubleTailBits(Start, Last, Mantissa, Exponent);
+  if bits and $7fffffffffffffff = $7ff0000000000000 then
+    exit;
+  Value.VDouble := PDouble(@bits)^;
+  TSynVarData(Value).VType := varDouble;
+  result := Last;
+end;
+
+// Cold bridge from the leaf scanner: RCX=end, RDX=value, R9=mantissa,
+// R10=exponent, XMM2=start. Its frame describes the outgoing fifth argument.
+procedure FinishJsonTailBridge;
+{$ifdef FPC} nostackframe; assembler;
+asm
+        {$ifdef ABISYSVX64}
+        movq    rdi, xmm2
+        mov     rsi, rcx
+        mov     rcx, r9
+        mov     r8, r10
+        jmp     FinishJsonTail
+        {$else}
+        sub     rsp, 40
+        .seh_stackalloc 40
+        .seh_endprologue
+        mov     qword ptr [rsp + 32], r10
+        {$endif ABISYSVX64}
+{$else}
+asm
+        .params 5
+        mov     qword ptr @params[32], r10
+{$endif FPC}
+        {$ifndef ABISYSVX64}
+        mov     r8, rdx
+        mov     rdx, rcx
+        movq    rcx, xmm2
+        call    FinishJsonTail
+        {$ifdef FPC}
+        add     rsp, 40
+        ret
+        {$endif FPC}
+        {$endif ABISYSVX64}
+end;
+
+{ x86_64 JSON number conversion (Delphi/FPC, Windows/System V). Preserve the portable Integer/Int64/
+  Currency/Double classification. Apply the sign before a rounded operation.
+  Huge exponents use the portable implementation.
+  Byte loads and volatile registers only; a fallback restores the arguments. }
+
+function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
+  AllowVarDouble: boolean): PUtf8Char;
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        {$ifdef ABISYSVX64}
+        movzx   r8d, dl
+        mov     rcx, rdi
+        mov     rdx, rsi
+        {$else}
+        movzx   r8d, r8b
+        {$endif ABISYSVX64}
+        movq    xmm2, rcx
+        shl     r8d, 3 // flags: negative=1, negative exponent=2, double=8, int64=16, discarded=32
+        xor     r10d, r10d
+        test    rcx, rcx
+        jz      @invalid
+        movzx   eax, byte ptr [rcx]
+        cmp     eax, '-'
+        jne     @first
+        inc     rcx
+        or      r8d, 1
+        movzx   eax, byte ptr [rcx]
+@first:
+        lea     r11, [rcx + 18]
+        sub     eax, 48
+        cmp     eax, 9
+        ja      @invalid
+        mov     r9d, eax
+        test    eax, eax
+        jnz     @integerNext
+        inc     rcx
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        jbe     @invalid // JSON does not permit integer leading zeroes
+        cmp     eax, -48
+        je      @zero
+        jmp     @integerEnd
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif FPC}
+@integer:
+        cmp     rcx, r11
+        jae     @lastInteger
+@integerDigit:
+        lea     r9, [r9 + r9 * 4]
+        lea     r9, [rax + r9 * 2]
+@integerNext:
+        inc     rcx
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        jbe     @integer
+@integerEnd:
+        cmp     eax, -2
+        jne     @finish
+        inc     rcx
+        inc     r11 // the dot does not consume a digit
+        mov     r10, rcx
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        ja      @invalid
+        test    r9, r9
+        jnz     @fraction
+        test    eax, eax
+        jnz     @fractionFirst
+@fractionZero:
+        inc     rcx
+        inc     r11 // skipped fractional zeroes affect scale, not digit capacity
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        jz      @fractionZero
+        cmp     eax, -48
+        je      @zero
+        cmp     eax, 9
+        ja      @fractionEnd
+@fractionFirst:
+        mov     r9d, eax
+        jmp     @fractionNext
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif FPC}
+@fraction:
+        cmp     rcx, r11
+        jae     @lastFraction
+        lea     r9, [r9 + r9 * 4]
+        lea     r9, [rax + r9 * 2]
+        inc     rcx
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        ja      @fractionEnd
+        cmp     rcx, r11
+        jae     @lastFraction
+@fractionDigit:
+        lea     r9, [r9 + r9 * 4]
+        lea     r9, [rax + r9 * 2]
+@fractionNext:
+        inc     rcx
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        jbe     @fraction
+@fractionEnd:
+        sub     r10, rcx
+@finish:
+        cmp     eax, -2
+        je      @invalid // a second dot
+        sub     r11, rcx
+        cmp     r11, 8 // 18 - retained digits; 10 or more means Int64
+        jg      @suffix
+        or      r8d, 16
+@suffix:
+        or      eax, 32
+        cmp     eax, 53 // 'e'/'E', after subtracting '0'
+        je      @exponent
+@parsed:
+        test    r9, r9
+        jle     @nonPositive
+        test    r8b, 32 // discarded digits exclude exact integer/currency results
+        jnz     @tail
+        test    r10, r10
+        jnz     @currency
+        test    r8b, 1
+        jz      @integerType
+        neg     r9
+@integerType:
+        mov     eax, varInteger
+        test    r8b, 16
+        jz      @store
+        mov     eax, varInt64
+@store:
+        mov     word ptr [rdx], ax
+        mov     qword ptr [rdx + 8], r9
+        mov     rax, rcx
+        ret
+@zero:
+        mov     word ptr [rdx], varInteger
+        mov     qword ptr [rdx + 8], r9
+        mov     rax, rcx
+        ret
+@nonPositive:
+        jz      @zero
+        // The only negative magnitude is abs(Low(Int64)).
+        test    r8b, 32
+        jnz     @tail
+        test    r8b, 1
+        jz      @double
+        mov     eax, varInt64
+        test    r10, r10
+        jz      @store
+        cmp     r10, -4
+        jne     @double
+        mov     eax, varCurrency
+        jmp     @store
+@currency:
+        lea     rax, [r10 + 4]
+        cmp     rax, 3
+        ja      @double
+        lea     r11, [rip + CURRENCY_FACTOR]
+        movsxd  rax, dword ptr [r11 + rax * 4] // negative factor
+        imul    rax, r9
+        jo      @double
+        test    r8b, 1
+        jnz     @currencyValue
+        neg     rax
+@currencyValue:
+        mov     r9, rax
+        mov     eax, varCurrency
+        jmp     @store
+@double:
+        test    r8b, 8
+        jz      @invalid
+        lea     rax, [r10 + 22]
+        cmp     rax, 21
+        ja      @nonFraction
+        mov     rax, r9
+        shr     rax, 53
+        jnz     @exact
+        test    r8b, 1
+        jz      @positiveFraction
+        neg     r9
+@positiveFraction:
+        lea     r11, [rip + POW10]
+        pxor    xmm0, xmm0
+        cvtsi2sd xmm0, r9
+        neg     r10
+        divsd   xmm0, qword ptr [r11 + r10 * 8 + 31 * 8]
+@storeDouble:
+        mov     word ptr [rdx], varDouble
+        movsd   qword ptr [rdx + 8], xmm0
+        mov     rax, rcx
+        ret
+@exponent:
+        movq    xmm4, r11 // retain the digit count for the large-scale bound
+        inc     rcx
+        movzx   eax, byte ptr [rcx]
+        cmp     eax, '+'
+        je      @exponentSign
+        cmp     eax, '-'
+        jne     @exponentFirst
+        or      r8d, 2
+@exponentSign:
+        inc     rcx
+        movzx   eax, byte ptr [rcx]
+@exponentFirst:
+        sub     eax, 48
+        cmp     eax, 9
+        ja      @invalid
+        mov     r11d, eax
+        jmp     @exponentNext
+@exponentLoop:
+        cmp     r11d, 1000000
+        ja      @slow
+        lea     r11, [r11 + r11 * 4]
+        lea     r11, [rax + r11 * 2]
+@exponentNext:
+        inc     rcx
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        jbe     @exponentLoop
+        test    r8b, 2
+        jz      @positiveExponent
+        sub     r10, r11
+        movq    r11, xmm4
+        jmp     @parsed
+@positiveExponent:
+        add     r10, r11
+        movq    r11, xmm4
+        jmp     @parsed
+@lastInteger:
+        ja      @discardInteger
+        movq    xmm5, rax
+        mov     rax, 922337203685477580
+        cmp     r9, rax
+        movq    rax, xmm5
+        ja      @overflowInteger
+        jb      @integerDigit
+        cmp     eax, 8
+        jbe     @integerDigit
+@overflowInteger:
+        dec     r11 // portable scanner charges an extra digit for signed overflow
+@discardInteger:
+        or      r8d, 32
+@discardIntegerLoop:
+        inc     r10
+        inc     rcx
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        jbe     @discardIntegerLoop
+        cmp     eax, -2
+        je      @slow
+        jmp     @finish
+@lastFraction:
+        ja      @discardFraction
+        movq    xmm5, rax
+        mov     rax, 922337203685477580
+        cmp     r9, rax
+        movq    rax, xmm5
+        ja      @overflowFraction
+        jb      @fractionDigit
+        cmp     eax, 8
+        jbe     @fractionDigit
+@overflowFraction:
+        dec     r11
+@discardFraction:
+        or      r8d, 32
+        sub     r10, rcx
+@discardFractionLoop:
+        inc     rcx
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        jbe     @discardFractionLoop
+        jmp     @finish
+@nonFraction:
+        cmp     r10, 22
+        ja      @largeScale
+        mov     rax, r9
+        shr     rax, 53
+        jnz     @exact
+        test    r8b, 1
+        jz      @positiveScale
+        neg     r9
+@positiveScale:
+        lea     r11, [rip + POW10]
+        pxor    xmm0, xmm0
+        cvtsi2sd xmm0, r9
+        mulsd   xmm0, qword ptr [r11 + r10 * 8 + 31 * 8]
+        jmp     @storeDouble
+@largeScale:
+        cmp     r10, -324
+        jle     @invalid
+        cmp     r10, 31
+        jle     @exact
+        lea     rax, [r11 + 291]
+        cmp     r10, rax
+        jge     @invalid
+@exact:
+        and     r8d, 1
+        lea     rax, [r8 + r10 * 2]
+        mov     r8, r9
+        mov     r9, rax
+        {$ifdef ABISYSVX64}
+        mov     rdi, rcx
+        mov     rsi, rdx
+        mov     rdx, r8
+        mov     rcx, r9
+        {$endif ABISYSVX64}
+        jmp     FinishJsonNumber
+@tail:
+        test    r8b, 8
+        jz      @invalid
+        cmp     r10, -324
+        jle     @invalid
+        cmp     r10, 31
+        jle     @tailReady
+        lea     rax, [r11 + 291]
+        cmp     r10, rax
+        jge     @invalid
+@tailReady:
+        jmp     FinishJsonTailBridge
+@invalid:
+        xor     eax, eax
+        ret
+@slow:
+        movq    rcx, xmm2
+        shr     r8d, 3
+        and     r8d, 1
+        {$ifdef ABISYSVX64}
+        mov     rdi, rcx
+        mov     rsi, rdx
+        mov     edx, r8d
+        {$endif ABISYSVX64}
+        jmp     GetNumericVariantFromJsonPascal
+end;
 {$ifend}
 
 procedure UniqueVariant(Interning: TRawUtf8Interning; var aResult: variant;
