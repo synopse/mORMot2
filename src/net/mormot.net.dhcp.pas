@@ -1893,7 +1893,8 @@ begin
   DhcpAddOptionByte(result, {doMessageType=} 53, ord(dmt));
   if serverid <> 0 then
   begin
-    dhcp.siaddr := serverid;
+    if dmt <> dmtNak then
+      dhcp.siaddr := serverid; // RFC 2131 Table 3: 'siaddr' is 0 in a DHCPNAK
     DhcpAddOption32(result, doServerIdentifier, serverid);
   end;
   result^ := #255;
@@ -5810,7 +5811,8 @@ begin
         DoLog(sllTrace, 'out-of-sync NAK', State);
         State.SendType := dmtNak;
         State.SendEnd := DhcpNew(State.Send, dmtNak, State.Recv.xid,
-          PNetMac(@State.Mac64)^, State.Scope^.ServerIdentifier);
+          // RFC 2131 Table 3: 'chaddr' is the client one, not its option 61
+          PNetMac(@State.Recv.chaddr)^, State.Scope^.ServerIdentifier);
         result := Flush(State);
       end;
     dsmDroppedPackets:
@@ -6113,15 +6115,20 @@ function TDhcpProcess.Flush(var State: TDhcpState): PtrInt;
 begin
   // recognize State.RecvBoot from options 60/77/93
   SetRecvBoot(State);
-  // append "rule" custom options - always first since have precedence
   integer(State.SendOptions) := 0;
-  if State.RecvRule <> nil then
-    State.AddRulesOptions;
-  // append "boot" specific options 60,66,67,97
-  if State.RecvBoot <> dcbDefault then
-    AddBootOptions(State);
-  // append regular DHCP 1,3,6,15,28,42 [+ 51,58,59] options
-  State.AddRegularOptions;
+  // RFC 2131 Table 3: a DHCPNAK excludes the lease time, the network settings
+  // and the boot options - the 61/82 copies below are RFC 6842/3046
+  if State.SendType <> dmtNak then
+  begin
+    // append "rule" custom options - always first since have precedence
+    if State.RecvRule <> nil then
+      State.AddRulesOptions;
+    // append "boot" specific options 60,66,67,97
+    if State.RecvBoot <> dcbDefault then
+      AddBootOptions(State);
+    // append regular DHCP 1,3,6,15,28,42 [+ 51,58,59] options
+    State.AddRegularOptions;
+  end;
   // optional callback support
   if Assigned(fOnComputeResponse) and
      RunCallbackAborted(State) then
@@ -6521,10 +6528,13 @@ begin
     fState.Send.giaddr := fState.Recv.giaddr;
     remote.SetIP4Port(fState.Recv.giaddr, fServerPort);
   end
+  else if fState.SendType = dmtNak then
+    // RFC 2131 4.3.2: with no relay, a DHCPNAK MUST be broadcasted to
+    // 0xffffffff because the client may have a wrong address or subnet mask
+    remote.SetIP4Port(cAnyHost32, fClientPort)
   else if (fState.Recv.ciaddr <> 0) and
           (fState.Recv.flags and DHCP_BROADCAST_FLAG = 0) and
-          (fState.RecvType in [dmtRequest, dmtInform]) and
-          (fState.SendType <> dmtNak) then
+          (fState.RecvType in [dmtRequest, dmtInform]) then
     // unicast to known client IP
     remote.SetIP4Port(fState.Recv.ciaddr, fClientPort)
   else
