@@ -5604,6 +5604,10 @@ begin
   CheckDoubleToShortSame(12.345678901234);
   CheckDoubleToShortSame(123.45678901234);
   CheckDoubleToShortSame(1234.5678901234);
+  CheckDoubleToShort(0.00123456789012345, '0.00123456789012');
+  CheckDoubleToShort(-0.00123456789012345, '-0.00123456789012');
+  CheckDoubleToShort(0.000123456789012345, '0.00012345678901');
+  CheckDoubleToShort(-0.000123456789012345, '-0.00012345678901');
   CheckDecimalRounding;
   {$ifndef WIN32DELPHI} // fails when converted to FP80 in x87 asm
   d := GetExtended('0e400', err);
@@ -5614,12 +5618,21 @@ begin
   Check(d = 0);
   d := GetExtended('-0e400', err);
   CheckEqual(err, 0);
-  Check(PQWord(@d)^ = QWord($8000000000000000));
+  Check(d = 0); // '-0' -> 0 with ECMAScript's number-to-string rules
   CheckGetExtendedBits('4.9406564584124654E-324', $0000000000000001);
   CheckGetExtendedBits('2.2250738585072009E-308', $000FFFFFFFFFFFFF);
   CheckGetExtendedBits('2.2250738585072014E-308', $0010000000000000);
   CheckGetExtendedBits('1.7976931348623157E308', $7FEFFFFFFFFFFFFF);
   CheckGetExtendedBits('1E308', $7FE1CCF385EBC8A0);
+  CheckGetExtendedBits('0.5000000000000000000', $3FE0000000000000);
+  CheckGetExtendedBits('0.50000000000000000000', $3FE0000000000000);
+  CheckGetExtendedBits('0.50000000000000000008', $3FE0000000000000);
+  CheckGetExtendedBits('0.9223372036854775807', $3FED83C94FB6D2AC);
+  {$ifndef CPUX86} // FPC x87 conversion may fail those
+  CheckGetExtendedBits('0.123456789012345678', $3FBF9ADD3746F660);
+  CheckGetExtendedBits('0.9223372036854775808', $3FED83C94FB6D2AD);
+  CheckGetExtendedBits('0.9223372036854775809', $3FED83C94FB6D2AD);
+  {$endif CPUX86}
   CheckDoubleToShortBits($4D6E62C4E38FF876, '1.0000000000000005E65');
   CheckDoubleToShortBits(QWord($CD6E62C4E38FF876), '-1.0000000000000005E65');
   CheckDoubleToShortBits($0000000000000001, '4.9406564584124654E-324');
@@ -5724,6 +5737,8 @@ begin
   CheckInvalidNumber('0..1');
   CheckInvalidNumber('toto');
   CheckInvalidNumber('e1');
+  CheckInvalidNumber('-e1');
+  CheckInvalidNumber('.e2');
   CheckInvalidNumber('-.e2');
   CheckInvalidNumber('1e');
   CheckInvalidNumber('1e+');

@@ -6733,7 +6733,7 @@ const
 var
   c, n: PtrUInt;
   frac: PtrInt;
-  flags: set of (fNeg, fNegExp, fValid);
+  flags: set of (fNeg, fNegExp, fValidExp);
   v64: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
 label
   z, e, o;
@@ -6774,46 +6774,63 @@ z:    err := 1; // fast error path for non-number input
     end;
     exit;
   end;
-  n := 18; // v64=-9,223,372,036,854,775,808..+9,223,372,036,854,775,807
+  n := PtrUInt(P) + 18;   // the first 18 digits can't overflow Int64
   repeat
     c := PtrUInt(P^) - ord('0');
-    if c <= 9 then
-    begin
-      if (n <> 0) or  // validate the 19th significant digit
-         (v64 > MAX_INT64_DIV10 - ord(c > 7)) then
-        dec(n);
-      if PtrInt(n) >= 0 then // over-required digits are just ignored
-      begin
-        v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64 {$else} * 10 {$endif} + c;
-        include(flags, fValid);
-        dec(frac, ord(frac <> 0)); // digits after '.' (branchless)
-        inc(P);
-        continue;
-      end;
-      inc(frac, ord(frac >= 0)); // handle #############00000
-      inc(P);
-      continue;
-    end;
-    if P^ <> '.' then
+    if c > 9 then
       break;
     inc(P);
-    if frac <> 0 then
-      goto e; // only one dot allowed
-    dec(frac);
+    v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64 {$else} * 10 {$endif} + PtrInt(c);
+    if PtrUInt(P) <> n then // very fast most common path
+      continue;
+    repeat // loop including Int64 overflow test (seldom used)
+      c := PtrUInt(P^) - ord('0');
+      if c > 9 then
+        break;
+      if v64 > MAX_INT64_DIV10 - ord(c > 7) then
+        break;
+      inc(P);
+      v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64 {$else} * 10 {$endif} + PtrInt(c);
+    until false;
+    if c <= 9 then
+      repeat // ignore-them-all path for >18/19 significant integer digits
+        inc(P);
+        inc(frac);
+      until not (P^ in ['0' .. '9']);
+    break;
+  until false;
+  if P^ = '.' then // fraction
+  begin
+    inc(P);
+    if (frac <> 0) or // keep original GetExtended() behavior
+       not (P^ in ['0' .. '9']) then
+      goto e;
     if v64 = 0 then // properly handle 0.00000000000000000123
       while P^ = '0' do
       begin
         dec(frac);
         inc(P);
       end;
-  until false;
-  inc(frac, ord(frac < 0)); // adjust digits after '.'
+    repeat
+      c := PtrUInt(P^) - ord('0');
+      if c > 9 then
+       break;
+      if (PtrUInt(P) < n) or
+         (v64 <= MAX_INT64_DIV10 - ord(c > 7)) then
+        v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64 {$else} * 10 {$endif} + PtrInt(c)
+      else
+        break;
+      inc(P);
+      dec(frac);
+    until false;
+    while P^ in ['0' .. '9'] do
+      inc(P);
+    if P^ = '.' then
+      goto e;
+  end;
   if P^ in ['E', 'e'] then
   begin
-    if not (fValid in flags) then
-      goto e;
     n := 0;
-    exclude(flags, fValid);
     inc(P);
     if P^ = '+' then
       inc(P)
@@ -6827,18 +6844,19 @@ z:    err := 1; // fast error path for non-number input
       if c > 9 then
         break;
       n := (n * 10) + c;
-      include(flags, fValid);
       inc(P);
       if n >= $fff000 then // huge constant, but still aarch64 friendly
         goto e;
+      include(flags, fValidExp); // at least one valid exponent digit
     until false;
     if fNegExp in flags then
       dec(frac, n)
     else
       inc(frac, n);
+    if not (fValidExp in flags) then
+      goto e;
   end;
-  if (P^ <> #0) or
-     not (fValid in flags) then
+  if P^ <> #0 then
 e:  err := 1; // return the (partial) value even if not ended with #0
   if (frac = 0) or (v64 = 0) then // fast path for e.g. '123' or '0'/'0E400'
   begin
