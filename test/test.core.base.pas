@@ -5733,6 +5733,34 @@ begin
   Check(GetNumericVariantFromJson(pointer(s), TVarData(vj), false) = nil);
   s := '9223372036854775.8';
   Check(GetNumericVariantFromJson(pointer(s), TVarData(vj), false) = nil);
+  CheckInvalidNumber('');
+  CheckInvalidNumber(' ');
+  CheckInvalidNumber('+');
+  CheckInvalidNumber('-');
+  CheckInvalidNumber('  +');
+  CheckInvalidNumber('  -');
+  {$ifndef WIN32DELPHI}
+  CheckGetExtendedBits('0.00000000000000000770000', $3C61C14719F3FABC);
+  CheckGetExtendedBits('0.000000007832000000000000', $3E40D1B00240A588);
+  CheckGetExtendedBits('228518839.2', $41AB3DD76E666666);
+  CheckGetExtendedBits('228518839.20000000', $41AB3DD76E666666);
+  CheckGetExtendedBits('-228518839.20000000', QWord($C1AB3DD76E666666));
+  {$endif WIN32DELPHI}
+  CheckJsonDoubleBits('0.00000000000000000770000', $3C61C14719F3FABC);
+  CheckJsonDoubleBits('0.000000007832000000000000', $3E40D1B00240A588);
+  CheckJsonDoubleBits('228518839.20000000', $41AB3DD76E666666);
+  CheckJsonDoubleBits('-228518839.20000000', QWord($C1AB3DD76E666666));
+  CheckJsonDoubleBits('-922337203685477580.8', QWord($C3A999999999999A));
+  CheckJsonDoubleBits('-92233720368547758.08', QWord($C3747AE147AE147B));
+  CheckJsonDoubleBits('-9223372036854775.808', QWord($C340624DD2F1A9FC));
+  s := '0.' + RawUtf8(StringOfChar('0', 324));
+  Check(GetNumericVariantFromJson(pointer(s), TVarData(vj), false) = PUtf8Char(pointer(s)) + length(s));
+  CheckEqual(TVarData(vj).VType, varInteger);
+  CheckEqual(TVarData(vj).VInteger, 0);
+  s := '-0e-400';
+  Check(GetNumericVariantFromJson(pointer(s), TVarData(vj), false) = PUtf8Char(pointer(s)) + length(s));
+  CheckEqual(TVarData(vj).VType, varInteger);
+  CheckEqual(TVarData(vj).VInteger, 0);
   CheckInvalidNumber('1.2.3');
   CheckInvalidNumber('0..1');
   CheckInvalidNumber('toto');

@@ -11654,6 +11654,7 @@ begin
            not (fNeg in flags) then
           break;
         inc(Json);
+        dec(frac); // the boundary digit also belongs to the fraction
         v64 := MIN_INT64; // sentinel = magnitude 2^63, already negative
         c := PtrUInt(Json^) - ord('0');
         break;
@@ -11703,15 +11704,15 @@ begin
       inc(frac, n);
   end;
   // 2. now v64, frac, cnt, exp contain a number parsed from Json
+  if v64 = 0 then
+  begin // zero is independent of the number of fractional zeros or exponent
+    vd.VType := varInteger;
+    vd.VPtrInt := {$ifdef CPU64} v64 {$else} 0 {$endif};
+    result := Json; // returns the first char after the parsed number
+    exit;
+  end;
   if PtrInt(cnt) >= 0 then
-    if v64 = 0 then
-    begin
-      vd.VType := varInteger;
-      vd.VPtrInt := {$ifdef CPU64} v64 {$else} 0 {$endif};
-      result := Json; // returns the first char after the parsed number
-      exit;
-    end
-    else if frac = 0 then
+    if frac = 0 then
     begin
       if cnt <= 9 then
         vd.VType := varInt64
@@ -11726,7 +11727,8 @@ begin
     end
     else if (frac < 0) and
             (frac >= -4) and
-            (v64 <= CURRENCY_MAX[frac]) then
+            (v64 <= CURRENCY_MAX[frac]) and
+            ((v64 >= 0) or (frac = -4)) then
     begin // currency as ###.0123
       if v64 > 0 then // MIN_INT64 final value may have been set above
       begin
@@ -11739,6 +11741,15 @@ begin
       result := Json;
       exit;
     end;
+  // Remove padding that prevents exact Clinger operands (mantissa and power).
+  while (frac < 0) and
+        ((v64 > MAX_SAFE_JS_INTEGER) or (frac < -22)) do
+  begin
+    if v64 mod 10 <> 0 then
+      break;
+    v64 := v64 div 10;
+    inc(frac);
+  end;
   if not AllowVarDouble or
      (frac <= -324) then // 5.0 x 10^-324 .. 1.7 x 10^308
     exit; // we can't convert into a double

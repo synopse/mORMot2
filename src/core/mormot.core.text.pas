@@ -6755,6 +6755,8 @@ begin
     inc(P);
     include(flags, fNeg);
   end;
+  if P^ = #0 then
+    goto z; // a sign or spaces alone contain no number
   if P^ > '9' then
   begin
     c := PtrUInt(PWord(P)^) and $dfdf; // at least 1 char + #0
@@ -6864,6 +6866,15 @@ e:  err := 1; // return the (partial) value even if not ended with #0
       v64 := -v64; // '-0' -> 0 following ECMAScript's number-to-string rules
     result := v64;
     exit;
+  end;
+  // Remove padding that prevents exact Clinger operands (mantissa and power).
+  while (frac < 0) and
+        ((v64 > MAX_SAFE_JS_INTEGER) or (frac < -22)) do
+  begin
+    if v64 mod 10 <> 0 then
+      break;
+    v64 := v64 div 10;
+    inc(frac);
   end;
   result := v64;
   if (frac < 0) and
