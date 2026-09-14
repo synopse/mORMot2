@@ -6722,95 +6722,6 @@ begin
   UInt32ToUtf8(Value, result);
 end;
 
-// Only the retained integer mantissa is converted: no tail rescan or big integers.
-function DecimalToDoubleDirected(Mantissa: UInt64; Exponent: PtrInt; Negative: boolean): double;
-const
-  Scale: double = 1.3407807929942597e154; // 2^512
-  InvScale: double = 7.458340731200207e-155;
-  MaxScaled: double = 1.3407807929942596e154;
-var
-  d: double;
-  q: UInt64;
-begin
-  if Mantissa = 0 then
-  begin
-    result := 0;
-    if Negative then
-      result := -result;
-    exit;
-  end;
-  // Recover the short path for equivalent inputs such as 228518839.20000000.
-  while (Mantissa > 9007199254740991) or (Exponent < -22) do
-  begin
-    q := Mantissa div 10;
-    if q * 10 <> Mantissa then
-      break;
-    Mantissa := q;
-    inc(Exponent);
-  end;
-  // Apply the sign before rounding the integer conversion.
-  if Mantissa <= UInt64(High(Int64)) then
-    if Negative then
-      d := -Int64(Mantissa)
-    else
-      d := Int64(Mantissa)
-  else
-  begin
-    // Both 32-bit halves and the power-of-two scaling are exact doubles.
-    d := Int64(Mantissa shr 32) * 4294967296.0;
-    if Negative then
-      d := -d - cardinal(Mantissa)
-    else
-      d := d + cardinal(Mantissa);
-  end;
-  if Exponent = 0 then
-    result := d
-  else if (Exponent >= -22) and (Exponent < 0) then
-    // Exact mantissa / exact power: the short-number rule from #583.
-    result := d / POW10[-Exponent]
-  else if (Exponent >= -31) and (Exponent <= 31) then
-    result := d * POW10[Exponent]
-  else if Exponent < -342 then
-    result := d * 0.0
-  else if Exponent < -307 then
-  begin
-    // Delay underflow until after the significant digits have been applied.
-    inc(Exponent, 308);
-    if Exponent < -31 then
-      d := d * (POW10[(-Exponent and not 31) shr 5 + 45] / POW10[-Exponent and 31])
-    else
-      d := d * POW10[Exponent];
-    result := d * 1E-308;
-  end
-  else if Exponent < 0 then
-  begin
-    Exponent := -Exponent;
-    result := d * (POW10[(Exponent and not 31) shr 5 + 45] / POW10[Exponent and 31]);
-  end
-  else if Exponent > 308 then
-  begin
-    q := $7ff0000000000000;
-    if Negative then
-      q := q or $8000000000000000;
-    result := PDouble(@q)^;
-  end
-  else if Exponent >= 290 then
-  begin
-    d := d * (POW10[(Exponent and not 31) shr 5 + 34] * POW10[Exponent and 31] * InvScale);
-    if abs(d) > MaxScaled then
-    begin
-      q := $7ff0000000000000;
-      if Negative then
-        q := q or $8000000000000000;
-      result := PDouble(@q)^;
-    end
-    else
-      result := d * Scale;
-  end
-  else
-    result := d * (POW10[(Exponent and not 31) shr 5 + 34] * POW10[Exponent and 31]);
-end;
-
 { Fixed-width conversion of an integer mantissa and decimal exponent.
   Integer scaling follows fast_float (decimal_to_binary.h).
   No input string, discarded-tail analysis, or variable-precision arithmetic.
@@ -7605,6 +7516,150 @@ begin
     result := $7ff0000000000000
   else
     result := (UInt64(Power) shl 52) or (M and $000fffffffffffff);
+end;
+
+// Compare a bounded M * 10^E with a finite positive binary64, exactly.
+// Only directed rounding uses this: no input rescan or discarded-tail recovery.
+function DecimalCompareDouble(Mantissa: UInt64; Exponent: integer; Bits: UInt64): integer;
+type
+  TProduct = record
+    Count: integer;
+    Limb: array[0..27] of cardinal; // at most 53 + ceil(342*log2(5)) = 848 bits
+  end;
+
+  procedure Init(var P: TProduct; Value: UInt64);
+  begin
+    P.Limb[0] := cardinal(Value);
+    P.Limb[1] := Value shr 32;
+    P.Count := 1 + ord(P.Limb[1] <> 0);
+  end;
+
+  procedure Power5(var P: TProduct; E: integer);
+  const
+    POW5: array[0..13] of cardinal = (1, 5, 25, 125, 625, 3125, 15625,
+      78125, 390625, 1953125, 9765625, 48828125, 244140625, 1220703125);
+  var
+    i, step: integer;
+    carry: UInt64;
+    factor: cardinal;
+  begin
+    while E <> 0 do
+    begin
+      step := 13;
+      if E < step then
+        step := E;
+      factor := POW5[step];
+      carry := 0;
+      for i := 0 to P.Count - 1 do
+      begin
+        carry := UInt64(P.Limb[i]) * factor + carry;
+        P.Limb[i] := cardinal(carry);
+        carry := carry shr 32;
+      end;
+      if carry <> 0 then
+      begin
+        P.Limb[P.Count] := carry;
+        inc(P.Count);
+      end;
+      dec(E, step);
+    end;
+  end;
+
+  procedure Shift(var P: TProduct; N: integer);
+  var
+    words, bits, i: integer;
+  begin
+    words := N shr 5;
+    bits := N and 31;
+    if bits = 0 then
+    begin
+      for i := P.Count - 1 downto 0 do
+        P.Limb[i + words] := P.Limb[i];
+      inc(P.Count, words);
+    end
+    else
+    begin
+      P.Limb[P.Count + words] := P.Limb[P.Count - 1] shr (32 - bits);
+      for i := P.Count - 1 downto 1 do
+        P.Limb[i + words] := (P.Limb[i] shl bits) or (P.Limb[i - 1] shr (32 - bits));
+      P.Limb[words] := P.Limb[0] shl bits;
+      inc(P.Count, words + 1);
+      if P.Limb[P.Count - 1] = 0 then
+        dec(P.Count);
+    end;
+    for i := 0 to words - 1 do
+      P.Limb[i] := 0;
+  end;
+
+var
+  a, b: TProduct;
+  binaryExponent, aBits, bBits, i: integer;
+  binaryMantissa: UInt64;
+begin
+  binaryExponent := Bits shr 52;
+  binaryMantissa := Bits and $000fffffffffffff;
+  if binaryExponent = 0 then
+    binaryExponent := -1074
+  else
+  begin
+    binaryMantissa := binaryMantissa or (UInt64(1) shl 52);
+    dec(binaryExponent, 1075);
+  end;
+  Init(a, Mantissa);
+  Init(b, binaryMantissa);
+  if Exponent >= 0 then
+    Power5(a, Exponent)
+  else
+    Power5(b, -Exponent);
+  aBits := (a.Count - 1) * 32 + 64 - DecimalLeadingZeros(a.Limb[a.Count - 1]);
+  bBits := (b.Count - 1) * 32 + 64 - DecimalLeadingZeros(b.Limb[b.Count - 1]);
+  result := (aBits + Exponent) - (bBits + binaryExponent);
+  if result <> 0 then
+    exit;
+  // Equal bit lengths bound either shifted product by the larger existing one.
+  if Exponent > binaryExponent then
+    Shift(a, Exponent - binaryExponent)
+  else if Exponent < binaryExponent then
+    Shift(b, binaryExponent - Exponent);
+  for i := a.Count - 1 downto 0 do
+    if a.Limb[i] <> b.Limb[i] then
+    begin
+      result := ord(a.Limb[i] > b.Limb[i]) * 2 - 1;
+      exit;
+    end;
+end;
+
+function DecimalToDoubleDirected(Mantissa: UInt64; Exponent: PtrInt; Negative: boolean): double;
+var
+  bits: UInt64;
+  cmp: integer;
+  away: boolean;
+begin
+  // Start from the nearest result, then select its exact directed neighbour.
+  bits := DecimalToDoubleBitsPortable(Mantissa, Exponent);
+  // Keep the infinity sentinel used by both parsers to report overflow.
+  if (Mantissa <> 0) and (bits <> $7ff0000000000000) then
+  begin
+    case GetRoundMode of
+      rmDown: away := Negative;
+      rmUp:   away := not Negative;
+    else
+      away := false;
+    end;
+    if bits = 0 then
+      inc(bits, ord(away))
+    else
+    begin
+      cmp := DecimalCompareDouble(Mantissa, Exponent, bits);
+      if away then
+        inc(bits, ord(cmp > 0))
+      else
+        dec(bits, ord(cmp < 0));
+    end;
+  end;
+  if Negative then
+    bits := bits or $8000000000000000;
+  result := PDouble(@bits)^;
 end;
 
 {$ifdef ASMX64}

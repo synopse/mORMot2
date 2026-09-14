@@ -5152,12 +5152,66 @@ procedure TTestCoreBase.NumericalConversions;
     CheckJsonDoubleBits('0.00012', $3F1F75104D551D69);
   end;
 
+  procedure CheckDirectedRounding;
+  const
+    Inputs: array[0..7] of RawUtf8 = (
+      '99999999999999990',
+      '-99999999999999990',
+      '9223372036854775800',
+      '-1000000000000000010',
+      '1.23456789012345678',
+      '-1.23456789012345678',
+      '1.234e-200',
+      '1.7976931348623157e308');
+    Expected: array[0..7, 0..3] of QWord = (
+      (QWord($4376345785D89FFF), QWord($4376345785D89FFF), QWord($4376345785D8A000), QWord($4376345785D89FFF)),
+      (QWord($C376345785D89FFF), QWord($C376345785D8A000), QWord($C376345785D89FFF), QWord($C376345785D89FFF)),
+      (QWord($43E0000000000000), QWord($43DFFFFFFFFFFFFF), QWord($43E0000000000000), QWord($43DFFFFFFFFFFFFF)),
+      (QWord($C3ABC16D674EC800), QWord($C3ABC16D674EC801), QWord($C3ABC16D674EC800), QWord($C3ABC16D674EC800)),
+      (QWord($3FF3C0CA428C59FB), QWord($3FF3C0CA428C59FB), QWord($3FF3C0CA428C59FC), QWord($3FF3C0CA428C59FB)),
+      (QWord($BFF3C0CA428C59FB), QWord($BFF3C0CA428C59FC), QWord($BFF3C0CA428C59FB), QWord($BFF3C0CA428C59FB)),
+      (QWord($166E39E258C236BF), QWord($166E39E258C236BF), QWord($166E39E258C236C0), QWord($166E39E258C236BF)),
+      (QWord($7FEFFFFFFFFFFFFF), QWord($7FEFFFFFFFFFFFFE), QWord($7FEFFFFFFFFFFFFF), QWord($7FEFFFFFFFFFFFFE)));
+  var
+    saved: TFpuRoundingMode;
+    mode, i: integer;
+    text: RawUtf8;
+  begin
+    saved := GetRoundMode;
+    try
+      for mode := 0 to 3 do
+      begin
+        SetRoundMode(TFpuRoundingMode(mode));
+        for i := 0 to high(Inputs) do
+        begin
+          text := Inputs[i];
+          CheckGetExtendedBits(text, Expected[i, mode]);
+          CheckGetExtendedBits(' ' + text, Expected[i, mode]);
+          if text[1] <> '-' then
+            CheckGetExtendedBits('+' + text, Expected[i, mode]);
+          if i <= 3 then
+          begin
+            CheckGetExtendedBits(text + 'e0', Expected[i, mode]);
+            CheckGetExtendedBits(text + '.0', Expected[i, mode]);
+            CheckGetExtendedBits(copy(text, 1, length(text) - 1) + 'e1', Expected[i, mode]);
+            CheckJsonDoubleBits(text + '.0', Expected[i, mode]);
+          end
+          else if i <> high(Inputs) then
+            CheckJsonDoubleBits(text, Expected[i, mode]);
+        end;
+      end;
+    finally
+      SetRoundMode(saved);
+    end;
+  end;
+
   procedure CheckRetainedDecimal;
   var
     saved: TFpuRoundingMode;
     mode: integer;
     text: RawUtf8;
   begin
+    CheckDirectedRounding;
     saved := GetRoundMode;
     try
       SetRoundMode(rmNearest);
