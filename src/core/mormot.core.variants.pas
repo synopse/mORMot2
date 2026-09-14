@@ -11518,8 +11518,14 @@ const
   CURRENCY_MAX: array[-4 .. -1] of Int64 = (
     MAX_INT64, MAX_INT64_DIV10, MAX_INT64 div 100, MAX_INT64 div 1000);
 
+{$if defined(WIN64DELPHI) and defined(ASMX64)}
+function GetNumericVariantFromJsonPascal(Json: PUtf8Char; var Value: TVarData;
+  AllowVarDouble: boolean): PUtf8Char;
+{$else}
 function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
   AllowVarDouble: boolean): PUtf8Char;
+{$ifend}
+
 var
   // logic below is similar to mormot.core.text.pas GetExtended()
   c, n, cnt: PtrUInt;
@@ -11782,6 +11788,293 @@ begin
   vd.VDouble := d;
   result := Json;
 end;
+
+{$if defined(WIN64DELPHI) and defined(ASMX64)}
+const
+  NUMERIC_SSSE3_BYTE = ord(cfSSSE3) shr 3;
+  NUMERIC_SSSE3_MASK = 1 shl (ord(cfSSSE3) and 7);
+
+// SSSE3 digit reduction, adapted from MoonBot's JS4 scanner.
+// Read 16 bytes only when P..P+16 stay within one 4 KiB page. Digit masks
+// locate the dot/terminator; PSHUFB and PMADDUBSW/PMADDWD combine exact
+// integer groups. Small positional tables contain byte controls, not powers.
+// Other CPUs, long inputs and uncommon grammar use the Pascal implementation.
+// REP BSF is TZCNT when available; its nonzero operand also works with BSF.
+function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
+  AllowVarDouble: boolean): PUtf8Char;
+asm .noframe
+        test    byte ptr [rip + CpuFeatures + NUMERIC_SSSE3_BYTE], NUMERIC_SSSE3_MASK
+        je      GetNumericVariantFromJsonPascal       // CPU without SSSE3: arguments untouched
+        test    rcx, rcx
+        jz      GetNumericVariantFromJsonPascal       // nil pointer: the scalar answers nil
+        movzx   r11d, r8b
+        add     r11d, r11d               // bit 1: AllowDouble
+        cmp     byte ptr [rcx], '-'
+        jne     @positive
+        inc     rcx
+        or      r11d, 1                  // bit 0: negative
+@positive:
+        mov     eax, ecx
+        and     eax, 4095
+        cmp     eax, 4079
+        ja      @fallback               // 17 bytes must stay inside the page
+        movdqu  xmm0, [rcx]
+        movdqa  xmm1, xmm0
+        paddb   xmm1, [rip + @jbias]
+        pcmpgtb xmm1, [rip + @jthreshold] // digit lanes
+        pmovmskb eax, xmm1
+        not     eax                      // non-digit lanes; bits 16..31 are sentinels
+        db      $f3
+        bsf     r8d, eax                 // p: integer digit count
+        test    r8d, r8d
+        jz      @nil                     // no leading digit: not a JSON number
+        cmp     r8d, 15
+        ja      @fallback                // 16+ digits: scalar
+        movzx   r9d, byte ptr [rcx]
+        sub     r9d, 48                  // 0 iff the first digit is '0'
+        lea     r10d, [r8 - 1]           // 0 iff a single integer digit
+        test    r9d, r9d
+        setz    r9b
+        test    r10d, r10d
+        setnz   r10b
+        and     r9b, r10b
+        jnz     @nil                     // JSON forbids a leading zero before another digit
+        psubb   xmm0, [rip + @jascii0]
+        movzx   r9d, byte ptr [rcx + r8] // byte after the integer digits
+        cmp     r9d, '.'
+        je      @fraction
+        or      r9d, 32
+        cmp     r9d, 'e'
+        je      @fallback
+                                         // any other byte ends the number
+        mov     r10d, r8d                // p
+        shl     r8d, 4
+        lea     rax, [rip + @jctrlInt]
+        pshufb  xmm0, [rax + r8]         // digits right-aligned in all 16 lanes
+        pmaddubsw xmm0, [rip + @jten]
+        pmaddwd xmm0, [rip + @jhundred]
+        packssdw xmm0, xmm0
+        pmaddwd xmm0, [rip + @jtenThousand]
+        movq    rax, xmm0                // low dword: lanes 0..7 (H), high dword: lanes 8..15 (L)
+        mov     r9d, eax
+        shr     rax, 32
+        imul    r9, r9, 100000000
+        add     rax, r9                  // exact integer < 10^15
+        lea     r8, [rcx + r10]          // end pointer
+        cmp     r10d, 9
+        seta    r10b
+        movzx   r10d, r10b
+        imul    r10d, r10d, 17
+        add     r10d, 3                  // varInteger = 3, varInt64 = 20
+        mov     r9d, r11d
+        and     r9d, 1
+        neg     r9                       // 0 or -1
+        xor     rax, r9
+        sub     rax, r9                  // conditional negate (zero stays +0)
+        mov     qword ptr [rdx + 8], rax
+        mov     dword ptr [rdx], r10d
+        mov     rax, r8
+        ret
+@fraction:
+        lea     r9d, [rax - 1]
+        and     eax, r9d                 // clear the dot bit
+        db      $f3
+        bsf     r9d, eax                 // n: position after the fraction digits (16 = none in the window)
+        movzx   eax, byte ptr [rcx + r9] // byte after the fraction digits (index <= 16: readable)
+        cmp     r9d, 16
+        jne     @fractionChecks
+        lea     r10d, [rax - 48]
+        cmp     r10d, 9
+        jbe     @fallback                // digit at byte 16: the number continues
+@fractionChecks:
+        lea     r10d, [r8 + 1]
+        cmp     r9d, r10d
+        je      @nil                     // "1.": an empty fraction is not JSON
+        cmp     eax, '.'
+        je      @nil                     // second dot
+        or      eax, 32
+        cmp     eax, 'e'
+        je      @fallback
+        mov     r10d, r9d
+        sub     r10d, r8d
+        dec     r10d                     // fractional digit count
+        cmp     r10d, 4
+        jbe     @currency
+        mov     r10d, r8d                // p
+        shl     r8d, 4
+        shl     r9d, 4
+        lea     rax, [rip + @jmask]
+        pand    xmm0, [rax + r9]
+        lea     rax, [rip + @jctrlDot]
+        pshufb  xmm0, [rax + r8]
+        pmaddubsw xmm0, [rip + @jten]
+        pmaddwd xmm0, [rip + @jhundred]
+        packssdw xmm0, xmm0
+        pmaddwd xmm0, [rip + @jtenThousand]
+        movq    rax, xmm0
+        test    rax, rax
+        jz      @fractionZero            // JSON zero is always varInteger
+        test    r11d, 2
+        jz      @nil
+        cvtdq2pd xmm0, xmm0
+        neg     r10
+        lea     rax, [rip + POW10]
+        cmp     r9d, 9 * 16
+        ja      @wideFraction
+        divsd   xmm0, qword ptr [rax + r10 * 8 + 39 * 8]
+        jmp     @fractionSign
+@wideFraction:
+        movhlps xmm1, xmm0
+        mulsd   xmm0, [rip + @je8]
+        addsd   xmm0, xmm1
+        divsd   xmm0, qword ptr [rax + r10 * 8 + 47 * 8]
+@fractionSign:
+        and     r11d, 1
+        shl     r11, 63
+        movq    xmm1, r11
+        xorpd   xmm0, xmm1               // same rounding order as Pascal
+        movsd   qword ptr [rdx + 8], xmm0
+        mov     dword ptr [rdx], varDouble
+        shr     r9d, 4
+        lea     rax, [rcx + r9]
+        ret
+@fractionZero:
+        mov     qword ptr [rdx + 8], 0
+        mov     dword ptr [rdx], varInteger
+        shr     r9d, 4
+        lea     rax, [rcx + r9]
+        ret
+@currency:                               // f=1..4; at most 15 digits, scaling cannot overflow Int64
+        movd    xmm2, r10d               // preserve f during integer reduction
+        mov     r10d, r9d                // n
+        shl     r8d, 4
+        shl     r9d, 4
+        lea     rax, [rip + @jmask]
+        pand    xmm0, [rax + r9]
+        lea     rax, [rip + @jctrlDot]
+        pshufb  xmm0, [rax + r8]
+        lea     rax, [rip + @jctrlInt]
+        sub     r9d, 16
+        pshufb  xmm0, [rax + r9]         // right-align n-1 digits
+        pmaddubsw xmm0, [rip + @jten]
+        pmaddwd xmm0, [rip + @jhundred]
+        packssdw xmm0, xmm0
+        pmaddwd xmm0, [rip + @jtenThousand]
+        movq    rax, xmm0
+        mov     r9d, eax
+        shr     rax, 32
+        imul    r9, r9, 100000000
+        add     rax, r9
+        lea     r8, [rcx + r10]
+        test    rax, rax
+        jz      @currencyZero
+        movd    r9d, xmm2
+        neg     r9d
+        movsxd  r9, r9d
+        lea     r10, [rip + CURRENCY_FACTOR]
+        movsxd  r9, dword ptr [r10 + r9 * 4 + 16]
+        imul    rax, r9                  // integer Currency payload, exact
+        mov     r9d, r11d
+        and     r9d, 1
+        neg     r9
+        xor     rax, r9
+        sub     rax, r9
+        mov     qword ptr [rdx + 8], rax
+        mov     dword ptr [rdx], varCurrency
+        mov     rax, r8
+        ret
+@currencyZero:
+        mov     qword ptr [rdx + 8], 0
+        mov     dword ptr [rdx], varInteger
+        mov     rax, r8
+        ret
+@nil:
+        xor     eax, eax
+        ret
+@fallback:
+        mov     r8d, r11d
+        shr     r8d, 1
+        and     r11d, 1
+        sub     rcx, r11
+        jmp     GetNumericVariantFromJsonPascal
+        .align 16
+@jbias:
+        db $46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46
+        .align 16
+@jthreshold:
+        db $75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75
+        .align 16
+@jascii0:
+        db $30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30
+        .align 16
+@jten:
+        db $0a,$01,$0a,$01,$0a,$01,$0a,$01,$0a,$01,$0a,$01,$0a,$01,$0a,$01
+        .align 16
+@jhundred:
+        db $64,$00,$01,$00,$64,$00,$01,$00,$64,$00,$01,$00,$64,$00,$01,$00
+        .align 16
+@jtenThousand:
+        db $10,$27,$01,$00,$10,$27,$01,$00,$10,$27,$01,$00,$10,$27,$01,$00
+        .align 16
+@je8:
+        dq $4197d78400000000, 0
+        .align 16
+@jctrlInt: // row p (1..15): p digits right-aligned in all 16 lanes (lane 15 = last digit)
+        db $80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80
+        db $80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$00
+        db $80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$00,$01
+        db $80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$00,$01,$02
+        db $80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$00,$01,$02,$03
+        db $80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$00,$01,$02,$03,$04
+        db $80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$00,$01,$02,$03,$04,$05
+        db $80,$80,$80,$80,$80,$80,$80,$80,$80,$00,$01,$02,$03,$04,$05,$06
+        db $80,$80,$80,$80,$80,$80,$80,$80,$00,$01,$02,$03,$04,$05,$06,$07
+        db $80,$80,$80,$80,$80,$80,$80,$00,$01,$02,$03,$04,$05,$06,$07,$08
+        db $80,$80,$80,$80,$80,$80,$00,$01,$02,$03,$04,$05,$06,$07,$08,$09
+        db $80,$80,$80,$80,$80,$00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a
+        db $80,$80,$80,$80,$00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
+        db $80,$80,$80,$00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c
+        db $80,$80,$00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d
+        db $80,$00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e
+        .align 16
+@jctrlDot: // row p (1..14): lanes < p keep, lanes p..14 select lane+1, lane 15 zero
+        db $01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
+        db $00,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
+        db $00,$01,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
+        db $00,$01,$02,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
+        db $00,$01,$02,$03,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
+        db $00,$01,$02,$03,$04,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
+        db $00,$01,$02,$03,$04,$05,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
+        db $00,$01,$02,$03,$04,$05,$06,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
+        db $00,$01,$02,$03,$04,$05,$06,$07,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
+        db $00,$01,$02,$03,$04,$05,$06,$07,$08,$0a,$0b,$0c,$0d,$0e,$0f,$80
+        db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0b,$0c,$0d,$0e,$0f,$80
+        db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0c,$0d,$0e,$0f,$80
+        db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0d,$0e,$0f,$80
+        db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0e,$0f,$80
+        db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0f,$80
+        db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$80
+        .align 16
+@jmask: // row n (0..16): lanes < n keep, lanes >= n zero
+        db $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+        db $ff,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+        db $ff,$ff,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+        db $ff,$ff,$ff,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+        db $ff,$ff,$ff,$ff,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+        db $ff,$ff,$ff,$ff,$ff,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+        db $ff,$ff,$ff,$ff,$ff,$ff,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$00,$00,$00,$00,$00,$00,$00,$00,$00
+        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$00,$00,$00,$00,$00,$00,$00,$00
+        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$00,$00,$00,$00,$00,$00,$00
+        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$00,$00,$00,$00,$00,$00
+        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$00,$00,$00,$00,$00
+        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$00,$00,$00,$00
+        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$00,$00,$00
+        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$00,$00
+        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$00
+        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+end;
+{$ifend}
 
 procedure UniqueVariant(Interning: TRawUtf8Interning; var aResult: variant;
   aText: PUtf8Char; aTextLen: PtrInt; aAllowVarDouble: boolean);
