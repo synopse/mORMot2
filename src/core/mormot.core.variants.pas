@@ -11514,27 +11514,24 @@ exponent:         inc(Json); // inlined custom GetInteger()
 end;
 
 const
-  CURRENCY_FACTOR: array[-4 .. -1] of integer = (-1, -10, -100, -1000);
-  CURRENCY_MAX_NEG: array[-4 .. -1] of Int64 = (
-    -MAX_INT64, -MAX_INT64_DIV10, -MAX_INT64 div 100, -MAX_INT64 div 1000);
+  CURRENCY_FACTOR: array[-4 .. -1] of integer = (1, 10, 100, 1000);
+  CURRENCY_MAX: array[-4 .. -1] of Int64 = (
+    MAX_INT64, MAX_INT64_DIV10, MAX_INT64 div 100, MAX_INT64 div 1000);
 
 function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
   AllowVarDouble: boolean): PUtf8Char;
 var
   // logic below is similar to mormot.core.text.pas GetExtended()
-  c: PtrUInt;
-  remdigit: integer;
-  frac, exp: PtrInt;
-  flags: set of (fNeg, fNegExp, fValid);
-  v64: Int64; // accumulated as negative (faster, and no UInt64 on Delphi 7)
+  c, n, cnt: PtrUInt;
+  frac: PtrInt;
+  flags: set of (fNeg, fNegExp, fValidExp);
+  v64: Int64;
   d: double;
   vd: TSynVarData absolute Value;
 begin
-  // 1. parse input text as number into v64, frac, digit, exp
+  // 1. parse input text as number into v64, frac, cnt
   result := nil; // return nil to indicate parsing error
   byte(flags) := 0;
-  v64 := 0;
-  frac := 0;
   if Json = nil then
     exit;
   if Json^ = '-' then // note: '+xxx' is not valid Json so is not handled here
@@ -11542,60 +11539,145 @@ begin
     inc(Json);
     include(flags, fNeg);
   end;
-  c := PtrUInt(Json^) - ord('0');
-  if c > 9 then
+  cnt := PtrUInt(Json^) - ord('0');
+  if ((cnt = 0) and
+      (Json[1] in ['0' .. '9'])) or // '012' is no valid Json, but '0.x' '0' are
+     (cnt > 9) then
     exit;
-  if (c = 0) and
-     (Json[1] in ['0' .. '9']) then // '012' is not Json, but '0.x' and '0' are
-    exit;
-  remdigit := 19;    // max Int64 resolution
-  repeat
+  n := PtrUInt(Json) + 18;   // the first 18 digits can't overflow Int64
+  inc(Json);
+  c := PtrUInt(Json^) - ord('0'); // unroll first 8 digits parsing
+  if c <= 9 then
+  begin
+    inc(Json);
+    cnt := cnt * 10 + c; // very efficient, especially on CPU32
+    c := PtrUInt(Json^) - ord('0');
     if c <= 9 then
     begin
       inc(Json);
-      dec(remdigit); // over-required digits are just ignored
-      if (remdigit = 0) and // validate the 19th significant digit
-         (v64 < -MAX_INT64_DIV10 + ord(c > 8)) then
-        dec(remdigit);
-      if remdigit >= 0 then
+      cnt := cnt * 10 + c;
+      c := PtrUInt(Json^) - ord('0');
+      if c <= 9 then
       begin
-        v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64
-                   {$else} * 10 {$endif} - PtrInt(c); // accumulate as negative
+        inc(Json);
+        cnt := cnt * 10 + c;
         c := PtrUInt(Json^) - ord('0');
-        include(flags, fValid);
-        dec(frac, ord(frac <> 0)); // digits after '.' (branchless)
-        continue;
+        if c <= 9 then
+        begin
+          inc(Json);
+          cnt := cnt * 10 + c;
+          c := PtrUInt(Json^) - ord('0');
+          if c <= 9 then
+          begin
+            inc(Json);
+            cnt := cnt * 10 + c;
+            c := PtrUInt(Json^) - ord('0');
+            if c <= 9 then
+            begin
+              inc(Json);
+              cnt := cnt * 10 + c;
+              c := PtrUInt(Json^) - ord('0');
+              if c <= 9 then
+              begin
+                inc(Json);
+                cnt := cnt * 10 + c;
+              end;
+            end;
+          end;
+        end;
       end;
-      c := PtrUInt(Json^) - ord('0');
-      if frac >= 0 then
-        inc(frac);   // frac>0 to handle #############00000
-      continue;
     end;
-    inc(c, ord('0'));
-    if c <> ord('.') then
+  end;
+  frac := 0;
+  v64 := cnt;
+  if c <= 9 then // 64-bit aware loop for 9 digits and up
+  repeat
+    c := PtrUInt(Json^) - ord('0');
+    if c > 9 then
       break;
-    if frac <> 0 then
-      exit; // only one dot allowed
-    repeat
-      inc(Json);
+    inc(Json);
+    cnt := PtrUInt(Json^) - ord('0'); // pre-load digits by pair
+    v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64 {$else} * 10 {$endif} + Int64(c);
+    if cnt > 9 then
+      break;
+    inc(Json); // we know that PtrUInt(Json) <> n this it is an odd digit index
+    v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64 {$else} * 10 {$endif} + Int64(cnt);
+    if PtrUInt(Json) <> n then // five maximum 2-digit Int64 iterations
+      continue;
+    repeat // loop including Int64 overflow test for 18-19 digits
       c := PtrUInt(Json^) - ord('0');
-      if c > 9 then // require a single dot followed by a digit
-        if frac = 0 then
-          exit // needs at least one digit after the dot
-        else
+      if c > 9 then
+        break;
+      if v64 > MAX_INT64_DIV10 - ord(c > 7) then
+      begin
+        if (v64 <> MAX_INT64_DIV10) or
+           (c <> 8) or
+           not (fNeg in flags) then
           break;
-      dec(frac);
-    until (c <> 0) or
-          (v64 <> 0);
+        inc(Json);
+        v64 := MIN_INT64; // sentinel = magnitude 2^63, already negative
+        c := PtrUInt(Json^) - ord('0');
+        break;
+      end;
+      inc(Json);
+      v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64 {$else} * 10 {$endif} + Int64(c);
+    until false;
+    if c <= 9 then
+      repeat // ignore-them-all path for >18/19 significant integer digits
+        inc(Json);
+        inc(frac);
+      until not (Json^ in ['0' .. '9']);
+    break;
   until false;
-  if frac < 0 then
-    inc(frac);       // adjust digits after '.'
-  if (c = ord('E')) or
-     (c = ord('e')) then
+  if Json^ = '.' then // fraction
   begin
     inc(Json);
-    exp := 0;
-    exclude(flags, fValid);
+    if (frac <> 0) or // keep original GetExtended() behavior
+       not (Json^ in ['0' .. '9']) then
+      exit;
+    inc(n); // the dot consumes no digit
+    if v64 = 0 then // properly handle 0.00000000000000000123
+      while Json^ = '0' do
+      begin
+        dec(frac);
+        inc(Json);
+      end;
+    repeat
+      c := PtrUInt(Json^) - ord('0');
+      if c > 9 then
+       break;
+      if (PtrUInt(Json) >= n) and
+         (v64 > MAX_INT64_DIV10 - ord(c > 7)) then
+      begin
+        if (v64 <> MAX_INT64_DIV10) or
+           (c <> 8) or
+           not (fNeg in flags) then
+          break;
+        inc(Json);
+        v64 := MIN_INT64; // sentinel = magnitude 2^63, already negative
+        c := PtrUInt(Json^) - ord('0');
+        break;
+      end;
+      v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64 {$else} * 10 {$endif} + Int64(c);
+      inc(Json);
+      dec(frac);
+    until false;
+    if c <= 9 then
+    begin
+      if PtrUInt(Json) = n then
+        dec(n);
+      repeat
+        inc(Json);
+      until not (Json^ in ['0' .. '9']);
+    end;
+    if Json^ = '.' then
+      exit;
+  end;
+  cnt := n - PtrUInt(Json) + 1; // compute 64-bit remaining-digit count
+  if Json^ in ['E', 'e'] then
+  begin
+    n := 0; // exponent value
+    inc(Json);
     if Json^ = '+' then
       inc(Json)
     else if Json^ = '-' then
@@ -11607,88 +11689,83 @@ begin
       c := PtrUInt(Json^) - ord('0');
       if c > 9 then
         break;
-      exp := (exp * 10) + PtrInt(c);
+      n := (n * 10) + c;
       inc(Json);
-      include(flags, fValid);
-      if exp >= $fff000 then // huge constant, but still aarch64 friendly
+      if n >= $fff000 then // huge constant, but still aarch64 friendly
         exit;
+      include(flags, fValidExp); // at least one valid exponent digit
     until false;
+    if not (fValidExp in flags) then
+      exit;
     if fNegExp in flags then
-      dec(frac, exp)
+      dec(frac, n)
     else
-      inc(frac, exp);
+      inc(frac, n);
   end;
-  if not (fValid in flags) then
-    exit;
-  // 2. now v64, frac, digit, exp contain a number parsed from Json
-  if remdigit >= 0 then
-  begin
-    if v64 = 0 then // in JSON we normalize all 0E100 as plain 0 value
+  // 2. now v64, frac, cnt, exp contain a number parsed from Json
+  if PtrInt(cnt) >= 0 then
+    if v64 = 0 then
     begin
       vd.VType := varInteger;
-      vd.VInteger := v64;
+      vd.VPtrInt := {$ifdef CPU64} v64 {$else} 0 {$endif};
       result := Json; // returns the first char after the parsed number
       exit;
-    end;
-    if (frac = 0) and
-       ((v64 <> Low(Int64)) or (fNeg in flags)) then
+    end
+    else if frac = 0 then
     begin
-      if not (fNeg in flags) then
-        v64 := -v64;
-      if remdigit <= 9 then
-        remdigit := varInt64
+      if cnt <= 9 then
+        vd.VType := varInt64
       else
-        remdigit := varInteger;
-      vd.VType := remdigit;
+        vd.VType := varInteger;
+      if (fNeg in flags) and
+         (v64 > 0) then // MIN_INT64 final value may have been set above
+        v64 := -v64;
       vd.VInt64 := v64;
       result := Json;
       exit;
-    end;
-    if (frac < 0) and
-       (frac >= -4) and
-       ((v64 >= CURRENCY_MAX_NEG[frac]) or
-        ((frac = -4) and (v64 = Low(Int64)) and (fNeg in flags))) then
+    end
+    else if (frac < 0) and
+            (frac >= -4) and
+            (v64 <= CURRENCY_MAX[frac]) then
     begin // currency as ###.0123
-      if fNeg in flags then
-        v64 := -v64; // as round(CurrValue*10000)
-      v64 := v64 * CURRENCY_FACTOR[frac];
+      if v64 > 0 then // MIN_INT64 final value may have been set above
+      begin
+        if fNeg in flags then
+          v64 := -v64;
+        v64 := v64 * CURRENCY_FACTOR[frac];
+      end;
       vd.VType := varCurrency;
       vd.VInt64 := v64;
       result := Json;
       exit;
     end;
-  end;
   if not AllowVarDouble or
      (frac <= -324) then // 5.0 x 10^-324 .. 1.7 x 10^308
     exit; // we can't convert into a double
-  exp := PtrUInt(@POW10);
   if (frac < 0) and
      (frac >= -22) and
-     (v64 >= -MAX_SAFE_JS_INTEGER) then // v64 is negative here
-  begin
+     (v64 <= MAX_SAFE_JS_INTEGER) then
     // Clinger's fast path: d64 and 10^-frac are both exact doubles, so a single
     // IEEE division is correctly rounded - whereas POW10[frac] * d64 is not,
     // since 1E-1..1E-22 are inexact (e.g. '1.2' returned 1.2000000000000002)
-    d := v64;
-    d := d / PPow10(exp)[-frac];
-  end
+    d := v64 / POW10[-frac]
   else
   begin
     if frac >= -31 then
       if frac <= 31 then
-        d := PPow10(exp)[frac] // -31 .. + 31 is the most common case
-      else if frac >= remdigit + 290 then
+        d := POW10[frac] // -31 .. + 31 is the most common case
+      else if frac >= PtrInt(cnt) + 290 then
         exit                   // +308 ..
       else                     // +32 .. +307
-        d := PPow10(exp)[(frac and not 31) shr 5 + 34] * PPow10(exp)[frac and 31]
+        d := POW10[(frac and not 31) shr 5 + 34] * POW10[frac and 31]
     else
     begin
       frac := -frac; // .. -32
-      d := PPow10(exp)[(frac and not 31) shr 5 + 45] / PPow10(exp)[frac and 31];
+      d := POW10[(frac and not 31) shr 5 + 45] / POW10[frac and 31];
     end;
     d := d * v64;
   end;
-  if not (fNeg in flags) then
+  if (fNeg in flags) <> (v64 < 0) then
     d := -d;
   vd.VType := varDouble;
   vd.VDouble := d;
