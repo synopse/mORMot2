@@ -7998,7 +7998,7 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         sub     eax, 48
         cmp     eax, 9
         ja      @special
-        lea     r8, [rcx + 18] // up to 18 digits need no overflow check
+        lea     r8, [rcx + 17] // pairs retain 17 digits; further digits are checked
         mov     r9d, eax
         inc     rcx
         movzx   eax, byte ptr [rcx]
@@ -8035,7 +8035,7 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         sub     eax, 48
         cmp     eax, 9
         ja      @finish
-        sub     r8, 2
+        dec     r8 // compensate the dot while retaining the same 18 safe digits
 @fractionFour:
         cmp     rcx, r8
         jae     @fractionTwo
@@ -8119,8 +8119,6 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         xorpd   xmm0, xmm3
         jmp     @store
 @integerValue:
-        test    r9, r9
-        js      @unsignedInteger
         test    r11b, 1
         jnz     @negativeInteger
 @positiveInteger:
@@ -8134,9 +8132,6 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         movq    xmm0, qword ptr [rip + NumberSignMask]
         mov     dword ptr [rdx], 0
         ret
-@unsignedInteger:
-        xor     r10d, r10d
-        jmp     @convertFull
 @integerExponent:
         xor     r10d, r10d
         jmp     @exponent
@@ -8145,12 +8140,14 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         jmp     @fractionOne
 @moreInteger:
         movq    xmm4, rax
-        mov     rax, 1000000000000000000
+        mov     rax, 922337203685477580 // same signed mantissa limit as Pascal
         cmp     r9, rax
         movq    rax, xmm4
-        jae     @discardInteger
+        ja      @discardInteger
+        jb      @retainInteger
+        cmp     eax, 7
+        ja      @discardInteger
 @retainInteger:
-        inc     r8
         jmp     @integerOne
 @discardInteger:
         xor     r10d, r10d
@@ -8175,12 +8172,14 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         jmp     @exponent
 @moreFraction:
         movq    xmm4, rax
-        mov     rax, 1000000000000000000
+        mov     rax, 922337203685477580 // same signed mantissa limit as Pascal
         cmp     r9, rax
         movq    rax, xmm4
-        jae     @discardFraction
+        ja      @discardFraction
+        jb      @retainFraction
+        cmp     eax, 7
+        ja      @discardFraction
 @retainFraction:
-        inc     r8
         jmp     @fractionOne
 @discardFraction:
         sub     r10, rcx
@@ -8242,6 +8241,8 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         mulsd   xmm0, qword ptr [r8 + r10 * 8 + 31 * 8]
         jmp     @store
 @largeMantissa:
+        cmp     r10, 22 // trimming cannot recover the fast path; keep M for range errors
+        jg      @convertFull
         // Remove only exact trailing decimal zeroes; this can recover the Clinger path.
         mov     r8, $cccccccccccccccd
         mov     rcx, $1999999999999999

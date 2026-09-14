@@ -5890,6 +5890,29 @@ begin
   Check(GetNumericVariantFromJson(pointer(s), TVarData(vj), false) = nil);
   s := '9223372036854775.8';
   Check(GetNumericVariantFromJson(pointer(s), TVarData(vj), false) = nil);
+  // Long tails must advance to the terminator, including invalid suffixes.
+  s := '0.' + StringOfChar('0', 8192);
+  CheckGetExtendedBits(s, 0);
+  CheckJsonExact(s, varInteger, 0);
+  CheckInvalidNumber(s + 'e+');
+  s := '1.25' + StringOfChar('0', 8192);
+  CheckGetExtendedBits(s, QWord($3FF4000000000000));
+  d := GetExtended(pointer(s + 'x'), err);
+  CheckNotEqual(err, 0);
+  Check(not _Json('{"x":' + s + 'x}', vj)); // numeric prefix is not a complete JSON value
+  s := '1e' + StringOfChar('0', 8192) + '0';
+  CheckGetExtendedBits(s, QWord($3FF0000000000000));
+  CheckJsonExact(s, varInteger, 1);
+  {$ifndef TSYNEXTENDED80}
+  // The 19th digit must obey the same Int64 limit with and without whitespace.
+  CheckGetExtendedBits('9223372036854776833', QWord($43E0000000000000));
+  CheckGetExtendedBits(' 9223372036854776833', QWord($43E0000000000000));
+  CheckGetExtendedBits('922337203685477683.3e1', QWord($43E0000000000000));
+  s := '1000000000000000000e400';
+  d := GetExtended(pointer(s), err);
+  CheckNotEqual(err, 0);
+  CheckUtf8(PQWord(@d)^ = QWord($43ABC16D674EC800), 'range error retains the original mantissa');
+  {$endif TSYNEXTENDED80}
   CheckInvalidNumber('1.2.3');
   CheckInvalidNumber('0..1');
   CheckInvalidNumber('0.0.1');
