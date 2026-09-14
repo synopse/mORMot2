@@ -6775,7 +6775,7 @@ z:    err := 1; // fast error path for non-number input
     exit;
   end;
   n := PtrUInt(P) + 18;   // the first 18 digits can't overflow Int64
-  repeat
+  repeat // Delphi has its own x87 asm -> no need to optimize first 8 digits
     c := PtrUInt(P^) - ord('0');
     if c > 9 then
       break;

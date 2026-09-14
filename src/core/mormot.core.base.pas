@@ -4309,6 +4309,7 @@ type
         case padding: cardinal of // access the most used TVarData value members
           varInteger:  (VInteger:  integer);
           varOleUInt:  (VCardinal: cardinal);
+          varOleInt:   (VPtrInt:   PtrInt);
           varDouble:   (VDouble:   double);
           varCurrency: (VCurrency: currency);
           varDate:     (VDate:     TDateTime);
@@ -4879,6 +4880,8 @@ const
   MAX_INT64 = high(Int64);
   /// equals 922337203685477580
   MAX_INT64_DIV10 = MAX_INT64 div 10;
+  /// equals -9223372036854775808
+  MIN_INT64 = low(Int64);
   /// maximum number stored in a JavaScript-compatible Int53 value
   MAX_SAFE_JS_INTEGER  = (Int64(1) shl 53) - 1;
 

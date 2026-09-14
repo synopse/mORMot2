@@ -2947,7 +2947,7 @@ var
   v: Int64;
 begin
   result := false;
-  max := low(Int64);
+  max := MIN_INT64;
   if fCount = 0 then
     exit;
   if WhereField = 0 then
