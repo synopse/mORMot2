@@ -6731,12 +6731,12 @@ const
   InvScale: double = 7.458340731200207e-155; // 2^-512
   MaxScaled: double = 1.3407807929942596e154; // MaxDouble * 2^-512
 var
-  remdigit, frac, exp: PtrInt;
+  c, n: PtrUInt;
+  frac: PtrInt;
   flags: set of (fNeg, fNegExp, fValid);
   v64: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
-  d64: TSynExtended;
 label
-  z, e, x, o;
+  z, e, o;
 begin
   byte(flags) := 0;
   v64 := 0;
@@ -6757,36 +6757,34 @@ begin
   end;
   if P^ > '9' then
   begin
-    if (P[1] = #0) or
-       (P[2] = #0) then
-      goto z;
-    case PCardinal(P)^ and $00dfdfdf of
-      ord('N') + ord('A') shl 8 + ord('N') shl 16:
-        result := NaN;
-      ord('I') + ord('N') shl 8 + ord('F') shl 16:
-        if fNeg in flags then
-          result := NegInfinity
-        else
-          result := Infinity;
+    c := PtrUInt(PWord(P)^) and $dfdf; // at least 1 char + #0
+    if (c = ord('N') + ord('A') shl 8) and
+       (P[2] in ['N', 'n']) then
+      result := Nan
+    else if (c = ord('I') + ord('N') shl 8) and
+            (P[2] in ['F', 'f']) then
+      if fNeg in flags then
+        result := NegInfinity
+      else
+        result := Infinity
     else
-      begin
-z:      err := 1; // fast error path for non-number input
-        result := 0;
-      end;
+    begin
+z:    err := 1; // fast error path for non-number input
+      result := 0;
     end;
     exit;
   end;
-  remdigit := 18; // v64=-9,223,372,036,854,775,808..+9,223,372,036,854,775,807
+  n := 18; // v64=-9,223,372,036,854,775,808..+9,223,372,036,854,775,807
   repeat
-    exp := ord(P^) - ord('0');
-    if PtrUInt(exp) <= 9 then
+    c := PtrUInt(P^) - ord('0');
+    if c <= 9 then
     begin
-      if (remdigit <> 0) or  // validate the 19th significant digit
-         (v64 > MAX_INT64_DIV10 - ord(exp > 7)) then
-        dec(remdigit);
-      if remdigit >= 0 then // over-required digits are just ignored
+      if (n <> 0) or  // validate the 19th significant digit
+         (v64 > MAX_INT64_DIV10 - ord(c > 7)) then
+        dec(n);
+      if PtrInt(n) >= 0 then // over-required digits are just ignored
       begin
-        v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64 {$else} * 10 {$endif} + exp;
+        v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64 {$else} * 10 {$endif} + c;
         include(flags, fValid);
         dec(frac, ord(frac <> 0)); // digits after '.' (branchless)
         inc(P);
@@ -6814,7 +6812,7 @@ z:      err := 1; // fast error path for non-number input
   begin
     if not (fValid in flags) then
       goto e;
-    exp := 0;
+    n := 0;
     exclude(flags, fValid);
     inc(P);
     if P^ = '+' then
@@ -6825,77 +6823,68 @@ z:      err := 1; // fast error path for non-number input
       include(flags, fNegExp);
     end;
     repeat
-      remdigit := PtrInt(P^) - ord('0');
-      if PtrUInt(remdigit) > 9 then
+      c := PtrUInt(P^) - ord('0');
+      if c > 9 then
         break;
-      exp := (exp * 10) + remdigit;
+      n := (n * 10) + c;
       include(flags, fValid);
       inc(P);
-      if exp >= $fff000 then // huge constant, but still aarch64 friendly
+      if n >= $fff000 then // huge constant, but still aarch64 friendly
         goto e;
     until false;
     if fNegExp in flags then
-      dec(frac, exp)
+      dec(frac, n)
     else
-      inc(frac, exp);
+      inc(frac, n);
   end;
   if (P^ <> #0) or
      not (fValid in flags) then
 e:  err := 1; // return the (partial) value even if not ended with #0
-  if v64 = 0 then
+  if (frac = 0) or (v64 = 0) then // fast path for e.g. '123' or '0'/'0E400'
   begin
-    result := 0; // fast path for e.g. '0' or '0E400'
-    goto x;
+    if fNeg in flags then
+      v64 := -v64; // '-0' -> 0 following ECMAScript's number-to-string rules
+    result := v64;
+    exit;
   end;
-  d64 := v64;
+  result := v64;
   if (frac < 0) and
      (frac >= -22) and
      (v64 <= MAX_SAFE_JS_INTEGER) then
-  begin
     // Clinger's fast path: d64 and 10^-frac are both exact doubles, so a single
     // IEEE division is correctly rounded - whereas POW10[frac] * d64 is not,
     // since 1E-1..1E-22 are inexact (e.g. '1.2' returned 1.2000000000000002)
-    result := d64 / POW10[-frac];
-    goto x;
-  end;
-  if PtrUInt(frac) + 31 <= 62 then // -31 .. +31: overwhelmingly common
-    result := POW10[frac]
+    result := result / POW10[-frac]
+  else if PtrUInt(frac) + 31 <= 62 then // -31 .. +31: overwhelmingly common
+    result := result * POW10[frac]
   else if frac < -31 then
-  begin
     if frac <= -324 then
     begin
       if frac < -342 then
         goto o;
       // avoid creating a subnormal 10^frac before applying d64
       frac := -(frac + 160);
-      result := d64 * POW10[50] * // 1E-160
+      result := result * POW10[50] * // 1E-160
                 (POW10[(frac and not 31) shr 5 + 45] / POW10[frac and 31]);
-      goto x;
-    end;
-    frac := -frac;
-    result := POW10[(frac and not 31) shr 5 + 45] / POW10[frac and 31];
+    end
+    else
+    begin
+      frac := -frac;
+      result := POW10[(frac and not 31) shr 5 + 45] / POW10[frac and 31] * result;
+    end
+  else if frac > 308 then
+o:  err := 1
+  else if frac >= 290 then // avoid overflow, even with unmasked FPU
+  begin
+    result := (POW10[(frac and not 31) shr 5 + 34] *
+               POW10[frac and 31] * InvScale) * result;
+    if result > MaxScaled then
+      goto o;
+    result := result * Scale;
   end
-  else
-  begin // frac >= 32
-    if frac > 308 then
-    begin
-o:    result := d64;
-      err := 1;
-      goto x;
-    end;
-    if frac >= 290 then // avoid overflow, even with unmasked FPU
-    begin
-      result := (POW10[(frac and not 31) shr 5 + 34] *
-                 POW10[frac and 31] * InvScale) * d64;
-      if result > MaxScaled then
-        goto o;
-      result := result * Scale;
-      goto x;
-    end;
-    result := POW10[(frac and not 31) shr 5 + 34] * POW10[frac and 31];
-  end;
-  result := result * d64;
-x:if fNeg in flags then
+  else // frac >= 32
+    result := (POW10[(frac and not 31) shr 5 + 34] * POW10[frac and 31]) * result;
+  if fNeg in flags then
     result := -result;
 end;
 

@@ -11666,8 +11666,9 @@ begin
      (frac >= -22) and
      (v64 >= -MAX_SAFE_JS_INTEGER) then // v64 is negative here
   begin
-    // Clinger's fast path: v64 and 10^-frac are both exact doubles, so a single
-    // IEEE division is correctly rounded - see GetExtended() in mormot.core.text
+    // Clinger's fast path: d64 and 10^-frac are both exact doubles, so a single
+    // IEEE division is correctly rounded - whereas POW10[frac] * d64 is not,
+    // since 1E-1..1E-22 are inexact (e.g. '1.2' returned 1.2000000000000002)
     d := v64;
     d := d / PPow10(exp)[-frac];
   end
