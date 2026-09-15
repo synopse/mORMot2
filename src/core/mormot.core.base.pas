@@ -6273,7 +6273,7 @@ begin
     exit;
   inc(P);
   result := c;
-  repeat // handle two digits per iteration (used by JL_Byte/Word/Integer/Int64)
+  repeat // two digits per iteration (used by JL_Byte/SmallInt/Integer/Int64)
     c := cardinal(byte(P[0]))  - ord('0');
     if c > 9 then
       break;
@@ -6283,12 +6283,10 @@ begin
       inc(d, c * 10);
       result := result * 100 + PtrInt(d);
       inc(P, 2);
-    end
-    else
-    begin
-      result := result * 10 + PtrInt(c);
-      break;
+      continue;
     end;
+    result := result * 10 + PtrInt(c);
+    break;
   until false;
   if minus then
     result := -result;
@@ -6541,7 +6539,7 @@ begin
     exit;
   inc(P);
   result := c;
-  repeat // handle two digits per iteration (used by JL_Byte/Word/Cardinal/QWord)
+  repeat // two digits per iteration (used by JL_Byte/Word/Cardinal/QWord)
     c := cardinal(byte(P[0]))  - ord('0');
     if c > 9 then
       break;
@@ -6551,12 +6549,10 @@ begin
       inc(d, c * 10);
       result := result * 100 + d;
       inc(P, 2);
-    end
-    else
-    begin
-      result := result * 10 + c;
-      break;
+      continue;
     end;
+    result := result * 10 + c;
+    break;
   until false;
 end;
 
