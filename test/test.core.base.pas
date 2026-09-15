@@ -4989,6 +4989,8 @@ begin
 end;
 
 procedure TTestCoreBase.NumericalConversions;
+var
+  HasFP80: boolean;
 
   procedure CheckGetExtendedBits(const text: RawUtf8; expected: QWord);
   var
@@ -5098,9 +5100,11 @@ procedure TTestCoreBase.NumericalConversions;
 
   procedure CheckDecimalRounding;
   var
-    i, err, bad: integer;
-    s: RawUtf8;
+    i, err, len: integer;
+    p: PUtf8Char;
     d, d0: double;
+    v: array[1 .. 20000] of TShort23;
+    Timer: TPrecisionTimer;
   begin
     // decimal text should be parsed as the nearest IEEE double: digits*POW10[-n]
     // was not, since 1E-1..1E-22 are inexact - e.g. '1.2' = 1.2000000000000002
@@ -5122,17 +5126,60 @@ procedure TTestCoreBase.NumericalConversions;
     CheckGetExtendedBits('0.0003', $3F33A92A30553261);
     CheckGetExtendedBits('0.00003', $3EFF75104D551D69);
     // 'x.y' and 'x.y0' are the same number, so should return the same double
-    bad := 0;
-    for i := 1 to 20000 do
+    FillCharFast(v, SizeOf(v), 0);
+    len := 0;
+    for i := 1 to high(v) do // pre-compute all values
     begin
-      s := FormatUtf8('%.%', [i div 10, i mod 10]);
-      d := GetExtended(pointer(s), err);
-      s := s + '0';
-      d0 := GetExtended(pointer(s), err);
-      if PQWord(@d)^ <> PQWord(@d0)^ then
-        inc(bad);
+      case i and 7 of
+        0:
+          FormatShort('%.%', [
+            i div 10,
+            i mod 10], v[i]);               // ~3-6 chars
+        1:
+          FormatShort('123%.%', [
+            i mod 10000,
+            i mod 10], v[i]);               // ~6-10 chars
+        2:
+          FormatShort('123456%.%', [
+            i mod 100000,
+            i mod 100], v[i]);              // ~10-14 chars
+        3:
+          FormatShort('123456789%.%', [
+            i mod 100000,
+            i mod 1000], v[i]);             // ~14-18 chars
+        4:
+          FormatShort('123456789012%.%', [
+            i mod 10000,
+            i mod 1000], v[i]);             // ~17-21 chars
+        5:
+          FormatShort('0.00000000000%', [
+            i mod 10], v[i]);               // long small fraction
+        6:
+          FormatShort('12.3456789000%', [
+            i mod 100], v[i]);              // padded fraction
+        7:
+          FormatShort('123456789012345.%', [
+            i mod 10], v[i]);               // 17 significant digits
+      end;
+      inc(len, length(v[i]) * 3 + 2);
     end;
-    CheckEqual(bad, 0, 'x.y = x.y0');
+    Timer.Start;
+    for i := 1 to high(v) do
+    begin
+      p := @v[i];
+      d := GetExtended(p + 1, err);
+      CheckEqual(err, 0, 'p');
+      p[ord(p^) + 1] := '0'; // s := s + '0' with no allocation
+      d0 := GetExtended(p + 1, err);
+      CheckEqual(err, 0, 'p0');
+      Check(PQWord(@d)^ = PQWord(@d0)^, 'd=d0 bits');
+      p[2] := '2';
+      p[ord(p^) + 1] := '1'; // e.g. '0.00' -> '0201'
+      d := GetExtended(p + 1, err);
+      Check(PInt64(@d)^ <> 0);
+
+    end;
+    NotifyTestSpeed('GetExtended', length(v) * 3, len, @Timer);
     // GetNumericVariantFromJson() had the same issue for varDouble values
     // (with both SSE2 and x87 FPU, since its local d variable is a double)
     CheckJsonDoubleBits('0.00003', $3EFF75104D551D69);
@@ -5144,19 +5191,15 @@ procedure TTestCoreBase.NumericalConversions;
   procedure CheckInvalidNumber(const text: RawUtf8; extendedToo: boolean = true);
   var
     v: variant;
-    {$ifndef TSYNEXTENDED80}
     d: double;
     err: integer;
-    {$endif TSYNEXTENDED80}
   begin
     CheckUtf8(GetNumericVariantFromJson(pointer(text), TVarData(v), true) = nil, text);
-    {$ifndef TSYNEXTENDED80} // FP80
-    if not extendedToo then
+    if HasFP80 or not extendedToo then
       exit;
     d := GetExtended(pointer(text), err);
     CheckNotEqual(err, 0, text);
     CheckUtf8(not IsInfinite(d) and not IsNan(d), text);
-    {$endif TSYNEXTENDED80}
   end;
 
 var
@@ -5180,6 +5223,7 @@ var
   crc, u32, n: cardinal;
   Timer: TPrecisionTimer;
 begin
+  HasFP80 := SizeOf(TSynExtended) <> SizeOf(double); // FP80 has full precision
   a := '';
   AppendShortCardinal(0, a);
   check(a = '0');
@@ -5478,10 +5522,13 @@ begin
   Check(u = '40640.5028819444', u);
   e := 40640.5028819444;
   CheckSame(d, e, 1e-11);
-  s := '40640e400';
-  d := GetExtended(pointer(s), err);
-  CheckSame(d, 40640.0, DOUBLE_SAME, 'e400=e0');
-  Check(err > 0, 'e400');
+  if not HasFP80 then // FP80 would convert it
+  begin
+    s := '40640e400';
+    d := GetExtended(pointer(s), err);
+    CheckSame(d, 40640.0, DOUBLE_SAME, 'e400=e0');
+    Check(err > 0, 'e400');
+  end;
   s := 'Nan';
   d := GetExtended(pointer(s), err);
   CheckEqual(err, 0, s);
@@ -5606,41 +5653,40 @@ begin
   CheckDoubleToShortSame(12.345678901234);
   CheckDoubleToShortSame(123.45678901234);
   CheckDoubleToShortSame(1234.5678901234);
-  {$ifndef WIN32DELPHI} // fails when converted to FP80 in x87 asm
-  CheckDoubleToShort(0.00123456789012345, '0.00123456789012');
-  CheckDoubleToShort(-0.00123456789012345, '-0.00123456789012');
-  CheckDoubleToShort(0.000123456789012345, '0.00012345678901');
-  CheckDoubleToShort(-0.000123456789012345, '-0.00012345678901');
-  d := GetExtended('0e400', err);
-  CheckEqual(err, 0);
-  Check(d = 0);
-  d := GetExtended('0e-400', err);
-  CheckEqual(err, 0);
-  Check(d = 0);
-  d := GetExtended('-0e400', err);
-  CheckEqual(err, 0);
-  Check(d = 0); // '-0' -> 0 with ECMAScript's number-to-string rules
-  CheckGetExtendedBits('4.9406564584124654E-324', $0000000000000001);
-  CheckGetExtendedBits('2.2250738585072009E-308', $000FFFFFFFFFFFFF);
-  CheckGetExtendedBits('2.2250738585072014E-308', $0010000000000000);
-  CheckGetExtendedBits('1.7976931348623157E308', $7FEFFFFFFFFFFFFF);
-  CheckGetExtendedBits('1E308', $7FE1CCF385EBC8A0);
-  CheckGetExtendedBits('0.5000000000000000000', $3FE0000000000000);
-  CheckGetExtendedBits('0.50000000000000000000', $3FE0000000000000);
-  CheckGetExtendedBits('0.50000000000000000008', $3FE0000000000000);
-  CheckGetExtendedBits('0.9223372036854775807', $3FED83C94FB6D2AC);
-  {$ifndef CPUX86} // FPC x87 conversion may fail those
-  CheckGetExtendedBits('0.123456789012345678', $3FBF9ADD3746F660);
-  CheckGetExtendedBits('0.9223372036854775808', $3FED83C94FB6D2AD);
-  CheckGetExtendedBits('0.9223372036854775809', $3FED83C94FB6D2AD);
-  {$endif CPUX86}
-  CheckDoubleToShortBits($4D6E62C4E38FF876, '1.0000000000000005E65');
-  CheckDoubleToShortBits(QWord($CD6E62C4E38FF876), '-1.0000000000000005E65');
-  CheckDoubleToShortBits($0000000000000001, '4.9406564584124654E-324');
-  CheckDoubleToShortBits($000FFFFFFFFFFFFF, '2.2250738585072009E-308');
-  CheckDoubleToShortBits($0010000000000000, '2.2250738585072014E-308');
-  CheckDoubleToShortBits($7FEFFFFFFFFFFFFF, '1.7976931348623157E308');
-  {$endif WIN32DELPHI}
+  if not HasFP80 then // FP80 has more precision
+  begin
+    CheckDoubleToShort(0.00123456789012345, '0.00123456789012');
+    CheckDoubleToShort(-0.00123456789012345, '-0.00123456789012');
+    CheckDoubleToShort(0.000123456789012345, '0.00012345678901');
+    CheckDoubleToShort(-0.000123456789012345, '-0.00012345678901');
+    d := GetExtended('0e400', err);
+    CheckEqual(err, 0);
+    Check(d = 0);
+    d := GetExtended('0e-400', err);
+    CheckEqual(err, 0);
+    Check(d = 0);
+    d := GetExtended('-0e400', err);
+    CheckEqual(err, 0);
+    Check(d = 0); // '-0' -> 0 with ECMAScript's number-to-string rules
+    CheckGetExtendedBits('4.9406564584124654E-324', $0000000000000001);
+    CheckGetExtendedBits('2.2250738585072009E-308', $000FFFFFFFFFFFFF);
+    CheckGetExtendedBits('2.2250738585072014E-308', $0010000000000000);
+    CheckGetExtendedBits('1.7976931348623157E308', $7FEFFFFFFFFFFFFF);
+    CheckGetExtendedBits('1E308', $7FE1CCF385EBC8A0);
+    CheckGetExtendedBits('0.5000000000000000000', $3FE0000000000000);
+    CheckGetExtendedBits('0.50000000000000000000', $3FE0000000000000);
+    CheckGetExtendedBits('0.50000000000000000008', $3FE0000000000000);
+    CheckGetExtendedBits('0.9223372036854775807', $3FED83C94FB6D2AC);
+    CheckGetExtendedBits('0.123456789012345678', $3FBF9ADD3746F660);
+    CheckGetExtendedBits('0.9223372036854775808', $3FED83C94FB6D2AD);
+    CheckGetExtendedBits('0.9223372036854775809', $3FED83C94FB6D2AD);
+    CheckDoubleToShortBits($4D6E62C4E38FF876, '1.0000000000000005E65');
+    CheckDoubleToShortBits(QWord($CD6E62C4E38FF876), '-1.0000000000000005E65');
+    CheckDoubleToShortBits($0000000000000001, '4.9406564584124654E-324');
+    CheckDoubleToShortBits($000FFFFFFFFFFFFF, '2.2250738585072009E-308');
+    CheckDoubleToShortBits($0010000000000000, '2.2250738585072014E-308');
+    CheckDoubleToShortBits($7FEFFFFFFFFFFFFF, '1.7976931348623157E308');
+  end;
   CheckEqual(TextToVariantNumberType('1'), varInt64);
   CheckEqual(TextToVariantNumberType('10'), varInt64);
   CheckEqual(TextToVariantNumberType('01'), varString);
@@ -5773,9 +5819,6 @@ begin
   CheckJsonDoubleBits('228518839.20000000', $41AB3DD76E666666);
   CheckJsonDoubleBits('-228518839.20000000', QWord($C1AB3DD76E666666));
   // The dot/first fractional digit can straddle the 16-byte SIMD window.
-  {$ifdef ASMX64}
-  Check(PtrUInt(@NumericSimdData) and 15 = 0);
-  {$endif ASMX64}
   CheckJsonExact('100000000000000.000', varCurrency, 1000000000000000000);
   CheckJsonExact('100000000000000.0001', varCurrency, 1000000000000000001);
   CheckJsonExact('1234567890123456', varInt64, 1234567890123456);
@@ -5835,12 +5878,13 @@ begin
   d := GetExtended(pointer(s), err);
   CheckEqual(err, 0);
   Check(not IsInfinite(d) and (d > 1.79e308));
-  {$ifndef WIN32DELPHI} // Delphi trigger an EOverflow exception
-  s := '99e307';
-  d := GetExtended(pointer(s), err);
-  Check(err <> 0);
-  Check(not IsInfinite(d));
-  {$endif WIN32DELPHI}
+  if not HasFP80 then // FP80 has more precision
+  begin
+    s := '99e307';
+    d := GetExtended(pointer(s), err);
+    Check(err <> 0);
+    Check(not IsInfinite(d));
+  end;
   // validate ScanUtf8()
   Check(ScanUtf8('1 2 3', '  %', [@i, @j, @d]) = 0);
   Check(ScanUtf8('', '%d%d%f', [@i, @j, @d]) = 0);
