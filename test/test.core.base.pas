@@ -5797,6 +5797,7 @@ begin
   CheckJsonDoubleBits('-922337203685477580.8', QWord($C3A999999999999A));
   CheckJsonDoubleBits('-92233720368547758.08', QWord($C3747AE147AE147B));
   CheckJsonDoubleBits('-9223372036854775.808', QWord($C340624DD2F1A9FC));
+  CheckJsonDoubleBits('-9223372036854775808.0', QWord($C3E0000000000000));
   s := '0.' + RawUtf8(StringOfChar('0', 324));
   Check(GetNumericVariantFromJson(pointer(s), TVarData(vj), false) = PUtf8Char(pointer(s)) + length(s));
   CheckEqual(TVarData(vj).VType, varInteger);

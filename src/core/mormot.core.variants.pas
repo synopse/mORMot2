@@ -11646,7 +11646,8 @@ begin
       end;
     repeat
       c := PtrUInt(Json^) - ord('0');
-      if c > 9 then
+      if (c > 9) or
+         (v64 < 0) then // MIN_INT64 sentinel
        break;
       if (PtrUInt(Json) >= n) and
          (v64 > MAX_INT64_DIV10 - ord(c > 7)) then

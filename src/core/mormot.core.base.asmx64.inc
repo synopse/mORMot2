@@ -1673,7 +1673,7 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         jne     @scalarSkipInteger
         test    r11b, 1
         jz      @scalarSkipInteger
-        mov     r9, $8000000000000000    // magnitude 2^63, already negative
+        mov     r9, MIN_INT64        // magnitude 2^63, already negative
         inc     rcx
         movzx   eax, byte ptr [rcx]
         sub     eax, 48
@@ -1710,6 +1710,8 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         sub     eax, 48
         cmp     eax, 9
         ja      @scalarFractionEnd
+        test    r9, r9
+        js      @scalarDiscardFraction // MIN_INT64 sentivel
         cmp     r9, r8
         jg      @scalarDiscardFraction
         jl      @scalarKeepFraction
@@ -1719,7 +1721,7 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         jne     @scalarDiscardFraction
         test    r11b, 1
         jz      @scalarDiscardFraction
-        mov     r9, $8000000000000000
+        mov     r9, MIN_INT64
         inc     rcx
         dec     r10
         movzx   eax, byte ptr [rcx]
