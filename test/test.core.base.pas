@@ -11370,6 +11370,20 @@ begin
     for os2 := low(os) to high(os) do
       Check((OS_INITIAL[os2] = OS_INITIAL[os]) = (os2 = os), 'OS_INITIAL');
   end;
+  // validate OSX kernel number to Apple Corp marketing "logic"
+  osv.os := osOSX;
+  osv.utsrelease[2] := 7;
+  CheckEqual(MacKernel(osv), 8);
+  osv.utsrelease[2] := 8;
+  CheckEqual(MacKernel(osv), 8);
+  osv.utsrelease[2] := 24;
+  CheckEqual(MacKernel(osv), 24);
+  osv.utsrelease[2] := 25;
+  CheckEqual(MacKernel(osv), 25);
+  osv.utsrelease[2] := 27;
+  CheckEqual(MacKernel(osv), 27);
+  osv.utsrelease[2] := 28;
+  CheckEqual(MacKernel(osv), 27);
   // validate Syslog messages formatting
   msg := ' test  ';
   dst := @tmp;
