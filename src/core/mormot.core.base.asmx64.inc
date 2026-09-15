@@ -887,7 +887,9 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         mov     dword ptr [rdx], 1       // err := 1 on any other byte (quote/comma)
 @integerGo:
         cmp     r8d, 1
-        je      @singleInteger
+        je      @one
+        cmp     r8d, 2
+        je      @two
         mov     r10d, r8d                // p
         shl     r8d, 4
         lea     r9, [rip + NumericSimdData + NUMERIC_CTRLINT]
@@ -902,12 +904,16 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         test    r11d, r11d               // <= 8 digits sit in lanes 0..7: value = H
         jnz     @negativeInteger
         ret
-@singleInteger:
-        movzx   eax, byte ptr [rcx]
-        sub     eax, 48
-        cvtsi2sd xmm0, eax
-        test    r11d, r11d
-        jnz     @negativeInteger
+@two:   pmaddubsw xmm0, [rip + NumericSimdData + NUMERIC_TEN]
+        movd    eax, xmm0
+        movzx   eax, ax
+        jmp     @int
+@one:   movd    eax, xmm0
+        movzx   eax, al
+@int:   test    r11d, r11d
+        jz      @intPos
+        neg     eax
+@intPos:cvtsi2sd xmm0, eax
         ret
 @wideInteger:
         movhlps xmm1, xmm0
@@ -1441,6 +1447,10 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         or      r9d, 32
         cmp     r9d, 'e'
         je      @integerExponent    // any other byte ends the number
+        cmp     r8d, 1
+        je      @one
+        cmp     r8d, 2
+        je      @two
         mov     r10d, r8d           // p
         lea     rax, [rip + NumericSimdData + NUMERIC_JSONINT]
         movdqu  xmm3, [rax + r8]
@@ -1469,6 +1479,19 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         mov     dword ptr [rdx], r10d
         mov     rax, r8
         ret                      // branchless for integers
+@two:   pmaddubsw xmm0, [rip + NumericSimdData + NUMERIC_TEN]
+        movd    eax, xmm0
+        movzx   eax, ax
+        jmp     @int
+@one:   movd    eax, xmm0
+        movzx   eax, al
+@int:   test    r11d, 1
+        jz      @intPos
+        neg     eax
+@intPos:mov     dword ptr [rdx + 8], eax
+        mov     dword ptr [rdx], varInteger
+        lea     rax, [rcx + r8]
+        ret
 @fraction:
         lea     r9d, [rax - 1]
         and     eax, r9d         // clear the dot bit

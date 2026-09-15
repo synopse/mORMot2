@@ -5083,9 +5083,12 @@ var
     v: variant;
   begin
     TVarData(v).VType := varEmpty;
-    CheckUtf8(GetNumericVariantFromJson(pointer(text), TVarData(v), false) <> nil, text);
+    CheckUtf8(GetNumericVariantFromJson(pointer(text), TVarData(v), false)^ = #0, text);
     CheckEqual(TVarData(v).VType, kind, text);
-    CheckEqual(TVarData(v).VInt64, expected, text);
+    if kind = varInteger then
+      CheckEqual(TVarData(v).VInteger, expected, text)
+    else
+      CheckEqual(TVarData(v).VInt64, expected, text);
   end;
 
   procedure CheckJsonDoubleBits(const text: RawUtf8; expected: QWord);
@@ -5560,6 +5563,8 @@ begin
   Check(IsAnsiCompatible('teste'));
   CheckDoubleToShort(0, '0');
   CheckDoubleToShort(1, '1');
+  CheckDoubleToShort(10, '10');
+  CheckDoubleToShort(101, '101');
   CheckDoubleToShort(-1, '-1');
   CheckDoubleToShort(0.1, '0.1');
   CheckDoubleToShort(0.01, '0.01');
@@ -5753,6 +5758,10 @@ begin
   CheckJsonExact('0', varInteger, 0);
   CheckJsonExact('0.0', varInteger, 0);
   CheckJsonExact('0.000000000', varInteger, 0);
+  CheckJsonExact('1', varInteger, 1);
+  CheckJsonExact('-1', varInteger, -1);
+  CheckJsonExact('12', varInteger, 12);
+  CheckJsonExact('-12', varInteger, -12);
   CheckJsonExact('123', varInteger, 123);
   CheckJsonExact('-123', varInteger, -123);
   CheckJsonExact('1.23', varCurrency, 12300);
