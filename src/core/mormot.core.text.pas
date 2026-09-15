@@ -1495,8 +1495,7 @@ const
   NUMERIC_CTRLDOT = 400;
   NUMERIC_MASK = 656;
   NUMERIC_JSONINT = 928;
-// Shared, 16-byte aligned SSSE3 data starts 16 bytes after this entry point.
-// An assembler container avoids Delphi's 8-byte alignment of typed constants.
+// shared, 16-byte aligned SSSE3 data fake procedure - published only for testing
 procedure NumericSimdData;
 {$endif ASMX64}
 
@@ -6752,19 +6751,24 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
 var
   c, n: PtrUInt;
   frac: PtrInt;
-  flags: set of (fNeg, fNegExp, fValidExp);
+  flags: set of (fNeg, fNegExp);
   v64: Int64; // 64-bit resolution for the digits
 label
-  z, e;
-{$ifndef TSYNEXTENDED80}
+  z, e, o;
+{$ifdef TSYNEXTENDED80}
+const
+  Pow10Tab1: array[0 .. 14] of TSynExtended = (
+    1E32, 1E64, 1E96, 1E128, 1E160, 1E192, 1E224, 1E256, 1E288, 1E320,
+    1E352, 1E384, 1E416, 1E448, 1E480);
+  Pow10Tab2: array[0 .. 8] of TSynExtended = (
+    1E512, 1E1024, 1E1536, 1E2048, 1E2560, 1E3072, 1E3584, 1E4096, 1E4608);
+{$else}
 var
   q64: Int64;
 const
   Scale: double = 1.3407807929942597e154; // 2^512
   InvScale: double = 7.458340731200207e-155; // 2^-512
   MaxScaled: double = 1.3407807929942596e154; // MaxDouble * 2^-512
-label
-  o;
 {$endif TSYNEXTENDED80}
 begin
   byte(flags) := 0;
@@ -6811,7 +6815,7 @@ z:    err := 1; // fast error path for non-number input
     if c > 9 then
       break;
     inc(P);
-    v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64 {$else} * 10 {$endif} + PtrInt(c);
+    v64 := v64 * 10 + PtrInt(c);
     if PtrUInt(P) <> n then // very fast most common path
       continue;
     repeat // loop including Int64 overflow test (seldom used)
@@ -6821,7 +6825,7 @@ z:    err := 1; // fast error path for non-number input
       if v64 > MAX_INT64_DIV10 - ord(c > 7) then
         break;
       inc(P);
-      v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64 {$else} * 10 {$endif} + PtrInt(c);
+      v64 := v64 * 10 + PtrInt(c);
     until false;
     if c <= 9 then
       repeat // ignore-them-all path for >18/19 significant integer digits
@@ -6848,7 +6852,7 @@ z:    err := 1; // fast error path for non-number input
        break;
       if (PtrUInt(P) < n) or
          (v64 <= MAX_INT64_DIV10 - ord(c > 7)) then
-        v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64 {$else} * 10 {$endif} + PtrInt(c)
+        v64 := v64 * 10 + PtrInt(c)
       else
         break;
       inc(P);
@@ -6861,7 +6865,6 @@ z:    err := 1; // fast error path for non-number input
   end;
   if P^ in ['E', 'e'] then
   begin
-    n := 0;
     inc(P);
     if P^ = '+' then
       inc(P)
@@ -6870,22 +6873,22 @@ z:    err := 1; // fast error path for non-number input
       inc(P);
       include(flags, fNegExp);
     end;
+    n := PtrUInt(P^) - ord('0');
+    if n > 9 then
+      goto e;
     repeat
+      inc(P);
       c := PtrUInt(P^) - ord('0');
       if c > 9 then
         break;
       n := (n * 10) + c;
-      inc(P);
       if n >= $fff000 then // huge constant, but still aarch64 friendly
         goto e;
-      include(flags, fValidExp); // at least one valid exponent digit
     until false;
     if fNegExp in flags then
       dec(frac, n)
     else
       inc(frac, n);
-    if not (fValidExp in flags) then
-      goto e;
   end;
   if P^ <> #0 then
 e:  err := 1; // return the (partial) value even if not ended with #0
@@ -6897,34 +6900,50 @@ e:  err := 1; // return the (partial) value even if not ended with #0
     exit;
   end;
   {$ifdef TSYNEXTENDED80}
-  result := v64; // specific path for FP80 with full 64-bit mantissa precision
-  if (frac > 5120) or (frac < -5120) then // paranoid check
+  result := v64; // fast FP80 path with full 64-bit mantissa precision
+  if frac > 0 then
   begin
-    err := 1;
-    exit;
-  end;
-  while frac > 320 do
-  begin
-    result := result * POW10[44]; // 1E320
-    dec(frac, 320);
-  end;
-  while frac < -320 do
-  begin
-    result := result * POW10[55]; // 1E-320
-    inc(frac, 320);
-  end;
-  if PtrUInt(frac) + 31 <= 62 then // -31 .. +31
-    result := result * POW10[frac]
-  else if frac > 0 then
-    result := result * POW10[(frac and not 31) shr 5 + 34] * POW10[frac and 31]
+    if frac >= 5120 then
+      goto o;
+    c := frac and 31;
+    if c <> 0 then
+      result := result * POW10[c];
+    frac := frac shr 5;
+    if frac <> 0 then
+    begin
+      c := frac and 15;
+      if c <> 0 then
+        result := result * Pow10Tab1[c - 1];
+      frac := frac shr 4;
+      if frac <> 0 then
+        result := result * Pow10Tab2[frac - 1];
+    end;
+  end
   else
   begin
     frac := -frac;
-    result := result * POW10[(frac and not 31) shr 5 + 45] / POW10[frac and 31];
+    if frac >= 5120 then
+    begin
+o:    err := 1;
+      exit;
+    end;
+    c := frac and 31;
+    if c <> 0 then
+      result := result / POW10[c];
+    frac := frac shr 5;
+    if frac <> 0 then
+    begin
+      c := frac and 15;
+      if c <> 0 then
+        result := result / Pow10Tab1[c - 1];
+      frac := frac shr 4;
+      if frac <> 0 then
+        result := result / Pow10Tab2[frac - 1];
+    end;
   end;
-  {$else} // more cases for proper binary64 precision
+  {$else} // more cases are neded for proper binary64 precision
   while (frac < 0) and
-        ((frac < -22) or (v64 > MAX_SAFE_JS_INTEGER)) do // reduce ending 000000
+        ((frac < -22) or (v64 shr 53 <> 0)) do // reduce ending 000000
   begin
     q64 := v64 div 10; // fast shr/mul by reciprocal on FPC
     if q64 *10 <> v64 then
@@ -6933,9 +6952,8 @@ e:  err := 1; // return the (partial) value even if not ended with #0
     inc(frac);
   end;
   result := v64;
-  if (frac < 0) and
-     (frac >= -22) and
-     (v64 <= MAX_SAFE_JS_INTEGER) then
+  if (PtrUInt(frac + 22) <= 21) and
+     (UInt64(v64) shr 53 = 0) then // v64 <= MAX_SAFE_JS_INTEGER
     // Clinger's fast path: d64 and 10^-frac are both exact doubles, so a single
     // IEEE division is correctly rounded - whereas POW10[frac] * d64 is not,
     // since 1E-1..1E-22 are inexact (e.g. '1.2' returned 1.2000000000000002)
@@ -6949,26 +6967,25 @@ e:  err := 1; // return the (partial) value even if not ended with #0
         goto o;
       // avoid creating a subnormal 10^frac before applying d64
       frac := -(frac + 160);
-      result := result * POW10[50] * // 1E-160
-                (POW10[(frac and not 31) shr 5 + 45] / POW10[frac and 31]);
+      result := result * POW10[50] * (POW10[frac shr 5 + 45] / POW10[frac and 31]);
     end
     else
     begin
       frac := -frac;
-      result := POW10[(frac and not 31) shr 5 + 45] / POW10[frac and 31] * result;
+      result := POW10[frac shr 5 + 45] / POW10[frac and 31] * result;
     end
-  else if frac > 308 then
-o:  err := 1
-  else if frac >= 290 then // avoid overflow, even with unmasked FPU
-  begin
-    result := (POW10[(frac and not 31) shr 5 + 34] *
-               POW10[frac and 31] * InvScale) * result;
-    if result > MaxScaled then
-      goto o;
-    result := result * Scale;
-  end
-  else // frac >= 32
-    result := (POW10[(frac and not 31) shr 5 + 34] * POW10[frac and 31]) * result;
+  else if frac <= 308 then
+    if frac >= 290 then // avoid overflow, even with unmasked FPU
+    begin
+      result := (POW10[frac shr 5 + 34] * POW10[frac and 31] * InvScale) * result;
+      if result > MaxScaled then
+        goto o;
+      result := result * Scale;
+    end
+    else // frac >= 32
+      result := (POW10[frac shr 5 + 34] * POW10[frac and 31]) * result
+  else
+o:  err := 1;
   {$endif TSYNEXTENDED80}
   if fNeg in flags then
     result := -result;
