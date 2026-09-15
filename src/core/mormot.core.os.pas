@@ -11402,13 +11402,13 @@ end;
 procedure TMultiLightLock.Init;
 begin
   Flags := 0;
-  ThreadID := 0;
+  ThreadID := TThreadID(0);
 end;
 
 procedure TMultiLightLock.Done;
 begin
   Flags := MaxInt;
-  ThreadID := 0; // invalid combination to let TryLock fail
+  ThreadID := TThreadID(0); // invalid combination to let TryLock fail
 end;
 
 procedure TMultiLightLock.Lock;
@@ -11420,7 +11420,7 @@ end;
 procedure TMultiLightLock.UnLock;
 begin
   if Flags = 1 then
-    ThreadID := 0; // paranoid
+    ThreadID := TThreadID(0); // paranoid
   LockedDec32(@Flags);
 end;
 
