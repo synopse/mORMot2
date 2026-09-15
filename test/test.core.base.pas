@@ -11373,17 +11373,20 @@ begin
   // validate OSX kernel number to Apple Corp marketing "logic"
   osv.os := osOSX;
   osv.utsrelease[2] := 7;
-  CheckEqual(MacKernel(osv), 8);
+  CheckEqualShort(MACOS_NUM[MacKernel(osv)], '10.4');
   osv.utsrelease[2] := 8;
-  CheckEqual(MacKernel(osv), 8);
+  CheckEqualShort(MACOS_NUM[MacKernel(osv)], '10.4');
   osv.utsrelease[2] := 24;
-  CheckEqual(MacKernel(osv), 24);
+  CheckEqualShort(MACOS_NUM[MacKernel(osv)], '15');
   osv.utsrelease[2] := 25;
-  CheckEqual(MacKernel(osv), 25);
+  CheckEqualShort(MACOS_NUM[MacKernel(osv)], '26');
   osv.utsrelease[2] := 27;
-  CheckEqual(MacKernel(osv), 27);
+  CheckEqualShort(MACOS_NUM[MacKernel(osv)], '27');
   osv.utsrelease[2] := 28;
-  CheckEqual(MacKernel(osv), 27);
+  CheckEqualShort(MACOS_NUM[MacKernel(osv)], '28');
+  CheckEqualShort(MACOS_NAME[MacKernel(osv)], 'Next');
+  osv.utsrelease[2] := 29;
+  CheckEqualShort(MACOS_NAME[MacKernel(osv)], 'Next');
   // validate Syslog messages formatting
   msg := ' test  ';
   dst := @tmp;

@@ -6761,8 +6761,8 @@ end;
 function MacKernel(const osv: TOperatingSystemVersion): PtrUInt;
 begin
   result := osv.utsrelease[2]; // e.g. macOS 15  -> Darwin 24
-  if result > 25 then
-    inc(result); // Darwin 26 is skipped in the sequence
+  if result > 26 then
+    dec(result); // Darwin 26 is skipped in the MACOS_NAME[] sequence
   result := MinPtrUInt(high(MACOS_NAME), MaxPtrUInt(low(MACOS_NAME), result));
 end; // 'Tiger' or 'Next' as lower/higher fallback
 
