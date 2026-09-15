@@ -6748,19 +6748,24 @@ end;
 function GetExtendedPascal(P: PUtf8Char; out err: integer): TSynExtended;
 {$else}
 function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
-{$ifend}
-
-const
-  Scale: double = 1.3407807929942597e154; // 2^512
-  InvScale: double = 7.458340731200207e-155; // 2^-512
-  MaxScaled: double = 1.3407807929942596e154; // MaxDouble * 2^-512
+{$endif ASMX64}
 var
   c, n: PtrUInt;
   frac: PtrInt;
   flags: set of (fNeg, fNegExp, fValidExp);
-  v64: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
+  v64: Int64; // 64-bit resolution for the digits
 label
-  z, e, o;
+  z, e;
+{$ifndef TSYNEXTENDED80}
+var
+  q64: Int64;
+const
+  Scale: double = 1.3407807929942597e154; // 2^512
+  InvScale: double = 7.458340731200207e-155; // 2^-512
+  MaxScaled: double = 1.3407807929942596e154; // MaxDouble * 2^-512
+label
+  o;
+{$endif TSYNEXTENDED80}
 begin
   byte(flags) := 0;
   v64 := 0;
@@ -6891,13 +6896,40 @@ e:  err := 1; // return the (partial) value even if not ended with #0
     result := v64;
     exit;
   end;
-  // Remove padding that prevents exact Clinger operands (mantissa and power).
-  while (frac < 0) and
-        ((v64 > MAX_SAFE_JS_INTEGER) or (frac < -22)) do
+  {$ifdef TSYNEXTENDED80}
+  result := v64; // specific path for FP80 with full 64-bit mantissa precision
+  if (frac > 5120) or (frac < -5120) then // paranoid check
   begin
-    if v64 mod 10 <> 0 then
+    err := 1;
+    exit;
+  end;
+  while frac > 320 do
+  begin
+    result := result * POW10[44]; // 1E320
+    dec(frac, 320);
+  end;
+  while frac < -320 do
+  begin
+    result := result * POW10[55]; // 1E-320
+    inc(frac, 320);
+  end;
+  if PtrUInt(frac) + 31 <= 62 then // -31 .. +31
+    result := result * POW10[frac]
+  else if frac > 0 then
+    result := result * POW10[(frac and not 31) shr 5 + 34] * POW10[frac and 31]
+  else
+  begin
+    frac := -frac;
+    result := result * POW10[(frac and not 31) shr 5 + 45] / POW10[frac and 31];
+  end;
+  {$else} // more cases for proper binary64 precision
+  while (frac < 0) and
+        ((frac < -22) or (v64 > MAX_SAFE_JS_INTEGER)) do // reduce ending 000000
+  begin
+    q64 := v64 div 10; // fast shr/mul by reciprocal on FPC
+    if q64 *10 <> v64 then
       break;
-    v64 := v64 div 10;
+    v64 := q64; // adjust the CLinger's path for exact precision
     inc(frac);
   end;
   result := v64;
@@ -6937,6 +6969,7 @@ o:  err := 1
   end
   else // frac >= 32
     result := (POW10[(frac and not 31) shr 5 + 34] * POW10[frac and 31]) * result;
+  {$endif TSYNEXTENDED80}
   if fNeg in flags then
     result := -result;
 end;
@@ -6947,7 +6980,7 @@ end;
   {$codealign proc=16}
 {$else}
   {$codealign 16}
-{$endif}
+{$endif FPC}
 procedure NumericSimdData;
 {$ifdef FPC} assembler; nostackframe; {$endif}
 asm

@@ -11524,14 +11524,14 @@ function GetNumericVariantFromJsonPascal(Json: PUtf8Char; var Value: TVarData;
 {$else}
 function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
   AllowVarDouble: boolean): PUtf8Char;
-{$ifend}
+{$endif ASMX64}
 
 var
   // logic below is similar to mormot.core.text.pas GetExtended()
   c, n, cnt: PtrUInt;
   frac: PtrInt;
   flags: set of (fNeg, fNegExp, fValidExp);
-  v64: Int64;
+  v64 {$ifndef TSYNEXTENDED80}, q64{$endif}: Int64;
   d: double;
   vd: TSynVarData absolute Value;
 begin
@@ -11709,7 +11709,7 @@ begin
     else
       inc(frac, n);
   end;
-  // 2. now v64, frac, cnt, exp contain a number parsed from Json
+  // 2. render v64, frac, cnt number definition into a proper variant value
   if v64 = 0 then
   begin // zero is independent of the number of fractional zeros or exponent
     vd.VType := varInteger;
@@ -11747,21 +11747,30 @@ begin
       result := Json;
       exit;
     end;
-  // Remove padding that prevents exact Clinger operands (mantissa and power).
+  if not AllowVarDouble then
+    exit;
+  {$ifdef TSYNEXTENDED80} // FP80 has no 53-bit mantissa limitation
+  if (frac <= -324) or // 5.0 x 10^-324 .. 1.7 x 10^308
+     (frac >= PtrInt(cnt) + 290) then
+    exit; // we can't convert into a double
+  if (frac < 0) and
+     (frac >= -27) then // FP80 has full 64-bit mantissa so no 53-bit limitation
+  {$else}
   while (frac < 0) and
-        ((v64 > MAX_SAFE_JS_INTEGER) or (frac < -22)) do
+        ((frac < -22) or (v64 > MAX_SAFE_JS_INTEGER)) do // reduce ending 000000
   begin
-    if v64 mod 10 <> 0 then
+    q64 := v64 div 10; // fast shr/mul by reciprocal on FPC 64-bit
+    if q64 *10 <> v64 then
       break;
-    v64 := v64 div 10;
+    v64 := q64; // adjust the Clinger's path for proper binary64 precision
     inc(frac);
   end;
-  if not AllowVarDouble or
-     (frac <= -324) then // 5.0 x 10^-324 .. 1.7 x 10^308
+  if frac <= -324 then // 5.0 x 10^-324 .. 1.7 x 10^308
     exit; // we can't convert into a double
   if (frac < 0) and
      (frac >= -22) and
      (v64 <= MAX_SAFE_JS_INTEGER) then
+  {$endif TSYNEXTENDED80}
     // Clinger's fast path: d64 and 10^-frac are both exact doubles, so a single
     // IEEE division is correctly rounded - whereas POW10[frac] * d64 is not,
     // since 1E-1..1E-22 are inexact (e.g. '1.2' returned 1.2000000000000002)
@@ -12330,7 +12339,7 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         ret
 
 end;
-{$ifend}
+{$endif ASMX64}
 
 procedure UniqueVariant(Interning: TRawUtf8Interning; var aResult: variant;
   aText: PUtf8Char; aTextLen: PtrInt; aAllowVarDouble: boolean);
