@@ -1481,6 +1481,25 @@ const
     1E160, 1E192, 1E224, 1E256, 1E288, 1E320, 1E-0,{45} 1E-32, 1E-64,
     1E-96, 1E-128, 1E-160, 1E-192, 1E-224, 1E-256, 1E-288, 1E-320);
 
+{$ifdef ASMX64}
+const
+  NUMERIC_BIAS = 16;
+  NUMERIC_THRESHOLD = 32;
+  NUMERIC_ASCII0 = 48;
+  NUMERIC_TEN = 64;
+  NUMERIC_HUNDRED = 80;
+  NUMERIC_TENTHOUSAND = 96;
+  NUMERIC_E8 = 112;
+  NUMERIC_SIGN = 128;
+  NUMERIC_CTRLINT = 144;
+  NUMERIC_CTRLDOT = 400;
+  NUMERIC_MASK = 656;
+  NUMERIC_JSONINT = 928;
+// Shared, 16-byte aligned SSSE3 data starts 16 bytes after this entry point.
+// An assembler container avoids Delphi's 8-byte alignment of typed constants.
+procedure NumericSimdData;
+{$endif ASMX64}
+
 var
   /// best possible precision when rendering a "single" kind of float
   // - can be used as parameter for ExtendedToShort/ExtendedToStr
@@ -6923,6 +6942,82 @@ o:  err := 1
 end;
 
 {$ifdef ASMX64}
+{$ifdef FPC}
+  {$push}
+  {$codealign proc=16}
+{$else}
+  {$codealign 16}
+{$endif}
+procedure NumericSimdData;
+{$ifdef FPC} assembler; nostackframe; {$endif}
+asm
+        {$ifndef FPC} .noframe {$endif}
+        ret
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+        db $46, $46, $46, $46, $46, $46, $46, $46, $46, $46, $46, $46, $46, $46, $46, $46
+        db $75, $75, $75, $75, $75, $75, $75, $75, $75, $75, $75, $75, $75, $75, $75, $75
+        db $30, $30, $30, $30, $30, $30, $30, $30, $30, $30, $30, $30, $30, $30, $30, $30
+        db $0a, $01, $0a, $01, $0a, $01, $0a, $01, $0a, $01, $0a, $01, $0a, $01, $0a, $01
+        db $64, $00, $01, $00, $64, $00, $01, $00, $64, $00, $01, $00, $64, $00, $01, $00
+        db $10, $27, $01, $00, $10, $27, $01, $00, $10, $27, $01, $00, $10, $27, $01, $00
+        db $00, $00, $00, $00, $84, $d7, $97, $41, $00, $00, $00, $00, $00, $00, $00, $00
+        db $00, $00, $00, $00, $00, $00, $00, $80, $00, $00, $00, $00, $00, $00, $00, $00
+        db $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80
+        db $80, $80, $80, $80, $80, $80, $80, $00, $80, $80, $80, $80, $80, $80, $80, $80
+        db $80, $80, $80, $80, $80, $80, $00, $01, $80, $80, $80, $80, $80, $80, $80, $80
+        db $80, $80, $80, $80, $80, $00, $01, $02, $80, $80, $80, $80, $80, $80, $80, $80
+        db $80, $80, $80, $80, $00, $01, $02, $03, $80, $80, $80, $80, $80, $80, $80, $80
+        db $80, $80, $80, $00, $01, $02, $03, $04, $80, $80, $80, $80, $80, $80, $80, $80
+        db $80, $80, $00, $01, $02, $03, $04, $05, $80, $80, $80, $80, $80, $80, $80, $80
+        db $80, $00, $01, $02, $03, $04, $05, $06, $80, $80, $80, $80, $80, $80, $80, $80
+        db $00, $01, $02, $03, $04, $05, $06, $07, $80, $80, $80, $80, $80, $80, $80, $80
+        db $80, $80, $80, $80, $80, $80, $80, $00, $01, $02, $03, $04, $05, $06, $07, $08
+        db $80, $80, $80, $80, $80, $80, $00, $01, $02, $03, $04, $05, $06, $07, $08, $09
+        db $80, $80, $80, $80, $80, $00, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0a
+        db $80, $80, $80, $80, $00, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0a, $0b
+        db $80, $80, $80, $00, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0a, $0b, $0c
+        db $80, $80, $00, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d
+        db $80, $00, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e
+        db $01, $02, $03, $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $0f, $80
+        db $00, $02, $03, $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $0f, $80
+        db $00, $01, $03, $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $0f, $80
+        db $00, $01, $02, $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $0f, $80
+        db $00, $01, $02, $03, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $0f, $80
+        db $00, $01, $02, $03, $04, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $0f, $80
+        db $00, $01, $02, $03, $04, $05, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $0f, $80
+        db $00, $01, $02, $03, $04, $05, $06, $08, $09, $0a, $0b, $0c, $0d, $0e, $0f, $80
+        db $00, $01, $02, $03, $04, $05, $06, $07, $09, $0a, $0b, $0c, $0d, $0e, $0f, $80
+        db $00, $01, $02, $03, $04, $05, $06, $07, $08, $0a, $0b, $0c, $0d, $0e, $0f, $80
+        db $00, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0b, $0c, $0d, $0e, $0f, $80
+        db $00, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0a, $0c, $0d, $0e, $0f, $80
+        db $00, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0a, $0b, $0d, $0e, $0f, $80
+        db $00, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0e, $0f, $80
+        db $00, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0f, $80
+        db $00, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $80
+        db $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+        db $ff, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+        db $ff, $ff, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+        db $ff, $ff, $ff, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+        db $ff, $ff, $ff, $ff, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+        db $ff, $ff, $ff, $ff, $ff, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+        db $ff, $ff, $ff, $ff, $ff, $ff, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+        db $ff, $ff, $ff, $ff, $ff, $ff, $ff, $00, $00, $00, $00, $00, $00, $00, $00, $00
+        db $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $00, $00, $00, $00, $00, $00, $00, $00
+        db $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $00, $00, $00, $00, $00, $00, $00
+        db $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $00, $00, $00, $00, $00, $00
+        db $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $00, $00, $00, $00, $00
+        db $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $00, $00, $00, $00
+        db $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $00, $00, $00
+        db $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $00, $00
+        db $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $00
+        db $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+        db $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80, $80
+        db $00, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $0f
+end;
+{$ifdef FPC} {$pop} {$else} {$codealign 0} {$endif}
+{$endif ASMX64}
+
+{$ifdef ASMX64}
 const
   NUMERIC_SSSE3_BYTE = ord(cfSSSE3) shr 3;
   NUMERIC_SSSE3_MASK = 1 shl (ord(cfSSSE3) and 7);
@@ -6933,7 +7028,8 @@ const
 // Read 16 bytes only when P..P+16 stay within one 4 KiB page. Digit masks
 // locate the dot/terminator; PSHUFB and PMADDUBSW/PMADDWD combine exact
 // integer groups. Small positional tables contain byte controls, not powers.
-// Other CPUs, long inputs and uncommon grammar use the Pascal implementation.
+// The scalar ASM path handles other CPUs and uncommon grammar. Long inputs
+// continue from the end of this window, retaining the parsed integer prefix.
 // REP BSF is TZCNT when available; its nonzero operand also works with BSF.
 function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
@@ -6942,9 +7038,9 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         mov     rdx, rsi
         {$endif ABISYSVX64}
         test    rcx, rcx
-        jz      GetExtendedPascal        // nil: the scalar answers
+        jz      @scalarInvalid
         test    byte ptr [rip + CpuFeatures + NUMERIC_SSSE3_BYTE], NUMERIC_SSSE3_MASK
-        je      GetExtendedPascal        // CPU without SSSE3: arguments untouched (r11 is not set yet)
+        je      @scalarStart
         xor     r11d, r11d
         cmp     byte ptr [rcx], '-'
         jne     @positive
@@ -6957,17 +7053,17 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         ja      @fallback               // 17 bytes must stay inside the page (16 read + terminator)
         movdqu  xmm0, [rcx]
         movdqa  xmm1, xmm0
-        paddb   xmm1, [rip + @bias]
-        pcmpgtb xmm1, [rip + @threshold] // digit lanes
+        paddb   xmm1, [rip + NumericSimdData + NUMERIC_BIAS]
+        pcmpgtb xmm1, [rip + NumericSimdData + NUMERIC_THRESHOLD] // digit lanes
         pmovmskb eax, xmm1
         not     eax                      // non-digit lanes; bits 16..31 are sentinels
         db      $f3                      // TZCNT, or BSF without BMI1: same result for nonzero input
         bsf     r8d, eax                 // p: first non-digit = integer digit count
         test    r8d, r8d
-        jz      @special                 // NaN/Inf or uncommon grammar
+        jz      @fallback                // NaN/Inf or uncommon grammar
         cmp     r8d, 15
-        ja      @fallback                // 16+ digits
-        psubb   xmm0, [rip + @ascii0]
+        ja      @longInteger
+        psubb   xmm0, [rip + NumericSimdData + NUMERIC_ASCII0]
         movzx   r9d, byte ptr [rcx + r8] // byte after the integer digits: dot or terminator
         cmp     r9d, '.'
         je      @fraction
@@ -6979,23 +7075,32 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         je      @integerExponent         // exponent: parsed here, no restart
         mov     dword ptr [rdx], 1       // any other byte (quote, comma...): partial value, err = 1
 @integerGo:
+        cmp     r8d, 1
+        je      @singleInteger
         mov     r10d, r8d                // p
         shl     r8d, 4
-        lea     r9, [rip + @ctrlInt]
+        lea     r9, [rip + NumericSimdData + NUMERIC_CTRLINT]
         pshufb  xmm0, [r9 + r8]          // integer: right-aligned, other lanes zero
-        pmaddubsw xmm0, [rip + @ten]
-        pmaddwd xmm0, [rip + @hundred]
+        pmaddubsw xmm0, [rip + NumericSimdData + NUMERIC_TEN]
+        pmaddwd xmm0, [rip + NumericSimdData + NUMERIC_HUNDRED]
         packssdw xmm0, xmm0
-        pmaddwd xmm0, [rip + @tenThousand] // dwords: H = lanes 0..7, L = lanes 8..15
+        pmaddwd xmm0, [rip + NumericSimdData + NUMERIC_TENTHOUSAND] // dwords: H = lanes 0..7, L = lanes 8..15
         cvtdq2pd xmm0, xmm0              // lo = H, hi = L, both exact
         cmp     r10d, 8
         ja      @wideInteger
         test    r11d, r11d               // <= 8 digits sit in lanes 0..7: value = H
         jnz     @negativeInteger
         ret
+@singleInteger:
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cvtsi2sd xmm0, eax
+        test    r11d, r11d
+        jnz     @negativeInteger
+        ret
 @wideInteger:
         movhlps xmm1, xmm0
-        mulsd   xmm0, [rip + @e8]        // H * 10^8 exact
+        mulsd   xmm0, [rip + NumericSimdData + NUMERIC_E8]        // H * 10^8 exact
         addsd   xmm0, xmm1               // M exact (< 10^15 < 2^53)
         test    r11d, r11d
         jnz     @negativeInteger
@@ -7004,7 +7109,7 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         xorpd   xmm1, xmm1
         ucomisd xmm0, xmm1
         je      @integerZero
-        xorpd   xmm0, [rip + @sign]
+        xorpd   xmm0, [rip + NumericSimdData + NUMERIC_SIGN]
 @integerZero:
         ret
 @fraction:
@@ -7014,7 +7119,7 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         bsf     r9d, eax                 // n: second non-digit, 16 = none inside the window (never above: bits 16..31 are set)
         lea     r10d, [r8 + 1]
         cmp     r9d, r10d
-        je      @fallback                // upstream rejects an empty fraction
+        je      @fractionBoundary         // the first fraction digit may be at byte 16
         movzx   eax, byte ptr [rcx + r9] // terminator of the fraction (byte 16 is readable)
         mov     dword ptr [rdx], 0
         test    eax, eax
@@ -7023,7 +7128,7 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         jne     @fractionTerminator
         lea     r10d, [rax - 48]
         cmp     r10d, 9
-        jbe     @fallback                // a digit at byte 16: the number continues past the window
+        jbe     @longFraction
 @fractionTerminator:
         cmp     eax, '.'
         je      @fallback                // second dot: scalar scanner decides
@@ -7035,14 +7140,14 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         mov     r10d, r8d                // p
         shl     r8d, 4
         shl     r9d, 4
-        lea     rax, [rip + @ctrlDot]
-        lea     rcx, [rip + @mask]
+        lea     rax, [rip + NumericSimdData + NUMERIC_CTRLDOT]
+        lea     rcx, [rip + NumericSimdData + NUMERIC_MASK]
         pand    xmm0, [rcx + r9]         // clear lanes >= n (NUL and beyond)
         pshufb  xmm0, [rax + r8]         // remove the dot; lane 15 zero
-        pmaddubsw xmm0, [rip + @ten]
-        pmaddwd xmm0, [rip + @hundred]
+        pmaddubsw xmm0, [rip + NumericSimdData + NUMERIC_TEN]
+        pmaddwd xmm0, [rip + NumericSimdData + NUMERIC_HUNDRED]
         packssdw xmm0, xmm0
-        pmaddwd xmm0, [rip + @tenThousand]
+        pmaddwd xmm0, [rip + NumericSimdData + NUMERIC_TENTHOUSAND]
         cvtdq2pd xmm0, xmm0              // lo = H, hi = L
         neg     r10
         lea     rax, [rip + POW10]
@@ -7054,7 +7159,7 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         ret
 @wideFraction:
         movhlps xmm1, xmm0
-        mulsd   xmm0, [rip + @e8]
+        mulsd   xmm0, [rip + NumericSimdData + NUMERIC_E8]
         addsd   xmm0, xmm1               // exact even integer below 10^16
         divsd   xmm0, qword ptr [rax + r10 * 8 + 47 * 8]
         test    r11d, r11d
@@ -7063,12 +7168,12 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
 @integerExponent:                        // r8d = p, 'e' at [rcx + p]
         mov     r10d, r8d
         shl     r8d, 4
-        lea     r9, [rip + @ctrlInt]
+        lea     r9, [rip + NumericSimdData + NUMERIC_CTRLINT]
         pshufb  xmm0, [r9 + r8]          // right-aligned digits
-        pmaddubsw xmm0, [rip + @ten]
-        pmaddwd xmm0, [rip + @hundred]
+        pmaddubsw xmm0, [rip + NumericSimdData + NUMERIC_TEN]
+        pmaddwd xmm0, [rip + NumericSimdData + NUMERIC_HUNDRED]
         packssdw xmm0, xmm0
-        pmaddwd xmm0, [rip + @tenThousand]
+        pmaddwd xmm0, [rip + NumericSimdData + NUMERIC_TENTHOUSAND]
         cvtdq2pd xmm0, xmm0
         lea     r9d, [r10 + 1]           // index after the 'e'
         cmp     r10d, 8
@@ -7081,17 +7186,17 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         dec     r10d                     // f = n - p - 1
         shl     r8d, 4
         shl     r9d, 4
-        lea     rax, [rip + @mask]
+        lea     rax, [rip + NumericSimdData + NUMERIC_MASK]
         pand    xmm0, [rax + r9]         // clear lanes from the 'e' on
-        lea     rax, [rip + @ctrlDot]
+        lea     rax, [rip + NumericSimdData + NUMERIC_CTRLDOT]
         pshufb  xmm0, [rax + r8]         // remove the dot: digits left-aligned
-        lea     rax, [rip + @ctrlInt]
+        lea     rax, [rip + NumericSimdData + NUMERIC_CTRLINT]
         sub     r9d, 16                  // row d = n - 1 digits
         pshufb  xmm0, [rax + r9]         // right-aligned: exact integer of all digits
-        pmaddubsw xmm0, [rip + @ten]
-        pmaddwd xmm0, [rip + @hundred]
+        pmaddubsw xmm0, [rip + NumericSimdData + NUMERIC_TEN]
+        pmaddwd xmm0, [rip + NumericSimdData + NUMERIC_HUNDRED]
         packssdw xmm0, xmm0
-        pmaddwd xmm0, [rip + @tenThousand]
+        pmaddwd xmm0, [rip + NumericSimdData + NUMERIC_TENTHOUSAND]
         cvtdq2pd xmm0, xmm0
         shr     r9d, 4
         add     r9d, 2                   // index after the 'e' = n + 1
@@ -7099,7 +7204,7 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         jbe     @exponent
 @wideExponent:
         movhlps xmm1, xmm0
-        mulsd   xmm0, [rip + @e8]
+        mulsd   xmm0, [rip + NumericSimdData + NUMERIC_E8]
         addsd   xmm0, xmm1               // exact (< 10^15)
 @exponent:                               // xmm0 = all digits as an exact Double, r10d = f, r9d = index after 'e'
         movq    xmm1, rdx                // rdx is a byte scratch until the store
@@ -7132,7 +7237,7 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         movzx   edx, byte ptr [rcx + r9 + 3]
         sub     edx, 48
         cmp     edx, 9
-        jbe     @exponentFallback        // four or more digits: scalar grammar
+        jbe     @longExponent            // continue from the fourth exponent digit
 @exponentEnd:                            // edx = terminator - '0'
         cmp     edx, -48
         setne   dl
@@ -7145,9 +7250,9 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         movq    rdx, xmm1
         mov     dword ptr [rdx], r9d
         cmp     eax, 22
-        jg      @fallback
+        jg      @largeExponent
         cmp     eax, -22
-        jl      @fallback
+        jl      @largeExponent
         lea     r8, [rip + POW10]
         test    eax, eax
         js      @exponentDivide
@@ -7161,134 +7266,313 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         test    r11d, r11d
         jnz     @negativeInteger
         ret
-@special:                               // cold path; preserve rcx/r11 for fallback
-        mov     r9, rcx
-        mov     r10d, r11d
-        test    r11d, r11d
-        jnz     @specialWord             // a leading '-' was already consumed
-@specialSpaces:
-        cmp     byte ptr [r9], ' '
-        jne     @specialSign
-        inc     r9
-        jmp     @specialSpaces
-@specialSign:
-        cmp     byte ptr [r9], '+'
-        je      @specialSkipSign
-        cmp     byte ptr [r9], '-'
-        jne     @specialWord
-        inc     r10d
-@specialSkipSign:
-        inc     r9
-@specialWord:
-        cmp     byte ptr [r9], 0
-        je      @fallback
-        movzx   eax, word ptr [r9]       // a nonzero first byte guarantees char + NUL
-        and     eax, $dfdf
-        cmp     eax, $414e               // NA
-        je      @specialNaN
-        cmp     eax, $4e49               // IN
-        jne     @fallback
-        movzx   eax, byte ptr [r9 + 2]   // both preceding bytes are nonzero
-        and     eax, $df
-        cmp     eax, 'F'
-        jne     @fallback
-        movsd   xmm0, qword ptr [rip + NUMERIC_INFINITY]
-        mov     dword ptr [rdx], 0
-        test    r10d, r10d
-        jz      @specialDone
-        xorpd   xmm0, [rip + @sign]
-@specialDone:
-        ret
-@specialNaN:
-        movzx   eax, byte ptr [r9 + 2]
-        and     eax, $df
-        cmp     eax, 'N'
-        jne     @fallback
-        movsd   xmm0, qword ptr [rip + NUMERIC_NAN] // Pascal ignores the NaN sign and suffix
-        mov     dword ptr [rdx], 0
-        ret
-@exponentFallback:
+@longExponent:
+        lea     rcx, [rcx + r9 + 3]
+        cvttsd2si r9, xmm0
+        neg     r10
+        add     r8d, r8d
+        or      r11d, r8d                // bit 1 = negative exponent
+        mov     r8d, eax                 // the three exponent digits already parsed
+        mov     eax, edx                 // fourth digit
         movq    rdx, xmm1
+        jmp     @scalarExponentDigit
+@exponentFallback:                      // no exponent digit: return the parsed mantissa
+        movq    rdx, xmm1
+        cvttsd2si r9, xmm0
+        neg     r10
+        jmp     @scalarError
 @fallback:
         sub     rcx, r11                 // back over the sign
-        jmp     GetExtendedPascal
-        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@bias:
-        db $46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46
-        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@threshold:
-        db $75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75
-        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@ascii0:
-        db $30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30
-        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@ten:
-        db $0a,$01,$0a,$01,$0a,$01,$0a,$01,$0a,$01,$0a,$01,$0a,$01,$0a,$01
-        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@hundred:
-        db $64,$00,$01,$00,$64,$00,$01,$00,$64,$00,$01,$00,$64,$00,$01,$00
-        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@tenThousand:
-        db $10,$27,$01,$00,$10,$27,$01,$00,$10,$27,$01,$00,$10,$27,$01,$00
-        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@e8:
-        dq $4197d78400000000, 0
-        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@sign:
-        dq $8000000000000000, 0
-        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@ctrlInt: // row p: 1..8 right-aligned in lanes 0..7, 9..15 right-aligned in all 16 lanes
-        db $80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80
-        db $80,$80,$80,$80,$80,$80,$80,$00,$80,$80,$80,$80,$80,$80,$80,$80
-        db $80,$80,$80,$80,$80,$80,$00,$01,$80,$80,$80,$80,$80,$80,$80,$80
-        db $80,$80,$80,$80,$80,$00,$01,$02,$80,$80,$80,$80,$80,$80,$80,$80
-        db $80,$80,$80,$80,$00,$01,$02,$03,$80,$80,$80,$80,$80,$80,$80,$80
-        db $80,$80,$80,$00,$01,$02,$03,$04,$80,$80,$80,$80,$80,$80,$80,$80
-        db $80,$80,$00,$01,$02,$03,$04,$05,$80,$80,$80,$80,$80,$80,$80,$80
-        db $80,$00,$01,$02,$03,$04,$05,$06,$80,$80,$80,$80,$80,$80,$80,$80
-        db $00,$01,$02,$03,$04,$05,$06,$07,$80,$80,$80,$80,$80,$80,$80,$80
-        db $80,$80,$80,$80,$80,$80,$80,$00,$01,$02,$03,$04,$05,$06,$07,$08
-        db $80,$80,$80,$80,$80,$80,$00,$01,$02,$03,$04,$05,$06,$07,$08,$09
-        db $80,$80,$80,$80,$80,$00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a
-        db $80,$80,$80,$80,$00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b
-        db $80,$80,$80,$00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c
-        db $80,$80,$00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d
-        db $80,$00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e
-@ctrlDot: // row p (1..14): lanes < p keep, lanes p..14 select lane+1, lane 15 zero
-        db $01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
-        db $00,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
-        db $00,$01,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
-        db $00,$01,$02,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
-        db $00,$01,$02,$03,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
-        db $00,$01,$02,$03,$04,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
-        db $00,$01,$02,$03,$04,$05,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
-        db $00,$01,$02,$03,$04,$05,$06,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
-        db $00,$01,$02,$03,$04,$05,$06,$07,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
-        db $00,$01,$02,$03,$04,$05,$06,$07,$08,$0a,$0b,$0c,$0d,$0e,$0f,$80
-        db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0b,$0c,$0d,$0e,$0f,$80
-        db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0c,$0d,$0e,$0f,$80
-        db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0d,$0e,$0f,$80
-        db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0e,$0f,$80
-        db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0f,$80
-        db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$80
-@mask: // row n (0..16): lanes < n keep, lanes >= n zero
-        db $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-        db $ff,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-        db $ff,$ff,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-        db $ff,$ff,$ff,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-        db $ff,$ff,$ff,$ff,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-        db $ff,$ff,$ff,$ff,$ff,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-        db $ff,$ff,$ff,$ff,$ff,$ff,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$00,$00,$00,$00,$00,$00,$00,$00,$00
-        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$00,$00,$00,$00,$00,$00,$00,$00
-        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$00,$00,$00,$00,$00,$00,$00
-        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$00,$00,$00,$00,$00,$00
-        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$00,$00,$00,$00,$00
-        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$00,$00,$00,$00
-        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$00,$00,$00
-        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$00,$00
-        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$00
-        db $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+        jmp     @scalarStart
+@fractionBoundary:
+        cmp     r9d, 16
+        jne     @fallback                // an empty fraction
+        movzx   eax, byte ptr [rcx + 16]
+        sub     eax, 48
+        cmp     eax, 9
+        ja      @fallback
+        jmp     @longFraction
+@longInteger:                           // all 16 SIMD lanes contain digits
+        psubb   xmm0, [rip + NumericSimdData + NUMERIC_ASCII0]
+        xor     r10d, r10d
+        jmp     @longReduce
+@longFraction:                          // 15 digits and a dot; continue at byte 16
+        or      r11d, 4                  // includes a dot in the last SIMD lane
+        lea     r10d, [r8 - 15]
+        shl     r8d, 4
+        lea     rax, [rip + NumericSimdData + NUMERIC_CTRLDOT]
+        pshufb  xmm0, [rax + r8]
+        pshufb  xmm0, [rip + NumericSimdData + NUMERIC_CTRLINT + 15 * 16]
+@longReduce:
+        pmaddubsw xmm0, [rip + NumericSimdData + NUMERIC_TEN]
+        pmaddwd xmm0, [rip + NumericSimdData + NUMERIC_HUNDRED]
+        packssdw xmm0, xmm0
+        pmaddwd xmm0, [rip + NumericSimdData + NUMERIC_TENTHOUSAND]
+        movq    rax, xmm0
+        mov     r9d, eax
+        shr     rax, 32
+        imul    r9, r9, 100000000
+        add     r9, rax
+        add     rcx, 16
+        movsxd  r10, r10d
+        mov     dword ptr [rdx], 0
+        mov     r8, 922337203685477580
+        test    r11b, 4
+        jnz     @scalarFraction
+        jmp     @scalarInteger
+@largeExponent:                         // SIMD already produced the exact mantissa
+        cvttsd2si r9, xmm0
+        movsxd  r10, eax
+        jmp     @scalarValue
+@scalarStart:                           // byte scanner, also used without SSSE3
+        xor     r9d, r9d
+        xor     r10d, r10d
+        xor     r11d, r11d
+        mov     dword ptr [rdx], 0
+@scalarSpaces:
+        cmp     byte ptr [rcx], ' '
+        jne     @scalarSign
+        inc     rcx
+        jmp     @scalarSpaces
+@scalarSign:
+        cmp     byte ptr [rcx], '+'
+        je      @scalarSkipSign
+        cmp     byte ptr [rcx], '-'
+        jne     @scalarFirst
+        inc     r11d
+@scalarSkipSign:
+        inc     rcx
+@scalarFirst:
+        cmp     byte ptr [rcx], 0
+        je      @scalarInvalid
+        cmp     byte ptr [rcx], '9'
+        ja      @scalarWord
+        mov     r8, 922337203685477580
+@scalarInteger:
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        ja      @scalarIntegerEnd
+        cmp     r9, r8
+        ja      @scalarSkipInteger
+        jb      @scalarKeepInteger
+        cmp     eax, 7
+        ja      @scalarSkipInteger
+@scalarKeepInteger:
+        lea     r9, [r9 + r9 * 4]
+        lea     r9, [rax + r9 * 2]
+        inc     rcx
+        jmp     @scalarInteger
+@scalarSkipInteger:
+        inc     rcx
+        inc     r10
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        jbe     @scalarSkipInteger
+@scalarIntegerEnd:
+        cmp     eax, -2                  // '.' - '0'
+        jne     @scalarExponent
+        inc     rcx
+        test    r10, r10
+        jnz     @scalarError
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        ja      @scalarError
+@scalarFraction:
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        ja      @scalarFractionEnd
+        cmp     r9, r8
+        ja      @scalarSkipFraction
+        jb      @scalarKeepFraction
+        cmp     eax, 7
+        ja      @scalarSkipFraction
+@scalarKeepFraction:
+        lea     r9, [r9 + r9 * 4]
+        lea     r9, [rax + r9 * 2]
+        inc     rcx
+        dec     r10
+        jmp     @scalarFraction
+@scalarSkipFraction:
+        inc     rcx
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        jbe     @scalarSkipFraction
+@scalarFractionEnd:
+        cmp     eax, -2
+        je      @scalarError
+@scalarExponent:
+        cmp     eax, -48                 // NUL - '0'
+        je      @scalarValue
+        or      eax, 32
+        cmp     eax, 53                  // ('E' - '0') or 32
+        jne     @scalarError
+        inc     rcx
+        movzx   eax, byte ptr [rcx]
+        cmp     eax, '+'
+        je      @scalarExponentSign
+        cmp     eax, '-'
+        jne     @scalarExponentFirst
+        or      r11d, 2
+@scalarExponentSign:
+        inc     rcx
+        movzx   eax, byte ptr [rcx]
+@scalarExponentFirst:
+        sub     eax, 48
+        cmp     eax, 9
+        ja      @scalarError
+        xor     r8d, r8d
+@scalarExponentDigit:
+        lea     r8, [r8 + r8 * 4]
+        lea     r8, [rax + r8 * 2]
+        inc     rcx
+        cmp     r8, $fff000
+        jae     @scalarError
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        jbe     @scalarExponentDigit
+        test    r11b, 2
+        jz      @scalarExponentPositive
+        neg     r8
+@scalarExponentPositive:
+        add     r10, r8
+        cmp     eax, -48
+        je      @scalarValue
+@scalarError:
+        mov     dword ptr [rdx], 1
+@scalarValue:
+        test    r10, r10
+        jz      @scalarIntegerValue
+        test    r9, r9
+        jz      @scalarIntegerValue
+        jmp     @scalarTrimCheck
+@scalarTrim:
+        mov     rax, r9
+        mov     r8, $cccccccccccccccd
+        imul    rax, r8
+        ror     rax, 1
+        mov     r8, $1999999999999999
+        cmp     rax, r8                  // exact quotient iff M is divisible by ten
+        ja      @scalarConvert
+        mov     r9, rax
+        inc     r10
+@scalarTrimCheck:
+        test    r10, r10
+        jns     @scalarConvert
+        cmp     r10, -22
+        jl      @scalarTrim
+        mov     rax, r9
+        shr     rax, 53
+        jnz     @scalarTrim
+@scalarConvert:
+        pxor    xmm0, xmm0
+        cvtsi2sd xmm0, r9
+        lea     rcx, [rip + POW10]
+        lea     rax, [r10 + 22]
+        cmp     rax, 21
+        ja      @scalarGeneral
+        mov     rax, r9
+        shr     rax, 53
+        jnz     @scalarGeneral
+        neg     r10
+        divsd   xmm0, qword ptr [rcx + r10 * 8 + 31 * 8]
+        jmp     @scalarApplySign
+@scalarGeneral:
+        lea     rax, [r10 + 31]
+        cmp     rax, 62
+        ja      @scalarLargeScale
+        mulsd   xmm0, qword ptr [rcx + rax * 8]
+        jmp     @scalarApplySign
+@scalarLargeScale:
+        cmp     r10, -31
+        jge     @scalarLargePositive
+        cmp     r10, -324
+        jg      @scalarSmall
+        cmp     r10, -342
+        jl      @scalarRangeError
+        add     r10, 160
+        mulsd   xmm0, qword ptr [rcx + (50 + 31) * 8]
+@scalarSmall:
+        neg     r10
+        mov     rax, r10
+        shr     rax, 5
+        and     r10d, 31
+        movsd   xmm1, qword ptr [rcx + rax * 8 + (45 + 31) * 8]
+        divsd   xmm1, qword ptr [rcx + r10 * 8 + 31 * 8]
+        mulsd   xmm0, xmm1
+        jmp     @scalarApplySign
+@scalarLargePositive:
+        cmp     r10, 308
+        jg      @scalarRangeError
+        mov     rax, r10
+        shr     rax, 5
+        mov     r8d, r10d
+        and     r8d, 31
+        movsd   xmm1, qword ptr [rcx + rax * 8 + (34 + 31) * 8]
+        mulsd   xmm1, qword ptr [rcx + r8 * 8 + 31 * 8]
+        cmp     r10, 290
+        jl      @scalarLargeMultiply
+        mulsd   xmm1, qword ptr [rip + @invScale]
+        mulsd   xmm0, xmm1
+        ucomisd xmm0, qword ptr [rip + @maxScaled]
+        ja      @scalarRangeError
+        mulsd   xmm0, qword ptr [rip + @scale]
+        jmp     @scalarApplySign
+@scalarLargeMultiply:
+        mulsd   xmm0, xmm1
+        jmp     @scalarApplySign
+@scalarRangeError:
+        mov     dword ptr [rdx], 1
+@scalarApplySign:
+        test    r11b, 1
+        jz      @scalarDone
+        xorpd   xmm0, [rip + NumericSimdData + NUMERIC_SIGN]
+@scalarDone:
+        ret
+@scalarIntegerValue:
+        test    r11b, 1
+        jz      @scalarIntegerPositive
+        neg     r9
+@scalarIntegerPositive:
+        pxor    xmm0, xmm0
+        cvtsi2sd xmm0, r9
+        ret
+@scalarWord:
+        movzx   eax, word ptr [rcx]       // first byte is nonzero
+        and     eax, $dfdf
+        cmp     eax, $414e
+        je      @scalarNaN
+        cmp     eax, $4e49
+        jne     @scalarInvalid
+        movzx   eax, byte ptr [rcx + 2]   // the preceding two bytes are nonzero
+        and     eax, $df
+        cmp     eax, 'F'
+        jne     @scalarInvalid
+        movsd   xmm0, qword ptr [rip + NUMERIC_INFINITY]
+        jmp     @scalarApplySign
+@scalarNaN:
+        movzx   eax, byte ptr [rcx + 2]
+        and     eax, $df
+        cmp     eax, 'N'
+        jne     @scalarInvalid
+        movsd   xmm0, qword ptr [rip + NUMERIC_NAN]
+        ret
+@scalarInvalid:
+        mov     dword ptr [rdx], 1
+        pxor    xmm0, xmm0
+        ret
+@scale:
+        dq $5ff0000000000000
+@invScale:
+        dq $1ff0000000000000
+@maxScaled:
+        dq $5fefffffffffffff
+
 end;
 
 {$ifend}

@@ -5761,6 +5761,28 @@ begin
   CheckJsonDoubleBits('0.000000007832000000000000', $3E40D1B00240A588);
   CheckJsonDoubleBits('228518839.20000000', $41AB3DD76E666666);
   CheckJsonDoubleBits('-228518839.20000000', QWord($C1AB3DD76E666666));
+  // The dot/first fractional digit can straddle the 16-byte SIMD window.
+  {$ifdef ASMX64}
+  Check(PtrUInt(@NumericSimdData) and 15 = 0);
+  {$endif ASMX64}
+  CheckJsonExact('100000000000000.000', varCurrency, 1000000000000000000);
+  CheckJsonExact('100000000000000.0001', varCurrency, 1000000000000000001);
+  CheckJsonExact('1234567890123456', varInt64, 1234567890123456);
+  CheckJsonDoubleBits('1.25e0004', $40C86A0000000000);
+  {$ifndef WIN32DELPHI}
+  CheckGetExtendedBits('100000000000000.000', $42D6BCC41E900000);
+  CheckGetExtendedBits('1234567890123456', $43118B54F22AEB00);
+  CheckGetExtendedBits('1.25e0004', $40C86A0000000000);
+  s := '228518839.20000000' + '","next":1';
+  d := GetExtended(pointer(s), err);
+  CheckEqual(err, 1);
+  CheckUtf8(PQWord(@d)^ = $41AB3DD76E666666, s);
+  {$endif WIN32DELPHI}
+  s := '100000000000000.0001,"next":1';
+  P := GetNumericVariantFromJson(pointer(s), TVarData(vj), false);
+  Check(P = PUtf8Char(pointer(s)) + 20);
+  CheckEqual(TVarData(vj).VType, varCurrency);
+  CheckEqual(TVarData(vj).VInt64, 1000000000000000001);
   CheckJsonDoubleBits('-922337203685477580.8', QWord($C3A999999999999A));
   CheckJsonDoubleBits('-92233720368547758.08', QWord($C3747AE147AE147B));
   CheckJsonDoubleBits('-9223372036854775.808', QWord($C340624DD2F1A9FC));
