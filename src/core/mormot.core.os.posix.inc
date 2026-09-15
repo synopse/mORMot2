@@ -6092,7 +6092,9 @@ var
   {$ifndef NODIRECTTHREADMANAGER}
   tm: TThreadManager;
   {$endif NODIRECTTHREADMANAGER}
-  {$ifndef OSDARWIN}
+  {$ifdef OSDARWIN}
+  kern: PtrUInt;
+  {$else}
   tpfail: integer;
   tp: array[0 .. 1{$ifdef OSLINUX} + 2{$endif}] of TTimeSpec;
   {$endif OSDARWIN}
@@ -6342,15 +6344,13 @@ begin
   {$ifdef OSDARWIN}
   temp1 := 'macOS ';
   modname := fpsysctlbynamestr('kern.osproductversion', temp2); // '15.7.3'
-  if OSVersion32.utsrelease[2] in [low(MACOS_NUM) .. high(MACOS_NUM)] then
-  begin
-    if modname = nil then // '15' number from kernel revision
-      AppendShort(MACOS_NUM[OSVersion32.utsrelease[2]], temp1)
-    else                  // '15.7.3'
-      AppendShortBuffer(pointer(modname), StrLen(modname), high(temp1), @temp1);
-    AppendShortCharSafe(' ', temp1);
-    AppendShort(MACOS_NAME[OSVersion32.utsrelease[2]], temp1);
-  end;
+  kern := MacKernel(OSVersion32);
+  if modname = nil then // '15' main number from kernel revision
+    AppendShort(MACOS_NUM[kern], temp1)
+  else                  // '15.7.3'
+    AppendShortBuffer(pointer(modname), StrLen(modname), high(temp1), @temp1);
+  AppendShortCharSafe(' ', temp1);
+  AppendShort(MACOS_NAME[kern], temp1);
   ShortStringToAnsi7String(temp1, OSVersionShort); // 'macOS 15.7.3 Sequoia'
   OSVersionText := Join([OSVersionShort, ' (', OSVersionText, ')']);
   mach_timebase_info(mach_timeinfo);

@@ -487,18 +487,18 @@ type
 
 const
   /// OSVersion32.utsrelease[2] indexed MacOS versions, as number
-  MACOS_NUM: array[8 .. 26] of TShort7 = (
+  MACOS_NUM: array[8 .. 27] of TShort7 = (
     '10.4',  '10.5',  '10.6',  '10.7',  '10.8',  '10.9',  '10.10', '10.11',
     '10.12', '10.13', '10.14', '10.15', '11',    '12',    '13',    '14',
-    '15',    '26',    '27'); // MacOS 27 expected in 2026, ARM-only
+    '15',    '26',    '27',    '28');
 
   /// OSVersion32.utsrelease[2] indexed MacOS versions, as plain text
   // - see https://en.wikipedia.org/wiki/MacOS_version_history#Releases
-  MACOS_NAME: array[8 .. 26] of TShort15 = (
+  MACOS_NAME: array[8 .. 27] of TShort15 = (
     'Tiger', 'Leopard', 'Snow Leopard', 'Lion', 'Mountain Lion', 'Mavericks',
     'Yosemite', 'El Capitan', 'Sierra', 'High Sierra', 'Mojave', 'Catalina',
     'Big Sur', 'Monterey', 'Ventura', 'Sonoma', 'Sequoia', 'Tahoe',
-    'Next'); // expected in 2026, ARM-only
+    'Golden Gate', 'Next');
 
   /// the recognized Windows versions, as plain text
   // - defined even outside OSWINDOWS to allow process e.g. from monitoring tools
@@ -839,6 +839,9 @@ function MatchOS(os: TOperatingSystem): boolean;
 
 /// recognize the Linux distribution for a given Operating System
 function LinuxDistribution(os: TOperatingSystem): TLinuxDistribution;
+
+/// convert the raw utsrelease[2] Kernel number into human MACOS_NAME[] index
+function MacKernel(const osv: TOperatingSystemVersion): PtrUInt;
 
 /// return the best known ERROR_* system error message constant texts
 // - without the 'ERROR_' prefix, but in a cross-platform way
@@ -6755,7 +6758,17 @@ begin
   AppendOsBuild(osv, @result, sep);
 end;
 
+function MacKernel(const osv: TOperatingSystemVersion): PtrUInt;
+begin
+  result := osv.utsrelease[2]; // e.g. macOS 15  -> Darwin 24
+  if result > 25 then
+    inc(result); // Darwin 26 is skipped in the sequence
+  result := MinPtrUInt(high(MACOS_NAME), MaxPtrUInt(low(MACOS_NAME), result));
+end; // 'Tiger' or 'Next' as lower/higher fallback
+
 procedure AppendOsv(const osv: TOperatingSystemVersion; var dest: TShort47);
+var
+  kern: PtrUInt;
 begin
   case osv.os of
     osWindows:
@@ -6766,12 +6779,12 @@ begin
         exit;
       end;
     osOSX: // guess end-user MacOS Name from Darwin version number
-      if osv.utsrelease[2] in [low(MACOS_NAME) .. high(MACOS_NAME)] then
       begin
+        kern := MacKernel(osv); // e.g. macOS 15  -> Darwin 24
         AppendShort('macOS ', dest);
-        AppendShort(MACOS_NUM[osv.utsrelease[2]], dest);
+        AppendShort(MACOS_NUM[kern], dest);
         AppendShortChar(' ', @dest);
-        AppendShort(MACOS_NAME[osv.utsrelease[2]], dest);
+        AppendShort(MACOS_NAME[kern], dest);
         exit;
       end;
   end;
@@ -6800,8 +6813,7 @@ begin
     osWindows:
       result := @WINDOWS_NAME[osv.win];
     osOSX:
-      if osv.utsrelease[2] in [low(MACOS_NAME) .. high(MACOS_NAME)] then
-        result := @MACOS_NAME[osv.utsrelease[2]];
+      result := @MACOS_NAME[MacKernel(osv)];
   end;
   if (result = nil) or
      (result^[0] = #0) then
