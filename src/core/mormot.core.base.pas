@@ -3118,7 +3118,7 @@ type
   // as expected e.g. by IsValidUtf8Avx2/Base64EncodeAvx2 dedicated asm
   // - won't include ERMSB flag because it is not propagated within some VMs
   TX64CpuFeatures = set of (
-    cpuAVX, cpuAVX2, cpuHaswell);
+    cpuSSSE3, cpuAVX, cpuAVX2, cpuHaswell);
 
 var
   /// internal flags used by FillCharFast - easier from asm that CpuFeatures
@@ -10962,6 +10962,9 @@ begin
     end;
   {$ifdef ASMX64NOTPIC}
   // note: cfERMS has no cpuid within some VMs -> ignore and assume present
+  if (cfSSE3 in CpuFeatures) and
+     (cfSSSE3 in CpuFeatures) then
+    include(X64CpuFeatures, cpuSSSE3);
   if cfAVX in CpuFeatures then
   begin
     include(X64CpuFeatures, cpuAVX);
