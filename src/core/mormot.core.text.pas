@@ -1469,7 +1469,7 @@ const
   JSON_NAN: array[TFloatNan] of TShort15 = (
     '0', '"NaN"', '"Infinity"', '"-Infinity"');
 
-  /// most common 10 ^ exponent constants, ending with values for HugePower10*()
+  /// most common 10 ^ exponent constants, ending with values for huge exponents
   POW10: TPow10 = (
     1E-31, 1E-30, 1E-29, 1E-28, 1E-27, 1E-26, 1E-25, 1E-24, 1E-23, 1E-22,
     1E-21, 1E-20, 1E-19, 1E-18, 1E-17, 1E-16, 1E-15, 1E-14, 1E-13, 1E-12,
@@ -6750,7 +6750,6 @@ end;
   {$WARN 7119 off : Exported/global symbols should be accessed via the GOT }
   {$WARN 7121 off : Check size of memory operand "$1: memory-operand-size is $2 bits, but expected [$3 bits]" }
   {$WARN 7122 off : Check size of memory operand "$1: memory-operand-size is $2 bits, but expected [$3 bits + $4 byte offset]" }
-  {$WARN 7123 off : Check "$1: offset of memory operand is negative "$2 byte" }
 
 procedure NumericSimdData; assembler; nostackframe;
 asm
@@ -6857,15 +6856,15 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
 @positive:
         mov     eax, ecx
         and     eax, 4095
-        cmp     eax, 4079
-        ja      @fallback       // 17 bytes must stay inside the page (16 read + terminator)
+        cmp     eax, 4079       // 16 read + terminator
+        ja      @fallback       // 17 bytes must stay inside the page
         movdqu  xmm0, [rcx]
         movdqa  xmm1, xmm0
         paddb   xmm1, [rip + NumericSimdData + NUMERIC_BIAS]
         pcmpgtb xmm1, [rip + NumericSimdData + NUMERIC_THRESHOLD] // digit lanes
         pmovmskb eax, xmm1
         not     eax             // non-digit lanes; bits 16..31 are sentinels
-        db      $f3             // TZCNT, or BSF without BMI1: same result for nonzero input
+        db      $f3             // TZCNT, or BSF without BMI1: identical if <> 0
         bsf     r8d, eax        // p: first non-digit = integer digit count
         test    r8d, r8d
         jz      @fallback       // NaN/Inf or uncommon grammar
@@ -6875,13 +6874,13 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         movzx   r9d, byte ptr [rcx + r8] // byte after the integer digits: dot or terminator
         cmp     r9d, '.'
         je      @fraction
-        mov     dword ptr [rdx], 0
+        mov     dword ptr [rdx], 0       // set err := 0
         test    r9d, r9d
         jz      @integerGo               // NUL: complete number
         or      r9d, 32
         cmp     r9d, 'e'
         je      @integerExponent         // exponent: parsed here, no restart
-        mov     dword ptr [rdx], 1       // any other byte (quote, comma...): partial value, err = 1
+        mov     dword ptr [rdx], 1       // err := 1 on any other byte (quote/comma)
 @integerGo:
         cmp     r8d, 1
         je      @singleInteger
@@ -6923,11 +6922,11 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
 @fraction:
         lea     r9d, [rax - 1]
         and     eax, r9d                 // clear the dot bit
-        db      $f3
-        bsf     r9d, eax                 // n: second non-digit, 16 = none inside the window (never above: bits 16..31 are set)
+        db      $f3                      // TZCNT, or BSF without BMI1
+        bsf     r9d, eax // n: second non-digit, 16 = none inside the window (never above: bits 16..31 are set)
         lea     r10d, [r8 + 1]
         cmp     r9d, r10d
-        je      @fractionBoundary         // the first fraction digit may be at byte 16
+        je      @fractionBoundary        // the first fraction digit may be at byte 16
         movzx   eax, byte ptr [rcx + r9] // terminator of the fraction (byte 16 is readable)
         mov     dword ptr [rdx], 0
         test    eax, eax
