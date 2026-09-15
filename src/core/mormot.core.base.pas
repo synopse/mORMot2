@@ -6236,8 +6236,8 @@ end;
 
 function GetInteger(P: PUtf8Char): PtrInt;
 var
-  c: byte;
-  minus: boolean;
+  c, d: cardinal; // good enough even on i386
+  minus: boolean; // better than * PtrInt 1/-1
 begin
   result := 0;
   if P = nil then
@@ -6271,14 +6271,24 @@ begin
   dec(c, 48);
   if c > 9 then
     exit;
+  inc(P);
   result := c;
-  repeat
-    inc(P);
-    c := byte(P^);
-    dec(c, 48);
+  repeat // handle two digits per iteration (used by JL_Byte/Word/Integer/Int64)
+    c := cardinal(byte(P[0]))  - ord('0');
     if c > 9 then
       break;
-    result := result * 10 + PtrInt(c);
+    d := cardinal(byte(P[1])) - ord('0');
+    if d <= 9 then
+    begin
+      inc(d, c * 10);
+      result := result * 100 + PtrInt(d);
+      inc(P, 2);
+    end
+    else
+    begin
+      result := result * 10 + PtrInt(c);
+      break;
+    end;
   until false;
   if minus then
     result := -result;
@@ -6512,7 +6522,7 @@ end;
 
 function GetCardinal(P: PUtf8Char): PtrUInt;
 var
-  c: byte;
+  c, d: cardinal; // good enough even on i386
 begin
   result := 0;
   if P = nil then
@@ -6529,14 +6539,24 @@ begin
   dec(c, 48);
   if c > 9 then
     exit;
+  inc(P);
   result := c;
-  repeat
-    inc(P);
-    c := byte(P^);
-    dec(c, 48);
+  repeat // handle two digits per iteration (used by JL_Byte/Word/Cardinal/QWord)
+    c := cardinal(byte(P[0]))  - ord('0');
     if c > 9 then
       break;
-    result := result * 10 + PtrUInt(c);
+    d := cardinal(byte(P[1])) - ord('0');
+    if d <= 9 then
+    begin
+      inc(d, c * 10);
+      result := result * 100 + d;
+      inc(P, 2);
+    end
+    else
+    begin
+      result := result * 10 + c;
+      break;
+    end;
   until false;
 end;
 
