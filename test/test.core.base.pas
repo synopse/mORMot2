@@ -5080,6 +5080,7 @@ procedure TTestCoreBase.NumericalConversions;
   var
     v: variant;
   begin
+    TVarData(v).VType := varEmpty;
     CheckUtf8(GetNumericVariantFromJson(pointer(text), TVarData(v), false) <> nil, text);
     CheckEqual(TVarData(v).VType, kind, text);
     CheckEqual(TVarData(v).VInt64, expected, text);
@@ -5091,7 +5092,8 @@ procedure TTestCoreBase.NumericalConversions;
   begin
     CheckUtf8(GetNumericVariantFromJson(pointer(text), TVarData(v), true) <> nil, text);
     CheckEqual(TVarData(v).VType, varDouble, text);
-    CheckUtf8(PQWord(@TVarData(v).VDouble)^ = expected, text);
+    CheckUtf8(PQWord(@TVarData(v).VDouble)^ = expected,
+      'CheckJsonDoubleBits %=%', [PQWord(@TVarData(v).VDouble)^, expected]);
   end;
 
   procedure CheckDecimalRounding;
@@ -5604,12 +5606,11 @@ begin
   CheckDoubleToShortSame(12.345678901234);
   CheckDoubleToShortSame(123.45678901234);
   CheckDoubleToShortSame(1234.5678901234);
+  {$ifndef WIN32DELPHI} // fails when converted to FP80 in x87 asm
   CheckDoubleToShort(0.00123456789012345, '0.00123456789012');
   CheckDoubleToShort(-0.00123456789012345, '-0.00123456789012');
   CheckDoubleToShort(0.000123456789012345, '0.00012345678901');
   CheckDoubleToShort(-0.000123456789012345, '-0.00012345678901');
-  CheckDecimalRounding;
-  {$ifndef WIN32DELPHI} // fails when converted to FP80 in x87 asm
   d := GetExtended('0e400', err);
   CheckEqual(err, 0);
   Check(d = 0);
@@ -5706,7 +5707,17 @@ begin
   CheckJsonExact('0', varInteger, 0);
   CheckJsonExact('0.0', varInteger, 0);
   CheckJsonExact('0.000000000', varInteger, 0);
+  CheckJsonExact('123', varInteger, 123);
   CheckJsonExact('-123', varInteger, -123);
+  CheckJsonExact('1.23', varCurrency, 12300);
+  CheckJsonExact('-1.23', varCurrency, -12300);
+  CheckJsonExact('1234', varInteger, 1234);
+  CheckJsonExact('12345', varInteger, 12345);
+  CheckJsonExact('123456', varInteger, 123456);
+  CheckJsonExact('1234567', varInteger, 1234567);
+  CheckJsonExact('12345678', varInteger, 12345678);
+  CheckJsonExact('123456789', varInteger, 123456789);
+  CheckJsonExact('1234567890', varInt64, 1234567890);
   CheckJsonExact('9223372036854775807',   varInt64,    High(Int64));
   CheckJsonExact('-9223372036854775808',  varInt64,    Low(Int64));
   CheckJsonExact('922337203685477.5807',  varCurrency, High(Int64));
@@ -5749,6 +5760,7 @@ begin
   CheckInvalidNumber('+1', false);
   CheckInvalidNumber('1e400');
   CheckInvalidNumber('1e-400');
+  CheckDecimalRounding;
   s := '0.0000000000000000001';
   d := GetExtended(pointer(s), err);
   CheckEqual(err, 0);
