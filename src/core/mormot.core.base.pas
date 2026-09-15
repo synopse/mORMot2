@@ -1521,12 +1521,8 @@ function GetInt64(P: PUtf8Char; var err: integer): Int64; overload;
 // was successful (same as the standard val function)
 function GetQWord(P: PUtf8Char; var err: integer): QWord;
 
-{$ifdef WIN32DELPHI} // Delphi has its own x86/x87 asm version
-/// get the extended floating point value stored in P^
-// - set the err content to the index of any faulty character, 0 if conversion
-// was successful (same as the standard val function)
-// - this optimized function is consistent on all platforms/compilers and return
-// the decoded value even if err is not 0 (e.g. if P^ is not #0 ended)
+{$ifdef WIN32DELPHI}
+/// Delphi specific x86/x87 asm - pascal version in mormot.core.text.pas
 function GetExtended(P: PUtf8Char; out err: integer): TSynExtended; overload;
 {$endif WIN32DELPHI}
 
@@ -3128,6 +3124,13 @@ var
 const
   // identify Intel/AMD AVX2+BMI support at Haswell level
   CPUAVX2HASWELL = [cfAVX2, cfSSE42, cfBMI1, cfBMI2, cfCLMUL];
+
+/// x86_64 asm with SSSE3 SIMD process - pascal version in mormot.core.text.pas
+function GetExtended(P: PUtf8Char; out err: integer): TSynExtended; overload;
+
+/// x86_64 asm with SSSE3 SIMD process - pascal version in mormot.core.variants.pas
+function GetNumericVariantFromJson(Json: PUtf8Char;
+  var Value: TVarData; AllowVarDouble: boolean): PUtf8Char;
 
 {$ifdef ASMX64AVX1}
 /// simdjson asm as used by mormot.core.unicode on Haswell for FPC IsValidUtf8()
