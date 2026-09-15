@@ -6725,7 +6725,7 @@ end;
 
 {$ifndef WIN32DELPHI} // Delphi has its own x86/x87 asm version
 
-{$if defined(WIN64DELPHI) and defined(ASMX64)}
+{$ifdef ASMX64}
 function GetExtendedPascal(P: PUtf8Char; out err: integer): TSynExtended;
 {$else}
 function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
@@ -6922,10 +6922,12 @@ o:  err := 1
     result := -result;
 end;
 
-{$if defined(WIN64DELPHI) and defined(ASMX64)}
+{$ifdef ASMX64}
 const
   NUMERIC_SSSE3_BYTE = ord(cfSSSE3) shr 3;
   NUMERIC_SSSE3_MASK = 1 shl (ord(cfSSSE3) and 7);
+  NUMERIC_NAN: double = NaN;
+  NUMERIC_INFINITY: double = Infinity;
 
 // SSSE3 digit reduction, adapted from MoonBot's JS4 scanner.
 // Read 16 bytes only when P..P+16 stay within one 4 KiB page. Digit masks
@@ -6934,7 +6936,11 @@ const
 // Other CPUs, long inputs and uncommon grammar use the Pascal implementation.
 // REP BSF is TZCNT when available; its nonzero operand also works with BSF.
 function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
-asm .noframe
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        {$ifdef ABISYSVX64}
+        mov     rcx, rdi
+        mov     rdx, rsi
+        {$endif ABISYSVX64}
         test    rcx, rcx
         jz      GetExtendedPascal        // nil: the scalar answers
         test    byte ptr [rip + CpuFeatures + NUMERIC_SSSE3_BYTE], NUMERIC_SSSE3_MASK
@@ -6958,7 +6964,7 @@ asm .noframe
         db      $f3                      // TZCNT, or BSF without BMI1: same result for nonzero input
         bsf     r8d, eax                 // p: first non-digit = integer digit count
         test    r8d, r8d
-        jz      @fallback                // no leading digit
+        jz      @special                 // NaN/Inf or uncommon grammar
         cmp     r8d, 15
         ja      @fallback                // 16+ digits
         psubb   xmm0, [rip + @ascii0]
@@ -7155,36 +7161,82 @@ asm .noframe
         test    r11d, r11d
         jnz     @negativeInteger
         ret
+@special:                               // cold path; preserve rcx/r11 for fallback
+        mov     r9, rcx
+        mov     r10d, r11d
+        test    r11d, r11d
+        jnz     @specialWord             // a leading '-' was already consumed
+@specialSpaces:
+        cmp     byte ptr [r9], ' '
+        jne     @specialSign
+        inc     r9
+        jmp     @specialSpaces
+@specialSign:
+        cmp     byte ptr [r9], '+'
+        je      @specialSkipSign
+        cmp     byte ptr [r9], '-'
+        jne     @specialWord
+        inc     r10d
+@specialSkipSign:
+        inc     r9
+@specialWord:
+        cmp     byte ptr [r9], 0
+        je      @fallback
+        movzx   eax, word ptr [r9]       // a nonzero first byte guarantees char + NUL
+        and     eax, $dfdf
+        cmp     eax, $414e               // NA
+        je      @specialNaN
+        cmp     eax, $4e49               // IN
+        jne     @fallback
+        movzx   eax, byte ptr [r9 + 2]   // both preceding bytes are nonzero
+        and     eax, $df
+        cmp     eax, 'F'
+        jne     @fallback
+        movsd   xmm0, qword ptr [rip + NUMERIC_INFINITY]
+        mov     dword ptr [rdx], 0
+        test    r10d, r10d
+        jz      @specialDone
+        xorpd   xmm0, [rip + @sign]
+@specialDone:
+        ret
+@specialNaN:
+        movzx   eax, byte ptr [r9 + 2]
+        and     eax, $df
+        cmp     eax, 'N'
+        jne     @fallback
+        movsd   xmm0, qword ptr [rip + NUMERIC_NAN] // Pascal ignores the NaN sign and suffix
+        mov     dword ptr [rdx], 0
+        ret
 @exponentFallback:
         movq    rdx, xmm1
 @fallback:
         sub     rcx, r11                 // back over the sign
         jmp     GetExtendedPascal
-        .align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @bias:
         db $46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46
-        .align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @threshold:
         db $75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75
-        .align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @ascii0:
         db $30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30
-        .align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @ten:
         db $0a,$01,$0a,$01,$0a,$01,$0a,$01,$0a,$01,$0a,$01,$0a,$01,$0a,$01
-        .align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @hundred:
         db $64,$00,$01,$00,$64,$00,$01,$00,$64,$00,$01,$00,$64,$00,$01,$00
-        .align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @tenThousand:
         db $10,$27,$01,$00,$10,$27,$01,$00,$10,$27,$01,$00,$10,$27,$01,$00
-        .align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @e8:
         dq $4197d78400000000, 0
-        .align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @sign:
         dq $8000000000000000, 0
-        .align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @ctrlInt: // row p: 1..8 right-aligned in lanes 0..7, 9..15 right-aligned in all 16 lanes
         db $80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80
         db $80,$80,$80,$80,$80,$80,$80,$00,$80,$80,$80,$80,$80,$80,$80,$80

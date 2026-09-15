@@ -11518,7 +11518,7 @@ const
   CURRENCY_MAX: array[-4 .. -1] of Int64 = (
     MAX_INT64, MAX_INT64_DIV10, MAX_INT64 div 100, MAX_INT64 div 1000);
 
-{$if defined(WIN64DELPHI) and defined(ASMX64)}
+{$ifdef ASMX64}
 function GetNumericVariantFromJsonPascal(Json: PUtf8Char; var Value: TVarData;
   AllowVarDouble: boolean): PUtf8Char;
 {$else}
@@ -11789,7 +11789,7 @@ begin
   result := Json;
 end;
 
-{$if defined(WIN64DELPHI) and defined(ASMX64)}
+{$ifdef ASMX64}
 const
   NUMERIC_SSSE3_BYTE = ord(cfSSSE3) shr 3;
   NUMERIC_SSSE3_MASK = 1 shl (ord(cfSSSE3) and 7);
@@ -11802,11 +11802,19 @@ const
 // REP BSF is TZCNT when available; its nonzero operand also works with BSF.
 function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
   AllowVarDouble: boolean): PUtf8Char;
-asm .noframe
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         test    byte ptr [rip + CpuFeatures + NUMERIC_SSSE3_BYTE], NUMERIC_SSSE3_MASK
         je      GetNumericVariantFromJsonPascal       // CPU without SSSE3: arguments untouched
+        {$ifdef ABISYSVX64}
+        test    rdi, rdi
+        jz      GetNumericVariantFromJsonPascal
+        mov     r8d, edx
+        mov     rcx, rdi
+        mov     rdx, rsi
+        {$else}
         test    rcx, rcx
         jz      GetNumericVariantFromJsonPascal       // nil pointer: the scalar answers nil
+        {$endif ABISYSVX64}
         movzx   r11d, r8b
         add     r11d, r11d               // bit 1: AllowDouble
         cmp     byte ptr [rcx], '-'
@@ -11996,29 +12004,32 @@ asm .noframe
         shr     r8d, 1
         and     r11d, 1
         sub     rcx, r11
+        {$ifdef ABISYSVX64}
+        mov     edx, r8d                 // rdi/rsi still hold the original pointer arguments
+        {$endif ABISYSVX64}
         jmp     GetNumericVariantFromJsonPascal
-        .align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @jbias:
         db $46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46,$46
-        .align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @jthreshold:
         db $75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75,$75
-        .align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @jascii0:
         db $30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30,$30
-        .align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @jten:
         db $0a,$01,$0a,$01,$0a,$01,$0a,$01,$0a,$01,$0a,$01,$0a,$01,$0a,$01
-        .align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @jhundred:
         db $64,$00,$01,$00,$64,$00,$01,$00,$64,$00,$01,$00,$64,$00,$01,$00
-        .align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @jtenThousand:
         db $10,$27,$01,$00,$10,$27,$01,$00,$10,$27,$01,$00,$10,$27,$01,$00
-        .align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @je8:
         dq $4197d78400000000, 0
-        .align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @jctrlInt: // row p (1..15): p digits right-aligned in all 16 lanes (lane 15 = last digit)
         db $80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80
         db $80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$80,$00
@@ -12036,7 +12047,7 @@ asm .noframe
         db $80,$80,$80,$00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c
         db $80,$80,$00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d
         db $80,$00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e
-        .align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @jctrlDot: // row p (1..14): lanes < p keep, lanes p..14 select lane+1, lane 15 zero
         db $01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
         db $00,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$0f,$80
@@ -12054,7 +12065,7 @@ asm .noframe
         db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0e,$0f,$80
         db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0f,$80
         db $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0a,$0b,$0c,$0d,$0e,$80
-        .align 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @jmask: // row n (0..16): lanes < n keep, lanes >= n zero
         db $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
         db $ff,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00

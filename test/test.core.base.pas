@@ -5740,6 +5740,17 @@ begin
   CheckInvalidNumber('  +');
   CheckInvalidNumber('  -');
   {$ifndef WIN32DELPHI}
+  d := mormot.core.text.NaN;
+  CheckGetExtendedBits('-nAn', PQWord(@d)^);
+  CheckGetExtendedBits('  +NaNtail', PQWord(@d)^);
+  CheckGetExtendedBits('  -NaN', PQWord(@d)^);
+  CheckGetExtendedBits('+iNf', $7FF0000000000000);
+  CheckGetExtendedBits('  -INfinity', QWord($FFF0000000000000));
+  CheckInvalidNumber('N');
+  CheckInvalidNumber('Na');
+  CheckInvalidNumber('I');
+  CheckInvalidNumber('In');
+  CheckInvalidNumber('- NaN');
   CheckGetExtendedBits('0.00000000000000000770000', $3C61C14719F3FABC);
   CheckGetExtendedBits('0.000000007832000000000000', $3E40D1B00240A588);
   CheckGetExtendedBits('228518839.2', $41AB3DD76E666666);
