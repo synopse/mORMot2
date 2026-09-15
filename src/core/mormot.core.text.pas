@@ -6735,7 +6735,7 @@ var
   v64: Int64; // 64-bit resolution for the digits
 label
   z, e, o;
-{$ifdef TSYNEXTENDED80} // faster FP80 = extended path
+{$ifdef TSYNEXTENDED80} // dedicated FP80 = extended path
 const
   Pow10Tab1: array[0 .. 14] of TSynExtended = (
     1E32, 1E64, 1E96, 1E128, 1E160, 1E192, 1E224, 1E256, 1E288, 1E320,
@@ -6905,6 +6905,8 @@ e:  err := 1; // return the (partial) value even if not ended with #0
     if frac >= 5120 then
     begin
 o:    err := 1;
+      if fNeg in flags then
+        result := -result; // same result than the binary64 branch
       exit;
     end;
     c := frac and 31;
