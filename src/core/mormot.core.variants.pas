@@ -11518,8 +11518,14 @@ const
   CURRENCY_MAX: array[-4 .. -1] of Int64 = (
     MAX_INT64, MAX_INT64_DIV10, MAX_INT64 div 100, MAX_INT64 div 1000);
 
+{$ifdef ASMX64}
+function GetNumericVariantFromJsonPascal(Json: PUtf8Char; var Value: TVarData;
+  AllowVarDouble: boolean): PUtf8Char;
+{$else}
 function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
   AllowVarDouble: boolean): PUtf8Char;
+{$ifend}
+
 var
   // logic below is similar to mormot.core.text.pas GetExtended()
   c, n, cnt: PtrUInt;
@@ -11654,6 +11660,7 @@ begin
            not (fNeg in flags) then
           break;
         inc(Json);
+        dec(frac); // the boundary digit also belongs to the fraction
         v64 := MIN_INT64; // sentinel = magnitude 2^63, already negative
         c := PtrUInt(Json^) - ord('0');
         break;
@@ -11703,15 +11710,15 @@ begin
       inc(frac, n);
   end;
   // 2. now v64, frac, cnt, exp contain a number parsed from Json
+  if v64 = 0 then
+  begin // zero is independent of the number of fractional zeros or exponent
+    vd.VType := varInteger;
+    vd.VPtrInt := {$ifdef CPU64} v64 {$else} 0 {$endif};
+    result := Json; // returns the first char after the parsed number
+    exit;
+  end;
   if PtrInt(cnt) >= 0 then
-    if v64 = 0 then
-    begin
-      vd.VType := varInteger;
-      vd.VPtrInt := {$ifdef CPU64} v64 {$else} 0 {$endif};
-      result := Json; // returns the first char after the parsed number
-      exit;
-    end
-    else if frac = 0 then
+    if frac = 0 then
     begin
       if cnt <= 9 then
         vd.VType := varInt64
@@ -11726,7 +11733,8 @@ begin
     end
     else if (frac < 0) and
             (frac >= -4) and
-            (v64 <= CURRENCY_MAX[frac]) then
+            (v64 <= CURRENCY_MAX[frac]) and
+            ((v64 >= 0) or (frac = -4)) then
     begin // currency as ###.0123
       if v64 > 0 then // MIN_INT64 final value may have been set above
       begin
@@ -11739,6 +11747,15 @@ begin
       result := Json;
       exit;
     end;
+  // Remove padding that prevents exact Clinger operands (mantissa and power).
+  while (frac < 0) and
+        ((v64 > MAX_SAFE_JS_INTEGER) or (frac < -22)) do
+  begin
+    if v64 mod 10 <> 0 then
+      break;
+    v64 := v64 div 10;
+    inc(frac);
+  end;
   if not AllowVarDouble or
      (frac <= -324) then // 5.0 x 10^-324 .. 1.7 x 10^308
     exit; // we can't convert into a double
@@ -11771,6 +11788,549 @@ begin
   vd.VDouble := d;
   result := Json;
 end;
+
+{$ifdef ASMX64}
+const
+  NUMERIC_SSSE3_BYTE = ord(cfSSSE3) shr 3;
+  NUMERIC_SSSE3_MASK = 1 shl (ord(cfSSSE3) and 7);
+
+// SSSE3 digit reduction, adapted from MoonBot's JS4 scanner.
+// Read 16 bytes only when P..P+16 stay within one 4 KiB page. Digit masks
+// locate the dot/terminator; PSHUFB and PMADDUBSW/PMADDWD combine exact
+// integer groups. Small positional tables contain byte controls, not powers.
+// The scalar ASM path handles other CPUs and uncommon grammar. Long inputs
+// continue from the end of this window, retaining the parsed integer prefix.
+// REP BSF is TZCNT when available; its nonzero operand also works with BSF.
+function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
+  AllowVarDouble: boolean): PUtf8Char;
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+        {$ifdef ABISYSVX64}
+        mov     r8d, edx
+        mov     rcx, rdi
+        mov     rdx, rsi
+        {$endif ABISYSVX64}
+        test    rcx, rcx
+        jz      @nil
+        test    byte ptr [rip + CpuFeatures + NUMERIC_SSSE3_BYTE], NUMERIC_SSSE3_MASK
+        je      @scalarStart
+        movzx   r11d, r8b
+        add     r11d, r11d               // bit 1: AllowDouble
+        cmp     byte ptr [rcx], '-'
+        jne     @positive
+        inc     rcx
+        or      r11d, 1                  // bit 0: negative
+@positive:
+        mov     eax, ecx
+        and     eax, 4095
+        cmp     eax, 4079
+        ja      @fallback               // 17 bytes must stay inside the page
+        movdqu  xmm0, [rcx]
+        movdqa  xmm1, xmm0
+        paddb   xmm1, [rip + NumericSimdData + NUMERIC_BIAS]
+        pcmpgtb xmm1, [rip + NumericSimdData + NUMERIC_THRESHOLD] // digit lanes
+        pmovmskb eax, xmm1
+        not     eax                      // non-digit lanes; bits 16..31 are sentinels
+        db      $f3
+        bsf     r8d, eax                 // p: integer digit count
+        test    r8d, r8d
+        jz      @nil                     // no leading digit: not a JSON number
+        cmp     r8d, 15
+        ja      @longInteger
+        cmp     byte ptr [rcx], '0'
+        jne     @leadingDigit
+        cmp     r8d, 1
+        jne     @nil                     // JSON forbids a leading zero before another digit
+@leadingDigit:
+        psubb   xmm0, [rip + NumericSimdData + NUMERIC_ASCII0]
+        movzx   r9d, byte ptr [rcx + r8] // byte after the integer digits
+        cmp     r9d, '.'
+        je      @fraction
+        or      r9d, 32
+        cmp     r9d, 'e'
+        je      @integerExponent
+                                         // any other byte ends the number
+        mov     r10d, r8d                // p
+        lea     rax, [rip + NumericSimdData + NUMERIC_JSONINT]
+        movdqu  xmm3, [rax + r8]
+        pshufb  xmm0, xmm3                // digits right-aligned in all 16 lanes
+        pmaddubsw xmm0, [rip + NumericSimdData + NUMERIC_TEN]
+        pmaddwd xmm0, [rip + NumericSimdData + NUMERIC_HUNDRED]
+        packssdw xmm0, xmm0
+        pmaddwd xmm0, [rip + NumericSimdData + NUMERIC_TENTHOUSAND]
+        movq    rax, xmm0                // low dword: lanes 0..7 (H), high dword: lanes 8..15 (L)
+        mov     r9d, eax
+        shr     rax, 32
+        imul    r9, r9, 100000000
+        add     rax, r9                  // exact integer < 10^15
+        lea     r8, [rcx + r10]          // end pointer
+        cmp     r10d, 9
+        seta    r10b
+        movzx   r10d, r10b
+        imul    r10d, r10d, 17
+        add     r10d, 3                  // varInteger = 3, varInt64 = 20
+        mov     r9d, r11d
+        and     r9d, 1
+        neg     r9                       // 0 or -1
+        xor     rax, r9
+        sub     rax, r9                  // conditional negate (zero stays +0)
+        mov     qword ptr [rdx + 8], rax
+        mov     dword ptr [rdx], r10d
+        mov     rax, r8
+        ret
+@fraction:
+        lea     r9d, [rax - 1]
+        and     eax, r9d                 // clear the dot bit
+        db      $f3
+        bsf     r9d, eax                 // n: position after the fraction digits (16 = none in the window)
+        movzx   eax, byte ptr [rcx + r9] // byte after the fraction digits (index <= 16: readable)
+        cmp     r9d, 16
+        jne     @fractionChecks
+        lea     r10d, [rax - 48]
+        cmp     r10d, 9
+        jbe     @longFraction
+@fractionChecks:
+        lea     r10d, [r8 + 1]
+        cmp     r9d, r10d
+        je      @nil                     // "1.": an empty fraction is not JSON
+        cmp     eax, '.'
+        je      @nil                     // second dot
+        or      eax, 32
+        cmp     eax, 'e'
+        je      @longFraction
+        mov     r10d, r9d
+        sub     r10d, r8d
+        dec     r10d                     // fractional digit count
+        cmp     r10d, 4
+        jbe     @currency
+        mov     r10d, r8d                // p
+        shl     r8d, 4
+        shl     r9d, 4
+        lea     rax, [rip + NumericSimdData + NUMERIC_MASK]
+        pand    xmm0, [rax + r9]
+        lea     rax, [rip + NumericSimdData + NUMERIC_CTRLDOT]
+        pshufb  xmm0, [rax + r8]
+        pmaddubsw xmm0, [rip + NumericSimdData + NUMERIC_TEN]
+        pmaddwd xmm0, [rip + NumericSimdData + NUMERIC_HUNDRED]
+        packssdw xmm0, xmm0
+        pmaddwd xmm0, [rip + NumericSimdData + NUMERIC_TENTHOUSAND]
+        movq    rax, xmm0
+        test    rax, rax
+        jz      @fractionZero            // JSON zero is always varInteger
+        test    r11d, 2
+        jz      @nil
+        cvtdq2pd xmm0, xmm0
+        neg     r10
+        lea     rax, [rip + POW10]
+        cmp     r9d, 9 * 16
+        ja      @wideFraction
+        divsd   xmm0, qword ptr [rax + r10 * 8 + 39 * 8]
+        jmp     @fractionSign
+@wideFraction:
+        movhlps xmm1, xmm0
+        mulsd   xmm0, [rip + NumericSimdData + NUMERIC_E8]
+        addsd   xmm0, xmm1
+        divsd   xmm0, qword ptr [rax + r10 * 8 + 47 * 8]
+@fractionSign:
+        and     r11d, 1
+        shl     r11, 63
+        movq    xmm1, r11
+        xorpd   xmm0, xmm1               // same rounding order as Pascal
+        movsd   qword ptr [rdx + 8], xmm0
+        mov     dword ptr [rdx], varDouble
+        shr     r9d, 4
+        lea     rax, [rcx + r9]
+        ret
+@fractionZero:
+        mov     qword ptr [rdx + 8], 0
+        mov     dword ptr [rdx], varInteger
+        shr     r9d, 4
+        lea     rax, [rcx + r9]
+        ret
+@currency:                               // f=1..4; at most 15 digits, scaling cannot overflow Int64
+        movd    xmm2, r10d               // preserve f during integer reduction
+        mov     r10d, r9d                // n
+        shl     r8d, 4
+        shl     r9d, 4
+        lea     rax, [rip + NumericSimdData + NUMERIC_MASK]
+        pand    xmm0, [rax + r9]
+        lea     rax, [rip + NumericSimdData + NUMERIC_CTRLDOT]
+        pshufb  xmm0, [rax + r8]
+        lea     rax, [rip + NumericSimdData + NUMERIC_JSONINT]
+        sub     r9d, 16
+        shr     r9d, 4
+        movdqu  xmm3, [rax + r9]
+        pshufb  xmm0, xmm3                // right-align n-1 digits
+        pmaddubsw xmm0, [rip + NumericSimdData + NUMERIC_TEN]
+        pmaddwd xmm0, [rip + NumericSimdData + NUMERIC_HUNDRED]
+        packssdw xmm0, xmm0
+        pmaddwd xmm0, [rip + NumericSimdData + NUMERIC_TENTHOUSAND]
+        movq    rax, xmm0
+        mov     r9d, eax
+        shr     rax, 32
+        imul    r9, r9, 100000000
+        add     rax, r9
+        lea     r8, [rcx + r10]
+        test    rax, rax
+        jz      @currencyZero
+        movd    r9d, xmm2
+        neg     r9d
+        movsxd  r9, r9d
+        lea     r10, [rip + CURRENCY_FACTOR]
+        movsxd  r9, dword ptr [r10 + r9 * 4 + 16]
+        imul    rax, r9                  // integer Currency payload, exact
+        mov     r9d, r11d
+        and     r9d, 1
+        neg     r9
+        xor     rax, r9
+        sub     rax, r9
+        mov     qword ptr [rdx + 8], rax
+        mov     dword ptr [rdx], varCurrency
+        mov     rax, r8
+        ret
+@currencyZero:
+        mov     qword ptr [rdx + 8], 0
+        mov     dword ptr [rdx], varInteger
+        mov     rax, r8
+        ret
+@nil:
+        xor     eax, eax
+        ret
+@fallback:
+        mov     r8d, r11d
+        shr     r8d, 1
+        and     r11d, 1
+        sub     rcx, r11
+        jmp     @scalarStart
+@longInteger:
+        cmp     byte ptr [rcx], '0'
+        je      @nil                     // a 16-digit integer cannot start with zero
+        psubb   xmm0, [rip + NumericSimdData + NUMERIC_ASCII0]
+        lea     rax, [rcx + 18]
+        movq    xmm2, rax
+        add     rcx, 16
+        xor     r10d, r10d
+        jmp     @longReduce
+@integerExponent:
+        lea     rax, [rcx + 18]
+        movq    xmm2, rax
+        add     rcx, r8
+        lea     rax, [rip + NumericSimdData + NUMERIC_JSONINT]
+        movdqu  xmm3, [rax + r8]
+        pshufb  xmm0, xmm3
+        xor     r10d, r10d
+        jmp     @longReduce
+@longFraction:                          // includes an exponent after a short fraction
+        or      r11d, 8                  // the dot may be the last SIMD byte
+        lea     rax, [rcx + 19]          // the dot is not counted as a digit
+        movq    xmm2, rax
+        lea     r10d, [r8 + 1]
+        sub     r10d, r9d
+        movsxd  r10, r10d
+        add     rcx, r9
+        shl     r8d, 4
+        shl     r9d, 4
+        lea     rax, [rip + NumericSimdData + NUMERIC_MASK]
+        pand    xmm0, [rax + r9]
+        lea     rax, [rip + NumericSimdData + NUMERIC_CTRLDOT]
+        pshufb  xmm0, [rax + r8]
+        shr     r9d, 4
+        dec     r9d
+        lea     rax, [rip + NumericSimdData + NUMERIC_JSONINT]
+        movdqu  xmm3, [rax + r9]
+        pshufb  xmm0, xmm3
+@longReduce:
+        pmaddubsw xmm0, [rip + NumericSimdData + NUMERIC_TEN]
+        pmaddwd xmm0, [rip + NumericSimdData + NUMERIC_HUNDRED]
+        packssdw xmm0, xmm0
+        pmaddwd xmm0, [rip + NumericSimdData + NUMERIC_TENTHOUSAND]
+        movq    rax, xmm0
+        mov     r9d, eax
+        shr     rax, 32
+        imul    r9, r9, 100000000
+        add     r9, rax
+        mov     r8, 922337203685477580
+        test    r11b, 8
+        jnz     @scalarFraction
+        jmp     @scalarInteger
+@scalarStart:
+        movzx   r11d, r8b
+        add     r11d, r11d               // bit 1 = AllowVarDouble
+        cmp     byte ptr [rcx], '-'
+        jne     @scalarFirst
+        inc     rcx
+        or      r11d, 1
+@scalarFirst:
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        ja      @nil
+        test    eax, eax
+        jnz     @scalarInitialize
+        movzx   eax, byte ptr [rcx + 1]
+        sub     eax, 48
+        cmp     eax, 9
+        jbe     @nil
+@scalarInitialize:
+        lea     rax, [rcx + 18]
+        movq    xmm2, rax
+        xor     r9d, r9d
+        xor     r10d, r10d
+        mov     r8, 922337203685477580
+@scalarInteger:
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        ja      @scalarIntegerEnd
+        cmp     r9, r8
+        ja      @scalarSkipInteger
+        jb      @scalarKeepInteger
+        cmp     eax, 7
+        jbe     @scalarKeepInteger
+        cmp     eax, 8
+        jne     @scalarSkipInteger
+        test    r11b, 1
+        jz      @scalarSkipInteger
+        mov     r9, $8000000000000000    // magnitude 2^63, already negative
+        inc     rcx
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        jbe     @scalarSkipInteger
+        jmp     @scalarIntegerEnd
+@scalarKeepInteger:
+        lea     r9, [r9 + r9 * 4]
+        lea     r9, [rax + r9 * 2]
+        inc     rcx
+        jmp     @scalarInteger
+@scalarSkipInteger:
+        inc     rcx
+        inc     r10
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        jbe     @scalarSkipInteger
+@scalarIntegerEnd:
+        cmp     eax, -2
+        jne     @scalarExponent
+        inc     rcx
+        test    r10, r10
+        jnz     @nil
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        ja      @nil
+        movq    rax, xmm2
+        inc     rax
+        movq    xmm2, rax
+@scalarFraction:
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        ja      @scalarFractionEnd
+        cmp     r9, r8
+        jg      @scalarDiscardFraction
+        jl      @scalarKeepFraction
+        cmp     eax, 7
+        jbe     @scalarKeepFraction
+        cmp     eax, 8
+        jne     @scalarDiscardFraction
+        test    r11b, 1
+        jz      @scalarDiscardFraction
+        mov     r9, $8000000000000000
+        inc     rcx
+        dec     r10
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        ja      @scalarFractionEnd
+        jmp     @scalarDiscardFraction
+@scalarKeepFraction:
+        lea     r9, [r9 + r9 * 4]
+        lea     r9, [rax + r9 * 2]
+        inc     rcx
+        dec     r10
+        jmp     @scalarFraction
+@scalarDiscardFraction:
+        movq    rax, xmm2
+        cmp     rcx, rax
+        jne     @scalarSkipFraction
+        dec     rax
+        movq    xmm2, rax
+@scalarSkipFraction:
+        inc     rcx
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        jbe     @scalarSkipFraction
+@scalarFractionEnd:
+        cmp     eax, -2
+        je      @nil
+@scalarExponent:
+        movq    r8, xmm2
+        sub     r8, rcx
+        inc     r8                      // remaining digit count determines the variant type
+        movq    xmm2, r8
+        or      eax, 32
+        cmp     eax, 53
+        jne     @scalarValue
+        inc     rcx
+        movzx   eax, byte ptr [rcx]
+        cmp     eax, '+'
+        je      @scalarExponentSign
+        cmp     eax, '-'
+        jne     @scalarExponentFirst
+        or      r11d, 4
+@scalarExponentSign:
+        inc     rcx
+        movzx   eax, byte ptr [rcx]
+@scalarExponentFirst:
+        sub     eax, 48
+        cmp     eax, 9
+        ja      @nil
+        xor     r8d, r8d
+@scalarExponentDigit:
+        lea     r8, [r8 + r8 * 4]
+        lea     r8, [rax + r8 * 2]
+        inc     rcx
+        cmp     r8, $fff000
+        jae     @nil
+        movzx   eax, byte ptr [rcx]
+        sub     eax, 48
+        cmp     eax, 9
+        jbe     @scalarExponentDigit
+        test    r11b, 4
+        jz      @scalarExponentPositive
+        neg     r8
+@scalarExponentPositive:
+        add     r10, r8
+@scalarValue:
+        test    r9, r9
+        jz      @scalarZero
+        movq    r8, xmm2
+        test    r8, r8
+        js      @scalarTrimCheck
+        test    r10, r10
+        jnz     @scalarCurrency
+        mov     eax, varInteger
+        cmp     r8, 9
+        ja      @scalarIntegerSign
+        mov     eax, varInt64
+@scalarIntegerSign:
+        test    r11b, 1
+        jz      @scalarIntegerStore
+        test    r9, r9
+        jle     @scalarIntegerStore
+        neg     r9
+@scalarIntegerStore:
+        mov     qword ptr [rdx + 8], r9
+        mov     dword ptr [rdx], eax
+        mov     rax, rcx
+        ret
+@scalarZero:
+        mov     eax, varInteger
+        jmp     @scalarIntegerStore
+@scalarCurrency:
+        lea     rax, [r10 + 4]
+        cmp     rax, 3
+        ja      @scalarTrimCheck
+        lea     r8, [rip + CURRENCY_MAX]
+        cmp     r9, qword ptr [r8 + rax * 8]
+        jg      @scalarTrimCheck
+        test    r9, r9
+        jns     @scalarCurrencyPositive
+        test    eax, eax
+        jnz     @scalarTrimCheck
+        jmp     @scalarCurrencyStore
+@scalarCurrencyPositive:
+        test    r11b, 1
+        jz      @scalarCurrencyScale
+        neg     r9
+@scalarCurrencyScale:
+        lea     r8, [rip + CURRENCY_FACTOR]
+        movsxd  rax, dword ptr [r8 + rax * 4]
+        imul    r9, rax
+@scalarCurrencyStore:
+        mov     eax, varCurrency
+        jmp     @scalarIntegerStore
+@scalarTrim:
+        mov     rax, r9
+        mov     r8, $cccccccccccccccd
+        imul    rax, r8
+        ror     rax, 1
+        mov     r8, $1999999999999999
+        cmp     rax, r8
+        ja      @scalarConvert
+        mov     r9, rax
+        inc     r10
+@scalarTrimCheck:
+        test    r10, r10
+        jns     @scalarConvert
+        cmp     r10, -22
+        jl      @scalarTrim
+        mov     rax, $001fffffffffffff
+        cmp     r9, rax
+        jg      @scalarTrim
+@scalarConvert:
+        test    r11b, 2
+        jz      @nil
+        cmp     r10, -324
+        jle     @nil
+        lea     rax, [r10 + 22]
+        cmp     rax, 21
+        ja      @scalarGeneral
+        mov     rax, $001fffffffffffff
+        cmp     r9, rax
+        jg      @scalarGeneral
+        pxor    xmm0, xmm0
+        cvtsi2sd xmm0, r9
+        neg     r10
+        lea     r8, [rip + POW10]
+        divsd   xmm0, qword ptr [r8 + r10 * 8 + 31 * 8]
+        jmp     @scalarSign
+@scalarGeneral:
+        lea     r8, [rip + POW10]
+        cmp     r10, -31
+        jl      @scalarSmall
+        cmp     r10, 31
+        jg      @scalarLarge
+        movsd   xmm0, qword ptr [r8 + r10 * 8 + 31 * 8]
+        jmp     @scalarMultiply
+@scalarLarge:
+        movq    rax, xmm2
+        add     rax, 290
+        cmp     r10, rax
+        jge     @nil
+        mov     rax, r10
+        shr     rax, 5
+        and     r10d, 31
+        movsd   xmm0, qword ptr [r8 + rax * 8 + (34 + 31) * 8]
+        mulsd   xmm0, qword ptr [r8 + r10 * 8 + 31 * 8]
+        jmp     @scalarMultiply
+@scalarSmall:
+        neg     r10
+        mov     rax, r10
+        shr     rax, 5
+        and     r10d, 31
+        movsd   xmm0, qword ptr [r8 + rax * 8 + (45 + 31) * 8]
+        divsd   xmm0, qword ptr [r8 + r10 * 8 + 31 * 8]
+@scalarMultiply:
+        pxor    xmm1, xmm1
+        cvtsi2sd xmm1, r9
+        mulsd   xmm0, xmm1
+@scalarSign:
+        shr     r9, 63
+        xor     r11d, r9d
+        and     r11d, 1
+        shl     r11, 63
+        movq    xmm1, r11
+        xorpd   xmm0, xmm1
+        movsd   qword ptr [rdx + 8], xmm0
+        mov     dword ptr [rdx], varDouble
+        mov     rax, rcx
+        ret
+
+end;
+{$ifend}
 
 procedure UniqueVariant(Interning: TRawUtf8Interning; var aResult: variant;
   aText: PUtf8Char; aTextLen: PtrInt; aAllowVarDouble: boolean);
