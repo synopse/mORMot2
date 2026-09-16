@@ -7493,6 +7493,8 @@ end;
 
 function TSynLogFile.LineContains(const aUpperSearch: RawUtf8;
   aIndex: integer): boolean;
+var
+  p: PUtf8Char;
 begin // overriden to take fLineTextOffset into account
   if (self = nil) or
      (cardinal(aIndex) >= cardinal(fCount)) or
@@ -7501,8 +7503,10 @@ begin // overriden to take fLineTextOffset into account
      (fLevels[aIndex] = sllNone) then // an unparsed row has no text at offset
     result := false
   else
-    result := GetLineContains(PUtf8Char(fLines[aIndex]) + fLineTextOffset,
-      GetLineEnd(fLines[aIndex]), pointer(aUpperSearch));
+  begin
+    p := fLines[aIndex];
+    result := GetLineContains(p + fLineTextOffset, GetLineEnd(p), pointer(aUpperSearch));
+  end;
 end;
 
 function TSynLogFile.EventDateTime(aIndex: integer): TDateTime;
@@ -8215,19 +8219,20 @@ end;
 
 function TSynLogFile.GetEventText(index: integer): RawUtf8;
 var
-  L: cardinal;
+  L: PtrInt;
+  p: PUtf8Char;
 begin
   if (self = nil) or
      (cardinal(index) >= cardinal(fCount)) then
     FastAssignNew(result)
   else
   begin
-    L := GetLineSize(fLines[index], GetLineEnd(fLines[index]));
-    if L <= fLineTextOffset then
+    p := fLines[index];
+    L := GetLineSize(p, GetLineEnd(p)) - fLineTextOffset;
+    if L <= 0 then
       FastAssignNew(result)
     else
-      FastSetString(result, PAnsiChar(fLines[index]) + fLineTextOffset,
-        L - fLineTextOffset);
+      FastSetString(result, p + fLineTextOffset, L);
   end;
 end;
 

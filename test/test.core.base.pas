@@ -11365,11 +11365,11 @@ procedure TTestCoreBase.Debugging;
       begin
         input := STAMPS[s];
         if THREADS[t] <> 0 then
-          input := input + Int18ToChars3(THREADS[t]);
+          Append(input, Int18ToChars3(THREADS[t]));
         input := input + ' info  Mapped payload';
         source := HEADER;
         for i := 1 to 4 do
-          source := source + input + #13#10;
+          Append(source, input, #13#10);
         log := TSynLogFile.Create(pointer(source), length(source));
         try
           CheckEqual(log.Count, 4, 'mapped rows');
@@ -11400,12 +11400,13 @@ procedure TTestCoreBase.Debugging;
     begin
       stamp := STAMPS[0];
       if t <> 0 then
-        stamp := stamp + Int18ToChars3(THREADS[2]);
-      input := stamp + ' info  ' + RawUtf8OfChar('m', 1078);
-      source := input + #13#10;
-      while length(source) < n * (length(input) + 2) do
-        source := source + source; // O(log n) instead of O(n2) concatenation
-      SetLength(source, n * (length(input) + 2));
+        Append(stamp, Int18ToChars3(THREADS[2]));
+      Join([stamp, ' info  ', RawUtf8OfChar('m', 1078)], input);
+      Join([input, #13#10], source);
+      s := n * (length(input) + 2);
+      while length(source) < s do
+        source := source + source; // O(log n) instead of O(n2) concatenations
+      SetLength(source, s);
       source := HEADER + source;
       log := TSynLogFile.Create(pointer(source), length(source));
       try
@@ -11462,6 +11463,7 @@ procedure TTestCoreBase.Debugging;
       Free;
     end;
   end;
+
   procedure Test(const LOG: RawUtf8; ExpectedDate: TDateTime);
   var
     L: TSynLogFile;

@@ -9612,8 +9612,7 @@ function GetLineSizeSmallerThan(P, PEnd: PUtf8Char; aMinimalCount: integer): boo
 begin
   result := false;
   if P <> nil then
-    if PEnd = nil then
-      // an in-memory line is #0 ended, as GetLineSize/GetLineContains expect
+    if PEnd = nil then // ending at #0
       while not (P^ in [#0, #10, #13]) do
       begin
         if aMinimalCount = 0 then
