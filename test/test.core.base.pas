@@ -5185,13 +5185,13 @@ var
       p := @v[i];
       d := GetExtended(p + 1, err);
       CheckEqual(err, 0, 'p');
-      if i < 10 then           // don't append to exponent
+      if not ((i and 15) in [10, 11]) then  // don't append to exponent
         p[ord(p^) + 1] := '0'; // s := s + '0' with no allocation
       d0 := GetExtended(p + 1, err);
       CheckEqual(err, 0, 'p0');
       if dot[i] <> 0 then
       begin
-        if i < 10 then
+        if not ((i and 15) in [10, 11]) then
           Check(PQWord(@d)^ = PQWord(@d0)^, 'd=d0 bits');
         p[dot[i]] := '1'; // e.g. '0.00' -> '0201'
       end;

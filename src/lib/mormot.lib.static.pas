@@ -284,12 +284,13 @@ end;
 
 function pas_malloc_usable_size(P: pointer): PtrUInt; cdecl;
  {$ifdef FPC} public name _PREFIX + 'pas_malloc_usable_size'; {$endif}
-begin
+begin // only used by mormot.lib.quickjs which accepts 0 as fallback if unknown
   {$ifdef FPC}
-  result := MemSize(P); // only available on FPC
-  {$else}
-  result := 0; // will reallocate each time - good enough with Delphi's FastMM4
+  if P <> nil then
+    result := MemSize(P) // only available on FPC
+  else
   {$endif FPC}
+    result := 0; // caller should reallocate each time
 end;
 
 // see e.g. #define assert(x) in QuickJS cutils.h
