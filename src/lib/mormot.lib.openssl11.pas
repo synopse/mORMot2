@@ -681,38 +681,40 @@ const
   SSL_ERROR_WANT_ASYNC_JOB = 10;
   SSL_ERROR_WANT_CLIENT_HELLO_CB = 11;
 
-  SSL_OP_LEGACY_SERVER_CONNECT = $00000004;
-  SSL_OP_TLSEXT_PADDING = $00000010;
-  SSL_OP_SAFARI_ECDHE_ECDSA_BUG = $00000040;
-  SSL_OP_ALLOW_NO_DHE_KEX = $00000400;
-  SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS = $00000800;
-  SSL_OP_NO_QUERY_MTU = $00001000;
-  SSL_OP_COOKIE_EXCHANGE = $00002000;
-  SSL_OP_NO_TICKET = $00004000;
-  SSL_OP_CISCO_ANYCONNECT = $00008000;
+  SSL_OP_LEGACY_SERVER_CONNECT                  = $00000004;
+  SSL_OP_TLSEXT_PADDING                         = $00000010;
+  SSL_OP_SAFARI_ECDHE_ECDSA_BUG                 = $00000040;
+  SSL_OP_ALLOW_NO_DHE_KEX                       = $00000400;
+  SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS            = $00000800;
+  SSL_OP_NO_QUERY_MTU                           = $00001000;
+  SSL_OP_COOKIE_EXCHANGE                        = $00002000;
+  SSL_OP_NO_TICKET                              = $00004000;
+  SSL_OP_CISCO_ANYCONNECT                       = $00008000;
   SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION = $00010000;
-  SSL_OP_NO_COMPRESSION = $00020000;
-  SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION = $00040000;
-  SSL_OP_NO_ENCRYPT_THEN_MAC = $00080000;
-  SSL_OP_ENABLE_MIDDLEBOX_COMPAT = $00100000;
-  SSL_OP_PRIORITIZE_CHACHA = $00200000;
-  SSL_OP_CIPHER_SERVER_PREFERENCE = $00400000;
-  SSL_OP_TLS_ROLLBACK_BUG = $00800000;
-  SSL_OP_NO_ANTI_REPLAY = $01000000;
-  SSL_OP_NO_SSLv3 = $02000000;
-  SSL_OP_NO_TLSv1 = $04000000;
-  SSL_OP_NO_TLSv1_2 = $08000000;
-  SSL_OP_NO_TLSv1_1 = $10000000;
-  SSL_OP_NO_TLSv1_3 = $20000000;
-  SSL_OP_NO_DTLSv1 = $04000000;
-  SSL_OP_NO_DTLSv1_2 = $08000000;
+  SSL_OP_NO_COMPRESSION                         = $00020000;
+  SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION      = $00040000;
+  SSL_OP_NO_ENCRYPT_THEN_MAC                    = $00080000;
+  SSL_OP_ENABLE_MIDDLEBOX_COMPAT                = $00100000;
+  SSL_OP_PRIORITIZE_CHACHA                      = $00200000;
+  SSL_OP_CIPHER_SERVER_PREFERENCE               = $00400000;
+  SSL_OP_TLS_ROLLBACK_BUG                       = $00800000;
+  SSL_OP_NO_ANTI_REPLAY                         = $01000000;
+  SSL_OP_NO_SSLv3                               = $02000000;
+  SSL_OP_NO_TLSv1                               = $04000000;
+  SSL_OP_NO_TLSv1_2                             = $08000000;
+  SSL_OP_NO_TLSv1_1                             = $10000000;
+  SSL_OP_NO_TLSv1_3                             = $20000000;
+  SSL_OP_NO_DTLSv1                              = SSL_OP_NO_TLSv1;
+  SSL_OP_NO_DTLSv1_2                            = SSL_OP_NO_TLSv1_2;
+  SSL_OP_NO_DTLSv1_3                            = SSL_OP_NO_TLSv1_3;
   SSL_OP_NO_SSL_MASK = SSL_OP_NO_SSLv3 or
                        SSL_OP_NO_TLSv1 or
                        SSL_OP_NO_TLSv1_1 or
                        SSL_OP_NO_TLSv1_2 or
                        SSL_OP_NO_TLSv1_3;
   SSL_OP_NO_DTLS_MASK = SSL_OP_NO_DTLSv1 or
-                        SSL_OP_NO_DTLSv1_2;
+                        SSL_OP_NO_DTLSv1_2 or
+                        SSL_OP_NO_DTLSv1_3;
   SSL_OP_NO_RENEGOTIATION = $40000000;
   SSL_OP_CRYPTOPRO_TLSEXT_BUG = $80000000;
   SSL_OP_ALL = SSL_OP_CRYPTOPRO_TLSEXT_BUG or
@@ -2185,7 +2187,8 @@ procedure SSL_CTX_set_default_passwd_cb(ctx: PSSL_CTX; cb: Ppem_password_cb); cd
 procedure SSL_CTX_set_default_passwd_cb_userdata(ctx: PSSL_CTX; u: pointer); cdecl;
 function SSL_CTX_use_PrivateKey_file(ctx: PSSL_CTX; _file: PUtf8Char;
    typ: integer): integer; cdecl;
-function SSL_CTX_set_cipher_list(p1: PSSL_CTX; str: PUtf8Char): integer; cdecl;
+function SSL_CTX_set_cipher_list(ctx: PSSL_CTX; str: PUtf8Char): integer; cdecl;
+function SSL_CTX_set_ciphersuites(ctx: PSSL_CTX; str: PUtf8Char): integer; cdecl;
 function SSL_set_fd(s: PSSL; fd: integer): integer; cdecl;
 function SSL_get_current_cipher(s: PSSL): PSSL_CIPHER; cdecl;
 function SSL_CIPHER_description(p1: PSSL_CIPHER;
@@ -3042,7 +3045,8 @@ type
     SSL_CTX_set_default_passwd_cb: procedure(ctx: PSSL_CTX; cb: Ppem_password_cb); cdecl;
     SSL_CTX_set_default_passwd_cb_userdata: procedure(ctx: PSSL_CTX; u: pointer); cdecl;
     SSL_CTX_use_PrivateKey_file: function(ctx: PSSL_CTX; _file: PUtf8Char; typ: integer): integer; cdecl;
-    SSL_CTX_set_cipher_list: function(p1: PSSL_CTX; str: PUtf8Char): integer; cdecl;
+    SSL_CTX_set_cipher_list: function(ctx: PSSL_CTX; str: PUtf8Char): integer; cdecl;
+    SSL_CTX_set_ciphersuites: function(ctx: PSSL_CTX; str: PUtf8Char): integer; cdecl;
     SSL_set_fd: function(s: PSSL; fd: integer): integer; cdecl;
     SSL_get_current_cipher: function(s: PSSL): PSSL_CIPHER; cdecl;
     SSL_CIPHER_description: function(p1: PSSL_CIPHER; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
@@ -3054,7 +3058,7 @@ type
   end;
 
 const
-  LIBSSL_ENTRIES: array[0..57] of PAnsiChar = (
+  LIBSSL_ENTRIES: array[0..58] of PAnsiChar = (
     'SSL_CTX_new',
     'SSL_CTX_free',
     'SSL_CTX_set_timeout',
@@ -3105,6 +3109,7 @@ const
     'SSL_CTX_set_default_passwd_cb_userdata',
     'SSL_CTX_use_PrivateKey_file',
     'SSL_CTX_set_cipher_list',
+    '?SSL_CTX_set_ciphersuites', // TLS 1.3 specific for recent OpenSSL
     'SSL_set_fd',
     'SSL_get_current_cipher',
     'SSL_CIPHER_description',
@@ -3377,9 +3382,17 @@ begin
   result := libssl.SSL_CTX_use_PrivateKey_file(ctx, _file, typ);
 end;
 
-function SSL_CTX_set_cipher_list(p1: PSSL_CTX; str: PUtf8Char): integer;
+function SSL_CTX_set_cipher_list(ctx: PSSL_CTX; str: PUtf8Char): integer;
 begin
-  result := libssl.SSL_CTX_set_cipher_list(p1, str);
+  result := libssl.SSL_CTX_set_cipher_list(ctx, str);
+end;
+
+function SSL_CTX_set_ciphersuites(ctx: PSSL_CTX; str: PUtf8Char): integer;
+begin
+  if Assigned(libssl.SSL_CTX_set_ciphersuites) then
+    result := libssl.SSL_CTX_set_ciphersuites(ctx, str)
+  else
+    result := OPENSSLSUCCESS; // OpenSSL 1.1.0 has no TLS 1.3 anyway
 end;
 
 function SSL_set_fd(s: PSSL; fd: integer): integer;
@@ -6513,6 +6526,14 @@ function SSL_CTX_use_PrivateKey_file(ctx: PSSL_CTX; _file: PUtf8Char; typ: integ
 
 function SSL_CTX_set_cipher_list(p1: PSSL_CTX; str: PUtf8Char): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_set_cipher_list';
+
+// only OpenSSL 1.1 is supported yet as static linking
+function SSL_CTX_set_ciphersuites(ctx: PSSL_CTX; str: PUtf8Char): integer;
+begin
+  result := OPENSSLSUCCESS; // OpenSSL 1.1.0 has no TLS 1.3 anyway
+end;
+//function SSL_CTX_set_ciphersuites(ctx: PSSL_CTX; str: PUtf8Char): integer; cdecl;
+//  external LIB_SSL name _PU + 'SSL_CTX_set_ciphersuites';
 
 function SSL_set_fd(s: PSSL; fd: integer): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_set_fd';
