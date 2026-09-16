@@ -8392,6 +8392,7 @@ begin
   n_digits_have := d2a_gen_digits_64(@buf, D.f shr (-D.e));
   dot_pos := n_digits_have;
   // Generate digits: fractional part
+  fl := 0;
   {$ifdef CPU32}
   f := 0; // "sticky" digit
   {$endif CPU32}
