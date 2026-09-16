@@ -38,16 +38,16 @@
 extern "C" {
 #endif
 
-#if !defined(pas_malloc)
-//AB
-void *pas_malloc(int size);
-void pas_free(void *ptr);
-void *pas_realloc(void *ptr, int size);
-int pas_malloc_usable_size(void *ptr); 
-#endif
-
 /* *** Dependencies *** */
 #include <stddef.h>    /* size_t */
+
+#if !defined(pas_malloc)
+//AB
+void *pas_malloc(size_t size);
+void pas_free(void *ptr);
+void *pas_realloc(void *ptr, size_t size);
+size_t pas_malloc_usable_size(void *ptr); 
+#endif
 
 
 /*-*** PUBLIC_API : control library symbols visibility *** */
