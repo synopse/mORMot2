@@ -4980,6 +4980,8 @@ begin
       [text, Sig, si_code], nil);
   end;
   SynDaemonTerminated := Sig;
+  if Assigned(OsWakeAllOnValue) then
+    OsWakeAllOnValue(@SynDaemonTerminated); // wake e.g. all Linux futexes
 end;
 
 procedure SynDaemonIntercept(const onlog: TSynLogProc);

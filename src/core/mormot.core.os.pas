@@ -6239,6 +6239,9 @@ function RunUntilSigTerminatedState: TServiceState;
 var
   /// once SynDaemonIntercept has been called, this global variable
   // contains the SIGQUIT / SIGTERM / SIGINT received signal
+  // - on Linux you could even write:
+  // ! if Assigned(OsWaitOnValue) then
+  // !   OsWaitOnValue(@SynDaemonTerminated, 0, INFINITE); // clean futex wait
   SynDaemonTerminated: integer;
 {$else}
 /// compatibility function for Delphi POSIX - only SIGINT/SIGQUIT are tracked
