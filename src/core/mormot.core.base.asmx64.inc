@@ -839,7 +839,7 @@ const
 // The scalar ASM path handles other CPUs and uncommon grammar. Long inputs
 // continue from the end of this window, retaining the parsed integer prefix.
 // REP BSF is TZCNT when available; its nonzero operand also works with BSF.
-function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
+function GetExtendedSsse3(P: PUtf8Char; out err: integer): TSynExtended;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         {$ifdef ABISYSVX64}
         mov     rcx, rdi
@@ -852,8 +852,6 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         {$endif ABISYSVX64}
         jz      @scalarInvalid
         and     eax, 4095
-        test    byte ptr [rip + X64CpuFeatures], 1 shl cpuSSSE3
-        jz      @scalarStart    // no supplementary SSE3 opcodes
         cmp     eax, 4079       // 16 read + terminator
         ja      @scalarStart    // 17 bytes must stay inside the page
         xor     r11d, r11d
@@ -1158,7 +1156,7 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         cvttsd2si r9, xmm0
         movsxd  r10, eax
         jmp     @scalarValue
-@scalarStart:                 // byte scanner, also used without SSSE3
+@scalarStart:                 // byte scanner fallback
         xor     r9d, r9d
         xor     r10d, r10d
         xor     r11d, r11d
@@ -1413,8 +1411,10 @@ const
   CURRENCY_MAX: array[-4 .. -1] of Int64 = (
     MAX_INT64, MAX_INT64_DIV10, MAX_INT64 div 100, MAX_INT64 div 1000);
 
-// SSSE3 digit reduction from MoonBot's JS4 scanner - see GetExtended asm above
-function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
+// SSSE3 digit reduction from MoonBot's JS4 scanner - see GetExtendedSsse3 above
+// - from our tests on realistic JSON input, this SIMD version seems slower than
+// mormot.core.text GetNumericVariantPas() but may be enabled for longer numbers
+function GetNumericVariantSsse3(Json: PUtf8Char; var Value: TVarData;
   AllowVarDouble: boolean): PUtf8Char;
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         {$ifdef ABISYSVX64}
@@ -1430,8 +1430,6 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         {$endif ABISYSVX64}
         jz      @nil
         add     r11d, r11d       // bit 1: AllowDouble
-        test    byte ptr [rip + X64CpuFeatures], 1 shl cpuSSSE3
-        jz      @scalarStart     // no supplementary SSE3 opcodes
         and     eax, 4095
         cmp     eax, 4079        // 16 read + terminator
         ja      @scalarStart     // 17 bytes must stay inside the page

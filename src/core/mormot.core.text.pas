@@ -1429,15 +1429,25 @@ procedure UInt32DigitsToUtf8(Value, Digits: PtrUInt; var result: RawUtf8);
 /// fast RawUtf8 version of 64-bit IntToStr(), with proper QWord support
 procedure UInt64ToUtf8(Value: QWord; var result: RawUtf8);
 
+type
+  /// function prototype of GetExtended() process
+  TGetExtended =  function(P: PUtf8Char; out err: integer): TSynExtended;
+
 {$ifndef WIN32DELPHI}  { Delphi x87 asm in mormot.core.base.asmx86.inc }
-{$ifndef ASMX64NOTPIC} { SIMD/SSE3 x64 asm in mormot.core.base.asmx64.inc }
+{$ifdef ASMX64NOTPIC}  { SIMD/SSE3 x64 asm in mormot.core.base.asmx64.inc }
+function GetExtendedPas(P: PUtf8Char; out err: integer): TSynExtended;
+var
+  /// redirect to either GetExtendedPas or GetExtendedSsse3
+  GetExtendedStub: TGetExtended = GetExtendedPas;
+{$endif ASMX64NOTPIC}
+
 /// get the extended floating point value stored in P^
 // - set the err content to the index of any faulty character, 0 if conversion
 // was successful (same as the standard val function)
 // - this optimized function is consistent on all platforms/compilers and return
 // the decoded value even if err is not 0 (e.g. if P^ is not #0 ended)
-function GetExtended(P: PUtf8Char; out err: integer): TSynExtended; overload;
-{$endif ASMX64NOTPIC}
+function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
+  overload; {$ifdef ASMX64NOTPIC} inline; {$endif}
 {$endif WIN32DELPHI}
 
 /// get the extended floating point value stored in P^
@@ -6726,8 +6736,16 @@ begin
 end;
 
 {$ifndef WIN32DELPHI}  // Delphi x87 asm in mormot.core.base.asmx86.inc
-{$ifndef ASMX64NOTPIC} // SIMD x64 asm in mormot.core.base.asmx64.inc
+{$ifdef ASMX64NOTPIC}
 function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
+begin // GetExtendedPas() or GetExtendedSsse3() in mormot.core.base.asmx64.inc
+  result := GetExtendedStub(P, err);
+end;
+
+function GetExtendedPas(P: PUtf8Char; out err: integer): TSynExtended;
+{$else}
+function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
+{$endif ASMX64NOTPIC}
 var
   c, n: PtrUInt;
   frac: PtrInt;
@@ -6972,7 +6990,6 @@ o:  err := 1;
   if fNeg in flags then
     result := -result;
 end;
-{$endif ASMX64NOTPIC}
 {$endif WIN32DELPHI}
 
 function ToDouble(const text: RawUtf8; out value: double): boolean;
@@ -11921,6 +11938,10 @@ begin
   _VariantToUtf8DateTimeIso8601 := __VariantToUtf8DateTimeIso8601;
   _VariantToTempUtf8DateTimeIso8601 := @__VariantToUtf8DateTimeIso8601;
   _VariantSaveJson              := __VariantSaveJson;
+  {$ifdef ASMX64NOTPIC}
+  if cpuSSSE3 in X64CpuFeatures then
+    GetExtendedStub := @GetExtendedSsse3; // SIMD SSSE3 seems the fastest
+  {$endif ASMX64NOTPIC}
 end;
 
 

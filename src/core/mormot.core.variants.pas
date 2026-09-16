@@ -3102,7 +3102,20 @@ function TextToVariantNumberType(Json: PUtf8Char): cardinal;
 // - warning: supplied JSON is expected to be not nil
 function TextToVariantNumberTypeNoDouble(Json: PUtf8Char): cardinal;
 
-{$ifndef ASMX64NOTPIC} { SIMD/SSE3 x64 asm in mormot.core.base.asmx64.inc }
+type
+  /// function prototype of GetNumericVariantFromJson() process
+  TGetNumericVariantFromJson = function(Json: PUtf8Char;
+    var Value: TVarData; AllowVarDouble: boolean): PUtf8Char;
+
+{$ifdef ASMX64NOTPIC} { SIMD/SSE3 x64 asm in mormot.core.base.asmx64.inc }
+function GetNumericVariantPas(Json: PUtf8Char;
+  var Value: TVarData; AllowVarDouble: boolean): PUtf8Char;
+var
+  /// redirect to GetNumericVariantPas by default which seems the fastest
+  // - you may try GetNumericVariantSsse3() for SIMD process on longer numbers
+  GetNumericVariantStub: TGetNumericVariantFromJson = GetNumericVariantPas;
+{$endif ASMX64NOTPIC}
+
 /// low-level function to parse a variant from an unescaped JSON number
 // - returns the position after the number, and set Value to a variant of type
 // varInteger/varInt64/varCurrency (or varDouble if AllowVarDouble is true)
@@ -3113,7 +3126,7 @@ function TextToVariantNumberTypeNoDouble(Json: PUtf8Char): cardinal;
 // parse null/false/true values
 function GetNumericVariantFromJson(Json: PUtf8Char;
   var Value: TVarData; AllowVarDouble: boolean): PUtf8Char;
-{$endif ASMX64NOTPIC}
+  {$ifdef ASMX64NOTPIC} inline; {$endif}
 
 /// convert some UTF-8 into a variant, detecting JSON numbers or constants
 // - first try GetVariantFromNotStringJson() then fallback to RawUtf8ToVariant()
@@ -11515,9 +11528,19 @@ exponent:         inc(Json); // inlined custom GetInteger()
   end;
 end;
 
-{$ifndef ASMX64NOTPIC} { SIMD/SSE3 x64 asm in mormot.core.base.asmx64.inc }
+{$ifdef ASMX64NOTPIC} { SIMD/SSE3 x64 asm in mormot.core.base.asmx64.inc }
 function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
   AllowVarDouble: boolean): PUtf8Char;
+begin
+  result := GetNumericVariantStub(Json, Value, AllowVarDouble);
+end;
+
+function GetNumericVariantPas(Json: PUtf8Char;
+  var Value: TVarData; AllowVarDouble: boolean): PUtf8Char;
+{$else}
+function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
+  AllowVarDouble: boolean): PUtf8Char;
+{$endif ASMX64NOTPIC}
 const
   CURRENCY_FACTOR: array[-4 .. -1] of integer = (1, 10, 100, 1000);
   CURRENCY_MAX: array[-4 .. -1] of Int64 = (
@@ -11794,7 +11817,6 @@ begin
   vd.VDouble := d;
   result := Json;
 end;
-{$endif ASMX64NOTPIC}
 
 procedure UniqueVariant(Interning: TRawUtf8Interning; var aResult: variant;
   aText: PUtf8Char; aTextLen: PtrInt; aAllowVarDouble: boolean);

@@ -3126,10 +3126,10 @@ const
   CPUAVX2HASWELL = [cfAVX2, cfSSE42, cfBMI1, cfBMI2, cfCLMUL];
 
 /// x86_64 asm with SSSE3 SIMD process - pascal version in mormot.core.text.pas
-function GetExtended(P: PUtf8Char; out err: integer): TSynExtended; overload;
+function GetExtendedSsse3(P: PUtf8Char; out err: integer): TSynExtended; overload;
 
 /// x86_64 asm with SSSE3 SIMD process - pascal version in mormot.core.variants.pas
-function GetNumericVariantFromJson(Json: PUtf8Char;
+function GetNumericVariantSsse3(Json: PUtf8Char;
   var Value: TVarData; AllowVarDouble: boolean): PUtf8Char;
 
 {$ifdef ASMX64AVX1}
