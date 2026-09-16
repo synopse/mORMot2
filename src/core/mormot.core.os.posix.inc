@@ -2820,6 +2820,17 @@ begin
   tmp.Store.Done;
 end;
 
+procedure WaitForDaemonTermination;
+begin
+  if SynDaemonTerminated = 0 then
+    {$ifdef FPC} // SynDaemonTerminated is a function on Delphi POSIX
+    if Assigned(OsWaitOnValue) then
+      OsWaitOnValue(@SynDaemonTerminated, 0, 1000) // e.g. from Linux futex
+    else
+    {$endif FPC}
+      SleepHiRes(1000);
+end;
+
 procedure ConsoleWaitForEnterKey(doCheckSynchronize: boolean);
 var
   c: AnsiChar;
@@ -2841,25 +2852,23 @@ begin
     begin
       res := WaitReadPending(StdInputHandle, 10000);
       if res < 0 then // HUP/ERR/NVAL -> wait to avoid 100% cpu burn
-        if SynDaemonTerminated = 0 then
-          SleepHiRes(1000);
+        WaitForDaemonTermination;
       if res <= 0 then
         continue;
     end;
-    if SynDaemonTerminated = 0 then
-      repeat
-        c := #0;
-        res := FpRead(StdInputHandle, @c, 1);
-        if res <> 1 then
-        begin // EOF/error e.g. under systemd /dev/null -> wait
-          if (SynDaemonTerminated = 0) and
-             not doCheckSynchronize then
-            SleepHiRes(1000);
-          break;
-        end;
-        if c in [#10, #13] then
-          exit; // [Enter] key pressed
-      until false;
+    while SynDaemonTerminated = 0 do
+    begin
+      c := #0;
+      res := FpRead(StdInputHandle, @c, 1);
+      if res <> 1 then
+      begin // EOF/error e.g. under systemd /dev/null -> always wait
+        if not doCheckSynchronize then
+          WaitForDaemonTermination;
+        break;
+      end;
+      if c in [#10, #13] then
+        exit; // [Enter] key pressed
+    end;
   end;
 end;
 

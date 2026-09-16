@@ -6242,6 +6242,7 @@ var
   // - on Linux you could even write:
   // ! if Assigned(OsWaitOnValue) then
   // !   OsWaitOnValue(@SynDaemonTerminated, 0, INFINITE); // clean futex wait
+  // - so never assign directly this variable unless you call OsWakeAllOnValue()
   SynDaemonTerminated: integer;
 {$else}
 /// compatibility function for Delphi POSIX - only SIGINT/SIGQUIT are tracked
