@@ -6269,8 +6269,12 @@ begin
 end;
 
 procedure TSynLog.LogFileInit(nfo: PSynLogThreadInfo);
+var
+  bak: TSynLogThreadInfoFlags;
 begin
   SynLogGlobalLock.Lock;
+  bak := nfo^.Flags;
+  include(nfo^.Flags, tiExceptionIgnore); // no exception log with fWriter = nil
   try
     fThreadInfo := nfo;
     if logInitDone in fFlags then // paranoid thread safety
@@ -6313,6 +6317,7 @@ begin
     AddSysInfo;
     fWriterEcho.AddEndOfLine(sllNewRun);
   finally
+    nfo^.Flags := bak;
     SynLogGlobalLock.UnLock;
   end;
 end;

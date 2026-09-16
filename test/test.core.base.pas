@@ -11342,7 +11342,40 @@ begin
   end;
 end;
 
+type
+  TSynLogInitProbe = class(TSynLog)
+  protected
+    procedure CreateLogWriter; override;
+  end;
+
+var
+  SynLogInitExceptionIgnore: boolean;
+
+procedure TSynLogInitProbe.CreateLogWriter;
+begin
+  SynLogInitExceptionIgnore := fFamily.ExceptionIgnoreCurrentThread;
+  inherited CreateLogWriter;
+end;
+
 procedure TTestCoreBase.Debugging;
+
+  procedure TestLogFileInit;
+  var
+    fam: TSynLogFamily;
+  begin
+    // if the log file creation raises (e.g. missing folder), the exception
+    // should not be logged into this instance with fWriter = nil: it did leak
+    // SynLogGlobalLock, so all other threads were blocked at their first log
+    fam := TSynLogInitProbe.Family;
+    fam.Level := [sllDebug];
+    fam.NoFile := true;
+    TSynLogInitProbe.Add.CloseLogFile; // force LogFileInit, e.g. with --loop
+    Check(not fam.ExceptionIgnoreCurrentThread);
+    SynLogInitExceptionIgnore := false;
+    TSynLogInitProbe.Add.Log(sllDebug, 'init');
+    Check(SynLogInitExceptionIgnore, 'no exception log in LogFileInit');
+    Check(not fam.ExceptionIgnoreCurrentThread, 'flags restored');
+  end;
 
   procedure TestLiveAppendedLines;
   const
@@ -11684,6 +11717,7 @@ begin
   Check(dst[len - 1] = '+', 'last+');
   Check(dst[len] = #0, 'ending #0');
   Check(dst[len + 1] = #1, 'buffer');
+  TestLogFileInit;
   // validate TSynLogFile
   TestLiveAppendedLines;
   TestZonedLayout;
