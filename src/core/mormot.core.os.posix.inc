@@ -5255,10 +5255,15 @@ begin
       onlog(sllNewRun, 'Start % /% %',
         [servicename, TXT[dofork], Executable.Version.DetailedOrVoid], nil);
     Start;
-    while SynDaemonTerminated = 0 do
-      if GetCurrentThreadID = MainThreadID then
+    if GetCurrentThreadID = MainThreadID then
+      while SynDaemonTerminated = 0 do
         CheckSynchronize(100)
-      else
+    {$ifdef FPC} // SynDaemonTerminated is a function on Delphi POSIX
+    else if Assigned(OsWaitOnValue) then // use clean futex on Linux to wait
+      OsWaitOnValue(@SynDaemonTerminated, 0, INFINITE)
+    {$endif FPC}
+    else
+      while SynDaemonTerminated = 0 do
         SleepHiRes(100);
   finally
     if Assigned(onlog) then
