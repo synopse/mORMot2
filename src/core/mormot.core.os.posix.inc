@@ -2073,7 +2073,7 @@ begin
             (PosixSymlink(Target, SymLink) = 0);
 end;
 
-function WaitReadPending(fd, timeout: integer): boolean;
+function WaitReadPending(fd, timeout: integer): integer;
 var
   p: TPollFD; // select() limits process to 1024 sockets in POSIX -> use poll()
   // https://moythreads.com/wordpress/2009/12/22/select-system-call-limitation
@@ -2081,7 +2081,12 @@ begin
   p.fd := fd;
   p.events := POLLIN or POLLPRI;
   p.revents := 0;
-  result := FpPoll(@p, 1, timeout) > 0;
+  result := FpPoll(@p, 1, timeout);
+  if result > 0 then
+    if p.revents and (POLLIN or POLLPRI) <> 0 then
+      result := 1   // something is available
+    else
+      result := -1; // HUP/ERR/NVAL: not readable console input
 end;
 
 procedure ConsoleErrorWrite(const text: RawUtf8);
@@ -2698,7 +2703,7 @@ end;
 
 function LinuxEventFDWait(fd: integer; ms: integer): boolean;
 begin
-  result := WaitReadPending(fd, ms); // call FpPoll()
+  result := WaitReadPending(fd, ms) > 0; // call FpPoll()
 end;
 {$else}
 function LinuxEventFD(nonblocking, semaphore: boolean): integer;
@@ -2818,6 +2823,7 @@ end;
 procedure ConsoleWaitForEnterKey(doCheckSynchronize: boolean);
 var
   c: AnsiChar;
+  res: integer;
 begin
   if GetCurrentThreadID = MainThreadID then
     SynDaemonIntercept // intercept ^C and SIGQUIT - do nothing if already set
@@ -2828,15 +2834,25 @@ begin
     if doCheckSynchronize then
     begin
       CheckSynchronize(1000);
-      if not WaitReadPending(StdInputHandle, 0) then
+      if WaitReadPending(StdInputHandle, 0) <= 0 then
         continue;
     end
-    else if not WaitReadPending(StdInputHandle, 10000) then
-      continue;
+    else
+    begin
+      res := WaitReadPending(StdInputHandle, 10000);
+      if res < 0 then
+        SleepHiRes(1000); // fppoll failed -> wait to burn 100% cpu
+      if res <= 0 then
+        continue;
+    end;
     repeat
       c := #0;
-      if FpRead(StdInputHandle, @c, 1) <> 1 then
+      res := FpRead(StdInputHandle, @c, 1);
+      if res <> 1 then
+      begin
+        SleepHiRes(1000); // EOF/error e.g. under systemd /dev/null -> wait
         break;
+      end;
       if c in [#10, #13] then
         exit;
     until false;
@@ -5483,7 +5499,7 @@ var
     u: RawUtf8;
   begin
     result := false; // return false on pipe closed
-    if WaitReadPending(fd, wait) then
+    if WaitReadPending(fd, wait) > 0 then
     begin
       n := fpread(fd, @tmp, SizeOf(tmp));
       if n <= 0 then

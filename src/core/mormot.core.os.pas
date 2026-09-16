@@ -4255,7 +4255,7 @@ function GetFileNameFromUrl(const Uri: RawUtf8): TFileName;
 {$else}
 
 /// internal function just wrapping fppoll(POLLIN or POLLPRI)
-function WaitReadPending(fd, timeout: integer): boolean;
+function WaitReadPending(fd, timeout: integer): integer;
 
 type
   /// optional callback used by PosixFileNames()
