@@ -11464,6 +11464,40 @@ procedure TTestCoreBase.Debugging;
     end;
   end;
 
+  procedure TestZonedLayout;
+  const
+    HEADER = 'C:\mormot2tests.exe 1.0.0 (2025-02-13 16:41:00)'#13#10 +
+      'Host=Test User=Test CPU=1 OS=0 Wow64=0 Freq=1000000'#13#10 +
+      'TSynLog 2.0 2025-02-13T16:41:00'#13#10#13#10;
+  var
+    log: TSynLogFile;
+    t, i: integer;
+    input, source: RawUtf8;
+  begin
+    // Int18ToText() encodes a thread number as $20 + 6-bit chars, so thread 58
+    // ends with 'Z' - which the ZonedTimestamp detection did read as its own
+    // 'Z' marker, shifting fLineLevelOffset and loading the whole file empty
+    for t := 0 to 1 do
+    begin
+      input := '20250213 16410200';
+      if t <> 0 then
+        Append(input, 'Z'); // TSynLogFamily.ZonedTimestamp layout
+      Append(input, Int18ToChars3(58), ' info  Zoned payload');
+      source := HEADER;
+      for i := 1 to 4 do
+        Append(source, input, #13#10);
+      log := TSynLogFile.Create(pointer(source), length(source));
+      try
+        CheckEqual(log.Count, 4, 'zoned rows');
+        CheckEqual(log.EventThread[0], 58);
+        CheckEqual(log.EventText[0], ' Zoned payload');
+        Check(log.EventLevel[0] = sllInfo);
+      finally
+        log.Free;
+      end;
+    end;
+  end;
+
   procedure Test(const LOG: RawUtf8; ExpectedDate: TDateTime);
   var
     L: TSynLogFile;
@@ -11652,6 +11686,7 @@ begin
   Check(dst[len + 1] = #1, 'buffer');
   // validate TSynLogFile
   TestLiveAppendedLines;
+  TestZonedLayout;
   Test('D:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.4 (2011-04-07 11:09:06)'#13#10 +
     'Host=MyPC User=MySelf CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545 ' +
     'Instance=D:\Dev\MyLibrary.dll'#13#10 +

@@ -8051,7 +8051,7 @@ begin
     begin
       // YYYYMMDD HHMMSSXX[Z] is one/two chars bigger than Timestamp
       fLineLevelOffset := 19;
-      if LineBeg[fLineLevelOffset] = 'Z' then
+      if LineBeg[fLineLevelOffset - 2] = 'Z' then
         inc(fLineLevelOffset); // did have TSynLogFamily.ZonedTimestamp
       fDayCurrent := PInt64(LineBeg)^;
       AddInteger(fDayChangeIndex, fCount - 1);
