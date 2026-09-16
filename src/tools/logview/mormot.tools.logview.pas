@@ -43,9 +43,20 @@ uses
   mormot.core.rtti,
   mormot.core.log,
   mormot.core.perf,
-  mormot.rest.http.server;
+  mormot.rest.core,
+  mormot.rest.http.server,
+  mormot.tools.logview.remote;
 
 type
+  /// a row received by the HTTP server thread, with its sender
+  TReceivedRow = record
+    Text: RawUtf8;
+    Received: RawUtf8; // TRemoteLogNormalizer.NowStamp at reception
+    RemoteIP: RawUtf8;
+    Connection: TRestConnectionID;
+  end;
+  TReceivedRowDynArray = array of TReceivedRow;
+
   { TMainLogView }
 
   TMainLogView = class(TForm)
@@ -99,7 +110,6 @@ type
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormShow(Sender: TObject);
-    procedure BtnFilterClick(Sender: TObject);
     procedure EventsListClickCheck(Sender: TObject);
     procedure BtnSearchNextClick(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
@@ -146,8 +156,11 @@ type
     fPanelThreadVisible: boolean;
     // rows received by the HTTP server thread, applied by the UI thread
     fReceivedSafe: TLightLock;
-    fReceived: TRawUtf8DynArray;
+    fReceived: TReceivedRowDynArray;
     fReceivedCount: integer;
+    fNormalizer: TRemoteLogNormalizer; // used by the UI thread only
+    fHiddenThreadRows: boolean; // ApplyReceived() appended a filtered thread row
+    fRemoteStarted: RawUtf8; // UTC 'yyyy-mm-dd hh:mm:ss' of the current capture
     procedure SetLogFileName(const Value: TFileName);
     procedure SetListColumns(aLogFormat: boolean);
     procedure LayoutLeftPanel;
@@ -155,8 +168,10 @@ type
     procedure BtnFilterMenu(Sender: TObject);
     procedure ThreadListCheckRefresh;
     procedure ThreadListNameRefresh(Index: integer);
-    procedure ReceivedOne(const Text: RawUtf8);
+    procedure ReceivedOne(const Text: RawUtf8;
+      ConnectionID: TRestConnectionID; const RemoteIP: RawUtf8);
     function ApplyReceived: boolean;
+    procedure RefreshRemoteThreads;
     procedure ClearReceived;
     procedure StopRemoteLog;
     function RowToIndex(aRow: integer): integer;
@@ -186,6 +201,7 @@ resourcestring
   sEnterAddress = 'Enter a relative hexadecimal address (RVA):';
   sAddressNotFound = 'No symbol found at this address';
   sMabOnly = 'Please select a .mab file - use the mab tool to convert a .map or .dbg';
+  sStopRemote = 'Stop the remote logging server, and discard the received rows?';
   sCompressFailed = 'Unable to create %s'#13#10'The uncompressed log is kept as %s';
   sStats = #13#10 +
     '%s'#13#10'%s'#13#10#13#10 +
@@ -479,6 +495,7 @@ begin
   FreeAndNil(fRemoteLogService);
   FreeAndNil(fLog);
   FreeAndNil(fLogUncompressed);
+  FreeAndNil(fNormalizer);
 end;
 
 procedure TMainLogView.FormShow(Sender: TObject);
@@ -519,18 +536,6 @@ begin
       LogFileName := cmdline;
   end;
   WindowState := wsMaximized;
-end;
-
-procedure TMainLogView.BtnFilterClick(Sender: TObject);
-var
-  btn: TButton absolute Sender;
-  pt: TPoint;
-begin
-  if Sender.InheritsFrom(TButton) then
-  begin
-    pt := ClientToScreen(btn.BoundsRect.TopLeft);
-    btn.PopupMenu.Popup(pt.X, pt.Y + btn.Height);
-  end;
 end;
 
 procedure TMainLogView.BtnFilterMenu(Sender: TObject);
@@ -1165,10 +1170,13 @@ var
   names: TRawUtf8DynArray;
   i: integer;
 begin
+  if fRemoteLogService <> nil then
+    exit; // remote mode: RefreshRemoteThreads() maintains the names
   names := fLog.ThreadNames(Index);
   if names = nil then
     exit;
-  for i := 0 to fLog.ThreadsCount - 1 do
+  for i := 0 to MinPtrInt(high(names),
+                 MinPtrInt(high(fThreadNames), ThreadListBox.Count - 1)) do
     if names[i] <> fThreadNames[i] then
       ThreadListBox.Items[i] := Utf8ToString(names[i]);
   fThreadNames := names;
@@ -1202,9 +1210,18 @@ begin
   if Files.Selected = nil then
     exit;
   fn := Files.GetPathFromItem(Files.Selected);
-  if (fLog = nil) or
-     (fLog.FileName <> fn) then
-    LogFileName := fn;
+  if (fLog <> nil) and
+     (fLog.FileName = fn) then
+    exit;
+  // opening a file stops the remote server and drops its unsaved rows
+  if fRemoteLogService <> nil then
+    tmrRefreshTimer(nil); // also show the rows still waiting in the queue
+  if (fRemoteLogService <> nil) and
+     (fLog <> nil) and
+     (fLog.Count > 1) and
+     (MessageDlg(sStopRemote, mtConfirmation, [mbYes, mbNo], 0) <> mrYes) then
+    exit;
+  LogFileName := fn;
 end;
 
 procedure TMainLogView.ListMenuCopyClick(Sender: TObject);
@@ -1233,7 +1250,7 @@ var
 begin
   if fRemoteLogService = nil then
   try
-    fRemoteLogService := TRestHttpRemoteLogServer.Create(
+    fRemoteLogService := TRestHttpRemoteLogServer.CreateWithSender(
       StringToUtf8(edtServerRoot.Text), StrToInt(edtServerPort.Text), ReceivedOne);
     Caption := fMainCaption + sRemoteLog;
   except
@@ -1275,29 +1292,46 @@ begin
   BtnSearchNext.Show;
   BtnSearchPrevious.Show;
   LayoutLeftPanel;
-  ReceivedOne(FormatUtf8(
-    '%00 info  Remote Logging Server started on port % with root name "%"',
-    [NowToString(false), fRemoteLogService.Port,
-     fRemoteLogService.Server.Model.Root]));
+  if fNormalizer = nil then
+    fNormalizer := TRemoteLogNormalizer.Create;
+  if fLog.Count = 0 then
+  begin
+    fRemoteStarted := NowToString({expanded=}true, ' ', {utc=}true);
+    // the first row fixes the layout of the view - see TRemoteLogNormalizer
+    fLog.AddInMemoryLine(TRemoteLogNormalizer.Banner(FormatUtf8(
+      'Remote Logging Server started on port % with root name "%"',
+      [fRemoteLogService.Port, fRemoteLogService.Server.Model.Root])));
+  end;
+  List.RowCount := VisibleRows;
   List.Show;
   tmrRefresh.Enabled := true;
 end;
 
-procedure TMainLogView.ReceivedOne(const Text: RawUtf8);
+procedure TMainLogView.ReceivedOne(const Text: RawUtf8;
+  ConnectionID: TRestConnectionID; const RemoteIP: RawUtf8);
 var
   p: PUtf8Char;
-  line: RawUtf8;
+  line, stamp: RawUtf8;
 begin
   // called from the HTTP server thread: just queue the rows, since
   // TSynLogFileView.AddInMemoryLine() reallocates what the UI thread draws
+  stamp := TRemoteLogNormalizer.NowStamp;
   p := pointer(Text);
   fReceivedSafe.Lock;
   try
     while p <> nil do // handle multiple log rows in the incoming text
     begin
       line := GetNextLine(p, p);
-      if length(line) >= 24 then
-        AddRawUtf8(fReceived, fReceivedCount, line);
+      if line = '' then
+        continue; // any other row is kept, even if not a TSynLog row
+      if fReceivedCount = length(fReceived) then
+        SetLength(fReceived, NextGrow(fReceivedCount));
+      // no "with": the record fields would hide the Text/RemoteIP parameters
+      fReceived[fReceivedCount].Text := line;
+      fReceived[fReceivedCount].Received := stamp;
+      fReceived[fReceivedCount].RemoteIP := RemoteIP;
+      fReceived[fReceivedCount].Connection := ConnectionID;
+      inc(fReceivedCount);
     end;
   finally
     fReceivedSafe.UnLock;
@@ -1306,28 +1340,87 @@ end;
 
 function TMainLogView.ApplyReceived: boolean;
 var
+  received: TReceivedRowDynArray;
   rows: TRawUtf8DynArray;
-  n, i: integer;
+  n, i, count: integer;
 begin
   // called from the UI thread only
   fReceivedSafe.Lock;
   try
     n := fReceivedCount;
-    rows := fReceived;
+    received := fReceived;
     fReceived := nil;
     fReceivedCount := 0;
   finally
     fReceivedSafe.UnLock;
   end;
   result := (n <> 0) and
-            (fLog <> nil);
-  if result then
+            (fLog <> nil) and
+            (fNormalizer <> nil);
+  if not result then
+    exit;
+  count := 0;
+  for i := 0 to n - 1 do
+    fNormalizer.Normalize(received[i].Text, received[i].Received,
+      received[i].Connection, received[i].RemoteIP, rows, count);
+  for i := 0 to count - 1 do
+  begin
+    fLog.AddInMemoryLine(rows[i]);
+    // normalized rows have their thread column at 17: see TRemoteLogNormalizer
+    if (fLog.EventThread <> nil) and
+       not fLog.Threads[Chars3ToInt18(PUtf8Char(pointer(rows[i])) + 17)] then
+      fHiddenThreadRows := true;
+  end;
+end;
+
+procedure TMainLogView.RefreshRemoteThreads;
+var
+  i, n: integer;
+  caption: string;
+begin
+  if (fLog = nil) or
+     (fLog.EventThread = nil) or
+     (fNormalizer = nil) then
+    exit;
+  // TSynLogFile.ThreadNames() would compare addresses of appended rows, so
+  // use the latest names as seen by the normalizer, with their row counts
+  n := fLog.ThreadsCount;
+  SetLength(fThreadNames, n);
+  ThreadListBox.Items.BeginUpdate;
+  try
     for i := 0 to n - 1 do
-      fLog.AddInMemoryLine(rows[i]);
+    begin
+      FormatUtf8('% % (% rows)', [i + 1, fNormalizer.ThreadName(i + 1),
+        fLog.ThreadRows(i + 1)], fThreadNames[i]);
+      caption := Utf8ToString(fThreadNames[i]);
+      if i >= ThreadListBox.Count then
+      begin
+        ThreadListBox.Items.Add(caption);
+        ThreadListBox.Checked[i] := fLog.Threads[i + 1];
+      end
+      else if ThreadListBox.Items[i] <> caption then
+        ThreadListBox.Items[i] := caption; // only the threads with new rows
+    end;
+  finally
+    ThreadListBox.Items.EndUpdate;
+  end;
+  if not ThreadGroup.Visible then
+  begin
+    ThreadGroup.Show;
+    LayoutLeftPanel;
+  end;
+  // TSynLogFileView.AddInMemoryLine() only checks the event level: re-select
+  // only when rows of a filtered thread were appended since the last tick
+  if fHiddenThreadRows and
+     (fLog.Events <> []) then
+    fLog.Select(List.Row);
+  fHiddenThreadRows := false;
 end;
 
 procedure TMainLogView.ClearReceived;
 begin
+  if fNormalizer <> nil then
+    fNormalizer.Clear; // new connections and threads numbering
   fReceivedSafe.Lock;
   try
     fReceived := nil;
@@ -1344,6 +1437,7 @@ begin
   tmrRefresh.Enabled := false;
   FreeAndNil(fRemoteLogService); // stop receiving before dropping the queue
   ClearReceived;
+  FreeAndNil(fNormalizer);
 end;
 
 function TMainLogView.VisibleRows: integer;
@@ -1367,12 +1461,24 @@ begin
 end;
 
 procedure TMainLogView.tmrRefreshTimer(Sender: TObject);
+var
+  following: boolean;
+  n: integer;
 begin
   if not ApplyReceived then
     exit; // no new row since the last refresh
-  List.RowCount := VisibleRows;
-  if List.RowCount > 0 then
-    List.TopRow := List.RowCount - List.VisibleRowCount;
+  RefreshRemoteThreads;
+  // VisibleRowCount is not the viewport capacity once the rows overflow it
+  following := (List.RowCount = 0) or // LeftCol: may be scrolled horizontally
+               List.IsCellVisible(List.LeftCol, List.RowCount - 1);
+  n := VisibleRows;
+  if n <> List.RowCount then
+  begin
+    List.RowCount := n;
+    if following and
+       (n > List.VisibleRowCount) then // don't scroll a user reading above
+      List.TopRow := n - List.VisibleRowCount;
+  end;
   List.Invalidate;
 end;
 
@@ -1381,6 +1487,13 @@ begin
   ClearReceived; // rows received before the Clear click
   List.RowCount := 0;
   MemoBottom.Text := ''; // no OnClick is triggered when RowCount shrinks
+  if fPanelThreadVisible then
+    BtnThreadShowClick(nil);
+  ThreadGroup.Hide;
+  lblThreadName.Caption := '';
+  ThreadListBox.Clear;
+  fThreadNames := nil;
+  fHiddenThreadRows := false;
   FreeAndNil(fLog);
   btnServerLaunchClick(nil);
 end;
@@ -1396,10 +1509,12 @@ begin
   if not dlgSaveList.Execute then
     exit;
   fn := dlgSaveList.FileName;
-  header := StringToUtf8(Executable.ProgramFileName) + ' 0.0.0.0 (' + NowToString + ')'#13 +
+  // StartDateTime is read from the 3rd line: UTC as the normalized rows
+  header := StringToUtf8(Executable.ProgramFileName) + ' 0.0.0.0 (' + fRemoteStarted + ')'#13 +
     'Host=Remote User=Unknown CPU=Unknown OS=0.0=0.0.0 Wow64=0 Freq=1'#13 +
-    'LogView ' + SYNOPSE_FRAMEWORK_VERSION + ' Remote ' + NowToString + #13#13;
-  if dlgSaveList.FilterIndex <> 3 then
+    'LogView ' + SYNOPSE_FRAMEWORK_VERSION + ' Remote ' + fRemoteStarted + #13#13;
+  // the dialog keeps a typed extension, whatever the selected filter is
+  if not SameText(ExtractFileExt(fn), '.synlz') then
   begin
     fLog.SaveToFile(fn, header); // overwriting was confirmed by the dialog
     exit;
