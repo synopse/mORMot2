@@ -947,7 +947,7 @@ procedure JS_SetMemoryLimit(rt: JSRuntime; limit: PtrUInt);
 procedure JS_SetGCThreshold(rt: JSRuntime; gc_threshold: PtrUInt);
   cdecl; external {$ifdef QJSDLL}QJ{$endif};
 
-procedure JS_SetMaxStackSize(ctx: JSContext; stack_size: PtrUInt);
+procedure JS_SetMaxStackSize(rt: JSRuntime; stack_size: PtrUInt);
   cdecl; external {$ifdef QJSDLL}QJ{$endif};
 
 function JS_NewRuntime2(const mf: PJSMallocFunctions;
@@ -1461,7 +1461,6 @@ function JS_EnqueueJob(ctx: JSContext; job_func: PJSJobFunc; argc: integer;
 
 function JS_IsJobPending(rt: JSRuntime): JS_BOOL;
    cdecl; external {$ifdef QJSDLL}QJ{$endif};
-// TODO: Check pctx if the type is right.
 
 function JS_ExecutePendingJob(rt: JSRuntime; pctx: PJSContext): integer;
    cdecl; external {$ifdef QJSDLL}QJ{$endif};
