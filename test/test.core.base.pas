@@ -5038,6 +5038,8 @@ var
     u: RawUtf8;
     err: integer;
     d: double;
+    vv: variant;
+    p: PUtf8Char;
   begin
     s := DoubleToString(v);
     val(s, d, err);
@@ -5047,6 +5049,9 @@ var
     d := GetExtended(pointer(u), err);
     CheckEqual(err, 0);
     CheckSame(d, v);
+    p := GetNumericVariantFromJson(pointer(u), TVarData(vv), true);
+    CheckUtf8(p = PUtf8Char(pointer(u)) + length(u), u);
+    CheckSame(double(vv), v);
   end;
 
   {$ifdef CPU64}
@@ -5062,7 +5067,7 @@ var
   {$endif CPU64}
 
   procedure CheckJsonValue(const text: RawUtf8; kind: integer; expected: double;
-     expectedText: RawUtf8 = '');
+    expectedText: RawUtf8 = '');
   var
     v: variant;
     p: PUtf8Char;
@@ -5081,9 +5086,11 @@ var
   procedure CheckJsonExact(const text: RawUtf8; kind: integer; expected: Int64);
   var
     v: variant;
+    p: PUtf8Char;
   begin
     TVarData(v).VType := varEmpty;
-    CheckUtf8(GetNumericVariantFromJson(pointer(text), TVarData(v), false)^ = #0, text);
+    p := GetNumericVariantFromJson(pointer(text), TVarData(v), false);
+    CheckUtf8(p = PUtf8Char(pointer(text)) + length(text), text);
     CheckEqual(TVarData(v).VType, kind, text);
     if kind = varInteger then
       CheckEqual(TVarData(v).VInteger, expected, text)
@@ -5795,6 +5802,20 @@ begin
     '9.223372036854776E15');
   CheckJsonValue('0.0000000000000000001', varDouble, 1E-19,
     '9.9999999999999998E-20');
+  CheckJsonValue('1E0', varInteger, 1 ,'1');
+  CheckJsonValue('1E1', varDouble, 10, '10');
+  CheckJsonValue('1E2', varDouble, 100, '100');
+  CheckJsonValue('10E1', varDouble, 100, '100');
+  CheckJsonValue('10E2', varDouble, 1000, '1000');
+  CheckJsonValue('10E12', varDouble, 1E13,
+    {$ifdef WIN32DELPHI} '1000000000000' {$else} '1E13' {$endif} );
+  CheckJsonValue('2E101', varDouble, 2E101);
+  CheckJsonValue('-1E0', varInteger, -1 ,'-1');
+  CheckJsonValue('-1E1', varDouble, -10, '-10');
+  CheckJsonValue('-1E2', varDouble, -100, '-100');
+  CheckJsonValue('-1E12', varDouble, -1E12
+    {$ifdef WIN32DELPHI}, '-1000000000000' {$endif} );
+  CheckJsonValue('-2E101', varDouble, -2E101);
   s := '9223372036854775808';
   Check(GetNumericVariantFromJson(pointer(s), TVarData(vj), false) = nil);
   s := '9223372036854775.8';
