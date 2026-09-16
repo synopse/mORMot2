@@ -11642,7 +11642,7 @@ begin
   begin
     opt := SSL_OP_CIPHER_SERVER_PREFERENCE;
     if HasHWAes then
-      opt := opt or SSL_OP_PRIORITIZE_CHACHA; // ignore CipherList/CipherSuites
+      opt := opt or SSL_OP_PRIORITIZE_CHACHA; // favor weak client preference
     SSL_CTX_set_options(fCtx, opt);
   end;
   v := TLS1_2_VERSION; // no SSL3 TLS1.0 TLS1.1

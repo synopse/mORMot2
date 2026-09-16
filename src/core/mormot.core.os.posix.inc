@@ -2840,22 +2840,26 @@ begin
     else
     begin
       res := WaitReadPending(StdInputHandle, 10000);
-      if res < 0 then
-        SleepHiRes(1000); // fppoll failed -> wait to burn 100% cpu
+      if res < 0 then // HUP/ERR/NVAL -> wait to avoid 100% cpu burn
+        if SynDaemonTerminated = 0 then
+          SleepHiRes(1000);
       if res <= 0 then
         continue;
     end;
-    repeat
-      c := #0;
-      res := FpRead(StdInputHandle, @c, 1);
-      if res <> 1 then
-      begin
-        SleepHiRes(1000); // EOF/error e.g. under systemd /dev/null -> wait
-        break;
-      end;
-      if c in [#10, #13] then
-        exit;
-    until false;
+    if SynDaemonTerminated = 0 then
+      repeat
+        c := #0;
+        res := FpRead(StdInputHandle, @c, 1);
+        if res <> 1 then
+        begin // EOF/error e.g. under systemd /dev/null -> wait
+          if (SynDaemonTerminated = 0) and
+             not doCheckSynchronize then
+            SleepHiRes(1000);
+          break;
+        end;
+        if c in [#10, #13] then
+          exit; // [Enter] key pressed
+      until false;
   end;
 end;
 
