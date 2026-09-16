@@ -1492,7 +1492,7 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         mov     qword ptr [rdx + 8], rax
         mov     dword ptr [rdx], r10d
         mov     rax, r8
-        ret                      // branchless for 3..8 digits integers
+        ret                      // branchless for 3..15 digits integers
 @integerTwo:
         pmaddubsw xmm0, [rip + NumericSimdData + NUMERIC_TEN]
         pextrw  eax, xmm0, 0     // fast movd eax,xmm0 + movzx eax,ax
@@ -1502,7 +1502,7 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         movzx   eax, al
 @integerDirect:
         test    r11d, 1          // '-' sign?
-        jz      @integerPos      // branchless is not mandatoryu here
+        jz      @integerPos      // branchless is not mandatory here
         neg     eax
 @integerPos:
         mov     dword ptr [rdx + 8], eax
