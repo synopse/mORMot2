@@ -3640,6 +3640,8 @@ begin
     FastAssignNew(UserAgent);
   if Referer <> '' then
     FastAssignNew(Referer);
+  if AcceptEncoding <> '' then
+    FastAssignNew(AcceptEncoding);
   RangeOffset := 0;
   FastAssignNew(Content);
   RangeLength := -1;
