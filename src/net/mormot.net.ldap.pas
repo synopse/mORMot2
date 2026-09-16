@@ -7559,6 +7559,8 @@ begin
       SetUnknownError('Stopped by SearchAllAbort');
       result := false;
       exclude(fFlags, fAborted);
+      if fSearchRange <> nil then
+        FreeAndNil(fSearchRange);
     end
     else if fSearchRange <> nil then
       // additional requests to fill any "paging attributes" auto-range results
