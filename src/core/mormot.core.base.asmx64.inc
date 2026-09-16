@@ -868,10 +868,10 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         pcmpgtb xmm1, [rip + NumericSimdData + NUMERIC_THRESHOLD] // digit lanes
         pmovmskb eax, xmm1
         not     eax             // non-digit lanes; bits 16..31 are sentinels
+        test    al, 1
+        jnz     @fallback       // NaN/Inf or uncommon grammar
         db      $f3             // TZCNT, or BSF without BMI1: identical if <> 0
         bsf     r8d, eax        // p: first non-digit = integer digit count
-        test    r8d, r8d
-        jz      @fallback       // NaN/Inf or uncommon grammar
         cmp     r8d, 15
         ja      @longInteger
         psubb   xmm0, [rip + NumericSimdData + NUMERIC_ASCII0]
@@ -886,10 +886,9 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         je      @integerExponent         // exponent: parsed here, no restart
         mov     dword ptr [rdx], 1       // err := 1 on any other byte (quote/comma)
 @integerGo:
-        cmp     r8d, 1
-        je      @one
         cmp     r8d, 2
-        je      @two
+        jb      @integerOne              // fast path for common 1/2 digits
+        je      @integerTwo
         mov     r10d, r8d                // p
         shl     r8d, 4
         lea     r9, [rip + NumericSimdData + NUMERIC_CTRLINT]
@@ -903,17 +902,20 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         ja      @wideInteger
         test    r11d, r11d               // <= 8 digits sit in lanes 0..7: value = H
         jnz     @negativeInteger
-        ret
-@two:   pmaddubsw xmm0, [rip + NumericSimdData + NUMERIC_TEN]
+        ret                              // branchless for 3..8 digits
+@integerTwo:
+        pmaddubsw xmm0, [rip + NumericSimdData + NUMERIC_TEN]
+        pextrw  eax, xmm0, 0             // fast movd eax,xmm0 + movzx eax,ax
+        jmp     @integerDirect
+@integerOne:
         movd    eax, xmm0
-        movzx   eax, ax
-        jmp     @int
-@one:   movd    eax, xmm0
         movzx   eax, al
-@int:   test    r11d, r11d
-        jz      @intPos
-        neg     eax
-@intPos:cvtsi2sd xmm0, eax
+@integerDirect:
+        test    r11d, 1                  // '-' sign?
+        jz      @integerPos
+        neg     eax                      // faster than @negativeInteger
+@integerPos:
+        cvtsi2sd xmm0, eax
         ret
 @wideInteger:
         movhlps xmm1, xmm0
@@ -983,6 +985,9 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         jnz     @negativeInteger
         ret
 @integerExponent:                        // r8d = p, 'e' at [rcx + p]
+        cmp     r8d, 2
+        jb      @integerExponentOne      // p=1; zero already rejected
+        je      @integerExponentTwo      // p=2
         mov     r10d, r8d
         shl     r8d, 4
         lea     r9, [rip + NumericSimdData + NUMERIC_CTRLINT]
@@ -996,6 +1001,18 @@ function GetExtended(P: PUtf8Char; out err: integer): TSynExtended;
         cmp     r10d, 8
         mov     r10d, 0                  // f = 0 (flags kept)
         ja      @wideExponent
+        jmp     @exponent
+@integerExponentTwo:
+        pmaddubsw xmm0, [rip + NumericSimdData + NUMERIC_TEN]
+        pextrw  eax, xmm0, 0             // 10*d0 + d1
+        jmp     @integerExponentShort
+@integerExponentOne:
+        movd    eax, xmm0
+        movzx   eax, al                   // d0
+@integerExponentShort:
+        cvtsi2sd xmm0, eax                // exact 1..99
+        lea     r9d, [r8 + 1]             // index after 'e'
+        xor     r10d, r10d                // f = 0
         jmp     @exponent
 @fractionExponent:                       // r8d = p, r9d = n, 'e' at [rcx + n]
         mov     r10d, r9d
@@ -1403,19 +1420,19 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         {$ifdef ABISYSVX64}
         movzx   r11d, dl         // move AllowDouble in r11d flags
         mov     rcx, rdi
-        mov     rax, rdi
+        mov     eax, edi
         mov     rdx, rsi
         test    rdi, rdi
         {$else}
         movzx   r11d, r8b        // move AllowDouble in r11d flags
-        mov     rax, rcx
+        mov     eax, ecx
         test    rcx, rcx
         {$endif ABISYSVX64}
         jz      @nil
         add     r11d, r11d       // bit 1: AllowDouble
-        and     eax, 4095
         test    byte ptr [rip + X64CpuFeatures], 1 shl cpuSSSE3
         jz      @scalarStart     // no supplementary SSE3 opcodes
+        and     eax, 4095
         cmp     eax, 4079        // 16 read + terminator
         ja      @scalarStart     // 17 bytes must stay inside the page
         cmp     byte ptr [rcx], '-'
@@ -1429,10 +1446,10 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         pcmpgtb xmm1, [rip + NumericSimdData + NUMERIC_THRESHOLD] // digit lanes
         pmovmskb eax, xmm1
         not     eax              // non-digit lanes; bits 16..31 are sentinels
+        test    al, 1
+        jnz     @nil             // no leading digit: not a JSON number
         db      $f3              // TZCNT, or BSF without BMI1: identical if <> 0
         bsf     r8d, eax         // p: integer digit count
-        test    r8d, r8d
-        jz      @nil             // no leading digit: not a JSON number
         cmp     r8d, 15
         ja      @longInteger
         cmp     byte ptr [rcx], '0'
@@ -1447,10 +1464,9 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         or      r9d, 32
         cmp     r9d, 'e'
         je      @integerExponent    // any other byte ends the number
-        cmp     r8d, 1
-        je      @one
         cmp     r8d, 2
-        je      @two
+        jb      @integerOne         // fast path for common 1/2 digits
+        je      @integerTwo
         mov     r10d, r8d           // p
         lea     rax, [rip + NumericSimdData + NUMERIC_JSONINT]
         movdqu  xmm3, [rax + r8]
@@ -1465,30 +1481,31 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         imul    r9, r9, 100000000
         add     rax, r9          // exact integer < 10^15
         lea     r8, [rcx + r10]  // end pointer
-        cmp     r10d, 9
-        seta    r10b
-        movzx   r10d, r10b
-        imul    r10d, r10d, 17
-        add     r10d, 3          // varInteger = 3, varInt64 = 20
-        mov     r9d, r11d
-        and     r9d, 1
-        neg     r9               // 0 or -1
-        xor     rax, r9
-        sub     rax, r9          // conditional negate (zero stays +0)
+        cmp     r10d, 10
+        sbb     r10d, r10d       // -1 if digits < 10, else 0
+        and     r10d, -17        // -17 or 0
+        add     r10d, 20         // varInteger = 3, varInt64 = 20
+        mov     r9, rax
+        neg     r9
+        test    r11b, 1          // '-' sign?
+        cmovnz  rax, r9          // negate result
         mov     qword ptr [rdx + 8], rax
         mov     dword ptr [rdx], r10d
         mov     rax, r8
-        ret                      // branchless for integers
-@two:   pmaddubsw xmm0, [rip + NumericSimdData + NUMERIC_TEN]
+        ret                      // branchless for 3..8 digits integers
+@integerTwo:
+        pmaddubsw xmm0, [rip + NumericSimdData + NUMERIC_TEN]
+        pextrw  eax, xmm0, 0     // fast movd eax,xmm0 + movzx eax,ax
+        jmp     @integerDirect
+@integerOne:
         movd    eax, xmm0
-        movzx   eax, ax
-        jmp     @int
-@one:   movd    eax, xmm0
         movzx   eax, al
-@int:   test    r11d, 1
-        jz      @intPos
+@integerDirect:
+        test    r11d, 1          // '-' sign?
+        jz      @integerPos      // branchless is not mandatoryu here
         neg     eax
-@intPos:mov     dword ptr [rdx + 8], eax
+@integerPos:
+        mov     dword ptr [rdx + 8], eax
         mov     dword ptr [rdx], varInteger
         lea     rax, [rcx + r8]
         ret
@@ -1620,14 +1637,28 @@ function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
         jmp     @longReduce
 @integerExponent:
         lea     rax, [rcx + 18]
-        movq    xmm2, rax
-        add     rcx, r8
+        movq    xmm2, rax           // preserve existing digit-count limit
+        add     rcx, r8             // rcx -> e/E
+        cmp     r8d, 2
+        jb      @integerExponentOne // fast path for common 1/2 digits
+        je      @integerExponentTwo
         lea     rax, [rip + NumericSimdData + NUMERIC_JSONINT]
         movdqu  xmm3, [rax + r8]
         pshufb  xmm0, xmm3
         xor     r10d, r10d
         jmp     @longReduce
-@longFraction:                      // includes an exponent after a short fraction
+@integerExponentTwo:
+        pmaddubsw xmm0, [rip + NumericSimdData + NUMERIC_TEN]
+        pextrw  r9d, xmm0, 0        // mantissa = 10*d0+d1
+        jmp     @integerExponentShort
+@integerExponentOne:
+        movd    r9d, xmm0
+        movzx   r9d, r9b            // mantissa = d0
+@integerExponentShort:
+        xor     r10d, r10d          // decimal scale = 0
+        mov     eax, 'e' - '0'      // as expected by @scalarExponent
+        jmp     @scalarExponent
+@longFraction:                      // also exponent after a short fraction
         or      r11d, 8             // the dot may be the last SIMD byte
         lea     rax, [rcx + 19]     // the dot is not counted as a digit
         movq    xmm2, rax
