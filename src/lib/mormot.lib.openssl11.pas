@@ -11338,6 +11338,7 @@ begin
     EOpenSslNetTls.CheckFailed(self, method, fLastError, fSsl, res, fServerAddress);
 end;
 
+// see https://www.ibm.com/support/knowledgecenter/SSB23S_1.1.0.2020/gtps7/s5sple2.html
 const
   // list taken on 2026-05-01 from https://ssl-config.mozilla.org/
   SAFE_CIPHERLIST: array[ {hwaes=} boolean ] of PUtf8Char = (
@@ -11355,8 +11356,16 @@ const
     'ECDHE-RSA-AES256-GCM-SHA384:' +
     'ECDHE-ECDSA-CHACHA20-POLY1305:' +
     'ECDHE-RSA-CHACHA20-POLY1305');
-
-// see https://www.ibm.com/support/knowledgecenter/SSB23S_1.1.0.2020/gtps7/s5sple2.html
+  // list specific to TLS 1.3
+  SAFE_TLS13_CIPHERSUITES: array[ {hwaes=} boolean ] of PUtf8Char = (
+    // without AES acceleration
+    'TLS_CHACHA20_POLY1305_SHA256:' +
+    'TLS_AES_128_GCM_SHA256:' +
+    'TLS_AES_256_GCM_SHA384',
+    // with AES acceleration
+    'TLS_AES_128_GCM_SHA256:' +
+    'TLS_AES_256_GCM_SHA384:' +
+    'TLS_CHACHA20_POLY1305_SHA256');
 
 procedure TOpenSslNetTls.AfterConnection(Socket: TNetSocket;
   var Context: TNetTlsContext; const ServerAddress: RawUtf8);
@@ -11504,7 +11513,7 @@ end;
 
 procedure TOpenSslNetTls.SetupCtx(var Context: TNetTlsContext; Bind: boolean);
 var
-  v, mode, i: integer;
+  v, mode, i, opt: integer;
   cert: RawByteString;
   x: PX509;
   xa: PX509DynArray;
@@ -11619,9 +11628,23 @@ begin
   else if Bind and (pk = nil) then
     raise EOpenSslNetTls.Create('AfterBind: PrivateKey required');
   if Context.CipherList = '' then
-    Context.CipherList := SAFE_CIPHERLIST[HasHWAes];
+    Context.CipherList := SAFE_CIPHERLIST[HasHWAes]; // our own default
   Check('SetupCtx set_cipher_list',
     SSL_CTX_set_cipher_list(fCtx, pointer(Context.CipherList)));
+  if not Context.DisableTls13 then
+  begin
+    if Context.CipherSuites = '' then
+      Context.CipherSuites := SAFE_TLS13_CIPHERSUITES[HasHWAes]; // our default
+    Check('SetupCtx set_ciphersuites',
+      SSL_CTX_set_ciphersuites(fCtx, pointer(Context.CipherSuites)));
+  end;
+  if Bind then
+  begin
+    opt := SSL_OP_CIPHER_SERVER_PREFERENCE;
+    if HasHWAes then
+      opt := opt or SSL_OP_PRIORITIZE_CHACHA; // ignore CipherList/CipherSuites
+    SSL_CTX_set_options(fCtx, opt);
+  end;
   v := TLS1_2_VERSION; // no SSL3 TLS1.0 TLS1.1
   if Context.AllowDeprecatedTls then
     v := TLS1_VERSION; // allow TLS1.0 TLS1.1 but no SSL

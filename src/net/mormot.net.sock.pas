@@ -1087,9 +1087,14 @@ type
     // especially on Windows
     // - not used on SChannel client
     CASystemStores: TSystemCertificateStores;
-    /// input: preferred Cipher List
+    /// input: preferred Cipher List - for TLS 1.3, use CipherSuites instead
+    // - colon-separated names as accepted by SSL_CTX_set_cipher_list()
     // - not used on SChannel
     CipherList: RawUtf8;
+    /// input: preferred TLS 1.3 Cipher Suites
+    // - colon-separated names as accepted by SSL_CTX_set_ciphersuites()
+    // - not used on SChannel
+    CipherSuites: RawUtf8;
     /// input: a CSV list of host names to be validated by AfterConnection
     // - e.g. 'smtp.example.com,example.com'
     // - not used on SChannel
