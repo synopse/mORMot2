@@ -2357,8 +2357,10 @@ function FindNameValuePointer(NameValuePairs: PUtf8Char; UpperName: PAnsiChar;
 function GetLineSize(P, PEnd: PUtf8Char): PtrUInt;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// returns true if the line length from source array of chars is not less than
-// the specified count
+/// returns true if the line length from source array of chars is not bigger
+// than the specified count
+// - if PEnd = nil, end counting at either #0, #13 or #10, as GetLineSize() does
+// - otherwise, end counting at either #13 or #10
 function GetLineSizeSmallerThan(P, PEnd: PUtf8Char; aMinimalCount: integer): boolean;
 
 {$ifndef PUREMORMOT2}
@@ -9610,13 +9612,22 @@ function GetLineSizeSmallerThan(P, PEnd: PUtf8Char; aMinimalCount: integer): boo
 begin
   result := false;
   if P <> nil then
-    while (P < PEnd) and
-          (P^ <> #10) and
-          (P^ <> #13) do
-      if aMinimalCount = 0 then
-        exit
-      else
+    if PEnd = nil then
+      // an in-memory line is #0 ended, as GetLineSize/GetLineContains expect
+      while not (P^ in [#0, #10, #13]) do
       begin
+        if aMinimalCount = 0 then
+          exit;
+        dec(aMinimalCount);
+        inc(P);
+      end
+    else
+      while (P < PEnd) and
+            (P^ <> #10) and
+            (P^ <> #13) do
+      begin
+        if aMinimalCount = 0 then
+          exit;
         dec(aMinimalCount);
         inc(P);
       end;

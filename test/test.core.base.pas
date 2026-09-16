@@ -11344,6 +11344,124 @@ end;
 
 procedure TTestCoreBase.Debugging;
 
+  procedure TestLiveAppendedLines;
+  const
+    STAMPS: array[0..1] of RawUtf8 = ( // calendar and high resolution layouts
+      '20250213 16410200', '0000000000001234');
+    THREADS: array[0..2] of integer = (0, 1, 4096);
+    HEADER = 'C:\mormot2tests.exe 1.0.0 (2025-02-13 16:41:00)'#13#10 +
+      'Host=Test User=Test CPU=1 OS=0 Wow64=0 Freq=1000000'#13#10 +
+      'TSynLog 2.0 2025-02-13T16:41:00'#13#10#13#10;
+  var
+    log: TSynLogFile;
+    s, t, i, n: integer;
+    stamp, input, source: RawUtf8;
+  begin
+    // AddInMemoryLine() rows are standalone #0 ended strings which don't belong
+    // to the memory mapped buffer: fMapEnd is no valid line end for them, for
+    // any layout - e.g. with or without ptIdentifiedInOneFile thread columns
+    for s := low(STAMPS) to high(STAMPS) do
+      for t := low(THREADS) to high(THREADS) do
+      begin
+        input := STAMPS[s];
+        if THREADS[t] <> 0 then
+          input := input + Int18ToChars3(THREADS[t]);
+        input := input + ' info  Mapped payload';
+        source := HEADER;
+        for i := 1 to 4 do
+          source := source + input + #13#10;
+        log := TSynLogFile.Create(pointer(source), length(source));
+        try
+          CheckEqual(log.Count, 4, 'mapped rows');
+          CheckEqual(log.EventText[0], ' Mapped payload');
+          if THREADS[t] = 0 then
+            Check(log.EventThread = nil)
+          else
+            CheckEqual(log.EventThread[0], THREADS[t]);
+          log.AddInMemoryLine(input);
+          CheckEqual(log.Count, 5, 'appended row');
+          CheckEqual(log.Lines[4], input);
+          CheckEqual(log.LineSize(4), length(input));
+          Check(not log.LineSizeSmallerThan(4, length(input) - 1));
+          Check(log.LineSizeSmallerThan(4, length(input)));
+          CheckEqual(log.EventText[4], ' Mapped payload');
+          Check(log.LineContains('PAYLOAD', 4));
+          if THREADS[t] <> 0 then
+            CheckEqual(log.EventThread[4], THREADS[t]);
+        finally
+          log.Free;
+        end;
+      end;
+    // LoadFromMap() did size fLines[] and fThreads[] down without adjusting
+    // their fLinesMax/fThreadsCount capacity, so the next AddInMemoryLine()
+    // rows were stored past the reallocated buffers
+    n := 1700; // long enough lines to trigger the down-sizing
+    for t := 0 to 1 do
+    begin
+      stamp := STAMPS[0];
+      if t <> 0 then
+        stamp := stamp + Int18ToChars3(THREADS[2]);
+      input := stamp + ' info  ' + RawUtf8OfChar('m', 1078);
+      source := input + #13#10;
+      while length(source) < n * (length(input) + 2) do
+        source := source + source; // O(log n) instead of O(n2) concatenation
+      SetLength(source, n * (length(input) + 2));
+      source := HEADER + source;
+      log := TSynLogFile.Create(pointer(source), length(source));
+      try
+        CheckEqual(log.Count, n, 'big mapped rows');
+        for i := 1 to 100 do
+          log.AddInMemoryLine(input); // did corrupt the heap before the fix
+        CheckEqual(log.Count, n + 100);
+        for i := n to log.Count - 1 do
+        begin
+          CheckEqual(log.LineSize(i), length(input));
+          if t <> 0 then
+            CheckEqual(log.EventThread[i], THREADS[2]);
+        end;
+        // a row shorter than fLineTextOffset is no valid search start - the
+        // invalid read itself is not observable in-process, so this asserts
+        // the guard's result, and that longer rows still are searchable
+        log.AddInMemoryLine('short');
+        Check(not log.LineContains('SHORT', log.Count - 1));
+        Check(log.LineContains('MMM', log.Count - 2));
+        // fLogProcStack[] is released by LoadFromMap() but needed on append
+        log.AddInMemoryLine(stamp + '  +    Work');
+        log.AddInMemoryLine(stamp + '  -    Work 00.020.006');
+        CheckEqual(log.Count, n + 103);
+        Check(log.EventLevel[log.Count - 2] = sllEnter);
+        Check(log.EventLevel[log.Count - 1] = sllLeave);
+        Check(log.LogProc = nil, 'no sllEnter among the mapped rows');
+        log.LogProcMerged := false; // sets LogProc[] from fLogProcNatural[]
+        Check(log.LogProc <> nil);
+        for i := 1 to 10 do
+          log.AddInMemoryLine(stamp + '  +    More'); // reallocs fLogProcNatural
+        CheckEqual(log.LogProc[0].Index, n + 101); // the appended sllEnter row
+        CheckEqual(log.LogProc[0].Time, 20006);    // no dangling LogProc[]
+        // note: LogProcCount is a snapshot made by LogProcMerged, and
+        // LogProc[].ProperTime is computed by LoadFromMap() only: both are
+        // not maintained for appended rows - out of scope for this fix
+        CheckEqual(log.LogProcCount, 1);
+      finally
+        log.Free;
+      end;
+    end;
+    // an appended row is never stored as a reference into the mapped buffer,
+    // so that its line pointer alone tells it apart from a mapped line
+    source := RawUtf8OfChar('x', 64);
+    with TMemoryMapText.Create(pointer(source), 32) do
+    try
+      AddInMemoryLine(source);
+      CheckEqual(Count, 2);
+      Check(LinePointers[1] <> pointer(source), 'unaliased');
+      CheckEqual(LineSize(0), 32);
+      CheckEqual(LineSize(1), 64);
+      CheckEqual(Lines[1], source);
+      Check(LineContains('XXX', 1));
+    finally
+      Free;
+    end;
+  end;
   procedure Test(const LOG: RawUtf8; ExpectedDate: TDateTime);
   var
     L: TSynLogFile;
@@ -11531,6 +11649,7 @@ begin
   Check(dst[len] = #0, 'ending #0');
   Check(dst[len + 1] = #1, 'buffer');
   // validate TSynLogFile
+  TestLiveAppendedLines;
   Test('D:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.4 (2011-04-07 11:09:06)'#13#10 +
     'Host=MyPC User=MySelf CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545 ' +
     'Instance=D:\Dev\MyLibrary.dll'#13#10 +

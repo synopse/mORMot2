@@ -7496,11 +7496,13 @@ function TSynLogFile.LineContains(const aUpperSearch: RawUtf8;
 begin // overriden to take fLineTextOffset into account
   if (self = nil) or
      (cardinal(aIndex) >= cardinal(fCount)) or
-     (aUpperSearch = '') then
+     (aUpperSearch = '') or
+     (fLevels = nil) or
+     (fLevels[aIndex] = sllNone) then // an unparsed row has no text at offset
     result := false
   else
     result := GetLineContains(PUtf8Char(fLines[aIndex]) + fLineTextOffset,
-      fMapEnd, pointer(aUpperSearch));
+      GetLineEnd(fLines[aIndex]), pointer(aUpperSearch));
 end;
 
 function TSynLogFile.EventDateTime(aIndex: integer): TDateTime;
@@ -7841,6 +7843,7 @@ begin
       if fThreads <> nil then
       begin
         SetLength(fThreads, fCount);
+        fThreadsCount := fCount; // so that AddInMemoryLine() can grow it back
         SetLength(fThreadInfo, fThreadMax + 1);
       end;
     end;
@@ -7891,7 +7894,14 @@ begin
     Utf8DecodeToString(P, StrLen(P), string(fFileName));
   end
   else
+  begin
+    if fLogProcStack = nil then
+    begin // released by LoadFromMap(), but needed again by ProcessOneLine()
+      SetLength(fLogProcStack, NextGrow(length(fThreadInfo)));
+      SetLength(fLogProcStackCount, length(fLogProcStack));
+    end;
     inherited AddInMemoryLine(aNewLine);
+  end;
 end;
 
 procedure TSynLogFile.LogProcSort(Order: TLogProcSortOrder);
@@ -8103,7 +8113,15 @@ begin
       begin
         AddInteger(fLogProcStack[thread], fLogProcStackCount[thread], fLogProcNaturalCount);
         if fLogProcNaturalCount >= length(fLogProcNatural) then
+        begin
           SetLength(fLogProcNatural, NextGrow(fLogProcNaturalCount));
+          if (fLogProcCurrent <> nil) and
+             not fLogProcIsMerged then
+            fLogProcCurrent := pointer(fLogProcNatural); // realloc may move it
+        end;
+        // .Index is overwritten by CleanLevels() after an initial parsing,
+        // but is needed as such for any AddInMemoryLine() appended row
+        fLogProcNatural[fLogProcNaturalCount].Index := fCount - 1;
         // fLogProcNatural[].### fields will be set later during parsing
         inc(fLogProcNaturalCount);
       end;
@@ -8162,7 +8180,7 @@ begin
               break;
             end;
         end;
-        FastSetString(result, found, GetLineSize(found, fMapEnd));
+        FastSetString(result, found, GetLineSize(found, GetLineEnd(found)));
         delete(result, 1, PosEx('=', result, 40)); // raw thread name
       end;
     end;
@@ -8204,7 +8222,7 @@ begin
     FastAssignNew(result)
   else
   begin
-    L := GetLineSize(fLines[index], fMapEnd);
+    L := GetLineSize(fLines[index], GetLineEnd(fLines[index]));
     if L <= fLineTextOffset then
       FastAssignNew(result)
     else
