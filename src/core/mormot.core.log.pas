@@ -1253,7 +1253,7 @@ type
     fFileName: TFileName;
     fRotateBytes, fFlushTix32, fRotateDailyTix32: cardinal; // OnFlushToStream
     fStreamPositionAfterHeader: integer;
-    fStartTimestampDateTime: TDateTime;
+    fStartTimestampDateTimeUtc: TDateTime;
     fWriterClass: TJsonWriterClass;
     class function FamilyCreate: TSynLogFamily;
     // TInterfacedObject methods for fake per-thread RefCnt
@@ -5755,6 +5755,8 @@ begin
   if aFamily = nil then
     aFamily := Family;
   fFamily := aFamily;
+  QueryPerformanceMicroSeconds(fStartTimestamp);
+  fStartTimestampDateTimeUtc := NowUtc;
   entry := GetInterfaceEntry(ISynLog);
   if (entry = nil) or
      not InterfaceEntryIsStandard(entry) {$ifdef FPC} or
@@ -6540,21 +6542,14 @@ begin
     exit;
   // setup (once) proper timing for this log instance
   if fStartTimestamp = 0 then // don't reset after rotation
-  begin
-    QueryPerformanceMicroSeconds(fStartTimestamp);
     if fFamily.FileExistsAction = acAppend then
       fFamily.HighResolutionTimestamp := false; // file reuse = absolute time
-    if fFamily.LocalTimestamp then
-      fStartTimestampDateTime := Now
-    else
-      fStartTimestampDateTime := NowUtc;
-  end;
   // check if we need to log the thread names in this new file
   if (sllInfo in fFamily.Level) and
      (fFamily.PerThreadLog = ptIdentifiedInOneFile) then
     include(fFlags, logAddThreadName);
   fThreadNameLogged := nil; // force re-notify
-  // eventually mark this instance as initialized (i.e. fStartTimestamp set)
+  // eventually mark this instance as initialized
   include(fFlags, logInitDone);
   try
     // initialize fWriter and its optional header - if needed
@@ -6586,6 +6581,7 @@ end;
 procedure TSynLog.LogFileHeader;
 var
   w: TJsonWriter;
+  dt: TDateTime;
   i: PtrInt;
 begin
   include(fFlags, logFileHeaderWritten);
@@ -6672,7 +6668,10 @@ begin
     w.AddDirect(#10);
     w.AddClassName(self.ClassType);
     w.AddShort(' ' + SYNOPSE_FRAMEWORK_FULLVERSION + ' ');
-    w.AddDateTime(fStartTimestampDateTime);
+    dt := fStartTimestampDateTimeUtc;
+    if fFamily.LocalTimestamp then
+      dt := UtcToLocal(dt);
+    w.AddDateTime(dt);
     w.AddDirect(#10, #10);
     w.FlushToStream;
     fWriterEcho.EchoReset; // header is not to be sent to console
@@ -7686,7 +7685,7 @@ begin
           if log.BeginWrite(nfo) then
           try
             freq := FormatUtf8('freq=%,%,%',
-              [1000000, double(log.fStartTimestampDateTime), log.fFileName]);
+              [1000000, double(log.fStartTimestampDateTimeUtc), log.fFileName]);
           finally
             log.EndWrite(nfo);
           end;
