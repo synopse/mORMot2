@@ -11778,7 +11778,7 @@ begin
      (frac >= -27) then // FP80 has full 64-bit mantissa so no 53-bit limitation
   {$else}
   while (frac < 0) and
-        ((frac < -22) or (v64 > MAX_SAFE_JS_INTEGER)) do // reduce ending 000000
+        ((frac < -22) or (v64 shr 53 <> 0)) do // reduce ending 000000
   begin
     q64 := v64 div 10; // fast shr/mul by reciprocal on FPC 64-bit
     if q64 *10 <> v64 then
@@ -11788,9 +11788,8 @@ begin
   end;
   if frac <= -324 then // 5.0 x 10^-324 .. 1.7 x 10^308
     exit; // we can't convert into a double
-  if (frac < 0) and
-     (frac >= -22) and
-     (v64 <= MAX_SAFE_JS_INTEGER) then
+  if (PtrUInt(frac + 22) <= 21) and
+     (UInt64(v64) shr 53 = 0) then
   {$endif TSYNEXTENDED80}
     // Clinger's fast path: d64 and 10^-frac are both exact doubles, so a single
     // IEEE division is correctly rounded - whereas POW10[frac] * d64 is not,

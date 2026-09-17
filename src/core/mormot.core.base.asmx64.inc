@@ -1904,9 +1904,9 @@ function GetNumericVariantSsse3(Json: PUtf8Char; var Value: TVarData;
         jns     @scalarConvert
         cmp     r10, -22
         jl      @scalarTrim
-        mov     rax, $001fffffffffffff
-        cmp     r9, rax
-        jg      @scalarTrim
+        mov     rax, r9
+        shr     rax, 53
+        jnz      @scalarTrim
 @scalarConvert:
         test    r11b, 2
         jz      @nil
@@ -1916,9 +1916,9 @@ function GetNumericVariantSsse3(Json: PUtf8Char; var Value: TVarData;
         lea     rax, [r10 + 22]
         cmp     rax, 21
         ja      @scalarGeneral
-        mov     rax, $001fffffffffffff
-        cmp     r9, rax
-        jg      @scalarGeneral
+        mov     rax, r9
+        shr     rax, 53
+        jnz     @scalarGeneral
         pxor    xmm0, xmm0
         cvtsi2sd xmm0, r9
         neg     r10
