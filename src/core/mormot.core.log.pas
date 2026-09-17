@@ -1276,10 +1276,10 @@ type
     procedure LogFileInitLocked(nfo: PSynLogThreadInfo);
     function LogFileInitOrUnlock(nfo: PSynLogThreadInfo): boolean;
     function PerformRotationOrUnlock(nfo: PSynLogThreadInfo): boolean;
-    procedure LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
-      {$ifdef ISDELPHI} ; addr: PtrUInt = 0 {$endif});
-    procedure LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
-      fmt: PUtf8Char; args: PVarRec; argscount: PtrInt; microsecs: PInt64);
+    function LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
+      {$ifdef ISDELPHI} ; addr: PtrUInt = 0 {$endif}): boolean;
+    function LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject; fmt: PUtf8Char;
+      args: PVarRec; argscount: PtrInt; microsecs: PInt64): boolean;
     procedure AddLogThreadName;
     procedure CreateLogWriter; virtual;
     procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
@@ -1570,7 +1570,6 @@ type
     /// manual low-level ISynLog release after TSynLog.Enter execution
     // - each call to ManualEnter should be followed by a matching ManualLeave
     procedure ManualLeave;
-      {$ifdef HASINLINE}inline;{$endif}
     /// allow to temporary disable remote logging
     // - uses a non-reentrant per-thread flag and does not acquire a writer lock
     // - to be used within a try ... finally section:
@@ -5732,21 +5731,19 @@ begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   dec(ms, PInt64(refcnt)^ shr 8); // elapsed time since Enter
   if not BeginWrite(nfo) then
     exit;
-  if fWriter = nil then
+  if fWriter <> nil then
   begin
-    EndWrite(nfo);
-    exit;
+    fThreadInfo := nfo;
+    LogHeaderNoRecursion(fWriter, sllLeave, @nfo^.CurrentTimeAndThread);
+    rec := nfo^.RecursionCount; // rec <= MAX_SYNLOGRECURSION = 53
+    if rec <> 0 then // inlined AddChars(#9, rec)
+    begin
+      FillCharFast(fWriter.B[1], rec, 9); // LogHeaderNoRecursion did AddShort()
+      inc(fWriter.B, rec);
+    end;
+    fWriter.AddMicroSec(ms);
+    fWriterEcho.AddEndOfLine(sllLeave);
   end;
-  fThreadInfo := nfo;
-  LogHeaderNoRecursion(fWriter, sllLeave, @nfo^.CurrentTimeAndThread);
-  rec := nfo^.RecursionCount; // rec <= MAX_SYNLOGRECURSION = 53
-  if rec <> 0 then // inlined AddChars(#9, rec)
-  begin
-    FillCharFast(fWriter.B[1], rec, 9); // LogHeaderNoRecursion did AddShort()
-    inc(fWriter.B, rec);
-  end;
-  fWriter.AddMicroSec(ms);
-  fWriterEcho.AddEndOfLine(sllLeave);
   EndWrite(nfo);
 end;
 
@@ -5885,19 +5882,7 @@ function TSynLog.LockAndPrepareEnter(nfo: PSynLogThreadInfo;
 var
   ms, rec: Int64;
 begin
-  if not BeginWrite(nfo) or
-     ((not (logInitDone in fFlags) and
-       not LogFileInitOrUnlock(nfo)) or
-      ((pendingRotate in fPendingFlags) and
-       not PerformRotationOrUnlock(nfo))) then
-  begin
-    if nfo^.RecursionCount <> 0 then
-      dec(nfo^.RecursionCount); // undo DoEnter()
-    if microsecs <> nil then
-      microsecs^ := 0;
-    result := false; // nested writer or cold init/rotation failure
-    exit;
-  end;
+  // syscalls before the lock
   if sllLeave in fFamily.Level then
   begin
     QueryPerformanceMicroSeconds(ms);
@@ -5914,15 +5899,30 @@ begin
       microsecs^ := 0;
     rec := 1;
   end;
+  // lock and ensure the output file is prepared
+  if not BeginWrite(nfo) or
+     ((not (logInitDone in fFlags) and
+       not LogFileInitOrUnlock(nfo)) or
+      ((pendingRotate in fPendingFlags) and
+       not PerformRotationOrUnlock(nfo))) then
+  begin
+    if nfo^.RecursionCount <> 0 then
+      dec(nfo^.RecursionCount); // undo DoEnter()
+    if microsecs <> nil then
+      microsecs^ := 0;
+    result := false; // nested writer or cold init/rotation failure
+    exit;
+  end;
   nfo^.Recursion[nfo^.RecursionCount - 1] := rec;
   SetThreadInfoAndThreadName(self, nfo);
   result := true;
 end;
 
-procedure TSynLog.LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
-  {$ifdef ISDELPHI} ; addr: PtrUInt {$endif});
+function TSynLog.LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
+  {$ifdef ISDELPHI} ; addr: PtrUInt {$endif}): boolean;
 begin
-  if not LockAndPrepareEnter(nfo, nil) then
+  result := LockAndPrepareEnter(nfo, nil);
+  if not result then
     exit;
   LogHeader(sllEnter, inst);
   if txt <> nil then
@@ -5935,10 +5935,11 @@ begin
   EndWrite(nfo);
 end;
 
-procedure TSynLog.LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
-  fmt: PUtf8Char; args: PVarRec; argscount: PtrInt; microsecs: PInt64);
+function TSynLog.LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
+  fmt: PUtf8Char; args: PVarRec; argscount: PtrInt; microsecs: PInt64): boolean;
 begin
-  if not LockAndPrepareEnter(nfo, microsecs) then
+  result := LockAndPrepareEnter(nfo, nil);
+  if not result then
     exit;
   LogHeader(sllEnter, inst);
   fWriter.AddFmt(fmt, args, argscount, twOnSameLine,
@@ -5982,8 +5983,8 @@ begin
     if addr <> 0 then
       dec(addr, 5);
   end;
-  log.LogEnter(nfo, aInstance, aMethodName, addr);
-  pointer(result) := PAnsiChar(log) + log.fISynLogOffset; // result := self
+  if log.LogEnter(nfo, aInstance, aMethodName, addr) then
+    pointer(result) := PAnsiChar(log) + log.fISynLogOffset; // result := self
 end;
 
 {$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
@@ -6012,10 +6013,11 @@ var
 begin // expects the caller to have set Local = nil
   result := Add;
   nfo := result.DoEnter;
-  if nfo = nil then
-    exit; // nothing to log
-  result.LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs), nil);
-  pointer(Local) := PAnsiChar(result) + result.fISynLogOffset; // result := self
+  if nfo <> nil then
+    if result.LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs), nil) then
+      pointer(Local) := PAnsiChar(result) + result.fISynLogOffset // result := self
+    else
+      result := nil;
 end;
 
 class function TSynLog.EnterLocal(var Local: ISynLog; aInstance: TObject;
@@ -6025,10 +6027,11 @@ var
 begin // expects the caller to have set Local = nil
   result := Add;
   nfo := result.DoEnter;
-  if nfo = nil then
-    exit; // nothing to log
-  result.LogEnter(nfo, aInstance, aMethodName); // with refcnt = 1
-  pointer(Local) := PAnsiChar(result) + result.fISynLogOffset; // result := self
+  if nfo <> nil then
+    if result.LogEnter(nfo, aInstance, aMethodName) then // with refcnt = 1
+      pointer(Local) := PAnsiChar(result) + result.fISynLogOffset // result := self
+    else
+      result := nil;
 end;
 
 class function TSynLog.EnterLocalString(var Local: ISynLog; aInstance: TObject;
@@ -6056,7 +6059,11 @@ var
 begin
   nfo := DoEnter;
   if nfo <> nil then
-    LogEnter(nfo, aInstance, aMethodName);
+    if not LogEnter(nfo, aInstance, aMethodName) then
+    begin
+      inc(nfo^.RecursionCount); // restore matching ManualLeave level
+      nfo^.Recursion[nfo^.RecursionCount - 1] := 0; // failed ManualEnter
+    end;
 end;
 
 procedure TSynLog.ManualEnter(aInstance: TObject; TextFmt: PUtf8Char;
@@ -6066,12 +6073,25 @@ var
 begin
   nfo := DoEnter;
   if nfo <> nil then
-    LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs), MicroSecs);
+    if not LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs), MicroSecs) then
+    begin
+      inc(nfo^.RecursionCount); // restore matching ManualLeave level
+      nfo^.Recursion[nfo^.RecursionCount - 1] := 0; // failed ManualEnter
+    end;
 end;
 
 procedure TSynLog.ManualLeave;
+var
+  nfo: PSynLogThreadInfo;
 begin
-  if self <> nil then
+  if self = nil then
+    exit;
+  nfo := @PerThreadInfo;
+  if nfo^.RecursionCount = 0 then
+    exit;
+  if nfo^.Recursion[nfo^.RecursionCount - 1] = 0 then
+    dec(nfo^.RecursionCount) // consume failed ManualEnter
+  else
     _Release;
 end;
 
