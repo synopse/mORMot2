@@ -4988,6 +4988,11 @@ begin
   end;
 end;
 
+function GetExtendedHook(P: PUtf8Char; out err: integer): TSynExtended;
+begin
+  result := GetExtended(P, err); // resolve the proper GetExtended() overload
+end;
+
 procedure TTestCoreBase.NumericalConversions;
 var
   HasFP80: boolean;
@@ -5110,127 +5115,131 @@ var
 
   procedure BenchmarkNumbers;
   var
-    i: PtrUInt;
-    err, len: integer;
-    p, p2: PUtf8Char;
-    c: AnsiChar;
+    i, l: PtrUInt;
+    c: cardinal;
+    err: integer;
+    p: PUtf8Char;
+    lens: TBytes;
+    gen: TLecuyer;
     d, d0: double;
-    v1, v2: TVarData;
-    v: array[1 .. 20000] of TShort23;
-    dot: array[1 .. high(v)] of byte;
-    Timer: TPrecisionTimer;
+    data: RawUtf8;
+    tmp: TShort23;
+
+    procedure DoTest(GetExt: TGetExtended; GetNum: TGetNumericVariantFromJson);
+    var
+      i: PtrUInt;
+      p, p2: PUtf8Char;
+      d: double;
+      d64: Int64;
+      err: integer;
+      vd: TVarData;
+      Timer: TPrecisionTimer;
+    begin
+      check(Assigned(GetExt));
+      d64 := 0;
+      Timer.Start;
+      p := pointer(data);
+      for i := 0 to high(lens) do
+      begin
+        d := GetExt(p, err);
+        CheckEqual(err, 0, 'p');
+        Check((lens[i] <= 3) or (PInt64(@d)^ <> d64), 'd64');
+        d64 := PInt64(@d)^; // never twice the same number (if big enough)
+        inc(p, lens[i] + 1);
+      end;
+      NotifyTestSpeed('GetExtended%', [tmp], length(lens), length(data), @Timer);
+      Timer.Start;
+      p := pointer(data);
+      for i := 0 to high(lens) do
+      begin
+        PCardinal(@vd.VType)^ := varEmpty;
+        p2 := GetNumericVariantFromJson(p, vd, {double=}true);
+        Check(p2 - p = lens[i]);
+        Check(vd.VType >= varInteger);
+        p := p2 + 1;
+      end;
+      NotifyTestSpeed('GetNumericVariant%', [tmp], length(lens), length(data), @Timer);
+    end;
+
   begin
-    // 'x.y' and 'x.y0' are the same number, so should return the same double
-    FillCharFast(v, SizeOf(v), 0);
-    len := 0;
-    for i := 1 to high(v) do // pre-compute all values
+    // pre-compute all number values as #0-separated huge string
+    SetLength(lens, 200000);
+    gen.SeedGenerator(200000); // up to 16GB of deterministic distribution
+    SetLength(data, 1758350);  // generate 1.7MB of contiguous numbers
+    p := pointer(data);
+    for i := 0 to high(lens) do
     begin
-      case i and 15 of
-        0, 12, 13:
-          FormatShort('%', [
-            i div 9 + 1], v[i]);            // 1 char
-        1, 14, 15:
-          FormatShort('%', [
-            i div 99 + 1], v[i]);           // 1-2 chars
-        2:
-          FormatShort('%.%', [
-            i div 10,
-            i mod 10], v[i]);               // ~3-6 chars
-        3:
-          FormatShort('123%.%', [
-            i mod 10000,
-            i mod 10], v[i]);               // ~6-10 chars
-        4:
-          FormatShort('123456%.%', [
-            i mod 100000,
-            i mod 100], v[i]);              // ~10-14 chars
-        5:
-          FormatShort('123456789%.%', [
-            i mod 100000,
-            i mod 1000], v[i]);             // ~14-18 chars
-        6:
-          FormatShort('123456789012%.%', [
-            i mod 10000,
-            i mod 1000], v[i]);             // ~17-21 chars
-        7:
-          FormatShort('0.00000000000%', [
-            i mod 10], v[i]);               // long small fraction
-        8:
-          FormatShort('12.3456789000%', [
-            i mod 100], v[i]);              // padded fraction
-        9:
-          FormatShort('123456789012345.%', [
-            i mod 10], v[i]);               // 17 significant digits
-        10:
-          FormatShort('1e%', [
-            i mod 100], v[i]);              // scientific notation
-        11:
-          FormatShort('%.%e%', [
-            i mod 100, i div 100, i mod 10], v[i]);
-      end;
-      p := @v[i];
-      p2 := PosChar(p + 1, '.');
-      if p2 = nil then
-        dot[i] := 0
+      c := gen.Next;
+      tmp[0] := #0;
+      if c and $70000 > $50000 then
+        PWord(@tmp)^ := 1 + ord('-') shl 8 // a few negative values
       else
-      begin
-        dot[i] := p2 - p;
-        Check(p[dot[i]] = '.', 'dot');
+        tmp[0] := #0;
+      case i and 15 of // fixed order/layout of field types (like real data)
+        0, 8, 12, 15:
+          AppendShortCardinal(c shr (32 - (c and 15)), tmp);
+        1, 9, 13:
+          AppendShortQWord(QWord(c) * i, tmp);
+        2, 10, 14:
+          AppendShortCardinal(c shr 24, tmp);
+        3:
+          tmp[0] := AnsiChar(Curr64ToPChar(c, @tmp[1]));
+        4, 11:
+          AppendShortVar(tmp, [c and 15, '.', c shr 20]);
+        5:
+          AppendShortVar(tmp, [c shr 20, 'E', c and 127]);
+        6:
+          AppendShortVar(tmp, [c shr 20, '.', (c shr 10) and 31, 'e', c and 63]);
+        7:
+          AppendShortVar(tmp, ['0.000000000000000',c shr 28 + 1]);
       end;
-      inc(len, ord(p^) * 3 + 2);
+      //ConsoleWrite(tmp);
+      MoveFast(tmp[1], p^, ord(tmp[0]));
+      l := ord(tmp[0]);
+      lens[i] := l;
+      p[l] := #0; // all with a trailing #0
+      inc(p, l + 1);
     end;
-    Timer.Start;
-    for i := 1 to high(v) do
+    CheckEqual(p - pointer(data), length(data));
+    CheckHash(data, $D2D00549);
+    // 'x.y' and 'x.y0' are the same number, so should return the same double
+    p := pointer(data);
+    for i := 0 to high(lens) do
     begin
-      p := @v[i];
-      d := GetExtended(p + 1, err);
-      CheckEqual(err, 0, 'p');
-      if not ((i and 15) in [10, 11]) then  // don't append to exponent
-        p[ord(p^) + 1] := '0'; // s := s + '0' with no allocation
-      d0 := GetExtended(p + 1, err);
-      CheckEqual(err, 0, 'p0');
-      if dot[i] <> 0 then
+      if i and 15 = 3 then // Curr64ToPChar e.g. 225140.5360 49537.6115
       begin
-        if not ((i and 15) in [10, 11]) then
-          Check(PQWord(@d)^ = PQWord(@d0)^, 'd=d0 bits');
-        p[dot[i]] := '1'; // e.g. '0.00' -> '0201'
+        d := GetExtended(p, err); // makes also a non sequential L1 cache access
+        CheckEqual(err, 0, 'd');
+        Check(PInt64(@d)^ <> 0);
+        l := lens[i];
+        tmp[l + 1] := '0';
+        tmp[l + 2] := #0;
+        MoveFast(p^, tmp[1], l);
+        d0 := GetExtended(@tmp[1], err); // parse '0' appended value
+        CheckEqual(err, 0, 'd0');
+        CheckEqual(PInt64(@d0)^, PInt64(@d)^, 'frac0'); // same binary64
       end;
-      d := GetExtended(p + 1, err);
-      Check(PInt64(@d)^ <> 0);
-      CheckEqual(err, 0, 'p1');
+      inc(p, lens[i] + 1);
     end;
-    NotifyTestSpeed('GetExtended', length(v) * 3, len, @Timer);
-    Timer.Start;
-    for i := 1 to high(v) do
+    // benchmark GetExtended() and GetNumericVariantFromJson()
+    for i := 1 to 1 do
     begin
-      p := @v[i];  // e.g. '0201'
-      c := p[1];
-      p[1] := '7'; // '0' is not permitted as first JSON digit
-      PCardinal(@v1.VType)^ := varEmpty;
-      Check(GetNumericVariantFromJson(p + 1, v1, {vardouble=}true) > p + ord(p^));
-      CheckNotEqual(v1.VType, varEmpty);
-      Check(v1.VInt64 <> 0);
-      p[1] := c;
-      if dot[i] <> 0 then
-        p[dot[i]] := '.'; // e.g. '0.00' -> '0201'
-      PCardinal(@v1.VType)^ := varEmpty;
-      Check(GetNumericVariantFromJson(p + 1, v1, {vardouble=}true) > p + ord(p^));
-      CheckNotEqual(v1.VType, varEmpty);
-      p[ord(p^) + 1] := #0; // trim ending '0'
-      PCardinal(@v2.VType)^ := varEmpty;
-      Check(GetNumericVariantFromJson(p + 1, v2, {vardouble=}true) = p + ord(p^) + 1);
-      CheckNotEqual(v2.VType, varEmpty);
-      CheckEqual(v1.VType, v2.VType);
-      if dot[i] <> 0 then
-        CheckEqual(v1.VInt64, v2.VInt64);
+      {$ifdef ASMX64NOTPIC} { SIMD/SSE3 x64 asm in mormot.core.base.asmx64.inc }
+      tmp := 'Pas';
+      DoTest(@GetExtendedPas, @GetNumericVariantPas);
+      tmp := 'Ssse3';
+      if cpuSSSE3 in X64CpuFeatures then
+        DoTest(@GetExtendedSsse3, @GetNumericVariantSsse3);
+      {$else}
+      tmp[0] := #0;
+      {$ifdef WIN32DELPHI} // x87 asm of GetExtended
+      DoTest(@mormot.core.base.GetExtended, @GetNumericVariantFromJson);
+      {$else}
+      DoTest(@GetExtendedHook, @GetNumericVariantFromJson); // purepascal
+      {$endif WIN32DELPHI}
+      {$endif ASMX64NOTPIC}
     end;
-    NotifyTestSpeed('GetNumericVariant', length(v) * 3, len, @Timer);
-    // GetNumericVariantFromJson() had the same issue for varDouble values
-    // (with both SSE2 and x87 FPU, since its local d variable is a double)
-    CheckJsonDoubleBits('0.00003', $3EFF75104D551D69);
-    CheckJsonDoubleBits('0.00006', $3F0F75104D551D69);
-    CheckJsonDoubleBits('-0.00007', QWord($BF12599ED7C6FBD2));
-    CheckJsonDoubleBits('0.00012', $3F1F75104D551D69);
+    CheckHash(data, $D2D00549, 'untouched');
   end;
 
   procedure CheckInvalidNumber(const text: RawUtf8; extendedToo: boolean = true);
@@ -5968,6 +5977,12 @@ begin
     Check(err <> 0);
     Check(not IsInfinite(d));
   end;
+  // GetNumericVariantFromJson() had the same issue for varDouble values
+  // (with both SSE2 and x87 FPU, since its local d variable is a double)
+  CheckJsonDoubleBits('0.00003', $3EFF75104D551D69);
+  CheckJsonDoubleBits('0.00006', $3F0F75104D551D69);
+  CheckJsonDoubleBits('-0.00007', QWord($BF12599ED7C6FBD2));
+  CheckJsonDoubleBits('0.00012', $3F1F75104D551D69);
   BenchmarkNumbers;
   // validate ScanUtf8()
   Check(ScanUtf8('1 2 3', '  %', [@i, @j, @d]) = 0);
