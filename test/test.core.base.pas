@@ -5120,6 +5120,7 @@ var
     err: integer;
     p: PUtf8Char;
     lens: TBytes;
+    ref: TInt64DynArray;
     gen: TLecuyer;
     d, d0: double;
     data: RawUtf8;
@@ -5131,11 +5132,16 @@ var
       p, p2: PUtf8Char;
       d: double;
       d64: Int64;
+      setref: boolean;
       err: integer;
       vd: TVarData;
       Timer: TPrecisionTimer;
     begin
       check(Assigned(GetExt));
+      check(Assigned(GetNum));
+      setref := ref = nil;
+      if setref then
+        SetLength(ref, length(lens));
       d64 := 0;
       Timer.Start;
       p := pointer(data);
@@ -5145,9 +5151,14 @@ var
         CheckEqual(err, 0, 'p');
         Check((lens[i] <= 3) or (PInt64(@d)^ <> d64), 'd64');
         d64 := PInt64(@d)^; // never twice the same number (if big enough)
+        if setref then
+          ref[i] := d64
+        else
+          Check(ref[i] = d64, 'ref');
         inc(p, lens[i] + 1);
       end;
       NotifyTestSpeed('GetExtended%', [tmp], length(lens), length(data), @Timer);
+      // GetExtended() on Core i5 13500: SSSE3 is around 30-35% faster
       Timer.Start;
       p := pointer(data);
       for i := 0 to high(lens) do
@@ -5156,9 +5167,20 @@ var
         p2 := GetNum(p, vd, {double=}true);
         Check(p2 - p = lens[i]);
         Check(vd.VType >= varInteger);
+        if not HasFP80 then
+          if vd.VType = varDouble then
+            Check(ref[i] = vd.VInt64, 'refvd1')
+          else if Check(VariantToDouble(variant(vd), PDouble(@d64)^)) then
+            Check(ref[i] = d64, 'refvd2')
+        else if Check(VariantToDouble(variant(vd), d)) then
+          CheckSame(d, PDouble(@ref[i])^, DOUBLE_SAME, 'refvd3');
         p := p2 + 1;
       end;
       NotifyTestSpeed('GetNumericVariant%', [tmp], length(lens), length(data), @Timer);
+      // GetNumericVariantFromJson() on Core i5 13500:
+      // - FPC: about 2.7 ms Pascal versus about 2.0 ms SSSE3 with checks
+      // - Delphi: about 2.9 ms Pascal versus about 2.0 ms SSSE3
+      // after removing Check() overhead: 2.46 ms Pascal versus 1.85 ms SSSE3
     end;
 
   begin
@@ -5228,7 +5250,8 @@ var
       tmp := 'Pas';
       DoTest(@GetExtendedPas, @GetNumericVariantPas);
       tmp := 'Ssse3';
-      if cpuSSSE3 in X64CpuFeatures then
+      if cfSSE3 in CpuFeatures then
+        // cpuSSSE3 in X64CpuFeatures is changed by other threads
         DoTest(@GetExtendedSsse3, @GetNumericVariantSsse3);
       {$else}
       tmp[0] := #0;
