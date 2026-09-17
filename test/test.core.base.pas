@@ -5748,13 +5748,16 @@ begin
     CheckDoubleToShort(-0.00123456789012345, '-0.00123456789012');
     CheckDoubleToShort(0.000123456789012345, '0.00012345678901');
     CheckDoubleToShort(-0.000123456789012345, '-0.00012345678901');
-    d := GetExtended('0e400', err);
+    s := '0e400';
+    d := GetExtended(pointer(s), err);
     CheckEqual(err, 0);
     Check(d = 0);
-    d := GetExtended('0e-400', err);
+    s := '0e-400';
+    d := GetExtended(pointer(s), err);
     CheckEqual(err, 0);
     Check(d = 0);
-    d := GetExtended('-0e400', err);
+    s := '-0e400';
+    d := GetExtended(pointer(s), err);
     CheckEqual(err, 0);
     Check(d = 0); // '-0' -> 0 with ECMAScript's number-to-string rules
     CheckGetExtendedBits('4.9406564584124654E-324', $0000000000000001);

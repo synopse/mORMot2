@@ -7332,7 +7332,6 @@ begin
   if nfo^.ThreadBitLo = 0 then
     InitThreadNumber(nfo);
   include(nfo^.Flags, tiWriting);
-  log := nil;
   mainfam := nil;
   ignored := false;
   try
