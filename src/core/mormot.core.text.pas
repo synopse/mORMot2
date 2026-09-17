@@ -2048,6 +2048,9 @@ procedure FormatShort(const Format: RawUtf8; const Args: array of const;
 function FormatToShort(const Format: RawUtf8; const Args: array of const): ShortString;
   {$ifdef FPC}inline;{$endif} // Delphi has trouble with this
 
+/// append some text items to a ShortString variable
+procedure AppendShortVar(var Text: ShortString; const Args: array of const);
+
 /// fast Format() function replacement, tuned for small content
 // - use the same single token % (and implementation) than FormatUtf8()
 procedure FormatString(const Format: RawUtf8; const Args: array of const;
@@ -9920,6 +9923,16 @@ function FormatToShort(const Format: RawUtf8;
 begin
   result[0] := AnsiChar(FormatBufferRaw(
     Format, @Args[0], length(Args), @result[1], high(result)) - @result[1]);
+end;
+
+procedure AppendShortVar(var Text: ShortString; const Args: array of const);
+var
+  f: TFormatUtf8;
+begin
+  {%H-}f.Init;
+  f.AddVarRec(@Args[0], length(Args)); // f.DoAppend for ShortString
+  if f.size <> 0 then
+    Text[0] := AnsiChar(f.WriteMax(@Text[ord(Text[0]) + 1], high(Text) - ord(Text[0])) - @Text[1]);
 end;
 
 procedure FormatAdder(var Dest: TSynTempAdder; const Format: RawUtf8; const Args: array of const);
