@@ -3111,9 +3111,7 @@ type
 function GetNumericVariantPas(Json: PUtf8Char;
   var Value: TVarData; AllowVarDouble: boolean): PUtf8Char;
 var
-  /// redirect to GetNumericVariantPas by default which seems the fastest
-  // - you may try GetNumericVariantSsse3() for SIMD process on longer numbers
-  // e.g. by setting FORCE_SSSE3_JSON conditional at compilation time
+  /// redirect to either GetNumericVariantPas or GetNumericVariantSsse3
   GetNumericVariantStub: TGetNumericVariantFromJson = GetNumericVariantPas;
 {$endif ASMX64NOTPIC}
 
@@ -14019,12 +14017,10 @@ begin
   except // paranoid to avoid fatal exception during process initialization
   end;
   {$endif FPC}
-  {$ifdef FORCE_SSSE3_JSON}
   {$ifdef ASMX64NOTPIC}
-  if cpuSSSE3 in X64CpuFeatures then
+  if cpuSSSE3 in X64CpuFeatures then // SIMD SSSE3 seems 25% faster
     GetNumericVariantStub := @GetNumericVariantSsse3;
   {$endif ASMX64NOTPIC}
-  {$endif FORCE_SSSE3_JSON}
 end;
 
 

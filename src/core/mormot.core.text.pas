@@ -11953,8 +11953,8 @@ begin
   _VariantToTempUtf8DateTimeIso8601 := @__VariantToUtf8DateTimeIso8601;
   _VariantSaveJson              := __VariantSaveJson;
   {$ifdef ASMX64NOTPIC}
-  if cpuSSSE3 in X64CpuFeatures then
-    GetExtendedStub := @GetExtendedSsse3; // SIMD SSSE3 seems the fastest
+  if cpuSSSE3 in X64CpuFeatures then // SIMD SSSE3 seems 30% faster
+    GetExtendedStub := @GetExtendedSsse3;
   {$endif ASMX64NOTPIC}
 end;
 

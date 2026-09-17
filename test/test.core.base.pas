@@ -5153,7 +5153,7 @@ var
       for i := 0 to high(lens) do
       begin
         PCardinal(@vd.VType)^ := varEmpty;
-        p2 := GetNumericVariantFromJson(p, vd, {double=}true);
+        p2 := GetNum(p, vd, {double=}true);
         Check(p2 - p = lens[i]);
         Check(vd.VType >= varInteger);
         p := p2 + 1;
