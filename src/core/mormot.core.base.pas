@@ -13711,12 +13711,16 @@ begin
   result := true;
   vd := VarDataFromVariant(V); // handle varVariantByRef
   case cardinal(vd^.VType) of
-    varEmpty,
+    varEmpty,                  // include most common integer types
     varNull:
       Value := 0;
+    varInteger:
+      Value := vd^.VInteger;
+    varInt64:
+      Value := vd^.VInt64;
     varDouble,
     varDate:
-      Value := vd^.VDouble;
+      Value := vd^.VDouble;    // direct assignment of FP types
     varSingle:
       Value := vd^.VSingle;
     varCurrency:
