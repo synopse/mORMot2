@@ -7859,10 +7859,11 @@ var
   p: PUtf8Char;
 begin // overriden to take fLineTextOffset into account
   if (self = nil) or
-     (cardinal(aIndex) >= cardinal(fCount)) or
-     (aUpperSearch = '') or
-     (fLevels = nil) or
-     (fLevels[aIndex] = sllNone) then // an unparsed row has no text at offset
+     (fLevels = nil) then // plain text file, e.g. for SearchNextText()
+    result := inherited LineContains(aUpperSearch, aIndex)
+  else if (cardinal(aIndex) >= cardinal(fCount)) or
+          (aUpperSearch = '') or
+          (fLevels[aIndex] = sllNone) then // an unparsed row has no text at offset
     result := false
   else
   begin
