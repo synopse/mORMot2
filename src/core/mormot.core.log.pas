@@ -1621,6 +1621,7 @@ type
   end;
 
   TSynLogDynArray = array of TSynLog;
+  TSynLogFamilyDynArray = array of TSynLogFamily;
 
 const
   /// maximum content size for TSynLog.LogEscape
@@ -4389,7 +4390,7 @@ var
   /// internal list of registered TSynLogFamily instances
   // - up to MAX_SYNLOGFAMILY TSynLog sub-classes may be defined
   // - protected by SynLogFiles lock
-  SynLogFamily: array of TSynLogFamily;
+  SynLogFamily: TSynLogFamilyDynArray;
 
   /// internal list of created TSynLog instances, one per each log file on disk
   // - also used by AutoFlushProc() to get a global list of TSynLog instances
@@ -7300,7 +7301,7 @@ var
 procedure SynLogException(const Ctxt: TSynLogExceptionContext);
 var
   fam, mainfam: TSynLogFamily;
-  families: array of TSynLogFamily;
+  families: TSynLogFamilyDynArray;
   log: TSynLog;
   nfo: PSynLogThreadInfo;
   info: ^TSynLogExceptionInfo;
