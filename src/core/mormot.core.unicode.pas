@@ -2152,6 +2152,9 @@ function HasOnlyChar(const text: RawUtf8; const chars: TSynAnsicharSet): boolean
 // - here control chars have an ASCII code in [#0 .. ' '], i.e. text[] <= last
 function TrimControlChars(const text: RawUtf8; last: AnsiChar = ' '): RawUtf8;
 
+/// returns true if any P[0..Len-1] is in [#0 .. #31] range
+function HasControlChars(P: PUtf8Char; Len: PtrUInt): boolean;
+
 /// split a RawUtf8 string into two strings, according to SepStr separator
 // - returns true and LeftStr/RightStr if they were separated by SepStr
 // - if SepStr is not found, LeftStr=Str and RightStr='' and returns false
@@ -8895,6 +8898,22 @@ begin
     if text[i] > ' ' then
       exit;
   result := true;
+end;
+
+function HasControlChars(P: PUtf8Char; Len: PtrUInt): boolean;
+begin
+  result := true;
+  inc(Len, PtrUInt(P)); // Len becomes end address
+  if P <> nil then
+    while true do
+      if PtrUInt(P) <> Len then
+        if P^ >= ' ' then
+          inc(P)
+        else
+          exit // found #0..#31
+      else
+        break;
+  result := false; // scanned whole buffer without #0..#31
 end;
 
 function TrimControlChars(const text: RawUtf8; last: AnsiChar): RawUtf8;
