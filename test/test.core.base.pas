@@ -11550,6 +11550,28 @@ procedure TTestCoreBase.Debugging;
     end;
   end;
 
+  procedure TestPlainText;
+  var
+    log: TSynLogFileView;
+    source: RawUtf8;
+  begin
+    // a file with no TSynLog header nor rows is searched as plain text
+    source := 'first line'#13#10'some needle here'#13#10'last line';
+    log := TSynLogFileView.Create(pointer(source), length(source));
+    try
+      CheckEqual(log.Count, 3);
+      Check(log.EventLevel = nil, 'plain text');
+      Check(log.LineContains('NEEDLE', 1));
+      Check(not log.LineContains('NEEDLE', 0));
+      Check(not log.LineContains('NEEDLE', 3), 'out of range');
+      CheckEqual(log.SearchNextText('NEEDLE', 0, 1), 1);
+      CheckEqual(log.SearchPreviousText('NEEDLE', 2), 1);
+      CheckEqual(log.SearchNextText('NOTHING', 0, 1), -1);
+    finally
+      log.Free;
+    end;
+  end;
+
   procedure TestZonedLayout;
   const
     HEADER = 'C:\mormot2tests.exe 1.0.0 (2025-02-13 16:41:00)'#13#10 +
@@ -11773,6 +11795,7 @@ begin
   TestLogFileInit;
   // validate TSynLogFile
   TestLiveAppendedLines;
+  TestPlainText;
   TestZonedLayout;
   Test('D:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.4 (2011-04-07 11:09:06)'#13#10 +
     'Host=MyPC User=MySelf CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545 ' +
