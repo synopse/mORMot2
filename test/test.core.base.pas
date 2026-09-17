@@ -187,10 +187,16 @@ type
     fAdd, fDel: RawUtf8;
     fQuickSelectValues: TIntegerDynArray;
     rnd: PLecuyer;
+    HasValidUtf8Avx2: boolean;
     procedure Setup; override;
     function QuickSelectGT(IndexA, IndexB: PtrInt): boolean;
     procedure intadd(const Sender; Value: integer);
     procedure intdel(const Sender; Value: integer);
+    /// validate our optimized MoveFast/FillCharFast functions
+    procedure CustomRTLSlow(Sender: TObject);
+    /// low level fast Integer or Floating-Point to/from string conversion
+    // - especially the RawUtf8 or PUtf8Char relative versions
+    procedure NumericalConversionsSlow(Sender: TObject);
     // methods below are run in the background from _TDynArray startup
     /// test the TDynArrayHashed object and methods (dictionary features)
     // - this test will create an array of 200,000 items to test speed
@@ -205,6 +211,10 @@ type
     procedure TRawUtf8ListSlow(Context: TObject);
     /// test the TPipeStream class
     procedure TStreamSlow(Context: TObject);
+    /// client side geniune 64 bit identifiers generation
+    procedure TSynUniqueIdentifierSlow(Sender: TObject);
+    // test TSynQueue with all kind of values in a background thread
+    procedure TSynQueueSlow(Sender: TObject);
   published
     /// test RecordCopy(), TRttiMap and TRttiFilter
     procedure _Records;
@@ -224,8 +234,6 @@ type
     {$endif FPC_X64MM}
     /// test T*ObjArray types and the ObjArray*() wrappers
     procedure _TObjArray;
-    /// validate our optimized MoveFast/FillCharFast functions
-    procedure CustomRTL;
     /// test StrIComp() and AnsiIComp() functions
     procedure FastStringCompare;
     /// test IdemPropName() and IdemPropNameU() functions
@@ -243,9 +251,6 @@ type
     /// the Soundex search feature (i.e. TSynSoundex and all related
     // functions)
     procedure Soundex;
-    /// low level fast Integer or Floating-Point to/from string conversion
-    // - especially the RawUtf8 or PUtf8Char relative versions
-    procedure NumericalConversions;
     /// test low-level integer/Int64 functions
     procedure Integers;
     /// test crc32c in both software and hardware (SSE4.2) implementations
@@ -296,8 +301,6 @@ type
     procedure _TSynValidate;
     /// low-level TSynLogFile class and OS detection
     procedure Debugging;
-    /// client side geniune 64 bit identifiers generation
-    procedure _TSynUniqueIdentifier;
     {$ifdef OSWINDOWS}
     /// some Windows-specific tests
     procedure WindowsSpecificApi;
@@ -1892,13 +1895,21 @@ const
   end;
 
 begin
-  // run the slowest tests in a background thread
+  {$ifdef ASMX64AVX1}
+  HasValidUtf8Avx2 := (cpuHaswell in X64CpuFeatures);
+  {$else}
+  HasValidUtf8Avx2 := false; // IsValidUtf8Buffer = @IsValidUtf8Pas
+  {$endif ASMX64AVX1}
+  // run the slowest tests in background thread(s)
+  Run(NumericalConversionsSlow, self, 'NumericalConversions', true, false);
   Run(TDynArrayHashedSlow, self, 'TDynArrayHashed', true, false);
   Run(TSynDictionarySlow, self, 'TSynDictionary', true, false);
   Run(Utf8Slow, self, 'UTF-8', true, false);
   Run(TimeZonesSlow, self, 'TimeZones', true, false);
   Run(TRawUtf8ListSlow, self, 'TRawUtf8List', true, false);
   Run(TStreamSlow, self, 'TPipeStream', true, false);
+  Run(TSynUniqueIdentifierSlow, self, 'TSynUniqueIdentifier', true, false);
+  Run(CustomRTLSlow, self, 'CustomRTL', true, false);
   { TODO : implement TypeInfoToHash() if really needed }
   {
   h := TypeInfoToHash(TypeInfo(TAmount));
@@ -2675,7 +2686,7 @@ begin
   result := true;
 end;
 
-procedure TTestCoreBase.CustomRTL;
+procedure TTestCoreBase.CustomRTLSlow(Sender: TObject);
 // note: mormot.core.os.posix.inc redirects FillCharFast/MoveFast to the libc
 var
   buf: RawByteString;
@@ -4993,7 +5004,7 @@ begin
   result := GetExtended(P, err); // resolve the proper GetExtended() overload
 end;
 
-procedure TTestCoreBase.NumericalConversions;
+procedure TTestCoreBase.NumericalConversionsSlow(Sender: TObject);
 var
   HasFP80: boolean;
 
@@ -5251,7 +5262,6 @@ var
       DoTest(@GetExtendedPas, @GetNumericVariantPas);
       tmp := 'Ssse3';
       if cfSSE3 in CpuFeatures then
-        // cpuSSSE3 in X64CpuFeatures is changed by other threads
         DoTest(@GetExtendedSsse3, @GetNumericVariantSsse3);
       {$else}
       tmp[0] := #0;
@@ -6563,7 +6573,7 @@ var
   q: RawUtf8;
   Unic: RawByteString;
   Ucs4: RawUcs4;
-  WA, HasValidUtf8Avx2: Boolean;
+  WA: Boolean;
   lng: TLanguage;
   rb1, rb2, rb3: RawByteString;
   eng: TSynAnsiConvert;
@@ -7383,16 +7393,11 @@ begin
     else
       len120 := 0;
     Check(IsValidUtf8Buffer(P, len120), 'IsValidUtf8Buffer truncated');
-    {$ifdef ASMX64AVX1}
-    HasValidUtf8Avx2 := (cpuHaswell in X64CpuFeatures);
     if HasValidUtf8Avx2 then
     begin
       check(IsValidUtf8Small(U), 'IsValidUtf8Pas');
       Check(IsValidUtf8Pas(P, len120), 'IsValidUtf8Pas120');
     end;
-    {$else}
-    HasValidUtf8Avx2 := false; // IsValidUtf8Buffer = @IsValidUtf8Pas
-    {$endif ASMX64AVX1}
     for j := 1 to lenup100 do
     begin
       check(PosChar(P, U[j])^ = U[j], 'PosCharj');
@@ -11837,7 +11842,7 @@ begin
   checkEqual(nv.Count, 0);
 end;
 
-procedure TTestCoreBase._TSynUniqueIdentifier;
+procedure TTestCoreBase.TSynUniqueIdentifierSlow(Sender: TObject);
 const
   JAN2015_UNIX = 1420070400;
 var
@@ -12455,7 +12460,7 @@ type
   end;
   TNotifyTaskDynArray = array of TNotifyTask;
 
-procedure TTestCoreBase._TSynQueue;
+procedure TTestCoreBase.TSynQueueSlow(Sender: TObject);
 var
   o, i, j, k, n: integer; // not PtrInt
   f: TSynQueue;
@@ -12465,32 +12470,6 @@ var
   savedu: TRawUtf8DynArray;
   ev: TSynEvent;
 begin
-  // validate TSynEvent process
-  ev := TSynEvent.Create;
-  try
-    CheckEqual(PtrUInt(GetCurrentThreadID), PtrUInt(MainThreadID), 'mainthread');
-    for i := 1 to 10 do
-    begin
-      // emulate a ResetEvent between the two SetEvent state updates
-      ev.ResetEvent;
-      ev.SetEvent;
-      Check(ev.WaitFor(1000), 'WaitFor signal');
-      ev.SetEvent;
-      ev.ResetEvent;
-      ev.SetEvent;
-      Check(ev.WaitFor(INFINITE), 'WaitFor(INFINITE) signal');
-      // validate the main-thread CheckSynchronize() wrapper as well
-      ev.ResetEvent;
-      ev.SetEvent;
-      Check(ev.WaitForSafe(1000), 'WaitForSafe signal');
-      ev.SetEvent;
-      ev.ResetEvent;
-      ev.SetEvent;
-      Check(ev.WaitForSafe(INFINITE), 'WaitForSafe(INFINITE) signal');
-    end;
-  finally
-    ev.Free;
-  end;
   // validate TSynQueue with integer values
   f := TSynQueue.Create(TypeInfo(TIntegerDynArray));
   try
@@ -12651,6 +12630,41 @@ begin
     checkEqual(f.Count, 0);
   finally
     f.Free;
+  end;
+end;
+
+procedure TTestCoreBase._TSynQueue; // should run in the main thread
+var
+  i: PtrInt;
+  ev: TSynEvent;
+begin
+  // validate TSynQueue with all kind of values in a background thread
+  Run(TSynQueueSlow, self, 'TSynQueue', true, false);
+  // validate TSynEvent process in the main thread
+  ev := TSynEvent.Create;
+  try
+    CheckEqual(PtrUInt(GetCurrentThreadID), PtrUInt(MainThreadID), 'mainthread');
+    for i := 1 to 10 do
+    begin
+      // emulate a ResetEvent between the two SetEvent state updates
+      ev.ResetEvent;
+      ev.SetEvent;
+      Check(ev.WaitFor(1000), 'WaitFor signal');
+      ev.SetEvent;
+      ev.ResetEvent;
+      ev.SetEvent;
+      Check(ev.WaitFor(INFINITE), 'WaitFor(INFINITE) signal');
+      // validate the main-thread CheckSynchronize() wrapper as well
+      ev.ResetEvent;
+      ev.SetEvent;
+      Check(ev.WaitForSafe(1000), 'WaitForSafe signal');
+      ev.SetEvent;
+      ev.ResetEvent;
+      ev.SetEvent;
+      Check(ev.WaitForSafe(INFINITE), 'WaitForSafe(INFINITE) signal');
+    end;
+  finally
+    ev.Free;
   end;
 end;
 
