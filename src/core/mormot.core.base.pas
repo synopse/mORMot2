@@ -5726,7 +5726,7 @@ const
 
 procedure AppendShortByteHex(value: PtrUInt; var dest: ShortString);
 var
-  len: PtrInt;
+  len, v: PtrInt;
   d, hex: PAnsiChar;
 begin
   d := @dest;
@@ -5734,7 +5734,8 @@ begin
   if len + 2 > high(dest) then
     exit;
   hex := @HexCharsUpper;
-  d[len + 1] := hex[value shr 4];
+  v := value shr 4;
+  d[len + 1] := hex[v and $0f];
   inc(len, 2);
   value := value and $0f;
   d[len] := hex[value];
