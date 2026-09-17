@@ -165,12 +165,6 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     procedure AppendLocationShort(aPointer: PtrUInt; var aInfo: ShortString);
     function AppendLog(W: TTextWriter; aPointer: PtrUInt; NoHex: boolean): boolean;
-    // use fast O(log n) binary search to locate a symbol or line number
-    function FindSymbol(rva: TDebugAddress): PDebugSymbol;
-    function FindBlock(rva: TDebugAddress; out line: integer): PDebugBlock; overload;
-    function FindBlock(rva: TDebugAddress): PDebugBlock; overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    function FindBlockByName(const aUnitName: RawUtf8): PDebugBlock;
     function GetExeDate: RawUtf8;
   public
     /// get the available debugging information
@@ -213,6 +207,18 @@ type
     /// check if this memory address is part of the code segments of this instance
     function IsCode(aPointer: PtrUInt): boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// use fast O(log n) binary search to locate a symbol
+    function FindSymbol(aRva: TDebugAddress): PDebugSymbol;
+    /// use fast O(log n) binary search to locate a block
+    function FindBlock(aRva: TDebugAddress): PDebugBlock; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// use fast O(log n) binary search to locate a block with its line number
+    function FindBlock(aRva: TDebugAddress; out aLine: integer): PDebugBlock; overload;
+    /// brute force search of a block from its Symbol.Name
+    function FindBlockByName(const aUnitName: RawUtf8): PDebugBlock;
+    /// compute human friendly text information about a given RVA address
+    // - typically used after Create([dfsNoMabExternalCheck, dfsNoMabSaveAtCreate])
+    function Lookup(aRva: TDebugAddress): RawUtf8;
     /// return the symbol location according to the supplied absolute address
     // - filename, symbol name and line number (if any), as plain text, e.g.
     // $ 5880ea mormot.core.log.pas InitializeUnit (8475)
@@ -2261,6 +2267,27 @@ begin
             (aPointer <= fStop);
 end;
 
+function TDebugFile.Lookup(aRva: TDebugAddress): RawUtf8;
+var
+  line: integer; // not PtrInt
+  s: PDebugSymbol;
+  b: PDebugBlock;
+begin
+  FastAssignNew(result);
+  s := FindSymbol(aRva);
+  b := FindBlock(aRva, line);
+  if b <> nil then
+    if line = 0 then
+      result := b^.Symbol.Name
+    else
+      FormatUtf8('% (%)', [b^.FileName, line], result);
+  if s <> nil then
+    if result = '' then
+      result := s^.Name
+    else
+      Append(result, ' ', s^.Name);
+end;
+
 var
   DebugFileLast, DebugFileCurrent: TDebugFile; // aligned pointer access is atomic
   DebugFilesSafe: TRWLightLock;
@@ -3947,20 +3974,20 @@ begin
   end;
 end;
 
-function TDebugFile.FindSymbol(rva: TDebugAddress): PDebugSymbol;
+function TDebugFile.FindSymbol(aRva: TDebugAddress): PDebugSymbol;
 var
   i, L, R: PtrInt;
 begin
   L := 0;
   R := fSymbolsCount - 1;
   if (R >= 0) and
-     (rva > 0) then
+     (aRva > 0) then
     repeat // efficient O(log(n)) binary search
       i := (L + R) shr 1;
       result := @fSymbol[i];
-      if rva < result^.Start then
+      if aRva < result^.Start then
         R := i - 1
-      else if rva > result^.Stop then
+      else if aRva > result^.Stop then
         L := i + 1
       else
         exit; // found
@@ -3968,20 +3995,20 @@ begin
   result := nil; // not found
 end;
 
-function TDebugFile.FindBlock(rva: TDebugAddress): PDebugBlock;
+function TDebugFile.FindBlock(aRva: TDebugAddress): PDebugBlock;
 var
   i, L, R: PtrInt;
 begin
   L := 0;
   R := fBlocksCount - 1;
   if (R >= 0) and
-     (rva > 0) then
+     (aRva > 0) then
     repeat // efficient O(log(n)) binary search
       i := (L + R) shr 1;
       result := @fBlock[i];
-      if rva < result^.Symbol.Start then
+      if aRva < result^.Symbol.Start then
         R := i - 1
-      else if rva > result^.Symbol.Stop then
+      else if aRva > result^.Symbol.Stop then
         L := i + 1
       else
         exit; // found
@@ -3989,13 +4016,13 @@ begin
   result := nil; // not found
 end;
 
-function TDebugFile.FindBlock(rva: TDebugAddress; out line: integer): PDebugBlock;
+function TDebugFile.FindBlock(aRva: TDebugAddress; out aLine: integer): PDebugBlock;
 var
   i, L, R, max: PtrInt;
   a: PIntegerArray;
 begin
-  line := 0;
-  result := FindBlock(rva);
+  aLine := 0;
+  result := FindBlock(aRva);
   if result = nil then
     exit;
   // unit found -> search line number from within matching Addr[]
@@ -4008,14 +4035,14 @@ begin
     repeat // efficient O(log(i)) binary search
       i := (L + R) shr 1;
       a := @result^.Addr[i];
-      if rva < a^[0] then
+      if aRva < a^[0] then
         R := i - 1
       else if (i < max) and
-              (rva >= a^[1]) then
+              (aRva >= a^[1]) then
         L := i + 1
       else
       begin
-        line := result^.Line[i]; // found
+        aLine := result^.Line[i]; // found
         exit;
       end;
     until L > R;
