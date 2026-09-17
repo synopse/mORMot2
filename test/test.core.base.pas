@@ -11395,11 +11395,19 @@ type
   end;
 
 var
-  SynLogInitExceptionIgnore: boolean;
+  SynLogInitProbeCount: integer;
+  SynLogInitNestedDone: boolean;
 
 procedure TSynLogInitProbe.CreateLogWriter;
 begin
-  SynLogInitExceptionIgnore := fFamily.ExceptionIgnoreCurrentThread;
+  inc(SynLogInitProbeCount);
+  // we are already inside this TSynLog writer lock:
+  // this nested log must be silently ignored
+  if not SynLogInitNestedDone then
+  begin
+    SynLogInitNestedDone := true;
+    Log(sllDebug, 'nested during CreateLogWriter');
+  end;
   inherited CreateLogWriter;
 end;
 
@@ -11409,18 +11417,17 @@ procedure TTestCoreBase.Debugging;
   var
     fam: TSynLogFamily;
   begin
-    // if the log file creation raises (e.g. missing folder), the exception
-    // should not be logged into this instance with fWriter = nil: it did leak
-    // SynLogGlobalLock, so all other threads were blocked at their first log
     fam := TSynLogInitProbe.Family;
     fam.Level := [sllDebug];
     fam.NoFile := true;
-    TSynLogInitProbe.Add.CloseLogFile; // force LogFileInit, e.g. with --loop
+    TSynLogInitProbe.Add.CloseLogFile; // force LogFileInit
     Check(not fam.ExceptionIgnoreCurrentThread);
-    SynLogInitExceptionIgnore := false;
+    SynLogInitProbeCount := 0;
+    SynLogInitNestedDone := false;
     TSynLogInitProbe.Add.Log(sllDebug, 'init');
-    Check(SynLogInitExceptionIgnore, 'no exception log in LogFileInit');
-    Check(not fam.ExceptionIgnoreCurrentThread, 'flags restored');
+    CheckEqual(SynLogInitProbeCount, 1, 'no recursive CreateLogWriter');
+    Check(SynLogInitNestedDone, 'nested logging probe executed');
+    Check(not fam.ExceptionIgnoreCurrentThread, 'exception flag untouched');
   end;
 
   procedure TestLiveAppendedLines;
@@ -12471,7 +12478,6 @@ var
   r1, r2: TNotifyTask;
   savedint: TIntegerDynArray;
   savedu: TRawUtf8DynArray;
-  ev: TSynEvent;
 begin
   // validate TSynQueue with integer values
   f := TSynQueue.Create(TypeInfo(TIntegerDynArray));
