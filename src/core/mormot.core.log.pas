@@ -6614,47 +6614,53 @@ end;
 procedure TSynLog.LogInternalText(Level: TSynLogLevel; Text: PUtf8Char;
   TextLen: PtrInt; Instance: TObject; TextTruncateAtLength: PtrInt);
 var
+  nfo: PSynLogThreadInfo;
   lasterror, trunclen: PtrInt;
+  esc: boolean;
 begin
   lasterror := 0;
   if Level = sllLastError then
     lasterror := GetLastError;
-  if LockAndDisableExceptions then
-  try
-    LogHeader(Level, Instance);
-    if Text = nil then
-    begin
-      if Instance <> nil then
-        // by definition, a JSON object is serialized on the same line
-        fWriter.WriteObject(Instance, [woFullExpand]);
-    end
+  esc := false;
+  trunclen := TextLen;
+  if Text <> nil then // truncate/validate UTF-8 text outside of the lock
+  begin
+    if (TextTruncateAtLength <> 0) and
+       (TextLen > TextTruncateAtLength) then
+      trunclen := Utf8TruncatedLength(pointer(Text), TextLen, TextTruncateAtLength);
+    if IsValidUtf8Buffer(Text, trunclen) then
+      esc := HasControlChars(Text, trunclen) // need AddOnSameLine()
     else
-    begin
-      trunclen := TextLen;
-      if (TextTruncateAtLength <> 0) and
-         (TextLen > TextTruncateAtLength) then
-        trunclen := Utf8TruncatedLength(pointer(Text), TextLen, TextTruncateAtLength);
-      if IsValidUtf8Buffer(Text, trunclen) then // may use AVX2
+      trunclen := -1; // will fallback to AddEscapeBuffer()
+  end;
+  nfo := @PerThreadInfo;
+  if LockAndPrepareWrite(nfo) then
+  begin
+    LogHeader(Level, Instance);
+    if Text <> nil then
+      if trunclen >= 0 then // valid UTF-8, -1 if not IsValidUtf8Buffer()
+      begin
+        if esc then
+          fWriter.AddOnSameLine(Text, trunclen)
+        else
+          fWriter.AddNoJsonEscape(Text, trunclen);
         if trunclen <> TextLen then
         begin
-          fWriter.AddOnSameLine(Text, trunclen);
           fWriter.AddShort('... (truncated) length=');
           fWriter.AddU(TextLen);
-        end
-        else
-          fWriter.AddOnSameLine(Text, TextLen) // TextLen may be < length(Text)
-      else // binary is written as escaped text and $xx binary
-        fWriter.AddEscapeBuffer(Text, trunclen, TextTruncateAtLength);
-    end;
+        end;
+      end
+      else
+        fWriter.AddEscapeBuffer(Text, TextLen, TextTruncateAtLength)
+    else if Instance <> nil then
+      fWriter.WriteObject(Instance, [woFullExpand]);
     if lasterror <> 0 then
       AddErrorMessage(lasterror);
     LogTrailer(Level);
-  finally
-    fThreadInfo^.Flags := fThreadInfoBackup;
-    SynLogGlobalLock.UnLock;
-    if lasterror <> 0 then
-      SetLastError(lasterror);
+    exclude(nfo^.Flags, tiWriting);
   end;
+  if lasterror <> 0 then
+    SetLastError(lasterror);
 end;
 
 procedure TSynLog.LogInternalRtti(Level: TSynLogLevel; const aName: RawUtf8;
