@@ -14018,7 +14018,7 @@ begin
   end;
   {$endif FPC}
   {$ifdef ASMX64NOTPIC}
-  if cpuSSSE3 in X64CpuFeatures then // SIMD SSSE3 seems 25% faster
+  if cfSSSE3 in CpuFeatures then // SIMD SSSE3 seems 25% faster
     GetNumericVariantStub := @GetNumericVariantSsse3;
   {$endif ASMX64NOTPIC}
 end;
