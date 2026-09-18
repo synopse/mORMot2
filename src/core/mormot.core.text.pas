@@ -2005,6 +2005,9 @@ function VarRecIsDefault(V: PVarRec): boolean;
 function VarRecIsVoid(V: PVarRec): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// check if any V^.VType is vtObject/vtInterface and would need WriteObject()
+function VarRecHasObject(V: PVarRec; n: integer): boolean;
+
 /// fast Format() function replacement, optimized for RawUtf8
 // - only supported token is %, which will be written in the resulting string
 // according to each Args[] supplied items - so you will never get any exception
@@ -9041,6 +9044,19 @@ end;
 function VarRecIsVoid(V: PVarRec): boolean;
 begin // we consider a boolean to be never void by design
   result := (V^.VType <> vtBoolean) and VarRecIsDefault(V);
+end;
+
+function VarRecHasObject(V: PVarRec; n: integer): boolean;
+begin
+  result := true;
+  if n > 0 then
+    repeat
+      if V^.VType in [vtObject, vtInterface] then
+        exit; // would require WriteObject()
+      inc(V);
+      dec(n);
+    until n = 0;
+  result := false;
 end;
 
 function VarRecIsDefault(V: PVarRec): boolean;
