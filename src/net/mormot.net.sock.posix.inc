@@ -503,11 +503,8 @@ begin
       exit;
     if endtix = 0 then
       continue; // wait INFINITE
-    result := 0;
     timeout := endtix - mormot.core.os.GetTickCount64;
-    if timeout <= 0 then
-      exit; // timeout eventually elapsed while being interrupted
-  until false;
+  until timeout <= 0; // timeout eventually elapsed while being interrupted
 end;
 
 
@@ -1855,11 +1852,20 @@ const
   // EPOLLRDHUP is relevant only in ET mode
   EPOLLCLOSE = EPOLLHUP or (EPOLLMODE and EPOLLRDHUP);
 
+function EpollCtlNoEIntr(epfd, op: integer; fd: TNetSocket; var e: TEPoll_Event): boolean;
+begin
+  result := true;
+  repeat
+    if epoll_ctl(epfd, op, TSocket(fd), @e) >= 0 then
+      exit; // success
+  until cerrno <> ESysEINTR;
+  result := false;
+end;
+
 function TPollSocketEpoll.Subscribe(socket: TNetSocket; events: TPollSocketEvents;
   tag: TPollSocketTag): boolean;
 var
   e: TEPoll_Event;
-  err: integer;
 begin
   result := false;
   if (self = nil) or
@@ -1879,10 +1885,7 @@ begin
   else
     e.events := 0;
   // EPOLLERR and EPOLLHUP are always implicitly tracked
-  repeat
-    err := epoll_ctl(fEPFD, EPOLL_CTL_ADD, TSocket(socket), @e);
-  until err <> ESysEINTR;
-  result := err >= NO_ERROR;
+  result := EpollCtlNoEIntr(fEPFD, EPOLL_CTL_ADD, socket, e);
   if not result then
     exit;
   LockedInc32(@fCount);
@@ -1892,7 +1895,6 @@ end;
 function TPollSocketEpoll.Unsubscribe(socket: TNetSocket): boolean;
 var
   e: TEPoll_Event; // should be there even if not used (old kernel < 2.6.9)
-  err: integer;
 begin
   if (self = nil) or
      (socket = nil) or
@@ -1901,10 +1903,7 @@ begin
     result := false
   else
   begin
-    repeat
-      err := epoll_ctl(fEPFD, EPOLL_CTL_DEL, TSocket(socket), @e);
-    until err <> ESysEINTR;
-    result := err >= NO_ERROR;
+    result := EpollCtlNoEIntr(fEPFD, EPOLL_CTL_DEL, socket, e);
     if result then
     begin
       LockedDec32(@fCount);
@@ -1932,7 +1931,6 @@ begin
       exit;
     if endtix = 0 then
       continue; // wait INFINITE
-    result := 0;
     timeout := endtix - mormot.core.os.GetTickCount64; // compute remaining time
   until timeout <= 0;
 end;
