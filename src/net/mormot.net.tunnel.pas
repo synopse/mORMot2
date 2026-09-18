@@ -1252,6 +1252,7 @@ begin
     include(fFlags, fSocketBound);
   result := LocalPort;
   // initial single round trip handshake
+  thread := nil;
   infoaes := nil;
   try
     // header with optional ECDHE
@@ -1356,7 +1357,7 @@ begin
     fPort := result;
     TimeOutMS := (TimeOutMS shr 10) + 5; // minimal coherent accept time
     thread := TTunnelLocalThread.Create(
-      self, fTransmit, key.Lo, iv.Lo, sock, TimeOutMS);
+      self, fTransmit, key.Lo, iv.Lo, Sock, TimeOutMS);
     SleepHiRes(100, thread.fStarted);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: started=% %',
@@ -1391,8 +1392,8 @@ begin
   except
     on E: Exception do
     begin
-      fLogClass.Add.Log(sllWarning, 'OpenInterface failed after thread=% % [%]',
-        [thread, PClass(E)^, E.Message], self);
+      fLogClass.Add.Log(sllWarning, 'OpenInternal % [%] for thread=% sock=%',
+        [PClass(E)^, E.Message, thread, pointer(Sock)], self);
       sock.ShutdownAndClose(true); // any error would abort and return 0
       result := 0;
     end;

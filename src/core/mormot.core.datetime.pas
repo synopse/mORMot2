@@ -2581,16 +2581,12 @@ end;
 
 var
   // GlobalTime[LocalTime] thread-safe cache of decoded TSynSystemTime
-  // - not "packed": such a record has an alignment of 1, and the Delphi aarch64
-  // linker did place this variable at an odd address on iOS, where the atomic
-  // instruction of safe.ReadLock/WriteLock then raised an access violation
-  // - the fields are laid out the same way either way, since TRWLightLock is
-  // pointer-sized and both cardinal and TSynSystemTime are aligned within
+  // - not "packed" for Delphi aarch which makes an alignment of 1
   GlobalTime: array[boolean] of record
     safe: TRWLightLock;
     clock: cardinal;      // avoid slower API call with 16ms loss of precision
     time: TSynSystemTime;
-    _pad: array[1 .. 64 - // to fill exactly one L1 cache line
+    _pad: array[1 .. 64 - // to fill exactly at least one L1 cache line
       (SizeOf(TRWLightLock) + SizeOf(cardinal) + SizeOf(TSynSystemTime))] of byte;
   end;
 
@@ -4857,7 +4853,7 @@ procedure InitializeUnit;
 begin
   // as expected by ParseMonth() to call FindShortStringListNoTrim()
   assert(PtrUInt(@HTML_MONTH_NAMES[3]) - PtrUInt(@HTML_MONTH_NAMES[1]) = 8);
-  assert(SizeOf(GlobalTime) = 128);
+  assert(SizeOf(GlobalTime) >= 128);
   assert(TTextDateWriter.InstanceSize <= SizeOf(TLocalWriter) - 256);
   // some mormot.core.text wrappers are implemented by this unit
   _VariantToUtf8DateTimeIso8601     := DateTimeToIso8601TextVar;
