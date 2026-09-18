@@ -3724,7 +3724,7 @@ begin
       result := mormot.net.sock.recvfrom(TSocket(@self), Buf, len, 0, @addr, @addrlen);
     {$ifdef OSPOSIX}
     until (result >= 0) or
-          (RawSocketErrNo <> EsockEINTR);
+          (RawSocketErrNo <> ESysEINTR);
     {$endif OSPOSIX}
   end;
 end;
