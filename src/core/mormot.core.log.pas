@@ -672,7 +672,7 @@ type
     // the integer mapped value will be transmitted, therefore wrongly)
     // - if Instance is set, it will log the corresponding class name and address
     // (to be used if you didn't call TSynLog.Enter() method first)
-    procedure Log(Level: TSynLogLevel; TextFmt: PUtf8Char;
+    procedure Log(Level: TSynLogLevel; const Format: RawUtf8;
       const TextArgs: array of const; Instance: TObject = nil); overload;
     /// call this method to add some information to the log at a specified level
     // - if Instance is set and Text is not '', it will log the corresponding
@@ -1284,7 +1284,7 @@ type
     procedure CreateLogWriter; virtual;
     procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
     procedure AutoFlush(tix32: cardinal);
-    procedure LogInternalFmt(Level: TSynLogLevel; Format: PUtf8Char;
+    procedure LogInternalFmt(Level: TSynLogLevel; const Format: RawUtf8;
       Values: PVarRec; ValuesCount: integer; Instance: TObject);
     procedure LogInternalText(Level: TSynLogLevel; Text: PUtf8Char;
       TextLen: PtrInt; Instance: TObject; TextTruncateAtLength: PtrInt);
@@ -1484,7 +1484,7 @@ type
     // to be appended as text (e.g. class name), any variant as JSON...
     // - note that cardinal values should be type-casted to Int64() (otherwise
     // the integer mapped value will be transmitted, therefore wrongly)
-    procedure Log(Level: TSynLogLevel; Fmt: PUtf8Char;
+    procedure Log(Level: TSynLogLevel; const Format: RawUtf8;
       const Args: array of const; aInstance: TObject = nil); overload;
     /// call this method to add some information to the log at the specified level
     // - if Instance is set and Text is not '', it will log the corresponding
@@ -1587,7 +1587,7 @@ type
     // signature, or used instead of Add.Log
     // - will flush the content to disk and avoid any memory reallocation
     // if Level is sllExceptionOS, e.g. on SIGABRT/SIGQUIT/SIGINT
-    class procedure DoLog(Level: TSynLogLevel; Fmt: PUtf8Char;
+    class procedure DoLog(Level: TSynLogLevel; const Format: RawUtf8;
       const Args: array of const; Instance: TObject = nil);
     /// low-level class method which can be assigned to a TOnInfoProgress callback
     // - as used e.g. by TStreamRedirect.OnInfoProgress or TZipAbstract.OnProgress
@@ -6147,12 +6147,12 @@ begin
     result := fFamily.fEchoRemoteEvent(Sender, Level, Text);
 end;
 
-procedure TSynLog.Log(Level: TSynLogLevel; Fmt: PUtf8Char;
+procedure TSynLog.Log(Level: TSynLogLevel; const Format: RawUtf8;
   const Args: array of const; aInstance: TObject);
 begin
   if (self <> nil) and
      (Level in fFamily.fLevel) then
-    LogInternalFmt(Level, Fmt, @Args[0], length(Args), aInstance);
+    LogInternalFmt(Level, Format, @Args[0], length(Args), aInstance);
 end;
 
 procedure TSynLog.Log(Level: TSynLogLevel; const Text: RawUtf8;
@@ -6298,7 +6298,7 @@ begin
     result := PPointer(self)^;
 end;
 
-class procedure TSynLog.DoLog(Level: TSynLogLevel; Fmt: PUtf8Char;
+class procedure TSynLog.DoLog(Level: TSynLogLevel; const Format: RawUtf8;
    const Args: array of const; Instance: TObject);
 var
   log: TSynLog;
@@ -6306,7 +6306,7 @@ begin
   log := Add;
   if (log <> nil) and
      (Level in log.fFamily.fLevel) then
-    log.LogInternalFmt(Level, Fmt, @Args[0], length(Args), Instance);
+    log.LogInternalFmt(Level, Format, @Args[0], length(Args), Instance);
 end;
 
 class procedure TSynLog.ProgressInfo(Sender: TObject; Info: PProgressInfo);
@@ -6828,7 +6828,7 @@ begin
   LogFileInitLocked(nfo);
 end;
 
-procedure TSynLog.LogInternalFmt(Level: TSynLogLevel; Format: PUtf8Char;
+procedure TSynLog.LogInternalFmt(Level: TSynLogLevel; const Format: RawUtf8;
   Values: PVarRec; ValuesCount: integer; Instance: TObject);
 var
   nfo: PSynLogThreadInfo;
@@ -6841,7 +6841,7 @@ begin
   if LockAndPrepareWrite(nfo) then
   begin
     LogHeader(Level, Instance);
-    fWriter.AddFmt(Format, Values, ValuesCount, twOnSameLine,
+    fWriter.AddFmt(pointer(Format), Values, ValuesCount, twOnSameLine,
       [woDontStoreDefault, woDontStoreVoid, woFullExpand]);
     if lasterror <> 0 then
       AddErrorMessage(lasterror);

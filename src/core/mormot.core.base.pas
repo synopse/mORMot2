@@ -4784,7 +4784,7 @@ type
   // - match class procedure TSynLog.DoLog
   // - used e.g. by global variables like WindowsServiceLog in mormot.core.os
   // or TCrtSocket.OnLog in mormot.net.sock
-  TSynLogProc = procedure(Level: TSynLogLevel; Fmt: PUtf8Char;
+  TSynLogProc = procedure(Level: TSynLogLevel; const Format: RawUtf8;
      const Args: array of const; Instance: TObject = nil) of object;
 
 {$ifndef PUREMORMOT2}
