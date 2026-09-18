@@ -8958,6 +8958,11 @@ function TExecutableResource.Open(ResourceName, ResType: PChar;
 begin
   result := false;
   {$ifdef DELPHIPOSIX}
+  // the Delphi POSIX RTL FindResource() casts ResourceName into a string, so
+  // would read at address 1 for e.g. MAKEINTRESOURCE(1): the resulting GPF
+  // during InitUnits ends up in a stack overflow, hanging the whole process
+  if PtrUInt(ResourceName) < $10000 then
+    exit; // MAKEINTRESOURCE() ordinals are unsupported on Delphi POSIX
   if Instance = 0 then
     Instance := HInstance; // always 0 on FPC POSIX for the current process
   {$endif DELPHIPOSIX}
@@ -8987,6 +8992,9 @@ end;
 function ResourceExists(ResourceName, ResType: PChar; Instance: TLibHandle): boolean;
 begin
   {$ifdef DELPHIPOSIX}
+  result := false;
+  if PtrUInt(ResourceName) < $10000 then
+    exit; // see TExecutableResource.Open() above
   if Instance = 0 then
     Instance := HInstance; // always 0 on FPC POSIX for the current process
   {$endif DELPHIPOSIX}
