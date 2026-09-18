@@ -873,6 +873,8 @@ type
     function GetArchiveDestPath(age: TDateTime): TFileName;
     function GetCurrentThreadFlag(ti: TSynLogThreadInfoFlag): boolean;
     procedure SetCurrentThreadFlag(ti: TSynLogThreadInfoFlag; value: boolean);
+    function PreRenderFmt(var Temp: TBuffer4K; const Format: RawUtf8;
+      Values: PVarRec; ValuesCount: integer; var Instance: TObject): PtrInt;
   public
     /// initialize for a TSynLog class family
     // - add it in the global SynLogFileFamily[] list
@@ -5350,6 +5352,31 @@ begin
   end;
 end;
 
+function TSynLogFamily.PreRenderFmt(var Temp: TBuffer4K; const Format: RawUtf8;
+  Values: PVarRec; ValuesCount: integer; var Instance: TObject): PtrInt;
+var
+  p: PUtf8Char;
+begin
+  if fDirectRendering or
+     VarRecNeedsWriteObject(Values, ValuesCount) then
+  begin
+    result := -1; // we need the slow path within the lock
+    exit;
+  end;
+  p := @Temp;
+  if Instance <> nil then // better sooner than in LogHeader()
+  begin
+    p := PointerToText(Instance, p, fWithUnitName, fWithInstancePointer);
+    p^ := ' ';
+    inc(p);
+    Instance := nil; // so that LogHeader() won't do anything
+  end;
+  result := FormatBufferRaw(Format, Values, ValuesCount, p, SizeOf(Temp)) - Temp;
+  if result = SizeOf(Temp) then
+    result := Utf8TruncatedLength(@Temp, result, result); // ensure valid UTF-8
+  TrimControlCharsBuffer(@Temp, result); // in-place twOnSameLine process
+end;
+
 
 { TSynLog }
 
@@ -5945,15 +5972,6 @@ begin
   EndWrite(nfo);
 end;
 
-function PreRenderFmt(var Temp: TBuffer4K; const Format: RawUtf8;
-  Values: PVarRec; ValuesCount: integer): PtrInt;
-begin
-  result := FormatBufferRaw(Format, Values, ValuesCount, @Temp, SizeOf(Temp)) - Temp;
-  if result = SizeOf(Temp) then
-    result := Utf8TruncatedLength(@Temp, result, result); // ensure valid UTF-8
-  TrimControlCharsBuffer(@Temp, result); // in-place twOnSameLine process
-end;
-
 function TSynLog.LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
   const fmt: RawUtf8; args: PVarRec; argscount: PtrInt; microsecs: PInt64;
   var tmp: TBuffer4K): boolean;
@@ -5961,11 +5979,7 @@ var
   len: PtrInt;
 begin
   // pre-render Format/Values up to 4KB on stack outside of the TSynLog lock
-  if fFamily.DirectRendering or
-     VarRecNeedsWriteObject(args, argscount) then
-    len := -1 // we need the slow path within the lock
-  else
-    len := PreRenderFmt(tmp, fmt, args, argscount);
+  len := fFamily.PreRenderFmt(tmp, fmt, args, argscount, inst);
   // log this line
   result := LockAndPrepareEnter(nfo, microsecs);
   if not result then
@@ -6870,11 +6884,7 @@ begin
   if Level = sllLastError then
     lasterror := GetLastError;
   // pre-render Format/Values up to 4KB on stack outside of the TSynLog lock
-  if fFamily.DirectRendering or
-     VarRecNeedsWriteObject(Values, ValuesCount) then
-    len := -1 // we need the slow path within the lock
-  else
-    len := PreRenderFmt(tmp, Format, Values, ValuesCount);
+  len := fFamily.PreRenderFmt(tmp, Format, Values, ValuesCount, Instance);
   // log this line
   nfo := @PerThreadInfo;
   if LockAndPrepareWrite(nfo) then
