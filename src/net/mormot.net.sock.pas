@@ -3267,7 +3267,7 @@ end;
 function GetReachableNetAddr(const address, port: array of RawUtf8;
   timeoutms, neededcount: integer; sockets: PNetSocketDynArray): TNetAddrDynArray;
 var
-  i, n: PtrInt;
+  i, n, avail: PtrInt;
   s: TNetSocket;
   sock: TNetSocketDynArray;
   addr: TNetAddrDynArray;
@@ -3292,13 +3292,12 @@ begin
     if res <> nrOK then
       continue;
     s := addr[n].NewSocket(nlTcp);
-    if (s = nil) or
-       (s.MakeAsync <> nrOk) then
+    if s = nil then
       continue;
-    connect(s.Socket, @addr[n], addr[n].Size); // non-blocking connect() once
-    if s.MakeBlocking <> nrOk then
+    res := addr[n].SocketConnect(s, -1); // ms=-1 for async connection
+    if res <> nrOk then
     begin
-      closesocket(s.Socket); // release handle
+      s.Close;
       continue;
     end;
     sock[n] := s;
@@ -3312,12 +3311,24 @@ begin
   if sockets <> nil then
     SetLength(sockets^, n);
   n := 0;
+  avail := length(result);
   tix := mormot.core.os.GetTickCount64 + timeoutms;
   repeat
     for i := 0 to length(result) - 1 do
-      if (sock[i] <> nil) and
-         (neWrite in sock[i].WaitFor(1, [neWrite, neError])) then
+      if sock[i] <> nil then // if not previously closed
       begin
+        res := sock[i].WaitForWithRawSocketError(1);
+        if res = nrRetry then
+          continue;
+        if res = nrOk then
+          res := sock[i].MakeBlocking;
+        if res <> nrOk then
+        begin
+          sock[i].Close;
+          sock[i] := nil; // mark this socket as closed
+          dec(avail);     // don't wait if there is no more socket
+          continue;
+        end;
         if sockets = nil then
           sock[i].ShutdownAndClose(false)
         else
@@ -3330,6 +3341,7 @@ begin
           break;
       end;
   until (neededcount = 0) or
+        (avail = 0) or
         (mormot.core.os.GetTickCount64 > tix);
   if n <> length(result) then
   begin
