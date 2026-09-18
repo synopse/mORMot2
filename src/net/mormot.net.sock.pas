@@ -3166,8 +3166,6 @@ begin
 end;
 
 function TNetAddr.SocketConnect(socket: TNetSocket; ms: integer): TNetResult;
-var
-  events: TNetEvents;
 begin
   result := socket.MakeAsync;
   if result <> nrOK then
@@ -3184,18 +3182,15 @@ begin
     exit; // abort on fatal error (e.g. invalid address)
   if ms < 0 then
   begin
-    result := nrOk; // asynchronous connection is pending
-    exit; // don't wait now
-  end;
-  result := socket.MakeBlocking;
-  if result <> nrOK then
+    result := nrOk; // asynchronous connection is pending: don't wait now
     exit;
-  events := socket.WaitFor(ms, [neWrite, neError]);
-  if events = [] then
+  end;
+  // connect() completion status is reported by SO_ERROR
+  result := socket.WaitForWithRawSocketError(ms);
+  if result = nrRetry then
     result := nrTimeout
-  else
-    // connect() completion status is reported by SO_ERROR
-    result := socket.GetRawSocketError;
+  else if result = nrOk then
+    result := socket.MakeBlocking;
 end;
 
 function TNetAddr.SocketBind(socket: TNetSocket): TNetResult;
