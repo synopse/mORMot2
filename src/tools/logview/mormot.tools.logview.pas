@@ -41,6 +41,7 @@ uses
   mormot.core.buffers,
   mormot.core.datetime,
   mormot.core.rtti,
+  mormot.core.variants,
   mormot.core.log,
   mormot.core.perf,
   mormot.rest.core,
@@ -114,6 +115,11 @@ type
     procedure BtnSearchNextClick(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure ListClick(Sender: TObject);
+    procedure ListMouseUp(Sender: TObject; Button: TMouseButton;
+      Shift: TShiftState; X, Y: integer);
+    procedure ListMouseWheel(Sender: TObject; Shift: TShiftState;
+      WheelDelta: integer; MousePos: TPoint; var Handled: boolean);
+    procedure ListMenuFontClick(Sender: TObject);
     procedure ProfileListClick(Sender: TObject);
     procedure ListDblClick(Sender: TObject);
     procedure BtnStatsClick(Sender: TObject);
@@ -161,9 +167,13 @@ type
     fNormalizer: TRemoteLogNormalizer; // used by the UI thread only
     fHiddenThreadRows: boolean; // ApplyReceived() appended a filtered thread row
     fRemoteStarted: RawUtf8; // UTC 'yyyy-mm-dd hh:mm:ss' of the current capture
+    fFontSize, fFontSizeDefault: integer; // in points, for the log content
     procedure SetLogFileName(const Value: TFileName);
     procedure SetListColumns(aLogFormat: boolean);
     procedure LayoutLeftPanel;
+    procedure ListKeepFirstColumn;
+    procedure SetContentFontSize(aSize: integer; aSave: boolean);
+    function SettingsFileName: TFileName;
     procedure SetListItem(Index: integer; const search: RawUtf8 = '');
     procedure BtnFilterMenu(Sender: TObject);
     procedure ThreadListCheckRefresh;
@@ -196,6 +206,10 @@ uses
   LazUTF8,
   Themes,
   Clipbrd;
+
+const
+  FONT_MENU: array[-1 .. 1] of string = (
+    'Smaller Font   Ctrl -', 'Default Font   Ctrl 0', 'Larger Font   Ctrl +');
 
 resourcestring
   sEnterAddress = 'Enter a relative hexadecimal address (RVA):';
@@ -455,12 +469,13 @@ begin
     exit;
   end;
   List.ColCount := 4;
-  List.ColWidths[0] := Canvas.TextWidth('00:00:00.000') + 12; // GetCell() format
+  List.Canvas.Font := List.Font; // may have a custom size
+  List.ColWidths[0] := List.Canvas.TextWidth('00:00:00.000') + 12; // GetCell()
   w := 0;
   for e := succ(sllNone) to high(e) do
-    w := MaxPtrInt(w, Canvas.TextWidth(ToCaption(e)));
+    w := MaxPtrInt(w, List.Canvas.TextWidth(ToCaption(e)));
   List.ColWidths[1] := w + 12;
-  List.ColWidths[2] := Canvas.TextWidth('00000') + 12;
+  List.ColWidths[2] := List.Canvas.TextWidth('00000') + 12;
   List.ColWidths[3] := 2000;
 end;
 
@@ -469,6 +484,7 @@ var
   f: TSynLogFilter;
   o: TLogProcSortOrder;
   m: TMenuItem;
+  i: integer;
 begin
   fMainCaption := Format(Caption, [SYNOPSE_FRAMEWORK_VERSION]) + ' ';
   for f := low(f) to high(f) do
@@ -484,6 +500,14 @@ begin
   for o := low(o) to high(o) do
     ProfileGroup.Items.AddObject(GetCaptionFromEnum(
       TypeInfo(TLogProcSortOrder), ord(o)), TObject(PtrInt(ord(o))));
+  for i := -1 to 1 do
+  begin
+    m := TMenuItem.Create(self);
+    m.Caption := FONT_MENU[i];
+    m.Tag := i;
+    m.OnClick := ListMenuFontClick;
+    ListMenu.Items.Add(m);
+  end;
   ProfileList.Hide;
   MemoBottom.Font.Name := MonospaceFontName;
   MemoBottom.Text := '';
@@ -502,16 +526,20 @@ procedure TMainLogView.FormShow(Sender: TObject);
 var
   cmdline: TFileName;
   h: integer;
+  settings: TDocVariantData;
 begin
   // mORMot 1 fixed pixel sizes did clip the text with current fonts and DPI
-  h := Canvas.TextHeight('Wg') + 4;
-  List.DefaultRowHeight := h;
-  ProfileList.DefaultRowHeight := h;
-  EventsList.ItemHeight := h;
-  // set here, since the LCL DPI scaling resets widths assigned in FormCreate
-  ProfileList.ColWidths[0] := Canvas.TextWidth('000.000.000') + 12;
-  ProfileList.ColWidths[1] := 2000;
+  EventsList.ItemHeight := Canvas.TextHeight('Wg') + 4;
   PanelThread.Width := 300;
+  // set here, since the LCL DPI scaling resets widths assigned in FormCreate
+  fFontSizeDefault := GetFontData(List.Font.Reference.Handle).Height;
+  fFontSizeDefault := MulDiv(abs(fFontSizeDefault), 72, Font.PixelsPerInch);
+  if fFontSizeDefault <= 0 then
+    fFontSizeDefault := 9; // paranoid
+  h := 0;
+  if settings.InitJson(StringFromFile(SettingsFileName), JSON_FAST) then
+    settings.GetAsInteger('FontSize', h);
+  SetContentFontSize(h, {save=}false); // 0 = default
   // the widest caption of the left panel, with its check mark and margins
   h := Canvas.TextWidth(MergedProfile.Caption) + Scale96ToForm(32) +
        2 * EventsList.Left;
@@ -701,6 +729,22 @@ end;
 procedure TMainLogView.FormKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
 begin
+  if ActiveControl = List then
+    ListKeepFirstColumn; // before the grid handles e.g. the arrow keys
+  if Shift - [ssShift] = [ssCtrl] then // '+' may need Shift, e.g. US keyboard
+    if Key in [VK_ADD, VK_OEM_PLUS, VK_SUBTRACT, VK_OEM_MINUS, VK_0, VK_NUMPAD0] then
+    begin
+      case Key of
+        VK_ADD, VK_OEM_PLUS:
+          SetContentFontSize(fFontSize + 1, {save=}true);
+        VK_SUBTRACT, VK_OEM_MINUS:
+          SetContentFontSize(fFontSize - 1, {save=}true);
+      else
+        SetContentFontSize(0, {save=}true);
+      end;
+      Key := 0; // e.g. no '0' typed into the search field
+      exit;
+    end;
   if Key = VK_F3 then
   begin
     if Shift = [] then
@@ -759,6 +803,95 @@ begin
         s := fLog.EventString(Index);
       ProfileList.Canvas.TextRect(ARect, ARect.Left + 4, ARect.Top, s);
     end;
+end;
+
+procedure TMainLogView.ListKeepFirstColumn;
+var
+  sel: TGridRect;
+begin
+  // the LCL makes the clicked column current, even with goRowSelect: then the
+  // arrow keys or List.Row := would scroll the wide text column into view, and
+  // hide the first columns - so always keep the first column as current
+  if List.Col = 0 then
+    exit;
+  sel := List.Selection;
+  List.Col := 0;
+  if sel.Top <> sel.Bottom then
+    List.Selection := sel; // keep several rows selected, e.g. for Copy
+end;
+
+procedure TMainLogView.ListMouseUp(Sender: TObject; Button: TMouseButton;
+  Shift: TShiftState; X, Y: integer);
+begin
+  // note: after a mouse range selection, TCustomGrid.MouseUp sets the column
+  // again after this event: FormKeyDown() and SetListItem() also call it
+  ListKeepFirstColumn;
+end;
+
+procedure TMainLogView.ListMouseWheel(Sender: TObject; Shift: TShiftState;
+  WheelDelta: integer; MousePos: TPoint; var Handled: boolean);
+begin
+  if not (ssCtrl in Shift) then
+    exit;
+  if WheelDelta > 0 then
+    SetContentFontSize(fFontSize + 1, {save=}true)
+  else
+    SetContentFontSize(fFontSize - 1, {save=}true);
+  Handled := true;
+end;
+
+procedure TMainLogView.ListMenuFontClick(Sender: TObject);
+begin
+  case TMenuItem(Sender).Tag of
+    0:
+      SetContentFontSize(0, {save=}true); // back to the default size
+  else
+    SetContentFontSize(fFontSize + TMenuItem(Sender).Tag, {save=}true);
+  end;
+end;
+
+function TMainLogView.SettingsFileName: TFileName;
+begin
+  {$ifdef OSPOSIX}
+  // spUserData is a cache folder on POSIX, which may be cleaned
+  result := GetSystemPath(spUserDocuments) + '.config' + PathDelim; // = $HOME
+  if not DirectoryExists(result) then
+  {$endif OSPOSIX}
+    result := GetSystemPath(spUserData);
+  result := result + 'logview.settings';
+end;
+
+procedure TMainLogView.SetContentFontSize(aSize: integer; aSave: boolean);
+var
+  h: integer;
+begin
+  // only the log content: the other controls have fixed sizes from the .lfm
+  if aSize <= 0 then
+    aSize := fFontSizeDefault
+  else if aSize < 6 then
+    aSize := 6
+  else if aSize > 40 then
+    aSize := 40;
+  if aSize = fFontSize then
+    exit;
+  fFontSize := aSize;
+  List.Font.Size := aSize;
+  ProfileList.Font.Size := aSize;
+  MemoBottom.Font.Size := aSize;
+  // mORMot 1 fixed pixel sizes did clip the text with current fonts and DPI
+  List.Canvas.Font := List.Font;
+  h := List.Canvas.TextHeight('Wg') + 4;
+  List.DefaultRowHeight := h;
+  ProfileList.DefaultRowHeight := h;
+  ProfileList.ColWidths[0] := List.Canvas.TextWidth('000.000.000') + 12;
+  ProfileList.ColWidths[1] := 2000;
+  if List.ColCount = 4 then
+    SetListColumns({logformat=}true);
+  if not aSave then
+    exit;
+  if aSize = fFontSizeDefault then
+    aSize := 0; // follow the system default
+  FileFromString(FormatUtf8('{"FontSize":%}', [aSize]), SettingsFileName);
 end;
 
 procedure TMainLogView.ListClick(Sender: TObject);
@@ -986,6 +1119,7 @@ begin
     MemoBottom.Text := ''
   else
   begin
+    ListKeepFirstColumn;
     List.Row := Index;
     if (search = '') and
        List.Visible and

@@ -452,13 +452,15 @@ object MainLogView: TMainLogView
     ExtendedSelect = False
     FixedCols = 0
     FixedRows = 0
-    Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goDrawFocusSelected, goRowSelect, goThumbTracking]
+    Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goDrawFocusSelected, goRowSelect, goThumbTracking, goDontScrollPartCell]
     PopupMenu = ListMenu
     RowCount = 1
     TabOrder = 2
     Visible = False
     OnClick = ListClick
     OnDblClick = ListDblClick
+    OnMouseUp = ListMouseUp
+    OnMouseWheel = ListMouseWheel
     OnDrawCell = ListDrawCell
   end
   object ProfileList: TDrawGrid
@@ -473,7 +475,7 @@ object MainLogView: TMainLogView
     ExtendedSelect = False
     FixedCols = 0
     FixedRows = 0
-    Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goRowSelect, goThumbTracking]
+    Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goRowSelect, goThumbTracking, goDontScrollPartCell]
     TabOrder = 1
     Visible = False
     OnClick = ProfileListClick
