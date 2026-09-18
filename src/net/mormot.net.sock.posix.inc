@@ -1913,6 +1913,27 @@ begin
   end;
 end;
 
+function EpollWaitNoEintr(epfd: integer; events: PEPoll_Event;
+  maxevents, timeout: integer): integer;
+var
+  endtix: Int64;
+begin
+  if timeout > 0 then
+    endtix := mormot.core.os.GetTickCount64 + timeout
+  else
+    endtix := 0;
+  repeat
+    result := epoll_wait(epfd, events, maxevents, timeout);
+    if (result >= 0) or
+       (cerrno <> ESysEINTR) then
+      exit;
+    if endtix = 0 then
+      continue; // wait INFINITE
+    result := 0;
+    timeout := endtix - mormot.core.os.GetTickCount64; // compute remaining time
+  until timeout <= 0;
+end;
+
 function TPollSocketEpoll.WaitForModified(var results: TPollSocketResults;
   timeoutMS: integer): boolean;
 var
@@ -1928,7 +1949,7 @@ begin
      (fEPFD <= 0) then
     exit;
   // we allow fCount=0 which enable background epoll_ctl subscription
-  n := epoll_wait(fEPFD, @tmp, length(tmp), timeoutMS);
+  n := EpollWaitNoEintr(fEPFD, @tmp, length(tmp), timeoutMS);
   // if pending > length(tmp): epoll_wait() would round-robin
   results.Count := n;
   if n <= 0 then
