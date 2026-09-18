@@ -3752,32 +3752,6 @@ begin
   result := nrClosed;
 end;
 
-function TNetSocketWrap.Available(loerr: PNetErrorInt; nowait: boolean): boolean;
-var
-  events: TNetEvents;
-  dummy: integer;
-begin
-  result := true;
-  if loerr <> nil then
-    loerr^ := 0;
-  if nowait then
-    events := [neRead] // just MSG_PEEK
-  else
-    events := WaitFor(0, [neRead, neError], loerr); // select() or poll()
-  if events = [] then
-    exit; // the socket seems stable with no pending input
-  if neRead in events then
-    // - on Windows, may be WSACONNRESET (nrClosed), with recv() returning 0
-    // - on POSIX, may be ESysEINPROGRESS (nrRetry) just after connect
-    // - no need to MakeAsync: recv() should not block after neRead
-    // - may be [neRead, neClosed] on gracefully closed HTTP/1.0 response
-    // - expected recv() result: -1=error, 0=closed, 1=success
-    if (mormot.net.sock.recv(TSocket(@self), @dummy, 1, MSG_PEEK) = 1) or
-       (NetLastError(NO_ERROR, loerr) = nrRetry) then
-      exit;
-  result := false; // e.g. neError or neClosed with no neRead
-end;
-
 procedure TNetSocketWrap.RawShutdown;
 begin
   if @self <> nil then

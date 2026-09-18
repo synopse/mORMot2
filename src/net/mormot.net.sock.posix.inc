@@ -511,6 +511,41 @@ end;
 
 { ******** TNetSocket Cross-Platform Wrapper }
 
+function NewUnixSocket(const path: RawUtf8; out netsocket: TNetSocket;
+  asstream: boolean): TNetResult;
+var
+  addr: TNetAddr;
+  sock: PtrUInt;
+  st: TStat;
+begin
+  netsocket := nil;
+  // first validate the address is an existing unix socket file
+  result := nrNotFound;
+  if (path = '') or
+     (fpStat(pointer(path), st) <> 0) or
+     not fpS_ISSOCK(st.st_mode) then
+    exit;
+  // compute the proper TNetAddr and create a unix DGRAM/STREAM socket
+  result := addr.SetFrom(path, '', nlUnix);
+  if result <> nrOk then
+    exit;
+  sock := SOCK_DGRAM;
+  if asstream then
+    sock := SOCK_STREAM;
+  sock := socket(AF_UNIX, sock, 0);
+  if sock = 0 then
+    result := NetLastError
+  // try to connect to this unix socket
+  else if connect(sock, @addr, addr.Size) = NO_ERROR then
+    netsocket := TNetSocket(sock)
+  else
+  begin
+    result := NetLastError;
+    closesocket(sock);
+  end;
+end;
+
+
 { TNetAddr }
 
 var
@@ -622,22 +657,22 @@ end;
 function TNetSocketWrap.Recv(Buf: pointer; var len: integer;
   rawError: PNetErrorInt): TNetResult;
 var
-  recv: integer;
+  received: integer;
 begin
   if @self = nil then
     result := nrNoSocket
   else
   begin
     repeat
-      recv := mormot.net.sock.recv(TSocket(@self), Buf, len, 0);
-    until (recv >= 0) or
+      received := mormot.net.sock.recv(TSocket(@self), Buf, len, 0);
+    until (received >= 0) or
           (cerrno <> ESysEINTR); // retry on SIG received
     // man recv: Upon successful completion, recv() shall return the length of
     // the message in bytes. If no messages are available to be received and the
     // peer has performed an orderly shutdown, recv() shall return 0.
     // Otherwise, -1 shall be returned and errno set to indicate the error,
     // which may be nrRetry if no data is available.
-    len := recv;
+    len := received;
     if len <= 0 then
       if len = 0 then
         result := nrClosed
@@ -859,38 +894,38 @@ begin
     include(result, neClosed); // may return neClosed + neRead e.g. on HTTP/1.0
 end;
 
-function NewUnixSocket(const path: RawUtf8; out netsocket: TNetSocket;
-  asstream: boolean): TNetResult;
+function TNetSocketWrap.Available(loerr: PNetErrorInt; nowait: boolean): boolean;
 var
-  addr: TNetAddr;
-  sock: PtrUInt;
-  st: TStat;
+  events: TNetEvents;
+  dummy, received, err: integer;
 begin
-  netsocket := nil;
-  // first validate the address is an existing unix socket file
-  result := nrNotFound;
-  if (path = '') or
-     (fpStat(pointer(path), st) <> 0) or
-     not fpS_ISSOCK(st.st_mode) then
-    exit;
-  // compute the proper TNetAddr and create a unix DGRAM/STREAM socket
-  result := addr.SetFrom(path, '', nlUnix);
-  if result <> nrOk then
-    exit;
-  sock := SOCK_DGRAM;
-  if asstream then
-    sock := SOCK_STREAM;
-  sock := socket(AF_UNIX, sock, 0);
-  if sock = 0 then
-    result := NetLastError
-  // try to connect to this unix socket
-  else if connect(sock, @addr, addr.Size) = NO_ERROR then
-    netsocket := TNetSocket(sock)
+  result := true;
+  if loerr <> nil then
+    loerr^ := 0;
+  if nowait then
+    events := [neRead] // just MSG_PEEK
   else
+    events := WaitFor(0, [neRead, neError], loerr); // select() or poll()
+  if events = [] then
+    exit; // the socket seems stable with no pending input
+  if neRead in events then
   begin
-    result := NetLastError;
-    closesocket(sock);
+    repeat
+      // - no need to MakeAsync: recv() should not block after neRead
+      // - may be [neRead, neClosed] on gracefully closed HTTP/1.0 response
+      // - expected recv() result: -1=error, 0=closed, 1=success
+      received := mormot.net.sock.recv(TSocket(@self), @dummy, 1, MSG_PEEK);
+      if received >= 0 then
+        exit(received = 1);
+      err := cerrno;
+    until err <> ESysEINTR;
+    if loerr <> nil then
+      loerr^ := err;
+    if NetErrorFromSystem(err, NO_ERROR) = nrRetry then
+      // on POSIX, may be ESysEINPROGRESS (nrRetry) just after connect
+      exit;
   end;
+  result := false; // e.g. neError or neClosed with no neRead
 end;
 
 
@@ -1934,6 +1969,7 @@ begin
       exit;
     if endtix = 0 then
       continue; // wait INFINITE
+    result := 0;
     timeout := endtix - mormot.core.os.GetTickCount64; // compute remaining time
   until timeout <= 0;
 end;
