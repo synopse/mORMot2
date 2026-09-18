@@ -5755,8 +5755,12 @@ begin
   if aFamily = nil then
     aFamily := Family;
   fFamily := aFamily;
+  // setup (once) proper timing for this log instance
+  if fFamily.FileExistsAction = acAppend then
+    fFamily.HighResolutionTimestamp := false; // file reuse = absolute time
   QueryPerformanceMicroSeconds(fStartTimestamp);
   fStartTimestampDateTimeUtc := NowUtc;
+  // compute the ISynLog internal offset for fast computation
   entry := GetInterfaceEntry(ISynLog);
   if (entry = nil) or
      not InterfaceEntryIsStandard(entry) {$ifdef FPC} or
@@ -5940,7 +5944,7 @@ end;
 function TSynLog.LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
   fmt: PUtf8Char; args: PVarRec; argscount: PtrInt; microsecs: PInt64): boolean;
 begin
-  result := LockAndPrepareEnter(nfo, nil);
+  result := LockAndPrepareEnter(nfo, microsecs);
   if not result then
     exit;
   LogHeader(sllEnter, inst);
@@ -6046,7 +6050,10 @@ begin // expects the caller to have set Local = nil
   if nfo = nil then
     exit; // nothing to log
   if not result.LockAndPrepareEnter(nfo, nil) then
+  begin
+    result := nil;
     exit;
+  end;
   result.LogHeader(sllEnter, aInstance);
   if aMethodName <> '' then // direct string output with no temp conversion
     result.fWriter.AddOnSameLineString(aMethodName);
@@ -6332,14 +6339,14 @@ var
   nfo: PSynLogThreadInfo;
 begin
   nfo := GetThreadInfo;
-  if entervalue then
+  if entervalue then // DisableRemoteLog(true) first
   begin
     if tiDisableRemoteEcho in nfo^.Flags then
       ESynLogException.RaiseUtf8('Nested %.DisableRemoteLog', [self]);
     include(nfo^.Flags, tiDisableRemoteEcho);
   end
   else
-  begin
+  begin // eventual finally DisableRemoteLog(false)
     if not (tiDisableRemoteEcho in nfo^.Flags) then
       ESynLogException.RaiseUtf8('Missing %.DisableRemoteLog(true)', [self]);
     exclude(nfo^.Flags, tiDisableRemoteEcho);
@@ -6540,10 +6547,6 @@ begin
   fThreadInfo := nfo;
   if logInitDone in fFlags then // paranoid thread safety
     exit;
-  // setup (once) proper timing for this log instance
-  if fStartTimestamp = 0 then // don't reset after rotation
-    if fFamily.FileExistsAction = acAppend then
-      fFamily.HighResolutionTimestamp := false; // file reuse = absolute time
   // check if we need to log the thread names in this new file
   if (sllInfo in fFamily.Level) and
      (fFamily.PerThreadLog = ptIdentifiedInOneFile) then
