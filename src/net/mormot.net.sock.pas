@@ -356,7 +356,7 @@ type
     /// retrieve the peer address associated on this connected socket
     function GetPeer(out addr: TNetAddr): TNetResult;
     /// retrieve the raw SO_ERROR option value on this socket
-    function GetSocketError: TNetResult;
+    function GetRawSocketError: TNetResult;
     /// change the socket state to non-blocking
     // - note that on Windows, there is no easy way to check the non-blocking
     // state of the socket (WSAIoctl has been deprecated for this)
@@ -3164,37 +3164,30 @@ end;
 
 function TNetAddr.SocketConnect(socket: TNetSocket; ms: integer): TNetResult;
 var
-  tix: Int64;
+  events: TNetEvents;
 begin
   result := socket.MakeAsync;
   if result <> nrOK then
     exit;
   if connect(socket.Socket, @Addr, Size) = 0 then // non-blocking connect() once
     exit; // immediate success (unlikely)
-  if ms < 0 then
-    exit; // don't wait now
   result := NetLastError;
   if result <> nrRetry then
     exit; // abort on fatal error (e.g. invalid address)
+  if ms < 0 then
+  begin
+    result := nrOk; // asynchronous connection is pending
+    exit; // don't wait now
+  end;
   result := socket.MakeBlocking;
   if result <> nrOK then
     exit;
-  if ms < 50 then
-    tix := 0
+  events := socket.WaitFor(ms, [neWrite, neError]);
+  if events = [] then
+    result := nrTimeout
   else
-  begin
-    tix := mormot.core.os.GetTickCount64 + ms;
-    ms := 50;
-  end;
-  repeat
-    result := NetEventsToNetResult(socket.WaitFor(ms, [neWrite, neError]));
-    if result <> nrRetry then
-      exit;
-    // typically, status = [] for TRY_AGAIN result
-    SleepHiRes(1); // paranoid to avoid buring CPU if WaitFor() doesn't wait
-  until (tix = 0) or
-        (mormot.core.os.GetTickCount64 > tix);
-  result := nrTimeout;
+    // connect() completion status is reported by SO_ERROR
+    result := socket.GetRawSocketError;
 end;
 
 function TNetAddr.SocketBind(socket: TNetSocket): TNetResult;
@@ -3493,7 +3486,7 @@ begin
     raise ENetSock.CreateLastError('GetOptInt(%d,%d)', [prot, name]);
 end;
 
-function TNetSocketWrap.GetSocketError: TNetResult;
+function TNetSocketWrap.GetRawSocketError: TNetResult;
 var
   err, len: integer;
 begin
