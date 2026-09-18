@@ -3686,14 +3686,26 @@ end;
 
 function TNetSocketWrap.SendTo(Buf: pointer; len: integer;
   const addr: TNetAddr): TNetResult;
+var
+  sent: integer;
 begin
   if @self = nil then
     result := nrNoSocket
-  else if mormot.net.sock.sendto(
-            TSocket(@self), Buf, len, 0, @addr, addr.Size) < 0 then
-    result := NetLastError
   else
-    result := nrOk;
+  begin
+    {$ifdef OSPOSIX}
+    repeat
+    {$endif OSPOSIX}
+      sent := mormot.net.sock.sendto(TSocket(@self), Buf, len, 0, @addr, addr.Size);
+    {$ifdef OSPOSIX}
+    until (sent >= 0) or
+          (RawSocketErrNo <> ESysEINTR);
+    {$endif OSPOSIX}
+    if sent < 0 then
+      result := NetLastError
+    else
+      result := nrOk;
+  end;
 end;
 
 function TNetSocketWrap.RecvFrom(Buf: pointer; len: integer;
@@ -3705,8 +3717,15 @@ begin
     result := -1
   else
   begin
-    addrlen := SizeOf(addr);
-    result := mormot.net.sock.recvfrom(TSocket(@self), Buf, len, 0, @addr, @addrlen);
+    {$ifdef OSPOSIX}
+    repeat
+    {$endif OSPOSIX}
+      addrlen := SizeOf(addr);
+      result := mormot.net.sock.recvfrom(TSocket(@self), Buf, len, 0, @addr, @addrlen);
+    {$ifdef OSPOSIX}
+    until (result >= 0) or
+          (RawSocketErrNo <> EsockEINTR);
+    {$endif OSPOSIX}
   end;
 end;
 
