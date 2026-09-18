@@ -2155,6 +2155,9 @@ function TrimControlChars(const text: RawUtf8; last: AnsiChar = ' '): RawUtf8;
 /// returns true if any P[0..Len-1] is in [#0 .. #31] range
 function HasControlChars(P: PUtf8Char; Len: PtrUInt): boolean;
 
+/// change in-place any [#0 .. #31] character into a space
+procedure TrimControlCharsBuffer(P: PUtf8Char; Len: PtrUInt);
+
 /// split a RawUtf8 string into two strings, according to SepStr separator
 // - returns true and LeftStr/RightStr if they were separated by SepStr
 // - if SepStr is not found, LeftStr=Str and RightStr='' and returns false
@@ -8914,6 +8917,23 @@ begin
       else
         break;
   result := false; // scanned whole buffer without #0..#31
+end;
+
+procedure TrimControlCharsBuffer(P: PUtf8Char; Len: PtrUInt);
+begin
+  inc(Len, PtrUInt(P)); // Len becomes end address
+  if P <> nil then
+    while true do
+      if PtrUInt(P) <> Len then
+        if P^ >= ' ' then
+          inc(P) // this is the fast path
+        else
+        begin
+          P^ := ' '; // overwrite #0..#31
+          inc(P);
+        end
+      else
+        break;
 end;
 
 function TrimControlChars(const text: RawUtf8; last: AnsiChar): RawUtf8;
