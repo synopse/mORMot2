@@ -5363,6 +5363,7 @@ begin
     result := -1; // we need the slow path within the lock
     exit;
   end;
+  result := SizeOf(Temp);
   p := @Temp;
   if Instance <> nil then // better sooner than in LogHeader()
   begin
@@ -5370,8 +5371,9 @@ begin
     p^ := ' ';
     inc(p);
     Instance := nil; // so that LogHeader() won't do anything
+    dec(result, (p - Temp)); // available on buffer
   end;
-  result := FormatBufferRaw(Format, Values, ValuesCount, p, SizeOf(Temp)) - Temp;
+  result := FormatBufferRaw(Format, Values, ValuesCount, p, result) - Temp;
   if result = SizeOf(Temp) then
     result := Utf8TruncatedLength(@Temp, result, result); // ensure valid UTF-8
   TrimControlCharsBuffer(@Temp, result); // in-place twOnSameLine process
@@ -6212,13 +6214,14 @@ end;
 procedure TSynLog.Log(Level: TSynLogLevel; const Text: string; aInstance: TObject);
 var
   vr: TVarRec;
+  tmp: TBuffer4K;
 begin
   if (self = nil) or
      not (Level in fFamily.fLevel) then
     exit;
   vr.VType := vtUnicodeString;
   vr.VUnicodeString := pointer(Text);
-  LogInternalFmt(Level, '%', @vr, 1, aInstance);
+  LogInternalFmt(Level, '%', @vr, 1, aInstance, tmp);
 end;
 {$endif UNICODE}
 
