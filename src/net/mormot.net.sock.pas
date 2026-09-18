@@ -553,6 +553,9 @@ var
   /// the TCP SetKeepAlive() value for a client (false) or server (true)
   TcpKeepAliveSeconds: array[boolean] of cardinal = (120, 240);
 
+  /// filled with MSG_NOSIGNAL low-level definition of the current platform
+  NET_MSG_NOSIGNAL: integer;
+
 const
   /// a constant to indicate no socket
   NO_SOCKET = TNetSocket(-1);
@@ -8142,6 +8145,7 @@ initialization
   IP4local := cLocalhost; // use var string with refcount=1 to avoid allocation
   NetRandomSeq := SystemEntropy.LiveFeed.c0; // initialize NetRandom32
   DefaultListenBacklog := SOMAXCONN;
+  NET_MSG_NOSIGNAL := MSG_NOSIGNAL;
   GetSystemMacAddress := @_GetSystemMacAddress;
   InitializeUnit; // in mormot.net.sock.windows/posix.inc
 

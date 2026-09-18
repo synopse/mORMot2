@@ -1711,6 +1711,7 @@ begin
   fServer.ServiceMethodRegisterPublishedMethods('', self);
   fServer.AcquireExecutionMode[execSoaByMethod] := amLocked; // protect aEvent
   inherited Create(UInt32ToUtf8(aPort), fServer, '+', useHttpSocket, nil, 1);
+  // we favor useHttpSocket since it is stable and perfect for a few clients
   SetAccessControlAllowOrigin('*'); // e.g. when called from AJAX/SMS
 end;
 
