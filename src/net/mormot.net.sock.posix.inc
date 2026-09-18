@@ -503,6 +503,7 @@ begin
       exit;
     if endtix = 0 then
       continue; // wait INFINITE
+    result := 0;
     timeout := endtix - mormot.core.os.GetTickCount64;
   until timeout <= 0; // timeout eventually elapsed while being interrupted
 end;
@@ -846,6 +847,8 @@ begin
     exit;
   end;
   result := [];
+  if res = 0 then
+    exit; // timeout in PollNoEintr()
   if p.revents and (POLLIN or POLLPRI) <> 0 then
     include(result, neRead);
   if p.revents and POLLOUT <> 0 then
