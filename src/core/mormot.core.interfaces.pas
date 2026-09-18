@@ -1862,6 +1862,21 @@ SYSV aarch64:
     // symbol enables the small fixups that bridge that ABI difference.
     {$define DELPHI_SYSVX64_RESULT_FIRST}
   {$endif ABISYSVX64}
+  {$ifdef ABIA64}
+    {$if defined(OSANDROID) or defined(IOS)}
+      // Delphi's LLVM aarch64 compiler follows AAPCS64 and passes a by-ref
+      // result in the dedicated X8 register, so it does not consume X1 as FPC
+      // does: the external aarch64fakestub (assembled from delphi-aarch64.s)
+      // saves X8 into TFakeCallStack.Frame, and no integer register is
+      // reserved for the result
+      // - the very same code is used as ELF for Android and as Mach-O for iOS
+      // - macOS/Windows aarch64 would need their own object: not done yet
+      {$define DELPHI_AARCH64_RESULT_X8}
+      // iOS terminates an app which runs code it wrote itself, so the VMT
+      // entry points come compiled in (aarch64fakethunks) instead of JITted
+      {$define DELPHI_AARCH64_STATIC_FAKEVMT}
+    {$ifend}
+  {$endif ABIA64}
 {$endif ISDELPHI}
 
 const
@@ -3443,6 +3458,11 @@ begin
     else
     {$endif HAS_FPREG}
       if a^.RegisterIdent > 0 then
+        {$ifdef DELPHI_AARCH64_RESULT_X8}
+        if a^.ValueDirection = imdResult then
+          V := @ctxt.Stack.Frame // X8, as saved by aarch64fakestub
+        else
+        {$endif DELPHI_AARCH64_RESULT_X8}
         {$ifdef DELPHI_SYSVX64_RESULT_FIRST}
         if a^.ValueDirection = imdResult then
           // Delphi LLVM Linux x64: the hidden result pointer travels in the
@@ -4435,10 +4455,12 @@ begin
         // this parameter will go in a register
         a^.InStackOffset := -1;
         {$ifndef ABIX86}
+        {$ifndef DELPHI_AARCH64_RESULT_X8} // X8 is used instead
         if (m^.ArgsResultIndex >= 0) and
            (reg = PARAMREG_RESULT) and
            (m^.Args[m^.ArgsResultIndex].ValueType in ARGS_RESULT_BY_REF) then
           inc(reg); // this register is reserved for method result pointer
+        {$endif DELPHI_AARCH64_RESULT_X8}
         {$endif ABIX86}
         {$ifdef HAS_FPREG}
         if SizeInFPR = 1 then
@@ -4867,8 +4889,53 @@ end;
 {$ifdef ABIA64}
 procedure TInterfacedObjectFakeRaw.AArch64FakeStub;
 begin
-  // TODO: use external .o for Delphi ARM64
+  // unused: DELPHI_AARCH64_RESULT_X8 platforms link aarch64fakestub instead
 end;
+
+{$ifdef DELPHI_AARCH64_RESULT_X8}
+
+// the external stub calls back fakecall(Instance, Stack), with X8 in Stack.Frame
+function DelphiAArch64FakeCall(Instance: TInterfacedObjectFakeRaw;
+  Stack: PFakeCallStack): Int64; cdecl;
+begin
+  result := Instance.FakeCall(Stack); // FakeCall uses SelfFromInterface
+end;
+
+exports
+  DelphiAArch64FakeCall name 'fakecall';
+
+const
+  // the same code, one object per binary format and platform
+  AARCH64OBJ =
+    {$if defined(OSANDROID)}
+      '../../res/static/delphillvm/delphi-android-arm64.o'  // ELF
+    {$elseif defined(IOSSIMULATOR)}
+      '../../res/static/delphillvm/delphi-iossim-arm64.o'   // Mach-O
+    {$else}
+      '../../res/static/delphillvm/delphi-ios-arm64.o'      // Mach-O
+    {$ifend};
+
+procedure aarch64fakestub; external AARCH64OBJ
+  name 'aarch64fakestub';
+
+{$ifdef DELPHI_AARCH64_STATIC_FAKEVMT}
+const
+  // one VMT entry point per method index, 8 bytes each, in the order _FAKEVMT
+  // expects them - delphi-aarch64.s supplies 128 of them
+  AARCH64THUNKSIZE = 8;
+
+{$if MAX_METHOD_COUNT > 128}
+  {$message fatal 'delphi-aarch64.s: aarch64fakethunks has only 128 entries'}
+{$ifend}
+
+// the table is addressed through this function on purpose: Delphi wraps an
+// "external ... name" procedure into a thunk of its own, so @aarch64fakethunks
+// would yield that wrapper instead of the table itself
+function aarch64fakethunkbase: pointer; cdecl; external AARCH64OBJ
+  name 'aarch64fakethunkbase';
+{$endif DELPHI_AARCH64_STATIC_FAKEVMT}
+
+{$endif DELPHI_AARCH64_RESULT_X8}
 {$endif ABIA64}
 
 {$endif FPC}
@@ -5029,6 +5096,30 @@ end;
 
 {$else}
 
+{$ifdef DELPHI_AARCH64_STATIC_FAKEVMT}
+
+// no JIT here: the VMT entry points are compiled in, because iOS terminates an
+// app which executes code it wrote itself - such a JITted page shows up as
+// "Untagged" rwx memory, and the kernel reports CODESIGNING / "Invalid Page"
+// - internal function protected by VmtSafe.Lock
+procedure Compute_FAKEVMT;
+var
+  i: PtrInt;
+  thunk: PAnsiChar;
+begin
+  SetLength(_FAKEVMT, MAX_METHOD_COUNT + RESERVED_VTABLE_SLOTS);
+  // set IInterface RESERVED_VTABLE_SLOTS required methods
+  _FAKEVMT[0] := @TInterfacedObjectFakeRaw.FakeQueryInterface;
+  _FAKEVMT[1] := @TInterfacedObjectFakeRaw.Fake_AddRef;
+  _FAKEVMT[2] := @TInterfacedObjectFakeRaw.Fake_Release;
+  // point to the static thunk of each method index (mov x16,i; b aarch64fakestub)
+  thunk := aarch64fakethunkbase;
+  for i := 0 to MAX_METHOD_COUNT - 1 do
+    _FAKEVMT[i + RESERVED_VTABLE_SLOTS] := @thunk[i * AARCH64THUNKSIZE];
+end;
+
+{$else}
+
 // JIT MAX_METHOD_COUNT VMT stubs for every method of any interface
 // - internal function protected by VmtSafe.Lock
 procedure Compute_FAKEVMT;
@@ -5114,6 +5205,8 @@ begin
   ReserveExecutableMemoryPageAccess(
     _FAKEVMT[RESERVED_VTABLE_SLOTS], {exec=}true);
 end;
+
+{$endif DELPHI_AARCH64_STATIC_FAKEVMT}
 
 function TInterfaceFactory.GetMethodsVirtualTable: pointer;
 begin
@@ -6920,6 +7013,11 @@ type
     {$endif HAS_FPREG}
     res64: Int64Rec;
     resKind: TInterfaceMethodValueType;
+    {$ifdef DELPHI_AARCH64_RESULT_X8}
+    // by-ref result pointer, loaded into X8 by aarch64callmethod
+    // - its offset 168 is hardcoded in delphi-aarch64.s
+    ResultX8: PtrInt;
+    {$endif DELPHI_AARCH64_RESULT_X8}
   end;
 
 // ARM/AARCH64 code below provided by ALF, greatly inspired by pascalscript
@@ -7105,10 +7203,15 @@ asmcall_end:
    ret
 end;
 {$else}
+{$ifdef DELPHI_AARCH64_RESULT_X8}
+procedure CallMethod(var Args: TCallMethodArgs); external
+  AARCH64OBJ name 'aarch64callmethod';
+{$else}
 procedure CallMethod(var Args: TCallMethodArgs);
 begin
   // TODO: use external .o stub on Delphi ARM64
 end;
+{$endif DELPHI_AARCH64_RESULT_X8}
 {$endif FPC}
 {$endif ABIA64}
 
@@ -7406,6 +7509,11 @@ begin
       reValStack:
         MoveFast(pv^^, Stack[arg^.InStackOffset], arg^.SizeInStack);
       reRefReg:
+        {$ifdef DELPHI_AARCH64_RESULT_X8}
+        if arg^.ValueDirection = imdResult then
+          call.ResultX8 := PPtrInt(pv)^ // AAPCS64 passes it in X8
+        else
+        {$endif DELPHI_AARCH64_RESULT_X8}
         call.ParamRegs[arg^.RegisterIdent] := PPtrInt(pv)^;
       reRefStack:
         PPointer(@Stack[arg^.InStackOffset])^ := pv^;
