@@ -1699,7 +1699,7 @@ begin
      (fCount = 0) then
     exit;
   // here fCount=0 would not permit next async subscription
-  n := poll(pointer(fFD), fFDCount, timeoutMS);
+  n := PollNoEintr(pointer(fFD), fFDCount, timeoutMS); // ignoring EINTR signals
   results.Count := n;
   if n <= 0 then
     exit;
@@ -1750,7 +1750,7 @@ begin
   until n = 0;
   if res = 0 then
     exit; // no pseRead to check
-  n := poll(pointer(fd), res, timeoutMS);
+  n := PollNoEintr(pointer(fd), res, timeoutMS); // ignoring EINTR signals
   if n <= 0 then
     exit;
   results.Count := n;
