@@ -4929,7 +4929,7 @@ var
   cltaddr: TNetAddr;
   cltservsock: THttpServerSocket;
   res: TNetResult;
-  banlen {$ifdef OSWINDOWS}, sec, acceptsec {$endif}: integer;
+  err, banlen {$ifdef OSWINDOWS} , sec, acceptsec {$endif}: integer;
   tix64: QWord;
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
@@ -4946,16 +4946,18 @@ begin
       fSock.OnLog := nil;
     fExecuteState := esRunning;
     if not fSock.SockIsDefined then // paranoid check
-      EHttpServer.RaiseUtf8('%.Execute: %.Bind failed', [self, fSock]);
+      EHttpServer.RaiseUtf8('%.DoExecute: %.Bind failed', [self, fSock]);
     // main ACCEPT loop
     {$ifdef OSWINDOWS}
     acceptsec := 0;
     {$endif OSWINDOWS}
     while not Terminated do
     begin
-      res := Sock.Sock.Accept(cltsock, cltaddr, {async=}false);
+      res := Sock.Sock.Accept(cltsock, cltaddr, {async=}false, @err);
       if not (res in [nrOK, nrRetry]) then
       begin
+        fLogClass.Add.Log(sllDebug, 'DoExecute: accept() failed as % %',
+          [_NR[res], SystemErrorShort(err)], self);
         if Terminated then
           break;
         SleepHiRes(1); // failure (too many clients?) -> wait and retry
@@ -5032,7 +5034,7 @@ begin
           on E: Exception do
             // do not stop thread on TLS or socket error
             if Assigned(fSock.OnLog) then
-              fSock.OnLog(sllTrace, 'Execute: % [%]', [PClass(E)^, E.Message], self);
+              fSock.OnLog(sllTrace, 'DoExecute: % [%]', [PClass(E)^, E.Message], self);
         end
       else if Assigned(fThreadPool) then
       begin
@@ -5043,7 +5045,7 @@ begin
         // note: we tried to reuse the fSocketClass instance -> no perf benefit
         cltservsock.AcceptRequest(cltsock, @cltaddr);
         if Assigned(fSock.OnLog) then
-          fSock.OnLog(sllTrace, 'Execute: push %', [cltservsock], self);
+          fSock.OnLog(sllTrace, 'DoExecute: push %', [cltservsock], self);
         if not fThreadPool.Push(pointer(cltservsock), {waitoncontention=}true) then
           // was false if there is no idle thread in the pool, and queue is full
           cltservsock.Free; // will call DirectShutdown(cltsock)

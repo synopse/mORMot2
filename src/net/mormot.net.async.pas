@@ -4093,6 +4093,7 @@ var
   {$else}
   // in select/poll/epoll mode, this thread may do accept or accept+write
   async: boolean;
+  err: integer;
   {$endif USE_WINIOCP}
   res: TNetResult;
   notif: TPollSocketResult;
@@ -4186,7 +4187,7 @@ begin
         // could we Accept one or several incoming connection(s)?
         {DoLog(sllCustom1, 'Execute: before accepted=%', [fAccepted], self);}
         res := fServer.Sock.Accept(client, sin, // = accept4() on Linux
-          {async=}not (acoEnableTls in fOptions)); // see OnFirstReadDoTls
+          {async=}not (acoEnableTls in fOptions), @err); // see OnFirstReadDoTls
       {$endif USE_WINIOCP}
         {DoLog(sllTrace, 'Execute: Accept(%)=% sock=% #% hi=%', [fServer.Port,
           _NR[res], pointer(client), fAccepted, fConnectionHigh], self);}
@@ -4213,7 +4214,8 @@ begin
         if res = nrRetry then // timeout
           continue;
         // check if the remote IP is banned
-        if fBanned.IsBanned(sin) then // IP filtering from blacklist
+        if (res = nrOk) and
+           fBanned.IsBanned(sin) then // IP filtering from blacklist
         begin
           if acoVerboseLog in fOptions then
             DoLog(sllTrace, 'Execute: ban=%', [CardinalToHexShort(sin.IP4)], self);
@@ -4240,8 +4242,9 @@ begin
         if res <> nrOK then
         begin
           // failure (too many clients?) -> wait and retry
-          DoLog(sllDebug, 'Execute: Accept(%) failed as %',
-            [fServer.Port, _NR[res]], self);
+          DoLog(sllDebug, 'Execute: Accept(%) failed as % %',
+            [fServer.Port, _NR[res]
+            {$ifndef USE_WINIOCP}, SystemErrorShort(err){$endif}], self);
           // progressive wait on socket error, including nrTooManyConnections
           SleepStep(start);
           continue;
