@@ -562,8 +562,8 @@ type
 
   /// callback expected by TRestHttpRemoteLogServer.CreateWithSender
   // - ConnectionID identifies the HTTP connection which sent this text, not a
-  // client process: a reconnecting client gets a new ID, and an ID may be
-  // reused after a while - RemoteIP may be '' for a local connection
+  // client process: a reconnecting client gets a new ID, from the 31-bit
+  // sequence of the socket server - RemoteIP may be '' for a local connection
   TRemoteLogReceivedFrom = procedure(const Text: RawUtf8;
     ConnectionID: TRestConnectionID; const RemoteIP: RawUtf8) of object;
 
@@ -579,8 +579,8 @@ type
     fEventFrom: TRemoteLogReceivedFrom;
   public
     /// initialize the HTTP server and an internal mORMot server
-    // - you can share several HTTP log servers on the same port, if you use
-    // a dedicated root URI and use the http.sys server (which is the default)
+    // - will use our useHttpSocket server on all systems, which is good enough
+    // for a few connections, and needs no http.sys URI registration on Windows
     constructor Create(const aRoot: RawUtf8; aPort: integer;
       const aEvent: TRemoteLogReceivedOne); reintroduce;
     /// initialize the HTTP server, also notifying the sender connection
@@ -1710,7 +1710,7 @@ begin
   aModel.Owner := fServer;
   fServer.ServiceMethodRegisterPublishedMethods('', self);
   fServer.AcquireExecutionMode[execSoaByMethod] := amLocked; // protect aEvent
-  inherited Create(UInt32ToUtf8(aPort), fServer, '+', HTTP_DEFAULT_MODE, nil, 1);
+  inherited Create(UInt32ToUtf8(aPort), fServer, '+', useHttpSocket, nil, 1);
   SetAccessControlAllowOrigin('*'); // e.g. when called from AJAX/SMS
 end;
 
