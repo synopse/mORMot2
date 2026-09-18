@@ -67,13 +67,13 @@ const
   SO_REUSEPORT = 15; // available since Kernel 3.9 - not defined by FPC yet
   {$endif OSLINUXANDROID}
 
-  {$ifdef OSFREEBSD}
-  NI_NUMERICHOST = 2;
-  NI_NUMERICSERV = 8;
-  {$else}
+  {$if defined(OSLINUXANDROID) or defined(OSOPENBSD)}
   NI_NUMERICHOST = 1;
   NI_NUMERICSERV = 2;
-  {$endif OSFREEBSD}
+  {$else}
+  NI_NUMERICHOST = 2;
+  NI_NUMERICSERV = 8; // Darwin/FreeBSD/NetBSD/DragonFly/Solaris
+  {$ifend}
 
   {$ifdef OSBSDDARWIN}
     {$ifdef OSOPENBSD}
@@ -207,12 +207,18 @@ const
   POLLRDNORM   = $0040;
   // poll() flag when priority data may be read
   POLLRDBAND   = $0080;
+
+  {$ifdef OSLINUXANDROID}
   // poll() flag when writing now will not block
   POLLWRNORM   = $0100;
   // poll() flag when priority data may be written
   POLLWRBAND   = $0200;
   // poll() flag extension for Linux
   POLLMSG      = $0400;
+  {$else}
+  POLLWRNORM   = POLLOUT;
+  POLLWRBAND   = $0100;
+  {$endif OSLINUXANDROID}
 
 type
   /// polling request data structure for poll()
@@ -749,9 +755,9 @@ end;
 {$endif OSLINUXANDROID}
 {$ifdef OSFREEBSD}
 const
-  TCP_KEEPIDLE  = 4;
-  TCP_KEEPINTVL = 5;
-  TCP_KEEPCNT   = 6;
+  TCP_KEEPIDLE  = 256;
+  TCP_KEEPINTVL = 512;
+  TCP_KEEPCNT   = 1024;
   {$define HASKEEPALIVETCP}
 {$endif OSFREEBSD}
 {$ifdef OSDARWIN}
@@ -943,7 +949,9 @@ const
   // https://github.com/apple/darwin-xnu/blob/main/bsd/net/if_types.h
   IFT_ETHER    = $06;
   IFT_PPP      = $17;
+  {$ifdef OSDARWIN}
   IFT_CELLULAR = $ff;
+  {$endif OSDARWIN}
 
   {$else}
 
@@ -965,7 +973,7 @@ const
   ARPOP_RREQUEST  = 3;  // RARP request
   ARPOP_RREPLY    = 4;  // RARP reply
   ARPOP_InREQUEST = 8;  // InARP request
-  ARPOP_InREPLY   = 8;  // InARP reply
+  ARPOP_InREPLY   = 9;  // InARP reply
   ARPOP_NAK       = 10; // (ATM)ARP NAK
 
   {$endif OSBSDDARWIN}
@@ -1200,8 +1208,10 @@ begin
                 m^.Kind := makEthernet;
               IFT_PPP:
                 m^.Kind := makPpp;
+              {$ifdef OSDARWIN}
               IFT_CELLULAR:
                 m^.Kind := makCellular;
+              {$endif OSDARWIN}
             {$else}
             m^.IfIndex := PSockAddr_ll(info^.ifa_addr)^.sll_ifindex;
             case PSockAddr_ll(info^.ifa_addr)^.sll_hatype of
