@@ -4979,7 +4979,7 @@ type
     VROffs: integer;
   end;
 
-function VAGPArg(va: PSynVAListAapcs64): PAnsiChar;
+function VAGPArg(va: PSynVAListAapcs64): PAnsiChar; inline;
 begin
   if va^.GROffs < 0 then
   begin
@@ -4992,7 +4992,7 @@ begin
   inc(va^.Stack, 8);
 end;
 
-function VAFPArg(va: PSynVAListAapcs64): PAnsiChar;
+function VAFPArg(va: PSynVAListAapcs64): PAnsiChar; inline;
 begin
   if va^.VROffs < 0 then
   begin

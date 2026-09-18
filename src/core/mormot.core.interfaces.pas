@@ -7514,7 +7514,7 @@ begin
           call.ResultX8 := PPtrInt(pv)^ // AAPCS64 passes it in X8
         else
         {$endif DELPHI_AARCH64_RESULT_X8}
-        call.ParamRegs[arg^.RegisterIdent] := PPtrInt(pv)^;
+          call.ParamRegs[arg^.RegisterIdent] := PPtrInt(pv)^;
       reRefStack:
         PPointer(@Stack[arg^.InStackOffset])^ := pv^;
       {$ifdef HAS_FPREG}
