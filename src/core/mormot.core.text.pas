@@ -9608,7 +9608,7 @@ type
     blocks: array[0..80] of TTempUtf8; // 4KB to avoid most heap allocations
     procedure Init;
       {$ifdef HASINLINE} inline; {$endif}
-    procedure InitParse(const Format: RawUtf8; Arg: PVarRec; ArgCount: PtrInt);
+    procedure InitParse(const Format: RawUtf8; Arg: PVarRec; ArgCount, MaxSize: PtrInt);
     procedure InitDelim(Arg: PVarRec; ArgCount: integer; EndWithDelim: boolean;
       Delim: AnsiChar);
     procedure AddText(const SomeText: RawUtf8);
@@ -9664,7 +9664,7 @@ begin
   until d = last;
 end;
 
-procedure TFormatUtf8.InitParse(const Format: RawUtf8; Arg: PVarRec; ArgCount: PtrInt);
+procedure TFormatUtf8.InitParse(const Format: RawUtf8; Arg: PVarRec; ArgCount, MaxSize: PtrInt);
 var
   F, FDeb: PUtf8Char;
   c: PTempUtf8;
@@ -9693,6 +9693,8 @@ begin
           inc(size, c^.Len);
           c^.TempRawUtf8 := nil;
           inc(c);
+          if size >= MaxSize then
+            break;
         end;
         continue;
       end;
@@ -9703,6 +9705,8 @@ begin
         begin
           inc(size, c^.Len);
           inc(c);
+          if size >= MaxSize then
+            break;
         end;
         inc(Arg);
         dec(ArgCount);
@@ -9869,7 +9873,7 @@ begin
     VarRecToUtf8(@Args[0], Result)
   else
   begin
-    f.InitParse(Format, @Args[0], length(Args)); // handle all supplied Args[]
+    f.InitParse(Format, @Args[0], length(Args), MaxInt); // handle all Args[]
     if f.size <> 0 then
       f.WriteAll(FastSetString(Result, f.size), @f.blocks)
     else
@@ -9882,7 +9886,7 @@ procedure FormatUtf8Raw(const Format: RawUtf8; Args: PVarRec; ArgsCount: PtrInt;
 var
   f: TFormatUtf8 absolute Temp;
 begin
-  f.InitParse(Format, Args, ArgsCount); // handle all supplied Args[]
+  f.InitParse(Format, Args, ArgsCount, MaxInt); // handle all supplied Args[]
   if f.size <> 0 then
     f.WriteAll(FastSetString(Result, f.size), @f.blocks)
   else
@@ -9894,7 +9898,7 @@ function FormatBufferRaw(const Format: RawUtf8; Args: PVarRec; ArgsCount: PtrInt
 var
   f: TFormatUtf8;
 begin
-  f.InitParse(Format, Args, ArgsCount);
+  f.InitParse(Format, Args, ArgsCount, DestLen);
   result := f.WriteMax(Dest, DestLen);
 end;
 
@@ -9914,7 +9918,7 @@ procedure FormatShort(const Format: RawUtf8; const Args: array of const;
 var
   f: TFormatUtf8;
 begin
-  f.InitParse(Format, @Args[0], length(Args));
+  f.InitParse(Format, @Args[0], length(Args), high(result));
   result[0] := AnsiChar(f.WriteMax(@result[1], high(result)) - @result[1]);
 end;
 
@@ -9939,7 +9943,7 @@ procedure FormatAdder(var Dest: TSynTempAdder; const Format: RawUtf8; const Args
 var
   f: TFormatUtf8;
 begin
-  f.InitParse(Format, @Args[0], length(Args));
+  f.InitParse(Format, @Args[0], length(Args), MaxInt);
   f.WriteAll(Dest.Add(f.size), @f.blocks);
 end;
 
@@ -9953,7 +9957,7 @@ begin
     Utf8ToStringVar(Format, result)
   else
   begin
-    f.InitParse(Format, @Args[0], length(Args));
+    f.InitParse(Format, @Args[0], length(Args), MaxInt);
     f.WriteString(result);
   end;
 end;
