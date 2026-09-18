@@ -167,7 +167,7 @@ type
     procedure FillPeople(var People: TOrmPeople);
     /// validate array of TOrm transmission
     procedure FillPeoples(n: integer; out People: TOrmPeopleObjArray);
-    {$ifndef CPUAARCH64} // FPC doesn't follow the AARCH64 ABI -> fixme
+    {$ifndef ABIA64} // FPC doesn't follow the AARCH64 ABI -> fixme
     {$ifndef HASNOSTATICRTTI}
     /// validate simple record transmission
     // - older Delphi versions (e.g. 6-7-2009) do not allow records without
@@ -176,7 +176,7 @@ type
     // returned as function result -> Echo is an "out" parameter here
     function EchoRecord(const Nav: TConsultaNav): TConsultaNav;
     {$endif HASNOSTATICRTTI}
-    {$endif CPUAARCH64}
+    {$endif ABIA64}
   end;
 
   /// a test interface, used by TTestServiceOrientedArchitecture
@@ -1439,7 +1439,7 @@ begin
           CheckEqual(YearOfDeath, 1992 + j);
         end;
       ObjArrayClear(peoples);
-      {$ifndef CPUAARCH64} // FPC doesn't follow the AARCH64 ABI -> fixme
+      {$ifndef ABIA64} // FPC doesn't follow the AARCH64 ABI -> fixme
       {$ifndef HASNOSTATICRTTI} // need RTTI for static records
       Nav.MaxRows := c;
       Nav.Row0 := c * 2;
@@ -1453,7 +1453,7 @@ begin
       Check(Nav2.IsSQLUpdateBack = (c and 1 = 0));
       Check(Nav2.EOF = (c and 1 = 1));
       {$endif HASNOSTATICRTTI}
-      {$endif CPUAARCH64}
+      {$endif ABIA64}
       if c mod 10 = 1 then
       begin
         Item.Color := Item.Color + 1;
