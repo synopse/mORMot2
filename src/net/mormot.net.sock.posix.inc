@@ -76,41 +76,39 @@ const
   {$endif OSFREEBSD}
 
   {$ifdef OSBSDDARWIN}
-
-    {$ifndef OSOPENBSD}
-    {$ifdef OSDARWIN}
-    SO_NOSIGPIPE = $1022;
-    SO_REUSEPORT = $0200;
-    AF_LINK      = 18;
+    {$ifdef OSOPENBSD}
+      MSG_NOSIGNAL  = $400;
     {$else}
-    SO_NOSIGPIPE = $800;
-    {$endif OSDARWIN}
+      {$ifdef OSDARWIN}
+        MSG_NOSIGNAL = $80000;
+        SO_NOSIGPIPE = $1022;
+        SO_REUSEPORT = $0200;
+        AF_LINK      = 18;
+      {$else}
+        SO_NOSIGPIPE = $800;
+        {$ifdef OSFREEBSD}
+          MSG_NOSIGNAL = $20000;
+        {$else} // NetBSD / DragonFlyBSD
+          MSG_NOSIGNAL = $400;
+        {$endif OSFREEBSD}
+      {$endif OSDARWIN}
     {$endif OSOPENBSD}
-
-    {$ifndef OSOPENBSD}
-    // Works under MAC OS X and FreeBSD, but is undocumented, so FPC doesn't include it
-    MSG_NOSIGNAL  = $20000;
-    {$else}
-    MSG_NOSIGNAL  = $400;
-    {$endif OSOPENBSD}
-  {$else}
-
+  {$else} // Linux/Solaris conditionals
     {$ifdef SUNOS}
-    MSG_NOSIGNAL = $20000;
+    MSG_NOSIGNAL = $200;
     {$else}
     MSG_NOSIGNAL = $4000; // don't generate SIGPIPE on Linux
     {$endif SUNOS}
-
   {$endif OSBSDDARWIN}
 
-  {$ifdef FPC} // or defined in mormot.core.os.delphi.pas
+{$ifdef FPC} // or defined in mormot.core.os.delphi.pas
 
   {$packrecords C}
 
   FIONREAD = termio.FIONREAD;
   FIONBIO  = termio.FIONBIO;
 
-  {$endif FPC}
+{$endif FPC}
 
   _ST: array[TNetLayer] of cint = (
     SOCK_STREAM,
