@@ -801,6 +801,7 @@ procedure TTunnelLocalThread.DoExecute;
 var
   tmp: RawByteString;
   res: TNetResult;
+  err: integer;
   start: cardinal;
 begin
   fStarted := true;
@@ -816,7 +817,7 @@ begin
       try
         start := GetTickSec; // socket timeout is 500ms: use a loop
         repeat
-          res := fServerSock.Accept(fClientSock, fClientAddr, {async=}false);
+          res := fServerSock.Accept(fClientSock, fClientAddr, {async=}false, @err);
           if (res = nrOk) and
              not Terminated then
           begin
@@ -891,8 +892,8 @@ begin
         ETunnel.RaiseUtf8('%.Execute(%): rejected client %',
           [self, fPort, fClientAddr.IPShort(true)])
       else
-        ETunnel.RaiseUtf8('%.Execute(%): accept failed with %',
-          [self, fPort, _NR[res]]);
+        ETunnel.RaiseUtf8('%.Execute(%): accept failed as % %',
+          [self, fPort, _NR[res], SystemErrorShort(err)]);
   except
     on E: Exception do
     try
@@ -1388,8 +1389,13 @@ begin
     if Assigned(log) then
       log.Log(sllTrace, 'Open=% %', [result, variant(fInfo)], self);
   except
-    sock.ShutdownAndClose(true); // any error would abort and return 0
-    result := 0;
+    on E: Exception do
+    begin
+      fLogClass.Add.Log(sllWarning, 'OpenInterface failed after thread=% % [%]',
+        [thread, PClass(E)^, E.Message], self);
+      sock.ShutdownAndClose(true); // any error would abort and return 0
+      result := 0;
+    end;
   end;
   infoaes.Free;
   FillZero(key.b);
