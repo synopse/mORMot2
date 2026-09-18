@@ -4963,6 +4963,74 @@ var
   DispInvokeArgOrderInverted: boolean; // circumvent FPC 3.2+ breaking change
 {$endif FPC}
 
+{$ifdef DISPINVOKE_AAPCS64}
+// Android/Linux Delphi aarch64: Params is a pointer to an AAPCS64 va_list (see
+// the "Variable argument lists" appendix of the Procedure Call Standard for the
+// Arm 64-bit Architecture): general purpose values use 8-byte slots below
+// GR_Top, floating point values 16-byte slots below VR_Top, then the stack in
+// 8-byte slots - and records > 16 bytes (i.e. variants) are passed by reference
+type
+  PSynVAListAapcs64 = ^TSynVAListAapcs64;
+  TSynVAListAapcs64 = record // matches System.TVarArgList on this platform
+    Stack: PAnsiChar;
+    GRTop: PAnsiChar;
+    VRTop: PAnsiChar;
+    GROffs: integer;
+    VROffs: integer;
+  end;
+
+function VAGPArg(va: PSynVAListAapcs64): PAnsiChar;
+begin
+  if va^.GROffs < 0 then
+  begin
+    result := va^.GRTop + va^.GROffs;
+    inc(va^.GROffs, 8);
+    if va^.GROffs <= 0 then
+      exit;
+  end;
+  result := va^.Stack;
+  inc(va^.Stack, 8);
+end;
+
+function VAFPArg(va: PSynVAListAapcs64): PAnsiChar;
+begin
+  if va^.VROffs < 0 then
+  begin
+    result := va^.VRTop + va^.VROffs;
+    inc(va^.VROffs, 16);
+    if va^.VROffs <= 0 then
+      exit;
+  end;
+  result := va^.Stack;
+  inc(va^.Stack, 8);
+end;
+
+{$define DISPINVOKE_VALIST}
+{$endif DISPINVOKE_AAPCS64}
+
+{$ifdef DISPINVOKE_APPLEA64}
+// iOS/macOS Delphi aarch64: Apple does not use the AAPCS64 va_list - as shown
+// by System.pas, TVarArgList is a plain pointer there, because every variadic
+// argument is passed on the stack, in 8-byte slots: so general purpose and
+// floating point values are both read the very same way
+type
+  PSynVAListApple = ^PAnsiChar;
+
+function VAGPArg(va: PSynVAListApple): PAnsiChar;
+begin
+  result := va^;
+  inc(va^, 8);
+end;
+
+function VAFPArg(va: PSynVAListApple): PAnsiChar;
+begin
+  result := va^;
+  inc(va^, 8);
+end;
+
+{$define DISPINVOKE_VALIST}
+{$endif DISPINVOKE_APPLEA64}
+
 {$ifdef DISPINVOKE_SYSVAMD64}
 // Linux/macOS/Android Delphi 64-bit Intel: Params is a SysV AMD64 va_list
 // pointer; use va_arg semantics. ARGREF (var/out) params are passed as pointers
@@ -5004,6 +5072,8 @@ begin
     inc(va^.overflow_arg_area, 8);
   end;
 end;
+
+{$define DISPINVOKE_VALIST}
 {$endif DISPINVOKE_SYSVAMD64}
 
 procedure DispInvokeNamed(VT: TSynInvokeableVariantType; NamePtr: pointer;
@@ -5011,7 +5081,7 @@ procedure DispInvokeNamed(VT: TSynInvokeableVariantType; NamePtr: pointer;
 var
   name: string;
   res: TSynVarData;
-  i, {$ifndef DISPINVOKE_SYSVAMD64} asize, {$endif} n: PtrInt;
+  i, {$ifndef DISPINVOKE_VALIST} asize, {$endif} n: PtrInt;
   a: PAnsiChar;
   v: PVarData;
   args: TVarDataArray; // DoProcedure/DoFunction require a dynamic array
@@ -5043,9 +5113,9 @@ begin
     else
     {$endif FPC}
       v := pointer(args);
-    {$ifndef DISPINVOKE_SYSVAMD64}
+    {$ifndef DISPINVOKE_VALIST}
     a := Params;
-    {$endif DISPINVOKE_SYSVAMD64}
+    {$endif DISPINVOKE_VALIST}
     for i := 0 to n - 1 do
     begin
       t := cardinal(CallDesc^.ArgTypes[i]) and ARGTYPE_MASK;
@@ -5057,15 +5127,15 @@ begin
         varStrArg:
           t := varString;
       end;
-      {$ifdef DISPINVOKE_SYSVAMD64}
+      {$ifdef DISPINVOKE_VALIST}
       if (CallDesc^.ArgTypes[i] and ARGREF_MASK <> 0) or
          not (t in [varSingle, varDouble, varDate]) then
-        a := VAGPArgSysVAmd64(Params)
+        a := {$ifdef DISPINVOKE_SYSVAMD64} VAGPArgSysVAmd64 {$else} VAGPArg {$endif} (Params)
       else
-        a := VAFPArgSysVAmd64(Params);
+        a := {$ifdef DISPINVOKE_SYSVAMD64} VAFPArgSysVAmd64 {$else} VAFPArg {$endif} (Params);
       {$else}
       asize := SizeOf(pointer); // most arguments in flat-buffer are pointers
-      {$endif DISPINVOKE_SYSVAMD64}
+      {$endif DISPINVOKE_VALIST}
       if CallDesc^.ArgTypes[i] and ARGREF_MASK <> 0 then
       begin
         PSynVarData(v)^.VType := t or varByRef;
@@ -5078,7 +5148,7 @@ begin
           varError:
             begin
               v^.VError := VAR_PARAMNOTFOUND;
-              {$ifndef DISPINVOKE_SYSVAMD64} asize := 0; {$endif}
+              {$ifndef DISPINVOKE_VALIST} asize := 0; {$endif}
             end;
           varVariant:
             {$ifdef DISPINVOKEBYVALUE}
@@ -5096,7 +5166,7 @@ begin
           varWord64:
             begin
               v^.VInt64 := PInt64(a)^;
-              {$ifndef DISPINVOKE_SYSVAMD64} asize := SizeOf(Int64); {$endif}
+              {$ifndef DISPINVOKE_VALIST} asize := SizeOf(Int64); {$endif}
             end;
           // small values are stored as pointers on stack but pushed as 32-bit
           varSingle,
@@ -5112,9 +5182,9 @@ begin
           v^.VAny := PPointer(a)^; // e.g. varString or varOleStr
         end;
       end;
-      {$ifndef DISPINVOKE_SYSVAMD64}
-      inc(a, asize); // flat-buffer advancement (VAArgSysVAmd64 has its own list)
-      {$endif DISPINVOKE_SYSVAMD64}
+      {$ifndef DISPINVOKE_VALIST}
+      inc(a, asize); // flat-buffer advancement (a va_list has its own cursor)
+      {$endif DISPINVOKE_VALIST}
       {$ifdef FPC}
       if inverted then
         dec(v)

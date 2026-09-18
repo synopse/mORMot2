@@ -823,7 +823,14 @@
     {$define NOEXCEPTIONINTERCEPT}   // TODO: interception for Delphi POSIX
     {$ifdef CPUX64}
       {$define DISPINVOKE_SYSVAMD64} // use SysV AMD64 va_list layout
-    {$endif CPUX64}                  // TODO: check aarch64 ABI on Delphi
+    {$endif CPUX64}
+    {$ifdef CPUARM64}
+      {$ifdef MACOS}
+        {$define DISPINVOKE_APPLEA64} // on Apple, TVarArgList is a plain pointer
+      {$else}
+        {$define DISPINVOKE_AAPCS64}  // use the AAPCS64 va_list layout
+      {$endif MACOS}
+    {$endif CPUARM64}
   {$endif OSWINDOWS}
   {$ifdef CPU32}
     {$define HASSLOWMUL64}  // Delphi 32-bit has slow 64-bit mul: favor shl
