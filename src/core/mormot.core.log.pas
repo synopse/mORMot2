@@ -1282,14 +1282,14 @@ type
     function PerformRotationOrUnlock(nfo: PSynLogThreadInfo): boolean;
     function LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
       {$ifdef ISDELPHI} ; addr: PtrUInt = 0 {$endif}): boolean;
-    function LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject; fmt: PUtf8Char;
-      args: PVarRec; argscount: PtrInt; microsecs: PInt64): boolean;
+    function LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject; const fmt: RawUtf8;
+      args: PVarRec; argscount: PtrInt; microsecs: PInt64; var tmp: TBuffer4K): boolean;
     procedure AddLogThreadName;
     procedure CreateLogWriter; virtual;
     procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
     procedure AutoFlush(tix32: cardinal);
     procedure LogInternalFmt(Level: TSynLogLevel; const Format: RawUtf8;
-      Values: PVarRec; ValuesCount: integer; Instance: TObject);
+      Values: PVarRec; ValuesCount: integer; Instance: TObject; var tmp: TBuffer4K);
     procedure LogInternalText(Level: TSynLogLevel; Text: PUtf8Char;
       TextLen: PtrInt; Instance: TObject; TextTruncateAtLength: PtrInt);
     procedure LogInternalRtti(Level: TSynLogLevel; const aName: RawUtf8;
@@ -1407,7 +1407,7 @@ type
     // text content, after expanding the parameters like FormatUtf8()
     // - it will append the corresponding sllLeave log entry when the method ends
     // - warning: may return nil if sllEnter is not enabled for the TSynLog class
-    class function Enter(TextFmt: PUtf8Char; const TextArgs: array of const;
+    class function Enter(const TextFmt: RawUtf8; const TextArgs: array of const;
       aInstance: TObject = nil): ISynLog; overload;
     /// handle method enter / auto-leave tracing, with some custom text arguments
     // - expects the ISynLog to be a void variable on stack
@@ -1436,7 +1436,7 @@ type
     // !   if Assigned(logger) then // may be nil if sllEnter is not enabled
     // !     logger.Log(sllInfo,'method called');
     // ! end; // when logger is out-of-scope, will log the method leaving
-    class function EnterLocal(var Local: ISynLog; TextFmt: PUtf8Char;
+    class function EnterLocal(var Local: ISynLog; const TextFmt: RawUtf8;
       const TextArgs: array of const; aInstance: TObject = nil): TSynLog; overload;
     /// handle method enter / auto-leave tracing, with some custom string arguments
     // - the logged text is supplied as generic string value, not RawUtf8/PUtf8Char
@@ -1569,7 +1569,7 @@ type
     /// manual low-level TSynLog.Enter execution without the ISynLog overhead
     // - may be used to log Enter/Leave stack from non-pascal code
     // - each call to ManualEnter should be followed by a matching ManualLeave
-    procedure ManualEnter(aInstance: TObject; TextFmt: PUtf8Char;
+    procedure ManualEnter(aInstance: TObject; const TextFmt: RawUtf8;
       const TextArgs: array of const; MicroSecs: PInt64 = nil); overload;
     /// manual low-level ISynLog release after TSynLog.Enter execution
     // - each call to ManualEnter should be followed by a matching ManualLeave
@@ -5945,15 +5945,37 @@ begin
   EndWrite(nfo);
 end;
 
-function TSynLog.LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
-  fmt: PUtf8Char; args: PVarRec; argscount: PtrInt; microsecs: PInt64): boolean;
+function PreRenderFmt(var Temp: TBuffer4K; const Format: RawUtf8;
+  Values: PVarRec; ValuesCount: integer): PtrInt;
 begin
+  result := FormatBufferRaw(Format, Values, ValuesCount, @Temp, SizeOf(Temp)) - Temp;
+  if result = SizeOf(Temp) then
+    result := Utf8TruncatedLength(@Temp, result, result); // ensure valid UTF-8
+  TrimControlCharsBuffer(@Temp, result); // in-place twOnSameLine process
+end;
+
+function TSynLog.LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
+  const fmt: RawUtf8; args: PVarRec; argscount: PtrInt; microsecs: PInt64;
+  var tmp: TBuffer4K): boolean;
+var
+  len: PtrInt;
+begin
+  // pre-render Format/Values up to 4KB on stack outside of the TSynLog lock
+  if fFamily.DirectRendering or
+     VarRecNeedsWriteObject(args, argscount) then
+    len := -1 // we need the slow path within the lock
+  else
+    len := PreRenderFmt(tmp, fmt, args, argscount);
+  // log this line
   result := LockAndPrepareEnter(nfo, microsecs);
   if not result then
     exit;
   LogHeader(sllEnter, inst);
-  fWriter.AddFmt(fmt, args, argscount, twOnSameLine,
-    [woDontStoreDefault, woDontStoreVoid, woFullExpand]);
+  if len >= 0 then
+    fWriter.AddNoJsonEscape(@tmp, len)
+  else
+    fWriter.AddFmt(pointer(fmt), args, argscount, twOnSameLine,
+      [woDontStoreDefault, woDontStoreVoid, woFullExpand]);
   fWriterEcho.AddEndOfLine(sllEnter);
   EndWrite(nfo);
 end;
@@ -6009,22 +6031,23 @@ end;
 
 {$endif WINTELDELPHI}
 
-class function TSynLog.Enter(TextFmt: PUtf8Char;
+class function TSynLog.Enter(const TextFmt: RawUtf8;
   const TextArgs: array of const; aInstance: TObject): ISynLog;
 begin
   result := nil;
   EnterLocal(result, TextFmt, TextArgs, aInstance);
 end;
 
-class function TSynLog.EnterLocal(var Local: ISynLog; TextFmt: PUtf8Char;
+class function TSynLog.EnterLocal(var Local: ISynLog; const TextFmt: RawUtf8;
   const TextArgs: array of const; aInstance: TObject): TSynLog;
 var
   nfo: PSynLogThreadInfo;
+  tmp: TBuffer4K;
 begin // expects the caller to have set Local = nil
   result := Add;
   nfo := result.DoEnter;
   if nfo <> nil then
-    if result.LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs), nil) then
+    if result.LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs), nil, tmp) then
       pointer(Local) := PAnsiChar(result) + result.fISynLogOffset // result := self
     else
       result := nil;
@@ -6079,14 +6102,15 @@ begin
     end;
 end;
 
-procedure TSynLog.ManualEnter(aInstance: TObject; TextFmt: PUtf8Char;
+procedure TSynLog.ManualEnter(aInstance: TObject; const TextFmt: RawUtf8;
   const TextArgs: array of const; MicroSecs: PInt64);
 var
   nfo: PSynLogThreadInfo;
+  tmp: TBuffer4K;
 begin
   nfo := DoEnter;
   if nfo <> nil then
-    if not LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs), MicroSecs) then
+    if not LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs), MicroSecs, tmp) then
     begin
       inc(nfo^.RecursionCount); // restore matching ManualLeave level
       nfo^.Recursion[nfo^.RecursionCount - 1] := 0; // failed ManualEnter
@@ -6153,10 +6177,12 @@ end;
 
 procedure TSynLog.Log(Level: TSynLogLevel; const Format: RawUtf8;
   const Args: array of const; aInstance: TObject);
+var
+  tmp: TBuffer4K;
 begin
   if (self <> nil) and
      (Level in fFamily.fLevel) then
-    LogInternalFmt(Level, Format, @Args[0], length(Args), aInstance);
+    LogInternalFmt(Level, Format, @Args[0], length(Args), aInstance, tmp);
 end;
 
 procedure TSynLog.Log(Level: TSynLogLevel; const Text: RawUtf8;
@@ -6306,11 +6332,12 @@ class procedure TSynLog.DoLog(Level: TSynLogLevel; const Format: RawUtf8;
    const Args: array of const; Instance: TObject);
 var
   log: TSynLog;
+  tmp: TBuffer4K;
 begin
   log := Add;
   if (log <> nil) and
      (Level in log.fFamily.fLevel) then
-    log.LogInternalFmt(Level, Format, @Args[0], length(Args), Instance);
+    log.LogInternalFmt(Level, Format, @Args[0], length(Args), Instance, tmp);
 end;
 
 class procedure TSynLog.ProgressInfo(Sender: TObject; Info: PProgressInfo);
@@ -6832,22 +6859,12 @@ begin
   LogFileInitLocked(nfo);
 end;
 
-function PreRenderFmt(var Temp: TBuffer4K; const Format: RawUtf8;
-  Values: PVarRec; ValuesCount: integer): PtrInt;
-begin
-  result := FormatBufferRaw(Format, Values, ValuesCount, @Temp, SizeOf(Temp)) - Temp;
-  if result = SizeOf(Temp) then
-    result := Utf8TruncatedLength(@Temp, result, result); // ensure valid UTF-8
-  TrimControlCharsBuffer(@Temp, result);
-end;
-
 procedure TSynLog.LogInternalFmt(Level: TSynLogLevel; const Format: RawUtf8;
-  Values: PVarRec; ValuesCount: integer; Instance: TObject);
+  Values: PVarRec; ValuesCount: integer; Instance: TObject; var tmp: TBuffer4K);
 var
   nfo: PSynLogThreadInfo;
   len: PtrInt;
   lasterror: cardinal;
-  tmp: TBuffer4K;
 begin
   lasterror := 0;
   if Level = sllLastError then
