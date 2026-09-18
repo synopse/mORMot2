@@ -478,9 +478,12 @@ type
     /// iterate until a given element name is reached anywhere in the content
     // - used e.g. to implement Find('//book')
     function FindAny(ElementName: PUtf8Char; ElementLen: PtrInt): boolean;
-    /// retrieve a text sub-value via Save+Find+ConsumeText+Restore
+    /// retrieve a text sub-value
+    // - relative and '//...' paths preserve the current parser position
+    // - an absolute '/...' path rewinds from the document root and leaves the
+    // parser at the resulting position
     function GetU(Path: PUtf8Char; var V: RawUtf8): boolean;
-    /// retrieve an integer sub-value via Save+Find+ConsumeText+Restore+ToInt64
+    /// retrieve an integer sub-value wrapping a GetU() transient call
     function GetI(Path: PUtf8Char; var V: Int64): boolean;
     /// save the current state of the parser (Position, Kind and Depth)
     // - up to 32 Save/Restore nested levels are allowed
