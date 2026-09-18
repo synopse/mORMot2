@@ -4651,7 +4651,7 @@ begin
     if fOwner.fIocpAccept.PrepareNext('client', c.fIocpSub, wieConnect) then
       result := nrOk;
     {$else}
-    result := addr.SocketConnect(c.fSocket, -1);
+    result := addr.SocketConnect(c.fSocket, -1); // ms=-1 for non-blocking
     if result <> nrOk then
       exit;
     if fOwner.fSockets.fWrite.Subscribe(c.fSocket, [pseWrite], tag) then

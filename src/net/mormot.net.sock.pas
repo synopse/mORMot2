@@ -3170,7 +3170,12 @@ begin
   if result <> nrOK then
     exit;
   if connect(socket.Socket, @Addr, Size) = 0 then // non-blocking connect() once
-    exit; // immediate success (unlikely)
+  begin
+    // immediate success (unlikely but may happen)
+    if ms >= 0 then
+      result := socket.MakeBlocking; // caller expect a socket in blockin mode
+    exit;
+  end;
   result := NetLastError;
   if result <> nrRetry then
     exit; // abort on fatal error (e.g. invalid address)
