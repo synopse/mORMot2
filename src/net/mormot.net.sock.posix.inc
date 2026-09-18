@@ -454,27 +454,33 @@ function doaccept(s: TSocket; addr: PSockAddr; var async: boolean): integer;
 var
   len: TSockLen;
 begin
-  len := SOCKADDR_SIZE;
   {$ifdef HASACCEPT4}
   if async and
      not Accept4Unsupported then
   begin
     // see https://github.com/eudev-project/eudev/issues/7#issuecomment-10502344
-    result := accept4(s, addr, len, SOCK_NONBLOCK);
-    if (result < 0) and
-       ((cerrno = ESysENOSYS) or
-        (cerrno = ESysEOPNOTSUPP)) then
-    begin
-      Accept4Unsupported := true; // will fallback from now on on old systems
+    repeat
       len := SOCKADDR_SIZE;
-      result := accept(s, addr, len);
-    end
-    else
-      async := false; // no need to call MakeAsync
+      result := accept4(s, addr, len, SOCK_NONBLOCK);
+      if result >= 0 then
+      begin
+        async := false; // accepted descriptor is already non-blocking
+        exit;
+      end;
+    until cerrno <> ESysEINTR;
+    if (cerrno <> ESysENOSYS) and
+       (cerrno <> ESysEOPNOTSUPP) then
+      exit;
+    // old kernel/libc: fallback to plain accept() from now on
+    Accept4Unsupported := true;
   end
   else
   {$endif HASACCEPT4}
+  repeat
+    len := SOCKADDR_SIZE;
     result := accept(s, addr, len);
+  until (result >= 0) or
+        (cerrno <> ESysEINTR);
 end;
 
 function PollNoEintr(fds: PPollFD; nfds, timeout: integer): integer;
