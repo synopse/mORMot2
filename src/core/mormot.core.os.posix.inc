@@ -535,6 +535,16 @@ begin
           icui18n := LibraryOpen(fn);
         end;
       end;
+      {$ifdef OSANDROID}
+      if icu = 0 then
+      begin
+        // current Android has no libicudata.so (its data is part of the i18n
+        // APEX) but still publishes libicuuc.so/libicui18n.so to the apps
+        icu := LibraryOpen('libicuuc.so');
+        if icu <> 0 then
+          icui18n := LibraryOpen('libicui18n.so');
+      end;
+      {$endif OSANDROID}
       {$endif OSDARWIN}
       if icui18n = 0 then
       begin
@@ -563,7 +573,7 @@ begin
           break;
         end;
       end;
-      if vers <> '' then
+      if vers = '' then // no official version number matched
       {$endif OSANDROID}
       if LibraryResolve(icu, 'ucnv_open') = nil then
         for i := ICU_MAX downto ICU_MIN do
