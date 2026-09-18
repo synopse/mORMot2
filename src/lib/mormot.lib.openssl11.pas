@@ -628,6 +628,7 @@ const
   BIO_C_SET_EX_ARG = 153;
   BIO_C_GET_EX_ARG = 154;
   BIO_C_SET_CONNECT_MODE = 155;
+  BIO_C_SET_SEND_FLAGS = 160; // OpenSSL 4+ e.g. to supply MSG_NOSIGNAL
 
   BIO_CTRL_RESET = 1;
   BIO_CTRL_EOF = 2;
@@ -2873,9 +2874,11 @@ type
 function NewOpenSslNetTls: INetTls;
 
 var
-  /// force to true so that NewOpenSslNetTls won't disable SIG_PIPE on POSIX
-  // - due to an OpenSSL limitation, which does not set socket MSG_NOSIGNAL
-  // - just ignored on Windows
+  /// force to true so that OpenSSL 1.1/3.x won't disable SIGPIPE on POSIX
+  // - OpenSSL 1.1/3.x socket BIOs don't support MSG_NOSIGNAL
+  // - OpenSSL 4.x uses per-socket BIO_C_SET_SEND_FLAGS + MSG_NOSIGNAL instead,
+  // so no process-wide SIGPIPE interception is needed so this flag is ignored
+  // - also just ignored on Windows by design
   NewOpenSslNetTlsNoSigPipeIntercept: boolean;
 
 /// retrieve the peer certificates chain from a given HTTPS server URI
@@ -10828,6 +10831,54 @@ begin
   result := EVP_MD_size(EVP_MD_CTX_md(ctx))
 end;
 
+{$ifdef OSPOSIX}
+var
+  OpenSslBioSendFlagsUnsupported: boolean;
+{$endif OSPOSIX}
+
+function SSLSetFdNoSigPipe(s: PSSL; fd: integer): integer;
+{$ifdef OSPOSIX}
+var
+  bio: PBIO;
+{$endif OSPOSIX}
+begin
+  {$ifdef OSPOSIX}
+  // OpenSSL 4.0 finally allows socket BIO send(MSG_NOSIGNAL) to be specified
+  if (OpenSslVersion >= OPENSSL4_VERNUM) and
+     (NET_MSG_NOSIGNAL <> 0) and
+     not OpenSslBioSendFlagsUnsupported then
+  begin
+    // SSL_set_fd() internally does essentially:
+    //   BIO_new_socket(fd, BIO_NOCLOSE);
+    //   SSL_set_bio(s, bio, bio);
+    // We reproduce it here so that BIO_C_SET_SEND_FLAGS can be applied
+    // before any TLS handshake/write takes place.
+    bio := BIO_new_socket(fd, {BIO_NOCLOSE=}0);
+    if bio = nil then
+      exit(0); // BIO allocation is a fatal error: SSL_set_fd() won't do better
+    if BIO_ctrl(bio, BIO_C_SET_SEND_FLAGS, NET_MSG_NOSIGNAL, nil) = OPENSSLSUCCESS then
+    begin
+      // SSL takes ownership of the BIO.
+      // Passing the same BIO for read and write is exactly what SSL_set_fd()
+      // does for a normal stream socket.
+      SSL_set_bio(s, bio, bio);
+      result := OPENSSLSUCCESS;
+      exit;
+    end;
+    // BIO_C_SET_SEND_FLAGS / MSG_NOSIGNAL wasn't accepted
+    bio.Free;
+    ERR_get_error; // consume internal error status
+    OpenSslBioSendFlagsUnsupported := true; // no need to retry again
+  end;
+  // OpenSSL 1.1 / 3.x has no way to pass MSG_NOSIGNAL to its socket BIO
+  // Keep the historical mORMot fallback unless explicitly disabled
+  if not NewOpenSslNetTlsNoSigPipeIntercept then
+    SigPipeIntercept; // do nothing and quickly return if already intercepted
+  {$endif OSPOSIX}
+  // regular TLS context assignment to a socket - Windows needs no MSG_NOSIGNAL
+  result := SSL_set_fd(s, fd);
+end;
+
 function BN_num_bytes(bn: PBIGNUM): integer;
 begin
   result := (BN_num_bits(bn) + 7) shr 3;
@@ -11403,7 +11454,9 @@ begin
           Check('AfterConnection add1_host', SSL_add1_host(fSsl, pointer(h)));
       end;
     end;
-    Check('AfterConnection set_fd', SSL_set_fd(fSsl, Socket.Socket));
+    // setup the conection using MSG_NOSIGNAL on OpenSSL 4+
+    Check('AfterConnection set_fd',
+      SSLSetFdNoSigPipe(fSsl, Socket.Socket));
     // client TLS negotiation with server
     Check('AfterConnection connect', SSL_connect(fSsl));
     fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
@@ -11728,7 +11781,8 @@ begin
     if BoundContext.AcceptCert = nil then
       raise EOpenSslNetTls.Create('AfterAccept: missing AfterBind');
     fSsl := SSL_new(BoundContext.AcceptCert);
-    Check('AfterAccept set_fd', SSL_set_fd(fSsl, Socket.Socket));
+    Check('AfterAccept set_fd',
+      SSLSetFdNoSigPipe(fSsl, Socket.Socket)); // MSG_NOSIGNAL on OpenSSL 4+
     // server TLS negotiation with server
     Check('AfterAccept accept', SSL_accept(fSsl));
     fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
@@ -11863,13 +11917,7 @@ end;
 function NewOpenSslNetTls: INetTls;
 begin
   if OpenSslIsAvailable then
-  begin
-    {$ifdef OSPOSIX}
-    if not NewOpenSslNetTlsNoSigPipeIntercept then
-      SigPipeIntercept;
-    {$endif OSPOSIX}
-    result := TOpenSslNetTls.Create;
-  end
+    result := TOpenSslNetTls.Create
   else
     result := nil;
 end;
@@ -11893,7 +11941,7 @@ begin
     s := SSL_new(c);
     SSL_set_tlsext_host_name(s, u.Server);
     try
-      if (SSL_set_fd(s, ns.Socket) = OPENSSLSUCCESS) and
+      if (SSLSetFdNoSigPipe(s, ns.Socket) = OPENSSLSUCCESS) and
          (SSL_connect(s) = OPENSSLSUCCESS) then
         result := s.PeerCertificates({acquire=}true);
     finally

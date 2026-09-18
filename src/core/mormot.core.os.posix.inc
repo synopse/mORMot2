@@ -5028,8 +5028,7 @@ begin
   end;
 end;
 
-// TO INVESTIGATE: we may use per-thread signal masking instead
-// http://www.microhowto.info/howto/ignore_sigpipe_without_affecting_other_threads_in_a_process.html
+// per-thread signal masking is no solution for OpenSSL - rather upgrade to 4+
 procedure SigPipeIntercept;
 var
   sa: SigactionRec;
@@ -5043,7 +5042,7 @@ begin
     FillCharFast(sa, SizeOf(sa), 0);
     sa.sa_handler := SigActionHandler(SIG_IGN);
     if fpSigaction(SIGPIPE, @sa, nil) = 0 then
-      include(_F1, fSigPipeDisabled); // set AFTER disabling it
+      include(_F1, fSigPipeDisabled); // set once AFTER disabling it
   finally
     OSSafe.UnLock;
   end;

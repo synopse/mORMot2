@@ -6258,8 +6258,8 @@ function SynDaemonTerminated: integer;
 procedure SynDaemonIntercept(const onlog: TSynLogProc = nil);
 
 /// disable SIGPIPE signal for the current process
-// - is called e.g. by NewOpenSslNetTls since the OpenSsl TLS layer does not
-// (yet) use MSG_NOSIGNAL when accessing the socket
+// - is called e.g. by NewOpenSslNetTls since the OpenSsl 1.x/3.x TLS layer does
+// not use MSG_NOSIGNAL when accessing the socket - not needed since OpenSsl 4.x
 procedure SigPipeIntercept;
 
 {$endif OSWINDOWS}
