@@ -353,6 +353,7 @@ const
   AF_PACKET     = 17; // Linux specific
   SOMAXCONN     = Posix.SysSocket.SOMAXCONN;
   SOL_SOCKET    = Posix.SysSocket.SOL_SOCKET;
+  SO_ERROR      = Posix.SysSocket.SO_ERROR;
   SO_SNDTIMEO   = Posix.SysSocket.SO_SNDTIMEO;
   SO_RCVTIMEO   = Posix.SysSocket.SO_RCVTIMEO;
   SO_REUSEADDR  = Posix.SysSocket.SO_REUSEADDR;

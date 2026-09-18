@@ -355,6 +355,8 @@ type
     function GetIP(out ip: RawUtf8; withport: boolean = true): TNetResult;
     /// retrieve the peer address associated on this connected socket
     function GetPeer(out addr: TNetAddr): TNetResult;
+    /// retrieve the raw SO_ERROR option value on this socket
+    function GetSocketError: TNetResult;
     /// change the socket state to non-blocking
     // - note that on Windows, there is no easy way to check the non-blocking
     // state of the socket (WSAIoctl has been deprecated for this)
@@ -3489,6 +3491,23 @@ begin
   len := SizeOf(result);
   if getsockopt(TSocket(@self), prot, name, @result, @len) <> NO_ERROR then
     raise ENetSock.CreateLastError('GetOptInt(%d,%d)', [prot, name]);
+end;
+
+function TNetSocketWrap.GetSocketError: TNetResult;
+var
+  err, len: integer;
+begin
+  if @self = nil then
+    result := nrNoSocket
+  else
+  begin
+    err := 0;
+    len := SizeOf(err);
+    if getsockopt(TSocket(@self), SOL_SOCKET, SO_ERROR, @err, @len) <> NO_ERROR then
+      result := NetLastError
+    else
+      result := NetErrorFromSystem(err, NO_ERROR);
+  end;
 end;
 
 procedure TNetSocketWrap.SetKeepAlive(secs: cardinal);
