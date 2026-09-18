@@ -453,6 +453,9 @@ var
 function doaccept(s: TSocket; addr: PSockAddr; var async: boolean): integer;
 var
   len: TSockLen;
+  {$ifdef HASACCEPT4}
+  err: integer;
+  {$endif HASACCEPT4}
 begin
   {$ifdef HASACCEPT4}
   if async and
@@ -467,14 +470,14 @@ begin
         async := false; // accepted descriptor is already non-blocking
         exit;
       end;
-    until cerrno <> ESysEINTR;
-    if (cerrno <> ESysENOSYS) and
-       (cerrno <> ESysEOPNOTSUPP) then
+      err := cerrno; // access threadvar once
+    until err <> ESysEINTR;
+    if (err <> ESysENOSYS) and
+       (err <> ESysEOPNOTSUPP) then // quit with result = -1 on fatal error
       exit;
     // old kernel/libc: fallback to plain accept() from now on
     Accept4Unsupported := true;
-  end
-  else
+  end;
   {$endif HASACCEPT4}
   repeat
     len := SOCKADDR_SIZE;
@@ -606,7 +609,7 @@ begin
     repeat
       sent := mormot.net.sock.send(TSocket(@self), Buf, len, MSG_NOSIGNAL);
     until (sent >= 0) or
-          (RawSocketErrNo <> ESysEINTR); // retry on SIG received
+          (cerrno <> ESysEINTR); // retry on SIG received
     // man send: Upon success, send() returns the number of bytes sent.
     // Otherwise, -1 is returned and errno set to indicate the error.
     len := sent;
@@ -630,7 +633,7 @@ begin
     repeat
       recv := mormot.net.sock.recv(TSocket(@self), Buf, len, 0);
     until (recv >= 0) or
-          (RawSocketErrNo <> ESysEINTR); // retry on SIG received
+          (cerrno <> ESysEINTR); // retry on SIG received
     // man recv: Upon successful completion, recv() shall return the length of
     // the message in bytes. If no messages are available to be received and the
     // peer has performed an orderly shutdown, recv() shall return 0.
@@ -659,7 +662,7 @@ begin
     repeat
       sent := mormot.net.sock.sendto(TSocket(@self), Buf, len, 0, @addr, addr.Size);
     until (sent >= 0) or
-          (RawSocketErrNo <> ESysEINTR); // retry on SIG received
+          (cerrno <> ESysEINTR); // retry on SIG received
     if sent < 0 then
       result := NetLastError
     else
@@ -679,7 +682,7 @@ begin
       addrlen := SizeOf(addr);
       result := mormot.net.sock.recvfrom(TSocket(@self), Buf, len, 0, @addr, @addrlen);
     until (result >= 0) or
-          (RawSocketErrNo <> ESysEINTR); // retry on SIG received
+          (cerrno <> ESysEINTR); // retry on SIG received
 end;
 
 procedure SetTimeVal(ms: PtrUInt; out tv: TTimeVal);
