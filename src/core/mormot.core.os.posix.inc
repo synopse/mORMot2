@@ -5018,10 +5018,6 @@ begin
   end;
 end;
 
-procedure DoNothing(Sig: integer; Info: PSigInfo; Context: PSigContext); cdecl;
-begin
-end;
-
 // TO INVESTIGATE: we may use per-thread signal masking instead
 // http://www.microhowto.info/howto/ignore_sigpipe_without_affecting_other_threads_in_a_process.html
 procedure SigPipeIntercept;

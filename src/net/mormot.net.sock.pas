@@ -348,7 +348,7 @@ type
     // - async=true will force clientsocket to be defined as asynchronous;
     // supporting accept4() syscall on Linux
     function Accept(out clientsocket: TNetSocket; out addr: TNetAddr;
-      async: boolean): TNetResult;
+      async: boolean; rawError: PNetErrorInt = nil): TNetResult;
     /// retrieve the current address associated on this connected socket
     function GetName(out addr: TNetAddr): TNetResult;
     /// retrieve this connected socket address as 'ip[:port]' text
@@ -3578,10 +3578,12 @@ begin
 end;
 
 function TNetSocketWrap.Accept(out clientsocket: TNetSocket;
-  out addr: TNetAddr; async: boolean): TNetResult;
+  out addr: TNetAddr; async: boolean; rawError: PNetErrorInt): TNetResult;
 var
   sock: TSocket;
 begin
+  if rawError <> nil then
+    rawError^ := 0;
   if @self = nil then
     result := nrNoSocket
   else
@@ -3589,7 +3591,7 @@ begin
     sock := doaccept(TSocket(@self), @addr, async);
     if sock = -1 then
     begin
-      result := NetLastError;
+      result := NetLastError(NO_ERROR, rawError);
       if result = nrOk then
         result := nrNotImplemented;
     end
