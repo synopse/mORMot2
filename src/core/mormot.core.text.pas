@@ -2655,9 +2655,13 @@ function PointerToHex(aPointer: pointer): RawUtf8; overload;
 procedure PointerToHex(aPointer: pointer; var result: RawUtf8); overload;
 
 /// fast conversion from a pointer data into hexa chars, ready to be displayed
+function PointerToHexShort(aPointer: pointer): TShort16;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast conversion from a pointer data into hexa chars, ready to be displayed
 // - use internally DisplayMinChars() and BinToHexDisplay()
-// - such result type would avoid a string allocation on heap
-function PointerToHexShort(aPointer: pointer): TShort16; overload;
+// - such aText type would avoid a string allocation on heap
+procedure PointerToHexShortVar(aPointer: pointer; var aText: shortstring);
 
 /// append an Instance name and pointer, as 'unit.name.TObjectList(00425E68)'
 // - used e.g. by TTextWriter.AddInstancePointer
@@ -11242,8 +11246,13 @@ end;
 
 function PointerToHexShort(aPointer: pointer): TShort16;
 begin
-  result[0] := AnsiChar(DisplayMinChars(@aPointer, SizeOf(aPointer)) * 2);
-  BinToHexDisplayLower(@aPointer, @result[1], ord(result[0]) shr 1);
+  PointerToHexShortVar(aPointer, result);
+end;
+
+procedure PointerToHexShortVar(aPointer: pointer; var aText: shortstring);
+begin
+  aText[0] := AnsiChar(DisplayMinChars(@aPointer, SizeOf(aPointer)) * 2);
+  BinToHexDisplayLower(@aPointer, @aText[1], ord(aText[0]) shr 1);
 end;
 
 function CardinalToHexShort(aCardinal: cardinal): TShort15;
