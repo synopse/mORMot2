@@ -673,6 +673,73 @@ begin
     (v = SocketPriorityHintVeryLow);
 end;
 
+// no POSIX signals interception needed for Send/Recv/SendTo/RecvFrom on WinAPI
+
+function TNetSocketWrap.Send(Buf: pointer; var len: integer;
+  rawError: PNetErrorInt): TNetResult;
+begin
+  if @self = nil then
+    result := nrNoSocket
+  else
+  begin
+    len := mormot.net.sock.send(TSocket(@self), Buf, len, MSG_NOSIGNAL);
+    // man send: Upon success, send() returns the number of bytes sent.
+    // Otherwise, -1 is returned and errno set to indicate the error.
+    if len < 0 then
+      result := NetLastError(NO_ERROR, rawError)
+    else
+      result := nrOK;
+  end;
+end;
+
+function TNetSocketWrap.Recv(Buf: pointer; var len: integer;
+  rawError: PNetErrorInt): TNetResult;
+begin
+  if @self = nil then
+    result := nrNoSocket
+  else
+  begin
+    len := mormot.net.sock.recv(TSocket(@self), Buf, len, 0);
+    // man recv: Upon successful completion, recv() shall return the length of
+    // the message in bytes. If no messages are available to be received and the
+    // peer has performed an orderly shutdown, recv() shall return 0.
+    // Otherwise, -1 shall be returned and errno set to indicate the error,
+    // which may be nrRetry if no data is available.
+    if len <= 0 then
+      if len = 0 then
+        result := nrClosed
+      else
+        result := NetLastError(NO_ERROR, rawError)
+    else
+      result := nrOK;
+  end;
+end;
+
+function TNetSocketWrap.SendTo(Buf: pointer; len: integer;
+  const addr: TNetAddr): TNetResult;
+begin
+  if @self = nil then
+    result := nrNoSocket
+  else if mormot.net.sock.sendto(TSocket(@self), Buf, len, 0, @addr, addr.Size) < 0 then
+    result := NetLastError
+  else
+    result := nrOk;
+end;
+
+function TNetSocketWrap.RecvFrom(Buf: pointer; len: integer;
+  out addr: TNetAddr): integer;
+var
+  addrlen: integer;
+begin
+  if @self = nil then
+    result := -1
+  else
+  begin
+    addrlen := SizeOf(addr);
+    result := mormot.net.sock.recvfrom(TSocket(@self), Buf, len, 0, @addr, @addrlen);
+  end;
+end;
+
 procedure SetTimeVal(ms: cardinal; out tv: TTimeVal);
   {$ifdef HASINLINE} inline; {$endif}
 begin

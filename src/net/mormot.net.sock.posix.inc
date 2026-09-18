@@ -562,6 +562,96 @@ end;
 
 { TNetSocketWrap }
 
+// POSIX signals could interrupt the raw socket syscalls -> retry on ESysEINTR
+
+function TNetSocketWrap.Send(Buf: pointer; var len: integer;
+  rawError: PNetErrorInt): TNetResult;
+var
+  sent: integer;
+begin
+  if @self = nil then
+    result := nrNoSocket
+  else
+  begin
+    repeat
+      sent := mormot.net.sock.send(TSocket(@self), Buf, len, MSG_NOSIGNAL);
+    until (sent >= 0) or
+          (RawSocketErrNo <> ESysEINTR); // retry on SIG received
+    // man send: Upon success, send() returns the number of bytes sent.
+    // Otherwise, -1 is returned and errno set to indicate the error.
+    len := sent;
+    if len < 0 then
+      result := NetLastError(NO_ERROR, rawError)
+      // and return len = -1 as in mormot.net.sock.windows.inc
+    else
+      result := nrOK;
+  end;
+end;
+
+function TNetSocketWrap.Recv(Buf: pointer; var len: integer;
+  rawError: PNetErrorInt): TNetResult;
+var
+  recv: integer;
+begin
+  if @self = nil then
+    result := nrNoSocket
+  else
+  begin
+    repeat
+      recv := mormot.net.sock.recv(TSocket(@self), Buf, len, 0);
+    until (recv >= 0) or
+          (RawSocketErrNo <> ESysEINTR); // retry on SIG received
+    // man recv: Upon successful completion, recv() shall return the length of
+    // the message in bytes. If no messages are available to be received and the
+    // peer has performed an orderly shutdown, recv() shall return 0.
+    // Otherwise, -1 shall be returned and errno set to indicate the error,
+    // which may be nrRetry if no data is available.
+    len := recv;
+    if len <= 0 then
+      if len = 0 then
+        result := nrClosed
+      else
+        result := NetLastError(NO_ERROR, rawError)
+    else
+      result := nrOK;
+  end;
+end;
+
+function TNetSocketWrap.SendTo(Buf: pointer; len: integer;
+  const addr: TNetAddr): TNetResult;
+var
+  sent: integer;
+begin
+  if @self = nil then
+    result := nrNoSocket
+  else
+  begin
+    repeat
+      sent := mormot.net.sock.sendto(TSocket(@self), Buf, len, 0, @addr, addr.Size);
+    until (sent >= 0) or
+          (RawSocketErrNo <> ESysEINTR); // retry on SIG received
+    if sent < 0 then
+      result := NetLastError
+    else
+      result := nrOk;
+  end;
+end;
+
+function TNetSocketWrap.RecvFrom(Buf: pointer; len: integer;
+  out addr: TNetAddr): integer;
+var
+  addrlen: integer;
+begin
+  if @self = nil then
+    result := -1
+  else
+    repeat
+      addrlen := SizeOf(addr);
+      result := mormot.net.sock.recvfrom(TSocket(@self), Buf, len, 0, @addr, @addrlen);
+    until (result >= 0) or
+          (RawSocketErrNo <> ESysEINTR); // retry on SIG received
+end;
+
 procedure SetTimeVal(ms: PtrUInt; out tv: TTimeVal);
 var
   d: PtrUInt;
