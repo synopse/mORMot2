@@ -2581,7 +2581,12 @@ end;
 
 var
   // GlobalTime[LocalTime] thread-safe cache of decoded TSynSystemTime
-  GlobalTime: array[boolean] of packed record
+  // - not "packed": such a record has an alignment of 1, and the Delphi aarch64
+  // linker did place this variable at an odd address on iOS, where the atomic
+  // instruction of safe.ReadLock/WriteLock then raised an access violation
+  // - the fields are laid out the same way either way, since TRWLightLock is
+  // pointer-sized and both cardinal and TSynSystemTime are aligned within
+  GlobalTime: array[boolean] of record
     safe: TRWLightLock;
     clock: cardinal;      // avoid slower API call with 16ms loss of precision
     time: TSynSystemTime;
