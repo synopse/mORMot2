@@ -828,7 +828,7 @@ begin
     exit;
   p := Posix.Dlfcn.dlsym(FindResourceHInstance(HInstance), Rec^.Key); // main exe only
   if p <> nil then
-    if p^.ShortLen = $ffff then
+    if p^.ShortLen <> $ffff then // $ffff marks the long layout, as in system.pas
       SetString(Res, p^.ShortW, p^.ShortLen)
     else
       SetString(Res, p^.LongW, p^.LongLen);
