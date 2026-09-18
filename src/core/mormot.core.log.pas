@@ -822,6 +822,7 @@ type
     fPerThreadLog: TSynLogPerThreadMode;
     fWithUnitName: boolean;
     fWithInstancePointer: boolean;
+    fDirectRendering: boolean;
     fStackTraceLevel: byte;
     fStackTraceUse: TSynLogStackTraceUse;
     fFileExistsAction: TSynLogExistsAction;
@@ -1111,6 +1112,9 @@ type
     // - set to TRUE by default, for better debugging experience
     property WithInstancePointer: boolean
       read fWithInstancePointer write fWithInstancePointer;
+    /// if TRUE, internal 4KB pre-rendering is bypassed and AddFmt() is called
+    property DirectRendering: boolean
+      read fDirectRendering write fDirectRendering;
     /// the time (in seconds) after which the log content must be written on
     // disk, whatever the current content size is
     // - equals 0 by default, so that the log file will be written for every 8KB
@@ -6828,21 +6832,42 @@ begin
   LogFileInitLocked(nfo);
 end;
 
+function PreRenderFmt(var Temp: TBuffer4K; const Format: RawUtf8;
+  Values: PVarRec; ValuesCount: integer): PtrInt;
+begin
+  result := FormatBufferRaw(Format, Values, ValuesCount, @Temp, SizeOf(Temp)) - Temp;
+  if result = SizeOf(Temp) then
+    result := Utf8TruncatedLength(@Temp, result, result); // ensure valid UTF-8
+  TrimControlCharsBuffer(@Temp, result);
+end;
+
 procedure TSynLog.LogInternalFmt(Level: TSynLogLevel; const Format: RawUtf8;
   Values: PVarRec; ValuesCount: integer; Instance: TObject);
 var
   nfo: PSynLogThreadInfo;
+  len: PtrInt;
   lasterror: cardinal;
+  tmp: TBuffer4K;
 begin
   lasterror := 0;
   if Level = sllLastError then
     lasterror := GetLastError;
+  // pre-render Format/Values up to 4KB on stack outside of the TSynLog lock
+  if fFamily.DirectRendering or
+     VarRecNeedsWriteObject(Values, ValuesCount) then
+    len := -1 // we need the slow path within the lock
+  else
+    len := PreRenderFmt(tmp, Format, Values, ValuesCount);
+  // log this line
   nfo := @PerThreadInfo;
   if LockAndPrepareWrite(nfo) then
   begin
     LogHeader(Level, Instance);
-    fWriter.AddFmt(pointer(Format), Values, ValuesCount, twOnSameLine,
-      [woDontStoreDefault, woDontStoreVoid, woFullExpand]);
+    if len >= 0 then
+      fWriter.AddNoJsonEscape(@tmp, len)
+    else
+      fWriter.AddFmt(pointer(Format), Values, ValuesCount, twOnSameLine,
+        [woDontStoreDefault, woDontStoreVoid, woFullExpand]);
     if lasterror <> 0 then
       AddErrorMessage(lasterror);
     LogTrailer(Level);
