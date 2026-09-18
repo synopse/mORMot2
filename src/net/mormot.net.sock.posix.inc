@@ -492,10 +492,9 @@ var
 begin
   // preserve the requested timeout across EINTR: restarting poll() with the
   // original timeout could otherwise extend the effective wait indefinitely
+  endtix := 0;
   if timeout > 0 then
-    endtix := mormot.core.os.GetTickCount64 + timeout
-  else
-    endtix := 0;
+    endtix := GetTickCount64 + timeout;
   repeat
     result := poll(fds, nfds, timeout);
     if (result >= 0) or
@@ -504,7 +503,7 @@ begin
     if endtix = 0 then
       continue; // wait INFINITE
     result := 0;
-    timeout := endtix - mormot.core.os.GetTickCount64;
+    timeout := endtix - GetTickCount64;
   until timeout <= 0; // timeout eventually elapsed while being interrupted
 end;
 
@@ -1323,7 +1322,7 @@ var
   arp: TRawArp;
   addr: SockAddr_ll;
   resp: RawByteString;
-  retry: integer;
+  retry, sent: integer;
   start: Int64;
 begin
   FastAssignNew(result);
@@ -1377,7 +1376,11 @@ begin
     start := GetTickCount64;
   for retry := 0 to 4 do // with some exponential backoff on network congestion
   begin
-    if sendto(s, @arp, SizeOf(arp), 0, @addr, SizeOf(addr)) >= 0 then
+    repeat
+      sent := sendto(s, @arp, SizeOf(arp), 0, @addr, SizeOf(addr));
+    until (sent >= 0) or
+          (cerrno <> ESysEINTR);
+    if sent >= 0 then
     begin
       if ns.RecvWait(100 + retry * 50, resp) = nrOK then
         repeat
@@ -1958,10 +1961,9 @@ function EpollWaitNoEintr(epfd: integer; events: PEPoll_Event;
 var
   endtix: Int64;
 begin
+  endtix := 0;
   if timeout > 0 then
-    endtix := mormot.core.os.GetTickCount64 + timeout
-  else
-    endtix := 0;
+    endtix := GetTickCount64 + timeout;
   repeat
     result := epoll_wait(epfd, events, maxevents, timeout);
     if (result >= 0) or
@@ -1970,7 +1972,7 @@ begin
     if endtix = 0 then
       continue; // wait INFINITE
     result := 0;
-    timeout := endtix - mormot.core.os.GetTickCount64; // compute remaining time
+    timeout := endtix - GetTickCount64; // compute remaining time
   until timeout <= 0;
 end;
 
