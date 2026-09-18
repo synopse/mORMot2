@@ -334,6 +334,8 @@ type
   // ! while true do
   // !   case x.ParseNext of
   // !     ...
+  // - as show above, methods are FORWARD-ONLY: use properly Save/Restore or
+  // Rewind otherwise you may get a "Missing TXmlParser.Save/Rewind" exception
   // - this is a "basic" parser, from actual simple needs: no DTD support (which
   // makes it immune to entity expansion attacks by design), no URI namespace
   // binding, only the most useful XPath lookup syntax
@@ -2372,7 +2374,7 @@ var
 begin
   i := fStackLen[high(fStackLen)]; // fSave[] count
   if i = 0 then
-    EXmlException.RaiseU('Missing TXmlParser.Save');
+    EXmlException.RaiseU('Missing TXmlParser.Save/Rewind');
   dec(i);
   fStackLen[high(fStackLen)] := i;
   s := @fSave[i];
@@ -2955,11 +2957,19 @@ begin
 end;
 
 function TXmlParser.GetU(Path: PUtf8Char; var V: RawUtf8): boolean;
+var
+  keeppos: boolean;
 begin
-  Save;
+  result := false;
+  if Path = nil then
+    exit;
+  keeppos := (Path[0] <> '/') or (Path[1] = '/');
+  if keeppos then
+    Save;
   result := Find(Path) and
             ConsumeText(V);
-  Restore;
+  if keeppos then
+    Restore;
 end;
 
 function TXmlParser.GetI(Path: PUtf8Char; var V: Int64): boolean;
