@@ -477,6 +477,30 @@ begin
     result := accept(s, addr, len);
 end;
 
+function PollNoEintr(fds: PPollFD; nfds, timeout: integer): integer;
+var
+  endtix: Int64;
+begin
+  // preserve the requested timeout across EINTR: restarting poll() with the
+  // original timeout could otherwise extend the effective wait indefinitely
+  if timeout > 0 then
+    endtix := mormot.core.os.GetTickCount64 + timeout
+  else
+    endtix := 0;
+  repeat
+    result := poll(fds, nfds, timeout);
+    if (result >= 0) or
+       (cerrno <> ESysEINTR) then
+      exit;
+    if endtix = 0 then
+      continue; // wait INFINITE
+    result := 0;
+    timeout := endtix - mormot.core.os.GetTickCount64;
+    if timeout <= 0 then
+      exit; // timeout eventually elapsed while being interrupted
+  until false;
+end;
+
 
 { ******** TNetSocket Cross-Platform Wrapper }
 
@@ -804,13 +828,13 @@ begin
     p.events := p.events or POLLOUT;
   // POLLERR and POLLHUP are ignored in p.events: implicit [neError]
   p.revents := 0;
-  res := poll(@p, 1, ms);
+  res := PollNoEintr(@p, 1, ms); // would indentify ESysEINTR within poll()
   if res < 0 then
   begin
     res := cerrno;
     if loerr <> nil then
       loerr^ := res;
-    if res in [ESysEAGAIN, ESysEINTR] then
+    if res = ESysEAGAIN then
       // timeout, not a true error
       result := [];
     exit;
