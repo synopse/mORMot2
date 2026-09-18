@@ -1095,6 +1095,12 @@
     // Delphi for WinArm has no SQlite3/QuickJS static support yet
     {$define NOSQLITE3STATIC}
     {$undef LIBQUICKJSSTATIC}
+    {$ifdef OSDARWIN}
+      // Apple does not follow the AAPCS64 standard for the arguments passed on
+      // the stack: they are packed to their natural size there, so this Delphi
+      // target needs the same fix as FPC on aarch64-darwin
+      {$define OSDARWINARM}
+    {$endif OSDARWIN}
   {$endif CPUINTEL}
 {$endif FPC}
 
