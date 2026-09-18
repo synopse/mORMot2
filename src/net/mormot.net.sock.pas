@@ -357,6 +357,9 @@ type
     function GetPeer(out addr: TNetAddr): TNetResult;
     /// retrieve the raw SO_ERROR option value on this socket
     function GetRawSocketError: TNetResult;
+    /// wrap WaitFor() and GetRawSocketError() methods
+    function WaitForWithRawSocketError(ms: integer;
+      scope: TNetEvents = [neWrite, neError]): TNetResult;
     /// change the socket state to non-blocking
     // - note that on Windows, there is no easy way to check the non-blocking
     // state of the socket (WSAIoctl has been deprecated for this)
@@ -3506,6 +3509,17 @@ begin
     else
       result := NetErrorFromSystem(err, NO_ERROR);
   end;
+end;
+
+function TNetSocketWrap.WaitForWithRawSocketError(ms: integer; scope: TNetEvents): TNetResult;
+var
+  events: TNetEvents;
+begin
+  events := WaitFor(ms, scope);
+  if events = [] then
+    result := nrRetry
+  else
+    result := GetRawSocketError;
 end;
 
 procedure TNetSocketWrap.SetKeepAlive(secs: cardinal);
