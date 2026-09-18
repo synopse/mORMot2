@@ -227,7 +227,8 @@ type
     // - returns only the hexadecimal value if no match is found in .map/.dbg/.mab
     // - won't allocate any heap memory during the text creation
     // - mormot.core.os.pas' GetExecutableLocation() redirects to this method
-    class procedure FindLocationShort(aPointer: pointer; var aInfo: ShortString);
+    class procedure FindLocationShort(aPointer: pointer; var aInfo: ShortString;
+      aNoHex: boolean = false);
       {$ifdef HASINLINE} static; {$endif}
     /// return the symbol location according to the supplied absolute address
     // - filename, symbol name and line number (if any), as plain text, e.g.
@@ -4184,12 +4185,15 @@ begin
 end;
 
 class procedure TDebugFile.FindLocationShort(aPointer: pointer;
-  var aInfo: ShortString);
+  var aInfo: ShortString; aNoHex: boolean);
 var
   deb: TDebugFile;
   tmp: pointer; // RawUtf8
 begin
-  aInfo := PointerToHexShort(aPointer);
+  if aNoHex then
+    aInfo[0] := #0
+  else
+    PointerToHexShortVar(aPointer, aInfo);
   tmp := nil;
   deb := DebugFileGet(PtrUInt(aPointer), @tmp);
   if deb <> nil then
@@ -5370,8 +5374,8 @@ begin
     p := PointerToText(Instance, p, fWithUnitName, fWithInstancePointer);
     p^ := ' ';
     inc(p);
-    Instance := nil; // so that LogHeader() won't do anything
-    dec(result, (p - Temp)); // available on buffer
+    Instance := nil; // so that LogHeader() won't do anything about this pointer
+    dec(result, (p - Temp)); // still available on buffer
   end;
   result := FormatBufferRaw(Format, Values, ValuesCount, p, result) - Temp;
   if result = SizeOf(Temp) then
@@ -6064,7 +6068,7 @@ begin // expects the caller to have set Local = nil
   nfo := result.DoEnter;
   if nfo <> nil then
     if result.LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs), nil, tmp) then
-      pointer(Local) := PAnsiChar(result) + result.fISynLogOffset // result := self
+      pointer(Local) := PAnsiChar(result) + result.fISynLogOffset // Local := self
     else
       result := nil;
 end;
@@ -6078,7 +6082,7 @@ begin // expects the caller to have set Local = nil
   nfo := result.DoEnter;
   if nfo <> nil then
     if result.LogEnter(nfo, aInstance, aMethodName) then // with refcnt = 1
-      pointer(Local) := PAnsiChar(result) + result.fISynLogOffset // result := self
+      pointer(Local) := PAnsiChar(result) + result.fISynLogOffset // Local := self
     else
       result := nil;
 end;
