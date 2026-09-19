@@ -7492,7 +7492,10 @@ var
       begin
         {$ifndef SYNDB_SILENCE}
         if SynDBLog.HasLevel([sllSQL, sllDB, sllException, sllError]) then
-          SynDBLog.Add.LogLines(sllSQL, pointer(stmt.SqlWithInlinedParams), self, '--');
+          if stmt <> nil then
+            SynDBLog.Add.LogLines(sllSQL, pointer(stmt.SqlWithInlinedParams), self, '--')
+          else // NewStatement itself failed (e.g. Connect raised)
+            SynDBLog.Add.LogLines(sllSQL, pointer(aSql), self, '--');
         {$endif SYNDB_SILENCE}
         stmt.Free;
         result := nil;
