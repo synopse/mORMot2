@@ -52,6 +52,9 @@ uses
   {$ifdef USELIBCURL}  // as set in mormot.defines.inc
   mormot.lib.curl,
   {$endif USELIBCURL}
+  {$ifdef USEDELPHINETHTTP} // as set in mormot.defines.inc
+  mormot.lib.nethttp,
+  {$endif USEDELPHINETHTTP}
   {$ifdef DOMAINRESTAUTH}
   mormot.lib.sspi,   // void unit on POSIX
   mormot.lib.gssapi, // void unit on Windows
@@ -1661,6 +1664,45 @@ type
   end;
 
 {$endif USELIBCURL}
+
+{$ifdef USEDELPHINETHTTP}
+
+type
+  /// a class to handle HTTP/1.1 request using the Delphi RTL
+  // System.Net.HttpClient, i.e. the TLS stack of the Operating System
+  // - used as MainHttpClass on Delphi Android/iOS, which have neither
+  // OpenSSL nor libcurl available
+  // - OnUploadProgress/OnDownloadProgress are not implemented
+  TDelphiNetHttp = class(THttpRequest)
+  protected
+    fConnection: TNetHttpConnection;
+    fRootUrl: RawUtf8;
+    fIn: record
+      Method, Url: RawUtf8;
+      Headers: RawUtf8;
+    end;
+    fOut: record
+      Status: integer;
+      Header, Encoding, AcceptEncoding: string;
+      Data: RawByteString;
+    end;
+    procedure InternalConnect(
+      ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal); override;
+    procedure InternalCreateRequest(const aMethod, aUrl: RawUtf8); override;
+    procedure InternalSendRequest(const aMethod: RawUtf8;
+      const aData: RawByteString); override;
+    function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding: RawUtf8;
+      var Data: RawByteString): integer; override;
+    procedure InternalCloseRequest; override;
+    procedure InternalAddHeader(const hdr: RawUtf8); override;
+  public
+    /// returns TRUE: the RTL is always available
+    class function IsAvailable: boolean; override;
+    /// release the connection
+    destructor Destroy; override;
+  end;
+
+{$endif USEDELPHINETHTTP}
 
 
 const
@@ -5284,6 +5326,9 @@ begin
     {$ifdef USELIBCURL}
     _MainHttpClass := TCurlHttp;
     {$endif USELIBCURL}
+    {$ifdef USEDELPHINETHTTP}
+    _MainHttpClass := TDelphiNetHttp;
+    {$endif USEDELPHINETHTTP}
     {$endif USEWININET}
     if _MainHttpClass = nil then
       EHttpSocket.RaiseU('MainHttpClass: No THttpRequest class known!');
@@ -6129,6 +6174,80 @@ end;
 
 {$endif USELIBCURL}
 
+{$ifdef USEDELPHINETHTTP}
+
+{ TDelphiNetHttp }
+
+procedure TDelphiNetHttp.InternalConnect(
+  ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal);
+begin
+  if fLayer <> nlTcp then
+    EHttpSocket.RaiseUtf8('%: unsupported layer %', [self, ord(fLayer)]);
+  fConnection := TNetHttpConnection.Create(ConnectionTimeOut, SendTimeout,
+    ReceiveTimeout, Utf8ToString(fProxyName));
+  FormatUtf8('http%://%:%', [TLS_TEXT[fHttps], fServer, fPort], fRootUrl);
+end;
+
+destructor TDelphiNetHttp.Destroy;
+begin
+  fConnection.Free;
+  inherited Destroy;
+end;
+
+class function TDelphiNetHttp.IsAvailable: boolean;
+begin
+  result := true;
+end;
+
+procedure TDelphiNetHttp.InternalCreateRequest(const aMethod, aUrl: RawUtf8);
+begin
+  fIn.Method := UpperCase(aMethod);
+  if fIn.Method = '' then
+    fIn.Method := 'GET';
+  fIn.Url := Join([fRootUrl, aUrl]);
+  fIn.Headers := '';
+  Finalize(fOut);
+end;
+
+procedure TDelphiNetHttp.InternalAddHeader(const hdr: RawUtf8);
+begin
+  if hdr <> '' then
+    Append(fIn.Headers, [hdr, #13#10]);
+end;
+
+procedure TDelphiNetHttp.InternalSendRequest(const aMethod: RawUtf8;
+  const aData: RawByteString);
+begin
+  if AuthScheme = wraBearer then
+    Append(fIn.Headers, ['Authorization: Bearer ', AuthToken, #13#10])
+  else if AuthScheme = wraBasic then
+    Append(fIn.Headers, ['Authorization: Basic ',
+      BinToBase64(Join([AuthUserName, ':', AuthPassword])), #13#10]);
+  fConnection.IgnoreCertificateErrors := IgnoreTlsCertificateErrors;
+  fOut.Status := fConnection.Request(Utf8ToString(fIn.Method),
+    Utf8ToString(fIn.Url), Utf8ToString(fIn.Headers), aData,
+    fExtendedOptions.RedirectMax, Utf8ToString(fExtendedOptions.UserAgent),
+    fOut.Header, fOut.Encoding, fOut.AcceptEncoding, fOut.Data);
+end;
+
+function TDelphiNetHttp.InternalRetrieveAnswer(
+  var Header, Encoding, AcceptEncoding: RawUtf8; var Data: RawByteString): integer;
+begin
+  result := fOut.Status;
+  Header := StringToUtf8(fOut.Header);
+  Encoding := StringToUtf8(fOut.Encoding);
+  AcceptEncoding := StringToUtf8(fOut.AcceptEncoding);
+  Data := fOut.Data;
+end;
+
+procedure TDelphiNetHttp.InternalCloseRequest;
+begin
+  Finalize(fIn);
+  Finalize(fOut);
+end;
+
+{$endif USEDELPHINETHTTP}
+
 
 { ******************** IHttpClient / TSimpleHttpClient Wrappers }
 
@@ -6870,6 +6989,12 @@ begin
           aUri, inHeaders, ignoreTlsCertError, outHeaders, outStatus)
       else
       {$endif USELIBCURL}
+      {$ifdef USEDELPHINETHTTP} // the socket layer has no TLS on those targets
+      if uri.Https then
+        result := TDelphiNetHttp.Get(
+          aUri, inHeaders, ignoreTlsCertError, outHeaders, outStatus, timeout)
+      else
+      {$endif USEDELPHINETHTTP}
         // fallback to SChannel/OpenSSL if libcurl is not installed
         result := OpenHttpGet(uri.Server, uri.Port, uri.Address,
           inHeaders, outHeaders, uri.Layer, uri.Https, outStatus,
