@@ -3771,9 +3771,7 @@ begin
      (abs(fExeAge - mabage) < 2) and // same exact age (allow 1 second diff)
      not (dfsNoMabExternalCheck in Scope) then
   begin
-    LoadMab(fMabFile);
-    if fBlocksCount or fSymbolsCount = 0 then
-      DeleteFile(fMabFile);
+    LoadMab(fMabFile); // no DeleteFile() on failure: may not be our own file
   end;
   // recompute from .map/.dbg if no faster-to-load .mab available
   if fBlocksCount or fSymbolsCount = 0 then
