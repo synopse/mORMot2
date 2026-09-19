@@ -8701,7 +8701,8 @@ begin
   O := fLogProcSortInternalOrder;
   if Value then // set TSynLogFile.LogProcMerged=true profiling merged info
   begin
-    if fLogProcMerged = nil then
+    if (fLogProcMerged = nil) and
+       (fLogProcNaturalCount <> 0) then // nothing to merge without sllEnter
     begin
       fLogProcCurrent := pointer(fLogProcNatural);
       fLogProcCurrentCount := fLogProcNaturalCount;
@@ -8815,7 +8816,11 @@ begin
   result := '';
   if cardinal(aRow) < cardinal(fSelectedCount) then
     aRow := fSelected[aRow];
-  if cardinal(aRow) < cardinal(fCount) then
+  if cardinal(aRow) >= cardinal(fCount) then
+    exit;
+  if fLevels = nil then
+    result := Strings[aRow] // plain text file: no timestamp nor level
+  else
   begin
     dt := EventDateTime(aRow);
     FormatString('% %'#9'%'#9, [DateToStr(dt), FormatDateTime(TIME_FORMAT, dt),
@@ -9115,13 +9120,14 @@ var
   i, search: PtrInt;
 begin
   result := 0;
-  if integer(fEvents) <> 0 then
+  if cardinal(aRow) < cardinal(fSelectedCount) then
+    search := fSelected[aRow]
+  else
+    search := maxInt;
+  fSelectedCount := 0; // also if no level is selected: display no row at all
+  if (integer(fEvents) <> 0) and
+     (fLevels <> nil) then // a plain text file has no level to select
   begin
-    if cardinal(aRow) < cardinal(fSelectedCount) then
-      search := fSelected[aRow]
-    else
-      search := maxInt;
-    fSelectedCount := 0;
     for i := 0 to Count - 1 do
       if fLevels[i] in fEvents then
         if (fThreads = nil) or
