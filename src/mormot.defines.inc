@@ -1156,13 +1156,28 @@
   {$undef USE_WINIOCP}        // disable any Windows-specific code
   {$undef USE_THREADWINIOCP}
 
-  {$ifdef OSANDROID}
+  {$if defined(OSANDROID)}
 
     // for Android, consider using https://github.com/gcesarmza/curl-android-ios
     // static libraries and force USELIBCURL in the project conditionals
     {$ifdef CPUARM3264}
       {$define LIBCURLSTATIC}
     {$endif CPUARM3264}
+
+    {$ifndef FPC}
+      {$ifndef USELIBCURL}
+        {$ifndef NODELPHINETHTTP} // HTTPS via the TLS stack of the OS
+          {$define USEDELPHINETHTTP} // see mormot.lib.nethttp
+        {$endif NODELPHINETHTTP}
+      {$endif USELIBCURL}
+    {$endif FPC}
+
+  {$elseif defined(IOS) and not defined(FPC)}
+
+    // iOS ships neither libcurl nor libgss: HTTPS goes through the OS TLS stack
+    {$ifndef NODELPHINETHTTP}
+      {$define USEDELPHINETHTTP} // see mormot.lib.nethttp
+    {$endif NODELPHINETHTTP}
 
   {$else}
 
@@ -1174,11 +1189,11 @@
       {$define DOMAINRESTAUTH}  // enable libgss in mormot.rest.client/server
     {$endif NOGSSAPIAUTH}
 
-  {$endif OSANDROID}
+  {$ifend OSANDROID}
 
 {$endif OSPOSIX}
 
-{$if defined(USEWININET) or defined(USELIBCURL)}
+{$if defined(USEWININET) or defined(USELIBCURL) or defined(USEDELPHINETHTTP)}
   {$define USEHTTPREQUEST}
 {$ifend}
 
