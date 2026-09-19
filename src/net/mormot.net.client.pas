@@ -6895,6 +6895,7 @@ function HttpGetWeak(const aUri: RawUtf8; const aLocalFile: TFileName;
 var
   status: integer;
 begin
+  status := 0; // HttpGet() may not set it, e.g. on connection error
   if aLocalFile <> '' then // try from local cache
   begin
     result := StringFromFile(aLocalFile); // useful e.g. during regression tests
