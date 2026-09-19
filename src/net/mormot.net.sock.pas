@@ -57,8 +57,8 @@ const
 
   {$ifdef OSWINDOWS}
   SOCKADDR_SIZE = 28;
-  {$else}
-  SOCKADDR_SIZE = 110; // able to store UNIX domain socket name
+  {$else} // should be big enough to store UNIX domain socket name
+  SOCKADDR_SIZE = {$ifdef SOCK_HAS_SINLEN} 106 {$else} 110; {$endif}
   {$endif OSWINDOWS}
 
 var
@@ -2874,8 +2874,12 @@ begin
       result := SizeOf(TSockAddrIn);
     AF_INET6:
       result := SizeOf(TSockAddrIn6);
+    {$ifdef OSPOSIX}
+    AF_UNIX:
+      result := SizeOf(TSockAddrUnix); // maybe <> SizeOf(Addr)
+    {$endif OSPOSIX}
   else
-    result := SizeOf(Addr); // assume AF_UNIX
+    result := SizeOf(Addr);
   end;
 end;
 
@@ -2906,10 +2910,16 @@ begin
         ad6.sin6_flowinfo := 0; // won't hurt
         ad6.sin6_scope_id := 0;
       end;
-  {$ifdef SOCK_HAS_SINLEN}
+    {$ifdef OSPOSIX}
+    AF_UNIX:
+      {$ifdef SOCK_HAS_SINLEN}
+      ad4.sa_len := SizeOf(TSockAddrUnix); // for OpenBSD - FreeBSD/Darwin allow 0
+      {$endif SOCK_HAS_SINLEN}
+    {$endif OSPOSIX}
   else
-    ad4.sa_len := SizeOf(Addr); // for OpenBSD - FreeBSD/Darwin allow 0
-  {$endif SOCK_HAS_SINLEN}
+    {$ifdef SOCK_HAS_SINLEN}
+    ad4.sa_len := SizeOf(Addr);
+    {$endif SOCK_HAS_SINLEN}
   end;
 end;
 

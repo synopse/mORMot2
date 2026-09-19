@@ -168,9 +168,12 @@ type
   TSockAddrUnix = packed record
     {$ifdef SOCK_HAS_SINLEN}
     sun_len:    cuchar; // could be 0 on FreeBSD/Darwin but not on OpenBSD
-    {$endif SOCK_HAS_SINLEN}
+    sun_family: sa_family_t;
+    sun_path:   array[0..103] of AnsiChar;
+    {$else}
     sun_family: sa_family_t;
     sun_path:   array[0..107] of AnsiChar;
+    {$endif SOCK_HAS_SINLEN}
   end;
   PSockAddrUnix = ^TSockAddrUnix;
 
