@@ -1158,6 +1158,22 @@ function mach_continuous_time: UInt64;
 function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): integer;
   cdecl external clib name 'mach_timebase_info';
 
+{$ifdef ISDELPHI}
+// the Delphi linker needs the library name here: a bare external makes it look
+// for a file named like the symbol ("ld: file not found: mach_task_self")
+function host_processor_info(host, flavor: cint; var proccount: cardinal;
+  var info: pointer; var infocount: cardinal): cint;
+  cdecl external clib name 'host_processor_info';
+
+function mach_host_self: cint;
+  cdecl external clib name 'mach_host_self';
+
+function vm_deallocate(task: cint; add: pointer; size: PtrUInt): cint;
+  cdecl external clib name 'vm_deallocate';
+
+function mach_task_self: cint;
+  cdecl external clib name 'mach_task_self';
+{$else}
 function host_processor_info(host, flavor: cint; var proccount: cardinal;
   var info: pointer; var infocount: cardinal): cint;
   cdecl external 'host_processor_info';
@@ -1170,6 +1186,7 @@ function vm_deallocate(task: cint; add: pointer; size: PtrUInt): cint;
 
 function mach_task_self: cint;
   cdecl external 'mach_task_self';
+{$endif ISDELPHI}
 
 var
   mach_timeinfo: TTimebaseInfoData;
