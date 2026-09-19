@@ -228,7 +228,9 @@ type
     // - won't allocate any heap memory during the text creation
     // - mormot.core.os.pas' GetExecutableLocation() redirects to this method
     class procedure FindLocationShort(aPointer: pointer; var aInfo: ShortString;
-      aNoHex: boolean = false);
+      aNoHex: boolean = false);   {$ifdef HASINLINE} static; {$endif}
+    /// append the symbol location(s) according to the current call stack
+    class procedure AppendCallerShort(var aInfo: ShortString; aSkip, aDepth: integer);
       {$ifdef HASINLINE} static; {$endif}
     /// return the symbol location according to the supplied absolute address
     // - filename, symbol name and line number (if any), as plain text, e.g.
@@ -2271,6 +2273,139 @@ uses
 {$endif FPCDARWIN}
 
 
+threadvar // do not publish for compilation within Delphi packages
+  PerThreadInfo: TSynLogThreadInfo;
+
+type
+  // on Win64, RtlCaptureStackBackTrace() API is limited to < 62 frames
+  TRawStackFrames = array[0..61] of PtrUInt;
+
+{$STACKFRAMES ON} // we need a stack frame for the backtrace API calls below
+
+{$ifndef FPC}
+{$ifdef OSWINDOWS}
+{$ifndef CPU64}
+
+function CheckAsmX86(xret: PtrUInt): boolean; // naive x86 caller detection
+var
+  i: PtrUInt;
+begin
+  result := true;
+  try
+    if PByte(xret - 5)^ = $E8 then
+      exit;
+    for i := 2 to 7 do
+      if PWord(xret - i)^ and $38FF = $10FF then
+        exit;
+  except
+    // ignore any GPF
+  end;
+  result := false;
+end;
+
+// heuristic ebp-chain walk into frames[], returning the frames count
+// - on Delphi Win32, RtlCaptureStackBackTrace() requires stack frames and
+// is likely to return nothing, so the manual scan of TSynLog stOnlyManual
+// mode is needed - note: skip levels do not apply to such a heuristic scan
+function ManualStackTrace(var frames: TRawStackFrames): PtrInt;
+var
+  st, max_stack, min_stack, buf0, buf1: PtrUInt;
+  stack: PPtrUInt;
+begin
+  result := 0;
+  asm
+      mov     min_stack, ebp
+      mov     eax, fs:[4]
+      mov     max_stack, eax
+  end;
+  buf0 := PtrUInt(@frames); // frames[] is likely on stack in this range:
+  buf1 := buf0 + SizeOf(frames); // never scan our own output buffer
+  stack := pointer(min_stack);
+  try
+    while (PtrUInt(stack) < max_stack) and
+          (result < length(frames)) do
+    begin
+      if (PtrUInt(stack) >= buf0) and
+         (PtrUInt(stack) < buf1) then
+      begin
+        stack := pointer(buf1); // jump over frames[] we are filling
+        continue;
+      end;
+      st := stack^;
+      inc(stack);
+      if (st >= min_stack) and
+         (st <= max_stack) then
+        continue; // on-stack pointer is no code
+      if SeemsRealPointer(pointer(st - 8)) and
+         CheckAsmX86(st) then
+      begin
+        frames[result] := st;
+        inc(result);
+      end;
+    end;
+  except
+    // just ignore any access violation here
+  end;
+end;
+
+{$endif CPU64}
+{$endif OSWINDOWS}
+{$endif FPC}
+
+// capture the current thread stack into frames[], returning the frames count
+// - first frame is the caller of this function, plus optional skip levels
+// - use follows TSynLogFamily.StackTraceUse semantics (ignored on FPC)
+function RawStackTrace(skip: PtrInt; use: TSynLogStackTraceUse;
+  var frames: TRawStackFrames): PtrInt;
+{$ifndef NOEXCEPTIONINTERCEPT}
+var
+  addedwriting: boolean;
+  threadflags: ^TSynLogThreadInfoFlags;
+{$endif NOEXCEPTIONINTERCEPT}
+begin
+  if skip < 0 then
+    skip := 0;
+  inc(skip); // ignore this very function
+  {$ifndef NOEXCEPTIONINTERCEPT}
+  // the manual stack walk makes speculative reads: intercepted exceptions
+  // should not reach the logs during the process
+  threadflags := @PerThreadInfo.Flags;
+  addedwriting := not (tiWriting in threadflags^);
+  if addedwriting then
+    include(threadflags^, tiWriting);
+  try
+    {$endif NOEXCEPTIONINTERCEPT}
+    try
+      {$ifdef FPC}
+      result := CaptureBacktrace(skip, length(frames), pointer(@frames));
+      {$else}
+      result := 0;
+      {$ifdef OSWINDOWS}
+      if use <> stOnlyManual then
+        result := RtlCaptureStackBackTrace(skip, length(frames), @frames, nil);
+      {$ifndef CPU64}
+      if (result < 2) and
+         (use <> stOnlyAPI) then
+        // support stOnlyManual/stManualAndAPI on Delphi Win32, where the API
+        // needs stack frames and is likely to return (almost) nothing
+        result := ManualStackTrace(frames);
+      {$endif CPU64}
+      {$endif OSWINDOWS}
+      {$endif FPC}
+    except
+      result := 0;
+    end;
+  {$ifndef NOEXCEPTIONINTERCEPT}
+  finally
+    if addedwriting then
+      exclude(threadflags^, tiWriting);
+  end;
+  {$endif NOEXCEPTIONINTERCEPT}
+end;
+
+{$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
+
+
 { ************** Debug Symbols Processing from Delphi .map or FPC/GDB DWARF }
 
 { TDebugFile }
@@ -4146,7 +4281,9 @@ begin
   if (s = nil) and
      (l = nil) then
      exit;
-  AppendShortChar(' ', @aInfo);
+  if (aInfo[0] <> #0) and
+     (aInfo[ord(aInfo[0])] <> ' ') then
+    AppendShortCharSafe(' ', aInfo);
   if l <> nil then
   begin
     AppendShortAnsi7String(l^.FileName, aInfo);
@@ -4164,12 +4301,11 @@ begin
   end;
   if s <> nil then
     AppendShortAnsi7String(s^.Name, aInfo);
-  if line > 0 then
-  begin
-    AppendShortTwoCharsSafe(ord(' ') + ord('(') shl 8, aInfo);
-    AppendShortCardinal(line, aInfo);
-    AppendShortCharSafe(')', aInfo);
-  end;
+  if line <= 0 then
+    exit;
+  AppendShortTwoCharsSafe(ord(' ') + ord('(') shl 8, aInfo);
+  AppendShortCardinal(line, aInfo);
+  AppendShortCharSafe(')', aInfo);
 end;
 
 class function TDebugFile.FindLocation(aPointer: pointer): RawUtf8;
@@ -4200,6 +4336,46 @@ begin
     FastAssignNew(tmp);
   end;
 end;
+
+{$STACKFRAMES ON} // we need a stack frame for the backtrace API call below
+
+class procedure TDebugFile.AppendCallerShort(var aInfo: ShortString;
+  aSkip, aDepth: integer);
+var
+  deb: TDebugFile;
+  tmp: pointer; // RawUtf8
+  frames: TRawStackFrames;
+  i, n: PtrInt;
+  l: AnsiChar;
+begin
+  if aDepth <= 0 then
+    exit;
+  n := RawStackTrace(aSkip + 1, stManualAndAPI, frames); // + 1 to ignore this
+  for i := 0 to n - 1 do
+    if (i = 0) or
+       (frames[i] <> frames[i - 1]) then
+    begin
+      l := aInfo[0];
+      if ord(l) = high(aInfo) then
+        break; // output buffer is full
+      tmp := nil;
+      deb := DebugFileGet(frames[i], @tmp);
+      if deb <> nil then
+        deb.AppendLocationShort(frames[i], aInfo)
+      else if tmp <> nil then
+      begin
+        AppendShortAnsi7String(RawUtf8(tmp), aInfo);
+        FastAssignNew(tmp);
+      end;
+      if aInfo[0] = l then
+        continue; // nothing added
+      dec(aDepth);
+      if aDepth = 0 then
+        break; // we got what we needed
+    end;
+end;
+
+{$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
 
 class function TDebugFile.FindLocationRaisedAt(exc: ESynException): RawUtf8;
 begin
@@ -4579,108 +4755,7 @@ begin
   TSynLog.NotifyThreadEnded; // as in mormot.core.thread TThreadAbstract
 end;
 
-threadvar // do not publish for compilation within Delphi packages
-  PerThreadInfo: TSynLogThreadInfo;
-
-type
-  // on Win64, RtlCaptureStackBackTrace() API is limited to < 62 frames
-  TRawStackFrames = array[0..61] of PtrUInt;
-
 {$STACKFRAMES ON} // we need a stack frame for the backtrace API calls below
-
-{$ifndef FPC}
-{$ifdef OSWINDOWS}
-{$ifndef CPU64}
-
-function CheckAsmX86(xret: PtrUInt): boolean; // naive x86 caller detection
-var
-  i: PtrUInt;
-begin
-  result := true;
-  try
-    if PByte(xret - 5)^ = $E8 then
-      exit;
-    for i := 2 to 7 do
-      if PWord(xret - i)^ and $38FF = $10FF then
-        exit;
-  except
-    // ignore any GPF
-  end;
-  result := false;
-end;
-
-// heuristic ebp-chain walk into frames[], returning the frames count
-// - on Delphi Win32, RtlCaptureStackBackTrace() requires stack frames and
-// is likely to return nothing, so the manual scan of TSynLog stOnlyManual
-// mode is needed - note: skip levels do not apply to such a heuristic scan
-function ManualStackTrace(var frames: TRawStackFrames): PtrInt;
-var
-  st, max_stack, min_stack, buf0, buf1: PtrUInt;
-  stack: PPtrUInt;
-begin
-  result := 0;
-  asm
-      mov     min_stack, ebp
-      mov     eax, fs:[4]
-      mov     max_stack, eax
-  end;
-  buf0 := PtrUInt(@frames); // frames[] is likely on stack in this range:
-  buf1 := buf0 + SizeOf(frames); // never scan our own output buffer
-  stack := pointer(min_stack);
-  try
-    while (PtrUInt(stack) < max_stack) and
-          (result < length(frames)) do
-    begin
-      if (PtrUInt(stack) >= buf0) and
-         (PtrUInt(stack) < buf1) then
-      begin
-        stack := pointer(buf1); // jump over frames[] we are filling
-        continue;
-      end;
-      st := stack^;
-      inc(stack);
-      if (st >= min_stack) and
-         (st <= max_stack) then
-        continue; // on-stack pointer is no code
-      if SeemsRealPointer(pointer(st - 8)) and
-         CheckAsmX86(st) then
-      begin
-        frames[result] := st;
-        inc(result);
-      end;
-    end;
-  except
-    // just ignore any access violation here
-  end;
-end;
-
-{$endif CPU64}
-{$endif OSWINDOWS}
-{$endif FPC}
-
-// capture the current thread stack into frames[], returning the frames count
-// - first frame is the caller of this function, plus optional skip levels
-// - use follows TSynLogFamily.StackTraceUse semantics (ignored on FPC)
-function RawStackTrace(skip: PtrInt; use: TSynLogStackTraceUse;
-  var frames: TRawStackFrames): PtrInt;
-begin
-  {$ifdef FPC}
-  result := CaptureBacktrace(skip + 1, length(frames), pointer(@frames));
-  {$else}
-  result := 0;
-  {$ifdef OSWINDOWS}
-  if use <> stOnlyManual then
-    result := RtlCaptureStackBackTrace(skip + 1, length(frames), @frames, nil);
-  {$ifndef CPU64}
-  if (result < 2) and
-     (use <> stOnlyAPI) then
-    // support stOnlyManual/stManualAndAPI on Delphi Win32, where the API
-    // needs stack frames and is likely to return (almost) nothing
-    result := ManualStackTrace(frames);
-  {$endif CPU64}
-  {$endif OSWINDOWS}
-  {$endif FPC}
-end;
 
 class function TDebugFile.StackTrace(skip, depth: integer;
   use: TSynLogStackTraceUse): RawUtf8;
