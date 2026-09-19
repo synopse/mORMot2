@@ -1285,8 +1285,8 @@ type
     procedure LogFileInitLocked(nfo: PSynLogThreadInfo);
     function LogFileInitOrUnlock(nfo: PSynLogThreadInfo): boolean;
     function PerformRotationOrUnlock(nfo: PSynLogThreadInfo): boolean;
-    function LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
-      {$ifdef ISDELPHI} ; addr: PtrUInt = 0 {$endif}): boolean;
+    function LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char;
+      location: PShortString = nil): boolean;
     function LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject; const fmt: RawUtf8;
       args: PVarRec; argscount: PtrInt; microsecs: PInt64; var tmp: TBuffer4K): boolean;
     procedure AddLogThreadName;
@@ -1384,17 +1384,17 @@ type
     // !   TSynLogDB.Enter(self, 'SQLFlush');
     // !   // do some stuff
     // ! end;
-    // - on Delphi, if no aMethodName is supplied, it will use the caller address,
-    // and write it as hexa and with full unit and symbol name, if the debugging
-    // information is available from TDebugFile, i.e. there is .map/.mab content
+    // - if no aMethodName is supplied, it will use the caller address, and
+    // write it with full unit and symbol name, if the debugging information
+    // is available from TDebugFile, i.e. there is associated .map/.gdb/.mab
     // ! procedure TMyDB.SQLFlush;
     // ! var log: ISynLog;
     // ! begin
     // !   log := TSynLogDB.Enter(self);
     // !   // do some stuff
     // ! end;
-    // - note that supplying aMethodName is faster than using the .map content,
-    // and is what FPC requires, so it should be preferred for most projects
+    // - note that supplying aMethodName is faster than calling TDebugFile, and
+    // requires debug info or .mab, so chould be preferred for most projects
     // - if TSynLogFamily.HighResolutionTimestamp is TRUE, high-resolution
     // time stamp will be written instead of ISO 8601 date and time: this will
     // allow performance profiling of the application on the customer side
@@ -1406,7 +1406,6 @@ type
     // - may return nil if sllEnter is not enabled for the TSynLog class
     class function Enter(aInstance: TObject = nil;
       aMethodName: PUtf8Char = nil): ISynLog; overload;
-      {$ifdef FPC} inline; {$endif}
     /// handle method enter / auto-leave tracing, with some custom text arguments
     // - this overloaded method would not write the method name, but the supplied
     // text content, after expanding the parameters like FormatUtf8()
@@ -4757,6 +4756,30 @@ end;
 
 {$STACKFRAMES ON} // we need a stack frame for the backtrace API calls below
 
+class procedure TDebugFile.StackTrace(W: TTextWriter; skip, depth: integer;
+  use: TSynLogStackTraceUse);
+var
+  frames: TRawStackFrames;
+  i, n: PtrInt;
+begin
+  if W = nil then
+    exit;
+  if depth <= 0 then
+    depth := 30; // as default TSynLogFamily.StackTraceLevel
+  if skip < 0 then
+    skip := 0;
+  n := RawStackTrace(skip + 1, use, frames); // + 1 to ignore this method
+  for i := 0 to n - 1 do
+    if (i = 0) or
+       (frames[i] <> frames[i - 1]) then
+      if AddLog(W, frames[i]) then
+      begin
+        dec(depth);
+        if depth = 0 then
+          break;
+      end;
+end;
+
 class function TDebugFile.StackTrace(skip, depth: integer;
   use: TSynLogStackTraceUse): RawUtf8;
 var
@@ -4766,61 +4789,12 @@ begin
   FastAssignNew(result);
   w := TTextWriter.CreateOwnedStream(temp);
   try
-    StackTrace(w, skip + 1, depth, use); // + 1 to ignore this very method
+    StackTrace(w, skip + 1, depth, use); // + 1 to ignore this method
     w.CancelLastChar(' ');
     w.SetText(result);
   finally
     w.Free;
   end;
-end;
-
-class procedure TDebugFile.StackTrace(W: TTextWriter; skip, depth: integer;
-  use: TSynLogStackTraceUse);
-var
-  frames: TRawStackFrames;
-  i, n: PtrInt;
-  {$ifndef FPC}
-  {$ifndef NOEXCEPTIONINTERCEPT}
-  addedwriting: boolean;
-  threadflags: ^TSynLogThreadInfoFlags;
-  {$endif NOEXCEPTIONINTERCEPT}
-  {$endif FPC}
-begin
-  if W = nil then
-    exit;
-  if depth <= 0 then
-    depth := 30; // as default TSynLogFamily.StackTraceLevel
-  if skip < 0 then
-    skip := 0;
-  {$ifndef FPC}
-  {$ifndef NOEXCEPTIONINTERCEPT}
-  // the manual stack walk makes speculative reads: intercepted exceptions
-  // should not reach the logs during the process
-  threadflags := @PerThreadInfo.Flags;
-  addedwriting := not (tiWriting in threadflags^);
-  if addedwriting then
-    include(threadflags^, tiWriting);
-  {$endif NOEXCEPTIONINTERCEPT}
-  {$endif FPC}
-  try
-    n := RawStackTrace(skip + 1, use, frames); // + 1 to ignore this very method
-    for i := 0 to n - 1 do
-      if (i = 0) or
-         (frames[i] <> frames[i - 1]) then
-        if AddLog(W, frames[i]) then
-        begin
-          dec(depth);
-          if depth = 0 then
-            break;
-        end;
-  except // don't let any unexpected GPF break the caller
-  end;
-  {$ifndef FPC}
-  {$ifndef NOEXCEPTIONINTERCEPT}
-  if addedwriting then
-    exclude(threadflags^, tiWriting);
-  {$endif NOEXCEPTIONINTERCEPT}
-  {$endif FPC}
 end;
 
 {$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
@@ -6032,8 +6006,8 @@ begin
   result := true;
 end;
 
-function TSynLog.LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
-  {$ifdef ISDELPHI} ; addr: PtrUInt {$endif}): boolean;
+function TSynLog.LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char;
+  location: PShortString): boolean;
 begin
   result := LockAndPrepareEnter(nfo, nil);
   if not result then
@@ -6041,10 +6015,8 @@ begin
   LogHeader(sllEnter, inst);
   if txt <> nil then
     fWriter.AddOnSameLine(txt)
-  {$ifdef ISDELPHI}
-  else if addr <> 0 then
-    TDebugFile.AddLog(fWriter, addr, {nohex=}true)
-  {$endif ISDELPHI};
+  else if location <> nil then
+    fWriter.AddShort(location^); // from FindLocationShort()
   fWriterEcho.AddEndOfLine(sllEnter);
   EndWrite(nfo);
 end;
@@ -6071,56 +6043,61 @@ begin
   EndWrite(nfo);
 end;
 
-{$ifdef WINTELDELPHI} // specific to Delphi: fast get the caller method name
+{$STACKFRAMES ON} // we need a stack frame for the backtrace API call below
 
-{$STACKFRAMES ON} // we need a stack frame for ebp/RtlCaptureStackBackTrace
-{$ifdef CPU64}
-  {$define USERTLCAPTURESTACKBACKTRACE}
-{$else}
-  {$define USEASMX86STACKBACKTRACE}
-{$endif CPU64}
+procedure TSynLog.Log(Level: TSynLogLevel);
+var
+  nfo: PSynLogThreadInfo;
+  lasterror: integer;
+  tmp: ShortString; // pre-computed caller symbol outside fWriter lock
+begin
+  if (self = nil) or
+     not (Level in fFamily.fLevel) then
+    exit;
+  lasterror := 0;
+  if Level = sllLastError then
+    lasterror := GetLastError;
+  tmp[0] := #0;
+  TDebugFile.AppendCallerShort(tmp, {skip=}1, {depth=}1);
+  nfo := @PerThreadInfo;
+  if LockAndPrepareWrite(nfo) then
+  begin
+    LogHeader(Level, nil);
+    if lasterror <> 0 then
+      AddErrorMessage(lasterror);
+    fWriter.AddShort(tmp);
+    LogTrailer(Level);
+    exclude(nfo^.Flags, tiWriting);
+  end;
+  if lasterror <> 0 then
+    SetLastError(lasterror);
+end;
 
 class function TSynLog.Enter(aInstance: TObject; aMethodName: PUtf8Char): ISynLog;
 var
   log: TSynLog;
   nfo: PSynLogThreadInfo;
-  addr: PtrUInt;
+  location: PShortString;
+  tmp: ShortString;
 begin
   result := nil;
   log := Add;
   nfo := log.DoEnter;
   if nfo = nil then
     exit; // nothing to log
-  addr := 0;
+  location := nil;
   if aMethodName = nil then
   begin
-    {$ifdef USERTLCAPTURESTACKBACKTRACE}
-    if RtlCaptureStackBackTrace(1, 1, @addr, nil) = 0 then
-      addr := 0;
-    {$else}
-    asm
-      mov  eax, [ebp + 4] // retrieve caller EIP from push ebp; mov ebp,esp
-      mov  addr, eax
-    end;
-    {$endif USERTLCAPTURESTACKBACKTRACE}
-    if addr <> 0 then
-      dec(addr, 5);
+    tmp[0] := #0;
+    TDebugFile.AppendCallerShort(tmp, {skip=}1, {depth=}1);
+    if tmp[0] <> #0 then
+      location := @tmp;
   end;
-  if log.LogEnter(nfo, aInstance, aMethodName, addr) then
+  if log.LogEnter(nfo, aInstance, aMethodName, location) then
     pointer(result) := PAnsiChar(log) + log.fISynLogOffset; // result := self
 end;
 
 {$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
-
-{$else}
-
-class function TSynLog.Enter(aInstance: TObject; aMethodName: PUtf8Char): ISynLog;
-begin
-  result := nil;
-  EnterLocal(result, aInstance, aMethodName);
-end;
-
-{$endif WINTELDELPHI}
 
 class function TSynLog.Enter(const TextFmt: RawUtf8;
   const TextArgs: array of const; aInstance: TObject): ISynLog;
@@ -6492,52 +6469,6 @@ begin
     LogInternalRtti(Level, aName, aTypeInfo, aValue, Instance);
 end;
 
-{$ifdef ISDELPHI}
-  {$STACKFRAMES ON} // we need a stack frame for ebp/RtlCaptureStackBackTrace
-{$endif ISDELPHI}
-
-procedure TSynLog.Log(Level: TSynLogLevel);
-var
-  nfo: PSynLogThreadInfo;
-  lasterror: integer;
-  {$ifdef ISDELPHI}
-  addr: PtrUInt;
-  {$endif ISDELPHI}
-begin
-  if (self = nil) or
-     not (Level in fFamily.fLevel) then
-    exit;
-  lasterror := 0;
-  if Level = sllLastError then
-    lasterror := GetLastError;
-  nfo := @PerThreadInfo;
-  if LockAndPrepareWrite(nfo) then
-  begin
-    LogHeader(Level, nil);
-    if lasterror <> 0 then
-      AddErrorMessage(lasterror);
-    {$ifdef ISDELPHI}
-    addr := 0;
-    {$ifdef USERTLCAPTURESTACKBACKTRACE}
-    if RtlCaptureStackBackTrace(1, 1, @addr, nil) = 0 then
-      addr := 0;
-    {$endif USERTLCAPTURESTACKBACKTRACE}
-    {$ifdef USEASMX86STACKBACKTRACE}
-    asm
-      mov  eax, [ebp + 4]
-      mov  addr, eax
-    end;
-    {$endif USEASMX86STACKBACKTRACE}
-    if addr <> 0 then
-      TDebugFile.AddLog(fWriter, addr - 5, {nohex=}true);
-    {$endif ISDELPHI}
-    LogTrailer(Level);
-    exclude(nfo^.Flags, tiWriting);
-  end;
-  if lasterror <> 0 then
-    SetLastError(lasterror);
-end;
-
 procedure TSynLog.LogText(Level: TSynLogLevel; Text: PUtf8Char; Instance: TObject);
 var
   nfo: PSynLogThreadInfo;
@@ -6602,8 +6533,6 @@ begin
     EndWrite(nfo);
   end;
 end;
-
-{$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
 
 class procedure TSynLog.DebuggerNotify(Level: TSynLogLevel; const Text: RawUtf8);
 begin
