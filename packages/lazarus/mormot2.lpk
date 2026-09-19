@@ -49,7 +49,7 @@
     <Description Value="mORMot 2 ORM/SOA/MVC framework"/>
     <License Value="MPL, GPL or LGPL"/>
     <Version Major="2" Minor="4"/>
-    <Files Count="123">
+    <Files Count="124">
       <Item1>
         <Filename Value="../../src/app/mormot.app.console.pas"/>
         <UnitName Value="mormot.app.console"/>
@@ -504,45 +504,49 @@
         <UnitName Value="mormot.crypt.x509"/>
       </Item113>
       <Item114>
-        <Filename Value="../../src/net/mormot.net.openapi.pas"/>
-        <UnitName Value="mormot.net.openapi"/>
+        <Filename Value="../../src/crypt/mormot.crypt.pkcs11.pas"/>
+        <UnitName Value="mormot.crypt.pkcs11"/>
       </Item114>
       <Item115>
-        <Filename Value="../../src/core/mormot.core.os.security.pas"/>
-        <UnitName Value="mormot.core.os.security"/>
+        <Filename Value="../../src/net/mormot.net.openapi.pas"/>
+        <UnitName Value="mormot.net.openapi"/>
       </Item115>
       <Item116>
-        <Filename Value="../../src/tools/mget/mormot.tools.mget.pas"/>
-        <UnitName Value="mormot.tools.mget"/>
+        <Filename Value="../../src/core/mormot.core.os.security.pas"/>
+        <UnitName Value="mormot.core.os.security"/>
       </Item116>
       <Item117>
-        <Filename Value="../../src/core/mormot.core.mvc.pas"/>
-        <UnitName Value="mormot.core.mvc"/>
+        <Filename Value="../../src/tools/mget/mormot.tools.mget.pas"/>
+        <UnitName Value="mormot.tools.mget"/>
       </Item117>
       <Item118>
-        <Filename Value="../../src/crypt/mormot.crypt.other.pas"/>
-        <UnitName Value="mormot.crypt.other"/>
+        <Filename Value="../../src/core/mormot.core.mvc.pas"/>
+        <UnitName Value="mormot.core.mvc"/>
       </Item118>
       <Item119>
-        <Filename Value="../../src/net/mormot.net.dhcp.pas"/>
-        <UnitName Value="mormot.net.dhcp"/>
+        <Filename Value="../../src/crypt/mormot.crypt.other.pas"/>
+        <UnitName Value="mormot.crypt.other"/>
       </Item119>
       <Item120>
-        <Filename Value="../../src/core/mormot.core.fmt.pas"/>
-        <UnitName Value="mormot.core.fmt"/>
+        <Filename Value="../../src/net/mormot.net.dhcp.pas"/>
+        <UnitName Value="mormot.net.dhcp"/>
       </Item120>
       <Item121>
-        <Filename Value="../../src/core/mormot.core.os.delphi.pas"/>
-        <UnitName Value="mormot.core.os.delphi"/>
+        <Filename Value="../../src/core/mormot.core.fmt.pas"/>
+        <UnitName Value="mormot.core.fmt"/>
       </Item121>
       <Item122>
-        <Filename Value="../../src/core/mormot.core.i18n.pas"/>
-        <UnitName Value="mormot.core.i18n"/>
+        <Filename Value="../../src/core/mormot.core.os.delphi.pas"/>
+        <UnitName Value="mormot.core.os.delphi"/>
       </Item122>
       <Item123>
+        <Filename Value="../../src/core/mormot.core.i18n.pas"/>
+        <UnitName Value="mormot.core.i18n"/>
+      </Item123>
+      <Item124>
         <Filename Value="../../src/lib/mormot.lib.uniscribe.pas"/>
         <UnitName Value="mormot.lib.uniscribe"/>
-      </Item123>
+      </Item124>
     </Files>
     <CompatibilityMode Value="True"/>
     <UsageOptions>
