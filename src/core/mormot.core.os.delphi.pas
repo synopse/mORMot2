@@ -309,7 +309,7 @@ type
     mem_unit: cuint;                   // Memory unit size in bytes
 {$ifndef cpu64}
     { the upper bound of the array below is negative for 64 bit cpus }
-    _f: array[0..19-2*sizeof(clong)-sizeof(cint)] of cChar;  // Padding as libc5
+    _f: array[0..19-2*sizeof(clong)-sizeof(cint)] of cint8;  // Padding as libc5
 {$endif cpu64}
   end;
   PSysInfo = ^TSysInfo;
