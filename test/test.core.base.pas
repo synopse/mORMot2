@@ -11561,12 +11561,53 @@ procedure TTestCoreBase.Debugging;
     try
       CheckEqual(log.Count, 3);
       Check(log.EventLevel = nil, 'plain text');
+      CheckEqual(StringToUtf8(log.GetLineForClipboard(1)), 'some needle here');
+      CheckEqual(StringToUtf8(log.GetLineForClipboard(-1)), '', 'out of range');
+      CheckEqual(StringToUtf8(log.GetLineForClipboard(log.Count)), '');
+      log.Events := LOG_VERBOSE; // no level to select in a plain text file
+      CheckEqual(log.Select(0), 0);
+      CheckEqual(log.SelectedCount, 0);
+      log.Events := [];
       Check(log.LineContains('NEEDLE', 1));
       Check(not log.LineContains('NEEDLE', 0));
       Check(not log.LineContains('NEEDLE', 3), 'out of range');
       CheckEqual(log.SearchNextText('NEEDLE', 0, 1), 1);
       CheckEqual(log.SearchPreviousText('NEEDLE', 2), 1);
       CheckEqual(log.SearchNextText('NOTHING', 0, 1), -1);
+    finally
+      log.Free;
+    end;
+  end;
+
+  procedure TestNoProcNoEvent;
+  var
+    log: TSynLogFileView;
+    source: RawUtf8;
+  begin
+    source := 'test.exe 1.0.0 (2026-02-13 16:41:00)'#13#10 +
+      'Host=Test User=Test CPU=1 OS=0 Wow64=0 Freq=1000000'#13#10 +
+      'TSynLog 2.0 2026-02-13T16:41:00'#13#10#13#10 +
+      '20260213 16410200 info  first row'#13#10 +
+      '20260213 16410300 warn  second row'#13#10;
+    log := TSynLogFileView.Create(pointer(source), length(source));
+    try
+      CheckEqual(log.Count, 2);
+      // merging the methods profiler of a log with no sllEnter at all
+      CheckEqual(log.LogProcCount, 0, 'no method');
+      log.LogProcMerged := true; // should not read fLogProcNatural[0]
+      CheckEqual(log.LogProcCount, 0, 'nothing to merge');
+      log.LogProcMerged := false;
+      CheckEqual(log.LogProcCount, 0, 'nothing to unmerge');
+      // unchecking all levels should display no row, not the previous rows
+      log.Events := LOG_VERBOSE;
+      log.Select(0);
+      CheckEqual(log.SelectedCount, 2);
+      log.Events := [];
+      CheckEqual(log.Select(0), 0);
+      CheckEqual(log.SelectedCount, 0, 'no level selected');
+      log.Events := LOG_VERBOSE; // back to all rows
+      log.Select(0);
+      CheckEqual(log.SelectedCount, 2);
     finally
       log.Free;
     end;
@@ -11796,6 +11837,7 @@ begin
   // validate TSynLogFile
   TestLiveAppendedLines;
   TestPlainText;
+  TestNoProcNoEvent;
   TestZonedLayout;
   Test('D:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.4 (2011-04-07 11:09:06)'#13#10 +
     'Host=MyPC User=MySelf CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545 ' +
