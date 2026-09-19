@@ -185,7 +185,7 @@ type
     h_name:     PAnsiChar;
     h_aliases:  PPAnsiChar;
     h_addrtype: cint;
-    h_length:   TSockLen;
+    h_length:   cint;
     case integer of
        0: (h_addr_list: PPAnsiChar);
        1: (h_addr:      ^PNetIP4);
@@ -1075,7 +1075,7 @@ type
     sdl_nlen: byte;        // interface name length, no trailing 0 required
     sdl_alen: byte;        // link level address length
     sdl_slen: byte;        // link layer selector length
-    sdl_data: TByteToByte; // interface name + link level address
+    sdl_data: TByteToByte; // interface name + link level address (max size)
   end;
   {$else}
   PSockAddr_ll = ^SockAddr_ll;
