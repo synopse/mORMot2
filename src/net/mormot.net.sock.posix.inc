@@ -1102,15 +1102,15 @@ var
 
 function getifaddrs(var ifap: pifaddrs): integer;
 var
-  lib: pointer;
+  lib: TLibHandle; // use mormot.core.os for FPC and Delphi compatibility
 begin
   if not _ifaddrsresolved then
   begin
-    lib := dlopen('libc.so', RTLD_NOW);
-    if lib <> nil then
+    lib := LibraryOpen('libc.so');
+    if pointer(lib) <> nil then
     begin
-      @_getifaddrs := dlsym(lib, 'getifaddrs');
-      @_freeifaddrs := dlsym(lib, 'freeifaddrs');
+      @_getifaddrs := LibraryResolve(lib, 'getifaddrs');
+      @_freeifaddrs := LibraryResolve(lib, 'freeifaddrs');
     end;
     _ifaddrsresolved := true;
   end;

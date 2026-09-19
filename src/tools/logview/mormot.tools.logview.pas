@@ -20,6 +20,8 @@ interface
 
 {$I ..\..\mormot.defines.inc}
 
+{$WARN 5024 off : Parameter "$1" not used}
+
 uses
   sysutils,
   classes,

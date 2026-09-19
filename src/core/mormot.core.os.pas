@@ -690,7 +690,7 @@ const
       'x64'
     {$else} {$ifdef CPUARM}
       'arm' +
-    {$else} {$ifdef ABIA64} // CPUAARCH64 is not defined by Delphi
+    {$else} {$ifdef CPUAARCH64}
       'aarch' +
     {$ifdef CPUPOWERPC}
       'ppc' +
@@ -699,7 +699,7 @@ const
     {$endif CPUSPARC}
     {$endif CPUPOWERPC}
     {$endif CPUARM}
-    {$endif ABIA64}
+    {$endif CPUAARCH64}
     {$ifdef CPU32}
       '32'
     {$else}

@@ -58,7 +58,7 @@ const
   {$ifdef OSWINDOWS}
   SOCKADDR_SIZE = 28;
   {$else} // should be big enough to store UNIX domain socket name
-  SOCKADDR_SIZE = {$ifdef SOCK_HAS_SINLEN} 106 {$else} 110; {$endif}
+  SOCKADDR_SIZE = {$ifdef SOCK_HAS_SINLEN} 106 {$else} 110 {$endif};
   {$endif OSWINDOWS}
 
 var
@@ -4941,7 +4941,7 @@ end;
 
 function ResToEvents(const res: TPollSocketResult): TPollSocketEvents;
 begin
-  result := TPollSocketEvents(byte(res shr 48) and $0f);
+  result := TPollSocketEvents(byte((res shr 48) and $0f));
 end;
 
 procedure SetRes(var res: TPollSocketResult; tag: TPollSocketTag; ev: TPollSocketEvents);

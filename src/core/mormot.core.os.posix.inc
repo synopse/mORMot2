@@ -157,8 +157,7 @@ begin
   result := FpOpendir(PosixFN(DirName, tmp));
 end;
 
-function PosixStatFS(const Path: TFileName;
-  Info: {$ifdef ISDELPHI} pointer {$else} PStatfs {$endif}): cint;
+function PosixStatFS(const Path: TFileName; Info: pointer{PStatfs}): cint;
 var
   tmp: TFNTemp;
 begin
@@ -243,9 +242,7 @@ begin
   result := FpOpendir(pointer(DirName));
 end;
 
-// on Delphi, Info is an untyped pointer: PStatfs is part of the FPC RTL only
-function PosixStatFS(const Path: TFileName;
-  Info: {$ifdef ISDELPHI} pointer {$else} PStatfs {$endif}): cint; inline;
+function PosixStatFS(const Path: TFileName; Info: pointer): cint; inline;
 begin
   result := FpStatFS(pointer(Path), Info);
 end;
@@ -1939,11 +1936,11 @@ begin
     exit;
   if FileId <> nil then
     {$ifdef OSANDROID}
-    {$ifdef CPU64}
+    {$ifdef DELPHIPOSIX}
     FileId^ := lp.__st_ino; // as named by the Delphi Android64 RTL
     {$else}
     FileId^ := lp.st_ino;
-    {$endif CPU64}
+    {$endif DELPHIPOSIX}
     {$else}
     FileId^ := lp.st_ino;
     {$endif OSANDROID}
