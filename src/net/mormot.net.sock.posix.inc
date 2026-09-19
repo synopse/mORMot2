@@ -1090,11 +1090,51 @@ type
   end;
   {$endif OSBSDDARWIN}
 
+{$ifdef OSANDROID}
+
+// bionic exports getifaddrs/freeifaddrs since API 24 (Android 7) only, but an
+// app may target an older minSdkVersion and link against its stubs: so resolve
+// them at runtime, and return no interface at all on such older devices
+var
+  _getifaddrs: function(var ifap: pifaddrs): integer; cdecl;
+  _freeifaddrs: procedure(ifap: pifaddrs); cdecl;
+  _ifaddrsresolved: boolean;
+
+function getifaddrs(var ifap: pifaddrs): integer;
+var
+  lib: pointer;
+begin
+  if not _ifaddrsresolved then
+  begin
+    lib := dlopen('libc.so', RTLD_NOW);
+    if lib <> nil then
+    begin
+      @_getifaddrs := dlsym(lib, 'getifaddrs');
+      @_freeifaddrs := dlsym(lib, 'freeifaddrs');
+    end;
+    _ifaddrsresolved := true;
+  end;
+  if Assigned(_getifaddrs) and
+     Assigned(_freeifaddrs) then
+    result := _getifaddrs(ifap)
+  else
+    result := -1; // API < 24: no interface list available
+end;
+
+procedure freeifaddrs(ifap: pifaddrs);
+begin
+  _freeifaddrs(ifap);
+end;
+
+{$else}
+
 function getifaddrs(var ifap: pifaddrs): integer; cdecl;
   external clib name 'getifaddrs';
 
 procedure freeifaddrs(ifap: pifaddrs); cdecl;
   external clib name 'freeifaddrs';
+
+{$endif OSANDROID}
 
 function GetIPAddresses(Kind: TIPAddress): TRawUtf8DynArray;
 var
@@ -2042,7 +2082,11 @@ begin
     er^.B[4] := byte(e);
     er^.Li := TPollSocketTag(ee^.data.ptr);
     {$else}
+    {$ifdef OSANDROID} // keep the tagged pointer top byte - see SetRes()
+    er^ := PtrUInt(ee^.data.ptr) or (PtrUInt(byte(e)) shl 48);
+    {$else}
     er^ := PtrUInt(ee^.data.ptr) or (PtrUInt(byte(e)) shl 60);
+    {$endif OSANDROID}
     {$endif CPU32}
     inc(ee);
     inc(er);

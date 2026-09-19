@@ -4928,6 +4928,34 @@ end;
 
 {$else}
 
+{$ifdef OSANDROID}
+
+// Android arm64 heap pointers carry a tag in their top byte (tagged pointers,
+// as verified by free): so store the events in bits 48..51, which are always
+// void since the user space addresses use at most 48-bit
+
+function ResToTag(const res: TPollSocketResult): TPollSocketTag;
+begin
+  result := res and $fff0ffffffffffff;
+end;
+
+function ResToEvents(const res: TPollSocketResult): TPollSocketEvents;
+begin
+  result := TPollSocketEvents(byte(res shr 48) and $0f);
+end;
+
+procedure SetRes(var res: TPollSocketResult; tag: TPollSocketTag; ev: TPollSocketEvents);
+begin
+  res := tag or (PtrUInt(byte(ev)) shl 48);
+end;
+
+procedure ResetResEvents(var res: TPollSocketResult);
+begin
+  res := res and $fff0ffffffffffff;
+end;
+
+{$else}
+
 function ResToTag(const res: TPollSocketResult): TPollSocketTag;
 begin
   result := res and $00ffffffffffffff; // pointer from lower 56-bit integer
@@ -4947,6 +4975,8 @@ procedure ResetResEvents(var res: TPollSocketResult);
 begin
   res := res and $00ffffffffffffff;
 end;
+
+{$endif OSANDROID}
 
 {$endif CPU32}
 

@@ -839,6 +839,9 @@
     {$ifdef CPUINTEL}
       {$define DOUBLETOSHORT_USEGRISU} // fast DoubleToAscii() - using BSRQWord
     {$endif CPUINTEL}
+    {$ifdef CPUAARCH64DELPHI}
+      {$define DOUBLETOSHORT_USEGRISU} // str() gives 15 digits and E-0019
+    {$endif CPUAARCH64DELPHI}
   {$endif CPU32}
 
 {$endif FPC}
