@@ -227,9 +227,11 @@ type
     // - returns only the hexadecimal value if no match is found in .map/.dbg/.mab
     // - won't allocate any heap memory during the text creation
     // - mormot.core.os.pas' GetExecutableLocation() redirects to this method
+    // - will also return any library name or symbol outside the executable
     class procedure FindLocationShort(aPointer: pointer; var aInfo: ShortString;
       aNoHex: boolean = false);   {$ifdef HASINLINE} static; {$endif}
     /// append the symbol location(s) according to the current call stack
+    // - won't return any library name or symbol outside the executable
     class procedure AppendCallerShort(var aInfo: ShortString; aSkip, aDepth: integer);
       {$ifdef HASINLINE} static; {$endif}
     /// return the symbol location according to the supplied absolute address
@@ -1195,7 +1197,7 @@ type
   end;
 
   /// thread-specific internal threadvar definition used for fast process
-  // - consumes 484/512 bytes per thread on CPU32/CPU64
+  // - consumes 484/512 bytes + 256+64 per thread on CPU32/CPU64
   TSynLogThreadInfo = packed record
     /// number of recursive calls currently stored in Recursion[]
     // - nothing logged above MAX_SYNLOGRECURSION (53) to keep this record small
@@ -1224,6 +1226,11 @@ type
     // (microseconds as 56-bit do cover 2285 years before overflow)
     // - allow thread-safe non-blocking ISynLog._AddRef/_Release process
     Recursion: array[0 .. MAX_SYNLOGRECURSION - 1] of Int64;
+    /// additional temporary text buffer for TSynLogFamily.LevelStackTrace
+    // - caps the whole stack trace at 255 AnsiChars
+    StackTrace: ShortString;
+    /// additional temporary text buffer for TSynLogFamily.LevelSysInfo
+    SysInfo: TShort63;
   end;
   PSynLogThreadInfo = ^TSynLogThreadInfo;
 
@@ -1280,7 +1287,10 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     procedure EndWrite(nfo: PSynLogThreadInfo);
       {$ifdef HASINLINE}inline;{$endif}
-    function LockAndPrepareWrite(nfo: PSynLogThreadInfo): boolean;
+    function LockAndPrepareWrite(nfo: PSynLogThreadInfo; level: TSynLogLevel;
+      depth: integer = 0): boolean;
+    procedure LogTrailerAndUnlock(Info: PSynLogThreadInfo; Level: TSynLogLevel);
+      {$ifdef FPC}inline;{$endif}
     procedure CloseLogFileLocked;
     procedure LogFileInitLocked(nfo: PSynLogThreadInfo);
     function LogFileInitOrUnlock(nfo: PSynLogThreadInfo): boolean;
@@ -1300,8 +1310,6 @@ type
     procedure LogInternalRtti(Level: TSynLogLevel; const aName: RawUtf8;
       aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
     procedure LogHeader(const Level: TSynLogLevel; Instance: TObject);
-      {$ifdef FPC}inline;{$endif}
-    procedure LogTrailer(Level: TSynLogLevel);
       {$ifdef FPC}inline;{$endif}
     procedure FillInfo(nfo: PSynLogThreadInfo; MicroSec: PInt64); virtual;
     procedure LogFileInit(nfo: PSynLogThreadInfo);
@@ -5573,22 +5581,6 @@ begin
   inc(WR.B, 7); // include no recursive indentation nor any Instance
 end;
 
-procedure TSynLog.LogTrailer(Level: TSynLogLevel);
-var
-  fam: TSynLogFamily;
-  lev: TSynLogLevels; // use faster bt reg,reg instead of bt [mem],reg
-begin
-  fam := fFamily;
-  lev := fam.fLevelStackTrace;
-  if Level in lev then
-    AddStackTrace(nil);
-  lev := fam.fLevelSysInfo;
-  if Level in lev then
-    AddSysInfo;
-  fWriterEcho.AddEndOfLine(Level); // AddCR + any per-line echo suport
-  fWriteSafe.UnLock;               // inlined EndWrite - caller reset tiWriting
-end;
-
 procedure InternalSetCurrentThreadName(const Name: RawUtf8);
 var
   ndx: PtrInt;
@@ -5742,7 +5734,17 @@ begin
   exclude(nfo^.Flags, tiWriting);
 end;
 
-function TSynLog.LockAndPrepareWrite(nfo: PSynLogThreadInfo): boolean;
+procedure SynLogSysInfo(var tmp: ShortString);
+begin
+  PCardinal(@tmp)^ := 2 + ord(' ') shl 8 + ord('{') shl 16;
+  AppendSysInfo(tmp);
+  AppendShortCharSafe('}', tmp);
+end;
+
+function TSynLog.LockAndPrepareWrite(nfo: PSynLogThreadInfo;
+  level: TSynLogLevel; depth: integer): boolean;
+var
+  lev: TSynLogLevels;
 begin
   result := false;
   if (nfo = nil) or
@@ -5751,7 +5753,17 @@ begin
   if nfo^.ThreadBitLo = 0 then
     InitThreadNumber(nfo); // first access - inlined GetThreadInfo
   FillInfo(nfo, nil);      // usual syscall outside of the writer lock
-  fWriteSafe.Lock;         // inlined BeginWrite
+  lev := fFamily.fLevelStackTrace;
+  if level in lev then
+    depth := MaxPtrInt(depth, fFamily.fStackTraceLevel);
+  nfo^.StackTrace[0] := #0;
+  if depth > 0 then // .map/.mab/.gdb loading outside of the writer lock
+    TDebugFile.AppendCallerShort(nfo^.StackTrace, {skip=}2, depth);
+  nfo^.SysInfo[0] := #0;
+  lev := fFamily.fLevelSysInfo;
+  if level in lev then
+    SynLogSysInfo(nfo^.SysInfo); // gather OS information before lock
+  fWriteSafe.Lock;               // inlined BeginWrite
   include(nfo^.Flags, tiWriting);
   if (not (logInitDone in fFlags) and
       not LogFileInitOrUnlock(nfo)) or
@@ -5760,6 +5772,27 @@ begin
     exit;
   SetThreadInfoAndThreadName(self, nfo);
   result := true; // normal process, with eventual EndWrite
+end;
+
+procedure TSynLog.LogTrailerAndUnlock(Info: PSynLogThreadInfo; Level: TSynLogLevel);
+var
+  ps: PShortString;
+begin
+  ps := @Info^.StackTrace;
+  if ps^[0] <> #0 then
+  begin
+    fWriter.AddShort(ps^); // caps at 255 AnsiChars
+    ps^[0] := #0; // safer
+  end;
+  ps := @Info^.SysInfo;
+  if ps^[0] <> #0 then
+  begin
+    fWriter.AddShort(ps^);
+    ps^[0] := #0;
+  end;
+  fWriterEcho.AddEndOfLine(Level); // AddCR + any per-line echo suport
+  fWriteSafe.UnLock;               // inlined EndWrite
+  exclude(Info^.Flags, tiWriting);
 end;
 
 function TSynLog.QueryInterface(
@@ -6045,7 +6078,6 @@ procedure TSynLog.Log(Level: TSynLogLevel);
 var
   nfo: PSynLogThreadInfo;
   lasterror: integer;
-  tmp: ShortString; // pre-computed caller symbol outside fWriter lock
 begin
   if (self = nil) or
      not (Level in fFamily.fLevel) then
@@ -6053,17 +6085,13 @@ begin
   lasterror := 0;
   if Level = sllLastError then
     lasterror := GetLastError;
-  tmp[0] := #0;
-  TDebugFile.AppendCallerShort(tmp, {skip=}1, {depth=}1);
   nfo := @PerThreadInfo;
-  if LockAndPrepareWrite(nfo) then
+  if LockAndPrepareWrite(nfo, Level, {depth=}1) then
   begin
     LogHeader(Level, nil);
     if lasterror <> 0 then
       AddErrorMessage(lasterror);
-    fWriter.AddShort(tmp);
-    LogTrailer(Level);
-    exclude(nfo^.Flags, tiWriting);
+    LogTrailerAndUnlock(nfo, Level);
   end;
   if lasterror <> 0 then
     SetLastError(lasterror);
@@ -6474,12 +6502,11 @@ begin
      not (Level in fFamily.fLevel) then
     exit;
   nfo := @PerThreadInfo;
-  if not LockAndPrepareWrite(nfo) then
+  if not LockAndPrepareWrite(nfo, Level) then
     exit;
   LogHeader(Level, Instance);
   fWriter.AddOnSameLine(Text);
-  LogTrailer(Level);
-  exclude(nfo^.Flags, tiWriting);
+  LogTrailerAndUnlock(nfo, Level);
 end;
 
 procedure TSynLog.LogText(Level: TSynLogLevel; Text: PUtf8Char; TextLen: PtrInt;
@@ -6520,13 +6547,12 @@ begin
      not Assigned(Event) then
     exit;
   nfo := @PerThreadInfo;
-  if LockAndPrepareWrite(nfo) then
+  if LockAndPrepareWrite(nfo, Level) then
   try
     LogHeader(Level, Instance);
     Event(self, Level, Opaque, Value, Instance);
-    fWriterEcho.AddEndOfLine(Level);
   finally
-    EndWrite(nfo);
+    LogTrailerAndUnlock(nfo, Level);
   end;
 end;
 
@@ -6759,12 +6785,10 @@ end;
 
 procedure TSynLog.AddSysInfo;
 var
-  tmp: ShortString;
+  tmp: TShort95;
 begin
-  fWriter.AddDirect(' ', '{');
-  RetrieveSysInfoText(tmp);
+  SynLogSysInfo(tmp);
   fWriter.AddShort(tmp);
-  fWriter.AddDirect('}');
 end;
 
 procedure TSynLog.FillInfo(nfo: PSynLogThreadInfo; MicroSec: PInt64);
@@ -6890,7 +6914,7 @@ begin
   len := fFamily.PreRenderFmt(tmp, Format, Values, ValuesCount, Instance);
   // log this line
   nfo := @PerThreadInfo;
-  if LockAndPrepareWrite(nfo) then
+  if LockAndPrepareWrite(nfo, Level) then
   begin
     LogHeader(Level, Instance);
     if len >= 0 then
@@ -6900,8 +6924,7 @@ begin
         [woDontStoreDefault, woDontStoreVoid, woFullExpand]);
     if lasterror <> 0 then
       AddErrorMessage(lasterror);
-    LogTrailer(Level);
-    exclude(nfo^.Flags, tiWriting);
+    LogTrailerAndUnlock(nfo, Level);
   end;
   if lasterror <> 0 then
     SetLastError(lasterror);
@@ -6930,7 +6953,7 @@ begin
       trunclen := -1; // will fallback to AddEscapeBuffer()
   end;
   nfo := @PerThreadInfo;
-  if LockAndPrepareWrite(nfo) then
+  if LockAndPrepareWrite(nfo, Level) then
   begin
     LogHeader(Level, Instance);
     if Text <> nil then
@@ -6952,8 +6975,7 @@ begin
       fWriter.WriteObject(Instance, [woFullExpand]);
     if lasterror <> 0 then
       AddErrorMessage(lasterror);
-    LogTrailer(Level);
-    exclude(nfo^.Flags, tiWriting);
+    LogTrailerAndUnlock(nfo, Level);
   end;
   if lasterror <> 0 then
     SetLastError(lasterror);
@@ -6965,14 +6987,13 @@ var
   nfo: PSynLogThreadInfo;
 begin
   nfo := @PerThreadInfo;
-  if not LockAndPrepareWrite(nfo) then
+  if not LockAndPrepareWrite(nfo, Level) then
     exit;
   LogHeader(Level, Instance);
   fWriter.AddOnSameLine(pointer(aName));
   fWriter.AddDirect('=');
   fWriter.AddTypedJson(@aValue, aTypeInfo, [woDontStoreVoid]);
-  LogTrailer(Level);
-  exclude(nfo^.Flags, tiWriting);
+  LogTrailerAndUnlock(nfo, Level);
 end;
 
 procedure TSynLog.ComputeFileName;
@@ -7211,16 +7232,15 @@ end;
 
 procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
 begin
-  if fFamily.StackTraceLevel = 0 then
-    exit;
-  try
-    fWriter.AddDirect(' ');
-    // skip=2 to start at the caller of our caller, as this method did before
-    TDebugFile.StackTrace(fWriter, {skip=}2, fFamily.StackTraceLevel,
-      fFamily.StackTraceUse); // use is actually ignored on FPC
-    fWriter.CancelLastChar(' ');
-  except // don't let any unexpected GPF break the logging process
-  end;
+  if fFamily.StackTraceLevel > 0 then
+    try
+      fWriter.AddDirect(' ');
+      // skip=2 to start at the caller of our caller, as this method did before
+      TDebugFile.StackTrace(fWriter, {skip=}2, fFamily.StackTraceLevel,
+        fFamily.StackTraceUse); // use is actually ignored on FPC
+      fWriter.CancelLastChar(' ');
+    except // don't let any unexpected GPF break the logging process
+    end;
 end;
 
 {$else not FPC}
