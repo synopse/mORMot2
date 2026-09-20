@@ -4053,6 +4053,9 @@ function RetrieveLoadAvg: TShort23;
 // or 'ncores user kern [updays] used/totalram [used/totalswap] osint32' on Windows
 procedure RetrieveSysInfoText(var text: ShortString);
 
+/// used by RetrieveSysInfoText() from text = ''
+procedure AppendSysInfo(var text: ShortString);
+
 /// retrieve low-level information about current memory usage
 // - as used e.g. by TSynMonitorMemory or GetMemoryInfoText
 // - under BSD, only memtotal/memfree/percent are properly returned
@@ -9514,10 +9517,15 @@ begin
 end;
 
 procedure RetrieveSysInfoText(var text: ShortString);
+begin
+  text[0] := #0;
+  AppendSysInfo(text);
+end;
+
+procedure AppendSysInfo(var text: ShortString);
 var
   si: TSysInfo;  // Linuxism, but properly emulated in thit unit on Win/Mac/BSD
 begin
-  text[0] := #0;
   AppendShortCardinal(SystemInfo.dwNumberOfProcessors, text); // no syscall
   if not RetrieveSysInfo(si) then // single syscall on Linux - 1 second cache
     exit;

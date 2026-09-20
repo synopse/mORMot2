@@ -11916,7 +11916,6 @@ begin
       ne := [neWrite]
     else
       ne := [neRead, neWrite];
-    writeln(ctx, ' = ', byte(ne));
     fSocket.WaitFor(10, ne);
   until false;
 end;
