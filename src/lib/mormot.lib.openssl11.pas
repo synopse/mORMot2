@@ -110,7 +110,7 @@ type
     // wrap ERR_get_error/ERR_error_string_n or SSL_get_error/SSL_error
     class procedure CheckFailed(caller: TObject; const method: ShortString;
       errormsg: PRawUtf8 = nil; ssl: pointer = nil; sslretcode: integer = 0;
-      const context: RawUtf8 = '');
+      const context: RawUtf8 = ''; sslerrcode: integer = 0);
     class procedure TryNotAvailable(caller: TClass; const method: ShortString);
   public
     /// if res <> OPENSSLSUCCESS, raise the exception with some detailed message
@@ -2914,7 +2914,8 @@ begin
 end;
 
 class procedure EOpenSsl.CheckFailed(caller: TObject; const method: ShortString;
-  errormsg: PRawUtf8; ssl: pointer; sslretcode: integer; const context: RawUtf8);
+  errormsg: PRawUtf8; ssl: pointer; sslretcode: integer; const context: RawUtf8;
+  sslerrcode: integer);
 var
   res: integer;
   msg: RawUtf8;
@@ -2929,7 +2930,10 @@ begin
   else
   begin
     // specific error within the context of ssl_*() methods during TLS process
-    res := SSL_get_error(ssl, sslretcode);
+    if sslerrcode <> 0 then
+      res := sslerrcode
+    else
+      res := SSL_get_error(ssl, sslretcode);
     SSL_get_error_text(res, msg); // recognize SSL_ERROR_* constant and more
     PSSL(ssl).IsVerified(@msg); // append cert verif error text to msg if needed
   end;
@@ -11905,7 +11909,7 @@ begin
     if res = OPENSSLSUCCESS then
       exit;
     if CheckSsl(res, @err) <> nrRetry then // nrRetry happens on async socket
-      EOpenSslNetTls.CheckFailed(self, ctx, fLastError, fSsl, res, fServerAddress);
+      EOpenSslNetTls.CheckFailed(self, ctx, fLastError, fSsl, res, fServerAddress, err);
     if endtix = 0 then
       endtix := GetTickCount64 + 5000
     else if GetTickCount64 > endtix then
