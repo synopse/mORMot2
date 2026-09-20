@@ -586,6 +586,9 @@ type
   TShort127 = string[127];
   PShort127 = ^TShort127;
 
+  TShort95 = string[95];
+  PShort95 = ^TShort95;
+
   /// used to serialize up to 256-bit binary as hexadecimal
   TShort64 = string[64];
   PShort64 = ^TShort64;

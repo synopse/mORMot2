@@ -11288,6 +11288,9 @@ end;
 { TOpenSslNetTls }
 
 type
+  // SSL_connect() and SSL_accept() functions prototype
+  TOpenSSLProc = function(ssl: PSSL): integer; cdecl;
+
   /// OpenSSL TLS layer communication
   TOpenSslNetTls = class(TInterfacedObject, INetTls)
   private
@@ -11301,7 +11304,8 @@ type
     fDoSslShutdown: boolean;
     procedure Check(const method: ShortString; res: integer);
       {$ifdef HASINLINE} inline; {$endif}
-    function CheckSsl(res: integer): TNetResult;
+    function CheckSsl(res: integer; error: PInteger = nil): TNetResult;
+    procedure CheckProc(proc: TOpenSSLProc; const ctx: ShortString);
     procedure SetupCtx(var Context: TNetTlsContext; Bind: boolean);
   public
     destructor Destroy; override;
@@ -11458,7 +11462,7 @@ begin
     Check('AfterConnection set_fd',
       SSLSetFdNoSigPipe(fSsl, Socket.Socket));
     // client TLS negotiation with server
-    Check('AfterConnection connect', SSL_connect(fSsl));
+    CheckProc(@SSL_connect, 'AfterConnection SSL_connect');
     fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
     Context.CipherName := GetCipherName;
     // writeln(Context.CipherName);
@@ -11784,7 +11788,7 @@ begin
     Check('AfterAccept set_fd',
       SSLSetFdNoSigPipe(fSsl, Socket.Socket)); // MSG_NOSIGNAL on OpenSSL 4+
     // server TLS negotiation with server
-    Check('AfterAccept accept', SSL_accept(fSsl));
+    CheckProc(@SSL_accept, 'AfterAccept SSL_accept');
     fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
     if CipherName <> nil then
       CipherName^ := GetCipherName;
@@ -11842,13 +11846,15 @@ begin
 end;
 
 // see https://www.openssl.org/docs/man1.1.1/man3/SSL_get_error.html
-function TOpenSslNetTls.CheckSsl(res: integer): TNetResult;
+function TOpenSslNetTls.CheckSsl(res: integer; error: PInteger): TNetResult;
 var
   err: integer; // not PtrInt
   tmp: ShortString;
 begin
   tmp[0] := #0;
   err := SSL_get_error(fSsl, res); // caller ensured res <= 0
+  if error <> nil then
+    error^ := err;
   case err of
     SSL_ERROR_NONE:
       result := nrOk; // paranoid
@@ -11886,6 +11892,34 @@ begin
      (tmp[0] <> #0) then
     ShortStringToAnsi7String(tmp, fLastError^);
  end;
+
+procedure TOpenSslNetTls.CheckProc(proc: TOpenSSLProc; const ctx: ShortString);
+var
+  res, err: integer;
+  ne: TNetEvents;
+  endtix: Int64;
+begin
+  endtix := 0;
+  repeat
+    res := proc(fSsl);
+    if res = OPENSSLSUCCESS then
+      exit;
+    if CheckSsl(res, @err) <> nrRetry then // nrRetry happens on async socket
+      EOpenSslNetTls.CheckFailed(self, ctx, fLastError, fSsl, res, fServerAddress);
+    if endtix = 0 then
+      endtix := GetTickCount64 + 5000
+    else if GetTickCount64 > endtix then
+      raise EOpenSslNetTls.CreateFmt('%s timeout', [ctx]);
+    if err = SSL_ERROR_WANT_READ then
+      ne := [neRead]
+    else if err = SSL_ERROR_WANT_WRITE then
+      ne := [neWrite]
+    else
+      ne := [neRead, neWrite];
+    writeln(ctx, ' = ', byte(ne));
+    fSocket.WaitFor(10, ne);
+  until false;
+end;
 
 function TOpenSslNetTls.Receive(Buffer: pointer; var Length: integer): TNetResult;
 begin
