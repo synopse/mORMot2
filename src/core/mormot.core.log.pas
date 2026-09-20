@@ -2372,33 +2372,30 @@ begin
   addedwriting := not (tiWriting in threadflags^);
   if addedwriting then
     include(threadflags^, tiWriting);
+  {$endif NOEXCEPTIONINTERCEPT}
   try
-    {$endif NOEXCEPTIONINTERCEPT}
-    try
-      {$ifdef FPC}
-      result := CaptureBacktrace(skip, length(frames), pointer(@frames));
-      {$else}
-      result := 0;
-      {$ifdef OSWINDOWS}
-      if use <> stOnlyManual then
-        result := RtlCaptureStackBackTrace(skip, length(frames), @frames, nil);
-      {$ifndef CPU64}
-      if (result < 2) and
-         (use <> stOnlyAPI) then
-        // support stOnlyManual/stManualAndAPI on Delphi Win32, where the API
-        // needs stack frames and is likely to return (almost) nothing
-        result := ManualStackTrace(frames);
-      {$endif CPU64}
-      {$endif OSWINDOWS}
-      {$endif FPC}
-    except
-      result := 0;
-    end;
-  {$ifndef NOEXCEPTIONINTERCEPT}
-  finally
-    if addedwriting then
-      exclude(threadflags^, tiWriting);
+    {$ifdef FPC}
+    result := CaptureBacktrace(skip, length(frames), pointer(@frames));
+    {$else}
+    result := 0;
+    {$ifdef OSWINDOWS}
+    if use <> stOnlyManual then
+      result := RtlCaptureStackBackTrace(skip, length(frames), @frames, nil);
+    {$ifndef CPU64}
+    if (result < 2) and
+       (use <> stOnlyAPI) then
+      // support stOnlyManual/stManualAndAPI on Delphi Win32, where the API
+      // needs stack frames and is likely to return (almost) nothing
+      result := ManualStackTrace(frames);
+    {$endif CPU64}
+    {$endif OSWINDOWS}
+    {$endif FPC}
+  except
+    result := 0;
   end;
+  {$ifndef NOEXCEPTIONINTERCEPT}
+  if addedwriting then
+    exclude(threadflags^, tiWriting);
   {$endif NOEXCEPTIONINTERCEPT}
 end;
 
@@ -2481,17 +2478,25 @@ begin
   fn := GetExecutableName(pointer(a), @base, @symbol); // e.g. fast dladdr()
   if fn = '' then
     exit;
-  DebugFilesSafe.WriteLock; // safe blocking registration process
+  DebugFilesSafe.ReadLock;
   try
     if SynLogFileFreeing or
        (FindString(DebugFileNamesUnknown, fn) >= 0) then // known to be unknown
       exit;
+  finally
+    DebugFilesSafe.ReadUnLock;
+  end;
+  DebugFilesSafe.WriteLock; // safe blocking registration process
+  try
     result := DebugFileSearch(pointer(DebugFiles), a); // paranoid
     if result <> nil then
       exit; // was registered in another background thread
     for i := 0 to length(DebugFiles) - 1 do
       if DebugFiles[i].fExeFile = fn then
         exit; // a is part of this exe/dll but outside of the debug info range
+    if SynLogFileFreeing or
+       (FindString(DebugFileNamesUnknown, fn) >= 0) then // known to be unknown
+      exit;
     try
       result := TDebugFile.Create(fn);
     except
@@ -4280,9 +4285,7 @@ begin
   if (s = nil) and
      (l = nil) then
      exit;
-  if (aInfo[0] <> #0) and
-     (aInfo[ord(aInfo[0])] <> ' ') then
-    AppendShortCharSafe(' ', aInfo);
+  AppendShortCharSafe(' ', aInfo); // always prepend a space
   if l <> nil then
   begin
     AppendShortAnsi7String(l^.FileName, aInfo);
@@ -4342,7 +4345,6 @@ class procedure TDebugFile.AppendCallerShort(var aInfo: ShortString;
   aSkip, aDepth: integer);
 var
   deb: TDebugFile;
-  tmp: pointer; // RawUtf8
   frames: TRawStackFrames;
   i, n: PtrInt;
   l: AnsiChar;
@@ -4357,15 +4359,9 @@ begin
       l := aInfo[0];
       if ord(l) = high(aInfo) then
         break; // output buffer is full
-      tmp := nil;
-      deb := DebugFileGet(frames[i], @tmp);
+      deb := DebugFileGet(frames[i], nil); // no tmp = no external symbol
       if deb <> nil then
-        deb.AppendLocationShort(frames[i], aInfo)
-      else if tmp <> nil then
-      begin
-        AppendShortAnsi7String(RawUtf8(tmp), aInfo);
-        FastAssignNew(tmp);
-      end;
+        deb.AppendLocationShort(frames[i], aInfo);
       if aInfo[0] = l then
         continue; // nothing added
       dec(aDepth);
