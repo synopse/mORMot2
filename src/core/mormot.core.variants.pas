@@ -5031,6 +5031,28 @@ end;
 {$define DISPINVOKE_VALIST}
 {$endif DISPINVOKE_APPLEA64}
 
+{$ifdef DISPINVOKE_AAPCS32}
+// Android Delphi 32-bit ARM: Params points to the TVarArgList, which is a plain
+// pointer into the variadic arguments (AAPCS): 4-byte slots, but 64-bit values
+// (including doubles, since variadic calls use no VFP register) are 8-byte
+// aligned - and variants are passed by reference
+type
+  PSynVAListAapcs32 = ^PAnsiChar;
+
+function VAArgAapcs32(va: PSynVAListAapcs32; is64: boolean): PAnsiChar;
+begin
+  if is64 then
+    va^ := pointer((PtrUInt(va^) + 7) and not PtrUInt(7));
+  result := va^;
+  if is64 then
+    inc(va^, 8)
+  else
+    inc(va^, 4);
+end;
+
+{$define DISPINVOKE_VALIST}
+{$endif DISPINVOKE_AAPCS32}
+
 {$ifdef DISPINVOKE_SYSVAMD64}
 // Linux/macOS/Android Delphi 64-bit Intel: Params is a SysV AMD64 va_list
 // pointer; use va_arg semantics. ARGREF (var/out) params are passed as pointers
@@ -5128,11 +5150,16 @@ begin
           t := varString;
       end;
       {$ifdef DISPINVOKE_VALIST}
+      {$ifdef DISPINVOKE_AAPCS32}
+      a := VAArgAapcs32(Params, (CallDesc^.ArgTypes[i] and ARGREF_MASK = 0) and
+        (t in [varDouble, varCurrency, varDate, varInt64, varWord64]));
+      {$else}
       if (CallDesc^.ArgTypes[i] and ARGREF_MASK <> 0) or
          not (t in [varSingle, varDouble, varDate]) then
         a := {$ifdef DISPINVOKE_SYSVAMD64} VAGPArgSysVAmd64 {$else} VAGPArg {$endif} (Params)
       else
         a := {$ifdef DISPINVOKE_SYSVAMD64} VAFPArgSysVAmd64 {$else} VAFPArg {$endif} (Params);
+      {$endif DISPINVOKE_AAPCS32}
       {$else}
       asize := SizeOf(pointer); // most arguments in flat-buffer are pointers
       {$endif DISPINVOKE_VALIST}

@@ -831,9 +831,17 @@
         {$define DISPINVOKE_AAPCS64}  // use the AAPCS64 va_list layout
       {$endif MACOS}
     {$endif CPUARM64}
+    {$ifdef CPUARM32}
+      {$define DISPINVOKE_AAPCS32}    // TVarArgList is a plain pointer
+    {$endif CPUARM32}
   {$endif OSWINDOWS}
   {$ifdef CPU32}
     {$define HASSLOWMUL64}  // Delphi 32-bit has slow 64-bit mul: favor shl
+    {$ifdef CPUARM32} // no x87 there: extended = double
+      {$define EXTENDEDTOSHORT_USESTR}
+      {$define DOUBLETOSHORT_USEGRISU} // FloatToText() gives 15 digits
+      {$define DELPHI_ARM32_UNALIGNED} // packed fields: no VLDR/LDRD fault
+    {$endif CPUARM32}
   {$else}
     {$define EXTENDEDTOSHORT_USESTR} // FloatToText() slower in Delphi Win64
     {$ifdef CPUINTEL}
