@@ -2068,7 +2068,7 @@ function FormatString(const Format: RawUtf8; const Args: array of const): string
 /// fast Format() function replacement, for UTF-8 content stored in variant
 function FormatVariant(const Format: RawUtf8; const Args: array of const): variant;
 
-/// fast Format() function replacement in to a TSynTempAdder
+/// fast Format() function replacement to format-and-append into a TSynTempAdder
 procedure FormatAdder(var Dest: TSynTempAdder; const Format: RawUtf8; const Args: array of const);
 
 /// concatenate several arguments into an UTF-8 string
@@ -9970,7 +9970,8 @@ var
   f: TFormatUtf8;
 begin
   f.InitParse(Format, @Args[0], length(Args), MaxInt);
-  WriteAll(Dest.Add(f.size), @f.blocks, f.last);
+  if f.size <> 0 then
+    WriteAll(Dest.Add(f.size), @f.blocks, f.last);
 end;
 
 procedure FormatString(const Format: RawUtf8; const Args: array of const;
