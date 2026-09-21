@@ -9487,6 +9487,7 @@ var
   _SystemInfoText: TCachedValue;
   _SysInfoTix: cardinal;
   _SysInfoCache: TSysInfo;
+  _SysInfoText: TShort95;
 
 function GetSystemInfoText: RawUtf8;
 begin
@@ -9500,20 +9501,58 @@ begin
     _SetShell(_Shell, result);
 end;
 
-function RetrieveSysInfo(var si: TSysInfo): boolean;
+function RetrieveSysInfo(si: PSysInfo; txt: PAnsiChar; max: PtrInt): boolean;
 var
   tix: cardinal;
+  s: PSysInfo;
+  p: PShortString;
 begin
-  tix := GetTickSec;
+  tix := GetTickSec; // cached for 1 second
   OSSafe.Lock;
   if _SysInfoTix <> tix then
   begin
     _SysInfoTix := tix;
-    _RetrieveSysInfo(_SysInfoCache)
+    _RetrieveSysInfo(_SysInfoCache);
+    _SysInfoText[0] := #0; // recompute text cache when needed
   end;
-  si := _SysInfoCache;
+  if si <> nil then
+    si^ := _SysInfoCache;
+  result := _SysInfoCache.uptime <> 0;
+  if txt <> nil then
+  begin
+    p := @_SysInfoText;
+    if p^[0] = #0 then
+    begin
+      AppendShortCardinal(SystemInfo.dwNumberOfProcessors, p^);
+      if result then
+      begin
+        s := @_SysInfoCache;
+        AppendShortChar(' ', pointer(p)); // s^.loads[0/1] = user kern on Windows
+        AppendShortCurr64((Int64(s^.loads[0]) * CURR_RES + 5000) shr 16, p^, 2);
+        AppendShortChar(' ', pointer(p));
+        AppendShortCurr64((Int64(s^.loads[1]) * CURR_RES + 5000) shr 16, p^, 2);
+        AppendShortChar(' ', pointer(p));
+        {$ifdef OSPOSIX} // s^.loads[0/1/2] = avg1 avg5 avg15 on POSIX
+        AppendShortCurr64((Int64(s^.loads[2]) * CURR_RES + 5000) shr 16, p^, 2);
+        AppendShortChar(' ', pointer(p));
+        inc(s^.freeram, s^.bufferram);
+        {$endif OSPOSIX}
+        if s^.uptime > SecsPerDay then // optional [ndays]
+        begin
+          AppendShortCardinal(cardinal(s^.uptime) div SecsPerDay, p^);
+          AppendShortChar(' ', pointer(p));
+        end;
+        AppendFreeTotalKB(QWord(s^.totalram - s^.freeram) * s^.mem_unit,
+                          QWord(s^.totalram) * s^.mem_unit, p^);
+        if s^.freeswap < s^.totalswap shr 2 then // include swap if free below 25%
+          AppendFreeTotalKB(QWord(s^.totalswap - s^.freeswap) * s^.mem_unit,
+                            QWord(s^.totalswap) * s^.mem_unit, p^);
+        AppendShortIntHex(OSVersionInt32, p^); // identify and OS version
+      end;
+    end;
+    AppendShortBuffer(@p^[1], ord(p^[0]), max, txt);
+  end;
   OSSafe.UnLock;
-  result := si.uptime <> 0;
 end;
 
 procedure RetrieveSysInfoText(var text: ShortString);
@@ -9523,33 +9562,8 @@ begin
 end;
 
 procedure AppendSysInfo(var text: ShortString);
-var
-  si: TSysInfo;  // Linuxism, but properly emulated in thit unit on Win/Mac/BSD
-begin
-  AppendShortCardinal(SystemInfo.dwNumberOfProcessors, text); // no syscall
-  if not RetrieveSysInfo(si) then // single syscall on Linux - 1 second cache
-    exit;
-  AppendShortChar(' ', @text); // si.loads[0/1] = user kern on Windows
-  AppendShortCurr64((Int64(si.loads[0]) * CURR_RES + 5000) shr 16, text, 2);
-  AppendShortChar(' ', @text);
-  AppendShortCurr64((Int64(si.loads[1]) * CURR_RES + 5000) shr 16, text, 2);
-  AppendShortChar(' ', @text);
-  {$ifdef OSPOSIX} // si.loads[0/1/2] = avg1 avg5 avg15 on POSIX
-  AppendShortCurr64((Int64(si.loads[2]) * CURR_RES + 5000) shr 16, text, 2);
-  AppendShortChar(' ', @text);
-  inc(si.freeram, si.bufferram);
-  {$endif OSPOSIX}
-  if si.uptime > SecsPerDay then // optional [ndays]
-  begin
-    AppendShortCardinal(cardinal(si.uptime) div SecsPerDay, text);
-    AppendShortChar(' ', @text);
-  end;
-  AppendFreeTotalKB(QWord(si.totalram - si.freeram) * si.mem_unit,
-                    QWord(si.totalram) * si.mem_unit, text);
-  if si.freeswap < si.totalswap shr 2 then // include swap if free below 25%
-    AppendFreeTotalKB(QWord(si.totalswap - si.freeswap) * si.mem_unit,
-                      QWord(si.totalswap) * si.mem_unit, text);
-  AppendShortIntHex(OSVersionInt32, text); // identify and OS version
+begin // Linuxism, but properly emulated in thit unit on Win/Mac/BSD
+  RetrieveSysInfo(nil, @text, high(text)); // syscall on Linux - 1 second cache
 end;
 
 procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;

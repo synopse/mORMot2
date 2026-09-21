@@ -3561,6 +3561,7 @@ type
     freeswap: cardinal;                  // swap space still available
     mem_unit: cardinal;                  // Memory unit size in bytes
   end;
+  PSysInfo = ^TSysInfo;
 
 function _RetrieveSysInfo(var si: TSysInfo): boolean;
 var
@@ -4072,14 +4073,14 @@ begin // single syscall gives enough information on Linux
   result := SysInfo(@si) = 0;
 end;
 
-function RetrieveSysInfo(var si: TSysInfo): boolean; forward; // 1 second cache
+function RetrieveSysInfo(si: PSysInfo; txt: PAnsiChar; max: PtrInt): boolean; forward;
 
 function RetrieveLoadAvg: TShort23;
 var
   si: TSysInfo;  // Linuxism
 begin
   result[0] := #0;
-  if not RetrieveSysInfo(si) then // cache or syscall faster than /proc/loadavg
+  if not RetrieveSysInfo(@si, nil, 0) then // cache or fast syscall
     exit;
   AppendShort(TwoDigits(si.loads[0] / double(65536.0)), result);
   AppendShortChar(' ', @result);
