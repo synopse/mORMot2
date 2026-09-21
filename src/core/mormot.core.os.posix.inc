@@ -1160,16 +1160,16 @@ function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): integer;
 
 function host_processor_info(host, flavor: cint; var proccount: cardinal;
   var info: pointer; var infocount: cardinal): cint;
-  cdecl external 'host_processor_info';
+  cdecl external clib name 'host_processor_info';
 
 function mach_host_self: cint;
-  cdecl external 'mach_host_self';
+  cdecl external clib name 'mach_host_self';
 
 function vm_deallocate(task: cint; add: pointer; size: PtrUInt): cint;
-  cdecl external 'vm_deallocate';
+  cdecl external clib name 'vm_deallocate';
 
 function mach_task_self: cint;
-  cdecl external 'mach_task_self';
+  cdecl external clib name 'mach_task_self';
 
 var
   mach_timeinfo: TTimebaseInfoData;

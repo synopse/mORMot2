@@ -831,9 +831,17 @@
         {$define DISPINVOKE_AAPCS64}  // use the AAPCS64 va_list layout
       {$endif MACOS}
     {$endif CPUARM64}
+    {$ifdef CPUARM32}
+      {$define DISPINVOKE_AAPCS32}    // TVarArgList is a plain pointer
+    {$endif CPUARM32}
   {$endif OSWINDOWS}
   {$ifdef CPU32}
     {$define HASSLOWMUL64}  // Delphi 32-bit has slow 64-bit mul: favor shl
+    {$ifdef CPUARM32} // no x87 there: extended = double
+      {$define EXTENDEDTOSHORT_USESTR}
+      {$define DOUBLETOSHORT_USEGRISU} // FloatToText() gives 15 digits
+      {$define DELPHI_ARM32_UNALIGNED} // packed fields: no VLDR/LDRD fault
+    {$endif CPUARM32}
   {$else}
     {$define EXTENDEDTOSHORT_USESTR} // FloatToText() slower in Delphi Win64
     {$ifdef CPUINTEL}
@@ -1164,10 +1172,32 @@
       {$define LIBCURLSTATIC}
     {$endif CPUARM3264}
 
+    {$ifndef FPC}
+      {$ifndef USELIBCURL}
+        {$ifndef NODELPHINETHTTP}    // HTTPS via the TLS stack of the OS
+          {$define USEDELPHINETHTTP} // see TDelphiNetHttp in mormot.net.client
+        {$endif NODELPHINETHTTP}
+      {$endif USELIBCURL}
+    {$endif FPC}
+
   {$else}
 
+    {$ifdef IOS}
+      {$ifndef FPC}
+        // Delphi iOS ships neither libcurl nor libgss: use the OS TLS stack
+        {$ifndef USELIBCURL}
+          {$ifndef NODELPHINETHTTP}
+            {$define USEDELPHINETHTTP} // see TDelphiNetHttp in mormot.net.client
+          {$endif NODELPHINETHTTP}
+        {$endif USELIBCURL}
+        {$define NOGSSAPIAUTH}
+      {$endif FPC}
+    {$endif IOS}
+
     {$ifndef USE_OPENSSL}       // if OpenSSL is not available on this platform
-      {$define USELIBCURL}      // try cross-platform libcurl for https
+      {$ifndef USEDELPHINETHTTP}
+        {$define USELIBCURL}    // try cross-platform libcurl for https
+      {$endif USEDELPHINETHTTP}
     {$endif USE_OPENSSL}
 
     {$ifndef NOGSSAPIAUTH}      // mormot.lib.gssapi is not Android compatible
@@ -1178,7 +1208,7 @@
 
 {$endif OSPOSIX}
 
-{$if defined(USEWININET) or defined(USELIBCURL)}
+{$if defined(USEWININET) or defined(USELIBCURL) or defined(USEDELPHINETHTTP)}
   {$define USEHTTPREQUEST}
 {$ifend}
 
