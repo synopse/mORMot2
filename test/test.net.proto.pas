@@ -1381,7 +1381,10 @@ var
   utc1, utc2: TDateTime;
   ntp, usr, pwd, ku, main, txt: RawUtf8;
   dn: TNameValueDNs;
+  dr: TDnsResult;
+  hdr: PDnsHeader;
   endtix: cardinal;
+  start: Int64;
 begin
   // validate NTP/SNTP client using NTP_DEFAULT_SERVER = time.google.com
   if not Executable.Command.Get('ntp', ntp) then
@@ -1391,7 +1394,29 @@ begin
      Executable.Command.Has(['t', 'test']) then
     hasinternet := false // once is enough (e.g. from LUTI)
   else
-    hasinternet := DnsLookups('yahoo.com', '', 500) <> nil; // avoid abusive wait
+  begin
+    QueryPerformanceMicroSeconds(start);
+    hasinternet := DnsQuery('yahoo.com', dr, drrA, '', 500);
+    hdr := pointer(dr.RawAnswer);
+    if hasinternet then
+    begin
+      AddConsole('yahoo.com OK in % raw=% answer=% parsed=%',
+        [MicroSecToString(dr.ElapsedMicroSec), length(dr.RawAnswer),
+         dr.Header.AnswerCount, length(dr.Answer)]);
+      if CheckUtf8(hdr <> nil, 'hdr') then
+      begin
+        CheckEqual(bswap16(hdr^.QuestionCount), dr.Header.QuestionCount, 'ques');
+        CheckEqual(bswap16(hdr^.AnswerCount), dr.Header.AnswerCount, 'answ');
+      end;
+    end
+    else if hdr = nil then
+      AddConsole('yahoo.com fail in % with no raw answer', [MicroSecFrom(start)])
+    else
+      AddConsole('yahoo.com FAIL in %us raw=% rcode=% q=% a=% tc=% ra=%',
+        [dr.ElapsedMicroSec, length(dr.RawAnswer), hdr^.ResponseCode,
+         bswap16(hdr^.QuestionCount), bswap16(hdr^.AnswerCount),
+         hdr^.Truncation, hdr^.RecursionAvailable]);
+  end;
   if hasinternet then
   begin
     utc1 := GetSntpTime(ntp);
@@ -1403,9 +1428,7 @@ begin
       if withntp then
         CheckSame(utc1, utc2, 1, 'NTP system A'); // allow 1 day diff
     end;
-  end
-  else
-    AddConsole('no Internet connection');
+  end;
   // validate some IP releated process
   Check(not NetIsIP4(nil));
   Check(not NetIsIP4('1'));
@@ -3586,7 +3609,6 @@ begin
     viewerport := vieweraddr.Port;
     Check(viewerport <> 0, 'viewer port');
     Make([cLocalHost, ':', backendport], address);
-
     // Register routing only.  In particular there is no TCP connection to the
     // fake VNC backend at this point, matching ssh -R setup semantics.
     session := agent.TunnelPrepare(agentcallback);
@@ -3594,19 +3616,16 @@ begin
     Check(console.TunnelAccept(session, consolecallback), 'deferred accept');
     Check(not agentlocal.WaitForHandshake(session, 0),
       'no handshake before viewer');
-
     // Agent blocks on the handshake event.  It will connect backendport only
     // after console OpenSocket() below has accepted a real viewer and emitted
     // the first handshake frame.
     worker := TunnelBackgroundDeferred(agentlocal, session, agent, address);
-
     nr := NewTcpClientSocket(cLocalHost, UInt32ToUtf8(viewerport),
       1000, viewerclient);
     CheckUtf8(nr = nrOk, 'viewer client=%', [_NR[nr]]);
     nr := viewerlisten.Accept(viewersock, vieweraddr, {async=}false);
     CheckUtf8(nr = nrOk, 'viewer accept=%', [_NR[nr]]);
     Check(viewersock <> nil, 'viewer accepted socket');
-
     // The accepted application socket is handed to TTunnelLocal.  This call
     // emits the first handshake and wakes TunnelDeferredExecute() above.
     port := consolelocal.OpenSocket(session, console, [toEcdhe], 1000,
@@ -3620,7 +3639,6 @@ begin
     CheckEqual(consolelocal.RemotePort, backendport, 'viewer remote port');
     Check(agentlocal.Encrypted, 'backend encrypted');
     Check(consolelocal.Encrypted, 'viewer encrypted');
-
     // The agent Open(host:port) has now connected to our fake VNC listener.
     // Accept it and reproduce the RFB behavior where the VNC server speaks
     // first.  Do this BEFORE TunnelCommit(): pending sessions must already route
@@ -3633,10 +3651,8 @@ begin
     nr := viewerclient.RecvWait(1000, received);
     CheckUtf8(nr = nrOk, 'viewer banner recv=%', [_NR[nr]]);
     CheckBlocks(log, serverbanner, received, 10);
-
     Check(agent.TunnelCommit(session), 'deferred agent commit');
     Check(console.TunnelCommit(session), 'deferred console commit');
-
     // Then validate the opposite direction like the viewer's RFB reply.
     clienthello := 'RFB 003.008'#10;
     nr := viewerclient.SendAll(pointer(clienthello), length(clienthello));
