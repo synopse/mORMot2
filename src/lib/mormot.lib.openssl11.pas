@@ -11454,13 +11454,12 @@ begin
     if not Context.IgnoreCertificateErrors then
     begin
       P := pointer(Context.HostNamesCsv);
-      if GetNextCsv(P, h) then
-      begin
-        SSL_set_hostflags(fSsl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
-        Check('AfterConnection set1_host', SSL_set1_host(fSsl, pointer(h)));
-        while GetNextCsv(P, h) do
-          Check('AfterConnection add1_host', SSL_add1_host(fSsl, pointer(h)));
-      end;
+      if not GetNextCsv(P, h) then // default expected peer identity
+        h := ServerAddress; // plain IP here may fail before OpenSSL 3.4
+      SSL_set_hostflags(fSsl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+      Check('AfterConnection set1_host', SSL_set1_host(fSsl, pointer(h)));
+      while GetNextCsv(P, h) do
+        Check('AfterConnection add1_host', SSL_add1_host(fSsl, pointer(h)));
     end;
     // setup the conection using MSG_NOSIGNAL on OpenSSL 4+
     Check('AfterConnection set_fd',
