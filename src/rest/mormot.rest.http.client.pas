@@ -12,6 +12,7 @@ unit mormot.rest.http.client;
     - TRestHttpClientWebsockets REST Client Class over WebSockets
     - TRestHttpClientWinINet TRestHttpClientWinHttp Windows REST Client Classes
     - TRestHttpClientCurl REST Client Class over LibCurl
+    - TRestHttpClientDelphiNet REST Client Class over Delphi System.Net.HttpClient
     - TRestHttpClient/TRestHttpClients Main Usable Classes
 
   *****************************************************************************
@@ -251,7 +252,7 @@ type
     procedure InternalSetClass; virtual;
   public
     /// internal class instance used for the connection
-    // - will return either a TWinINet, a TWinHttp or a TCurlHttp class instance
+    // - contains one TWinINet, TWinHttp, TCurlHttp or TDelphiNetHttp instance
     property Request: THttpRequest
       read fRequest;
     /// optional Authentication Scheme
@@ -497,7 +498,19 @@ type
   {$endif USELIBCURL}
 
 
-  { ************ TRestHttpClient/TRestHttpClients Main Usable Classes }
+{ ************ TRestHttpClientDelphiNet REST Client over Delphi HttpClient }
+
+  {$ifdef USEDELPHINETHTTP}
+  /// HTTP/1.1 RESTful JSON Client class using Delphi RTL System.Net.HttpClient
+  // - will handle HTTP and HTTPS, using the proper Operating System TLS layer
+  TRestHttpClientDelphiNet = class(TRestHttpClientRequest)
+  protected
+    procedure InternalSetClass; override;
+  end;
+  {$endif USEDELPHINETHTTP}
+
+
+{ ************ TRestHttpClient/TRestHttpClients Main Usable Classes }
 
 type
   {$ifndef OSWINDOWS}
@@ -515,16 +528,21 @@ type
 
   {$else}
 
-  /// HTTP/1.1 RESTful JSON default mORMot Client class uses sockets on POSIX
+  /// HTTP/1.1 RESTful JSON default mORMot Client class using plain sockets API
   TRestHttpClient = TRestHttpClientSocket;
 
   {$ifdef USELIBCURL}
-  /// set HTTP/HTTPS RESTful JSON default mORMot Client class to use libcurl
+  /// HTTP/HTTPS RESTful JSON default mORMot Client class with libcurl
   TRestHttpsClient = TRestHttpClientCurl;   
   {$else}
-  /// default HTTP/HTTPS RESTful JSON default mORMot Client class is our socket layer
-  // - includes direct SChannel/OpenSSL TLS support on all platforms
+  {$ifdef USEDELPHINETHTTP} { the socket layer has no TLS on those targets }
+  /// HTTP/HTTPS RESTful JSON default mORMot Client class with Delphi System.Net
+  TRestHttpsClient = TRestHttpClientDelphiNet;
+  {$else}
+  /// HTTP/HTTPS RESTful JSON default mORMot Client with our socket layer
+  // - includes direct SChannel/OpenSSL TLS support on almost all platforms
   TRestHttpsClient = TRestHttpClientSocket;
+  {$endif USEDELPHINETHTTP}
   {$endif USELIBCURL}
 
   {$endif CLIENTUSEWININET}
@@ -1171,6 +1189,20 @@ end;
 
 {$endif USELIBCURL}
 
+
+{ ************ TRestHttpClientDelphiNet REST Client over Delphi HttpClient }
+
+{$ifdef USEDELPHINETHTTP}
+
+{ TRestHttpClientDelphiNet }
+
+procedure TRestHttpClientDelphiNet.InternalSetClass;
+begin
+  fRequestClass := TDelphiNetHttp;
+end;
+
+{$endif USEDELPHINETHTTP}
+
 initialization
   TRestHttpClientSocket.RegisterClassNameForDefinition;
   {$ifndef NOHTTPCLIENTWEBSOCKETS}
@@ -1183,6 +1215,9 @@ initialization
   {$ifdef USELIBCURL}
   TRestHttpClientCurl.RegisterClassNameForDefinition;
   {$endif USELIBCURL}
+  {$ifdef USEDELPHINETHTTP}
+  TRestHttpClientDelphiNet.RegisterClassNameForDefinition;
+  {$endif USEDELPHINETHTTP}
 
 end.
 
