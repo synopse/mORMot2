@@ -12,7 +12,7 @@ unit mormot.net.client;
    - THttpClientSocket Implementing HTTP client over plain sockets
    - Additional Client Protocols Support
    - THttpRequest Abstract HTTP client class
-   - TWinHttp TWinINet TCurlHttp classes
+   - TWinHttp TWinINet TCurlHttp TDelphiNetHttp classes
    - IHttpClient / TSimpleHttpClient Wrappers
    - TJsonClient JSON requests over HTTP
    - Cached HTTP Connection to a Remote Server
@@ -1181,7 +1181,8 @@ type
 
   {$M+} // to have existing RTTI for published properties
   /// abstract class to handle HTTP/1.1 request
-  // - never instantiate this class, but inherited TWinHttp, TWinINet or TCurlHttp
+  // - never instantiate this class, but inherited TWinHttp, TWinINet,
+  // TCurlHttp or TDelphiNetHttp with their actual implementation
   THttpRequest = class
   protected
     fServer: RawUtf8;
