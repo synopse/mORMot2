@@ -1172,10 +1172,32 @@
       {$define LIBCURLSTATIC}
     {$endif CPUARM3264}
 
+    {$ifndef FPC}
+      {$ifndef USELIBCURL}
+        {$ifndef NODELPHINETHTTP}    // HTTPS via the TLS stack of the OS
+          {$define USEDELPHINETHTTP} // see TDelphiNetHttp in mormot.net.client
+        {$endif NODELPHINETHTTP}
+      {$endif USELIBCURL}
+    {$endif FPC}
+
   {$else}
 
+    {$ifdef IOS}
+      {$ifndef FPC}
+        // Delphi iOS ships neither libcurl nor libgss: use the OS TLS stack
+        {$ifndef USELIBCURL}
+          {$ifndef NODELPHINETHTTP}
+            {$define USEDELPHINETHTTP} // see TDelphiNetHttp in mormot.net.client
+          {$endif NODELPHINETHTTP}
+        {$endif USELIBCURL}
+        {$define NOGSSAPIAUTH}
+      {$endif FPC}
+    {$endif IOS}
+
     {$ifndef USE_OPENSSL}       // if OpenSSL is not available on this platform
-      {$define USELIBCURL}      // try cross-platform libcurl for https
+      {$ifndef USEDELPHINETHTTP}
+        {$define USELIBCURL}    // try cross-platform libcurl for https
+      {$endif USEDELPHINETHTTP}
     {$endif USE_OPENSSL}
 
     {$ifndef NOGSSAPIAUTH}      // mormot.lib.gssapi is not Android compatible
@@ -1186,7 +1208,7 @@
 
 {$endif OSPOSIX}
 
-{$if defined(USEWININET) or defined(USELIBCURL)}
+{$if defined(USEWININET) or defined(USELIBCURL) or defined(USEDELPHINETHTTP)}
   {$define USEHTTPREQUEST}
 {$ifend}
 
