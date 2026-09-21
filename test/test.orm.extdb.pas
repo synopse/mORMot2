@@ -195,7 +195,7 @@ type
 
 function TSqlDBSQLite3ConnectionNoStatement.NewStatement: TSqlDBStatement;
 begin
-  raise ESqlDBException.Create('NewStatement failed');
+  raise ESynLogSilent.Create('NewStatement failed');
 end;
 
 function TSqlDBSQLite3ConnectionPropertiesNoStatement.NewConnection: TSqlDBConnection;
@@ -1071,7 +1071,7 @@ begin
         on E: Exception do
           raised := E.ClassType;
       end;
-      Check(raised = ESqlDBException, 'original exception re-raised');
+      Check(raised = ESynLogSilent, 'original exception re-raised');
     finally
       conn.Free;
     end;
