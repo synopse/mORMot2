@@ -1320,7 +1320,6 @@ type
       aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
     procedure LogHeader(const Level: TSynLogLevel; Instance: TObject);
       {$ifdef FPC}inline;{$endif}
-    procedure LogFmt(const Level: TSynLogLevel; var Fmt: TPreRenderFmt);
     procedure FillInfo(nfo: PSynLogThreadInfo; MicroSec: PInt64); virtual;
     procedure LogFileInit(nfo: PSynLogThreadInfo);
     procedure LogFileHeader; virtual;
@@ -6062,12 +6061,13 @@ begin
   EndWrite(nfo);
 end;
 
-procedure TSynLog.LogFmt(const Level: TSynLogLevel; var Fmt: TPreRenderFmt);
+procedure AddPreRenderFmt(W: TJsonWriter; var Fmt: TPreRenderFmt);
+  {$ifdef HASINLINE} inline; {$endif}
 begin
   if Fmt.TempLen >= 0 then // already rendered, truncated and twOnSameLine
-    fWriter.AddNoJsonEscape(@Fmt.Temp, Fmt.TempLen)
+    W.AddNoJsonEscape(@Fmt.Temp, Fmt.TempLen)
   else
-    fWriter.AddFmt(Fmt.Format, Fmt.Values, Fmt.ValuesCount, twOnSameLine,
+    W.AddFmt(Fmt.Format, Fmt.Values, Fmt.ValuesCount, twOnSameLine,
       [woDontStoreDefault, woDontStoreVoid, woFullExpand]);
 end;
 
@@ -6080,7 +6080,7 @@ begin
   result := LockAndPrepareEnter(nfo, fmt.Instance, microsecs);
   if not result then
     exit;
-  LogFmt(sllEnter, fmt);
+  AddPreRenderFmt(fWriter, fmt);
   fWriterEcho.AddEndOfLine(sllEnter); // no LogTrailerAndUnlock() needed here
   EndWrite(nfo);
 end;
@@ -6948,7 +6948,7 @@ begin
   nfo := @PerThreadInfo;
   if LockAndPrepareWrite(nfo, Level, fmt.Instance, {skip=}1) then
   begin
-    LogFmt(Level, fmt);
+    AddPreRenderFmt(fWriter, fmt);
     if lasterror <> 0 then
       AddErrorMessage(lasterror);
     LogTrailerAndUnlock(nfo, Level);

@@ -439,8 +439,9 @@ type
     property StatementCache: TSqlStatementCached
       read fStatementCache;
     /// after how many bytes a sllSQL statement log entry should be truncated
-    // - default is 0, meaning no truncation
-    // - typical value is 2048 (2KB), which will avoid any heap allocation
+    // - default is 0, meaning no truncation at this level: we will rely on
+    // TSynLogFamily.PreRenderFmt default internal truncation at 4KB of stack
+    // - set e.g. 2048 (2KB) for smaller output, or if DirectRendering is true
     property StatementTruncateSqlLogLen: integer
       read fStatementTruncateSqlLogLen write fStatementTruncateSqlLogLen;
   published
@@ -1297,8 +1298,8 @@ begin
           fStatementSql[fStatementTruncateSqlLogLen] := c; // restore
         end
         else
-          fRest.InternalLog('% % %', [fStatementTimer^.LastTime, Msg,
-            fStatementSql], sllSQL);
+          fRest.InternalLog('% % %',
+            [fStatementTimer^.LastTime, Msg, fStatementSql], sllSQL);
       fStatementTimer := nil;
     end;
     fStatementMonitor := nil;
