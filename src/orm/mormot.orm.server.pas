@@ -2364,10 +2364,9 @@ begin
     for i := 0 to high(fRunTableTrans) do
       if fRunTableTrans[i] <> nil then
         fRunTableTrans[i].RollBack(CONST_AUTHENTICATION_NOT_USED);
-    UniqueRawUtf8ZeroToTilde(fData, 1 shl 16);
     if Assigned(fLog) then
       fLog.Log(sllWarning, '% -> PARTIAL rollback of latest auto-committed ' +
-        'transaction data=%', [E, fData]);
+        'transaction data=%', [E, UniqueRawUtf8ZeroToTilde(fData, SizeOf(TBuffer4K))]);
   end;
 end;
 
