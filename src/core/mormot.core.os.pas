@@ -10083,6 +10083,47 @@ begin
   TrimSelf(s);
 end;
 
+{$ifdef OSANDROID}
+// an Android app is a .so library loaded by app_process64, so ParamStr(0) is
+// void: use this .so, the package name and the application files folder
+procedure SetAndroidProgramInfo;
+var
+  pkg: RawByteString;
+  i: PtrInt;
+  dir: TFileName;
+begin
+  with Executable do
+  begin
+    ProgramFileName := InstanceFileName; // e.g. /data/app/.../lib/arm64/libApp.so
+    ProgramFilePath := ExtractFilePath(ProgramFileName);
+    ProgramName := GetFileNameWithoutExtOrPath(ProgramFileName);
+    pkg := StringFromFileNoSize('/proc/self/cmdline'); // e.g. 'com.company.app'#0
+    for i := 1 to length(pkg) do
+      if pkg[i] in [#0, ':'] then // ':' for secondary processes of the app
+      begin
+        SetLength(pkg, i - 1);
+        break;
+      end
+      else if pkg[i] = '/' then // not an Android package name
+        exit;
+    if pkg = '' then
+      exit;
+    FastSetString(ProgramName, pointer(pkg), length(pkg));
+    // same as Context.getFilesDir(): the application private writable folder
+    // - so that log files, pid files or data can be written as usual
+    dir := Format('/data/user/%d/%s/', [FpGetuid div 100000, string(pkg)]);
+    if not DirectoryExists(dir) then
+      dir := Format('/data/data/%s/', [string(pkg)]);
+    if not DirectoryExists(dir) then
+      exit;
+    dir := dir + 'files/'; // may not exist yet on a fresh install
+    if DirectoryExists(dir) or
+       CreateDir(dir) then
+      ProgramFilePath := dir;
+  end;
+end;
+{$endif OSANDROID}
+
 procedure InitializeProcessInfo; // called once at startup
 var
   dt: TDateTime;
@@ -10174,6 +10215,11 @@ begin
     end;
     if InstanceFileName = '' then
       InstanceFileName := ProgramFileName; // fallback (unlikely)
+    {$ifdef OSANDROID}
+    if (ProgramFileName = '') and
+       (InstanceFileName <> '') then
+      SetAndroidProgramInfo;
+    {$endif OSANDROID}
     {$endif OSWINDOWS}
     GetUserHost(User, Host);
     if Host = '' then
