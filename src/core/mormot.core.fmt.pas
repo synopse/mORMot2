@@ -340,7 +340,7 @@ type
   // - as show above, methods are FORWARD-ONLY: use properly Save/Restore or
   // Rewind otherwise you may get a "Missing TXmlParser.Save/Rewind" exception
   // - this is a "basic" parser, from actual simple needs: no DTD support but
-  // basic <!DOCTYPE name> (which makes it immune to entity expansion attacks by
+  // basic <!DOCTYPE ...> (which makes it immune to entity expansion attacks by
   // design), no URI namespace binding, only the most useful XPath lookup syntax
   // - well-formedness of the tags nesting is verified, and any syntax or
   // nesting error would raise an EXmlException with the faulty line number,
@@ -2370,7 +2370,8 @@ begin
   s := @fSave[i];
   inc(i);
   fStackLen[high(fStackLen)] := i;
-  s^.L := PCardinal(@Kind)^;
+  s^.L := PCardinal(@Kind)^; // B[0]=Kind B[1]=Depth B[2]=fStackLen[0]
+  s^.B[2] := fStackLen[0];   // preserve root/prolog state for DOCTYPE
   s^.H := fCur - fBegin;
 end;
 
@@ -2386,7 +2387,8 @@ begin
   dec(i);
   fStackLen[high(fStackLen)] := i;
   s := @fSave[i];
-  PWord(@Kind)^ := s^.L; // B[0]=Kind B[1]=Depth
+  PWord(@Kind)^ := s^.L; // B[0]=Kind B[1]=Depth B[2]=fStackLen[0]
+  fStackLen[0] := s^.B[2];
   p := fBegin + s^.H;
   if p <= fCur then
     fCur := p
@@ -2754,7 +2756,7 @@ begin
         '"', '''':
           quote := p^;
         '[', ']', '<':
-          exit; // nested DTD are not allowed
+          exit; // internal subsets and nested DTD markup are not allowed
         '>':
           begin
             result := p + 1; // valid simple <!DOCTYPE name> node

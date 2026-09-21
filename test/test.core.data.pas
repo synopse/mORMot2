@@ -9590,6 +9590,24 @@ begin
   XmlWalk(p, xtElementStart, 'svg');
   XmlWalk(p, xtElementEnd, 'svg');
   Check(p.ParseNext = xtEof);
+  // DOCTYPE should be properly supported after Save/Restore
+  p.Init('<!DOCTYPE svg><svg/>');
+  p.Save;
+  XmlWalk(p, xtElementStart, 'svg');
+  XmlWalk(p, xtElementEnd, 'svg');
+  Check(p.ParseNext = xtEof);
+  p.Restore;
+  XmlWalk(p, xtElementStart, 'svg');
+  XmlWalk(p, xtElementEnd, 'svg');
+  Check(p.ParseNext = xtEof);
+  p.Init('<!--before--><!DOCTYPE svg><svg/>', [xpoKeepComments]);
+  XmlWalk(p, xtComment, '', 'before');
+  p.Save;
+  XmlWalk(p, xtElementStart, 'svg');
+  XmlWalk(p, xtElementEnd, 'svg');
+  p.Restore;
+  XmlWalk(p, xtElementStart, 'svg');
+  XmlWalk(p, xtElementEnd, 'svg');
 end;
 
 procedure TTestCoreProcess.XmlSaxErrors;
