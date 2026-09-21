@@ -1291,14 +1291,14 @@ type
     function DoEnter: PSynLogThreadInfo; // returns nil if sllEnter is disabled
       {$ifdef FPC}inline;{$endif}
     procedure RaiseDoEnter;
-    function LockAndPrepareEnter(nfo: PSynLogThreadInfo;
-      microsecs: PInt64): boolean; // returns with fWriteSafe owned
+    function LockAndPrepareEnter(nfo: PSynLogThreadInfo; instance: TObject;
+      microsecs: PInt64 = nil): boolean; // returns fWriteSafe owned
     function BeginWrite(nfo: PSynLogThreadInfo): boolean;
       {$ifdef HASINLINE}inline;{$endif}
     procedure EndWrite(nfo: PSynLogThreadInfo);
       {$ifdef HASINLINE}inline;{$endif}
     function LockAndPrepareWrite(nfo: PSynLogThreadInfo; level: TSynLogLevel;
-      skip: integer = 0; depth: integer = 0): boolean;
+      instance: TObject; skip: integer = 0; depth: integer = 0): boolean;
     procedure LogTrailerAndUnlock(Info: PSynLogThreadInfo; Level: TSynLogLevel);
       {$ifdef FPC}inline;{$endif}
     procedure CloseLogFileLocked;
@@ -5750,7 +5750,7 @@ begin
 end;
 
 function TSynLog.LockAndPrepareWrite(nfo: PSynLogThreadInfo;
-  level: TSynLogLevel; skip, depth: integer): boolean;
+  level: TSynLogLevel; instance: TObject; skip, depth: integer): boolean;
 var
   lev: TSynLogLevels;
 begin
@@ -5779,6 +5779,7 @@ begin
       not PerformRotationOrUnlock(nfo)) then
     exit;
   SetThreadInfoAndThreadName(self, nfo);
+  LogHeader(level, instance);
   result := true; // normal process, with eventual EndWrite
 end;
 
@@ -6006,7 +6007,7 @@ begin
 end;
 
 function TSynLog.LockAndPrepareEnter(nfo: PSynLogThreadInfo;
-  microsecs: PInt64): boolean;
+  instance: TObject; microsecs: PInt64): boolean;
 var
   ms, rec: Int64;
 begin
@@ -6043,16 +6044,16 @@ begin
   end;
   nfo^.Recursion[nfo^.RecursionCount - 1] := rec;
   SetThreadInfoAndThreadName(self, nfo);
+  LogHeader(sllEnter, instance);
   result := true;
 end;
 
 function TSynLog.LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char;
   location: PShortString): boolean;
 begin
-  result := LockAndPrepareEnter(nfo, nil);
+  result := LockAndPrepareEnter(nfo, inst);
   if not result then
     exit;
-  LogHeader(sllEnter, inst);
   if txt <> nil then
     fWriter.AddOnSameLine(txt)
   else if location <> nil then
@@ -6063,7 +6064,6 @@ end;
 
 procedure TSynLog.LogFmt(const Level: TSynLogLevel; var Fmt: TPreRenderFmt);
 begin
-  LogHeader(Level, Fmt.Instance);
   if Fmt.TempLen >= 0 then // already rendered, truncated and twOnSameLine
     fWriter.AddNoJsonEscape(@Fmt.Temp, Fmt.TempLen)
   else
@@ -6077,7 +6077,7 @@ begin
   // pre-render Format/Values up to 4KB on stack outside of the TSynLog lock
   fFamily.PreRenderFmt(fmt);
   // log this line
-  result := LockAndPrepareEnter(nfo, microsecs);
+  result := LockAndPrepareEnter(nfo, fmt.Instance, microsecs);
   if not result then
     exit;
   LogFmt(sllEnter, fmt);
@@ -6099,9 +6099,8 @@ begin
   if Level = sllLastError then
     lasterror := GetLastError;
   nfo := @PerThreadInfo;
-  if LockAndPrepareWrite(nfo, Level, {skip=}0, {depth=}1) then
+  if LockAndPrepareWrite(nfo, Level, {instance=}nil, {skip=}0, {depth=}1) then
   begin
-    LogHeader(Level, nil);
     if lasterror <> 0 then
       AddErrorMessage(lasterror);
     LogTrailerAndUnlock(nfo, Level);
@@ -6199,12 +6198,11 @@ begin // expects the caller to have set Local = nil
   nfo := result.DoEnter;
   if nfo = nil then
     exit; // nothing to log
-  if not result.LockAndPrepareEnter(nfo, nil) then
+  if not result.LockAndPrepareEnter(nfo, aInstance) then
   begin
     result := nil;
     exit;
   end;
-  result.LogHeader(sllEnter, aInstance);
   if aMethodName <> '' then // direct string output with no temp conversion
     result.fWriter.AddOnSameLineString(aMethodName);
   result.fWriterEcho.AddEndOfLine(sllEnter);
@@ -6330,7 +6328,7 @@ end;
 procedure TSynLog.Log(Level: TSynLogLevel; const Text: string;
   aInstance: TObject);
 begin
-  Log(Level, '%', [Text], Instance); // will be inlined at caller site
+  Log(Level, '%', [Text], aInstance); // will be inlined at caller site
 end;
 {$endif UNICODE}
 
@@ -6540,9 +6538,8 @@ begin
      not (Level in fFamily.fLevel) then
     exit;
   nfo := @PerThreadInfo;
-  if not LockAndPrepareWrite(nfo, Level) then
+  if not LockAndPrepareWrite(nfo, Level, Instance) then
     exit;
-  LogHeader(Level, Instance);
   fWriter.AddOnSameLine(Text);
   LogTrailerAndUnlock(nfo, Level);
 end;
@@ -6585,9 +6582,8 @@ begin
      not Assigned(Event) then
     exit;
   nfo := @PerThreadInfo;
-  if LockAndPrepareWrite(nfo, Level) then
+  if LockAndPrepareWrite(nfo, Level, Instance) then
   try // protect unsafe Event() callback call
-    LogHeader(Level, Instance);
     Event(self, Level, Opaque, Value, Instance);
   finally
     LogTrailerAndUnlock(nfo, Level);
@@ -6950,7 +6946,7 @@ begin
   fFamily.PreRenderFmt(fmt);
   // log this line
   nfo := @PerThreadInfo;
-  if LockAndPrepareWrite(nfo, Level, {skip=}1) then
+  if LockAndPrepareWrite(nfo, Level, fmt.Instance, {skip=}1) then
   begin
     LogFmt(Level, fmt);
     if lasterror <> 0 then
@@ -6984,9 +6980,8 @@ begin
       trunclen := -1; // will fallback to AddEscapeBuffer()
   end;
   nfo := @PerThreadInfo;
-  if LockAndPrepareWrite(nfo, Level, {skip=}1) then
+  if LockAndPrepareWrite(nfo, Level, Instance) then
   begin
-    LogHeader(Level, Instance);
     if Text <> nil then
       if trunclen >= 0 then // valid UTF-8
       begin
@@ -7018,9 +7013,8 @@ var
   nfo: PSynLogThreadInfo;
 begin
   nfo := @PerThreadInfo;
-  if not LockAndPrepareWrite(nfo, Level, {skip=}1) then
+  if not LockAndPrepareWrite(nfo, Level, Instance) then
     exit;
-  LogHeader(Level, Instance);
   fWriter.AddOnSameLine(pointer(aName));
   fWriter.AddDirect('=');
   fWriter.AddTypedJson(@aValue, aTypeInfo, [woDontStoreVoid]);
