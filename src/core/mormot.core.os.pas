@@ -688,7 +688,7 @@ const
       'x86'
     {$else} {$ifdef CPUX64}
       'x64'
-    {$else} {$ifdef CPUARM}
+    {$else} {$ifdef ABIA32}  // NOASMBLOCK undefines CPUARM on Delphi
       'arm' +
     {$else} {$ifdef ABIA64} // not CPUAARCH64: NOASMBLOCK undefines it on Delphi
       'aarch' +

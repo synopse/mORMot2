@@ -5726,6 +5726,26 @@ begin
     Ctxt.W, Data, Ctxt.Options);
 end;
 
+{$ifdef DELPHI_ARM32_UNALIGNED}
+// ARMv7 raises an alignment fault on VLDR/VSTR/LDRD/STRD at an address which is
+// not 4-byte aligned, as a double or Int64 field of a packed record may be:
+// the value is then processed from/to a properly aligned local copy
+function IsUnalignedValue(Data: pointer; Info: TRttiCustom): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := (PtrUInt(Data) and 3 <> 0) and
+            (Info.Kind in [rkFloat, rkInt64]);
+end;
+
+procedure _JS_Unaligned(Data: pointer; const Ctxt: TJsonSaveContext);
+var
+  tmp: Int64;
+begin
+  MoveFast(Data^, tmp, Ctxt.Info.Size);
+  TRttiJsonSave(Ctxt.Info.JsonSave)(@tmp, Ctxt);
+end;
+{$endif DELPHI_ARM32_UNALIGNED}
+
 procedure _JS_OneProp(var c: TJsonSaveContext; p: PRttiCustomProp; Data: PAnsiChar);
   {$ifdef HASINLINE} inline; {$endif}
 begin
@@ -5738,6 +5758,11 @@ begin
     c.Info := p^.Value;
     c.Prop := p;
     if c.Info.JsonSave <> nil then
+      {$ifdef DELPHI_ARM32_UNALIGNED}
+      if IsUnalignedValue(Data + p^.OffsetGet, c.Info) then
+        _JS_Unaligned(Data + p^.OffsetGet, c)
+      else
+      {$endif DELPHI_ARM32_UNALIGNED}
       TRttiJsonSave(c.Info.JsonSave)(Data + p^.OffsetGet, c)
     else
       c.W.AddNull;
@@ -8225,6 +8250,20 @@ begin
   MoveFast(v, Data^, Ctxt.Info.Size);
 end;
 
+{$ifdef DELPHI_ARM32_UNALIGNED}
+procedure JsonLoadUnaligned(Load: TRttiJsonLoad; Data: pointer;
+  var Ctxt: TJsonParserContext);
+var
+  tmp: Int64;
+  size: PtrInt;
+begin
+  size := Ctxt.Info.Size; // Ctxt.Info may be changed by Load()
+  MoveFast(Data^, tmp, size); // keep the previous value on parsing error
+  Load(@tmp, Ctxt);
+  MoveFast(tmp, Data^, size);
+end;
+{$endif DELPHI_ARM32_UNALIGNED}
+
 function JsonLoadProp(Data: PAnsiChar; Prop: PRttiCustomProp;
   var Ctxt: TJsonParserContext): boolean; {$ifdef HASINLINE} inline; {$endif}
 var
@@ -8240,6 +8279,11 @@ begin
        TORHook(Data).RttiBeforeReadPropertyValue(@Ctxt, Prop) then
       // custom parsing method (e.g. TOrm nested TOrm properties)
     else
+    {$ifdef DELPHI_ARM32_UNALIGNED}
+    if IsUnalignedValue(Data + Prop^.OffsetSet, Ctxt.Info) then
+      JsonLoadUnaligned(load, Data + Prop^.OffsetSet, Ctxt)
+    else
+    {$endif DELPHI_ARM32_UNALIGNED}
       // default fast parsing into the property/field memory
       load(Data + Prop^.OffsetSet, Ctxt)
   else
