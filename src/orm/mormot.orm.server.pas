@@ -2325,7 +2325,9 @@ begin
         fValueID := fRunningRest.InternalBatchDirectOne(
           fEncoding, fRunTableIndex, fValueDirectFields, fValueDirect);
         fResults[fCount] := fValueID;
-        result := fValueID > 0;
+        result := (fValueID > 0) and
+                  ((fEncoding <> encPutHexID) or   // returns an ID
+                   (fValueID = HTTP_SUCCESS));     // returns an HTTP status
         // no ready-to-used fValue -> no fCache notification
       end;
     encPut:

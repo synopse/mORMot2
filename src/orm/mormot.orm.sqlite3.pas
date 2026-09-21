@@ -231,6 +231,8 @@ type
     SimpleFieldsCount: integer;
     UpdateFieldsCount: integer;
     SimpleFields: TFieldBits;
+    UpdateFields: TFieldBits;
+    UpdateProps: TOrmProperties;
     UpdateSql: RawUtf8;
     Types: array[0..MAX_SQLFIELDS - 1] of TSqlDBFieldType;
     PostValues: array[0..MAX_SQLPARAMS - 1] of RawUtf8;
@@ -2760,9 +2762,13 @@ var
   id: TID;
 begin
   b := DB.fBatch;
-  if not IsEqual(b^.SimpleFields, Fields) then
+  // UpdateSql is cached per table and fields, since InternalBatchStart/Stop
+  // are not called for UPDATE, and SimpleFields is used for INSERT
+  if (b^.UpdateProps <> Props) or
+     not IsEqual(b^.UpdateFields, Fields) then
   begin
-    b^.SimpleFields := Fields;
+    b^.UpdateProps := Props;
+    b^.UpdateFields := Fields;
     b^.UpdateFieldsCount := FieldBitCount(Fields, Props.Fields.Count) + 1;
     Props.Fields.ToCsvText(['update ', Props.SqlTableName, ' set '],
       Fields, '=?', [' where RowID=?'], b^.UpdateSql);
