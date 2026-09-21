@@ -74,6 +74,8 @@ type
     procedure _SynDBRemote;
     /// test TSqlDBConnectionProperties persistent as JSON
     procedure DBPropertiesPersistence;
+    /// NewStatementPrepared() when NewStatement itself raises an exception
+    procedure NewStatementFailure;
     /// initialize needed RESTful client (and server) instances
     // - i.e. a RESTful direct access to an external DB
     procedure ExternalRecords;
@@ -178,6 +180,28 @@ type
   // class hooks to access DMBS property for TTestExternalDatabase.AutoAdaptSQL
   TSqlDBConnectionPropertiesHook = class(TSqlDBConnectionProperties);
   TRestStorageExternalHook = class(TRestStorageExternal);
+
+  // a connection whose NewStatement always fails - as TSqlDBZeosConnection
+  // does when its implicit Connect raises (e.g. database server unreachable)
+  TSqlDBSQLite3ConnectionNoStatement = class(TSqlDBSQLite3Connection)
+  public
+    function NewStatement: TSqlDBStatement; override;
+  end;
+
+  TSqlDBSQLite3ConnectionPropertiesNoStatement = class(TSqlDBSQLite3ConnectionProperties)
+  public
+    function NewConnection: TSqlDBConnection; override;
+  end;
+
+function TSqlDBSQLite3ConnectionNoStatement.NewStatement: TSqlDBStatement;
+begin
+  raise ESqlDBException.Create('NewStatement failed');
+end;
+
+function TSqlDBSQLite3ConnectionPropertiesNoStatement.NewConnection: TSqlDBConnection;
+begin
+  result := TSqlDBSQLite3ConnectionNoStatement.Create(self);
+end;
 
 
 { TTestExternalDatabase }
@@ -1017,6 +1041,43 @@ begin
     end;
   finally
     Props.Free;
+  end;
+end;
+
+procedure TTestExternalDatabase.NewStatementFailure;
+var
+  props: TSqlDBConnectionProperties;
+  conn: TSqlDBConnection;
+  raised: TClass;
+  level: TSynLogLevels;
+begin
+  // TryPrepare() logged stmt.SqlWithInlinedParams in its except block, with
+  // stmt=nil when NewStatement raised: an EAccessViolation replaced the
+  // original error, and LastErrorMessage was never set
+  level := SynDBLog.Family.Level;
+  SynDBLog.Family.Level := level + [sllError]; // force the logging branch
+  props := TSqlDBSQLite3ConnectionPropertiesNoStatement.Create(
+    SQLITE_MEMORY_DATABASE_NAME, '', '', '');
+  try
+    conn := props.NewConnection;
+    try
+      Check(conn.NewStatementPrepared('select 1', true, false) = nil);
+      Check(PosEx('NewStatement failed', conn.LastErrorMessage) > 0,
+        'LastErrorMessage');
+      raised := nil;
+      try
+        conn.NewStatementPrepared('select 1', true, true);
+      except
+        on E: Exception do
+          raised := E.ClassType;
+      end;
+      Check(raised = ESqlDBException, 'original exception re-raised');
+    finally
+      conn.Free;
+    end;
+  finally
+    props.Free;
+    SynDBLog.Family.Level := level;
   end;
 end;
 
