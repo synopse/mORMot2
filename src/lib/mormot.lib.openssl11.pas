@@ -11895,44 +11895,61 @@ begin
      (fLastError <> nil) and
      (tmp[0] <> #0) then
     ShortStringToAnsi7String(tmp, fLastError^);
- end;
+end;
+
+procedure WaitRetry(sock: TNetSocket; err: integer; var endtix: Int64;
+  const ctx: ShortString);
+var
+  ne: TNetEvents;
+begin
+  if endtix = 0 then
+    endtix := GetTickCount64 + 5000 // never loop forever
+  else if GetTickCount64 > endtix then
+    raise EOpenSslNetTls.CreateFmt('%s timeout', [ctx]);
+  if err = SSL_ERROR_WANT_READ then
+    ne := [neRead, neError]
+  else if err = SSL_ERROR_WANT_WRITE then
+    ne := [neWrite, neError]
+  else
+    ne := [neRead, neWrite, neError]; // should never happen
+  sock.WaitFor(100, ne);
+end;
 
 procedure TOpenSslNetTls.CheckProc(proc: TOpenSSLProc; const ctx: ShortString);
 var
   res, err: integer;
-  ne: TNetEvents;
   endtix: Int64;
 begin
   endtix := 0;
   repeat
-    res := proc(fSsl);
+    res := proc(fSsl); // SSL_connect() or SSL_accept()
     if res = OPENSSLSUCCESS then
       exit;
     if CheckSsl(res, @err) <> nrRetry then // nrRetry happens on async socket
       EOpenSslNetTls.CheckFailed(self, ctx, fLastError, fSsl, res, fServerAddress, err);
-    if endtix = 0 then
-      endtix := GetTickCount64 + 5000
-    else if GetTickCount64 > endtix then
-      raise EOpenSslNetTls.CreateFmt('%s timeout', [ctx]);
-    if err = SSL_ERROR_WANT_READ then
-      ne := [neRead]
-    else if err = SSL_ERROR_WANT_WRITE then
-      ne := [neWrite]
-    else
-      ne := [neRead, neWrite];
-    fSocket.WaitFor(10, ne);
+    WaitRetry(fSocket, err, endtix, ctx);
   until false;
 end;
 
 function TOpenSslNetTls.Receive(Buffer: pointer; var Length: integer): TNetResult;
+var
+  len, err: integer;
+  endtix: Int64;
 begin
-  Length := SSL_read(fSsl, Buffer, Length);
-  if Length <= 0 then
-    // read operation was not successful
-    result := CheckSsl(Length)
-  else
-    // return value is number of bytes actually read from the TLS connection
+  len := Length; // preserve original SSL_read() arguments
+  endtix := 0;
+  repeat
     result := nrOK;
+    Length := SSL_read(fSsl, Buffer, len);
+    if Length > 0 then
+      // return value was number of bytes actually read from the TLS connection
+      exit;
+    // TLS read operation was not successful
+    result := CheckSsl(Length, @err);
+    if err <> SSL_ERROR_WANT_WRITE then
+      exit; // SSL_ERROR_WANT_READ is handled (asynchronously) by the caller
+    WaitRetry(fSocket, err, endtix, 'Receive');
+  until false;
 end;
 
 function TOpenSslNetTls.ReceivePending: integer;
@@ -11941,14 +11958,24 @@ begin
 end;
 
 function TOpenSslNetTls.Send(Buffer: pointer; var Length: integer): TNetResult;
+var
+  len, err: integer;
+  endtix: Int64;
 begin
-  Length := SSL_write(fSsl, Buffer, Length);
-  if Length <= 0 then
-    // write operation was not successful
-    result := CheckSsl(Length)
-  else
-    // return value is number of bytes actually written to the TLS connection
+  len := Length; // preserve original SSL_write() arguments
+  endtix := 0;
+  repeat
     result := nrOK;
+    Length := SSL_write(fSsl, Buffer, len);
+    if Length > 0 then
+      // return value was number of bytes actually sent to the TLS connection
+      exit;
+    // TLS write operation was not successful
+    result := CheckSsl(Length, @err);
+    if err <> SSL_ERROR_WANT_READ then
+      exit; // SSL_ERROR_WANT_WRITE is handled (asynchronously) by the caller
+    WaitRetry(fSocket, err, endtix, 'Send');
+  until false;
 end;
 
 function NewOpenSslNetTls: INetTls;
