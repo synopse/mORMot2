@@ -690,7 +690,7 @@ const
       'x64'
     {$else} {$ifdef CPUARM}
       'arm' +
-    {$else} {$ifdef CPUAARCH64}
+    {$else} {$ifdef ABIA64} // not CPUAARCH64: NOASMBLOCK undefines it on Delphi
       'aarch' +
     {$ifdef CPUPOWERPC}
       'ppc' +
@@ -699,7 +699,7 @@ const
     {$endif CPUSPARC}
     {$endif CPUPOWERPC}
     {$endif CPUARM}
-    {$endif CPUAARCH64}
+    {$endif ABIA64}
     {$ifdef CPU32}
       '32'
     {$else}
