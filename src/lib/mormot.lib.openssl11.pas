@@ -16,8 +16,8 @@ unit mormot.lib.openssl11;
 
     In respect to OpenSSL 1.0.x, the new 1.1 API hides most structures
    behind getter/setter functions, and does not require complex initialization.
-    OpenSSL 1.1 features TLS 1.3, but is now deprecated.
-    OpenSSL 3.x / 4.x are supported as the current major version.
+    OpenSSL 1.1 features TLS 1.3, but official support ended in 2023.
+    OpenSSL 3.5+ / 4.x are adviced as the current major versions.
     OpenSSL 1.1 / 3.x / 4.x API adaptation is done at runtime by dynamic loading.
 
   *****************************************************************************
@@ -2103,7 +2103,7 @@ type
 
   SSL_verify_cb = function(preverify_ok: integer; x509_ctx: PX509_STORE_CTX): integer; cdecl;
   SSL_SNI_servername_cb = function(s: PSSL; ad: PInteger; arg: pointer): integer; cdecl;
-  SSL_CTX_callback_ctrl_ = procedure; cdecl;
+  SSL_CTX_callback_ctrl_ = procedure(); cdecl;
   Ppem_password_cb = function(buf: PUtf8Char; size, rwflag: integer; userdata: pointer): integer; cdecl;
   ECDH_compute_key_KDF = function(_in: pointer; inlen: PtrUInt; _out: pointer; outlen: PPtrUInt): pointer; cdecl;
 
@@ -2211,6 +2211,7 @@ function CRYPTO_get_ex_new_index(class_index: integer;
   dup_func: PCRYPTO_EX_dup; free_func: PCRYPTO_EX_free): integer; cdecl;
 procedure ERR_error_string_n(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
 function ERR_get_error(): cardinal; cdecl;
+procedure ERR_clear_error(); cdecl;
 function ERR_load_BIO_strings(): integer; cdecl;
 function EVP_PKEY_new(): PEVP_PKEY; cdecl;
 function EVP_PKEY_size(pkey: PEVP_PKEY): integer; cdecl;
@@ -3444,11 +3445,12 @@ type
   TLibCrypto = class(TSynLibrary)
   public
     CRYPTO_malloc: function(num: PtrUInt; _file: PUtf8Char; line: integer): pointer; cdecl;
-    CRYPTO_set_mem_functions: function (m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn; f: dyn_MEM_free_fn): integer; cdecl;
+    CRYPTO_set_mem_functions: function(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn; f: dyn_MEM_free_fn): integer; cdecl;
     CRYPTO_free: procedure(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
     CRYPTO_get_ex_new_index: function(class_index: integer; argl: integer; argp: pointer; new_func: PCRYPTO_EX_new; dup_func: PCRYPTO_EX_dup; free_func: PCRYPTO_EX_free): integer; cdecl;
     ERR_error_string_n: procedure(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
     ERR_get_error: function(): cardinal; cdecl;
+    ERR_clear_error: procedure(); cdecl;
     ERR_load_BIO_strings: function(): integer; cdecl;
     EVP_PKEY_new: function(): PEVP_PKEY; cdecl;
     EVP_PKEY_size: function(pkey: PEVP_PKEY): integer; cdecl;
@@ -3528,7 +3530,7 @@ type
     X509_NAME_print_ex_fp: function(fp: PPointer; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
     X509_NAME_entry_count: function(name: PX509_NAME): integer; cdecl;
     X509_NAME_get_entry: function(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY; cdecl;
-    X509_NAME_get_text_by_NID: function (name: PX509_NAME; nid: integer; buf: PUtf8Char; len: integer): integer; cdecl;
+    X509_NAME_get_text_by_NID: function(name: PX509_NAME; nid: integer; buf: PUtf8Char; len: integer): integer; cdecl;
     X509_NAME_get_index_by_NID: function(name: PX509_NAME; nid: integer; lastpos: integer): integer; cdecl;
     X509_NAME_delete_entry: function(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY; cdecl;
     X509_NAME_ENTRY_get_data: function(ne: PX509_NAME_ENTRY): PASN1_STRING; cdecl;
@@ -3673,7 +3675,7 @@ type
     OBJ_txt2nid: function(s: PUtf8Char): integer; cdecl;
     OBJ_txt2obj: function(s: PUtf8Char; no_name: integer): PASN1_OBJECT; cdecl;
     OBJ_obj2nid: function(o: PASN1_OBJECT): integer; cdecl;
-    OBJ_obj2txt: function (buf: PUtf8Char; buf_len: integer; a: PASN1_OBJECT; no_name: integer): integer; cdecl;
+    OBJ_obj2txt: function(buf: PUtf8Char; buf_len: integer; a: PASN1_OBJECT; no_name: integer): integer; cdecl;
     ASN1_OBJECT_free: procedure(a: PASN1_OBJECT); cdecl;
     ASN1_STRING_data: function(x: PASN1_STRING): PByte; cdecl;
     ASN1_STRING_length: function(x: PASN1_STRING): integer; cdecl;
@@ -3806,13 +3808,14 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..357] of PAnsiChar = (
+  LIBCRYPTO_ENTRIES: array[0..358] of PAnsiChar = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
     'CRYPTO_get_ex_new_index',
     'ERR_error_string_n',
     'ERR_get_error',
+    'ERR_clear_error',
     'ERR_load_BIO_strings',
     'EVP_PKEY_new',
     'EVP_PKEY_get_size EVP_PKEY_size', // OpenSSL 3.0 / 1.1 alternate names
@@ -4200,6 +4203,12 @@ end;
 function ERR_get_error(): cardinal;
 begin
   result := libcrypto.ERR_get_error;
+end;
+
+procedure ERR_clear_error();
+begin
+  // needed on OpenSSL <= 3.x before SSL_connect SSL_accept SSL_read SSL_write
+  libcrypto.ERR_clear_error;
 end;
 
 function ERR_load_BIO_strings(): integer;
@@ -6586,6 +6595,9 @@ procedure ERR_error_string_n(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
 
 function ERR_get_error(): cardinal; cdecl;
   external LIB_CRYPTO name _PU + 'ERR_get_error';
+
+procedure ERR_clear_error(); cdecl;
+  external LIB_CRYPTO name _PU + 'ERR_clear_error';
 
 function ERR_load_BIO_strings(): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ERR_load_BIO_strings';
@@ -11921,6 +11933,7 @@ var
 begin
   endtix := 0;
   repeat
+    ERR_clear_error;   // needed on 1.x/3.x - but harmless for OpenSSL 4+
     res := proc(fSsl); // SSL_connect() or SSL_accept()
     if res = OPENSSLSUCCESS then
       exit;
@@ -11939,6 +11952,7 @@ begin
   endtix := 0;
   repeat
     result := nrOK;
+    ERR_clear_error; // needed on 1.x/3.x - but harmless for OpenSSL 4+
     Length := SSL_read(fSsl, Buffer, len);
     if Length > 0 then
       // return value was number of bytes actually read from the TLS connection
@@ -11965,6 +11979,7 @@ begin
   endtix := 0;
   repeat
     result := nrOK;
+    ERR_clear_error; // needed on 1.x/3.x - but harmless for OpenSSL 4+
     Length := SSL_write(fSsl, Buffer, len);
     if Length > 0 then
       // return value was number of bytes actually sent to the TLS connection

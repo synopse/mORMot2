@@ -20890,9 +20890,6 @@ function ERR_peek_last_error_line(_file: PPUtf8Char; line: PInteger): cardinal; 
 function ERR_peek_last_error_line_data(_file: PPUtf8Char; line: PInteger; data: PPUtf8Char; flags: PInteger): cardinal; cdecl;
   external LIB_CRYPTO name _PU + 'ERR_peek_last_error_line_data';
 
-procedure ERR_clear_error(); cdecl;
-  external LIB_CRYPTO name _PU + 'ERR_clear_error';
-
 function ERR_error_string(e: cardinal; buf: PUtf8Char): PUtf8Char; cdecl;
   external LIB_CRYPTO name _PU + 'ERR_error_string';
 
