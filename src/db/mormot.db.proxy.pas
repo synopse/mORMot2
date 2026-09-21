@@ -706,7 +706,7 @@ type
   // to access remotely any mormot.db.sql
   TSqlDBDelphiNetConnectionProperties = class(TSqlDBHttpRequestConnectionProperties)
   public
-    /// initialize the properties for remote access via HTTP using libcurl
+    /// initialize the properties for remote access via HTTP using Delphi RTL
     // - aServerName should be the HTTP server address as 'server:port'
     // - aDatabaseName would be used to compute the URI as in TSqlDBServerAbstract
     // - the user/password credential should match server-side authentication

@@ -9557,6 +9557,33 @@ begin
   XmlWalk(p, xtText, '', '  ');
   XmlWalk(p, xtElementEnd, 'a');
   Check(p.ParseNext = xtEof);
+  // simple DOCTYPE is ignored by default
+  s := '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" '#10 +
+       '  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">'#10 +
+       '<svg/>';
+  p.Init(s);
+  XmlWalk(p, xtElementStart, 'svg');
+  XmlWalk(p, xtElementEnd, 'svg');
+  Check(p.ParseNext = xtEof);
+  // XML declaration, whitespace and DOCTYPE
+  s := '<?xml version="1.0" encoding="UTF-8"?>'#10 +
+       '<!DOCTYPE svg SYSTEM "svg.dtd">'#10 +
+       '<svg/>';
+  p.Init(s);
+  XmlWalk(p, xtElementStart, 'svg');
+  XmlWalk(p, xtElementEnd, 'svg');
+  Check(p.ParseNext = xtEof);
+  // quoted '>' doesn't terminate the declaration
+  p.Init('<!DOCTYPE svg SYSTEM "foo>bar.dtd"><svg/>');
+  XmlWalk(p, xtElementStart, 'svg');
+  XmlWalk(p, xtElementEnd, 'svg');
+  Check(p.ParseNext = xtEof);
+  // works even when prolog whitespace is explicitly returned
+  p.Init('  <!DOCTYPE svg><svg/>', [xpoKeepWhiteSpace]);
+  XmlWalk(p, xtText, '', '  ');
+  XmlWalk(p, xtElementStart, 'svg');
+  XmlWalk(p, xtElementEnd, 'svg');
+  Check(p.ParseNext = xtEof);
 end;
 
 procedure TTestCoreProcess.XmlSaxErrors;
@@ -9597,6 +9624,18 @@ begin
   XmlExpectRaise(xpeTooMuchNesting, 'too much nesting', deep);
   deep := '<' + RawUtf8OfChar('n', 300) + '/>';
   XmlExpectRaise(xpeTagNameTooLong, 'name too long', deep);
+  XmlExpectRaise(xpeUnsupportedMarkup, 'dtd internal subset',
+    '<!DOCTYPE foo [<!ENTITY x "y">]><foo>&x;</foo>');
+  XmlExpectRaise(xpeUnsupportedMarkup, 'dtd nested definition',
+    '<!DOCTYPE foo <!ENTITY x "y">><foo/>');
+  XmlExpectRaise(xpeUnsupportedMarkup, 'doctype after root',
+    '<foo/><!DOCTYPE foo>');
+  XmlExpectRaise(xpeUnsupportedMarkup, 'doctype explicitly rejected',
+    '<!DOCTYPE svg SYSTEM "svg.dtd"><svg/>',
+    [xpoRejectDocType]);
+  // A simple DOCTYPE never defines or loads entities.
+  XmlExpectRaise(xpeXmlUnescapeFailed, 'doctype entity is never resolved',
+    '<!DOCTYPE foo SYSTEM "foo.dtd"><foo>&custom;</foo>');
 end;
 
 procedure TTestCoreProcess.XmlSaxBoundaries;

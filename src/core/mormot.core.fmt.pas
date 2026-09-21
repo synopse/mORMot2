@@ -291,6 +291,8 @@ type
   // - xpoKeepWhiteSpace would return xtText tokens made only of whitespace,
   // which are silently skipped by default
   // - xpoVariantGuessType let XmlToVariant() recognize booleans and numbers
+  // - xpoRejectDocType rejects any <!DOCTYPE ...> declaration, whereas simple
+  // DOCTYPE declarations are ignored by default without any DTD processing
   TXmlParserOption = (
     xpoNoException,
     xpoStripNamespacePrefix,
@@ -298,7 +300,8 @@ type
     xpoKeepComments,
     xpoKeepPI,
     xpoKeepWhiteSpace,
-    xpoVariantGuessType);
+    xpoVariantGuessType,
+    xpoRejectDocType);
 
   /// options to refine TXmlParser process
   TXmlParserOptions = set of TXmlParserOption;
@@ -358,6 +361,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function ParseName(p, e: PUtf8Char): PUtf8Char;
       {$ifdef HASINLINE} inline; {$endif}
+    function ParseDocType(p: PUtf8Char): PUtf8Char;
     /// append the current Name/Value attribute into a TDocVariant object
     procedure AttributeToDocVariant(Dest: PDocVariantData);
     /// raw recursive conversion of the current level into a TDocVariant object
@@ -530,7 +534,7 @@ const
     'mismatched end tag',                        // xpeWrongEndTag
     'unfinished comment',                        // xpeEofInComment
     'unfinished CDATA',                          // xpeEofInCdata
-    'DTD and <!..> markup are not supported',    // xpeUnsupportedMarkup
+    'unsupported DTD or <!..> markup',           // xpeUnsupportedMarkup
     'void or invalid PI name',                   // xpeVoidPiName
     'unfinished processing instruction',         // xpeEofInPi
     'void or invalid name',                      // xpeVoidTagName
@@ -2328,6 +2332,7 @@ begin
   {$ifndef FPCX86NOTPIC}
   fTab := @XML_KIND;
   {$endif FPCX86NOTPIC}
+  fStackLen[0] := 0;               // no document element yet
   fStackLen[high(fStackLen)] := 0; // 8-bit Save/Restore count
   fStackPos[high(fStackPos)] := 0; // 32-bit ForEach() flags
 end;
@@ -2578,12 +2583,12 @@ begin
                   end;
                   inc(p, 3);
                   continue;
-                end;
-                if (e - p >= 7) and
-                   (PCardinal(p)^ = ord('[') + ord('C') shl 8 +
-                                    ord('D') shl 16 + ord('A') shl 24) and
-                   (PCardinal(p + 3)^ = ord('A') + ord('T') shl 8 +
-                                        ord('A') shl 16 + ord('[') shl 24) then
+                end
+                else if (e - p >= 7) and
+                        (PCardinal(p)^ = ord('[') + ord('C') shl 8 +
+                                         ord('D') shl 16 + ord('A') shl 24) and
+                        (PCardinal(p + 3)^ = ord('A') + ord('T') shl 8 +
+                                         ord('A') shl 16 + ord('[') shl 24) then
                 begin
                   // <![CDATA[ ... ]]> verbatim section
                   inc(p, 7);
@@ -2603,6 +2608,21 @@ begin
                   end;
                   LastError := xpeEofInCdata;
                 end
+                else if (e - p >= 7) and
+                        (PCardinal(p)^ = ord('D') + ord('O') shl 8 +
+                                         ord('C') shl 16 + ord('T') shl 24) and
+                        (PCardinal(p + 3)^ = ord('T') + ord('Y') shl 8 +
+                                         ord('P') shl 16 + ord('E') shl 24) then
+                  // <!DOCTYPE name ...> with no internal subset or nested markup
+                  if (fStackLen[0] <> 0) or // accepted only as first element
+                     (xpoRejectDocType in Options) then
+                    LastError := xpeUnsupportedMarkup
+                  else
+                  begin
+                    p := ParseDocType(p + 7);
+                    if p <> nil then
+                      continue;
+                  end
                 else
                   LastError := xpeUnsupportedMarkup;
               end;
@@ -2706,6 +2726,64 @@ begin
   until false;
   fCur := p;
   result := Kind;
+end;
+
+function TXmlParser.ParseDocType(p: PUtf8Char): PUtf8Char;
+var
+  quote: AnsiChar;
+begin
+  result := nil;
+  if (p >= fAfter) or
+     (p^ > ' ') then // expects <!DOCTYPE name
+  begin
+    LastError := xpeUnsupportedMarkup;
+    exit;
+  end;
+  repeat
+    inc(p);
+  until (p = fAfter) or
+        (p^ > ' ');
+  if p = fAfter then // document element name should not be empty
+  begin
+    LastError := xpeUnsupportedMarkup;
+    exit;
+  end;
+  if {$ifdef FPCX86NOTPIC} XML_KIND {$else} fTab^ {$endif}[p^] <> 0 then
+  begin
+    LastError := xpeUnsupportedMarkup;
+    exit;
+  end;
+  repeat
+    inc(p);
+  until (p = fAfter) or
+        ({$ifdef FPCX86NOTPIC} XML_KIND {$else} fTab^ {$endif}[p^] <> 0);
+
+  quote := #0;
+  while p < fAfter do // Scan up to the final '>' ignoring quotes
+  begin
+    if quote <> #0 then
+    begin
+      if p^ = quote then
+        quote := #0;
+    end
+    else
+      case p^ of
+        '"', '''':
+          quote := p^;
+        '[', ']', '<':
+          begin
+            LastError := xpeUnsupportedMarkup;
+            exit;
+          end;
+        '>':
+          begin
+            result := p + 1;
+            exit;
+          end;
+      end;
+    inc(p);
+  end;
+  LastError := xpeUnsupportedMarkup;
 end;
 
 procedure TXmlParser.NameToUtf8(var result: RawUtf8);
