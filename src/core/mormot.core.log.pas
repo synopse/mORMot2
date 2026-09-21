@@ -1236,9 +1236,10 @@ type
     // - allow thread-safe non-blocking ISynLog._AddRef/_Release process
     Recursion: array[0 .. MAX_SYNLOGRECURSION - 1] of Int64;
     /// additional temporary text buffer for TSynLogFamily.LevelStackTrace
-    // - caps the whole stack trace at 255 AnsiChars
+    // - caps the whole stack trace at 255 chars
     StackTrace: ShortString;
     /// additional temporary text buffer for TSynLogFamily.LevelSysInfo
+    // - capping at 63 chars seems fair enough since TShort95 is seldom needed
     SysInfo: TShort63;
   end;
   PSynLogThreadInfo = ^TSynLogThreadInfo;
@@ -1297,7 +1298,7 @@ type
     procedure EndWrite(nfo: PSynLogThreadInfo);
       {$ifdef HASINLINE}inline;{$endif}
     function LockAndPrepareWrite(nfo: PSynLogThreadInfo; level: TSynLogLevel;
-      depth: integer = 0): boolean;
+      skip: integer = 0; depth: integer = 0): boolean;
     procedure LogTrailerAndUnlock(Info: PSynLogThreadInfo; Level: TSynLogLevel);
       {$ifdef FPC}inline;{$endif}
     procedure CloseLogFileLocked;
@@ -1445,7 +1446,7 @@ type
     class function EnterLocal(var Local: ISynLog; aInstance: TObject;
       aMethodName: PUtf8Char): TSynLog; overload;
     /// handle method enter / auto-leave tracing, with some custom text arguments
-    // - expects the ISynLog to be a void variable on stack
+    // - expects/requires the ISynLog to be a void (=nil) variable on stack
     // - slightly more efficient - especially on FPC - than plain Enter()
     // - optionally return the TSynLog instance (or nil) for direct usage
     // - optionally return the TSynLog instance (or nil) for direct call
@@ -5749,7 +5750,7 @@ begin
 end;
 
 function TSynLog.LockAndPrepareWrite(nfo: PSynLogThreadInfo;
-  level: TSynLogLevel; depth: integer): boolean;
+  level: TSynLogLevel; skip, depth: integer): boolean;
 var
   lev: TSynLogLevels;
 begin
@@ -5765,11 +5766,11 @@ begin
     depth := MaxPtrInt(depth, fFamily.fStackTraceLevel);
   nfo^.StackTrace[0] := #0;
   if depth > 0 then // .map/.mab/.gdb loading outside of the writer lock
-    TDebugFile.AppendCallerShort(nfo^.StackTrace, {skip=}2, depth);
+    TDebugFile.AppendCallerShort(nfo^.StackTrace, skip + 2, depth);
   nfo^.SysInfo[0] := #0;
   lev := fFamily.fLevelSysInfo;
-  if level in lev then
-    SynLogSysInfo(nfo^.SysInfo); // gather OS information before lock
+  if level in lev then // gather OS information before lock
+    SynLogSysInfo(nfo^.SysInfo); // capped at 63 chars
   fWriteSafe.Lock;               // inlined BeginWrite
   include(nfo^.Flags, tiWriting);
   if (not (logInitDone in fFlags) and
@@ -6098,7 +6099,7 @@ begin
   if Level = sllLastError then
     lasterror := GetLastError;
   nfo := @PerThreadInfo;
-  if LockAndPrepareWrite(nfo, Level, {depth=}1) then
+  if LockAndPrepareWrite(nfo, Level, {skip=}0, {depth=}1) then
   begin
     LogHeader(Level, nil);
     if lasterror <> 0 then
@@ -6137,9 +6138,22 @@ end;
 
 class function TSynLog.Enter(const TextFmt: RawUtf8;
   const TextArgs: array of const; aInstance: TObject): ISynLog;
+var
+  log: TSynLog;
+  nfo: PSynLogThreadInfo;
+  fmt: TPreRenderFmt;
 begin
   result := nil;
-  EnterLocal(result, TextFmt, TextArgs, aInstance);
+  log := Add;
+  nfo := log.DoEnter;
+  if nfo = nil then
+    exit;
+  fmt.Format := pointer(TextFmt);
+  fmt.Values := @TextArgs[0];
+  fmt.ValuesCount := length(TextArgs);
+  fmt.Instance := aInstance;
+  if log.LogEnterFmt(nfo, fmt, nil) then
+    pointer(result) := PAnsiChar(log) + log.fISynLogOffset; // result := self
 end;
 
 class function TSynLog.EnterLocal(var Local: ISynLog; const TextFmt: RawUtf8;
@@ -6313,11 +6327,10 @@ begin
 end;
 
 {$ifdef UNICODE}
-procedure TSynLog.Log(Level: TSynLogLevel; const Text: string; aInstance: TObject);
+procedure TSynLog.Log(Level: TSynLogLevel; const Text: string;
+  aInstance: TObject);
 begin
-  if (self <> nil) and
-     (Level in fFamily.fLevel) then
-    Log(Level, '%', [Text], aInstance);
+  Log(Level, '%', [Text], Instance); // will be inlined at caller site
 end;
 {$endif UNICODE}
 
@@ -6573,7 +6586,7 @@ begin
     exit;
   nfo := @PerThreadInfo;
   if LockAndPrepareWrite(nfo, Level) then
-  try
+  try // protect unsafe Event() callback call
     LogHeader(Level, Instance);
     Event(self, Level, Opaque, Value, Instance);
   finally
@@ -6937,7 +6950,7 @@ begin
   fFamily.PreRenderFmt(fmt);
   // log this line
   nfo := @PerThreadInfo;
-  if LockAndPrepareWrite(nfo, Level) then
+  if LockAndPrepareWrite(nfo, Level, {skip=}1) then
   begin
     LogFmt(Level, fmt);
     if lasterror <> 0 then
@@ -6971,7 +6984,7 @@ begin
       trunclen := -1; // will fallback to AddEscapeBuffer()
   end;
   nfo := @PerThreadInfo;
-  if LockAndPrepareWrite(nfo, Level) then
+  if LockAndPrepareWrite(nfo, Level, {skip=}1) then
   begin
     LogHeader(Level, Instance);
     if Text <> nil then
@@ -7005,7 +7018,7 @@ var
   nfo: PSynLogThreadInfo;
 begin
   nfo := @PerThreadInfo;
-  if not LockAndPrepareWrite(nfo, Level) then
+  if not LockAndPrepareWrite(nfo, Level, {skip=}1) then
     exit;
   LogHeader(Level, Instance);
   fWriter.AddOnSameLine(pointer(aName));
