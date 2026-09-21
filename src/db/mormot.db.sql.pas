@@ -6967,7 +6967,8 @@ end;
 
 function TSqlDBStatement.GetSqlCurrent: RawUtf8;
 begin
-  if fSqlPrepared <> '' then
+  if (self = nil) or
+     (fSqlPrepared <> '') then
     result := fSqlPrepared
   else
     result := fSql;
@@ -6975,7 +6976,8 @@ end;
 
 function TSqlDBStatement.GetSqlWithInlinedParams: RawUtf8;
 begin
-  if fSql = '' then
+  if (self = nil) or
+     (fSql = '') then
     FastAssignNew(result)
   else
   begin
@@ -7016,7 +7018,7 @@ procedure TSqlDBStatement.ComputeSqlWithInlinedParams;
 var
   P, B: PUtf8Char;
   num: integer;
-  maxSize, maxAllowed: cardinal;
+  maxSize, maxAllowed: integer;
   W: TJsonWriter; // at least TJsonWriter since W.AddVariant() is needed
   tmp: TTextWriterStackBuffer; // maxsize is typically 2048 so all on stack
 begin
@@ -7025,7 +7027,7 @@ begin
     maxSize := 2048 // LoggedSqlMaxSize default seems fair enough
   else
     maxSize := fConnection.fProperties.fLoggedSqlMaxSize;
-  if (integer(maxSize) < 0) or
+  if (maxSize < 0) or
      (PosExChar('?', fSql) = 0) then
     // maxsize=-1 -> log statement without any parameter value (just ?)
     exit;
@@ -7046,14 +7048,15 @@ begin
         break;
       inc(P); // jump P^='?'
       if maxSize > 0 then
-        maxAllowed := W.TextLength - maxSize
+        maxAllowed := maxSize - W.TextLength
       else
         maxAllowed := maxInt;
-      AddParamValueAsText(num, W, maxAllowed);
+      if maxAllowed <= 0 then
+        W.Add('?') // too verbose: just append place holders from now on
+      else
+        AddParamValueAsText(num, W, maxAllowed);
       inc(num);
-    until (P^ = #0) or
-          ((maxSize > 0) and
-           (W.TextLength >= maxSize));
+    until P^ = #0;
     W.SetText(fSqlWithInlinedParams);
   finally
     W.Free;
@@ -7088,7 +7091,7 @@ begin
        (cardinal(vd.VType) in [varDouble, varDate]) then
       Dest.AddDateTime(vd.VDate)
     else
-      Dest.AddVariant(v);
+      Dest.AddVariant(v); // typically numbers
   end;
 end;
 
@@ -7491,11 +7494,13 @@ var
       on E: Exception do
       begin
         {$ifndef SYNDB_SILENCE}
-        if SynDBLog.HasLevel([sllSQL, sllDB, sllException, sllError]) then
-          if stmt <> nil then
-            SynDBLog.Add.LogLines(sllSQL, pointer(stmt.SqlWithInlinedParams), self, '--')
-          else // NewStatement itself failed (e.g. Connect raised)
-            SynDBLog.Add.LogLines(sllSQL, pointer(aSql), self, '--');
+        if sllSQL in SynDBLog.Family.Level then
+        begin
+          cachedsql := stmt.SqlWithInlinedParams;
+          if cachedsql = '' then // NewStatement itself failed (e.g. Connect raised)
+            cachedsql := aSQL;
+          SynDBLog.Add.LogLines(sllSQL, pointer(cachedsql), self, '--');
+        end;
         {$endif SYNDB_SILENCE}
         stmt.Free;
         result := nil;
