@@ -728,6 +728,16 @@ type
     function Instance: TSynLog;
   end;
 
+  // internal structure used by TSynLogFamily.PreRenderFmt
+  TPreRenderFmt = record
+    Format: pointer; // RawUtf8
+    Values: PVarRec;
+    TempLen: integer;
+    ValuesCount: integer;
+    Instance: TObject;
+    Temp: TBuffer4K;
+  end;
+
   /// this event can be set for a TSynLogFamily to archive any deprecated log
   // into a custom compressed format, i.e. compress and delete them
   // - called by TSynLogFamily.Destroy with files older than ArchiveAfterDays,
@@ -878,8 +888,7 @@ type
     function GetArchiveDestPath(age: TDateTime): TFileName;
     function GetCurrentThreadFlag(ti: TSynLogThreadInfoFlag): boolean;
     procedure SetCurrentThreadFlag(ti: TSynLogThreadInfoFlag; value: boolean);
-    function PreRenderFmt(var Temp: TBuffer4K; const Format: RawUtf8;
-      Values: PVarRec; ValuesCount: integer; var Instance: TObject): PtrInt;
+    procedure PreRenderFmt(var Fmt: TPreRenderFmt);
   public
     /// initialize for a TSynLog class family
     // - add it in the global SynLogFileFamily[] list
@@ -1297,20 +1306,20 @@ type
     function PerformRotationOrUnlock(nfo: PSynLogThreadInfo): boolean;
     function LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char;
       location: PShortString = nil): boolean;
-    function LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject; const fmt: RawUtf8;
-      args: PVarRec; argscount: PtrInt; microsecs: PInt64; var tmp: TBuffer4K): boolean;
+    function LogEnterFmt(nfo: PSynLogThreadInfo; var fmt: TPreRenderFmt;
+      microsecs: PInt64): boolean;
     procedure AddLogThreadName;
     procedure CreateLogWriter; virtual;
     procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
     procedure AutoFlush(tix32: cardinal);
-    procedure LogInternalFmt(Level: TSynLogLevel; const Format: RawUtf8;
-      Values: PVarRec; ValuesCount: integer; Instance: TObject; var tmp: TBuffer4K);
+    procedure LogInternalFmt(Level: TSynLogLevel; var fmt: TPreRenderFmt);
     procedure LogInternalText(Level: TSynLogLevel; Text: PUtf8Char;
       TextLen: PtrInt; Instance: TObject; TextTruncateAtLength: PtrInt);
     procedure LogInternalRtti(Level: TSynLogLevel; const aName: RawUtf8;
       aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
     procedure LogHeader(const Level: TSynLogLevel; Instance: TObject);
       {$ifdef FPC}inline;{$endif}
+    procedure LogFmt(const Level: TSynLogLevel; var Fmt: TPreRenderFmt);
     procedure FillInfo(nfo: PSynLogThreadInfo; MicroSec: PInt64); virtual;
     procedure LogFileInit(nfo: PSynLogThreadInfo);
     procedure LogFileHeader; virtual;
@@ -5405,31 +5414,29 @@ begin
   end;
 end;
 
-function TSynLogFamily.PreRenderFmt(var Temp: TBuffer4K; const Format: RawUtf8;
-  Values: PVarRec; ValuesCount: integer; var Instance: TObject): PtrInt;
+procedure TSynLogFamily.PreRenderFmt(var Fmt: TPreRenderFmt);
 var
   p: PUtf8Char;
 begin
+  Fmt.TempLen := -1; // trigger the slow path within the lock
   if fDirectRendering or
-     VarRecNeedsWriteObject(Values, ValuesCount) then
-  begin
-    result := -1; // we need the slow path within the lock
+     VarRecNeedsWriteObject(Fmt.Values, Fmt.ValuesCount) then
     exit;
-  end;
-  result := SizeOf(Temp);
-  p := @Temp;
-  if Instance <> nil then // better sooner than in LogHeader()
+  Fmt.TempLen := SizeOf(Fmt.Temp); // available bytes in temporay buffer
+  p := @Fmt.Temp;
+  if Fmt.Instance <> nil then // better sooner than in LogHeader()
   begin
-    p := PointerToText(Instance, p, fWithUnitName, fWithInstancePointer);
+    p := PointerToText(Fmt.Instance, p, fWithUnitName, fWithInstancePointer);
     p^ := ' ';
     inc(p);
-    Instance := nil; // so that LogHeader() won't do anything about this pointer
-    dec(result, (p - Temp)); // still available on buffer
+    Fmt.Instance := nil; // so that LogHeader() won't do anything on its side
+    dec(Fmt.TempLen, (p - Fmt.Temp)); // recompute available bytes
   end;
-  result := FormatBufferRaw(Format, Values, ValuesCount, p, result) - Temp;
-  if result = SizeOf(Temp) then
-    result := Utf8TruncatedLength(@Temp, result, result); // ensure valid UTF-8
-  TrimControlCharsBuffer(@Temp, result); // in-place twOnSameLine process
+  Fmt.TempLen := FormatBufferRaw(RawUtf8(Fmt.Format),
+    Fmt.Values, Fmt.ValuesCount, p, Fmt.TempLen) - Fmt.Temp;
+  if Fmt.TempLen = SizeOf(Fmt.Temp) then // ensure valid UTF-8 after truncation
+    Fmt.TempLen := Utf8TruncatedLength(@Fmt.Temp, Fmt.TempLen, Fmt.TempLen);
+  TrimControlCharsBuffer(@Fmt.Temp, Fmt.TempLen); // in-place twOnSameLine
 end;
 
 
@@ -5973,12 +5980,15 @@ end;
 
 function TSynLog.DoEnter: PSynLogThreadInfo;
 var
+  fam: TSynLogFamily;
   ndx: byte;
 begin
   result := nil;
-  if (self = nil) or
-     (not (sllEnter in fFamily.fLevel)) or // void operation
-     (fFamily.fPerThreadLog = ptNoThreadProcess) then // don't mess with recursion
+  if self = nil then
+    exit;
+  fam := fFamily;
+  if (not (sllEnter in fam.fLevel)) or // void operation
+     (fam.fPerThreadLog = ptNoThreadProcess) then // don't mess with recursion
     exit;
   result := GetThreadInfo; // may call InitThreadNumber() if first access
   if result^.Flags * [tiTemporaryDisable, tiWriting] = [] then
@@ -6050,25 +6060,27 @@ begin
   EndWrite(nfo);
 end;
 
-function TSynLog.LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
-  const fmt: RawUtf8; args: PVarRec; argscount: PtrInt; microsecs: PInt64;
-  var tmp: TBuffer4K): boolean;
-var
-  len: PtrInt;
+procedure TSynLog.LogFmt(const Level: TSynLogLevel; var Fmt: TPreRenderFmt);
+begin
+  LogHeader(Level, Fmt.Instance);
+  if Fmt.TempLen >= 0 then // already rendered, truncated and twOnSameLine
+    fWriter.AddNoJsonEscape(@Fmt.Temp, Fmt.TempLen)
+  else
+    fWriter.AddFmt(Fmt.Format, Fmt.Values, Fmt.ValuesCount, twOnSameLine,
+      [woDontStoreDefault, woDontStoreVoid, woFullExpand]);
+end;
+
+function TSynLog.LogEnterFmt(nfo: PSynLogThreadInfo; var fmt: TPreRenderFmt;
+  microsecs: PInt64): boolean;
 begin
   // pre-render Format/Values up to 4KB on stack outside of the TSynLog lock
-  len := fFamily.PreRenderFmt(tmp, fmt, args, argscount, inst);
+  fFamily.PreRenderFmt(fmt);
   // log this line
   result := LockAndPrepareEnter(nfo, microsecs);
   if not result then
     exit;
-  LogHeader(sllEnter, inst);
-  if len >= 0 then
-    fWriter.AddNoJsonEscape(@tmp, len)
-  else
-    fWriter.AddFmt(pointer(fmt), args, argscount, twOnSameLine,
-      [woDontStoreDefault, woDontStoreVoid, woFullExpand]);
-  fWriterEcho.AddEndOfLine(sllEnter);
+  LogFmt(sllEnter, fmt);
+  fWriterEcho.AddEndOfLine(sllEnter); // no LogTrailerAndUnlock() needed here
   EndWrite(nfo);
 end;
 
@@ -6134,15 +6146,20 @@ class function TSynLog.EnterLocal(var Local: ISynLog; const TextFmt: RawUtf8;
   const TextArgs: array of const; aInstance: TObject): TSynLog;
 var
   nfo: PSynLogThreadInfo;
-  tmp: TBuffer4K;
+  fmt: TPreRenderFmt;
 begin // expects the caller to have set Local = nil
   result := Add;
   nfo := result.DoEnter;
-  if nfo <> nil then
-    if result.LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs), nil, tmp) then
-      pointer(Local) := PAnsiChar(result) + result.fISynLogOffset // Local := self
-    else
-      result := nil;
+  if nfo = nil then
+    exit;
+  fmt.Format := pointer(TextFmt);
+  fmt.Values := @TextArgs[0];
+  fmt.ValuesCount := length(TextArgs);
+  fmt.Instance := aInstance;
+  if result.LogEnterFmt(nfo, fmt, nil) then
+    pointer(Local) := PAnsiChar(result) + result.fISynLogOffset // Local := self
+  else
+    result := nil; // fWrite would fail anyway
 end;
 
 class function TSynLog.EnterLocal(var Local: ISynLog; aInstance: TObject;
@@ -6156,7 +6173,7 @@ begin // expects the caller to have set Local = nil
     if result.LogEnter(nfo, aInstance, aMethodName) then // with refcnt = 1
       pointer(Local) := PAnsiChar(result) + result.fISynLogOffset // Local := self
     else
-      result := nil;
+      result := nil; // fWrite would fail anyway
 end;
 
 class function TSynLog.EnterLocalString(var Local: ISynLog; aInstance: TObject;
@@ -6198,15 +6215,19 @@ procedure TSynLog.ManualEnter(aInstance: TObject; const TextFmt: RawUtf8;
   const TextArgs: array of const; MicroSecs: PInt64);
 var
   nfo: PSynLogThreadInfo;
-  tmp: TBuffer4K;
+  fmt: TPreRenderFmt;
 begin
   nfo := DoEnter;
-  if nfo <> nil then
-    if not LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs), MicroSecs, tmp) then
-    begin
-      inc(nfo^.RecursionCount); // restore matching ManualLeave level
-      nfo^.Recursion[nfo^.RecursionCount - 1] := 0; // failed ManualEnter
-    end;
+  if nfo = nil then
+    exit;
+  fmt.Format := pointer(TextFmt);
+  fmt.Values := @TextArgs[0];
+  fmt.ValuesCount := length(TextArgs);
+  fmt.Instance := aInstance;
+  if LogEnterFmt(nfo, fmt, MicroSecs) then
+    exit; // success
+  inc(nfo^.RecursionCount); // restore matching ManualLeave level
+  nfo^.Recursion[nfo^.RecursionCount - 1] := 0; // failed ManualEnter
 end;
 
 procedure TSynLog.ManualLeave;
@@ -6270,11 +6291,16 @@ end;
 procedure TSynLog.Log(Level: TSynLogLevel; const Format: RawUtf8;
   const Args: array of const; aInstance: TObject);
 var
-  tmp: TBuffer4K;
+  fmt: TPreRenderFmt;
 begin
-  if (self <> nil) and
-     (Level in fFamily.fLevel) then
-    LogInternalFmt(Level, Format, @Args[0], length(Args), aInstance, tmp);
+  if (self = nil) or
+     not (Level in fFamily.fLevel) then
+    exit;
+  fmt.Format := pointer(Format);
+  fmt.Values := @Args[0];
+  fmt.ValuesCount := length(Args);
+  fmt.Instance := aInstance;
+  LogInternalFmt(Level, fmt);
 end;
 
 procedure TSynLog.Log(Level: TSynLogLevel; const Text: RawUtf8;
@@ -6288,16 +6314,10 @@ end;
 
 {$ifdef UNICODE}
 procedure TSynLog.Log(Level: TSynLogLevel; const Text: string; aInstance: TObject);
-var
-  vr: TVarRec;
-  tmp: TBuffer4K;
 begin
-  if (self = nil) or
-     not (Level in fFamily.fLevel) then
-    exit;
-  vr.VType := vtUnicodeString;
-  vr.VUnicodeString := pointer(Text);
-  LogInternalFmt(Level, '%', @vr, 1, aInstance, tmp);
+  if (self <> nil) and
+     (Level in fFamily.fLevel) then
+    Log(Level, '%', [Text], aInstance);
 end;
 {$endif UNICODE}
 
@@ -6425,12 +6445,17 @@ class procedure TSynLog.DoLog(Level: TSynLogLevel; const Format: RawUtf8;
    const Args: array of const; Instance: TObject);
 var
   log: TSynLog;
-  tmp: TBuffer4K;
+  fmt: TPreRenderFmt;
 begin
   log := Add;
-  if (log <> nil) and
-     (Level in log.fFamily.fLevel) then
-    log.LogInternalFmt(Level, Format, @Args[0], length(Args), Instance, tmp);
+  if (log = nil) or
+     not (Level in log.fFamily.fLevel) then
+    exit;
+  fmt.Format := pointer(Format);
+  fmt.Values := @Args[0];
+  fmt.ValuesCount := length(Args);
+  fmt.Instance := Instance;
+  log.LogInternalFmt(Level, fmt);
 end;
 
 class procedure TSynLog.ProgressInfo(Sender: TObject; Info: PProgressInfo);
@@ -6900,28 +6925,21 @@ begin
   LogFileInitLocked(nfo);
 end;
 
-procedure TSynLog.LogInternalFmt(Level: TSynLogLevel; const Format: RawUtf8;
-  Values: PVarRec; ValuesCount: integer; Instance: TObject; var tmp: TBuffer4K);
+procedure TSynLog.LogInternalFmt(Level: TSynLogLevel; var fmt: TPreRenderFmt);
 var
   nfo: PSynLogThreadInfo;
-  len: PtrInt;
   lasterror: cardinal;
 begin
   lasterror := 0;
   if Level = sllLastError then
     lasterror := GetLastError;
   // pre-render Format/Values up to 4KB on stack outside of the TSynLog lock
-  len := fFamily.PreRenderFmt(tmp, Format, Values, ValuesCount, Instance);
+  fFamily.PreRenderFmt(fmt);
   // log this line
   nfo := @PerThreadInfo;
   if LockAndPrepareWrite(nfo, Level) then
   begin
-    LogHeader(Level, Instance);
-    if len >= 0 then
-      fWriter.AddNoJsonEscape(@tmp, len)
-    else
-      fWriter.AddFmt(pointer(Format), Values, ValuesCount, twOnSameLine,
-        [woDontStoreDefault, woDontStoreVoid, woFullExpand]);
+    LogFmt(Level, fmt);
     if lasterror <> 0 then
       AddErrorMessage(lasterror);
     LogTrailerAndUnlock(nfo, Level);
@@ -6957,19 +6975,19 @@ begin
   begin
     LogHeader(Level, Instance);
     if Text <> nil then
-      if trunclen >= 0 then // valid UTF-8, -1 if not IsValidUtf8Buffer()
+      if trunclen >= 0 then // valid UTF-8
       begin
         if esc then
           fWriter.AddOnSameLine(Text, trunclen)
         else
-          fWriter.AddNoJsonEscape(Text, trunclen);
+          fWriter.AddNoJsonEscape(Text, trunclen); // fastest common method
         if trunclen <> TextLen then
         begin
           fWriter.AddShort('... (truncated) length=');
           fWriter.AddU(TextLen);
         end;
       end
-      else
+      else // -1 = failed IsValidUtf8Buffer() -> escape
         fWriter.AddEscapeBuffer(Text, TextLen, TextTruncateAtLength)
     else if Instance <> nil then
       fWriter.WriteObject(Instance, [woFullExpand]);
