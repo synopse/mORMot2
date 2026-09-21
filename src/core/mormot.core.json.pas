@@ -735,7 +735,7 @@ type
     // - will use TSynAnsiConvert to perform the conversion to UTF-8
     procedure AddAnyAnsiBuffer(P: PAnsiChar; Len: PtrInt;
       Escape: TTextWriterKind; CodePage: integer);
-    /// append some binary buffer as ASCCI text or $xx hexadecimal codes
+    /// append some binary buffer as ASCII text or $xx hexadecimal codes
     // - wrap EscapeBuffer() into the output buffer, up to MaxLen source bytes
     procedure AddEscapeBuffer(P: pointer; Len, MaxLen: PtrInt);
     /// write some data Base64 encoded

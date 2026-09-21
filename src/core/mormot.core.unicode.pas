@@ -936,13 +936,14 @@ function AnyTextFileToSynUnicode(const FileName: TFileName;
 
 { *************** Low-Level String Conversion Functions }
 
-/// will fast replace all #0 chars as ~
+/// will fast replace all #0..#31 chars as '~' and optionally truncate
+// - returns pointer(u) as in-place PUtf8Char #0 terminated (truncated) buffer
 // - could be used after UniqueRawUtf8() on a in-placed modified JSON buffer,
 // in which all values have been ended with #0
 // - you can optionally specify a maximum size, in bytes (this won't reallocate
 // the string, but just add a #0 at some point in the UTF-8 buffer)
 // - could allow logging of parsed input e.g. after an exception
-procedure UniqueRawUtf8ZeroToTilde(var u: RawUtf8; MaxSize: PtrInt = maxInt);
+function UniqueRawUtf8ZeroToTilde(var u: RawUtf8; MaxSize: PtrInt = maxInt): PUtf8Char;
 
 /// convert a binary buffer into a fake ASCII/UTF-8 content without any #0 input
 // - will use ~ char to escape any #0 as ~0 pair (and plain ~ as ~~ pair)
@@ -6012,18 +6013,19 @@ begin
   result := WinAnsiToSynUnicode(pointer(WinAnsi), Length(WinAnsi));
 end;
 
-procedure UniqueRawUtf8ZeroToTilde(var u: RawUtf8; MaxSize: PtrInt);
+function UniqueRawUtf8ZeroToTilde(var u: RawUtf8; MaxSize: PtrInt): PUtf8Char;
 var
   i: PtrInt;
 begin
+  result := pointer(u);
   i := length(u);
   if i > MaxSize then
-    PByteArray(u)[MaxSize] := 0
+    result[MaxSize] := #0 // truncate PUtf8Char result
   else
     MaxSize := i;
   for i := 0 to MaxSize - 1 do
-    if PByteArray(u)[i] = 0 then
-      PByteArray(u)[i] := ord('~');
+    if result[i] < ' ' then // sanitize #0 and any control char
+      result[i] := '~';
 end;
 
 const

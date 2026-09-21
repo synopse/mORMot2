@@ -2007,6 +2007,7 @@ function VarRecIsVoid(V: PVarRec): boolean;
 
 /// check if any V^.VType is vtObject/vtInterface and would need WriteObject()
 function VarRecNeedsWriteObject(V: PVarRec; n: integer): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast Format() function replacement, optimized for RawUtf8
 // - only supported token is %, which will be written in the resulting string
