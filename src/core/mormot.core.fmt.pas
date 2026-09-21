@@ -339,9 +339,9 @@ type
   // !     ...
   // - as show above, methods are FORWARD-ONLY: use properly Save/Restore or
   // Rewind otherwise you may get a "Missing TXmlParser.Save/Rewind" exception
-  // - this is a "basic" parser, from actual simple needs: no DTD support (which
-  // makes it immune to entity expansion attacks by design), no URI namespace
-  // binding, only the most useful XPath lookup syntax
+  // - this is a "basic" parser, from actual simple needs: no DTD support but
+  // basic <!DOCTYPE name> (which makes it immune to entity expansion attacks by
+  // design), no URI namespace binding, only the most useful XPath lookup syntax
   // - well-formedness of the tags nesting is verified, and any syntax or
   // nesting error would raise an EXmlException with the faulty line number,
   // unless xpoNoException option was set and ParseNext returns xtError and
@@ -2613,16 +2613,13 @@ begin
                                          ord('C') shl 16 + ord('T') shl 24) and
                         (PCardinal(p + 3)^ = ord('T') + ord('Y') shl 8 +
                                          ord('P') shl 16 + ord('E') shl 24) then
-                  // <!DOCTYPE name ...> with no internal subset or nested markup
-                  if (fStackLen[0] <> 0) or // accepted only as first element
-                     (xpoRejectDocType in Options) then
-                    LastError := xpeUnsupportedMarkup
-                  else
-                  begin
-                    p := ParseDocType(p + 7);
-                    if p <> nil then
-                      continue;
-                  end
+                // <!DOCTYPE name ...> with no internal subset or nested markup
+                begin
+                  p := ParseDocType(p + 7);
+                  if p <> nil then
+                    continue;
+                  LastError := xpeUnsupportedMarkup;
+                end
                 else
                   LastError := xpeUnsupportedMarkup;
               end;
@@ -2732,58 +2729,42 @@ function TXmlParser.ParseDocType(p: PUtf8Char): PUtf8Char;
 var
   quote: AnsiChar;
 begin
-  result := nil;
-  if (p >= fAfter) or
+  result := nil; // caller will make LastError := xpeUnsupportedMarkup
+  if (fStackLen[0] <> 0) or // accepted only as first element
+     (xpoRejectDocType in Options) or
+     (p >= fAfter) or
      (p^ > ' ') then // expects <!DOCTYPE name
-  begin
-    LastError := xpeUnsupportedMarkup;
     exit;
-  end;
   repeat
     inc(p);
-  until (p = fAfter) or
-        (p^ > ' ');
-  if p = fAfter then // document element name should not be empty
-  begin
-    LastError := xpeUnsupportedMarkup;
-    exit;
-  end;
+    if p = fAfter then
+      exit;
+  until p^ > ' ';
   if {$ifdef FPCX86NOTPIC} XML_KIND {$else} fTab^ {$endif}[p^] <> 0 then
-  begin
-    LastError := xpeUnsupportedMarkup;
     exit;
-  end;
   repeat
     inc(p);
-  until (p = fAfter) or
-        ({$ifdef FPCX86NOTPIC} XML_KIND {$else} fTab^ {$endif}[p^] <> 0);
-
+    if p = fAfter then
+      exit;
+  until {$ifdef FPCX86NOTPIC} XML_KIND {$else} fTab^ {$endif}[p^] <> 0;
   quote := #0;
-  while p < fAfter do // Scan up to the final '>' ignoring quotes
-  begin
-    if quote <> #0 then
-    begin
-      if p^ = quote then
-        quote := #0;
-    end
-    else
+  repeat // Scan up to the final '>' ignoring quotes
+    if quote = #0 then
       case p^ of
         '"', '''':
           quote := p^;
         '[', ']', '<':
-          begin
-            LastError := xpeUnsupportedMarkup;
-            exit;
-          end;
+          exit; // nested DTD are not allowed
         '>':
           begin
-            result := p + 1;
+            result := p + 1; // valid simple <!DOCTYPE name> node
             exit;
           end;
-      end;
+      end
+    else if p^ = quote then
+      quote := #0;
     inc(p);
-  end;
-  LastError := xpeUnsupportedMarkup;
+  until p = fAfter;
 end;
 
 procedure TXmlParser.NameToUtf8(var result: RawUtf8);

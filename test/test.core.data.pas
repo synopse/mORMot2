@@ -9584,6 +9584,12 @@ begin
   XmlWalk(p, xtElementStart, 'svg');
   XmlWalk(p, xtElementEnd, 'svg');
   Check(p.ParseNext = xtEof);
+  // exercises the prolog state choice directly
+  p.Init('<!--before--><!DOCTYPE svg><svg/>', [xpoKeepComments]);
+  XmlWalk(p, xtComment, '', 'before');
+  XmlWalk(p, xtElementStart, 'svg');
+  XmlWalk(p, xtElementEnd, 'svg');
+  Check(p.ParseNext = xtEof);
 end;
 
 procedure TTestCoreProcess.XmlSaxErrors;
