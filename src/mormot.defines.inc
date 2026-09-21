@@ -1156,7 +1156,7 @@
   {$undef USE_WINIOCP}        // disable any Windows-specific code
   {$undef USE_THREADWINIOCP}
 
-  {$if defined(OSANDROID)}
+  {$ifdef OSANDROID}
 
     // for Android, consider using https://github.com/gcesarmza/curl-android-ios
     // static libraries and force USELIBCURL in the project conditionals
@@ -1166,30 +1166,37 @@
 
     {$ifndef FPC}
       {$ifndef USELIBCURL}
-        {$ifndef NODELPHINETHTTP} // HTTPS via the TLS stack of the OS
-          {$define USEDELPHINETHTTP} // see mormot.lib.nethttp
+        {$ifndef NODELPHINETHTTP}    // HTTPS via the TLS stack of the OS
+          {$define USEDELPHINETHTTP} // see TDelphiNetHttp in mormot.net.client
         {$endif NODELPHINETHTTP}
       {$endif USELIBCURL}
     {$endif FPC}
 
-  {$elseif defined(IOS) and not defined(FPC)}
-
-    // iOS ships neither libcurl nor libgss: HTTPS goes through the OS TLS stack
-    {$ifndef NODELPHINETHTTP}
-      {$define USEDELPHINETHTTP} // see mormot.lib.nethttp
-    {$endif NODELPHINETHTTP}
-
   {$else}
 
+    {$ifdef IOS}
+      {$ifndef FPC}
+        // Delphi iOS ships neither libcurl nor libgss: use the OS TLS stack
+        {$ifndef USELIBCURL}
+          {$ifndef NODELPHINETHTTP}
+            {$define USEDELPHINETHTTP} // see TDelphiNetHttp in mormot.net.client
+          {$endif NODELPHINETHTTP}
+        {$endif USELIBCURL}
+        {$define NOGSSAPIAUTH}
+      {$endif FPC}
+    {$endif IOS}
+
     {$ifndef USE_OPENSSL}       // if OpenSSL is not available on this platform
-      {$define USELIBCURL}      // try cross-platform libcurl for https
+      {$ifndef USEDELPHINETHTTP}
+        {$define USELIBCURL}    // try cross-platform libcurl for https
+      {$endif USEDELPHINETHTTP}
     {$endif USE_OPENSSL}
 
     {$ifndef NOGSSAPIAUTH}      // mormot.lib.gssapi is not Android compatible
       {$define DOMAINRESTAUTH}  // enable libgss in mormot.rest.client/server
     {$endif NOGSSAPIAUTH}
 
-  {$ifend OSANDROID}
+  {$endif OSANDROID}
 
 {$endif OSPOSIX}
 
