@@ -5763,7 +5763,7 @@ begin
         _JS_Unaligned(Data + p^.OffsetGet, c)
       else
       {$endif DELPHI_ARM32_UNALIGNED}
-      TRttiJsonSave(c.Info.JsonSave)(Data + p^.OffsetGet, c)
+        TRttiJsonSave(c.Info.JsonSave)(Data + p^.OffsetGet, c)
     else
       c.W.AddNull;
   end

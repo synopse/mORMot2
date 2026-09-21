@@ -488,7 +488,8 @@ var
   m: TMenuItem;
   i: integer;
 begin
-  fMainCaption := Format(Caption, [SYNOPSE_FRAMEWORK_VERSION]) + ' ';
+  fMainCaption := Format(Caption, [
+    SYNOPSE_FRAMEWORK_VERSION + '  ' + OS_TEXT + ' ' + CPU_ARCH_TEXT]) + ' ';
   for f := low(f) to high(f) do
   begin
     m := TMenuItem.Create(self);
@@ -531,7 +532,7 @@ var
   settings: TDocVariantData;
 begin
   // mORMot 1 fixed pixel sizes did clip the text with current fonts and DPI
-  EventsList.ItemHeight := Canvas.TextHeight('Wg') + 4;
+  EventsList.ItemHeight := EventsList.Canvas.TextHeight('W');
   PanelThread.Width := 300;
   // set here, since the LCL DPI scaling resets widths assigned in FormCreate
   fFontSizeDefault := GetFontData(List.Font.Reference.Handle).Height;
@@ -882,7 +883,7 @@ begin
   MemoBottom.Font.Size := aSize;
   // mORMot 1 fixed pixel sizes did clip the text with current fonts and DPI
   List.Canvas.Font := List.Font;
-  h := List.Canvas.TextHeight('Wg') + 4;
+  h := List.Canvas.TextHeight('Wg') + 2;
   List.DefaultRowHeight := h;
   ProfileList.DefaultRowHeight := h;
   ProfileList.ColWidths[0] := List.Canvas.TextWidth('000.000.000') + 12;
