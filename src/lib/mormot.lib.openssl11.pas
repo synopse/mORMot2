@@ -553,6 +553,9 @@ const
   EVP_PKEY_CTRL_RSA_KEYGEN_BITS = EVP_PKEY_ALG_CTRL + 3;
   EVP_PKEY_CTRL_RSA_PADDING = EVP_PKEY_ALG_CTRL + 1;
   EVP_PKEY_CTRL_RSA_PSS_SALTLEN = EVP_PKEY_ALG_CTRL + 2;
+  {$ifdef OSANDROID}
+  RSA_PSS_SALTLEN_DIGEST = -1;
+  {$endif OSANDROID}
   EVP_PKEY_CTRL_RSA_KEYGEN_PUBEXP = EVP_PKEY_ALG_CTRL + 4;
   EVP_PKEY_CTRL_RSA_MGF1_MD = EVP_PKEY_ALG_CTRL + 5;
   EVP_PKEY_CTRL_GET_RSA_PADDING = EVP_PKEY_ALG_CTRL + 6;
@@ -2687,6 +2690,9 @@ function BigNumFromDecimal(const Text: RawUtf8): PBIGNUM;
 function BigNumHexFromDecimal(const Text: RawUtf8): RawUtf8;
 function EVP_PKEY_CTX_set_rsa_padding(ctx: PEVP_PKEY_CTX; padding: integer): integer;
 function EVP_PKEY_CTX_set_rsa_mgf1_md(ctx: PEVP_PKEY_CTX; md: PEVP_MD): integer;
+{$ifdef OSANDROID}
+function EVP_PKEY_CTX_set_rsa_pss_saltlen(ctx: PEVP_PKEY_CTX; len: integer): integer;
+{$endif OSANDROID}
 function EVP_PKEY_CTX_set_rsa_oaep_md(ctx: PEVP_PKEY_CTX; md: PEVP_MD): integer;
 function EVP_PKEY_assign_RSA(pkey: PEVP_PKEY; rsa: PRSA): integer;
 function EVP_PKEY_assign_EC_KEY(pkey: PEVP_PKEY; ec: PEC_KEY): integer;
@@ -6351,6 +6357,44 @@ end;
 
 { ******************** Statically linked OpenSSL Library Functions }
 
+function OpenSslWinLocateEntry(const entries: TRawUtf8DynArray;
+  out majsel: integer): RawUtf8;
+var
+  p: PUtf8Char;
+  maj, min, minsel: integer;
+  i: PtrInt;
+begin
+  result := '';
+  majsel := 0;
+  minsel := -1;
+  for i := 0 to high(entries) do
+  begin
+    p := pointer(entries[i]);
+    if not NetStartWith(p, 'OPENSSL-') then
+      continue;
+    inc(p, 8);
+    maj := GetCardinal(p);
+    if maj < majsel then
+      continue;
+    while p^ in ['0' .. '9'] do
+      inc(p);
+    if p^ <> '.' then
+      continue;
+    inc(p);
+    min := GetCardinal(p);
+    if (maj = majsel) and
+       (min < minsel) then
+      continue;
+    while p^ in ['0' .. '9'] do
+      inc(p);
+    if not NetStartWith(p, '-OPENSSLPROJECT') then
+      continue;
+    result := entries[i];
+    majsel := maj;
+    minsel := min;
+  end;
+end;
+
 { --------- libssl entries }
 
 {$ifdef FPC}
@@ -6511,7 +6555,7 @@ procedure SSL_CTX_set_default_passwd_cb_userdata(ctx: PSSL_CTX; u: pointer); cde
 function SSL_CTX_use_PrivateKey_file(ctx: PSSL_CTX; _file: PUtf8Char; typ: integer): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_use_PrivateKey_file';
 
-function SSL_CTX_set_cipher_list(p1: PSSL_CTX; str: PUtf8Char): integer; cdecl;
+function SSL_CTX_set_cipher_list(ctx: PSSL_CTX; str: PUtf8Char): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_set_cipher_list';
 
 function SSL_set_fd(s: PSSL; fd: integer): integer; cdecl;
@@ -7393,12 +7437,6 @@ function EVP_CIPHER_CTX_set_padding(c: PEVP_CIPHER_CTX; pad: integer): integer; 
 function EVP_CIPHER_CTX_iv(ctx: PEVP_CIPHER_CTX): PByte; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_iv';
 
-function EVP_MD_CTX_new(): PEVP_MD_CTX; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_MD_CTX_new';
-
-procedure EVP_MD_CTX_free(ctx: PEVP_MD_CTX); cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_MD_CTX_free';
-
 function EVP_MD_CTX_md(ctx: PEVP_MD_CTX): PEVP_MD; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_CTX_md';
 
@@ -7600,21 +7638,36 @@ function EVP_PKEY_CTX_ctrl(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer
   external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_ctrl';
 
 function EVP_PKEY_CTX_set1_pbe_pass(ctx: PEVP_PKEY_CTX;
-  pass: PAnsiChar; passlen: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_set1_pbe_pass';
+  pass: PAnsiChar; passlen: integer): integer;
+begin
+  result := EVP_PKEY_CTX_ctrl(ctx, -1, 1, EVP_PKEY_ALG_CTRL + 3,
+    passlen, pass);
+end;
 
 function EVP_PKEY_CTX_set1_scrypt_salt(ctx: PEVP_PKEY_CTX;
-  salt: PByte; saltlen: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_set1_scrypt_salt';
+  salt: PByte; saltlen: integer): integer;
+begin
+  result := EVP_PKEY_CTX_ctrl(ctx, -1, 1, EVP_PKEY_ALG_CTRL + 8,
+    saltlen, salt);
+end;
 
-function EVP_PKEY_CTX_set_scrypt_N(ctx: PEVP_PKEY_CTX; n: QWord): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_set_scrypt_N';
+function EVP_PKEY_CTX_set_scrypt_N(ctx: PEVP_PKEY_CTX; n: QWord): integer;
+begin
+  result := EVP_PKEY_CTX_ctrl(ctx, -1, 1, EVP_PKEY_ALG_CTRL + 9,
+    0, pointer(n));
+end;
 
-function EVP_PKEY_CTX_set_scrypt_r(ctx: PEVP_PKEY_CTX; r: QWord): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_set_scrypt_r';
+function EVP_PKEY_CTX_set_scrypt_r(ctx: PEVP_PKEY_CTX; r: QWord): integer;
+begin
+  result := EVP_PKEY_CTX_ctrl(ctx, -1, 1, EVP_PKEY_ALG_CTRL + 10,
+    0, pointer(r));
+end;
 
-function EVP_PKEY_CTX_set_scrypt_p(ctx: PEVP_PKEY_CTX; p: QWord): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_set_scrypt_p';
+function EVP_PKEY_CTX_set_scrypt_p(ctx: PEVP_PKEY_CTX; p: QWord): integer;
+begin
+  result := EVP_PKEY_CTX_ctrl(ctx, -1, 1, EVP_PKEY_ALG_CTRL + 11,
+    0, pointer(p));
+end;
 
 function EVP_PKEY_CTX_new(pkey: PEVP_PKEY; e: PENGINE): PEVP_PKEY_CTX; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_new';
@@ -10194,6 +10247,9 @@ end;
 function EVP_PKEY.Sign(Algo: PEVP_MD; Msg: pointer; Len: integer): RawByteString;
 var
   ctx: PEVP_MD_CTX;
+  {$ifdef OSANDROID}
+  pctx: PEVP_PKEY_CTX;
+  {$endif OSANDROID}
   s: PtrUInt;
 begin
   // expects @self to be a private key
@@ -10203,7 +10259,15 @@ begin
   try
     // note: ED25519 requires single-pass EVP_DigestSign()
     s := 0;
+    {$ifdef OSANDROID}
+    pctx := nil;
+    if (EVP_DigestSignInit(ctx, @pctx, Algo, nil, @self) = OPENSSLSUCCESS) and
+       ((EVP_PKEY_id(@self) <> EVP_PKEY_RSA_PSS) or
+        ((EVP_PKEY_CTX_set_rsa_pss_saltlen(pctx, RSA_PSS_SALTLEN_DIGEST) = OPENSSLSUCCESS) and
+         (EVP_PKEY_CTX_set_rsa_mgf1_md(pctx, Algo) = OPENSSLSUCCESS))) and
+    {$else}
     if (EVP_DigestSignInit(ctx, nil, Algo, nil, @self) = OPENSSLSUCCESS) and
+    {$endif OSANDROID}
        (EVP_DigestSign(ctx, nil, s, Msg, Len) = OPENSSLSUCCESS) then
     begin
       SetLength(result, s); // here size is maximum s bytes
@@ -10224,6 +10288,9 @@ function EVP_PKEY.Verify(Algo: PEVP_MD;
   Sig, Msg: pointer; SigLen, MsgLen: integer): boolean;
 var
   ctx: PEVP_MD_CTX;
+  {$ifdef OSANDROID}
+  pctx: PEVP_PKEY_CTX;
+  {$endif OSANDROID}
 begin
   // expects @self to be a public (or private) key
   // we don't check "if @self = nil" because may be called without EVP_PKEY
@@ -10231,9 +10298,19 @@ begin
   ctx := EVP_MD_CTX_new;
   try
     // note: ED25519 requires single-pass EVP_DigestVerify()
+    {$ifdef OSANDROID}
+    pctx := nil;
+    result :=
+      (EVP_DigestVerifyInit(ctx, @pctx, Algo, nil, @self) = OPENSSLSUCCESS) and
+      ((EVP_PKEY_id(@self) <> EVP_PKEY_RSA_PSS) or
+       ((EVP_PKEY_CTX_set_rsa_pss_saltlen(pctx, RSA_PSS_SALTLEN_DIGEST) = OPENSSLSUCCESS) and
+        (EVP_PKEY_CTX_set_rsa_mgf1_md(pctx, Algo) = OPENSSLSUCCESS))) and
+      (EVP_DigestVerify(ctx, Sig, SigLen, Msg, MsgLen) = OPENSSLSUCCESS);
+    {$else}
     result :=
       (EVP_DigestVerifyInit(ctx, nil, Algo, nil, @self) = OPENSSLSUCCESS) and
       (EVP_DigestVerify(ctx, Sig, SigLen, Msg, MsgLen) = OPENSSLSUCCESS);
+    {$endif OSANDROID}
   finally
     EVP_MD_CTX_free(ctx);
   end;
@@ -10843,6 +10920,14 @@ begin
     EVP_PKEY_OP_TYPE_SIG or EVP_PKEY_OP_TYPE_CRYPT,
     EVP_PKEY_CTRL_RSA_MGF1_MD, 0, md);
 end;
+
+{$ifdef OSANDROID}
+function EVP_PKEY_CTX_set_rsa_pss_saltlen(ctx: PEVP_PKEY_CTX; len: integer): integer;
+begin
+  result := {$ifndef OPENSSLSTATIC}libcrypto.{$endif}RSA_pkey_ctx_ctrl(ctx,
+    EVP_PKEY_OP_TYPE_SIG, EVP_PKEY_CTRL_RSA_PSS_SALTLEN, len, nil);
+end;
+{$endif OSANDROID}
 
 function EVP_PKEY_assign_RSA(pkey: PEVP_PKEY; rsa: PRSA): integer;
 begin
