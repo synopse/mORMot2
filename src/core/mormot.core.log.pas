@@ -4845,7 +4845,7 @@ var
   // local cache containing TSynLogFamily with fHandleExceptions = true
   HandleExceptionFamily: TSynLogFamily;
 
-function SearchHandleException(f: PPointer): TSynLogFamily;
+function SearchHandleException(f: PPointer; ign: pointer): TSynLogFamily;
 var
   n: integer;
 begin
@@ -4853,8 +4853,9 @@ begin
   begin
     n := PDALen(PAnsiChar(f) - _DALEN)^ + _DAOFF;
     repeat
-      result := f^;
-      if result.fHandleExceptions then // main log is the first
+      result := f^; // main log is the first
+      if (result <> ign) and
+         result.fHandleExceptions then
         exit;
       inc(f);
       dec(n);
@@ -4867,8 +4868,8 @@ end;
 type
   TSynLogThreads = record
     Safe: TLightLock;       // topmost to ensure aarch64 alignment
-    Name: TRawUtf8DynArray; // Name[ThreadNumber - 1] for ptIdentifiedInOneFile
     Count: integer;         // as returned by TSynLog.ThreadCount
+    Name: TRawUtf8DynArray; // Name[ThreadNumber - 1] for ptIdentifiedInOneFile
     IndexReleasedCount: integer;
     IndexReleased: TWordDynArray; // reuse TSynLogThreadInfo.ThreadNumber
   end;
@@ -4951,13 +4952,14 @@ begin
       begin
         HandleExceptionFamily := self;
         RawExceptionIntercept(SynLogException);
+        // TDebugFile.CurrentDebugFile; // could help to pre-load the debugg info
       end;
     end
     else if HandleExceptionFamily = self then
     begin
       SynLogFiles.ReadLock;
       try
-        HandleExceptionFamily := SearchHandleException(pointer(SynLogFamily));
+        HandleExceptionFamily := SearchHandleException(pointer(SynLogFamily), self);
       finally
         SynLogFiles.ReadUnLock;
       end;
@@ -5007,6 +5009,9 @@ begin
   fRotateFileDailyAtHour := -1;
   fBufferSize := 8192;
   fStackTraceLevel := 30;
+  {$ifdef WIN32DELPHI}
+  // fStackTraceUse := stManualAndAPI; // generates lots of false positives
+  {$endif WIN32DELPHI}
   fWithUnitName := true;
   fWithInstancePointer := true;
   {$ifdef OSWINDOWS}
