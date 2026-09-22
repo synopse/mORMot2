@@ -782,6 +782,9 @@ function NowTextDateShort(UtcDate: boolean = false): TShort15;
 /// convert a TUnixTime date into '19 Sep 2023' English-readable text
 function UnixTimeToTextDateShort(Date: TUnixTime): TShort15;
 
+/// convert a TUnixTime timestamp into '19 Sep 2023 13:56:52' ISO 8601 text
+function UnixTimeToShort(Epoch: TUnixTime; FirstTimeChar: AnsiChar = ' '): TShort31;
+
 /// convert a TDateTime date into '19 Sep 2023' English-readable text
 function DateToTextDateShort(Date: TDateTime): TShort15;
 
@@ -3576,6 +3579,14 @@ var
 begin
   T.FromUnixTime(Date);
   T.ToTextDateShort(result);
+end;
+
+function UnixTimeToShort(Epoch: TUnixTime; FirstTimeChar: AnsiChar): TShort31;
+var
+  T: TSynSystemTime;
+begin
+  T.FromUnixTime(Epoch);
+  T.ToIsoDateTimeShort(result, FirstTimeChar);
 end;
 
 function DateToTextDateShort(Date: TDateTime): TShort15;
