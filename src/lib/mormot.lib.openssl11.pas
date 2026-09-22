@@ -11318,7 +11318,7 @@ type
     fPeer: PX509;
     fCipherName, fServerAddress: RawUtf8;
     fDoSslShutdown: boolean;
-    procedure Check(const method: ShortString; res: integer);
+    procedure CheckRes(const method: ShortString; res: integer);
       {$ifdef HASINLINE} inline; {$endif}
     function CheckSsl(res: integer; error: PInteger = nil): TNetResult;
     procedure CheckProc(proc: TOpenSSLProc; const ctx: ShortString);
@@ -11404,10 +11404,11 @@ begin
   end;
 end;
 
-procedure TOpenSslNetTls.Check(const method: ShortString; res: integer);
+procedure TOpenSslNetTls.CheckRes(const method: ShortString; res: integer);
 begin
+  // this method is called ouside of SSL I/O error check e.g. during context setup
   if res <> OPENSSLSUCCESS then
-    EOpenSslNetTls.CheckFailed(self, method, fLastError, fSsl, res, fServerAddress);
+    EOpenSslNetTls.CheckFailed(self, method, fLastError, nil, res, fServerAddress);
 end;
 
 // see https://www.ibm.com/support/knowledgecenter/SSB23S_1.1.0.2020/gtps7/s5sple2.html
@@ -11470,12 +11471,12 @@ begin
       if not GetNextCsv(P, h) then // default expected peer identity
         h := ServerAddress; // plain IP here may fail before OpenSSL 3.4
       SSL_set_hostflags(fSsl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
-      Check('AfterConnection set1_host', SSL_set1_host(fSsl, pointer(h)));
+      CheckRes('AfterConnection set1_host', SSL_set1_host(fSsl, pointer(h)));
       while GetNextCsv(P, h) do
-        Check('AfterConnection add1_host', SSL_add1_host(fSsl, pointer(h)));
+        CheckRes('AfterConnection add1_host', SSL_add1_host(fSsl, pointer(h)));
     end;
     // setup the conection using MSG_NOSIGNAL on OpenSSL 4+
-    Check('AfterConnection set_fd',
+    CheckRes('AfterConnection set_fd',
       SSLSetFdNoSigPipe(fSsl, Socket.Socket));
     // client TLS negotiation with server
     CheckProc(@SSL_connect, 'AfterConnection SSL_connect');
@@ -11497,7 +11498,7 @@ begin
       //PX509DynArrayFree(x);
       if (fPeer = nil) and
          not Context.IgnoreCertificateErrors then
-        Check('AfterConnection get_peer_certificate', 0);
+         raise EOpenSslNetTls.Create('AfterConnection: missing peer certificate');
       try
         if fPeer <> nil then
         begin
@@ -11638,11 +11639,11 @@ begin
     xa := LoadCertificates(cert); // PEM
     if xa <> nil then
     try
-      Check('SetupCtx Certificate0',
+      CheckRes('SetupCtx Certificate0',
         SSL_CTX_use_certificate(fCtx, xa[0]));
       for i := 1 to high(xa) do
       begin
-        Check('SetupCtx Chain',
+        CheckRes('SetupCtx Chain',
           SSL_CTX_add_extra_chain_cert(fCtx, xa[i]));
         xa[i] := nil; // fCtx owns it now - no inc(refcnt)
       end;
@@ -11653,7 +11654,7 @@ begin
             (Context.PrivateKeyFile = '') and
             ParsePkcs12(cert, Context.PrivatePassword, x, pk, @ca) then
       try // was .pfx/pkcs#12 format as with SChannel
-        Check('SetupCtx Certificate',
+        CheckRes('SetupCtx Certificate',
           SSL_CTX_use_certificate(fCtx, x));
         if ca <> nil then
           for i := 0 to ca^.Count - 1 do
@@ -11662,9 +11663,9 @@ begin
             X509_up_ref(c); // no inc(refcnt) in fCtx
             SSL_CTX_add_extra_chain_cert(fCtx, c);
           end;
-        Check('SetupCtx PrivateKey',
+        CheckRes('SetupCtx PrivateKey',
           SSL_CTX_use_PrivateKey(fCtx, pk));
-        Check('SetupCtx pfx',
+        CheckRes('SetupCtx pfx',
           SSL_CTX_check_private_key(fCtx));
       finally
         x^.Free;
@@ -11676,7 +11677,7 @@ begin
         nil, nil, 0, fServerAddress);
   end
   else if Context.CertificateRaw <> nil then
-    Check('SetupCtx CertificateRaw',
+    CheckRes('SetupCtx CertificateRaw',
       SSL_CTX_use_certificate(fCtx, Context.CertificateRaw))
   else if Bind then
     raise EOpenSslNetTls.Create('AfterBind: Certificate required');
@@ -11689,26 +11690,26 @@ begin
         fCtx, pointer(Context.PrivatePassword));
     SSL_CTX_use_PrivateKey_file(
       fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM);
-    Check('SetupCtx check_private_key file',
+    CheckRes('SetupCtx check_private_key file',
       SSL_CTX_check_private_key(fCtx));
   end
   else if Context.PrivateKeyRaw <> nil then
   begin
     SSL_CTX_use_PrivateKey(fCtx, Context.PrivateKeyRaw);
-    Check('SetupCtx check_private_key raw',
+    CheckRes('SetupCtx check_private_key raw',
       SSL_CTX_check_private_key(fCtx));
   end
   else if Bind and (pk = nil) then
     raise EOpenSslNetTls.Create('AfterBind: PrivateKey required');
   if Context.CipherList = '' then
     Context.CipherList := SAFE_CIPHERLIST[HasHWAes]; // our own default
-  Check('SetupCtx set_cipher_list',
+  CheckRes('SetupCtx set_cipher_list',
     SSL_CTX_set_cipher_list(fCtx, pointer(Context.CipherList)));
   if not Context.DisableTls13 then
   begin
     if Context.CipherSuites = '' then
       Context.CipherSuites := SAFE_TLS13_CIPHERSUITES[HasHWAes]; // our default
-    Check('SetupCtx set_ciphersuites',
+    CheckRes('SetupCtx set_ciphersuites',
       SSL_CTX_set_ciphersuites(fCtx, pointer(Context.CipherSuites)));
   end;
   if Bind then
@@ -11801,7 +11802,7 @@ begin
     if BoundContext.AcceptCert = nil then
       raise EOpenSslNetTls.Create('AfterAccept: missing AfterBind');
     fSsl := SSL_new(BoundContext.AcceptCert);
-    Check('AfterAccept set_fd',
+    CheckRes('AfterAccept set_fd',
       SSLSetFdNoSigPipe(fSsl, Socket.Socket)); // MSG_NOSIGNAL on OpenSSL 4+
     // server TLS negotiation with server
     CheckProc(@SSL_accept, 'AfterAccept SSL_accept');
