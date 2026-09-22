@@ -616,6 +616,10 @@ function FromAppLogLevel(const Text: RawUtf8): TSynLogLevels;
 function RetrieveMemoryManagerInfo: RawUtf8;
 
 var
+  /// is set to TRUE before ObjArrayClear(SynLogFile) in unit finalization
+  // - defined here to avoid unexpected GPF at shutdown
+  SynLogFileFreeing: boolean;
+
   /// protects the global TSynLog/TSynLogFamily global lists
   // - never acquire a TSynLog.fWriteSafe while holding this lock
   // - a writer may acquire this lock for file-name reservation
@@ -624,10 +628,6 @@ var
   /// serializes global exception interception state
   // - never hold this lock while acquiring a TSynLog.fWriteSafe
   SynLogExceptions: TOSLock;
-
-  /// is set to TRUE before ObjArrayClear(SynLogFile) in unit finalization
-  // - defined here to avoid unexpected GPF at shutdown
-  SynLogFileFreeing: boolean;
 
 type
   /// class of Exceptions raised by this unit
@@ -2465,6 +2465,7 @@ end;
 
 var
   DebugFileLast, DebugFileCurrent: TDebugFile; // aligned pointer access is atomic
+  DebugFileCurrentSearched: TLightLock;
   DebugFilesSafe: TRWLightLock;
   DebugFiles: array of TDebugFile;
   DebugFileNamesUnknown: TStringDynArray; // search once
@@ -2583,15 +2584,9 @@ end;
 
 class function TDebugFile.CurrentDebugFile: TDebugFile;
 begin
-  if DebugFileCurrent = nil then // resolve local procedure
-  begin
-    DebugFileCurrent := Get(@TDebugFile.CurrentDebugFile);
-    if DebugFileCurrent = nil then
-      DebugFileCurrent := pointer(1);
-  end;
+  if DebugFileCurrentSearched.TryLock then // resolve once
+    DebugFileCurrent := Get(@DebugFileRegister); // local procedure
   result := DebugFileCurrent;
-  if result = pointer(1) then
-    result := nil;
 end;
 
 {$ifdef FPC}
