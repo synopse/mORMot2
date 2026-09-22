@@ -2353,7 +2353,8 @@ begin
       if (st >= min_stack) and
          (st <= max_stack) then
         continue; // on-stack pointer is no code
-      if SeemsRealPointer(pointer(st - 8)) and
+      if (not IntegerScanExists(@frames, result, st)) and
+         SeemsRealPointer(pointer(st - 8)) and
          CheckAsmX86(st) then
       begin
         frames[result] := st;
