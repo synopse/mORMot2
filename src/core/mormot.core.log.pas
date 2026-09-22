@@ -2311,9 +2311,7 @@ type
 {$STACKFRAMES ON} // we need {$W+} stack frame for the backtrace API calls below
 {$endif KEEP_STACKFRAMES}
 
-{$ifndef FPC}
-{$ifdef OSWINDOWS}
-{$ifndef CPU64}
+{$ifdef WIN32DELPHI}
 
 function CheckAsmX86(xret: PtrUInt): boolean; // naive x86 caller detection
 var
@@ -2378,9 +2376,11 @@ begin
   end;
 end;
 
-{$endif CPU64}
-{$endif OSWINDOWS}
-{$endif FPC}
+{$endif WIN32DELPHI}
+
+//function backtrace(buffer: PPointer; size: Integer): Integer; cdecl; external 'c';
+// TODO: try this API on Delphi for POSIX - could be worthwhile but with dynamic
+// linking on Android (min API < 33) - and with a warmup call at startup
 
 // capture the current thread stack into frames[], returning the frames count
 // - first frame is the caller of this function, plus optional skip levels
@@ -2412,13 +2412,13 @@ begin
     {$ifdef OSWINDOWS}
     if use <> stOnlyManual then
       result := RtlCaptureStackBackTrace(skip, length(frames), @frames, nil);
-    {$ifndef CPU64}
+    {$ifdef WIN32DELPHI}
     if (result < 2) and
        (use <> stOnlyAPI) then
       // support stOnlyManual/stManualAndAPI on Delphi Win32, where the API
       // needs stack frames and is likely to return (almost) nothing
       result := ManualStackTrace(frames);
-    {$endif CPU64}
+    {$endif WIN32DELPHI}
     {$endif OSWINDOWS}
     {$endif FPC}
   except
@@ -7543,8 +7543,8 @@ begin
   try
     n := last^.Next;
     if n = 0 then
-      n := high(last^.Infos);
-    info := last^.Infos[n];
+      n := length(last^.Infos);
+    info := last^.Infos[n - 1];
   finally
     last^.Safe.UnLock;
   end;
@@ -7555,36 +7555,28 @@ procedure GetLastExceptions(out result: TSynLogExceptionInfoDynArray;
   Depth: integer);
 var
   last: ^TLastException;
-  n: PtrInt;
-
-  procedure Add(p: PSynLogExceptionInfo; b, e: PtrInt);
-  begin
-    while b <= e do
-    begin
-      if p^.Context.ELevel <> sllNone then
-      begin
-        result[n] := p^;
-        inc(n);
-        if n = length(last^.Infos) then
-          break;
-      end;
-      inc(b);
-      inc(p);
-    end;
-  end;
-
+  i, n, max: PtrInt;
 begin
-  // thread-safe retrieve last exceptions
   if SynLogFileFreeing then
     exit;
   last := @GlobalLastException;
-  SetLength(result, length(last^.Infos)); // pre-allocate
+  max := length(last^.Infos); // is a power of two by design
+  if (Depth > 0) and
+     (max > Depth) then
+    max := Depth;
+  SetLength(result, max); // pre-allocate
   n := 0;
-  last^.Safe.Lock;
+  last^.Safe.Lock; // thread-safe retrieve last exceptions
   try
-    Add(@last^.Infos[last^.Next], last^.Next, high(last^.Infos));
-    if n <= length(last^.Infos) then
-      Add(@last^.Infos[0], 0, last^.Next - 1);
+    i := last^.Next; // next slot to write
+    while n < max do
+    begin
+      i := (i - 1) and high(last^.Infos);
+      if last^.Infos[i].Context.ELevel = sllNone then
+        break; // ring has not been filled up to this point yet
+      result[n] := last^.Infos[i];
+      inc(n);
+    end;
   finally
     last^.Safe.UnLock;
   end;
