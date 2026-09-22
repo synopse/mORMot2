@@ -164,7 +164,7 @@ type
     function AbsoluteToRelative(aPointer: PtrUInt): TDebugAddress;
       {$ifdef HASINLINE}inline;{$endif}
     procedure AppendLocationShort(aPointer: PtrUInt; var aInfo: ShortString);
-    function AppendLog(W: TTextWriter; aPointer: PtrUInt; NoHex: boolean): boolean;
+    function AddLog(W: TTextWriter; aPointer: PtrUInt; NoHex: boolean = false): boolean;
     function GetExeDate: RawUtf8;
   public
     /// get the available debugging information
@@ -256,9 +256,6 @@ type
     // - is much faster: around 1us per lookup, whereas lnfodwrf is 20ms
     class function RegisterBacktraceStrFunc: boolean; static;
     {$endif FPC}
-    /// add some debugging information about the supplied absolute memory address
-    class function AddLog(W: TTextWriter; aPointer: PtrUInt;
-      NoHex: boolean = false): boolean; {$ifdef HASINLINE} static; {$endif}
     /// return the current thread stack trace as convenient plain text
     // - filename, symbol name and line number (if any) of each frame, e.g.
     // $ 57f480 mormot.core.log.pas TSynLog.LogEscape (5782) 4a0a40 ...
@@ -277,7 +274,7 @@ type
     // - use follows TSynLogFamily.StackTraceUse semantics: ignored on FPC,
     // and stOnlyManual is implemented on Delphi Win32 only, as TSynLog
     // - skip does not apply to the heuristic manual stack walk
-    // - a trailing space is left after each located frame, as TDebugFile.AddLog
+    // - a trailing space is left after each located frame
     class procedure StackTrace(W: TTextWriter; skip: integer = 0;
       depth: integer = 0; use: TSynLogStackTraceUse = stManualAndAPI); overload;
       {$ifdef HASINLINE} static; {$endif}
@@ -4223,7 +4220,7 @@ begin
     until L > R;
 end;
 
-function TDebugFile.AppendLog(W: TTextWriter; aPointer: PtrUInt; NoHex: boolean): boolean;
+function TDebugFile.AddLog(W: TTextWriter; aPointer: PtrUInt; NoHex: boolean): boolean;
 var
   rva: TDebugAddress;
   line: integer; // not PtrInt
@@ -4231,18 +4228,31 @@ var
   l: PDebugBlock;
 begin
   result := false;
+  if (W = nil) or
+     (aPointer = 0) then
+    exit;
+  if self = nil then
+  begin
+    // no TDebugFile: append the hexa address of process pointer
+    if NoHex or
+       not IsCurrentExecutable(pointer(aPointer)) then // fast OS API
+      exit;
+    W.AddPointer(aPointer, ' '); // write raw pointer if no debug info
+    result := true;
+    exit;
+  end;
   rva := AbsoluteToRelative(aPointer);
   if rva = 0 then
     exit;
   s := FindSymbol(rva);
-  {$ifdef ISDELPHI}
   if (s <> nil) and
-     (FindPropName(['SynRtlUnwind', '@HandleAnyException',  'LogExcept',
-       '@HandleOnException', 'ThreadWrapper', 'ThreadProc'],
-       s^.Name) >= 0) then
-    // no stack trace within the Delphi exception interception functions
-    exit;
-  {$endif ISDELPHI}
+     (FindPropName(['LogExcept', 'SynLogException', 'ThreadProc',
+       'ESynException.RaiseUtf8'
+       {$ifdef ISDELPHI} , 'SynRtlUnwind',  '@HandleAnyException',
+       '@HandleOnException', '@InternalRaiseAtExcept', '@RaiseAtExcept',
+       'ThreadWrapper' {$ifdef CPUX86} , 'RawStackTrace' {$endif}
+       {$endif ISDELPHI} ], s^.Name) >= 0) then
+    exit; // only meaningful entries
   result := true;
   if not NoHex then
   begin
@@ -4266,19 +4276,6 @@ begin
   W.AddDirect('(');
   W.AddU(line);
   W.AddDirect(')', ' '); // always end with a ' '
-end;
-
-class function TDebugFile.AddLog(W: TTextWriter; aPointer: PtrUInt; NoHex: boolean): boolean;
-var
-  debug: TDebugFile;
-begin
-  result := false;
-  if (W = nil) or
-     (aPointer = 0) then
-    exit;
-  debug := DebugFileGet(aPointer, nil); // TDebugFile.Get(pointer(aPointer))
-  if debug <> nil then
-    result := debug.AppendLog(W, aPointer, NoHex);
 end;
 
 procedure TDebugFile.AppendLocationShort(aPointer: PtrUInt; var aInfo: ShortString);
