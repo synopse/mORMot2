@@ -717,7 +717,16 @@ end;
 
 procedure TTestMultiThreadProcess.MainThread;
 begin
+  {$ifdef OSANDROID}
+  // The Android test runner executes tests on a worker thread.  The
+  // amMainThread mode requires the FMX UI thread for CheckSynchronize and
+  // would otherwise either fail or block the Android UI long enough for ANR.
+  // BackgroundThread exercises the same concurrent client path without
+  // requiring UI-thread synchronization.
+  Test(TRestClientDB, HTTP_DEFAULT_MODE, amBackgroundThread);
+  {$else}
   Test(TRestClientDB, HTTP_DEFAULT_MODE, amMainThread);
+  {$endif OSANDROID}
 end;
 
 {$ifdef USEWININET}
@@ -740,9 +749,24 @@ end;
 
 {$ifdef OSPOSIX}
 procedure TTestMultiThreadProcess.UnixDomainSockets;
+var
+  SocketFileName: TFileName;
 begin
-  Test(TRestHttpClientSocket, useHttp, amLocked,
-    'unix:' + RawUtf8(ChangeFileExt(Executable.ProgramFileName, '.sock')));
+  {$ifdef OSANDROID}
+  // The native library path inside an Android APK is read-only.  WorkDir is
+  // the writable test directory selected by the Android runner.
+  SocketFileName := WorkDir + 'mormot2tests.sock';
+  {$else}
+  SocketFileName := ChangeFileExt(Executable.ProgramFileName, '.sock');
+  {$endif OSANDROID}
+  DeleteFile(SocketFileName);
+  try
+    Test(TRestHttpClientSocket, useHttp, amLocked,
+      'unix:' + RawUtf8(SocketFileName));
+  finally
+    // Do not leave a stale AF_UNIX endpoint for the next suite run.
+    DeleteFile(SocketFileName);
+  end;
 end;
 {$endif OSPOSIX}
 

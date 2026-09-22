@@ -4431,7 +4431,7 @@ begin
   check(csr <> '', 'csr');
   check(priv <> '', 'priv');
   c2 := crt.GenerateFromCsr(csr);
-  if Check(c2 <> nil, 'gen csr1') then
+  if Check(c2 <> nil, 'gen csr1 ' + Utf8ToString(crt.AlgoName)) then
   begin
     if crt.AlgoName <> 'syn-es256-v1' then
       check(c2.GetUsage = [cuCA, cuDigitalSignature], 'csr usage1');
