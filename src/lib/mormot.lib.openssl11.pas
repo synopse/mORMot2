@@ -11322,6 +11322,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function CheckSsl(res: integer; error: PInteger = nil): TNetResult;
     procedure CheckProc(proc: TOpenSSLProc; const ctx: ShortString);
+    procedure WaitRetry(res, err: integer; var endtix: Int64; const ctx: ShortString);
     procedure SetupCtx(var Context: TNetTlsContext; Bind: boolean);
   public
     destructor Destroy; override;
@@ -11908,27 +11909,30 @@ begin
     ShortStringToAnsi7String(tmp, fLastError^);
 end;
 
-procedure WaitRetry(sock: TNetSocket; err: integer; var endtix: Int64;
+procedure TOpenSslNetTls.WaitRetry(res, err: integer; var endtix: Int64;
   const ctx: ShortString);
 var
   ne: TNetEvents;
 begin
+  case err of
+    SSL_ERROR_WANT_READ:
+      ne := [neRead, neError];
+    SSL_ERROR_WANT_WRITE:
+      ne := [neWrite, neError];
+  else
+    EOpenSslNetTls.CheckFailed(
+      self, ctx, fLastError, fSsl, res, fServerAddress, err);
+  end;
   if endtix = 0 then
     endtix := GetTickCount64 + 5000 // never loop forever
   else if GetTickCount64 > endtix then
     raise EOpenSslNetTls.CreateFmt('%s timeout', [ctx]);
-  if err = SSL_ERROR_WANT_READ then
-    ne := [neRead, neError]
-  else if err = SSL_ERROR_WANT_WRITE then
-    ne := [neWrite, neError]
-  else
-    ne := [neRead, neWrite, neError]; // should never happen
-  sock.WaitFor(100, ne);
+  fSocket.WaitFor(100, ne);
 end;
 
 procedure TOpenSslNetTls.CheckProc(proc: TOpenSSLProc; const ctx: ShortString);
 var
-  res, err: integer;
+  res: integer;
   endtix: Int64;
 begin
   endtix := 0;
@@ -11937,9 +11941,7 @@ begin
     res := proc(fSsl); // SSL_connect() or SSL_accept()
     if res = OPENSSLSUCCESS then
       exit;
-    if CheckSsl(res, @err) <> nrRetry then // nrRetry happens on async socket
-      EOpenSslNetTls.CheckFailed(self, ctx, fLastError, fSsl, res, fServerAddress, err);
-    WaitRetry(fSocket, err, endtix, ctx);
+    WaitRetry(res, SSL_get_error(fSsl, res), endtix, ctx);
   until false;
 end;
 
@@ -11961,7 +11963,7 @@ begin
     result := CheckSsl(Length, @err);
     if err <> SSL_ERROR_WANT_WRITE then
       exit; // SSL_ERROR_WANT_READ is handled (asynchronously) by the caller
-    WaitRetry(fSocket, err, endtix, 'Receive');
+    WaitRetry(Length, err, endtix, 'Receive');
   until false;
 end;
 
@@ -11988,7 +11990,7 @@ begin
     result := CheckSsl(Length, @err);
     if err <> SSL_ERROR_WANT_READ then
       exit; // SSL_ERROR_WANT_WRITE is handled (asynchronously) by the caller
-    WaitRetry(fSocket, err, endtix, 'Send');
+    WaitRetry(Length, err, endtix, 'Send');
   until false;
 end;
 
