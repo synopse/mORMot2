@@ -10529,8 +10529,11 @@ begin
 end;
 
 procedure TLecuyer.SeedGenerator(fixedseed: QWord);
+var
+  tmp: QWord; // for FPC arm32
 begin
-  SeedGenerator(@fixedseed, SizeOf(fixedseed));
+  tmp := fixedseed;
+  SeedGenerator(@tmp, SizeOf(tmp));
 end;
 
 procedure TLecuyer.SeedGenerator(fixedseed: pointer; fixedseedbytes: integer);

@@ -2087,7 +2087,7 @@ end;
 { ******************** TLS / HTTPS Encryption Abstract Layer }
 
 type
-  ESChannel = class(Exception);
+  ESChannel = class(ExceptionWithProps);
 
   TSChannelNetTls = class(TInterfacedObject, INetTls)
   private

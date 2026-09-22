@@ -143,7 +143,7 @@ type
 
 type
   /// exception class raised by TSynLabeledEdit
-  ESynLabeledEdit = class(Exception);
+  ESynLabeledEdit = class(ExceptionWithProps);
 
   /// diverse kind of values which may be edited by a TSynLabeledEdit
   TSynLabeledEditKind = (
