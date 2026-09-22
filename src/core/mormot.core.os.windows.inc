@@ -1965,40 +1965,51 @@ begin
     exit;
   backuplasterror := GetLastError;
   backuphandler := _RawLogException;
+  _RawLogException := nil; // disable nested exception at API level
   if Assigned(backuphandler) then // paranoid check (tested before calling)
-    try
-      _RawLogException := nil; // disable nested exception at API level
-      ctxt.ECode := Exc.ExceptionCode;
-      if (Exc.ExceptionCode = cRtlException) and
-         (Exc.ExceptObject <> nil) then
+  try
+    ctxt.EStack := pointer(stack); // for manual unwinding on Delphi x86
+    ctxt.EStackCount := 0;
+    ctxt.ECode := Exc.ExceptionCode;
+    if (Exc.ExceptionCode = cRtlException) and
+       (Exc.ExceptObject <> nil) then
+    begin
+      if Exc.ExceptObject.InheritsFrom(Exception) then
       begin
-        if Exc.ExceptObject.InheritsFrom(Exception) then
-          ctxt.EClass := PPointer(Exc.ExceptObject)^
-        else
-          ctxt.EClass := EExternalException;
-        ctxt.EInstance := Exc.ExceptObject;
-        ctxt.ELevel := sllException;
-        ctxt.EAddr := Exc.ExceptAddr;
+        ctxt.EClass := PPointer(Exc.ExceptObject)^;
+        {$ifdef FPC} // fpc_RaiseException() calls GetBacktrace() as needed
+        if (Exc.NumberParameters >= 4) and
+           (Exc.ExceptionInformation[2] < 63) and
+           (Exc.ExceptionInformation[3] <> 0) then
+        begin
+          ctxt.EStackCount := Exc.ExceptionInformation[2];
+          ctxt.EStack := pointer(Exc.ExceptionInformation[3]);
+        end;
+        {$endif FPC}
       end
       else
-      begin
-        {$ifndef LLVM}
-        if Assigned(ExceptClsProc) then
-          ctxt.EClass := GetExceptionClass(ExceptClsProc)(Exc)
-        else
-        {$endif LLVM}
-          ctxt.EClass := EExternal;
-        ctxt.EInstance := nil;
-        ctxt.ELevel := sllExceptionOS;
-        ctxt.EAddr := Exc.ExceptionAddress;
-      end;
-      ctxt.EStack := pointer(stack);
-      ctxt.EStackCount := 0;
-      ctxt.ETimestamp := UnixTimeUtc; // fast API call
-      backuphandler(ctxt);
-    except
-      { ignore any nested exception }
+        ctxt.EClass := EExternalException;
+      ctxt.EInstance := Exc.ExceptObject;
+      ctxt.ELevel := sllException;
+      ctxt.EAddr := Exc.ExceptAddr;
+    end
+    else
+    begin
+      {$ifndef LLVM}
+      if Assigned(ExceptClsProc) then
+        ctxt.EClass := GetExceptionClass(ExceptClsProc)(Exc)
+      else
+      {$endif LLVM}
+        ctxt.EClass := EExternal;
+      ctxt.EInstance := nil;
+      ctxt.ELevel := sllExceptionOS;
+      ctxt.EAddr := Exc.ExceptionAddress;
     end;
+    ctxt.ETimestamp := UnixTimeUtc; // the fastest API call possible
+    backuphandler(ctxt);
+  except
+    { ignore any nested exception }
+  end;
   _RawLogException := backuphandler;
   SetLastError(backuplasterror); // code above could have changed this
 end;
@@ -2012,6 +2023,9 @@ type
     ContextRecord: pointer;
   end;
 
+const
+  EXCEPTION_CONTINUE_SEARCH = 0;
+
 var // to register SynLogVectoredHandler once
   AddVectoredExceptionHandlerCalled: boolean;
   // RemoveVectoredContinueHandler() is available under 64 bit editions only
@@ -2020,8 +2034,6 @@ function AddVectoredExceptionHandler(FirstHandler: cardinal;
   VectoredHandler: pointer): PtrInt; stdcall; external kernel32;
 
 function SynLogVectoredHandler(ExceptionInfo: PExceptionInfo): PtrInt; stdcall;
-const
-  EXCEPTION_CONTINUE_SEARCH = 0;
 begin
   if Assigned(_RawLogException) then
     LogExcept(nil, ExceptionInfo^.ExceptionRecord^);
