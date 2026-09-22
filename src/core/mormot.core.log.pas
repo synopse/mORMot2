@@ -230,6 +230,9 @@ type
     // - will also return any library name or symbol outside the executable
     class procedure FindLocationShort(aPointer: pointer; var aInfo: ShortString;
       aNoHex: boolean = false);   {$ifdef HASINLINE} static; {$endif}
+    /// append the supplied symbol location(s) - as used by AppendCallerShort()
+    class procedure AppendLocationsShort(var aInfo: ShortString;
+      aFrames: PPtrUIntArray; aFramesCount, aDepth: PtrInt);
     /// append the symbol location(s) according to the current call stack
     // - won't return any library name or symbol outside the executable
     class procedure AppendCallerShort(var aInfo: ShortString; aSkip, aDepth: integer);
@@ -4351,38 +4354,32 @@ begin
   end;
 end;
 
-{$STACKFRAMES ON} // we need a stack frame for the backtrace API call below
-
-class procedure TDebugFile.AppendCallerShort(var aInfo: ShortString;
-  aSkip, aDepth: integer);
+class procedure TDebugFile.AppendLocationsShort(var aInfo: ShortString;
+  aFrames: PPtrUIntArray; aFramesCount, aDepth: PtrInt);
 var
+  i: PtrInt;
   deb: TDebugFile;
-  frames: TRawStackFrames;
-  i, n: PtrInt;
   l: AnsiChar;
 begin
-  if aDepth <= 0 then
-    exit;
-  n := RawStackTrace(aSkip + 1, stManualAndAPI, frames); // + 1 to ignore this
-  for i := 0 to n - 1 do
-    if (i = 0) or
-       (frames[i] <> frames[i - 1]) then
-    begin
-      l := aInfo[0];
-      if ord(l) = high(aInfo) then
-        break; // output buffer is full
-      deb := DebugFileGet(frames[i], nil); // no tmp = no external symbol
-      if deb <> nil then
-        deb.AppendLocationShort(frames[i], aInfo);
-      if aInfo[0] = l then
-        continue; // nothing added
-      dec(aDepth);
-      if aDepth = 0 then
-        break; // we got what we needed
-    end;
+  if (aFrames <> nil) and
+     (aDepth > 0) then
+    for i := 0 to aFramesCount - 1 do
+      if (i = 0) or
+         (aFrames[i] <> aFrames[i - 1]) then
+      begin
+        l := aInfo[0];
+        if ord(l) = high(aInfo) then
+          break; // output buffer is full
+        deb := DebugFileGet(aFrames[i], nil); // no tmp = no external symbol
+        if deb <> nil then
+          deb.AppendLocationShort(aFrames[i], aInfo);
+        if aInfo[0] = l then
+          continue; // nothing added
+        dec(aDepth);
+        if aDepth = 0 then
+          break; // we got what we needed
+      end;
 end;
-
-{$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
 
 class function TDebugFile.FindLocationRaisedAt(exc: ESynException): RawUtf8;
 begin
