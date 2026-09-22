@@ -4776,11 +4776,24 @@ end;
 {$STACKFRAMES ON} // we need {$W+} stack frame for the backtrace API calls below
 {$endif KEEP_STACKFRAMES}
 
+class procedure TDebugFile.AppendCallerShort(var aInfo: ShortString;
+  aSkip, aDepth: integer);
+var
+  frames: TRawStackFrames;
+  n: PtrInt;
+begin
+  if aDepth <= 0 then
+    exit;
+  n := RawStackTrace(aSkip + 1, stManualAndAPI, frames); // + 1 to ignore this
+  AppendLocationsShort(aInfo, @frames, n, aDepth);
+end;
+
 class procedure TDebugFile.StackTrace(W: TTextWriter; skip, depth: integer;
   use: TSynLogStackTraceUse);
 var
   frames: TRawStackFrames;
   i, n: PtrInt;
+  deb: TDebugFile;
 begin
   if W = nil then
     exit;
@@ -4789,10 +4802,13 @@ begin
   if skip < 0 then
     skip := 0;
   n := RawStackTrace(skip + 1, use, frames); // + 1 to ignore this method
+  if n = 0 then
+    exit;
+  deb := CurrentDebugFile; // load debug information once
   for i := 0 to n - 1 do
     if (i = 0) or
        (frames[i] <> frames[i - 1]) then
-      if AddLog(W, frames[i]) then
+      if deb.AddLog(W, frames[i]) then
       begin
         dec(depth);
         if depth = 0 then
@@ -6144,6 +6160,19 @@ begin
     pointer(result) := PAnsiChar(log) + log.fISynLogOffset; // result := self
 end;
 
+procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
+begin
+  if fFamily.StackTraceLevel > 0 then
+    try
+      fWriter.AddDirect(' ');
+      // skip=2 to start at the caller of our caller, as this method did before
+      TDebugFile.StackTrace(fWriter, {skip=}2, fFamily.StackTraceLevel,
+        fFamily.StackTraceUse); // use is actually ignored on FPC
+      fWriter.CancelLastChar(' ');
+    except // don't let any unexpected GPF break the logging process
+    end;
+end;
+
 {$ifndef KEEP_STACKFRAMES}
 {$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
 {$endif KEEP_STACKFRAMES}
@@ -7265,129 +7294,6 @@ begin
       EndWrite(nfo);
     end;
 end;
-
-{$ifdef FPC}
-
-procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
-begin
-  if fFamily.StackTraceLevel > 0 then
-    try
-      fWriter.AddDirect(' ');
-      // skip=2 to start at the caller of our caller, as this method did before
-      TDebugFile.StackTrace(fWriter, {skip=}2, fFamily.StackTraceLevel,
-        fFamily.StackTraceUse); // use is actually ignored on FPC
-      fWriter.CancelLastChar(' ');
-    except // don't let any unexpected GPF break the logging process
-    end;
-end;
-
-{$else not FPC}
-
-procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
-{$ifdef OSWINDOWS}
-{$ifdef CPU64}
-
-  procedure AddStackManual(Stack: PPtrUInt);
-  begin
-    // not implemented yet
-  end;
-
-{$else}
-
-  procedure AddStackManual(Stack: PPtrUInt);
-  // note: reuses CheckAsmX86() shared with the ManualStackTrace() function
-  var
-    st, max_stack, min_stack, depth: PtrUInt;
-  begin
-    asm
-        mov     min_stack, ebp
-        mov     eax, fs:[4]
-        mov     max_stack, eax
-    end;
-    if Stack = nil then // if no Stack pointer set, retrieve current one
-      Stack := pointer(min_stack)
-    else if PtrUInt(Stack) < min_stack then
-      exit;
-    fWriter.Add(' ');
-    depth := fFamily.StackTraceLevel;
-    try
-      while (PtrUInt(Stack) < max_stack) and
-            (depth > 0) do
-      begin
-        st := Stack^;
-        inc(Stack);
-        if (st >= min_stack) and
-           (st <= max_stack) then
-          continue; // on-stack pointer is no code
-        if not SeemsRealPointer(pointer(st - 8)) or
-           not CheckAsmX86(st) then
-          continue;
-        if not TDebugFile.AddLog(fWriter, st) then
-        begin
-          fWriter.AddPointer(st);
-          fWriter.AddDirect(' ');
-        end;
-        dec(depth);
-        if depth = 0 then
-          break;
-      end;
-    except
-      // just ignore any access violation here
-    end;
-  end;
-
-{$endif CPU64}
-
-var
-  {$ifndef NOEXCEPTIONINTERCEPT}
-  addedwriting: boolean;
-  threadflags: ^TSynLogThreadInfoFlags;
-  {$endif NOEXCEPTIONINTERCEPT}
-  {$ifdef OSWINDOWS}
-  n, i, logged: integer;
-  BackTrace: array[byte] of PtrUInt;
-  {$endif OSWINDOWS}
-begin
-  if fFamily.StackTraceLevel <= 0 then
-    exit;
-  {$ifndef NOEXCEPTIONINTERCEPT}
-  threadflags := @PerThreadInfo.Flags;
-  addedwriting := not (tiWriting in threadflags^);
-  if addedwriting then
-    include(threadflags^, tiWriting);
-  {$endif NOEXCEPTIONINTERCEPT}
-  try
-    {$ifdef OSWINDOWS}
-    logged := 0;
-    if fFamily.StackTraceUse <> stOnlyManual then
-    begin
-      n := RtlCaptureStackBackTrace(2, fFamily.StackTraceLevel, @BackTrace, nil);
-      if n <> 0 then
-      begin
-        fWriter.AddDirect(' ');
-        for i := 0 to n - 1 do
-          if TDebugFile.AddLog(fWriter, BackTrace[i]) then
-            inc(logged);
-      end;
-    end;
-    if (logged < 2) and
-       (fFamily.StackTraceUse <> stOnlyAPI) then
-      AddStackManual(stack);
-    {$endif OSWINDOWS}
-  except
-    // just ignore any access violation here
-  end;
-  {$ifndef NOEXCEPTIONINTERCEPT}
-  if addedwriting then
-    exclude(threadflags^, tiWriting);
-  {$endif NOEXCEPTIONINTERCEPT}
-end;
-
-{$else}
-begin // not implemented yet on Delphi POSIX
-end;
-{$endif OSWINDOWS}
-{$endif FPC}
 
 
 { ************** High-Level Logs and Exception Related Features }
