@@ -7459,74 +7459,53 @@ begin
   finally
     exclude(nfo^.Flags, tiWriting);
   end;
-  if ignored or
-     (log = nil) or 
-     not log.BeginWrite(nfo) then
-    exit;
+  if not log.BeginWrite(nfo) then
+    exit; // on disk failure, the following code is pointless
   try
-    try
-      if not (logInitDone in log.fFlags) then
-        log.LogFileInitLocked(nfo);
-      log.FillInfo(nfo, nil);
-      if pendingRotate in log.fPendingFlags then
-        log.PerformRotation(nfo); // outer finally owns the writer unlock
-      SetThreadInfoAndThreadName(log, nfo);
-      LogHeaderNoRecursion(log.fWriter, Ctxt.ELevel, @nfo^.CurrentTimeAndThread);
-      if (Ctxt.ELevel = sllException) and
-         (Ctxt.EInstance <> nil) and
-         Ctxt.EInstance.InheritsFrom(ESynException) then
-      begin
-        ESynException(Ctxt.EInstance).RaisedAt := pointer(Ctxt.EAddr);
-        if ESynException(Ctxt.EInstance).CustomLog(log.fWriter, Ctxt) then
-          goto fin;
-        goto adr; // CustomLog() includes DefaultSynLogExceptionToStr()
-      end;
-      if DefaultSynLogExceptionToStr(log.fWriter, Ctxt, {addinfo=}true) then
+    if not (logInitDone in log.fFlags) then
+      log.LogFileInitLocked(nfo);
+    log.FillInfo(nfo, nil);
+    if pendingRotate in log.fPendingFlags then
+      log.PerformRotation(nfo); // outer finally owns the writer unlock
+    SetThreadInfoAndThreadName(log, nfo);
+    LogHeaderNoRecursion(log.fWriter, Ctxt.ELevel, @nfo^.CurrentTimeAndThread);
+    if (Ctxt.ELevel = sllException) and
+       (Ctxt.EInstance <> nil) and
+       Ctxt.EInstance.InheritsFrom(ESynException) then
+    begin
+      ESynException(Ctxt.EInstance).RaisedAt := pointer(Ctxt.EAddr);
+      if ESynException(Ctxt.EInstance).CustomLog(log.fWriter, Ctxt) then
         goto fin;
-adr:  // regular exception context log with its stack trace
-      log.fWriter.AddDirect(' ', '['); // [#1 Main]
-      n := nfo^.ThreadNumber;
-      if n <> 0 then
-      begin
-        log.fWriter.AddDirect('#');
-        log.fWriter.AddU(n);
-      end;
-      thrdnam := CurrentThreadNameShort;
-      if thrdnam^[0] <> #0 then
-      begin
-        log.fWriter.AddDirect(' ');
-        log.fWriter.AddShort(thrdnam^); // fThreadContext^.ThreadName may be ''
-      end;
-      log.fWriter.AddShorter('] at ');
-      try
-        log.fWriter.AddPointer(Ctxt.EAddr);
-        log.fWriter.AddDirect(' ');
-        TDebugFile.AddLog(log.fWriter, Ctxt.EAddr, {nohex=}true);
-        {$ifdef FPC}
-        prev := Ctxt.EAddr;
-        // we rely on the stack trace supplied by the FPC RTL
-        for i := 0 to Ctxt.EStackCount - 1 do
-        begin
-          curr := Ctxt.EStack[i];
-          if curr = prev then
-            continue; // don't log twice
-          TDebugFile.AddLog(log.fWriter, curr);
-          prev := curr;
-        end;
-        {$else}
-        {$ifdef CPUX86}
-        // stack frame OK only for RTLUnwindProc by now
-        log.AddStackTrace(pointer(Ctxt.EStack));
-        {$endif CPUX86}
-        {$endif FPC}
-      except // paranoid
-      end;
-fin:  if Ctxt.ELevel in log.fFamily.fLevelSysInfo then
-        log.AddSysInfo;
-      log.fWriterEcho.AddEndOfLine(Ctxt.ELevel);
-      log.fWriter.FlushToStream;
-    except
+      goto adr; // CustomLog() includes DefaultSynLogExceptionToStr()
     end;
+    if DefaultSynLogExceptionToStr(log.fWriter, Ctxt, {addinfo=}true) then
+      goto fin;
+adr:// regular exception context log with its stack trace
+    log.fWriter.AddDirect(' ', '['); // [#1 Main]
+    n := nfo^.ThreadNumber;
+    if n <> 0 then
+    begin
+      log.fWriter.AddDirect('#');
+      log.fWriter.AddU(n);
+    end;
+    if thrdnam^[0] <> #0 then
+    begin
+      log.fWriter.AddDirect(' ');
+      log.fWriter.AddShort(thrdnam^); // fThreadContext^.ThreadName may be ''
+    end;
+    log.fWriter.AddShorter('] at ');
+    log.fWriter.AddPointer(Ctxt.EAddr);
+    log.fWriter.AddDirect(' ');
+    try
+      DebugFileCurrent.AddLog(log.fWriter, Ctxt.EAddr, {nohex=}true);
+      for i := 0 to framescount - 1 do // append pre-computed stack trace
+        DebugFileCurrent.AddLog(log.fWriter, frames[i]);
+    except // paranoid
+    end;
+fin:if Ctxt.ELevel in log.fFamily.fLevelSysInfo then
+      log.AddSysInfo;
+    log.fWriterEcho.AddEndOfLine(Ctxt.ELevel);
+    log.fWriter.FlushToStream;
   finally
     log.EndWrite(nfo);
   end;
