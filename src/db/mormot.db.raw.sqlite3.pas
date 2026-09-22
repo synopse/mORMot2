@@ -5581,6 +5581,11 @@ var
 
 implementation
 
+{$ifdef ISDELPHI}
+{$ifdef ANDROID}
+uses AndroidAPI.IOUtils;
+{$endif ANDROID}
+{$endif ISDELPHI}
 
 { ************ Raw SQLite3 API Constants and Functions }
 
@@ -5893,7 +5898,7 @@ end;
 
 // under FPC, MemSize() returns the value expected by xSize()
 // under Delphi, of with a FPC MM which don't support MemSize(), we store the
-// size as 4 bytes header (a 32-bit header is enough for SQLite3)
+// size in a padded header, preserving the allocator alignment for SQLite3
 
 {$ifdef FPC}
 
@@ -5919,25 +5924,33 @@ end;
 
 {$endif FPC}
 
+const
+  // SQLite requires at least 8-byte alignment. A 4-byte prefix breaks it,
+  // notably for atomic accesses on Android ARM64. Preserve 16-byte alignment.
+  SQLITE_MEM_HEADER = 16;
+
 function xMalloc2(size: integer): pointer; cdecl;
 begin
-  GetMem(result, size + 4);
+  GetMem(result, PtrInt(size) + SQLITE_MEM_HEADER);
   PInteger(result)^ := size;
-  inc(PInteger(result));
+  inc(PByte(result), SQLITE_MEM_HEADER);
 end;
 
 procedure xFree2(ptr: pointer); cdecl;
 begin
-  dec(PInteger(ptr));
+  if ptr = nil then
+    exit;
+  dec(PByte(ptr), SQLITE_MEM_HEADER);
   FreeMem(ptr);
 end;
 
 function xRealloc2(ptr: pointer; size: integer): pointer; cdecl;
 begin
-  dec(PInteger(ptr));
-  ReallocMem(ptr, size + 4);
+  if ptr <> nil then
+    dec(PByte(ptr), SQLITE_MEM_HEADER);
+  ReallocMem(ptr, PtrInt(size) + SQLITE_MEM_HEADER);
   PInteger(ptr)^ := size;
-  inc(PInteger(ptr));
+  inc(PByte(ptr), SQLITE_MEM_HEADER);
   result := ptr;
 end;
 
@@ -5946,7 +5959,7 @@ begin
   if ptr = nil then
     result := 0
   else
-    result := PInteger(PAnsiChar(ptr) - 4)^;
+    result := PInteger(PAnsiChar(ptr) - SQLITE_MEM_HEADER)^;
 end;
 
 function xRoundup(size: integer): integer; cdecl;
@@ -6219,9 +6232,17 @@ var
   vers: PUtf8Char;
 begin
   fLoader := TSynLibrary.Create;
+  l1 := LibraryName;
   if LibraryName = SQLITE_LIBRARY_DEFAULT_NAME then
+  begin
+    {$if defined(ANDROID) and defined(ISDELPHI)}
+    // Android native libraries are not stored in the writable files folder.
+    l1 := IncludeTrailingPathDelimiter(GetLibraryPath) + LibraryName;
+    {$else}
     // first search for the standard library in the executable folder
     l1 := Executable.ProgramFilePath + LibraryName;
+    {$ifend}
+  end;
   try
     // try to load the SQLite3 library, raising ESqlite3Exception if missing
     fLoader.TryLoadLibrary([{%H-}l1, LibraryName], ESqlite3Exception);
@@ -6260,6 +6281,11 @@ begin
       '%.Create: TOO OLD % % - need 3.7 at least', [self, LibraryName, vers]);
   end;
   BeforeInitialization;
+  {$ifdef OSANDROID}
+  // Initialize the Android C runtime backend before any allocation or DB use.
+  if initialize() <> SQLITE_OK then
+    ESqlite3Exception.RaiseUtf8('%.Create: sqlite3_initialize failed', [self]);
+  {$endif OSANDROID}
   inherited Create; // set fVersionNumber/fVersionText
   SQLite3Log.Add.Log(sllInfo,
     'Loaded external % version %', [LibraryName, Version]);
