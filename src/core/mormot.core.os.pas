@@ -2193,8 +2193,7 @@ function GetModuleHandle(lpModuleName: PChar): HMODULE;
 // - redefined in mormot.core.os to avoid dependency to the Windows unit
 function PostMessage(hWnd: HWND; Msg: UINT; wParam: WPARAM; lParam: LPARAM): BOOL;
 
-/// retrieves the current stack trace
-// - only available since Windows XP
+/// retrieves the current stack trace, using Windows XP+ official API
 // - FramesToSkip + FramesToCapture should be <= 62
 function RtlCaptureStackBackTrace(FramesToSkip, FramesToCapture: cardinal;
   BackTrace, BackTraceHash: pointer): byte; stdcall;
@@ -3095,7 +3094,7 @@ type
     EStackCount: integer;
     /// the address where the exception occurred
     EAddr: PtrUInt;
-    /// the optional stack trace
+    /// the optional stack trace - only <> nil within the exception handler
     EStack: PPtrUIntArray;
     /// timestamp of this exception, as number of seconds since UNIX Epoch
     // - UnixTimeUtc is faster than NowUtc or GetSystemTime
@@ -8726,6 +8725,10 @@ end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 
+{$ifndef KEEP_STACKFRAMES}
+{$STACKFRAMES ON} // we need {$W+} stack frame for the backtrace API calls below
+{$endif KEEP_STACKFRAMES}
+
 {$ifdef WITH_RAISEPROC} // for FPC on Win32 + Linux (Win64=WITH_VECTOREXCEPT)
 var
   OldRaiseProc: TExceptProc;
@@ -8810,6 +8813,10 @@ begin
     GlobalUnLock;
   end;
 end;
+
+{$ifndef KEEP_STACKFRAMES}
+{$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
+{$endif KEEP_STACKFRAMES}
 
 {$endif NOEXCEPTIONINTERCEPT}
 

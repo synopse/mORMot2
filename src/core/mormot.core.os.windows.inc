@@ -1921,9 +1921,13 @@ var
   {$ifdef CPU64}
     {$define WITH_VECTOREXCEPT}
   {$else}
-    {$define WITH_RTLUNWINDPROC} //  use x86_64 asm -> Win32 only
+    {$define WITH_RTLUNWINDPROC} //  use x86_64 asm on Delphi Win32
   {$endif CPU64}
 {$endif FPC}
+
+{$ifndef KEEP_STACKFRAMES}
+{$STACKFRAMES ON} // we need {$W+} stack frame for the backtrace API calls below
+{$endif KEEP_STACKFRAMES}
 
 {$ifndef WITH_RAISEPROC}
 
@@ -1937,7 +1941,7 @@ type
     NumberParameters: integer;
     case {IsOsException:} boolean of
       true:
-        (ExceptionInformation: array[0..14] of PtrUInt);
+        (ExceptionInformation: array[0 .. 14] of PtrUInt);
       false: // ExceptionCode = cRtlException
         (ExceptAddr: PtrUInt;
          ExceptObject: Exception);
@@ -2026,6 +2030,10 @@ end;
 
 {$endif WITH_VECTOREXCEPT}
 
+{$ifndef KEEP_STACKFRAMES}
+{$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
+{$endif KEEP_STACKFRAMES}
+
 {$ifdef WITH_RTLUNWINDPROC}
 
 var
@@ -2050,6 +2058,7 @@ end;
 {$endif WITH_RAISEPROC}
 
 {$endif NOEXCEPTIONINTERCEPT}
+
 
 { TMemoryMap }
 

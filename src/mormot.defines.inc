@@ -51,6 +51,12 @@
 {.$define NOEXCEPTIONINTERCEPT}
 // if defined, exceptions shall not be intercepted nor logged
 
+{.$define KEEP_STACKFRAMES}
+// if defined, {$W-} won't be forced and stack frames will follow project options
+// - useful mostly with FPC POSIX targets where unwinding info is not available
+// - should NOT be defined for Delphi Win32 which has its own x86 asm
+// - not set by default since has a measurable performance cost
+
 {.$define NOCOMPRESSEDTABLE}
 // disable compressed tables e.g. UU_COMPRESSED or BIGINT_PRIMES[] which may
 // trigger some weak anti-virus heuristic
@@ -147,7 +153,7 @@
     HAS_UI HAS_UI_VCL_LCL HAS_UI_PDF
     CPU32 CPU64
     CPUINTEL CPUX86 CPUX64 CPUARM3264 CPUARM CPUAARCH64 CPUX86NOTPIC
-    NOASMBLOCK
+    NOASMBLOCK KEEP_STACKFRAMES
     ASMINTEL ASMINTELNOTPIC ASMSSE2 ASMAESNI
     ASMX86 ASMX86NOTPIC ASMX64 ASMX64NOTPIC ASMX64AVX0 ASMX64AVX1
     ABIX86 ABIX64 ABIWINX64 ABISYSVX64 ABIA32 ABIA64 ABIWINA64 ABISYSVA64
@@ -875,13 +881,15 @@
   {$R-} // disable Range checking in our code
   {$S-} // disable Stack checking in our code
   {$X+} // expect extended syntax
-  {$W-} // disable stack frame generation
   {$Q-} // disable overflow checking in our code
   {$B-} // expect short circuit boolean
   {$V-} // disable Var-String Checking
   {$T-} // Typed @ operator
   {$Z1} // enumerators stored as byte by default
   {$P+} // Open string params
+  {$ifndef KEEP_STACKFRAMES}
+  {$W-} // disable stack frame generation
+  {$endif KEEP_STACKFRAMES}
 
   {$ifdef DEBUG}
     {$assertions on}   // assert() may be disabled, e.g. on FPC

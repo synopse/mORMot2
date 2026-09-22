@@ -2295,7 +2295,9 @@ type
   // on Win64, RtlCaptureStackBackTrace() API is limited to < 62 frames
   TRawStackFrames = array[0..61] of PtrUInt;
 
-{$STACKFRAMES ON} // we need a stack frame for the backtrace API calls below
+{$ifndef KEEP_STACKFRAMES}
+{$STACKFRAMES ON} // we need {$W+} stack frame for the backtrace API calls below
+{$endif KEEP_STACKFRAMES}
 
 {$ifndef FPC}
 {$ifdef OSWINDOWS}
@@ -2415,7 +2417,9 @@ begin
   {$endif NOEXCEPTIONINTERCEPT}
 end;
 
+{$ifndef KEEP_STACKFRAMES}
 {$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
+{$endif KEEP_STACKFRAMES}
 
 
 { ************** Debug Symbols Processing from Delphi .map or FPC/GDB DWARF }
@@ -4766,7 +4770,9 @@ begin
   TSynLog.NotifyThreadEnded; // as in mormot.core.thread TThreadAbstract
 end;
 
-{$STACKFRAMES ON} // we need a stack frame for the backtrace API calls below
+{$ifndef KEEP_STACKFRAMES}
+{$STACKFRAMES ON} // we need {$W+} stack frame for the backtrace API calls below
+{$endif KEEP_STACKFRAMES}
 
 class procedure TDebugFile.StackTrace(W: TTextWriter; skip, depth: integer;
   use: TSynLogStackTraceUse);
@@ -4809,7 +4815,9 @@ begin
   end;
 end;
 
+{$ifndef KEEP_STACKFRAMES}
 {$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
+{$endif KEEP_STACKFRAMES}
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 // this is the main entry point for all intercepted exceptions
@@ -6084,7 +6092,9 @@ begin
   EndWrite(nfo);
 end;
 
-{$STACKFRAMES ON} // we need a stack frame for the backtrace API call below
+{$ifndef KEEP_STACKFRAMES}
+{$STACKFRAMES ON} // we need {$W+} stack frame for the backtrace API calls below
+{$endif KEEP_STACKFRAMES}
 
 procedure TSynLog.Log(Level: TSynLogLevel);
 var
@@ -6132,7 +6142,9 @@ begin
     pointer(result) := PAnsiChar(log) + log.fISynLogOffset; // result := self
 end;
 
+{$ifndef KEEP_STACKFRAMES}
 {$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
+{$endif KEEP_STACKFRAMES}
 
 class function TSynLog.Enter(const TextFmt: RawUtf8;
   const TextArgs: array of const; aInstance: TObject): ISynLog;
