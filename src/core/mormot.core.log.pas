@@ -279,8 +279,7 @@ type
     // - skip does not apply to the heuristic manual stack walk
     // - a trailing space is left after each located frame, as TDebugFile.AddLog
     class procedure StackTrace(W: TTextWriter; skip: integer = 0;
-      depth: integer = 0;
-      use: TSynLogStackTraceUse = stManualAndAPI); overload;
+      depth: integer = 0; use: TSynLogStackTraceUse = stManualAndAPI); overload;
       {$ifdef HASINLINE} static; {$endif}
     /// low-level resolution of a TDebugFile instance from a code address
     // - this is the main internal thread-safe factory method for this process

@@ -9485,9 +9485,10 @@ end;
 var
   _Shell: RawUtf8;
   _SystemInfoText: TCachedValue;
+  _SysInfoSafe: TLightLock;
   _SysInfoTix: cardinal;
   _SysInfoCache: TSysInfo;
-  _SysInfoText: TShort95;
+  _SysInfoText: TShort95;  // e.g. '20 0.45 1.02 1.31 5 17.5GB/62.4GB 060c6b08'
 
 function GetSystemInfoText: RawUtf8;
 begin
@@ -9508,7 +9509,7 @@ var
   p: PShortString;
 begin
   tix := GetTickSec; // cached for 1 second
-  OSSafe.Lock;
+  _SysInfoSafe.Lock;
   if _SysInfoTix <> tix then
   begin
     _SysInfoTix := tix;
@@ -9552,7 +9553,7 @@ begin
     end;
     AppendShortBuffer(@p^[1], ord(p^[0]), max, txt);
   end;
-  OSSafe.UnLock;
+  _SysInfoSafe.UnLock;
 end;
 
 procedure RetrieveSysInfoText(var text: ShortString);

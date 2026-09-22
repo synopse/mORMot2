@@ -4073,6 +4073,7 @@ begin // single syscall gives enough information on Linux
   result := SysInfo(@si) = 0;
 end;
 
+// 1 sec cache or single syscall (faster than /proc/loadavg)
 function RetrieveSysInfo(si: PSysInfo; txt: PAnsiChar; max: PtrInt): boolean; forward;
 
 function RetrieveLoadAvg: TShort23;
@@ -4080,7 +4081,7 @@ var
   si: TSysInfo;  // Linuxism
 begin
   result[0] := #0;
-  if not RetrieveSysInfo(@si, nil, 0) then // cache or fast syscall
+  if not RetrieveSysInfo(@si, nil, 0) then
     exit;
   AppendShort(TwoDigits(si.loads[0] / double(65536.0)), result);
   AppendShortChar(' ', @result);
