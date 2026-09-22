@@ -5127,9 +5127,9 @@ var
   procedure BenchmarkNumbers;
   var
     i, l: PtrUInt;
-    c: cardinal;
+    c, hash: cardinal;
     err: integer;
-    p: PUtf8Char;
+    p, max: PUtf8Char;
     lens: TBytes;
     ref: TInt64DynArray;
     gen: TLecuyer;
@@ -5200,6 +5200,7 @@ var
     gen.SeedGenerator(200000); // up to 16GB of deterministic distribution
     SetLength(data, 1758350);  // generate 1.7MB of contiguous numbers
     p := pointer(data);
+    max := p + length(data);
     for i := 0 to high(lens) do
     begin
       c := gen.Next;
@@ -5227,13 +5228,16 @@ var
           AppendShortVar(tmp, ['0.000000000000000',c shr 28 + 1]);
       end;
       //ConsoleWrite(tmp);
-      MoveFast(tmp[1], p^, ord(tmp[0]));
       l := ord(tmp[0]);
+      if not Check(p + l < max, 'gen.Next overflow') then
+        exit;
+      MoveFast(tmp[1], p^, l);
       lens[i] := l;
       p[l] := #0; // all with a trailing #0
       inc(p, l + 1);
     end;
     CheckEqual(p - pointer(data), length(data));
+    hash := Hash32(data);
     CheckHash(data, $D2D00549);
     // 'x.y' and 'x.y0' are the same number, so should return the same double
     p := pointer(data);
@@ -5272,7 +5276,8 @@ var
       {$endif WIN32DELPHI}
       {$endif ASMX64NOTPIC}
     end;
-    CheckHash(data, $D2D00549, 'untouched');
+    CheckEqual(Hash32(data), hash, 'untouched 1');
+    CheckHash(data, $D2D00549, 'untouched 2');
   end;
 
   procedure CheckInvalidNumber(const text: RawUtf8; extendedToo: boolean = true);
