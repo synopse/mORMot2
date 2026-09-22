@@ -1668,7 +1668,14 @@ procedure CleanThreadName(var name: RawUtf8);
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 
+const
+  /// same limit as FPC RTL objpash.inc RaiseMaxFrameCount
+  MAX_STACK_TRACE = 16;
+
 type
+  /// store some raw pointers of the stack trace, filtered in CurrentDebugFile
+  TSynLogStackTrace = array[0 .. MAX_STACK_TRACE - 1] of PtrUInt;
+
   /// storage of the information associated with an intercepted exception
   // - as returned by GetLastException() function
   TSynLogExceptionInfo = record
@@ -1677,7 +1684,12 @@ type
     Context: TSynLogExceptionContext;
     /// associated Exception.Message content (if any)
     Message: string;
+    /// associated storage for filtered Context.EStackCount values
+    StackTrace: TSynLogStackTrace;
   end;
+
+  /// pointer reference to one intercept exception informaiton
+  PSynLogExceptionInfo = ^TSynLogExceptionInfo;
 
   /// storage of information associated with one or several exceptions
   // - as returned by GetLastExceptions() function
@@ -4423,7 +4435,7 @@ begin
     name := Executable.ProgramName
   else
     name := unitname;
-  l := TDebugFile.CurrentDebugFile.FindBlockByName(name);
+  l := CurrentDebugFile.FindBlockByName(name);
   if l <> nil then
     Utf8ToFileName(l^.FileName, result);
 end;
@@ -7403,22 +7415,48 @@ begin
   end;
 end;
 
-const
-  MAX_EXCEPTHISTORY = 15;
+function DebugCurrentCleanup(src, dst: PPtrUIntArray; n: PtrInt; main: PtrUInt): PtrInt;
+var
+  i: PtrInt;
+  prev, curr: PtrUInt;
+  deb: TDebugFile;
+begin
+  deb := TDebugFile.CurrentDebugFile; // is likely to have been pre-loaded
+  prev := 0;
+  result := 0;
+  for i := 0 to n - 1 do
+  begin
+    curr := src[i];
+    if (curr = 0) or
+       (curr = prev) or
+       (curr = main) then
+      continue;
+    if deb = nil then
+    begin
+      if not IsCurrentExecutable(pointer(curr)) then
+        continue;
+    end
+    else if not deb.IsCode(curr) then
+      continue;
+    prev := curr;
+    dst[result] := curr;
+    inc(result);
+    if result = MAX_STACK_TRACE then
+      exit;
+  end;
+end;
 
 type
-  TSynLogExceptionInfos = array[0 .. MAX_EXCEPTHISTORY] of TSynLogExceptionInfo;
+  TSynLogExceptionInfos = array[0 .. 15] of TSynLogExceptionInfo; // power of 2
   TLastException = record
-    Index: integer;
-    StackCount: integer;
+    Safe: TLightLock;
+    Next: integer;
     Infos: TSynLogExceptionInfos;
-    Stack: array[0 .. MAX_EXCEPTHISTORY - 1] of PtrUInt;
   end;
 
 var
   // some static information about the latest exceptions raised
-  GlobalLastException: TLastException = (
-    Index: -1{%H-});
+  GlobalLastException: TLastException;
 
 // this is the main entry point for all intercepted exceptions
 procedure SynLogException(const Ctxt: TSynLogExceptionContext);
@@ -7427,14 +7465,11 @@ var
   families: TSynLogFamilyDynArray;
   log: TSynLog;
   nfo: PSynLogThreadInfo;
-  info: ^TSynLogExceptionInfo;
+  info: PSynLogExceptionInfo;
   thrdnam: PShortString;
   last: ^TLastException;
-  ignored: boolean;
-  i, n: PtrInt;
-  {$ifdef FPC}
-  curr, prev: PtrUInt;
-  {$endif FPC}
+  i, n, framescount: PtrInt;
+  frames: TRawStackFrames; // filtered and reduced to TSynLogStackTrace size
 label
   adr, fin;
 begin
@@ -7452,63 +7487,63 @@ begin
     exit;
   {$endif ISDELPHIXE6}
   {$endif WIN64DELPHI}
+  thrdnam := CurrentThreadNameShort;
   if nfo^.ThreadBitLo = 0 then
     InitThreadNumber(nfo);
-  include(nfo^.Flags, tiWriting);
-  mainfam := nil;
-  ignored := false;
+  include(nfo^.Flags, tiWriting); // avoid any nested exception/logging
   try
+    // handle TSynLogFamily settings
+    SynLogExceptions.Lock;
     try
-      SynLogExceptions.Lock;
-      try
-        mainfam := HandleExceptionFamily;
-      finally
-        SynLogExceptions.UnLock;
-      end;
+      mainfam := HandleExceptionFamily;
       if (mainfam = nil) or
          mainfam.ExceptionIgnore.Exists(Ctxt.EClass) then
         exit;
-      log := mainfam.Add;
-      if log = nil then
-        exit;
-      if log.fFamily.ExceptionIgnoreExternal and
+      if mainfam.ExceptionIgnoreExternal and
          (Ctxt.EAddr <> 0) and
          not IsCurrentExecutable(pointer(Ctxt.EAddr)) then // fast guess
         exit;
-      thrdnam := CurrentThreadNameShort;
-      SynLogExceptions.Lock;
-      try
-        if Assigned(log.fFamily.OnBeforeException) and
-           log.fFamily.OnBeforeException(Ctxt, thrdnam^) then
-          ignored := true // intercepted by custom callback
-        else
-        begin
-          // memorize last exceptions into an internal round-robin static list
-          last := @GlobalLastException;
-          if last^.Index = high(last^.Infos) then
-            last^.Index := 0
-          else
-            inc(last^.Index);
-          info := @last^.Infos[last^.Index];
-          info^.Context := Ctxt;
-          info^.Message := '';
-          if (Ctxt.ELevel = sllException) and
-             (Ctxt.EInstance <> nil) then
-            info^.Message := Ctxt.EInstance.Message;
-          if Ctxt.EStack = nil then
-            last^.StackCount := 0
-          else
-          begin
-            n := MinPtrInt(high(last^.Stack) + 1, Ctxt.EStackCount);
-            last^.StackCount := n;
-            MoveFast(Ctxt.EStack[0], last^.Stack[0], n * SizeOf(PtrUInt));
-          end;
+      if Assigned(mainfam.OnBeforeException) then
+        try
+          if mainfam.OnBeforeException(Ctxt, thrdnam^) then
+            exit; // intercepted by the custom callback
+        except
+          // continue even if custom callback did fail
         end;
-      finally
-        SynLogExceptions.UnLock;
-      end;
-    except
-      log := nil; // exception interception must never raise another exception
+    finally
+      SynLogExceptions.UnLock;
+    end;
+    log := mainfam.Add;
+    if log = nil then
+      exit;
+    // cleanup the stack trace to include only current process code
+    n := Ctxt.EStackCount;
+    if n = 0 then
+    begin
+      // manual retrieval of the current stack trace
+      n := RawStackTrace({skip=}3, mainfam.StackTraceUse, frames);
+      framescount := DebugCurrentCleanup(@frames, @frames, n, Ctxt.EAddr);
+    end
+    else
+      // rely on the stack trace supplied by the RTL caller function
+      framescount := DebugCurrentCleanup(Ctxt.EStack, @frames, n, Ctxt.EAddr);
+    // memorize last exceptions into an internal round-robin static list
+    last := @GlobalLastException;
+    last^.Safe.Lock;
+    try
+      info := @last^.Infos[last^.Next];
+      info^.Context := Ctxt;
+      info^.Context.EInstance := nil; // avoid GPF
+      info^.Context.EStack := nil;    // stored in info^.StackTrace[]
+      info^.Context.EStackCount := framescount;
+      info^.Message := '';
+      if (Ctxt.ELevel = sllException) and
+         (Ctxt.EInstance <> nil) then
+        info^.Message := Ctxt.EInstance.Message; // by refcnt assign
+      MoveFast(frames, info^.StackTrace, framescount * SizeOf(PtrUInt));
+      last^.Next := (last^.Next + 1) and high(last^.Infos);
+    finally
+      last^.Safe.UnLock;
     end;
   finally
     exclude(nfo^.Flags, tiWriting);
@@ -7606,97 +7641,81 @@ fin:  if Ctxt.ELevel in log.fFamily.fLevelSysInfo then
 end;
 
 function GetLastException(out info: TSynLogExceptionInfo): boolean;
+var
+  last: ^TLastException;
+  n: PtrInt;
 begin
   result := false;
   if SynLogFileFreeing then
     exit;
-  SynLogExceptions.Lock;
+  last := @GlobalLastException;
+  last^.Safe.Lock;
   try
-    if GlobalLastException.Index < 0 then
-      exit; // no exception intercepted yet (or any more)
-    info := GlobalLastException.Infos[GlobalLastException.Index];
-    info.Context.EStack := @GlobalLastException.Stack;
-    info.Context.EStackCount := GlobalLastException.StackCount;
+    n := last^.Next;
+    if n = 0 then
+      n := high(last^.Infos);
+    info := last^.Infos[n];
   finally
-    SynLogExceptions.UnLock;
+    last^.Safe.UnLock;
   end;
-  info.Context.EInstance := nil; // avoid any GPF
   result := info.Context.ELevel <> sllNone;
 end;
 
 procedure GetLastExceptions(out result: TSynLogExceptionInfoDynArray;
   Depth: integer);
 var
-  infos: TSynLogExceptionInfos; // use thread-safe local copy of static array
-  index, last, n, i, stackcount: PtrInt;
+  last: ^TLastException;
+  n: PtrInt;
+
+  procedure Add(p: PSynLogExceptionInfo; b, e: PtrInt);
+  begin
+    while b <= e do
+    begin
+      if p^.Context.ELevel <> sllNone then
+      begin
+        result[n] := p^;
+        inc(n);
+        if n = length(last^.Infos) then
+          break;
+      end;
+      inc(b);
+      inc(p);
+    end;
+  end;
+
 begin
   // thread-safe retrieve last exceptions
   if SynLogFileFreeing then
     exit;
-  SynLogExceptions.Lock;
+  last := @GlobalLastException;
+  SetLength(result, length(last^.Infos)); // pre-allocate
+  n := 0;
+  last^.Safe.Lock;
   try
-    index := GlobalLastException.Index;
-    if index < 0 then
-      exit;
-    infos := GlobalLastException.Infos;
-    stackcount := GlobalLastException.StackCount;
+    Add(@last^.Infos[last^.Next], last^.Next, high(last^.Infos));
+    if n <= length(last^.Infos) then
+      Add(@last^.Infos[0], 0, last^.Next - 1);
   finally
-    SynLogExceptions.UnLock;
+    last^.Safe.UnLock;
   end;
-  // generate an ordered array of exception infos
-  n := MAX_EXCEPTHISTORY + 1;
-  if (Depth > 0) and
-     (n > Depth) then
-    n := Depth;
   SetLength(result, n);
-  last := MAX_EXCEPTHISTORY;
-  for i := 0 to n - 1 do
-  begin
-    if i <= index then
-      result[i] := infos[index - i]
-    else
-    begin
-      result[i] := infos[last];
-      dec(last);
-    end;
-    with result[i].Context do
-      if ELevel = sllNone then
-      begin
-        SetLength(result, i); // truncate to latest available exception
-        break;
-      end
-      else
-      begin
-        EInstance := nil; // avoid any GPF
-        if i = 0 then
-        begin
-          EStack := @GlobalLastException.Stack; // static copy of last exception
-          EStackCount := stackcount;
-        end
-        else
-          EStack := nil; // avoid any GPF
-      end;
-  end;
 end;
 
 function ToText(var info: TSynLogExceptionInfo): RawUtf8;
 var
-  i: PtrInt;
   tmp: ShortString;
 begin
   with info.Context do
     if ELevel <> sllNone then
     begin
       TDebugFile.FindLocationShort(pointer(EAddr), tmp);
-      FormatUtf8('% % at %: % [%]', [_LogInfoText[ELevel], EClass, tmp,
-        UnixTimeToString(ETimestamp, {expanded=}true, ' '),
-        StringToUtf8(info.Message)], result);
-      if EStack <> nil then
-        for i := 0 to EStackCount - 1 do
-        begin
-          TDebugFile.FindLocationShort(pointer(EStack[i]), tmp);
-          Append(result, [', ', tmp]);
-        end;
+      FormatUtf8('% % at % % [%]', [_LogInfoText[ELevel], EClass, tmp,
+        UnixTimeToShort(ETimestamp), StringToUtf8(info.Message)], result);
+      if EStackCount = 0 then
+        exit; // no stack frame available
+      tmp[0] := #0;
+      TDebugFile.AppendLocationsShort(tmp, @info.StackTrace, EStackCount, 16);
+      AppendShortToUtf8(tmp, result);
     end
     else
       FastAssignNew(result);
@@ -9397,7 +9416,7 @@ procedure InitializeUnit;
 //var start: Int64;
 begin
   SynLogExceptions.Init;
-  if (PtrUInt(@SynLogThreads) and POINTERAND) <> 0 then
+  if (PtrUInt(@SynLogThreads.Safe) and POINTERAND) <> 0 then
     ESynLogException.RaiseU('SynLogThreads alignment issue');
   GetEnumTrimmedNames(TypeInfo(TSynLogLevel), @_LogInfoText);
   GetEnumTrimmedNames(TypeInfo(TAppLogLevel), @_LogAppText);
