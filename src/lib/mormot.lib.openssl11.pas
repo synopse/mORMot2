@@ -12114,7 +12114,6 @@ begin
     result := nil;
 end;
 
-
 function GetPeerCertFromUrl(const url: RawUtf8): PX509DynArray;
 var
   u: TUri;
@@ -12135,7 +12134,9 @@ begin
       s := SSL_new(c);
       if s <> nil then
       try
-        SSL_set_tlsext_host_name(s, u.Server);
+        if IsDnsHostName(pointer(u.Server)) and
+           (SSL_set_tlsext_host_name(s, u.Server) <> OPENSSLSUCCESS) then
+          exit;
         if (SSLSetFdNoSigPipe(s, ns.Socket) = OPENSSLSUCCESS) and
            (SSL_connect(s) = OPENSSLSUCCESS) then
           result := s.PeerCertificates({acquire=}true);
