@@ -11513,6 +11513,7 @@ procedure TOpenSslNetTls.AfterConnection(Socket: TNetSocket;
 var
   P: PUtf8Char;
   h: RawUtf8;
+  l: PtrInt;
   peer: ^TOpenSslNetTls;
   prev: TOpenSslNetTls;
   //x: PX509DynArray;
@@ -11546,7 +11547,14 @@ begin
     begin
       P := pointer(Context.HostNamesCsv);
       if not GetNextHost(P, h) then // default expected peer identity
+      begin
         h := ServerAddress; // plain IP here may fail before OpenSSL 3.4
+        l := length(h);
+        if (l <> 0) and
+           (h[1] = '[') and
+           (h[l] = ']') then
+          h := copy(h, 2, l - 2); // '[ip:6]' -> 'ip:6' for OpenSSL
+      end;
       SSL_set_hostflags(fSsl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
       CheckRes('AfterConnection set1_host', SSL_set1_host(fSsl, pointer(h)));
       while GetNextHost(P, h) do
