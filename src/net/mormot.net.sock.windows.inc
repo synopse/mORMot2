@@ -2115,6 +2115,8 @@ type
     function RecvRaw(const ctx: ShortString; buf: PByte; len: integer): integer;
     function HandshakeStep(buf: PByteArray; var len: integer): cardinal;
     procedure HandshakeLoop(StepFirst: boolean = false);
+    function CompleteHandshakeToken(const ctx: ShortString;
+      res: cardinal; output: PSecBufferDesc): cardinal;
     procedure FinalizeCredCtxt;
     procedure CleanShutdown;
   public
@@ -2361,6 +2363,8 @@ begin
         res := InitializeSecurityContextW(
           @fCred, nil, pointer(fServerAddressW), fFlags, 0, 0,
           nil, 0, @fCtxt, @buf.output, f, nil);
+        res := CompleteHandshakeToken(
+          'AfterConnection CompleteAuthToken', res, @buf.output);
         if res <> SEC_I_CONTINUE_NEEDED then
           ESChannelRaiseLastError('InitializeSecurityContextW', res);
         if (buf.buf[2].cbBuffer = 0) or // SECBUFFER_TOKEN
@@ -2535,24 +2539,12 @@ begin
         @fCred, @fCtxt, pointer(fServerAddressW), fFlags, 0, 0,
         @b.input, 0, @fCtxt, @b.output, f, nil);
     // SSPI may ask the caller to finalize the generated token
-    case result of
-      SEC_I_COMPLETE_NEEDED:
-        begin
-          CheckSEC_E_OK('CompleteAuthToken313',
-            CompleteAuthToken(@fCtxt, @b.output));
-          result := SEC_E_OK;
-        end;
-      SEC_I_COMPLETE_AND_CONTINUE:
-        begin
-          CheckSEC_E_OK('CompleteAuthToken314',
-            CompleteAuthToken(@fCtxt, @b.output));
-          result := SEC_I_CONTINUE_NEEDED;
-        end;
-    end;
+    result := CompleteHandshakeToken(
+      'HandshakeStep CompleteAuthToken', result, @b.output);
     // An output token may be generated even together with SEC_E_OK
     if (b.buf[2].pvBuffer <> nil) and
        (b.buf[2].cbBuffer <> 0) then
-      SendRawAll('send', b.buf[2].pvBuffer, b.buf[2].cbBuffer, 5000);
+      SendRawAll('HandshakeStep send', b.buf[2].pvBuffer, b.buf[2].cbBuffer, 5000);
   finally
     HandshakeBufFree(b);
   end;
@@ -2623,6 +2615,24 @@ begin
      (inputneeded > fInputSize) then
     raise ESChannel.CreateFmt(
       'InputSize=%d>%d', [inputneeded, fInputSize]);
+end;
+
+function TSChannelNetTls.CompleteHandshakeToken(const ctx: ShortString;
+  res: cardinal; output: PSecBufferDesc): cardinal;
+begin
+  result := res;
+  case res of
+    SEC_I_COMPLETE_NEEDED:
+      begin
+        CheckSEC_E_OK(ctx, CompleteAuthToken(@fCtxt, output));
+        result := SEC_E_OK;
+      end;
+    SEC_I_COMPLETE_AND_CONTINUE:
+      begin
+        CheckSEC_E_OK(ctx, CompleteAuthToken(@fCtxt, output));
+        result := SEC_I_CONTINUE_NEEDED;
+      end;
+  end;
 end;
 
 procedure TSChannelNetTls.CleanShutdown;
