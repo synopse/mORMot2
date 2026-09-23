@@ -11344,6 +11344,8 @@ end;
 type
   // SSL_connect() and SSL_accept() functions prototype
   TOpenSSLProc = function(ssl: PSSL): integer; cdecl;
+  // SSL_read() and SSL_write() functions prototype
+  TOpenSSLIO = function(ssl: PSSL; buf: pointer; num: integer): integer; cdecl;
 
   /// OpenSSL TLS layer communication
   TOpenSslNetTls = class(TInterfacedObject, INetTls)
@@ -11361,6 +11363,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function CheckSsl(res: integer; error: PInteger = nil): TNetResult;
     procedure CheckProc(proc: TOpenSSLProc; const ctx: ShortString);
+    function CheckIO(IO: TOpenSSLIO; Buffer: pointer; var Length: integer;
+      WaitRes: integer): TNetResult;
     procedure WaitRetry(res, err: integer; var endtix: Int64; const ctx: ShortString);
     procedure SetupCtx;
   public
@@ -12072,37 +12076,54 @@ procedure TOpenSslNetTls.CheckProc(proc: TOpenSSLProc; const ctx: ShortString);
 var
   res: integer;
   endtix: Int64;
+  peer: ^TOpenSslNetTls;
+  prev: TOpenSslNetTls;
 begin
+  peer := @_PeerVerify; // resolve threadvar once
   endtix := 0;
   repeat
     ERR_clear_error;   // needed on 1.x/3.x - but harmless for OpenSSL 4+
+    prev := peer^;
+    peer^ := self;     // TLS callbacks may be called again
     res := proc(fSsl); // SSL_connect() or SSL_accept()
+    peer^ := prev;
     if res = OPENSSLSUCCESS then
       exit;
     WaitRetry(res, SSL_get_error(fSsl, res), endtix, ctx);
   until false;
 end;
 
-function TOpenSslNetTls.Receive(Buffer: pointer; var Length: integer): TNetResult;
+function TOpenSslNetTls.CheckIO(IO: TOpenSSLIO; Buffer: pointer; var Length: integer;
+  WaitRes: integer): TNetResult;
 var
   len, err: integer;
   endtix: Int64;
+  peer: ^TOpenSslNetTls;
+  prev: TOpenSslNetTls;
 begin
-  len := Length; // preserve original SSL_read() arguments
+  peer := @_PeerVerify; // resolve threadvar once
+  len := Length;        // preserve original SSL_read() arguments
   endtix := 0;
   repeat
     result := nrOK;
-    ERR_clear_error; // needed on 1.x/3.x - but harmless for OpenSSL 4+
-    Length := SSL_read(fSsl, Buffer, len);
-    if Length > 0 then
-      // return value was number of bytes actually read from the TLS connection
+    ERR_clear_error;    // needed on 1.x/3.x - but harmless for OpenSSL 4+
+    prev := peer^;
+    peer^ := self;      // TLS callbacks may be called again
+    Length := IO(fSsl, Buffer, len);
+    peer^ := prev;
+    if Length > 0 then  // number of bytes actually processed on TLS connection
       exit;
     // TLS read operation was not successful
     result := CheckSsl(Length, @err);
-    if err <> SSL_ERROR_WANT_WRITE then
-      exit; // SSL_ERROR_WANT_READ is handled (asynchronously) by the caller
+    if err <> WaitRes then
+      exit; // SSL_ERROR_WANT_* handled (asynchronously) by the caller
     WaitRetry(Length, err, endtix, 'Receive');
   until false;
+end;
+
+function TOpenSslNetTls.Receive(Buffer: pointer; var Length: integer): TNetResult;
+begin
+  result := CheckIO(@SSL_read, Buffer, Length, SSL_ERROR_WANT_WRITE);
 end;
 
 function TOpenSslNetTls.ReceivePending: integer;
@@ -12111,25 +12132,8 @@ begin
 end;
 
 function TOpenSslNetTls.Send(Buffer: pointer; var Length: integer): TNetResult;
-var
-  len, err: integer;
-  endtix: Int64;
 begin
-  len := Length; // preserve original SSL_write() arguments
-  endtix := 0;
-  repeat
-    result := nrOK;
-    ERR_clear_error; // needed on 1.x/3.x - but harmless for OpenSSL 4+
-    Length := SSL_write(fSsl, Buffer, len);
-    if Length > 0 then
-      // return value was number of bytes actually sent to the TLS connection
-      exit;
-    // TLS write operation was not successful
-    result := CheckSsl(Length, @err);
-    if err <> SSL_ERROR_WANT_READ then
-      exit; // SSL_ERROR_WANT_WRITE is handled (asynchronously) by the caller
-    WaitRetry(Length, err, endtix, 'Send');
-  until false;
+  result := CheckIO(@SSL_write, Buffer, Length, SSL_ERROR_WANT_READ);
 end;
 
 function NewOpenSslNetTls: INetTls;
