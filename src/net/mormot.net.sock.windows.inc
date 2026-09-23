@@ -2334,9 +2334,7 @@ begin
       fFlags := ISC_REQ_FLAGS;
       if Context.IgnoreCertificateErrors then
         // prevent SEC_E_UNTRUSTED_ROOT result in HandshakeLoop
-        fFlags := fFlags or
-          ISC_REQ_MANUAL_CRED_VALIDATION or // no WinVerifyTrust() call
-          ISC_REQ_USE_SUPPLIED_CREDS; // send no client certificate to the server
+        fFlags := fFlags or ISC_REQ_MANUAL_CRED_VALIDATION;
       // initiate a ClientHello TLS message and a new fCtxt
       HandshakeBufInit(buf);
       res := InitializeSecurityContextW(
@@ -2579,10 +2577,13 @@ begin
                                fInputSize - fInputCount));
     end;
     res := HandshakeStep(pointer(fInput), fInputCount);
-    if res = SEC_I_INCOMPLETE_CREDENTIALS then
+    if (res = SEC_I_INCOMPLETE_CREDENTIALS) and
+       (not fAccept) and
+       ((fFlags and ISC_REQ_USE_SUPPLIED_CREDS) = 0) then
     begin
-      // TODO: deserves a separate cleanup because the documented meaning
-      // is "client credentials are required", not "retry unchanged"
+      // Server requested a client certificate: since we don't support client
+      // TLS certificates here, just continue with existing credentials
+      fFlags := fFlags or ISC_REQ_USE_SUPPLIED_CREDS;
       res := HandshakeStep(pointer(fInput), fInputCount);
     end;
     case res of
