@@ -1490,7 +1490,7 @@ begin
   Check(not IsDnsName('1..2.3.4'));
   Check(IsDnsName('.'));
   Check(not IsDnsName('..'));
-  Check(not IsDnsName('..'));
+  Check(not IsDnsName('...'));
   // RFC 6066 DNS host name validation
   Check(not IsDnsHostName(nil));
   Check(not IsDnsHostName(''));
@@ -1517,6 +1517,7 @@ begin
   Check(not IsDnsHostName('.example.com'));
   Check(not IsDnsHostName('example.com.'));
   Check(not IsDnsHostName('example..com'));
+  Check(not IsDnsHostName('..'));
   Check(not IsDnsHostName('a..b'));
   // '-' is allowed only inside a label
   Check(not IsDnsHostName('-example.com'));

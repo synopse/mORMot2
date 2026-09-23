@@ -1594,6 +1594,7 @@ type
   PPX509_REQ_INFO = ^PX509_REQ_INFO;
 
   PX509_NAME = ^X509_NAME;
+  Pstack_st_X509_NAME = POPENSSL_STACK;
   PX509_EXTENSION = ^X509_EXTENSION;
 
   /// convenient wrapper to a PX509_REQ instance
@@ -2197,8 +2198,12 @@ function SSL_CIPHER_description(p1: PSSL_CIPHER;
 function SSL_get_verify_result(ssl: PSSL): integer;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 procedure SSL_set_hostflags(s: PSSL; flags: cardinal); cdecl;
+function SSL_load_client_CA_file(_file: PUtf8Char): Pstack_st_X509_NAME; cdecl;
+procedure SSL_CTX_set_client_CA_list(ctx: PSSL_CTX; list: Pstack_st_X509_NAME); cdecl;
+function SSL_CTX_add_client_CA(ctx: PSSL_CTX; cacert: PX509): integer; cdecl;
 function SSL_set1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
 function SSL_add1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
+
 
 { --------- libcrypto entries }
 
@@ -3060,13 +3065,16 @@ type
     SSL_CIPHER_description: function(p1: PSSL_CIPHER; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
     SSL_get_verify_result: function(ssl: PSSL): integer; cdecl;
     SSL_set_hostflags: procedure(s: PSSL; flags: cardinal); cdecl;
+    SSL_load_client_CA_file: function(_file: PUtf8Char): Pstack_st_X509_NAME; cdecl;
+    SSL_CTX_set_client_CA_list: procedure(ctx: PSSL_CTX; list: Pstack_st_X509_NAME); cdecl;
+    SSL_CTX_add_client_CA: function(ctx: PSSL_CTX; cacert: PX509): integer; cdecl;
     SSL_set1_host: function(s: PSSL; hostname: PUtf8Char): integer; cdecl;
     // expected to be the last entry in OpenSslInitialize() below
     SSL_add1_host: function(s: PSSL; hostname: PUtf8Char): integer; cdecl;
   end;
 
 const
-  LIBSSL_ENTRIES: array[0..58] of PAnsiChar = (
+  LIBSSL_ENTRIES: array[0..61] of PAnsiChar = (
     'SSL_CTX_new',
     'SSL_CTX_free',
     'SSL_CTX_set_timeout',
@@ -3123,6 +3131,9 @@ const
     'SSL_CIPHER_description',
     'SSL_get_verify_result',
     'SSL_set_hostflags',
+    'SSL_load_client_CA_file',
+    'SSL_CTX_set_client_CA_list',
+    'SSL_CTX_add_client_CA',
     'SSL_set1_host',
     'SSL_add1_host',
     nil);
@@ -3426,6 +3437,21 @@ end;
 procedure SSL_set_hostflags(s: PSSL; flags: cardinal);
 begin
   libssl.SSL_set_hostflags(s, flags);
+end;
+
+function SSL_load_client_CA_file(_file: PUtf8Char): Pstack_st_X509_NAME;
+begin
+  result := libssl.SSL_load_client_CA_file(_file);
+end;
+
+procedure SSL_CTX_set_client_CA_list(ctx: PSSL_CTX; list: Pstack_st_X509_NAME);
+begin
+  libssl.SSL_CTX_set_client_CA_list(ctx, list);
+end;
+
+function SSL_CTX_add_client_CA(ctx: PSSL_CTX; cacert: PX509): integer;
+begin
+  result := libssl.SSL_CTX_add_client_CA(ctx, cacert);
 end;
 
 function SSL_set1_host(s: PSSL; hostname: PUtf8Char): integer;
@@ -6565,6 +6591,15 @@ function SSL_get_verify_result(ssl: PSSL): integer; cdecl;
 
 procedure SSL_set_hostflags(s: PSSL; flags: cardinal); cdecl;
   external LIB_SSL name _PU + 'SSL_set_hostflags';
+
+function SSL_load_client_CA_file(_file: PUtf8Char): Pstack_st_X509_NAME; cdecl;
+  external LIB_SSL name _PU + 'SSL_load_client_CA_file';
+
+procedure SSL_CTX_set_client_CA_list(ctx: PSSL_CTX; list: Pstack_st_X509_NAME); cdecl;
+  external LIB_SSL name _PU + 'SSL_CTX_set_client_CA_list';
+
+function SSL_CTX_add_client_CA(ctx: PSSL_CTX; cacert: PX509): integer; cdecl;
+  external LIB_SSL name _PU + 'SSL_CTX_add_client_CA';
 
 function SSL_set1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_set1_host';
@@ -11625,6 +11660,8 @@ var
   pk: PEVP_PKEY;
   c: PX509;
   ca: Pstack_st_X509;
+  canames: Pstack_st_X509_NAME;
+  trusted: PX509DynArray;
   cb: pointer;
 begin
   // setup the peer verification - shared by AfterConnection and AfterBind
@@ -11644,15 +11681,34 @@ begin
         mode := mode or SSL_VERIFY_CLIENT_ONCE;
     end;
     if fContext^.CACertificatesFile <> '' then
+    begin
       CheckRes('SetupCtx load_verify_locations',
         SSL_CTX_load_verify_locations(
-          fCtx, pointer(fContext^.CACertificatesFile), nil))
+          fCtx, pointer(fContext^.CACertificatesFile), nil));
+      if (not fClientSide) and
+         fContext^.ClientCertificateAuthentication then
+      begin
+        canames := SSL_load_client_CA_file(pointer(fContext^.CACertificatesFile));
+        if canames = nil then
+          CheckRes('SetupCtx load_client_CA_file');
+        SSL_CTX_set_client_CA_list(fCtx, canames); // ownership to fCtx
+      end;
+    end
     else if fContext^.CASystemStores <> [] then
       SSL_CTX_get_cert_store(fCtx)^.AddCertificates(
         LoadCertificatesFromSystemStore(fContext^.CASystemStores)) // cached
     else if fContext^.CACertificatesRaw <> nil then
-      SSL_CTX_get_cert_store(fCtx)^.AddCertificates(
-        PX509DynArray(fContext^.CACertificatesRaw))
+    begin
+      trusted := PX509DynArray(fContext^.CACertificatesRaw);
+      CheckRes('SetupCtx add raw CA',
+        ord(SSL_CTX_get_cert_store(fCtx)^.AddCertificates(trusted)));
+      if (not fClientSide) and
+         fContext^.ClientCertificateAuthentication then
+        for i := 0 to high(trusted) do
+          if trusted[i] <> nil then
+            CheckRes('SetupCtx add_client_CA',
+              SSL_CTX_add_client_CA(fCtx, trusted[i]));
+    end
     else
       CheckRes('SetupCtx default_verify_paths',
         SSL_CTX_set_default_verify_paths(fCtx));
