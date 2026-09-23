@@ -3679,7 +3679,7 @@ procedure MultiEventMerge(var DestList; const ToBeAddedList);
 
 /// compare two TMethod instances
 function EventEquals(const eventA, eventB): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASSAFEINLINE}inline;{$endif}
 
 
 { ************ Buffers (e.g. Hashing and SynLZ compression) Raw Functions }
