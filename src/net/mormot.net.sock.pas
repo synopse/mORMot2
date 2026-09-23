@@ -1205,10 +1205,10 @@ type
     // data ready to be unciphered at socket level
     function ReceivePending: integer;
     /// send some data from the TLS layer
-    // - should return Length = 0 on success, or keep it untouched on nrRetry
-    // so that the very same Buffer output would be transmitted again once
-    // the socket is ready to send the very same data (which may be buffered
-    // as encrypted in the internal SChannel buffers for instance)
+    // - return in Length the number of plaintext bytes consumed on success, or
+    // Length = 0 on nrRetry so that the very same Buffer can be retried once
+    // the socket is ready (the corresponding encrypted record may already be
+    // buffered internally by the TLS implementation - e.g. SChannel does)
     function Send(Buffer: pointer; var Length: integer): TNetResult;
   end;
 

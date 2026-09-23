@@ -2380,7 +2380,7 @@ procedure TSChannelNetTls.AfterConnection(Socket: TNetSocket;
 var
   cred: TSChannelCred;
   buf: THandshakeBuf;
-  res, f, trial: cardinal;
+  res, f: cardinal;
 begin
   // reset output information
   ResetNetTlsContext(Context);
@@ -2388,61 +2388,38 @@ begin
   ResetState(Socket);
   fServerAddressW := SynUnicode(ServerAddress);
   fAccept := false;
-  trial := 0;
-  while true do
-    try
-      // prepare execution context
-      f := SCH_CRED_NO_DEFAULT_CREDS;
-      if Context.IgnoreCertificateErrors then
-        f := f or SCH_CRED_MANUAL_CRED_VALIDATION
-      else
-        f := f or SCH_CRED_REVOCATION_CHECK_CHAIN or
-                  SCH_CRED_IGNORE_REVOCATION_OFFLINE;
-      CredInit(cred, Context, f, nil);
-      CheckSEC_E_OK('AfterConnection AcquireCredentialsHandleW',
-        AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_OUTBOUND,
-          nil, @cred, nil, nil, @fCred, nil));
-      fDataPos := 0;
-      fDataCount := 0;
-      fInputCount := 0;
-      fFlags := ISC_REQ_FLAGS;
-      // initiate a ClientHello TLS message and a new fCtxt
-      HandshakeBufInit(buf);
-      try
-        res := InitializeSecurityContextW(
-          @fCred, nil, pointer(fServerAddressW), fFlags, 0, 0,
-          nil, 0, @fCtxt, @buf.output, f, nil);
-        res := CompleteHandshakeToken(
-          'AfterConnection CompleteAuthToken', res, @buf.output);
-        if res <> SEC_I_CONTINUE_NEEDED then
-          ESChannelRaiseLastError('InitializeSecurityContextW', res);
-        if (buf.buf[2].cbBuffer = 0) or // SECBUFFER_TOKEN
-           (buf.buf[2].pvBuffer = nil) then
-          raise ESChannel.CreateFmt('Void Hello answer to %s', [ServerAddress]);
-        SendRawAll('AfterConnection send',
-          buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 5000);
-      finally
-        HandshakeBufFree(buf);
-      end;
-      // make initial TLS handshake and prepare for process
-      HandshakeLoop;
-      break; // we are connected
-    except
-      // circumvent Windows 7/8 random bug identified on TLS 1.2 and
-      // TLS_DHE_RSA_WITH_AES_128_GCM_SHA256 TLS_DHE_RSA_WITH_AES_256_GCM_SHA384
-      // https://github.com/Waffle/waffle/pull/128#issuecomment-163342222
-      on E: ESChannel do
-        if (trial = 0) and
-           ((fLastCheckSecError = SEC_E_BUFFER_TOO_SMALL) or
-            (fLastCheckSecError = SEC_E_MESSAGE_ALTERED)) then
-        begin
-          // just retry once
-          FinalizeCredCtxt;
-          inc(trial);
-        end
-        else
-          raise;
-    end;
+  // prepare execution context
+  f := SCH_CRED_NO_DEFAULT_CREDS;
+  if Context.IgnoreCertificateErrors then
+    f := f or SCH_CRED_MANUAL_CRED_VALIDATION
+  else
+    f := f or SCH_CRED_REVOCATION_CHECK_CHAIN or
+              SCH_CRED_IGNORE_REVOCATION_OFFLINE;
+  CredInit(cred, Context, f, nil);
+  CheckSEC_E_OK('AfterConnection AcquireCredentialsHandleW',
+    AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_OUTBOUND,
+      nil, @cred, nil, nil, @fCred, nil));
+  fFlags := ISC_REQ_FLAGS;
+  // initiate a ClientHello TLS message and a new fCtxt
+  HandshakeBufInit(buf);
+  try
+    res := InitializeSecurityContextW(
+      @fCred, nil, pointer(fServerAddressW), fFlags, 0, 0,
+      nil, 0, @fCtxt, @buf.output, f, nil);
+    res := CompleteHandshakeToken(
+      'AfterConnection CompleteAuthToken', res, @buf.output);
+    if res <> SEC_I_CONTINUE_NEEDED then
+      ESChannelRaiseLastError('InitializeSecurityContextW', res);
+    if (buf.buf[2].cbBuffer = 0) or // SECBUFFER_TOKEN
+       (buf.buf[2].pvBuffer = nil) then
+      raise ESChannel.CreateFmt('Void Hello answer to %s', [ServerAddress]);
+    SendRawAll('AfterConnection send',
+      buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, {timeoutms=}5000);
+  finally
+    HandshakeBufFree(buf);
+  end;
+  // make initial TLS handshake and prepare for process
+  HandshakeLoop;
   Context.CipherName := GetCipherName;
   if TlsCertInfo(fCtxt, fPeerInfo) then
   begin
@@ -2587,7 +2564,8 @@ begin
     // An output token may be generated even together with SEC_E_OK
     if (b.buf[2].pvBuffer <> nil) and
        (b.buf[2].cbBuffer <> 0) then
-      SendRawAll('HandshakeStep send', b.buf[2].pvBuffer, b.buf[2].cbBuffer, 5000);
+      SendRawAll('HandshakeStep send',
+        b.buf[2].pvBuffer, b.buf[2].cbBuffer, {timeoutms=}5000);
   finally
     HandshakeBufFree(b);
   end;
