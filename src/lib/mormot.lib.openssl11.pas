@@ -11327,7 +11327,7 @@ type
     function CheckSsl(res: integer; error: PInteger = nil): TNetResult;
     procedure CheckProc(proc: TOpenSSLProc; const ctx: ShortString);
     procedure WaitRetry(res, err: integer; var endtix: Int64; const ctx: ShortString);
-    procedure SetupCtx(var Context: TNetTlsContext; Bind: boolean);
+    procedure SetupCtx;
   public
     destructor Destroy; override;
     // INetTls methods
@@ -11472,7 +11472,6 @@ procedure TOpenSslNetTls.AfterConnection(Socket: TNetSocket;
 var
   P: PUtf8Char;
   h: RawUtf8;
-  peer: PPointer;
   //x: PX509DynArray;
   //ext: TX509_Extensions; exts: TRawUtf8DynArray; len: PtrInt; ocsp, isssuers: TRawUtf8DynArray;
 begin
@@ -11484,14 +11483,12 @@ begin
   ResetNetTlsContext(Context);
   fLastError := @Context.LastError;
   fServerAddress := ServerAddress;
-  peer := @_PeerVerify; // for OnEachPeerVerify/OnPrivatePassword callbacks
   // prepare TLS connection properties
   fCtx := SSL_CTX_new(TLS_client_method);
   if fCtx = nil then
     CheckRes('AfterConnection SSL_CTX_new');
   try
-    peer^ := self;
-    SetupCtx(Context, {bind=}false);
+    SetupCtx;
     fSsl := SSL_new(fCtx);
     if fSsl = nil then
       CheckRes('AfterConnection SSL_new');
@@ -11615,11 +11612,11 @@ begin
       end;
     end;
   finally
-    peer^ := nil; // but keep fLastError since fContext remains
+    _PeerVerify := nil; // but keep fLastError since fContext remains
   end;
 end;
 
-procedure TOpenSslNetTls.SetupCtx(var Context: TNetTlsContext; Bind: boolean);
+procedure TOpenSslNetTls.SetupCtx;
 var
   v, mode, i, opt, res: integer;
   cert: RawByteString;
@@ -11632,47 +11629,48 @@ var
 begin
   // setup the peer verification - shared by AfterConnection and AfterBind
   cb := nil;
-  if Context.IgnoreCertificateErrors then
+  _PeerVerify := self; // for OnEachPeerVerify/OnPrivatePassword callbacks
+  if fContext^.IgnoreCertificateErrors then
     mode := SSL_VERIFY_NONE
   else
   begin
     mode := SSL_VERIFY_PEER;
-    if Context.ClientCertificateAuthentication then
+    if fContext^.ClientCertificateAuthentication then
       mode := mode or SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
-    if Assigned(Context.OnEachPeerVerify) then
+    if Assigned(fContext^.OnEachPeerVerify) then
     begin
       cb := @AfterConnectionPeerVerify;
-      if Context.ClientVerifyOnce then
+      if fContext^.ClientVerifyOnce then
         mode := mode or SSL_VERIFY_CLIENT_ONCE;
     end;
-    if Context.CACertificatesFile <> '' then
+    if fContext^.CACertificatesFile <> '' then
       CheckRes('SetupCtx load_verify_locations',
         SSL_CTX_load_verify_locations(
-          fCtx, pointer(Context.CACertificatesFile), nil))
-    else if Context.CASystemStores <> [] then
+          fCtx, pointer(fContext^.CACertificatesFile), nil))
+    else if fContext^.CASystemStores <> [] then
       SSL_CTX_get_cert_store(fCtx)^.AddCertificates(
-        LoadCertificatesFromSystemStore(Context.CASystemStores)) // cached
-    else if Context.CACertificatesRaw <> nil then
+        LoadCertificatesFromSystemStore(fContext^.CASystemStores)) // cached
+    else if fContext^.CACertificatesRaw <> nil then
       SSL_CTX_get_cert_store(fCtx)^.AddCertificates(
-        PX509DynArray(Context.CACertificatesRaw))
+        PX509DynArray(fContext^.CACertificatesRaw))
     else
       CheckRes('SetupCtx default_verify_paths',
         SSL_CTX_set_default_verify_paths(fCtx));
-    if not Bind then
-      if Context.ClientAllowUnsafeRenegotation then
+    if fClientSide then
+      if fContext^.ClientAllowUnsafeRenegotation then
         SSL_CTX_set_options(fCtx, SSL_OP_LEGACY_SERVER_CONNECT);
   end;
   SSL_CTX_set_verify(fCtx, mode, cb);
   // load any certificate (and private key)
   pk := nil;
-  cert := Context.CertificateBin;
+  cert := fContext^.CertificateBin;
   if (cert = '') and
-     (Context.CertificateFile <> '') then
+     (fContext^.CertificateFile <> '') then
   begin
-    cert := StringFromFile(TFileName(Context.CertificateFile));
+    cert := StringFromFile(TFileName(fContext^.CertificateFile));
     if cert = '' then
       EOpenSslNetTls.RaiseFmt(self,
-        'SetupCtx: missing CertificateFile %s', [Context.CertificateFile]);
+        'SetupCtx: missing CertificateFile %s', [fContext^.CertificateFile]);
   end;
   if cert <> '' then
   begin
@@ -11691,9 +11689,9 @@ begin
     finally
       PX509DynArrayFree(xa);
     end
-    else if (Context.PrivateKeyRaw = nil) and
-            (Context.PrivateKeyFile = '') and
-            ParsePkcs12(cert, Context.PrivatePassword, x, pk, @ca) then
+    else if (fContext^.PrivateKeyRaw = nil) and
+            (fContext^.PrivateKeyFile = '') and
+            ParsePkcs12(cert, fContext^.PrivatePassword, x, pk, @ca) then
     try // was .pfx/pkcs#12 format as with SChannel
       CheckRes('SetupCtx use_certificate(x)',
         SSL_CTX_use_certificate(fCtx, x));
@@ -11721,45 +11719,45 @@ begin
     else
       CheckRes('SetupCtx: unsupported Certificate');
   end
-  else if Context.CertificateRaw <> nil then
+  else if fContext^.CertificateRaw <> nil then
     CheckRes('SetupCtx CertificateRaw',
-      SSL_CTX_use_certificate(fCtx, Context.CertificateRaw))
-  else if Bind then
+      SSL_CTX_use_certificate(fCtx, fContext^.CertificateRaw))
+  else if not fClientSide then
     raise EOpenSslNetTls.Create('AfterBind: Certificate required');
-  if Context.PrivateKeyFile <> '' then
+  if fContext^.PrivateKeyFile <> '' then
   begin
-    if Assigned(Context.OnPrivatePassword) then
+    if Assigned(fContext^.OnPrivatePassword) then
       SSL_CTX_set_default_passwd_cb(fCtx, AfterConnectionAskPassword)
-    else if Context.PrivatePassword <> '' then
+    else if fContext^.PrivatePassword <> '' then
       SSL_CTX_set_default_passwd_cb_userdata(
-        fCtx, pointer(Context.PrivatePassword));
+        fCtx, pointer(fContext^.PrivatePassword));
     CheckRes('SetupCtx use_PrivateKey_file',
       SSL_CTX_use_PrivateKey_file(
-        fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM));
+        fCtx, pointer(fContext^.PrivateKeyFile), SSL_FILETYPE_PEM));
     CheckRes('SetupCtx check_private_key file',
       SSL_CTX_check_private_key(fCtx));
   end
-  else if Context.PrivateKeyRaw <> nil then
+  else if fContext^.PrivateKeyRaw <> nil then
   begin
     CheckRes('SetupCtx use_PrivateKey raw',
-      SSL_CTX_use_PrivateKey(fCtx, Context.PrivateKeyRaw));
+      SSL_CTX_use_PrivateKey(fCtx, fContext^.PrivateKeyRaw));
     CheckRes('SetupCtx check_private_key raw',
       SSL_CTX_check_private_key(fCtx));
   end
-  else if Bind and (pk = nil) then
+  else if (not fClientSide) and (pk = nil) then
     raise EOpenSslNetTls.Create('AfterBind: PrivateKey required');
-  if Context.CipherList = '' then
-    Context.CipherList := SAFE_CIPHERLIST[HasHWAes]; // our own default
+  if fContext^.CipherList = '' then
+    fContext^.CipherList := SAFE_CIPHERLIST[HasHWAes]; // our own default
   CheckRes('SetupCtx set_cipher_list',
-    SSL_CTX_set_cipher_list(fCtx, pointer(Context.CipherList)));
-  if not Context.DisableTls13 then
+    SSL_CTX_set_cipher_list(fCtx, pointer(fContext^.CipherList)));
+  if not fContext^.DisableTls13 then
   begin
-    if Context.CipherSuites = '' then
-      Context.CipherSuites := SAFE_TLS13_CIPHERSUITES[HasHWAes]; // our default
+    if fContext^.CipherSuites = '' then
+      fContext^.CipherSuites := SAFE_TLS13_CIPHERSUITES[HasHWAes]; // our default
     CheckRes('SetupCtx set_ciphersuites',
-      SSL_CTX_set_ciphersuites(fCtx, pointer(Context.CipherSuites)));
+      SSL_CTX_set_ciphersuites(fCtx, pointer(fContext^.CipherSuites)));
   end;
-  if Bind then
+  if not fClientSide then
   begin
     opt := SSL_OP_CIPHER_SERVER_PREFERENCE;
     if HasHWAes then
@@ -11767,11 +11765,11 @@ begin
     SSL_CTX_set_options(fCtx, opt);
   end;
   v := TLS1_2_VERSION; // no SSL3 TLS1.0 TLS1.1
-  if Context.AllowDeprecatedTls then
+  if fContext^.AllowDeprecatedTls then
     v := TLS1_VERSION; // allow TLS1.0 TLS1.1 but no SSL
   CheckRes('SetupCtx set_min_proto_version',
     SSL_CTX_set_min_proto_version(fCtx, v));
-  if Context.DisableTls13 then
+  if fContext^.DisableTls13 then
     CheckRes('SetupCtx set_max_proto_version',
       SSL_CTX_set_max_proto_version(fCtx, TLS1_2_VERSION)); // stick to TLS 1.2
   // SSL_MODE_ENABLE_PARTIAL_WRITE ($01): SSL_write returns partial count on
@@ -11780,7 +11778,7 @@ begin
   // SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER ($02): allow retry with different
   // buffer pointer after WANT_WRITE (mORMot copies pending data to fWr)
   mode := SSL_MODE_ENABLE_PARTIAL_WRITE or SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER;
-  if Context.ReleaseBuffers then
+  if fContext^.ReleaseBuffers then
     mode := mode or SSL_MODE_RELEASE_BUFFERS; // save 34KB per idle TLS instance
   SSL_CTX_set_mode(fCtx, mode);
 end;
@@ -11811,22 +11809,18 @@ end;
 
 procedure TOpenSslNetTls.AfterBind(Socket: TNetSocket;
   var Context: TNetTlsContext; const ServerAddress: RawUtf8);
-var
-  peer: PPointer;
 begin
   fSocket := Socket;
   fContext := @Context;
   Context.LastError := '';
   fLastError := @Context.LastError;
   fServerAddress := ServerAddress;
-  peer := @_PeerVerify; // for OnEachPeerVerify/OnPrivatePassword callbacks
   // prepare global TLS connection properties, as reused by AfterAccept()
   fCtx := SSL_CTX_new_server(ServerAddress);
   if fCtx = nil then
     CheckRes('AfterBind SSL_CTX_new');
   try
-    peer^ := self;
-    SetupCtx(Context, {bind=}true);
+    SetupCtx;
     // allow SNI per-server certificate via OnAcceptServerName callback
     if EnableOnNetTlsAcceptServerName then
     begin
@@ -11836,9 +11830,9 @@ begin
     // this global context fCtx will be reused by AfterAccept()
     Context.AcceptCert := fCtx;
   finally
+    _PeerVerify := nil;
     fLastError := nil; // as expected on server side
     fContext := nil;   // don't retain shared server context here
-    peer^ := nil;
   end;
 end;
 
