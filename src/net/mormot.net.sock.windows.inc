@@ -2318,12 +2318,12 @@ begin
   while true do
     try
       // prepare execution context
+      f := SCH_CRED_NO_DEFAULT_CREDS;
       if Context.IgnoreCertificateErrors then
-        f := SCH_CRED_MANUAL_CRED_VALIDATION or
-             SCH_CRED_NO_DEFAULT_CREDS
+        f := f or SCH_CRED_MANUAL_CRED_VALIDATION
       else
-        f := SCH_CRED_REVOCATION_CHECK_CHAIN or
-             SCH_CRED_IGNORE_REVOCATION_OFFLINE;
+        f := f or SCH_CRED_REVOCATION_CHECK_CHAIN or
+                  SCH_CRED_IGNORE_REVOCATION_OFFLINE;
       CredInit(cred, Context.AllowDeprecatedTLS, Context.DisableTls13, f, nil);
       CheckSEC_E_OK('AfterConnection AcquireCredentialsHandleW',
         AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_OUTBOUND,
@@ -2332,9 +2332,6 @@ begin
       fDataCount := 0;
       fInputCount := 0;
       fFlags := ISC_REQ_FLAGS;
-      if Context.IgnoreCertificateErrors then
-        // prevent SEC_E_UNTRUSTED_ROOT result in HandshakeLoop
-        fFlags := fFlags or ISC_REQ_MANUAL_CRED_VALIDATION;
       // initiate a ClientHello TLS message and a new fCtxt
       HandshakeBufInit(buf);
       res := InitializeSecurityContextW(
@@ -2428,7 +2425,7 @@ begin
   // find first certificate in store with private key
   flags := CRYPT_ACQUIRE_CACHE_FLAG; // credential owned by fAcceptCert
   if OSVersion >= wVista then
-    flags := flags or CRYPT_ACQUIRE_ALLOW_NCRYPT_KEY_FLAG; // enable CNG store
+    flags := flags or CRYPT_ACQUIRE_ALLOW_NCRYPT_KEY_FLAG; // enable CNG
   repeat
     fAcceptCert := mormot.lib.sspi.CertFindCertificateInStore(
       fAcceptCertStore, 0, 0, CERT_FIND_ANY, nil, fAcceptCert);
