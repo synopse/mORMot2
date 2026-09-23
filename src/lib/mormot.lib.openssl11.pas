@@ -11420,6 +11420,7 @@ begin
       ctx^.PeerSubject := '';
     end;
     result := ord(ctx^.OnEachPeerVerify(c.fSocket, ctx, wasok <> 0, c.fSsl, x));
+    ctx^.PeerCert := nil; // this PX509 is short-lived
   except
     result := 0; // abort the connection on exception within callback
   end;
