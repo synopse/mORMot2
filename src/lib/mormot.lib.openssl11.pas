@@ -11619,7 +11619,7 @@ end;
 
 procedure TOpenSslNetTls.SetupCtx(var Context: TNetTlsContext; Bind: boolean);
 var
-  v, mode, i, opt: integer;
+  v, mode, i, opt, res: integer;
   cert: RawByteString;
   x: PX509;
   xa: PX509DynArray;
@@ -11673,42 +11673,46 @@ begin
     xa := LoadCertificates(cert); // PEM
     if xa <> nil then
     try
-      CheckRes('SetupCtx Certificate0',
+      CheckRes('SetupCtx use_certificate(0)',
         SSL_CTX_use_certificate(fCtx, xa[0]));
       for i := 1 to high(xa) do
       begin
-        CheckRes('SetupCtx Chain',
+        CheckRes('SetupCtx add_extra_chain_cert',
           SSL_CTX_add_extra_chain_cert(fCtx, xa[i]));
         xa[i] := nil; // fCtx owns it now - no inc(refcnt)
       end;
     finally
       PX509DynArrayFree(xa);
     end
-     else if (Context.PrivateKeyRaw = nil) and
+    else if (Context.PrivateKeyRaw = nil) and
             (Context.PrivateKeyFile = '') and
             ParsePkcs12(cert, Context.PrivatePassword, x, pk, @ca) then
-      try // was .pfx/pkcs#12 format as with SChannel
-        CheckRes('SetupCtx Certificate',
-          SSL_CTX_use_certificate(fCtx, x));
-        if ca <> nil then
-          for i := 0 to ca^.Count - 1 do
-          begin
-            c := ca^.Items[i];
-            X509_up_ref(c); // no inc(refcnt) in fCtx
-            SSL_CTX_add_extra_chain_cert(fCtx, c);
-          end;
-        CheckRes('SetupCtx PrivateKey',
-          SSL_CTX_use_PrivateKey(fCtx, pk));
-        CheckRes('SetupCtx pfx',
-          SSL_CTX_check_private_key(fCtx));
-      finally
-        x^.Free;
-        pk^.Free;
-        ca^.FreeX509;
-      end
+    try // was .pfx/pkcs#12 format as with SChannel
+      CheckRes('SetupCtx use_certificate(x)',
+        SSL_CTX_use_certificate(fCtx, x));
+      if ca <> nil then
+        for i := 0 to ca^.Count - 1 do
+        begin
+          c := ca^.Items[i];
+          CheckRes('SetupCtx Chain up_ref',
+            X509_up_ref(c)); // no inc(refcnt) in fCtx
+          res := SSL_CTX_add_extra_chain_cert(fCtx, c);
+          if res = OPENSSLSUCCESS then
+            continue;
+          c^.Free; // don't leak memory
+          CheckRes('SetupCtx add_extra_chain_cert', res);
+        end;
+      CheckRes('SetupCtx PrivateKey',
+        SSL_CTX_use_PrivateKey(fCtx, pk));
+      CheckRes('SetupCtx pfx',
+        SSL_CTX_check_private_key(fCtx));
+    finally
+      x^.Free;
+      pk^.Free;
+      ca^.FreeX509;
+    end
     else
-      EOpenSslNetTls.CheckFailed(self, 'SetupCtx: unsupported Certificate',
-        nil, nil, 0, fServerAddress);
+      CheckRes('SetupCtx: unsupported Certificate');
   end
   else if Context.CertificateRaw <> nil then
     CheckRes('SetupCtx CertificateRaw',
@@ -11758,9 +11762,11 @@ begin
   v := TLS1_2_VERSION; // no SSL3 TLS1.0 TLS1.1
   if Context.AllowDeprecatedTls then
     v := TLS1_VERSION; // allow TLS1.0 TLS1.1 but no SSL
-  SSL_CTX_set_min_proto_version(fCtx, v);
+  CheckRes('SetupCtx set_min_proto_version',
+    SSL_CTX_set_min_proto_version(fCtx, v));
   if Context.DisableTls13 then
-    SSL_CTX_set_max_proto_version(fCtx, TLS1_2_VERSION); // stick to TLS 1.2
+    CheckRes('SetupCtx set_max_proto_version',
+      SSL_CTX_set_max_proto_version(fCtx, TLS1_2_VERSION)); // stick to TLS 1.2
   // SSL_MODE_ENABLE_PARTIAL_WRITE ($01): SSL_write returns partial count on
   // partial send, so mORMot can advance the buffer pointer correctly and
   // issue a fresh SSL_write for the remainder (no retry-same-buffer constraint)
@@ -11787,8 +11793,8 @@ begin
       exit;
     sslctx := ctx^.OnAcceptServerName(ctx, s, servername);
     if sslctx <> nil then
-      // switching server context
-      if SSL_set_SSL_CTX(s, sslctx) = nil then // note: only change certificates
+      // switching server context - note: only change certificates
+      if SSL_set_SSL_CTX(s, sslctx) = nil then
         result := SSL_TLSEXT_ERR_ALERT_FATAL;  // servername was rejected
   except
     // don't propagate any client callback exception to OpenSSL
