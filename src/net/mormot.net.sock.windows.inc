@@ -2099,9 +2099,11 @@ type
     fFlags: cardinal;
     fLastCheckSecError: cardinal;
     fSizes: TSecPkgContext_StreamSizes;
-    fInput: RawByteString; // encrypted TLS records
-    fData: RawByteString;  // decrypted application bytes
-    fInputSize, fDataPos, fDataCount, fInputCount: integer;
+    fInput: RawByteString;  // encrypted TLS input records
+    fOutput: RawByteString; // encrypted TLS output records
+    fData: RawByteString;   // decrypted application bytes
+    fInputSize, fInputCount, fDataPos, fDataCount: integer;
+    fOutputPos, fOutputCount, fOutputPlainCount: integer;
     fSessionClosed: boolean;
     fAccept: boolean;
     fAcceptCert: mormot.core.os.security.PCCERT_CONTEXT;
@@ -2109,8 +2111,10 @@ type
     fPeerInfo: TWinCertInfo;
     procedure ESChannelRaiseLastError(const ctx: ShortString; res: cardinal);
     function CheckSEC_E_OK(const ctx: ShortString; res: integer): cardinal;
+    procedure ResetState(Socket: TNetSocket);
     procedure WaitRawRetry(const ctx: ShortString; events: TNetEvents;
       var endtix: Int64; timeout: integer);
+    function SendOutput: TNetResult;
     procedure SendRawAll(const ctx: ShortString; buf: PByte; len, timeout: integer);
     function RecvRaw(const ctx: ShortString; buf: PByte; len: integer): integer;
     function HandshakeStep(buf: PByteArray; var len: integer): cardinal;
@@ -2171,6 +2175,34 @@ begin
   else if tix > endtix then
     raise ESChannel.CreateFmt('%s timeout', [ctx]);
   fSocket.WaitFor(100, events);
+end;
+
+function TSChannelNetTls.SendOutput: TNetResult;
+var
+  sent, err: integer;
+begin
+  result := nrOK;
+  while fOutputCount > 0 do
+  begin
+    sent := mormot.net.sock.Send(fSocket.Socket,
+      @PByteArray(fOutput)[fOutputPos], fOutputCount, MSG_NOSIGNAL);
+    if sent > 0 then
+    begin
+      inc(fOutputPos, sent);
+      dec(fOutputCount, sent);
+      continue; // another immediate send() is harmless
+    end;
+    if sent = 0 then
+    begin
+      result := nrClosed;
+      exit;
+    end;
+    result := NetLastError(NO_ERROR, @err);
+    if result = nrOK then
+      result := nrUnknownError;
+    exit; // especially nrRetry: never WaitFor() here
+  end;
+  fOutputPos := 0;
 end;
 
 procedure TSChannelNetTls.SendRawAll(const ctx: ShortString;
@@ -2323,6 +2355,24 @@ begin
   end;
 end;
 
+procedure TSChannelNetTls.ResetState(Socket: TNetSocket);
+begin
+  fSocket := Socket;
+  fInputCount := 0;
+  fInputSize := TLSRECMAXSIZE;
+  if fInput = '' then
+    SetLength(fInput, TLSRECMAXSIZE);  // encrypted TLS input records
+  fOutputPos := 0;
+  fOutputCount := 0;
+  fOutputPlainCount := 0;
+  if fOutput = '' then
+    SetLength(fOutput, TLSRECMAXSIZE); // encrypted TLS outputrecords
+  if fData = '' then
+    SetLength(fData, TLSRECMAXSIZE);   // decrypted application data
+  fDataPos := 0;
+  fDataCount := 0;
+end;
+
 procedure TSChannelNetTls.AfterConnection(Socket: TNetSocket;
   var Context: TNetTlsContext; const ServerAddress: RawUtf8);
 var
@@ -2333,11 +2383,8 @@ begin
   // reset output information
   ResetNetTlsContext(Context);
   // method called once to attach the socket from the client side
-  fSocket := Socket;
+  ResetState(Socket);
   fServerAddressW := SynUnicode(ServerAddress);
-  SetLength(fInput, TLSRECMAXSIZE); // encrypted TLS records
-  SetLength(fData, TLSRECMAXSIZE);  // decrypted application data
-  fInputSize := TLSRECMAXSIZE;
   fAccept := false;
   trial := 0;
   while true do
@@ -2469,7 +2516,7 @@ var
   cred: TSChannelCred;
 begin
   // prepare execution context
-  fSocket := Socket;
+  ResetState(Socket);
   fAccept := true;
   // prepare TLS connection properties from AfterBind() global certificate
   if BoundContext.AcceptCert = nil then
@@ -2478,14 +2525,8 @@ begin
   CheckSEC_E_OK('AfterAccept AcquireCredentialsHandleW',
     AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_INBOUND,
       nil, @cred, nil, nil, @fCred, nil));
-  fDataPos := 0;
-  fDataCount := 0;
-  fInputCount := 0;
   fFlags := ASC_REQ_FLAGS;
   // make TLS handshake and prepare for process
-  SetLength(fData, TLSRECMAXSIZE);  // decrypted application data
-  SetLength(fInput, TLSRECMAXSIZE); // encrypted TLS records
-  fInputSize := TLSRECMAXSIZE;
   HandshakeLoop;
   if CipherName <> nil then
     CipherName^ := GetCipherName;
@@ -2825,72 +2866,61 @@ function TSChannelNetTls.Send(Buffer: pointer; var Length: integer): TNetResult;
 var
   desc: TSecBufferDesc;
   buf: array[0..3] of TSecBuffer;
-  sent, len, trailer, pending, templen: cardinal;
-  s, err: integer;
-  tix, endtix: Int64;
-  temp: array[0..TLSRECMAXSIZE] of byte;
+  plain, trailer, encrypted: integer;
 begin
-  result := nrFatalError;
+  plain := Length;
+  Length := 0; // nothing consumed unless we explicitly return it below
+  result := nrOK;
+  if plain <= 0 then
+    exit;
+  // A previous call already encrypted this same plaintext record but could
+  // not completely write its ciphertext. Flush it before doing anything else.
+  if fOutputCount <> 0 then
+  begin
+    result := SendOutput;
+    if result <> nrOK then
+      exit; // nrRetry -> caller retries the same plaintext
+    // The buffered TLS record is now completely on the socket.
+    Length := fOutputPlainCount;
+    fOutputPlainCount := 0;
+    exit;
+  end;
+  if plain > integer(fSizes.cbMaximumMessage) then
+    plain := fSizes.cbMaximumMessage;
+  encrypted := integer(fSizes.cbHeader) + plain + integer(fSizes.cbTrailer);
+  if encrypted > system.Length(fOutput) then
+    SetLength(fOutput, encrypted); // paranoid
+  MoveFast(Buffer^, PByteArray(fOutput)[fSizes.cbHeader], plain);
   desc.ulVersion := SECBUFFER_VERSION;
   desc.cBuffers := 4;
   desc.pBuffers := @buf[0];
-  pending := Length;
-  while pending > 0 do
-  begin
-    templen := pending;
-    if templen > fSizes.cbMaximumMessage then
-      templen := fSizes.cbMaximumMessage;
-    MoveFast(Buffer^, temp[fSizes.cbHeader], templen);
-    inc(PByte(Buffer), templen);
-    dec(pending, templen);
-    trailer := fSizes.cbHeader + templen;
-    buf[0].cbBuffer := fSizes.cbHeader;
-    buf[0].BufferType := SECBUFFER_STREAM_HEADER;
-    buf[0].pvBuffer := @temp;
-    buf[1].cbBuffer := templen;
-    buf[1].BufferType := SECBUFFER_DATA;
-    buf[1].pvBuffer := @temp[fSizes.cbHeader];
-    buf[2].cbBuffer := fSizes.cbTrailer;
-    buf[2].BufferType := SECBUFFER_STREAM_TRAILER;
-    buf[2].pvBuffer := @temp[trailer];
-    buf[3].cbBuffer := 0;
-    buf[3].BufferType := SECBUFFER_EMPTY;
-    buf[3].pvBuffer := nil;
-    if EncryptMessage(@fCtxt, 0, @desc, 0) <> SEC_E_OK then
-      exit; // caller would shutdown the connection on SChannel error
-    len := buf[0].cbBuffer + buf[1].cbBuffer + buf[2].cbBuffer;
-    endtix := 0;
-    sent := 0;
-    repeat
-      s := mormot.net.sock.Send(fSocket.Socket, @temp[sent], len, MSG_NOSIGNAL);
-      if s > 0 then
-      begin
-        dec(len, s);
-        if len = 0 then
-          break;
-        inc(sent, s);
-        continue; // successful partial write: try again immediately
-      end;
-      if s = 0 then
-      begin
-        result := nrClosed;
-        exit;
-      end;
-      result := NetLastError(NO_ERROR, @err);
-      if result <> nrRetry then
-        exit;
-      tix := GetTickCount64;
-      if endtix = 0 then
-        endtix := tix + 1000 // OS buffers are likely not to be full anyway
-      else if tix > endtix then
-      begin
-        result := nrTimeout;
-        exit;
-      end;
-      fSocket.WaitFor(100, [neWrite, neError]);
-    until false;
-  end;
-  result := nrOK;
+  buf[0].cbBuffer := fSizes.cbHeader;
+  buf[0].BufferType := SECBUFFER_STREAM_HEADER;
+  buf[0].pvBuffer := pointer(fOutput);
+  buf[1].cbBuffer := plain;
+  buf[1].BufferType := SECBUFFER_DATA;
+  buf[1].pvBuffer := @PByteArray(fOutput)[fSizes.cbHeader];
+  trailer := integer(fSizes.cbHeader) + plain;
+  buf[2].cbBuffer := fSizes.cbTrailer;
+  buf[2].BufferType := SECBUFFER_STREAM_TRAILER;
+  buf[2].pvBuffer := @PByteArray(fOutput)[trailer];
+  buf[3].cbBuffer := 0;
+  buf[3].BufferType := SECBUFFER_EMPTY;
+  buf[3].pvBuffer := nil;
+  result := nrFatalError;
+  if EncryptMessage(@fCtxt, 0, @desc, 0) <> SEC_E_OK then
+    exit;
+  encrypted := buf[0].cbBuffer + buf[1].cbBuffer + buf[2].cbBuffer;
+  fOutputPos := 0;
+  fOutputCount := encrypted;
+  fOutputPlainCount := plain;
+  result := SendOutput;
+  if result <> nrOK then
+    // on nrRetry (or error), Length remains zero and fOutput keeps partial record
+    exit;
+  // Ciphertext was completely accepted by the socket.
+  Length := fOutputPlainCount;
+  fOutputPlainCount := 0;
 end;
 
 
