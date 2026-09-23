@@ -6817,7 +6817,15 @@ begin
       include(fFlags, fProxyConnect);
       res := nrRefused;
       if Tunnel.Https then
-        DoTlsAfter(cstaConnect); // the proxy requires a TLS connection
+      begin
+        s := fServer;
+        fServer := Tunnel.Server;  // proper host for the proxy TLS handshake
+        try
+          DoTlsAfter(cstaConnect); // the proxy requires a TLS connection
+        finally
+          fServer := s;
+        end;
+      end;
       SockSendLine(['CONNECT ', fServer, ':', fPort, ' HTTP/1.0']);
       if Tunnel.User <> '' then
         SockSendLine(['Proxy-Authorization: Basic ', Tunnel.UserPasswordBase64]);
