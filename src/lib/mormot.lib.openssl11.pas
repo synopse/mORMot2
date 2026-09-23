@@ -11715,21 +11715,23 @@ begin
       SSL_CTX_use_certificate(fCtx, Context.CertificateRaw))
   else if Bind then
     raise EOpenSslNetTls.Create('AfterBind: Certificate required');
-  if FileExists(TFileName(Context.PrivateKeyFile)) then
+  if Context.PrivateKeyFile <> '' then
   begin
     if Assigned(Context.OnPrivatePassword) then
       SSL_CTX_set_default_passwd_cb(fCtx, AfterConnectionAskPassword)
     else if Context.PrivatePassword <> '' then
       SSL_CTX_set_default_passwd_cb_userdata(
         fCtx, pointer(Context.PrivatePassword));
-    SSL_CTX_use_PrivateKey_file(
-      fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM);
+    CheckRes('SetupCtx use_PrivateKey_file',
+      SSL_CTX_use_PrivateKey_file(
+        fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM));
     CheckRes('SetupCtx check_private_key file',
       SSL_CTX_check_private_key(fCtx));
   end
   else if Context.PrivateKeyRaw <> nil then
   begin
-    SSL_CTX_use_PrivateKey(fCtx, Context.PrivateKeyRaw);
+    CheckRes('SetupCtx use_PrivateKey raw',
+      SSL_CTX_use_PrivateKey(fCtx, Context.PrivateKeyRaw));
     CheckRes('SetupCtx check_private_key raw',
       SSL_CTX_check_private_key(fCtx));
   end
