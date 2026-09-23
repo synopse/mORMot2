@@ -2251,26 +2251,31 @@ begin
   buf.buf[4].BufferType := SECBUFFER_EMPTY;
 end;
 
-procedure CredInit(var cred: TSChannelCred; AllowDeprecatedTLS, DisableTls13: boolean;
+// TLS 1.3 is officially supported starting in Windows 11 and Server 2022.
+// Enabling TLS 1.3 on earlier versions of Windows is possible through the
+// registry, but is explictly documented as unsafe by Microsoft.
+// https://learn.microsoft.com/en-us/windows/win32/secauthn/protocols-in-tls-ssl--schannel-ssp-
+
+procedure CredInit(var cred: TSChannelCred; const ctx: TNetTlsContext;
   dwFlags: cardinal; paServCred: PPCCERT_CONTEXT);
 begin
   FillCharFast(cred, SizeOf(cred), 0);
-  if SChannelEnableTls13 and // should be explicitly enabled
+  // request Schannel to reject known weak ciphers whenever possible
+  if not ctx.AllowDeprecatedTls and
+     (OSVersion >= wSeven) then
+    dwFlags := dwFlags or SCH_USE_STRONG_CRYPTO;
+  if SChannelEnableTls13 and
      ((OSVersion in [wEleven, wEleven_64]) or
       (OSVersion >= wServer2022_64)) and
-     not DisableTls13 then
-  // TLS 1.3 is officially supported starting in Windows 11 and Server 2022.
-  // Enabling TLS 1.3 on earlier versions of Windows is possible through the
-  // registry, but is explictly documented as unsafe by Microsoft.
-  // https://learn.microsoft.com/en-us/windows/win32/secauthn/protocols-in-tls-ssl--schannel-ssp-
+     not ctx.DisableTls13 then
   begin
-    // require new SCH_CREDENTIALS structure in order to enable TLS 1.3
+    // new SCH_CREDENTIALS structure is required in order to enable TLS 1.3
     cred.New.dwVersion := SCH_CREDENTIALS_VERSION;
-    if not AllowDeprecatedTLS then
+    if not ctx.AllowDeprecatedTLS then
     begin
-      dwFlags := dwFlags or SCH_USE_STRONG_CRYPTO;
       cred.New.cTlsParameters := 1;
       cred.New.pTlsParameters := @cred.Tls;
+      // disable SSL/TLS versions older than TLS 1.2
       cred.Tls.grbitDisabledProtocols := SP_PROT_TLS_UNSAFE;
     end;
     cred.New.dwFlags := dwFlags;
@@ -2282,14 +2287,20 @@ begin
   end
   else
   begin
-    // legacy SCHANNEL_CRED structure - deprecated since Windows 10, 1809
+    // legacy SCHANNEL_CRED path: never enable TLS 1.3 here
     cred.Old.dwVersion := SCHANNEL_CRED_VERSION;
     cred.Old.dwFlags := dwFlags;
-    cred.Old.grbitEnabledProtocols := SP_PROT_TLS_SAFE;
-    if (OSVersion < wSeven) or // XP and Vista only support TLS 1.0 anyway :(
-       AllowDeprecatedTls then
-      cred.Old.grbitEnabledProtocols := cred.Old.grbitEnabledProtocols or
-        SP_PROT_TLS1_0 or SP_PROT_TLS1_1;
+    if OSVersion < wSeven then
+      // TLS 1.0 is the only realistic choice on these old systems
+      cred.Old.grbitEnabledProtocols := SP_PROT_TLS1_0
+    else
+    begin
+      // TLS 1.2 only unless deprecated protocols were explicitly requested
+      cred.Old.grbitEnabledProtocols := SP_PROT_TLS1_2;
+      if ctx.AllowDeprecatedTLS then
+        cred.Old.grbitEnabledProtocols := cred.Old.grbitEnabledProtocols or
+          SP_PROT_TLS1_0 or SP_PROT_TLS1_1;
+    end;
     if paServCred <> nil then
     begin
       cred.Old.cCreds := 1;
@@ -2324,7 +2335,7 @@ begin
       else
         f := f or SCH_CRED_REVOCATION_CHECK_CHAIN or
                   SCH_CRED_IGNORE_REVOCATION_OFFLINE;
-      CredInit(cred, Context.AllowDeprecatedTLS, Context.DisableTls13, f, nil);
+      CredInit(cred, Context, f, nil);
       CheckSEC_E_OK('AfterConnection AcquireCredentialsHandleW',
         AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_OUTBOUND,
           nil, @cred, nil, nil, @fCred, nil));
@@ -2448,8 +2459,7 @@ begin
   // prepare TLS connection properties from AfterBind() global certificate
   if BoundContext.AcceptCert = nil then
     raise ESChannel.Create('AfterAccept: missing AfterBind');
-  CredInit(cred, BoundContext.AllowDeprecatedTls, BoundContext.DisableTls13,
-    0, @BoundContext.AcceptCert);
+  CredInit(cred, BoundContext, 0, @BoundContext.AcceptCert);
   CheckSEC_E_OK('AfterAccept AcquireCredentialsHandleW',
     AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_INBOUND,
       nil, @cred, nil, nil, @fCred, nil));
