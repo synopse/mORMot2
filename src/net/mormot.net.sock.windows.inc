@@ -2251,6 +2251,18 @@ begin
   buf.buf[4].BufferType := SECBUFFER_EMPTY;
 end;
 
+procedure HandshakeBufFree(var buf: THandshakeBuf);
+var
+  i: PtrInt;
+begin
+  for i := 2 to 4 do
+    if buf.buf[i].pvBuffer <> nil then
+    begin
+      FreeContextBuffer(buf.buf[i].pvBuffer); // no exception here
+      buf.buf[i].pvBuffer := nil;
+    end;
+end;
+
 // TLS 1.3 is officially supported starting in Windows 11 and Server 2022.
 // Enabling TLS 1.3 on earlier versions of Windows is possible through the
 // registry, but is explictly documented as unsafe by Microsoft.
@@ -2345,20 +2357,19 @@ begin
       fFlags := ISC_REQ_FLAGS;
       // initiate a ClientHello TLS message and a new fCtxt
       HandshakeBufInit(buf);
-      res := InitializeSecurityContextW(
-        @fCred, nil, pointer(fServerAddressW), fFlags, 0, 0,
-        nil, 0, @fCtxt, @buf.output, f, nil);
-      if res <> SEC_I_CONTINUE_NEEDED then
-        ESChannelRaiseLastError('InitializeSecurityContextW', res);
-      if (buf.buf[2].cbBuffer = 0) or // SECBUFFER_TOKEN
-         (buf.buf[2].pvBuffer = nil) then
-        raise ESChannel.CreateFmt('Void Hello answer to %s', [ServerAddress]);
       try
+        res := InitializeSecurityContextW(
+          @fCred, nil, pointer(fServerAddressW), fFlags, 0, 0,
+          nil, 0, @fCtxt, @buf.output, f, nil);
+        if res <> SEC_I_CONTINUE_NEEDED then
+          ESChannelRaiseLastError('InitializeSecurityContextW', res);
+        if (buf.buf[2].cbBuffer = 0) or // SECBUFFER_TOKEN
+           (buf.buf[2].pvBuffer = nil) then
+          raise ESChannel.CreateFmt('Void Hello answer to %s', [ServerAddress]);
         SendRawAll('AfterConnection send',
           buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 5000);
       finally
-        CheckSEC_E_OK('AfterConnection FreeContextBuffer',
-          FreeContextBuffer(buf.buf[2].pvBuffer));
+        HandshakeBufFree(buf);
       end;
       // make TLS handshake and prepare for process
       HandshakeLoop;
@@ -2504,24 +2515,25 @@ var
   LInCtxPtr: PSecHandle;
 begin
   HandshakeBufInit(b);
-  b.buf[0].pvBuffer := buf; // SECBUFFER_TOKEN
-  b.buf[0].cbBuffer := len;
-  f := 0;
-  if fAccept then // server side
-  begin
-    if (fCtxt.dwLower = 0) and
-       (fCtxt.dwUpper = 0) then
-      LInCtxPtr := nil
-    else
-      LInCtxPtr := @fCtxt;
-    result := AcceptSecurityContext(
-      @fCred, LInCtxPtr, @b.input, fFlags, 0, @fCtxt, @b.output, f, nil);
-  end
-  else // client side
-    result := InitializeSecurityContextW(
-      @fCred, @fCtxt, pointer(fServerAddressW), fFlags, 0, 0,
-      @b.input, 0, @fCtxt, @b.output, f, nil);
   try
+    // initialize the proper security context
+    b.buf[0].pvBuffer := buf; // SECBUFFER_TOKEN
+    b.buf[0].cbBuffer := len;
+    f := 0;
+    if fAccept then // server side
+    begin
+      if (fCtxt.dwLower = 0) and
+         (fCtxt.dwUpper = 0) then
+        LInCtxPtr := nil
+      else
+        LInCtxPtr := @fCtxt;
+      result := AcceptSecurityContext(
+        @fCred, LInCtxPtr, @b.input, fFlags, 0, @fCtxt, @b.output, f, nil);
+    end
+    else // client side
+      result := InitializeSecurityContextW(
+        @fCred, @fCtxt, pointer(fServerAddressW), fFlags, 0, 0,
+        @b.input, 0, @fCtxt, @b.output, f, nil);
     // SSPI may ask the caller to finalize the generated token
     case result of
       SEC_I_COMPLETE_NEEDED:
@@ -2542,15 +2554,7 @@ begin
        (b.buf[2].cbBuffer <> 0) then
       SendRawAll('send', b.buf[2].pvBuffer, b.buf[2].cbBuffer, 5000);
   finally
-    // ISC_REQ/ASC_REQ_ALLOCATE_MEMORY applies to output buffers
-    // - in particular SECBUFFER_ALERT may also have been allocated
-    for f := 2 to 4 do
-      if b.buf[f].pvBuffer <> nil then
-      begin
-        CheckSEC_E_OK('HandshakeStep FreeContextBuffer',
-          FreeContextBuffer(b.buf[f].pvBuffer));
-        b.buf[f].pvBuffer := nil;
-      end;
+    HandshakeBufFree(b);
   end;
   if (b.buf[1].BufferType = SECBUFFER_EXTRA) and
      (b.buf[1].cbBuffer <> 0) then
@@ -2651,11 +2655,11 @@ begin
       // best effort: any generated token is worth sending even if
       // SChannel reports an informational/final shutdown status
       if buf.pvBuffer <> nil then
-        try
-          SendRawAll('shutdown', buf.pvBuffer, buf.cbBuffer, {timeoutms=}500);
-        finally
-          FreeContextBuffer(buf.pvBuffer);
-        end;
+      try
+        SendRawAll('shutdown', buf.pvBuffer, buf.cbBuffer, {timeoutms=}500);
+      finally
+        FreeContextBuffer(buf.pvBuffer);
+      end;
       // no CheckSEC_E_OK(res): shutdown from a destructor is best effort
     end;
   except
