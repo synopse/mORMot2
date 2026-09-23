@@ -11496,7 +11496,9 @@ begin
     if fSsl = nil then
       CheckRes('AfterConnection SSL_new');
     // setup client-side SNI field for the expected server host name(s)
-    SSL_set_tlsext_host_name(fSsl, ServerAddress);
+    if IsDnsHostName(pointer(ServerAddress)) then
+      CheckRes('AfterConnection set_tlsext_host_name',
+        SSL_set_tlsext_host_name(fSsl, ServerAddress));
     if not Context.IgnoreCertificateErrors then
     begin
       P := pointer(Context.HostNamesCsv);
