@@ -2110,12 +2110,13 @@ type
     procedure ESChannelRaiseLastError(const ctx: ShortString; res: cardinal);
     function CheckSEC_E_OK(const ctx: ShortString; res: integer): cardinal;
     procedure WaitRawRetry(const ctx: ShortString; events: TNetEvents;
-      var endtix: Int64);
-    procedure SendRawAll(const ctx: ShortString; buf: PByte; len: integer);
+      var endtix: Int64; timeout: integer);
+    procedure SendRawAll(const ctx: ShortString; buf: PByte; len, timeout: integer);
     function RecvRaw(const ctx: ShortString; buf: PByte; len: integer): integer;
     function HandshakeStep(buf: PByteArray; var len: integer): cardinal;
     procedure HandshakeLoop(StepFirst: boolean = false);
     procedure FinalizeCredCtxt;
+    procedure CleanShutdown;
   public
     destructor Destroy; override;
     // INetTls methods
@@ -2136,8 +2137,8 @@ type
 
 { TSChannelNetTls }
 
-procedure TSChannelNetTls.ESChannelRaiseLastError(
-  const ctx: ShortString; res: cardinal);
+procedure TSChannelNetTls.ESChannelRaiseLastError(const ctx: ShortString;
+  res: cardinal);
 var
   sys: integer;
   msg: string;
@@ -2148,8 +2149,8 @@ begin
   raise ESChannel.Create(msg);
 end;
 
-function TSChannelNetTls.CheckSEC_E_OK(
-  const ctx: ShortString; res: integer): cardinal;
+function TSChannelNetTls.CheckSEC_E_OK(const ctx: ShortString;
+  res: integer): cardinal;
 begin
   fLastCheckSecError := res;
   if res <> SEC_E_OK then
@@ -2158,20 +2159,20 @@ begin
 end;
 
 procedure TSChannelNetTls.WaitRawRetry(const ctx: ShortString;
-  events: TNetEvents; var endtix: Int64);
+  events: TNetEvents; var endtix: Int64; timeout: integer);
 var
   tix: Int64;
 begin
   tix := GetTickCount64;
   if endtix = 0 then
-    endtix := tix + 5000 // never loop forever
+    endtix := tix + timeout // never loop forever
   else if tix > endtix then
     raise ESChannel.CreateFmt('%s timeout', [ctx]);
   fSocket.WaitFor(100, events);
 end;
 
 procedure TSChannelNetTls.SendRawAll(const ctx: ShortString;
-  buf: PByte; len: integer);
+  buf: PByte; len, timeout: integer);
 var
   sent, err: integer;
   endtix: Int64;
@@ -2193,7 +2194,7 @@ begin
     if NetLastError(NO_ERROR, @err) <> nrRetry then
       raise ESChannel.CreateFmt('%s: Socket Error %s',
         [ctx, WinErrorShort(err)]);
-    WaitRawRetry(ctx, [neWrite, neError], endtix); // asynchronous socket
+    WaitRawRetry(ctx, [neWrite, neError], endtix, timeout); // asynch socket
   end;
 end;
 
@@ -2213,7 +2214,7 @@ begin
     if NetLastError(NO_ERROR, @err) <> nrRetry then
       raise ESChannel.CreateFmt('%s: Socket Error %s',
         [ctx, WinErrorShort(err)]);
-    WaitRawRetry(ctx, [neRead, neError], endtix); // asynchronous socket
+    WaitRawRetry(ctx, [neRead, neError], endtix, 5000); // asynchronous socket
   until false;
 end;
 
@@ -2324,8 +2325,9 @@ begin
         f := SCH_CRED_REVOCATION_CHECK_CHAIN or
              SCH_CRED_IGNORE_REVOCATION_OFFLINE;
       CredInit(cred, Context.AllowDeprecatedTLS, Context.DisableTls13, f, nil);
-      CheckSEC_E_OK('AcquireCredentialsHandleW', AcquireCredentialsHandleW(
-        nil, UNISP_NAME, SECPKG_CRED_OUTBOUND, nil, @cred, nil, nil, @fCred, nil));
+      CheckSEC_E_OK('AfterConnection AcquireCredentialsHandleW',
+        AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_OUTBOUND,
+          nil, @cred, nil, nil, @fCred, nil));
       fDataPos := 0;
       fDataCount := 0;
       fInputCount := 0;
@@ -2346,9 +2348,10 @@ begin
          (buf.buf[2].pvBuffer = nil) then
         raise ESChannel.CreateFmt('Void Hello answer to %s', [ServerAddress]);
       try
-        SendRawAll('send', buf.buf[2].pvBuffer, buf.buf[2].cbBuffer);
+        SendRawAll('AfterConnection send',
+          buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 5000);
       finally
-        CheckSEC_E_OK('FreeContextBuffer',
+        CheckSEC_E_OK('AfterConnection FreeContextBuffer',
           FreeContextBuffer(buf.buf[2].pvBuffer));
       end;
       // make TLS handshake and prepare for process
@@ -2452,7 +2455,7 @@ begin
     raise ESChannel.Create('AfterAccept: missing AfterBind');
   CredInit(cred, BoundContext.AllowDeprecatedTls, BoundContext.DisableTls13,
     0, @BoundContext.AcceptCert);
-  CheckSEC_E_OK('AcquireCredentialsHandleW',
+  CheckSEC_E_OK('AfterAccept AcquireCredentialsHandleW',
     AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_INBOUND,
       nil, @cred, nil, nil, @fCred, nil));
   fDataPos := 0;
@@ -2513,15 +2516,37 @@ begin
     result := InitializeSecurityContextW(
       @fCred, @fCtxt, pointer(fServerAddressW), fFlags, 0, 0,
       @b.input, 0, nil, @b.output, f, nil);
-  if b.buf[2].pvBuffer <> nil then
-    // need to send back something to the server
-    try
-      if b.buf[2].cbBuffer <> 0 then
-        SendRawAll('send', b.buf[2].pvBuffer, b.buf[2].cbBuffer);
-    finally
-      CheckSEC_E_OK('FreeContextBuffer',
-        FreeContextBuffer(b.buf[2].pvBuffer));
+  try
+    // SSPI may ask the caller to finalize the generated token
+    case result of
+      SEC_I_COMPLETE_NEEDED:
+        begin
+          CheckSEC_E_OK('CompleteAuthToken313',
+            CompleteAuthToken(@fCtxt, @b.output));
+          result := SEC_E_OK;
+        end;
+      SEC_I_COMPLETE_AND_CONTINUE:
+        begin
+          CheckSEC_E_OK('CompleteAuthToken314',
+            CompleteAuthToken(@fCtxt, @b.output));
+          result := SEC_I_CONTINUE_NEEDED;
+        end;
     end;
+    // An output token may be generated even together with SEC_E_OK
+    if (b.buf[2].pvBuffer <> nil) and
+       (b.buf[2].cbBuffer <> 0) then
+      SendRawAll('send', b.buf[2].pvBuffer, b.buf[2].cbBuffer, 5000);
+  finally
+    // ISC_REQ/ASC_REQ_ALLOCATE_MEMORY applies to output buffers
+    // - in particular SECBUFFER_ALERT may also have been allocated
+    for f := 2 to 4 do
+      if b.buf[f].pvBuffer <> nil then
+      begin
+        CheckSEC_E_OK('HandshakeStep FreeContextBuffer',
+          FreeContextBuffer(b.buf[f].pvBuffer));
+        b.buf[f].pvBuffer := nil;
+      end;
+  end;
   if (b.buf[1].BufferType = SECBUFFER_EXTRA) and
      (b.buf[1].cbBuffer <> 0) then
   begin
@@ -2588,52 +2613,62 @@ begin
       'InputSize=%d>%d', [inputneeded, fInputSize]);
 end;
 
-destructor TSChannelNetTls.Destroy;
+procedure TSChannelNetTls.CleanShutdown;
 var
   desc: TSecBufferDesc;
   buf: TSecBuffer;
-  dt, f, res: cardinal;
+  dt, f: cardinal;
 begin
   try
-    if {%H-}PtrInt(fSocket.Socket) > 0 then
+    // Generate the TLS close_notify alert
+    desc.ulVersion := SECBUFFER_VERSION;
+    desc.cBuffers := 1;
+    desc.pBuffers := @buf;
+    dt := SCHANNEL_SHUTDOWN;
+    buf.cbBuffer := SizeOf(dt);
+    buf.BufferType := SECBUFFER_TOKEN;
+    buf.pvBuffer := @dt;
+    if ApplyControlToken(@fCtxt, @desc) = SEC_E_OK then
     begin
-      // notify the other end with proper TLS shutdown frames
-      desc.ulVersion := SECBUFFER_VERSION;
-      desc.cBuffers := 1;
-      desc.pBuffers := @buf;
-      buf.cbBuffer := 4;
+      buf.cbBuffer := 0;
       buf.BufferType := SECBUFFER_TOKEN;
-      dt := SCHANNEL_SHUTDOWN;
-      buf.pvBuffer := @dt;
-      if ApplyControlToken(@fCtxt, @desc) = SEC_E_OK then
-      begin
-        buf.cbBuffer := 0;
-        buf.BufferType := SECBUFFER_TOKEN;
-        buf.pvBuffer := nil;
-        if fAccept then
-          res := AcceptSecurityContext(
-            @fCred, @fCtxt, nil, fFlags, 0, nil, @desc, f, nil)
-        else
-          res := InitializeSecurityContextW(
-            @fCred, @fCtxt, pointer(fServerAddressW), fFlags, 0, 0,
-            nil, 0, @fCtxt, @desc, f, nil);
-        if res = SEC_E_OK then
-        begin
-          SendRawAll('shutdown', buf.pvBuffer, buf.cbBuffer);
+      buf.pvBuffer := nil;
+      f := 0;
+      if fAccept then
+        AcceptSecurityContext(@fCred, @fCtxt, nil, fFlags, 0,
+          @fCtxt, @desc, f, nil)
+      else
+        InitializeSecurityContextW(@fCred, @fCtxt,
+          pointer(fServerAddressW), fFlags, 0, 0, nil, 0, @fCtxt, @desc, f, nil);
+      // best effort: any generated token is worth sending even if
+      // SChannel reports an informational/final shutdown status
+      if (buf.pvBuffer <> nil) and
+         (buf.cbBuffer <> 0) then
+        try
+          SendRawAll('shutdown', buf.pvBuffer, buf.cbBuffer, {timeoutms=}500);
+        finally
           FreeContextBuffer(buf.pvBuffer);
         end;
-      end;
+      // no CheckSEC_E_OK(res): shutdown from a destructor is best effort
     end;
-    // finalize TLS context for this connection
-    FinalizeCredCtxt;
-  finally
-    // release AfterBind() certificates information
-    if fAcceptCert <> nil then
-      CertFreeCertificateContext(fAcceptCert);
-    if fAcceptCertStore <> nil then
-      CertCloseStore(fAcceptCertStore, CERT_CLOSE_STORE_DEFAULT);
-    inherited Destroy;
+  except
+    // absorb any failed close_notify
   end;
+end;
+
+destructor TSChannelNetTls.Destroy;
+begin
+  // ensure shutdown robustness
+  if {%H-}PtrInt(fSocket.Socket) > 0 then
+    CleanShutdown;
+  // finalize TLS context for this connection
+  FinalizeCredCtxt;
+  // release AfterBind() certificates information
+  if fAcceptCert <> nil then
+    CertFreeCertificateContext(fAcceptCert);
+  if fAcceptCertStore <> nil then
+    CertCloseStore(fAcceptCertStore, CERT_CLOSE_STORE_DEFAULT);
+  inherited Destroy;
 end;
 
 function TSChannelNetTls.ReceivePending: integer;
@@ -2769,7 +2804,9 @@ function TSChannelNetTls.Send(Buffer: pointer; var Length: integer): TNetResult;
 var
   desc: TSecBufferDesc;
   buf: array[0..3] of TSecBuffer;
-  sent, s, len, trailer, pending, templen: cardinal;
+  sent, len, trailer, pending, templen: cardinal;
+  s, err: integer;
+  tix, endtix: Int64;
   temp: array[0..TLSRECMAXSIZE] of byte;
 begin
   result := nrFatalError;
@@ -2801,26 +2838,35 @@ begin
     if EncryptMessage(@fCtxt, 0, @desc, 0) <> SEC_E_OK then
       exit; // caller would shutdown the connection on SChannel error
     len := buf[0].cbBuffer + buf[1].cbBuffer + buf[2].cbBuffer;
+    endtix := 0;
     sent := 0;
     repeat
       s := mormot.net.sock.Send(fSocket.Socket, @temp[sent], len, MSG_NOSIGNAL);
-      if s = len then
-        break; // whole message sent
-      if s = 0 then
-        exit;  // report connection closed
-      if integer(s) < 0 then
-      begin
-        result := NetLastError;
-        if result <> nrRetry then
-          exit; // report socket fatal error
-      end
-      else
+      if s > 0 then
       begin
         dec(len, s);
+        if len = 0 then
+          break;
         inc(sent, s);
+        continue; // successful partial write: try again immediately
       end;
-      SleepHiRes(0); // warning: Sleep(1) waits typically 1-15 ms on Windows
-      // loop to try again
+      if s = 0 then
+      begin
+        result := nrClosed;
+        exit;
+      end;
+      result := NetLastError(NO_ERROR, @err);
+      if result <> nrRetry then
+        exit;
+      tix := GetTickCount64;
+      if endtix = 0 then
+        endtix := tix + 5000 // never loop forever
+      else if tix > endtix then
+      begin
+        result := nrTimeout;
+        exit;
+      end;
+      fSocket.WaitFor(100, [neWrite, neError]);
     until false;
   end;
   result := nrOK;
