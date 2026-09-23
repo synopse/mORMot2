@@ -2200,7 +2200,7 @@ begin
     result := NetLastError(NO_ERROR, @err);
     if result = nrOK then
       result := nrUnknownError;
-    exit; // especially nrRetry: never WaitFor() here
+    exit; // especially nrRetry: no WaitFor() loop here
   end;
   fOutputPos := 0;
 end;
@@ -2686,6 +2686,10 @@ var
   dt, f: cardinal;
 begin
   try
+    // flush pending EncryptMessage() pending buffer
+    if fOutputCount <> 0 then
+      if SendOutput <> nrOK then
+        exit; // can't preserve TLS record ordering: just close the TCP socket
     // Generate the TLS close_notify alert
     desc.ulVersion := SECBUFFER_VERSION;
     desc.cBuffers := 1;
@@ -2876,14 +2880,14 @@ begin
   result := nrOK;
   if plain <= 0 then
     exit;
-  // A previous call already encrypted this same plaintext record but could
-  // not completely write its ciphertext. Flush it before doing anything else.
+  // a previous call already encrypted this same plaintext record but could
+  // not completely write its ciphertext: flush it before doing anything else
   if fOutputCount <> 0 then
   begin
     result := SendOutput;
     if result <> nrOK then
       exit; // nrRetry -> caller retries the same plaintext
-    // The buffered TLS record is now completely on the socket.
+    // the buffered TLS record is now completely on the socket
     Length := fOutputPlainCount;
     fOutputPlainCount := 0;
     exit;
@@ -2917,11 +2921,11 @@ begin
   fOutputPos := 0;
   fOutputCount := encrypted;
   fOutputPlainCount := plain;
-  result := SendOutput;
+  result := SendOutput; // nrOk means fOutputCount = 0
   if result <> nrOK then
-    // on nrRetry (or error), Length remains zero and fOutput keeps partial record
+    // on nrRetry (or error), Length = zero and fOutput keeps partial record
     exit;
-  // Ciphertext was completely accepted by the socket.
+  // ciphertext was completely accepted by the socket
   Length := fOutputPlainCount;
   fOutputPlainCount := 0;
 end;
