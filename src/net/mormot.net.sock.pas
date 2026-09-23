@@ -4861,18 +4861,27 @@ end;
 function SameNetTlsContext(const tls1, tls2: TNetTlsContext): boolean;
 begin
   result := (tls1.Enabled = tls2.Enabled) and
-            ((not tls1.Enabled) or
-             ((tls1.IgnoreCertificateErrors = tls2.IgnoreCertificateErrors) and
-              (tls1.CertificateFile         = tls2.CertificateFile) and
-              (tls1.CertificateBin          = tls2.CertificateBin) and
-              (tls1.CACertificatesFile      = tls2.CACertificatesFile) and
-              (tls1.CACertificatesRaw       = tls2.CACertificatesRaw) and
-              (tls1.CASystemStores          = tls2.CASystemStores) and
-              (tls1.CertificateRaw          = tls2.CertificateRaw) and
-              (tls1.PrivateKeyFile          = tls2.PrivateKeyFile) and
-              (tls1.PrivatePassword         = tls2.PrivatePassword) and
-              (tls1.PrivateKeyRaw           = tls2.PrivateKeyRaw) and
-              (tls1.HostNamesCsv            = tls2.HostNamesCsv)));
+    ((not tls1.Enabled) or
+     ((tls1.IgnoreCertificateErrors       = tls2.IgnoreCertificateErrors) and
+      (tls1.AllowDeprecatedTls            = tls2.AllowDeprecatedTls) and
+      (tls1.DisableTls13                  = tls2.DisableTls13) and
+      (tls1.ClientAllowUnsafeRenegotation = tls2.ClientAllowUnsafeRenegotation) and
+      (tls1.CertificateFile               = tls2.CertificateFile) and
+      (tls1.CertificateBin                = tls2.CertificateBin) and
+      (tls1.CACertificatesFile            = tls2.CACertificatesFile) and
+      (tls1.CACertificatesRaw             = tls2.CACertificatesRaw) and
+      (tls1.CASystemStores                = tls2.CASystemStores) and
+      (tls1.CertificateRaw                = tls2.CertificateRaw) and
+      (tls1.PrivateKeyFile                = tls2.PrivateKeyFile) and
+      (tls1.PrivatePassword               = tls2.PrivatePassword) and
+      (tls1.PrivateKeyRaw                 = tls2.PrivateKeyRaw) and
+      (tls1.CipherList                    = tls2.CipherList) and
+      (tls1.CipherSuites                  = tls2.CipherSuites) and
+      (tls1.HostNamesCsv                  = tls2.HostNamesCsv)));
+  { note: the following do not need to be compared AFAICT
+    - ClientCertificateAuthentication: server-side semantics
+    - ClientVerifyOnce: server-side
+    - ReleaseBuffers: memory policy, not peer/handshake identity }
 end;
 
 
