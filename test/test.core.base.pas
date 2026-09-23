@@ -5201,9 +5201,11 @@ var
     SetLength(data, 1758350);  // generate 1.7MB of contiguous numbers
     p := pointer(data);
     max := p + length(data);
+    hash := 0;
     for i := 0 to high(lens) do
     begin
       c := gen.Next;
+      hash := crc32cBy4(hash, c);
       tmp[0] := #0;
       if c and $70000 > $50000 then
         PWord(@tmp)^ := 1 + ord('-') shl 8 // a few negative values
@@ -5236,6 +5238,7 @@ var
       p[l] := #0; // all with a trailing #0
       inc(p, l + 1);
     end;
+    CheckEqual(hash, 152899875, 'TLecuyer.Next');
     CheckEqual(p - pointer(data), length(data));
     hash := Hash32(data);
     CheckHash(data, $D2D00549);
