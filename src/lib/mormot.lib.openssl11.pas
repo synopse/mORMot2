@@ -11350,8 +11350,11 @@ var
   peer: PX509;
   c: TOpenSslNetTls;
 begin
-  peer := X509_STORE_CTX_get_current_cert(store);
+  result := 0;
   c := _PeerVerify;
+  if c = nil then
+    exit; // should not be called now
+  peer := X509_STORE_CTX_get_current_cert(store);
   c.fContext.PeerIssuer := peer.IssuerName;
   c.fContext.PeerSubject := peer.SubjectName;
   c.fContext.PeerCert := peer;
@@ -11369,7 +11372,10 @@ var
   c: TOpenSslNetTls;
   pwd: RawUtf8;
 begin
+  result := 0;
   c := _PeerVerify;
+  if c = nil then
+    exit; // should not be called now
   try
     pwd := c.fContext.OnPrivatePassword(c.fSocket, c.fContext, c.fSsl);
     result := length(pwd);
@@ -11445,7 +11451,7 @@ procedure TOpenSslNetTls.AfterConnection(Socket: TNetSocket;
 var
   P: PUtf8Char;
   h: RawUtf8;
-  threadpeer: PPointer;
+  peer: PPointer;
   //x: PX509DynArray;
   //ext: TX509_Extensions; exts: TRawUtf8DynArray; len: PtrInt; ocsp, isssuers: TRawUtf8DynArray;
 begin
@@ -11456,11 +11462,11 @@ begin
   ResetNetTlsContext(Context);
   fLastError := @Context.LastError;
   fServerAddress := ServerAddress;
-  threadpeer := @_PeerVerify;
+  peer := @_PeerVerify; // for OnEachPeerVerify/OnPrivatePassword callbacks
   // prepare TLS connection properties
   fCtx := SSL_CTX_new(TLS_client_method);
   try
-    threadpeer^ := self;
+    peer^ := self;
     SetupCtx(Context, {bind=}false);
     fSsl := SSL_new(fCtx);
     // setup client-side SNI field for the expected server host name(s)
@@ -11581,7 +11587,7 @@ begin
       end;
     end;
   finally
-    threadpeer^ := nil; // but keep fLastError since fContext remains
+    peer^ := nil; // but keep fLastError since fContext remains
   end;
 end;
 
@@ -11761,11 +11767,12 @@ procedure TOpenSslNetTls.AfterBind(Socket: TNetSocket;
 var
   peer: PPointer;
 begin
-  // we don't keep any fSocket/fContext bound socket on server side
+  fSocket := Socket;
+  fContext := @Context;
   Context.LastError := '';
   fLastError := @Context.LastError;
   fServerAddress := ServerAddress;
-  peer := @_PeerVerify;
+  peer := @_PeerVerify; // for OnEachPeerVerify/OnPrivatePassword callbacks
   // prepare global TLS connection properties, as reused by AfterAccept()
   fCtx := SSL_CTX_new_server(ServerAddress);
   try
@@ -11781,6 +11788,7 @@ begin
     Context.AcceptCert := fCtx;
   finally
     fLastError := nil; // as expected on server side
+    fContext := nil;   // don't retain shared server context here
     peer^ := nil;
   end;
 end;
@@ -11795,7 +11803,7 @@ begin
   fContext := @BoundContext; // main context may be shared e.g. for TAsyncServer
   // reset output information
   fLastError := LastError;
-  peer := @_PeerVerify;
+  peer := @_PeerVerify; // for OnEachPeerVerify callback support
   try
     peer^ := self;
     // prepare TLS connection properties from AfterBind() global context
