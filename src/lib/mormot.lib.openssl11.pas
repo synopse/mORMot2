@@ -11677,7 +11677,7 @@ end;
 procedure TOpenSslNetTls.SetupCtx;
 var
   v, mode, i, opt, res: integer;
-  cert: RawByteString;
+  cert, pwd: RawByteString;
   x: PX509;
   xa: PX509DynArray;
   pk: PEVP_PKEY;
@@ -11754,9 +11754,10 @@ begin
   if cert <> '' then
   begin
     ca := nil;
-    xa := LoadCertificates(cert); // PEM
+    xa := LoadCertificates(cert);
     if xa <> nil then
     try
+      // certificate(s) were suppplied as PEM text format
       CheckRes('SetupCtx use_certificate(0)',
         SSL_CTX_use_certificate(fCtx, xa[0]));
       for i := 1 to high(xa) do
@@ -11768,35 +11769,45 @@ begin
     finally
       PX509DynArrayFree(xa);
     end
-    else if (fContext^.PrivateKeyRaw = nil) and
-            (fContext^.PrivateKeyFile = '') and
-            ParsePkcs12(cert, fContext^.PrivatePassword, x, pk, @ca) then
-    try // was .pfx/pkcs#12 format as with SChannel
-      CheckRes('SetupCtx use_certificate(x)',
-        SSL_CTX_use_certificate(fCtx, x));
-      if ca <> nil then
-        for i := 0 to ca^.Count - 1 do
-        begin
-          c := ca^.Items[i];
-          CheckRes('SetupCtx Chain up_ref',
-            X509_up_ref(c)); // no inc(refcnt) in fCtx
-          res := SSL_CTX_add_extra_chain_cert(fCtx, c);
-          if res = OPENSSLSUCCESS then
-            continue;
-          c^.Free; // don't leak memory
-          CheckRes('SetupCtx add_extra_chain_cert', res);
-        end;
-      CheckRes('SetupCtx PrivateKey',
-        SSL_CTX_use_PrivateKey(fCtx, pk));
-      CheckRes('SetupCtx pfx',
-        SSL_CTX_check_private_key(fCtx));
-    finally
-      x^.Free;
-      pk^.Free;
-      ca^.FreeX509;
-    end
     else
-      CheckRes('SetupCtx: unsupported Certificate');
+    begin
+      // try certificate in .pfx/pkcs#12 format as with SChannel
+      if (fContext^.PrivateKeyRaw <> nil) or
+         (fContext^.PrivateKeyFile <> '') then
+        CheckRes('SetupCtx: unexpected private key with PKCS12');
+      pwd := fContext^.PrivatePassword;
+      if (pwd = '') and
+         Assigned(fContext^.OnPrivatePassword) then
+        pwd := fContext^.OnPrivatePassword(fSocket, fContext, fSsl);
+      if ParsePkcs12(cert, pwd, x, pk, @ca) then
+      try
+        CheckRes('SetupCtx use_certificate(x)',
+          SSL_CTX_use_certificate(fCtx, x));
+        if ca <> nil then
+          for i := 0 to ca^.Count - 1 do
+          begin
+            c := ca^.Items[i];
+            CheckRes('SetupCtx Chain up_ref',
+              X509_up_ref(c)); // no inc(refcnt) in fCtx
+            res := SSL_CTX_add_extra_chain_cert(fCtx, c);
+            if res = OPENSSLSUCCESS then
+              continue;
+            c^.Free; // don't leak memory
+            CheckRes('SetupCtx add_extra_chain_cert', res);
+          end;
+        CheckRes('SetupCtx PrivateKey',
+          SSL_CTX_use_PrivateKey(fCtx, pk));
+        CheckRes('SetupCtx pfx',
+          SSL_CTX_check_private_key(fCtx));
+      finally
+        FillZero(pwd);
+        x^.Free;
+        pk^.Free;
+        ca^.FreeX509;
+      end
+      else
+        CheckRes('SetupCtx: unsupported Certificate');
+    end;
   end
   else if fContext^.CertificateRaw <> nil then
     CheckRes('SetupCtx CertificateRaw',
