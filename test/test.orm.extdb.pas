@@ -76,6 +76,8 @@ type
     procedure DBPropertiesPersistence;
     /// NewStatementPrepared() when NewStatement itself raises an exception
     procedure NewStatementFailure;
+    /// EngineLockedNextID() when 'select max(ID)' fails (e.g. connection lost)
+    procedure NextIDSelectMaxFailure;
     /// initialize needed RESTful client (and server) instances
     // - i.e. a RESTful direct access to an external DB
     procedure ExternalRecords;
@@ -1078,6 +1080,59 @@ begin
   finally
     props.Free;
     SynDBLog.Family.Level := level;
+  end;
+end;
+
+procedure TTestExternalDatabase.NextIDSelectMaxFailure;
+var
+  model: TOrmModel;
+  server: TRestServerFullMemory;
+  props: TSqlDBConnectionProperties;
+  ext: TRestStorageExternalHook;
+  ndx: PtrInt;
+begin
+  // when 'select max(ID)' failed (e.g. "MySQL server has gone away"), the
+  // counter silently restarted from 0, so the next INSERT used ID=1, then 2, 3..
+  // with a "Duplicate entry for key PRIMARY" error until the next reset
+  model := TOrmModel.Create([TOrmPeopleExt]);
+  try
+    server := TRestServerFullMemory.Create(model);
+    try
+      DeleteFile('maxidtest.db3');
+      props := TSqlDBSQLite3ConnectionProperties.Create(
+        'maxidtest.db3', '', '', '');
+      try
+        OrmMapExternal(model, TOrmPeopleExt, props, 'MaxIDTest');
+        ext := TRestStorageExternalHook.Create(
+          TOrmPeopleExt, server.OrmInstance as TRestOrmServer);
+        try
+          ndx := model.GetTableIndexExisting(TOrmPeopleExt);
+          props.ExecuteNoResult('insert into MaxIDTest (ID) values (?)', [10]);
+          // make 'select max(ID)' fail: ExecuteDirect() returns nil
+          props.ExecuteNoResult('alter table MaxIDTest rename to MaxIDAway', []);
+          CheckEqual(ext.EngineLockedNextID, 0, 'no ID on select failure');
+          CheckEqual(ext.EngineLockedNextID, 0, 'no counter from 0');
+          CheckEqual(ext.EngineAdd(ndx, '{"FirstName":"a"}'), 0, 'add');
+          // once the database is back, max(ID) is retrieved again
+          props.ExecuteNoResult('alter table MaxIDAway rename to MaxIDTest', []);
+          CheckEqual(ext.EngineLockedNextID, 11, 'recovered');
+          CheckEqual(ext.EngineAdd(ndx, '{"FirstName":"b"}'), 12, 'add ok');
+          // void table: max(ID)=NULL is no error -> first ID is 1
+          props.ExecuteNoResult('delete from MaxIDTest', []);
+          ext.EngineAddForceSelectMaxID;
+          CheckEqual(ext.EngineLockedNextID, 1, 'void table');
+        finally
+          ext.Free;
+        end;
+      finally
+        props.Free;
+        DeleteFile('maxidtest.db3');
+      end;
+    finally
+      server.Free;
+    end;
+  finally
+    model.Free;
   end;
 end;
 
