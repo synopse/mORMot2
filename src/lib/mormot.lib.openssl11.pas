@@ -11668,7 +11668,12 @@ begin
   cert := Context.CertificateBin;
   if (cert = '') and
      (Context.CertificateFile <> '') then
+  begin
     cert := StringFromFile(TFileName(Context.CertificateFile));
+    if cert = '' then
+      EOpenSslNetTls.RaiseFmt(self,
+        'SetupCtx: missing CertificateFile %s', [Context.CertificateFile]);
+  end;
   if cert <> '' then
   begin
     ca := nil;
