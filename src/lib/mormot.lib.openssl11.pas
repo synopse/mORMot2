@@ -11318,6 +11318,7 @@ type
     fSsl: PSSL;
     fPeer: PX509;
     fCipherName, fServerAddress: RawUtf8;
+    fClientSide: boolean;
     fDoSslShutdown: boolean;
     procedure CheckRes(const method: ShortString; res: integer);
       {$ifdef HASINLINE} inline; {$endif}
@@ -11350,26 +11351,35 @@ function AfterConnectionPeerVerify(
 var
   x: PX509;
   c: TOpenSslNetTls;
+  ctx: PNetTlsContext;
+  server: TNetTlsContext; // local copy for each callback on server side
 begin
   result := 0;
   c := _PeerVerify;
-  if c = nil then
+  if (c = nil) or
+     not Assigned(c.fContext) or
+     not Assigned(c.fContext.OnEachPeerVerify) then
     exit; // should not be called now
+  ctx := c.fContext;
+  if not c.fClientSide then
+  begin
+    server := ctx^; // transient thread-safe context
+    ctx := @server;
+  end;
   x := store.CurrentCert;
-  c.fContext.PeerCert := x;
+  ctx^.PeerCert := x;
   if Assigned(x) then
   begin
-    c.fContext.PeerIssuer := x.IssuerName;
-    c.fContext.PeerSubject := x.SubjectName;
+    ctx^.PeerIssuer := x.IssuerName;
+    ctx^.PeerSubject := x.SubjectName;
   end
   else
   begin
-    c.fContext.PeerIssuer := '';
-    c.fContext.PeerSubject := '';
+    ctx^.PeerIssuer := '';
+    ctx^.PeerSubject := '';
   end;
   try
-    result := ord(c.fContext.OnEachPeerVerify(
-      c.fSocket, c.fContext, wasok <> 0, c.fSsl, x));
+    result := ord(ctx^.OnEachPeerVerify(c.fSocket, ctx, wasok <> 0, c.fSsl, x));
   except
     result := 0; // abort the connection on exception within callback
   end;
@@ -11383,7 +11393,9 @@ var
 begin
   result := 0;
   c := _PeerVerify;
-  if c = nil then
+  if (c = nil) or
+     not Assigned(c.fContext) or
+     not Assigned(c.fContext.OnPrivatePassword) then
     exit; // should not be called now
   try
     pwd := c.fContext.OnPrivatePassword(c.fSocket, c.fContext, c.fSsl);
@@ -11467,6 +11479,7 @@ begin
   // this method is called on the Client side once the TCP socket is established
   fSocket := Socket;
   fContext := @Context;
+  fClientSide := true;
   // reset output information
   ResetNetTlsContext(Context);
   fLastError := @Context.LastError;
@@ -11754,17 +11767,17 @@ end;
 function AfterAcceptSNI(s: PSSL; ad: PInteger; arg: pointer): integer; cdecl;
 var
   servername: PUtf8Char;
-  nettlscontext: PNetTlsContext absolute arg;
+  ctx: PNetTlsContext absolute arg;
   sslctx: PSSL_CTX;
 begin
   result := SSL_TLSEXT_ERR_OK; // requested servername has been accepted
-  if not Assigned(nettlscontext) or
-     not Assigned(nettlscontext^.OnAcceptServerName) then
+  if not Assigned(ctx) or
+     not Assigned(ctx^.OnAcceptServerName) then
     exit; // use default context/certificate
   servername := SSL_get_servername(s, TLSEXT_NAMETYPE_host_name);
   if servername = nil then
     exit;
-  sslctx := nettlscontext^.OnAcceptServerName(nettlscontext, s, servername);
+  sslctx := ctx^.OnAcceptServerName(ctx, s, servername);
   if sslctx <> nil then
     // switching server context
     if SSL_set_SSL_CTX(s, sslctx) = nil then // note: only change certificates
