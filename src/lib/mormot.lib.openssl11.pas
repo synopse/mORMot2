@@ -11356,29 +11356,28 @@ var
 begin
   result := 0;
   c := _PeerVerify;
-  if (c = nil) or
-     not Assigned(c.fContext) or
-     not Assigned(c.fContext.OnEachPeerVerify) then
-    exit; // should not be called now
-  ctx := c.fContext;
-  if not c.fClientSide then
-  begin
-    server := ctx^; // transient thread-safe context
-    ctx := @server;
-  end;
-  x := store.CurrentCert;
-  ctx^.PeerCert := x;
-  if Assigned(x) then
-  begin
-    ctx^.PeerIssuer := x.IssuerName;
-    ctx^.PeerSubject := x.SubjectName;
-  end
-  else
-  begin
-    ctx^.PeerIssuer := '';
-    ctx^.PeerSubject := '';
-  end;
+  if (c <> nil) and
+     Assigned(c.fContext) and
+     Assigned(c.fContext.OnEachPeerVerify) then // verify proper calling state
   try
+    ctx := c.fContext;
+    if not c.fClientSide then
+    begin
+      server := ctx^; // transient thread-safe context
+      ctx := @server;
+    end;
+    x := store.CurrentCert;
+    ctx^.PeerCert := x;
+    if Assigned(x) then
+    begin
+      ctx^.PeerIssuer := x.IssuerName;
+      ctx^.PeerSubject := x.SubjectName;
+    end
+    else
+    begin
+      ctx^.PeerIssuer := '';
+      ctx^.PeerSubject := '';
+    end;
     result := ord(ctx^.OnEachPeerVerify(c.fSocket, ctx, wasok <> 0, c.fSsl, x));
   except
     result := 0; // abort the connection on exception within callback
@@ -11393,10 +11392,9 @@ var
 begin
   result := 0;
   c := _PeerVerify;
-  if (c = nil) or
-     not Assigned(c.fContext) or
-     not Assigned(c.fContext.OnPrivatePassword) then
-    exit; // should not be called now
+  if (c <> nil) and
+     Assigned(c.fContext) and
+     Assigned(c.fContext.OnPrivatePassword) then // verify proper calling state
   try
     pwd := c.fContext.OnPrivatePassword(c.fSocket, c.fContext, c.fSsl);
     result := length(pwd);
@@ -11771,17 +11769,20 @@ var
   sslctx: PSSL_CTX;
 begin
   result := SSL_TLSEXT_ERR_OK; // requested servername has been accepted
-  if not Assigned(ctx) or
-     not Assigned(ctx^.OnAcceptServerName) then
-    exit; // use default context/certificate
-  servername := SSL_get_servername(s, TLSEXT_NAMETYPE_host_name);
-  if servername = nil then
-    exit;
-  sslctx := ctx^.OnAcceptServerName(ctx, s, servername);
-  if sslctx <> nil then
-    // switching server context
-    if SSL_set_SSL_CTX(s, sslctx) = nil then // note: only change certificates
-      result := SSL_TLSEXT_ERR_NOACK; // requested servername has been rejected
+  if Assigned(ctx) and
+     Assigned(ctx^.OnAcceptServerName) then
+  try
+    servername := SSL_get_servername(s, TLSEXT_NAMETYPE_host_name);
+    if servername = nil then
+      exit;
+    sslctx := ctx^.OnAcceptServerName(ctx, s, servername);
+    if sslctx <> nil then
+      // switching server context
+      if SSL_set_SSL_CTX(s, sslctx) = nil then // note: only change certificates
+        result := SSL_TLSEXT_ERR_NOACK; // requested servername has been rejected
+  except
+    // don't propagate any client callback exception to OpenSSL
+  end;
 end;
 
 procedure TOpenSslNetTls.AfterBind(Socket: TNetSocket;
