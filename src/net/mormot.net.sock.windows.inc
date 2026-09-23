@@ -2389,8 +2389,7 @@ var
   pfx: RawByteString;
   blob: TCryptDataBlob;
   pass: SynUnicode;
-  flags: integer;
-  keyspec: cardinal;
+  flags, keyspec: cardinal;
   prov: HCRYPTPROV;
   freeprov: BOOL;
 begin
@@ -2427,16 +2426,16 @@ begin
       RaiseLastError('AfterBind: PFXImportCertStore', ESChannel);
   end;
   // find first certificate in store with private key
+  flags := CRYPT_ACQUIRE_CACHE_FLAG; // credential owned by fAcceptCert
+  if OSVersion >= wVista then
+    flags := flags or CRYPT_ACQUIRE_ALLOW_NCRYPT_KEY_FLAG; // enable CNG store
   repeat
     fAcceptCert := mormot.lib.sspi.CertFindCertificateInStore(
       fAcceptCertStore, 0, 0, CERT_FIND_ANY, nil, fAcceptCert);
     if fAcceptCert = nil then
       raise ESChannel.Create('AfterBind: no Certificate available');
   until CryptAcquireCertificatePrivateKey(
-         fAcceptCert, 0, nil, prov, keyspec, freeprov);
-  if freeprov and
-     CryptoApi.Available then
-    CryptoApi.ReleaseContext(prov, 0);
+         fAcceptCert, flags, nil, prov, keyspec, freeprov);
   // this global certificate and its private key will be used by AfterAccept()
   Context.AcceptCert := fAcceptCert;
 end;
@@ -2581,8 +2580,8 @@ begin
        (not fAccept) and
        ((fFlags and ISC_REQ_USE_SUPPLIED_CREDS) = 0) then
     begin
-      // Server requested a client certificate: since we don't support client
-      // TLS certificates here, just continue with existing credentials
+      // Server requested a client certificate: since we don't supply one here,
+      // tell SChannel to continue without automatically selected credentials
       fFlags := fFlags or ISC_REQ_USE_SUPPLIED_CREDS;
       res := HandshakeStep(pointer(fInput), fInputCount);
     end;
