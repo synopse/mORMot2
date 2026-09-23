@@ -9213,7 +9213,8 @@ begin
     if errcert <> nil then
     begin
       errcert^ := c.CurrentCert;
-      X509_up_ref(errcert^);
+      if errcert^ <> nil then
+        X509_up_ref(errcert^);
     end;
   finally
     c.Free;
@@ -11347,20 +11348,28 @@ threadvar // do not publish for compilation within Delphi packages
 function AfterConnectionPeerVerify(
   wasok: integer; store: PX509_STORE_CTX): integer; cdecl;
 var
-  peer: PX509;
+  x: PX509;
   c: TOpenSslNetTls;
 begin
   result := 0;
   c := _PeerVerify;
   if c = nil then
     exit; // should not be called now
-  peer := X509_STORE_CTX_get_current_cert(store);
-  c.fContext.PeerIssuer := peer.IssuerName;
-  c.fContext.PeerSubject := peer.SubjectName;
-  c.fContext.PeerCert := peer;
+  x := store.CurrentCert;
+  c.fContext.PeerCert := x;
+  if Assigned(x) then
+  begin
+    c.fContext.PeerIssuer := x.IssuerName;
+    c.fContext.PeerSubject := x.SubjectName;
+  end
+  else
+  begin
+    c.fContext.PeerIssuer := '';
+    c.fContext.PeerSubject := '';
+  end;
   try
     result := ord(c.fContext.OnEachPeerVerify(
-      c.fSocket, c.fContext, wasok <> 0, c.fSsl, peer));
+      c.fSocket, c.fContext, wasok <> 0, c.fSsl, x));
   except
     result := 0; // abort the connection on exception within callback
   end;
