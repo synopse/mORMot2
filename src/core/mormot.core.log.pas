@@ -4266,7 +4266,7 @@ begin
        'ESynException.RaiseUtf8'
        {$ifdef ISDELPHI} , 'SynRtlUnwind',  '@HandleAnyException',
        '@HandleOnException', '@InternalRaiseAtExcept', '@RaiseAtExcept',
-       '@RaiseExcept', 'ThreadWrapper'
+       '@RaiseExcept', '@RaiseAgain', 'ThreadWrapper'
        {$ifdef CPUX86} , 'RawStackTrace' {$endif}
        {$endif ISDELPHI} ], s^.Name) >= 0) then
     exit; // only meaningful entries

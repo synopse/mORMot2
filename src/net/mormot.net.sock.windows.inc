@@ -2358,6 +2358,8 @@ end;
 procedure TSChannelNetTls.ResetState(Socket: TNetSocket);
 begin
   fSocket := Socket;
+  fSessionClosed := false;
+  fCipherName := '';
   fInputCount := 0;
   fInputSize := TLSRECMAXSIZE;
   if fInput = '' then
@@ -2366,7 +2368,7 @@ begin
   fOutputCount := 0;
   fOutputPlainCount := 0;
   if fOutput = '' then
-    SetLength(fOutput, TLSRECMAXSIZE); // encrypted TLS outputrecords
+    SetLength(fOutput, TLSRECMAXSIZE); // encrypted TLS output records
   if fData = '' then
     SetLength(fData, TLSRECMAXSIZE);   // decrypted application data
   fDataPos := 0;
@@ -2422,7 +2424,7 @@ begin
       finally
         HandshakeBufFree(buf);
       end;
-      // make TLS handshake and prepare for process
+      // make initial TLS handshake and prepare for process
       HandshakeLoop;
       break; // we are connected
     except
@@ -2526,7 +2528,7 @@ begin
     AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_INBOUND,
       nil, @cred, nil, nil, @fCred, nil));
   fFlags := ASC_REQ_FLAGS;
-  // make TLS handshake and prepare for process
+  // make initial TLS handshake and prepare for process
   HandshakeLoop;
   if CipherName <> nil then
     CipherName^ := GetCipherName;
@@ -2607,8 +2609,9 @@ var
   needrecv: boolean;
 begin
   // StepFirst=false for initial handshake - wait for the peer before ISC/ASC
-  // StepFirst=true for  SEC_I_RENEGOTIATE/post-handshake processing - call
-  //   ISC/ASC with the bytes returned by DecryptMessage, possibly none
+  if StepFirst then
+    // StepFirst=true for  SEC_I_RENEGOTIATE/post-handshake processing
+    fCipherName := ''; // may change have re-negotiate
   needrecv := not StepFirst;
   repeat
     if needrecv then
