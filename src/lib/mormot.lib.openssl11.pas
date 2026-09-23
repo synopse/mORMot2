@@ -11698,12 +11698,11 @@ begin
     mode := SSL_VERIFY_PEER;
     if fContext^.ClientCertificateAuthentication then
       mode := mode or SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
+    if fContext^.ClientVerifyOnce and
+       not fClientSide then
+      mode := mode or SSL_VERIFY_CLIENT_ONCE;
     if Assigned(fContext^.OnEachPeerVerify) then
-    begin
       cb := @AfterConnectionPeerVerify;
-      if fContext^.ClientVerifyOnce then
-        mode := mode or SSL_VERIFY_CLIENT_ONCE;
-    end;
     if fContext^.CACertificatesFile <> '' then
     begin
       CheckRes('SetupCtx load_verify_locations',
@@ -12117,7 +12116,7 @@ begin
     result := CheckSsl(Length, @err);
     if err <> WaitRes then
       exit; // SSL_ERROR_WANT_* handled (asynchronously) by the caller
-    WaitRetry(Length, err, endtix, 'Receive');
+    WaitRetry(Length, err, endtix, 'Receive/Send');
   until false;
 end;
 

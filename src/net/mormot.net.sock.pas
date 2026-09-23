@@ -1021,7 +1021,6 @@ type
     // - not used on SChannel
     ClientCertificateAuthentication: boolean;
     /// input: if two-way TLS client should be verified only once on the server
-    // - to be used with OnEachPeerVerify callback
     // - on OpenSSL server, set SSL_VERIFY_CLIENT_ONCE mode, i.e. do not ask for
     // a client certificate again during renegotiation or post-authentication
     // if a certificate was requested during the initial handshake
