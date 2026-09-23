@@ -2097,7 +2097,6 @@ type
     fCred: TCredHandle;
     fCtxt: TCtxtHandle;
     fFlags: cardinal;
-    fLastCheckSecError: cardinal;
     fSizes: TSecPkgContext_StreamSizes;
     fInput: RawByteString;  // encrypted TLS input records
     fOutput: RawByteString; // encrypted TLS output records
@@ -2109,8 +2108,9 @@ type
     fAcceptCert: mormot.core.os.security.PCCERT_CONTEXT;
     fAcceptCertStore: HCERTSTORE;
     fPeerInfo: TWinCertInfo;
-    procedure ESChannelRaiseLastError(const ctx: ShortString; res: cardinal);
-    function CheckSEC_E_OK(const ctx: ShortString; res: integer): cardinal;
+    procedure ESChannelRaiseError(const ctx: ShortString; res: cardinal);
+    procedure CheckSEC_E_OK(const ctx: ShortString; res: integer);
+      {$ifdef HASINLINE} inline; {$endif}
     procedure ResetState(Socket: TNetSocket);
     procedure WaitRawRetry(const ctx: ShortString; events: TNetEvents;
       var endtix: Int64; timeout: integer);
@@ -2118,7 +2118,7 @@ type
     procedure SendRawAll(const ctx: ShortString; buf: PByte; len, timeout: integer);
     function RecvRaw(const ctx: ShortString; buf: PByte; len: integer): integer;
     function HandshakeStep(buf: PByteArray; var len: integer): cardinal;
-    procedure HandshakeLoop(StepFirst: boolean = false);
+    procedure HandshakeLoop(NeedRecv: boolean = true);
     function CompleteHandshakeToken(const ctx: ShortString;
       res: cardinal; output: PSecBufferDesc): cardinal;
     procedure FinalizeCredCtxt;
@@ -2143,25 +2143,17 @@ type
 
 { TSChannelNetTls }
 
-procedure TSChannelNetTls.ESChannelRaiseLastError(const ctx: ShortString;
+procedure TSChannelNetTls.ESChannelRaiseError(const ctx: ShortString;
   res: cardinal);
-var
-  sys: integer;
-  msg: string;
 begin
-  sys := GetLastError;
-  msg := format('<%s>: %s returned %s, System Error %d [%s]',
-    [fServerAddressW, ctx, OsErrorShort(res), sys, GetErrorShort(sys)]);
-  raise ESChannel.Create(msg);
+  raise ESChannel.CreateFmt('<%s>: %s returned %s',
+    [fServerAddressW, ctx, OsErrorShort(res)]);
 end;
 
-function TSChannelNetTls.CheckSEC_E_OK(const ctx: ShortString;
-  res: integer): cardinal;
+procedure TSChannelNetTls.CheckSEC_E_OK(const ctx: ShortString; res: integer);
 begin
-  fLastCheckSecError := res;
   if res <> SEC_E_OK then
-    ESChannelRaiseLastError(ctx, res);
-  result := res;
+    ESChannelRaiseError(ctx, res);
 end;
 
 procedure TSChannelNetTls.WaitRawRetry(const ctx: ShortString;
@@ -2409,7 +2401,7 @@ begin
     res := CompleteHandshakeToken(
       'AfterConnection CompleteAuthToken', res, @buf.output);
     if res <> SEC_I_CONTINUE_NEEDED then
-      ESChannelRaiseLastError('InitializeSecurityContextW', res);
+      ESChannelRaiseError('InitializeSecurityContextW', res);
     if (buf.buf[2].cbBuffer = 0) or // SECBUFFER_TOKEN
        (buf.buf[2].pvBuffer = nil) then
       raise ESChannel.CreateFmt('Void Hello answer to %s', [ServerAddress]);
@@ -2580,19 +2572,15 @@ begin
     len := 0;
 end;
 
-procedure TSChannelNetTls.HandshakeLoop(StepFirst: boolean);
+procedure TSChannelNetTls.HandshakeLoop(NeedRecv: boolean);
 var
   res: cardinal;
   inputneeded: integer;
-  needrecv: boolean;
 begin
-  // StepFirst=false for initial handshake - wait for the peer before ISC/ASC
-  if StepFirst then
-    // StepFirst=true for  SEC_I_RENEGOTIATE/post-handshake processing
-    fCipherName := ''; // may change have re-negotiate
-  needrecv := not StepFirst;
+  // NeedRecv=true for initial handshake - wait for the peer before ISC/ASC
+  // NeedRecv=false for SEC_I_RENEGOTIATE/post-handshake processing
   repeat
-    if needrecv then
+    if NeedRecv then
     begin
       if fInputCount >= fInputSize then
         raise ESChannel.CreateFmt(
@@ -2613,13 +2601,13 @@ begin
     case res of
       SEC_E_INCOMPLETE_MESSAGE:
         // Keep existing bytes and append more TCP data
-        needrecv := true;
+        NeedRecv := true;
       SEC_I_CONTINUE_NEEDED:
         // SECBUFFER_EXTRA may already contain the next handshake message -
         // consume it immediately instead of blocking in recv()
-        needrecv := fInputCount = 0;
+        NeedRecv := fInputCount = 0;
     else
-      needrecv := false;
+      NeedRecv := false;
     end;
   until (res <> SEC_I_CONTINUE_NEEDED) and
         (res <> SEC_E_INCOMPLETE_MESSAGE);
@@ -2838,7 +2826,7 @@ begin
       end;
       if res = SEC_I_RENEGOTIATE then
         // TLS 1.3 uses SEC_I_RENEGOTIATE for post-handshake messages
-        HandshakeLoop({StepFirst=}true); // true = without waiting for recv()
+        HandshakeLoop({NeedRecv=}false);
       if fInputCount = 0 then
         break;
       res := DecryptInput;
