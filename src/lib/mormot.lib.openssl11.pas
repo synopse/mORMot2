@@ -11643,9 +11643,10 @@ begin
       if Context.ClientVerifyOnce then
         mode := mode or SSL_VERIFY_CLIENT_ONCE;
     end;
-    if FileExists(TFileName(Context.CACertificatesFile)) then
-      SSL_CTX_load_verify_locations(
-        fCtx, pointer(Context.CACertificatesFile), nil)
+    if Context.CACertificatesFile <> '' then
+      CheckRes('SetupCtx load_verify_locations',
+        SSL_CTX_load_verify_locations(
+          fCtx, pointer(Context.CACertificatesFile), nil))
     else if Context.CASystemStores <> [] then
       SSL_CTX_get_cert_store(fCtx)^.AddCertificates(
         LoadCertificatesFromSystemStore(Context.CASystemStores)) // cached
@@ -11653,7 +11654,8 @@ begin
       SSL_CTX_get_cert_store(fCtx)^.AddCertificates(
         PX509DynArray(Context.CACertificatesRaw))
     else
-      SSL_CTX_set_default_verify_paths(fCtx);
+      CheckRes('SetupCtx default_verify_paths',
+        SSL_CTX_set_default_verify_paths(fCtx));
     if not Bind then
       if Context.ClientAllowUnsafeRenegotation then
         SSL_CTX_set_options(fCtx, SSL_OP_LEGACY_SERVER_CONNECT);
