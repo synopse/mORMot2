@@ -11667,7 +11667,9 @@ begin
   // setup the peer verification - shared by AfterConnection and AfterBind
   cb := nil;
   _PeerVerify := self; // for OnEachPeerVerify/OnPrivatePassword callbacks
-  if fContext^.IgnoreCertificateErrors then
+  if fContext^.IgnoreCertificateErrors and
+     (fClientSide or
+      not fContext^.ClientCertificateAuthentication) then // support mTLS
     mode := SSL_VERIFY_NONE
   else
   begin
