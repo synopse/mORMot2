@@ -11437,7 +11437,7 @@ begin
      Assigned(c.fContext) and
      Assigned(c.fContext.OnPrivatePassword) then // verify proper calling state
   try
-    pwd := c.fContext.OnPrivatePassword(c.fSocket, c.fContext, c.fSsl);
+    pwd := c.fContext.OnPrivatePassword(c.fSocket, c.fContext, c.fCtx);
     result := length(pwd);
     if result <> 0 then
       if size > result  then
@@ -11775,10 +11775,10 @@ begin
       if (fContext^.PrivateKeyRaw <> nil) or
          (fContext^.PrivateKeyFile <> '') then
         CheckRes('SetupCtx: unexpected private key with PKCS12');
-      pwd := fContext^.PrivatePassword;
-      if (pwd = '') and
-         Assigned(fContext^.OnPrivatePassword) then
-        pwd := fContext^.OnPrivatePassword(fSocket, fContext, fSsl);
+      if Assigned(fContext^.OnPrivatePassword) then // as with PEM below
+        pwd := fContext^.OnPrivatePassword(fSocket, fContext, fCtx)
+      else
+        pwd := fContext^.PrivatePassword;
       if ParsePkcs12(cert, pwd, x, pk, @ca) then
       try
         CheckRes('SetupCtx use_certificate(x)',
@@ -11800,7 +11800,7 @@ begin
         CheckRes('SetupCtx pfx',
           SSL_CTX_check_private_key(fCtx));
       finally
-        FillZero(pwd);
+        FillZero(pwd); // protect this valid password
         x^.Free;
         pk^.Free;
         ca^.FreeX509;
