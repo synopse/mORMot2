@@ -10765,6 +10765,8 @@ var
   h: THash128;
 begin
   result := SSL_CTX_new(TLS_server_method);
+  if result = nil then
+    exit;
   // server process seems to expect a genuine session ID otherwise some clients
   // may trigger https://github.com/synopse/mORMot2/issues/377
   //   OpenSSL 1010104F error 1 [SSL_ERROR_SSL (error:140D9115:SSL
@@ -11320,7 +11322,7 @@ type
     fCipherName, fServerAddress: RawUtf8;
     fClientSide: boolean;
     fDoSslShutdown: boolean;
-    procedure CheckRes(const method: ShortString; res: integer);
+    procedure CheckRes(const method: ShortString; res: integer = 0);
       {$ifdef HASINLINE} inline; {$endif}
     function CheckSsl(res: integer; error: PInteger = nil): TNetResult;
     procedure CheckProc(proc: TOpenSSLProc; const ctx: ShortString);
@@ -11485,10 +11487,14 @@ begin
   peer := @_PeerVerify; // for OnEachPeerVerify/OnPrivatePassword callbacks
   // prepare TLS connection properties
   fCtx := SSL_CTX_new(TLS_client_method);
+  if fCtx = nil then
+    CheckRes('AfterConnection SSL_CTX_new');
   try
     peer^ := self;
     SetupCtx(Context, {bind=}false);
     fSsl := SSL_new(fCtx);
+    if fSsl = nil then
+      CheckRes('AfterConnection SSL_new');
     // setup client-side SNI field for the expected server host name(s)
     SSL_set_tlsext_host_name(fSsl, ServerAddress);
     if not Context.IgnoreCertificateErrors then
@@ -11779,9 +11785,10 @@ begin
     if sslctx <> nil then
       // switching server context
       if SSL_set_SSL_CTX(s, sslctx) = nil then // note: only change certificates
-        result := SSL_TLSEXT_ERR_NOACK; // requested servername has been rejected
+        result := SSL_TLSEXT_ERR_ALERT_FATAL;  // servername was rejected
   except
     // don't propagate any client callback exception to OpenSSL
+    result :=  SSL_TLSEXT_ERR_ALERT_FATAL;
   end;
 end;
 
@@ -11798,6 +11805,8 @@ begin
   peer := @_PeerVerify; // for OnEachPeerVerify/OnPrivatePassword callbacks
   // prepare global TLS connection properties, as reused by AfterAccept()
   fCtx := SSL_CTX_new_server(ServerAddress);
+  if fCtx = nil then
+    CheckRes('AfterBind SSL_CTX_new');
   try
     peer^ := self;
     SetupCtx(Context, {bind=}true);
@@ -11833,6 +11842,8 @@ begin
     if BoundContext.AcceptCert = nil then
       raise EOpenSslNetTls.Create('AfterAccept: missing AfterBind');
     fSsl := SSL_new(BoundContext.AcceptCert);
+    if fSsl = nil then
+      CheckRes('AfterAccept SSL_new');
     CheckRes('AfterAccept set_fd',
       SSLSetFdNoSigPipe(fSsl, Socket.Socket)); // MSG_NOSIGNAL on OpenSSL 4+
     // server TLS negotiation with server
@@ -12049,15 +12060,20 @@ begin
   try
     // cut-down version of TOpenSslNetTls.AfterConnection
     c := SSL_CTX_new(TLS_client_method);
-    SSL_CTX_set_verify(c, SSL_VERIFY_NONE, nil);
-    s := SSL_new(c);
-    SSL_set_tlsext_host_name(s, u.Server);
+    if c <> nil then
     try
-      if (SSLSetFdNoSigPipe(s, ns.Socket) = OPENSSLSUCCESS) and
-         (SSL_connect(s) = OPENSSLSUCCESS) then
-        result := s.PeerCertificates({acquire=}true);
+      SSL_CTX_set_verify(c, SSL_VERIFY_NONE, nil);
+      s := SSL_new(c);
+      if s <> nil then
+      try
+        SSL_set_tlsext_host_name(s, u.Server);
+        if (SSLSetFdNoSigPipe(s, ns.Socket) = OPENSSLSUCCESS) and
+           (SSL_connect(s) = OPENSSLSUCCESS) then
+          result := s.PeerCertificates({acquire=}true);
+      finally
+        s.Free;
+      end;
     finally
-      s.Free;
       c.Free;
     end;
   finally
