@@ -2419,13 +2419,14 @@ begin
     blob.pbData := pointer(pfx);
     pass := SynUnicode(Context.PrivatePassword);
     flags := PKCS12_INCLUDE_EXTENDED_PROPERTIES;
-    if OSVersion < wVista then
+    if (OSVersion < wVista) or
+       (wsWine in WindowsSpecs) then
       flags := 0;
     fAcceptCertStore := PFXImportCertStore(@blob, pointer(pass), flags);
     if pass <> '' then
       FillCharFast(pointer(pass)^, length(pass) * 2, 0); // anti forensic
     if fAcceptCertStore = nil then
-      ESChannelRaiseLastError('AfterBind: PFXImportCertStore', SEC_E_CERT_UNKNOWN);
+      RaiseLastError('AfterBind: PFXImportCertStore', ESChannel);
   end;
   // find first certificate in store with private key
   repeat
@@ -2515,7 +2516,7 @@ begin
   else // client side
     result := InitializeSecurityContextW(
       @fCred, @fCtxt, pointer(fServerAddressW), fFlags, 0, 0,
-      @b.input, 0, nil, @b.output, f, nil);
+      @b.input, 0, @fCtxt, @b.output, f, nil);
   try
     // SSPI may ask the caller to finalize the generated token
     case result of
@@ -2642,8 +2643,7 @@ begin
           pointer(fServerAddressW), fFlags, 0, 0, nil, 0, @fCtxt, @desc, f, nil);
       // best effort: any generated token is worth sending even if
       // SChannel reports an informational/final shutdown status
-      if (buf.pvBuffer <> nil) and
-         (buf.cbBuffer <> 0) then
+      if buf.pvBuffer <> nil then
         try
           SendRawAll('shutdown', buf.pvBuffer, buf.cbBuffer, {timeoutms=}500);
         finally
@@ -2860,7 +2860,7 @@ begin
         exit;
       tix := GetTickCount64;
       if endtix = 0 then
-        endtix := tix + 5000 // never loop forever
+        endtix := tix + 1000 // OS buffers are likely not to be full anyway
       else if tix > endtix then
       begin
         result := nrTimeout;
