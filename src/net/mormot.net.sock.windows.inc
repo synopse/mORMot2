@@ -2109,9 +2109,10 @@ type
     fPeerInfo: TWinCertInfo;
     procedure ESChannelRaiseLastError(const ctx: ShortString; res: cardinal);
     function CheckSEC_E_OK(const ctx: ShortString; res: integer): cardinal;
-    function FreeAndCheckSocket(const ctx: ShortString; res: integer;
-      tofree: pointer): cardinal;
-    procedure SendRawAll(const ctx: ShortString; buf: pointer; len: integer);
+    procedure WaitRawRetry(const ctx: ShortString; events: TNetEvents;
+      var endtix: Int64);
+    procedure SendRawAll(const ctx: ShortString; buf: PByte; len: integer);
+    function RecvRaw(const ctx: ShortString; buf: PByte; len: integer): integer;
     function HandshakeStep(buf: PByteArray; var len: integer): cardinal;
     procedure HandshakeLoop(StepFirst: boolean = false);
     procedure FinalizeCredCtxt;
@@ -2156,37 +2157,64 @@ begin
   result := res;
 end;
 
-function TSChannelNetTls.FreeAndCheckSocket(const ctx: ShortString;
-  res: integer; tofree: pointer): cardinal;
+procedure TSChannelNetTls.WaitRawRetry(const ctx: ShortString;
+  events: TNetEvents; var endtix: Int64);
+var
+  tix: Int64;
 begin
-  if tofree <> nil then
-    CheckSEC_E_OK(ctx, FreeContextBuffer(tofree)); // avoid leak id raised
-  if res = SOCKET_ERROR then
-    raise ESChannel.CreateFmt('%s: Socket Error %s',
-      [ctx, WinErrorShort(RawSocketErrNo)]);
-  if res = 0 then
-    raise ESChannel.CreateFmt('%s: Handshake aborted', [ctx]);
-  result := res;
+  tix := GetTickCount64;
+  if endtix = 0 then
+    endtix := tix + 5000 // never loop forever
+  else if tix > endtix then
+    raise ESChannel.CreateFmt('%s timeout', [ctx]);
+  fSocket.WaitFor(100, events);
 end;
 
 procedure TSChannelNetTls.SendRawAll(const ctx: ShortString;
-  buf: pointer; len: integer);
+  buf: PByte; len: integer);
 var
-  sent: integer;
-  p: PByte;
+  sent, err: integer;
+  endtix: Int64;
 begin
-  p := buf;
+  if buf = nil then
+    exit;
+  endtix := 0;
   while len > 0 do
   begin
-    sent := mormot.net.sock.Send(fSocket.Socket, p, len, 0);
-    if sent = SOCKET_ERROR then
-      raise ESChannel.CreateFmt('%s: Socket Error %s',
-        [ctx, WinErrorShort(RawSocketErrNo)]);
+    sent := mormot.net.sock.Send(fSocket.Socket, buf, len, MSG_NOSIGNAL);
+    if sent > 0 then
+    begin
+      inc(buf, sent);
+      dec(len, sent);
+      continue;
+    end;
     if sent = 0 then
-      raise ESChannel.CreateFmt('%s: Handshake aborted', [ctx]);
-    inc(p, sent);
-    dec(len, sent);
+      raise ESChannel.CreateFmt('%s: connection closed', [ctx]);
+    if NetLastError(NO_ERROR, @err) <> nrRetry then
+      raise ESChannel.CreateFmt('%s: Socket Error %s',
+        [ctx, WinErrorShort(err)]);
+    WaitRawRetry(ctx, [neWrite, neError], endtix); // asynchronous socket
   end;
+end;
+
+function TSChannelNetTls.RecvRaw(const ctx: ShortString;
+  buf: PByte; len: integer): integer;
+var
+  err: integer;
+  endtix: Int64;
+begin
+  endtix := 0;
+  repeat
+    result := mormot.net.sock.recv(fSocket.Socket, buf, len, 0);
+    if result > 0 then
+      exit;
+    if result = 0 then
+      raise ESChannel.CreateFmt('%s: connection closed', [ctx]);
+    if NetLastError(NO_ERROR, @err) <> nrRetry then
+      raise ESChannel.CreateFmt('%s: Socket Error %s',
+        [ctx, WinErrorShort(err)]);
+    WaitRawRetry(ctx, [neRead, neError], endtix); // asynchronous socket
+  until false;
 end;
 
 procedure TSChannelNetTls.FinalizeCredCtxt;
@@ -2521,10 +2549,8 @@ begin
       if fInputCount >= fInputSize then
         raise ESChannel.CreateFmt(
           'Handshake input buffer full (%d)', [fInputCount]);
-      inc(fInputCount, FreeAndCheckSocket('recv',
-        recv(fSocket.Socket,
-          @PByteArray(fInput)[fInputCount],
-          fInputSize - fInputCount, 0), nil));
+      inc(fInputCount, RecvRaw('recv', @PByteArray(fInput)[fInputCount],
+                               fInputSize - fInputCount));
     end;
     res := HandshakeStep(pointer(fInput), fInputCount);
     if res = SEC_I_INCOMPLETE_CREDENTIALS then
@@ -2593,7 +2619,7 @@ begin
             nil, 0, @fCtxt, @desc, f, nil);
         if res = SEC_E_OK then
         begin
-          mormot.net.sock.Send(fSocket.Socket, buf.pvBuffer, buf.cbBuffer, 0);
+          SendRawAll('shutdown', buf.pvBuffer, buf.cbBuffer);
           FreeContextBuffer(buf.pvBuffer);
         end;
       end;
