@@ -1222,8 +1222,8 @@ procedure ResetNetTlsContext(var TLS: TNetTlsContext);
 function GetTlsContext(TlsEnabled, IgnoreTlsCertError: boolean;
   var Context: TNetTlsContext; Forced: PNetTlsContext = nil): PNetTlsContext;
 
-/// compare the main fields of twoTNetTlsContext instances
-// - won't compare the callbacks, just the certificates/privatekey/hostcsv fields
+/// compare the main fields of twoTNetTlsContext instances for connection reuse
+// - check all TLS configuration fields and peer verification callbacks
 function SameNetTlsContext(const tls1, tls2: TNetTlsContext): boolean;
 
 var
@@ -4877,10 +4877,14 @@ begin
       (tls1.PrivateKeyRaw                 = tls2.PrivateKeyRaw) and
       (tls1.CipherList                    = tls2.CipherList) and
       (tls1.CipherSuites                  = tls2.CipherSuites) and
-      (tls1.HostNamesCsv                  = tls2.HostNamesCsv)));
+      (tls1.HostNamesCsv                  = tls2.HostNamesCsv) and
+      EventEquals(tls1.OnPeerValidate,      tls2.OnPeerValidate) and
+      EventEquals(tls1.OnEachPeerVerify,    tls2.OnEachPeerVerify) and
+      EventEquals(tls1.OnAfterPeerValidate, tls2.OnAfterPeerValidate)));
   { note: the following do not need to be compared AFAICT
-    - ClientCertificateAuthentication: server-side semantics
-    - ClientVerifyOnce: server-side
+    - ClientCertificateAuthentication, ClientVerifyOnce and OnAcceptServerName
+      are server-side policy
+    - OnPrivatePassword is not connection/peer related
     - ReleaseBuffers: memory policy, not peer/handshake identity }
 end;
 
