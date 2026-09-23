@@ -11392,7 +11392,7 @@ var
   server: TNetTlsContext; // local copy for each callback on server side
 begin
   result := 0;
-  c := _PeerVerify;
+  c := _PeerVerify; // resolve threadvar once
   if (c <> nil) and
      Assigned(c.fContext) and
      Assigned(c.fContext.OnEachPeerVerify) then // verify proper calling state
@@ -11428,7 +11428,7 @@ var
   pwd: RawUtf8;
 begin
   result := 0;
-  c := _PeerVerify;
+  c := _PeerVerify; // resolve threadvar once
   if (c <> nil) and
      Assigned(c.fContext) and
      Assigned(c.fContext.OnPrivatePassword) then // verify proper calling state
@@ -11460,7 +11460,7 @@ begin
     P := nil;
     exit;
   end;
-  S := P;
+  P := S;
   while (S^ <> #0) and
         (S^ <> ',') do
     inc(S);
@@ -11513,6 +11513,8 @@ procedure TOpenSslNetTls.AfterConnection(Socket: TNetSocket;
 var
   P: PUtf8Char;
   h: RawUtf8;
+  peer: ^TOpenSslNetTls;
+  prev: TOpenSslNetTls;
   //x: PX509DynArray;
   //ext: TX509_Extensions; exts: TRawUtf8DynArray; len: PtrInt; ocsp, isssuers: TRawUtf8DynArray;
 begin
@@ -11528,6 +11530,9 @@ begin
   fCtx := SSL_CTX_new(TLS_client_method);
   if fCtx = nil then
     CheckRes('AfterConnection SSL_CTX_new');
+  peer := @_PeerVerify; // resolve threadvar once
+  prev := peer^;        // make TLS callbacks reentrant
+  peer^ := self;
   try
     SetupCtx;
     fSsl := SSL_new(fCtx);
@@ -11653,7 +11658,7 @@ begin
       end;
     end;
   finally
-    _PeerVerify := nil; // but keep fLastError since fContext remains
+    peer^ := prev; // but keep fLastError since fContext remains
   end;
 end;
 
@@ -11672,7 +11677,6 @@ var
 begin
   // setup the peer verification - shared by AfterConnection and AfterBind
   cb := nil;
-  _PeerVerify := self; // for OnEachPeerVerify/OnPrivatePassword callbacks
   if fContext^.IgnoreCertificateErrors and
      (fClientSide or
       not fContext^.ClientCertificateAuthentication) then // support mTLS
@@ -11873,6 +11877,9 @@ end;
 
 procedure TOpenSslNetTls.AfterBind(Socket: TNetSocket;
   var Context: TNetTlsContext; const ServerAddress: RawUtf8);
+var
+  peer: ^TOpenSslNetTls;
+  prev: TOpenSslNetTls;
 begin
   fSocket := Socket;
   fContext := @Context;
@@ -11883,6 +11890,9 @@ begin
   fCtx := SSL_CTX_new_server(ServerAddress);
   if fCtx = nil then
     CheckRes('AfterBind SSL_CTX_new');
+  peer := @_PeerVerify; // resolve threadvar once
+  prev := peer^;        // make TLS callbacks reentrant
+  peer^ := self;
   try
     SetupCtx;
     // allow SNI per-server certificate via OnAcceptServerName callback
@@ -11894,7 +11904,7 @@ begin
     // this global context fCtx will be reused by AfterAccept()
     Context.AcceptCert := fCtx;
   finally
-    _PeerVerify := nil;
+    peer^ := prev;
     fLastError := nil; // as expected on server side
     fContext := nil;   // don't retain shared server context here
   end;
@@ -11903,16 +11913,18 @@ end;
 procedure TOpenSslNetTls.AfterAccept(Socket: TNetSocket;
   const BoundContext: TNetTlsContext; LastError, CipherName: PRawUtf8);
 var
-  peer: PPointer;
+  peer: ^TOpenSslNetTls;
+  prev: TOpenSslNetTls;
 begin
   // this method is called on the Server side for each accepted client TCP socket
   fSocket := Socket;
   fContext := @BoundContext; // main context may be shared e.g. for TAsyncServer
   // reset output information
   fLastError := LastError;
-  peer := @_PeerVerify; // for OnEachPeerVerify callback support
+  peer := @_PeerVerify; // resolve threadvar once
+  prev := peer^;        // make TLS callbacks reentrant
+  peer^ := self;
   try
-    peer^ := self;
     // prepare TLS connection properties from AfterBind() global context
     if BoundContext.AcceptCert = nil then
       raise EOpenSslNetTls.Create('AfterAccept: missing AfterBind');
@@ -11928,7 +11940,7 @@ begin
       CipherName^ := GetCipherName;
   finally
     fLastError := nil; // main fContext is shared, but not as error state
-    peer^ := nil;
+    peer^ := prev;
   end;
 end;
 

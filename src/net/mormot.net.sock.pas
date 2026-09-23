@@ -1222,7 +1222,7 @@ procedure ResetNetTlsContext(var TLS: TNetTlsContext);
 function GetTlsContext(TlsEnabled, IgnoreTlsCertError: boolean;
   var Context: TNetTlsContext; Forced: PNetTlsContext = nil): PNetTlsContext;
 
-/// compare the main fields of twoTNetTlsContext instances for connection reuse
+/// compare TNetTlsContext main fields for client connection reuse
 // - check all TLS configuration fields and peer verification callbacks
 function SameNetTlsContext(const tls1, tls2: TNetTlsContext): boolean;
 
