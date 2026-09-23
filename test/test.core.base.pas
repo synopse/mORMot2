@@ -5212,8 +5212,8 @@ var
       else
         tmp[0] := #0;
       case i and 15 of // fixed order/layout of field types (like real data)
-        0, 8, 12, 15:
-          AppendShortCardinal(c shr (32 - (c and 15)), tmp);
+        0, 8, 12, 15: // "and 31" below is mandatory on arm32
+          AppendShortCardinal(c shr ((32 - (c and 15)) and 31), tmp);
         1, 9, 13:
           AppendShortQWord(QWord(c) * i, tmp);
         2, 10, 14:
