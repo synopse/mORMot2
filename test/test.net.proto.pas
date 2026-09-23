@@ -1491,7 +1491,53 @@ begin
   Check(IsDnsName('.'));
   Check(not IsDnsName('..'));
   Check(not IsDnsName('..'));
-  // validate DNS client with some known values
+  // RFC 6066 DNS host name validation
+  Check(not IsDnsHostName(nil));
+  Check(not IsDnsHostName(''));
+  Check(IsDnsHostName('a'));
+  Check(IsDnsHostName('ab'));
+  Check(IsDnsHostName('localhost'));
+  Check(IsDnsHostName('example.com'));
+  Check(IsDnsHostName('www.example.com'));
+  Check(IsDnsHostName('a-b.example.com'));
+  Check(IsDnsHostName('123.example.com'));
+  Check(IsDnsHostName('1a.example.com'));
+  Check(IsDnsHostName('xn--mnchen-3ya.de'));
+  // SNI does not accept IP literals
+  Check(not IsDnsHostName('1.2.3.4'));
+  Check(not IsDnsHostName('127.0.0.1'));
+  Check(not IsDnsHostName('255.255.255.255'));
+  Check(not IsDnsHostName('::1'));
+  Check(not IsDnsHostName('2001:db8::1'));
+  // but purely numeric DNS labels are legal if it isn't an IPv4 literal
+  Check(IsDnsHostName('123'));
+  Check(IsDnsHostName('1.2.3.4.5'));
+  Check(IsDnsHostName('999.2.3.4'));
+  // invalid label separators / endings
+  Check(not IsDnsHostName('.example.com'));
+  Check(not IsDnsHostName('example.com.'));
+  Check(not IsDnsHostName('example..com'));
+  Check(not IsDnsHostName('a..b'));
+  // '-' is allowed only inside a label
+  Check(not IsDnsHostName('-example.com'));
+  Check(not IsDnsHostName('example-.com'));
+  Check(not IsDnsHostName('a.-example.com'));
+  Check(not IsDnsHostName('a.example-.com'));
+  Check(IsDnsHostName('a-b.c-d'));
+  // '_' is valid for DNS service names, but not host names / SNI
+  Check(IsDnsName('_sip._tcp.example.com'));
+  Check(IsDnsName('_acme-challenge.example.com'));
+  Check(IsDnsName('my_server'));
+  Check(not IsDnsHostName('_sip._tcp.example.com'));
+  Check(not IsDnsHostName('_acme-challenge.example.com'));
+  Check(not IsDnsHostName('my_server'));
+  // relaxed host-name characters are not DNS host-name characters
+  Check(not IsDnsHostName('nas$'));
+  Check(not IsDnsHostName('db~backup'));
+  Check(not IsDnsHostName('test+lab'));
+  Check(not IsDnsHostName('a b'));
+  Check(not IsDnsHostName('a/b'));
+  Check(not IsDnsHostName('user@example.com'));
   CheckEqual(ord(drrOPT), 41);
   CheckEqual(ord(drrHTTPS), 65);
   CheckEqual(ord(drrSPF), 99);

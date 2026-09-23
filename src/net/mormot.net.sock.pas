@@ -915,6 +915,10 @@ function IsHostName(Name: PUtf8Char): boolean;
 // - i.e. valid RFC 952 / RFC 1123 AA/AAAA records with '_ldap._tcp.domain.com'
 function IsDnsName(Name: PUtf8Char): boolean;
 
+/// quickly check if the text is a DNS host name, mainly alphanum ASCII and no IP
+// - e.g. as defined by RFC 6066 for valid SNI DNS names
+function IsDnsHostName(Name: PUtf8Char): boolean;
+
 /// quickly check if the text starts with the 'unix:/' prefix
 function IsUnix(Name: PUtf8Char): boolean;
   {$ifdef HASINLINE} inline; {$endif}
@@ -4726,6 +4730,46 @@ begin
       exit;
     end;
   result := true;
+end;
+
+function IsDnsHostName(Name: PUtf8Char): boolean;
+var
+  pos, lab: PtrInt;
+begin
+  result := false;
+  if Name = nil then
+    exit;
+  pos := 0;
+  lab := 0;
+  while true do
+    case Name[pos] of
+      #0, '.':
+        begin
+          if (pos = 0) or (pos > 253) or // textual FQDN without trailing '.'
+             (lab = 0) or (lab > 63) or  // DNS label size
+             (Name[pos - 1] = '-') then  // label should end with alphanumeric
+            exit;
+          if Name[pos] = #0 then
+            break;
+          inc(pos);
+          lab := 0;
+        end;
+      '0'..'9', 'a'..'z', 'A'..'Z':
+        begin
+          inc(pos);
+          inc(lab);
+        end;
+      '-':
+        begin
+          if lab = 0 then        // label can't start with '-'
+            exit;
+          inc(pos);
+          inc(lab);
+        end;
+    else
+      exit; // rejects '_', UTF-8, ':', URI chars...
+    end;
+  result := not NetIsIP4(Name); // RFC 6066 explicitly forbids literal IPv4
 end;
 
 function GetKnownHost(const HostName: RawUtf8; out ip4: TNetIP4): boolean;
