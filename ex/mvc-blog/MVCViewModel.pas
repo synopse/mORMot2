@@ -255,7 +255,7 @@ begin
       info.Title := 'mORMot BLOG';
       info.Description :=
         'Sample Blog Web Application using Synopse mORMot 2 MVC';
-      info.About := TSynTestCase.RandomTextParagraph(10, '!');
+      info.About := RandomTextParagraph(10, '!');
     end;
     info.About := info.About + #13#10'Website powered by mORMot MVC ' +
       SYNOPSE_FRAMEWORK_VERSION + ', compiled with ' + COMPILER_VERSION +
@@ -287,10 +287,9 @@ begin
     for n := 1 to FAKEDATA_ARTICLESCOUNT do
     begin
       article.PublishedMonth := 2014 * 12 + (n div 100);
-      article.Title := TSynTestCase.RandomTextParagraph(5, ' ');
-      article.abstract := TSynTestCase.RandomTextParagraph(30, '!');
-      article.Content := TSynTestCase.RandomTextParagraph(
-        200, '.', 'https://synopse.info');
+      article.Title    := RandomTextParagraph(5, ' ');
+      article.Abstract := RandomTextParagraph(30, '!');
+      article.Content  := RandomTextParagraph(200, '.', 'https://synopse.info');
       article.Tags := nil;
       for t := 1 to Random32(6) do
         article.TagsAddOrdered(tags[Random32(length(tags))], fTagsLookup);
@@ -305,9 +304,8 @@ begin
       for n := 1 to FAKEDATA_ARTICLESCOUNT * 2 do
       begin
         comment.Article := CastID(articles[Random32(length(articles))]);
-        comment.Title := TSynTestCase.RandomTextParagraph(5, ' ');
-        comment.Content :=
-          TSynTestCase.RandomTextParagraph(30, '.', 'http://mormot.net');
+        comment.Title   := RandomTextParagraph(5, ' ');
+        comment.Content := RandomTextParagraph(30, '.', 'http://mormot.net');
         batch.Add(comment, true);
       end;
       RestModel.Orm.BatchSend(batch, comments)

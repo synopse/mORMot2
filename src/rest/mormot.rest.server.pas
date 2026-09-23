@@ -116,7 +116,7 @@ type
     /// the thread which launched the request
     // - is set by TRestServer.BeginCurrentThread from multi-thread server
     // handlers - e.g. TRestHttpServer
-    RunningThread: TThread;
+    RunningThread: TThreadAbstract;
   end;
 
   /// kind of (static) database server implementation available
@@ -1834,9 +1834,9 @@ type
     fServer: IRestOrmServer;
     fRouter: TRestRouter;
     fRouterSafe: TRWLightLock;
+    fServiceReleaseTimeoutMicrosec: integer;
     fOnNotifyCallback: TOnRestServerClientCallback;
     fAuthenticationBearerHeader: PAesSignature;
-    fServiceReleaseTimeoutMicrosec: integer;
     procedure SetNoAjaxJson(const Value: boolean);
     function GetNoAjaxJson: boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -1845,8 +1845,8 @@ type
     function StatusCodeToText(Code: cardinal): PRawUtf8; virtual;
     procedure HandleUriError(Ctxt: TRestServerUriContext; E: Exception);
     /// ensure the thread will be taken into account during process
-    procedure OnBeginCurrentThread(Sender: TThread); override;
-    procedure OnEndCurrentThread(Sender: TThread); override;
+    procedure OnBeginCurrentThread(Sender: TThreadAbstract); override;
+    procedure OnEndCurrentThread(Sender: TThreadAbstract); override;
     // called by Stat() and Info() method-based services
     procedure InternalStat(Ctxt: TRestServerUriContext; W: TJsonWriter); virtual;
     procedure AddStat(Flags: TRestServerAddStats; W: TJsonWriter);
@@ -2984,7 +2984,7 @@ function TRestServerUriContext.Authenticate: boolean;
 var
   s: TAuthSession;
   a: ^TRestServerAuthentication;
-  tix32, bearerid: cardinal;
+  tix32, c32, bearerid: cardinal;
   n: PtrInt;
 begin
   result := true;
@@ -3029,7 +3029,9 @@ begin
     end;
     // first check for deprecated sessions (every second is enough)
     tix32 := TickCount64 shr 10;
-    if Server.fSessionsDeprecatedTix <> tix32 then
+    c32 := Server.fSessionsDeprecatedTix;
+    if (c32 <> tix32) and
+       LockedExc32(Server.fSessionsDeprecatedTix, tix32, c32) then
       Server.SessionDeleteDeprecated(tix32);
     // TAuthSession instance may have been stored at connection level
     if (rsoSessionInConnectionOpaque in Server.Options) and
@@ -7379,7 +7381,6 @@ var
   a: PAuthSession;
 begin
   // TRestServer.Uri() runs this method at most every second
-  fSessionsDeprecatedTix := tix32; // = TickCount64 shr 10
   result := 0;
   if (self = nil) or
      (fSessions = nil) or
@@ -7391,17 +7392,16 @@ begin
     for i := fSessions.Count - 1 downto 0 do // backward for deletion
     begin
       dec(a);
-      if tix32 > a^.fTimeOutTix then // remove this session
+      if tix32 <= a^.fTimeOutTix then
+        continue; // keep this session
+      if result = 0 then // first deprecated session identified
       begin
-        if result = 0 then // first deprecated session identified
-        begin
-          fLogClass.EnterLocal(log, self, 'SessionDeleteDeprecated');
-          fSessions.Safe.WriteLock; // upgrade the lock (only if needed)
-        end;
-        WriteLockedSessionDelete(i, a^, nil); // with full clean-up
-        a := @fSessions.List[i]; // List[] may have moved in memory
-        inc(result);
+        fLogClass.EnterLocal(log, self, 'SessionDeleteDeprecated');
+        fSessions.Safe.WriteLock; // upgrade the lock (only if needed)
       end;
+      WriteLockedSessionDelete(i, a^, nil); // with full clean-up
+      a := @fSessions.List[i]; // List[] may have moved in memory
+      inc(result);
     end;
   finally
     if result <> 0 then
@@ -7813,7 +7813,7 @@ begin
     DeleteFile(aFileName);
 end;
 
-procedure TRestServer.OnBeginCurrentThread(Sender: TThread);
+procedure TRestServer.OnBeginCurrentThread(Sender: TThreadAbstract);
 var
   tc: integer;
   id: TThreadID;
@@ -7841,7 +7841,7 @@ begin
   inherited OnBeginCurrentThread(Sender);
 end;
 
-procedure TRestServer.OnEndCurrentThread(Sender: TThread);
+procedure TRestServer.OnEndCurrentThread(Sender: TThreadAbstract);
 var
   tc: integer;
   i: PtrInt;
@@ -7899,7 +7899,7 @@ var
   ctxt: TRestServerUriContext;
   node: TRestTreeNode;
   i: PtrInt;
-  idletix32: cardinal;
+  idletix32, c32: cardinal;
   m: TUriMethod;
 begin
   // 1. reject ASAP if not worth processing
@@ -8083,12 +8083,12 @@ begin
     ctxt.Free;
   end;
   // 12. trigger post-request periodic process
-  if (idletix32 <> 0) and
-     (fOnIdleLastTix <> idletix32) then
-  begin
-    fOnIdleLastTix := idletix32;
+  if idletix32 = 0 then
+    exit;
+  c32 := fOnIdleLastTix;
+  if (c32 <> idletix32) and
+     LockedExc32(fOnIdleLastTix, idletix32, c32) then
     OnIdle(self);
-  end;
 end;
 
 procedure TRestServer.Stat(Ctxt: TRestServerUriContext);
@@ -8450,7 +8450,7 @@ end;
 initialization
   // should match TPerThreadRunningContext definition in mormot.core.interfaces
   assert(SizeOf(TServiceRunningContext) =
-    SizeOf(TObject) + SizeOf(TObject) + SizeOf(TThread));
+    SizeOf(TObject) + SizeOf(TObject) + SizeOf(TThreadAbstract));
   GetEnumTrimmedNames(TypeInfo(TOnAuthenticationFailedReason), @OAFR_TXT, scUnCamelCase);
 
 end.

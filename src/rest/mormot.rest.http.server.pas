@@ -252,8 +252,8 @@ type
     // implement the server response - must be thread-safe
     function Request(Ctxt: THttpServerRequestAbstract): cardinal; virtual;
     // assigned to fHttpServer.OnHttpThreadStart/Terminate e.g. to handle connections
-    procedure HttpThreadStart(Sender: TThread); virtual;
-    procedure HttpThreadTerminate(Sender: TThread); virtual;
+    procedure HttpThreadStart(Sender: TThreadAbstract); virtual;
+    procedure HttpThreadTerminate(Sender: TThreadAbstract); virtual;
     function GetRestServerCount: integer;
       {$ifdef HASINLINE}inline;{$endif}
     function GetRestServer(Index: integer): TRestServer;
@@ -560,6 +560,13 @@ type
   /// callback expected by TRestHttpRemoteLogServer to notify about a received log
   TRemoteLogReceivedOne = procedure(const Text: RawUtf8) of object;
 
+  /// callback expected by TRestHttpRemoteLogServer.CreateWithSender
+  // - ConnectionID identifies the HTTP connection which sent this text, not a
+  // client process: a reconnecting client gets a new ID, from the 31-bit
+  // sequence of the socket server - RemoteIP may be '' for a local connection
+  TRemoteLogReceivedFrom = procedure(const Text: RawUtf8;
+    ConnectionID: TRestConnectionID; const RemoteIP: RawUtf8) of object;
+
   /// limited HTTP server which is will receive remote log notifications
   // - this will create a simple in-memory mORMot server, which will trigger
   // a supplied callback when a remote log is received
@@ -569,12 +576,17 @@ type
   protected
     fServer: TRestServerFullMemory;
     fEvent: TRemoteLogReceivedOne;
+    fEventFrom: TRemoteLogReceivedFrom;
   public
     /// initialize the HTTP server and an internal mORMot server
-    // - you can share several HTTP log servers on the same port, if you use
-    // a dedicated root URI and use the http.sys server (which is the default)
+    // - will use our useHttpSocket server on all systems, which is good enough
+    // for a few connections, and needs no http.sys URI registration on Windows
     constructor Create(const aRoot: RawUtf8; aPort: integer;
       const aEvent: TRemoteLogReceivedOne); reintroduce;
+    /// initialize the HTTP server, also notifying the sender connection
+    // - e.g. to tell several simultaneous clients apart, as the LogView tool
+    constructor CreateWithSender(const aRoot: RawUtf8; aPort: integer;
+      const aEvent: TRemoteLogReceivedFrom);
     /// release the HTTP server and its internal mORMot server
     destructor Destroy; override;
     /// the associated mORMot server instance running with this HTTP server
@@ -864,7 +876,7 @@ begin
     include(hso, hsoThreadSmooting); // regular HW tends to like it
   {$ifdef USEHTTPSYS}
   if aUse in HTTP_API_MODES then // Windows system's http.sys
-    if wsWine in WindowsSpecs then
+    if wsWeakHttpSys in WindowsSpecs then
     begin
       fLog.Add.Log(sllWarning, '%: httpapi probably not well supported on % -> ' +
           'fallback to useHttpAsync', [ToText(aUse)^, OSVersionInfoEx], self);
@@ -1237,7 +1249,7 @@ begin
     match := rmNoMatch;
     matchcase := rsoRedirectServerRootUriForExactCase in fOptions;
     // thread-safe TLS + URI match from fRestServers[].Server.Model array
-    fSafe.ReadLock;
+    fSafe.ReadLock; // protect fRestServers[]
     {$ifdef HASFASTTRYFINALLY}
     try
     {$else}
@@ -1326,7 +1338,7 @@ begin
     ComputeAccessControlHeader(Ctxt, {ReplicateAllowHeaders=}false);
 end;
 
-procedure TRestHttpServer.HttpThreadTerminate(Sender: TThread);
+procedure TRestHttpServer.HttpThreadTerminate(Sender: TThreadAbstract);
 var
   i: PtrInt;
 begin
@@ -1341,7 +1353,7 @@ begin
   end;
 end;
 
-procedure TRestHttpServer.HttpThreadStart(Sender: TThread);
+procedure TRestHttpServer.HttpThreadStart(Sender: TThreadAbstract);
 var
   i: PtrInt;
 begin
@@ -1584,7 +1596,7 @@ begin
         inc(one);
       end;
   finally
-    fSafe.ReadLock;
+    fSafe.ReadUnLock;
   end;
 end;
 
@@ -1692,14 +1704,22 @@ constructor TRestHttpRemoteLogServer.Create(const aRoot: RawUtf8;
 var
   aModel: TOrmModel;
 begin
+  fEvent := aEvent; // before the HTTP server starts to process requests
   aModel := TOrmModel.Create([], aRoot);
   fServer := TRestServerFullMemory.Create(aModel);
   aModel.Owner := fServer;
   fServer.ServiceMethodRegisterPublishedMethods('', self);
   fServer.AcquireExecutionMode[execSoaByMethod] := amLocked; // protect aEvent
-  inherited Create(UInt32ToUtf8(aPort), fServer, '+', HTTP_DEFAULT_MODE, nil, 1);
-  fEvent := aEvent;
+  inherited Create(UInt32ToUtf8(aPort), fServer, '+', useHttpSocket, nil, 1);
+  // we favor useHttpSocket since it is stable and perfect for a few clients
   SetAccessControlAllowOrigin('*'); // e.g. when called from AJAX/SMS
+end;
+
+constructor TRestHttpRemoteLogServer.CreateWithSender(const aRoot: RawUtf8;
+  aPort: integer; const aEvent: TRemoteLogReceivedFrom);
+begin
+  fEventFrom := aEvent; // before the HTTP server starts to process requests
+  Create(aRoot, aPort, nil);
 end;
 
 destructor TRestHttpRemoteLogServer.Destroy;
@@ -1713,12 +1733,16 @@ end;
 
 procedure TRestHttpRemoteLogServer.RemoteLog(Ctxt: TRestServerUriContext);
 begin
-  if Assigned(fEvent) and
-     (Ctxt.Method = mPUT) then
-  begin
-    fEvent(Ctxt.Call^.InBody);
-    Ctxt.Success;
-  end;
+  if Ctxt.Method <> mPUT then
+    exit;
+  if Assigned(fEventFrom) then
+    fEventFrom(Ctxt.Call^.InBody, Ctxt.Call^.LowLevelConnectionID,
+      Ctxt.Call^.LowLevelRemoteIP)
+  else if Assigned(fEvent) then
+    fEvent(Ctxt.Call^.InBody)
+  else
+    exit;
+  Ctxt.Success;
 end;
 
 

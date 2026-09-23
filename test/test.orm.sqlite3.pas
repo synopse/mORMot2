@@ -151,6 +151,8 @@ type
     procedure ShardReadAfterPurge;
     /// validate TRestStorageShardDB.MaxShardCount implementation
     procedure _MaxShardCount;
+    /// validate "uhex" BATCH UPDATE over several tables and rejected rows
+    procedure BatchUpdate;
   end;
 
 
@@ -2769,6 +2771,126 @@ begin
     finally
       R.Free;
     end;
+  finally
+    db.Free;
+  end;
+end;
+
+type
+  // two tables with the very same layout, i.e. the same field bits
+  TOrmBatchUpdA = class(TOrm)
+  protected
+    fX, fY: integer;
+  published
+    property X: integer
+      read fX write fX;
+    property Y: integer
+      read fY write fY;
+  end;
+
+  TOrmBatchUpdB = class(TOrmBatchUpdA);
+
+procedure TTestSqliteMemory.BatchUpdate;
+var
+  db: TRestServerDB;
+  b: TRestBatch;
+  res: TIDDynArray;
+
+  procedure Fill(Table: TOrmClass);
+  var
+    r: TOrmBatchUpdA;
+    i: integer;
+  begin
+    r := Table.Create as TOrmBatchUpdA;
+    try
+      for i := 1 to 3 do
+      begin
+        r.IDValue := i;
+        r.X := i;
+        r.Y := 0;
+        CheckEqual(db.Orm.Add(r, true, true), i);
+      end;
+    finally
+      r.Free;
+    end;
+  end;
+
+  procedure AddUpdates(Table: TOrmClass; Base: integer);
+  var
+    r: TOrmBatchUpdA;
+    i: integer;
+  begin
+    r := Table.Create as TOrmBatchUpdA;
+    try
+      for i := 1 to 3 do
+      begin
+        r.IDValue := i;
+        r.Y := Base + i;
+        check(b.Update(r, 'Y') >= 0); // "uhex" encoding of the Y field only
+      end;
+    finally
+      r.Free;
+    end;
+  end;
+
+  function Update(Table: TOrmClass; Base: integer;
+    Options: TRestBatchOptions): integer;
+  begin
+    b := TRestBatch.Create(db.Orm, Table, 1000, Options);
+    try
+      AddUpdates(Table, Base);
+      result := db.Orm.BatchSend(b, res);
+    finally
+      b.Free;
+    end;
+  end;
+
+  function Values(Table: TOrmClass): RawUtf8;
+  begin
+    result := db.Orm.OneFieldValues(Table, 'Y', '');
+  end;
+
+begin
+  db := TRestServerDB.CreateWithOwnModel([TOrmBatchUpdA, TOrmBatchUpdB],
+    SQLITE_MEMORY_DATABASE_NAME);
+  try
+    db.Server.CreateMissingTables;
+    Fill(TOrmBatchUpdA);
+    Fill(TOrmBatchUpdB);
+    // two separated batches over two tables with the same field bits
+    CheckEqual(Update(TOrmBatchUpdA, 100, [boExtendedJson]), HTTP_SUCCESS);
+    CheckEqual(Values(TOrmBatchUpdA), '101,102,103');
+    CheckEqual(Values(TOrmBatchUpdB), '0,0,0');
+    CheckEqual(Update(TOrmBatchUpdB, 200, [boExtendedJson]), HTTP_SUCCESS);
+    CheckEqual(Values(TOrmBatchUpdA), '101,102,103', 'no cross-table write');
+    CheckEqual(Values(TOrmBatchUpdB), '201,202,203');
+    // a single batch over two tables with the same field bits
+    b := TRestBatch.Create(db.Orm, nil, 1000, [boExtendedJson]);
+    try
+      AddUpdates(TOrmBatchUpdA, 300);
+      AddUpdates(TOrmBatchUpdB, 400);
+      CheckEqual(db.Orm.BatchSend(b, res), HTTP_SUCCESS);
+    finally
+      b.Free;
+    end;
+    CheckEqual(Values(TOrmBatchUpdA), '301,302,303');
+    CheckEqual(Values(TOrmBatchUpdB), '401,402,403');
+    // a row rejected by the database is reported as such
+    db.DB.Execute('CREATE TRIGGER BatchUpdReject BEFORE UPDATE ON BatchUpdB ' +
+      'WHEN OLD.ID=2 BEGIN SELECT RAISE(ABORT,''rejected''); END');
+    CheckEqual(Update(TOrmBatchUpdB, 500, [boExtendedJson]), HTTP_SUCCESS);
+    if CheckEqual(length(res), 3) then
+    begin
+      CheckEqual(res[0], HTTP_SUCCESS);
+      check(res[1] <> HTTP_SUCCESS, 'rejected');
+      CheckEqual(res[2], HTTP_SUCCESS);
+    end;
+    CheckEqual(Values(TOrmBatchUpdB), '501,402,503');
+    // and boRollbackOnError aborts the whole batch transaction
+    check(Update(TOrmBatchUpdB, 600, [boExtendedJson, boRollbackOnError])
+      <> HTTP_SUCCESS, 'rollback');
+    CheckEqual(Values(TOrmBatchUpdB), '501,402,503', 'rollbacked');
+    CheckEqual(Values(TOrmBatchUpdA), '301,302,303');
   finally
     db.Free;
   end;

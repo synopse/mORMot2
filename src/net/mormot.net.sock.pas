@@ -57,8 +57,8 @@ const
 
   {$ifdef OSWINDOWS}
   SOCKADDR_SIZE = 28;
-  {$else}
-  SOCKADDR_SIZE = 110; // able to store UNIX domain socket name
+  {$else} // should be big enough to store UNIX domain socket name
+  SOCKADDR_SIZE = {$ifdef SOCK_HAS_SINLEN} 106 {$else} 110 {$endif};
   {$endif OSWINDOWS}
 
 var
@@ -260,6 +260,8 @@ type
     procedure PortText(var result: RawUtf8);
     /// set the network port (0..65535) of this address
     function SetPort(p: TNetPort): TNetResult;
+    /// quickly check if holds 127.x.x.x. IPv4 loopback or ::1 IPv6 loopback
+    function IsLoopback: boolean;
     /// compute the number of bytes actually used in this address buffer
     function Size: integer;
       {$ifdef FPC}inline;{$endif}
@@ -346,13 +348,18 @@ type
     // - async=true will force clientsocket to be defined as asynchronous;
     // supporting accept4() syscall on Linux
     function Accept(out clientsocket: TNetSocket; out addr: TNetAddr;
-      async: boolean): TNetResult;
+      async: boolean; rawError: PNetErrorInt = nil): TNetResult;
     /// retrieve the current address associated on this connected socket
     function GetName(out addr: TNetAddr): TNetResult;
     /// retrieve this connected socket address as 'ip[:port]' text
     function GetIP(out ip: RawUtf8; withport: boolean = true): TNetResult;
     /// retrieve the peer address associated on this connected socket
     function GetPeer(out addr: TNetAddr): TNetResult;
+    /// retrieve the raw SO_ERROR option value on this socket
+    function GetRawSocketError: TNetResult;
+    /// wrap WaitFor() and GetRawSocketError() methods
+    function WaitForWithRawSocketError(ms: integer;
+      scope: TNetEvents = [neWrite, neError]): TNetResult;
     /// change the socket state to non-blocking
     // - note that on Windows, there is no easy way to check the non-blocking
     // state of the socket (WSAIoctl has been deprecated for this)
@@ -545,6 +552,9 @@ var
 
   /// the TCP SetKeepAlive() value for a client (false) or server (true)
   TcpKeepAliveSeconds: array[boolean] of cardinal = (120, 240);
+
+  /// filled with MSG_NOSIGNAL low-level definition of the current platform
+  NET_MSG_NOSIGNAL: integer;
 
 const
   /// a constant to indicate no socket
@@ -1085,9 +1095,14 @@ type
     // especially on Windows
     // - not used on SChannel client
     CASystemStores: TSystemCertificateStores;
-    /// input: preferred Cipher List
+    /// input: preferred Cipher List - for TLS 1.3, use CipherSuites instead
+    // - colon-separated names as accepted by SSL_CTX_set_cipher_list()
     // - not used on SChannel
     CipherList: RawUtf8;
+    /// input: preferred TLS 1.3 Cipher Suites
+    // - colon-separated names as accepted by SSL_CTX_set_ciphersuites()
+    // - not used on SChannel
+    CipherSuites: RawUtf8;
     /// input: a CSV list of host names to be validated by AfterConnection
     // - e.g. 'smtp.example.com,example.com'
     // - not used on SChannel
@@ -1428,12 +1443,12 @@ type
   protected
     fMergeSubscribeEventsLock: TLightLock; // topmost to ensure aarch64 alignment
     fSubscriptionSafe: TLightLock; // dedicated not to block Accept()
-    fPendingSafe: TOSLightLock; // TLightLock seems less stable on high-end HW
+    fPendingSafe: TLightLock;      // RW or OS lock are slower (low contention)
+    fGettingOne: integer;
     fPoll: array of TPollSocketAbstract; // each track up to fPoll[].MaxSockets
     fPending: TPollSocketResults;
     fPendingIndex: PtrInt;
     fPollIndex: integer;
-    fGettingOne: integer;
     fTerminated: boolean;
     fUnsubscribeShutdownSocket: boolean;
     fPollClass: TPollSocketClass;
@@ -1770,8 +1785,8 @@ type
     procedure Clear;
     /// fill the members from a supplied URI
     // - recognize e.g. 'http://server:port/address', 'https://server/address',
-    // 'server/address' (as http), 'http://unix:/server:/address' (as nlUnix),
-    // 'https://user:password@server:port/address' (authenticated),
+    // 'server/address' or 'server' (as http), 'http://unix:/server:/address' (as
+    // nlUnix), 'https://user:password@server:port/address' (authenticated),
     // 'wss://Server/Address' (as https) or 'file://server/folder/data.xml'
     // - supports RFC 3986 IPv6 litterals like 'https://[::1]:123/tata'
     // - returns TRUE if the Server has been extracted and is not ''
@@ -1985,6 +2000,9 @@ function NetBinToBase64(const s: RawByteString): RawUtf8;
 /// IsPem() like function, to avoid linking mormot.crypt.secure
 // - search for '-----BEGIN' text, so may hardly give some false positives
 function NetIsPem(p: PUtf8Char): boolean;
+
+/// return 32-bit obfuscated random number <> 0 to be used e.g. as network XID
+function NetRandom32: cardinal;
 
 
 { ********* TCrtSocket Buffered Socket Read/Write Class }
@@ -2856,8 +2874,12 @@ begin
       result := SizeOf(TSockAddrIn);
     AF_INET6:
       result := SizeOf(TSockAddrIn6);
+    {$ifdef OSPOSIX}
+    AF_UNIX:
+      result := SizeOf(TSockAddrUnix); // maybe <> SizeOf(Addr)
+    {$endif OSPOSIX}
   else
-    result := SizeOf(Addr); // assume AF_UNIX
+    result := SizeOf(Addr);
   end;
 end;
 
@@ -2888,10 +2910,16 @@ begin
         ad6.sin6_flowinfo := 0; // won't hurt
         ad6.sin6_scope_id := 0;
       end;
-  {$ifdef SOCK_HAS_SINLEN}
+    {$ifdef OSPOSIX}
+    AF_UNIX:
+      {$ifdef SOCK_HAS_SINLEN}
+      ad4.sa_len := SizeOf(TSockAddrUnix); // for OpenBSD - FreeBSD/Darwin allow 0
+      {$endif SOCK_HAS_SINLEN}
+    {$endif OSPOSIX}
   else
-    ad4.sa_len := SizeOf(Addr); // for OpenBSD - FreeBSD/Darwin allow 0
-  {$endif SOCK_HAS_SINLEN}
+    {$ifdef SOCK_HAS_SINLEN}
+    ad4.sa_len := SizeOf(Addr);
+    {$endif SOCK_HAS_SINLEN}
   end;
 end;
 
@@ -2903,7 +2931,7 @@ begin
   result := false;
   ad4.sin_family := 0; // reset family to mark as invalid, but keep sin_port
   ad4.sin_addr := 0;   // reset
-  if (address = cLocalhost) or  // '127.0.0.1'
+  if (address = IP4local) or  // '127.0.0.1'
      PropNameEquals(address, 'localhost') then
     ad4.sin_addr := cLocalhost32 // 127.0.0.1
   else if address = cBroadcast then
@@ -3082,6 +3110,22 @@ begin
     result := nrNotFound;
 end;
 
+function TNetAddr.IsLoopback: boolean;
+var
+  ad4: TSockAddr absolute Addr;
+  ad6: TSockAddrIn6 absolute Addr;
+begin
+  case ad4.sa_family of
+    AF_INET:
+      result := PByte(@ad4.sin_addr)^ = 127; // any 127.x.x.x e.g. cLocalhost32
+    AF_INET6:
+       with ad6.sin6_addr do // check ::1
+         result := (c0 = 0) and (c1 = 0) and (c2 = 0) and (c3 = $01000000);
+  else
+    result := false;
+  end;
+end;
+
 function TNetAddr.SetIP4Port(ipv4: TNetIP4; netport: TNetPort): TNetResult;
 var
   ad4: TSockAddr absolute Addr;
@@ -3135,38 +3179,31 @@ begin
 end;
 
 function TNetAddr.SocketConnect(socket: TNetSocket; ms: integer): TNetResult;
-var
-  tix: Int64;
 begin
   result := socket.MakeAsync;
   if result <> nrOK then
     exit;
   if connect(socket.Socket, @Addr, Size) = 0 then // non-blocking connect() once
-    exit; // immediate success (unlikely)
-  if ms < 0 then
-    exit; // don't wait now
+  begin
+    // immediate success (unlikely but may happen)
+    if ms >= 0 then
+      result := socket.MakeBlocking; // caller expect a socket in blockin mode
+    exit;
+  end;
   result := NetLastError;
   if result <> nrRetry then
     exit; // abort on fatal error (e.g. invalid address)
-  result := socket.MakeBlocking;
-  if result <> nrOK then
-    exit;
-  if ms < 50 then
-    tix := 0
-  else
+  if ms < 0 then
   begin
-    tix := mormot.core.os.GetTickCount64 + ms;
-    ms := 50;
+    result := nrOk; // asynchronous connection is pending: don't wait now
+    exit;
   end;
-  repeat
-    result := NetEventsToNetResult(socket.WaitFor(ms, [neWrite, neError]));
-    if result <> nrRetry then
-      exit;
-    // typically, status = [] for TRY_AGAIN result
-    SleepHiRes(1); // paranoid to avoid buring CPU if WaitFor() doesn't wait
-  until (tix = 0) or
-        (mormot.core.os.GetTickCount64 > tix);
-  result := nrTimeout;
+  // connect() completion status is reported by SO_ERROR
+  result := socket.WaitForWithRawSocketError(ms);
+  if result = nrRetry then
+    result := nrTimeout
+  else if result = nrOk then
+    result := socket.MakeBlocking;
 end;
 
 function TNetAddr.SocketBind(socket: TNetSocket): TNetResult;
@@ -3203,7 +3240,7 @@ begin
           ({%H-}p > 65535) then
     result := nrNotFound // port should be valid
   else if (address = '') or
-          (address = cLocalhost) or
+          (address = IP4local) or
           PropNameEquals(address, 'localhost') or
           (address = cAnyHost) then // for client: '0.0.0.0' -> '127.0.0.1'
     result := addr.SetIP4Port(cLocalhost32, p)
@@ -3243,7 +3280,7 @@ end;
 function GetReachableNetAddr(const address, port: array of RawUtf8;
   timeoutms, neededcount: integer; sockets: PNetSocketDynArray): TNetAddrDynArray;
 var
-  i, n: PtrInt;
+  i, n, avail: PtrInt;
   s: TNetSocket;
   sock: TNetSocketDynArray;
   addr: TNetAddrDynArray;
@@ -3268,13 +3305,12 @@ begin
     if res <> nrOK then
       continue;
     s := addr[n].NewSocket(nlTcp);
-    if (s = nil) or
-       (s.MakeAsync <> nrOk) then
+    if s = nil then
       continue;
-    connect(s.Socket, @addr[n], addr[n].Size); // non-blocking connect() once
-    if s.MakeBlocking <> nrOk then
+    res := addr[n].SocketConnect(s, -1); // ms=-1 for async connection
+    if res <> nrOk then
     begin
-      closesocket(s.Socket); // release handle
+      s.Close;
       continue;
     end;
     sock[n] := s;
@@ -3288,12 +3324,24 @@ begin
   if sockets <> nil then
     SetLength(sockets^, n);
   n := 0;
+  avail := length(result);
   tix := mormot.core.os.GetTickCount64 + timeoutms;
   repeat
     for i := 0 to length(result) - 1 do
-      if (sock[i] <> nil) and
-         (neWrite in sock[i].WaitFor(1, [neWrite, neError])) then
+      if sock[i] <> nil then // if not previously closed
       begin
+        res := sock[i].WaitForWithRawSocketError(1);
+        if res = nrRetry then
+          continue;
+        if res = nrOk then
+          res := sock[i].MakeBlocking;
+        if res <> nrOk then
+        begin
+          sock[i].Close;
+          sock[i] := nil; // mark this socket as closed
+          dec(avail);     // don't wait if there is no more socket
+          continue;
+        end;
         if sockets = nil then
           sock[i].ShutdownAndClose(false)
         else
@@ -3306,6 +3354,7 @@ begin
           break;
       end;
   until (neededcount = 0) or
+        (avail = 0) or
         (mormot.core.os.GetTickCount64 > tix);
   if n <> length(result) then
   begin
@@ -3465,6 +3514,34 @@ begin
     raise ENetSock.CreateLastError('GetOptInt(%d,%d)', [prot, name]);
 end;
 
+function TNetSocketWrap.GetRawSocketError: TNetResult;
+var
+  err, len: integer;
+begin
+  if @self = nil then
+    result := nrNoSocket
+  else
+  begin
+    err := 0;
+    len := SizeOf(err);
+    if getsockopt(TSocket(@self), SOL_SOCKET, SO_ERROR, @err, @len) <> NO_ERROR then
+      result := NetLastError
+    else
+      result := NetErrorFromSystem(err, NO_ERROR);
+  end;
+end;
+
+function TNetSocketWrap.WaitForWithRawSocketError(ms: integer; scope: TNetEvents): TNetResult;
+var
+  events: TNetEvents;
+begin
+  events := WaitFor(ms, scope);
+  if events = [] then
+    result := nrRetry
+  else
+    result := GetRawSocketError;
+end;
+
 procedure TNetSocketWrap.SetKeepAlive(secs: cardinal);
 var
   v: cardinal;
@@ -3535,10 +3612,12 @@ begin
 end;
 
 function TNetSocketWrap.Accept(out clientsocket: TNetSocket;
-  out addr: TNetAddr; async: boolean): TNetResult;
+  out addr: TNetAddr; async: boolean; rawError: PNetErrorInt): TNetResult;
 var
   sock: TSocket;
 begin
+  if rawError <> nil then
+    rawError^ := 0;
   if @self = nil then
     result := nrNoSocket
   else
@@ -3546,7 +3625,7 @@ begin
     sock := doaccept(TSocket(@self), @addr, async);
     if sock = -1 then
     begin
-      result := NetLastError;
+      result := NetLastError(NO_ERROR, rawError);
       if result = nrOk then
         result := nrNotImplemented;
     end
@@ -3616,72 +3695,6 @@ end;
 function TNetSocketWrap.MakeBlocking: TNetResult;
 begin
   result := SetIoMode(0);
-end;
-
-function TNetSocketWrap.Send(Buf: pointer; var len: integer;
-  rawError: PNetErrorInt): TNetResult;
-begin
-  if @self = nil then
-    result := nrNoSocket
-  else
-  begin
-    len := mormot.net.sock.send(TSocket(@self), Buf, len, MSG_NOSIGNAL);
-    // man send: Upon success, send() returns the number of bytes sent.
-    // Otherwise, -1 is returned and errno set to indicate the error.
-    if len < 0 then
-      result := NetLastError(NO_ERROR, rawError)
-    else
-      result := nrOK;
-  end;
-end;
-
-function TNetSocketWrap.Recv(Buf: pointer; var len: integer;
-  rawError: PNetErrorInt): TNetResult;
-begin
-  if @self = nil then
-    result := nrNoSocket
-  else
-  begin
-    len := mormot.net.sock.recv(TSocket(@self), Buf, len, 0);
-    // man recv: Upon successful completion, recv() shall return the length of
-    // the message in bytes. If no messages are available to be received and the
-    // peer has performed an orderly shutdown, recv() shall return 0.
-    // Otherwise, -1 shall be returned and errno set to indicate the error,
-    // which may be nrRetry if no data is available.
-    if len <= 0 then
-      if len = 0 then
-        result := nrClosed
-      else
-        result := NetLastError(NO_ERROR, rawError)
-    else
-      result := nrOK;
-  end;
-end;
-
-function TNetSocketWrap.SendTo(Buf: pointer; len: integer;
-  const addr: TNetAddr): TNetResult;
-begin
-  if @self = nil then
-    result := nrNoSocket
-  else if mormot.net.sock.sendto(
-            TSocket(@self), Buf, len, 0, @addr, addr.Size) < 0 then
-    result := NetLastError
-  else
-    result := nrOk;
-end;
-
-function TNetSocketWrap.RecvFrom(Buf: pointer; len: integer;
-  out addr: TNetAddr): integer;
-var
-  addrlen: integer;
-begin
-  if @self = nil then
-    result := -1
-  else
-  begin
-    addrlen := SizeOf(addr);
-    result := mormot.net.sock.recvfrom(TSocket(@self), Buf, len, 0, @addr, @addrlen);
-  end;
 end;
 
 function TNetSocketWrap.RecvFrom(out addr: TNetAddr): RawByteString;
@@ -3790,32 +3803,6 @@ begin
   until Assigned(terminated) and
         terminated^;
   result := nrClosed;
-end;
-
-function TNetSocketWrap.Available(loerr: PNetErrorInt; nowait: boolean): boolean;
-var
-  events: TNetEvents;
-  dummy: integer;
-begin
-  result := true;
-  if loerr <> nil then
-    loerr^ := 0;
-  if nowait then
-    events := [neRead] // just MSG_PEEK
-  else
-    events := WaitFor(0, [neRead, neError], loerr); // select() or poll()
-  if events = [] then
-    exit; // the socket seems stable with no pending input
-  if neRead in events then
-    // - on Windows, may be WSACONNRESET (nrClosed), with recv() returning 0
-    // - on POSIX, may be ESysEINPROGRESS (nrRetry) just after connect
-    // - no need to MakeAsync: recv() should not block after neRead
-    // - may be [neRead, neClosed] on gracefully closed HTTP/1.0 response
-    // - expected recv() result: -1=error, 0=closed, 1=success
-    if (mormot.net.sock.recv(TSocket(@self), @dummy, 1, MSG_PEEK) = 1) or
-       (NetLastError(NO_ERROR, loerr) = nrRetry) then
-      exit;
-  result := false; // e.g. neError or neClosed with no neRead
 end;
 
 procedure TNetSocketWrap.RawShutdown;
@@ -4609,7 +4596,7 @@ var
   tix32: cardinal;
   i: PtrInt;
 begin
-  tix32 := mormot.core.os.GetTickSec shr 6 + 1; // TCachedValue resolution
+  tix32 := mormot.core.os.GetTickSec shr 6 + 1; // flushed every 64 seconds
   DnsCacheSafe.Lock;
   try
     if tix32 <> DnsCacheTix then
@@ -4941,6 +4928,34 @@ end;
 
 {$else}
 
+{$ifdef OSANDROID}
+
+// Android arm64 heap pointers carry a tag in their top byte (tagged pointers,
+// as verified by free): so store the events in bits 48..51, which are always
+// void since the user space addresses use at most 48-bit
+
+function ResToTag(const res: TPollSocketResult): TPollSocketTag;
+begin
+  result := res and $fff0ffffffffffff;
+end;
+
+function ResToEvents(const res: TPollSocketResult): TPollSocketEvents;
+begin
+  result := TPollSocketEvents(byte((res shr 48) and $0f));
+end;
+
+procedure SetRes(var res: TPollSocketResult; tag: TPollSocketTag; ev: TPollSocketEvents);
+begin
+  res := tag or (PtrUInt(byte(ev)) shl 48);
+end;
+
+procedure ResetResEvents(var res: TPollSocketResult);
+begin
+  res := res and $fff0ffffffffffff;
+end;
+
+{$else}
+
 function ResToTag(const res: TPollSocketResult): TPollSocketTag;
 begin
   result := res and $00ffffffffffffff; // pointer from lower 56-bit integer
@@ -4960,6 +4975,8 @@ procedure ResetResEvents(var res: TPollSocketResult);
 begin
   res := res and $00ffffffffffffff;
 end;
+
+{$endif OSANDROID}
 
 {$endif CPU32}
 
@@ -5135,20 +5152,23 @@ begin
 end;
 
 function TPollSockets.EnsurePending(tag: TPollSocketTag): boolean;
+var
+  i: PtrInt;
 begin
-  // manual O(n) brute force search
-  result := FindPendingFromTag(
-    @fPending.Events[fPendingIndex], fPending.Count - fPendingIndex, tag) <> nil;
+  // manual O(i) brute force search into remaining events list
+  // overriden in TPollReadSockets to use TPollAsyncConnection fReadPending flag
+  i := fPendingIndex; // typically 0 in MergePendingEvents()
+  result := FindPendingFromTag(@fPending.Events[i], fPending.Count - i, tag) <> nil;
 end;
 
 procedure TPollSockets.SetPending(tag: TPollSocketTag);
 begin
-  // overriden method may set a per-connection flag for O(1) lookup
+  // overriden in TPollReadSockets to set TPollAsyncConnection fReadPending flag
 end;
 
 function TPollSockets.UnsetPending(tag: TPollSocketTag): boolean;
 begin
-  result := true; // overriden e.g. in TPollAsyncReadSockets
+  result := true; // overriden e.g. in TPollAsyncReadSockets to use fReadPending
 end;
 
 function TPollSockets.GetSubscribeCount: integer;
@@ -5337,7 +5357,6 @@ begin
   try
     // thread-safe get the pending (un)subscriptions
     new.Count := 0;
-    {$ifdef OSPOSIX} // TOSLight.TryLock is not available on Windows
     if (fPending.Count = 0) and
        fPendingSafe.TryLock then
     begin
@@ -5349,7 +5368,6 @@ begin
       end;
       fPendingSafe.UnLock;
     end;
-    {$endif OSPOSIX}
     {$ifdef POLLSOCKETEPOLL}
     // TPollSocketEpoll is thread-safe and let epoll_wait() work in the background
     {if Assigned(OnLog) then
@@ -5941,6 +5959,16 @@ begin
       exit;
     end;
   result := false;
+end;
+
+var
+  NetRandomSeq: integer; // thread-safe sequence source filled from OS entropy
+
+function NetRandom32: cardinal;
+begin
+  repeat
+    result := crc32cby4(0, InterlockedIncrement(NetRandomSeq)); // may use HW
+  until result <> 0;
 end;
 
 
@@ -8148,14 +8176,16 @@ end;
 
 
 initialization
-  IP4local := cLocalhost; // use var string with refcount=1 to avoid allocation
   assert(SizeOf(TNetIP4) = 4);
   assert(SizeOf(TNetIP6) = 16);
   assert(SizeOf(TSockAddrIn) = 16);
   assert(SizeOf(TNetAddr) = SOCKADDR_SIZE);
   assert(SizeOf(TNetAddr) >= {$ifdef OSWINDOWS} SizeOf(TSockAddrIn6)
                                         {$else} SizeOf(TSockAddrUnix) {$endif});
+  IP4local := cLocalhost; // use var string with refcount=1 to avoid allocation
+  NetRandomSeq := SystemEntropy.LiveFeed.c0; // initialize NetRandom32
   DefaultListenBacklog := SOMAXCONN;
+  NET_MSG_NOSIGNAL := MSG_NOSIGNAL;
   GetSystemMacAddress := @_GetSystemMacAddress;
   InitializeUnit; // in mormot.net.sock.windows/posix.inc
 

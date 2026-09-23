@@ -107,11 +107,11 @@ type
     /// gateway IP address
     giaddr: TNetIP4;
     /// client MAC address - only chaddr[0..5] for htype=1 and hlen=6
-    chaddr: array[0..15] of byte;
+    chaddr: THash128;
     /// server-hostname
-    sname:  array[0..63] of byte;
+    sname:  THash512;
     /// boot-file-name
-    bootfile:  array[0..127] of byte;
+    bootfile: TTemp128;
     /// magic cookie for DHCP encapsulated in BOOTP message
     cookie: cardinal;
     /// the raw DHCP options, as type/len/value triplets, ending with $ff
@@ -522,6 +522,7 @@ type
   // - dsmDroppedNoSubnet: packet has no matching subnet for its giaddr or option 82/118
   // - dsmDroppedNoAvailableIP: the IPv4 range of a subnet is exhausted
   // - dsmDroppedInvalidIP: packet requests an IP that is already in use or invalid
+  // - dsmDroppedOtherServer: packet targets another server
   // - dsmDroppedCallback: the OnComputeResponse callback aborted this request
   // - dsmDroppedPxeBoot: there was no proper configuration for this PXE/iPXE
   // - dsmDroppedTooManyOptions: avoid a buffer overflow with too many options
@@ -559,6 +560,7 @@ type
     dsmDroppedNoSubnet,
     dsmDroppedNoAvailableIP,
     dsmDroppedInvalidIP,
+    dsmDroppedOtherServer,
     dsmDroppedCallback,
     dsmDroppedPxeBoot,
     dsmDroppedTooManyOptions);
@@ -861,11 +863,11 @@ type
   public
     /// simple but not-rentrant lock to protect Entry[0..Count-1] values
     Safe: TLightLock;
+    /// the broadcast IP of this scope for doBroadcastAddress option 28
+    Broadcast: TNetIP4;
     /// define the subnet of this scope
     // - Subnet.mask is the doSubnetMask option 1 of this scope
     Subnet: TIp4SubNet;
-    /// the broadcast IP of this scope for doBroadcastAddress option 28
-    Broadcast: TNetIP4;
     /// the gateway IP of this scope for doRouter option 3
     Gateway: TNetIP4;
     /// the server IP of this scope for doServerIdentifier option 54
@@ -1519,14 +1521,14 @@ type
   TDhcpProcess = class(TSynPersistent)
   protected
     fScopeSafe: TRWLightLock; // multi-read reentrant lock to protect Scope[]
+    fOptions: TDhcpServerOptions;
+    fState: (sNone, sSetup, sSetupFailed, sShutdown);
     fScope: TDhcpScopes;
     fFileFlushSeconds, fMetricsCsvSeconds, fDnsScriptThreads: cardinal;
     fIdleTix, fFileFlushTix, fMetricsCsvTix, fModifSequence, fModifSaved: cardinal;
     fLog: TSynLogClass;
     fFileName, fMetricsFolder, fMetricsJson: TFileName;
     fOnComputeResponse: TOnComputeResponse;
-    fOptions: TDhcpServerOptions;
-    fState: (sNone, sSetup, sSetupFailed, sShutdown);
     fMetricsDroppedPackets, fMetricsInvalidRequest: QWord; // no scope counters
     fLogPrefix: RawUtf8;
     fBackgroundExecute: TSynBackgroundQueue;
@@ -1876,9 +1878,6 @@ const
 
   ARPHRD_ETHER = 1; // from linux/if_arp.h
 
-var
-  DhcpClientId: integer; // thread-safe global random-initialized sequence
-
 function DhcpNew(var dhcp: TDhcpPacket; dmt: TDhcpMessageType; xid: cardinal;
   const addr: TNetMac; serverid: TNetIP4 = 0): PAnsiChar;
 begin
@@ -1887,11 +1886,7 @@ begin
   dhcp.htype := ARPHRD_ETHER;
   dhcp.hlen := SizeOf(addr);
   if xid = 0 then
-  begin
-    if DhcpClientId = 0 then
-      DhcpClientId := Random32Not0;
-    xid := InterlockedIncrement(DhcpClientId);
-  end;
+    xid := NetRandom32;
   dhcp.xid := xid;
   dhcp.flags := DHCP_BROADCAST_FLAG; // not unicast in this userland UDP socket API unit
   PNetMac(@dhcp.chaddr)^ := addr;
@@ -1900,7 +1895,8 @@ begin
   DhcpAddOptionByte(result, {doMessageType=} 53, ord(dmt));
   if serverid <> 0 then
   begin
-    dhcp.siaddr := serverid;
+    if dmt <> dmtNak then
+      dhcp.siaddr := serverid; // RFC 2131 Table 3: 'siaddr' is 0 in a DHCPNAK
     DhcpAddOption32(result, doServerIdentifier, serverid);
   end;
   result^ := #255;
@@ -1943,7 +1939,7 @@ end;
 
 function DhcpIP4(dhcp: PDhcpPacket; len: PtrUInt): TNetIP4;
 begin
-  result := len;
+  result := 0;
   if len = 0 then
     exit;
   len := PtrUInt(@dhcp.options[len]);
@@ -4328,6 +4324,7 @@ begin
   AddOptionOnce32(doBroadcastAddress,   Scope^.Broadcast);
   AddOptionOnce32(doRouters,            Scope^.Gateway);
   AddOptionOnceA32(doDomainNameServers, pointer(Scope^.DnsServers));
+  AddOptionOnceU(doDomainName,          pointer(Scope^.DomainName));
   AddOptionOnceA32(doNtpServers,        pointer(Scope^.NtpServers));
   // optional 51,58,59 lease timing options
   if (RecvType <> dmtInform) and
@@ -5019,9 +5016,9 @@ begin
       aSettings.Scope[i].PrepareScope(self, new[i]); // compute Subnet
       s := GetScope(new[i].Subnet.ip);
       if s = nil then
-        continue; // brand new subnet
-      aSettings.Scope[i].PrepareScope(self, s^); // may adjust existing leases
-      new[i] := s^;
+        continue;   // brand new subnet was just prepared
+      new[i] := s^; // reuse/update existing
+      aSettings.Scope[i].PrepareScope(self, new[i]); // adjust existing leases
     end;
     fScope := new; // replace
     // support FileName/MetricsFolder background persistence
@@ -5816,7 +5813,8 @@ begin
         DoLog(sllTrace, 'out-of-sync NAK', State);
         State.SendType := dmtNak;
         State.SendEnd := DhcpNew(State.Send, dmtNak, State.Recv.xid,
-          PNetMac(@State.Mac64)^, State.Scope^.ServerIdentifier);
+          // RFC 2131 Table 3: 'chaddr' is the client one, not its option 61
+          PNetMac(@State.Recv.chaddr)^, State.Scope^.ServerIdentifier);
         result := Flush(State);
       end;
     dsmDroppedPackets:
@@ -5826,6 +5824,8 @@ begin
       DoLog(sllDebug, 'overload', State);
     dsmDroppedInvalidIP:
       DoLog(sllTrace, 'unexpected', State);
+    dsmDroppedOtherServer:
+      DoLog(sllTrace, 'another server', State);
     dsmLeaseReleased:
       begin
         IP4Short(@Lease^.IP4, State.Ip);
@@ -6119,15 +6119,20 @@ function TDhcpProcess.Flush(var State: TDhcpState): PtrInt;
 begin
   // recognize State.RecvBoot from options 60/77/93
   SetRecvBoot(State);
-  // append "rule" custom options - always first since have precedence
   integer(State.SendOptions) := 0;
-  if State.RecvRule <> nil then
-    State.AddRulesOptions;
-  // append "boot" specific options 60,66,67,97
-  if State.RecvBoot <> dcbDefault then
-    AddBootOptions(State);
-  // append regular DHCP 1,3,6,15,28,42 [+ 51,58,59] options
-  State.AddRegularOptions;
+  // RFC 2131 Table 3: a DHCPNAK excludes the lease time, the network settings
+  // and the boot options - the 61/82 copies below are RFC 6842/3046
+  if State.SendType <> dmtNak then
+  begin
+    // append "rule" custom options - always first since have precedence
+    if State.RecvRule <> nil then
+      State.AddRulesOptions;
+    // append "boot" specific options 60,66,67,97
+    if State.RecvBoot <> dcbDefault then
+      AddBootOptions(State);
+    // append regular DHCP 1,3,6,15,28,42 [+ 51,58,59] options
+    State.AddRegularOptions;
+  end;
   // optional callback support
   if Assigned(fOnComputeResponse) and
      RunCallbackAborted(State) then
@@ -6149,6 +6154,7 @@ function TDhcpProcess.LockedResponse(var State: TDhcpState): PtrInt;
 var
   r: PDhcpRule;
   p: PDhcpLease;
+  ip: TNetIP4;
 begin
   // find any existing dynamic lease - or StaticMac[] StaticUuid[] fake lease
   p := FindLease(State);
@@ -6235,6 +6241,14 @@ begin
     dmtRequest:
       begin
         inc(State.Scope^.Metrics.Current[dsmRequest]);
+        ip := DhcpIP4(@State.Recv, State.RecvLens[doServerIdentifier]);
+        if (ip <> 0) and
+           (ip <> State.Scope^.ServerIdentifier) then
+        begin
+          // RFC 2131 3.1: ignore any REQUEST selecting another server
+          result := DoError(State, dsmDroppedOtherServer);
+          exit;
+        end;
         if (p <> nil) and
            (p^.IP4 <> 0) and
            ((p^.State in [lsReserved, lsAck, lsAckDdns, lsStatic]) or
@@ -6243,9 +6257,23 @@ begin
              (State.Scope^.LeaseTimeLE < SecsPerHour) and // grace period
              (State.BootTix32 - p^.Expired <
                 State.Scope^.LeaseTimeLE * State.Scope^.GraceFactor))) then
+        begin
           // RFC 2131: lease is Reserved after OFFER = SELECTING
           //           lease is Ack/Static/Outdated = RENEWING/REBINDING
-          inc(State.Scope^.Metrics.Current[dsmLeaseRenewed])
+          if p^.State = lsStatic then
+          begin
+            // check option 50 requested IP on SELECTING or INIT-REBOOT
+            State.Ip4 := DhcpIP4(@State.Recv, State.RecvLens[doRequestedAddress]);
+            if (State.Ip4 <> 0) and
+               (State.Ip4 <> p^.IP4) then
+            begin
+              // RFC 2131 4.3.2: the requested address is not the one reserved
+              result := DoError(State, dsmNak);
+              exit;
+            end;
+          end;
+          inc(State.Scope^.Metrics.Current[dsmLeaseRenewed]);
+        end
         else if RetrieveFrameIP(State, p) then // IP from option 50
         begin
           // no lease, but Option 50 = INIT-REBOOT
@@ -6527,10 +6555,13 @@ begin
     fState.Send.giaddr := fState.Recv.giaddr;
     remote.SetIP4Port(fState.Recv.giaddr, fServerPort);
   end
+  else if fState.SendType = dmtNak then
+    // RFC 2131 4.3.2: with no relay, a DHCPNAK MUST be broadcasted to
+    // 0xffffffff because the client may have a wrong address or subnet mask
+    remote.SetIP4Port(cAnyHost32, fClientPort)
   else if (fState.Recv.ciaddr <> 0) and
           (fState.Recv.flags and DHCP_BROADCAST_FLAG = 0) and
-          (fState.RecvType in [dmtRequest, dmtInform]) and
-          (fState.SendType <> dmtNak) then
+          (fState.RecvType in [dmtRequest, dmtInform]) then
     // unicast to known client IP
     remote.SetIP4Port(fState.Recv.ciaddr, fClientPort)
   else
@@ -6625,7 +6656,7 @@ begin
       EnsureBound(ds, mac);
     end;
   finally
-    fScopeSafe.WriteLock;
+    fScopeSafe.WriteUnLock;
   end;
 end;
 

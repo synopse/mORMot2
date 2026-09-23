@@ -1018,27 +1018,19 @@ implementation
 // see http://download.oracle.com/docs/cd/B28359_01/appdev.111/b28395/oci03typ.htm#sthref389
 
 function TOracleDate.ToDateTime: TDateTime;
-var
-  time: TDateTime;
 begin
-  if (PInteger(@self)^ = 0) and
-     (PInteger(PtrUInt(@self) + 3)^ = 0) then
-    // Cent=Year=Month=Day=Hour=Main=Sec=0 -> returns 0
-    result := 0
-  else
+  if (Cent <= 100) or
+     ((PInteger(@self)^ = 0) and
+      (PInteger(PAnsiChar(@self) + 3)^ = 0)) then // 0 or not supported date
   begin
-    if (Cent <= 100) or
-      // avoid TDateTime values < 0 (generates wrong DecodeTime)
-      not mormot.core.datetime.TryEncodeDate(
-            (Cent - 100) * 100 + Year - 100, Month, Day, result) then
-      result := 0;
-    if (Hour > 1) or
-       (Min > 1) or
-       (Sec > 1) then
-      if mormot.core.datetime.TryEncodeTime(
-           Hour - 1, Min - 1, Sec - 1, 0, time) then
-        result := result + time;
+    result := 0;
+    exit;
   end;
+  result := EncodeDateOrZero((Cent - 100) * 100 + Year - 100, Month, Day);
+  if (Hour > 1) or
+     (Min > 1) or
+     (Sec > 1) then
+    result := result + EncodeTimeOrZero(Hour - 1, Min - 1, Sec - 1, 0);
 end;
 
 procedure TOracleDate.ToIso8601(var aIso8601: RawUtf8);

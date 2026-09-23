@@ -3,7 +3,6 @@
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 unit mormot.lib.zstd;
 
-
 {
   *****************************************************************************
 
@@ -169,7 +168,7 @@ var
   Zstd: TSynZstd;
 
 
-  { ****************** TAlgoZstd High-Level Algorithms }
+{ ****************** TAlgoZstd High-Level Algorithms }
 
 var
   /// implement Zstandard compression in level 3 (ZSTD_CLEVEL_DEFAULT)
@@ -313,11 +312,11 @@ type
   // TAlgoCompress file layout and only support raw buffer and file methods
   TAlgoZstd = class(TAlgoCompress)
   protected
-    fCompressionLevel: integer;
-    fCompressionContext: TZSTD_CCtx;
-    fCompressionContextSafe: TLightLock;
-    fDecompressionContext: TZSTD_DCtx;
+    fCompressionContextSafe: TLightLock; // TryLock to acquire shared CCtx
     fDecompressionContextSafe: TLightLock;
+    fCompressionContext: TZSTD_CCtx;
+    fDecompressionContext: TZSTD_DCtx;
+    fCompressionLevel: integer;
   public
     /// set AlgoID = 11 as genuine byte identifier for zstd (even if not used)
     constructor Create; override;
@@ -352,6 +351,59 @@ begin
   inherited Destroy;
 end;
 
+function TAlgoZstd.AlgoCompress(Plain: pointer; PlainLen: integer; Comp: pointer): integer;
+var
+  ctx: TZSTD_CCtx;
+begin
+  result := 0;
+  if Zstd = nil then
+    exit;
+  if fCompressionContextSafe.TryLock then // acquired shared context
+  begin
+    if fCompressionContext = nil then
+      fCompressionContext := Zstd.createCCtx;
+    ctx := fCompressionContext;
+  end
+  else
+    ctx := Zstd.createCCtx; // transient context for this thread on contention
+  try
+    Zstd.CCtx_setParameter(ctx, ZSTD_c_compressionLevel, fCompressionLevel);
+    result := zstd.compress2(ctx,
+      Comp, Zstd.compressBound(PlainLen) {Todo}, Plain, PlainLen);
+  finally
+    if ctx = fCompressionContext then
+      fCompressionContextSafe.UnLock
+    else
+      Zstd.freeCCtx(ctx);
+  end;
+end;
+
+function TAlgoZstd.AlgoDecompress(Comp: pointer; CompLen: integer; Plain: pointer): integer;
+var
+  ctx: TZSTD_DCtx;
+begin
+  result := 0;
+  if Zstd = nil then
+    exit;
+  if fDecompressionContextSafe.TryLock then // acquired shared context
+  begin
+    if fDecompressionContext = nil then
+      fDecompressionContext := Zstd.createDCtx;
+    ctx := fDecompressionContext;
+  end
+  else
+    ctx := Zstd.createDCtx; // transient context for this thread on contention
+  try
+    result := zstd.decompressDCtx(ctx, Plain,
+      Zstd.getFrameContentSize(Comp, CompLen) {Todo}, Comp, CompLen);
+  finally
+    if ctx = fDecompressionContext then
+      fDecompressionContextSafe.UnLock
+    else
+      Zstd.freeDCtx(ctx);
+  end;
+end;
+
 function TAlgoZstd.AlgoCompressDestLen(PlainLen: integer): integer;
 begin
   if Zstd = nil then
@@ -360,50 +412,12 @@ begin
     result := Zstd.compressBound(PlainLen);
 end;
 
-function TAlgoZstd.AlgoCompress(Plain: pointer; PlainLen: integer; Comp: pointer): integer;
-begin
-  if Zstd = nil then
-    result := 0
-  else
-  begin
-    fCompressionContextSafe.Lock;
-    try
-      if fCompressionContext = nil then
-        fCompressionContext := Zstd.createCCtx;
-      Zstd.CCtx_setParameter(fCompressionContext,
-        ZSTD_c_compressionLevel, fCompressionLevel);
-      result := zstd.compress2(fCompressionContext,
-        Comp, Zstd.compressBound(PlainLen) {Todo}, Plain, PlainLen);
-    finally
-      fCompressionContextSafe.UnLock;
-    end;
-  end;
-end;
-
 function TAlgoZstd.AlgoDecompressDestLen(Comp: pointer): integer;
 begin
   if Zstd = nil then
     result := 0
   else
     result := Zstd.getFrameContentSize(Comp, MemSize(Comp) {Todo});
-end;
-
-function TAlgoZstd.AlgoDecompress(Comp: pointer; CompLen: integer; Plain: pointer): integer;
-begin
-  if Zstd = nil then
-    result := 0
-  else
-  begin
-    fDecompressionContextSafe.Lock;
-    try
-      if fDecompressionContext = nil then
-        fDecompressionContext := Zstd.createDCtx;
-      result := zstd.decompressDCtx(fDecompressionContext, Plain,
-        Zstd.getFrameContentSize(Comp, CompLen) {Todo}, Comp, CompLen);
-    finally
-      fDecompressionContextSafe.UnLock;
-    end;
-  end;
 end;
 
 function TAlgoZstd.AlgoDecompressPartial(Comp: pointer; CompLen: integer;

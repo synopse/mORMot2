@@ -67,50 +67,48 @@ const
   SO_REUSEPORT = 15; // available since Kernel 3.9 - not defined by FPC yet
   {$endif OSLINUXANDROID}
 
-  {$ifdef OSFREEBSD}
-  NI_NUMERICHOST = 2;
-  NI_NUMERICSERV = 8;
-  {$else}
+  {$if defined(OSLINUXANDROID) or defined(OSOPENBSD)}
   NI_NUMERICHOST = 1;
   NI_NUMERICSERV = 2;
-  {$endif OSFREEBSD}
+  {$else}
+  NI_NUMERICHOST = 2;
+  NI_NUMERICSERV = 8; // Darwin/FreeBSD/NetBSD/DragonFly/Solaris
+  {$ifend}
 
   {$ifdef OSBSDDARWIN}
-
-    {$ifndef OSOPENBSD}
-    {$ifdef OSDARWIN}
-    SO_NOSIGPIPE = $1022;
-    SO_REUSEPORT = $0200;
-    AF_LINK      = 18;
+    {$ifdef OSOPENBSD}
+      MSG_NOSIGNAL  = $400;
     {$else}
-    SO_NOSIGPIPE = $800;
-    {$endif OSDARWIN}
+      {$ifdef OSDARWIN}
+        MSG_NOSIGNAL = $80000;
+        SO_NOSIGPIPE = $1022;
+        SO_REUSEPORT = $0200;
+        AF_LINK      = 18;
+      {$else}
+        SO_NOSIGPIPE = $800;
+        {$ifdef OSFREEBSD}
+          MSG_NOSIGNAL = $20000;
+        {$else} // NetBSD / DragonFlyBSD
+          MSG_NOSIGNAL = $400;
+        {$endif OSFREEBSD}
+      {$endif OSDARWIN}
     {$endif OSOPENBSD}
-
-    {$ifndef OSOPENBSD}
-    // Works under MAC OS X and FreeBSD, but is undocumented, so FPC doesn't include it
-    MSG_NOSIGNAL  = $20000;
-    {$else}
-    MSG_NOSIGNAL  = $400;
-    {$endif OSOPENBSD}
-  {$else}
-
+  {$else} // Linux/Solaris conditionals
     {$ifdef SUNOS}
-    MSG_NOSIGNAL = $20000;
+    MSG_NOSIGNAL = $200;
     {$else}
     MSG_NOSIGNAL = $4000; // don't generate SIGPIPE on Linux
     {$endif SUNOS}
-
   {$endif OSBSDDARWIN}
 
-  {$ifdef FPC} // or defined in mormot.core.os.delphi.pas
+{$ifdef FPC} // or defined in mormot.core.os.delphi.pas
 
   {$packrecords C}
 
   FIONREAD = termio.FIONREAD;
   FIONBIO  = termio.FIONBIO;
 
-  {$endif FPC}
+{$endif FPC}
 
   _ST: array[TNetLayer] of cint = (
     SOCK_STREAM,
@@ -170,9 +168,12 @@ type
   TSockAddrUnix = packed record
     {$ifdef SOCK_HAS_SINLEN}
     sun_len:    cuchar; // could be 0 on FreeBSD/Darwin but not on OpenBSD
-    {$endif SOCK_HAS_SINLEN}
+    sun_family: sa_family_t;
+    sun_path:   array[0..103] of AnsiChar;
+    {$else}
     sun_family: sa_family_t;
     sun_path:   array[0..107] of AnsiChar;
+    {$endif SOCK_HAS_SINLEN}
   end;
   PSockAddrUnix = ^TSockAddrUnix;
 
@@ -184,7 +185,7 @@ type
     h_name:     PAnsiChar;
     h_aliases:  PPAnsiChar;
     h_addrtype: cint;
-    h_length:   TSockLen;
+    h_length:   cint;
     case integer of
        0: (h_addr_list: PPAnsiChar);
        1: (h_addr:      ^PNetIP4);
@@ -209,12 +210,18 @@ const
   POLLRDNORM   = $0040;
   // poll() flag when priority data may be read
   POLLRDBAND   = $0080;
+
+  {$ifdef OSLINUXANDROID}
   // poll() flag when writing now will not block
   POLLWRNORM   = $0100;
   // poll() flag when priority data may be written
   POLLWRBAND   = $0200;
   // poll() flag extension for Linux
   POLLMSG      = $0400;
+  {$else}
+  POLLWRNORM   = POLLOUT;
+  POLLWRBAND   = $0100;
+  {$endif OSLINUXANDROID}
 
 type
   /// polling request data structure for poll()
@@ -453,32 +460,97 @@ var
 function doaccept(s: TSocket; addr: PSockAddr; var async: boolean): integer;
 var
   len: TSockLen;
+  {$ifdef HASACCEPT4}
+  err: integer;
+  {$endif HASACCEPT4}
 begin
-  len := SOCKADDR_SIZE;
   {$ifdef HASACCEPT4}
   if async and
      not Accept4Unsupported then
   begin
     // see https://github.com/eudev-project/eudev/issues/7#issuecomment-10502344
-    result := accept4(s, addr, len, SOCK_NONBLOCK);
-    if (result < 0) and
-       ((cerrno = ESysENOSYS) or
-        (cerrno = ESysEOPNOTSUPP)) then
-    begin
-      Accept4Unsupported := true; // will fallback from now on on old systems
+    repeat
       len := SOCKADDR_SIZE;
-      result := accept(s, addr, len);
-    end
-    else
-      async := false; // no need to call MakeAsync
-  end
-  else
+      result := accept4(s, addr, len, SOCK_NONBLOCK);
+      if result >= 0 then
+      begin
+        async := false; // accepted descriptor is already non-blocking
+        exit;
+      end;
+      err := cerrno; // access threadvar once
+    until err <> ESysEINTR;
+    if (err <> ESysENOSYS) and
+       (err <> ESysEOPNOTSUPP) then // quit with result = -1 on fatal error
+      exit;
+    // old kernel/libc: fallback to plain accept() from now on
+    Accept4Unsupported := true;
+  end;
   {$endif HASACCEPT4}
+  repeat
+    len := SOCKADDR_SIZE;
     result := accept(s, addr, len);
+  until (result >= 0) or
+        (cerrno <> ESysEINTR);
+end;
+
+function PollNoEintr(fds: PPollFD; nfds, timeout: integer): integer;
+var
+  endtix: Int64;
+begin
+  // preserve the requested timeout across EINTR: restarting poll() with the
+  // original timeout could otherwise extend the effective wait indefinitely
+  endtix := 0;
+  if timeout > 0 then
+    endtix := GetTickCount64 + timeout;
+  repeat
+    result := poll(fds, nfds, timeout);
+    if (result >= 0) or
+       (cerrno <> ESysEINTR) then
+      exit;
+    if endtix = 0 then
+      continue; // wait INFINITE
+    result := 0;
+    timeout := endtix - GetTickCount64;
+  until timeout <= 0; // timeout eventually elapsed while being interrupted
 end;
 
 
 { ******** TNetSocket Cross-Platform Wrapper }
+
+function NewUnixSocket(const path: RawUtf8; out netsocket: TNetSocket;
+  asstream: boolean): TNetResult;
+var
+  addr: TNetAddr;
+  sock: PtrUInt;
+  st: TStat;
+begin
+  netsocket := nil;
+  // first validate the address is an existing unix socket file
+  result := nrNotFound;
+  if (path = '') or
+     (fpStat(pointer(path), st) <> 0) or
+     not fpS_ISSOCK(st.st_mode) then
+    exit;
+  // compute the proper TNetAddr and create a unix DGRAM/STREAM socket
+  result := addr.SetFrom(path, '', nlUnix);
+  if result <> nrOk then
+    exit;
+  sock := SOCK_DGRAM;
+  if asstream then
+    sock := SOCK_STREAM;
+  sock := socket(AF_UNIX, sock, 0);
+  if sock = 0 then
+    result := NetLastError
+  // try to connect to this unix socket
+  else if connect(sock, @addr, addr.Size) = NO_ERROR then
+    netsocket := TNetSocket(sock)
+  else
+  begin
+    result := NetLastError;
+    closesocket(sock);
+  end;
+end;
+
 
 { TNetAddr }
 
@@ -562,6 +634,96 @@ end;
 
 { TNetSocketWrap }
 
+// POSIX signals could interrupt the raw socket syscalls -> retry on ESysEINTR
+
+function TNetSocketWrap.Send(Buf: pointer; var len: integer;
+  rawError: PNetErrorInt): TNetResult;
+var
+  sent: integer;
+begin
+  if @self = nil then
+    result := nrNoSocket
+  else
+  begin
+    repeat
+      sent := mormot.net.sock.send(TSocket(@self), Buf, len, MSG_NOSIGNAL);
+    until (sent >= 0) or
+          (cerrno <> ESysEINTR); // retry on SIG received
+    // man send: Upon success, send() returns the number of bytes sent.
+    // Otherwise, -1 is returned and errno set to indicate the error.
+    len := sent;
+    if len < 0 then
+      result := NetLastError(NO_ERROR, rawError)
+      // and return len = -1 as in mormot.net.sock.windows.inc
+    else
+      result := nrOK;
+  end;
+end;
+
+function TNetSocketWrap.Recv(Buf: pointer; var len: integer;
+  rawError: PNetErrorInt): TNetResult;
+var
+  received: integer;
+begin
+  if @self = nil then
+    result := nrNoSocket
+  else
+  begin
+    repeat
+      received := mormot.net.sock.recv(TSocket(@self), Buf, len, 0);
+    until (received >= 0) or
+          (cerrno <> ESysEINTR); // retry on SIG received
+    // man recv: Upon successful completion, recv() shall return the length of
+    // the message in bytes. If no messages are available to be received and the
+    // peer has performed an orderly shutdown, recv() shall return 0.
+    // Otherwise, -1 shall be returned and errno set to indicate the error,
+    // which may be nrRetry if no data is available.
+    len := received;
+    if len <= 0 then
+      if len = 0 then
+        result := nrClosed
+      else
+        result := NetLastError(NO_ERROR, rawError)
+    else
+      result := nrOK;
+  end;
+end;
+
+function TNetSocketWrap.SendTo(Buf: pointer; len: integer;
+  const addr: TNetAddr): TNetResult;
+var
+  sent: integer;
+begin
+  if @self = nil then
+    result := nrNoSocket
+  else
+  begin
+    repeat
+      sent := mormot.net.sock.sendto(TSocket(@self), Buf, len, 0, @addr, addr.Size);
+    until (sent >= 0) or
+          (cerrno <> ESysEINTR); // retry on SIG received
+    if sent < 0 then
+      result := NetLastError
+    else
+      result := nrOk;
+  end;
+end;
+
+function TNetSocketWrap.RecvFrom(Buf: pointer; len: integer;
+  out addr: TNetAddr): integer;
+var
+  addrlen: integer;
+begin
+  if @self = nil then
+    result := -1
+  else
+    repeat
+      addrlen := SizeOf(addr);
+      result := mormot.net.sock.recvfrom(TSocket(@self), Buf, len, 0, @addr, @addrlen);
+    until (result >= 0) or
+          (cerrno <> ESysEINTR); // retry on SIG received
+end;
+
 procedure SetTimeVal(ms: PtrUInt; out tv: TTimeVal);
 var
   d: PtrUInt;
@@ -596,9 +758,9 @@ end;
 {$endif OSLINUXANDROID}
 {$ifdef OSFREEBSD}
 const
-  TCP_KEEPIDLE  = 4;
-  TCP_KEEPINTVL = 5;
-  TCP_KEEPCNT   = 6;
+  TCP_KEEPIDLE  = 256;
+  TCP_KEEPINTVL = 512;
+  TCP_KEEPCNT   = 1024;
   {$define HASKEEPALIVETCP}
 {$endif OSFREEBSD}
 {$ifdef OSDARWIN}
@@ -714,18 +876,20 @@ begin
     p.events := p.events or POLLOUT;
   // POLLERR and POLLHUP are ignored in p.events: implicit [neError]
   p.revents := 0;
-  res := poll(@p, 1, ms);
+  res := PollNoEintr(@p, 1, ms); // would indentify ESysEINTR within poll()
   if res < 0 then
   begin
     res := cerrno;
     if loerr <> nil then
       loerr^ := res;
-    if res in [ESysEAGAIN, ESysEINTR] then
+    if res = ESysEAGAIN then
       // timeout, not a true error
       result := [];
     exit;
   end;
   result := [];
+  if res = 0 then
+    exit; // timeout in PollNoEintr()
   if p.revents and (POLLIN or POLLPRI) <> 0 then
     include(result, neRead);
   if p.revents and POLLOUT <> 0 then
@@ -736,38 +900,38 @@ begin
     include(result, neClosed); // may return neClosed + neRead e.g. on HTTP/1.0
 end;
 
-function NewUnixSocket(const path: RawUtf8; out netsocket: TNetSocket;
-  asstream: boolean): TNetResult;
+function TNetSocketWrap.Available(loerr: PNetErrorInt; nowait: boolean): boolean;
 var
-  addr: TNetAddr;
-  sock: PtrUInt;
-  st: TStat;
+  events: TNetEvents;
+  dummy, received, err: integer;
 begin
-  netsocket := nil;
-  // first validate the address is an existing unix socket file
-  result := nrNotFound;
-  if (path = '') or
-     (fpStat(pointer(path), st) <> 0) or
-     not fpS_ISSOCK(st.st_mode) then
-    exit;
-  // compute the proper TNetAddr and create a unix DGRAM/STREAM socket
-  result := addr.SetFrom(path, '', nlUnix);
-  if result <> nrOk then
-    exit;
-  sock := SOCK_DGRAM;
-  if asstream then
-    sock := SOCK_STREAM;
-  sock := socket(AF_UNIX, sock, 0);
-  if sock = 0 then
-    result := NetLastError
-  // try to connect to this unix socket
-  else if connect(sock, @addr, addr.Size) = NO_ERROR then
-    netsocket := TNetSocket(sock)
+  result := true;
+  if loerr <> nil then
+    loerr^ := 0;
+  if nowait then
+    events := [neRead] // just MSG_PEEK
   else
+    events := WaitFor(0, [neRead, neError], loerr); // select() or poll()
+  if events = [] then
+    exit; // the socket seems stable with no pending input
+  if neRead in events then
   begin
-    result := NetLastError;
-    closesocket(sock);
+    repeat
+      // - no need to MakeAsync: recv() should not block after neRead
+      // - may be [neRead, neClosed] on gracefully closed HTTP/1.0 response
+      // - expected recv() result: -1=error, 0=closed, 1=success
+      received := mormot.net.sock.recv(TSocket(@self), @dummy, 1, MSG_PEEK);
+      if received >= 0 then
+        exit(received = 1);
+      err := cerrno;
+    until err <> ESysEINTR;
+    if loerr <> nil then
+      loerr^ := err;
+    if NetErrorFromSystem(err, NO_ERROR) = nrRetry then
+      // on POSIX, may be ESysEINPROGRESS (nrRetry) just after connect
+      exit;
   end;
+  result := false; // e.g. neError or neClosed with no neRead
 end;
 
 
@@ -788,7 +952,9 @@ const
   // https://github.com/apple/darwin-xnu/blob/main/bsd/net/if_types.h
   IFT_ETHER    = $06;
   IFT_PPP      = $17;
+  {$ifdef OSDARWIN}
   IFT_CELLULAR = $ff;
+  {$endif OSDARWIN}
 
   {$else}
 
@@ -802,13 +968,15 @@ const
 
   ETH_P_IP  = $0800;
   ETH_P_ARP = $0806;
+  ETH_P_IP_LE  = $0008;
+  ETH_P_ARP_LE = $0608;
 
   ARPOP_REQUEST   = 1;  // ARP request
   ARPOP_REPLY     = 2;  // ARP reply
   ARPOP_RREQUEST  = 3;  // RARP request
   ARPOP_RREPLY    = 4;  // RARP reply
   ARPOP_InREQUEST = 8;  // InARP request
-  ARPOP_InREPLY   = 8;  // InARP reply
+  ARPOP_InREPLY   = 9;  // InARP reply
   ARPOP_NAK       = 10; // (ATM)ARP NAK
 
   {$endif OSBSDDARWIN}
@@ -907,7 +1075,7 @@ type
     sdl_nlen: byte;        // interface name length, no trailing 0 required
     sdl_alen: byte;        // link level address length
     sdl_slen: byte;        // link layer selector length
-    sdl_data: TByteToByte; // interface name + link level address
+    sdl_data: TByteToByte; // interface name + link level address (max size)
   end;
   {$else}
   PSockAddr_ll = ^SockAddr_ll;
@@ -922,11 +1090,51 @@ type
   end;
   {$endif OSBSDDARWIN}
 
+{$ifdef OSANDROID}
+
+// bionic exports getifaddrs/freeifaddrs since API 24 (Android 7) only, but an
+// app may target an older minSdkVersion and link against its stubs: so resolve
+// them at runtime, and return no interface at all on such older devices
+var
+  _getifaddrs: function(var ifap: pifaddrs): integer; cdecl;
+  _freeifaddrs: procedure(ifap: pifaddrs); cdecl;
+  _ifaddrsresolved: boolean;
+
+function getifaddrs(var ifap: pifaddrs): integer;
+var
+  lib: TLibHandle; // use mormot.core.os for FPC and Delphi compatibility
+begin
+  if not _ifaddrsresolved then
+  begin
+    lib := LibraryOpen('libc.so');
+    if pointer(lib) <> nil then
+    begin
+      @_getifaddrs := LibraryResolve(lib, 'getifaddrs');
+      @_freeifaddrs := LibraryResolve(lib, 'freeifaddrs');
+    end;
+    _ifaddrsresolved := true;
+  end;
+  if Assigned(_getifaddrs) and
+     Assigned(_freeifaddrs) then
+    result := _getifaddrs(ifap)
+  else
+    result := -1; // API < 24: no interface list available
+end;
+
+procedure freeifaddrs(ifap: pifaddrs);
+begin
+  _freeifaddrs(ifap);
+end;
+
+{$else}
+
 function getifaddrs(var ifap: pifaddrs): integer; cdecl;
   external clib name 'getifaddrs';
 
 procedure freeifaddrs(ifap: pifaddrs); cdecl;
   external clib name 'freeifaddrs';
+
+{$endif OSANDROID}
 
 function GetIPAddresses(Kind: TIPAddress): TRawUtf8DynArray;
 var
@@ -1043,8 +1251,10 @@ begin
                 m^.Kind := makEthernet;
               IFT_PPP:
                 m^.Kind := makPpp;
+              {$ifdef OSDARWIN}
               IFT_CELLULAR:
                 m^.Kind := makCellular;
+              {$endif OSDARWIN}
             {$else}
             m^.IfIndex := PSockAddr_ll(info^.ifa_addr)^.sll_ifindex;
             case PSockAddr_ll(info^.ifa_addr)^.sll_hatype of
@@ -1131,7 +1341,7 @@ end;
 
 type
   // a low-level ARP frame binary content, with its SOCK_RAW ethernet header
-  TRawARP = packed record
+  TRawArp = packed record
     Dest: TNetMac;
     Src: TNetMac;
     EType: word;
@@ -1145,7 +1355,7 @@ type
     THA: TNetMac;
     TPA: TNetIP4;
   end;
-  PRawARP = ^TRawARP;
+  PRawArp = ^TRawArp;
 
 const
   MAC_BROADCAST: TNetMac = ($ff, $ff, $ff, $ff, $ff, $ff);
@@ -1160,10 +1370,10 @@ var
   s: TSocket;
   ns: TNetSocket absolute s;
   local: TMacAddress;
-  arp: TRawARP;
+  arp: TRawArp;
   addr: SockAddr_ll;
   resp: RawByteString;
-  retry: integer;
+  retry, sent: integer;
   start: Int64;
 begin
   FastAssignNew(result);
@@ -1179,17 +1389,17 @@ begin
     exit;
   end;
   arp.Dest  := MAC_BROADCAST;
-  arp.EType := bswap16(ETH_P_ARP);
-  arp.HType := bswap16(ARPHRD_ETHER);
-  arp.PType := bswap16(ETH_P_IP);
+  arp.EType := ETH_P_ARP_LE;
+  arp.HType := ARPHRD_ETHER shl 8;
+  arp.PType := ETH_P_IP_LE;
   arp.HLen  := SizeOf(TNetMac);
   arp.PLen  := SizeOf(TNetIP4);
-  arp.Op    := bswap16(ARPOP_REQUEST);
+  arp.Op    := ARPOP_REQUEST shl 8;
   arp.SHA   := arp.Src;
   arp.THA   := MAC_ZERO;
   FillCharFast(addr, SizeOf(addr), 0);
   addr.sll_family   := AF_PACKET;
-  addr.sll_protocol := bswap16(ETH_P_ARP);
+  addr.sll_protocol := ETH_P_ARP_LE;
   addr.sll_ifindex  := local.IfIndex;
   addr.sll_halen    := SizeOf(MAC_BROADCAST);
   PNetMac(@addr.sll_addr)^ := MAC_BROADCAST;
@@ -1197,7 +1407,7 @@ begin
   if SharedArpLock.TryLock then
   begin
     if SharedArpSock = 0 then
-      SharedArpSock := socket(AF_PACKET, SOCK_RAW, bswap16(ETH_P_ARP));
+      SharedArpSock := socket(AF_PACKET, SOCK_RAW, ETH_P_ARP_LE);
     s := SharedArpSock;
     if s <= 0 then // typically not root or CAP_NET_RAW
     begin
@@ -1207,7 +1417,7 @@ begin
   end
   else
   begin
-    s := socket(AF_PACKET, SOCK_RAW, bswap16(ETH_P_ARP)); // transient socket
+    s := socket(AF_PACKET, SOCK_RAW, ETH_P_ARP_LE); // transient socket
     if s <= 0 then
       exit; // paranoid (e.g. fd exhaustion)
   end;
@@ -1217,14 +1427,18 @@ begin
     start := GetTickCount64;
   for retry := 0 to 4 do // with some exponential backoff on network congestion
   begin
-    if sendto(s, @arp, SizeOf(arp), 0, @addr, SizeOf(addr)) >= 0 then
+    repeat
+      sent := sendto(s, @arp, SizeOf(arp), 0, @addr, SizeOf(addr));
+    until (sent >= 0) or
+          (cerrno <> ESysEINTR);
+    if sent >= 0 then
     begin
       if ns.RecvWait(100 + retry * 50, resp) = nrOK then
         repeat
           if length(resp) >= SizeOf(TRawArp) then
-            with PRawARP(resp)^ do
-              if (Op = bswap16(ARPOP_REPLY)) and // reply
-                 (TPA = arp.SPA) and             // from expected IPs
+            with PRawArp(resp)^ do
+              if (Op = ARPOP_REPLY shl 8) and // reply
+                 (TPA = arp.SPA) and          // from expected IPs
                  (SPA = arp.TPA) then
               begin
                 result := MacToText(@SHA);
@@ -1577,7 +1791,7 @@ begin
      (fCount = 0) then
     exit;
   // here fCount=0 would not permit next async subscription
-  n := poll(pointer(fFD), fFDCount, timeoutMS);
+  n := PollNoEintr(pointer(fFD), fFDCount, timeoutMS); // ignoring EINTR signals
   results.Count := n;
   if n <= 0 then
     exit;
@@ -1628,7 +1842,7 @@ begin
   until n = 0;
   if res = 0 then
     exit; // no pseRead to check
-  n := poll(pointer(fd), res, timeoutMS);
+  n := PollNoEintr(pointer(fd), res, timeoutMS); // ignoring EINTR signals
   if n <= 0 then
     exit;
   results.Count := n;
@@ -1730,11 +1944,20 @@ const
   // EPOLLRDHUP is relevant only in ET mode
   EPOLLCLOSE = EPOLLHUP or (EPOLLMODE and EPOLLRDHUP);
 
+function EpollCtlNoEIntr(epfd, op: integer; fd: TNetSocket; var e: TEPoll_Event): boolean;
+begin
+  result := true;
+  repeat
+    if epoll_ctl(epfd, op, TSocket(fd), @e) >= 0 then
+      exit; // success
+  until cerrno <> ESysEINTR;
+  result := false;
+end;
+
 function TPollSocketEpoll.Subscribe(socket: TNetSocket; events: TPollSocketEvents;
   tag: TPollSocketTag): boolean;
 var
   e: TEPoll_Event;
-  err: integer;
 begin
   result := false;
   if (self = nil) or
@@ -1754,10 +1977,7 @@ begin
   else
     e.events := 0;
   // EPOLLERR and EPOLLHUP are always implicitly tracked
-  repeat
-    err := epoll_ctl(fEPFD, EPOLL_CTL_ADD, TSocket(socket), @e);
-  until err <> ESysEINTR;
-  result := err >= NO_ERROR;
+  result := EpollCtlNoEIntr(fEPFD, EPOLL_CTL_ADD, socket, e);
   if not result then
     exit;
   LockedInc32(@fCount);
@@ -1767,7 +1987,6 @@ end;
 function TPollSocketEpoll.Unsubscribe(socket: TNetSocket): boolean;
 var
   e: TEPoll_Event; // should be there even if not used (old kernel < 2.6.9)
-  err: integer;
 begin
   if (self = nil) or
      (socket = nil) or
@@ -1776,10 +1995,7 @@ begin
     result := false
   else
   begin
-    repeat
-      err := epoll_ctl(fEPFD, EPOLL_CTL_DEL, TSocket(socket), @e);
-    until err <> ESysEINTR;
-    result := err >= NO_ERROR;
+    result := EpollCtlNoEIntr(fEPFD, EPOLL_CTL_DEL, socket, e);
     if result then
     begin
       LockedDec32(@fCount);
@@ -1789,6 +2005,26 @@ begin
        fOwner.fUnsubscribeShutdownSocket then
       socket.ShutdownAndClose({rdwr=}false);
   end;
+end;
+
+function EpollWaitNoEintr(epfd: integer; events: PEPoll_Event;
+  maxevents, timeout: integer): integer;
+var
+  endtix: Int64;
+begin
+  endtix := 0;
+  if timeout > 0 then
+    endtix := GetTickCount64 + timeout;
+  repeat
+    result := epoll_wait(epfd, events, maxevents, timeout);
+    if (result >= 0) or
+       (cerrno <> ESysEINTR) then
+      exit;
+    if endtix = 0 then
+      continue; // wait INFINITE
+    result := 0;
+    timeout := endtix - GetTickCount64; // compute remaining time
+  until timeout <= 0;
 end;
 
 function TPollSocketEpoll.WaitForModified(var results: TPollSocketResults;
@@ -1806,7 +2042,7 @@ begin
      (fEPFD <= 0) then
     exit;
   // we allow fCount=0 which enable background epoll_ctl subscription
-  n := epoll_wait(fEPFD, @tmp, length(tmp), timeoutMS);
+  n := EpollWaitNoEintr(fEPFD, @tmp, length(tmp), timeoutMS);
   // if pending > length(tmp): epoll_wait() would round-robin
   results.Count := n;
   if n <= 0 then
@@ -1846,7 +2082,11 @@ begin
     er^.B[4] := byte(e);
     er^.Li := TPollSocketTag(ee^.data.ptr);
     {$else}
+    {$ifdef OSANDROID} // keep the tagged pointer top byte - see SetRes()
+    er^ := PtrUInt(ee^.data.ptr) or (PtrUInt(byte(e)) shl 48);
+    {$else}
     er^ := PtrUInt(ee^.data.ptr) or (PtrUInt(byte(e)) shl 60);
+    {$endif OSANDROID}
     {$endif CPU32}
     inc(ee);
     inc(er);

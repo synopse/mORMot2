@@ -827,10 +827,16 @@
         <Mode0 Name="default"/>
       </Modes>
     </RunParams>
-    <RequiredPackages Count="1">
+    <RequiredPackages Count="3">
       <Item1>
         <PackageName Value="mormot2"/>
       </Item1>
+      <Item2>
+        <PackageName Value="mormot2ui"/>
+      </Item2>
+      <Item3>
+        <PackageName Value="LCL"/>
+      </Item3>
     </RequiredPackages>
     <Units Count="99">
       <Unit0>
@@ -1270,5 +1276,37 @@
     </Other>
   </CompilerOptions>
   <Debugging>
+    <Exceptions Count="10">
+      <Item1>
+        <Name Value="EHttpSocket"/>
+      </Item1>
+      <Item2>
+        <Name Value="EHttpMultiPart"/>
+      </Item2>
+      <Item3>
+        <Name Value="EXmlException"/>
+      </Item3>
+      <Item4>
+        <Name Value="EYamlException"/>
+      </Item4>
+      <Item5>
+        <Name Value="EStreamError"/>
+      </Item5>
+      <Item6>
+        <Name Value="EHttpServer"/>
+      </Item6>
+      <Item7>
+        <Name Value="EWriteError"/>
+      </Item7>
+      <Item8>
+        <Name Value="EHttpSocketOverflow"/>
+      </Item8>
+      <Item9>
+        <Name Value="ENetSock"/>
+      </Item9>
+      <Item10>
+        <Name Value="EJsonObjectDecoder"/>
+      </Item10>
+    </Exceptions>
   </Debugging>
 </CONFIG>

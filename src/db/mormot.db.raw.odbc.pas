@@ -846,17 +846,14 @@ begin
 end;
 
 function SQL_TIMESTAMP_STRUCT.ToDateTime(DataType: SqlSmallint): TDateTime;
-var
-  time: TDateTime;
 begin
-  if (DataType = SQL_TYPE_TIME) or
-     not mormot.core.datetime.TryEncodeDate(Year, Month, Day, result) then
-    result := 0;
+  if DataType = SQL_TYPE_TIME then
+    result := 0
+  else
+    result := EncodeDateOrZero(Year, Month, Day);
   if (DataType <> SQL_TYPE_DATE) and
-     (PInt64(@Hour)^ <> 0)  and
-     mormot.core.datetime.TryEncodeTime(Hour, Minute, Second,
-                                        Fraction div 1000000, time) then
-    result := result  +  time;
+     (PInt64(@Hour)^ <> 0)  then
+    result := result + EncodeTimeOrZero(Hour, Minute, Second, Fraction div 1000000);
 end;
 
 function SQL_TIMESTAMP_STRUCT.ToIso8601(Dest: PUtf8Char; DataType: SqlSmallint;

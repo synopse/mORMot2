@@ -1316,6 +1316,7 @@ type
     fOnTableCreate: TOnTableCreate;
     fOnTableAddColumn: TOnTableAddColumn;
     fOnTableCreateMultiIndex: TOnTableCreateMultiIndex;
+    procedure UnRegisterSharedTransaction(SessionID: cardinal);
     procedure SetFlag(const flag: TSqlDBConnectionPropertiesFlag; const value: boolean);
       {$ifdef HASINLINE}inline;{$endif}
     function GetFlag(const flag: TSqlDBConnectionPropertiesFlag): boolean;
@@ -2803,7 +2804,7 @@ type
   protected
     fConnectionPool: array of TSqlDBConnectionThreadSafe;
     fConnectionPoolMin, fConnectionPoolMax, fConnectionPoolCount: integer;
-    fConnectionPoolDeprecatedTix32: integer;
+    fConnectionPoolDeprecatedTix32: cardinal;
     fThreadingMode: TSqlDBConnectionPropertiesThreadSafeThreadingMode;
     procedure DeleteDeprecated(secs: integer);
     procedure RemoveFromPool(conn: TSqlDBConnectionThreadSafe);
@@ -3725,9 +3726,10 @@ function TSqlDBConnectionProperties.SharedTransaction(SessionID: cardinal;
   action: TSqlDBSharedTransactionAction): TSqlDBConnection;
 var
   i, n: PtrInt;
-  found: boolean;
+  found, added: boolean;
   t: ^TSqlDBConnectionTransaction;
 begin
+  added := false;
   try
     result := ThreadSafeConnection;
     // thread-safe found transactions support
@@ -3782,6 +3784,7 @@ begin
           t^.SessionID := SessionID;
           t^.RefCount := 1;
           t^.Connection := result;
+          added := true; // registered, but StartTransaction not attempted yet
         end
         else
           ESqlDBException.RaiseUtf8('Unexpected %.SharedTransaction(%,%)',
@@ -3806,10 +3809,46 @@ begin
   except
     on Exception do
     begin
+      if added then
+        // the entry was registered above, BEFORE StartTransaction was even
+        // attempted (it runs outside the lock): since that attempt failed -
+        // e.g. the connection died - the registration must be undone.
+        // Otherwise it stays forever with RefCount=1 for a transaction which
+        // was never started, and the next transBegin for this SessionID takes
+        // the "found" branch and just inc(RefCount), letting the caller write
+        // OUTSIDE any transaction, silently
+        UnRegisterSharedTransaction(SessionID);
       result := nil; // result.StartTransaction/Commit/Rollback failed
       if action = transCommitWithException then
         raise;
     end;
+  end;
+end;
+
+procedure TSqlDBConnectionProperties.UnRegisterSharedTransaction(
+  SessionID: cardinal);
+var
+  i, n: PtrInt;
+  t: ^TSqlDBConnectionTransaction;
+begin
+  fSharedTransactionsSafe.Lock;
+  try
+    n := Length(fSharedTransactions);
+    t := pointer(fSharedTransactions);
+    for i := 0 to n - 1 do
+      if t^.SessionID = SessionID then
+      begin
+        dec(n);
+        if n = 0 then
+          fSharedTransactions := nil
+        else
+          DynArrayFakeDelete(fSharedTransactions, i, n, SizeOf(t^));
+        exit;
+      end
+      else
+        inc(t);
+  finally
+    fSharedTransactionsSafe.UnLock;
   end;
 end;
 
@@ -5608,7 +5647,7 @@ var
 
 class procedure TSqlDBConnectionProperties.RegisterClassNameForDefinition;
 begin
-  ObjArrayAddOnce(GlobalDefinitions, TObject(self)); // TClass stored as TObject
+  PtrArrayAddOnce(GlobalDefinitions, pointer(self)); // store TClass
 end;
 
 procedure TSqlDBConnectionProperties.DefinitionTo(
@@ -6928,7 +6967,8 @@ end;
 
 function TSqlDBStatement.GetSqlCurrent: RawUtf8;
 begin
-  if fSqlPrepared <> '' then
+  if (self = nil) or
+     (fSqlPrepared <> '') then
     result := fSqlPrepared
   else
     result := fSql;
@@ -6936,7 +6976,8 @@ end;
 
 function TSqlDBStatement.GetSqlWithInlinedParams: RawUtf8;
 begin
-  if fSql = '' then
+  if (self = nil) or
+     (fSql = '') then
     FastAssignNew(result)
   else
   begin
@@ -6977,7 +7018,7 @@ procedure TSqlDBStatement.ComputeSqlWithInlinedParams;
 var
   P, B: PUtf8Char;
   num: integer;
-  maxSize, maxAllowed: cardinal;
+  maxSize, maxAllowed: integer;
   W: TJsonWriter; // at least TJsonWriter since W.AddVariant() is needed
   tmp: TTextWriterStackBuffer; // maxsize is typically 2048 so all on stack
 begin
@@ -6986,7 +7027,7 @@ begin
     maxSize := 2048 // LoggedSqlMaxSize default seems fair enough
   else
     maxSize := fConnection.fProperties.fLoggedSqlMaxSize;
-  if (integer(maxSize) < 0) or
+  if (maxSize < 0) or
      (PosExChar('?', fSql) = 0) then
     // maxsize=-1 -> log statement without any parameter value (just ?)
     exit;
@@ -7007,14 +7048,15 @@ begin
         break;
       inc(P); // jump P^='?'
       if maxSize > 0 then
-        maxAllowed := W.TextLength - maxSize
+        maxAllowed := maxSize - W.TextLength
       else
         maxAllowed := maxInt;
-      AddParamValueAsText(num, W, maxAllowed);
+      if maxAllowed <= 0 then
+        W.Add('?') // too verbose: just append place holders from now on
+      else
+        AddParamValueAsText(num, W, maxAllowed);
       inc(num);
-    until (P^ = #0) or
-          ((maxSize > 0) and
-           (W.TextLength >= maxSize));
+    until P^ = #0;
     W.SetText(fSqlWithInlinedParams);
   finally
     W.Free;
@@ -7049,7 +7091,7 @@ begin
        (cardinal(vd.VType) in [varDouble, varDate]) then
       Dest.AddDateTime(vd.VDate)
     else
-      Dest.AddVariant(v);
+      Dest.AddVariant(v); // typically numbers
   end;
 end;
 
@@ -7452,8 +7494,13 @@ var
       on E: Exception do
       begin
         {$ifndef SYNDB_SILENCE}
-        if SynDBLog.HasLevel([sllSQL, sllDB, sllException, sllError]) then
-          SynDBLog.Add.LogLines(sllSQL, pointer(stmt.SqlWithInlinedParams), self, '--');
+        if sllSQL in SynDBLog.Family.Level then
+        begin
+          cachedsql := stmt.SqlWithInlinedParams;
+          if cachedsql = '' then // NewStatement itself failed (e.g. Connect raised)
+            cachedsql := aSQL;
+          SynDBLog.Add.LogLines(sllSQL, pointer(cachedsql), self, '--');
+        end;
         {$endif SYNDB_SILENCE}
         stmt.Free;
         result := nil;
@@ -7791,7 +7838,7 @@ begin
     finally
       fConnectionPoolSafe.UnLock;
     end;
-    fConnectionPoolDeprecatedTix32 := 0; // trigger DeleteDeprecated()
+    LockedReset32(@fConnectionPoolDeprecatedTix32, 0); // for DeleteDeprecated()
   end
   else
   begin
@@ -7874,22 +7921,25 @@ end;
 function TSqlDBConnectionPropertiesThreadSafe.ThreadSafeConnection: TSqlDBConnection;
 var
   secs: integer;
+  c32, s32: cardinal;
   ndx: PtrInt;
 begin
   case fThreadingMode of
     tmThreadPool:
       begin
-        // first delete any deprecated connection(s) - check every 32 seconds
+        // first delete any deprecated connection(s)
         secs := 0;
         if fConnectionTimeOutSecs <> 0 then
         begin
           secs := GetTickSec;
           if ConnectionTimeOutBackground and // disabled by default
-             (not (cpfDeleteConnectionInOwnThread in fFlags)) and
-             (fConnectionPoolDeprecatedTix32 <> secs shr 5) then
+             (not (cpfDeleteConnectionInOwnThread in fFlags)) then
           begin
-            fConnectionPoolDeprecatedTix32 := secs shr 5;
-            DeleteDeprecated(secs);
+            c32 := fConnectionPoolDeprecatedTix32;
+            s32 := secs shr 5; // check every 32 seconds
+            if (c32 <> s32) and
+               LockedExc32(fConnectionPoolDeprecatedTix32, s32, c32) then
+              DeleteDeprecated(secs);
           end;
         end;
         // search for an existing connection

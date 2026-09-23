@@ -2847,10 +2847,10 @@ type
   public
     /// ensure the current thread will be taken into account during process
     // - this abstract method won't do anything, but overriden versions may
-    procedure BeginCurrentThread(Sender: TThread); virtual;
+    procedure BeginCurrentThread(Sender: TThreadAbstract); virtual;
     /// called when thread is finished to ensure
     // - this abstract method won't do anything, but overriden versions may
-    procedure EndCurrentThread(Sender: TThread); virtual;
+    procedure EndCurrentThread(Sender: TThreadAbstract); virtual;
   end;
 
 
@@ -4959,7 +4959,7 @@ type
   // - you may inherit from this class to ensure any text field will use the
   // faster and SQLite3 built-in NOCASE collation, handling only 7-bit A-Z chars
   // - inherit from TOrmNoCase or TOrmCaseSensitive if you expect
-  // your text fields to contain only basic (un)accentued ASCCI characters, and
+  // your text fields to contain only basic (un)accentued ASCII characters, and
   // to be opened by any standard/ SQLite3 library or tool (outside of
   // mormot.db.raw.sqlite3.pas/SynDBExplorer)
   TOrmNoCase = class(TOrm)
@@ -4977,7 +4977,7 @@ type
   // - you may inherit from this class to ensure any text field will use the
   // faster and SQLite3 built-in BINARY collation, which is case-sensitive
   // - inherit from TOrmNoCase or TOrmCaseSensitive if you expect
-  // your text fields to contain only basic (un)accentued ASCCI characters, and
+  // your text fields to contain only basic (un)accentued ASCII characters, and
   // to be opened by any standard/ SQLite3 library or tool (outside of
   // mormot.db.raw.sqlite3.pas/SynDBExplorer)
   TOrmCaseSensitive = class(TOrm)
@@ -4995,7 +4995,7 @@ type
   // - you may inherit from this class to ensure any text field will use our
   // Utf8ILCompReference() function which handles Unicode 10.0
   // - inherit from TOrmNoCase or TOrmCaseSensitive if you expect
-  // your text fields to contain only basic (un)accentued ASCCI characters, and
+  // your text fields to contain only basic (un)accentued ASCII characters, and
   // to be opened by any standard/ SQLite3 library or tool (outside of
   // mormot.db.raw.sqlite3.pas/SynDBExplorer)
   TOrmUnicodeNoCase = class(TOrm)
@@ -8823,12 +8823,12 @@ end;
 
 { TRestOrmParent }
 
-procedure TRestOrmParent.BeginCurrentThread(Sender: TThread);
+procedure TRestOrmParent.BeginCurrentThread(Sender: TThreadAbstract);
 begin
   // nothing do to at this level -> see e.g. TRestOrmServer.BeginCurrentThread
 end;
 
-procedure TRestOrmParent.EndCurrentThread(Sender: TThread);
+procedure TRestOrmParent.EndCurrentThread(Sender: TThreadAbstract);
 begin
   // nothing do to at this level -> see e.g. TRestOrmServer.EndCurrentThread
 end;

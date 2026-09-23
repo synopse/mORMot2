@@ -231,6 +231,8 @@ type
     SimpleFieldsCount: integer;
     UpdateFieldsCount: integer;
     SimpleFields: TFieldBits;
+    UpdateFields: TFieldBits;
+    UpdateProps: TOrmProperties;
     UpdateSql: RawUtf8;
     Types: array[0..MAX_SQLFIELDS - 1] of TSqlDBFieldType;
     PostValues: array[0..MAX_SQLPARAMS - 1] of RawUtf8;
@@ -437,8 +439,9 @@ type
     property StatementCache: TSqlStatementCached
       read fStatementCache;
     /// after how many bytes a sllSQL statement log entry should be truncated
-    // - default is 0, meaning no truncation
-    // - typical value is 2048 (2KB), which will avoid any heap allocation
+    // - default is 0, meaning no truncation at this level: we will rely on
+    // TSynLogFamily.PreRenderFmt default internal truncation at 4KB of stack
+    // - set e.g. 2048 (2KB) for smaller output, or if DirectRendering is true
     property StatementTruncateSqlLogLen: integer
       read fStatementTruncateSqlLogLen write fStatementTruncateSqlLogLen;
   published
@@ -1302,8 +1305,8 @@ begin
           fStatementSql[fStatementTruncateSqlLogLen] := c; // restore
         end
         else
-          fRest.InternalLog('% % %', [fStatementTimer^.LastTime, Msg,
-            fStatementSql], sllSQL);
+          fRest.InternalLog('% % %',
+            [fStatementTimer^.LastTime, Msg, fStatementSql], sllSQL);
       fStatementTimer := nil;
     end;
     fStatementMonitor := nil;
@@ -2767,9 +2770,13 @@ var
   id: TID;
 begin
   b := DB.fBatch;
-  if not IsEqual(b^.SimpleFields, Fields) then
+  // UpdateSql is cached per table and fields, since InternalBatchStart/Stop
+  // are not called for UPDATE, and SimpleFields is used for INSERT
+  if (b^.UpdateProps <> Props) or
+     not IsEqual(b^.UpdateFields, Fields) then
   begin
-    b^.SimpleFields := Fields;
+    b^.UpdateProps := Props;
+    b^.UpdateFields := Fields;
     b^.UpdateFieldsCount := FieldBitCount(Fields, Props.Fields.Count) + 1;
     Props.Fields.ToCsvText(['update ', Props.SqlTableName, ' set '],
       Fields, '=?', [' where RowID=?'], b^.UpdateSql);

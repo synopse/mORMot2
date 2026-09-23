@@ -1495,19 +1495,19 @@ begin
   result := p^.V;
 end; // warning: FPC's GetTickCount64 doesn't handle 49.7 days wrap on XP :(
 
-procedure InitializeSRWLockForXP(var P: TOSLightMutex); stdcall;
+procedure InitializeSRWLockForXP(var P: pointer); stdcall;
 begin
-  TLightLock(P).Init; // our TLightLock is good enough on XP
+  PLightLock(@P)^.Init; // our TLightLock is good enough on XP
 end;
 
-procedure AcquireSRWLockExclusiveForXP(var P: TOSLightMutex); stdcall;
+procedure AcquireSRWLockExclusiveForXP(var P: pointer); stdcall;
 begin
-  TLightLock(P).Lock;
+  PLightLock(@P)^.Lock;
 end;
 
-procedure ReleaseSRWLockExclusiveForXP(var P: TOSLightMutex); stdcall;
+procedure ReleaseSRWLockExclusiveForXP(var P: pointer); stdcall;
 begin
-  TLightLock(P).UnLock;
+  PLightLock(@P)^.UnLock;
 end;
 
 function GetTickSec: cardinal;
@@ -1529,36 +1529,13 @@ begin
 end;
 
 
-{ TOSLightLock }
-
-procedure TOSLightLock.Init;
-begin
-  fMutex := nil;
-  InitializeSRWLock(fMutex); // fallback to TLightLock on XP
-end;
-
-procedure TOSLightLock.Done;
-begin // nothing needed
-end;
-
-procedure TOSLightLock.Lock;
-begin
-  AcquireSRWLockExclusive(fMutex);
-end;
-
-procedure TOSLightLock.UnLock;
-begin
-  ReleaseSRWLockExclusive(fMutex);
-end;
-
-
 // Win8+ WaitOnAddress/WakeByAddressSingle futex-like efficient API
 // see also warnings at https://devblogs.microsoft.com/oldnewthing/20160826-00
 var
   // function returns when Address^ differs from the value at CompareAddress^
   WaitOnAddress: function(Address, CompareAddress: pointer;
     AddressSize, dwMilliseconds: PtrUInt): BOOL; stdcall;
-  WakeByAddressSingle: procedure(Address: pointer); stdcall;
+  WakeByAddressSingle, WakeByAddressAll: procedure(Address: pointer); stdcall;
 
 procedure _OsWaitOnValue(Value: PCardinal; Expected, TimeoutMS: cardinal);
 begin
@@ -1944,9 +1921,13 @@ var
   {$ifdef CPU64}
     {$define WITH_VECTOREXCEPT}
   {$else}
-    {$define WITH_RTLUNWINDPROC} //  use x86_64 asm -> Win32 only
+    {$define WITH_RTLUNWINDPROC} //  use x86_64 asm on Delphi Win32
   {$endif CPU64}
 {$endif FPC}
+
+{$ifndef KEEP_STACKFRAMES}
+{$STACKFRAMES ON} // we need {$W+} stack frame for the backtrace API calls below
+{$endif KEEP_STACKFRAMES}
 
 {$ifndef WITH_RAISEPROC}
 
@@ -1960,7 +1941,7 @@ type
     NumberParameters: integer;
     case {IsOsException:} boolean of
       true:
-        (ExceptionInformation: array[0..14] of PtrUInt);
+        (ExceptionInformation: array[0 .. 14] of PtrUInt);
       false: // ExceptionCode = cRtlException
         (ExceptAddr: PtrUInt;
          ExceptObject: Exception);
@@ -1984,40 +1965,51 @@ begin
     exit;
   backuplasterror := GetLastError;
   backuphandler := _RawLogException;
+  _RawLogException := nil; // disable nested exception at API level
   if Assigned(backuphandler) then // paranoid check (tested before calling)
-    try
-      _RawLogException := nil; // disable nested exception at API level
-      ctxt.ECode := Exc.ExceptionCode;
-      if (Exc.ExceptionCode = cRtlException) and
-         (Exc.ExceptObject <> nil) then
+  try
+    ctxt.EStack := pointer(stack); // for manual unwinding on Delphi x86
+    ctxt.EStackCount := 0;
+    ctxt.ECode := Exc.ExceptionCode;
+    if (Exc.ExceptionCode = cRtlException) and
+       (Exc.ExceptObject <> nil) then
+    begin
+      if Exc.ExceptObject.InheritsFrom(Exception) then
       begin
-        if Exc.ExceptObject.InheritsFrom(Exception) then
-          ctxt.EClass := PPointer(Exc.ExceptObject)^
-        else
-          ctxt.EClass := EExternalException;
-        ctxt.EInstance := Exc.ExceptObject;
-        ctxt.ELevel := sllException;
-        ctxt.EAddr := Exc.ExceptAddr;
+        ctxt.EClass := PPointer(Exc.ExceptObject)^;
+        {$ifdef FPC} // fpc_RaiseException() calls GetBacktrace() as needed
+        if (Exc.NumberParameters >= 4) and
+           (Exc.ExceptionInformation[2] < 63) and
+           (Exc.ExceptionInformation[3] <> 0) then
+        begin
+          ctxt.EStackCount := Exc.ExceptionInformation[2];
+          ctxt.EStack := pointer(Exc.ExceptionInformation[3]);
+        end;
+        {$endif FPC}
       end
       else
-      begin
-        {$ifndef LLVM}
-        if Assigned(ExceptClsProc) then
-          ctxt.EClass := GetExceptionClass(ExceptClsProc)(Exc)
-        else
-        {$endif LLVM}
-          ctxt.EClass := EExternal;
-        ctxt.EInstance := nil;
-        ctxt.ELevel := sllExceptionOS;
-        ctxt.EAddr := Exc.ExceptionAddress;
-      end;
-      ctxt.EStack := pointer(stack);
-      ctxt.EStackCount := 0;
-      ctxt.ETimestamp := UnixTimeUtc; // fast API call
-      backuphandler(ctxt);
-    except
-      { ignore any nested exception }
+        ctxt.EClass := EExternalException;
+      ctxt.EInstance := Exc.ExceptObject;
+      ctxt.ELevel := sllException;
+      ctxt.EAddr := Exc.ExceptAddr;
+    end
+    else
+    begin
+      {$ifndef LLVM}
+      if Assigned(ExceptClsProc) then
+        ctxt.EClass := GetExceptionClass(ExceptClsProc)(Exc)
+      else
+      {$endif LLVM}
+        ctxt.EClass := EExternal;
+      ctxt.EInstance := nil;
+      ctxt.ELevel := sllExceptionOS;
+      ctxt.EAddr := Exc.ExceptionAddress;
     end;
+    ctxt.ETimestamp := UnixTimeUtc; // the fastest API call possible
+    backuphandler(ctxt);
+  except
+    { ignore any nested exception }
+  end;
   _RawLogException := backuphandler;
   SetLastError(backuplasterror); // code above could have changed this
 end;
@@ -2031,6 +2023,9 @@ type
     ContextRecord: pointer;
   end;
 
+const
+  EXCEPTION_CONTINUE_SEARCH = 0;
+
 var // to register SynLogVectoredHandler once
   AddVectoredExceptionHandlerCalled: boolean;
   // RemoveVectoredContinueHandler() is available under 64 bit editions only
@@ -2039,8 +2034,6 @@ function AddVectoredExceptionHandler(FirstHandler: cardinal;
   VectoredHandler: pointer): PtrInt; stdcall; external kernel32;
 
 function SynLogVectoredHandler(ExceptionInfo: PExceptionInfo): PtrInt; stdcall;
-const
-  EXCEPTION_CONTINUE_SEARCH = 0;
 begin
   if Assigned(_RawLogException) then
     LogExcept(nil, ExceptionInfo^.ExceptionRecord^);
@@ -2048,6 +2041,10 @@ begin
 end;
 
 {$endif WITH_VECTOREXCEPT}
+
+{$ifndef KEEP_STACKFRAMES}
+{$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
+{$endif KEEP_STACKFRAMES}
 
 {$ifdef WITH_RTLUNWINDPROC}
 
@@ -2073,6 +2070,7 @@ end;
 {$endif WITH_RAISEPROC}
 
 {$endif NOEXCEPTIONINTERCEPT}
+
 
 { TMemoryMap }
 
@@ -2547,7 +2545,7 @@ begin
   if (Buffer = nil) or
      (Len <= 0) then
     exit;
-  // try the newest per-processor ProcessPrng() AES-CTR-DRBG first
+  // try the Win8+ per-processor ProcessPrng() AES-CTR-DRBG first
   if (OSVersion >= wEight) and
      DelayedProc(ProcessPrng, BCryptPrimitives, 'BCryptPrimitives.dll', 'ProcessPrng') then
     result := ProcessPrng(Buffer, Len);
@@ -2581,6 +2579,7 @@ type
     freeswap: cardinal;                  // swap space still available
     mem_unit: cardinal;                  // Memory unit size in bytes
   end;
+  PSysInfo = ^TSysInfo;
 
 function _RetrieveSysInfo(var si: TSysInfo): boolean;
 var
@@ -5221,18 +5220,6 @@ begin
     AcquireSRWLockExclusive := @AcquireSRWLockExclusiveForXP;
     ReleaseSRWLockExclusive := @ReleaseSRWLockExclusiveForXP;
   end;
-  if OSVersion >= wEight then
-  begin
-    h := Windows.LoadLibrary('API-MS-Win-Core-Synch-l1-2-0.dll'); // Win8+
-    WaitOnAddress := LibraryResolve(h, 'WaitOnAddress');
-    WakeByAddressSingle := LibraryResolve(h, 'WakeByAddressSingle');
-    if Assigned(WaitOnAddress) and
-       Assigned(WakeByAddressSingle) then
-    begin
-      OsWaitOnValue := @_OsWaitOnValue;
-      OsWakeOnValue := @WakeByAddressSingle; // defined as stdcall
-    end;
-  end;
   // 3. retrieve system information
   TimeZoneLocalBias := -GetLocalTimeOffset;
   FillcharFast(SystemInfo, SizeOf(SystemInfo), 0);
@@ -5320,6 +5307,21 @@ begin
   OSVersion32.os := osWindows;
   OSVersion32.win := Vers;
   OSVersion32.winbuild := OSVersionInfo.dwBuildNumber;
+  if OSVersion >= wEight then
+  begin
+    h := Windows.LoadLibrary('API-MS-Win-Core-Synch-l1-2-0.dll'); // Win8+
+    WaitOnAddress       := LibraryResolve(h, 'WaitOnAddress');
+    WakeByAddressSingle := LibraryResolve(h, 'WakeByAddressSingle');
+    WakeByAddressAll    := LibraryResolve(h, 'WakeByAddressAll');
+    if Assigned(WaitOnAddress) and
+       Assigned(WakeByAddressSingle) and
+       Assigned(WakeByAddressAll) then
+    begin
+      OsWaitOnValue    := @_OsWaitOnValue;
+      OsWakeOnValue    := @WakeByAddressSingle; // defined as stdcall
+      OsWakeAllOnValue := @WakeByAddressAll;    // defined as stdcall
+    end;
+  end;
   h := GetModuleHandle(ntdll); // late binding over unstable / altered API
   if h > 0 then
   begin
@@ -5328,7 +5330,8 @@ begin
     begin
       OSVersionInfoEx := wine_get_version;
       OSVersionInfoEx := TrimU(Join(['Wine ', TrimU(OSVersionInfoEx)]));
-      WindowsSpecs := WindowsSpecs + [wsWine, wsWeakDpAPI, wsWeakHttpApi];
+      WindowsSpecs := WindowsSpecs +
+        [wsWine, wsWeakDpAPI, wsWeakHttpApi, wsWeakHttpSys];
     end
     {$ifdef CPUINTEL}
     else if IsWow64Emulation then

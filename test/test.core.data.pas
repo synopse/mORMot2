@@ -512,6 +512,9 @@ var
   vd: TVarData absolute v;
   info: TGetJsonField;
   t: pointer;
+  s: RawUtf8;
+  r: RawByteString;
+  rc: integer;
   dt: TDateTime;
   ni: TNullableInteger;
   nt: TNullableUtf8Text;
@@ -530,9 +533,16 @@ begin
   TextToVariant('1e308', true, v);
   Check(VarIsStr(v));
   Check(VarIsString(v));
+  FormatUtf8('value-%', [123], s); // ensure a regular ref-counted string
+  TextToVariant(s, true, v);
+  VariantToRawByteString(v, r);
+  rc := GetRefCount(r);
+  Check(rc > 1);
   t := nil; // makes the compiler happy
   ValueVarToVariant(nil, 0, oftBoolean, vd, false, t);
   CheckEqual(TVarData(v).VType, varNull);
+  CheckEqual(GetRefCount(r), rc - 1);
+  r := '';
   ValueVarToVariant('0', 1, oftBoolean, vd, false, t);
   Check(not boolean(v));
   Check(VariantTypeName(v)^ = 'Boolean');
@@ -4592,10 +4602,10 @@ begin
   NotifyTestSpeed('TDocVariant FromResults not exp', c, lennexp * ITER, @timer, ONLYLOG);
   // TDocVariant FromResults not exp in 242.29ms i.e. 6.4M/s, 355.9 MB/s
   Check(dv.InitArrayFromResults(people));
-  CheckEqual(peoplehash, Hash32(dv.ToJson));
+  CheckHash(dv.ToJson, peoplehash, 'dv.ToJson1');
   dv.Clear; // to reuse dv
   Check(dv.InitArrayFromResults(notexpanded));
-  CheckEqual(peoplehash, Hash32(dv.ToJson));
+  CheckHash(dv.ToJson, peoplehash, 'dv.ToJson2');
   dv.Clear; // to reuse dv
   timer.Start;
   for i := 1 to ITER do
@@ -9547,6 +9557,57 @@ begin
   XmlWalk(p, xtText, '', '  ');
   XmlWalk(p, xtElementEnd, 'a');
   Check(p.ParseNext = xtEof);
+  // simple DOCTYPE is ignored by default
+  s := '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" '#10 +
+       '  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">'#10 +
+       '<svg/>';
+  p.Init(s);
+  XmlWalk(p, xtElementStart, 'svg');
+  XmlWalk(p, xtElementEnd, 'svg');
+  Check(p.ParseNext = xtEof);
+  // XML declaration, whitespace and DOCTYPE
+  s := '<?xml version="1.0" encoding="UTF-8"?>'#10 +
+       '<!DOCTYPE svg SYSTEM "svg.dtd">'#10 +
+       '<svg/>';
+  p.Init(s);
+  XmlWalk(p, xtElementStart, 'svg');
+  XmlWalk(p, xtElementEnd, 'svg');
+  Check(p.ParseNext = xtEof);
+  // quoted '>' doesn't terminate the declaration
+  p.Init('<!DOCTYPE svg SYSTEM "foo>bar.dtd"><svg/>');
+  XmlWalk(p, xtElementStart, 'svg');
+  XmlWalk(p, xtElementEnd, 'svg');
+  Check(p.ParseNext = xtEof);
+  // works even when prolog whitespace is explicitly returned
+  p.Init('  <!DOCTYPE svg><svg/>', [xpoKeepWhiteSpace]);
+  XmlWalk(p, xtText, '', '  ');
+  XmlWalk(p, xtElementStart, 'svg');
+  XmlWalk(p, xtElementEnd, 'svg');
+  Check(p.ParseNext = xtEof);
+  // exercises the prolog state choice directly
+  p.Init('<!--before--><!DOCTYPE svg><svg/>', [xpoKeepComments]);
+  XmlWalk(p, xtComment, '', 'before');
+  XmlWalk(p, xtElementStart, 'svg');
+  XmlWalk(p, xtElementEnd, 'svg');
+  Check(p.ParseNext = xtEof);
+  // DOCTYPE should be properly supported after Save/Restore
+  p.Init('<!DOCTYPE svg><svg/>');
+  p.Save;
+  XmlWalk(p, xtElementStart, 'svg');
+  XmlWalk(p, xtElementEnd, 'svg');
+  Check(p.ParseNext = xtEof);
+  p.Restore;
+  XmlWalk(p, xtElementStart, 'svg');
+  XmlWalk(p, xtElementEnd, 'svg');
+  Check(p.ParseNext = xtEof);
+  p.Init('<!--before--><!DOCTYPE svg><svg/>', [xpoKeepComments]);
+  XmlWalk(p, xtComment, '', 'before');
+  p.Save;
+  XmlWalk(p, xtElementStart, 'svg');
+  XmlWalk(p, xtElementEnd, 'svg');
+  p.Restore;
+  XmlWalk(p, xtElementStart, 'svg');
+  XmlWalk(p, xtElementEnd, 'svg');
 end;
 
 procedure TTestCoreProcess.XmlSaxErrors;
@@ -9587,6 +9648,18 @@ begin
   XmlExpectRaise(xpeTooMuchNesting, 'too much nesting', deep);
   deep := '<' + RawUtf8OfChar('n', 300) + '/>';
   XmlExpectRaise(xpeTagNameTooLong, 'name too long', deep);
+  XmlExpectRaise(xpeUnsupportedMarkup, 'dtd internal subset',
+    '<!DOCTYPE foo [<!ENTITY x "y">]><foo>&x;</foo>');
+  XmlExpectRaise(xpeUnsupportedMarkup, 'dtd nested definition',
+    '<!DOCTYPE foo <!ENTITY x "y">><foo/>');
+  XmlExpectRaise(xpeUnsupportedMarkup, 'doctype after root',
+    '<foo/><!DOCTYPE foo>');
+  XmlExpectRaise(xpeUnsupportedMarkup, 'doctype explicitly rejected',
+    '<!DOCTYPE svg SYSTEM "svg.dtd"><svg/>',
+    [xpoRejectDocType]);
+  // A simple DOCTYPE never defines or loads entities.
+  XmlExpectRaise(xpeXmlUnescapeFailed, 'doctype entity is never resolved',
+    '<!DOCTYPE foo SYSTEM "foo.dtd"><foo>&custom;</foo>');
 end;
 
 procedure TTestCoreProcess.XmlSaxBoundaries;
@@ -11432,7 +11505,7 @@ begin
     with TZipWrite.CreateFromIgnore(
       FN2, TFileNameDynArray(deleted), 1 shl 20, onprog) do
     try
-      Check(Count = length(json) - length(deleted));
+      CheckEqual(Count, length(json) - length(deleted));
     finally
       Free;
     end;

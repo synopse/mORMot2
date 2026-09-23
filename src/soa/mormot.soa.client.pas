@@ -104,7 +104,7 @@ type
     fResultAsJsonObject: boolean;
     fDelayedInstance: boolean;
     fNonBlockWithoutAnswer: boolean;
-    fSendNotificationsThread: TThread;
+    fSendNotificationsThread: TThreadAbstract;
     fSendNotificationsRest: TRest;
     fSendNotificationsLogClass: TOrmServiceNotificationsClass;
     function CreateFakeInstance: TInterfacedObject;
@@ -771,11 +771,8 @@ begin
       begin
         // no "result":... layout
         if aErrorMsg <> nil then
-        begin
-          UniqueRawUtf8ZeroToTilde(resp, 1 shl 10);
-          aErrorMsg^ :=
-            'Invalid returned JSON content: expects {result:...}, got ' + resp;
-        end;
+          Join(['Invalid returned JSON content: expects {result:...}, got ',
+            UniqueRawUtf8ZeroToTilde(resp, 1 shl 10)], aErrorMsg^); // 1KB trunc
         exit; // leave result=false
       end;
       if aResult <> nil then

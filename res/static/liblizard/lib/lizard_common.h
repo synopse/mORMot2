@@ -43,7 +43,7 @@ extern "C" {
 /*-************************************
 *  Memory routines
 **************************************/
-#include <stdlib.h>   /* pas_malloc, calloc, pas_free */
+#include <stdlib.h>   /* malloc, calloc, free */
 #include <string.h>   /* memset, memcpy */
 #include <stdint.h>   /* intptr_t */
 #include "mem.h"
@@ -123,10 +123,10 @@ extern "C" {
 #define LIZARD_STREAM_UNCOMPRESSED   5
 
 //AB
-void *pas_malloc(int size);
+void *pas_malloc(size_t size);
 void pas_free(void *ptr);
-void *pas_realloc(void *ptr, int size);
-int pas_malloc_usable_size(void *ptr); 
+void *pas_realloc(void *ptr, size_t size);
+size_t pas_malloc_usable_size(void *ptr); 
 
 typedef enum { Lizard_parser_fastSmall, Lizard_parser_fast, Lizard_parser_fastBig, Lizard_parser_noChain, Lizard_parser_hashChain, Lizard_parser_priceFast, Lizard_parser_lowestPrice, Lizard_parser_optimalPrice, Lizard_parser_optimalPriceBT } Lizard_parser_type;   /* from faster to stronger */ 
 typedef enum { Lizard_coderwords_LZ4, Lizard_coderwords_LIZv1 } Lizard_decompress_type;

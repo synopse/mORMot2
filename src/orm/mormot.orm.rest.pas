@@ -95,10 +95,10 @@ type
   TRestOrm = class(TRestOrmParent, IRestOrm)
   protected
     fTempJsonWriterLock: TLightLock; // topmost to ensure proper aarch64 align
+    fTransactionActiveSession: cardinal;
     fRest: TRest;
     fModel: TOrmModel; // owned by the TRest associated instance
     fCache: TOrmCache;
-    fTransactionActiveSession: cardinal;
     fTransactionTable: TOrmClass;
     fTempJsonWriter: TJsonWriter; // shared with a 64KB internal buffer
     /// compute SELECT ... FROM TABLE WHERE ...

@@ -3102,6 +3102,19 @@ function TextToVariantNumberType(Json: PUtf8Char): cardinal;
 // - warning: supplied JSON is expected to be not nil
 function TextToVariantNumberTypeNoDouble(Json: PUtf8Char): cardinal;
 
+type
+  /// function prototype of GetNumericVariantFromJson() process
+  TGetNumericVariantFromJson = function(Json: PUtf8Char;
+    var Value: TVarData; AllowVarDouble: boolean): PUtf8Char;
+
+{$ifdef ASMX64NOTPIC} { SIMD/SSE3 x64 asm in mormot.core.base.asmx64.inc }
+function GetNumericVariantPas(Json: PUtf8Char;
+  var Value: TVarData; AllowVarDouble: boolean): PUtf8Char;
+var
+  /// redirect to either GetNumericVariantPas or GetNumericVariantSsse3
+  GetNumericVariantStub: TGetNumericVariantFromJson = GetNumericVariantPas;
+{$endif ASMX64NOTPIC}
+
 /// low-level function to parse a variant from an unescaped JSON number
 // - returns the position after the number, and set Value to a variant of type
 // varInteger/varInt64/varCurrency (or varDouble if AllowVarDouble is true)
@@ -3112,6 +3125,7 @@ function TextToVariantNumberTypeNoDouble(Json: PUtf8Char): cardinal;
 // parse null/false/true values
 function GetNumericVariantFromJson(Json: PUtf8Char;
   var Value: TVarData; AllowVarDouble: boolean): PUtf8Char;
+  {$ifdef ASMX64NOTPIC} inline; {$endif}
 
 /// convert some UTF-8 into a variant, detecting JSON numbers or constants
 // - first try GetVariantFromNotStringJson() then fallback to RawUtf8ToVariant()
@@ -4949,6 +4963,96 @@ var
   DispInvokeArgOrderInverted: boolean; // circumvent FPC 3.2+ breaking change
 {$endif FPC}
 
+{$ifdef DISPINVOKE_AAPCS64}
+// Android/Linux Delphi aarch64: Params is a pointer to an AAPCS64 va_list (see
+// the "Variable argument lists" appendix of the Procedure Call Standard for the
+// Arm 64-bit Architecture): general purpose values use 8-byte slots below
+// GR_Top, floating point values 16-byte slots below VR_Top, then the stack in
+// 8-byte slots - and records > 16 bytes (i.e. variants) are passed by reference
+type
+  PSynVAListAapcs64 = ^TSynVAListAapcs64;
+  TSynVAListAapcs64 = record // matches System.TVarArgList on this platform
+    Stack: PAnsiChar;
+    GRTop: PAnsiChar;
+    VRTop: PAnsiChar;
+    GROffs: integer;
+    VROffs: integer;
+  end;
+
+function VAGPArg(va: PSynVAListAapcs64): PAnsiChar; inline;
+begin
+  if va^.GROffs < 0 then
+  begin
+    result := va^.GRTop + va^.GROffs;
+    inc(va^.GROffs, 8);
+    if va^.GROffs <= 0 then
+      exit;
+  end;
+  result := va^.Stack;
+  inc(va^.Stack, 8);
+end;
+
+function VAFPArg(va: PSynVAListAapcs64): PAnsiChar; inline;
+begin
+  if va^.VROffs < 0 then
+  begin
+    result := va^.VRTop + va^.VROffs;
+    inc(va^.VROffs, 16);
+    if va^.VROffs <= 0 then
+      exit;
+  end;
+  result := va^.Stack;
+  inc(va^.Stack, 8);
+end;
+
+{$define DISPINVOKE_VALIST}
+{$endif DISPINVOKE_AAPCS64}
+
+{$ifdef DISPINVOKE_APPLEA64}
+// iOS/macOS Delphi aarch64: Apple does not use the AAPCS64 va_list - as shown
+// by System.pas, TVarArgList is a plain pointer there, because every variadic
+// argument is passed on the stack, in 8-byte slots: so general purpose and
+// floating point values are both read the very same way
+type
+  PSynVAListApple = ^PAnsiChar;
+
+function VAGPArg(va: PSynVAListApple): PAnsiChar;
+begin
+  result := va^;
+  inc(va^, 8);
+end;
+
+function VAFPArg(va: PSynVAListApple): PAnsiChar;
+begin
+  result := va^;
+  inc(va^, 8);
+end;
+
+{$define DISPINVOKE_VALIST}
+{$endif DISPINVOKE_APPLEA64}
+
+{$ifdef DISPINVOKE_AAPCS32}
+// Android Delphi 32-bit ARM: Params points to the TVarArgList, which is a plain
+// pointer into the variadic arguments (AAPCS): 4-byte slots, but 64-bit values
+// (including doubles, since variadic calls use no VFP register) are 8-byte
+// aligned - and variants are passed by reference
+type
+  PSynVAListAapcs32 = ^PAnsiChar;
+
+function VAArgAapcs32(va: PSynVAListAapcs32; is64: boolean): PAnsiChar;
+begin
+  if is64 then
+    va^ := pointer((PtrUInt(va^) + 7) and not PtrUInt(7));
+  result := va^;
+  if is64 then
+    inc(va^, 8)
+  else
+    inc(va^, 4);
+end;
+
+{$define DISPINVOKE_VALIST}
+{$endif DISPINVOKE_AAPCS32}
+
 {$ifdef DISPINVOKE_SYSVAMD64}
 // Linux/macOS/Android Delphi 64-bit Intel: Params is a SysV AMD64 va_list
 // pointer; use va_arg semantics. ARGREF (var/out) params are passed as pointers
@@ -4990,6 +5094,8 @@ begin
     inc(va^.overflow_arg_area, 8);
   end;
 end;
+
+{$define DISPINVOKE_VALIST}
 {$endif DISPINVOKE_SYSVAMD64}
 
 procedure DispInvokeNamed(VT: TSynInvokeableVariantType; NamePtr: pointer;
@@ -4997,7 +5103,7 @@ procedure DispInvokeNamed(VT: TSynInvokeableVariantType; NamePtr: pointer;
 var
   name: string;
   res: TSynVarData;
-  i, {$ifndef DISPINVOKE_SYSVAMD64} asize, {$endif} n: PtrInt;
+  i, {$ifndef DISPINVOKE_VALIST} asize, {$endif} n: PtrInt;
   a: PAnsiChar;
   v: PVarData;
   args: TVarDataArray; // DoProcedure/DoFunction require a dynamic array
@@ -5029,9 +5135,9 @@ begin
     else
     {$endif FPC}
       v := pointer(args);
-    {$ifndef DISPINVOKE_SYSVAMD64}
+    {$ifndef DISPINVOKE_VALIST}
     a := Params;
-    {$endif DISPINVOKE_SYSVAMD64}
+    {$endif DISPINVOKE_VALIST}
     for i := 0 to n - 1 do
     begin
       t := cardinal(CallDesc^.ArgTypes[i]) and ARGTYPE_MASK;
@@ -5043,15 +5149,20 @@ begin
         varStrArg:
           t := varString;
       end;
-      {$ifdef DISPINVOKE_SYSVAMD64}
+      {$ifdef DISPINVOKE_VALIST}
+      {$ifdef DISPINVOKE_AAPCS32}
+      a := VAArgAapcs32(Params, (CallDesc^.ArgTypes[i] and ARGREF_MASK = 0) and
+        (t in [varDouble, varCurrency, varDate, varInt64, varWord64]));
+      {$else}
       if (CallDesc^.ArgTypes[i] and ARGREF_MASK <> 0) or
          not (t in [varSingle, varDouble, varDate]) then
-        a := VAGPArgSysVAmd64(Params)
+        a := {$ifdef DISPINVOKE_SYSVAMD64} VAGPArgSysVAmd64 {$else} VAGPArg {$endif} (Params)
       else
-        a := VAFPArgSysVAmd64(Params);
+        a := {$ifdef DISPINVOKE_SYSVAMD64} VAFPArgSysVAmd64 {$else} VAFPArg {$endif} (Params);
+      {$endif DISPINVOKE_AAPCS32}
       {$else}
       asize := SizeOf(pointer); // most arguments in flat-buffer are pointers
-      {$endif DISPINVOKE_SYSVAMD64}
+      {$endif DISPINVOKE_VALIST}
       if CallDesc^.ArgTypes[i] and ARGREF_MASK <> 0 then
       begin
         PSynVarData(v)^.VType := t or varByRef;
@@ -5064,7 +5175,7 @@ begin
           varError:
             begin
               v^.VError := VAR_PARAMNOTFOUND;
-              {$ifndef DISPINVOKE_SYSVAMD64} asize := 0; {$endif}
+              {$ifndef DISPINVOKE_VALIST} asize := 0; {$endif}
             end;
           varVariant:
             {$ifdef DISPINVOKEBYVALUE}
@@ -5082,7 +5193,7 @@ begin
           varWord64:
             begin
               v^.VInt64 := PInt64(a)^;
-              {$ifndef DISPINVOKE_SYSVAMD64} asize := SizeOf(Int64); {$endif}
+              {$ifndef DISPINVOKE_VALIST} asize := SizeOf(Int64); {$endif}
             end;
           // small values are stored as pointers on stack but pushed as 32-bit
           varSingle,
@@ -5098,9 +5209,9 @@ begin
           v^.VAny := PPointer(a)^; // e.g. varString or varOleStr
         end;
       end;
-      {$ifndef DISPINVOKE_SYSVAMD64}
-      inc(a, asize); // flat-buffer advancement (VAArgSysVAmd64 has its own list)
-      {$endif DISPINVOKE_SYSVAMD64}
+      {$ifndef DISPINVOKE_VALIST}
+      inc(a, asize); // flat-buffer advancement (a va_list has its own cursor)
+      {$endif DISPINVOKE_VALIST}
       {$ifdef FPC}
       if inverted then
         dec(v)
@@ -11513,160 +11624,293 @@ exponent:         inc(Json); // inlined custom GetInteger()
   end;
 end;
 
-const
-  CURRENCY_FACTOR: array[-4 .. -1] of integer = (1, 10, 100, 1000);
-
+{$ifdef ASMX64NOTPIC} { SIMD/SSE3 x64 asm in mormot.core.base.asmx64.inc }
 function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
   AllowVarDouble: boolean): PUtf8Char;
-var
-  // logic below is extracted from mormot.core.base.pas' GetExtended()
-  remdigit: integer;
-  frac, exp {$ifdef CPUX86NOTPIC}, f {$endif}: PtrInt;
-  c: AnsiChar;
-  flags: set of (fNeg, fNegExp, fValid);
-  v64: Int64; // allows 64-bit resolution for the digits (match 80-bit extended)
-  d: double;
 begin
-  // 1. parse input text as number into v64, frac, digit, exp
+  result := GetNumericVariantStub(Json, Value, AllowVarDouble);
+end;
+
+function GetNumericVariantPas(Json: PUtf8Char;
+  var Value: TVarData; AllowVarDouble: boolean): PUtf8Char;
+{$else}
+function GetNumericVariantFromJson(Json: PUtf8Char; var Value: TVarData;
+  AllowVarDouble: boolean): PUtf8Char;
+{$endif ASMX64NOTPIC}
+const
+  CURRENCY_FACTOR: array[-4 .. -1] of integer = (1, 10, 100, 1000);
+  CURRENCY_MAX: array[-4 .. -1] of Int64 = (
+    MAX_INT64, MAX_INT64_DIV10, MAX_INT64 div 100, MAX_INT64 div 1000);
+var
+  // logic below is similar to mormot.core.text.pas GetExtended()
+  c, n, cnt: PtrUInt;
+  frac: PtrInt;
+  flags: set of (fNeg, fNegExp, fValidExp);
+  v64 {$ifndef TSYNEXTENDED80}, q64{$endif}: Int64;
+  d: double;
+  vd: TSynVarData absolute Value;
+begin
+  // 1. parse input text as number into v64, frac, cnt
   result := nil; // return nil to indicate parsing error
   byte(flags) := 0;
-  v64 := 0;
-  frac := 0;
   if Json = nil then
     exit;
-  c := Json^;
-  if c = '-' then // note: '+xxx' is not valid Json so is not handled here
+  if Json^ = '-' then // note: '+xxx' is not valid Json so is not handled here
   begin
-    c := Json[1];
     inc(Json);
     include(flags, fNeg);
   end;
-  if (c = '0') and
-     (Json[1] in ['0' .. '9']) then // '012' is not Json, but '0.xx' and '0' are
+  cnt := PtrUInt(Json^) - ord('0');
+  if ((cnt = 0) and
+      (Json[1] in ['0' .. '9'])) or // '012' is no valid Json, but '0.x' '0' are
+     (cnt > 9) then
     exit;
-  remdigit := 19;    // max Int64 resolution
-  repeat
-    if c in ['0' .. '9'] then
+  n := PtrUInt(Json) + 18;   // the first 18 digits can't overflow Int64
+  inc(Json);
+  c := PtrUInt(Json^) - ord('0'); // unroll first 8 digits parsing
+  if c <= 9 then
+  begin
+    inc(Json);
+    cnt := cnt * 10 + c; // PtrInt arithmetic - especially efficient on CPU32
+    c := PtrUInt(Json^) - ord('0');
+    if c <= 9 then
     begin
       inc(Json);
-      dec(remdigit); // over-required digits are just ignored
-      if remdigit >= 0 then
+      cnt := cnt * 10 + c;
+      c := PtrUInt(Json^) - ord('0');
+      if c <= 9 then
       begin
-        dec(c, ord('0'));
-        {$ifdef CPU64}
-        v64 := v64 * 10;
-        {$else}
-        v64 := v64 shl 3 + v64 + v64;
-        {$endif CPU64}
-        inc(v64, byte(c));
-        c := Json^;
-        include(flags, fValid);
-        if frac <> 0 then
-          dec(frac); // frac<0 for digits after '.'
-        continue;
+        inc(Json);
+        cnt := cnt * 10 + c;
+        c := PtrUInt(Json^) - ord('0');
+        if c <= 9 then
+        begin
+          inc(Json);
+          cnt := cnt * 10 + c;
+          c := PtrUInt(Json^) - ord('0');
+          if c <= 9 then
+          begin
+            inc(Json);
+            cnt := cnt * 10 + c;
+            c := PtrUInt(Json^) - ord('0');
+            if c <= 9 then
+            begin
+              inc(Json);
+              cnt := cnt * 10 + c;
+              c := PtrUInt(Json^) - ord('0');
+              if c <= 9 then
+              begin
+                inc(Json);
+                cnt := cnt * 10 + c;
+              end;
+            end;
+          end;
+        end;
       end;
-      c := Json^;
-      if frac >= 0 then
-        inc(frac);   // frac>0 to handle #############00000
-      continue;
     end;
-    if c <> '.' then
+  end;
+  frac := 0;
+  v64 := cnt;
+  if c <= 9 then // 64-bit aware loop for 9 digits and up
+  repeat
+    c := PtrUInt(Json^) - ord('0');
+    if c > 9 then
       break;
-    c := Json[1];
-    if (frac > 0) or
-       (c = #0) then // avoid ##.
-      exit;
-    inc(json);
-    dec(frac);
-  until false;
-  if frac < 0 then
-    inc(frac);       // adjust digits after '.'
-  if (c = 'E') or
-     (c = 'e') then
-  begin
-    c := Json[1];
     inc(Json);
-    exp := 0;
-    exclude(flags, fValid);
-    if c = '+' then
+    cnt := PtrUInt(Json^) - ord('0'); // pre-load digits by pair
+    v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64 {$else} * 10 {$endif} + Int64(c);
+    if cnt > 9 then
+      break;
+    inc(Json); // we know that PtrUInt(Json) <> n this it is an odd digit index
+    v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64 {$else} * 10 {$endif} + Int64(cnt);
+    if PtrUInt(Json) <> n then // five maximum 2-digit Int64 iterations
+      continue;
+    repeat // loop including Int64 overflow test for 18-19 digits
+      c := PtrUInt(Json^) - ord('0');
+      if c > 9 then
+        break;
+      if v64 > MAX_INT64_DIV10 - ord(c > 7) then
+      begin
+        if (v64 <> MAX_INT64_DIV10) or
+           (c <> 8) or
+           not (fNeg in flags) then
+          break;
+        inc(Json);
+        v64 := MIN_INT64; // sentinel = magnitude 2^63, already negative
+        c := PtrUInt(Json^) - ord('0');
+        break;
+      end;
+      inc(Json);
+      v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64 {$else} * 10 {$endif} + Int64(c);
+    until false;
+    if c <= 9 then
+      repeat // ignore-them-all path for >18/19 significant integer digits
+        inc(Json);
+        inc(frac);
+      until not (Json^ in ['0' .. '9']);
+    break;
+  until false;
+  if Json^ = '.' then // fraction
+  begin
+    inc(Json);
+    if (frac <> 0) or // keep original GetExtended() behavior
+       not (Json^ in ['0' .. '9']) then
+      exit;
+    inc(n); // the dot consumes no digit
+    if v64 = 0 then // properly handle 0.00000000000000000123
+      while Json^ = '0' do
+      begin
+        dec(frac);
+        inc(Json);
+      end;
+    repeat
+      c := PtrUInt(Json^) - ord('0');
+      if (c > 9) or
+         (v64 < 0) then // MIN_INT64 sentinel
+       break;
+      if (PtrUInt(Json) >= n) and
+         (v64 > MAX_INT64_DIV10 - ord(c > 7)) then
+      begin
+        if (v64 <> MAX_INT64_DIV10) or
+           (c <> 8) or
+           not (fNeg in flags) then
+          break;
+        inc(Json);
+        dec(frac); // the boundary digit also belongs to the fraction
+        v64 := MIN_INT64; // sentinel = magnitude 2^63, already negative
+        c := PtrUInt(Json^) - ord('0');
+        break;
+      end;
+      v64 := v64 {$ifdef HASSLOWMUL64} shl 3 + v64 + v64 {$else} * 10 {$endif} + Int64(c);
+      inc(Json);
+      dec(frac);
+    until false;
+    if c <= 9 then
+    begin
+      if PtrUInt(Json) = n then
+        dec(n);
+      repeat
+        inc(Json);
+      until not (Json^ in ['0' .. '9']);
+    end;
+    if Json^ = '.' then
+      exit;
+  end;
+  cnt := n - PtrUInt(Json) + 1; // compute 64-bit remaining-digit count
+  if Json^ in ['E', 'e'] then
+  begin
+    n := 0; // exponent value
+    inc(Json);
+    if Json^ = '+' then
       inc(Json)
-    else if c = '-' then
+    else if Json^ = '-' then
     begin
       inc(Json);
       include(flags, fNegExp);
     end;
     repeat
-      c := Json^;
-      if not (c in ['0' .. '9']) then
+      c := PtrUInt(Json^) - ord('0');
+      if c > 9 then
         break;
+      n := (n * 10) + c;
       inc(Json);
-      dec(c, ord('0'));
-      exp := (exp * 10) + byte(c);
-      include(flags, fValid);
+      if n >= $fff000 then // huge constant, but still aarch64 friendly
+        exit;
+      include(flags, fValidExp); // at least one valid exponent digit
     until false;
+    if not (fValidExp in flags) then
+      exit;
     if fNegExp in flags then
-      dec(frac, exp)
+      dec(frac, n)
     else
-      inc(frac, exp);
+      inc(frac, n);
   end;
-  if not (fValid in flags) then
+  // 2. render v64, frac, cnt number definition into a proper variant value
+  if v64 = 0 then
+  begin // zero is independent of the number of fractional zeros or exponent
+    vd.VType := varInteger;
+    vd.VPtrInt := {$ifdef CPU64} v64 {$else} 0 {$endif};
+    result := Json; // returns the first char after the parsed number
     exit;
-  if fNeg in flags then
-    v64 := -v64;
-  // 2. now v64, frac, digit, exp contain number parsed from Json
-  if (frac = 0) and
-     (remdigit >= 0) then // return an integer or Int64 value
-  begin
-    Value.VInt64 := v64;
-    if remdigit <= 9 then
-      TSynVarData(Value).VType := varInt64
-    else
-      TSynVarData(Value).VType := varInteger;
-  end
-  else if (frac < 0) and
-          (frac >= -4) then // currency as ###.0123
-  begin
-    TSynVarData(Value).VType := varCurrency;
-    Value.VInt64 := v64 * CURRENCY_FACTOR[frac]; // as round(CurrValue*10000)
-  end
-  else if AllowVarDouble and
-          (frac > -324) then // 5.0 x 10^-324 .. 1.7 x 10^308
-  begin // convert into a double value
-    {$ifdef CPUX86NOTPIC}
-    f := frac;
-    if f >= -31 then
-      if f <= 31 then
-        d := POW10[f] // -31 .. + 31
-      else if (18 - remdigit) + integer(f) >= 308 then
-        exit          // +308 ..
-      else
-        d := POW10[(f and not 31) shr 5 + 34] * POW10[f and 31] // +32 .. +307
-    else
+  end;
+  if PtrInt(cnt) >= 0 then
+    if frac = 0 then
     begin
-      f := -f; // .. -32
-      d := POW10[(f and not 31) shr 5 + 45] / POW10[f and 31];
+      if cnt <= 9 then
+        vd.VType := varInt64
+      else
+        vd.VType := varInteger;
+      if (fNeg in flags) and
+         (v64 > 0) then // MIN_INT64 final value may have been set above
+        v64 := -v64;
+      vd.VInt64 := v64;
+      result := Json;
+      exit;
+    end
+    else if (frac < 0) and
+            (frac >= -4) and
+            (v64 <= CURRENCY_MAX[frac]) and
+            ((v64 >= 0) or (frac = -4)) then
+    begin // currency as ###.0123
+      if v64 > 0 then // MIN_INT64 final value may have been set above
+      begin
+        if fNeg in flags then
+          v64 := -v64;
+        v64 := v64 * CURRENCY_FACTOR[frac];
+      end;
+      vd.VType := varCurrency;
+      vd.VInt64 := v64;
+      result := Json;
+      exit;
     end;
-    {$else}
-    exp := PtrUInt(@POW10);
+  if not AllowVarDouble then
+    exit;
+  {$ifdef TSYNEXTENDED80} // FP80 has no 53-bit mantissa limitation
+  if (frac <= -324) or // 5.0 x 10^-324 .. 1.7 x 10^308
+     (frac >= PtrInt(cnt) + 290) then
+    exit; // we can't convert into a double
+  if (frac < 0) and
+     (frac >= -27) then // FP80 has full 64-bit mantissa so no 53-bit limitation
+  {$else}
+  while (frac < 0) and
+        ((frac < -22) or (v64 shr 53 <> 0)) do // reduce ending 000000
+  begin
+    q64 := v64 div 10; // fast shr/mul by reciprocal on FPC 64-bit
+    if q64 *10 <> v64 then
+      break;
+    v64 := q64; // adjust the Clinger's path for proper binary64 precision
+    inc(frac);
+  end;
+  if frac <= -324 then // 5.0 x 10^-324 .. 1.7 x 10^308
+    exit; // we can't convert into a double
+  if (PtrUInt(frac + 22) <= 21) and
+     (UInt64(v64) shr 53 = 0) then
+  {$endif TSYNEXTENDED80}
+    // Clinger's fast path: d64 and 10^-frac are both exact doubles, so a single
+    // IEEE division is correctly rounded - whereas POW10[frac] * d64 is not,
+    // since 1E-1..1E-22 are inexact (e.g. '1.2' returned 1.2000000000000002)
+    d := v64 / POW10[-frac]
+  else
+  begin
     if frac >= -31 then
       if frac <= 31 then
-        d := PPow10(exp)[frac] // -31 .. + 31 is the most common case
-      else if (18 - remdigit) + integer(frac) >= 308 then
+        d := POW10[frac] // -31 .. + 31 is the most common case
+      else if frac >= PtrInt(cnt) + 290 then
         exit                   // +308 ..
       else                     // +32 .. +307
-        d := PPow10(exp)[(frac and not 31) shr 5 + 34] * PPow10(exp)[frac and 31]
+        d := POW10[frac shr 5 + 34] * POW10[frac and 31]
     else
     begin
       frac := -frac; // .. -32
-      d := PPow10(exp)[(frac and not 31) shr 5 + 45] / PPow10(exp)[frac and 31];
+      d := POW10[frac shr 5 + 45] / POW10[frac and 31];
     end;
-    {$endif CPUX86NOTPIC}
-    Value.VDouble := d * v64;
-    TSynVarData(Value).VType := varDouble;
-  end
-  else
-    exit;
-  result := Json; // returns the first char after the parsed number
+    d := d * v64;
+  end;
+  if (fNeg in flags) <> (v64 < 0) then
+    d := -d;
+  vd.VType := varDouble;
+  vd.VDouble := d;
+  result := Json;
 end;
 
 procedure UniqueVariant(Interning: TRawUtf8Interning; var aResult: variant;
@@ -13870,6 +14114,10 @@ begin
   except // paranoid to avoid fatal exception during process initialization
   end;
   {$endif FPC}
+  {$ifdef ASMX64NOTPIC}
+  if cfSSSE3 in CpuFeatures then // SIMD SSSE3 seems 25% faster
+    GetNumericVariantStub := @GetNumericVariantSsse3;
+  {$endif ASMX64NOTPIC}
 end;
 
 

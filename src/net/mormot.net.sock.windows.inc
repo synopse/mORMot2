@@ -673,6 +673,73 @@ begin
     (v = SocketPriorityHintVeryLow);
 end;
 
+// no POSIX signals interception needed for Send/Recv/SendTo/RecvFrom on WinAPI
+
+function TNetSocketWrap.Send(Buf: pointer; var len: integer;
+  rawError: PNetErrorInt): TNetResult;
+begin
+  if @self = nil then
+    result := nrNoSocket
+  else
+  begin
+    len := mormot.net.sock.send(TSocket(@self), Buf, len, MSG_NOSIGNAL);
+    // man send: Upon success, send() returns the number of bytes sent.
+    // Otherwise, -1 is returned and errno set to indicate the error.
+    if len < 0 then
+      result := NetLastError(NO_ERROR, rawError)
+    else
+      result := nrOK;
+  end;
+end;
+
+function TNetSocketWrap.Recv(Buf: pointer; var len: integer;
+  rawError: PNetErrorInt): TNetResult;
+begin
+  if @self = nil then
+    result := nrNoSocket
+  else
+  begin
+    len := mormot.net.sock.recv(TSocket(@self), Buf, len, 0);
+    // man recv: Upon successful completion, recv() shall return the length of
+    // the message in bytes. If no messages are available to be received and the
+    // peer has performed an orderly shutdown, recv() shall return 0.
+    // Otherwise, -1 shall be returned and errno set to indicate the error,
+    // which may be nrRetry if no data is available.
+    if len <= 0 then
+      if len = 0 then
+        result := nrClosed
+      else
+        result := NetLastError(NO_ERROR, rawError)
+    else
+      result := nrOK;
+  end;
+end;
+
+function TNetSocketWrap.SendTo(Buf: pointer; len: integer;
+  const addr: TNetAddr): TNetResult;
+begin
+  if @self = nil then
+    result := nrNoSocket
+  else if mormot.net.sock.sendto(TSocket(@self), Buf, len, 0, @addr, addr.Size) < 0 then
+    result := NetLastError
+  else
+    result := nrOk;
+end;
+
+function TNetSocketWrap.RecvFrom(Buf: pointer; len: integer;
+  out addr: TNetAddr): integer;
+var
+  addrlen: integer;
+begin
+  if @self = nil then
+    result := -1
+  else
+  begin
+    addrlen := SizeOf(addr);
+    result := mormot.net.sock.recvfrom(TSocket(@self), Buf, len, 0, @addr, @addrlen);
+  end;
+end;
+
 procedure SetTimeVal(ms: cardinal; out tv: TTimeVal);
   {$ifdef HASINLINE} inline; {$endif}
 begin
@@ -766,6 +833,31 @@ begin
      ({%H-}er.fd_count = 1) and
      (er.fd_array[0] = sock) then
     include(result, neError);
+end;
+
+function TNetSocketWrap.Available(loerr: PNetErrorInt; nowait: boolean): boolean;
+var
+  events: TNetEvents;
+  dummy: integer;
+begin
+  result := true;
+  if loerr <> nil then
+    loerr^ := 0;
+  if nowait then
+    events := [neRead] // just MSG_PEEK
+  else
+    events := WaitFor(0, [neRead, neError], loerr); // select() or poll()
+  if events = [] then
+    exit; // the socket seems stable with no pending input
+  if neRead in events then
+    // - on Windows, may be WSACONNRESET (nrClosed), with recv() returning 0
+    // - no need to MakeAsync: recv() should not block after neRead
+    // - may be [neRead, neClosed] on gracefully closed HTTP/1.0 response
+    // - expected recv() result: -1=error, 0=closed, 1=success
+    if (mormot.net.sock.recv(TSocket(@self), @dummy, 1, MSG_PEEK) = 1) or
+       (NetLastError(NO_ERROR, loerr) = nrRetry) then
+      exit;
+  result := false; // e.g. neError or neClosed with no neRead
 end;
 
 
@@ -1955,12 +2047,14 @@ end;
 function TWinIocp.Unsubscribe(var one: PWinIocpSubscription): boolean;
 var
   res: TNetResult;
-  o: PIocpSubscription absolute one;
+  o: PIocpSubscription;
 begin
   result := false;
+  o := pointer(one); // local copy
   if (self = nil) or
-     (one = nil) or
-     fTerminated then
+     fTerminated or
+     (o = nil) or
+     not LockedExc(PPtrUInt(@one)^, 0, PtrUInt(o)) then // CAS one := nil
     exit;
   res := nrOK;
   if Assigned(fOnLog) then
@@ -1977,25 +2071,23 @@ begin
     // - follow documented pattern: shutdown(SD_SEND) + recv()=0 + closesocket
     shutdown(o^.socket, SHUT_WR); // = SD_SEND
     o^.recvclosing := true; // flag for GetNext() to call closesocket()
-    if PrepareNext('unsub', one, wieRecv) then
+    if PrepareNext('unsub', pointer(o), wieRecv) then
     begin
       // started async WSARecv() until the function completes with success
       result := true;
-      one := nil;
       exit;
     end
     else // if failed, graceful disconnect is not possible (already closed)
       closesocket(o^.socket);
   end;
-  result := fOne.Free(one); // one^.sequence will avoid ABA problem in GetNext()
-  one := nil;
+  result := fOne.Free(o); // one^.sequence will avoid ABA problem in GetNext()
 end;
 
 
 { ******************** TLS / HTTPS Encryption Abstract Layer }
 
 type
-  ESChannel = class(Exception);
+  ESChannel = class(ExceptionWithProps);
 
   TSChannelNetTls = class(TInterfacedObject, INetTls)
   private

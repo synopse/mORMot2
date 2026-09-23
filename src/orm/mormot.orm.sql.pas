@@ -1924,11 +1924,17 @@ end;
 function TRestStorageExternal.TransactionBegin(aTable: TOrmClass;
   SessionID: cardinal): boolean;
 begin
-  if (aTable = fStoredClass) and
-     inherited TransactionBegin(aTable, SessionID) then
-    result := fProperties.SharedTransaction(SessionID, transBegin) <> nil
-  else
-    result := false;
+  result := false;
+  if (aTable <> fStoredClass) or
+     not inherited TransactionBegin(aTable, SessionID) then
+    exit;
+  // inherited has already set fTransactionActiveSession - if the actual
+  // StartTransaction fails (e.g. the connection died), we MUST release it,
+  // otherwise every future TransactionBegin() is refused by the inherited
+  // check and the storage stays locked until the process restarts
+  result := fProperties.SharedTransaction(SessionID, transBegin) <> nil;
+  if not result then
+    inherited RollBack(SessionID); // reset fTransactionActiveSession
 end;
 
 procedure TRestStorageExternal.Commit(SessionID: cardinal;

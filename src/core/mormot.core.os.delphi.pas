@@ -148,7 +148,11 @@ const
   O_NONBLOCK        = O_NONBLOCK;
   SEEK_CUR          = SEEK_CUR;
   FIONREAD          = FIONREAD;
+  {$ifdef OSANDROID}
+  FIONBIO           = $5421; // not defined by the Delphi Android RTL
+  {$else}
   FIONBIO           = FIONBIO;
+  {$endif OSANDROID}
   F_OK              = F_OK;
 
   CLOCK_MONOTONIC_RAW = 4;
@@ -278,7 +282,7 @@ function fpopendir(path: PAnsiChar): pDir;
 function fpreaddir(var dirp: Dir): pDirent;
 function fpclosedir(var dirp: Dir): cint;
 
-{$ifdef OSLINUX}
+{$ifdef OSLINUXANDROID} // bionic exports the same libc API as glibc
 
 type
   TStatfs = record
@@ -305,7 +309,7 @@ type
     mem_unit: cuint;                   // Memory unit size in bytes
 {$ifndef cpu64}
     { the upper bound of the array below is negative for 64 bit cpus }
-    _f: array[0..19-2*sizeof(clong)-sizeof(cint)] of cChar;  // Padding as libc5
+    _f: array[0..19-2*sizeof(clong)-sizeof(cint)] of cint8;  // Padding as libc5
 {$endif cpu64}
   end;
   PSysInfo = ^TSysInfo;
@@ -317,7 +321,12 @@ function sched_getaffinity(pid: integer;
     cpusetsize: PtrUInt; cpuset: pointer): integer; cdecl
   external clib name 'sched_getaffinity';
 
-{$endif OSLINUX}
+{$endif OSLINUXANDROID}
+
+{$ifdef OSANDROID}
+/// retrieve an Android system property, as the FPC Android RTL does
+function GetSystemProperty(Name: PAnsiChar): RawUtf8;
+{$endif OSANDROID}
 
 function fpstatfs(path: PAnsiChar; nfo: pointer): cint;
 function IsAtty(fd: cint): cint;
@@ -353,6 +362,7 @@ const
   AF_PACKET     = 17; // Linux specific
   SOMAXCONN     = Posix.SysSocket.SOMAXCONN;
   SOL_SOCKET    = Posix.SysSocket.SOL_SOCKET;
+  SO_ERROR      = Posix.SysSocket.SO_ERROR;
   SO_SNDTIMEO   = Posix.SysSocket.SO_SNDTIMEO;
   SO_RCVTIMEO   = Posix.SysSocket.SO_RCVTIMEO;
   SO_REUSEADDR  = Posix.SysSocket.SO_REUSEADDR;
@@ -361,9 +371,13 @@ const
   SO_SNDBUF     = Posix.SysSocket.SO_SNDBUF;
   SO_RCVBUF     = Posix.SysSocket.SO_RCVBUF;
   SO_BROADCAST  = Posix.SysSocket.SO_BROADCAST;
+  {$ifdef OSANDROID}
+  SO_PRIORITY   = 12; // not defined by the Delphi Android RTL
+  {$else}
   {$ifdef OSLINUXANDROID}
   SO_PRIORITY   = Posix.SysSocket.SO_PRIORITY;
   {$endif OSLINUXANDROID}
+  {$endif OSANDROID}
 
 
 type
@@ -386,7 +400,7 @@ type
 function fppoll(fds: PPollFD; nfds, timeout: cint): cint; cdecl;
   external clib name 'poll';
 
-{$ifdef OSLINUX}
+{$ifdef OSLINUXANDROID} // bionic exports epoll as glibc does
 
 const
   EPOLLIN      = $01;
@@ -426,7 +440,7 @@ function epoll_wait(epfd: cint; events: PEPoll_Event;
     maxevents, timeout: cint): cint; cdecl;
   external clib name 'epoll_wait';
 
-{$endif OSLINUX}
+{$endif OSLINUXANDROID}
 
 
 
@@ -803,6 +817,20 @@ begin
   result := statfs(path, nfo);
 end;
 
+{$ifdef OSANDROID}
+
+function __system_property_get(name, value: PAnsiChar): cint; cdecl;
+  external clib name '__system_property_get';
+
+function GetSystemProperty(Name: PAnsiChar): RawUtf8;
+var
+  tmp: array[0 .. 91] of AnsiChar; // PROP_VALUE_MAX = 92
+begin
+  SetString(result, tmp, __system_property_get(Name, @tmp));
+end;
+
+{$endif OSANDROID}
+
 function IsAtty(fd: cint): cint;
 var
   t: Termios;
@@ -828,7 +856,7 @@ begin
     exit;
   p := Posix.Dlfcn.dlsym(FindResourceHInstance(HInstance), Rec^.Key); // main exe only
   if p <> nil then
-    if p^.ShortLen = $ffff then
+    if p^.ShortLen <> $ffff then // $ffff marks the long layout, as in system.pas
       SetString(Res, p^.ShortW, p^.ShortLen)
     else
       SetString(Res, p^.LongW, p^.LongLen);

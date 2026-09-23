@@ -688,7 +688,7 @@ User.PasswordHashHexa := 'plaintext';
 User.SetPasswordPlain('password');  // SHA-256
 
 // ✓ Or use PBKDF2 for better security
-User.SetPassword('password', RandomString(16), 10000);
+User.SetPassword('password', RandomUri(16), 10000);
 ```
 
 ### 21.11.3. SQL Injection Prevention

@@ -117,6 +117,15 @@ type
     diInternalMab,
     {$ifdef FPC} diInternalDwarf, diExternalDwarf {$else} diExternalMap {$endif});
 
+  /// how stack trace shall be computed during logging
+  // - stOnlyAPI is the first (and default) value, since manual stack makes
+  // unexpected detections, and was reported as very slow on Windows 11
+  // - on FPC, these values are ignored, because RTL CaptureBacktrace() is used
+  TSynLogStackTraceUse = (
+    stOnlyAPI,
+    stManualAndAPI,
+    stOnlyManual);
+
   /// allow to customize TDebugFile.Create and TDebugFile.SaveToFile process
   TDebugFileScope = set of (
     dfsIncludePathInFileName,
@@ -155,13 +164,7 @@ type
     function AbsoluteToRelative(aPointer: PtrUInt): TDebugAddress;
       {$ifdef HASINLINE}inline;{$endif}
     procedure AppendLocationShort(aPointer: PtrUInt; var aInfo: ShortString);
-    function AppendLog(W: TTextWriter; aPointer: PtrUInt; NoHex: boolean): boolean;
-    // use fast O(log n) binary search to locate a symbol or line number
-    function FindSymbol(rva: TDebugAddress): PDebugSymbol;
-    function FindBlock(rva: TDebugAddress; out line: integer): PDebugBlock; overload;
-    function FindBlock(rva: TDebugAddress): PDebugBlock; overload;
-      {$ifdef HASINLINE}inline;{$endif}
-    function FindBlockByName(const aUnitName: RawUtf8): PDebugBlock;
+    function AddLog(W: TTextWriter; aPointer: PtrUInt; NoHex: boolean = false): boolean;
     function GetExeDate: RawUtf8;
   public
     /// get the available debugging information
@@ -204,6 +207,18 @@ type
     /// check if this memory address is part of the code segments of this instance
     function IsCode(aPointer: PtrUInt): boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// use fast O(log n) binary search to locate a symbol
+    function FindSymbol(aRva: TDebugAddress): PDebugSymbol;
+    /// use fast O(log n) binary search to locate a block
+    function FindBlock(aRva: TDebugAddress): PDebugBlock; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// use fast O(log n) binary search to locate a block with its line number
+    function FindBlock(aRva: TDebugAddress; out aLine: integer): PDebugBlock; overload;
+    /// brute force search of a block from its Symbol.Name
+    function FindBlockByName(const aUnitName: RawUtf8): PDebugBlock;
+    /// compute human friendly text information about a given RVA address
+    // - typically used after Create([dfsNoMabExternalCheck, dfsNoMabSaveAtCreate])
+    function Lookup(aRva: TDebugAddress): RawUtf8;
     /// return the symbol location according to the supplied absolute address
     // - filename, symbol name and line number (if any), as plain text, e.g.
     // $ 5880ea mormot.core.log.pas InitializeUnit (8475)
@@ -212,7 +227,15 @@ type
     // - returns only the hexadecimal value if no match is found in .map/.dbg/.mab
     // - won't allocate any heap memory during the text creation
     // - mormot.core.os.pas' GetExecutableLocation() redirects to this method
-    class procedure FindLocationShort(aPointer: pointer; var aInfo: ShortString);
+    // - will also return any library name or symbol outside the executable
+    class procedure FindLocationShort(aPointer: pointer; var aInfo: ShortString;
+      aNoHex: boolean = false);   {$ifdef HASINLINE} static; {$endif}
+    /// append the supplied symbol location(s) - as used by AppendCallerShort()
+    class procedure AppendLocationsShort(var aInfo: ShortString;
+      aFrames: PPtrUIntArray; aFramesCount, aDepth: PtrInt);
+    /// append the symbol location(s) according to the current call stack
+    // - won't return any library name or symbol outside the executable
+    class procedure AppendCallerShort(var aInfo: ShortString; aSkip, aDepth: integer);
       {$ifdef HASINLINE} static; {$endif}
     /// return the symbol location according to the supplied absolute address
     // - filename, symbol name and line number (if any), as plain text, e.g.
@@ -236,9 +259,28 @@ type
     // - is much faster: around 1us per lookup, whereas lnfodwrf is 20ms
     class function RegisterBacktraceStrFunc: boolean; static;
     {$endif FPC}
-    /// add some debugging information about the supplied absolute memory address
-    class function AddLog(W: TTextWriter; aPointer: PtrUInt;
-      NoHex: boolean = false): boolean; {$ifdef HASINLINE} static; {$endif}
+    /// return the current thread stack trace as convenient plain text
+    // - filename, symbol name and line number (if any) of each frame, e.g.
+    // $ 57f480 mormot.core.log.pas TSynLog.LogEscape (5782) 4a0a40 ...
+    // - skip is the number of caller frames to ignore (0 = start at caller)
+    // - depth is the maximum number of located frames (0 = 30 as TSynLog)
+    // - could be used e.g. for diagnostic endpoints or error reporting, with
+    // no exception involved - returns '' if no stack trace is available
+    class function StackTrace(skip: integer = 0; depth: integer = 0;
+      use: TSynLogStackTraceUse = stManualAndAPI): RawUtf8; overload;
+      {$ifdef HASINLINE} static; {$endif}
+    /// append the current thread stack trace to an existing TTextWriter
+    // - the current thread stack is captured via the RTL CaptureBacktrace()
+    // on FPC, or the RtlCaptureStackBackTrace() API on Delphi + Windows,
+    // with a manual stack walk fallback on Delphi Win32 (where this API is
+    // limited) - not implemented on Delphi POSIX yet (nothing is appended)
+    // - use follows TSynLogFamily.StackTraceUse semantics: ignored on FPC,
+    // and stOnlyManual is implemented on Delphi Win32 only, as TSynLog
+    // - skip does not apply to the heuristic manual stack walk
+    // - a trailing space is left after each located frame
+    class procedure StackTrace(W: TTextWriter; skip: integer = 0;
+      depth: integer = 0; use: TSynLogStackTraceUse = stManualAndAPI); overload;
+      {$ifdef HASINLINE} static; {$endif}
     /// low-level resolution of a TDebugFile instance from a code address
     // - this is the main internal thread-safe factory method for this process
     // - returns nil if this code address has no known debug information
@@ -574,17 +616,18 @@ function FromAppLogLevel(const Text: RawUtf8): TSynLogLevels;
 function RetrieveMemoryManagerInfo: RawUtf8;
 
 var
-  /// low-level critical section used internally by this unit
-  // - we use a process-wide giant lock to avoid proper multi-threading of logs
-  // - most process (e.g. time retrieval) is done outside of the lock: only
-  // actual log file writing is blocking the threads - slowest process like file
-  // rotation/archival or console output will be executed in a background thread
-  // - do not access this variable in your code: defined here for proper inlining
-  SynLogGlobalLock: TOSLock;
-
   /// is set to TRUE before ObjArrayClear(SynLogFile) in unit finalization
   // - defined here to avoid unexpected GPF at shutdown
   SynLogFileFreeing: boolean;
+
+  /// protects the global TSynLog/TSynLogFamily global lists
+  // - never acquire a TSynLog.fWriteSafe while holding this lock
+  // - a writer may acquire this lock for file-name reservation
+  SynLogFiles: TRWLightLock;
+
+  /// serializes global exception interception state
+  // - never hold this lock while acquiring a TSynLog.fWriteSafe
+  SynLogExceptions: TOSLock;
 
 type
   /// class of Exceptions raised by this unit
@@ -633,7 +676,7 @@ type
     // the integer mapped value will be transmitted, therefore wrongly)
     // - if Instance is set, it will log the corresponding class name and address
     // (to be used if you didn't call TSynLog.Enter() method first)
-    procedure Log(Level: TSynLogLevel; TextFmt: PUtf8Char;
+    procedure Log(Level: TSynLogLevel; const Format: RawUtf8;
       const TextArgs: array of const; Instance: TObject = nil); overload;
     /// call this method to add some information to the log at a specified level
     // - if Instance is set and Text is not '', it will log the corresponding
@@ -684,6 +727,16 @@ type
     function Instance: TSynLog;
   end;
 
+  // internal structure used by TSynLogFamily.PreRenderFmt
+  TPreRenderFmt = record
+    Format: pointer; // RawUtf8
+    Values: PVarRec;
+    TempLen: integer;
+    ValuesCount: integer;
+    Instance: TObject;
+    Temp: TBuffer4K;
+  end;
+
   /// this event can be set for a TSynLogFamily to archive any deprecated log
   // into a custom compressed format, i.e. compress and delete them
   // - called by TSynLogFamily.Destroy with files older than ArchiveAfterDays,
@@ -726,15 +779,6 @@ type
     ptIdentifiedInOneFile,
     ptNoThreadProcess);
 
-  /// how stack trace shall be computed during logging
-  // - stOnlyAPI is the first (and default) value, since manual stack makes
-  // unexpected detections, and was reported as very slow on Windows 11
-  // - on FPC, these values are ignored, because RTL CaptureBacktrace() is used 
-  TSynLogStackTraceUse = (
-    stOnlyAPI,
-    stManualAndAPI,
-    stOnlyManual);
-
   /// how file existing shall be handled during logging
   TSynLogExistsAction = (
     acOverwrite,
@@ -748,12 +792,15 @@ type
   {$endif NOEXCEPTIONINTERCEPT}
 
   /// available TSynLogThreadInfo.Flags definition
-  // - tiExceptionIgnore store TSynLogFamily.ExceptionIgnoreCurrentThread
-  // property (used only if NOEXCEPTIONINTERCEPT conditional is undefined)
-  // - tiTemporaryDisable store TSynLogFamily.DisableCurrentThread property
+  // - tiExceptionIgnore stores TSynLogFamily.ExceptionIgnoreCurrentThread
+  // - tiTemporaryDisable stores TSynLogFamily.DisableCurrentThread
+  // - tiWriting prevents any nested TSynLog writer acquisition in this thread
+  // - tiDisableRemoteEcho suppresses only the remote echo in this thread
   TSynLogThreadInfoFlag = (
     tiExceptionIgnore,
-    tiTemporaryDisable);
+    tiTemporaryDisable,
+    tiWriting,
+    tiDisableRemoteEcho);
   /// TSynLogThreadInfo.Flags property set type definition
   TSynLogThreadInfoFlags = set of TSynLogThreadInfoFlag;
 
@@ -789,6 +836,7 @@ type
     fPerThreadLog: TSynLogPerThreadMode;
     fWithUnitName: boolean;
     fWithInstancePointer: boolean;
+    fDirectRendering: boolean;
     fStackTraceLevel: byte;
     fStackTraceUse: TSynLogStackTraceUse;
     fFileExistsAction: TSynLogExistsAction;
@@ -831,6 +879,7 @@ type
     procedure SetDestinationPath(const value: TFileName);
     procedure SetLevel(aLevel: TSynLogLevels);
     procedure SynLogFileListEcho(const aEvent: TOnTextWriterEcho; aEventAdd: boolean);
+    procedure SynLogFileListRemoteEcho(aEventAdd: boolean);
     procedure SetEchoToConsole(aEnabled: TSynLogLevels);
     procedure SetEchoCustom(const aEvent: TOnTextWriterEcho);
     function GetSynLogClassName: string;
@@ -838,6 +887,7 @@ type
     function GetArchiveDestPath(age: TDateTime): TFileName;
     function GetCurrentThreadFlag(ti: TSynLogThreadInfoFlag): boolean;
     procedure SetCurrentThreadFlag(ti: TSynLogThreadInfoFlag; value: boolean);
+    procedure PreRenderFmt(var Fmt: TPreRenderFmt);
   public
     /// initialize for a TSynLog class family
     // - add it in the global SynLogFileFamily[] list
@@ -868,12 +918,6 @@ type
     // - will retrieve the log content for the current file, truncating the
     // text up to the specified number of KB (an up to 128 MB at most)
     function GetExistingLog(MaximumKB: cardinal): RawUtf8;
-    /// callback to notify the current logger that its thread is finished
-    // - method follows TOnNotifyThread signature, which can be assigned to
-    // TSynBackgroundThreadAbstract.OnAfterExecute
-    // - is called e.g. by TRest.EndCurrentThread
-    // - just a wrapper around TSynLog.NotifyThreadEnded
-    class procedure OnThreadEnded(Sender: TThread);
     /// clean up *.log file by running OnArchive() on deprecated files
     // - will find and archive DestinationPath\*.log (or sourcePath\*.log)
     // files older than ArchiveAfterDays (or archiveDays), into the ArchivePath
@@ -921,7 +965,7 @@ type
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// you can let exceptions be ignored from a callback
     // - if set and returns true, the given exception won't be logged
-    // - execution of this event handler is protected via the logs global lock
+    // - execution of this event handler is serialized by the exception lock
     // - may be handy e.g. when working with code triggerring a lot of
     // exceptions (e.g. Indy), where ExceptionIgnore could be refined
     property OnBeforeException: TOnBeforeException
@@ -1083,6 +1127,9 @@ type
     // - set to TRUE by default, for better debugging experience
     property WithInstancePointer: boolean
       read fWithInstancePointer write fWithInstancePointer;
+    /// if TRUE, internal 4KB pre-rendering is bypassed and AddFmt() is called
+    property DirectRendering: boolean
+      read fDirectRendering write fDirectRendering;
     /// the time (in seconds) after which the log content must be written on
     // disk, whatever the current content size is
     // - equals 0 by default, so that the log file will be written for every 8KB
@@ -1158,7 +1205,7 @@ type
   end;
 
   /// thread-specific internal threadvar definition used for fast process
-  // - consumes 484/512 bytes per thread on CPU32/CPU64
+  // - consumes 484/512 bytes + 256+64 per thread on CPU32/CPU64
   TSynLogThreadInfo = packed record
     /// number of recursive calls currently stored in Recursion[]
     // - nothing logged above MAX_SYNLOGRECURSION (53) to keep this record small
@@ -1170,12 +1217,12 @@ type
     // - see SynLogThreads.Ident[ThreadNumber - 1] for ptIdentifiedInOneFile
     // - raw value can be retrieved from TSynLog.ThreadIndex class method
     ThreadNumber: word;
-    /// pre-computed "1 shl ((ThreadNumber - 1) and 31)" value
+    /// pre-computed "1 shl ((ThreadNumber - 1) and 31)" value as 32-bit mask
     // - equals 0 if InitThreadNumber() needs to be called
     ThreadBitLo: cardinal;
     /// pre-computed "(ThreadNumber - 1) shr 5" value
     ThreadBitHi: word;
-    /// ready-to-be-written text timestamp, filled outside SynLogGlobalLock
+    /// ready-to-be-written text timestamp, usually filled outside fWriteSafe
     // - ptIdentifiedInOneFile appends the ThreadNumber in Int18ToText() format
     // - store up to 19-20 chars - padded with previous fields as 32 bytes
     CurrentTimeAndThread: string[21];
@@ -1187,12 +1234,19 @@ type
     // (microseconds as 56-bit do cover 2285 years before overflow)
     // - allow thread-safe non-blocking ISynLog._AddRef/_Release process
     Recursion: array[0 .. MAX_SYNLOGRECURSION - 1] of Int64;
+    /// additional temporary text buffer for TSynLogFamily.LevelStackTrace
+    // - caps the whole stack trace at 255 chars
+    StackTrace: ShortString;
+    /// additional temporary text buffer for TSynLogFamily.LevelSysInfo
+    // - capping at 63 chars seems fair enough since TShort95 is seldom needed
+    SysInfo: TShort63;
   end;
   PSynLogThreadInfo = ^TSynLogThreadInfo;
 
   /// low-level callback triggered within the raw logging context
   // - allow TSynLog.RawLog() to ouput directly some data to Sender.Writer
-  // - is called between LogHeader/LogTrailer methods, in the global lock
+  // - is called between LogHeader/LogTrailer methods, while the TSynLog
+  // writer lock is owned
   // - the implementation should be stable and don't break the same-line output
   TOnRawLog = procedure(Sender: TSynLog; Level: TSynLogLevel;
     Opaque: pointer; Value: PtrInt; Instance: TObject) of object;
@@ -1210,12 +1264,12 @@ type
   TSynLog = class(TObject, ISynLog)
   // note: don't inherit from TSynInterfacedObject to avoid a method call
   protected
+    fWriteSafe: TOSLightLock; // one non-reentrant writer lock per TSynLog
     fFamily: TSynLogFamily;
     fWriter: TJsonWriter;
     fThreadInfo: PSynLogThreadInfo;
     fFlags: set of (logFileHeaderWritten, logInitDone, logAddThreadName);
-    fPendingFlags: set of (pendingDisableRemoteLogLeave, pendingRotate);
-    fThreadInfoBackup: TSynLogThreadInfoFlags;
+    fPendingFlags: set of (pendingRotate);
     fISynLogOffset: integer;
     fStartTimestamp: Int64;
     fWriterEcho: TEchoWriter;
@@ -1224,7 +1278,7 @@ type
     fFileName: TFileName;
     fRotateBytes, fFlushTix32, fRotateDailyTix32: cardinal; // OnFlushToStream
     fStreamPositionAfterHeader: integer;
-    fStartTimestampDateTime: TDateTime;
+    fStartTimestampDateTimeUtc: TDateTime;
     fWriterClass: TJsonWriterClass;
     class function FamilyCreate: TSynLogFamily;
     // TInterfacedObject methods for fake per-thread RefCnt
@@ -1236,25 +1290,34 @@ type
     function DoEnter: PSynLogThreadInfo; // returns nil if sllEnter is disabled
       {$ifdef FPC}inline;{$endif}
     procedure RaiseDoEnter;
-    procedure LockAndPrepareEnter(nfo: PSynLogThreadInfo;
-      microsecs: PInt64); // no profit inlining
-    function LockAndDisableExceptions: boolean; // no profit inlining
-    procedure LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
-      {$ifdef ISDELPHI} ; addr: PtrUInt = 0 {$endif});
-    procedure LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
-      fmt: PUtf8Char; args: PVarRec; argscount: PtrInt; microsecs: PInt64);
+    function LockAndPrepareEnter(nfo: PSynLogThreadInfo; instance: TObject;
+      microsecs: PInt64 = nil): boolean; // returns fWriteSafe owned
+    function BeginWrite(nfo: PSynLogThreadInfo): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    procedure EndWrite(nfo: PSynLogThreadInfo);
+      {$ifdef HASINLINE}inline;{$endif}
+    function LockAndPrepareWrite(nfo: PSynLogThreadInfo; level: TSynLogLevel;
+      instance: TObject; skip: integer = 0; depth: integer = 0): boolean;
+    procedure LogTrailerAndUnlock(Info: PSynLogThreadInfo; Level: TSynLogLevel);
+      {$ifdef FPC}inline;{$endif}
+    procedure CloseLogFileLocked;
+    procedure LogFileInitLocked(nfo: PSynLogThreadInfo);
+    function LogFileInitOrUnlock(nfo: PSynLogThreadInfo): boolean;
+    function PerformRotationOrUnlock(nfo: PSynLogThreadInfo): boolean;
+    function LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char;
+      location: PShortString = nil): boolean;
+    function LogEnterFmt(nfo: PSynLogThreadInfo; var fmt: TPreRenderFmt;
+      microsecs: PInt64): boolean;
     procedure AddLogThreadName;
     procedure CreateLogWriter; virtual;
     procedure OnFlushToStream(Text: PUtf8Char; Len: PtrInt);
-    procedure LogInternalFmt(Level: TSynLogLevel; Format: PUtf8Char;
-      Values: PVarRec; ValuesCount: integer; Instance: TObject);
+    procedure AutoFlush(tix32: cardinal);
+    procedure LogInternalFmt(Level: TSynLogLevel; var fmt: TPreRenderFmt);
     procedure LogInternalText(Level: TSynLogLevel; Text: PUtf8Char;
       TextLen: PtrInt; Instance: TObject; TextTruncateAtLength: PtrInt);
     procedure LogInternalRtti(Level: TSynLogLevel; const aName: RawUtf8;
       aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
     procedure LogHeader(const Level: TSynLogLevel; Instance: TObject);
-      {$ifdef FPC}inline;{$endif}
-    procedure LogTrailer(Level: TSynLogLevel);
       {$ifdef FPC}inline;{$endif}
     procedure FillInfo(nfo: PSynLogThreadInfo; MicroSec: PInt64); virtual;
     procedure LogFileInit(nfo: PSynLogThreadInfo);
@@ -1270,6 +1333,8 @@ type
     function Instance: TSynLog;
     function ConsoleEcho(Sender: TEchoWriter; Level: TSynLogLevel;
       const Text: RawUtf8): boolean; virtual;
+    function RemoteEcho(Sender: TEchoWriter; Level: TSynLogLevel;
+      const Text: RawUtf8): boolean;
   public
     /// initialize for a TSynLog class instance
     // - WARNING: not to be called directly! Use TSynLog.Enter or TSynLog.Add
@@ -1335,17 +1400,17 @@ type
     // !   TSynLogDB.Enter(self, 'SQLFlush');
     // !   // do some stuff
     // ! end;
-    // - on Delphi, if no aMethodName is supplied, it will use the caller address,
-    // and write it as hexa and with full unit and symbol name, if the debugging
-    // information is available from TDebugFile, i.e. there is .map/.mab content
+    // - if no aMethodName is supplied, it will use the caller address, and
+    // write it with full unit and symbol name, if the debugging information
+    // is available from TDebugFile, i.e. there is associated .map/.gdb/.mab
     // ! procedure TMyDB.SQLFlush;
     // ! var log: ISynLog;
     // ! begin
     // !   log := TSynLogDB.Enter(self);
     // !   // do some stuff
     // ! end;
-    // - note that supplying aMethodName is faster than using the .map content,
-    // and is what FPC requires, so it should be preferred for most projects
+    // - note that supplying aMethodName is faster than calling TDebugFile, and
+    // requires debug info or .mab, so chould be preferred for most projects
     // - if TSynLogFamily.HighResolutionTimestamp is TRUE, high-resolution
     // time stamp will be written instead of ISO 8601 date and time: this will
     // allow performance profiling of the application on the customer side
@@ -1357,13 +1422,12 @@ type
     // - may return nil if sllEnter is not enabled for the TSynLog class
     class function Enter(aInstance: TObject = nil;
       aMethodName: PUtf8Char = nil): ISynLog; overload;
-      {$ifdef FPC} inline; {$endif}
     /// handle method enter / auto-leave tracing, with some custom text arguments
     // - this overloaded method would not write the method name, but the supplied
     // text content, after expanding the parameters like FormatUtf8()
     // - it will append the corresponding sllLeave log entry when the method ends
     // - warning: may return nil if sllEnter is not enabled for the TSynLog class
-    class function Enter(TextFmt: PUtf8Char; const TextArgs: array of const;
+    class function Enter(const TextFmt: RawUtf8; const TextArgs: array of const;
       aInstance: TObject = nil): ISynLog; overload;
     /// handle method enter / auto-leave tracing, with some custom text arguments
     // - expects the ISynLog to be a void variable on stack
@@ -1380,7 +1444,7 @@ type
     class function EnterLocal(var Local: ISynLog; aInstance: TObject;
       aMethodName: PUtf8Char): TSynLog; overload;
     /// handle method enter / auto-leave tracing, with some custom text arguments
-    // - expects the ISynLog to be a void variable on stack
+    // - expects/requires the ISynLog to be a void (=nil) variable on stack
     // - slightly more efficient - especially on FPC - than plain Enter()
     // - optionally return the TSynLog instance (or nil) for direct usage
     // - optionally return the TSynLog instance (or nil) for direct call
@@ -1392,7 +1456,7 @@ type
     // !   if Assigned(logger) then // may be nil if sllEnter is not enabled
     // !     logger.Log(sllInfo,'method called');
     // ! end; // when logger is out-of-scope, will log the method leaving
-    class function EnterLocal(var Local: ISynLog; TextFmt: PUtf8Char;
+    class function EnterLocal(var Local: ISynLog; const TextFmt: RawUtf8;
       const TextArgs: array of const; aInstance: TObject = nil): TSynLog; overload;
     /// handle method enter / auto-leave tracing, with some custom string arguments
     // - the logged text is supplied as generic string value, not RawUtf8/PUtf8Char
@@ -1444,7 +1508,7 @@ type
     // to be appended as text (e.g. class name), any variant as JSON...
     // - note that cardinal values should be type-casted to Int64() (otherwise
     // the integer mapped value will be transmitted, therefore wrongly)
-    procedure Log(Level: TSynLogLevel; Fmt: PUtf8Char;
+    procedure Log(Level: TSynLogLevel; const Format: RawUtf8;
       const Args: array of const; aInstance: TObject = nil); overload;
     /// call this method to add some information to the log at the specified level
     // - if Instance is set and Text is not '', it will log the corresponding
@@ -1525,14 +1589,13 @@ type
     /// manual low-level TSynLog.Enter execution without the ISynLog overhead
     // - may be used to log Enter/Leave stack from non-pascal code
     // - each call to ManualEnter should be followed by a matching ManualLeave
-    procedure ManualEnter(aInstance: TObject; TextFmt: PUtf8Char;
+    procedure ManualEnter(aInstance: TObject; const TextFmt: RawUtf8;
       const TextArgs: array of const; MicroSecs: PInt64 = nil); overload;
     /// manual low-level ISynLog release after TSynLog.Enter execution
     // - each call to ManualEnter should be followed by a matching ManualLeave
     procedure ManualLeave;
-      {$ifdef HASINLINE}inline;{$endif}
     /// allow to temporary disable remote logging
-    // - will enter the SynLogGlobalLock - and is NOT reentrant
+    // - uses a non-reentrant per-thread flag and does not acquire a writer lock
     // - to be used within a try ... finally section:
     // ! log.DisableRemoteLog(true);
     // ! try
@@ -1548,7 +1611,7 @@ type
     // signature, or used instead of Add.Log
     // - will flush the content to disk and avoid any memory reallocation
     // if Level is sllExceptionOS, e.g. on SIGABRT/SIGQUIT/SIGINT
-    class procedure DoLog(Level: TSynLogLevel; Fmt: PUtf8Char;
+    class procedure DoLog(Level: TSynLogLevel; const Format: RawUtf8;
       const Args: array of const; Instance: TObject = nil);
     /// low-level class method which can be assigned to a TOnInfoProgress callback
     // - as used e.g. by TStreamRedirect.OnInfoProgress or TZipAbstract.OnProgress
@@ -1581,6 +1644,7 @@ type
   end;
 
   TSynLogDynArray = array of TSynLog;
+  TSynLogFamilyDynArray = array of TSynLogFamily;
 
 const
   /// maximum content size for TSynLog.LogEscape
@@ -1604,7 +1668,14 @@ procedure CleanThreadName(var name: RawUtf8);
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 
+const
+  /// same limit as FPC RTL objpash.inc RaiseMaxFrameCount
+  MAX_STACK_TRACE = 16;
+
 type
+  /// store some raw pointers of the stack trace, filtered in CurrentDebugFile
+  TSynLogStackTrace = array[0 .. MAX_STACK_TRACE - 1] of PtrUInt;
+
   /// storage of the information associated with an intercepted exception
   // - as returned by GetLastException() function
   TSynLogExceptionInfo = record
@@ -1613,7 +1684,12 @@ type
     Context: TSynLogExceptionContext;
     /// associated Exception.Message content (if any)
     Message: string;
+    /// associated storage for filtered Context.EStackCount values
+    StackTrace: TSynLogStackTrace;
   end;
+
+  /// pointer reference to one intercept exception informaiton
+  PSynLogExceptionInfo = ^TSynLogExceptionInfo;
 
   /// storage of information associated with one or several exceptions
   // - as returned by GetLastExceptions() function
@@ -2224,6 +2300,141 @@ uses
 {$endif FPCDARWIN}
 
 
+threadvar // do not publish for compilation within Delphi packages
+  PerThreadInfo: TSynLogThreadInfo;
+
+type
+  // on Win64, RtlCaptureStackBackTrace() API is limited to < 62 frames
+  TRawStackFrames = array[0..61] of PtrUInt;
+
+{$ifndef KEEP_STACKFRAMES}
+{$STACKFRAMES ON} // we need {$W+} stack frame for the backtrace API calls below
+{$endif KEEP_STACKFRAMES}
+
+{$ifdef WIN32DELPHI}
+
+function CheckAsmX86(xret: PtrUInt): boolean; // naive x86 caller detection
+var
+  i: PtrUInt;
+begin
+  result := true;
+  try
+    if PByte(xret - 5)^ = $E8 then
+      exit;
+    for i := 2 to 7 do
+      if PWord(xret - i)^ and $38FF = $10FF then
+        exit;
+  except
+    // ignore any GPF
+  end;
+  result := false;
+end;
+
+// heuristic ebp-chain walk into frames[], returning the frames count
+// - on Delphi Win32, RtlCaptureStackBackTrace() requires stack frames and
+// is likely to return nothing, so the manual scan of TSynLog stOnlyManual
+// mode is needed - note: skip levels do not apply to such a heuristic scan
+function ManualStackTrace(var frames: TRawStackFrames): PtrInt;
+var
+  st, max_stack, min_stack, buf0, buf1: PtrUInt;
+  stack: PPtrUInt;
+begin
+  result := 0;
+  asm
+      mov     min_stack, ebp
+      mov     eax, fs:[4]
+      mov     max_stack, eax
+  end;
+  buf0 := PtrUInt(@frames); // frames[] is likely on stack in this range:
+  buf1 := buf0 + SizeOf(frames); // never scan our own output buffer
+  stack := pointer(min_stack);
+  try
+    while (PtrUInt(stack) < max_stack) and
+          (result < length(frames)) do
+    begin
+      if (PtrUInt(stack) >= buf0) and
+         (PtrUInt(stack) < buf1) then
+      begin
+        stack := pointer(buf1); // jump over frames[] we are filling
+        continue;
+      end;
+      st := stack^;
+      inc(stack);
+      if (st >= min_stack) and
+         (st <= max_stack) then
+        continue; // on-stack pointer is no code
+      if (not IntegerScanExists(@frames, result, st)) and
+         SeemsRealPointer(pointer(st - 8)) and
+         CheckAsmX86(st) then
+      begin
+        frames[result] := st;
+        inc(result);
+      end;
+    end;
+  except
+    // just ignore any access violation here
+  end;
+end;
+
+{$endif WIN32DELPHI}
+
+//function backtrace(buffer: PPointer; size: Integer): Integer; cdecl; external 'c';
+// TODO: try this API on Delphi for POSIX - could be worthwhile but with dynamic
+// linking on Android (min API < 33) - and with a warmup call at startup
+
+// capture the current thread stack into frames[], returning the frames count
+// - first frame is the caller of this function, plus optional skip levels
+// - use follows TSynLogFamily.StackTraceUse semantics (ignored on FPC)
+function RawStackTrace(skip: PtrInt; use: TSynLogStackTraceUse;
+  var frames: TRawStackFrames): PtrInt;
+{$ifndef NOEXCEPTIONINTERCEPT}
+var
+  addedwriting: boolean;
+  threadflags: ^TSynLogThreadInfoFlags;
+{$endif NOEXCEPTIONINTERCEPT}
+begin
+  if skip < 0 then
+    skip := 0;
+  inc(skip); // ignore this very function
+  {$ifndef NOEXCEPTIONINTERCEPT}
+  // the manual stack walk makes speculative reads: intercepted exceptions
+  // should not reach the logs during the process
+  threadflags := @PerThreadInfo.Flags;
+  addedwriting := not (tiWriting in threadflags^);
+  if addedwriting then
+    include(threadflags^, tiWriting);
+  {$endif NOEXCEPTIONINTERCEPT}
+  try
+    {$ifdef FPC}
+    result := CaptureBacktrace(skip, length(frames), pointer(@frames));
+    {$else}
+    result := 0;
+    {$ifdef OSWINDOWS}
+    if use <> stOnlyManual then
+      result := RtlCaptureStackBackTrace(skip, length(frames), @frames, nil);
+    {$ifdef WIN32DELPHI}
+    if (result < 2) and
+       (use <> stOnlyAPI) then
+      // support stOnlyManual/stManualAndAPI on Delphi Win32, where the API
+      // needs stack frames and is likely to return (almost) nothing
+      result := ManualStackTrace(frames);
+    {$endif WIN32DELPHI}
+    {$endif OSWINDOWS}
+    {$endif FPC}
+  except
+    result := 0;
+  end;
+  {$ifndef NOEXCEPTIONINTERCEPT}
+  if addedwriting then
+    exclude(threadflags^, tiWriting);
+  {$endif NOEXCEPTIONINTERCEPT}
+end;
+
+{$ifndef KEEP_STACKFRAMES}
+{$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
+{$endif KEEP_STACKFRAMES}
+
+
 { ************** Debug Symbols Processing from Delphi .map or FPC/GDB DWARF }
 
 { TDebugFile }
@@ -2244,8 +2455,30 @@ begin
             (aPointer <= fStop);
 end;
 
+function TDebugFile.Lookup(aRva: TDebugAddress): RawUtf8;
+var
+  line: integer; // not PtrInt
+  s: PDebugSymbol;
+  b: PDebugBlock;
+begin
+  FastAssignNew(result);
+  s := FindSymbol(aRva);
+  b := FindBlock(aRva, line);
+  if b <> nil then
+    if line = 0 then
+      result := b^.Symbol.Name
+    else
+      FormatUtf8('% (%)', [b^.FileName, line], result);
+  if s <> nil then
+    if result = '' then
+      result := s^.Name
+    else
+      Append(result, ' ', s^.Name);
+end;
+
 var
   DebugFileLast, DebugFileCurrent: TDebugFile; // aligned pointer access is atomic
+  DebugFileCurrentSearched: TLightLock;
   DebugFilesSafe: TRWLightLock;
   DebugFiles: array of TDebugFile;
   DebugFileNamesUnknown: TStringDynArray; // search once
@@ -2279,17 +2512,25 @@ begin
   fn := GetExecutableName(pointer(a), @base, @symbol); // e.g. fast dladdr()
   if fn = '' then
     exit;
-  DebugFilesSafe.WriteLock; // safe blocking registration process
+  DebugFilesSafe.ReadLock;
   try
     if SynLogFileFreeing or
        (FindString(DebugFileNamesUnknown, fn) >= 0) then // known to be unknown
       exit;
+  finally
+    DebugFilesSafe.ReadUnLock;
+  end;
+  DebugFilesSafe.WriteLock; // safe blocking registration process
+  try
     result := DebugFileSearch(pointer(DebugFiles), a); // paranoid
     if result <> nil then
       exit; // was registered in another background thread
     for i := 0 to length(DebugFiles) - 1 do
       if DebugFiles[i].fExeFile = fn then
         exit; // a is part of this exe/dll but outside of the debug info range
+    if SynLogFileFreeing or
+       (FindString(DebugFileNamesUnknown, fn) >= 0) then // known to be unknown
+      exit;
     try
       result := TDebugFile.Create(fn);
     except
@@ -2312,6 +2553,7 @@ begin
       DebugFileCurrent := result
     else
       DebugFileLast := result;
+    //ConsoleObject(result);
     if not result.IsCode(a) then
       result := nil; // we loaded this exe/lib debug info but a is outside
   finally
@@ -2355,15 +2597,9 @@ end;
 
 class function TDebugFile.CurrentDebugFile: TDebugFile;
 begin
-  if DebugFileCurrent = nil then // resolve local procedure
-  begin
-    DebugFileCurrent := Get(@TDebugFile.CurrentDebugFile);
-    if DebugFileCurrent = nil then
-      DebugFileCurrent := pointer(1);
-  end;
+  if DebugFileCurrentSearched.TryLock then // resolve once
+    DebugFileCurrent := Get(@DebugFileRegister); // local procedure
   result := DebugFileCurrent;
-  if result = pointer(1) then
-    result := nil;
 end;
 
 {$ifdef FPC}
@@ -2445,7 +2681,7 @@ type
     FilesDir: TIntegerDynArray;
     Map: TMemoryMap;
     temp: ShortString;
-    numoptable: array[1..255] of byte;
+    numoptable: array[1..255] of byte; // start at index 1 -> no THash2048
     function LoadSections: boolean;
     procedure ReadInit(aBase, aLimit: Int64);
     function ReadLeb128: Int64;
@@ -3701,11 +3937,7 @@ begin
   if (mabage <> 0) and // SaveToFile() set FileSetDateFrom(fExeFile);
      (abs(fExeAge - mabage) < 2) and // same exact age (allow 1 second diff)
      not (dfsNoMabExternalCheck in Scope) then
-  begin
-    LoadMab(fMabFile);
-    if fBlocksCount or fSymbolsCount = 0 then
-      DeleteFile(fMabFile);
-  end;
+    LoadMab(fMabFile); // no DeleteFile() on failure: may not be our own file
   // recompute from .map/.dbg if no faster-to-load .mab available
   if fBlocksCount or fSymbolsCount = 0 then
   try
@@ -3930,20 +4162,20 @@ begin
   end;
 end;
 
-function TDebugFile.FindSymbol(rva: TDebugAddress): PDebugSymbol;
+function TDebugFile.FindSymbol(aRva: TDebugAddress): PDebugSymbol;
 var
   i, L, R: PtrInt;
 begin
   L := 0;
   R := fSymbolsCount - 1;
   if (R >= 0) and
-     (rva > 0) then
+     (aRva > 0) then
     repeat // efficient O(log(n)) binary search
       i := (L + R) shr 1;
       result := @fSymbol[i];
-      if rva < result^.Start then
+      if aRva < result^.Start then
         R := i - 1
-      else if rva > result^.Stop then
+      else if aRva > result^.Stop then
         L := i + 1
       else
         exit; // found
@@ -3951,20 +4183,20 @@ begin
   result := nil; // not found
 end;
 
-function TDebugFile.FindBlock(rva: TDebugAddress): PDebugBlock;
+function TDebugFile.FindBlock(aRva: TDebugAddress): PDebugBlock;
 var
   i, L, R: PtrInt;
 begin
   L := 0;
   R := fBlocksCount - 1;
   if (R >= 0) and
-     (rva > 0) then
+     (aRva > 0) then
     repeat // efficient O(log(n)) binary search
       i := (L + R) shr 1;
       result := @fBlock[i];
-      if rva < result^.Symbol.Start then
+      if aRva < result^.Symbol.Start then
         R := i - 1
-      else if rva > result^.Symbol.Stop then
+      else if aRva > result^.Symbol.Stop then
         L := i + 1
       else
         exit; // found
@@ -3972,13 +4204,13 @@ begin
   result := nil; // not found
 end;
 
-function TDebugFile.FindBlock(rva: TDebugAddress; out line: integer): PDebugBlock;
+function TDebugFile.FindBlock(aRva: TDebugAddress; out aLine: integer): PDebugBlock;
 var
   i, L, R, max: PtrInt;
   a: PIntegerArray;
 begin
-  line := 0;
-  result := FindBlock(rva);
+  aLine := 0;
+  result := FindBlock(aRva);
   if result = nil then
     exit;
   // unit found -> search line number from within matching Addr[]
@@ -3991,20 +4223,20 @@ begin
     repeat // efficient O(log(i)) binary search
       i := (L + R) shr 1;
       a := @result^.Addr[i];
-      if rva < a^[0] then
+      if aRva < a^[0] then
         R := i - 1
       else if (i < max) and
-              (rva >= a^[1]) then
+              (aRva >= a^[1]) then
         L := i + 1
       else
       begin
-        line := result^.Line[i]; // found
+        aLine := result^.Line[i]; // found
         exit;
       end;
     until L > R;
 end;
 
-function TDebugFile.AppendLog(W: TTextWriter; aPointer: PtrUInt; NoHex: boolean): boolean;
+function TDebugFile.AddLog(W: TTextWriter; aPointer: PtrUInt; NoHex: boolean): boolean;
 var
   rva: TDebugAddress;
   line: integer; // not PtrInt
@@ -4012,18 +4244,31 @@ var
   l: PDebugBlock;
 begin
   result := false;
+  if (W = nil) or
+     (aPointer = 0) then
+    exit;
+  if self = nil then
+  begin
+    // no TDebugFile: append the hexa address of process pointer
+    if NoHex or
+       not IsCurrentExecutable(pointer(aPointer)) then // fast OS API
+      exit;
+    W.AddPointer(aPointer, ' '); // write raw pointer if no debug info
+    result := true;
+    exit;
+  end;
   rva := AbsoluteToRelative(aPointer);
   if rva = 0 then
     exit;
   s := FindSymbol(rva);
-  {$ifdef ISDELPHI}
   if (s <> nil) and
-     (FindPropName(['SynRtlUnwind', '@HandleAnyException',  'LogExcept',
-       '@HandleOnException', 'ThreadWrapper', 'ThreadProc'],
-       s^.Name) >= 0) then
-    // no stack trace within the Delphi exception interception functions
-    exit;
-  {$endif ISDELPHI}
+     (FindPropName(['LogExcept', 'SynLogException', 'ThreadProc',
+       'ESynException.RaiseUtf8'
+       {$ifdef ISDELPHI} , 'SynRtlUnwind',  '@HandleAnyException',
+       '@HandleOnException', '@InternalRaiseAtExcept', '@RaiseAtExcept',
+       'ThreadWrapper' {$ifdef CPUX86} , 'RawStackTrace' {$endif}
+       {$endif ISDELPHI} ], s^.Name) >= 0) then
+    exit; // only meaningful entries
   result := true;
   if not NoHex then
   begin
@@ -4049,19 +4294,6 @@ begin
   W.AddDirect(')', ' '); // always end with a ' '
 end;
 
-class function TDebugFile.AddLog(W: TTextWriter; aPointer: PtrUInt; NoHex: boolean): boolean;
-var
-  debug: TDebugFile;
-begin
-  result := false;
-  if (W = nil) or
-     (aPointer = 0) then
-    exit;
-  debug := TDebugFile.Get(pointer(aPointer));
-  if debug <> nil then
-    result := debug.AppendLog(W, aPointer, NoHex);
-end;
-
 procedure TDebugFile.AppendLocationShort(aPointer: PtrUInt; var aInfo: ShortString);
 var
   line: integer; // not PtrInt
@@ -4081,7 +4313,7 @@ begin
   if (s = nil) and
      (l = nil) then
      exit;
-  AppendShortChar(' ', @aInfo);
+  AppendShortCharSafe(' ', aInfo); // always prepend a space
   if l <> nil then
   begin
     AppendShortAnsi7String(l^.FileName, aInfo);
@@ -4099,12 +4331,11 @@ begin
   end;
   if s <> nil then
     AppendShortAnsi7String(s^.Name, aInfo);
-  if line > 0 then
-  begin
-    AppendShortTwoCharsSafe(ord(' ') + ord('(') shl 8, aInfo);
-    AppendShortCardinal(line, aInfo);
-    AppendShortCharSafe(')', aInfo);
-  end;
+  if line <= 0 then
+    exit;
+  AppendShortTwoCharsSafe(ord(' ') + ord('(') shl 8, aInfo);
+  AppendShortCardinal(line, aInfo);
+  AppendShortCharSafe(')', aInfo);
 end;
 
 class function TDebugFile.FindLocation(aPointer: pointer): RawUtf8;
@@ -4116,12 +4347,15 @@ begin
 end;
 
 class procedure TDebugFile.FindLocationShort(aPointer: pointer;
-  var aInfo: ShortString);
+  var aInfo: ShortString; aNoHex: boolean);
 var
   deb: TDebugFile;
   tmp: pointer; // RawUtf8
 begin
-  aInfo := PointerToHexShort(aPointer);
+  if aNoHex then
+    aInfo[0] := #0
+  else
+    PointerToHexShortVar(aPointer, aInfo);
   tmp := nil;
   deb := DebugFileGet(PtrUInt(aPointer), @tmp);
   if deb <> nil then
@@ -4131,6 +4365,33 @@ begin
     AppendShortAnsi7String(RawUtf8(tmp), aInfo);
     FastAssignNew(tmp);
   end;
+end;
+
+class procedure TDebugFile.AppendLocationsShort(var aInfo: ShortString;
+  aFrames: PPtrUIntArray; aFramesCount, aDepth: PtrInt);
+var
+  i: PtrInt;
+  deb: TDebugFile;
+  l: AnsiChar;
+begin
+  if (aFrames <> nil) and
+     (aDepth > 0) then
+    for i := 0 to aFramesCount - 1 do
+      if (i = 0) or
+         (aFrames[i] <> aFrames[i - 1]) then
+      begin
+        l := aInfo[0];
+        if ord(l) = high(aInfo) then
+          break; // output buffer is full
+        deb := DebugFileGet(aFrames[i], nil); // no tmp = no external symbol
+        if deb <> nil then
+          deb.AppendLocationShort(aFrames[i], aInfo);
+        if aInfo[0] = l then
+          continue; // nothing added
+        dec(aDepth);
+        if aDepth = 0 then
+          break; // we got what we needed
+      end;
 end;
 
 class function TDebugFile.FindLocationRaisedAt(exc: ESynException): RawUtf8;
@@ -4174,7 +4435,7 @@ begin
     name := Executable.ProgramName
   else
     name := unitname;
-  l := TDebugFile.CurrentDebugFile.FindBlockByName(name);
+  l := CurrentDebugFile.FindBlockByName(name);
   if l <> nil then
     Utf8ToFileName(l^.FileName, result);
 end;
@@ -4326,12 +4587,12 @@ end;
 var
   /// internal list of registered TSynLogFamily instances
   // - up to MAX_SYNLOGFAMILY TSynLog sub-classes may be defined
-  // - protected by SynLogGlobalLock
-  SynLogFamily: array of TSynLogFamily;
+  // - protected by SynLogFiles lock
+  SynLogFamily: TSynLogFamilyDynArray;
 
   /// internal list of created TSynLog instances, one per each log file on disk
   // - also used by AutoFlushProc() to get a global list of TSynLog instances
-  // - protected by SynLogGlobalLock
+  // - protected by SynLogFiles lock
   SynLogFile: TSynLogDynArray;
 
 
@@ -4344,9 +4605,10 @@ type
   end;
 
   // cross-platform / cross-compiler TThread-based flush disk or console
-  TAutoFlushThread = class(TThread)
+  TAutoFlushThread = class(TThread) { no TThreadAbstract dependency }
   protected
     fToConsoleSafe: TLightLock; // topmost to ensure aarch64 alignment
+    fToCompressSafe: TLightLock;
     fEvent: TSynEvent;
     fToCompress: TFileName;
     fToConsole: TAutoFlushThreadToConsole; // Family.EchoToConsoleBackground
@@ -4359,6 +4621,7 @@ type
   end;
 
 var
+  AutoFlushThreadSafe: TLightLock;
   AutoFlushThread: TAutoFlushThread;
 
 constructor TAutoFlushThread.Create;
@@ -4428,9 +4691,8 @@ end;
 procedure TAutoFlushThread.Execute;
 var
   i: PtrInt;
-  tmp: TFileName;
+  src, tmp: TFileName;
   waitms, tix32, lasttix32: cardinal;
-  log: TSynLog;
   files: TSynLogDynArray;
 begin
   waitms := MilliSecsPerSec;
@@ -4440,14 +4702,24 @@ begin
     if Terminated then
       break;
     try
-      // 1. try background (SynLZ) compression after TSynLog.PerformRotation
-      if fToCompress <> '' then
+      // 1. try background compression after TSynLog.PerformRotation
+      src := '';
+      fToCompressSafe.Lock;
+      try
+        if fToCompress <> '' then
+        begin
+          src := fToCompress;
+          fToCompress := '';
+        end;
+      finally
+        fToCompressSafe.UnLock;
+      end;
+      if src <> '' then
       begin
-        tmp := fToCompress + '.tmp';
-        RenameFile(fToCompress, tmp);
-        LogCompressAlgo.FileCompress(tmp, fToCompress, LOG_MAGIC, true);
+        tmp := src + '.tmp';
+        RenameFile(src, tmp);
+        LogCompressAlgo.FileCompress(tmp, src, LOG_MAGIC, true);
         DeleteFile(tmp);
-        fToCompress := '';
         if Terminated then
           break;
       end;
@@ -4462,31 +4734,23 @@ begin
       // 3. regularly flush (and maybe rotate) log content on disk
       tix32 := GetTickSec;
       if lasttix32 = tix32 then
-        continue; // checking once per second is enough
-      if Terminated or
-         SynLogFileFreeing then
+        continue;
+      if Terminated or SynLogFileFreeing then
         break;
-      SynLogGlobalLock.Lock;
+      SynLogFiles.ReadLock;
       try
-        if Terminated or
-           SynLogFileFreeing then
-          break;
-        files := copy(SynLogFile); // don't slow down main logging process
+        if Terminated or SynLogFileFreeing then
+          files := nil
+        else
+          files := copy(SynLogFile);
       finally
-        SynLogGlobalLock.UnLock;
+        SynLogFiles.ReadUnLock;
       end;
       for i := 0 to high(files) do
       begin
-        if Terminated or
-           SynLogFileFreeing then // avoid GPF
+        if Terminated or SynLogFileFreeing then
           break;
-        log := files[i];
-        if (log.fFlushTix32 <> 0) and
-           (tix32 >= log.fFlushTix32) and
-           (log.fWriter <> nil) and
-           (log.fWriter.PendingBytes > 1) then
-          // write pending data after TSynLogFamily.AutoFlushTimeOut seconds
-          log.Flush({forcediskwrite=}false); // may also set pendingRotate flag
+        files[i].AutoFlush(tix32);
       end;
       lasttix32 := tix32;
     except
@@ -4505,10 +4769,73 @@ begin
   except
     ; // ignore any exception at shutdown
   end;
+  TSynLog.NotifyThreadEnded; // as in mormot.core.thread TThreadAbstract
 end;
 
-threadvar // do not publish for compilation within Delphi packages
-  PerThreadInfo: TSynLogThreadInfo;
+{$ifndef KEEP_STACKFRAMES}
+{$STACKFRAMES ON} // we need {$W+} stack frame for the backtrace API calls below
+{$endif KEEP_STACKFRAMES}
+
+class procedure TDebugFile.AppendCallerShort(var aInfo: ShortString;
+  aSkip, aDepth: integer);
+var
+  frames: TRawStackFrames;
+  n: PtrInt;
+begin
+  if aDepth <= 0 then
+    exit;
+  n := RawStackTrace(aSkip + 1, stManualAndAPI, frames); // + 1 to ignore this
+  AppendLocationsShort(aInfo, @frames, n, aDepth);
+end;
+
+class procedure TDebugFile.StackTrace(W: TTextWriter; skip, depth: integer;
+  use: TSynLogStackTraceUse);
+var
+  frames: TRawStackFrames;
+  i, n: PtrInt;
+  deb: TDebugFile;
+begin
+  if W = nil then
+    exit;
+  if depth <= 0 then
+    depth := 30; // as default TSynLogFamily.StackTraceLevel
+  if skip < 0 then
+    skip := 0;
+  n := RawStackTrace(skip + 1, use, frames); // + 1 to ignore this method
+  if n = 0 then
+    exit;
+  deb := CurrentDebugFile; // load debug information once
+  for i := 0 to n - 1 do
+    if (i = 0) or
+       (frames[i] <> frames[i - 1]) then
+      if deb.AddLog(W, frames[i]) then
+      begin
+        dec(depth);
+        if depth = 0 then
+          break;
+      end;
+end;
+
+class function TDebugFile.StackTrace(skip, depth: integer;
+  use: TSynLogStackTraceUse): RawUtf8;
+var
+  temp: TTextWriterStackBuffer;
+  w: TTextWriter;
+begin
+  FastAssignNew(result);
+  w := TTextWriter.CreateOwnedStream(temp);
+  try
+    StackTrace(w, skip + 1, depth, use); // + 1 to ignore this method
+    w.CancelLastChar(' ');
+    w.SetText(result);
+  finally
+    w.Free;
+  end;
+end;
+
+{$ifndef KEEP_STACKFRAMES}
+{$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
+{$endif KEEP_STACKFRAMES}
 
 {$ifndef NOEXCEPTIONINTERCEPT}
 // this is the main entry point for all intercepted exceptions
@@ -4518,7 +4845,7 @@ var
   // local cache containing TSynLogFamily with fHandleExceptions = true
   HandleExceptionFamily: TSynLogFamily;
 
-function SearchHandleException(f: PPointer): TSynLogFamily;
+function SearchHandleException(f: PPointer; ign: pointer): TSynLogFamily;
 var
   n: integer;
 begin
@@ -4526,8 +4853,9 @@ begin
   begin
     n := PDALen(PAnsiChar(f) - _DALEN)^ + _DAOFF;
     repeat
-      result := f^;
-      if result.fHandleExceptions then // main log is the first
+      result := f^; // main log is the first
+      if (result <> ign) and
+         result.fHandleExceptions then
         exit;
       inc(f);
       dec(n);
@@ -4540,8 +4868,8 @@ end;
 type
   TSynLogThreads = record
     Safe: TLightLock;       // topmost to ensure aarch64 alignment
-    Name: TRawUtf8DynArray; // Name[ThreadNumber - 1] for ptIdentifiedInOneFile
     Count: integer;         // as returned by TSynLog.ThreadCount
+    Name: TRawUtf8DynArray; // Name[ThreadNumber - 1] for ptIdentifiedInOneFile
     IndexReleasedCount: integer;
     IndexReleased: TWordDynArray; // reuse TSynLogThreadInfo.ThreadNumber
   end;
@@ -4576,10 +4904,13 @@ begin
   finally
     thd^.Safe.UnLock;
   end;
+  // reset TSynLogThreadInfo flags
+  nfo^.RecursionCount := 0;
+  byte(nfo^.Flags) := 0;
   nfo^.ThreadNumber := num;
   // pre-compute GetBitPtr() constants for SetThreadInfoAndThreadName()
   dec(num);
-  nfo^.ThreadBitLo := 1 shl (num and 31); // 32-bit fThreadNameLogged[] value
+  nfo^.ThreadBitLo := 1 shl (num and 31); // 32-bit fThreadNameLogged[] mask
   nfo^.ThreadBitHi := num shr 5;          // index in fThreadNameLogged[]
 end;
 
@@ -4611,18 +4942,31 @@ begin
   if SynLogNoExceptionIntercept then
     exit;
   // intercept exceptions, if necessary
-  fHandleExceptions := (sllExceptionOS in aLevel) or
-                       (sllException in aLevel);
-  if fHandleExceptions then
-  begin
-    if HandleExceptionFamily = nil then
+  SynLogExceptions.Lock;
+  try
+    fHandleExceptions := (sllExceptionOS in aLevel) or
+                         (sllException in aLevel);
+    if fHandleExceptions then
     begin
-      HandleExceptionFamily := self;
-      RawExceptionIntercept(SynLogException);
+      if HandleExceptionFamily = nil then
+      begin
+        HandleExceptionFamily := self;
+        RawExceptionIntercept(SynLogException);
+        // TDebugFile.CurrentDebugFile; // could help to pre-load the debugg info
+      end;
+    end
+    else if HandleExceptionFamily = self then
+    begin
+      SynLogFiles.ReadLock;
+      try
+        HandleExceptionFamily := SearchHandleException(pointer(SynLogFamily), self);
+      finally
+        SynLogFiles.ReadUnLock;
+      end;
     end;
-  end
-  else if HandleExceptionFamily = self then // remove self and find next
-    HandleExceptionFamily := SearchHandleException(pointer(SynLogFamily));
+  finally
+    SynLogExceptions.UnLock;
+  end;
   {$endif NOEXCEPTIONINTERCEPT}
 end;
 
@@ -4646,9 +4990,14 @@ end;
 constructor TSynLogFamily.Create(aSynLog: TSynLogClass);
 begin
   fSynLogClass := aSynLog;
-  if length(SynLogFamily) >= MAX_SYNLOGFAMILY then
-    ESynLogException.RaiseUtf8('%.Create(%): too many classes', [self, aSynLog]);
-  fIdent := PtrArrayAdd(SynLogFamily, self); // index of this TSynLogClass
+  SynLogFiles.WriteLock;
+  try
+    if length(SynLogFamily) >= MAX_SYNLOGFAMILY then
+      ESynLogException.RaiseUtf8('%.Create(%): too many classes', [self, aSynLog]);
+    fIdent := PtrArrayAdd(SynLogFamily, self); // index of this TSynLogClass
+  finally
+    SynLogFiles.WriteUnLock;
+  end;
   fDestinationPath := Executable.ProgramFilePath;
   // use .exe path by default - no [idwExcludeWinSys] needed here
   if not IsDirectoryWritable(fDestinationPath) then
@@ -4660,6 +5009,9 @@ begin
   fRotateFileDailyAtHour := -1;
   fBufferSize := 8192;
   fStackTraceLevel := 30;
+  {$ifdef WIN32DELPHI}
+  // fStackTraceUse := stManualAndAPI; // generates lots of false positives
+  {$endif WIN32DELPHI}
   fWithUnitName := true;
   fWithInstancePointer := true;
   {$ifdef OSWINDOWS}
@@ -4694,8 +5046,14 @@ begin
   result := nil;
   if SynLogFileFreeing then
     exit; // avoid GPF
-  SynLogGlobalLock.Lock;
+  SynLogFiles.WriteLock;
   try
+    if fPerThreadLog <> ptOneFilePerThread then
+    begin
+      result := fGlobalLog;
+      if result <> nil then
+        exit; // another thread created it while we were waiting
+    end;
     result := fSynLogClass.Create(self);
     PtrArrayAdd(SynLogFile, result);
     if fPerThreadLog = ptOneFilePerThread then
@@ -4711,17 +5069,25 @@ begin
     else
       fGlobalLog := result;
   finally
-    SynLogGlobalLock.UnLock;
+    SynLogFiles.WriteUnLock;
   end;
 end;
 
 procedure TSynLogFamily.EnsureAutoFlushThreadRunning;
 begin
-  if (AutoFlushThread = nil) and
-     not SynLogFileFreeing and
-     (fAutoFlushTimeOut <> 0)
-     {$ifdef ISDELPHI} and (DebugHook = 0) {$endif} then
-    AutoFlushThread := TAutoFlushThread.Create;
+  if (AutoFlushThread <> nil) or
+     SynLogFileFreeing or
+     (fAutoFlushTimeOut = 0)
+     {$ifdef ISDELPHI} or (DebugHook <> 0) {$endif} then
+    exit;
+  AutoFlushThreadSafe.Lock;
+  try
+    if (AutoFlushThread = nil) and
+       not SynLogFileFreeing then
+      AutoFlushThread := TAutoFlushThread.Create;
+  finally
+    AutoFlushThreadSafe.UnLock;
+  end;
 end;
 
 function TSynLogFamily.ArchiveAndDeleteFile(const aFileName: TFileName): boolean;
@@ -4767,8 +5133,16 @@ end;
 destructor TSynLogFamily.Destroy;
 begin
   {$ifndef NOEXCEPTIONINTERCEPT}
-  if HandleExceptionFamily = self then
-    HandleExceptionFamily := nil;
+  if not SynLogFileFreeing then
+  begin
+    SynLogExceptions.Lock;
+    try
+      if HandleExceptionFamily = self then
+        HandleExceptionFamily := nil;
+    finally
+      SynLogExceptions.UnLock;
+    end;
+  end;
   {$endif NOEXCEPTIONINTERCEPT}
   fDestroying := true;
   EchoRemoteStop;
@@ -4866,23 +5240,69 @@ procedure TSynLogFamily.SynLogFileListEcho(const aEvent: TOnTextWriterEcho;
   aEventAdd: boolean);
 var
   i: PtrInt;
+  log: TSynLog;
+  nfo: PSynLogThreadInfo;
+  files: TSynLogDynArray;
 begin
   if (self = nil) or
      SynLogFileFreeing or
-     (SynLogFile = nil) or
-     (not Assigned(aEvent)) then
+     not Assigned(aEvent) then
     exit;
-  SynLogGlobalLock.Lock;
+  SynLogFiles.ReadLock;
   try
-    for i := 0 to high(SynLogFile) do
-      with SynLogFile[i] do
-        if fFamily = self then
-          if aEventAdd then
-            fWriterEcho.EchoAdd(aEvent)
-          else
-            fWriterEcho.EchoRemove(aEvent);
+    files := copy(SynLogFile);
   finally
-    SynLogGlobalLock.UnLock;
+    SynLogFiles.ReadUnLock;
+  end;
+  nfo := GetThreadInfo;
+  for i := 0 to high(files) do
+  begin
+    log := files[i];
+    if (log.fFamily = self) and
+       log.BeginWrite(nfo) then
+    try
+      if log.fWriterEcho <> nil then
+        if aEventAdd then
+          log.fWriterEcho.EchoAdd(aEvent)
+        else
+          log.fWriterEcho.EchoRemove(aEvent);
+    finally
+      log.EndWrite(nfo);
+    end;
+  end;
+end;
+
+procedure TSynLogFamily.SynLogFileListRemoteEcho(aEventAdd: boolean);
+var
+  i: PtrInt;
+  log: TSynLog;
+  nfo: PSynLogThreadInfo;
+  files: TSynLogDynArray;
+begin
+  if (self = nil) or
+     SynLogFileFreeing then
+    exit;
+  SynLogFiles.ReadLock;
+  try
+    files := copy(SynLogFile);
+  finally
+    SynLogFiles.ReadUnLock;
+  end;
+  nfo := GetThreadInfo;
+  for i := 0 to high(files) do
+  begin
+    log := files[i];
+    if (log.fFamily = self) and
+       log.BeginWrite(nfo) then
+    try
+      if log.fWriterEcho <> nil then
+        if aEventAdd then
+          log.fWriterEcho.EchoAdd(log.RemoteEcho)
+        else
+          log.fWriterEcho.EchoRemove(log.RemoteEcho);
+    finally
+      log.EndWrite(nfo);
+    end;
   end;
 end;
 
@@ -4890,6 +5310,8 @@ procedure TSynLogFamily.SetEchoCustom(const aEvent: TOnTextWriterEcho);
 begin
   if self = nil then
     exit;
+  if tiWriting in PerThreadInfo.Flags then
+    ESynLogException.RaiseUtf8('%.SetEchoCustom during log callback', [self]);
   SynLogFileListEcho(fEchoCustom, {add=}false); // unsubscribe any previous
   fEchoCustom := aEvent;
   SynLogFileListEcho(aEvent, {add=}true); // subscribe new
@@ -4898,33 +5320,45 @@ end;
 procedure TSynLogFamily.EchoRemoteStart(aClient: TObject;
   const aClientEvent: TOnTextWriterEcho; aClientOwnedByFamily: boolean);
 begin
+  if tiWriting in PerThreadInfo.Flags then
+    ESynLogException.RaiseUtf8('%.EchoRemoteStart during log callback', [self]);
   EchoRemoteStop;
   fEchoRemoteClient := aClient;
   fEchoRemoteEvent := aClientEvent;
   fEchoRemoteClientOwned := aClientOwnedByFamily;
-  SynLogFileListEcho(fEchoRemoteEvent, {add=}true); // subscribe
+  if Assigned(fEchoRemoteEvent) then
+    SynLogFileListRemoteEcho({add=}true);
 end;
 
 procedure TSynLogFamily.EchoRemoteStop;
+var
+  client: TObject;
+  event: TOnTextWriterEcho;
+  owned: boolean;
 begin
-  if fEchoRemoteClient = nil then
+  if tiWriting in PerThreadInfo.Flags then
+    ESynLogException.RaiseUtf8('%.EchoRemoteStop during log callback', [self]);
+  client := fEchoRemoteClient;
+  if client = nil then
     exit;
-  if fEchoRemoteClientOwned then
+  event := fEchoRemoteEvent;
+  owned := fEchoRemoteClientOwned;
+  SynLogFileListRemoteEcho({add=}false);
+  fEchoRemoteClient := nil;
+  fEchoRemoteEvent := nil;
+  fEchoRemoteClientOwned := false;
+  if owned then
   try
     try
-      fEchoRemoteEvent(nil, sllClient,
-        FormatUtf8('%00%    Remote Client % Disconnected',
-          [NowToString(false), LOG_LEVEL_TEXT[sllClient], self]));
+      if Assigned(event) then
+        event(nil, sllClient,
+          FormatUtf8('%00%    Remote Client % Disconnected',
+            [NowToString(false), LOG_LEVEL_TEXT[sllClient], self]));
     finally
-      fEchoRemoteClient.Free;
+      client.Free;
     end;
   except
-    on Exception do
-      ;
   end;
-  fEchoRemoteClient := nil;
-  SynLogFileListEcho(fEchoRemoteEvent, {add=}false); // unsubscribe
-  fEchoRemoteEvent := nil;
 end;
 
 function TSynLogFamily.GetExistingLog(MaximumKB: cardinal): RawUtf8;
@@ -4934,72 +5368,105 @@ const
 var
   stream: TStream;
   log: TSynLog;
+  nfo: PSynLogThreadInfo;
   endpos, start: Int64;
   c: AnsiChar;
   i, len, read, total: integer;
   P: PAnsiChar;
 begin
   FastAssignNew(result);
-  if (SynLogFile = nil) or
-     SynLogFileFreeing then
+  if SynLogFileFreeing then
     exit;
-  SynLogGlobalLock.Lock;
+  log := nil;
+  SynLogFiles.ReadLock;
   try
     for i := 0 to high(SynLogFile) do
-    begin
-      log := SynLogFile[i];
-      if log.fFamily <> self then
-        continue;
-      log.Writer.FlushToStream;
-      stream := log.Writer.Stream;
-      endpos := stream.Position;
-      try
-        if endpos > MAXPREVIOUSCONTENTSIZE then
-          len := MAXPREVIOUSCONTENTSIZE
-        else
-          len := MaximumKB shl 10;
-        start := log.fStreamPositionAfterHeader;
-        if (len <> 0) and
-           (endpos - start > len) then
-        begin
-          start := endpos - len;
-          stream.Position := start;
-          repeat
-            inc(start)
-          until (stream.Read(c, 1) = 0) or
-                (ord(c) in [10, 13]);
-        end
-        else
-          stream.Position := start;
-        len := endpos - start;
-        SetLength(result, len);
-        P := pointer(result);
-        total := 0;
-        repeat
-          read := stream.Read(P^, len);
-          if read <= 0 then
-          begin
-            if total <> len then
-              FakeLength(result, total); // truncate on read error (paranoid)
-            break;
-          end;
-          inc(P, read);
-          dec(len, read);
-          inc(total, read);
-        until len = 0;
-      finally
-        stream.Position := endpos;
+      if SynLogFile[i].fFamily = self then
+      begin
+        log := SynLogFile[i];
+        break;
       end;
-      break;
+  finally
+    SynLogFiles.ReadUnLock;
+  end;
+  if log = nil then
+    exit;
+  nfo := GetThreadInfo;
+  if not log.BeginWrite(nfo) then
+    exit;
+  try
+    if log.fWriter = nil then
+      exit;
+    log.fWriter.FlushToStream;
+    stream := log.fWriter.Stream;
+    if stream = nil then
+      exit;
+    endpos := stream.Position;
+    try
+      if endpos > MAXPREVIOUSCONTENTSIZE then
+        len := MAXPREVIOUSCONTENTSIZE
+      else
+        len := MaximumKB shl 10;
+      start := log.fStreamPositionAfterHeader;
+      if (len <> 0) and
+         (endpos - start > len) then
+      begin
+        start := endpos - len;
+        stream.Position := start;
+        repeat
+          inc(start)
+        until (stream.Read(c, 1) = 0) or
+              (ord(c) in [10, 13]);
+      end
+      else
+        stream.Position := start;
+      len := endpos - start;
+      SetLength(result, len);
+      P := pointer(result);
+      total := 0;
+      repeat
+        read := stream.Read(P^, len);
+        if read <= 0 then
+        begin
+          if total <> len then
+            FakeLength(result, total); // truncate on read error (paranoid)
+          break;
+        end;
+        inc(P, read);
+        dec(len, read);
+        inc(total, read);
+      until len = 0;
+    finally
+      stream.Position := endpos;
     end;
   finally
-    SynLogGlobalLock.UnLock;
+    log.EndWrite(nfo);
   end;
 end;
 
-class procedure TSynLogFamily.OnThreadEnded(Sender: TThread);
+procedure TSynLogFamily.PreRenderFmt(var Fmt: TPreRenderFmt);
+var
+  p: PUtf8Char;
 begin
-  TSynLog.NotifyThreadEnded;
+  Fmt.TempLen := -1; // trigger the slow path within the lock
+  if fDirectRendering or
+     VarRecNeedsWriteObject(Fmt.Values, Fmt.ValuesCount) then
+    exit;
+  Fmt.TempLen := SizeOf(Fmt.Temp); // available bytes in temporay buffer
+  p := @Fmt.Temp;
+  if Fmt.Instance <> nil then // better sooner than in LogHeader()
+  begin
+    p := PointerToText(Fmt.Instance, p, fWithUnitName, fWithInstancePointer);
+    p^ := ' ';
+    inc(p);
+    Fmt.Instance := nil; // so that LogHeader() won't do anything on its side
+    dec(Fmt.TempLen, (p - Fmt.Temp)); // recompute available bytes
+  end;
+  Fmt.TempLen := FormatBufferRaw(RawUtf8(Fmt.Format),
+    Fmt.Values, Fmt.ValuesCount, p, Fmt.TempLen) - Fmt.Temp;
+  if Fmt.TempLen = SizeOf(Fmt.Temp) then // ensure valid UTF-8 after truncation
+    Fmt.TempLen := Utf8TruncatedLength(@Fmt.Temp, Fmt.TempLen, Fmt.TempLen);
+  TrimControlCharsBuffer(@Fmt.Temp, Fmt.TempLen); // in-place twOnSameLine
 end;
 
 
@@ -5151,15 +5618,6 @@ begin
   inc(WR.B, 7); // include no recursive indentation nor any Instance
 end;
 
-procedure TSynLog.LogTrailer(Level: TSynLogLevel);
-begin
-  if Level in fFamily.fLevelStackTrace then
-    AddStackTrace(nil);
-  if Level in fFamily.fLevelSysInfo then
-    AddSysInfo;
-  fWriterEcho.AddEndOfLine(Level); // AddCR + any per-line echo suport
-end;
-
 procedure InternalSetCurrentThreadName(const Name: RawUtf8);
 var
   ndx: PtrInt;
@@ -5192,23 +5650,46 @@ var
   s: PShortString;
   nfo: PSynLogThreadInfo;
   thd: PSynLogThreads;
+  log: TSynLog;
+  files: TSynLogDynArray;
   num, i: PtrInt;
 begin
+  // reset global thread information
   s := CurrentThreadNameShort;
-  if s^[0] <> #0 then // avoid GPF if returned @NULCHAR
-    s^[0] := #0; // reset TShort31 threadvar for consistency
+  if s^[0] <> #0 then    // avoid GPF if returned @NULCHAR
+    s^[0] := #0;         // reset TShort31 threadvar for consistency
   nfo := @PerThreadInfo; // no automatic InitThreadNumber()
   num := nfo^.ThreadNumber;
-  if num = 0 then // not touched yet by TSynLog, or called twice
+  if num = 0 then        // not touched yet by TSynLog, or called twice
     exit;
-  nfo^.ThreadBitLo := 0; // force InitThreadNumber on next thread access
-  // reset global thread information
+  nfo^.ThreadNumber := 0; // mark once as recycled
+  nfo^.ThreadBitLo := 0;  // force InitThreadNumber on next thread access
   if SynLogFileFreeing then
-    exit; // inconsistent call at shutdown
+    exit;
+  // reset this thread naming flag in each TSynLog
+  SynLogFiles.ReadLock;
+  try
+    files := copy(SynLogFile);
+  finally
+    SynLogFiles.ReadUnLock;
+  end;
+  for i := 0 to high(files) do
+  begin
+    log := files[i];
+    if log.BeginWrite(nfo) then
+    try
+      if (sllInfo in log.fFamily.Level) and
+         (log.fFamily.PerThreadLog = ptIdentifiedInOneFile) and
+         (num <= (length(log.fThreadNameLogged) shl 5)) then
+        UnSetBitPtr(log.fThreadNameLogged, num - 1);
+    finally
+      log.EndWrite(nfo);
+    end;
+  end;
+  // reset this thread name for ptIdentifiedInOneFile
   thd := @SynLogThreads;
   thd^.Safe.Lock;
   try
-    // reset this thread name for ptIdentifiedInOneFile
     if num <= length(thd^.Name) then
       FastAssignNew(thd^.Name[num - 1]);
     // mark thread number to be recycled by InitThreadNumber
@@ -5216,15 +5697,6 @@ begin
   finally
     thd^.Safe.UnLock;
   end;
-  // reset this thread naming flag in each TSynLog
-  dec(num);
-  for i := 0 to length(SynLogFamily) - 1 do
-    with SynLogFamily[i] do
-      if (sllInfo in Level) and
-         (PerThreadLog = ptIdentifiedInOneFile) and
-         (fGlobalLog <> nil) and
-         (num < (length(fGlobalLog.fThreadNameLogged) shl 5)) then
-        UnSetBitPtr(fGlobalLog.fThreadNameLogged, num);
 end;
 
 function TSynLog.GetThreadCount: integer;
@@ -5265,12 +5737,10 @@ procedure SetThreadInfoAndThreadName(log: TSynLog; nfo: PSynLogThreadInfo);
 var
   p: PIntegerArray;
   ndx: PtrUInt;
-begin // caller just made SynLogGlobalLock.Lock
+begin
+  // caller owns log.fWriteSafe and has already processed pendingRotate
   log.fThreadInfo := nfo;
-  // quickly check if we need to rotate or write the "SetThreadName" line
-  if pendingRotate in log.fPendingFlags then   // from OnFlushToStream
-    log.PerformRotation(nfo);
-  if not (logAddThreadName in log.fFlags) then 
+  if not (logAddThreadName in log.fFlags) then
     exit; // no sllInfo + ptIdentifiedInOneFile
   p := pointer(log.fThreadNameLogged); // threads bit-set of this TSynLog
   if p <> nil then
@@ -5284,31 +5754,83 @@ begin // caller just made SynLogGlobalLock.Lock
   log.AddLogThreadName;
 end;
 
-function TSynLog.LockAndDisableExceptions: boolean;
-var
-  nfo: PSynLogThreadInfo;
+function TSynLog.BeginWrite(nfo: PSynLogThreadInfo): boolean;
 begin
-  nfo := @PerThreadInfo; // access the threadvar
-  if not (tiTemporaryDisable in nfo^.Flags) then
+  result := false;
+  if (nfo = nil) or
+     (tiWriting in nfo^.Flags) then
+    exit;
+  fWriteSafe.Lock;
+  include(nfo^.Flags, tiWriting);
+  result := true;
+end;
+
+procedure TSynLog.EndWrite(nfo: PSynLogThreadInfo);
+begin
+  fWriteSafe.UnLock;
+  exclude(nfo^.Flags, tiWriting);
+end;
+
+procedure SynLogSysInfo(var tmp: ShortString);
+begin
+  PCardinal(@tmp)^ := 2 + ord(' ') shl 8 + ord('{') shl 16;
+  AppendSysInfo(tmp);
+  AppendShortCharSafe('}', tmp);
+end;
+
+function TSynLog.LockAndPrepareWrite(nfo: PSynLogThreadInfo;
+  level: TSynLogLevel; instance: TObject; skip, depth: integer): boolean;
+var
+  lev: TSynLogLevels;
+begin
+  result := false;
+  if (nfo = nil) or
+     (nfo^.Flags * [tiTemporaryDisable, tiWriting] <> []) then
+    exit;
+  if nfo^.ThreadBitLo = 0 then
+    InitThreadNumber(nfo); // first access - inlined GetThreadInfo
+  FillInfo(nfo, nil);      // usual syscall outside of the writer lock
+  lev := fFamily.fLevelStackTrace;
+  if level in lev then
+    depth := MaxPtrInt(depth, fFamily.fStackTraceLevel);
+  nfo^.StackTrace[0] := #0;
+  if depth > 0 then // .map/.mab/.gdb loading outside of the writer lock
+    TDebugFile.AppendCallerShort(nfo^.StackTrace, skip + 2, depth);
+  nfo^.SysInfo[0] := #0;
+  lev := fFamily.fLevelSysInfo;
+  if level in lev then // gather OS information before lock
+    SynLogSysInfo(nfo^.SysInfo); // capped at 63 chars
+  fWriteSafe.Lock;               // inlined BeginWrite
+  include(nfo^.Flags, tiWriting);
+  if (not (logInitDone in fFlags) and
+      not LogFileInitOrUnlock(nfo)) or
+     ((pendingRotate in fPendingFlags) and
+      not PerformRotationOrUnlock(nfo)) then
+    exit;
+  SetThreadInfoAndThreadName(self, nfo);
+  LogHeader(level, instance);
+  result := true; // normal process, with eventual EndWrite
+end;
+
+procedure TSynLog.LogTrailerAndUnlock(Info: PSynLogThreadInfo; Level: TSynLogLevel);
+var
+  ps: PShortString;
+begin
+  ps := @Info^.StackTrace;
+  if ps^[0] <> #0 then
   begin
-    if nfo^.ThreadBitLo = 0 then
-      InitThreadNumber(nfo); // first access - inlined GetThreadInfo
-    if not (logInitDone in fFlags) then
-      LogFileInit(nfo); // run once, to set start time and write headers
-    FillInfo(nfo, nil); // syscall outside of SynLogGlobalLock
-    SynLogGlobalLock.Lock;
-    SetThreadInfoAndThreadName(self, nfo);
-    {$ifndef NOEXCEPTIONINTERCEPT}
-    // any exception within logging process will be ignored from now on
-    fThreadInfoBackup := nfo^.Flags;
-    // caller should always eventually perform in its finally ... end block:
-    //    fThreadInfo^.Flags := fThreadInfoBackup;
-    include(nfo^.Flags, tiExceptionIgnore);
-    {$endif NOEXCEPTIONINTERCEPT}
-    result := true; // normal process, with eventual fThreadInfoBackup + UnLock
-  end
-  else
-    result := false; // TSynLogFamily.DisableCurrentThread=true for this thread
+    fWriter.AddShort(ps^); // caps at 255 AnsiChars
+    ps^[0] := #0; // safer
+  end;
+  ps := @Info^.SysInfo;
+  if ps^[0] <> #0 then
+  begin
+    fWriter.AddShort(ps^);
+    ps^[0] := #0;
+  end;
+  fWriterEcho.AddEndOfLine(Level); // AddCR + any per-line echo suport
+  fWriteSafe.UnLock;               // inlined EndWrite
+  exclude(Info^.Flags, tiWriting);
 end;
 
 function TSynLog.QueryInterface(
@@ -5356,12 +5878,11 @@ begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
   dec(ms, fStartTimestamp);
   FillInfo(nfo, @ms); // timestamp [+ threadnumber]
   dec(ms, PInt64(refcnt)^ shr 8); // elapsed time since Enter
-  SynLogGlobalLock.Lock;
-  {$ifdef HASFASTTRYFINALLY}
-  try
-  {$else}
-  begin // direct AddMicroSec() output should not trigger any exception
-  {$endif HASFASTTRYFINALLY}
+  if not BeginWrite(nfo) then
+    exit;
+  if fWriter <> nil then
+  begin
+    fThreadInfo := nfo;
     LogHeaderNoRecursion(fWriter, sllLeave, @nfo^.CurrentTimeAndThread);
     rec := nfo^.RecursionCount; // rec <= MAX_SYNLOGRECURSION = 53
     if rec <> 0 then // inlined AddChars(#9, rec)
@@ -5371,20 +5892,24 @@ begin // self <> nil indicates sllEnter in fFamily.Level and nfo^.Recursion OK
     end;
     fWriter.AddMicroSec(ms);
     fWriterEcho.AddEndOfLine(sllLeave);
-  {$ifdef HASFASTTRYFINALLY}
-  finally
-  {$endif HASFASTTRYFINALLY}
-    SynLogGlobalLock.UnLock;
   end;
+  EndWrite(nfo);
 end;
 
 constructor TSynLog.Create(aFamily: TSynLogFamily);
 var
   entry: PInterfaceEntry;
 begin
+  fWriteSafe.Init; // mandatory on BSD
   if aFamily = nil then
     aFamily := Family;
   fFamily := aFamily;
+  // setup (once) proper timing for this log instance
+  if fFamily.FileExistsAction = acAppend then
+    fFamily.HighResolutionTimestamp := false; // file reuse = absolute time
+  QueryPerformanceMicroSeconds(fStartTimestamp);
+  fStartTimestampDateTimeUtc := NowUtc;
+  // compute the ISynLog internal offset for fast computation
   entry := GetInterfaceEntry(ISynLog);
   if (entry = nil) or
      not InterfaceEntryIsStandard(entry) {$ifdef FPC} or
@@ -5399,61 +5924,84 @@ begin
   fWriterEcho.Free;
   fWriter.Free;
   fWriterStream.Free;
+  fWriteSafe.Done; // mandatory on BSD
   inherited;
 end;
 
-procedure TSynLog.CloseLogFile;
+procedure TSynLog.CloseLogFileLocked;
 begin
-  SynLogGlobalLock.Lock;
-  try
-    if fWriter = nil then
-      exit;
+  if fWriter <> nil then
+  begin
     fWriter.FlushFinal;
     FreeAndNilSafe(fWriterEcho);
     FreeAndNilSafe(fWriter);
     FreeAndNilSafe(fWriterStream);
-  finally
-    fFlags := [];
-    exclude(fPendingFlags, pendingRotate); // reset it (after FlushFinal)
-    SynLogGlobalLock.UnLock;
   end;
+  fFlags := [];
+  exclude(fPendingFlags, pendingRotate);
+end;
+
+procedure TSynLog.CloseLogFile;
+var
+  nfo: PSynLogThreadInfo;
+begin
+  if self = nil then
+    exit;
+  nfo := GetThreadInfo;
+  if BeginWrite(nfo) then
+    try
+      CloseLogFileLocked;
+    finally
+      EndWrite(nfo);
+    end;
 end;
 
 procedure TSynLog.Release;
+var
+  nfo: PSynLogThreadInfo;
 begin
-  SynLogGlobalLock.Lock;
+  if self = nil then
+    exit;
+  nfo := GetThreadInfo;
+  if not BeginWrite(nfo) then
+    exit; // never free a TSynLog from inside one of its logging callbacks
   try
-    CloseLogFile;
+    CloseLogFileLocked;
+  finally
+    EndWrite(nfo);
+  end;
+  SynLogFiles.WriteLock;
+  try
     ObjArrayDelete(SynLogFile, self);
+    if fFamily.fGlobalLog = self then
+      fFamily.fGlobalLog := nil;
     if fFamily.fPerThreadLog = ptOneFilePerThread then
       PerThreadInfo.FileLookup[fFamily.fIdent] := nil;
   finally
-    SynLogGlobalLock.UnLock;
+    SynLogFiles.WriteUnLock;
   end;
   Free;
 end;
 
 procedure TSynLog.Flush(ForceDiskWrite: boolean);
 var
-  diskflush: THandle;
+  nfo: PSynLogThreadInfo;
 begin
-  if (self = nil) or
-     (fWriter = nil) then
+  if self = nil then
     exit;
-  diskflush := 0;
-  SynLogGlobalLock.Lock;
-  try
-    if fWriter = nil then
-      exit;
-    fWriter.FlushToStream;
-    if ForceDiskWrite and
-       fWriterStream.InheritsFrom(THandleStream) then
-      diskflush := THandleStream(fWriterStream).Handle;
-  finally
-    SynLogGlobalLock.UnLock;
-  end;
-  if diskflush <> 0 then
-    FlushFileBuffers(diskflush); // slow OS operation outside of the main lock
+  nfo := GetThreadInfo;
+  if BeginWrite(nfo) then
+    try
+      if fWriter = nil then
+        exit;
+      fWriter.FlushToStream;
+      if ForceDiskWrite and
+         (fWriterStream <> nil) and
+         fWriterStream.InheritsFrom(THandleStream) then
+        FlushFileBuffers(THandleStream(fWriterStream).Handle);
+    finally
+      EndWrite(nfo);
+    end;
 end;
 
 procedure TSynLog.RaiseDoEnter;
@@ -5463,15 +6011,18 @@ end;
 
 function TSynLog.DoEnter: PSynLogThreadInfo;
 var
+  fam: TSynLogFamily;
   ndx: byte;
 begin
   result := nil;
-  if (self = nil) or
-     (not (sllEnter in fFamily.fLevel)) or // void operation
-     (fFamily.fPerThreadLog = ptNoThreadProcess) then // don't mess with recursion
+  if self = nil then
+    exit;
+  fam := fFamily;
+  if (not (sllEnter in fam.fLevel)) or // void operation
+     (fam.fPerThreadLog = ptNoThreadProcess) then // don't mess with recursion
     exit;
   result := GetThreadInfo; // may call InitThreadNumber() if first access
-  if not (tiTemporaryDisable in result^.Flags) then
+  if result^.Flags * [tiTemporaryDisable, tiWriting] = [] then
   begin
     ndx := result^.RecursionCount;
     inc(ndx);
@@ -5484,148 +6035,191 @@ begin
   result := nil; // logging disabled, or above MAX_SYNLOGRECURSION
 end;
 
-procedure TSynLog.LockAndPrepareEnter(nfo: PSynLogThreadInfo; microsecs: PInt64);
+function TSynLog.LockAndPrepareEnter(nfo: PSynLogThreadInfo;
+  instance: TObject; microsecs: PInt64): boolean;
 var
   ms, rec: Int64;
 begin
-  // prepare output file if not already done - and compute fStartTimestamp
-  if not (logInitDone in fFlags) then
-    LogFileInit(nfo);
-  // setup recursive timing with RefCnt=1 like with _AddRef outside lock
+  // syscalls before the lock
   if sllLeave in fFamily.Level then
   begin
     QueryPerformanceMicroSeconds(ms);
     if microsecs <> nil then
       microsecs^ := ms;
     dec(ms, fStartTimestamp);
-    FillInfo(nfo, @ms); // timestamp [+ threadnumber]
-    rec := ms shl 8 + {RefCnt=}1;
+    FillInfo(nfo, @ms);
+    rec := ms shl 8 + 1;
   end
   else
   begin
     FillInfo(nfo, nil);
     if microsecs <> nil then
       microsecs^ := 0;
-    rec := {RefCnt=}1; // no timestamp needed if no sllLeave
+    rec := 1;
   end;
-  nfo^.Recursion[nfo^.RecursionCount - 1] := rec; // with RefCnt = 1
-  // prepare for the actual content logging
-  SynLogGlobalLock.Lock;
+  // lock and ensure the output file is prepared
+  if not BeginWrite(nfo) or
+     ((not (logInitDone in fFlags) and
+       not LogFileInitOrUnlock(nfo)) or
+      ((pendingRotate in fPendingFlags) and
+       not PerformRotationOrUnlock(nfo))) then
+  begin
+    if nfo^.RecursionCount <> 0 then
+      dec(nfo^.RecursionCount); // undo DoEnter()
+    if microsecs <> nil then
+      microsecs^ := 0;
+    result := false; // nested writer or cold init/rotation failure
+    exit;
+  end;
+  nfo^.Recursion[nfo^.RecursionCount - 1] := rec;
   SetThreadInfoAndThreadName(self, nfo);
+  LogHeader(sllEnter, instance);
+  result := true;
 end;
 
-procedure TSynLog.LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char
-  {$ifdef ISDELPHI} ; addr: PtrUInt {$endif});
+function TSynLog.LogEnter(nfo: PSynLogThreadInfo; inst: TObject; txt: PUtf8Char;
+  location: PShortString): boolean;
 begin
-  LockAndPrepareEnter(nfo, nil);
-  // append e.g. 00000000001FE4DC  !  +       TSqlDatabase(01039c0280).DBClose
-  {$ifdef HASFASTTRYFINALLY}
-  try
-  {$else}
-  begin // direct txt output should not trigger any exception
-  {$endif HASFASTTRYFINALLY}
-    LogHeader(sllEnter, inst);
-    if txt <> nil then
-      fWriter.AddOnSameLine(txt)
-    {$ifdef ISDELPHI}
-    else if addr <> 0 then
-      // no method name specified -> try from map/mab symbols
-      TDebugFile.AddLog(fWriter, addr, {nohex=}true)
-    {$endif ISDELPHI};
-    fWriterEcho.AddEndOfLine(sllEnter);
-  {$ifdef HASFASTTRYFINALLY}
-  finally
-  {$endif HASFASTTRYFINALLY}
-    SynLogGlobalLock.UnLock;
-  end;
+  result := LockAndPrepareEnter(nfo, inst);
+  if not result then
+    exit;
+  if txt <> nil then
+    fWriter.AddOnSameLine(txt)
+  else if location <> nil then
+    fWriter.AddShort(location^); // from FindLocationShort()
+  fWriterEcho.AddEndOfLine(sllEnter);
+  EndWrite(nfo);
 end;
 
-procedure TSynLog.LogEnterFmt(nfo: PSynLogThreadInfo; inst: TObject;
-  fmt: PUtf8Char; args: PVarRec; argscount: PtrInt; microsecs: PInt64);
+procedure AddPreRenderFmt(W: TJsonWriter; var Fmt: TPreRenderFmt);
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  LockAndPrepareEnter(nfo, microsecs);
-  fThreadInfoBackup := nfo^.Flags;
-  try
-    include(nfo^.Flags, tiExceptionIgnore);
-    LogHeader(sllEnter, inst);
-    fWriter.AddFmt(fmt, args, argscount, twOnSameLine,
+  if Fmt.TempLen >= 0 then // already rendered, truncated and twOnSameLine
+    W.AddNoJsonEscape(@Fmt.Temp, Fmt.TempLen)
+  else
+    W.AddFmt(Fmt.Format, Fmt.Values, Fmt.ValuesCount, twOnSameLine,
       [woDontStoreDefault, woDontStoreVoid, woFullExpand]);
-    fWriterEcho.AddEndOfLine(sllEnter);
-  finally
-    nfo^.Flags := fThreadInfoBackup;
-    SynLogGlobalLock.UnLock;
-  end;
 end;
 
-{$ifdef WINTELDELPHI} // specific to Delphi: fast get the caller method name
+function TSynLog.LogEnterFmt(nfo: PSynLogThreadInfo; var fmt: TPreRenderFmt;
+  microsecs: PInt64): boolean;
+begin
+  // pre-render Format/Values up to 4KB on stack outside of the TSynLog lock
+  fFamily.PreRenderFmt(fmt);
+  // log this line
+  result := LockAndPrepareEnter(nfo, fmt.Instance, microsecs);
+  if not result then
+    exit;
+  AddPreRenderFmt(fWriter, fmt);
+  fWriterEcho.AddEndOfLine(sllEnter); // no LogTrailerAndUnlock() needed here
+  EndWrite(nfo);
+end;
 
-{$STACKFRAMES ON} // we need a stack frame for ebp/RtlCaptureStackBackTrace
-{$ifdef CPU64}
-  {$define USERTLCAPTURESTACKBACKTRACE}
-{$else}
-  {$define USEASMX86STACKBACKTRACE}
-{$endif CPU64}
+{$ifndef KEEP_STACKFRAMES}
+{$STACKFRAMES ON} // we need {$W+} stack frame for the backtrace API calls below
+{$endif KEEP_STACKFRAMES}
+
+procedure TSynLog.Log(Level: TSynLogLevel);
+var
+  nfo: PSynLogThreadInfo;
+  lasterror: integer;
+begin
+  if (self = nil) or
+     not (Level in fFamily.fLevel) then
+    exit;
+  lasterror := 0;
+  if Level = sllLastError then
+    lasterror := GetLastError;
+  nfo := @PerThreadInfo;
+  if LockAndPrepareWrite(nfo, Level, {instance=}nil, {skip=}0, {depth=}1) then
+  begin
+    if lasterror <> 0 then
+      AddErrorMessage(lasterror);
+    LogTrailerAndUnlock(nfo, Level);
+  end;
+  if lasterror <> 0 then
+    SetLastError(lasterror);
+end;
 
 class function TSynLog.Enter(aInstance: TObject; aMethodName: PUtf8Char): ISynLog;
 var
   log: TSynLog;
   nfo: PSynLogThreadInfo;
-  addr: PtrUInt;
+  location: PShortString;
+  tmp: ShortString;
 begin
   result := nil;
   log := Add;
   nfo := log.DoEnter;
   if nfo = nil then
     exit; // nothing to log
-  addr := 0;
+  location := nil;
   if aMethodName = nil then
   begin
-    {$ifdef USERTLCAPTURESTACKBACKTRACE}
-    if RtlCaptureStackBackTrace(1, 1, @addr, nil) = 0 then
-      addr := 0;
-    {$else}
-    asm
-      mov  eax, [ebp + 4] // retrieve caller EIP from push ebp; mov ebp,esp
-      mov  addr, eax
-    end;
-    {$endif USERTLCAPTURESTACKBACKTRACE}
-    if addr <> 0 then
-      dec(addr, 5);
+    tmp[0] := #0;
+    TDebugFile.AppendCallerShort(tmp, {skip=}1, {depth=}1);
+    if tmp[0] <> #0 then
+      location := @tmp;
   end;
-  log.LogEnter(nfo, aInstance, aMethodName, addr);
-  pointer(result) := PAnsiChar(log) + log.fISynLogOffset; // result := self
+  if log.LogEnter(nfo, aInstance, aMethodName, location) then
+    pointer(result) := PAnsiChar(log) + log.fISynLogOffset; // result := self
 end;
 
+procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
+begin
+  if fFamily.StackTraceLevel > 0 then
+    try
+      fWriter.AddDirect(' ');
+      // skip=2 to start at the caller of our caller, as this method did before
+      TDebugFile.StackTrace(fWriter, {skip=}2, fFamily.StackTraceLevel,
+        fFamily.StackTraceUse); // use is actually ignored on FPC
+      fWriter.CancelLastChar(' ');
+    except // don't let any unexpected GPF break the logging process
+    end;
+end;
+
+{$ifndef KEEP_STACKFRAMES}
 {$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
+{$endif KEEP_STACKFRAMES}
 
-{$else}
-
-class function TSynLog.Enter(aInstance: TObject; aMethodName: PUtf8Char): ISynLog;
-begin
-  result := nil;
-  EnterLocal(result, aInstance, aMethodName);
-end;
-
-{$endif WINTELDELPHI}
-
-class function TSynLog.Enter(TextFmt: PUtf8Char;
+class function TSynLog.Enter(const TextFmt: RawUtf8;
   const TextArgs: array of const; aInstance: TObject): ISynLog;
+var
+  log: TSynLog;
+  nfo: PSynLogThreadInfo;
+  fmt: TPreRenderFmt;
 begin
   result := nil;
-  EnterLocal(result, TextFmt, TextArgs, aInstance);
+  log := Add;
+  nfo := log.DoEnter;
+  if nfo = nil then
+    exit;
+  fmt.Format := pointer(TextFmt);
+  fmt.Values := @TextArgs[0];
+  fmt.ValuesCount := length(TextArgs);
+  fmt.Instance := aInstance;
+  if log.LogEnterFmt(nfo, fmt, nil) then
+    pointer(result) := PAnsiChar(log) + log.fISynLogOffset; // result := self
 end;
 
-class function TSynLog.EnterLocal(var Local: ISynLog; TextFmt: PUtf8Char;
+class function TSynLog.EnterLocal(var Local: ISynLog; const TextFmt: RawUtf8;
   const TextArgs: array of const; aInstance: TObject): TSynLog;
 var
   nfo: PSynLogThreadInfo;
+  fmt: TPreRenderFmt;
 begin // expects the caller to have set Local = nil
   result := Add;
   nfo := result.DoEnter;
   if nfo = nil then
-    exit; // nothing to log
-  result.LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs), nil);
-  pointer(Local) := PAnsiChar(result) + result.fISynLogOffset; // result := self
+    exit;
+  fmt.Format := pointer(TextFmt);
+  fmt.Values := @TextArgs[0];
+  fmt.ValuesCount := length(TextArgs);
+  fmt.Instance := aInstance;
+  if result.LogEnterFmt(nfo, fmt, nil) then
+    pointer(Local) := PAnsiChar(result) + result.fISynLogOffset // Local := self
+  else
+    result := nil; // fWrite would fail anyway
 end;
 
 class function TSynLog.EnterLocal(var Local: ISynLog; aInstance: TObject;
@@ -5635,10 +6229,11 @@ var
 begin // expects the caller to have set Local = nil
   result := Add;
   nfo := result.DoEnter;
-  if nfo = nil then
-    exit; // nothing to log
-  result.LogEnter(nfo, aInstance, aMethodName); // with refcnt = 1
-  pointer(Local) := PAnsiChar(result) + result.fISynLogOffset; // result := self
+  if nfo <> nil then
+    if result.LogEnter(nfo, aInstance, aMethodName) then // with refcnt = 1
+      pointer(Local) := PAnsiChar(result) + result.fISynLogOffset // Local := self
+    else
+      result := nil; // fWrite would fail anyway
 end;
 
 class function TSynLog.EnterLocalString(var Local: ISynLog; aInstance: TObject;
@@ -5650,12 +6245,15 @@ begin // expects the caller to have set Local = nil
   nfo := result.DoEnter;
   if nfo = nil then
     exit; // nothing to log
-  result.LockAndPrepareEnter(nfo, nil); // inlined result.LogEnter()
-  result.LogHeader(sllEnter, aInstance);
+  if not result.LockAndPrepareEnter(nfo, aInstance) then
+  begin
+    result := nil;
+    exit;
+  end;
   if aMethodName <> '' then // direct string output with no temp conversion
     result.fWriter.AddOnSameLineString(aMethodName);
   result.fWriterEcho.AddEndOfLine(sllEnter);
-  SynLogGlobalLock.UnLock;
+  result.EndWrite(nfo);
   pointer(Local) := PAnsiChar(result) + result.fISynLogOffset; // result := self
 end;
 
@@ -5665,22 +6263,44 @@ var
 begin
   nfo := DoEnter;
   if nfo <> nil then
-    LogEnter(nfo, aInstance, aMethodName);
+    if not LogEnter(nfo, aInstance, aMethodName) then
+    begin
+      inc(nfo^.RecursionCount); // restore matching ManualLeave level
+      nfo^.Recursion[nfo^.RecursionCount - 1] := 0; // failed ManualEnter
+    end;
 end;
 
-procedure TSynLog.ManualEnter(aInstance: TObject; TextFmt: PUtf8Char;
+procedure TSynLog.ManualEnter(aInstance: TObject; const TextFmt: RawUtf8;
   const TextArgs: array of const; MicroSecs: PInt64);
 var
   nfo: PSynLogThreadInfo;
+  fmt: TPreRenderFmt;
 begin
   nfo := DoEnter;
-  if nfo <> nil then
-    LogEnterFmt(nfo, aInstance, TextFmt, @TextArgs[0], length(TextArgs), MicroSecs);
+  if nfo = nil then
+    exit;
+  fmt.Format := pointer(TextFmt);
+  fmt.Values := @TextArgs[0];
+  fmt.ValuesCount := length(TextArgs);
+  fmt.Instance := aInstance;
+  if LogEnterFmt(nfo, fmt, MicroSecs) then
+    exit; // success
+  inc(nfo^.RecursionCount); // restore matching ManualLeave level
+  nfo^.Recursion[nfo^.RecursionCount - 1] := 0; // failed ManualEnter
 end;
 
 procedure TSynLog.ManualLeave;
+var
+  nfo: PSynLogThreadInfo;
 begin
-  if self <> nil then
+  if self = nil then
+    exit;
+  nfo := @PerThreadInfo;
+  if nfo^.RecursionCount = 0 then
+    exit;
+  if nfo^.Recursion[nfo^.RecursionCount - 1] = 0 then
+    dec(nfo^.RecursionCount) // consume failed ManualEnter
+  else
     _Release;
 end;
 
@@ -5717,12 +6337,29 @@ begin
     end;
 end;
 
-procedure TSynLog.Log(Level: TSynLogLevel; Fmt: PUtf8Char;
-  const Args: array of const; aInstance: TObject);
+function TSynLog.RemoteEcho(Sender: TEchoWriter; Level: TSynLogLevel;
+  const Text: RawUtf8): boolean;
 begin
-  if (self <> nil) and
-     (Level in fFamily.fLevel) then
-    LogInternalFmt(Level, Fmt, @Args[0], length(Args), aInstance);
+  result := true;
+  if tiDisableRemoteEcho in PerThreadInfo.Flags then
+    exit;
+  if Assigned(fFamily.fEchoRemoteEvent) then
+    result := fFamily.fEchoRemoteEvent(Sender, Level, Text);
+end;
+
+procedure TSynLog.Log(Level: TSynLogLevel; const Format: RawUtf8;
+  const Args: array of const; aInstance: TObject);
+var
+  fmt: TPreRenderFmt;
+begin
+  if (self = nil) or
+     not (Level in fFamily.fLevel) then
+    exit;
+  fmt.Format := pointer(Format);
+  fmt.Values := @Args[0];
+  fmt.ValuesCount := length(Args);
+  fmt.Instance := aInstance;
+  LogInternalFmt(Level, fmt);
 end;
 
 procedure TSynLog.Log(Level: TSynLogLevel; const Text: RawUtf8;
@@ -5735,16 +6372,10 @@ begin
 end;
 
 {$ifdef UNICODE}
-procedure TSynLog.Log(Level: TSynLogLevel; const Text: string; aInstance: TObject);
-var
-  vr: TVarRec;
+procedure TSynLog.Log(Level: TSynLogLevel; const Text: string;
+  aInstance: TObject);
 begin
-  if (self = nil) or
-     not (Level in fFamily.fLevel) then
-    exit;
-  vr.VType := vtUnicodeString;
-  vr.VUnicodeString := pointer(Text);
-  LogInternalFmt(Level, '%', @vr, 1, aInstance);
+  Log(Level, '%', [Text], aInstance); // will be inlined at caller site
 end;
 {$endif UNICODE}
 
@@ -5835,19 +6466,18 @@ var
   thd: PSynLogThreads;
 begin
   FastAssignNew(result);
-  if not SynLogFileFreeing then
+  if SynLogFileFreeing then
+    exit;
+  ndx := PerThreadInfo.ThreadNumber - 1; // no InitThreadNumber() call
+  if ndx >= 0 then
   begin
-    ndx := PerThreadInfo.ThreadNumber - 1; // no InitThreadNumber() call
-    if ndx >= 0 then
-    begin
-      thd := @SynLogThreads;
-      thd^.Safe.Lock;
-      if ndx < length(thd^.Name) then
-        result := thd^.Name[ndx]; // full thread name
-      thd^.Safe.UnLock;
-    end;
+    thd := @SynLogThreads;
+    thd^.Safe.Lock;
+    if ndx < length(thd^.Name) then
+      result := thd^.Name[ndx]; // full thread name
+    thd^.Safe.UnLock;
   end;
-  if result = '' then // fallback to mormot.core.os default TShort21 behavior
+  if result = '' then // fallback to mormot.core.os default TShort31 value
     ShortStringToAnsi7String(CurrentThreadNameShort^, result);
 end;
 
@@ -5869,15 +6499,21 @@ begin
     result := PPointer(self)^;
 end;
 
-class procedure TSynLog.DoLog(Level: TSynLogLevel; Fmt: PUtf8Char;
+class procedure TSynLog.DoLog(Level: TSynLogLevel; const Format: RawUtf8;
    const Args: array of const; Instance: TObject);
 var
   log: TSynLog;
+  fmt: TPreRenderFmt;
 begin
   log := Add;
-  if (log <> nil) and
-     (Level in log.fFamily.fLevel) then
-    log.LogInternalFmt(Level, Fmt, @Args[0], length(Args), Instance);
+  if (log = nil) or
+     not (Level in log.fFamily.fLevel) then
+    exit;
+  fmt.Format := pointer(Format);
+  fmt.Values := @Args[0];
+  fmt.ValuesCount := length(Args);
+  fmt.Instance := Instance;
+  log.LogInternalFmt(Level, fmt);
 end;
 
 class procedure TSynLog.ProgressInfo(Sender: TObject; Info: PProgressInfo);
@@ -5891,37 +6527,36 @@ begin
 end;
 
 procedure TSynLog.ForceRotation;
+var
+  nfo: PSynLogThreadInfo;
 begin
-  SynLogGlobalLock.Lock;
-  try
-    PerformRotation(nil);
-  finally
-    SynLogGlobalLock.UnLock;
-  end;
+  if self = nil then
+    exit;
+  nfo := GetThreadInfo;
+  if BeginWrite(nfo) then
+    try
+      PerformRotation(nfo);
+    finally
+      EndWrite(nfo);
+    end;
 end;
 
 procedure TSynLog.DisableRemoteLog(entervalue: boolean);
+var
+  nfo: PSynLogThreadInfo;
 begin
-  if not Assigned(fFamily.fEchoRemoteEvent) then
-    exit;
-  if entervalue then
+  nfo := GetThreadInfo;
+  if entervalue then // DisableRemoteLog(true) first
   begin
-    SynLogGlobalLock.Lock;
-    if pendingDisableRemoteLogLeave in fPendingFlags then
-    begin
-      SynLogGlobalLock.UnLock;
+    if tiDisableRemoteEcho in nfo^.Flags then
       ESynLogException.RaiseUtf8('Nested %.DisableRemoteLog', [self]);
-    end;
-    include(fPendingFlags, pendingDisableRemoteLogLeave);
+    include(nfo^.Flags, tiDisableRemoteEcho);
   end
   else
-  begin
-    if not (pendingDisableRemoteLogLeave in fPendingFlags) then
+  begin // eventual finally DisableRemoteLog(false)
+    if not (tiDisableRemoteEcho in nfo^.Flags) then
       ESynLogException.RaiseUtf8('Missing %.DisableRemoteLog(true)', [self]);
-    // DisableRemoteLog(false) -> add to events, and quit the global mutex
-    exclude(fPendingFlags, pendingDisableRemoteLogLeave);
-    fWriterEcho.EchoAdd(fFamily.fEchoRemoteEvent);
-    SynLogGlobalLock.UnLock;
+    exclude(nfo^.Flags, tiDisableRemoteEcho);
   end;
 end;
 
@@ -5941,73 +6576,19 @@ begin
     LogInternalRtti(Level, aName, aTypeInfo, aValue, Instance);
 end;
 
-{$ifdef ISDELPHI}
-  {$STACKFRAMES ON} // we need a stack frame for ebp/RtlCaptureStackBackTrace
-{$endif ISDELPHI}
-
-procedure TSynLog.Log(Level: TSynLogLevel);
-var
-  lasterror: integer;
-  {$ifdef ISDELPHI}
-  addr: PtrUInt;
-  {$endif ISDELPHI}
-begin
-  if (self = nil) or
-     not (Level in fFamily.fLevel) then
-    exit;
-  lasterror := 0;
-  if Level = sllLastError then
-    lasterror := GetLastError;
-  if LockAndDisableExceptions then
-  try
-    LogHeader(Level, nil);
-    if lasterror <> 0 then
-      AddErrorMessage(lasterror);
-    {$ifdef ISDELPHI}
-    addr := 0;
-    {$ifdef USERTLCAPTURESTACKBACKTRACE}
-    if RtlCaptureStackBackTrace(1, 1, @addr, nil) = 0 then
-      addr := 0;
-    {$endif USERTLCAPTURESTACKBACKTRACE}
-    {$ifdef USEASMX86STACKBACKTRACE}
-    asm
-      mov  eax, [ebp + 4]  // retrieve caller EIP from push ebp; mov ebp,esp
-      mov  addr, eax
-    end;
-    {$endif USEASMX86STACKBACKTRACE}
-    if addr <> 0 then
-      TDebugFile.AddLog(fWriter, addr - 5, {nohex=}true);
-    {$endif ISDELPHI}
-    LogTrailer(Level);
-  finally
-    fThreadInfo^.Flags := fThreadInfoBackup;
-    SynLogGlobalLock.UnLock;
-    if lasterror <> 0 then
-      SetLastError(lasterror);
-  end;
-end;
-
 procedure TSynLog.LogText(Level: TSynLogLevel; Text: PUtf8Char; Instance: TObject);
+var
+  nfo: PSynLogThreadInfo;
 begin
   if (self = nil) or
      (Text = nil) or
      not (Level in fFamily.fLevel) then
     exit;
-  if LockAndDisableExceptions then
-  {$ifdef HASFASTTRYFINALLY}
-  try
-  {$else}
-  begin // direct Text output should not trigger any exception
-  {$endif HASFASTTRYFINALLY}
-    LogHeader(Level, Instance);
-    fWriter.AddOnSameLine(Text); // end with #0
-    LogTrailer(Level);
-  {$ifdef HASFASTTRYFINALLY}
-  finally
-  {$endif HASFASTTRYFINALLY}
-    fThreadInfo^.Flags := fThreadInfoBackup;
-    SynLogGlobalLock.UnLock;
-  end;
+  nfo := @PerThreadInfo;
+  if not LockAndPrepareWrite(nfo, Level, Instance) then
+    exit;
+  fWriter.AddOnSameLine(Text);
+  LogTrailerAndUnlock(nfo, Level);
 end;
 
 procedure TSynLog.LogText(Level: TSynLogLevel; Text: PUtf8Char; TextLen: PtrInt;
@@ -6040,23 +6621,21 @@ end;
 
 procedure TSynLog.RawLog(Level: TSynLogLevel; const Event: TOnRawLog;
   Opaque: pointer; Value: PtrInt; Instance: TObject);
+var
+  nfo: PSynLogThreadInfo;
 begin
   if (self = nil) or
      not (Level in fFamily.fLevel) or
      not Assigned(Event) then
     exit;
-  if LockAndDisableExceptions then
-  try
-    LogHeader(Level, Instance);
+  nfo := @PerThreadInfo;
+  if LockAndPrepareWrite(nfo, Level, Instance) then
+  try // protect unsafe Event() callback call
     Event(self, Level, Opaque, Value, Instance);
-    fWriterEcho.AddEndOfLine(Level); // LogTrailer(Level) is not needed here
   finally
-    fThreadInfo^.Flags := fThreadInfoBackup;
-    SynLogGlobalLock.UnLock;
+    LogTrailerAndUnlock(nfo, Level);
   end;
 end;
-
-{$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
 
 class procedure TSynLog.DebuggerNotify(Level: TSynLogLevel; const Text: RawUtf8);
 begin
@@ -6084,32 +6663,56 @@ end;
 
 procedure TSynLog.LogFileInit(nfo: PSynLogThreadInfo);
 begin
-  SynLogGlobalLock.Lock;
-  try
-    fThreadInfo := nfo;
-    if logInitDone in fFlags then // paranoid thread safety
-      exit;
-    // setup (once) proper timing for this log instance
-    if fStartTimestamp = 0 then // don't reset after rotation
-    begin
-      QueryPerformanceMicroSeconds(fStartTimestamp);
-      if fFamily.FileExistsAction = acAppend then
-        fFamily.HighResolutionTimestamp := false; // file reuse = absolute time
-      if fFamily.LocalTimestamp then
-        fStartTimestampDateTime := Now
-      else
-        fStartTimestampDateTime := NowUtc;
+  if nfo = nil then
+    nfo := GetThreadInfo;
+  if BeginWrite(nfo) then
+    try
+      LogFileInitLocked(nfo);
+    finally
+      EndWrite(nfo);
     end;
-    // check if we need to log the thread names in this new file
-    if (sllInfo in fFamily.Level) and
-       (fFamily.PerThreadLog = ptIdentifiedInOneFile) then
-      include(fFlags, logAddThreadName);
-    fThreadNameLogged := nil; // force re-notify
-    // eventually mark this instance as initialized (i.e. fStartTimestamp set)
-    include(fFlags, logInitDone);
+end;
+
+function TSynLog.LogFileInitOrUnlock(nfo: PSynLogThreadInfo): boolean;
+begin
+  // cold path only: CreateLogWriter/LogFileHeader perform external file access
+  result := true;
+  try
+    LogFileInitLocked(nfo);
+  except
+    EndWrite(nfo);   // current fWriter is clearly invalid
+    result := false; // notify the caller to abort and that EndWrite() was done
+  end;
+end;
+
+function TSynLog.PerformRotationOrUnlock(nfo: PSynLogThreadInfo): boolean;
+begin
+  // cold path only: rotation performs rename/archive/compression file access
+  result := true;
+  try
+    PerformRotation(nfo);
+  except
+    EndWrite(nfo);   // current fWriter is clearly invalid
+    result := false; // notify the caller to abort and that EndWrite() was done
+  end;
+end;
+
+procedure TSynLog.LogFileInitLocked(nfo: PSynLogThreadInfo);
+begin
+  fThreadInfo := nfo;
+  if logInitDone in fFlags then // paranoid thread safety
+    exit;
+  // check if we need to log the thread names in this new file
+  if (sllInfo in fFamily.Level) and
+     (fFamily.PerThreadLog = ptIdentifiedInOneFile) then
+    include(fFlags, logAddThreadName);
+  fThreadNameLogged := nil; // force re-notify
+  // eventually mark this instance as initialized
+  include(fFlags, logInitDone);
+  try
     // initialize fWriter and its optional header - if needed
     if fWriter = nil then
-      CreateLogWriter; // file creation should be thread-safe
+      CreateLogWriter;
     if not (logFileHeaderWritten in fFlags) then
       LogFileHeader; // executed once per file - not needed in acAppend mode
     // append a sllNewRun line at the log file (re)opening
@@ -6126,14 +6729,17 @@ begin
     fWriter.AddShort(' ' + SYNOPSE_FRAMEWORK_VERSION);
     AddSysInfo;
     fWriterEcho.AddEndOfLine(sllNewRun);
-  finally
-    SynLogGlobalLock.UnLock;
+  except
+    // restore a state from which the next attempt can initialize again
+    exclude(fFlags, logInitDone);
+    raise;
   end;
 end;
 
 procedure TSynLog.LogFileHeader;
 var
   w: TJsonWriter;
+  dt: TDateTime;
   i: PtrInt;
 begin
   include(fFlags, logFileHeaderWritten);
@@ -6220,7 +6826,10 @@ begin
     w.AddDirect(#10);
     w.AddClassName(self.ClassType);
     w.AddShort(' ' + SYNOPSE_FRAMEWORK_FULLVERSION + ' ');
-    w.AddDateTime(fStartTimestampDateTime);
+    dt := fStartTimestampDateTimeUtc;
+    if fFamily.LocalTimestamp then
+      dt := UtcToLocal(dt);
+    w.AddDateTime(dt);
     w.AddDirect(#10, #10);
     w.FlushToStream;
     fWriterEcho.EchoReset; // header is not to be sent to console
@@ -6257,12 +6866,10 @@ end;
 
 procedure TSynLog.AddSysInfo;
 var
-  tmp: ShortString;
+  tmp: TShort95;
 begin
-  fWriter.AddDirect(' ', '{');
-  RetrieveSysInfoText(tmp);
+  SynLogSysInfo(tmp);
   fWriter.AddShort(tmp);
-  fWriter.AddDirect('}');
 end;
 
 procedure TSynLog.FillInfo(nfo: PSynLogThreadInfo; MicroSec: PInt64);
@@ -6270,7 +6877,7 @@ var
   st: TSynSystemTime;
   ms: Int64 absolute st;
   p: PUtf8Char;
-begin // set timestamp [+ threadnumber] - usually run outside SynLogGlobalLock
+begin // set timestamp [+ threadnumber] - usually run outside fWriteSafe
   p := @nfo^.CurrentTimeAndThread;
   if fFamily.HighResolutionTimestamp then
   begin
@@ -6287,7 +6894,7 @@ begin // set timestamp [+ threadnumber] - usually run outside SynLogGlobalLock
   begin
     FromGlobalTime(st, fFamily.LocalTimestamp); // with 16ms cache
     p[0] := #17;
-    st.ToLogTime(@p[1]); // '20110325 19241502' 17 chars
+    st.ToLogTime(@p[1]); // '20110325 19241502' 17 chars - not worth caching
     if fFamily.ZonedTimestamp then
       AppendShortChar('Z', PAnsiChar(p));
   end;
@@ -6300,159 +6907,165 @@ end;
 procedure TSynLog.PerformRotation(nfo: PSynLogThreadInfo);
 var
   currentMaxSynLZ: cardinal;
-  bak: TSynLogThreadInfoFlags;
+  queued: boolean;
   i: PtrInt;
   ext: TFileName;
   FN: array of TFileName;
-begin // caller made SynLogGlobalLock.Lock
+begin
   exclude(fPendingFlags, pendingRotate);
   if nfo = nil then
-    nfo := @PerThreadInfo; // from ForceRotation
-  bak := nfo^.Flags;
-  include(nfo^.Flags, tiExceptionIgnore); // avoid infinite locks
+    nfo := @PerThreadInfo;
+  CloseLogFileLocked;
   try
-    CloseLogFile;
-    try
-      if not (Assigned(fFamily.fOnRotate) and
-              fFamily.fOnRotate(self, fFileName)) then
+    if not (Assigned(fFamily.fOnRotate) and
+            fFamily.fOnRotate(self, fFileName)) then
+    begin
+      if fFamily.fRotateFileCount > 1 then
       begin
-        if fFamily.fRotateFileCount > 1 then
+        // rotate e.g. xxx.1.synlz ... xxx.9.synlz files
+        ext := '.log';
+        if LogCompressAlgo <> nil then
+          ext := LogCompressAlgo.AlgoFileExt; // e.g. '.synlz' or '.gz'
+        currentMaxSynLZ := 0;
+        SetLength(FN, fFamily.fRotateFileCount - 1);
+        for i := fFamily.fRotateFileCount - 1 downto 1 do
         begin
-          // rotate e.g. xxx.1.synlz ... xxx.9.synlz files
-          ext := '.log';
-          if LogCompressAlgo <> nil then
-            ext := LogCompressAlgo.AlgoFileExt; // e.g. '.synlz' or '.gz'
-          currentMaxSynLZ := 0;
-          SetLength(FN, fFamily.fRotateFileCount - 1);
-          for i := fFamily.fRotateFileCount - 1 downto 1 do
+          FN[i - 1] := ChangeFileExt(fFileName, MakeString(['.', i, ext]));
+          if (currentMaxSynLZ = 0) and
+             FileExists(FN[i - 1]) then
+            currentMaxSynLZ := i;
+        end;
+        if currentMaxSynLZ = fFamily.fRotateFileCount - 1 then
+          // delete (and archive) xxx.9.synlz
+          fFamily.ArchiveAndDeleteFile(FN[currentMaxSynLZ - 1]);
+        for i := fFamily.fRotateFileCount - 2 downto 1 do
+          // e.g. xxx.8.synlz -> xxx.9.synlz
+          RenameFile(FN[i - 1], FN[i]);
+        // compress the current FN[0] .log file into xxx.1.log/.synlz
+        if LogCompressAlgo = nil then
+          // no compression: quickly rename FN[0] into xxx.1.log
+          RenameFile(fFileName, FN[0])
+        else
+        begin
+          // background compression of FN[0] into xxx.1.synlz
+          queued := false;
+          if AutoFlushThread <> nil then
           begin
-            FN[i - 1] := ChangeFileExt(fFileName, MakeString(['.', i, ext]));
-            if (currentMaxSynLZ = 0) and
-               FileExists(FN[i - 1]) then
-              currentMaxSynLZ := i;
+            AutoFlushThread.fToCompressSafe.Lock;
+            try
+              if (AutoFlushThread.fToCompress = '') and
+                 RenameFile(fFileName, FN[0]) then
+              begin
+                AutoFlushThread.fToCompress := FN[0];
+                queued := true;
+              end;
+            finally
+              AutoFlushThread.fToCompressSafe.UnLock;
+            end;
+            if queued then
+              AutoFlushThread.fEvent.SetEvent;
           end;
-          if currentMaxSynLZ = fFamily.fRotateFileCount - 1 then
-            // delete (and archive) xxx.9.synlz
-            fFamily.ArchiveAndDeleteFile(FN[currentMaxSynLZ - 1]);
-          for i := fFamily.fRotateFileCount - 2 downto 1 do
-            // e.g. xxx.8.synlz -> xxx.9.synlz
-            RenameFile(FN[i - 1], FN[i]);
-          // compress the current FN[0] .log file into xxx.1.log/.synlz
-          if LogCompressAlgo = nil then
-            // no compression: quickly rename FN[0] into xxx.1.log
-            RenameFile(fFileName, FN[0])
-          else if (AutoFlushThread <> nil) and
-                  (AutoFlushThread.fToCompress = '') and
-                  RenameFile(fFileName, FN[0]) then
-          begin
-            // background compression of FN[0] into xxx.1.synlz
-            AutoFlushThread.fToCompress := FN[0];
-            AutoFlushThread.fEvent.SetEvent;
-          end
-          else
+          if not queued then
           begin
             // blocking compression in the main processing thread
             LogCompressAlgo.FileCompress(fFileName, FN[0], LOG_MAGIC, true);
             DeleteFile(fFileName);
           end;
-        end
-        else
-          fFamily.ArchiveAndDeleteFile(fFileName);
-      end;
-    except
-      // just ignore any problem during file rotation, and recreate the log file
+        end;
+      end
+      else
+        fFamily.ArchiveAndDeleteFile(fFileName);
     end;
-    // initialize a brand new log file
-    LogFileInit(GetThreadInfo);
-  finally
-    nfo^.Flags := bak;
+  except
   end;
+  LogFileInitLocked(nfo);
 end;
 
-procedure TSynLog.LogInternalFmt(Level: TSynLogLevel; Format: PUtf8Char;
-  Values: PVarRec; ValuesCount: integer; Instance: TObject);
+procedure TSynLog.LogInternalFmt(Level: TSynLogLevel; var fmt: TPreRenderFmt);
 var
+  nfo: PSynLogThreadInfo;
   lasterror: cardinal;
 begin
   lasterror := 0;
   if Level = sllLastError then
     lasterror := GetLastError;
-  if LockAndDisableExceptions then
-  try
-    LogHeader(Level, Instance);
-    fWriter.AddFmt(Format, Values, ValuesCount, twOnSameLine,
-      [woDontStoreDefault, woDontStoreVoid, woFullExpand]);
+  // pre-render Format/Values up to 4KB on stack outside of the TSynLog lock
+  fFamily.PreRenderFmt(fmt);
+  // log this line
+  nfo := @PerThreadInfo;
+  if LockAndPrepareWrite(nfo, Level, fmt.Instance, {skip=}1) then
+  begin
+    AddPreRenderFmt(fWriter, fmt);
     if lasterror <> 0 then
       AddErrorMessage(lasterror);
-    LogTrailer(Level);
-  finally
-    fThreadInfo^.Flags := fThreadInfoBackup;
-    SynLogGlobalLock.UnLock;
-    if lasterror <> 0 then
-      SetLastError(lasterror);
+    LogTrailerAndUnlock(nfo, Level);
   end;
+  if lasterror <> 0 then
+    SetLastError(lasterror);
 end;
 
 procedure TSynLog.LogInternalText(Level: TSynLogLevel; Text: PUtf8Char;
   TextLen: PtrInt; Instance: TObject; TextTruncateAtLength: PtrInt);
 var
+  nfo: PSynLogThreadInfo;
   lasterror, trunclen: PtrInt;
+  esc: boolean;
 begin
   lasterror := 0;
   if Level = sllLastError then
     lasterror := GetLastError;
-  if LockAndDisableExceptions then
-  try
-    LogHeader(Level, Instance);
-    if Text = nil then
-    begin
-      if Instance <> nil then
-        // by definition, a JSON object is serialized on the same line
-        fWriter.WriteObject(Instance, [woFullExpand]);
-    end
+  esc := false;
+  trunclen := TextLen;
+  if Text <> nil then // truncate/validate UTF-8 text outside of the lock
+  begin
+    if (TextTruncateAtLength <> 0) and
+       (TextLen > TextTruncateAtLength) then
+      trunclen := Utf8TruncatedLength(pointer(Text), TextLen, TextTruncateAtLength);
+    if IsValidUtf8Buffer(Text, trunclen) then
+      esc := HasControlChars(Text, trunclen) // need AddOnSameLine()
     else
-    begin
-      trunclen := TextLen;
-      if (TextTruncateAtLength <> 0) and
-         (TextLen > TextTruncateAtLength) then
-        trunclen := Utf8TruncatedLength(pointer(Text), TextLen, TextTruncateAtLength);
-      if IsValidUtf8Buffer(Text, trunclen) then // may use AVX2
+      trunclen := -1; // will fallback to AddEscapeBuffer()
+  end;
+  nfo := @PerThreadInfo;
+  if LockAndPrepareWrite(nfo, Level, Instance) then
+  begin
+    if Text <> nil then
+      if trunclen >= 0 then // valid UTF-8
+      begin
+        if esc then
+          fWriter.AddOnSameLine(Text, trunclen)
+        else
+          fWriter.AddNoJsonEscape(Text, trunclen); // fastest common method
         if trunclen <> TextLen then
         begin
-          fWriter.AddOnSameLine(Text, trunclen);
           fWriter.AddShort('... (truncated) length=');
           fWriter.AddU(TextLen);
-        end
-        else
-          fWriter.AddOnSameLine(Text, TextLen) // TextLen may be < length(Text)
-      else // binary is written as escaped text and $xx binary
-        fWriter.AddEscapeBuffer(Text, trunclen, TextTruncateAtLength);
-    end;
+        end;
+      end
+      else // -1 = failed IsValidUtf8Buffer() -> escape
+        fWriter.AddEscapeBuffer(Text, TextLen, TextTruncateAtLength)
+    else if Instance <> nil then
+      fWriter.WriteObject(Instance, [woFullExpand]);
     if lasterror <> 0 then
       AddErrorMessage(lasterror);
-    LogTrailer(Level);
-  finally
-    fThreadInfo^.Flags := fThreadInfoBackup;
-    SynLogGlobalLock.UnLock;
-    if lasterror <> 0 then
-      SetLastError(lasterror);
+    LogTrailerAndUnlock(nfo, Level);
   end;
+  if lasterror <> 0 then
+    SetLastError(lasterror);
 end;
 
 procedure TSynLog.LogInternalRtti(Level: TSynLogLevel; const aName: RawUtf8;
   aTypeInfo: PRttiInfo; const aValue; Instance: TObject);
+var
+  nfo: PSynLogThreadInfo;
 begin
-  if LockAndDisableExceptions then
-  try
-    LogHeader(Level, Instance);
-    fWriter.AddOnSameLine(pointer(aName));
-    fWriter.AddDirect('=');
-    fWriter.AddTypedJson(@aValue, aTypeInfo, [woDontStoreVoid]);
-    LogTrailer(Level);
-  finally
-    fThreadInfo^.Flags := fThreadInfoBackup;
-    SynLogGlobalLock.UnLock;
-  end;
+  nfo := @PerThreadInfo;
+  if not LockAndPrepareWrite(nfo, Level, Instance) then
+    exit;
+  fWriter.AddOnSameLine(pointer(aName));
+  fWriter.AddDirect('=');
+  fWriter.AddTypedJson(@aValue, aTypeInfo, [woDontStoreVoid]);
+  LogTrailerAndUnlock(nfo, Level);
 end;
 
 procedure TSynLog.ComputeFileName;
@@ -6478,75 +7091,80 @@ var
   fn: TFileName;
   classn: RawUtf8;
 begin
-  fn := fFamily.fCustomFileName;
-  if fn = '' then
-    // compute the default filename as '<exename>(<user>@<host>)'
-    with Executable do
-    begin
-      if fFamily.IncludeComputerNameInFileName then
-        if fFamily.IncludeUserNameInFileName then
-          fn := FormatString('%(%@%)', [ProgramName, User, Host])
+  SynLogFiles.WriteLock;
+  try
+    fn := fFamily.fCustomFileName;
+    if fn = '' then
+      // compute the default filename as '<exename>(<user>@<host>)'
+      with Executable do
+      begin
+        if fFamily.IncludeComputerNameInFileName then
+          if fFamily.IncludeUserNameInFileName then
+            fn := FormatString('%(%@%)', [ProgramName, User, Host])
+          else
+            fn := FormatString('%(%)', [ProgramName, Host])
+        else if fFamily.IncludeUserNameInFileName then
+          fn := FormatString('%(%)', [ProgramName, User])
         else
-          fn := FormatString('%(%)', [ProgramName, Host])
-      else if fFamily.IncludeUserNameInFileName then
-        fn := FormatString('%(%)', [ProgramName, User])
-      else
-        Utf8ToFileName(ProgramName, fn);
-      if IsLibrary then // include library name
-        fn := fn + ' ' + ExtractFileName(Executable.InstanceFileName);
-    end;
-  // prepare for any file flush or rotation - as checked in OnFlushToStream
-  fRotateBytes := 0;
-  fFlushTix32 := 0;
-  fRotateDailyTix32 := 0;
-  tix32 := GetTickSec;
-  if fFamily.AutoFlushTimeOut <> 0 then
-    fFlushTix32 := tix32 + fFamily.AutoFlushTimeOut;
-  if fFamily.fRotateFileCount > 0 then
-  begin
-    if fFamily.fRotateFileSizeKB > 0 then
-      fRotateBytes := fFamily.fRotateFileSizeKB shl 10; // size KB -> B
-    if fFamily.fRotateFileDailyAtHour in [0..23] then
+          Utf8ToFileName(ProgramName, fn);
+        if IsLibrary then // include library name
+          fn := fn + ' ' + ExtractFileName(Executable.InstanceFileName);
+      end;
+    // prepare for any file flush or rotation - as checked in OnFlushToStream
+    fRotateBytes := 0;
+    fFlushTix32 := 0;
+    fRotateDailyTix32 := 0;
+    tix32 := GetTickSec;
+    if fFamily.AutoFlushTimeOut <> 0 then
+      fFlushTix32 := tix32 + fFamily.AutoFlushTimeOut;
+    if fFamily.fRotateFileCount > 0 then
     begin
-      hourRotate := EncodeTime(fFamily.fRotateFileDailyAtHour, 0, 0, 0);
-      beforeRotate := hourRotate - Time; // use local time hour
-      if beforeRotate <= 1 / MinsPerDay then // hour passed, or within 1 minute
-        beforeRotate := beforeRotate + 1; // trigger tomorrow
-      fRotateDailyTix32 := tix32 + trunc(beforeRotate * SecsPerDay);
+      if fFamily.fRotateFileSizeKB > 0 then
+        fRotateBytes := fFamily.fRotateFileSizeKB shl 10; // size KB -> B
+      if fFamily.fRotateFileDailyAtHour in [0..23] then
+      begin
+        hourRotate := EncodeTime(fFamily.fRotateFileDailyAtHour, 0, 0, 0);
+        beforeRotate := hourRotate - Time; // use local time hour
+        if beforeRotate <= 1 / MinsPerDay then // hour passed, or within 1 minute
+          beforeRotate := beforeRotate + 1; // trigger tomorrow
+        fRotateDailyTix32 := tix32 + trunc(beforeRotate * SecsPerDay);
+      end;
     end;
+    // file name should include current timestamp if no rotation is involved
+    if (fRotateBytes = 0) and
+       (fRotateDailyTix32 = 0) then
+      fn := FormatString('% %',
+        [fn, NowToFileShort(fFamily.LocalTimestamp)]);
+    // include thread ID in ptOneFilePerThread mode
+    if fFamily.fPerThreadLog = ptOneFilePerThread then
+      fn := FormatString('% %',
+        [fn, PointerToHexShort({%H-}pointer(GetCurrentThreadId))]);
+    {$ifdef OSPOSIX}
+    // normalize file name to be more readable and usable on POSIX command line
+    fn := StringReplace(fn, ' ', '-', [rfReplaceAll]);
+    {$endif OSPOSIX}
+    // include inherited TSynLog class name as suffix
+    if PClass(self)^ <> TSynLog then
+    begin
+      classn := ToText(PClass(self)^);
+      if IdemPChar(pointer(classn), 'TSYNLOG') then
+        delete(classn, 1, 7)  // TSynLogSecondary -> 'secondary'
+      else if classn[1] = 'T' then
+        delete(classn, 1, 1); // TCustomLog -> 'customlog'
+      LowerCaseSelf(classn);
+      if SetName([fn, '-', classn]) then
+        exit; // exename-secondary.log was not yet active so has been selected
+    end;
+    // ensure this file name is unique among all opened files
+    if SetName([fn]) then
+      exit; // exename.log is not already used
+    for dup := 2 to MAX_SYNLOGFAMILY + 3 do // absolute max = MAX_SYNLOGFAMILY = 7
+      if SetName([fn, '-', dup]) then
+        exit; // exename-#.log does not exist
+    ESynLogException.RaiseUtf8('Duplicated %.FileName=%', [self, fFileName]);
+  finally
+    SynLogFiles.WriteUnLock;
   end;
-  // file name should include current timestamp if no rotation is involved
-  if (fRotateBytes = 0) and
-     (fRotateDailyTix32 = 0) then
-    fn := FormatString('% %',
-      [fn, NowToFileShort(fFamily.LocalTimestamp)]);
-  // include thread ID in ptOneFilePerThread mode
-  if fFamily.fPerThreadLog = ptOneFilePerThread then
-    fn := FormatString('% %',
-      [fn, PointerToHexShort({%H-}pointer(GetCurrentThreadId))]);
-  {$ifdef OSPOSIX}
-  // normalize file name to be more readable and usable on POSIX command line
-  fn := StringReplace(fn, ' ', '-', [rfReplaceAll]);
-  {$endif OSPOSIX}
-  // include inherited TSynLog class name as suffix
-  if PClass(self)^ <> TSynLog then
-  begin
-    classn := ToText(PClass(self)^);
-    if IdemPChar(pointer(classn), 'TSYNLOG') then
-      delete(classn, 1, 7)  // TSynLogSecondary -> 'secondary'
-    else if classn[1] = 'T' then
-      delete(classn, 1, 1); // TCustomLog -> 'customlog'
-    LowerCaseSelf(classn);
-    if SetName([fn, '-', classn]) then
-      exit; // exename-secondary.log was not yet active so has been selected
-  end;
-  // ensure this file name is unique among all opened files
-  if SetName([fn]) then
-    exit; // exename.log is not already used
-  for dup := 2 to MAX_SYNLOGFAMILY + 3 do // absolute max = MAX_SYNLOGFAMILY = 7
-    if SetName([fn, '-', dup]) then
-      exit; // exename-#.log does not exist
-  ESynLogException.RaiseUtf8('Duplicated %.FileName=%', [self, fFileName]);
 end;
 
 procedure TSynLog.CreateLogWriter;
@@ -6601,8 +7219,8 @@ begin
     fWriterEcho.EchoAdd(ConsoleEcho);
   if Assigned(fFamily.EchoCustom) then
     fWriterEcho.EchoAdd(fFamily.EchoCustom);
-  if Assigned(fFamily.fEchoRemoteClient) then
-    fWriterEcho.EchoAdd(fFamily.fEchoRemoteEvent);
+  if Assigned(fFamily.fEchoRemoteEvent) then
+    fWriterEcho.EchoAdd(RemoteEcho);
   fWriter.OnFlushToStream := OnFlushToStream; // note: overwrites fWriterEcho
   // enable background writing in its own TAutoFlushThread
   if fFamily.AutoFlushTimeOut <> 0 then
@@ -6622,7 +7240,7 @@ begin
     tix32 := GetTickSec;
     fFlushTix32 := tix32 + secs;
   end;
-  // check for any PerformRotation - delayed in SetThreadInfoAndThreadName
+  // check for any PerformRotation - delayed until the next locked write
   if not (pendingRotate in fPendingFlags) then
   begin
     bytes := fRotateBytes;
@@ -6646,168 +7264,41 @@ begin
   fWriterEcho.FlushToStream(Text, Len);
 end;
 
+procedure TSynLog.AutoFlush(tix32: cardinal);
+var
+  nfo: PSynLogThreadInfo;
+begin
+  if SynLogFileFreeing then
+    exit;
+  nfo := GetThreadInfo;
+  if BeginWrite(nfo) then
+    try
+      if (fFlushTix32 <> 0) and
+         (tix32 >= fFlushTix32) and
+         (fWriter <> nil) and
+         (fWriter.PendingBytes > 1) then
+        fWriter.FlushToStream;
+    finally
+      EndWrite(nfo);
+    end;
+end;
+
 function TSynLog.GetFileSize: Int64;
+var
+  nfo: PSynLogThreadInfo;
 begin
   result := 0;
-  if SynLogFileFreeing or
-     (fWriterStream = nil) then
+  if (self = nil) or SynLogFileFreeing then
     exit;
-  SynLogGlobalLock.Lock;
-  try
-    if fWriterStream <> nil then
-      result := fWriterStream.Size;
-  finally
-    SynLogGlobalLock.UnLock;
-  end;
-end;
-
-{$ifdef FPC}
-
-procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
-var
-  frames: array[0..61] of PtrUInt; // on Win64, RtlCaptureStackBackTrace < 62
-  i, depth: PtrInt;
-begin
-  depth := fFamily.StackTraceLevel;
-  if depth <> 0 then
+  nfo := GetThreadInfo;
+  if BeginWrite(nfo) then
     try
-      fWriter.AddDirect(' ');
-      for i := 0 to CaptureBacktrace(2, length(frames), @frames[0]) - 1 do
-        if (i = 0) or
-           (frames[i] <> frames[i - 1]) then
-          if TDebugFile.AddLog(fWriter, frames[i]) then
-          begin
-            dec(depth);
-            if depth = 0 then
-              break;
-          end;
-      fWriter.CancelLastChar(' ');
-    except // don't let any unexpected GPF break the logging process
+      if fWriterStream <> nil then
+        result := fWriterStream.Size;
+    finally
+      EndWrite(nfo);
     end;
 end;
-
-{$else not FPC}
-
-procedure TSynLog.AddStackTrace(Stack: PPtrUInt);
-{$ifdef OSWINDOWS}
-{$ifdef CPU64}
-
-  procedure AddStackManual(Stack: PPtrUInt);
-  begin
-    // not implemented yet
-  end;
-
-{$else}
-
-  procedure AddStackManual(Stack: PPtrUInt); 
-
-    function CheckAsmX86(xret: PtrUInt): boolean; // naive detection
-    var
-      i: PtrUInt;
-    begin
-      result := true;
-      try
-        if PByte(xret - 5)^ = $E8 then
-          exit;
-        for i := 2 to 7 do
-          if PWord(xret - i)^ and $38FF = $10FF then
-            exit;
-      except
-        // ignore any GPF
-      end;
-      result := false;
-    end;
-
-  var
-    st, max_stack, min_stack, depth: PtrUInt;
-  begin
-    asm
-        mov     min_stack, ebp
-        mov     eax, fs:[4]
-        mov     max_stack, eax
-    end;
-    if Stack = nil then // if no Stack pointer set, retrieve current one
-      Stack := pointer(min_stack)
-    else if PtrUInt(Stack) < min_stack then
-      exit;
-    fWriter.Add(' ');
-    depth := fFamily.StackTraceLevel;
-    try
-      while (PtrUInt(Stack) < max_stack) and
-            (depth > 0) do
-      begin
-        st := Stack^;
-        inc(Stack);
-        if (st >= min_stack) and
-           (st <= max_stack) then
-          continue; // on-stack pointer is no code
-        if not SeemsRealPointer(pointer(st - 8)) or
-           not CheckAsmX86(st) then
-          continue;
-        if not TDebugFile.AddLog(fWriter, st) then
-        begin
-          fWriter.AddPointer(st);
-          fWriter.AddDirect(' ');
-        end;
-        dec(depth);
-        if depth = 0 then
-          break;
-      end;
-    except
-      // just ignore any access violation here
-    end;
-  end;
-
-{$endif CPU64}
-
-var
-  {$ifndef NOEXCEPTIONINTERCEPT}
-  bak: TSynLogThreadInfoFlags; // paranoid precaution
-  threadflags: ^TSynLogThreadInfoFlags;
-  {$endif NOEXCEPTIONINTERCEPT}
-  {$ifdef OSWINDOWS}
-  n, i, logged: integer;
-  BackTrace: array[byte] of PtrUInt;
-  {$endif OSWINDOWS}
-begin
-  if fFamily.StackTraceLevel <= 0 then
-    exit;
-  {$ifndef NOEXCEPTIONINTERCEPT}
-  threadflags := @PerThreadInfo.Flags;
-  bak := threadflags^;
-  include(threadflags^, tiExceptionIgnore);
-  {$endif NOEXCEPTIONINTERCEPT}
-  try
-    {$ifdef OSWINDOWS}
-    logged := 0;
-    if fFamily.StackTraceUse <> stOnlyManual then
-    begin
-      n := RtlCaptureStackBackTrace(2, fFamily.StackTraceLevel, @BackTrace, nil);
-      if n <> 0 then
-      begin
-        fWriter.AddDirect(' ');
-        for i := 0 to n - 1 do
-          if TDebugFile.AddLog(fWriter, BackTrace[i]) then
-            inc(logged);
-      end;
-    end;
-    if (logged < 2) and
-       (fFamily.StackTraceUse <> stOnlyAPI) then
-      AddStackManual(stack);
-    {$endif OSWINDOWS}
-  except
-    // just ignore any access violation here
-  end;
-  {$ifndef NOEXCEPTIONINTERCEPT}
-  threadflags^ := bak;
-  {$endif NOEXCEPTIONINTERCEPT}
-end;
-
-{$else}
-begin // not implemented yet on Delphi POSIX
-end;
-{$endif OSWINDOWS}
-{$endif FPC}
 
 
 { ************** High-Level Logs and Exception Related Features }
@@ -6816,56 +7307,88 @@ end;
 
 procedure DoLogException(Log: TSynLog; Info: PSynLogThreadInfo;
   const Ctxt: TSynLogExceptionContext);
-begin // called by SynLogException() within its SynLogGlobalLock.Lock
-  if (Log = nil) or
-     (Log.fWriter = nil) then
-    exit; // this TSynLogFamily has no fGlobalLog or opened file (yet)
-  Log.FillInfo(Info, nil); // timestamp [+ threadnumber]
-  SetThreadInfoAndThreadName(Log, Info);
-  LogHeaderNoRecursion(Log.fWriter, Ctxt.ELevel, @Info^.CurrentTimeAndThread);
-  DefaultSynLogExceptionToStr(Log.fWriter, Ctxt, {addinfo=}false);
-  // stack trace only in the main thread
-  Log.fWriterEcho.AddEndOfLine(Ctxt.ELevel);
+begin
+  if (Log <> nil) and
+     Log.BeginWrite(Info) then
+  try
+    if Log.fWriter = nil then
+      exit; // this TSynLogFamily has no fGlobalLog or opened file (yet)
+    Log.FillInfo(Info, nil); // timestamp [+ threadnumber]
+    if pendingRotate in Log.fPendingFlags then
+      Log.PerformRotation(Info); // outer finally owns the writer unlock
+    SetThreadInfoAndThreadName(Log, Info);
+    LogHeaderNoRecursion(Log.fWriter, Ctxt.ELevel, @Info^.CurrentTimeAndThread);
+    DefaultSynLogExceptionToStr(Log.fWriter, Ctxt, {addinfo=}false);
+    // stack trace only in the main thread
+    Log.fWriterEcho.AddEndOfLine(Ctxt.ELevel);
+  finally
+    Log.EndWrite(Info);
+  end;
 end;
 
-const
-  MAX_EXCEPTHISTORY = 15;
+function DebugCurrentCleanup(src, dst: PPtrUIntArray; n: PtrInt; main: PtrUInt): PtrInt;
+var
+  i: PtrInt;
+  prev, curr: PtrUInt;
+  deb: TDebugFile;
+begin
+  deb := TDebugFile.CurrentDebugFile; // is likely to have been pre-loaded
+  prev := 0;
+  result := 0;
+  for i := 0 to n - 1 do
+  begin
+    curr := src[i];
+    if (curr = 0) or
+       (curr = prev) or
+       (curr = main) then
+      continue;
+    if deb = nil then
+    begin
+      if not IsCurrentExecutable(pointer(curr)) then
+        continue;
+    end
+    else if not deb.IsCode(curr) then
+      continue;
+    prev := curr;
+    dst[result] := curr;
+    inc(result);
+    if result = MAX_STACK_TRACE then
+      exit;
+  end;
+end;
 
 type
-  TSynLogExceptionInfos = array[0 .. MAX_EXCEPTHISTORY] of TSynLogExceptionInfo;
+  TSynLogExceptionInfos = array[0 .. 15] of TSynLogExceptionInfo; // power of 2
   TLastException = record
-    Index: integer;
-    StackCount: integer;
+    Safe: TLightLock;
+    Next: integer;
     Infos: TSynLogExceptionInfos;
-    Stack: array[0 .. MAX_EXCEPTHISTORY - 1] of PtrUInt;
   end;
 
 var
   // some static information about the latest exceptions raised
-  GlobalLastException: TLastException = (
-    Index: -1{%H-});
+  GlobalLastException: TLastException;
 
 // this is the main entry point for all intercepted exceptions
 procedure SynLogException(const Ctxt: TSynLogExceptionContext);
 var
-  fam: TSynLogFamily;
+  fam, mainfam: TSynLogFamily;
+  families: TSynLogFamilyDynArray;
   log: TSynLog;
   nfo: PSynLogThreadInfo;
-  info: ^TSynLogExceptionInfo;
+  info: PSynLogExceptionInfo;
   thrdnam: PShortString;
   last: ^TLastException;
-  bak: TSynLogThreadInfoFlags;
-  i, n: PtrInt;
-  {$ifdef FPC}
-  curr, prev: PtrUInt;
-  {$endif FPC}
+  i, n, framescount: PtrInt;
+  frames: TRawStackFrames; // filtered and reduced to TSynLogStackTrace size
 label
   adr, fin;
 begin
-  if (HandleExceptionFamily = nil) or // no TSynLogFamily.fHandleExceptions set
-     SynLogFileFreeing or             // inconsistent call at shutdown
-     (Ctxt.EClass = ESynLogSilent) or
-     HandleExceptionFamily.ExceptionIgnore.Exists(Ctxt.EClass) then
+  if SynLogFileFreeing or
+    (Ctxt.EClass = ESynLogSilent) then
+    exit;
+  nfo := @PerThreadInfo;
+  if nfo^.Flags * [tiExceptionIgnore, tiWriting] <> [] then
     exit;
   {$ifdef WIN64DELPHI} // Delphi<XE6 in System.pas to retrieve x64 dll exit code
   {$ifndef ISDELPHIXE6}
@@ -6875,203 +7398,206 @@ begin
     exit;
   {$endif ISDELPHIXE6}
   {$endif WIN64DELPHI}
-  nfo := @PerThreadInfo;
-  if tiExceptionIgnore in nfo^.Flags then
-    exit; // disabled for this thread (avoid nested call)
-  log := HandleExceptionFamily.Add;
-  if log = nil then
-    exit;
-  if log.fFamily.ExceptionIgnoreExternal and
-     (Ctxt.EAddr <> 0) and
-     not IsCurrentExecutable(pointer(Ctxt.EAddr)) then // fast guess
-    exit;
   thrdnam := CurrentThreadNameShort;
-  bak := nfo^.Flags;
-  exclude(nfo^.Flags, tiTemporaryDisable); // always log exceptions
-  if log.LockAndDisableExceptions then
+  if nfo^.ThreadBitLo = 0 then
+    InitThreadNumber(nfo);
+  include(nfo^.Flags, tiWriting); // avoid any nested exception/logging
   try
+    // handle TSynLogFamily settings
+    SynLogExceptions.Lock;
     try
-      // ensure we need to log this
-      if Assigned(log.fFamily.OnBeforeException) then
-        if log.fFamily.OnBeforeException(Ctxt, thrdnam^) then
-          exit; // intercepted by custom callback
-      // memorize last exceptions into an internal round-robin static list
-      last := @GlobalLastException;
-      if last^.Index = high(last^.Infos) then
-        last^.Index := 0
-      else
-        inc(last^.Index);
-      info := @last^.Infos[last^.Index];
+      mainfam := HandleExceptionFamily;
+      if (mainfam = nil) or
+         mainfam.ExceptionIgnore.Exists(Ctxt.EClass) then
+        exit;
+      if mainfam.ExceptionIgnoreExternal and
+         (Ctxt.EAddr <> 0) and
+         not IsCurrentExecutable(pointer(Ctxt.EAddr)) then // fast guess
+        exit;
+      if Assigned(mainfam.OnBeforeException) then
+        try
+          if mainfam.OnBeforeException(Ctxt, thrdnam^) then
+            exit; // intercepted by the custom callback
+        except
+          // continue even if custom callback did fail
+        end;
+    finally
+      SynLogExceptions.UnLock;
+    end;
+    log := mainfam.Add;
+    if log = nil then
+      exit;
+    // cleanup the stack trace to include only current process code
+    n := Ctxt.EStackCount;
+    if n = 0 then
+    begin
+      // manual retrieval of the current stack trace
+      n := RawStackTrace({skip=}3, mainfam.StackTraceUse, frames);
+      framescount := DebugCurrentCleanup(@frames, @frames, n, Ctxt.EAddr);
+    end
+    else
+      // rely on the stack trace supplied by the RTL caller function
+      framescount := DebugCurrentCleanup(Ctxt.EStack, @frames, n, Ctxt.EAddr);
+    // memorize last exceptions into an internal round-robin static list
+    last := @GlobalLastException;
+    last^.Safe.Lock;
+    try
+      info := @last^.Infos[last^.Next];
       info^.Context := Ctxt;
+      info^.Context.EInstance := nil; // avoid GPF
+      info^.Context.EStack := nil;    // stored in info^.StackTrace[]
+      info^.Context.EStackCount := framescount;
       info^.Message := '';
-      if Ctxt.EStack = nil then
-        last^.StackCount := 0
-      else
-      begin
-        n := MinPtrInt(high(last^.Stack) + 1, Ctxt.EStackCount);
-        last^.StackCount := n;
-        MoveFast(Ctxt.EStack[0], last^.Stack[0], n * SizeOf(PtrUInt));
-      end;
-      // actual exception log - with potential customization
-      LogHeaderNoRecursion(log.fWriter, Ctxt.ELevel, @nfo^.CurrentTimeAndThread);
       if (Ctxt.ELevel = sllException) and
          (Ctxt.EInstance <> nil) then
-      begin
-        info^.Message := Ctxt.EInstance.Message;
-        if Ctxt.EInstance.InheritsFrom(ESynException) then
-        begin
-          ESynException(Ctxt.EInstance).RaisedAt := pointer(Ctxt.EAddr);
-          if ESynException(Ctxt.EInstance).CustomLog(log.fWriter, Ctxt) then
-            goto fin;
-          goto adr; // CustomLog() includes DefaultSynLogExceptionToStr()
-        end;
-      end;
-      if DefaultSynLogExceptionToStr(log.fWriter, Ctxt, {addinfo=}true) then
-        goto fin;
-adr:  // regular exception context log with its stack trace
-      log.fWriter.AddDirect(' ', '['); // fThreadContext^.ThreadName may be ''
-      log.fWriter.AddShort(thrdnam^);
-      log.fWriter.AddShorter('] at ');
-      try
-        log.fWriter.AddPointer(Ctxt.EAddr);
-        log.fWriter.AddDirect(' ');
-        TDebugFile.AddLog(log.fWriter, Ctxt.EAddr, {nohex=}true);
-        {$ifdef FPC}
-        prev := Ctxt.EAddr;
-        // we rely on the stack trace supplied by the FPC RTL
-        for i := 0 to Ctxt.EStackCount - 1 do
-        begin
-          curr := Ctxt.EStack[i];
-          if curr = prev then
-            continue; // don't log twice
-          TDebugFile.AddLog(log.fWriter, curr);
-          prev := curr;
-        end;
-        {$else}
-        {$ifdef CPUX86}
-        // stack frame OK only for RTLUnwindProc by now
-        log.AddStackTrace(pointer(Ctxt.EStack));
-        {$endif CPUX86}
-        {$endif FPC}
-      except // paranoid
-      end;
-fin:  if Ctxt.ELevel in log.fFamily.fLevelSysInfo then
-        log.AddSysInfo;
-      log.fWriterEcho.AddEndOfLine(Ctxt.ELevel);
-      log.fWriter.FlushToStream; // exceptions available on disk ASAP
-      // minimal exception logging to all other TSynLog files (to ease debug)
-      for i := 0 to high(SynLogFamily) do
-      begin
-        fam := SynLogFamily[i];
-        if (fam <> HandleExceptionFamily) and // if not already logged above
-           (Ctxt.ELevel in fam.Level) then
-        try // only DefaultSynLogExceptionToStr() but with no stack trace
-          DoLogException(fam.fGlobalLog, nfo, Ctxt);
-        except
-          // paranoid: don't try this family again (without SetLevel)
-          fam.fLevel := fam.fLevel - [sllException, sllExceptionOS];
-        end;
-      end;
-    except
-      // any nested exception should never be propagated to the OS caller
+        info^.Message := Ctxt.EInstance.Message; // by refcnt assign
+      MoveFast(frames, info^.StackTrace, framescount * SizeOf(PtrUInt));
+      last^.Next := (last^.Next + 1) and high(last^.Infos);
+    finally
+      last^.Safe.UnLock;
     end;
   finally
-    nfo^.Flags := bak; // may reintroduce tiTemporaryDisable
-    SynLogGlobalLock.UnLock;
+    exclude(nfo^.Flags, tiWriting);
+  end;
+  if not log.BeginWrite(nfo) then
+    exit; // on disk failure, the following code is pointless
+  try
+    if not (logInitDone in log.fFlags) then
+      log.LogFileInitLocked(nfo);
+    log.FillInfo(nfo, nil);
+    if pendingRotate in log.fPendingFlags then
+      log.PerformRotation(nfo); // outer finally owns the writer unlock
+    SetThreadInfoAndThreadName(log, nfo);
+    LogHeaderNoRecursion(log.fWriter, Ctxt.ELevel, @nfo^.CurrentTimeAndThread);
+    if (Ctxt.ELevel = sllException) and
+       (Ctxt.EInstance <> nil) and
+       Ctxt.EInstance.InheritsFrom(ESynException) then
+    begin
+      ESynException(Ctxt.EInstance).RaisedAt := pointer(Ctxt.EAddr);
+      if ESynException(Ctxt.EInstance).CustomLog(log.fWriter, Ctxt) then
+        goto fin;
+      goto adr; // CustomLog() includes DefaultSynLogExceptionToStr()
+    end;
+    if DefaultSynLogExceptionToStr(log.fWriter, Ctxt, {addinfo=}true) then
+      goto fin;
+adr:// regular exception context log with its stack trace
+    log.fWriter.AddDirect(' ', '['); // [#1 Main]
+    n := nfo^.ThreadNumber;
+    if n <> 0 then
+    begin
+      log.fWriter.AddDirect('#');
+      log.fWriter.AddU(n);
+    end;
+    if thrdnam^[0] <> #0 then
+    begin
+      log.fWriter.AddDirect(' ');
+      log.fWriter.AddShort(thrdnam^); // fThreadContext^.ThreadName may be ''
+    end;
+    log.fWriter.AddShorter('] at ');
+    log.fWriter.AddPointer(Ctxt.EAddr);
+    log.fWriter.AddDirect(' ');
+    try
+      DebugFileCurrent.AddLog(log.fWriter, Ctxt.EAddr, {nohex=}true);
+      for i := 0 to framescount - 1 do // append pre-computed stack trace
+        DebugFileCurrent.AddLog(log.fWriter, frames[i]);
+    except // paranoid
+    end;
+fin:if Ctxt.ELevel in log.fFamily.fLevelSysInfo then
+      log.AddSysInfo;
+    log.fWriterEcho.AddEndOfLine(Ctxt.ELevel);
+    log.fWriter.FlushToStream;
+  finally
+    log.EndWrite(nfo);
+  end;
+  // minimal exception logging to all other TSynLog files (to ease debug)
+  SynLogFiles.ReadLock;
+  try
+    families := copy(SynLogFamily);
+  finally
+    SynLogFiles.ReadUnLock;
+  end;
+  for i := 0 to high(families) do
+  begin
+    fam := families[i];
+    if (fam <> mainfam) and // if not already logged above
+       (Ctxt.ELevel in fam.Level) then
+    try // only DefaultSynLogExceptionToStr() but with no stack trace
+      DoLogException(fam.fGlobalLog, nfo, Ctxt);
+    except
+      // paranoid: don't try this family again (without SetLevel)
+      fam.fLevel := fam.fLevel - [sllException, sllExceptionOS];
+    end;
   end;
 end;
 
 function GetLastException(out info: TSynLogExceptionInfo): boolean;
+var
+  last: ^TLastException;
+  n: PtrInt;
 begin
   result := false;
-  if SynLogFileFreeing or
-     (GlobalLastException.Index < 0) then
-    exit; // no exception intercepted yet (or any more)
-  SynLogGlobalLock.Lock;
+  if SynLogFileFreeing then
+    exit;
+  last := @GlobalLastException;
+  last^.Safe.Lock;
   try
-    if GlobalLastException.Index < 0 then
-      exit;
-    info := GlobalLastException.Infos[GlobalLastException.Index]; // copy
+    n := last^.Next;
+    if n = 0 then
+      n := length(last^.Infos);
+    info := last^.Infos[n - 1];
   finally
-    SynLogGlobalLock.UnLock;
+    last^.Safe.UnLock;
   end;
-  info.Context.EInstance := nil; // avoid any GPF
-  info.Context.EStack := @GlobalLastException.Stack;
-  info.Context.EStackCount := GlobalLastException.StackCount;
   result := info.Context.ELevel <> sllNone;
 end;
 
 procedure GetLastExceptions(out result: TSynLogExceptionInfoDynArray;
   Depth: integer);
 var
-  infos: TSynLogExceptionInfos; // use thread-safe local copy of static array
-  index, last, n, i: PtrInt;
+  last: ^TLastException;
+  i, n, max: PtrInt;
 begin
-  // thread-safe retrieve last exceptions
-  if SynLogFileFreeing or
-     (GlobalLastException.Index < 0) then
-    exit; // no exception intercepted yet (or any more)
-  SynLogGlobalLock.Lock;
-  try
-    infos := GlobalLastException.Infos;
-    index := GlobalLastException.Index;
-  finally
-    SynLogGlobalLock.UnLock;
-  end;
-  // generate an ordered array of exception infos
-  n := MAX_EXCEPTHISTORY + 1;
+  if SynLogFileFreeing then
+    exit;
+  last := @GlobalLastException;
+  max := length(last^.Infos); // is a power of two by design
   if (Depth > 0) and
-     (n > Depth) then
-    n := Depth;
-  SetLength(result, n);
-  last := MAX_EXCEPTHISTORY;
-  for i := 0 to n - 1 do
-  begin
-    if i <= index then
-      result[i] := infos[index - i]
-    else
+     (max > Depth) then
+    max := Depth;
+  SetLength(result, max); // pre-allocate
+  n := 0;
+  last^.Safe.Lock; // thread-safe retrieve last exceptions
+  try
+    i := last^.Next; // next slot to write
+    while n < max do
     begin
-      result[i] := infos[last];
-      dec(last);
+      i := (i - 1) and high(last^.Infos);
+      if last^.Infos[i].Context.ELevel = sllNone then
+        break; // ring has not been filled up to this point yet
+      result[n] := last^.Infos[i];
+      inc(n);
     end;
-    with result[i].Context do
-      if ELevel = sllNone then
-      begin
-        SetLength(result, i); // truncate to latest available exception
-        break;
-      end
-      else
-      begin
-        EInstance := nil; // avoid any GPF
-        if i = 0 then
-        begin
-          EStack := @GlobalLastException.Stack; // static copy of last exception
-          EStackCount := GlobalLastException.StackCount;
-        end
-        else
-          EStack := nil; // avoid any GPF
-      end;
+  finally
+    last^.Safe.UnLock;
   end;
+  SetLength(result, n);
 end;
 
 function ToText(var info: TSynLogExceptionInfo): RawUtf8;
 var
-  i: PtrInt;
   tmp: ShortString;
 begin
   with info.Context do
     if ELevel <> sllNone then
     begin
       TDebugFile.FindLocationShort(pointer(EAddr), tmp);
-      FormatUtf8('% % at %: % [%]', [_LogInfoText[ELevel], EClass, tmp,
-        UnixTimeToString(ETimestamp, {expanded=}true, ' '),
-        StringToUtf8(info.Message)], result);
-      if EStack <> nil then
-        for i := 0 to EStackCount - 1 do
-        begin
-          TDebugFile.FindLocationShort(pointer(EStack[i]), tmp);
-          Append(result, [', ', tmp]);
-        end;
+      FormatUtf8('% % at % % [%]', [_LogInfoText[ELevel], EClass, tmp,
+        UnixTimeToShort(ETimestamp), StringToUtf8(info.Message)], result);
+      if EStackCount = 0 then
+        exit; // no stack frame available
+      tmp[0] := #0;
+      TDebugFile.AppendLocationsShort(tmp, @info.StackTrace, EStackCount, 16);
+      AppendShortToUtf8(tmp, result);
     end
     else
       FastAssignNew(result);
@@ -7146,19 +7672,32 @@ function TSynLogCallbacks.Subscribe(const Levels: TSynLogLevels;
   const Callback: ISynLogCallback; ReceiveExistingKB: cardinal): integer;
 var
   reg: TSynLogCallback;
-  previousContent: RawUtf8;
+  previousContent, freq: RawUtf8;
+  log: TSynLog;
+  nfo: PSynLogThreadInfo;
 begin
   if Assigned(Callback) then
-  try
+  begin
     if ReceiveExistingKB > 0 then
     begin
-      SynLogGlobalLock.Lock;
       previousContent := TrackedLog.GetExistingLog(ReceiveExistingKB);
-      if TrackedLog.HighResolutionTimestamp and
-         (TrackedLog.fGlobalLog <> nil) then
-        with TrackedLog.fGlobalLog do
-          Callback.Log(sllNone, FormatUtf8('freq=%,%,%',
-            [1000000, double(fStartTimestampDateTime), fFileName]));
+      if TrackedLog.HighResolutionTimestamp then
+      begin
+        log := TrackedLog.fGlobalLog;
+        if log <> nil then
+        begin
+          nfo := GetThreadInfo;
+          if log.BeginWrite(nfo) then
+          try
+            freq := FormatUtf8('freq=%,%,%',
+              [1000000, double(log.fStartTimestampDateTimeUtc), log.fFileName]);
+          finally
+            log.EndWrite(nfo);
+          end;
+        end;
+      end;
+      if freq <> '' then
+        Callback.Log(sllNone, freq);
       Callback.Log(sllNone, previousContent);
     end;
     reg.Levels := Levels;
@@ -7169,9 +7708,6 @@ begin
     finally
       fSafe.UnLock;
     end;
-  finally
-    if ReceiveExistingKB > 0 then
-      SynLogGlobalLock.UnLock;
   end;
   result := length(previousContent);
 end;
@@ -7323,14 +7859,21 @@ end;
 
 function TSynLogFile.LineContains(const aUpperSearch: RawUtf8;
   aIndex: integer): boolean;
+var
+  p: PUtf8Char;
 begin // overriden to take fLineTextOffset into account
   if (self = nil) or
-     (cardinal(aIndex) >= cardinal(fCount)) or
-     (aUpperSearch = '') then
+     (fLevels = nil) then // plain text file, e.g. for SearchNextText()
+    result := inherited LineContains(aUpperSearch, aIndex)
+  else if (cardinal(aIndex) >= cardinal(fCount)) or
+          (aUpperSearch = '') or
+          (fLevels[aIndex] = sllNone) then // an unparsed row has no text at offset
     result := false
   else
-    result := GetLineContains(PUtf8Char(fLines[aIndex]) + fLineTextOffset,
-      fMapEnd, pointer(aUpperSearch));
+  begin
+    p := fLines[aIndex];
+    result := GetLineContains(p + fLineTextOffset, GetLineEnd(p), pointer(aUpperSearch));
+  end;
 end;
 
 function TSynLogFile.EventDateTime(aIndex: integer): TDateTime;
@@ -7671,6 +8214,7 @@ begin
       if fThreads <> nil then
       begin
         SetLength(fThreads, fCount);
+        fThreadsCount := fCount; // so that AddInMemoryLine() can grow it back
         SetLength(fThreadInfo, fThreadMax + 1);
       end;
     end;
@@ -7721,7 +8265,14 @@ begin
     Utf8DecodeToString(P, StrLen(P), string(fFileName));
   end
   else
+  begin
+    if fLogProcStack = nil then
+    begin // released by LoadFromMap(), but needed again by ProcessOneLine()
+      SetLength(fLogProcStack, NextGrow(length(fThreadInfo)));
+      SetLength(fLogProcStackCount, length(fLogProcStack));
+    end;
     inherited AddInMemoryLine(aNewLine);
+  end;
 end;
 
 procedure TSynLogFile.LogProcSort(Order: TLogProcSortOrder);
@@ -7867,7 +8418,7 @@ begin
     begin
       // YYYYMMDD HHMMSSXX[Z] is one/two chars bigger than Timestamp
       fLineLevelOffset := 19;
-      if LineBeg[fLineLevelOffset] = 'Z' then
+      if LineBeg[fLineLevelOffset - 2] = 'Z' then
         inc(fLineLevelOffset); // did have TSynLogFamily.ZonedTimestamp
       fDayCurrent := PInt64(LineBeg)^;
       AddInteger(fDayChangeIndex, fCount - 1);
@@ -7933,7 +8484,15 @@ begin
       begin
         AddInteger(fLogProcStack[thread], fLogProcStackCount[thread], fLogProcNaturalCount);
         if fLogProcNaturalCount >= length(fLogProcNatural) then
+        begin
           SetLength(fLogProcNatural, NextGrow(fLogProcNaturalCount));
+          if (fLogProcCurrent <> nil) and
+             not fLogProcIsMerged then
+            fLogProcCurrent := pointer(fLogProcNatural); // realloc may move it
+        end;
+        // .Index is overwritten by CleanLevels() after an initial parsing,
+        // but is needed as such for any AddInMemoryLine() appended row
+        fLogProcNatural[fLogProcNaturalCount].Index := fCount - 1;
         // fLogProcNatural[].### fields will be set later during parsing
         inc(fLogProcNaturalCount);
       end;
@@ -7992,7 +8551,7 @@ begin
               break;
             end;
         end;
-        FastSetString(result, found, GetLineSize(found, fMapEnd));
+        FastSetString(result, found, GetLineSize(found, GetLineEnd(found)));
         delete(result, 1, PosEx('=', result, 40)); // raw thread name
       end;
     end;
@@ -8027,19 +8586,20 @@ end;
 
 function TSynLogFile.GetEventText(index: integer): RawUtf8;
 var
-  L: cardinal;
+  L: PtrInt;
+  p: PUtf8Char;
 begin
   if (self = nil) or
      (cardinal(index) >= cardinal(fCount)) then
     FastAssignNew(result)
   else
   begin
-    L := GetLineSize(fLines[index], fMapEnd);
-    if L <= fLineTextOffset then
+    p := fLines[index];
+    L := GetLineSize(p, GetLineEnd(p)) - fLineTextOffset;
+    if L <= 0 then
       FastAssignNew(result)
     else
-      FastSetString(result, PAnsiChar(fLines[index]) + fLineTextOffset,
-        L - fLineTextOffset);
+      FastSetString(result, p + fLineTextOffset, L);
   end;
 end;
 
@@ -8084,7 +8644,8 @@ begin
   O := fLogProcSortInternalOrder;
   if Value then // set TSynLogFile.LogProcMerged=true profiling merged info
   begin
-    if fLogProcMerged = nil then
+    if (fLogProcMerged = nil) and
+       (fLogProcNaturalCount <> 0) then // nothing to merge without sllEnter
     begin
       fLogProcCurrent := pointer(fLogProcNatural);
       fLogProcCurrentCount := fLogProcNaturalCount;
@@ -8198,7 +8759,11 @@ begin
   result := '';
   if cardinal(aRow) < cardinal(fSelectedCount) then
     aRow := fSelected[aRow];
-  if cardinal(aRow) < cardinal(fCount) then
+  if cardinal(aRow) >= cardinal(fCount) then
+    exit;
+  if fLevels = nil then
+    result := Strings[aRow] // plain text file: no timestamp nor level
+  else
   begin
     dt := EventDateTime(aRow);
     FormatString('% %'#9'%'#9, [DateToStr(dt), FormatDateTime(TIME_FORMAT, dt),
@@ -8498,13 +9063,14 @@ var
   i, search: PtrInt;
 begin
   result := 0;
-  if integer(fEvents) <> 0 then
+  if cardinal(aRow) < cardinal(fSelectedCount) then
+    search := fSelected[aRow]
+  else
+    search := maxInt;
+  fSelectedCount := 0; // also if no level is selected: display no row at all
+  if (integer(fEvents) <> 0) and
+     (fLevels <> nil) then // a plain text file has no level to select
   begin
-    if cardinal(aRow) < cardinal(fSelectedCount) then
-      search := fSelected[aRow]
-    else
-      search := maxInt;
-    fSelectedCount := 0;
     for i := 0 to Count - 1 do
       if fLevels[i] in fEvents then
         if (fThreads = nil) or
@@ -8729,9 +9295,10 @@ end;
 
 
 procedure InitializeUnit;
+//var start: Int64;
 begin
-  SynLogGlobalLock.Init;
-  if (PtrUInt(@SynLogThreads) and POINTERAND) <> 0 then
+  SynLogExceptions.Init;
+  if (PtrUInt(@SynLogThreads.Safe) and POINTERAND) <> 0 then
     ESynLogException.RaiseU('SynLogThreads alignment issue');
   GetEnumTrimmedNames(TypeInfo(TSynLogLevel), @_LogInfoText);
   GetEnumTrimmedNames(TypeInfo(TAppLogLevel), @_LogAppText);
@@ -8741,10 +9308,24 @@ begin
   GetExecutableLocation := _GetExecutableLocation; // use FindLocationShort()
   LogCompressAlgo := AlgoSynLZ; // very fast and efficient on logs
   LogCompressAlgoArchive := @_LogCompressAlgoArchive;
+{  //
+  exit;
+  QueryPerformanceMicroSeconds(start);
+  writeln(TDebugFile.FindLocation(@Rdtsc));
+  writeln('in ',MicroSecFrom(start));
+  QueryPerformanceMicroSeconds(start);
+  //
+  writeln(TDebugFile.FindLocation(@TSynLog.Add));
+  writeln('in ',MicroSecFrom(start));
+  //
+  QueryPerformanceMicroSeconds(start);
+  writeln(TDebugFile.FindLocation(@TSynLog.LogEscape));
+  writeln('in ',MicroSecFrom(start));}
+  {$ifdef FPC}
   //writeln(BacktraceStrFpc(Get_pc_addr));
   //writeln(GetExecutableLocation(get_caller_addr(get_frame)));
-  //writeln(TDebugFile.FindLocation(@TDynArray.InitFrom));
-  //TDebugFile.CurrentDebugFile.SaveToJson('debug.json',jsonUnquotedPropName);
+  {$endif FPC}
+  //TDebugFile.CurrentDebugFile.SaveToJson(Executable.ProgramFilePath+'debug2.json', jsonUnquotedPropName);
 end;
 
 procedure FinalizeUnit;
@@ -8752,14 +9333,22 @@ var
   files: TSynLogDynArray; // thread-safe local copy
 begin
   {$ifndef NOEXCEPTIONINTERCEPT}
-  HandleExceptionFamily := nil; // disable exception interception
+  SynLogExceptions.Lock;
+  try
+    HandleExceptionFamily := nil; // disable exception interception
+  finally
+    SynLogExceptions.UnLock;
+  end;
   {$endif NOEXCEPTIONINTERCEPT}
   SynLogFileFreeing := true;    // to avoid GPF at shutdown
-  SynLogGlobalLock.Lock;
-  files := SynLogFile;
-  SynLogFile := nil;            // would break any background process
-  SynLogFamily := nil;          // paranoid - freed as TRttiCustom.Private
-  SynLogGlobalLock.UnLock;
+  SynLogFiles.WriteLock;
+  try
+    files := SynLogFile;
+    SynLogFile := nil;          // would break any background process
+    SynLogFamily := nil;        // paranoid - freed as TRttiCustom.Private
+  finally
+    SynLogFiles.WriteUnLock;
+  end;
   if AutoFlushThread <> nil then
   begin
     AutoFlushThread.Terminate;
@@ -8773,7 +9362,7 @@ begin
     BacktraceStrFunc := SysBacktraceStr; // avoid instability
   {$endif FPC}
   ObjArrayClear(DebugFiles);
-  SynLogGlobalLock.Done;
+  SynLogExceptions.Done;
 end;
 
 

@@ -37,7 +37,8 @@
 // serialization) - left undefined by default to ensure minimal impact
 
 {.$define FPCUSEVERSIONINFO}
-// link POSIX fileinfo/machoreader/elfreader units to retrieve more information
+// link POSIX fileinfo/machoreader/elfreader units to call TFileVersion.Create()
+// on any TFileName and not only the local executable resource
 
 {.$define NOSETTHREADNAME}
 // Delphi Wintel only: if defined, SetThreadName() would not raise the "thread
@@ -49,6 +50,12 @@
 
 {.$define NOEXCEPTIONINTERCEPT}
 // if defined, exceptions shall not be intercepted nor logged
+
+{.$define KEEP_STACKFRAMES}
+// if defined, {$W-} won't be forced and stack frames will follow project options
+// - useful mostly with FPC POSIX targets where unwinding info is not available
+// - should NOT be defined for Delphi Win32 which has its own x86 asm
+// - not set by default since has a measurable performance cost
 
 {.$define NOCOMPRESSEDTABLE}
 // disable compressed tables e.g. UU_COMPRESSED or BIGINT_PRIMES[] which may
@@ -143,9 +150,10 @@
     HASITERATORS HASIMPLICITOPERATOR HASDBFTWIDE HASDBFNEW
     HASTTHREADSTART HASTTHREADTERMINATESET HASINTERFACEASTOBJECT
     HASEXTRECORDRTTI HASSLOWMUL64
+    HAS_UI HAS_UI_VCL_LCL HAS_UI_PDF
     CPU32 CPU64
     CPUINTEL CPUX86 CPUX64 CPUARM3264 CPUARM CPUAARCH64 CPUX86NOTPIC
-    NOASMBLOCK
+    NOASMBLOCK KEEP_STACKFRAMES
     ASMINTEL ASMINTELNOTPIC ASMSSE2 ASMAESNI
     ASMX86 ASMX86NOTPIC ASMX64 ASMX64NOTPIC ASMX64AVX0 ASMX64AVX1
     ABIX86 ABIX64 ABIWINX64 ABISYSVX64 ABIA32 ABIA64 ABIWINA64 ABISYSVA64
@@ -153,7 +161,7 @@
     OSWINDOWS OSWINTEL OSWINARM
     OSPOSIX OSBSD OSDARWIN OSBSDDARWIN OSOPENBSD OSFREEBSD
     OSLINUX OSANDROID OSLINUXINTEL OSLINUXX64 OSLINUXX86
-    OSLINUXANDROID OSANDROIDARM64 OSELF
+    OSLINUXANDROID OSANDROIDARM64 OSELF OSFUTEX
     PUREMORMOT2
 
   FPC only:
@@ -164,7 +172,7 @@
 
   Delphi only:
     ISDELPHI ISDELPHIUNICODE ISDELPHIxxx
-    WIN32DELPHI WIN64DELPHI WINTELDELPHI WINARMDELPHI DELPHIPOSIX
+    WINDELPHI WIN32DELPHI WIN64DELPHI WINTELDELPHI WINARMDELPHI DELPHIPOSIX
 
 ********************** Conditionals **********************)
 
@@ -201,6 +209,7 @@
   {$define HASIMPLICITOPERATOR}
   {$define HASDBFTWIDE}
   {$define HASTTHREADSTART}
+  {$define HASTTHREADFINISHED}
   {$define HASINTERFACEASTOBJECT}
   {$define EXTENDEDTOSHORT_USESTR} // FloatToText uses str() in FPC
   {$define DOUBLETOSHORT_USEGRISU} // fast DoubleToAscii()
@@ -569,6 +578,7 @@
       since TDynArrayHashed = object(TDynArray) fails to initialize
       http://blog.synopse.info/post/2011/01/29/record-and-object-issue-in-Delphi-2010 }
     {$define UNDIRECTDYNARRAY}
+    {$define HASTTHREADFINISHED}    // Delphi 2009 introduced TThread.Finished
   {$else}
     {$define HASNOSTATICRTTI}        // Delphi 7/2007 has no TypeInfo(TGuid)
   {$endif UNICODE}
@@ -744,12 +754,15 @@
     {$ifend}
     {$if CompilerVersion >= 30.0} // = Delphi 10
       {$define ISDELPHI10}
+      {$define ISDELPHI10_103}    // Delphi 10..10.3 inlinining issues
     {$ifend}
     {$if CompilerVersion >= 31.0} // = Delphi 10.1
       {$define ISDELPHI101}
+      {$define ISDELPHI10_103}    // Delphi 10..10.3 inlinining issues
     {$ifend}
     {$if CompilerVersion >= 32.0} // = Delphi 10.2
       {$define ISDELPHI102}
+      {$define ISDELPHI10_103}    // Delphi 10..10.3 inlinining issues
       {$ifdef CPUX64}
       {$ifdef VER320withoutAprilUpdate}
         // circumvent early Delphi 10.2 Tokyo Win64 compiler bug
@@ -759,6 +772,7 @@
     {$ifend}
     {$if CompilerVersion >= 33.0} // = Delphi 10.3
       {$define ISDELPHI103}
+      {$define ISDELPHI10_103}    // Delphi 10..10.3 inlinining issues
     {$ifend}
     {$if CompilerVersion >= 34.0} // = Delphi 10.4
       {$define ISDELPHI104}
@@ -788,6 +802,7 @@
   // -- compiler-specific code generation conditionals
 
   {$ifdef OSWINDOWS}
+    {$define WINDELPHI}           // Delphi on Windows + Intel/AMD or ARM64
     {$ifdef CPUX86}
       {$define WIN32DELPHI}       // Delphi with Win32 inlined asm
       {$define ASMINTELNOTPIC}
@@ -814,15 +829,33 @@
     {$define NOEXCEPTIONINTERCEPT}   // TODO: interception for Delphi POSIX
     {$ifdef CPUX64}
       {$define DISPINVOKE_SYSVAMD64} // use SysV AMD64 va_list layout
-    {$endif CPUX64}                  // TODO: check aarch64 ABI on Delphi
+    {$endif CPUX64}
+    {$ifdef CPUARM64}
+      {$ifdef MACOS}
+        {$define DISPINVOKE_APPLEA64} // on Apple, TVarArgList is a plain pointer
+      {$else}
+        {$define DISPINVOKE_AAPCS64}  // use the AAPCS64 va_list layout
+      {$endif MACOS}
+    {$endif CPUARM64}
+    {$ifdef CPUARM32}
+      {$define DISPINVOKE_AAPCS32}    // TVarArgList is a plain pointer
+    {$endif CPUARM32}
   {$endif OSWINDOWS}
   {$ifdef CPU32}
     {$define HASSLOWMUL64}  // Delphi 32-bit has slow 64-bit mul: favor shl
+    {$ifdef CPUARM32} // no x87 there: extended = double
+      {$define EXTENDEDTOSHORT_USESTR}
+      {$define DOUBLETOSHORT_USEGRISU} // FloatToText() gives 15 digits
+      {$define DELPHI_ARM32_UNALIGNED} // packed fields: no VLDR/LDRD fault
+    {$endif CPUARM32}
   {$else}
     {$define EXTENDEDTOSHORT_USESTR} // FloatToText() slower in Delphi Win64
     {$ifdef CPUINTEL}
       {$define DOUBLETOSHORT_USEGRISU} // fast DoubleToAscii() - using BSRQWord
     {$endif CPUINTEL}
+    {$ifdef CPUAARCH64DELPHI}
+      {$define DOUBLETOSHORT_USEGRISU} // str() gives 15 digits and E-0019
+    {$endif CPUAARCH64DELPHI}
   {$endif CPU32}
 
 {$endif FPC}
@@ -848,13 +881,15 @@
   {$R-} // disable Range checking in our code
   {$S-} // disable Stack checking in our code
   {$X+} // expect extended syntax
-  {$W-} // disable stack frame generation
   {$Q-} // disable overflow checking in our code
   {$B-} // expect short circuit boolean
   {$V-} // disable Var-String Checking
   {$T-} // Typed @ operator
   {$Z1} // enumerators stored as byte by default
   {$P+} // Open string params
+  {$ifndef KEEP_STACKFRAMES}
+  {$W-} // disable stack frame generation
+  {$endif KEEP_STACKFRAMES}
 
   {$ifdef DEBUG}
     {$assertions on}   // assert() may be disabled, e.g. on FPC
@@ -943,13 +978,17 @@
     {$define OSWINARM}
   {$endif ABIARM}
   {$define THREADID32}    // TThreadID always 32-bit DWORD on all Windows archs
+  {$define OSFUTEX}       // WaitForValue() futex-like API appeared with Win8
 {$else}
   {$ifdef CPU32}
-    {$define THREADID32}    // TThreadID 32-bit on 32-bit systems
+    {$define THREADID32}  // TThreadID is 32-bit on 32-bit POSIX systems
   {$endif CPU32}
   {$ifdef OSLINUX}
     {$define OSLINUXANDROID}
     {$define OSELF}
+    {$ifdef FPC}
+      {$define OSFUTEX}   // direct futex syscall on FPC Linux
+    {$endif FPC}
     {$ifdef ABIX86}
       {$define OSLINUXINTEL}
       {$define OSLINUXX86}
@@ -968,6 +1007,7 @@
   {$ifdef OSANDROID}
     {$define OSLINUXANDROID}
     {$define OSELF}
+    {.$define OSFUTEX}        // untested
     {$ifdef ABIA64}
       {$define OSANDROIDARM64}
     {$endif ABIA64}
@@ -1074,6 +1114,12 @@
     // Delphi for WinArm has no SQlite3/QuickJS static support yet
     {$define NOSQLITE3STATIC}
     {$undef LIBQUICKJSSTATIC}
+    {$ifdef OSDARWIN}
+      // Apple does not follow the AAPCS64 standard for the arguments passed on
+      // the stack: they are packed to their natural size there, so this Delphi
+      // target needs the same fix as FPC on aarch64-darwin
+      {$define OSDARWINARM}
+    {$endif OSDARWIN}
   {$endif CPUINTEL}
 {$endif FPC}
 
@@ -1134,10 +1180,32 @@
       {$define LIBCURLSTATIC}
     {$endif CPUARM3264}
 
+    {$ifndef FPC}
+      {$ifndef USELIBCURL}
+        {$ifndef NODELPHINETHTTP}    // HTTPS via the TLS stack of the OS
+          {$define USEDELPHINETHTTP} // see TDelphiNetHttp in mormot.net.client
+        {$endif NODELPHINETHTTP}
+      {$endif USELIBCURL}
+    {$endif FPC}
+
   {$else}
 
+    {$ifdef IOS}
+      {$ifndef FPC}
+        // Delphi iOS ships neither libcurl nor libgss: use the OS TLS stack
+        {$ifndef USELIBCURL}
+          {$ifndef NODELPHINETHTTP}
+            {$define USEDELPHINETHTTP} // see TDelphiNetHttp in mormot.net.client
+          {$endif NODELPHINETHTTP}
+        {$endif USELIBCURL}
+        {$define NOGSSAPIAUTH}
+      {$endif FPC}
+    {$endif IOS}
+
     {$ifndef USE_OPENSSL}       // if OpenSSL is not available on this platform
-      {$define USELIBCURL}      // try cross-platform libcurl for https
+      {$ifndef USEDELPHINETHTTP}
+        {$define USELIBCURL}    // try cross-platform libcurl for https
+      {$endif USEDELPHINETHTTP}
     {$endif USE_OPENSSL}
 
     {$ifndef NOGSSAPIAUTH}      // mormot.lib.gssapi is not Android compatible
@@ -1148,7 +1216,42 @@
 
 {$endif OSPOSIX}
 
-{$if defined(USEWININET) or defined(USELIBCURL)}
+{$if defined(USEWININET) or defined(USELIBCURL) or defined(USEDELPHINETHTTP)}
   {$define USEHTTPREQUEST}
 {$ifend}
+
+
+// -----------
+// -- Per-platform UI abilities
+
+// you can define the following at project/package level
+{.$define NO_UI}     // disable whole UI path e.g. in mormot2tests
+{.$define NO_UI_VCL} // disable VCL usage on Delphi e.g. for pure FMX
+{.$define NO_UI_PDF} // disable mormot.ui.pdf unit
+
+{$undef HAS_UI}
+{$undef HAS_UI_VCL_LCL}
+{$ifndef NO_UI}
+  {$define HAS_UI}
+  {$ifdef FPC}
+    {$define HAS_UI_LCL}
+    {$define HAS_UI_VCL_LCL}
+  {$else}
+    {$ifndef NO_UI_VCL}
+      {$define HAS_UI_VCL_LCL}
+    {$endif NO_UI_VCL}
+  {$endif FPC}
+{$endif NO_UI}
+
+// mormot.ui.pdf is available with the Delphi VCL or FPC/Lazarus LCL on Windows
+{$undef HAS_UI_PDF}
+{$ifdef OSWINDOWS}
+  {$ifdef HAS_UI_VCL_LCL}
+    {$define HAS_UI_PDF}
+  {$endif HAS_UI_VCL_LCL}
+{$endif OSWINDOWS}
+{$ifdef NO_UI_PDF}
+  {$undef HAS_UI_PDF}
+{$endif NO_UI_PDF}
+
 

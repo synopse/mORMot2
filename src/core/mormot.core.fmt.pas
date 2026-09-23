@@ -291,6 +291,8 @@ type
   // - xpoKeepWhiteSpace would return xtText tokens made only of whitespace,
   // which are silently skipped by default
   // - xpoVariantGuessType let XmlToVariant() recognize booleans and numbers
+  // - xpoRejectDocType rejects any <!DOCTYPE ...> declaration, whereas simple
+  // DOCTYPE declarations are ignored by default without any DTD processing
   TXmlParserOption = (
     xpoNoException,
     xpoStripNamespacePrefix,
@@ -298,7 +300,8 @@ type
     xpoKeepComments,
     xpoKeepPI,
     xpoKeepWhiteSpace,
-    xpoVariantGuessType);
+    xpoVariantGuessType,
+    xpoRejectDocType);
 
   /// options to refine TXmlParser process
   TXmlParserOptions = set of TXmlParserOption;
@@ -334,9 +337,11 @@ type
   // ! while true do
   // !   case x.ParseNext of
   // !     ...
-  // - this is a "basic" parser, from actual simple needs: no DTD support (which
-  // makes it immune to entity expansion attacks by design), no URI namespace
-  // binding, only the most useful XPath lookup syntax
+  // - as show above, methods are FORWARD-ONLY: use properly Save/Restore or
+  // Rewind otherwise you may get a "Missing TXmlParser.Save/Rewind" exception
+  // - this is a "basic" parser, from actual simple needs: no DTD support but
+  // basic <!DOCTYPE ...> (which makes it immune to entity expansion attacks by
+  // design), no URI namespace binding, only the most useful XPath lookup syntax
   // - well-formedness of the tags nesting is verified, and any syntax or
   // nesting error would raise an EXmlException with the faulty line number,
   // unless xpoNoException option was set and ParseNext returns xtError and
@@ -356,6 +361,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function ParseName(p, e: PUtf8Char): PUtf8Char;
       {$ifdef HASINLINE} inline; {$endif}
+    function ParseDocType(p: PUtf8Char): PUtf8Char;
     /// append the current Name/Value attribute into a TDocVariant object
     procedure AttributeToDocVariant(Dest: PDocVariantData);
     /// raw recursive conversion of the current level into a TDocVariant object
@@ -476,9 +482,12 @@ type
     /// iterate until a given element name is reached anywhere in the content
     // - used e.g. to implement Find('//book')
     function FindAny(ElementName: PUtf8Char; ElementLen: PtrInt): boolean;
-    /// retrieve a text sub-value via Save+Find+ConsumeText+Restore
+    /// retrieve a text sub-value
+    // - relative and '//...' paths preserve the current parser position
+    // - an absolute '/...' path rewinds from the document root and leaves the
+    // parser at the resulting position
     function GetU(Path: PUtf8Char; var V: RawUtf8): boolean;
-    /// retrieve an integer sub-value via Save+Find+ConsumeText+Restore+ToInt64
+    /// retrieve an integer sub-value wrapping a GetU() transient call
     function GetI(Path: PUtf8Char; var V: Int64): boolean;
     /// save the current state of the parser (Position, Kind and Depth)
     // - up to 32 Save/Restore nested levels are allowed
@@ -525,7 +534,7 @@ const
     'mismatched end tag',                        // xpeWrongEndTag
     'unfinished comment',                        // xpeEofInComment
     'unfinished CDATA',                          // xpeEofInCdata
-    'DTD and <!..> markup are not supported',    // xpeUnsupportedMarkup
+    'unsupported DTD or <!..> markup',           // xpeUnsupportedMarkup
     'void or invalid PI name',                   // xpeVoidPiName
     'unfinished processing instruction',         // xpeEofInPi
     'void or invalid name',                      // xpeVoidTagName
@@ -2323,6 +2332,7 @@ begin
   {$ifndef FPCX86NOTPIC}
   fTab := @XML_KIND;
   {$endif FPCX86NOTPIC}
+  fStackLen[0] := 0;               // no document element yet
   fStackLen[high(fStackLen)] := 0; // 8-bit Save/Restore count
   fStackPos[high(fStackPos)] := 0; // 32-bit ForEach() flags
 end;
@@ -2360,7 +2370,8 @@ begin
   s := @fSave[i];
   inc(i);
   fStackLen[high(fStackLen)] := i;
-  s^.L := PCardinal(@Kind)^;
+  s^.L := PCardinal(@Kind)^; // B[0]=Kind B[1]=Depth B[2]=fStackLen[0]
+  s^.B[2] := fStackLen[0];   // preserve root/prolog state for DOCTYPE
   s^.H := fCur - fBegin;
 end;
 
@@ -2372,11 +2383,12 @@ var
 begin
   i := fStackLen[high(fStackLen)]; // fSave[] count
   if i = 0 then
-    EXmlException.RaiseU('Missing TXmlParser.Save');
+    EXmlException.RaiseU('Missing TXmlParser.Save/Rewind');
   dec(i);
   fStackLen[high(fStackLen)] := i;
   s := @fSave[i];
-  PWord(@Kind)^ := s^.L; // B[0]=Kind B[1]=Depth
+  PWord(@Kind)^ := s^.L; // B[0]=Kind B[1]=Depth B[2]=fStackLen[0]
+  fStackLen[0] := s^.B[2];
   p := fBegin + s^.H;
   if p <= fCur then
     fCur := p
@@ -2573,12 +2585,12 @@ begin
                   end;
                   inc(p, 3);
                   continue;
-                end;
-                if (e - p >= 7) and
-                   (PCardinal(p)^ = ord('[') + ord('C') shl 8 +
-                                    ord('D') shl 16 + ord('A') shl 24) and
-                   (PCardinal(p + 3)^ = ord('A') + ord('T') shl 8 +
-                                        ord('A') shl 16 + ord('[') shl 24) then
+                end
+                else if (e - p >= 7) and
+                        (PCardinal(p)^ = ord('[') + ord('C') shl 8 +
+                                         ord('D') shl 16 + ord('A') shl 24) and
+                        (PCardinal(p + 3)^ = ord('A') + ord('T') shl 8 +
+                                         ord('A') shl 16 + ord('[') shl 24) then
                 begin
                   // <![CDATA[ ... ]]> verbatim section
                   inc(p, 7);
@@ -2597,6 +2609,18 @@ begin
                     break;
                   end;
                   LastError := xpeEofInCdata;
+                end
+                else if (e - p >= 7) and
+                        (PCardinal(p)^ = ord('D') + ord('O') shl 8 +
+                                         ord('C') shl 16 + ord('T') shl 24) and
+                        (PCardinal(p + 3)^ = ord('T') + ord('Y') shl 8 +
+                                         ord('P') shl 16 + ord('E') shl 24) then
+                // <!DOCTYPE name ...> with no internal subset or nested markup
+                begin
+                  p := ParseDocType(p + 7);
+                  if p <> nil then
+                    continue;
+                  LastError := xpeUnsupportedMarkup;
                 end
                 else
                   LastError := xpeUnsupportedMarkup;
@@ -2701,6 +2725,48 @@ begin
   until false;
   fCur := p;
   result := Kind;
+end;
+
+function TXmlParser.ParseDocType(p: PUtf8Char): PUtf8Char;
+var
+  quote: AnsiChar;
+begin
+  result := nil; // caller will make LastError := xpeUnsupportedMarkup
+  if (fStackLen[0] <> 0) or // accepted only as first element
+     (xpoRejectDocType in Options) or
+     (p >= fAfter) or
+     (p^ > ' ') then // expects <!DOCTYPE name
+    exit;
+  repeat
+    inc(p);
+    if p = fAfter then
+      exit;
+  until p^ > ' ';
+  if {$ifdef FPCX86NOTPIC} XML_KIND {$else} fTab^ {$endif}[p^] <> 0 then
+    exit;
+  repeat
+    inc(p);
+    if p = fAfter then
+      exit;
+  until {$ifdef FPCX86NOTPIC} XML_KIND {$else} fTab^ {$endif}[p^] <> 0;
+  quote := #0;
+  repeat // Scan up to the final '>' ignoring quotes
+    if quote = #0 then
+      case p^ of
+        '"', '''':
+          quote := p^;
+        '[', ']', '<':
+          exit; // internal subsets and nested DTD markup are not allowed
+        '>':
+          begin
+            result := p + 1; // valid simple <!DOCTYPE name> node
+            exit;
+          end;
+      end
+    else if p^ = quote then
+      quote := #0;
+    inc(p);
+  until p = fAfter;
 end;
 
 procedure TXmlParser.NameToUtf8(var result: RawUtf8);
@@ -2955,11 +3021,19 @@ begin
 end;
 
 function TXmlParser.GetU(Path: PUtf8Char; var V: RawUtf8): boolean;
+var
+  keeppos: boolean;
 begin
-  Save;
+  result := false;
+  if Path = nil then
+    exit;
+  keeppos := (Path[0] <> '/') or (Path[1] = '/');
+  if keeppos then
+    Save;
   result := Find(Path) and
             ConsumeText(V);
-  Restore;
+  if keeppos then
+    Restore;
 end;
 
 function TXmlParser.GetI(Path: PUtf8Char; var V: Int64): boolean;
@@ -3163,7 +3237,8 @@ begin
         else
           exit;
       prev := u;
-      u := u * 10 + QWord(ord(p^) - ord('0'));
+      u := u {$ifdef HASSLOWMUL64} shl 3 + u + u {$else} * 10 {$endif};
+      inc(u, QWord(ord(p^) - ord('0')));
       if Int64(u) < Int64(prev) then
         exit; // 63-bit overflow
       inc(p);
@@ -5255,20 +5330,19 @@ end;
 
 function IdemPChar2(table: PNormTable; p: PUtf8Char; up: PAnsiChar): boolean;
   {$ifdef HASINLINE}inline;{$endif}
-var
-  u: AnsiChar;
 begin
-  // here p and up are expected to be <> nil
-  result := false;
+  // in this local IdemPChar() version, p and up are expected to be <> nil
   dec(PtrUInt(p), PtrUInt(up));
-  repeat
-    u := up^;
-    if u = #0 then
-      break;
-    if table^[up[PtrUInt(p)]] <> u then
+  while true do
+    if up^ = #0 then
+      break
+    else if table[up[PtrUInt(p)]] = up^ then
+      inc(up)
+    else
+    begin
+      result := false;
       exit;
-    inc(up);
-  until false;
+    end;
   result := true;
 end;
 

@@ -157,7 +157,7 @@ begin
   result := FpOpendir(PosixFN(DirName, tmp));
 end;
 
-function PosixStatFS(const Path: TFileName; Info: PStatfs): cint;
+function PosixStatFS(const Path: TFileName; Info: pointer{PStatfs}): cint;
 var
   tmp: TFNTemp;
 begin
@@ -242,7 +242,7 @@ begin
   result := FpOpendir(pointer(DirName));
 end;
 
-function PosixStatFS(const Path: TFileName; Info: PStatfs): cint; inline;
+function PosixStatFS(const Path: TFileName; Info: pointer): cint; inline;
 begin
   result := FpStatFS(pointer(Path), Info);
 end;
@@ -535,6 +535,16 @@ begin
           icui18n := LibraryOpen(fn);
         end;
       end;
+      {$ifdef OSANDROID}
+      if icu = 0 then
+      begin
+        // current Android has no libicudata.so (its data is part of the i18n
+        // APEX) but still publishes libicuuc.so/libicui18n.so to the apps
+        icu := LibraryOpen('libicuuc.so');
+        if icu <> 0 then
+          icui18n := LibraryOpen('libicui18n.so');
+      end;
+      {$endif OSANDROID}
       {$endif OSDARWIN}
       if icui18n = 0 then
       begin
@@ -563,7 +573,7 @@ begin
           break;
         end;
       end;
-      if vers <> '' then
+      if vers = '' then // no official version number matched
       {$endif OSANDROID}
       if LibraryResolve(icu, 'ucnv_open') = nil then
         for i := ICU_MAX downto ICU_MIN do
@@ -656,12 +666,12 @@ begin
   begin
     ndx := i; // for eventual SharedUcnvUnLock()
     fSharedLast := i; // optimistic usage
-    if PLightLock(@fSharedLock[i])^.TryLock then
+    if TLightLock(fSharedLock[i]).TryLock then
       result := fSharedCnv[i]; // this thread acquired this converter
     exit;
   end;
   // first time we see this codepage: try to add in our internal cache
-  PLightLock(@fSharedMainLock)^.Lock; // main write lock
+  TLightLock(fSharedMainLock).Lock; // main write lock
   try
     n := fSharedCount;
     if (n <> length(fSharedCP)) and // cache up to 32 instances
@@ -678,14 +688,14 @@ begin
       inc(fSharedCount); // should be set last
     end;
   finally
-    PLightLock(@fSharedMainLock)^.UnLock;
+    TLightLock(fSharedMainLock).UnLock;
   end;
 end;
 
 procedure TIcuLibrary.SharedUcnvUnLock(ndx: PtrInt);
 begin
   ucnv_reset(fSharedCnv[ndx]); // clean-up from this thread (before unlock)
-  PLightLock(@fSharedLock[ndx])^.UnLock;
+  TLightLock(fSharedLock[ndx]).UnLock;
 end;
 
 procedure syslog(priv: integer; fmt: PAnsiChar; arg: array of const);
@@ -995,34 +1005,39 @@ end;
 
 
 const
-  // Date Translation - see http://en.wikipedia.org/wiki/Julian_day
-  D0 = 1461;
-  D1 = 146097;
-  D2 = 1721119;
+  // very fast Gregorian date translation - see TSynSystemTime.FromJulianDay
+  D0    = 1461;
+  D1    = 146097;
+  D2    = 153;
+  CGREG = 1721119;
   C1970 = 2440588;
+  DaysFromMarch: array[0 .. 11] of word = (
+    0, 31, 61, 92, 122, 153, 184, 214, 245, 275, 306, 337);
 
-procedure JulianToGregorian(JulianDN: PtrUInt; out result: TSystemTime);
-  {$ifdef HASINLINE}inline;{$endif}
+procedure DaysToGregorian(t: cardinal; var result: TSystemTime);
 var
-  YYear, XYear, Temp, TempMonth: PtrUInt;
+  t2, t3: cardinal;
 begin
-  Temp := ((JulianDN - D2) * 4) - 1;
-  JulianDN := Temp div D1;
-  XYear := (Temp - (JulianDN * D1)) or 3;
-  YYear := XYear div D0;
-  Temp := (((XYear - (YYear * D0) + 4) shr 2) * 5) - 3;
-  TempMonth := Temp div 153;
-  result.Day := PtrUInt((Temp - (TempMonth * 153)) + 5) div 5;
-  if TempMonth >= 10 then
-  begin
-    inc(YYear);
-    dec(TempMonth, 12 - 3);
-  end
+  t := t * 4 - 1;
+  t3 := t div D1;
+  t2 := (t - t3 * D1) and not 3;
+  t := (t2 + 3) div D0;
+  result.Year := t3 * 100 + t;
+  t3 := t * D0;
+  inc(t2, 7);
+  dec(t2, t3);
+  t2 := t2 shr 2;
+  t3 := t2 * 535;
+  dec(t3, 202);
+  t3 := t3 shr 14;
+  result.Day := t2 - DaysFromMarch[t3]; // pre-computed (Month * D2 + 2) div 5
+  if t3 < 10 then
+    result.Month := t3 + 3
   else
-    inc(TempMonth, 3);
-  result.Month := TempMonth;
-  result.Year := YYear + (JulianDN * 100);
-  // initialize fake dayOfWeek - as used by FromGlobalTime()
+  begin
+    result.Month := t3 - 9;
+    inc(result.Year);
+  end;
   result.DayOfWeek := 0;
 end;
 
@@ -1031,7 +1046,7 @@ var
   t: PtrUInt;
 begin
   t := epoch div SecsPerDay;
-  JulianToGregorian(t + C1970, result);
+  DaysToGregorian(t + (C1970 - CGREG), result);
   dec(epoch, t * SecsPerDay);
   t := epoch div SecsPerHour;
   result.Hour := t;
@@ -1145,16 +1160,16 @@ function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): integer;
 
 function host_processor_info(host, flavor: cint; var proccount: cardinal;
   var info: pointer; var infocount: cardinal): cint;
-  cdecl external 'host_processor_info';
+  cdecl external clib name 'host_processor_info';
 
 function mach_host_self: cint;
-  cdecl external 'mach_host_self';
+  cdecl external clib name 'mach_host_self';
 
 function vm_deallocate(task: cint; add: pointer; size: PtrUInt): cint;
-  cdecl external 'vm_deallocate';
+  cdecl external clib name 'vm_deallocate';
 
 function mach_task_self: cint;
-  cdecl external 'mach_task_self';
+  cdecl external clib name 'mach_task_self';
 
 var
   mach_timeinfo: TTimebaseInfoData;
@@ -1454,6 +1469,7 @@ function pthread_mutex_unlock(mutex: pointer): integer;      cdecl; external;
 {$endif OSPTHREADSSTATIC}
 
 {$ifdef FPCLINUX}
+
 procedure _SetShell(var a, b: RawUtf8);
 var
   pw: PPasswd; // from the pwd.pp unit
@@ -1470,7 +1486,9 @@ function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
 begin
   result := cs.__m_kind <> 0;
 end;
+
 {$else}
+
 procedure _SetShell(var a, b: RawUtf8);
 begin
   if not GetSystemEnv('SHELL', a) then
@@ -1482,9 +1500,14 @@ function IsInitializedCriticalSection(var cs: TRTLCriticalSection): boolean;
 begin
   result := not IsZero(@cs, SizeOf(cs));
 end;
+
 {$endif FPCLINUX}
 
 {$ifdef HAS_OSPTHREADS}
+{$ifndef OSFUTEX}
+
+// on Mac/BSD TOSLightLock uses pthreads_mutex - FPCLINUX is handled just above
+{$define HAS_TOSLIGHTLOCK}
 
 { TOSLightLock }
 
@@ -1522,37 +1545,8 @@ begin
   pthread_mutex_unlock(@fMutex);
 end;
 
-{$else} // fallback to plain recursive TRTLCriticalSection
-
-{ TOSLightLock }
-
-procedure TOSLightLock.Init;
-begin
-  InitCriticalSection(fMutex);
-end;
-
-procedure TOSLightLock.Done;
-begin
-  DeleteCriticalSectionIfNeeded(fMutex);
-end;
-
-procedure TOSLightLock.Lock;
-begin
-  EnterCriticalSection(fMutex);
-end;
-
-function TOSLightLock.TryLock: boolean;
-begin
-  result := TryEnterCriticalSection(fMutex) <> 0;
-end;
-
-procedure TOSLightLock.UnLock;
-begin
-  LeaveCriticalSection(fMutex);
-end;
-
+{$endif OSFUTEX}
 {$endif HAS_OSPTHREADS}
-
 
 procedure PosixSetThreadName(ThreadID: TThreadID; const Name: RawByteString);
 var
@@ -1941,7 +1935,15 @@ begin
   if not result then
     exit;
   if FileId <> nil then
+    {$ifdef OSANDROID}
+    {$ifdef DELPHIPOSIX}
+    FileId^ := lp.__st_ino; // as named by the Delphi Android64 RTL
+    {$else}
     FileId^ := lp.st_ino;
+    {$endif DELPHIPOSIX}
+    {$else}
+    FileId^ := lp.st_ino;
+    {$endif OSANDROID}
   if FileSize <> nil then
     FileSize^ := lp.st_size;
   if (LastWriteAccess = nil) and
@@ -2089,7 +2091,7 @@ begin
             (PosixSymlink(Target, SymLink) = 0);
 end;
 
-function WaitReadPending(fd, timeout: integer): boolean;
+function WaitReadPending(fd, timeout: integer): integer;
 var
   p: TPollFD; // select() limits process to 1024 sockets in POSIX -> use poll()
   // https://moythreads.com/wordpress/2009/12/22/select-system-call-limitation
@@ -2097,7 +2099,12 @@ begin
   p.fd := fd;
   p.events := POLLIN or POLLPRI;
   p.revents := 0;
-  result := FpPoll(@p, 1, timeout) > 0;
+  result := FpPoll(@p, 1, timeout);
+  if result > 0 then
+    if p.revents and (POLLIN or POLLPRI) <> 0 then
+      result := 1   // something is available
+    else
+      result := -1; // HUP/ERR/NVAL: not readable console input
 end;
 
 procedure ConsoleErrorWrite(const text: RawUtf8);
@@ -2253,7 +2260,6 @@ end;
 // seems a better solution, and also prevents pathological spinning if the
 // scheduler policy actually is not adapted to this usage
 { $define OSLINUX_SCHEDYIELD}     // force sched_yield syscall on Linux
-{ $define OSLINUX_SCHEDYIELDONCE} // yield once during DoSpin() - no benefit
 
 {$ifdef OSLINUX_SCHEDYIELD}
 procedure SwitchToThread;
@@ -2289,7 +2295,7 @@ begin
       // reported as unreliable by Alan on most POSIX, and despitable by Linus
       // - from our testing, it gives worse performance than fpnanosleep()
       // when waiting for some event (but may be sometimes used for spinning)
-      ThreadSwitch; // FPC RTL redirects to pthread_yield()
+      ThreadSwitch; // FPC/Delphi RTL redirects to pthread_yield()
       exit;
     end
     else
@@ -2308,10 +2314,10 @@ end;
 
 {$ifdef FPCLINUX} // Linux futex(2) has no dedicated libc wrapper
 const
-  // missing definitions from uapî\linux\futex.h
+  // missing definitions from uapi\linux\futex.h
   FUTEX_WAIT         = 0;
   FUTEX_WAKE         = 1;
-  FUTEX_PRIVATE_FLAG = 128; // since Linux 2.6.22
+  FUTEX_PRIVATE_FLAG = 128; // since Linux 2.6.22 (Jul 2007)
   FUTEX_WAIT_PRIVATE = FUTEX_WAIT or FUTEX_PRIVATE_FLAG;
   FUTEX_WAKE_PRIVATE = FUTEX_WAKE or FUTEX_PRIVATE_FLAG;
 
@@ -2325,6 +2331,11 @@ end;
 procedure _OsWakeOnValue(Value: PCardinal);
 begin
   _futex(Value, FUTEX_WAKE_PRIVATE, 1, nil);
+end;
+
+procedure _OsWakeAllOnValue(Value: PCardinal);
+begin
+  _futex(Value, FUTEX_WAKE_PRIVATE, MaxInt, nil);
 end;
 
 procedure _OsWaitOnValue(Value: PCardinal; Expected, TimeoutMS: cardinal);
@@ -2710,7 +2721,7 @@ end;
 
 function LinuxEventFDWait(fd: integer; ms: integer): boolean;
 begin
-  result := WaitReadPending(fd, ms); // call FpPoll()
+  result := WaitReadPending(fd, ms) > 0; // call FpPoll()
 end;
 {$else}
 function LinuxEventFD(nonblocking, semaphore: boolean): integer;
@@ -2827,9 +2838,21 @@ begin
   tmp.Store.Done;
 end;
 
+procedure WaitForDaemonTermination;
+begin
+  if SynDaemonTerminated = 0 then
+    {$ifdef FPC} // SynDaemonTerminated is a function on Delphi POSIX
+    if Assigned(OsWaitOnValue) then
+      OsWaitOnValue(@SynDaemonTerminated, 0, 1000) // e.g. from Linux futex
+    else
+    {$endif FPC}
+      SleepHiRes(1000);
+end;
+
 procedure ConsoleWaitForEnterKey(doCheckSynchronize: boolean);
 var
   c: AnsiChar;
+  res: integer;
 begin
   if GetCurrentThreadID = MainThreadID then
     SynDaemonIntercept // intercept ^C and SIGQUIT - do nothing if already set
@@ -2840,18 +2863,30 @@ begin
     if doCheckSynchronize then
     begin
       CheckSynchronize(1000);
-      if not WaitReadPending(StdInputHandle, 0) then
+      if WaitReadPending(StdInputHandle, 0) <= 0 then
         continue;
     end
-    else if not WaitReadPending(StdInputHandle, 10000) then
-      continue;
-    repeat
+    else
+    begin
+      res := WaitReadPending(StdInputHandle, 10000);
+      if res < 0 then // HUP/ERR/NVAL -> wait to avoid 100% cpu burn
+        WaitForDaemonTermination;
+      if res <= 0 then
+        continue;
+    end;
+    while SynDaemonTerminated = 0 do
+    begin
       c := #0;
-      if FpRead(StdInputHandle, @c, 1) <> 1 then
+      res := FpRead(StdInputHandle, @c, 1);
+      if res <> 1 then
+      begin // EOF/error e.g. under systemd /dev/null -> always wait
+        if not doCheckSynchronize then
+          WaitForDaemonTermination;
         break;
+      end;
       if c in [#10, #13] then
-        exit;
-    until false;
+        exit; // [Enter] key pressed
+    end;
   end;
 end;
 
@@ -2958,34 +2993,33 @@ begin
 end;
 {$endif FPCUSEVERSIONINFO}
 
-procedure _GetSystemEnv;
+function _GetSystemEnv: PPUtf8Char;
 var
-  e: PPUtf8Char;
   b, p: PUtf8Char;
   n: PtrInt;
 begin
-  e := pointer(envp);
-  if e = nil then
+  result := pointer(envp);
+  if result = nil then
     exit;
   n := 0; // pre-compute the number of entries
-  while e^ <> nil do
+  while result^ <> nil do
   begin
-    if e^^ <> '=' then
+    if result^^ <> '=' then
       inc(n);
-    inc(e);
+    inc(result);
   end;
   if n = 0 then
-    exit; // should never happen
+    exit;
   SetLength(_SystemEnvNames, n);
   SetLength(_SystemEnvValues, n);
-  e := pointer(envp);
+  result := pointer(envp);
   n := 0;
   repeat
-    p := e^;
+    p := result^;
     if p^ <> '=' then
     begin
       p := PosChar0(p, '=');
-      FastSetString(_SystemEnvNames[n], e^, p);
+      FastSetString(_SystemEnvNames[n], result^, p);
       if p^ <> #0 then
         inc(p); // ignore '='
       b := p;
@@ -2993,8 +3027,8 @@ begin
       FastSetString(_SystemEnvValues[n], b, p);
       inc(n);
     end;
-    inc(e);
-  until e^ = nil;
+    inc(result);
+  until result^ = nil;
 end;
 
 function setenv(name, value: PUtf8Char; replace: integer): integer;
@@ -3527,6 +3561,7 @@ type
     freeswap: cardinal;                  // swap space still available
     mem_unit: cardinal;                  // Memory unit size in bytes
   end;
+  PSysInfo = ^TSysInfo;
 
 function _RetrieveSysInfo(var si: TSysInfo): boolean;
 var
@@ -4038,14 +4073,15 @@ begin // single syscall gives enough information on Linux
   result := SysInfo(@si) = 0;
 end;
 
-function RetrieveSysInfo(var si: TSysInfo): boolean; forward; // 1 second cache
+// 1 sec cache or single syscall (faster than /proc/loadavg)
+function RetrieveSysInfo(si: PSysInfo; txt: PAnsiChar; max: PtrInt): boolean; forward;
 
 function RetrieveLoadAvg: TShort23;
 var
   si: TSysInfo;  // Linuxism
 begin
   result[0] := #0;
-  if not RetrieveSysInfo(si) then // cache or syscall faster than /proc/loadavg
+  if not RetrieveSysInfo(@si, nil, 0) then
     exit;
   AppendShort(TwoDigits(si.loads[0] / double(65536.0)), result);
   AppendShortChar(' ', @result);
@@ -4973,6 +5009,8 @@ begin
       [text, Sig, si_code], nil);
   end;
   SynDaemonTerminated := Sig;
+  if Assigned(OsWakeAllOnValue) then
+    OsWakeAllOnValue(@SynDaemonTerminated); // wake e.g. all Linux futexes
 end;
 
 procedure SynDaemonIntercept(const onlog: TSynLogProc);
@@ -5000,12 +5038,7 @@ begin
   end;
 end;
 
-procedure DoNothing(Sig: integer; Info: PSigInfo; Context: PSigContext); cdecl;
-begin
-end;
-
-// TO INVESTIGATE: we may use per-thread signal masking instead
-// http://www.microhowto.info/howto/ignore_sigpipe_without_affecting_other_threads_in_a_process.html
+// per-thread signal masking is no solution for OpenSSL - rather upgrade to 4+
 procedure SigPipeIntercept;
 var
   sa: SigactionRec;
@@ -5017,9 +5050,9 @@ begin
     if fSigPipeDisabled in _F1 then
       exit;
     FillCharFast(sa, SizeOf(sa), 0);
-    sa.sa_handler := @DoNothing;
-    fpSigaction(SIGPIPE, @sa, nil);
-    include(_F1, fSigPipeDisabled); // set AFTER disabling it
+    sa.sa_handler := SigActionHandler(SIG_IGN);
+    if fpSigaction(SIGPIPE, @sa, nil) = 0 then
+      include(_F1, fSigPipeDisabled); // set once AFTER disabling it
   finally
     OSSafe.UnLock;
   end;
@@ -5246,10 +5279,15 @@ begin
       onlog(sllNewRun, 'Start % /% %',
         [servicename, TXT[dofork], Executable.Version.DetailedOrVoid], nil);
     Start;
-    while SynDaemonTerminated = 0 do
-      if GetCurrentThreadID = MainThreadID then
+    if GetCurrentThreadID = MainThreadID then
+      while SynDaemonTerminated = 0 do
         CheckSynchronize(100)
-      else
+    {$ifdef FPC} // SynDaemonTerminated is a function on Delphi POSIX
+    else if Assigned(OsWaitOnValue) then // use clean futex on Linux to wait
+      OsWaitOnValue(@SynDaemonTerminated, 0, INFINITE)
+    {$endif FPC}
+    else
+      while SynDaemonTerminated = 0 do
         SleepHiRes(100);
   finally
     if Assigned(onlog) then
@@ -5270,20 +5308,83 @@ begin
   end;
 end;
 
+type
+  // stack-allocated storage for RunBuildEnv() child environment pointers
+  TRunEnv = array[0..511] of PUtf8Char; // max 512 environment variables
+
+// compute the child environment pointers from Windows-layout env pairs
+// - to be called before fork(), since it may not be fork-safe
+// - returns false on too many environment variables
+// - returns true and envpp=nil to reuse the current process environment,
+// or envpp<>nil pointing to e[] entries (values from env and current envp)
+function RunBuildEnv(const env: TRunArg; options: TRunOptions;
+  var e: TRunEnv; out envpp: PPUtf8Char): boolean;
+var
+  cur: PPUtf8Char;
+  P: PUtf8Char;
+  n: PtrInt;
+begin
+  envpp := pointer(envp); // Delphi POSIX uses wrongly a PWideChar here
+  if env <> '' then
+  begin
+    result := false; // -ESysE2BIG on too many variables
+    n := 0;
+    if (roEnvAddExisting in options) and
+       (envpp <> nil) then
+    begin
+      cur := envpp;
+      while cur^ <> nil do
+      begin
+        if PosChar(cur^, #10) = nil then
+        begin
+          // filter to add only single-line variables
+          if n = high(e) - 1 then
+            exit;
+          e[n] := cur^;
+          inc(n);
+        end;
+        inc(cur);
+      end;
+    end;
+    P := pointer(env); // env follows Windows layout 'n1=v1'#0'n2=v2'#0#0
+    while P^ <> #0 do
+    begin
+      if n = high(e) - 1 then
+        exit;
+      e[n] := P; // makes POSIX compatible
+      inc(n);
+      inc(P, StrLen(P) + 1);
+    end;
+    e[n] := nil; // end with null
+    envpp := @e;
+  end;
+  result := true;
+end;
+
+function RunFork: TPID; {$ifdef HASINLINE} inline; {$endif}
+begin
+  // vfork is required with libc on BSD/SunOS - as FPC RTL POpen_internal()
+  {$if (defined(BSD) or defined(SUNOS)) and defined(FPC_USE_LIBC)}
+  result := FpvFork;
+  {$else}
+  result := FpFork;
+  {$ifend}
+end;
+
 function RunInternal(args: PPAnsiChar; waitfor: boolean; const env: TRunArg;
   options: TRunOptions): integer;
 var
   pid: TPID;
-  e: array[0..511] of PUtf8Char; // max 512 environment variables
+  e: TRunEnv;
   envpp: PPUtf8Char;
-  P: PUtf8Char;
-  n: PtrInt;
 begin
-  {$if (defined(BSD) or defined(SUNOS)) and defined(FPC_USE_LIBC)}
-  pid := FpvFork;
-  {$else}
-  pid := FpFork;
-  {$ifend}
+  // prepare the child environment before fork() for fork-safety
+  if not RunBuildEnv(env, options, e, envpp) then
+  begin
+    result := -ESysE2BIG;
+    exit;
+  end;
+  pid := RunFork;
   if pid < 0 then
   begin
     // fork failed
@@ -5296,39 +5397,6 @@ begin
     if not waitfor then
       // don't share the same console
       CleanAfterFork;
-    envpp := pointer(envp); // Delphi POSIX uses wrongly a PWideChar here
-    if env <> '' then
-    begin
-      n := 0;
-      result := -ESysE2BIG;
-      if (roEnvAddExisting in options) and
-         (envpp <> nil) then
-      begin
-        while envpp^ <> nil do
-        begin
-          if PosChar(envpp^, #10) = nil then
-          begin
-            // filter to add only single-line variables
-            if n = high(e) - 1 then
-              exit;
-            e[n] := envpp^;
-            inc(n);
-          end;
-          inc(envpp);
-        end;
-      end;
-      P := pointer(env); // env follows Windows layout 'n1=v1'#0'n2=v2'#0#0
-      while P^ <> #0 do
-      begin
-        if n = high(e) - 1 then
-          exit;
-        e[n] := P; // makes POSIX compatible
-        inc(n);
-        inc(P, StrLen(P) + 1);
-      end;
-      e[n] := nil; // end with null
-      envpp := @e;
-    end;
     FpExecve(args^, args, envpp);
     FpExit(127);
   end;
@@ -5387,18 +5455,78 @@ begin
 end;
 
 {$ifdef FPC}
+
+// retrieve the PATH= value from the environment to be passed to execve()
+// - i.e. from the RunBuildEnv() output, or the current environment
+function RunEnvPath(envpp: PPUtf8Char): RawUtf8;
+var
+  p: PPUtf8Char;
+begin
+  FastAssignNew(result);
+  p := envpp;
+  if p = nil then
+    p := pointer(envp);
+  if p <> nil then
+    while p^ <> nil do
+    begin
+      // keep the last PATH=, so explicit env values override inherited ones
+      if IdemPChar(p^, 'PATH=') then
+        FastSetString(result, p^ + 5, StrLen(p^ + 5));
+      inc(p);
+    end;
+end;
+
+// search the supplied PATH for a command name, as a shell would
+// - a name which already contains a / is returned as-is (absolute/relative)
+// - returns '' if name was not found in the pathenv folders
+function RunSearchPath(name: PAnsiChar; const pathenv: RawUtf8): RawUtf8;
+var
+  p, s: PUtf8Char;
+begin
+  if name <> nil then
+    if PosChar(name, '/') <> nil then
+    begin
+      // a supplied path is used as-is, with no $PATH lookup - as a shell would
+      FastSetString(result, name, StrLen(name));
+      exit;
+    end;
+  p := pointer(pathenv);
+  if (p <> nil) and
+     (name <> nil) then
+    repeat
+      s := p;
+      while not (s^ in [#0, ':']) do
+        inc(s);
+      if s <> p then
+      begin
+        FastSetString(result, p, s - p);
+        result := result + '/' + RawUtf8(name);
+        if fpaccess(pointer(result), X_OK) = 0 then
+          exit; // found an executable file with this name
+      end;
+      if s^ = #0 then
+        break;
+      p := s + 1;
+    until false;
+  FastAssignNew(result); // not found: caller would fallback to the shell
+end;
+
 function RunRedirect(const cmd: TRunArg; exitcode: PInteger;
   const onoutput: TOnRedirect; waitfordelayms: cardinal; setresult: boolean;
   const env: TRunArg; const wrkdir: TFileName; options: TRunOptions): RawByteString;
 var
-  // notes: - FPC popen() allows access to the pid whereas clib popen() won't
-  //        - env and options params are not supported by popen() so are ignored
-  f: file;
+  fds: TFilDes;
   fd: THandle;
   pid, res, wr: cint;
   n: ssize_t;
   wait: cardinal;
   endtix: Int64;
+  aborted, reaped: boolean;
+  err: TParseCommands;
+  a: TParseCommandsArgs;
+  temp, path, wdir: RawUtf8;
+  e: TRunEnv;
+  envpp: PPUtf8Char;
   tmp: TBuffer64K;
 
   function RedirectOutput(killing: boolean; var redir: RawByteString): boolean;
@@ -5406,13 +5534,12 @@ var
     u: RawUtf8;
   begin
     result := false; // return false on pipe closed
-    if WaitReadPending(fd, wait) then
+    if WaitReadPending(fd, wait) > 0 then
     begin
       n := fpread(fd, @tmp, SizeOf(tmp));
-      if n < 0 then
-        exit; // pipe closed or EINTR = execution finished
-      if setresult and
-         (n <> 0) then
+      if n <= 0 then
+        exit; // n=0 on EOF (execution finished), n<0 on error or EINTR
+      if setresult then
         AppendBufferToUtf8(@tmp, n, RawUtf8(redir)); // assume CP_UTF8
       if Assigned(onoutput) then
       begin
@@ -5429,14 +5556,80 @@ var
     result := true;
   end;
 
+  procedure KillGroup(sig: integer);
+  begin
+    // the child did setsid: signal its whole process group so that even
+    // grand-children (e.g. spawned by a shell) won't leak as orphans
+    if fpkill(-pid, sig) <> 0 then
+      fpkill(pid, sig); // paranoid fallback (e.g. race before setsid)
+  end;
+
 begin
   FastAssignNew(result);
-  if wrkdir <> '' then
-    ChDir(wrkdir);
-  if popen(f, cmd, 'r') <> 0 then // fork and launch cmd - env is ignored by now
+  if exitcode <> nil then
+    exitcode^ := -1; // if not executed or aborted
+  // prepare the whole execution context before fork(): heap allocations
+  // are not fork-safe in a multi-threaded process
+  if not RunBuildEnv(env, options, e, envpp) then
+    exit; // too many environment variables
+  a[0] := nil;
+  err := ParseCommandArgs(cmd, @a, nil, @temp);
+  if err = [] then
+  begin
+    // no need to spawn the shell for simple commands - but resolve the
+    // executable as a shell would, from the PATH= actually supplied to
+    // execve(), and fallback to the shell if not found (e.g. for a
+    // shell built-in like "exit")
+    path := RunSearchPath(a[0], RunEnvPath(envpp));
+    if path <> '' then
+      a[0] := pointer(path)
+    else
+      err := [pcHasShellVariable]; // let the shell handle it below
+  end
+  else if err * PARSECOMMAND_ERROR <> [] then
+    exit; // no system call for clearly invalid command line
+  if err <> [] then
+  begin
+    // execute complex commands via the shell
+    path := GetSystemShell;
+    a[0] := pointer(path);
+    a[1] := '-c';
+    a[2] := pointer(cmd);
+    a[3] := nil;
+  end;
+  wdir := RawUtf8(wrkdir);
+  if fppipe(fds) <> 0 then
     exit;
-  fd := TFileRec(f).Handle;
-  pid := pcint(@TFileRec(f).userdata[2])^; // see popen() from Unix.pp
+  pid := RunFork;
+  if pid < 0 then
+  begin
+    fpclose(fds[0]);
+    fpclose(fds[1]);
+    exit; // fork failed
+  end;
+  if pid = 0 then
+  begin
+    // we are in the child process: only low-level fork/vfork-safe syscalls
+    // until execve(), checking the failures which would break redirection
+    if fpsetsid < 0 then // new session/group, so the group can be signaled
+      FpExit(127);
+    if fpdup2(fds[1], 1) < 0 then // stdout to the pipe (stderr not touched)
+      FpExit(127);
+    fpclose(fds[0]);
+    if fds[1] <> 1 then
+      fpclose(fds[1]);
+    if (wdir <> '') and
+       (FpChdir(pointer(wdir)) <> 0) then
+      FpExit(127); // paranoid
+    FpExecve(a[0], @a, envpp);
+    FpExit(127); // command not found or not executable
+  end;
+  // parent process: redirect the pipe output until EOF
+  fpclose(fds[1]);
+  fd := fds[0];
+  aborted := false;
+  reaped := false;
+  wr := 0;
   if Assigned(onoutput) then
     onoutput('', pid);
   wait := 200;
@@ -5454,37 +5647,36 @@ begin
        (GetTickCount64 > endtix) then
     begin
       // abort process execution after timeout or onoutput()=true
-      if RunAbortTimeoutSecs > 0 then
+      aborted := true;
+      if (RunAbortTimeoutSecs > 0) and
+         (ramSigTerm in RunAbortMethods) then
       begin
         // try gracefull death
-        if (ramSigTerm in RunAbortMethods) and
-           (fpkill(pid, SIGTERM) = 0) then
-        begin
-          endtix := GetTickCount64 + RunAbortTimeoutSecs * 1000;
-          repeat
-            wr := FpWaitPid(pid, @res, WNOHANG);    // 0 = no state change
-            RedirectOutput({killing=}true, result); // continue redirection
-            if (wr <> 0) or
-               (GetTickCount64 > endtix) then
-              break;
-            SleepHiRes(5);
-          until false;
-          if wr = pid then // <0 for error
-            break; // gracefully ended
-        end;
+        KillGroup(SIGTERM);
+        endtix := GetTickCount64 + RunAbortTimeoutSecs * 1000;
+        repeat
+          wr := FpWaitPid(pid, @res, WNOHANG);    // 0 = no state change
+          RedirectOutput({killing=}true, result); // continue redirection
+          if (wr <> 0) or
+             (GetTickCount64 > endtix) then
+            break;
+          SleepHiRes(5);
+        until false;
+        reaped := (wr = pid); // gracefully ended and reaped
       end;
-      // force process termination alla Roberspierre
-      fpkill(pid, SIGKILL);
-      pid := 0;
+      // force process group termination alla Robespierre
+      KillGroup(SIGKILL);
       break;
     end;
   until false;
-  res := pclose(f);
-  if exitcode <> nil then
-    if pid = 0 then
-      exitcode^ := -1
-    else
+  fpclose(fd);
+  if not reaped then
+  begin
+    res := WaitProcess(pid); // reap the zombie (immediate after SIGKILL)
+    if (exitcode <> nil) and
+       not aborted then
       exitcode^ := res;
+  end;
 end;
 {$else}
 function RunRedirect(const cmd: TRunArg; exitcode: PInteger;
@@ -5853,8 +6045,10 @@ begin
               GetSystemProperty('ro.product.name'), ' ',
               GetSystemProperty('ro.product.device')]), txt);
   {$endif OSLINUX}
+  {$ifndef CPUINTEL} // Hardware: field appears e.g. on ARM but not on Intel/AMD
   if _CpuSockets = 0 then
-    ReadCpuInfo; // populate _BiosInfoHardwareFromCpuInfo
+    ReadCpuInfo;     // populate _BiosInfoHardwareFromCpuInfo
+  {$endif CPUINTEL}
   if _BiosInfoHardwareFromCpuInfo <> '' then // e.g. 'Hardware : BCM2709' on RPi3
     if txt = '' then
       txt := _BiosInfoHardwareFromCpuInfo
@@ -5949,7 +6143,9 @@ var
   {$ifndef NODIRECTTHREADMANAGER}
   tm: TThreadManager;
   {$endif NODIRECTTHREADMANAGER}
-  {$ifndef OSDARWIN}
+  {$ifdef OSDARWIN}
+  kern: PtrUInt;
+  {$else}
   tpfail: integer;
   tp: array[0 .. 1{$ifdef OSLINUX} + 2{$endif}] of TTimeSpec;
   {$endif OSDARWIN}
@@ -6083,11 +6279,9 @@ begin
   // OSLINUXANDROID branch
   SystemInfo.release := release;
   OS_DISTRI := LinuxDistribution(OS_KIND);
-  auxv := pointer(envp); // read auxiliary vectors
+  auxv := pointer(_GetSystemEnv); // auxiliary vectors are just after regular env
   if auxv <> nil then
   begin
-    while auxv[0] <> 0 do
-      auxv := @auxv[1];
     auxv := @auxv[1]; // set by kernel's ELF binary loader after all env PPAnsiChar
     P := pointer(auxv);
     while auxv[0] <> 0 do
@@ -6172,8 +6366,9 @@ begin
   {$ifdef FPC} // futex() has no libc api -> no Delphi for POSIX compatibility
   if KernelRevision >= $020616 then // FUTEX_PRIVATE_FLAG since Linux 2.6.22
   begin
-    OsWaitOnValue := @_OsWaitOnValue;
-    OsWakeOnValue := @_OsWakeOnValue;
+    OsWaitOnValue    := @_OsWaitOnValue;
+    OsWakeOnValue    := @_OsWakeOnValue;
+    OsWakeAllOnValue := @_OsWakeAllOnValue;
   end;
   {$endif FPC}
   {$ifdef OSLINUXHUGEPAGES}
@@ -6200,15 +6395,13 @@ begin
   {$ifdef OSDARWIN}
   temp1 := 'macOS ';
   modname := fpsysctlbynamestr('kern.osproductversion', temp2); // '15.7.3'
-  if OSVersion32.utsrelease[2] in [low(MACOS_NUM) .. high(MACOS_NUM)] then
-  begin
-    if modname = nil then // '15' number from kernel revision
-      AppendShort(MACOS_NUM[OSVersion32.utsrelease[2]], temp1)
-    else                  // '15.7.3'
-      AppendShortBuffer(pointer(modname), StrLen(modname), high(temp1), @temp1);
-    AppendShortCharSafe(' ', temp1);
-    AppendShort(MACOS_NAME[OSVersion32.utsrelease[2]], temp1);
-  end;
+  kern := MacKernel(OSVersion32);
+  if modname = nil then // '15' main number from kernel revision
+    AppendShort(MACOS_NUM[kern], temp1)
+  else                  // '15.7.3'
+    AppendShortBuffer(pointer(modname), StrLen(modname), high(temp1), @temp1);
+  AppendShortCharSafe(' ', temp1);
+  AppendShort(MACOS_NAME[kern], temp1);
   ShortStringToAnsi7String(temp1, OSVersionShort); // 'macOS 15.7.3 Sequoia'
   OSVersionText := Join([OSVersionShort, ' (', OSVersionText, ')']);
   mach_timebase_info(mach_timeinfo);

@@ -91,7 +91,8 @@ fi
 if [[ $TARGET == win* ]]; then
   # specific windows extension for executables
   dest_fn="$dest_fn.exe"
-  CONDITIONALS="$CONDITIONALS -CX -XX"
+  # no LCL widgetset in a command line build, so no HAS_UI_PDF/test.ui.pdf
+  CONDITIONALS="$CONDITIONALS -CX -XX -dNO_UI"
 fi
 if [ $TARGET = "linux" ]; then
   CONDITIONALS="$CONDITIONALS -CX -XX"

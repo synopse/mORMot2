@@ -43,7 +43,7 @@ HTTP Client Classes
 - `THttpClientSocket` Implementing HTTP client over plain sockets
 - Additional Client Protocols Support (e.g. 'file://')
 - `THttpRequest` Abstract HTTP client class
-- `TWinHttp` `TWinINet` `TCurlHTTP` classes
+- `TWinHttp` `TWinINet` `TCurlHTTP` `TDelphiNetHttp` classes
 - `TSimpleHttpClient` Wrapper Class
 - Cached HTTP Connection to a Remote Server
 - Send Email using the `SMTP` Protocol

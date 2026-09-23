@@ -186,11 +186,17 @@ type
     a: TOrmPeopleObjArray;
     fAdd, fDel: RawUtf8;
     fQuickSelectValues: TIntegerDynArray;
-    rnd: TLecuyer;
+    rnd: PLecuyer;
+    HasValidUtf8Avx2: boolean;
     procedure Setup; override;
     function QuickSelectGT(IndexA, IndexB: PtrInt): boolean;
     procedure intadd(const Sender; Value: integer);
     procedure intdel(const Sender; Value: integer);
+    /// validate our optimized MoveFast/FillCharFast functions
+    procedure CustomRTLSlow(Sender: TObject);
+    /// low level fast Integer or Floating-Point to/from string conversion
+    // - especially the RawUtf8 or PUtf8Char relative versions
+    procedure NumericalConversionsSlow(Sender: TObject);
     // methods below are run in the background from _TDynArray startup
     /// test the TDynArrayHashed object and methods (dictionary features)
     // - this test will create an array of 200,000 items to test speed
@@ -205,6 +211,10 @@ type
     procedure TRawUtf8ListSlow(Context: TObject);
     /// test the TPipeStream class
     procedure TStreamSlow(Context: TObject);
+    /// client side geniune 64 bit identifiers generation
+    procedure TSynUniqueIdentifierSlow(Sender: TObject);
+    // test TSynQueue with all kind of values in a background thread
+    procedure TSynQueueSlow(Sender: TObject);
   published
     /// test RecordCopy(), TRttiMap and TRttiFilter
     procedure _Records;
@@ -224,8 +234,6 @@ type
     {$endif FPC_X64MM}
     /// test T*ObjArray types and the ObjArray*() wrappers
     procedure _TObjArray;
-    /// validate our optimized MoveFast/FillCharFast functions
-    procedure CustomRTL;
     /// test StrIComp() and AnsiIComp() functions
     procedure FastStringCompare;
     /// test IdemPropName() and IdemPropNameU() functions
@@ -243,9 +251,6 @@ type
     /// the Soundex search feature (i.e. TSynSoundex and all related
     // functions)
     procedure Soundex;
-    /// low level fast Integer or Floating-Point to/from string conversion
-    // - especially the RawUtf8 or PUtf8Char relative versions
-    procedure NumericalConversions;
     /// test low-level integer/Int64 functions
     procedure Integers;
     /// test crc32c in both software and hardware (SSE4.2) implementations
@@ -296,8 +301,6 @@ type
     procedure _TSynValidate;
     /// low-level TSynLogFile class and OS detection
     procedure Debugging;
-    /// client side geniune 64 bit identifiers generation
-    procedure _TSynUniqueIdentifier;
     {$ifdef OSWINDOWS}
     /// some Windows-specific tests
     procedure WindowsSpecificApi;
@@ -354,7 +357,7 @@ end;
 
 procedure TTestCoreBase.Setup;
 begin
-  RandomLecuyer(rnd);
+  rnd := ThreadRandom; // reference to the main thread generator
 end;
 
 {$ifdef FPC_X64MM}
@@ -1135,6 +1138,7 @@ var
   v64: Int64;
   sl: TStrings;
   timer: TPrecisionTimer;
+  cv: TCachedValues;
 
   procedure TestSort;
   begin
@@ -1180,6 +1184,7 @@ begin
   SetLength(v, MAX + 1); // allocate once the strings
   for i := 0 to MAX do
     UInt32ToUtf8(i, v[i]);
+  // validate TRawUtf8List
   L := TRawUtf8List.CreateEx([fObjectsOwned]);
   try // no hash table involved
     timer.Start;
@@ -1272,6 +1277,7 @@ begin
   finally
     L.Free;
   end;
+  // validate TBinDictionary
   B := TBinDictionary.Create;
   try // with hash table
     timer.Start;
@@ -1314,9 +1320,25 @@ begin
     len := 1;
     Check(PInteger(B.Find(nil, 0, @len))^ = 0);
     Check(len = 0);
-finally
+  finally
     B.Free;
   end;
+  // validate TCachedValues
+  cv.Safe.Init;
+  cv.CustomCompare := nil;
+  cv.Reset;
+  for i := 0 to MAX do
+    check(not cv.Exists(v[i]));
+  for i := 0 to MAX do
+    check(cv.Add(v[i]));
+  for i := 0 to MAX do
+    check(not cv.Add(v[i]));
+  for i := 0 to MAX do
+    check(cv.Exists(v[i]));
+  check(not cv.Exists('toto'));
+  cv.Reset;
+  for i := 0 to MAX do
+    check(not cv.Exists(v[i]));
 end;
 
 type
@@ -1873,13 +1895,21 @@ const
   end;
 
 begin
-  // run the slowest tests in a background thread
+  {$ifdef ASMX64AVX1}
+  HasValidUtf8Avx2 := (cpuHaswell in X64CpuFeatures);
+  {$else}
+  HasValidUtf8Avx2 := false; // IsValidUtf8Buffer = @IsValidUtf8Pas
+  {$endif ASMX64AVX1}
+  // run the slowest tests in background thread(s)
+  Run(NumericalConversionsSlow, self, 'NumericalConversions', true, false);
   Run(TDynArrayHashedSlow, self, 'TDynArrayHashed', true, false);
   Run(TSynDictionarySlow, self, 'TSynDictionary', true, false);
   Run(Utf8Slow, self, 'UTF-8', true, false);
   Run(TimeZonesSlow, self, 'TimeZones', true, false);
   Run(TRawUtf8ListSlow, self, 'TRawUtf8List', true, false);
   Run(TStreamSlow, self, 'TPipeStream', true, false);
+  Run(TSynUniqueIdentifierSlow, self, 'TSynUniqueIdentifier', true, false);
+  Run(CustomRTLSlow, self, 'CustomRTL', true, false);
   { TODO : implement TypeInfoToHash() if really needed }
   {
   h := TypeInfoToHash(TypeInfo(TAmount));
@@ -2124,7 +2154,7 @@ begin
   U := '3000';
   Check(AUP.IndexOf(U) < 0);
   Test := AUP.SaveTo;
-  CheckEqual(Hash32(@Test[2], length(Test) - 1), $1EC51463, 'hash32e');
+  CheckHash(@Test[2], length(Test) - 1, $1EC51463, 'hash32e');
   // trimed Test[1]=ElemSize
   for i := 0 to 1000 do
   begin
@@ -2656,7 +2686,7 @@ begin
   result := true;
 end;
 
-procedure TTestCoreBase.CustomRTL;
+procedure TTestCoreBase.CustomRTLSlow(Sender: TObject);
 // note: mormot.core.os.posix.inc redirects FillCharFast/MoveFast to the libc
 var
   buf: RawByteString;
@@ -4085,8 +4115,9 @@ var
   timer: TPrecisionTimer;
   gen: TLecuyer;
 begin
+  RandomLecuyer(gen); // local instance to avoid any thread influence
   for i := 0 to high(c) do
-    c[i] := Random32;
+    c[i] := gen.Next;
   QuickSortInteger(@c, 0, high(c));
   n := 0;
   for i := 0 to high(c) - 1 do
@@ -4094,17 +4125,17 @@ begin
       inc(n);
   Check(n < 2, 'unique Random32'); // n=1 have been seen once
   timer.Start;
-  Check(Random32(0) = 0);
-  Check(Random32(1) = 0);
+  Check(gen.Next(0) = 0);
+  Check(gen.Next(1) = 0);
   for i := 1 to 100000 do
-    Check(Random32(i) < cardinal(i));
+    Check(gen.Next(i) < cardinal(i));
   for i := 0 to 100000 do
-    Check(Random32(maxInt - i) < cardinal(maxInt - i));
+    Check(gen.Next(maxInt - i) < cardinal(maxInt - i));
   qp := 0;
   n := 0;
   for i := 1 to 20000 do
   begin
-    q := Random64;
+    q := gen.NextQWord;
     Check((q = 0) or (q <> qp));
     if q and $ffffffff00000000 <> 0 then
       inc(n);
@@ -4115,14 +4146,14 @@ begin
   NotifyTestSpeed('Random32', n, n * 4, @timer);
   timer.Start;
   for i := 1 to 100 do
-    RandomBytes(@c, SizeOf(c));
+    gen.Fill(@c, SizeOf(c));
   NotifyTestSpeed('RandomBytes', 0, SizeOf(c) * 100, @timer);
   for i := 0 to high(REF_LECUYER_GENERATOR) do
   begin
     gen.SeedGenerator(i);
     FillCharFast(c, SizeOf(c), 0); // gen.Fill() will XOR the buffer
     gen.Fill(@c, SizeOf(c));
-    CheckEqual(Hash32(@c, SizeOf(c)), REF_LECUYER_GENERATOR[i], 'lecgen');
+    CheckHash(@c, SizeOf(c), REF_LECUYER_GENERATOR[i], 'lecgen');
     CheckEqual(gen.Next, REF_LECUYER_GENERATOR_TRAIL[i], 'lecgentrail');
   end;
 end;
@@ -4968,22 +4999,53 @@ begin
   end;
 end;
 
-procedure TTestCoreBase.NumericalConversions;
+function GetExtendedHook(P: PUtf8Char; out err: integer): TSynExtended;
+begin
+  result := GetExtended(P, err); // resolve the proper GetExtended() overload
+end;
 
-  procedure CheckDoubleToShort(v: double; const expected: RawUtf8);
+procedure TTestCoreBase.NumericalConversionsSlow(Sender: TObject);
+var
+  HasFP80: boolean;
+
+  procedure CheckGetExtendedBits(const text: RawUtf8; expected: QWord);
+  var
+    d: double;
+    err: integer;
+  begin
+    d := GetExtended(pointer(text), err);
+    CheckEqual(err, 0, text);
+    CheckUtf8(PQWord(@d)^ = expected, text);
+  end;
+
+  procedure CheckDoubleToShort(v: double; const expected: ShortString);
   var
     a: ShortString;
     d: double;
     err: integer;
   begin
-    ExtendedToShort(@a, v, DOUBLE_PRECISION);
-    CheckEqual(ShortStringToUtf8(a), expected, 'ExtendedToShort');
+    ExtendedToShort(@a, v, DOUBLE_PRECISION); // = 15
+    if expected = '1E-19' then // may return '9.9999999999999998E-20' as double
+      Check(a <> '0', '1E-19') // just validate that it is not trimmed to '0'
+    else
+      CheckEqualShort(a, expected, 'ExtendedToShort');
     DoubleToShort(@a, v);
-    CheckEqual(ShortStringToUtf8(a), expected, 'DoubleToShort');
+    if expected = '1E-19' then
+      Check(a <> '0', '1E-19')
+    else
+      CheckEqualShort(a, expected, 'DoubleToShort');
     a[ord(a[0]) + 1] := #0;
     d := GetExtended(@a[1], err);
     CheckEqual(err, 0);
     CheckSame(v, d);
+  end;
+
+  procedure CheckDoubleToShortBits(bits: QWord; const expected: ShortString);
+  var
+    d: double;
+  begin
+    PUInt64(@d)^ := bits;
+    CheckDoubleToShort(d, expected);
   end;
 
   procedure CheckDoubleToShortSame(v: double);
@@ -4992,6 +5054,8 @@ procedure TTestCoreBase.NumericalConversions;
     u: RawUtf8;
     err: integer;
     d: double;
+    vv: variant;
+    p: PUtf8Char;
   begin
     s := DoubleToString(v);
     val(s, d, err);
@@ -5001,6 +5065,233 @@ procedure TTestCoreBase.NumericalConversions;
     d := GetExtended(pointer(u), err);
     CheckEqual(err, 0);
     CheckSame(d, v);
+    p := GetNumericVariantFromJson(pointer(u), TVarData(vv), true);
+    CheckUtf8(p = PUtf8Char(pointer(u)) + length(u), u);
+    CheckSame(double(vv), v);
+  end;
+
+  {$ifdef CPU64}
+  procedure CheckIntegerValue(const text: RawUtf8; expected: Int64);
+  var
+    err: integer;
+    value: Int64;
+  begin
+    value := GetInt64(pointer(text), err);
+    CheckEqual(err, 0, text);
+    CheckEqual(value, expected, text);
+  end;
+  {$endif CPU64}
+
+  procedure CheckJsonValue(const text: RawUtf8; kind: integer; expected: double;
+    expectedText: RawUtf8 = '');
+  var
+    v: variant;
+    p: PUtf8Char;
+  begin
+    p := GetNumericVariantFromJson(pointer(text), TVarData(v), true);
+    CheckUtf8(p = PUtf8Char(pointer(text)) + length(text), text);
+    CheckEqual(TVarData(v).VType, kind, text);
+    CheckSame(double(v), expected, 0, 'CheckJsonValue');
+    if expectedText = '' then
+      expectedText := Text
+    else if SizeOf(TSynExtended) <> SizeOf(double) then
+      exit; // extended=FP80 on Delphi Win32
+    CheckEqual(DoubleToStr(double(v)), expectedText);
+  end;
+
+  procedure CheckJsonExact(const text: RawUtf8; kind: integer; expected: Int64);
+  var
+    v: variant;
+    p: PUtf8Char;
+  begin
+    TVarData(v).VType := varEmpty;
+    p := GetNumericVariantFromJson(pointer(text), TVarData(v), false);
+    CheckUtf8(p = PUtf8Char(pointer(text)) + length(text), text);
+    CheckEqual(TVarData(v).VType, kind, text);
+    if kind = varInteger then
+      CheckEqual(TVarData(v).VInteger, expected, text)
+    else
+      CheckEqual(TVarData(v).VInt64, expected, text);
+  end;
+
+  procedure CheckJsonDoubleBits(const text: RawUtf8; expected: QWord);
+  var
+    v: variant;
+  begin
+    CheckUtf8(GetNumericVariantFromJson(pointer(text), TVarData(v), true) <> nil, text);
+    CheckEqual(TVarData(v).VType, varDouble, text);
+    CheckUtf8(PQWord(@TVarData(v).VDouble)^ = expected,
+      'CheckJsonDoubleBits %=%', [PQWord(@TVarData(v).VDouble)^, expected]);
+  end;
+
+  procedure BenchmarkNumbers;
+  var
+    i, l: PtrUInt;
+    c, hash: cardinal;
+    err: integer;
+    p, max: PUtf8Char;
+    lens: TBytes;
+    ref: TInt64DynArray;
+    gen: TLecuyer;
+    d, d0: double;
+    data: RawUtf8;
+    tmp: TShort23;
+
+    procedure DoTest(GetExt: TGetExtended; GetNum: TGetNumericVariantFromJson);
+    var
+      i: PtrUInt;
+      p, p2: PUtf8Char;
+      d: double;
+      d64: Int64;
+      setref: boolean;
+      err: integer;
+      vd: TVarData;
+      Timer: TPrecisionTimer;
+    begin
+      check(Assigned(GetExt));
+      check(Assigned(GetNum));
+      setref := ref = nil;
+      if setref then
+        SetLength(ref, length(lens));
+      d64 := 0;
+      Timer.Start;
+      p := pointer(data);
+      for i := 0 to high(lens) do
+      begin
+        d := GetExt(p, err);
+        CheckEqual(err, 0, 'p');
+        Check((lens[i] <= 3) or (PInt64(@d)^ <> d64), 'd64');
+        d64 := PInt64(@d)^; // never twice the same number (if big enough)
+        if setref then
+          ref[i] := d64
+        else
+          Check(ref[i] = d64, 'ref');
+        inc(p, lens[i] + 1);
+      end;
+      NotifyTestSpeed('GetExtended%', [tmp], length(lens), length(data), @Timer);
+      // GetExtended() on Core i5 13500: SSSE3 is around 30-35% faster
+      Timer.Start;
+      p := pointer(data);
+      for i := 0 to high(lens) do
+      begin
+        PCardinal(@vd.VType)^ := varEmpty;
+        p2 := GetNum(p, vd, {double=}true);
+        Check(p2 - p = lens[i]);
+        Check(vd.VType >= varInteger);
+        if not HasFP80 then
+          if vd.VType = varDouble then
+            Check(ref[i] = vd.VInt64, 'refvd1')
+          else if Check(VariantToDouble(variant(vd), PDouble(@d64)^)) then
+            Check(ref[i] = d64, 'refvd2')
+        else if Check(VariantToDouble(variant(vd), d)) then
+          CheckSame(d, PDouble(@ref[i])^, DOUBLE_SAME, 'refvd3');
+        p := p2 + 1;
+      end;
+      NotifyTestSpeed('GetNumericVariant%', [tmp], length(lens), length(data), @Timer);
+      // GetNumericVariantFromJson() on Core i5 13500:
+      // - FPC: about 2.7 ms Pascal versus about 2.0 ms SSSE3 with checks
+      // - Delphi: about 2.9 ms Pascal versus about 2.0 ms SSSE3
+      // after removing Check() overhead: 2.46 ms Pascal versus 1.85 ms SSSE3
+    end;
+
+  begin
+    // pre-compute all number values as #0-separated huge string
+    SetLength(lens, 200000);
+    gen.SeedGenerator(200000); // up to 16GB of deterministic distribution
+    SetLength(data, 1758350);  // generate 1.7MB of contiguous numbers
+    p := pointer(data);
+    max := p + length(data);
+    for i := 0 to high(lens) do
+    begin
+      c := gen.Next;
+      tmp[0] := #0;
+      if c and $70000 > $50000 then
+        PWord(@tmp)^ := 1 + ord('-') shl 8 // a few negative values
+      else
+        tmp[0] := #0;
+      case i and 15 of // fixed order/layout of field types (like real data)
+        0, 8, 12, 15:
+          AppendShortCardinal(c shr (32 - (c and 15)), tmp);
+        1, 9, 13:
+          AppendShortQWord(QWord(c) * i, tmp);
+        2, 10, 14:
+          AppendShortCardinal(c shr 24, tmp);
+        3:
+          tmp[0] := AnsiChar(Curr64ToPChar(c, @tmp[1]));
+        4, 11:
+          AppendShortVar(tmp, [c and 15, '.', c shr 20]);
+        5:
+          AppendShortVar(tmp, [c shr 20, 'E', c and 127]);
+        6:
+          AppendShortVar(tmp, [c shr 20, '.', (c shr 10) and 31, 'e', c and 63]);
+        7:
+          AppendShortVar(tmp, ['0.000000000000000',c shr 28 + 1]);
+      end;
+      //ConsoleWrite(tmp);
+      l := ord(tmp[0]);
+      if not Check(p + l < max, 'gen.Next overflow') then
+        exit;
+      MoveFast(tmp[1], p^, l);
+      lens[i] := l;
+      p[l] := #0; // all with a trailing #0
+      inc(p, l + 1);
+    end;
+    CheckEqual(p - pointer(data), length(data));
+    hash := Hash32(data);
+    CheckHash(data, $D2D00549);
+    // 'x.y' and 'x.y0' are the same number, so should return the same double
+    p := pointer(data);
+    for i := 0 to high(lens) do
+    begin
+      if i and 15 = 3 then // Curr64ToPChar e.g. 225140.5360 49537.6115
+      begin
+        d := GetExtended(p, err); // makes also a non sequential L1 cache access
+        CheckEqual(err, 0, 'd');
+        Check(PInt64(@d)^ <> 0);
+        l := lens[i];
+        tmp[l + 1] := '0';
+        tmp[l + 2] := #0;
+        MoveFast(p^, tmp[1], l);
+        d0 := GetExtended(@tmp[1], err); // parse '0' appended value
+        CheckEqual(err, 0, 'd0');
+        CheckEqual(PInt64(@d0)^, PInt64(@d)^, 'frac0'); // same binary64
+      end;
+      inc(p, lens[i] + 1);
+    end;
+    // benchmark GetExtended() and GetNumericVariantFromJson()
+    for i := 1 to 1 do
+    begin
+      {$ifdef ASMX64NOTPIC} { SIMD/SSE3 x64 asm in mormot.core.base.asmx64.inc }
+      tmp := 'Pas';
+      DoTest(@GetExtendedPas, @GetNumericVariantPas);
+      tmp := 'Ssse3';
+      if cfSSE3 in CpuFeatures then
+        DoTest(@GetExtendedSsse3, @GetNumericVariantSsse3);
+      {$else}
+      tmp[0] := #0;
+      {$ifdef WIN32DELPHI} // x87 asm of GetExtended
+      DoTest(@mormot.core.base.GetExtended, @GetNumericVariantFromJson);
+      {$else}
+      DoTest(@GetExtendedHook, @GetNumericVariantFromJson); // purepascal
+      {$endif WIN32DELPHI}
+      {$endif ASMX64NOTPIC}
+    end;
+    CheckEqual(Hash32(data), hash, 'untouched 1');
+    CheckHash(data, $D2D00549, 'untouched 2');
+  end;
+
+  procedure CheckInvalidNumber(const text: RawUtf8; extendedToo: boolean = true);
+  var
+    v: variant;
+    d: double;
+    err: integer;
+  begin
+    CheckUtf8(GetNumericVariantFromJson(pointer(text), TVarData(v), true) = nil, text);
+    if HasFP80 or not extendedToo then
+      exit;
+    d := GetExtended(pointer(text), err);
+    CheckNotEqual(err, 0, text);
+    CheckUtf8(not IsInfinite(d) and not IsNan(d), text);
   end;
 
 var
@@ -5024,6 +5315,7 @@ var
   crc, u32, n: cardinal;
   Timer: TPrecisionTimer;
 begin
+  HasFP80 := SizeOf(TSynExtended) <> SizeOf(double); // FP80 has full precision
   a := '';
   AppendShortCardinal(0, a);
   check(a = '0');
@@ -5033,7 +5325,7 @@ begin
   for i := 11 to 120 do
     AppendShortCardinal(i, a);
   CheckEqual(length(a), 253);
-  CheckEqual(Hash32(@a[1], ord(a[0])), $1CDCEE09, 'AppendShortCardinal');
+  CheckHash(@a[1], ord(a[0]), $1CDCEE09, 'AppendShortCardinal');
   a := '';
   AppendShortByte(0, @a);
   check(a = '0');
@@ -5043,7 +5335,7 @@ begin
   for i := 11 to 120 do
     AppendShortByte(i, @a);
   CheckEqual(length(a), 253);
-  CheckEqual(Hash32(@a[1], ord(a[0])), $1CDCEE09, 'AppendShortByte');
+  CheckHash(@a[1], ord(a[0]), $1CDCEE09, 'AppendShortByte');
   CheckEqualShort(TwoDigits(0), '0');
   CheckEqualShort(TwoDigits(1), '1');
   CheckEqualShort(TwoDigits(10), '10');
@@ -5269,22 +5561,22 @@ begin
   Check(KB(4294963200) = '4 GB');
   Check(Int64ToUtf8(-maxInt) = '-2147483647');
   Check(Int64ToUtf8(-1) = '-1');
-  Check(Int64ToUtf8(-9223372036854775807) = '-9223372036854775807');
+  Check(Int64ToUtf8(-MAX_INT64) = '-9223372036854775807');
   Int64ToUtf8(-maxInt, s);
   Check(s = '-2147483647');
   Int64ToUtf8(-1, s);
   Check(s = '-1');
   Int64ToUtf8(100, s);
   Check(s = '100');
-  Int64ToUtf8(-9223372036854775807, s);
+  Int64ToUtf8(-MAX_INT64, s);
   Check(s = '-9223372036854775807');
   {$ifdef HASINLINE} // bug with MinInt64 with older versions of Delphi
-  Check(Int64ToUtf8(-9223372036854775808) = '-9223372036854775808');
+  CheckEqual(Int64ToUtf8(-9223372036854775808), '-9223372036854775808');
   Int64ToUtf8(-9223372036854775808, s);
-  Check(s = '-9223372036854775808');
+  CheckEqual(s, '-9223372036854775808');
   {$endif HASINLINE}
-  Check(Int64ToUtf8(2119852951849248647) = '2119852951849248647');
-  Check(FormatUtf8(' % ', [2119852951849248647]) = ' 2119852951849248647 ');
+  CheckEqual(Int64ToUtf8(2119852951849248647), '2119852951849248647');
+  CheckEqual(FormatUtf8(' % ', [2119852951849248647]), ' 2119852951849248647 ');
   s := '1234';
   d := GetExtended(pointer(s));
   CheckSame(d, 1234);
@@ -5307,6 +5599,9 @@ begin
   d := GetExtended(pointer(s), err);
   Check(err = 0);
   CheckSame(d, 1234);
+  s := '0.0';
+  d := GetExtended(pointer(s));
+  CheckSame(d, 0);
   u := DoubleToString(40640.5028819444);
   Check(u = '40640.5028819444', u);
   s := '40640.5028a819444';
@@ -5319,10 +5614,13 @@ begin
   Check(u = '40640.5028819444', u);
   e := 40640.5028819444;
   CheckSame(d, e, 1e-11);
-  s := '40640e400';
-  d := GetExtended(pointer(s), err);
-  CheckSame(d, 40640.0, DOUBLE_SAME, 'e400=e0');
-  Check(err > 0, 'e400');
+  if not HasFP80 then // FP80 would convert it
+  begin
+    s := '40640e400';
+    d := GetExtended(pointer(s), err);
+    CheckSame(d, 40640.0, DOUBLE_SAME, 'e400=e0');
+    Check(err > 0, 'e400');
+  end;
   s := 'Nan';
   d := GetExtended(pointer(s), err);
   CheckEqual(err, 0, s);
@@ -5354,11 +5652,26 @@ begin
   Check(IsAnsiCompatible('teste'));
   CheckDoubleToShort(0, '0');
   CheckDoubleToShort(1, '1');
+  CheckDoubleToShort(10, '10');
+  CheckDoubleToShort(101, '101');
   CheckDoubleToShort(-1, '-1');
   CheckDoubleToShort(0.1, '0.1');
   CheckDoubleToShort(0.01, '0.01');
   CheckDoubleToShort(0.001, '0.001');
   CheckDoubleToShort(0.0001, '0.0001');
+  CheckDoubleToShort(0.0000000000000000001, '1E-19'); // double <> extended
+  CheckDoubleToShort(0.0000000000000000002, '2E-19'); // would exactly convert
+  CheckDoubleToShort(-0.0000000000000000002, '-2E-19');
+  CheckDoubleToShort(0.00000000000000000015, '1.5E-19');
+  CheckDoubleToShort(-0.00000000000000000015, '-1.5E-19');
+  CheckDoubleToShort(0.0000000000000002, '2E-16');
+  CheckDoubleToShort(-0.0000000000000002, '-2E-16');
+  CheckDoubleToShort(0.000000000002, '2E-12');
+  CheckDoubleToShort(-0.000000000002, '-2E-12');
+  CheckDoubleToShort(2e19, '2E19');
+  CheckDoubleToShort(-2e19, '-2E19');
+  CheckDoubleToShort(1.5e19, '1.5E19');
+  CheckDoubleToShort(-1.5e19, '-1.5E19');
   CheckDoubleToShort(-0.1, '-0.1');
   CheckDoubleToShort(-0.01, '-0.01');
   CheckDoubleToShort(-0.001, '-0.001');
@@ -5434,6 +5747,43 @@ begin
   CheckDoubleToShortSame(12.345678901234);
   CheckDoubleToShortSame(123.45678901234);
   CheckDoubleToShortSame(1234.5678901234);
+  if not HasFP80 then // FP80 has more precision
+  begin
+    CheckDoubleToShort(0.00123456789012345, '0.00123456789012');
+    CheckDoubleToShort(-0.00123456789012345, '-0.00123456789012');
+    CheckDoubleToShort(0.000123456789012345, '0.00012345678901');
+    CheckDoubleToShort(-0.000123456789012345, '-0.00012345678901');
+    s := '0e400';
+    d := GetExtended(pointer(s), err);
+    CheckEqual(err, 0);
+    Check(d = 0);
+    s := '0e-400';
+    d := GetExtended(pointer(s), err);
+    CheckEqual(err, 0);
+    Check(d = 0);
+    s := '-0e400';
+    d := GetExtended(pointer(s), err);
+    CheckEqual(err, 0);
+    Check(d = 0); // '-0' -> 0 with ECMAScript's number-to-string rules
+    CheckGetExtendedBits('4.9406564584124654E-324', $0000000000000001);
+    CheckGetExtendedBits('2.2250738585072009E-308', $000FFFFFFFFFFFFF);
+    CheckGetExtendedBits('2.2250738585072014E-308', $0010000000000000);
+    CheckGetExtendedBits('1.7976931348623157E308', $7FEFFFFFFFFFFFFF);
+    CheckGetExtendedBits('1E308', $7FE1CCF385EBC8A0);
+    CheckGetExtendedBits('0.5000000000000000000', $3FE0000000000000);
+    CheckGetExtendedBits('0.50000000000000000000', $3FE0000000000000);
+    CheckGetExtendedBits('0.50000000000000000008', $3FE0000000000000);
+    CheckGetExtendedBits('0.9223372036854775807', $3FED83C94FB6D2AC);
+    CheckGetExtendedBits('0.123456789012345678', $3FBF9ADD3746F660);
+    CheckGetExtendedBits('0.9223372036854775808', $3FED83C94FB6D2AD);
+    CheckGetExtendedBits('0.9223372036854775809', $3FED83C94FB6D2AD);
+    CheckDoubleToShortBits($4D6E62C4E38FF876, '1.0000000000000005E65');
+    CheckDoubleToShortBits(QWord($CD6E62C4E38FF876), '-1.0000000000000005E65');
+    CheckDoubleToShortBits($0000000000000001, '4.9406564584124654E-324');
+    CheckDoubleToShortBits($000FFFFFFFFFFFFF, '2.2250738585072009E-308');
+    CheckDoubleToShortBits($0010000000000000, '2.2250738585072014E-308');
+    CheckDoubleToShortBits($7FEFFFFFFFFFFFFF, '1.7976931348623157E308');
+  end;
   CheckEqual(TextToVariantNumberType('1'), varInt64);
   CheckEqual(TextToVariantNumberType('10'), varInt64);
   CheckEqual(TextToVariantNumberType('01'), varString);
@@ -5483,6 +5833,198 @@ begin
   CheckDoubleToShortSame(184467440737095514);
   CheckDoubleToShortSame(1844674407370955148);
   {$endif FPC}
+  // signed numeric boundaries and JSON grammar
+  {$ifdef CPU64}
+  CheckIntegerValue('9223372036854775807', High(Int64));
+  CheckIntegerValue('-9223372036854775808', Low(Int64));
+  CheckIntegerValue('  -  000000000000000000000000000000000000000000123', -123);
+  CheckIntegerValue('+0000', 0);
+  for i := 0 to 3 do
+  begin
+    s := GetCsvItem('9223372036854775808,-9223372036854775809,' +
+      '18446744073709551616,99999999999999999999', i);
+    GetInt64(pointer(s), err);
+    CheckNotEqual(err, 0, s);
+  end;
+  {$endif CPU64}
+  CheckJsonExact('0', varInteger, 0);
+  CheckJsonExact('0.0', varInteger, 0);
+  CheckJsonExact('0.000000000', varInteger, 0);
+  CheckJsonExact('1', varInteger, 1);
+  CheckJsonExact('-1', varInteger, -1);
+  CheckJsonExact('12', varInteger, 12);
+  CheckJsonExact('-12', varInteger, -12);
+  CheckJsonExact('123', varInteger, 123);
+  CheckJsonExact('-123', varInteger, -123);
+  CheckJsonExact('1.23', varCurrency, 12300);
+  CheckJsonExact('-1.23', varCurrency, -12300);
+  CheckJsonExact('1234', varInteger, 1234);
+  CheckJsonExact('12345', varInteger, 12345);
+  CheckJsonExact('123456', varInteger, 123456);
+  CheckJsonExact('1234567', varInteger, 1234567);
+  CheckJsonExact('12345678', varInteger, 12345678);
+  CheckJsonExact('123456789', varInteger, 123456789);
+  CheckJsonExact('1234567890', varInt64, 1234567890);
+  CheckJsonExact('9223372036854775807',   varInt64,    High(Int64));
+  CheckJsonExact('-9223372036854775808',  varInt64,    Low(Int64));
+  CheckJsonExact('922337203685477.5807',  varCurrency, High(Int64));
+  CheckJsonExact('-922337203685477.5808', varCurrency, Low(Int64));
+  CheckJsonExact('922337203685477.58',    varCurrency, High(Int64) - 7);
+  CheckJsonExact('-922337203685477.58',   varCurrency, Low(Int64) + 8);
+  CheckJsonValue('9223372036854775808',   varDouble, 9223372036854775808.0,
+    '9.2233720368547758E18');
+  CheckJsonValue('-9223372036854775809',  varDouble, -9223372036854775809.0,
+    '-9.2233720368547758E18');
+  CheckJsonValue('9999999999999999999',   varDouble, 9999999999999999999.0,
+    '1E19');
+  CheckJsonValue('-9999999999999999999',  varDouble, -9999999999999999999.0,
+    '-1E19');
+  CheckJsonValue('922337203685477.5808',  varDouble, 922337203685477.5808,
+    '9.2233720368547762E14');
+  CheckJsonValue('-922337203685477.5809', varDouble, -922337203685477.5809,
+    '-9.2233720368547762E14');
+  CheckJsonValue('9223372036854775.8',    varDouble, 9223372036854775.8,
+    '9.223372036854776E15');
+  CheckJsonValue('0.0000000000000000001', varDouble, 1E-19,
+    '9.9999999999999998E-20');
+  CheckJsonValue('1E0', varInteger, 1 ,'1');
+  CheckJsonValue('1E1', varDouble, 10, '10');
+  CheckJsonValue('1E2', varDouble, 100, '100');
+  CheckJsonValue('10E1', varDouble, 100, '100');
+  CheckJsonValue('10E2', varDouble, 1000, '1000');
+  CheckJsonValue('10E12', varDouble, 1E13,
+    {$ifdef WIN32DELPHI} '1000000000000' {$else} '1E13' {$endif} );
+  CheckJsonValue('2E101', varDouble, 2E101);
+  CheckJsonValue('-1E0', varInteger, -1 ,'-1');
+  CheckJsonValue('-1E1', varDouble, -10, '-10');
+  CheckJsonValue('-1E2', varDouble, -100, '-100');
+  CheckJsonValue('-1E12', varDouble, -1E12
+    {$ifdef WIN32DELPHI}, '-1000000000000' {$endif} );
+  CheckJsonValue('-2E101', varDouble, -2E101);
+  s := '9223372036854775808';
+  Check(GetNumericVariantFromJson(pointer(s), TVarData(vj), false) = nil);
+  s := '9223372036854775.8';
+  Check(GetNumericVariantFromJson(pointer(s), TVarData(vj), false) = nil);
+  CheckInvalidNumber('');
+  CheckInvalidNumber(' ');
+  CheckInvalidNumber('+');
+  CheckInvalidNumber('-');
+  CheckInvalidNumber('  +');
+  CheckInvalidNumber('  -');
+  {$ifndef WIN32DELPHI}
+  d := mormot.core.text.NaN;
+  CheckGetExtendedBits('-nAn', PQWord(@d)^);
+  CheckGetExtendedBits('  +NaNtail', PQWord(@d)^);
+  CheckGetExtendedBits('  -NaN', PQWord(@d)^);
+  CheckGetExtendedBits('+iNf', $7FF0000000000000);
+  CheckGetExtendedBits('  -INfinity', QWord($FFF0000000000000));
+  CheckInvalidNumber('N');
+  CheckInvalidNumber('Na');
+  CheckInvalidNumber('I');
+  CheckInvalidNumber('In');
+  CheckInvalidNumber('- NaN');
+  CheckGetExtendedBits('0.00000000000000000770000', $3C61C14719F3FABC);
+  CheckGetExtendedBits('0.000000007832000000000000', $3E40D1B00240A588);
+  CheckGetExtendedBits('228518839.2', $41AB3DD76E666666);
+  CheckGetExtendedBits('228518839.20000000', $41AB3DD76E666666);
+  CheckGetExtendedBits('-228518839.20000000', QWord($C1AB3DD76E666666));
+  {$endif WIN32DELPHI}
+  CheckJsonDoubleBits('0.00000000000000000770000', $3C61C14719F3FABC);
+  CheckJsonDoubleBits('0.000000007832000000000000', $3E40D1B00240A588);
+  CheckJsonDoubleBits('228518839.20000000', $41AB3DD76E666666);
+  CheckJsonDoubleBits('-228518839.20000000', QWord($C1AB3DD76E666666));
+  // The dot/first fractional digit can straddle the 16-byte SIMD window.
+  CheckJsonExact('100000000000000.000', varCurrency, 1000000000000000000);
+  CheckJsonExact('100000000000000.0001', varCurrency, 1000000000000000001);
+  CheckJsonExact('1234567890123456', varInt64, 1234567890123456);
+  CheckJsonDoubleBits('1.25e0004', $40C86A0000000000);
+  {$ifndef WIN32DELPHI}
+  CheckGetExtendedBits('100000000000000.000', $42D6BCC41E900000);
+  CheckGetExtendedBits('1234567890123456', $43118B54F22AEB00);
+  CheckGetExtendedBits('1.25e0004', $40C86A0000000000);
+  s := '228518839.20000000' + '","next":1';
+  d := GetExtended(pointer(s), err);
+  CheckEqual(err, 1);
+  CheckUtf8(PQWord(@d)^ = $41AB3DD76E666666, s);
+  {$endif WIN32DELPHI}
+  s := '100000000000000.0001,"next":1';
+  P := GetNumericVariantFromJson(pointer(s), TVarData(vj), false);
+  Check(P = PUtf8Char(pointer(s)) + 20);
+  CheckEqual(TVarData(vj).VType, varCurrency);
+  CheckEqual(TVarData(vj).VInt64, 1000000000000000001);
+  CheckJsonDoubleBits('-922337203685477580.8', QWord($C3A999999999999A));
+  CheckJsonDoubleBits('-92233720368547758.08', QWord($C3747AE147AE147B));
+  CheckJsonDoubleBits('-9223372036854775.808', QWord($C340624DD2F1A9FC));
+  CheckJsonDoubleBits('-9223372036854775808.0', QWord($C3E0000000000000));
+  s := '0.' + RawUtf8(StringOfChar('0', 324));
+  Check(GetNumericVariantFromJson(pointer(s), TVarData(vj), false) = PUtf8Char(pointer(s)) + length(s));
+  CheckEqual(TVarData(vj).VType, varInteger);
+  CheckEqual(TVarData(vj).VInteger, 0);
+  s := '-0e-400';
+  Check(GetNumericVariantFromJson(pointer(s), TVarData(vj), false) = PUtf8Char(pointer(s)) + length(s));
+  CheckEqual(TVarData(vj).VType, varInteger);
+  CheckEqual(TVarData(vj).VInteger, 0);
+  CheckInvalidNumber('1.2.3');
+  CheckInvalidNumber('0..1');
+  CheckInvalidNumber('toto');
+  CheckInvalidNumber('e1');
+  CheckInvalidNumber('-e1');
+  CheckInvalidNumber('.e2');
+  CheckInvalidNumber('-.e2');
+  CheckInvalidNumber('1e');
+  CheckInvalidNumber('1e+');
+  CheckInvalidNumber('.5', false); // GetExtended intentionally also accepts Pascal syntax
+  CheckInvalidNumber('1.', false);
+  CheckInvalidNumber('1.e2', false);
+  CheckInvalidNumber('01', false);
+  CheckInvalidNumber('+1', false);
+  CheckInvalidNumber('1e400');
+  CheckInvalidNumber('1e-400');
+  // decimal text should be parsed as the nearest IEEE double: digits*POW10[-n]
+  // was not, since 1E-1..1E-22 are inexact - e.g. '1.2' = 1.2000000000000002
+  CheckGetExtendedBits('1.2', $3FF3333333333333);
+  CheckGetExtendedBits('-1.2', QWord($BFF3333333333333));
+  CheckGetExtendedBits('12e-1', $3FF3333333333333);
+  CheckGetExtendedBits('0.1', $3FB999999999999A);
+  CheckGetExtendedBits('0.3', $3FD3333333333333);
+  CheckGetExtendedBits('0.7', $3FE6666666666666);
+  CheckGetExtendedBits('1.15', $3FF2666666666666);
+  CheckGetExtendedBits('39.9', $4043F33333333333);
+  CheckGetExtendedBits('100.1', $4059066666666666);
+  CheckGetExtendedBits('0.35', $3FD6666666666666);
+  CheckGetExtendedBits('4.52', $4012147AE147AE14);
+  CheckGetExtendedBits('452E-2', $4012147AE147AE14);
+  CheckGetExtendedBits('2.675', $4005666666666666);
+  CheckGetExtendedBits('0.009', $3F826E978D4FDF3B);
+  CheckGetExtendedBits('10000.05', $40C3880666666666);
+  CheckGetExtendedBits('0.0003', $3F33A92A30553261);
+  CheckGetExtendedBits('0.00003', $3EFF75104D551D69);
+  s := '0.0000000000000000001';
+  d := GetExtended(pointer(s), err);
+  CheckEqual(err, 0);
+  CheckSame(d, 1E-19, 0);
+  s := '9223372036854775808';
+  d := GetExtended(pointer(s), err);
+  CheckEqual(err, 0);
+  CheckSame(d, 9223372036854775808.0, 0);
+  s := '1.7976931348623157e308';
+  d := GetExtended(pointer(s), err);
+  CheckEqual(err, 0);
+  Check(not IsInfinite(d) and (d > 1.79e308));
+  if not HasFP80 then // FP80 has more precision
+  begin
+    s := '99e307';
+    d := GetExtended(pointer(s), err);
+    Check(err <> 0);
+    Check(not IsInfinite(d));
+  end;
+  // GetNumericVariantFromJson() had the same issue for varDouble values
+  // (with both SSE2 and x87 FPU, since its local d variable is a double)
+  CheckJsonDoubleBits('0.00003', $3EFF75104D551D69);
+  CheckJsonDoubleBits('0.00006', $3F0F75104D551D69);
+  CheckJsonDoubleBits('-0.00007', QWord($BF12599ED7C6FBD2));
+  CheckJsonDoubleBits('0.00012', $3F1F75104D551D69);
+  BenchmarkNumbers;
   // validate ScanUtf8()
   Check(ScanUtf8('1 2 3', '  %', [@i, @j, @d]) = 0);
   Check(ScanUtf8('', '%d%d%f', [@i, @j, @d]) = 0);
@@ -6026,6 +6568,7 @@ var
   WS: WideString;
   SU, SU2: SynUnicode;
   WU: array[0..3] of WideChar;
+  WU2: array[0..15] of WideChar;
   str: string;
   ss: ShortString;
   fn: TFileName;
@@ -6038,7 +6581,7 @@ var
   q: RawUtf8;
   Unic: RawByteString;
   Ucs4: RawUcs4;
-  WA, HasValidUtf8Avx2: Boolean;
+  WA: Boolean;
   lng: TLanguage;
   rb1, rb2, rb3: RawByteString;
   eng: TSynAnsiConvert;
@@ -6858,16 +7401,11 @@ begin
     else
       len120 := 0;
     Check(IsValidUtf8Buffer(P, len120), 'IsValidUtf8Buffer truncated');
-    {$ifdef ASMX64AVX1}
-    HasValidUtf8Avx2 := (cpuHaswell in X64CpuFeatures);
     if HasValidUtf8Avx2 then
     begin
       check(IsValidUtf8Small(U), 'IsValidUtf8Pas');
       Check(IsValidUtf8Pas(P, len120), 'IsValidUtf8Pas120');
     end;
-    {$else}
-    HasValidUtf8Avx2 := false; // IsValidUtf8Buffer = @IsValidUtf8Pas
-    {$endif ASMX64AVX1}
     for j := 1 to lenup100 do
     begin
       check(PosChar(P, U[j])^ = U[j], 'PosCharj');
@@ -7081,8 +7619,18 @@ begin
   Check(Utf8ToUnicodeLength(Pointer(U)) = 2);
   Check(Utf8FirstLineToUtf16Length(Pointer(U)) = 2);
   PCardinal(@WU)^ := 0;
-  if CheckEqual(Utf8ToWideChar(WU, pointer(U), SizeOf(WU), length(U), false), 4) then
+  if CheckEqual(Utf8ToWideChar(WU, pointer(U), length(WU), length(U), false), 4) then
     Check(PCardinal(@WU)^ = $DCD2D863);
+  // ensure MaxDestChars is a WideChar count - not a byte count
+  U := 'abcdefgh';
+  FillCharFast(WU2, SizeOf(WU2), 0);
+  CheckEqual(Utf8ToWideChar(@WU2, pointer(U), length(WU2), length(U), false), 16);
+  CheckEqual(StrLenW(@WU2), 8);
+  FillCharFast(WU2, SizeOf(WU2), 0);
+  CheckEqual(Utf8ToWideChar(@WU2, pointer(U), 5, length(U), false), 10);
+  CheckEqual(StrLenW(@WU2), 5);
+  SU2 := 'abcde';
+  Check(CompareMem(@WU2, pointer(SU2), 10), 'truncate at MaxDestChars');
   U := SynUnicodeToUtf8(SU);
   if Check(length(U) = 4) then
     Check(PCardinal(U)^ = $92b3a8f0);
@@ -8108,7 +8656,8 @@ procedure TTestCoreBase.Iso8601DateAndTime;
 
 var
   i: integer;
-  D: TDateTime;
+  D, D2: TDateTime;
+  u: Int64; // TUnixTime/TUnixMSTime
   tmp: RawUtf8;
   b: TTimeLogBits;
   st, start: TSynSystemTime;
@@ -8173,7 +8722,7 @@ begin
   st.Month := 13;
   st.Normalize;
   CheckEqual(st.ToText, '1984-01-01T00:00:00.000', 'nextyear 2');
-  for i := 1700 to 2500 do
+  for i := 1500 to 2500 do
     Check(mormot.core.datetime.IsLeapYear(i) = SysUtils.IsLeapYear(i), 'IsLeapYear');
   // this will test typically from year 1905 to 2065
   D := Now / 20 + rnd.NextDouble * 20; // some starting random date/time
@@ -8181,6 +8730,16 @@ begin
   begin
     Test(D, true);
     Test(D, false);
+    u := DateTimeToUnixTime(D);
+    st.FromUnixTime(u);
+    CheckEqual(st.ToUnixTime, u);
+    D2 := st.ToDateTime;
+    Check(Abs(D2 - D) < (1 / SecsPerDay)); // we allow 999 ms error
+    u := DateTimeToUnixMSTime(D);
+    st.FromUnixMsTime(u);
+    CheckEqual(st.ToUnixMsTime, u);
+    D2 := st.ToDateTime;
+    Check(Abs(D2 - D) < (1 / MilliSecsPerDay)); // we allow 1 ms error
     D := D + rnd.NextDouble * 57; // go further a little bit: change date/time
   end;
   b.Value := Iso8601ToTimeLog('20150504');
@@ -8259,11 +8818,30 @@ var
   i, bias: integer;
   m: word;
   hdl, reload: boolean;
-  endtix: Int64;
+  endtix, ts: Int64;
   buf: RawByteString;
   dt, dtl: TDateTime;
   ut: TUnixTime;
   s31: TShort31;
+
+  procedure CheckTimeSpan(Value: Int64; const Expected: RawUtf8);
+  var
+    parsed: Int64;
+    p: PUtf8Char;
+  begin
+    CheckEqual(TimeSpanToText(Value), Expected);
+    p := TextToTimeSpanBuffer(pointer(Expected), parsed);
+    if CheckUtf8(p <> nil, Expected) then
+      CheckUtf8(p^ = #0, Expected);
+    CheckEqual(parsed, Value - Value mod TicksPerMillisecond);
+  end;
+
+  procedure CheckInvalidTimeSpan(const Text: RawUtf8);
+  var
+    ts: Int64;
+  begin
+    CheckUtf8(not TextToTimeSpan(Text, ts), Text);
+  end;
 
   procedure testBias(year, expected: integer);
   begin
@@ -8348,7 +8926,7 @@ begin
   CheckEqual(DateTimeToIso8601Text(dt), '1994-11-06T08:49:37');
   CheckEqual(DateTimeToHttpDate(dt), 'Sun, 06 Nov 1994 08:49:37 GMT');
   UnixMSTimeUtcToHttpDate(DateTimeToUnixMSTime(dt), s31);
-  Check(s31 = 'Sun, 06 Nov 1994 08:49:37 GMT', 'UnixMSTimeUtcToHttpDate');
+  CheckEqualShort(s31, 'Sun, 06 Nov 1994 08:49:37 GMT', 'UnixMSTimeUtcToHttpDate');
   CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
     'Sunday, 06-DEC-94 08:49:37 UTC')), '1994-12-06T08:49:37');
   CheckEqual(DateTimeToIso8601Text(HttpDateToDateTime(
@@ -8467,6 +9045,74 @@ begin
     tz.Free;
   end;
   CheckSameTime(dtl, UtcToLocal(dt, 'Romance Standard Time'));
+  // validate TimeSpan conversion
+  CheckTimeSpan(0,              '00:00:00');
+  CheckTimeSpan(1,              '00:00:00');
+  CheckTimeSpan(9999,           '00:00:00');
+  CheckTimeSpan(10000,          '00:00:00.001');
+  CheckTimeSpan(599990000,      '00:00:59.999');
+  CheckTimeSpan(600000000,      '00:01:00');
+  CheckTimeSpan(35999990000,    '00:59:59.999');
+  CheckTimeSpan(36000000000,    '01:00:00');
+  CheckTimeSpan(863999990000,   '23:59:59.999');
+  CheckTimeSpan(864000000000,   '1');
+  CheckTimeSpan(1728000000000,  '2');
+  CheckTimeSpan(1838450060000,  '2.03:04:05.006');
+  CheckTimeSpan(9092967890000,  '10.12:34:56.789');
+  CheckTimeSpan(-599990000,     '-00:00:59.999');
+  CheckTimeSpan(-35999990000,   '-00:59:59.999');
+  CheckTimeSpan(-863999990000,  '-23:59:59.999');
+  CheckTimeSpan(-1838450060000, '-2.03:04:05.006');
+  CheckTimeSpan(-9092967890000, '-10.12:34:56.789');
+  CheckTimeSpan(9999999,        '00:00:00.999');
+  CheckTimeSpan(10000000,       '00:00:01');
+  CheckTimeSpan(600000000,      '00:01:00');
+  CheckTimeSpan(36000000000,    '01:00:00');
+  CheckTimeSpan(36610000000,    '01:01:01');
+  CheckTimeSpan(36611230000,    '01:01:01.123');
+  CheckTimeSpan(36611234567,    '01:01:01.123');
+  CheckTimeSpan(864000000000,   '1');
+  CheckTimeSpan(864000010000,   '1.00:00:00.001');
+  CheckTimeSpan(865000000000,   '1.00:01:40');
+  CheckTimeSpan(900610000000,   '1.01:01:01');
+  CheckTimeSpan(-10000,         '-00:00:00.001');
+  CheckTimeSpan(-10000000,      '-00:00:01');
+  CheckTimeSpan(-36611230000,   '-01:01:01.123');
+  CheckTimeSpan(-864000000000,  '-1');
+  CheckTimeSpan(-864000010000,  '-1.00:00:00.001');
+  CheckTimeSpan(High(Int64),    '10675199.02:48:05.477');
+  CheckTimeSpan(-High(Int64),   '-10675199.02:48:05.477');
+  Check(TextToTimeSpan('0.06:18:55', ts));
+  CheckEqual(ts, 227350000000);
+  Check(TextToTimeSpan(' 0.00:00:00.001 ', ts));
+  CheckEqual(ts, 10000);
+  Check(TextToTimeSpan('000.23:59:59.99999999', ts));
+  CheckEqual(ts, 863999990000);
+  CheckInvalidTimeSpan('');
+  CheckInvalidTimeSpan('-');
+  CheckInvalidTimeSpan('.');
+  CheckInvalidTimeSpan(':');
+  CheckInvalidTimeSpan('abc');
+  CheckInvalidTimeSpan('00:00');
+  CheckInvalidTimeSpan('00:00:');
+  CheckInvalidTimeSpan('00::00');
+  CheckInvalidTimeSpan('1.');
+  CheckInvalidTimeSpan('1.00');
+  CheckInvalidTimeSpan('1.00:00');
+  CheckInvalidTimeSpan('24:00:00');
+  CheckInvalidTimeSpan('00:60:00');
+  CheckInvalidTimeSpan('00:00:60');
+  CheckInvalidTimeSpan('1.24:00:00');
+  CheckInvalidTimeSpan('1.00:60:00');
+  CheckInvalidTimeSpan('1.00:00:60');
+  CheckInvalidTimeSpan('00:00:00.');
+  CheckInvalidTimeSpan('00:00:00.1');
+  CheckInvalidTimeSpan('00:00:00.12');
+  CheckInvalidTimeSpan('00:00:00.12x');
+  CheckInvalidTimeSpan('00:00:00.123x');
+  CheckInvalidTimeSpan('+00:00:00');
+  CheckInvalidTimeSpan('--00:00:00');
+  CheckInvalidTimeSpan('-+00:00:00');
 end;
 
 const
@@ -10196,7 +10842,7 @@ var
   i, j, n: integer;
   fa: TFileAge;
   fdt: TDateTime;
-  fs: Int64;
+  fs, sz: Int64;
   fu: TUnixMSTime;
   fn: array[0..10] of TFileName;
   mp, mp2: TMultiPartDynArray;
@@ -10405,6 +11051,39 @@ begin
     DecodeAndTest;
     DecodeStreamAndTest(4096);
     DecodeStreamAndTest(65536);
+    // Flush should be idempotent: THttpClientSocket calls Seek(0, soBeginning)
+    // before sending the body, which triggers Flush again - the closing
+    // boundary was appended once more and the sent body exceeded the
+    // Content-Length: computed from Size - see #565
+    sz := st.Size;
+    CheckEqual(sz, length(mpc), 'st size');
+    st.Flush;
+    CheckEqual(st.Size, sz, 'st flush twice');
+    st.Seek(0, soBeginning);
+    CheckEqual(st.Size, sz, 'st rewind');
+    CheckEqual(StreamToRawByteString(st), mpc, 'st read twice');
+    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+    try
+      raised := false;
+      try
+        st.AddContent('late', 'not allowed after Flush');
+      except
+        on EHttpSocket do
+          raised := true;
+      end;
+      Check(raised, 'st add after flush');
+      raised := false;
+      try
+        st.AddFile('late', fn[0]); // should not even open the file
+      except
+        on EHttpSocket do
+          raised := true;
+      end;
+      Check(raised, 'st addfile after flush');
+      CheckEqual(st.Size, sz, 'st size after failed add');
+    finally
+      TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+    end;
     st.Free;
     for i := 0 to high(fn) do
       check(DeleteFile(fn[i]));
@@ -10718,7 +11397,264 @@ begin
   end;
 end;
 
+type
+  TSynLogInitProbe = class(TSynLog)
+  protected
+    procedure CreateLogWriter; override;
+  end;
+
+var
+  SynLogInitProbeCount: integer;
+  SynLogInitNestedDone: boolean;
+
+procedure TSynLogInitProbe.CreateLogWriter;
+begin
+  inc(SynLogInitProbeCount);
+  // we are already inside this TSynLog writer lock:
+  // this nested log must be silently ignored
+  if not SynLogInitNestedDone then
+  begin
+    SynLogInitNestedDone := true;
+    Log(sllDebug, 'nested during CreateLogWriter');
+  end;
+  inherited CreateLogWriter;
+end;
+
 procedure TTestCoreBase.Debugging;
+
+  procedure TestLogFileInit;
+  var
+    fam: TSynLogFamily;
+  begin
+    fam := TSynLogInitProbe.Family;
+    fam.Level := [sllDebug];
+    fam.NoFile := true;
+    TSynLogInitProbe.Add.CloseLogFile; // force LogFileInit
+    Check(not fam.ExceptionIgnoreCurrentThread);
+    SynLogInitProbeCount := 0;
+    SynLogInitNestedDone := false;
+    TSynLogInitProbe.Add.Log(sllDebug, 'init');
+    CheckEqual(SynLogInitProbeCount, 1, 'no recursive CreateLogWriter');
+    Check(SynLogInitNestedDone, 'nested logging probe executed');
+    Check(not fam.ExceptionIgnoreCurrentThread, 'exception flag untouched');
+  end;
+
+  procedure TestLiveAppendedLines;
+  const
+    STAMPS: array[0..1] of RawUtf8 = ( // calendar and high resolution layouts
+      '20250213 16410200', '0000000000001234');
+    THREADS: array[0..2] of integer = (0, 1, 4096);
+    HEADER = 'C:\mormot2tests.exe 1.0.0 (2025-02-13 16:41:00)'#13#10 +
+      'Host=Test User=Test CPU=1 OS=0 Wow64=0 Freq=1000000'#13#10 +
+      'TSynLog 2.0 2025-02-13T16:41:00'#13#10#13#10;
+  var
+    log: TSynLogFile;
+    s, t, i, n: integer;
+    stamp, input, source: RawUtf8;
+  begin
+    // AddInMemoryLine() rows are standalone #0 ended strings which don't belong
+    // to the memory mapped buffer: fMapEnd is no valid line end for them, for
+    // any layout - e.g. with or without ptIdentifiedInOneFile thread columns
+    for s := low(STAMPS) to high(STAMPS) do
+      for t := low(THREADS) to high(THREADS) do
+      begin
+        input := STAMPS[s];
+        if THREADS[t] <> 0 then
+          Append(input, Int18ToChars3(THREADS[t]));
+        input := input + ' info  Mapped payload';
+        source := HEADER;
+        for i := 1 to 4 do
+          Append(source, input, #13#10);
+        log := TSynLogFile.Create(pointer(source), length(source));
+        try
+          CheckEqual(log.Count, 4, 'mapped rows');
+          CheckEqual(log.EventText[0], ' Mapped payload');
+          if THREADS[t] = 0 then
+            Check(log.EventThread = nil)
+          else
+            CheckEqual(log.EventThread[0], THREADS[t]);
+          log.AddInMemoryLine(input);
+          CheckEqual(log.Count, 5, 'appended row');
+          CheckEqual(log.Lines[4], input);
+          CheckEqual(log.LineSize(4), length(input));
+          Check(not log.LineSizeSmallerThan(4, length(input) - 1));
+          Check(log.LineSizeSmallerThan(4, length(input)));
+          CheckEqual(log.EventText[4], ' Mapped payload');
+          Check(log.LineContains('PAYLOAD', 4));
+          if THREADS[t] <> 0 then
+            CheckEqual(log.EventThread[4], THREADS[t]);
+        finally
+          log.Free;
+        end;
+      end;
+    // LoadFromMap() did size fLines[] and fThreads[] down without adjusting
+    // their fLinesMax/fThreadsCount capacity, so the next AddInMemoryLine()
+    // rows were stored past the reallocated buffers
+    n := 1700; // long enough lines to trigger the down-sizing
+    for t := 0 to 1 do
+    begin
+      stamp := STAMPS[0];
+      if t <> 0 then
+        Append(stamp, Int18ToChars3(THREADS[2]));
+      Join([stamp, ' info  ', RawUtf8OfChar('m', 1078)], input);
+      Join([input, #13#10], source);
+      s := n * (length(input) + 2);
+      while length(source) < s do
+        source := source + source; // O(log n) instead of O(n2) concatenations
+      SetLength(source, s);
+      source := HEADER + source;
+      log := TSynLogFile.Create(pointer(source), length(source));
+      try
+        CheckEqual(log.Count, n, 'big mapped rows');
+        for i := 1 to 100 do
+          log.AddInMemoryLine(input); // did corrupt the heap before the fix
+        CheckEqual(log.Count, n + 100);
+        for i := n to log.Count - 1 do
+        begin
+          CheckEqual(log.LineSize(i), length(input));
+          if t <> 0 then
+            CheckEqual(log.EventThread[i], THREADS[2]);
+        end;
+        // a row shorter than fLineTextOffset is no valid search start - the
+        // invalid read itself is not observable in-process, so this asserts
+        // the guard's result, and that longer rows still are searchable
+        log.AddInMemoryLine('short');
+        Check(not log.LineContains('SHORT', log.Count - 1));
+        Check(log.LineContains('MMM', log.Count - 2));
+        // fLogProcStack[] is released by LoadFromMap() but needed on append
+        log.AddInMemoryLine(stamp + '  +    Work');
+        log.AddInMemoryLine(stamp + '  -    Work 00.020.006');
+        CheckEqual(log.Count, n + 103);
+        Check(log.EventLevel[log.Count - 2] = sllEnter);
+        Check(log.EventLevel[log.Count - 1] = sllLeave);
+        Check(log.LogProc = nil, 'no sllEnter among the mapped rows');
+        log.LogProcMerged := false; // sets LogProc[] from fLogProcNatural[]
+        Check(log.LogProc <> nil);
+        for i := 1 to 10 do
+          log.AddInMemoryLine(stamp + '  +    More'); // reallocs fLogProcNatural
+        CheckEqual(log.LogProc[0].Index, n + 101); // the appended sllEnter row
+        CheckEqual(log.LogProc[0].Time, 20006);    // no dangling LogProc[]
+        // note: LogProcCount is a snapshot made by LogProcMerged, and
+        // LogProc[].ProperTime is computed by LoadFromMap() only: both are
+        // not maintained for appended rows - out of scope for this fix
+        CheckEqual(log.LogProcCount, 1);
+      finally
+        log.Free;
+      end;
+    end;
+    // an appended row is never stored as a reference into the mapped buffer,
+    // so that its line pointer alone tells it apart from a mapped line
+    source := RawUtf8OfChar('x', 64);
+    with TMemoryMapText.Create(pointer(source), 32) do
+    try
+      AddInMemoryLine(source);
+      CheckEqual(Count, 2);
+      Check(LinePointers[1] <> pointer(source), 'unaliased');
+      CheckEqual(LineSize(0), 32);
+      CheckEqual(LineSize(1), 64);
+      CheckEqual(Lines[1], source);
+      Check(LineContains('XXX', 1));
+    finally
+      Free;
+    end;
+  end;
+
+  procedure TestPlainText;
+  var
+    log: TSynLogFileView;
+    source: RawUtf8;
+  begin
+    // a file with no TSynLog header nor rows is searched as plain text
+    source := 'first line'#13#10'some needle here'#13#10'last line';
+    log := TSynLogFileView.Create(pointer(source), length(source));
+    try
+      CheckEqual(log.Count, 3);
+      Check(log.EventLevel = nil, 'plain text');
+      CheckEqual(StringToUtf8(log.GetLineForClipboard(1)), 'some needle here');
+      CheckEqual(StringToUtf8(log.GetLineForClipboard(-1)), '', 'out of range');
+      CheckEqual(StringToUtf8(log.GetLineForClipboard(log.Count)), '');
+      log.Events := LOG_VERBOSE; // no level to select in a plain text file
+      CheckEqual(log.Select(0), 0);
+      CheckEqual(log.SelectedCount, 0);
+      log.Events := [];
+      Check(log.LineContains('NEEDLE', 1));
+      Check(not log.LineContains('NEEDLE', 0));
+      Check(not log.LineContains('NEEDLE', 3), 'out of range');
+      CheckEqual(log.SearchNextText('NEEDLE', 0, 1), 1);
+      CheckEqual(log.SearchPreviousText('NEEDLE', 2), 1);
+      CheckEqual(log.SearchNextText('NOTHING', 0, 1), -1);
+    finally
+      log.Free;
+    end;
+  end;
+
+  procedure TestNoProcNoEvent;
+  var
+    log: TSynLogFileView;
+    source: RawUtf8;
+  begin
+    source := 'test.exe 1.0.0 (2026-02-13 16:41:00)'#13#10 +
+      'Host=Test User=Test CPU=1 OS=0 Wow64=0 Freq=1000000'#13#10 +
+      'TSynLog 2.0 2026-02-13T16:41:00'#13#10#13#10 +
+      '20260213 16410200 info  first row'#13#10 +
+      '20260213 16410300 warn  second row'#13#10;
+    log := TSynLogFileView.Create(pointer(source), length(source));
+    try
+      CheckEqual(log.Count, 2);
+      // merging the methods profiler of a log with no sllEnter at all
+      CheckEqual(log.LogProcCount, 0, 'no method');
+      log.LogProcMerged := true; // should not read fLogProcNatural[0]
+      CheckEqual(log.LogProcCount, 0, 'nothing to merge');
+      log.LogProcMerged := false;
+      CheckEqual(log.LogProcCount, 0, 'nothing to unmerge');
+      // unchecking all levels should display no row, not the previous rows
+      log.Events := LOG_VERBOSE;
+      log.Select(0);
+      CheckEqual(log.SelectedCount, 2);
+      log.Events := [];
+      CheckEqual(log.Select(0), 0);
+      CheckEqual(log.SelectedCount, 0, 'no level selected');
+      log.Events := LOG_VERBOSE; // back to all rows
+      log.Select(0);
+      CheckEqual(log.SelectedCount, 2);
+    finally
+      log.Free;
+    end;
+  end;
+
+  procedure TestZonedLayout;
+  const
+    HEADER = 'C:\mormot2tests.exe 1.0.0 (2025-02-13 16:41:00)'#13#10 +
+      'Host=Test User=Test CPU=1 OS=0 Wow64=0 Freq=1000000'#13#10 +
+      'TSynLog 2.0 2025-02-13T16:41:00'#13#10#13#10;
+  var
+    log: TSynLogFile;
+    t, i: integer;
+    input, source: RawUtf8;
+  begin
+    // Int18ToText() encodes a thread number as $20 + 6-bit chars, so thread 58
+    // ends with 'Z' - which the ZonedTimestamp detection did read as its own
+    // 'Z' marker, shifting fLineLevelOffset and loading the whole file empty
+    for t := 0 to 1 do
+    begin
+      input := '20250213 16410200';
+      if t <> 0 then
+        Append(input, 'Z'); // TSynLogFamily.ZonedTimestamp layout
+      Append(input, Int18ToChars3(58), ' info  Zoned payload');
+      source := HEADER;
+      for i := 1 to 4 do
+        Append(source, input, #13#10);
+      log := TSynLogFile.Create(pointer(source), length(source));
+      try
+        CheckEqual(log.Count, 4, 'zoned rows');
+        CheckEqual(log.EventThread[0], 58);
+        CheckEqual(log.EventText[0], ' Zoned payload');
+        Check(log.EventLevel[0] = sllInfo);
+      finally
+        log.Free;
+      end;
+    end;
+  end;
 
   procedure Test(const LOG: RawUtf8; ExpectedDate: TDateTime);
   var
@@ -10830,6 +11766,23 @@ begin
     for os2 := low(os) to high(os) do
       Check((OS_INITIAL[os2] = OS_INITIAL[os]) = (os2 = os), 'OS_INITIAL');
   end;
+  // validate OSX kernel number to Apple Corp marketing "logic"
+  osv.os := osOSX;
+  osv.utsrelease[2] := 7;
+  CheckEqualShort(MACOS_NUM[MacKernel(osv)], '10.4');
+  osv.utsrelease[2] := 8;
+  CheckEqualShort(MACOS_NUM[MacKernel(osv)], '10.4');
+  osv.utsrelease[2] := 24;
+  CheckEqualShort(MACOS_NUM[MacKernel(osv)], '15');
+  osv.utsrelease[2] := 25;
+  CheckEqualShort(MACOS_NUM[MacKernel(osv)], '26');
+  osv.utsrelease[2] := 27;
+  CheckEqualShort(MACOS_NUM[MacKernel(osv)], '27');
+  osv.utsrelease[2] := 28;
+  CheckEqualShort(MACOS_NUM[MacKernel(osv)], '28');
+  CheckEqualShort(MACOS_NAME[MacKernel(osv)], 'Next');
+  osv.utsrelease[2] := 29;
+  CheckEqualShort(MACOS_NAME[MacKernel(osv)], 'Next');
   // validate Syslog messages formatting
   msg := ' test  ';
   dst := @tmp;
@@ -10889,7 +11842,12 @@ begin
   Check(dst[len - 1] = '+', 'last+');
   Check(dst[len] = #0, 'ending #0');
   Check(dst[len + 1] = #1, 'buffer');
+  TestLogFileInit;
   // validate TSynLogFile
+  TestLiveAppendedLines;
+  TestPlainText;
+  TestNoProcNoEvent;
+  TestZonedLayout;
   Test('D:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.4 (2011-04-07 11:09:06)'#13#10 +
     'Host=MyPC User=MySelf CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545 ' +
     'Instance=D:\Dev\MyLibrary.dll'#13#10 +
@@ -10968,7 +11926,7 @@ begin
   checkEqual(nv.Count, 0);
 end;
 
-procedure TTestCoreBase._TSynUniqueIdentifier;
+procedure TTestCoreBase.TSynUniqueIdentifierSlow(Sender: TObject);
 const
   JAN2015_UNIX = 1420070400;
 var
@@ -11236,7 +12194,7 @@ const
   MAX = 10000;
 var
   dict: TSynDictionary;
-  rnd: TLecuyer; // local per-thread instance
+  rnd: PLecuyer; // local per-thread instance
 
   procedure TestSpeed(Count: integer; SetCapacity, DoText: boolean;
     Hasher: THasher; const Msg: RawUtf8);
@@ -11333,7 +12291,7 @@ var
   b: byte;
   sdk: TSDKey;
 begin
-  RandomLecuyer(rnd); // local per-thread generator
+  rnd := ThreadRandom; // use the TLecuyer of this thread
   SetDict;
   try
     CheckEqual(dict.Count, 0);
@@ -11586,7 +12544,7 @@ type
   end;
   TNotifyTaskDynArray = array of TNotifyTask;
 
-procedure TTestCoreBase._TSynQueue;
+procedure TTestCoreBase.TSynQueueSlow(Sender: TObject);
 var
   o, i, j, k, n: integer; // not PtrInt
   f: TSynQueue;
@@ -11594,36 +12552,7 @@ var
   r1, r2: TNotifyTask;
   savedint: TIntegerDynArray;
   savedu: TRawUtf8DynArray;
-  ev: TSynEvent;
 begin
-  // validate TSynEvent process
-  ev := TSynEvent.Create;
-  try
-    {$ifndef OSANDROID}
-    CheckEqual(PtrUInt(GetCurrentThreadID), PtrUInt(MainThreadID), 'mainthread');
-    {$endif OSANDROID}
-    for i := 1 to 10 do
-    begin
-      // emulate a ResetEvent between the two SetEvent state updates
-      ev.ResetEvent;
-      ev.SetEvent;
-      Check(ev.WaitFor(1000), 'WaitFor signal');
-      ev.SetEvent;
-      ev.ResetEvent;
-      ev.SetEvent;
-      Check(ev.WaitFor(INFINITE), 'WaitFor(INFINITE) signal');
-      // validate the main-thread CheckSynchronize() wrapper as well
-      ev.ResetEvent;
-      ev.SetEvent;
-      Check(ev.WaitForSafe(1000), 'WaitForSafe signal');
-      ev.SetEvent;
-      ev.ResetEvent;
-      ev.SetEvent;
-      Check(ev.WaitForSafe(INFINITE), 'WaitForSafe(INFINITE) signal');
-    end;
-  finally
-    ev.Free;
-  end;
   // validate TSynQueue with integer values
   f := TSynQueue.Create(TypeInfo(TIntegerDynArray));
   try
@@ -11784,6 +12713,41 @@ begin
     checkEqual(f.Count, 0);
   finally
     f.Free;
+  end;
+end;
+
+procedure TTestCoreBase._TSynQueue; // should run in the main thread
+var
+  i: PtrInt;
+  ev: TSynEvent;
+begin
+  // validate TSynQueue with all kind of values in a background thread
+  Run(TSynQueueSlow, self, 'TSynQueue', true, false);
+  // validate TSynEvent process in the main thread
+  ev := TSynEvent.Create;
+  try
+    CheckEqual(PtrUInt(GetCurrentThreadID), PtrUInt(MainThreadID), 'mainthread');
+    for i := 1 to 10 do
+    begin
+      // emulate a ResetEvent between the two SetEvent state updates
+      ev.ResetEvent;
+      ev.SetEvent;
+      Check(ev.WaitFor(1000), 'WaitFor signal');
+      ev.SetEvent;
+      ev.ResetEvent;
+      ev.SetEvent;
+      Check(ev.WaitFor(INFINITE), 'WaitFor(INFINITE) signal');
+      // validate the main-thread CheckSynchronize() wrapper as well
+      ev.ResetEvent;
+      ev.SetEvent;
+      Check(ev.WaitForSafe(1000), 'WaitForSafe signal');
+      ev.SetEvent;
+      ev.ResetEvent;
+      ev.SetEvent;
+      Check(ev.WaitForSafe(INFINITE), 'WaitForSafe(INFINITE) signal');
+    end;
+  finally
+    ev.Free;
   end;
 end;
 

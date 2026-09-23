@@ -735,7 +735,7 @@ type
     // - will use TSynAnsiConvert to perform the conversion to UTF-8
     procedure AddAnyAnsiBuffer(P: PAnsiChar; Len: PtrInt;
       Escape: TTextWriterKind; CodePage: integer);
-    /// append some binary buffer as ASCCI text or $xx hexadecimal codes
+    /// append some binary buffer as ASCII text or $xx hexadecimal codes
     // - wrap EscapeBuffer() into the output buffer, up to MaxLen source bytes
     procedure AddEscapeBuffer(P: pointer; Len, MaxLen: PtrInt);
     /// write some data Base64 encoded
@@ -5726,6 +5726,26 @@ begin
     Ctxt.W, Data, Ctxt.Options);
 end;
 
+{$ifdef DELPHI_ARM32_UNALIGNED}
+// ARMv7 raises an alignment fault on VLDR/VSTR/LDRD/STRD at an address which is
+// not 4-byte aligned, as a double or Int64 field of a packed record may be:
+// the value is then processed from/to a properly aligned local copy
+function IsUnalignedValue(Data: pointer; Info: TRttiCustom): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := (PtrUInt(Data) and 3 <> 0) and
+            (Info.Kind in [rkFloat, rkInt64]);
+end;
+
+procedure _JS_Unaligned(Data: pointer; const Ctxt: TJsonSaveContext);
+var
+  tmp: Int64;
+begin
+  MoveFast(Data^, tmp, Ctxt.Info.Size);
+  TRttiJsonSave(Ctxt.Info.JsonSave)(@tmp, Ctxt);
+end;
+{$endif DELPHI_ARM32_UNALIGNED}
+
 procedure _JS_OneProp(var c: TJsonSaveContext; p: PRttiCustomProp; Data: PAnsiChar);
   {$ifdef HASINLINE} inline; {$endif}
 begin
@@ -5738,7 +5758,12 @@ begin
     c.Info := p^.Value;
     c.Prop := p;
     if c.Info.JsonSave <> nil then
-      TRttiJsonSave(c.Info.JsonSave)(Data + p^.OffsetGet, c)
+      {$ifdef DELPHI_ARM32_UNALIGNED}
+      if IsUnalignedValue(Data + p^.OffsetGet, c.Info) then
+        _JS_Unaligned(Data + p^.OffsetGet, c)
+      else
+      {$endif DELPHI_ARM32_UNALIGNED}
+        TRttiJsonSave(c.Info.JsonSave)(Data + p^.OffsetGet, c)
     else
       c.W.AddNull;
   end
@@ -8225,6 +8250,20 @@ begin
   MoveFast(v, Data^, Ctxt.Info.Size);
 end;
 
+{$ifdef DELPHI_ARM32_UNALIGNED}
+procedure JsonLoadUnaligned(Load: TRttiJsonLoad; Data: pointer;
+  var Ctxt: TJsonParserContext);
+var
+  tmp: Int64;
+  size: PtrInt;
+begin
+  size := Ctxt.Info.Size; // Ctxt.Info may be changed by Load()
+  MoveFast(Data^, tmp, size); // keep the previous value on parsing error
+  Load(@tmp, Ctxt);
+  MoveFast(tmp, Data^, size);
+end;
+{$endif DELPHI_ARM32_UNALIGNED}
+
 function JsonLoadProp(Data: PAnsiChar; Prop: PRttiCustomProp;
   var Ctxt: TJsonParserContext): boolean; {$ifdef HASINLINE} inline; {$endif}
 var
@@ -8240,6 +8279,11 @@ begin
        TORHook(Data).RttiBeforeReadPropertyValue(@Ctxt, Prop) then
       // custom parsing method (e.g. TOrm nested TOrm properties)
     else
+    {$ifdef DELPHI_ARM32_UNALIGNED}
+    if IsUnalignedValue(Data + Prop^.OffsetSet, Ctxt.Info) then
+      JsonLoadUnaligned(load, Data + Prop^.OffsetSet, Ctxt)
+    else
+    {$endif DELPHI_ARM32_UNALIGNED}
       // default fast parsing into the property/field memory
       load(Data + Prop^.OffsetSet, Ctxt)
   else
@@ -9229,7 +9273,7 @@ end;
 function TSynDictionary.DeleteDeprecated(tix64: Int64): integer;
 var
   i, tomove: PtrInt;
-  tix32, timeout32: cardinal;
+  tix32, c32, timeout32: cardinal;
 begin
   result := 0;
   if (self = nil) or
@@ -9240,11 +9284,12 @@ begin
     tix32 := GetTickSec
   else
     tix32 := tix64 div MilliSecsPerSec;
-  if fSafe.Padding[DIC_TIMETIX].VInteger = integer(tix32) then
+  c32 := fSafe.Padding[DIC_TIMETIX].VCardinal;
+  if (c32 = tix32) or
+     not LockedExc32(fSafe.Padding[DIC_TIMETIX].VCardinal, tix32, c32) then
     exit; // no need to search more often than every second
   fSafe.ReadWriteLock; // would upgrade to cWrite only if needed
   try
-    fSafe.Padding[DIC_TIMETIX].VInteger := tix32;
     for i := fSafe.Padding[DIC_KEYCOUNT].VInteger - 1 downto 0 do
     begin
       timeout32 := fTimeOut[i];
@@ -9377,7 +9422,7 @@ end;
 
 function TSynDictionary.DeleteAt(aIndex: PtrInt): boolean;
 begin
-  if cardinal(aIndex) < cardinal(fSafe.Padding[DIC_KEYCOUNT].VInteger) then
+  if cardinal(aIndex) < fSafe.Padding[DIC_KEYCOUNT].VCardinal then
     // use Delete(aKey) to have efficient hash table update
     result := Delete(fKeys.ItemPtr(aIndex)^) = aIndex
   else
@@ -9793,7 +9838,7 @@ procedure TSynDictionary.SetTimeoutAtIndex(aIndex: PtrInt);
 var
   tim: cardinal;
 begin
-  if cardinal(aIndex) >= cardinal(fSafe.Padding[DIC_KEYCOUNT].VInteger) then
+  if cardinal(aIndex) >= fSafe.Padding[DIC_KEYCOUNT].VCardinal then
     exit;
   tim := fSafe.Padding[DIC_TIMESEC].VInteger;
   if tim > 0 then

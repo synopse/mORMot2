@@ -16,8 +16,8 @@ unit mormot.lib.openssl11;
 
     In respect to OpenSSL 1.0.x, the new 1.1 API hides most structures
    behind getter/setter functions, and does not require complex initialization.
-    OpenSSL 1.1 features TLS 1.3, but is now deprecated.
-    OpenSSL 3.x / 4.x are supported as the current major version.
+    OpenSSL 1.1 features TLS 1.3, but official support ended in 2023.
+    OpenSSL 3.5+ / 4.x are adviced as the current major versions.
     OpenSSL 1.1 / 3.x / 4.x API adaptation is done at runtime by dynamic loading.
 
   *****************************************************************************
@@ -110,7 +110,7 @@ type
     // wrap ERR_get_error/ERR_error_string_n or SSL_get_error/SSL_error
     class procedure CheckFailed(caller: TObject; const method: ShortString;
       errormsg: PRawUtf8 = nil; ssl: pointer = nil; sslretcode: integer = 0;
-      const context: RawUtf8 = '');
+      const context: RawUtf8 = ''; sslerrcode: integer = 0);
     class procedure TryNotAvailable(caller: TClass; const method: ShortString);
   public
     /// if res <> OPENSSLSUCCESS, raise the exception with some detailed message
@@ -631,6 +631,7 @@ const
   BIO_C_SET_EX_ARG = 153;
   BIO_C_GET_EX_ARG = 154;
   BIO_C_SET_CONNECT_MODE = 155;
+  BIO_C_SET_SEND_FLAGS = 160; // OpenSSL 4+ e.g. to supply MSG_NOSIGNAL
 
   BIO_CTRL_RESET = 1;
   BIO_CTRL_EOF = 2;
@@ -684,38 +685,40 @@ const
   SSL_ERROR_WANT_ASYNC_JOB = 10;
   SSL_ERROR_WANT_CLIENT_HELLO_CB = 11;
 
-  SSL_OP_LEGACY_SERVER_CONNECT = $00000004;
-  SSL_OP_TLSEXT_PADDING = $00000010;
-  SSL_OP_SAFARI_ECDHE_ECDSA_BUG = $00000040;
-  SSL_OP_ALLOW_NO_DHE_KEX = $00000400;
-  SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS = $00000800;
-  SSL_OP_NO_QUERY_MTU = $00001000;
-  SSL_OP_COOKIE_EXCHANGE = $00002000;
-  SSL_OP_NO_TICKET = $00004000;
-  SSL_OP_CISCO_ANYCONNECT = $00008000;
+  SSL_OP_LEGACY_SERVER_CONNECT                  = $00000004;
+  SSL_OP_TLSEXT_PADDING                         = $00000010;
+  SSL_OP_SAFARI_ECDHE_ECDSA_BUG                 = $00000040;
+  SSL_OP_ALLOW_NO_DHE_KEX                       = $00000400;
+  SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS            = $00000800;
+  SSL_OP_NO_QUERY_MTU                           = $00001000;
+  SSL_OP_COOKIE_EXCHANGE                        = $00002000;
+  SSL_OP_NO_TICKET                              = $00004000;
+  SSL_OP_CISCO_ANYCONNECT                       = $00008000;
   SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION = $00010000;
-  SSL_OP_NO_COMPRESSION = $00020000;
-  SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION = $00040000;
-  SSL_OP_NO_ENCRYPT_THEN_MAC = $00080000;
-  SSL_OP_ENABLE_MIDDLEBOX_COMPAT = $00100000;
-  SSL_OP_PRIORITIZE_CHACHA = $00200000;
-  SSL_OP_CIPHER_SERVER_PREFERENCE = $00400000;
-  SSL_OP_TLS_ROLLBACK_BUG = $00800000;
-  SSL_OP_NO_ANTI_REPLAY = $01000000;
-  SSL_OP_NO_SSLv3 = $02000000;
-  SSL_OP_NO_TLSv1 = $04000000;
-  SSL_OP_NO_TLSv1_2 = $08000000;
-  SSL_OP_NO_TLSv1_1 = $10000000;
-  SSL_OP_NO_TLSv1_3 = $20000000;
-  SSL_OP_NO_DTLSv1 = $04000000;
-  SSL_OP_NO_DTLSv1_2 = $08000000;
+  SSL_OP_NO_COMPRESSION                         = $00020000;
+  SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION      = $00040000;
+  SSL_OP_NO_ENCRYPT_THEN_MAC                    = $00080000;
+  SSL_OP_ENABLE_MIDDLEBOX_COMPAT                = $00100000;
+  SSL_OP_PRIORITIZE_CHACHA                      = $00200000;
+  SSL_OP_CIPHER_SERVER_PREFERENCE               = $00400000;
+  SSL_OP_TLS_ROLLBACK_BUG                       = $00800000;
+  SSL_OP_NO_ANTI_REPLAY                         = $01000000;
+  SSL_OP_NO_SSLv3                               = $02000000;
+  SSL_OP_NO_TLSv1                               = $04000000;
+  SSL_OP_NO_TLSv1_2                             = $08000000;
+  SSL_OP_NO_TLSv1_1                             = $10000000;
+  SSL_OP_NO_TLSv1_3                             = $20000000;
+  SSL_OP_NO_DTLSv1                              = SSL_OP_NO_TLSv1;
+  SSL_OP_NO_DTLSv1_2                            = SSL_OP_NO_TLSv1_2;
+  SSL_OP_NO_DTLSv1_3                            = SSL_OP_NO_TLSv1_3;
   SSL_OP_NO_SSL_MASK = SSL_OP_NO_SSLv3 or
                        SSL_OP_NO_TLSv1 or
                        SSL_OP_NO_TLSv1_1 or
                        SSL_OP_NO_TLSv1_2 or
                        SSL_OP_NO_TLSv1_3;
   SSL_OP_NO_DTLS_MASK = SSL_OP_NO_DTLSv1 or
-                        SSL_OP_NO_DTLSv1_2;
+                        SSL_OP_NO_DTLSv1_2 or
+                        SSL_OP_NO_DTLSv1_3;
   SSL_OP_NO_RENEGOTIATION = $40000000;
   SSL_OP_CRYPTOPRO_TLSEXT_BUG = $80000000;
   SSL_OP_ALL = SSL_OP_CRYPTOPRO_TLSEXT_BUG or
@@ -2103,7 +2106,7 @@ type
 
   SSL_verify_cb = function(preverify_ok: integer; x509_ctx: PX509_STORE_CTX): integer; cdecl;
   SSL_SNI_servername_cb = function(s: PSSL; ad: PInteger; arg: pointer): integer; cdecl;
-  SSL_CTX_callback_ctrl_ = procedure; cdecl;
+  SSL_CTX_callback_ctrl_ = procedure(); cdecl;
   Ppem_password_cb = function(buf: PUtf8Char; size, rwflag: integer; userdata: pointer): integer; cdecl;
   ECDH_compute_key_KDF = function(_in: pointer; inlen: PtrUInt; _out: pointer; outlen: PPtrUInt): pointer; cdecl;
 
@@ -2188,7 +2191,8 @@ procedure SSL_CTX_set_default_passwd_cb(ctx: PSSL_CTX; cb: Ppem_password_cb); cd
 procedure SSL_CTX_set_default_passwd_cb_userdata(ctx: PSSL_CTX; u: pointer); cdecl;
 function SSL_CTX_use_PrivateKey_file(ctx: PSSL_CTX; _file: PUtf8Char;
    typ: integer): integer; cdecl;
-function SSL_CTX_set_cipher_list(p1: PSSL_CTX; str: PUtf8Char): integer; cdecl;
+function SSL_CTX_set_cipher_list(ctx: PSSL_CTX; str: PUtf8Char): integer; cdecl;
+function SSL_CTX_set_ciphersuites(ctx: PSSL_CTX; str: PUtf8Char): integer; cdecl;
 function SSL_set_fd(s: PSSL; fd: integer): integer; cdecl;
 function SSL_get_current_cipher(s: PSSL): PSSL_CIPHER; cdecl;
 function SSL_CIPHER_description(p1: PSSL_CIPHER;
@@ -2210,6 +2214,7 @@ function CRYPTO_get_ex_new_index(class_index: integer;
   dup_func: PCRYPTO_EX_dup; free_func: PCRYPTO_EX_free): integer; cdecl;
 procedure ERR_error_string_n(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
 function ERR_get_error(): cardinal; cdecl;
+procedure ERR_clear_error(); cdecl;
 function ERR_load_BIO_strings(): integer; cdecl;
 function EVP_PKEY_new(): PEVP_PKEY; cdecl;
 function EVP_PKEY_size(pkey: PEVP_PKEY): integer; cdecl;
@@ -2876,9 +2881,11 @@ type
 function NewOpenSslNetTls: INetTls;
 
 var
-  /// force to true so that NewOpenSslNetTls won't disable SIG_PIPE on POSIX
-  // - due to an OpenSSL limitation, which does not set socket MSG_NOSIGNAL
-  // - just ignored on Windows
+  /// force to true so that OpenSSL 1.1/3.x won't disable SIGPIPE on POSIX
+  // - OpenSSL 1.1/3.x socket BIOs don't support MSG_NOSIGNAL
+  // - OpenSSL 4.x uses per-socket BIO_C_SET_SEND_FLAGS + MSG_NOSIGNAL instead,
+  // so no process-wide SIGPIPE interception is needed so this flag is ignored
+  // - also just ignored on Windows by design
   NewOpenSslNetTlsNoSigPipeIntercept: boolean;
 
 /// retrieve the peer certificates chain from a given HTTPS server URI
@@ -2914,7 +2921,8 @@ begin
 end;
 
 class procedure EOpenSsl.CheckFailed(caller: TObject; const method: ShortString;
-  errormsg: PRawUtf8; ssl: pointer; sslretcode: integer; const context: RawUtf8);
+  errormsg: PRawUtf8; ssl: pointer; sslretcode: integer; const context: RawUtf8;
+  sslerrcode: integer);
 var
   res: integer;
   msg: RawUtf8;
@@ -2929,7 +2937,10 @@ begin
   else
   begin
     // specific error within the context of ssl_*() methods during TLS process
-    res := SSL_get_error(ssl, sslretcode);
+    if sslerrcode <> 0 then
+      res := sslerrcode
+    else
+      res := SSL_get_error(ssl, sslretcode);
     SSL_get_error_text(res, msg); // recognize SSL_ERROR_* constant and more
     PSSL(ssl).IsVerified(@msg); // append cert verif error text to msg if needed
   end;
@@ -3048,7 +3059,8 @@ type
     SSL_CTX_set_default_passwd_cb: procedure(ctx: PSSL_CTX; cb: Ppem_password_cb); cdecl;
     SSL_CTX_set_default_passwd_cb_userdata: procedure(ctx: PSSL_CTX; u: pointer); cdecl;
     SSL_CTX_use_PrivateKey_file: function(ctx: PSSL_CTX; _file: PUtf8Char; typ: integer): integer; cdecl;
-    SSL_CTX_set_cipher_list: function(p1: PSSL_CTX; str: PUtf8Char): integer; cdecl;
+    SSL_CTX_set_cipher_list: function(ctx: PSSL_CTX; str: PUtf8Char): integer; cdecl;
+    SSL_CTX_set_ciphersuites: function(ctx: PSSL_CTX; str: PUtf8Char): integer; cdecl;
     SSL_set_fd: function(s: PSSL; fd: integer): integer; cdecl;
     SSL_get_current_cipher: function(s: PSSL): PSSL_CIPHER; cdecl;
     SSL_CIPHER_description: function(p1: PSSL_CIPHER; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
@@ -3060,7 +3072,7 @@ type
   end;
 
 const
-  LIBSSL_ENTRIES: array[0..57] of PAnsiChar = (
+  LIBSSL_ENTRIES: array[0..58] of PAnsiChar = (
     'SSL_CTX_new',
     'SSL_CTX_free',
     'SSL_CTX_set_timeout',
@@ -3111,6 +3123,7 @@ const
     'SSL_CTX_set_default_passwd_cb_userdata',
     'SSL_CTX_use_PrivateKey_file',
     'SSL_CTX_set_cipher_list',
+    '?SSL_CTX_set_ciphersuites', // TLS 1.3 specific for recent OpenSSL
     'SSL_set_fd',
     'SSL_get_current_cipher',
     'SSL_CIPHER_description',
@@ -3383,9 +3396,17 @@ begin
   result := libssl.SSL_CTX_use_PrivateKey_file(ctx, _file, typ);
 end;
 
-function SSL_CTX_set_cipher_list(p1: PSSL_CTX; str: PUtf8Char): integer;
+function SSL_CTX_set_cipher_list(ctx: PSSL_CTX; str: PUtf8Char): integer;
 begin
-  result := libssl.SSL_CTX_set_cipher_list(p1, str);
+  result := libssl.SSL_CTX_set_cipher_list(ctx, str);
+end;
+
+function SSL_CTX_set_ciphersuites(ctx: PSSL_CTX; str: PUtf8Char): integer;
+begin
+  if Assigned(libssl.SSL_CTX_set_ciphersuites) then
+    result := libssl.SSL_CTX_set_ciphersuites(ctx, str)
+  else
+    result := OPENSSLSUCCESS; // OpenSSL 1.1.0 has no TLS 1.3 anyway
 end;
 
 function SSL_set_fd(s: PSSL; fd: integer): integer;
@@ -3430,11 +3451,12 @@ type
   TLibCrypto = class(TSynLibrary)
   public
     CRYPTO_malloc: function(num: PtrUInt; _file: PUtf8Char; line: integer): pointer; cdecl;
-    CRYPTO_set_mem_functions: function (m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn; f: dyn_MEM_free_fn): integer; cdecl;
+    CRYPTO_set_mem_functions: function(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn; f: dyn_MEM_free_fn): integer; cdecl;
     CRYPTO_free: procedure(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
     CRYPTO_get_ex_new_index: function(class_index: integer; argl: integer; argp: pointer; new_func: PCRYPTO_EX_new; dup_func: PCRYPTO_EX_dup; free_func: PCRYPTO_EX_free): integer; cdecl;
     ERR_error_string_n: procedure(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
     ERR_get_error: function(): cardinal; cdecl;
+    ERR_clear_error: procedure(); cdecl;
     ERR_load_BIO_strings: function(): integer; cdecl;
     EVP_PKEY_new: function(): PEVP_PKEY; cdecl;
     EVP_PKEY_size: function(pkey: PEVP_PKEY): integer; cdecl;
@@ -3514,7 +3536,7 @@ type
     X509_NAME_print_ex_fp: function(fp: PPointer; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
     X509_NAME_entry_count: function(name: PX509_NAME): integer; cdecl;
     X509_NAME_get_entry: function(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY; cdecl;
-    X509_NAME_get_text_by_NID: function (name: PX509_NAME; nid: integer; buf: PUtf8Char; len: integer): integer; cdecl;
+    X509_NAME_get_text_by_NID: function(name: PX509_NAME; nid: integer; buf: PUtf8Char; len: integer): integer; cdecl;
     X509_NAME_get_index_by_NID: function(name: PX509_NAME; nid: integer; lastpos: integer): integer; cdecl;
     X509_NAME_delete_entry: function(name: PX509_NAME; loc: integer): PX509_NAME_ENTRY; cdecl;
     X509_NAME_ENTRY_get_data: function(ne: PX509_NAME_ENTRY): PASN1_STRING; cdecl;
@@ -3659,7 +3681,7 @@ type
     OBJ_txt2nid: function(s: PUtf8Char): integer; cdecl;
     OBJ_txt2obj: function(s: PUtf8Char; no_name: integer): PASN1_OBJECT; cdecl;
     OBJ_obj2nid: function(o: PASN1_OBJECT): integer; cdecl;
-    OBJ_obj2txt: function (buf: PUtf8Char; buf_len: integer; a: PASN1_OBJECT; no_name: integer): integer; cdecl;
+    OBJ_obj2txt: function(buf: PUtf8Char; buf_len: integer; a: PASN1_OBJECT; no_name: integer): integer; cdecl;
     ASN1_OBJECT_free: procedure(a: PASN1_OBJECT); cdecl;
     ASN1_STRING_data: function(x: PASN1_STRING): PByte; cdecl;
     ASN1_STRING_length: function(x: PASN1_STRING): integer; cdecl;
@@ -3792,13 +3814,14 @@ type
   end;
 
 const
-  LIBCRYPTO_ENTRIES: array[0..357] of PAnsiChar = (
+  LIBCRYPTO_ENTRIES: array[0..358] of PAnsiChar = (
     'CRYPTO_malloc',
     'CRYPTO_set_mem_functions',
     'CRYPTO_free',
     'CRYPTO_get_ex_new_index',
     'ERR_error_string_n',
     'ERR_get_error',
+    'ERR_clear_error',
     'ERR_load_BIO_strings',
     'EVP_PKEY_new',
     'EVP_PKEY_get_size EVP_PKEY_size', // OpenSSL 3.0 / 1.1 alternate names
@@ -4186,6 +4209,12 @@ end;
 function ERR_get_error(): cardinal;
 begin
   result := libcrypto.ERR_get_error;
+end;
+
+procedure ERR_clear_error();
+begin
+  // needed on OpenSSL <= 3.x before SSL_connect SSL_accept SSL_read SSL_write
+  libcrypto.ERR_clear_error;
 end;
 
 function ERR_load_BIO_strings(): integer;
@@ -6558,6 +6587,14 @@ function SSL_CTX_use_PrivateKey_file(ctx: PSSL_CTX; _file: PUtf8Char; typ: integ
 function SSL_CTX_set_cipher_list(ctx: PSSL_CTX; str: PUtf8Char): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_set_cipher_list';
 
+// only OpenSSL 1.1 is supported yet as static linking
+function SSL_CTX_set_ciphersuites(ctx: PSSL_CTX; str: PUtf8Char): integer;
+begin
+  result := OPENSSLSUCCESS; // OpenSSL 1.1.0 has no TLS 1.3 anyway
+end;
+//function SSL_CTX_set_ciphersuites(ctx: PSSL_CTX; str: PUtf8Char): integer; cdecl;
+//  external LIB_SSL name _PU + 'SSL_CTX_set_ciphersuites';
+
 function SSL_set_fd(s: PSSL; fd: integer): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_set_fd';
 
@@ -6602,6 +6639,9 @@ procedure ERR_error_string_n(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
 
 function ERR_get_error(): cardinal; cdecl;
   external LIB_CRYPTO name _PU + 'ERR_get_error';
+
+procedure ERR_clear_error(); cdecl;
+  external LIB_CRYPTO name _PU + 'ERR_clear_error';
 
 function ERR_load_BIO_strings(): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ERR_load_BIO_strings';
@@ -9226,7 +9266,8 @@ begin
     if errcert <> nil then
     begin
       errcert^ := c.CurrentCert;
-      X509_up_ref(errcert^);
+      if errcert^ <> nil then
+        X509_up_ref(errcert^);
     end;
   finally
     c.Free;
@@ -10884,6 +10925,54 @@ begin
   result := EVP_MD_size(EVP_MD_CTX_md(ctx))
 end;
 
+{$ifdef OSPOSIX}
+var
+  OpenSslBioSendFlagsUnsupported: boolean;
+{$endif OSPOSIX}
+
+function SSLSetFdNoSigPipe(s: PSSL; fd: integer): integer;
+{$ifdef OSPOSIX}
+var
+  bio: PBIO;
+{$endif OSPOSIX}
+begin
+  {$ifdef OSPOSIX}
+  // OpenSSL 4.0 finally allows socket BIO send(MSG_NOSIGNAL) to be specified
+  if (OpenSslVersion >= OPENSSL4_VERNUM) and
+     (NET_MSG_NOSIGNAL <> 0) and
+     not OpenSslBioSendFlagsUnsupported then
+  begin
+    // SSL_set_fd() internally does essentially:
+    //   BIO_new_socket(fd, BIO_NOCLOSE);
+    //   SSL_set_bio(s, bio, bio);
+    // We reproduce it here so that BIO_C_SET_SEND_FLAGS can be applied
+    // before any TLS handshake/write takes place.
+    bio := BIO_new_socket(fd, {BIO_NOCLOSE=}0);
+    if bio = nil then
+      exit(0); // BIO allocation is a fatal error: SSL_set_fd() won't do better
+    if BIO_ctrl(bio, BIO_C_SET_SEND_FLAGS, NET_MSG_NOSIGNAL, nil) = OPENSSLSUCCESS then
+    begin
+      // SSL takes ownership of the BIO.
+      // Passing the same BIO for read and write is exactly what SSL_set_fd()
+      // does for a normal stream socket.
+      SSL_set_bio(s, bio, bio);
+      result := OPENSSLSUCCESS;
+      exit;
+    end;
+    // BIO_C_SET_SEND_FLAGS / MSG_NOSIGNAL wasn't accepted
+    bio.Free;
+    ERR_get_error; // consume internal error status
+    OpenSslBioSendFlagsUnsupported := true; // no need to retry again
+  end;
+  // OpenSSL 1.1 / 3.x has no way to pass MSG_NOSIGNAL to its socket BIO
+  // Keep the historical mORMot fallback unless explicitly disabled
+  if not NewOpenSslNetTlsNoSigPipeIntercept then
+    SigPipeIntercept; // do nothing and quickly return if already intercepted
+  {$endif OSPOSIX}
+  // regular TLS context assignment to a socket - Windows needs no MSG_NOSIGNAL
+  result := SSL_set_fd(s, fd);
+end;
+
 function BN_num_bytes(bn: PBIGNUM): integer;
 begin
   result := (BN_num_bits(bn) + 7) shr 3;
@@ -11301,6 +11390,9 @@ end;
 { TOpenSslNetTls }
 
 type
+  // SSL_connect() and SSL_accept() functions prototype
+  TOpenSSLProc = function(ssl: PSSL): integer; cdecl;
+
   /// OpenSSL TLS layer communication
   TOpenSslNetTls = class(TInterfacedObject, INetTls)
   private
@@ -11311,10 +11403,13 @@ type
     fSsl: PSSL;
     fPeer: PX509;
     fCipherName, fServerAddress: RawUtf8;
+    fClientSide: boolean;
     fDoSslShutdown: boolean;
-    procedure Check(const method: ShortString; res: integer);
+    procedure CheckRes(const method: ShortString; res: integer);
       {$ifdef HASINLINE} inline; {$endif}
-    function CheckSsl(res: integer): TNetResult;
+    function CheckSsl(res: integer; error: PInteger = nil): TNetResult;
+    procedure CheckProc(proc: TOpenSSLProc; const ctx: ShortString);
+    procedure WaitRetry(res, err: integer; var endtix: Int64; const ctx: ShortString);
     procedure SetupCtx(var Context: TNetTlsContext; Bind: boolean);
   public
     destructor Destroy; override;
@@ -11339,17 +11434,36 @@ threadvar // do not publish for compilation within Delphi packages
 function AfterConnectionPeerVerify(
   wasok: integer; store: PX509_STORE_CTX): integer; cdecl;
 var
-  peer: PX509;
+  x: PX509;
   c: TOpenSslNetTls;
+  ctx: PNetTlsContext;
+  server: TNetTlsContext; // local copy for each callback on server side
 begin
-  peer := X509_STORE_CTX_get_current_cert(store);
+  result := 0;
   c := _PeerVerify;
-  c.fContext.PeerIssuer := peer.IssuerName;
-  c.fContext.PeerSubject := peer.SubjectName;
-  c.fContext.PeerCert := peer;
+  if (c <> nil) and
+     Assigned(c.fContext) and
+     Assigned(c.fContext.OnEachPeerVerify) then // verify proper calling state
   try
-    result := ord(c.fContext.OnEachPeerVerify(
-      c.fSocket, c.fContext, wasok <> 0, c.fSsl, peer));
+    ctx := c.fContext;
+    if not c.fClientSide then
+    begin
+      server := ctx^; // transient thread-safe context
+      ctx := @server;
+    end;
+    x := store.CurrentCert;
+    ctx^.PeerCert := x;
+    if Assigned(x) then
+    begin
+      ctx^.PeerIssuer := x.IssuerName;
+      ctx^.PeerSubject := x.SubjectName;
+    end
+    else
+    begin
+      ctx^.PeerIssuer := '';
+      ctx^.PeerSubject := '';
+    end;
+    result := ord(ctx^.OnEachPeerVerify(c.fSocket, ctx, wasok <> 0, c.fSsl, x));
   except
     result := 0; // abort the connection on exception within callback
   end;
@@ -11361,7 +11475,11 @@ var
   c: TOpenSslNetTls;
   pwd: RawUtf8;
 begin
+  result := 0;
   c := _PeerVerify;
+  if (c <> nil) and
+     Assigned(c.fContext) and
+     Assigned(c.fContext.OnPrivatePassword) then // verify proper calling state
   try
     pwd := c.fContext.OnPrivatePassword(c.fSocket, c.fContext, c.fSsl);
     result := length(pwd);
@@ -11396,12 +11514,14 @@ begin
   end;
 end;
 
-procedure TOpenSslNetTls.Check(const method: ShortString; res: integer);
+procedure TOpenSslNetTls.CheckRes(const method: ShortString; res: integer);
 begin
+  // this method is called ouside of SSL I/O error check e.g. during context setup
   if res <> OPENSSLSUCCESS then
-    EOpenSslNetTls.CheckFailed(self, method, fLastError, fSsl, res, fServerAddress);
+    EOpenSslNetTls.CheckFailed(self, method, fLastError, nil, res, fServerAddress);
 end;
 
+// see https://www.ibm.com/support/knowledgecenter/SSB23S_1.1.0.2020/gtps7/s5sple2.html
 const
   // list taken on 2026-05-01 from https://ssl-config.mozilla.org/
   SAFE_CIPHERLIST: array[ {hwaes=} boolean ] of PUtf8Char = (
@@ -11419,30 +11539,39 @@ const
     'ECDHE-RSA-AES256-GCM-SHA384:' +
     'ECDHE-ECDSA-CHACHA20-POLY1305:' +
     'ECDHE-RSA-CHACHA20-POLY1305');
-
-// see https://www.ibm.com/support/knowledgecenter/SSB23S_1.1.0.2020/gtps7/s5sple2.html
+  // list specific to TLS 1.3
+  SAFE_TLS13_CIPHERSUITES: array[ {hwaes=} boolean ] of PUtf8Char = (
+    // without AES acceleration
+    'TLS_CHACHA20_POLY1305_SHA256:' +
+    'TLS_AES_128_GCM_SHA256:' +
+    'TLS_AES_256_GCM_SHA384',
+    // with AES acceleration
+    'TLS_AES_128_GCM_SHA256:' +
+    'TLS_AES_256_GCM_SHA384:' +
+    'TLS_CHACHA20_POLY1305_SHA256');
 
 procedure TOpenSslNetTls.AfterConnection(Socket: TNetSocket;
   var Context: TNetTlsContext; const ServerAddress: RawUtf8);
 var
   P: PUtf8Char;
   h: RawUtf8;
-  threadpeer: PPointer;
+  peer: PPointer;
   //x: PX509DynArray;
   //ext: TX509_Extensions; exts: TRawUtf8DynArray; len: PtrInt; ocsp, isssuers: TRawUtf8DynArray;
 begin
   // this method is called on the Client side once the TCP socket is established
   fSocket := Socket;
   fContext := @Context;
+  fClientSide := true;
   // reset output information
   ResetNetTlsContext(Context);
   fLastError := @Context.LastError;
   fServerAddress := ServerAddress;
-  threadpeer := @_PeerVerify;
+  peer := @_PeerVerify; // for OnEachPeerVerify/OnPrivatePassword callbacks
   // prepare TLS connection properties
   fCtx := SSL_CTX_new(TLS_client_method);
   try
-    threadpeer^ := self;
+    peer^ := self;
     SetupCtx(Context, {bind=}false);
     fSsl := SSL_new(fCtx);
     // setup client-side SNI field for the expected server host name(s)
@@ -11450,17 +11579,18 @@ begin
     if not Context.IgnoreCertificateErrors then
     begin
       P := pointer(Context.HostNamesCsv);
-      if GetNextCsv(P, h) then
-      begin
-        SSL_set_hostflags(fSsl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
-        Check('AfterConnection set1_host', SSL_set1_host(fSsl, pointer(h)));
-        while GetNextCsv(P, h) do
-          Check('AfterConnection add1_host', SSL_add1_host(fSsl, pointer(h)));
-      end;
+      if not GetNextCsv(P, h) then // default expected peer identity
+        h := ServerAddress; // plain IP here may fail before OpenSSL 3.4
+      SSL_set_hostflags(fSsl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+      CheckRes('AfterConnection set1_host', SSL_set1_host(fSsl, pointer(h)));
+      while GetNextCsv(P, h) do
+        CheckRes('AfterConnection add1_host', SSL_add1_host(fSsl, pointer(h)));
     end;
-    Check('AfterConnection set_fd', SSL_set_fd(fSsl, Socket.Socket));
+    // setup the conection using MSG_NOSIGNAL on OpenSSL 4+
+    CheckRes('AfterConnection set_fd',
+      SSLSetFdNoSigPipe(fSsl, Socket.Socket));
     // client TLS negotiation with server
-    Check('AfterConnection connect', SSL_connect(fSsl));
+    CheckProc(@SSL_connect, 'AfterConnection SSL_connect');
     fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
     Context.CipherName := GetCipherName;
     // writeln(Context.CipherName);
@@ -11479,7 +11609,7 @@ begin
       //PX509DynArrayFree(x);
       if (fPeer = nil) and
          not Context.IgnoreCertificateErrors then
-        Check('AfterConnection get_peer_certificate', 0);
+         raise EOpenSslNetTls.Create('AfterConnection: missing peer certificate');
       try
         if fPeer <> nil then
         begin
@@ -11562,13 +11692,13 @@ begin
       end;
     end;
   finally
-    threadpeer^ := nil; // but keep fLastError since fContext remains
+    peer^ := nil; // but keep fLastError since fContext remains
   end;
 end;
 
 procedure TOpenSslNetTls.SetupCtx(var Context: TNetTlsContext; Bind: boolean);
 var
-  v, mode, i: integer;
+  v, mode, i, opt: integer;
   cert: RawByteString;
   x: PX509;
   xa: PX509DynArray;
@@ -11620,11 +11750,11 @@ begin
     xa := LoadCertificates(cert); // PEM
     if xa <> nil then
     try
-      Check('SetupCtx Certificate0',
+      CheckRes('SetupCtx Certificate0',
         SSL_CTX_use_certificate(fCtx, xa[0]));
       for i := 1 to high(xa) do
       begin
-        Check('SetupCtx Chain',
+        CheckRes('SetupCtx Chain',
           SSL_CTX_add_extra_chain_cert(fCtx, xa[i]));
         xa[i] := nil; // fCtx owns it now - no inc(refcnt)
       end;
@@ -11635,7 +11765,7 @@ begin
             (Context.PrivateKeyFile = '') and
             ParsePkcs12(cert, Context.PrivatePassword, x, pk, @ca) then
       try // was .pfx/pkcs#12 format as with SChannel
-        Check('SetupCtx Certificate',
+        CheckRes('SetupCtx Certificate',
           SSL_CTX_use_certificate(fCtx, x));
         if ca <> nil then
           for i := 0 to ca^.Count - 1 do
@@ -11644,9 +11774,9 @@ begin
             X509_up_ref(c); // no inc(refcnt) in fCtx
             SSL_CTX_add_extra_chain_cert(fCtx, c);
           end;
-        Check('SetupCtx PrivateKey',
+        CheckRes('SetupCtx PrivateKey',
           SSL_CTX_use_PrivateKey(fCtx, pk));
-        Check('SetupCtx pfx',
+        CheckRes('SetupCtx pfx',
           SSL_CTX_check_private_key(fCtx));
       finally
         x^.Free;
@@ -11658,7 +11788,7 @@ begin
         nil, nil, 0, fServerAddress);
   end
   else if Context.CertificateRaw <> nil then
-    Check('SetupCtx CertificateRaw',
+    CheckRes('SetupCtx CertificateRaw',
       SSL_CTX_use_certificate(fCtx, Context.CertificateRaw))
   else if Bind then
     raise EOpenSslNetTls.Create('AfterBind: Certificate required');
@@ -11671,21 +11801,35 @@ begin
         fCtx, pointer(Context.PrivatePassword));
     SSL_CTX_use_PrivateKey_file(
       fCtx, pointer(Context.PrivateKeyFile), SSL_FILETYPE_PEM);
-    Check('SetupCtx check_private_key file',
+    CheckRes('SetupCtx check_private_key file',
       SSL_CTX_check_private_key(fCtx));
   end
   else if Context.PrivateKeyRaw <> nil then
   begin
     SSL_CTX_use_PrivateKey(fCtx, Context.PrivateKeyRaw);
-    Check('SetupCtx check_private_key raw',
+    CheckRes('SetupCtx check_private_key raw',
       SSL_CTX_check_private_key(fCtx));
   end
   else if Bind and (pk = nil) then
     raise EOpenSslNetTls.Create('AfterBind: PrivateKey required');
   if Context.CipherList = '' then
-    Context.CipherList := SAFE_CIPHERLIST[HasHWAes];
-  Check('SetupCtx set_cipher_list',
+    Context.CipherList := SAFE_CIPHERLIST[HasHWAes]; // our own default
+  CheckRes('SetupCtx set_cipher_list',
     SSL_CTX_set_cipher_list(fCtx, pointer(Context.CipherList)));
+  if not Context.DisableTls13 then
+  begin
+    if Context.CipherSuites = '' then
+      Context.CipherSuites := SAFE_TLS13_CIPHERSUITES[HasHWAes]; // our default
+    CheckRes('SetupCtx set_ciphersuites',
+      SSL_CTX_set_ciphersuites(fCtx, pointer(Context.CipherSuites)));
+  end;
+  if Bind then
+  begin
+    opt := SSL_OP_CIPHER_SERVER_PREFERENCE;
+    if HasHWAes then
+      opt := opt or SSL_OP_PRIORITIZE_CHACHA; // favor weak client preference
+    SSL_CTX_set_options(fCtx, opt);
+  end;
   v := TLS1_2_VERSION; // no SSL3 TLS1.0 TLS1.1
   if Context.AllowDeprecatedTls then
     v := TLS1_VERSION; // allow TLS1.0 TLS1.1 but no SSL
@@ -11706,21 +11850,24 @@ end;
 function AfterAcceptSNI(s: PSSL; ad: PInteger; arg: pointer): integer; cdecl;
 var
   servername: PUtf8Char;
-  nettlscontext: PNetTlsContext absolute arg;
+  ctx: PNetTlsContext absolute arg;
   sslctx: PSSL_CTX;
 begin
   result := SSL_TLSEXT_ERR_OK; // requested servername has been accepted
-  if not Assigned(nettlscontext) or
-     not Assigned(nettlscontext^.OnAcceptServerName) then
-    exit; // use default context/certificate
-  servername := SSL_get_servername(s, TLSEXT_NAMETYPE_host_name);
-  if servername = nil then
-    exit;
-  sslctx := nettlscontext^.OnAcceptServerName(nettlscontext, s, servername);
-  if sslctx <> nil then
-    // switching server context
-    if SSL_set_SSL_CTX(s, sslctx) = nil then // note: only change certificates
-      result := SSL_TLSEXT_ERR_NOACK; // requested servername has been rejected
+  if Assigned(ctx) and
+     Assigned(ctx^.OnAcceptServerName) then
+  try
+    servername := SSL_get_servername(s, TLSEXT_NAMETYPE_host_name);
+    if servername = nil then
+      exit;
+    sslctx := ctx^.OnAcceptServerName(ctx, s, servername);
+    if sslctx <> nil then
+      // switching server context
+      if SSL_set_SSL_CTX(s, sslctx) = nil then // note: only change certificates
+        result := SSL_TLSEXT_ERR_NOACK; // requested servername has been rejected
+  except
+    // don't propagate any client callback exception to OpenSSL
+  end;
 end;
 
 procedure TOpenSslNetTls.AfterBind(Socket: TNetSocket;
@@ -11728,11 +11875,12 @@ procedure TOpenSslNetTls.AfterBind(Socket: TNetSocket;
 var
   peer: PPointer;
 begin
-  // we don't keep any fSocket/fContext bound socket on server side
+  fSocket := Socket;
+  fContext := @Context;
   Context.LastError := '';
   fLastError := @Context.LastError;
   fServerAddress := ServerAddress;
-  peer := @_PeerVerify;
+  peer := @_PeerVerify; // for OnEachPeerVerify/OnPrivatePassword callbacks
   // prepare global TLS connection properties, as reused by AfterAccept()
   fCtx := SSL_CTX_new_server(ServerAddress);
   try
@@ -11748,6 +11896,7 @@ begin
     Context.AcceptCert := fCtx;
   finally
     fLastError := nil; // as expected on server side
+    fContext := nil;   // don't retain shared server context here
     peer^ := nil;
   end;
 end;
@@ -11762,16 +11911,17 @@ begin
   fContext := @BoundContext; // main context may be shared e.g. for TAsyncServer
   // reset output information
   fLastError := LastError;
-  peer := @_PeerVerify;
+  peer := @_PeerVerify; // for OnEachPeerVerify callback support
   try
     peer^ := self;
     // prepare TLS connection properties from AfterBind() global context
     if BoundContext.AcceptCert = nil then
       raise EOpenSslNetTls.Create('AfterAccept: missing AfterBind');
     fSsl := SSL_new(BoundContext.AcceptCert);
-    Check('AfterAccept set_fd', SSL_set_fd(fSsl, Socket.Socket));
+    CheckRes('AfterAccept set_fd',
+      SSLSetFdNoSigPipe(fSsl, Socket.Socket)); // MSG_NOSIGNAL on OpenSSL 4+
     // server TLS negotiation with server
-    Check('AfterAccept accept', SSL_accept(fSsl));
+    CheckProc(@SSL_accept, 'AfterAccept SSL_accept');
     fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
     if CipherName <> nil then
       CipherName^ := GetCipherName;
@@ -11829,13 +11979,15 @@ begin
 end;
 
 // see https://www.openssl.org/docs/man1.1.1/man3/SSL_get_error.html
-function TOpenSslNetTls.CheckSsl(res: integer): TNetResult;
+function TOpenSslNetTls.CheckSsl(res: integer; error: PInteger): TNetResult;
 var
   err: integer; // not PtrInt
   tmp: ShortString;
 begin
   tmp[0] := #0;
   err := SSL_get_error(fSsl, res); // caller ensured res <= 0
+  if error <> nil then
+    error^ := err;
   case err of
     SSL_ERROR_NONE:
       result := nrOk; // paranoid
@@ -11872,17 +12024,64 @@ begin
      (fLastError <> nil) and
      (tmp[0] <> #0) then
     ShortStringToAnsi7String(tmp, fLastError^);
- end;
+end;
+
+procedure TOpenSslNetTls.WaitRetry(res, err: integer; var endtix: Int64;
+  const ctx: ShortString);
+var
+  ne: TNetEvents;
+begin
+  case err of
+    SSL_ERROR_WANT_READ:
+      ne := [neRead, neError];
+    SSL_ERROR_WANT_WRITE:
+      ne := [neWrite, neError];
+  else
+    EOpenSslNetTls.CheckFailed(
+      self, ctx, fLastError, fSsl, res, fServerAddress, err);
+  end;
+  if endtix = 0 then
+    endtix := GetTickCount64 + 5000 // never loop forever
+  else if GetTickCount64 > endtix then
+    raise EOpenSslNetTls.CreateFmt('%s timeout', [ctx]);
+  fSocket.WaitFor(100, ne);
+end;
+
+procedure TOpenSslNetTls.CheckProc(proc: TOpenSSLProc; const ctx: ShortString);
+var
+  res: integer;
+  endtix: Int64;
+begin
+  endtix := 0;
+  repeat
+    ERR_clear_error;   // needed on 1.x/3.x - but harmless for OpenSSL 4+
+    res := proc(fSsl); // SSL_connect() or SSL_accept()
+    if res = OPENSSLSUCCESS then
+      exit;
+    WaitRetry(res, SSL_get_error(fSsl, res), endtix, ctx);
+  until false;
+end;
 
 function TOpenSslNetTls.Receive(Buffer: pointer; var Length: integer): TNetResult;
+var
+  len, err: integer;
+  endtix: Int64;
 begin
-  Length := SSL_read(fSsl, Buffer, Length);
-  if Length <= 0 then
-    // read operation was not successful
-    result := CheckSsl(Length)
-  else
-    // return value is number of bytes actually read from the TLS connection
+  len := Length; // preserve original SSL_read() arguments
+  endtix := 0;
+  repeat
     result := nrOK;
+    ERR_clear_error; // needed on 1.x/3.x - but harmless for OpenSSL 4+
+    Length := SSL_read(fSsl, Buffer, len);
+    if Length > 0 then
+      // return value was number of bytes actually read from the TLS connection
+      exit;
+    // TLS read operation was not successful
+    result := CheckSsl(Length, @err);
+    if err <> SSL_ERROR_WANT_WRITE then
+      exit; // SSL_ERROR_WANT_READ is handled (asynchronously) by the caller
+    WaitRetry(Length, err, endtix, 'Receive');
+  until false;
 end;
 
 function TOpenSslNetTls.ReceivePending: integer;
@@ -11891,26 +12090,31 @@ begin
 end;
 
 function TOpenSslNetTls.Send(Buffer: pointer; var Length: integer): TNetResult;
+var
+  len, err: integer;
+  endtix: Int64;
 begin
-  Length := SSL_write(fSsl, Buffer, Length);
-  if Length <= 0 then
-    // write operation was not successful
-    result := CheckSsl(Length)
-  else
-    // return value is number of bytes actually written to the TLS connection
+  len := Length; // preserve original SSL_write() arguments
+  endtix := 0;
+  repeat
     result := nrOK;
+    ERR_clear_error; // needed on 1.x/3.x - but harmless for OpenSSL 4+
+    Length := SSL_write(fSsl, Buffer, len);
+    if Length > 0 then
+      // return value was number of bytes actually sent to the TLS connection
+      exit;
+    // TLS write operation was not successful
+    result := CheckSsl(Length, @err);
+    if err <> SSL_ERROR_WANT_READ then
+      exit; // SSL_ERROR_WANT_WRITE is handled (asynchronously) by the caller
+    WaitRetry(Length, err, endtix, 'Send');
+  until false;
 end;
 
 function NewOpenSslNetTls: INetTls;
 begin
   if OpenSslIsAvailable then
-  begin
-    {$ifdef OSPOSIX}
-    if not NewOpenSslNetTlsNoSigPipeIntercept then
-      SigPipeIntercept;
-    {$endif OSPOSIX}
-    result := TOpenSslNetTls.Create;
-  end
+    result := TOpenSslNetTls.Create
   else
     result := nil;
 end;
@@ -11934,7 +12138,7 @@ begin
     s := SSL_new(c);
     SSL_set_tlsext_host_name(s, u.Server);
     try
-      if (SSL_set_fd(s, ns.Socket) = OPENSSLSUCCESS) and
+      if (SSLSetFdNoSigPipe(s, ns.Socket) = OPENSSLSUCCESS) and
          (SSL_connect(s) = OPENSSLSUCCESS) then
         result := s.PeerCertificates({acquire=}true);
     finally

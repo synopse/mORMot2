@@ -254,16 +254,19 @@ implementation
 // QuickJS and lizard source e.g. was patched to call those heap functions
 // warning: we can't replace malloc/free/realloc and link libc/libpthread/libdl
 
-function pas_malloc(size: cardinal): pointer; cdecl;
+function pas_malloc(size: PtrInt): pointer; cdecl;
  {$ifdef FPC} public name _PREFIX + 'pas_malloc'; {$endif}
 begin
   GetMem(result, size);
 end;
 
-function pas_calloc(n, size: PtrInt): pointer; cdecl;
+function pas_calloc(n, size: PtrUInt): pointer; cdecl;
  {$ifdef FPC} public name _PREFIX + 'pas_calloc'; {$endif}
 begin
-  result := AllocMem(size * n);
+  if (size <> 0) and (n > High(PtrUInt) div size) then
+    result := nil   // refuse rather than wrap
+  else
+    result := AllocMem(size * n);
 end;
 
 procedure pas_free(P: pointer); cdecl;
@@ -279,14 +282,15 @@ begin
   result := P;
 end;
 
-function pas_malloc_usable_size(P: pointer): integer; cdecl;
+function pas_malloc_usable_size(P: pointer): PtrUInt; cdecl;
  {$ifdef FPC} public name _PREFIX + 'pas_malloc_usable_size'; {$endif}
-begin
+begin // only used by mormot.lib.quickjs which accepts 0 as fallback if unknown
   {$ifdef FPC}
-  result := MemSize(P); // only available on FPC
-  {$else}
-  result := 0; // will reallocate each time - good enough with Delphi's FastMM4
+  if P <> nil then
+    result := MemSize(P) // only available on FPC
+  else
   {$endif FPC}
+    result := 0; // caller should reallocate each time
 end;
 
 // see e.g. #define assert(x) in QuickJS cutils.h

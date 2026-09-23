@@ -1860,8 +1860,35 @@ SYSV aarch64:
     // is pushed to the 2nd (RSI). FPC and Delphi-Win64 do the opposite (Self
     // first), which is what the register layout in this unit assumes. This
     // symbol enables the small fixups that bridge that ABI difference.
-    {$define DELPHI_SYSVX64_RESULT_FIRST}
+    {$define DELPHI_RESULT_FIRST}
   {$endif ABISYSVX64}
+  {$ifdef ABIA32}
+    {$ifdef OSANDROID}
+      // Delphi's LLVM ARM compiler (armeabi-v7a) follows AAPCS with VFP
+      // hard-float, as CPUARMHF expects, but has no asm: the external stubs
+      // (assembled from delphi-arm.s) replace ArmFakeStub and CallMethod
+      {$define DELPHI_ARM32_STUBS}
+      // like Delphi on Linux x64, it passes a by-ref result in R0 and Self in R1
+      {$define DELPHI_RESULT_FIRST}
+      // the VMT entry points come compiled in (armfakethunks), as on aarch64
+      {$define DELPHI_STATIC_FAKEVMT}
+    {$endif OSANDROID}
+  {$endif ABIA32}
+  {$ifdef ABIA64}
+    {$if defined(OSANDROID) or defined(IOS)}
+      // Delphi's LLVM aarch64 compiler follows AAPCS64 and passes a by-ref
+      // result in the dedicated X8 register, so it does not consume X1 as FPC
+      // does: the external aarch64fakestub (assembled from delphi-aarch64.s)
+      // saves X8 into TFakeCallStack.Frame, and no integer register is
+      // reserved for the result
+      // - the very same code is used as ELF for Android and as Mach-O for iOS
+      // - macOS/Windows aarch64 would need their own object: not done yet
+      {$define DELPHI_AARCH64_RESULT_X8}
+      // iOS terminates an app which runs code it wrote itself, so the VMT
+      // entry points come compiled in (aarch64fakethunks) instead of JITted
+      {$define DELPHI_STATIC_FAKEVMT}
+    {$ifend}
+  {$endif ABIA64}
 {$endif ISDELPHI}
 
 const
@@ -3443,13 +3470,18 @@ begin
     else
     {$endif HAS_FPREG}
       if a^.RegisterIdent > 0 then
-        {$ifdef DELPHI_SYSVX64_RESULT_FIRST}
+        {$ifdef DELPHI_AARCH64_RESULT_X8}
         if a^.ValueDirection = imdResult then
-          // Delphi LLVM Linux x64: the hidden result pointer travels in the
-          // 1st integer register, not the 2nd as FPC/Delphi-Win64 do
-          V := @ctxt.Stack.ParamRegs[REGRDI]
+          V := @ctxt.Stack.Frame // X8, as saved by aarch64fakestub
         else
-        {$endif DELPHI_SYSVX64_RESULT_FIRST}
+        {$endif DELPHI_AARCH64_RESULT_X8}
+        {$ifdef DELPHI_RESULT_FIRST}
+        if a^.ValueDirection = imdResult then
+          // Delphi LLVM Linux x64 and ARM: the hidden result pointer travels
+          // in the 1st integer register, not the 2nd as FPC/Delphi-Win64 do
+          V := @ctxt.Stack.ParamRegs[PARAMREG_FIRST]
+        else
+        {$endif DELPHI_RESULT_FIRST}
           V := @ctxt.Stack.ParamRegs[a^.RegisterIdent + (PARAMREG_FIRST - 1)];
     if a^.RegisterIdent = PARAMREG_FIRST then
       FakeCallRaiseError(ctxt, 'unexpected self', []);
@@ -3509,17 +3541,17 @@ begin
      forged to call a remote SOA server or mock/stub an interface
   *)
   me := SelfFromInterface;
-  {$ifdef DELPHI_SYSVX64_RESULT_FIRST}
-  // for a by-ref-result method, Delphi's LLVM Linux x64 ABI passes the hidden
-  // result pointer in the 1st integer register, so the shared x64fakestub
+  {$ifdef DELPHI_RESULT_FIRST}
+  // for a by-ref-result method, Delphi's LLVM Linux x64 and ARM ABIs pass the
+  // hidden result pointer in the 1st integer register, so the shared stub
   // trampoline forwarded @Result (not the interface) to us as Self. A genuine
   // fake interface has fVTable = _FAKEVMT; if it does not, the real Self was
-  // pushed into the 2nd register (RSI), saved on the stack: recover it there.
+  // pushed into the 2nd register (RSI/R1), saved on the stack: recover it there.
   if (self = nil) or
      (me.fVTable <> pointer(_FAKEVMT)) then
-    me := TInterfacedObjectFakeRaw(PAnsiChar(stack^.ParamRegs[REGRSI]) -
+    me := TInterfacedObjectFakeRaw(PAnsiChar(stack^.ParamRegs[PARAMREG_RESULT]) -
       PtrUInt(@TInterfacedObjectFakeRaw(nil).fVTable));
-  {$endif DELPHI_SYSVX64_RESULT_FIRST}
+  {$endif DELPHI_RESULT_FIRST}
   // setup context
   ctxt.Stack := stack;
   if stack.MethodIndex >= PtrUInt(me.fFactory.MethodsCount) then
@@ -4435,10 +4467,12 @@ begin
         // this parameter will go in a register
         a^.InStackOffset := -1;
         {$ifndef ABIX86}
+        {$ifndef DELPHI_AARCH64_RESULT_X8} // X8 is used instead
         if (m^.ArgsResultIndex >= 0) and
            (reg = PARAMREG_RESULT) and
            (m^.Args[m^.ArgsResultIndex].ValueType in ARGS_RESULT_BY_REF) then
           inc(reg); // this register is reserved for method result pointer
+        {$endif DELPHI_AARCH64_RESULT_X8}
         {$endif ABIX86}
         {$ifdef HAS_FPREG}
         if SizeInFPR = 1 then
@@ -4867,9 +4901,95 @@ end;
 {$ifdef ABIA64}
 procedure TInterfacedObjectFakeRaw.AArch64FakeStub;
 begin
-  // TODO: use external .o for Delphi ARM64
+  // unused: DELPHI_AARCH64_RESULT_X8 platforms link aarch64fakestub instead
 end;
+
+{$ifdef DELPHI_AARCH64_RESULT_X8}
+
+// the external stub calls back fakecall(Instance, Stack), with X8 in Stack.Frame
+function DelphiAArch64FakeCall(Instance: TInterfacedObjectFakeRaw;
+  Stack: PFakeCallStack): Int64; cdecl;
+begin
+  result := Instance.FakeCall(Stack); // FakeCall uses SelfFromInterface
+end;
+
+exports
+  DelphiAArch64FakeCall name 'fakecall';
+
+const
+  // the same code, one object per binary format and platform
+  AARCH64OBJ =
+    {$if defined(OSANDROID)}
+      '../../res/static/delphillvm/delphi-android-arm64.o'  // ELF
+    {$elseif defined(IOSSIMULATOR)}
+      '../../res/static/delphillvm/delphi-iossim-arm64.o'   // Mach-O
+    {$else}
+      '../../res/static/delphillvm/delphi-ios-arm64.o'      // Mach-O
+    {$ifend};
+
+procedure aarch64fakestub; external AARCH64OBJ
+  name 'aarch64fakestub';
+
+{$ifdef DELPHI_STATIC_FAKEVMT}
+const
+  // one VMT entry point per method index, 8 bytes each, in the order _FAKEVMT
+  // expects them - delphi-aarch64.s supplies 128 of them
+  FAKETHUNKSIZE = 8;
+
+{$if MAX_METHOD_COUNT > 128}
+  {$message fatal 'delphi-aarch64.s: aarch64fakethunks has only 128 entries'}
+{$ifend}
+
+// the table is addressed through this function on purpose: Delphi wraps an
+// "external ... name" procedure into a thunk of its own, so @aarch64fakethunks
+// would yield that wrapper instead of the table itself
+function FakeThunkBase: pointer; cdecl; external AARCH64OBJ
+  name 'aarch64fakethunkbase';
+{$endif DELPHI_STATIC_FAKEVMT}
+
+{$endif DELPHI_AARCH64_RESULT_X8}
 {$endif ABIA64}
+
+{$ifdef ABIA32}
+procedure TInterfacedObjectFakeRaw.ArmFakeStub;
+begin
+  // unused: DELPHI_ARM32_STUBS platforms link armfakestub instead
+end;
+
+{$ifdef DELPHI_ARM32_STUBS}
+
+// the external stub calls back fakecall(Instance, Stack)
+function DelphiArmFakeCall(Instance: TInterfacedObjectFakeRaw;
+  Stack: PFakeCallStack): Int64; cdecl;
+begin
+  result := Instance.FakeCall(Stack); // FakeCall uses SelfFromInterface
+end;
+
+exports
+  DelphiArmFakeCall name 'fakecall';
+
+const
+  ARMOBJ = '../../res/static/delphillvm/delphi-android-arm.o'; // ELF
+
+procedure armfakestub; external ARMOBJ
+  name 'armfakestub';
+
+const
+  // one VMT entry point per method index, 8 bytes each, in the order _FAKEVMT
+  // expects them - delphi-arm.s supplies 128 of them
+  FAKETHUNKSIZE = 8;
+
+{$if MAX_METHOD_COUNT > 128}
+  {$message fatal 'delphi-arm.s: armfakethunks has only 128 entries'}
+{$ifend}
+
+// the table is addressed through this function on purpose: Delphi wraps an
+// "external ... name" procedure into a thunk of its own
+function FakeThunkBase: pointer; cdecl; external ARMOBJ
+  name 'armfakethunkbase';
+
+{$endif DELPHI_ARM32_STUBS}
+{$endif ABIA32}
 
 {$endif FPC}
 
@@ -5029,6 +5149,30 @@ end;
 
 {$else}
 
+{$ifdef DELPHI_STATIC_FAKEVMT}
+
+// no JIT here: the VMT entry points are compiled in, because iOS terminates an
+// app which executes code it wrote itself - such a JITted page shows up as
+// "Untagged" rwx memory, and the kernel reports CODESIGNING / "Invalid Page"
+// - internal function protected by VmtSafe.Lock
+procedure Compute_FAKEVMT;
+var
+  i: PtrInt;
+  thunk: PAnsiChar;
+begin
+  SetLength(_FAKEVMT, MAX_METHOD_COUNT + RESERVED_VTABLE_SLOTS);
+  // set IInterface RESERVED_VTABLE_SLOTS required methods
+  _FAKEVMT[0] := @TInterfacedObjectFakeRaw.FakeQueryInterface;
+  _FAKEVMT[1] := @TInterfacedObjectFakeRaw.Fake_AddRef;
+  _FAKEVMT[2] := @TInterfacedObjectFakeRaw.Fake_Release;
+  // point to the static thunk of each method index (e.g. mov x16,i; b stub)
+  thunk := FakeThunkBase;
+  for i := 0 to MAX_METHOD_COUNT - 1 do
+    _FAKEVMT[i + RESERVED_VTABLE_SLOTS] := @thunk[i * FAKETHUNKSIZE];
+end;
+
+{$else}
+
 // JIT MAX_METHOD_COUNT VMT stubs for every method of any interface
 // - internal function protected by VmtSafe.Lock
 procedure Compute_FAKEVMT;
@@ -5114,6 +5258,8 @@ begin
   ReserveExecutableMemoryPageAccess(
     _FAKEVMT[RESERVED_VTABLE_SLOTS], {exec=}true);
 end;
+
+{$endif DELPHI_STATIC_FAKEVMT}
 
 function TInterfaceFactory.GetMethodsVirtualTable: pointer;
 begin
@@ -6920,11 +7066,20 @@ type
     {$endif HAS_FPREG}
     res64: Int64Rec;
     resKind: TInterfaceMethodValueType;
+    {$ifdef DELPHI_AARCH64_RESULT_X8}
+    // by-ref result pointer, loaded into X8 by aarch64callmethod
+    // - its offset 168 is hardcoded in delphi-aarch64.s
+    ResultX8: PtrInt;
+    {$endif DELPHI_AARCH64_RESULT_X8}
   end;
 
 // ARM/AARCH64 code below provided by ALF, greatly inspired by pascalscript
 {$ifdef ABIA32}
 
+{$ifdef DELPHI_ARM32_STUBS}
+procedure CallMethod(var Args: TCallMethodArgs); external
+  ARMOBJ name 'armcallmethod';
+{$else}
 procedure CallMethod(var Args: TCallMethodArgs); assembler; nostackframe;
 label
   {$ifdef HAS_FPREG}
@@ -7012,8 +7167,6 @@ load_regs:
    cmp   r2, imvDouble
    beq   float_result
    cmp   r2, imvDateTime
-   beq   float_result
-   cmp   r2, imvCurrency
    bne   asmcall_end
    // store double result in res64
 float_result:
@@ -7023,6 +7176,7 @@ asmcall_end:
    // epilog
    ldmea fp, {v1, v2, sb, sl, fp, sp, pc}
 end;
+{$endif DELPHI_ARM32_STUBS}
 
 {$endif ABIA32}
 
@@ -7096,8 +7250,6 @@ load_regs:
    cmp  x15, imvDouble
    b.eq float_result
    cmp  x15, imvDateTime
-   b.eq float_result
-   cmp  x15, imvCurrency
    b.ne asmcall_end
    // store double result in res64
 float_result:
@@ -7109,10 +7261,15 @@ asmcall_end:
    ret
 end;
 {$else}
+{$ifdef DELPHI_AARCH64_RESULT_X8}
+procedure CallMethod(var Args: TCallMethodArgs); external
+  AARCH64OBJ name 'aarch64callmethod';
+{$else}
 procedure CallMethod(var Args: TCallMethodArgs);
 begin
   // TODO: use external .o stub on Delphi ARM64
 end;
+{$endif DELPHI_AARCH64_RESULT_X8}
 {$endif FPC}
 {$endif ABIA64}
 
@@ -7196,8 +7353,14 @@ asm
         mov     cl, [r12].TCallMethodArgs.resKind
         cmp     cl, imvDouble
         je      @d
-        cmp     cl, imvDateTime // but imvCurrency is returned in rax
+        cmp     cl, imvDateTime
+        je      @d
+        {$ifdef FPCPOSIX} // FPC x86-64 SysV store imvCurrency into x87 ST0
+        cmp     cl, imvCurrency
         jne     @e
+        fistp   qword [r12].TCallMethodArgs.res64
+        {$endif FPCPOSIX}
+        jmp     @e
 @d:     movlpd  qword ptr [r12].TCallMethodArgs.res64, xmm0
         // movlpd to ignore upper 64-bit of 128-bit xmm0 reg
 @e:     {$ifdef FPC}
@@ -7404,7 +7567,12 @@ begin
       reValStack:
         MoveFast(pv^^, Stack[arg^.InStackOffset], arg^.SizeInStack);
       reRefReg:
-        call.ParamRegs[arg^.RegisterIdent] := PPtrInt(pv)^;
+        {$ifdef DELPHI_AARCH64_RESULT_X8}
+        if arg^.ValueDirection = imdResult then
+          call.ResultX8 := PPtrInt(pv)^ // AAPCS64 passes it in X8
+        else
+        {$endif DELPHI_AARCH64_RESULT_X8}
+          call.ParamRegs[arg^.RegisterIdent] := PPtrInt(pv)^;
       reRefStack:
         PPointer(@Stack[arg^.InStackOffset])^ := pv^;
       {$ifdef HAS_FPREG}
@@ -7416,14 +7584,14 @@ begin
       {$endif HAS_FPREG}
     end;
   end;
-  {$ifdef DELPHI_SYSVX64_RESULT_FIRST}
-  // the FPC-shaped layout above placed a by-ref result pointer in RSI
-  // (PARAMREG_RESULT); Delphi's LLVM Linux x64 ABI expects it in RDI, so
-  // move it there once. Self is assigned to RSI per-instance in the loop.
+  {$ifdef DELPHI_RESULT_FIRST}
+  // the FPC-shaped layout above placed a by-ref result pointer in RSI/R1
+  // (PARAMREG_RESULT); Delphi's LLVM Linux x64 and ARM ABIs expect it in
+  // RDI/R0, so move it there once. Self is assigned to RSI/R1 per-instance.
   if (fMethod^.ArgsResultIndex >= 0) and
      (fMethod^.Args[fMethod^.ArgsResultIndex].ValueType in ARGS_RESULT_BY_REF) then
-    call.ParamRegs[REGRDI] := call.ParamRegs[REGRSI];
-  {$endif DELPHI_SYSVX64_RESULT_FIRST}
+    call.ParamRegs[PARAMREG_FIRST] := call.ParamRegs[PARAMREG_RESULT];
+  {$endif DELPHI_RESULT_FIRST}
   // execute the method
   for i := 0 to InstancesLast do
   begin
@@ -7441,13 +7609,13 @@ begin
       end;
     end;
     // prepare the low-level call context for the asm stub
-    {$ifdef DELPHI_SYSVX64_RESULT_FIRST}
+    {$ifdef DELPHI_RESULT_FIRST}
     if (fMethod^.ArgsResultIndex >= 0) and
        (fMethod^.Args[fMethod^.ArgsResultIndex].ValueType in ARGS_RESULT_BY_REF) then
-      // Delphi LLVM Linux x64: Self travels in the 2nd integer register
-      call.ParamRegs[REGRSI] := PtrInt(Instances[i])
+      // Delphi LLVM Linux x64 and ARM: Self travels in the 2nd integer register
+      call.ParamRegs[PARAMREG_RESULT] := PtrInt(Instances[i])
     else
-    {$endif DELPHI_SYSVX64_RESULT_FIRST}
+    {$endif DELPHI_RESULT_FIRST}
     call.ParamRegs[PARAMREG_FIRST] := PtrInt(Instances[i]); // pass self
     call.method := PPtrIntArray(PPointer(Instances[i])^)^[
       fMethod^.ExecutionMethodIndex];

@@ -947,7 +947,7 @@ procedure JS_SetMemoryLimit(rt: JSRuntime; limit: PtrUInt);
 procedure JS_SetGCThreshold(rt: JSRuntime; gc_threshold: PtrUInt);
   cdecl; external {$ifdef QJSDLL}QJ{$endif};
 
-procedure JS_SetMaxStackSize(ctx: JSContext; stack_size: PtrUInt);
+procedure JS_SetMaxStackSize(rt: JSRuntime; stack_size: PtrUInt);
   cdecl; external {$ifdef QJSDLL}QJ{$endif};
 
 function JS_NewRuntime2(const mf: PJSMallocFunctions;
@@ -1461,7 +1461,6 @@ function JS_EnqueueJob(ctx: JSContext; job_func: PJSJobFunc; argc: integer;
 
 function JS_IsJobPending(rt: JSRuntime): JS_BOOL;
    cdecl; external {$ifdef QJSDLL}QJ{$endif};
-// TODO: Check pctx if the type is right.
 
 function JS_ExecutePendingJob(rt: JSRuntime; pctx: PJSContext): integer;
    cdecl; external {$ifdef QJSDLL}QJ{$endif};
@@ -1765,28 +1764,28 @@ uses
 // note: Delphi expects the dependencies to be in the very same unit
 //  -> we either implement them here, or asm jmp to mormot.lib.static code
 
-function pas_malloc(size: cardinal): pointer; cdecl;
-begin
+function pas_malloc(size: PtrUInt): pointer; cdecl;
+begin // defined as void *pas_malloc(size_t size); in cutils.h
   if size = 0 then
   begin
     result := nil;
     exit;
   end;
-  GetMem(result, size + 4);
+  GetMem(result, size + 4);  // +4 on Delphi since we don't have FPC MemSize(P)
   PInteger(result)^ := size; // put size as trailer for pas_malloc_usable_size()
   inc(PInteger(result));
 end;
 
 procedure pas_free(P: pointer); cdecl;
-begin
+begin // void pas_free(void *ptr);
   if P = nil then
     exit;
   dec(PInteger(P));
   FreeMem(P);
 end;
 
-function pas_realloc(P: pointer; Size: integer): pointer; cdecl;
-begin
+function pas_realloc(P: pointer; Size: PtrUInt): pointer; cdecl;
+begin // void *pas_realloc(void *ptr, size_t size);
   if (P = nil) or
      (Size = 0) then
   begin
@@ -1801,14 +1800,14 @@ begin
   inc(PInteger(result));
 end;
 
-function pas_malloc_usable_size(P: pointer): integer; cdecl;
-begin
+function pas_malloc_usable_size(P: pointer): PtrUInt; cdecl;
+begin // size_t pas_malloc_usable_size(void *ptr);
   if P = nil then
     result := 0
   else
   begin
     dec(PInteger(P));
-    result := PInteger(P)^;
+    result := PInteger(P)^; // we don't have FPC MemSize(P) on Delphi
   end;
 end;
 

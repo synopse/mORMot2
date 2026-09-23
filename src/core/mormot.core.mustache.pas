@@ -2445,8 +2445,12 @@ end;
 
 class procedure TSynMustacheStandardHelpers.NewGuid(const Value: variant;
   out Result: variant);
+var
+  guid: TGuid;
 begin
-  RawUtf8ToVariant(GuidToRawUtf8(RandomGuid), Result);
+  RandomBytes(@guid, SizeOf(guid)); // no need of mormot.crypt.core RandomGuid()
+  MakeRandomGuid(@guid);
+  RawUtf8ToVariant(GuidToRawUtf8(guid), Result);
 end;
 
 class procedure TSynMustacheStandardHelpers.ExtractFileName(const Value: variant;

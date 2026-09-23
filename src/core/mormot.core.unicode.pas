@@ -936,13 +936,14 @@ function AnyTextFileToSynUnicode(const FileName: TFileName;
 
 { *************** Low-Level String Conversion Functions }
 
-/// will fast replace all #0 chars as ~
+/// will fast replace all #0..#31 chars as '~' and optionally truncate
+// - returns pointer(u) as in-place PUtf8Char #0 terminated (truncated) buffer
 // - could be used after UniqueRawUtf8() on a in-placed modified JSON buffer,
 // in which all values have been ended with #0
 // - you can optionally specify a maximum size, in bytes (this won't reallocate
 // the string, but just add a #0 at some point in the UTF-8 buffer)
 // - could allow logging of parsed input e.g. after an exception
-procedure UniqueRawUtf8ZeroToTilde(var u: RawUtf8; MaxSize: PtrInt = maxInt);
+function UniqueRawUtf8ZeroToTilde(var u: RawUtf8; MaxSize: PtrInt = maxInt): PUtf8Char;
 
 /// convert a binary buffer into a fake ASCII/UTF-8 content without any #0 input
 // - will use ~ char to escape any #0 as ~0 pair (and plain ~ as ~~ pair)
@@ -1802,6 +1803,9 @@ function ContainsUtf8(p, up: PUtf8Char): boolean;
 function GetLineContains(p, pEnd, up: PUtf8Char): boolean;
   {$ifdef FPC}inline;{$endif} // Delphi does not like inlining goto+label
 
+/// run PosEx(SubStr, Text) over a given Text buffer until the end
+function CountOccurrences(const SubStr, Text: RawUtf8): integer;
+
 /// copy source into a 256 chars dest^ buffer with 7-bit upper case conversion
 // - used internally for short keys match or case-insensitive hash
 // - returns final dest pointer
@@ -2149,6 +2153,12 @@ function HasOnlyChar(const text: RawUtf8; const chars: TSynAnsicharSet): boolean
 // - here control chars have an ASCII code in [#0 .. ' '], i.e. text[] <= last
 function TrimControlChars(const text: RawUtf8; last: AnsiChar = ' '): RawUtf8;
 
+/// returns true if any P[0..Len-1] is in [#0 .. #31] range
+function HasControlChars(P: PUtf8Char; Len: PtrUInt): boolean;
+
+/// change in-place any [#0 .. #31] character into a space
+procedure TrimControlCharsBuffer(P: PUtf8Char; Len: PtrUInt);
+
 /// split a RawUtf8 string into two strings, according to SepStr separator
 // - returns true and LeftStr/RightStr if they were separated by SepStr
 // - if SepStr is not found, LeftStr=Str and RightStr='' and returns false
@@ -2354,8 +2364,10 @@ function FindNameValuePointer(NameValuePairs: PUtf8Char; UpperName: PAnsiChar;
 function GetLineSize(P, PEnd: PUtf8Char): PtrUInt;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// returns true if the line length from source array of chars is not less than
-// the specified count
+/// returns true if the line length from source array of chars is not bigger
+// than the specified count
+// - if PEnd = nil, end counting at either #0, #13 or #10, as GetLineSize() does
+// - otherwise, end counting at either #13 or #10
 function GetLineSizeSmallerThan(P, PEnd: PUtf8Char; aMinimalCount: integer): boolean;
 
 {$ifndef PUREMORMOT2}
@@ -2806,6 +2818,24 @@ function SumRawUtf8Length(Values: PRawUtf8; n: integer): TStrLen;
 procedure DeduplicateRawUtf8(var Values: TRawUtf8DynArray);
 
 type
+  /// raw thread-safe cache of a RawUtf8 content, stored as sorted dynamic array
+  // - should be filled with 0 before usage, e.g. as class field or global var
+  {$ifdef USERECORDWITHMETHODS}
+  TCachedValues = record
+  {$else}
+  TCachedValues = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    Safe: TLightLock; // single 32-bit field
+    Tix32: cardinal;
+    Values: TRawUtf8DynArray; // sorted array for O(log(n)) binary search
+    ValuesCount: integer;
+    CustomCompare: TUtf8Compare;
+    procedure Reset;
+    function Exists(const Value: RawUtf8; TixShr: cardinal = 0): boolean;
+    function Add(const Value: RawUtf8; TixShr: cardinal = 0): boolean;
+  end;
+
   /// a read-only virtual TStrings using internal TRawUtf8DynArray storage
   // - is meant to be used in the UI layer from existing RawUtf8 content
   TVirtualStringList = class(TStrings)
@@ -3303,7 +3333,7 @@ var
   {$endif CPUX86NOTPIC}
 label
   quit, nosource, by2;
-begin // slightly slower overload with explicit destlen
+begin // slightly slower overload with explicit dest length as MaxDestChars
   result := 0;
   if dest = nil then
     exit;
@@ -3321,8 +3351,9 @@ begin // slightly slower overload with explicit destlen
     until source[sourcebytes] = #0;
     {$endif ASMX86}
   end;
-  inc(sourceBytes, PtrUInt(source)); // PUtf8Char(sourceBytes)  = endSource
-  inc(MaxDestChars, PtrUInt(dest));  // PUtf8Char(MaxDestChars) = endDest
+  inc(sourceBytes, PtrUInt(source)); // PUtf8Char(sourceBytes) = endSource
+  // MaxDestChars is a WideChar count: compute PUtf8Char(MaxDestChars) = endDest
+  MaxDestChars := PtrUInt(@dest[MaxDestChars]);
   {$ifndef CPUX86NOTPIC}
   utf8 := @UTF8_TABLE;
   {$endif CPUX86NOTPIC}
@@ -5157,7 +5188,7 @@ function AnyTextFileToRawUtf8(const FileName: TFileName; AssumeUtf8IfNoBom: bool
 var
   tmp: RawByteString;
   buf: pointer;
-  chars: PtrInt;
+  chars: PtrInt; // not integer
 begin
   case StringFromBomFile(FileName, tmp, buf, chars) of
     bomNone: // most common case, especially on POSIX
@@ -5188,7 +5219,7 @@ function AnyTextFileToSynUnicode(const FileName: TFileName; ForceUtf8: boolean):
 var
   tmp: RawByteString;
   buf: pointer;
-  chars: PtrInt;
+  chars: PtrInt; // not integer
 begin
   case StringFromBomFile(FileName, tmp, buf, chars) of
     bomNone: // most common case, especially on POSIX
@@ -5220,7 +5251,7 @@ function AnyTextFileToString(const FileName: TFileName; ForceUtf8: boolean): str
 var
   tmp: RawByteString;
   buf: pointer;
-  chars: PtrInt;
+  chars: PtrInt; // not integer
 begin
   case StringFromBomFile(FileName, tmp, buf, chars) of
     bomNone: // most common case, especially on POSIX
@@ -5982,18 +6013,19 @@ begin
   result := WinAnsiToSynUnicode(pointer(WinAnsi), Length(WinAnsi));
 end;
 
-procedure UniqueRawUtf8ZeroToTilde(var u: RawUtf8; MaxSize: PtrInt);
+function UniqueRawUtf8ZeroToTilde(var u: RawUtf8; MaxSize: PtrInt): PUtf8Char;
 var
   i: PtrInt;
 begin
+  result := pointer(u);
   i := length(u);
   if i > MaxSize then
-    PByteArray(u)[MaxSize] := 0
+    result[MaxSize] := #0 // truncate PUtf8Char result
   else
     MaxSize := i;
   for i := 0 to MaxSize - 1 do
-    if PByteArray(u)[i] = 0 then
-      PByteArray(u)[i] := ord('~');
+    if result[i] < ' ' then // sanitize #0 and any control char
+      result[i] := '~';
 end;
 
 const
@@ -7336,6 +7368,23 @@ begin
     until p = nil;
   end;
   result := false;
+end;
+
+function CountOccurrences(const SubStr, Text: RawUtf8): integer;
+var
+  offset: PtrInt;
+begin
+  result := 0;
+  if SubStr = '' then
+    exit;
+  offset := 1;
+  repeat
+    offset := PosEx(SubStr, Text, offset);
+    if offset = 0 then
+      break;
+    inc(offset, length(SubStr));
+    inc(result);
+  until false;
 end;
 
 function GetNextUtf8Upper(var U: PUtf8Char): Ucs4CodePoint;
@@ -8856,6 +8905,39 @@ begin
   result := true;
 end;
 
+function HasControlChars(P: PUtf8Char; Len: PtrUInt): boolean;
+begin
+  result := true;
+  inc(Len, PtrUInt(P)); // Len becomes end address
+  if P <> nil then
+    while true do
+      if PtrUInt(P) <> Len then
+        if P^ >= ' ' then
+          inc(P)
+        else
+          exit // found #0..#31
+      else
+        break;
+  result := false; // scanned whole buffer without #0..#31
+end;
+
+procedure TrimControlCharsBuffer(P: PUtf8Char; Len: PtrUInt);
+begin
+  inc(Len, PtrUInt(P)); // Len becomes end address
+  if P <> nil then
+    while true do
+      if PtrUInt(P) <> Len then
+        if P^ >= ' ' then
+          inc(P) // this is the fast path
+        else
+        begin
+          P^ := ' '; // overwrite #0..#31
+          inc(P);
+        end
+      else
+        break;
+end;
+
 function TrimControlChars(const text: RawUtf8; last: AnsiChar): RawUtf8;
 var
   len, i, j, n: PtrInt;
@@ -9571,13 +9653,21 @@ function GetLineSizeSmallerThan(P, PEnd: PUtf8Char; aMinimalCount: integer): boo
 begin
   result := false;
   if P <> nil then
-    while (P < PEnd) and
-          (P^ <> #10) and
-          (P^ <> #13) do
-      if aMinimalCount = 0 then
-        exit
-      else
+    if PEnd = nil then // ending at #0
+      while not (P^ in [#0, #10, #13]) do
       begin
+        if aMinimalCount = 0 then
+          exit;
+        dec(aMinimalCount);
+        inc(P);
+      end
+    else
+      while (P < PEnd) and
+            (P^ <> #10) and
+            (P^ <> #13) do
+      begin
+        if aMinimalCount = 0 then
+          exit;
         dec(aMinimalCount);
         inc(P);
       end;
@@ -10502,7 +10592,7 @@ begin
     for result := 0 to ValuesCount do
       if (PtrUInt(Values^) <> 0) and
          ({%H-}PStrLen(PtrUInt(Values^) - _STRLEN)^ = len) and
-         CompareMemFixed(pointer(PtrInt(Values^)), pointer(Value), len) then
+         CompareMemFixed(pointer(PtrUInt(Values^)), pointer(Value), len) then
         exit
       else
         inc(Values)
@@ -10861,62 +10951,64 @@ end;
 
 {$ifdef ASMX64}
 
-function FastFindPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt; Value: PUtf8Char): PtrInt;
+function FastFindPUtf8CharSorted(P: PPUtf8CharArray; R: PtrInt;
+  Value: PUtf8Char): PtrInt;
 {$ifdef FPC} assembler; nostackframe; asm {$else} asm .noframe {$endif}
-        {$ifdef win64}  // P=rcx/rdi R=rdx/rsi Value=r8/rdx
+        // P=rcx/rdi R=rdx/rsi Value=r8/rdx
+        {$ifdef win64}
         push    rdi
-        mov     rdi, P  // P=rdi
+        mov     rdi, P
         {$endif win64}
-        push    r12
-        push    r13
-        xor     r9, r9  // L=r9
         test    R, R
         jl      @err
         test    Value, Value
         jz      @void
-        mov     cl, byte ptr [Value]  // to check first char (likely diverse)
+        xor     r9, r9                  // r9 = L = 0
+        movzx   ecx, byte ptr [Value]   // cl = cached Value[0]
 {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @s:     lea     rax, qword ptr [r9 + R]
-        shr     rax, 1
-        lea     r12, qword ptr [rax - 1]  // branchless main loop
-        lea     r13, qword ptr [rax + 1]
+        shr     rax, 1                  // rax = result = (L + R) shr 1
         mov     r10, qword ptr [rdi + rax * 8]
         test    r10, r10
         jz      @lt
-        cmp     cl, byte ptr [r10]
+        cmp     cl, byte ptr [r10]      // Value[0] vs pivot[0]
         je      @eq
-        cmovc   R, r12
-        cmovnc  r9, r13
+@diff:  lea     r11, qword ptr [rax - 1]
+        lea     r10, qword ptr [rax + 1]
+        cmovc   R, r11                  // CF = Value[0] < pivot[0]
+        cmovnc  r9, r10
 @nxt:   cmp     r9, R
-        jle     @s
-@err:   mov     rax, -1
-@found: pop     r13
-        pop     r12
+        jle     @s                      // branchless main loop
+@err:   or      rax, -1
         {$ifdef win64}
         pop     rdi
         {$endif win64}
         ret
-@void:  mov     rax, -1
-        cmp     qword ptr [P], 0
-        cmove   rax, Value
-        jmp     @found
-@lt:    mov     r9, r13 // very unlikely P[rax]=nil
+@lt:    lea     r9, qword ptr [rax + 1]
         jmp     @nxt
-@eq:    mov     r11, Value // first char equal -> check others
-@sub:   mov     cl, byte ptr [r10]
-        add     r10, 1
-        add     r11, 1
+@void:  or      rax, -1                 // Value = nil
+        cmp     qword ptr [rdi], Value  // if P^[0] = nil then result := 0
+        cmove   rax, Value
+        {$ifdef win64}
+        pop     rdi
+        {$endif win64}
+        ret
+@subd:  movzx   ecx, byte ptr [Value]   // restore Value[0]
+        jmp     @diff
+@eq:    test    cl, cl
+        jz      @found                  // if c = 0 then exit in pascal code
+        mov     r11, Value
+        sub     r11, r10
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@sub:   add     r10, 1
+        movzx   ecx, byte ptr [r11 + r10] // Value byte
+        cmp     cl, byte ptr [r10]        // Value vs pivot
+        jne     @subd
         test    cl, cl
-        jz      @found
-        mov     cl, byte ptr [r11]
-        cmp     cl, byte ptr [r10]
-        je      @sub
-        mov     cl, byte ptr [Value]  // reset first char
-        cmovc   R, r12
-        cmovnc  r9, r13
-        cmp     r9, R
-        jle     @s
-        jmp     @err
+        jnz     @sub                     // continue till end of Value
+@found: {$ifdef win64}
+        pop     rdi
+        {$endif win64}
 end;
 
 {$else}
@@ -11060,6 +11152,55 @@ begin
     result := n;
   Values[result] := Value;
   inc(ValuesCount);
+end;
+
+{ TCachedValues }
+
+procedure TCachedValues.Reset;
+begin
+  Safe.Lock;
+  Tix32 := 0;
+  Values := nil;
+  ValuesCount := 0;
+  Safe.UnLock;
+end;
+
+function TCachedValues.Exists(const Value: RawUtf8; TixShr: cardinal): boolean;
+begin
+  result := false;
+  if ValuesCount = 0 then
+    exit;
+  if TixShr <> 0 then
+    TixShr := (GetTickSec shr TixShr) + 1; // big shr may get 0 just after boot
+  Safe.Lock;
+  if ValuesCount <> 0 then
+    if TixShr = Tix32 then
+      if Assigned(CustomCompare) then // O(log(n)) binary search
+        result := FastFindPUtf8CharSorted(pointer(Values), ValuesCount - 1,
+          pointer(Value), CustomCompare) >= 0
+      else
+        result := FastFindPUtf8CharSorted(pointer(Values), ValuesCount - 1,
+          pointer(Value)) >= 0
+    else
+    begin
+      Tix32 := TixShr;
+      ValuesCount := 0; // flush cache
+    end;
+  Safe.UnLock;
+end;
+
+function TCachedValues.Add(const Value: RawUtf8; TixShr: cardinal): boolean;
+begin
+  if TixShr <> 0 then
+    TixShr := (GetTickSec shr TixShr) + 1; // big shr may get 0 just after boot
+  Safe.Lock;
+  if TixShr <> Tix32 then
+  begin
+    Tix32 := TixShr;
+    ValuesCount := 0; // flush cache
+  end;
+  result := AddSortedRawUtf8(Values, ValuesCount, Value, nil, -1, CustomCompare) >= 0;
+  Safe.UnLock;
 end;
 
 type

@@ -106,7 +106,7 @@ function FromVarUInt32High(var Source: PByte): cardinal;
 
 /// get a 32-bit integer from zigzag encoded buffer 0=0,1=1,2=-1,3=2,4=-2,...
 function FromVarInt32(var Source: PByte): PtrInt;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifndef ISDELPHI10_103}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// convert a UInt64 into a 64-bit variable-length integer buffer
 function ToVarUInt64(Value: QWord; Dest: PByte): PByte;
@@ -379,13 +379,13 @@ type
     // - returns true on success, and false on decoding error - but some chunks
     // may have been decompressed in Dest even if false is returned
     function StreamUnCompress(Source, Dest: TStream; Magic: cardinal;
-      ForceHash32: boolean = false): boolean; overload;
+      ForceHash32: boolean = false; NoSeek0: boolean = false): boolean; overload;
     /// uncompress a Stream previously compressed via StreamCompress()
     // - return nil on decompression error, or a new TMemoryStream instance
     // - follow the StreamUnSynLZ() deprecated function format, if ForceHash32=true
     // so that Hash32() is used instead of the AlgoHash() of this instance
     function StreamUnCompress(Source: TStream; Magic: cardinal;
-      ForceHash32: boolean = false): TMemoryStream; overload;
+      ForceHash32: boolean = false; NoSeek0: boolean = false): TMemoryStream; overload;
     /// uncompress a File previously compressed via StreamCompress() as TStream
     // - you should specify a Magic number to be used to identify the compressed
     // Stream format
@@ -1996,6 +1996,8 @@ type
     fFileName: TFileName;
     fAppendedLines: TRawUtf8DynArray;
     fAppendedLinesCount: integer;
+    function GetLineEnd(Line: PUtf8Char): PUtf8Char;
+      {$ifdef HASINLINE}inline;{$endif}
     function GetLine(aIndex: integer): RawUtf8;
       {$ifdef HASINLINE}inline;{$endif}
     function GetString(aIndex: integer): string;
@@ -2034,11 +2036,9 @@ type
     /// retrieve the number of UTF-8 chars of the given line
     // - warning: no range check is performed about supplied index
     function LineSize(aIndex: integer): integer;
-      {$ifdef HASINLINE}inline;{$endif}
     /// check if there is at least a given number of UTF-8 chars in the given line
     // - this is faster than LineSize(aIndex)<aMinimalCount for big lines
     function LineSizeSmallerThan(aIndex, aMinimalCount: integer): boolean;
-      {$ifdef HASINLINE}inline;{$endif}
     /// returns TRUE if the supplied text is contained in the corresponding line
     function LineContains(const aUpperSearch: RawUtf8; aIndex: integer): boolean; virtual;
     /// retrieve a line content as UTF-8
@@ -4268,7 +4268,8 @@ end;
 { TBufferWriter }
 
 constructor TBufferWriter.Create(aFile: THandle; BufLen: integer);
-begin // raise EOSException on invalid aFile handle
+begin
+  SetLastError(0); // raise EOSException on invalid aFile handle
   Create(TFileStreamEx.CreateFromHandle(aFile, ''), BufLen);
   fInternalStream := true;
 end;
@@ -4383,7 +4384,7 @@ begin
   if fIsRawByteStream then
     TRawByteStringStream(fStream).Size := 0
   else
-    fStream.Seek(0, soBeginning);
+    fStream.Seek(0, soBeginning); // rewind
 end;
 
 procedure TBufferWriter.Write(Data: pointer; DataLen: PtrInt);
@@ -5548,15 +5549,15 @@ begin
 end;
 
 function TAlgoCompress.StreamUnCompress(Source: TStream; Magic: cardinal;
-  ForceHash32: boolean): TMemoryStream;
+  ForceHash32, NoSeek0: boolean): TMemoryStream;
 begin
   result := TMemoryStream.Create;
-  if not StreamUncompress(Source, result, Magic, ForceHash32) then
+  if not StreamUncompress(Source, result, Magic, ForceHash32, NoSeek0) then
     FreeAndNil(result);
 end;
 
 function TAlgoCompress.StreamUnCompress(Source, Dest: TStream; Magic: cardinal;
-  ForceHash32: boolean): boolean;
+  ForceHash32, NoSeek0: boolean): boolean;
 var
   S, D: PAnsiChar;
   sourcePosition, resultSize, sourceSize: Int64;
@@ -5610,7 +5611,10 @@ begin
     exit;
   EnsureAlgoHasNoForcedFormat('StreamUnCompress');
   sourceSize := Source.Size;
-  sourcePosition := Source.Position;
+  if NoSeek0 then
+    sourcePosition := 0
+  else
+    sourcePosition := Source.Position;
   if Source.Read(head, SizeOf(head)) <> SizeOf(head) then
     exit;
   if (head.Magic <> Magic) and
@@ -5702,7 +5706,7 @@ begin
   if S <> nil then
     try
       try
-        result := StreamUnCompress(S, Magic, ForceHash32);
+        result := StreamUnCompress(S, Magic, ForceHash32, {noseek0=}true);
       finally
         S.Free;
       end;
@@ -5784,7 +5788,7 @@ begin
       DeleteFile(Dest);
       D := TFileStreamEx.Create(Dest, fmCreate);
       try
-        if not StreamUnCompress(S, D, Magic, ForceHash32) then
+        if not StreamUnCompress(S, D, Magic, ForceHash32, {noseek0=}true) then
           exit;
       finally
         D.Free;
@@ -9190,43 +9194,73 @@ begin
   end;
 end;
 
+function TMemoryMapText.GetLineEnd(Line: PUtf8Char): PUtf8Char;
+begin // AddInMemoryLine() ensures an appended row never aliases fMap.Buffer
+  if (PtrUInt(Line) >= PtrUInt(fMap.Buffer)) and
+     (PtrUInt(Line) < PtrUInt(fMapEnd)) then
+    result := fMapEnd
+  else
+    result := nil; // an AddInMemoryLine() entry is a standalone #0 string
+end;
+
 function TMemoryMapText.GetLine(aIndex: integer): RawUtf8;
+var
+  p: PUtf8Char;
 begin
   if (self = nil) or
      (cardinal(aIndex) >= cardinal(fCount)) then
     FastAssignNew(result)
   else
-    FastSetString(result, fLines[aIndex], GetLineSize(fLines[aIndex], fMapEnd));
+  begin
+    p := fLines[aIndex];
+    FastSetString(result, p, GetLineSize(p, GetLineEnd(p)));
+  end;
 end;
 
 function TMemoryMapText.GetString(aIndex: integer): string;
+var
+  p: PUtf8Char;
 begin
   if (self = nil) or
      (cardinal(aIndex) >= cardinal(fCount)) then
     result := ''
   else
-    Utf8DecodeToString(fLines[aIndex], GetLineSize(fLines[aIndex], fMapEnd), result);
+  begin
+    p := fLines[aIndex];
+    Utf8DecodeToString(p, GetLineSize(p, GetLineEnd(p)), result);
+  end;
 end;
 
 function TMemoryMapText.LineContains(const aUpperSearch: RawUtf8;
   aIndex: integer): boolean;
+var
+  p: PUtf8Char;
 begin
   if (self = nil) or
      (cardinal(aIndex) >= cardinal(fCount)) or
      (aUpperSearch = '') then
     result := false
   else
-    result := GetLineContains(fLines[aIndex], fMapEnd, pointer(aUpperSearch));
+  begin
+    p := fLines[aIndex];
+    result := GetLineContains(p, GetLineEnd(p), pointer(aUpperSearch));
+  end;
 end;
 
 function TMemoryMapText.LineSize(aIndex: integer): integer;
+var
+  p: PUtf8Char;
 begin
-  result := GetLineSize(fLines[aIndex], fMapEnd);
+  p := fLines[aIndex];
+  result := GetLineSize(p, GetLineEnd(p));
 end;
 
 function TMemoryMapText.LineSizeSmallerThan(aIndex, aMinimalCount: integer): boolean;
+var
+  p: PUtf8Char;
 begin
-  result := GetLineSizeSmallerThan(fLines[aIndex], fMapEnd, aMinimalCount);
+  p := fLines[aIndex];
+  result := GetLineSizeSmallerThan(p, GetLineEnd(p), aMinimalCount);
 end;
 
 procedure TMemoryMapText.ProcessOneLine(LineBeg, LineEnd: PUtf8Char);
@@ -9287,17 +9321,30 @@ begin
   if PCardinal(P)^ and $00ffffff = BOM_UTF8 then
     inc(P, 3); // ignore any UTF-8 BOM (still appears on Windows)
   ParseLines(P, fMapEnd, self);
-  if fLinesMax > fCount + 16384 then
-    ReallocMem(fLines, fCount * SizeOf(pointer)); // size down only if worth it
+  if fLinesMax <= fCount + 16384 then
+    exit;
+  ReallocMem(fLines, fCount * SizeOf(pointer)); // size down only if worth it
+  fLinesMax := fCount;
 end;
 
 procedure TMemoryMapText.AddInMemoryLine(const aNewLine: RawUtf8);
 var
   P: PUtf8Char;
+  unaliased: RawUtf8;
 begin
   if aNewLine = '' then
     exit;
-  AddRawUtf8(fAppendedLines, fAppendedLinesCount, aNewLine);
+  P := pointer(aNewLine);
+  if (PtrUInt(P) >= PtrUInt(fMap.Buffer)) and
+     (PtrUInt(P) < PtrUInt(fMapEnd)) then
+  begin
+    // never share a reference into the memory mapped buffer, so that a line
+    // pointer alone tells an appended row apart - see GetLineEnd()
+    FastSetString(unaliased, P, length(aNewLine));
+    AddRawUtf8(fAppendedLines, fAppendedLinesCount, unaliased);
+  end
+  else
+    AddRawUtf8(fAppendedLines, fAppendedLinesCount, aNewLine);
   P := pointer(fAppendedLines[fAppendedLinesCount - 1]);
   ProcessOneLine(P, P + StrLen(P));
 end;
@@ -9864,25 +9911,25 @@ class function TStreamRedirect.HashFile(const FileName: TFileName;
   const OnProgress: TOnStreamProgress): RawUtf8;
 var
   hasher: TStreamRedirect;
-  f: THandle;
+  f: THandleStream;
 begin
   FastAssignNew(result);
   if GetHashFileExt = '' then
     exit; // no hash function defined
-  f := FileOpenSequentialRead(FileName);
-  if not ValidHandle(f) then // would raise EOSException on invalid f
+  f := FileStreamSequentialRead(FileName);
+  if f = nil then // no EOSException on invalid FileName
     exit;
-  hasher := Create(TFileStreamEx.CreateFromHandle(f, FileName));
+  hasher := Create(f);
   try
     if Assigned(OnProgress) then
     begin
-      hasher.fInfo.ExpectedSize := FileSize(f);
+      hasher.fInfo.ExpectedSize := f.Size;
       hasher.OnProgress := OnProgress;
     end;
     hasher.Append;
     result := hasher.GetHash;
   finally
-    hasher.Free; // includes FileClose(f)
+    hasher.Free; // includes f.Free
   end;
 end;
 
@@ -10143,7 +10190,7 @@ begin
   for i := 0 to n - 1 do
     with fNested[i] do
     begin
-      Stream.Seek(0, soBeginning);
+      Stream.Seek(0, soBeginning); // rewind
       Start := fSize;
       inc(fSize, Stream.Size); // to allow proper Seek() + Read()
       Stop := fSize;
@@ -10210,7 +10257,7 @@ constructor TBufferedStreamReader.Create(aSource: TStream; aBufSize: integer;
 begin
   fSource := aSource;
   fSize := fSource.Size; // get it once
-  fSource.Seek(0, soBeginning);
+  fSource.Seek(0, soBeginning); // rewind
   pointer(fBuffer) := FastNewString(aBufSize);
   if aOwnSource then
     fOwnStream := fSource;

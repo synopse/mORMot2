@@ -2296,7 +2296,7 @@ type
     /// retrieve a field value as a variant
     // - returns null if the row/field is incorrect
     // - expand* methods will allow to return human-friendly representations
-    procedure GetAsVariant(row, field: PtrInt; out value: variant;
+    procedure GetAsVariant(row, field: PtrInt; var value: variant;
       expandTimeLogAsText, expandEnumsAsText, expandHugeIDAsUniqueIdentifier: boolean;
       options: TDocVariantOptions = JSON_FAST);
 
@@ -2307,7 +2307,7 @@ type
     // - expand* methods will allow to return human-friendly representations
     // - if your purpose is to create a TDocVariant array from ORM/SQL JSON,
     // consider using faster TDocVariantData.InitArrayFromResults() method
-    procedure ToDocVariant(Row: PtrInt; out doc: variant;
+    procedure ToDocVariant(Row: PtrInt; var doc: variant;
       options: TDocVariantOptions = JSON_FAST;
       expandTimeLogAsText: boolean = false; expandEnumsAsText: boolean = false;
       expandHugeIDAsUniqueIdentifier: boolean = false); overload;
@@ -2926,7 +2926,7 @@ type
     fBlobFields: TOrmPropInfoRttiRawBlobDynArray;
     fSqlTableName: RawUtf8;
     fLastFieldsSafe: TLightLock; // topmost to ensure proper aarch64 alignment
-    fSafe: TOSLightLock; // = TOSLightMutex = SRW lock or direct pthread mutex
+    fSafe: TOSLightLock;         // = TOSLightMutex = futex on Linux and Win8+
     fHasNotSimpleFields: boolean;
     fDynArrayFieldsHasObjArray: boolean;
     fHasTypeFields: TOrmFieldTypes;
@@ -3624,7 +3624,7 @@ var
 begin
   if Value = nil then
   begin
-    TSynVarData(result).VType := varNull;
+    VarClearAndSetType(variant(result), varNull);
     exit;
   end;
   VarClearAndSetType(variant(result), SQL_ELEMENTTYPES[fieldType]);
@@ -6638,7 +6638,7 @@ procedure TOrmPropInfoRttiVariant.CopySameClassProp(Source: TObject;
 var
   off: PtrUInt;
   v: PVariant;
-  value: TVarData;
+  value: TSynVarData;
 begin
   off := TOrmPropInfoRttiVariant(DestInfo).fSetterIsFieldPropOffset;
   if off <> 0 then // avoid any temporary variable
@@ -6649,10 +6649,10 @@ begin
   end
   else
   begin
-    PCardinal(@value)^ := varEmpty; // real temp variant for a setter
+    value.VType := varEmpty; // temp variant for a setter
     fPropInfo.GetVariantProp(Source, variant(value), {byref=}false);
     TOrmPropInfoRttiVariant(DestInfo).fPropInfo.SetVariantProp(Dest, variant(value));
-    VarClearProc(value);
+    VarClear(variant(value));
   end;
 end;
 
@@ -6719,7 +6719,7 @@ end;
 
 function TOrmPropInfoRttiVariant.IsValueVoid(Instance: TObject): boolean;
 var
-  value: TVarData;
+  value: TSynVarData;
   off: PtrUInt;
 begin
   off := fGetterIsFieldPropOffset;
@@ -6727,17 +6727,17 @@ begin
     result := VarIsEmptyOrNull(PVariant(PtrUInt(Instance) + off)^)
   else
   begin
-    PCardinal(@value)^ := varEmpty;
+    value.VType := varEmpty; // temp variant for a setter
     fPropInfo.GetVariantProp(Instance, variant(value), {byref=}true);
     result := VarIsEmptyOrNull(variant(value));
-    VarClearProc(value);
+    VarClear(variant(value));
   end;
 end;
 
 function TOrmPropInfoRttiVariant.CompareValue(Item1, Item2: TObject;
   CaseInsensitive: boolean): integer;
 var
-  V1, V2: TVarData;
+  V1, V2: TSynVarData;
   off: PtrUInt;
 begin
   if Item1 = Item2 then
@@ -6754,13 +6754,13 @@ begin
                                 PVarData(PtrUInt(Item2) + off), CaseInsensitive)
     else
     begin
-      PCardinal(@V1)^ := varEmpty;
-      PCardinal(@V2)^ := varEmpty;
+      V1.VType := varEmpty;
+      V2.VType := varEmpty;
       fPropInfo.GetVariantProp(Item1, variant(V1), {byref=}true);
       fPropInfo.GetVariantProp(Item2, variant(V2), {byref=}true);
       result := FastVarDataComp(@V1, @V2, CaseInsensitive);
-      VarClearProc(V1);
-      VarClearProc(V2);
+      VarClear(variant(V1));
+      VarClear(variant(V2));
     end;
   end;
 end;
@@ -8307,19 +8307,42 @@ begin
     QuickSortIndexedPUtf8Char(pointer(fFieldNames), fFieldCount, fFieldNameOrder);
 end;
 
-procedure TOrmTableAbstract.GetAsVariant(row, field: PtrInt; out value: variant;
+procedure ValueVarTimeAsText(oft: TOrmFieldType; V: PUtf8Char; value: PVariant);
+var
+  t: TTimeLogBits;
+  time: RawUtf8;
+begin
+  SetInt64(V, {%H-}t.Value);
+  if t.Value = 0 then
+    value^ := 0
+  else
+  begin
+    if oft = oftUnixTime then
+      t.FromUnixTime(t.Value);
+    if oft <> oftUnixMSTime then
+      time := t.Text(true)
+    else
+      // no TTimeLog use for milliseconds resolution
+      time := UnixMSTimeToString(t.Value);
+    PDocVariantData(value)^.InitObject([
+      'Time',  time,
+      'Value', t.Value], JSON_FAST);
+  end;
+end;
+
+procedure TOrmTableAbstract.GetAsVariant(row, field: PtrInt; var value: variant;
   expandTimeLogAsText, expandEnumsAsText, expandHugeIDAsUniqueIdentifier: boolean;
   options: TDocVariantOptions);
 const
   JAN2015_UNIX = 1420070400;
 var
-  t: TTimeLogBits;
   id: TSynUniqueIdentifierBits;
   V: PUtf8Char;
+  vd: TSynVarData absolute value;
   ft: POrmTableFieldType;
   enum, err: integer;
-  time: RawUtf8;
 begin
+  VarClearAndSetType(value, varNull);
   if (self = nil) or
      (row < 1) or
      (row > fRowCount) or
@@ -8331,69 +8354,56 @@ begin
   row := row * fFieldCount + field;
   V := GetResults(row);
   if V = nil then
-    TSynVarData(value).VType := varNull
-  else
-    if expandHugeIDAsUniqueIdentifier and
-       (field = fFieldIndexID) then
-    begin
-      SetInt64(V, PInt64(@id)^);
-      if id.CreateTimeUnix > JAN2015_UNIX then
-        id.ToVariant(value)
-      else
-        value := id.Value;
-    end
+    exit;
+  vd.VType := varInt64;
+  if expandHugeIDAsUniqueIdentifier and
+     (field = fFieldIndexID) then
+  begin
+    SetInt64(V, PInt64(@id)^);
+    if id.CreateTimeUnix > JAN2015_UNIX then
+      id.ToVariant(value)
     else
+      vd.VInt64 := id.Value;
+  end
+  else
+  begin
+    if expandEnumsAsText and
+       (ft^.ContentType = oftEnumerate) then
     begin
-      if expandEnumsAsText and
-         (ft^.ContentType = oftEnumerate) then
+      enum := GetInteger(V, err);
+      if (err = 0) and
+         (ft^.ContentTypeInfo <> nil) then
       begin
-        enum := GetInteger(V, err);
-        if (err = 0) and
-           (ft^.ContentTypeInfo <> nil) then
-        begin
-          value := PRttiEnumType(ft^.ContentTypeInfo)^.GetEnumNameOrd(enum)^;
-          exit;
-        end;
-      end
-      else if expandTimeLogAsText then
-        case ft^.ContentType of
-          oftTimeLog,
-          oftModTime,
-          oftCreateTime,
-          oftUnixTime,
-          oftUnixMSTime:
-            begin
-              SetInt64(V, {%H-}t.Value);
-              if t.Value = 0 then
-                value := 0
-              else
-              begin
-                if ft^.ContentType = oftUnixTime then
-                  t.FromUnixTime(t.Value);
-                if ft^.ContentType <> oftUnixMSTime then
-                  time := t.Text(true)
-                else
-                  // no TTimeLog use for milliseconds resolution
-                  time := UnixMSTimeToString(t.Value);
-                TDocVariantData(value).InitObject([
-                  'Time',  time,
-                  'Value', t.Value], JSON_FAST);
-              end;
-              exit;
-            end;
-        end;
-      ValueVarToVariant(V, GetResultsLen(row, V), ft^.ContentType, TVarData(value),
-        {createTempCopy=}true, ft^.ContentTypeInfo, options);
-    end;
+        ShortStringToVariant(PRttiEnumType(ft^.ContentTypeInfo)^.
+          GetEnumNameOrd(enum)^, value);
+        exit;
+      end;
+    end
+    else if expandTimeLogAsText then
+      case ft^.ContentType of
+        oftTimeLog,
+        oftModTime,
+        oftCreateTime,
+        oftUnixTime,
+        oftUnixMSTime:
+          begin
+            ValueVarTimeAsText(ft^.ContentType, V, @value);
+            exit;
+          end;
+      end;
+    ValueVarToVariant(V, GetResultsLen(row, V), ft^.ContentType, vd.Data,
+      {createTempCopy=}true, ft^.ContentTypeInfo, options);
+  end;
 end;
 
-procedure TOrmTableAbstract.ToDocVariant(Row: PtrInt; out doc: variant;
+procedure TOrmTableAbstract.ToDocVariant(Row: PtrInt; var doc: variant;
   options: TDocVariantOptions; expandTimeLogAsText, expandEnumsAsText,
   expandHugeIDAsUniqueIdentifier: boolean);
 var
   f: PtrInt;
   v: TVariantDynArray;
 begin
+  VarClearAndSetType(doc, varNull);
   if (self = nil) or
      (Row < 1) or
      (Row > fRowCount) then
@@ -11052,7 +11062,7 @@ end;
 
 constructor TOrmPropertiesAbstract.Create;
 begin
-  fSafe.Init;
+  fSafe.Init; // mandatory for TOSLightLock
   fSqlTableRetrieveAllFields := 'RowID'; // to work with virtual tables
   SetLength(fManyFields, MAX_SQLFIELDS);
   SetLength(fSimpleFields, MAX_SQLFIELDS);
@@ -11068,7 +11078,7 @@ end;
 destructor TOrmPropertiesAbstract.Destroy;
 begin
   inherited Destroy;
-  fSafe.Done;
+  fSafe.Done; // mandatory for TOSLightLock
 end;
 
 function TOrmPropertiesAbstract.BlobFieldPropFromRawUtf8(const PropName: RawUtf8): PRttiProp;
