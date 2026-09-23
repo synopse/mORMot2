@@ -1011,6 +1011,7 @@ type
     WithPeerInfo: boolean;
     /// input: if deprecated TLS 1.0 or TLS 1.1 are allowed
     // - default is TLS 1.2+ only, and deprecated SSL 2/3 are always disabled
+    // - set your own desired deprecated CipherList value when forced to true
     AllowDeprecatedTls: boolean;
     /// input: if TLS 1.3 should be avoided and fallback to TLS 1.2
     // - could be useful if the server has some trouble with TLS 1.3
@@ -1131,6 +1132,7 @@ type
     PeerInfo: RawUtf8;
     /// output: full detailed raw information about the connected Peer
     // - is a PX509 on OpenSSL, or a PWinCertInfo from mormot.lib.sspi on SChannel
+    // - only populated during OnEachPeerVerify callback execution
     PeerCert: pointer;
     /// output: low-level details about the last error at TLS level
     // - typically one X509_V_ERR_* integer constant

@@ -995,6 +995,7 @@ begin
     if handled then
       exit;
   end;
+  result := 0;
   if (fEngineLockedMaxID = 0) or
      EngineAddUseSelectMaxID then
     if not RetrieveFromDB then
