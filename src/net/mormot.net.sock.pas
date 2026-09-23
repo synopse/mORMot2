@@ -1136,10 +1136,11 @@ type
     /// output: low-level details about the last error at TLS level
     // - typically one X509_V_ERR_* integer constant
     LastError: RawUtf8;
-    /// called by INetTls.AfterConnection to fully customize peer validation
+    /// called by INetTls.AfterConnection after handshake to customize peer validation
+    // - set IgnoreCertificateErrors=true to fully handle validation yourself
     // - not implemented on SChannel
     OnPeerValidate: TOnNetTlsPeerValidate;
-    /// called by INetTls.AfterConnection for each peer validation
+    /// called by INetTls.AfterConnection for each certiticate during peer validation
     // - allow e.g. to verify CN or DNSName fields of each peer certificate
     // - see also ClientCertificateAuthentication and ClientVerifyOnce options
     // - not implemented on SChannel
@@ -4878,6 +4879,7 @@ begin
       (tls1.CipherList                    = tls2.CipherList) and
       (tls1.CipherSuites                  = tls2.CipherSuites) and
       (tls1.HostNamesCsv                  = tls2.HostNamesCsv) and
+      (tls1.WithPeerInfo                  = tls2.WithPeerInfo) and
       EventEquals(tls1.OnPeerValidate,      tls2.OnPeerValidate) and
       EventEquals(tls1.OnEachPeerVerify,    tls2.OnEachPeerVerify) and
       EventEquals(tls1.OnAfterPeerValidate, tls2.OnAfterPeerValidate)));
