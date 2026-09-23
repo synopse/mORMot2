@@ -9187,7 +9187,11 @@ var
       CheckEqualTrim(full.Processor[0].Manufacturer, os[sbiCpuManufacturer], 'proc');
     if full.Battery <> nil then
       CheckEqualTrim(full.Battery[0].Manufacturer, os[sbiBatteryManufacturer], 'batt');
-    if full.Oem <> nil then
+    // TSmbiosInfo also includes type 12 (System Configuration), while
+    // GetSmbios(sbiOem) only exposes type 11 (OEM Strings). Some firmware
+    // reports a placeholder such as "Unknown" only in type 12.
+    if (full.Oem <> nil) and
+       (os[sbiOem] <> '') then
       CheckEqualTrim(full.Oem[0], os[sbiOem], 'oem');
   end;
 
