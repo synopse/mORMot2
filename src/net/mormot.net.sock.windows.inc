@@ -2099,7 +2099,8 @@ type
     fFlags: cardinal;
     fLastCheckSecError: cardinal;
     fSizes: TSecPkgContext_StreamSizes;
-    fData, fInput: AnsiString;
+    fInput: RawByteString; // encrypted TLS records
+    fData: RawByteString;  // decrypted application bytes
     fInputSize, fDataPos, fDataCount, fInputCount: integer;
     fSessionClosed: boolean;
     fAccept: boolean;
@@ -2110,8 +2111,9 @@ type
     function CheckSEC_E_OK(const ctx: ShortString; res: integer): cardinal;
     function FreeAndCheckSocket(const ctx: ShortString; res: integer;
       tofree: pointer): cardinal;
+    procedure SendRawAll(const ctx: ShortString; buf: pointer; len: integer);
     function HandshakeStep(buf: PByteArray; var len: integer): cardinal;
-    procedure HandshakeLoop;
+    procedure HandshakeLoop(StepFirst: boolean = false);
     procedure FinalizeCredCtxt;
   public
     destructor Destroy; override;
@@ -2142,7 +2144,6 @@ begin
   sys := GetLastError;
   msg := format('<%s>: %s returned %s, System Error %d [%s]',
     [fServerAddressW, ctx, OsErrorShort(res), sys, GetErrorShort(sys)]);
-  //writeln(fSocket.Socket,' ',msg);
   raise ESChannel.Create(msg);
 end;
 
@@ -2158,7 +2159,6 @@ end;
 function TSChannelNetTls.FreeAndCheckSocket(const ctx: ShortString;
   res: integer; tofree: pointer): cardinal;
 begin
-  //writeln(fSocket.Socket,' ',ctx,'=',res);
   if tofree <> nil then
     CheckSEC_E_OK(ctx, FreeContextBuffer(tofree)); // avoid leak id raised
   if res = SOCKET_ERROR then
@@ -2167,6 +2167,26 @@ begin
   if res = 0 then
     raise ESChannel.CreateFmt('%s: Handshake aborted', [ctx]);
   result := res;
+end;
+
+procedure TSChannelNetTls.SendRawAll(const ctx: ShortString;
+  buf: pointer; len: integer);
+var
+  sent: integer;
+  p: PByte;
+begin
+  p := buf;
+  while len > 0 do
+  begin
+    sent := mormot.net.sock.Send(fSocket.Socket, p, len, 0);
+    if sent = SOCKET_ERROR then
+      raise ESChannel.CreateFmt('%s: Socket Error %s',
+        [ctx, WinErrorShort(RawSocketErrNo)]);
+    if sent = 0 then
+      raise ESChannel.CreateFmt('%s: Handshake aborted', [ctx]);
+    inc(p, sent);
+    dec(len, sent);
+  end;
 end;
 
 procedure TSChannelNetTls.FinalizeCredCtxt;
@@ -2261,7 +2281,9 @@ begin
   // method called once to attach the socket from the client side
   fSocket := Socket;
   fServerAddressW := SynUnicode(ServerAddress);
-  SetLength(fData, TLSRECMAXSIZE);
+  SetLength(fInput, TLSRECMAXSIZE); // encrypted TLS records
+  SetLength(fData, TLSRECMAXSIZE);  // decrypted application data
+  fInputSize := TLSRECMAXSIZE;
   fAccept := false;
   trial := 0;
   while true do
@@ -2278,6 +2300,7 @@ begin
         nil, UNISP_NAME, SECPKG_CRED_OUTBOUND, nil, @cred, nil, nil, @fCred, nil));
       fDataPos := 0;
       fDataCount := 0;
+      fInputCount := 0;
       fFlags := ISC_REQ_FLAGS;
       if Context.IgnoreCertificateErrors then
         // prevent SEC_E_UNTRUSTED_ROOT result in HandshakeLoop
@@ -2294,9 +2317,12 @@ begin
       if (buf.buf[2].cbBuffer = 0) or // SECBUFFER_TOKEN
          (buf.buf[2].pvBuffer = nil) then
         raise ESChannel.CreateFmt('Void Hello answer to %s', [ServerAddress]);
-      FreeAndCheckSocket('send', mormot.net.sock.Send(
-        fSocket.Socket, buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, 0),
-        buf.buf[2].pvBuffer);
+      try
+        SendRawAll('send', buf.buf[2].pvBuffer, buf.buf[2].cbBuffer);
+      finally
+        CheckSEC_E_OK('FreeContextBuffer',
+          FreeContextBuffer(buf.buf[2].pvBuffer));
+      end;
       // make TLS handshake and prepare for process
       HandshakeLoop;
       break; // we are connected
@@ -2403,9 +2429,12 @@ begin
       nil, @cred, nil, nil, @fCred, nil));
   fDataPos := 0;
   fDataCount := 0;
+  fInputCount := 0;
   fFlags := ASC_REQ_FLAGS;
   // make TLS handshake and prepare for process
-  SetLength(fData, TLSRECMAXSIZE);
+  SetLength(fData, TLSRECMAXSIZE);  // decrypted application data
+  SetLength(fInput, TLSRECMAXSIZE); // encrypted TLS records
+  fInputSize := TLSRECMAXSIZE;
   HandshakeLoop;
   if CipherName <> nil then
     CipherName^ := GetCipherName;
@@ -2438,7 +2467,6 @@ var
   b: THandshakeBuf;
   LInCtxPtr: PSecHandle;
 begin
-  //writeln(fSocket.Socket,' Handshake STEP ', len);
   HandshakeBufInit(b);
   b.buf[0].pvBuffer := buf; // SECBUFFER_TOKEN
   b.buf[0].cbBuffer := len;
@@ -2457,21 +2485,19 @@ begin
     result := InitializeSecurityContextW(
       @fCred, @fCtxt, pointer(fServerAddressW), fFlags, 0, 0,
       @b.input, 0, nil, @b.output, f, nil);
-  //writeln(fSocket.Socket,' ',SspiResToText(result),' tosend=',b.buf[2].cbBuffer);
-  if (result = SEC_E_OK) or
-     (result = SEC_I_CONTINUE_NEEDED) or
-     ((f and ISC_REQ_EXTENDED_ERROR) <> 0) then
-    if (b.buf[2].cbBuffer <> 0) and
-       (b.buf[2].pvBuffer <> nil) then
-      // need to send back something to the server
-      FreeAndCheckSocket('send', mormot.net.sock.Send(
-        fSocket.Socket, b.buf[2].pvBuffer, b.buf[2].cbBuffer, 0),
-        b.buf[2].pvBuffer);
+  if b.buf[2].pvBuffer <> nil then
+    // need to send back something to the server
+    try
+      if b.buf[2].cbBuffer <> 0 then
+        SendRawAll('send', b.buf[2].pvBuffer, b.buf[2].cbBuffer);
+    finally
+      CheckSEC_E_OK('FreeContextBuffer',
+        FreeContextBuffer(b.buf[2].pvBuffer));
+    end;
   if (b.buf[1].BufferType = SECBUFFER_EXTRA) and
      (b.buf[1].cbBuffer <> 0) then
   begin
     // reuse pending bytes - avoid unexpected SEC_E_INVALID_TOKEN
-    //writeln(fSocket.Socket,' SECBUFFER_EXTRA=',b.buf[1].cbBuffer,'/',len);
     MoveFast(buf[cardinal(len) - b.buf[1].cbBuffer], buf[0], b.buf[1].cbBuffer);
     len := b.buf[1].cbBuffer;
   end
@@ -2479,38 +2505,61 @@ begin
     len := 0;
 end;
 
-procedure TSChannelNetTls.HandshakeLoop;
+procedure TSChannelNetTls.HandshakeLoop(StepFirst: boolean);
 var
   res: cardinal;
+  inputneeded: integer;
+  needrecv: boolean;
 begin
-  //writeln(fSocket.Socket,' Handshake IN');
+  // StepFirst=false for initial handshake - wait for the peer before ISC/ASC
+  // StepFirst=true for  SEC_I_RENEGOTIATE/post-handshake processing - call
+  //   ISC/ASC with the bytes returned by DecryptMessage, possibly none
+  needrecv := not StepFirst;
   repeat
-    inc(fDataCount, FreeAndCheckSocket('recv',
-      recv(fSocket.Socket,
-        @PByteArray(fData)[fDataCount], length(fData) - fDataCount, 0), nil));
-    res := HandshakeStep(pointer(fData), fDataCount);
+    if needrecv then
+    begin
+      if fInputCount >= fInputSize then
+        raise ESChannel.CreateFmt(
+          'Handshake input buffer full (%d)', [fInputCount]);
+      inc(fInputCount, FreeAndCheckSocket('recv',
+        recv(fSocket.Socket,
+          @PByteArray(fInput)[fInputCount],
+          fInputSize - fInputCount, 0), nil));
+    end;
+    res := HandshakeStep(pointer(fInput), fInputCount);
     if res = SEC_I_INCOMPLETE_CREDENTIALS then
-      // check https://stackoverflow.com/a/47479968/458259
-      // run twice to let the handshake pass
-      res := HandshakeStep(pointer(fData), fDataCount);
+    begin
+      // TODO: deserves a separate cleanup because the documented meaning
+      // is "client credentials are required", not "retry unchanged"
+      res := HandshakeStep(pointer(fInput), fInputCount);
+    end;
+    case res of
+      SEC_E_INCOMPLETE_MESSAGE:
+        // Keep existing bytes and append more TCP data
+        needrecv := true;
+      SEC_I_CONTINUE_NEEDED:
+        // SECBUFFER_EXTRA may already contain the next handshake message -
+        // consume it immediately instead of blocking in recv()
+        needrecv := fInputCount = 0;
+    else
+      needrecv := false;
+    end;
   until (res <> SEC_I_CONTINUE_NEEDED) and
         (res <> SEC_E_INCOMPLETE_MESSAGE);
+  // fInputCount is intentionally NOT reset here
   CheckSEC_E_OK('HandshakeStep', res);
-  // note: fDataCount trailing content may come from SECBUFFER_EXTRA bytes
-  fCipherName := ''; // will be retrieved if needed
-  if fInputSize = 0 then
-  begin
-    // retrieve the TLS field sizes during first handshake
-    CheckSEC_E_OK('QueryContextAttributesW',
-      QueryContextAttributesW(@fCtxt, SECPKG_ATTR_STREAM_SIZES, @fSizes));
-    fInputSize := fSizes.cbHeader + fSizes.cbMaximumMessage + fSizes.cbTrailer;
-    if (fInputSize = 0) or
-       (fInputSize > TLSRECMAXSIZE) then
-      raise ESChannel.CreateFmt('InputSize=%d>%d', [fInputSize, TLSRECMAXSIZE]);
-    SetLength(fInput, fInputSize);
-    fInputCount := 0;
-  end;
-  //writeln(fSocket.Socket,' Handshake OUT inputsize=',fInputSize);
+  // On SEC_E_OK, SChannel may return SECBUFFER_EXTRA containing
+  // application records already received together with the final
+  // handshake message. Receive() must decrypt those bytes first.
+  fCipherName := '';
+  CheckSEC_E_OK('QueryContextAttributesW',
+    QueryContextAttributesW(
+      @fCtxt, SECPKG_ATTR_STREAM_SIZES, @fSizes));
+  inputneeded := fSizes.cbHeader +  fSizes.cbMaximumMessage + fSizes.cbTrailer;
+  if (inputneeded <= 0) or
+     (inputneeded > fInputSize) then
+    raise ESChannel.CreateFmt(
+      'InputSize=%d>%d', [inputneeded, fInputSize]);
 end;
 
 destructor TSChannelNetTls.Destroy;
@@ -2563,10 +2612,12 @@ end;
 
 function TSChannelNetTls.ReceivePending: integer;
 begin
-  if fSessionClosed then
+  if fDataCount <> 0 then
+    result := fDataCount
+  else if fSessionClosed then
     result := -1
   else
-    result := fDataCount;
+    result := 0;
 end;
 
 function TSChannelNetTls.Receive(Buffer: pointer; var Length: integer): TNetResult;
@@ -2575,6 +2626,7 @@ var
   buf: array[0..3] of TSecBuffer;
   res: cardinal;
   read, i, newlen: integer;
+  needrecv: boolean;
 
   function DecryptInput: cardinal;
   var
@@ -2608,24 +2660,34 @@ begin
     desc.ulVersion := SECBUFFER_VERSION;
     desc.cBuffers := 4;
     desc.pBuffers := @buf[0];
+    // There may already be encrypted input left by the handshake,
+    // or SECBUFFER_EXTRA left by a previous DecryptMessage()
+    needrecv := fInputCount = 0;
     repeat
-      read := recv(fSocket.Socket,
-                @PByteArray(fInput)[fInputCount], fInputSize - fInputCount, 0);
-      if read <= 0 then
+      if needrecv then
       begin
-        if read = 0 then
-          result := nrClosed
-        else
+        if fInputCount >= fInputSize then
+          raise ESChannel.CreateFmt(
+            'TLS input buffer full (%d)', [fInputCount]);
+        read := recv(fSocket.Socket, @PByteArray(fInput)[fInputCount],
+                  fInputSize - fInputCount, 0);
+        if read <= 0 then
         begin
-          result := NetLastError; // may be nrRetry for WSATRY_AGAIN
-          if result = nrOK then
-            result := nrUnknownError;
+          if read = 0 then
+            result := nrClosed
+          else
+          begin
+            result := NetLastError; // may be nrRetry for WSATRY_AGAIN
+            if result = nrOK then
+              result := nrUnknownError;
+          end;
+          exit;
         end;
-        exit;
+        inc(fInputCount, read);
       end;
-      inc(fInputCount, read);
       res := DecryptInput;
-    until res <> SEC_E_INCOMPLETE_MESSAGE;
+      needrecv := res = SEC_E_INCOMPLETE_MESSAGE;
+    until not needrecv;
     repeat
 //if res <> SEC_E_OK then writeln(fSocket.Socket,' res=',SspiResToText(res));
       case res of
@@ -2656,8 +2718,8 @@ begin
             end;
         end;
       if res = SEC_I_RENEGOTIATE then
-// https://learn.microsoft.com/en-us/windows/win32/secauthn/decryptmessage--schannel#remarks
-        HandshakeStep(pointer(fInput), fInputCount);
+        // TLS 1.3 uses SEC_I_RENEGOTIATE for post-handshake messages
+        HandshakeLoop({StepFirst=}true); // true = without waiting for recv()
       if fInputCount = 0 then
         break;
       res := DecryptInput;
