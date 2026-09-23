@@ -12007,8 +12007,9 @@ end;
 
 procedure TOpenSslNetTls.CleanShutdown;
 var
-  res, err: integer;
-  endtix: Int64;
+  res: integer;
+  ne: TNetEvents;
+  endtix, tix: Int64;
 begin
   endtix := 0;
   repeat
@@ -12016,13 +12017,20 @@ begin
     res := SSL_shutdown(fSsl);
     if res >= 0 then
       exit; // 0 = fast shutdown is enough, 1 = full shutdown
-    err := SSL_get_error(fSsl, res);
-    if (err <> SSL_ERROR_WANT_READ) and
-       (err <> SSL_ERROR_WANT_WRITE) then
+    case SSL_get_error(fSsl, res) of
+      SSL_ERROR_WANT_READ:
+        ne := [neRead, neError];
+      SSL_ERROR_WANT_WRITE:
+        ne := [neWrite, neError];
+    else
       exit; // won't try any more on fatal error
+    end;
+    tix := GetTickCount64;
     if endtix = 0 then
-      endtix := GetTickCount64 + 500; // 500 ms at shutdown timeout seems fair
-    WaitRetry(0, err, endtix, 'Shutdown'); // as clean as possible
+      endtix := tix + 500 // blocking up to 500 ms at shutdown seems fair
+    else if tix > endtix then
+      exit;
+    fSocket.WaitFor(100, ne);
   until false;
 end;
 
@@ -12091,6 +12099,7 @@ procedure TOpenSslNetTls.WaitRetry(res, err: integer; var endtix: Int64;
   const ctx: ShortString);
 var
   ne: TNetEvents;
+  tix: Int64;
 begin
   case err of
     SSL_ERROR_WANT_READ:
@@ -12101,9 +12110,10 @@ begin
     EOpenSslNetTls.CheckFailed(
       self, ctx, fLastError, fSsl, res, fServerAddress, err);
   end;
+  tix := GetTickCount64;
   if endtix = 0 then
-    endtix := GetTickCount64 + 5000 // never loop forever
-  else if GetTickCount64 > endtix then
+    endtix := tix + 5000 // never loop forever
+  else if tix > endtix then
     raise EOpenSslNetTls.CreateFmt('%s timeout', [ctx]);
   fSocket.WaitFor(100, ne);
 end;
