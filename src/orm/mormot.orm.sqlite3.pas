@@ -1122,13 +1122,6 @@ begin
   else
     mask := fShardRootFileName + '*.dbs';
   db := FindFiles(ExtractFilePath(mask), ExtractFileName(mask), '', [ffoSortByName]);
-  {$ifdef OSANDROID}
-  if db = nil then
-    // The optimized POSIX scanner may return no matching regular files on
-    // some Android file systems. Fall back to RTL FindFirst/FindNext.
-    FindFilesRtl(ExtractFilePath(mask), ExtractFileName(mask), '',
-      [ffoSortByName], db);
-  {$endif OSANDROID}
   fRest.InternalLog('InitShards mask=% db=%', [mask, length(db)], sllDB);
   if db = nil then
     exit; // no existing data

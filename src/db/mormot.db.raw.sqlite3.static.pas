@@ -48,9 +48,7 @@ begin
   except
     on E: Exception do
       {$ifdef OSANDROID}
-      // Delphi Android loads the bundled library after the FMX process has
-      // initialized its native library path. The runner retries explicitly.
-      ;
+      raise;
       {$else}
       DisplayFatalError(SQLITE_LIBRARY_DEFAULT_NAME + ' initialization failed',
         RawUtf8(E.ClassName +  ': ' + E.Message));

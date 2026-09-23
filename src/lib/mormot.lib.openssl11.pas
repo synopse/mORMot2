@@ -2835,7 +2835,7 @@ function LoadPkcs12(const Der: RawByteString): PPKCS12;
 function ParsePkcs12(const Saved: RawByteString; const Password: SpiUtf8;
   out Cert: PX509; out PrivateKey: PEVP_PKEY; CA: PPstack_st_X509 = nil): boolean;
 
-/// low-level SCrypt hash computation as available since OpenSSL 3.x / 4.x
+/// low-level SCrypt hash computation with static OpenSSL 1.1 or OpenSSL 3.x / 4.x
 // - see http://www.tarsnap.com/scrypt.html and RFC 7914
 // - OpenSSL is slower than mormot.crypt.other.pas i386/x86_64 tuned SSE2 code:
 // $ on Win32:     RawSCrypt in 101ms, OpenSslScrypt in 157ms
@@ -3002,6 +3002,44 @@ end;
 
 
 { ******************** Dynamically linked OpenSSL Library Functions }
+
+function OpenSslWinLocateEntry(const entries: TRawUtf8DynArray;
+  out majsel: integer): RawUtf8;
+var
+  p: PUtf8Char;
+  maj, min, minsel: integer;
+  i: PtrInt;
+begin // parse 'SOFTWARE\OpenSSL Corporation\OpenSSL-{maj}.{min}-OpenSSLProject'
+  result := '';
+  majsel := 0;
+  minsel := -1;
+  for i := 0 to high(entries) do
+  begin
+    p := pointer(entries[i]);
+    if not NetStartWith(p, 'OPENSSL-') then
+      continue;
+    inc(p, 8);
+    maj := GetCardinal(p);
+    if maj < majsel then
+      continue;
+    while p^ in ['0' .. '9'] do
+      inc(p);
+    if p^ <> '.' then
+      continue;
+    inc(p);
+    min := GetCardinal(p);
+    if (maj = majsel) and
+       (min < minsel) then
+      continue;
+    while p^ in ['0' .. '9'] do
+      inc(p);
+    if not NetStartWith(p, '-OPENSSLPROJECT') then
+      continue;
+    result := entries[i]; // found the highest version
+    majsel := maj;
+    minsel := min;
+  end;
+end;
 
 {$ifndef OPENSSLSTATIC}
 
@@ -6166,44 +6204,6 @@ begin
   result := openssl_initialized = lsAvailable;
 end;
 
-function OpenSslWinLocateEntry(const entries: TRawUtf8DynArray;
-  out majsel: integer): RawUtf8;
-var
-  p: PUtf8Char;
-  maj, min, minsel: integer;
-  i: PtrInt;
-begin // parse 'SOFTWARE\OpenSSL Corporation\OpenSSL-{maj}.{min}-OpenSSLProject'
-  result := '';
-  majsel := 0;
-  minsel := -1;
-  for i := 0 to high(entries) do
-  begin
-    p := pointer(entries[i]);
-    if not NetStartWith(p, 'OPENSSL-') then
-      continue;
-    inc(p, 8);
-    maj := GetCardinal(p);
-    if maj < majsel then
-      continue;
-    while p^ in ['0' .. '9'] do
-      inc(p);
-    if p^ <> '.' then
-      continue;
-    inc(p);
-    min := GetCardinal(p);
-    if (maj = majsel) and
-       (min < minsel) then
-      continue;
-    while p^ in ['0' .. '9'] do
-      inc(p);
-    if not NetStartWith(p, '-OPENSSLPROJECT') then
-      continue;
-    result := entries[i]; // found the highest version
-    majsel := maj;
-    minsel := min;
-  end;
-end;
-
 {$ifdef OSWINDOWS}
 {$ifdef CPU32}
 function OpenSslWinLocate: TFileName;
@@ -6385,44 +6385,6 @@ end;
 {$else}
 
 { ******************** Statically linked OpenSSL Library Functions }
-
-function OpenSslWinLocateEntry(const entries: TRawUtf8DynArray;
-  out majsel: integer): RawUtf8;
-var
-  p: PUtf8Char;
-  maj, min, minsel: integer;
-  i: PtrInt;
-begin
-  result := '';
-  majsel := 0;
-  minsel := -1;
-  for i := 0 to high(entries) do
-  begin
-    p := pointer(entries[i]);
-    if not NetStartWith(p, 'OPENSSL-') then
-      continue;
-    inc(p, 8);
-    maj := GetCardinal(p);
-    if maj < majsel then
-      continue;
-    while p^ in ['0' .. '9'] do
-      inc(p);
-    if p^ <> '.' then
-      continue;
-    inc(p);
-    min := GetCardinal(p);
-    if (maj = majsel) and
-       (min < minsel) then
-      continue;
-    while p^ in ['0' .. '9'] do
-      inc(p);
-    if not NetStartWith(p, '-OPENSSLPROJECT') then
-      continue;
-    result := entries[i];
-    majsel := maj;
-    minsel := min;
-  end;
-end;
 
 { --------- libssl entries }
 
@@ -7677,36 +7639,42 @@ function EVP_PKEY_CTX_ctrl(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer
   cmd: integer; p1: integer; p2: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_ctrl';
 
+function EVP_PKEY_CTX_ctrl_uint64(ctx: PEVP_PKEY_CTX; keytype, optype,
+  cmd: integer; value: QWord): integer;
+begin
+  result := EVP_PKEY_CTX_ctrl(ctx, keytype, optype, cmd, 0, @value);
+end;
+
 function EVP_PKEY_CTX_set1_pbe_pass(ctx: PEVP_PKEY_CTX;
   pass: PAnsiChar; passlen: integer): integer;
 begin
-  result := EVP_PKEY_CTX_ctrl(ctx, -1, 1, EVP_PKEY_ALG_CTRL + 3,
+  result := EVP_PKEY_CTX_ctrl(ctx, -1, EVP_PKEY_OP_DERIVE, EVP_PKEY_ALG_CTRL + 8,
     passlen, pass);
 end;
 
 function EVP_PKEY_CTX_set1_scrypt_salt(ctx: PEVP_PKEY_CTX;
   salt: PByte; saltlen: integer): integer;
 begin
-  result := EVP_PKEY_CTX_ctrl(ctx, -1, 1, EVP_PKEY_ALG_CTRL + 8,
+  result := EVP_PKEY_CTX_ctrl(ctx, -1, EVP_PKEY_OP_DERIVE, EVP_PKEY_ALG_CTRL + 9,
     saltlen, salt);
 end;
 
 function EVP_PKEY_CTX_set_scrypt_N(ctx: PEVP_PKEY_CTX; n: QWord): integer;
 begin
-  result := EVP_PKEY_CTX_ctrl(ctx, -1, 1, EVP_PKEY_ALG_CTRL + 9,
-    0, pointer(n));
+  result := EVP_PKEY_CTX_ctrl_uint64(ctx, -1, EVP_PKEY_OP_DERIVE,
+    EVP_PKEY_ALG_CTRL + 10, n);
 end;
 
 function EVP_PKEY_CTX_set_scrypt_r(ctx: PEVP_PKEY_CTX; r: QWord): integer;
 begin
-  result := EVP_PKEY_CTX_ctrl(ctx, -1, 1, EVP_PKEY_ALG_CTRL + 10,
-    0, pointer(r));
+  result := EVP_PKEY_CTX_ctrl_uint64(ctx, -1, EVP_PKEY_OP_DERIVE,
+    EVP_PKEY_ALG_CTRL + 11, r);
 end;
 
 function EVP_PKEY_CTX_set_scrypt_p(ctx: PEVP_PKEY_CTX; p: QWord): integer;
 begin
-  result := EVP_PKEY_CTX_ctrl(ctx, -1, 1, EVP_PKEY_ALG_CTRL + 11,
-    0, pointer(p));
+  result := EVP_PKEY_CTX_ctrl_uint64(ctx, -1, EVP_PKEY_OP_DERIVE,
+    EVP_PKEY_ALG_CTRL + 12, p);
 end;
 
 function EVP_PKEY_CTX_new(pkey: PEVP_PKEY; e: PENGINE): PEVP_PKEY_CTX; cdecl;
@@ -11317,6 +11285,8 @@ function OpenSslSCrypt(const Password: RawUtf8; const Salt: RawByteString;
 var
   ctx: PEVP_PKEY_CTX;
   len: PtrUInt;
+  pwd, slt: pointer;
+  empty: byte;
 begin
   FastAssignNew(result);
   // validate parameters
@@ -11332,10 +11302,18 @@ begin
   ctx := EVP_PKEY_CTX_new_id(EVP_PKEY_SCRYPT, nil);
   if ctx <> nil then
   try
+    // OpenSSL 1.1 rejects nil data pointers even for a zero-length input.
+    empty := 0;
+    pwd := pointer(Password);
+    if pwd = nil then
+      pwd := @empty;
+    slt := pointer(Salt);
+    if slt = nil then
+      slt := @empty;
     // setup parameters
     if (EVP_PKEY_derive_init(ctx) <= 0) or
-       (EVP_PKEY_CTX_set1_pbe_pass(ctx, pointer(Password), Length(Password)) <= 0) or
-       (EVP_PKEY_CTX_set1_scrypt_salt(ctx, pointer(Salt), length(Salt)) <= 0) or
+       (EVP_PKEY_CTX_set1_pbe_pass(ctx, PAnsiChar(pwd), Length(Password)) <= 0) or
+       (EVP_PKEY_CTX_set1_scrypt_salt(ctx, PByte(slt), length(Salt)) <= 0) or
        (EVP_PKEY_CTX_set_scrypt_N(ctx, N) <= 0) or
        (EVP_PKEY_CTX_set_scrypt_r(ctx, R) <= 0) or
        (EVP_PKEY_CTX_set_scrypt_p(ctx, P) <= 0) then

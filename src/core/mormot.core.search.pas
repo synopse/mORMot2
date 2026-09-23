@@ -3794,7 +3794,9 @@ begin
     end
     else if aText > txtend then
       break;
-    if (PtrInt(PtrUInt(txtretry)) > 0) and
+    // Android64 may use tagged pointers with the top bit set (e.g. B400...).
+    // A valid retry address must not be tested as a signed PtrInt.
+    if (txtretry <> nil) and
        (txtretry <= txtend + 1) then
     begin
       aText := txtretry;

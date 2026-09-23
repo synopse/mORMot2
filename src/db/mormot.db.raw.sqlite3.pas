@@ -5898,7 +5898,7 @@ end;
 
 // under FPC, MemSize() returns the value expected by xSize()
 // under Delphi, of with a FPC MM which don't support MemSize(), we store the
-// size in a padded header, preserving the allocator alignment for SQLite3
+// size as 4 bytes header (a 32-bit header is enough for SQLite3)
 
 {$ifdef FPC}
 
@@ -5924,33 +5924,25 @@ end;
 
 {$endif FPC}
 
-const
-  // SQLite requires at least 8-byte alignment. A 4-byte prefix breaks it,
-  // notably for atomic accesses on Android ARM64. Preserve 16-byte alignment.
-  SQLITE_MEM_HEADER = 16;
-
 function xMalloc2(size: integer): pointer; cdecl;
 begin
-  GetMem(result, PtrInt(size) + SQLITE_MEM_HEADER);
+  GetMem(result, size + 4);
   PInteger(result)^ := size;
-  inc(PByte(result), SQLITE_MEM_HEADER);
+  inc(PInteger(result));
 end;
 
 procedure xFree2(ptr: pointer); cdecl;
 begin
-  if ptr = nil then
-    exit;
-  dec(PByte(ptr), SQLITE_MEM_HEADER);
+  dec(PInteger(ptr));
   FreeMem(ptr);
 end;
 
 function xRealloc2(ptr: pointer; size: integer): pointer; cdecl;
 begin
-  if ptr <> nil then
-    dec(PByte(ptr), SQLITE_MEM_HEADER);
-  ReallocMem(ptr, PtrInt(size) + SQLITE_MEM_HEADER);
+  dec(PInteger(ptr));
+  ReallocMem(ptr, size + 4);
   PInteger(ptr)^ := size;
-  inc(PByte(ptr), SQLITE_MEM_HEADER);
+  inc(PInteger(ptr));
   result := ptr;
 end;
 
@@ -5959,7 +5951,7 @@ begin
   if ptr = nil then
     result := 0
   else
-    result := PInteger(PAnsiChar(ptr) - SQLITE_MEM_HEADER)^;
+    result := PInteger(PAnsiChar(ptr) - 4)^;
 end;
 
 function xRoundup(size: integer): integer; cdecl;
