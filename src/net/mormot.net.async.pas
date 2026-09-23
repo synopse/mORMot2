@@ -955,6 +955,7 @@ type
     fResponseStatus: integer;
     fOnStateChange: TOnHttpClientStates;
     fTls: TNetTlsContext;
+    fSecureHost: RawUtf8;
     fSender: TObject;
     procedure AfterCreate; override;
     procedure BeforeDestroy; override;
@@ -4471,7 +4472,7 @@ begin
               if result <> soContinue then
                 break;
               fSocket.MakeBlocking;
-              fSecure.AfterConnection(fSocket, fTls, fHttp.Host);
+              fSecure.AfterConnection(fSocket, fTls, fSecureHost);
               fSocket.MakeAsync;
               result := NotifyStateChange(hcsAfterTlsHandshake);
               if result <> soContinue then
@@ -4557,6 +4558,7 @@ var
   sock: TNetSocket;
   h: THandle;
   c: THttpAsyncClientConnection;
+  tls: boolean;
   tag: TPollSocketTag absolute c;
 
   procedure HandleCleanup; // sub-function for FPC Win64-aarch64 compilation
@@ -4624,10 +4626,11 @@ begin
     if aHeaders <> '' then
       c.fHttp.Headers := PurgeHeaders(aHeaders, {trim=}true);
     c.fHttp.Head.Reserve(2048); // prepare for 2KB headers
-    if aUrl.Port = DEFAULT_PORT[aTls <> nil] then
+    tls := (aTls <> nil) or aUrl.Https;
+    if aUrl.Port = DEFAULT_PORT[tls] then
       c.fHttp.Host := aUrl.Server
     else
-      Append(c.fHttp.Host, [aUrl.Server, ':', aUrl.Port]);
+      Join([aUrl.Server, ':', aUrl.Port], c.fHttp.Host);
     if Assigned(aOnStateChanged) and
        (aOnStateChange <> []) then
     begin
@@ -4637,14 +4640,14 @@ begin
     end;
     // optionally prepare for TLS
     result := nrNotImplemented;
-    if (aTls <> nil) or
-       aUrl.Https then
+    if tls then
     begin
       if aTls <> nil then
         c.fTls := aTls^;
       c.fSecure := NewNetTls;
       if c.fSecure = nil then
         exit;
+      c.fSecureHost := aUrl.Server; // no port involved in SNI
     end;
     // start async events subscription and connection
     {$ifdef USE_WINIOCP}
