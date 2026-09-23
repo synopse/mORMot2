@@ -347,6 +347,7 @@ implementation
 var
   // The FMX Android runner executes the suite from TTestRunnerThread.  Keep
   // that worker id as the test's logical main thread for the thread checks.
+  // These checks do not assert dispatch to the actual FMX UI thread.
   AndroidTestThreadID: PtrUInt;
 {$endif OSANDROID}
 

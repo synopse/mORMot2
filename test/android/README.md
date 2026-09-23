@@ -1,6 +1,6 @@
 # mORMot2 Android64 test runner
 
-Open `mormot2tests-android.dproj` in Delphi and select Android64. The project
+Open `mormot2tests.dproj` in Delphi and select Android64. The project
 uses relative paths to the mORMot source and test units. The app waits for the
 user to tap **Run tests**; launching it does not start the suite.
 
@@ -24,7 +24,9 @@ build.cmd Debug
 deploy-run.cmd
 ```
 
-`build.cmd` compiles and packages a debug signed APK. Its optional `Release`
+`build.cmd` uses Delphi's incremental `Make` target and packages a debug
+signed APK. Use `msbuild mormot2tests.dproj /target:Build` from a configured
+RAD Studio command prompt when a complete rebuild is needed. Its optional `Release`
 argument selects optimized compilation with the same local debug packaging.
 `deploy-run.cmd` installs the
 existing APK on an ADB connected device and opens the app. Set
@@ -54,4 +56,7 @@ physical device is connected, checks the guest ABI, and waits for Android to
 finish booting. The test suite still starts only when **Run tests** is tapped.
 
 The suite covers core, ORM, and SOA cases. It may take several minutes on a
-phone. Results appear in the app and can be shared after completion.
+phone. Tap **Run PSS certificate tests** to run the isolated Android RSA-PSS
+certificate checks, or **Run thread checks** for the queue/main-thread and
+exclusive-lock regressions. Results appear in the app and can be shared after
+completion.

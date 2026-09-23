@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 set "PROJECT_DIR=%~dp0"
-set "APK=%PROJECT_DIR%mormot2tests-android\bin\mormot2tests-android.apk"
+set "APK=%PROJECT_DIR%mormot2tests\bin\mormot2tests.apk"
 set "CONFIG=%~1"
 if not defined CONFIG set "CONFIG=Debug"
 if /I not "%CONFIG%"=="Debug" if /I not "%CONFIG%"=="Release" (
@@ -18,12 +18,12 @@ if not defined BDS call :setup_delphi
 if errorlevel 1 exit /b 2
 
 pushd "%PROJECT_DIR%"
-msbuild.exe "mormot2tests-android.dproj" /nologo /verbosity:minimal /target:Build /property:Config=%CONFIG%;Platform=Android64
+msbuild.exe "mormot2tests.dproj" /nologo /verbosity:minimal /target:Make /property:Config=%CONFIG%;Platform=Android64
 if errorlevel 1 goto :build_failed
-msbuild.exe "mormot2tests-android.dproj" /nologo /verbosity:minimal /target:Deploy /property:Config=%CONFIG%;Platform=Android64
+msbuild.exe "mormot2tests.dproj" /nologo /verbosity:minimal /target:Deploy /property:Config=%CONFIG%;Platform=Android64
 if errorlevel 1 goto :build_failed
 if not exist "%APK%" goto :build_failed
-powershell.exe -NoProfile -Command "$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.IO.Compression.FileSystem; $z=[IO.Compression.ZipFile]::OpenRead($env:APK); try { if (-not $z.GetEntry('classes.dex') -or -not $z.GetEntry('lib/arm64-v8a/libmormot2tests-android.so')) { exit 1 } } finally { $z.Dispose() }"
+powershell.exe -NoProfile -Command "$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.IO.Compression.FileSystem; $z=[IO.Compression.ZipFile]::OpenRead($env:APK); try { if (-not $z.GetEntry('classes.dex') -or -not $z.GetEntry('lib/arm64-v8a/libmormot2tests.so')) { exit 1 } } finally { $z.Dispose() }"
 if errorlevel 1 goto :invalid_apk
 popd
 echo APK: %APK%

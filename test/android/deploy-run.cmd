@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 set "PROJECT_DIR=%~dp0"
-set "APK=%PROJECT_DIR%mormot2tests-android\bin\mormot2tests-android.apk"
+set "APK=%PROJECT_DIR%mormot2tests\bin\mormot2tests.apk"
 set "PACKAGE=org.mormot.tests.android"
 set "ACTIVITY=com.embarcadero.firemonkey.FMXNativeActivity"
 

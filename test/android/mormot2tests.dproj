@@ -1,7 +1,7 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{792927C8-852B-4F76-BEB8-BF70148026A2}</ProjectGuid>
-        <MainSource>mormot2tests-android.dpr</MainSource>
+        <MainSource>mormot2tests.dpr</MainSource>
         <Base>True</Base>
         <Config Condition="'$(Config)'==''">Debug</Config>
         <Platform Condition="'$(Platform)'==''">Android64</Platform>
@@ -57,7 +57,7 @@
         <Borland.ProjectType/>
         <BorlandProject>
             <Delphi.Personality>
-                <Source><Source Name="MainSource">mormot2tests-android.dpr</Source></Source>
+                <Source><Source Name="MainSource">mormot2tests.dpr</Source></Source>
             </Delphi.Personality>
             <Platforms><Platform value="Android64">True</Platform></Platforms>
             <Deployment Version="5">
@@ -76,5 +76,5 @@
         <ProjectFileVersion>12</ProjectFileVersion>
     </ProjectExtensions>
     <Import Project="$(BDS)\Bin\CodeGear.Delphi.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Delphi.Targets')"/>
-    <Import Project="$(MSBuildProjectDirectory)\mormot2tests-android.deployproj" Condition="Exists('$(MSBuildProjectDirectory)\mormot2tests-android.deployproj')"/>
+    <Import Project="$(MSBuildProjectDirectory)\mormot2tests.deployproj" Condition="Exists('$(MSBuildProjectDirectory)\mormot2tests.deployproj')"/>
 </Project>

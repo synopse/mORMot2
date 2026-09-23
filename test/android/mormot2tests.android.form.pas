@@ -26,17 +26,22 @@ type
     FSuccess: Boolean;
     FAssertions: Integer;
     FFailed: Integer;
+    FUiThreadId: NativeUInt;
+    FRestriction: RawUtf8;
     procedure CaptureOutput(const AValue: RawUtf8);
     procedure ReportFinished;
+    procedure CaptureUiThread;
   protected
     procedure Execute; override;
   public
-    constructor Create(AForm: TAndroidTestForm);
+    constructor Create(AForm: TAndroidTestForm; const ARestriction: RawUtf8);
   end;
 
   TAndroidTestForm = class(TForm)
   private
     FStartButton: TButton;
+    FFocusedButton: TButton;
+    FThreadButton: TButton;
     FShareButton: TButton;
     FStatusLabel: TLabel;
     FTerminalBackground: TRectangle;
@@ -84,7 +89,6 @@ uses
   test.soa.network,
   {$IFDEF ANDROID}
   FMX.MediaLibrary.Android,
-  Androidapi.Helpers,
   Androidapi.Log,
   Androidapi.JNI.GraphicsContentViewText,
   Androidapi.JNI.JavaTypes,
@@ -103,17 +107,9 @@ begin
 end;
 
 procedure EnsureAndroidSQLite;
-var
-  NativeLibraryFile: string;
 begin
   if sqlite3 = nil then
-  begin
-    {$IFDEF ANDROID}
-    NativeLibraryFile := IncludeTrailingPathDelimiter(
-      TAndroidHelper.PackagePath) + 'libsqlite.so';
-    {$ENDIF}
-    sqlite3 := TSqlite3LibraryDynamic.Create(NativeLibraryFile);
-  end;
+    sqlite3 := TSqlite3LibraryDynamic.Create(SQLITE_LIBRARY_DEFAULT_NAME);
 end;
 
 type
@@ -160,10 +156,12 @@ begin
   ]);
 end;
 
-constructor TTestRunnerThread.Create(AForm: TAndroidTestForm);
+constructor TTestRunnerThread.Create(AForm: TAndroidTestForm;
+  const ARestriction: RawUtf8);
 begin
   inherited Create(True);
   FForm := AForm;
+  FRestriction := ARestriction;
   FreeOnTerminate := True;
 end;
 
@@ -174,11 +172,22 @@ begin
   Tests := nil;
   try
     try
+      // Prove that the FMX UI thread services Synchronize from the test worker.
+      // The SOA tests below still use this worker as their logical main thread;
+      // they do not validate mORMot's actual UI-thread dispatch on Android.
+      TThread.Synchronize(nil, CaptureUiThread);
+      if (FUiThreadId <> NativeUInt(MainThreadID)) or
+         (FUiThreadId = NativeUInt(GetCurrentThreadID)) then
+        raise Exception.Create('FMX main-thread synchronization failed');
       RegisterOpenSsl;
       RegisterX509;
       if not OpenSslIsAvailable then
         raise Exception.Create('Android OpenSSL 1.1 static libraries unavailable');
       Tests := TAndroidIntegrationTests.Create('mORMot2 Android Regression Tests');
+      if FRestriction = 'thread-checks' then
+        Tests.Restrict := ['CoreBase._TSynQueue', 'CoreThreads.ExclusiveLocks']
+      else if FRestriction <> '' then
+        Tests.Restrict := [FRestriction];
       Tests.CustomOutput := CaptureOutput;
       FSuccess := Tests.Run;
       FAssertions := Tests.Assertions;
@@ -194,6 +203,11 @@ begin
     Tests.Free;
   end;
   TThread.Synchronize(nil, ReportFinished);
+end;
+
+procedure TTestRunnerThread.CaptureUiThread;
+begin
+  FUiThreadId := NativeUInt(GetCurrentThreadID);
 end;
 
 procedure TTestRunnerThread.CaptureOutput(const AValue: RawUtf8);
@@ -238,6 +252,20 @@ begin
   FStartButton.Height := 64;
   FStartButton.Text := 'Run tests';
   FStartButton.OnClick := StartTests;
+
+  FFocusedButton := TButton.Create(Self);
+  FFocusedButton.Parent := Self;
+  FFocusedButton.Align := TAlignLayout.Top;
+  FFocusedButton.Height := 56;
+  FFocusedButton.Text := 'Run PSS certificate tests';
+  FFocusedButton.OnClick := StartTests;
+
+  FThreadButton := TButton.Create(Self);
+  FThreadButton.Parent := Self;
+  FThreadButton.Align := TAlignLayout.Top;
+  FThreadButton.Height := 56;
+  FThreadButton.Text := 'Run thread checks';
+  FThreadButton.OnClick := StartTests;
 
   FShareButton := TButton.Create(Self);
   FShareButton.Parent := Self;
@@ -388,13 +416,20 @@ begin
     end;
   end;
   FStartButton.Enabled := False;
+  FFocusedButton.Enabled := False;
+  FThreadButton.Enabled := False;
   FShareButton.Enabled := False;
   FStatusLabel.Text := 'Tests running ...';
   FPendingOutput := '';
   FOutputMemo.Text :=
     'mORMot2 Android Test Terminal' + sLineBreak +
     'Tests started ...' + sLineBreak + sLineBreak;
-  Runner := TTestRunnerThread.Create(Self);
+  if Sender = FThreadButton then
+    Runner := TTestRunnerThread.Create(Self, 'thread-checks')
+  else if Sender = FFocusedButton then
+    Runner := TTestRunnerThread.Create(Self, 'CoreCrypto.PssCertificates')
+  else
+    Runner := TTestRunnerThread.Create(Self, '');
   Runner.Start;
 end;
 
@@ -411,6 +446,8 @@ begin
   AppendTerminal(sLineBreak + FStatusLabel.Text + sLineBreak);
   FlushTerminal(nil);
   FStartButton.Enabled := True;
+  FFocusedButton.Enabled := True;
+  FThreadButton.Enabled := True;
   FShareButton.Enabled := True;
 end;
 

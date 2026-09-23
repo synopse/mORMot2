@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 try {
 $projectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$apk = Join-Path $projectDir 'mormot2tests-android\bin\mormot2tests-android.apk'
+$apk = Join-Path $projectDir 'mormot2tests\bin\mormot2tests.apk'
 $package = 'org.mormot.tests.android'
 $activity = 'com.embarcadero.firemonkey.FMXNativeActivity'
 

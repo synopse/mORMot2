@@ -215,6 +215,7 @@ type
     procedure TSynUniqueIdentifierSlow(Sender: TObject);
     // test TSynQueue with all kind of values in a background thread
     procedure TSynQueueSlow(Sender: TObject);
+    procedure TSynQueueMainThread;
   published
     /// test RecordCopy(), TRttiMap and TRttiFilter
     procedure _Records;
@@ -4037,6 +4038,17 @@ begin
     Check(IsMatch('[a-z0-9]?[A-Z0-9]', V, true) = isword);
     Check(IsMatch('[A-Z0-9]*', V, true) = isword);
   end;
+  {$ifdef OSANDROID}
+  // Android64 heap strings may carry a pointer tag in their high bits.
+  // SearchNoRange must retry after '*' even when that pointer is negative
+  // when interpreted as PtrInt.
+  V := 'test0' + RawUtf8(StringOfChar('0', 3)) + '.dbs';
+  Check(IsMatchs('test0*.dbs', V, false));
+  Check(IsMatchs('*.txt;test0*.dbs', V, false, ';'));
+  match.Prepare('test0*.dbs', false, true);
+  Check(match.Match(V));
+  Check(not match.Match('test0000.txt'));
+  {$endif OSANDROID}
 end;
 
 procedure TTestCoreBase._TExprParserMatch;
@@ -9184,11 +9196,7 @@ var
       CheckEqualTrim(full.Processor[0].Manufacturer, os[sbiCpuManufacturer], 'proc');
     if full.Battery <> nil then
       CheckEqualTrim(full.Battery[0].Manufacturer, os[sbiBatteryManufacturer], 'batt');
-    // TSmbiosInfo also includes type 12 (System Configuration), while
-    // GetSmbios(sbiOem) only exposes type 11 (OEM Strings).  Some firmware
-    // reports a placeholder such as "Unknown" only in type 12.
-    if (full.Oem <> nil) and
-       (os[sbiOem] <> '') then
+    if full.Oem <> nil then
       CheckEqualTrim(full.Oem[0], os[sbiOem], 'oem');
   end;
 
@@ -12716,14 +12724,11 @@ begin
   end;
 end;
 
-procedure TTestCoreBase._TSynQueue; // should run in the main thread
+procedure TTestCoreBase.TSynQueueMainThread;
 var
   i: PtrInt;
   ev: TSynEvent;
 begin
-  // validate TSynQueue with all kind of values in a background thread
-  Run(TSynQueueSlow, self, 'TSynQueue', true, false);
-  // validate TSynEvent process in the main thread
   ev := TSynEvent.Create;
   try
     CheckEqual(PtrUInt(GetCurrentThreadID), PtrUInt(MainThreadID), 'mainthread');
@@ -12749,6 +12754,19 @@ begin
   finally
     ev.Free;
   end;
+end;
+
+procedure TTestCoreBase._TSynQueue; // should run in the main thread
+begin
+  // validate TSynQueue with all kind of values in a background thread
+  Run(TSynQueueSlow, self, 'TSynQueue', true, false);
+  // the Android FMX runner executes tests from a worker thread
+  {$ifdef OSANDROID}
+  if GetCurrentThreadID <> MainThreadID then
+    TThread.Synchronize(nil, TSynQueueMainThread)
+  else
+  {$endif OSANDROID}
+    TSynQueueMainThread;
 end;
 
 procedure TTestCoreBase.DeltaCompression;

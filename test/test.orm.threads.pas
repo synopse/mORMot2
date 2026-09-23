@@ -722,7 +722,8 @@ begin
   // amMainThread mode requires the FMX UI thread for CheckSynchronize and
   // would otherwise either fail or block the Android UI long enough for ANR.
   // BackgroundThread exercises the same concurrent client path without
-  // requiring UI-thread synchronization.
+  // requiring UI-thread synchronization. This does not verify amMainThread
+  // dispatch on Android; the FMX runner checks Synchronize separately.
   Test(TRestClientDB, HTTP_DEFAULT_MODE, amBackgroundThread);
   {$else}
   Test(TRestClientDB, HTTP_DEFAULT_MODE, amMainThread);

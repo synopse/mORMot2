@@ -11,7 +11,7 @@ three native ARM64 files in the repository's `static/arm64-v8a` directory:
 
 The `static` directory is ignored by Git. The libraries are not included in
 the project commit. Each developer must provide compatible ARM64 binaries
-before compiling or packaging `mormot2tests-android.dproj`. The project uses only
+before compiling or packaging `mormot2tests.dproj`. The project uses only
 relative paths to these files. Do not place machine-specific SDK paths in the
 project file.
 
@@ -39,7 +39,7 @@ of any native binaries before sharing them.
 
 ## Build and launch
 
-Run `test\mormot2tests-android\build.cmd Debug` from the repository root,
+Run `test\android\build.cmd Debug` from the repository root,
 then `deploy-run.cmd` for an ADB-connected phone or `run-emulator.cmd` for an
 Android Studio AVD. The APK contains ARM64 native code, so the target Android
 device must report `arm64-v8a` among its supported ABIs.

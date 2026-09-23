@@ -62,9 +62,9 @@ libssl-android64.a
 
 The Android64 project links this directory with `-L`. The archives are link
 inputs; the APK contains the resulting application shared library. The build
-script `test/mormot2tests-android/build.cmd` checks that both files exist
+script `test/android/build.cmd` checks that both files exist
 before invoking MSBuild. See
-[`ANDROID-README.md`](../test/mormot2tests-android/ANDROID-README.md) for all
+[`ANDROID-README.md`](../test/android/ANDROID-README.md) for all
 native library requirements.
 
 ## Build and verify
@@ -72,7 +72,7 @@ native library requirements.
 From the repository root:
 
 ```bat
-test\mormot2tests-android\build.cmd Debug
+test\android\build.cmd Debug
 ```
 
 The Android runner checks OpenSSL availability when the user starts the test
