@@ -11367,6 +11367,7 @@ type
       WaitRes: integer): TNetResult;
     procedure WaitRetry(res, err: integer; var endtix: Int64; const ctx: ShortString);
     procedure SetupCtx;
+    procedure CleanShutdown;
   public
     destructor Destroy; override;
     // INetTls methods
@@ -11408,7 +11409,6 @@ begin
       ctx := @server;
     end;
     x := store.CurrentCert;
-    ctx^.PeerCert := x;
     if Assigned(x) then
     begin
       ctx^.PeerIssuer := x.IssuerName;
@@ -11419,8 +11419,12 @@ begin
       ctx^.PeerIssuer := '';
       ctx^.PeerSubject := '';
     end;
-    result := ord(ctx^.OnEachPeerVerify(c.fSocket, ctx, wasok <> 0, c.fSsl, x));
-    ctx^.PeerCert := nil; // this PX509 is short-lived
+    try
+      ctx^.PeerCert := x;
+      result := ord(ctx^.OnEachPeerVerify(c.fSocket, ctx, wasok <> 0, c.fSsl, x));
+    finally
+      ctx^.PeerCert := nil; // this CurrentCert PX509 is short-lived
+    end;
   except
     result := 0; // abort the connection on exception within callback
   end;
@@ -12001,12 +12005,33 @@ begin
   x^.Free;
 end;
 
+procedure TOpenSslNetTls.CleanShutdown;
+var
+  res, err: integer;
+  endtix: Int64;
+begin
+  endtix := 0;
+  repeat
+    ERR_clear_error;
+    res := SSL_shutdown(fSsl);
+    if res >= 0 then
+      exit; // 0 = fast shutdown is enough, 1 = full shutdown
+    err := SSL_get_error(fSsl, res);
+    if (err <> SSL_ERROR_WANT_READ) and
+       (err <> SSL_ERROR_WANT_WRITE) then
+      exit; // won't try any more on fatal error
+    if endtix = 0 then
+      endtix := GetTickCount64 + 500; // 500 ms at shutdown timeout seems fair
+    WaitRetry(0, err, endtix, 'Shutdown'); // as clean as possible
+  until false;
+end;
+
 destructor TOpenSslNetTls.Destroy;
 begin
   if fSsl <> nil then // client or AfterAccept server connection
   begin
     if fDoSslShutdown then
-      SSL_shutdown(fSsl);
+      CleanShutdown;
     fSsl.Free;
   end;
   if fCtx <> nil then
