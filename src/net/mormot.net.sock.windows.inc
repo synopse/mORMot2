@@ -2797,12 +2797,11 @@ begin
       needrecv := res = SEC_E_INCOMPLETE_MESSAGE;
     until not needrecv;
     repeat
-//if res <> SEC_E_OK then writeln(fSocket.Socket,' res=',SspiResToText(res));
       case res of
         SEC_I_RENEGOTIATE:
-          ; // appears with TLS 1.3
+          ; // appears with TLS 1.3 - processed below
         SEC_I_CONTEXT_EXPIRED:
-          fSessionClosed := true;
+          fSessionClosed := true; // and processed below
         SEC_E_INCOMPLETE_MESSAGE:
           break;
         else
@@ -2825,6 +2824,18 @@ begin
               fInputCount := buf[i].cbBuffer;
             end;
         end;
+      if res = SEC_I_CONTEXT_EXPIRED then
+      begin
+        // close_notify terminates the TLS input stream
+        fInputCount := 0;
+        if fDataCount = 0 then
+        begin
+          Length := 0;
+          result := nrClosed;
+          exit;
+        end;
+        break;
+      end;
       if res = SEC_I_RENEGOTIATE then
         // TLS 1.3 uses SEC_I_RENEGOTIATE for post-handshake messages
         HandshakeLoop({StepFirst=}true); // true = without waiting for recv()
