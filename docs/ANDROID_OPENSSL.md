@@ -50,7 +50,7 @@ The build must produce static libraries containing AArch64 objects.
 Copy or build the archives into this directory:
 
 ```text
-test/android-libs/arm64-v8a/
+static/arm64-v8a/
 ```
 
 The required filenames are:
@@ -60,25 +60,23 @@ libcrypto-android64.a
 libssl-android64.a
 ```
 
-The Android64 project links this directory with `-L` and deploys both
-archives into the APK's `lib/arm64-v8a` deployment area. The build script
-`test/build_android_runner.cmd` checks that both files exist before invoking
-MSBuild.
+The Android64 project links this directory with `-L`. The archives are link
+inputs; the APK contains the resulting application shared library. The build
+script `test/mormot2tests-android/build.cmd` checks that both files exist
+before invoking MSBuild. See
+[`ANDROID-README.md`](../test/mormot2tests-android/ANDROID-README.md) for all
+native library requirements.
 
 ## Build and verify
 
 From the repository root:
 
 ```bat
-test\build_android_runner.cmd
+test\mormot2tests-android\build.cmd Debug
 ```
 
-The Android runner performs an OpenSSL availability smoke test before running
-the test suite. A successful run writes:
-
-```text
-OpenSSL TLS smoke check passed
-```
+The Android runner checks OpenSSL availability when the user starts the test
+suite with **Run tests**.
 
 The full Android suite also exercises `TRestHttpsServer` and
 `TRestHttpsClient`. Keep the Android runner on a worker thread; running the

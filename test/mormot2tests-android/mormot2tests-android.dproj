@@ -1,0 +1,80 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{792927C8-852B-4F76-BEB8-BF70148026A2}</ProjectGuid>
+        <MainSource>mormot2tests-android.dpr</MainSource>
+        <Base>True</Base>
+        <Config Condition="'$(Config)'==''">Debug</Config>
+        <Platform Condition="'$(Platform)'==''">Android64</Platform>
+        <AppType>Application</AppType>
+        <FrameworkType>FMX</FrameworkType>
+        <ProjectVersion>20.4</ProjectVersion>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Config)'=='Base' or '$(Base)'!=''">
+        <Base>true</Base>
+        <DCC_UnitSearchPath>..;..\..\src;..\..\src\app;..\..\src\core;..\..\src\crypt;..\..\src\db;..\..\src\ddd;..\..\src\lib;..\..\src\misc;..\..\src\net;..\..\src\orm;..\..\src\rest;..\..\src\script;..\..\src\soa;..\..\src\tools\ecc;..\..\src\ui;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <DCC_Namespace>System;Xml;Data;Datasnap;Web;Soap;$(DCC_Namespace)</DCC_Namespace>
+    </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='Android64' and '$(Base)'=='true') or '$(Base_Android64)'!=''">
+        <Base_Android64>true</Base_Android64>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+        <BT_BuildType>Debug</BT_BuildType>
+        <VerInfo_Keys>package=org.mormot.tests.android;label=mORMot2 Android Tests;versionCode=1;versionName=1.0.0;persistent=False;restoreAnyVersion=False;installLocation=auto;largeHeap=True;theme=TitleBar;hardwareAccelerated=true;minSdkVersion=23;targetSdkVersion=36</VerInfo_Keys>
+        <AUP_INTERNET>true</AUP_INTERNET>
+        <EnabledSysJars>activity-1.7.2.dex.jar;annotation-experimental-1.4.1.dex.jar;annotation-jvm-1.8.1.dex.jar;annotations-23.0.0.dex.jar;appcompat-1.2.0.dex.jar;appcompat-resources-1.2.0.dex.jar;billing-7.1.1.dex.jar;biometric-1.1.0.dex.jar;browser-1.4.0.dex.jar;cloud-messaging.dex.jar;collection-jvm-1.4.2.dex.jar;concurrent-futures-1.1.0.dex.jar;core-1.17.0.dex.jar;core-common-2.2.0.dex.jar;core-ktx-1.17.0.dex.jar;core-runtime-2.2.0.dex.jar;core-viewtree-1.0.0.dex.jar;cursoradapter-1.0.0.dex.jar;customview-1.0.0.dex.jar;documentfile-1.0.0.dex.jar;drawerlayout-1.0.0.dex.jar;error_prone_annotations-2.9.0.dex.jar;exifinterface-1.3.6.dex.jar;firebase-annotations-16.2.0.dex.jar;firebase-common-20.3.1.dex.jar;firebase-components-17.1.0.dex.jar;firebase-datatransport-18.1.7.dex.jar;firebase-encoders-17.0.0.dex.jar;firebase-encoders-json-18.0.0.dex.jar;firebase-encoders-proto-16.0.0.dex.jar;firebase-iid-interop-17.1.0.dex.jar;firebase-installations-17.1.3.dex.jar;firebase-installations-interop-17.1.0.dex.jar;firebase-measurement-connector-19.0.0.dex.jar;firebase-messaging-23.1.2.dex.jar;fmx.dex.jar;fragment-1.2.5.dex.jar;google-play-licensing.dex.jar;interpolator-1.0.0.dex.jar;javax.inject-1.dex.jar;jspecify-1.0.0.dex.jar;kotlin-stdlib-2.1.21.dex.jar;kotlinx-coroutines-android-1.8.1.dex.jar;kotlinx-coroutines-core-jvm-1.8.1.dex.jar;legacy-support-core-utils-1.0.0.dex.jar;lifecycle-common-2.6.2.dex.jar;lifecycle-livedata-2.6.2.dex.jar;lifecycle-livedata-core-2.6.2.dex.jar;lifecycle-runtime-2.6.2.dex.jar;lifecycle-service-2.6.2.dex.jar;lifecycle-viewmodel-2.6.2.dex.jar;lifecycle-viewmodel-savedstate-2.6.2.dex.jar;listenablefuture-1.0.dex.jar;loader-1.0.0.dex.jar;localbroadcastmanager-1.0.0.dex.jar;okio-jvm-3.4.0.dex.jar;play-services-ads-22.2.0.dex.jar;play-services-ads-base-22.2.0.dex.jar;play-services-ads-identifier-18.0.0.dex.jar;play-services-ads-lite-22.2.0.dex.jar;play-services-appset-16.0.1.dex.jar;play-services-base-18.5.0.dex.jar;play-services-basement-18.4.0.dex.jar;play-services-cloud-messaging-17.0.1.dex.jar;play-services-location-21.0.1.dex.jar;play-services-maps-18.1.0.dex.jar;play-services-measurement-base-20.1.2.dex.jar;play-services-measurement-sdk-api-20.1.2.dex.jar;play-services-stats-17.0.2.dex.jar;play-services-tasks-18.2.0.dex.jar;print-1.0.0.dex.jar;profileinstaller-1.3.0.dex.jar;room-common-2.2.5.dex.jar;room-runtime-2.2.5.dex.jar;savedstate-1.2.1.dex.jar;sqlite-2.1.0.dex.jar;sqlite-framework-2.1.0.dex.jar;startup-runtime-1.1.1.dex.jar;tracing-1.2.0.dex.jar;transport-api-3.0.0.dex.jar;transport-backend-cct-3.1.8.dex.jar;transport-runtime-3.1.8.dex.jar;user-messaging-platform-2.0.0.dex.jar;vectordrawable-1.1.0.dex.jar;vectordrawable-animated-1.1.0.dex.jar;versionedparcelable-1.1.1.dex.jar;viewpager-1.0.0.dex.jar;work-runtime-2.7.0.dex.jar</EnabledSysJars>
+        <DCC_Define>FORCE_OPENSSL;$(DCC_Define)</DCC_Define>
+        <DCC_UnitSearchPath>..\..\static\arm64-v8a;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <DCC_AdditionalOptions>-L&quot;$(PROJECTDIR)\..\..\static\arm64-v8a&quot; $(DCC_AdditionalOptions)</DCC_AdditionalOptions>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Config)'=='Release' or '$(Cfg_1)'!=''">
+        <Cfg_1>true</Cfg_1>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+        <DCC_Define>RELEASE;$(DCC_Define)</DCC_Define>
+        <DCC_DebugInformation>0</DCC_DebugInformation>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Config)'=='Debug' or '$(Cfg_2)'!=''">
+        <Cfg_2>true</Cfg_2>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+        <DCC_Define>DEBUG;$(DCC_Define)</DCC_Define>
+        <DCC_Optimize>false</DCC_Optimize>
+        <DCC_GenerateStackFrames>true</DCC_GenerateStackFrames>
+        <DCC_RangeChecking>true</DCC_RangeChecking>
+        <DCC_IntegerOverflowCheck>true</DCC_IntegerOverflowCheck>
+    </PropertyGroup>
+    <ItemGroup>
+        <DelphiCompile Include="$(MainSource)">
+            <MainSource>MainSource</MainSource>
+        </DelphiCompile>
+        <DCCReference Include="mormot2tests.android.form.pas"/>
+        <BuildConfiguration Include="Base"><Key>Base</Key></BuildConfiguration>
+        <BuildConfiguration Include="Release"><Key>Cfg_1</Key><CfgParent>Base</CfgParent></BuildConfiguration>
+        <BuildConfiguration Include="Debug"><Key>Cfg_2</Key><CfgParent>Base</CfgParent></BuildConfiguration>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Delphi.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Delphi.Personality>
+                <Source><Source Name="MainSource">mormot2tests-android.dpr</Source></Source>
+            </Delphi.Personality>
+            <Platforms><Platform value="Android64">True</Platform></Platforms>
+            <Deployment Version="5">
+                <DeployFile LocalName="AndroidManifest.xml" Configuration="Debug" Class="ProjectAndroidManifest">
+                    <Platform Name="Android64"><RemoteDir>$(MSBuildProjectName)\</RemoteDir><Operation>1</Operation><Overwrite>true</Overwrite></Platform>
+                </DeployFile>
+                <DeployFile LocalName="AndroidManifest.xml" Configuration="Release" Class="ProjectAndroidManifest">
+                    <Platform Name="Android64"><RemoteDir>$(MSBuildProjectName)\</RemoteDir><Operation>1</Operation><Overwrite>true</Overwrite></Platform>
+                </DeployFile>
+                <DeployClass Name="ProjectAndroidManifest">
+                    <Platform Name="Android64"><Operation>1</Operation></Platform>
+                </DeployClass>
+                <ProjectRoot Platform="Android64" Name="$(PROJECTNAME)"/>
+            </Deployment>
+        </BorlandProject>
+        <ProjectFileVersion>12</ProjectFileVersion>
+    </ProjectExtensions>
+    <Import Project="$(BDS)\Bin\CodeGear.Delphi.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Delphi.Targets')"/>
+    <Import Project="$(MSBuildProjectDirectory)\mormot2tests-android.deployproj" Condition="Exists('$(MSBuildProjectDirectory)\mormot2tests-android.deployproj')"/>
+</Project>
