@@ -5859,7 +5859,7 @@ begin // this method is protected by fOsSafe.Lock
   FastAssignNew(result);
   status := fRemoteClient.Request(uri, 'GET', '', '', '',
        fSettings.HttpKeepAlive * MilliSecsPerSec);
-  if StatusCodeIsSuccess(status) then // 2xx..3xx range
+  if status in HTTP_GET_OK then // 200/204/206
     result := fRemoteClient.Body;
   fOwner.fLog.Add.Log(sllTrace, 'RemoteClientGet(%)=% size=%',
     [uri.Address, status, length(result)], self);
@@ -5889,6 +5889,8 @@ type
     uri: RawUtf8;
     filestream: TFileStreamEx;
     writestream: TStream;
+    partialid: THttpPartialID;
+    expectedsize: Int64;
   end;
 
 function TStartProxyRequest.MakeHeadAndComputeFilename: cardinal;
@@ -5989,6 +5991,8 @@ begin // this method is protected by proxy.fOsSafe.Lock
     opt := proxy.fRemoteClient.Options^; // local copy for this instance
     background := TStartProxyRequestClient.OpenOptions(remote, opt);
     background.filestream := stream;
+    background.partialid := id;
+    background.expectedsize := localsize;
     if proxy.fSettings.HttpLimitPerSecond > 0 then
     begin
       background.writestream := TStreamRedirect.Create(stream);
@@ -6005,6 +6009,11 @@ begin // this method is protected by proxy.fOsSafe.Lock
     result := HTTP_SUCCESS;
   except
     stream.Free;
+    // abort all progressive clients associated with this failed download
+    proxy.fOwner.fPartials.Abort(id);
+    if FileExists(filename) and
+       not DeleteFile(filename) then
+      log.Add.Log(sllLastError, 'MakeGet: delete failed %', [filename], proxy);
     loginfo := 'connect';
     result := HTTP_BADGATEWAY;
   end;
@@ -6016,23 +6025,54 @@ var
   status: integer;
   msg: RawUtf8;
   fn: TFileName; // local copy
+  id: THttpPartialID;
+  expected, actual: Int64;
+  ok: boolean;
 begin
   status := 0;
+  actual := -1;
+  msg := 'exception';
+  ok := false;
+  fn := back.filestream.FileName;
+  id := back.partialid;
+  expected := back.expectedsize;
   try
-    status := back.Request(back.uri, 'GET', fSettings.HttpKeepAlive * MilliSecsPerSec,
-      '', '', '', {AsRetry=}false, nil, back.writestream);
-    fn := back.filestream.FileName;
-    if StatusCodeIsSuccess(status) then // 2xx..3xx range
-      msg := 'ok'
+    status := back.Request(back.uri, 'GET',
+      fSettings.HttpKeepAlive * MilliSecsPerSec, '', '', '',
+      {AsRetry=}false, nil, back.writestream);
+    actual := back.filestream.Size;
+    if status in HTTP_GET_OK then
+      if actual = expected then
+      begin
+        msg := 'ok';
+        ok := true;
+      end
+      else
+        msg := 'size mismatch'
     else
-      msg := 'GET error';
+      msg := 'unexpected status';
   finally
+    // stop writing before notifying progressive readers of a failure
     if back.writestream <> back.filestream then
       FreeAndNil(back.writestream);
     FreeAndNil(back.filestream);
     back.Free;
-    fOwner.fLog.Add.Log(sllInfo, 'BackgroundGet=%: % [%] size=%',
-      [status, fn, msg, FileSize(fn)], self);
+    fOwner.fLog.Add.Log(sllInfo, 'BackgroundGet=%: % [%] size=% expected=%',
+      [status, fn, msg, actual, expected], self);
+    if not ok then
+    begin
+      // abort all progressive clients associated with this download
+      fOwner.fPartials.Abort(id);
+      fOsSafe.Lock; // as in OnGetHeadRemoteUri / MakeGet (non-rentrant lock)
+      try
+        if FileExists(fn) and
+           not DeleteFile(fn) then
+          fOwner.fLog.Add.Log(sllLastError,
+            'BackgroundGet: delete failed %', [fn], self);
+      finally
+        fOsSafe.UnLock;
+      end;
+    end;
   end;
 end;
 
