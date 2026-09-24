@@ -2091,7 +2091,7 @@ type
 
   TSChannelNetTls = class(TInterfacedObject, INetTls)
   private
-    fSspiSafe: TLightLock; // protect Recv() SEC_I_RENEGOTIATE vs Send()
+    fSspiSafe: TOSLightLock; // protect Recv() SEC_I_RENEGOTIATE vs Send()
     fSocket: TNetSocket;
     fCipherName: RawUtf8;
     fServerAddressW: SynUnicode;
@@ -2368,7 +2368,7 @@ begin
     SetLength(fData, TLSRECMAXSIZE);   // decrypted application data
   fDataPos := 0;
   fDataCount := 0;
-  fSspiSafe.Init;
+  fSspiSafe.Init; // on Windows, just reset flags to 0
 end;
 
 procedure TSChannelNetTls.AfterConnection(Socket: TNetSocket;
@@ -2548,8 +2548,6 @@ begin
         LInCtxPtr := @fCtxt;
       result := AcceptSecurityContext(
         @fCred, LInCtxPtr, @b.input, fFlags, 0, @fCtxt, @b.output, f, nil);
-      if result = SEC_I_CONTINUE_NEEDED then
-        fAcceptFirst := false;
     end
     else // client side
       result := InitializeSecurityContextW(

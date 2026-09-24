@@ -4818,7 +4818,7 @@ type
     // would deadlock
     procedure Lock;
       {$ifdef HASINLINE} inline; {$endif}
-    /// access to raw pthread_mutex_trylock() method
+    /// try once to acquire the raw futex or call pthread_mutex_trylock() method
     function TryLock: boolean;
       {$ifdef HASINLINE} inline; {$endif}
     /// leave an OS lock
