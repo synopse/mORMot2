@@ -2098,6 +2098,7 @@ type
     fCred: TCredHandle;
     fCtxt: TCtxtHandle;
     fFlags: cardinal;
+    fSizeMaxRecord: integer;
     fSizes: TSecPkgContext_StreamSizes;
     fInput: RawByteString;  // encrypted TLS input records
     fOutput: RawByteString; // encrypted TLS output records
@@ -2256,13 +2257,25 @@ end;
 
 const
   // automatic adaptation of TSChannelNetTls.Receive/Send buffers size
-  TLSRECMINSIZE = 4096;
+  TLS_IN_MIN  = 4096;
+  TLS_OUT_MIN = 2048;
 
-procedure EnsureLength(var buf: RawByteString; need: PtrInt);
-begin
-  need := MaxPtrInt(TLSRECMINSIZE, need + (need shr 2)); // reserve 25% more
-  if need > length(buf) then
-    SetLength(buf, need);
+procedure EnsureLength(var buf: RawByteString; need, min, max: PtrInt);
+  {$ifdef HASINLINE} inline; {$endif}
+var
+  cap: PtrInt;
+begin // reserve 25% more space up to max
+  cap := length(buf);
+  if need < cap then
+    exit;
+  need := MaxPtrInt(min, need + (need shr 2));
+  if (max <> 0) and // max = 0 means no cap (void branch when inlined)
+     (need > max) then
+    if max <= cap then
+      exit
+    else
+      need := max;
+  SetLength(buf, need);
 end;
 
 type
@@ -2367,6 +2380,7 @@ begin
   fSocket := Socket;
   fSessionClosed := false;
   fAcceptFirst := true;
+  fSizeMaxRecord := 0;
   fCipherName := '';
   fInputCount := 0;
   fOutputPos := 0;
@@ -2595,7 +2609,7 @@ begin
   repeat
     if NeedRecv then
     begin
-      EnsureLength(fInput, fInputCount);
+      EnsureLength(fInput, fInputCount, TLS_IN_MIN, 0);
       inc(fInputCount, RecvRaw('recv', @PByteArray(fInput)[fInputCount],
                                length(fInput) - fInputCount));
     end;
@@ -2631,6 +2645,9 @@ begin
   CheckSEC_E_OK('QueryContextAttributesW',
     QueryContextAttributesW(
       @fCtxt, SECPKG_ATTR_STREAM_SIZES, @fSizes));
+  fSizeMaxRecord := fSizes.cbHeader + fSizes.cbMaximumMessage +  fSizes.cbTrailer;
+  if fSizeMaxRecord <= 0 then
+    raise ESChannel.CreateFmt('Invalid TLS record size %d', [fSizeMaxRecord]);
 end;
 
 function TSChannelNetTls.CompleteHandshakeToken(const ctx: ShortString;
@@ -2765,7 +2782,7 @@ var
       case b^.BufferType of
         SECBUFFER_DATA:
           begin
-            EnsureLength(fData, fDataCount + integer(b^.cbBuffer));
+            EnsureLength(fData, fDataCount + integer(b^.cbBuffer), TLS_OUT_MIN, 0);
             MoveFast(b^.pvBuffer^, PByteArray(fData)[fDataCount], b^.cbBuffer);
             inc(fDataCount, b^.cbBuffer);
           end;
@@ -2798,7 +2815,7 @@ begin
     repeat
       if needrecv then
       begin
-        EnsureLength(fInput, fInputCount);
+        EnsureLength(fInput, fInputCount, TLS_IN_MIN, fSizeMaxRecord);
         read := recv(fSocket.Socket, @PByteArray(fInput)[fInputCount],
                   system.length(fInput) - fInputCount, 0);
         if read <= 0 then
@@ -2816,7 +2833,15 @@ begin
         inc(fInputCount, read);
       end;
       res := DecryptInput;
-      needrecv := res = SEC_E_INCOMPLETE_MESSAGE;
+      if res = SEC_E_INCOMPLETE_MESSAGE then
+      begin
+        if (buf[1].BufferType = SECBUFFER_MISSING) and
+           (buf[1].cbBuffer <> 0) then
+          EnsureLength(fInput, fSizeMaxRecord, TLS_IN_MIN, fSizeMaxRecord);
+        needrecv := true;
+      end
+      else
+        needrecv := false;
     until not needrecv;
     repeat
       case res of
@@ -2913,7 +2938,7 @@ begin
     if plain > integer(fSizes.cbMaximumMessage) then
       plain := fSizes.cbMaximumMessage;
     encrypted := integer(fSizes.cbHeader) + plain + integer(fSizes.cbTrailer);
-    EnsureLength(fOutput, encrypted);
+    EnsureLength(fOutput, encrypted, TLS_OUT_MIN, fSizeMaxRecord);
     MoveFast(Buffer^, PByteArray(fOutput)[fSizes.cbHeader], plain);
     desc.ulVersion := SECBUFFER_VERSION;
     desc.cBuffers := 4;

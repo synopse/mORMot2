@@ -240,6 +240,7 @@ const
   SECBUFFER_EMPTY            = 0;
   SECBUFFER_DATA             = 1;
   SECBUFFER_TOKEN            = 2;
+  SECBUFFER_MISSING          = 4;
   SECBUFFER_EXTRA            = 5;
   SECBUFFER_STREAM_TRAILER   = 6;
   SECBUFFER_STREAM_HEADER    = 7;
