@@ -4288,7 +4288,8 @@ begin
         // https://developer.mozilla.org/en-US/docs/Web/HTTP/Redirections
         HTTP_MOVEDPERMANENTLY,
         HTTP_SEEOTHER:
-          ctxt.Method := 'GET';
+          if not HttpMethodWithNoBody(Ctxt.Method) then // keep HEAD/OPTIONS
+            ctxt.Method := 'GET'; // but force e.g. POST/PUT into GET
         // HTTP_TEMPORARYREDIRECT HTTP_PERMANENTREDIRECT should keep the method
       end;
       if (OutStream <> nil) and

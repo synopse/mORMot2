@@ -3685,7 +3685,7 @@ begin
       gc := sec - gc;
   allowed := GetLastOperationIdleSeconds; // e.g. WebSockets HeartbeatDelay
   if allowed <> 0 then
-    if sec < gc then
+    if allowed < gc then
       allowed := 0
     else
       allowed := sec - allowed;
