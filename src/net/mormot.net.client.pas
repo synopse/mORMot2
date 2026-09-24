@@ -349,6 +349,32 @@ type
     Token: SpiUtf8;
   end;
 
+  /// define optional restrictions when following HTTP redirections
+  // - hroPurgeAuthorization won't forward origin Authorization credentials
+  // after a cross-origin redirection
+  // - hroPurgeCookie won't forward an explicit Cookie: header after a
+  // cross-origin redirection
+  // - hroPurgeReferer won't forward Referer information after a cross-origin
+  // redirection
+  // - hroRejectDowngrade won't follow a HTTPS to HTTP redirection
+  // - hroRejectCrossOrigin won't follow a redirection changing scheme, server
+  // name or port
+  // - hroRejectUserInfo won't follow a redirection whose URI contains explicit
+  // user authentication information like https://user:pass@server/
+  // - rejected redirections are returned as their original 3xx response,
+  // including the Location: header
+  THttpRedirectOption = (
+    hroPurgeAuthorization,
+    hroPurgeCookie,
+    hroPurgeReferer,
+    hroRejectDowngrade,
+    hroRejectCrossOrigin,
+    hroRejectUserInfo);
+
+  /// set of optional restrictions when following HTTP redirections
+  // - default [] keeps an unrestricted behavior for backward compatibility
+  THttpRedirectOptions = set of THttpRedirectOption;
+
   /// a record to set some extended options for HTTP clients
   // - allow easy propagation e.g. from a TRestHttpClient* wrapper class to
   // the actual mormot.net.http's THttpRequest implementation class
@@ -378,6 +404,10 @@ type
     // - TCurlHttp would only check for RedirectMax > 0 with no exact count
     // - TWinINet won't support this parameter
     RedirectMax: integer;
+    /// optional restrictions when following HTTP redirections
+    // - currently implemented by THttpClientSocket
+    // - defaults to [] to preserve the existing behavior
+    RedirectOptions: THttpRedirectOptions;
     /// force THttpClientSocket to close and reopen its socket on idle connection
     RecreateConnectionAfterSecs: cardinal;
     /// allow to customize the User-Agent header
@@ -814,6 +844,7 @@ type
     fRequestContext: RawUtf8;
     fRangeStart, fRangeEnd: Int64;
     fAuthDigestAlgo: TDigestAlgo;
+    fAuthCrossOriginDisable: boolean; // per-request hcopPurgeAuthorization
     fOnAuthorize, fOnProxyAuthorize: TOnHttpClientSocketAuthorize;
     fOnBeforeRequest: TOnHttpClientSocketRequest;
     fOnProtocolRequest: TOnHttpClientRequest;
@@ -4163,17 +4194,18 @@ begin
       SockSend(['Range: bytes=', fRangeStart, '-', fRangeEnd])
     else
       SockSend(['Range: bytes=', fRangeStart, '-']);
-  with fExtendedOptions.Auth do
-    case Scheme of
-      wraBasic:
-        begin
-          BasicClient(UserName, Password, secret);
-          SockSend(secret);
-          FillZero(secret);
-        end;
-      wraBearer:
-        SockSendLine(['Authorization: Bearer ', Token]);
-    end; // other Scheme values would have set OnAuthorize
+  if not fAuthCrossOriginDisable then
+    with fExtendedOptions.Auth do
+      case Scheme of
+        wraBasic:
+          begin
+            BasicClient(UserName, Password, secret);
+            SockSend(secret);
+            FillZero(secret);
+          end;
+        wraBearer:
+          SockSendLine(['Authorization: Bearer ', Token]);
+      end; // other Scheme values would have set OnAuthorize
   if fReferer <> '' then
     SockSendLine(['Referer: ', fReferer]);
   if fAccept <> '' then
@@ -4193,9 +4225,11 @@ function THttpClientSocket.Request(const url, method: RawUtf8;
 var
   ctxt: THttpClientRequest;
   newuri: TUri;
+  crossorigin: boolean;
 begin
   // prepare the execution
   fRequestContext := '';
+  fAuthCrossOriginDisable := false;
   ctxt.Url := url;
   if (url = '') or
      (url[1] <> '/') then
@@ -4249,7 +4283,8 @@ begin
         break;
       // handle optional (proxy) authentication callbacks
       if (ctxt.Status = HTTP_UNAUTHORIZED) and
-          Assigned(fOnAuthorize) then
+          Assigned(fOnAuthorize) and
+          not fAuthCrossOriginDisable then
       begin
         if Assigned(OnLog) then
           OnLog(sllTrace, 'Request(% %)=%', [ctxt.Method, url, ctxt.Status], self);
@@ -4308,11 +4343,53 @@ begin
       if IsHttp(ctxt.Url) and
          newuri.From(ctxt.Url) then // relocated to another server
       begin
+        if (hroRejectUserInfo in fExtendedOptions.RedirectOptions) and
+           ((newuri.User <> '') or
+            (newuri.Password <> '')) then
+        begin
+          AppendLine(fRequestContext,
+            ['Reject redirect with userinfo into ', newuri.URI]);
+          break; // preserve original 3xx status and Location:
+        end;
+        crossorigin := (newuri.Server <> Server) or
+                       (newuri.Port <> Port) or
+                       (newuri.Https <> ServerTls);
+        if crossorigin then
+        begin
+          if ServerTls and
+             not newuri.Https and
+             (hroRejectDowngrade in fExtendedOptions.RedirectOptions) then
+          begin
+            AppendLine(fRequestContext,
+              ['Reject HTTPS downgrade into ', newuri.URI]);
+            break;
+          end;
+          if hroRejectCrossOrigin in fExtendedOptions.RedirectOptions then
+          begin
+            AppendLine(fRequestContext,
+              ['Reject cross-origin redirect into ', newuri.URI]);
+            break; // keep original 3xx response + Location:
+          end;
+          if hroPurgeCookie in fExtendedOptions.RedirectOptions then
+          begin
+            ctxt.Header := DeleteHeader(ctxt.Header, 'Cookie');
+            AppendLine(fRequestContext, ['Purge cookie']);
+          end;
+          if hroPurgeReferer in fExtendedOptions.RedirectOptions then
+          begin
+            ctxt.Header := DeleteHeader(ctxt.Header, 'Referer');
+            AppendLine(fRequestContext, ['Purge referer']);
+          end;
+          if hroPurgeAuthorization in fExtendedOptions.RedirectOptions then
+          begin
+            ctxt.Header := DeleteHeader(ctxt.Header, 'Authorization');
+            AppendLine(fRequestContext, ['Purge authorization']);
+            fAuthCrossOriginDisable := true;
+          end;
+        end;
         fRedirected := newuri.Address;
-        if (hfConnectionClose in Http.HeaderFlags) or
-           (newuri.Server <> Server) or
-           (newuri.Port <> Port) or
-           (newuri.Https <> ServerTls) then
+        if crossorigin or
+           (hfConnectionClose in Http.HeaderFlags) then
         begin
           Close; // relocated to another server -> reset the TCP connection
           try
