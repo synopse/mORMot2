@@ -79,7 +79,8 @@ type
   // - fSubRead/fSubWrite flags are set when Subscribe() has been called
   // - fInList indicates that ConnectionAdd() did register the connection
   // - fReadPending states that there is a pending event for this connection
-  // - note: better keep it up to 8 items to fit in a byte (faster access)
+  // - fMemClean is set after TPollAsyncConnection.ReleaseMemoryOnIdle success
+  // - note: better keep it to 8 items to fit in a byte (faster access)
   TPollAsyncConnectionFlags = set of (
     fWasActive,
     fClosed,
@@ -89,7 +90,8 @@ type
     fSubWrite,
     {$endif USE_WINIOCP}
     fInList,
-    fReadPending
+    fReadPending,
+    fMemClean
   );
 
   /// abstract parent to store information about one TPollAsyncSockets connection
@@ -105,7 +107,7 @@ type
     fFlags: TPollAsyncConnectionFlags;
     /// internal 8-bit flags e.g. for fRW[] or IOCP or to mark AddGC()
     fInternalFlags: set of (
-      ifWriteWait, ifFromGC, ifInGC, ifSeparateWLock, ifProcessing, ifMemClean);
+      ifWriteWait, ifFromGC, ifInGC, ifSeparateWLock, ifProcessing);
     /// the current (reusable) receiving data buffer of this connection
     fRd: TRawByteStringBuffer;
     /// the current (reusable) sending data buffer of this connection
@@ -596,7 +598,6 @@ type
     fOptions: TAsyncConnectionsOptions;
     fLastOperationSec: TAsyncConnectionSec;
     fLastOperationReleaseMemorySeconds: cardinal;
-    fLastOperationIdleSeconds: cardinal;
     fKeepConnectionInstanceMS: cardinal;
     fLastOperationMS: Int64; // = GetTickCount64 as set by ProcessIdleTix()
     {$ifdef USE_WINIOCP}
@@ -665,6 +666,10 @@ type
     /// add or remove a callback run from ProcessIdleTix() internal method
     // - all callbacks will be triggered once with Sender=nil at shutdown
     procedure SetOnIdle(const aOnIdle: TOnPollSocketsIdle; Remove: boolean = false);
+    /// allow to execute TAsyncConnection.OnLastOperationIdle after an idle period
+    // - returns 0 (i.e. disabled) by default but TWebSocketAsyncConnection
+    // will return its heartbeat delay in seconds
+    function GetLastOperationIdleSeconds: cardinal; virtual;
     /// high-level access to a connection instance, from its handle
     // - use efficient O(log(n)) binary search
     // - could be executed e.g. from a TAsyncConnection.OnRead method
@@ -726,11 +731,6 @@ type
     // constrained memory, e.g. with a lower value like 2 seconds
     property LastOperationReleaseMemorySeconds: cardinal
       read fLastOperationReleaseMemorySeconds write fLastOperationReleaseMemorySeconds;
-    /// will execute TAsyncConnection.OnLastOperationIdle after an idle period
-    // - could be used to send heartbeats after read/write inactivity
-    // - equals 0 (i.e. disabled) by default
-    property LastOperationIdleSeconds: cardinal
-      read fLastOperationIdleSeconds write fLastOperationIdleSeconds;
     /// how many milliseconds a TAsyncConnection instance is kept alive after closing
     // - default is 100 ms before the internal GC calls Free on this instance
     property KeepConnectionInstanceMS: cardinal
@@ -1709,7 +1709,7 @@ function TPollAsyncConnection.ReleaseMemoryOnIdle: PtrInt;
     inc(result, ReleaseWriteMemoryOnIdle);
     if fSecure <> nil then
       inc(result, fSecure.ReleaseBuffers);
-    include(fInternalFlags, ifMemClean); // no need to call this method anymore
+    include(fFlags, fMemClean); // no need to call this method anymore
   end;
 
 begin
@@ -3651,6 +3651,11 @@ begin
       sllTrace, ident, identargs, data.Buffer, data.Len, connection);
 end;
 
+function TAsyncConnections.GetLastOperationIdleSeconds: cardinal;
+begin
+  result := 0; // TAsyncConnection.OnLastOperationIdle disabled in this class
+end;
+
 procedure TAsyncConnections.IdleEverySecond;
 var
   i, notified, gced: PtrInt;
@@ -3664,20 +3669,22 @@ begin
      (fConnectionCount = 0) or
      (acoNoConnectionTrack in fOptions) then
     exit;
+  // update TAsyncConnection.fLastOperation according to fWasActive flag
   // call TAsyncConnection.ReleaseMemoryOnIdle and OnLastOperationIdle events
-  // and update TAsyncConnection.fLastOperation when needed
   if acoVerboseLog in fOptions then
     QueryPerformanceMicroSeconds(start);
   idles := 0;
   notified := 0;
   gced := 0;
   sec := fLastOperationSec; // 32-bit second resolution is fine
-  allowed := fLastOperationIdleSeconds;
-  if allowed <> 0 then
-    allowed := sec - allowed;
   gc := fLastOperationReleaseMemorySeconds;
-  if gc <> 0 then
+  if (gc <> 0) and
+     (sec > gc) then
     gc := sec - gc;
+  allowed := GetLastOperationIdleSeconds; // e.g. WebSockets HeartbeatDelay
+  if (allowed <> 0) and
+     (sec > allowed) then
+    allowed := sec - allowed;
   fConnectionLock.ReadOnlyLock; // non-blocking quick process
   try
     for i := 0 to fConnectionCount - 1 do
@@ -3685,9 +3692,8 @@ begin
       c := fConnection[i];
       if fWasActive in c.fFlags then
       begin
-        // update activityflags once per second
-        exclude(c.fFlags, fWasActive);
-        exclude(c.fInternalFlags, ifMemClean);
+        // update activity flags once per second on each connection
+        c.fFlags := c.fFlags - [fWasActive, fMemClean];
         c.fLastOperation := sec;
       end
       else // inactive connection
@@ -3695,12 +3701,12 @@ begin
         // check if some working memory could be released
         if (gc <> 0) and
            (c.fLastOperation < gc) and
-           not (ifMemClean in c.fInternalFlags) then
+           not (fMemClean in c.fFlags) then
           inc(gced, c.ReleaseMemoryOnIdle);
         // check if some events should be triggerred
         // e.g. TWebSocketAsyncConnection would send ping/pong heartbeats
         if (allowed <> 0) and
-           (c.fLastOperation < allowed) then
+           (c.fLastOperation <= allowed) then
           ObjArrayAddCount(idle, c, idles); // calls below, outside the lock
         if Terminated then
           break;

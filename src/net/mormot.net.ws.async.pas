@@ -127,6 +127,8 @@ type
       aConnectionClass: TAsyncConnectionClass; const ProcessName: RawUtf8;
       aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions;
       aThreadPoolCount: integer); override;
+    /// trigger TWebSocketAsyncConnection.OnLastOperationIdle every HeartbeatDelay
+    function GetLastOperationIdleSeconds: cardinal; override;
   end;
 
   /// callback signature to notify TWebSocketAsyncServer connections
@@ -394,8 +396,14 @@ constructor TWebSocketAsyncConnections.Create(const aPort: RawUtf8;
 begin
   inherited Create(aPort, OnStart, OnStop, aConnectionClass, ProcessName,
     aLog, aOptions, aThreadPoolCount);
-  fLastOperationIdleSeconds := 5;   // 5 secs is good enough for ping/pong
   fKeepConnectionInstanceMS := 500; // more conservative for blocking callbacks
+end;
+
+function TWebSocketAsyncConnections.GetLastOperationIdleSeconds: cardinal;
+begin
+  result := TWebSocketAsyncServer(fAsyncServer).fSettings.HeartbeatDelay;
+  if result <> 0 then // HeartbeatDelay=0 means ping/pong disabled
+    result := MaxPtrUInt(1, result div MilliSecsPerSec);
 end;
 
 procedure TWebSocketAsyncConnections.NotifyOutgoing(
