@@ -2711,6 +2711,7 @@ begin
     CertFreeCertificateContext(fAcceptCert);
   if fAcceptCertStore <> nil then
     CertCloseStore(fAcceptCertStore, CERT_CLOSE_STORE_DEFAULT);
+  fSspiSafe.Done; // do nothing on Windows - for API clarity
   inherited Destroy;
 end;
 
@@ -2729,7 +2730,7 @@ var
   desc: TSecBufferDesc;
   buf: array[0..3] of TSecBuffer;
   res: cardinal;
-  read, i, newlen: integer;
+  read, newlen: integer;
   needrecv: boolean;
 
   function DecryptInput: cardinal;
@@ -2752,6 +2753,29 @@ var
     result := DecryptMessage(@fCtxt, @desc, 0, qop);
     if result <> SEC_I_RENEGOTIATE then
       fSspiSafe.UnLock; // delayed unlock until handshake is done
+  end;
+
+  procedure ProcessBuffers;
+  var
+    i: PtrInt;
+  begin
+    fInputCount := 0;
+    for i := 1 to 3 do // i=0 for SECBUFFER_DATA input
+      case buf[i].BufferType of
+        SECBUFFER_DATA:
+          begin
+            newlen := fDataCount + integer(buf[i].cbBuffer);
+            if newlen > system.Length(fData) then
+              SetLength(fData, newlen);
+            MoveFast(buf[i].pvBuffer^, PByteArray(fData)[fDataCount], buf[i].cbBuffer);
+            inc(fDataCount, buf[i].cbBuffer);
+          end;
+        SECBUFFER_EXTRA:
+          begin
+            MoveFast(buf[i].pvBuffer^, pointer(fInput)^, buf[i].cbBuffer);
+            fInputCount := buf[i].cbBuffer;
+          end;
+      end;
   end;
 
 begin
@@ -2797,36 +2821,32 @@ begin
     until not needrecv;
     repeat
       case res of
-        SEC_I_RENEGOTIATE:
-          ; // appears with TLS 1.3 - processed below (within fSspiSafe.Lock)
-        SEC_I_CONTEXT_EXPIRED:
-          fSessionClosed := true; // and processed below
+        SEC_E_OK:
+          // nominal case
+          ProcessBuffers;
         SEC_E_INCOMPLETE_MESSAGE:
+          // will call back Receive() again with new data from the socket
           break;
-        else
-          CheckSEC_E_OK('DecryptInput', res);
-      end;
-      fInputCount := 0;
-      for i := 1 to 3 do // i=0 for SECBUFFER_DATA input
-        case buf[i].BufferType of
-          SECBUFFER_DATA:
+        SEC_I_RENEGOTIATE: // within fSspiSafe.Lock
+          try
+            // TLS 1.3 uses SEC_I_RENEGOTIATE for post-handshake messages
+            if fOutputCount <> 0 then
             begin
-              newlen := fDataCount + integer(buf[i].cbBuffer);
-              if newlen > system.Length(fData) then
-                SetLength(fData, newlen);
-              MoveFast(buf[i].pvBuffer^, PByteArray(fData)[fDataCount], buf[i].cbBuffer);
-              inc(fDataCount, buf[i].cbBuffer);
-            end;
-          SECBUFFER_EXTRA:
-            begin
-              MoveFast(buf[i].pvBuffer^, pointer(fInput)^, buf[i].cbBuffer);
-              fInputCount := buf[i].cbBuffer;
-            end;
-        end;
-      case res of
+              // there is some pending output data from Send(): would require
+              // more state logic for little gain so is not supported yet
+              result := nrFatalError;
+              exit;
+            end
+            else
+              HandshakeLoop({NeedRecv=}false);
+          finally
+            fSspiSafe.UnLock; // Lock was done in DecryptInput
+          end;
         SEC_I_CONTEXT_EXPIRED:
           begin
-            // close_notify terminates the TLS input stream
+            fSessionClosed := true;
+            ProcessBuffers;
+            // close_notify terminated the TLS input stream
             fInputCount := 0;
             if fDataCount = 0 then
             begin
@@ -2836,20 +2856,8 @@ begin
             end;
             break;
           end;
-        SEC_I_RENEGOTIATE: // executed within fSspiSafe.Lock
-          try
-            // TLS 1.3 uses SEC_I_RENEGOTIATE for post-handshake messages
-            if fOutputCount <> 0 then
-            begin
-              // there is some pending output data from Send(): would require
-              // more state logic for little gain so is not supported yet
-              result := nrFatalError;
-              exit;
-            end;
-            HandshakeLoop({NeedRecv=}false);
-          finally
-            fSspiSafe.UnLock; // Lock was done in DecryptInput
-          end;
+      else
+        ESChannelRaiseError('Receive: DecryptInput', res);
       end;
       if fInputCount = 0 then
         break;

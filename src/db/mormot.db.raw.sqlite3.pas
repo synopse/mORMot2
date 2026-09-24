@@ -5920,8 +5920,7 @@ end;
 {$endif FPC}
 
 const
-  // SQLite requires at least 8-byte alignment. A 4-byte prefix breaks it,
-  // notably for atomic accesses on Android ARM64. Preserve 16-byte alignment.
+  // SQLite requires at least 8-byte alignment notably for Android ARM64
   SQLITE_MEM_HEADER = 16;
 
 function xMalloc2(size: integer): pointer; cdecl;
