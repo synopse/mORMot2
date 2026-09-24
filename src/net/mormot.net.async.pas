@@ -5986,9 +5986,9 @@ begin // this method is protected by proxy.fOsSafe.Lock
     exit;
   end;
   // connect and start background downloading (unlocked)
+  opt := proxy.fRemoteClient.Options^; // local copy for this instance
   ctxt.SetOutProgressiveFile(filename, localsize);
   try
-    opt := proxy.fRemoteClient.Options^; // local copy for this instance
     background := TStartProxyRequestClient.OpenOptions(remote, opt);
     background.filestream := stream;
     background.partialid := id;
@@ -6008,6 +6008,7 @@ begin // this method is protected by proxy.fOsSafe.Lock
     loginfo := pointer(head.PurgedHeaders);
     result := HTTP_SUCCESS;
   except
+    // handle main exception from TStartProxyRequestClient.OpenOptions
     stream.Free;
     // abort all progressive clients associated with this failed download
     proxy.fOwner.fPartials.Abort(id);
@@ -6646,9 +6647,12 @@ begin
       // no actual file is needed to implement a HEAD request
       if req.loginfo = nil then
         req.loginfo := 'head';
-      Ctxt.SetOutProgressiveFile(req.filename, req.head.Size);
+      if result in HTTP_GET_OK then // 2xx follow regular HEAD response path
+        Ctxt.SetOutProgressiveFile(req.filename, req.head.Size)
+      else if req.head.Size >= 0 then
+        Ctxt.AddOutHeader(['Content-Length: ', req.head.Size]);
     end
-    else if result < 300 then // StatusCodeIsSuccess = 2xx..3xx range
+    else if result in HTTP_GET_OK then // 2xx
     begin
       result := HTTP_NOTFOUND; // default to trigger req.MakeGet(Uri)
       // check any local file
