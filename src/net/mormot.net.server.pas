@@ -7595,6 +7595,7 @@ begin
   if redirmax = 0 then // from DirectFileNameHead()
     include(cs.Http.Options, hroHeadersUnfiltered);
   result := cs.Head(uri.Address, 30000, hdr);
+  Ctxt.OutCustomHeaders := cs.Headers; // include e.g. Content-Type: or Location:
   if not (result in HTTP_GET_OK) then
   begin
     FreeAndNil(cs);
@@ -7604,7 +7605,6 @@ begin
     uri.Address := cs.Redirected; // follow 3xx redirection
   cs.RemoteUri := uri.Address;
   cs.RemoteHeaders := hdr;
-  Ctxt.OutCustomHeaders := cs.Headers; // to include e.g. Content-Type:
 end;
 
 function THttpPeerCache.DirectFileName(Ctxt: THttpServerRequestAbstract;
