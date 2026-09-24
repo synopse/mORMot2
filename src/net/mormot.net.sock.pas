@@ -1210,6 +1210,10 @@ type
     // the socket is ready (the corresponding encrypted record may already be
     // buffered internally by the TLS implementation - e.g. SChannel does)
     function Send(Buffer: pointer; var Length: integer): TNetResult;
+    /// release unused internal TLS buffers on an idle connection
+    // - caller should ensure there is no concurrent Receive/Send
+    // - returns the amount of memory released, if known
+    function ReleaseBuffers: PtrInt;
   end;
 
 /// initialize a stack-allocated TNetTlsContext instance

@@ -2141,6 +2141,7 @@ type
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     function ReceivePending: integer;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
+    function ReleaseBuffers: PtrInt;
   end;
 
 
@@ -2975,6 +2976,22 @@ begin
   end
   else
     result := nrRetry; // Recv() is handling SEC_I_RENEGOTIATE
+end;
+
+function TSChannelNetTls.ReleaseBuffers: PtrInt;
+begin
+  result := 0;
+  if (fInputCount <> 0) or
+     (fDataCount <> 0) or
+     (fOutputCount <> 0) or
+     (fOutputPlainCount <> 0) then
+    exit; // still some pending data in buffers
+  result := length(fInput) + length(fData) + length(fOutput);
+  fInput := '';
+  fData := '';
+  fOutput := '';
+  fDataPos := 0;
+  fOutputPos := 0;
 end;
 
 

@@ -11383,6 +11383,7 @@ type
     function Receive(Buffer: pointer; var Length: integer): TNetResult;
     function ReceivePending: integer;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
+    function ReleaseBuffers: PtrInt;
   end;
 
 threadvar // do not publish for compilation within Delphi packages
@@ -12181,6 +12182,13 @@ function TOpenSslNetTls.Send(Buffer: pointer; var Length: integer): TNetResult;
 begin
   result := CheckIO(@SSL_write, Buffer, Length, SSL_ERROR_WANT_READ);
 end;
+
+function TOpenSslNetTls.ReleaseBuffers: PtrInt;
+begin
+  result := 0; // SSL_MODE_RELEASE_BUFFERS already handles this safely
+  // existing SSL_free_buffers() API is unsafe with several CVE security issues
+end;
+
 
 function NewOpenSslNetTls: INetTls;
 begin
