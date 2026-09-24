@@ -2830,6 +2830,7 @@ begin
         SEC_I_RENEGOTIATE: // within fSspiSafe.Lock
           try
             // TLS 1.3 uses SEC_I_RENEGOTIATE for post-handshake messages
+            ProcessBuffers;
             if fOutputCount <> 0 then
             begin
               // there is some pending output data from Send(): would require
