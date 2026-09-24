@@ -105,7 +105,7 @@ type
     fFlags: TPollAsyncConnectionFlags;
     /// internal 8-bit flags e.g. for fRW[] or IOCP or to mark AddGC()
     fInternalFlags: set of (
-      ifWriteWait, ifFromGC, ifInGC, ifSeparateWLock, ifProcessing);
+      ifWriteWait, ifFromGC, ifInGC, ifSeparateWLock, ifProcessing, ifMemClean);
     /// the current (reusable) receiving data buffer of this connection
     fRd: TRawByteStringBuffer;
     /// the current (reusable) sending data buffer of this connection
@@ -1701,44 +1701,35 @@ begin
 end;
 
 function TPollAsyncConnection.ReleaseMemoryOnIdle: PtrInt;
-var
-  separate: boolean;
-begin
-  // called now and then to reduce temp memory consumption on Idle connections
-  result := 0;
-  separate := ifSeparateWLock in fInternalFlags;
-  if (fRd.Buffer <> nil) and
-     (fRd.Len = 0) and
-     fRWSafe[0].TryLock then // direct call to leave fWasActive flag untouched
+
+  procedure ReleaseWriteSecure;
   begin
-    inc(result, ReleaseReadMemoryOnIdle);
-    if (fWr.Buffer <> nil) and
-       (fWr.Len = 0) and
-       not separate then
-      inc(result, ReleaseWriteMemoryOnIdle); // do it within the same lock
-    fRWSafe[0].UnLock;
-  end;
-  if separate and
-     (fWr.Buffer <> nil) and
-     (fWr.Len = 0) and
-     fRWSafe[1].TryLock then
-  begin
+    if fWr.Len <> 0 then
+      exit;
     inc(result, ReleaseWriteMemoryOnIdle);
-    fRWSafe[1].UnLock;
-  end;
-  if (fSecure <> nil) and // INetTls method expects both directions acquisition
-     (fRd.Len = 0) and
-     (fWr.Len = 0) and
-     fRWSafe[0].TryLock then
-  try
-    if not separate then
-      inc(result, fSecure.ReleaseBuffers)
-    else if fRWSafe[1].TryLock then
-    try
+    if fSecure <> nil then
       inc(result, fSecure.ReleaseBuffers);
-    finally
-      fRWSafe[1].UnLock;
-    end;
+    include(fInternalFlags, ifMemClean); // no need to call this method anymore
+  end;
+
+begin
+  result := 0;
+  if (fRd.Len = 0) and
+     (fWr.Len = 0) and
+     fRWSafe[0].TryLock then // thread-safe memory release
+  try
+    if fRd.Len <> 0 then
+      exit;
+    inc(result, ReleaseReadMemoryOnIdle);
+    if ifSeparateWLock in fInternalFlags then
+      if fRWSafe[1].TryLock then
+      try
+        ReleaseWriteSecure;
+      finally
+        fRWSafe[1].UnLock;
+      end
+    else
+      ReleaseWriteSecure;
   finally
     fRWSafe[0].UnLock;
   end;
@@ -3694,16 +3685,18 @@ begin
       c := fConnection[i];
       if fWasActive in c.fFlags then
       begin
-        // update fLastOperation flag once per second is good enough
+        // update activityflags once per second
         exclude(c.fFlags, fWasActive);
+        exclude(c.fInternalFlags, ifMemClean);
         c.fLastOperation := sec;
       end
       else // inactive connection
       begin
         // check if some working memory could be released
         if (gc <> 0) and
-           (c.fLastOperation < gc) then
-          inc(gced, c.ReleaseMemoryOnIdle); // quick non virtual method
+           (c.fLastOperation < gc) and
+           not (ifMemClean in c.fInternalFlags) then
+          inc(gced, c.ReleaseMemoryOnIdle);
         // check if some events should be triggerred
         // e.g. TWebSocketAsyncConnection would send ping/pong heartbeats
         if (allowed <> 0) and
