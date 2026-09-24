@@ -2091,6 +2091,7 @@ type
 
   TSChannelNetTls = class(TInterfacedObject, INetTls)
   private
+    fSspiSafe: TLightLock; // protect Recv() SEC_I_RENEGOTIATE vs Send()
     fSocket: TNetSocket;
     fCipherName: RawUtf8;
     fServerAddressW: SynUnicode;
@@ -2365,6 +2366,7 @@ begin
     SetLength(fData, TLSRECMAXSIZE);   // decrypted application data
   fDataPos := 0;
   fDataCount := 0;
+  fSspiSafe.Init;
 end;
 
 procedure TSChannelNetTls.AfterConnection(Socket: TNetSocket;
@@ -2740,7 +2742,10 @@ var
     buf[3].cbBuffer := 0;
     buf[3].BufferType := SECBUFFER_EMPTY;
     buf[3].pvBuffer := nil;
+    fSspiSafe.Lock; // protect with concurrent Send() - paranoid
     result := DecryptMessage(@fCtxt, @desc, 0, qop);
+    if result <> SEC_I_RENEGOTIATE then
+      fSspiSafe.UnLock; // delayed unlock until handshake is done
   end;
 
 begin
@@ -2787,7 +2792,7 @@ begin
     repeat
       case res of
         SEC_I_RENEGOTIATE:
-          ; // appears with TLS 1.3 - processed below
+          ; // appears with TLS 1.3 - processed below (within fSspiSafe.Lock)
         SEC_I_CONTEXT_EXPIRED:
           fSessionClosed := true; // and processed below
         SEC_E_INCOMPLETE_MESSAGE:
@@ -2812,21 +2817,34 @@ begin
               fInputCount := buf[i].cbBuffer;
             end;
         end;
-      if res = SEC_I_CONTEXT_EXPIRED then
-      begin
-        // close_notify terminates the TLS input stream
-        fInputCount := 0;
-        if fDataCount = 0 then
-        begin
-          Length := 0;
-          result := nrClosed;
-          exit;
-        end;
-        break;
+      case res of
+        SEC_I_CONTEXT_EXPIRED:
+          begin
+            // close_notify terminates the TLS input stream
+            fInputCount := 0;
+            if fDataCount = 0 then
+            begin
+              Length := 0;
+              result := nrClosed;
+              exit;
+            end;
+            break;
+          end;
+        SEC_I_RENEGOTIATE: // executed within fSspiSafe.Lock
+          try
+            // TLS 1.3 uses SEC_I_RENEGOTIATE for post-handshake messages
+            if fOutputCount <> 0 then
+            begin
+              // there is some pending output data from Send(): would require
+              // more state logic for little gain so is not supported yet
+              result := nrFatalError;
+              exit;
+            end;
+            HandshakeLoop({NeedRecv=}false);
+          finally
+            fSspiSafe.UnLock; // Lock was done in DecryptInput
+          end;
       end;
-      if res = SEC_I_RENEGOTIATE then
-        // TLS 1.3 uses SEC_I_RENEGOTIATE for post-handshake messages
-        HandshakeLoop({NeedRecv=}false);
       if fInputCount = 0 then
         break;
       res := DecryptInput;
@@ -2854,57 +2872,71 @@ var
 begin
   plain := Length;
   Length := 0; // nothing consumed unless we explicitly return it below
-  result := nrOK;
-  if plain <= 0 then
-    exit;
-  // a previous call already encrypted this same plaintext record but could
-  // not completely write its ciphertext: flush it before doing anything else
-  if fOutputCount <> 0 then
+  if fSessionClosed then
   begin
-    result := SendOutput;
-    if result <> nrOK then
-      exit; // nrRetry -> caller retries the same plaintext
-    // the buffered TLS record is now completely on the socket
-    Length := fOutputPlainCount;
-    fOutputPlainCount := 0;
+    result := nrClosed;
     exit;
   end;
-  if plain > integer(fSizes.cbMaximumMessage) then
-    plain := fSizes.cbMaximumMessage;
-  encrypted := integer(fSizes.cbHeader) + plain + integer(fSizes.cbTrailer);
-  if encrypted > system.Length(fOutput) then
-    SetLength(fOutput, encrypted); // paranoid
-  MoveFast(Buffer^, PByteArray(fOutput)[fSizes.cbHeader], plain);
-  desc.ulVersion := SECBUFFER_VERSION;
-  desc.cBuffers := 4;
-  desc.pBuffers := @buf[0];
-  buf[0].cbBuffer := fSizes.cbHeader;
-  buf[0].BufferType := SECBUFFER_STREAM_HEADER;
-  buf[0].pvBuffer := pointer(fOutput);
-  buf[1].cbBuffer := plain;
-  buf[1].BufferType := SECBUFFER_DATA;
-  buf[1].pvBuffer := @PByteArray(fOutput)[fSizes.cbHeader];
-  trailer := integer(fSizes.cbHeader) + plain;
-  buf[2].cbBuffer := fSizes.cbTrailer;
-  buf[2].BufferType := SECBUFFER_STREAM_TRAILER;
-  buf[2].pvBuffer := @PByteArray(fOutput)[trailer];
-  buf[3].cbBuffer := 0;
-  buf[3].BufferType := SECBUFFER_EMPTY;
-  buf[3].pvBuffer := nil;
-  result := nrFatalError;
-  if EncryptMessage(@fCtxt, 0, @desc, 0) <> SEC_E_OK then
+  if plain <= 0 then
+  begin
+    result := nrOK;
     exit;
-  encrypted := buf[0].cbBuffer + buf[1].cbBuffer + buf[2].cbBuffer;
-  fOutputPos := 0;
-  fOutputCount := encrypted;
-  fOutputPlainCount := plain;
-  result := SendOutput; // nrOk means fOutputCount = 0
-  if result <> nrOK then
-    // on nrRetry (or error), Length = zero and fOutput keeps partial record
-    exit;
-  // ciphertext was completely accepted by the socket
-  Length := fOutputPlainCount;
-  fOutputPlainCount := 0;
+  end;
+  if fSspiSafe.TryLock then // protect SEC_I_RENEGOTIATE in Recv() - paranoid
+  try
+    // a previous call already encrypted this same plaintext record but could
+    // not completely write its ciphertext: flush it before doing anything else
+    if fOutputCount <> 0 then
+    begin
+      result := SendOutput;
+      if result <> nrOK then
+        exit; // nrRetry -> caller retries the same plaintext
+      // the buffered TLS record is now completely on the socket
+      Length := fOutputPlainCount;
+      fOutputPlainCount := 0;
+      exit;
+    end;
+    if plain > integer(fSizes.cbMaximumMessage) then
+      plain := fSizes.cbMaximumMessage;
+    encrypted := integer(fSizes.cbHeader) + plain + integer(fSizes.cbTrailer);
+    if encrypted > system.Length(fOutput) then
+      SetLength(fOutput, encrypted); // paranoid
+    MoveFast(Buffer^, PByteArray(fOutput)[fSizes.cbHeader], plain);
+    desc.ulVersion := SECBUFFER_VERSION;
+    desc.cBuffers := 4;
+    desc.pBuffers := @buf[0];
+    buf[0].cbBuffer := fSizes.cbHeader;
+    buf[0].BufferType := SECBUFFER_STREAM_HEADER;
+    buf[0].pvBuffer := pointer(fOutput);
+    buf[1].cbBuffer := plain;
+    buf[1].BufferType := SECBUFFER_DATA;
+    buf[1].pvBuffer := @PByteArray(fOutput)[fSizes.cbHeader];
+    trailer := integer(fSizes.cbHeader) + plain;
+    buf[2].cbBuffer := fSizes.cbTrailer;
+    buf[2].BufferType := SECBUFFER_STREAM_TRAILER;
+    buf[2].pvBuffer := @PByteArray(fOutput)[trailer];
+    buf[3].cbBuffer := 0;
+    buf[3].BufferType := SECBUFFER_EMPTY;
+    buf[3].pvBuffer := nil;
+    result := nrFatalError;
+    if EncryptMessage(@fCtxt, 0, @desc, 0) <> SEC_E_OK then
+      exit;
+    encrypted := buf[0].cbBuffer + buf[1].cbBuffer + buf[2].cbBuffer;
+    fOutputPos := 0;
+    fOutputCount := encrypted;
+    fOutputPlainCount := plain;
+    result := SendOutput; // nrOk means fOutputCount = 0
+    if result <> nrOK then
+      // on nrRetry (or error), Length = zero and fOutput keeps partial record
+      exit;
+    // ciphertext was completely accepted by the socket
+    Length := fOutputPlainCount;
+    fOutputPlainCount := 0;
+  finally
+    fSspiSafe.UnLock;
+  end
+  else
+    result := nrRetry; // Recv() is handling SEC_I_RENEGOTIATE
 end;
 
 
