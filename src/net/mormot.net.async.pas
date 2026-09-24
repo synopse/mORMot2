@@ -1701,9 +1701,12 @@ begin
 end;
 
 function TPollAsyncConnection.ReleaseMemoryOnIdle: PtrInt;
+var
+  separate: boolean;
 begin
   // called now and then to reduce temp memory consumption on Idle connections
   result := 0;
+  separate := ifSeparateWLock in fInternalFlags;
   if (fRd.Buffer <> nil) and
      (fRd.Len = 0) and
      fRWSafe[0].TryLock then // direct call to leave fWasActive flag untouched
@@ -1711,17 +1714,33 @@ begin
     inc(result, ReleaseReadMemoryOnIdle);
     if (fWr.Buffer <> nil) and
        (fWr.Len = 0) and
-       not (ifSeparateWLock in fInternalFlags) then
+       not separate then
       inc(result, ReleaseWriteMemoryOnIdle); // do it within the same lock
     fRWSafe[0].UnLock;
   end;
-  if (ifSeparateWLock in fInternalFlags) and
+  if separate and
      (fWr.Buffer <> nil) and
      (fWr.Len = 0) and
      fRWSafe[1].TryLock then
   begin
     inc(result, ReleaseWriteMemoryOnIdle);
     fRWSafe[1].UnLock;
+  end;
+  if (fSecure <> nil) and // INetTls method expects both directions acquisition
+     (fRd.Len = 0) and
+     (fWr.Len = 0) and
+     fRWSafe[0].TryLock then
+  try
+    if not separate then
+      inc(result, fSecure.ReleaseBuffers)
+    else if fRWSafe[1].TryLock then
+    try
+      inc(result, fSecure.ReleaseBuffers);
+    finally
+      fRWSafe[1].UnLock;
+    end;
+  finally
+    fRWSafe[0].UnLock;
   end;
 end;
 
