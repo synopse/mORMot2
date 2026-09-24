@@ -844,7 +844,7 @@ type
     fRequestContext: RawUtf8;
     fRangeStart, fRangeEnd: Int64;
     fAuthDigestAlgo: TDigestAlgo;
-    fAuthCrossOriginDisable: boolean; // per-request hcopPurgeAuthorization
+    fAuthPurge: set of (apReferer, apAuthorization);
     fOnAuthorize, fOnProxyAuthorize: TOnHttpClientSocketAuthorize;
     fOnBeforeRequest: TOnHttpClientSocketRequest;
     fOnProtocolRequest: TOnHttpClientRequest;
@@ -4194,7 +4194,7 @@ begin
       SockSend(['Range: bytes=', fRangeStart, '-', fRangeEnd])
     else
       SockSend(['Range: bytes=', fRangeStart, '-']);
-  if not fAuthCrossOriginDisable then
+  if not (apAuthorization in fAuthPurge) then
     with fExtendedOptions.Auth do
       case Scheme of
         wraBasic:
@@ -4206,7 +4206,8 @@ begin
         wraBearer:
           SockSendLine(['Authorization: Bearer ', Token]);
       end; // other Scheme values would have set OnAuthorize
-  if fReferer <> '' then
+  if (fReferer <> '') and
+     not (apReferer in fAuthPurge) then
     SockSendLine(['Referer: ', fReferer]);
   if fAccept <> '' then
     SockSendLine(['Accept: ', fAccept]);
@@ -4229,7 +4230,7 @@ var
 begin
   // prepare the execution
   fRequestContext := '';
-  fAuthCrossOriginDisable := false;
+  fAuthPurge := [];
   ctxt.Url := url;
   if (url = '') or
      (url[1] <> '/') then
@@ -4284,7 +4285,7 @@ begin
       // handle optional (proxy) authentication callbacks
       if (ctxt.Status = HTTP_UNAUTHORIZED) and
           Assigned(fOnAuthorize) and
-          not fAuthCrossOriginDisable then
+          not (apAuthorization in fAuthPurge) then
       begin
         if Assigned(OnLog) then
           OnLog(sllTrace, 'Request(% %)=%', [ctxt.Method, url, ctxt.Status], self);
@@ -4351,9 +4352,7 @@ begin
             ['Reject redirect with userinfo into ', newuri.URI]);
           break; // preserve original 3xx status and Location:
         end;
-        crossorigin := (newuri.Server <> Server) or
-                       (newuri.Port <> Port) or
-                       (newuri.Https <> ServerTls);
+        crossorigin := not newuri.Same(Server, Port, ServerTls);
         if crossorigin then
         begin
           if ServerTls and
@@ -4379,12 +4378,13 @@ begin
           begin
             ctxt.Header := DeleteHeader(ctxt.Header, 'Referer');
             AppendLine(fRequestContext, ['Purge referer']);
+            include(fAuthPurge, apReferer);
           end;
           if hroPurgeAuthorization in fExtendedOptions.RedirectOptions then
           begin
             ctxt.Header := DeleteHeader(ctxt.Header, 'Authorization');
             AppendLine(fRequestContext, ['Purge authorization']);
-            fAuthCrossOriginDisable := true;
+            include(fAuthPurge, apAuthorization);
           end;
         end;
         fRedirected := newuri.Address;
