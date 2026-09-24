@@ -2102,7 +2102,7 @@ type
     fInput: RawByteString;  // encrypted TLS input records
     fOutput: RawByteString; // encrypted TLS output records
     fData: RawByteString;   // decrypted application bytes
-    fInputSize, fInputCount, fDataPos, fDataCount: integer;
+    fInputCount, fDataPos, fDataCount: integer;
     fOutputPos, fOutputCount, fOutputPlainCount: integer;
     fSessionClosed: boolean;
     fAccept: boolean;
@@ -2255,7 +2255,15 @@ begin
 end;
 
 const
-  TLSRECMAXSIZE = 19000; // buffers for TSChannelNetTls.Receive/Send
+  // automatic adaptation of TSChannelNetTls.Receive/Send buffers size
+  TLSRECMINSIZE = 4096;
+
+procedure EnsureLength(var buf: RawByteString; need: PtrInt);
+begin
+  need := MaxPtrInt(TLSRECMINSIZE, need + (need shr 2)); // reserve 25% more
+  if need > length(buf) then
+    SetLength(buf, need);
+end;
 
 type
   THandshakeBuf = record
@@ -2281,14 +2289,19 @@ end;
 
 procedure HandshakeBufFree(var buf: THandshakeBuf);
 var
-  i: PtrInt;
+  i: integer;
+  b: PSecBuffer;
 begin
+  b := @buf.buf[2];
   for i := 2 to 4 do
-    if buf.buf[i].pvBuffer <> nil then
+  begin
+    if b^.pvBuffer <> nil then
     begin
-      FreeContextBuffer(buf.buf[i].pvBuffer); // no exception here
-      buf.buf[i].pvBuffer := nil;
+      FreeContextBuffer(b^.pvBuffer); // no exception here
+      b^.pvBuffer := nil;
     end;
+    inc(b);
+  end;
 end;
 
 // TLS 1.3 is officially supported starting in Windows 11 and Server 2022.
@@ -2356,16 +2369,9 @@ begin
   fAcceptFirst := true;
   fCipherName := '';
   fInputCount := 0;
-  fInputSize := TLSRECMAXSIZE;
-  if fInput = '' then
-    SetLength(fInput, TLSRECMAXSIZE);  // encrypted TLS input records
   fOutputPos := 0;
   fOutputCount := 0;
   fOutputPlainCount := 0;
-  if fOutput = '' then
-    SetLength(fOutput, TLSRECMAXSIZE); // encrypted TLS output records
-  if fData = '' then
-    SetLength(fData, TLSRECMAXSIZE);   // decrypted application data
   fDataPos := 0;
   fDataCount := 0;
   fSspiSafe.Init; // on Windows, just reset flags to 0
@@ -2583,18 +2589,15 @@ end;
 procedure TSChannelNetTls.HandshakeLoop(NeedRecv: boolean);
 var
   res: cardinal;
-  inputneeded: integer;
 begin
   // NeedRecv=true for initial handshake - wait for the peer before ISC/ASC
   // NeedRecv=false for SEC_I_RENEGOTIATE/post-handshake processing
   repeat
     if NeedRecv then
     begin
-      if fInputCount >= fInputSize then
-        raise ESChannel.CreateFmt(
-          'Handshake input buffer full (%d)', [fInputCount]);
+      EnsureLength(fInput, fInputCount);
       inc(fInputCount, RecvRaw('recv', @PByteArray(fInput)[fInputCount],
-                               fInputSize - fInputCount));
+                               length(fInput) - fInputCount));
     end;
     res := HandshakeStep(pointer(fInput), fInputCount);
     if (res = SEC_I_INCOMPLETE_CREDENTIALS) and
@@ -2628,11 +2631,6 @@ begin
   CheckSEC_E_OK('QueryContextAttributesW',
     QueryContextAttributesW(
       @fCtxt, SECPKG_ATTR_STREAM_SIZES, @fSizes));
-  inputneeded := fSizes.cbHeader +  fSizes.cbMaximumMessage + fSizes.cbTrailer;
-  if (inputneeded <= 0) or
-     (inputneeded > fInputSize) then
-    raise ESChannel.CreateFmt(
-      'InputSize=%d>%d', [inputneeded, fInputSize]);
 end;
 
 function TSChannelNetTls.CompleteHandshakeToken(const ctx: ShortString;
@@ -2730,7 +2728,7 @@ var
   desc: TSecBufferDesc;
   buf: array[0..3] of TSecBuffer;
   res: cardinal;
-  read, newlen: integer;
+  read: integer;
   needrecv: boolean;
 
   function DecryptInput: cardinal;
@@ -2757,25 +2755,28 @@ var
 
   procedure ProcessBuffers;
   var
-    i: PtrInt;
+    i: integer;
+    b: PSecBuffer;
   begin
     fInputCount := 0;
-    for i := 1 to 3 do // i=0 for SECBUFFER_DATA input
-      case buf[i].BufferType of
+    b := @buf[1]; // buf[0] = SECBUFFER_DATA input
+    for i := 1 to 3 do
+    begin
+      case b^.BufferType of
         SECBUFFER_DATA:
           begin
-            newlen := fDataCount + integer(buf[i].cbBuffer);
-            if newlen > system.Length(fData) then
-              SetLength(fData, newlen);
-            MoveFast(buf[i].pvBuffer^, PByteArray(fData)[fDataCount], buf[i].cbBuffer);
-            inc(fDataCount, buf[i].cbBuffer);
+            EnsureLength(fData, fDataCount + integer(b^.cbBuffer));
+            MoveFast(b^.pvBuffer^, PByteArray(fData)[fDataCount], b^.cbBuffer);
+            inc(fDataCount, b^.cbBuffer);
           end;
         SECBUFFER_EXTRA:
           begin
-            MoveFast(buf[i].pvBuffer^, pointer(fInput)^, buf[i].cbBuffer);
-            fInputCount := buf[i].cbBuffer;
+            MoveFast(b^.pvBuffer^, pointer(fInput)^, b^.cbBuffer);
+            fInputCount := b^.cbBuffer;
           end;
       end;
+      inc(b);
+    end;
   end;
 
 begin
@@ -2797,11 +2798,9 @@ begin
     repeat
       if needrecv then
       begin
-        if fInputCount >= fInputSize then
-          raise ESChannel.CreateFmt(
-            'TLS input buffer full (%d)', [fInputCount]);
+        EnsureLength(fInput, fInputCount);
         read := recv(fSocket.Socket, @PByteArray(fInput)[fInputCount],
-                  fInputSize - fInputCount, 0);
+                  system.length(fInput) - fInputCount, 0);
         if read <= 0 then
         begin
           if read = 0 then
@@ -2914,8 +2913,7 @@ begin
     if plain > integer(fSizes.cbMaximumMessage) then
       plain := fSizes.cbMaximumMessage;
     encrypted := integer(fSizes.cbHeader) + plain + integer(fSizes.cbTrailer);
-    if encrypted > system.Length(fOutput) then
-      SetLength(fOutput, encrypted); // paranoid
+    EnsureLength(fOutput, encrypted);
     MoveFast(Buffer^, PByteArray(fOutput)[fSizes.cbHeader], plain);
     desc.ulVersion := SECBUFFER_VERSION;
     desc.cBuffers := 4;
