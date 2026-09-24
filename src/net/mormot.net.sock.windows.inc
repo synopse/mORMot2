@@ -2106,6 +2106,7 @@ type
     fOutputPos, fOutputCount, fOutputPlainCount: integer;
     fSessionClosed: boolean;
     fAccept: boolean;
+    fAcceptFirst: boolean;
     fAcceptCert: mormot.core.os.security.PCCERT_CONTEXT;
     fAcceptCertStore: HCERTSTORE;
     fPeerInfo: TWinCertInfo;
@@ -2352,6 +2353,7 @@ procedure TSChannelNetTls.ResetState(Socket: TNetSocket);
 begin
   fSocket := Socket;
   fSessionClosed := false;
+  fAcceptFirst := true;
   fCipherName := '';
   fInputCount := 0;
   fInputSize := TLSRECMAXSIZE;
@@ -2540,13 +2542,14 @@ begin
     f := 0;
     if fAccept then // server side
     begin
-      if (fCtxt.dwLower = 0) and
-         (fCtxt.dwUpper = 0) then
+      if fAcceptFirst then
         LInCtxPtr := nil
       else
         LInCtxPtr := @fCtxt;
       result := AcceptSecurityContext(
         @fCred, LInCtxPtr, @b.input, fFlags, 0, @fCtxt, @b.output, f, nil);
+      if result = SEC_I_CONTINUE_NEEDED then
+        fAcceptFirst := false;
     end
     else // client side
       result := InitializeSecurityContextW(
@@ -2555,6 +2558,11 @@ begin
     // SSPI may ask the caller to finalize the generated token
     result := CompleteHandshakeToken(
       'HandshakeStep CompleteAuthToken', result, @b.output);
+    if fAccept and
+       fAcceptFirst and
+       ((result = SEC_E_OK) or
+        (result = SEC_I_CONTINUE_NEEDED)) then
+      fAcceptFirst := false;
     // An output token may be generated even together with SEC_E_OK
     if (b.buf[2].pvBuffer <> nil) and
        (b.buf[2].cbBuffer <> 0) then
