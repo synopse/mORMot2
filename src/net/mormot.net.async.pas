@@ -431,7 +431,7 @@ type
     fRemoteIP4: cardinal; // may contain cLocalhost32 = 127.0.0.1
     fRemoteIP: RawUtf8;   // never contains '127.0.0.1'
     fOwner: TAsyncConnections;
-    // called after TAsyncConnections.LastOperationIdleSeconds of no activity
+    // called after TAsyncConnections.GetLastOperationIdleSeconds of no activity
     // - Sender.Write() could be used to send e.g. a hearbeat frame
     // - should finish quickly and be non-blocking
     // - returns true to log notified events, false if nothing happened
@@ -3678,13 +3678,17 @@ begin
   gced := 0;
   sec := fLastOperationSec; // 32-bit second resolution is fine
   gc := fLastOperationReleaseMemorySeconds;
-  if (gc <> 0) and
-     (sec > gc) then
-    gc := sec - gc;
+  if gc <> 0 then
+    if sec < gc then
+      gc := 0
+    else
+      gc := sec - gc;
   allowed := GetLastOperationIdleSeconds; // e.g. WebSockets HeartbeatDelay
-  if (allowed <> 0) and
-     (sec > allowed) then
-    allowed := sec - allowed;
+  if allowed <> 0 then
+    if sec < gc then
+      allowed := 0
+    else
+      allowed := sec - allowed;
   fConnectionLock.ReadOnlyLock; // non-blocking quick process
   try
     for i := 0 to fConnectionCount - 1 do
@@ -3703,14 +3707,13 @@ begin
            (c.fLastOperation < gc) and
            not (fMemClean in c.fFlags) then
           inc(gced, c.ReleaseMemoryOnIdle);
-        // check if some events should be triggerred
-        // e.g. TWebSocketAsyncConnection would send ping/pong heartbeats
+        // check if OnLastOperationIdle events should be triggerred
         if (allowed <> 0) and
            (c.fLastOperation <= allowed) then
           ObjArrayAddCount(idle, c, idles); // calls below, outside the lock
-        if Terminated then
-          break;
       end;
+      if Terminated then
+        break;
     end;
   finally
     fConnectionLock.ReadOnlyUnLock;
@@ -3719,11 +3722,11 @@ begin
   // Write() fails, it calls ConnectionDelete() and its WriteLock
   for i := 0 to idles - 1 do
     try
+      if Terminated then
+        break;
       c := idle[i];
       if c.OnLastOperationIdle(sec) then
         inc(notified); // e.g. a TWebSocketAsyncConnection ping was sent
-      if Terminated then
-        break;
     except
       // this overriden method should fail silently
     end;
