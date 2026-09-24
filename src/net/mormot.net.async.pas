@@ -5909,7 +5909,7 @@ begin // this method is protected by proxy.fOsSafe.Lock
   if not StatusCodeIsSuccess(result) then // 4xx.. range
     exit;
   if (head.Size < 0) and
-     (result in HTTP_GET_OK) then // 3xx redirections are no error
+     (result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT]) then // not 204 or 3xx
     // note: progressive download needs an eventual size (by now), but Apache
     // may not provide Content-Length/Range on dynamic content (text/html)
     if FindNameValue(pointer(head.PurgedHeaders), 'CONTENT-TYPE: TEXT/HTM') = nil then
@@ -6043,6 +6043,7 @@ begin
   id := back.partialid;
   expected := back.expectedsize;
   try
+    // make the actual HTTP/HTTPS blocking huge GET in this thread
     status := back.Request(back.uri, 'GET',
       fSettings.HttpKeepAlive * MilliSecsPerSec, '', '', '',
       {AsRetry=}false, nil, back.writestream);
@@ -6652,9 +6653,10 @@ begin
       // no actual file is needed to implement a HEAD request
       if req.loginfo = nil then
         req.loginfo := 'head';
-      if result in HTTP_GET_OK then // 2xx follow regular HEAD response path
+      if result in [HTTP_SUCCESS, HTTP_PARTIALCONTENT] then // regular response
         Ctxt.SetOutProgressiveFile(req.filename, req.head.Size)
-      else if req.head.Size >= 0 then
+      else if (result <> HTTP_NOCONTENT) and
+              (req.head.Size >= 0) then
         Ctxt.AddOutHeader(['Content-Length: ', req.head.Size]);
     end
     else if result in HTTP_GET_OK then // 2xx
