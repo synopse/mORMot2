@@ -5827,9 +5827,13 @@ begin // this method is protected by fOsSafe.Lock
     if HttpRequestLength(pointer(fRemoteClient.Headers)) = nil then
       // server has no length: try range GET trick for a 200 response
       if status = HTTP_SUCCESS then // but return 204 NoContent or 3xx Redirect
+      begin
         // Apache+Varnish may return 'Content-Range: bytes 0-0/*' for text/html
         status := fRemoteClient.Request(uri, 'GET',
           'Range: bytes=0-0', '', '', keepalive);
+        if status = HTTP_PARTIALCONTENT then // 'Range:' triggers 206
+          status := HTTP_SUCCESS;            // but we emulate a regular 200
+      end;
   // set Headers and extract Size + TimeMS fields and base-32 encoded filename
   cache.Status := status;
   cache.Size := 0;
@@ -5904,7 +5908,8 @@ begin // this method is protected by proxy.fOsSafe.Lock
   localsize := head.Size; // for proper logging
   if not StatusCodeIsSuccess(result) then // 4xx.. range
     exit;
-  if head.Size < 0 then
+  if (head.Size < 0) and
+     (result in HTTP_GET_OK) then // 3xx redirections are no error
     // note: progressive download needs an eventual size (by now), but Apache
     // may not provide Content-Length/Range on dynamic content (text/html)
     if FindNameValue(pointer(head.PurgedHeaders), 'CONTENT-TYPE: TEXT/HTM') = nil then
