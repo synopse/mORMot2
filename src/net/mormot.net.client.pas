@@ -1776,7 +1776,7 @@ type
     // the options to be used for connection and authentication
     fConnectOptions: THttpRequestExtendedOptions;
     // last request values
-    fUri, fHeaders: RawUtf8;
+    fUri, fHeaders, fLastContext: RawUtf8;
     fBody: RawByteString;
     fLastError: string;
     fStatus: integer;
@@ -6504,6 +6504,7 @@ function TSimpleHttpClient.Request(const Uri: TUri;
 begin
   // reset status
   fLastError := '';
+  fLastContext := '';
   fStatus := 0;
   // do the request
   result := 0;
@@ -6522,14 +6523,15 @@ begin
         Uri.Address, Method, KeepAlive, Header, Data, DataMimeType);
       fBody := fHttp.Http.Content;
       fHeaders := fHttp.Http.Headers;
+      fLastContext := fHttp.RequestContext;
     end;
     if KeepAlive = 0 then
       Close; // force HTTP/1.0 scheme
   except
     on E: Exception do
     begin
-      FormatString('% % raised % [%]',
-        [Method, Uri.URI, E, E.Message], fLastError);
+      FormatString('% % raised % [%] %',
+        [Method, Uri.URI, E, E.Message, fLastContext], fLastError);
       Close; // keeping result = 0
     end;
   end;

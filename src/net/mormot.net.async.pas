@@ -5825,11 +5825,11 @@ begin // this method is protected by fOsSafe.Lock
   status := fRemoteClient.Request(uri, 'HEAD', '', '', '', keepalive);
   if StatusCodeIsSuccess(status) then // 2xx..3xx range
     if HttpRequestLength(pointer(fRemoteClient.Headers)) = nil then
-      status := 0;
-  if status = 0 then // server has no length: try range GET trick
-    // Apache+Varnish may return 'Content-Range: bytes 0-0/*' for some text/html :(
-    status := fRemoteClient.Request(uri, 'GET',
-      'Range: bytes=0-0', '', '', keepalive);
+      // server has no length: try range GET trick for a 200 response
+      if status = HTTP_SUCCESS then // but return 204 NoContent or 3xx Redirect
+        // Apache+Varnish may return 'Content-Range: bytes 0-0/*' for text/html
+        status := fRemoteClient.Request(uri, 'GET',
+          'Range: bytes=0-0', '', '', keepalive);
   // set Headers and extract Size + TimeMS fields and base-32 encoded filename
   cache.Status := status;
   cache.Size := 0;
@@ -5847,8 +5847,9 @@ begin // this method is protected by fOsSafe.Lock
      (status < HTTP_SERVERERROR) and  // retry on pure 5xx or 666 (client)
      (cache.Size >= 0) then           // only store if the size was known
     fHeadCache.Add(hash, cache);
-  fOwner.fLog.Add.Log(sllTrace, 'RemoteClientHead(%)=% size=% lastmod=% as %',
-    [uri.Address, status, cache.Size, d, cache.HashB32], self);
+  fOwner.fLog.Add.Log(sllTrace, 'RemoteClientHead(%)=% size=% lastmod=% as % %',
+    [uri.Address, status, cache.Size, d, cache.HashB32,
+     fRemoteClient.LastError], self);
 end;
 
 function THttpProxyUrl.RemoteClientGet(const uri: TUri): RawByteString;
