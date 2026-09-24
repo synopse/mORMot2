@@ -4326,8 +4326,8 @@ begin
             end;
           end;
           HttpStateReset;
-          ctxt.Url := newuri.Address;
         end;
+        ctxt.Url := newuri.Address;
       end
       else
         fRedirected := ctxt.Url;
