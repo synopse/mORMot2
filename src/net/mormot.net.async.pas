@@ -6357,6 +6357,7 @@ begin
       fServer.Shutdown;
       FreeAndNil(fServer);
     end;
+  exclude(fFlags, fUrlSet);
   ObjArrayClear(fUrl);
 end;
 
@@ -6376,7 +6377,7 @@ var
 begin
   fSources := [];
   fUrlOptions := [];
-  fFlags := fFlags - [fHasCacheClean];
+  fFlags := fFlags - [fHasCacheClean, fUrlSet];
   ObjArrayClear(fUrl);
   new := TUriRouter.Create(TUriTreeNode);
   try
@@ -6549,6 +6550,8 @@ begin // folder timestamp check is called every 17 minutes, and may be slow
       ok := DirectoryDeleteOlderFiles(cache.Path,
         cache.TimeoutSec * SecsPerDate, FILES_ALL,
         {recursive=}hpoClientCacheSubFolder in one^.fSettings.Options, @size);
+      if not (fUrlSet in fFlags) then
+        exit; // paranoid abort at Shutdown
       if (n <> 0) or
          not ok then // something changed on disk
         fLog.Add.Log(sllTrace, 'OnIdle: remote=% delete=% old=%=%',
