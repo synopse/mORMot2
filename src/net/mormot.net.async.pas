@@ -1535,7 +1535,7 @@ type
     fSettings: THttpProxyServerSettings;
     fUrl: THttpProxyUrlObjArray;
     fLog: TSynLogClass;
-    fFlags: set of (fSettingsOwned, fHasLog, fHasCacheClean);
+    fFlags: set of (fUrlSet, fSettingsOwned, fHasLog, fHasCacheClean);
     fSources: THttpProxySources;
     fUrlOptions: THttpProxyUrlOptions; // consolidated from all fUrl[].Options
     fTempFilesTix: cardinal;
@@ -6346,6 +6346,7 @@ begin
     fServer.WaitStarted;
   if Assigned(log) then
     log.Log(sllDebug, 'Start: %', [fServer], self);
+  include(fFlags, fUrlSet); // now fUrl[] should remain stable
 end;
 
 procedure THttpProxyServer.Stop;
@@ -6498,6 +6499,8 @@ var
   tmp: TSynLogClass; // for Delphi 7 compilation
 begin
   // delete any deprecated in-memory cached content - called every second
+  if not (fUrlSet in fFlags) then
+    exit; // called too early to access fUrl[] safely
   mem := 0;
   hash := 0;
   head := 0;
@@ -6531,6 +6534,8 @@ var
   i, n: integer;
   ok: boolean;
 begin // folder timestamp check is called every 17 minutes, and may be slow
+  if not (fUrlSet in fFlags) then
+    exit; // called too early to access fUrl[] safely
   one := pointer(fUrl);
   for i := 1 to length(fUrl) do
   begin
