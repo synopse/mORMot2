@@ -2767,7 +2767,8 @@ begin
   if fTimeoutSeconds = 0 then
     exit;
   tix := GetTickSec;
-  if fTimeoutTix > tix then
+  if (fTimeoutTix <> 0) and
+     (tix >= fTimeoutTix) then
     Reset;
   fTimeoutTix := tix + fTimeoutSeconds;
 end;
