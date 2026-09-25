@@ -343,10 +343,11 @@ type
     // - return true if something has been read or closed, false to retry later
     function ProcessRead(Sender: TSynThread;
       const notif: TPollSocketResult): boolean;
-    /// one thread should execute this method with the proper pseWrite notif
-    // - thread-safe handle of any outgoing packets
+    /// one or several threads could execute this method with the pseWrite notif
+    // - thread-safe handle of any outgoing packets using the writer lock
     // - sent  is the number of bytes already sent from connection.fWr buffer,
     // e.g. via TWinIocp.PrepareNext(wieSend)
+    // - iocpwaitms is used on Windows when called from the worker pool
     procedure ProcessWrite(const notif: TPollSocketResult; sent: integer
       {$ifdef USE_WINIOCP} ; iocpwaitms: integer = 20 {$endif});
     /// notify internal socket polls to stop their polling loop ASAP
@@ -554,8 +555,8 @@ type
   // - acoThreadSmooting will change the ThreadPollingWakeup() algorithm to
   // focus the process on the first threads of the pool - by design, this
   // setting will disable both acoThreadCpuAffinity and acoThreadSocketAffinity
-  // - acoIocpWriteDirect try sending data in the thread pool before relaying to
-  // the THttpAsyncServer writing thread - may reduce contention on Windows
+  // - acoIocpWriteDirect try sending data in the thread pool instead of the
+  // THttpAsyncServer writing thread - may help serving local files on Windows
   TAsyncConnectionsOptions = set of (
     acoOnErrorContinue,
     acoNoLogRead,
@@ -2414,7 +2415,7 @@ begin
         (ifWriteWait in connection.fInternalFlags) or
         (neWrite in connection.Socket.WaitFor(0, [neWrite, neError]))) and
        connection.WaitLock({writer=}true, iocpwaitms) then
-       // allow to wait a little since we are in a single W thread
+       // iocpwaitms allows to wait a little from the main W thread
     {$else}
     if connection.TryLock({writer=}true) then // no need to wait
     {$endif USE_WINIOCP}
@@ -6307,9 +6308,10 @@ begin
   if fServer <> nil then
     EHttpProxyServer.RaiseUtf8('Duplicated %.Start', [self]);
   // compute THttpAsyncServer options from settings
-  hso := [hsoNoXPoweredHeader,
-          hsoIncludeDateHeader,
-          hsoThreadSmooting];
+  hso := [hsoNoXPoweredHeader,  // we better hide ourself
+          hsoIncludeDateHeader, // as most proxies do
+          hsoThreadSmooting,    // won't hurt and seems the smoothest
+          hsoIocpWriteDirect];  // better IOCP scaling when serving files
   if Assigned(log) and
      (psoLogVerbose in fSettings.Server.Options) then
     include(hso, hsoLogVerbose);

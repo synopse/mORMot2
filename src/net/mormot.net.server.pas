@@ -495,6 +495,7 @@ type
   // - hsoRejectBotUserAgent identifies and rejects Bots via IsHttpUserAgentBot()
   // - hsoTextError will return a small and non-verbose UTF-8 text in case of
   // HTTP errors, instead of the default human-friendly HTML page
+  // - hsoIocpWriteDirect try to reduce IOCP async sending contention on Windows
   THttpServerOption = (
     hsoHeadersUnfiltered,
     hsoHeadersInterning,
@@ -516,7 +517,8 @@ type
     hsoTelemetryJson,
     hsoContentTypeNoGuess,
     hsoRejectBotUserAgent,
-    hsoTextError);
+    hsoTextError,
+    hsoIocpWriteDirect);
 
   /// how a THttpServerGeneric class is expected to process incoming requests
   THttpServerOptions = set of THttpServerOption;
