@@ -6410,7 +6410,8 @@ begin
           not (p^ in SCHEME_CHARS);
   UriScheme := usHttp; // fallback to http:// if no scheme specified
   if (aUriEnd - p >= 3) and
-     (PInteger(p)^ and $ffffff = HTTP__24) then // '://'
+     (p^ = ':') and
+     (PWord(p + 1)^ = SLASH_16) then // '://'
   begin
     FastSetString(Scheme, aUri, p);
     UriScheme := TUriScheme(FindPropName(@_US, Scheme, length(_US)) + ord(low(_US)));
@@ -6743,9 +6744,8 @@ begin
       if (s < refend) and
          (s^ = ':') then
       begin
-        if (PWord(s + 1)^ = SLASH_16) and
-           {(PCardinal(loc)^ and $dfdfdfdf = HTTP_32) and
-           (loc[4] in [':', 's', 'S']) and}
+        if (refend - s >= 3) and
+           (PWord(s + 1)^ = SLASH_16) and
            FromBuffer(loc, refend, '') and
            (UriScheme in [usHttp, usHttps]) then
           StoreParsedUri;
@@ -6760,6 +6760,15 @@ begin
       if loc <> refend then
         FromNetworkPath(loc, refend);
       exit;
+    end;
+    // RFC 3986 path-noscheme doesn't allow ':' in its first segment
+    s := loc;
+    while (s < refend) and
+          not (s^ in ['/', '?']) do
+    begin
+      if s^ = ':' then
+        exit;
+      inc(s);
     end;
     // all remaining URI-reference forms inherit the current origin
     if aServer = '' then
