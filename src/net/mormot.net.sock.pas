@@ -1811,6 +1811,12 @@ type
     /// fill the members from a set of parameters and URI scheme
     function FromScheme(aScheme: TUriScheme; const aServer: RawUtf8;
       const aPort: RawUtf8 = ''): boolean;
+    /// fill the members from a 'Location:' header value following RFC 3986
+    // - recognize e.g. 'http://server:port/address' but also '//server/address'
+    // - aUri is the current request target, and is replaced by the resolved one
+    // - aServer/aPort/aServerTls define the current request origin
+    function FromLocation(var aUri: RawUtf8; const aServer, aPort: RawUtf8;
+      aServerTls: boolean; const aLocation: RawUtf8): boolean;
     /// check if a connection need to be re-established to follow this URI
     function Same(const aServer, aPort: RawUtf8; aHttps: boolean): boolean;
     /// check if a connection need to be re-established to follow this URI
@@ -6563,6 +6569,262 @@ begin
   if Port = '' then
     Port := _US_PORT[aScheme];
   result := Server <> '';
+end;
+
+procedure _SplitUri(P, PEnd: PUtf8Char; out PathEnd, Query, RefEnd: PUtf8Char);
+begin
+  Query := nil;
+  PathEnd := PEnd;
+  RefEnd := PEnd;
+  while P < PEnd do
+    case P^ of
+      '?':
+        begin
+          if Query = nil then
+          begin
+            Query := P;
+            PathEnd := P;
+          end;
+          inc(P);
+        end;
+      '#':
+        begin
+          RefEnd := P;
+          if Query = nil then
+            PathEnd := P;
+          exit;
+        end;
+    else
+      inc(P);
+    end;
+end;
+
+procedure _AddPath(var V: TSynTempAdder; P, PEnd: PAnsiChar; Normalize: boolean);
+var
+  seg: PAnsiChar;
+  len: PtrInt;
+  slash: boolean;
+begin
+  if (P = nil) or
+     (P >= PEnd) then
+    exit;
+  if P^ = '/' then // '/' has already been emitted
+    inc(P);
+  if Normalize then
+    while P < PEnd do
+    begin
+      seg := P;
+      while (P < PEnd) and
+            (P^ <> '/') do
+        inc(P);
+      len := P - seg;
+      slash := P < PEnd;
+      if (len <> 1) or
+         (seg^ <> '.') then // skip '.' segment
+        if (len = 2) and
+           (PWord(seg)^ = DOT_16) then // '..' go back one segment
+        begin
+          len := V.Size;
+          if len > 1 then // never go above root '/'
+          begin
+            seg := V.Buffer;
+            if seg[len - 1] = '/' then
+              dec(len);
+            while (len > 1) and
+                  (seg[len - 1] <> '/') do
+              dec(len);
+            V.Size := len;
+          end;
+        end
+        else
+        begin
+          // also preserve empty segments, i.e. duplicate '//'
+          if len <> 0 then
+            V.Add(seg, len);
+          if slash then
+            V.Add('/');
+        end;
+      if slash then
+        inc(P);
+    end
+  else
+    V.Add(P, PEnd - P); // append existing raw path
+end;
+
+function TUri.FromLocation(var aUri: RawUtf8; const aServer, aPort: RawUtf8;
+  aServerTls: boolean; const aLocation: RawUtf8): boolean;
+var
+  p, pe, q, s, raw, rawend, loc, locend, refend, locrefend: PUtf8Char;
+  base, baseend, basepathend, basequery, baserefend: PUtf8Char;
+  root: AnsiChar;
+
+  procedure StoreTarget(Path1, Path1End, Path2, Path2End,
+    Query, QueryEnd: PAnsiChar; Normalize: boolean);
+  var
+    tmp: TSynTempAdder;
+  begin
+    tmp.Init;
+    tmp.AddDirect('/'); // all HTTP request-target paths should be absolute
+    _AddPath(tmp, Path1, Path1End, Normalize);
+    _AddPath(tmp, Path2, Path2End, Normalize);
+    if (Query <> nil) and
+       (Query < QueryEnd) then
+      tmp.Add(Query, QueryEnd - Query); // Query includes its leading '?'
+    FastSetString(Address, PUtf8Char(tmp.Buffer) + 1, tmp.Size - 1); // no '/'
+    tmp.Done(aUri);
+    result := true;
+  end;
+
+  procedure StoreParsedUri;
+  var
+    a, pathend, query, parsedend: PAnsiChar;
+  begin
+    a := pointer(Address);
+    if a = nil then
+    begin
+      StoreTarget(nil, nil, nil, nil, nil, nil, {normalize=}true);
+      exit;
+    end;
+    _SplitUri(a, a + length(Address), pathend, query, parsedend);
+    StoreTarget(a, pathend, nil, nil, query, parsedend, true);
+  end;
+
+  procedure FromNetworkPath(loc, refend: PUtf8Char);
+  var
+    tmp: TSynTempAdder;
+  begin
+    tmp.Init;
+    tmp.Add(HTTPS_TEXT[aServerTls]);
+    tmp.Add(loc, refend - loc);
+    if FromBuffer(tmp.Buffer, PUtf8Char(tmp.Buffer) + tmp.Size, '') then
+      StoreParsedUri;
+    tmp.Store.Done;
+  end;
+
+begin
+  result := false;
+  Clear;
+  // trim Location: without allocating
+  raw := pointer(aLocation);
+  if raw = nil then
+    exit;
+  rawend := raw + length(aLocation);
+  loc := raw;
+  locend := rawend;
+  while (loc < locend) and
+        (loc^ <= ' ') do
+    inc(loc);
+  while (locend > loc) and
+        ((locend - 1)^ <= ' ') do
+    dec(locend);
+  if loc = locend then
+    exit;
+  // reject embedded whitespace/control bytes and locate #fragment
+  refend := locend;
+  p := loc;
+  while p < locend do
+  begin
+    if p^ <= ' ' then
+      exit; // embedded #0 / HT / CR / LF / SP
+    if (p^ = '#') and
+       (refend = locend) then
+      refend := p;
+    inc(p);
+  end;
+  try
+    // absolute URI: let TUri.From() parse scheme/authority/userinfo
+    s := loc;
+    if s^ in ['a'..'z', 'A'..'Z'] then
+    begin
+      repeat
+        inc(s);
+      until (s >= refend) or
+            not (s^ in SCHEME_CHARS);
+      if (s < refend) and
+         (s^ = ':') then
+      begin
+        // HTTP(S) absolute URI requires ://
+        // PInteger() may safely use the terminating RawUtf8 #0 as byte 4
+        if (refend - s < 3) or
+           (PInteger(s)^ and $ffffff <> HTTP__24) then
+          exit;
+        if (loc = raw) and
+           (refend = rawend) then
+        begin
+          // common path: no trimming and no fragment
+          if not From(aLocation) then
+            exit;
+        end
+        else
+        begin
+          // TUri.From() should not see the fragment nor trimmed whitespace
+          if not FromBuffer(loc, refend, '') then
+            exit;
+        end;
+        if UriScheme in [usHttp, usHttps] then
+          StoreParsedUri;
+        exit;
+      end;
+    end;
+    // network-path reference: //server/path
+    if (refend - loc >= 2) and
+       (PWord(loc)^ = SLASH_16) then
+    begin
+      FromNetworkPath(loc + 2, refend); // + 2 to skip initial '//'
+      exit;
+    end;
+    // all remaining URI-reference forms inherit the current origin
+    if aServer = '' then
+      exit;
+  finally
+    if not result then
+      Clear;
+  end;
+  // refend already excludes the Location fragment
+  _SplitUri(loc, refend, pe, q, locrefend);
+  // split the existing request-target
+  if aUri = '' then
+  begin
+    root := '/';
+    base := @root;
+    baseend := base + 1;
+  end
+  else
+  begin
+    base := pointer(aUri);
+    baseend := base + length(aUri);
+  end;
+  _SplitUri(base, baseend, basepathend, basequery, baserefend);
+  // set current origin
+  Server := aServer;
+  Port := aPort;
+  Https := aServerTls;
+  if Https then
+    UriScheme := usHttps
+  else
+    UriScheme := usHttp;
+  Scheme := _US[UriScheme];
+  if Port = '' then
+    Port := _US_PORT[UriScheme];
+  if pe = loc then // empty reference path
+    // RFC 3986 inherits the base path verbatim here: normalize=false below
+    if q <> nil then // same path, replace query
+      StoreTarget(base, basepathend, nil, nil, q, locrefend, {normalize=}false)
+    else             // same path and same query
+      StoreTarget(base, basepathend, nil, nil, basequery, baserefend, false)
+  else if loc^ = '/' then
+    // absolute-path reference
+    StoreTarget(loc, pe, nil, nil, q, locrefend, {normalize=}true)
+  else
+  begin
+    // merge relative-path reference
+    s := basepathend;
+    while (s > base) and
+          ((s - 1)^ <> '/') do
+      dec(s);
+    // normalize base-directory + relative path
+    StoreTarget(base, s, loc, pe, q, locrefend, {normalize=}true);
+  end;
 end;
 
 function TUri.Same(const aServer, aPort: RawUtf8; aHttps: boolean): boolean;
