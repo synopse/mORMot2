@@ -5339,7 +5339,8 @@ end;
 function TRestServerAuthenticationSignedUri.RetrieveSession(
   Ctxt: TRestServerUriContext): TAuthSession;
 var
-  ts, sign, minticks, expectedsign: cardinal;
+  ts, sign, last, expectedsign: cardinal;
+  delta: integer;
   P: PAnsiChar;
   reslen: PtrInt;
 begin
@@ -5360,33 +5361,38 @@ begin
   if result = nil then
     exit; // unknown Session
   P := @P[reslen + (19 + 8)]; // points to Hexa8(Timestamp)
-  minticks := result.fLastClientTimestamp - fTimestampCoherencyTicks;
-  if HexDisplayToCardinal(P, ts) and
-     (fNoTimestampCoherencyCheck or
-      (integer(minticks) < 0) or // <0 just after computer startup
-      ({%H-}ts >= minticks)) then
+  last := result.fLastClientTimestamp;
+  if HexDisplayToCardinal(P, ts) then
   begin
-    expectedsign := fComputeSignature(result.fPrivateSaltHash,
-      P, pointer(Ctxt.Call^.Url), reslen);
-    if HexDisplayToCardinal(P + 8, sign) and // Hexa8(Signature)
-       ({%H-}sign = expectedsign) then
+    // signed modular distance between two 32-bit timestamps:
+    // > 0 = newer, < 0 = older, also across cardinal rollover
+    delta := integer(ts - last);
+    if fNoTimestampCoherencyCheck or
+       (last = 0) or
+       (delta >= -integer(fTimestampCoherencyTicks)) then
     begin
-      if not fNoTimestampCoherencyCheck then
-        if ts > result.fLastClientTimestamp then
-          result.fLastClientTimestamp := ts;
-      Ctxt.SessionAssign(result); // set TimeOutTix and fill Ctxt.Session*
-      exit; // success
+      expectedsign := fComputeSignature(result.fPrivateSaltHash,
+        P, pointer(Ctxt.Call^.Url), reslen);
+      if HexDisplayToCardinal(P + 8, sign) and // Hexa8(Signature)
+         ({%H-}sign = expectedsign) then
+      begin
+        if not fNoTimestampCoherencyCheck then
+          if (last = 0) or
+             (delta > 0) then
+            result.fLastClientTimestamp := ts;
+        Ctxt.SessionAssign(result); // set TimeOutTix and fill Ctxt.Session*
+        exit;                       // success
+      end
+      else if Assigned(Ctxt.fLog) and
+              (sllUserAuth in fServer.fLogLevel) then
+        Ctxt.fLog.Log(sllUserAuth, 'Invalid Signature: expected %, got %',
+          [CardinalToHexShort(expectedsign), CardinalToHexShort(sign)], self);
     end
     else if Assigned(Ctxt.fLog) and
             (sllUserAuth in fServer.fLogLevel) then
-      Ctxt.fLog.Log(sllUserAuth, 'Invalid Signature: expected %, got %',
-        [CardinalToHexShort(expectedsign),
-         CardinalToHexShort(sign)], self);
-  end
-  else if Assigned(Ctxt.fLog) and
-          (sllUserAuth in fServer.fLogLevel) then
-    Ctxt.fLog.Log(sllUserAuth, 'Invalid Timestamp: expected >=%, got %',
-      [Int64(minticks), Int64(ts)], self);
+      Ctxt.fLog.Log(sllUserAuth, 'Invalid Timestamp: delta=% tolerance=%',
+        [delta, fTimestampCoherencyTicks], self);
+  end;
   result := nil; // indicates invalid signature
 end;
 
