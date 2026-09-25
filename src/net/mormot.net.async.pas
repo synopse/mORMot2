@@ -556,7 +556,7 @@ type
   // focus the process on the first threads of the pool - by design, this
   // setting will disable both acoThreadCpuAffinity and acoThreadSocketAffinity
   // - acoIocpWriteDirect try sending data in the thread pool instead of the
-  // THttpAsyncServer writing thread - may help serving local files on Windows
+  // THttpAsyncConnections writing thread - may help serving files on Windows
   TAsyncConnectionsOptions = set of (
     acoOnErrorContinue,
     acoNoLogRead,
@@ -3697,7 +3697,7 @@ begin
       gc := sec - gc;
   allowed := GetLastOperationIdleSeconds; // e.g. WebSockets HeartbeatDelay
   if allowed <> 0 then
-    if allowed < gc then
+    if sec < allowed then
       allowed := 0
     else
       allowed := sec - allowed;
