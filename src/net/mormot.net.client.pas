@@ -349,7 +349,7 @@ type
     Token: SpiUtf8;
   end;
 
-  /// define optional restrictions when following HTTP redirections
+  /// define optional behaviors when following HTTP redirections
   // - hroPurgeAuthorization won't forward origin Authorization credentials
   // after a cross-origin redirection
   // - hroPurgeCookie won't forward an explicit Cookie: header after a
@@ -361,6 +361,8 @@ type
   // name or port
   // - hroRejectUserInfo won't follow a redirection whose URI contains explicit
   // user authentication information like https://user:pass@server/
+  // - hroForceReconnect close and reopen the underlying connection on any
+  // redirection, including same-origin - circumvent e.g. HEAD E2Guardian bug
   // - rejected redirections are returned as their original 3xx response,
   // including the Location: header
   THttpRedirectOption = (
@@ -369,9 +371,10 @@ type
     hroPurgeReferer,
     hroRejectDowngrade,
     hroRejectCrossOrigin,
-    hroRejectUserInfo);
+    hroRejectUserInfo,
+    hroForceReconnect);
 
-  /// set of optional restrictions when following HTTP redirections
+  /// set of optional behaviors and restrictions when following HTTP redirections
   // - default [] keeps an unrestricted behavior for backward compatibility
   THttpRedirectOptions = set of THttpRedirectOption;
 
@@ -4391,7 +4394,8 @@ begin
         end;
         fRedirected := newuri.Address;
         if crossorigin or
-           (hfConnectionClose in Http.HeaderFlags) then
+           (hfConnectionClose in Http.HeaderFlags) or
+           (hroForceReconnect in fExtendedOptions.RedirectOptions) then
         begin
           Close; // relocated to another server -> reset the TCP connection
           try
