@@ -5292,24 +5292,26 @@ begin
   // validate TUri.FromScheme wrapper
   Check(U.FromScheme(usHttp, 'server'));
   Check(U.UriScheme = usHttp);
+  CheckEqual(U.Scheme, 'http');
   CheckEqual(U.URI, 'http://server/');
-  Check(U.FromScheme(usWs, 'server'));
-  Check(U.UriScheme = usWs);
-  CheckEqual(U.URI, 'ws://server/');
+  Check(U.SameUri('http://server'));
   Check(U.FromScheme(usHttps, 'server'));
   Check(U.UriScheme = usHttps);
+  CheckEqual(U.Scheme, 'https');
+  Check(U.Https);
   CheckEqual(U.URI, 'https://server/');
+  Check(U.SameUri('https://server'));
+  Check(U.FromScheme(usWs, 'server'));
+  CheckEqual(U.Scheme, 'ws');
+  CheckEqual(U.URI, 'ws://server/');
   Check(U.FromScheme(usWss, 'server'));
-  Check(U.UriScheme = usWss);
+  CheckEqual(U.Scheme, 'wss');
   CheckEqual(U.URI, 'wss://server/');
   Check(U.FromScheme(usFtp, 'server'));
-  Check(U.UriScheme = usFtp);
+  CheckEqual(U.Scheme, 'ftp');
   CheckEqual(U.URI, 'ftp://server/');
-  Check(U.FromScheme(usFtps, 'server'));
-  CheckEqual(U.URI, 'ftps://server/');
-  Check(U.FromScheme(usLdap, 'server'));
-  CheckEqual(U.URI, 'ldap://server/');
   Check(U.FromScheme(usLdaps, 'server'));
+  CheckEqual(U.Scheme, 'ldaps');
   CheckEqual(U.URI, 'ldaps://server/');
   // validate THttpCookies and CookieFromHeaders()
   hc.ParseServer('');

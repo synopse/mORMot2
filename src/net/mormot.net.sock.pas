@@ -6566,6 +6566,7 @@ begin
       Layer := nlUdp;
   end;
   UriScheme := aScheme;
+  Scheme := _US[aScheme];
   Server := aServer;
   Port := aPort;
   if Port = '' then
