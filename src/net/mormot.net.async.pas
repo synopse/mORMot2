@@ -347,7 +347,8 @@ type
     // - thread-safe handle of any outgoing packets
     // - sent  is the number of bytes already sent from connection.fWr buffer,
     // e.g. via TWinIocp.PrepareNext(wieSend)
-    procedure ProcessWrite(const notif: TPollSocketResult; sent: integer);
+    procedure ProcessWrite(const notif: TPollSocketResult; sent: integer
+      {$ifdef USE_WINIOCP} ; iocpwaitms: integer = 20 {$endif});
     /// notify internal socket polls to stop their polling loop ASAP
     procedure Terminate(waitforMS: integer);
     /// some processing options
@@ -553,6 +554,8 @@ type
   // - acoThreadSmooting will change the ThreadPollingWakeup() algorithm to
   // focus the process on the first threads of the pool - by design, this
   // setting will disable both acoThreadCpuAffinity and acoThreadSocketAffinity
+  // - acoIocpWriteDirect try sending data in the thread pool before relaying to
+  // the THttpAsyncServer writing thread - may reduce contention on Windows
   TAsyncConnectionsOptions = set of (
     acoOnErrorContinue,
     acoNoLogRead,
@@ -566,7 +569,8 @@ type
     acoThreadSocketAffinity,
     acoReusePort,
     acoThreadSmooting,
-    acoWriteNoLoop
+    acoWriteNoLoop,
+    acoIocpWriteDirect
   );
 
   /// dynamic array of TAsyncConnectionsThread instances
@@ -2385,8 +2389,8 @@ begin
   end;
 end;
 
-procedure TPollAsyncSockets.ProcessWrite(
-  const notif: TPollSocketResult; sent: integer);
+procedure TPollAsyncSockets.ProcessWrite(const notif: TPollSocketResult;
+  sent {$ifdef USE_WINIOCP} , iocpwaitms {$endif}: integer);
 var
   connection: TPollAsyncConnection;
   buf: PByte;
@@ -2409,7 +2413,7 @@ begin
     if ((connection.fSecure = nil) or // ensure TLS won't actually block
         (ifWriteWait in connection.fInternalFlags) or
         (neWrite in connection.Socket.WaitFor(0, [neWrite, neError]))) and
-       connection.WaitLock({writer=}true, {timeout=}20) then
+       connection.WaitLock({writer=}true, iocpwaitms) then
        // allow to wait a little since we are in a single W thread
     {$else}
     if connection.TryLock({writer=}true) then // no need to wait
@@ -2486,9 +2490,9 @@ begin
       if fDebugLog <> nil then
         DoLog('ProcessWrite: WaitLock failed % -> will retry later',
           [pointer(connection)]);
-      SleepHiRes(0); // avoid switch threads for nothing
-      {$ifdef USE_WINIOCP} // add to main IOCP queue, but no PrepareNextWrite
+      {$ifdef USE_WINIOCP} // back to main IOCP queue, but no PrepareNextWrite
       fIocpRecvSend.Enqueue(connection.fIocpSub, wieSend, sent);
+      // retry later without blocking any wieRecv notifications
       {$endif USE_WINIOCP}
     end;
   finally
@@ -2767,14 +2771,21 @@ begin
             fOwner.fSockets.ProcessRead(self, notif);
           end;
         wieSend:
-          // writes are done in the single (and main) fOwner.Execute thread
-          // -> just relay this event to the IOCP queue handling acceptex()
-          // process, i.e. TAsyncServer.DoExecute
-          fOwner.fIocpAccept.Enqueue(sub, e, bytes);
+          if acoIocpWriteDirect in fOwner.fOptions then
+          begin
+            // use this thread of the poll to try to lock and send with no delay
+            SetRes(notif, sub^.Tag, [pseWrite]);
+            fOwner.fSockets.ProcessWrite(notif, bytes, {waitms=}0);
+          end
+          else
+            // writes are done in the single (and main) fOwner.Execute thread
+            // -> just relay this event to the IOCP queue handling acceptex()
+            // process, i.e. TAsyncServer.DoExecute
+            fOwner.fIocpAccept.Enqueue(sub, e, bytes);
         wieConnect: // from THttpAsyncClientConnections.StartRequest
           begin
             SetRes(notif, sub^.Tag, [pseWrite]);
-            fOwner.fSockets.ProcessWrite(notif, 0);
+            fOwner.fSockets.ProcessWrite(notif, {sent=}0, {waitms=}0);
           end;
       end;
     end;
@@ -5389,6 +5400,10 @@ begin
   end;
   if hsoReusePort in ProcessOptions then
     include(aco, acoReusePort);
+  {$ifdef USE_WINIOCP}
+  if hsoIocpWriteDirect in ProcessOptions then
+    include(aco, acoIocpWriteDirect);
+  {$endif USE_WINIOCP}
   if fConnectionClass = nil then
     fConnectionClass := THttpAsyncServerConnection;
   if fConnectionsClass = nil then
