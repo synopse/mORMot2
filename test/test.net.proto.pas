@@ -6566,9 +6566,9 @@ begin
       if res = crOk then
         CheckEqual(rd, orig, 'http root');
       // final checks and global performance benchmark
-      CheckEqual(srv.ConnectionTotal, 5, 'srv.ConnectionTotal');
-      NotifyTestSpeed('TFTP request', srv.ConnectionTotal,
-        length(orig) * srv.ConnectionTotal, @timer);
+      CheckUtf8(srv.ConnectionTotal >= 5, // additional RRQs/retries happen
+        'srv.ConnectionTotal=%', [srv.ConnectionTotal]);
+      NotifyTestSpeed('TFTP request', srv.ConnectionTotal, length(orig) * 5, @timer);
       srv.TerminateAndWaitFinished(1000);
     finally
       srv.Free;
