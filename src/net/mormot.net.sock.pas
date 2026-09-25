@@ -1797,7 +1797,7 @@ type
     Address: RawUtf8;
     /// reset all stored information
     procedure Clear;
-    /// fill the members from a supplied URI
+    /// fill the members from a supplied URI string
     // - recognize e.g. 'http://server:port/address', 'https://server/address',
     // 'server/address' or 'server' (as http), 'http://unix:/server:/address' (as
     // nlUnix), 'https://user:password@server:port/address' (authenticated),
@@ -1805,6 +1805,9 @@ type
     // - supports RFC 3986 IPv6 litterals like 'https://[::1]:123/tata'
     // - returns TRUE if the Server has been extracted and is not ''
     function From(const aUri: RawUtf8; const DefaultPort: RawUtf8 = ''): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// fill the members from a URI supplied as UTF-8 buffer
+    function FromBuffer(aUri, aUriEnd: PUtf8Char; const DefaultPort: RawUtf8): boolean;
     /// fill the members from a set of parameters and URI scheme
     function FromScheme(aScheme: TUriScheme; const aServer: RawUtf8;
       const aPort: RawUtf8 = ''): boolean;
@@ -3234,8 +3237,8 @@ end;
 function IsUnix(Name: PUtf8Char): boolean;
 begin
   result := (Name <> nil) and (PCardinal(Name)^ and $dfdfdfdf =
-    ord('U') + ord('N') shl 8 + ord('I') shl 16 + ord('X') shl 24) and
-    (PWord(Name + 4)^ = ord(':') + ord('/') shl 8);
+              ord('U') + ord('N') shl 8 + ord('I') shl 16 + ord('X') shl 24) and
+            (PWord(Name + 4)^ = ord(':') + ord('/') shl 8);
 end;
 
 function GetSocketAddressFromCache(const address, port: RawUtf8; layer: TNetLayer;
@@ -6357,131 +6360,188 @@ begin
   Finalize(self); // reset all RawUtf8 fields
 end;
 
+function TUri.From(const aUri: RawUtf8; const DefaultPort: RawUtf8): boolean;
+var
+  p: PUtf8Char;
+begin
+  p := pointer(aUri);
+  result := (p <> nil) and
+            FromBuffer(p, p + PStrLen(p - _STRLEN)^, DefaultPort);
+end;
+
 const
   _US: array[usHttp .. high(TUriScheme)] of RawUtf8 = (
     'http', 'ws', 'https', 'wss', 'udp', 'file', 'ftp', 'ftps', 'ldap', 'ldaps');
   _US_PORT: array[TUriScheme] of RawUtf8 = (
     '', '', '80', '80', '443', '443', '', '', '20', '989', '389', '636');
+  SCHEME_CHARS = ['a'..'z', 'A'..'Z', '+', '-', '.', '0'..'9'];
 
-function TUri.From(const aUri: RawUtf8; const DefaultPort: RawUtf8): boolean;
+function TUri.FromBuffer(aUri, aUriEnd: PUtf8Char; const DefaultPort: RawUtf8): boolean;
 var
-  p, s, p1, p2: PAnsiChar;
-  i: PtrInt;
+  p, authorityend, at, c, portend: PUtf8Char;
 begin
   Clear;
   result := false;
-  // trim left
-  s := pointer(aUri);
-  if s = nil then
+  if aUri = nil then
     exit;
-  while s^ <= ' ' do
-    if s^ = #0 then
-      exit
-    else
-      inc(s);
-  // parse Scheme
-  p := s;
-  while s^ in ['a'..'z', 'A'..'Z', '+', '-', '.', '0'..'9'] do
-    inc(s);
-  UriScheme := usHttp; // fallback to http:// if no scheme specified
-  if PInteger(s)^ and $ffffff = HTTP__24 then // '://'
+  while (aUri < aUriEnd) and       // trim left
+        (aUri^ <= ' ') do
+    inc(aUri);
+  while (aUriEnd > aUri) and
+        ((aUriEnd - 1)^ <= ' ') do // trim right
+    dec(aUriEnd);
+  if aUri = aUriEnd then
+    exit;
+  p := aUri;
+  while p < aUriEnd do             // reject control chars
   begin
-    FastSetString(Scheme, p, s);
+    if p^ < ' ' then
+      exit;
+    inc(p);
+  end;
+  // parse Scheme
+  p := aUri;
+  while (p < aUriEnd) and
+        (p^ in SCHEME_CHARS) do
+    inc(p);
+  UriScheme := usHttp; // fallback to http:// if no scheme specified
+  if (aUriEnd - p >= 3) and
+     (PInteger(p)^ and $ffffff = HTTP__24) then // '://'
+  begin
+    FastSetString(Scheme, aUri, p);
     UriScheme := TUriScheme(FindPropName(@_US, Scheme, length(_US)) + ord(low(_US)));
     case UriScheme of
       usHttps,
-      usWss:  // wss:// is just an upgraded https:
+      usWss:
         Https := true;
-      usUdp:  // 'udp://server:port'
+      usUdp:
         Layer := nlUdp;
-      usFile: // https://en.wikipedia.org/wiki/File_URI_scheme#Number_of_slash_characters
-        if cardinal(PWord(s + 3)^) = SLASH_16 then
-          inc(s, 2); // support 'file:////server/folder/data.xml' form
+      usFile:
+        if (aUriEnd - p >= 5) and
+           (PWord(p + 3)^ = SLASH_16) then
+          inc(p, 2); // support file:////server/folder/data.xml
     end;
-    p := s + 3;
-  end;
-  // parse Server
-  if (PCardinal(p)^ and $dfdfdfdf = ord('U') + ord('N') shl 8 + ord('I') shl 16 +
-       ord('X') shl 24) and (PWord(p + 4)^ = ord(':') + ord('/') shl 8) then
+    p := p + 3;
+  end
+  else
+    p := aUri;
+  // our custom http://unix:/path/to/socket.sock:/url/path syntax
+  if (aUriEnd - p >= 6) and
+     IsUnix(p) then
   begin
-    inc(p, 5); // 'http://unix:/path/to/socket.sock:/url/path'
+    inc(p, 5); // skip 'unix:'
+    aUri := p;
+    while (aUri < aUriEnd) and
+          (aUri^ <> ':') do
+    begin
+      if aUri^ in ['?', '#'] then
+        exit;
+      inc(aUri);
+    end;
+    if aUri = aUriEnd then
+      exit;
+    FastSetString(Server, p, aUri); // '/path/to/socket.sock'
     Layer := nlUnix;
-    s := p;
-    while not (s^ in [#0, ':']) do
-      inc(s);
-    FastSetString(Server, p, s); // Server='/path/to/socket.sock'
+    // keep the existing "empty port before /address" semantics
+    inc(aUri); // skip ':'
+    while (aUri < aUriEnd) and
+          (aUri^ = ' ') do
+      inc(aUri);
+    p := aUri;
+    while (aUri < aUriEnd) and
+          not (aUri^ in ['/', '?', '#']) do
+      inc(aUri);
+    FastSetString(Port, p, aUri);
   end
   else
   begin
-    p1 := pointer(PosChar(pointer(p), '@')); // use fast SSE2 asm on x86_64
-    if p1 <> nil then
+    // locate the end of the authority first, so that @ in path/query/fragment
+    // is never interpreted as userinfo
+    authorityend := p;
+    while (authorityend < aUriEnd) and
+          not (authorityend^ in ['/', '?', '#']) do
+      inc(authorityend);
+    // optional userinfo before '@'
+    at := p;
+    while (at < authorityend) and
+          (at^ <> '@') do
+      inc(at);
+    if at < authorityend then
     begin
-      // parse 'https://user:password@server:port/address'
-      p2 := pointer(PosChar(pointer(p), '/'));
-      if (p2 = nil) or
-         (PtrUInt(p2) > PtrUInt(p1)) then
+      // reject more than one raw '@' in the authority
+      c := at + 1;
+      while c < authorityend do
       begin
-        FastSetString(User, p, p1);
-        i := PosExChar(':', User);
-        if i <> 0 then
-        begin
-          TrimCopy(User, i + 1, 1000, Password);
-          SetLength(User, i - 1);
-        end;
-        p := p1 + 1;
+        if c^ = '@' then
+          exit;
+        inc(c);
       end;
+      // split user[:password] without allocating an intermediate User value
+      c := p;
+      while (c < at) and
+            (c^ <> ':') do
+        inc(c);
+      FastSetString(User, p, c);
+      if c < at then
+        FastSetString(Password, c + 1, at);
+      p := at + 1;
     end;
-    s := p;
-    if s^ = '[' then
+    // parse Server, with special handling for [IPv6]
+    aUri := p;
+    if (aUri < authorityend) and
+       (aUri^ = '[') then
     begin
-      // '[ip6::1]:port/address' or '[ip6::1]/address'
-      repeat
-        inc(s);
-        if s^ <= ' ' then
-          exit; // #0 or ' ' are invalid in an IPv6
-      until s^ = ']';
-      FastSetString(Server, p, s - p + 1);
-      repeat
-        inc(s); // ignore ending ']'
-      until s^ <> ' ';
+      inc(aUri);
+      while (aUri < authorityend) and
+            (aUri^ <> ']') do
+        inc(aUri);
+      if aUri = authorityend then
+        exit;    // missing closing ']'
+      inc(aUri); // include ']'
+      FastSetString(Server, p, aUri);
+      while (aUri < authorityend) and
+            (aUri^ = ' ') do
+        inc(aUri);
     end
     else
     begin
-      // regular 'server:port/address' or 'server/address'
-      while not (s^ in [#0, ':', '/', '?']) do
-        inc(s);
-      FastSetString(Server, p, s);
+      while (aUri < authorityend) and
+            (aUri^ <> ':') do
+        inc(aUri);
+      FastSetString(Server, p, aUri);
     end;
+    // optional Port - don't consume ?query or #fragment
+    if aUri < authorityend then
+    begin
+      if aUri^ <> ':' then
+        exit;
+      inc(aUri);
+      while (aUri < authorityend) and
+            (aUri^ = ' ') do
+        inc(aUri);
+      p := aUri;
+      portend := authorityend;
+      while (portend > p) and
+            ((portend - 1)^ = ' ') do
+        dec(portend);
+      FastSetString(Port, p, portend);
+    end
+    else if Server <> '' then
+      if DefaultPort <> '' then
+        Port := DefaultPort
+      else
+        Port := _US_PORT[UriScheme];
+    aUri := authorityend;
   end;
-  // optional Port
-  if Server <> '' then // we need a server to have a port
-    if s^ = ':' then
-    begin
-      repeat
-        inc(s);
-      until s^ <> ' ';
-      p := s;
-      while not (s^ in [#0, '/']) do
-        inc(s);
-      FastSetString(Port, p, s); // Port='' for nlUnix
-    end
-    else if DefaultPort <> '' then
-      Port := DefaultPort
-    else
-      Port := _US_PORT[UriScheme];
-  // all the remaining text is the Address
-  if s^ <> #0 then // ':' or '/' or '?'
+  // remaining path/query/fragment
+  if aUri < aUriEnd then
   begin
-    if s^ <> '?' then
-      inc(s);
-    i := StrLen(s);
-    while (i > 0) and
-          (s[i - 1] <= ' ') do
-      dec(i); // trim right
-    FastSetString(Address, s, i);
+    if aUri^ = '/' then
+      inc(aUri); // Address never starts with the URI path'aUri first '/'
+    // keep '?' and '#' delimiters when there is no path
+    FastSetString(Address, aUri, aUriEnd);
   end;
-  if Server <> '' then
-    result := true;
+  result := Server <> '';
 end;
 
 function TUri.FromScheme(aScheme: TUriScheme; const aServer, aPort: RawUtf8): boolean;
