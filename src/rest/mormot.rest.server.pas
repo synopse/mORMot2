@@ -4933,7 +4933,7 @@ end;
 procedure TAuthSession.ComputeProtectedValues(tix: Int64);
 begin
   // here User.GroupRights and fPrivateKey should have been set
-  fTimeOutShr10 := User.GroupRights.SessionTimeout * (MilliSecsPerMin shr 10);
+  fTimeOutShr10 := (QWord(User.GroupRights.SessionTimeout) * MilliSecsPerMin) shr 10;
   fTimeOutTix := tix shr 10 + fTimeOutShr10;
   fAccessRights := User.GroupRights.OrmAccessRights;
   Make([fID, '+', fPrivateKey], fPrivateSalt); // 'SessionID+PrivateKey'
