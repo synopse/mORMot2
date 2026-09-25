@@ -5690,7 +5690,7 @@ begin
     hrtWeekly:
       begin
         needrotate := Size >= 100 shl 20; // always rotate above 100MB
-        if NextTix32 >= Tix32 then
+        if Tix32 >= NextTix32 then
         begin
           NextTix32 := Tix32 + 60 * 60; // check TriggerDate every hour
           dt := NowUtc;
@@ -5776,6 +5776,7 @@ begin
   try
     Trigger := aTrigger;
     Files := aFiles;
+    NextTix32 := 0; // force date check on next TryRotate()
     PrepareNextRotateDate(0);
   finally
     Rotating.UnLock;
