@@ -3993,11 +3993,13 @@ begin
       // prepare headers
       RequestSendHeader(ctxt.Url, ctxt.Method);
       buflen := fSndBufLen;
-      if ctxt.KeepAliveSec <> 0 then
-        SockSend(['Connection: Keep-Alive'#13#10 +
-                  'Keep-Alive: timeout=', ctxt.KeepAliveSec]) // as seconds
+      if ctxt.KeepAliveSec = 0 then
+        SockSend('Connection: Close')
+      else if fProxyHttp in fFlags then
+        SockSend('Proxy-Connection: Keep-Alive') // as curl does
       else
-        SockSend('Connection: Close');
+        SockSend(['Connection: Keep-Alive'#13#10 +
+                  'Keep-Alive: timeout=', ctxt.KeepAliveSec]);
       dat := ctxt.Data; // local var copy for Data to be compressed in-place
       if ctxt.InStream <> nil then
         // InStream may be a THttpMultiPartStream -> Seek(0) calls Flush, so
