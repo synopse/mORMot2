@@ -3013,7 +3013,7 @@ begin
   ObjArrayAdd(fGC1.Items, aConnection, fGC1.Safe, @fGC1.Count); // to 1st gen
 end;
 
-function OneGC(var gen, dst: TPollAsyncConnections; lastms, oldms: cardinal): PtrInt;
+function OneGC(var gen, dst: TPollAsyncConnections; lastms, delayms: cardinal): PtrInt;
 var
   c: PAsyncConnection;
   ms, n: cardinal;
@@ -3024,13 +3024,18 @@ begin
   if n = 0 then
     exit;
   d := dst.Count;
-  if oldms < 50 then
-    oldms := 50; // bare minimum for GC#1
-  oldms := lastms - oldms;
+  if delayms < 50 then
+    delayms := 50; // bare minimum for GC#1
   c := pointer(gen.Items);
   repeat
     ms := c^.fLastOperation;
-    if ms <= oldms then // AddGC() set c.fLastOperation as ms
+    if ms > lastms then
+    begin
+      // 32-bit (49 days) rollover, or timestamp newer than our lastms snapshot
+      c^.fLastOperation := lastms;
+      ms := lastms;
+    end;
+    if lastms - ms >= delayms then
     begin
       // move to next generation list after timeout
       if d = length(dst.Items) then
@@ -3040,9 +3045,6 @@ begin
     end
     else
     begin
-      if ms > lastms then
-        // need to reset time flag every 49.7 days (32-bit unlikely overflow)
-        c^.fLastOperation := lastms; // will wait twice the delay
       gen.Items[result] := c^; // keep
       inc(result);
     end;
