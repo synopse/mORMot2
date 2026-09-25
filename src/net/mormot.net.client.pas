@@ -796,7 +796,6 @@ type
     InStream, OutStream: TStream;
     KeepAliveSec: cardinal;
     Retry: set of (rMain, rAuth, rAuthProxy); // auth + retry state machine
-    RedirectCrossOrigin: boolean;             // set for OnRedirect
     RedirectOptions: THttpRedirectOptions;    // for OnRedirect customization
     OutStreamInitialPos: Int64;
   end;
@@ -4234,6 +4233,7 @@ var
   ctxt: THttpClientRequest;
   newuri: TUri;
   u: RawUtf8;
+  crossorigin: boolean;
 begin
   // prepare the execution
   fRequestContext := '';
@@ -4345,8 +4345,8 @@ begin
         OutStream.Position := ctxt.OutStreamInitialPos; // reset position
       end;
       if Assigned(OnLog) then
-        OnLog(sllTrace, 'Request % % redirected to %', [ctxt.Method, url, ctxt.Url], self);
-      ctxt.RedirectCrossOrigin := not newuri.Same(Server, Port, ServerTls);
+        OnLog(sllTrace, 'Request % % redirected to %',
+          [ctxt.Method, u, ctxt.Url], self);
       ctxt.RedirectOptions := fExtendedOptions.RedirectOptions;
       if Assigned(fOnRedirect) then
         if not fOnRedirect(self, ctxt) then // may change ctxt.Url = Location
@@ -4362,7 +4362,8 @@ begin
           ['Reject redirect with userinfo into ', newuri.URI]);
         break; // preserve original 3xx status and Location:
       end;
-      if ctxt.RedirectCrossOrigin then
+      crossorigin := not newuri.Same(Server, Port, ServerTls);
+      if crossorigin then
       begin
         if ServerTls and
            not newuri.Https and
@@ -4400,7 +4401,7 @@ begin
       ctxt.Url := u;
       fRedirected := u;
       inc(ctxt.Redirected);
-      if ctxt.RedirectCrossOrigin or
+      if crossorigin or
          (hfConnectionClose in Http.HeaderFlags) or
          (hroForceReconnect in ctxt.RedirectOptions) then
       begin
@@ -4413,6 +4414,7 @@ begin
           begin
             AppendLine(fRequestContext, [E, ': ', E.Message]);
             ctxt.Status := HTTP_CLIENTERROR; // more explicit than 404 or 501
+            HttpStateReset;
             break;
           end;
         end;

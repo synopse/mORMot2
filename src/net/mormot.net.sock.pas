@@ -6565,6 +6565,7 @@ begin
     usUdp:  // 'udp://server:port'
       Layer := nlUdp;
   end;
+  UriScheme := aScheme;
   Server := aServer;
   Port := aPort;
   if Port = '' then
