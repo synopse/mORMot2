@@ -584,7 +584,7 @@ type
   /// exception class raised during SSPI process
   ESynSspi = class(ExceptionWithProps)
   public
-    class procedure RaiseLastOSError(const Ctx: ShortString; Res: cardinal);
+    class procedure RaiseSspiError(const Ctx: ShortString; Res: cardinal);
   end;
 
 
@@ -1245,21 +1245,19 @@ end;
 
 { ESynSspi }
 
-procedure Check(const Ctx: ShortString; Res: cardinal);
+procedure CheckOK(const Ctx: ShortString; Res: cardinal);
+  {$ifdef HASINLINE} inline; {$endif}
 begin
+  // SSPI does not use GetLastError but directly returns the error code
+  // -> we use WinCheck() below for non-SSPI API which requires GetLastError
   if Res <> SEC_E_OK then
-    ESynSspi.RaiseLastOSError(Ctx, Res);
+    ESynSspi.RaiseSspiError(Ctx, Res);
 end;
 
-class procedure ESynSspi.RaiseLastOSError(const Ctx: ShortString; Res: cardinal);
-var
-  sys: integer;
+class procedure ESynSspi.RaiseSspiError(const Ctx: ShortString; Res: cardinal);
 begin
-  sys := GetLastError;
-  raise Create(format('%s returned %s, System Error %d [%s]',
-          [Ctx, OsErrorShort(res), sys, GetErrorShort(sys)]));
+  raise CreateFmt('%s returned %s', [Ctx, OsErrorShort(Res)]);
 end;
-
 
 procedure InvalidateSecContext(var aSecContext: TSecContext);
 begin
@@ -1313,7 +1311,7 @@ var
 begin
   FastAssignNew(result);
   // sizes.cbSecurityTrailer is size of the trailer (signature + padding) block
-  Check('SecEncrypt QueryContextAttributesW',
+  CheckOK('SecEncrypt QueryContextAttributesW',
     QueryContextAttributesW(@aSecContext.CtxHandle, SECPKG_ATTR_SIZES, @sizes));
   if (sizes.cbSecurityTrailer > SizeOf(token)) or
      (sizes.cbBlockSize > SizeOf(padding)) then
@@ -1342,7 +1340,7 @@ begin
   inDesc.Add(SECBUFFER_PADDING, @padding, sizes.cbBlockSize);
   status := EncryptMessage(@aSecContext.CtxHandle, 0, @inDesc, 0);
   if status < 0 then
-    Check('EncryptMessage', status);
+    CheckOK('EncryptMessage', status);
   len := inDesc.Data[0].cbBuffer + inDesc.Data[1].cbBuffer + inDesc.Data[2].cbBuffer;
   SetLength(result, len);
   res := pointer(result);
@@ -1382,7 +1380,7 @@ begin
   inDesc.Add(SECBUFFER_DATA);
   status := DecryptMessage(@aSecContext.CtxHandle, @inDesc, 0, qop);
   if status < 0 then
-    Check('DecryptMessage', status);
+    CheckOK('DecryptMessage', status);
   FastSetRawByteString(result, inDesc.Data[1].pvBuffer, inDesc.Data[1].cbBuffer);
 end;
 
@@ -1766,7 +1764,7 @@ begin
   if (aSecContext.CredHandle.dwLower = -1) and
      (aSecContext.CredHandle.dwUpper = -1) then
   begin
-    Check('Client AcquireCredentialsHandleW',
+    CheckOK('Client AcquireCredentialsHandleW',
       AcquireCredentialsHandleW(nil, pointer(NegotiateName), SECPKG_CRED_OUTBOUND,
       nil, pAuthData, nil, nil, @aSecContext.CredHandle, nil));
     ctx := nil;
@@ -1794,10 +1792,10 @@ begin
   begin
     status := CompleteAuthToken(@aSecContext.CtxHandle, @outDesc);
     if status < 0 then
-      Check('Client CompleteAuthToken', status);
+      CheckOK('Client CompleteAuthToken', status);
   end
   else if status < 0 then
-    Check('Client InitializeSecurityContextW', status);
+    CheckOK('Client InitializeSecurityContextW', status);
   FastSetRawByteString(aOutData, outDesc.Data[0].pvBuffer, outDesc.Data[0].cbBuffer);
   FreeContextBuffer(outDesc.Data[0].pvBuffer);
 end;
@@ -1890,7 +1888,7 @@ begin
       pkg := pointer(NtlmName) // backward compatible but unsafe/legacy
     else
       pkg := pointer(NegotiateName);
-    Check('Server AcquireCredentialsHandleW',
+    CheckOK('Server AcquireCredentialsHandleW',
       AcquireCredentialsHandleW(nil, pkg, SECPKG_CRED_INBOUND,
         nil, nil, nil, nil, @aSecContext.CredHandle, nil));
     ctx := nil;
@@ -1910,10 +1908,10 @@ begin
   begin
     status := CompleteAuthToken(@aSecContext.CtxHandle, @outDesc);
     if status < 0 then
-      Check('Server CompleteAuthToken', status);
+      CheckOK('Server CompleteAuthToken', status);
   end
   else if status < 0 then
-    Check('Server AcceptSecurityContext', status);
+    CheckOK('Server AcceptSecurityContext', status);
   FastSetRawByteString(aOutData, outDesc.Data[0].pvBuffer, outDesc.Data[0].cbBuffer);
   FreeContextBuffer(outDesc.Data[0].pvBuffer);
 end;
@@ -1923,7 +1921,7 @@ procedure ServerSspiAuthUser(var aSecContext: TSecContext;
 var
   Names: SecPkgContext_NamesW;
 begin
-  Check('ServerSspiAuthUser QueryContextAttributesW',
+  CheckOK('ServerSspiAuthUser QueryContextAttributesW',
     QueryContextAttributesW(@aSecContext.CtxHandle, SECPKG_ATTR_NAMES, @Names));
   Win32PWideCharToUtf8(Names.sUserName, aUserName);
   FreeContextBuffer(Names.sUserName);
@@ -1951,7 +1949,7 @@ function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 var
   NegotiationInfo: TSecPkgContext_NegotiationInfo;
 begin
-  Check('SecPackageName',
+  CheckOK('SecPackageName',
     QueryContextAttributesW(@aSecContext.CtxHandle,
       SECPKG_ATTR_NEGOTIATION_INFO, @NegotiationInfo));
   Win32PWideCharToUtf8(NegotiationInfo.PackageInfo^.Name, result);

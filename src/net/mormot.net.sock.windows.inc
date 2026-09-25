@@ -2112,7 +2112,7 @@ type
     fAcceptCertStore: HCERTSTORE;
     fPeerInfo: TWinCertInfo;
     procedure ESChannelRaiseError(const ctx: ShortString; res: cardinal);
-    procedure CheckSEC_E_OK(const ctx: ShortString; res: integer);
+    procedure CheckOK(const ctx: ShortString; res: integer);
       {$ifdef HASINLINE} inline; {$endif}
     procedure ResetState(Socket: TNetSocket);
     procedure WaitRawRetry(const ctx: ShortString; events: TNetEvents;
@@ -2154,8 +2154,9 @@ begin
     [fServerAddressW, ctx, OsErrorShort(res)]);
 end;
 
-procedure TSChannelNetTls.CheckSEC_E_OK(const ctx: ShortString; res: integer);
+procedure TSChannelNetTls.CheckOK(const ctx: ShortString; res: integer);
 begin
+  // SSPI does not use GetLastError but directly returns the error code
   if res <> SEC_E_OK then
     ESChannelRaiseError(ctx, res);
 end;
@@ -2413,7 +2414,7 @@ begin
     f := f or SCH_CRED_REVOCATION_CHECK_CHAIN or
               SCH_CRED_IGNORE_REVOCATION_OFFLINE;
   CredInit(cred, Context, f, nil);
-  CheckSEC_E_OK('AfterConnection AcquireCredentialsHandleW',
+  CheckOK('AfterConnection AcquireCredentialsHandleW',
     AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_OUTBOUND,
       nil, @cred, nil, nil, @fCred, nil));
   fFlags := ISC_REQ_FLAGS;
@@ -2518,7 +2519,7 @@ begin
   if BoundContext.AcceptCert = nil then
     raise ESChannel.Create('AfterAccept: missing AfterBind');
   CredInit(cred, BoundContext, 0, @BoundContext.AcceptCert);
-  CheckSEC_E_OK('AfterAccept AcquireCredentialsHandleW',
+  CheckOK('AfterAccept AcquireCredentialsHandleW',
     AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_INBOUND,
       nil, @cred, nil, nil, @fCred, nil));
   fFlags := ASC_REQ_FLAGS;
@@ -2638,12 +2639,12 @@ begin
   until (res <> SEC_I_CONTINUE_NEEDED) and
         (res <> SEC_E_INCOMPLETE_MESSAGE);
   // fInputCount is intentionally NOT reset here
-  CheckSEC_E_OK('HandshakeStep', res);
+  CheckOK('HandshakeStep', res);
   // On SEC_E_OK, SChannel may return SECBUFFER_EXTRA containing
   // application records already received together with the final
   // handshake message. Receive() must decrypt those bytes first.
   fCipherName := '';
-  CheckSEC_E_OK('QueryContextAttributesW',
+  CheckOK('QueryContextAttributesW',
     QueryContextAttributesW(
       @fCtxt, SECPKG_ATTR_STREAM_SIZES, @fSizes));
   fSizeMaxRecord := fSizes.cbHeader + fSizes.cbMaximumMessage +  fSizes.cbTrailer;
@@ -2658,12 +2659,12 @@ begin
   case res of
     SEC_I_COMPLETE_NEEDED:
       begin
-        CheckSEC_E_OK(ctx, CompleteAuthToken(@fCtxt, output));
+        CheckOK(ctx, CompleteAuthToken(@fCtxt, output));
         result := SEC_E_OK;
       end;
     SEC_I_COMPLETE_AND_CONTINUE:
       begin
-        CheckSEC_E_OK(ctx, CompleteAuthToken(@fCtxt, output));
+        CheckOK(ctx, CompleteAuthToken(@fCtxt, output));
         result := SEC_I_CONTINUE_NEEDED;
       end;
   end;
@@ -2708,7 +2709,7 @@ begin
       finally
         FreeContextBuffer(buf.pvBuffer);
       end;
-      // no CheckSEC_E_OK(res): shutdown from a destructor is best effort
+      // no CheckOK(res): shutdown from a destructor is best effort
     end;
   except
     // absorb any failed close_notify
