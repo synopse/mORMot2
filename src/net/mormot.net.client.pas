@@ -796,6 +796,8 @@ type
     InStream, OutStream: TStream;
     KeepAliveSec: cardinal;
     Retry: set of (rMain, rAuth, rAuthProxy); // auth + retry state machine
+    RedirectCrossOrigin: boolean;             // set for OnRedirect
+    RedirectOptions: THttpRedirectOptions;    // for OnRedirect customization
     OutStreamInitialPos: Int64;
   end;
 
@@ -4231,7 +4233,7 @@ function THttpClientSocket.Request(const url, method: RawUtf8;
 var
   ctxt: THttpClientRequest;
   newuri: TUri;
-  crossorigin: boolean;
+  u: RawUtf8;
 begin
   // prepare the execution
   fRequestContext := '';
@@ -4323,6 +4325,7 @@ begin
         ctxt.Retry := [rMain]
       else
         ctxt.Retry := [];
+      u := ctxt.Url;
       ctxt.Url := Http.HeaderGetValue('LOCATION');
       AppendLine(fRequestContext, [ctxt.Status, ' into ', ctxt.Url]);
       case ctxt.Status of
@@ -4330,7 +4333,7 @@ begin
         HTTP_MOVEDPERMANENTLY,
         HTTP_SEEOTHER:
           if not HttpMethodWithNoBody(Ctxt.Method) then // keep HEAD/OPTIONS
-            ctxt.Method := 'GET'; // but force e.g. POST/PUT into GET
+            ctxt.Method := 'GET';        // but force e.g. POST/PUT into GET
         // HTTP_TEMPORARYREDIRECT HTTP_PERMANENTREDIRECT should keep the method
       end;
       if (OutStream <> nil) and
@@ -4343,78 +4346,78 @@ begin
       end;
       if Assigned(OnLog) then
         OnLog(sllTrace, 'Request % % redirected to %', [ctxt.Method, url, ctxt.Url], self);
+      ctxt.RedirectCrossOrigin := not newuri.Same(Server, Port, ServerTls);
+      ctxt.RedirectOptions := fExtendedOptions.RedirectOptions;
       if Assigned(fOnRedirect) then
-        if not fOnRedirect(self, ctxt) then
-          break;
-      if IsHttp(ctxt.Url) and
-         newuri.From(ctxt.Url) then // relocated to another server
+        if not fOnRedirect(self, ctxt) then // may change ctxt.Url = Location
+          break;                            // callback asked to abort
+      // apply all RFC 3986 Location: relative/absolute changes
+      if not newUri.FromLocation(u, Server, Port, ServerTls, ctxt.Url) then
+        break;                              // invalid Location: header
+      if (hroRejectUserInfo in ctxt.RedirectOptions) and
+         ((newuri.User <> '') or
+          (newuri.Password <> '')) then
       begin
-        if (hroRejectUserInfo in fExtendedOptions.RedirectOptions) and
-           ((newuri.User <> '') or
-            (newuri.Password <> '')) then
+        AppendLine(fRequestContext,
+          ['Reject redirect with userinfo into ', newuri.URI]);
+        break; // preserve original 3xx status and Location:
+      end;
+      if ctxt.RedirectCrossOrigin then
+      begin
+        if ServerTls and
+           not newuri.Https and
+           (hroRejectDowngrade in ctxt.RedirectOptions) then
         begin
           AppendLine(fRequestContext,
-            ['Reject redirect with userinfo into ', newuri.URI]);
-          break; // preserve original 3xx status and Location:
+            ['Reject HTTPS downgrade into ', newuri.URI]);
+          break;
         end;
-        crossorigin := not newuri.Same(Server, Port, ServerTls);
-        if crossorigin then
+        if hroRejectCrossOrigin in ctxt.RedirectOptions then
         begin
-          if ServerTls and
-             not newuri.Https and
-             (hroRejectDowngrade in fExtendedOptions.RedirectOptions) then
+          AppendLine(fRequestContext,
+            ['Reject cross-origin redirect into ', newuri.URI]);
+          break; // keep original 3xx response + Location:
+        end;
+        if hroPurgeCookie in ctxt.RedirectOptions then
+        begin
+          ctxt.Header := DeleteHeader(ctxt.Header, 'Cookie');
+          AppendLine(fRequestContext, ['Purge cookie']);
+        end;
+        if hroPurgeReferer in ctxt.RedirectOptions then
+        begin
+          ctxt.Header := DeleteHeader(ctxt.Header, 'Referer');
+          AppendLine(fRequestContext, ['Purge referer']);
+          include(fAuthPurge, apReferer);
+        end;
+        if hroPurgeAuthorization in ctxt.RedirectOptions then
+        begin
+          ctxt.Header := DeleteHeader(ctxt.Header, 'Authorization');
+          AppendLine(fRequestContext, ['Purge authorization']);
+          include(fAuthPurge, apAuthorization);
+        end;
+      end;
+      // u as returned by newUri.FromLocation() passed all validation checks
+      ctxt.Url := u;
+      fRedirected := u;
+      inc(ctxt.Redirected);
+      if ctxt.RedirectCrossOrigin or
+         (hfConnectionClose in Http.HeaderFlags) or
+         (hroForceReconnect in ctxt.RedirectOptions) then
+      begin
+        Close; // relocated to another server -> reset the TCP connection
+        try
+          AppendLine(fRequestContext, ['ReOpen ', newuri.URI]);
+          OpenBind(newuri.Server, newuri.Port, {bind=}false, newuri.Https);
+        except
+          on E: Exception do
           begin
-            AppendLine(fRequestContext,
-              ['Reject HTTPS downgrade into ', newuri.URI]);
+            AppendLine(fRequestContext, [E, ': ', E.Message]);
+            ctxt.Status := HTTP_CLIENTERROR; // more explicit than 404 or 501
             break;
           end;
-          if hroRejectCrossOrigin in fExtendedOptions.RedirectOptions then
-          begin
-            AppendLine(fRequestContext,
-              ['Reject cross-origin redirect into ', newuri.URI]);
-            break; // keep original 3xx response + Location:
-          end;
-          if hroPurgeCookie in fExtendedOptions.RedirectOptions then
-          begin
-            ctxt.Header := DeleteHeader(ctxt.Header, 'Cookie');
-            AppendLine(fRequestContext, ['Purge cookie']);
-          end;
-          if hroPurgeReferer in fExtendedOptions.RedirectOptions then
-          begin
-            ctxt.Header := DeleteHeader(ctxt.Header, 'Referer');
-            AppendLine(fRequestContext, ['Purge referer']);
-            include(fAuthPurge, apReferer);
-          end;
-          if hroPurgeAuthorization in fExtendedOptions.RedirectOptions then
-          begin
-            ctxt.Header := DeleteHeader(ctxt.Header, 'Authorization');
-            AppendLine(fRequestContext, ['Purge authorization']);
-            include(fAuthPurge, apAuthorization);
-          end;
         end;
-        fRedirected := newuri.Address;
-        if crossorigin or
-           (hfConnectionClose in Http.HeaderFlags) or
-           (hroForceReconnect in fExtendedOptions.RedirectOptions) then
-        begin
-          Close; // relocated to another server -> reset the TCP connection
-          try
-            AppendLine(fRequestContext, ['ReOpen ', newuri.URI]);
-            OpenBind(newuri.Server, newuri.Port, {bind=}false, newuri.Https);
-          except
-            on E: Exception do
-            begin
-              AppendLine(fRequestContext, [E, ': ', E.Message]);
-              ctxt.Status := HTTP_CLIENTERROR; // more explicit than 404 or 501
-            end;
-          end;
-          HttpStateReset;
-        end;
-        ctxt.Url := newuri.Address;
-      end
-      else
-        fRedirected := ctxt.Url;
-      inc(ctxt.Redirected);
+        HttpStateReset;
+      end;
     until Aborted;
     if Assigned(fOnAfterRequest) then
       fOnAfterRequest(self, ctxt);
