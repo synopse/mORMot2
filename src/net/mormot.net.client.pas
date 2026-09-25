@@ -406,7 +406,7 @@ type
     RedirectMax: integer;
     /// optional restrictions when following HTTP redirections
     // - currently implemented by THttpClientSocket
-    // - defaults to [] to preserve the existing behavior
+    // - defaults to [] to preserve existing non-restricted/unsafe behavior
     RedirectOptions: THttpRedirectOptions;
     /// force THttpClientSocket to close and reopen its socket on idle connection
     RecreateConnectionAfterSecs: cardinal;

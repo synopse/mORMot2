@@ -6538,37 +6538,45 @@ begin
       CheckEqual(srv.RedirectUri('http/backgrd', httpuri, 4096), 1);
       Check(srv.RedirectUri('http/cache/new', httpuri) < 0, 'dup3');
       Check(srv.RedirectUri('http/backgrd/new', httpuri) < 0, 'dup4');
-      tftpuri := Join(['tftp://127.0.0.1:6969/http/cache/', uri]);
-      rd := '';
-      res := CurlPerform(tftpuri, rd);
-      Check(res = crOK, 'http cached over tftp');
-      if res = crOk then
-        CheckEqual(rd, orig, 'http cache');
-      tftpuri := Join(['tftp://127.0.0.1:6969/http/backgrd/sub/', uri]);
-      rd := '';
-      res := CurlPerform(tftpuri, rd);
-      Check(res = crOK, 'http background over tftp');
-      if res = crOk then
-        CheckEqual(rd, orig, 'http background');
-      // wrong resource location with no RedirectUri() confusion
-      tftpuri := Join(['tftp://127.0.0.1:6969/http/cachewrong/uri']);
-      rd := '';
-      res := CurlPerform(tftpuri, rd, {timeout=}5000);
-      Check(res = crTFtpNotFound, 'tftp not found');
-      // redirect root to HTTP
-      rd := '';
-      res := CurlPerform('tftp://127.0.0.1:6969/pxelinux.0', rd, 100000);
-      Check(res = crTFtpNotFound, 'http background over tftp');
-      CheckEqual(srv.RedirectUri('/', httpuri), 2);
-      rd := '';
-      res := CurlPerform('tftp://127.0.0.1:6969/pxelinux.0', rd, 100000);
-      Check(res = crOK, 'http background over tftp');
-      if res = crOk then
-        CheckEqual(rd, orig, 'http root');
-      // final checks and global performance benchmark
-      CheckUtf8(srv.ConnectionTotal >= 5, // additional RRQs/retries happen
-        'srv.ConnectionTotal=%', [srv.ConnectionTotal]);
-      NotifyTestSpeed('TFTP request', srv.ConnectionTotal, length(orig) * 5, @timer);
+      // curl < 8.17 has known TFTP issues with retransmitted RRQ/server TID
+      // which araise especially on ARM64 + KVM
+      {$ifdef CPUX64}
+      if curl.info.version_num >= $080000 then
+      {$else}
+      if curl.info.version_num >= $081100 then
+      {$endif CPUX64}
+      begin
+        tftpuri := Join(['tftp://127.0.0.1:6969/http/cache/', uri]);
+        rd := '';
+        res := CurlPerform(tftpuri, rd);
+        if CheckUtf8(res = crOK, 'http cached over tftp %', [ToText(res)^]) then
+          CheckEqual(rd, orig, 'http cache');
+        tftpuri := Join(['tftp://127.0.0.1:6969/http/backgrd/sub/', uri]);
+        rd := '';
+        res := CurlPerform(tftpuri, rd);
+        if CheckUtf8(res = crOK, 'http background over tftp %', [ToText(res)^]) then
+          CheckEqual(rd, orig, 'http background');
+        // wrong resource location with no RedirectUri() confusion
+        tftpuri := Join(['tftp://127.0.0.1:6969/http/cachewrong/uri']);
+        rd := '';
+        res := CurlPerform(tftpuri, rd, {timeout=}5000);
+        Check(res = crTFtpNotFound, 'tftp not found');
+        // redirect root to HTTP
+        rd := '';
+        res := CurlPerform('tftp://127.0.0.1:6969/pxelinux.0', rd, 100000);
+        Check(res = crTFtpNotFound, 'http background over tftp');
+        CheckEqual(srv.RedirectUri('/', httpuri), 2);
+        rd := '';
+        res := CurlPerform('tftp://127.0.0.1:6969/pxelinux.0', rd, 100000);
+        Check(res = crOK, 'http background over tftp');
+        if res = crOk then
+          CheckEqual(rd, orig, 'http root');
+        // final checks and global performance benchmark
+        CheckUtf8(srv.ConnectionTotal >= 5, // additional RRQs/retries happen
+          'srv.ConnectionTotal=%', [srv.ConnectionTotal]);
+        NotifyTestSpeed('TFTP %', [curl.info.version],
+          srv.ConnectionTotal, length(orig) * 5, @timer);
+      end;
       srv.TerminateAndWaitFinished(1000);
     finally
       srv.Free;

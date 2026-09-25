@@ -2570,7 +2570,10 @@ begin
       (Bits <> 8192)) then
     exit;                  // see https://stackoverflow.com/a/589850/458259
   // setup the timeout period
-  if TimeOutMS <= 0 then
+  if {$ifdef OSWINDOWS}
+     (wsPrism in WindowsSpecs) or // relax for PRISM translation layer
+     {$endif OSWINDOWS}
+     (TimeOutMS <= 0) then
     TimeOutMS := MilliSecsPerMin; // blocking 1 minute seems fair enough
   endtix := GetTickCount64 + TimeOutMS;
   // setup local variables

@@ -4263,7 +4263,7 @@ begin
   s := FindSymbol(rva);
   if (s <> nil) and
      (FindPropName(['LogExcept', 'SynLogException', 'ThreadProc',
-       'ESynException.RaiseUtf8'
+       'ESynException.RaiseUtf8', 'SynLogVectoredHandler'
        {$ifdef ISDELPHI} , 'SynRtlUnwind',  '@HandleAnyException',
        '@HandleOnException', '@InternalRaiseAtExcept', '@RaiseAtExcept',
        '@RaiseExcept', '@RaiseAgain', 'ThreadWrapper'
