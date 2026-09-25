@@ -1805,7 +1805,6 @@ type
     // - supports RFC 3986 IPv6 litterals like 'https://[::1]:123/tata'
     // - returns TRUE if the Server has been extracted and is not ''
     function From(const aUri: RawUtf8; const DefaultPort: RawUtf8 = ''): boolean;
-      {$ifdef HASINLINE} inline; {$endif}
     /// fill the members from a URI supplied as UTF-8 buffer
     function FromBuffer(aUri, aUriEnd: PUtf8Char; const DefaultPort: RawUtf8): boolean;
     /// fill the members from a set of parameters and URI scheme
@@ -6367,12 +6366,8 @@ begin
 end;
 
 function TUri.From(const aUri: RawUtf8; const DefaultPort: RawUtf8): boolean;
-var
-  p: PUtf8Char;
 begin
-  p := pointer(aUri);
-  result := (p <> nil) and
-            FromBuffer(p, p + PStrLen(p - _STRLEN)^, DefaultPort);
+  result := FromBuffer(pointer(aUri), PUtf8Char(pointer(aUri)) + length(aUri), DefaultPort);
 end;
 
 const
@@ -6380,6 +6375,7 @@ const
     'http', 'ws', 'https', 'wss', 'udp', 'file', 'ftp', 'ftps', 'ldap', 'ldaps');
   _US_PORT: array[TUriScheme] of RawUtf8 = (
     '', '', '80', '80', '443', '443', '', '', '20', '989', '389', '636');
+  SCHEME_FIRST = ['a'..'z', 'A'..'Z'];
   SCHEME_CHARS = ['a'..'z', 'A'..'Z', '+', '-', '.', '0'..'9'];
 
 function TUri.FromBuffer(aUri, aUriEnd: PUtf8Char; const DefaultPort: RawUtf8): boolean;
@@ -6407,9 +6403,11 @@ begin
   end;
   // parse Scheme
   p := aUri;
-  while (p < aUriEnd) and
-        (p^ in SCHEME_CHARS) do
-    inc(p);
+  if p^ in SCHEME_FIRST then
+    repeat
+      inc(P);
+    until (p >= aUriEnd) or
+          not (p^ in SCHEME_CHARS);
   UriScheme := usHttp; // fallback to http:// if no scheme specified
   if (aUriEnd - p >= 3) and
      (PInteger(p)^ and $ffffff = HTTP__24) then // '://'
@@ -6530,6 +6528,8 @@ begin
       while (portend > p) and
             ((portend - 1)^ = ' ') do
         dec(portend);
+      if p = portend then
+        exit; // void port is not allowed
       FastSetString(Port, p, portend);
     end
     else if Server <> '' then
@@ -6599,9 +6599,9 @@ begin
     end;
 end;
 
-procedure _AddPath(var V: TSynTempAdder; P, PEnd: PAnsiChar; Normalize: boolean);
+procedure _AddPath(var V: TSynTempAdder; P, PEnd: PUtf8Char; Normalize: boolean);
 var
-  seg: PAnsiChar;
+  seg: PUtf8Char;
   len: PtrInt;
   slash: boolean;
 begin
@@ -6659,7 +6659,7 @@ var
   root: AnsiChar;
 
   procedure StoreTarget(Path1, Path1End, Path2, Path2End,
-    Query, QueryEnd: PAnsiChar; Normalize: boolean);
+    Query, QueryEnd: PUtf8Char; Normalize: boolean);
   var
     tmp: TSynTempAdder;
   begin
@@ -6677,7 +6677,7 @@ var
 
   procedure StoreParsedUri;
   var
-    a, pathend, query, parsedend: PAnsiChar;
+    a, pathend, query, parsedend: PUtf8Char;
   begin
     a := pointer(Address);
     if a = nil then
@@ -6725,7 +6725,7 @@ begin
   while p < locend do
   begin
     if p^ <= ' ' then
-      exit; // embedded #0 / HT / CR / LF / SP
+      exit; // reject any control char
     if (p^ = '#') and
        (refend = locend) then
       refend := p;
@@ -6734,7 +6734,7 @@ begin
   try
     // absolute URI: let TUri.From() parse scheme/authority/userinfo
     s := loc;
-    if s^ in ['a'..'z', 'A'..'Z'] then
+    if s^ in SCHEME_FIRST then
     begin
       repeat
         inc(s);
@@ -6743,25 +6743,11 @@ begin
       if (s < refend) and
          (s^ = ':') then
       begin
-        // HTTP(S) absolute URI requires ://
-        // PInteger() may safely use the terminating RawUtf8 #0 as byte 4
-        if (refend - s < 3) or
-           (PInteger(s)^ and $ffffff <> HTTP__24) then
-          exit;
-        if (loc = raw) and
-           (refend = rawend) then
-        begin
-          // common path: no trimming and no fragment
-          if not From(aLocation) then
-            exit;
-        end
-        else
-        begin
-          // TUri.From() should not see the fragment nor trimmed whitespace
-          if not FromBuffer(loc, refend, '') then
-            exit;
-        end;
-        if UriScheme in [usHttp, usHttps] then
+        if (PWord(s + 1)^ = SLASH_16) and
+           {(PCardinal(loc)^ and $dfdfdfdf = HTTP_32) and
+           (loc[4] in [':', 's', 'S']) and}
+           FromBuffer(loc, refend, '') and
+           (UriScheme in [usHttp, usHttps]) then
           StoreParsedUri;
         exit;
       end;
@@ -6770,7 +6756,9 @@ begin
     if (refend - loc >= 2) and
        (PWord(loc)^ = SLASH_16) then
     begin
-      FromNetworkPath(loc + 2, refend); // + 2 to skip initial '//'
+      inc(loc, 2); // skip initial '//'
+      if loc <> refend then
+        FromNetworkPath(loc, refend);
       exit;
     end;
     // all remaining URI-reference forms inherit the current origin
