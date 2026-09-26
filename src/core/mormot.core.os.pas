@@ -4795,7 +4795,8 @@ type
   // - to protect a very small code section of a few CPU cycles with no Init/Done
   // needed, and a lower footprint, you may consider our TLightLock
   // - same signature as TOSLock/TLightLock, usable as compile time alternatives
-  // - warning: non-reentrant, i.e. nested Lock calls would block, as TLightLock
+  // - warning: normally non-reentrant, i.e. nested Lock calls would block;
+  // Delphi Android uses a recursive TRTLCriticalSection fallback
   {$ifdef USERECORDWITHMETHODS}
   TOSLightLock = record
   {$else}
@@ -4814,8 +4815,8 @@ type
     // - mandatory for the TRTLCriticalSection fallback compatibility
     procedure Done;
       /// enter an OS lock
-    // - warning: this method is NOT reentrant/recursive, so any nested call
-    // would deadlock
+    // - warning: normally NOT reentrant/recursive; on Delphi Android the
+    // TRTLCriticalSection fallback permits nested calls
     procedure Lock;
       {$ifdef HASINLINE} inline; {$endif}
     /// try once to acquire the raw futex or call pthread_mutex_trylock() method

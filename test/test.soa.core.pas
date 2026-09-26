@@ -287,6 +287,7 @@ type
   TTestServiceOrientedArchitecture = class(TSynTestCase)
   protected
     fMain: TRestClientDBNamed;
+    procedure Setup; override;
     procedure Test(const Inst: TTestServiceInstances; Iterations: Cardinal = 700);
     procedure TestHttp(aClient: TRestClientDBNamed; const port: RawUtf8);
     procedure ClientTest(aClient: TRestClientDBNamed; aRouting: TRestServerUriContextClass;
@@ -341,6 +342,22 @@ type
 
 
 implementation
+
+{$ifdef OSANDROID}
+var
+  // The FMX Android runner executes the suite from TTestRunnerThread.  Keep
+  // that worker id as the test's logical main thread for the thread checks.
+  // These checks do not assert dispatch to the actual FMX UI thread.
+  AndroidTestThreadID: PtrUInt;
+{$endif OSANDROID}
+
+procedure TTestServiceOrientedArchitecture.Setup;
+begin
+  inherited Setup;
+  {$ifdef OSANDROID}
+  AndroidTestThreadID := PtrUInt(GetCurrentThreadID);
+  {$endif OSANDROID}
+end;
 
 { TServiceCalculator }
 
@@ -633,8 +650,8 @@ begin
     csServer,
     csMainThread:
       {$ifdef OSANDROID}
-      // On Android, processes never run in the mainthread
-      ;
+      if thrid <> AndroidTestThreadID then
+        ESynException.RaiseUtf8('% shall be in the test worker thread', [name^]);
       {$else}
       if thrid <> PtrUInt(MainThreadID) then
         ESynException.RaiseUtf8('% shall be in main thread', [name^]);
@@ -1346,12 +1363,20 @@ begin
     csDirect,
     csServer,
     csMainThread:
+      {$ifdef OSANDROID}
+      Check(y = AndroidTestThreadID, 'thrd1');
+      {$else}
       Check(y = PtrUInt(MainThreadID), 'thrd1');
+      {$endif OSANDROID}
     csBackground,
     csHttp,
     csHttpLog,
     csHttpBearer:
+      {$ifdef OSANDROID}
+      Check(y <> AndroidTestThreadID, 'thrd2');
+      {$else}
       Check(y <> PtrUInt(MainThreadID), 'thrd2');
+      {$endif OSANDROID}
   end;
   TestCalculator(Inst.I);
   TestCalculator(Inst.CC); // test the fact that CC inherits from ICalculator
@@ -1525,7 +1550,11 @@ begin
     csDirect:
       begin
         Check(x = y);
+        {$ifdef OSANDROID}
+        Check(x = AndroidTestThreadID);
+        {$else}
         Check(x = PtrUInt(MainThreadID));
+        {$endif OSANDROID}
         Check(z = 0);
         Check(w = 0);
       end;
@@ -1534,8 +1563,13 @@ begin
     csHttpBearer:
       begin
         Check(z <> 0);
+        {$ifdef OSANDROID}
+        Check(x <> AndroidTestThreadID);
+        Check(y <> AndroidTestThreadID);
+        {$else}
         Check(x <> PtrUInt(MainThreadID));
         Check(y <> PtrUInt(MainThreadID));
+        {$endif OSANDROID}
         Check(w <> 0);
       end;
   // csLocked, csMainThread, csBackground does not apply to CC: ITestPerThread

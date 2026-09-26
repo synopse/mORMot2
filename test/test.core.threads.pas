@@ -167,7 +167,11 @@ const
   EXCLUSIVE_LOCK_REENTRANT: array[TExclusiveLockKind] of boolean = (
     false,  // TLightLock
     true,   // TMultiLightLock
+    {$ifdef OSANDROID}
+    true,   // Delphi/Android fallback uses recursive TRTLCriticalSection
+    {$else}
     false,  // TOSLightLock
+    {$endif OSANDROID}
     true);  // TOSLock
 
   /// IsLocked is part of TLightLock/TMultiLightLock but not TOS*Lock API

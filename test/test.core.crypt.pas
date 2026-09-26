@@ -110,6 +110,10 @@ type
     procedure _TKerberosKeyTab;
     /// High-Level Cryptography Catalog
     procedure Catalog;
+    {$ifdef OSANDROID}
+    /// focused Android regression for OpenSSL RSA-PSS certificates
+    procedure PssCertificates;
+    {$endif OSANDROID}
     /// compute some performance numbers, mostly against regression
     procedure Benchmark;
   end;
@@ -2235,7 +2239,8 @@ begin
   // pure pascal and OpenSSL SCrypt implementation
   {$ifdef USE_OPENSSL}
   if OpenSslIsAvailable then
-    if OpenSslVersion >= OPENSSL3_VERNUM then
+    if OpenSslStatic or
+       (OpenSslVersion >= OPENSSL3_VERNUM) then
       TestSCript(@OpenSslSCrypt, 'OpenSslSCrypt');
   {$endif USE_OPENSSL}
   TestSCript(@RawSCrypt, 'RawSCrypt');
@@ -4471,7 +4476,7 @@ begin
   check(csr <> '', 'csr');
   check(priv <> '', 'priv');
   c2 := crt.GenerateFromCsr(csr);
-  if Check(c2 <> nil, 'gen csr1') then
+  if CheckUtf8(c2 <> nil, 'gen csr1 %', [crt.AlgoName]) then
   begin
     if crt.AlgoName <> 'syn-es256-v1' then
       check(c2.GetUsage = [cuCA, cuDigitalSignature], 'csr usage1');
@@ -4799,6 +4804,27 @@ begin
   // wait for all background thread process
   RunWait;
 end;
+
+{$ifdef OSANDROID}
+procedure TTestCoreCrypto.PssCertificates;
+const
+  PS: array[0..3] of RawUtf8 = (
+    'x509-ps256', 'x509-ps384', 'x509-ps512',
+    'x509-ps256-int');
+var
+  i: integer;
+  crt: TCryptCertAlgo;
+begin
+  for i := 0 to high(PS) do
+  begin
+    crt := CertAlgo(PS[i]);
+    Check(crt <> nil, string(PS[i]));
+    if crt <> nil then
+      Run(CatalogRunCert, crt, crt.AlgoName, false);
+  end;
+  RunWait;
+end;
+{$endif OSANDROID}
 
 procedure TTestCoreCrypto._TBinaryCookieGenerator;
 var

@@ -8899,7 +8899,13 @@ end;
 
 procedure TTestCoreProcess.Folders;
 var
-  folder, subfolder: TFileName;
+  folder, subfolder, basefolder: TFileName;
+  {$ifdef OSANDROID}
+  rawShardNames: TRawUtf8DynArray;
+  shardName: RawUtf8;
+  slash, shardIndex: PtrInt;
+  foundShard: boolean;
+  {$endif OSANDROID}
 
   procedure DoOne(opt: TFindFilesOptions; const mask: TFileName);
   var
@@ -8981,13 +8987,42 @@ var
 
 begin
   // create at least two sub-folder levels to validate proper recursive process
+  {$ifdef OSANDROID}
+  basefolder := WorkDir; // the APK native library directory is read-only
+  {$else}
+  basefolder := Executable.ProgramFilePath;
+  {$endif OSANDROID}
   subfolder := EnsureDirectoryExists([
-    Executable.ProgramFilePath, 'data', 'synecc', 'level2']);
+    basefolder, 'data', 'synecc', 'level2']);
   Check(subfolder <> '', 'subfolder');
   Check(FileFromString('non void folder', subfolder + 'test.txt'));
+  {$ifdef OSANDROID}
+  // Reproduce SQLite shard discovery on a writable Android directory.
+  Check(FileFromString('shard', subfolder + 'test0000.dbs'));
+  folder := subfolder;
+  rawShardNames := PosixFileNames(folder, false);
+  foundShard := false;
+  for shardIndex := 0 to high(rawShardNames) do
+  begin
+    shardName := rawShardNames[shardIndex];
+    slash := length(shardName);
+    while (slash > 0) and (shardName[slash] <> '/') do
+      dec(slash);
+    shardName := copy(shardName, slash + 1, maxint);
+    if shardName = 'test0000.dbs' then
+    begin
+      foundShard := true;
+      Check(IsMatchs('test0*.dbs', shardName, false), 'tagged pointer mask');
+    end;
+  end;
+  Check(foundShard, 'raw shard enumeration');
+  DoOne([ffoSortByName], 'test0*.dbs'); // actual InitShards mask
+  Check(length(FindFiles(folder, 'test0*.dbs')) = 1, 'Android shard scan');
+  Check(DeleteFile(subfolder + 'test0000.dbs'));
+  {$endif OSANDROID}
   // we can't use Executable.ProgramFilePath because of its live mormot*.log
-  DoFolder(Executable.ProgramFilePath + 'data');
-  DoFolder(Executable.ProgramFilePath + 'log');
+  DoFolder(basefolder + 'data');
+  DoFolder(basefolder + 'log');
   Check(DirectoryDelete(subfolder), subfolder);
 end;
 
