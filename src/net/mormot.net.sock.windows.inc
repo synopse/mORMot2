@@ -2500,7 +2500,7 @@ begin
     fAcceptCert := mormot.lib.sspi.CertFindCertificateInStore(
       fAcceptCertStore, 0, 0, CERT_FIND_ANY, nil, fAcceptCert);
     if fAcceptCert = nil then
-      raise ESChannel.Create('AfterBind: no Certificate available');
+      RaiseLastError('AfterBind: CertFindCertificateInStore', ESChannel);
   until CryptAcquireCertificatePrivateKey(
          fAcceptCert, flags, nil, prov, keyspec, freeprov);
   // this global certificate and its private key will be used by AfterAccept()
