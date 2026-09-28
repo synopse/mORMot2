@@ -1252,9 +1252,10 @@ var
 var
   /// try to enable TLS 1.3 over SChannel on Windows 11 or Windows Server 2022+
   // - this flag does nothing on older versions of Windows
-  // - by default, it is disabled because our wrapper was reported to be
-  // unstable on some Windows builds :(
-  SChannelEnableTls13: boolean = false;
+  // - enabled by default after latest SChannel refactoring, but could be disabled
+  // if you find it unstable on your own side - and don't forget to report any
+  // issue ASAP to our forum/github for proper investigation
+  SChannelEnableTls13: boolean = true;
 
 /// SChannel TLS layer communication factory - as expected by this unit
 // - can be used at runtime to override another implementation e.g.
