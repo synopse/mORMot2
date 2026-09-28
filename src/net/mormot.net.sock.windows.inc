@@ -2086,8 +2086,83 @@ end;
 
 { ******************** TLS / HTTPS Encryption Abstract Layer }
 
+// TLS 1.3 is officially supported starting in Windows 11 and Server 2022.
+// Enabling TLS 1.3 on earlier versions of Windows is possible through the
+// registry, but is explictly documented as unsafe by Microsoft.
+// https://learn.microsoft.com/en-us/windows/win32/secauthn/protocols-in-tls-ssl--schannel-ssp-
+
+procedure CredInit(var cred: TSChannelCred; const ctx: TNetTlsContext;
+  dwFlags: cardinal; paServCred: PPCCERT_CONTEXT);
+begin
+  FillCharFast(cred, SizeOf(cred), 0);
+  // request Schannel to reject known weak ciphers whenever possible
+  if not ctx.AllowDeprecatedTls and
+     (OSVersion >= wSeven) then
+    dwFlags := dwFlags or SCH_USE_STRONG_CRYPTO;
+  if SChannelEnableTls13 and
+     ((OSVersion in [wEleven, wEleven_64]) or
+      (OSVersion >= wServer2022_64)) and
+     not ctx.DisableTls13 then
+  begin
+    // new SCH_CREDENTIALS structure is required in order to enable TLS 1.3
+    cred.New.dwVersion := SCH_CREDENTIALS_VERSION;
+    if not ctx.AllowDeprecatedTLS then
+    begin
+      cred.New.cTlsParameters := 1;
+      cred.New.pTlsParameters := @cred.Tls;
+      // disable SSL/TLS versions older than TLS 1.2
+      cred.Tls.grbitDisabledProtocols := SP_PROT_TLS_UNSAFE;
+    end;
+    cred.New.dwFlags := dwFlags;
+    if paServCred <> nil then
+    begin
+      cred.New.cCreds := 1;
+      cred.New.paCred := paServCred;
+    end;
+  end
+  else
+  begin
+    // legacy SCHANNEL_CRED path: never enable TLS 1.3 here
+    cred.Old.dwVersion := SCHANNEL_CRED_VERSION;
+    cred.Old.dwFlags := dwFlags;
+    if OSVersion < wSeven then
+      // TLS 1.0 is the only realistic choice on these old systems
+      cred.Old.grbitEnabledProtocols := SP_PROT_TLS1_0
+    else
+    begin
+      // TLS 1.2 only unless deprecated protocols were explicitly requested
+      cred.Old.grbitEnabledProtocols := SP_PROT_TLS1_2;
+      if ctx.AllowDeprecatedTLS then
+        cred.Old.grbitEnabledProtocols := cred.Old.grbitEnabledProtocols or
+          SP_PROT_TLS1_0 or SP_PROT_TLS1_1;
+    end;
+    if paServCred <> nil then
+    begin
+      cred.Old.cCreds := 1;
+      cred.Old.paCred := paServCred;
+    end;
+  end;
+end;
+
 type
   ESChannel = class(ExceptionWithProps);
+
+  // reference-counted management of shared credentials for the HTTPS server
+  // - SSPI requires all CtxtHandles to be deleted before freeing their CredHandle
+  TSChannelServerContext = class(TInterfacedObject)
+  private
+    fCertificate: mormot.core.os.security.PCCERT_CONTEXT;
+    fStore: HCERTSTORE;
+    fCred: TCredHandle;
+    fCredAcquired: boolean;
+    fParameters: TSChannelCred;
+    procedure CheckOK(const ctx: ShortString; res: integer);
+      {$ifdef HASINLINE} inline; {$endif}
+    procedure LoadCertificate(const Context: TNetTlsContext);
+  public
+    constructor Create(const Context: TNetTlsContext);
+    destructor Destroy; override;
+  end;
 
   TSChannelNetTls = class(TInterfacedObject, INetTls)
   private
@@ -2108,8 +2183,8 @@ type
     fSessionClosed: boolean;
     fAccept: boolean;
     fAcceptFirst: boolean;
-    fAcceptCert: mormot.core.os.security.PCCERT_CONTEXT;
-    fAcceptCertStore: HCERTSTORE;
+    fServerContext: TSChannelServerContext;
+    fServerContextRef: IInterface; // thread-safe shared sever-side credentials
     fPeerInfo: TWinCertInfo;
     procedure ESChannelRaiseError(const ctx: ShortString; res: cardinal);
     procedure CheckOK(const ctx: ShortString; res: integer);
@@ -2143,6 +2218,102 @@ type
     function Send(Buffer: pointer; var Length: integer): TNetResult;
     function ReleaseBuffers: PtrInt;
   end;
+
+
+{ TSChannelServerContext }
+
+procedure TSChannelServerContext.CheckOK(const ctx: ShortString; res: integer);
+begin
+  if res <> SEC_E_OK then
+    raise ESChannel.CreateFmt('AfterBind: %s returned %s',
+      [ctx, OsErrorShort(res)]);
+end;
+
+procedure TSChannelServerContext.LoadCertificate(const Context: TNetTlsContext);
+var
+  pfx: RawByteString;
+  blob: TCryptDataBlob;
+  pass: SynUnicode;
+  flags, keyspec: cardinal;
+  prov: HCRYPTPROV;
+  freeprov: BOOL;
+begin
+  pfx := Context.CertificateBin;
+  if (pfx = '') and
+     (Context.CertificateFile <> '') then
+    // try to load from .PFX file
+    pfx := StringFromFile(TFileName(Context.CertificateFile));
+  if pfx = '' then
+  begin
+    // fallback to first certificate and private key from personal Windows store
+    fStore := CertOpenSystemStoreW(nil, 'MY');
+    if fStore = nil then
+      RaiseLastError('AfterBind: CertOpenSystemStoreW', ESChannel);
+  end
+  else
+  begin
+    // expecting e.g. a Let's Encrypt certificate, converted to PFX:
+    //   openssl pkcs12 -inkey privkey.pem -in cert.pem -export -out mycert.pfx
+    // or using mormot.crypt.openssl:
+    //   c := Cert('x509-rs256');
+    //   c.Generate([cuTlsServer], 'toto.com', nil, 3650);
+    //   FileFromString(c.Save('3des=pass', ccfBinary), WorkDir + 'privkeycert.pfx');
+    blob.cbData := Length(pfx);
+    blob.pbData := pointer(pfx);
+    pass := SynUnicode(Context.PrivatePassword);
+    flags := PKCS12_INCLUDE_EXTENDED_PROPERTIES;
+    if (OSVersion < wVista) or
+       (wsWine in WindowsSpecs) then
+      flags := 0;
+    fStore := PFXImportCertStore(@blob, pointer(pass), flags);
+    if pass <> '' then
+      FillCharFast(pointer(pass)^, length(pass) * 2, 0); // anti forensic
+    if fStore = nil then
+      RaiseLastError('AfterBind: PFXImportCertStore', ESChannel);
+  end;
+  // find first certificate in store with private key
+  flags := 0;
+  if OSVersion >= wVista then
+    flags := flags or CRYPT_ACQUIRE_ALLOW_NCRYPT_KEY_FLAG; // enable CNG
+  repeat
+    fCertificate := mormot.lib.sspi.CertFindCertificateInStore(
+      fStore, 0, 0, CERT_FIND_ANY, nil, fCertificate);
+    if fCertificate = nil then
+      RaiseLastError('AfterBind: CertFindCertificateInStore', ESChannel);
+    freeprov := false;
+    keyspec := 0;
+  until CryptAcquireCertificatePrivateKey(
+         fCertificate, flags, nil, prov, keyspec, freeprov);
+  if freeprov then
+    if keyspec = CERT_NCRYPT_KEY_SPEC then
+      NCrypt.FreeSafe(prov)
+    else if CryptoApi.Available then
+      CryptoApi.ReleaseContext(prov, 0);
+end;
+
+constructor TSChannelServerContext.Create(const Context: TNetTlsContext);
+begin
+  inherited Create;
+  LoadCertificate(Context);
+  // keep both credential layouts and their referenced TLS_PARAMETERS stable
+  CredInit(fParameters, Context, 0, @fCertificate);
+  CheckOK('AcquireCredentialsHandleW',
+    AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_INBOUND,
+      nil, @fParameters, nil, nil, @fCred, nil));
+  fCredAcquired := true;
+end;
+
+destructor TSChannelServerContext.Destroy;
+begin
+  // all accepted CtxtHandles have already been deleted by their owners
+  if fCredAcquired then
+    FreeCredentialsHandle(@fCred);
+  if fCertificate <> nil then
+    CertFreeCertificateContext(fCertificate);
+  if fStore <> nil then
+    CertCloseStore(fStore, CERT_CLOSE_STORE_DEFAULT);
+  inherited Destroy;
+end;
 
 
 { TSChannelNetTls }
@@ -2251,8 +2422,11 @@ end;
 
 procedure TSChannelNetTls.FinalizeCredCtxt;
 begin
-  DeleteSecurityContext(@fCtxt);
-  FreeCredentialsHandle(@fCred);
+  DeleteSecurityContext(@fCtxt); // should be called first
+  if not fAccept then // clients own their per-connection credential instance
+    FreeCredentialsHandle(@fCred);
+  fServerContext := nil;
+  fServerContextRef := nil;      // thread-safe shared sever-side credentials
   FillCharFast(fCtxt, SizeOf(fCtxt), 0);
   FillCharFast(fCred, SizeOf(fCred), 0);
 end;
@@ -2316,64 +2490,6 @@ begin
       b^.pvBuffer := nil;
     end;
     inc(b);
-  end;
-end;
-
-// TLS 1.3 is officially supported starting in Windows 11 and Server 2022.
-// Enabling TLS 1.3 on earlier versions of Windows is possible through the
-// registry, but is explictly documented as unsafe by Microsoft.
-// https://learn.microsoft.com/en-us/windows/win32/secauthn/protocols-in-tls-ssl--schannel-ssp-
-
-procedure CredInit(var cred: TSChannelCred; const ctx: TNetTlsContext;
-  dwFlags: cardinal; paServCred: PPCCERT_CONTEXT);
-begin
-  FillCharFast(cred, SizeOf(cred), 0);
-  // request Schannel to reject known weak ciphers whenever possible
-  if not ctx.AllowDeprecatedTls and
-     (OSVersion >= wSeven) then
-    dwFlags := dwFlags or SCH_USE_STRONG_CRYPTO;
-  if SChannelEnableTls13 and
-     ((OSVersion in [wEleven, wEleven_64]) or
-      (OSVersion >= wServer2022_64)) and
-     not ctx.DisableTls13 then
-  begin
-    // new SCH_CREDENTIALS structure is required in order to enable TLS 1.3
-    cred.New.dwVersion := SCH_CREDENTIALS_VERSION;
-    if not ctx.AllowDeprecatedTLS then
-    begin
-      cred.New.cTlsParameters := 1;
-      cred.New.pTlsParameters := @cred.Tls;
-      // disable SSL/TLS versions older than TLS 1.2
-      cred.Tls.grbitDisabledProtocols := SP_PROT_TLS_UNSAFE;
-    end;
-    cred.New.dwFlags := dwFlags;
-    if paServCred <> nil then
-    begin
-      cred.New.cCreds := 1;
-      cred.New.paCred := paServCred;
-    end;
-  end
-  else
-  begin
-    // legacy SCHANNEL_CRED path: never enable TLS 1.3 here
-    cred.Old.dwVersion := SCHANNEL_CRED_VERSION;
-    cred.Old.dwFlags := dwFlags;
-    if OSVersion < wSeven then
-      // TLS 1.0 is the only realistic choice on these old systems
-      cred.Old.grbitEnabledProtocols := SP_PROT_TLS1_0
-    else
-    begin
-      // TLS 1.2 only unless deprecated protocols were explicitly requested
-      cred.Old.grbitEnabledProtocols := SP_PROT_TLS1_2;
-      if ctx.AllowDeprecatedTLS then
-        cred.Old.grbitEnabledProtocols := cred.Old.grbitEnabledProtocols or
-          SP_PROT_TLS1_0 or SP_PROT_TLS1_1;
-    end;
-    if paServCred <> nil then
-    begin
-      cred.Old.cCreds := 1;
-      cred.Old.paCred := paServCred;
-    end;
   end;
 end;
 
@@ -2452,84 +2568,26 @@ end;
 
 procedure TSChannelNetTls.AfterBind(Socket: TNetSocket;
   var Context: TNetTlsContext; const ServerAddress: RawUtf8);
-var
-  pfx: RawByteString;
-  blob: TCryptDataBlob;
-  pass: SynUnicode;
-  flags, keyspec: cardinal;
-  prov: HCRYPTPROV;
-  freeprov: BOOL;
 begin
-  // method called once the socket has been bound on server side
-  if ServerAddress <> '' then
-    fServerAddressW := SynUnicode(ServerAddress); // for exceptions
-  pfx := Context.CertificateBin;
-  if (pfx = '') and
-     (Context.CertificateFile <> '') then
-    // try to load from .PFX file
-    pfx := StringFromFile(TFileName(Context.CertificateFile));
-  if pfx = '' then
-    // fallback to first certificate and private key from personal Windows store
-    fAcceptCertStore := CertOpenSystemStoreW(nil, 'MY')
-  else
-  begin
-    // expecting e.g. a Let's Encrypt certificate, converted to PFX:
-    //   openssl pkcs12 -inkey privkey.pem -in cert.pem -export -out mycert.pfx
-    // or using mormot.crypt.openssl:
-    //   c := Cert('x509-rs256');
-    //   c.Generate([cuTlsServer], 'toto.com', nil, 3650);
-    //   FileFromString(c.Save('3des=pass', ccfBinary), WorkDir + 'privkeycert.pfx');
-    blob.cbData := Length(pfx);
-    blob.pbData := pointer(pfx);
-    pass := SynUnicode(Context.PrivatePassword);
-    flags := PKCS12_INCLUDE_EXTENDED_PROPERTIES;
-    if (OSVersion < wVista) or
-       (wsWine in WindowsSpecs) then
-      flags := 0;
-    //flags := flags or PKCS12_ALWAYS_CNG_KSP; // to trigger and debug CNG path
-    fAcceptCertStore := PFXImportCertStore(@blob, pointer(pass), flags);
-    if pass <> '' then
-      FillCharFast(pointer(pass)^, length(pass) * 2, 0); // anti forensic
-    if fAcceptCertStore = nil then
-      RaiseLastError('AfterBind: PFXImportCertStore', ESChannel);
-  end;
-  // find first certificate in store with private key
-  flags := 0;
-  if OSVersion >= wVista then
-    flags := flags or CRYPT_ACQUIRE_ALLOW_NCRYPT_KEY_FLAG; // enable CNG
-  repeat
-    fAcceptCert := mormot.lib.sspi.CertFindCertificateInStore(
-      fAcceptCertStore, 0, 0, CERT_FIND_ANY, nil, fAcceptCert);
-    if fAcceptCert = nil then
-      RaiseLastError('AfterBind: CertFindCertificateInStore', ESChannel);
-    freeprov := false;
-    keyspec := 0;
-  until CryptAcquireCertificatePrivateKey(
-         fAcceptCert, flags, nil, prov, keyspec, freeprov);
-  if freeprov then
-    if keyspec = CERT_NCRYPT_KEY_SPEC then
-      NCrypt.FreeSafe(prov)
-    else if CryptoApi.Available then
-      CryptoApi.ReleaseContext(prov, 0);
-  // this global certificate and its private key will be used by AfterAccept()
-  Context.AcceptCert := fAcceptCert;
+  Context.AcceptCert := nil;
+  fServerAddressW := SynUnicode(ServerAddress);
+  fServerContext := TSChannelServerContext.Create(Context);
+  fServerContextRef := fServerContext; // initiate ref-counting lifetime
+  // this TSChannelServerContext instance will be shared for all connections
+  Context.AcceptCert := fServerContext;
 end;
 
 procedure TSChannelNetTls.AfterAccept(Socket: TNetSocket;
   const BoundContext: TNetTlsContext; LastError, CipherName: PRawUtf8);
-var
-  cred: TSChannelCred;
 begin
   // prepare execution context
   ResetState(Socket);
   fAccept := true;
-  // prepare TLS connection properties from AfterBind() global certificate
+  // reuse the inbound credential; only fCtxt belongs to this connection
   if BoundContext.AcceptCert = nil then
     raise ESChannel.Create('AfterAccept: missing AfterBind');
-  CredInit(cred, BoundContext, 0, @BoundContext.AcceptCert);
-  CheckOK('AfterAccept AcquireCredentialsHandleW',
-    AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_INBOUND,
-      nil, @cred, nil, nil, @fCred, nil));
+  fServerContext := TObject(BoundContext.AcceptCert) as TSChannelServerContext;
+  fServerContextRef := fServerContext; // increment RefCount
   fFlags := ASC_REQ_FLAGS;
   // make initial TLS handshake and prepare for process
   HandshakeLoop;
@@ -2576,8 +2634,8 @@ begin
         LInCtxPtr := nil
       else
         LInCtxPtr := @fCtxt;
-      result := AcceptSecurityContext(
-        @fCred, LInCtxPtr, @b.input, fFlags, 0, @fCtxt, @b.output, f, nil);
+      result := AcceptSecurityContext(@fServerContext.fCred, LInCtxPtr,
+        @b.input, fFlags, 0, @fCtxt, @b.output, f, nil);
     end
     else // client side
       result := InitializeSecurityContextW(
@@ -2704,7 +2762,7 @@ begin
       buf.pvBuffer := nil;
       f := 0;
       if fAccept then
-        AcceptSecurityContext(@fCred, @fCtxt, nil, fFlags, 0,
+        AcceptSecurityContext(@fServerContext.fCred, @fCtxt, nil, fFlags, 0,
           @fCtxt, @desc, f, nil)
       else
         InitializeSecurityContextW(@fCred, @fCtxt,
@@ -2731,14 +2789,9 @@ begin
     CleanShutdown;
   // finalize TLS context for this connection
   FinalizeCredCtxt;
-  // release AfterBind() certificates information
-  if fAcceptCert <> nil then
-    CertFreeCertificateContext(fAcceptCert);
-  if fAcceptCertStore <> nil then
-    CertCloseStore(fAcceptCertStore, CERT_CLOSE_STORE_DEFAULT);
   fSspiSafe.Done; // do nothing on Windows - for API clarity
   inherited Destroy;
-end;
+end; // will finalize fServerContextRef field to decrement its RefCount
 
 function TSChannelNetTls.ReceivePending: integer;
 begin
