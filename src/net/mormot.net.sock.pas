@@ -981,8 +981,8 @@ type
     ServerName: PUtf8Char): pointer of object;
 
   /// TLS Options and Information for a given TCrtSocket/INetTls connection
-  // - currently only properly implemented by mormot.lib.openssl11 - SChannel
-  // on Windows only recognizes IgnoreCertificateErrors and sets CipherName
+  // - implemented by mormot.lib.openssl11 or the native Windows SChannel
+  // backend; some options remain specific to OpenSSL
   // - typical usage is the following:
   // ! with THttpClientSocket.Create do
   // ! try
@@ -1038,7 +1038,7 @@ type
     // - may be useful with high number of concurrent connections to save around
     // 34KB per idle TLS connection - false (disabled) by default
     // - on OpenSSL client or server, set the SSL_MODE_RELEASE_BUFFERS option
-    // - not used on SChannel
+    // - on SChannel, releases idle read/write buffers when requested
     ReleaseBuffers: boolean;
     /// input: PEM/PFX file name containing a certificate to be loaded
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
@@ -1057,7 +1057,9 @@ type
     /// input: opaque pointer containing a certificate to be used
     // - on OpenSSL client or server, calls SSL_CTX_use_certificate() API
     // expecting the pointer to be of PX509 type
-    // - not used on SChannel
+    // - on SChannel server, expects a PCCERT_CONTEXT with an accessible
+    // CAPI/CNG private key; AfterBind duplicates the certificate context
+    // - not used on SChannel client
     CertificateRaw: pointer;
     /// input: PEM file name containing a private key to be loaded
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
@@ -1068,7 +1070,7 @@ type
     // - see also OnPrivatePassword callback
     // - on OpenSSL client or server, calls
     // SSL_CTX_set_default_passwd_cb_userdata() API
-    // - not used on SChannel
+    // - on SChannel server, is the PFX/PKCS#12 import password
     PrivatePassword: RawUtf8;
     /// input: opaque pointer containing a private key to be used
     // - on OpenSSL client or server, calls SSL_CTX_use_PrivateKey() API
@@ -1150,8 +1152,9 @@ type
     // - allow e.g. to verify CN or DNSName fields of the peer certificate
     // - not implemented on SChannel
     OnAfterPeerValidate: TOnNetTlsAfterPeerValidate;
-    /// called by INetTls.AfterConnection to retrieve a private password
-    // - not implemented on SChannel
+    /// called to retrieve a private password
+    // - on SChannel server, overrides PrivatePassword when importing PFX;
+    // TLS is nil during AfterBind
     OnPrivatePassword: TOnNetTlsGetPassword;
     /// called by INetTls.AfterAccept to set a server/host-specific certificate
     // - used e.g. by TAcmeLetsEncryptServer to allow SNI per-host certificate

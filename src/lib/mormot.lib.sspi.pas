@@ -585,6 +585,9 @@ function CryptAcquireCertificatePrivateKey(pCert: PCCERT_CONTEXT; dwFlags: cardi
 
 function CertFreeCertificateContext(pCertContext: PCCERT_CONTEXT): BOOL; stdcall;
 
+function CertDuplicateCertificateContext(
+  pCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT; stdcall;
+
 function CertNameToStrW(dwCertEncodingType: cardinal; var pName: CERT_NAME_BLOB;
   dwStrType: cardinal; psz: PWideChar; csz: cardinal): cardinal; stdcall;
 
@@ -1259,6 +1262,7 @@ function CertGetEnhancedKeyUsage;           external crypt32;
 function CertGetCertificateContextProperty; external crypt32;
 function CryptAcquireCertificatePrivateKey; external crypt32;
 function CertFreeCertificateContext;        external crypt32;
+function CertDuplicateCertificateContext;   external crypt32;
 function CertNameToStrW;                    external crypt32;
 function CryptFindOIDInfo;                  external crypt32;
 

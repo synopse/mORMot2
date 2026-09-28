@@ -2158,9 +2158,9 @@ type
     fParameters: TSChannelCred;
     procedure CheckOK(const ctx: ShortString; res: integer);
       {$ifdef HASINLINE} inline; {$endif}
-    procedure LoadCertificate(const Context: TNetTlsContext);
+    procedure LoadCertificate(Socket: TNetSocket; var Context: TNetTlsContext);
   public
-    constructor Create(const Context: TNetTlsContext);
+    constructor Create(Socket: TNetSocket; var Context: TNetTlsContext);
     destructor Destroy; override;
   end;
 
@@ -2229,28 +2229,43 @@ begin
       [ctx, OsErrorShort(res)]);
 end;
 
-procedure TSChannelServerContext.LoadCertificate(const Context: TNetTlsContext);
+procedure TSChannelServerContext.LoadCertificate(Socket: TNetSocket;
+  var Context: TNetTlsContext);
 var
   pfx: RawByteString;
   blob: TCryptDataBlob;
-  pass: SynUnicode;
+  password: RawUtf8;
   flags, keyspec: cardinal;
   prov: HCRYPTPROV;
   freeprov: BOOL;
+  utf16: PWideChar;
+  tmp: TSynTempBuffer;
 begin
-  pfx := Context.CertificateBin;
-  if (pfx = '') and
+  if Context.CertificateRaw <> nil then
+  begin
+    // retain a reference independent of the caller's certificate lifetime
+    fCertificate := CertDuplicateCertificateContext(
+      PCCERT_CONTEXT(Context.CertificateRaw));
+    if fCertificate = nil then
+      RaiseLastError('AfterBind: CertDuplicateCertificateContext', ESChannel);
+  end;
+  pfx := '';
+  if Context.CertificateRaw = nil then
+    pfx := Context.CertificateBin;
+  if (Context.CertificateRaw = nil) and
+     (pfx = '') and
      (Context.CertificateFile <> '') then
     // try to load from .PFX file
     pfx := StringFromFile(TFileName(Context.CertificateFile));
-  if pfx = '' then
+  if (pfx = '') and
+     (fCertificate = nil) then
   begin
     // fallback to first certificate and private key from personal Windows store
     fStore := CertOpenSystemStoreW(nil, 'MY');
     if fStore = nil then
       RaiseLastError('AfterBind: CertOpenSystemStoreW', ESChannel);
   end
-  else
+  else if pfx <> '' then
   begin
     // expecting e.g. a Let's Encrypt certificate, converted to PFX:
     //   openssl pkcs12 -inkey privkey.pem -in cert.pem -export -out mycert.pfx
@@ -2260,14 +2275,23 @@ begin
     //   FileFromString(c.Save('3des=pass', ccfBinary), WorkDir + 'privkeycert.pfx');
     blob.cbData := Length(pfx);
     blob.pbData := pointer(pfx);
-    pass := SynUnicode(Context.PrivatePassword);
+    password := Context.PrivatePassword;
+    if Assigned(Context.OnPrivatePassword) then
+      password := Context.OnPrivatePassword(Socket, @Context, nil);
+    utf16 := nil;
+    if password <> '' then
+      utf16 := Utf8ToWin32PWideChar(password, tmp);
+    FillZero(RawByteString(password));
     flags := PKCS12_INCLUDE_EXTENDED_PROPERTIES;
     if (OSVersion < wVista) or
        (wsWine in WindowsSpecs) then
       flags := 0;
-    fStore := PFXImportCertStore(@blob, pointer(pass), flags);
-    if pass <> '' then
-      FillCharFast(pointer(pass)^, length(pass) * 2, 0); // anti forensic
+    fStore := PFXImportCertStore(@blob, utf16, flags);
+    if utf16 <> nil then
+    begin
+      FillCharFast(tmp.buf^, tmp.len * 2, 0); // len in WideChar (not bytes)
+      tmp.Done;
+    end;
     if fStore = nil then
       RaiseLastError('AfterBind: PFXImportCertStore', ESChannel);
   end;
@@ -2275,15 +2299,25 @@ begin
   flags := 0;
   if OSVersion >= wVista then
     flags := flags or CRYPT_ACQUIRE_ALLOW_NCRYPT_KEY_FLAG; // enable CNG
-  repeat
-    fCertificate := mormot.lib.sspi.CertFindCertificateInStore(
-      fStore, 0, 0, CERT_FIND_ANY, nil, fCertificate);
-    if fCertificate = nil then
-      RaiseLastError('AfterBind: CertFindCertificateInStore', ESChannel);
+  if fCertificate = nil then
+    repeat
+      fCertificate := mormot.lib.sspi.CertFindCertificateInStore(
+        fStore, 0, 0, CERT_FIND_ANY, nil, fCertificate);
+      if fCertificate = nil then
+        RaiseLastError('AfterBind: CertFindCertificateInStore', ESChannel);
+      freeprov := false;
+      keyspec := 0;
+    until CryptAcquireCertificatePrivateKey(
+           fCertificate, flags, nil, prov, keyspec, freeprov)
+  else
+  begin
+    // a native certificate must have an accessible CAPI/CNG private key
     freeprov := false;
     keyspec := 0;
-  until CryptAcquireCertificatePrivateKey(
-         fCertificate, flags, nil, prov, keyspec, freeprov);
+    if not CryptAcquireCertificatePrivateKey(
+             fCertificate, flags, nil, prov, keyspec, freeprov) then
+      RaiseLastError('AfterBind: CertificateRaw private key', ESChannel);
+  end;
   if freeprov then
     if keyspec = CERT_NCRYPT_KEY_SPEC then
       NCrypt.FreeSafe(prov)
@@ -2291,10 +2325,14 @@ begin
       CryptoApi.ReleaseContext(prov, 0);
 end;
 
-constructor TSChannelServerContext.Create(const Context: TNetTlsContext);
+constructor TSChannelServerContext.Create(Socket: TNetSocket;
+  var Context: TNetTlsContext);
 begin
   inherited Create;
-  LoadCertificate(Context);
+  if Context.ClientCertificateAuthentication then
+    raise ESChannel.Create(
+      'SChannel client certificate authentication is not implemented');
+  LoadCertificate(Socket, Context);
   // keep both credential layouts and their referenced TLS_PARAMETERS stable
   CredInit(fParameters, Context, 0, @fCertificate);
   CheckOK('AcquireCredentialsHandleW',
@@ -2571,7 +2609,7 @@ procedure TSChannelNetTls.AfterBind(Socket: TNetSocket;
 begin
   Context.AcceptCert := nil;
   fServerAddressW := SynUnicode(ServerAddress);
-  fServerContext := TSChannelServerContext.Create(Context);
+  fServerContext := TSChannelServerContext.Create(Socket, Context);
   fServerContextRef := fServerContext; // initiate ref-counting lifetime
   // this TSChannelServerContext instance will be shared for all connections
   Context.AcceptCert := fServerContext;
