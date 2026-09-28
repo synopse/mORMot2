@@ -2461,20 +2461,18 @@ begin
   if status <> NO_ERROR then
     ENCrypt.RaiseFmt(self,
       'Unprotect: NCryptUnprotectSecret failed [%x]', [status]);
-  try
+  if plain <> nil then
+  begin
     if plainlen <> 0 then
-      FastSetRawByteString(result, plain, plainlen);
-  finally
-    if plain <> nil then
     begin
-      if plainlen <> 0 then
-        FillCharFast(plain^, plainlen, 0); // anti-forensic
-      LocalFree(plain);
+      FastSetRawByteString(result, plain, plainlen);
+      FillCharFast(plain^, plainlen, 0); // anti-forensic
     end;
-    if (desc <> nil) and
-       Assigned(CloseProtectionDescriptor) then
-      CloseProtectionDescriptor(desc);
+    LocalFree(plain);
   end;
+  if (desc <> nil) and
+     Assigned(CloseProtectionDescriptor) then
+    CloseProtectionDescriptor(desc);
 end;
 
 function TNCrypt.LapsDecrypt(const bin: RawByteString): RawUtf8;
@@ -2486,15 +2484,15 @@ begin
   result := '';
   len := length(bin);
   if len < 16 then
-    ENCrypt.RaiseFmt(self, 'LapsDecrypt: invalid LDAPS blob (len=%d)', [len]);
+    ENCrypt.RaiseFmt(self, 'LapsDecrypt: invalid LAPS blob (len=%d)', [len]);
   b := pointer(bin);
   expected := len - 16;
   len := PCardinal(b + 8)^;
+  if len <> expected then
+    ENCrypt.RaiseFmt(self, 'LapsDecrypt: header=%d actual=%d', [len, expected]);
   reserved := PCardinal(b + 12)^;
   if reserved <> 0 then
     ENCrypt.RaiseFmt(self, 'LapsDecrypt: Reserved=0x%.8x', [reserved]);
-  if len <> expected then
-    ENCrypt.RaiseFmt(self, 'LapsDecrypt: header=%d actual=%d', [len, expected]);
   utf16 := NCrypt.Unprotect(b + 16, len, NCRYPT_SILENT_FLAG);
   Win32PWideCharToUtf8(pointer(utf16), length(utf16) shr 1, result); // UTF-16
   FillZero(utf16);
