@@ -2486,6 +2486,7 @@ begin
     if (OSVersion < wVista) or
        (wsWine in WindowsSpecs) then
       flags := 0;
+    //flags := flags or PKCS12_ALWAYS_CNG_KSP; // to trigger and debug CNG path
     fAcceptCertStore := PFXImportCertStore(@blob, pointer(pass), flags);
     if pass <> '' then
       FillCharFast(pointer(pass)^, length(pass) * 2, 0); // anti forensic
@@ -2493,7 +2494,7 @@ begin
       RaiseLastError('AfterBind: PFXImportCertStore', ESChannel);
   end;
   // find first certificate in store with private key
-  flags := CRYPT_ACQUIRE_CACHE_FLAG; // credential owned by fAcceptCert
+  flags := 0;
   if OSVersion >= wVista then
     flags := flags or CRYPT_ACQUIRE_ALLOW_NCRYPT_KEY_FLAG; // enable CNG
   repeat
@@ -2501,8 +2502,15 @@ begin
       fAcceptCertStore, 0, 0, CERT_FIND_ANY, nil, fAcceptCert);
     if fAcceptCert = nil then
       RaiseLastError('AfterBind: CertFindCertificateInStore', ESChannel);
+    freeprov := false;
+    keyspec := 0;
   until CryptAcquireCertificatePrivateKey(
          fAcceptCert, flags, nil, prov, keyspec, freeprov);
+  if freeprov then
+    if keyspec = CERT_NCRYPT_KEY_SPEC then
+      NCrypt.FreeSafe(prov)
+    else if CryptoApi.Available then
+      CryptoApi.ReleaseContext(prov, 0);
   // this global certificate and its private key will be used by AfterAccept()
   Context.AcceptCert := fAcceptCert;
 end;

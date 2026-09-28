@@ -2584,6 +2584,7 @@ type
 {$A+}
 
   /// direct access to the Windows CryptoApi - use the global CryptoAPI variable
+  // - consider the more recent NCrypt (CNG) API as defined in mormot.lib.sspi
   {$ifdef USERECORDWITHMETHODS}
   TWinCryptoApi = record
   {$else}
