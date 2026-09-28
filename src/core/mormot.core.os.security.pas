@@ -2641,6 +2641,7 @@ const
   CRYPT_NEWKEYSET                 = 8;
   CRYPT_VERIFYCONTEXT             = DWord($F0000000);
   CRYPT_STRING_BASE64HEADER       = 0; // = PEM textual format
+  CERT_FIND_ANY                   = 0;
   CERT_STORE_PROV_SYSTEM_W        = 10;
   CERT_STORE_OPEN_EXISTING_FLAG   = $00004000;
   CERT_STORE_READONLY_FLAG        = $00008000;
@@ -2741,7 +2742,7 @@ type
 
 /// convert binary data using the Windows CryptBinaryToStringA() API
 // - default Flags are CRYPT_STRING_BASE64HEADER for PEM output
-// - returns '' on conversion failure
+// - leaves Text unchanged on conversion failure
 procedure WinCryptBinaryAppendAsText(Data: pointer; DataLen: cardinal;
   var Text: RawUtf8; Flags: cardinal = CRYPT_STRING_BASE64HEADER);
 

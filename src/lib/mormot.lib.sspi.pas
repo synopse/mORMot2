@@ -499,16 +499,6 @@ const
 
   PKCS12_INCLUDE_EXTENDED_PROPERTIES = $10;
 
-  CERT_FIND_ANY = 0;
-
-  CERT_STORE_PROV_SYSTEM_W        = 10;
-
-  CERT_STORE_OPEN_EXISTING_FLAG   = $00004000;
-  CERT_STORE_READONLY_FLAG        = $00008000;
-
-  CERT_SYSTEM_STORE_CURRENT_USER  = $00010000;
-  CERT_SYSTEM_STORE_LOCAL_MACHINE = $00020000;
-
   CRYPT_ACQUIRE_COMPARE_KEY_FLAG     = $00000004;
   CRYPT_ACQUIRE_SILENT_FLAG          = $00000040;
   CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG = $00040000;
@@ -586,9 +576,6 @@ function CertGetCertificateContextProperty(pCertContext: PCCERT_CONTEXT;
 function CryptAcquireCertificatePrivateKey(pCert: PCCERT_CONTEXT; dwFlags: cardinal;
   pvReserved: pointer; var phCryptProv: HCRYPTPROV; var pdwKeySpec: cardinal;
   var pfCallerFreeProv: BOOL): BOOL; stdcall;
-
-function CertDuplicateCertificateContext(
-  pCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT; stdcall;
 
 function CertNameToStrW(dwCertEncodingType: cardinal; var pName: CERT_NAME_BLOB;
   dwStrType: cardinal; psz: PWideChar; csz: cardinal): cardinal; stdcall;
@@ -1319,6 +1306,26 @@ type
     function LapsDecrypt(const bin: RawByteString): RawUtf8;
   end;
 
+  /// short-lived CNG private key associated with a Windows certificate
+  // - call Init() then Done(), typically within a try..finally block
+  // - hides CryptAcquireCertificatePrivateKey() ownership semantics
+  TWinCertCngKey = object
+  private
+    fCallerFree: boolean;
+  public
+    /// CNG private key returned by CryptAcquireCertificatePrivateKey()
+    Handle: NCRYPT_KEY_HANDLE;
+    /// acquire the CNG private key associated with a certificate
+    // - returns NO_ERROR on success, or a Win32/NTE_* error code
+    // - Silent forbids any KSP user interface, e.g. PIN dialogs
+    // - CompareKey verifies that the private key matches the certificate
+    function Init(Ctxt: PCCERT_CONTEXT; Silent: boolean = false;
+      CompareKey: boolean = true): cardinal;
+    /// release the CNG key if Windows told us that we own the handle
+    procedure Done;
+  end;
+
+
 /// factory for late binding access to the Cryptography Next Generation (CNG) API
 // - on XP may return nil for the functions so you may need to call NCrypt.Exists
 function NCrypt: TNCrypt;
@@ -1363,7 +1370,6 @@ function CertGetIntendedKeyUsage;           external crypt32;
 function CertGetEnhancedKeyUsage;           external crypt32;
 function CertGetCertificateContextProperty; external crypt32;
 function CryptAcquireCertificatePrivateKey; external crypt32;
-function CertDuplicateCertificateContext;   external crypt32;
 function CertNameToStrW;                    external crypt32;
 function CryptFindOIDInfo;                  external crypt32;
 
@@ -1817,7 +1823,7 @@ begin
     exit;
   Finalize(Cert);
   FillcharFast(Cert, SizeOf(Cert), 0);
-  Cert.KeyProviderType := high(cardinal); // 0 means "unknown"
+  Cert.KeyProviderType := high(cardinal); // 0 means CNG, high() means unknown
   nfo := Ctxt^.pCertInfo;
   with nfo^.SerialNumber do
     ToHumanHex(Cert.Serial, pointer(pbData), cbData, {reverse=}true);
@@ -2774,6 +2780,65 @@ begin
   end;
   _NCryptSafe.UnLock;
 end;
+
+
+
+{ TWinCertCngKey }
+
+function TWinCertCngKey.Init(Ctxt: PCCERT_CONTEXT;
+  Silent, CompareKey: boolean): cardinal;
+var
+  h: HCRYPTPROV;
+  keyspec, flags: cardinal;
+  callerfree: BOOL;
+begin
+  Handle := nil;
+  fCallerFree := false;
+  result := ERROR_INVALID_PARAMETER;
+  if Ctxt = nil then
+    exit;
+  flags := CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG;
+  if CompareKey then
+    flags := flags or CRYPT_ACQUIRE_COMPARE_KEY_FLAG;
+  if Silent then
+    flags := flags or CRYPT_ACQUIRE_SILENT_FLAG;
+  h := nil;
+  keyspec := 0;
+  callerfree := false;
+  if not CryptAcquireCertificatePrivateKey(
+      Ctxt, flags, nil, h, keyspec, callerfree) then
+  begin
+    result := GetLastError;
+    exit;
+  end;
+  if keyspec <> CERT_NCRYPT_KEY_SPEC then
+  begin
+    // impossible with CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG,
+    // but properly release an unexpected legacy CSP handle
+    if (h <> nil) and
+       callerfree and
+       CryptoApi.Available then
+      CryptoApi.ReleaseContext(h, 0);
+    result := ERROR_INVALID_DATA;
+    exit;
+  end;
+  result := ERROR_INVALID_HANDLE;
+  if h = nil then
+    exit;
+  Handle := NCRYPT_KEY_HANDLE(h);
+  fCallerFree := callerfree;
+  result := NO_ERROR;
+end;
+
+procedure TWinCertCngKey.Done;
+begin
+  if fCallerFree and
+     (Handle <> nil) then
+    NCrypt.FreeSafe(Handle);
+  Handle := nil;
+  fCallerFree := false;
+end;
+
 
 
 initialization

@@ -2320,9 +2320,9 @@ begin
   end;
   if freeprov then
     if keyspec = CERT_NCRYPT_KEY_SPEC then
-      NCrypt.FreeSafe(prov)
+      NCrypt.FreeSafe(prov)              // CNG API
     else if CryptoApi.Available then
-      CryptoApi.ReleaseContext(prov, 0);
+      CryptoApi.ReleaseContext(prov, 0); // old API
 end;
 
 constructor TSChannelServerContext.Create(Socket: TNetSocket;
