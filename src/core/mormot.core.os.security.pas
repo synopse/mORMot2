@@ -2470,8 +2470,6 @@ type
     Blob: CRYPT_OBJID_BLOB;
   end;
   PCERT_EXTENSION = ^CERT_EXTENSION;
-  CERT_EXTENSIONS = array[word] of CERT_EXTENSION;
-  PCERT_EXTENSIONS = ^CERT_EXTENSIONS;
 
   CERT_INFO = record
     dwVersion: DWord;
@@ -2485,9 +2483,15 @@ type
     IssuerUniqueId: CRYPT_BIT_BLOB;
     SubjectUniqueId: CRYPT_BIT_BLOB;
     cExtension: DWord;
-    rgExtension: PCERT_EXTENSIONS;
+    rgExtension: PCERT_EXTENSION;
   end;
   PCERT_INFO = ^CERT_INFO;
+
+  CERT_EXTENSIONS = record
+    cExtension: DWORD;
+    rgExtension: PCERT_EXTENSION;
+  end;
+  PCERT_EXTENSIONS = ^CERT_EXTENSIONS;
 
   CERT_CONTEXT = record
     dwCertEncodingType: DWord;

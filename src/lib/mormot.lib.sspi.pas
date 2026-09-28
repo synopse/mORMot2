@@ -500,6 +500,8 @@ const
 
   CERT_FIND_ANY = 0;
 
+  CERT_NCRYPT_KEY_SPEC = $ffffffff;
+
   // no check is made to determine whether memory for contexts remains allocated
   CERT_CLOSE_STORE_DEFAULT = 0;
   // force freeing all contexts associated with the store
@@ -559,11 +561,11 @@ function CertStrToNameW(dwCertEncodingType: cardinal; pszX500: PWideChar;
   dwStrType: cardinal; pvReserved, pbEncoded: pointer;
   var pcbEncoded: cardinal; ppszError: pointer): BOOL; stdcall;
 
-function CertCreateSelfSignCertificate(hCryptProvOrNCryptKey: NCRYPT_HANDLE;
+function CertCreateSelfSignCertificate(hCryptProvOrNCryptKey: HCRYPTPROV;
   pSubjectIssuerBlob: pointer; dwFlags: cardinal;
   pKeyProvInfo: PCRYPT_KEY_PROV_INFO;
   pSignatureAlgorithm: pointer; pStartTime, pEndTime: pointer;
-  pExtensions: PCertExtensions): PCCERT_CONTEXT; stdcall;
+  pExtensions: PCERT_EXTENSIONS): PCCERT_CONTEXT; stdcall;
 
 function CertGetIntendedKeyUsage(dwCertEncodingType: cardinal; pCertInfo: PCERT_INFO;
   pbKeyUsage: PByte; cbKeyUsage: cardinal): BOOL; stdcall;
@@ -1660,7 +1662,7 @@ begin
     ToHumanHex(Cert.Hash, @h, len);
   SetLength(Cert.Extension, nfo^.cExtension);
   c := pointer(Cert.Extension);
-  e := @nfo^.rgExtension[0];
+  e := @nfo^.rgExtension;
   for i := 1 to nfo^.cExtension do
   begin
     // store the raw extension content as hexadecimal
