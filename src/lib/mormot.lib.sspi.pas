@@ -501,6 +501,18 @@ const
 
   CERT_FIND_ANY = 0;
 
+  CERT_STORE_PROV_SYSTEM_W        = 10;
+
+  CERT_STORE_OPEN_EXISTING_FLAG   = $00004000;
+  CERT_STORE_READONLY_FLAG        = $00008000;
+
+  CERT_SYSTEM_STORE_CURRENT_USER  = $00010000;
+  CERT_SYSTEM_STORE_LOCAL_MACHINE = $00020000;
+
+  CRYPT_ACQUIRE_COMPARE_KEY_FLAG     = $00000004;
+  CRYPT_ACQUIRE_SILENT_FLAG          = $00000040;
+  CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG = $00040000;
+
   // CERT_KEY_CONTEXT Keys associated with a CNG CSP
   CERT_NCRYPT_KEY_SPEC = $ffffffff;
 
@@ -552,6 +564,9 @@ function CertCloseStore(hCertStore: HCERTSTORE; dwFlags: cardinal): BOOL; stdcal
 
 function CertFindCertificateInStore(hCertStore: HCERTSTORE;
   dwCertEncodingType, dwFindFlags, dwFindType: cardinal; pvFindPara: pointer;
+  pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT; stdcall;
+
+function CertEnumCertificatesInStore(hCertStore: HCERTSTORE;
   pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT; stdcall;
 
 function PFXImportCertStore(pPFX: pointer; szPassword: PWideChar;
@@ -720,6 +735,15 @@ type
     KeyContainer: RawUtf8;
     /// the key container provider name
     KeyProvider: RawUtf8;
+    /// the key provider type from CRYPT_KEY_PROV_INFO.dwProvType
+    // - 0 identifies a CNG Key Storage Provider
+    // - high(cardinal) means no CERT_KEY_PROV_INFO_PROP_ID was available
+    KeyProviderType: cardinal;
+    /// the CRYPT_KEY_PROV_INFO.dwFlags value
+    // - may contain NCRYPT_MACHINE_KEY_FLAG for a CNG machine key
+    KeyProviderFlags: cardinal;
+    /// the CRYPT_KEY_PROV_INFO.dwKeySpec value
+    KeySpec: cardinal;
     /// the raw X509 extensions of this certificate
     Extension: array of TWinCertExtension;
   end;
@@ -1171,9 +1195,9 @@ const
   NCRYPT_ALLOW_SIGNING_FLAG       = $00000002;
   NCRYPT_ALLOW_KEY_AGREEMENT_FLAG = $00000004;
 
-  // common NCrypt object properties
-  NCRYPT_LENGTH_PROPERTY: PWideChar    = 'Length';
-  NCRYPT_KEY_USAGE_PROPERTY: PWideChar = 'Key Usage';
+  // common NCrypt object properties names
+  NCRYPT_LENGTH_PROPERTY    = 'Length';
+  NCRYPT_KEY_USAGE_PROPERTY = 'Key Usage';
 
   // BCrypt hash algorithm identifiers used by NCryptSignHash()
   BCRYPT_ALGORITHM: array[TNcryptHashAlgo] of PWideChar = (
@@ -1350,6 +1374,7 @@ function CertOpenStore;                     external crypt32;
 function CertOpenSystemStoreW;              external crypt32;
 function CertCloseStore;                    external crypt32;
 function CertFindCertificateInStore;        external crypt32;
+function CertEnumCertificatesInStore;       external crypt32;
 function PFXImportCertStore;                external crypt32;
 function CertCreateCertificateContext;      external crypt32;
 function CertStrToNameW;                    external crypt32;
@@ -1813,6 +1838,7 @@ begin
     exit;
   Finalize(Cert);
   FillcharFast(Cert, SizeOf(Cert), 0);
+  Cert.KeyProviderType := high(cardinal); // 0 means "unknown"
   nfo := Ctxt^.pCertInfo;
   with nfo^.SerialNumber do
     ToHumanHex(Cert.Serial, pointer(pbData), cbData, {reverse=}true);
@@ -1872,6 +1898,9 @@ begin
     begin
       Win32PWideCharToUtf8(pwszContainerName, Cert.KeyContainer);
       Win32PWideCharToUtf8(pwszProvName, Cert.KeyProvider);
+      Cert.KeyProviderType  := dwProvType;
+      Cert.KeyProviderFlags := dwFlags;
+      Cert.KeySpec          := dwKeySpec;
     end;
   len := SizeOf(h); // 20 bytes of a SHA-1 hash
   if CertGetCertificateContextProperty(Ctxt, CERT_HASH_PROP_ID, @h, len) then
@@ -2629,7 +2658,7 @@ begin
   flags := 0;
   case Mode of
     nsmEcdsa:
-       ; // NCryptSignHash() expects the raw hash and no padding information
+       pkcs1.pszAlgId := nil; // ECDSA expects raw hash and no padding information
     nsmRsaPkcs1:
       begin
         pkcs1.pszAlgId := BCRYPT_ALGORITHM[Algo];
@@ -2655,10 +2684,10 @@ begin
   bits := KeyBits(hKey);
   case Mode of
     nsmEcdsa:
-      // NCrypt ECDSA signature is fixed-width r || s.
+      // NCrypt ECDSA signature is fixed-width r || s concatenation
       len := ((bits + 7) shr 3) shl 1;
   else
-    // RSA signature always has the modulus size.
+    // RSA signature size is the modulus size
     len := (bits + 7) shr 3;
   end;
   if len = 0 then
