@@ -555,6 +555,16 @@ function PFXImportCertStore(pPFX: pointer; szPassword: PWideChar;
 function CertCreateCertificateContext(dwCertEncodingType: cardinal;
   pbCertEncoded: PByte; cbCertEncoded: cardinal): PCCERT_CONTEXT; stdcall;
 
+function CertStrToNameW(dwCertEncodingType: cardinal; pszX500: PWideChar;
+  dwStrType: cardinal; pvReserved, pbEncoded: pointer;
+  var pcbEncoded: cardinal; ppszError: pointer): BOOL; stdcall;
+
+function CertCreateSelfSignCertificate(hCryptProvOrNCryptKey: NCRYPT_HANDLE;
+  pSubjectIssuerBlob: pointer; dwFlags: cardinal;
+  pKeyProvInfo: PCRYPT_KEY_PROV_INFO;
+  pSignatureAlgorithm: pointer; pStartTime, pEndTime: pointer;
+  pExtensions: PCertExtensions): PCCERT_CONTEXT; stdcall;
+
 function CertGetIntendedKeyUsage(dwCertEncodingType: cardinal; pCertInfo: PCERT_INFO;
   pbKeyUsage: PByte; cbKeyUsage: cardinal): BOOL; stdcall;
 
@@ -1125,6 +1135,8 @@ function CertCloseStore;                    external crypt32;
 function CertFindCertificateInStore;        external crypt32;
 function PFXImportCertStore;                external crypt32;
 function CertCreateCertificateContext;      external crypt32;
+function CertStrToNameW;                    external crypt32;
+function CertCreateSelfSignCertificate;     external crypt32;
 function CertGetIntendedKeyUsage;           external crypt32;
 function CertGetEnhancedKeyUsage;           external crypt32;
 function CertGetCertificateContextProperty; external crypt32;
