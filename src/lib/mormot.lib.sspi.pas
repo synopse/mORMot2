@@ -13,6 +13,7 @@ unit mormot.lib.sspi;
    - High-Level Client and Server Authentication using SSPI
    - Lan Manager Access Functions
    - Windows Application Installation and Servicing (msi)
+   - Low-Level Cryptography Next Generation (CNG) API
 
   *****************************************************************************
 
@@ -500,6 +501,7 @@ const
 
   CERT_FIND_ANY = 0;
 
+  // CERT_KEY_CONTEXT Keys associated with a CNG CSP
   CERT_NCRYPT_KEY_SPEC = $ffffffff;
 
   // no check is made to determine whether memory for contexts remains allocated
@@ -535,6 +537,7 @@ const
   CRYPT_OID_INFO_OID_KEY   = 1;
 
   CRYPT_ACQUIRE_CACHE_FLAG            = $00000001;
+  PKCS12_ALWAYS_CNG_KSP               = $00000200;
   CRYPT_ACQUIRE_ALLOW_NCRYPT_KEY_FLAG = $00010000;
 
 // crypt32.dll API calls
@@ -1106,6 +1109,83 @@ function MsiVerify(const MsiExeFile: TFileName;
   Certificate: PWinCertInfo = nil; HashIgnore: boolean = false): string;
 
 
+{ **************** Low-Level Cryptography Next Generation (CNG) API }
+
+type
+  NCRYPT_HANDLE = pointer;
+  NCRYPT_PROV_HANDLE = NCRYPT_HANDLE;
+  NCRYPT_KEY_HANDLE = NCRYPT_HANDLE;
+
+  /// exception class raised during NCrypt / CNG API process
+  ENCrypt = class(ExceptionWithProps);
+
+  /// dynamically loaded CNG key storage API (unavailable on Windows XP)
+  //- don't use TNCrypt.Create but global NCrypt factory function instead
+  TNCrypt = class(TSynLibrary)
+  public
+    /// open a CNG Key Storage Provider
+    // - pszProviderName may be e.g. MS_KEY_STORAGE_PROVIDER
+    // - returns ERROR_SUCCESS on success, or a NTE_* error code
+    // - the returned provider handle should be released by FreeObject()
+    OpenStorageProvider: function(var phProvider: NCRYPT_PROV_HANDLE;
+      pszProviderName: PWideChar; dwFlags: cardinal): integer; stdcall;
+    /// create a new persisted or ephemeral CNG key
+    // - pszAlgId may be e.g. NCRYPT_RSA_ALGORITHM or NCRYPT_ECDSA_P256_ALGORITHM
+    // - pszKeyName=nil creates an ephemeral key, otherwise a persisted key
+    // - dwLegacyKeySpec is usually 0, or AT_KEYEXCHANGE/AT_SIGNATURE if needed
+    // - call SetProperty() as needed, then FinalizeKey() before using the key
+    // - the returned key handle should be released by FreeObject() or DeleteKey()
+    CreatePersistedKey: function(hProvider: NCRYPT_PROV_HANDLE;
+      var phKey: NCRYPT_KEY_HANDLE; pszAlgId, pszKeyName: PWideChar;
+      dwLegacyKeySpec, dwFlags: cardinal): integer; stdcall;
+    /// set a property on a CNG provider or key object
+    // - pszProperty identifies the property, e.g. NCRYPT_LENGTH_PROPERTY
+    // - pbInput/cbInput contain the property value
+    // - some key properties should be set before FinalizeKey()
+    // - returns ERROR_SUCCESS on success, or a NTE_* error code
+    SetProperty: function(hObject: NCRYPT_HANDLE; pszProperty: PWideChar;
+      pbInput: pointer; cbInput, dwFlags: cardinal): integer; stdcall;
+    /// finalize a newly created or imported CNG key
+    // - applies the configured key properties and makes the key usable
+    // - should be called once after CreatePersistedKey() and SetProperty()
+    // - returns ERROR_SUCCESS on success, or a NTE_* error code
+    FinalizeKey: function(hKey: NCRYPT_KEY_HANDLE;
+      dwFlags: cardinal): integer; stdcall;
+    /// delete a persisted CNG key and release its handle
+    // - removes the key from its Key Storage Provider
+    // - the supplied handle should not be used after a successful call
+    // - returns ERROR_SUCCESS on success, or a NTE_* error code
+    DeleteKey: function(hKey: NCRYPT_KEY_HANDLE;
+      dwFlags: cardinal): integer; stdcall;
+    /// release a CNG provider or key handle
+    // - accepts handles returned by OpenStorageProvider(), CreatePersistedKey()
+    // and other NCrypt* functions
+    // - does not delete a persisted key from its provider
+    // - returns ERROR_SUCCESS on success, or a NTE_* error code
+    FreeObject: function(hObject: NCRYPT_HANDLE): integer; stdcall;
+    /// same as FreeObject() but raise ENCrypt on XP instead of GPF
+    function FreeSafe(hObject: NCRYPT_HANDLE): integer;
+  end;
+
+const
+  MS_KEY_STORAGE_PROVIDER = 'Microsoft Software Key Storage Provider';
+  NCRYPT_SILENT_FLAG = $00000040;
+  NCRYPT_ALLOW_DECRYPT_FLAG = $00000001;
+  NCRYPT_ALLOW_SIGNING_FLAG = $00000002;
+
+/// factory for late binding access to the Cryptography Next Generation (CNG) API
+// - on XP may return nil for the functions so you may need to call NCrypt.Exists
+function NCrypt: TNCrypt;
+  {$ifdef HASINLINE} inline; {$endif}
+
+var
+  /// global variable used when inlining NCrypt wrapper function
+  _NCrypt: TNCrypt;
+
+/// function used when inlining NCrypt wrapper function
+function InitializeNCrypt: TNCrypt;
+
+
 implementation
 
 
@@ -1662,7 +1742,7 @@ begin
     ToHumanHex(Cert.Hash, @h, len);
   SetLength(Cert.Extension, nfo^.cExtension);
   c := pointer(Cert.Extension);
-  e := @nfo^.rgExtension;
+  e := nfo^.rgExtension;
   for i := 1 to nfo^.cExtension do
   begin
     // store the raw extension content as hexadecimal
@@ -2316,11 +2396,59 @@ begin
 end;
 
 
+{ **************** Low-Level Cryptography API: Next Generation (CNG) Functions }
+
+{ TNCrypt }
+
+function TNCrypt.FreeSafe(hObject: NCRYPT_HANDLE): integer;
+begin
+  if Assigned(FreeObject) then
+    result := FreeObject(hObject)
+  else
+    raise ENCrypt.CreateFmt('Unexpected NCrypt.FreeSafe on %', [OSVersionShort]);
+end;
+
+var
+  _NCryptSafe: TLightLock;
+
+function NCrypt: TNCrypt;
+begin
+  result := _NCrypt;
+  if result = nil then
+    result := InitializeNCrypt; // delayed thread-safe loading
+end;
+
+const
+  NCRYPT_NAMES: array[0..6] of PAnsiChar = (
+    'OpenStorageProvider',
+    'CreatePersistedKey',
+    'SetProperty',
+    'FinalizeKey',
+    'DeleteKey',
+    'FreeObject',
+    nil);
+
+function InitializeNCrypt: TNCrypt;
+begin
+  _NCryptSafe.Lock;
+  result := _NCrypt;
+  if result = nil then
+  begin
+    result := TNCrypt.Create;
+    if OSVersion >= wVista then // not available on XP
+       result.TryLoadResolve(['ncrypt.dll'], 'NCrypt', @NCRYPT_NAMES,
+         @@result.OpenStorageProvider, ESynSspi);
+    _NCrypt := result; // should be set last
+  end;
+  _NCryptSafe.UnLock;
+end;
+
 
 initialization
   WinCertInfoToText := @_WinCertInfoToText;
 
 finalization
+  _NCrypt.Free;
 
 {$endif OSPOSIX}
 
