@@ -554,19 +554,8 @@ const
 
 // crypt32.dll API calls
 
-function CertOpenStore(lpszStoreProvider: PAnsiChar; dwEncodingType: cardinal;
-  hCryptProv: HCRYPTPROV; dwFlags: cardinal; pvPara: pointer): HCERTSTORE; stdcall;
-
-function CertOpenSystemStoreW(hProv: HCRYPTPROV;
-  szSubsystemProtocol: PWideChar): HCERTSTORE; stdcall;
-
-function CertCloseStore(hCertStore: HCERTSTORE; dwFlags: cardinal): BOOL; stdcall;
-
 function CertFindCertificateInStore(hCertStore: HCERTSTORE;
   dwCertEncodingType, dwFindFlags, dwFindType: cardinal; pvFindPara: pointer;
-  pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT; stdcall;
-
-function CertEnumCertificatesInStore(hCertStore: HCERTSTORE;
   pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT; stdcall;
 
 function PFXImportCertStore(pPFX: pointer; szPassword: PWideChar;
@@ -597,8 +586,6 @@ function CertGetCertificateContextProperty(pCertContext: PCCERT_CONTEXT;
 function CryptAcquireCertificatePrivateKey(pCert: PCCERT_CONTEXT; dwFlags: cardinal;
   pvReserved: pointer; var phCryptProv: HCRYPTPROV; var pdwKeySpec: cardinal;
   var pfCallerFreeProv: BOOL): BOOL; stdcall;
-
-function CertFreeCertificateContext(pCertContext: PCCERT_CONTEXT): BOOL; stdcall;
 
 function CertDuplicateCertificateContext(
   pCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT; stdcall;
@@ -1367,14 +1354,7 @@ function FreeContextBuffer;          external secur32;
 function DeleteSecurityContext;      external secur32;
 function FreeCredentialsHandle;      external secur32;
 
-const
-  crypt32 = 'crypt32.dll';
-
-function CertOpenStore;                     external crypt32;
-function CertOpenSystemStoreW;              external crypt32;
-function CertCloseStore;                    external crypt32;
 function CertFindCertificateInStore;        external crypt32;
-function CertEnumCertificatesInStore;       external crypt32;
 function PFXImportCertStore;                external crypt32;
 function CertCreateCertificateContext;      external crypt32;
 function CertStrToNameW;                    external crypt32;
@@ -1383,7 +1363,6 @@ function CertGetIntendedKeyUsage;           external crypt32;
 function CertGetEnhancedKeyUsage;           external crypt32;
 function CertGetCertificateContextProperty; external crypt32;
 function CryptAcquireCertificatePrivateKey; external crypt32;
-function CertFreeCertificateContext;        external crypt32;
 function CertDuplicateCertificateContext;   external crypt32;
 function CertNameToStrW;                    external crypt32;
 function CryptFindOIDInfo;                  external crypt32;

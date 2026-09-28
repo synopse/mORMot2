@@ -2641,6 +2641,11 @@ const
   CRYPT_NEWKEYSET                 = 8;
   CRYPT_VERIFYCONTEXT             = DWord($F0000000);
   CRYPT_STRING_BASE64HEADER       = 0; // = PEM textual format
+  CERT_STORE_PROV_SYSTEM_W        = 10;
+  CERT_STORE_OPEN_EXISTING_FLAG   = $00004000;
+  CERT_STORE_READONLY_FLAG        = $00008000;
+  CERT_SYSTEM_STORE_CURRENT_USER  = $00010000;
+  CERT_SYSTEM_STORE_LOCAL_MACHINE = $00020000;
   CRYPTPROTECT_UI_FORBIDDEN       = 1;
   PLAINTEXTKEYBLOB                = 8;
   CUR_BLOB_VERSION                = 2;
@@ -2668,9 +2673,19 @@ function CertOpenSystemStoreW(hProv: HCRYPTPROV;
   szSubsystemProtocol: PWideChar): HCERTSTORE ;
     stdcall; external crypt32;
 
+function CertOpenStore(lpszStoreProvider: PAnsiChar; dwEncodingType: cardinal;
+  hCryptProv: HCRYPTPROV; dwFlags: cardinal; pvPara: pointer): HCERTSTORE;
+  stdcall; external crypt32;
+
 function CertEnumCertificatesInStore(hCertStore: HCERTSTORE;
   pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT;
     stdcall; external crypt32;
+
+function CertFreeCertificateContext(pCertContext: PCCERT_CONTEXT): BOOL;
+  stdcall; external crypt32;
+
+function CertDuplicateCertificateContext(pCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT;
+  stdcall; external crypt32;
 
 function CryptBinaryToStringA(pBinary: PByte; cbBinary, dwFlags: DWord;
   pszString: PAnsiChar; var pchString: DWord): BOOL;
@@ -2678,6 +2693,57 @@ function CryptBinaryToStringA(pBinary: PByte; cbBinary, dwFlags: DWord;
 
 function CertCloseStore(hCertStore: HCERTSTORE; dwFlags: DWord): BOOL;
     stdcall; external crypt32;
+
+type
+  /// identify the location of a Windows system certificate store
+  TWinCertStoreLocation = (
+    wcslCurrentUser,
+    wcslLocalMachine);
+
+  /// enumerate certificates from one Windows system certificate store
+  // - owns the HCERTSTORE and current enumeration PCCERT_CONTEXT
+  // - Context is valid until the next call to Next() or until destruction
+  // - call Duplicate() if the current context should survive this instance
+  TWinCertStore = class
+  private
+    fHandle: HCERTSTORE;
+    fContext: PCCERT_CONTEXT;
+    fCertStore: TSystemCertificateStore;
+    fLocation: TWinCertStoreLocation;
+  public
+    /// open a Windows certificate store for read-only enumeration
+    constructor Create(CertStore: TSystemCertificateStore;
+      Location: TWinCertStoreLocation = wcslCurrentUser); reintroduce;
+    /// release the current certificate context and store handle
+    destructor Destroy; override;
+    /// move to the next certificate
+    // - automatically releases the previous Context
+    // - returns false when no more certificate is available
+    function Next: boolean;
+    /// duplicate the current certificate context
+    // - caller should eventually call CertFreeCertificateContext()
+    function Duplicate: PCCERT_CONTEXT;
+    /// export the current certificate context as PEM text
+    function ToPem: RawUtf8;
+    /// underlying certificate store handle
+    property Handle: HCERTSTORE
+      read fHandle;
+    /// current enumerated certificate
+    property Context: PCCERT_CONTEXT
+      read fContext;
+    /// logical certificate store, e.g. scsMY or scsRoot
+    property CertStore: TSystemCertificateStore
+      read fCertStore;
+    /// Windows store location
+    property Location: TWinCertStoreLocation
+      read fLocation;
+  end;
+
+/// convert binary data using the Windows CryptBinaryToStringA() API
+// - default Flags are CRYPT_STRING_BASE64HEADER for PEM output
+// - returns '' on conversion failure
+procedure WinCryptBinaryAppendAsText(Data: pointer; DataLen: cardinal;
+  var Text: RawUtf8; Flags: cardinal = CRYPT_STRING_BASE64HEADER);
 
 type
   /// TSynWindowsPrivileges enumeration synchronized with WinAPI
@@ -7575,37 +7641,18 @@ end;
 
 {$ifdef OSWINDOWS}
 
-const
-  WINDOWS_CERTSTORE: array[TSystemCertificateStore] of PWideChar = (
-    'CA', 'MY', 'ROOT', 'SPC');
-
 function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;
 var
-  certlen: DWord;
-  store: HCERTSTORE;
-  ctx: PCCERT_CONTEXT;
-  tmp: TSynTempBuffer;
+  store: TWinCertStore; // use our thing Windows API wrapper
 begin
-  // call the Windows API to retrieve the System certificates
   FastAssignNew(result);
-  store := CertOpenSystemStoreW(nil, WINDOWS_CERTSTORE[CertStore]);
+  store := TWinCertStore.Create(CertStore);
   try
-    ctx := CertEnumCertificatesInStore(store, nil);
-    while ctx <> nil do
-    begin
-      certlen := 0;
-      if not CryptBinaryToStringA(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
-          CRYPT_STRING_BASE64HEADER, nil, certlen) then
-        break;
-      tmp.Init(certlen); // a PEM is very likely to be < 8KB so will be on stack
-      if CryptBinaryToStringA(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
-          CRYPT_STRING_BASE64HEADER, tmp.buf, certlen) then
-         AppendBufferToUtf8(tmp.buf, certlen, result);
-      tmp.Done;
-      ctx := CertEnumCertificatesInStore(store, ctx); // next certificate
-    end;
+    while store.Next do
+      with store.Context^ do
+        WinCryptBinaryAppendAsText(pbCertEncoded, cbCertEncoded, result);
   finally
-    CertCloseStore(store, 0);
+    store.Free;
   end;
 end;
 
@@ -7885,6 +7932,87 @@ begin
   else
     FastAssignNew(result);
 end;
+
+procedure WinCryptBinaryAppendAsText(Data: pointer; DataLen: cardinal;
+  var Text: RawUtf8; Flags: cardinal);
+var
+  len: cardinal;
+  tmp: TSynTempBuffer;
+begin
+  if (Data = nil) or
+     (DataLen = 0) then
+    exit;
+  len := 0; // first API call to retrieve the full length
+  if not CryptBinaryToStringA(Data, DataLen, Flags, nil, len) or
+     (len = 0) then
+    exit;
+  tmp.Init(len); // second API call for the actual conversion process
+  if CryptBinaryToStringA(Data, DataLen, Flags, tmp.buf, len) then
+    AppendBufferToUtf8(tmp.buf, len, Text);
+  tmp.Done;
+end;
+
+
+{ TWinCertStore }
+
+const
+  WINDOWS_CERTSTORE: array[TSystemCertificateStore] of PWideChar = (
+    'CA', 'MY', 'ROOT', 'SPC');
+
+  WINDOWS_CERTSTORE_LOCATION: array[TWinCertStoreLocation] of cardinal = (
+    CERT_SYSTEM_STORE_CURRENT_USER,
+    CERT_SYSTEM_STORE_LOCAL_MACHINE);
+
+constructor TWinCertStore.Create(CertStore: TSystemCertificateStore;
+  Location: TWinCertStoreLocation);
+begin
+  inherited Create;
+  fCertStore := CertStore;
+  fLocation := Location;
+  fHandle := CertOpenStore(
+    PAnsiChar(PtrUInt(CERT_STORE_PROV_SYSTEM_W)),
+    0,
+    nil,
+    WINDOWS_CERTSTORE_LOCATION[Location] or
+      CERT_STORE_OPEN_EXISTING_FLAG or
+      CERT_STORE_READONLY_FLAG,
+    WINDOWS_CERTSTORE[CertStore]);
+end;
+
+destructor TWinCertStore.Destroy;
+begin
+  if fContext <> nil then
+    CertFreeCertificateContext(fContext);
+  if fHandle <> nil then
+    CertCloseStore(fHandle, 0);
+  inherited Destroy;
+end;
+
+function TWinCertStore.Next: boolean;
+begin
+  result := false;
+  if fHandle = nil then
+    exit;
+  // CertEnumCertificatesInStore() releases the previous fContext
+  fContext := CertEnumCertificatesInStore(fHandle, fContext);
+  result := fContext <> nil;
+end;
+
+function TWinCertStore.Duplicate: PCCERT_CONTEXT;
+begin
+  if fContext = nil then
+    result := nil
+  else
+    result := CertDuplicateCertificateContext(fContext);
+end;
+
+function TWinCertStore.ToPem: RawUtf8;
+begin
+  FastAssignNew(result);
+  if fContext <> nil then
+    WinCryptBinaryAppendAsText(fContext.pbCertEncoded, fContext.cbCertEncoded, result);
+end;
+
 
 function SetSystemTime(const utctime: TSystemTime): boolean;
 var
