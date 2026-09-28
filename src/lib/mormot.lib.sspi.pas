@@ -1114,20 +1114,72 @@ function MsiVerify(const MsiExeFile: TFileName;
 
 { **************** Low-Level Cryptography Next Generation (CNG) API }
 
-const
-  MS_KEY_STORAGE_PROVIDER = 'Microsoft Software Key Storage Provider';
-
-  NCRYPT_SILENT_FLAG        = $00000040;
-  NCRYPT_ALLOW_DECRYPT_FLAG = $00000001;
-  NCRYPT_ALLOW_SIGNING_FLAG = $00000002;
-
 type
+  // define various CNG handles as abstract pointers
   NCRYPT_HANDLE             = pointer;
-  NCRYPT_PROV_HANDLE        = NCRYPT_HANDLE;
-  NCRYPT_KEY_HANDLE         = NCRYPT_HANDLE;
-  NCRYPT_DESCRIPTOR_HANDLE  = NCRYPT_HANDLE;
+  NCRYPT_PROV_HANDLE        = type NCRYPT_HANDLE;
+  NCRYPT_KEY_HANDLE         = type NCRYPT_HANDLE;
+  NCRYPT_DESCRIPTOR_HANDLE  = type NCRYPT_HANDLE;
   PNCRYPT_DESCRIPTOR_HANDLE = ^NCRYPT_DESCRIPTOR_HANDLE;
 
+  /// RSA PKCS#1 padding parameters expected by NCryptSignHash()
+  TBcryptPkcs1PaddingInfo = record
+    pszAlgId: PWideChar;
+  end;
+  PBcryptPkcs1PaddingInfo = ^TBcryptPkcs1PaddingInfo;
+
+  /// RSA-PSS padding parameters expected by NCryptSignHash()
+  TBcryptPssPaddingInfo = record
+    pszAlgId: PWideChar;
+    cbSalt: cardinal;
+  end;
+  PBcryptPssPaddingInfo = ^TBcryptPssPaddingInfo;
+
+type
+  /// middle-level hash algorithm identifier supplied to CNG RSA padding
+  // - kept local to mormot.lib.sspi to avoid any mormot.crypt dependency
+  TNcryptHashAlgo = (
+    nhaSha256,
+    nhaSha384,
+    nhaSha512);
+
+  /// middle-level signature mode for TNCrypt.KeySign()
+  // - nsmEcdsa uses no CNG padding and returns the native raw r || s signature
+  // - nsmRsaPkcs1 uses PKCS#1 v1.5 signature padding
+  // - nsmRsaPss uses RSA-PSS signature padding
+  TNcryptSignMode = (
+    nsmEcdsa,
+    nsmRsaPkcs1,
+    nsmRsaPss);
+
+const
+  /// default Microsoft software Key Storage Provider
+  MS_KEY_STORAGE_PROVIDER = 'Microsoft Software Key Storage Provider';
+
+  // common NCrypt operation flags
+  NCRYPT_SILENT_FLAG      = $00000040;
+  NCRYPT_MACHINE_KEY_FLAG = $00000020;
+
+  // NCryptSignHash / NCryptDecrypt padding flags
+  NCRYPT_NO_PADDING_FLAG   = $00000001;
+  NCRYPT_PAD_PKCS1_FLAG    = $00000002;
+  NCRYPT_PAD_OAEP_FLAG     = $00000004;
+  NCRYPT_PAD_PSS_FLAG      = $00000008;
+
+  // NCRYPT_KEY_USAGE_PROPERTY flags
+  NCRYPT_ALLOW_DECRYPT_FLAG       = $00000001;
+  NCRYPT_ALLOW_SIGNING_FLAG       = $00000002;
+  NCRYPT_ALLOW_KEY_AGREEMENT_FLAG = $00000004;
+
+  // common NCrypt object properties
+  NCRYPT_LENGTH_PROPERTY: PWideChar    = 'Length';
+  NCRYPT_KEY_USAGE_PROPERTY: PWideChar = 'Key Usage';
+
+  // BCrypt hash algorithm identifiers used by NCryptSignHash()
+  BCRYPT_ALGORITHM: array[TNcryptHashAlgo] of PWideChar = (
+    'SHA256', 'SHA384', 'SHA512');
+
+type
   /// exception class raised during NCrypt / CNG API process
   ENCrypt = class(ExceptionWithProps);
 
@@ -1141,6 +1193,11 @@ type
     // - the returned provider handle should be released by FreeObject()
     OpenStorageProvider: function(var phProvider: NCRYPT_PROV_HANDLE;
       pszProviderName: PWideChar; dwFlags: cardinal): integer; stdcall;
+    /// open an existing CNG key from a Key Storage Provider
+    // - the returned key should be released by FreeObject()
+    OpenKey: function(hProvider: NCRYPT_PROV_HANDLE;
+      var phKey: NCRYPT_KEY_HANDLE; pszKeyName: PWideChar;
+      dwLegacyKeySpec, dwFlags: cardinal): integer; stdcall;
     /// create a new persisted or ephemeral CNG key
     // - pszAlgId may be e.g. NCRYPT_RSA_ALGORITHM or NCRYPT_ECDSA_P256_ALGORITHM
     // - pszKeyName=nil creates an ephemeral key, otherwise a persisted key
@@ -1150,6 +1207,10 @@ type
     CreatePersistedKey: function(hProvider: NCRYPT_PROV_HANDLE;
       var phKey: NCRYPT_KEY_HANDLE; pszAlgId, pszKeyName: PWideChar;
       dwLegacyKeySpec, dwFlags: cardinal): integer; stdcall;
+    /// retrieve a property from a CNG provider or key object
+    GetProperty: function(hObject: NCRYPT_HANDLE; pszProperty: PWideChar;
+      pbOutput: pointer; cbOutput: cardinal; var pcbResult: cardinal;
+      dwFlags: cardinal): integer; stdcall;
     /// set a property on a CNG provider or key object
     // - pszProperty identifies the property, e.g. NCRYPT_LENGTH_PROPERTY
     // - pbInput/cbInput contain the property value
@@ -1175,6 +1236,18 @@ type
     // - does not delete a persisted key from its provider
     // - returns ERROR_SUCCESS on success, or a NTE_* error code
     FreeObject: function(hObject: NCRYPT_HANDLE): integer; stdcall;
+    /// create a RSA or ECDSA signature over an already computed hash
+    SignHash: function(hKey: NCRYPT_KEY_HANDLE; pPaddingInfo: pointer;
+      pbHashValue: PByte; cbHashValue: cardinal; pbSignature: PByte;
+      cbSignature: cardinal; var pcbResult: cardinal;
+      dwFlags: cardinal): integer; stdcall;
+    /// decrypt one asymmetric encrypted block
+    // - added here already because it belongs to the same basic NCrypt surface
+    // - the higher-level RSA envelope integration may be implemented later
+    Decrypt: function(hKey: NCRYPT_KEY_HANDLE; pbInput: PByte;
+      cbInput: cardinal; pPaddingInfo: pointer; pbOutput: PByte;
+      cbOutput: cardinal; var pcbResult: cardinal;
+      dwFlags: cardinal): integer; stdcall;
     /// protect an in-memory secret using a CNG protection descriptor
     // - hDescriptor defines how the secret is protected
     // - pbData/cbData contain the clear-text input buffer
@@ -1200,8 +1273,32 @@ type
     // - returns ERROR_SUCCESS on success, or a NTE_* / Win32 error code
     CloseProtectionDescriptor: function(
       hDescriptor: NCRYPT_DESCRIPTOR_HANDLE): integer; stdcall;
+  public
     /// same as FreeObject() but raise ENCrypt on XP instead of GPF
     function FreeSafe(hObject: NCRYPT_HANDLE): integer;
+    /// retrieve a cardinal property from a CNG provider or key
+    // - raise ENCrypt on any NCryptGetProperty() error
+    function GetCardinal(hObject: NCRYPT_HANDLE; PropertyName: PWideChar): cardinal;
+    /// retrieve any CNG object property into a binary buffer
+    // - returns '' for a zero-length property
+    // - raise ENCrypt on NCryptGetProperty() errors
+    function GetBuffer(hObject: NCRYPT_HANDLE; PropertyName: PWideChar): RawByteString;
+    /// return the size in bits of a CNG key
+    function KeyBits(hKey: NCRYPT_KEY_HANDLE): cardinal;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// return the allowed NCRYPT_ALLOW_* usages of a CNG key
+    function KeyUsage(hKey: NCRYPT_KEY_HANDLE): cardinal;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// sign an already computed hash with a CNG private key
+    // - Algo identifies the hash for RSA PKCS#1/PSS padding
+    // - Mode selects ECDSA, RSA PKCS#1 or RSA-PSS signing
+    // - PssSaltLen=0 means use HashLen, as expected by JOSE
+    // - Silent adds NCRYPT_SILENT_FLAG to forbid any KSP user interface
+    // - ECDSA result is the native fixed-width r || s returned by CNG
+    // - raise ENCrypt on API or key-property errors
+    function KeySign(hKey: NCRYPT_KEY_HANDLE; Hash: pointer; HashLen: cardinal;
+      Algo: TNcryptHashAlgo; Mode: TNcryptSignMode; PssSaltLen: cardinal = 0;
+      Silent: boolean = false): RawByteString;
     /// wrapper around the UnprotectSecret() API
     function Unprotect(Buf: pointer; Len: cardinal;
       Flags: cardinal = NCRYPT_SILENT_FLAG): RawByteString;
@@ -2437,34 +2534,159 @@ end;
 
 { **************** Low-Level Cryptography API: Next Generation (CNG) Functions }
 
+procedure EnsureExists(Api: pointer; const Name: ShortString);
+begin
+  if not Assigned(Api) then
+    raise ENCrypt.CreateFmt('NCrypt%s unavailable on %s', [Name, OSVersionShort]);
+end;
+
+procedure CheckNCrypt(const Name: ShortString; Status: integer);
+begin
+  if status <> NO_ERROR then
+    // OSErrorShort() knows most NTE_* error constants returned by CNG API
+    raise ENCrypt.CreateFmt('NCrypt%s failed %s', [Name, OsErrorShort(Status)]);
+end;
+
+
 { TNCrypt }
 
 function TNCrypt.FreeSafe(hObject: NCRYPT_HANDLE): integer;
 begin
-  if Assigned(FreeObject) then
-    result := FreeObject(hObject)
+  EnsureExists(@FreeObject, 'FreeObject');
+  result := FreeObject(hObject);
+end;
+
+function TNCrypt.GetCardinal(hObject: NCRYPT_HANDLE;
+  PropertyName: PWideChar): cardinal;
+var
+  len: cardinal;
+begin
+  result := 0;
+  EnsureExists(@GetProperty, 'GetProperty');
+  if (hObject = nil) or
+     (PropertyName = nil) then
+    ENCrypt.RaiseFmt(self, 'GetCardinal: invalid parameter', []);
+  len := 0;
+  CheckNCrypt('GetProperty',
+    GetProperty(hObject, PropertyName, @result, SizeOf(result), len, 0));
+  if len <> SizeOf(result) then
+    ENCrypt.RaiseFmt(self,
+      'GetCardinal: unexpected property size %', [len]);
+end;
+
+function TNCrypt.GetBuffer(hObject: NCRYPT_HANDLE;
+  PropertyName: PWideChar): RawByteString;
+var
+  len, outlen: cardinal;
+begin
+  FastAssignNew(result);
+  EnsureExists(@GetProperty, 'GetProperty');
+  if (hObject = nil) or
+     (PropertyName = nil) then
+    ENCrypt.RaiseFmt(self, 'GetBuffer: invalid parameter', []);
+  len := 0;
+  CheckNCrypt('GetProperty Buffer Size',
+    GetProperty(hObject, PropertyName, nil, 0, len, 0));
+  if len = 0 then
+    exit;
+  pointer(result) := FastNewString(len);
+  outlen := len;
+  CheckNCrypt('GetProperty Buffer Value',
+    GetProperty(hObject, PropertyName, pointer(result), len, outlen, 0));
+  if outlen > len then
+    ENCrypt.RaiseFmt(self,
+      'GetBuffer: unexpected property size % > %', [outlen, len]);
+  if outlen <> len then
+    FakeLength(result, outlen);
+end;
+
+function TNCrypt.KeyBits(hKey: NCRYPT_KEY_HANDLE): cardinal;
+begin
+  result := GetCardinal(hKey, NCRYPT_LENGTH_PROPERTY);
+end;
+
+function TNCrypt.KeyUsage(hKey: NCRYPT_KEY_HANDLE): cardinal;
+begin
+  result := GetCardinal(hKey, NCRYPT_KEY_USAGE_PROPERTY);
+end;
+
+function TNCrypt.KeySign(hKey: NCRYPT_KEY_HANDLE; Hash: pointer; HashLen: cardinal;
+  Algo: TNcryptHashAlgo; Mode: TNcryptSignMode; PssSaltLen: cardinal;
+  Silent: boolean): RawByteString;
+var
+  bits, len, outlen, flags: cardinal;
+  padding: pointer;
+  pkcs1: TBcryptPkcs1PaddingInfo;
+  pss: TBcryptPssPaddingInfo;
+begin
+  FastAssignNew(result);
+  EnsureExists(@SignHash, 'SignHash');
+  if (hKey = nil) or
+     (Hash = nil) or
+     (HashLen = 0) then
+    ENCrypt.RaiseFmt(self, 'KeySign: invalid parameter', []);
+  padding := nil;
+  flags := 0;
+  case Mode of
+    nsmEcdsa:
+       ; // NCryptSignHash() expects the raw hash and no padding information
+    nsmRsaPkcs1:
+      begin
+        pkcs1.pszAlgId := BCRYPT_ALGORITHM[Algo];
+        padding := @pkcs1;
+        flags := NCRYPT_PAD_PKCS1_FLAG;
+      end;
+    nsmRsaPss:
+      begin
+        if PssSaltLen = 0 then
+          PssSaltLen := HashLen;
+        pss.pszAlgId := BCRYPT_ALGORITHM[Algo];
+        pss.cbSalt := PssSaltLen;
+        padding := @pss;
+        flags := NCRYPT_PAD_PSS_FLAG;
+      end;
+  else // paranoid
+    ENCrypt.RaiseFmt(self, 'KeySign: invalid signature mode %d', [ord(Mode)]);
+  end;
+  if Silent then
+    flags := flags or NCRYPT_SILENT_FLAG;
+  // don't issue the conventional NCryptSignHash(nil output) size query
+  // - for a hardware KSP we want a single actual signing operation
+  bits := KeyBits(hKey);
+  case Mode of
+    nsmEcdsa:
+      // NCrypt ECDSA signature is fixed-width r || s.
+      len := ((bits + 7) shr 3) shl 1;
   else
-    raise ENCrypt.CreateFmt(
-      'Unexpected NCrypt.FreeSafe on %s', [OSVersionShort]);
+    // RSA signature always has the modulus size.
+    len := (bits + 7) shr 3;
+  end;
+  if len = 0 then
+    ENCrypt.RaiseFmt(self, 'KeySign: invalid key size', []);
+  pointer(result) := FastNewString(len);
+  outlen := len;
+  CheckNCrypt('SignHash',
+    SignHash(hKey, padding, Hash, HashLen, pointer(result), len, outlen, flags));
+  if outlen > len then
+    ENCrypt.RaiseFmt(self,
+      'KeySign: unexpected signature size % > %', [outlen, len]);
+  if outlen <> len then
+    FakeLength(result, outlen);
 end;
 
 function TNCrypt.Unprotect(Buf: pointer; Len, Flags: cardinal): RawByteString;
 var
   desc: NCRYPT_DESCRIPTOR_HANDLE;
   plain: pointer;
-  plainlen, status: cardinal;
+  plainlen: cardinal;
 begin
   FastAssignNew(result);
-  if not Assigned(UnprotectSecret) then
-    ENCrypt.RaiseFmt(self, 'Unprotect: NCryptUnprotectSecret unavailable on %s',
-      [OSVersionShort]);
+  EnsureExists(@UnprotectSecret, 'UnprotectSecret');
   desc := nil;
   plain := nil;
   plainlen := 0;
-  status := UnprotectSecret(@desc, Flags, Buf, Len, nil, 0, plain, plainlen);
-  if status <> NO_ERROR then
-    ENCrypt.RaiseFmt(self,
-      'Unprotect: NCryptUnprotectSecret failed [%x]', [status]);
+  CheckNCrypt('UnprotectSecret',
+    UnprotectSecret(@desc, Flags, Buf, Len, nil, 0, plain, plainlen));
   if plain <> nil then
   begin
     if plainlen <> 0 then
@@ -2513,13 +2735,17 @@ begin
 end;
 
 const
-  NCRYPT_NAMES: array[0..9] of PAnsiChar = (
+  NCRYPT_NAMES: array[0 .. 13] of PAnsiChar = (
     'OpenStorageProvider',
+    'OpenKey',
     'CreatePersistedKey',
+    'GetProperty',
     'SetProperty',
     'FinalizeKey',
     'DeleteKey',
     'FreeObject',
+    'SignHash',
+    'Decrypt',
     '?ProtectSecret', // Win8+ APIs
     '?UnprotectSecret',
     '?CloseProtectionDescriptor',
