@@ -6799,7 +6799,7 @@ begin
     end;
     {$ifdef OSWINDOWS}
     w.AddShorter(' Wow64=');
-    w.AddB(byte(WindowsSpecs));
+    w.AddU(word(WindowsSpecs));
     {$else}
     w.AddShorter(' Wow64=0');
     {$endif OSWINDOWS}
@@ -8164,7 +8164,7 @@ begin
       else
         mormot.core.text.HexToBin(f, @fIntelCPU, SizeOf(fIntelCPU));
       end;
-    fWindowsSpecs := TWindowsSpecs(byte(GetInteger(pointer(aWow64))));
+    fWindowsSpecs := TWindowsSpecs(word(GetInteger(pointer(aWow64))));
     fWow64 := wsWow64 in fWindowsSpecs;
     SetInt64(PBeg, fFreq);
     while (PBeg < PEnd) and

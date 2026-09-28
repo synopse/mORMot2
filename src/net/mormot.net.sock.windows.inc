@@ -2617,14 +2617,17 @@ end;
 
 procedure TSChannelNetTls.AfterAccept(Socket: TNetSocket;
   const BoundContext: TNetTlsContext; LastError, CipherName: PRawUtf8);
+var
+  ctx: TObject;
 begin
   // prepare execution context
   ResetState(Socket);
   fAccept := true;
   // reuse the inbound credential; only fCtxt belongs to this connection
-  if BoundContext.AcceptCert = nil then
+  ctx := BoundContext.AcceptCert;
+  if ctx = nil then
     raise ESChannel.Create('AfterAccept: missing AfterBind');
-  fServerContext := TObject(BoundContext.AcceptCert) as TSChannelServerContext;
+  fServerContext := ctx as TSChannelServerContext;
   fServerContextRef := fServerContext; // increment RefCount
   fFlags := ASC_REQ_FLAGS;
   // make initial TLS handshake and prepare for process
