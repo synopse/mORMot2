@@ -7048,6 +7048,12 @@ type
   TWinErrorSorted = (
     // some EXCEPTION_* in range $80000000 .. $800000ff
     DATATYPE_MISALIGNMENT, BREAKPOINT, SINGLE_STEP,
+    // some NTE_* errors as returned by CNG
+    BAD_KEY, BAD_LEN, BAD_DATA, BAD_ALGID, BAD_FLAGS, NO_KEY, NO_MEMORY, PERM,
+    NOT_FOUND, BAD_KEYSET, FAIL, SYS_ERR, SILENT_CONTEXT, INVALID__HANDLE,
+    INVALID__PARAMETER, BUFFER_TOO_SMALL, NOT__SUPPORTED, NO_MORE_ITEMS,
+    DECRYPTION_FAILURE, INTERNAL_ERROR, UI_REQUIRED, DEVICE_NOT_READY,
+    INCORRECT_PASSWORD,
     // some SEC_E_* errors as returned by SSPI
     E_UNSUPPORTED_FUNCTION, E_INVALID_TOKEN, E_MESSAGE_ALTERED,
     E_CONTEXT_EXPIRED, E_INCOMPLETE_MESSAGE, E_BUFFER_TOO_SMALL,
@@ -7083,6 +7089,11 @@ const
   WINERR_SORTED: array[TWinErrorSorted] of cardinal = (
     // some EXCEPTION_* in range $80000000 .. $800000ff
     $80000002, $80000003, $80000004,
+    // some NTE_* errors as returned by CNG
+    $80090003, $80090004, $80090005, $80090008, $80090009, $8009000d, $8009000e,
+    $80090010, $80090011, $80090016, $80090020, $80090021, $80090022, $80090026,
+    $80090027, $80090028, $80090029, $8009002a, $8009002c, $8009002d, $8009002e,
+    $80090030, $80090033,
     // some SEC_E_* errors as returned by SSPI
     $80090302, $80090308, $8009030F, $80090317, $80090318, $80090321,
     $80090326, $80090327, $80090328, $80090329, $80090330, $80090331,
@@ -7149,8 +7160,8 @@ begin
 end;
 
 const
-  _PREFIX: array[0..5] of TShort15 = (
-    'WSA', 'ERROR_WINHTTP_', '', 'EXCEPTION_', 'SEC_', 'ERROR_');
+  _PREFIX: array[0 .. 6] of TShort15 = (
+    'WSA', 'ERROR_WINHTTP_', '', 'EXCEPTION_', 'SEC_', 'NTE_', 'ERROR_');
 
 function AppendWinErrorText(Code: cardinal; var Dest: ShortString;
   Sep: AnsiChar): boolean;
@@ -7175,8 +7186,10 @@ begin
     $00090312 .. $00090321,
     $80090302 .. $80090331:
       Code := 4; // SEC_* SSPI constants
+    $80090000 .. $800900ff:
+      Code := 5; // NTE_* CNG constants
   else
-    Code := 5;   // regular Windows ERROR_* constant
+    Code := 6;   // regular Windows ERROR_* constant
   end;
   AppendShort(_PREFIX[Code], Dest);
   AppendShort(txt^, Dest);

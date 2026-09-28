@@ -9338,6 +9338,7 @@ begin
   CheckEqualShort(WinErrorShort($c00000fd), 'c00000fd EXCEPTION_STACK_OVERFLOW', 'w6');
   CheckEqualShort(WinErrorShort($80090330), '80090330 SEC_E_DECRYPT_FAILURE', 'w7');
   CheckEqualShort(WinErrorShort($00090321), '590625 SEC_I_RENEGOTIATE', 'w8');
+  CheckEqualShort(WinErrorShort($8009002a), '8009002a NTE_NO_MORE_ITEMS', 'w9');
   CheckEqualShort(WinErrorShort(244, {noint=}false), '244', '244w');
   CheckEqualShort(WinErrorShort(245, {noint=}true), '', '245w');
   WinErrorShortVar($80092012, ss);
