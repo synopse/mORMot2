@@ -2244,8 +2244,7 @@ begin
   if Context.CertificateRaw <> nil then
   begin
     // retain a reference independent of the caller's certificate lifetime
-    fCertificate := CertDuplicateCertificateContext(
-      PCCERT_CONTEXT(Context.CertificateRaw));
+    fCertificate := CertDuplicateCertificateContext(Context.CertificateRaw);
     if fCertificate = nil then
       RaiseLastError('AfterBind: CertDuplicateCertificateContext', ESChannel);
   end;
