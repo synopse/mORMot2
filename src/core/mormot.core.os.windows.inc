@@ -493,6 +493,7 @@ procedure SetEndOfFile;               external kernel32;
 procedure FlushFileBuffers;           external kernel32;
 function  GetLastError;               external kernel32;
 procedure SetLastError;               external kernel32;
+function  LocalFree;                  external kernel32;
 function  IocpCreate;                 external kernel32 name 'CreateIoCompletionPort';
 function  IocpGetQueuedStatus;        external kernel32 name 'GetQueuedCompletionStatus';
 function  IocpPostQueuedStatus;       external kernel32 name 'PostQueuedCompletionStatus';

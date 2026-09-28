@@ -7818,7 +7818,7 @@ begin
        sd, SDDL_REVISION_1, ALL_INFO, txt, nil) then
     exit;
   FastSetString(text, txt, StrLen(txt));
-  LocalFree(HLOCAL(txt));
+  LocalFree(txt);
   result := true;
 end;
 
@@ -7880,7 +7880,7 @@ begin
   if ok then
   begin
     FastSetRawByteString(result, dst.pbData, dst.cbData);
-    LocalFree(HLOCAL(dst.pbData));
+    LocalFree(dst.pbData);
   end
   else
     FastAssignNew(result);
@@ -8919,7 +8919,7 @@ begin
   if result then
     result := dest.FromBinary(pointer(sd)); // assume OS input is safe
   if sd <> nil then
-    LocalFree(HLOCAL(sd));
+    LocalFree(sd);
   if not result then
     SetLastError(bak); // so that WinLastError / RaiseLastError would work
 end;

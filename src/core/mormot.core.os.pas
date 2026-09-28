@@ -1986,6 +1986,7 @@ type
   HWND          = Windows.HWND;
   BOOL          = Windows.BOOL;
   LARGE_INTEGER = Windows.LARGE_INTEGER;
+  HLOCAL        = Windows.HLOCAL;
   TFileTime     = Windows.FILETIME;
   PFileTime     = ^TFileTime;
 
@@ -2220,6 +2221,7 @@ function FreeEnvironmentStringsW(EnvBlock: PWideChar): BOOL; stdcall;
 function SysAllocString(psz: PWideChar): pointer; stdcall;
 function SysAllocStringLen(psz: PWideChar; len: cardinal): pointer; stdcall;
 procedure SysFreeString(bstr: pointer); stdcall;
+function LocalFree(hMem: pointer): pointer; stdcall;
 
 /// try to enter a Critical Section (Lock)
 // - returns 1 if the lock was acquired, or 0 if the mutex is already locked
