@@ -2333,7 +2333,7 @@ end;
 { ****************** Windows Application Installation and Servicing (msi) }
 
 const
-  msidll = 'msi.dll';
+  msidll = 'msi.dll'; // introduced with Windows 2000
 
 function MsiOpenProductW;        external msidll;
 function MsiGetProductPropertyW; external msidll;
@@ -2532,7 +2532,8 @@ begin
   if result = nil then
   begin
     result := TNCrypt.Create;
-    if OSVersion >= wVista then // not available on XP
+    if (OSVersion >= wVista) and            // not available on XP
+       not (wsWeakCng in WindowsSpecs) then // Wine only implements stubs
        result.TryLoadResolve(['ncrypt.dll'], 'NCrypt', @NCRYPT_NAMES,
          @@result.OpenStorageProvider, ESynSspi);
     _NCrypt := result; // should be set last

@@ -5332,7 +5332,7 @@ begin
       OSVersionInfoEx := wine_get_version;
       OSVersionInfoEx := TrimU(Join(['Wine ', TrimU(OSVersionInfoEx)]));
       WindowsSpecs := WindowsSpecs +
-        [wsWine, wsWeakDpAPI, wsWeakHttpApi, wsWeakHttpSys];
+        [wsWine, wsWeakDpAPI, wsWeakHttpApi, wsWeakHttpSys, wsWeakCng];
     end
     {$ifdef CPUINTEL}
     else if IsWow64Emulation then

@@ -466,14 +466,15 @@ type
 
   /// Windows specific detected context e.g. WOW64 translation, PRISM or Wine
   TWindowsSpecs = set of (
-   wsWow64,
-   wsWow64Emulation,
-   wsPrism,
-   wsWine,
-   wsFavorFewThreads,
-   wsWeakDpApi,
-   wsWeakHttpApi,
-   wsWeakHttpSys);
+    wsWow64,
+    wsWow64Emulation,
+    wsPrism,
+    wsWine,
+    wsFavorFewThreads,
+    wsWeakDpApi,
+    wsWeakCng,
+    wsWeakHttpApi,
+    wsWeakHttpSys);
 
   /// notable Linux distributions, organized by their package management system
   TLinuxDistribution = (
