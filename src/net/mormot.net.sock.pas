@@ -1160,7 +1160,8 @@ type
     /// opaque pointer used by INetTls.AfterBind/AfterAccept to propagate the
     // bound server certificate context into each accepted connection
     // - so that certificates are decoded only once in AfterBind
-    // - is typically a PSSL_CTX on OpenSSL, or a PCCERT_CONTEXT on SChannel
+    // - is a PSSL_CTX on OpenSSL, or a shared server credential on SChannel
+    // - borrowed pointer: the bound INetTls must stay alive during AfterAccept
     AcceptCert: pointer;
   end;
 
@@ -1236,11 +1237,15 @@ function GetTlsContext(TlsEnabled, IgnoreTlsCertError: boolean;
 // - check all TLS configuration fields and peer verification callbacks
 function SameNetTlsContext(const tls1, tls2: TNetTlsContext): boolean;
 
+type
+  /// function prototype of an INetTls factory
+  TNewNetTls = function: INetTls;
+
 var
   /// global factory for a new TLS encrypted layer for TCrtSocket
   // - on Windows, this unit will set a factory using the system SChannel API
   // - could also be overriden e.g. by the mormot.lib.openssl11.pas unit
-  NewNetTls: function: INetTls;
+  NewNetTls: TNewNetTls;
 
   /// set globally to setup TNetTlsContext.OnAcceptServerName SNI callbacks
   // - default false may be lighter, e.g. for a single-host HTTPS server
@@ -6378,6 +6383,7 @@ const
     '', '', '80', '80', '443', '443', '', '', '20', '989', '389', '636');
   SCHEME_FIRST = ['a'..'z', 'A'..'Z'];
   SCHEME_CHARS = ['a'..'z', 'A'..'Z', '+', '-', '.', '0'..'9'];
+  _ROOT: AnsiChar = '/';
 
 function TUri.FromBuffer(aUri, aUriEnd: PUtf8Char; const DefaultPort: RawUtf8): boolean;
 var
@@ -6660,7 +6666,6 @@ function TUri.FromLocation(var aUri: RawUtf8; const aServer, aPort: RawUtf8;
 var
   p, pe, q, s, raw, rawend, loc, locend, refend, locrefend: PUtf8Char;
   base, baseend, basepathend, basequery, baserefend: PUtf8Char;
-  root: AnsiChar;
 
   procedure StoreTarget(Path1, Path1End, Path2, Path2End,
     Query, QueryEnd: PUtf8Char; Normalize: boolean);
@@ -6785,8 +6790,7 @@ begin
   // split the existing request-target
   if aUri = '' then
   begin
-    root := '/';
-    base := @root;
+    base := @_ROOT; // at least '/'
     baseend := base + 1;
   end
   else
