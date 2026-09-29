@@ -11413,48 +11413,46 @@ begin
   vers := AsnNextInteger(pos, seq, vt);
   if vt = ASN1_INT then
     case vers of
-      0: // PKCS#8 format
+      0: // PKCS#8 PrivateKeyInfo
         if (AsnNext(pos, seq) = ASN1_SEQ) and // privateKeyAlgorithm
            (AsnNext(pos, seq, @oid) = ASN1_OBJID) then
-        begin
-          // CkaToSeq() decoding
           case cka of
-            ckaEcc256 .. ckaEcc256k:
-              if (oid <> ASN1_OID_X962_PUBLICKEY) or
-                 (AsnNext(pos, seq, @oid) <> ASN1_OBJID) then
-                exit;
-            ckaEdDSA:
-              ;
+            ckaEcc256 .. ckaEcc256k: // RFC 5480 id-ecPublicKey + namedCurve OID
+              if (oid = ASN1_OID_X962_PUBLICKEY) and
+                 (AsnNext(pos, seq, @oid) = ASN1_OBJID) and
+                 (oid = CKA_OID[cka]) and
+                 // RFC 5915 ECPrivateKey inside PKCS#8 privateKey OCTET STRING:
+                 (AsnNextBuffer(pos, seq, oct) = ASN1_OCTSTR) and
+                 (AsnNextBuffer(oct) = ASN1_SEQ) and             // SEQ
+                 (AsnNextBuffer(oct) = ASN1_INT) and             // version
+                 (AsnNextBuffer(oct, @key) = ASN1_OCTSTR) then   // privateKey
+                result := key;
+            ckaEdDSA: // RFC 8410 algorithm identifier is directly id-Ed25519
+              if (oid = CKA_OID[cka]) and
+                 (AsnNextBuffer(pos, seq, oct) = ASN1_OCTSTR) and
+                 (AsnNextBuffer(oct, @key) = ASN1_OCTSTR) then
+                result := key;
           else
             exit; // this function is dedicated to ECC
           end;
-          if oid <> CKA_OID[cka] then
-            exit;
-          // private key raw binary extraction
-          if (AsnNextBuffer(pos, seq, oct) = ASN1_OCTSTR) and // privateKey
-             (AsnNextBuffer(oct{%H-}) = ASN1_SEQ) and
-             (AsnNextBuffer(oct) = ASN1_INT) and
-             (AsnNextBuffer(oct, @key) = ASN1_OCTSTR) then
+      1: // RFC 5915 EC key pair alternate format
+        if (cka in CKA_ECC) and
+           (AsnNextRaw(pos, seq, key) = ASN1_OCTSTR) then
+        begin
+          vt := AsnNext(pos, seq);
+          if vt = ASN1_NULL then
+            result := key
+          else if (vt = ASN1_CTC0) and // [0] ECparameters (optional)
+                  (AsnNext(pos, seq, @oid) = ASN1_OBJID) and
+                  {%H-}(oid = CKA_OID[cka]) then
+          begin
             result := key;
+            if (rfcpub <> nil) and     // [1] publicKey (optional)
+               (AsnNext(pos, seq) = ASN1_CTC1) and
+               (AsnNextRaw(pos, seq, key) = ASN1_BITSTR) then
+              rfcpub^ := key;
+          end;
         end;
-      1: // https://www.rfc-editor.org/rfc/rfc5915 EC key pair alternate format
-       if (cka in CKA_ECC) and                           // Elliptic Curve only
-          (AsnNextRaw(pos, seq, key) = ASN1_OCTSTR) then // privateKey
-       begin
-         vt := AsnNext(pos, seq);
-         if vt = ASN1_NULL then
-           result := key // just privateKey, without optional constructed fields
-         else if (vt = ASN1_CTC0) and  // [0] ECparameters (optional)
-                 (AsnNext(pos, seq, @oid) = ASN1_OBJID) and
-                 {%H-}(oid = CKA_OID[cka]) then
-         begin
-           result := key;
-           if (rfcpub <> nil) and       // [1] publicKey (optional)
-              (AsnNext(pos, seq) = ASN1_CTC1) and
-              (AsnNextRaw(pos, seq, key) = ASN1_BITSTR) then
-             rfcpub^ := key;
-        end;
-      end;
     end;
   FillZero(key);
 end;
