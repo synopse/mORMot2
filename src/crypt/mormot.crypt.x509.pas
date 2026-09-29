@@ -2787,7 +2787,7 @@ function TX509.FingerPrintCompare(const Value: RawUtf8; Algo: THashAlgo): intege
 begin
   if fCachedHash[Algo] = '' then
     ComputeCachedHash(Algo);
-  result := mormot.core.unicode.StrIComp(pointer(fCachedHash[Algo]), pointer(Value));
+  result := HumanHexCompare(pointer(fCachedHash[Algo]), pointer(Value));
 end;
 
 function TX509.FingerPrintCompare(Another: TX509; Algo: THashAlgo): integer;
@@ -3698,7 +3698,6 @@ var
   found: boolean;
   n: integer;
   bin: RawByteString;
-  hex: RawUtf8;
 begin
   if Count = 0 then
     exit;
@@ -3710,12 +3709,6 @@ begin
     ccmIssuedBy:
       if not HumanHexToBin(Value, bin) then
         bin := Value; // allow Value to be in hexadecimal or raw binary
-    ccmSha1,
-    ccmSha256:
-      if HumanHexToBin(Value, bin) then
-        hex := BinToHexLower(bin) // normalize
-      else
-        hex := Value;
   end;
   if MaxCount <= 0 then
     MaxCount := MaxInt;

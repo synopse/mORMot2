@@ -9373,9 +9373,9 @@ begin
       ccmBinary:
         found := EqualBuf(Cert^.Save, Value);
       ccmSha1:
-        found := PropNameEquals(Cert^.GetDigest(hfSha1), Value);
+        found := HumanHexCompare(Cert^.GetDigest(hfSha1), Value) = 0;
       ccmSha256:
-        found := PropNameEquals(Cert^.GetDigest(hfSha256), Value);
+        found := HumanHexCompare(Cert^.GetDigest(hfSha256), Value) = 0;
     else
       found := false; // unsupported search method (e.g. ccmUsage)
     end;
@@ -9463,9 +9463,9 @@ begin
         result := CompareBuf(Save(cccCertOnly, '', ccfBinary),
                              Another.Save(cccCertOnly, '', ccfBinary));
       ccmSha1:
-        result := CompareBuf(GetDigest(hfSHA1), Another.GetDigest(hfSHA1));
+        result := HumanHexCompare(GetDigest(hfSHA1), Another.GetDigest(hfSHA1));
       ccmSha256:
-        result := CompareBuf(GetDigest(hfSHA256), Another.GetDigest(hfSHA256));
+        result := HumanHexCompare(GetDigest(hfSHA256), Another.GetDigest(hfSHA256));
       ccmIssuedBy:
         result := CompareBuf(GetAuthorityKey, Another.GetSubjectKey);
     else // e.g. ccmInstance
