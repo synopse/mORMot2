@@ -462,6 +462,10 @@ constructor TCryptPrivateKeyPkcs11.Create(aCert: TCryptCertPkcs11);
 begin
   inherited Create;
   fCert := aCert;
+  fCert := aCert;
+  if (aCert <> nil) and
+     (aCert.fX509 <> nil) then
+    fKeyAlgo := XKA_TO_CKA[aCert.fX509.Signed.SubjectPublicKeyAlgorithm];
 end;
 
 function TCryptPrivateKeyPkcs11.FromDer(algo: TCryptKeyAlgo;
@@ -480,8 +484,13 @@ var
   seq: TAsnObject;
   log: ISynLog; // seldom called, and better be traced (and profiled)
 begin
-  fCert.Log.EnterLocal(log, 'SignDigest % %', [ToText(DigAlgo)^, fCert], self);
   FastAssignNew(result);
+  if (fCert = nil) or
+     (fCert.fX509 = nil) or
+     (DigAlgo <> fCert.fCaa) or
+     (HASH_SIZE[CAA_HF[DigAlgo]] <> DigLen) then
+    exit;
+  fCert.Log.EnterLocal(log, 'SignDigest % %', [ToText(DigAlgo)^, fCert], self);
   hf := CAA_HF[DigAlgo];
   if HASH_SIZE[hf] <> DigLen then
     exit; // paranoid
@@ -520,7 +529,7 @@ function TCryptPrivateKeyPkcs11.RsaModulus: integer;
 begin
   if (fCert = nil) or
      (fCert.fX509 = nil) or
-     not (fCert.fCaa in CAA_RSA) then
+     not (fKeyAlgo in CKA_RSA) then
     result := 0
   else
     result := (fCert.fX509.Signed.SubjectPublicKeyBits + 7) shr 3;

@@ -11057,8 +11057,7 @@ begin
   result := rawsignature;
   if (result = '') or
      (algo in CAA_RAWSIGNATURE) then
-     // no need to be encoded, since RSA and EdDSA have no SEQ
-    exit;
+    exit; // no need to be encoded, since RSA and EdDSA have no SEQ
   eccbytes := CAA_SIZE[algo];
   if length(result) = eccbytes * 2 then
     result := Asn(ASN1_SEQ, [
