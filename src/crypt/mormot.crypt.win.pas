@@ -160,7 +160,7 @@ type
     /// retrieve the Windows system store this certificate originated from
     // - returns false for certificates imported from memory, e.g. PKCS#12/PFX
     function GetSystemStore(out CertStore: TSystemCertificateStore;
-      out Locations: TWinCertStoreLocations): boolean;
+      out Location: TWinCertStoreLocation): boolean;
     /// the CNG Key Storage Provider name associated with this certificate
     function KeyProvider: RawUtf8;
     /// the CNG private key/container name associated with this certificate
@@ -230,7 +230,8 @@ type
   protected
     fContext: PCCERT_CONTEXT;
     fCertStore: TSystemCertificateStore;
-    fStoreLocations: TWinCertStoreLocations;
+    fStoreLocation: TWinCertStoreLocation;
+    fFromSystemStore: boolean;
     fKeyOptions: TWinCertCngKeyOptions;
     fCaa: TCryptAsymAlgo;
     fKeyProvider: RawUtf8;
@@ -239,8 +240,9 @@ type
   public
     /// create a certificate from a context currently enumerated in a store
     // - duplicates aContext so this instance owns its certificate context
+    // - you should not call this constructor directly but use
     constructor Create(aOwner: TCryptCertAlgoCng;
-      aContext: PCCERT_CONTEXT; aLocations: TWinCertStoreLocations;
+      aContext: PCCERT_CONTEXT; aLocation: TWinCertStoreLocation;
       aKeyOptions: TWinCertCngKeyOptions;
       aInfo: PWinCertKeyProviderInfo = nil); reintroduce;
     /// clear both the TX509 representation and retained Windows context
@@ -268,7 +270,7 @@ type
     procedure SetSilent(Value: boolean);
     function Silent: boolean;
     function GetSystemStore(out CertStore: TSystemCertificateStore;
-      out Locations: TWinCertStoreLocations): boolean;
+      out Location: TWinCertStoreLocation): boolean;
     function KeyProvider: RawUtf8;
     function KeyContainer: RawUtf8;
     function WinContext: PCCERT_CONTEXT;
@@ -627,7 +629,7 @@ begin
           continue; // no private key or a legacy CryptoAPI CSP
         try
           cert := TCryptCertCng.Create(self, store.Context,
-            [Location], [wckCompareKey], @info);
+            Location, [wckCompareKey], @info);
           n := length(fCert);
           SetLength(fCert, n + 1);
           fCert[n] := cert;
@@ -646,6 +648,8 @@ procedure TCryptCertAlgoCng.Refresh;
 var
   wcsl: TWinCertStoreLocation;
 begin
+  if self = nil then
+    exit;
   fCert := nil; // clear any previous certificates
   if not NCrypt.Exists then
   begin
@@ -664,7 +668,8 @@ function TCryptCertAlgoCng.Find(const Value: RawByteString;
   Method: TCryptCertComparer; MaxCount: integer): ICryptCertCngs;
 begin
   result := nil;
-  if fCert <> nil then
+  if (self <> nil) and
+     (fCert <> nil) then
     TCryptCertCng.InternalFind(pointer(fCert), Value, Method, length(fCert),
       MaxCount, ICryptCerts(result));
 end;
@@ -674,21 +679,26 @@ function TCryptCertAlgoCng.FindOne(const Value: RawByteString;
 var
   found: ICryptCertCngs;
 begin
+  result := nil;
+  if self = nil then
+    exit;
   found := Find(Value, Method, 1);
-  if found = nil then
-    result := nil
-  else
-    result := found[0];
+  if found <> nil then
+    result := found[0]; // return the first
 end;
 
 function TCryptCertAlgoCng.Cert: ICryptCertCngs;
 begin
-  result := fCert;
+  if self = nil then
+    result := nil
+  else
+    result := fCert;
 end;
 
 const
   PKCS12_FLAGS = PKCS12_INCLUDE_EXTENDED_PROPERTIES or
-                 PKCS12_ALWAYS_CNG_KSP or PKCS12_NO_PERSIST_KEY;
+                 PKCS12_ALWAYS_CNG_KSP or
+                 PKCS12_NO_PERSIST_KEY;
 
 function TCryptCertAlgoCng.LoadPkcs12(const Pfx: RawByteString;
   const Password: SpiUtf8): ICryptCertCng;
@@ -700,7 +710,8 @@ var
   log: ISynLog;
 begin
   result := nil;
-  if (Pfx = '') or
+  if (self = nil) or
+     (Pfx = '') or
      not NCrypt.Exists then
     exit;
   fLog.EnterLocal(log, 'LoadPkcs12 len=%', [length(Pfx)], self);
@@ -722,7 +733,8 @@ begin
       if err <> NO_ERROR then
         continue;
       key.Done;
-      result := TCryptCertCng.Create(self, ctxt, [], [wckCache, wckSilent]);
+      result := TCryptCertCng.Create(
+        self, ctxt, wcslCurrentUser, [wckCache, wckSilent]);
       log.Log(sllDebug,
         'LoadPkcs12: loaded %', [result.Instance], self);
       exit;
@@ -740,7 +752,7 @@ end;
 { TCryptCertCng }
 
 constructor TCryptCertCng.Create(aOwner: TCryptCertAlgoCng;
-  aContext: PCCERT_CONTEXT; aLocations: TWinCertStoreLocations;
+  aContext: PCCERT_CONTEXT; aLocation: TWinCertStoreLocation;
   aKeyOptions: TWinCertCngKeyOptions; aInfo: PWinCertKeyProviderInfo);
 var
   der: RawByteString;
@@ -753,9 +765,10 @@ begin
   fCryptAlgo := aOwner;
   fKeyOptions := aKeyOptions;
   fCertStore := aOwner.fCertStore;
-  fStoreLocations := aLocations;
+  fStoreLocation := aLocation;
   if aInfo <> nil then
   begin
+    fFromSystemStore := true;
     if aInfo^.ProviderType <> 0 then
       RaiseError('Create: certificate is not backed by a CNG KSP');
     fKeyProvider := aInfo^.Provider;
@@ -928,11 +941,11 @@ begin
 end;
 
 function TCryptCertCng.GetSystemStore(out CertStore: TSystemCertificateStore;
-  out Locations: TWinCertStoreLocations): boolean;
+  out Location: TWinCertStoreLocation): boolean;
 begin
   CertStore := fCertStore;
-  Locations := fStoreLocations;
-  result := Locations <> [];
+  Location := fStoreLocation;
+  result := fFromSystemStore;
 end;
 
 function TCryptCertCng.KeyProvider: RawUtf8;
