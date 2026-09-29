@@ -157,10 +157,10 @@ type
     procedure SetSilent(Value: boolean);
     /// return true if KSP user interface has been disabled
     function Silent: boolean;
-    /// the Windows system certificate store containing this certificate
-    function SystemStore: TSystemCertificateStore;
-    /// the Windows certificate store location containing this certificate
-    function StoreLocation: TWinCertStoreLocation;
+    /// retrieve the Windows system store this certificate originated from
+    // - returns false for certificates imported from memory, e.g. PKCS#12/PFX
+    function GetSystemStore(out CertStore: TSystemCertificateStore;
+      out Location: TWinCertStoreLocation): boolean;
     /// the CNG Key Storage Provider name associated with this certificate
     function KeyProvider: RawUtf8;
     /// the CNG private key/container name associated with this certificate
@@ -228,8 +228,10 @@ type
     fStoreLocation: TWinCertStoreLocation;
     fKeyOptions: TWinCertCngKeyOptions;
     fCaa: TCryptAsymAlgo;
+    fFromSystemStore: boolean;
     fKeyProvider: RawUtf8;
     fKeyContainer: RawUtf8;
+    procedure InitContext(aOwner: TCryptCertAlgoCng; aContext: PCCERT_CONTEXT);
     procedure RaiseError(const Msg: ShortString); overload; override;
   public
     /// create a certificate from a context currently enumerated in a store
@@ -261,8 +263,8 @@ type
     procedure SetAsymAlgo(caa: TCryptAsymAlgo);
     procedure SetSilent(Value: boolean);
     function Silent: boolean;
-    function SystemStore: TSystemCertificateStore;
-    function StoreLocation: TWinCertStoreLocation;
+    function GetSystemStore(out CertStore: TSystemCertificateStore;
+      out Location: TWinCertStoreLocation): boolean;
     function KeyProvider: RawUtf8;
     function KeyContainer: RawUtf8;
     function WinContext: PCCERT_CONTEXT;
@@ -682,41 +684,49 @@ end;
 
 { TCryptCertCng }
 
-constructor TCryptCertCng.Create(aOwner: TCryptCertAlgoCng;
-  aContext: PCCERT_CONTEXT; aLocation: TWinCertStoreLocation;
-  const aInfo: TWinCertKeyProviderInfo);
+procedure TCryptCertCng.InitContext(aOwner: TCryptCertAlgoCng;
+  aContext: PCCERT_CONTEXT);
 var
   der: RawByteString;
   xka: TXPublicKeyAlgorithm;
 begin
+  fCryptAlgo := aOwner;
+  fContext := CertDuplicateCertificateContext(aContext);
+  if fContext = nil then
+    RaiseError('Create: CertDuplicateCertificateContext failed');
+  FastSetRawByteString(
+    der, fContext^.pbCertEncoded, fContext^.cbCertEncoded);
+  fX509 := TX509.Create;
+  if not fX509.LoadFromDer(der) then
+    RaiseError('Create: invalid X.509 certificate');
+  xka := fX509.Signed.SubjectPublicKeyAlgorithm;
+  if not (xka in [xkaRsa, xkaRsaPss, xkaEcc256, xkaEcc384, xkaEcc512]) then
+    RaiseError('Create: unsupported public key algorithm %',
+      [ToText(xka)^]);
+  // XKA_TO_CAA defaults RSA/RSA-PSS to SHA-256, as with PKCS#11
+  fCaa := XKA_TO_CAA[xka];
+  // safe access of its own private key using the Windows CNG API
+  fPrivateKey := TCryptPrivateKeyCng.Create(self);
+end;
+
+constructor TCryptCertCng.Create(aOwner: TCryptCertAlgoCng;
+  aContext: PCCERT_CONTEXT; aLocation: TWinCertStoreLocation;
+  const aInfo: TWinCertKeyProviderInfo);
+begin
   if (aOwner = nil) or
      (aContext = nil) then
     ECryptCertCng.RaiseU('TCryptCertCng.Create: invalid owner/context');
-  fKeyOptions := [wckCompareKey];
   inherited Create;
+  fKeyOptions := [wckCompareKey];
+  fFromSystemStore := true;
+  fCertStore := aOwner.fCertStore;
+  fStoreLocation := aLocation;
+  fKeyProvider := aInfo.Provider;
+  fKeyContainer := aInfo.Container;
+  if aInfo.ProviderType <> 0 then
+    RaiseError('Create: certificate is not backed by a CNG KSP');
   try
-    fContext := CertDuplicateCertificateContext(aContext);
-    if fContext = nil then
-      RaiseError('Create: CertDuplicateCertificateContext failed');
-    FastSetRawByteString(der, fContext^.pbCertEncoded, fContext^.cbCertEncoded);
-    fX509 := TX509.Create;
-    if not fX509.LoadFromDer(der) then
-      RaiseError('Create: invalid X.509 certificate');
-    xka := fX509.Signed.SubjectPublicKeyAlgorithm;
-    if not (xka in [xkaRsa, xkaRsaPss, xkaEcc256, xkaEcc384, xkaEcc512]) then
-      RaiseError('Create: unsupported public key algorithm %',
-        [ToText(xka)^]);
-    if aInfo.ProviderType <> 0 then
-      RaiseError('Create: certificate is not backed by a CNG KSP');
-    fCryptAlgo := aOwner;
-    fCertStore := aOwner.fCertStore;
-    fStoreLocation := aLocation;
-    fKeyProvider := aInfo.Provider;
-    fKeyContainer := aInfo.Container;
-    // XKA_TO_CAA defaults RSA/RSA-PSS to SHA-256, as with PKCS#11
-    fCaa := XKA_TO_CAA[xka];
-    // safe access of its own private key using the Windows CNG API
-    fPrivateKey := TCryptPrivateKeyCng.Create(self);
+    InitContext(aOwner, aContext);
   except
     Clear;
     raise;
@@ -870,14 +880,12 @@ begin
   result := wckSilent in fKeyOptions;
 end;
 
-function TCryptCertCng.SystemStore: TSystemCertificateStore;
+function TCryptCertCng.GetSystemStore(out CertStore: TSystemCertificateStore;
+  out Location: TWinCertStoreLocation): boolean;
 begin
-  result := fCertStore;
-end;
-
-function TCryptCertCng.StoreLocation: TWinCertStoreLocation;
-begin
-  result := fStoreLocation;
+  CertStore := fCertStore;
+  Location := fStoreLocation;
+  result := fFromSystemStore;
 end;
 
 function TCryptCertCng.KeyProvider: RawUtf8;
