@@ -2134,7 +2134,7 @@ type
     // is allowed by the object itself (e.g. posExtractable key)
     // - return false if there is no such object in this Session
     // - return true and fill Info with the found Object information on success
-    function GetObject(ObjectClass: CK_OBJECT_CLASS; out Info: TPkcs11Object;
+    function GetObject(ObjectClass: CK_OBJECT_CLASS; var Info: TPkcs11Object;
       const StorageLabel: RawUtf8 = ''; const StorageID: RawUtf8 = '';
       Value: PRawByteString = nil): boolean; overload;
     /// retrieve one object handle by class type and label/ID from current Session
@@ -4123,7 +4123,7 @@ begin
    SetLength(Handles^, count);
 end;
 
-function TPkcs11.GetObject(ObjectClass: CK_OBJECT_CLASS; out Info: TPkcs11Object;
+function TPkcs11.GetObject(ObjectClass: CK_OBJECT_CLASS; var Info: TPkcs11Object;
   const StorageLabel, StorageID: RawUtf8; Value: PRawByteString): boolean;
 var
   attr: CK_ATTRIBUTES;
@@ -4133,6 +4133,7 @@ var
 begin
   EnsureSession('GetObject');
   result := false;
+  Finalize(Info);
   FillCharFast(Info, SizeOf(Info), 0);
   attr.New(ObjectClass, StorageLabel, StorageID);
   if Value = nil then
@@ -4140,8 +4141,9 @@ begin
   else
     valp := @val;
   res := GetObjects(@attr, nil, valp);
-  if res = nil then
+  if length(res) <> 1 then
     exit;
+  Info := res[0];
   if Value <> nil then
     if length(val) <> 1 then
       exit
