@@ -206,12 +206,6 @@ type
     /// access all currently recognized Windows CNG certificates
     function Cert: ICryptCertCngs;
       {$ifdef HASINLINE} inline; {$endif}
-    // TCryptCertAlgo generic factories are unsupported for an OS-owned key
-    function New: ICryptCert; override;
-    function FromHandle(Handle: pointer): ICryptCert; override;
-    function CreateSelfSignedCsr(const Subjects: RawUtf8;
-      const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
-      Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8; override;
     /// logging class used by this provider
     property Log: TSynLogClass
       read fLog;
@@ -683,25 +677,6 @@ end;
 function TCryptCertAlgoCng.Cert: ICryptCertCngs;
 begin
   result := fCert;
-end;
-
-// TCryptCertAlgo generic factories are unsupported for OS-owned identities
-
-function TCryptCertAlgoCng.New: ICryptCert;
-begin
-  result := nil;
-end;
-
-function TCryptCertAlgoCng.FromHandle(Handle: pointer): ICryptCert;
-begin
-  result := nil;
-end;
-
-function TCryptCertAlgoCng.CreateSelfSignedCsr(const Subjects: RawUtf8;
-  const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
-  Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8;
-begin
-  FastAssignNew(result);
 end;
 
 

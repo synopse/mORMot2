@@ -3140,14 +3140,16 @@ type
   public
     /// main factory to create a new Certificate instance with this algorithm
     // - return a new void instance, ready to call e.g. ICryptCert.Load
-    function New: ICryptCert; virtual; abstract;
+    // - return nil by design e.g. for TCryptCertAlgoCng or TCryptCertAlgoPkcs11
+    function New: ICryptCert; virtual;
     /// low-level factory directly from the raw implementation handle
     // - e.g. a PX509 for OpenSsl, or TEccCertificate for mormot.crypt.ecc
     // - warning: ensure Handle is of the expected type, otherwise it will GPF
     // - includes the private key for TEccCertificate, or not for OpenSsl
-    // - note that this Handle will be owned by the new ICryptCert instance,
-    // so you should not make FromHandle(another.Handle)
-    function FromHandle(Handle: pointer): ICryptCert; virtual; abstract;
+    // - return nil by design e.g. for TCryptCertAlgoCng or TCryptCertAlgoPkcs11
+    // - note that this Handle will be owned (and eventually released) by the
+    // new ICryptCert instance, so you should not make FromHandle(another.Handle)
+    function FromHandle(Handle: pointer): ICryptCert; virtual;
     /// factory to load a Certificate from a ICryptCert.Save() content
     // - PrivatePassword is needed if the input contains a private key
     // - will only recognize and support the ccfBinary and ccfPem formats
@@ -3170,6 +3172,7 @@ type
     // - by default, this class returns a self-signed certificate as CSR, but
     // will be overriden by our X.509 engines (OpenSSL and mormot.crypt.x509) to
     // return a proper PKCS#10 standard CSR, in a Let's Encrypt compatible way
+    // - return '' by design e.g. for TCryptCertAlgoCng or TCryptCertAlgoPkcs11
     function CreateSelfSignedCsr(const Subjects: RawUtf8;
       const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
       Usages: TCryptCertUsages = [];
@@ -9246,20 +9249,32 @@ end;
 
 { TCryptCertAlgo }
 
+function TCryptCertAlgo.New: ICryptCert;
+begin
+  result := nil; // unsupported
+end;
+
+function TCryptCertAlgo.FromHandle(Handle: pointer): ICryptCert;
+begin
+  result := nil; // unsupported
+end;
+
 function TCryptCertAlgo.Load(const Saved: RawByteString;
   Content: TCryptCertContent; const PrivatePassword: SpiUtf8): ICryptCert;
 begin
   result := New;
-  if not result.Load(Saved, Content, PrivatePassword) then
-    result := nil;
+  if Assigned(result) then // some classes may return nil
+    if not result.Load(Saved, Content, PrivatePassword) then
+      result := nil;
 end;
 
 function TCryptCertAlgo.Generate(Usages: TCryptCertUsages;
   const Subjects: RawUtf8; const Authority: ICryptCert; ExpireDays: integer;
   ValidDays: integer; Fields: PCryptCertFields): ICryptCert;
 begin
-  result := New.
-    Generate(Usages, Subjects, Authority, ExpireDays, ValidDays, Fields);
+  result := New;
+  if Assigned(result) then // some classes may return nil
+    result.Generate(Usages, Subjects, Authority, ExpireDays, ValidDays, Fields);
 end;
 
 function TCryptCertAlgo.CreateSelfSignedCsr(const Subjects: RawUtf8;
@@ -9268,11 +9283,14 @@ function TCryptCertAlgo.CreateSelfSignedCsr(const Subjects: RawUtf8;
 var
   csr: ICryptCert;
 begin
+  FastAssignNew(result);
   if PrivateKeyPem <> '' then
     ECryptCert.RaiseUtf8('%.CreateSelfSignedCsr % does not support ' +
       'a custom private key', [self, AlgoName]);
   // by default, just generate a self-signed certificate as CSR
   csr := New;
+  if not Assigned(csr) then
+    exit; // e.g. from TCryptCertAlgoCng or TCryptCertAlgoPkcs11
   csr.Generate(Usages, Subjects, nil, 365, -1, Fields);
   PrivateKeyPem := csr.Save(cccPrivateKeyOnly, PrivateKeyPassword);
   result := csr.Save(cccCertOnly, '', ccfPem);
@@ -9282,7 +9300,9 @@ end;
 function TCryptCertAlgo.GenerateFromCsr(const Csr: RawByteString;
   const Authority: ICryptCert; ExpireDays, ValidDays: integer): ICryptCert;
 begin
-  result := New.GenerateFromCsr(Csr, Authority, ExpireDays, ValidDays);
+  result := New;
+  if Assigned(result) then // some classes may return nil
+    result := GenerateFromCsr(Csr, Authority, ExpireDays, ValidDays);
 end;
 
 function TCryptCertAlgo.JwtName: RawUtf8;

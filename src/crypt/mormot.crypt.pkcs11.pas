@@ -154,12 +154,6 @@ type
     // - call CreateObject() with the certificate and its associated private key
     function Import(const CertWithPrivKey: ICryptCert; Slot: TPkcs11SlotID;
       const ID: RawUtf8; const SoPinCode: SpiUtf8): ICryptCertPkcs11;
-    // TCryptCertAlgo methods are mostly unsupported
-    function New: ICryptCert; override;
-    function FromHandle(Handle: pointer): ICryptCert; override;
-    function CreateSelfSignedCsr(const Subjects: RawUtf8;
-      const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
-      Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8; override;
     /// access to the high-level certificates recognized in this PKCS#11 instance
     // - will wait if background loading of information is not finished
     function Cert: ICryptCertPkcs11s;
@@ -741,25 +735,6 @@ begin
   if not fConfigRetrieved then
     EnsureRetrieveConfig; // wait until BackgroundLoad has finished
   result := fCert;
-end;
-
-// TCryptCertAlgo methods are mostly unsupported
-
-function TCryptCertAlgoPkcs11.New: ICryptCert;
-begin
-  result := nil; // unsupported
-end;
-
-function TCryptCertAlgoPkcs11.FromHandle(Handle: pointer): ICryptCert;
-begin
-  result := nil; // unsupported
-end;
-
-function TCryptCertAlgoPkcs11.CreateSelfSignedCsr(const Subjects: RawUtf8;
-  const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
-  Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8;
-begin
-  FastAssignNew(result); // unsupported
 end;
 
 
