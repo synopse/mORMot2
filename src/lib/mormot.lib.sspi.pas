@@ -587,7 +587,6 @@ function CryptFindOIDInfo(dwKeyType: cardinal; pvKey: pointer;
 
 { ****************** Middle-Level SSPI Wrappers }
 
-
 type
   /// exception class raised during SSPI process
   ESynSspi = class(ExceptionWithProps)
@@ -771,6 +770,15 @@ function WinCertCtxtDecode(Ctxt: PCCERT_CONTEXT; out Cert: TWinCertInfo;
 // - Info.ProviderType=0 identifies a CNG Key Storage Provider
 function WinCertCtxtKeyProvider(Ctxt: PCCERT_CONTEXT;
   out Info: TWinCertKeyProviderInfo): boolean;
+
+/// import a PKCS#12/PFX buffer into a temporary Windows certificate store
+// - returns NO_ERROR on success, otherwise the GetLastError() value returned
+// by PFXImportCertStore()
+// - caller owns Store and should eventually call CertCloseStore()
+// - Password is converted to UTF-16 in a temporary wiped buffer
+function WinCertStoreImportPfx(const Pfx: RawByteString;
+  const Password: SpiUtf8; out Store: HCERTSTORE;
+  Flags: cardinal = PKCS12_INCLUDE_EXTENDED_PROPERTIES): cardinal;
 
 /// could be used to extract CERT_X500_NAME_STR values
 // - for instance, in TWinCertInfo Name := ExtractX500('CN=', SubjectName);
@@ -1331,6 +1339,10 @@ type
   end;
 
   /// define how TWinCertCngKey.Init() should allocate its CNG key
+  // - wckSilent forbids any KSP user interface, e.g. PIN dialogs
+  // - wckCompareKey verifies that the private key matches the certificate
+  // - wckCache reuses the key attached to the certificate context, notably
+  // CERT_KEY_CONTEXT_PROP_ID from PKCS12_NO_PERSIST_KEY imports
   TWinCertCngKeyOptions = set of (
     wckSilent,
     wckCompareKey,
@@ -2018,6 +2030,37 @@ begin
     result := true;
   finally
     tmp.Done;
+  end;
+end;
+
+function WinCertStoreImportPfx(const Pfx: RawByteString; const Password: SpiUtf8;
+  out Store: HCERTSTORE; Flags: cardinal): cardinal;
+var
+  blob: TCryptDataBlob;
+  pwd: PWideChar;
+  tmp: TSynTempBuffer;
+begin
+  Store := nil;
+  result := ERROR_INVALID_DATA;
+  if Pfx = '' then
+    exit;
+  blob.cbData := length(Pfx);
+  blob.pbData := pointer(Pfx);
+  pwd := nil;
+  if Password <> '' then
+    pwd := Utf8ToWin32PWideChar(Password, tmp);
+  try
+    Store := PFXImportCertStore(@blob, pwd, Flags);
+    if Store <> nil then
+      result := NO_ERROR
+    else
+      result := GetLastError; // capture before wiping/freeing temporary data
+  finally
+    if pwd <> nil then
+    begin
+      FillCharFast(tmp.buf^, tmp.len * SizeOf(WideChar), 0);
+      tmp.Done;
+    end;
   end;
 end;
 
