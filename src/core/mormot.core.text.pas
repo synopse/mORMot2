@@ -8859,9 +8859,9 @@ begin // used e.g. by FastVarDataComp() for diverse non-complex VType
   VariantToTempUtf8(PVariant(A)^, at, flags);
   VariantToTempUtf8(PVariant(B)^, bt, flags);
   if caseInsensitive then
-    result := StrIComp(at.Text, bt.Text)
+    result := mormot.core.unicode.StrIComp(at.Text, bt.Text)
   else
-    result := StrComp(at.Text, bt.Text);
+    result := mormot.core.base.StrComp(at.Text, bt.Text);
   TempUtf8Done(at);
   TempUtf8Done(bt);
 end;

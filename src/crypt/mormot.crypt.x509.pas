@@ -678,6 +678,7 @@ type
     function FingerPrint(algo: THashAlgo = hfSha1): RawUtf8;
     /// check if a FingerPrint() hexa hash match a supplied value
     // - will inline the hash computation to avoid temporary string allocation
+    // and use case-insensitive hexadecimal hash comparison
     function FingerPrintCompare(const Value: RawUtf8;
       Algo: THashAlgo = hfSha1): integer; overload;
       {$ifdef HASINLINE} inline; {$endif}
@@ -2786,7 +2787,7 @@ function TX509.FingerPrintCompare(const Value: RawUtf8; Algo: THashAlgo): intege
 begin
   if fCachedHash[Algo] = '' then
     ComputeCachedHash(Algo);
-  result := SortDynArrayAnsiString(fCachedHash[Algo], Value);
+  result := mormot.core.unicode.StrIComp(pointer(fCachedHash[Algo]), pointer(Value));
 end;
 
 function TX509.FingerPrintCompare(Another: TX509; Algo: THashAlgo): integer;
@@ -3697,6 +3698,7 @@ var
   found: boolean;
   n: integer;
   bin: RawByteString;
+  hex: RawUtf8;
 begin
   if Count = 0 then
     exit;
@@ -3708,6 +3710,12 @@ begin
     ccmIssuedBy:
       if not HumanHexToBin(Value, bin) then
         bin := Value; // allow Value to be in hexadecimal or raw binary
+    ccmSha1,
+    ccmSha256:
+      if HumanHexToBin(Value, bin) then
+        hex := BinToHexLower(bin) // normalize
+      else
+        hex := Value;
   end;
   if MaxCount <= 0 then
     MaxCount := MaxInt;

@@ -1050,7 +1050,7 @@ function SortByLevel(const A, B): integer; // run and display by increasing Leve
 begin
   result := TSynAngelizeService(A).Level - TSynAngelizeService(B).Level;
   if result = 0 then
-    result := StrIComp( // display by name within each level
+    result := mormot.core.unicode.StrIComp( // display by name within each level
       pointer(TSynAngelizeService(A).Name), pointer(TSynAngelizeService(B).Name));
 end;
 

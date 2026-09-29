@@ -4514,7 +4514,7 @@ begin
   n := 0;
   for f := 0 to FieldCount - 1 do
     if not IsRowID(FieldNames^[f]) and
-       (StrIComp(pointer(KeyFieldName), FieldNames^[f]) <> 0) then
+       (mormot.core.unicode.StrIComp(pointer(KeyFieldName), FieldNames^[f]) <> 0) then
     begin
       // the key itself is never assigned: it is what identifies the conflict
       FieldBitSet(assignable, f);

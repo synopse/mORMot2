@@ -5722,9 +5722,9 @@ begin
       if fEngine.CodePage = CP_WINANSI then
         result := AnsiIComp(pointer(tmp1), pointer(tmp2))
       else
-        result := StrIComp(pointer(tmp1), pointer(tmp2))
+        result := mormot.core.unicode.StrIComp(pointer(tmp1), pointer(tmp2))
     else
-      result := StrComp(pointer(tmp1), pointer(tmp2));
+      result := mormot.core.base.StrComp(pointer(tmp1), pointer(tmp2));
   end;
 end;
 
