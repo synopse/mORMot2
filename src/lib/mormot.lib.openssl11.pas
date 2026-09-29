@@ -2930,7 +2930,7 @@ class procedure EOpenSsl.CheckFailed(caller: TObject; const method: ShortString;
   errormsg: PRawUtf8; ssl: pointer; sslretcode: integer; const context: RawUtf8;
   sslerrcode: integer);
 var
-  res: TErrQueueCode;
+  res: TErrQueueCode; // stores sslerrcode if ssl<>nil
   msg: RawUtf8;
   exc: EOpenSsl;
 begin
@@ -2943,12 +2943,11 @@ begin
   else
   begin
     // specific error within the context of ssl_*() methods during TLS process
-    if sslerrcode <> 0 then
-      res := sslerrcode
-    else
-      res := SSL_get_error(ssl, sslretcode);
-    SSL_get_error_text(res, msg); // recognize SSL_ERROR_* constant and more
+    if sslerrcode = 0 then
+      sslerrcode := SSL_get_error(ssl, sslretcode);
+    SSL_get_error_text(sslerrcode, msg); // recognize SSL_ERROR_* constants
     PSSL(ssl).IsVerified(@msg); // append cert verif error text to msg if needed
+    res := sslerrcode;
   end;
   if errormsg <> nil then
   begin
@@ -3230,9 +3229,9 @@ end;
 
 type
   // OpenSSL 3.0 changed the SSL_CTX_set_options() parameter types to 64-bit
-  TSSL_CTX_set_options1 = function(ctx: PSSL_CTX; op: clong): cardinal; cdecl;
+  TSSL_CTX_set_options1 = function(ctx: PSSL_CTX; op: clong): clong; cdecl;
   TSSL_CTX_set_options3 = function(ctx: PSSL_CTX; op: qword): qword; cdecl;
-  TSSL_CTX_clear_options1 = function(ctx: PSSL_CTX; op: clong): cardinal; cdecl;
+  TSSL_CTX_clear_options1 = function(ctx: PSSL_CTX; op: clong): clong; cdecl;
   TSSL_CTX_clear_options3 = function(ctx: PSSL_CTX; op: qword): qword; cdecl;
 
 function SSL_CTX_set_options(ctx: PSSL_CTX; op: QWord): QWord;
@@ -6474,6 +6473,7 @@ function SSL_CTX_set_alpn_protos(ctx: PSSL_CTX;
 function SSL_CTX_ctrl(ctx: PSSL_CTX; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_ctrl';
 
+// FIXME: op is culong since OpenSSL 3.x
 function SSL_CTX_set_options(ctx: PSSL_CTX; op: cardinal): cardinal; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_set_options';
 
@@ -10725,7 +10725,7 @@ const
 procedure SSL_get_error_short(get_error: integer; var dest: ShortString);
 var
   tmp: ShortString;
-  err: TErrQueueCode; // culong since OpenSSL 3.x
+  err: TErrQueueCode; // culong values in the error queue
 begin
   dest := 'SSL_ERROR_';
   if get_error in [low(SSL_ERROR_TEXT) .. high(SSL_ERROR_TEXT)] then
