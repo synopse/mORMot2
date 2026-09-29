@@ -1230,13 +1230,13 @@ type
   {$ifdef OSWINDOWS}
 
   // minimal C-like definitions to mimic unixtype FPC unit on Windows
-  clong = PtrInt;
+  clong = integer; // C long is 32-bit on CPU64
   time_t = PtrInt; // may suffer Year2038 issue on CPU32 - not used in practice
   ptime_t = ^time_t;
 
   timeval = record
-    tv_sec: integer;
-    tv_usec: integer;
+    tv_sec: clong;
+    tv_usec: clong;
   end;
   PTimeVal = ^timeval;
 
@@ -9942,7 +9942,7 @@ begin
     result := MacToHex(@dig, len);
 end;
 
-function X509.SetValidity(ValidDays, ExpireDays: PtrInt): boolean;
+function X509.SetValidity(ValidDays, ExpireDays: clong): boolean;
 begin
   // any recent supported X509_gmtime_adj() accepts negative values
   result := (@self <> nil) and
