@@ -1227,6 +1227,21 @@ type
 {$MINENUMSIZE 4}
 
 type
+  {$ifdef OSWINDOWS}
+
+  // minimal C-like definitions to mimic unixtype FPC unit on Windows
+  clong = PtrInt;
+  time_t = PtrInt; // may suffer Year2038 issue on CPU32 - not used in practice
+  ptime_t = ^time_t;
+
+  timeval = record
+    tv_sec: integer;
+    tv_usec: integer;
+  end;
+  PTimeVal = ^timeval;
+
+  {$endif OSWINDOWS}
+
   PSSL = ^SSL;
   PPSSL = ^PSSL;
   PSSL_CIPHER = ^SSL_CIPHER;
@@ -1755,7 +1770,7 @@ type
     function SerialNumber: RawUtf8;
     function RevocationDate: TDateTime;
     function Reason: integer;
-    function SetReason(value: PtrInt): boolean;
+    function SetReason(value: clong): boolean;
     function ToBinary: RawByteString;
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
@@ -1858,7 +1873,7 @@ type
   X509_STORE_CTX = object
   public
     function CurrentCert: PX509;
-    function CurrentError(errstr: PPUtf8Char = nil): PtrInt;
+    function CurrentError(errstr: PPUtf8Char = nil): integer;
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
   end;
@@ -1981,7 +1996,7 @@ type
     /// set the Not Before / Not After Vailidy of this Certificate
     // - ValidDays and ExpireDays are relative to the current time - ValidDays
     // is usually -1 to avoid most clock synch issues
-    function SetValidity(ValidDays, ExpireDays: PtrInt): boolean;
+    function SetValidity(ValidDays, ExpireDays: clong): boolean;
     /// low-level set an extension to a X509 Certificate
     // - any previous extension with this NID will be first deleted
     // - typical nid are NID_subject_alt_name (with 'DNS:xxx'), NID_info_access
@@ -2086,21 +2101,6 @@ type
     tm_gmtoff: integer;
     tm_zone: PAnsiChar;
   end;
-
-  {$ifdef OSWINDOWS}
-
-  // minimal C-like definitions to mimic unixtype FPC unit on Windows
-  clong = PtrInt;
-  time_t = PtrInt; // may suffer Year2038 issue on CPU32 - not used in practice
-  ptime_t = ^time_t;
-
-  timeval = record
-    tv_sec: integer;
-    tv_usec: integer;
-  end;
-  PTimeVal = ^timeval;
-
-  {$endif OSWINDOWS}
 
   SSL_verify_cb = function(preverify_ok: integer; x509_ctx: PX509_STORE_CTX): integer; cdecl;
   SSL_SNI_servername_cb = function(s: PSSL; ad: PInteger; arg: pointer): integer; cdecl;
@@ -2664,9 +2664,9 @@ function SSL_get_ex_new_index(l: clong; p: pointer; newf: PCRYPTO_EX_new;
 // allocate a new TLS_server_method with a genuine session id
 function SSL_CTX_new_server(const id: RawUtf8): PSSL_CTX;
 
-function SSL_CTX_set_session_cache_mode(ctx: PSSL_CTX; mode: integer): integer;
+function SSL_CTX_set_session_cache_mode(ctx: PSSL_CTX; mode: clong): clong;
   {$ifdef HASINLINE} inline; {$endif}
-function SSL_CTX_add_extra_chain_cert(ctx: PSSL_CTX; cert: PX509): cardinal;
+function SSL_CTX_add_extra_chain_cert(ctx: PSSL_CTX; cert: PX509): clong;
   {$ifdef HASINLINE} inline; {$endif}
 function SSL_CTX_set_tmp_dh(ctx: PSSL_CTX; dh: pointer): integer;
   {$ifdef HASINLINE} inline; {$endif}
@@ -2684,11 +2684,11 @@ function SSL_CTX_set_tlsext_servername_callback(ctx: PSSL_CTX; cb: SSL_SNI_serve
   {$ifdef HASINLINE} inline; {$endif}
 function SSL_CTX_set_tlsext_servername_arg(ctx: PSSL_CTX; arg: pointer): integer;
   {$ifdef HASINLINE} inline; {$endif}
-function SSL_CTX_set_mode(ctx: PSSL_CTX; mode: integer): integer;
+function SSL_CTX_set_mode(ctx: PSSL_CTX; mode: clong): clong;
   {$ifdef HASINLINE} inline; {$endif}
-function SSL_set_mode(s: PSSL; version: integer): integer;
+function SSL_set_mode(s: PSSL; mode: clong): clong;
   {$ifdef HASINLINE} inline; {$endif}
-function SSL_get_mode(s: PSSL): integer;
+function SSL_get_mode(s: PSSL): clong;
   {$ifdef HASINLINE} inline; {$endif}
 
 function EVP_MD_CTX_size(ctx: PEVP_MD_CTX): integer;
@@ -8545,7 +8545,7 @@ begin
   end;
 end;
 
-function X509_REVOKED.SetReason(value: PtrInt): boolean;
+function X509_REVOKED.SetReason(value: clong): boolean;
 var
   enum: PASN1_ENUMERATED;
 begin
@@ -8818,7 +8818,7 @@ begin
     result := X509_STORE_CTX_get_current_cert(@self);
 end;
 
-function X509_STORE_CTX.CurrentError(errstr: PPUtf8Char): PtrInt;
+function X509_STORE_CTX.CurrentError(errstr: PPUtf8Char): integer;
 begin
   if @self = nil then
     result := -1
@@ -10812,12 +10812,12 @@ begin
   SSL_CTX_set_session_id_context(result, @h, SizeOf(h));
 end;
 
-function SSL_CTX_set_session_cache_mode(ctx: PSSL_CTX; mode: integer): integer;
+function SSL_CTX_set_session_cache_mode(ctx: PSSL_CTX; mode: clong): clong;
 begin
   result := SSL_CTX_ctrl(ctx, SSL_CTRL_SET_SESS_CACHE_MODE, mode, nil);
 end;
 
-function SSL_CTX_add_extra_chain_cert(ctx: PSSL_CTX; cert: PX509): cardinal;
+function SSL_CTX_add_extra_chain_cert(ctx: PSSL_CTX; cert: PX509): clong;
 begin
   result := SSL_CTX_ctrl(ctx, SSL_CTRL_EXTRA_CHAIN_CERT, 0, cert);
 end;
@@ -10864,17 +10864,17 @@ begin
   result := SSL_CTX_ctrl(ctx, SSL_CTRL_SET_TLSEXT_SERVERNAME_ARG, 0, arg);
 end;
 
-function SSL_CTX_set_mode(ctx: PSSL_CTX; mode: integer): integer;
+function SSL_CTX_set_mode(ctx: PSSL_CTX; mode: clong): clong;
 begin
   result := SSL_CTX_ctrl(ctx, SSL_CTRL_MODE, mode, nil);
 end;
 
-function SSL_set_mode(s: PSSL; version: integer): integer;
+function SSL_set_mode(s: PSSL; mode: clong): clong;
 begin
-  result := SSL_ctrl(s, SSL_CTRL_MODE, version, nil);
+  result := SSL_ctrl(s, SSL_CTRL_MODE, mode, nil);
 end;
 
-function SSL_get_mode(s: PSSL): integer;
+function SSL_get_mode(s: PSSL): clong;
 begin
   result := SSL_ctrl(s, SSL_CTRL_MODE, 0, nil);
 end;
