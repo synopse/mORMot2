@@ -1331,7 +1331,7 @@ type
       Algo: TNcryptHashAlgo; Mode: TNcryptSignMode; PssSaltLen: cardinal = 0;
       Silent: boolean = false): RawByteString;
     /// decrypt one RSA PKCS#1 v1.5 block with a CNG private key
-    // - InputLen should match the RSA modulus size
+    // - InputLen should match the RSA modulus size in bytes
     // - preallocates InputLen bytes to avoid a preliminary NCryptDecrypt()
     // size query, which could trigger an extra hardware-token operation
     // - Silent adds NCRYPT_SILENT_FLAG

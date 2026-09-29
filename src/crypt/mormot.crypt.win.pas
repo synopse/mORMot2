@@ -35,6 +35,7 @@ uses
   mormot.core.log,
   mormot.crypt.core,
   mormot.crypt.secure,
+  mormot.crypt.rsa,
   mormot.crypt.x509,
   mormot.lib.sspi;
 
@@ -165,8 +166,12 @@ type
     function GetSystemStore(out CertStore: TSystemCertificateStore;
       out Location: TWinCertStoreLocation): boolean;
     /// the CNG Key Storage Provider name associated with this certificate
+    // e.g. 'Microsoft Software Key Storage Provider' or
+    // 'Microsoft Smart Card Key Storage Provider'
     function KeyProvider: RawUtf8;
     /// the CNG private key/container name associated with this certificate
+    // - may be a human-readable key/container name or an opaque vendor-specific ID
+    // - corresponds to CRYPT_KEY_PROV_INFO.pwszContainerName / NCryptOpenKey pszKeyName
     function KeyContainer: RawUtf8;
     /// access the retained Windows certificate context
     // - caller should never free this context
@@ -299,10 +304,14 @@ type
   TCryptPrivateKeyCng = class(TCryptPrivateKey)
   protected
     fCert: TCryptCertCng;
+    function RsaModulus: integer;
+    function KeyInit(var key: TWinCertCngKey; var log: ISynLog;
+      const ctx: ShortString): boolean;
     function FromDer(algo: TCryptKeyAlgo; const der: RawByteString;
       pub: TCryptPublicKey): boolean; override;
     function SignDigest(const Dig: THash512Rec; DigLen: integer;
       DigAlgo: TCryptAsymAlgo): RawByteString; override;
+    function DecryptPkcs1(Input: pointer): RawByteString;
   public
     /// initialize this adapter for its owning certificate
     constructor Create(aCert: TCryptCertCng); reintroduce;
@@ -520,10 +529,33 @@ begin
     fKeyAlgo := XKA_TO_CKA[aCert.fX509.Signed.SubjectPublicKeyAlgorithm];
 end;
 
-function TCryptPrivateKeyCng.FromDer(algo: TCryptKeyAlgo;
-  const der: RawByteString; pub: TCryptPublicKey): boolean;
+function TCryptPrivateKeyCng.RsaModulus: integer;
 begin
-  result := false; // private key stays in the Windows CNG provider
+  if (fCert = nil) or
+     (fCert.fX509 = nil) or
+     not (fKeyAlgo in CKA_RSA) then
+    result := 0
+  else
+    result := (fCert.fX509.Signed.SubjectPublicKeyBits + 7) shr 3;
+end;
+
+function TCryptPrivateKeyCng.KeyInit(var key: TWinCertCngKey; var log: ISynLog;
+  const ctx: ShortString): boolean;
+var
+  err: integer;
+begin
+  fCert.fLogClass.EnterLocal(log, '% %', [ctx, fCert.fKeyContainer], self);
+  err := key.Init(fCert.fContext, fCert.fKeyOptions);
+  if err = NO_ERROR then
+  begin
+    result := true;
+    exit;
+  end;
+  if Assigned(log) then
+    log.Log(sllTrace,
+      '% CryptAcquireCertificatePrivateKey failed as % key=% provider=%',
+      [ctx, OsErrorShort(err), fCert.fKeyContainer, fCert.fKeyProvider]);
+  result := false;
 end;
 
 function TCryptPrivateKeyCng.SignDigest(const Dig: THash512Rec;
@@ -531,25 +563,16 @@ function TCryptPrivateKeyCng.SignDigest(const Dig: THash512Rec;
 var
   hash: TNcryptHashAlgo;
   mode: TNcryptSignMode;
-  err: cardinal;
   key: TWinCertCngKey; // safe short-lived CNG private key access
   log: ISynLog;
 begin
   FastAssignNew(result);
-  if (fCert = nil) or
-     (fCert.fX509 = nil) or
-     (DigAlgo <> fCert.fCaa) or
-     (HASH_SIZE[CAA_HF[DigAlgo]] <> DigLen) or
-     not CngSignParams(DigAlgo, hash, mode) then
-    exit;
-  fCert.fLogClass.EnterLocal(log,
-    'SignDigest % %', [ToText(DigAlgo)^, fCert], self);
-  err := key.Init(fCert.fContext, fCert.fKeyOptions);
-  if err <> NO_ERROR then
-    log.Log(sllTrace,
-      'SignDigest: CryptAcquireCertificatePrivateKey failed %',
-      [OsErrorShort(err)], self)
-  else
+  if (fCert <> nil) and
+     (fCert.fX509 <> nil) and
+     (DigAlgo = fCert.fCaa) and
+     (HASH_SIZE[CAA_HF[DigAlgo]] = DigLen) and
+     CngSignParams(DigAlgo, hash, mode) and
+     KeyInit(key, log, 'SignDigest') then
   try
     try
       // TNCrypt.KeySign() avoids an extra size-query signing operation,
@@ -564,14 +587,42 @@ begin
         'SignDigest: returns len=%', [length(result)], self);
     except
       on E: Exception do
-      begin
         log.Log(sllTrace, 'SignDigest failed due to %', [E], self);
-        FastAssignNew(result);
-      end;
     end;
   finally
     key.Done; // release the private key handle ASAP for safety
   end;
+end;
+
+function TCryptPrivateKeyCng.DecryptPkcs1(Input: pointer): RawByteString;
+var
+  key: TWinCertCngKey;
+  modlen: cardinal;
+  log: ISynLog;
+begin
+  FastAssignNew(result);
+  modlen := RsaModulus; // also ensure fCert has a valid RSA public key
+  if (modlen <> 0) and
+     (Input <> nil) and
+     KeyInit(key, log, 'DecryptPkcs1') then
+  try
+    try
+      result := NCrypt.KeyDecryptPkcs1(key.Handle, Input, modlen,
+        wckSilent in fCert.fKeyOptions);
+      log.Log(sllTrace, 'DecryptPkcs1: returns len=%', [length(result)], self);
+    except
+      on E: Exception do
+        log.Log(sllTrace, 'DecryptPkcs1 failed due to %', [E], self);
+    end;
+  finally
+    key.Done;
+  end;
+end;
+
+function TCryptPrivateKeyCng.FromDer(algo: TCryptKeyAlgo;
+  const der: RawByteString; pub: TCryptPublicKey): boolean;
+begin
+  result := false; // private key stays in the Windows CNG provider
 end;
 
 function TCryptPrivateKeyCng.Generate(
@@ -596,8 +647,16 @@ end;
 
 function TCryptPrivateKeyCng.Open(const Message: RawByteString;
   const Cipher: RawUtf8): RawByteString;
+var
+  mode: TAesMode;
+  bits, modlen: integer;
 begin
-  FastAssignNew(result); // NCryptDecrypt support will be added later
+  FastAssignNew(result);
+  if not AesAlgoNameDecode(pointer(Cipher), mode, bits) then
+    exit;
+  modlen := RsaModulus; // also ensure fCert has a valid RSA public key
+  if modlen <> 0 then
+    result := RsaOpen(TAesFast[mode], bits, modlen, Message, DecryptPkcs1);
 end;
 
 
