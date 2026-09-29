@@ -105,7 +105,7 @@ type
   /// exception class raised by this unit
   EOpenSsl = class(ExceptionWithProps)
   protected
-    fLastError: integer;
+    fLastError: PtrInt;
     class function GetOpenSsl: string;
     // wrap ERR_get_error/ERR_error_string_n or SSL_get_error/SSL_error
     class procedure CheckFailed(caller: TObject; const method: ShortString;
@@ -128,7 +128,8 @@ type
       {$ifdef HASINLINE} inline; {$endif}
   published
     /// the last error code from OpenSSL, after Check() failure
-    property LastError: integer
+    // - may be a SSL integer code or a TErrQueueCode ordinal value
+    property LastError: PtrInt
       read fLastError;
     /// returns the OpenSslVersionHexa value
     property OpenSsl: string
@@ -1243,6 +1244,11 @@ type
 
   {$endif OSWINDOWS}
 
+  /// packed error code stored in the OpenSSL ERR queue
+  // - most C API returns a plain 32-bit integer but the ERR_get_error() queue
+  // returns a C long integer, which is 64-bit on 64-bit POSIX systems
+  TErrQueueCode = type culong;
+
   PSSL = ^SSL;
   PPSSL = ^PSSL;
   PSSL_CIPHER = ^SSL_CIPHER;
@@ -2215,8 +2221,8 @@ procedure CRYPTO_free(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
 function CRYPTO_get_ex_new_index(class_index: integer;
   argl: clong; argp: pointer; new_func: PCRYPTO_EX_new;
   dup_func: PCRYPTO_EX_dup; free_func: PCRYPTO_EX_free): integer; cdecl;
-procedure ERR_error_string_n(e: culong; buf: PUtf8Char; len: PtrUInt); cdecl;
-function ERR_get_error(): cardinal; cdecl;
+procedure ERR_error_string_n(e: TErrQueueCode; buf: PUtf8Char; len: PtrUInt); cdecl;
+function ERR_get_error(): TErrQueueCode; cdecl;
 procedure ERR_clear_error(); cdecl;
 function ERR_load_BIO_strings(): integer; cdecl;
 function EVP_PKEY_new(): PEVP_PKEY; cdecl;
@@ -2650,11 +2656,11 @@ function X509_print(bp: PBIO; x: PX509): integer; cdecl;
 
 procedure OpenSSL_Free(ptr: pointer);
 
-procedure OpenSSL_error_short(error: integer; var result: ShortString);
-procedure OpenSSL_error(error: integer; var result: RawUtf8); overload;
-function OpenSSL_error(error: integer): RawUtf8; overload;
+procedure OpenSSL_error_short(error: TErrQueueCode; var result: ShortString);
+procedure OpenSSL_error(error: TErrQueueCode; var result: RawUtf8); overload;
+function OpenSSL_error(error: TErrQueueCode): RawUtf8; overload;
   {$ifdef HASINLINE} inline; {$endif}
-function OpenSSL_error_eof(error: integer): boolean;
+function OpenSSL_error_eof(error: TErrQueueCode): boolean;
 
 function SSL_is_fatal_error(get_error: integer): boolean;
 procedure SSL_get_error_text(get_error: integer; var result: RawUtf8);
@@ -2924,7 +2930,7 @@ class procedure EOpenSsl.CheckFailed(caller: TObject; const method: ShortString;
   errormsg: PRawUtf8; ssl: pointer; sslretcode: integer; const context: RawUtf8;
   sslerrcode: integer);
 var
-  res: integer;
+  res: TErrQueueCode;
   msg: RawUtf8;
   exc: EOpenSsl;
 begin
@@ -3475,8 +3481,8 @@ type
     CRYPTO_set_mem_functions: function(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn; f: dyn_MEM_free_fn): integer; cdecl;
     CRYPTO_free: procedure(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
     CRYPTO_get_ex_new_index: function(class_index: integer; argl: clong; argp: pointer; new_func: PCRYPTO_EX_new; dup_func: PCRYPTO_EX_dup; free_func: PCRYPTO_EX_free): integer; cdecl;
-    ERR_error_string_n: procedure(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
-    ERR_get_error: function(): cardinal; cdecl;
+    ERR_error_string_n: procedure(e: TErrQueueCode; buf: PUtf8Char; len: PtrUInt); cdecl;
+    ERR_get_error: function(): TErrQueueCode; cdecl;
     ERR_clear_error: procedure(); cdecl;
     ERR_load_BIO_strings: function(): integer; cdecl;
     EVP_PKEY_new: function(): PEVP_PKEY; cdecl;
@@ -4222,12 +4228,12 @@ begin
     class_index, argl, argp, new_func, dup_func, free_func);
 end;
 
-procedure ERR_error_string_n(e: cardinal; buf: PUtf8Char; len: PtrUInt);
+procedure ERR_error_string_n(e: TErrQueueCode; buf: PUtf8Char; len: PtrUInt);
 begin
   libcrypto.ERR_error_string_n(e, buf, len);
 end;
 
-function ERR_get_error(): cardinal;
+function ERR_get_error(): TErrQueueCode;
 begin
   result := libcrypto.ERR_get_error;
 end;
@@ -6626,10 +6632,10 @@ function CRYPTO_get_ex_new_index(class_index: integer; argl: clong;
   free_func: PCRYPTO_EX_free): integer; cdecl;
   external LIB_CRYPTO name _PU + 'CRYPTO_get_ex_new_index';
 
-procedure ERR_error_string_n(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
+procedure ERR_error_string_n(e: TErrQueueCode; buf: PUtf8Char; len: PtrUInt); cdecl;
   external LIB_CRYPTO name _PU + 'ERR_error_string_n';
 
-function ERR_get_error(): cardinal; cdecl;
+function ERR_get_error(): TErrQueueCode; cdecl;
   external LIB_CRYPTO name _PU + 'ERR_get_error';
 
 procedure ERR_clear_error(); cdecl;
@@ -10646,27 +10652,27 @@ begin
   CRYPTO_free(ptr, 'mormot', 0);
 end;
 
-function OpenSSL_error(error: integer): RawUtf8;
+function OpenSSL_error(error: TErrQueueCode): RawUtf8;
 begin
   OpenSSL_error(error, result);
 end;
 
-procedure OpenSSL_error(error: integer; var result: RawUtf8);
+procedure OpenSSL_error(error: TErrQueueCode; var result: RawUtf8);
 var
   tmp: TBuffer1K;
 begin
   FastAssignNew(result);
-  if error = SSL_ERROR_NONE then // no error in the queue
+  if error = 0 then // no error in the queue
     exit;
   ERR_error_string_n(error, @tmp, SizeOf(tmp));
   tmp[SizeOf(tmp) - 1] := #0;  // ensure termination (paranoid)
   FastSetString(result, @tmp, mormot.core.base.StrLen(@tmp));
 end;
 
-procedure OpenSSL_error_short(error: integer; var result: ShortString);
+procedure OpenSSL_error_short(error: TErrQueueCode; var result: ShortString);
 begin
   result[0] := #0;
-  if error = SSL_ERROR_NONE then // no error in the queue
+  if error = 0 then // no error in the queue
     exit;
   ERR_error_string_n(error, @result[1], high(result));
   result[high(result)] := #0;  // ensure termination (paranoid)
@@ -10677,7 +10683,7 @@ const
   // ERR_GET_REASON() is a version-specific macro with no public API :(
   OPENSSL_EOF_TEXT: TShort15 = ' eof while';
 
-function OpenSSL_error_eof(error: integer): boolean;
+function OpenSSL_error_eof(error: TErrQueueCode): boolean;
 var
   tmp: ShortString;
 begin
@@ -10719,6 +10725,7 @@ const
 procedure SSL_get_error_short(get_error: integer; var dest: ShortString);
 var
   tmp: ShortString;
+  err: TErrQueueCode; // culong since OpenSSL 3.x
 begin
   dest := 'SSL_ERROR_';
   if get_error in [low(SSL_ERROR_TEXT) .. high(SSL_ERROR_TEXT)] then
@@ -10727,11 +10734,11 @@ begin
     case get_error of
       SSL_ERROR_SSL: // non-recoverable protocol error
         begin
-          get_error := ERR_get_error; // unqueue earliest error code
-          if get_error <> SSL_ERROR_NONE then
+          err := ERR_get_error; // unqueue earliest error code
+          if err <> SSL_ERROR_NONE then
           begin
             AppendShortTwoCharsSafe(ord(' ') + ord('(') shl 8, dest);
-            OpenSSL_error_short(get_error, tmp);
+            OpenSSL_error_short(err, tmp);
             AppendShort(tmp, dest);
             AppendShortCharSafe(')', dest)
           end;
