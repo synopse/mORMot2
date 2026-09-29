@@ -2700,6 +2700,8 @@ type
   TWinCertStoreLocation = (
     wcslCurrentUser,
     wcslLocalMachine);
+  /// select one or several Windows certificate store locations
+  TWinCertStoreLocations = set of TWinCertStoreLocation;
 
   /// enumerate certificates from one Windows system certificate store
   // - owns the HCERTSTORE and current enumeration PCCERT_CONTEXT

@@ -110,6 +110,8 @@ For `ECC` or `RSA`, our `mormot.crypt.ecc256r1` or `mormot.crypt.rsa` units are 
 
 Direct Cryptography using Windows API
 - AES cypher/uncypher using PROV_RSA_AES CryptoApi
+- High-Level Windows Certificate Store Integration
+- Middle-Level Windows CNG Private Key Integration
 
 ### mormot.crypt.pkcs11
 

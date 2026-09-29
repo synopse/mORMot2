@@ -2092,7 +2092,7 @@ end;
 // https://learn.microsoft.com/en-us/windows/win32/secauthn/protocols-in-tls-ssl--schannel-ssp-
 
 procedure CredInit(var cred: TSChannelCred; const ctx: TNetTlsContext;
-  dwFlags: cardinal; paServCred: PPCCERT_CONTEXT);
+  dwFlags: cardinal; paServCred: mormot.core.os.security.PPCCERT_CONTEXT);
 begin
   FillCharFast(cred, SizeOf(cred), 0);
   // request Schannel to reject known weak ciphers whenever possible
@@ -2151,7 +2151,7 @@ type
   // - SSPI requires all CtxtHandles to be deleted before freeing their CredHandle
   TSChannelServerContext = class(TInterfacedObject)
   private
-    fCertificate: mormot.core.os.security.PCCERT_CONTEXT;
+    fCertificate: mormot.core.os.security.PCCERT_CONTEXT; // not Window's
     fStore: HCERTSTORE;
     fCred: TCredHandle;
     fCredAcquired: boolean;
