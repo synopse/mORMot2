@@ -1274,7 +1274,7 @@ type
       dwFlags: cardinal): integer; stdcall;
     /// decrypt one asymmetric encrypted block
     // - added here already because it belongs to the same basic NCrypt surface
-    // - the higher-level RSA envelope integration may be implemented later
+    // - used by KeyDecryptPkcs1() for high-level RSA envelope decryption
     Decrypt: function(hKey: NCRYPT_KEY_HANDLE; pbInput: PByte;
       cbInput: cardinal; pPaddingInfo: pointer; pbOutput: PByte;
       cbOutput: cardinal; var pcbResult: cardinal;
@@ -1330,6 +1330,14 @@ type
     function KeySign(hKey: NCRYPT_KEY_HANDLE; Hash: pointer; HashLen: cardinal;
       Algo: TNcryptHashAlgo; Mode: TNcryptSignMode; PssSaltLen: cardinal = 0;
       Silent: boolean = false): RawByteString;
+    /// decrypt one RSA PKCS#1 v1.5 block with a CNG private key
+    // - InputLen should match the RSA modulus size
+    // - preallocates InputLen bytes to avoid a preliminary NCryptDecrypt()
+    // size query, which could trigger an extra hardware-token operation
+    // - Silent adds NCRYPT_SILENT_FLAG
+    // - raises ENCrypt on CNG errors
+    function KeyDecryptPkcs1(hKey: NCRYPT_KEY_HANDLE; Input: pointer;
+      InputLen: cardinal; Silent: boolean = false): RawByteString;
     /// wrapper around the UnprotectSecret() API
     function Unprotect(Buf: pointer; Len: cardinal;
       Flags: cardinal = NCRYPT_SILENT_FLAG): RawByteString;
@@ -2793,6 +2801,45 @@ begin
     ENCrypt.RaiseFmt(self,
       'KeySign: unexpected signature size % > %', [outlen, len]);
   if outlen <> len then
+    FakeLength(result, outlen);
+end;
+
+function TNCrypt.KeyDecryptPkcs1(hKey: NCRYPT_KEY_HANDLE;
+  Input: pointer; InputLen: cardinal; Silent: boolean): RawByteString;
+var
+  len, outlen, flags: cardinal;
+  status: integer;
+begin
+  FastAssignNew(result);
+  EnsureExists(@Decrypt, 'Decrypt');
+  if (hKey = nil) or
+     (Input = nil) or
+     (InputLen = 0) then
+    ENCrypt.RaiseFmt(self, 'KeyDecryptPkcs1: invalid parameter', []);
+  // RSA plaintext can never be bigger than its encrypted modulus-sized block
+  len := InputLen;
+  pointer(result) := FastNewString(len);
+  outlen := len;
+  flags := NCRYPT_PAD_PKCS1_FLAG;
+  if Silent then
+    flags := flags or NCRYPT_SILENT_FLAG;
+  // don't issue the conventional nil-output size query: for a hardware KSP
+  // we want a single actual private-key operation
+  status := Decrypt(hKey, Input, InputLen, nil, pointer(result), len, outlen, flags);
+  if status <> NO_ERROR then
+  begin
+    FillZero(result); // paranoid cleaning of any partial result
+    CheckNCrypt('Decrypt', status); // raises ENCrypt
+  end;
+  if outlen > len then
+  begin
+    FillZero(result);
+    ENCrypt.RaiseFmt(self,
+      'KeyDecryptPkcs1: unexpected plaintext size %d > %d', [outlen, len]);
+  end;
+  if outlen = 0 then
+    FillZero(result)
+  else if outlen <> len then
     FakeLength(result, outlen);
 end;
 
