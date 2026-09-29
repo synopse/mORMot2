@@ -117,6 +117,8 @@ type
   /// class loading a PKCS#11 library in the context of our high-level
   // cryptographic catalog
   // - it is the main factory for ICryptCert support of a PKCS#11 library
+  // - its methods won't be thread-safe because they share a single TPkcs11
+  // instance - please use Lock/UnLock from several threads
   TCryptCertAlgoPkcs11 = class(TCryptCertAlgo)
   protected
     fEngine: TPkcs11;
@@ -125,6 +127,7 @@ type
     fCert: ICryptCertPkcs11s;
     fLibraryName: TFileName;
     fLoadingError: string;
+    fSafe: TOSLock;
     procedure BackgroundLoad(Sender: TObject);
     procedure EnsureRetrieveConfig;
     procedure CryptCertToPkcs11PrivKeyAttributes(const Cert: ICryptCert;
@@ -133,6 +136,7 @@ type
   public
     /// load a PKCS#11 library and asynchronously retrieve its configuration
     // - Engine.Load() and RetrieveConfig() will happen in a background thread
+    // until the LoadingConfigRetrieved property becomes true
     // - Cert method will wait if needed for the configuration to be loaded
     // - see LoadingError property for any error during the background process
     constructor Create(const aLibraryName: TFileName;
@@ -162,6 +166,10 @@ type
     // - will wait if background loading of information is not finished
     function Cert: ICryptCertPkcs11s;
       {$ifdef HASINLINE} inline; {$endif}
+    /// enter the main reentrant TOSLock of this catalog instance
+    procedure Lock;
+    /// leave the main reentrant TOSLock of this catalog instance
+    procedure UnLock;
     /// the associated PKCS#11 library instance
     property Engine: TPkcs11
       read fEngine;
@@ -462,7 +470,6 @@ constructor TCryptPrivateKeyPkcs11.Create(aCert: TCryptCertPkcs11);
 begin
   inherited Create;
   fCert := aCert;
-  fCert := aCert;
   if (aCert <> nil) and
      (aCert.fX509 <> nil) then
     fKeyAlgo := XKA_TO_CKA[aCert.fX509.Signed.SubjectPublicKeyAlgorithm];
@@ -487,8 +494,7 @@ begin
   FastAssignNew(result);
   if (fCert = nil) or
      (fCert.fX509 = nil) or
-     (DigAlgo <> fCert.fCaa) or
-     (HASH_SIZE[CAA_HF[DigAlgo]] <> DigLen) then
+     (DigAlgo <> fCert.fCaa) then
     exit;
   fCert.Log.EnterLocal(log, 'SignDigest % %', [ToText(DigAlgo)^, fCert], self);
   hf := CAA_HF[DigAlgo];
@@ -612,6 +618,7 @@ constructor TCryptCertAlgoPkcs11.Create(const aLibraryName: TFileName;
 begin
   if aLog = nil then
     aLog := TSynLog;
+  fSafe.Init; // needed for TOSLock
   fLog := aLog;
   with fLog.Enter('Create %', [aLibraryName], self) do
   begin
@@ -624,6 +631,7 @@ end;
 destructor TCryptCertAlgoPkcs11.Destroy;
 begin
   fEngine.Free;
+  fSafe.Done; // needed for TOSLock
   inherited Destroy;
 end;
 
@@ -644,6 +652,7 @@ var
   ids: TPkcs11ObjectIDs;
   c: ICryptCertPkcs11;
 begin
+  fSafe.Lock;
   try
     // this operation could take 10 seconds
     fEngine.Load(fLibraryName);
@@ -677,6 +686,7 @@ begin
       fLoadingError := E.Message;
     end;
   end;
+  fSafe.UnLock;
   fConfigRetrieved := true;
 end;
 
@@ -843,6 +853,16 @@ begin
   if not fConfigRetrieved then
     EnsureRetrieveConfig; // wait until BackgroundLoad has finished
   result := fCert;
+end;
+
+procedure TCryptCertAlgoPkcs11.Lock;
+begin
+  fSafe.Lock;
+end;
+
+procedure TCryptCertAlgoPkcs11.UnLock;
+begin
+  fSafe.UnLock;
 end;
 
 

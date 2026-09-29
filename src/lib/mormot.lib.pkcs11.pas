@@ -2020,9 +2020,8 @@ type
   TOnPkcs11Notify =
     function(Sender: TPkcs11; Slot: TPkcs11SlotID): boolean of object;
 
-  /// can load and use a PKCS#11 library
-  // - need to explicitly call Safe.Lock/UnLock in a multi-thread context
-  TPkcs11 = class(TObjectOSLock)
+  /// can load and use a PKCS#11 library - not thread-safe
+  TPkcs11 = class(TSynPersistent)
   protected
     fC: CK_FUNCTION_LIST_PTR;
     fHandle: TLibHandle;
@@ -2039,8 +2038,7 @@ type
     fOnNotify: TOnPkcs11Notify;
     procedure EnsureLoaded(const ctxt: ShortString);
     procedure EnsureSession(const ctxt: ShortString);
-    procedure Check(res: CK_RVULONG; const ctxt: ShortString;
-      unlock: boolean = false);
+    procedure Check(res: CK_RVULONG; const ctxt: ShortString);
     procedure CheckAttr(res: CK_RVULONG);
     function DoGetSlotList(Present: boolean): TPkcs11SlotIDDynArray;
   public
@@ -2081,15 +2079,12 @@ type
     function WaitForSlotEvent(NotBlocking: boolean = false): TPkcs11SlotID;
     /// search for a given TPkcs11Slot.Slot within current Slots[]
     // - returns nil if no slot was found, or add a new entry if AddNew is set
-    // - not thread-safe: use Safe.Lock/UnLock when you are outside a session
     function SlotByID(SlotID: TPkcs11SlotID; AddNew: boolean = false): PPkcs11Slot;
     /// search for a given TPkcs11Token.Slot within current Token[]
     // - returns nil if no token was found, or add a new entry if AddNew is set
-    // - not thread-safe: use Safe.Lock/UnLock when you are outside a session
     function TokenByID(SlotID: TPkcs11SlotID; AddNew: boolean = false): PPkcs11Token;
     /// search for a given TPkcs11Token.Name within current Tokens[]
     // - returns nil if the token was not found
-    // - not thread-safe: use Safe.Lock/UnLock when you are outside a session
     function TokenByName(const TokenName: RawUtf8;
       CaseInsensitive: boolean = false): PPkcs11Token;
     /// search for a given TPkcs11Token.Slot within current Tokens[].Name
@@ -3083,102 +3078,102 @@ end;
 const
   // warning: RV() expects this array to be sorted
   CKR_WORD: array[low(CK_RV) .. pred(high(CK_RV))] of word = (
-    $0000, // CKR_OK
-    $0001, // CKR_CANCEL
-    $0002, // CKR_HOST_MEMORY
-    $0003, // CKR_SLOT_ID_INVALID
-    $0005, // CKR_GENERAL_ERROR
-    $0006, // CKR_FUNCTION_FAILED
-    $0007, // CKR_ARGUMENTS_BAD
-    $0008, // CKR_NO_EVENT
-    $0009, // CKR_NEED_TO_CREATE_THREADS
-    $000A, // CKR_CANT_LOCK
-    $0010, // CKR_ATTRIBUTE_READ_ONLY
-    $0011, // CKR_ATTRIBUTE_SENSITIVE
-    $0012, // CKR_ATTRIBUTE_TYPE_INVALID
-    $0013, // CKR_ATTRIBUTE_VALUE_INVALID
-    $001B, // CKR_ACTION_PROHIBITED
-    $0020, // CKR_DATA_INVALID
-    $0021, // CKR_DATA_LEN_RANGE
-    $0030, // CKR_DEVICE_ERROR
-    $0031, // CKR_DEVICE_MEMORY
-    $0032, // CKR_DEVICE_REMOVED
-    $0040, // CKR_ENCRYPTED_DATA_INVALID
-    $0041, // CKR_ENCRYPTED_DATA_LEN_RANGE
-    $0042, // CKR_AEAD_DECRYPT_FAILED
-    $0050, // CKR_FUNCTION_CANCELED
-    $0051, // CKR_FUNCTION_NOT_PARALLEL
-    $0054, // CKR_FUNCTION_NOT_SUPPORTED
-    $0060, // CKR_KEY_HANDLE_INVALID
-    $0062, // CKR_KEY_SIZE_RANGE
-    $0063, // CKR_KEY_TYPE_INCONSISTENT
-    $0064, // CKR_KEY_NOT_NEEDED
-    $0065, // CKR_KEY_CHANGED
-    $0066, // CKR_KEY_NEEDED
-    $0067, // CKR_KEY_INDIGESTIBLE
-    $0068, // CKR_KEY_FUNCTION_NOT_PERMITTED
-    $0069, // CKR_KEY_NOT_WRAPPABLE
-    $006A, // CKR_KEY_UNEXTRACTABLE
-    $0070, // CKR_MECHANISM_INVALID
-    $0071, // CKR_MECHANISM_PARAM_INVALID
-    $0082, // CKR_OBJECT_HANDLE_INVALID
-    $0090, // CKR_OPERATION_ACTIVE
-    $0091, // CKR_OPERATION_NOT_INITIALIZED
-    $00A0, // CKR_PIN_INCORRECT
-    $00A1, // CKR_PIN_INVALID
-    $00A2, // CKR_PIN_LEN_RANGE
-    $00A3, // CKR_PIN_EXPIRED
-    $00A4, // CKR_PIN_LOCKED
-    $00B0, // CKR_SESSION_CLOSED
-    $00B1, // CKR_SESSION_COUNT
-    $00B3, // CKR_SESSION_HANDLE_INVALID
-    $00B4, // CKR_SESSION_PARALLEL_NOT_SUPPORTED
-    $00B5, // CKR_SESSION_READ_ONLY
-    $00B6, // CKR_SESSION_EXISTS
-    $00B7, // CKR_SESSION_READ_ONLY_EXISTS
-    $00B8, // CKR_SESSION_READ_WRITE_SO_EXISTS
-    $00C0, // CKR_SIGNATURE_INVALID
-    $00C1, // CKR_SIGNATURE_LEN_RANGE
-    $00D0, // CKR_TEMPLATE_INCOMPLETE
-    $00D1, // CKR_TEMPLATE_INCONSISTENT
-    $00E0, // CKR_TOKEN_NOT_PRESENT
-    $00E1, // CKR_TOKEN_NOT_RECOGNIZED
-    $00E2, // CKR_TOKEN_WRITE_PROTECTED
-    $00F0, // CKR_UNWRAPPING_KEY_HANDLE_INVALID
-    $00F1, // CKR_UNWRAPPING_KEY_SIZE_RANGE
-    $00F2, // CKR_UNWRAPPING_KEY_TYPE_INCONSISTENT
-    $0100, // CKR_USER_ALREADY_LOGGED_IN
-    $0101, // CKR_USER_NOT_LOGGED_IN
-    $0102, // CKR_USER_PIN_NOT_INITIALIZED
-    $0103, // CKR_USER_TYPE_INVALID
-    $0104, // CKR_USER_ANOTHER_ALREADY_LOGGED_IN
-    $0105, // CKR_USER_TOO_MANY_TYPES
-    $0110, // CKR_WRAPPED_KEY_INVALID
-    $0112, // CKR_WRAPPED_KEY_LEN_RANGE
-    $0113, // CKR_WRAPPING_KEY_HANDLE_INVALID
-    $0114, // CKR_WRAPPING_KEY_SIZE_RANGE
-    $0115, // CKR_WRAPPING_KEY_TYPE_INCONSISTENT
-    $0120, // CKR_RANDOM_SEED_NOT_SUPPORTED
-    $0121, // CKR_RANDOM_NO_RNG
-    $0130, // CKR_DOMAIN_PARAMS_INVALID
-    $0140, // CKR_CURVE_NOT_SUPPORTED
-    $0150, // CKR_BUFFER_TOO_SMALL
-    $0160, // CKR_SAVED_STATE_INVALID
-    $0170, // CKR_INFORMATION_SENSITIVE
-    $0180, // CKR_STATE_UNSAVEABLE
-    $0190, // CKR_CRYPTOKI_NOT_INITIALIZED
-    $0191, // CKR_CRYPTOKI_ALREADY_INITIALIZED
-    $01A0, // CKR_MUTEX_BAD
-    $01A1, // CKR_MUTEX_NOT_LOCKED
-    $01B0, // CKR_NEW_PIN_MODE
-    $01B1, // CKR_NEXT_OTP
-    $01B5, // CKR_EXCEEDED_MAX_ITERATIONS
-    $01B6, // CKR_FIPS_SELF_TEST_FAILED
-    $01B7, // CKR_LIBRARY_LOAD_FAILED
-    $01B8, // CKR_PIN_TOO_WEAK
-    $01B9, // CKR_PUBLIC_KEY_INVALID
-    $0200, // CKR_FUNCTION_REJECTED
-    $0201, // CKR_TOKEN_RESOURCE_EXCEEDED
+    $0000,  // CKR_OK
+    $0001,  // CKR_CANCEL
+    $0002,  // CKR_HOST_MEMORY
+    $0003,  // CKR_SLOT_ID_INVALID
+    $0005,  // CKR_GENERAL_ERROR
+    $0006,  // CKR_FUNCTION_FAILED
+    $0007,  // CKR_ARGUMENTS_BAD
+    $0008,  // CKR_NO_EVENT
+    $0009,  // CKR_NEED_TO_CREATE_THREADS
+    $000A,  // CKR_CANT_LOCK
+    $0010,  // CKR_ATTRIBUTE_READ_ONLY
+    $0011,  // CKR_ATTRIBUTE_SENSITIVE
+    $0012,  // CKR_ATTRIBUTE_TYPE_INVALID
+    $0013,  // CKR_ATTRIBUTE_VALUE_INVALID
+    $001B,  // CKR_ACTION_PROHIBITED
+    $0020,  // CKR_DATA_INVALID
+    $0021,  // CKR_DATA_LEN_RANGE
+    $0030,  // CKR_DEVICE_ERROR
+    $0031,  // CKR_DEVICE_MEMORY
+    $0032,  // CKR_DEVICE_REMOVED
+    $0040,  // CKR_ENCRYPTED_DATA_INVALID
+    $0041,  // CKR_ENCRYPTED_DATA_LEN_RANGE
+    $0042,  // CKR_AEAD_DECRYPT_FAILED
+    $0050,  // CKR_FUNCTION_CANCELED
+    $0051,  // CKR_FUNCTION_NOT_PARALLEL
+    $0054,  // CKR_FUNCTION_NOT_SUPPORTED
+    $0060,  // CKR_KEY_HANDLE_INVALID
+    $0062,  // CKR_KEY_SIZE_RANGE
+    $0063,  // CKR_KEY_TYPE_INCONSISTENT
+    $0064,  // CKR_KEY_NOT_NEEDED
+    $0065,  // CKR_KEY_CHANGED
+    $0066,  // CKR_KEY_NEEDED
+    $0067,  // CKR_KEY_INDIGESTIBLE
+    $0068,  // CKR_KEY_FUNCTION_NOT_PERMITTED
+    $0069,  // CKR_KEY_NOT_WRAPPABLE
+    $006A,  // CKR_KEY_UNEXTRACTABLE
+    $0070,  // CKR_MECHANISM_INVALID
+    $0071,  // CKR_MECHANISM_PARAM_INVALID
+    $0082,  // CKR_OBJECT_HANDLE_INVALID
+    $0090,  // CKR_OPERATION_ACTIVE
+    $0091,  // CKR_OPERATION_NOT_INITIALIZED
+    $00A0,  // CKR_PIN_INCORRECT
+    $00A1,  // CKR_PIN_INVALID
+    $00A2,  // CKR_PIN_LEN_RANGE
+    $00A3,  // CKR_PIN_EXPIRED
+    $00A4,  // CKR_PIN_LOCKED
+    $00B0,  // CKR_SESSION_CLOSED
+    $00B1,  // CKR_SESSION_COUNT
+    $00B3,  // CKR_SESSION_HANDLE_INVALID
+    $00B4,  // CKR_SESSION_PARALLEL_NOT_SUPPORTED
+    $00B5,  // CKR_SESSION_READ_ONLY
+    $00B6,  // CKR_SESSION_EXISTS
+    $00B7,  // CKR_SESSION_READ_ONLY_EXISTS
+    $00B8,  // CKR_SESSION_READ_WRITE_SO_EXISTS
+    $00C0,  // CKR_SIGNATURE_INVALID
+    $00C1,  // CKR_SIGNATURE_LEN_RANGE
+    $00D0,  // CKR_TEMPLATE_INCOMPLETE
+    $00D1,  // CKR_TEMPLATE_INCONSISTENT
+    $00E0,  // CKR_TOKEN_NOT_PRESENT
+    $00E1,  // CKR_TOKEN_NOT_RECOGNIZED
+    $00E2,  // CKR_TOKEN_WRITE_PROTECTED
+    $00F0,  // CKR_UNWRAPPING_KEY_HANDLE_INVALID
+    $00F1,  // CKR_UNWRAPPING_KEY_SIZE_RANGE
+    $00F2,  // CKR_UNWRAPPING_KEY_TYPE_INCONSISTENT
+    $0100,  // CKR_USER_ALREADY_LOGGED_IN
+    $0101,  // CKR_USER_NOT_LOGGED_IN
+    $0102,  // CKR_USER_PIN_NOT_INITIALIZED
+    $0103,  // CKR_USER_TYPE_INVALID
+    $0104,  // CKR_USER_ANOTHER_ALREADY_LOGGED_IN
+    $0105,  // CKR_USER_TOO_MANY_TYPES
+    $0110,  // CKR_WRAPPED_KEY_INVALID
+    $0112,  // CKR_WRAPPED_KEY_LEN_RANGE
+    $0113,  // CKR_WRAPPING_KEY_HANDLE_INVALID
+    $0114,  // CKR_WRAPPING_KEY_SIZE_RANGE
+    $0115,  // CKR_WRAPPING_KEY_TYPE_INCONSISTENT
+    $0120,  // CKR_RANDOM_SEED_NOT_SUPPORTED
+    $0121,  // CKR_RANDOM_NO_RNG
+    $0130,  // CKR_DOMAIN_PARAMS_INVALID
+    $0140,  // CKR_CURVE_NOT_SUPPORTED
+    $0150,  // CKR_BUFFER_TOO_SMALL
+    $0160,  // CKR_SAVED_STATE_INVALID
+    $0170,  // CKR_INFORMATION_SENSITIVE
+    $0180,  // CKR_STATE_UNSAVEABLE
+    $0190,  // CKR_CRYPTOKI_NOT_INITIALIZED
+    $0191,  // CKR_CRYPTOKI_ALREADY_INITIALIZED
+    $01A0,  // CKR_MUTEX_BAD
+    $01A1,  // CKR_MUTEX_NOT_LOCKED
+    $01B0,  // CKR_NEW_PIN_MODE
+    $01B1,  // CKR_NEXT_OTP
+    $01B5,  // CKR_EXCEEDED_MAX_ITERATIONS
+    $01B6,  // CKR_FIPS_SELF_TEST_FAILED
+    $01B7,  // CKR_LIBRARY_LOAD_FAILED
+    $01B8,  // CKR_PIN_TOO_WEAK
+    $01B9,  // CKR_PUBLIC_KEY_INVALID
+    $0200,  // CKR_FUNCTION_REJECTED
+    $0201,  // CKR_TOKEN_RESOURCE_EXCEEDED
     $0202); // CKR_OPERATION_CANCEL_FAILED
     // exclude CKR_VENDOR_DEFINED
 
@@ -3643,14 +3638,10 @@ begin
     EPkcs11.RaiseUtf8('%.% requires a session', [self, ctxt]);
 end;
 
-procedure TPkcs11.Check(res: CK_RVULONG; const ctxt: ShortString;
-  unlock: boolean);
+procedure TPkcs11.Check(res: CK_RVULONG; const ctxt: ShortString);
 begin
-  if res = CKR_SUCCESS then
-    exit;
-  if unlock then
-    Safe.UnLock;
-  EPkcs11.RaiseUtf8('%.%: failed as % (%)', [self, ctxt, ToText(ToCKR(res))^, res]);
+  if res <> CKR_SUCCESS then
+    EPkcs11.RaiseUtf8('%.%: failed as % (%)', [self, ctxt, ToText(ToCKR(res))^, res]);
 end;
 
 procedure TPkcs11.CheckAttr(res: CK_RVULONG);
@@ -3683,23 +3674,15 @@ var
 begin
   if fSession <> 0 then
     EPkcs11.RaiseUtf8('%: pending session', [self]);
-  Safe.Lock;
-  try
-    fSessionSlot := slot;
-    fSessionFlags := [];
-    notif := nil;
-    if Assigned(fOnNotify) then
-      notif := @DoNotify;
-    Check(fC.OpenSession(slot, byte(FLAGS[rw]), pointer(self), notif, fSession),
-      'Open', {unlock=}true);
-    if rw then
-      include(fSessionFlags, sfRW);
-  except
-    begin
-      Safe.UnLock;
-      raise;
-    end;
-  end;
+  fSessionSlot := slot;
+  fSessionFlags := [];
+  notif := nil;
+  if Assigned(fOnNotify) then
+    notif := @DoNotify;
+  Check(fC.OpenSession(slot, byte(FLAGS[rw]), pointer(self), notif, fSession),
+    'Open');
+  if rw then
+    include(fSessionFlags, sfRW);
 end;
 
 procedure TPkcs11.Open(slot: TPkcs11SlotID; const pin: RawUtf8; rw, so: boolean);
@@ -3742,7 +3725,6 @@ begin
   fC.CloseSession(fSession); // no error check
   fSession := 0;
   fSessionFlags := [];
-  Safe.UnLock; // always eventually release lock
 end;
 
 function TPkcs11.Load(const aLibraryName: TFileName): boolean;
@@ -3827,17 +3809,12 @@ var
   i: PtrInt;
 begin
   EnsureLoaded('RetrieveConfig');
-  fSafe.Lock;
-  try
-    fRetrieveConfigIncludeMechanisms := IncludeMechanisms;
-    fSlots := nil;
-    fTokens := nil;
-    fSlotIDs := DoGetSlotList(not IncludeVoidSlots);
-    for i := 0 to high(fSlotIDs) do
-      UpdateConfig(fSlotIDs[i]);
-  finally
-    fSafe.UnLock;
-  end;
+  fRetrieveConfigIncludeMechanisms := IncludeMechanisms;
+  fSlots := nil;
+  fTokens := nil;
+  fSlotIDs := DoGetSlotList(not IncludeVoidSlots);
+  for i := 0 to high(fSlotIDs) do
+    UpdateConfig(fSlotIDs[i]);
 end;
 
 function TPkcs11.RetrieveVoidSlots: TPkcs11SlotIDDynArray;
@@ -3847,16 +3824,11 @@ var
 begin
   EnsureLoaded('RetrieveVoidSlots');
   result := nil;
-  fSafe.Lock;
-  try
-    present := DoGetSlotList(true); // when called twice: return ALL :(
-    all := DoGetSlotList(false);
-    for i := 0 to high(all) do
-      if not IntegerScanExists(pointer(present), length(present), all[i]) then
-        AddInteger(TIntegerDynArray(result), all[i]);
-  finally
-    fSafe.UnLock;
-  end;
+  present := DoGetSlotList(true); // when called twice: return ALL :(
+  all := DoGetSlotList(false);
+  for i := 0 to high(all) do
+    if not IntegerScanExists(pointer(present), length(present), all[i]) then
+      AddInteger(TIntegerDynArray(result), all[i]);
 end;
 
 procedure TPkcs11.UpdateConfig(SlotID: TPkcs11SlotID);
@@ -3873,58 +3845,53 @@ begin
   EnsureLoaded('UpdateConfig');
   FillCharFast(sltnfo, SizeOf(sltnfo), 0);
   FillCharFast(toknfo, SizeOf(toknfo), 0);
-  fSafe.Lock;
-  try
-    AddInteger(TIntegerDynArray(fSlotIDs), SlotID, {nodup=}true);
-    s := SlotByID(SlotID, {addnew=}true);
-    res := fC^.GetSlotInfo(SlotID, sltnfo);
-    if res = CKR_WORD[CKR_FUNCTION_NOT_SUPPORTED] then
-    begin
-      // some hardware won't support this call if no token is available
-      FormatUtf8('Undefined: GetSlotInfo(#%) failed', [SlotID], s^.Description);
-      exit;
-    end;
-    Check(res, 'GetSlotInfo');
-    FillSlot(SlotID, sltnfo, s^);
-    if not (CKF_TOKEN_PRESENT in s^.Flags) then
-    begin
-      for i := 0 to length(fTokens) - 1 do
-        if fTokens[i].Slot = SlotID then // there is no such token any more
-        begin
-          DynArray(TypeInfo(TPkcs11TokenDynArray), fTokens).Delete(i);
-          break;
-        end;
-      exit;
-    end;
-    if fRetrieveConfigIncludeMechanisms then
-    begin
-      mn := 64;
-      repeat
-        if length(m) < CK_LONG(mn) then
-          SetLength(m, mn);
-        res := fC^.GetMechanismList(SlotID, pointer(m), mn);
-      until res <> CKR_BUFFER_TOOSMALL; // loop if 64 was not enough
-      if res = CKR_WORD[CKR_TOKEN_NOT_PRESENT] then
-        exit; // CKF_TOKEN_PRESENT may be set on a void or unsupported device
-      Check(res, 'GetMechanismList');
-      SetLength(s^.Mechanism, mn);
-      for i := 0 to CK_LONG(mn) - 1 do
+  AddInteger(TIntegerDynArray(fSlotIDs), SlotID, {nodup=}true);
+  s := SlotByID(SlotID, {addnew=}true);
+  res := fC^.GetSlotInfo(SlotID, sltnfo);
+  if res = CKR_WORD[CKR_FUNCTION_NOT_SUPPORTED] then
+  begin
+    // some hardware won't support this call if no token is available
+    FormatUtf8('Undefined: GetSlotInfo(#%) failed', [SlotID], s^.Description);
+    exit;
+  end;
+  Check(res, 'GetSlotInfo');
+  FillSlot(SlotID, sltnfo, s^);
+  if not (CKF_TOKEN_PRESENT in s^.Flags) then
+  begin
+    for i := 0 to length(fTokens) - 1 do
+      if fTokens[i].Slot = SlotID then // there is no such token any more
       begin
-        Check(fC^.GetMechanismInfo(SlotID, m[i], mecnfo), 'GetMechanismInfo');
-        with s^.Mechanism[i] do
-        begin
-          Kind := ToCKM(m[i]);
-          MinKey := mecnfo.ulMinKeySize;
-          MaxKey := mecnfo.ulMaxKeySize;
-          Flags := CKM_FLAGS(cardinal(mecnfo.flags));
-        end;
+        DynArray(TypeInfo(TPkcs11TokenDynArray), fTokens).Delete(i);
+        break;
+      end;
+    exit;
+  end;
+  if fRetrieveConfigIncludeMechanisms then
+  begin
+    mn := 64;
+    repeat
+      if length(m) < CK_LONG(mn) then
+        SetLength(m, mn);
+      res := fC^.GetMechanismList(SlotID, pointer(m), mn);
+    until res <> CKR_BUFFER_TOOSMALL; // loop if 64 was not enough
+    if res = CKR_WORD[CKR_TOKEN_NOT_PRESENT] then
+      exit; // CKF_TOKEN_PRESENT may be set on a void or unsupported device
+    Check(res, 'GetMechanismList');
+    SetLength(s^.Mechanism, mn);
+    for i := 0 to CK_LONG(mn) - 1 do
+    begin
+      Check(fC^.GetMechanismInfo(SlotID, m[i], mecnfo), 'GetMechanismInfo');
+      with s^.Mechanism[i] do
+      begin
+        Kind := ToCKM(m[i]);
+        MinKey := mecnfo.ulMinKeySize;
+        MaxKey := mecnfo.ulMaxKeySize;
+        Flags := CKM_FLAGS(cardinal(mecnfo.flags));
       end;
     end;
-    Check(fC^.GetTokenInfo(SlotID, toknfo), 'GetTokenInfo');
-    FillToken(SlotID, toknfo, TokenByID(SlotID, {addnew=}true)^);
-  finally
-    fSafe.UnLock;
   end;
+  Check(fC^.GetTokenInfo(SlotID, toknfo), 'GetTokenInfo');
+  FillToken(SlotID, toknfo, TokenByID(SlotID, {addnew=}true)^);
 end;
 
 function TPkcs11.WaitForSlotEvent(NotBlocking: boolean): TPkcs11SlotID;
@@ -3938,17 +3905,12 @@ begin
   if NotBlocking then
     flags := CKF_DONT_BLOCK;
   result := PKCS11_NOSLOT;
-  fSafe.Lock;
-  try
-    res := fC.WaitForSlotEvent(flags, slotid, nil);
-    if res = CKR_NOEVENT then
-      exit;
-    Check(res, 'WaitForSlotEvent');
-    UpdateConfig(slotid); // reload
-    result := slotid;
-  finally
-    fSafe.UnLock;
-  end;
+  res := fC.WaitForSlotEvent(flags, slotid, nil);
+  if res = CKR_NOEVENT then
+    exit;
+  Check(res, 'WaitForSlotEvent');
+  UpdateConfig(slotid); // reload
+  result := slotid;
 end;
 
 function TPkcs11.SlotByID(SlotID: TPkcs11SlotID; AddNew: boolean): PPkcs11Slot;
@@ -4283,13 +4245,8 @@ procedure TPkcs11.InitToken(SlotID: TPkcs11SlotID;
   const SOPin, TokenLabel: RawUtf8);
 begin
   EnsureLoaded('InitToken');
-  fSafe.Lock;
-  try
-    Check(fC.InitToken(SlotID, pointer(SOPin), length(SOPin),
-      pointer(Pad(TokenLabel, 32))), 'InitToken');
-  finally
-    fSafe.UnLock;
-  end;
+  Check(fC.InitToken(SlotID, pointer(SOPin), length(SOPin),
+    pointer(Pad(TokenLabel, 32))), 'InitToken');
 end;
 
 procedure TPkcs11.InitUserPin(SlotID: TPkcs11SlotID; const SOPin, UserPin: RawUtf8);
