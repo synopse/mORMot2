@@ -184,7 +184,7 @@ type
   // by default CurrentUser\MY and LocalMachine\MY
   // - only certificates associated with a CNG Key Storage Provider are exposed,
   // including smart cards and hardware tokens with a Windows CNG KSP
-  // - use Cert(), Find() or FindOne() to retrieve ready-to-use ICryptCertCng
+  // - use Cert(), Find() or FindOne() to retrieve CNG-backed ICryptCertCng
   // - this class is a store catalog, not a generic certificate factory:
   // New/Load/Generate operations inherited from TCryptCertAlgo are unsupported
   TCryptCertAlgoCng = class(TCryptCertAlgo)

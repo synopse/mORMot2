@@ -816,6 +816,19 @@ type
     function Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString; override;
   end;
 
+  /// callback used by RsaOpen() to decrypt one PKCS#1 v1.5 RSA block
+  // - Input points to ModulusLen bytes
+  // - returns the unpadded binary value, or '' on error
+  // - allows external/private-key providers to reuse the same RSA envelope
+  // decoding as TRsa.Open()
+  TRsaPkcs1Decrypt = function(Input: pointer): RawByteString of object;
+
+/// decrypt a message encoded by TRsa.Seal() using an external RSA private key
+// - shares the exact same EVP_SealInit/EVP_OpenInit compatible envelope as
+// TRsa.Open(), but delegates the PKCS#1 private operation to Decrypt
+function RsaOpen(Cipher: TAesAbstractClass; AesBits, ModulusLen: integer;
+  const Message: RawByteString; Decrypt: TRsaPkcs1Decrypt): RawByteString;
+
 /// low-level computation of the ASN.1 sequence of a hash signature
 // - following RSASSA-PKCS1-v1_5 signature scheme RFC 8017 #9.2 steps 1 and 2
 // - as used by TRsa.Sign() method and expected by CKM_RSA_PKCS signature
@@ -2281,11 +2294,66 @@ begin
             ]);
 end;
 
+type
+  // extra header for IV and plain text / key size storage
+  // - should match the very same record definition in EVP_PKEY.RsaSeal/RsaOpen
+  // from mormot.lib.openssl11.pas, which is fully compatible with this unit
+  // - see also the matching python code as comment in mormot.crypt.openssl
+  TRsaSealHeader = packed record
+    iv: TAesBlock;
+    plainlen: integer;
+    encryptedkeylen: word; // typically 256 bytes for RSA-2048
+    // followed by the encrypted key then the encrypted message
+  end;
+  PRsaSealHeader = ^TRsaSealHeader;
+
+// this code follows OpenSSL EVP_SealInit/EVP_SealFinal from crypto/evp/p_seal.c
+// algorithm, so that RSA Message encoding would stay compatible
+
+function RsaOpen(Cipher: TAesAbstractClass; AesBits, ModulusLen: integer;
+  const Message: RawByteString; Decrypt: TRsaPkcs1Decrypt): RawByteString;
+var
+  msgpos, msglen: PtrInt;
+  a: TAesAbstract;
+  key: RawByteString;
+  head: PRsaSealHeader absolute Message;
+  input: PByteArray absolute Message;
+begin
+  FastAssignNew(result);
+  msglen := length(Message);
+  if not Assigned(Decrypt) or
+     (Cipher = nil) or
+     (ModulusLen <= 0) or
+     (msglen < SizeOf(head^)) or
+     (head^.plainlen <= 0) or
+     (head^.plainlen > 128 shl 20) or
+     (head^.encryptedkeylen <> ModulusLen) then
+    exit;
+  msgpos := SizeOf(head^) + head^.encryptedkeylen;
+  if msglen < msgpos + head^.plainlen then
+    exit;
+  key := Decrypt(@input[SizeOf(head^)]);
+  if key <> '' then
+    try
+      if length(key) <> AesBits shr 3 then
+        exit;
+      a := Cipher.Create(pointer(key)^, AesBits);
+      try
+        a.IV := head^.iv;
+        a.DecryptPkcs7Var(
+          @input[msgpos], msglen - msgpos, {iv=}false, result);
+      finally
+        a.Free;
+      end;
+    finally
+      FillZero(key);
+    end;
+end;
+
 function ToText(res: TRsaGenerateResult): PShortString;
 begin
   result := GetEnumName(TypeInfo(TRsaGenerateResult), ord(res));
 end;
-
 
 
 { TRsaPublicKey }
@@ -3095,29 +3163,13 @@ begin
     FastAssignNew(result);
 end;
 
-type
-  // extra header for IV and plain text / key size storage
-  // - should match the very same record definition in EVP_PKEY.RsaSeal/RsaOpen
-  // from mormot.lib.openssl11.pas, which is fully compatible with this unit
-  TRsaSealHeader = packed record
-    iv: TAesBlock;
-    plainlen: integer;
-    encryptedkeylen: word; // typically 256 bytes for RSA-2048
-    // followed by the encrypted key then the encrypted message
-  end;
-  PRsaSealHeader = ^TRsaSealHeader;
-
-// this code follows OpenSSL EVP_SealInit/EVP_SealFinal from crypto/evp/p_seal.c
-// algorithm, so that RSA Message encoding would stay compatible
-// - see also the matching python code as comment in mormot.crypt.openssl
-
 function TRsa.Seal(Cipher: TAesAbstractClass; AesBits: integer;
   const Message: RawByteString): RawByteString;
 var
   msgpos: PtrInt;
   a: TAesAbstract;
   key: THash256;
-  head: TRsaSealHeader;
+  head: TRsaSealHeader; // follows RsaOpen() algorithm above
   enckey, encmsg: RawByteString;
 begin
   FastAssignNew(result);
@@ -3156,42 +3208,11 @@ end;
 
 function TRsa.Open(Cipher: TAesAbstractClass; AesBits: integer;
   const Message: RawByteString): RawByteString;
-var
-  msgpos, msglen: PtrInt;
-  a: TAesAbstract;
-  key: RawByteString;
-  head: PRsaSealHeader absolute Message;
-  input: PByteArray absolute Message;
 begin
-  FastAssignNew(result);
-  // decode and validate the header
-  msglen := length(Message);
-  if not HasPrivateKey or
-     (Cipher = nil) or
-     (msglen < SizeOf(head^)) or
-     (head^.plainlen <= 0) or
-     (head^.plainlen > 128 shl 20) or
-     (head^.encryptedkeylen <> fModulusLen) then
-    exit;
-  msgpos := SizeOf(head^) + head^.encryptedkeylen;
-  if msglen < msgpos + head^.plainlen then
-    exit; // avoid buffer overflow on malformatted/forged input
-  // decrypt the ephemeral key, then the message
-  key := Pkcs1Decrypt(@input[SizeOf(head^)]);
-  if key <> '' then
-    try
-      if length(key) <> AesBits shr 3 then
-        exit;
-      a := Cipher.Create(pointer(key)^, AesBits);
-      try
-        a.IV := head^.iv;
-        a.DecryptPkcs7Var(@input[msgpos], msglen - msgpos, {iv=}false, result);
-      finally
-        a.Free;
-      end;
-    finally
-      FillZero(key); // anti-forensic
-    end;
+  if HasPrivateKey then
+    result := RsaOpen(Cipher, AesBits, fModulusLen, Message, Pkcs1Decrypt)
+  else
+    FastAssignNew(result);
 end;
 
 
