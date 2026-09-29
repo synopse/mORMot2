@@ -2007,6 +2007,7 @@ function TWinIocp.GetNextAccept(one: PWinIocpSubscription;
 var
   l, r: PSockAddr;
   llen, rlen: integer;
+  lsock: TSocket;
 begin
   result := false;
   if (self = nil) or
@@ -2038,6 +2039,16 @@ begin
   Socket := fAcceptSocket;
   fAcceptSocket := nil;
   fAcceptExUsed.UnLock;
+  // AcceptEx() sockets need SO_UPDATE_ACCEPT_CONTEXT to inherit the listening
+  // socket properties, and before shutdown() getsockname() getpeername() are
+  // used - otherwise shutdown(SD_SEND) in Unsubscribe() fails with WSAENOTCONN
+  // and no FIN is ever sent to the client on a server-side close
+  lsock := TSocket(one^.socket);
+  if (setsockopt(TSocket(Socket), SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT,
+        @lsock, SizeOf(lsock)) <> NO_ERROR) and
+     Assigned(fOnLog) then
+    fOnLog(sllWarning, 'GetNextAccept(%): SO_UPDATE_ACCEPT_CONTEXT failed as %',
+      [pointer(one^.socket), WinErrorShort(RawSocketErrNo)], self);
   result := true;
   if Assigned(fOnLog) then
     fOnLog(sllTrace, 'GetNextAccept(%)=%',
