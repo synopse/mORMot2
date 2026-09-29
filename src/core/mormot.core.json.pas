@@ -6583,8 +6583,8 @@ begin
      (Len <= 0) then
     exit;
   if (MaxLen > 0) and
-     (MaxLen > Len) then
-    Len := MaxLen;
+     (Len > MaxLen) then
+    Len := MaxLen; // truncate - never read beyond P + Len
   if BEnd - B <= Len then // note: PtrInt(BEnd - B) could be < 0
     FlushToStream;
   B := PUtf8Char(EscapeBuffer(P, Len, PAnsiChar(B + 1), BEnd - B) + 1);
