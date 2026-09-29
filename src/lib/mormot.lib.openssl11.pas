@@ -9944,8 +9944,7 @@ end;
 
 function X509.SetValidity(ValidDays, ExpireDays: integer): boolean;
 begin
-  if ValidDays < 0 then
-    ValidDays := 0; // X509_gmtime_adj() does not support negative values
+  // any recent supported X509_gmtime_adj() accepts negative values
   result := (@self <> nil) and
     (ExpireDays > ValidDays) and
     (X509_gmtime_adj(X509_getm_notBefore(@self), SecsPerDay * ValidDays) <> nil) and
