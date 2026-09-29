@@ -2892,6 +2892,7 @@ begin
     result := nrClosed;
     exit;
   end;
+  result := nrFatalError; // default to error on exit
   while fDataCount = 0 do
   try
     fDataPos := 0;
@@ -2945,14 +2946,10 @@ begin
             // TLS 1.3 uses SEC_I_RENEGOTIATE for post-handshake messages
             ProcessBuffers;
             if fOutputCount <> 0 then
-            begin
               // there is some pending output data from Send(): would require
               // more state logic for little gain so is not supported yet
-              result := nrFatalError;
-              exit;
-            end
-            else
-              HandshakeLoop({NeedRecv=}false);
+              exit; // return nrFatalError
+            HandshakeLoop({NeedRecv=}false);
           finally
             fSspiSafe.UnLock; // Lock was done in DecryptInput
           end;
@@ -2979,8 +2976,7 @@ begin
     until false;
   except
     // catch any socket/SChannel exception for the caller to shutdown the socket
-    result := nrFatalError;
-    exit;
+    exit; // return nrFatalError
   end;
   read := fDataCount;
   if Length < read then
