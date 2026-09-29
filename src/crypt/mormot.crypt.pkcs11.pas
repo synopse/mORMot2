@@ -400,6 +400,8 @@ type
       pub: TCryptPublicKey): boolean; override;
     function SignDigest(const Dig: THash512Rec; DigLen: integer;
       DigAlgo: TCryptAsymAlgo): RawByteString; override;
+    function RsaModulus: integer;
+    function DecryptPkcs1(Input: pointer): RawByteString;
   public
     /// initialize this instance
     constructor Create(aCert: TCryptCertPkcs11); reintroduce;
@@ -469,6 +471,64 @@ begin
     end;
 end;
 
+function TCryptPrivateKeyPkcs11.RsaModulus: integer;
+begin
+  if (fCert = nil) or
+     (fCert.fX509 = nil) or
+     not (fCert.fCaa in CAA_RSA) then
+    result := 0
+  else
+    result := (fCert.fX509.Signed.SubjectPublicKeyBits + 7) shr 3;
+end;
+
+function TCryptPrivateKeyPkcs11.DecryptPkcs1(
+  Input: pointer): RawByteString;
+var
+  obj: CK_OBJECT_HANDLE;
+  mech: CK_MECHANISM;
+  modlen: integer;
+  log: ISynLog;
+begin
+  FastAssignNew(result);
+  modlen := RsaModulus;
+  if (modlen = 0) or
+     (Input = nil) then
+    exit;
+  fCert.Log.EnterLocal(log, 'DecryptPkcs1 %', [fCert], self);
+  obj := fCert.OpenPrivateKey;
+  if obj <> CK_INVALID_HANDLE then
+    try
+      try
+        // RsaOpen() expects RSAES-PKCS1-v1_5 unpadding to be done
+        // by the external private-key provider
+        Pkcs11SetMechanism(caaRS256, mech);
+        result := fCert.fEngine.Decrypt(Input, modlen, obj, mech);
+        log.Log(sllTrace,
+          'DecryptPkcs1: returns len=%', [length(result)], self);
+      except
+        on E: Exception do
+          log.Log(sllTrace,
+            'DecryptPkcs1 failed due to %', [E], self);
+      end;
+    finally
+      fCert.fEngine.Close;
+    end;
+end;
+
+function TCryptPrivateKeyPkcs11.Open(const Message: RawByteString;
+  const Cipher: RawUtf8): RawByteString;
+var
+  mode: TAesMode;
+  bits, modlen: integer;
+begin
+  FastAssignNew(result);
+  if not AesAlgoNameDecode(pointer(Cipher), mode, bits) then
+    exit;
+  modlen := RsaModulus;
+  if modlen <> 0 then
+    result := RsaOpen(TAesFast[mode], bits, modlen, Message, DecryptPkcs1);
+end;
+
 function TCryptPrivateKeyPkcs11.Generate(Algorithm: TCryptAsymAlgo): RawByteString;
 begin
   FastAssignNew(result); // to be implemented later on
@@ -482,12 +542,6 @@ end;
 function TCryptPrivateKeyPkcs11.ToSubjectPublicKey: RawByteString;
 begin
   result := fCert.fX509.Signed.SubjectPublicKey; // from TX509 (fake) instance
-end;
-
-function TCryptPrivateKeyPkcs11.Open(const Message: RawByteString;
-  const Cipher: RawUtf8): RawByteString;
-begin
-  FastAssignNew(result); // to be implemented later on
 end;
 
 function TCryptPrivateKeyPkcs11.SharedSecret(
