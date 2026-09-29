@@ -10443,9 +10443,11 @@ begin
   CoCreateGuid(e.h);
 end; // seldom called: RtlGenRandom/SystemFunction036 is not worth it
 {$else}
+{$ifdef FPC} // only used below with FPC - and the Delphi linker has no 'c' lib
 {$ifdef OSDARWIN} // lighter than sysutil's fpgettimeofday(), and in nanoseconds
 function GetTickCount64: UInt64; cdecl external 'c' name 'mach_absolute_time';
 {$endif OSDDARWIN}
+{$endif FPC}
 procedure __Fill256FromOs(out e: THash256Rec);
 begin
   {$ifdef FPC}
