@@ -723,6 +723,23 @@ type
   end;
   PWinCertInfo = ^TWinCertInfo;
 
+  /// key provider information associated with a Windows certificate
+  // - decoded from its CERT_KEY_PROV_INFO_PROP_ID property
+  TWinCertKeyProviderInfo = record
+    /// key container/key name
+    Container: RawUtf8;
+    /// CSP or CNG Key Storage Provider name
+    Provider: RawUtf8;
+    /// provider type
+    // - 0 identifies a CNG Key Storage Provider
+    // - high(cardinal) means no provider information was available
+    ProviderType: cardinal;
+    /// CRYPT_KEY_PROV_INFO.dwFlags
+    Flags: cardinal;
+    /// CRYPT_KEY_PROV_INFO.dwKeySpec
+    KeySpec: cardinal;
+  end;
+
 const
   WIN_CERT_USAGE: array[wkuCrlSign .. wkuDigitalSignature] of byte = (
     CERT_OFFLINE_CRL_SIGN_KEY_USAGE,    // wkuCrlSign
@@ -747,6 +764,12 @@ function WinCertDecode(const Asn1: RawByteString; out Cert: TWinCertInfo;
 /// decode a raw WinCrypto API PCCERT_CONTEXT struct
 function WinCertCtxtDecode(Ctxt: PCCERT_CONTEXT; out Cert: TWinCertInfo;
   StrType: cardinal = CERT_X500_NAME_STR): boolean;
+
+/// retrieve the key provider information associated with a certificate
+// - returns false if there is no CERT_KEY_PROV_INFO_PROP_ID property
+// - Info.ProviderType=0 identifies a CNG Key Storage Provider
+function WinCertCtxtKeyProvider(Ctxt: PCCERT_CONTEXT;
+  out Info: TWinCertKeyProviderInfo): boolean;
 
 /// could be used to extract CERT_X500_NAME_STR values
 // - for instance, in TWinCertInfo Name := ExtractX500('CN=', SubjectName);
@@ -1816,6 +1839,7 @@ var
   h: THash160;
   e: PCERT_EXTENSION;
   c: PWinCertExtension;
+  key: TWinCertKeyProviderInfo;
   tmp: TSynTempBuffer;
 begin
   result := false;
@@ -1876,17 +1900,14 @@ begin
   WinCertAlgoName(Cert.PublicKeyAlgorithm, Cert.PublicKeyAlgorithmName);
   with nfo^.SubjectPublicKeyInfo.PublicKey do
     FastSetRawByteString(Cert.PublicKeyContent, pbData, cbData);
-  len := tmp.Init;
-  if CertGetCertificateContextProperty(
-       Ctxt, CERT_KEY_PROV_INFO_PROP_ID, tmp.buf, len) then
-    with PCRYPT_KEY_PROV_INFO(tmp.buf)^ do
-    begin
-      Win32PWideCharToUtf8(pwszContainerName, Cert.KeyContainer);
-      Win32PWideCharToUtf8(pwszProvName, Cert.KeyProvider);
-      Cert.KeyProviderType  := dwProvType;
-      Cert.KeyProviderFlags := dwFlags;
-      Cert.KeySpec          := dwKeySpec;
-    end;
+  if WinCertCtxtKeyProvider(Ctxt, key) then
+  begin
+    Cert.KeyContainer     := key.Container;
+    Cert.KeyProvider      := key.Provider;
+    Cert.KeyProviderType  := key.ProviderType;
+    Cert.KeyProviderFlags := key.Flags;
+    Cert.KeySpec          := key.KeySpec;
+  end;
   len := SizeOf(h); // 20 bytes of a SHA-1 hash
   if CertGetCertificateContextProperty(Ctxt, CERT_HASH_PROP_ID, @h, len) then
     ToHumanHex(Cert.Hash, @h, len);
@@ -1956,6 +1977,41 @@ begin
     result := Join([result, '    X509v3 Subject Alternative Name:'#13#10 +
                             '      ', c.SubjectAltNames, #13#10]);
   // other extensions will be properly written by mormot.crypt.secure code
+end;
+
+function WinCertCtxtKeyProvider(Ctxt: PCCERT_CONTEXT;
+  out Info: TWinCertKeyProviderInfo): boolean;
+var
+  len: cardinal;
+  p: PCRYPT_KEY_PROV_INFO;
+  tmp: TSynTempBuffer;
+begin
+  result := false;
+  Finalize(Info);
+  FillCharFast(Info, SizeOf(Info), 0);
+  Info.ProviderType := high(cardinal);
+  if Ctxt = nil then
+    exit;
+  len := 0;
+  if not CertGetCertificateContextProperty(
+      Ctxt, CERT_KEY_PROV_INFO_PROP_ID, nil, len) or
+     (len < SizeOf(CRYPT_KEY_PROV_INFO)) then
+    exit;
+  tmp.Init(len);
+  try
+    if not CertGetCertificateContextProperty(
+        Ctxt, CERT_KEY_PROV_INFO_PROP_ID, tmp.buf, len) then
+      exit;
+    p := tmp.buf;
+    Win32PWideCharToUtf8(p^.pwszContainerName, Info.Container);
+    Win32PWideCharToUtf8(p^.pwszProvName, Info.Provider);
+    Info.ProviderType := p^.dwProvType;
+    Info.Flags := p^.dwFlags;
+    Info.KeySpec := p^.dwKeySpec;
+    result := true;
+  finally
+    tmp.Done;
+  end;
 end;
 
 

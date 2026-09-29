@@ -236,7 +236,7 @@ type
     // - duplicates aContext so this instance owns its certificate context
     constructor Create(aOwner: TCryptCertAlgoCng;
       aContext: PCCERT_CONTEXT; aLocation: TWinCertStoreLocation;
-      const aInfo: TWinCertInfo); reintroduce;
+      const aInfo: TWinCertKeyProviderInfo); reintroduce;
     /// clear both the TX509 representation and retained Windows context
     procedure Clear; override;
     /// return the logging class from the associated CNG catalog
@@ -603,9 +603,9 @@ end;
 procedure TCryptCertAlgoCng.LoadStore(Location: TWinCertStoreLocation);
 var
   store: TWinCertStore;
-  info: TWinCertInfo;
   cert: ICryptCertCng;
   n: PtrInt;
+  info: TWinCertKeyProviderInfo;
   log: ISynLog;
 begin
   fLog.EnterLocal(log, 'LoadStore %', [WINCNG_LOCATION_TEXT[Location]], self);
@@ -616,8 +616,8 @@ begin
     else
       while store.Next do
       begin
-        if not WinCertCtxtDecode(store.Context, info) or
-           (info.KeyProviderType <> 0) then
+        if not WinCertCtxtKeyProvider(store.Context, info) or
+           (info.ProviderType <> 0) then
           continue; // no private key or a legacy CryptoAPI CSP
         try
           cert := TCryptCertCng.Create(self, store.Context, Location, info);
@@ -684,7 +684,7 @@ end;
 
 constructor TCryptCertCng.Create(aOwner: TCryptCertAlgoCng;
   aContext: PCCERT_CONTEXT; aLocation: TWinCertStoreLocation;
-  const aInfo: TWinCertInfo);
+  const aInfo: TWinCertKeyProviderInfo);
 var
   der: RawByteString;
   xka: TXPublicKeyAlgorithm;
@@ -705,13 +705,13 @@ begin
     if not (xka in [xkaRsa, xkaRsaPss, xkaEcc256, xkaEcc384, xkaEcc512]) then
       RaiseError('Create: unsupported public key algorithm %',
         [ToText(xka)^]);
-    if aInfo.KeyProviderType <> 0 then
+    if aInfo.ProviderType <> 0 then
       RaiseError('Create: certificate is not backed by a CNG KSP');
     fCryptAlgo := aOwner;
     fCertStore := aOwner.fCertStore;
     fStoreLocation := aLocation;
-    fKeyProvider := aInfo.KeyProvider;
-    fKeyContainer := aInfo.KeyContainer;
+    fKeyProvider := aInfo.Provider;
+    fKeyContainer := aInfo.Container;
     // XKA_TO_CAA defaults RSA/RSA-PSS to SHA-256, as with PKCS#11
     fCaa := XKA_TO_CAA[xka];
     // safe access of its own private key using the Windows CNG API
