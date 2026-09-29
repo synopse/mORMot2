@@ -159,10 +159,11 @@ type
     /// search the internal list per ICryptCertPkcs11.StorageID value
     // - i.e. known public certificate matching hexadecimal CKA_ID
     function FindByID(const Value: TPkcs11ObjectID): ICryptCertPkcs11;
-    /// store a ICryptCert instance with its private key into the token
-    // - call CreateObject() with the certificate and its associated private key
+    /// store an ICryptCert instance with its private key into the token
+    // - PinCode is the normal user PIN, not the Security Officer PIN
+    // - requires a R/W User session to create the CKO_PRIVATE_KEY object
     function Import(const CertWithPrivKey: ICryptCert; Slot: TPkcs11SlotID;
-      const ID: RawUtf8; const SoPinCode: SpiUtf8): ICryptCertPkcs11;
+      const ID: RawUtf8; const PinCode: SpiUtf8): ICryptCertPkcs11;
     /// access to the high-level certificates recognized in this PKCS#11 instance
     // - will wait if background loading of information is not finished
     function Cert: ICryptCertPkcs11s;
@@ -821,7 +822,7 @@ end;
 
 function TCryptCertAlgoPkcs11.Import(const CertWithPrivKey: ICryptCert;
   Slot: TPkcs11SlotID; const ID: RawUtf8;
-  const SoPinCode: SpiUtf8): ICryptCertPkcs11;
+  const PinCode: SpiUtf8): ICryptCertPkcs11;
 var
   der, key, binid, val: RawByteString;
   cert, priv: CK_OBJECT_HANDLE;
@@ -837,7 +838,7 @@ begin
   binid := HexToBin(ID);
   if not Assigned(CertWithPrivKey) or
      not CertWithPrivKey.HasPrivateSecret or
-     (SoPinCode = '') or
+     (PinCode = '') or
      (binid = '') then
     exit;
   der := CertWithPrivKey.Save; // X.509 DER to be stored as CKO_CERTIFICATE
@@ -847,7 +848,7 @@ begin
   cert := CK_INVALID_HANDLE;
   priv := CK_INVALID_HANDLE;
   imported := false;
-  fEngine.Open(Slot, SoPinCode, {rw=}true, {so=}true);
+  fEngine.Open(Slot, PinCode, {rw=}true, {so=}false);
   try
     // import the X.509 certificate
     cert := fEngine.AddSessionCertificate(
