@@ -123,11 +123,12 @@ type
   protected
     fEngine: TPkcs11;
     fLog: TSynLogClass;
-    fConfigRetrieved: boolean;
     fCert: ICryptCertPkcs11s;
+    fSafe: TOSLock;
+    fConfigRetrieved: boolean;
     fLibraryName: TFileName;
     fLoadingError: string;
-    fSafe: TOSLock;
+    fLoader: TLoggedWorkThread;
     procedure BackgroundLoad(Sender: TObject);
     procedure EnsureRetrieveConfig;
     procedure CryptCertToPkcs11PrivKeyAttributes(const Cert: ICryptCert;
@@ -615,23 +616,25 @@ end;
 
 constructor TCryptCertAlgoPkcs11.Create(const aLibraryName: TFileName;
   aLog: TSynLogClass);
+var
+  l: ISynLog;
 begin
+  fSafe.Init; // needed for TOSLock
   if aLog = nil then
     aLog := TSynLog;
-  fSafe.Init; // needed for TOSLock
   fLog := aLog;
-  with fLog.Enter('Create %', [aLibraryName], self) do
-  begin
-    fLibraryName := aLibraryName;
-    fEngine := TPkcs11.Create; // the dll/so is loaded in BackgroundLoad
-    TLoggedWorkThread.Create(fLog, 'BackgroundLoad', self, BackgroundLoad);
-  end;
+  fLog.EnterLocal(l, 'Create %', [aLibraryName], self);
+  fLibraryName := aLibraryName;
+  fEngine := TPkcs11.Create; // the dll/so is loaded in BackgroundLoad
+  fLoader := TLoggedWorkThread.Create(fLog, 'BackgroundLoad',
+    self, BackgroundLoad, {suspended=}false, {manualwaitfor=}true);
 end;
 
 destructor TCryptCertAlgoPkcs11.Destroy;
 begin
+  fLoader.Free; // would wait for any pending BackgroundLoad
   fEngine.Free;
-  fSafe.Done; // needed for TOSLock
+  fSafe.Done;   // needed for TOSLock
   inherited Destroy;
 end;
 
@@ -654,40 +657,43 @@ var
 begin
   fSafe.Lock;
   try
-    // this operation could take 10 seconds
-    fEngine.Load(fLibraryName);
-    fEngine.RetrieveConfig({includevoid=}false, {includmechs=}false);
-    fLog.Add.Log(sllDebug, 'BackgroundLoad %', [fEngine], self);
-    // generate all ICryptCertPkcs11 certificates from the retrieved information
-    for i := 0 to high(fEngine.SlotIDs) do
-    begin
-      fEngine.Open(fEngine.SlotIDs[i]); // anynymous session for certs and pubkey
-      try
-        obj := fEngine.GetObjects(nil, nil, @val); // all objects
-        ids := nil;
-        for j := 0 to high(obj) do
-          if (obj[j].ObjClass in [CKO_CERTIFICATE, CKO_PUBLIC_KEY]) and
-             (obj[j].StorageID <> '') then
-            AddRawUtf8(ids, obj[j].StorageID, {nodup=}true);
-        for j := 0 to high(ids) do
-        begin
-          c := TCryptCertPkcs11.Create(self, fEngine.SlotIDs[i], obj, val, ids[j]);
-          InterfaceArrayAdd(fCert, c);
+    try
+      // this operation could take 10 seconds
+      fEngine.Load(fLibraryName);
+      fEngine.RetrieveConfig({includevoid=}false, {includmechs=}false);
+      fLog.Add.Log(sllDebug, 'BackgroundLoad %', [fEngine], self);
+      // generate all ICryptCertPkcs11 certificates from the retrieved information
+      for i := 0 to high(fEngine.SlotIDs) do
+      begin
+        fEngine.Open(fEngine.SlotIDs[i]); // anynymous session for certs and pubkey
+        try
+          obj := fEngine.GetObjects(nil, nil, @val); // all objects
+          ids := nil;
+          for j := 0 to high(obj) do
+            if (obj[j].ObjClass in [CKO_CERTIFICATE, CKO_PUBLIC_KEY]) and
+               (obj[j].StorageID <> '') then
+              AddRawUtf8(ids, obj[j].StorageID, {nodup=}true);
+          for j := 0 to high(ids) do
+          begin
+            c := TCryptCertPkcs11.Create(self, fEngine.SlotIDs[i], obj, val, ids[j]);
+            InterfaceArrayAdd(fCert, c);
+          end;
+        finally
+          fEngine.Close; // close session
         end;
-      finally
-        fEngine.Close; // close session
+      end;
+      ObjArraySort(fCert, CertStorageCompare);
+    except
+      on E: Exception do
+      begin
+        fLog.Add.Log(sllTrace, 'BackgroundLoad: aborted due to %', [E], self);
+        fLoadingError := E.Message;
       end;
     end;
-    ObjArraySort(fCert, CertStorageCompare);
-  except
-    on E: Exception do
-    begin
-      fLog.Add.Log(sllTrace, 'BackgroundLoad: aborted due to %', [E], self);
-      fLoadingError := E.Message;
-    end;
+  finally
+    fConfigRetrieved := true;
+    fSafe.UnLock;
   end;
-  fSafe.UnLock;
-  fConfigRetrieved := true;
 end;
 
 procedure TCryptCertAlgoPkcs11.EnsureRetrieveConfig;
